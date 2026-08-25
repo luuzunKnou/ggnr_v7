@@ -16,7 +16,6 @@ import { PARCEL_ANALYSIS_BASEMAP_TILE_TIMEOUT_MS } from '@/lib/parcelAnalysisThe
 import { fromString } from 'ol/transform';
 import { isCanvas } from 'ol/dom';
 import { getCenter } from 'ol/extent';
-import { getGeoServerBase } from '@/app/(pages)/map/_mapComponents/layerFactory/serviceLayerFactory';
 import {
   PARCEL_ANALYSIS_BOUNDARY_STROKE,
   PARCEL_ANALYSIS_BOUNDARY_STROKE_WIDTH,
@@ -34,6 +33,7 @@ import {
 } from './parcelAnalysis.mapStyle';
 import '@/app/(pages)/map/_mapComponents/config/projections';
 import { sortLayerNamesForWmsStack, type LayerDbGeometryKind } from '@/lib/mapLayerGeometryOrder';
+import { getGeoServerBase } from '@/lib/geoserverUrl';
 
 /** 숨김 OL 지도 캡처 해상도 */
 export const PARCEL_ANALYSIS_CAPTURE_SIZE: [number, number] = [900, 400];

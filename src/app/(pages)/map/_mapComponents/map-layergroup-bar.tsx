@@ -31,15 +31,9 @@ import { useMapContext } from './MapContext';
 import { LayerManagementPanel } from './LayerManagementPanel';
 import { cn } from '@/lib/utils';
 import { call } from '@/lib/api';
+import { getGeoServerBase } from '@/lib/geoserverUrl';
 import { WORKSPACE } from './layerFactory/serviceLayerFactory';
 import { getLayerGroupIconMap, defaultLayerGroupIcon } from '@/config/layerGroupIcon';
-
-function getGeoServerBase(): string {
-  if (typeof window !== 'undefined') {
-    return `${window.location.protocol}//${window.location.hostname}:8080/geoserver`;
-  }
-  return 'http://localhost:8080/geoserver';
-}
 
 /** GeoServer WMS GetLegendGraphic URL (범례 이미지) */
 function getLegendGraphicUrl(layerName: string): string {

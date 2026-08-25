@@ -13,6 +13,7 @@ import {
 import type Map from 'ol/Map';
 import { fromLonLat } from 'ol/proj';
 import { call } from '@/lib/api';
+import { appFetch } from '@/lib/basePath';
 import { useMapContext } from '../../../_mapComponents/MapContext';
 import type { ItsCctvItem } from '../../road/roadCCTV/itsCctvTypes';
 import {
@@ -88,7 +89,7 @@ function findNearestOpposite(from: SafetyWaterStation, all: SafetyWaterStation[]
 
 async function fetchStationObservation(st: SafetyWaterStation, time: FloodTimeType) {
   const qs = new URLSearchParams({ kind: st.kind, code: st.code, time });
-  const res = await fetch(`/api/flood/observations?${qs.toString()}`);
+  const res = await appFetch(`/api/flood/observations?${qs.toString()}`);
   const j = (await res.json().catch(() => ({}))) as Record<string, unknown>;
   if (!res.ok) {
     const error = parseFloodError(j) ?? { errorClass: 'ours' as const, uiMessage: UI_MSG.ours };
@@ -129,7 +130,7 @@ async function fetchAverageObservations(stations: SafetyWaterStation[], time: Fl
     .filter((item) => item.kind === 'rain')
     .map((item) => ({ code: item.code, kind: 'rain' as const }));
 
-  const res = await fetch('/api/flood/observations/batch', {
+  const res = await appFetch('/api/flood/observations/batch', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ time, stations: [...waterStations, ...rainStations] }),
@@ -348,7 +349,7 @@ export function SafetyWaterProvider({ children, statsKinds, onStatsKindsChange }
         minY: String(minY),
         maxY: String(maxY),
       });
-      const stRes = await fetch(`/api/flood/stations?${qs.toString()}`);
+      const stRes = await appFetch(`/api/flood/stations?${qs.toString()}`);
       const stJson = (await stRes.json().catch(() => ({}))) as Record<string, unknown>;
       if (!stRes.ok) {
         setUiError(parseFloodError(stJson) ?? { errorClass: 'ours', uiMessage: UI_MSG.ours });
@@ -372,7 +373,7 @@ export function SafetyWaterProvider({ children, statsKinds, onStatsKindsChange }
           waterCodes.length > 0
             ? `?codes=${encodeURIComponent(waterCodes.join(','))}`
             : '';
-        const fcRes = await fetch(`/api/flood/forecast${fcQs}`);
+        const fcRes = await appFetch(`/api/flood/forecast${fcQs}`);
         const fcJson = (await fcRes.json().catch(() => ({}))) as Record<string, unknown>;
         if (!fcRes.ok) {
           setForecasts([]);
@@ -657,7 +658,7 @@ export function SafetyWaterProvider({ children, statsKinds, onStatsKindsChange }
     const gen = ++waterLevelFetchGenRef.current;
     void (async () => {
       try {
-        const res = await fetch('/api/flood/observations/batch', {
+        const res = await appFetch('/api/flood/observations/batch', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -717,7 +718,7 @@ export function SafetyWaterProvider({ children, statsKinds, onStatsKindsChange }
           const i = cursor++;
           const st = waterStations[i];
           try {
-            const res = await fetch('/api/flood/observations/stats', {
+            const res = await appFetch('/api/flood/observations/stats', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({

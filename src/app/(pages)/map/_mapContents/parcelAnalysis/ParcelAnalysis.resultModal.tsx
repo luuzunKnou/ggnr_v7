@@ -28,6 +28,7 @@ import {
   ParcelLandLinkageFailReasonHidden,
 } from '@/app/(pages)/map/_mapComponents/parcelLandLinkageUi';
 import { ParcelAnalysisMapCapture } from './ParcelAnalysis.mapCapture';
+import { getGeoServerBase } from '@/lib/geoserverUrl';
 import {
   FacilityLayerLegendIcon,
   ParcelAnalysisThemeMap,
@@ -595,7 +596,7 @@ export function ParcelAnalysisResultModal({
   enriching = false,
   scopeAreaSqm = 0,
   itemCount = 0,
-  mapCaptureConfig = { geoserverUrl: 'http://localhost:8080/geoserver', workspace: 'ggnr' },
+  mapCaptureConfig = { geoserverUrl: getGeoServerBase(), workspace: 'ggnr' },
 }: ResultModalProps) {
   const [activeSectionId, setActiveSectionId] = useState<string | null>(sections[0]?.id ?? null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -1122,7 +1123,7 @@ function renderSectionBody(
     };
     outerScrollRef?: RefObject<HTMLElement | null>;
   } = {
-    mapCaptureConfig: { geoserverUrl: 'http://localhost:8080/geoserver', workspace: 'ggnr' },
+    mapCaptureConfig: { geoserverUrl: getGeoServerBase(), workspace: 'ggnr' },
   }
 ) {
   const landEnriching = opts.landEnriching ?? false;

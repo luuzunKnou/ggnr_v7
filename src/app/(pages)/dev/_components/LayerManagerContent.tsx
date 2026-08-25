@@ -17,11 +17,9 @@ import { LayerInfoManager } from "./LayerInfoManager"
 import { LayerAttrManager } from "./LayerAttrManager"
 import { LayerCodeManager } from "./LayerCodeManager"
 import { LayerExtraManager } from "./LayerExtraManager"
+import { getGeoServerBase } from "@/lib/geoserverUrl"
 
-const GEOSERVER_DEFAULT_URL =
-  typeof window !== "undefined"
-    ? `${window.location.protocol}//${window.location.hostname}:8080/geoserver`
-    : "http://localhost:8080/geoserver"
+const GEOSERVER_DEFAULT_URL = getGeoServerBase()
 
 const MAIN_TABS = [
   { id: "list", label: "레이어 목록" },

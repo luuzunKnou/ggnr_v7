@@ -9,19 +9,12 @@ import {
   type LayerDbGeometryKind,
 } from '@/lib/mapLayerGeometryOrder';
 import { resolveOccupationDeptWmsStyleName } from '@/lib/occupationDeptWmsStyle';
+import { getGeoServerBase } from '@/lib/geoserverUrl';
 
 const WORKSPACE = 'ggnr';
 
 /** 뷰포트 bbox 대비 GetMap 요청 여유 (1 = 화면과 동일, 1.5 = 가장자리 라벨·선 잘림 완화) */
 const WMS_VIEWPORT_IMAGE_RATIO = 1.5;
-
-/** 메인 지도·필지분석 캡처 공통 — 브라우저에서는 접속 호스트:8080/geoserver */
-export function getGeoServerBase(): string {
-  if (typeof window !== 'undefined') {
-    return `${window.location.protocol}//${window.location.hostname}:8080/geoserver`;
-  }
-  return 'http://localhost:8080/geoserver';
-}
 
 /**
  * GeoServer WMS GetLegendGraphic URL — 범례 이미지 요청용

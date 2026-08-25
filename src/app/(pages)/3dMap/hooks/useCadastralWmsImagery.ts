@@ -4,16 +4,10 @@ import { useEffect, useRef } from 'react';
 import { getCesium } from '../cesiumLoader';
 import { CADASTRAL_LAYERS } from '../../map/_mapComponents/layerFactory/boundaryLayerFactory';
 import { WORKSPACE } from '../../map/_mapComponents/layerFactory/serviceLayerFactory';
+import { getGeoServerBase } from '@/lib/geoserverUrl';
 
 type CesiumViewer = import('cesium').Viewer;
 type ImageryLayer = import('cesium').ImageryLayer;
-
-function getGeoServerBase(): string {
-  if (typeof window !== 'undefined') {
-    return `${window.location.protocol}//${window.location.hostname}:8080/geoserver`;
-  }
-  return 'http://localhost:8080/geoserver';
-}
 
 /** Ion/배경 이미지가 비동기로 올라오며 순서가 밀릴 수 있어 여러 번 맨 위로 올림 */
 const RAISE_AGAIN_DELAYS_MS = [0, 200, 800, 2000] as const;

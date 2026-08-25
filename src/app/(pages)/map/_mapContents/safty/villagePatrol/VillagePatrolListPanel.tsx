@@ -74,14 +74,14 @@ const EMPTY_FORM: FormState = {
 const inputClass =
   'box-border w-full min-w-0 appearance-none border-0 border-b border-border bg-transparent px-0 py-0.5 text-xs leading-5 text-muted-foreground outline-none ring-0 placeholder:text-muted-foreground/50 focus:border-primary focus:text-foreground'
 const cellClass = 'px-2 py-1.5 align-middle'
-const viewTextClass = 'block truncate text-xs leading-5 text-slate-800'
+const viewTextClass = 'block truncate text-xs leading-5 text-foreground'
 const theadThClass =
-  'whitespace-nowrap border-b border-slate-200 px-1.5 py-1.5 text-left font-semibold text-slate-700'
+  'whitespace-nowrap border-b border-border px-1.5 py-1.5 text-left font-semibold text-foreground/90'
 const sortHeadButtonClass = (active: boolean, align: 'left' | 'center' = 'left') =>
   cn(
-    'inline-flex max-w-full items-center gap-0.5 rounded px-0.5 py-0.5 transition-colors hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50',
+    'inline-flex max-w-full items-center gap-0.5 rounded px-0.5 py-0.5 transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50',
     align === 'left' ? 'justify-start' : 'justify-center',
-    active ? 'text-primary' : 'text-slate-700'
+    active ? 'text-primary' : 'text-foreground/90'
   )
 const filterSelectClass =
   'rounded-md border border-border bg-background px-2 py-1.5 text-xs text-foreground'
@@ -744,7 +744,7 @@ export function VillagePatrolListPanel({ onClose }: Props) {
     const f = item.form
     const rowVillages = listVillages(allRows, f.eup)
     return (
-      <tr key={item.key} className="border-b border-border bg-sky-500/10 dark:bg-sky-500/15">
+      <tr key={item.key} className="border-b border-border bg-primary/10">
         <td className={cn(cellClass, 'text-left text-muted-foreground')}>+</td>
         <td className={cellClass}>
           <VillagePatrolSuggestInput
@@ -837,9 +837,9 @@ export function VillagePatrolListPanel({ onClose }: Props) {
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-white pr-2.5">
-      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-slate-200 px-3 py-1.5">
-        <span className="text-sm font-semibold text-slate-800">마을순찰대</span>
+    <div className="flex h-full min-h-0 flex-col bg-background pr-2.5">
+      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border px-3 py-1.5">
+        <span className="text-sm font-semibold text-foreground">마을순찰대</span>
         <div className="flex items-center gap-1">
           <LayerRowPanelButton
             type="button"
@@ -870,7 +870,7 @@ export function VillagePatrolListPanel({ onClose }: Props) {
             disabled={hasCreateRows || deleteMode}
             className={
               editMode
-                ? 'border-sky-300 bg-sky-50 text-sky-800 dark:border-sky-700 dark:bg-sky-950/40 dark:text-sky-200'
+                ? 'border-primary/40 bg-primary/10 text-primary'
                 : undefined
             }
           >
@@ -884,7 +884,7 @@ export function VillagePatrolListPanel({ onClose }: Props) {
             disabled={hasCreateRows || editMode}
             className={
               deleteMode
-                ? 'border-red-300 bg-red-50 text-red-800 dark:border-red-800 dark:bg-red-950/40 dark:text-red-200'
+                ? 'border-destructive/40 bg-destructive/10 text-destructive'
                 : undefined
             }
           >
@@ -898,7 +898,7 @@ export function VillagePatrolListPanel({ onClose }: Props) {
                 onClick={() => void saveAll()}
                 title="저장"
                 disabled={isSaving}
-                className="border-primary bg-primary text-white hover:border-primary hover:bg-primary/90 hover:text-white"
+                className="border-primary bg-primary text-primary-foreground hover:border-primary hover:bg-primary/90 hover:text-primary-foreground"
               >
                 <Check className="h-3 w-3 shrink-0" aria-hidden />
                 {isSaving ? '저장 중…' : '저장'}
@@ -970,10 +970,10 @@ export function VillagePatrolListPanel({ onClose }: Props) {
             <button
               type="button"
               onClick={() => chooseImportMode('drop')}
-              className="rounded-md border border-amber-200 bg-amber-50/80 px-3 py-2.5 text-left text-sm transition-colors hover:border-amber-300 hover:bg-amber-50 dark:border-amber-800 dark:bg-amber-950/30 dark:hover:border-amber-700 dark:hover:bg-amber-950/50"
+              className="rounded-md border border-chart-5/40 bg-chart-5/15 px-3 py-2.5 text-left text-sm transition-colors hover:border-chart-5/60 hover:bg-chart-5/20"
             >
-              <div className="font-medium text-amber-900 dark:text-amber-200">전체교체 (drop)</div>
-              <p className="mt-0.5 text-xs text-amber-800/80 dark:text-amber-300/80">
+              <div className="font-medium text-chart-5">전체교체 (drop)</div>
+              <p className="mt-0.5 text-xs text-chart-5/80">
                 기존 명단을 모두 지우고 엑셀 내용으로 바꿉니다. 되돌릴 수 없습니다.
               </p>
             </button>
@@ -990,7 +990,7 @@ export function VillagePatrolListPanel({ onClose }: Props) {
         </DialogContent>
       </Dialog>
 
-      <div className="shrink-0 space-y-2 border-b border-slate-100 px-3 py-2">
+      <div className="shrink-0 space-y-2 border-b border-border px-3 py-2">
         <div className="flex items-center gap-1.5">
           <div className="relative min-w-0 flex-1">
             <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -1118,12 +1118,12 @@ export function VillagePatrolListPanel({ onClose }: Props) {
           </label>
         </div>
         {importError ? (
-          <div className="rounded border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-200">
+          <div className="rounded border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
             {importError}
           </div>
         ) : null}
         {importInfo ? (
-          <div className="rounded border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-200">
+          <div className="rounded border border-chart-2/40 bg-chart-2/15 px-3 py-2 text-xs text-chart-2">
             {importInfo}
           </div>
         ) : null}
@@ -1159,7 +1159,7 @@ export function VillagePatrolListPanel({ onClose }: Props) {
                 <col className="w-12" /> 
               </colgroup>
             )}
-            <thead className="sticky top-0 z-[1] bg-slate-50 shadow-[0_1px_0_0_rgb(226_232_240)]">
+            <thead className="sticky top-0 z-[1] bg-muted/50 shadow-[0_1px_0_0_var(--border)]">
               <tr>
                 <th className={theadThClass}>순번</th>
                 {showPersonTable ? (
@@ -1231,7 +1231,7 @@ export function VillagePatrolListPanel({ onClose }: Props) {
                       className={cn(
                         'rounded px-1 py-0.5 text-[10px] font-semibold transition-colors',
                         allListedMarkedForDelete
-                          ? 'bg-red-100 text-red-700 hover:bg-red-200 dark:bg-red-950/60 dark:text-red-300 dark:hover:bg-red-900/60'
+                          ? 'bg-destructive/15 text-destructive hover:bg-destructive/25'
                           : 'text-muted-foreground hover:bg-muted hover:text-foreground'
                       )}
                       title={
@@ -1251,7 +1251,7 @@ export function VillagePatrolListPanel({ onClose }: Props) {
 
               {displayCount === 0 && !hasCreateRows ? (
                 <tr>
-                  <td colSpan={showPersonTable ? 7 : 9} className="px-3 py-8 text-center text-slate-500">
+                  <td colSpan={showPersonTable ? 7 : 9} className="px-3 py-8 text-center text-muted-foreground">
                     조회된 항목이 없습니다.
                   </td>
                 </tr>
@@ -1275,17 +1275,17 @@ export function VillagePatrolListPanel({ onClose }: Props) {
                     <tr
                       key={r.key}
                       className={cn(
-                        'border-b border-slate-100',
+                        'border-b border-border',
                         markedDelete
-                          ? 'bg-red-50/60 opacity-70'
+                          ? 'bg-destructive/10 opacity-70'
                           : editMode
-                            ? 'bg-sky-500/10'
+                            ? 'bg-primary/10'
                             : deleteMode
-                              ? 'hover:bg-red-50/40'
-                              : 'transition-colors hover:bg-slate-50/80'
+                              ? 'hover:bg-destructive/10'
+                              : 'transition-colors hover:bg-muted/50'
                       )}
                     >
-                      <td className={cn(cellClass, 'text-left tabular-nums text-slate-500')}>{index + 1}</td>
+                      <td className={cn(cellClass, 'text-left tabular-nums text-muted-foreground')}>{index + 1}</td>
                       {editMode ? (
                         <>
                           <td className={cellClass}>
@@ -1416,17 +1416,17 @@ export function VillagePatrolListPanel({ onClose }: Props) {
                     <tr
                       key={r.id}
                       className={cn(
-                        'border-b border-slate-100',
+                        'border-b border-border',
                         markedDelete
-                          ? 'bg-red-50/60 opacity-70'
+                          ? 'bg-destructive/10 opacity-70'
                           : editMode
-                            ? 'bg-sky-500/10'
+                            ? 'bg-primary/10'
                             : deleteMode
-                              ? 'hover:bg-red-50/40'
-                              : 'transition-colors hover:bg-slate-50/80'
+                              ? 'hover:bg-destructive/10'
+                              : 'transition-colors hover:bg-muted/50'
                       )}
                     >
-                      <td className={cn(cellClass, 'text-left tabular-nums text-slate-500')}>
+                      <td className={cn(cellClass, 'text-left tabular-nums text-muted-foreground')}>
                         {hasCreateRows ? index + 1 + createRows.length : index + 1}
                       </td>
                       {editMode ? (
@@ -1629,8 +1629,8 @@ function DeleteButton({ onDelete, marked }: { onDelete: () => void; marked?: boo
       className={cn(
         'rounded p-1',
         marked
-          ? 'bg-red-100 text-red-700 hover:bg-red-200 dark:bg-red-950/60 dark:text-red-300 dark:hover:bg-red-900/60'
-          : 'text-muted-foreground hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/40 dark:hover:text-red-300'
+          ? 'bg-destructive/15 text-destructive hover:bg-destructive/25'
+          : 'text-muted-foreground hover:bg-destructive/10 hover:text-destructive'
       )}
       title={marked ? '삭제 예정 해제' : '삭제 예정'}
       aria-label={marked ? '삭제 예정 해제' : '삭제 예정'}

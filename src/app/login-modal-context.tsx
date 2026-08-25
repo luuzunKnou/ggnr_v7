@@ -22,6 +22,7 @@ import { Input } from '@/app/shadcnComponents/ui/input';
 import { SignUpApplyForm } from '@/app/(pages)/(index)/SignUpApplyForm';
 import { call } from '@/lib/api';
 import { AUTH_REQUIRED_EVENT } from '@/lib/authRequiredEvent';
+import { withBasePathNav } from '@/lib/basePath';
 
 type LoginModalContextValue = {
   openLogin: () => void;
@@ -157,7 +158,7 @@ function LoginModalDialog({
           : here.startsWith('/')
             ? here
             : '/';
-      window.location.href = dest;
+      window.location.href = withBasePathNav(dest);
     } catch {
       setError('로그인에 실패했습니다.');
       setLoading(false);

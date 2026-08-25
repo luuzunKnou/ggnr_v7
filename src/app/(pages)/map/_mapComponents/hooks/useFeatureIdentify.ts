@@ -3,6 +3,7 @@ import type { Map, MapBrowserEvent } from 'ol';
 import Overlay from 'ol/Overlay';
 import { unByKey } from 'ol/Observable';
 import { call } from '@/lib/api';
+import { getGeoServerBase } from '@/lib/geoserverUrl';
 
 export interface IdentifyFeatureItem {
   titleValue: string;
@@ -34,13 +35,6 @@ export interface IdentifyPopupState {
 /** d = 300000 * 0.54^z  (z = zoom level) */
 function zoomToBuffer(zoom: number): number {
   return 300_000 * Math.pow(0.54, zoom);
-}
-
-function getGeoServerBase(): string {
-  if (typeof window !== 'undefined') {
-    return `${window.location.protocol}//${window.location.hostname}:8080/geoserver`;
-  }
-  return 'http://localhost:8080/geoserver';
 }
 
 const WORKSPACE = 'ggnr';

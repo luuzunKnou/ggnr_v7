@@ -438,9 +438,9 @@ export function RoadNetworkListPanel({ onClose }: Props) {
     ];
 
   return (
-    <div className="flex min-h-0 h-full flex-col bg-white">
-      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-slate-200 px-3 py-1.5">
-        <span className="text-sm font-semibold text-slate-800">도로망도</span>
+    <div className="flex min-h-0 h-full flex-col bg-background">
+      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border px-3 py-1.5">
+        <span className="text-sm font-semibold text-foreground">도로망도</span>
         <div className="flex items-center gap-1">
           <LayerRowPanelButton type="button" onClick={handleExport} title="엑셀 내보내기">
             <Download className="h-3 w-3 shrink-0" aria-hidden />
@@ -457,7 +457,7 @@ export function RoadNetworkListPanel({ onClose }: Props) {
               clearBoundaryForm();
               onClose();
             }}
-            className="shrink-0 rounded p-1 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
+            className="shrink-0 rounded p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
             title="닫기"
             aria-label="닫기"
           >
@@ -466,8 +466,8 @@ export function RoadNetworkListPanel({ onClose }: Props) {
         </div>
       </div>
 
-      <div className="shrink-0 space-y-2 border-b border-slate-200 px-2.5 py-2">
-        <div className="flex rounded-md border border-slate-200 bg-slate-50 p-0.5">
+      <div className="shrink-0 space-y-2 border-b border-border px-2.5 py-2">
+        <div className="flex rounded-md border border-border bg-muted/50 p-0.5">
           <button
             type="button"
             onClick={() => {
@@ -478,8 +478,8 @@ export function RoadNetworkListPanel({ onClose }: Props) {
             className={cn(
               "flex-1 rounded py-1.5 text-[11px] font-medium transition-colors",
               mapSearchTab === "keyword"
-                ? "bg-white text-primary shadow-sm"
-                : "text-slate-500 hover:text-slate-700"
+                ? "bg-background text-primary shadow-sm"
+                : "text-muted-foreground hover:text-foreground"
             )}
           >
             통합검색
@@ -490,8 +490,8 @@ export function RoadNetworkListPanel({ onClose }: Props) {
             className={cn(
               "flex-1 rounded py-1.5 text-[11px] font-medium transition-colors",
               mapSearchTab === "shape"
-                ? "bg-white text-primary shadow-sm"
-                : "text-slate-500 hover:text-slate-700"
+                ? "bg-background text-primary shadow-sm"
+                : "text-muted-foreground hover:text-foreground"
             )}
           >
             도형검색
@@ -506,8 +506,8 @@ export function RoadNetworkListPanel({ onClose }: Props) {
             className={cn(
               "flex-1 rounded px-0.5 py-1.5 text-[10px] font-medium leading-tight transition-colors",
               mapSearchTab === "boundary"
-                ? "bg-white text-primary shadow-sm"
-                : "text-slate-500 hover:text-slate-700"
+                ? "bg-background text-primary shadow-sm"
+                : "text-muted-foreground hover:text-foreground"
             )}
           >
             행정경계 검색
@@ -518,12 +518,12 @@ export function RoadNetworkListPanel({ onClose }: Props) {
           <div className="space-y-1.5">
             <div className="flex items-stretch gap-1.5">
               <div className="relative min-w-0 flex-1">
-                <Search className="absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
+                <Search className="absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
                 <input
                   value={keyword}
                   onChange={(e) => setKeyword(e.target.value)}
                   placeholder="도로명·도로번호·종류·관리기관"
-                  className="h-8 w-full rounded border border-slate-300 pl-7 pr-2.5 text-xs outline-none focus:border-primary focus:ring-2 focus:ring-primary/25"
+                  className="h-8 w-full rounded border border-border pl-7 pr-2.5 text-xs outline-none focus:border-primary focus:ring-2 focus:ring-primary/25"
                 />
               </div>
               <div
@@ -544,7 +544,7 @@ export function RoadNetworkListPanel({ onClose }: Props) {
                         "rounded border px-1.5 text-[10px] font-medium leading-tight transition-colors",
                         active
                           ? "border-primary bg-primary/10 text-primary"
-                          : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50"
+                          : "border-border bg-background text-muted-foreground hover:border-border hover:bg-muted/50"
                       )}
                       aria-pressed={active}
                     >
@@ -571,7 +571,7 @@ export function RoadNetworkListPanel({ onClose }: Props) {
                       "min-w-0 flex-1 truncate rounded border px-0.5 py-1 text-center text-[10px] font-medium leading-tight transition-colors",
                       active
                         ? "border-primary bg-primary/10 text-primary"
-                        : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50"
+                        : "border-border bg-background text-muted-foreground hover:border-border hover:bg-muted/50"
                     )}
                     aria-pressed={active}
                   >
@@ -600,7 +600,7 @@ export function RoadNetworkListPanel({ onClose }: Props) {
                     "flex min-w-[2.25rem] flex-1 flex-col items-center justify-center gap-0.5 rounded border py-1.5 text-[10px] transition-colors",
                     active
                       ? "border-primary bg-primary/5 text-primary"
-                      : "border-slate-200 bg-white text-slate-400 hover:border-slate-300 hover:text-slate-600"
+                      : "border-border bg-background text-muted-foreground hover:border-border hover:text-foreground"
                   )}
                 >
                   <Icon className="h-4 w-4 shrink-0" strokeWidth={2} />
@@ -615,15 +615,15 @@ export function RoadNetworkListPanel({ onClose }: Props) {
               className={cn(
                 "flex min-w-[2.25rem] flex-1 flex-col items-center justify-center gap-0.5 rounded border py-1.5 transition-colors",
                 spatialWkt
-                  ? "border-amber-300 bg-white text-amber-600 hover:border-amber-400"
-                  : "border-slate-200 bg-white text-slate-400 hover:border-slate-300 hover:text-primary"
+                  ? "border-chart-4/50 bg-background text-chart-4 hover:border-chart-4"
+                  : "border-border bg-background text-muted-foreground hover:border-border hover:text-primary"
               )}
             >
               <RefreshCw className="h-4 w-4 shrink-0" strokeWidth={2} />
               <span className="text-[10px]">{spatialWkt ? "해제" : "초기화"}</span>
             </button>
             {spatialDrawRequest ? (
-              <p className="w-full text-[10px] text-slate-500">지도에 도형을 그려 주세요.</p>
+              <p className="w-full text-[10px] text-muted-foreground">지도에 도형을 그려 주세요.</p>
             ) : null}
           </div>
         ) : null}
@@ -639,7 +639,7 @@ export function RoadNetworkListPanel({ onClose }: Props) {
                     setRiSelected("");
                   }}
                   disabled={boundaryLoading}
-                  className="h-8 w-full rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] focus:border-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 disabled:opacity-50"
+                  className="h-8 w-full rounded-md border border-border bg-background px-2 py-1 text-[11px] focus:border-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 disabled:opacity-50"
                 >
                   <option value="">읍면동 선택</option>
                   {emdOptions.map((opt) => (
@@ -654,7 +654,7 @@ export function RoadNetworkListPanel({ onClose }: Props) {
                   value={riSelected}
                   onChange={(e) => setRiSelected(e.target.value)}
                   disabled={!emdSelected || boundaryLoading}
-                  className="h-8 w-full rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] focus:border-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 disabled:cursor-not-allowed disabled:opacity-60"
+                  className="h-8 w-full rounded-md border border-border bg-background px-2 py-1 text-[11px] focus:border-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   <option value="">리 선택</option>
                   {riOptions.map((opt) => (
@@ -669,7 +669,7 @@ export function RoadNetworkListPanel({ onClose }: Props) {
                 title="선택 항목을 목록에 추가"
                 onClick={addBoundaryBadgeFromDraft}
                 disabled={boundaryLoading}
-                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-primary bg-primary text-white transition-colors hover:bg-primary/90 disabled:opacity-50"
+                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-primary bg-primary text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50"
               >
                 <Plus className="h-4 w-4" strokeWidth={2} aria-hidden />
               </button>
@@ -679,7 +679,7 @@ export function RoadNetworkListPanel({ onClose }: Props) {
                 {boundaryBadges.map((b) => (
                   <span
                     key={b.key}
-                    className="inline-flex max-w-full items-center gap-0.5 rounded-full border border-primary/25 bg-primary/8 py-0.5 pl-1.5 pr-0.5 text-[10px] text-slate-800"
+                    className="inline-flex max-w-full items-center gap-0.5 rounded-full border border-primary/25 bg-primary/8 py-0.5 pl-1.5 pr-0.5 text-[10px] text-foreground"
                   >
                     <Landmark className="h-2.5 w-2.5 shrink-0 text-primary/70" />
                     <span className="max-w-[4.5rem] truncate" title={b.label}>
@@ -693,7 +693,7 @@ export function RoadNetworkListPanel({ onClose }: Props) {
                           prev.filter((x) => x.key !== b.key)
                         )
                       }
-                      className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-slate-500 hover:bg-primary/15 hover:text-primary"
+                      className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:bg-primary/15 hover:text-primary"
                     >
                       <X className="h-2.5 w-2.5" strokeWidth={2} />
                     </button>
@@ -706,7 +706,7 @@ export function RoadNetworkListPanel({ onClose }: Props) {
                 type="button"
                 onClick={() => void runBoundarySearch()}
                 disabled={boundaryLoading || boundaryBadges.length === 0}
-                className="min-h-8 flex-1 rounded-md border border-primary bg-primary py-1.5 text-[11px] font-medium text-white transition-colors hover:bg-primary/90 disabled:opacity-50"
+                className="min-h-8 flex-1 rounded-md border border-primary bg-primary py-1.5 text-[11px] font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50"
               >
                 {boundaryLoading ? "검색 중…" : "검색"}
               </button>
@@ -718,7 +718,7 @@ export function RoadNetworkListPanel({ onClose }: Props) {
                   clearSpatial();
                 }}
                 disabled={boundaryLoading}
-                className="min-h-8 flex-1 rounded-md border border-slate-200 bg-white py-1.5 text-[11px] text-slate-600 transition-colors hover:border-slate-300 hover:text-primary disabled:opacity-50"
+                className="min-h-8 flex-1 rounded-md border border-border bg-background py-1.5 text-[11px] text-muted-foreground transition-colors hover:border-border hover:text-primary disabled:opacity-50"
               >
                 초기화
               </button>
@@ -726,13 +726,13 @@ export function RoadNetworkListPanel({ onClose }: Props) {
           </div>
         ) : null}
 
-        <div className="flex items-center justify-between gap-2 text-[11px] text-slate-500">
+        <div className="flex items-center justify-between gap-2 text-[11px] text-muted-foreground">
           <span>목록 {items.length}건</span>
           {isSpatialActive ? (
             <button
               type="button"
               onClick={clearSpatial}
-              className="inline-flex items-center gap-0.5 text-[10px] font-medium text-amber-700 hover:text-amber-800"
+              className="inline-flex items-center gap-0.5 text-[10px] font-medium text-chart-4 hover:text-chart-4/80"
             >
               <X className="h-3 w-3" />
               범위 적용 중 · 해제
@@ -743,11 +743,11 @@ export function RoadNetworkListPanel({ onClose }: Props) {
 
       <div className="min-h-0 flex-1 overflow-auto scrollbar-thin">
         {listLoading ? (
-          <p className="px-3 py-2.5 text-xs text-slate-500">불러오는 중...</p>
+          <p className="px-3 py-2.5 text-xs text-muted-foreground">불러오는 중...</p>
         ) : listError ? (
-          <p className="px-3 py-2.5 text-xs text-red-600">{listError}</p>
+          <p className="px-3 py-2.5 text-xs text-destructive">{listError}</p>
         ) : items.length === 0 ? (
-          <p className="px-3 py-2.5 text-xs text-slate-500">검색 결과가 없습니다.</p>
+          <p className="px-3 py-2.5 text-xs text-muted-foreground">검색 결과가 없습니다.</p>
         ) : (
           <table className="w-full table-fixed border-collapse text-xs">
             <colgroup>
@@ -777,10 +777,10 @@ export function RoadNetworkListPanel({ onClose }: Props) {
                       }
                     }}
                     className={cn(
-                      "cursor-pointer border-b border-slate-200 align-middle transition-colors",
+                      "cursor-pointer border-b border-border align-middle transition-colors",
                       isSelected
                         ? "border-l-[3px] border-l-primary bg-primary/[0.11] ring-1 ring-inset ring-primary/20 hover:bg-primary/[0.14]"
-                        : "border-l-[3px] border-l-transparent hover:bg-slate-50"
+                        : "border-l-[3px] border-l-transparent hover:bg-muted/50"
                     )}
                   >
                     <td className="min-w-0 overflow-hidden px-3 py-1.5">
@@ -814,7 +814,7 @@ export function RoadNetworkListPanel({ onClose }: Props) {
                         <p
                           className={cn(
                             "min-w-0 flex-1 truncate text-sm font-medium leading-tight",
-                            hasName ? "text-slate-800" : "text-slate-400"
+                            hasName ? "text-foreground" : "text-muted-foreground"
                           )}
                           title={titleLine}
                         >
@@ -823,7 +823,7 @@ export function RoadNetworkListPanel({ onClose }: Props) {
                       </div>
                     </td>
                     <td
-                      className="min-w-0 px-3 py-2.5 pl-1.5 text-right text-[11px] text-slate-500"
+                      className="min-w-0 px-3 py-2.5 pl-1.5 text-right text-[11px] text-muted-foreground"
                       title={item.dept || undefined}
                     >
                       <span className="block truncate">{item.dept || "—"}</span>

@@ -37,6 +37,7 @@ import {
 } from './parcelAnalysis.types';
 import { useMapContext } from '../../_mapComponents/MapContext';
 import { canStartMapDrawInteraction } from '../../_mapComponents/mapDrawInteraction';
+import { getGeoServerBase } from '@/lib/geoserverUrl';
 
 export const PARCEL_ANALYSIS_OPENED_KEY = 'parcelAnalysis';
 
@@ -196,7 +197,7 @@ export function ParcelAnalysisProvider({ children }: { children: ReactNode }) {
     workspace: string;
     publishedLayerKeys?: string[];
   }>({
-    geoserverUrl: 'http://localhost:8080/geoserver',
+    geoserverUrl: getGeoServerBase(),
     workspace: 'ggnr',
   });
 

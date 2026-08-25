@@ -36,31 +36,31 @@ import { MapAdminToolsMenu } from './mapAdminTools/MapAdminToolsMenu';
 const mapSearchBarIconShell = cn(
   'shrink-0 opacity-90 rounded-[5px] backdrop-blur-sm shadow-lg border overflow-hidden',
   'bg-white/95 border-slate-200',
-  'dark:bg-black/55 dark:border-white/10'
+  'dark:bg-black/95 dark:border-white/10'
 );
 
 const mapSearchBarIconBtnInner = cn(
   'box-border flex items-center justify-center w-[30px] h-[30px] p-0 cursor-pointer transition-colors',
   'text-slate-600 dark:text-white/90',
-  'hover:bg-slate-100 hover:text-blue-600',
-  'dark:hover:bg-white/10 dark:hover:text-white'
+  'hover:bg-slate-100 hover:text-primary',
+  'dark:hover:bg-white/10 dark:hover:text-primary'
 );
 
 const mapSearchBarIconBtnActive = cn(
-  'bg-slate-100 text-blue-600',
-  'dark:bg-white/20 dark:text-white'
+  'bg-slate-100 text-primary',
+  'dark:bg-white/20 dark:text-primary'
 );
 
 /** 검색바 공통 표면 — 시스템 선택 등 넓은 컨트롤 */
 const mapSearchBarSurface = cn(
   'opacity-90 rounded-[5px] backdrop-blur-sm shadow-lg border transition-colors',
   'bg-white/95 border-slate-200',
-  'dark:bg-black/55 dark:border-white/10'
+  'dark:bg-black/95 dark:border-white/10'
 );
 
 const mapSearchBarSurfaceHover = cn(
-  'hover:bg-slate-100 hover:text-blue-600',
-  'dark:hover:bg-white/10 dark:hover:text-white'
+  'hover:bg-slate-100 hover:text-primary',
+  'dark:hover:bg-white/10 dark:hover:text-primary'
 );
 
 /** 시스템 선택 트리거 */

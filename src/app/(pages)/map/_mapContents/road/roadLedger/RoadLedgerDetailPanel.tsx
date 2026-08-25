@@ -128,19 +128,19 @@ function DetailInfoRow({
   labelClassName: string;
 }) {
   return (
-    <div className={cn("flex", showBottomBorder && "border-b border-slate-200")}>
+    <div className={cn("flex", showBottomBorder && "border-b border-border")}>
       <div
         className={cn(
-          "flex min-w-0 shrink-0 items-start bg-slate-100 px-2 py-1.5",
+          "flex min-w-0 shrink-0 items-start bg-muted px-2 py-1.5",
           labelClassName,
         )}
       >
-        <span className="min-w-0 w-full whitespace-normal break-words text-[11px] leading-snug text-[#666]">
+        <span className="min-w-0 w-full whitespace-normal break-words text-[11px] leading-snug text-muted-foreground">
           {field.label}
         </span>
       </div>
       <div className="flex min-w-0 flex-1 items-start px-2 py-1.5">
-        <span className="break-all text-[11px] leading-snug text-[#666]">{field.value}</span>
+        <span className="break-all text-[11px] leading-snug text-muted-foreground">{field.value}</span>
       </div>
     </div>
   );
@@ -152,7 +152,7 @@ export function DetailInfoTable({
   entries: { fieldKey: string; label: string; value: string }[];
 }) {
   if (entries.length === 0) {
-    return <p className="text-[11px] text-slate-500">표시할 항목이 없습니다.</p>;
+    return <p className="text-[11px] text-muted-foreground">표시할 항목이 없습니다.</p>;
   }
 
   const mid = Math.ceil(entries.length / 2);
@@ -163,14 +163,14 @@ export function DetailInfoTable({
   if (entries.length === 1) {
     const field = entries[0]!;
     return (
-      <div className="overflow-hidden rounded-[5px] border border-slate-200">
+      <div className="overflow-hidden rounded-[5px] border border-border">
         <DetailInfoRow field={field} showBottomBorder={false} labelClassName="w-[100px]" />
       </div>
     );
   }
 
   return (
-    <div className="grid grid-cols-2 divide-x divide-slate-200 overflow-hidden rounded-[5px] border border-slate-200">
+    <div className="grid grid-cols-2 divide-x divide-border overflow-hidden rounded-[5px] border border-border">
       <div className="min-w-0">
         {leftCol.map((field, index) => (
           <DetailInfoRow
@@ -252,12 +252,12 @@ function RoadLedgerDocActionGrid({
               "h-7 text-[11px] rounded border min-w-0 inline-flex items-center justify-center gap-0.5 px-1 leading-none whitespace-nowrap",
               !isReportOnly && !setVisibleLayerNames && "pointer-events-none opacity-50",
               isReportOnly
-                ? "border-slate-300 bg-slate-50 text-slate-700 hover:bg-slate-100"
+                ? "border-border bg-muted/50 text-foreground/90 hover:bg-muted"
                 : hasLayers
                   ? active
-                    ? "border-primary/45 bg-primary/[0.08] text-slate-800 ring-1 ring-inset ring-primary/15 hover:bg-primary/[0.11]"
-                    : "border-slate-300 bg-slate-50 text-slate-700 hover:bg-slate-100"
-                  : "border-slate-200 bg-slate-50/80 text-slate-500 hover:bg-slate-100",
+                    ? "border-primary/45 bg-primary/[0.08] text-foreground ring-1 ring-inset ring-primary/15 hover:bg-primary/[0.11]"
+                    : "border-border bg-muted/50 text-foreground/90 hover:bg-muted"
+                  : "border-border bg-muted/50 text-muted-foreground hover:bg-muted",
             )}
           >
             <Icon className="h-3.5 w-3.5 shrink-0" aria-hidden />
@@ -416,18 +416,18 @@ export function RoadLedgerDetailPanel({ row, onClose }: Props) {
     }));
 
   return (
-    <div className="flex h-full min-h-0 w-full min-w-0 flex-col bg-white">
-      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-slate-200 px-4 py-2.5">
+    <div className="flex h-full min-h-0 w-full min-w-0 flex-col bg-background">
+      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border px-4 py-2.5">
         <div className="min-w-0 flex-1">
-          <p className="break-words text-sm font-semibold leading-snug text-slate-800">
+          <p className="break-words text-sm font-semibold leading-snug text-foreground">
             {roadName || "—"}
-            {titleParen ? <span className="font-medium text-slate-600"> {titleParen}</span> : null}
+            {titleParen ? <span className="font-medium text-muted-foreground"> {titleParen}</span> : null}
           </p>
         </div>
         <button
           type="button"
           onClick={onClose}
-          className="shrink-0 rounded p-1 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
+          className="shrink-0 rounded p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
           title="닫기"
           aria-label="닫기"
         >
@@ -436,7 +436,7 @@ export function RoadLedgerDetailPanel({ row, onClose }: Props) {
       </div>
 
       <div className="flex min-h-0 w-full min-w-0 flex-1 flex-col">
-        <div className="shrink-0 border-slate-200 bg-white px-3 py-2 pb-0">
+        <div className="shrink-0 border-border bg-background px-3 py-2 pb-0">
           <div className="space-y-1.5">
             <RoadLedgerDocActionGrid
               items={DOC_ACTION_BUTTONS_PRIMARY}
@@ -463,26 +463,26 @@ export function RoadLedgerDetailPanel({ row, onClose }: Props) {
           </div>
         </div>
 
-        <MapSideDetailScroll className="min-h-0 flex-1 overflow-auto border-slate-200 p-3 pt-0">
-          <div className="mt-3 border-t border-slate-200">
+        <MapSideDetailScroll className="min-h-0 flex-1 overflow-auto border-border p-3 pt-0">
+          <div className="mt-3 border-t border-border">
             <div className="flex items-center justify-between gap-2 mt-1">
               <button
                 type="button"
-                className="flex min-w-0 flex-1 items-center gap-1.5 py-1.5 text-left transition-colors hover:bg-slate-50"
+                className="flex min-w-0 flex-1 items-center gap-1.5 py-1.5 text-left transition-colors hover:bg-muted/50"
                 onClick={() => setAttrOpen(!attrOpen)}
               >
                 {attrOpen ? (
                   <ChevronDown className="h-3.5 w-3.5 shrink-0 text-primary" />
                 ) : (
-                  <ChevronRight className="h-3.5 w-3.5 shrink-0 text-slate-500" />
+                  <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
                 )}
-                <span className="text-[12px] font-semibold text-[#666]">속성정보</span>
+                <span className="text-[12px] font-semibold text-muted-foreground">속성정보</span>
               </button>
               {otherEntries.length > 0 ? (
                 <button
                   type="button"
                   onClick={() => setDetailModalOpen(true)}
-                  className="shrink-0 border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-medium text-slate-700 shadow-sm transition-colors hover:bg-slate-50"
+                  className="shrink-0 border border-border bg-background px-2.5 py-1 text-[11px] font-medium text-foreground/90 shadow-sm transition-colors hover:bg-muted/50"
                 >
                   상세정보
                 </button>
@@ -490,17 +490,17 @@ export function RoadLedgerDetailPanel({ row, onClose }: Props) {
             </div>
             {attrOpen ? (
               <div className="mt-2 px-0 pb-1">
-                <div className="overflow-hidden border border-slate-200">
+                <div className="overflow-hidden border border-border">
                   {PRIMARY_TABLE_ROWS.map(({ field, label }, idx) => {
                     const raw = pickRoadLedgerField(row, field);
                     const display = primaryCellDisplay(field, raw);
                     return (
                       <div
                         key={field}
-                        className={`flex ${idx !== PRIMARY_TABLE_ROWS.length - 1 ? "border-b border-slate-200" : ""}`}
+                        className={`flex ${idx !== PRIMARY_TABLE_ROWS.length - 1 ? "border-b border-border" : ""}`}
                       >
-                        <div className="w-[130px] shrink-0 bg-slate-100 px-2.5 py-1.5 text-[11px] text-[#666]">{label}</div>
-                        <div className="min-w-0 flex-1 px-2.5 py-1.5 text-[11px] text-[#666] break-all">{display}</div>
+                        <div className="w-[130px] shrink-0 bg-muted px-2.5 py-1.5 text-[11px] text-muted-foreground">{label}</div>
+                        <div className="min-w-0 flex-1 px-2.5 py-1.5 text-[11px] text-muted-foreground break-all">{display}</div>
                       </div>
                     );
                   })}
@@ -514,8 +514,8 @@ export function RoadLedgerDetailPanel({ row, onClose }: Props) {
               showCloseButton
               className="!flex max-h-[min(85vh,720px)] w-[min(36rem,calc(100vw-2rem))] max-w-none flex-col gap-0 overflow-hidden rounded-[5px] p-0 sm:max-w-none"
             >
-              <DialogHeader className="shrink-0 border-b border-slate-200 px-4 py-3 text-left">
-                <DialogTitle className="text-base font-semibold text-slate-800">상세정보</DialogTitle>
+              <DialogHeader className="shrink-0 border-b border-border px-4 py-3 text-left">
+                <DialogTitle className="text-base font-semibold text-foreground">상세정보</DialogTitle>
               </DialogHeader>
               <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-3">
                 <DetailInfoTable entries={otherEntries} />

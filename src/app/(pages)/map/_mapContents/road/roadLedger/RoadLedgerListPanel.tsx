@@ -209,13 +209,13 @@ export function RoadLedgerListPanel({ onClose }: Props) {
   }, [keyword]);
 
   return (
-    <div className="flex min-h-0 h-full flex-col bg-white">
-      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-slate-200 px-3 py-1.5">
-        <span className="text-sm font-semibold text-slate-800">도로대장</span>
+    <div className="flex min-h-0 h-full flex-col bg-background">
+      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border px-3 py-1.5">
+        <span className="text-sm font-semibold text-foreground">도로대장</span>
         <button
           type="button"
           onClick={onClose}
-          className="shrink-0 rounded p-1 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
+          className="shrink-0 rounded p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
           title="닫기"
           aria-label="닫기"
         >
@@ -223,25 +223,25 @@ export function RoadLedgerListPanel({ onClose }: Props) {
         </button>
       </div>
 
-      <div className="shrink-0 border-b border-slate-200 px-2.5 py-1.5">
+      <div className="shrink-0 border-b border-border px-2.5 py-1.5">
         <div className="relative">
-          <Search className="absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
+          <Search className="absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
           <input
             value={keyword}
             onChange={(e) => setKeyword(e.target.value)}
             placeholder="도로명·노선번호·구간·일자·연장 검색"
-            className="h-8 w-full rounded border border-slate-300 pl-7 pr-2.5 text-xs outline-none focus:border-primary focus:ring-2 focus:ring-primary/25"
+            className="h-8 w-full rounded border border-border pl-7 pr-2.5 text-xs outline-none focus:border-primary focus:ring-2 focus:ring-primary/25"
           />
         </div>
       </div>
 
       <div className="min-h-0 flex-1 overflow-auto scrollbar-thin">
         {loading ? (
-          <p className="px-3 py-2.5 text-xs text-slate-500">불러오는 중...</p>
+          <p className="px-3 py-2.5 text-xs text-muted-foreground">불러오는 중...</p>
         ) : error ? (
-          <p className="px-3 py-2.5 text-xs text-red-600">{error}</p>
+          <p className="px-3 py-2.5 text-xs text-destructive">{error}</p>
         ) : items.length === 0 ? (
-          <p className="px-3 py-2.5 text-xs text-slate-500">검색 결과가 없습니다.</p>
+          <p className="px-3 py-2.5 text-xs text-muted-foreground">검색 결과가 없습니다.</p>
         ) : (
           <table className="w-full table-fixed border-collapse text-xs">
             <colgroup>
@@ -277,10 +277,10 @@ export function RoadLedgerListPanel({ onClose }: Props) {
                       }
                     }}
                     className={cn(
-                      "cursor-pointer border-b border-slate-200 align-middle transition-colors",
+                      "cursor-pointer border-b border-border align-middle transition-colors",
                       isSelected
                         ? "border-l-[3px] border-l-primary bg-primary/[0.11] ring-1 ring-inset ring-primary/20 hover:bg-primary/[0.14]"
-                        : "border-l-[3px] border-l-transparent hover:bg-slate-50",
+                        : "border-l-[3px] border-l-transparent hover:bg-muted/50",
                       isBusy && "opacity-70"
                     )}
                   >
@@ -297,7 +297,7 @@ export function RoadLedgerListPanel({ onClose }: Props) {
                         <p
                           className={cn(
                             "min-w-0 truncate text-sm font-medium leading-tight",
-                            titleLine !== "—" ? "text-slate-800" : "text-slate-400"
+                            titleLine !== "—" ? "text-foreground" : "text-muted-foreground"
                           )}
                           title={titleLine !== "—" ? titleLine : undefined}
                         >
@@ -305,10 +305,10 @@ export function RoadLedgerListPanel({ onClose }: Props) {
                         </p>
                       </div>
                     </td>
-                    <td className="px-1 py-2.5 text-right text-[11px] tabular-nums text-slate-500 whitespace-nowrap">
+                    <td className="px-1 py-2.5 text-right text-[11px] tabular-nums text-muted-foreground whitespace-nowrap">
                       {hasMeta ? formatRoadLedgerDsgdateForList(dsg) : ""}
                     </td>
-                    <td className="px-3 py-1.5 pl-1.5 text-right text-[11px] tabular-nums text-slate-500 whitespace-nowrap">
+                    <td className="px-3 py-1.5 pl-1.5 text-right text-[11px] tabular-nums text-muted-foreground whitespace-nowrap">
                       {hasMeta ? lenM || "—" : ""}
                     </td>
                   </tr>

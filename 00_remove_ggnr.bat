@@ -1,12 +1,11 @@
 @echo off
-chcp 65001 >nul
 setlocal EnableExtensions EnableDelayedExpansion
 
 :: =============================================================================
-:: GGNR_V7 ì„œë¹„ìŠ¤ ì œê±° + 80Â·3000 í¬íŠ¸ ì ìœ  ì¢…ë£Œ (ê´€ë¦¬ì ê¶Œí•œìœ¼ë¡œ ì‹¤í–‰)
-:: - nssm ìœ„ì¹˜: root\nssm\win64\nssm.exe (nssm_install_ggnr.bat ê³¼ ë™ì¼)
-:: - ìˆœì„œ: 1) nssm stop/remove GGNR_V7  2) 80Â·3000 í¬íŠ¸ Listen í”„ë¡œì„¸ìŠ¤ ì¢…ë£Œ
-:: - ì¢…ë£Œ ì‹œ í•­ìƒ pause â€” ë¡œê·¸ í™•ì¸ í›„ ìˆ˜ë™ìœ¼ë¡œ ì°½ ë‹«ê¸°
+:: GGNR_V7 ¼­ºñ½º Á¦°Å + 80¡¤3000 Æ÷Æ® Á¡À¯ Á¾·á (°ü¸®ÀÚ ±ÇÇÑÀ¸·Î ½ÇÇà)
+:: - nssm À§Ä¡: root\nssm\win64\nssm.exe (nssm_install_ggnr.bat °ú µ¿ÀÏ)
+:: - ¼ø¼­: 1) nssm stop/remove GGNR_V7  2) 80¡¤3000 Æ÷Æ® Listen ÇÁ·Î¼¼½º Á¾·á
+:: - Á¾·á ½Ã Ç×»ó pause ? ·Î±× È®ÀÎ ÈÄ ¼öµ¿À¸·Î Ã¢ ´İ±â
 :: =============================================================================
 
 set "SERVICE_NAME=GGNR_V7"
@@ -23,18 +22,18 @@ echo [remove-ggnr] geo port= %GEO_PORT%
 echo [remove-ggnr] app port= %APP_PORT%
 echo.
 
-:: ê´€ë¦¬ì ì—¬ë¶€
+:: °ü¸®ÀÚ ¿©ºÎ
 net session >nul 2>&1
 if errorlevel 1 (
-  echo [ì˜¤ë¥˜] ê´€ë¦¬ì ì‹¤í–‰ì´ ì•„ë‹™ë‹ˆë‹¤.
-  echo         ì´ ìŠ¤í¬ë¦½íŠ¸ëŠ” ê´€ë¦¬ì CMDì—ì„œ ì‹¤í–‰í•´ì•¼ í•©ë‹ˆë‹¤.
-  echo         CMDë¥¼ ë§ˆìš°ìŠ¤ ì˜¤ë¥¸ìª½ ë²„íŠ¼ â†’ Â«ê´€ë¦¬ì ê¶Œí•œìœ¼ë¡œ ì‹¤í–‰Â» í›„ ë‹¤ì‹œ ì‹¤í–‰í•˜ì„¸ìš”.
+  echo [¿À·ù] °ü¸®ÀÚ ½ÇÇàÀÌ ¾Æ´Õ´Ï´Ù.
+  echo         ÀÌ ½ºÅ©¸³Æ®´Â °ü¸®ÀÚ CMD¿¡¼­ ½ÇÇàÇØ¾ß ÇÕ´Ï´Ù.
+  echo         CMD¸¦ ¸¶¿ì½º ¿À¸¥ÂÊ ¹öÆ° ¡æ ¡ì°ü¸®ÀÚ ±ÇÇÑÀ¸·Î ½ÇÇà¡í ÈÄ ´Ù½Ã ½ÇÇàÇÏ¼¼¿ä.
   set "EXIT_EC=1"
   goto :end_pause
 )
-echo [í™•ì¸] ê´€ë¦¬ì ê¶Œí•œìœ¼ë¡œ ì‹¤í–‰ ì¤‘ì…ë‹ˆë‹¤.
+echo [È®ÀÎ] °ü¸®ÀÚ ±ÇÇÑÀ¸·Î ½ÇÇà ÁßÀÔ´Ï´Ù.
 
-:: nssm ì°¾ê¸° (í”„ë¡œì íŠ¸ ë‚´ë¶€: root\nssm\win64\nssm.exe)
+:: nssm Ã£±â (ÇÁ·ÎÁ§Æ® ³»ºÎ: root\nssm\win64\nssm.exe)
 set "NSSM=%ROOT%\nssm\win64\nssm.exe"
 if not exist "%NSSM%" set "NSSM=%ROOT%\nssm\win32\nssm.exe"
 if not exist "%NSSM%" (
@@ -49,8 +48,8 @@ if not exist "%NSSM%" (
 
 :nssm_found
 if not exist "%NSSM%" (
-  echo [ì˜¤ë¥˜] nssm.exe ë¥¼ ì°¾ì§€ ëª»í–ˆìŠµë‹ˆë‹¤.
-  echo   ê¸°ëŒ€ ê²½ë¡œ: %ROOT%\nssm\win64\nssm.exe
+  echo [¿À·ù] nssm.exe ¸¦ Ã£Áö ¸øÇß½À´Ï´Ù.
+  echo   ±â´ë °æ·Î: %ROOT%\nssm\win64\nssm.exe
   set "EXIT_EC=1"
   goto :end_pause
 )
@@ -60,62 +59,62 @@ echo.
 :: ---------------------------------------------------------------------------
 :: 1) nssm remove GGNR_V7
 :: ---------------------------------------------------------------------------
-echo [1/2] nssm ì„œë¹„ìŠ¤ %SERVICE_NAME% ì¤‘ì§€Â·ì œê±°...
+echo [1/2] nssm ¼­ºñ½º %SERVICE_NAME% ÁßÁö¡¤Á¦°Å...
 "%NSSM%" status %SERVICE_NAME% >nul 2>&1
 if errorlevel 1 (
-  echo [ì•ˆë‚´] ì„œë¹„ìŠ¤ %SERVICE_NAME% ê°€ ë“±ë¡ë˜ì–´ ìˆì§€ ì•ŠìŠµë‹ˆë‹¤. ^(ì œê±° ìƒëµ^)
+  echo [¾È³»] ¼­ºñ½º %SERVICE_NAME% °¡ µî·ÏµÇ¾î ÀÖÁö ¾Ê½À´Ï´Ù. ^(Á¦°Å »ı·«^)
 ) else (
   echo [remove-ggnr] stop %SERVICE_NAME% ...
   "%NSSM%" stop %SERVICE_NAME% confirm >nul 2>&1
   echo [remove-ggnr] remove %SERVICE_NAME% ...
   "%NSSM%" remove %SERVICE_NAME% confirm
   if errorlevel 1 (
-    echo [ì˜¤ë¥˜] nssm remove ì‹¤íŒ¨
-    echo         ìˆ˜ë™: "%NSSM%" stop %SERVICE_NAME% confirm
+    echo [¿À·ù] nssm remove ½ÇÆĞ
+    echo         ¼öµ¿: "%NSSM%" stop %SERVICE_NAME% confirm
     echo               "%NSSM%" remove %SERVICE_NAME% confirm
     set "EXIT_EC=1"
     goto :end_pause
   )
-  echo [ì™„ë£Œ] ì„œë¹„ìŠ¤ %SERVICE_NAME% ì œê±°ë¨.
+  echo [¿Ï·á] ¼­ºñ½º %SERVICE_NAME% Á¦°ÅµÊ.
 )
 echo.
 
 :: ---------------------------------------------------------------------------
-:: 2) 80Â·3000 í¬íŠ¸ Listen í”„ë¡œì„¸ìŠ¤ ì¢…ë£Œ
-::    (findstr :80 ë‹¨ë…ì€ 8000Â·8080 ë“±ë„ ì¡íˆë¯€ë¡œ LISTENING + :í¬íŠ¸ ê²½ê³„ë¥¼ ë§ì¶¤)
+:: 2) 80¡¤3000 Æ÷Æ® Listen ÇÁ·Î¼¼½º Á¾·á
+::    (findstr :80 ´Üµ¶Àº 8000¡¤8080 µîµµ ÀâÈ÷¹Ç·Î LISTENING + :Æ÷Æ® °æ°è¸¦ ¸ÂÃã)
 :: ---------------------------------------------------------------------------
-echo [2/2] í¬íŠ¸ %GEO_PORT%, %APP_PORT% Listen í”„ë¡œì„¸ìŠ¤ ê²€ìƒ‰Â·ì¢…ë£Œ...
+echo [2/2] Æ÷Æ® %GEO_PORT%, %APP_PORT% Listen ÇÁ·Î¼¼½º °Ë»ö¡¤Á¾·á...
 call :kill_listen_port %GEO_PORT%
 echo.
 call :kill_listen_port %APP_PORT%
 
 echo.
 if "!EXIT_EC!"=="0" (
-  echo [ì™„ë£Œ] remove_ggnr ì‘ì—…ì´ ëë‚¬ìŠµë‹ˆë‹¤.
+  echo [¿Ï·á] remove_ggnr ÀÛ¾÷ÀÌ ³¡³µ½À´Ï´Ù.
   echo   1^) nssm remove %SERVICE_NAME%
-  echo   2^) í¬íŠ¸ %GEO_PORT%, %APP_PORT% ì •ë¦¬
+  echo   2^) Æ÷Æ® %GEO_PORT%, %APP_PORT% Á¤¸®
 ) else (
-  echo [ì¢…ë£Œ] ì˜¤ë¥˜ë¡œ ì¤‘ë‹¨ë˜ì—ˆìŠµë‹ˆë‹¤ ^(exit=!EXIT_EC!^). ìœ„ ë©”ì‹œì§€ë¥¼ í™•ì¸í•˜ì„¸ìš”.
+  echo [Á¾·á] ¿À·ù·Î Áß´ÜµÇ¾ú½À´Ï´Ù ^(exit=!EXIT_EC!^). À§ ¸Ş½ÃÁö¸¦ È®ÀÎÇÏ¼¼¿ä.
 )
 
 :end_pause
 echo.
 echo -----------------------------------------------------------
-echo  ë¡œê·¸ë¥¼ í™•ì¸í•œ ë’¤, ì•„ë¬´ í‚¤ë‚˜ ëˆ„ë¥´ë©´ ì°½ì´ ë‹«í™ë‹ˆë‹¤.
+echo  ·Î±×¸¦ È®ÀÎÇÑ µÚ, ¾Æ¹« Å°³ª ´©¸£¸é Ã¢ÀÌ ´İÈü´Ï´Ù.
 echo -----------------------------------------------------------
 pause
 exit /b !EXIT_EC!
 
 :: ---------------------------------------------------------------------------
-:: %1 = Listen í¬íŠ¸. í•´ë‹¹ í¬íŠ¸ PID ì¢…ë£Œ í›„ ì¬í™•ì¸.
+:: %1 = Listen Æ÷Æ®. ÇØ´ç Æ÷Æ® PID Á¾·á ÈÄ ÀçÈ®ÀÎ.
 :: ---------------------------------------------------------------------------
 :kill_listen_port
 set "KP=%~1"
-echo ----- í¬íŠ¸ %KP% -----
-echo       netstat ì°¸ê³  ^(í˜„ì¬ LISTENING^):
+echo ----- Æ÷Æ® %KP% -----
+echo       netstat Âü°í ^(ÇöÀç LISTENING^):
 netstat -ano | findstr /R /C:":%KP% .*LISTENING"
 if errorlevel 1 (
-  echo [ì•ˆë‚´] í¬íŠ¸ %KP% Listen ì—†ìŒ.
+  echo [¾È³»] Æ÷Æ® %KP% Listen ¾øÀ½.
   goto :eof
 )
 
@@ -126,27 +125,27 @@ for /f "tokens=5" %%P in ('netstat -ano ^| findstr /R /C:":%KP% .*LISTENING"') d
     taskkill /F /PID %%P >nul 2>&1
     if not errorlevel 1 (
       set /a KILLED+=1
-      echo [ì™„ë£Œ] PID %%P ì¢…ë£Œ
+      echo [¿Ï·á] PID %%P Á¾·á
     ) else (
-      echo [ê²½ê³ ] PID %%P ì¢…ë£Œ ì‹¤íŒ¨ ^(ì´ë¯¸ ì¢…ë£Œë˜ì—ˆê±°ë‚˜ ê¶Œí•œ ë¶€ì¡±^)
+      echo [°æ°í] PID %%P Á¾·á ½ÇÆĞ ^(ÀÌ¹Ì Á¾·áµÇ¾ú°Å³ª ±ÇÇÑ ºÎÁ·^)
     )
   )
 )
 
 if "!KILLED!"=="0" (
-  echo [ì•ˆë‚´] ì¢…ë£Œí•œ PID ì—†ìŒ ^(íŒŒì‹± ì‹¤íŒ¨ ì‹œ ìˆ˜ë™^):
+  echo [¾È³»] Á¾·áÇÑ PID ¾øÀ½ ^(ÆÄ½Ì ½ÇÆĞ ½Ã ¼öµ¿^):
   echo         netstat -ano ^| findstr :%KP%
   echo         taskkill /f /pid [PID]
 ) else (
-  echo [ì™„ë£Œ] í¬íŠ¸ %KP% ê´€ë ¨ í”„ë¡œì„¸ìŠ¤ !KILLED!ê±´ ì¢…ë£Œ ì‹œë„í•¨.
+  echo [¿Ï·á] Æ÷Æ® %KP% °ü·Ã ÇÁ·Î¼¼½º !KILLED!°Ç Á¾·á ½ÃµµÇÔ.
 )
 
 timeout /t 1 /nobreak >nul
 netstat -ano | findstr /R /C:":%KP% .*LISTENING" >nul 2>&1
 if errorlevel 1 (
-  echo [í™•ì¸] í¬íŠ¸ %KP% Listen ì—†ìŒ.
+  echo [È®ÀÎ] Æ÷Æ® %KP% Listen ¾øÀ½.
 ) else (
-  echo [ê²½ê³ ] í¬íŠ¸ %KP% ê°€ ì•„ì§ Listen ì¤‘ì…ë‹ˆë‹¤. ìˆ˜ë™ í™•ì¸í•˜ì„¸ìš”.
+  echo [°æ°í] Æ÷Æ® %KP% °¡ ¾ÆÁ÷ Listen ÁßÀÔ´Ï´Ù. ¼öµ¿ È®ÀÎÇÏ¼¼¿ä.
   netstat -ano | findstr /R /C:":%KP% .*LISTENING"
 )
 goto :eof

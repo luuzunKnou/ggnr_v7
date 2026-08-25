@@ -6,11 +6,12 @@ import { getProjectEnvVars } from "./scripts/load-project-env";
 
 /**
  * [project].env 의 [dev|demo|prod] 섹션 BASE_PATH → Next basePath.
- * 게이트 등록: https://dggskorea/[프로젝트명] 과 동일하게 BASE_PATH=/[프로젝트명] (또는 프로젝트명만).
+ * 게이트 등록: https://dggs.kr/[프로젝트명] 과 동일하게 BASE_PATH=/[프로젝트명] (또는 프로젝트명만).
  * run.ts 가 먼저 process.env 에 넣은 값을 쓰고, 없으면 GGNR_PROJECT+GGNR_ENV 로 파일에서 읽음.
  * 없으면 "" → localhost/IP 루트 접속(기존과 동일).
  *
  * 주의: basePath 는 next build / next dev 기동 시점에 반영됨. env만 바꾸고 재빌드 없이 start 하면 CSS/JS 경로가 어긋날 수 있음.
+ * 게이트 진입 예: https://dggs.kr/build_yy — BASE_PATH=/build_yy (끝 / 없음).
  */
 function resolveBasePath(): string {
   let raw = (process.env.BASE_PATH ?? "").trim();
@@ -26,7 +27,7 @@ function resolveBasePath(): string {
     }
   }
   if (!raw) return "";
-  // 실수로 전체 URL을 넣은 경우 pathname만 사용 (예: https://dggskorea/uav_ulsan)
+  // 실수로 전체 URL을 넣은 경우 pathname만 사용 (예: https://dggs.kr/uav_ulsan)
   if (/^https?:\/\//i.test(raw)) {
     try {
       raw = new URL(raw).pathname;
@@ -75,7 +76,13 @@ const nextConfig: NextConfig = {
     'pg-native',
   ],
   async rewrites() {
+    // GeoServer: 브라우저·게이트는 동일 출처 `{basePath}/geoserver` → 로컬 8080
+    const geoInternal = (
+      process.env.GEOSERVER_URL?.trim() || 'http://127.0.0.1:8080/geoserver'
+    ).replace(/\/$/, '');
     return [
+      { source: '/geoserver', destination: geoInternal },
+      { source: '/geoserver/:path*', destination: `${geoInternal}/:path*` },
       { source: '/vworldLandCharacteristics.api', destination: '/api/vworld/land-characteristics' },
       { source: '/vworldLandCharacteristics_https.api', destination: '/api/vworld/land-characteristics' },
       { source: '/vworldLandUseAttr.api', destination: '/api/vworld/land-use' },

@@ -3,6 +3,7 @@ import path from 'node:path';
 import { spawn } from 'node:child_process';
 
 import { pool } from '@/database/db';
+import { getGeoServerInternalBase } from '@/lib/geoserverUrl';
 
 export type RetryOptions = {
   retries: number;
@@ -208,7 +209,7 @@ export async function geoserverFetch(
   pathSeg: string,
   options: { method?: string; body?: string; contentType?: string; accept?: string } = {}
 ): Promise<Response> {
-  const baseUrl = (process.env.GEOSERVER_URL ?? 'http://localhost:8080/geoserver').replace(/\/$/, '');
+  const baseUrl = getGeoServerInternalBase();
   const user = process.env.GEOSERVER_USER ?? 'admin';
   const pass = process.env.GEOSERVER_PASSWORD ?? 'geoserver';
   const auth = Buffer.from(`${user}:${pass}`, 'utf8').toString('base64');

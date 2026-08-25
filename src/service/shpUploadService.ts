@@ -377,7 +377,7 @@ function isValidUtf8Bytes(bytes: Buffer): boolean {
 }
 
 /** 완성된 UTF-8 시퀀스만 남기고, 끝의 잘린 멀티바이트는 제거 */
-function stripIncompleteUtf8Bytes(bytes: Buffer): Buffer {
+function stripIncompleteUtf8Bytes(bytes: Buffer): Buffer<ArrayBuffer> {
   let i = 0;
   let end = 0;
   while (i < bytes.length) {
@@ -404,7 +404,7 @@ function stripIncompleteUtf8Bytes(bytes: Buffer): Buffer {
     i += need;
     end = i;
   }
-  return bytes.subarray(0, end);
+  return Buffer.from(bytes.subarray(0, end));
 }
 
 /**

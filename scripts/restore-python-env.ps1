@@ -1,7 +1,20 @@
-param(
+﻿param(
   [Parameter(Mandatory = $true)]
   [string]$Root
 )
+
+# CMD(chcp 65001)에서 한글 로그가 깨지지 않도록 콘솔·출력 인코딩 맞춤
+try {
+  $utf8NoBom = New-Object System.Text.UTF8Encoding $false
+  [Console]::InputEncoding = $utf8NoBom
+  [Console]::OutputEncoding = $utf8NoBom
+  $OutputEncoding = $utf8NoBom
+  if ($PSVersionTable.PSVersion.Major -lt 6) {
+    chcp 65001 > $null
+  }
+} catch {
+  # 인코딩 설정 실패해도 복원은 진행
+}
 
 $ErrorActionPreference = 'Stop'
 $envExe = Join-Path $Root 'python\env\python.exe'
