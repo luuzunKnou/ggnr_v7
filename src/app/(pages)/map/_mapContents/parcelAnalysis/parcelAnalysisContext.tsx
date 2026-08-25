@@ -155,7 +155,12 @@ type ParcelAnalysisContextValue = {
     Array<{ layerKey: string; layerKorName: string; geomType: string; schema: string }>
   >;
   facilityWmsLayerMap: Record<string, string[]>;
-  mapCaptureConfig: { geoserverUrl: string; workspace: string };
+  mapCaptureConfig: {
+    geoserverUrl: string;
+    workspace: string;
+    /** GeoServer 발행분(소문자). 있으면 기본도·시설 WMS는 이 목록만 요청 */
+    publishedLayerKeys?: string[];
+  };
   boundaryEmdOptions: EmdRiOption[];
   boundaryEmdLoading: boolean;
   boundaryEmdError: string | null;
@@ -183,10 +188,14 @@ export function ParcelAnalysisProvider({ children }: { children: ReactNode }) {
     setBoundaryDraft,
   } = useParcelAnalysisArea();
   const { fitProjectEmdExtent, resetZoomFlag } = useParcelAnalysisMapZoom();
-  const { groups: analysisGroups, allItemIds, facilityLayerMap, facilityWmsLayerMap, catalogLoaded } =
+  const { groups: analysisGroups, allItemIds, facilityLayerMap, facilityWmsLayerMap, publishedWmsLayerKeys, catalogLoaded } =
     useParcelAnalysisGroups(isOpen);
 
-  const [mapCaptureConfig, setMapCaptureConfig] = useState({
+  const [mapCaptureConfig, setMapCaptureConfig] = useState<{
+    geoserverUrl: string;
+    workspace: string;
+    publishedLayerKeys?: string[];
+  }>({
     geoserverUrl: 'http://localhost:8080/geoserver',
     workspace: 'ggnr',
   });
@@ -581,16 +590,24 @@ export function ParcelAnalysisProvider({ children }: { children: ReactNode }) {
         });
         const data = (res?.data ?? res) as { geoserverUrl?: string; workspace?: string } | undefined;
         if (data?.geoserverUrl && data?.workspace) {
-          setMapCaptureConfig({
-            geoserverUrl: data.geoserverUrl,
-            workspace: data.workspace,
-          });
+          setMapCaptureConfig((prev) => ({
+            ...prev,
+            geoserverUrl: data.geoserverUrl!,
+            workspace: data.workspace!,
+          }));
         }
       } catch {
         /* 기본값 유지 */
       }
     })();
   }, [isOpen]);
+
+  useEffect(() => {
+    setMapCaptureConfig((prev) => ({
+      ...prev,
+      publishedLayerKeys: publishedWmsLayerKeys,
+    }));
+  }, [publishedWmsLayerKeys]);
 
   useEffect(() => {
     if (!isOpen || !catalogLoaded) return;
