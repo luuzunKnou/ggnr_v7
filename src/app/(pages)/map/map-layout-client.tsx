@@ -90,6 +90,16 @@ import { clearUsageDataAsWmsLayers } from "./_mapContents/river/usageDataAs/usag
 import { RoadRewardListPanel } from "./_mapContents/road/roadReward/RoadRewardListPanel"
 import { RoadRewardDetailPanel } from "./_mapContents/road/roadReward/RoadRewardDetailPanel"
 import { type RoadRewardCase } from "./_mapContents/road/roadReward/roadRewardMock"
+import { RoadFrontageBuildingListPanel } from "./_mapContents/road/roadFrontageBuilding/RoadFrontageBuildingListPanel"
+import { RoadFrontageBuildingDetailPanel } from "./_mapContents/road/roadFrontageBuilding/RoadFrontageBuildingDetailPanel"
+import { ROAD_FRONTAGE_BUILDING_NEW_ID } from "./_mapContents/road/roadFrontageBuilding/roadFrontageBuildingMock"
+import { RoadFrontageMarkerListPanel } from "./_mapContents/road/roadFrontageMarker/RoadFrontageMarkerListPanel"
+import { RoadFrontageMarkerDetailPanel } from "./_mapContents/road/roadFrontageMarker/RoadFrontageMarkerDetailPanel"
+import {
+  ROAD_FRONTAGE_MARKER_NEW_ID,
+  createInitialRoadFrontageMarkerLedgers,
+  type RoadFrontageMarkerLedger,
+} from "./_mapContents/road/roadFrontageMarker/roadFrontageMarkerMock"
 import { UsageDataAsNotifBootstrap } from "./_mapComponents/UsageDataAsNotifBootstrap"
 import { OccupationLedgerListPanel } from "./_mapContents/occupationLedger/OccupationLedgerListPanel"
 import { OccupationLedgerDetailPanel } from "./_mapContents/occupationLedger/OccupationLedgerDetailPanel"
@@ -377,6 +387,24 @@ const ROAD_REWARD_DETAIL_DEFAULT_WIDTH = 480
 const ROAD_REWARD_DETAIL_MIN_WIDTH = 380
 const ROAD_REWARD_DETAIL_MAX_WIDTH = 720
 
+/** serviceList `ser_eng`: roadFrontageBuilding — 접도구역 건축물 관리대장(목업) */
+const ROAD_FRONTAGE_BUILDING_OPENED_KEY = "roadFrontageBuilding"
+const ROAD_FRONTAGE_BUILDING_PANEL_DEFAULT_WIDTH = 420
+const ROAD_FRONTAGE_BUILDING_PANEL_MIN_WIDTH = 360
+const ROAD_FRONTAGE_BUILDING_PANEL_MAX_WIDTH = 640
+const ROAD_FRONTAGE_BUILDING_DETAIL_DEFAULT_WIDTH = 800
+const ROAD_FRONTAGE_BUILDING_DETAIL_MIN_WIDTH = 640
+const ROAD_FRONTAGE_BUILDING_DETAIL_MAX_WIDTH = 980
+
+/** serviceList `ser_eng`: roadFrontageMarker — 접도구역 표주 관리대장(목업) */
+const ROAD_FRONTAGE_MARKER_OPENED_KEY = "roadFrontageMarker"
+const ROAD_FRONTAGE_MARKER_PANEL_DEFAULT_WIDTH = 320
+const ROAD_FRONTAGE_MARKER_PANEL_MIN_WIDTH = 260
+const ROAD_FRONTAGE_MARKER_PANEL_MAX_WIDTH = 480
+const ROAD_FRONTAGE_MARKER_DETAIL_DEFAULT_WIDTH = 560
+const ROAD_FRONTAGE_MARKER_DETAIL_MIN_WIDTH = 460
+const ROAD_FRONTAGE_MARKER_DETAIL_MAX_WIDTH = 780
+
 function MapLayoutContent({
   children,
   indexLogoSrc,
@@ -528,6 +556,8 @@ function MapLayoutContent({
   const occupationLedgerSerEng = findOpenedOccupationLedgerSerEng(openedWindows)
   const occupationLedgerOpen = Boolean(occupationLedgerSerEng)
   const roadRewardOpen = openedWindows.includes(ROAD_REWARD_OPENED_KEY)
+  const roadFrontageBuildingOpen = openedWindows.includes(ROAD_FRONTAGE_BUILDING_OPENED_KEY)
+  const roadFrontageMarkerOpen = openedWindows.includes(ROAD_FRONTAGE_MARKER_OPENED_KEY)
   const useFeeSerEng = findOpenedUseFeeSerEng(openedWindows)
   const useFeeOpen = Boolean(useFeeSerEng)
   const groundwaterPermitOpen = openedWindows.includes(GROUNDWATER_PERMIT_OPENED_KEY)
@@ -552,6 +582,22 @@ function MapLayoutContent({
   const [roadRewardCases, setRoadRewardCases] = useState<RoadRewardCase[]>([])
   const [roadRewardSelectedId, setRoadRewardSelectedId] = useState<string | null>(null)
   const roadRewardDetailOpen = roadRewardOpen && Boolean(roadRewardSelectedId)
+  /** 접도구역 건축물 관리대장 */
+  const [roadFrontageBuildingSelectedId, setRoadFrontageBuildingSelectedId] = useState<
+    string | null
+  >(null)
+  const [roadFrontageBuildingListRefreshKey, setRoadFrontageBuildingListRefreshKey] = useState(0)
+  const roadFrontageBuildingDetailOpen =
+    roadFrontageBuildingOpen && Boolean(roadFrontageBuildingSelectedId)
+  /** 접도구역 표주 — 화면 목업. 샘플 데이터를 화면 상태로만 들고 있음 */
+  const [roadFrontageMarkerLedgers, setRoadFrontageMarkerLedgers] = useState<
+    RoadFrontageMarkerLedger[]
+  >(() => createInitialRoadFrontageMarkerLedgers())
+  const [roadFrontageMarkerSelectedId, setRoadFrontageMarkerSelectedId] = useState<
+    string | null
+  >(null)
+  const roadFrontageMarkerDetailOpen =
+    roadFrontageMarkerOpen && Boolean(roadFrontageMarkerSelectedId)
   // 점용대장(프) 더미 state 비활성
   // const useLedgerProtoOpen = openedWindows.includes(USE_LEDGER_PROTO_OPENED_KEY)
   // const [useLedgerProtoDetailId, setUseLedgerProtoDetailId] = useState<string | null>(null)
@@ -671,6 +717,18 @@ function MapLayoutContent({
   )
   const [roadRewardPanelWidth, setRoadRewardPanelWidth] = useState(ROAD_REWARD_PANEL_DEFAULT_WIDTH)
   const [roadRewardDetailWidth, setRoadRewardDetailWidth] = useState(ROAD_REWARD_DETAIL_DEFAULT_WIDTH)
+  const [roadFrontageBuildingPanelWidth, setRoadFrontageBuildingPanelWidth] = useState(
+    ROAD_FRONTAGE_BUILDING_PANEL_DEFAULT_WIDTH
+  )
+  const [roadFrontageBuildingDetailWidth, setRoadFrontageBuildingDetailWidth] = useState(
+    ROAD_FRONTAGE_BUILDING_DETAIL_DEFAULT_WIDTH
+  )
+  const [roadFrontageMarkerPanelWidth, setRoadFrontageMarkerPanelWidth] = useState(
+    ROAD_FRONTAGE_MARKER_PANEL_DEFAULT_WIDTH
+  )
+  const [roadFrontageMarkerDetailWidth, setRoadFrontageMarkerDetailWidth] = useState(
+    ROAD_FRONTAGE_MARKER_DETAIL_DEFAULT_WIDTH
+  )
   // const [useLedgerProtoPanelWidth, setUseLedgerProtoPanelWidth] = useState(USE_LEDGER_PROTO_PANEL_DEFAULT_WIDTH)
   // const [useLedgerProtoDetailWidth, setUseLedgerProtoDetailWidth] = useState(USE_LEDGER_PROTO_DETAIL_DEFAULT_WIDTH)
   // const [useLedgerProtoFeeWidth, setUseLedgerProtoFeeWidth] = useState(USE_FEE_DETAIL_DEFAULT_WIDTH)
@@ -720,6 +778,10 @@ function MapLayoutContent({
     (occupationLedgerDetailOpen ? occupationLedgerDetailWidth : 0) +
     (roadRewardOpen ? roadRewardPanelWidth : 0) +
     (roadRewardDetailOpen ? roadRewardDetailWidth : 0) +
+    (roadFrontageBuildingOpen ? roadFrontageBuildingPanelWidth : 0) +
+    (roadFrontageBuildingDetailOpen ? roadFrontageBuildingDetailWidth : 0) +
+    (roadFrontageMarkerOpen ? roadFrontageMarkerPanelWidth : 0) +
+    (roadFrontageMarkerDetailOpen ? roadFrontageMarkerDetailWidth : 0) +
     (memoManagementOpen ? memoPanelWidth : 0) +
     (memoDetailOpen ? memoDetailWidth : 0) +
     (complaintManagementOpen ? complaintPanelWidth : 0) +
@@ -810,8 +872,20 @@ function MapLayoutContent({
     (occupationLedgerDetailOpen ? occupationLedgerDetailWidth : 0)
   const roadRewardDetailLeftPx =
     roadRewardPanelLeftPx + (roadRewardOpen ? roadRewardPanelWidth : 0)
-  const memoPanelLeftPx =
+  const roadFrontageBuildingPanelLeftPx =
     roadRewardDetailLeftPx + (roadRewardDetailOpen ? roadRewardDetailWidth : 0)
+  const roadFrontageBuildingDetailLeftPx =
+    roadFrontageBuildingPanelLeftPx +
+    (roadFrontageBuildingOpen ? roadFrontageBuildingPanelWidth : 0)
+  const roadFrontageMarkerPanelLeftPx =
+    roadFrontageBuildingDetailLeftPx +
+    (roadFrontageBuildingDetailOpen ? roadFrontageBuildingDetailWidth : 0)
+  const roadFrontageMarkerDetailLeftPx =
+    roadFrontageMarkerPanelLeftPx +
+    (roadFrontageMarkerOpen ? roadFrontageMarkerPanelWidth : 0)
+  const memoPanelLeftPx =
+    roadFrontageMarkerDetailLeftPx +
+    (roadFrontageMarkerDetailOpen ? roadFrontageMarkerDetailWidth : 0)
   const memoDetailLeftPx = memoPanelLeftPx + (memoManagementOpen ? memoPanelWidth : 0)
   const complaintPanelLeftPx =
     memoDetailLeftPx + (memoDetailOpen ? memoDetailWidth : 0)
@@ -1199,6 +1273,18 @@ function MapLayoutContent({
     setOpened(next)
   }
 
+  const handleCloseRoadFrontageBuilding = () => {
+    setRoadFrontageBuildingSelectedId(null)
+    const next = openedWindows.filter((w) => w !== ROAD_FRONTAGE_BUILDING_OPENED_KEY)
+    setOpened(next)
+  }
+
+  const handleCloseRoadFrontageMarker = () => {
+    setRoadFrontageMarkerSelectedId(null)
+    const next = openedWindows.filter((w) => w !== ROAD_FRONTAGE_MARKER_OPENED_KEY)
+    setOpened(next)
+  }
+
   const handleCloseMemoManagement = () => {
     setMemoDetailId(null)
     const next = openedWindows.filter((w) => w !== MEMO_OPENED_KEY)
@@ -1287,6 +1373,18 @@ function MapLayoutContent({
   useEffect(() => {
     if (!roadRewardOpen) setRoadRewardSelectedId(null)
   }, [roadRewardOpen])
+
+  useEffect(() => {
+    if (!roadFrontageBuildingOpen) setRoadFrontageBuildingSelectedId(null)
+  }, [roadFrontageBuildingOpen])
+
+  useEffect(() => {
+    setRoadFrontageBuildingPanelWidth(ROAD_FRONTAGE_BUILDING_PANEL_DEFAULT_WIDTH)
+  }, [])
+
+  useEffect(() => {
+    if (!roadFrontageMarkerOpen) setRoadFrontageMarkerSelectedId(null)
+  }, [roadFrontageMarkerOpen])
 
   // 점용대장(프) 더미 effects 비활성
   // useEffect(() => { if (!useLedgerProtoOpen) { setUseLedgerProtoDetailId(null); setUseLedgerProtoFeeId(null) } }, [useLedgerProtoOpen])
@@ -2125,6 +2223,104 @@ function MapLayoutContent({
                   overlayWidthPx={
                     roadRewardPanelWidth +
                     (roadRewardDetailOpen ? roadRewardDetailWidth : 0)
+                  }
+                />
+              </MapSideListPanel>
+            </div>
+          )}
+          {roadFrontageBuildingOpen && (
+            <div className="pointer-events-auto shrink-0">
+              <MapSideListPanel
+                width={roadFrontageBuildingPanelWidth}
+                minWidth={ROAD_FRONTAGE_BUILDING_PANEL_MIN_WIDTH}
+                maxWidth={ROAD_FRONTAGE_BUILDING_PANEL_MAX_WIDTH}
+                leftOffsetPx={roadFrontageBuildingPanelLeftPx}
+                onWidthChange={setRoadFrontageBuildingPanelWidth}
+              >
+                <RoadFrontageBuildingListPanel
+                  selectedId={roadFrontageBuildingSelectedId}
+                  onSelectId={setRoadFrontageBuildingSelectedId}
+                  onAdd={() => setRoadFrontageBuildingSelectedId(ROAD_FRONTAGE_BUILDING_NEW_ID)}
+                  onClose={handleCloseRoadFrontageBuilding}
+                  refreshKey={roadFrontageBuildingListRefreshKey}
+                />
+              </MapSideListPanel>
+            </div>
+          )}
+          {roadFrontageBuildingOpen && roadFrontageBuildingSelectedId && (
+            <div className="pointer-events-auto shrink-0">
+              <MapSideListPanel
+                width={roadFrontageBuildingDetailWidth}
+                minWidth={ROAD_FRONTAGE_BUILDING_DETAIL_MIN_WIDTH}
+                maxWidth={ROAD_FRONTAGE_BUILDING_DETAIL_MAX_WIDTH}
+                leftOffsetPx={roadFrontageBuildingDetailLeftPx}
+                onWidthChange={setRoadFrontageBuildingDetailWidth}
+                contentClassName="overflow-hidden"
+              >
+                <RoadFrontageBuildingDetailPanel
+                  key={roadFrontageBuildingSelectedId}
+                  ledgerId={roadFrontageBuildingSelectedId}
+                  onClose={() => setRoadFrontageBuildingSelectedId(null)}
+                  onSaved={() => setRoadFrontageBuildingListRefreshKey((k) => k + 1)}
+                  onCreated={(newId) => {
+                    setRoadFrontageBuildingListRefreshKey((k) => k + 1)
+                    setRoadFrontageBuildingSelectedId(newId)
+                  }}
+                  onDeleted={() => {
+                    setRoadFrontageBuildingSelectedId(null)
+                    setRoadFrontageBuildingListRefreshKey((k) => k + 1)
+                  }}
+                  overlayLeftPx={roadFrontageBuildingPanelLeftPx}
+                  overlayWidthPx={
+                    roadFrontageBuildingPanelWidth +
+                    (roadFrontageBuildingDetailOpen ? roadFrontageBuildingDetailWidth : 0)
+                  }
+                />
+              </MapSideListPanel>
+            </div>
+          )}
+          {roadFrontageMarkerOpen && (
+            <div className="pointer-events-auto shrink-0">
+              <MapSideListPanel
+                width={roadFrontageMarkerPanelWidth}
+                minWidth={ROAD_FRONTAGE_MARKER_PANEL_MIN_WIDTH}
+                maxWidth={ROAD_FRONTAGE_MARKER_PANEL_MAX_WIDTH}
+                leftOffsetPx={roadFrontageMarkerPanelLeftPx}
+                onWidthChange={setRoadFrontageMarkerPanelWidth}
+                contentClassName="overflow-hidden"
+              >
+                <RoadFrontageMarkerListPanel
+                  ledgers={roadFrontageMarkerLedgers}
+                  selectedId={roadFrontageMarkerSelectedId}
+                  onSelectId={setRoadFrontageMarkerSelectedId}
+                  onAdd={() => setRoadFrontageMarkerSelectedId(ROAD_FRONTAGE_MARKER_NEW_ID)}
+                  onClose={handleCloseRoadFrontageMarker}
+                />
+              </MapSideListPanel>
+            </div>
+          )}
+          {roadFrontageMarkerOpen && roadFrontageMarkerSelectedId && (
+            <div className="pointer-events-auto shrink-0">
+              <MapSideListPanel
+                width={roadFrontageMarkerDetailWidth}
+                minWidth={ROAD_FRONTAGE_MARKER_DETAIL_MIN_WIDTH}
+                maxWidth={ROAD_FRONTAGE_MARKER_DETAIL_MAX_WIDTH}
+                leftOffsetPx={roadFrontageMarkerDetailLeftPx}
+                onWidthChange={setRoadFrontageMarkerDetailWidth}
+                contentClassName="overflow-hidden"
+              >
+                <RoadFrontageMarkerDetailPanel
+                  key={roadFrontageMarkerSelectedId}
+                  ledgerId={roadFrontageMarkerSelectedId}
+                  ledgers={roadFrontageMarkerLedgers}
+                  onLedgersChange={setRoadFrontageMarkerLedgers}
+                  onClose={() => setRoadFrontageMarkerSelectedId(null)}
+                  onDeleted={() => setRoadFrontageMarkerSelectedId(null)}
+                  onLedgerIdChange={setRoadFrontageMarkerSelectedId}
+                  overlayLeftPx={roadFrontageMarkerPanelLeftPx}
+                  overlayWidthPx={
+                    roadFrontageMarkerPanelWidth +
+                    (roadFrontageMarkerDetailOpen ? roadFrontageMarkerDetailWidth : 0)
                   }
                 />
               </MapSideListPanel>

@@ -12,13 +12,17 @@ import {
   replaceDroneUnitsFromServer,
   replacePanoUnitsFromServer,
   replaceOrthoUnitsFromServer,
+  replaceSatelliteUnitsFromServer,
   removeDroneUnitFromStore,
   removeDroneFileFromStore,
   removeMediaUnitFromStore,
+  removeMediaFileFromStore,
   removeOrthoUnitFromStore,
   removeOrthoFileFromStore,
+  removeSatelliteUnitFromStore,
+  removeSatelliteFileFromStore,
 } from './aerialMediaMockData';
-import type { AerialKind } from './aerialMediaTypes';
+import type { AerialKind, AttrRow, WorkUnitItem } from './aerialMediaTypes';
 import { AERIAL_KIND_LABEL } from './aerialMediaTypes';
 import { MapPlaceholder } from './AerialMediaUi';
 import { WorkUnitListPanel } from './WorkUnitListPanel';
@@ -70,6 +74,11 @@ function aerialMediaUrl(relativePath: string): string {
   return `/api/aerial/media?${new URLSearchParams({
     path: relativePath.replace(/\\/g, '/'),
   }).toString()}`;
+}
+
+function attrValue(attrs: AttrRow[], label: string, fallback = ''): string {
+  const value = attrs.find((row) => row.label === label)?.value.trim() ?? '';
+  return value === '—' ? '' : value || fallback;
 }
 
 const KIND_ORDER_ALL: AerialKind[] = ['ortho', 'drone', 'panorama', 'satellite'];
@@ -166,6 +175,10 @@ export function AerialMediaShell({
         workName: string;
         workDate: string | null;
         srKey: number | null;
+        workPurpose?: string | null;
+        author?: string | null;
+        photographer?: string | null;
+        memo?: string | null;
         items: Array<{
           fuKey: number;
           fileName: string;
@@ -226,6 +239,9 @@ export function AerialMediaShell({
         workName: string;
         workDate: string | null;
         srKey: number | null;
+        workPurpose?: string | null;
+        author?: string | null;
+        memo?: string | null;
         items: Array<{
           fuKey: number;
           fileName: string;
@@ -257,6 +273,9 @@ export function AerialMediaShell({
         workName: string;
         workDate: string | null;
         srKey: number | null;
+        workPurpose?: string | null;
+        author?: string | null;
+        memo?: string | null;
         items: Array<{
           tuKey?: number;
           fileName: string;
@@ -269,6 +288,38 @@ export function AerialMediaShell({
       }>;
     };
     replaceOrthoUnitsFromServer(data.units ?? []);
+    setListTick((t) => t + 1);
+  };
+
+  const refreshSatelliteWorkUnitList = async () => {
+    const res = await call('', 'POST', {
+      service: 'aerialUploadService',
+      action: 'listWorkUnits',
+      params: { kind: 'satellite' },
+    });
+    if (!res?.success) return;
+    const data = (res.data ?? res) as {
+      units?: Array<{
+        wuKey: number;
+        folderName: string;
+        workName: string;
+        workDate: string | null;
+        srKey: number | null;
+        workPurpose?: string | null;
+        author?: string | null;
+        memo?: string | null;
+        items: Array<{
+          tuKey?: number;
+          fileName: string;
+          sizeLabel: string;
+          format: string;
+          convertStatus?: string;
+          tilesRelativePath?: string | null;
+          relativePath?: string;
+        }>;
+      }>;
+    };
+    replaceSatelliteUnitsFromServer(data.units ?? []);
     setListTick((t) => t + 1);
   };
   /** 사이드바 종류 메뉴 전환 시 패널을 다시 만들지 않고 종류만 맞춤 (업로드 진행 유지) */
@@ -307,7 +358,7 @@ export function AerialMediaShell({
       ? findShootingRequest(selectedUnit.linkedRequestId)
       : null;
 
-  /** 사진·동영상·파노라마·드론영상: DB → 작업단위 목록 */
+  /** 사진·동영상·파노라마·드론영상·항공영상: DB → 작업단위 목록 */
   useEffect(() => {
     if (kind === 'drone') {
       void refreshDroneWorkUnitList().catch(() => undefined);
@@ -315,6 +366,8 @@ export function AerialMediaShell({
       void refreshPanoWorkUnitList().catch(() => undefined);
     } else if (kind === 'ortho') {
       void refreshOrthoWorkUnitList().catch(() => undefined);
+    } else if (kind === 'satellite') {
+      void refreshSatelliteWorkUnitList().catch(() => undefined);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [kind]);
@@ -382,7 +435,8 @@ export function AerialMediaShell({
     linkedRequestId?: string;
     id?: string;
   }) => {
-    if (unit.kind !== 'drone' && unit.kind !== 'ortho' && unit.kind !== 'panorama') return;
+    if (unit.kind !== 'drone' && unit.kind !== 'ortho' && unit.kind !== 'panorama' && unit.kind !== 'satellite')
+      return;
     const wuKey =
       unit.id?.startsWith('wu-') && Number.isFinite(Number(unit.id.slice(3)))
         ? Number(unit.id.slice(3))
@@ -398,9 +452,15 @@ export function AerialMediaShell({
 
   const handleFolderCreated = (info: FolderCreatedInfo) => {
     setListTick((t) => t + 1);
-    if (info.kind === 'drone' || info.kind === 'ortho' || info.kind === 'panorama') {
+    if (
+      info.kind === 'drone' ||
+      info.kind === 'ortho' ||
+      info.kind === 'panorama' ||
+      info.kind === 'satellite'
+    ) {
       if (info.kind === 'drone') void refreshDroneWorkUnitList().catch(() => undefined);
       else if (info.kind === 'panorama') void refreshPanoWorkUnitList().catch(() => undefined);
+      else if (info.kind === 'satellite') void refreshSatelliteWorkUnitList().catch(() => undefined);
       else void refreshOrthoWorkUnitList().catch(() => undefined);
       setMediaUploadTarget({
         kind: info.kind,
@@ -423,6 +483,8 @@ export function AerialMediaShell({
       await refreshPanoMediaFiles(event.folderName, event.wuKey).catch(() => undefined);
     } else if (event.kind === 'ortho') {
       await refreshOrthoWorkUnitList().catch(() => undefined);
+    } else if (event.kind === 'satellite') {
+      await refreshSatelliteWorkUnitList().catch(() => undefined);
     }
     if (event.linkedRequestId) {
       completeMediaRegistration(event.linkedRequestId, event.workName);
@@ -453,6 +515,139 @@ export function AerialMediaShell({
     setSelectedUnitId(null);
     setSelectedFileId(null);
     setDetailTab('info');
+  };
+
+  const handleSaveOrthoAttrs = async (attrs: AttrRow[]) => {
+    if (!selectedUnit || selectedUnit.kind !== 'ortho') return;
+    const wuKey =
+      selectedUnit.id.startsWith('wu-') && Number.isFinite(Number(selectedUnit.id.slice(3)))
+        ? Number(selectedUnit.id.slice(3))
+        : null;
+    if (wuKey == null) {
+      window.alert('수정할 작업단위 키가 없습니다.');
+      throw new Error('작업단위 키가 필요합니다.');
+    }
+
+    try {
+      const res = await call('', 'POST', {
+        service: 'aerialUploadService',
+        action: 'updateOrthoWorkUnitAttrs',
+        params: {
+          wuKey,
+          workDate: attrValue(attrs, '작업일', selectedUnit.workDate),
+          workPurpose: attrValue(attrs, '임무/작업 목적'),
+          author: attrValue(attrs, '작성자'),
+          memo: attrValue(attrs, '메모'),
+        },
+      });
+      if (res?.success === false) {
+        throw new Error(String(res?.error ?? '드론영상 속성 수정에 실패했습니다.'));
+      }
+      await refreshOrthoWorkUnitList();
+    } catch (error) {
+      const message =
+        error && typeof error === 'object' && 'error' in error
+          ? String((error as { error?: unknown }).error ?? '')
+          : error instanceof Error
+            ? error.message
+            : '';
+      window.alert(message || '드론영상 속성 수정에 실패했습니다.');
+      throw error;
+    }
+  };
+
+  const handleSaveDroneAttrs = async (attrs: AttrRow[]) => {
+    if (!selectedUnit || selectedUnit.kind !== 'drone') return;
+    const wuKey =
+      selectedUnit.id.startsWith('wu-') && Number.isFinite(Number(selectedUnit.id.slice(3)))
+        ? Number(selectedUnit.id.slice(3))
+        : null;
+    if (wuKey == null) {
+      window.alert('수정할 작업단위 키가 없습니다.');
+      throw new Error('작업단위 키가 필요합니다.');
+    }
+    const workName =
+      attrValue(attrs, '작업단위 명', selectedUnit.workName) ||
+      attrValue(attrs, '작업단위', selectedUnit.workName);
+    if (!workName) {
+      window.alert('작업단위명을 입력해 주세요.');
+      throw new Error('작업단위명이 필요합니다.');
+    }
+
+    try {
+      const res = await call('', 'POST', {
+        service: 'aerialUploadService',
+        action: 'updateDroneWorkUnit',
+        params: {
+          wuKey,
+          workName,
+          workPurpose: attrValue(attrs, '임무/작업 목적'),
+          author: attrValue(attrs, '작성자'),
+          photographer: attrValue(attrs, '촬영자'),
+          memo: attrValue(attrs, '메모'),
+        },
+      });
+      if (res?.success === false) {
+        throw new Error(String(res?.error ?? '작업단위 수정에 실패했습니다.'));
+      }
+      await refreshDroneWorkUnitList();
+    } catch (error) {
+      const message =
+        error && typeof error === 'object' && 'error' in error
+          ? String((error as { error?: unknown }).error ?? '')
+          : error instanceof Error
+            ? error.message
+            : '';
+      window.alert(message || '작업단위 수정에 실패했습니다.');
+      throw error;
+    }
+  };
+
+  const handleSavePanoAttrs = async (attrs: AttrRow[]) => {
+    if (!selectedUnit || selectedUnit.kind !== 'panorama') return;
+    const wuKey =
+      selectedUnit.id.startsWith('wu-') && Number.isFinite(Number(selectedUnit.id.slice(3)))
+        ? Number(selectedUnit.id.slice(3))
+        : null;
+    if (wuKey == null) {
+      window.alert('수정할 작업단위 키가 없습니다.');
+      throw new Error('작업단위 키가 필요합니다.');
+    }
+    const workName =
+      attrValue(attrs, '작업단위 명', selectedUnit.workName) ||
+      attrValue(attrs, '작업단위', selectedUnit.workName);
+    if (!workName) {
+      window.alert('작업단위명을 입력해 주세요.');
+      throw new Error('작업단위명이 필요합니다.');
+    }
+
+    try {
+      const res = await call('', 'POST', {
+        service: 'aerialUploadService',
+        action: 'updatePanoramaWorkUnit',
+        params: {
+          wuKey,
+          workName,
+          workPurpose: attrValue(attrs, '임무/작업 목적'),
+          author: attrValue(attrs, '작성자'),
+          photographer: attrValue(attrs, '촬영자'),
+          memo: attrValue(attrs, '메모'),
+        },
+      });
+      if (res?.success === false) {
+        throw new Error(String(res?.error ?? '파노라마 작업단위 수정에 실패했습니다.'));
+      }
+      await refreshPanoWorkUnitList();
+    } catch (error) {
+      const message =
+        error && typeof error === 'object' && 'error' in error
+          ? String((error as { error?: unknown }).error ?? '')
+          : error instanceof Error
+            ? error.message
+            : '';
+      window.alert(message || '파노라마 작업단위 수정에 실패했습니다.');
+      throw error;
+    }
   };
 
   const handleDeleteDroneFile = async () => {
@@ -579,6 +774,164 @@ export function AerialMediaShell({
     }
   };
 
+  const handleDeletePanoFile = async (file: WorkUnitItem['files'][number]) => {
+    if (!selectedUnit || selectedUnit.kind !== 'panorama') return;
+    const fuKey =
+      file.id.startsWith('fu-') && Number.isFinite(Number(file.id.slice(3)))
+        ? Number(file.id.slice(3))
+        : null;
+    if (fuKey == null) {
+      window.alert('삭제할 파일 키가 없습니다.');
+      return;
+    }
+    const ok = window.confirm(
+      `파일 «${file.name}»을(를) 삭제할까요?\n디스크에 저장된 파일도 함께 삭제됩니다.`
+    );
+    if (!ok) return;
+    try {
+      const res = await call('', 'POST', {
+        service: 'aerialUploadService',
+        action: 'deleteFileUnit',
+        params: { fuKey },
+      });
+      const payload = (res?.data ?? res) as { success?: boolean; error?: string };
+      if (res?.success === false || payload?.success === false) {
+        window.alert(payload?.error || '파일 삭제에 실패했습니다.');
+        return;
+      }
+      removeMediaFileFromStore('panorama', selectedUnit.id, file.id);
+      if (selectedFileId === file.id) setSelectedFileId(null);
+      setListTick((t) => t + 1);
+      await refreshPanoWorkUnitList();
+    } catch (e: unknown) {
+      const msg =
+        e && typeof e === 'object' && 'error' in e
+          ? String((e as { error?: unknown }).error ?? '')
+          : e instanceof Error
+            ? e.message
+            : '';
+      window.alert(msg || '파일 삭제에 실패했습니다.');
+    }
+  };
+
+  const handleSaveSatelliteAttrs = async (attrs: AttrRow[]) => {
+    if (!selectedUnit || selectedUnit.kind !== 'satellite') return;
+    const wuKey =
+      selectedUnit.id.startsWith('wu-') && Number.isFinite(Number(selectedUnit.id.slice(3)))
+        ? Number(selectedUnit.id.slice(3))
+        : null;
+    if (wuKey == null) {
+      window.alert('수정할 작업단위 키가 없습니다.');
+      throw new Error('작업단위 키가 필요합니다.');
+    }
+
+    try {
+      const res = await call('', 'POST', {
+        service: 'aerialUploadService',
+        action: 'updateOrthoWorkUnitAttrs',
+        params: {
+          wuKey,
+          workDate: attrValue(attrs, '작업일', selectedUnit.workDate),
+          workPurpose: attrValue(attrs, '임무/작업 목적'),
+          author: attrValue(attrs, '작성자'),
+          memo: attrValue(attrs, '메모'),
+        },
+      });
+      if (res?.success === false) {
+        throw new Error(String(res?.error ?? '항공영상 속성 수정에 실패했습니다.'));
+      }
+      await refreshSatelliteWorkUnitList();
+    } catch (error) {
+      const message =
+        error && typeof error === 'object' && 'error' in error
+          ? String((error as { error?: unknown }).error ?? '')
+          : error instanceof Error
+            ? error.message
+            : '';
+      window.alert(message || '항공영상 속성 수정에 실패했습니다.');
+      throw error;
+    }
+  };
+
+  const handleDeleteSatelliteUnit = async () => {
+    if (!selectedUnit || selectedUnit.kind !== 'satellite') return;
+    const wuKey =
+      selectedUnit.id.startsWith('wu-') && Number.isFinite(Number(selectedUnit.id.slice(3)))
+        ? Number(selectedUnit.id.slice(3))
+        : undefined;
+    const ok = window.confirm(
+      `작업단위 «${selectedUnit.workName}»을(를) 삭제할까요?\n소속 TIF·자체항공영상 타일·디스크 폴더도 함께 삭제됩니다.`
+    );
+    if (!ok) return;
+    try {
+      const res = await call('', 'POST', {
+        service: 'aerialUploadService',
+        action: 'deleteWorkUnit',
+        params: {
+          kind: 'satellite',
+          folderName: selectedUnit.folderName,
+          ...(wuKey != null ? { wuKey } : {}),
+        },
+      });
+      const payload = (res?.data ?? res) as { success?: boolean; error?: string };
+      if (res?.success === false || payload?.success === false) {
+        window.alert(payload?.error || '작업단위 삭제에 실패했습니다.');
+        return;
+      }
+      removeSatelliteUnitFromStore(selectedUnit.id);
+      setListTick((t) => t + 1);
+      closeUnitDetail();
+      void refreshSatelliteWorkUnitList().catch(() => undefined);
+    } catch (e: unknown) {
+      const msg =
+        e && typeof e === 'object' && 'error' in e
+          ? String((e as { error?: unknown }).error ?? '')
+          : e instanceof Error
+            ? e.message
+            : '';
+      window.alert(msg || '작업단위 삭제에 실패했습니다.');
+    }
+  };
+
+  const handleDeleteSatelliteFile = async (file: WorkUnitItem['files'][number]) => {
+    if (!selectedUnit || selectedUnit.kind !== 'satellite') return;
+    const tuKey =
+      file.id.startsWith('tu-') && Number.isFinite(Number(file.id.slice(3)))
+        ? Number(file.id.slice(3))
+        : null;
+    if (tuKey == null) {
+      window.alert('삭제할 파일 키가 없습니다.');
+      return;
+    }
+    const ok = window.confirm(
+      `파일 «${file.name}»을(를) 삭제할까요?\n원본 TIF와 자체항공영상 타일도 함께 삭제됩니다.`
+    );
+    if (!ok) return;
+    try {
+      const res = await call('', 'POST', {
+        service: 'aerialOrthoService',
+        action: 'deleteTifUnit',
+        params: { tuKey },
+      });
+      const payload = (res?.data ?? res) as { success?: boolean; error?: string };
+      if (res?.success === false || payload?.success === false) {
+        window.alert(payload?.error || '파일 삭제에 실패했습니다.');
+        return;
+      }
+      removeSatelliteFileFromStore(selectedUnit.id, file.id);
+      setListTick((t) => t + 1);
+      await refreshSatelliteWorkUnitList();
+    } catch (e: unknown) {
+      const msg =
+        e && typeof e === 'object' && 'error' in e
+          ? String((e as { error?: unknown }).error ?? '')
+          : e instanceof Error
+            ? e.message
+            : '';
+      window.alert(msg || '파일 삭제에 실패했습니다.');
+    }
+  };
+
   const handleDeleteOrthoUnit = async () => {
     if (!selectedUnit || selectedUnit.kind !== 'ortho') return;
     const wuKey =
@@ -587,7 +940,7 @@ export function AerialMediaShell({
         : undefined;
     const ok = window.confirm(
       `작업단위 «${selectedUnit.workName}»을(를) 삭제할까요?
-소속 TIF·변환 타일도 함께 삭제됩니다.`
+소속 TIF·변환 타일·디스크 폴더도 함께 삭제됩니다.`
     );
     if (!ok) return;
     try {
@@ -605,7 +958,13 @@ export function AerialMediaShell({
         window.alert(payload?.error || '작업단위 삭제에 실패했습니다.');
         return;
       }
+      const removedFileIds = new Set(selectedUnit.files.map((f) => f.id));
       removeOrthoUnitFromStore(selectedUnit.id);
+      setCheckedOrthoIds((prev) => {
+        const next = new Set(prev);
+        for (const id of removedFileIds) next.delete(id);
+        return next;
+      });
       setListTick((t) => t + 1);
       closeUnitDetail();
       void refreshOrthoWorkUnitList().catch(() => undefined);
@@ -617,6 +976,52 @@ export function AerialMediaShell({
             ? e.message
             : '';
       window.alert(msg || '작업단위 삭제에 실패했습니다.');
+    }
+  };
+
+  const handleDeleteOrthoFile = async (file: WorkUnitItem['files'][number]) => {
+    if (!selectedUnit || selectedUnit.kind !== 'ortho') return;
+    const tuKey =
+      file.id.startsWith('tu-') && Number.isFinite(Number(file.id.slice(3)))
+        ? Number(file.id.slice(3))
+        : null;
+    if (tuKey == null) {
+      window.alert('삭제할 파일 키가 없습니다.');
+      return;
+    }
+    const ok = window.confirm(
+      `파일 «${file.name}»을(를) 삭제할까요?
+원본 TIF와 변환 타일도 함께 삭제됩니다.`
+    );
+    if (!ok) return;
+    try {
+      const res = await call('', 'POST', {
+        service: 'aerialOrthoService',
+        action: 'deleteTifUnit',
+        params: { tuKey },
+      });
+      const payload = (res?.data ?? res) as { success?: boolean; error?: string };
+      if (res?.success === false || payload?.success === false) {
+        window.alert(payload?.error || '파일 삭제에 실패했습니다.');
+        return;
+      }
+      removeOrthoFileFromStore(selectedUnit.id, file.id);
+      setCheckedOrthoIds((prev) => {
+        const next = new Set(prev);
+        next.delete(file.id);
+        return next;
+      });
+      if (selectedFileId === file.id) setSelectedFileId(null);
+      setListTick((t) => t + 1);
+      await refreshOrthoWorkUnitList();
+    } catch (e: unknown) {
+      const msg =
+        e && typeof e === 'object' && 'error' in e
+          ? String((e as { error?: unknown }).error ?? '')
+          : e instanceof Error
+            ? e.message
+            : '';
+      window.alert(msg || '파일 삭제에 실패했습니다.');
     }
   };
 
@@ -767,9 +1172,11 @@ export function AerialMediaShell({
               );
             })}
           </ul>
-          <div className="border-t border-slate-200 px-2.5 py-2 text-[9px] leading-relaxed text-slate-400">
-            {viewOnly ? '조회 전용' : '관리 · 목업'}
-          </div>
+          {viewOnly ? (
+            <div className="border-t border-slate-200 px-2.5 py-2 text-[9px] leading-relaxed text-slate-400">
+              조회 전용
+            </div>
+          ) : null}
         </nav>
       ) : null}
 
@@ -785,7 +1192,7 @@ export function AerialMediaShell({
           onUpload={viewOnly ? undefined : openFreeFolderUpload}
           onClose={hideKindNav ? onClose : undefined}
           showStatus={kind === 'satellite'}
-          showConvertStatus={kind === 'ortho'}
+          showConvertStatus={kind === 'ortho' || kind === 'satellite'}
           dateFrom={dateFrom}
           dateTo={dateTo}
           onDateFromChange={setDateFrom}
@@ -830,6 +1237,10 @@ export function AerialMediaShell({
               setUploadLinkRequestId(null);
               clearActiveRegistrationRequest();
             }}
+            onSaveAttrs={handleSaveOrthoAttrs}
+            onDeleteFile={(file) => {
+              void handleDeleteOrthoFile(file);
+            }}
             onDelete={() => {
               void handleDeleteOrthoUnit();
             }}
@@ -854,6 +1265,7 @@ export function AerialMediaShell({
               setUploadLinkRequestId(null);
               clearActiveRegistrationRequest();
             }}
+            onSaveAttrs={handleSaveDroneAttrs}
             onDelete={() => {
               void handleDeleteDroneUnit();
             }}
@@ -878,6 +1290,10 @@ export function AerialMediaShell({
               setUploadLinkRequestId(null);
               clearActiveRegistrationRequest();
             }}
+            onSaveAttrs={handleSavePanoAttrs}
+            onDeleteFile={(file) => {
+              void handleDeletePanoFile(file);
+            }}
             onDelete={
               viewOnly
                 ? undefined
@@ -899,10 +1315,22 @@ export function AerialMediaShell({
             viewOnly={viewOnly}
             linkedRequest={detailLinkedRequest}
             onFolderUpload={() => openLinkedFolderUpload(selectedUnit.linkedRequestId)}
+            onAddFiles={() => openMediaUploadForUnit(selectedUnit)}
             onClearLink={() => {
               setUploadLinkRequestId(null);
               clearActiveRegistrationRequest();
             }}
+            onSaveAttrs={handleSaveSatelliteAttrs}
+            onDeleteFile={(file) => {
+              void handleDeleteSatelliteFile(file);
+            }}
+            onDelete={
+              viewOnly
+                ? undefined
+                : () => {
+                    void handleDeleteSatelliteUnit();
+                  }
+            }
           />
         </div>
       ) : null}
