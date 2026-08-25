@@ -1,22 +1,21 @@
-ï»¿@echo off
-chcp 65001 >nul
+@echo off
 setlocal EnableExtensions EnableDelayedExpansion
 
 :: =============================================================================
-:: ggnr_start.bat ìƒì„±ê¸° + (ì„ íƒ) nssm ë“±ë¡ Â· ë¡œê·¸ ì°½
-:: - ì‹¤í–‰ ìœ„ì¹˜ root = ì´ batì´ ìžˆëŠ” í´ë”
-:: - node PATH = where node ê²°ê³¼ì˜ ë””ë ‰í„°ë¦¬
-:: - package-lock.json ê¸°ì¤€ npm ci ë¡œ ì˜ì¡´ì„± ë™ê¸°í™” (Y/N, GGNR_START_NO_PAUSE=1 ì´ë©´ ìžë™)
-:: - ì´ì–´ì„œ npm run build (GGNR_PROJECT/ENV -> BASE_PATH ë°˜ì˜). ì‹¤íŒ¨ ì‹œ pause í›„ ì¤‘ë‹¨
-:: - ggnr_start.bat: BUILD_ID ìžˆìœ¼ë©´ ë¹Œë“œ ìƒëžµ -> start (ì—†ìœ¼ë©´ ë³´ì™„ ë¹Œë“œ)
-:: - í”„ë¡œì íŠ¸ëª…Â·íƒ€ìž…Â·npmÂ·ë®ì–´ì“°ê¸°Â·nssm Y/N = ì‹¤í–‰ ì „ í•œ ë²ˆì— ìž…ë ¥
-:: - nssm = root\nssm\win64\nssm.exe (í”„ë¡œì íŠ¸ ë‚´)
-:: - python/env_parts ëŠ” í•„ìˆ˜ê°€ ì•„ë‹˜. ìžˆì„ ë•Œë§Œ python/env ë¡œ ë³µì› í›„ env_parts ì‚­ì œ
-::   (ì´ë¯¸ python\env\python.exe ê°€ ìžˆê±°ë‚˜ env_parts ê°€ ì—†ìœ¼ë©´ ë³µì› ìƒëžµÂ·ì •ìƒ ì§„í–‰)
-:: - ìž…ë ¥ í›„: (nssm=Y ì´ë©´ ê´€ë¦¬ìž ê²€ì‚¬) -> ì´ì „ ì‹¤í–‰ ì •ë¦¬ -> ìƒì„± -> (ì„ íƒ) nssm -> ë¡œê·¸ ì°½
-:: - ì´ì „ ì‹¤í–‰ì´ ë‚¨ì•„ Ctrl+C ë¡œ ëŠì§€ ì•Šë„ë¡, ìž‘ì—… ì‹œìž‘ ì „ ìžë™ ì¤‘ì§€ (Terminate batch job ë°©ì§€)
-:: - DO_NSSM=Y ì¸ë° ë¹„ê´€ë¦¬ìžë©´ ë¹Œë“œ ì „ì— ì¤‘ë‹¨ (ê¸´ ë¹Œë“œ í›„ nssm ìŠ¤í‚µ ë°©ì§€)
-:: - ì°½ ìœ ì§€: ê¸°ë³¸ í•­ìƒ set /p. ìƒëžµì€ GGNR_STARTER_NO_PAUSE=1 ë§Œ ^(GGNR_START_NO_PAUSE ì™€ ë¶„ë¦¬ - nssm í™˜ê²½ë³€ìˆ˜ê°€ starter ì°½ì„ ë‹«ì§€ ì•ŠìŒ^)
+:: ggnr_start.bat »ý¼º±â + (¼±ÅÃ) nssm µî·Ï ¡¤ ·Î±× Ã¢
+:: - ½ÇÇà À§Ä¡ root = ÀÌ batÀÌ ÀÖ´Â Æú´õ
+:: - node PATH = where node °á°úÀÇ µð·ºÅÍ¸®
+:: - package-lock.json ±âÁØ npm ci ·Î ÀÇÁ¸¼º µ¿±âÈ­ (Y/N, GGNR_START_NO_PAUSE=1 ÀÌ¸é ÀÚµ¿)
+:: - ÀÌ¾î¼­ npm run build (GGNR_PROJECT/ENV -> BASE_PATH ¹Ý¿µ). ½ÇÆÐ ½Ã pause ÈÄ Áß´Ü
+:: - ggnr_start.bat: BUILD_ID ÀÖÀ¸¸é ºôµå »ý·« -> start (¾øÀ¸¸é º¸¿Ï ºôµå)
+:: - ÇÁ·ÎÁ§Æ®¸í¡¤Å¸ÀÔ¡¤npm¡¤µ¤¾î¾²±â¡¤nssm Y/N = ½ÇÇà Àü ÇÑ ¹ø¿¡ ÀÔ·Â
+:: - nssm = root\nssm\win64\nssm.exe (ÇÁ·ÎÁ§Æ® ³»)
+:: - python/env_parts ´Â ÇÊ¼ö°¡ ¾Æ´Ô. ÀÖÀ» ¶§¸¸ python/env ·Î º¹¿ø ÈÄ env_parts »èÁ¦
+::   (ÀÌ¹Ì python\env\python.exe °¡ ÀÖ°Å³ª env_parts °¡ ¾øÀ¸¸é º¹¿ø »ý·«¡¤Á¤»ó ÁøÇà)
+:: - ÀÔ·Â ÈÄ: (nssm=Y ÀÌ¸é °ü¸®ÀÚ °Ë»ç) -> ÀÌÀü ½ÇÇà Á¤¸® -> »ý¼º -> (¼±ÅÃ) nssm -> ·Î±× Ã¢
+:: - ÀÌÀü ½ÇÇàÀÌ ³²¾Æ Ctrl+C ·Î ²÷Áö ¾Êµµ·Ï, ÀÛ¾÷ ½ÃÀÛ Àü ÀÚµ¿ ÁßÁö (Terminate batch job ¹æÁö)
+:: - DO_NSSM=Y ÀÎµ¥ ºñ°ü¸®ÀÚ¸é ºôµå Àü¿¡ Áß´Ü (±ä ºôµå ÈÄ nssm ½ºÅµ ¹æÁö)
+:: - Ã¢ À¯Áö: ±âº» Ç×»ó set /p. »ý·«Àº GGNR_STARTER_NO_PAUSE=1 ¸¸ ^(GGNR_START_NO_PAUSE ¿Í ºÐ¸® - nssm È¯°æº¯¼ö°¡ starter Ã¢À» ´ÝÁö ¾ÊÀ½^)
 :: =============================================================================
 
 set "ROOT=%~dp0"
@@ -28,85 +27,85 @@ if not exist "%NSSM_EXE%" set "NSSM_EXE=%ROOT%\nssm\win32\nssm.exe"
 set "LOGS_BAT=%ROOT%\open_ggnr_logs.bat"
 set "SERVICE_NAME=GGNR_V7"
 set "APP_PORT=3000"
-:: ì°½ ìœ ì§€. GGNR_START_NO_PAUSE ëŠ” ggnr_start/nssm ìš© - starter ì°½ì—ëŠ” ì“°ì§€ ì•ŠìŒ
+:: Ã¢ À¯Áö. GGNR_START_NO_PAUSE ´Â ggnr_start/nssm ¿ë - starter Ã¢¿¡´Â ¾²Áö ¾ÊÀ½
 set "PAUSE_ON_FAIL=1"
 if /i "%GGNR_STARTER_NO_PAUSE%"=="1" set "PAUSE_ON_FAIL=0"
 set "NPM_SYNC_DONE=0"
 
 echo.
 echo [00_make_ggnr_starter] root = %ROOT%
-echo [00_make_ggnr_starter] ì¶œë ¥ = %OUT%
-if /i "%GGNR_START_NO_PAUSE%"=="1" echo [ì•ˆë‚´] GGNR_START_NO_PAUSE=1 - ìž…ë ¥ ìžë™ Y ^(ì°½ì€ ìœ ì§€. ì°½ ìƒëžµì€ GGNR_STARTER_NO_PAUSE=1^)
+echo [00_make_ggnr_starter] Ãâ·Â = %OUT%
+if /i "%GGNR_START_NO_PAUSE%"=="1" echo [¾È³»] GGNR_START_NO_PAUSE=1 - ÀÔ·Â ÀÚµ¿ Y ^(Ã¢Àº À¯Áö. Ã¢ »ý·«Àº GGNR_STARTER_NO_PAUSE=1^)
 echo.
 
-:: --- ì‚¬ìš©ìž ìž…ë ¥ (ì‹¤í–‰ ì „ í•œ ë²ˆì— ìˆ˜ì§‘, ì´í›„ Y/N ì—†ìŒ) ---
-echo [ìž…ë ¥] ì•„ëž˜ë¥¼ ëª¨ë‘ ìž…ë ¥í•œ ë’¤ ìž‘ì—…ì„ ì‹œìž‘í•©ë‹ˆë‹¤. (Y/N ì€ Y ë˜ëŠ” N)
+:: --- »ç¿ëÀÚ ÀÔ·Â (½ÇÇà Àü ÇÑ ¹ø¿¡ ¼öÁý, ÀÌÈÄ Y/N ¾øÀ½) ---
+echo [ÀÔ·Â] ¾Æ·¡¸¦ ¸ðµÎ ÀÔ·ÂÇÑ µÚ ÀÛ¾÷À» ½ÃÀÛÇÕ´Ï´Ù. (Y/N Àº Y ¶Ç´Â N)
 echo.
-set /p "PROJECT_NAME=í”„ë¡œì íŠ¸ëª… (GGNR_PROJECT): "
+set /p "PROJECT_NAME=ÇÁ·ÎÁ§Æ®¸í (GGNR_PROJECT): "
 if not defined PROJECT_NAME (
-  echo [ì˜¤ë¥˜] í”„ë¡œì íŠ¸ëª…ì´ ë¹„ì–´ ìžˆìŠµë‹ˆë‹¤.
+  echo [¿À·ù] ÇÁ·ÎÁ§Æ®¸íÀÌ ºñ¾î ÀÖ½À´Ï´Ù.
   goto :fail_exit
 )
 echo(!PROJECT_NAME!| findstr /C:" " >nul 2>&1
 if not errorlevel 1 (
-  echo [ì˜¤ë¥˜] í”„ë¡œì íŠ¸ëª…ì— ê³µë°±ì´ ìžˆìŠµë‹ˆë‹¤. ê³µë°± ì—†ì´ ìž…ë ¥í•˜ì„¸ìš”.
+  echo [¿À·ù] ÇÁ·ÎÁ§Æ®¸í¿¡ °ø¹éÀÌ ÀÖ½À´Ï´Ù. °ø¹é ¾øÀÌ ÀÔ·ÂÇÏ¼¼¿ä.
   goto :fail_exit
 )
 
-set /p "ENV_NAME=íƒ€ìž… (GGNR_ENV, dev ^| demo ^| prod): "
+set /p "ENV_NAME=Å¸ÀÔ (GGNR_ENV, dev ^| demo ^| prod): "
 if not defined ENV_NAME (
-  echo [ì˜¤ë¥˜] íƒ€ìž…ì´ ë¹„ì–´ ìžˆìŠµë‹ˆë‹¤.
+  echo [¿À·ù] Å¸ÀÔÀÌ ºñ¾î ÀÖ½À´Ï´Ù.
   goto :fail_exit
 )
 echo(!ENV_NAME!| findstr /C:" " >nul 2>&1
 if not errorlevel 1 (
-  echo [ì˜¤ë¥˜] íƒ€ìž…ëª…ì— ê³µë°±ì´ ìžˆìŠµë‹ˆë‹¤. ê³µë°± ì—†ì´ ìž…ë ¥í•˜ì„¸ìš”.
+  echo [¿À·ù] Å¸ÀÔ¸í¿¡ °ø¹éÀÌ ÀÖ½À´Ï´Ù. °ø¹é ¾øÀÌ ÀÔ·ÂÇÏ¼¼¿ä.
   goto :fail_exit
 )
 
 set "OVERWRITE=Y"
 set "DO_REREG=N"
 if /i "%GGNR_START_NO_PAUSE%"=="1" (
-  echo [ì§„í–‰] GGNR_START_NO_PAUSE=1 - npmÂ·ë®ì–´ì“°ê¸°Â·nssm ìžë™ Y
+  echo [ÁøÇà] GGNR_START_NO_PAUSE=1 - npm¡¤µ¤¾î¾²±â¡¤nssm ÀÚµ¿ Y
   set "DO_NPM_SYNC=Y"
   set "DO_NSSM=Y"
   set "DO_REREG=Y"
 ) else (
   echo.
-  echo [ê³ ì§€] ë°°í¬ ì•ˆì •ì„ ìœ„í•´ package-lock.json ê¸°ì¤€ npm ci ë¥¼ ê¶Œìž¥í•©ë‹ˆë‹¤.
-  echo         ê¸°ì¡´ node_modules ê°€ ìžˆì–´ë„ ë³µì‚¬ë³¸Â·lock ë¶ˆì¼ì¹˜ë©´ Y ë¡œ lock ê³¼ ë§žì¶”ì„¸ìš”.
-  echo         íì‡„ë§ì¼ ê²½ìš° N ì„ ìž…ë ¥í•˜ì„¸ìš” ^(npm install ë¶ˆê°€^).
+  echo [°íÁö] ¹èÆ÷ ¾ÈÁ¤À» À§ÇØ package-lock.json ±âÁØ npm ci ¸¦ ±ÇÀåÇÕ´Ï´Ù.
+  echo         ±âÁ¸ node_modules °¡ ÀÖ¾îµµ º¹»çº»¡¤lock ºÒÀÏÄ¡¸é Y ·Î lock °ú ¸ÂÃß¼¼¿ä.
+  echo         Æó¼â¸ÁÀÏ °æ¿ì N À» ÀÔ·ÂÇÏ¼¼¿ä ^(npm install ºÒ°¡^).
   echo.
-  set /p "DO_NPM_SYNC=npm ci ^(ë˜ëŠ” install^) ë¡œ ì˜ì¡´ì„± ë™ê¸°í™”í• ê¹Œìš”? (Y/N): "
+  set /p "DO_NPM_SYNC=npm ci ^(¶Ç´Â install^) ·Î ÀÇÁ¸¼º µ¿±âÈ­ÇÒ±î¿ä? (Y/N): "
   if exist "%OUT%" (
-    set /p "OVERWRITE=ì´ë¯¸ ggnr_start.bat ì´ ìžˆìŠµë‹ˆë‹¤. ë®ì–´ì“¸ê¹Œìš”? (Y/N): "
+    set /p "OVERWRITE=ÀÌ¹Ì ggnr_start.bat ÀÌ ÀÖ½À´Ï´Ù. µ¤¾î¾µ±î¿ä? (Y/N): "
   )
-  set /p "DO_NSSM=nssm ì„œë¹„ìŠ¤ë¥¼ ë“±ë¡í• ê¹Œìš”? (Y/N): "
+  set /p "DO_NSSM=nssm ¼­ºñ½º¸¦ µî·ÏÇÒ±î¿ä? (Y/N): "
   if /i "!DO_NSSM!"=="Y" (
-    set /p "DO_REREG=ê¸°ì¡´ GGNR_V7 ì„œë¹„ìŠ¤ê°€ ìžˆìœ¼ë©´ ì‚­ì œ í›„ ìž¬ë“±ë¡í• ê¹Œìš”? (Y/N): "
+    set /p "DO_REREG=±âÁ¸ GGNR_V7 ¼­ºñ½º°¡ ÀÖÀ¸¸é »èÁ¦ ÈÄ Àçµî·ÏÇÒ±î¿ä? (Y/N): "
   )
 )
 
-:: Y/N ì •ê·œí™” (ê³µë°± ì œê±° Â· Y/N ë§Œ í—ˆìš© Â· ê·¸ ì™¸Â·ë¹ˆê°’ -> ê¸°ë³¸ê°’ + ê²½ê³ )
+:: Y/N Á¤±ÔÈ­ (°ø¹é Á¦°Å ¡¤ Y/N ¸¸ Çã¿ë ¡¤ ±× ¿Ü¡¤ºó°ª -> ±âº»°ª + °æ°í)
 set "DO_NPM_SYNC=!DO_NPM_SYNC: =!"
 if /i not "!DO_NPM_SYNC!"=="Y" if /i not "!DO_NPM_SYNC!"=="N" (
-  echo [ê²½ê³ ] npm ë™ê¸°í™” ìž…ë ¥ì´ Y/N ì´ ì•„ë‹˜ - N ìœ¼ë¡œ ì²˜ë¦¬í•©ë‹ˆë‹¤ ^(ìž…ë ¥=[!DO_NPM_SYNC!]^)
+  echo [°æ°í] npm µ¿±âÈ­ ÀÔ·ÂÀÌ Y/N ÀÌ ¾Æ´Ô - N À¸·Î Ã³¸®ÇÕ´Ï´Ù ^(ÀÔ·Â=[!DO_NPM_SYNC!]^)
   set "DO_NPM_SYNC=N"
 )
 set "OVERWRITE=!OVERWRITE: =!"
 if /i not "!OVERWRITE!"=="Y" if /i not "!OVERWRITE!"=="N" (
-  echo [ê²½ê³ ] ë®ì–´ì“°ê¸° ìž…ë ¥ì´ Y/N ì´ ì•„ë‹˜ - Y ë¡œ ì²˜ë¦¬í•©ë‹ˆë‹¤ ^(ìž…ë ¥=[!OVERWRITE!]^)
+  echo [°æ°í] µ¤¾î¾²±â ÀÔ·ÂÀÌ Y/N ÀÌ ¾Æ´Ô - Y ·Î Ã³¸®ÇÕ´Ï´Ù ^(ÀÔ·Â=[!OVERWRITE!]^)
   set "OVERWRITE=Y"
 )
 set "DO_NSSM=!DO_NSSM: =!"
 if /i not "!DO_NSSM!"=="Y" if /i not "!DO_NSSM!"=="N" (
-  echo [ê²½ê³ ] nssm ë“±ë¡ ìž…ë ¥ì´ Y/N ì´ ì•„ë‹˜ - N ìœ¼ë¡œ ì²˜ë¦¬í•©ë‹ˆë‹¤ ^(ìž…ë ¥=[!DO_NSSM!]^)
+  echo [°æ°í] nssm µî·Ï ÀÔ·ÂÀÌ Y/N ÀÌ ¾Æ´Ô - N À¸·Î Ã³¸®ÇÕ´Ï´Ù ^(ÀÔ·Â=[!DO_NSSM!]^)
   set "DO_NSSM=N"
 )
 if /i "!DO_NSSM!"=="Y" (
   set "DO_REREG=!DO_REREG: =!"
   if /i not "!DO_REREG!"=="Y" if /i not "!DO_REREG!"=="N" (
-    echo [ê²½ê³ ] ìž¬ë“±ë¡ ìž…ë ¥ì´ Y/N ì´ ì•„ë‹˜ - N ìœ¼ë¡œ ì²˜ë¦¬í•©ë‹ˆë‹¤ ^(ìž…ë ¥=[!DO_REREG!]^)
+    echo [°æ°í] Àçµî·Ï ÀÔ·ÂÀÌ Y/N ÀÌ ¾Æ´Ô - N À¸·Î Ã³¸®ÇÕ´Ï´Ù ^(ÀÔ·Â=[!DO_REREG!]^)
     set "DO_REREG=N"
   )
 ) else (
@@ -114,29 +113,29 @@ if /i "!DO_NSSM!"=="Y" (
 )
 
 echo.
-echo [í™•ì¸]
+echo [È®ÀÎ]
 echo   PROJECT     = %PROJECT_NAME%
 echo   TYPE        = %ENV_NAME%
-echo   npm ë™ê¸°í™”  = !DO_NPM_SYNC!
-echo   ë®ì–´ì“°ê¸°    = !OVERWRITE!
-echo   nssm ë“±ë¡   = !DO_NSSM!
-echo   ìž¬ë“±ë¡      = !DO_REREG!
+echo   npm µ¿±âÈ­  = !DO_NPM_SYNC!
+echo   µ¤¾î¾²±â    = !OVERWRITE!
+echo   nssm µî·Ï   = !DO_NSSM!
+echo   Àçµî·Ï      = !DO_REREG!
 echo.
 
-:: nssm=Y ì´ë©´ ë¹Œë“œ ì „ì— ê´€ë¦¬ìž í™•ì¸ (ë¹„ê´€ë¦¬ìž+ê¸´ ë¹Œë“œ í›„ ìŠ¤í‚µ ë°©ì§€)
+:: nssm=Y ÀÌ¸é ºôµå Àü¿¡ °ü¸®ÀÚ È®ÀÎ (ºñ°ü¸®ÀÚ+±ä ºôµå ÈÄ ½ºÅµ ¹æÁö)
 if /i "!DO_NSSM!"=="Y" (
   call :require_admin
   if errorlevel 1 goto :fail_exit
 )
 
-:: ì´ì „ ggnr_start / nssm / node ê°€ ì‚´ì•„ ìžˆìœ¼ë©´ npm ciÂ·ìž¬ë“±ë¡ì´ ìž ê¸°ê±°ë‚˜
-:: ì‚¬ìš©ìžê°€ Ctrl+C ë¡œ ëŠë‹¤ "Terminate batch job (Y/N)?" ë¥¼ ë³´ê²Œ ë¨ -> ë¨¼ì € ì •ë¦¬
+:: ÀÌÀü ggnr_start / nssm / node °¡ »ì¾Æ ÀÖÀ¸¸é npm ci¡¤Àçµî·ÏÀÌ Àá±â°Å³ª
+:: »ç¿ëÀÚ°¡ Ctrl+C ·Î ²÷´Ù "Terminate batch job (Y/N)?" ¸¦ º¸°Ô µÊ -> ¸ÕÀú Á¤¸®
 call :stop_previous_ggnr
 echo.
 
 where node >nul 2>&1
 if errorlevel 1 (
-  echo [ì˜¤ë¥˜] where node ì‹¤íŒ¨. PATH ì— node ê°€ ì—†ìŠµë‹ˆë‹¤.
+  echo [¿À·ù] where node ½ÇÆÐ. PATH ¿¡ node °¡ ¾ø½À´Ï´Ù.
   goto :fail_exit
 )
 
@@ -148,7 +147,7 @@ for /f "delims=" %%I in ('where node') do (
 
 :node_found
 if not defined NODE_EXE (
-  echo [ì˜¤ë¥˜] node.exe ê²½ë¡œë¥¼ ì½ì§€ ëª»í–ˆìŠµë‹ˆë‹¤.
+  echo [¿À·ù] node.exe °æ·Î¸¦ ÀÐÁö ¸øÇß½À´Ï´Ù.
   goto :fail_exit
 )
 
@@ -157,39 +156,39 @@ if "%NODE_DIR:~-1%"=="\" set "NODE_DIR=%NODE_DIR:~0,-1%"
 
 echo [00_make_ggnr_starter] node.exe = %NODE_EXE%
 for /f "delims=" %%V in ('node -v 2^>nul') do echo [00_make_ggnr_starter] Node = %%V
-echo [00_make_ggnr_starter] PATH ì¶”ê°€ = %NODE_DIR%
+echo [00_make_ggnr_starter] PATH Ãß°¡ = %NODE_DIR%
 echo.
 
-:: --- python/env : env_parts ìžˆìœ¼ë©´ ë³µì›(í•„ìˆ˜ ì•„ë‹˜Â·ì—†ìœ¼ë©´ ìƒëžµ exit 0) ---
-echo [ì§„í–‰] python/env ë³µì› í™•ì¸ ^(env_parts ì—†ìœ¼ë©´ ìƒëžµ^)...
-:: PowerShell í•œê¸€ ë¡œê·¸: ìŠ¤í¬ë¦½íŠ¸ UTF-8 BOM + ì½˜ì†” UTF-8 (restore-python-env.ps1 ìƒë‹¨)
+:: --- python/env : env_parts ÀÖÀ¸¸é º¹¿ø(ÇÊ¼ö ¾Æ´Ô¡¤¾øÀ¸¸é »ý·« exit 0) ---
+echo [ÁøÇà] python/env º¹¿ø È®ÀÎ ^(env_parts ¾øÀ¸¸é »ý·«^)...
+:: PowerShell ÇÑ±Û ·Î±×: ½ºÅ©¸³Æ® UTF-8 BOM + ÄÜ¼Ö UTF-8 (restore-python-env.ps1 »ó´Ü)
 powershell -NoProfile -ExecutionPolicy Bypass -File "%ROOT%\scripts\restore-python-env.ps1" -Root "%ROOT%"
 if errorlevel 1 goto :fail_exit
 echo.
 
-:: --- ì˜ì¡´ì„± ë™ê¸°í™”: node_modules ìœ ë¬´ì™€ ê´€ê³„ì—†ì´ lock ê¸°ì¤€ ìž¬ì„¤ì¹˜ ê¶Œìž¥ ---
+:: --- ÀÇÁ¸¼º µ¿±âÈ­: node_modules À¯¹«¿Í °ü°è¾øÀÌ lock ±âÁØ Àç¼³Ä¡ ±ÇÀå ---
 if /i "!DO_NPM_SYNC!"=="Y" (
   call :run_npm_sync
   if errorlevel 1 goto :fail_exit
   set "NPM_SYNC_DONE=1"
   echo.
 ) else (
-  echo [ê±´ë„ˆëœ€] ì˜ì¡´ì„± ë™ê¸°í™”ë¥¼ í•˜ì§€ ì•ŠìŠµë‹ˆë‹¤.
-  echo         nssm ê¸°ë™ ì‹œ node_modules\next ê°€ ì—†ìœ¼ë©´ ì‹¤íŒ¨í•  ìˆ˜ ìžˆìŠµë‹ˆë‹¤. í•„ìš” ì‹œ root ì—ì„œ npm ci ë¥¼ ì‹¤í–‰í•˜ì„¸ìš”.
+  echo [°Ç³Ê¶Ü] ÀÇÁ¸¼º µ¿±âÈ­¸¦ ÇÏÁö ¾Ê½À´Ï´Ù.
+  echo         nssm ±âµ¿ ½Ã node_modules\next °¡ ¾øÀ¸¸é ½ÇÆÐÇÒ ¼ö ÀÖ½À´Ï´Ù. ÇÊ¿ä ½Ã root ¿¡¼­ npm ci ¸¦ ½ÇÇàÇÏ¼¼¿ä.
   echo.
 )
 
-:: --- production ë¹Œë“œ: starter ì—ì„œ ëë‚¸ë‹¤ (nssm/ggnr_start ê°€ ë¹Œë“œë¶€í„° ë„ëŠ” ê²ƒ ë°©ì§€) ---
-:: GGNR_PROJECT/ENV ë¡œ next.config ê°€ BASE_PATH ë¥¼ ì½ìŒ (ì˜ˆ: demo -> /build_yy)
+:: --- production ºôµå: starter ¿¡¼­ ³¡³½´Ù (nssm/ggnr_start °¡ ºôµåºÎÅÍ µµ´Â °Í ¹æÁö) ---
+:: GGNR_PROJECT/ENV ·Î next.config °¡ BASE_PATH ¸¦ ÀÐÀ½ (¿¹: demo -> /build_yy)
 set "GGNR_PROJECT=%PROJECT_NAME%"
 set "GGNR_ENV=%ENV_NAME%"
 set "PATH=%PATH%;%NODE_DIR%"
 call :run_npm_build
 if errorlevel 1 goto :fail_exit
 echo.
-echo [ì™„ë£Œ] ë¹Œë“œ ë‹¨ê³„ ë - ì´ì–´ì„œ ggnr_start / nssm ì§„í–‰í•©ë‹ˆë‹¤.
+echo [¿Ï·á] ºôµå ´Ü°è ³¡ - ÀÌ¾î¼­ ggnr_start / nssm ÁøÇàÇÕ´Ï´Ù.
 echo.
-echo [í™•ì¸]
+echo [È®ÀÎ]
 echo   cd          = %ROOT%
 echo   NODE_DIR    = %NODE_DIR%
 echo   PROJECT     = %PROJECT_NAME%
@@ -199,70 +198,70 @@ echo.
 set "SKIP_WRITE=0"
 if exist "%OUT%" (
   if /i not "!OVERWRITE!"=="Y" (
-    echo [ìœ ì§€] ê¸°ì¡´ ggnr_start.bat ì„ ê·¸ëŒ€ë¡œ ë‘¡ë‹ˆë‹¤.
+    echo [À¯Áö] ±âÁ¸ ggnr_start.bat À» ±×´ë·Î µÓ´Ï´Ù.
     set "SKIP_WRITE=1"
   )
 )
 
-echo [ì§„í–‰] ë¹Œë“œ ì´í›„ ë‹¨ê³„ - ggnr_start.bat / nssm / ë¡œê·¸
+echo [ÁøÇà] ºôµå ÀÌÈÄ ´Ü°è - ggnr_start.bat / nssm / ·Î±×
 if "!SKIP_WRITE!"=="0" (
-  echo [ì§„í–‰] ggnr_start.bat ìƒì„± ì¤‘...
+  echo [ÁøÇà] ggnr_start.bat »ý¼º Áß...
   call :write_ggnr_start
   if errorlevel 1 goto :fail_exit
   if not exist "%OUT%" (
-    echo [ì˜¤ë¥˜] ggnr_start.bat ìƒì„± ì‹¤íŒ¨
+    echo [¿À·ù] ggnr_start.bat »ý¼º ½ÇÆÐ
     goto :fail_exit
   )
-  echo [ì™„ë£Œ] ìƒì„±ë¨: %OUT%
+  echo [¿Ï·á] »ý¼ºµÊ: %OUT%
 ) else (
   if not exist "%OUT%" (
-    echo [ì˜¤ë¥˜] ggnr_start.bat ì´ ì—†ìŠµë‹ˆë‹¤.
+    echo [¿À·ù] ggnr_start.bat ÀÌ ¾ø½À´Ï´Ù.
     goto :fail_exit
   )
-  echo [ì£¼ì˜] ê¸°ì¡´ ggnr_start.bat ì„ ìœ ì§€í•©ë‹ˆë‹¤.
-  echo         ë°©ê¸ˆ ìž…ë ¥í•œ í”„ë¡œì íŠ¸ëª…/í™˜ê²½ì€ ê¸°ì¡´ íŒŒì¼ì— ë°˜ì˜ë˜ì§€ ì•ŠìŠµë‹ˆë‹¤.
-  echo         ë°”ê¾¸ë ¤ë©´ ë®ì–´ì“°ê¸° Y ë¡œ ë‹¤ì‹œ ì‹¤í–‰í•˜ì„¸ìš”.
+  echo [ÁÖÀÇ] ±âÁ¸ ggnr_start.bat À» À¯ÁöÇÕ´Ï´Ù.
+  echo         ¹æ±Ý ÀÔ·ÂÇÑ ÇÁ·ÎÁ§Æ®¸í/È¯°æÀº ±âÁ¸ ÆÄÀÏ¿¡ ¹Ý¿µµÇÁö ¾Ê½À´Ï´Ù.
+  echo         ¹Ù²Ù·Á¸é µ¤¾î¾²±â Y ·Î ´Ù½Ã ½ÇÇàÇÏ¼¼¿ä.
   echo.
 )
 
-echo [ì§„í–‰] ggnr_start.bat ì²˜ë¦¬ ì™„ë£Œ.
+echo [ÁøÇà] ggnr_start.bat Ã³¸® ¿Ï·á.
 
 if /i not "!DO_NSSM!"=="Y" (
-  echo [ê±´ë„ˆëœ€] nssmÂ·ë¡œê·¸ ^(DO_NSSM=!DO_NSSM!^)
-  echo [ì¢…ë£Œ] ìƒì„±ë§Œ ì™„ë£Œí–ˆìŠµë‹ˆë‹¤.
-  echo   ìˆ˜ë™: nssm_install_ggnr.bat ^(ê´€ë¦¬ìž CMD^) -> open_ggnr_logs.bat
+  echo [°Ç³Ê¶Ü] nssm¡¤·Î±× ^(DO_NSSM=!DO_NSSM!^)
+  echo [Á¾·á] »ý¼º¸¸ ¿Ï·áÇß½À´Ï´Ù.
+  echo   ¼öµ¿: nssm_install_ggnr.bat ^(°ü¸®ÀÚ CMD^) -> open_ggnr_logs.bat
   echo.
   if "!PAUSE_ON_FAIL!"=="1" call :pause_keep
   exit /b 0
 )
 
-:: --- ê´€ë¦¬ìž ìž¬í™•ì¸ (ì•ˆì „ë§: ë¹Œë“œ ì „ì—ë„ ì´ë¯¸ ê²€ì‚¬í•¨) ---
+:: --- °ü¸®ÀÚ ÀçÈ®ÀÎ (¾ÈÀü¸Á: ºôµå Àü¿¡µµ ÀÌ¹Ì °Ë»çÇÔ) ---
 call :require_admin
 if errorlevel 1 goto :fail_exit
 
 if not exist "%ROOT%\node_modules\next\package.json" (
-  echo [ì˜¤ë¥˜] node_modules ê°€ ì—†ê±°ë‚˜ next ê°€ ì„¤ì¹˜ë˜ì§€ ì•Šì•˜ìŠµë‹ˆë‹¤.
-  echo         ì˜ì¡´ì„± ë™ê¸°í™”ë¥¼ Y ë¡œ ë‹¤ì‹œ ì‹¤í–‰í•˜ê±°ë‚˜, root ì—ì„œ npm ci ë¥¼ ì‹¤í–‰í•œ ë’¤ nssm ë“±ë¡ì„ ì§„í–‰í•˜ì„¸ìš”.
+  echo [¿À·ù] node_modules °¡ ¾ø°Å³ª next °¡ ¼³Ä¡µÇÁö ¾Ê¾Ò½À´Ï´Ù.
+  echo         ÀÇÁ¸¼º µ¿±âÈ­¸¦ Y ·Î ´Ù½Ã ½ÇÇàÇÏ°Å³ª, root ¿¡¼­ npm ci ¸¦ ½ÇÇàÇÑ µÚ nssm µî·ÏÀ» ÁøÇàÇÏ¼¼¿ä.
   goto :fail_exit
 )
 
 if not exist "%NSSM_BAT%" (
-  echo [ì˜¤ë¥˜] ì—†ìŒ: %NSSM_BAT%
+  echo [¿À·ù] ¾øÀ½: %NSSM_BAT%
   goto :fail_exit
 )
 if not exist "%NSSM_EXE%" (
-  echo [ì˜¤ë¥˜] nssm.exe ì—†ìŒ: %NSSM_EXE%
-  echo         ì„¤ì¹˜ ZIPì— nssm\win64\nssm.exe ê°€ í¬í•¨ë˜ì–´ ìžˆëŠ”ì§€ í™•ì¸í•˜ì„¸ìš”.
+  echo [¿À·ù] nssm.exe ¾øÀ½: %NSSM_EXE%
+  echo         ¼³Ä¡ ZIP¿¡ nssm\win64\nssm.exe °¡ Æ÷ÇÔµÇ¾î ÀÖ´ÂÁö È®ÀÎÇÏ¼¼¿ä.
   goto :fail_exit
 )
 if not exist "%LOGS_BAT%" (
-  echo [ì˜¤ë¥˜] ì—†ìŒ: %LOGS_BAT%
+  echo [¿À·ù] ¾øÀ½: %LOGS_BAT%
   goto :fail_exit
 )
 
 echo.
-echo [ì§„í–‰] nssm ë“±ë¡ ^(1/2^)...
-echo         ^(ì‹¤íŒ¨ ì‹œ nssm_install ì°½ì´ pause ë¡œ ìœ ì§€ë©ë‹ˆë‹¤. ë©”ì‹œì§€ í™•ì¸ í›„ Enter.^)
+echo [ÁøÇà] nssm µî·Ï ^(1/2^)...
+echo         ^(½ÇÆÐ ½Ã nssm_install Ã¢ÀÌ pause ·Î À¯ÁöµË´Ï´Ù. ¸Þ½ÃÁö È®ÀÎ ÈÄ Enter.^)
 set "GGNR_NSSM_REREG=!DO_REREG!"
 set "GGNR_NSSM_PROJECT=%PROJECT_NAME%"
 set "GGNR_NSSM_ENV=%ENV_NAME%"
@@ -271,29 +270,29 @@ call "%NSSM_BAT%"
 set "NSSM_EC=!ERRORLEVEL!"
 set "GGNR_NSSM_FROM_STARTER="
 if "!NSSM_EC!"=="2" (
-  echo [ì•ˆë‚´] ê¸°ì¡´ GGNR_V7 ì„œë¹„ìŠ¤ë¥¼ ìœ ì§€í–ˆìŠµë‹ˆë‹¤ ^(ìž¬ë“±ë¡ ì•ˆ í•¨^).
-  echo         í•„ìš” ì‹œ ì„œë¹„ìŠ¤ ê´€ë¦¬ìžì—ì„œ GGNR_V7 ì„ ì‹œìž‘í•˜ì„¸ìš”.
+  echo [¾È³»] ±âÁ¸ GGNR_V7 ¼­ºñ½º¸¦ À¯ÁöÇß½À´Ï´Ù ^(Àçµî·Ï ¾È ÇÔ^).
+  echo         ÇÊ¿ä ½Ã ¼­ºñ½º °ü¸®ÀÚ¿¡¼­ GGNR_V7 À» ½ÃÀÛÇÏ¼¼¿ä.
   echo.
-  echo [ì§„í–‰] ë¡œê·¸ ì°½ ^(2/2^)...
+  echo [ÁøÇà] ·Î±× Ã¢ ^(2/2^)...
   call "%LOGS_BAT%"
   echo.
-  echo [ì™„ë£Œ] ìƒì„± -> ^(ê¸°ì¡´ ì„œë¹„ìŠ¤ ìœ ì§€^) -> ë¡œê·¸ ì°½ê¹Œì§€ ëë‚¬ìŠµë‹ˆë‹¤.
+  echo [¿Ï·á] »ý¼º -> ^(±âÁ¸ ¼­ºñ½º À¯Áö^) -> ·Î±× Ã¢±îÁö ³¡³µ½À´Ï´Ù.
   echo.
   if "!PAUSE_ON_FAIL!"=="1" call :pause_keep
   exit /b 0
 )
 if not "!NSSM_EC!"=="0" (
-  echo [ì¤‘ë‹¨] nssm ë“±ë¡/ì‹œìž‘ ì‹¤íŒ¨ ^(exit=!NSSM_EC!^)
+  echo [Áß´Ü] nssm µî·Ï/½ÃÀÛ ½ÇÆÐ ^(exit=!NSSM_EC!^)
   set "FAIL_EC=!NSSM_EC!"
   goto :fail_exit
 )
 
 echo.
-echo [ì§„í–‰] ë¡œê·¸ ì°½ ^(2/2^)...
+echo [ÁøÇà] ·Î±× Ã¢ ^(2/2^)...
 call "%LOGS_BAT%"
 
 echo.
-echo [ì™„ë£Œ] ìƒì„± -> nssm ë“±ë¡ -> ë¡œê·¸ ì°½ê¹Œì§€ ëë‚¬ìŠµë‹ˆë‹¤.
+echo [¿Ï·á] »ý¼º -> nssm µî·Ï -> ·Î±× Ã¢±îÁö ³¡³µ½À´Ï´Ù.
 echo.
 if "!PAUSE_ON_FAIL!"=="1" call :pause_keep
 exit /b 0
@@ -301,40 +300,40 @@ exit /b 0
 :fail_exit
 if not defined FAIL_EC set "FAIL_EC=1"
 echo.
-echo [ì¢…ë£Œ] ì˜¤ë¥˜ë¡œ ì¤‘ë‹¨ë˜ì—ˆìŠµë‹ˆë‹¤ ^(exit=!FAIL_EC!^). ìœ„ ë©”ì‹œì§€ë¥¼ í™•ì¸í•˜ì„¸ìš”.
-echo         nssm ê²°ê³¼ ë¡œê·¸: C:\logs\nssm_install_last.log
-echo         ìˆ˜ë™: nssm_install_ggnr.bat ^(ê´€ë¦¬ìž CMD^) -> open_ggnr_logs.bat
+echo [Á¾·á] ¿À·ù·Î Áß´ÜµÇ¾ú½À´Ï´Ù ^(exit=!FAIL_EC!^). À§ ¸Þ½ÃÁö¸¦ È®ÀÎÇÏ¼¼¿ä.
+echo         nssm °á°ú ·Î±×: C:\logs\nssm_install_last.log
+echo         ¼öµ¿: nssm_install_ggnr.bat ^(°ü¸®ÀÚ CMD^) -> open_ggnr_logs.bat
 if "!PAUSE_ON_FAIL!"=="1" call :pause_keep
 exit /b !FAIL_EC!
 
 :: ---------------------------------------------------------------------------
-:: ì°½ ìœ ì§€. pause ^>nul ì€ ê´€ë¦¬ìž ë”ë¸”í´ë¦­ì—ì„œ ë°”ë¡œ í†µê³¼í•˜ëŠ” ê²½ìš°ê°€ ìžˆì–´ set /p ì‚¬ìš©
+:: Ã¢ À¯Áö. pause ^>nul Àº °ü¸®ÀÚ ´õºíÅ¬¸¯¿¡¼­ ¹Ù·Î Åë°úÇÏ´Â °æ¿ì°¡ ÀÖ¾î set /p »ç¿ë
 :: ---------------------------------------------------------------------------
 :pause_keep
 echo -----------------------------------------------------------
-echo  í™•ì¸ í›„ Enter í‚¤ë¥¼ ëˆ„ë¥´ë©´ ì´ ì°½ì´ ë‹«íž™ë‹ˆë‹¤.
+echo  È®ÀÎ ÈÄ Enter Å°¸¦ ´©¸£¸é ÀÌ Ã¢ÀÌ ´ÝÈü´Ï´Ù.
 echo -----------------------------------------------------------
 set /p "=Enter... "
 goto :eof
 
 :: ---------------------------------------------------------------------------
-:: ê´€ë¦¬ìž ê¶Œí•œ í™•ì¸. ì‹¤íŒ¨ ì‹œ FAIL_EC=1, exit /b 1
+:: °ü¸®ÀÚ ±ÇÇÑ È®ÀÎ. ½ÇÆÐ ½Ã FAIL_EC=1, exit /b 1
 :: ---------------------------------------------------------------------------
 :require_admin
 net session >nul 2>&1
 if errorlevel 1 (
-  echo [ì˜¤ë¥˜] ê´€ë¦¬ìž ì‹¤í–‰ì´ ì•„ë‹™ë‹ˆë‹¤.
-  echo         nssm ë“±ë¡ì€ ê´€ë¦¬ìž CMDì—ì„œ ì‹¤í–‰í•´ì•¼ í•©ë‹ˆë‹¤.
-  echo         CMDë¥¼ ë§ˆìš°ìŠ¤ ì˜¤ë¥¸ìª½ ë²„íŠ¼ -> "ê´€ë¦¬ìž ê¶Œí•œìœ¼ë¡œ ì‹¤í–‰" í›„ ë‹¤ì‹œ ì‹¤í–‰í•˜ì„¸ìš”.
+  echo [¿À·ù] °ü¸®ÀÚ ½ÇÇàÀÌ ¾Æ´Õ´Ï´Ù.
+  echo         nssm µî·ÏÀº °ü¸®ÀÚ CMD¿¡¼­ ½ÇÇàÇØ¾ß ÇÕ´Ï´Ù.
+  echo         CMD¸¦ ¸¶¿ì½º ¿À¸¥ÂÊ ¹öÆ° -> "°ü¸®ÀÚ ±ÇÇÑÀ¸·Î ½ÇÇà" ÈÄ ´Ù½Ã ½ÇÇàÇÏ¼¼¿ä.
   set "FAIL_EC=1"
   exit /b 1
 )
-echo [í™•ì¸] ê´€ë¦¬ìž ê¶Œí•œìœ¼ë¡œ ì‹¤í–‰ ì¤‘ìž…ë‹ˆë‹¤.
+echo [È®ÀÎ] °ü¸®ÀÚ ±ÇÇÑÀ¸·Î ½ÇÇà ÁßÀÔ´Ï´Ù.
 exit /b 0
 
 :: ---------------------------------------------------------------------------
-:: ggnr_start.bat ìƒì„±.
-:: ì£¼ì˜: ì•„ëž˜ ^(^) ë¦¬ë‹¤ì´ë ‰íŠ¸ ë¸”ë¡ ì•ˆì€ ASCII ë§Œ ì‚¬ìš© ^(UTF-8 í•œê¸€ì´ CP949 íŒŒì‹±ì—ì„œ ëª…ë ¹ìœ¼ë¡œ ê¹¨ì§^)
+:: ggnr_start.bat »ý¼º.
+:: ÁÖÀÇ: ¾Æ·¡ ^(^) ¸®´ÙÀÌ·ºÆ® ºí·Ï ¾ÈÀº ASCII ¸¸ »ç¿ë ^(UTF-8 ÇÑ±ÛÀÌ CP949 ÆÄ½Ì¿¡¼­ ¸í·ÉÀ¸·Î ±úÁü^)
 :: ---------------------------------------------------------------------------
 :write_ggnr_start
 :: %% -> one % in generated bat
@@ -423,129 +422,129 @@ echo exit /b 1
 if not exist "%OUT%" exit /b 1
 exit /b 0
 
-:: package-lock.json ê¸°ì¤€ npm ci ^(ì—†ìœ¼ë©´ npm install^). exit /b ë¡œ FAIL_EC ë°˜í™˜.
+:: package-lock.json ±âÁØ npm ci ^(¾øÀ¸¸é npm install^). exit /b ·Î FAIL_EC ¹ÝÈ¯.
 :run_npm_sync
 pushd "%ROOT%"
 if exist "package-lock.json" (
-  echo [ì§„í–‰] npm ci ^(package-lock.json ê¸°ì¤€, node_modules ìž¬ìƒì„±^)...
+  echo [ÁøÇà] npm ci ^(package-lock.json ±âÁØ, node_modules Àç»ý¼º^)...
   call npm ci
 ) else (
-  echo [ê²½ê³ ] package-lock.json ì—†ìŒ - npm install ë¡œ ëŒ€ì²´í•©ë‹ˆë‹¤.
+  echo [°æ°í] package-lock.json ¾øÀ½ - npm install ·Î ´ëÃ¼ÇÕ´Ï´Ù.
   call npm install
 )
 set "NPM_EC=!errorlevel!"
 popd
 if not "!NPM_EC!"=="0" (
-  echo [ì˜¤ë¥˜] ì˜ì¡´ì„± ë™ê¸°í™” ì‹¤íŒ¨ ^(exit=!NPM_EC!^)
+  echo [¿À·ù] ÀÇÁ¸¼º µ¿±âÈ­ ½ÇÆÐ ^(exit=!NPM_EC!^)
   set "FAIL_EC=!NPM_EC!"
   exit /b !NPM_EC!
 )
 if not exist "%ROOT%\node_modules\next\package.json" (
-  echo [ì˜¤ë¥˜] node_modules ì— next ê°€ ì—†ìŠµë‹ˆë‹¤. package.jsonÂ·package-lock.json ì„ í™•ì¸í•˜ì„¸ìš”.
+  echo [¿À·ù] node_modules ¿¡ next °¡ ¾ø½À´Ï´Ù. package.json¡¤package-lock.json À» È®ÀÎÇÏ¼¼¿ä.
   set "FAIL_EC=1"
   exit /b 1
 )
-echo [ì™„ë£Œ] ì˜ì¡´ì„± ë™ê¸°í™” ì™„ë£Œ.
+echo [¿Ï·á] ÀÇÁ¸¼º µ¿±âÈ­ ¿Ï·á.
 exit /b 0
 
-:: production ë¹Œë“œ. GGNR_PROJECT/ENV ëŠ” í˜¸ì¶œ ì „ì— ì„¤ì •.
+:: production ºôµå. GGNR_PROJECT/ENV ´Â È£Ãâ Àü¿¡ ¼³Á¤.
 :run_npm_build
 if not exist "%ROOT%\node_modules\next\package.json" (
-  echo [ì˜¤ë¥˜] next ë¯¸ì„¤ì¹˜ - ë¹Œë“œ ë¶ˆê°€. npm ë™ê¸°í™”ë¥¼ Y ë¡œ ë‹¤ì‹œ ì‹¤í–‰í•˜ì„¸ìš”.
+  echo [¿À·ù] next ¹Ì¼³Ä¡ - ºôµå ºÒ°¡. npm µ¿±âÈ­¸¦ Y ·Î ´Ù½Ã ½ÇÇàÇÏ¼¼¿ä.
   set "FAIL_EC=1"
   exit /b 1
 )
-echo [ì§„í–‰] npm run build ...
+echo [ÁøÇà] npm run build ...
 echo         GGNR_PROJECT=%GGNR_PROJECT%  GGNR_ENV=%GGNR_ENV%
-echo         ^(next.config ê°€ í”„ë¡œì íŠ¸ env ì˜ BASE_PATH ë¥¼ ë°˜ì˜í•©ë‹ˆë‹¤^)
-echo         ì‹¤íŒ¨í•˜ë©´ ì´ ì°½ì— ì˜¤ë¥˜ê°€ ë‚¨ìŠµë‹ˆë‹¤. ë‹«ì§€ ë§ˆì„¸ìš”.
+echo         ^(next.config °¡ ÇÁ·ÎÁ§Æ® env ÀÇ BASE_PATH ¸¦ ¹Ý¿µÇÕ´Ï´Ù^)
+echo         ½ÇÆÐÇÏ¸é ÀÌ Ã¢¿¡ ¿À·ù°¡ ³²½À´Ï´Ù. ´ÝÁö ¸¶¼¼¿ä.
 pushd "%ROOT%"
 call npm run build
 set "BUILD_EC=!errorlevel!"
 popd
 if not "!BUILD_EC!"=="0" (
   echo.
-  echo ===== ë¹Œë“œ ì‹¤íŒ¨ =====
-  echo [ì˜¤ë¥˜] npm run build ì‹¤íŒ¨ ^(exit=!BUILD_EC!^)
-  echo         ìœ„ TypeScript/Next ë¡œê·¸ë¥¼ í™•ì¸í•˜ì„¸ìš”.
+  echo ===== ºôµå ½ÇÆÐ =====
+  echo [¿À·ù] npm run build ½ÇÆÐ ^(exit=!BUILD_EC!^)
+  echo         À§ TypeScript/Next ·Î±×¸¦ È®ÀÎÇÏ¼¼¿ä.
   set "FAIL_EC=!BUILD_EC!"
   exit /b !BUILD_EC!
 )
 if not exist "%ROOT%\.next\BUILD_ID" (
   echo.
-  echo ===== ë¹Œë“œ ì‹¤íŒ¨ =====
-  echo [ì˜¤ë¥˜] npm run build í›„ .next\BUILD_ID ê°€ ì—†ìŠµë‹ˆë‹¤.
+  echo ===== ºôµå ½ÇÆÐ =====
+  echo [¿À·ù] npm run build ÈÄ .next\BUILD_ID °¡ ¾ø½À´Ï´Ù.
   set "FAIL_EC=1"
   exit /b 1
 )
-echo [ì™„ë£Œ] npm run build ì™„ë£Œ. BUILD_ID=
+echo [¿Ï·á] npm run build ¿Ï·á. BUILD_ID=
 type "%ROOT%\.next\BUILD_ID"
 echo.
 exit /b 0
 
 :: ---------------------------------------------------------------------------
-:: ì´ì „ GGNR ì‹¤í–‰ ì •ë¦¬: ì„œë¹„ìŠ¤ ì¤‘ì§€^(ì œê±° ì•„ë‹˜^) + ì•± í¬íŠ¸ Listen ì¢…ë£Œ
-:: Ctrl+C ë¡œ ì´ì „ ì°½ì„ ëŠì§€ ì•Šì•„ë„ ìž¬ì‹¤í–‰ ê°€ëŠ¥.
+:: ÀÌÀü GGNR ½ÇÇà Á¤¸®: ¼­ºñ½º ÁßÁö^(Á¦°Å ¾Æ´Ô^) + ¾Û Æ÷Æ® Listen Á¾·á
+:: Ctrl+C ·Î ÀÌÀü Ã¢À» ²÷Áö ¾Ê¾Æµµ Àç½ÇÇà °¡´É.
 :: ---------------------------------------------------------------------------
 :stop_previous_ggnr
-echo [ì •ë¦¬] ì´ì „ GGNR ì‹¤í–‰ì´ ìžˆìœ¼ë©´ ì¤‘ì§€í•©ë‹ˆë‹¤ ^(ì„œë¹„ìŠ¤ ì œê±° ì—†ìŒ^)...
+echo [Á¤¸®] ÀÌÀü GGNR ½ÇÇàÀÌ ÀÖÀ¸¸é ÁßÁöÇÕ´Ï´Ù ^(¼­ºñ½º Á¦°Å ¾øÀ½^)...
 if exist "%NSSM_EXE%" (
   "%NSSM_EXE%" status %SERVICE_NAME% >nul 2>&1
   if not errorlevel 1 (
-    :: ì´ë¯¸ Y/N ëŒ€ê¸° ì¤‘ì´ë©´ Ctrl+C ìž¬ì „ì†¡í•˜ì§€ ì•Šë„ë¡ Skip ì„¤ì • í›„ stop
+    :: ÀÌ¹Ì Y/N ´ë±â ÁßÀÌ¸é Ctrl+C ÀçÀü¼ÛÇÏÁö ¾Êµµ·Ï Skip ¼³Á¤ ÈÄ stop
     "%NSSM_EXE%" set %SERVICE_NAME% AppStopMethodSkip 1 >nul 2>&1
     "%NSSM_EXE%" set %SERVICE_NAME% AppStopMethodConsole 500 >nul 2>&1
-    echo [ì •ë¦¬] nssm stop %SERVICE_NAME% ...
+    echo [Á¤¸®] nssm stop %SERVICE_NAME% ...
     "%NSSM_EXE%" stop %SERVICE_NAME% confirm >nul 2>&1
     timeout /t 2 /nobreak >nul
-    echo [ì •ë¦¬] ì„œë¹„ìŠ¤ ì¤‘ì§€ ìš”ì²­ ì™„ë£Œ.
+    echo [Á¤¸®] ¼­ºñ½º ÁßÁö ¿äÃ» ¿Ï·á.
   ) else (
-    echo [ì •ë¦¬] ì„œë¹„ìŠ¤ %SERVICE_NAME% ë¯¸ë“±ë¡ - ì„œë¹„ìŠ¤ ì¤‘ì§€ ìƒëžµ.
+    echo [Á¤¸®] ¼­ºñ½º %SERVICE_NAME% ¹Ìµî·Ï - ¼­ºñ½º ÁßÁö »ý·«.
   )
 ) else (
-  echo [ì •ë¦¬] nssm.exe ì—†ìŒ - ì„œë¹„ìŠ¤ ì¤‘ì§€ ìƒëžµ. í¬íŠ¸ë§Œ í™•ì¸í•©ë‹ˆë‹¤.
+  echo [Á¤¸®] nssm.exe ¾øÀ½ - ¼­ºñ½º ÁßÁö »ý·«. Æ÷Æ®¸¸ È®ÀÎÇÕ´Ï´Ù.
 )
 call :kill_listen_port %APP_PORT%
-:: Terminate batch job Y/N ë¡œ ë©ˆì¶˜ cmd^(ggnr_start^) ìž”ì—¬ ì •ë¦¬
+:: Terminate batch job Y/N ·Î ¸ØÃá cmd^(ggnr_start^) ÀÜ¿© Á¤¸®
 call :kill_ggnr_start_cmds
-echo [ì •ë¦¬] ì´ì „ ì‹¤í–‰ ì •ë¦¬ ë. ì´ì–´ì„œ ì§„í–‰í•©ë‹ˆë‹¤.
+echo [Á¤¸®] ÀÌÀü ½ÇÇà Á¤¸® ³¡. ÀÌ¾î¼­ ÁøÇàÇÕ´Ï´Ù.
 goto :eof
 
-:: ggnr_start.bat ì„ ëŒë¦¬ëŠ” cmd ìž”ì—¬ ê°•ì œ ì¢…ë£Œ (Y/N ëŒ€ê¸° í¬í•¨)
+:: ggnr_start.bat À» µ¹¸®´Â cmd ÀÜ¿© °­Á¦ Á¾·á (Y/N ´ë±â Æ÷ÇÔ)
 :kill_ggnr_start_cmds
-echo [ì •ë¦¬] ggnr_start.bat ìž”ì—¬ cmd ê²€ìƒ‰...
+echo [Á¤¸®] ggnr_start.bat ÀÜ¿© cmd °Ë»ö...
 powershell -NoProfile -ExecutionPolicy Bypass -Command ^
   "$procs = Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object { $_.CommandLine -and $_.CommandLine -like '*ggnr_start.bat*' };" ^
-  "if (-not $procs) { Write-Host '[ì •ë¦¬] ggnr_start ìž”ì—¬ cmd ì—†ìŒ.'; exit 0 };" ^
-  "foreach ($p in @($procs)) { Write-Host ('[ì •ë¦¬] taskkill /F /PID {0} /T' -f $p.ProcessId); Start-Process -FilePath taskkill.exe -ArgumentList @('/F','/PID',([string]$p.ProcessId),'/T') -Wait -NoNewWindow | Out-Null }"
+  "if (-not $procs) { Write-Host '[Á¤¸®] ggnr_start ÀÜ¿© cmd ¾øÀ½.'; exit 0 };" ^
+  "foreach ($p in @($procs)) { Write-Host ('[Á¤¸®] taskkill /F /PID {0} /T' -f $p.ProcessId); Start-Process -FilePath taskkill.exe -ArgumentList @('/F','/PID',([string]$p.ProcessId),'/T') -Wait -NoNewWindow | Out-Null }"
 goto :eof
 
-:: %1 = Listen í¬íŠ¸. í•´ë‹¹ í¬íŠ¸ PID ì¢…ë£Œ ^(00_remove_ggnr.bat ê³¼ ë™ì¼ íŒ¨í„´^).
+:: %1 = Listen Æ÷Æ®. ÇØ´ç Æ÷Æ® PID Á¾·á ^(00_remove_ggnr.bat °ú µ¿ÀÏ ÆÐÅÏ^).
 :kill_listen_port
 set "KP=%~1"
-echo [ì •ë¦¬] í¬íŠ¸ %KP% Listen í™•ì¸...
+echo [Á¤¸®] Æ÷Æ® %KP% Listen È®ÀÎ...
 netstat -ano | findstr /R /C:":%KP% .*LISTENING" >nul 2>&1
 if errorlevel 1 (
-  echo [ì •ë¦¬] í¬íŠ¸ %KP% Listen ì—†ìŒ.
+  echo [Á¤¸®] Æ÷Æ® %KP% Listen ¾øÀ½.
   goto :eof
 )
 set "KILLED=0"
 for /f "tokens=5" %%P in ('netstat -ano ^| findstr /R /C:":%KP% .*LISTENING"') do (
   if not "%%P"=="0" (
-    echo [ì •ë¦¬] taskkill /F /PID %%P /T
+    echo [Á¤¸®] taskkill /F /PID %%P /T
     taskkill /F /PID %%P /T >nul 2>&1
     if not errorlevel 1 (
       set /a KILLED+=1
-      echo [ì •ë¦¬] PID %%P ì¢…ë£Œ
+      echo [Á¤¸®] PID %%P Á¾·á
     ) else (
-      echo [ê²½ê³ ] PID %%P ì¢…ë£Œ ì‹¤íŒ¨ ^(ì´ë¯¸ ì¢…ë£Œë˜ì—ˆê±°ë‚˜ ê¶Œí•œ ë¶€ì¡±^)
+      echo [°æ°í] PID %%P Á¾·á ½ÇÆÐ ^(ÀÌ¹Ì Á¾·áµÇ¾ú°Å³ª ±ÇÇÑ ºÎÁ·^)
     )
   )
 )
 if "!KILLED!"=="0" (
-  echo [ì•ˆë‚´] í¬íŠ¸ %KP% ì¢…ë£Œí•œ PID ì—†ìŒ. ê´€ë¦¬ìž ê¶Œí•œìœ¼ë¡œ ë‹¤ì‹œ ì‹¤í–‰í•´ ë³´ì„¸ìš”.
+  echo [¾È³»] Æ÷Æ® %KP% Á¾·áÇÑ PID ¾øÀ½. °ü¸®ÀÚ ±ÇÇÑÀ¸·Î ´Ù½Ã ½ÇÇàÇØ º¸¼¼¿ä.
 ) else (
-  echo [ì •ë¦¬] í¬íŠ¸ %KP% ê´€ë ¨ !KILLED!ê±´ ì¢…ë£Œ.
+  echo [Á¤¸®] Æ÷Æ® %KP% °ü·Ã !KILLED!°Ç Á¾·á.
 )
 timeout /t 1 /nobreak >nul
 goto :eof

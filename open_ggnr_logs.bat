@@ -1,14 +1,13 @@
 @echo off
-chcp 65001 >nul
 setlocal EnableExtensions
 
 :: =============================================================================
-:: GGNR / GeoServer ë¡œê·¸ ì‹¤ì‹œê°„ ë³´ê¸° (CMD ì°½ 2ê°œ)
-:: ì„œë¹„ìŠ¤ ë“±ë¡ì‹œ ë¡œê·¸ì°½ì´ ì—†ê¸° ë•Œë¬¸ì— í™•ì¸ ìœ„í•´ ì‚¬ìš©
-:: - GGNR stdout = nssm_install_ggnr.bat ê³¼ ë™ì¼ C:\logs\GGNR_V7_stdout.log
+:: GGNR / GeoServer ·Î±× ½Ç½Ã°£ º¸±â (CMD Ã¢ 2°³)
+:: ¼­ºñ½º µî·Ï½Ã ·Î±×Ã¢ÀÌ ¾ø±â ¶§¹®¿¡ È®ÀÎ À§ÇØ »ç¿ë
+:: - GGNR stdout = nssm_install_ggnr.bat °ú µ¿ÀÏ C:\logs\GGNR_V7_stdout.log
 :: - GeoServer   = root\geoserver_modules\data_dir\logs\geoserver.log
-:: - root = ì´ batì´ ìˆëŠ” í´ë”
-:: - Get-Content ëŠê¸°ë©´(íŒŒì¼ ì¬ìƒì„± ë“±) ìë™ ì¬ì ‘ì†
+:: - root = ÀÌ batÀÌ ÀÖ´Â Æú´õ
+:: - Get-Content ²÷±â¸é(ÆÄÀÏ Àç»ı¼º µî) ÀÚµ¿ ÀçÁ¢¼Ó
 :: =============================================================================
 
 set "ROOT=%~dp0"
@@ -23,11 +22,11 @@ echo [open_ggnr_logs] root    = %ROOT%
 echo [open_ggnr_logs] GGNR    = %LOG_OUT%
 echo [open_ggnr_logs] GeoSrv  = %GEO_LOG%
 echo.
-echo íŒŒì¼ì´ ì—†ê±°ë‚˜ ì—°ê²°ì´ ëŠê¸°ë©´ ì¬ì ‘ì†í•©ë‹ˆë‹¤. ì°½ì„ ë‹«ìœ¼ë©´ ì¢…ë£Œë©ë‹ˆë‹¤.
+echo ÆÄÀÏÀÌ ¾ø°Å³ª ¿¬°áÀÌ ²÷±â¸é ÀçÁ¢¼ÓÇÕ´Ï´Ù. Ã¢À» ´İÀ¸¸é Á¾·áµË´Ï´Ù.
 echo.
 
-start "GGNR ë¡œê·¸" cmd /k powershell -NoProfile -Command "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; $p='%LOG_OUT%'; while ($true) { while (-not (Test-Path -LiteralPath $p)) { Start-Sleep -Seconds 2 }; try { Get-Content -LiteralPath $p -Encoding UTF8 -Wait -Tail 10 } catch {}; Write-Host '[open_ggnr_logs] ì¬ì ‘ì†...'; Start-Sleep -Seconds 1 }"
+start "GGNR ·Î±×" cmd /k powershell -NoProfile -Command "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; $p='%LOG_OUT%'; while ($true) { while (-not (Test-Path -LiteralPath $p)) { Start-Sleep -Seconds 2 }; try { Get-Content -LiteralPath $p -Encoding UTF8 -Wait -Tail 10 } catch {}; Write-Host '[open_ggnr_logs] ÀçÁ¢¼Ó...'; Start-Sleep -Seconds 1 }"
 
-start "GeoServer ë¡œê·¸" cmd /k powershell -NoProfile -Command "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; $p='%GEO_LOG%'; while ($true) { while (-not (Test-Path -LiteralPath $p)) { Start-Sleep -Seconds 2 }; try { Get-Content -LiteralPath $p -Encoding UTF8 -Wait -Tail 10 } catch {}; Write-Host '[open_ggnr_logs] ì¬ì ‘ì†...'; Start-Sleep -Seconds 1 }"
+start "GeoServer ·Î±×" cmd /k powershell -NoProfile -Command "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; $p='%GEO_LOG%'; while ($true) { while (-not (Test-Path -LiteralPath $p)) { Start-Sleep -Seconds 2 }; try { Get-Content -LiteralPath $p -Encoding UTF8 -Wait -Tail 10 } catch {}; Write-Host '[open_ggnr_logs] ÀçÁ¢¼Ó...'; Start-Sleep -Seconds 1 }"
 
 exit /b 0

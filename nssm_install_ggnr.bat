@@ -1,17 +1,16 @@
 @echo off
-chcp 65001 >nul
 setlocal EnableExtensions EnableDelayedExpansion
 
 :: =============================================================================
-:: nssmì— GGNR_V7 ì„œë¹„ìŠ¤ ìë™ ë“±ë¡ (ê´€ë¦¬ì ê¶Œí•œìœ¼ë¡œ ì‹¤í–‰)
-:: - í”„ë¡œì íŠ¸ ê²½ë¡œ = ì´ batì´ ìˆëŠ” root (ggnr_start.bat ê³¼ ë™ì¼ í´ë”)
-:: - ì•± = root\ggnr_start.bat
-:: - ë¡œê·¸ = C:\logs\GGNR_V7_stdout.log / GGNR_V7_stderr.log
-:: - ê¸°ì¡´ ì„œë¹„ìŠ¤ê°€ ìˆìœ¼ë©´ Y/N í›„ ì‚­ì œÂ·ì¬ë“±ë¡ (Nì´ë©´ ë“±ë¡ ì¤‘ë‹¨ exit 2)
-:: - GGNR_NSSM_REREG=Y^|N ì´ë©´ ì¬ì§ˆë¬¸ ì—†ì´ ê·¸ ê°’ ì‚¬ìš© (00_make_ggnr_starter ì—°ë™)
-:: - ì‹¤íŒ¨ ì‹œ í•­ìƒ pause + C:\logs\nssm_install_last.log ê¸°ë¡
-:: - ì„±ê³µ ì‹œ: ì§ì ‘ ì‹¤í–‰ì´ë©´ í•­ìƒ pause. starter ì—°ë™(GGNR_NSSM_FROM_STARTER=1)ë§Œ pause ìƒëµ
-:: - stop ì „ í¬íŠ¸Â·ggnr_start ê°•ì œ ì¢…ë£Œ + AppStopMethodSkip (Terminate Y/N ë©ˆì¶¤ ë°©ì§€)
+:: nssm¿¡ GGNR_V7 ¼­ºñ½º ÀÚµ¿ µî·Ï (°ü¸®ÀÚ ±ÇÇÑÀ¸·Î ½ÇÇà)
+:: - ÇÁ·ÎÁ§Æ® °æ·Î = ÀÌ batÀÌ ÀÖ´Â root (ggnr_start.bat °ú µ¿ÀÏ Æú´õ)
+:: - ¾Û = root\ggnr_start.bat
+:: - ·Î±× = C:\logs\GGNR_V7_stdout.log / GGNR_V7_stderr.log
+:: - ±âÁ¸ ¼­ºñ½º°¡ ÀÖÀ¸¸é Y/N ÈÄ »èÁ¦¡¤Àçµî·Ï (NÀÌ¸é µî·Ï Áß´Ü exit 2)
+:: - GGNR_NSSM_REREG=Y^|N ÀÌ¸é ÀçÁú¹® ¾øÀÌ ±× °ª »ç¿ë (00_make_ggnr_starter ¿¬µ¿)
+:: - ½ÇÆĞ ½Ã Ç×»ó pause + C:\logs\nssm_install_last.log ±â·Ï
+:: - ¼º°ø ½Ã: Á÷Á¢ ½ÇÇàÀÌ¸é Ç×»ó pause. starter ¿¬µ¿(GGNR_NSSM_FROM_STARTER=1)¸¸ pause »ı·«
+:: - stop Àü Æ÷Æ®¡¤ggnr_start °­Á¦ Á¾·á + AppStopMethodSkip (Terminate Y/N ¸ØÃã ¹æÁö)
 :: =============================================================================
 
 set "SERVICE_NAME=GGNR_V7"
@@ -25,7 +24,7 @@ set "LOG_ERR=%LOG_DIR%\GGNR_V7_stderr.log"
 set "INSTALL_LOG=%LOG_DIR%\nssm_install_last.log"
 set "APP_PORT=3000"
 set "EXIT_EC=0"
-:: ë”ë¸”í´ë¦­Â·ì§ì ‘ ì‹¤í–‰: ê²°ê³¼ ë³´ê³  ì°½ ìœ ì§€. starter ê°€ 1 ë¡œ ë„˜ê¸°ë©´ ì„±ê³µ ì‹œë§Œ ìƒëµ
+:: ´õºíÅ¬¸¯¡¤Á÷Á¢ ½ÇÇà: °á°ú º¸°í Ã¢ À¯Áö. starter °¡ 1 ·Î ³Ñ±â¸é ¼º°ø ½Ã¸¸ »ı·«
 set "KEEP_OPEN=1"
 if /i "%GGNR_NSSM_FROM_STARTER%"=="1" set "KEEP_OPEN=0"
 
@@ -37,33 +36,33 @@ if not exist "%LOG_DIR%" mkdir "%LOG_DIR%" 2>nul
 
 echo.
 echo ============================================================
-echo  nssm_install_ggnr â€” GGNR_V7 ì„œë¹„ìŠ¤ ë“±ë¡
+echo  nssm_install_ggnr ? GGNR_V7 ¼­ºñ½º µî·Ï
 echo ============================================================
 echo [nssm-install] root     = %ROOT%
 echo [nssm-install] app      = %APP_BAT%
 echo [nssm-install] log dir  = %LOG_DIR%
-echo [nssm-install] ê²°ê³¼ë¡œê·¸ = %INSTALL_LOG%
+echo [nssm-install] °á°ú·Î±× = %INSTALL_LOG%
 echo [nssm-install] backup   = %LOG_BACKUP%
 echo.
 
-:: ê´€ë¦¬ì ì—¬ë¶€
+:: °ü¸®ÀÚ ¿©ºÎ
 net session >nul 2>&1
 if errorlevel 1 (
-  echo [ì˜¤ë¥˜] ê´€ë¦¬ì ì‹¤í–‰ì´ ì•„ë‹™ë‹ˆë‹¤.
-  echo         ì´ ìŠ¤í¬ë¦½íŠ¸ëŠ” ê´€ë¦¬ì CMDì—ì„œ ì‹¤í–‰í•´ì•¼ í•©ë‹ˆë‹¤.
-  echo         CMDë¥¼ ë§ˆìš°ìŠ¤ ì˜¤ë¥¸ìª½ ë²„íŠ¼ â†’ Â«ê´€ë¦¬ì ê¶Œí•œìœ¼ë¡œ ì‹¤í–‰Â» í›„ ë‹¤ì‹œ ì‹¤í–‰í•˜ì„¸ìš”.
+  echo [¿À·ù] °ü¸®ÀÚ ½ÇÇàÀÌ ¾Æ´Õ´Ï´Ù.
+  echo         ÀÌ ½ºÅ©¸³Æ®´Â °ü¸®ÀÚ CMD¿¡¼­ ½ÇÇàÇØ¾ß ÇÕ´Ï´Ù.
+  echo         CMD¸¦ ¸¶¿ì½º ¿À¸¥ÂÊ ¹öÆ° ¡æ ¡ì°ü¸®ÀÚ ±ÇÇÑÀ¸·Î ½ÇÇà¡í ÈÄ ´Ù½Ã ½ÇÇàÇÏ¼¼¿ä.
   set "EXIT_EC=1"
   goto :fail_end
 )
-echo [í™•ì¸] ê´€ë¦¬ì ê¶Œí•œìœ¼ë¡œ ì‹¤í–‰ ì¤‘ì…ë‹ˆë‹¤.
+echo [È®ÀÎ] °ü¸®ÀÚ ±ÇÇÑÀ¸·Î ½ÇÇà ÁßÀÔ´Ï´Ù.
 
 if not exist "%APP_BAT%" (
-  echo [ì˜¤ë¥˜] ggnr_start.bat ì´ rootì— ì—†ìŠµë‹ˆë‹¤: %APP_BAT%
+  echo [¿À·ù] ggnr_start.bat ÀÌ root¿¡ ¾ø½À´Ï´Ù: %APP_BAT%
   set "EXIT_EC=1"
   goto :fail_end
 )
 
-:: nssm ì°¾ê¸° (í”„ë¡œì íŠ¸ ë‚´ë¶€: root\nssm\win64\nssm.exe)
+:: nssm Ã£±â (ÇÁ·ÎÁ§Æ® ³»ºÎ: root\nssm\win64\nssm.exe)
 set "NSSM=%ROOT%\nssm\win64\nssm.exe"
 if not exist "%NSSM%" set "NSSM=%ROOT%\nssm\win32\nssm.exe"
 if not exist "%NSSM%" (
@@ -78,76 +77,76 @@ if not exist "%NSSM%" (
 
 :nssm_found
 if not exist "%NSSM%" (
-  echo [ì˜¤ë¥˜] nssm.exe ë¥¼ ì°¾ì§€ ëª»í–ˆìŠµë‹ˆë‹¤.
-  echo   ê¸°ëŒ€ ê²½ë¡œ: %ROOT%\nssm\win64\nssm.exe
+  echo [¿À·ù] nssm.exe ¸¦ Ã£Áö ¸øÇß½À´Ï´Ù.
+  echo   ±â´ë °æ·Î: %ROOT%\nssm\win64\nssm.exe
   set "EXIT_EC=1"
   goto :fail_end
 )
 echo [nssm-install] nssm     = %NSSM%
 
-:: log / log\backup í´ë”ë§Œ ìƒì„±
+:: log / log\backup Æú´õ¸¸ »ı¼º
 call :EnsureLogFolders
 if errorlevel 1 (
   set "EXIT_EC=1"
   goto :fail_end
 )
 
-:: ê¸°ì¡´ ì„œë¹„ìŠ¤ë©´ Y/N í›„ ì¤‘ì§€Â·ì œê±°(ì¬ë“±ë¡). ìƒìœ„ ìŠ¤í¬ë¦½íŠ¸ê°€ GGNR_NSSM_REREG ë¥¼ ì£¼ë©´ ì¬ì§ˆë¬¸ ì—†ìŒ
+:: ±âÁ¸ ¼­ºñ½º¸é Y/N ÈÄ ÁßÁö¡¤Á¦°Å(Àçµî·Ï). »óÀ§ ½ºÅ©¸³Æ®°¡ GGNR_NSSM_REREG ¸¦ ÁÖ¸é ÀçÁú¹® ¾øÀ½
 "%NSSM%" status %SERVICE_NAME% >nul 2>&1
 if not errorlevel 1 (
-  echo [nssm-install] ì„œë¹„ìŠ¤ %SERVICE_NAME% ê°€ ì´ë¯¸ ë“±ë¡ë˜ì–´ ìˆìŠµë‹ˆë‹¤.
+  echo [nssm-install] ¼­ºñ½º %SERVICE_NAME% °¡ ÀÌ¹Ì µî·ÏµÇ¾î ÀÖ½À´Ï´Ù.
   if defined GGNR_NSSM_REREG (
     set "DO_REREG=%GGNR_NSSM_REREG%"
-    echo [nssm-install] ì¬ë“±ë¡ ì—¬ë¶€ = !DO_REREG! ^(ìƒìœ„ ìŠ¤í¬ë¦½íŠ¸ì—ì„œ ì§€ì •^)
+    echo [nssm-install] Àçµî·Ï ¿©ºÎ = !DO_REREG! ^(»óÀ§ ½ºÅ©¸³Æ®¿¡¼­ ÁöÁ¤^)
   ) else (
-    set /p "DO_REREG=ì‚­ì œ í›„ ì¬ë“±ë¡í• ê¹Œìš”? (Y/N): "
+    set /p "DO_REREG=»èÁ¦ ÈÄ Àçµî·ÏÇÒ±î¿ä? (Y/N): "
   )
   if /i not "!DO_REREG!"=="Y" (
     echo.
-    echo ===== ì¤‘ë‹¨ ^(ì‹¤íŒ¨ ì•„ë‹˜^) =====
-    echo [ì¤‘ë‹¨] ê¸°ì¡´ ì„œë¹„ìŠ¤ë¥¼ ìœ ì§€í•©ë‹ˆë‹¤. ì¬ë“±ë¡í•˜ì§€ ì•Šì•˜ìŠµë‹ˆë‹¤. ^(exit=2^)
+    echo ===== Áß´Ü ^(½ÇÆĞ ¾Æ´Ô^) =====
+    echo [Áß´Ü] ±âÁ¸ ¼­ºñ½º¸¦ À¯ÁöÇÕ´Ï´Ù. Àçµî·ÏÇÏÁö ¾Ê¾Ò½À´Ï´Ù. ^(exit=2^)
     echo.
-    call :log_line "ì¤‘ë‹¨ exit=2 ì¬ë“±ë¡ ì•ˆ í•¨"
+    call :log_line "Áß´Ü exit=2 Àçµî·Ï ¾È ÇÔ"
     if "!KEEP_OPEN!"=="1" call :pause_keep
     exit /b 2
   )
-  echo [nssm-install] ê¸°ì¡´ ì„œë¹„ìŠ¤ ê°•ì œ ì •ë¦¬ í›„ ì¤‘ì§€/ì œê±°...
+  echo [nssm-install] ±âÁ¸ ¼­ºñ½º °­Á¦ Á¤¸® ÈÄ ÁßÁö/Á¦°Å...
   call :force_clear_before_stop
   echo [nssm-install] nssm stop %SERVICE_NAME% ...
   call :nssm_stop_with_timeout
   echo [nssm-install] nssm remove %SERVICE_NAME% ...
   "%NSSM%" remove %SERVICE_NAME% confirm
   if errorlevel 1 (
-    echo [ì˜¤ë¥˜] nssm remove ì‹¤íŒ¨. ì„œë¹„ìŠ¤ ê´€ë¦¬ìì—ì„œ GGNR_V7 ì„ ìˆ˜ë™ ì œê±°í•œ ë’¤ ë‹¤ì‹œ ì‹¤í–‰í•˜ì„¸ìš”.
+    echo [¿À·ù] nssm remove ½ÇÆĞ. ¼­ºñ½º °ü¸®ÀÚ¿¡¼­ GGNR_V7 À» ¼öµ¿ Á¦°ÅÇÑ µÚ ´Ù½Ã ½ÇÇàÇÏ¼¼¿ä.
     set "EXIT_EC=1"
     goto :fail_end
   )
-  echo [nssm-install] ê¸°ì¡´ ì„œë¹„ìŠ¤ ì œê±° ì™„ë£Œ.
+  echo [nssm-install] ±âÁ¸ ¼­ºñ½º Á¦°Å ¿Ï·á.
 )
 
-echo [nssm-install] ì„œë¹„ìŠ¤ ë“±ë¡...
+echo [nssm-install] ¼­ºñ½º µî·Ï...
 "%NSSM%" install %SERVICE_NAME% "%APP_BAT%"
 if errorlevel 1 (
-  echo [ì˜¤ë¥˜] nssm install ì‹¤íŒ¨
+  echo [¿À·ù] nssm install ½ÇÆĞ
   set "EXIT_EC=1"
   goto :fail_end
 )
 
 "%NSSM%" set %SERVICE_NAME% AppDirectory "%ROOT%"
 if errorlevel 1 (
-  echo [ì˜¤ë¥˜] AppDirectory ì„¤ì • ì‹¤íŒ¨
+  echo [¿À·ù] AppDirectory ¼³Á¤ ½ÇÆĞ
   set "EXIT_EC=1"
   goto :fail_end
 )
 "%NSSM%" set %SERVICE_NAME% AppExit Default Restart
 "%NSSM%" set %SERVICE_NAME% AppRestartDelay 3000
-:: bat+npm êµ¬ì¡°ì—ì„œ stop ì‹œ Ctrl+C â†’ ã€ŒTerminate batch job (Y/N)?ã€ë¡œê·¸ ë©ˆì¶¤ ë°©ì§€
+:: bat+npm ±¸Á¶¿¡¼­ stop ½Ã Ctrl+C ¡æ ¡¸Terminate batch job (Y/N)?¡¹·Î±× ¸ØÃã ¹æÁö
 "%NSSM%" set %SERVICE_NAME% AppStopMethodSkip 1
 "%NSSM%" set %SERVICE_NAME% AppStopMethodConsole 500
 "%NSSM%" set %SERVICE_NAME% AppStopMethodWindow 500
 "%NSSM%" set %SERVICE_NAME% AppStopMethodThreads 500
 
-:: ggnr_start.bat ì‹¤íŒ¨ ì‹œ pause ë°©ì§€ + í”„ë¡œì íŠ¸/íƒ€ì… (run.ts ê°€ argvë³´ë‹¤ env ìš°ì„ )
+:: ggnr_start.bat ½ÇÆĞ ½Ã pause ¹æÁö + ÇÁ·ÎÁ§Æ®/Å¸ÀÔ (run.ts °¡ argvº¸´Ù env ¿ì¼±)
 set "NSSM_PROJECT=%GGNR_NSSM_PROJECT%"
 set "NSSM_ENV=%GGNR_NSSM_ENV%"
 if not defined NSSM_PROJECT (
@@ -170,7 +169,7 @@ if defined NSSM_PROJECT if defined NSSM_ENV (
   echo [nssm-install] AppEnvironmentExtra GGNR_PROJECT=!NSSM_PROJECT! GGNR_ENV=!NSSM_ENV!
   "%NSSM%" set %SERVICE_NAME% AppEnvironmentExtra GGNR_START_NO_PAUSE=1 GGNR_PROJECT=!NSSM_PROJECT! GGNR_ENV=!NSSM_ENV!
 ) else (
-  echo [ê²½ê³ ] ggnr_start.bat ì—ì„œ GGNR_PROJECT/GGNR_ENV ë¥¼ ëª» ì½ì—ˆìŠµë‹ˆë‹¤. GGNR_START_NO_PAUSE ë§Œ ì„¤ì •í•©ë‹ˆë‹¤.
+  echo [°æ°í] ggnr_start.bat ¿¡¼­ GGNR_PROJECT/GGNR_ENV ¸¦ ¸ø ÀĞ¾ú½À´Ï´Ù. GGNR_START_NO_PAUSE ¸¸ ¼³Á¤ÇÕ´Ï´Ù.
   "%NSSM%" set %SERVICE_NAME% AppEnvironmentExtra GGNR_START_NO_PAUSE=1
 )
 "%NSSM%" set %SERVICE_NAME% AppStdout "%LOG_OUT%"
@@ -181,12 +180,12 @@ if defined NSSM_PROJECT if defined NSSM_ENV (
 "%NSSM%" set %SERVICE_NAME% AppRotateBytes 10485760
 "%NSSM%" set %SERVICE_NAME% AppRotateOnline 1
 
-echo [nssm-install] ì„œë¹„ìŠ¤ ì‹œì‘...
+echo [nssm-install] ¼­ºñ½º ½ÃÀÛ...
 "%NSSM%" start %SERVICE_NAME%
 if errorlevel 1 (
-  echo [ì˜¤ë¥˜] ì„œë¹„ìŠ¤ ì‹œì‘ ì‹¤íŒ¨.
-  echo         ggnr_start.bat ì˜ í”„ë¡œì íŠ¸ëª…/í™˜ê²½Â·node PATH ë¥¼ í™•ì¸í•˜ì„¸ìš”.
-  echo         ìƒíƒœ í™•ì¸: "%NSSM%" status %SERVICE_NAME%
+  echo [¿À·ù] ¼­ºñ½º ½ÃÀÛ ½ÇÆĞ.
+  echo         ggnr_start.bat ÀÇ ÇÁ·ÎÁ§Æ®¸í/È¯°æ¡¤node PATH ¸¦ È®ÀÎÇÏ¼¼¿ä.
+  echo         »óÅÂ È®ÀÎ: "%NSSM%" status %SERVICE_NAME%
   echo         stdout: %LOG_OUT%
   echo         stderr: %LOG_ERR%
   "%NSSM%" status %SERVICE_NAME%
@@ -195,44 +194,44 @@ if errorlevel 1 (
 )
 
 echo.
-echo ===== ì„±ê³µ =====
-echo [ì™„ë£Œ] ì„œë¹„ìŠ¤ %SERVICE_NAME% ë“±ë¡Â·ì‹œì‘ë¨.
+echo ===== ¼º°ø =====
+echo [¿Ï·á] ¼­ºñ½º %SERVICE_NAME% µî·Ï¡¤½ÃÀÛµÊ.
 "%NSSM%" status %SERVICE_NAME%
 echo   stdout: %LOG_OUT%
 echo   stderr: %LOG_ERR%
-echo   backup í´ë”: %LOG_BACKUP%
-echo   ì„¤ì¹˜ ê²°ê³¼: %INSTALL_LOG%
+echo   backup Æú´õ: %LOG_BACKUP%
+echo   ¼³Ä¡ °á°ú: %INSTALL_LOG%
 echo.
-echo [ì‹¤ì‹œê°„ ë¡œê·¸]
-echo   open_ggnr_logs.bat ë˜ëŠ”
+echo [½Ç½Ã°£ ·Î±×]
+echo   open_ggnr_logs.bat ¶Ç´Â
 echo   powershell -Command "Get-Content '%LOG_OUT%' -Encoding UTF8 -Wait -Tail 10"
 echo.
-call :log_line "ì„±ê³µ â€” ì„œë¹„ìŠ¤ ë“±ë¡Â·ì‹œì‘ ì™„ë£Œ"
+call :log_line "¼º°ø ? ¼­ºñ½º µî·Ï¡¤½ÃÀÛ ¿Ï·á"
 if "!KEEP_OPEN!"=="1" (
   call :pause_keep
 ) else (
-  echo [ì•ˆë‚´] starter ì—°ë™ â€” ì„±ê³µ pause ìƒëµ. ê²°ê³¼: %INSTALL_LOG%
+  echo [¾È³»] starter ¿¬µ¿ ? ¼º°ø pause »ı·«. °á°ú: %INSTALL_LOG%
 )
 exit /b 0
 
 :fail_end
 echo.
-echo ===== ì‹¤íŒ¨ =====
-echo [ì¢…ë£Œ] nssm_install ì‹¤íŒ¨ ^(exit=!EXIT_EC!^). ìœ„ ë©”ì‹œì§€ë¥¼ í™•ì¸í•˜ì„¸ìš”.
-echo         ê²°ê³¼ ë¡œê·¸: %INSTALL_LOG%
-echo         ì°½ì„ ë‹«ì§€ ë§ˆì„¸ìš” â€” í™•ì¸ í›„ Enter ë¥¼ ëˆ„ë¥´ë©´ ì¢…ë£Œë©ë‹ˆë‹¤.
+echo ===== ½ÇÆĞ =====
+echo [Á¾·á] nssm_install ½ÇÆĞ ^(exit=!EXIT_EC!^). À§ ¸Ş½ÃÁö¸¦ È®ÀÎÇÏ¼¼¿ä.
+echo         °á°ú ·Î±×: %INSTALL_LOG%
+echo         Ã¢À» ´İÁö ¸¶¼¼¿ä ? È®ÀÎ ÈÄ Enter ¸¦ ´©¸£¸é Á¾·áµË´Ï´Ù.
 echo.
-call :log_line "ì‹¤íŒ¨ exit=!EXIT_EC!"
-:: ì‹¤íŒ¨ëŠ” starter ì—°ë™ì´ì–´ë„ í•­ìƒ ì°½ ìœ ì§€ (ê²°ê³¼ í™•ì¸)
+call :log_line "½ÇÆĞ exit=!EXIT_EC!"
+:: ½ÇÆĞ´Â starter ¿¬µ¿ÀÌ¾îµµ Ç×»ó Ã¢ À¯Áö (°á°ú È®ÀÎ)
 call :pause_keep
 exit /b !EXIT_EC!
 
 :pause_keep
 echo -----------------------------------------------------------
-echo  í™•ì¸ í›„ Enter í‚¤ë¥¼ ëˆ„ë¥´ë©´ ì´ ì°½ì´ ë‹«í™ë‹ˆë‹¤.
-echo  ^(ê²°ê³¼ ë¡œê·¸: %INSTALL_LOG%^)
+echo  È®ÀÎ ÈÄ Enter Å°¸¦ ´©¸£¸é ÀÌ Ã¢ÀÌ ´İÈü´Ï´Ù.
+echo  ^(°á°ú ·Î±×: %INSTALL_LOG%^)
 echo -----------------------------------------------------------
-:: pause ^>nul ì€ ê´€ë¦¬ì ë”ë¸”í´ë¦­ì—ì„œ ë°”ë¡œ í†µê³¼í•˜ëŠ” ê²½ìš°ê°€ ìˆì–´ set /p ì‚¬ìš©
+:: pause ^>nul Àº °ü¸®ÀÚ ´õºíÅ¬¸¯¿¡¼­ ¹Ù·Î Åë°úÇÏ´Â °æ¿ì°¡ ÀÖ¾î set /p »ç¿ë
 set /p "=Enter... "
 goto :eof
 
@@ -241,7 +240,7 @@ echo %~1>> "%INSTALL_LOG%"
 goto :eof
 
 :: ---------------------------------------------------------------------------
-:: stop ì „ì— Ctrl+C/Y/N ëŒ€ê¸° í”„ë¡œì„¸ìŠ¤Â·í¬íŠ¸ ì •ë¦¬
+:: stop Àü¿¡ Ctrl+C/Y/N ´ë±â ÇÁ·Î¼¼½º¡¤Æ÷Æ® Á¤¸®
 :: ---------------------------------------------------------------------------
 :force_clear_before_stop
 "%NSSM%" set %SERVICE_NAME% AppStopMethodSkip 1 >nul 2>&1
@@ -251,31 +250,31 @@ call :kill_ggnr_start_cmds
 timeout /t 1 /nobreak >nul
 goto :eof
 
-:: nssm stop ì´ Y/N ë“±ìœ¼ë¡œ ì˜¤ë˜ ê±¸ë¦¬ë©´ 15ì´ˆ í›„ ê°•ì œ í¬íŠ¸Â·cmd ì •ë¦¬
+:: nssm stop ÀÌ Y/N µîÀ¸·Î ¿À·¡ °É¸®¸é 15ÃÊ ÈÄ °­Á¦ Æ÷Æ®¡¤cmd Á¤¸®
 :nssm_stop_with_timeout
 powershell -NoProfile -ExecutionPolicy Bypass -Command ^
   "$nssm='%NSSM%'; $svc='%SERVICE_NAME%';" ^
   "$p = Start-Process -FilePath $nssm -ArgumentList @('stop',$svc,'confirm') -PassThru -NoNewWindow -Wait:$false;" ^
-  "if (-not $p.WaitForExit(15000)) { Write-Host '[nssm-install] stop 15ì´ˆ ì´ˆê³¼ â€” í”„ë¡œì„¸ìŠ¤ ê°•ì œ ì¢…ë£Œ'; try { $p.Kill() } catch {}; exit 0 };" ^
+  "if (-not $p.WaitForExit(15000)) { Write-Host '[nssm-install] stop 15ÃÊ ÃÊ°ú ? ÇÁ·Î¼¼½º °­Á¦ Á¾·á'; try { $p.Kill() } catch {}; exit 0 };" ^
   "Write-Host ('[nssm-install] nssm stop exit=' + $p.ExitCode)"
 call :kill_listen_port %APP_PORT%
 call :kill_ggnr_start_cmds
 goto :eof
 
 :kill_ggnr_start_cmds
-echo [nssm-install] ggnr_start.bat ì”ì—¬ cmd ê²€ìƒ‰...
+echo [nssm-install] ggnr_start.bat ÀÜ¿© cmd °Ë»ö...
 powershell -NoProfile -ExecutionPolicy Bypass -Command ^
   "$procs = Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object { $_.CommandLine -and $_.CommandLine -like '*ggnr_start.bat*' };" ^
-  "if (-not $procs) { Write-Host '[nssm-install] ggnr_start ì”ì—¬ ì—†ìŒ.'; exit 0 };" ^
+  "if (-not $procs) { Write-Host '[nssm-install] ggnr_start ÀÜ¿© ¾øÀ½.'; exit 0 };" ^
   "foreach ($p in @($procs)) { Write-Host ('[nssm-install] taskkill /F /PID {0} /T' -f $p.ProcessId); Start-Process -FilePath taskkill.exe -ArgumentList @('/F','/PID',([string]$p.ProcessId),'/T') -Wait -NoNewWindow | Out-Null }"
 goto :eof
 
 :kill_listen_port
 set "KP=%~1"
-echo [nssm-install] í¬íŠ¸ %KP% Listen í™•ì¸...
+echo [nssm-install] Æ÷Æ® %KP% Listen È®ÀÎ...
 netstat -ano | findstr /R /C:":%KP% .*LISTENING" >nul 2>&1
 if errorlevel 1 (
-  echo [nssm-install] í¬íŠ¸ %KP% Listen ì—†ìŒ.
+  echo [nssm-install] Æ÷Æ® %KP% Listen ¾øÀ½.
   goto :eof
 )
 for /f "tokens=5" %%P in ('netstat -ano ^| findstr /R /C:":%KP% .*LISTENING"') do (
@@ -292,21 +291,21 @@ goto :eof
 if not exist "%LOG_DIR%" (
   mkdir "%LOG_DIR%"
   if errorlevel 1 (
-    echo [ì˜¤ë¥˜] ë¡œê·¸ í´ë” ìƒì„± ì‹¤íŒ¨: %LOG_DIR%
+    echo [¿À·ù] ·Î±× Æú´õ »ı¼º ½ÇÆĞ: %LOG_DIR%
     exit /b 1
   )
-  echo [nssm-install] ìƒì„±: %LOG_DIR%
+  echo [nssm-install] »ı¼º: %LOG_DIR%
 )
 if not exist "%LOG_BACKUP%" (
   mkdir "%LOG_BACKUP%"
   if errorlevel 1 (
-    echo [ì˜¤ë¥˜] ë°±ì—… í´ë” ìƒì„± ì‹¤íŒ¨: %LOG_BACKUP%
+    echo [¿À·ù] ¹é¾÷ Æú´õ »ı¼º ½ÇÆĞ: %LOG_BACKUP%
     exit /b 1
   )
-  echo [nssm-install] ìƒì„±: %LOG_BACKUP%
+  echo [nssm-install] »ı¼º: %LOG_BACKUP%
 )
 if not exist "%LOG_DIR%\linkage" (
   mkdir "%LOG_DIR%\linkage"
-  echo [nssm-install] ìƒì„±: %LOG_DIR%\linkage
+  echo [nssm-install] »ı¼º: %LOG_DIR%\linkage
 )
 exit /b 0
