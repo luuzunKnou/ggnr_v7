@@ -260,7 +260,7 @@ table.m td { border: 0; height: auto; padding: 0.2mm 1mm; font-size: 9.5pt; text
       <col />
     </colgroup>
     <tr>
-      <th class="side" rowspan="3">건축물<br/>(공작물)</th>
+      <th class="side" rowspan="3">건축물(공작물)</th>
       <td class="fld" colspan="2">
         <span class="k">위치</span>
         <span class="b">${tx(ledger.locationAddress)}</span>
@@ -310,7 +310,7 @@ table.m td { border: 0; height: auto; padding: 0.2mm 1mm; font-size: 9.5pt; text
       <col />
     </colgroup>
     <tr class="hh">
-      <th class="side" rowspan="${2 + details.length}">건축물(공작물) 내용</th>
+      <th class="side" rowspan="${2 + details.length}">건축물(공작물)<br/>내용</th>
       <th rowspan="2">동 구분</th>
       <th rowspan="2">설치 연월일</th>
       <th rowspan="2">구조</th>
