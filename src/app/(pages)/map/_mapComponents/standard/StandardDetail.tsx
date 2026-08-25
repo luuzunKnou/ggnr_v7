@@ -14,10 +14,10 @@ import {
   Upload,
 } from 'lucide-react';
 import { SER_FILE_ENG } from '@/lib/serviceFileDataSerEng';
-import { formatDetailScalarValue } from '@/lib/formatDetailScalar';
+import { formatDefineFieldDisplayValue } from '@/lib/defineLayerCodeDisplay';
 import { cn, formatFileSize } from '@/lib/utils';
 import { useMapContext } from '../MapContext';
-import { getRowKey, getRowValueByField } from './defineLayerRowUtils';
+import { getRowKey, getRowValueByField, isDefineFieldFlagTrue } from './defineLayerRowUtils';
 import {
   isImageServiceFileName,
   isPdfServiceFileName,
@@ -33,6 +33,7 @@ import { InfoSection } from './DetailInfoSection';
 import { ServiceFileAttachmentThumb } from './ServiceFileAttachmentThumb';
 import { ServiceFilePdfThumb } from './ServiceFilePdfThumb';
 import { ServiceFileImagePreview, type ServiceFilePreviewItem } from './ServiceFileImagePreview';
+import { useDefineLayerCodes } from './useDefineLayerCodes';
 
 type DetailTab = 'basic' | 'history' | 'attach';
 
@@ -100,6 +101,15 @@ const SAMPLE_HISTORY: TimelineEvent[] = [
   },
 ];
 
+const EMPTY_FIELDS: {
+  define_field_name?: string;
+  define_field_kor_name?: string;
+  define_field_is_key?: string;
+  define_field_type?: string;
+  define_field_show_detail?: string | boolean;
+}[] = [];
+const EMPTY_ROW: Record<string, unknown> = {};
+
 export default function StandardDetail() {
   const mapContext = useMapContext();
   const selectedDetail = mapContext?.selectedDetail ?? null;
@@ -113,21 +123,27 @@ export default function StandardDetail() {
     initialIndex: number;
   } | null>(null);
 
-  if (selectedDetail === null || !setSelectedDetail) return null;
-
-  const { layerName, tableName, row, fields } = selectedDetail;
-  const handleClose = () => setSelectedDetail(null);
+  const fields = selectedDetail?.fields ?? EMPTY_FIELDS;
+  const row = selectedDetail?.row ?? EMPTY_ROW;
+  const tableName = selectedDetail?.tableName ?? '';
+  const layerName = selectedDetail?.layerName ?? '';
+  const codesByField = useDefineLayerCodes(tableName || null, fields);
 
   const keyFieldName = useMemo(() => {
-    const keyField = fields.find((f) => String(f.define_field_is_key ?? '').toLowerCase() === 'true');
+    const keyField = fields.find((f) => isDefineFieldFlagTrue(f.define_field_is_key));
     return keyField ? String(keyField.define_field_name ?? '').trim() || null : null;
   }, [fields]);
 
-  const rowKeyForAttachments = getRowKey(row, keyFieldName);
+  const detailVisibleFields = useMemo(
+    () => fields.filter((f) => isDefineFieldFlagTrue(f.define_field_show_detail)),
+    [fields]
+  );
+
+  const rowKeyForAttachments = selectedDetail != null ? getRowKey(row, keyFieldName) : null;
   const layerSegmentForFiles = String(tableName ?? '').trim().toLowerCase() || null;
   const attachmentQuery = useServiceFileData({
     serEng: SER_FILE_ENG.dataQuery,
-    enabled: activeTab === 'attach',
+    enabled: activeTab === 'attach' && selectedDetail != null,
     layerSegment: layerSegmentForFiles,
     keyValue: rowKeyForAttachments,
     refreshNonce: attachListRefreshNonce,
@@ -148,6 +164,10 @@ export default function StandardDetail() {
       }));
   }, [attachmentQuery.files, layerSegmentForFiles, rowKeyForAttachments]);
   const attachChunkUpload = useServiceFileChunkedUpload();
+
+  if (selectedDetail === null || !setSelectedDetail) return null;
+
+  const handleClose = () => setSelectedDetail(null);
 
   const tabs: { id: DetailTab; label: string; icon: typeof FileText }[] = [
     { id: 'basic', label: '기본정보', icon: FileText },
@@ -208,10 +228,10 @@ export default function StandardDetail() {
                 title="기본정보"
                 fields={Object.entries((row ?? {}) as Record<string, unknown>)
                   .filter(([k]) => { const n = k.toLowerCase(); return n !== 'gid' && n !== 'geom'; })
-                  .map(([k, v], i) => ({
+                  .map(([k, v]) => ({
                     label: k,
                     value: v != null ? String(v) : '-',
-                    highlight: i === 0,
+                    highlight: keyFieldName != null && k.trim().toLowerCase() === keyFieldName.trim().toLowerCase(),
                   }))}
                 defaultOpen={true}
               />
@@ -220,28 +240,42 @@ export default function StandardDetail() {
                 <InfoSection
                   title="기본정보"
                   fields={(() => {
-                    const mid = Math.ceil(fields.length / 2);
-                    const slice = fields.slice(0, mid);
-                    return slice.map((f, i) => {
+                    const mid = Math.ceil(detailVisibleFields.length / 2);
+                    const slice = detailVisibleFields.slice(0, mid);
+                    return slice.map((f) => {
                       const key = String(f.define_field_name ?? '');
                       const label = String(f.define_field_kor_name ?? f.define_field_name ?? '');
                       const raw = getRowValueByField(row, key);
-                      const value = formatDetailScalarValue(raw);
-                      return { label, value, highlight: i === 0 };
+                      const value = formatDefineFieldDisplayValue(
+                        raw,
+                        f.define_field_type,
+                        codesByField[key.trim().toLowerCase()]
+                      );
+                      return {
+                        label,
+                        value,
+                        highlight:
+                          keyFieldName != null &&
+                          key.trim().toLowerCase() === keyFieldName.trim().toLowerCase(),
+                      };
                     });
                   })()}
                   defaultOpen={true}
                 />
-                {fields.length > 1 && (
+                {detailVisibleFields.length > 1 && (
                   <InfoSection
                     title="상세정보"
                     fields={(() => {
-                      const mid = Math.ceil(fields.length / 2);
-                      return fields.slice(mid).map((f) => {
+                      const mid = Math.ceil(detailVisibleFields.length / 2);
+                      return detailVisibleFields.slice(mid).map((f) => {
                         const key = String(f.define_field_name ?? '');
                         const label = String(f.define_field_kor_name ?? f.define_field_name ?? '');
                         const raw = getRowValueByField(row, key);
-                        const value = formatDetailScalarValue(raw);
+                        const value = formatDefineFieldDisplayValue(
+                          raw,
+                          f.define_field_type,
+                          codesByField[key.trim().toLowerCase()]
+                        );
                         return { label, value };
                       });
                     })()}

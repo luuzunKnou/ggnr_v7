@@ -24,17 +24,21 @@ function isLikelyPlainNumericForDisplay(s: string): boolean {
   return true;
 }
 
+export type FormatDetailScalarOptions = {
+  /** 코드·식별자: 천단위·날짜 추정 없이 원문 */
+  asLiteral?: boolean;
+};
+
 /**
  * 상세 필드 1개 표시용. null/빈 문자열은 `empty` (기본 '-').
  */
-export function formatDetailScalarValue(raw: unknown, empty = '-'): string {
+export function formatDetailScalarValue(
+  raw: unknown,
+  empty = '-',
+  options?: FormatDetailScalarOptions
+): string {
   if (raw === null || raw === undefined) return empty;
   if (typeof raw === 'boolean') return raw ? 'true' : 'false';
-  if (typeof raw === 'number') {
-    if (!Number.isFinite(raw)) return String(raw);
-    return formatFiniteNumberKoTrimZeros(raw);
-  }
-  if (typeof raw === 'bigint') return raw.toString();
   if (typeof raw === 'object') {
     try {
       return JSON.stringify(raw);
@@ -42,6 +46,20 @@ export function formatDetailScalarValue(raw: unknown, empty = '-'): string {
       return String(raw);
     }
   }
+  if (options?.asLiteral) {
+    if (typeof raw === 'number') {
+      if (!Number.isFinite(raw)) return String(raw);
+      return String(raw);
+    }
+    if (typeof raw === 'bigint') return raw.toString();
+    const lit = String(raw).trim();
+    return lit === '' ? empty : lit;
+  }
+  if (typeof raw === 'number') {
+    if (!Number.isFinite(raw)) return String(raw);
+    return formatFiniteNumberKoTrimZeros(raw);
+  }
+  if (typeof raw === 'bigint') return raw.toString();
   const s = String(raw).trim();
   if (s === '') return empty;
   const ymd = tryFormatToYmd(s);
