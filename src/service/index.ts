@@ -53,6 +53,7 @@ import * as seumPermitService from './seumService';
 import * as memoService from './memoService';
 import * as villagePatrolService from './villagePatrolService';
 import * as dataQueryHistoryService from './dataQueryHistoryService';
+import * as safedataHistoryService from './safedataHistoryService';
 import * as noticeService from './noticeService';
 import * as boardService from './boardService';
 import * as mngVersionHistoryService from './mngVersionHistoryService';
@@ -121,6 +122,7 @@ export {
   memoService,
   villagePatrolService,
   dataQueryHistoryService,
+  safedataHistoryService,
   noticeService,
   boardService,
   mngVersionHistoryService,
