@@ -81,12 +81,14 @@ type FacilityCatalogResponse = {
     layers: FacilityLayerMeta[];
     wmsLayerKeys?: string[];
   }>;
+  publishedLayerKeys?: string[];
 };
 
 export function useParcelAnalysisGroups(isOpen: boolean) {
   const [facilityLayerMap, setFacilityLayerMap] = useState<Record<string, FacilityLayerMeta[]>>({});
   const [facilityWmsLayerMap, setFacilityWmsLayerMap] = useState<Record<string, string[]>>({});
   const [facilityItems, setFacilityItems] = useState<ParcelAnalysisGroupDef['items']>([]);
+  const [publishedWmsLayerKeys, setPublishedWmsLayerKeys] = useState<string[] | undefined>(undefined);
   const [catalogLoaded, setCatalogLoaded] = useState(false);
 
   useEffect(() => {
@@ -94,6 +96,7 @@ export function useParcelAnalysisGroups(isOpen: boolean) {
       setFacilityLayerMap({});
       setFacilityWmsLayerMap({});
       setFacilityItems([]);
+      setPublishedWmsLayerKeys(undefined);
       setCatalogLoaded(false);
       return;
     }
@@ -125,11 +128,17 @@ export function useParcelAnalysisGroups(isOpen: boolean) {
         setFacilityLayerMap(layerMap);
         setFacilityWmsLayerMap(wmsMap);
         setFacilityItems(items);
+        setPublishedWmsLayerKeys(
+          Array.isArray(data?.publishedLayerKeys)
+            ? data.publishedLayerKeys.map((k) => String(k).toLowerCase())
+            : undefined
+        );
       } catch {
         if (!cancelled) {
           setFacilityLayerMap({});
           setFacilityWmsLayerMap({});
           setFacilityItems([]);
+          setPublishedWmsLayerKeys(undefined);
         }
       } finally {
         if (!cancelled) setCatalogLoaded(true);
@@ -149,7 +158,14 @@ export function useParcelAnalysisGroups(isOpen: boolean) {
 
   const allItemIds = useMemo(() => groups.flatMap((g) => g.items.map((i) => i.id)), [groups]);
 
-  return { groups, allItemIds, facilityLayerMap, facilityWmsLayerMap, catalogLoaded };
+  return {
+    groups,
+    allItemIds,
+    facilityLayerMap,
+    facilityWmsLayerMap,
+    publishedWmsLayerKeys,
+    catalogLoaded,
+  };
 }
 
 type Props = {

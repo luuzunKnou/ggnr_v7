@@ -33,6 +33,17 @@ const TABLES_PATH = join(process.cwd(), 'src', 'config', 'defineLayer', 'tables.
 
 const EXCLUDED_GROUPS = new Set(['메모', '민원']);
 
+/**
+ * 대장 부속(필지목록·물건지) — 필지분석 시설 현황 목록·표·지도·안내에서 제외.
+ * 예: road_use_ledger_jijuk, road_use_ledger_mulgunji, road_occupationledger_mgj
+ */
+export function isParcelAnalysisFacilityLedgerChild(layerKey: string): boolean {
+  const k = String(layerKey ?? '')
+    .trim()
+    .toLowerCase();
+  return k.endsWith('_jijuk') || k.endsWith('_mulgunji') || k.endsWith('_mgj');
+}
+
 function readDefineLayerTables(): DefineLayerMetaRow[] {
   if (!existsSync(TABLES_PATH)) return [];
   try {
@@ -81,7 +92,9 @@ export function buildParcelAnalysisFacilityCatalogFromDbTables(
 
   return dataQueryGroups
     .map(({ groupName, layers }) => {
-      const parcelLayers = layers.map(toParcelLayer);
+      const parcelLayers = layers
+        .map(toParcelLayer)
+        .filter((l) => !isParcelAnalysisFacilityLedgerChild(l.layerKey));
       const wmsLayerKeys = publishedLayerNamesLower
         ? parcelLayers
             .map((l) => l.layerKey)
