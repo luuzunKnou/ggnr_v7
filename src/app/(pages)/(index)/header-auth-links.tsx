@@ -2,6 +2,7 @@
 
 import { useSession, signOut } from 'next-auth/react';
 import { useLoginModal } from '@/app/login-modal-context';
+import { withBasePathNav } from '@/lib/basePath';
 
 export function HeaderAuthLinks() {
   const { data: session, status } = useSession();
@@ -60,7 +61,7 @@ export function HeaderAuthLinks() {
         className="text-[13px] text-muted-foreground hover:text-foreground transition-colors"
         onClick={async () => {
           await signOut({ redirect: false });
-          window.location.assign('/');
+          window.location.assign(withBasePathNav('/'));
         }}
       >
         로그아웃

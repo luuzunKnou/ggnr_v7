@@ -134,7 +134,7 @@ export function JimokLandownLayerSelector({
                     className={cn(
                       'truncate text-xs',
                       checked
-                        ? 'font-medium text-blue-700 dark:text-white'
+                        ? 'font-medium text-primary'
                         : 'text-slate-700 dark:text-white/90'
                     )}
                   >

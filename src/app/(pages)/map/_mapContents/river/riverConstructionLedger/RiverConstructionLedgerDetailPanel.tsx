@@ -33,6 +33,7 @@ import { Style, Stroke, Fill, Circle as CircleStyle } from "ol/style";
 import { isEmpty as isEmptyExtent } from "ol/extent";
 import { cn } from "@/lib/utils";
 import { call } from "@/lib/api";
+import { appFetch } from "@/lib/basePath";
 import { recordDataViewLog } from "@/lib/recordDataViewLog";
 import { SER_FILE_ENG } from "@/lib/serviceFileDataSerEng";
 import { streamDownloadFile } from "@/lib/streamFileDownload";
@@ -808,7 +809,7 @@ export function RiverConstructionLedgerDetailPanel({ row, onClose }: Props) {
       key: fileKey,
       folders: "1",
     });
-    void fetch(`/api/service-files?${qs.toString()}`, { credentials: "include" })
+    void appFetch(`/api/service-files?${qs.toString()}`, { credentials: "include" })
       .then(async (r) => {
         if (!r.ok) return { folders: [] as string[] };
         return r.json() as Promise<{ folders?: string[] }>;

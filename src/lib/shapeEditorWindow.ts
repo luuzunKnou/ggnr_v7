@@ -1,3 +1,5 @@
+import { withBasePathNav } from '@/lib/basePath';
+
 const SHAPE_EDITOR_WINDOW_NAME = 'ggnr_shape_editor';
 
 /** 브라우저별 팝업 — 주소창·툴바 최소화 + 작업표시줄 제외 전체 영역 */
@@ -43,7 +45,7 @@ export function buildShapeEditorMapUrl(systemKey?: string | null): string {
 /** 새 팝업 창으로 도형편집기 지도 열기 (전체 화면, URL 바 숨김 시도) */
 export function openShapeEditorMapWindow(systemKey?: string | null): Window | null {
   if (typeof window === 'undefined') return null;
-  const path = buildShapeEditorMapUrl(systemKey);
+  const path = withBasePathNav(buildShapeEditorMapUrl(systemKey));
   const url = `${window.location.origin}${path}`;
   const win = window.open(url, SHAPE_EDITOR_WINDOW_NAME, buildShapeEditorWindowFeatures());
   if (win) tryMaximizePopup(win);

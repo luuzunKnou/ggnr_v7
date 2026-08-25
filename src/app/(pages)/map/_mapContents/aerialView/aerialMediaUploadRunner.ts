@@ -4,6 +4,7 @@
  */
 
 import { call } from '@/lib/api';
+import { appFetch, withBasePath } from '@/lib/basePath';
 import type { AerialKind } from './aerialMediaTypes';
 import {
   beginClientUploadJob,
@@ -203,8 +204,8 @@ export function startAerialMediaUpload(
           const start = chunkIndex * chunkSize;
           const end = Math.min(start + chunkSize, file.size);
           const blob = file.slice(start, end);
-          const url = `/api/upload/chunk?uploadId=${encodeURIComponent(uploadId)}&chunkIndex=${chunkIndex}&totalChunks=${expectedChunks}`;
-          const res = await fetch(url, { method: 'POST', body: blob, signal });
+          const url = `${withBasePath('/api/upload/chunk')}?uploadId=${encodeURIComponent(uploadId)}&chunkIndex=${chunkIndex}&totalChunks=${expectedChunks}`;
+          const res = await appFetch(url, { method: 'POST', body: blob, signal });
           if (!res.ok) {
             const errText = await res.text();
             let errMsg = `청크 ${chunkIndex + 1} 전송 실패`;
@@ -253,23 +254,23 @@ export function startAerialMediaUpload(
         if (completeData.item) items.push(completeData.item);
       }
 
-      /** 드론영상: 업로드 직후 변환 큐 */
-      if (kind === 'ortho' && items.length > 0 && !signal.aborted) {
+      /** 드론영상·항공영상: 업로드 직후 변환 큐 */
+      if ((kind === 'ortho' || kind === 'satellite') && items.length > 0 && !signal.aborted) {
         updateClientUploadJob({
           kind,
           folderName,
           fileIndex: files.length,
           fileTotal: files.length,
-          currentFileName: '타일 변환 중…',
+          currentFileName: kind === 'satellite' ? '자체항공영상 등록 중…' : '타일 변환 중…',
           chunkIndex: 0,
           chunkTotal: 0,
           percent: 80,
         });
         const convertRes = await call('', 'POST', {
           service: 'aerialOrthoService',
-          action: 'convertOrthoWorkUnit',
+          action: kind === 'satellite' ? 'convertSatelliteWorkUnit' : 'convertOrthoWorkUnit',
           params: {
-            kind: 'ortho',
+            kind,
             folderName,
             ...(resolvedWuKey != null ? { wuKey: resolvedWuKey } : {}),
           },
@@ -279,7 +280,9 @@ export function startAerialMediaUpload(
             typeof convertRes?.error === 'string'
               ? convertRes.error
               : (convertRes?.error as { message?: string } | undefined)?.message ||
-                  '타일 변환에 실패했습니다.'
+                  (kind === 'satellite'
+                    ? '자체항공영상 등록에 실패했습니다.'
+                    : '타일 변환에 실패했습니다.')
           );
         }
         updateClientUploadJob({
@@ -287,7 +290,7 @@ export function startAerialMediaUpload(
           folderName,
           fileIndex: files.length,
           fileTotal: files.length,
-          currentFileName: '변환 완료',
+          currentFileName: kind === 'satellite' ? '자체항공영상 등록 완료' : '변환 완료',
           chunkIndex: 1,
           chunkTotal: 1,
           percent: 99,

@@ -38,11 +38,69 @@ function resolvePoolMax(): number {
 }
 
 type GlobalPg = typeof globalThis & { __ggnrPgPool?: Pool };
+type InstrumentedPool = Pool & { __ggnrInstrumented?: boolean };
+
+/**
+ * HMR마다 모듈이 재실행돼도 pool 싱글톤은 유지됨.
+ * query 래핑·error 리스너를 매번 붙이면 중첩/누적 → Failed query·MaxListeners 유발.
+ * 풀 인스턴스당 1회만 계측한다.
+ */
+function instrumentPoolOnce(pool: Pool): void {
+  const p = pool as InstrumentedPool;
+  if (p.__ggnrInstrumented) return;
+  p.__ggnrInstrumented = true;
+
+  const SQL_LOG_ENABLED = (() => {
+    const v = String(process.env.DB_QUERY_LOG ?? process.env.SQL_LOG ?? '').trim().toLowerCase();
+    return v === '1' || v === 'true' || v === 'yes' || v === 'on';
+  })();
+
+  const originalQuery = pool.query.bind(pool);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  (pool as any).query = function (config: unknown, values?: unknown, callback?: unknown): unknown {
+    if (SQL_LOG_ENABLED) {
+      const first = typeof config === 'string' ? config : (config as Record<string, unknown>);
+      const text =
+        typeof first === 'string'
+          ? first
+          : first?.text != null
+            ? String(first.text)
+            : first?.sql != null
+              ? String(first.sql)
+              : typeof first === 'object' && first !== null
+                ? JSON.stringify(first).slice(0, 500)
+                : String(config);
+      console.log('[SQL]', text);
+    }
+    const result =
+      callback != null
+        ? (originalQuery as (c: unknown, v?: unknown, cb?: unknown) => void)(config, values, callback)
+        : (originalQuery as (c: unknown, v?: unknown) => Promise<{ rows?: QueryResultRow[] }>)(
+            config,
+            values
+          );
+    if (SQL_LOG_ENABLED && result != null && typeof (result as Promise<unknown>)?.then === 'function') {
+      return (result as Promise<{ rows?: QueryResultRow[] }>).then((res) => {
+        const rows = res?.rows ?? [];
+        console.log('[SQL Result]', Array.isArray(rows) ? rows.length : 0, 'rows');
+        return res;
+      });
+    }
+    return result;
+  };
+
+  pool.on('error', (err) => {
+    console.error('Unexpected error on idle client', err);
+  });
+}
 
 function getOrCreatePool(): Pool {
   const g = globalThis as GlobalPg;
   // HMR 시 모듈이 다시 로드돼도 풀을 재사용 (미종료 연결 누적 → 53300 방지)
-  if (g.__ggnrPgPool) return g.__ggnrPgPool;
+  if (g.__ggnrPgPool) {
+    instrumentPoolOnce(g.__ggnrPgPool);
+    return g.__ggnrPgPool;
+  }
 
   const pool = new Pool({
     ...getDatabaseConfig(),
@@ -50,54 +108,13 @@ function getOrCreatePool(): Pool {
     idleTimeoutMillis: 30_000,
     connectionTimeoutMillis: 15_000,
   });
+  instrumentPoolOnce(pool);
   g.__ggnrPgPool = pool;
   return pool;
 }
 
 // PostgreSQL 연결 풀 (프로세스당 싱글톤)
 const pool = getOrCreatePool();
-
-/** SQL 콘솔 로그는 기본 비활성. 필요할 때만 env로 켬. */
-const SQL_LOG_ENABLED = (() => {
-  const v = String(process.env.DB_QUERY_LOG ?? process.env.SQL_LOG ?? '').trim().toLowerCase();
-  return v === '1' || v === 'true' || v === 'yes' || v === 'on';
-})();
-
-// 모든 서비스의 pool.query를 래핑 (SQL 로그는 옵션)
-const originalQuery = pool.query.bind(pool);
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-(pool as any).query = function (config: unknown, values?: unknown, callback?: unknown): unknown {
-  if (SQL_LOG_ENABLED) {
-    const first = typeof config === 'string' ? config : (config as Record<string, unknown>);
-    const text =
-      typeof first === 'string'
-        ? first
-        : first?.text != null
-          ? String(first.text)
-          : first?.sql != null
-            ? String(first.sql)
-            : typeof first === 'object' && first !== null
-              ? JSON.stringify(first).slice(0, 500)
-              : String(config);
-    console.log('[SQL]', text);
-  }
-  const result = callback != null
-    ? (originalQuery as (c: unknown, v?: unknown, cb?: unknown) => void)(config, values, callback)
-    : (originalQuery as (c: unknown, v?: unknown) => Promise<{ rows?: QueryResultRow[] }>)(config, values);
-  if (SQL_LOG_ENABLED && result != null && typeof (result as Promise<unknown>)?.then === 'function') {
-    return (result as Promise<{ rows?: QueryResultRow[] }>).then((res) => {
-      const rows = res?.rows ?? [];
-      console.log('[SQL Result]', Array.isArray(rows) ? rows.length : 0, 'rows');
-      return res;
-    });
-  }
-  return result;
-};
-
-// 연결 풀 이벤트 핸들러
-pool.on('error', (err) => {
-  console.error('Unexpected error on idle client', err);
-});
 
 // Drizzle 클라이언트 생성
 export const db = drizzle(pool, { schema });

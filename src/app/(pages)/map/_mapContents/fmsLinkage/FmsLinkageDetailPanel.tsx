@@ -105,7 +105,7 @@ function GroupedAttrList({
       {visible.map((section) => (
         <div key={section.id}>
           {section.label ? (
-            <div className="mb-1 text-xs font-semibold tracking-wide text-slate-600 dark:text-muted-foreground">
+            <div className="mb-1 text-[11px] font-semibold tracking-wide text-slate-600 dark:text-muted-foreground">
               {section.label}
             </div>
           ) : null}
@@ -276,7 +276,7 @@ export function FmsLinkageDetailPanel({
         </button>
       </div>
 
-      <MapSideDetailScroll className="min-h-0 flex-1 overflow-auto px-3 py-2 text-xs">
+      <MapSideDetailScroll className="min-h-0 flex-1 overflow-auto px-3 py-2 text-[11px]">
         {loading && attributes.length === 0 ? (
           <div className="px-1 py-6 text-center text-muted-foreground">불러오는 중…</div>
         ) : error && attributes.length === 0 ? (
@@ -290,7 +290,7 @@ export function FmsLinkageDetailPanel({
             />
 
             <div className="mt-3">
-              <div className="mb-1.5 text-xs font-semibold tracking-wide text-slate-600 dark:text-muted-foreground">
+              <div className="mb-1.5 text-[11px] font-semibold tracking-wide text-slate-600 dark:text-muted-foreground">
                 {FMS_INSPECTION_TITLE}
               </div>
               {inspections.length === 0 ? (
@@ -419,7 +419,7 @@ export function FmsLinkageDetailPanel({
                       ref={inspectionDetailRef}
                       className="rounded border border-border bg-muted/30 px-2.5 py-2"
                     >
-                      <div className="mb-1.5 flex flex-wrap items-baseline gap-x-1.5 text-xs">
+                      <div className="mb-1.5 flex flex-wrap items-baseline gap-x-1.5 text-[11px]">
                         <span className="font-semibold text-slate-600 dark:text-foreground">점검 상세</span>
                         <span className="font-normal text-black/40 dark:text-muted-foreground/50">·</span>
                         <span className="font-normal text-black/50 dark:text-muted-foreground">

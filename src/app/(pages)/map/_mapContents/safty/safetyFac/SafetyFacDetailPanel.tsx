@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { X } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { appFetch } from '@/lib/basePath';
 import { MapSideDetailScroll } from '../../../_mapComponents/MapSideDetailScroll';
 import {
   buildSafetyFacCustomDetailRows,
@@ -39,7 +40,7 @@ export function SafetyFacDetailPanel({ facility, onClose }: Props) {
     let cancelled = false;
     setFields([]);
     setCodesByField({});
-    void fetch(`/api/config/defineLayer/fields/${encodeURIComponent(facility.table)}`)
+    void appFetch(`/api/config/defineLayer/fields/${encodeURIComponent(facility.table)}`)
       .then((r) => r.json())
       .then(async (json: { data?: SafetyFacDefineField[] }) => {
         const nextFields = Array.isArray(json?.data) ? json.data : [];
@@ -56,7 +57,7 @@ export function SafetyFacDetailPanel({ facility, onClose }: Props) {
             if (!name) return null;
             const key = `${facility.table}__${name}`;
             try {
-              const res = await fetch(`/api/config/defineLayer/codes/${encodeURIComponent(key)}`);
+              const res = await appFetch(`/api/config/defineLayer/codes/${encodeURIComponent(key)}`);
               const body = (await res.json()) as { data?: DefineCodeRow[] };
               const codes = Array.isArray(body?.data) ? body.data : [];
               return [name.toLowerCase(), codes] as const;

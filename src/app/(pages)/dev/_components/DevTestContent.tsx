@@ -3,8 +3,7 @@
 import { useState, useEffect } from "react"
 import { Button } from "@/app/shadcnComponents/ui/button"
 import { call } from "@/lib/api"
-
-const GEOSERVER_DEFAULT_URL = "http://localhost:8080/geoserver"
+import { getGeoServerBase } from "@/lib/geoserverUrl"
 
 interface TestResult {
   timestamp: string
@@ -55,11 +54,7 @@ export function DevTestContent() {
   const [geoserverLogs, setGeoserverLogs] = useState<string[]>([])
 
   useEffect(() => {
-    if (typeof window !== "undefined") {
-      setGeoserverUrl(`${window.location.protocol}//${window.location.hostname}:8080/geoserver`)
-    } else {
-      setGeoserverUrl(GEOSERVER_DEFAULT_URL)
-    }
+    setGeoserverUrl(getGeoServerBase())
   }, [])
 
   const addLog = (message: string) => {
@@ -201,7 +196,7 @@ export function DevTestContent() {
 
       if (response.success && response.data?.success) {
         addGeoserverLog("GeoServer가 백그라운드에서 시작되었습니다.")
-        addGeoserverLog("웹 UI: http://localhost:8080/geoserver")
+        addGeoserverLog(`웹 UI: ${getGeoServerBase()}`)
       } else {
         addGeoserverLog(`실행 실패: ${response.error ?? response.data?.error ?? "Unknown"}`)
       }

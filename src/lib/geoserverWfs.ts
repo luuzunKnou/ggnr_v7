@@ -1,11 +1,5 @@
 import { WORKSPACE } from '@/app/(pages)/map/_mapComponents/layerFactory/serviceLayerFactory';
-
-function getGeoServerBase(): string {
-  if (typeof window !== 'undefined') {
-    return `${window.location.protocol}//${window.location.hostname}:8080/geoserver`;
-  }
-  return 'http://localhost:8080/geoserver';
-}
+import { getGeoServerBase } from '@/lib/geoserverUrl';
 
 export function buildCqlEquals(keyField: string, keyValue: string): string {
   const field = String(keyField ?? '').trim();

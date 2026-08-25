@@ -4,13 +4,7 @@ import ImageWMS from 'ol/source/ImageWMS';
 import type { Map as OlMap } from 'ol';
 import tables from '@/config/defineLayer/tables.json';
 import { WORKSPACE } from './serviceLayerFactory';
-
-function getGeoServerBase(): string {
-  if (typeof window !== 'undefined') {
-    return `${window.location.protocol}//${window.location.hostname}:8080/geoserver`;
-  }
-  return 'http://localhost:8080/geoserver';
-}
+import { getGeoServerBase } from '@/lib/geoserverUrl';
 
 type DefineTableRow = {
   define_table_name?: string;

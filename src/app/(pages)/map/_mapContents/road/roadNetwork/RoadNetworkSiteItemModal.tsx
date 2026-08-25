@@ -12,14 +12,14 @@ import {
 } from "./roadNetworkMock";
 
 const fieldClass =
-  "h-7 w-full min-w-0 rounded border border-slate-300 bg-white px-1.5 text-[11px] outline-none focus:border-primary focus:ring-1 focus:ring-primary/25";
-const labelClass = "mb-0.5 block text-[11px] text-slate-500";
+  "h-7 w-full min-w-0 rounded border border-border bg-background px-1.5 text-[11px] outline-none focus:border-primary focus:ring-1 focus:ring-primary/25";
+const labelClass = "mb-0.5 block text-[11px] text-muted-foreground";
 const btnPrimary =
-  "inline-flex h-7 items-center gap-1 rounded border border-primary bg-primary px-2 text-[11px] font-medium text-white hover:bg-primary/90 disabled:opacity-50";
+  "inline-flex h-7 items-center gap-1 rounded border border-primary bg-primary px-2 text-[11px] font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50";
 const btnGhost =
-  "inline-flex h-7 items-center gap-1 rounded border border-slate-200 bg-white px-2 text-[11px] font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-50";
+  "inline-flex h-7 items-center gap-1 rounded border border-border bg-background px-2 text-[11px] font-medium text-muted-foreground hover:bg-muted/50 disabled:opacity-50";
 const btnDanger =
-  "inline-flex h-7 items-center gap-1 rounded border border-red-200 bg-white px-2 text-[11px] font-medium text-red-600 hover:bg-red-50 disabled:opacity-50";
+  "inline-flex h-7 items-center gap-1 rounded border border-destructive/30 bg-background px-2 text-[11px] font-medium text-destructive hover:bg-destructive/10 disabled:opacity-50";
 
 function ensureAttachments(list?: RoadNetworkAttachment[] | null): RoadNetworkAttachment[] {
   return Array.isArray(list) ? list : [];
@@ -57,7 +57,7 @@ function AttachmentThumbGrid({
   attach: AttachHandlers;
 }) {
   if (items.length === 0) {
-    return <p className="text-[11px] text-slate-400">첨부 없음</p>;
+    return <p className="text-[11px] text-muted-foreground">첨부 없음</p>;
   }
   return (
     <div className="grid grid-cols-3 gap-1.5">
@@ -69,14 +69,14 @@ function AttachmentThumbGrid({
             <button
               type="button"
               onClick={() => attach.onPreview(items, a.id)}
-              className="block aspect-square w-full overflow-hidden rounded border border-slate-200 bg-slate-50"
+              className="block aspect-square w-full overflow-hidden rounded border border-border bg-muted/50"
               title={`${a.name} 미리보기`}
             >
               {isImage ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img src={a.previewUrl} alt={a.name} className="h-full w-full object-cover" />
               ) : (
-                <div className="flex h-full w-full flex-col items-center justify-center gap-0.5 text-slate-400">
+                <div className="flex h-full w-full flex-col items-center justify-center gap-0.5 text-muted-foreground">
                   <FileText className="h-5 w-5" />
                   <span className="text-[10px] font-semibold">{isPdf ? "PDF" : "파일"}</span>
                 </div>
@@ -89,7 +89,7 @@ function AttachmentThumbGrid({
                   e.stopPropagation();
                   attach.onDownload(a);
                 }}
-                className="pointer-events-auto inline-flex h-6 w-6 items-center justify-center rounded bg-white text-slate-700 shadow ring-1 ring-slate-200/80 hover:text-primary"
+                className="pointer-events-auto inline-flex h-6 w-6 items-center justify-center rounded bg-background text-foreground/90 shadow ring-1 ring-border/80 hover:text-primary"
                 title="다운로드"
               >
                 <Download className="h-3.5 w-3.5" />
@@ -100,13 +100,13 @@ function AttachmentThumbGrid({
                   e.stopPropagation();
                   attach.onRemove(a.id);
                 }}
-                className="pointer-events-auto inline-flex h-6 w-6 items-center justify-center rounded bg-white text-red-600 shadow ring-1 ring-slate-200/80 hover:bg-red-50"
+                className="pointer-events-auto inline-flex h-6 w-6 items-center justify-center rounded bg-background text-destructive shadow ring-1 ring-border/80 hover:bg-destructive/10"
                 title="삭제"
               >
                 <Trash2 className="h-3.5 w-3.5" />
               </button>
             </div>
-            <p className="mt-0.5 truncate text-[10px] text-slate-500" title={a.name}>
+            <p className="mt-0.5 truncate text-[10px] text-muted-foreground" title={a.name}>
               {a.name}
             </p>
           </div>
@@ -147,7 +147,7 @@ function SiteAddressLine({
   return (
     <div>
       <span className={labelClass}>현장 위치</span>
-      <p className="truncate text-[11px] text-slate-600">
+      <p className="truncate text-[11px] text-muted-foreground">
         {point ? address || "주소 조회 중…" : "미지정 — 지도에서 지정"}
       </p>
     </div>
@@ -187,7 +187,7 @@ function MaintEdit({
       <label className="block">
         <span className={labelClass}>내용</span>
         <textarea
-          className="min-h-[2.75rem] w-full rounded border border-slate-300 px-2 py-1 text-xs outline-none focus:border-primary focus:ring-2 focus:ring-primary/25"
+          className="min-h-[2.75rem] w-full rounded border border-border px-2 py-1 text-xs outline-none focus:border-primary focus:ring-2 focus:ring-primary/25"
           rows={2}
           value={draft.content}
           onChange={(e) => setDraft((d) => (d ? { ...d, content: e.target.value } : d))}
@@ -254,7 +254,7 @@ function CompEdit({
       <label className="block">
         <span className={labelClass}>내용</span>
         <textarea
-          className="min-h-[2.75rem] w-full rounded border border-slate-300 px-2 py-1 text-xs outline-none focus:border-primary focus:ring-2 focus:ring-primary/25"
+          className="min-h-[2.75rem] w-full rounded border border-border px-2 py-1 text-xs outline-none focus:border-primary focus:ring-2 focus:ring-primary/25"
           rows={2}
           value={draft.content}
           onChange={(e) => setDraft((d) => (d ? { ...d, content: e.target.value } : d))}
@@ -317,11 +317,11 @@ export function RoadNetworkSiteItemModal(props: RoadNetworkSiteItemModalProps) {
       onClick={close}
     >
       <div
-        className="relative flex max-h-[calc(100dvh-5rem)] w-full max-w-lg flex-col overflow-hidden rounded-[5px] border border-slate-200 bg-white shadow-2xl"
+        className="relative flex max-h-[calc(100dvh-5rem)] w-full max-w-lg flex-col overflow-hidden rounded-[5px] border border-border bg-background shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex shrink-0 items-center border-b border-slate-200 px-3 py-2">
-          <h3 id={titleId} className="text-sm font-semibold text-slate-800">
+        <div className="flex shrink-0 items-center border-b border-border px-3 py-2">
+          <h3 id={titleId} className="text-sm font-semibold text-foreground">
             {heading}
           </h3>
         </div>
@@ -335,7 +335,7 @@ export function RoadNetworkSiteItemModal(props: RoadNetworkSiteItemModalProps) {
           ) : null}
         </div>
 
-        <div className="flex shrink-0 items-center justify-end gap-1 border-t border-slate-200 px-3 py-1.5">
+        <div className="flex shrink-0 items-center justify-end gap-1 border-t border-border px-3 py-1.5">
           <button type="button" className={btnPrimary} onClick={onSave}>
             저장
           </button>

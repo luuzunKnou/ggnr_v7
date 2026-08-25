@@ -1180,7 +1180,7 @@ export function LayerDataPanel({
     (f) => !isGeomLikeFieldName(String(f.define_field_name ?? ''))
   );
   /** 데이터 조회와 동일: 최대 5열. 시설관리 컬럼 순서는 도로대장 설정, 헤더는 defineLayer 한글명 */
-  const listFields = useFacilityCols
+  const listFields: DefineFieldRow[] = useFacilityCols
     ? facilityColumnKeys.slice(0, 5).map((k) => {
         const kl = String(k).trim().toLowerCase();
         const meta =
@@ -1192,6 +1192,7 @@ export function LayerDataPanel({
         return {
           define_field_name: k,
           define_field_kor_name: kor || k,
+          define_field_type: meta?.define_field_type,
         };
       })
     : listFieldsAll.slice(0, 5);

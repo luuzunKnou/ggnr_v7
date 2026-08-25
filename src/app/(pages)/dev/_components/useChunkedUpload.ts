@@ -2,8 +2,7 @@
 
 import { useState, useCallback, useRef } from 'react';
 import { call } from '@/lib/api';
-
-const API_BASE = typeof window !== 'undefined' ? '' : '';
+import { withBasePath } from '@/lib/basePath';
 
 export type ChunkedUploadState = {
   progress: number;
@@ -116,7 +115,7 @@ export function useChunkedUpload(): UseChunkedUploadReturn {
         if (!uploadId) {
           throw new Error('Init failed: no uploadId');
         }
-        const base = `${API_BASE || ''}/api/upload/chunk`;
+        const base = withBasePath('/api/upload/chunk');
         for (let chunkIndex = 0; chunkIndex < expectedChunks; chunkIndex++) {
           if (signal.aborted) {
             const msg = '취소됨';

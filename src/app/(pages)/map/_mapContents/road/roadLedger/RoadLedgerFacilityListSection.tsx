@@ -266,8 +266,8 @@ export function RoadLedgerFacilityListSection({
 
   if (activeFacilityGroups.length === 0) {
     return (
-      <div className="mt-3 border-t border-slate-200 pt-3">
-        <p className="text-[11px] leading-relaxed text-slate-500">
+      <div className="mt-3 border-t border-border pt-3">
+        <p className="text-[11px] leading-relaxed text-muted-foreground">
           주요시설~기타시설 구분을 켜면, 하위 시설 목록이 여기에 표시됩니다.
         </p>
       </div>
@@ -276,8 +276,8 @@ export function RoadLedgerFacilityListSection({
 
   if (!hasRdidForFacilityList) {
     return (
-      <div className="mt-3 border-t border-slate-200 pt-3">
-        <p className="text-[11px] text-amber-700">
+      <div className="mt-3 border-t border-border pt-3">
+        <p className="text-[11px] text-chart-4">
           RDID가 없거나 {ROAD_LEDGER_RDID_MIN_LEN_FOR_FACILITY_JOIN}자 미만이면 시설 목록을 불러올 수 없습니다.
           (레이어 3자 제외 4~19번째·16자로 조인)
         </p>
@@ -286,10 +286,10 @@ export function RoadLedgerFacilityListSection({
   }
 
   return (
-    <div className="mt-3 border-t border-slate-200 pt-3">
+    <div className="mt-3 border-t border-border pt-3">
       <div className="flex flex-col gap-0">
         <div
-          className="-mx-0 flex flex-nowrap gap-0 overflow-x-auto border-b border-slate-200 scrollbar-hide"
+          className="-mx-0 flex flex-nowrap gap-0 overflow-x-auto border-b border-border scrollbar-hide"
           role="tablist"
           aria-label="시설 구분"
         >
@@ -305,8 +305,8 @@ export function RoadLedgerFacilityListSection({
                 className={cn(
                   "relative min-w-0 shrink-0 truncate whitespace-nowrap border px-2.5 py-1.5 text-center text-[11px] font-medium transition-colors",
                   isSel
-                    ? "z-[1] -mb-px border-slate-200 border-b-white bg-white font-semibold text-primary"
-                    : "border-transparent bg-slate-50 text-slate-600 hover:bg-slate-100 hover:text-slate-800",
+                    ? "z-[1] -mb-px border-border border-b-background bg-background font-semibold text-primary"
+                    : "border-transparent bg-muted/50 text-muted-foreground hover:bg-muted hover:text-foreground",
                 )}
               >
                 {key}
@@ -316,17 +316,17 @@ export function RoadLedgerFacilityListSection({
         </div>
 
         <div
-          className="min-h-[4rem] border border-t-0 border-slate-200 bg-white p-1"
+          className="min-h-[4rem] border border-t-0 border-border bg-background p-1"
           role="tabpanel"
         >
           {loading ? (
-            <p className="px-2 text-[11px] text-slate-500">불러오는 중…</p>
+            <p className="px-2 text-[11px] text-muted-foreground">불러오는 중…</p>
           ) : error ? (
-            <p className="px-2 text-[11px] text-red-600">{error}</p>
+            <p className="px-2 text-[11px] text-destructive">{error}</p>
           ) : !selectedTabKey ? (
-            <p className="px-2 text-[11px] text-slate-500">구분을 선택해 주세요.</p>
+            <p className="px-2 text-[11px] text-muted-foreground">구분을 선택해 주세요.</p>
           ) : !selectedSection || selectedSection.tables.length === 0 ? (
-            <p className="px-2 text-[11px] text-slate-500">해당 구분에 표시할 시설 데이터가 없습니다.</p>
+            <p className="px-2 text-[11px] text-muted-foreground">해당 구분에 표시할 시설 데이터가 없습니다.</p>
           ) : (
             <div className="space-y-2">
               {selectedSection.tables.map((t) => {
@@ -348,9 +348,9 @@ export function RoadLedgerFacilityListSection({
                 return (
                   <div
                     key={`${selectedSection.groupKey}-${t.defineTableName}`}
-                    className="overflow-hidden rounded border border-slate-200 bg-white"
+                    className="overflow-hidden rounded border border-border bg-background"
                   >
-                    <div className="flex min-w-0 items-center gap-1.5 border-b border-slate-100 bg-slate-50 px-2 py-1.5">
+                    <div className="flex min-w-0 items-center gap-1.5 border-b border-border bg-muted/50 px-2 py-1.5">
                       <img
                         src={getLegendUrl(t.defineTableName)}
                         alt=""
@@ -362,16 +362,16 @@ export function RoadLedgerFacilityListSection({
                           e.currentTarget.style.display = "none";
                         }}
                       />
-                      <span className="min-w-0 truncate text-[11px] font-medium text-slate-800">{t.title}</span>
-                      <span className="shrink-0 text-[10px] text-slate-500">
+                      <span className="min-w-0 truncate text-[11px] font-medium text-foreground">{t.title}</span>
+                      <span className="shrink-0 text-[10px] text-muted-foreground">
                         {t.defineTableName}
                         {typeof t.total === "number" ? ` · ${t.total}건` : ""}
                       </span>
                     </div>
                     {t.error ? (
-                      <div className="px-2 py-1.5 text-[11px] text-red-600">{t.error}</div>
+                      <div className="px-2 py-1.5 text-[11px] text-destructive">{t.error}</div>
                     ) : columnKeys.length === 0 ? (
-                      <p className="px-2 py-1.5 text-[11px] text-slate-500">표시할 속성이 없습니다.</p>
+                      <p className="px-2 py-1.5 text-[11px] text-muted-foreground">표시할 속성이 없습니다.</p>
                     ) : (
                       <>
                         <div
@@ -382,7 +382,7 @@ export function RoadLedgerFacilityListSection({
                         >
                         <table
                           className={cn(
-                            "border-collapse text-left text-[10px] text-slate-700",
+                            "border-collapse text-left text-[10px] text-foreground/90",
                             tableExpanded ? "w-full table-fixed" : "w-max min-w-full",
                           )}
                         >
@@ -397,7 +397,7 @@ export function RoadLedgerFacilityListSection({
                             </colgroup>
                           ) : null}
                           <thead className={tableExpanded ? "sticky top-0 z-[1]" : undefined}>
-                            <tr className="border-b border-slate-200 bg-slate-100">
+                            <tr className="border-b border-border bg-muted">
                               {columnKeys.map((col) => {
                                 const kor = resolveRoadLedgerFieldLabel(tableLabels, col);
                                 return (
@@ -406,7 +406,7 @@ export function RoadLedgerFacilityListSection({
                                     scope="col"
                                     title={tableExpanded ? kor : undefined}
                                     className={cn(
-                                      "px-1.5 py-1 text-left align-middle font-medium leading-tight text-slate-700",
+                                      "px-1.5 py-1 text-left align-middle font-medium leading-tight text-foreground/90",
                                       tableExpanded
                                         ? "min-w-0 truncate"
                                         : "whitespace-nowrap",
@@ -443,8 +443,8 @@ export function RoadLedgerFacilityListSection({
                               role="button"
                               tabIndex={0}
                               className={cn(
-                                "cursor-pointer border-b border-slate-100 align-middle transition-colors hover:bg-primary/5",
-                                !isModalRow && rowIdx % 2 === 1 && "bg-slate-50/60",
+                                "cursor-pointer border-b border-border align-middle transition-colors hover:bg-primary/5",
+                                !isModalRow && rowIdx % 2 === 1 && "bg-muted/40",
                                 isModalRow &&
                                   "bg-primary/[0.12] ring-1 ring-inset ring-primary/25 hover:bg-primary/[0.16]",
                                 rowBusy && "pointer-events-none opacity-60",
@@ -485,7 +485,7 @@ export function RoadLedgerFacilityListSection({
                         </table>
                         </div>
                         {moreRowCount > 0 && (
-                          <div className="flex justify-center border-t border-slate-100 bg-slate-50/80 px-2 py-1.5">
+                          <div className="flex justify-center border-t border-border bg-muted/50 px-2 py-1.5">
                             <button
                               type="button"
                               className="text-[11px] font-medium text-primary hover:underline"

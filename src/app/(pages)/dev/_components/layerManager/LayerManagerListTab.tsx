@@ -20,11 +20,9 @@ import { registerLayerManagerListRefresh, requestLayerManagerDefineRefresh } fro
 import { StyleLegendThumb } from "./StylePreviewSwatch"
 import { parseSimpleStyleFromCss, type GeometryType, type StyleProps } from "@/lib/geoserverStyleUtils"
 import { fetchDefineLayerTables, fetchLayerDbTableList } from "./layerManagerListCache"
+import { getGeoServerBase } from "@/lib/geoserverUrl"
 
-const GEOSERVER_DEFAULT_URL =
-  typeof window !== "undefined"
-    ? `${window.location.protocol}//${window.location.hostname}:8080/geoserver`
-    : "http://localhost:8080/geoserver"
+const GEOSERVER_DEFAULT_URL = getGeoServerBase()
 
 const GEOSERVER_WORKSPACE = "ggnr"
 
@@ -130,6 +128,7 @@ function getLegendGraphicUrl(layerName: string, styleName?: string, version?: nu
     FORMAT: "image/png",
     WIDTH: "32",
     HEIGHT: "32",
+    TRANSPARENT: "true",
     ...(version != null ? { _v: String(version) } : {}),
   })
   return `${GEOSERVER_DEFAULT_URL}/wms?${params.toString()}`

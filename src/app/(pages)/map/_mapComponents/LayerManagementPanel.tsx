@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Settings, ChevronDown, ChevronRight, X, Search, SlidersHorizontal, Palette, Trash2, Star } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { getGeoServerBase } from '@/lib/geoserverUrl';
 import { WORKSPACE } from './layerFactory/serviceLayerFactory';
 import type { LayerFilterRow } from './map-layergroup-bar';
 
@@ -35,13 +36,6 @@ function serviceLayersForGroup(
   return tableList.filter(
     (row) => (String(row.define_table_group ?? '').trim() || '(미분류)') === groupKey
   );
-}
-
-function getGeoServerBase(): string {
-  if (typeof window !== 'undefined') {
-    return `${window.location.protocol}//${window.location.hostname}:8080/geoserver`;
-  }
-  return 'http://localhost:8080/geoserver';
 }
 
 /** GeoServer WMS GetLegendGraphic URL (범례 이미지) */

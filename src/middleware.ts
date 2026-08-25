@@ -1,5 +1,5 @@
 import { auth } from '@/auth';
-import { NextResponse } from 'next/server';
+import { NextResponse, type NextRequest } from 'next/server';
 
 /** CSS/JS·이미지 등 — basePath(/프로젝트명) 뒤에서도 인증 리다이렉트 금지 */
 function isStaticAssetPath(pathname: string): boolean {
@@ -12,11 +12,29 @@ function isStaticAssetPath(pathname: string): boolean {
   );
 }
 
+/** basePath 유지한 앱 루트 URL (게이트에서 `/`로 떨어지지 않게) */
+function appHomeUrl(req: NextRequest): URL {
+  const home = req.nextUrl.clone();
+  home.pathname = '/';
+  home.search = '';
+  home.hash = '';
+  return home;
+}
+
 export default auth((req) => {
   const path = req.nextUrl.pathname;
 
   // basePath 사용 시 matcher만으로는 _next 제외가 깨질 수 있음 → 핸들러에서도 방어
   if (isStaticAssetPath(path)) return NextResponse.next();
+
+  // GeoServer 동일출처 프록시 (WMS img 등) — 로그인 리다이렉트 금지
+  if (
+    path === '/geoserver' ||
+    path.startsWith('/geoserver/') ||
+    path.includes('/geoserver/')
+  ) {
+    return NextResponse.next();
+  }
 
   const isApiAuth = path.startsWith('/api/auth');
   const isApi = path.startsWith('/api');
@@ -30,7 +48,7 @@ export default auth((req) => {
     if (path === '/signup' || path.startsWith('/signup/')) return NextResponse.next();
     if (path === '/notice' || path.startsWith('/notice/')) return NextResponse.next();
     if (path === '/library' || path.startsWith('/library/')) return NextResponse.next();
-    const home = new URL('/', req.nextUrl);
+    const home = appHomeUrl(req);
     const dest = path + req.nextUrl.search;
     home.searchParams.set('next', dest);
     home.searchParams.set('openLogin', '1');
@@ -38,7 +56,7 @@ export default auth((req) => {
   }
 
   if (loggedIn && path === '/login') {
-    return NextResponse.redirect(new URL('/', req.nextUrl));
+    return NextResponse.redirect(appHomeUrl(req));
   }
 
   return NextResponse.next();

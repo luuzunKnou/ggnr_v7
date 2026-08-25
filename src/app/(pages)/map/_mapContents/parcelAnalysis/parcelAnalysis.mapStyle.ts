@@ -68,6 +68,8 @@ export function createParcelAnalysisBasemapSource(url: string): XYZ {
   return new XYZ({
     url,
     crossOrigin: 'anonymous',
+    /** VWorld 원본 타일 상한 — 이보다 확대되면 z19를 확대해서 씀(단색 폴백 방지) */
+    maxZoom: PARCEL_ANALYSIS_BASEMAP_TILE_MAX_ZOOM,
     tileLoadFunction: (tile: Tile, src: string) => {
       if (!(tile instanceof ImageTile)) return;
       const image = tile.getImage();
@@ -101,8 +103,17 @@ export function createParcelAnalysisBasemapSource(url: string): XYZ {
   });
 }
 
-/** 캡처·테마 지도 최대 줌 (VWorld 타일 상한과 동일) */
-export const PARCEL_ANALYSIS_MAP_MAX_ZOOM = 19;
+/**
+ * 브이월드 원본 타일 상한.
+ * 화면 줌이 더 커도 타일은 여기까지만 요청하고, 그 위는 오버줌(확대)한다.
+ */
+export const PARCEL_ANALYSIS_BASEMAP_TILE_MAX_ZOOM = 19;
+
+/**
+ * 결과 지도 view.fit 최대 줌.
+ * 소형 영역이 프레임 ~90%를 채우도록 타일 상한(19)보다 높게 둔다.
+ */
+export const PARCEL_ANALYSIS_MAP_MAX_ZOOM = 24;
 
 /**
  * 결과 지도(테마·캡처) — 휠·드래그·핀치·줌 UI 없음.
@@ -157,8 +168,25 @@ export function toCaptureDisplayGeometry(geom: Geometry): Geometry {
   return geom.clone();
 }
 
-/** view.fit 여백(px) — 분석 영역 외곽선이 잘리지 않도록 */
-export const PARCEL_ANALYSIS_MAP_FIT_PADDING: [number, number, number, number] = [20, 20, 20, 20];
+/** view.fit 여백(px) — 레거시·기타 fit용 (결과 지도는 VIEWPORT_FILL 사용) */
+export const PARCEL_ANALYSIS_MAP_FIT_PADDING: [number, number, number, number] = [12, 12, 12, 12];
+
+/**
+ * 결과 지도(캡처·소유자·지목) — 분석 영역이 프레임에서 차지할 목표 비율.
+ * 짧은 변(보통 높이) 기준으로 넘치지 않게 contain. 0.9 = 프레임의 약 90%.
+ */
+export const PARCEL_ANALYSIS_RESULT_MAP_VIEWPORT_FILL = 0.9;
+
+/** fill 비율에 맞는 view.fit padding [top, right, bottom, left] */
+export function paddingForViewportFill(
+  mapSize: [number, number],
+  fillRatio = PARCEL_ANALYSIS_RESULT_MAP_VIEWPORT_FILL
+): [number, number, number, number] {
+  const fill = Math.min(1, Math.max(0.1, fillRatio));
+  const padX = Math.max(0, Math.round((mapSize[0] * (1 - fill)) / 2));
+  const padY = Math.max(0, Math.round((mapSize[1] * (1 - fill)) / 2));
+  return [padY, padX, padY, padX];
+}
 
 /**
  * 분석 영역 바깥 마스크 외곽 링.
@@ -285,23 +313,22 @@ export function applyThemeMapHomeView(
   mapSize: [number, number],
   options?: {
     padding?: [number, number, number, number];
-    /** 1보다 작으면 fit 후 확대(선택 영역이 프레임에 더 크게). 기본 1 */
+    /** 프레임에서 영역이 차지할 비율(넘치지 않음). padding보다 우선. 기본 0.9 */
+    viewportFill?: number;
+    /** @deprecated viewportFill 사용. 호환용 — 무시됨 */
     zoomInFactor?: number;
   }
 ): ThemeMapHomeView {
-  const padding = options?.padding ?? PARCEL_ANALYSIS_MAP_FIT_PADDING;
-  const zoomInFactor = options?.zoomInFactor ?? 1;
+  const padding =
+    options?.padding ??
+    paddingForViewportFill(mapSize, options?.viewportFill ?? PARCEL_ANALYSIS_RESULT_MAP_VIEWPORT_FILL);
   view.fit(analysisExtent, {
     size: mapSize,
     padding,
     maxZoom: PARCEL_ANALYSIS_MAP_MAX_ZOOM,
   });
 
-  let homeResolution = view.getResolution() ?? 1;
-  if (zoomInFactor > 0 && zoomInFactor < 1) {
-    homeResolution = homeResolution * zoomInFactor;
-    view.setResolution(homeResolution);
-  }
+  const homeResolution = view.getResolution() ?? 1;
   const minResolution = homeResolution / PARCEL_THEME_MAP_MIN_AREA_VISIBLE_RATIO;
   const minZoom = view.getZoomForResolution(minResolution);
   view.setMaxZoom(PARCEL_ANALYSIS_MAP_MAX_ZOOM);

@@ -3,66 +3,66 @@
 
 @custom-variant dark (&:is(.dark *));
 
-/* S-Core Dream (public/font/SCDREAM1~9.OTF) */
+/* S-Core Dream (public/font/SCDREAM1~9.OTF) — 상대경로로 basePath 반영 */
 @font-face {
   font-family: "S-Core Dream";
-  src: url("/font/SCDREAM1.OTF") format("opentype");
+  src: url("../../public/font/SCDREAM1.OTF") format("opentype");
   font-weight: 100;
   font-style: normal;
   font-display: swap;
 }
 @font-face {
   font-family: "S-Core Dream";
-  src: url("/font/SCDREAM2.OTF") format("opentype");
+  src: url("../../public/font/SCDREAM2.OTF") format("opentype");
   font-weight: 200;
   font-style: normal;
   font-display: swap;
 }
 @font-face {
   font-family: "S-Core Dream";
-  src: url("/font/SCDREAM3.OTF") format("opentype");
+  src: url("../../public/font/SCDREAM3.OTF") format("opentype");
   font-weight: 300;
   font-style: normal;
   font-display: swap;
 }
 @font-face {
   font-family: "S-Core Dream";
-  src: url("/font/SCDREAM4.OTF") format("opentype");
+  src: url("../../public/font/SCDREAM4.OTF") format("opentype");
   font-weight: 400;
   font-style: normal;
   font-display: swap;
 }
 @font-face {
   font-family: "S-Core Dream";
-  src: url("/font/SCDREAM5.OTF") format("opentype");
+  src: url("../../public/font/SCDREAM5.OTF") format("opentype");
   font-weight: 500;
   font-style: normal;
   font-display: swap;
 }
 @font-face {
   font-family: "S-Core Dream";
-  src: url("/font/SCDREAM6.OTF") format("opentype");
+  src: url("../../public/font/SCDREAM6.OTF") format("opentype");
   font-weight: 700;
   font-style: normal;
   font-display: swap;
 }
 @font-face {
   font-family: "S-Core Dream";
-  src: url("/font/SCDREAM7.OTF") format("opentype");
+  src: url("../../public/font/SCDREAM7.OTF") format("opentype");
   font-weight: 800;
   font-style: normal;
   font-display: swap;
 }
 @font-face {
   font-family: "S-Core Dream";
-  src: url("/font/SCDREAM8.OTF") format("opentype");
+  src: url("../../public/font/SCDREAM8.OTF") format("opentype");
   font-weight: 800;
   font-style: normal;
   font-display: swap;
 }
 @font-face {
   font-family: "S-Core Dream";
-  src: url("/font/SCDREAM9.OTF") format("opentype");
+  src: url("../../public/font/SCDREAM9.OTF") format("opentype");
   font-weight: 900;
   font-style: normal;
   font-display: swap;
@@ -319,6 +319,33 @@
 .input-date-primary::-webkit-calendar-picker-indicator {
   filter: invert(48%) sepia(79%) saturate(2476%) hue-rotate(152deg) brightness(95%) contrast(91%);
   cursor: pointer;
+}
+
+/*
+ * 대장 서식처럼 좁은 표 칸 안의 date input.
+ * line-height:1 이면 내부 편집 영역이 글자보다 낮아 연·월·일이 위아래로 잘리고,
+ * 기본 달력 아이콘(약 16px)이 남은 폭을 먹어 일자가 가려진다.
+ */
+.input-date-compact {
+  line-height: normal;
+}
+.input-date-compact::-webkit-datetime-edit,
+.input-date-compact::-webkit-datetime-edit-fields-wrapper {
+  padding: 0;
+  line-height: normal;
+  overflow: visible;
+}
+.input-date-compact::-webkit-calendar-picker-indicator {
+  width: 11px;
+  height: 11px;
+  padding: 0;
+  margin: 0 0 0 1px;
+  opacity: 0.55;
+  cursor: pointer;
+}
+.input-date-compact::-webkit-clear-button,
+.input-date-compact::-webkit-inner-spin-button {
+  display: none;
 }
 
 /* a, button 기본 마우스 포인트 설정 */
