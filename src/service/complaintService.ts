@@ -10,8 +10,14 @@ import {
   createOrUpdateGeoServerLayer,
   getGeoServerLayerList,
   getGeoServerStyleList,
+  getLayerGeometryType,
   setLayerDefaultStyle,
 } from '@/service/devTestService';
+import {
+  deleteTableRowByKey,
+  insertTableRow,
+  updateTableRowByKey,
+} from '@/service/layerRowService';
 
 const DEFAULT_LIMIT = 50;
 const MAX_LIMIT = 200;
@@ -20,8 +26,9 @@ const COMP_LAYER_ID = 'comp';
 const COMP_TABLE_SQL = 'layer."comp"';
 
 /**
- * 민원관리 WMS: GeoServer 레이어·스타일 없으면 생성.
- * 스타일이 이미 있으면 덮어쓰지 않는다. (테이블은 layer.comp 실테이블)
+ * 민원관리 WMS: GeoServer 레이어·스타일 확보.
+ * geom 컬럼 추가 후 구 FeatureType(도형 없음·POLYGON 오인)이 남으면 재생성한다.
+ * 스타일이 이미 있으면 덮어쓰지 않는다.
  */
 export async function ensureWmsLayer(): Promise<{
   success: boolean;
@@ -35,7 +42,16 @@ export async function ensureWmsLayer(): Promise<{
   try {
     const listRes = await getGeoServerLayerList();
     const layerNames = (listRes.layers ?? []).map((n) => String(n).toLowerCase());
-    if (!layerNames.includes(COMP_LAYER_ID)) {
+    const layerExists = layerNames.includes(COMP_LAYER_ID);
+
+    let needsPublish = !layerExists;
+    if (layerExists) {
+      const geomType = await getLayerGeometryType({ layerName: COMP_LAYER_ID });
+      // POINT가 아니면 geom 반영 전 FeatureType이거나 메타 오류 → 재발행
+      needsPublish = !geomType.success || geomType.geometryType !== 'POINT';
+    }
+
+    if (needsPublish) {
       const layerRes = await createOrUpdateGeoServerLayer({ layerName: COMP_LAYER_ID });
       if (!layerRes.success) {
         return {
@@ -83,10 +99,44 @@ function emptyToNull(s: string | null | undefined): string | null {
   return t === '' ? null : t;
 }
 
+async function wkt5181FromLonLat4326(lon: number, lat: number): Promise<string | null> {
+  try {
+    const res = await db.execute(
+      sql.raw(
+        `SELECT ST_AsText(ST_Transform(ST_SetSRID(ST_MakePoint(${lon}, ${lat}), 4326), 5181)) AS wkt`
+      )
+    );
+    const wkt = String((res.rows?.[0] as { wkt?: string } | undefined)?.wkt ?? '').trim();
+    return wkt || null;
+  } catch {
+    return null;
+  }
+}
+
+async function resolveCompGeomWkt5181(params: {
+  compAdr?: string | null;
+  lon?: number | string | null;
+  lat?: number | string | null;
+}): Promise<{ geomWkt5181: string | null; geomClear: boolean }> {
+  const adr = emptyToNull(params.compAdr);
+  let lonLat = parseLonLat(params.lon, params.lat);
+  if (!lonLat && adr) {
+    lonLat = await fetchCoordFromAddress(adr);
+  }
+  if (!lonLat) return { geomWkt5181: null, geomClear: true };
+  const wkt = await wkt5181FromLonLat4326(lonLat.lon, lonLat.lat);
+  if (!wkt) return { geomWkt5181: null, geomClear: true };
+  return { geomWkt5181: wkt, geomClear: false };
+}
+
 function parseLonLat(
   lon?: number | string | null,
   lat?: number | string | null
 ): { lon: number; lat: number } | null {
+  // Number(null)===0 이라 null/빈값은 좌표 없음으로 처리 (0,0 오인 방지)
+  if (lon == null || lat == null) return null;
+  if (typeof lon === 'string' && lon.trim() === '') return null;
+  if (typeof lat === 'string' && lat.trim() === '') return null;
   const x = Number(lon);
   const y = Number(lat);
   if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
@@ -124,11 +174,17 @@ async function syncCompGeomFromAddress(params: {
       )
     );
   } catch (e: unknown) {
-    const msg = e instanceof Error ? e.message : String(e);
-    // 컬럼 미적용 DB에서도 접수 저장은 유지
-    if (/column .*geom.* does not exist/i.test(msg) || /geom.*존재하지/i.test(msg)) {
+    const err = e as { cause?: { message?: string; code?: string }; message?: string };
+    const msg = [err.message, err.cause?.message, String(e)].filter(Boolean).join(' ');
+    // 컬럼 미적용·권한·투영 실패 등이어도 접수 저장은 유지
+    if (
+      /column .*geom.* does not exist/i.test(msg) ||
+      /geom.*존재하지/i.test(msg) ||
+      /Failed query:[\s\S]*["']?geom["']?/i.test(msg)
+    ) {
       console.warn(
-        '[complaintService] layer.comp.geom 컬럼이 없습니다. ALTER TABLE layer.comp ADD COLUMN geom geometry(Point,5181); 후 다시 저장하세요.'
+        '[complaintService] layer.comp.geom 갱신 실패(접수는 저장됨):',
+        msg.slice(0, 300)
       );
       return;
     }
@@ -177,7 +233,7 @@ export async function list(params: {
   return { rows: rowsWithState, total };
 }
 
-/** 단건 조회 + 처리내역(compd) 목록 + 지도 이동용 extent3857 */
+/** 단건 조회 + 처리내역(compd) 목록 + 지도 이동용 extent3857 + 하이라이트용 geom(EPSG:4326) */
 export async function get(params: { compKey: number }) {
   const key = Number(params?.compKey);
   if (!Number.isInteger(key) || key < 1) return null;
@@ -198,7 +254,30 @@ export async function get(params: { compKey: number }) {
     extent3857 = await getCompExtent3857(key);
   }
 
-  return { ...row, compdList, extent3857 };
+  const geomGeoJson4326 = await getCompGeomGeoJson4326(key);
+
+  return { ...row, compdList, extent3857, geomGeoJson4326 };
+}
+
+/** comp.geom → GeoJSON (EPSG:4326). 하이라이트용 */
+async function getCompGeomGeoJson4326(compKey: number): Promise<Record<string, unknown> | null> {
+  try {
+    const res = await db.execute(
+      sql.raw(
+        `SELECT ST_AsGeoJSON(ST_Transform(geom, 4326))::text AS g
+         FROM ${COMP_TABLE_SQL}
+         WHERE "comp_key" = ${compKey} AND geom IS NOT NULL
+         LIMIT 1`
+      )
+    );
+    const raw = (res.rows?.[0] as { g?: unknown } | undefined)?.g;
+    if (typeof raw !== 'string' || !raw.trim()) return null;
+    const parsed = JSON.parse(raw) as unknown;
+    if (!parsed || typeof parsed !== 'object') return null;
+    return parsed as Record<string, unknown>;
+  } catch {
+    return null;
+  }
 }
 
 /** comp.geom → EPSG:3857 점 extent (없으면 null) */
@@ -271,40 +350,45 @@ export async function create(params: {
   lat?: number | string | null;
 }) {
   try {
-    const [inserted] = await db
-      .insert(comp)
-      .values({
-        compDate: emptyToNull(params.compDate),
-        compCu: emptyToNull(params.compCu),
-        compCt: emptyToNull(params.compCt),
-        compCg: emptyToNull(params.compCg),
-        compAdr: emptyToNull(params.compAdr),
-        compName: emptyToNull(params.compName),
-        compTel: emptyToNull(params.compTel),
-        compContent: emptyToNull(params.compContent),
-        compExtra: params.compExtra ?? null,
-      })
-      .returning();
-    if (!inserted) return null;
+    const geom = await resolveCompGeomWkt5181({
+      compAdr: params.compAdr,
+      lon: params.lon,
+      lat: params.lat,
+    });
+    const inserted = await insertTableRow({
+      table: 'comp',
+      schema: 'layer',
+      keyField: 'comp_key',
+      values: {
+        comp_date: emptyToNull(params.compDate),
+        comp_cu: emptyToNull(params.compCu),
+        comp_ct: emptyToNull(params.compCt),
+        comp_cg: emptyToNull(params.compCg),
+        comp_adr: emptyToNull(params.compAdr),
+        comp_name: emptyToNull(params.compName),
+        comp_tel: emptyToNull(params.compTel),
+        comp_content: emptyToNull(params.compContent),
+        comp_extra: params.compExtra ?? null,
+      },
+      allowPhysicalColumns: true,
+      geomWkt5181: geom.geomWkt5181,
+    });
+    if (!inserted.success) {
+      throw Object.assign(new Error(inserted.error ?? '등록에 실패했습니다.'), {
+        detail: inserted.error,
+      });
+    }
+    const compKey = Number(inserted.keyValue);
+    if (!Number.isInteger(compKey) || compKey < 1) return null;
 
     await ensureInitialReceiptHistory({
-      compKey: inserted.compKey,
+      compKey,
       compCu: params.compCu,
       compCt: params.compCt,
       compCg: params.compCg,
     });
 
-    await syncCompGeomFromAddress({
-      compKey: inserted.compKey,
-      compAdr: params.compAdr,
-      lon: params.lon,
-      lat: params.lat,
-    });
-
-    const [withGeom] = await db.select().from(comp).where(eq(comp.compKey, inserted.compKey)).limit(1);
-    if (!withGeom) return inserted;
-    // 생성 직후 상세·지도 이동용 extent 포함
-    return (await get({ compKey: inserted.compKey })) ?? withGeom;
+    return (await get({ compKey })) ?? null;
   } catch (e: unknown) {
     const err = e as { code?: string; detail?: string; message?: string };
     const msg = err.detail || err.message || String(e);
@@ -330,31 +414,26 @@ export async function update(params: {
   const key = Number(params.compKey);
   if (!Number.isInteger(key) || key < 1) return null;
 
-  const set: Record<string, unknown> = {};
-  if (params.compDate !== undefined) set.compDate = emptyToNull(params.compDate);
-  if (params.compCu !== undefined) set.compCu = emptyToNull(params.compCu);
-  if (params.compCt !== undefined) set.compCt = emptyToNull(params.compCt);
-  if (params.compCg !== undefined) set.compCg = emptyToNull(params.compCg);
-  if (params.compAdr !== undefined) set.compAdr = emptyToNull(params.compAdr);
-  if (params.compName !== undefined) set.compName = emptyToNull(params.compName);
-  if (params.compTel !== undefined) set.compTel = emptyToNull(params.compTel);
-  if (params.compContent !== undefined) set.compContent = emptyToNull(params.compContent);
-  if (params.compExtra !== undefined) set.compExtra = params.compExtra;
+  const changes: Record<string, unknown> = {};
+  if (params.compDate !== undefined) changes.comp_date = emptyToNull(params.compDate);
+  if (params.compCu !== undefined) changes.comp_cu = emptyToNull(params.compCu);
+  if (params.compCt !== undefined) changes.comp_ct = emptyToNull(params.compCt);
+  if (params.compCg !== undefined) changes.comp_cg = emptyToNull(params.compCg);
+  if (params.compAdr !== undefined) changes.comp_adr = emptyToNull(params.compAdr);
+  if (params.compName !== undefined) changes.comp_name = emptyToNull(params.compName);
+  if (params.compTel !== undefined) changes.comp_tel = emptyToNull(params.compTel);
+  if (params.compContent !== undefined) changes.comp_content = emptyToNull(params.compContent);
+  if (params.compExtra !== undefined) changes.comp_extra = params.compExtra;
 
   const shouldSyncGeom =
     params.compAdr !== undefined || params.lon !== undefined || params.lat !== undefined;
 
-  if (Object.keys(set).length === 0 && !shouldSyncGeom) {
+  if (Object.keys(changes).length === 0 && !shouldSyncGeom) {
     return (await get({ compKey: key })) ?? null;
   }
 
-  if (Object.keys(set).length > 0) {
-    await db
-      .update(comp)
-      .set(set as Partial<typeof comp.$inferInsert>)
-      .where(eq(comp.compKey, key));
-  }
-
+  let geomWkt5181: string | null = null;
+  let geomClear = false;
   if (shouldSyncGeom) {
     let adr = params.compAdr;
     if (adr === undefined) {
@@ -365,11 +444,28 @@ export async function update(params: {
         .limit(1);
       adr = cur?.compAdr ?? null;
     }
-    await syncCompGeomFromAddress({
-      compKey: key,
+    const geom = await resolveCompGeomWkt5181({
       compAdr: adr,
       lon: params.lon,
       lat: params.lat,
+    });
+    geomWkt5181 = geom.geomWkt5181;
+    geomClear = geom.geomClear;
+  }
+
+  const updated = await updateTableRowByKey({
+    table: 'comp',
+    schema: 'layer',
+    keyField: 'comp_key',
+    keyValue: key,
+    changes,
+    allowPhysicalColumns: true,
+    geomWkt5181,
+    geomClear,
+  });
+  if (!updated.success) {
+    throw Object.assign(new Error(updated.error ?? '수정에 실패했습니다.'), {
+      detail: updated.error,
     });
   }
 
@@ -450,8 +546,15 @@ export async function remove(params: { compKey: number }) {
   const key = Number(params.compKey);
   if (!Number.isInteger(key) || key < 1) return { deleted: false };
 
-  await db.delete(comp).where(eq(comp.compKey, key));
-  return { deleted: true };
+  const result = await deleteTableRowByKey({
+    table: 'comp',
+    schema: 'layer',
+    keyField: 'comp_key',
+    keyValue: key,
+    childTableNames: ['compd'],
+    childParentField: 'comp_key',
+  });
+  return { deleted: result.success === true };
 }
 
 /** 민원관리 메뉴 진입 시 전체 위치(comp.geom) extent — EPSG:3857 */

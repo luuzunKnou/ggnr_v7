@@ -1,0 +1,9317 @@
+[
+  {
+    "id": "vp-1",
+    "eup": "영양읍",
+    "village": "동부1",
+    "team": "A조",
+    "name": "김경묵",
+    "affiliation": "이장",
+    "phone": "010-4800-7753"
+  },
+  {
+    "id": "vp-2",
+    "eup": "영양읍",
+    "village": "동부1",
+    "team": "B조",
+    "name": "강성훈",
+    "affiliation": "지도자",
+    "phone": "010-4199-0948"
+  },
+  {
+    "id": "vp-3",
+    "eup": "영양읍",
+    "village": "동부1",
+    "team": "C조",
+    "name": "김경묵",
+    "affiliation": "이장",
+    "phone": "010-4800-7753"
+  },
+  {
+    "id": "vp-4",
+    "eup": "영양읍",
+    "village": "동부1",
+    "team": "A조",
+    "name": "이재동",
+    "affiliation": "공무원",
+    "phone": "010-4509-2966"
+  },
+  {
+    "id": "vp-5",
+    "eup": "영양읍",
+    "village": "동부1",
+    "team": "B조",
+    "name": "최지희",
+    "affiliation": "공무원",
+    "phone": "010-4538-3150"
+  },
+  {
+    "id": "vp-6",
+    "eup": "영양읍",
+    "village": "동부1",
+    "team": "C조",
+    "name": "이재동",
+    "affiliation": "공무원",
+    "phone": "010-4509-2966"
+  },
+  {
+    "id": "vp-7",
+    "eup": "영양읍",
+    "village": "동부1",
+    "team": "A조",
+    "name": "강성훈",
+    "affiliation": "지도자",
+    "phone": "010-4199-0948"
+  },
+  {
+    "id": "vp-8",
+    "eup": "영양읍",
+    "village": "동부1",
+    "team": "B조",
+    "name": "김경묵",
+    "affiliation": "이장",
+    "phone": "010-4800-7753"
+  },
+  {
+    "id": "vp-9",
+    "eup": "영양읍",
+    "village": "동부1",
+    "team": "C조",
+    "name": "강성훈",
+    "affiliation": "지도자",
+    "phone": "010-4199-0948"
+  },
+  {
+    "id": "vp-10",
+    "eup": "영양읍",
+    "village": "동부2",
+    "team": "A조",
+    "name": "금재연",
+    "affiliation": "이장",
+    "phone": "010-6288-3338"
+  },
+  {
+    "id": "vp-11",
+    "eup": "영양읍",
+    "village": "동부2",
+    "team": "B조",
+    "name": "김영관",
+    "affiliation": "의용소방대",
+    "phone": "010-3538-2332"
+  },
+  {
+    "id": "vp-12",
+    "eup": "영양읍",
+    "village": "동부2",
+    "team": "C조",
+    "name": "금재연",
+    "affiliation": "이장",
+    "phone": "010-6288-3338"
+  },
+  {
+    "id": "vp-13",
+    "eup": "영양읍",
+    "village": "동부2",
+    "team": "A조",
+    "name": "강원경",
+    "affiliation": "공무원",
+    "phone": "010-4810-1783"
+  },
+  {
+    "id": "vp-14",
+    "eup": "영양읍",
+    "village": "동부2",
+    "team": "B조",
+    "name": "최지희",
+    "affiliation": "공무원",
+    "phone": "010-4538-3150"
+  },
+  {
+    "id": "vp-15",
+    "eup": "영양읍",
+    "village": "동부2",
+    "team": "C조",
+    "name": "강원경",
+    "affiliation": "공무원",
+    "phone": "010-4810-1783"
+  },
+  {
+    "id": "vp-16",
+    "eup": "영양읍",
+    "village": "동부2",
+    "team": "A조",
+    "name": "김영관",
+    "affiliation": "의용소방대",
+    "phone": "010-3538-2332"
+  },
+  {
+    "id": "vp-17",
+    "eup": "영양읍",
+    "village": "동부2",
+    "team": "B조",
+    "name": "금재연",
+    "affiliation": "이장",
+    "phone": "010-6288-3338"
+  },
+  {
+    "id": "vp-18",
+    "eup": "영양읍",
+    "village": "동부2",
+    "team": "C조",
+    "name": "김영관",
+    "affiliation": "의용소방대",
+    "phone": "010-3538-2332"
+  },
+  {
+    "id": "vp-19",
+    "eup": "영양읍",
+    "village": "서부1",
+    "team": "A조",
+    "name": "신승배",
+    "affiliation": "이장",
+    "phone": "010-5319-2738"
+  },
+  {
+    "id": "vp-20",
+    "eup": "영양읍",
+    "village": "서부1",
+    "team": "B조",
+    "name": "남현욱",
+    "affiliation": "의용소방대",
+    "phone": "010-9366-3498"
+  },
+  {
+    "id": "vp-21",
+    "eup": "영양읍",
+    "village": "서부1",
+    "team": "C조",
+    "name": "신승배",
+    "affiliation": "이장",
+    "phone": "010-5319-2738"
+  },
+  {
+    "id": "vp-22",
+    "eup": "영양읍",
+    "village": "서부1",
+    "team": "A조",
+    "name": "김태구",
+    "affiliation": "공무원",
+    "phone": "010-9178-6677"
+  },
+  {
+    "id": "vp-23",
+    "eup": "영양읍",
+    "village": "서부1",
+    "team": "B조",
+    "name": "박진경",
+    "affiliation": "공무원",
+    "phone": "010-2967-6996"
+  },
+  {
+    "id": "vp-24",
+    "eup": "영양읍",
+    "village": "서부1",
+    "team": "C조",
+    "name": "김태구",
+    "affiliation": "공무원",
+    "phone": "010-9178-6677"
+  },
+  {
+    "id": "vp-25",
+    "eup": "영양읍",
+    "village": "서부1",
+    "team": "A조",
+    "name": "이우형",
+    "affiliation": "",
+    "phone": "010-3761-1585"
+  },
+  {
+    "id": "vp-26",
+    "eup": "영양읍",
+    "village": "서부1",
+    "team": "B조",
+    "name": "신승배",
+    "affiliation": "이장",
+    "phone": "010-5319-2738"
+  },
+  {
+    "id": "vp-27",
+    "eup": "영양읍",
+    "village": "서부1",
+    "team": "C조",
+    "name": "이우형",
+    "affiliation": "",
+    "phone": "010-3761-1585"
+  },
+  {
+    "id": "vp-28",
+    "eup": "영양읍",
+    "village": "서부2",
+    "team": "A조",
+    "name": "김연직",
+    "affiliation": "이장",
+    "phone": "010-3538-3161"
+  },
+  {
+    "id": "vp-29",
+    "eup": "영양읍",
+    "village": "서부2",
+    "team": "B조",
+    "name": "권재우",
+    "affiliation": "의용소방대",
+    "phone": "010-3506-7354"
+  },
+  {
+    "id": "vp-30",
+    "eup": "영양읍",
+    "village": "서부2",
+    "team": "C조",
+    "name": "권재우",
+    "affiliation": "의용소방대",
+    "phone": "010-3506-7354"
+  },
+  {
+    "id": "vp-31",
+    "eup": "영양읍",
+    "village": "서부2",
+    "team": "A조",
+    "name": "김경업",
+    "affiliation": "공무원",
+    "phone": "010-3871-3772"
+  },
+  {
+    "id": "vp-32",
+    "eup": "영양읍",
+    "village": "서부2",
+    "team": "B조",
+    "name": "박진경",
+    "affiliation": "공무원",
+    "phone": "010-2967-6996"
+  },
+  {
+    "id": "vp-33",
+    "eup": "영양읍",
+    "village": "서부2",
+    "team": "C조",
+    "name": "김경업",
+    "affiliation": "공무원",
+    "phone": "010-3871-3772"
+  },
+  {
+    "id": "vp-34",
+    "eup": "영양읍",
+    "village": "서부2",
+    "team": "A조",
+    "name": "권재우",
+    "affiliation": "의용소방대",
+    "phone": "010-3506-7354"
+  },
+  {
+    "id": "vp-35",
+    "eup": "영양읍",
+    "village": "서부2",
+    "team": "B조",
+    "name": "김연직",
+    "affiliation": "이장",
+    "phone": "010-3538-3161"
+  },
+  {
+    "id": "vp-36",
+    "eup": "영양읍",
+    "village": "서부2",
+    "team": "C조",
+    "name": "김연직",
+    "affiliation": "이장",
+    "phone": "010-3538-3161"
+  },
+  {
+    "id": "vp-37",
+    "eup": "영양읍",
+    "village": "서부3",
+    "team": "A조",
+    "name": "권용우",
+    "affiliation": "이장",
+    "phone": "010-3522-2449"
+  },
+  {
+    "id": "vp-38",
+    "eup": "영양읍",
+    "village": "서부3",
+    "team": "B조",
+    "name": "장오용",
+    "affiliation": "",
+    "phone": "010-9382-9027"
+  },
+  {
+    "id": "vp-39",
+    "eup": "영양읍",
+    "village": "서부3",
+    "team": "C조",
+    "name": "권용우",
+    "affiliation": "이장",
+    "phone": "010-3522-2449"
+  },
+  {
+    "id": "vp-40",
+    "eup": "영양읍",
+    "village": "서부3",
+    "team": "A조",
+    "name": "김명인",
+    "affiliation": "공무원",
+    "phone": "010-6294-6890"
+  },
+  {
+    "id": "vp-41",
+    "eup": "영양읍",
+    "village": "서부3",
+    "team": "B조",
+    "name": "임미진",
+    "affiliation": "공무원",
+    "phone": "010-7176-8226"
+  },
+  {
+    "id": "vp-42",
+    "eup": "영양읍",
+    "village": "서부3",
+    "team": "C조",
+    "name": "김명인",
+    "affiliation": "공무원",
+    "phone": "010-6294-6890"
+  },
+  {
+    "id": "vp-43",
+    "eup": "영양읍",
+    "village": "서부3",
+    "team": "A조",
+    "name": "장오용",
+    "affiliation": "",
+    "phone": "010-9382-9027"
+  },
+  {
+    "id": "vp-44",
+    "eup": "영양읍",
+    "village": "서부3",
+    "team": "B조",
+    "name": "권용우",
+    "affiliation": "이장",
+    "phone": "010-3522-2449"
+  },
+  {
+    "id": "vp-45",
+    "eup": "영양읍",
+    "village": "서부3",
+    "team": "C조",
+    "name": "장오용",
+    "affiliation": "",
+    "phone": "010-9382-9027"
+  },
+  {
+    "id": "vp-46",
+    "eup": "영양읍",
+    "village": "서부4",
+    "team": "A조",
+    "name": "권종훈",
+    "affiliation": "이장",
+    "phone": "010-3532-2654"
+  },
+  {
+    "id": "vp-47",
+    "eup": "영양읍",
+    "village": "서부4",
+    "team": "B조",
+    "name": "권건태",
+    "affiliation": "",
+    "phone": "010-8852-7254"
+  },
+  {
+    "id": "vp-48",
+    "eup": "영양읍",
+    "village": "서부4",
+    "team": "C조",
+    "name": "권종훈",
+    "affiliation": "이장·방재단",
+    "phone": "010-3532-2654"
+  },
+  {
+    "id": "vp-49",
+    "eup": "영양읍",
+    "village": "서부4",
+    "team": "A조",
+    "name": "강성훈",
+    "affiliation": "공무원",
+    "phone": "010-4547-0385"
+  },
+  {
+    "id": "vp-50",
+    "eup": "영양읍",
+    "village": "서부4",
+    "team": "B조",
+    "name": "임미진",
+    "affiliation": "공무원",
+    "phone": "010-7176-8226"
+  },
+  {
+    "id": "vp-51",
+    "eup": "영양읍",
+    "village": "서부4",
+    "team": "C조",
+    "name": "강성훈",
+    "affiliation": "공무원",
+    "phone": "010-4547-0385"
+  },
+  {
+    "id": "vp-52",
+    "eup": "영양읍",
+    "village": "서부4",
+    "team": "A조",
+    "name": "권건태",
+    "affiliation": "",
+    "phone": "010-8852-7254"
+  },
+  {
+    "id": "vp-53",
+    "eup": "영양읍",
+    "village": "서부4",
+    "team": "B조",
+    "name": "권종훈",
+    "affiliation": "이장",
+    "phone": "010-3532-2654"
+  },
+  {
+    "id": "vp-54",
+    "eup": "영양읍",
+    "village": "서부4",
+    "team": "C조",
+    "name": "권건태",
+    "affiliation": "",
+    "phone": "010-8852-7254"
+  },
+  {
+    "id": "vp-55",
+    "eup": "영양읍",
+    "village": "황용",
+    "team": "A조",
+    "name": "정휘대",
+    "affiliation": "이장",
+    "phone": "010-6651-3530"
+  },
+  {
+    "id": "vp-56",
+    "eup": "영양읍",
+    "village": "황용",
+    "team": "B조",
+    "name": "권태국",
+    "affiliation": "지도자",
+    "phone": "010-6679-2716"
+  },
+  {
+    "id": "vp-57",
+    "eup": "영양읍",
+    "village": "황용",
+    "team": "C조",
+    "name": "정휘대",
+    "affiliation": "이장",
+    "phone": "010-6651-3530"
+  },
+  {
+    "id": "vp-58",
+    "eup": "영양읍",
+    "village": "황용",
+    "team": "A조",
+    "name": "나승준",
+    "affiliation": "공무원",
+    "phone": "010-3439-1472"
+  },
+  {
+    "id": "vp-59",
+    "eup": "영양읍",
+    "village": "황용",
+    "team": "B조",
+    "name": "김혜림",
+    "affiliation": "공무원",
+    "phone": "010-7302-2411"
+  },
+  {
+    "id": "vp-60",
+    "eup": "영양읍",
+    "village": "황용",
+    "team": "C조",
+    "name": "나승준",
+    "affiliation": "공무원",
+    "phone": "010-3439-1472"
+  },
+  {
+    "id": "vp-61",
+    "eup": "영양읍",
+    "village": "황용",
+    "team": "A조",
+    "name": "권태국",
+    "affiliation": "지도자",
+    "phone": "010-6679-2716"
+  },
+  {
+    "id": "vp-62",
+    "eup": "영양읍",
+    "village": "황용",
+    "team": "B조",
+    "name": "정휘대",
+    "affiliation": "이장·방재단",
+    "phone": "010-6651-3530"
+  },
+  {
+    "id": "vp-63",
+    "eup": "영양읍",
+    "village": "황용",
+    "team": "C조",
+    "name": "권태국",
+    "affiliation": "지도자",
+    "phone": "010-6679-2716"
+  },
+  {
+    "id": "vp-64",
+    "eup": "영양읍",
+    "village": "현1",
+    "team": "A조",
+    "name": "신찬희",
+    "affiliation": "이장",
+    "phone": "010-8576-6252"
+  },
+  {
+    "id": "vp-65",
+    "eup": "영양읍",
+    "village": "현1",
+    "team": "B조",
+    "name": "김분희",
+    "affiliation": "지도자",
+    "phone": "010-8582-2917"
+  },
+  {
+    "id": "vp-66",
+    "eup": "영양읍",
+    "village": "현1",
+    "team": "C조",
+    "name": "신찬희",
+    "affiliation": "이장",
+    "phone": "010-8576-6252"
+  },
+  {
+    "id": "vp-67",
+    "eup": "영양읍",
+    "village": "현1",
+    "team": "A조",
+    "name": "오수호",
+    "affiliation": "공무원",
+    "phone": "010-6835-2508"
+  },
+  {
+    "id": "vp-68",
+    "eup": "영양읍",
+    "village": "현1",
+    "team": "B조",
+    "name": "김윤희",
+    "affiliation": "공무원",
+    "phone": "010-9358-3680"
+  },
+  {
+    "id": "vp-69",
+    "eup": "영양읍",
+    "village": "현1",
+    "team": "C조",
+    "name": "오수호",
+    "affiliation": "공무원",
+    "phone": "010-6835-2508"
+  },
+  {
+    "id": "vp-70",
+    "eup": "영양읍",
+    "village": "현1",
+    "team": "A조",
+    "name": "김분희",
+    "affiliation": "지도자",
+    "phone": "010-8582-2917"
+  },
+  {
+    "id": "vp-71",
+    "eup": "영양읍",
+    "village": "현1",
+    "team": "B조",
+    "name": "신찬희",
+    "affiliation": "이장",
+    "phone": "010-8576-6252"
+  },
+  {
+    "id": "vp-72",
+    "eup": "영양읍",
+    "village": "현1",
+    "team": "C조",
+    "name": "김분희",
+    "affiliation": "지도자",
+    "phone": "010-8582-2917"
+  },
+  {
+    "id": "vp-73",
+    "eup": "영양읍",
+    "village": "현2",
+    "team": "A조",
+    "name": "김형도",
+    "affiliation": "이장",
+    "phone": "010-2502-3655"
+  },
+  {
+    "id": "vp-74",
+    "eup": "영양읍",
+    "village": "현2",
+    "team": "B조",
+    "name": "추명엽",
+    "affiliation": "지도자",
+    "phone": "010-4522-2005"
+  },
+  {
+    "id": "vp-75",
+    "eup": "영양읍",
+    "village": "현2",
+    "team": "C조",
+    "name": "김형도",
+    "affiliation": "이장",
+    "phone": "010-2502-3655"
+  },
+  {
+    "id": "vp-76",
+    "eup": "영양읍",
+    "village": "현2",
+    "team": "A조",
+    "name": "김아름",
+    "affiliation": "공무원",
+    "phone": "010-4453-1972"
+  },
+  {
+    "id": "vp-77",
+    "eup": "영양읍",
+    "village": "현2",
+    "team": "B조",
+    "name": "김윤희",
+    "affiliation": "공무원",
+    "phone": "010-9358-3680"
+  },
+  {
+    "id": "vp-78",
+    "eup": "영양읍",
+    "village": "현2",
+    "team": "C조",
+    "name": "김아름",
+    "affiliation": "공무원",
+    "phone": "010-4453-1972"
+  },
+  {
+    "id": "vp-79",
+    "eup": "영양읍",
+    "village": "현2",
+    "team": "A조",
+    "name": "추명엽",
+    "affiliation": "지도자",
+    "phone": "010-4522-2005"
+  },
+  {
+    "id": "vp-80",
+    "eup": "영양읍",
+    "village": "현2",
+    "team": "B조",
+    "name": "김형도",
+    "affiliation": "이장",
+    "phone": "010-2502-3655"
+  },
+  {
+    "id": "vp-81",
+    "eup": "영양읍",
+    "village": "현2",
+    "team": "C조",
+    "name": "추명엽",
+    "affiliation": "지도자",
+    "phone": "010-4522-2005"
+  },
+  {
+    "id": "vp-82",
+    "eup": "영양읍",
+    "village": "현3",
+    "team": "A조",
+    "name": "신후선",
+    "affiliation": "이장",
+    "phone": "010-9447-2754"
+  },
+  {
+    "id": "vp-83",
+    "eup": "영양읍",
+    "village": "현3",
+    "team": "B조",
+    "name": "정명기",
+    "affiliation": "의용소방대",
+    "phone": "010-9094-8311"
+  },
+  {
+    "id": "vp-84",
+    "eup": "영양읍",
+    "village": "현3",
+    "team": "C조",
+    "name": "신후선",
+    "affiliation": "이장",
+    "phone": "010-9447-2754"
+  },
+  {
+    "id": "vp-85",
+    "eup": "영양읍",
+    "village": "현3",
+    "team": "A조",
+    "name": "이재남",
+    "affiliation": "공무원",
+    "phone": "010-4913-0514"
+  },
+  {
+    "id": "vp-86",
+    "eup": "영양읍",
+    "village": "현3",
+    "team": "B조",
+    "name": "두지현",
+    "affiliation": "공무원",
+    "phone": "010-3131-2480"
+  },
+  {
+    "id": "vp-87",
+    "eup": "영양읍",
+    "village": "현3",
+    "team": "C조",
+    "name": "이재남",
+    "affiliation": "공무원",
+    "phone": "010-4913-0514"
+  },
+  {
+    "id": "vp-88",
+    "eup": "영양읍",
+    "village": "현3",
+    "team": "A조",
+    "name": "강성일",
+    "affiliation": "지도자",
+    "phone": "010-4278-4122"
+  },
+  {
+    "id": "vp-89",
+    "eup": "영양읍",
+    "village": "현3",
+    "team": "B조",
+    "name": "신후선",
+    "affiliation": "이장",
+    "phone": "010-9447-2754"
+  },
+  {
+    "id": "vp-90",
+    "eup": "영양읍",
+    "village": "현3",
+    "team": "C조",
+    "name": "강성일",
+    "affiliation": "지도자",
+    "phone": "010-4278-4122"
+  },
+  {
+    "id": "vp-91",
+    "eup": "영양읍",
+    "village": "전곡",
+    "team": "A조",
+    "name": "김부종",
+    "affiliation": "이장",
+    "phone": "010-3116-4316"
+  },
+  {
+    "id": "vp-92",
+    "eup": "영양읍",
+    "village": "전곡",
+    "team": "B조",
+    "name": "최일해",
+    "affiliation": "의용소방대",
+    "phone": "010-4522-3705"
+  },
+  {
+    "id": "vp-93",
+    "eup": "영양읍",
+    "village": "전곡",
+    "team": "C조",
+    "name": "김부종",
+    "affiliation": "이장",
+    "phone": "010-3116-4316"
+  },
+  {
+    "id": "vp-94",
+    "eup": "영양읍",
+    "village": "전곡",
+    "team": "A조",
+    "name": "김인규",
+    "affiliation": "공무원",
+    "phone": "010-7228-5070"
+  },
+  {
+    "id": "vp-95",
+    "eup": "영양읍",
+    "village": "전곡",
+    "team": "B조",
+    "name": "두지현",
+    "affiliation": "공무원",
+    "phone": "010-3131-2480"
+  },
+  {
+    "id": "vp-96",
+    "eup": "영양읍",
+    "village": "전곡",
+    "team": "C조",
+    "name": "김인규",
+    "affiliation": "공무원",
+    "phone": "010-7228-5070"
+  },
+  {
+    "id": "vp-97",
+    "eup": "영양읍",
+    "village": "전곡",
+    "team": "A조",
+    "name": "김기두",
+    "affiliation": "지도자",
+    "phone": "010-9768-2144"
+  },
+  {
+    "id": "vp-98",
+    "eup": "영양읍",
+    "village": "전곡",
+    "team": "B조",
+    "name": "김부종",
+    "affiliation": "이장",
+    "phone": "010-3116-4316"
+  },
+  {
+    "id": "vp-99",
+    "eup": "영양읍",
+    "village": "전곡",
+    "team": "C조",
+    "name": "김기두",
+    "affiliation": "지도자",
+    "phone": "010-9768-2144"
+  },
+  {
+    "id": "vp-100",
+    "eup": "영양읍",
+    "village": "감천1",
+    "team": "A조",
+    "name": "오윤찬",
+    "affiliation": "이장",
+    "phone": "010-9066-7308"
+  },
+  {
+    "id": "vp-101",
+    "eup": "영양읍",
+    "village": "감천1",
+    "team": "B조",
+    "name": "이용진",
+    "affiliation": "의용소방대",
+    "phone": "010-6234-3013"
+  },
+  {
+    "id": "vp-102",
+    "eup": "영양읍",
+    "village": "감천1",
+    "team": "C조",
+    "name": "오윤찬",
+    "affiliation": "이장",
+    "phone": "010-9066-7308"
+  },
+  {
+    "id": "vp-103",
+    "eup": "영양읍",
+    "village": "감천1",
+    "team": "A조",
+    "name": "권혜인",
+    "affiliation": "공무원",
+    "phone": "010-7666-5241"
+  },
+  {
+    "id": "vp-104",
+    "eup": "영양읍",
+    "village": "감천1",
+    "team": "B조",
+    "name": "정다윤",
+    "affiliation": "공무원",
+    "phone": "010-6683-7958"
+  },
+  {
+    "id": "vp-105",
+    "eup": "영양읍",
+    "village": "감천1",
+    "team": "C조",
+    "name": "권혜인",
+    "affiliation": "공무원",
+    "phone": "010-7666-5241"
+  },
+  {
+    "id": "vp-106",
+    "eup": "영양읍",
+    "village": "감천1",
+    "team": "A조",
+    "name": "전경연",
+    "affiliation": "지도자",
+    "phone": "010-4505-1549"
+  },
+  {
+    "id": "vp-107",
+    "eup": "영양읍",
+    "village": "감천1",
+    "team": "B조",
+    "name": "오윤찬",
+    "affiliation": "이장",
+    "phone": "010-9066-7308"
+  },
+  {
+    "id": "vp-108",
+    "eup": "영양읍",
+    "village": "감천1",
+    "team": "C조",
+    "name": "전경연",
+    "affiliation": "지도자",
+    "phone": "010-4505-1549"
+  },
+  {
+    "id": "vp-109",
+    "eup": "영양읍",
+    "village": "감천2",
+    "team": "A조",
+    "name": "손종하",
+    "affiliation": "이장",
+    "phone": "010-3811-8666"
+  },
+  {
+    "id": "vp-110",
+    "eup": "영양읍",
+    "village": "감천2",
+    "team": "B조",
+    "name": "남성호",
+    "affiliation": "의용소방대",
+    "phone": "010-8921-8218"
+  },
+  {
+    "id": "vp-111",
+    "eup": "영양읍",
+    "village": "감천2",
+    "team": "C조",
+    "name": "손종하",
+    "affiliation": "이장",
+    "phone": "010-3811-8666"
+  },
+  {
+    "id": "vp-112",
+    "eup": "영양읍",
+    "village": "감천2",
+    "team": "A조",
+    "name": "강가림",
+    "affiliation": "공무원",
+    "phone": "010-6653-5568"
+  },
+  {
+    "id": "vp-113",
+    "eup": "영양읍",
+    "village": "감천2",
+    "team": "B조",
+    "name": "정다윤",
+    "affiliation": "공무원",
+    "phone": "010-6683-7958"
+  },
+  {
+    "id": "vp-114",
+    "eup": "영양읍",
+    "village": "감천2",
+    "team": "C조",
+    "name": "강가림",
+    "affiliation": "공무원",
+    "phone": "010-6653-5568"
+  },
+  {
+    "id": "vp-115",
+    "eup": "영양읍",
+    "village": "감천2",
+    "team": "A조",
+    "name": "김갑수",
+    "affiliation": "지도자",
+    "phone": "010-3682-9441"
+  },
+  {
+    "id": "vp-116",
+    "eup": "영양읍",
+    "village": "감천2",
+    "team": "B조",
+    "name": "손종하",
+    "affiliation": "이장",
+    "phone": "010-3811-8666"
+  },
+  {
+    "id": "vp-117",
+    "eup": "영양읍",
+    "village": "감천2",
+    "team": "C조",
+    "name": "김갑수",
+    "affiliation": "지도자",
+    "phone": "010-3682-9441"
+  },
+  {
+    "id": "vp-118",
+    "eup": "영양읍",
+    "village": "삼지1",
+    "team": "A조",
+    "name": "김성철",
+    "affiliation": "이장",
+    "phone": "010-9670-4632"
+  },
+  {
+    "id": "vp-119",
+    "eup": "영양읍",
+    "village": "삼지1",
+    "team": "B조",
+    "name": "권성민",
+    "affiliation": "의용소방대",
+    "phone": "010-3660-9060"
+  },
+  {
+    "id": "vp-120",
+    "eup": "영양읍",
+    "village": "삼지1",
+    "team": "C조",
+    "name": "김성철",
+    "affiliation": "이장",
+    "phone": "010-9670-4632"
+  },
+  {
+    "id": "vp-121",
+    "eup": "영양읍",
+    "village": "삼지1",
+    "team": "A조",
+    "name": "김기웅",
+    "affiliation": "공무원",
+    "phone": "010-5038-5854"
+  },
+  {
+    "id": "vp-122",
+    "eup": "영양읍",
+    "village": "삼지1",
+    "team": "B조",
+    "name": "유재형",
+    "affiliation": "공무원",
+    "phone": "010-9779-7260"
+  },
+  {
+    "id": "vp-123",
+    "eup": "영양읍",
+    "village": "삼지1",
+    "team": "C조",
+    "name": "김기웅",
+    "affiliation": "공무원",
+    "phone": "010-5038-5854"
+  },
+  {
+    "id": "vp-124",
+    "eup": "영양읍",
+    "village": "삼지1",
+    "team": "A조",
+    "name": "윤병관",
+    "affiliation": "지도자",
+    "phone": "017-538-2193"
+  },
+  {
+    "id": "vp-125",
+    "eup": "영양읍",
+    "village": "삼지1",
+    "team": "B조",
+    "name": "김성철",
+    "affiliation": "이장",
+    "phone": "010-9670-4632"
+  },
+  {
+    "id": "vp-126",
+    "eup": "영양읍",
+    "village": "삼지1",
+    "team": "C조",
+    "name": "윤병관",
+    "affiliation": "지도자",
+    "phone": "017-538-2193"
+  },
+  {
+    "id": "vp-127",
+    "eup": "영양읍",
+    "village": "삼지2",
+    "team": "A조",
+    "name": "김정원",
+    "affiliation": "지도자",
+    "phone": "010-8580-3076"
+  },
+  {
+    "id": "vp-128",
+    "eup": "영양읍",
+    "village": "삼지2",
+    "team": "B조",
+    "name": "김상일",
+    "affiliation": "의용소방대",
+    "phone": "010-2539-2237"
+  },
+  {
+    "id": "vp-129",
+    "eup": "영양읍",
+    "village": "삼지2",
+    "team": "C조",
+    "name": "김정원",
+    "affiliation": "지도자",
+    "phone": "010-8580-3076"
+  },
+  {
+    "id": "vp-130",
+    "eup": "영양읍",
+    "village": "삼지2",
+    "team": "A조",
+    "name": "정대현",
+    "affiliation": "공무원",
+    "phone": "010-5790-0777"
+  },
+  {
+    "id": "vp-131",
+    "eup": "영양읍",
+    "village": "삼지2",
+    "team": "B조",
+    "name": "유재형",
+    "affiliation": "공무원",
+    "phone": "010-9779-7260"
+  },
+  {
+    "id": "vp-132",
+    "eup": "영양읍",
+    "village": "삼지2",
+    "team": "C조",
+    "name": "정대현",
+    "affiliation": "공무원",
+    "phone": "010-5790-0777"
+  },
+  {
+    "id": "vp-133",
+    "eup": "영양읍",
+    "village": "삼지2",
+    "team": "A조",
+    "name": "신영숙",
+    "affiliation": "지도자",
+    "phone": "010-5263-6665"
+  },
+  {
+    "id": "vp-134",
+    "eup": "영양읍",
+    "village": "삼지2",
+    "team": "B조",
+    "name": "김정원",
+    "affiliation": "지도자",
+    "phone": "010-8580-3076"
+  },
+  {
+    "id": "vp-135",
+    "eup": "영양읍",
+    "village": "삼지2",
+    "team": "C조",
+    "name": "신영숙",
+    "affiliation": "지도자",
+    "phone": "010-5263-6665"
+  },
+  {
+    "id": "vp-136",
+    "eup": "영양읍",
+    "village": "하원",
+    "team": "A조",
+    "name": "장근복",
+    "affiliation": "이장",
+    "phone": "010-9034-6070"
+  },
+  {
+    "id": "vp-137",
+    "eup": "영양읍",
+    "village": "하원",
+    "team": "B조",
+    "name": "이재동",
+    "affiliation": "의용소방대",
+    "phone": "010-5656-5066"
+  },
+  {
+    "id": "vp-138",
+    "eup": "영양읍",
+    "village": "하원",
+    "team": "C조",
+    "name": "장근복",
+    "affiliation": "이장",
+    "phone": "010-9034-6070"
+  },
+  {
+    "id": "vp-139",
+    "eup": "영양읍",
+    "village": "하원",
+    "team": "A조",
+    "name": "신선화",
+    "affiliation": "공무원",
+    "phone": "010-5036-8068"
+  },
+  {
+    "id": "vp-140",
+    "eup": "영양읍",
+    "village": "하원",
+    "team": "B조",
+    "name": "박미혜",
+    "affiliation": "공무원",
+    "phone": "010-5169-9298"
+  },
+  {
+    "id": "vp-141",
+    "eup": "영양읍",
+    "village": "하원",
+    "team": "C조",
+    "name": "신선화",
+    "affiliation": "공무원",
+    "phone": "010-5036-8068"
+  },
+  {
+    "id": "vp-142",
+    "eup": "영양읍",
+    "village": "하원",
+    "team": "A조",
+    "name": "김동환",
+    "affiliation": "지도자",
+    "phone": "010-5275-1873"
+  },
+  {
+    "id": "vp-143",
+    "eup": "영양읍",
+    "village": "하원",
+    "team": "B조",
+    "name": "장근복",
+    "affiliation": "이장",
+    "phone": "010-9034-6070"
+  },
+  {
+    "id": "vp-144",
+    "eup": "영양읍",
+    "village": "하원",
+    "team": "C조",
+    "name": "김동환",
+    "affiliation": "지도자",
+    "phone": "010-5275-1873"
+  },
+  {
+    "id": "vp-145",
+    "eup": "영양읍",
+    "village": "상원1",
+    "team": "A조",
+    "name": "조만영",
+    "affiliation": "이장",
+    "phone": "010-3667-8220"
+  },
+  {
+    "id": "vp-146",
+    "eup": "영양읍",
+    "village": "상원1",
+    "team": "B조",
+    "name": "안효준",
+    "affiliation": "의용소방대",
+    "phone": "010-4523-3876"
+  },
+  {
+    "id": "vp-147",
+    "eup": "영양읍",
+    "village": "상원1",
+    "team": "C조",
+    "name": "조만영",
+    "affiliation": "이장",
+    "phone": "010-3667-8220"
+  },
+  {
+    "id": "vp-148",
+    "eup": "영양읍",
+    "village": "상원1",
+    "team": "A조",
+    "name": "김경하",
+    "affiliation": "공무원",
+    "phone": "010-5359-3033"
+  },
+  {
+    "id": "vp-149",
+    "eup": "영양읍",
+    "village": "상원1",
+    "team": "B조",
+    "name": "권종식",
+    "affiliation": "공무원",
+    "phone": "010-5166-3341"
+  },
+  {
+    "id": "vp-150",
+    "eup": "영양읍",
+    "village": "상원1",
+    "team": "C조",
+    "name": "김경하",
+    "affiliation": "공무원",
+    "phone": "010-5359-3033"
+  },
+  {
+    "id": "vp-151",
+    "eup": "영양읍",
+    "village": "상원1",
+    "team": "A조",
+    "name": "유해양",
+    "affiliation": "지도자",
+    "phone": "010-4203-3239"
+  },
+  {
+    "id": "vp-152",
+    "eup": "영양읍",
+    "village": "상원1",
+    "team": "B조",
+    "name": "조만영",
+    "affiliation": "이장",
+    "phone": "010-3667-8220"
+  },
+  {
+    "id": "vp-153",
+    "eup": "영양읍",
+    "village": "상원1",
+    "team": "C조",
+    "name": "유해양",
+    "affiliation": "지도자",
+    "phone": "010-4203-3239"
+  },
+  {
+    "id": "vp-154",
+    "eup": "영양읍",
+    "village": "상원2",
+    "team": "A조",
+    "name": "조광현",
+    "affiliation": "이장",
+    "phone": "010-6599-0310"
+  },
+  {
+    "id": "vp-155",
+    "eup": "영양읍",
+    "village": "상원2",
+    "team": "B조",
+    "name": "한대진",
+    "affiliation": "의용소방대",
+    "phone": "010-3577-7648"
+  },
+  {
+    "id": "vp-156",
+    "eup": "영양읍",
+    "village": "상원2",
+    "team": "C조",
+    "name": "조광현",
+    "affiliation": "이장",
+    "phone": "010-6599-0310"
+  },
+  {
+    "id": "vp-157",
+    "eup": "영양읍",
+    "village": "상원2",
+    "team": "A조",
+    "name": "전현주",
+    "affiliation": "공무원",
+    "phone": "010-6333-4224"
+  },
+  {
+    "id": "vp-158",
+    "eup": "영양읍",
+    "village": "상원2",
+    "team": "B조",
+    "name": "권종식",
+    "affiliation": "공무원",
+    "phone": "010-5166-3341"
+  },
+  {
+    "id": "vp-159",
+    "eup": "영양읍",
+    "village": "상원2",
+    "team": "C조",
+    "name": "전현주",
+    "affiliation": "공무원",
+    "phone": "010-6333-4224"
+  },
+  {
+    "id": "vp-160",
+    "eup": "영양읍",
+    "village": "상원2",
+    "team": "A조",
+    "name": "이영준",
+    "affiliation": "지도자",
+    "phone": "010-3186-2066"
+  },
+  {
+    "id": "vp-161",
+    "eup": "영양읍",
+    "village": "상원2",
+    "team": "B조",
+    "name": "조광현",
+    "affiliation": "이장",
+    "phone": "010-6599-0310"
+  },
+  {
+    "id": "vp-162",
+    "eup": "영양읍",
+    "village": "상원2",
+    "team": "C조",
+    "name": "이영준",
+    "affiliation": "지도자",
+    "phone": "010-3186-2066"
+  },
+  {
+    "id": "vp-163",
+    "eup": "영양읍",
+    "village": "상원3",
+    "team": "A조",
+    "name": "손상득",
+    "affiliation": "이장",
+    "phone": "010-4805-5557"
+  },
+  {
+    "id": "vp-164",
+    "eup": "영양읍",
+    "village": "상원3",
+    "team": "B조",
+    "name": "박만수",
+    "affiliation": "의용소방대",
+    "phone": "010-4130-9366"
+  },
+  {
+    "id": "vp-165",
+    "eup": "영양읍",
+    "village": "상원3",
+    "team": "C조",
+    "name": "손상득",
+    "affiliation": "이장",
+    "phone": "010-4805-5557"
+  },
+  {
+    "id": "vp-166",
+    "eup": "영양읍",
+    "village": "상원3",
+    "team": "A조",
+    "name": "권준수",
+    "affiliation": "공무원",
+    "phone": "010-6588-5874"
+  },
+  {
+    "id": "vp-167",
+    "eup": "영양읍",
+    "village": "상원3",
+    "team": "B조",
+    "name": "권종식",
+    "affiliation": "공무원",
+    "phone": "010-5166-3341"
+  },
+  {
+    "id": "vp-168",
+    "eup": "영양읍",
+    "village": "상원3",
+    "team": "C조",
+    "name": "권준수",
+    "affiliation": "공무원",
+    "phone": "010-6588-5874"
+  },
+  {
+    "id": "vp-169",
+    "eup": "영양읍",
+    "village": "상원3",
+    "team": "A조",
+    "name": "조종일",
+    "affiliation": "지도자",
+    "phone": "010-3870-9772"
+  },
+  {
+    "id": "vp-170",
+    "eup": "영양읍",
+    "village": "상원3",
+    "team": "B조",
+    "name": "손상득",
+    "affiliation": "이장",
+    "phone": "010-4805-5557"
+  },
+  {
+    "id": "vp-171",
+    "eup": "영양읍",
+    "village": "상원3",
+    "team": "C조",
+    "name": "조종일",
+    "affiliation": "지도자",
+    "phone": "010-3870-9772"
+  },
+  {
+    "id": "vp-172",
+    "eup": "영양읍",
+    "village": "무학",
+    "team": "A조",
+    "name": "김영생",
+    "affiliation": "이장",
+    "phone": "010-6312-1814"
+  },
+  {
+    "id": "vp-173",
+    "eup": "영양읍",
+    "village": "무학",
+    "team": "B조",
+    "name": "신세호",
+    "affiliation": "의용소방대",
+    "phone": "010-4029-1035"
+  },
+  {
+    "id": "vp-174",
+    "eup": "영양읍",
+    "village": "무학",
+    "team": "C조",
+    "name": "김영생",
+    "affiliation": "이장",
+    "phone": "010-6312-1814"
+  },
+  {
+    "id": "vp-175",
+    "eup": "영양읍",
+    "village": "무학",
+    "team": "A조",
+    "name": "권영주",
+    "affiliation": "공무원",
+    "phone": "010-7458-5816"
+  },
+  {
+    "id": "vp-176",
+    "eup": "영양읍",
+    "village": "무학",
+    "team": "B조",
+    "name": "서의주",
+    "affiliation": "공무원",
+    "phone": "010-6564-3580"
+  },
+  {
+    "id": "vp-177",
+    "eup": "영양읍",
+    "village": "무학",
+    "team": "C조",
+    "name": "권영주",
+    "affiliation": "공무원",
+    "phone": "010-7458-5816"
+  },
+  {
+    "id": "vp-178",
+    "eup": "영양읍",
+    "village": "무학",
+    "team": "A조",
+    "name": "강인순",
+    "affiliation": "지도자",
+    "phone": "010-4275-4333"
+  },
+  {
+    "id": "vp-179",
+    "eup": "영양읍",
+    "village": "무학",
+    "team": "B조",
+    "name": "김영생",
+    "affiliation": "이장",
+    "phone": "010-6312-1814"
+  },
+  {
+    "id": "vp-180",
+    "eup": "영양읍",
+    "village": "무학",
+    "team": "C조",
+    "name": "강인순",
+    "affiliation": "지도자",
+    "phone": "010-4275-4333"
+  },
+  {
+    "id": "vp-181",
+    "eup": "영양읍",
+    "village": "대천1",
+    "team": "A조",
+    "name": "원계철",
+    "affiliation": "이장",
+    "phone": "010-3548-0106"
+  },
+  {
+    "id": "vp-182",
+    "eup": "영양읍",
+    "village": "대천1",
+    "team": "B조",
+    "name": "남대우",
+    "affiliation": "의용소방대",
+    "phone": "010-8789-1424"
+  },
+  {
+    "id": "vp-183",
+    "eup": "영양읍",
+    "village": "대천1",
+    "team": "C조",
+    "name": "원계철",
+    "affiliation": "이장",
+    "phone": "010-3548-0106"
+  },
+  {
+    "id": "vp-184",
+    "eup": "영양읍",
+    "village": "대천1",
+    "team": "A조",
+    "name": "문경태",
+    "affiliation": "공무원",
+    "phone": "010-3080-0646"
+  },
+  {
+    "id": "vp-185",
+    "eup": "영양읍",
+    "village": "대천1",
+    "team": "B조",
+    "name": "김동연",
+    "affiliation": "공무원",
+    "phone": "010-3320-0896"
+  },
+  {
+    "id": "vp-186",
+    "eup": "영양읍",
+    "village": "대천1",
+    "team": "C조",
+    "name": "문경태",
+    "affiliation": "공무원",
+    "phone": "010-3080-0646"
+  },
+  {
+    "id": "vp-187",
+    "eup": "영양읍",
+    "village": "대천1",
+    "team": "A조",
+    "name": "안상대",
+    "affiliation": "지도자",
+    "phone": "010-3879-0494"
+  },
+  {
+    "id": "vp-188",
+    "eup": "영양읍",
+    "village": "대천1",
+    "team": "B조",
+    "name": "원계철",
+    "affiliation": "이장",
+    "phone": "010-3548-0106"
+  },
+  {
+    "id": "vp-189",
+    "eup": "영양읍",
+    "village": "대천1",
+    "team": "C조",
+    "name": "안상대",
+    "affiliation": "지도자",
+    "phone": "010-3879-0494"
+  },
+  {
+    "id": "vp-190",
+    "eup": "영양읍",
+    "village": "대천2",
+    "team": "A조",
+    "name": "조신",
+    "affiliation": "이장",
+    "phone": "010-5313-3305"
+  },
+  {
+    "id": "vp-191",
+    "eup": "영양읍",
+    "village": "대천2",
+    "team": "B조",
+    "name": "김제열",
+    "affiliation": "의용소방대",
+    "phone": "010-3507-8322"
+  },
+  {
+    "id": "vp-192",
+    "eup": "영양읍",
+    "village": "대천2",
+    "team": "C조",
+    "name": "조신",
+    "affiliation": "이장",
+    "phone": "010-5313-3305"
+  },
+  {
+    "id": "vp-193",
+    "eup": "영양읍",
+    "village": "대천2",
+    "team": "A조",
+    "name": "이성민",
+    "affiliation": "공무원",
+    "phone": "010-4726-6438"
+  },
+  {
+    "id": "vp-194",
+    "eup": "영양읍",
+    "village": "대천2",
+    "team": "B조",
+    "name": "김동연",
+    "affiliation": "공무원",
+    "phone": "010-3320-0896"
+  },
+  {
+    "id": "vp-195",
+    "eup": "영양읍",
+    "village": "대천2",
+    "team": "C조",
+    "name": "이성민",
+    "affiliation": "공무원",
+    "phone": "010-4726-6438"
+  },
+  {
+    "id": "vp-196",
+    "eup": "영양읍",
+    "village": "대천2",
+    "team": "A조",
+    "name": "남범모",
+    "affiliation": "지도자",
+    "phone": "010-8572-0574"
+  },
+  {
+    "id": "vp-197",
+    "eup": "영양읍",
+    "village": "대천2",
+    "team": "B조",
+    "name": "조신",
+    "affiliation": "이장",
+    "phone": "010-5313-3305"
+  },
+  {
+    "id": "vp-198",
+    "eup": "영양읍",
+    "village": "대천2",
+    "team": "C조",
+    "name": "남범모",
+    "affiliation": "지도자",
+    "phone": "010-8572-0574"
+  },
+  {
+    "id": "vp-199",
+    "eup": "영양읍",
+    "village": "화천1",
+    "team": "A조",
+    "name": "우일정",
+    "affiliation": "이장",
+    "phone": "010-3547-0081"
+  },
+  {
+    "id": "vp-200",
+    "eup": "영양읍",
+    "village": "화천1",
+    "team": "B조",
+    "name": "이준일",
+    "affiliation": "의용소방대",
+    "phone": "010-4812-1100"
+  },
+  {
+    "id": "vp-201",
+    "eup": "영양읍",
+    "village": "화천1",
+    "team": "C조",
+    "name": "우일정",
+    "affiliation": "이장",
+    "phone": "010-3547-0081"
+  },
+  {
+    "id": "vp-202",
+    "eup": "영양읍",
+    "village": "화천1",
+    "team": "A조",
+    "name": "임은정",
+    "affiliation": "공무원",
+    "phone": "010-7237-3926"
+  },
+  {
+    "id": "vp-203",
+    "eup": "영양읍",
+    "village": "화천1",
+    "team": "B조",
+    "name": "조성대",
+    "affiliation": "공무원",
+    "phone": "010-6754-7727"
+  },
+  {
+    "id": "vp-204",
+    "eup": "영양읍",
+    "village": "화천1",
+    "team": "C조",
+    "name": "임은정",
+    "affiliation": "공무원",
+    "phone": "010-7237-3926"
+  },
+  {
+    "id": "vp-205",
+    "eup": "영양읍",
+    "village": "화천1",
+    "team": "A조",
+    "name": "김연학",
+    "affiliation": "지도자",
+    "phone": "010-2683-8113"
+  },
+  {
+    "id": "vp-206",
+    "eup": "영양읍",
+    "village": "화천1",
+    "team": "B조",
+    "name": "우일정",
+    "affiliation": "이장",
+    "phone": "010-3547-0081"
+  },
+  {
+    "id": "vp-207",
+    "eup": "영양읍",
+    "village": "화천1",
+    "team": "C조",
+    "name": "김연학",
+    "affiliation": "지도자",
+    "phone": "010-2683-8113"
+  },
+  {
+    "id": "vp-208",
+    "eup": "영양읍",
+    "village": "화천2",
+    "team": "A조",
+    "name": "황영삼",
+    "affiliation": "이장",
+    "phone": "010-8750-5207"
+  },
+  {
+    "id": "vp-209",
+    "eup": "영양읍",
+    "village": "화천2",
+    "team": "B조",
+    "name": "최준영",
+    "affiliation": "의용소방대",
+    "phone": "010-3151-3331"
+  },
+  {
+    "id": "vp-210",
+    "eup": "영양읍",
+    "village": "화천2",
+    "team": "C조",
+    "name": "황영삼",
+    "affiliation": "이장",
+    "phone": "010-8750-5207"
+  },
+  {
+    "id": "vp-211",
+    "eup": "영양읍",
+    "village": "화천2",
+    "team": "A조",
+    "name": "김대한",
+    "affiliation": "공무원",
+    "phone": "010-4078-1416"
+  },
+  {
+    "id": "vp-212",
+    "eup": "영양읍",
+    "village": "화천2",
+    "team": "B조",
+    "name": "조성대",
+    "affiliation": "공무원",
+    "phone": "010-6754-7727"
+  },
+  {
+    "id": "vp-213",
+    "eup": "영양읍",
+    "village": "화천2",
+    "team": "C조",
+    "name": "김대한",
+    "affiliation": "공무원",
+    "phone": "010-4078-1416"
+  },
+  {
+    "id": "vp-214",
+    "eup": "영양읍",
+    "village": "화천2",
+    "team": "A조",
+    "name": "오순현",
+    "affiliation": "지도자",
+    "phone": "010-9838-3345"
+  },
+  {
+    "id": "vp-215",
+    "eup": "영양읍",
+    "village": "화천2",
+    "team": "B조",
+    "name": "황영삼",
+    "affiliation": "이장",
+    "phone": "010-8750-5207"
+  },
+  {
+    "id": "vp-216",
+    "eup": "영양읍",
+    "village": "화천2",
+    "team": "C조",
+    "name": "오순현",
+    "affiliation": "지도자",
+    "phone": "010-9838-3345"
+  },
+  {
+    "id": "vp-217",
+    "eup": "영양읍",
+    "village": "무창1",
+    "team": "A조",
+    "name": "김석규",
+    "affiliation": "이장",
+    "phone": "010-4811-0097"
+  },
+  {
+    "id": "vp-218",
+    "eup": "영양읍",
+    "village": "무창1",
+    "team": "B조",
+    "name": "신경환",
+    "affiliation": "의용소방대",
+    "phone": "010-6252-2133"
+  },
+  {
+    "id": "vp-219",
+    "eup": "영양읍",
+    "village": "무창1",
+    "team": "C조",
+    "name": "김석규",
+    "affiliation": "이장",
+    "phone": "010-4811-0097"
+  },
+  {
+    "id": "vp-220",
+    "eup": "영양읍",
+    "village": "무창1",
+    "team": "A조",
+    "name": "노두호",
+    "affiliation": "공무원",
+    "phone": "010-8286-6665"
+  },
+  {
+    "id": "vp-221",
+    "eup": "영양읍",
+    "village": "무창1",
+    "team": "B조",
+    "name": "백소희",
+    "affiliation": "공무원",
+    "phone": "010-3466-6230"
+  },
+  {
+    "id": "vp-222",
+    "eup": "영양읍",
+    "village": "무창1",
+    "team": "C조",
+    "name": "노두호",
+    "affiliation": "공무원",
+    "phone": "010-8286-6665"
+  },
+  {
+    "id": "vp-223",
+    "eup": "영양읍",
+    "village": "무창1",
+    "team": "A조",
+    "name": "이재용",
+    "affiliation": "지도자",
+    "phone": "010-8511-5887"
+  },
+  {
+    "id": "vp-224",
+    "eup": "영양읍",
+    "village": "무창1",
+    "team": "B조",
+    "name": "김석규",
+    "affiliation": "이장",
+    "phone": "010-4811-0097"
+  },
+  {
+    "id": "vp-225",
+    "eup": "영양읍",
+    "village": "무창1",
+    "team": "C조",
+    "name": "이재용",
+    "affiliation": "지도자",
+    "phone": "010-8511-5887"
+  },
+  {
+    "id": "vp-226",
+    "eup": "영양읍",
+    "village": "무창2",
+    "team": "A조",
+    "name": "김성진",
+    "affiliation": "이장",
+    "phone": "010-8596-8699"
+  },
+  {
+    "id": "vp-227",
+    "eup": "영양읍",
+    "village": "무창2",
+    "team": "B조",
+    "name": "이상권",
+    "affiliation": "의용소방대",
+    "phone": "010-8857-8284"
+  },
+  {
+    "id": "vp-228",
+    "eup": "영양읍",
+    "village": "무창2",
+    "team": "C조",
+    "name": "김성진",
+    "affiliation": "이장",
+    "phone": "010-8596-8699"
+  },
+  {
+    "id": "vp-229",
+    "eup": "영양읍",
+    "village": "무창2",
+    "team": "A조",
+    "name": "황재만",
+    "affiliation": "공무원",
+    "phone": "010-9340-5744"
+  },
+  {
+    "id": "vp-230",
+    "eup": "영양읍",
+    "village": "무창2",
+    "team": "B조",
+    "name": "백소희",
+    "affiliation": "공무원",
+    "phone": "010-3466-6230"
+  },
+  {
+    "id": "vp-231",
+    "eup": "영양읍",
+    "village": "무창2",
+    "team": "C조",
+    "name": "황재만",
+    "affiliation": "공무원",
+    "phone": "010-9340-5744"
+  },
+  {
+    "id": "vp-232",
+    "eup": "영양읍",
+    "village": "무창2",
+    "team": "A조",
+    "name": "방영길",
+    "affiliation": "지도자",
+    "phone": "010-2230-1835"
+  },
+  {
+    "id": "vp-233",
+    "eup": "영양읍",
+    "village": "무창2",
+    "team": "B조",
+    "name": "김성진",
+    "affiliation": "이장",
+    "phone": "010-8596-8699"
+  },
+  {
+    "id": "vp-234",
+    "eup": "영양읍",
+    "village": "무창2",
+    "team": "C조",
+    "name": "방영길",
+    "affiliation": "지도자",
+    "phone": "010-2230-1835"
+  },
+  {
+    "id": "vp-235",
+    "eup": "영양읍",
+    "village": "무창3",
+    "team": "A조",
+    "name": "김시을",
+    "affiliation": "이장",
+    "phone": "010-6545-9845"
+  },
+  {
+    "id": "vp-236",
+    "eup": "영양읍",
+    "village": "무창3",
+    "team": "B조",
+    "name": "권기정",
+    "affiliation": "의용소방대",
+    "phone": "010-9774-0933"
+  },
+  {
+    "id": "vp-237",
+    "eup": "영양읍",
+    "village": "무창3",
+    "team": "C조",
+    "name": "김시을",
+    "affiliation": "이장",
+    "phone": "010-6545-9845"
+  },
+  {
+    "id": "vp-238",
+    "eup": "영양읍",
+    "village": "무창3",
+    "team": "A조",
+    "name": "이태훈",
+    "affiliation": "공무원",
+    "phone": "010-8718-0333"
+  },
+  {
+    "id": "vp-239",
+    "eup": "영양읍",
+    "village": "무창3",
+    "team": "B조",
+    "name": "정다윤",
+    "affiliation": "공무원",
+    "phone": "010-6683-7958"
+  },
+  {
+    "id": "vp-240",
+    "eup": "영양읍",
+    "village": "무창3",
+    "team": "C조",
+    "name": "이태훈",
+    "affiliation": "공무원",
+    "phone": "010-8718-0333"
+  },
+  {
+    "id": "vp-241",
+    "eup": "영양읍",
+    "village": "무창3",
+    "team": "A조",
+    "name": "이상득",
+    "affiliation": "지도자",
+    "phone": "010-6370-6649"
+  },
+  {
+    "id": "vp-242",
+    "eup": "영양읍",
+    "village": "무창3",
+    "team": "B조",
+    "name": "김시을",
+    "affiliation": "이장",
+    "phone": "010-6545-9845"
+  },
+  {
+    "id": "vp-243",
+    "eup": "영양읍",
+    "village": "무창3",
+    "team": "C조",
+    "name": "이상득",
+    "affiliation": "지도자",
+    "phone": "010-6370-6649"
+  },
+  {
+    "id": "vp-244",
+    "eup": "영양읍",
+    "village": "양구",
+    "team": "A조",
+    "name": "박인엽",
+    "affiliation": "이장",
+    "phone": "010-8568-0759"
+  },
+  {
+    "id": "vp-245",
+    "eup": "영양읍",
+    "village": "양구",
+    "team": "B조",
+    "name": "이무섭",
+    "affiliation": "의용소방대",
+    "phone": "010-2506-3996"
+  },
+  {
+    "id": "vp-246",
+    "eup": "영양읍",
+    "village": "양구",
+    "team": "C조",
+    "name": "박인엽",
+    "affiliation": "이장",
+    "phone": "010-8568-0759"
+  },
+  {
+    "id": "vp-247",
+    "eup": "영양읍",
+    "village": "양구",
+    "team": "A조",
+    "name": "윤용휘",
+    "affiliation": "공무원",
+    "phone": "010-8292-5707"
+  },
+  {
+    "id": "vp-248",
+    "eup": "영양읍",
+    "village": "양구",
+    "team": "B조",
+    "name": "정다윤",
+    "affiliation": "공무원",
+    "phone": "010-6683-7958"
+  },
+  {
+    "id": "vp-249",
+    "eup": "영양읍",
+    "village": "양구",
+    "team": "C조",
+    "name": "윤용휘",
+    "affiliation": "공무원",
+    "phone": "010-8292-5707"
+  },
+  {
+    "id": "vp-250",
+    "eup": "영양읍",
+    "village": "양구",
+    "team": "A조",
+    "name": "남호장",
+    "affiliation": "지도자",
+    "phone": "010-6392-3070"
+  },
+  {
+    "id": "vp-251",
+    "eup": "영양읍",
+    "village": "양구",
+    "team": "B조",
+    "name": "박인엽",
+    "affiliation": "이장",
+    "phone": "010-8568-0759"
+  },
+  {
+    "id": "vp-252",
+    "eup": "영양읍",
+    "village": "양구",
+    "team": "C조",
+    "name": "남호장",
+    "affiliation": "지도자",
+    "phone": "010-6392-3070"
+  },
+  {
+    "id": "vp-253",
+    "eup": "영양읍",
+    "village": "기산",
+    "team": "A조",
+    "name": "김병찬",
+    "affiliation": "이장",
+    "phone": "010-4523-0533"
+  },
+  {
+    "id": "vp-254",
+    "eup": "영양읍",
+    "village": "기산",
+    "team": "B조",
+    "name": "이현숙",
+    "affiliation": "의용소방대",
+    "phone": "010-9260-1637"
+  },
+  {
+    "id": "vp-255",
+    "eup": "영양읍",
+    "village": "기산",
+    "team": "C조",
+    "name": "김병찬",
+    "affiliation": "이장",
+    "phone": "010-4523-0533"
+  },
+  {
+    "id": "vp-256",
+    "eup": "영양읍",
+    "village": "기산",
+    "team": "A조",
+    "name": "이원창",
+    "affiliation": "공무원",
+    "phone": "010-8805-0144"
+  },
+  {
+    "id": "vp-257",
+    "eup": "영양읍",
+    "village": "기산",
+    "team": "B조",
+    "name": "박미혜",
+    "affiliation": "공무원",
+    "phone": "010-5169-9298"
+  },
+  {
+    "id": "vp-258",
+    "eup": "영양읍",
+    "village": "기산",
+    "team": "C조",
+    "name": "이원창",
+    "affiliation": "공무원",
+    "phone": "010-8805-0144"
+  },
+  {
+    "id": "vp-259",
+    "eup": "영양읍",
+    "village": "기산",
+    "team": "A조",
+    "name": "김용래",
+    "affiliation": "지도자",
+    "phone": "010-3364-0534"
+  },
+  {
+    "id": "vp-260",
+    "eup": "영양읍",
+    "village": "기산",
+    "team": "B조",
+    "name": "김병찬",
+    "affiliation": "이장",
+    "phone": "010-4523-0533"
+  },
+  {
+    "id": "vp-261",
+    "eup": "영양읍",
+    "village": "기산",
+    "team": "C조",
+    "name": "김용래",
+    "affiliation": "지도자",
+    "phone": "010-3364-0534"
+  },
+  {
+    "id": "vp-262",
+    "eup": "입암면",
+    "village": "신구1리",
+    "team": "A조",
+    "name": "정문섭",
+    "affiliation": "이장",
+    "phone": "010-9354-4604"
+  },
+  {
+    "id": "vp-263",
+    "eup": "입암면",
+    "village": "신구1리",
+    "team": "B조",
+    "name": "김정태",
+    "affiliation": "지도자",
+    "phone": "010-3854-0899"
+  },
+  {
+    "id": "vp-264",
+    "eup": "입암면",
+    "village": "신구1리",
+    "team": "C조",
+    "name": "이금옥",
+    "affiliation": "지도자",
+    "phone": "010-2514-5329"
+  },
+  {
+    "id": "vp-265",
+    "eup": "입암면",
+    "village": "신구1리",
+    "team": "A조",
+    "name": "김관수",
+    "affiliation": "공무원",
+    "phone": "010-3560-4052"
+  },
+  {
+    "id": "vp-266",
+    "eup": "입암면",
+    "village": "신구1리",
+    "team": "B조",
+    "name": "김주헌",
+    "affiliation": "공무원",
+    "phone": "010-3768-5018"
+  },
+  {
+    "id": "vp-267",
+    "eup": "입암면",
+    "village": "신구1리",
+    "team": "C조",
+    "name": "김관수",
+    "affiliation": "공무원",
+    "phone": "010-3560-4052"
+  },
+  {
+    "id": "vp-268",
+    "eup": "입암면",
+    "village": "신구1리",
+    "team": "A조",
+    "name": "천호영",
+    "affiliation": "자율방재단",
+    "phone": "010-3377-5893"
+  },
+  {
+    "id": "vp-269",
+    "eup": "입암면",
+    "village": "신구1리",
+    "team": "B조",
+    "name": "정문섭",
+    "affiliation": "이장",
+    "phone": "010-9354-4604"
+  },
+  {
+    "id": "vp-270",
+    "eup": "입암면",
+    "village": "신구1리",
+    "team": "C조",
+    "name": "천호영",
+    "affiliation": "자율방재단",
+    "phone": "010-3377-5893"
+  },
+  {
+    "id": "vp-271",
+    "eup": "입암면",
+    "village": "신구2리",
+    "team": "A조",
+    "name": "김천",
+    "affiliation": "이장",
+    "phone": "010-3354-7581"
+  },
+  {
+    "id": "vp-272",
+    "eup": "입암면",
+    "village": "신구2리",
+    "team": "B조",
+    "name": "천영대",
+    "affiliation": "지도자",
+    "phone": "010-4520-1944"
+  },
+  {
+    "id": "vp-273",
+    "eup": "입암면",
+    "village": "신구2리",
+    "team": "C조",
+    "name": "김미숙",
+    "affiliation": "지도자",
+    "phone": "010-8998-4322"
+  },
+  {
+    "id": "vp-274",
+    "eup": "입암면",
+    "village": "신구2리",
+    "team": "A조",
+    "name": "성영복",
+    "affiliation": "공무원",
+    "phone": "010-4543-3556"
+  },
+  {
+    "id": "vp-275",
+    "eup": "입암면",
+    "village": "신구2리",
+    "team": "B조",
+    "name": "박현민",
+    "affiliation": "공무원",
+    "phone": "010-9980-9825"
+  },
+  {
+    "id": "vp-276",
+    "eup": "입암면",
+    "village": "신구2리",
+    "team": "C조",
+    "name": "성영복",
+    "affiliation": "공무원",
+    "phone": "010-4543-3556"
+  },
+  {
+    "id": "vp-277",
+    "eup": "입암면",
+    "village": "신구2리",
+    "team": "A조",
+    "name": "황학자",
+    "affiliation": "자율방재단",
+    "phone": "010-3784-4592"
+  },
+  {
+    "id": "vp-278",
+    "eup": "입암면",
+    "village": "신구2리",
+    "team": "B조",
+    "name": "김국한",
+    "affiliation": "자율방재단",
+    "phone": "010-9475-4675"
+  },
+  {
+    "id": "vp-279",
+    "eup": "입암면",
+    "village": "신구2리",
+    "team": "C조",
+    "name": "신학균",
+    "affiliation": "자율방재단",
+    "phone": "010-4530-4514"
+  },
+  {
+    "id": "vp-280",
+    "eup": "입암면",
+    "village": "양항리",
+    "team": "A조",
+    "name": "강철원",
+    "affiliation": "이장",
+    "phone": "010-4123-4499"
+  },
+  {
+    "id": "vp-281",
+    "eup": "입암면",
+    "village": "양항리",
+    "team": "B조",
+    "name": "김우규",
+    "affiliation": "자율방재단",
+    "phone": "010-9351-4701"
+  },
+  {
+    "id": "vp-282",
+    "eup": "입암면",
+    "village": "양항리",
+    "team": "C조",
+    "name": "박종구",
+    "affiliation": "자율방재단",
+    "phone": "010-6343-7270"
+  },
+  {
+    "id": "vp-283",
+    "eup": "입암면",
+    "village": "양항리",
+    "team": "A조",
+    "name": "박정순",
+    "affiliation": "공무원",
+    "phone": "010-3101-1326"
+  },
+  {
+    "id": "vp-284",
+    "eup": "입암면",
+    "village": "양항리",
+    "team": "B조",
+    "name": "이철우",
+    "affiliation": "공무원",
+    "phone": "010-3103-1260"
+  },
+  {
+    "id": "vp-285",
+    "eup": "입암면",
+    "village": "양항리",
+    "team": "C조",
+    "name": "박정순",
+    "affiliation": "공무원",
+    "phone": "010-3101-1326"
+  },
+  {
+    "id": "vp-286",
+    "eup": "입암면",
+    "village": "양항리",
+    "team": "A조",
+    "name": "김우규",
+    "affiliation": "자율방재단",
+    "phone": "010-9351-4701"
+  },
+  {
+    "id": "vp-287",
+    "eup": "입암면",
+    "village": "양항리",
+    "team": "B조",
+    "name": "박종구",
+    "affiliation": "자율방재단",
+    "phone": "010-6343-7270"
+  },
+  {
+    "id": "vp-288",
+    "eup": "입암면",
+    "village": "양항리",
+    "team": "C조",
+    "name": "강철원",
+    "affiliation": "이장",
+    "phone": "010-4123-4499"
+  },
+  {
+    "id": "vp-289",
+    "eup": "입암면",
+    "village": "연당1리",
+    "team": "A조",
+    "name": "정수인",
+    "affiliation": "이장",
+    "phone": "010-4339-0660"
+  },
+  {
+    "id": "vp-290",
+    "eup": "입암면",
+    "village": "연당1리",
+    "team": "B조",
+    "name": "정구호",
+    "affiliation": "자율방재단",
+    "phone": "010-3822-1185"
+  },
+  {
+    "id": "vp-291",
+    "eup": "입암면",
+    "village": "연당1리",
+    "team": "C조",
+    "name": "권영학",
+    "affiliation": "자율방재단",
+    "phone": "010-5360-1552"
+  },
+  {
+    "id": "vp-292",
+    "eup": "입암면",
+    "village": "연당1리",
+    "team": "A조",
+    "name": "김성규",
+    "affiliation": "공무원",
+    "phone": "010-2789-0291"
+  },
+  {
+    "id": "vp-293",
+    "eup": "입암면",
+    "village": "연당1리",
+    "team": "B조",
+    "name": "안나영",
+    "affiliation": "공무원",
+    "phone": "010-5553-6905"
+  },
+  {
+    "id": "vp-294",
+    "eup": "입암면",
+    "village": "연당1리",
+    "team": "C조",
+    "name": "김성규",
+    "affiliation": "공무원",
+    "phone": "010-2789-0291"
+  },
+  {
+    "id": "vp-295",
+    "eup": "입암면",
+    "village": "연당1리",
+    "team": "A조",
+    "name": "정기연",
+    "affiliation": "자율방재단",
+    "phone": "010-5047-3963"
+  },
+  {
+    "id": "vp-296",
+    "eup": "입암면",
+    "village": "연당1리",
+    "team": "B조",
+    "name": "권영학",
+    "affiliation": "자율방재단",
+    "phone": "010-7223-1723"
+  },
+  {
+    "id": "vp-297",
+    "eup": "입암면",
+    "village": "연당1리",
+    "team": "C조",
+    "name": "정구호",
+    "affiliation": "자율방재단",
+    "phone": "010-3822-1185"
+  },
+  {
+    "id": "vp-298",
+    "eup": "입암면",
+    "village": "연당2리",
+    "team": "A조",
+    "name": "구연범",
+    "affiliation": "이장",
+    "phone": "010-4135-3857"
+  },
+  {
+    "id": "vp-299",
+    "eup": "입암면",
+    "village": "연당2리",
+    "team": "B조",
+    "name": "김동환",
+    "affiliation": "자율방재단",
+    "phone": "010-8599-8811"
+  },
+  {
+    "id": "vp-300",
+    "eup": "입암면",
+    "village": "연당2리",
+    "team": "C조",
+    "name": "구연범",
+    "affiliation": "이장",
+    "phone": "010-4135-3857"
+  },
+  {
+    "id": "vp-301",
+    "eup": "입암면",
+    "village": "연당2리",
+    "team": "A조",
+    "name": "김민채",
+    "affiliation": "공무원",
+    "phone": "010-4308-7070"
+  },
+  {
+    "id": "vp-302",
+    "eup": "입암면",
+    "village": "연당2리",
+    "team": "B조",
+    "name": "안나영",
+    "affiliation": "공무원",
+    "phone": "010-5553-6905"
+  },
+  {
+    "id": "vp-303",
+    "eup": "입암면",
+    "village": "연당2리",
+    "team": "C조",
+    "name": "김민채",
+    "affiliation": "공무원",
+    "phone": "010-4308-7070"
+  },
+  {
+    "id": "vp-304",
+    "eup": "입암면",
+    "village": "연당2리",
+    "team": "A조",
+    "name": "김억식",
+    "affiliation": "자율방재단",
+    "phone": "010-2507-4186"
+  },
+  {
+    "id": "vp-305",
+    "eup": "입암면",
+    "village": "연당2리",
+    "team": "B조",
+    "name": "권영준",
+    "affiliation": "자율방재단",
+    "phone": "010-9393-7355"
+  },
+  {
+    "id": "vp-306",
+    "eup": "입암면",
+    "village": "연당2리",
+    "team": "C조",
+    "name": "김억식",
+    "affiliation": "자율방재단",
+    "phone": "010-2507-4186"
+  },
+  {
+    "id": "vp-307",
+    "eup": "입암면",
+    "village": "금학리",
+    "team": "A조",
+    "name": "유명욱",
+    "affiliation": "이장",
+    "phone": "010-9315-9675"
+  },
+  {
+    "id": "vp-308",
+    "eup": "입암면",
+    "village": "금학리",
+    "team": "B조",
+    "name": "유명욱",
+    "affiliation": "이장",
+    "phone": "010-9315-9675"
+  },
+  {
+    "id": "vp-309",
+    "eup": "입암면",
+    "village": "금학리",
+    "team": "C조",
+    "name": "임성남",
+    "affiliation": "지도자",
+    "phone": "010-2533-5566"
+  },
+  {
+    "id": "vp-310",
+    "eup": "입암면",
+    "village": "금학리",
+    "team": "A조",
+    "name": "오제호",
+    "affiliation": "공무원",
+    "phone": "010-9735-8030"
+  },
+  {
+    "id": "vp-311",
+    "eup": "입암면",
+    "village": "금학리",
+    "team": "B조",
+    "name": "권영대",
+    "affiliation": "공무원",
+    "phone": "010-2022-7288"
+  },
+  {
+    "id": "vp-312",
+    "eup": "입암면",
+    "village": "금학리",
+    "team": "C조",
+    "name": "오제호",
+    "affiliation": "공무원",
+    "phone": "010-9735-8030"
+  },
+  {
+    "id": "vp-313",
+    "eup": "입암면",
+    "village": "금학리",
+    "team": "A조",
+    "name": "신정근",
+    "affiliation": "자율방재단",
+    "phone": "010-8568-1377"
+  },
+  {
+    "id": "vp-314",
+    "eup": "입암면",
+    "village": "금학리",
+    "team": "B조",
+    "name": "김종철",
+    "affiliation": "자율방재단",
+    "phone": "010-9434-9144"
+  },
+  {
+    "id": "vp-315",
+    "eup": "입암면",
+    "village": "금학리",
+    "team": "C조",
+    "name": "이준호",
+    "affiliation": "자율방재단",
+    "phone": "010-9034-4264"
+  },
+  {
+    "id": "vp-316",
+    "eup": "입암면",
+    "village": "대천리",
+    "team": "A조",
+    "name": "윤기현",
+    "affiliation": "이장",
+    "phone": "010-8503-6958"
+  },
+  {
+    "id": "vp-317",
+    "eup": "입암면",
+    "village": "대천리",
+    "team": "B조",
+    "name": "김진탁",
+    "affiliation": "자율방재단",
+    "phone": "010-6778-1158"
+  },
+  {
+    "id": "vp-318",
+    "eup": "입암면",
+    "village": "대천리",
+    "team": "C조",
+    "name": "조순녀",
+    "affiliation": "지도자",
+    "phone": "010-3194-4841"
+  },
+  {
+    "id": "vp-319",
+    "eup": "입암면",
+    "village": "대천리",
+    "team": "A조",
+    "name": "오남원",
+    "affiliation": "공무원",
+    "phone": "010-9717-0044"
+  },
+  {
+    "id": "vp-320",
+    "eup": "입암면",
+    "village": "대천리",
+    "team": "B조",
+    "name": "권영대",
+    "affiliation": "공무원",
+    "phone": "010-2022-7288"
+  },
+  {
+    "id": "vp-321",
+    "eup": "입암면",
+    "village": "대천리",
+    "team": "C조",
+    "name": "오남원",
+    "affiliation": "공무원",
+    "phone": "010-9717-0044"
+  },
+  {
+    "id": "vp-322",
+    "eup": "입암면",
+    "village": "대천리",
+    "team": "A조",
+    "name": "김진탁",
+    "affiliation": "자율방재단",
+    "phone": "010-6778-1158"
+  },
+  {
+    "id": "vp-323",
+    "eup": "입암면",
+    "village": "대천리",
+    "team": "B조",
+    "name": "이은경",
+    "affiliation": "자율방재단",
+    "phone": "010-7153-1109"
+  },
+  {
+    "id": "vp-324",
+    "eup": "입암면",
+    "village": "대천리",
+    "team": "C조",
+    "name": "이은경",
+    "affiliation": "자율방재단",
+    "phone": "010-7153-1109"
+  },
+  {
+    "id": "vp-325",
+    "eup": "입암면",
+    "village": "신사1리",
+    "team": "A조",
+    "name": "권윤동",
+    "affiliation": "이장",
+    "phone": "010-3511-3514"
+  },
+  {
+    "id": "vp-326",
+    "eup": "입암면",
+    "village": "신사1리",
+    "team": "B조",
+    "name": "이길수",
+    "affiliation": "자율방재단",
+    "phone": "010-7199-6052"
+  },
+  {
+    "id": "vp-327",
+    "eup": "입암면",
+    "village": "신사1리",
+    "team": "C조",
+    "name": "이상용",
+    "affiliation": "자율방재단",
+    "phone": "010-8591-3678"
+  },
+  {
+    "id": "vp-328",
+    "eup": "입암면",
+    "village": "신사1리",
+    "team": "A조",
+    "name": "김태곤",
+    "affiliation": "공무원",
+    "phone": "010-9536-3503"
+  },
+  {
+    "id": "vp-329",
+    "eup": "입암면",
+    "village": "신사1리",
+    "team": "B조",
+    "name": "이수진",
+    "affiliation": "공무원",
+    "phone": "010-3070-2196"
+  },
+  {
+    "id": "vp-330",
+    "eup": "입암면",
+    "village": "신사1리",
+    "team": "C조",
+    "name": "김태곤",
+    "affiliation": "공무원",
+    "phone": "010-9536-3503"
+  },
+  {
+    "id": "vp-331",
+    "eup": "입암면",
+    "village": "신사1리",
+    "team": "A조",
+    "name": "장인수",
+    "affiliation": "자율방재단",
+    "phone": "010-2757-3922"
+  },
+  {
+    "id": "vp-332",
+    "eup": "입암면",
+    "village": "신사1리",
+    "team": "B조",
+    "name": "심광수",
+    "affiliation": "자율방재단",
+    "phone": "010-3518-7629"
+  },
+  {
+    "id": "vp-333",
+    "eup": "입암면",
+    "village": "신사1리",
+    "team": "C조",
+    "name": "윤희철",
+    "affiliation": "자율방재단",
+    "phone": "010-9374-4494"
+  },
+  {
+    "id": "vp-334",
+    "eup": "입암면",
+    "village": "신사2리",
+    "team": "A조",
+    "name": "이재학",
+    "affiliation": "이장",
+    "phone": "010-9353-3776"
+  },
+  {
+    "id": "vp-335",
+    "eup": "입암면",
+    "village": "신사2리",
+    "team": "B조",
+    "name": "남두현",
+    "affiliation": "지도자",
+    "phone": "010-9375-0072"
+  },
+  {
+    "id": "vp-336",
+    "eup": "입암면",
+    "village": "신사2리",
+    "team": "C조",
+    "name": "오정동",
+    "affiliation": "지도자",
+    "phone": "010-9046-3776"
+  },
+  {
+    "id": "vp-337",
+    "eup": "입암면",
+    "village": "신사2리",
+    "team": "A조",
+    "name": "임윤정",
+    "affiliation": "공무원",
+    "phone": "010-2763-3057"
+  },
+  {
+    "id": "vp-338",
+    "eup": "입암면",
+    "village": "신사2리",
+    "team": "B조",
+    "name": "김명권",
+    "affiliation": "공무원",
+    "phone": "010-7262-7213"
+  },
+  {
+    "id": "vp-339",
+    "eup": "입암면",
+    "village": "신사2리",
+    "team": "C조",
+    "name": "임윤정",
+    "affiliation": "공무원",
+    "phone": "010-2763-3057"
+  },
+  {
+    "id": "vp-340",
+    "eup": "입암면",
+    "village": "신사2리",
+    "team": "A조",
+    "name": "신승훈",
+    "affiliation": "자율방재단",
+    "phone": "010-4165-4108"
+  },
+  {
+    "id": "vp-341",
+    "eup": "입암면",
+    "village": "신사2리",
+    "team": "B조",
+    "name": "천호영",
+    "affiliation": "자율방범대",
+    "phone": "010-3377-5893"
+  },
+  {
+    "id": "vp-342",
+    "eup": "입암면",
+    "village": "신사2리",
+    "team": "C조",
+    "name": "신승훈",
+    "affiliation": "자율방재단",
+    "phone": "010-4165-4108"
+  },
+  {
+    "id": "vp-343",
+    "eup": "입암면",
+    "village": "산해1리",
+    "team": "A조",
+    "name": "권영건",
+    "affiliation": "이장",
+    "phone": "010-3812-9067"
+  },
+  {
+    "id": "vp-344",
+    "eup": "입암면",
+    "village": "산해1리",
+    "team": "B조",
+    "name": "김찬구",
+    "affiliation": "지도자",
+    "phone": "010-6676-3602"
+  },
+  {
+    "id": "vp-345",
+    "eup": "입암면",
+    "village": "산해1리",
+    "team": "C조",
+    "name": "김숙이",
+    "affiliation": "지도자",
+    "phone": "010-7725-3775"
+  },
+  {
+    "id": "vp-346",
+    "eup": "입암면",
+    "village": "산해1리",
+    "team": "A조",
+    "name": "정명옥",
+    "affiliation": "공무원",
+    "phone": "010-2052-2369"
+  },
+  {
+    "id": "vp-347",
+    "eup": "입암면",
+    "village": "산해1리",
+    "team": "B조",
+    "name": "이상희",
+    "affiliation": "공무원",
+    "phone": "010-8401-1070"
+  },
+  {
+    "id": "vp-348",
+    "eup": "입암면",
+    "village": "산해1리",
+    "team": "C조",
+    "name": "정명옥",
+    "affiliation": "공무원",
+    "phone": "010-2052-2369"
+  },
+  {
+    "id": "vp-349",
+    "eup": "입암면",
+    "village": "산해1리",
+    "team": "A조",
+    "name": "이재권",
+    "affiliation": "자율방재단",
+    "phone": "010-3547-4169"
+  },
+  {
+    "id": "vp-350",
+    "eup": "입암면",
+    "village": "산해1리",
+    "team": "B조",
+    "name": "이재권",
+    "affiliation": "자율방재단",
+    "phone": "010-3547-4169"
+  },
+  {
+    "id": "vp-351",
+    "eup": "입암면",
+    "village": "산해1리",
+    "team": "C조",
+    "name": "권순기",
+    "affiliation": "자율방재단",
+    "phone": "010-9550-7002"
+  },
+  {
+    "id": "vp-352",
+    "eup": "입암면",
+    "village": "산해2리",
+    "team": "A조",
+    "name": "박기락",
+    "affiliation": "이장",
+    "phone": "010-6777-4205"
+  },
+  {
+    "id": "vp-353",
+    "eup": "입암면",
+    "village": "산해2리",
+    "team": "B조",
+    "name": "이맹용",
+    "affiliation": "지도자",
+    "phone": "010-4525-9860"
+  },
+  {
+    "id": "vp-354",
+    "eup": "입암면",
+    "village": "산해2리",
+    "team": "C조",
+    "name": "권금자",
+    "affiliation": "지도자",
+    "phone": "010-8567-0028"
+  },
+  {
+    "id": "vp-355",
+    "eup": "입암면",
+    "village": "산해2리",
+    "team": "A조",
+    "name": "김향희",
+    "affiliation": "공무원",
+    "phone": "010-6287-8614"
+  },
+  {
+    "id": "vp-356",
+    "eup": "입암면",
+    "village": "산해2리",
+    "team": "B조",
+    "name": "이상희",
+    "affiliation": "공무원",
+    "phone": "010-8401-1070"
+  },
+  {
+    "id": "vp-357",
+    "eup": "입암면",
+    "village": "산해2리",
+    "team": "C조",
+    "name": "김향희",
+    "affiliation": "공무원",
+    "phone": "010-6287-8614"
+  },
+  {
+    "id": "vp-358",
+    "eup": "입암면",
+    "village": "산해2리",
+    "team": "A조",
+    "name": "문성호",
+    "affiliation": "자율방재단",
+    "phone": "010-2459-5809"
+  },
+  {
+    "id": "vp-359",
+    "eup": "입암면",
+    "village": "산해2리",
+    "team": "B조",
+    "name": "박기락",
+    "affiliation": "이장",
+    "phone": "010-6777-4205"
+  },
+  {
+    "id": "vp-360",
+    "eup": "입암면",
+    "village": "산해2리",
+    "team": "C조",
+    "name": "문성호",
+    "affiliation": "자율방재단",
+    "phone": "010-2459-5809"
+  },
+  {
+    "id": "vp-361",
+    "eup": "입암면",
+    "village": "산해3리",
+    "team": "A조",
+    "name": "성정호",
+    "affiliation": "이장",
+    "phone": "010-3122-6582"
+  },
+  {
+    "id": "vp-362",
+    "eup": "입암면",
+    "village": "산해3리",
+    "team": "B조",
+    "name": "조원제",
+    "affiliation": "지도자",
+    "phone": "010-2506-3755"
+  },
+  {
+    "id": "vp-363",
+    "eup": "입암면",
+    "village": "산해3리",
+    "team": "C조",
+    "name": "임미정",
+    "affiliation": "지도자",
+    "phone": "010-9366-2692"
+  },
+  {
+    "id": "vp-364",
+    "eup": "입암면",
+    "village": "산해3리",
+    "team": "A조",
+    "name": "강소진",
+    "affiliation": "공무원",
+    "phone": "010-2102-9156"
+  },
+  {
+    "id": "vp-365",
+    "eup": "입암면",
+    "village": "산해3리",
+    "team": "B조",
+    "name": "이연호",
+    "affiliation": "공무원",
+    "phone": "010-8388-2538"
+  },
+  {
+    "id": "vp-366",
+    "eup": "입암면",
+    "village": "산해3리",
+    "team": "C조",
+    "name": "강소진",
+    "affiliation": "공무원",
+    "phone": "010-2102-9156"
+  },
+  {
+    "id": "vp-367",
+    "eup": "입암면",
+    "village": "산해3리",
+    "team": "A조",
+    "name": "김경민",
+    "affiliation": "자율방재단",
+    "phone": "010-6546-3330"
+  },
+  {
+    "id": "vp-368",
+    "eup": "입암면",
+    "village": "산해3리",
+    "team": "B조",
+    "name": "문성호",
+    "affiliation": "자율방재단",
+    "phone": "010-2459-5809"
+  },
+  {
+    "id": "vp-369",
+    "eup": "입암면",
+    "village": "산해3리",
+    "team": "C조",
+    "name": "김경민",
+    "affiliation": "자율방재단",
+    "phone": "010-6546-3330"
+  },
+  {
+    "id": "vp-370",
+    "eup": "입암면",
+    "village": "산해4리",
+    "team": "A조",
+    "name": "이영숙",
+    "affiliation": "이장",
+    "phone": "010-4525-4398"
+  },
+  {
+    "id": "vp-371",
+    "eup": "입암면",
+    "village": "산해4리",
+    "team": "B조",
+    "name": "임병영",
+    "affiliation": "지도자",
+    "phone": "010-5321-2024"
+  },
+  {
+    "id": "vp-372",
+    "eup": "입암면",
+    "village": "산해4리",
+    "team": "C조",
+    "name": "임정엽",
+    "affiliation": "지도자",
+    "phone": "010-3518-9072"
+  },
+  {
+    "id": "vp-373",
+    "eup": "입암면",
+    "village": "산해4리",
+    "team": "A조",
+    "name": "남현진",
+    "affiliation": "공무원",
+    "phone": "010-9514-0490"
+  },
+  {
+    "id": "vp-374",
+    "eup": "입암면",
+    "village": "산해4리",
+    "team": "B조",
+    "name": "황미숙",
+    "affiliation": "공무원",
+    "phone": "010-4117-7411"
+  },
+  {
+    "id": "vp-375",
+    "eup": "입암면",
+    "village": "산해4리",
+    "team": "C조",
+    "name": "남현진",
+    "affiliation": "공무원",
+    "phone": "010-9514-0490"
+  },
+  {
+    "id": "vp-376",
+    "eup": "입암면",
+    "village": "산해4리",
+    "team": "A조",
+    "name": "박경훈",
+    "affiliation": "자율방재단",
+    "phone": "010-5034-3075"
+  },
+  {
+    "id": "vp-377",
+    "eup": "입암면",
+    "village": "산해4리",
+    "team": "B조",
+    "name": "정수진",
+    "affiliation": "자율방재단",
+    "phone": "010-9653-3121"
+  },
+  {
+    "id": "vp-378",
+    "eup": "입암면",
+    "village": "산해4리",
+    "team": "C조",
+    "name": "박경훈",
+    "affiliation": "자율방재단",
+    "phone": "010-5034-3075"
+  },
+  {
+    "id": "vp-379",
+    "eup": "입암면",
+    "village": "교리",
+    "team": "A조",
+    "name": "김일연",
+    "affiliation": "이장",
+    "phone": "010-4808-3810"
+  },
+  {
+    "id": "vp-380",
+    "eup": "입암면",
+    "village": "교리",
+    "team": "B조",
+    "name": "김덕연",
+    "affiliation": "자율방재단",
+    "phone": "010-3131-3810"
+  },
+  {
+    "id": "vp-381",
+    "eup": "입암면",
+    "village": "교리",
+    "team": "C조",
+    "name": "김일연",
+    "affiliation": "이장",
+    "phone": "010-4808-3810"
+  },
+  {
+    "id": "vp-382",
+    "eup": "입암면",
+    "village": "교리",
+    "team": "A조",
+    "name": "김성훈",
+    "affiliation": "공무원",
+    "phone": "010-2674-4349"
+  },
+  {
+    "id": "vp-383",
+    "eup": "입암면",
+    "village": "교리",
+    "team": "B조",
+    "name": "서준기",
+    "affiliation": "공무원",
+    "phone": "010-8280-4173"
+  },
+  {
+    "id": "vp-384",
+    "eup": "입암면",
+    "village": "교리",
+    "team": "C조",
+    "name": "김성훈",
+    "affiliation": "공무원",
+    "phone": "010-2674-4349"
+  },
+  {
+    "id": "vp-385",
+    "eup": "입암면",
+    "village": "교리",
+    "team": "A조",
+    "name": "김덕연",
+    "affiliation": "자율방재단",
+    "phone": "010-3131-3810"
+  },
+  {
+    "id": "vp-386",
+    "eup": "입암면",
+    "village": "교리",
+    "team": "B조",
+    "name": "이유라",
+    "affiliation": "자율방재단",
+    "phone": "010-9148-9965"
+  },
+  {
+    "id": "vp-387",
+    "eup": "입암면",
+    "village": "교리",
+    "team": "C조",
+    "name": "이유라",
+    "affiliation": "자율방재단",
+    "phone": "010-9148-9965"
+  },
+  {
+    "id": "vp-388",
+    "eup": "입암면",
+    "village": "삼산리",
+    "team": "A조",
+    "name": "이재욱",
+    "affiliation": "이장",
+    "phone": "010-8243-2119"
+  },
+  {
+    "id": "vp-389",
+    "eup": "입암면",
+    "village": "삼산리",
+    "team": "B조",
+    "name": "김형복",
+    "affiliation": "지도자",
+    "phone": "010-9264-9735"
+  },
+  {
+    "id": "vp-390",
+    "eup": "입암면",
+    "village": "삼산리",
+    "team": "C조",
+    "name": "김춘희",
+    "affiliation": "지도자",
+    "phone": "010-8880-3046"
+  },
+  {
+    "id": "vp-391",
+    "eup": "입암면",
+    "village": "삼산리",
+    "team": "A조",
+    "name": "권은경",
+    "affiliation": "공무원",
+    "phone": "010-7752-6890"
+  },
+  {
+    "id": "vp-392",
+    "eup": "입암면",
+    "village": "삼산리",
+    "team": "B조",
+    "name": "김창수",
+    "affiliation": "공무원",
+    "phone": "010-6850-3941"
+  },
+  {
+    "id": "vp-393",
+    "eup": "입암면",
+    "village": "삼산리",
+    "team": "C조",
+    "name": "권은경",
+    "affiliation": "공무원",
+    "phone": "010-7752-6890"
+  },
+  {
+    "id": "vp-394",
+    "eup": "입암면",
+    "village": "삼산리",
+    "team": "A조",
+    "name": "김대한",
+    "affiliation": "자율방재단",
+    "phone": "010-3300-4937"
+  },
+  {
+    "id": "vp-395",
+    "eup": "입암면",
+    "village": "삼산리",
+    "team": "B조",
+    "name": "이재욱",
+    "affiliation": "이장",
+    "phone": "010-8243-2119"
+  },
+  {
+    "id": "vp-396",
+    "eup": "입암면",
+    "village": "삼산리",
+    "team": "C조",
+    "name": "김대한",
+    "affiliation": "자율방재단",
+    "phone": "010-3300-4937"
+  },
+  {
+    "id": "vp-397",
+    "eup": "입암면",
+    "village": "병옥리",
+    "team": "A조",
+    "name": "박상진",
+    "affiliation": "이장",
+    "phone": "010-3593-6439"
+  },
+  {
+    "id": "vp-398",
+    "eup": "입암면",
+    "village": "병옥리",
+    "team": "B조",
+    "name": "임재용",
+    "affiliation": "지도자",
+    "phone": "010-6710-1347"
+  },
+  {
+    "id": "vp-399",
+    "eup": "입암면",
+    "village": "병옥리",
+    "team": "C조",
+    "name": "권재순",
+    "affiliation": "지도자",
+    "phone": "010-9090-2282"
+  },
+  {
+    "id": "vp-400",
+    "eup": "입암면",
+    "village": "병옥리",
+    "team": "A조",
+    "name": "김아람",
+    "affiliation": "공무원",
+    "phone": "010-6489-2706"
+  },
+  {
+    "id": "vp-401",
+    "eup": "입암면",
+    "village": "병옥리",
+    "team": "B조",
+    "name": "오중대",
+    "affiliation": "공무원",
+    "phone": "010-9348-1346"
+  },
+  {
+    "id": "vp-402",
+    "eup": "입암면",
+    "village": "병옥리",
+    "team": "C조",
+    "name": "김아람",
+    "affiliation": "공무원",
+    "phone": "010-6489-2706"
+  },
+  {
+    "id": "vp-403",
+    "eup": "입암면",
+    "village": "병옥리",
+    "team": "A조",
+    "name": "김은숙",
+    "affiliation": "자율방재단",
+    "phone": "010-8589-2058"
+  },
+  {
+    "id": "vp-404",
+    "eup": "입암면",
+    "village": "병옥리",
+    "team": "B조",
+    "name": "박상진",
+    "affiliation": "이장",
+    "phone": "010-3593-6439"
+  },
+  {
+    "id": "vp-405",
+    "eup": "입암면",
+    "village": "병옥리",
+    "team": "C조",
+    "name": "김은숙",
+    "affiliation": "자율방재단",
+    "phone": "010-8589-2058"
+  },
+  {
+    "id": "vp-406",
+    "eup": "입암면",
+    "village": "노달리",
+    "team": "A조",
+    "name": "안창성",
+    "affiliation": "이장",
+    "phone": "010-8598-4830"
+  },
+  {
+    "id": "vp-407",
+    "eup": "입암면",
+    "village": "노달리",
+    "team": "B조",
+    "name": "신상철",
+    "affiliation": "지도자",
+    "phone": "010-6512-1692"
+  },
+  {
+    "id": "vp-408",
+    "eup": "입암면",
+    "village": "노달리",
+    "team": "C조",
+    "name": "김미화",
+    "affiliation": "지도자",
+    "phone": "010-9411-4082"
+  },
+  {
+    "id": "vp-409",
+    "eup": "입암면",
+    "village": "노달리",
+    "team": "A조",
+    "name": "조현수",
+    "affiliation": "공무원",
+    "phone": "010-7229-8036"
+  },
+  {
+    "id": "vp-410",
+    "eup": "입암면",
+    "village": "노달리",
+    "team": "B조",
+    "name": "김창수",
+    "affiliation": "공무원",
+    "phone": "010-6850-3941"
+  },
+  {
+    "id": "vp-411",
+    "eup": "입암면",
+    "village": "노달리",
+    "team": "C조",
+    "name": "조현수",
+    "affiliation": "공무원",
+    "phone": "010-7229-8036"
+  },
+  {
+    "id": "vp-412",
+    "eup": "입암면",
+    "village": "노달리",
+    "team": "A조",
+    "name": "안한규",
+    "affiliation": "자율방재단",
+    "phone": "010-6206-9023"
+  },
+  {
+    "id": "vp-413",
+    "eup": "입암면",
+    "village": "노달리",
+    "team": "B조",
+    "name": "김미화",
+    "affiliation": "자율방재단",
+    "phone": "010-9411-4082"
+  },
+  {
+    "id": "vp-414",
+    "eup": "입암면",
+    "village": "노달리",
+    "team": "C조",
+    "name": "권기배",
+    "affiliation": "자율방재단",
+    "phone": "010-9355-3446"
+  },
+  {
+    "id": "vp-415",
+    "eup": "입암면",
+    "village": "방전리",
+    "team": "A조",
+    "name": "심상국",
+    "affiliation": "이장",
+    "phone": "010-3058-5702"
+  },
+  {
+    "id": "vp-416",
+    "eup": "입암면",
+    "village": "방전리",
+    "team": "B조",
+    "name": "김종국",
+    "affiliation": "지도자",
+    "phone": "010-2552-5589"
+  },
+  {
+    "id": "vp-417",
+    "eup": "입암면",
+    "village": "방전리",
+    "team": "C조",
+    "name": "구말연",
+    "affiliation": "지도자",
+    "phone": "010-2290-5715"
+  },
+  {
+    "id": "vp-418",
+    "eup": "입암면",
+    "village": "방전리",
+    "team": "A조",
+    "name": "전영준",
+    "affiliation": "공무원",
+    "phone": "010-6517-9655"
+  },
+  {
+    "id": "vp-419",
+    "eup": "입암면",
+    "village": "방전리",
+    "team": "B조",
+    "name": "서준기",
+    "affiliation": "공무원",
+    "phone": "010-8280-4173"
+  },
+  {
+    "id": "vp-420",
+    "eup": "입암면",
+    "village": "방전리",
+    "team": "C조",
+    "name": "전영준",
+    "affiliation": "공무원",
+    "phone": "010-6517-9655"
+  },
+  {
+    "id": "vp-421",
+    "eup": "입암면",
+    "village": "방전리",
+    "team": "A조",
+    "name": "한영수",
+    "affiliation": "자율방재단",
+    "phone": "010-4809-7835"
+  },
+  {
+    "id": "vp-422",
+    "eup": "입암면",
+    "village": "방전리",
+    "team": "B조",
+    "name": "심상국",
+    "affiliation": "이장",
+    "phone": "010-3058-5702"
+  },
+  {
+    "id": "vp-423",
+    "eup": "입암면",
+    "village": "방전리",
+    "team": "C조",
+    "name": "한영수",
+    "affiliation": "자율방재단",
+    "phone": "010-4809-7835"
+  },
+  {
+    "id": "vp-424",
+    "eup": "입암면",
+    "village": "흥구리",
+    "team": "A조",
+    "name": "김영하",
+    "affiliation": "이장",
+    "phone": "010-3813-9760"
+  },
+  {
+    "id": "vp-425",
+    "eup": "입암면",
+    "village": "흥구리",
+    "team": "B조",
+    "name": "권훈기",
+    "affiliation": "지도자",
+    "phone": "010-3538-3203"
+  },
+  {
+    "id": "vp-426",
+    "eup": "입암면",
+    "village": "흥구리",
+    "team": "C조",
+    "name": "최해선",
+    "affiliation": "지도자",
+    "phone": "010-2507-1143"
+  },
+  {
+    "id": "vp-427",
+    "eup": "입암면",
+    "village": "흥구리",
+    "team": "A조",
+    "name": "권오빈",
+    "affiliation": "공무원",
+    "phone": "010-9063-4406"
+  },
+  {
+    "id": "vp-428",
+    "eup": "입암면",
+    "village": "흥구리",
+    "team": "B조",
+    "name": "홍성도",
+    "affiliation": "공무원",
+    "phone": "010-6666-7084"
+  },
+  {
+    "id": "vp-429",
+    "eup": "입암면",
+    "village": "흥구리",
+    "team": "C조",
+    "name": "권오빈",
+    "affiliation": "공무원",
+    "phone": "010-9063-4406"
+  },
+  {
+    "id": "vp-430",
+    "eup": "입암면",
+    "village": "흥구리",
+    "team": "A조",
+    "name": "권인희",
+    "affiliation": "자율방재단",
+    "phone": "010-9415-1173"
+  },
+  {
+    "id": "vp-431",
+    "eup": "입암면",
+    "village": "흥구리",
+    "team": "B조",
+    "name": "김영하",
+    "affiliation": "이장",
+    "phone": "010-3813-9760"
+  },
+  {
+    "id": "vp-432",
+    "eup": "입암면",
+    "village": "흥구리",
+    "team": "C조",
+    "name": "권인희",
+    "affiliation": "자율방재단",
+    "phone": "010-9415-1173"
+  },
+  {
+    "id": "vp-433",
+    "eup": "청기면",
+    "village": "저리",
+    "team": "A조",
+    "name": "김국종",
+    "affiliation": "이장",
+    "phone": "010-6277-8055"
+  },
+  {
+    "id": "vp-434",
+    "eup": "청기면",
+    "village": "저리",
+    "team": "B조",
+    "name": "김정철",
+    "affiliation": "자율방재단",
+    "phone": "010-8830-0438"
+  },
+  {
+    "id": "vp-435",
+    "eup": "청기면",
+    "village": "저리",
+    "team": "C조",
+    "name": "김기용",
+    "affiliation": "자율방재단",
+    "phone": "010-2961-1358"
+  },
+  {
+    "id": "vp-436",
+    "eup": "청기면",
+    "village": "저리",
+    "team": "A조",
+    "name": "신승훈",
+    "affiliation": "공무원",
+    "phone": "010-5147-2057"
+  },
+  {
+    "id": "vp-437",
+    "eup": "청기면",
+    "village": "저리",
+    "team": "B조",
+    "name": "이정숙",
+    "affiliation": "공무원",
+    "phone": "010-8517-5445"
+  },
+  {
+    "id": "vp-438",
+    "eup": "청기면",
+    "village": "저리",
+    "team": "C조",
+    "name": "신승훈",
+    "affiliation": "공무원",
+    "phone": "010-5147-2057"
+  },
+  {
+    "id": "vp-439",
+    "eup": "청기면",
+    "village": "저리",
+    "team": "A조",
+    "name": "김치종",
+    "affiliation": "자율방재단",
+    "phone": "010-3829-7569"
+  },
+  {
+    "id": "vp-440",
+    "eup": "청기면",
+    "village": "저리",
+    "team": "B조",
+    "name": "김원종",
+    "affiliation": "자율방재단",
+    "phone": "010-7565-6708"
+  },
+  {
+    "id": "vp-441",
+    "eup": "청기면",
+    "village": "저리",
+    "team": "C조",
+    "name": "김철종",
+    "affiliation": "자율방재단",
+    "phone": "010-6286-3186"
+  },
+  {
+    "id": "vp-442",
+    "eup": "청기면",
+    "village": "상청1리",
+    "team": "A조",
+    "name": "안종권",
+    "affiliation": "이장",
+    "phone": "010-6669-4426"
+  },
+  {
+    "id": "vp-443",
+    "eup": "청기면",
+    "village": "상청1리",
+    "team": "B조",
+    "name": "김인규",
+    "affiliation": "자율방재단",
+    "phone": "010-6512-8065"
+  },
+  {
+    "id": "vp-444",
+    "eup": "청기면",
+    "village": "상청1리",
+    "team": "C조",
+    "name": "조영종",
+    "affiliation": "자율방재단",
+    "phone": "010-7327-7873"
+  },
+  {
+    "id": "vp-445",
+    "eup": "청기면",
+    "village": "상청1리",
+    "team": "A조",
+    "name": "김승범",
+    "affiliation": "공무원",
+    "phone": "010-4794-4615"
+  },
+  {
+    "id": "vp-446",
+    "eup": "청기면",
+    "village": "상청1리",
+    "team": "B조",
+    "name": "권지남",
+    "affiliation": "공무원",
+    "phone": "010-6674-5594"
+  },
+  {
+    "id": "vp-447",
+    "eup": "청기면",
+    "village": "상청1리",
+    "team": "C조",
+    "name": "김승범",
+    "affiliation": "공무원",
+    "phone": "010-4794-4615"
+  },
+  {
+    "id": "vp-448",
+    "eup": "청기면",
+    "village": "상청1리",
+    "team": "A조",
+    "name": "안해웅",
+    "affiliation": "자율방재단",
+    "phone": "010-5394-7393"
+  },
+  {
+    "id": "vp-449",
+    "eup": "청기면",
+    "village": "상청1리",
+    "team": "B조",
+    "name": "김기국",
+    "affiliation": "자율방재단",
+    "phone": "010-2016-3032"
+  },
+  {
+    "id": "vp-450",
+    "eup": "청기면",
+    "village": "상청1리",
+    "team": "C조",
+    "name": "권기목",
+    "affiliation": "자율방재단",
+    "phone": "010-5446-2148"
+  },
+  {
+    "id": "vp-451",
+    "eup": "청기면",
+    "village": "상청2리",
+    "team": "A조",
+    "name": "김태숙",
+    "affiliation": "이장",
+    "phone": "010-5893-0325"
+  },
+  {
+    "id": "vp-452",
+    "eup": "청기면",
+    "village": "상청2리",
+    "team": "B조",
+    "name": "이상길",
+    "affiliation": "자율방재단",
+    "phone": "010-8283-6682"
+  },
+  {
+    "id": "vp-453",
+    "eup": "청기면",
+    "village": "상청2리",
+    "team": "C조",
+    "name": "이진우",
+    "affiliation": "자율방재단",
+    "phone": "010-5254-7624"
+  },
+  {
+    "id": "vp-454",
+    "eup": "청기면",
+    "village": "상청2리",
+    "team": "A조",
+    "name": "김시현",
+    "affiliation": "공무원",
+    "phone": "010-2426-9610"
+  },
+  {
+    "id": "vp-455",
+    "eup": "청기면",
+    "village": "상청2리",
+    "team": "B조",
+    "name": "권지남",
+    "affiliation": "공무원",
+    "phone": "010-6674-5594"
+  },
+  {
+    "id": "vp-456",
+    "eup": "청기면",
+    "village": "상청2리",
+    "team": "C조",
+    "name": "김시현",
+    "affiliation": "공무원",
+    "phone": "010-2426-9610"
+  },
+  {
+    "id": "vp-457",
+    "eup": "청기면",
+    "village": "상청2리",
+    "team": "A조",
+    "name": "김수동",
+    "affiliation": "자율방재단",
+    "phone": "010-4808-6616"
+  },
+  {
+    "id": "vp-458",
+    "eup": "청기면",
+    "village": "상청2리",
+    "team": "B조",
+    "name": "김승기",
+    "affiliation": "자율방재단",
+    "phone": "010-9371-9775"
+  },
+  {
+    "id": "vp-459",
+    "eup": "청기면",
+    "village": "상청2리",
+    "team": "C조",
+    "name": "김창규",
+    "affiliation": "자율방재단",
+    "phone": "010-2826-6619"
+  },
+  {
+    "id": "vp-460",
+    "eup": "청기면",
+    "village": "구매1리",
+    "team": "A조",
+    "name": "김주기",
+    "affiliation": "이장",
+    "phone": "010-3522-6909"
+  },
+  {
+    "id": "vp-461",
+    "eup": "청기면",
+    "village": "구매1리",
+    "team": "B조",
+    "name": "변복기",
+    "affiliation": "자율방재단",
+    "phone": "010-6506-2080"
+  },
+  {
+    "id": "vp-462",
+    "eup": "청기면",
+    "village": "구매1리",
+    "team": "C조",
+    "name": "김주기",
+    "affiliation": "이장",
+    "phone": "010-3522-6909"
+  },
+  {
+    "id": "vp-463",
+    "eup": "청기면",
+    "village": "구매1리",
+    "team": "A조",
+    "name": "김규섭",
+    "affiliation": "공무원",
+    "phone": "010-5126-2832"
+  },
+  {
+    "id": "vp-464",
+    "eup": "청기면",
+    "village": "구매1리",
+    "team": "B조",
+    "name": "문혜진",
+    "affiliation": "공무원",
+    "phone": "010-9406-1792"
+  },
+  {
+    "id": "vp-465",
+    "eup": "청기면",
+    "village": "구매1리",
+    "team": "C조",
+    "name": "김규섭",
+    "affiliation": "공무원",
+    "phone": "010-5126-2832"
+  },
+  {
+    "id": "vp-466",
+    "eup": "청기면",
+    "village": "구매1리",
+    "team": "A조",
+    "name": "변복기",
+    "affiliation": "자율방재단",
+    "phone": "010-6506-2080"
+  },
+  {
+    "id": "vp-467",
+    "eup": "청기면",
+    "village": "구매1리",
+    "team": "B조",
+    "name": "홍인수",
+    "affiliation": "자율방재단",
+    "phone": "010-6336-8950"
+  },
+  {
+    "id": "vp-468",
+    "eup": "청기면",
+    "village": "구매1리",
+    "team": "C조",
+    "name": "변복기",
+    "affiliation": "자율방재단",
+    "phone": "010-6506-2080"
+  },
+  {
+    "id": "vp-469",
+    "eup": "청기면",
+    "village": "구매2리",
+    "team": "A조",
+    "name": "우경윤",
+    "affiliation": "이장",
+    "phone": "010-8724-1965"
+  },
+  {
+    "id": "vp-470",
+    "eup": "청기면",
+    "village": "구매2리",
+    "team": "B조",
+    "name": "김억규",
+    "affiliation": "자율방재단",
+    "phone": "010-6546-6467"
+  },
+  {
+    "id": "vp-471",
+    "eup": "청기면",
+    "village": "구매2리",
+    "team": "C조",
+    "name": "박경숙",
+    "affiliation": "자율방재단",
+    "phone": "010-7628-1205"
+  },
+  {
+    "id": "vp-472",
+    "eup": "청기면",
+    "village": "구매2리",
+    "team": "A조",
+    "name": "표병욱",
+    "affiliation": "공무원",
+    "phone": "010-4175-1653"
+  },
+  {
+    "id": "vp-473",
+    "eup": "청기면",
+    "village": "구매2리",
+    "team": "B조",
+    "name": "문혜진",
+    "affiliation": "공무원",
+    "phone": "010-9406-1792"
+  },
+  {
+    "id": "vp-474",
+    "eup": "청기면",
+    "village": "구매2리",
+    "team": "C조",
+    "name": "표병욱",
+    "affiliation": "공무원",
+    "phone": "010-4175-1653"
+  },
+  {
+    "id": "vp-475",
+    "eup": "청기면",
+    "village": "구매2리",
+    "team": "A조",
+    "name": "최강수",
+    "affiliation": "자율방재단",
+    "phone": "010-3494-2553"
+  },
+  {
+    "id": "vp-476",
+    "eup": "청기면",
+    "village": "구매2리",
+    "team": "B조",
+    "name": "이순자",
+    "affiliation": "자율방재단",
+    "phone": "010-8779-3971"
+  },
+  {
+    "id": "vp-477",
+    "eup": "청기면",
+    "village": "구매2리",
+    "team": "C조",
+    "name": "강춘자",
+    "affiliation": "자율방재단",
+    "phone": "010-9364-6471"
+  },
+  {
+    "id": "vp-478",
+    "eup": "청기면",
+    "village": "청기1리",
+    "team": "A조",
+    "name": "이춘식",
+    "affiliation": "이장",
+    "phone": "010-9256-5348"
+  },
+  {
+    "id": "vp-479",
+    "eup": "청기면",
+    "village": "청기1리",
+    "team": "B조",
+    "name": "김세종",
+    "affiliation": "자율방재단",
+    "phone": "010-5177-8080"
+  },
+  {
+    "id": "vp-480",
+    "eup": "청기면",
+    "village": "청기1리",
+    "team": "C조",
+    "name": "권오진",
+    "affiliation": "자율방재단",
+    "phone": "010-8807-8584"
+  },
+  {
+    "id": "vp-481",
+    "eup": "청기면",
+    "village": "청기1리",
+    "team": "A조",
+    "name": "이충원",
+    "affiliation": "공무원",
+    "phone": "010-9366-9001"
+  },
+  {
+    "id": "vp-482",
+    "eup": "청기면",
+    "village": "청기1리",
+    "team": "B조",
+    "name": "정종순",
+    "affiliation": "공무원",
+    "phone": "010-8857-5166"
+  },
+  {
+    "id": "vp-483",
+    "eup": "청기면",
+    "village": "청기1리",
+    "team": "C조",
+    "name": "이충원",
+    "affiliation": "공무원",
+    "phone": "010-9366-9001"
+  },
+  {
+    "id": "vp-484",
+    "eup": "청기면",
+    "village": "청기1리",
+    "team": "A조",
+    "name": "오종협",
+    "affiliation": "자율방재단",
+    "phone": "010-7514-6000"
+  },
+  {
+    "id": "vp-485",
+    "eup": "청기면",
+    "village": "청기1리",
+    "team": "B조",
+    "name": "오경창",
+    "affiliation": "자율방재단",
+    "phone": "010-5559-3477"
+  },
+  {
+    "id": "vp-486",
+    "eup": "청기면",
+    "village": "청기1리",
+    "team": "C조",
+    "name": "이승우",
+    "affiliation": "자율방재단",
+    "phone": "010-4513-6061"
+  },
+  {
+    "id": "vp-487",
+    "eup": "청기면",
+    "village": "청기2리",
+    "team": "A조",
+    "name": "채영창",
+    "affiliation": "이장",
+    "phone": "010-4509-1222"
+  },
+  {
+    "id": "vp-488",
+    "eup": "청기면",
+    "village": "청기2리",
+    "team": "B조",
+    "name": "천기열",
+    "affiliation": "자율방재단",
+    "phone": "010-4194-8465"
+  },
+  {
+    "id": "vp-489",
+    "eup": "청기면",
+    "village": "청기2리",
+    "team": "C조",
+    "name": "심정보",
+    "affiliation": "자율방재단",
+    "phone": "010-4514-6085"
+  },
+  {
+    "id": "vp-490",
+    "eup": "청기면",
+    "village": "청기2리",
+    "team": "A조",
+    "name": "김석현",
+    "affiliation": "공무원",
+    "phone": "010-2627-3394"
+  },
+  {
+    "id": "vp-491",
+    "eup": "청기면",
+    "village": "청기2리",
+    "team": "B조",
+    "name": "정종순",
+    "affiliation": "공무원",
+    "phone": "010-8857-5166"
+  },
+  {
+    "id": "vp-492",
+    "eup": "청기면",
+    "village": "청기2리",
+    "team": "C조",
+    "name": "김석현",
+    "affiliation": "공무원",
+    "phone": "010-2627-3394"
+  },
+  {
+    "id": "vp-493",
+    "eup": "청기면",
+    "village": "청기2리",
+    "team": "A조",
+    "name": "정관훈",
+    "affiliation": "자율방재단",
+    "phone": "010-8774-6363"
+  },
+  {
+    "id": "vp-494",
+    "eup": "청기면",
+    "village": "청기2리",
+    "team": "B조",
+    "name": "허석영",
+    "affiliation": "자율방재단",
+    "phone": "010-5032-9975"
+  },
+  {
+    "id": "vp-495",
+    "eup": "청기면",
+    "village": "청기2리",
+    "team": "C조",
+    "name": "송종욱",
+    "affiliation": "자율방재단",
+    "phone": "010-3565-3706"
+  },
+  {
+    "id": "vp-496",
+    "eup": "청기면",
+    "village": "정족1리",
+    "team": "A조",
+    "name": "구자걸",
+    "affiliation": "이장",
+    "phone": "010-7733-6655"
+  },
+  {
+    "id": "vp-497",
+    "eup": "청기면",
+    "village": "정족1리",
+    "team": "B조",
+    "name": "박무용",
+    "affiliation": "자율방재단",
+    "phone": "010-3559-4259"
+  },
+  {
+    "id": "vp-498",
+    "eup": "청기면",
+    "village": "정족1리",
+    "team": "C조",
+    "name": "김용원",
+    "affiliation": "자율방범대",
+    "phone": "010-8534-7598"
+  },
+  {
+    "id": "vp-499",
+    "eup": "청기면",
+    "village": "정족1리",
+    "team": "A조",
+    "name": "이희승",
+    "affiliation": "공무원",
+    "phone": "010-4242-4537"
+  },
+  {
+    "id": "vp-500",
+    "eup": "청기면",
+    "village": "정족1리",
+    "team": "B조",
+    "name": "김지훈",
+    "affiliation": "공무원",
+    "phone": "010-7110-5367"
+  },
+  {
+    "id": "vp-501",
+    "eup": "청기면",
+    "village": "정족1리",
+    "team": "C조",
+    "name": "이희승",
+    "affiliation": "공무원",
+    "phone": "010-4242-4537"
+  },
+  {
+    "id": "vp-502",
+    "eup": "청기면",
+    "village": "정족1리",
+    "team": "A조",
+    "name": "김용원",
+    "affiliation": "자율방재단",
+    "phone": "010-8534-7598"
+  },
+  {
+    "id": "vp-503",
+    "eup": "청기면",
+    "village": "정족1리",
+    "team": "B조",
+    "name": "우동길",
+    "affiliation": "자율방재단",
+    "phone": "010-9037-5678"
+  },
+  {
+    "id": "vp-504",
+    "eup": "청기면",
+    "village": "정족1리",
+    "team": "C조",
+    "name": "금태영",
+    "affiliation": "자율방재단",
+    "phone": "010-2830-6157"
+  },
+  {
+    "id": "vp-505",
+    "eup": "청기면",
+    "village": "정족2리",
+    "team": "A조",
+    "name": "조규호",
+    "affiliation": "이장",
+    "phone": "010-2531-6158"
+  },
+  {
+    "id": "vp-506",
+    "eup": "청기면",
+    "village": "정족2리",
+    "team": "B조",
+    "name": "천도영",
+    "affiliation": "자율방재단",
+    "phone": "010-8757-6487"
+  },
+  {
+    "id": "vp-507",
+    "eup": "청기면",
+    "village": "정족2리",
+    "team": "C조",
+    "name": "김형업",
+    "affiliation": "자율방재단",
+    "phone": "010-4530-8478"
+  },
+  {
+    "id": "vp-508",
+    "eup": "청기면",
+    "village": "정족2리",
+    "team": "A조",
+    "name": "김예종",
+    "affiliation": "공무원",
+    "phone": "010-3933-7569"
+  },
+  {
+    "id": "vp-509",
+    "eup": "청기면",
+    "village": "정족2리",
+    "team": "B조",
+    "name": "김지훈",
+    "affiliation": "공무원",
+    "phone": "010-7110-5367"
+  },
+  {
+    "id": "vp-510",
+    "eup": "청기면",
+    "village": "정족2리",
+    "team": "C조",
+    "name": "김예종",
+    "affiliation": "공무원",
+    "phone": "010-3933-7569"
+  },
+  {
+    "id": "vp-511",
+    "eup": "청기면",
+    "village": "정족2리",
+    "team": "A조",
+    "name": "권영후",
+    "affiliation": "자율방재단",
+    "phone": "010-6637-3256"
+  },
+  {
+    "id": "vp-512",
+    "eup": "청기면",
+    "village": "정족2리",
+    "team": "B조",
+    "name": "정상화",
+    "affiliation": "자율방재단",
+    "phone": "010-5358-2446"
+  },
+  {
+    "id": "vp-513",
+    "eup": "청기면",
+    "village": "정족2리",
+    "team": "C조",
+    "name": "서광운",
+    "affiliation": "자율방재단",
+    "phone": "010-7326-0392"
+  },
+  {
+    "id": "vp-514",
+    "eup": "청기면",
+    "village": "토곡1리",
+    "team": "A조",
+    "name": "권종흠",
+    "affiliation": "이장",
+    "phone": "010-2022-6234"
+  },
+  {
+    "id": "vp-515",
+    "eup": "청기면",
+    "village": "토곡1리",
+    "team": "B조",
+    "name": "이석형",
+    "affiliation": "자율방재단",
+    "phone": "010-6427-9269"
+  },
+  {
+    "id": "vp-516",
+    "eup": "청기면",
+    "village": "토곡1리",
+    "team": "C조",
+    "name": "임규화",
+    "affiliation": "자율방재단",
+    "phone": "010-7440-8454"
+  },
+  {
+    "id": "vp-517",
+    "eup": "청기면",
+    "village": "토곡1리",
+    "team": "A조",
+    "name": "배학경",
+    "affiliation": "공무원",
+    "phone": "010-6588-1730"
+  },
+  {
+    "id": "vp-518",
+    "eup": "청기면",
+    "village": "토곡1리",
+    "team": "B조",
+    "name": "전지원",
+    "affiliation": "공무원",
+    "phone": "010-6609-8940"
+  },
+  {
+    "id": "vp-519",
+    "eup": "청기면",
+    "village": "토곡1리",
+    "team": "C조",
+    "name": "배학경",
+    "affiliation": "공무원",
+    "phone": "010-6588-1730"
+  },
+  {
+    "id": "vp-520",
+    "eup": "청기면",
+    "village": "토곡1리",
+    "team": "A조",
+    "name": "천정희",
+    "affiliation": "자율방재단",
+    "phone": "010-8223-8051"
+  },
+  {
+    "id": "vp-521",
+    "eup": "청기면",
+    "village": "토곡1리",
+    "team": "B조",
+    "name": "권범철",
+    "affiliation": "자율방재단",
+    "phone": "010-4544-3160"
+  },
+  {
+    "id": "vp-522",
+    "eup": "청기면",
+    "village": "토곡1리",
+    "team": "C조",
+    "name": "박재기",
+    "affiliation": "자율방재단",
+    "phone": "010-8007-5082"
+  },
+  {
+    "id": "vp-523",
+    "eup": "청기면",
+    "village": "토곡2리",
+    "team": "A조",
+    "name": "최영학",
+    "affiliation": "이장",
+    "phone": "010-4530-8887"
+  },
+  {
+    "id": "vp-524",
+    "eup": "청기면",
+    "village": "토곡2리",
+    "team": "B조",
+    "name": "유희걸",
+    "affiliation": "자율방재단",
+    "phone": "010-9773-0876"
+  },
+  {
+    "id": "vp-525",
+    "eup": "청기면",
+    "village": "토곡2리",
+    "team": "C조",
+    "name": "윤종식",
+    "affiliation": "자율방재단",
+    "phone": "010-5439-6012"
+  },
+  {
+    "id": "vp-526",
+    "eup": "청기면",
+    "village": "토곡2리",
+    "team": "A조",
+    "name": "이현정",
+    "affiliation": "공무원",
+    "phone": "010-3689-7246"
+  },
+  {
+    "id": "vp-527",
+    "eup": "청기면",
+    "village": "토곡2리",
+    "team": "B조",
+    "name": "전지원",
+    "affiliation": "공무원",
+    "phone": "010-6609-8940"
+  },
+  {
+    "id": "vp-528",
+    "eup": "청기면",
+    "village": "토곡2리",
+    "team": "C조",
+    "name": "이현정",
+    "affiliation": "공무원",
+    "phone": "010-3689-7246"
+  },
+  {
+    "id": "vp-529",
+    "eup": "청기면",
+    "village": "토곡2리",
+    "team": "A조",
+    "name": "이순우",
+    "affiliation": "자율방재단",
+    "phone": "010-3450-1055"
+  },
+  {
+    "id": "vp-530",
+    "eup": "청기면",
+    "village": "토곡2리",
+    "team": "B조",
+    "name": "장성조",
+    "affiliation": "지율방재단",
+    "phone": "010-6245-4160"
+  },
+  {
+    "id": "vp-531",
+    "eup": "청기면",
+    "village": "토곡2리",
+    "team": "C조",
+    "name": "최영학",
+    "affiliation": "이장",
+    "phone": "010-4530-8887"
+  },
+  {
+    "id": "vp-532",
+    "eup": "청기면",
+    "village": "토구리",
+    "team": "A조",
+    "name": "권상훈",
+    "affiliation": "이장",
+    "phone": "010-4530-7120"
+  },
+  {
+    "id": "vp-533",
+    "eup": "청기면",
+    "village": "토구리",
+    "team": "B조",
+    "name": "권경섭",
+    "affiliation": "자율방재단",
+    "phone": "010-3815-1304"
+  },
+  {
+    "id": "vp-534",
+    "eup": "청기면",
+    "village": "토구리",
+    "team": "C조",
+    "name": "배종서",
+    "affiliation": "자율방재단",
+    "phone": "010-8593-6270"
+  },
+  {
+    "id": "vp-535",
+    "eup": "청기면",
+    "village": "토구리",
+    "team": "A조",
+    "name": "손미루",
+    "affiliation": "공무원",
+    "phone": "010-7229-3242"
+  },
+  {
+    "id": "vp-536",
+    "eup": "청기면",
+    "village": "토구리",
+    "team": "B조",
+    "name": "오성주",
+    "affiliation": "공무원",
+    "phone": "010-8598-1669"
+  },
+  {
+    "id": "vp-537",
+    "eup": "청기면",
+    "village": "토구리",
+    "team": "C조",
+    "name": "손미루",
+    "affiliation": "공무원",
+    "phone": "010-7229-3242"
+  },
+  {
+    "id": "vp-538",
+    "eup": "청기면",
+    "village": "토구리",
+    "team": "A조",
+    "name": "김창수",
+    "affiliation": "자율방재단",
+    "phone": "010-3877-6021"
+  },
+  {
+    "id": "vp-539",
+    "eup": "청기면",
+    "village": "토구리",
+    "team": "B조",
+    "name": "이호종",
+    "affiliation": "자율방재단",
+    "phone": "010-2084-6385"
+  },
+  {
+    "id": "vp-540",
+    "eup": "청기면",
+    "village": "토구리",
+    "team": "C조",
+    "name": "김기하",
+    "affiliation": "자율방재단",
+    "phone": "010-6515-6239"
+  },
+  {
+    "id": "vp-541",
+    "eup": "청기면",
+    "village": "산운리",
+    "team": "A조",
+    "name": "이성춘",
+    "affiliation": "이장",
+    "phone": "010-4810-6676"
+  },
+  {
+    "id": "vp-542",
+    "eup": "청기면",
+    "village": "산운리",
+    "team": "B조",
+    "name": "송민규",
+    "affiliation": "자율방재단",
+    "phone": "010-4007-5185"
+  },
+  {
+    "id": "vp-543",
+    "eup": "청기면",
+    "village": "산운리",
+    "team": "C조",
+    "name": "천진희",
+    "affiliation": "자율방재단",
+    "phone": "010-9544-6889"
+  },
+  {
+    "id": "vp-544",
+    "eup": "청기면",
+    "village": "산운리",
+    "team": "A조",
+    "name": "박시형",
+    "affiliation": "공무원",
+    "phone": "010-8794-2838"
+  },
+  {
+    "id": "vp-545",
+    "eup": "청기면",
+    "village": "산운리",
+    "team": "B조",
+    "name": "정은주",
+    "affiliation": "공무원",
+    "phone": "010-9913-8368"
+  },
+  {
+    "id": "vp-546",
+    "eup": "청기면",
+    "village": "산운리",
+    "team": "C조",
+    "name": "박시형",
+    "affiliation": "공무원",
+    "phone": "010-8794-2838"
+  },
+  {
+    "id": "vp-547",
+    "eup": "청기면",
+    "village": "산운리",
+    "team": "A조",
+    "name": "박정환",
+    "affiliation": "자율방재단",
+    "phone": "010-4508-0371"
+  },
+  {
+    "id": "vp-548",
+    "eup": "청기면",
+    "village": "산운리",
+    "team": "B조",
+    "name": "임진국",
+    "affiliation": "자율방재단",
+    "phone": "010-5376-6142"
+  },
+  {
+    "id": "vp-549",
+    "eup": "청기면",
+    "village": "산운리",
+    "team": "C조",
+    "name": "송민규",
+    "affiliation": "자율방재단",
+    "phone": "010-4007-5185"
+  },
+  {
+    "id": "vp-550",
+    "eup": "청기면",
+    "village": "사리",
+    "team": "A조",
+    "name": "윤창수",
+    "affiliation": "이장",
+    "phone": "010-2535-1738"
+  },
+  {
+    "id": "vp-551",
+    "eup": "청기면",
+    "village": "사리",
+    "team": "B조",
+    "name": "장인석",
+    "affiliation": "자율방재단",
+    "phone": "010-5216-8713"
+  },
+  {
+    "id": "vp-552",
+    "eup": "청기면",
+    "village": "사리",
+    "team": "C조",
+    "name": "이명록",
+    "affiliation": "자율방재단",
+    "phone": "010-5434-5023"
+  },
+  {
+    "id": "vp-553",
+    "eup": "청기면",
+    "village": "사리",
+    "team": "A조",
+    "name": "이정민",
+    "affiliation": "공무원",
+    "phone": "010-5313-8398"
+  },
+  {
+    "id": "vp-554",
+    "eup": "청기면",
+    "village": "사리",
+    "team": "B조",
+    "name": "이창희",
+    "affiliation": "공무원",
+    "phone": "010-7424-6918"
+  },
+  {
+    "id": "vp-555",
+    "eup": "청기면",
+    "village": "사리",
+    "team": "C조",
+    "name": "이정민",
+    "affiliation": "공무원",
+    "phone": "010-5313-8398"
+  },
+  {
+    "id": "vp-556",
+    "eup": "청기면",
+    "village": "사리",
+    "team": "A조",
+    "name": "이학용",
+    "affiliation": "자율방재단",
+    "phone": "010-4502-3155"
+  },
+  {
+    "id": "vp-557",
+    "eup": "청기면",
+    "village": "사리",
+    "team": "B조",
+    "name": "윤재근",
+    "affiliation": "자율방재단",
+    "phone": "010-6360-7017"
+  },
+  {
+    "id": "vp-558",
+    "eup": "청기면",
+    "village": "사리",
+    "team": "C조",
+    "name": "이학용",
+    "affiliation": "자율방재단",
+    "phone": "010-4502-3155"
+  },
+  {
+    "id": "vp-559",
+    "eup": "청기면",
+    "village": "기포리",
+    "team": "A조",
+    "name": "권재현",
+    "affiliation": "이장",
+    "phone": "010-8584-7039"
+  },
+  {
+    "id": "vp-560",
+    "eup": "청기면",
+    "village": "기포리",
+    "team": "B조",
+    "name": "이유욱",
+    "affiliation": "자율방재단",
+    "phone": "010-4020-3162"
+  },
+  {
+    "id": "vp-561",
+    "eup": "청기면",
+    "village": "기포리",
+    "team": "C조",
+    "name": "김영수",
+    "affiliation": "자율방재단",
+    "phone": "010-3865-8040"
+  },
+  {
+    "id": "vp-562",
+    "eup": "청기면",
+    "village": "기포리",
+    "team": "A조",
+    "name": "조석우",
+    "affiliation": "공무원",
+    "phone": "010-6402-8119"
+  },
+  {
+    "id": "vp-563",
+    "eup": "청기면",
+    "village": "기포리",
+    "team": "B조",
+    "name": "이창희",
+    "affiliation": "공무원",
+    "phone": "010-7424-6918"
+  },
+  {
+    "id": "vp-564",
+    "eup": "청기면",
+    "village": "기포리",
+    "team": "C조",
+    "name": "조석우",
+    "affiliation": "공무원",
+    "phone": "010-6402-8119"
+  },
+  {
+    "id": "vp-565",
+    "eup": "청기면",
+    "village": "기포리",
+    "team": "A조",
+    "name": "심현보",
+    "affiliation": "자율방재단",
+    "phone": "010-7906-0277"
+  },
+  {
+    "id": "vp-566",
+    "eup": "청기면",
+    "village": "기포리",
+    "team": "B조",
+    "name": "이경문",
+    "affiliation": "자율방재단",
+    "phone": "010-6362-9595"
+  },
+  {
+    "id": "vp-567",
+    "eup": "청기면",
+    "village": "기포리",
+    "team": "C조",
+    "name": "박찬홍",
+    "affiliation": "자율방재단",
+    "phone": "010-3121-7343"
+  },
+  {
+    "id": "vp-568",
+    "eup": "청기면",
+    "village": "무진리",
+    "team": "A조",
+    "name": "정훈섭",
+    "affiliation": "이장",
+    "phone": "010-3821-6503"
+  },
+  {
+    "id": "vp-569",
+    "eup": "청기면",
+    "village": "무진리",
+    "team": "B조",
+    "name": "김준현",
+    "affiliation": "자율방재단",
+    "phone": "010-6681-0305"
+  },
+  {
+    "id": "vp-570",
+    "eup": "청기면",
+    "village": "무진리",
+    "team": "C조",
+    "name": "김찬용",
+    "affiliation": "자율방재단",
+    "phone": "010-8945-6784"
+  },
+  {
+    "id": "vp-571",
+    "eup": "청기면",
+    "village": "무진리",
+    "team": "A조",
+    "name": "김주헌",
+    "affiliation": "공무원",
+    "phone": "010-3754-3475"
+  },
+  {
+    "id": "vp-572",
+    "eup": "청기면",
+    "village": "무진리",
+    "team": "B조",
+    "name": "심명희",
+    "affiliation": "공무원",
+    "phone": "010-8436-1378"
+  },
+  {
+    "id": "vp-573",
+    "eup": "청기면",
+    "village": "무진리",
+    "team": "C조",
+    "name": "김주헌",
+    "affiliation": "공무원",
+    "phone": "010-3754-3475"
+  },
+  {
+    "id": "vp-574",
+    "eup": "청기면",
+    "village": "무진리",
+    "team": "A조",
+    "name": "김치곤",
+    "affiliation": "자율방재단",
+    "phone": "010-4520-0740"
+  },
+  {
+    "id": "vp-575",
+    "eup": "청기면",
+    "village": "무진리",
+    "team": "B조",
+    "name": "이윤구",
+    "affiliation": "자율방재단",
+    "phone": "010-3308-1269"
+  },
+  {
+    "id": "vp-576",
+    "eup": "청기면",
+    "village": "무진리",
+    "team": "C조",
+    "name": "김완기",
+    "affiliation": "자율방재단",
+    "phone": "010-2018-8010"
+  },
+  {
+    "id": "vp-577",
+    "eup": "청기면",
+    "village": "당리",
+    "team": "A조",
+    "name": "이상천",
+    "affiliation": "이장",
+    "phone": "010-2875-7275"
+  },
+  {
+    "id": "vp-578",
+    "eup": "청기면",
+    "village": "당리",
+    "team": "B조",
+    "name": "김영탁",
+    "affiliation": "자율방재단",
+    "phone": "010-5264-5295"
+  },
+  {
+    "id": "vp-579",
+    "eup": "청기면",
+    "village": "당리",
+    "team": "C조",
+    "name": "김위진",
+    "affiliation": "자율방재단",
+    "phone": "010-6781-6751"
+  },
+  {
+    "id": "vp-580",
+    "eup": "청기면",
+    "village": "당리",
+    "team": "A조",
+    "name": "조은지",
+    "affiliation": "공무원",
+    "phone": "010-8967-2409"
+  },
+  {
+    "id": "vp-581",
+    "eup": "청기면",
+    "village": "당리",
+    "team": "B조",
+    "name": "심명희",
+    "affiliation": "공무원",
+    "phone": "010-8436-1378"
+  },
+  {
+    "id": "vp-582",
+    "eup": "청기면",
+    "village": "당리",
+    "team": "C조",
+    "name": "조은지",
+    "affiliation": "공무원",
+    "phone": "010-8967-2409"
+  },
+  {
+    "id": "vp-583",
+    "eup": "청기면",
+    "village": "당리",
+    "team": "A조",
+    "name": "주영준",
+    "affiliation": "자율방재단",
+    "phone": "010-3033-3637"
+  },
+  {
+    "id": "vp-584",
+    "eup": "청기면",
+    "village": "당리",
+    "team": "B조",
+    "name": "김경진",
+    "affiliation": "자율방재단",
+    "phone": "010-4523-7281"
+  },
+  {
+    "id": "vp-585",
+    "eup": "청기면",
+    "village": "당리",
+    "team": "C조",
+    "name": "김영길",
+    "affiliation": "자율방재단",
+    "phone": "010-4511-8953"
+  },
+  {
+    "id": "vp-586",
+    "eup": "청기면",
+    "village": "행화리",
+    "team": "A조",
+    "name": "신승길",
+    "affiliation": "이장",
+    "phone": "010-3531-9226"
+  },
+  {
+    "id": "vp-587",
+    "eup": "청기면",
+    "village": "행화리",
+    "team": "B조",
+    "name": "권태로",
+    "affiliation": "자율방재단",
+    "phone": "010-3538-9935"
+  },
+  {
+    "id": "vp-588",
+    "eup": "청기면",
+    "village": "행화리",
+    "team": "C조",
+    "name": "김은권",
+    "affiliation": "자율방재단",
+    "phone": "010-5374-6633"
+  },
+  {
+    "id": "vp-589",
+    "eup": "청기면",
+    "village": "행화리",
+    "team": "A조",
+    "name": "권희준",
+    "affiliation": "공무원",
+    "phone": "010-4533-6106"
+  },
+  {
+    "id": "vp-590",
+    "eup": "청기면",
+    "village": "행화리",
+    "team": "B조",
+    "name": "김상배",
+    "affiliation": "공무원",
+    "phone": "010-9774-6231"
+  },
+  {
+    "id": "vp-591",
+    "eup": "청기면",
+    "village": "행화리",
+    "team": "C조",
+    "name": "권희준",
+    "affiliation": "공무원",
+    "phone": "010-4533-6106"
+  },
+  {
+    "id": "vp-592",
+    "eup": "청기면",
+    "village": "행화리",
+    "team": "A조",
+    "name": "윤근창",
+    "affiliation": "자율방재단",
+    "phone": "010-9090-7558"
+  },
+  {
+    "id": "vp-593",
+    "eup": "청기면",
+    "village": "행화리",
+    "team": "B조",
+    "name": "김수철",
+    "affiliation": "자율방재단",
+    "phone": "010-5914-5254"
+  },
+  {
+    "id": "vp-594",
+    "eup": "청기면",
+    "village": "행화리",
+    "team": "C조",
+    "name": "최만규",
+    "affiliation": "자율방재단",
+    "phone": "010-8569-7163"
+  },
+  {
+    "id": "vp-595",
+    "eup": "일월면",
+    "village": "도계1리",
+    "team": "A조",
+    "name": "권용찬",
+    "affiliation": "이장",
+    "phone": "010-7436-5055"
+  },
+  {
+    "id": "vp-596",
+    "eup": "일월면",
+    "village": "도계1리",
+    "team": "B조",
+    "name": "최영채",
+    "affiliation": "자율방재단",
+    "phone": "010-7251-5120"
+  },
+  {
+    "id": "vp-597",
+    "eup": "일월면",
+    "village": "도계1리",
+    "team": "C조",
+    "name": "김명상",
+    "affiliation": "자율방재단",
+    "phone": "010-4654-7062"
+  },
+  {
+    "id": "vp-598",
+    "eup": "일월면",
+    "village": "도계1리",
+    "team": "A조",
+    "name": "정인태",
+    "affiliation": "공무원",
+    "phone": "010-3603-9857"
+  },
+  {
+    "id": "vp-599",
+    "eup": "일월면",
+    "village": "도계1리",
+    "team": "B조",
+    "name": "강미숙",
+    "affiliation": "공무원",
+    "phone": "010-4184-3027"
+  },
+  {
+    "id": "vp-600",
+    "eup": "일월면",
+    "village": "도계1리",
+    "team": "C조",
+    "name": "정인태",
+    "affiliation": "공무원",
+    "phone": "010-3603-9857"
+  },
+  {
+    "id": "vp-601",
+    "eup": "일월면",
+    "village": "도계1리",
+    "team": "A조",
+    "name": "권오준",
+    "affiliation": "자율방재단",
+    "phone": "010-7117-4633"
+  },
+  {
+    "id": "vp-602",
+    "eup": "일월면",
+    "village": "도계1리",
+    "team": "B조",
+    "name": "최민우",
+    "affiliation": "자율방재단",
+    "phone": "010-4860-5120"
+  },
+  {
+    "id": "vp-603",
+    "eup": "일월면",
+    "village": "도계1리",
+    "team": "C조",
+    "name": "권용찬",
+    "affiliation": "이장",
+    "phone": "010-7436-5055"
+  },
+  {
+    "id": "vp-604",
+    "eup": "일월면",
+    "village": "도계2리",
+    "team": "A조",
+    "name": "곽정석",
+    "affiliation": "이장",
+    "phone": "010-6515-5578"
+  },
+  {
+    "id": "vp-605",
+    "eup": "일월면",
+    "village": "도계2리",
+    "team": "B조",
+    "name": "김명상",
+    "affiliation": "자율방재단",
+    "phone": "010-4654-7062"
+  },
+  {
+    "id": "vp-606",
+    "eup": "일월면",
+    "village": "도계2리",
+    "team": "C조",
+    "name": "최영채",
+    "affiliation": "자율방재단",
+    "phone": "010-7251-5120"
+  },
+  {
+    "id": "vp-607",
+    "eup": "일월면",
+    "village": "도계2리",
+    "team": "A조",
+    "name": "정재욱",
+    "affiliation": "공무원",
+    "phone": "010-8693-8917"
+  },
+  {
+    "id": "vp-608",
+    "eup": "일월면",
+    "village": "도계2리",
+    "team": "B조",
+    "name": "김수현",
+    "affiliation": "공무원",
+    "phone": "010-5177-7268"
+  },
+  {
+    "id": "vp-609",
+    "eup": "일월면",
+    "village": "도계2리",
+    "team": "C조",
+    "name": "정재욱",
+    "affiliation": "공무원",
+    "phone": "010-8693-8917"
+  },
+  {
+    "id": "vp-610",
+    "eup": "일월면",
+    "village": "도계2리",
+    "team": "A조",
+    "name": "권경원",
+    "affiliation": "자율방재단",
+    "phone": "010-4522-1295"
+  },
+  {
+    "id": "vp-611",
+    "eup": "일월면",
+    "village": "도계2리",
+    "team": "B조",
+    "name": "권오준",
+    "affiliation": "자율방재단",
+    "phone": "010-7117-4633"
+  },
+  {
+    "id": "vp-612",
+    "eup": "일월면",
+    "village": "도계2리",
+    "team": "C조",
+    "name": "곽정석",
+    "affiliation": "이장",
+    "phone": "010-6515-5578"
+  },
+  {
+    "id": "vp-613",
+    "eup": "일월면",
+    "village": "주곡1리",
+    "team": "A조",
+    "name": "조호기",
+    "affiliation": "이장",
+    "phone": "010-8577-5310"
+  },
+  {
+    "id": "vp-614",
+    "eup": "일월면",
+    "village": "주곡1리",
+    "team": "B조",
+    "name": "홍영기",
+    "affiliation": "자율방재단",
+    "phone": "010-4535-5194"
+  },
+  {
+    "id": "vp-615",
+    "eup": "일월면",
+    "village": "주곡1리",
+    "team": "C조",
+    "name": "조위석",
+    "affiliation": "자율방재단",
+    "phone": "010-4172-5310"
+  },
+  {
+    "id": "vp-616",
+    "eup": "일월면",
+    "village": "주곡1리",
+    "team": "A조",
+    "name": "차기웅",
+    "affiliation": "공무원",
+    "phone": "010-4838-8232"
+  },
+  {
+    "id": "vp-617",
+    "eup": "일월면",
+    "village": "주곡1리",
+    "team": "B조",
+    "name": "서혜지",
+    "affiliation": "공무원",
+    "phone": "010-9141-7831"
+  },
+  {
+    "id": "vp-618",
+    "eup": "일월면",
+    "village": "주곡1리",
+    "team": "C조",
+    "name": "차기웅",
+    "affiliation": "공무원",
+    "phone": "010-4838-8232"
+  },
+  {
+    "id": "vp-619",
+    "eup": "일월면",
+    "village": "주곡1리",
+    "team": "A조",
+    "name": "박상희",
+    "affiliation": "자율방재단",
+    "phone": "010-8800-0230"
+  },
+  {
+    "id": "vp-620",
+    "eup": "일월면",
+    "village": "주곡1리",
+    "team": "B조",
+    "name": "조위석",
+    "affiliation": "자율방재단",
+    "phone": "010-4172-5310"
+  },
+  {
+    "id": "vp-621",
+    "eup": "일월면",
+    "village": "주곡1리",
+    "team": "C조",
+    "name": "조호기",
+    "affiliation": "이장",
+    "phone": "010-8577-5310"
+  },
+  {
+    "id": "vp-622",
+    "eup": "일월면",
+    "village": "주곡2리",
+    "team": "A조",
+    "name": "신태환",
+    "affiliation": "이장",
+    "phone": "010-2557-5891"
+  },
+  {
+    "id": "vp-623",
+    "eup": "일월면",
+    "village": "주곡2리",
+    "team": "B조",
+    "name": "김준영",
+    "affiliation": "자율방재단",
+    "phone": "010-7738-0806"
+  },
+  {
+    "id": "vp-624",
+    "eup": "일월면",
+    "village": "주곡2리",
+    "team": "C조",
+    "name": "안길동",
+    "affiliation": "자율방재단",
+    "phone": "010-2075-7724"
+  },
+  {
+    "id": "vp-625",
+    "eup": "일월면",
+    "village": "주곡2리",
+    "team": "A조",
+    "name": "오희지",
+    "affiliation": "공무원",
+    "phone": "010-3080-0645"
+  },
+  {
+    "id": "vp-626",
+    "eup": "일월면",
+    "village": "주곡2리",
+    "team": "B조",
+    "name": "서혜지",
+    "affiliation": "공무원",
+    "phone": "010-9141-7831"
+  },
+  {
+    "id": "vp-627",
+    "eup": "일월면",
+    "village": "주곡2리",
+    "team": "C조",
+    "name": "오희지",
+    "affiliation": "공무원",
+    "phone": "010-3080-0645"
+  },
+  {
+    "id": "vp-628",
+    "eup": "일월면",
+    "village": "주곡2리",
+    "team": "A조",
+    "name": "안길동",
+    "affiliation": "자율방재단",
+    "phone": "010-2075-7724"
+  },
+  {
+    "id": "vp-629",
+    "eup": "일월면",
+    "village": "주곡2리",
+    "team": "B조",
+    "name": "강만석",
+    "affiliation": "자율방재단",
+    "phone": "010-3347-0854"
+  },
+  {
+    "id": "vp-630",
+    "eup": "일월면",
+    "village": "주곡2리",
+    "team": "C조",
+    "name": "신태환",
+    "affiliation": "이장",
+    "phone": "010-2557-5891"
+  },
+  {
+    "id": "vp-631",
+    "eup": "일월면",
+    "village": "가곡리",
+    "team": "A조",
+    "name": "조상석",
+    "affiliation": "이장",
+    "phone": "010-8707-6848"
+  },
+  {
+    "id": "vp-632",
+    "eup": "일월면",
+    "village": "가곡리",
+    "team": "B조",
+    "name": "손병기",
+    "affiliation": "자율방재단",
+    "phone": "010-9506-0375"
+  },
+  {
+    "id": "vp-633",
+    "eup": "일월면",
+    "village": "가곡리",
+    "team": "C조",
+    "name": "정찬일",
+    "affiliation": "자율방재단",
+    "phone": "010-9911-2982"
+  },
+  {
+    "id": "vp-634",
+    "eup": "일월면",
+    "village": "가곡리",
+    "team": "A조",
+    "name": "박진규",
+    "affiliation": "공무원",
+    "phone": "010-9850-4205"
+  },
+  {
+    "id": "vp-635",
+    "eup": "일월면",
+    "village": "가곡리",
+    "team": "B조",
+    "name": "이효선",
+    "affiliation": "공무원",
+    "phone": "010-5505-5170"
+  },
+  {
+    "id": "vp-636",
+    "eup": "일월면",
+    "village": "가곡리",
+    "team": "C조",
+    "name": "박진규",
+    "affiliation": "공무원",
+    "phone": "010-9850-4205"
+  },
+  {
+    "id": "vp-637",
+    "eup": "일월면",
+    "village": "가곡리",
+    "team": "A조",
+    "name": "정찬일",
+    "affiliation": "자율방재단",
+    "phone": "010-9911-2982"
+  },
+  {
+    "id": "vp-638",
+    "eup": "일월면",
+    "village": "가곡리",
+    "team": "B조",
+    "name": "권영훈",
+    "affiliation": "자율방재단",
+    "phone": "010-45878-1419"
+  },
+  {
+    "id": "vp-639",
+    "eup": "일월면",
+    "village": "가곡리",
+    "team": "C조",
+    "name": "조상석",
+    "affiliation": "이장",
+    "phone": "010-8707-6848"
+  },
+  {
+    "id": "vp-640",
+    "eup": "일월면",
+    "village": "도곡리",
+    "team": "A조",
+    "name": "이희락",
+    "affiliation": "이장",
+    "phone": "010-4523-5457"
+  },
+  {
+    "id": "vp-641",
+    "eup": "일월면",
+    "village": "도곡리",
+    "team": "B조",
+    "name": "권재영",
+    "affiliation": "자율방재단",
+    "phone": "010-4538-5416"
+  },
+  {
+    "id": "vp-642",
+    "eup": "일월면",
+    "village": "도곡리",
+    "team": "C조",
+    "name": "이재하",
+    "affiliation": "자율방재단",
+    "phone": "010-9413-5457"
+  },
+  {
+    "id": "vp-643",
+    "eup": "일월면",
+    "village": "도곡리",
+    "team": "A조",
+    "name": "권경자",
+    "affiliation": "공무원",
+    "phone": "010-2085-1878"
+  },
+  {
+    "id": "vp-644",
+    "eup": "일월면",
+    "village": "도곡리",
+    "team": "B조",
+    "name": "김선희",
+    "affiliation": "공무원",
+    "phone": "010-9220-7232"
+  },
+  {
+    "id": "vp-645",
+    "eup": "일월면",
+    "village": "도곡리",
+    "team": "C조",
+    "name": "권경자",
+    "affiliation": "공무원",
+    "phone": "010-2085-1878"
+  },
+  {
+    "id": "vp-646",
+    "eup": "일월면",
+    "village": "도곡리",
+    "team": "A조",
+    "name": "이재하",
+    "affiliation": "자율방재단",
+    "phone": "010-9413-5457"
+  },
+  {
+    "id": "vp-647",
+    "eup": "일월면",
+    "village": "도곡리",
+    "team": "B조",
+    "name": "이희락",
+    "affiliation": "이장",
+    "phone": "010-4523-5457"
+  },
+  {
+    "id": "vp-648",
+    "eup": "일월면",
+    "village": "도곡리",
+    "team": "C조",
+    "name": "이희락",
+    "affiliation": "이장",
+    "phone": "010-4523-5457"
+  },
+  {
+    "id": "vp-649",
+    "eup": "일월면",
+    "village": "오리리",
+    "team": "A조",
+    "name": "조찬영",
+    "affiliation": "이장",
+    "phone": "010-5308-5265"
+  },
+  {
+    "id": "vp-650",
+    "eup": "일월면",
+    "village": "오리리",
+    "team": "B조",
+    "name": "이상호",
+    "affiliation": "자율방재단",
+    "phone": "010-4535-0512"
+  },
+  {
+    "id": "vp-651",
+    "eup": "일월면",
+    "village": "오리리",
+    "team": "C조",
+    "name": "황원식",
+    "affiliation": "자율방재단",
+    "phone": "010-7752-8379"
+  },
+  {
+    "id": "vp-652",
+    "eup": "일월면",
+    "village": "오리리",
+    "team": "A조",
+    "name": "김인혁",
+    "affiliation": "공무원",
+    "phone": "010-4680-1488"
+  },
+  {
+    "id": "vp-653",
+    "eup": "일월면",
+    "village": "오리리",
+    "team": "B조",
+    "name": "박일수",
+    "affiliation": "공무원",
+    "phone": "010-3512-5679"
+  },
+  {
+    "id": "vp-654",
+    "eup": "일월면",
+    "village": "오리리",
+    "team": "C조",
+    "name": "김인혁",
+    "affiliation": "공무원",
+    "phone": "010-4680-1488"
+  },
+  {
+    "id": "vp-655",
+    "eup": "일월면",
+    "village": "오리리",
+    "team": "A조",
+    "name": "황원식",
+    "affiliation": "자율방재단",
+    "phone": "010-7752-8379"
+  },
+  {
+    "id": "vp-656",
+    "eup": "일월면",
+    "village": "오리리",
+    "team": "B조",
+    "name": "허성일",
+    "affiliation": "자율방재단",
+    "phone": "010-3555-7117"
+  },
+  {
+    "id": "vp-657",
+    "eup": "일월면",
+    "village": "오리리",
+    "team": "C조",
+    "name": "조찬영",
+    "affiliation": "이장",
+    "phone": "010-5308-5265"
+  },
+  {
+    "id": "vp-658",
+    "eup": "일월면",
+    "village": "용화1리",
+    "team": "A조",
+    "name": "오기현",
+    "affiliation": "이장",
+    "phone": "010-3022-0884"
+  },
+  {
+    "id": "vp-659",
+    "eup": "일월면",
+    "village": "용화1리",
+    "team": "B조",
+    "name": "설복주",
+    "affiliation": "자율방재단",
+    "phone": "010-5911-9644"
+  },
+  {
+    "id": "vp-660",
+    "eup": "일월면",
+    "village": "용화1리",
+    "team": "C조",
+    "name": "김재동",
+    "affiliation": "자율방재단",
+    "phone": "010-7393-1002"
+  },
+  {
+    "id": "vp-661",
+    "eup": "일월면",
+    "village": "용화1리",
+    "team": "A조",
+    "name": "김진언",
+    "affiliation": "공무원",
+    "phone": "010-8595-8098"
+  },
+  {
+    "id": "vp-662",
+    "eup": "일월면",
+    "village": "용화1리",
+    "team": "B조",
+    "name": "문진호",
+    "affiliation": "공무원",
+    "phone": "010-2508-3382"
+  },
+  {
+    "id": "vp-663",
+    "eup": "일월면",
+    "village": "용화1리",
+    "team": "C조",
+    "name": "김진언",
+    "affiliation": "공무원",
+    "phone": "010-8595-8098"
+  },
+  {
+    "id": "vp-664",
+    "eup": "일월면",
+    "village": "용화1리",
+    "team": "A조",
+    "name": "권오명",
+    "affiliation": "자율방재단",
+    "phone": "010-3347-0854"
+  },
+  {
+    "id": "vp-665",
+    "eup": "일월면",
+    "village": "용화1리",
+    "team": "B조",
+    "name": "김우환",
+    "affiliation": "자율방재단",
+    "phone": "010-9057-5194"
+  },
+  {
+    "id": "vp-666",
+    "eup": "일월면",
+    "village": "용화1리",
+    "team": "C조",
+    "name": "오기현",
+    "affiliation": "이장",
+    "phone": "010-3022-0884"
+  },
+  {
+    "id": "vp-667",
+    "eup": "일월면",
+    "village": "용화2리",
+    "team": "A조",
+    "name": "이상길",
+    "affiliation": "이장",
+    "phone": "010-6392-5025"
+  },
+  {
+    "id": "vp-668",
+    "eup": "일월면",
+    "village": "용화2리",
+    "team": "B조",
+    "name": "홍대진",
+    "affiliation": "자율방재단",
+    "phone": "010-2810-6986"
+  },
+  {
+    "id": "vp-669",
+    "eup": "일월면",
+    "village": "용화2리",
+    "team": "C조",
+    "name": "김우환",
+    "affiliation": "자율방재단",
+    "phone": "010-9057-5194"
+  },
+  {
+    "id": "vp-670",
+    "eup": "일월면",
+    "village": "용화2리",
+    "team": "A조",
+    "name": "안병재",
+    "affiliation": "공무원",
+    "phone": "010-2203-0460"
+  },
+  {
+    "id": "vp-671",
+    "eup": "일월면",
+    "village": "용화2리",
+    "team": "B조",
+    "name": "문진호",
+    "affiliation": "공무원",
+    "phone": "010-2508-3382"
+  },
+  {
+    "id": "vp-672",
+    "eup": "일월면",
+    "village": "용화2리",
+    "team": "C조",
+    "name": "안병재",
+    "affiliation": "공무원",
+    "phone": "010-2203-0460"
+  },
+  {
+    "id": "vp-673",
+    "eup": "일월면",
+    "village": "용화2리",
+    "team": "A조",
+    "name": "김재동",
+    "affiliation": "자율방재단",
+    "phone": "010-7393-1002"
+  },
+  {
+    "id": "vp-674",
+    "eup": "일월면",
+    "village": "용화2리",
+    "team": "B조",
+    "name": "권오명",
+    "affiliation": "자율방재단",
+    "phone": "010-3347-0854"
+  },
+  {
+    "id": "vp-675",
+    "eup": "일월면",
+    "village": "용화2리",
+    "team": "C조",
+    "name": "이상길",
+    "affiliation": "이장",
+    "phone": "010-6392-5025"
+  },
+  {
+    "id": "vp-676",
+    "eup": "일월면",
+    "village": "문암리",
+    "team": "A조",
+    "name": "김동훈",
+    "affiliation": "이장",
+    "phone": "010-9289-1043"
+  },
+  {
+    "id": "vp-677",
+    "eup": "일월면",
+    "village": "문암리",
+    "team": "B조",
+    "name": "김호일",
+    "affiliation": "자율방재단",
+    "phone": "010-9362-0978"
+  },
+  {
+    "id": "vp-678",
+    "eup": "일월면",
+    "village": "문암리",
+    "team": "C조",
+    "name": "최병석",
+    "affiliation": "자율방재단",
+    "phone": "010-2863-0549"
+  },
+  {
+    "id": "vp-679",
+    "eup": "일월면",
+    "village": "문암리",
+    "team": "A조",
+    "name": "권정애",
+    "affiliation": "공무원",
+    "phone": "010-9352-1560"
+  },
+  {
+    "id": "vp-680",
+    "eup": "일월면",
+    "village": "문암리",
+    "team": "B조",
+    "name": "조석우",
+    "affiliation": "공무원",
+    "phone": "010-9957-9044"
+  },
+  {
+    "id": "vp-681",
+    "eup": "일월면",
+    "village": "문암리",
+    "team": "C조",
+    "name": "권정애",
+    "affiliation": "공무원",
+    "phone": "010-9352-1560"
+  },
+  {
+    "id": "vp-682",
+    "eup": "일월면",
+    "village": "문암리",
+    "team": "A조",
+    "name": "최병석",
+    "affiliation": "자율방재단",
+    "phone": "010-2863-0549"
+  },
+  {
+    "id": "vp-683",
+    "eup": "일월면",
+    "village": "문암리",
+    "team": "B조",
+    "name": "이형진",
+    "affiliation": "자율방재단",
+    "phone": "010-2568-7876"
+  },
+  {
+    "id": "vp-684",
+    "eup": "일월면",
+    "village": "문암리",
+    "team": "C조",
+    "name": "김동훈",
+    "affiliation": "이장",
+    "phone": "010-9289-1043"
+  },
+  {
+    "id": "vp-685",
+    "eup": "일월면",
+    "village": "칠성리",
+    "team": "A조",
+    "name": "최영호",
+    "affiliation": "이장",
+    "phone": "010-3203-0579"
+  },
+  {
+    "id": "vp-686",
+    "eup": "일월면",
+    "village": "칠성리",
+    "team": "B조",
+    "name": "석용근",
+    "affiliation": "자율방재단",
+    "phone": "010-3823-9789"
+  },
+  {
+    "id": "vp-687",
+    "eup": "일월면",
+    "village": "칠성리",
+    "team": "C조",
+    "name": "이형진",
+    "affiliation": "자율방재단",
+    "phone": "010-2568-7876"
+  },
+  {
+    "id": "vp-688",
+    "eup": "일월면",
+    "village": "칠성리",
+    "team": "A조",
+    "name": "이창원",
+    "affiliation": "공무원",
+    "phone": "010-3388-8472"
+  },
+  {
+    "id": "vp-689",
+    "eup": "일월면",
+    "village": "칠성리",
+    "team": "B조",
+    "name": "이시형",
+    "affiliation": "공무원",
+    "phone": "010-3575-9911"
+  },
+  {
+    "id": "vp-690",
+    "eup": "일월면",
+    "village": "칠성리",
+    "team": "C조",
+    "name": "이창원",
+    "affiliation": "공무원",
+    "phone": "010-3388-8472"
+  },
+  {
+    "id": "vp-691",
+    "eup": "일월면",
+    "village": "칠성리",
+    "team": "A조",
+    "name": "허성일",
+    "affiliation": "자율방재단",
+    "phone": "010-3555-7117"
+  },
+  {
+    "id": "vp-692",
+    "eup": "일월면",
+    "village": "칠성리",
+    "team": "B조",
+    "name": "김세준",
+    "affiliation": "자율방재단",
+    "phone": "010-5005-7516"
+  },
+  {
+    "id": "vp-693",
+    "eup": "일월면",
+    "village": "칠성리",
+    "team": "C조",
+    "name": "김호일",
+    "affiliation": "자율방재단",
+    "phone": "010-9362-0978"
+  },
+  {
+    "id": "vp-694",
+    "eup": "일월면",
+    "village": "가천리",
+    "team": "A조",
+    "name": "류수영",
+    "affiliation": "이장",
+    "phone": "010-8859-5363"
+  },
+  {
+    "id": "vp-695",
+    "eup": "일월면",
+    "village": "가천리",
+    "team": "B조",
+    "name": "박승국",
+    "affiliation": "자율방재단",
+    "phone": "010-4529-0507"
+  },
+  {
+    "id": "vp-696",
+    "eup": "일월면",
+    "village": "가천리",
+    "team": "C조",
+    "name": "김학수",
+    "affiliation": "자율방재단",
+    "phone": "010-4822-3465"
+  },
+  {
+    "id": "vp-697",
+    "eup": "일월면",
+    "village": "가천리",
+    "team": "A조",
+    "name": "신준환",
+    "affiliation": "공무원",
+    "phone": "010-2696-5421"
+  },
+  {
+    "id": "vp-698",
+    "eup": "일월면",
+    "village": "가천리",
+    "team": "B조",
+    "name": "김경영",
+    "affiliation": "공무원",
+    "phone": "010-9475-6561"
+  },
+  {
+    "id": "vp-699",
+    "eup": "일월면",
+    "village": "가천리",
+    "team": "C조",
+    "name": "신준환",
+    "affiliation": "공무원",
+    "phone": "010-2696-5421"
+  },
+  {
+    "id": "vp-700",
+    "eup": "일월면",
+    "village": "가천리",
+    "team": "A조",
+    "name": "박승국",
+    "affiliation": "자율방재단",
+    "phone": "010-4529-0507"
+  },
+  {
+    "id": "vp-701",
+    "eup": "일월면",
+    "village": "가천리",
+    "team": "B조",
+    "name": "김학수",
+    "affiliation": "자율방재단",
+    "phone": "010-4822-3465"
+  },
+  {
+    "id": "vp-702",
+    "eup": "일월면",
+    "village": "가천리",
+    "team": "C조",
+    "name": "이상호",
+    "affiliation": "자율방재단",
+    "phone": "010-4535-0512"
+  },
+  {
+    "id": "vp-703",
+    "eup": "일월면",
+    "village": "섬촌리",
+    "team": "A조",
+    "name": "장유현",
+    "affiliation": "이장",
+    "phone": "010-8574-2038"
+  },
+  {
+    "id": "vp-704",
+    "eup": "일월면",
+    "village": "섬촌리",
+    "team": "B조",
+    "name": "남상호",
+    "affiliation": "자율방재단",
+    "phone": "010-8127-4636"
+  },
+  {
+    "id": "vp-705",
+    "eup": "일월면",
+    "village": "섬촌리",
+    "team": "C조",
+    "name": "남상호",
+    "affiliation": "자율방재단",
+    "phone": "010-8127-4636"
+  },
+  {
+    "id": "vp-706",
+    "eup": "일월면",
+    "village": "섬촌리",
+    "team": "A조",
+    "name": "박기준",
+    "affiliation": "공무원",
+    "phone": "010-2168-1195"
+  },
+  {
+    "id": "vp-707",
+    "eup": "일월면",
+    "village": "섬촌리",
+    "team": "B조",
+    "name": "김경영",
+    "affiliation": "공무원",
+    "phone": "010-9475-6561"
+  },
+  {
+    "id": "vp-708",
+    "eup": "일월면",
+    "village": "섬촌리",
+    "team": "C조",
+    "name": "박기준",
+    "affiliation": "공무원",
+    "phone": "010-2168-1195"
+  },
+  {
+    "id": "vp-709",
+    "eup": "일월면",
+    "village": "섬촌리",
+    "team": "A조",
+    "name": "이상준",
+    "affiliation": "자율방재단",
+    "phone": "010-9674-0314"
+  },
+  {
+    "id": "vp-710",
+    "eup": "일월면",
+    "village": "섬촌리",
+    "team": "B조",
+    "name": "이상준",
+    "affiliation": "자율방재단",
+    "phone": "010-9674-0314"
+  },
+  {
+    "id": "vp-711",
+    "eup": "일월면",
+    "village": "섬촌리",
+    "team": "C조",
+    "name": "장유현",
+    "affiliation": "이장",
+    "phone": "010-8574-2038"
+  },
+  {
+    "id": "vp-712",
+    "eup": "일월면",
+    "village": "곡강리",
+    "team": "A조",
+    "name": "이팔호",
+    "affiliation": "이장",
+    "phone": "010-2837-2600"
+  },
+  {
+    "id": "vp-713",
+    "eup": "일월면",
+    "village": "곡강리",
+    "team": "B조",
+    "name": "이광직",
+    "affiliation": "자율방재단",
+    "phone": "010-4804-3421"
+  },
+  {
+    "id": "vp-714",
+    "eup": "일월면",
+    "village": "곡강리",
+    "team": "C조",
+    "name": "김준영",
+    "affiliation": "자율방재단",
+    "phone": "010-7738-0806"
+  },
+  {
+    "id": "vp-715",
+    "eup": "일월면",
+    "village": "곡강리",
+    "team": "A조",
+    "name": "강주원",
+    "affiliation": "공무원",
+    "phone": "010-2495-3848"
+  },
+  {
+    "id": "vp-716",
+    "eup": "일월면",
+    "village": "곡강리",
+    "team": "B조",
+    "name": "강미숙",
+    "affiliation": "공무원",
+    "phone": "010-4184-3027"
+  },
+  {
+    "id": "vp-717",
+    "eup": "일월면",
+    "village": "곡강리",
+    "team": "C조",
+    "name": "강주원",
+    "affiliation": "공무원",
+    "phone": "010-2495-3848"
+  },
+  {
+    "id": "vp-718",
+    "eup": "일월면",
+    "village": "곡강리",
+    "team": "A조",
+    "name": "곽수봉",
+    "affiliation": "자율방재단",
+    "phone": "010-9378-5244"
+  },
+  {
+    "id": "vp-719",
+    "eup": "일월면",
+    "village": "곡강리",
+    "team": "B조",
+    "name": "권재용",
+    "affiliation": "자율방재단",
+    "phone": "010-4805-5768"
+  },
+  {
+    "id": "vp-720",
+    "eup": "일월면",
+    "village": "곡강리",
+    "team": "C조",
+    "name": "한상운",
+    "affiliation": "자율방재단",
+    "phone": "010-4535-6271"
+  },
+  {
+    "id": "vp-721",
+    "eup": "수비면",
+    "village": "발리1리",
+    "team": "A조",
+    "name": "금병성",
+    "affiliation": "이장",
+    "phone": "010-6261-9144"
+  },
+  {
+    "id": "vp-722",
+    "eup": "수비면",
+    "village": "발리1리",
+    "team": "B조",
+    "name": "최용육",
+    "affiliation": "의용소방대",
+    "phone": "010-4804-6000"
+  },
+  {
+    "id": "vp-723",
+    "eup": "수비면",
+    "village": "발리1리",
+    "team": "C조",
+    "name": "엄동식",
+    "affiliation": "자율방재단",
+    "phone": "010-3531-9311"
+  },
+  {
+    "id": "vp-724",
+    "eup": "수비면",
+    "village": "발리1리",
+    "team": "A조",
+    "name": "배진학",
+    "affiliation": "공무원",
+    "phone": "010-9778-8852"
+  },
+  {
+    "id": "vp-725",
+    "eup": "수비면",
+    "village": "발리1리",
+    "team": "B조",
+    "name": "이재국",
+    "affiliation": "공무원",
+    "phone": "010-9644-4039"
+  },
+  {
+    "id": "vp-726",
+    "eup": "수비면",
+    "village": "발리1리",
+    "team": "C조",
+    "name": "배진학",
+    "affiliation": "공무원",
+    "phone": "010-9778-8852"
+  },
+  {
+    "id": "vp-727",
+    "eup": "수비면",
+    "village": "발리1리",
+    "team": "A조",
+    "name": "최용육",
+    "affiliation": "의용소방대",
+    "phone": "010-4804-6000"
+  },
+  {
+    "id": "vp-728",
+    "eup": "수비면",
+    "village": "발리1리",
+    "team": "B조",
+    "name": "엄동식",
+    "affiliation": "자율방재단",
+    "phone": "010-3531-9311"
+  },
+  {
+    "id": "vp-729",
+    "eup": "수비면",
+    "village": "발리1리",
+    "team": "C조",
+    "name": "금병성",
+    "affiliation": "이장",
+    "phone": "010-6261-9144"
+  },
+  {
+    "id": "vp-730",
+    "eup": "수비면",
+    "village": "발리2리",
+    "team": "A조",
+    "name": "배재문",
+    "affiliation": "이장",
+    "phone": "010-8840-9176"
+  },
+  {
+    "id": "vp-731",
+    "eup": "수비면",
+    "village": "발리2리",
+    "team": "B조",
+    "name": "이철수",
+    "affiliation": "의용소방대",
+    "phone": "010-8811-4511"
+  },
+  {
+    "id": "vp-732",
+    "eup": "수비면",
+    "village": "발리2리",
+    "team": "C조",
+    "name": "이주해",
+    "affiliation": "자율방재단",
+    "phone": "010-9644-9303"
+  },
+  {
+    "id": "vp-733",
+    "eup": "수비면",
+    "village": "발리2리",
+    "team": "A조",
+    "name": "김서현",
+    "affiliation": "공무원",
+    "phone": "010-9805-1961"
+  },
+  {
+    "id": "vp-734",
+    "eup": "수비면",
+    "village": "발리2리",
+    "team": "B조",
+    "name": "이명희",
+    "affiliation": "공무원",
+    "phone": "010-6750-4889"
+  },
+  {
+    "id": "vp-735",
+    "eup": "수비면",
+    "village": "발리2리",
+    "team": "C조",
+    "name": "김서현",
+    "affiliation": "공무원",
+    "phone": "010-9805-1961"
+  },
+  {
+    "id": "vp-736",
+    "eup": "수비면",
+    "village": "발리2리",
+    "team": "A조",
+    "name": "이철수",
+    "affiliation": "의용소방대",
+    "phone": "010-8811-4511"
+  },
+  {
+    "id": "vp-737",
+    "eup": "수비면",
+    "village": "발리2리",
+    "team": "B조",
+    "name": "이주해",
+    "affiliation": "자율방재단",
+    "phone": "010-9644-9303"
+  },
+  {
+    "id": "vp-738",
+    "eup": "수비면",
+    "village": "발리2리",
+    "team": "C조",
+    "name": "배재문",
+    "affiliation": "이장",
+    "phone": "010-8840-9176"
+  },
+  {
+    "id": "vp-739",
+    "eup": "수비면",
+    "village": "계1리",
+    "team": "A조",
+    "name": "김수일",
+    "affiliation": "이장",
+    "phone": "010-6695-9404"
+  },
+  {
+    "id": "vp-740",
+    "eup": "수비면",
+    "village": "계1리",
+    "team": "B조",
+    "name": "김종남",
+    "affiliation": "의용소방대",
+    "phone": "010-4874-0176"
+  },
+  {
+    "id": "vp-741",
+    "eup": "수비면",
+    "village": "계1리",
+    "team": "C조",
+    "name": "정헌두",
+    "affiliation": "자율방재단",
+    "phone": "010-9772-9004"
+  },
+  {
+    "id": "vp-742",
+    "eup": "수비면",
+    "village": "계1리",
+    "team": "A조",
+    "name": "배학경",
+    "affiliation": "공무원",
+    "phone": "010-7123-1335"
+  },
+  {
+    "id": "vp-743",
+    "eup": "수비면",
+    "village": "계1리",
+    "team": "B조",
+    "name": "손채령",
+    "affiliation": "공무원",
+    "phone": "010-4611-6735"
+  },
+  {
+    "id": "vp-744",
+    "eup": "수비면",
+    "village": "계1리",
+    "team": "C조",
+    "name": "배학경",
+    "affiliation": "공무원",
+    "phone": "010-7123-1335"
+  },
+  {
+    "id": "vp-745",
+    "eup": "수비면",
+    "village": "계1리",
+    "team": "A조",
+    "name": "김종남",
+    "affiliation": "의용소방대",
+    "phone": "010-4874-0176"
+  },
+  {
+    "id": "vp-746",
+    "eup": "수비면",
+    "village": "계1리",
+    "team": "B조",
+    "name": "정헌두",
+    "affiliation": "자율방재단",
+    "phone": "010-9772-9004"
+  },
+  {
+    "id": "vp-747",
+    "eup": "수비면",
+    "village": "계1리",
+    "team": "C조",
+    "name": "김수일",
+    "affiliation": "이장",
+    "phone": "010-6695-9404"
+  },
+  {
+    "id": "vp-748",
+    "eup": "수비면",
+    "village": "계2리",
+    "team": "A조",
+    "name": "권갑원",
+    "affiliation": "이장",
+    "phone": "010-5261-5248"
+  },
+  {
+    "id": "vp-749",
+    "eup": "수비면",
+    "village": "계2리",
+    "team": "B조",
+    "name": "황재덕",
+    "affiliation": "의용소방대",
+    "phone": "010-2588-5055"
+  },
+  {
+    "id": "vp-750",
+    "eup": "수비면",
+    "village": "계2리",
+    "team": "C조",
+    "name": "김찬웅",
+    "affiliation": "자율방재단",
+    "phone": "010-3719-8691"
+  },
+  {
+    "id": "vp-751",
+    "eup": "수비면",
+    "village": "계2리",
+    "team": "A조",
+    "name": "권정훈",
+    "affiliation": "공무원",
+    "phone": "010-9986-2084"
+  },
+  {
+    "id": "vp-752",
+    "eup": "수비면",
+    "village": "계2리",
+    "team": "B조",
+    "name": "손채령",
+    "affiliation": "공무원",
+    "phone": "010-4611-6735"
+  },
+  {
+    "id": "vp-753",
+    "eup": "수비면",
+    "village": "계2리",
+    "team": "C조",
+    "name": "권정훈",
+    "affiliation": "공무원",
+    "phone": "010-9986-2084"
+  },
+  {
+    "id": "vp-754",
+    "eup": "수비면",
+    "village": "계2리",
+    "team": "A조",
+    "name": "황재덕",
+    "affiliation": "의용소방대",
+    "phone": "010-2588-5055"
+  },
+  {
+    "id": "vp-755",
+    "eup": "수비면",
+    "village": "계2리",
+    "team": "B조",
+    "name": "김찬웅",
+    "affiliation": "자율방재단",
+    "phone": "010-3719-8691"
+  },
+  {
+    "id": "vp-756",
+    "eup": "수비면",
+    "village": "계2리",
+    "team": "C조",
+    "name": "권갑원",
+    "affiliation": "이장",
+    "phone": "010-5261-5248"
+  },
+  {
+    "id": "vp-757",
+    "eup": "수비면",
+    "village": "오기1리",
+    "team": "A조",
+    "name": "김광선",
+    "affiliation": "이장",
+    "phone": "010-5458-9772"
+  },
+  {
+    "id": "vp-758",
+    "eup": "수비면",
+    "village": "오기1리",
+    "team": "B조",
+    "name": "임병철",
+    "affiliation": "의용소방대",
+    "phone": "010-5310-6855"
+  },
+  {
+    "id": "vp-759",
+    "eup": "수비면",
+    "village": "오기1리",
+    "team": "C조",
+    "name": "황규선",
+    "affiliation": "자율방재단",
+    "phone": "010-8710-5736"
+  },
+  {
+    "id": "vp-760",
+    "eup": "수비면",
+    "village": "오기1리",
+    "team": "A조",
+    "name": "김민우",
+    "affiliation": "공무원",
+    "phone": "010-4149-5803"
+  },
+  {
+    "id": "vp-761",
+    "eup": "수비면",
+    "village": "오기1리",
+    "team": "B조",
+    "name": "김찬규",
+    "affiliation": "공무원",
+    "phone": "010-9489-5414"
+  },
+  {
+    "id": "vp-762",
+    "eup": "수비면",
+    "village": "오기1리",
+    "team": "C조",
+    "name": "김민우",
+    "affiliation": "공무원",
+    "phone": "010-4149-5803"
+  },
+  {
+    "id": "vp-763",
+    "eup": "수비면",
+    "village": "오기1리",
+    "team": "A조",
+    "name": "임병철",
+    "affiliation": "의용소방대",
+    "phone": "010-5310-6855"
+  },
+  {
+    "id": "vp-764",
+    "eup": "수비면",
+    "village": "오기1리",
+    "team": "B조",
+    "name": "황규선",
+    "affiliation": "자율방재단",
+    "phone": "010-8710-5736"
+  },
+  {
+    "id": "vp-765",
+    "eup": "수비면",
+    "village": "오기1리",
+    "team": "C조",
+    "name": "김광선",
+    "affiliation": "이장",
+    "phone": "010-5458-9772"
+  },
+  {
+    "id": "vp-766",
+    "eup": "수비면",
+    "village": "오기2리",
+    "team": "A조",
+    "name": "서철석",
+    "affiliation": "이장",
+    "phone": "010-6533-1624"
+  },
+  {
+    "id": "vp-767",
+    "eup": "수비면",
+    "village": "오기2리",
+    "team": "B조",
+    "name": "서철석",
+    "affiliation": "이장",
+    "phone": "010-6533-1624"
+  },
+  {
+    "id": "vp-768",
+    "eup": "수비면",
+    "village": "오기2리",
+    "team": "C조",
+    "name": "서철석",
+    "affiliation": "이장",
+    "phone": "010-6533-1624"
+  },
+  {
+    "id": "vp-769",
+    "eup": "수비면",
+    "village": "오기2리",
+    "team": "A조",
+    "name": "박금영",
+    "affiliation": "공무원",
+    "phone": "010-2541-7264"
+  },
+  {
+    "id": "vp-770",
+    "eup": "수비면",
+    "village": "오기2리",
+    "team": "B조",
+    "name": "김찬규",
+    "affiliation": "공무원",
+    "phone": "010-9489-5414"
+  },
+  {
+    "id": "vp-771",
+    "eup": "수비면",
+    "village": "오기2리",
+    "team": "C조",
+    "name": "박금영",
+    "affiliation": "공무원",
+    "phone": "010-2541-7264"
+  },
+  {
+    "id": "vp-772",
+    "eup": "수비면",
+    "village": "오기2리",
+    "team": "A조",
+    "name": "황정인",
+    "affiliation": "의용소방대",
+    "phone": "010-5201-7773"
+  },
+  {
+    "id": "vp-773",
+    "eup": "수비면",
+    "village": "오기2리",
+    "team": "B조",
+    "name": "황정인",
+    "affiliation": "의용소방대",
+    "phone": "010-5201-7773"
+  },
+  {
+    "id": "vp-774",
+    "eup": "수비면",
+    "village": "오기2리",
+    "team": "C조",
+    "name": "황정인",
+    "affiliation": "의용소방대",
+    "phone": "010-5201-7773"
+  },
+  {
+    "id": "vp-775",
+    "eup": "수비면",
+    "village": "신원1리",
+    "team": "A조",
+    "name": "이상경",
+    "affiliation": "이장",
+    "phone": "010-4129-7011"
+  },
+  {
+    "id": "vp-776",
+    "eup": "수비면",
+    "village": "신원1리",
+    "team": "B조",
+    "name": "김용수",
+    "affiliation": "의용소방대",
+    "phone": "010-5352-3289"
+  },
+  {
+    "id": "vp-777",
+    "eup": "수비면",
+    "village": "신원1리",
+    "team": "C조",
+    "name": "황진곤",
+    "affiliation": "자율방재단",
+    "phone": "010-8568-1952"
+  },
+  {
+    "id": "vp-778",
+    "eup": "수비면",
+    "village": "신원1리",
+    "team": "A조",
+    "name": "이연호",
+    "affiliation": "공무원",
+    "phone": "010-8388-2538"
+  },
+  {
+    "id": "vp-779",
+    "eup": "수비면",
+    "village": "신원1리",
+    "team": "B조",
+    "name": "배수민",
+    "affiliation": "공무원",
+    "phone": "010-9394-7415"
+  },
+  {
+    "id": "vp-780",
+    "eup": "수비면",
+    "village": "신원1리",
+    "team": "C조",
+    "name": "이연호",
+    "affiliation": "공무원",
+    "phone": "010-8388-2538"
+  },
+  {
+    "id": "vp-781",
+    "eup": "수비면",
+    "village": "신원1리",
+    "team": "A조",
+    "name": "김용수",
+    "affiliation": "의용소방대",
+    "phone": "010-5352-3289"
+  },
+  {
+    "id": "vp-782",
+    "eup": "수비면",
+    "village": "신원1리",
+    "team": "B조",
+    "name": "황진곤",
+    "affiliation": "자율방재단",
+    "phone": "010-8568-1952"
+  },
+  {
+    "id": "vp-783",
+    "eup": "수비면",
+    "village": "신원1리",
+    "team": "C조",
+    "name": "이상경",
+    "affiliation": "이장",
+    "phone": "010-4129-7011"
+  },
+  {
+    "id": "vp-784",
+    "eup": "수비면",
+    "village": "신원2리",
+    "team": "A조",
+    "name": "김동규",
+    "affiliation": "이장",
+    "phone": "010-7484-5900"
+  },
+  {
+    "id": "vp-785",
+    "eup": "수비면",
+    "village": "신원2리",
+    "team": "B조",
+    "name": "김만택",
+    "affiliation": "의용소방대",
+    "phone": "010-3830-2258"
+  },
+  {
+    "id": "vp-786",
+    "eup": "수비면",
+    "village": "신원2리",
+    "team": "C조",
+    "name": "김동영",
+    "affiliation": "자율방재단",
+    "phone": "010-9773-4244"
+  },
+  {
+    "id": "vp-787",
+    "eup": "수비면",
+    "village": "신원2리",
+    "team": "A조",
+    "name": "이서하",
+    "affiliation": "공무원",
+    "phone": "010-3385-1262"
+  },
+  {
+    "id": "vp-788",
+    "eup": "수비면",
+    "village": "신원2리",
+    "team": "B조",
+    "name": "김동빈",
+    "affiliation": "공무원",
+    "phone": "010-6510-1272"
+  },
+  {
+    "id": "vp-789",
+    "eup": "수비면",
+    "village": "신원2리",
+    "team": "C조",
+    "name": "이서하",
+    "affiliation": "공무원",
+    "phone": "010-3385-1262"
+  },
+  {
+    "id": "vp-790",
+    "eup": "수비면",
+    "village": "신원2리",
+    "team": "A조",
+    "name": "김만택",
+    "affiliation": "의용소방대",
+    "phone": "010-3830-2258"
+  },
+  {
+    "id": "vp-791",
+    "eup": "수비면",
+    "village": "신원2리",
+    "team": "B조",
+    "name": "김동영",
+    "affiliation": "자율방재단",
+    "phone": "010-9773-4244"
+  },
+  {
+    "id": "vp-792",
+    "eup": "수비면",
+    "village": "신원2리",
+    "team": "C조",
+    "name": "김동규",
+    "affiliation": "이장",
+    "phone": "010-7484-5900"
+  },
+  {
+    "id": "vp-793",
+    "eup": "수비면",
+    "village": "수하1리",
+    "team": "A조",
+    "name": "김수연",
+    "affiliation": "이장",
+    "phone": "010-3355-4017"
+  },
+  {
+    "id": "vp-794",
+    "eup": "수비면",
+    "village": "수하1리",
+    "team": "B조",
+    "name": "권태흠",
+    "affiliation": "의용소방대",
+    "phone": "010-7155-1032"
+  },
+  {
+    "id": "vp-795",
+    "eup": "수비면",
+    "village": "수하1리",
+    "team": "C조",
+    "name": "이찬석",
+    "affiliation": "자율방재단",
+    "phone": "010-9305-6300"
+  },
+  {
+    "id": "vp-796",
+    "eup": "수비면",
+    "village": "수하1리",
+    "team": "A조",
+    "name": "권도원",
+    "affiliation": "공무원",
+    "phone": "010-9606-5952"
+  },
+  {
+    "id": "vp-797",
+    "eup": "수비면",
+    "village": "수하1리",
+    "team": "B조",
+    "name": "김동빈",
+    "affiliation": "공무원",
+    "phone": "010-6510-1272"
+  },
+  {
+    "id": "vp-798",
+    "eup": "수비면",
+    "village": "수하1리",
+    "team": "C조",
+    "name": "권도원",
+    "affiliation": "공무원",
+    "phone": "010-9606-5952"
+  },
+  {
+    "id": "vp-799",
+    "eup": "수비면",
+    "village": "수하1리",
+    "team": "A조",
+    "name": "권태흠",
+    "affiliation": "의용소방대",
+    "phone": "010-7155-1032"
+  },
+  {
+    "id": "vp-800",
+    "eup": "수비면",
+    "village": "수하1리",
+    "team": "B조",
+    "name": "이찬석",
+    "affiliation": "자율방재단",
+    "phone": "010-9305-6300"
+  },
+  {
+    "id": "vp-801",
+    "eup": "수비면",
+    "village": "수하1리",
+    "team": "C조",
+    "name": "김수연",
+    "affiliation": "이장",
+    "phone": "010-3355-4017"
+  },
+  {
+    "id": "vp-802",
+    "eup": "수비면",
+    "village": "수하2리",
+    "team": "A조",
+    "name": "배대은",
+    "affiliation": "이장",
+    "phone": "010-6403-0187"
+  },
+  {
+    "id": "vp-803",
+    "eup": "수비면",
+    "village": "수하2리",
+    "team": "B조",
+    "name": "김상배",
+    "affiliation": "의용소방대",
+    "phone": "010-3392-9375"
+  },
+  {
+    "id": "vp-804",
+    "eup": "수비면",
+    "village": "수하2리",
+    "team": "C조",
+    "name": "김동우",
+    "affiliation": "자율방재단",
+    "phone": "010-8690-0170"
+  },
+  {
+    "id": "vp-805",
+    "eup": "수비면",
+    "village": "수하2리",
+    "team": "A조",
+    "name": "김영남",
+    "affiliation": "공무원",
+    "phone": "010-4936-0154"
+  },
+  {
+    "id": "vp-806",
+    "eup": "수비면",
+    "village": "수하2리",
+    "team": "B조",
+    "name": "박찬용",
+    "affiliation": "공무원",
+    "phone": "010-4128-4432"
+  },
+  {
+    "id": "vp-807",
+    "eup": "수비면",
+    "village": "수하2리",
+    "team": "C조",
+    "name": "김영남",
+    "affiliation": "공무원",
+    "phone": "010-4936-0154"
+  },
+  {
+    "id": "vp-808",
+    "eup": "수비면",
+    "village": "수하2리",
+    "team": "A조",
+    "name": "김상배",
+    "affiliation": "의용소방대",
+    "phone": "010-3392-9375"
+  },
+  {
+    "id": "vp-809",
+    "eup": "수비면",
+    "village": "수하2리",
+    "team": "B조",
+    "name": "김동우",
+    "affiliation": "자율방재단",
+    "phone": "010-8690-0170"
+  },
+  {
+    "id": "vp-810",
+    "eup": "수비면",
+    "village": "수하2리",
+    "team": "C조",
+    "name": "배대은",
+    "affiliation": "이장",
+    "phone": "010-6403-0187"
+  },
+  {
+    "id": "vp-811",
+    "eup": "수비면",
+    "village": "수하3리",
+    "team": "A조",
+    "name": "배재정",
+    "affiliation": "이장",
+    "phone": "010-2350-4645"
+  },
+  {
+    "id": "vp-812",
+    "eup": "수비면",
+    "village": "수하3리",
+    "team": "B조",
+    "name": "배재정",
+    "affiliation": "이장",
+    "phone": "010-2350-4645"
+  },
+  {
+    "id": "vp-813",
+    "eup": "수비면",
+    "village": "수하3리",
+    "team": "C조",
+    "name": "배재정",
+    "affiliation": "이장",
+    "phone": "010-2350-4645"
+  },
+  {
+    "id": "vp-814",
+    "eup": "수비면",
+    "village": "수하3리",
+    "team": "A조",
+    "name": "천영민",
+    "affiliation": "공무원",
+    "phone": "010-2885-6049"
+  },
+  {
+    "id": "vp-815",
+    "eup": "수비면",
+    "village": "수하3리",
+    "team": "B조",
+    "name": "박찬용",
+    "affiliation": "공무원",
+    "phone": "010-4128-4432"
+  },
+  {
+    "id": "vp-816",
+    "eup": "수비면",
+    "village": "수하3리",
+    "team": "C조",
+    "name": "천영민",
+    "affiliation": "공무원",
+    "phone": "010-2885-6049"
+  },
+  {
+    "id": "vp-817",
+    "eup": "수비면",
+    "village": "수하3리",
+    "team": "A조",
+    "name": "권형원",
+    "affiliation": "자율방재단",
+    "phone": "010-9023-7518"
+  },
+  {
+    "id": "vp-818",
+    "eup": "수비면",
+    "village": "수하3리",
+    "team": "B조",
+    "name": "권형원",
+    "affiliation": "자율방재단",
+    "phone": "010-9023-7518"
+  },
+  {
+    "id": "vp-819",
+    "eup": "수비면",
+    "village": "수하3리",
+    "team": "C조",
+    "name": "권형원",
+    "affiliation": "자율방재단",
+    "phone": "010-9023-7518"
+  },
+  {
+    "id": "vp-820",
+    "eup": "수비면",
+    "village": "신암리",
+    "team": "A조",
+    "name": "이호영",
+    "affiliation": "이장",
+    "phone": "010-4803-5147"
+  },
+  {
+    "id": "vp-821",
+    "eup": "수비면",
+    "village": "신암리",
+    "team": "B조",
+    "name": "이호영",
+    "affiliation": "이장",
+    "phone": "010-4803-5147"
+  },
+  {
+    "id": "vp-822",
+    "eup": "수비면",
+    "village": "신암리",
+    "team": "C조",
+    "name": "이호영",
+    "affiliation": "이장",
+    "phone": "010-4803-5147"
+  },
+  {
+    "id": "vp-823",
+    "eup": "수비면",
+    "village": "신암리",
+    "team": "A조",
+    "name": "김태준",
+    "affiliation": "공무원",
+    "phone": "010-4198-8910"
+  },
+  {
+    "id": "vp-824",
+    "eup": "수비면",
+    "village": "신암리",
+    "team": "B조",
+    "name": "이상빈",
+    "affiliation": "공무원",
+    "phone": "010-2867-6830"
+  },
+  {
+    "id": "vp-825",
+    "eup": "수비면",
+    "village": "신암리",
+    "team": "C조",
+    "name": "김태준",
+    "affiliation": "공무원",
+    "phone": "010-4198-8910"
+  },
+  {
+    "id": "vp-826",
+    "eup": "수비면",
+    "village": "신암리",
+    "team": "A조",
+    "name": "이상호",
+    "affiliation": "자율방재단",
+    "phone": "010-5448-6864"
+  },
+  {
+    "id": "vp-827",
+    "eup": "수비면",
+    "village": "신암리",
+    "team": "B조",
+    "name": "이상호",
+    "affiliation": "자율방재단",
+    "phone": "010-5448-6864"
+  },
+  {
+    "id": "vp-828",
+    "eup": "수비면",
+    "village": "신암리",
+    "team": "C조",
+    "name": "이상호",
+    "affiliation": "자율방재단",
+    "phone": "010-5448-6864"
+  },
+  {
+    "id": "vp-829",
+    "eup": "수비면",
+    "village": "죽파리",
+    "team": "A조",
+    "name": "김국도",
+    "affiliation": "이장",
+    "phone": "010-7134-7837"
+  },
+  {
+    "id": "vp-830",
+    "eup": "수비면",
+    "village": "죽파리",
+    "team": "B조",
+    "name": "류동완",
+    "affiliation": "의용소방대",
+    "phone": "010-4333-1064"
+  },
+  {
+    "id": "vp-831",
+    "eup": "수비면",
+    "village": "죽파리",
+    "team": "C조",
+    "name": "홍갑용",
+    "affiliation": "자율방재단",
+    "phone": "010-3548-8069"
+  },
+  {
+    "id": "vp-832",
+    "eup": "수비면",
+    "village": "죽파리",
+    "team": "A조",
+    "name": "김명환",
+    "affiliation": "공무원",
+    "phone": "010-2734-5524"
+  },
+  {
+    "id": "vp-833",
+    "eup": "수비면",
+    "village": "죽파리",
+    "team": "B조",
+    "name": "조권영",
+    "affiliation": "공무원",
+    "phone": "010-6564-8470"
+  },
+  {
+    "id": "vp-834",
+    "eup": "수비면",
+    "village": "죽파리",
+    "team": "C조",
+    "name": "김명환",
+    "affiliation": "공무원",
+    "phone": "010-2734-5524"
+  },
+  {
+    "id": "vp-835",
+    "eup": "수비면",
+    "village": "죽파리",
+    "team": "A조",
+    "name": "류동완",
+    "affiliation": "의용소방대",
+    "phone": "010-4333-1064"
+  },
+  {
+    "id": "vp-836",
+    "eup": "수비면",
+    "village": "죽파리",
+    "team": "B조",
+    "name": "홍갑용",
+    "affiliation": "자율방재단",
+    "phone": "010-3548-8069"
+  },
+  {
+    "id": "vp-837",
+    "eup": "수비면",
+    "village": "죽파리",
+    "team": "C조",
+    "name": "김국도",
+    "affiliation": "이장",
+    "phone": "010-7134-7837"
+  },
+  {
+    "id": "vp-838",
+    "eup": "수비면",
+    "village": "송하리",
+    "team": "A조",
+    "name": "천호구",
+    "affiliation": "이장",
+    "phone": "010-2087-8830"
+  },
+  {
+    "id": "vp-839",
+    "eup": "수비면",
+    "village": "송하리",
+    "team": "B조",
+    "name": "천호구",
+    "affiliation": "이장",
+    "phone": "010-2087-8830"
+  },
+  {
+    "id": "vp-840",
+    "eup": "수비면",
+    "village": "송하리",
+    "team": "C조",
+    "name": "천호구",
+    "affiliation": "이장",
+    "phone": "010-2087-8830"
+  },
+  {
+    "id": "vp-841",
+    "eup": "수비면",
+    "village": "송하리",
+    "team": "A조",
+    "name": "손판곤",
+    "affiliation": "공무원",
+    "phone": "010-7374-0910"
+  },
+  {
+    "id": "vp-842",
+    "eup": "수비면",
+    "village": "송하리",
+    "team": "B조",
+    "name": "이영낭",
+    "affiliation": "공무원",
+    "phone": "010-8708-3809"
+  },
+  {
+    "id": "vp-843",
+    "eup": "수비면",
+    "village": "송하리",
+    "team": "C조",
+    "name": "손판곤",
+    "affiliation": "공무원",
+    "phone": "010-7374-0910"
+  },
+  {
+    "id": "vp-844",
+    "eup": "수비면",
+    "village": "송하리",
+    "team": "A조",
+    "name": "강수호",
+    "affiliation": "자율방재단",
+    "phone": "010-4532-7618"
+  },
+  {
+    "id": "vp-845",
+    "eup": "수비면",
+    "village": "송하리",
+    "team": "B조",
+    "name": "강수호",
+    "affiliation": "자율방재단",
+    "phone": "010-4532-7618"
+  },
+  {
+    "id": "vp-846",
+    "eup": "수비면",
+    "village": "송하리",
+    "team": "C조",
+    "name": "강수호",
+    "affiliation": "자율방재단",
+    "phone": "010-4532-7618"
+  },
+  {
+    "id": "vp-847",
+    "eup": "수비면",
+    "village": "본신리",
+    "team": "A조",
+    "name": "이상출",
+    "affiliation": "이장",
+    "phone": "010-4514-9472"
+  },
+  {
+    "id": "vp-848",
+    "eup": "수비면",
+    "village": "본신리",
+    "team": "B조",
+    "name": "이상출",
+    "affiliation": "이장",
+    "phone": "010-4514-9472"
+  },
+  {
+    "id": "vp-849",
+    "eup": "수비면",
+    "village": "본신리",
+    "team": "C조",
+    "name": "이상출",
+    "affiliation": "이장",
+    "phone": "010-4514-9472"
+  },
+  {
+    "id": "vp-850",
+    "eup": "수비면",
+    "village": "본신리",
+    "team": "A조",
+    "name": "박은경",
+    "affiliation": "공무원",
+    "phone": "010-5287-8403"
+  },
+  {
+    "id": "vp-851",
+    "eup": "수비면",
+    "village": "본신리",
+    "team": "B조",
+    "name": "한예희",
+    "affiliation": "공무원",
+    "phone": "010-3832-5043"
+  },
+  {
+    "id": "vp-852",
+    "eup": "수비면",
+    "village": "본신리",
+    "team": "C조",
+    "name": "박은경",
+    "affiliation": "공무원",
+    "phone": "010-5287-8403"
+  },
+  {
+    "id": "vp-853",
+    "eup": "수비면",
+    "village": "본신리",
+    "team": "A조",
+    "name": "남경식",
+    "affiliation": "의용소방대",
+    "phone": "010-8841-9344"
+  },
+  {
+    "id": "vp-854",
+    "eup": "수비면",
+    "village": "본신리",
+    "team": "B조",
+    "name": "남경식",
+    "affiliation": "의용소방대",
+    "phone": "010-8841-9344"
+  },
+  {
+    "id": "vp-855",
+    "eup": "수비면",
+    "village": "본신리",
+    "team": "C조",
+    "name": "남경식",
+    "affiliation": "의용소방대",
+    "phone": "010-8841-9344"
+  },
+  {
+    "id": "vp-856",
+    "eup": "석보면",
+    "village": "원리1",
+    "team": "A조",
+    "name": "박기진",
+    "affiliation": "이장",
+    "phone": "010-6489-0332"
+  },
+  {
+    "id": "vp-857",
+    "eup": "석보면",
+    "village": "원리1",
+    "team": "B조",
+    "name": "장완수",
+    "affiliation": "자율방범대",
+    "phone": "010-8592-7644"
+  },
+  {
+    "id": "vp-858",
+    "eup": "석보면",
+    "village": "원리1",
+    "team": "C조",
+    "name": "배재학",
+    "affiliation": "자율방범대",
+    "phone": "010-8285-4979"
+  },
+  {
+    "id": "vp-859",
+    "eup": "석보면",
+    "village": "원리1",
+    "team": "A조",
+    "name": "이서하",
+    "affiliation": "공무원",
+    "phone": "010-4276-7633"
+  },
+  {
+    "id": "vp-860",
+    "eup": "석보면",
+    "village": "원리1",
+    "team": "B조",
+    "name": "구덕모",
+    "affiliation": "공무원",
+    "phone": "010-7187-6608"
+  },
+  {
+    "id": "vp-861",
+    "eup": "석보면",
+    "village": "원리1",
+    "team": "C조",
+    "name": "이서하",
+    "affiliation": "공무원",
+    "phone": "010-4276-7633"
+  },
+  {
+    "id": "vp-862",
+    "eup": "석보면",
+    "village": "원리1",
+    "team": "A조",
+    "name": "이상엽",
+    "affiliation": "자율방범대",
+    "phone": "010-9123-2332"
+  },
+  {
+    "id": "vp-863",
+    "eup": "석보면",
+    "village": "원리1",
+    "team": "B조",
+    "name": "김명길",
+    "affiliation": "석맥청년회",
+    "phone": "010-6749-5315"
+  },
+  {
+    "id": "vp-864",
+    "eup": "석보면",
+    "village": "원리1",
+    "team": "C조",
+    "name": "황삼학",
+    "affiliation": "자율방범대",
+    "phone": "010-5050-0566"
+  },
+  {
+    "id": "vp-865",
+    "eup": "석보면",
+    "village": "원리2",
+    "team": "A조",
+    "name": "신종광",
+    "affiliation": "이장",
+    "phone": "010-9387-0071"
+  },
+  {
+    "id": "vp-866",
+    "eup": "석보면",
+    "village": "원리2",
+    "team": "B조",
+    "name": "황진태",
+    "affiliation": "자율방범대",
+    "phone": "010-2014-8254"
+  },
+  {
+    "id": "vp-867",
+    "eup": "석보면",
+    "village": "원리2",
+    "team": "C조",
+    "name": "홍대호",
+    "affiliation": "자율방범대",
+    "phone": "010-3500-1683"
+  },
+  {
+    "id": "vp-868",
+    "eup": "석보면",
+    "village": "원리2",
+    "team": "A조",
+    "name": "우태우",
+    "affiliation": "공무원",
+    "phone": "010-9362-8468"
+  },
+  {
+    "id": "vp-869",
+    "eup": "석보면",
+    "village": "원리2",
+    "team": "B조",
+    "name": "구덕모",
+    "affiliation": "공무원",
+    "phone": "010-7187-6608"
+  },
+  {
+    "id": "vp-870",
+    "eup": "석보면",
+    "village": "원리2",
+    "team": "C조",
+    "name": "우태우",
+    "affiliation": "공무원",
+    "phone": "010-9362-8468"
+  },
+  {
+    "id": "vp-871",
+    "eup": "석보면",
+    "village": "원리2",
+    "team": "A조",
+    "name": "박성환",
+    "affiliation": "의용소방대",
+    "phone": "010-3334-0249"
+  },
+  {
+    "id": "vp-872",
+    "eup": "석보면",
+    "village": "원리2",
+    "team": "B조",
+    "name": "이정호",
+    "affiliation": "자율방범대",
+    "phone": "010-4516-6463"
+  },
+  {
+    "id": "vp-873",
+    "eup": "석보면",
+    "village": "원리2",
+    "team": "C조",
+    "name": "박성환",
+    "affiliation": "자율방범대",
+    "phone": "010-8562-8349"
+  },
+  {
+    "id": "vp-874",
+    "eup": "석보면",
+    "village": "원리3",
+    "team": "A조",
+    "name": "홍준의",
+    "affiliation": "이장",
+    "phone": "010-4522-0127"
+  },
+  {
+    "id": "vp-875",
+    "eup": "석보면",
+    "village": "원리3",
+    "team": "B조",
+    "name": "박희준",
+    "affiliation": "자율방범대",
+    "phone": "010-9355-7986"
+  },
+  {
+    "id": "vp-876",
+    "eup": "석보면",
+    "village": "원리3",
+    "team": "C조",
+    "name": "김태현",
+    "affiliation": "자율방범대",
+    "phone": "010-8885-2427"
+  },
+  {
+    "id": "vp-877",
+    "eup": "석보면",
+    "village": "원리3",
+    "team": "A조",
+    "name": "김수현",
+    "affiliation": "공무원",
+    "phone": "010-4755-4497"
+  },
+  {
+    "id": "vp-878",
+    "eup": "석보면",
+    "village": "원리3",
+    "team": "B조",
+    "name": "김혜윤",
+    "affiliation": "공무원",
+    "phone": "010-4740-2928"
+  },
+  {
+    "id": "vp-879",
+    "eup": "석보면",
+    "village": "원리3",
+    "team": "C조",
+    "name": "김수현",
+    "affiliation": "공무원",
+    "phone": "010-4755-4497"
+  },
+  {
+    "id": "vp-880",
+    "eup": "석보면",
+    "village": "원리3",
+    "team": "A조",
+    "name": "김종연",
+    "affiliation": "자율방범대",
+    "phone": "010-9372-7780"
+  },
+  {
+    "id": "vp-881",
+    "eup": "석보면",
+    "village": "원리3",
+    "team": "B조",
+    "name": "엄주기",
+    "affiliation": "자율방범대",
+    "phone": "010-4538-3543"
+  },
+  {
+    "id": "vp-882",
+    "eup": "석보면",
+    "village": "원리3",
+    "team": "C조",
+    "name": "황진태",
+    "affiliation": "자율방범대",
+    "phone": "010-2014-8254"
+  },
+  {
+    "id": "vp-883",
+    "eup": "석보면",
+    "village": "지경",
+    "team": "A조",
+    "name": "박경도",
+    "affiliation": "이장",
+    "phone": "010-8589-7804"
+  },
+  {
+    "id": "vp-884",
+    "eup": "석보면",
+    "village": "지경",
+    "team": "B조",
+    "name": "김대희",
+    "affiliation": "자율방범대",
+    "phone": "010-3778-8318"
+  },
+  {
+    "id": "vp-885",
+    "eup": "석보면",
+    "village": "지경",
+    "team": "C조",
+    "name": "엄주복",
+    "affiliation": "자율방재단",
+    "phone": "010-4020-8143"
+  },
+  {
+    "id": "vp-886",
+    "eup": "석보면",
+    "village": "지경",
+    "team": "A조",
+    "name": "김혜림",
+    "affiliation": "공무원",
+    "phone": "010-9923-7507"
+  },
+  {
+    "id": "vp-887",
+    "eup": "석보면",
+    "village": "지경",
+    "team": "B조",
+    "name": "김정연",
+    "affiliation": "공무원",
+    "phone": "010-8575-5464"
+  },
+  {
+    "id": "vp-888",
+    "eup": "석보면",
+    "village": "지경",
+    "team": "C조",
+    "name": "김혜림",
+    "affiliation": "공무원",
+    "phone": "010-9923-7507"
+  },
+  {
+    "id": "vp-889",
+    "eup": "석보면",
+    "village": "지경",
+    "team": "A조",
+    "name": "권순국",
+    "affiliation": "자율방범대",
+    "phone": "010-6520-2252"
+  },
+  {
+    "id": "vp-890",
+    "eup": "석보면",
+    "village": "지경",
+    "team": "B조",
+    "name": "송용지",
+    "affiliation": "자율방범대",
+    "phone": "010-5061-8385"
+  },
+  {
+    "id": "vp-891",
+    "eup": "석보면",
+    "village": "지경",
+    "team": "C조",
+    "name": "최진성",
+    "affiliation": "자율방범대",
+    "phone": "010-8626-8032"
+  },
+  {
+    "id": "vp-892",
+    "eup": "석보면",
+    "village": "옥계1",
+    "team": "A조",
+    "name": "박창규",
+    "affiliation": "이장",
+    "phone": "010-2550-7005"
+  },
+  {
+    "id": "vp-893",
+    "eup": "석보면",
+    "village": "옥계1",
+    "team": "B조",
+    "name": "최병도",
+    "affiliation": "자율방범대",
+    "phone": "010-4545-2702"
+  },
+  {
+    "id": "vp-894",
+    "eup": "석보면",
+    "village": "옥계1",
+    "team": "C조",
+    "name": "김보규",
+    "affiliation": "자율방범대",
+    "phone": "010-4458-1205"
+  },
+  {
+    "id": "vp-895",
+    "eup": "석보면",
+    "village": "옥계1",
+    "team": "A조",
+    "name": "조동주",
+    "affiliation": "공무원",
+    "phone": "010-6823-1668"
+  },
+  {
+    "id": "vp-896",
+    "eup": "석보면",
+    "village": "옥계1",
+    "team": "B조",
+    "name": "임한희",
+    "affiliation": "공무원",
+    "phone": "010-7234-4113"
+  },
+  {
+    "id": "vp-897",
+    "eup": "석보면",
+    "village": "옥계1",
+    "team": "C조",
+    "name": "조동주",
+    "affiliation": "공무원",
+    "phone": "010-6823-1668"
+  },
+  {
+    "id": "vp-898",
+    "eup": "석보면",
+    "village": "옥계1",
+    "team": "A조",
+    "name": "박정우",
+    "affiliation": "자율방범대",
+    "phone": "010-8732-4341"
+  },
+  {
+    "id": "vp-899",
+    "eup": "석보면",
+    "village": "옥계1",
+    "team": "B조",
+    "name": "백덕흠",
+    "affiliation": "자율방범대",
+    "phone": "010-4922-2070"
+  },
+  {
+    "id": "vp-900",
+    "eup": "석보면",
+    "village": "옥계1",
+    "team": "C조",
+    "name": "최태원",
+    "affiliation": "자율방재단",
+    "phone": "010-9363-8137"
+  },
+  {
+    "id": "vp-901",
+    "eup": "석보면",
+    "village": "옥계2",
+    "team": "A조",
+    "name": "김경덕",
+    "affiliation": "이장",
+    "phone": "010-2788-3471"
+  },
+  {
+    "id": "vp-902",
+    "eup": "석보면",
+    "village": "옥계2",
+    "team": "B조",
+    "name": "박경훈",
+    "affiliation": "자율방범대",
+    "phone": "010-2924-3917"
+  },
+  {
+    "id": "vp-903",
+    "eup": "석보면",
+    "village": "옥계2",
+    "team": "C조",
+    "name": "신정한",
+    "affiliation": "자율방재단",
+    "phone": "010-5353-5407"
+  },
+  {
+    "id": "vp-904",
+    "eup": "석보면",
+    "village": "옥계2",
+    "team": "A조",
+    "name": "손태수",
+    "affiliation": "공무원",
+    "phone": "010-7572-2077"
+  },
+  {
+    "id": "vp-905",
+    "eup": "석보면",
+    "village": "옥계2",
+    "team": "B조",
+    "name": "임한희",
+    "affiliation": "공무원",
+    "phone": "010-7234-4113"
+  },
+  {
+    "id": "vp-906",
+    "eup": "석보면",
+    "village": "옥계2",
+    "team": "C조",
+    "name": "손태수",
+    "affiliation": "공무원",
+    "phone": "010-7572-2077"
+  },
+  {
+    "id": "vp-907",
+    "eup": "석보면",
+    "village": "옥계2",
+    "team": "A조",
+    "name": "서장훈",
+    "affiliation": "자율방범대",
+    "phone": "010-2042-7334"
+  },
+  {
+    "id": "vp-908",
+    "eup": "석보면",
+    "village": "옥계2",
+    "team": "B조",
+    "name": "장태수",
+    "affiliation": "자율방범대",
+    "phone": "010-7919-4141"
+  },
+  {
+    "id": "vp-909",
+    "eup": "석보면",
+    "village": "옥계2",
+    "team": "C조",
+    "name": "박병도",
+    "affiliation": "자율방범대",
+    "phone": "010-4938-9809"
+  },
+  {
+    "id": "vp-910",
+    "eup": "석보면",
+    "village": "소계",
+    "team": "A조",
+    "name": "박종근",
+    "affiliation": "이장",
+    "phone": "010-4811-8408"
+  },
+  {
+    "id": "vp-911",
+    "eup": "석보면",
+    "village": "소계",
+    "team": "B조",
+    "name": "김주년",
+    "affiliation": "석맥청년회",
+    "phone": "010-3549-6200"
+  },
+  {
+    "id": "vp-912",
+    "eup": "석보면",
+    "village": "소계",
+    "team": "C조",
+    "name": "김용구",
+    "affiliation": "자율방범대",
+    "phone": "010-4124-1225"
+  },
+  {
+    "id": "vp-913",
+    "eup": "석보면",
+    "village": "소계",
+    "team": "A조",
+    "name": "조용준",
+    "affiliation": "공무원",
+    "phone": "010-2885-6049"
+  },
+  {
+    "id": "vp-914",
+    "eup": "석보면",
+    "village": "소계",
+    "team": "B조",
+    "name": "김정연",
+    "affiliation": "공무원",
+    "phone": "010-8575-5464"
+  },
+  {
+    "id": "vp-915",
+    "eup": "석보면",
+    "village": "소계",
+    "team": "C조",
+    "name": "조용준",
+    "affiliation": "공무원",
+    "phone": "010-2885-6049"
+  },
+  {
+    "id": "vp-916",
+    "eup": "석보면",
+    "village": "소계",
+    "team": "A조",
+    "name": "장상식",
+    "affiliation": "자율방범대",
+    "phone": "010-4277-8404"
+  },
+  {
+    "id": "vp-917",
+    "eup": "석보면",
+    "village": "소계",
+    "team": "B조",
+    "name": "이정민",
+    "affiliation": "자율방범대",
+    "phone": "010-2774-9593"
+  },
+  {
+    "id": "vp-918",
+    "eup": "석보면",
+    "village": "소계",
+    "team": "C조",
+    "name": "신민호",
+    "affiliation": "자율방재단",
+    "phone": "010-7756-0205"
+  },
+  {
+    "id": "vp-919",
+    "eup": "석보면",
+    "village": "답곡1",
+    "team": "A조",
+    "name": "박순태",
+    "affiliation": "이장",
+    "phone": "010-4522-3297"
+  },
+  {
+    "id": "vp-920",
+    "eup": "석보면",
+    "village": "답곡1",
+    "team": "B조",
+    "name": "장세호",
+    "affiliation": "자율방범대",
+    "phone": "010-9941-0129"
+  },
+  {
+    "id": "vp-921",
+    "eup": "석보면",
+    "village": "답곡1",
+    "team": "C조",
+    "name": "서장훈",
+    "affiliation": "석맥청년회",
+    "phone": "010-2042-7334"
+  },
+  {
+    "id": "vp-922",
+    "eup": "석보면",
+    "village": "답곡1",
+    "team": "A조",
+    "name": "남재희",
+    "affiliation": "공무원",
+    "phone": "010-9207-0035"
+  },
+  {
+    "id": "vp-923",
+    "eup": "석보면",
+    "village": "답곡1",
+    "team": "B조",
+    "name": "오성주",
+    "affiliation": "공무원",
+    "phone": "010-8598-1669"
+  },
+  {
+    "id": "vp-924",
+    "eup": "석보면",
+    "village": "답곡1",
+    "team": "C조",
+    "name": "남재희",
+    "affiliation": "공무원",
+    "phone": "010-9207-0035"
+  },
+  {
+    "id": "vp-925",
+    "eup": "석보면",
+    "village": "답곡1",
+    "team": "A조",
+    "name": "이무섭",
+    "affiliation": "석맥청년회",
+    "phone": "010-6274-4443"
+  },
+  {
+    "id": "vp-926",
+    "eup": "석보면",
+    "village": "답곡1",
+    "team": "B조",
+    "name": "이상엽",
+    "affiliation": "석맥청년회",
+    "phone": "010-9123-2332"
+  },
+  {
+    "id": "vp-927",
+    "eup": "석보면",
+    "village": "답곡1",
+    "team": "C조",
+    "name": "김동민",
+    "affiliation": "석맥청년회",
+    "phone": "010-5444-5442"
+  },
+  {
+    "id": "vp-928",
+    "eup": "석보면",
+    "village": "답곡2",
+    "team": "A조",
+    "name": "이상학",
+    "affiliation": "이장",
+    "phone": "010-2929-1588"
+  },
+  {
+    "id": "vp-929",
+    "eup": "석보면",
+    "village": "답곡2",
+    "team": "B조",
+    "name": "장태중",
+    "affiliation": "석맥청년회",
+    "phone": "010-7919-4141"
+  },
+  {
+    "id": "vp-930",
+    "eup": "석보면",
+    "village": "답곡2",
+    "team": "C조",
+    "name": "김길영",
+    "affiliation": "석맥청년회",
+    "phone": "010-5828-4895"
+  },
+  {
+    "id": "vp-931",
+    "eup": "석보면",
+    "village": "답곡2",
+    "team": "A조",
+    "name": "이현정",
+    "affiliation": "공무원",
+    "phone": "010-3689-7246"
+  },
+  {
+    "id": "vp-932",
+    "eup": "석보면",
+    "village": "답곡2",
+    "team": "B조",
+    "name": "오성주",
+    "affiliation": "공무원",
+    "phone": "010-8598-1669"
+  },
+  {
+    "id": "vp-933",
+    "eup": "석보면",
+    "village": "답곡2",
+    "team": "C조",
+    "name": "이현정",
+    "affiliation": "공무원",
+    "phone": "010-3689-7246"
+  },
+  {
+    "id": "vp-934",
+    "eup": "석보면",
+    "village": "답곡2",
+    "team": "A조",
+    "name": "김평",
+    "affiliation": "자율방재단",
+    "phone": "010-6552-0409"
+  },
+  {
+    "id": "vp-935",
+    "eup": "석보면",
+    "village": "답곡2",
+    "team": "B조",
+    "name": "김태현",
+    "affiliation": "석맥청년회",
+    "phone": "010-8885-2427"
+  },
+  {
+    "id": "vp-936",
+    "eup": "석보면",
+    "village": "답곡2",
+    "team": "C조",
+    "name": "김도인",
+    "affiliation": "석맥청년회",
+    "phone": "010-3819-9126"
+  },
+  {
+    "id": "vp-937",
+    "eup": "석보면",
+    "village": "신평",
+    "team": "A조",
+    "name": "박영식",
+    "affiliation": "이장",
+    "phone": "010-6282-8692"
+  },
+  {
+    "id": "vp-938",
+    "eup": "석보면",
+    "village": "신평",
+    "team": "B조",
+    "name": "김보규",
+    "affiliation": "석맥청년회",
+    "phone": "010-4458-1205"
+  },
+  {
+    "id": "vp-939",
+    "eup": "석보면",
+    "village": "신평",
+    "team": "C조",
+    "name": "김명길",
+    "affiliation": "석맥청년회",
+    "phone": "010-6749-5315"
+  },
+  {
+    "id": "vp-940",
+    "eup": "석보면",
+    "village": "신평",
+    "team": "A조",
+    "name": "김원만",
+    "affiliation": "공무원",
+    "phone": "010-6569-0314"
+  },
+  {
+    "id": "vp-941",
+    "eup": "석보면",
+    "village": "신평",
+    "team": "B조",
+    "name": "김혜윤",
+    "affiliation": "공무원",
+    "phone": "010-4740-2928"
+  },
+  {
+    "id": "vp-942",
+    "eup": "석보면",
+    "village": "신평",
+    "team": "C조",
+    "name": "김원만",
+    "affiliation": "공무원",
+    "phone": "010-6569-0314"
+  },
+  {
+    "id": "vp-943",
+    "eup": "석보면",
+    "village": "신평",
+    "team": "A조",
+    "name": "최성운",
+    "affiliation": "석맥청년회",
+    "phone": "010-3522-8137"
+  },
+  {
+    "id": "vp-944",
+    "eup": "석보면",
+    "village": "신평",
+    "team": "B조",
+    "name": "박정우",
+    "affiliation": "석맥청년회",
+    "phone": "010-8732-4341"
+  },
+  {
+    "id": "vp-945",
+    "eup": "석보면",
+    "village": "신평",
+    "team": "C조",
+    "name": "백광웅",
+    "affiliation": "석맥청년회",
+    "phone": "010-4738-8415"
+  },
+  {
+    "id": "vp-946",
+    "eup": "석보면",
+    "village": "택전1",
+    "team": "A조",
+    "name": "김종환",
+    "affiliation": "이장",
+    "phone": "010-3686-6288"
+  },
+  {
+    "id": "vp-947",
+    "eup": "석보면",
+    "village": "택전1",
+    "team": "B조",
+    "name": "조성우",
+    "affiliation": "석맥청년회",
+    "phone": "010-3334-0249"
+  },
+  {
+    "id": "vp-948",
+    "eup": "석보면",
+    "village": "택전1",
+    "team": "C조",
+    "name": "박경훈",
+    "affiliation": "석맥청년회",
+    "phone": "010-2924-3917"
+  },
+  {
+    "id": "vp-949",
+    "eup": "석보면",
+    "village": "택전1",
+    "team": "A조",
+    "name": "박진경",
+    "affiliation": "공무원",
+    "phone": "010-2967-6996"
+  },
+  {
+    "id": "vp-950",
+    "eup": "석보면",
+    "village": "택전1",
+    "team": "B조",
+    "name": "손효주",
+    "affiliation": "공무원",
+    "phone": "010-5356-8824"
+  },
+  {
+    "id": "vp-951",
+    "eup": "석보면",
+    "village": "택전1",
+    "team": "C조",
+    "name": "박진경",
+    "affiliation": "공무원",
+    "phone": "010-2967-6996"
+  },
+  {
+    "id": "vp-952",
+    "eup": "석보면",
+    "village": "택전1",
+    "team": "A조",
+    "name": "유학균",
+    "affiliation": "자율방재단",
+    "phone": "010-6224-8753"
+  },
+  {
+    "id": "vp-953",
+    "eup": "석보면",
+    "village": "택전1",
+    "team": "B조",
+    "name": "강성웅",
+    "affiliation": "의용소방대",
+    "phone": "010-8746-3653"
+  },
+  {
+    "id": "vp-954",
+    "eup": "석보면",
+    "village": "택전1",
+    "team": "C조",
+    "name": "송용지",
+    "affiliation": "석맥청년회",
+    "phone": "010-8061-8385"
+  },
+  {
+    "id": "vp-955",
+    "eup": "석보면",
+    "village": "택전2",
+    "team": "A조",
+    "name": "우성영",
+    "affiliation": "이장",
+    "phone": "010-2807-8020"
+  },
+  {
+    "id": "vp-956",
+    "eup": "석보면",
+    "village": "택전2",
+    "team": "B조",
+    "name": "백광웅",
+    "affiliation": "석맥청년회",
+    "phone": "010-4738-8415"
+  },
+  {
+    "id": "vp-957",
+    "eup": "석보면",
+    "village": "택전2",
+    "team": "C조",
+    "name": "박희준",
+    "affiliation": "석맥청년회",
+    "phone": "010-9355-7986"
+  },
+  {
+    "id": "vp-958",
+    "eup": "석보면",
+    "village": "택전2",
+    "team": "A조",
+    "name": "정석수",
+    "affiliation": "공무원",
+    "phone": "010-6786-2635"
+  },
+  {
+    "id": "vp-959",
+    "eup": "석보면",
+    "village": "택전2",
+    "team": "B조",
+    "name": "손효주",
+    "affiliation": "공무원",
+    "phone": "010-5356-8824"
+  },
+  {
+    "id": "vp-960",
+    "eup": "석보면",
+    "village": "택전2",
+    "team": "C조",
+    "name": "정석수",
+    "affiliation": "공무원",
+    "phone": "010-6786-2635"
+  },
+  {
+    "id": "vp-961",
+    "eup": "석보면",
+    "village": "택전2",
+    "team": "A조",
+    "name": "백덕흠",
+    "affiliation": "석맥청년회",
+    "phone": "010-4922-2070"
+  },
+  {
+    "id": "vp-962",
+    "eup": "석보면",
+    "village": "택전2",
+    "team": "B조",
+    "name": "손문기",
+    "affiliation": "석맥청년회",
+    "phone": "010-6530-0816"
+  },
+  {
+    "id": "vp-963",
+    "eup": "석보면",
+    "village": "택전2",
+    "team": "C조",
+    "name": "이정민",
+    "affiliation": "석맥청년회",
+    "phone": "010-2774-9593"
+  },
+  {
+    "id": "vp-964",
+    "eup": "석보면",
+    "village": "화매1",
+    "team": "A조",
+    "name": "김진득",
+    "affiliation": "이장",
+    "phone": "010-3519-1247"
+  },
+  {
+    "id": "vp-965",
+    "eup": "석보면",
+    "village": "화매1",
+    "team": "B조",
+    "name": "박문환",
+    "affiliation": "의용소방대",
+    "phone": "010-5207-8349"
+  },
+  {
+    "id": "vp-966",
+    "eup": "석보면",
+    "village": "화매1",
+    "team": "C조",
+    "name": "이명섭",
+    "affiliation": "석맥청년회",
+    "phone": "010-2088-8043"
+  },
+  {
+    "id": "vp-967",
+    "eup": "석보면",
+    "village": "화매1",
+    "team": "A조",
+    "name": "황균석",
+    "affiliation": "공무원",
+    "phone": "010-9405-8867"
+  },
+  {
+    "id": "vp-968",
+    "eup": "석보면",
+    "village": "화매1",
+    "team": "B조",
+    "name": "이관석",
+    "affiliation": "공무원",
+    "phone": "010-6599-9070"
+  },
+  {
+    "id": "vp-969",
+    "eup": "석보면",
+    "village": "화매1",
+    "team": "C조",
+    "name": "황균석",
+    "affiliation": "공무원",
+    "phone": "010-9405-8867"
+  },
+  {
+    "id": "vp-970",
+    "eup": "석보면",
+    "village": "화매1",
+    "team": "A조",
+    "name": "이대호",
+    "affiliation": "자율방재단",
+    "phone": "010-3503-3025"
+  },
+  {
+    "id": "vp-971",
+    "eup": "석보면",
+    "village": "화매1",
+    "team": "B조",
+    "name": "이상학",
+    "affiliation": "석맥청년회",
+    "phone": "010-2929-1588"
+  },
+  {
+    "id": "vp-972",
+    "eup": "석보면",
+    "village": "화매1",
+    "team": "C조",
+    "name": "김주년",
+    "affiliation": "석맥청년회",
+    "phone": "010-3549-6200"
+  },
+  {
+    "id": "vp-973",
+    "eup": "석보면",
+    "village": "화매2",
+    "team": "A조",
+    "name": "오원인",
+    "affiliation": "이장",
+    "phone": "010-2512-8259"
+  },
+  {
+    "id": "vp-974",
+    "eup": "석보면",
+    "village": "화매2",
+    "team": "B조",
+    "name": "장상식",
+    "affiliation": "석맥청년회",
+    "phone": "010-5410-8404"
+  },
+  {
+    "id": "vp-975",
+    "eup": "석보면",
+    "village": "화매2",
+    "team": "C조",
+    "name": "장세호",
+    "affiliation": "석맥청년회",
+    "phone": "010-9941-0129"
+  },
+  {
+    "id": "vp-976",
+    "eup": "석보면",
+    "village": "화매2",
+    "team": "A조",
+    "name": "강혜민",
+    "affiliation": "공무원",
+    "phone": "010-7112-6218"
+  },
+  {
+    "id": "vp-977",
+    "eup": "석보면",
+    "village": "화매2",
+    "team": "B조",
+    "name": "이관석",
+    "affiliation": "공무원",
+    "phone": "010-6599-9070"
+  },
+  {
+    "id": "vp-978",
+    "eup": "석보면",
+    "village": "화매2",
+    "team": "C조",
+    "name": "강혜민",
+    "affiliation": "공무원",
+    "phone": "010-7112-6218"
+  },
+  {
+    "id": "vp-979",
+    "eup": "석보면",
+    "village": "화매2",
+    "team": "A조",
+    "name": "천정영",
+    "affiliation": "석맥청년회",
+    "phone": "010-3817-7700"
+  },
+  {
+    "id": "vp-980",
+    "eup": "석보면",
+    "village": "화매2",
+    "team": "B조",
+    "name": "최진성",
+    "affiliation": "석맥청년회",
+    "phone": "010-8626-8032"
+  },
+  {
+    "id": "vp-981",
+    "eup": "석보면",
+    "village": "화매2",
+    "team": "C조",
+    "name": "최병도",
+    "affiliation": "석맥청년회",
+    "phone": "010-4545-2702"
+  },
+  {
+    "id": "vp-982",
+    "eup": "석보면",
+    "village": "포산",
+    "team": "A조",
+    "name": "유철균",
+    "affiliation": "이장",
+    "phone": "010-4808-3152"
+  },
+  {
+    "id": "vp-983",
+    "eup": "석보면",
+    "village": "포산",
+    "team": "B조",
+    "name": "한태희",
+    "affiliation": "의용소방대",
+    "phone": "010-4533-7631"
+  },
+  {
+    "id": "vp-984",
+    "eup": "석보면",
+    "village": "포산",
+    "team": "C조",
+    "name": "박상식",
+    "affiliation": "자율방재단",
+    "phone": "010-4153-3300"
+  },
+  {
+    "id": "vp-985",
+    "eup": "석보면",
+    "village": "포산",
+    "team": "A조",
+    "name": "배상기",
+    "affiliation": "공무원",
+    "phone": "010-7396-3256"
+  },
+  {
+    "id": "vp-986",
+    "eup": "석보면",
+    "village": "포산",
+    "team": "B조",
+    "name": "김진현",
+    "affiliation": "공무원",
+    "phone": "010-3253-9758"
+  },
+  {
+    "id": "vp-987",
+    "eup": "석보면",
+    "village": "포산",
+    "team": "C조",
+    "name": "배상기",
+    "affiliation": "공무원",
+    "phone": "010-7396-3256"
+  },
+  {
+    "id": "vp-988",
+    "eup": "석보면",
+    "village": "포산",
+    "team": "A조",
+    "name": "황성구",
+    "affiliation": "석맥청년회",
+    "phone": "010-3452-3289"
+  },
+  {
+    "id": "vp-989",
+    "eup": "석보면",
+    "village": "포산",
+    "team": "B조",
+    "name": "황삼학",
+    "affiliation": "석맥청년회",
+    "phone": "010-5050-0566"
+  },
+  {
+    "id": "vp-990",
+    "eup": "석보면",
+    "village": "포산",
+    "team": "C조",
+    "name": "장완수",
+    "affiliation": "의용소방대",
+    "phone": "010-8592-7644"
+  },
+  {
+    "id": "vp-991",
+    "eup": "석보면",
+    "village": "삼의",
+    "team": "A조",
+    "name": "권영선",
+    "affiliation": "이장",
+    "phone": "010-5213-0853"
+  },
+  {
+    "id": "vp-992",
+    "eup": "석보면",
+    "village": "삼의",
+    "team": "B조",
+    "name": "이무섭",
+    "affiliation": "의용소방대",
+    "phone": "010-6274-4443"
+  },
+  {
+    "id": "vp-993",
+    "eup": "석보면",
+    "village": "삼의",
+    "team": "C조",
+    "name": "김대희",
+    "affiliation": "의용소방대",
+    "phone": "010-3778-8318"
+  },
+  {
+    "id": "vp-994",
+    "eup": "석보면",
+    "village": "삼의",
+    "team": "A조",
+    "name": "박선영",
+    "affiliation": "공무원",
+    "phone": "010-9773-1898"
+  },
+  {
+    "id": "vp-995",
+    "eup": "석보면",
+    "village": "삼의",
+    "team": "B조",
+    "name": "원종민",
+    "affiliation": "공무원",
+    "phone": "010-7307-1729"
+  },
+  {
+    "id": "vp-996",
+    "eup": "석보면",
+    "village": "삼의",
+    "team": "C조",
+    "name": "박선영",
+    "affiliation": "공무원",
+    "phone": "010-9773-1898"
+  },
+  {
+    "id": "vp-997",
+    "eup": "석보면",
+    "village": "삼의",
+    "team": "A조",
+    "name": "엄주기",
+    "affiliation": "의용소방대",
+    "phone": "010-4538-3543"
+  },
+  {
+    "id": "vp-998",
+    "eup": "석보면",
+    "village": "삼의",
+    "team": "B조",
+    "name": "박병도",
+    "affiliation": "의용소방대",
+    "phone": "010-4938-9809"
+  },
+  {
+    "id": "vp-999",
+    "eup": "석보면",
+    "village": "삼의",
+    "team": "C조",
+    "name": "박문환",
+    "affiliation": "의용소방대",
+    "phone": "010-5207-8349"
+  },
+  {
+    "id": "vp-1000",
+    "eup": "석보면",
+    "village": "요원1",
+    "team": "A조",
+    "name": "김상철",
+    "affiliation": "이장",
+    "phone": "010-3516-8517"
+  },
+  {
+    "id": "vp-1001",
+    "eup": "석보면",
+    "village": "요원1",
+    "team": "B조",
+    "name": "이명섭",
+    "affiliation": "의용소방대",
+    "phone": "010-2088-8043"
+  },
+  {
+    "id": "vp-1002",
+    "eup": "석보면",
+    "village": "요원1",
+    "team": "C조",
+    "name": "손문기",
+    "affiliation": "석맥청년회",
+    "phone": "010-6530-0816"
+  },
+  {
+    "id": "vp-1003",
+    "eup": "석보면",
+    "village": "요원1",
+    "team": "A조",
+    "name": "장연식",
+    "affiliation": "공무원",
+    "phone": "010-8566-8768"
+  },
+  {
+    "id": "vp-1004",
+    "eup": "석보면",
+    "village": "요원1",
+    "team": "B조",
+    "name": "박지희",
+    "affiliation": "공무원",
+    "phone": "010-2041-3650"
+  },
+  {
+    "id": "vp-1005",
+    "eup": "석보면",
+    "village": "요원1",
+    "team": "C조",
+    "name": "장연식",
+    "affiliation": "공무원",
+    "phone": "010-8566-8768"
+  },
+  {
+    "id": "vp-1006",
+    "eup": "석보면",
+    "village": "요원1",
+    "team": "A조",
+    "name": "홍대호",
+    "affiliation": "의용소방대",
+    "phone": "010-3500-1683"
+  },
+  {
+    "id": "vp-1007",
+    "eup": "석보면",
+    "village": "요원1",
+    "team": "B조",
+    "name": "최성운",
+    "affiliation": "의용소방대",
+    "phone": "010-3522-8137"
+  },
+  {
+    "id": "vp-1008",
+    "eup": "석보면",
+    "village": "요원1",
+    "team": "C조",
+    "name": "권순국",
+    "affiliation": "자율방범대",
+    "phone": "010-6520-2252"
+  },
+  {
+    "id": "vp-1009",
+    "eup": "석보면",
+    "village": "요원2",
+    "team": "A조",
+    "name": "조낙현",
+    "affiliation": "이장",
+    "phone": "010-3809-1707"
+  },
+  {
+    "id": "vp-1010",
+    "eup": "석보면",
+    "village": "요원2",
+    "team": "B조",
+    "name": "배재학",
+    "affiliation": "의용소방대",
+    "phone": "010-8285-4979"
+  },
+  {
+    "id": "vp-1011",
+    "eup": "석보면",
+    "village": "요원2",
+    "team": "C조",
+    "name": "장태중",
+    "affiliation": "의용소방대",
+    "phone": "010-7919-4141"
+  },
+  {
+    "id": "vp-1012",
+    "eup": "석보면",
+    "village": "요원2",
+    "team": "A조",
+    "name": "강덕원",
+    "affiliation": "공무원",
+    "phone": "010-6522-8667"
+  },
+  {
+    "id": "vp-1013",
+    "eup": "석보면",
+    "village": "요원2",
+    "team": "B조",
+    "name": "박지희",
+    "affiliation": "공무원",
+    "phone": "010-2041-3650"
+  },
+  {
+    "id": "vp-1014",
+    "eup": "석보면",
+    "village": "요원2",
+    "team": "C조",
+    "name": "강덕원",
+    "affiliation": "공무원",
+    "phone": "010-6522-8667"
+  },
+  {
+    "id": "vp-1015",
+    "eup": "석보면",
+    "village": "요원2",
+    "team": "A조",
+    "name": "김용구",
+    "affiliation": "의용소방대",
+    "phone": "010-4124-1225"
+  },
+  {
+    "id": "vp-1016",
+    "eup": "석보면",
+    "village": "요원2",
+    "team": "B조",
+    "name": "최재원",
+    "affiliation": "석맥청년회",
+    "phone": "010-9365-0884"
+  },
+  {
+    "id": "vp-1017",
+    "eup": "석보면",
+    "village": "요원2",
+    "team": "C조",
+    "name": "이정호",
+    "affiliation": "의용소방대",
+    "phone": "010-4516-6463"
+  },
+  {
+    "id": "vp-1018",
+    "eup": "석보면",
+    "village": "홍계",
+    "team": "A조",
+    "name": "김익환",
+    "affiliation": "이장",
+    "phone": "010-3803-7984"
+  },
+  {
+    "id": "vp-1019",
+    "eup": "석보면",
+    "village": "홍계",
+    "team": "B조",
+    "name": "황성구",
+    "affiliation": "의용소방대",
+    "phone": "010-3452-3289"
+  },
+  {
+    "id": "vp-1020",
+    "eup": "석보면",
+    "village": "홍계",
+    "team": "C조",
+    "name": "조성우",
+    "affiliation": "자율방범대",
+    "phone": "010-3334-0249"
+  },
+  {
+    "id": "vp-1021",
+    "eup": "석보면",
+    "village": "홍계",
+    "team": "A조",
+    "name": "김용한",
+    "affiliation": "공무원",
+    "phone": "010-6535-7908"
+  },
+  {
+    "id": "vp-1022",
+    "eup": "석보면",
+    "village": "홍계",
+    "team": "B조",
+    "name": "김창곤",
+    "affiliation": "공무원",
+    "phone": "010-2947-5321"
+  },
+  {
+    "id": "vp-1023",
+    "eup": "석보면",
+    "village": "홍계",
+    "team": "C조",
+    "name": "김용한",
+    "affiliation": "공무원",
+    "phone": "010-6535-7908"
+  },
+  {
+    "id": "vp-1024",
+    "eup": "석보면",
+    "village": "홍계",
+    "team": "A조",
+    "name": "김동민",
+    "affiliation": "의용소방대",
+    "phone": "010-5444-5442"
+  },
+  {
+    "id": "vp-1025",
+    "eup": "석보면",
+    "village": "홍계",
+    "team": "B조",
+    "name": "천정영",
+    "affiliation": "의용소방대",
+    "phone": "010-3817-7700"
+  },
+  {
+    "id": "vp-1026",
+    "eup": "석보면",
+    "village": "홍계",
+    "team": "C조",
+    "name": "장태수",
+    "affiliation": "자율방범대",
+    "phone": "010-7919-4141"
+  },
+  {
+    "id": "vp-1027",
+    "eup": "석보면",
+    "village": "주남",
+    "team": "A조",
+    "name": "이영호",
+    "affiliation": "이장",
+    "phone": "010-3817-7917"
+  },
+  {
+    "id": "vp-1028",
+    "eup": "석보면",
+    "village": "주남",
+    "team": "B조",
+    "name": "김종연",
+    "affiliation": "의용소방대",
+    "phone": "010-2014-8254"
+  },
+  {
+    "id": "vp-1029",
+    "eup": "석보면",
+    "village": "주남",
+    "team": "C조",
+    "name": "한태희",
+    "affiliation": "의용소방대",
+    "phone": "010-4533-7631"
+  },
+  {
+    "id": "vp-1030",
+    "eup": "석보면",
+    "village": "주남",
+    "team": "A조",
+    "name": "이예진",
+    "affiliation": "공무원",
+    "phone": "010-4503-3101"
+  },
+  {
+    "id": "vp-1031",
+    "eup": "석보면",
+    "village": "주남",
+    "team": "B조",
+    "name": "정종연",
+    "affiliation": "공무원",
+    "phone": "010-3521-1138"
+  },
+  {
+    "id": "vp-1032",
+    "eup": "석보면",
+    "village": "주남",
+    "team": "C조",
+    "name": "이예진",
+    "affiliation": "공무원",
+    "phone": "010-4503-3101"
+  },
+  {
+    "id": "vp-1033",
+    "eup": "석보면",
+    "village": "주남",
+    "team": "A조",
+    "name": "김도인",
+    "affiliation": "의용소방대",
+    "phone": "010-3819-9126"
+  },
+  {
+    "id": "vp-1034",
+    "eup": "석보면",
+    "village": "주남",
+    "team": "B조",
+    "name": "김길영",
+    "affiliation": "의용소방대",
+    "phone": "010-5828-4895"
+  },
+  {
+    "id": "vp-1035",
+    "eup": "석보면",
+    "village": "주남",
+    "team": "C조",
+    "name": "강성웅",
+    "affiliation": "의용소방대",
+    "phone": "010-8746-3653"
+  }
+]

@@ -16,6 +16,7 @@ import { registerLayerManagerUploadOpener, requestLayerManagerAfterUploadRefresh
 import { LayerInfoManager } from "./LayerInfoManager"
 import { LayerAttrManager } from "./LayerAttrManager"
 import { LayerCodeManager } from "./LayerCodeManager"
+import { LayerExtraManager } from "./LayerExtraManager"
 
 const GEOSERVER_DEFAULT_URL =
   typeof window !== "undefined"
@@ -29,6 +30,7 @@ const MAIN_TABS = [
   { id: "defineLayer", label: "레이어 설정 (Layer)" },
   { id: "defineField", label: "레이어 설정 (Field)" },
   { id: "defineCode", label: "레이어 설정 (Code)" },
+  { id: "defineExtra", label: "레이어 설정 (Extra)" },
   { id: "autoSetup", label: "오류수정" },
 ] as const
 
@@ -36,8 +38,19 @@ type MainTabId = (typeof MAIN_TABS)[number]["id"]
 
 export function LayerManagerContent() {
   const [activeTab, setActiveTab] = useState<MainTabId>("list")
+  const [visitedTabs, setVisitedTabs] = useState<Set<MainTabId>>(() => new Set(["list"]))
   const [autoSetupIssueCount, setAutoSetupIssueCount] = useState<number | null>(null)
   const [uploadDialog, setUploadDialog] = useState<LayerUploadDialogKind>(null)
+
+  const selectTab = useCallback((id: MainTabId) => {
+    setActiveTab(id)
+    setVisitedTabs((prev) => {
+      if (prev.has(id)) return prev
+      const next = new Set(prev)
+      next.add(id)
+      return next
+    })
+  }, [])
 
   const refreshAutoSetupIssueCount = useCallback(async () => {
     try {
@@ -56,8 +69,12 @@ export function LayerManagerContent() {
   }, [])
 
   useEffect(() => {
-    void refreshAutoSetupIssueCount()
-  }, [refreshAutoSetupIssueCount])
+    if (visitedTabs.has("autoSetup")) return
+    const timer = window.setTimeout(() => {
+      void refreshAutoSetupIssueCount()
+    }, 2500)
+    return () => window.clearTimeout(timer)
+  }, [visitedTabs, refreshAutoSetupIssueCount])
 
   const handleAutoSetupIssueCountChange = useCallback((count: number) => {
     setAutoSetupIssueCount(count)
@@ -66,14 +83,14 @@ export function LayerManagerContent() {
   const handleUploadSuccess = useCallback(
     (kind: Exclude<LayerUploadDialogKind, null>) => {
       if (kind === "shp") {
-        setActiveTab("historyShp")
+        selectTab("historyShp")
       } else {
-        setActiveTab("historyExcel")
+        selectTab("historyExcel")
       }
       void refreshAutoSetupIssueCount()
       requestLayerManagerAfterUploadRefresh(kind)
     },
-    [refreshAutoSetupIssueCount]
+    [refreshAutoSetupIssueCount, selectTab]
   )
 
   useEffect(() => {
@@ -93,7 +110,7 @@ export function LayerManagerContent() {
                 ? "border-primary text-primary"
                 : "border-transparent text-muted-foreground hover:text-foreground hover:border-border"
             )}
-            onClick={() => setActiveTab(tab.id)}
+            onClick={() => selectTab(tab.id)}
           >
             {tab.id === "autoSetup" && autoSetupIssueCount != null && autoSetupIssueCount > 0 ? (
               <BadgeAlert className="mr-1.5 h-4 w-4 shrink-0 text-rose-500 dark:text-rose-400" aria-hidden />
@@ -119,42 +136,62 @@ export function LayerManagerContent() {
         >
           <LayerManagerListTab />
         </div>
-        <div
-          className="absolute inset-0 flex flex-col"
-          style={{ display: activeTab === "historyShp" ? "flex" : "none" }}
-        >
-          <ShpHistoryTab embedded active={activeTab === "historyShp"} />
-        </div>
-        <div
-          className="absolute inset-0 flex flex-col"
-          style={{ display: activeTab === "historyExcel" ? "flex" : "none" }}
-        >
-          <ExlHistoryTab embedded />
-        </div>
-        <div
-          className="absolute inset-0 flex flex-col overflow-hidden"
-          style={{ display: activeTab === "defineLayer" ? "flex" : "none" }}
-        >
-          <LayerInfoManager />
-        </div>
-        <div
-          className="absolute inset-0 flex flex-col overflow-hidden"
-          style={{ display: activeTab === "defineField" ? "flex" : "none" }}
-        >
-          <LayerAttrManager />
-        </div>
-        <div
-          className="absolute inset-0 flex flex-col overflow-hidden"
-          style={{ display: activeTab === "defineCode" ? "flex" : "none" }}
-        >
-          <LayerCodeManager />
-        </div>
-        <div
-          className="absolute inset-0 flex flex-col overflow-hidden"
-          style={{ display: activeTab === "autoSetup" ? "flex" : "none" }}
-        >
-          <LayerManagerAutoSetupTab onIssueCountChange={handleAutoSetupIssueCountChange} />
-        </div>
+        {visitedTabs.has("historyShp") ? (
+          <div
+            className="absolute inset-0 flex flex-col"
+            style={{ display: activeTab === "historyShp" ? "flex" : "none" }}
+          >
+            <ShpHistoryTab embedded active={activeTab === "historyShp"} />
+          </div>
+        ) : null}
+        {visitedTabs.has("historyExcel") ? (
+          <div
+            className="absolute inset-0 flex flex-col"
+            style={{ display: activeTab === "historyExcel" ? "flex" : "none" }}
+          >
+            <ExlHistoryTab embedded />
+          </div>
+        ) : null}
+        {visitedTabs.has("defineLayer") ? (
+          <div
+            className="absolute inset-0 flex flex-col overflow-hidden"
+            style={{ display: activeTab === "defineLayer" ? "flex" : "none" }}
+          >
+            <LayerInfoManager />
+          </div>
+        ) : null}
+        {visitedTabs.has("defineField") ? (
+          <div
+            className="absolute inset-0 flex flex-col overflow-hidden"
+            style={{ display: activeTab === "defineField" ? "flex" : "none" }}
+          >
+            <LayerAttrManager />
+          </div>
+        ) : null}
+        {visitedTabs.has("defineCode") ? (
+          <div
+            className="absolute inset-0 flex flex-col overflow-hidden"
+            style={{ display: activeTab === "defineCode" ? "flex" : "none" }}
+          >
+            <LayerCodeManager />
+          </div>
+        ) : null}
+        {visitedTabs.has("defineExtra") ? (
+          <div
+            className="absolute inset-0 flex flex-col overflow-hidden"
+            style={{ display: activeTab === "defineExtra" ? "flex" : "none" }}
+          >
+            <LayerExtraManager />
+          </div>
+        ) : null}
+        {visitedTabs.has("autoSetup") ? (
+          <div
+            className="absolute inset-0 flex flex-col overflow-hidden"
+            style={{ display: activeTab === "autoSetup" ? "flex" : "none" }}
+          >
+            <LayerManagerAutoSetupTab onIssueCountChange={handleAutoSetupIssueCountChange} />
+          </div>
+        ) : null}
       </div>
     </div>
   )

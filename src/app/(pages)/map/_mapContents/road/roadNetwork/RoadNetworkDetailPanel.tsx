@@ -33,6 +33,7 @@ import { fromLonLat } from "ol/proj";
 import { isEmpty as isEmptyExtent } from "ol/extent";
 import { cn } from "@/lib/utils";
 import { call } from "@/lib/api";
+import { recordDataViewLog } from "@/lib/recordDataViewLog";
 import {
   Dialog,
   DialogContent,
@@ -430,6 +431,24 @@ export function RoadNetworkDetailPanel({
     "미확인";
   const mapContext = useMapContext();
   const isNewRoad = isNewRoadNetworkRowId(row.id);
+
+  // 데이터 이력관리에 조회 저장을 위해 추가
+  useEffect(() => {
+    if (isNewRoad) return;
+    const raw = String(row.id ?? "").trim();
+    if (!raw) return;
+    const sep = raw.indexOf(":");
+    const tableName = sep > 0 ? raw.slice(0, sep) : "road_network";
+    const keyValue = sep > 0 ? raw.slice(sep + 1) : raw;
+    if (!tableName || !keyValue) return;
+    recordDataViewLog({
+      tableName,
+      keyField: "ogc_fid",
+      keyValue,
+      serviceName: "도로망도",
+    });
+  }, [row.id, isNewRoad]);
+
   const [attrsOpen, setAttrsOpen] = useState(true);
   const [bottomTab, setBottomTab] = useState<BottomTab>("maintenance");
   const [attrEditing, setAttrEditing] = useState(isNewRoad);

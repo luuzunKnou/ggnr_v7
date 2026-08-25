@@ -19,9 +19,11 @@ import {
   getEditableFieldDefinitionsForTable,
   resolveJijukParcelGeomsByAddresses,
   syncChildParcelsByParentId,
+  buildChildOfParentWhereSql,
 } from './layerRowService';
 import { labelForOccupationLedgerField } from '@/app/(pages)/map/_mapContents/occupationLedger/occupationLedgerFieldLabels';
 import { deriveOccupationPeriodState } from '@/lib/occupationLedgerPeriodState';
+import { sortOccupationLedgerListRows } from '@/lib/occupationLedgerListSort';
 
 const DEFAULT_SCHEMA = 'layer';
 const GEOM_COLUMN_NAMES = new Set(['geom', 'geometry', 'the_geom', 'shape']);
@@ -107,8 +109,67 @@ function findColumn(columns: string[], name: string): string | null {
   return columns.find((c) => c.toLowerCase() === lower) ?? null;
 }
 
+/** 본표 키(ogc_fid). 허가번호·id 로 들어와도 본표 키로 맞춘다. 순번이 있으면 그 행만 쓴다. */
+async function canonicalOccupationLedgerKey(
+  binding: OccupationLedgerBinding,
+  keyRaw: string
+): Promise<string | null> {
+  const key = String(keyRaw ?? '').trim();
+  if (!key) return null;
+  const meta = await resolveTableWithSchema(binding.mainTable);
+  if (!meta) return null;
+  const cols = await getTableColumns(meta.schema, meta.tableName);
+  const keyCol = findColumn(cols, binding.fields.keyField);
+  const permitCol = findColumn(cols, 'permit_no');
+  const idCol = findColumn(cols, 'id');
+  if (!keyCol) return null;
+  const safe = meta.tableName.replace(/"/g, '""');
+  const safeSchema = meta.schema.replace(/"/g, '""');
+
+  const lookup = async (col: string): Promise<string | null> => {
+    try {
+      const res = await db.execute(
+        sql.raw(
+          `SELECT ${quoteIdent(keyCol)}::text AS k
+           FROM "${safeSchema}"."${safe}"
+           WHERE ${quoteIdent(col)}::text = '${esc(key)}'
+           LIMIT 1`
+        )
+      );
+      const k = String((res.rows?.[0] as { k?: string } | undefined)?.k ?? '').trim();
+      return k || null;
+    } catch {
+      return null;
+    }
+  };
+
+  const byKey = await lookup(keyCol);
+  if (byKey) return byKey;
+  if (permitCol && permitCol.toLowerCase() !== keyCol.toLowerCase()) {
+    const byPermit = await lookup(permitCol);
+    if (byPermit) return byPermit;
+  }
+  if (idCol && idCol.toLowerCase() !== keyCol.toLowerCase()) {
+    return lookup(idCol);
+  }
+  return null;
+}
+
+export async function resolveOccupationLedgerRowKey(params?: {
+  key?: string;
+  serEng?: string;
+  system?: string;
+}): Promise<{ key: string | null; error?: string }> {
+  const resolved = resolveBinding(params);
+  if (resolved.error || !resolved.binding) {
+    return { key: null, error: resolved.error };
+  }
+  const key = await canonicalOccupationLedgerKey(resolved.binding, String(params?.key ?? ''));
+  return { key };
+}
+
 function resolveChildParentCol(columns: string[], hint: string): string | null {
-  const ordered = [hint, 'parent_id', 'permit_no', 'cons_code', 'id']
+  const ordered = [hint, 'permit_no', 'parent_id', 'cons_code', 'id']
     .map((n) => String(n ?? '').trim())
     .filter(Boolean);
   const seen = new Set<string>();
@@ -174,10 +235,16 @@ async function getChildAddressItems(params: {
     ? `, r.${quoteIdent('ogc_fid')}::text AS ogc_fid`
     : `, NULL::text AS ogc_fid`;
 
+  const childOfParentSql = buildChildOfParentWhereSql({
+    parentCol,
+    parentId: params.parentKey,
+    alias: 'r',
+  });
+
   const sqlText = `
     SELECT COALESCE(r.${quoteIdent(addressCol)}::text, '') AS addr ${extentSelect}${ogcFidSelect}
     FROM "${safeSchema}"."${safe}" r
-    WHERE r.${quoteIdent(parentCol)}::text = '${esc(params.parentKey)}'
+    WHERE ${childOfParentSql}
       AND COALESCE(r.${quoteIdent(addressCol)}::text, '') <> ''
     ORDER BY r.${orderExpr}`;
 
@@ -200,21 +267,22 @@ async function getChildAddressItems(params: {
       const wmsRowKey = ogcFid ? { keyField: 'ogc_fid', keyValue: ogcFid } : undefined;
       return { address, extent3857, ...(wmsRowKey ? { wmsRowKey } : {}) };
     });
-    return { items: items.filter((x) => x.address) };
+    const seen = new Set<string>();
+    const unique = items.filter((x) => {
+      if (!x.address) return false;
+      const key = x.address.toLowerCase().replace(/\s+/g, ' ');
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+    return { items: unique };
   } catch {
     return { items: [] };
   }
 }
 
 function sortListRows(rows: OccupationLedgerListRow[]): OccupationLedgerListRow[] {
-  return [...rows].sort((a, b) => {
-    const aStart = tryFormatToYmd(a.startDate) ?? '';
-    const bStart = tryFormatToYmd(b.startDate) ?? '';
-    if (aStart && bStart && aStart !== bStart) return bStart.localeCompare(aStart);
-    if (aStart && !bStart) return -1;
-    if (!aStart && bStart) return 1;
-    return b.rowKey.localeCompare(a.rowKey);
-  });
+  return sortOccupationLedgerListRows(rows);
 }
 
 export async function getOccupationLedgerBindingInfo(params?: {
@@ -303,7 +371,7 @@ export async function getOccupationLedgerList(params?: {
       }
       return {
         rowKey: String(row.rowKey ?? '').trim(),
-        name: String(row.name ?? '').trim(),
+        name: formatAddressStripSidoSigungu(String(row.name ?? '')),
         place: formatAddressStripSidoSigungu(String(row.place ?? '')),
         startDate,
         endDate,
@@ -327,7 +395,9 @@ export async function getOccupationLedgerExtent3857ByKey(params: {
     return { extent3857: null, error: resolved.error };
   }
   const binding = resolved.binding;
-  const keyRaw = String(params?.key ?? '').trim();
+  const keyRaw =
+    (await canonicalOccupationLedgerKey(binding, String(params?.key ?? ''))) ??
+    String(params?.key ?? '').trim();
   if (!keyRaw) return { extent3857: null, error: '키가 필요합니다.' };
 
   const mainMeta = await resolveTableWithSchema(binding.mainTable);
@@ -382,7 +452,9 @@ export async function getOccupationLedgerDetailByKey(params: {
     return { attributes: [], parcelItems: [], mgjItems: [], error: resolved.error };
   }
   const binding = resolved.binding;
-  const keyRaw = String(params?.key ?? '').trim();
+  const keyRaw =
+    (await canonicalOccupationLedgerKey(binding, String(params?.key ?? ''))) ??
+    String(params?.key ?? '').trim();
   if (!keyRaw) {
     return { attributes: [], parcelItems: [], mgjItems: [], error: '키가 필요합니다.' };
   }
@@ -400,7 +472,7 @@ export async function getOccupationLedgerDetailByKey(params: {
   const fieldDefs = await getEditableFieldDefinitionsForTable({
     table: binding.mainTable,
     schema: DEFAULT_SCHEMA,
-    excludeFields: ['ogc_fid', 'id'],
+    excludeFields: ['ogc_fid', 'id', 'extra'],
     includeHiddenDetail: true,
   });
   if (fieldDefs.error) {
@@ -447,7 +519,7 @@ export async function getOccupationLedgerDetailByKey(params: {
     const endYmd =
       tryFormatToYmd(endRaw) ?? (endRaw == null ? '' : String(endRaw).trim());
     const periodState = deriveOccupationPeriodState(endYmd);
-    const addressFields = new Set(['occup_place', 'applicant_addr']);
+    const addressFields = new Set(['occup_place', 'applicant_addr', 'work_name']);
     const attributes: OccupationLedgerDetailAttr[] = dataFields.map((field) => {
       const def = metaByField.get(field.toLowerCase());
       const fl = field.toLowerCase();
@@ -469,16 +541,23 @@ export async function getOccupationLedgerDetailByKey(params: {
       };
     });
 
+    const permitKey =
+      Object.keys(row).find((k) => k.toLowerCase() === 'permit_no') ?? 'permit_no';
+    const childParentKey = String(row[permitKey] ?? '').trim();
+    if (!childParentKey) {
+      return { attributes, parcelItems: [], mgjItems: [] };
+    }
+
     const [parcels, mgj] = await Promise.all([
       getChildAddressItems({
         childTableName: binding.jijukTable,
-        parentKey: keyRaw,
+        parentKey: childParentKey,
         parentField: binding.fields.childParentField,
         addressField: binding.fields.childAddressField,
       }),
       getChildAddressItems({
         childTableName: binding.mgjTable,
-        parentKey: keyRaw,
+        parentKey: childParentKey,
         parentField: binding.fields.childParentField,
         addressField: binding.fields.childAddressField,
       }),
@@ -655,6 +734,34 @@ export async function syncOccupationLedgerMgjByKey(params: {
   const parentKey = String(params?.key ?? '').trim();
   if (!parentKey) return { success: false, error: '키가 필요합니다.' };
 
+  const extraValues: Record<string, string> = {};
+  const parentMeta = await resolveTableWithSchema(binding.mainTable);
+  if (parentMeta) {
+    const cols = await getTableColumns(parentMeta.schema, parentMeta.tableName);
+    const permitCol = findColumn(cols, 'permit_no');
+    const keyCol = findColumn(cols, binding.fields.keyField);
+    if (permitCol && keyCol) {
+      try {
+        const res = await db.execute(
+          sql.raw(
+            `SELECT COALESCE(${quoteIdent(permitCol)}::text, '') AS p
+             FROM "${parentMeta.schema.replace(/"/g, '""')}"."${parentMeta.tableName.replace(/"/g, '""')}"
+             WHERE ${quoteIdent(keyCol)}::text = '${esc(parentKey)}'
+             LIMIT 1`
+          )
+        );
+        const p = String((res.rows?.[0] as { p?: string } | undefined)?.p ?? '').trim();
+        if (p) extraValues.permit_no = p;
+      } catch {
+        /* ignore */
+      }
+    }
+  }
+
+  const childParentId = extraValues.permit_no;
+  if (!childParentId) {
+    return { success: false, error: '허가번호가 없어 물건지를 저장할 수 없습니다.' };
+  }
   const items = (params.items ?? []).filter((it) => String(it?.address ?? '').trim());
   if (items.length === 0) {
     return syncChildParcelsByParentId({
@@ -662,8 +769,9 @@ export async function syncOccupationLedgerMgjByKey(params: {
       childTableName: binding.mgjTable,
       childParentField: binding.fields.childParentField,
       childAddressField: binding.fields.childAddressField,
-      parentId: parentKey,
+      parentId: childParentId,
       parcels: [],
+      extraValues,
     });
   }
 
@@ -681,6 +789,8 @@ export async function syncOccupationLedgerMgjByKey(params: {
     return {
       address: String(item.address).trim(),
       pnu: String(resolvedRow?.pnu ?? item.pnu ?? '').trim() || undefined,
+      lon: item.x4326,
+      lat: item.y4326,
     };
   });
 
@@ -689,8 +799,9 @@ export async function syncOccupationLedgerMgjByKey(params: {
     childTableName: binding.mgjTable,
     childParentField: binding.fields.childParentField,
     childAddressField: binding.fields.childAddressField,
-    parentId: parentKey,
+    parentId: childParentId,
     parcels,
+    extraValues,
   });
 
   if (result.error) return { success: false, error: result.error };

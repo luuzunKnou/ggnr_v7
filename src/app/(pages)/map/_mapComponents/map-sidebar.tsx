@@ -18,6 +18,7 @@ import {
 } from '../_mapContents/bizNotif/bizNotifStore';
 import { ImportantNotifSidebarBubble } from '../_mapContents/prototypes/UserAccountProtoPanel';
 import { SHOOTING_REQUEST_UI_ENABLED } from '../_mapContents/shootingRequest/shootingRequestUiFlag';
+import { withBasePath } from '@/lib/basePath';
 
 type ServiceItem = {
   ser_eng: string | null;
@@ -123,7 +124,7 @@ export function MapSidebar({ indexLogoSrc }: { indexLogoSrc: string }) {
   const [deniedSerOpen, setDeniedSerOpen] = useState(false);
   const [deniedSerEng, setDeniedSerEng] = useState('');
   const [bootProject, setBootProject] = useState('');
-  const { snapshot, loading: accessLoading } = useMyAccessSnapshot();
+  const { snapshot } = useMyAccessSnapshot();
 
   const systemKeyFromUrl = searchParams.get('system') ?? '';
 
@@ -133,12 +134,19 @@ export function MapSidebar({ indexLogoSrc }: { indexLogoSrc: string }) {
         const data = res?.data ?? res;
         const ser = Array.isArray(data?.ser) ? data.ser : [];
         setServiceListConfig(
-          ser.map((s: { ser_eng?: string; ser_kor?: string; ser_svg?: string | null; ser_is_private?: boolean | null }) => ({
-            ser_eng: s.ser_eng ?? null,
-            ser_kor: s.ser_kor ?? null,
-            ser_svg: s.ser_svg ?? null,
-            ser_is_private: s.ser_is_private === true ? true : s.ser_is_private === false ? false : null,
-          }))
+          ser.map(
+            (s: {
+              ser_eng?: string;
+              ser_kor?: string;
+              ser_svg?: string | null;
+              ser_is_private?: boolean | null;
+            }) => ({
+              ser_eng: s.ser_eng ?? null,
+              ser_kor: s.ser_kor ?? null,
+              ser_svg: s.ser_svg ?? null,
+              ser_is_private: s.ser_is_private === true ? true : s.ser_is_private === false ? false : null,
+            })
+          )
         );
       })
       .catch(() => setServiceListConfig([]));
@@ -183,28 +191,21 @@ export function MapSidebar({ indexLogoSrc }: { indexLogoSrc: string }) {
 
   // systemList.config 의 해당 시스템 serviceList 만 사용 (serviceList.config 전체가 아님)
   const currentSystem = systemList.find((s) => s.sys_key === systemKeyFromUrl);
-  const firstSystem = systemList[0];
   const fromCurrent =
     currentSystem?.serviceList != null && currentSystem.serviceList.length > 0
       ? currentSystem.serviceList
       : null;
-  const fromFirst =
-    firstSystem?.serviceList != null && firstSystem.serviceList.length > 0 ? firstSystem.serviceList : null;
-  const serviceKeysInOrder: string[] = fromCurrent ?? fromFirst ?? [];
+  const serviceKeysInOrder: string[] = fromCurrent ?? [];
   const serviceMap = new Map(serviceListConfig.map((s) => [s.ser_eng ?? '', s]));
-  const sidebarItemsRaw: ServiceItem[] = serviceKeysInOrder
+  const sidebarItems: ServiceItem[] = serviceKeysInOrder
     .map((key) => serviceMap.get(key))
     .filter((s): s is ServiceItem => s != null)
     .filter((item) => {
+      // 비공개 Y → 관리자 포함 사이드바에서 숨김
+      if (item.ser_is_private === true) return false;
       if (bootProject === 'build_uj' && item.ser_eng === 'riverUseLedger') return false;
       return true;
     });
-
-  const sidebarItems = sidebarItemsRaw.filter((item) => {
-    if (item.ser_is_private !== true) return true;
-    if (accessLoading) return false;
-    return sidebarServicePolicy(snapshot, item.ser_eng ?? '', true) !== 'hidden';
-  });
 
   // master(jdong): roadDataFlow 열림 시 다른 메뉴 잠금 제거
 
@@ -247,7 +248,7 @@ export function MapSidebar({ indexLogoSrc }: { indexLogoSrc: string }) {
         />
       );
     }
-    const iconSrc = `/image/serviceListIcon/${serEng}.svg`;
+    const iconSrc = withBasePath(`/image/serviceListIcon/${serEng}.svg`);
     return (
       <span
         className="w-5 h-5 shrink-0 inline-block bg-current"

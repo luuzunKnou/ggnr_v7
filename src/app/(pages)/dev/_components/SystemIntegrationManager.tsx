@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/app/shadcnComponents
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/app/shadcnComponents/ui/table"
 import { call } from "@/lib/api"
 
-type SystemKey = "KAIS" | "KRAS" | "KORPES" | "SEUMTEO" | "SAEOL" | "SAFETYDATA"
+type SystemKey = "KAIS" | "KRAS" | "KORPES" | "SEUMTEO" | "SAEOL" | "SAFETYDATA" | "FMS" | "NEXTGEN"
 
 type LogRow = {
   ijl_key: number
@@ -128,6 +128,8 @@ export function SystemIntegrationManager() {
         { key: "SEUMTEO", label: "세움터" },
         { key: "SAEOL", label: "새올" },
         { key: "SAFETYDATA", label: "재난안전데이터" },
+        { key: "FMS", label: "FMS" },
+        { key: "NEXTGEN", label: "차세대" },
       ] as const,
     []
   )
@@ -141,26 +143,27 @@ export function SystemIntegrationManager() {
   const [safetyDatasets, setSafetyDatasets] = useState<SafetydataDatasetRow[]>([])
   const [safetyDatasetsLoading, setSafetyDatasetsLoading] = useState(false)
   const [safetyDatasetId, setSafetyDatasetId] = useState<string>("__ALL__")
+  const [krasTarget, setKrasTarget] = useState<string>("all")
   const [safetyDetailRows, setSafetyDetailRows] = useState<SafetydataDetailLogRow[]>([])
 
   const latestJob = rows[0]
   const latestParsedJob = parseJob(latestJob?.ijl_message ?? "")
   const parsedDetails = safetyDetailRows.map((r) => ({ row: r, parsed: parseDetail(r.log_safetydata_response_msg) }))
 
-  const fetchLogs = async (system: SystemKey) => {
-    setLogsLoading(true)
-    setError("")
+  const fetchLogs = async (system: SystemKey, opts?: { silent?: boolean }) => {
+    if (!opts?.silent) setLogsLoading(true)
+    if (!opts?.silent) setError("")
     try {
       const res = await call("", "POST", {
         service: "integrationService",
         action: "listIntegrationLogs",
-        params: { system, limit: 50 },
+        params: { system, limit: system === "NEXTGEN" ? 120 : 50 },
       })
       setRows((res?.data?.rows ?? []) as LogRow[])
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     } finally {
-      setLogsLoading(false)
+      if (!opts?.silent) setLogsLoading(false)
     }
   }
 
@@ -180,8 +183,8 @@ export function SystemIntegrationManager() {
     }
   }
 
-  const fetchSafetydataDetailLogs = async () => {
-    setDetailLogsLoading(true)
+  const fetchSafetydataDetailLogs = async (opts?: { silent?: boolean }) => {
+    if (!opts?.silent) setDetailLogsLoading(true)
     try {
       const res = await call("", "POST", {
         service: "integrationService",
@@ -192,11 +195,12 @@ export function SystemIntegrationManager() {
     } catch {
       setSafetyDetailRows([])
     } finally {
-      setDetailLogsLoading(false)
+      if (!opts?.silent) setDetailLogsLoading(false)
     }
   }
 
   useEffect(() => {
+    setError("")
     fetchLogs(active)
     if (active === "SAFETYDATA") {
       fetchSafetydataDatasets()
@@ -209,9 +213,9 @@ export function SystemIntegrationManager() {
   useEffect(() => {
     if (!loading) return
     const id = window.setInterval(() => {
-      void fetchLogs(active)
+      void fetchLogs(active, { silent: true })
       if (active === "SAFETYDATA") {
-        void fetchSafetydataDetailLogs()
+        void fetchSafetydataDetailLogs({ silent: true })
       }
     }, INTEGRATION_POLL_MS)
     return () => {
@@ -232,6 +236,9 @@ export function SystemIntegrationManager() {
         } else {
           params.datasetId = safetyDatasetId
         }
+      }
+      if (active === "KRAS") {
+        params.target = krasTarget
       }
       const runPromise = call("", "POST", {
         service: "integrationService",
@@ -275,6 +282,28 @@ export function SystemIntegrationManager() {
         ))}
       </div>
 
+      {active === "KRAS" ? (
+        <div className="flex flex-col gap-2 shrink-0">
+          <label className="text-sm text-muted-foreground flex flex-wrap items-center gap-2">
+            <span>대상</span>
+            <select
+              className="border rounded-md px-2 py-1.5 text-sm bg-background min-w-[12rem] max-w-full"
+              value={krasTarget}
+              onChange={(e) => setKrasTarget(e.target.value)}
+              disabled={loading}
+            >
+              <option value="all">전체 (목록·지적·읍면동·주제도·토지기본·소유현황)</option>
+              <option value="catalog">레이어 목록</option>
+              <option value="parcel">지적</option>
+              <option value="boundary">읍면동</option>
+              <option value="thematic">주제도</option>
+              <option value="landinfo">토지기본정보</option>
+              <option value="landown">소유현황</option>
+            </select>
+          </label>
+        </div>
+      ) : null}
+
       {active === "SAFETYDATA" ? (
         <div className="flex flex-col gap-2 shrink-0">
           <label className="text-sm text-muted-foreground flex flex-wrap items-center gap-2">
@@ -298,16 +327,17 @@ export function SystemIntegrationManager() {
       ) : null}
 
       <Card className="shrink-0">
-        <CardHeader className="pb-2 flex flex-row items-center justify-between gap-2 flex-wrap">
-          <CardTitle className="text-base">시스템 연계 - {active}</CardTitle>
-          <div className="flex items-center gap-2 flex-wrap">
-            <Button type="button" size="sm" onClick={run} disabled={loading}>
+        <CardHeader className="pb-2 flex flex-row items-center justify-between gap-2 flex-nowrap">
+          <CardTitle className="text-base min-w-0 truncate">시스템 연계 - {active}</CardTitle>
+          <div className="flex items-center gap-2 shrink-0">
+            <Button type="button" size="sm" className="min-w-[5.5rem]" onClick={run} disabled={loading}>
               {loading ? "연계 중…" : "연계 시작"}
             </Button>
             <Button
               type="button"
               variant="outline"
               size="sm"
+              className="min-w-[5.5rem]"
               onClick={() => (active === "SAFETYDATA" ? refreshSafetydataOnly() : fetchLogs(active))}
               disabled={logsLoading || (active === "SAFETYDATA" && detailLogsLoading)}
             >
@@ -317,7 +347,7 @@ export function SystemIntegrationManager() {
         </CardHeader>
         {error ? (
           <CardContent className="pt-0">
-            <p className="text-sm text-red-600">{error}</p>
+            <p className="text-sm text-red-600 whitespace-pre-wrap break-all">{error}</p>
           </CardContent>
         ) : null}
       </Card>
@@ -327,7 +357,7 @@ export function SystemIntegrationManager() {
           <CardHeader className="pb-2">
             <CardTitle className="text-base">실행 로그</CardTitle>
           </CardHeader>
-          <CardContent className="min-h-0 overflow-auto">
+          <CardContent className="min-h-0 overflow-y-scroll overflow-x-auto">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -352,7 +382,7 @@ export function SystemIntegrationManager() {
                       <TableCell>{r.ijl_status}</TableCell>
                       <TableCell>{formatDt(r.ijl_started_at)}</TableCell>
                       <TableCell>{formatDt(r.ijl_finished_at)}</TableCell>
-                      <TableCell className="whitespace-normal break-all">{r.ijl_message ?? ""}</TableCell>
+                      <TableCell className="whitespace-pre-wrap break-all">{r.ijl_message ?? ""}</TableCell>
                     </TableRow>
                   ))
                 )}
@@ -396,7 +426,7 @@ export function SystemIntegrationManager() {
             <CardHeader className="pb-2">
               <CardTitle className="text-base">실행 로그 (integration_job_log)</CardTitle>
             </CardHeader>
-            <CardContent className="min-h-0 overflow-auto">
+            <CardContent className="min-h-0 overflow-y-scroll overflow-x-auto">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -439,7 +469,7 @@ export function SystemIntegrationManager() {
             <CardHeader className="pb-2">
               <CardTitle className="text-base">데이터셋 결과 (log_safetydata)</CardTitle>
             </CardHeader>
-            <CardContent className="min-h-0 overflow-auto">
+            <CardContent className="min-h-0 overflow-y-scroll overflow-x-auto">
               <Table>
                 <TableHeader>
                   <TableRow>

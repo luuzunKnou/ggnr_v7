@@ -8,7 +8,10 @@ import { ComplaintDetailPanel } from './complaint-detail-panel';
 import type { CompUI, CompdUI } from './types';
 import type { ComplaintFormValues } from './complaint-info';
 import { call } from '@/lib/api';
-import { fitMapToComplaintExtent3857 } from './fitComplaintMap';
+import {
+  animateComplaintToCenter3857,
+  center3857FromExtent,
+} from './useComplaintMapClick';
 
 type Props = {
   onListRefresh?: () => void;
@@ -153,11 +156,13 @@ export default function ComplaintDetail({ onListRefresh }: Props) {
           };
           setComplaintDetail(data);
           bumpList();
-          fitMapToComplaintExtent3857(
-            mapContext?.mapInstanceRef?.current,
-            data.extent3857,
-            () => mapContext?.applyMapViewPaddingRef?.current?.()
-          );
+          const map = mapContext?.mapInstanceRef?.current;
+          const center = center3857FromExtent(data.extent3857);
+          if (map && center) {
+            animateComplaintToCenter3857(map, center, () =>
+              mapContext?.applyMapViewPaddingRef?.current?.()
+            );
+          }
         }
       } finally {
         setSaving(false);
@@ -215,12 +220,12 @@ export default function ComplaintDetail({ onListRefresh }: Props) {
       defaultPosition={{ top: 80, left: 20 }}
       header={
         <>
-          <span className="text-xs font-medium text-slate-600">민원 #{complaintDetail.compKey}</span>
+          <span className="text-xs font-medium text-muted-foreground">민원 #{complaintDetail.compKey}</span>
           <button
             type="button"
             title="닫기"
             onClick={handleClose}
-            className="flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center rounded text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+            className="flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center rounded text-muted-foreground hover:bg-muted/50 hover:text-foreground"
             aria-label="닫기"
           >
             <X className="h-3.5 w-3.5" />

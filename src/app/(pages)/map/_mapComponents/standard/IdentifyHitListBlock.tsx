@@ -48,15 +48,15 @@ export function IdentifyHitListBlock({
 
   return (
     <>
-      <div className="flex items-center border-b border-slate-200 bg-slate-100/60 px-4 py-1.5 text-[12px] text-[#666] shrink-0">
+      <div className="flex items-center border-b border-border bg-muted/40 px-4 py-1.5 text-[12px] text-muted-foreground shrink-0">
         {headerLabel}
-        <span className="ml-1.5 text-[11px] text-slate-500">
+        <span className="ml-1.5 text-[11px] text-muted-foreground">
           ({results.length}개 레이어, {identifyFlat.length}개 데이터)
         </span>
       </div>
       <div className="flex-1 min-h-0 overflow-y-auto">
         {isEmpty ? (
-          <div className="px-4 py-8 text-center text-[12px] text-slate-500">검색 결과가 없습니다.</div>
+          <div className="px-4 py-8 text-center text-[12px] text-muted-foreground">검색 결과가 없습니다.</div>
         ) : (
         identifyFlat.map(({ layer, feature, index: idx }) => {
           const isHighlighted = selectedIndex === idx;
@@ -67,7 +67,7 @@ export function IdentifyHitListBlock({
               ref={isHighlighted ? selectedRowRef : undefined}
               onClick={() => onItemClick({ layer, feature, index: idx })}
               className={cn(
-                'flex w-full items-center gap-2 border-b border-slate-100 px-4 py-1 text-left text-[12px] transition-colors hover:bg-primary/5 min-h-0 overflow-hidden',
+                'flex w-full items-center gap-2 border-b border-border px-4 py-1 text-left text-[12px] transition-colors hover:bg-primary/5 min-h-0 overflow-hidden',
                 isHighlighted && 'bg-primary/10'
               )}
             >
@@ -79,24 +79,24 @@ export function IdentifyHitListBlock({
                   e.currentTarget.style.display = 'none';
                 }}
               />
-              <span className="min-w-0 flex-1 truncate text-[#666]">
-                <span className="text-slate-700">{layer.korName}</span>
+              <span className="min-w-0 flex-1 truncate text-muted-foreground">
+                <span className="text-foreground">{layer.korName}</span>
                 {feature.titleValue && (
                   <>
-                    <span className="mx-1 text-slate-400">|</span>
+                    <span className="mx-1 text-muted-foreground">|</span>
                     <span>{feature.titleValue}</span>
                   </>
                 )}
               </span>
               {feature.keywordMatch && (
                 <span
-                  className="max-w-[min(55%,14rem)] shrink-0 truncate text-right text-[11px] text-slate-500"
+                  className="max-w-[min(55%,14rem)] shrink-0 truncate text-right text-[11px] text-muted-foreground"
                   title={`${feature.keywordMatch.fieldKorName ?? feature.keywordMatch.fieldName}: ${feature.keywordMatch.valuePreview}`}
                 >
-                  <span className="font-medium text-slate-600">
+                  <span className="font-medium text-muted-foreground">
                     {feature.keywordMatch.fieldKorName ?? feature.keywordMatch.fieldName}
                   </span>
-                  <span className="text-slate-400"> · </span>
+                  <span className="text-muted-foreground"> · </span>
                   {feature.keywordMatch.valuePreview}
                 </span>
               )}
@@ -105,13 +105,13 @@ export function IdentifyHitListBlock({
         })
         )}
       </div>
-      <div className="flex items-center justify-between gap-2 border-t border-slate-200 px-4 py-1.5 bg-slate-50/80 shrink-0">
-        <span className="text-[11px] text-[#666]">총 {identifyFlat.length.toLocaleString()}건</span>
+      <div className="flex items-center justify-between gap-2 border-t border-border px-4 py-1.5 bg-muted/30 shrink-0">
+        <span className="text-[11px] text-muted-foreground">총 {identifyFlat.length.toLocaleString()}건</span>
         {showFooterClose && (
           <button
             type="button"
             onClick={onClose}
-            className="rounded border border-slate-200 bg-white px-2.5 py-0.5 text-[11px] text-[#666] transition-colors hover:bg-slate-100"
+            className="rounded border border-border bg-background px-2.5 py-0.5 text-[11px] text-muted-foreground transition-colors hover:bg-muted/50"
           >
             닫기
           </button>

@@ -1,0 +1,16 @@
+<layer>
+  <name>road_fms_facility</name>
+  <id>LayerInfoImpl-389342b5:1a032442aee:-7f0f</id>
+  <type>VECTOR</type>
+  <defaultStyle>
+    <id>StyleInfoImpl--30e19f83:19cb3d4f76b:-7ffe</id>
+  </defaultStyle>
+  <resource class="featureType">
+    <id>FeatureTypeInfoImpl-389342b5:1a032442aee:-7f10</id>
+  </resource>
+  <attribution>
+    <logoWidth>0</logoWidth>
+    <logoHeight>0</logoHeight>
+  </attribution>
+  <dateCreated>2026-08-24 05:43:35.182 UTC</dateCreated>
+</layer>

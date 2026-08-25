@@ -1,0 +1,12 @@
+* {
+  mark: symbol(square);
+  mark-size: [min(18, 5 + sqrt(100000 / env('wms_scale_denominator', 10000)) * 1.5)];
+  :mark {
+    fill: #FF9800;
+    stroke: #FFFFFF;
+    stroke-width: 1.5;
+    stroke-opacity: 0.85;
+    fill-opacity: 0.85;
+  };
+  z-index: 0;
+}

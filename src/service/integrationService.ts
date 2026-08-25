@@ -1,12 +1,16 @@
 import { pool } from '@/database/db';
-import { runKais, defaultDailyWindow } from '@/integrations/kais';
+import { runKais, defaultDailyWindow, resolveKaisSggCode } from '@/integrations/kais';
 import { getSafetydataDatasetById, SAFETYDATA_DATASETS } from '@/integrations/safetydata.config';
 import { getSafetydataTargetSchema } from '@/integrations/safetydataHttp';
 import { ingestSafetydataDatasetToLayer } from '@/integrations/safetydataIngest';
+import { runKrasLayerSync, type KrasLayerSyncScope } from '@/integrations/krasLayerSync';
+import type { KrasIntegrationTarget } from '@/integrations/krasLayerSync.config';
+import { runKrasFileStep, runKrasFullSync, runKorepsPriceFileSync } from '@/integrations/krasLandFileSync';
+import { appendLinkageError, formatLinkageError } from '@/integrations/linkageErrorLog';
 
 type Params = Record<string, unknown>;
 
-export type IntegrationSystem = 'KAIS' | 'KRAS' | 'KORPES' | 'SEUMTEO' | 'SAEOL' | 'SAFETYDATA';
+export type IntegrationSystem = 'KAIS' | 'KRAS' | 'KORPES' | 'SEUMTEO' | 'SAEOL' | 'SAFETYDATA' | 'FMS' | 'NEXTGEN';
 
 const HARDCODED_KAIS_APP_KEY = 'U01TX0FVVEgyMDIzMDUzMDE3MzU1NDExMzgxMTM=';
 
@@ -61,7 +65,9 @@ function normalizeSystem(v: unknown): IntegrationSystem {
     s === 'KORPES' ||
     s === 'SEUMTEO' ||
     s === 'SAEOL' ||
-    s === 'SAFETYDATA'
+    s === 'SAFETYDATA' ||
+    s === 'FMS' ||
+    s === 'NEXTGEN'
   )
     return s;
   throw new Error(`Unknown integration system: ${s}`);
@@ -73,7 +79,7 @@ function compactErrorMessage(e: unknown): string {
     .split(/\r?\n/)
     .map((s) => s.trim())
     .find((s) => s.length > 0) ?? 'unknown error';
-  return first.length > 320 ? `${first.slice(0, 320)}...` : first;
+  return first.length > 500 ? `${first.slice(0, 500)}...` : first;
 }
 
 async function updateIntegrationJobProgress(ijlKey: number | undefined, message: string): Promise<void> {
@@ -122,19 +128,52 @@ export async function runIntegration(p: Params) {
 
   await ensureIntegrationTables();
 
+  const trigger = String(p.trigger ?? '').trim().toLowerCase();
+
+  if (system === 'NEXTGEN') {
+    const { runNextGenFeeSync } = await import('@/lib/nextGenLinkage/syncRunner');
+    console.error(`[INTEGRATION] START system=NEXTGEN trigger=${trigger || 'manual'}`);
+    const r = await runNextGenFeeSync();
+    if (r.skipped) {
+      throw new Error(r.message);
+    }
+    console.error(`[INTEGRATION] DONE system=NEXTGEN ok=${r.ok} success=${r.success} fail=${r.fail}`);
+    return { system, ok: r.ok, success: r.success, fail: r.fail };
+  }
+
+  const schedulerLabel =
+    trigger === 'scheduler'
+      ? `FMS 연계 스케줄러 실행 - ${new Date().toLocaleString('ko-KR', {
+          timeZone: 'Asia/Seoul',
+          year: 'numeric',
+          month: '2-digit',
+          day: '2-digit',
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit',
+          hour12: false,
+        })}`
+      : null;
+  const startMessage =
+    schedulerLabel ?? (mode === 'initial' ? 'initial run' : 'daily run');
+  const withSchedulerPrefix = (detail: string) =>
+    schedulerLabel ? `${schedulerLabel}\n${detail}` : detail;
+
   const started = await pool.query<{ ijl_key: number }>(
     `insert into integration_job_log (ijl_system, ijl_status, ijl_message)
      values ($1,'STARTED',$2)
      returning ijl_key`,
-    [system, mode === 'initial' ? 'initial run' : 'daily run']
+    [system, startMessage]
   );
   const ijlKey = started.rows[0]?.ijl_key;
 
   try {
-    console.error(`[INTEGRATION] START system=${system} mode=${mode} ijlKey=${ijlKey ?? '-'}`);
+    console.error(
+      `[INTEGRATION] START system=${system} mode=${mode} trigger=${trigger || 'manual'} ijlKey=${ijlKey ?? '-'}`
+    );
     if (system === 'KAIS') {
       const appKey = (process.env.KAIS_APP_KEY ?? '').trim() || HARDCODED_KAIS_APP_KEY;
-      const sggCode = process.env.SGG_CODE;
+      const sggCode = await resolveKaisSggCode();
       const window = from && to ? { from, to } : defaultDailyWindow();
       const cntcList = ['300001', '300002', '300003'];
 
@@ -192,6 +231,11 @@ export async function runIntegration(p: Params) {
             const msg = compactErrorMessage(e);
             console.error(`[SAFETYDATA RUN] ${seq}/${total} FAIL ${d.id} ${d.tableNameEn} ${msg}`);
             errors.push(`${seq}/${total} ${d.id} ${d.tableNameEn}: ${msg}`);
+            void appendLinkageError({
+              system: 'SAFETYDATA',
+              title: `${d.tableNameKo} (${d.id})`,
+              detail: formatLinkageError(e),
+            });
             await updateIntegrationJobProgress(
               ijlKey,
               `실패 ${seq}/${total} | ${d.id} | ${d.tableNameEn} | ${msg}`
@@ -225,6 +269,73 @@ export async function runIntegration(p: Params) {
           `완료 1/1 | ${cfg.id} | ${r.schema}.${r.tableNameEn} | fetched=${r.rowsFetched}, inserted=${r.rowsInserted}, filteredOut=${r.rowsFilteredOut}`
         );
       }
+    } else if (system === 'KRAS') {
+      const rawScope = String(p.target ?? p.scope ?? 'all').trim().toLowerCase();
+      const fileStep: 'catalog' | 'landinfo' | 'landown' | null =
+        rawScope === 'catalog' || rawScope === 'landinfo' || rawScope === 'landown' ? rawScope : null;
+      const shapeScope: KrasLayerSyncScope | null =
+        rawScope === 'parcel' || rawScope === 'boundary' || rawScope === 'thematic' ? rawScope : null;
+      const target: KrasIntegrationTarget = fileStep ?? shapeScope ?? 'all';
+      await updateIntegrationJobProgress(ijlKey, `진행중 | KRAS | ${target}`);
+      const r =
+        target === 'all'
+          ? await runKrasFullSync({
+              includeShape: true,
+              includePriceFile: false,
+              onProgress: (message) => updateIntegrationJobProgress(ijlKey, message),
+            })
+          : fileStep
+            ? await runKrasFileStep(fileStep, {
+                onProgress: (message) => updateIntegrationJobProgress(ijlKey, message),
+              })
+            : await runKrasLayerSync({
+                scope: shapeScope ?? 'all',
+                onProgress: (message) => updateIntegrationJobProgress(ijlKey, message),
+              });
+      await updateIntegrationJobProgress(ijlKey, r.message);
+      if (r.failed > 0 && r.success === 0) {
+        throw new Error(r.message);
+      }
+    } else if (system === 'KORPES') {
+      await updateIntegrationJobProgress(ijlKey, '진행중 | 공시지가 파일');
+      const r = await runKorepsPriceFileSync({
+        onProgress: (message) => updateIntegrationJobProgress(ijlKey, message),
+      });
+      await updateIntegrationJobProgress(ijlKey, r.message);
+      if (r.failed > 0 && r.success === 0) {
+        throw new Error(r.message);
+      }
+    } else if (system === 'FMS') {
+      await updateIntegrationJobProgress(
+        ijlKey,
+        withSchedulerPrefix('FMS 연계 실행 중...')
+      );
+      const { runFmsSync } = await import('@/lib/fmsLinkage/syncRunner');
+      const r = await runFmsSync();
+      if (r.skipped === 'already_running' || r.skipped === 'no_config' || r.skipped === 'no_query') {
+        throw new Error(r.message);
+      }
+      if (r.jobStatus === 'FAILED') {
+        throw new Error(r.message);
+      }
+      if (r.jobStatus === 'NOT_PROD' || r.jobStatus === 'NO_DATA') {
+        await pool.query(
+          `update integration_job_log
+           set ijl_status=$2, ijl_finished_at=now(), ijl_message=$3
+           where ijl_key=$1`,
+          [ijlKey, r.jobStatus, withSchedulerPrefix(r.message)]
+        );
+        console.error(`[INTEGRATION] DONE system=${system} ijlKey=${ijlKey ?? '-'} status=${r.jobStatus}`);
+        return { ijlKey, system, ok: false };
+      }
+      await pool.query(
+        `update integration_job_log
+         set ijl_status=$2, ijl_finished_at=now(), ijl_message=$3
+         where ijl_key=$1`,
+        [ijlKey, r.jobStatus, withSchedulerPrefix(r.message)]
+      );
+      console.error(`[INTEGRATION] DONE system=${system} ijlKey=${ijlKey ?? '-'} status=${r.jobStatus}`);
+      return { ijlKey, system, ok: r.jobStatus === 'SUCCESS' };
     } else {
       throw new Error('Not implemented yet');
     }
@@ -240,11 +351,18 @@ export async function runIntegration(p: Params) {
   } catch (e) {
     const msg = compactErrorMessage(e);
     console.error(`[INTEGRATION] FAIL system=${system} ijlKey=${ijlKey ?? '-'} message=${msg}`);
+    if (system !== 'KRAS' && system !== 'KORPES') {
+      void appendLinkageError({
+        system,
+        title: '연계 실패',
+        detail: formatLinkageError(e),
+      });
+    }
     await pool.query(
       `update integration_job_log
        set ijl_status='FAILED', ijl_finished_at=now(), ijl_message=$2
        where ijl_key=$1`,
-      [ijlKey, msg]
+      [ijlKey, withSchedulerPrefix(msg)]
     );
     throw e;
   }

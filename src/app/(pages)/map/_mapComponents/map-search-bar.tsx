@@ -3,7 +3,7 @@
 import React, { useMemo, useState, useEffect, useRef, useCallback } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useSession } from 'next-auth/react';
-import { Search, X, ChevronDown, LayoutGrid, Check, Loader2, History, EyeOff, ScrollText } from 'lucide-react';
+import { Search, X, ChevronDown, LayoutGrid, Check, Loader2, History, EyeOff } from 'lucide-react';
 import { Input } from '@/app/shadcnComponents/ui/input';
 import {
   Dialog,
@@ -14,7 +14,12 @@ import {
 import { call } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { MapLayergroupBar } from './map-layergroup-bar';
-import { getAddressFromCoord, searchAddress, type VWorldAddressItem } from './addressSearch/vworldAddressSearch';
+import {
+  getAddressFromCoord,
+  searchAddress,
+  searchPlace,
+  type VWorldAddressItem,
+} from './addressSearch/vworldAddressSearch';
 import { useMapContext } from './MapContext';
 import { transform } from 'ol/proj';
 import { canAccessPrivateSystem } from '@/lib/accessClient';
@@ -25,6 +30,7 @@ import { ResourceAccessDeniedDialog } from '@/app/(pages)/_components/AccessRequ
 import { ThemeToggle } from '@/app/(pages)/(index)/theme-toggle';
 import { scrubOccupationLedgerFromMapSearchParams } from '@/lib/occupationLedgerBinding';
 import { scrubUseFeeFromMapSearchParams } from '@/lib/useFeeBinding';
+import { MapAdminToolsMenu } from './mapAdminTools/MapAdminToolsMenu';
 
 /** 검색바 아이콘 버튼 — 우측 메뉴와 동일: 바깥=패널 배경, 안=투명+hover만 */
 const mapSearchBarIconShell = cn(
@@ -77,6 +83,13 @@ type SystemOption = {
 
 const SIDEBAR_WIDTH = 65;
 const SEARCH_BAR_MARGIN = 20;
+/** 지도가 넓을 때 주소검색 칸 최대 너비 */
+const ADDRESS_SEARCH_WIDTH_MAX_PX = 260;
+/** 왼쪽 패널이 넓어져 지도가 좁아져도 칸이 남을 최소 너비 */
+const ADDRESS_SEARCH_WIDTH_MIN_PX = 120;
+/** 우측 시스템선택·아이콘·여백 */
+const SEARCH_BAR_RIGHT_RESERVE_PX = 380;
+const SEARCH_BAR_EYE_BTN_PX = 38;
 
 /**
  * 상단 왼쪽 검색창 (지도 위 오버레이)
@@ -106,6 +119,96 @@ function saveRecentQueries(queries: string[]) {
   } catch {
     // ignore
   }
+}
+
+const addressSearchResultRowClass = cn(
+  'w-full cursor-pointer text-left px-4 py-1.5 transition-colors min-h-[44px] flex flex-col justify-center gap-0.5',
+  'border-b border-slate-100 last:border-b-0 hover:bg-slate-50',
+  'dark:border-white/10 dark:hover:bg-white/10'
+);
+
+function MapAddressSearchResultRow({
+  item,
+  variant,
+  onSelect,
+}: {
+  item: VWorldAddressItem;
+  variant: 'address' | 'place';
+  onSelect: (item: VWorldAddressItem) => void;
+}) {
+  const title = (item.title ?? '').trim();
+  const label = title || item.address;
+
+  return (
+    <button
+      type="button"
+      title={label}
+      onClick={() => onSelect(item)}
+      className={addressSearchResultRowClass}
+    >
+      {variant === 'place' && title ? (
+        <div className="flex min-h-[1.25rem] items-center gap-2">
+          <span className="w-12 shrink-0 rounded bg-emerald-100 py-0.5 text-center text-[10px] font-semibold text-emerald-800 dark:bg-emerald-500/25 dark:text-emerald-200">
+            장소
+          </span>
+          <span className="min-w-0 flex-1 truncate text-[12px] text-slate-800 dark:text-white/90">{title}</span>
+        </div>
+      ) : null}
+      {item.roadAddress ? (
+        <div className="flex min-h-[1.25rem] items-center gap-2">
+          <span className="w-12 shrink-0 rounded bg-blue-100 py-0.5 text-center text-[10px] font-semibold text-blue-700 dark:bg-blue-500/25 dark:text-blue-300">
+            도로명
+          </span>
+          <span className="min-w-0 flex-1 truncate text-[12px] text-slate-800 dark:text-white/90">
+            {item.roadAddress}
+            {item.buildingName ? ` (${item.buildingName})` : ''}
+          </span>
+        </div>
+      ) : null}
+      {item.jibunAddress ? (
+        <div className="flex min-h-[1.25rem] items-center gap-2">
+          <span className="w-12 shrink-0 rounded bg-amber-100 py-0.5 text-center text-[10px] font-semibold text-amber-800 dark:bg-amber-500/25 dark:text-amber-200">
+            지번
+          </span>
+          <span className="min-w-0 flex-1 truncate text-[12px] text-slate-800 dark:text-white/90">
+            {item.jibunAddress}
+          </span>
+        </div>
+      ) : null}
+      {!item.roadAddress && !item.jibunAddress && !(variant === 'place' && title) ? (
+        <span className="line-clamp-2 text-[12px] text-slate-800 dark:text-white/90">{item.address}</span>
+      ) : null}
+    </button>
+  );
+}
+
+function MapAddressSearchResultsSection({
+  title,
+  items,
+  variant,
+  onSelect,
+}: {
+  title: string;
+  items: VWorldAddressItem[];
+  variant: 'address' | 'place';
+  onSelect: (item: VWorldAddressItem) => void;
+}) {
+  return (
+    <div>
+      <p className="px-3 pb-1 pt-2 text-[12px] font-medium text-slate-500 dark:text-white/50">{title}</p>
+      {items.length > 0 ? (
+        <ul className="scrollbar-thin max-h-[130px] overflow-y-auto py-0.5">
+          {items.map((item, idx) => (
+            <li key={item.id ?? `${variant}-${item.address}-${idx}`}>
+              <MapAddressSearchResultRow item={item} variant={variant} onSelect={onSelect} />
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <div className="py-3 text-center text-[12px] text-slate-500 dark:text-white/50">검색 결과가 없습니다</div>
+      )}
+    </div>
+  );
 }
 
 function MapSearchBarIconButton({
@@ -166,14 +269,23 @@ export function MapSearchBar({
   const [deniedSysKey, setDeniedSysKey] = useState('');
   const { snapshot } = useMyAccessSnapshot();
 
-  const [addressResults, setAddressResults] = useState<VWorldAddressItem[]>([]);
+  const [addressSearchResults, setAddressSearchResults] = useState<VWorldAddressItem[]>([]);
+  const [placeSearchResults, setPlaceSearchResults] = useState<VWorldAddressItem[]>([]);
   const [addressSearchLoading, setAddressSearchLoading] = useState(false);
   const [addressPanelOpen, setAddressPanelOpen] = useState(false);
   const [recentQueries, setRecentQueries] = useState<string[]>(() => loadRecentQueries());
-  const [centerPlaceholder, setCenterPlaceholder] = useState('주소/지번 검색');
+  const [centerPlaceholder, setCenterPlaceholder] = useState('주소/지번/장소 검색');
+  const [viewportWidth, setViewportWidth] = useState(1280);
   const addressSearchWrapperRef = useRef<HTMLDivElement>(null);
   const centerPlaceholderReqIdRef = useRef(0);
   const vworldApiKey = mapContext?.vworldApiKey ?? '';
+
+  useEffect(() => {
+    const update = () => setViewportWidth(window.innerWidth);
+    update();
+    window.addEventListener('resize', update);
+    return () => window.removeEventListener('resize', update);
+  }, []);
 
   useEffect(() => {
     const el = addressSearchWrapperRef.current;
@@ -222,24 +334,48 @@ export function MapSearchBar({
     [mapContext, query, addRecentQuery]
   );
 
+  const runSplitAddressSearch = useCallback(
+    (keyword: string) => {
+      const trimmed = keyword.trim();
+      if (!trimmed || !vworldApiKey) {
+        setAddressSearchResults([]);
+        setPlaceSearchResults([]);
+        return Promise.resolve();
+      }
+      setAddressSearchLoading(true);
+      setAddressPanelOpen(true);
+      return Promise.all([
+        searchAddress(trimmed, {
+          maxResults: ADDRESS_RESULT_MAX,
+          type: 'address',
+          apiKey: vworldApiKey,
+        }),
+        searchPlace(trimmed, {
+          maxResults: ADDRESS_RESULT_MAX,
+          apiKey: vworldApiKey,
+        }),
+      ])
+        .then(([addressItems, placeItems]) => {
+          setAddressSearchResults(addressItems);
+          setPlaceSearchResults(placeItems);
+        })
+        .finally(() => setAddressSearchLoading(false));
+    },
+    [vworldApiKey]
+  );
+
   useEffect(() => {
     if (!query.trim()) {
-      setAddressResults([]);
+      setAddressSearchResults([]);
+      setPlaceSearchResults([]);
       return;
     }
     if (!vworldApiKey) return;
     const t = setTimeout(() => {
-      setAddressSearchLoading(true);
-      const trimmed = query.trim();
-      searchAddress(trimmed, { maxResults: ADDRESS_RESULT_MAX, type: 'address', apiKey: vworldApiKey })
-        .then((items) => {
-          setAddressResults(items);
-          setAddressPanelOpen(true);
-        })
-        .finally(() => setAddressSearchLoading(false));
+      void runSplitAddressSearch(query);
     }, ADDRESS_DEBOUNCE_MS);
     return () => clearTimeout(t);
-  }, [query, vworldApiKey]);
+  }, [query, vworldApiKey, runSplitAddressSearch]);
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
@@ -269,10 +405,10 @@ export function MapSearchBar({
       if (reqId !== centerPlaceholderReqIdRef.current) return;
       const jibun = String(addr?.jibun ?? '').trim();
       const road = String(addr?.road ?? '').trim();
-      setCenterPlaceholder(jibun || road || '주소/지번 검색');
+      setCenterPlaceholder(jibun || road || '주소/지번/장소 검색');
     } catch {
       if (reqId !== centerPlaceholderReqIdRef.current) return;
-      setCenterPlaceholder('주소/지번 검색');
+      setCenterPlaceholder('주소/지번/장소 검색');
     }
   }, [mapContext, vworldApiKey]);
 
@@ -310,6 +446,17 @@ export function MapSearchBar({
   useEffect(() => {
     fetchSystemList();
   }, [fetchSystemList]);
+
+  const mustPickSystem = !selectedSystemKey && systemList.length > 0;
+
+  useEffect(() => {
+    if (mustPickSystem) setSystemModalOpen(true);
+  }, [mustPickSystem]);
+
+  const handleSystemModalOpenChange = (open: boolean) => {
+    if (!open && mustPickSystem) return;
+    setSystemModalOpen(open);
+  };
 
   /** 지도 주소 검색·역지오코딩용 VWorld API 키는 서버(runtime.env)에서만 읽히므로 API로 조회 후 context에 저장 */
   const fetchMapConfig = useCallback(() => {
@@ -360,18 +507,18 @@ export function MapSearchBar({
     router.push(`/map?${params.toString()}`);
   };
 
-  /** 검색 버튼 클릭 시 VWorld 주소 검색 실행 */
+  /** 검색 버튼 클릭 시 VWorld 주소·장소 검색 실행 */
   const runAddressSearch = useCallback(() => {
-    const trimmed = query.trim();
-    if (!trimmed || !vworldApiKey) return;
-    setAddressSearchLoading(true);
-    setAddressPanelOpen(true);
-    searchAddress(trimmed, { maxResults: ADDRESS_RESULT_MAX, type: 'address', apiKey: vworldApiKey })
-      .then((items) => setAddressResults(items))
-      .finally(() => setAddressSearchLoading(false));
-  }, [query, vworldApiKey]);
+    void runSplitAddressSearch(query);
+  }, [query, runSplitAddressSearch]);
 
   const leftOffset = SIDEBAR_WIDTH + listPanelWidth + SEARCH_BAR_MARGIN;
+  const availableSearchWidthPx =
+    viewportWidth - leftOffset - SEARCH_BAR_EYE_BTN_PX - SEARCH_BAR_RIGHT_RESERVE_PX;
+  const addressSearchWidthPx = Math.min(
+    ADDRESS_SEARCH_WIDTH_MAX_PX,
+    Math.max(ADDRESS_SEARCH_WIDTH_MIN_PX, availableSearchWidthPx)
+  );
 
   return (
     <>
@@ -389,9 +536,10 @@ export function MapSearchBar({
               runAddressSearch();
             }}
             className={cn(
-              'flex items-center gap-2 w-[350px] rounded-[5px] px-1 py-1',
+              'flex items-center gap-2 rounded-[5px] px-1 py-1 transition-[width] duration-200',
               mapSearchBarSurface
             )}
+            style={{ width: addressSearchWidthPx }}
           >
             <button
               type="submit"
@@ -412,7 +560,7 @@ export function MapSearchBar({
               onFocus={() => setAddressPanelOpen(true)}
               placeholder={centerPlaceholder}
               className={cn(
-                'h-[20px] min-h-[20px] text-[12px] border-0 bg-transparent shadow-none',
+                'h-[20px] min-h-[20px] min-w-0 flex-1 text-[12px] border-0 bg-transparent shadow-none',
                 'text-foreground placeholder:text-muted-foreground',
                 'focus-visible:ring-0 focus-visible:border-0 dark:bg-transparent'
               )}
@@ -424,7 +572,8 @@ export function MapSearchBar({
                 onClick={() => {
                   setQuery('');
                   submit('');
-                  setAddressResults([]);
+                  setAddressSearchResults([]);
+                  setPlaceSearchResults([]);
                   setAddressPanelOpen(false);
                 }}
                 className={cn(
@@ -440,82 +589,51 @@ export function MapSearchBar({
             )}
           </form>
 
-          {/* 주소 검색 결과 목록 + 최근 검색어 */}
+          {/* 주소검색 결과 패널 + 최근 검색어 */}
           {addressPanelOpen && (
             <div
               className={cn(
-                'absolute top-full left-0 mt-1 w-[350px] rounded-[5px] opacity-90 shadow-lg overflow-hidden z-50 border',
+                'absolute top-full left-0 mt-1 rounded-[5px] opacity-90 shadow-lg overflow-hidden z-50 border transition-[width] duration-200',
                 'bg-white border-slate-200',
                 'dark:bg-black/80 dark:border-white/10 dark:backdrop-blur-sm'
               )}
+              style={{ width: addressSearchWidthPx }}
             >
               {addressSearchLoading ? (
-                <div className="flex items-center justify-center gap-2 py-6 text-slate-500 dark:text-white/50 text-[12px]">
-                  <Loader2 className="w-4 h-4 animate-spin" />
+                <div className="flex items-center justify-center gap-2 py-6 text-[12px] text-slate-500 dark:text-white/50">
+                  <Loader2 className="h-4 w-4 animate-spin" />
                   검색 중...
                 </div>
-              ) : addressResults.length > 0 ? (
-                <ul className="py-0.5 max-h-[260px] overflow-y-auto">
-                  {addressResults.map((item, idx) => (
-                    <li key={`${item.address}-${idx}`}>
-                      <button
-                        type="button"
-                        title={item.address}
-                        onClick={() => handleSelectAddress(item)}
-                        className={cn(
-                          'w-full cursor-pointer text-left px-4 py-1.5 transition-colors min-h-[44px] flex flex-col justify-center gap-0.5',
-                          'border-b border-slate-100 last:border-b-0 hover:bg-slate-50',
-                          'dark:border-white/10 dark:hover:bg-white/10'
-                        )}
-                      >
-                        {item.roadAddress && (
-                          <div className="flex items-center gap-2 min-h-[1.25rem]">
-                            <span className="shrink-0 w-12 text-center text-[10px] font-semibold py-0.5 rounded bg-blue-100 text-blue-700 dark:bg-blue-500/25 dark:text-blue-300">
-                              도로명
-                            </span>
-                            <span className="text-[12px] text-slate-800 dark:text-white/90 truncate flex-1 min-w-0">
-                              {item.roadAddress}
-                              {item.buildingName ? ` (${item.buildingName})` : ''}
-                            </span>
-                          </div>
-                        )}
-                        {item.jibunAddress && (
-                          <div className="flex items-center gap-2 min-h-[1.25rem]">
-                            <span className="shrink-0 w-12 text-center text-[10px] font-semibold py-0.5 rounded bg-amber-100 text-amber-800 dark:bg-amber-500/25 dark:text-amber-200">
-                              지번
-                            </span>
-                            <span className="text-[12px] text-slate-800 dark:text-white/90 truncate flex-1 min-w-0">
-                              {item.jibunAddress}
-                            </span>
-                          </div>
-                        )}
-                        {!item.roadAddress && !item.jibunAddress && (
-                          <span className="text-[12px] text-slate-800 dark:text-white/90 line-clamp-2">
-                            {item.address}
-                          </span>
-                        )}
-                      </button>
-                    </li>
-                  ))}
-                </ul>
               ) : query.trim() ? (
-                <div className="py-4 text-center text-[12px] text-slate-500 dark:text-white/50">
-                  검색 결과가 없습니다
-                </div>
+                <>
+                  <MapAddressSearchResultsSection
+                    title="주소 검색"
+                    items={addressSearchResults}
+                    variant="address"
+                    onSelect={handleSelectAddress}
+                  />
+                  <div className="border-t border-slate-100 dark:border-white/10" />
+                  <MapAddressSearchResultsSection
+                    title="장소 검색"
+                    items={placeSearchResults}
+                    variant="place"
+                    onSelect={handleSelectAddress}
+                  />
+                </>
               ) : recentQueries.length === 0 ? (
                 <div className="py-6 text-center text-[12px] text-slate-400">
-                  주소 또는 지번을 입력하세요
+                  주소, 지번 또는 장소를 입력하세요
                 </div>
               ) : null}
 
               {recentQueries.length > 0 && (
                 <>
-                  {(addressSearchLoading || addressResults.length > 0 || Boolean(query.trim())) && (
+                  {(addressSearchLoading || Boolean(query.trim())) && (
                     <div className="border-t border-slate-100 dark:border-white/10" />
                   )}
                   <div className="px-3 py-2">
-                    <p className="flex items-center gap-1.5 text-[12px] font-medium text-slate-500 dark:text-white/50 mb-1.5">
-                      <History className="w-3.5 h-3.5" />
+                    <p className="mb-1.5 flex items-center gap-1.5 text-[12px] font-medium text-slate-500 dark:text-white/50">
+                      <History className="h-3.5 w-3.5" />
                       최근 검색어
                     </p>
                     <ul className="flex flex-wrap gap-1.5">
@@ -526,14 +644,10 @@ export function MapSearchBar({
                             title={q}
                             onClick={() => {
                               setQuery(q);
-                              if (!vworldApiKey) return;
-                              setAddressSearchLoading(true);
-                              searchAddress(q, { maxResults: ADDRESS_RESULT_MAX, type: 'address', apiKey: vworldApiKey })
-                                .then((items) => setAddressResults(items))
-                                .finally(() => setAddressSearchLoading(false));
+                              void runSplitAddressSearch(q);
                             }}
                             className={cn(
-                              'text-[12px] px-2.5 py-1.5 rounded-[5px] cursor-pointer transition-colors',
+                              'cursor-pointer rounded-[5px] px-2.5 py-1.5 text-[12px] transition-colors',
                               'bg-slate-100 text-slate-700 hover:bg-slate-200',
                               'dark:bg-white/10 dark:text-white/90 dark:hover:bg-white/15'
                             )}
@@ -563,13 +677,10 @@ export function MapSearchBar({
       <div className="pointer-events-none fixed top-4 right-4 z-40">
         <div className="pointer-events-auto shrink-0 flex items-center gap-2">
           {canToggleGeoserverLog && (
-            <MapSearchBarIconButton
-              title={showDebugUi ? 'GeoServer 로그 끄기' : 'GeoServer 로그 켜기'}
-              active={showDebugUi}
-              onClick={() => mapContext?.setShowDebugUi(!showDebugUi)}
-            >
-              <ScrollText className="w-5 h-5" strokeWidth={2} />
-            </MapSearchBarIconButton>
+            <MapAdminToolsMenu
+              logOn={showDebugUi}
+              onToggleLog={() => mapContext?.setShowDebugUi(!showDebugUi)}
+            />
           )}
           <div className={mapSearchBarIconShell}>
             <ThemeToggle variant="mapIcon" iconBtnClassName={mapSearchBarIconBtnInner} />
@@ -599,8 +710,20 @@ export function MapSearchBar({
                 <ChevronDown className="w-4 h-4 shrink-0 text-slate-400 dark:text-white/50" aria-hidden />
               </button>
 
-              <Dialog open={systemModalOpen} onOpenChange={setSystemModalOpen}>
-                <DialogContent className="sm:max-w-[380px] p-0 gap-0 overflow-hidden rounded-[10px] border-slate-200/80 shadow-xl dark:border-white/10 dark:bg-black/90" showCloseButton={false}>
+              <Dialog open={systemModalOpen} onOpenChange={handleSystemModalOpenChange}>
+                <DialogContent
+                  className="sm:max-w-[380px] p-0 gap-0 overflow-hidden rounded-[10px] border-slate-200/80 shadow-xl dark:border-white/10 dark:bg-black/90"
+                  showCloseButton={false}
+                  onPointerDownOutside={(e) => {
+                    if (mustPickSystem) e.preventDefault();
+                  }}
+                  onInteractOutside={(e) => {
+                    if (mustPickSystem) e.preventDefault();
+                  }}
+                  onEscapeKeyDown={(e) => {
+                    if (mustPickSystem) e.preventDefault();
+                  }}
+                >
                   <DialogHeader className="px-3 py-2 border-b border-slate-100 bg-gradient-to-b from-slate-50/80 to-white dark:border-white/10 dark:from-white/5 dark:to-black/90">
                     <DialogTitle className="text-sm font-semibold text-slate-800 dark:text-white/90 flex items-center gap-2">
                       <div className="flex items-center justify-center w-6 h-6 rounded-[5px] bg-primary/10 text-primary">

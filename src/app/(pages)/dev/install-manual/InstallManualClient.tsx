@@ -1,12 +1,18 @@
 'use client';
 
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { Check, Copy } from 'lucide-react';
+import { copyTextToClipboard } from '@/lib/utils';
+
 const SECTIONS = [
+  { id: 'setting_file_list', label: '세팅용 파일' },
   { id: 'nodejs', label: 'Node.js 및 npm 설치' },
   { id: 'install_db', label: 'PostgreSQL 설치 및 DB 생성' },
   { id: 'package', label: '프로젝트 파일 설치/실행 및 서비스 등록' },
   { id: 'run', label: '구동' },
   { id: 'remove', label: 'Window 서비스 등록 삭제' },
-  { id: 'contour', label: '고도(등고선)' }
+  { id: 'contour', label: '기초데이터: 고도(등고선)' },
+  { id: 'kais', label: '기초데이터: 건설•도로' },
 ] as const;
 
 const HEADER_BAR = 'flex h-10 shrink-0 items-center border-b';
@@ -26,10 +32,44 @@ function ExtLink({ href, children }: { href: string; children: string }) {
 }
 
 function CodeBlock({ children }: { children: string }) {
+  const [copied, setCopied] = useState(false);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+    };
+  }, []);
+
+  const handleCopy = useCallback(async () => {
+    const ok = await copyTextToClipboard(children);
+    if (!ok) return;
+    setCopied(true);
+    if (timerRef.current) clearTimeout(timerRef.current);
+    timerRef.current = setTimeout(() => setCopied(false), 1500);
+  }, [children]);
+
   return (
-    <pre className="overflow-x-auto rounded border bg-muted/40 px-3 py-2 text-[11px] leading-relaxed text-foreground">
-      <code>{children}</code>
-    </pre>
+    <button
+      type="button"
+      onClick={() => void handleCopy()}
+      title={copied ? '복사됨' : '클릭하여 복사'}
+      className="flex w-full cursor-pointer items-start gap-2 rounded border border-border bg-muted/40 px-3 py-2 text-left text-[11px] leading-relaxed text-foreground transition-colors hover:border-primary/40 hover:bg-muted/60"
+    >
+      <pre className="m-0 min-w-0 flex-1 overflow-x-auto whitespace-pre-wrap break-all font-mono">
+        <code>{children}</code>
+      </pre>
+      <span
+        className="mt-0.5 inline-flex shrink-0 items-center justify-center rounded p-0.5 text-muted-foreground"
+        aria-hidden
+      >
+        {copied ? (
+          <Check className="h-3.5 w-3.5 text-primary" />
+        ) : (
+          <Copy className="h-3.5 w-3.5" />
+        )}
+      </span>
+    </button>
   );
 }
 
@@ -80,105 +120,84 @@ export function InstallManualClient() {
           style={{ display: 'flex', flexDirection: 'column', gap: 64 }}
         >
 
+          <section id="setting_file_list" className="scroll-mt-4 space-y-3">
+            <h1 className="text-xl font-semibold">세팅용 파일</h1>
+            <h2 className="text-base font-semibold">경로</h2>
+            <div className="mt-1">
+              <CodeBlock>{`\\\\192.168.127.11\\사업수행_개발\\020 공간누리 v7\\20260819_세팅용 파일`}</CodeBlock>
+            </div>
+          </section>
+
           <section id="nodejs" className="scroll-mt-4 space-y-3">
             <h1 className="text-xl font-semibold">Node.js 및 npm 설치</h1>
-            <ol className="list-decimal space-y-3 pl-5">
+            <ul className="list-decimal space-y-3 pl-5">
+              <li><code className="rounded bg-muted px-1 py-0.5">node-v20.14.0-x64.msi</code> 파일 실행</li>
               <li>
-                해당 페이지 &gt; 다운로드 &gt; github 다운로드
+                설치 파일 실행 종료되면 powershell 열고 아래 명령어 입력
                 <div className="mt-1">
-                  <ExtLink href="https://www.nvmnode.com/ko/guide/installation.html">
-                    https://www.nvmnode.com/ko/guide/installation.html
-                  </ExtLink>
-                </div>
-              </li>
-              <li>
-                cmd에서 아래 순서대로 진행
-                <ol className="mt-2 list-[lower-alpha] space-y-3 pl-5">
-                  <li>
-                    nvm 버전 확인(nvm은 설치경로상관없음)
-                    <div className="mt-1">
-                      <CodeBlock>nvm -v</CodeBlock>
-                    </div>
-                  </li>
-                  <li>
-                    최신버전 Node.js 및 npm 설치
-                    <div className="mt-1 space-y-1">
-                      <CodeBlock>{`nvm install lts
-
--- 여기서 node랑 npm 최신버전 설치`}</CodeBlock>
-                    </div>
-                  </li>
-                  <li>
-                    설치된 node 사용
-                    <div className="mt-1">
-                      <CodeBlock>{`--버전 확인--
-nvm ls
--- 해당 버전 사용--
-nvm use (사용할 버전)`}</CodeBlock>
-                    </div>
-                  </li>
-                  <li>
-                    설치 확인
-                    <div className="mt-1">
-                      <CodeBlock>{`node -v
+                  <CodeBlock>{`node -v
+where node
 npm -v`}</CodeBlock>
-                    </div>
-                  </li>
-                </ol>
+                </div>
+                버전 확인이 되면 정상 설치가 완료됨.
               </li>
-            </ol>
+            </ul>
           </section>
 
           <section id="install_db" className="scroll-mt-4 space-y-3">
             <h1 className="text-xl font-semibold">PostgreSQL 설치 및 DB 생성</h1>
-            <ol className="list-decimal space-y-3 pl-5">
-              <li>
-                PostgreSQL 18 버전 설치
-              </li>
-              <li>
-                DB 생성(V6 DB 세팅 참고)
-              </li>
-              <li>
-                '프로젝트명'.env 파일 내 demo/prod를 생성한 DB 내용에 따라 수정
-              </li>
-            </ol>
+            <h2 className="text-base font-semibold">1. PostgreSQL 18 버전 설치</h2>
+              <ul className="list-decimal space-y-3 pl-5">
+                <li>
+                  Stack Builder - Spatlal Extension 설치 - PostGIS 설치
+                  <img src="\image\manual_image\install_db_1.png" alt="Spatlal Extension 설치 - PostGIS 설치" />
+                </li>
+                <li>
+                  PostGIS Bundle에서 Enable ALL GDAL Drivers 체크
+                  <img src="\image\manual_image\install_db_2.png" alt="PostGIS Bundle에서 Enable ALL GDAL Drivers 체크" />
+                </li>
+                <li>
+                  <p><code className="rounded bg-muted px-1 py-0.5">pg_hba.conf</code> 파일 수정</p>
+                  <p>위치: <code className="rounded bg-muted px-1 py-0.5">postgresql/18/data/pg_hba.conf</code></p>
+                  <p>최하단에 아래 내용 추가하기</p>
+                  <div className="mt-1">
+                      <CodeBlock>{`host    all             all             [해당 서버 IP]/32         scram-sha-256`}</CodeBlock>
+                    </div>
+                </li>
+              </ul>
+            <h2 className="text-base font-semibold">2. DB 생성(pgAdmin 실행)</h2>
+              <ul className="list-decimal space-y-3 pl-5">
+                <li>
+                  <code className="rounded bg-muted px-1 py-0.5">V6 DB 세팅</code> 참고
+                </li>
+                <li>
+                  Extension 활성화
+                  <div className="mt-1">
+                      <CodeBlock>{`CREATE EXTENSION IF NOT EXISTS plpgsql;
+  CREATE EXTENSION IF NOT EXISTS postgis;
+  CREATE EXTENSION IF NOT EXISTS postgis_raster;`}</CodeBlock>
+                  </div>
+                </li>
+              </ul>
+            <h2 className="text-base font-semibold">3. '프로젝트명'.env 파일 내 demo/prod를 생성한 DB 내용에 따라 수정</h2>
+            <p>.env 수정하면서 GGNR_DATA_DIR도 확인후 수정</p>
           </section>
 
           <section id="package" className="scroll-mt-4 space-y-3">
             <h1 className="text-xl font-semibold">프로젝트 파일 설치/실행 및 서비스 등록</h1>
             <h2 className="text-base font-semibold">TypeScript 타입 검사</h2>
-            <p>
-              아래 실행하기 전 먼저 코드에서 TypeScript 타입 검사{' '}
-              <code className="rounded bg-muted px-1 py-0.5">npx tsc --noEmit</code> 를 실행하여
-              타입에러가 없는지 검사후 (커서에서 타입에러만 수정하도록 요청 -원본 작업자에게 이를 알리고
-              진행)
-            </p>
-            <h2 className="text-base font-semibold">에러가 없을 경우 다음으로 진행</h2>
-            <p>
-              <ExtLink href="http://localhost:3001/dev">http://localhost:3001/dev</ExtLink>{' '}
-              (개발자 모드)
-            </p>
-            <ol className="list-decimal space-y-2 pl-5">
-              <li>
-                버전관리 &gt; 소스코드 관리 &gt; 설치파일 다운로드
-                <ol className="mt-1 list-[lower-alpha] pl-5">
-                  <li>
-                    <code className="rounded bg-muted px-1 py-0.5">.env</code>에 해당 DB 정보 확인하기
-                  </li>
-                </ol>
-              </li>
-              <li>
-                GNMS / 현재 서버 선택
-                <ol className="mt-1 list-[lower-alpha] space-y-1 pl-5">
-                  <li>
-                    폐쇄망에 설치할 목적일 경우
-                    <ol className="mt-1 list-[lower-roman] pl-5">
-                      <li>개발 브라우저에서 현재 서버 &gt; 폐쇄망 선택 후 다운로드</li>
-                    </ol>
-                  </li>
-                </ol>
-              </li>
-              <li>다운로드 클릭</li>
+            <ul className="list-decimal space-y-3 pl-5">
+              <li><code className="rounded bg-muted px-1 py-0.5">npx tsc --noEmit</code> 타입 검사</li>
+              <li>타입에러 모달이 있을 경우, 수정후 다시 다운로드하세요.</li>
+            </ul>
+            <h2 className="text-base font-semibold">옵션 설명</h2>
+            <h3 className="text-sm font-semibold">GNMS 최신</h3>
+            <p>GNMS 서버에 업로드되어 있는 최신 버전을 다운로드합니다.</p>
+            <h3 className="text-sm font-semibold">현재 서버</h3>
+            <p>현재 로컬 기준으로 파일을 다운로드합니다.</p>
+            <ol className="list-decimal space-y-3 pl-5">
+              <li>폐쇄망: node_modules를 포함한 상태로 설치파일 ZIP을 제공합니다. (<span className="text-red-500">이후 <code className="rounded bg-muted px-1 py-0.5">00_make_ggnr_starter.bat</code>에서 npm install 질문시 'n' 입력</span>)</li>
+              <li>개방망: node_modules를 미포함한 상태로 설치파일 ZIP을 제공합니다.</li>
             </ol>
           </section>
 
@@ -191,7 +210,7 @@ npm -v`}</CodeBlock>
               </li>
               <li>
                 <code className="rounded bg-muted px-1 py-0.5">00_make_ggnr_starter.bat</code> 관리자로
-                실행 (소스테스트와 지오서버구동 그리고 실행파일이 만들어짐)
+                실행 (ggnr_start.bat 생성 및 선택 시 nssm 등록)
                 <ul className="mt-2 list-disc space-y-2 pl-5">
                   <li>
                     node_modules 폴더 여부 확인 후 npm install 진행 질문: y/n 입력 (폐쇄망일 경우
@@ -211,26 +230,17 @@ npm -v`}</CodeBlock>
                     </ul>
                   </li>
                   <li>
-                    이후 자동 진행되는 내용
+                    이후 자동 진행되는 내용 (nssm 등록을 Y로 한 경우)
                     <ul className="mt-1 list-disc pl-5">
-                      <li>smoke: npm run start 되는지 확인</li>
                       <li>nssm: Window 서비스 등록</li>
                       <li>window 서비스 로그 확인용 cmd 열기</li>
                     </ul>
                   </li>
-                </ul>
-              </li>
-              <li>
-                <code className="rounded bg-muted px-1 py-0.5">00_make_ggnr_starter.bat</code> 구동중
-                취소할 경우 npm run start가 제대로 구동되는지 체크되고 있어 cmd 종료시 실행중인 프로세스
-                종료가 필요함.
-                <ol className="mt-2 list-[lower-alpha] space-y-1 pl-5">
-                  <li>Ctrl+C로 종료(자동 청소): 자동 실행중 생성된 파일 제거</li>
                   <li>
-                    cmd 자체 종료(수동 청소):{' '}
-                    <code className="rounded bg-muted px-1 py-0.5">smoke_ggnr_cleanup.ps1</code> 실행
+                    설치 ZIP에 python/env 분할압축본(env_parts)이 있으면 시작 시 복원하고, 없으면
+                    건너뜁니다 (없어도 정상 진행).
                   </li>
-                </ol>
+                </ul>
               </li>
             </ol>
           </section>
@@ -271,7 +281,7 @@ taskkill /f /pid [작업 중지 번호]`}</CodeBlock>
           </section>
 
           <section id="contour" className="scroll-mt-4 space-y-3">
-            <h1 className="text-xl font-semibold">고도(등고선)</h1>
+            <h1 className="text-xl font-semibold">기초데이터: 고도(등고선)</h1>
             <ol className="list-decimal space-y-2 pl-5">
               <li>브이월드 &gt; 공간정보 다운로드 &gt; 등고선(지도-고도) 다운로드</li>
               <li>필요 지역 대해 다운로드</li>
@@ -305,6 +315,23 @@ taskkill /f /pid [작업 중지 번호]`}</CodeBlock>
                 속성 삭제 &gt; 저장
               </li>
             </ol>
+          </section>
+
+          <section id="kais" className="scroll-mt-4 space-y-3">
+            <h1 className="text-xl font-semibold">기초데이터: 건설•도로</h1>
+            <ul className="list-decimal space-y-3 pl-5">
+              <li>폴더 위치
+                <div className="mt-1">
+                  <CodeBlock>{`\\\\192.168.127.11\\사업수행_개발\\133 공간누리 세팅 자료\\11 KAIS 지자체별 데이터`}</CodeBlock>
+                </div>
+              </li>
+              <li>해당 위치에서 <code className="rounded bg-muted px-1 py-0.5">sig_cd</code>를 기준으로 필터링해서 레이어 추출</li>
+              <li>
+                <p>이후 스케줄러 필터링 기준은 아래 우선순위에 따라 적용됩니다.</p>
+                <p>- runtime.env에 SGG_CODE 넣기</p> 
+                <p>- public_layer.sgg의 <code className="rounded bg-muted px-1 py-0.5">adm_sect_cd</code> 참고</p>
+              </li>
+            </ul>
           </section>
         </article>
         </div>

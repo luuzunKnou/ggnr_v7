@@ -19,6 +19,8 @@ export interface VWorldAddressItem {
   buildingName?: string;
   /** 제목/장소명 (place 검색 시) */
   title?: string;
+  /** 장소(PLACE) 검색에서 온 항목 */
+  kind?: 'place';
   /** 좌표 (EPSG:4326 경도, 위도) */
   point: { x: number; y: number };
 }
@@ -96,8 +98,17 @@ export interface SearchAddressOptions {
   category?: 'road' | 'parcel' | 'both';
 }
 
+export interface SearchPlaceOptions {
+  /** VWorld API 키 (미지정 시 VWORLD_API_KEY 사용) */
+  apiKey?: string;
+  /** 좌표계 (기본 EPSG:4326) */
+  crs?: string;
+  /** 최대 결과 개수 (기본 5) */
+  maxResults?: number;
+}
+
 /**
- * 검색어로 VWorld 주소/장소 검색 후 최대 N건 반환
+ * 검색어로 VWorld 주소 검색 후 최대 N건 반환 (type=address)
  */
 export async function searchAddress(
   query: string,
@@ -111,7 +122,6 @@ export async function searchAddress(
     (typeof process !== 'undefined' ? process.env.VWORLD_API_KEY : undefined) ??
     '';
 
-  const crs = options?.crs ?? 'EPSG:4326';
   const maxResults = options?.maxResults ?? 5;
   const type = options?.type ?? 'address';
   const category = options?.category ?? 'both';
@@ -138,6 +148,68 @@ export async function searchAddress(
 
   const singleCategory = category === 'both' ? 'road' : category;
   return searchAddressOne(trimmed, { ...options, category: singleCategory }, apiKey);
+}
+
+/**
+ * 검색어로 VWorld 장소(PLACE) 검색 후 최대 N건 반환 (type=place, category 없음)
+ */
+export async function searchPlace(
+  query: string,
+  options?: SearchPlaceOptions
+): Promise<VWorldAddressItem[]> {
+  const trimmed = query?.trim();
+  if (!trimmed) return [];
+
+  const apiKey =
+    options?.apiKey ??
+    (typeof process !== 'undefined' ? process.env.VWORLD_API_KEY : undefined) ??
+    '';
+
+  return searchPlaceOne(trimmed, options ?? {}, apiKey);
+}
+
+function coordKey(item: VWorldAddressItem): string {
+  return `${item.point.x.toFixed(6)},${item.point.y.toFixed(6)}`;
+}
+
+/**
+ * 주소(도로명·지번)와 장소(POI)를 함께 검색한 뒤 좌표 기준으로 합친다.
+ * 같은 좌표면 주소 항목을 남기고, 장소 제목만 보강한다.
+ */
+export async function searchAddressAndPlace(
+  query: string,
+  options?: SearchAddressOptions
+): Promise<VWorldAddressItem[]> {
+  const trimmed = query?.trim();
+  if (!trimmed) return [];
+
+  const maxResults = options?.maxResults ?? 5;
+  const [addressItems, placeItems] = await Promise.all([
+    searchAddress(trimmed, { ...options, type: 'address' }),
+    searchPlace(trimmed, {
+      apiKey: options?.apiKey,
+      crs: options?.crs,
+      maxResults,
+    }),
+  ]);
+
+  const byCoord = new Map<string, VWorldAddressItem>();
+  const merged: VWorldAddressItem[] = [];
+  for (const item of addressItems) {
+    byCoord.set(coordKey(item), item);
+    merged.push(item);
+  }
+  for (const item of placeItems) {
+    const key = coordKey(item);
+    const existing = byCoord.get(key);
+    if (existing) {
+      if (!existing.title && item.title) existing.title = item.title;
+      continue;
+    }
+    byCoord.set(key, item);
+    merged.push(item);
+  }
+  return merged;
 }
 
 function parseSearchResponse(data: VWorldSearchResponse, maxResults: number): VWorldAddressItem[] {
@@ -175,7 +247,7 @@ function parseSearchResponse(data: VWorldSearchResponse, maxResults: number): VW
 
 function buildSearchParams(
   trimmed: string,
-  options: SearchAddressOptions & { category: 'road' | 'parcel' },
+  options: SearchAddressOptions,
   apiKey?: string
 ): URLSearchParams {
   const { crs = 'EPSG:4326', maxResults = 5, type = 'address', category } = options;
@@ -188,10 +260,12 @@ function buildSearchParams(
     page: '1',
     query: trimmed,
     type,
-    category,
     format: 'json',
     errorformat: 'json',
   });
+  if (type === 'address' && (category === 'road' || category === 'parcel')) {
+    params.set('category', category);
+  }
   if (apiKey) params.set('key', apiKey);
   return params;
 }
@@ -217,7 +291,7 @@ function searchAddressOne(
   apiKey: string
 ): Promise<VWorldAddressItem[]> {
   const maxResults = options.maxResults ?? 5;
-  const proxyParams = buildSearchParams(trimmed, options);
+  const proxyParams = buildSearchParams(trimmed, { ...options, type: 'address' });
   return searchAddressViaProxy(proxyParams, maxResults).then((viaProxy) => {
     if (Array.isArray(viaProxy)) return viaProxy;
     if (viaProxy === 'upstream_failed') return [];
@@ -225,13 +299,39 @@ function searchAddressOne(
       console.warn('[vworldAddressSearch] VWORLD_API_KEY not set');
       return [];
     }
-    return searchAddressOneJsonp(trimmed, options, apiKey);
+    return searchOneJsonp(trimmed, { ...options, type: 'address' }, apiKey);
   });
 }
 
-function searchAddressOneJsonp(
+/** type=place — category 없음 */
+function searchPlaceOne(
   trimmed: string,
-  options: SearchAddressOptions & { category: 'road' | 'parcel' },
+  options: SearchPlaceOptions,
+  apiKey: string
+): Promise<VWorldAddressItem[]> {
+  const maxResults = options.maxResults ?? 5;
+  const placeOpts: SearchAddressOptions = {
+    crs: options.crs,
+    maxResults,
+    type: 'place',
+  };
+  const proxyParams = buildSearchParams(trimmed, placeOpts);
+  return searchAddressViaProxy(proxyParams, maxResults).then((viaProxy) => {
+    const finish = (items: VWorldAddressItem[]) =>
+      items.map((it) => ({ ...it, kind: 'place' as const }));
+    if (Array.isArray(viaProxy)) return finish(viaProxy);
+    if (viaProxy === 'upstream_failed') return [];
+    if (!apiKey) {
+      console.warn('[vworldAddressSearch] VWORLD_API_KEY not set');
+      return [];
+    }
+    return searchOneJsonp(trimmed, placeOpts, apiKey).then(finish);
+  });
+}
+
+function searchOneJsonp(
+  trimmed: string,
+  options: SearchAddressOptions,
   apiKey: string
 ): Promise<VWorldAddressItem[]> {
   const { maxResults = 5 } = options;

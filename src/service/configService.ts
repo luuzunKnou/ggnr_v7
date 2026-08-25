@@ -2,10 +2,12 @@
  * Config 파일 읽기/쓰기 (systemList.config 등)
  * - 서버 측에서만 실행되며, 프로젝트 src/config 경로를 사용합니다.
  * - common.runtime.env + <project>.runtime.env, serviceList.config, systemList.config 는 호출 시마다 파일을 읽어 재시작 없이 반영됩니다.
+ * - SERVICE_SYSTEM_MAP: 기능(ser_eng):시스템(sys_key) 를 쉼표로 나열해 해당 프로젝트만 메뉴 소속을 옮김.
  */
 import { existsSync, readFileSync, writeFileSync } from "fs"
 import { join } from "path"
 import { unstable_noStore as noStore } from "next/cache"
+import { withBasePath } from "@/lib/basePath"
 
 /** package.json 이 있는 디렉터리를 프로젝트 루트로 사용 (Next 등에서 cwd 가 달라도 동작) */
 function getProjectRoot(): string {
@@ -176,6 +178,14 @@ export function getSystemKorName(): string {
   return name || "공간정보 통합관리 플랫폼"
 }
 
+/**
+ * common.runtime.env / 프로젝트 runtime.env 의 GNMS_URL.
+ * 예: `host:3000` 또는 `http://dggskorea/gnms` (없으면 빈 문자열)
+ */
+export function getGnmsUrl(): string {
+  return getRuntimeEnvVars().GNMS_URL?.trim() ?? ""
+}
+
 const DEFAULT_FOOTER_ADDR =
   "안동시 토지정보과 | 054-840-6371 | 36691 경상북도 안동시 퇴계로 115 (명륜동)"
 const DEFAULT_FOOTER_RSS = "Copyright (c) 2024. ALL RIGHTS RESERVED"
@@ -334,6 +344,15 @@ export function getBootProject(_params?: unknown): { project: string } {
   return { project: (process.env.GGNR_PROJECT ?? "build_yy").trim() || "build_yy" }
 }
 
+function readGgnrEnv(): string {
+  return (typeof process !== "undefined" ? process.env.GGNR_ENV : "")?.trim().toLowerCase() ?? ""
+}
+
+/** 운영(prod)만 행망. 개발·시연·테스트는 외부망(브이월드·공공데이터포털). */
+function useHangmangKras(): boolean {
+  return readGgnrEnv() === "prod"
+}
+
 export function getMapConfig(_params?: unknown): {
   VWORLD_API_KEY: string
   /** 브이월드 키 발급 시 등록한 서비스 URL. 2D데이터 API에서만 필요(없으면 파라미터 생략) */
@@ -344,24 +363,51 @@ export function getMapConfig(_params?: unknown): {
   DATA_PORTAL_KEY: string
   dataPotalKey: string
   KAKAO_MAP_API_KEY: string
+  USE_KRAS: boolean
+  USE_SEUM: boolean
 } {
-  const vars = getRuntimeEnvVars()
-  const dataPortalKey =
-    vars.DATA_PORTAL_KEY?.trim() ??
-    vars.dataPotalKey?.trim() ??
-    vars.DATA_POTAL_KEY?.trim() ??
-    vars.PUBLIC_DATA_KEY?.trim() ??
-    vars.DATA_GO_KR_KEY?.trim() ??
-    ""
-  return {
-    VWORLD_API_KEY: vars.VWORLD_API_KEY?.trim() ?? '',
-    VWORLD_DOMAIN: vars.VWORLD_DOMAIN?.trim() ?? '',
-    OPENAI_API_KEY: vars.OPENAI_API_KEY?.trim() ?? '',
-    SAFEMAP_API_KEY: vars.SAFEMAP_API_KEY?.trim() ?? '',
-    SAFETYDATA_API_KEY: vars.SAFETYDATA_API_KEY?.trim() ?? '',
-    DATA_PORTAL_KEY: dataPortalKey,
-    dataPotalKey: dataPortalKey,
-    KAKAO_MAP_API_KEY: vars.KAKAO_MAP_API_KEY?.trim() ?? '',
+  const empty = {
+    VWORLD_API_KEY: '',
+    VWORLD_DOMAIN: '',
+    OPENAI_API_KEY: '',
+    SAFEMAP_API_KEY: '',
+    SAFETYDATA_API_KEY: '',
+    DATA_PORTAL_KEY: '',
+    dataPotalKey: '',
+    KAKAO_MAP_API_KEY: '',
+    USE_KRAS: false,
+    USE_SEUM: true,
+  }
+  try {
+    const vars = getRuntimeEnvVars()
+    const dataPortalKey =
+      vars.DATA_PORTAL_KEY?.trim() ??
+      vars.dataPotalKey?.trim() ??
+      vars.DATA_POTAL_KEY?.trim() ??
+      vars.PUBLIC_DATA_KEY?.trim() ??
+      vars.DATA_GO_KR_KEY?.trim() ??
+      ""
+    let safemapKey = ''
+    try {
+      safemapKey = vars.SAFEMAP_API_KEY?.trim() ?? ''
+    } catch {
+      safemapKey = ''
+    }
+    return {
+      VWORLD_API_KEY: vars.VWORLD_API_KEY?.trim() ?? '',
+      VWORLD_DOMAIN: vars.VWORLD_DOMAIN?.trim() ?? '',
+      OPENAI_API_KEY: vars.OPENAI_API_KEY?.trim() ?? '',
+      SAFEMAP_API_KEY: safemapKey,
+      SAFETYDATA_API_KEY: vars.SAFETYDATA_API_KEY?.trim() ?? '',
+      DATA_PORTAL_KEY: dataPortalKey,
+      dataPotalKey: dataPortalKey,
+      KAKAO_MAP_API_KEY: vars.KAKAO_MAP_API_KEY?.trim() ?? '',
+      /** 행망(KRAS·KOREPS) — 운영만. 묶음 전체가 실패할 때만 브이월드 */
+      USE_KRAS: useHangmangKras(),
+      USE_SEUM: true,
+    }
+  } catch {
+    return empty
   }
 }
 
@@ -383,10 +429,8 @@ export function getLandLinkageConfig(_params?: unknown): {
 } {
   const vars = getRuntimeEnvVars()
   const map = getMapConfig()
-  /** 행망 호출: GGNR_ENV가 dev가 아닐 때만(demo·prod) */
-  const ggnrEnv = (typeof process !== "undefined" ? process.env.GGNR_ENV : "")?.trim().toLowerCase() ?? ""
   return {
-    useKras: ggnrEnv !== "dev",
+    useKras: useHangmangKras(),
     krasKey: vars.KRAS_KEY?.trim() ?? vars.KRAS_API_KEY?.trim() ?? "",
     krasIp: vars.KRAS_IP?.trim() ?? "",
     krasPort: vars.KRAS_PORT?.trim() ?? "",
@@ -398,7 +442,7 @@ export function getLandLinkageConfig(_params?: unknown): {
     sggCode: vars.SGG_CODE?.trim() ?? "",
     vworldKey: map.VWORLD_API_KEY,
     dataPortalKey: map.DATA_PORTAL_KEY,
-    /** 세움터 DB 우선. 실패·타임아웃 시 포털 */
+    /** 세움터 있으면 세움터, 없는 필지는 공공데이터포털 */
     useSeum: true,
   }
 }
@@ -568,8 +612,8 @@ export function getIndexSliderImages(projectName: string): string[] {
     const base = `${projectName}_${String(i).padStart(2, "0")}`
     const jpgPath = join(dir, `${base}.jpg`)
     const pngPath = join(dir, `${base}.png`)
-    if (existsSync(jpgPath)) out.push(`/image/indexImage/${base}.jpg`)
-    else if (existsSync(pngPath)) out.push(`/image/indexImage/${base}.png`)
+    if (existsSync(jpgPath)) out.push(withBasePath(`/image/indexImage/${base}.jpg`))
+    else if (existsSync(pngPath)) out.push(withBasePath(`/image/indexImage/${base}.png`))
     else out.push("")
   }
   return out
@@ -585,9 +629,9 @@ export function getIndexLogoSrc(projectName?: string): string {
   const root = getProjectRoot()
   const dir = join(root, "public", "image", "indexImage")
   const base = `${name}_index_logo`
-  if (existsSync(join(dir, `${base}.svg`))) return `/image/indexImage/${base}.svg`
-  if (existsSync(join(dir, `${base}.png`))) return `/image/indexImage/${base}.png`
-  return `/image/indexImage/default_index_logo.svg`
+  if (existsSync(join(dir, `${base}.svg`))) return withBasePath(`/image/indexImage/${base}.svg`)
+  if (existsSync(join(dir, `${base}.png`))) return withBasePath(`/image/indexImage/${base}.png`)
+  return withBasePath(`/image/indexImage/default_index_logo.svg`)
 }
 
 export type SystemConfigItem = {
@@ -639,6 +683,51 @@ export function getSystemListAll(_params?: unknown): { systems: SystemConfigItem
 }
 
 /**
+ * runtime.env SERVICE_SYSTEM_MAP — 기능(ser_eng)을 지정 시스템(sys_key) 메뉴로 옮김.
+ * 예: roadReward:river → 도로에서 빼고 하천 메뉴에 넣음. 여러 건은 쉼표.
+ */
+function parseServiceSystemMap(raw: string): { serEng: string; sysKey: string }[] {
+  const out: { serEng: string; sysKey: string }[] = []
+  for (const part of raw.split(",")) {
+    const t = part.trim()
+    if (!t) continue
+    const colon = t.indexOf(":")
+    if (colon <= 0) continue
+    const serEng = t.slice(0, colon).trim()
+    const sysKey = t.slice(colon + 1).trim()
+    if (serEng && sysKey) out.push({ serEng, sysKey })
+  }
+  return out
+}
+
+function applyServiceSystemMap(
+  systems: SystemConfigItem[],
+  pairs: { serEng: string; sysKey: string }[]
+): SystemConfigItem[] {
+  if (pairs.length === 0) return systems
+  const moveTo = new Map<string, string>()
+  for (const p of pairs) moveTo.set(p.serEng, p.sysKey)
+  return systems.map((s) => {
+    const key = s.sys_key?.trim() ?? ""
+    const prev = s.serviceList ?? []
+    const kept = prev.filter((eng) => {
+      const mapped = moveTo.get(String(eng).trim())
+      return !mapped || mapped === key
+    })
+    const next = [...kept]
+    for (const [serEng, sysKey] of moveTo) {
+      if (sysKey !== key) continue
+      if (next.includes(serEng)) continue
+      const after = next.indexOf("riverConstructionLedger")
+      if (after >= 0) next.splice(after + 1, 0, serEng)
+      else next.push(serEng)
+    }
+    if (next.length === prev.length && next.every((v, i) => v === prev[i])) return s
+    return { ...s, serviceList: next }
+  })
+}
+
+/**
  * systemList.config 전체 조회 (공통 시스템 목록).
  * runtime.env 의 ENABLED_SYSTEMS 가 있으면 해당 값(쉼표 구분)을 sys_key 로만 매칭해 노출.
  * 예: ENABLED_SYSTEMS=wtl,river → sys_key 가 wtl, river 인 시스템만 반환.
@@ -667,6 +756,10 @@ export function getSystemListDebug(): {
       const filtered = systems.filter((s) => allowedKeys.has(s.sys_key?.trim() ?? ""))
       if (filtered.length > 0) systems = filtered
     }
+  }
+  const mapStr = (runtime.SERVICE_SYSTEM_MAP ?? "").trim()
+  if (mapStr) {
+    systems = applyServiceSystemMap(systems, parseServiceSystemMap(mapStr))
   }
   /** runtime.env DISABLED_SERVICES — 프로젝트별로 사이드바 메뉴(ser_eng) 숨김 */
   const disabledStr = (runtime.DISABLED_SERVICES ?? "").trim()

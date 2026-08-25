@@ -35,8 +35,10 @@ export function readProjectRuntimeEnvVars(): Record<string, string> {
 /** 스케줄러 코드명 — instrumentation / DISABLED_SCHEDULERS 와 맞춤 */
 export const SCHEDULER_CODES = {
   useFeeSync: 'useFeeSync',
+  fmsSync: 'fmsSync',
   safetydata: 'safetydata',
   kais: 'kais',
+  krasLayer: 'krasLayer',
   nssmLogBackup: 'nssmLogBackup',
 } as const;
 

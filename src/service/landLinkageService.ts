@@ -12,6 +12,7 @@ import {
   hasParcelLandInfoTabData,
   mapKrasToParcelLandInfoTab,
   normalizeFromKrasRow,
+  type HangmangCallLine,
   type NormalizedParcelLand,
   type ParcelLandEnrichmentMap,
   type ParcelLandInfoTabData,
@@ -22,9 +23,16 @@ import {
   PARCEL_ANALYSIS_LINKAGE_CONCURRENCY,
   PARCEL_ANALYSIS_LINKAGE_TIMEOUT_MS,
 } from '@/lib/parcelAnalysisTheme';
+import {
+  decodeGatewayBody,
+  krasXmlFault,
+  logKrasGatewayFault,
+  redactKrasUrl,
+} from '@/integrations/krasGateway';
 
 const KRAS_LAND_QUERY_ID = 'KRAS000002';
 const KRAS_LAND_USE_QUERY_ID = 'KRAS000025';
+const KRAS_LAYER_LIST_QUERY_ID = 'KRAS000037';
 const KOREPS_PRICE_QUERY_ID = 'KOREPS00011';
 
 function toStr(value: unknown): string {
@@ -121,25 +129,182 @@ function buildKorepsUrl(cfg: ReturnType<typeof getLandLinkageConfig>): string | 
   return `http://${cfg.korepsIp}:${cfg.korepsPort}${withSlash}/${KOREPS_PRICE_QUERY_ID}`;
 }
 
-async function postKrasXml(url: string, body: string, timeoutMs?: number): Promise<string> {
+function linkageXmlIssue(xml: string): string | null {
+  const head = xml.slice(0, 800);
+  if (/<!DOCTYPE html/i.test(head) || /<html[\s>]/i.test(head) || /Licensed to the Apache Software Foundation/i.test(head)) {
+    return '행망이 웹 페이지를 반환(게이트웨이 경로 확인)';
+  }
+  if (!/<\?xml|<RESPONSE[\s>]|<HEADER[\s>]/i.test(head)) return null;
+  const code = xml.match(/<CODE>([\s\S]*?)<\/CODE>/i)?.[1]?.trim() ?? '';
+  const msg = xml.match(/<MESSAGE>([\s\S]*?)<\/MESSAGE>/i)?.[1]?.trim() ?? '';
+  if (code === '0000' || /^success$/i.test(msg)) return null;
+  if (msg) return `행망 응답: ${msg}`;
+  return '행망 XML 오류';
+}
+
+type LinkageXmlResult = { xml: string; error?: string };
+type LinkageProbeResult = { xml: string; httpStatus: number; error?: string };
+
+function pickXmlTag(xml: string, tag: string): string {
+  const m = xml.match(new RegExp(`<${tag}>([\\s\\S]*?)</${tag}>`, 'i'));
+  return m?.[1]?.trim() ?? '';
+}
+
+async function fetchLinkageXmlResult(
+  url: string,
+  query: string,
+  timeoutMs?: number,
+  method: 'GET' | 'POST' = 'POST'
+): Promise<LinkageXmlResult> {
   const ms = timeoutMs ?? PARCEL_ANALYSIS_LINKAGE_TIMEOUT_MS;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), ms);
+  const q = query.replace(/^\?/, '');
+  const requestUrl = method === 'GET' ? `${url.replace(/\/+$/, '')}?${q}` : url;
+  const shown = redactKrasUrl(requestUrl);
   try {
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
-      body,
-      signal: controller.signal,
-      cache: 'no-store',
-    });
-    if (!res.ok) return '';
-    return await res.text();
-  } catch {
-    return '';
+    const res =
+      method === 'GET'
+        ? await fetch(requestUrl, {
+            method: 'GET',
+            signal: controller.signal,
+            cache: 'no-store',
+          })
+        : await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
+            body: q,
+            signal: controller.signal,
+            cache: 'no-store',
+          });
+    const buf = Buffer.from(await res.arrayBuffer());
+    const xml = decodeGatewayBody(buf);
+    const requestHint = method === 'POST' ? `본문: ${q.replace(/conn_sys_id=[^&]*/gi, 'conn_sys_id=***')}\n\n` : '';
+    if (!res.ok) {
+      logKrasGatewayFault(requestUrl, `HTTP ${res.status}`, `${requestHint}${xml}`);
+      return { xml: '', error: `HTTP ${res.status} (${shown})` };
+    }
+    if (!xml.trim()) return { xml: '', error: `빈 응답 (${shown})` };
+    const xmlErr = krasXmlFault(buf, true);
+    if (xmlErr) {
+      logKrasGatewayFault(requestUrl, xmlErr.message, `${requestHint}${xmlErr.xml}`);
+      return { xml: '', error: `${xmlErr.message} (${shown})` };
+    }
+    const issue = linkageXmlIssue(xml);
+    if (issue) {
+      logKrasGatewayFault(requestUrl, issue, `${requestHint}${xml}`);
+      return { xml: '', error: `${issue} (${shown})` };
+    }
+    return { xml };
+  } catch (e) {
+    const name = e instanceof Error ? e.name : '';
+    if (name === 'AbortError' || (e instanceof Error && /aborted/i.test(e.message))) {
+      return { xml: '', error: `시간 초과 ${ms}ms (${shown})` };
+    }
+    const msg = e instanceof Error ? e.message : String(e);
+    return { xml: '', error: `연결 실패 (${shown}) ${msg}` };
   } finally {
     clearTimeout(timer);
   }
+}
+
+async function probeLinkageXml(
+  url: string,
+  query: string,
+  timeoutMs?: number,
+  method: 'GET' | 'POST' = 'POST'
+): Promise<LinkageProbeResult> {
+  const r = await fetchLinkageXmlResult(url, query, timeoutMs, method);
+  if (r.error) {
+    const httpMatch = r.error.match(/^HTTP (\d+)/);
+    return { xml: r.xml, httpStatus: httpMatch ? Number(httpMatch[1]) : 0, error: r.error };
+  }
+  return { xml: r.xml, httpStatus: 200 };
+}
+
+async function fetchLinkageXml(
+  url: string,
+  query: string,
+  timeoutMs?: number,
+  method: 'GET' | 'POST' = 'POST'
+): Promise<string> {
+  const r = await fetchLinkageXmlResult(url, query, timeoutMs, method);
+  return r.xml;
+}
+
+function hangmangCallFromProbe(svcId: string, probe: LinkageProbeResult): HangmangCallLine {
+  if (probe.error && !probe.xml) {
+    const skipped = probe.error.includes('키/주소 없음');
+    return { svcId, called: !skipped, detail: probe.error };
+  }
+  const code = pickXmlTag(probe.xml, 'CODE');
+  const message = pickXmlTag(probe.xml, 'MESSAGE');
+  if (code || message) {
+    return { svcId, called: true, detail: [code, message].filter(Boolean).join(' ') };
+  }
+  if (probe.httpStatus && probe.httpStatus !== 200) {
+    return { svcId, called: true, detail: `HTTP${probe.httpStatus}` };
+  }
+  if (probe.xml.trim()) {
+    return { svcId, called: true, detail: `HTTP${probe.httpStatus || 200}` };
+  }
+  return { svcId, called: true, detail: '응답없음' };
+}
+
+function skippedHangmangCalls(reason: string): HangmangCallLine[] {
+  return [
+    KRAS_LAYER_LIST_QUERY_ID,
+    KRAS_LAND_QUERY_ID,
+    KRAS_LAND_USE_QUERY_ID,
+    KOREPS_PRICE_QUERY_ID,
+  ].map((svcId) => ({ svcId, called: false, detail: reason }));
+}
+
+async function probeHangmangCalls(
+  pnu: string,
+  cfg: ReturnType<typeof getLandLinkageConfig>
+): Promise<{
+  calls: HangmangCallLine[];
+  landXml: string;
+  useXml: string;
+}> {
+  const krasUrl = buildKrasUrl(cfg);
+  const korepsUrl = buildKorepsUrl(cfg);
+  const emptyProbe: LinkageProbeResult = { xml: '', httpStatus: 0, error: undefined };
+
+  const krasReady = Boolean(krasUrl && cfg.krasKey && cfg.sggCode);
+  const korepsReady = Boolean(korepsUrl);
+
+  const [p037, p002, p025, pKoreps] = await Promise.all([
+    krasReady
+      ? probeLinkageXml(krasUrl!, buildKrasParam(pnu, KRAS_LAYER_LIST_QUERY_ID, cfg), undefined, 'GET')
+      : Promise.resolve({ ...emptyProbe, error: '키/주소 없음' }),
+    krasReady
+      ? probeLinkageXml(krasUrl!, buildKrasParam(pnu, KRAS_LAND_QUERY_ID, cfg), undefined, 'GET')
+      : Promise.resolve({ ...emptyProbe, error: '키/주소 없음' }),
+    krasReady
+      ? probeLinkageXml(krasUrl!, buildKrasParam(pnu, KRAS_LAND_USE_QUERY_ID, cfg), undefined, 'GET')
+      : Promise.resolve({ ...emptyProbe, error: '키/주소 없음' }),
+    korepsReady
+      ? probeLinkageXml(
+          korepsUrl!,
+          buildKrasParam(pnu, KOREPS_PRICE_QUERY_ID, cfg, cfg.korepsKey),
+          undefined,
+          'POST'
+        )
+      : Promise.resolve({ ...emptyProbe, error: '키/주소 없음' }),
+  ]);
+
+  return {
+    calls: [
+      hangmangCallFromProbe(KRAS_LAYER_LIST_QUERY_ID, p037),
+      hangmangCallFromProbe(KRAS_LAND_QUERY_ID, p002),
+      hangmangCallFromProbe(KRAS_LAND_USE_QUERY_ID, p025),
+      hangmangCallFromProbe(KOREPS_PRICE_QUERY_ID, pKoreps),
+    ],
+    landXml: p002.xml,
+    useXml: p025.xml,
+  };
 }
 
 async function fetchKrasForPnu(
@@ -148,7 +313,7 @@ async function fetchKrasForPnu(
 ): Promise<NormalizedParcelLand | null> {
   const url = buildKrasUrl(cfg);
   if (!url || !cfg.krasKey || !cfg.sggCode) return null;
-  const xml = await postKrasXml(url, buildKrasParam(pnu, KRAS_LAND_QUERY_ID, cfg));
+  const xml = await fetchLinkageXml(url, buildKrasParam(pnu, KRAS_LAND_QUERY_ID, cfg), undefined, 'GET');
   const rows = parseKrasLandInfoRows(xml);
   const row = rows[0];
   if (!row) return null;
@@ -177,9 +342,11 @@ async function fetchKorepsPriceForPnu(
 ): Promise<number | null> {
   const url = buildKorepsUrl(cfg);
   if (!url) return null;
-  const xml = await postKrasXml(
+  const xml = await fetchLinkageXml(
     url,
-    buildKrasParam(pnu, KOREPS_PRICE_QUERY_ID, cfg, cfg.korepsKey)
+    buildKrasParam(pnu, KOREPS_PRICE_QUERY_ID, cfg, cfg.korepsKey),
+    undefined,
+    'POST'
   );
   const latest = pickLatestKorepsPrice(parseKorepsPriceRows(xml));
   return latest?.pannJiga ?? null;
@@ -294,7 +461,7 @@ async function fetchKrasLandUseZonesForPnu(
 ): Promise<string[]> {
   const url = buildKrasUrl(cfg);
   if (!url || !cfg.krasKey || !cfg.sggCode) return [];
-  const xml = await postKrasXml(url, buildKrasParam(pnu, KRAS_LAND_USE_QUERY_ID, cfg));
+  const xml = await fetchLinkageXml(url, buildKrasParam(pnu, KRAS_LAND_USE_QUERY_ID, cfg), undefined, 'GET');
   const rows = parseKrasBodyFieldMaps(xml);
   return zonesFromKrasLandUseRows(rows);
 }
@@ -331,48 +498,81 @@ export async function fetchLandUseZonesByPnus(params: {
 async function fetchKrasLandInfoRowForPnu(
   pnu: string,
   cfg: ReturnType<typeof getLandLinkageConfig>
-) {
+): Promise<{ row: ReturnType<typeof parseKrasLandInfoRows>[number] | null; error?: string }> {
   const url = buildKrasUrl(cfg);
-  if (!url || !cfg.krasKey || !cfg.sggCode) return null;
-  const xml = await postKrasXml(url, buildKrasParam(pnu, KRAS_LAND_QUERY_ID, cfg));
-  return parseKrasLandInfoRows(xml)[0] ?? null;
+  if (!url || !cfg.krasKey || !cfg.sggCode) {
+    return { row: null, error: '토지행정망 접속정보(키·주소·시군구 코드)가 없습니다.' };
+  }
+  const r = await fetchLinkageXmlResult(url, buildKrasParam(pnu, KRAS_LAND_QUERY_ID, cfg), undefined, 'GET');
+  if (r.error) return { row: null, error: `토지대장 ${r.error}` };
+  const row = parseKrasLandInfoRows(r.xml)[0] ?? null;
+  if (!row) return { row: null, error: '토지대장 응답에 필지 항목이 없습니다.' };
+  return { row };
 }
 
 async function fetchKrasLandUseRowsForPnu(
   pnu: string,
   cfg: ReturnType<typeof getLandLinkageConfig>
-) {
+): Promise<{ rows: KrasBodyRecord[]; error?: string }> {
   const url = buildKrasUrl(cfg);
-  if (!url || !cfg.krasKey || !cfg.sggCode) return [];
-  const xml = await postKrasXml(url, buildKrasParam(pnu, KRAS_LAND_USE_QUERY_ID, cfg));
-  return parseKrasBodyFieldMaps(xml);
+  if (!url || !cfg.krasKey || !cfg.sggCode) {
+    return { rows: [], error: '토지행정망 접속정보(키·주소·시군구 코드)가 없습니다.' };
+  }
+  const r = await fetchLinkageXmlResult(url, buildKrasParam(pnu, KRAS_LAND_USE_QUERY_ID, cfg), undefined, 'GET');
+  if (r.error) return { rows: [], error: `이용계획 ${r.error}` };
+  return { rows: parseKrasBodyFieldMaps(r.xml) };
 }
 
 /** 우클릭 필지정보 탭 — 서버는 행망(KRAS)만. 브이월드는 클라이언트 JSONP. */
 export async function fetchParcelLandInfoTab(params: { pnu?: string }): Promise<
-  ParcelLandInfoTabData & { ok: boolean; error?: string }
+  ParcelLandInfoTabData & {
+    ok: boolean;
+    error?: string;
+    krasSkipReason?: string;
+    hangmangCalls?: HangmangCallLine[];
+  }
 > {
   const pnu = toStr(params.pnu);
   const empty = { ...emptyParcelLandInfoTab(), ok: false as const };
   if (!/^\d{19}$/.test(pnu)) return { ...empty, error: '유효한 PNU(19자리)가 필요합니다.' };
 
   const cfg = getLandLinkageConfig();
+  const ggnrEnv = (process.env.GGNR_ENV ?? '').trim() || '(없음)';
 
   try {
-    if (cfg.useKras) {
-      const [landRow, useRows] = await Promise.all([
-        fetchKrasLandInfoRowForPnu(pnu, cfg),
-        fetchKrasLandUseRowsForPnu(pnu, cfg),
-      ]);
-      const krasTab = mapKrasToParcelLandInfoTab(landRow, useRows);
-      if (hasParcelLandInfoTabData(krasTab)) {
-        return { ...krasTab, ok: true };
-      }
+    if (!cfg.useKras) {
+      const krasSkipReason = `개발 실행(GGNR_ENV=${ggnrEnv})이라 행망을 호출하지 않음`;
+      console.warn(`[landLinkage] 필지정보 행망 건너뜀 pnu=${pnu} ${krasSkipReason}`);
+      return {
+        ...emptyParcelLandInfoTab(),
+        ok: true,
+        krasSkipReason,
+        hangmangCalls: skippedHangmangCalls(krasSkipReason),
+      };
     }
 
-    return { ...emptyParcelLandInfoTab(), ok: true };
+    const probed = await probeHangmangCalls(pnu, cfg);
+    const landRow = parseKrasLandInfoRows(probed.landXml)[0] ?? null;
+    const useRows = parseKrasBodyFieldMaps(probed.useXml);
+    const krasTab = mapKrasToParcelLandInfoTab(landRow, useRows);
+    if (hasParcelLandInfoTabData(krasTab)) {
+      return { ...krasTab, ok: true, hangmangCalls: probed.calls };
+    }
+
+    const krasSkipReason =
+      [landRow ? undefined : '토지대장 응답에 필지 항목이 없습니다.', useRows.length ? undefined : '이용계획 응답 없음']
+        .filter(Boolean)
+        .join(' · ') || '행망 응답을 필지정보에 쓸 수 없음';
+    console.warn(`[landLinkage] 필지정보 행망 미사용 pnu=${pnu} ${krasSkipReason}`);
+    return {
+      ...emptyParcelLandInfoTab(),
+      ok: true,
+      krasSkipReason,
+      hangmangCalls: probed.calls,
+    };
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);
-    return { ...empty, error: msg };
+    console.warn(`[landLinkage] 필지정보 행망 예외 pnu=${pnu} ${msg}`);
+    return { ...empty, error: msg, krasSkipReason: msg, hangmangCalls: skippedHangmangCalls(msg) };
   }
 }

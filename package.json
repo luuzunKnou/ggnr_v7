@@ -24,6 +24,9 @@
     "db:introspect": "drizzle-kit introspect",
     "integrations:kais:daily": "tsx scripts/integrations-kais.ts --mode daily",
     "integrations:kais:initial": "tsx scripts/integrations-kais.ts --mode initial",
+    "integrations:fms": "tsx scripts/integrations-fms.ts",
+    "fix:fms-header": "tsx scripts/fix-fms-identifier-header.ts",
+    "seed:fms-xls": "tsx scripts/seed-fms-from-xls.ts",
     "install-geoserver": "powershell -ExecutionPolicy Bypass -File geoserver_modules/scripts/install-geoserver.ps1",
     "install-geoserver-css": "powershell -ExecutionPolicy Bypass -File geoserver_modules/scripts/install-geoserver-css.ps1",
     "geoserver": "cmd /c geoserver_modules\\scripts\\start-geoserver.bat",
@@ -65,7 +68,8 @@
     "react-dom": "19.2.3",
     "tailwind-merge": "^3.4.0",
     "undici": "^7.28.0",
-    "xlsx": "^0.18.5"
+    "xlsx": "^0.18.5",
+    "xlsx-js-style": "^1.2.0"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",

@@ -1,11 +1,18 @@
+/* emd와 동일: 단일 규칙 + 글꼴 목록 → TextSymbolizer 3개로 펼침 (z-index 분리 시 첫 글꼴만 사용되어 궁서 폴백됨) */
 * {
-  mark: symbol(circle);
-  mark-size: [min(18, 5 + sqrt(100000 / env('wms_scale_denominator', 10000)) * 1.5)];
-  :mark {
-    fill: #E91E63;
-    stroke: #FFFFFF;
-    stroke-width: 1.0;
-    stroke-opacity: 1.0;
-    fill-opacity: 1.0;
-  }
+  mark: url("sd_heat_wave_shelter.svg");
+  mark-mime: "image/svg+xml";
+  mark-size: [min(18, 5 + sqrt(100000 / env('wms_scale_denominator', 10000)) * 4.0)];
+  mark-anchor: 0.5 0.5;
+  mark-offset: 0 0;
+
+  label: [rstr_nm];
+  font-size: 14;
+  font-fill: #E91E63;
+  font-weight: bold;
+  font-family: "Nanum Gothic", "Malgun Gothic", "SansSerif";
+  halo-radius: 2;
+  halo-color: #FFFFFF;
+  label-anchor: 0.5 1.0;
+  label-offset: 0 -16;
 }

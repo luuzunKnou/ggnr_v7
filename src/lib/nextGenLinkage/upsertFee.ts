@@ -7,6 +7,7 @@ import {
   type NglFeeListTable,
 } from '@/database/schema/ngl_fee_list';
 import { buildTaxnNoKey } from '@/lib/nextGenLinkage/mapper';
+import { applyUseFeeGeomFromGlAddr } from '@/lib/useFeeGlAddrGeom';
 
 const nowSql = sql`now()`;
 
@@ -110,6 +111,7 @@ function arrearsUpdateSet(row: NewNglFeeList) {
     vtlacBankNm20: row.vtlacBankNm20,
     vrActno20: row.vrActno20,
     epayNo: row.epayNo,
+    ledgerNo: row.ledgerNo,
     mngItemSn1: row.mngItemSn1,
     mngItemSn2: row.mngItemSn2,
     mngItemSn3: row.mngItemSn3,
@@ -196,6 +198,7 @@ function receiptUpdateSet(row: NewNglFeeList) {
     vtlacBankNm20: row.vtlacBankNm20,
     vrActno20: row.vrActno20,
     epayNo: row.epayNo,
+    ledgerNo: row.ledgerNo,
     pyrNo: row.pyrNo,
     pyrNm: row.pyrNm,
     rcvmtSeCd: row.rcvmtSeCd,
@@ -230,18 +233,24 @@ function receiptOnlyMergeSet(row: NewNglFeeList) {
     rcvmtSeCd: row.rcvmtSeCd,
     rcvmtSttSeCd: row.rcvmtSttSeCd,
     taxnNo: row.taxnNo,
+    ledgerNo: row.ledgerNo,
     syncStatus: 'SYNCED',
     syncedAt: nowSql,
     updatedAt: nowSql,
   };
 }
 
+export type FeeUpsertResult = { saved: boolean; geom: boolean };
+
 export async function upsertArrearsRow(
   row: NewNglFeeList,
-  table: NglFeeListTable = waterNglFeeList
-): Promise<void> {
+  table: NglFeeListTable = waterNglFeeList,
+  tableName?: string
+): Promise<FeeUpsertResult> {
   const key = String(row.lvyKey ?? '').trim();
-  if (!key) return;
+  if (!key) {
+    return { saved: false, geom: false };
+  }
   const values: NewNglFeeList = {
     ...row,
     lvyKey: key,
@@ -256,6 +265,16 @@ export async function upsertArrearsRow(
       target: [table.lvyKey, table.rcvmtSn],
       set: arrearsUpdateSet(values),
     });
+  let geom = false;
+  if (tableName) {
+    geom = await applyUseFeeGeomFromGlAddr({
+      tableName,
+      lvyKey: key,
+      rcvmtSn: '',
+      glAddr: values.glAddr,
+    });
+  }
+  return { saved: true, geom };
 }
 
 /**
@@ -265,8 +284,9 @@ export async function upsertArrearsRow(
  */
 export async function upsertReceiptRow(
   row: NewNglFeeList,
-  table: NglFeeListTable = waterNglFeeList
-): Promise<void> {
+  table: NglFeeListTable = waterNglFeeList,
+  tableName?: string
+): Promise<FeeUpsertResult> {
   const key = String(row.lvyKey ?? '').trim();
   const sn = String(row.rcvmtSn ?? '').trim();
   const taxnNo = String(row.taxnNo ?? '').trim() || buildTaxnNoKey(row);
@@ -309,13 +329,24 @@ export async function upsertReceiptRow(
             .update(table)
             .set(receiptOnlyMergeSet({ ...values, rcvmtSn: sn, taxnNo }))
             .where(eq(table.id, matchedRow.id));
-          return;
+          let geom = false;
+          if (tableName) {
+            geom = await applyUseFeeGeomFromGlAddr({
+              tableName,
+              lvyKey: targetKey,
+              rcvmtSn: sn,
+              glAddr: values.glAddr,
+            });
+          }
+          return { saved: true, geom };
         }
       }
     }
   }
 
-  if (!key) return;
+  if (!key) {
+    return { saved: false, geom: false };
+  }
   await db
     .insert(table)
     .values({ ...values, lvyKey: key })
@@ -323,6 +354,16 @@ export async function upsertReceiptRow(
       target: [table.lvyKey, table.rcvmtSn],
       set: receiptUpdateSet({ ...values, lvyKey: key }),
     });
+  let geom = false;
+  if (tableName) {
+    geom = await applyUseFeeGeomFromGlAddr({
+      tableName,
+      lvyKey: key,
+      rcvmtSn: sn,
+      glAddr: values.glAddr,
+    });
+  }
+  return { saved: true, geom };
 }
 
 export async function insertNextGenErrorLog(params: {

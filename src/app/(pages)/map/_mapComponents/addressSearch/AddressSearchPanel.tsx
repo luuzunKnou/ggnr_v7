@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { History, Loader2, Search, X } from "lucide-react";
 import { Input } from "@/app/shadcnComponents/ui/input";
-import { searchAddress, type VWorldAddressItem } from "./vworldAddressSearch";
+import { searchAddress, searchAddressAndPlace, type VWorldAddressItem } from "./vworldAddressSearch";
 
 const ADDRESS_DEBOUNCE_MS = 300;
 const ADDRESS_RESULT_MAX = 8;
@@ -47,6 +47,8 @@ type Props = {
   layout?: 'default' | 'field';
   /** field일 때 표 칸 높이에 맞춤 */
   compact?: boolean;
+  /** true면 주소(도로명·지번)와 장소(POI)를 함께 검색 */
+  includePlace?: boolean;
 };
 
 /** 지도 map-search-bar와 동일한 VWorld 주소검색 UI */
@@ -59,6 +61,7 @@ export function AddressSearchPanel({
   onQueryChange,
   layout = 'default',
   compact = false,
+  includePlace = false,
 }: Props) {
   const [query, setQuery] = useState(initialQuery);
   const [addressResults, setAddressResults] = useState<VWorldAddressItem[]>([]);
@@ -101,11 +104,16 @@ export function AddressSearchPanel({
         return;
       }
       setLoading(true);
-      searchAddress(trimmed, { maxResults: ADDRESS_RESULT_MAX, type: "address", apiKey: vworldApiKey })
+      const search = includePlace ? searchAddressAndPlace : searchAddress;
+      search(trimmed, {
+        maxResults: ADDRESS_RESULT_MAX,
+        type: "address",
+        apiKey: vworldApiKey,
+      })
         .then((items) => setAddressResults(items))
         .finally(() => setLoading(false));
     },
-    [vworldApiKey]
+    [includePlace, vworldApiKey]
   );
 
   useEffect(() => {
@@ -128,6 +136,7 @@ export function AddressSearchPanel({
       const display =
         (item.roadAddress ?? '').trim() ||
         (item.jibunAddress ?? '').trim() ||
+        (item.title ?? '').trim() ||
         (item.address ?? '').trim();
       if (display) {
         lastEmittedQueryRef.current = display;
@@ -238,6 +247,16 @@ export function AddressSearchPanel({
                     onClick={() => handleSelect(item)}
                     className="flex min-h-[44px] w-full cursor-pointer flex-col justify-center gap-0.5 border-b border-border/60 px-3 py-1.5 text-left transition-colors last:border-b-0 hover:bg-muted/40"
                   >
+                    {item.title && (
+                      <div className="flex min-h-[1.25rem] items-center gap-2">
+                        <span className="w-12 shrink-0 rounded bg-emerald-100 py-0.5 text-center text-[10px] font-semibold text-emerald-800">
+                          장소
+                        </span>
+                        <span className="min-w-0 flex-1 truncate text-[12px] text-foreground">
+                          {item.title}
+                        </span>
+                      </div>
+                    )}
                     {item.roadAddress && (
                       <div className="flex min-h-[1.25rem] items-center gap-2">
                         <span className="w-12 shrink-0 rounded bg-blue-100 py-0.5 text-center text-[10px] font-semibold text-blue-700">
@@ -259,7 +278,7 @@ export function AddressSearchPanel({
                         </span>
                       </div>
                     )}
-                    {!item.roadAddress && !item.jibunAddress && (
+                    {!item.roadAddress && !item.jibunAddress && !item.title && (
                       <span className="line-clamp-2 text-[12px] text-foreground">{item.address}</span>
                     )}
                   </button>
@@ -294,7 +313,7 @@ export function AddressSearchPanel({
             </div>
           ) : isField ? null : (
             <div className="py-6 text-center text-[12px] text-muted-foreground/70">
-              주소 또는 지번을 입력하세요
+              {includePlace ? '주소, 지번 또는 장소를 입력하세요' : '주소 또는 지번을 입력하세요'}
             </div>
           )}
         </div>

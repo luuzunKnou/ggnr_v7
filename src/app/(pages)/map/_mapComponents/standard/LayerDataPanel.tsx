@@ -15,8 +15,11 @@ import {
   X,
   Upload,
 } from 'lucide-react';
+import { recordDataViewLog } from '@/lib/recordDataViewLog';
 import { SER_FILE_ENG } from '@/lib/serviceFileDataSerEng';
-import { formatDetailScalarValue } from '@/lib/formatDetailScalar';
+import { formatDefineFieldDisplayValue } from '@/lib/defineLayerCodeDisplay';
+import { isLayerExtraFieldName } from '@/lib/layerExtraField';
+import { useDefineLayerCodes } from './useDefineLayerCodes';
 import { cn, formatFileSize } from '@/lib/utils';
 import {
   isImageServiceFileName,
@@ -29,7 +32,7 @@ import {
   useServiceFileData,
 } from './useServiceFileData';
 import { useMapContext } from '../MapContext';
-import { getRowKey, getRowValueByField } from './defineLayerRowUtils';
+import { getRowKey, getRowValueByField, isDefineFieldFlagTrue } from './defineLayerRowUtils';
 import { ServiceFileAttachmentThumb } from './ServiceFileAttachmentThumb';
 import { ServiceFilePdfThumb } from './ServiceFilePdfThumb';
 import { ServiceFileImagePreview, type ServiceFilePreviewItem } from './ServiceFileImagePreview';
@@ -47,6 +50,7 @@ import VectorLayer from 'ol/layer/Vector';
 import GeoJSON from 'ol/format/GeoJSON';
 import { MAP_AUTO_NAV_MAX_ZOOM } from '../config/mapDefaults';
 import { scheduleFitMapToExtent3857 } from '../config/mapAutoNavigation';
+import { isFmsFacilityLayerTable } from '@/lib/fmsLinkage/fmsBinding';
 import { getAllRoadLedgerDocLayerIds } from '../../_mapContents/road/roadLedger/roadLedgerDocLayerMap';
 import {
   formatRoadLedgerFacilityCellValue,
@@ -66,6 +70,7 @@ type DefineFieldRow = {
   define_field_show_detail?: string;
   define_field_is_key?: string;
   define_field_read_only?: string | boolean;
+  define_field_type?: string;
   [key: string]: unknown;
 };
 
@@ -119,39 +124,39 @@ function InfoSection({
   const [isOpen, setIsOpen] = useState(defaultOpen);
   if (fields.length === 0) return null;
   return (
-    <div className="border-b border-slate-200">
+    <div className="border-b border-border">
       <button
         type="button"
-        className="flex w-full items-center gap-1.5 px-4 py-2 text-left transition-colors hover:bg-slate-50"
+        className="flex w-full items-center gap-1.5 px-4 py-2 text-left transition-colors hover:bg-muted/50"
         onClick={() => setIsOpen(!isOpen)}
       >
-        {isOpen ? <ChevronDown className="h-3.5 w-3.5 text-primary" /> : <ChevronRight className="h-3.5 w-3.5 text-slate-500" />}
-        <span className="text-[12px] font-semibold text-[#666]">{title}</span>
+        {isOpen ? <ChevronDown className="h-3.5 w-3.5 text-primary" /> : <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />}
+        <span className="text-[12px] font-semibold text-muted-foreground">{title}</span>
       </button>
       {isOpen && (
         <div className="px-3 pb-2">
-          <div className="overflow-hidden rounded border border-slate-200">
+          <div className="overflow-hidden rounded border border-border">
             {fields.map((field, index) => (
               <div
                 key={field.fieldKey}
-                className={cn('flex items-stretch', index !== fields.length - 1 && 'border-b border-slate-200')}
+                className={cn('flex items-stretch', index !== fields.length - 1 && 'border-b border-border')}
               >
-                <div className="flex min-w-0 w-[100px] shrink-0 items-start bg-slate-100 px-2.5 py-1.5">
-                  <span className="min-w-0 w-full whitespace-normal break-words text-[11px] leading-snug text-[#666]">
+                <div className="flex min-w-0 w-[100px] shrink-0 items-start bg-muted/40 px-2.5 py-1.5">
+                  <span className="min-w-0 w-full whitespace-normal break-words text-[11px] leading-snug text-muted-foreground">
                     {field.label}
                   </span>
                 </div>
                 <div className="flex min-w-0 flex-1 items-center px-2.5 py-1">
                   {editing && !field.readOnly ? (
                     <input
-                      className="h-6 w-full min-w-0 rounded border border-slate-300 bg-white px-1.5 text-[11px] outline-none focus:border-primary focus:ring-1 focus:ring-primary/25"
+                      className="h-6 w-full min-w-0 rounded border border-border bg-background px-1.5 text-[11px] outline-none focus:border-primary focus:ring-1 focus:ring-primary/25"
                       value={editValues?.[field.fieldKey] ?? ''}
                       onChange={(e) => onFieldChange?.(field.fieldKey, e.target.value)}
                     />
                   ) : (
-                    <span className={cn('text-[11px]', field.highlight ? 'font-medium text-primary' : 'text-[#666]')}>
+                    <span className={cn('text-[11px]', field.highlight ? 'font-medium text-primary' : 'text-muted-foreground')}>
                       {field.value}
-                      {field.unit != null && field.unit !== '' && <span className="ml-0.5 text-slate-500">{field.unit}</span>}
+                      {field.unit != null && field.unit !== '' && <span className="ml-0.5 text-muted-foreground">{field.unit}</span>}
                     </span>
                   )}
                 </div>
@@ -226,6 +231,10 @@ export function LayerDataPanel({
   const [fields, setFields] = useState<DefineFieldRow[]>([]);
   /** 상세보기 기본정보/상세정보에 쓸 전체 필드(목록 노출 여부와 무관) */
   const [detailFields, setDetailFields] = useState<DefineFieldRow[]>([]);
+  const codesByField = useDefineLayerCodes(
+    activeLayer?.tableName ?? activeLayer?.physicalTableName,
+    detailFields
+  );
   const [keyFieldName, setKeyFieldName] = useState<string | null>(null);
   const [rows, setRows] = useState<Record<string, unknown>[]>([]);
   const [loading, setLoading] = useState(false);
@@ -394,12 +403,36 @@ export function LayerDataPanel({
   /** 기본정보 수정에 쓰는 행 키 — 위 첨부·이력용과 동일 계산 */
   const currentRowKey = selectedRow != null ? getRowKey(selectedRow, keyFieldName) : null;
 
+  /** 안전점검 시설물 3테이블 — 데이터조회에서 조회만 */
+  const dataQueryReadOnly = useMemo(
+    () =>
+      isFmsFacilityLayerTable(
+        activeLayer?.physicalTableName ?? activeLayer?.tableName ?? null
+      ),
+    [activeLayer?.physicalTableName, activeLayer?.tableName]
+  );
+
+  // 데이터 이력관리에 조회 저장을 위해 추가
+  useEffect(() => {
+    if (currentRowKey == null || !keyFieldName) return;
+    const tableName = String(
+      activeLayer?.physicalTableName ?? activeLayer?.tableName ?? ''
+    ).trim();
+    if (!tableName) return;
+    recordDataViewLog({
+      tableName,
+      keyField: keyFieldName,
+      keyValue: currentRowKey,
+      serviceName: '데이터조회',
+    });
+  }, [currentRowKey, keyFieldName, activeLayer?.physicalTableName, activeLayer?.tableName]);
+
   /** 선택된 행이 바뀌거나 탭을 벗어나면 기본정보 수정 모드 자동 해제 */
   useEffect(() => {
     setEditingBasic(false);
     setBasicDraft({});
     setBasicError(null);
-  }, [selectedRowData, activeTab]);
+  }, [selectedRowData, activeTab, dataQueryReadOnly]);
 
   useEffect(() => {
     if (activeTab !== 'history') return;
@@ -649,7 +682,7 @@ export function LayerDataPanel({
     [mapContext, rows]
   );
 
-  /** 지도에서 선택된 항목 리스트 클릭 시: 해당 도형 강조만 (지도 이동/확대 없음) */
+  /** 지도 식별 항목 선택 시: 도형 강조 + 패널 padding 반영해 지도 이동·확대 (목록 행 선택과 동일) */
   const showIdentifyFeatureOnMap = useCallback(
     (record: Record<string, unknown>) => {
       const mapInstance = mapContext?.mapInstanceRef?.current;
@@ -668,6 +701,13 @@ export function LayerDataPanel({
       const geomType = features[0].getGeometry()?.getType();
       if (geomType === 'Point' || geomType === 'MultiPoint') features[0].set('isRadarPoint', true);
       source.addFeatures(features);
+      const ext = source.getExtent();
+      if (ext.every((v) => isFinite(v))) {
+        scheduleFitMapToExtent3857(mapInstance, ext as [number, number, number, number], {
+          maxZoom: Math.min(16, MAP_AUTO_NAV_MAX_ZOOM),
+          applyMapViewPadding: () => mapContext?.applyMapViewPaddingRef?.current?.(),
+        });
+      }
       setRadarActive(true);
     },
     [mapContext]
@@ -789,6 +829,7 @@ export function LayerDataPanel({
         const excludeGeomLike = (name: string) => {
           const n = name.trim().toLowerCase();
           return (
+            isLayerExtraFieldName(n) ||
             n === 'gid' ||
             n === 'geom' ||
             n === 'geometry' ||
@@ -800,14 +841,16 @@ export function LayerDataPanel({
         // 목록 표시 설정이어도 geom류는 속성 목록에 넣지 않음 (값은 지도 하이라이트용으로만 사용)
         const fieldsList = sortedAll.filter(
           (f) =>
-            String(f.define_field_show_list ?? '').toLowerCase() === 'true' &&
+            isDefineFieldFlagTrue(f.define_field_show_list) &&
             !excludeGeomLike(String(f.define_field_name ?? ''))
         );
         setFields(fieldsList);
         setDetailFields(
           sortedAll.filter((f) => !excludeGeomLike(String(f.define_field_name ?? '')))
         );
-        const keyField = Array.isArray(rawFields) ? rawFields.find((f) => String(f.define_field_is_key ?? '').toLowerCase() === 'true') : null;
+        const keyField = Array.isArray(rawFields)
+          ? rawFields.find((f) => isDefineFieldFlagTrue(f.define_field_is_key))
+          : null;
         setKeyFieldName(keyField ? String(keyField.define_field_name ?? '').trim() || null : null);
 
         if (useKey) {
@@ -853,7 +896,7 @@ export function LayerDataPanel({
       });
   }, [activeLayer, spatialFilterWkt, showCurrentListOnMap, initialDataKey, identifyResultList]);
 
-  // 팝업에서 항목 클릭 후 패널 열렸을 때 해당 행 선택 및 상세 표시 + 지도에서 도형 강조만 (확대/이동 없음)
+  // 지도 식별 후 패널 열렸을 때 해당 행 상세 + 도형 강조·지도 이동
   useEffect(() => {
     if (!isIdentifyMode || identifySelectedRow == null || !setIdentifySelectedRow) return;
     const idx = identifyFlat.findIndex((item) => item.feature.data === identifySelectedRow);
@@ -1027,7 +1070,7 @@ export function LayerDataPanel({
 
   /** 기본정보 인풋 초기값용 — 화면 표시 포맷이 아닌 원본 값 문자열 */
   const handleBeginBasicEdit = () => {
-    if (!selectedRow) return;
+    if (dataQueryReadOnly || !selectedRow) return;
     const draft: Record<string, string> = {};
     for (const f of basicInfoFields) {
       if (f.readOnly) continue;
@@ -1046,7 +1089,15 @@ export function LayerDataPanel({
   };
 
   const handleSaveBasicEdit = async () => {
-    if (!activeLayer || keyFieldName == null || currentRowKey == null || selectedRow == null) return;
+    if (
+      dataQueryReadOnly ||
+      !activeLayer ||
+      keyFieldName == null ||
+      currentRowKey == null ||
+      selectedRow == null
+    ) {
+      return;
+    }
     setBasicSaving(true);
     setBasicError(null);
     try {
@@ -1059,8 +1110,7 @@ export function LayerDataPanel({
           keyValue: String(currentRowKey),
           keyField: keyFieldName,
           changes: basicDraft,
-          // 기본정보 탭은 show_detail=false 필드도 함께 노출·편집하므로 서버에서도 동일하게 허용
-          includeHiddenDetail: true,
+          includeHiddenDetail: false,
         },
       });
       const data = res?.data ?? res;
@@ -1097,7 +1147,7 @@ export function LayerDataPanel({
 
   if (!activeLayer) {
     return (
-      <div className="flex-1 min-h-0 flex items-center justify-center text-sm text-slate-400 px-4">
+      <div className="flex-1 min-h-0 flex items-center justify-center text-sm text-muted-foreground px-4">
         좌측 패널에서 레이어를 선택하세요.
       </div>
     );
@@ -1111,6 +1161,7 @@ export function LayerDataPanel({
   const isGeomLikeFieldName = (name: string) => {
     const n = name.trim().toLowerCase();
     return (
+      isLayerExtraFieldName(n) ||
       n === 'gid' ||
       n === 'geom' ||
       n === 'geometry' ||
@@ -1148,31 +1199,39 @@ export function LayerDataPanel({
   const isKeyField = (name: string) =>
     keyFieldName != null && name.trim().toLowerCase() === keyFieldName.trim().toLowerCase();
 
-  /** 기본정보 표시·편집 공용 필드 목록 — 키 필드·읽기전용 필드는 편집모드에서도 인풋 대신 값만 표시 */
+  const basicVisibleFields = detailFields.filter((f) =>
+    isDefineFieldFlagTrue(f.define_field_show_detail)
+  );
+
+  /** 기본정보 — 상세보기 켠 칸만. 키·읽기전용은 편집모드에서도 값만 표시 */
   const basicInfoFields: InfoField[] =
     selectedRow == null
       ? []
-      : detailFields.length === 0
+      : basicVisibleFields.length === 0 && detailFields.length === 0
       ? Object.entries(selectedRow)
           .filter(([k]) => !isGeomLikeFieldName(k))
           .map(([k, v], i) => ({
             fieldKey: k || `auto-${i}`,
             label: k,
-            value: formatDetailScalarValue(v),
-            highlight: i === 0,
+            value: formatDefineFieldDisplayValue(v, undefined, undefined),
+            highlight: isKeyField(k),
             readOnly: isKeyField(k),
           }))
-      : detailFields.map((f, i) => {
+      : basicVisibleFields.map((f, i) => {
           const key = String(f.define_field_name ?? '');
           const label = String(f.define_field_kor_name ?? f.define_field_name ?? '');
           const raw = getRowValueByField(selectedRow, key);
           const readOnly =
-            String(f.define_field_read_only ?? '').toLowerCase() === 'true' || isKeyField(key);
+            isDefineFieldFlagTrue(f.define_field_read_only) || isKeyField(key);
           return {
             fieldKey: key || `basic-${i}`,
             label,
-            value: formatDetailScalarValue(raw),
-            highlight: i === 0,
+            value: formatDefineFieldDisplayValue(
+              raw,
+              f.define_field_type,
+              codesByField[key.trim().toLowerCase()]
+            ),
+            highlight: isKeyField(key),
             readOnly,
           };
         });
@@ -1187,18 +1246,18 @@ export function LayerDataPanel({
     <>
     <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
       {/* 상세 열림 시 패널 닫기는 레이어 목록과 동일하게 헤더 우측 X */}
-      <div className="flex items-center justify-between gap-2 border-b border-slate-200 px-4 py-2.5 shrink-0 bg-white">
+      <div className="flex items-center justify-between gap-2 border-b border-border px-4 py-2.5 shrink-0 bg-background">
         <div className="min-w-0 flex-1">
-          <h3 className="text-sm font-semibold text-slate-800 truncate">{activeLayer.name}</h3>
+          <h3 className="text-sm font-semibold text-foreground truncate">{activeLayer.name}</h3>
           {!isIdentifyMode && (
-            <span className="text-[11px] text-slate-500">{activeLayer.tableName}</span>
+            <span className="text-[11px] text-muted-foreground">{activeLayer.tableName}</span>
           )}
         </div>
         {hasDetail && (
           <button
             type="button"
             onClick={handleClose}
-            className="shrink-0 rounded p-1 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
+            className="shrink-0 rounded p-1 text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
             title="닫기"
             aria-label="닫기"
           >
@@ -1222,7 +1281,7 @@ export function LayerDataPanel({
       >
         <div ref={listScrollRef} className="flex-1 min-h-0 flex flex-col overflow-hidden">
           {loading && !isIdentifyMode && rows.length === 0 && (
-            <div className="px-4 py-6 text-center text-[12px] text-slate-500">로딩 중...</div>
+            <div className="px-4 py-6 text-center text-[12px] text-muted-foreground">로딩 중...</div>
           )}
           {error && (
             <div className="px-4 py-6 text-center text-[12px] text-red-600">{error}</div>
@@ -1240,7 +1299,7 @@ export function LayerDataPanel({
           )}
           {!isIdentifyMode && !error && listFields.length > 0 && (rows.length > 0 || !loading) && (
             <>
-              <div className="flex items-start border-b border-slate-200 bg-slate-100/60 px-4 py-2 text-[12px] font-semibold text-[#666] shrink-0">
+              <div className="flex items-start border-b border-border bg-muted/40 px-4 py-2 text-[12px] font-semibold text-muted-foreground shrink-0">
                 {listFields.map((f) => (
                   <span
                     key={String(f.define_field_name)}
@@ -1252,7 +1311,7 @@ export function LayerDataPanel({
                 ))}
               </div>
               {rows.length === 0 && (
-                <div className="px-4 py-6 text-center text-[12px] text-slate-500">데이터 없음</div>
+                <div className="px-4 py-6 text-center text-[12px] text-muted-foreground">데이터 없음</div>
               )}
               <div
                 className="flex-1 min-h-0"
@@ -1266,7 +1325,7 @@ export function LayerDataPanel({
                       type="button"
                       onClick={() => handleRowClick(rowIndex)}
                       className={cn(
-                        'flex w-full items-center border-b border-slate-100 px-4 text-left text-[12px] transition-colors hover:bg-primary/5 min-h-0 overflow-hidden',
+                        'flex w-full items-center border-b border-border px-4 text-left text-[12px] transition-colors hover:bg-primary/5 min-h-0 overflow-hidden',
                         isHighlighted && 'bg-primary/10'
                       )}
                     >
@@ -1277,11 +1336,22 @@ export function LayerDataPanel({
                               row as Record<string, unknown>
                             )
                           : (() => {
-                              const v = getRowValueByField(row, String(f.define_field_name));
-                              return formatDetailScalarValue(v);
+                              const fieldName = String(f.define_field_name ?? '');
+                              const v = getRowValueByField(row, fieldName);
+                              const meta =
+                                detailFields.find(
+                                  (df) =>
+                                    String(df.define_field_name ?? '').trim().toLowerCase() ===
+                                    fieldName.trim().toLowerCase()
+                                ) ?? f;
+                              return formatDefineFieldDisplayValue(
+                                v,
+                                meta.define_field_type,
+                                codesByField[fieldName.trim().toLowerCase()]
+                              );
                             })();
                         return (
-                          <span key={String(f.define_field_name)} className="flex-1 min-w-0 truncate pl-2 first:pl-0 text-[#666]">
+                          <span key={String(f.define_field_name)} className="flex-1 min-w-0 truncate pl-2 first:pl-0 text-muted-foreground">
                             {display}
                           </span>
                         );
@@ -1297,8 +1367,8 @@ export function LayerDataPanel({
 
         {/* Pagination (다음 버튼 뒤에 닫기) */}
         {!isIdentifyMode && listFields.length > 0 && (
-          <div className="flex items-center justify-between gap-2 border-t border-slate-200 px-4 py-1.5 bg-slate-50/80 shrink-0">
-            <span className="text-[11px] text-[#666]">
+          <div className="flex items-center justify-between gap-2 border-t border-border px-4 py-1.5 bg-muted/30 shrink-0">
+            <span className="text-[11px] text-muted-foreground">
               {rows.length === 0
                 ? '0건'
                 : `${(page - 1) * pageSize + 1}–${(page - 1) * pageSize + rows.length} / ${total.toLocaleString()}건`}
@@ -1308,16 +1378,16 @@ export function LayerDataPanel({
                 type="button"
                 disabled={page <= 1 || loading}
                 onClick={() => loadPage(page - 1)}
-                className="rounded border border-slate-200 bg-white px-2 py-0.5 text-[11px] text-[#666] disabled:opacity-50 disabled:cursor-not-allowed hover:bg-slate-100"
+                className="rounded border border-border bg-background px-2 py-0.5 text-[11px] text-muted-foreground disabled:opacity-50 disabled:cursor-not-allowed hover:bg-muted/50"
               >
                 이전
               </button>
-              <span className="px-1.5 text-[11px] text-[#666]">{page}페이지</span>
+              <span className="px-1.5 text-[11px] text-muted-foreground">{page}페이지</span>
               <button
                 type="button"
                 disabled={rows.length < pageSize || loading}
                 onClick={() => loadPage(page + 1)}
-                className="rounded border border-slate-200 bg-white px-2 py-0.5 text-[11px] text-[#666] disabled:opacity-50 disabled:cursor-not-allowed hover:bg-slate-100"
+                className="rounded border border-border bg-background px-2 py-0.5 text-[11px] text-muted-foreground disabled:opacity-50 disabled:cursor-not-allowed hover:bg-muted/50"
               >
                 다음
               </button>
@@ -1325,7 +1395,7 @@ export function LayerDataPanel({
                 <button
                   type="button"
                   onClick={handleClose}
-                  className="rounded border border-slate-200 bg-white px-2.5 py-0.5 text-[11px] text-[#666] transition-colors hover:bg-slate-100"
+                  className="rounded border border-border bg-background px-2.5 py-0.5 text-[11px] text-muted-foreground transition-colors hover:bg-muted/50"
                 >
                   닫기
                 </button>
@@ -1334,11 +1404,11 @@ export function LayerDataPanel({
           </div>
         )}
         {!isIdentifyMode && listFields.length === 0 && rows.length === 0 && !loading && !hasDetail && (
-          <div className="flex items-center justify-end border-t border-slate-200 px-4 py-1.5 bg-slate-50/80 shrink-0">
+          <div className="flex items-center justify-end border-t border-border px-4 py-1.5 bg-muted/30 shrink-0">
             <button
               type="button"
               onClick={handleClose}
-              className="rounded border border-slate-200 bg-white px-2.5 py-0.5 text-[11px] text-[#666] transition-colors hover:bg-slate-100"
+              className="rounded border border-border bg-background px-2.5 py-0.5 text-[11px] text-muted-foreground transition-colors hover:bg-muted/50"
             >
               닫기
             </button>
@@ -1348,9 +1418,9 @@ export function LayerDataPanel({
 
       {/* Detail section - 2/3 */}
       {hasDetail && selectedRow && (
-        <div className="flex-[7] min-h-0 flex flex-col border-t-2 border-primary/30 bg-white overflow-hidden">
+        <div className="flex-[7] min-h-0 flex flex-col border-t-2 border-primary/30 bg-background overflow-hidden">
           {/* Detail tabs */}
-          <div className="flex border-b border-slate-200 shrink-0">
+          <div className="flex border-b border-border shrink-0">
             {detailTabs.map(({ id, label, icon: TabIcon }) => (
               <button
                 key={id}
@@ -1360,7 +1430,7 @@ export function LayerDataPanel({
                   'flex flex-1 items-center justify-center gap-1 py-2 text-[11px] font-medium transition-colors',
                   activeTab === id
                     ? 'border-b-2 border-primary text-primary bg-primary/5'
-                    : 'text-slate-500 hover:bg-slate-50 hover:text-slate-700'
+                    : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'
                 )}
               >
                 <TabIcon className="h-3 w-3 shrink-0" />
@@ -1392,38 +1462,33 @@ export function LayerDataPanel({
             {activeTab === 'history' && (
               <div className="px-3 py-2">
                 {keyFieldName == null ? (
-                  <div className="py-6 text-[11px] text-slate-500 text-center leading-relaxed px-1">
+                  <div className="py-6 text-[11px] text-muted-foreground text-center leading-relaxed px-1">
                     레이어 속성관리에서 키(행 식별 컬럼)를 지정해야 이력을 조회할 수 있습니다.
                   </div>
                 ) : selectedRow == null ? (
-                  <div className="py-6 text-[11px] text-slate-500 text-center leading-relaxed px-1">
+                  <div className="py-6 text-[11px] text-muted-foreground text-center leading-relaxed px-1">
                     목록에서 행을 선택하세요.
                   </div>
                 ) : rowKeyForHistory == null ? (
-                  <div className="py-6 text-[11px] text-slate-500 text-center leading-relaxed px-1">
+                  <div className="py-6 text-[11px] text-muted-foreground text-center leading-relaxed px-1">
                     키 컬럼({keyFieldName}) 값이 비어 있어 이력을 조회할 수 없습니다.
                   </div>
                 ) : historyLoading ? (
-                  <div className="py-4 text-[11px] text-slate-500 text-center">로딩 중...</div>
+                  <div className="py-4 text-[11px] text-muted-foreground text-center">로딩 중...</div>
                 ) : historyError ? (
                   <div className="py-4 text-[11px] text-red-600 text-center">{historyError}</div>
                 ) : historyEvents.length === 0 ? (
-                  <div className="py-4 text-[11px] text-slate-500 text-center">이력 없음</div>
+                  <div className="py-4 text-[11px] text-muted-foreground text-center">이력 없음</div>
                 ) : (
                   <div className="relative space-y-0">
                     {historyEvents.map((event, index) => {
                       const config = HISTORY_TYPE_CONFIG[event.type];
                       if (!config) return null;
                       const EventIcon = config.icon;
-                      return (
-                        <button
-                          key={event.id}
-                          type="button"
-                          onClick={() => openHistoryEdit(event)}
-                          className="relative flex w-full gap-2.5 pb-4 text-left transition-colors hover:bg-slate-50/80 rounded-sm -mx-1 px-1"
-                        >
+                      const body = (
+                          <>
                           {index < historyEvents.length - 1 && (
-                            <div className="absolute left-[17px] top-7 h-[calc(100%-14px)] w-px bg-slate-200" aria-hidden />
+                            <div className="absolute left-[17px] top-7 h-[calc(100%-14px)] w-px bg-muted" aria-hidden />
                           )}
                           <div className={cn('relative z-10 flex h-7 w-7 shrink-0 items-center justify-center rounded-full', config.bg)}>
                             <EventIcon className={cn('h-3.5 w-3.5', config.color)} />
@@ -1431,16 +1496,33 @@ export function LayerDataPanel({
                           <div className="min-w-0 flex-1">
                             <div className="flex items-center gap-1.5">
                               <span className={cn('text-[10px] font-medium rounded px-1 py-0.5', config.color, config.bg)}>{event.type}</span>
-                              <span className="text-[10px] text-[#666]">{event.date}</span>
+                              <span className="text-[10px] text-muted-foreground">{event.date}</span>
                             </div>
-                            <p className="mt-0.5 text-[11px] font-medium text-[#666]">{event.title}</p>
+                            <p className="mt-0.5 text-[11px] font-medium text-muted-foreground">{event.title}</p>
                             {event.description ? (
-                              <p className="mt-0.5 text-[10px] leading-relaxed text-[#666]">{event.description}</p>
+                              <p className="mt-0.5 text-[10px] leading-relaxed text-muted-foreground">{event.description}</p>
                             ) : null}
                             {event.author ? (
-                              <p className="mt-0.5 text-[10px] text-[#666]">담당: {event.author}</p>
+                              <p className="mt-0.5 text-[10px] text-muted-foreground">담당: {event.author}</p>
                             ) : null}
                           </div>
+                          </>
+                      );
+                      if (dataQueryReadOnly) {
+                        return (
+                          <div key={event.id} className="relative flex w-full gap-2.5 pb-4 -mx-1 px-1">
+                            {body}
+                          </div>
+                        );
+                      }
+                      return (
+                        <button
+                          key={event.id}
+                          type="button"
+                          onClick={() => openHistoryEdit(event)}
+                          className="relative flex w-full gap-2.5 pb-4 text-left transition-colors hover:bg-muted/50 rounded-sm -mx-1 px-1"
+                        >
+                          {body}
                         </button>
                       );
                     })}
@@ -1474,36 +1556,36 @@ export function LayerDataPanel({
                   }}
                 />
                 {keyFieldName == null ? (
-                  <div className="py-6 text-[11px] text-slate-500 text-center leading-relaxed px-1">
+                  <div className="py-6 text-[11px] text-muted-foreground text-center leading-relaxed px-1">
                     레이어 속성관리에서 키(행 식별 컬럼)를 지정해야 첨부폴더를 조회할 수 있습니다.
                   </div>
                 ) : selectedRow == null ? (
-                  <div className="py-6 text-[11px] text-slate-500 text-center leading-relaxed px-1">
+                  <div className="py-6 text-[11px] text-muted-foreground text-center leading-relaxed px-1">
                     목록에서 행을 선택하세요.
                   </div>
                 ) : rowKeyForAttachments == null ? (
-                  <div className="py-6 text-[11px] text-slate-500 text-center leading-relaxed px-1">
+                  <div className="py-6 text-[11px] text-muted-foreground text-center leading-relaxed px-1">
                     키 컬럼({keyFieldName}) 값이 비어 있어 첨부폴더를 조회할 수 없습니다.
                   </div>
                 ) : (
                   <>
                     {attachChunkUpload.state.status === 'uploading' && (
-                      <div className="mb-2 rounded border border-slate-200 bg-slate-50 px-2.5 py-2">
-                        <div className="mb-1 flex justify-between text-[10px] text-[#666]">
+                      <div className="mb-2 rounded border border-border bg-muted/30 px-2.5 py-2">
+                        <div className="mb-1 flex justify-between text-[10px] text-muted-foreground">
                           <span className="flex items-center gap-1">
                             <Upload className="h-3 w-3 shrink-0" aria-hidden />
                             업로드 중…
                           </span>
                           <span>{attachChunkUpload.state.progress}%</span>
                         </div>
-                        <div className="h-1.5 overflow-hidden rounded-full bg-slate-200">
+                        <div className="h-1.5 overflow-hidden rounded-full bg-muted">
                           <div
                             className="h-full bg-primary transition-[width] duration-150"
                             style={{ width: `${attachChunkUpload.state.progress}%` }}
                           />
                         </div>
                         {attachChunkUpload.state.totalChunks > 0 && (
-                          <p className="mt-1 text-[10px] text-slate-500">
+                          <p className="mt-1 text-[10px] text-muted-foreground">
                             청크 {attachChunkUpload.state.currentChunk} / {attachChunkUpload.state.totalChunks}
                           </p>
                         )}
@@ -1515,11 +1597,11 @@ export function LayerDataPanel({
                       </div>
                     )}
                     {attachmentQuery.loading ? (
-                      <div className="py-6 text-[11px] text-slate-500 text-center">불러오는 중…</div>
+                      <div className="py-6 text-[11px] text-muted-foreground text-center">불러오는 중…</div>
                     ) : attachmentQuery.error ? (
                       <div className="py-6 text-[11px] text-red-600 text-center">{attachmentQuery.error}</div>
                     ) : attachmentQuery.files.length === 0 ? (
-                      <div className="py-6 text-[11px] text-slate-500 text-center">첨부파일 없음</div>
+                      <div className="py-6 text-[11px] text-muted-foreground text-center">첨부파일 없음</div>
                     ) : (
                   <div className="space-y-1.5">
                     {attachmentQuery.files.map((file) => {
@@ -1557,7 +1639,7 @@ export function LayerDataPanel({
                           aria-label={
                             isImg || isPdf ? `${file.name} 크게 보기` : `${file.name} 다운로드`
                           }
-                          className="flex cursor-pointer items-center gap-2.5 rounded border border-slate-200 bg-white p-2.5 pr-1 transition-colors hover:bg-slate-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+                          className="flex cursor-pointer items-center gap-2.5 rounded border border-border bg-background p-2.5 pr-1 transition-colors hover:bg-muted/50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
                           onClick={activateRow}
                           onKeyDown={(e) => {
                             if (e.key === 'Enter' || e.key === ' ') {
@@ -1588,8 +1670,8 @@ export function LayerDataPanel({
                             </div>
                           )}
                           <div className="min-w-0 flex-1">
-                            <p className="truncate text-[11px] font-medium text-[#666]">{file.name}</p>
-                            <p className="text-[10px] text-[#666]">
+                            <p className="truncate text-[11px] font-medium text-muted-foreground">{file.name}</p>
+                            <p className="text-[10px] text-muted-foreground">
                               {formatFileSize(file.size)} | {dateStr}
                             </p>
                           </div>
@@ -1600,12 +1682,13 @@ export function LayerDataPanel({
                                 e.stopPropagation();
                                 triggerServiceFileDownload(downloadUrl, file.name);
                               }}
-                              className="flex h-6 w-6 items-center justify-center rounded text-slate-500 transition-colors hover:bg-slate-200 hover:text-slate-900"
+                              className="flex h-6 w-6 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
                               title="다운로드"
                             >
                               <Download className="h-3 w-3" />
                               <span className="sr-only">다운로드</span>
                             </button>
+                            {!dataQueryReadOnly && (
                             <button
                               type="button"
                               onClick={(e) => {
@@ -1627,12 +1710,13 @@ export function LayerDataPanel({
                                   else window.alert(r.error);
                                 });
                               }}
-                              className="flex h-6 w-6 items-center justify-center rounded text-slate-500 transition-colors hover:bg-red-100 hover:text-red-700"
+                              className="flex h-6 w-6 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-red-100 hover:text-red-700"
                               title="삭제"
                             >
                               <X className="h-3 w-3" />
                               <span className="sr-only">삭제</span>
                             </button>
+                            )}
                           </div>
                         </div>
                       );
@@ -1646,10 +1730,10 @@ export function LayerDataPanel({
           </div>
 
           {/* Detail footer */}
-          <div className="shrink-0 border-t border-slate-200 bg-slate-50/80 px-3 py-2">
+          <div className="shrink-0 border-t border-border bg-muted/30 px-3 py-2">
             {activeTab === 'basic' && (
               <div className="flex items-center justify-between gap-2">
-                <span className="text-[10px] text-[#666]">기본정보</span>
+                <span className="text-[10px] text-muted-foreground">기본정보</span>
                 <div className="flex gap-1.5">
                   {editingBasic ? (
                     <>
@@ -1657,7 +1741,7 @@ export function LayerDataPanel({
                         type="button"
                         disabled={basicSaving}
                         onClick={handleCancelBasicEdit}
-                        className="rounded border border-slate-200 bg-white px-2.5 py-1 text-[11px] text-[#666] transition-colors hover:bg-slate-50 disabled:pointer-events-none disabled:opacity-50"
+                        className="rounded border border-border bg-background px-2.5 py-1 text-[11px] text-muted-foreground transition-colors hover:bg-muted/50 disabled:pointer-events-none disabled:opacity-50"
                       >
                         취소
                       </button>
@@ -1672,22 +1756,24 @@ export function LayerDataPanel({
                     </>
                   ) : (
                     <>
+                      {!dataQueryReadOnly && (
                       <button
                         type="button"
                         disabled={keyFieldName == null || currentRowKey == null}
                         onClick={handleBeginBasicEdit}
-                        className="rounded border border-slate-200 bg-white px-2.5 py-1 text-[11px] text-[#666] transition-colors hover:bg-slate-50 disabled:pointer-events-none disabled:opacity-50"
+                        className="rounded border border-border bg-background px-2.5 py-1 text-[11px] text-muted-foreground transition-colors hover:bg-muted/50 disabled:pointer-events-none disabled:opacity-50"
                       >
                         수정
                       </button>
+                      )}
                       <button
                         type="button"
                         onClick={handleShowSelectedOnMap}
-                        className="rounded border border-slate-200 bg-white px-2.5 py-1 text-[11px] text-[#666] transition-colors hover:bg-slate-50"
+                        className="rounded border border-border bg-background px-2.5 py-1 text-[11px] text-muted-foreground transition-colors hover:bg-muted/50"
                       >
                         지도보기
                       </button>
-                      <button type="button" onClick={closeDetail} className="rounded border border-slate-200 bg-white px-2.5 py-1 text-[11px] text-[#666] transition-colors hover:bg-slate-50">닫기</button>
+                      <button type="button" onClick={closeDetail} className="rounded border border-border bg-background px-2.5 py-1 text-[11px] text-muted-foreground transition-colors hover:bg-muted/50">닫기</button>
                     </>
                   )}
                 </div>
@@ -1695,30 +1781,33 @@ export function LayerDataPanel({
             )}
             {activeTab === 'history' && (
               <div className="flex items-center justify-between gap-2">
-                <span className="text-[10px] text-[#666]">
+                <span className="text-[10px] text-muted-foreground">
                   이력{' '}
                   {keyFieldName != null && rowKeyForHistory != null ? `${historyEvents.length}건` : '—'}
                 </span>
                 <div className="flex gap-1.5">
+                  {!dataQueryReadOnly && (
                   <button
                     type="button"
                     disabled={keyFieldName == null || rowKeyForHistory == null}
                     onClick={openHistoryCreate}
-                    className="rounded border border-slate-200 bg-white px-2.5 py-1 text-[11px] text-[#666] transition-colors hover:bg-slate-50 disabled:pointer-events-none disabled:opacity-50"
+                    className="rounded border border-border bg-background px-2.5 py-1 text-[11px] text-muted-foreground transition-colors hover:bg-muted/50 disabled:pointer-events-none disabled:opacity-50"
                   >
                     이력 추가
                   </button>
-                  <button type="button" onClick={closeDetail} className="rounded border border-slate-200 bg-white px-2.5 py-1 text-[11px] text-[#666] transition-colors hover:bg-slate-50">닫기</button>
+                  )}
+                  <button type="button" onClick={closeDetail} className="rounded border border-border bg-background px-2.5 py-1 text-[11px] text-muted-foreground transition-colors hover:bg-muted/50">닫기</button>
                 </div>
               </div>
             )}
             {activeTab === 'attach' && (
               <div className="flex items-center justify-between gap-2">
-                <span className="text-[10px] text-[#666]">
+                <span className="text-[10px] text-muted-foreground">
                   첨부파일{' '}
                   {keyFieldName != null && rowKeyForAttachments != null ? `${attachmentQuery.files.length}건` : '—'}
                 </span>
                 <div className="flex flex-wrap items-center justify-end gap-1.5">
+                  {!dataQueryReadOnly && (
                   <button
                     type="button"
                     disabled={
@@ -1730,10 +1819,11 @@ export function LayerDataPanel({
                       attachChunkUpload.reset();
                       attachUploadInputRef.current?.click();
                     }}
-                    className="rounded border border-slate-200 bg-white px-2.5 py-1 text-[11px] text-[#666] transition-colors hover:bg-slate-50 disabled:pointer-events-none disabled:opacity-50"
+                    className="rounded border border-border bg-background px-2.5 py-1 text-[11px] text-muted-foreground transition-colors hover:bg-muted/50 disabled:pointer-events-none disabled:opacity-50"
                   >
                     파일 추가
                   </button>
+                  )}
                   {keyFieldName != null &&
                   rowKeyForAttachments != null &&
                   activeLayer != null &&
@@ -1746,16 +1836,16 @@ export function LayerDataPanel({
                         { layerDisplayName: activeLayer.name }
                       )}
                       download
-                      className="rounded border border-slate-200 bg-white px-2.5 py-1 text-[11px] text-[#666] transition-colors hover:bg-slate-50"
+                      className="rounded border border-border bg-background px-2.5 py-1 text-[11px] text-muted-foreground transition-colors hover:bg-muted/50"
                     >
                       전체 다운로드
                     </a>
                   ) : (
-                    <span className="rounded border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] text-slate-400 cursor-not-allowed">
+                    <span className="rounded border border-border bg-muted/30 px-2.5 py-1 text-[11px] text-muted-foreground cursor-not-allowed">
                       전체 다운로드
                     </span>
                   )}
-                  <button type="button" onClick={closeDetail} className="rounded border border-slate-200 bg-white px-2.5 py-1 text-[11px] text-[#666] transition-colors hover:bg-slate-50">닫기</button>
+                  <button type="button" onClick={closeDetail} className="rounded border border-border bg-background px-2.5 py-1 text-[11px] text-muted-foreground transition-colors hover:bg-muted/50">닫기</button>
                 </div>
               </div>
             )}

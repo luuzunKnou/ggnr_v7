@@ -1,6 +1,8 @@
 "use client"
 
-import type { ReactNode } from "react"
+import { useEffect, useRef, type ReactNode } from "react"
+import { useRouter } from "next/navigation"
+import { useSession } from "next-auth/react"
 import { Users, Shield, Database, BarChart3 } from "lucide-react"
 import { AdminConsoleLayout, type AdminConsoleMenuGroup } from "@/app/(pages)/_components/AdminConsoleLayout"
 import { PermissionFeatureManager } from "@/app/(pages)/dev/_components/PermissionFeatureManager"
@@ -103,7 +105,11 @@ function renderSysAdminContent(menuId: string): ReactNode {
         </div>
       )
     case "userManager":
-      return <UserManager />
+      return (
+        <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
+          <UserManager />
+        </div>
+      )
     case "permissionFeature":
       return (
         <div className="flex flex-col overflow-hidden min-h-0 h-[calc(100vh-14rem)]">
@@ -145,6 +151,35 @@ function renderSysAdminContent(menuId: string): ReactNode {
 }
 
 export default function SysManagerPage() {
+  const router = useRouter()
+  const { data: session, status } = useSession()
+  const deniedRef = useRef(false)
+
+  useEffect(() => {
+    if (status !== "authenticated") return
+    if (session?.user?.id === "su") return
+    if (deniedRef.current) return
+    deniedRef.current = true
+    window.alert("권한이 없습니다")
+    router.replace("/")
+  }, [status, session?.user?.id, router])
+
+  if (status === "loading" || status !== "authenticated") {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background text-sm text-muted-foreground">
+        확인 중…
+      </div>
+    )
+  }
+
+  if (session?.user?.id !== "su") {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background text-sm text-muted-foreground">
+        권한이 없습니다
+      </div>
+    )
+  }
+
   return (
     <AdminConsoleLayout
       title="시스템 관리"

@@ -4,6 +4,21 @@ import { ThemeProvider } from "@/app/(pages)/(index)/theme-provider";
 import { AuthSessionProvider } from "@/app/providers";
 import { LoginModalProvider } from "@/app/login-modal-context";
 import { ActiveNoticeModal } from "@/app/(pages)/_components/notice/ActiveNoticeModal";
+import { ForcedPasswordChangeModal } from "@/app/(pages)/_components/ForcedPasswordChangeModal";
+import { BasePathClientPatch } from "@/app/BasePathClientPatch";
+import { getIndexLogoSrc, getSystemKorName } from "@/service/configService";
+
+export async function generateMetadata(): Promise<Metadata> {
+  const icon = getIndexLogoSrc();
+  const title = getSystemKorName();
+  return {
+    title,
+    icons: {
+      icon: [{ url: icon, type: "image/svg+xml" }],
+      apple: icon,
+    },
+  };
+}
 
 export default function RootLayout({
   children,
@@ -13,11 +28,13 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body className="font-sans antialiased">
+        <BasePathClientPatch />
         <AuthSessionProvider>
           <ThemeProvider>
             <LoginModalProvider>
               {children}
               <ActiveNoticeModal />
+              <ForcedPasswordChangeModal />
             </LoginModalProvider>
           </ThemeProvider>
         </AuthSessionProvider>

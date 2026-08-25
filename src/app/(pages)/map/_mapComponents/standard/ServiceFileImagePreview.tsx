@@ -160,7 +160,7 @@ export async function printServiceFilePreviewBlob(
 
 function toolbarBtnClass(disabled?: boolean): string {
   return cn(
-    'flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-white/90 transition-colors hover:bg-white/10',
+    'flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-white/90 transition-colors hover:bg-background/10',
     disabled && 'pointer-events-none opacity-35'
   );
 }
@@ -264,7 +264,7 @@ function PdfPreviewStage({
 
   if (phase === 'error') {
     return (
-      <div className="rounded border border-white/20 bg-white/5 px-4 py-6 text-center text-sm text-white/80">
+      <div className="rounded border border-white/20 bg-background/5 px-4 py-6 text-center text-sm text-white/80">
         PDF를 불러오지 못했습니다.
       </div>
     );
@@ -588,11 +588,11 @@ export function ServiceFileImagePreview({ items, initialIndex, onClose }: Props)
               <Printer className="h-5 w-5" aria-hidden />
             )}
           </button>
-          <span className="mx-0.5 hidden h-5 w-px bg-white/25 sm:block" aria-hidden />
+          <span className="mx-0.5 hidden h-5 w-px bg-background/25 sm:block" aria-hidden />
           <button
             type="button"
             onClick={onClose}
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-white/90 transition-colors hover:bg-white/10"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-white/90 transition-colors hover:bg-background/10"
             aria-label="닫기"
           >
             <X className="h-5 w-5" />
@@ -669,7 +669,7 @@ export function ServiceFileImagePreview({ items, initialIndex, onClose }: Props)
         >
           <ChevronRight className="h-5 w-5" />
         </button>
-        <span className="mx-1 hidden h-5 w-px bg-white/20 sm:block" aria-hidden />
+        <span className="mx-1 hidden h-5 w-px bg-background/20 sm:block" aria-hidden />
         <button
           type="button"
           className={toolbarBtnClass(!canPdfPage)}
@@ -690,7 +690,7 @@ export function ServiceFileImagePreview({ items, initialIndex, onClose }: Props)
         >
           <ChevronDown className="h-5 w-5" />
         </button>
-        <span className="mx-1 hidden h-5 w-px bg-white/20 sm:block" aria-hidden />
+        <span className="mx-1 hidden h-5 w-px bg-background/20 sm:block" aria-hidden />
         <button type="button" className={toolbarBtnClass()} onClick={zoomOut} title="축소 (-)" aria-label="축소">
           <ZoomOut className="h-5 w-5" />
         </button>
@@ -698,7 +698,7 @@ export function ServiceFileImagePreview({ items, initialIndex, onClose }: Props)
         <button type="button" className={toolbarBtnClass()} onClick={zoomIn} title="확대 (+)" aria-label="확대">
           <ZoomIn className="h-5 w-5" />
         </button>
-        <span className="mx-1 hidden h-5 w-px bg-white/20 sm:block" aria-hidden />
+        <span className="mx-1 hidden h-5 w-px bg-background/20 sm:block" aria-hidden />
         <button type="button" className={toolbarBtnClass()} onClick={rotateCcw} title="반시계 회전" aria-label="반시계 방향 회전">
           <RotateCcw className="h-5 w-5" />
         </button>

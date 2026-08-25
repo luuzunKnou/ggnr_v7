@@ -36,13 +36,13 @@ export function LayerParcelAddModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="gap-0 overflow-hidden rounded-[10px] border-slate-200/80 p-0 sm:max-w-[420px]">
-        <DialogHeader className="border-b border-slate-100 bg-gradient-to-b from-slate-50/80 to-white px-4 py-3">
-          <DialogTitle className="text-sm font-semibold text-slate-800">{title}</DialogTitle>
+      <DialogContent className="gap-0 overflow-hidden rounded-[10px] border-border/80 p-0 sm:max-w-[420px]">
+        <DialogHeader className="border-b border-border bg-gradient-to-b from-muted/30 to-background px-4 py-3">
+          <DialogTitle className="text-sm font-semibold text-foreground">{title}</DialogTitle>
         </DialogHeader>
         <div className="px-4 py-3">
           <AddressSearchPanel vworldApiKey={vworldApiKey} onSelect={handleSelect} />
-          <p className="mt-2 text-[10px] text-slate-400">검색 결과를 선택하면 목록에 추가되고 모달이 닫힙니다.</p>
+          <p className="mt-2 text-[10px] text-muted-foreground">검색 결과를 선택하면 목록에 추가되고 모달이 닫힙니다.</p>
         </div>
       </DialogContent>
     </Dialog>

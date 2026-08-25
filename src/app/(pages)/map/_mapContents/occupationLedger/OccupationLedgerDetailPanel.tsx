@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Loader2 } from 'lucide-react';
 import { call } from '@/lib/api';
+import { recordDataViewLog } from '@/lib/recordDataViewLog';
 import { getOccupationLedgerBinding } from './occupationLedgerBinding';
 import {
   LAYER_ROW_EDIT_PRESETS,
@@ -19,14 +20,17 @@ import {
 } from '../../_mapComponents/layerRowEdit';
 import { UsageDataAsAddressList } from '../river/usageDataAs/UsageDataAsAddressList';
 import { OccupationLedgerAttributeSection } from './OccupationLedgerAttributeSection';
-import { fitMapToLayerRowParcel } from '../../_mapComponents/layerRowEdit/layerRowParcelUtils';
+import {
+  LayerExtraFieldsEditor,
+  type LayerExtraEditorItem,
+  type LayerExtraDefOption,
+} from '../../_mapComponents/layerExtra/LayerExtraFieldsEditor';
 import { resolveParcelGeoms } from '../../_mapComponents/layerRowEdit/resolveParcelGeoms';
 import { resolveParcelItemIntersectParentForHighlight } from '../../_mapComponents/layerRowEdit/resolveParcelItemIntersectParentForHighlight';
 import {
   useLayerRowParcelHighlight,
   type LayerRowParcelHighlightVariant,
 } from '../../_mapComponents/layerRowEdit/useLayerRowParcelHighlight';
-import { useLayerRowParcelDraftPreview } from '../../_mapComponents/layerRowEdit/useLayerRowParcelDraftPreview';
 import { useMapContext } from '../../_mapComponents/MapContext';
 import { scheduleFitMapToExtent3857 } from '../../_mapComponents/config/mapAutoNavigation';
 import { MAP_AUTO_NAV_MAX_ZOOM } from '../../_mapComponents/config/mapDefaults';
@@ -127,6 +131,31 @@ export function OccupationLedgerDetailPanel({
   const [showParentGeom, setShowParentGeom] = useState(true);
   const [nextKey, setNextKey] = useState('');
   const [nextPermitNo, setNextPermitNo] = useState('');
+  const [extraItems, setExtraItems] = useState<LayerExtraEditorItem[]>([]);
+  const extraItemsRef = useRef<LayerExtraEditorItem[]>([]);
+  const [extraDefs, setExtraDefs] = useState<LayerExtraDefOption[]>([]);
+
+  useEffect(() => {
+    extraItemsRef.current = extraItems;
+  }, [extraItems]);
+
+  useEffect(() => {
+    if (extraDefs.length === 0) return;
+    setExtraItems((prev) => {
+      let changed = false;
+      const next = prev.map((it) => {
+        const def = extraDefs.find(
+          (d) => d.fieldName.toLowerCase() === it.fieldName.toLowerCase()
+        );
+        if (!def) return it;
+        const dt = String(def.dataType ?? 'text').trim() || 'text';
+        if (it.dataType.toLowerCase() === dt.toLowerCase()) return it;
+        changed = true;
+        return { ...it, dataType: dt };
+      });
+      return changed ? next : prev;
+    });
+  }, [extraDefs]);
 
   const {
     selectParcel: selectSoloParcel,
@@ -147,6 +176,7 @@ export function OccupationLedgerDetailPanel({
       setAttributes([]);
       setParcels([]);
       setMgjItems([]);
+      setExtraItems([]);
       setLoading(false);
       return;
     }
@@ -163,25 +193,66 @@ export function OccupationLedgerDetailPanel({
         setAttributes([]);
         setParcels([]);
         setMgjItems([]);
+        setExtraItems([]);
         setError(String(data.error));
         return;
       }
       setAttributes(Array.isArray(data?.attributes) ? data.attributes : []);
       setParcels(toParcelItems(data?.parcelItems));
       setMgjItems(toParcelItems(data?.mgjItems));
+
+      const extraRes = await call('', 'POST', {
+        service: 'layerExtraService',
+        action: 'getLayerRowExtra',
+        params: {
+          tableName: mainTable,
+          tableSchema: binding?.schema ?? 'layer',
+          keyField,
+          keyValue: key,
+        },
+      });
+      const extraData = extraRes?.data ?? extraRes;
+      const fields = Array.isArray(extraData?.fields) ? extraData.fields : [];
+      setExtraItems(
+        fields.map(
+          (
+            f: { fieldName?: string; dataType?: string; value?: string; sortOrder?: number },
+            idx: number
+          ) => ({
+            fieldName: String(f.fieldName ?? '').trim(),
+            dataType: String(f.dataType ?? 'text').trim() || 'text',
+            value: f.value == null ? '' : String(f.value),
+            sortOrder: Number(f.sortOrder) || idx + 1,
+          })
+        )
+      );
     } catch {
       setAttributes([]);
       setParcels([]);
       setMgjItems([]);
+      setExtraItems([]);
       setError('상세 정보를 불러오지 못했습니다.');
     } finally {
       setLoading(false);
     }
-  }, [detailId, serEng]);
+  }, [detailId, serEng, mainTable, binding?.schema, keyField]);
 
   useEffect(() => {
     void loadDetail();
   }, [loadDetail, reloadToken]);
+
+  // 데이터 이력관리에 조회 저장을 위해 추가
+  useEffect(() => {
+    if (isCreateMode) return;
+    const key = String(detailId ?? '').trim();
+    if (!key) return;
+    recordDataViewLog({
+      tableName: mainTable,
+      keyField,
+      keyValue: key,
+      serviceName: '점용대장',
+    });
+  }, [detailId, isCreateMode, mainTable, keyField]);
 
   useEffect(() => {
     setHighlightParcel(null);
@@ -281,8 +352,96 @@ export function OccupationLedgerDetailPanel({
     };
   }, [isCreateMode, serEng]);
 
+  /** 신규: 정의 테이블 → 추가속성 초기 목록 / 수정: 정의 이름만(수동 추가용) */
+  useEffect(() => {
+    let cancelled = false;
+    void call('', 'POST', {
+      service: 'layerExtraService',
+      action: 'getLayerExtraDefs',
+      params: {
+        tableName: mainTable,
+        tableSchema: binding?.schema ?? 'layer',
+      },
+    })
+      .then((res) => {
+        if (cancelled) return;
+        const data = res?.data ?? res;
+        const items = Array.isArray(data?.items) ? data.items : [];
+        const defs: LayerExtraDefOption[] = items
+          .map((it: { fieldName?: string; dataType?: string }) => ({
+            fieldName: String(it.fieldName ?? '').trim(),
+            dataType: String(it.dataType ?? 'text').trim() || 'text',
+          }))
+          .filter((it: LayerExtraDefOption) => it.fieldName);
+        setExtraDefs(defs);
+        if (isCreateMode) {
+          setExtraItems(
+            items.map(
+              (
+                it: { fieldName?: string; dataType?: string; sortOrder?: number },
+                idx: number
+              ) => ({
+                fieldName: String(it.fieldName ?? '').trim(),
+                dataType: String(it.dataType ?? 'text').trim() || 'text',
+                value: '',
+                sortOrder: Number(it.sortOrder) || idx + 1,
+              })
+            )
+          );
+        }
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setExtraDefs([]);
+        if (isCreateMode) setExtraItems([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isCreateMode, mainTable, binding?.schema, detailId]);
+
+  const persistExtra = useCallback(
+    async (ctx: { keyValue: string; isCreate: boolean }) => {
+      const fields = extraItemsRef.current
+        .map((it, idx) => ({
+          fieldName: String(it.fieldName ?? '').trim(),
+          dataType: String(it.dataType ?? 'text').trim() || 'text',
+          value: it.value == null ? '' : String(it.value),
+          sortOrder: Number(it.sortOrder) || idx + 1,
+        }))
+        .filter((it) => it.fieldName);
+      try {
+        const res = await call('', 'POST', {
+          service: 'layerExtraService',
+          action: 'saveLayerRowExtra',
+          params: {
+            tableName: mainTable,
+            tableSchema: binding?.schema ?? 'layer',
+            keyField,
+            keyValue: ctx.keyValue,
+            fields,
+            replaceDefs: ctx.isCreate,
+          },
+        });
+        const data = res?.data ?? res;
+        if (data?.success === false || data?.error) {
+          return { ok: false as const, error: String(data?.error ?? '추가속성 저장 실패') };
+        }
+        return { ok: true as const };
+      } catch (e: unknown) {
+        return {
+          ok: false as const,
+          error: e instanceof Error ? e.message : '추가속성 저장 실패',
+        };
+      }
+    },
+    [mainTable, binding?.schema, keyField]
+  );
+
   const formAttributesForEdit = useMemo(() => {
-    const base = isCreateMode ? formAttributes : attributes;
+    const base = (isCreateMode ? formAttributes : attributes).filter(
+      (row) => row.showDetail !== false
+    );
     if (!isCreateMode) return base;
     return base.map((row) => {
       const fl = row.field.toLowerCase();
@@ -326,6 +485,8 @@ export function OccupationLedgerDetailPanel({
     },
     onCancelCreate: onClose,
     wmsLayerId: jijukTable,
+    drawChildGeomOnMap: false,
+    afterPersist: persistExtra,
   });
 
   const handleOccupationDraftChange = useCallback(
@@ -339,17 +500,6 @@ export function OccupationLedgerDetailPanel({
     },
     [draft, handleDraftChange]
   );
-
-  /** 편집 진입·건 전환 시 종료일 기준으로 상태 맞춤 */
-  useEffect(() => {
-    if (!isEditing) return;
-    const endVal = draftFieldValue(draft, 'perm_end_date');
-    const stateKey = draftFieldKey(draft, 'state');
-    const next = deriveOccupationPeriodState(endVal);
-    if ((draft[stateKey] ?? '') === next) return;
-    handleDraftChange(stateKey, next);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- 편집 모드·건 전환 시에만
-  }, [isEditing, detailId]);
 
   const startDateRaw = draftFieldValue(draft, 'perm_start_date');
   const permitFieldKey = draftFieldKey(draft, 'permit_no');
@@ -378,8 +528,8 @@ export function OccupationLedgerDetailPanel({
   );
 
   useAutoOccupationPermitNo({
-    enabled: isEditing,
-    sessionKey: `${serEng}:${detailId}:${isEditing ? 'edit' : 'view'}`,
+    enabled: isCreateMode,
+    sessionKey: `${serEng}:${detailId}:${isCreateMode ? 'create' : 'view'}`,
     startDateRaw,
     permitValue,
     permitFieldKey,
@@ -400,6 +550,7 @@ export function OccupationLedgerDetailPanel({
     placeFieldKey,
     onSetPlace: handleDraftChange,
     parcelAddresses: draftParcels.map((p) => p.address),
+    refillOnParcelList: isCreateMode,
   });
 
   const handleAutoCalcArea = useCallback(
@@ -417,7 +568,6 @@ export function OccupationLedgerDetailPanel({
   );
 
   useLayerRowParcelHighlight(showParentGeom ? null : highlightParcel, highlightVariant);
-  useLayerRowParcelDraftPreview(draftMgj, 'red', isEditing);
   const { parentExtentRef } = useOccupationLedgerParentGeomHighlight(
     detailId,
     mainTable,
@@ -428,27 +578,57 @@ export function OccupationLedgerDetailPanel({
   );
 
   useEffect(() => {
-    if (!isEditing) setShowParentGeom(true);
-  }, [isEditing]);
+    if (!isEditing) {
+      setShowParentGeom(true);
+      return;
+    }
+    setHighlightParcel(null);
+    setShowParentGeom(true);
+    clearSoloSelection();
+    clearMgjSelection();
+    ensureOccupationLedgerWmsLayers(mapContext?.setVisibleLayerNames, {
+      serEng,
+      omitMain: Boolean(mapContext?.layerRowGeomEdit),
+    });
+  }, [
+    clearMgjSelection,
+    clearSoloSelection,
+    isEditing,
+    mapContext?.layerRowGeomEdit,
+    mapContext?.setVisibleLayerNames,
+    serEng,
+  ]);
 
   const focusParentGeomOnMap = useCallback(() => {
     setShowParentGeom(true);
     setHighlightParcel(null);
-    if (isEditing) return;
 
     const map = mapContext?.mapInstanceRef?.current;
-    const ext = parentExtentRef.current;
-    if (!map || !ext) return;
-    ensureOccupationLedgerWmsLayers(mapContext?.setVisibleLayerNames, { serEng });
-    scheduleFitMapToExtent3857(map, ext, {
-      maxZoom: MAP_AUTO_NAV_MAX_ZOOM,
-      applyMapViewPadding: () => mapContext?.applyMapViewPaddingRef?.current?.(),
+    const cached = parentExtentRef.current;
+    if (map && cached) {
+      ensureOccupationLedgerWmsLayers(mapContext?.setVisibleLayerNames, {
+        serEng,
+        omitMain: Boolean(mapContext?.layerRowGeomEdit),
+      });
+      scheduleFitMapToExtent3857(map, cached, {
+        maxZoom: MAP_AUTO_NAV_MAX_ZOOM,
+        applyMapViewPadding: () => mapContext?.applyMapViewPaddingRef?.current?.(),
+      });
+      return;
+    }
+
+    void refreshOccupationLedgerMapView({
+      map,
+      detailId,
+      serEng,
+      setVisibleLayerNames: mapContext?.setVisibleLayerNames,
+      applyMapViewPadding: mapContext?.applyMapViewPaddingRef?.current ?? null,
     });
-  }, [isEditing, mapContext, parentExtentRef, serEng]);
+  }, [detailId, mapContext, parentExtentRef, serEng]);
 
   useEffect(() => {
     if (isEditing) {
-      const base = [...mgjItems];
+      const base = mgjItems.map((p) => ({ ...p, showMapGeom: false as const }));
       setDraftMgj(base);
       draftMgjRef.current = base;
       mgjDirtyRef.current = false;
@@ -465,45 +645,27 @@ export function OccupationLedgerDetailPanel({
   const handleAddMgj = useCallback(
     (item: LayerRowParcelItem) => {
       const addrKey = item.address.toLowerCase();
-      const nextItem: LayerRowParcelItem = { ...item, showMapGeom: true };
+      const nextItem: LayerRowParcelItem = { ...item, showMapGeom: false };
       setDraftMgj((prev) => {
         if (prev.some((p) => p.address.toLowerCase() === addrKey)) return prev;
         mgjDirtyRef.current = true;
         return [...prev, nextItem];
       });
       void resolveParcelGeoms([nextItem]).then(([resolved]) => {
-        if (!resolved?.geometry3857) return;
+        if (!resolved) return;
         const merged: LayerRowParcelItem = {
           ...nextItem,
           pnu: resolved.pnu ?? nextItem.pnu,
           extent3857: resolved.extent3857 ?? nextItem.extent3857,
-          geometry3857: resolved.geometry3857,
-          showMapGeom: true,
+          geometry3857: resolved.geometry3857 ?? nextItem.geometry3857,
+          showMapGeom: false,
         };
         setDraftMgj((prev) =>
           prev.map((p) => (p.address.toLowerCase() === addrKey ? merged : p))
         );
-        setShowParentGeom(false);
-        setHighlightVariant('red');
-        setHighlightParcel(merged);
-        clearSoloSelection();
-        ensureOccupationLedgerWmsLayers(mapContext?.setVisibleLayerNames, { serEng });
-        const map = mapContext?.mapInstanceRef?.current;
-        if (map) {
-          fitMapToLayerRowParcel(map, merged, {
-            applyMapViewPadding: mapContext?.applyMapViewPaddingRef?.current,
-            enableWmsLayer: false,
-          });
-        }
       });
     },
-    [
-      clearSoloSelection,
-      mapContext?.applyMapViewPaddingRef,
-      mapContext?.mapInstanceRef,
-      mapContext?.setVisibleLayerNames,
-      serEng,
-    ]
+    []
   );
 
   const handleRemoveMgj = useCallback((index: number) => {
@@ -524,7 +686,10 @@ export function OccupationLedgerDetailPanel({
       clearMgjSelection();
       setShowParentGeom(false);
       setHighlightVariant('blue');
-      ensureOccupationLedgerWmsLayers(mapContext?.setVisibleLayerNames, { serEng });
+      ensureOccupationLedgerWmsLayers(mapContext?.setVisibleLayerNames, {
+        serEng,
+        omitMain: Boolean(mapContext?.layerRowGeomEdit),
+      });
       void (async () => {
         const clipped = await resolveParcelItemIntersectParentForHighlight(item, {
           childTable: jijukTable,
@@ -547,6 +712,7 @@ export function OccupationLedgerDetailPanel({
       jijukTable,
       keyField,
       mainTable,
+      mapContext?.layerRowGeomEdit,
       mapContext?.setVisibleLayerNames,
       selectSoloParcel,
       selectedSoloIdx,
@@ -564,7 +730,10 @@ export function OccupationLedgerDetailPanel({
       clearSoloSelection();
       setShowParentGeom(false);
       setHighlightVariant('red');
-      ensureOccupationLedgerWmsLayers(mapContext?.setVisibleLayerNames, { serEng });
+      ensureOccupationLedgerWmsLayers(mapContext?.setVisibleLayerNames, {
+        serEng,
+        omitMain: Boolean(mapContext?.layerRowGeomEdit),
+      });
       void selectMgjParcel(item, idx, {
         onHighlight: setHighlightParcel,
         enableWmsLayer: false,
@@ -574,6 +743,7 @@ export function OccupationLedgerDetailPanel({
       clearMgjSelection,
       clearSoloSelection,
       focusParentGeomOnMap,
+      mapContext?.layerRowGeomEdit,
       mapContext?.setVisibleLayerNames,
       selectMgjParcel,
       selectedMgjIdx,
@@ -599,7 +769,7 @@ export function OccupationLedgerDetailPanel({
   };
 
   return (
-    <div className="flex min-h-0 h-full flex-col bg-white">
+    <div className="flex min-h-0 h-full flex-col bg-background">
       <LayerRowEditHeader
         title={`${binding?.title ?? '점용'} 상세`}
         actionsPlacement="footer"
@@ -619,16 +789,16 @@ export function OccupationLedgerDetailPanel({
       {/* 울진하천 목록과 동일: overflow-auto scrollbar-thin (+ MapSideListPanel mr) */}
       <div className="min-h-0 flex-1 overflow-auto px-3 py-2 text-xs scrollbar-thin">
         {showLoading && (
-          <div className="flex items-center gap-2 py-6 text-slate-500">
+          <div className="flex items-center gap-2 py-6 text-muted-foreground">
             <Loader2 className="h-4 w-4 animate-spin shrink-0" aria-hidden />
             불러오는 중…
           </div>
         )}
         {!showLoading && error && (
-          <div className="rounded border border-red-100 bg-red-50 px-2 py-2 text-red-700">{error}</div>
+          <div className="rounded border border-destructive/20 bg-destructive/10 px-2 py-2 text-destructive">{error}</div>
         )}
         {!showLoading && editError && (
-          <div className="mb-2 rounded border border-red-100 bg-red-50 px-2 py-2 text-red-700">
+          <div className="mb-2 rounded border border-destructive/20 bg-destructive/10 px-2 py-2 text-destructive">
             {editError}
           </div>
         )}
@@ -645,6 +815,17 @@ export function OccupationLedgerDetailPanel({
               resetKey={detailId}
               onAutoCalcArea={handleAutoCalcArea}
             />
+
+            {(isEditing || extraItems.length > 0) && (
+              <div className="mt-3">
+                <LayerExtraFieldsEditor
+                  items={extraItems}
+                  isEditing={isEditing}
+                  onChange={setExtraItems}
+                  availableDefs={isCreateMode ? [] : extraDefs}
+                />
+              </div>
+            )}
 
             {(isEditing || !isCreateMode) && (
               <UsageDataAsAddressList
@@ -677,10 +858,10 @@ export function OccupationLedgerDetailPanel({
 
             {!isCreateMode && (
               <div className="mt-4">
-                <div className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                <div className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
                   점사용료 이력
                 </div>
-                <div className="rounded border border-dashed border-slate-200 bg-slate-50/80 px-2 py-4 text-center text-slate-500">
+                <div className="rounded border border-dashed border-border bg-muted/50 px-2 py-4 text-center text-muted-foreground">
                   연계된 점사용료가 없습니다.
                 </div>
               </div>
@@ -692,7 +873,7 @@ export function OccupationLedgerDetailPanel({
           isCreateMode &&
           !formFieldsLoading &&
           formAttributesForEdit.length === 0 && (
-            <div className="rounded border border-dashed border-slate-200 bg-slate-50/80 px-2 py-3 text-slate-500">
+            <div className="rounded border border-dashed border-border bg-muted/50 px-2 py-3 text-muted-foreground">
               등록할 필드 정의를 불러오지 못했습니다.
             </div>
           )}

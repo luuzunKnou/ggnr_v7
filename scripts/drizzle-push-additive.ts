@@ -21,26 +21,30 @@ import { Pool } from 'pg';
 
 const LOG = '[drizzle-additive]';
 const PUSH_SCHEMA_TIMEOUT_MS = 60_000;
+const CONNECT_TIMEOUT_MS = 10_000;
+const STATEMENT_TIMEOUT_MS = 30_000;
+const POOL_END_TIMEOUT_MS = 2_000;
 const MAX_APPLIED_LOG = 20;
 const MAX_WARN_SAMPLES = 5;
 const MAX_PREVIEW_ITEMS = 100;
 
-const SCHEMA_FILTERS = ['public', 'layer', 'next_gen_linkage'];
+const SCHEMA_FILTERS_FALLBACK = ['public', 'layer', 'next_gen_linkage'];
 
-/**
- * drizzle 스키마에 정의된 테이블명만 introspect — DB 전용 테이블이 rename 후보로 섞이지 않게
- */
-function collectManagedTableNames(schemaMod: Record<string, unknown>): string[] {
-  return collectManagedTableKeys(schemaMod).names;
-}
+type PoolInternal = Pool & {
+  _clients?: Array<{
+    connection?: { stream?: { destroy?: () => void } };
+  }>;
+};
 
 /** drizzle 스키마에 정의된 테이블 (schema.table + 테이블명) — DB 전용 객체 제외용 */
 function collectManagedTableKeys(schemaMod: Record<string, unknown>): {
   names: string[];
   keys: Set<string>;
+  schemas: string[];
 } {
   const names = new Set<string>();
   const keys = new Set<string>();
+  const schemas = new Set<string>();
   for (const value of Object.values(schemaMod)) {
     if (is(value, PgTable)) {
       const cfg = getTableConfig(value);
@@ -50,9 +54,10 @@ function collectManagedTableKeys(schemaMod: Record<string, unknown>): {
       names.add(tableName);
       keys.add(tableName);
       keys.add(`${schemaName}.${tableName}`);
+      schemas.add(schemaName);
     }
   }
-  return { names: [...names].sort(), keys };
+  return { names: [...names].sort(), keys, schemas: [...schemas].sort() };
 }
 
 function normalizeSqlIdent(raw: string): string {
@@ -324,9 +329,23 @@ function shorten(s: string, max = 200): string {
   return one.length <= max ? one : `${one.slice(0, max)}…`;
 }
 
-function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+function withTimeout<T>(
+  promise: Promise<T>,
+  ms: number,
+  label: string,
+  onTimeout?: () => void
+): Promise<T> {
   return new Promise((resolve, reject) => {
-    const t = setTimeout(() => reject(new Error(`${label} ${ms}ms 초과`)), ms);
+    const t = setTimeout(() => {
+      reject(new Error(`${label} ${ms}ms 초과`));
+      setImmediate(() => {
+        try {
+          onTimeout?.();
+        } catch {
+          /* ignore */
+        }
+      });
+    }, ms);
     promise.then(
       (v) => {
         clearTimeout(t);
@@ -338,6 +357,27 @@ function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise
       }
     );
   });
+}
+
+/** 진행 중 쿼리를 끊고 풀을 폐기 — end() 무한 대기 방지 */
+function forceClosePool(pool: Pool): void {
+  try {
+    const internal = pool as PoolInternal;
+    for (const client of internal._clients ?? []) {
+      try {
+        client.connection?.stream?.destroy?.();
+      } catch {
+        /* ignore */
+      }
+    }
+  } catch {
+    /* ignore */
+  }
+  try {
+    void pool.end().catch(() => undefined);
+  } catch {
+    /* ignore */
+  }
 }
 
 function logLine(msg: string, toStderr = false): void {
@@ -394,7 +434,8 @@ async function collectStatements(opts?: { quiet?: boolean }): Promise<CollectRes
     };
   }
 
-  const { names: managedTables, keys: managedKeys } = collectManagedTableKeys(schemaMod);
+  const { names: managedTables, keys: managedKeys, schemas: managedSchemas } =
+    collectManagedTableKeys(schemaMod);
   if (managedTables.length === 0) {
     log(`${LOG} skip — drizzle 스키마에 테이블이 없음`);
     return {
@@ -405,19 +446,30 @@ async function collectStatements(opts?: { quiet?: boolean }): Promise<CollectRes
     };
   }
 
+  const schemaFilters = managedSchemas.length > 0 ? managedSchemas : SCHEMA_FILTERS_FALLBACK;
+  const host = process.env.DATABASE_HOST || 'localhost';
+  const port = process.env.DATABASE_PORT ? parseInt(process.env.DATABASE_PORT, 10) : 5432;
+
+  log(`${LOG} info — DB ${host}:${port}/${database} user=${user}`);
   log(
     `${LOG} info — create/rename: 스키마·테이블명 불일치면 create 자동 (동일 스키마+동일 테이블만 rename)`
   );
   log(
-    `${LOG} info — 비교 범위: drizzle 정의 테이블 ${managedTables.length}개 (DB 전용 테이블 DROP 등은 제외)`
+    `${LOG} info — 비교 범위: 스키마 ${schemaFilters.join(',')} · drizzle 정의 테이블 ${managedTables.length}개 (DB 전용 테이블 DROP 등은 제외)`
   );
 
   const pool = new Pool({
-    host: process.env.DATABASE_HOST || 'localhost',
-    port: process.env.DATABASE_PORT ? parseInt(process.env.DATABASE_PORT, 10) : 5432,
+    host,
+    port,
     database,
     user,
     password: process.env.DATABASE_PASSWORD || '',
+    connectionTimeoutMillis: CONNECT_TIMEOUT_MS,
+    idleTimeoutMillis: CONNECT_TIMEOUT_MS,
+    allowExitOnIdle: true,
+  });
+  pool.on('connect', (client) => {
+    void client.query(`SET statement_timeout = ${STATEMENT_TIMEOUT_MS}`).catch(() => undefined);
   });
   const db = drizzle(pool);
 
@@ -427,11 +479,12 @@ async function collectStatements(opts?: { quiet?: boolean }): Promise<CollectRes
     // 부정 매칭이 allowlist를 깨서 DB 전용 테이블이 다시 rename 후보로 섞인다.
     const result = await withTimeout(
       withAutoCreateConflictAnswers(
-        () => pushSchema(schemaMod, db as never, SCHEMA_FILTERS, managedTables),
+        () => pushSchema(schemaMod, db as never, schemaFilters, managedTables),
         log
       ),
       PUSH_SCHEMA_TIMEOUT_MS,
-      'pushSchema'
+      'pushSchema',
+      () => forceClosePool(pool)
     );
     const rawStatements = result.statementsToExecute ?? [];
     const statements = filterStatementsToManagedScope(rawStatements, managedKeys);
@@ -452,27 +505,35 @@ async function collectStatements(opts?: { quiet?: boolean }): Promise<CollectRes
     const isTimeout = /초과|timeout/i.test(msg);
     log(
       isTimeout
-        ? `${LOG} fail(timeout) — pushSchema ${PUSH_SCHEMA_TIMEOUT_MS / 1000}초 초과 — additive 중단, 기동은 계속`
-        : `${LOG} fail(pushSchema) — ${msg} — additive 중단, 기동은 계속`
+        ? `\n${LOG} fail(timeout) — pushSchema ${PUSH_SCHEMA_TIMEOUT_MS / 1000}초 초과 — additive 중단, 기동은 계속`
+        : `\n${LOG} fail(pushSchema) — ${msg} — additive 중단, 기동은 계속`
     );
+    setImmediate(() => forceClosePool(pool));
     return {
       statements: [],
       warnings: [],
       hasDataLoss: false,
       error: msg,
       errorKind: isTimeout ? 'timeout' : 'pushSchema',
-      pool,
+      pool: null,
     };
   }
 }
 
 async function endPool(pool: Pool | null): Promise<void> {
   if (!pool) return;
+  let ended = false;
   try {
-    await pool.end();
+    await Promise.race([
+      pool.end().then(() => {
+        ended = true;
+      }),
+      new Promise<void>((resolve) => setTimeout(resolve, POOL_END_TIMEOUT_MS)),
+    ]);
   } catch {
     /* ignore */
   }
+  if (!ended) forceClosePool(pool);
 }
 
 /** 실행 없이 집계·목록만 (모달용) */
@@ -663,8 +724,10 @@ const isCli =
   typeof process.argv[1] === 'string' &&
   /drizzle-push-additive\.(ts|js|mts|cjs)/i.test(process.argv[1].replace(/\\/g, '/'));
 if (isCli) {
-  main().catch((e) => {
-    console.error(e);
-    process.exit(1);
-  });
+  main()
+    .then(() => process.exit(0))
+    .catch((e) => {
+      console.error(e);
+      process.exit(1);
+    });
 }

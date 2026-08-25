@@ -1,11 +1,18 @@
+/* emd와 동일: 단일 규칙 + 글꼴 목록 → TextSymbolizer 3개로 펼침 */
 * {
-  mark: symbol(circle);
-  mark-size: [min(18, 5 + sqrt(100000 / env('wms_scale_denominator', 10000)) * 1.5)];
-  :mark {
-    fill: #2196F3;
-    stroke: #FFFFFF;
-    stroke-width: 1.5;
-    stroke-opacity: 1.0;
-    fill-opacity: 1.0;
-  }
+  mark: url("sd_mois_displaced_temp_housing.svg");
+  mark-mime: "image/svg+xml";
+  mark-size: [min(18, 5 + sqrt(100000 / env('wms_scale_denominator', 10000)) * 4.0)];
+  mark-anchor: 0.5 0.5;
+  mark-offset: 0 0;
+
+  label: [vt_acmdfclty_nm];
+  font-size: 14;
+  font-fill: #009688;
+  font-weight: bold;
+  font-family: "Nanum Gothic", "Malgun Gothic", "SansSerif";
+  halo-radius: 2;
+  halo-color: #FFFFFF;
+  label-anchor: 0.5 1.0;
+  label-offset: 0 -16;
 }

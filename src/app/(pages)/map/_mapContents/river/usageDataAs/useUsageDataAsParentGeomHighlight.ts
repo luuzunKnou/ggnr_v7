@@ -30,6 +30,7 @@ export function useUsageDataAsParentGeomHighlight(
   const mapContext = useMapContext();
   const layerRef = useRef<VectorLayer<VectorSource> | null>(null);
   const parentExtentRef = useRef<[number, number, number, number] | null>(null);
+  const lastKeyRef = useRef("");
 
   useEffect(() => {
     const map = mapContext?.mapInstanceRef?.current;
@@ -57,11 +58,18 @@ export function useUsageDataAsParentGeomHighlight(
     if (!source) return;
 
     source.clear();
-    parentExtentRef.current = null;
 
     const key = String(detailId ?? "").trim();
-    if (!active || isEditing || !key || key === LAYER_ROW_NEW_ID) return;
+    if (!key || key === LAYER_ROW_NEW_ID) {
+      parentExtentRef.current = null;
+      return;
+    }
+    if (lastKeyRef.current !== key) {
+      lastKeyRef.current = key;
+      parentExtentRef.current = null;
+    }
 
+    const showFeatures = active && !isEditing;
     let cancelled = false;
     void (async () => {
       try {
@@ -86,12 +94,13 @@ export function useUsageDataAsParentGeomHighlight(
           { dataProjection: "EPSG:3857", featureProjection: "EPSG:3857" }
         );
         if (cancelled || features.length === 0) return;
-        source.clear();
-        source.addFeatures(features);
         const ext = features[0]?.getGeometry()?.getExtent();
         if (ext && ext.length === 4 && ext.every((v) => Number.isFinite(v))) {
           parentExtentRef.current = ext as [number, number, number, number];
         }
+        if (!showFeatures) return;
+        source.clear();
+        source.addFeatures(features);
       } catch {
         // ignore
       }

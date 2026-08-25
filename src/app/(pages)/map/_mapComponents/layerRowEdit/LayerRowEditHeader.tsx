@@ -70,7 +70,7 @@ export function LayerRowEditFooter(props: LayerRowEditToolbarProps) {
   if (!toolbar) return null;
 
   return (
-    <div className="flex shrink-0 items-center justify-end gap-1 border-t border-slate-200 bg-white px-3 py-2">
+    <div className="flex shrink-0 items-center justify-end gap-1 border-t border-border bg-background px-3 py-2">
       {toolbar}
     </div>
   );
@@ -107,11 +107,11 @@ export function LayerRowEditHeader({
   return (
     <div
       className={cn(
-        "flex shrink-0 items-center justify-between gap-2 border-b border-slate-200 px-3 py-1.5",
+        "flex shrink-0 items-center justify-between gap-2 border-b border-border px-3 py-1.5",
         className
       )}
     >
-      <span className="text-sm font-semibold text-slate-800">
+      <span className="text-sm font-semibold text-foreground">
         {isCreateMode ? `${title.replace(/ 상세$/, "")} 등록` : title}
       </span>
       <div className="flex shrink-0 items-center gap-1">
@@ -120,7 +120,7 @@ export function LayerRowEditHeader({
           type="button"
           onClick={onClose}
           disabled={busy}
-          className="rounded p-1 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600 disabled:opacity-60"
+          className="rounded p-1 text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground disabled:opacity-60"
           title="상세 닫기"
           aria-label="상세 닫기"
         >

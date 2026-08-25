@@ -1,11 +1,17 @@
 /**
- * 서버 기동 시 앱 필수 layer 테이블 확보 (없으면 생성, public에만 있으면 layer로 이동).
+ * 서버 기동 시 앱 필수 테이블 확보 (없으면 생성, public에만 있으면 layer로 이동).
+ * - 추가속성 정의: public.layer_extra_def
  * - 도로점용: road_use_ledger, road_use_ledger_jijuk
  * - 접도구역 건축물: road_frontage_building(+_detail|_confirm)
  * - 공통점용: water|road|public_occupationledger(+_jijuk|_mgj) — 9개
  * - 점사용료: water|road|public_ngl_fee_list — 3개
+ * - FMS: water|road|public_fms_facility + _fms_inspection — 6개
+ * - 차세대 연계: next_gen_linkage.ngl_error_log, ngl_query_table
  * - 메모: memo 및 memo_* 계열
  * - 영상: work_unit, file_unit
+ * - 보상편입: road_reward, road_reward_parcel
+ * - 공사대장: cons_data_as, cons_data_solo_as
+ * - 마을순찰대: village_patrol
  */
 import { db, pool } from '@/database/db';
 import { sql } from 'drizzle-orm';
@@ -78,6 +84,11 @@ async function ensureSchemaLayer(): Promise<void> {
   }
 }
 
+async function ensureSchemaNextGenLinkage(): Promise<void> {
+  if (await schemaExists('next_gen_linkage')) return;
+  await db.execute(sql.raw(`CREATE SCHEMA IF NOT EXISTS next_gen_linkage`));
+}
+
 async function execSqlStatements(raw: string): Promise<void> {
   const parts = raw
     .split(';')
@@ -117,6 +128,32 @@ async function ensureBaseTable(params: {
       return;
     }
 
+    await execSqlStatements(createSql);
+    result.created.push(fq);
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    result.errors.push(`${fq}: ${msg}`);
+  }
+}
+
+/** layer가 아닌 스키마 — 없으면 생성만 (public에서 이동하지 않음) */
+async function ensureNamedSchemaTable(params: {
+  schema: string;
+  table: string;
+  createSql: string;
+  result: EnsureResult;
+}): Promise<void> {
+  const { schema, table, createSql, result } = params;
+  const fq = `${schema}.${table}`;
+  try {
+    const existing = await tableExists(schema, table);
+    if (existing === 'BASE TABLE') {
+      result.existed.push(fq);
+      return;
+    }
+    if (existing === 'VIEW') {
+      await db.execute(sql.raw(`DROP VIEW IF EXISTS ${schema}."${table}" CASCADE`));
+    }
     await execSqlStatements(createSql);
     result.created.push(fq);
   } catch (e: unknown) {
@@ -267,6 +304,167 @@ CREATE INDEX IF NOT EXISTS file_unit_wu_key_idx ON layer.file_unit (wu_key);
 CREATE INDEX IF NOT EXISTS file_unit_geom_gix ON layer.file_unit USING GIST (geom);
 COMMENT ON TABLE layer.file_unit IS '영상작업단위파일';
 `;
+
+/** scripts/sql/road_reward.sql 과 동일 컬럼 */
+const ROAD_REWARD_SQL = `
+CREATE TABLE IF NOT EXISTS layer.road_reward (
+  ogc_fid SERIAL PRIMARY KEY,
+  geom geometry(Geometry, 5181),
+  name text,
+  org text,
+  policy text,
+  unit text,
+  detail text,
+  budget_item text,
+  stat_item text,
+  appraisal1_name text,
+  appraisal2_name text
+);
+CREATE INDEX IF NOT EXISTS road_reward_geom_idx
+  ON layer.road_reward USING GIST (geom);
+COMMENT ON TABLE layer.road_reward IS '보상편입용지';
+`;
+
+const ROAD_REWARD_PARCEL_SQL = `
+CREATE TABLE IF NOT EXISTS layer.road_reward_parcel (
+  ogc_fid SERIAL PRIMARY KEY,
+  geom geometry(Geometry, 5181),
+  reward_key integer NOT NULL,
+  pnu text,
+  eupmyeon_dong text,
+  jibun_original text,
+  jibun_included text,
+  area_original double precision,
+  area_included double precision,
+  jimok text,
+  appraisal1_value double precision,
+  appraisal2_value double precision,
+  applied_unit_price double precision,
+  compensation_amount double precision,
+  farming_compensation_amount double precision,
+  obstacle_compensation_amount double precision,
+  owner_address text,
+  owner_name text,
+  actual_owner text,
+  actual_cultivator text,
+  note text,
+  CONSTRAINT road_reward_parcel_reward_ogc_fid_fkey
+    FOREIGN KEY (reward_key) REFERENCES layer.road_reward (ogc_fid)
+    ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS road_reward_parcel_reward_ogc_fid_idx
+  ON layer.road_reward_parcel (reward_key);
+CREATE INDEX IF NOT EXISTS road_reward_parcel_pnu_idx
+  ON layer.road_reward_parcel (pnu);
+CREATE INDEX IF NOT EXISTS road_reward_parcel_geom_idx
+  ON layer.road_reward_parcel USING GIST (geom);
+COMMENT ON TABLE layer.road_reward_parcel IS '보상편입용지 필지목록';
+COMMENT ON COLUMN layer.road_reward_parcel.compensation_amount IS '토지보상금액(원)';
+COMMENT ON COLUMN layer.road_reward_parcel.farming_compensation_amount IS '영농보상금액(원)';
+COMMENT ON COLUMN layer.road_reward_parcel.obstacle_compensation_amount IS '지장물보상금액(원)';
+COMMENT ON COLUMN layer.road_reward_parcel.actual_owner IS '실소유자';
+COMMENT ON COLUMN layer.road_reward_parcel.actual_cultivator IS '실경작자';
+`;
+
+const CONS_DATA_AS_SQL = `
+CREATE TABLE IF NOT EXISTS layer.cons_data_as (
+  ogc_fid serial PRIMARY KEY,
+  geom geometry(MultiPolygon, 5181),
+  gkey_code text,
+  cons_code text,
+  river_type text,
+  river_code text,
+  river_name text,
+  cons_name text,
+  cons_locat text,
+  cons_volum text,
+  amount_pre text,
+  amount_var text,
+  amount_cha text,
+  amount_aft text,
+  cont_date text,
+  start_date text,
+  done_date text,
+  sdone_date text,
+  busin_name text,
+  ceo_name text,
+  busin_addr text,
+  busin_phon text,
+  direct_pos text,
+  direct_nam text,
+  reason text,
+  descript text
+);
+CREATE INDEX IF NOT EXISTS cons_data_as_geom_gix ON layer.cons_data_as USING GIST (geom);
+CREATE INDEX IF NOT EXISTS cons_data_as_cons_code_idx ON layer.cons_data_as (cons_code);
+COMMENT ON TABLE layer.cons_data_as IS '공사대장';
+`;
+
+const CONS_DATA_SOLO_AS_SQL = `
+CREATE TABLE IF NOT EXISTS layer.cons_data_solo_as (
+  ogc_fid serial PRIMARY KEY,
+  geom geometry(MultiPolygon, 5181),
+  cons_code text,
+  river_type text,
+  river_code text,
+  river_name text,
+  solo_code text,
+  remark text
+);
+CREATE INDEX IF NOT EXISTS cons_data_solo_as_geom_gix ON layer.cons_data_solo_as USING GIST (geom);
+CREATE INDEX IF NOT EXISTS cons_data_solo_as_cons_code_idx ON layer.cons_data_solo_as (cons_code);
+COMMENT ON TABLE layer.cons_data_solo_as IS '공사대장_개별';
+`;
+
+const VILLAGE_PATROL_SQL = `
+CREATE TABLE IF NOT EXISTS layer.village_patrol (
+  id SERIAL PRIMARY KEY,
+  eup text NOT NULL DEFAULT '',
+  village text NOT NULL DEFAULT '',
+  team text NOT NULL DEFAULT 'A조',
+  name text NOT NULL DEFAULT '',
+  affiliation text NOT NULL DEFAULT '',
+  phone text NOT NULL DEFAULT '',
+  note text NOT NULL DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS village_patrol_place_idx
+  ON layer.village_patrol (eup, village, team);
+CREATE INDEX IF NOT EXISTS village_patrol_phone_idx
+  ON layer.village_patrol (phone);
+COMMENT ON TABLE layer.village_patrol IS '마을순찰대 편성 명단';
+`;
+
+/** 기존 중복 정리 후 편성 유니크 인덱스 확보 */
+async function ensureVillagePatrolAssignmentUnique(result: EnsureResult): Promise<void> {
+  const fq = 'layer.village_patrol';
+  try {
+    if ((await tableExists('layer', 'village_patrol')) !== 'BASE TABLE') return;
+
+    await db.execute(
+      sql.raw(`
+        DELETE FROM layer.village_patrol a
+        USING layer.village_patrol b
+        WHERE a.id > b.id
+          AND a.eup = b.eup
+          AND a.village = b.village
+          AND a.team = b.team
+          AND a.name = b.name
+          AND a.phone = b.phone
+      `)
+    );
+
+    await db.execute(
+      sql.raw(`
+        CREATE UNIQUE INDEX IF NOT EXISTS village_patrol_assignment_uidx
+          ON layer.village_patrol (eup, village, team, name, phone)
+      `)
+    );
+    result.created.push(`${fq}.village_patrol_assignment_uidx`);
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    result.errors.push(`${fq}.assignment_uidx: ${msg}`);
+  }
+}
 
 function memoCreateSql(tableName: string): string {
   const t = tableName.replace(/"/g, '""');
@@ -467,6 +665,99 @@ COMMENT ON TABLE layer.${t} IS '점사용료 미납·수납 통합';
 `;
 }
 
+function fmsFacilitySql(tableName: string): string {
+  const t = tableName.replace(/"/g, '');
+  const uq = `${t}_facil_no_key`;
+  return `
+CREATE TABLE IF NOT EXISTS layer.${t} (
+  id bigserial PRIMARY KEY,
+  facil_no text,
+  facil_nm text,
+  mng_no text,
+  mng_main_cd text,
+  permit_org_cd text,
+  facil_owner text,
+  route_class text,
+  route_detail text,
+  facil_class text,
+  facil_gbn text,
+  facil_kind text,
+  facil_desc_cd text,
+  addr_sido text,
+  addr_gugun text,
+  addr_dong text,
+  addr_detail text,
+  cpl_ymd text,
+  temp_ymd text,
+  rsp_to_ymd text,
+  design_ymd_from text,
+  design_ymd_to text,
+  designer_nm text,
+  const_ymd_from text,
+  const_ymd_to text,
+  constractor_cd text,
+  constractor_nm text,
+  const_amt text,
+  spv_ymd_from text,
+  spv_ymd_to text,
+  supervisor_nm text,
+  const_order_cd text,
+  const_order_nm text,
+  const_nm text,
+  const_spvsr_nm text,
+  dsn_book_st_yn text,
+  eq_dsn_app_yn text,
+  gam_reason_cd text,
+  whl_pht_file_ct text,
+  etc_pht_file_ct text,
+  upper_no text,
+  lnk_facil_no text,
+  etc_remark text,
+  addr_full text,
+  geom geometry(MultiPolygon, 5181),
+  sync_status text,
+  synced_at timestamptz,
+  created_at timestamptz DEFAULT now(),
+  updated_at timestamptz DEFAULT now(),
+  CONSTRAINT ${uq} UNIQUE (facil_no)
+);
+CREATE INDEX IF NOT EXISTS ${t}_facil_no_idx ON layer.${t} (facil_no);
+CREATE INDEX IF NOT EXISTS ${t}_facil_nm_idx ON layer.${t} (facil_nm);
+CREATE INDEX IF NOT EXISTS ${t}_geom_gix ON layer.${t} USING GIST (geom);
+COMMENT ON TABLE layer.${t} IS 'FMS 시설물관리대장';
+`;
+}
+
+function fmsInspectionSql(tableName: string): string {
+  const t = tableName.replace(/"/g, '');
+  const uq = `${t}_facil_dign_key`;
+  return `
+CREATE TABLE IF NOT EXISTS layer.${t} (
+  id bigserial PRIMARY KEY,
+  facil_no text,
+  dign_seq text,
+  start_ymd text,
+  end_ymd text,
+  dign_gbn text,
+  regular_gbn text,
+  rep_engineer_nm text,
+  dign_amt text,
+  state_grade text,
+  dign_content text,
+  amend_content text,
+  wrt_ymd text,
+  wrt_person_nm text,
+  sync_status text,
+  synced_at timestamptz,
+  created_at timestamptz DEFAULT now(),
+  updated_at timestamptz DEFAULT now(),
+  CONSTRAINT ${uq} UNIQUE (facil_no, dign_seq)
+);
+CREATE INDEX IF NOT EXISTS ${t}_facil_no_idx ON layer.${t} (facil_no);
+COMMENT ON TABLE layer.${t} IS 'FMS 점검진단실적';
+`;
+}
+
 /** public→layer 이동 후 geom 컬럼·인덱스·좌표 백필 */
 async function ensureFileUnitGeom(result: EnsureResult): Promise<void> {
   const fq = 'layer.file_unit';
@@ -570,6 +861,43 @@ export async function ensureOccupationLedgerTables(result?: EnsureResult): Promi
   return out;
 }
 
+/** FMS water|road|public × facility·inspection (6개) */
+export async function ensureFmsTables(result?: EnsureResult): Promise<EnsureResult> {
+  const out: EnsureResult = result ?? { created: [], moved: [], existed: [], errors: [] };
+  await ensureSchemaLayer();
+  for (const prefix of OCCUPATION_PREFIXES) {
+    const facility = `${prefix}_fms_facility`;
+    const inspection = `${prefix}_fms_inspection`;
+    await ensureBaseTable({
+      table: facility,
+      createSql: fmsFacilitySql(facility),
+      result: out,
+    });
+    try {
+      if (!(await columnExists('layer', facility, 'geom'))) {
+        await db.execute(
+          sql.raw(`
+            ALTER TABLE layer.${facility}
+              ADD COLUMN IF NOT EXISTS geom geometry(MultiPolygon, 5181);
+            CREATE INDEX IF NOT EXISTS ${facility}_geom_gix
+              ON layer.${facility} USING GIST (geom);
+          `)
+        );
+      }
+    } catch (e) {
+      out.errors.push(
+        `layer.${facility}.geom: ${e instanceof Error ? e.message : String(e)}`
+      );
+    }
+    await ensureBaseTable({
+      table: inspection,
+      createSql: fmsInspectionSql(inspection),
+      result: out,
+    });
+  }
+  return out;
+}
+
 /** 점사용료 water|road|public_ngl_fee_list (3개) */
 export async function ensureNglFeeListTables(result?: EnsureResult): Promise<EnsureResult> {
   const out: EnsureResult = result ?? { created: [], moved: [], existed: [], errors: [] };
@@ -581,6 +909,61 @@ export async function ensureNglFeeListTables(result?: EnsureResult): Promise<Ens
       createSql: nglFeeListSql(table),
       result: out,
     });
+  }
+  return out;
+}
+
+const NGL_ERROR_LOG_SQL = `
+CREATE TABLE IF NOT EXISTS next_gen_linkage.ngl_error_log (
+  id serial4 NOT NULL,
+  lvy_no varchar(6) NULL,
+  itm_sn varchar(2) NULL,
+  interface_id varchar(100) NULL,
+  rprs_txm_cd varchar(6) NULL,
+  rprs_txm_nm varchar(100) NULL,
+  error_code varchar(20) NULL,
+  error_message varchar NULL,
+  created_at timestamp DEFAULT now() NULL,
+  CONSTRAINT ngl_error_log_pkey PRIMARY KEY (id)
+)
+`;
+
+const NGL_QUERY_TABLE_SQL = `
+CREATE TABLE IF NOT EXISTS next_gen_linkage.ngl_query_table (
+  ngl_key serial4 NOT NULL,
+  interface_id varchar(10) NOT NULL,
+  interface_nm varchar(200) NULL,
+  rprs_txm_cd varchar(6) NOT NULL,
+  rprs_txm_nm varchar(100) NULL,
+  spac_biz_cd varchar(4) NULL,
+  act_se_cd varchar(2) NOT NULL,
+  is_active varchar(1) DEFAULT 'Y'::character varying NULL,
+  if_id varchar(50) NULL,
+  dpt_cd varchar(7) NULL,
+  CONSTRAINT ngl_query_table_pkey PRIMARY KEY (ngl_key)
+)
+`;
+
+/** 차세대 연계 next_gen_linkage.ngl_error_log · ngl_query_table */
+export async function ensureNextGenLinkageTables(result?: EnsureResult): Promise<EnsureResult> {
+  const out: EnsureResult = result ?? { created: [], moved: [], existed: [], errors: [] };
+  try {
+    await ensureSchemaNextGenLinkage();
+    await ensureNamedSchemaTable({
+      schema: 'next_gen_linkage',
+      table: 'ngl_error_log',
+      createSql: NGL_ERROR_LOG_SQL,
+      result: out,
+    });
+    await ensureNamedSchemaTable({
+      schema: 'next_gen_linkage',
+      table: 'ngl_query_table',
+      createSql: NGL_QUERY_TABLE_SQL,
+      result: out,
+    });
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    out.errors.push(`next_gen_linkage: ${msg}`);
   }
   return out;
 }
@@ -615,17 +998,124 @@ export async function ensureAerialWorkUnitTables(result?: EnsureResult): Promise
   return out;
 }
 
+/** 기존 필지 테이블에 토지 외 금액·실소유자·실경작자 컬럼 보강 */
+async function ensureRoadRewardParcelColumns(result: EnsureResult): Promise<void> {
+  const table = 'road_reward_parcel';
+  const fq = `layer.${table}`;
+  try {
+    if ((await tableExists('layer', table)) !== 'BASE TABLE') return;
+
+    if (await columnExists('layer', table, 'compensation_amount')) {
+      await db.execute(
+        sql.raw(`COMMENT ON COLUMN layer.road_reward_parcel.compensation_amount IS '토지보상금액(원)'`)
+      );
+    }
+
+    const extras: { name: string; ddl: string; comment: string }[] = [
+      { name: 'farming_compensation_amount', ddl: 'double precision', comment: '영농보상금액(원)' },
+      { name: 'obstacle_compensation_amount', ddl: 'double precision', comment: '지장물보상금액(원)' },
+      { name: 'actual_owner', ddl: 'text', comment: '실소유자' },
+      { name: 'actual_cultivator', ddl: 'text', comment: '실경작자' },
+    ];
+    for (const col of extras) {
+      if (await columnExists('layer', table, col.name)) continue;
+      await db.execute(sql.raw(`ALTER TABLE layer.${table} ADD COLUMN ${col.name} ${col.ddl}`));
+      await db.execute(
+        sql.raw(`COMMENT ON COLUMN layer.${table}.${col.name} IS '${col.comment.replace(/'/g, "''")}'`)
+      );
+      result.created.push(`${fq}.${col.name}`);
+    }
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    result.errors.push(`${fq}.columns: ${msg}`);
+  }
+}
+
+/** 보상편입용지 · 필지목록 */
+export async function ensureRoadRewardTables(result?: EnsureResult): Promise<EnsureResult> {
+  const out: EnsureResult = result ?? { created: [], moved: [], existed: [], errors: [] };
+  await ensureSchemaLayer();
+  await ensureBaseTable({
+    table: 'road_reward',
+    createSql: ROAD_REWARD_SQL,
+    result: out,
+  });
+  await ensureBaseTable({
+    table: 'road_reward_parcel',
+    createSql: ROAD_REWARD_PARCEL_SQL,
+    result: out,
+  });
+  await ensureRoadRewardParcelColumns(out);
+  return out;
+}
+
+/** 공사대장 · 개별(필지) */
+export async function ensureConsDataAsTables(result?: EnsureResult): Promise<EnsureResult> {
+  const out: EnsureResult = result ?? { created: [], moved: [], existed: [], errors: [] };
+  await ensureSchemaLayer();
+  await ensureBaseTable({
+    table: 'cons_data_as',
+    createSql: CONS_DATA_AS_SQL,
+    result: out,
+  });
+  await ensureBaseTable({
+    table: 'cons_data_solo_as',
+    createSql: CONS_DATA_SOLO_AS_SQL,
+    result: out,
+  });
+  return out;
+}
+
+export async function ensureVillagePatrolTable(result?: EnsureResult): Promise<EnsureResult> {
+  const out: EnsureResult = result ?? { created: [], moved: [], existed: [], errors: [] };
+  await ensureSchemaLayer();
+  await ensureBaseTable({
+    table: 'village_patrol',
+    createSql: VILLAGE_PATROL_SQL,
+    result: out,
+  });
+  await ensureVillagePatrolAssignmentUnique(out);
+  return out;
+}
+
+/** public.layer_extra_def — 추가속성 정의 (점용 본대 extra 컬럼과는 별개) */
+export async function ensureLayerExtraDefTable(result?: EnsureResult): Promise<EnsureResult> {
+  const out: EnsureResult = result ?? { created: [], moved: [], existed: [], errors: [] };
+  const fq = 'public.layer_extra_def';
+  try {
+    const { ensureLayerExtraDefTable: ensureDef } = await import('@/service/layerExtraService');
+    const r = await ensureDef();
+    if (!r.ok) {
+      out.errors.push(`${fq}: ${r.error ?? 'failed'}`);
+      return out;
+    }
+    const exists = await tableExists('public', 'layer_extra_def');
+    if (exists === 'BASE TABLE') out.existed.push(fq);
+    else out.created.push(fq);
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    out.errors.push(`${fq}: ${msg}`);
+  }
+  return out;
+}
+
 /** instrumentation / 수동 호출용 */
 export async function ensureLayerAppTables(): Promise<EnsureResult> {
   const result: EnsureResult = { created: [], moved: [], existed: [], errors: [] };
   try {
     await ensureSchemaLayer();
+    await ensureLayerExtraDefTable(result);
     await ensureRoadUseLedgerTables(result);
     await ensureRoadFrontageBuildingTables(result);
     await ensureOccupationLedgerTables(result);
     await ensureNglFeeListTables(result);
+    await ensureFmsTables(result);
+    await ensureNextGenLinkageTables(result);
     await ensureMemoTables(result);
     await ensureAerialWorkUnitTables(result);
+    await ensureRoadRewardTables(result);
+    await ensureConsDataAsTables(result);
+    await ensureVillagePatrolTable(result);
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);
     result.errors.push(msg);

@@ -14,10 +14,10 @@ import {
   Upload,
 } from 'lucide-react';
 import { SER_FILE_ENG } from '@/lib/serviceFileDataSerEng';
-import { formatDetailScalarValue } from '@/lib/formatDetailScalar';
+import { formatDefineFieldDisplayValue } from '@/lib/defineLayerCodeDisplay';
 import { cn, formatFileSize } from '@/lib/utils';
 import { useMapContext } from '../MapContext';
-import { getRowKey, getRowValueByField } from './defineLayerRowUtils';
+import { getRowKey, getRowValueByField, isDefineFieldFlagTrue } from './defineLayerRowUtils';
 import {
   isImageServiceFileName,
   isPdfServiceFileName,
@@ -33,6 +33,7 @@ import { InfoSection } from './DetailInfoSection';
 import { ServiceFileAttachmentThumb } from './ServiceFileAttachmentThumb';
 import { ServiceFilePdfThumb } from './ServiceFilePdfThumb';
 import { ServiceFileImagePreview, type ServiceFilePreviewItem } from './ServiceFileImagePreview';
+import { useDefineLayerCodes } from './useDefineLayerCodes';
 
 type DetailTab = 'basic' | 'history' | 'attach';
 
@@ -100,6 +101,15 @@ const SAMPLE_HISTORY: TimelineEvent[] = [
   },
 ];
 
+const EMPTY_FIELDS: {
+  define_field_name?: string;
+  define_field_kor_name?: string;
+  define_field_is_key?: string;
+  define_field_type?: string;
+  define_field_show_detail?: string | boolean;
+}[] = [];
+const EMPTY_ROW: Record<string, unknown> = {};
+
 export default function StandardDetail() {
   const mapContext = useMapContext();
   const selectedDetail = mapContext?.selectedDetail ?? null;
@@ -113,21 +123,27 @@ export default function StandardDetail() {
     initialIndex: number;
   } | null>(null);
 
-  if (selectedDetail === null || !setSelectedDetail) return null;
-
-  const { layerName, tableName, row, fields } = selectedDetail;
-  const handleClose = () => setSelectedDetail(null);
+  const fields = selectedDetail?.fields ?? EMPTY_FIELDS;
+  const row = selectedDetail?.row ?? EMPTY_ROW;
+  const tableName = selectedDetail?.tableName ?? '';
+  const layerName = selectedDetail?.layerName ?? '';
+  const codesByField = useDefineLayerCodes(tableName || null, fields);
 
   const keyFieldName = useMemo(() => {
-    const keyField = fields.find((f) => String(f.define_field_is_key ?? '').toLowerCase() === 'true');
+    const keyField = fields.find((f) => isDefineFieldFlagTrue(f.define_field_is_key));
     return keyField ? String(keyField.define_field_name ?? '').trim() || null : null;
   }, [fields]);
 
-  const rowKeyForAttachments = getRowKey(row, keyFieldName);
+  const detailVisibleFields = useMemo(
+    () => fields.filter((f) => isDefineFieldFlagTrue(f.define_field_show_detail)),
+    [fields]
+  );
+
+  const rowKeyForAttachments = selectedDetail != null ? getRowKey(row, keyFieldName) : null;
   const layerSegmentForFiles = String(tableName ?? '').trim().toLowerCase() || null;
   const attachmentQuery = useServiceFileData({
     serEng: SER_FILE_ENG.dataQuery,
-    enabled: activeTab === 'attach',
+    enabled: activeTab === 'attach' && selectedDetail != null,
     layerSegment: layerSegmentForFiles,
     keyValue: rowKeyForAttachments,
     refreshNonce: attachListRefreshNonce,
@@ -148,6 +164,10 @@ export default function StandardDetail() {
       }));
   }, [attachmentQuery.files, layerSegmentForFiles, rowKeyForAttachments]);
   const attachChunkUpload = useServiceFileChunkedUpload();
+
+  if (selectedDetail === null || !setSelectedDetail) return null;
+
+  const handleClose = () => setSelectedDetail(null);
 
   const tabs: { id: DetailTab; label: string; icon: typeof FileText }[] = [
     { id: 'basic', label: '기본정보', icon: FileText },
@@ -171,7 +191,7 @@ export default function StandardDetail() {
           <button
             type="button"
             onClick={handleClose}
-            className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-900"
+            className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
             aria-label="닫기"
           >
             <X className="h-4 w-4" />
@@ -180,7 +200,7 @@ export default function StandardDetail() {
       }
     >
       {/* Tabs */}
-      <div className="flex border-b border-slate-200 shrink-0">
+      <div className="flex border-b border-border shrink-0">
         {tabs.map(({ id, label, icon: TabIcon }) => (
           <button
             key={id}
@@ -190,7 +210,7 @@ export default function StandardDetail() {
               'flex flex-1 items-center justify-center gap-1.5 py-2.5 text-xs font-medium transition-colors',
               activeTab === id
                 ? 'border-b-2 border-primary text-primary bg-primary/5'
-                : 'text-slate-500 hover:bg-slate-50 hover:text-slate-700'
+                : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'
             )}
           >
             <TabIcon className="h-3.5 w-3.5 shrink-0" />
@@ -208,10 +228,10 @@ export default function StandardDetail() {
                 title="기본정보"
                 fields={Object.entries((row ?? {}) as Record<string, unknown>)
                   .filter(([k]) => { const n = k.toLowerCase(); return n !== 'gid' && n !== 'geom'; })
-                  .map(([k, v], i) => ({
+                  .map(([k, v]) => ({
                     label: k,
                     value: v != null ? String(v) : '-',
-                    highlight: i === 0,
+                    highlight: keyFieldName != null && k.trim().toLowerCase() === keyFieldName.trim().toLowerCase(),
                   }))}
                 defaultOpen={true}
               />
@@ -220,28 +240,42 @@ export default function StandardDetail() {
                 <InfoSection
                   title="기본정보"
                   fields={(() => {
-                    const mid = Math.ceil(fields.length / 2);
-                    const slice = fields.slice(0, mid);
-                    return slice.map((f, i) => {
+                    const mid = Math.ceil(detailVisibleFields.length / 2);
+                    const slice = detailVisibleFields.slice(0, mid);
+                    return slice.map((f) => {
                       const key = String(f.define_field_name ?? '');
                       const label = String(f.define_field_kor_name ?? f.define_field_name ?? '');
                       const raw = getRowValueByField(row, key);
-                      const value = formatDetailScalarValue(raw);
-                      return { label, value, highlight: i === 0 };
+                      const value = formatDefineFieldDisplayValue(
+                        raw,
+                        f.define_field_type,
+                        codesByField[key.trim().toLowerCase()]
+                      );
+                      return {
+                        label,
+                        value,
+                        highlight:
+                          keyFieldName != null &&
+                          key.trim().toLowerCase() === keyFieldName.trim().toLowerCase(),
+                      };
                     });
                   })()}
                   defaultOpen={true}
                 />
-                {fields.length > 1 && (
+                {detailVisibleFields.length > 1 && (
                   <InfoSection
                     title="상세정보"
                     fields={(() => {
-                      const mid = Math.ceil(fields.length / 2);
-                      return fields.slice(mid).map((f) => {
+                      const mid = Math.ceil(detailVisibleFields.length / 2);
+                      return detailVisibleFields.slice(mid).map((f) => {
                         const key = String(f.define_field_name ?? '');
                         const label = String(f.define_field_kor_name ?? f.define_field_name ?? '');
                         const raw = getRowValueByField(row, key);
-                        const value = formatDetailScalarValue(raw);
+                        const value = formatDefineFieldDisplayValue(
+                          raw,
+                          f.define_field_type,
+                          codesByField[key.trim().toLowerCase()]
+                        );
                         return { label, value };
                       });
                     })()}
@@ -256,7 +290,7 @@ export default function StandardDetail() {
         {activeTab === 'history' && (
           <div className="px-4 py-3">
             {SAMPLE_HISTORY.length === 0 ? (
-              <div className="py-4 text-xs text-slate-500 text-center">이력 없음</div>
+              <div className="py-4 text-xs text-muted-foreground text-center">이력 없음</div>
             ) : (
               <div className="relative space-y-0">
                 {SAMPLE_HISTORY.map((event, index) => {
@@ -266,7 +300,7 @@ export default function StandardDetail() {
                     <div key={event.id} className="relative flex gap-3 pb-5">
                       {index < SAMPLE_HISTORY.length - 1 && (
                         <div
-                          className="absolute left-[15px] top-8 h-[calc(100%-16px)] w-px bg-slate-200"
+                          className="absolute left-[15px] top-8 h-[calc(100%-16px)] w-px bg-muted"
                           aria-hidden
                         />
                       )}
@@ -289,13 +323,13 @@ export default function StandardDetail() {
                           >
                             {event.type}
                           </span>
-                          <span className="text-[11px] text-slate-500">{event.date}</span>
+                          <span className="text-[11px] text-muted-foreground">{event.date}</span>
                         </div>
-                        <p className="mt-1 text-xs font-medium text-slate-900">{event.title}</p>
-                        <p className="mt-0.5 text-[11px] leading-relaxed text-slate-500">
+                        <p className="mt-1 text-xs font-medium text-foreground">{event.title}</p>
+                        <p className="mt-0.5 text-[11px] leading-relaxed text-muted-foreground">
                           {event.description}
                         </p>
-                        <p className="mt-1 text-[11px] text-slate-500">담당: {event.author}</p>
+                        <p className="mt-1 text-[11px] text-muted-foreground">담당: {event.author}</p>
                       </div>
                     </div>
                   );
@@ -330,21 +364,21 @@ export default function StandardDetail() {
               }}
             />
             {keyFieldName == null || rowKeyForAttachments == null || layerSegmentForFiles == null ? (
-              <div className="py-8 text-xs text-slate-500 text-center leading-relaxed px-1">
+              <div className="py-8 text-xs text-muted-foreground text-center leading-relaxed px-1">
                 레이어 데이터 설정에서 키 필드(define_field_is_key)가 지정되어 있어야 첨부폴더를 조회할 수 있습니다.
               </div>
             ) : (
               <>
                 {attachChunkUpload.state.status === 'uploading' && (
-                  <div className="mb-3 rounded border border-slate-200 bg-slate-50 px-3 py-2">
-                    <div className="mb-1 flex justify-between text-[11px] text-slate-600">
+                  <div className="mb-3 rounded border border-border bg-muted/30 px-3 py-2">
+                    <div className="mb-1 flex justify-between text-[11px] text-muted-foreground">
                       <span className="flex items-center gap-1">
                         <Upload className="h-3.5 w-3.5 shrink-0" aria-hidden />
                         업로드 중…
                       </span>
                       <span>{attachChunkUpload.state.progress}%</span>
                     </div>
-                    <div className="h-2 overflow-hidden rounded-full bg-slate-200">
+                    <div className="h-2 overflow-hidden rounded-full bg-muted">
                       <div
                         className="h-full bg-primary transition-[width] duration-150"
                         style={{ width: `${attachChunkUpload.state.progress}%` }}
@@ -358,11 +392,11 @@ export default function StandardDetail() {
                   </div>
                 )}
                 {attachmentQuery.loading ? (
-                  <div className="py-8 text-xs text-slate-500 text-center">불러오는 중…</div>
+                  <div className="py-8 text-xs text-muted-foreground text-center">불러오는 중…</div>
                 ) : attachmentQuery.error ? (
                   <div className="py-8 text-xs text-red-600 text-center">{attachmentQuery.error}</div>
                 ) : attachmentQuery.files.length === 0 ? (
-                  <div className="py-8 text-xs text-slate-500 text-center">첨부파일 없음</div>
+                  <div className="py-8 text-xs text-muted-foreground text-center">첨부파일 없음</div>
                 ) : (
               <div className="space-y-2">
                 {attachmentQuery.files.map((file) => {
@@ -400,7 +434,7 @@ export default function StandardDetail() {
                       aria-label={
                         isImg || isPdf ? `${file.name} 크게 보기` : `${file.name} 다운로드`
                       }
-                      className="flex cursor-pointer items-center gap-3 rounded border border-slate-200 bg-white p-3 transition-colors hover:bg-slate-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+                      className="flex cursor-pointer items-center gap-3 rounded border border-border bg-background p-3 transition-colors hover:bg-muted/50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
                       onClick={activateRow}
                       onKeyDown={(e) => {
                         if (e.key === 'Enter' || e.key === ' ') {
@@ -431,8 +465,8 @@ export default function StandardDetail() {
                         </div>
                       )}
                       <div className="min-w-0 flex-1">
-                        <p className="truncate text-xs font-medium text-slate-900">{file.name}</p>
-                        <p className="text-[11px] text-slate-500">
+                        <p className="truncate text-xs font-medium text-foreground">{file.name}</p>
+                        <p className="text-[11px] text-muted-foreground">
                           {formatFileSize(file.size)} | {dateStr}
                         </p>
                       </div>
@@ -443,7 +477,7 @@ export default function StandardDetail() {
                             e.stopPropagation();
                             triggerServiceFileDownload(downloadUrl, file.name);
                           }}
-                          className="flex h-7 w-7 items-center justify-center rounded text-slate-500 transition-colors hover:bg-slate-200 hover:text-slate-900"
+                          className="flex h-7 w-7 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
                           title="다운로드"
                         >
                           <Download className="h-3.5 w-3.5" />
@@ -470,7 +504,7 @@ export default function StandardDetail() {
                               else window.alert(r.error);
                             });
                           }}
-                          className="flex h-7 w-7 items-center justify-center rounded text-slate-500 transition-colors hover:bg-red-100 hover:text-red-700"
+                          className="flex h-7 w-7 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-red-100 hover:text-red-700"
                           title="삭제"
                         >
                           <X className="h-3.5 w-3.5" />
@@ -489,14 +523,14 @@ export default function StandardDetail() {
       </div>
 
       {/* 탭별 푸터 */}
-      <div className="shrink-0 border-t border-slate-200 bg-slate-50/80 px-4 py-2.5">
+      <div className="shrink-0 border-t border-border bg-muted/30 px-4 py-2.5">
         {activeTab === 'basic' && (
           <div className="flex items-center justify-between gap-2">
-            <span className="text-[11px] text-slate-500">기본정보</span>
+            <span className="text-[11px] text-muted-foreground">기본정보</span>
             <div className="flex gap-2">
               <button
                 type="button"
-                className="rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-700 transition-colors hover:bg-slate-50"
+                className="rounded border border-border bg-background px-3 py-1.5 text-xs text-foreground transition-colors hover:bg-muted/50"
               >
                 수정
               </button>
@@ -511,7 +545,7 @@ export default function StandardDetail() {
         )}
         {activeTab === 'history' && (
           <div className="flex items-center justify-between gap-2">
-            <span className="text-[11px] text-slate-500">
+            <span className="text-[11px] text-muted-foreground">
               이력 {SAMPLE_HISTORY.length}건
             </span>
             <button
@@ -524,7 +558,7 @@ export default function StandardDetail() {
         )}
         {activeTab === 'attach' && (
           <div className="flex items-center justify-between gap-2">
-            <span className="text-[11px] text-slate-500">
+            <span className="text-[11px] text-muted-foreground">
               첨부파일{' '}
               {keyFieldName != null && rowKeyForAttachments != null
                 ? `${attachmentQuery.files.length}건`
@@ -559,12 +593,12 @@ export default function StandardDetail() {
                     { layerDisplayName: layerName }
                   )}
                   download
-                  className="rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-700 transition-colors hover:bg-slate-50"
+                  className="rounded border border-border bg-background px-3 py-1.5 text-xs text-foreground transition-colors hover:bg-muted/50"
                 >
                   전체 다운로드
                 </a>
               ) : (
-                <span className="rounded border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs text-slate-400 cursor-not-allowed">
+                <span className="rounded border border-border bg-muted/30 px-3 py-1.5 text-xs text-muted-foreground cursor-not-allowed">
                   전체 다운로드
                 </span>
               )}

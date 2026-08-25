@@ -33,7 +33,9 @@ import { Style, Stroke, Fill, Circle as CircleStyle } from "ol/style";
 import { isEmpty as isEmptyExtent } from "ol/extent";
 import { cn } from "@/lib/utils";
 import { call } from "@/lib/api";
+import { recordDataViewLog } from "@/lib/recordDataViewLog";
 import { SER_FILE_ENG } from "@/lib/serviceFileDataSerEng";
+import { streamDownloadFile } from "@/lib/streamFileDownload";
 import {
   ServiceFileImagePreview,
   type ServiceFilePreviewItem,
@@ -48,6 +50,7 @@ import {
   withServiceFileThumbQuery,
 } from "../../../_mapComponents/standard/useServiceFileData";
 import { useMapContext } from "../../../_mapComponents/MapContext";
+import { refreshServiceWmsLayer } from "../../../_mapComponents/layerFactory/serviceLayerFactory";
 import { canStartMapDrawInteraction } from "../../../_mapComponents/mapDrawInteraction";
 import { layerRowPanelButtonClass } from "../../../_mapComponents/layerRowEdit/layerRowPanelButtonStyles";
 import {
@@ -76,6 +79,7 @@ import {
 } from "./riverConstructionLedgerMock";
 import { RiverNameSelect } from "./RiverNameSelect";
 import { MapSideDetailScroll } from "../../../_mapComponents/MapSideDetailScroll";
+import { OccupationLedgerPlaceInput } from "../../occupationLedger/OccupationLedgerPlaceInput";
 
 type Props = {
   row: RiverConstructionLedgerRow;
@@ -83,11 +87,11 @@ type Props = {
 };
 
 const fieldClass =
-  "box-border h-[22px] w-full min-w-0 rounded border border-slate-300 bg-white px-1.5 text-[11px] leading-none outline-none focus:border-primary focus:ring-1 focus:ring-primary/25";
+  "box-border h-[22px] w-full min-w-0 rounded border border-border bg-background px-1.5 text-[11px] leading-none outline-none focus:border-primary focus:ring-1 focus:ring-primary/25";
 const btnPrimary =
-  "inline-flex h-7 items-center gap-1 rounded border border-primary bg-primary px-2 text-[11px] font-medium text-white hover:bg-primary/90 disabled:opacity-50";
+  "inline-flex h-7 items-center gap-1 rounded border border-primary bg-primary px-2 text-[11px] font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50";
 const btnSecondary =
-  "inline-flex h-7 items-center gap-1 rounded border border-slate-200 bg-white px-2 text-[11px] font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50";
+  "inline-flex h-7 items-center gap-1 rounded border border-border bg-background px-2 text-[11px] font-medium text-foreground/90 hover:bg-muted/50 disabled:opacity-50";
 
 type AttrDraft = {
   name: string;
@@ -110,6 +114,11 @@ type AttrDraft = {
   changeReason: string;
   remark: string;
 };
+
+/** 사업비 입력 — 숫자·천단위 콤마만 남김 */
+function sanitizeBudgetInput(raw: string): string {
+  return String(raw ?? "").replace(/[^\d,]/g, "");
+}
 
 /** 사업비 숫자 파싱 — 빈 값은 0, 콤마·공백 제거 */
 function parseBudgetNumber(raw: string): number | null {
@@ -140,9 +149,9 @@ function computeBudgetAfter(
 }
 
 function toDraft(row: RiverConstructionLedgerRow): AttrDraft {
-  const budgetBefore = row.budgetBefore;
-  const budgetIncrease = row.budgetIncrease;
-  const budgetDecrease = row.budgetDecrease;
+  const budgetBefore = sanitizeBudgetInput(row.budgetBefore);
+  const budgetIncrease = sanitizeBudgetInput(row.budgetIncrease);
+  const budgetDecrease = sanitizeBudgetInput(row.budgetDecrease);
   return {
     name: row.name,
     location: row.location,
@@ -160,7 +169,7 @@ function toDraft(row: RiverConstructionLedgerRow): AttrDraft {
     budgetBefore,
     budgetIncrease,
     budgetDecrease,
-    budgetAfter: computeBudgetAfter(budgetBefore, budgetIncrease, budgetDecrease) || row.budgetAfter,
+    budgetAfter: computeBudgetAfter(budgetBefore, budgetIncrease, budgetDecrease) || sanitizeBudgetInput(row.budgetAfter),
     changeReason: row.changeReason,
     remark: row.remark,
   };
@@ -301,7 +310,7 @@ function AttrValue({ value }: { value: ReactNode }) {
   if (typeof value === "string") {
     return (
       <span
-        className="block truncate text-[11px] leading-snug text-slate-700"
+        className="block truncate text-[11px] leading-snug text-foreground/90"
         title={value && value !== "—" ? value : undefined}
       >
         {value || "—"}
@@ -326,14 +335,14 @@ function AttrLabelCell({
     <div
       className={cn(
         // 조회·수정 공통 행 높이 — 조회 기준(h-7), 수정 입력은 이 안에 맞춤
-        "flex h-7 items-center bg-slate-100 px-2",
-        borderBottom && "border-b border-slate-200",
-        borderRight && "border-r border-slate-200",
+        "flex h-7 items-center bg-muted px-2",
+        borderBottom && "border-b border-border",
+        borderRight && "border-r border-border",
         roundedCorner === "tl" && "rounded-tl-[5px]",
         roundedCorner === "bl" && "rounded-bl-[5px]"
       )}
     >
-      <span className="whitespace-nowrap text-[11px] font-medium leading-snug text-slate-600">
+      <span className="whitespace-nowrap text-[11px] font-medium leading-snug text-muted-foreground">
         {label}
       </span>
     </div>
@@ -355,8 +364,8 @@ function AttrValueCell({
     <div
       className={cn(
         "flex h-7 min-w-0 items-center px-2",
-        borderBottom && "border-b border-slate-200",
-        borderRight && "border-r border-slate-200"
+        borderBottom && "border-b border-border",
+        borderRight && "border-r border-border"
       )}
       style={gridColumn ? { gridColumn } : undefined}
     >
@@ -394,7 +403,7 @@ function AttrTable({ entries }: { entries: AttrEntry[] }) {
 
   return (
     <div
-      className="grid overflow-visible rounded-[5px] border border-slate-200"
+      className="grid overflow-visible rounded-[5px] border border-border"
       style={{ gridTemplateColumns: "max-content minmax(0,1fr) max-content minmax(0,1fr)" }}
     >
       {rows.map((pair, rowIdx) => {
@@ -467,7 +476,7 @@ function AttachmentThumb({
       <button
         type="button"
         onClick={onPreview}
-        className="block aspect-square w-full overflow-hidden rounded border border-slate-200 bg-slate-50"
+        className="block aspect-square w-full overflow-hidden rounded border border-border bg-muted/50"
         title={`${att.name} 미리보기`}
       >
         {thumbSrc ? (
@@ -480,7 +489,7 @@ function AttachmentThumb({
             onError={() => setThumbFailed(true)}
           />
         ) : (
-          <div className="flex h-full w-full flex-col items-center justify-center gap-1 text-slate-400">
+          <div className="flex h-full w-full flex-col items-center justify-center gap-1 text-muted-foreground">
             {isImage ? (
               <ImageIcon className="h-5 w-5" />
             ) : (
@@ -499,7 +508,7 @@ function AttachmentThumb({
             e.stopPropagation();
             onDownload();
           }}
-          className="pointer-events-auto inline-flex h-7 w-7 items-center justify-center rounded-md bg-white text-slate-700 shadow-md ring-1 ring-slate-200/80 hover:bg-slate-50 hover:text-primary"
+          className="pointer-events-auto inline-flex h-7 w-7 items-center justify-center rounded-md bg-background text-foreground/90 shadow-md ring-1 ring-border/80 hover:bg-muted/50 hover:text-primary"
           title="다운로드"
         >
           <Download className="h-4 w-4" />
@@ -510,13 +519,13 @@ function AttachmentThumb({
             e.stopPropagation();
             onDelete();
           }}
-          className="pointer-events-auto inline-flex h-7 w-7 items-center justify-center rounded-md bg-white text-red-600 shadow-md ring-1 ring-slate-200/80 hover:bg-red-50"
+          className="pointer-events-auto inline-flex h-7 w-7 items-center justify-center rounded-md bg-background text-destructive shadow-md ring-1 ring-border/80 hover:bg-destructive/10"
           title="삭제"
         >
           <Trash2 className="h-4 w-4" />
         </button>
       </div>
-      <p className="mt-0.5 truncate text-[10px] text-slate-500" title={att.name}>
+      <p className="mt-0.5 truncate text-[10px] text-muted-foreground" title={att.name}>
         {att.name}
       </p>
     </div>
@@ -609,7 +618,7 @@ function AttachmentThumbGrid({
   if (items.length === 0) {
     return (
       <div className="flex h-full min-h-[6rem] items-center justify-center">
-        <p className="text-center text-[11px] text-slate-400">{emptyLabel}</p>
+        <p className="text-center text-[11px] text-muted-foreground">{emptyLabel}</p>
       </div>
     );
   }
@@ -646,6 +655,20 @@ export function RiverConstructionLedgerDetailPanel({ row, onClose }: Props) {
   const attachInputRef = useRef<HTMLInputElement>(null);
   const attachScrollRef = useRef<HTMLDivElement>(null);
   const isNewRow = isNewRiverConstructionLedgerRow(row);
+
+  // 데이터 이력관리에 조회 저장을 위해 추가
+  useEffect(() => {
+    if (isNewRow) return;
+    const consCode = String(row.id ?? "").trim();
+    if (!consCode) return;
+    recordDataViewLog({
+      tableName: "cons_data_as",
+      keyField: "cons_code",
+      keyValue: consCode,
+      serviceName: "공사대장",
+    });
+  }, [row.id, isNewRow]);
+
   const [editing, setEditing] = useState(isNewRow || !row.name.trim());
   const [draft, setDraft] = useState<AttrDraft>(() => toDraft(row));
   /** 대상 하천 — 단일 값 입력 (기존에 여러 개가 저장돼 있으면 첫 번째만 표시) */
@@ -844,10 +867,10 @@ export function RiverConstructionLedgerDetailPanel({ row, onClose }: Props) {
     };
   }, [setGeomEditingId]);
 
-  /** 편집 중엔 공사구간 전체 도형(오버레이)을 숨기고, 대신 필지별 도형 참고 레이어를 보여준다 */
+  /** 속성·필지 수정 중엔 공사구간 전체 도형(오버레이)을 숨기고, 대신 필지별 도형 참고 레이어를 보여준다 */
   useEffect(() => {
-    setGeomEditingId?.(editing ? row.id : null);
-  }, [editing, row.id, setGeomEditingId]);
+    setGeomEditingId?.(editing && !isNewRow ? row.id : null);
+  }, [editing, isNewRow, row.id, setGeomEditingId]);
 
   /** 편집 중엔 입력창의 값을, 아닐 땐 저장된 값을 기준으로 표시 (단일 값) */
   const riverNames = editing
@@ -864,7 +887,7 @@ export function RiverConstructionLedgerDetailPanel({ row, onClose }: Props) {
 
   const parcels = row.parcels ?? [];
 
-  /** 필지 목록에 하천명·비고 입력용 빈 행 추가 */
+  /** 필지 목록에 빈 행을 넣고, 바로 지도에서 도형을 그리기 시작 */
   const handleAddParcelRow = () => {
     const next: LayerRowParcelItem = {
       address: "",
@@ -876,6 +899,9 @@ export function RiverConstructionLedgerDetailPanel({ row, onClose }: Props) {
     draftParcelsRef.current = list;
     setDraftParcels(list);
     patchRow((r) => ({ ...r, parcels: list }));
+    parcelGeomSnapshotRef.current = null;
+    setParcelGeomEditMode("draw");
+    setParcelGeomEditIdx(list.length - 1);
   };
 
   /** 필지 목록 특정 행의 하천명·비고 값 갱신 */
@@ -974,7 +1000,7 @@ export function RiverConstructionLedgerDetailPanel({ row, onClose }: Props) {
     finishParcelGeomEdit();
   };
 
-  /** 편집 중엔 필지 도형들을 계속 지도에 표시 — 공사구간 전체 도형은 필지 도형들의 합으로 자동 계산되므로 별도 오버레이 대신 이 참고 레이어로 확인 */
+  /** 수정 중엔 필지 도형들을 계속 지도에 표시 — 공사구간 전체 도형은 필지 도형들의 합으로 자동 계산되므로 별도 오버레이 대신 이 참고 레이어로 확인 */
   useEffect(() => {
     if (!editing) {
       draftParcelLayerRef.current = null;
@@ -1177,10 +1203,31 @@ export function RiverConstructionLedgerDetailPanel({ row, onClose }: Props) {
     setDraft(toDraft(row));
     setRiverNamesText(normalizeRiverNames(row.riverNames)[0] ?? "");
     const filled = withRiverNameFallback(row.parcels ?? []);
+    parcelsSnapshotRef.current = [...filled];
     draftParcelsRef.current = filled;
     setDraftParcels(filled);
-    parcelsSnapshotRef.current = filled;
     setEditing(true);
+  };
+
+  const parcelsToSavePayload = (list: LayerRowParcelItem[]) =>
+    list
+      .map((p) => ({
+        riverName: (p.riverName ?? "").trim(),
+        remark: (p.remark ?? "").trim(),
+        geomWkt5181: parcelGeomToWkt5181(p.geometry3857),
+      }))
+      .filter((p) => p.riverName || p.remark || p.geomWkt5181);
+
+  const applyMappedRow = (mapped: RiverConstructionLedgerRow) => {
+    mapContext?.setRiverConstructionLedgerRows?.((rows) => {
+      const withoutDraft = rows.filter((r) => r.id !== row.id);
+      const others = withoutDraft.filter((r) => r.id !== mapped.id);
+      return [mapped, ...others];
+    });
+    mapContext?.setRiverConstructionLedgerSelectedId?.(mapped.id);
+    mapContext?.setRiverConstructionLedgerOverlayRows?.((prev) =>
+      prev.map((r) => (r.id === row.id || r.id === mapped.id ? { ...mapped } : r))
+    );
   };
 
   const handleParcelClick = (item: LayerRowParcelItem, idx: number) => {
@@ -1196,14 +1243,6 @@ export function RiverConstructionLedgerDetailPanel({ row, onClose }: Props) {
       ...draft,
       riverNames,
     });
-    // 공사구간 전체 도형은 별도 입력 없이 필지 도형들의 합집합으로 서버에서 자동 계산됨
-    const parcels = draftParcelsRef.current
-      .map((p) => ({
-        riverName: (p.riverName ?? "").trim(),
-        remark: (p.remark ?? "").trim(),
-        geomWkt5181: parcelGeomToWkt5181(p.geometry3857),
-      }))
-      .filter((p) => p.riverName || p.remark || p.geomWkt5181);
     setSaving(true);
     try {
       const res = await call("", "POST", {
@@ -1213,7 +1252,7 @@ export function RiverConstructionLedgerDetailPanel({ row, onClose }: Props) {
           consCode: isNewRow ? undefined : row.id,
           isNew: isNewRow,
           values,
-          parcels,
+          parcels: isNewRow ? undefined : parcelsToSavePayload(draftParcelsRef.current),
         },
       });
       const data = res?.data ?? res;
@@ -1239,16 +1278,11 @@ export function RiverConstructionLedgerDetailPanel({ row, onClose }: Props) {
             parcels: draftParcelsRef.current,
           };
 
-      mapContext?.setRiverConstructionLedgerRows?.((rows) => {
-        const withoutDraft = rows.filter((r) => r.id !== row.id);
-        const others = withoutDraft.filter((r) => r.id !== consCode);
-        return [mapped, ...others];
-      });
-      mapContext?.setRiverConstructionLedgerSelectedId?.(consCode);
-      mapContext?.setRiverConstructionLedgerOverlayRows?.((prev) =>
-        prev.map((r) => (r.id === row.id || r.id === consCode ? { ...mapped } : r))
-      );
-
+      applyMappedRow(mapped);
+      const savedParcels = withRiverNameFallback(mapped.parcels ?? []);
+      draftParcelsRef.current = savedParcels;
+      setDraftParcels(savedParcels);
+      parcelsSnapshotRef.current = [...savedParcels];
       finishParcelGeomEdit();
       setEditing(false);
       setFoldersRefreshNonce((n) => n + 1);
@@ -1263,23 +1297,34 @@ export function RiverConstructionLedgerDetailPanel({ row, onClose }: Props) {
   const handleCancel = () => {
     setDraft(toDraft(row));
     setRiverNamesText(normalizeRiverNames(row.riverNames)[0] ?? "");
-    const snapParcels = [...parcelsSnapshotRef.current];
-    setDraftParcels(snapParcels);
-    patchRow((prev) => ({ ...prev, parcels: snapParcels }));
-    finishParcelGeomEdit();
-    if (isNewRiverConstructionLedgerRow(row) || !row.name.trim()) {
-      mapContext?.setRiverConstructionLedgerRows?.((rows) => rows.filter((r) => r.id !== row.id));
+    if (isNewRow) {
+      mapContext?.setRiverConstructionLedgerRows?.((rows) =>
+        rows.filter((r) => !isNewRiverConstructionLedgerRow(r))
+      );
       mapContext?.setRiverConstructionLedgerSelectedId?.(null);
       return;
     }
+    const snapParcels = [...parcelsSnapshotRef.current];
+    draftParcelsRef.current = snapParcels;
+    setDraftParcels(snapParcels);
+    patchRow((prev) => ({ ...prev, parcels: snapParcels }));
+    finishParcelGeomEdit();
     setEditing(false);
   };
 
   const handleDelete = async () => {
     if (!window.confirm(`「${row.name || "신규 공사"}」을(를) 삭제할까요?`)) return;
-    if (isNewRow) {
+    const clearDeletedFromMap = () => {
+      finishParcelGeomEdit();
       mapContext?.setRiverConstructionLedgerRows?.((rows) => rows.filter((r) => r.id !== row.id));
+      mapContext?.setRiverConstructionLedgerOverlayRows?.((rows) =>
+        rows.filter((r) => r.id !== row.id)
+      );
       mapContext?.setRiverConstructionLedgerSelectedId?.(null);
+      setRiverFocus?.(null);
+    };
+    if (isNewRow) {
+      clearDeletedFromMap();
       return;
     }
     setDeleting(true);
@@ -1294,8 +1339,10 @@ export function RiverConstructionLedgerDetailPanel({ row, onClose }: Props) {
         window.alert(String(data?.error ?? "삭제에 실패했습니다."));
         return;
       }
-      mapContext?.setRiverConstructionLedgerRows?.((rows) => rows.filter((r) => r.id !== row.id));
-      mapContext?.setRiverConstructionLedgerSelectedId?.(null);
+      clearDeletedFromMap();
+      const map = mapContext?.mapInstanceRef?.current;
+      refreshServiceWmsLayer(map);
+      requestAnimationFrame(() => refreshServiceWmsLayer(map));
     } catch (e: unknown) {
       window.alert(e instanceof Error ? e.message : "삭제에 실패했습니다.");
     } finally {
@@ -1359,6 +1406,31 @@ export function RiverConstructionLedgerDetailPanel({ row, onClose }: Props) {
     triggerServiceFileDownload(url, att.name);
   };
 
+  const handleDownloadAllAttachments = async () => {
+    if (!fileKey) return;
+    if (attachments.length === 0 && attachmentFolders.length === 0) {
+      window.alert("다운로드할 첨부파일이 없습니다.");
+      return;
+    }
+    const label =
+      String(row.name ?? "").trim() ||
+      String(row.location ?? "").trim() ||
+      "공사대장";
+    const url = serviceFileDataZipDownloadUrl(
+      fileSerEng,
+      CONS_DATA_AS_FILE_LAYER,
+      fileKey,
+      { layerDisplayName: label }
+    );
+    try {
+      await streamDownloadFile(url, `${label} 첨부파일.zip`);
+    } catch (e: unknown) {
+      window.alert(
+        e instanceof Error ? e.message : "다운로드할 첨부파일이 없습니다."
+      );
+    }
+  };
+
   const openPreview = (att: RiverConstructionLedgerAttachment) => {
     const scoped = attachments.filter((a) => a.category === att.category);
     const items: ServiceFilePreviewItem[] = scoped
@@ -1388,11 +1460,11 @@ export function RiverConstructionLedgerDetailPanel({ row, onClose }: Props) {
       placeholder="하천명 검색/선택"
     />
   ) : riverNames.length === 0 ? (
-    <span className="text-[11px] leading-snug text-[#666]">—</span>
+    <span className="text-[11px] leading-snug text-muted-foreground">—</span>
   ) : (
-    <p className="truncate text-[11px] leading-snug text-[#666]" title={riverNames.join(", ")}>
+    <p className="truncate text-[11px] leading-snug text-muted-foreground" title={riverNames.join(", ")}>
       {riverPreview.join(", ")}
-      {riverMoreCount > 0 ? <span className="text-slate-400"> 외 {riverMoreCount}</span> : null}
+      {riverMoreCount > 0 ? <span className="text-muted-foreground"> 외 {riverMoreCount}</span> : null}
     </p>
   );
 
@@ -1451,8 +1523,9 @@ export function RiverConstructionLedgerDetailPanel({ row, onClose }: Props) {
     key: "budgetBefore" | "budgetIncrease" | "budgetDecrease",
     value: string
   ) => {
+    const nextValue = sanitizeBudgetInput(value);
     setDraft((prev) => {
-      const next = { ...prev, [key]: value };
+      const next = { ...prev, [key]: nextValue };
       next.budgetAfter = computeBudgetAfter(
         next.budgetBefore,
         next.budgetIncrease,
@@ -1474,9 +1547,22 @@ export function RiverConstructionLedgerDetailPanel({ row, onClose }: Props) {
     <input
       className={fieldClass}
       value={draft[key]}
-      inputMode="decimal"
+      inputMode="numeric"
+      pattern="[0-9,]*"
       onChange={(e) => setBudgetField(key, e.target.value)}
     />
+  );
+
+  const vworldApiKey = mapContext?.vworldApiKey ?? "";
+  const addressInput = (
+    <div className="relative z-20">
+      <OccupationLedgerPlaceInput
+        value={draft.companyAddress}
+        onChange={(v) => setField("companyAddress", v)}
+        vworldApiKey={vworldApiKey}
+        placeholder="지번/도로명 검색"
+      />
+    </div>
   );
 
   const dateInput = (key: keyof AttrDraft) => (
@@ -1501,21 +1587,33 @@ export function RiverConstructionLedgerDetailPanel({ row, onClose }: Props) {
           { fieldKey: "actualEndDate", label: "실준공일자", value: dateInput("actualEndDate") },
           { fieldKey: "companyName", label: "업체명", value: textInput("companyName") },
           { fieldKey: "representative", label: "대표자명", value: textInput("representative") },
-          { fieldKey: "companyAddress", label: "업체주소", value: textInput("companyAddress") },
+          { fieldKey: "companyAddress", label: "업체주소", value: addressInput },
           { fieldKey: "supervisor", label: "감독관", value: textInput("supervisor") },
           { fieldKey: "supervisorName", label: "감독관명", value: textInput("supervisorName") },
           { fieldKey: "phone", label: "전화번호", value: textInput("phone") },
           { fieldKey: "budgetBefore", label: "사업비_전", value: budgetInput("budgetBefore") },
           { fieldKey: "budgetIncrease", label: "사업비_증가", value: budgetInput("budgetIncrease") },
           { fieldKey: "budgetDecrease", label: "사업비_감소", value: budgetInput("budgetDecrease") },
-          { fieldKey: "budgetAfter", label: "사업비_후", value: textInput("budgetAfter") },
+          {
+            fieldKey: "budgetAfter",
+            label: "사업비_후",
+            value: (
+              <input
+                className={cn(fieldClass, "bg-slate-50")}
+                value={draft.budgetAfter}
+                readOnly
+                tabIndex={-1}
+                inputMode="numeric"
+              />
+            ),
+          },
           { fieldKey: "changeReason", label: "변경사유", value: textInput("changeReason") },
           { fieldKey: "remark", label: "비고", value: textInput("remark") },
         ]),
         attrFullWidthByKey
       ),
     // eslint-disable-next-line react-hooks/exhaustive-deps -- draft + river cell
-    [draft, riverNames, riverNamesText, attrFullWidthByKey]
+    [draft, riverNames, riverNamesText, attrFullWidthByKey, vworldApiKey]
   );
 
   const geomBannerHost =
@@ -1525,7 +1623,7 @@ export function RiverConstructionLedgerDetailPanel({ row, onClose }: Props) {
     geomBannerHost && parcelGeomEditIdx != null
       ? createPortal(
           <div
-            className="pointer-events-none absolute z-[15] flex -translate-x-1/2 flex-col gap-1.5 rounded border border-emerald-300 bg-emerald-50/95 px-3 py-1.5 text-[11px] font-medium text-emerald-700 shadow-sm"
+            className="pointer-events-none absolute z-[15] flex -translate-x-1/2 flex-col gap-1.5 rounded border border-primary/40 bg-primary/10 px-3 py-1.5 text-[11px] font-medium text-primary shadow-sm"
             style={
               geomCenterPixel
                 ? { left: geomCenterPixel.x, top: geomHintTopPx }
@@ -1543,7 +1641,7 @@ export function RiverConstructionLedgerDetailPanel({ row, onClose }: Props) {
                   type="button"
                   className={layerRowPanelButtonClass(
                     "default",
-                    "pointer-events-auto shrink-0 border-emerald-200 text-emerald-700 hover:bg-emerald-100"
+                    "pointer-events-auto shrink-0 border-primary/30 text-primary hover:bg-primary/15"
                   )}
                   onClick={finishParcelGeomEdit}
                 >
@@ -1555,7 +1653,7 @@ export function RiverConstructionLedgerDetailPanel({ row, onClose }: Props) {
                     type="button"
                     className={layerRowPanelButtonClass(
                       "default",
-                      "pointer-events-auto shrink-0 border-emerald-200 text-emerald-700 hover:bg-emerald-100"
+                      "pointer-events-auto shrink-0 border-primary/30 text-primary hover:bg-primary/15"
                     )}
                     onClick={finishParcelGeomEdit}
                   >
@@ -1565,7 +1663,7 @@ export function RiverConstructionLedgerDetailPanel({ row, onClose }: Props) {
                     type="button"
                     className={layerRowPanelButtonClass(
                       "default",
-                      "pointer-events-auto shrink-0 border-emerald-200 text-emerald-700 hover:bg-emerald-100"
+                      "pointer-events-auto shrink-0 border-primary/30 text-primary hover:bg-primary/15"
                     )}
                     onClick={resetParcelGeomToSnapshot}
                   >
@@ -1586,13 +1684,13 @@ export function RiverConstructionLedgerDetailPanel({ row, onClose }: Props) {
         )
       : null;
 
-  const titleText = row.name.trim() || "공사대장 상세";
+  const titleText = isNewRow ? "공사대장 등록" : row.name.trim() || "공사대장 상세";
 
   return (
-    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-white">
-      <div className="flex h-9 shrink-0 items-center justify-between gap-2 border-b border-slate-200 px-3">
+    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-background">
+      <div className="flex h-9 shrink-0 items-center justify-between gap-2 border-b border-border px-3">
         <span
-          className="min-w-0 flex-1 truncate text-sm font-semibold leading-none text-slate-800"
+          className="min-w-0 flex-1 truncate text-sm font-semibold leading-none text-foreground"
           title={titleText}
         >
           {titleText}
@@ -1600,7 +1698,7 @@ export function RiverConstructionLedgerDetailPanel({ row, onClose }: Props) {
         <button
           type="button"
           onClick={onClose}
-          className="shrink-0 rounded p-1 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
+          className="shrink-0 rounded p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
           title="닫기"
           aria-label="닫기"
         >
@@ -1610,11 +1708,11 @@ export function RiverConstructionLedgerDetailPanel({ row, onClose }: Props) {
 
       {/* 본문 전체가 하나로 스크롤 — 상세 속성 · 필지 · 첨부파일 순서로 자연스럽게 이어짐 */}
       <MapSideDetailScroll className="flex min-h-0 flex-1 flex-col overflow-auto px-3 py-2 text-xs">
-        <div className="sticky top-0 z-10 mb-1 flex shrink-0 items-center justify-between gap-2 bg-white py-0.5">
-          <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+        <div className="sticky top-0 z-10 mb-1 flex shrink-0 items-center justify-between gap-2 bg-background py-0.5">
+          <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
             상세 속성
             {detailLoading ? (
-              <span className="ml-1.5 font-normal normal-case tracking-normal text-slate-400">
+              <span className="ml-1.5 font-normal normal-case tracking-normal text-muted-foreground">
                 불러오는 중…
               </span>
             ) : null}
@@ -1634,37 +1732,38 @@ export function RiverConstructionLedgerDetailPanel({ row, onClose }: Props) {
         </div>
         <AttrTable entries={editing ? editEntries : viewEntries} />
 
+        {!isNewRow ? (
         <div className="mt-4">
           <div className="mb-1 flex items-center justify-between gap-2">
-            <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+            <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
               필지목록
               {(editing ? draftParcels : parcels).length > 0 ? (
-                <span className="ml-1 font-normal normal-case text-slate-400">
+                <span className="ml-1 font-normal normal-case text-muted-foreground">
                   ({(editing ? draftParcels : parcels).length})
                 </span>
               ) : null}
             </div>
-            {editing && (
+            {editing ? (
               <LayerRowPanelButton className="h-6 px-2 text-[10px]" onClick={handleAddParcelRow}>
                 <Plus className="h-3 w-3 shrink-0" aria-hidden />
                 추가
               </LayerRowPanelButton>
-            )}
+            ) : null}
           </div>
 
           {(editing ? draftParcels : parcels).length === 0 ? (
-            <div className="rounded border border-dashed border-slate-200 bg-slate-50/80 px-2 py-2 text-slate-500">
+            <div className="rounded border border-dashed border-border bg-muted/50 px-2 py-2 text-muted-foreground">
               {editing
-                ? "「추가」로 하천명·비고를 입력하고, 필요하면 도형도 그릴 수 있습니다."
+                ? "「추가」를 누르면 지도에서 바로 도형을 그릴 수 있습니다. 하천명·비고도 입력하세요."
                 : "등록된 필지가 없습니다."}
             </div>
           ) : editing ? (
-            <ul className="max-h-48 list-none space-y-1.5 overflow-y-auto overscroll-contain rounded border border-slate-200 bg-white p-1.5 scrollbar-hide">
+            <ul className="max-h-48 list-none space-y-1.5 overflow-y-auto overscroll-contain rounded border border-border bg-background p-1.5 scrollbar-hide">
               {draftParcels.map((item, i) => (
-                <li key={i} className="flex items-center gap-1 rounded border border-slate-100 bg-slate-50/60 p-1">
+                <li key={i} className="flex items-center gap-1 rounded border border-border bg-muted/40 p-1">
                   <button
                     type="button"
-                    className="w-4 shrink-0 text-center text-[10px] tabular-nums text-slate-400 hover:text-primary disabled:cursor-default disabled:opacity-70"
+                    className="w-4 shrink-0 text-center text-[10px] tabular-nums text-muted-foreground hover:text-primary disabled:cursor-default disabled:opacity-70"
                     onClick={() => handleParcelClick(item, i)}
                     title="클릭 시 위치 이동"
                   >
@@ -1683,17 +1782,17 @@ export function RiverConstructionLedgerDetailPanel({ row, onClose }: Props) {
                     onChange={(e) => handleUpdateParcelField(i, "remark", e.target.value)}
                   />
                   {movingParcelIdx === i && (
-                    <span className="shrink-0 text-[10px] text-slate-500">이동중</span>
+                    <span className="shrink-0 text-[10px] text-muted-foreground">이동중</span>
                   )}
                   <button
                     type="button"
                     className={cn(
                       "inline-flex h-6 w-6 shrink-0 items-center justify-center rounded",
                       parcelGeomEditIdx === i
-                        ? "bg-emerald-100 text-emerald-700"
+                        ? "bg-primary/15 text-primary"
                         : item.geometry3857
-                          ? "text-emerald-600 hover:bg-emerald-50"
-                          : "text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+                          ? "text-primary hover:bg-primary/10"
+                          : "text-muted-foreground hover:bg-muted hover:text-foreground"
                     )}
                     onClick={() => toggleParcelGeomEdit(i)}
                     aria-label={item.geometry3857 ? "필지 도형 수정" : "필지 도형추가"}
@@ -1709,7 +1808,7 @@ export function RiverConstructionLedgerDetailPanel({ row, onClose }: Props) {
                   </button>
                   <button
                     type="button"
-                    className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded text-slate-400 hover:bg-red-50 hover:text-red-600"
+                    className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
                     onClick={() => handleRemoveParcel(i)}
                     aria-label="필지 삭제"
                     title="삭제"
@@ -1720,11 +1819,11 @@ export function RiverConstructionLedgerDetailPanel({ row, onClose }: Props) {
               ))}
             </ul>
           ) : (
-            <ul className="max-h-48 list-none space-y-0 overflow-y-auto overscroll-contain rounded border border-slate-200 bg-white scrollbar-hide">
+            <ul className="max-h-48 list-none space-y-0 overflow-y-auto overscroll-contain rounded border border-border bg-background scrollbar-hide">
               {parcels.map((item, i) => (
                 <li
                   key={i}
-                  className="flex items-start gap-1 border-b border-slate-100 px-2 py-1.5 text-slate-800 last:border-b-0"
+                  className="flex items-start gap-1 border-b border-border px-2 py-1.5 text-foreground last:border-b-0"
                 >
                   <button
                     type="button"
@@ -1732,7 +1831,7 @@ export function RiverConstructionLedgerDetailPanel({ row, onClose }: Props) {
                     onClick={() => handleParcelClick(item, i)}
                     title="클릭 시 위치 이동"
                   >
-                    <span className="mr-1 shrink-0 tabular-nums text-slate-400">{i + 1}.</span>
+                    <span className="mr-1 shrink-0 tabular-nums text-muted-foreground">{i + 1}.</span>
                     <span className="min-w-0 flex-1 break-words">
                       {item.displayText?.trim() ||
                         [item.riverName, item.remark].filter(Boolean).join(" · ") ||
@@ -1740,7 +1839,7 @@ export function RiverConstructionLedgerDetailPanel({ row, onClose }: Props) {
                         "—"}
                     </span>
                     {movingParcelIdx === i && (
-                      <span className="ml-1 shrink-0 text-[11px] text-slate-500">이동 중…</span>
+                      <span className="ml-1 shrink-0 text-[11px] text-muted-foreground">이동 중…</span>
                     )}
                   </button>
                 </li>
@@ -1748,11 +1847,12 @@ export function RiverConstructionLedgerDetailPanel({ row, onClose }: Props) {
             </ul>
           )}
         </div>
+        ) : null}
 
-        {/* 첨부파일 — 남는 세로 공간을 채우되, 속성·필지목록이 길어도 최소 높이 밑으로는 안 줄어듦(그 이상은 패널 전체 스크롤) */}
+        {!isNewRow ? (
         <div className="mt-4 flex min-h-[12rem] flex-1 flex-col">
           <div className="mb-1 flex shrink-0 items-center justify-between gap-2">
-            <div className="flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+            <div className="flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
               <Paperclip className="h-3.5 w-3.5" />
               첨부파일
             </div>
@@ -1766,20 +1866,7 @@ export function RiverConstructionLedgerDetailPanel({ row, onClose }: Props) {
                     ? "폴더 포함 첨부파일 전체 ZIP 다운로드"
                     : "저장 후 다운로드할 수 있습니다"
                 }
-                onClick={() => {
-                  if (!fileKey) return;
-                  const label =
-                    String(row.name ?? "").trim() ||
-                    String(row.location ?? "").trim() ||
-                    "공사대장";
-                  const url = serviceFileDataZipDownloadUrl(
-                    fileSerEng,
-                    CONS_DATA_AS_FILE_LAYER,
-                    fileKey,
-                    { layerDisplayName: label }
-                  );
-                  triggerServiceFileDownload(url, `${label} 첨부파일.zip`);
-                }}
+                onClick={() => void handleDownloadAllAttachments()}
               >
                 <Download className="h-3 w-3" />
                 전체
@@ -1806,7 +1893,7 @@ export function RiverConstructionLedgerDetailPanel({ row, onClose }: Props) {
 
           {fileKey ? (
             <>
-              <div className="mb-2 flex shrink-0 flex-wrap gap-0.5 rounded border border-slate-200 bg-slate-50 p-0.5">
+              <div className="mb-2 flex shrink-0 flex-wrap gap-0.5 rounded border border-border bg-muted/50 p-0.5">
                 {(attachmentFolders.length > 0 ? attachmentFolders : [CONS_ATTACH_ROOT_FOLDER]).map(
                   (folder) => (
                     <button
@@ -1815,8 +1902,8 @@ export function RiverConstructionLedgerDetailPanel({ row, onClose }: Props) {
                       className={cn(
                         "min-w-0 flex-1 rounded px-1 py-1 text-[10px] font-medium transition-colors",
                         attachmentTab === folder
-                          ? "bg-white text-slate-800 shadow-sm"
-                          : "text-slate-500 hover:text-slate-700"
+                          ? "bg-background text-foreground shadow-sm"
+                          : "text-muted-foreground hover:text-foreground"
                       )}
                       onClick={() => {
                         setAttachmentTab(folder);
@@ -1835,7 +1922,7 @@ export function RiverConstructionLedgerDetailPanel({ row, onClose }: Props) {
                 className="min-h-0 flex-1 overflow-y-auto overscroll-contain scrollbar-hide"
               >
                 {!attachmentsReady || filesLoading ? (
-                  <p className="py-3 text-center text-[11px] text-slate-400">첨부 목록 불러오는 중…</p>
+                  <p className="py-3 text-center text-[11px] text-muted-foreground">첨부 목록 불러오는 중…</p>
                 ) : (
                   <AttachmentThumbGrid
                     key={attachmentTab}
@@ -1850,11 +1937,12 @@ export function RiverConstructionLedgerDetailPanel({ row, onClose }: Props) {
               </div>
             </>
           ) : (
-            <div className="flex min-h-0 flex-1 items-center justify-center rounded border border-dashed border-slate-200 bg-slate-50/80 px-2 text-center text-[11px] text-slate-500">
+            <div className="flex min-h-0 flex-1 items-center justify-center rounded border border-dashed border-border bg-muted/50 px-2 text-center text-[11px] text-muted-foreground">
               저장한 뒤 폴더별 첨부파일을 등록할 수 있습니다.
             </div>
           )}
         </div>
+        ) : null}
       </MapSideDetailScroll>
 
       {preview ? (

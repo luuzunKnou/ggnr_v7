@@ -381,9 +381,9 @@ export function UseFeeListPanel({ onClose, selectedId, onSelectId, serEng }: Lis
   )
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-white">
-      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-slate-200 px-3 py-1.5">
-        <span className="text-sm font-semibold text-slate-800">{feeBinding.title}</span>
+    <div className="flex h-full min-h-0 flex-col bg-background">
+      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border px-3 py-1.5">
+        <span className="text-sm font-semibold text-foreground">{feeBinding.title}</span>
         <div className="flex items-center gap-1">
           <LayerRowPanelButton
             type="button"
@@ -413,7 +413,7 @@ export function UseFeeListPanel({ onClose, selectedId, onSelectId, serEng }: Lis
           <button
             type="button"
             onClick={onClose}
-            className="shrink-0 rounded p-1 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
+            className="shrink-0 rounded p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
             title="닫기"
             aria-label="닫기"
           >
@@ -422,20 +422,20 @@ export function UseFeeListPanel({ onClose, selectedId, onSelectId, serEng }: Lis
         </div>
       </div>
 
-      <div className="shrink-0 space-y-2 border-b border-slate-100 px-3 py-2">
+      <div className="shrink-0 space-y-2 border-b border-border px-3 py-2">
         <div className="flex items-stretch gap-1.5">
           <div className="relative min-w-0 flex-1">
-            <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <input
               type="search"
               value={keyword}
               onChange={(e) => setKeyword(e.target.value)}
               placeholder="검색 (대장번호, 부서명, 납부자, 상태)"
-              className="h-8 w-full rounded-md border border-slate-200 bg-white py-1.5 pl-8 pr-3 text-sm outline-none ring-offset-2 focus:border-slate-300 focus:ring-2 focus:ring-slate-200"
+              className="h-8 w-full rounded-md border border-border bg-background py-1.5 pl-8 pr-3 text-sm outline-none ring-offset-2 focus:border-border focus:ring-2 focus:ring-border"
             />
           </div>
           <div
-            className="flex shrink-0 rounded-md border border-slate-200 bg-slate-50 p-0.5"
+            className="flex shrink-0 rounded-md border border-border bg-muted/50 p-0.5"
             role="group"
             aria-label="미납·수납 필터"
             title="미납·수납"
@@ -450,8 +450,8 @@ export function UseFeeListPanel({ onClose, selectedId, onSelectId, serEng }: Lis
                   className={cn(
                     'rounded px-1.5 py-1 text-[10px] font-medium transition-colors',
                     active
-                      ? 'bg-white text-teal-800 shadow-sm'
-                      : 'text-slate-500 hover:text-slate-700'
+                      ? 'bg-background text-primary shadow-sm'
+                      : 'text-muted-foreground hover:text-foreground'
                   )}
                   aria-pressed={active}
                 >
@@ -478,8 +478,8 @@ export function UseFeeListPanel({ onClose, selectedId, onSelectId, serEng }: Lis
                 className={cn(
                   'max-w-full truncate rounded border px-2 py-1 text-[11px] font-medium transition-colors',
                   active
-                    ? 'border-primary bg-primary/10 text-slate-800'
-                    : 'border-slate-200 bg-white text-slate-500 hover:border-slate-300 hover:text-slate-700'
+                    ? 'border-primary bg-primary/10 text-foreground'
+                    : 'border-border bg-background text-muted-foreground hover:border-border hover:text-foreground'
                 )}
               >
                 {opt.label}
@@ -504,7 +504,7 @@ export function UseFeeListPanel({ onClose, selectedId, onSelectId, serEng }: Lis
               <col className="w-[90px]" />
               <col className="w-[80px]" />
             </colgroup>
-            <thead className="sticky top-0 z-[1] bg-slate-50 shadow-[0_1px_0_0_rgb(226_232_240)]">
+            <thead className="sticky top-0 z-[1] bg-muted/50">
               <tr>
                 {SORT_COLUMNS.map((col) => {
                   const sortIdx = sorts.findIndex((s) => s.key === col.key)
@@ -519,14 +519,14 @@ export function UseFeeListPanel({ onClose, selectedId, onSelectId, serEng }: Lis
                   return (
                     <th
                       key={col.key}
-                      className="whitespace-nowrap border-b border-slate-200 px-1.5 py-1.5 text-center font-semibold text-slate-700"
+                      className="whitespace-nowrap border-b-0 px-1.5 py-1.5 text-center font-semibold text-foreground/90 [box-shadow:inset_0_-2px_0_0_var(--border)]"
                     >
                       <button
                         type="button"
                         onClick={() => toggleSort(col.key)}
                         className={cn(
-                          'inline-flex max-w-full items-center justify-center gap-0.5 rounded px-0.5 py-0.5 transition-colors hover:bg-slate-100',
-                          active ? 'text-primary' : 'text-slate-700'
+                          'inline-flex max-w-full items-center justify-center gap-0.5 rounded px-0.5 py-0.5 transition-colors hover:bg-muted',
+                          active ? 'text-primary' : 'text-foreground/90'
                         )}
                         title={
                           !active
@@ -549,7 +549,7 @@ export function UseFeeListPanel({ onClose, selectedId, onSelectId, serEng }: Lis
                 <tr>
                   <td
                     colSpan={SORT_COLUMNS.length}
-                    className="px-3 py-6 text-center text-xs text-red-600"
+                    className="px-3 py-6 text-center text-xs text-destructive"
                   >
                     {error}
                   </td>
@@ -558,7 +558,7 @@ export function UseFeeListPanel({ onClose, selectedId, onSelectId, serEng }: Lis
                 <tr>
                   <td
                     colSpan={SORT_COLUMNS.length}
-                    className="px-3 py-6 text-center text-xs text-slate-500"
+                    className="px-3 py-6 text-center text-xs text-muted-foreground"
                   >
                     불러오는 중…
                   </td>
@@ -567,7 +567,7 @@ export function UseFeeListPanel({ onClose, selectedId, onSelectId, serEng }: Lis
                 <tr>
                   <td
                     colSpan={SORT_COLUMNS.length}
-                    className="px-3 py-6 text-center text-xs text-slate-500"
+                    className="px-3 py-6 text-center text-xs text-muted-foreground"
                   >
                     조회된 점사용료가 없습니다.
                   </td>
@@ -589,7 +589,7 @@ export function UseFeeListPanel({ onClose, selectedId, onSelectId, serEng }: Lis
                         }
                       }}
                       className={cn(
-                        'cursor-pointer border-b border-slate-100 transition-colors hover:bg-slate-50/80',
+                        'cursor-pointer border-b border-border transition-colors hover:bg-muted/50',
                         isSelected && 'bg-primary/10'
                       )}
                     >
@@ -598,30 +598,30 @@ export function UseFeeListPanel({ onClose, selectedId, onSelectId, serEng }: Lis
                           className={cn(
                             'inline-block rounded-full px-1.5 py-0.5 text-[11px] font-semibold',
                             row.status === '미납'
-                              ? 'bg-red-50 text-red-700'
-                              : 'bg-emerald-50 text-emerald-700'
+                              ? 'bg-destructive/10 text-destructive'
+                              : 'bg-primary/10 text-primary'
                           )}
                         >
                           {row.status}
                         </span>
                       </td>
-                      <td className="truncate px-1.5 py-1.5 text-slate-800" title={row.ledgerNo}>
+                      <td className="truncate px-1.5 py-1.5 text-foreground" title={row.ledgerNo}>
                         {row.ledgerNo || '—'}
                       </td>
-                      <td className="truncate px-1.5 py-1.5 text-slate-700" title={row.dptNm}>
+                      <td className="truncate px-1.5 py-1.5 text-foreground/90" title={row.dptNm}>
                         {row.dptNm || '—'}
                       </td>
-                      <td className="truncate px-1.5 py-1.5 text-slate-700" title={row.payer}>
+                      <td className="truncate px-1.5 py-1.5 text-foreground/90" title={row.payer}>
                         {row.payer || '—'}
                       </td>
                       <td
-                        className="truncate px-1 py-1.5 text-right tabular-nums text-slate-700"
+                        className="truncate px-1 py-1.5 text-right tabular-nums text-foreground/90"
                         title={row.amount}
                       >
                         {row.amount}
                       </td>
                       <td
-                        className="truncate px-1 py-1.5 tabular-nums text-slate-700"
+                        className="truncate px-1 py-1.5 tabular-nums text-foreground/90"
                         title={row.dueDate}
                       >
                         {row.dueDate}
@@ -634,15 +634,15 @@ export function UseFeeListPanel({ onClose, selectedId, onSelectId, serEng }: Lis
           </table>
           {rows.length > 0 ? (
             loadingMore ? (
-              <div className="px-3 py-2 text-center text-[11px] text-slate-500">더 불러오는 중…</div>
+              <div className="px-3 py-2 text-center text-[11px] text-muted-foreground">더 불러오는 중…</div>
             ) : rows.length < total ? (
-              <div className="px-3 py-2 text-center text-[11px] text-slate-400">
+              <div className="px-3 py-2 text-center text-[11px] text-muted-foreground">
                 아래로 스크롤하면 더 불러옵니다
               </div>
             ) : null
           ) : null}
         </div>
-        <div className="shrink-0 border-t border-slate-100 px-3 py-1.5 text-[11px] text-slate-500">
+        <div className="shrink-0 border-t border-border px-3 py-1.5 text-[11px] text-muted-foreground">
           {rows.length < total
             ? `${rows.length.toLocaleString()} / ${total.toLocaleString()}건`
             : `${total.toLocaleString()}건`}

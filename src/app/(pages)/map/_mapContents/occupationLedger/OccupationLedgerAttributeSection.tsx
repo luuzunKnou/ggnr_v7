@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import type { LayerRowDetailAttr } from '../../_mapComponents/layerRowEdit';
 import {
   formatAreaDisplay,
@@ -15,14 +15,14 @@ import { OccupationLedgerPlaceInput } from './OccupationLedgerPlaceInput';
 const AREA_FIELD = 'perm_area';
 
 const inputClass =
-  'rounded border border-slate-200 bg-white px-1.5 py-0.5 text-xs outline-none focus:border-primary focus:ring-1 focus:ring-primary/30';
+  'rounded border border-border bg-background px-1.5 py-0.5 text-xs outline-none focus:border-primary focus:ring-1 focus:ring-primary/30';
 const readonlyInputClass =
-  'cursor-default rounded border border-slate-200 bg-slate-100 px-1.5 py-0.5 text-xs text-slate-700 outline-none';
+  'cursor-default rounded border border-border bg-muted px-1.5 py-0.5 text-xs text-foreground/90 outline-none';
 /** 도로망 유지보수 «추가»와 동일 primary 톤, 입력 높이보다 약간 낮게 */
 const btnAutoCalc =
-  'inline-flex h-6 shrink-0 items-center rounded border border-primary bg-primary px-2 text-[11px] font-medium text-white hover:bg-primary/90 disabled:opacity-50';
+  'inline-flex h-6 shrink-0 items-center rounded border border-primary bg-primary px-2 text-[11px] font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50';
 const areaInputClass =
-  'h-6 min-w-0 flex-1 rounded border border-slate-200 bg-white px-1.5 text-xs outline-none focus:border-primary focus:ring-1 focus:ring-primary/30';
+  'h-6 min-w-0 flex-1 rounded border border-border bg-background px-1.5 text-xs outline-none focus:border-primary focus:ring-1 focus:ring-primary/30';
 
 const DATE_FIELD_SET = new Set(['perm_start_date', 'perm_end_date', 'permit_date']);
 const PLACE_FIELD = 'occup_place';
@@ -53,31 +53,12 @@ export function OccupationLedgerAttributeSection({
   resetKey,
   onAutoCalcArea,
 }: Props) {
-  const [expanded, setExpanded] = useState(false);
   const [areaHint, setAreaHint] = useState<string | null>(null);
 
-  useEffect(() => {
-    setExpanded(false);
-  }, [resetKey]);
-
-  useEffect(() => {
-    if (isEditing) setExpanded(true);
-  }, [isEditing]);
-
-  const { primaryAttributes, hiddenAttributes } = useMemo(() => {
-    const primary: LayerRowDetailAttr[] = [];
-    const hidden: LayerRowDetailAttr[] = [];
-    for (const row of attributes) {
-      if (row.showDetail === false) hidden.push(row);
-      else primary.push(row);
-    }
-    return { primaryAttributes: primary, hiddenAttributes: hidden };
-  }, [attributes]);
-
-  const visibleAttributes = expanded
-    ? [...primaryAttributes, ...hiddenAttributes]
-    : primaryAttributes;
-  const hiddenCount = hiddenAttributes.length;
+  const visibleAttributes = useMemo(
+    () => attributes.filter((row) => row.showDetail !== false),
+    [attributes]
+  );
 
   const resolveDraftValue = (field: string): string => {
     if (field in draft) return draft[field] ?? '';
@@ -87,12 +68,12 @@ export function OccupationLedgerAttributeSection({
 
   return (
     <>
-      <div className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+      <div className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
         상세 속성
       </div>
-      <dl className="divide-y divide-slate-100 rounded border border-slate-200 bg-slate-50/50">
+      <dl className="divide-y divide-border rounded border border-border bg-muted/40">
         {visibleAttributes.length === 0 ? (
-          <div className="px-2 py-3 text-slate-500">표시할 속성이 없습니다.</div>
+          <div className="px-2 py-3 text-muted-foreground">표시할 속성이 없습니다.</div>
         ) : (
           visibleAttributes.map((row) => {
             const fieldLower = row.field.toLowerCase();
@@ -113,15 +94,15 @@ export function OccupationLedgerAttributeSection({
                 key={row.field}
                 className="grid grid-cols-detail-30 items-center gap-x-2 gap-y-0.5 px-2 py-1.5"
               >
-                <dt className="shrink-0 leading-none font-medium text-slate-600">
+                <dt className="shrink-0 leading-none font-medium text-muted-foreground">
                   {row.label}
                   {isEditing && row.required ? (
-                    <span className="ml-0.5 text-red-500" aria-hidden>
+                    <span className="ml-0.5 text-destructive" aria-hidden>
                       *
                     </span>
                   ) : null}
                 </dt>
-                <dd className="relative min-w-0 break-words text-slate-800">
+                <dd className="relative min-w-0 break-words text-foreground">
                   {showInput ? (
                     isPlace ? (
                       <OccupationLedgerPlaceInput
@@ -160,7 +141,7 @@ export function OccupationLedgerAttributeSection({
                             className={areaInputClass}
                             placeholder="0"
                           />
-                          <span className="shrink-0 text-slate-500">m²</span>
+                          <span className="shrink-0 text-muted-foreground">m²</span>
                           {onAutoCalcArea ? (
                             <button
                               type="button"
@@ -176,7 +157,7 @@ export function OccupationLedgerAttributeSection({
                           ) : null}
                         </div>
                         {areaHint ? (
-                          <span className="text-[10px] text-amber-700">{areaHint}</span>
+                          <span className="text-[10px] text-muted-foreground">{areaHint}</span>
                         ) : null}
                       </div>
                     ) : isDate ? (
@@ -214,15 +195,6 @@ export function OccupationLedgerAttributeSection({
           })
         )}
       </dl>
-      {hiddenCount > 0 ? (
-        <button
-          type="button"
-          onClick={() => setExpanded((v) => !v)}
-          className="mt-2 w-full rounded border border-slate-200 bg-white py-1.5 text-[11px] font-medium text-primary hover:bg-slate-50"
-        >
-          {expanded ? '접기' : `더보기 (${hiddenCount}건)`}
-        </button>
-      ) : null}
     </>
   );
 }

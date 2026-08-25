@@ -17,6 +17,10 @@ import { reorderDefineLayerTableRow, reorderDefineLayerTablesArray } from '@/lib
 import { matchEpsgFromLooseText } from '@/lib/matchCoordinateSystemText';
 import { safeTableName, shpTableNameFromRelPath } from '@/lib/shpTableName';
 import {
+  isLayerExtraFieldName,
+  layerExtraDefineViewOff,
+} from '@/lib/layerExtraField';
+import {
   fetchSyncLogGeomAsGeoJson,
   fillPendingSyncLogGeoms,
   shouldStoreFullHistoryGeom,
@@ -353,6 +357,177 @@ function resolveShapefileDbfEncoding(dir: string, basename: string): string {
     }
   }
   return 'CP949';
+}
+
+/** DBF 필드명 슬롯(최대 10바이트)에서 null 전까지의 바이트 */
+function dbfFieldNamePayload(slot11: Buffer): Buffer {
+  let end = 0;
+  while (end < 10 && end < slot11.length && slot11[end] !== 0) end++;
+  return slot11.subarray(0, end);
+}
+
+function isValidUtf8Bytes(bytes: Buffer): boolean {
+  if (bytes.length === 0) return true;
+  try {
+    new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** 완성된 UTF-8 시퀀스만 남기고, 끝의 잘린 멀티바이트는 제거 */
+function stripIncompleteUtf8Bytes(bytes: Buffer): Buffer {
+  let i = 0;
+  let end = 0;
+  while (i < bytes.length) {
+    const b = bytes[i]!;
+    if (b < 0x80) {
+      i += 1;
+      end = i;
+      continue;
+    }
+    let need = 0;
+    if ((b & 0xe0) === 0xc0) need = 2;
+    else if ((b & 0xf0) === 0xe0) need = 3;
+    else if ((b & 0xf8) === 0xf0) need = 4;
+    else break;
+    if (i + need > bytes.length) break;
+    let ok = true;
+    for (let j = 1; j < need; j++) {
+      if ((bytes[i + j]! & 0xc0) !== 0x80) {
+        ok = false;
+        break;
+      }
+    }
+    if (!ok) break;
+    i += need;
+    end = i;
+  }
+  return bytes.subarray(0, end);
+}
+
+/**
+ * DBF 필드명이 UTF-8로 잘려 PG ALTER/COPY 시
+ * «UTF8 인코딩에서 사용할 수 없는 문자»(예: 0xec 0x22 0x20)가 나지 않도록 헤더를 교정한다.
+ * 원본 버퍼는 변경하지 않고 새 버퍼를 반환한다.
+ */
+function repairDbfFieldNamesBuffer(buf: Buffer): {
+  buffer: Buffer;
+  changes: Array<{ index: number; to: string }>;
+} {
+  if (buf.length < 32) return { buffer: buf, changes: [] };
+  const headerLen = buf.readUInt16LE(8);
+  if (headerLen < 33 || headerLen > buf.length) return { buffer: buf, changes: [] };
+
+  const out = Buffer.from(buf);
+  type Entry = { pos: number; raw: Buffer; name: string };
+  const entries: Entry[] = [];
+
+  for (let pos = 32; pos + 32 <= headerLen && pos + 32 <= out.length && out[pos] !== 0x0d; pos += 32) {
+    const raw = Buffer.from(dbfFieldNamePayload(out.subarray(pos, pos + 11)));
+    let nameBuf = raw;
+    if (raw.length > 0 && !isValidUtf8Bytes(raw)) {
+      nameBuf = stripIncompleteUtf8Bytes(raw);
+      if (nameBuf.length === 0 || !isValidUtf8Bytes(nameBuf)) {
+        nameBuf = Buffer.from(`fld_${entries.length}`, 'ascii');
+      }
+    }
+    let name = nameBuf.toString('utf8').trim();
+    if (!name) name = `fld_${entries.length}`;
+    entries.push({ pos, raw, name });
+  }
+
+  const used = new Set<string>();
+  const changes: Array<{ index: number; to: string }> = [];
+
+  for (let i = 0; i < entries.length; i++) {
+    const entry = entries[i]!;
+    let candidate = entry.name;
+    let n = 2;
+    while (used.has(candidate.toLowerCase())) {
+      const suffix = `_${n}`;
+      let base = entry.name;
+      let trial = Buffer.from(base + suffix, 'utf8');
+      while (trial.length > 10 && base.length > 0) {
+        base = base.slice(0, -1);
+        trial = Buffer.from(base + suffix, 'utf8');
+      }
+      candidate = trial.length > 10 ? `f${i}_${n}`.slice(0, 10) : base + suffix;
+      n += 1;
+    }
+    used.add(candidate.toLowerCase());
+
+    let finalBytes = Buffer.from(candidate, 'utf8');
+    if (finalBytes.length > 10) {
+      finalBytes = stripIncompleteUtf8Bytes(finalBytes.subarray(0, 10));
+      if (finalBytes.length === 0) finalBytes = Buffer.from(`fld_${i}`, 'ascii');
+      candidate = finalBytes.toString('utf8');
+    }
+
+    const slot = Buffer.alloc(11, 0);
+    finalBytes.copy(slot, 0, 0, Math.min(10, finalBytes.length));
+    const before = Buffer.alloc(11, 0);
+    out.copy(before, 0, entry.pos, entry.pos + 11);
+    if (!before.equals(slot)) {
+      slot.copy(out, entry.pos);
+      changes.push({ index: i, to: candidate });
+    }
+  }
+
+  return { buffer: out, changes };
+}
+
+const SHP_COPY_SIDECAR_EXTS = ['.shp', '.shx', '.dbf', '.prj', '.cpg', '.sbn', '.sbx'] as const;
+
+/**
+ * UTF-8 DBF에서 필드명이 10바이트 한도로 잘린 경우, 임시 복사본의 DBF 헤더만 고쳐 ogr2ogr에 넘긴다.
+ * 원본 shp_data 파일은 수정하지 않는다.
+ */
+async function prepareShpWithValidDbfFieldNames(absoluteShpPath: string): Promise<{
+  shpPath: string;
+  cleanup: () => Promise<void>;
+}> {
+  const noop = async () => {};
+  const dir = path.dirname(absoluteShpPath);
+  const basename = path.basename(absoluteShpPath, '.shp');
+  const encoding = resolveShapefileDbfEncoding(dir, basename);
+  if (!/^UTF-?8$/i.test(encoding)) return { shpPath: absoluteShpPath, cleanup: noop };
+
+  const dbfPath = path.join(dir, `${basename}.dbf`);
+  try {
+    if (!fsSync.existsSync(dbfPath)) return { shpPath: absoluteShpPath, cleanup: noop };
+    const buf = fsSync.readFileSync(dbfPath);
+    const { buffer, changes } = repairDbfFieldNamesBuffer(buf);
+    if (changes.length === 0) return { shpPath: absoluteShpPath, cleanup: noop };
+
+    const tmpDir = path.join(
+      GGNR_DATA_DIR,
+      'tmp',
+      `shp_dbf_fix_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
+    );
+    await fs.mkdir(tmpDir, { recursive: true });
+    for (const ext of SHP_COPY_SIDECAR_EXTS) {
+      const src = path.join(dir, `${basename}${ext}`);
+      if (!fsSync.existsSync(src)) continue;
+      const dest = path.join(tmpDir, `${basename}${ext}`);
+      if (ext === '.dbf') await fs.writeFile(dest, buffer);
+      else await fs.copyFile(src, dest);
+    }
+    const shpPath = path.join(tmpDir, `${basename}.shp`);
+    if (!fsSync.existsSync(shpPath)) {
+      await fs.rm(tmpDir, { recursive: true, force: true }).catch(() => {});
+      return { shpPath: absoluteShpPath, cleanup: noop };
+    }
+    return {
+      shpPath,
+      cleanup: async () => {
+        await fs.rm(tmpDir, { recursive: true, force: true }).catch(() => {});
+      },
+    };
+  } catch {
+    return { shpPath: absoluteShpPath, cleanup: noop };
+  }
 }
 
 /**
@@ -1213,7 +1388,15 @@ function readDbfNumericFields(dir: string, basename: string): DbfNumericField[] 
     const headerLen = buf.readUInt16LE(8);
     const out: DbfNumericField[] = [];
     for (let pos = 32; pos + 32 <= headerLen && pos + 32 <= buf.length && buf[pos] !== 0x0d; pos += 32) {
-      const name = buf.subarray(pos, pos + 11).toString('ascii').replace(/\0.*$/, '').trim();
+      const raw = dbfFieldNamePayload(buf.subarray(pos, pos + 11));
+      let nameBuf = raw;
+      if (raw.length > 0 && !isValidUtf8Bytes(raw)) {
+        nameBuf = stripIncompleteUtf8Bytes(raw);
+      }
+      const name =
+        nameBuf.length > 0 && isValidUtf8Bytes(nameBuf)
+          ? nameBuf.toString('utf8').trim()
+          : raw.toString('ascii').replace(/\0.*$/, '').trim();
       const typ = String.fromCharCode(buf[pos + 11] ?? 0).toUpperCase();
       const width = buf[pos + 16] ?? 0;
       const scale = buf[pos + 17] ?? 0;
@@ -1227,13 +1410,17 @@ function readDbfNumericFields(dir: string, basename: string): DbfNumericField[] 
 }
 
 /**
- * DBF 수치 헤더가 깨졌는지 (scale≥width 또는 scale>15).
- * 깨진 필드는 자릿수 없는 NUMERIC으로 올려 오버플로우를 피한다.
+ * DBF 수치 헤더가 깨졌거나 PG NUMERIC(p,s)로 옮기면 오버플로 위험이 있는지.
+ * - scale≥width / scale≥15 (예: KAIS N(24,15) → PG NUMERIC(23,15))
+ * - DBF 폭에 소수점 자리가 포함되어 PG 정수부 ≈ (width - scale - 1) 가 부족할 때
  */
 function isBrokenDbfNumericMeta(width: number, scale: number): boolean {
   const w = width > 0 ? width : 18;
   const sc = scale < 0 ? 0 : scale;
-  return sc >= w || sc > 15;
+  if (sc >= w || sc >= 15) return true;
+  // DBF width 포함 소수점 → GDAL이 PG typmod에서 1 줄임. 정수부 여유 < 10자리면 위험
+  if (sc > 0 && (w - sc - 1) < 10) return true;
+  return false;
 }
 
 /** ogr2ogr `-lco COLUMN_TYPES=…` — 비정상 수치 필드만 `NUMERIC`(자릿수 제한 없음). 없으면 null */
@@ -1241,17 +1428,27 @@ function buildNumericColumnTypesLco(dir: string, basename: string): string | nul
   const parts: string[] = [];
   for (const f of readDbfNumericFields(dir, basename)) {
     if (!isBrokenDbfNumericMeta(f.width, f.scale)) continue;
-    // OGR/PG 식별자: 쉼표·공백 없는 일반 SHP 필드명만
-    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(f.name)) continue;
+    // OGR/PG: ASCII 식별자 또는 수리된 UTF-8 한글 필드명 (쉼표·공백·= 금지)
+    if (!/^[\p{L}_][\p{L}\p{N}_]*$/u.test(f.name) || /[,=\s]/.test(f.name)) continue;
     parts.push(`${f.name}=NUMERIC`);
   }
   return parts.length > 0 ? parts.join(',') : null;
 }
 
 /**
+ * 깨진 수치 메타용 ogr2ogr 인자.
+ * -unsetFieldWidth: DBF 폭·소수 제거 → NUMERIC(23,15) typmod 방지
+ * COLUMN_TYPES: 해당 필드만 자릿수 없는 NUMERIC
+ */
+function ogrBrokenNumericFieldArgs(columnTypesLco: string | null): string[] {
+  if (!columnTypesLco) return [];
+  return ['-unsetFieldWidth', '-lco', `COLUMN_TYPES=${columnTypesLco}`];
+}
+
+/**
  * GDAL ogr2ogr로 SHP → PostGIS layer 스키마 테이블 생성
  * - ogr2ogr 실행 파일: GGNR_GDAL_OGR2OGR 환경변수 또는 PATH의 ogr2ogr
- * - Real(폭·소수 자리 비정상)은 COLUMN_TYPES로 자릿수 없는 NUMERIC (FLOAT8 전환 없음)
+ * - Real(폭·소수 자리 비정상)은 -unsetFieldWidth + COLUMN_TYPES로 자릿수 없는 NUMERIC
  * - 0바이트·open 실패 SHP는 ogc_fid+geom 빈 테이블로 폴백
  */
 export async function createTableFromShp(params: {
@@ -1261,6 +1458,8 @@ export async function createTableFromShp(params: {
   dbSchema?: 'layer' | 'public_layer';
   /** 테이블명 강제 (스키마 재생성용 임시 테이블 등) */
   tableNameOverride?: string;
+  /** false면 공간 인덱스를 만들지 않음(임시 테이블명 충돌 방지). 기본 true */
+  spatialIndex?: boolean;
 }): Promise<{ success: boolean; error?: string }> {
   const pathOrResult = params?.pathOrResult?.trim();
   if (!pathOrResult) return { success: false, error: 'pathOrResult가 필요합니다.' };
@@ -1295,6 +1494,8 @@ export async function createTableFromShp(params: {
   const layerTable = `${dbSchema}.${tableName}`;
 
   const { cmd: ogr2ogrCmd, args: ogr2ogrRunPrefix, env: gdalEnv } = resolveOgr2ogrRun();
+  const prepared = await prepareShpWithValidDbfFieldNames(absolutePath);
+  const ogrShpPath = prepared.shpPath;
 
   /** Windows: ogr2ogr stderr는 보통 CP949. iconv-lite로 CP949 → 유니코드 후 JSON(UTF-8)으로 전달 */
   const decodeStderr = (chunk: Buffer | string): string => {
@@ -1315,15 +1516,16 @@ export async function createTableFromShp(params: {
       const ogr2ogrArgs = [
         '-f', 'PostgreSQL',
         pgConnection,
-        absolutePath,
+        ogrShpPath,
         '-oo', `ENCODING=${encoding}`,
         '-nlt', 'PROMOTE_TO_MULTI',
         '-nln', layerTable,
         ...(sourceSrs ? (['-s_srs', sourceSrs] as const) : []),
         '-t_srs', targetSrs,
         '-lco', 'GEOMETRY_NAME=geom',
-        // 깨진 Real(22.28) 등 → 자릿수 없는 NUMERIC (PRECISION=NO/FLOAT8 사용 안 함)
-        ...(columnTypesLco ? (['-lco', `COLUMN_TYPES=${columnTypesLco}`] as const) : []),
+        ...(params.spatialIndex === false ? (['-lco', 'SPATIAL_INDEX=NO'] as const) : []),
+        // 깨진 Real(24.15) 등 → 폭 제거 + 자릿수 없는 NUMERIC
+        ...ogrBrokenNumericFieldArgs(columnTypesLco),
         '-overwrite',
       ];
       const execArgs = ogr2ogrRunPrefix.length > 0 ? [...ogr2ogrRunPrefix, ...ogr2ogrArgs] : ogr2ogrArgs;
@@ -1353,46 +1555,50 @@ export async function createTableFromShp(params: {
     return raw;
   };
 
-  const emptyBundle = isShpBundleEmptyOrUnreadable(dir, basename);
-  let result: { code: number; stderr: string };
-  if (emptyBundle) {
-    result = { code: -1, stderr: 'empty or missing shp/shx/dbf' };
-  } else {
-    result = await runOgr2ogr(dbfEncoding);
-  }
-
-  if (result.code !== 0) {
-    const openFail = /Unable to open datasource/i.test(result.stderr ?? '');
-    if (emptyBundle || openFail) {
-      try {
-        await createEmptyLayerTableFromShp(dbSchema, tableName);
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        return { success: false, error: `빈 SHP 테이블 생성 실패: ${msg}` };
-      }
+  try {
+    const emptyBundle = isShpBundleEmptyOrUnreadable(dir, basename);
+    let result: { code: number; stderr: string };
+    if (emptyBundle) {
+      result = { code: -1, stderr: 'empty or missing shp/shx/dbf' };
     } else {
-      return { success: false, error: mapOgrError(result.code, result.stderr) };
+      result = await runOgr2ogr(dbfEncoding);
     }
-  }
 
-  // ogr2ogr가 MultiPolygon 등으로 typmod를 고정해도 Point/Line 재업로드가 되도록 Geometry로 승격
-  await ensureLayerGeomColumnUnrestricted(dbSchema, tableName);
-
-  // 업로드에서 스키마를 명시했으면 defineLayer에 반영 (신규·기존 빈 값·강제 갱신)
-  // 임시 테이블명(override)으로 만들 때는 define에 올리지 않음 — 교체 후 호출측에서 처리
-  if (
-    !override &&
-    (params.dbSchema === 'public_layer' || params.dbSchema === 'layer')
-  ) {
-    try {
-      const geometryType = await getShpGeometryType(absolutePath).catch(() => null);
-      await ensureDefineLayerEntry(tableName, geometryType ?? 'POLYGON', undefined, params.dbSchema, true);
-    } catch {
-      // define 반영 실패해도 테이블 생성은 성공으로 둠
+    if (result.code !== 0) {
+      const openFail = /Unable to open datasource/i.test(result.stderr ?? '');
+      if (emptyBundle || openFail) {
+        try {
+          await createEmptyLayerTableFromShp(dbSchema, tableName);
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          return { success: false, error: `빈 SHP 테이블 생성 실패: ${msg}` };
+        }
+      } else {
+        return { success: false, error: mapOgrError(result.code, result.stderr) };
+      }
     }
-  }
 
-  return { success: true };
+    // ogr2ogr가 MultiPolygon 등으로 typmod를 고정해도 Point/Line 재업로드가 되도록 Geometry로 승격
+    await ensureLayerGeomColumnUnrestricted(dbSchema, tableName);
+
+    // 업로드에서 스키마를 명시했으면 defineLayer에 반영 (신규·기존 빈 값·강제 갱신)
+    // 임시 테이블명(override)으로 만들 때는 define에 올리지 않음 — 교체 후 호출측에서 처리
+    if (
+      !override &&
+      (params.dbSchema === 'public_layer' || params.dbSchema === 'layer')
+    ) {
+      try {
+        const geometryType = await getShpGeometryType(absolutePath).catch(() => null);
+        await ensureDefineLayerEntry(tableName, geometryType ?? 'POLYGON', undefined, params.dbSchema, true);
+      } catch {
+        // define 반영 실패해도 테이블 생성은 성공으로 둠
+      }
+    }
+
+    return { success: true };
+  } finally {
+    await prepared.cleanup();
+  }
 }
 
 const DEFINE_LAYER_TABLES_PATH = path.join(process.cwd(), 'src', 'config', 'defineLayer', 'tables.json');
@@ -1511,15 +1717,16 @@ function mapDataTypeToDefineFieldType(dataType: string): string {
 
 function buildDefaultField(col: { name: string; dataType: string }, idx: number): Record<string, unknown> {
   const fn = String(col.name ?? '').toLowerCase();
+  const extraOff = isLayerExtraFieldName(fn);
   return {
     define_field_name: fn,
-    define_field_kor_name: fn,
-    define_field_type: mapDataTypeToDefineFieldType(col.dataType),
+    define_field_kor_name: extraOff ? '추가속성' : fn,
+    define_field_type: extraOff ? 'TEXT' : mapDataTypeToDefineFieldType(col.dataType),
     define_field_idx: idx,
     define_field_is_required: false,
     define_field_show_search: false,
-    define_field_show_list: true,
-    define_field_show_detail: true,
+    define_field_show_list: extraOff ? false : true,
+    define_field_show_detail: extraOff ? false : true,
     define_field_read_only: false,
     define_field_is_key: false,
     define_field_show_search_detail: false,
@@ -1535,6 +1742,7 @@ function buildDefaultField(col: { name: string; dataType: string }, idx: number)
     define_field_sel_label_field: '',
     define_field_default_value: '',
     define_field_show_title: false,
+    ...(extraOff ? layerExtraDefineViewOff() : {}),
   };
 }
 
@@ -2597,12 +2805,17 @@ function parseShpFieldsFromOgrinfoText(stdout: string): ShpSchemaField[] {
 }
 
 async function getShpAttributeFields(absoluteShpPath: string): Promise<ShpSchemaField[]> {
-  const jsonOut = await runOgrinfoStdout(absoluteShpPath, ['-json', '-so']);
-  const fromJson = jsonOut ? parseShpFieldsFromOgrinfoJson(jsonOut) : null;
-  if (fromJson) return fromJson;
+  const prepared = await prepareShpWithValidDbfFieldNames(absoluteShpPath);
+  try {
+    const jsonOut = await runOgrinfoStdout(prepared.shpPath, ['-json', '-so']);
+    const fromJson = jsonOut ? parseShpFieldsFromOgrinfoJson(jsonOut) : null;
+    if (fromJson) return fromJson;
 
-  const textOut = await runOgrinfoStdout(absoluteShpPath, ['-al', '-so']);
-  return parseShpFieldsFromOgrinfoText(textOut);
+    const textOut = await runOgrinfoStdout(prepared.shpPath, ['-al', '-so']);
+    return parseShpFieldsFromOgrinfoText(textOut);
+  } finally {
+    await prepared.cleanup();
+  }
 }
 
 /**
@@ -2811,10 +3024,47 @@ function backupTableSuffixNow(): string {
     day: '2-digit',
     hour: '2-digit',
     minute: '2-digit',
+    second: '2-digit',
     hour12: false,
   }).formatToParts(new Date());
   const get = (type: string) => parts.find((p) => p.type === type)?.value ?? '';
-  return `${get('year')}${get('month')}${get('day')}_${get('hour')}${get('minute')}`;
+  return `${get('year')}${get('month')}${get('day')}_${get('hour')}${get('minute')}${get('second')}`;
+}
+
+function rctmpBackupTableName(tableName: string, suffix: string): string {
+  const rctmpPrefix = '_rctmp_';
+  let backupName = `${rctmpPrefix}${tableName}_${suffix}`;
+  if (backupName.length > 63) {
+    const maxTableLen = Math.max(1, 63 - rctmpPrefix.length - 1 - suffix.length);
+    backupName = `${rctmpPrefix}${tableName.slice(0, maxTableLen)}_${suffix}`;
+  }
+  return backupName;
+}
+
+async function layerTableExists(schema: string, tableName: string): Promise<boolean> {
+  const { db } = await import('@/database/db');
+  const { sql } = await import('drizzle-orm');
+  const schemaLit = schema.replace(/'/g, "''");
+  const tableLit = tableName.replace(/'/g, "''");
+  const exists = await db.execute(
+    sql.raw(
+      `SELECT 1 AS ok FROM information_schema.tables
+       WHERE table_schema = '${schemaLit}'
+         AND table_name = '${tableLit}'
+       LIMIT 1`
+    )
+  );
+  return (exists.rows?.length ?? 0) > 0;
+}
+
+async function allocateRctmpBackupName(schema: string, tableName: string): Promise<string> {
+  const base = backupTableSuffixNow();
+  for (let n = 0; n < 50; n++) {
+    const suffix = n === 0 ? base : `${base}_${n + 1}`;
+    const name = rctmpBackupTableName(tableName, suffix);
+    if (!(await layerTableExists(schema, name))) return name;
+  }
+  return rctmpBackupTableName(tableName, `${base}_${Date.now()}`);
 }
 
 function pgBackupObjectNewName(oldName: string, fromPrefix: string, toPrefix: string): string {
@@ -3039,7 +3289,7 @@ async function logShpSchemaResolveHistory(params: {
 /**
  * 스키마 불일치 해소.
  * - adjust: 타입(SHP 선택 시 ALTER)·SHP만 있는 필드 ADD COLUMN·DB만 있는 필드는 유지(+waiver)
- * - recreate: 테이블·관련 객체 이름을 `_yyyyMMdd_HHmm`으로 바꾼 뒤 SHP로 신규 생성
+ * - recreate: 테이블·관련 객체 이름을 `_yyyyMMdd_HHmmss`으로 바꾼 뒤 SHP로 신규 생성
  * DROP COLUMN / DROP TABLE 은 수행하지 않음.
  */
 export async function resolveShpSchemaMismatch(params: {
@@ -3075,13 +3325,8 @@ export async function resolveShpSchemaMismatch(params: {
 
   if (mode === 'recreate') {
     const rctmpPrefix = '_rctmp_';
-    const suffix = backupTableSuffixNow();
-    // 백업: _rctmp_{table}_{yyyyMMdd}_{HHmm} — 오류수정에서 제외·수동 정리 대상
-    let backupName = `${rctmpPrefix}${tableName}_${suffix}`;
-    if (backupName.length > 63) {
-      const maxTableLen = Math.max(1, 63 - rctmpPrefix.length - 1 - suffix.length);
-      backupName = `${rctmpPrefix}${tableName.slice(0, maxTableLen)}_${suffix}`;
-    }
+    // 백업: _rctmp_{table}_{yyyyMMdd}_{HHmmss} — 오류수정에서 제외·수동 정리 대상
+    const backupName = await allocateRctmpBackupName(dbSchema, tableName);
     // 교체용 임시: _rctmp_{table} (백업과 구분 — 날짜 접미사 없음)
     let tmpName = `${rctmpPrefix}${tableName}`;
     if (tmpName.length > 63) {
@@ -3756,19 +4001,24 @@ async function importShpToSyncTempForHydrate(params: {
     const dbCfg = getDbConfig();
     const pgConnection = `PG:host=${dbCfg.host} port=${dbCfg.port} dbname=${dbCfg.database} user=${dbCfg.user} password=${dbCfg.password}`;
 
-    const importResult = await runOgr2ogr([
-      '-f', 'PostgreSQL', pgConnection, absolutePath,
-      '-oo', `ENCODING=${dbfEncoding}`,
-      '-nlt', 'PROMOTE_TO_MULTI',
-      '-nln', `${dbSchema}.${syncTableName}`,
-      ...srsArgs,
-      '-lco', 'GEOMETRY_NAME=geom',
-      // 깨진 Real(22.28) 등 → 자릿수 없는 NUMERIC (본 업로드와 동일)
-      ...(columnTypesLco ? (['-lco', `COLUMN_TYPES=${columnTypesLco}`] as const) : []),
-      '-overwrite',
-    ]);
-    if (importResult.code !== 0) {
-      return { success: false, error: `임시 테이블 import 실패: ${importResult.stderr}` };
+    const prepared = await prepareShpWithValidDbfFieldNames(absolutePath);
+    try {
+      const importResult = await runOgr2ogr([
+        '-f', 'PostgreSQL', pgConnection, prepared.shpPath,
+        '-oo', `ENCODING=${dbfEncoding}`,
+        '-nlt', 'PROMOTE_TO_MULTI',
+        '-nln', `${dbSchema}.${syncTableName}`,
+        ...srsArgs,
+        '-lco', 'GEOMETRY_NAME=geom',
+        // 깨진 Real(24.15) 등 → 폭 제거 + 자릿수 없는 NUMERIC (본 업로드와 동일)
+        ...ogrBrokenNumericFieldArgs(columnTypesLco),
+        '-overwrite',
+      ]);
+      if (importResult.code !== 0) {
+        return { success: false, error: `임시 테이블 import 실패: ${importResult.stderr}` };
+      }
+    } finally {
+      await prepared.cleanup();
     }
   }
 
@@ -4202,18 +4452,24 @@ export async function compareShpWithTable(params: {
       timing.mark('ogr2ogrImport');
     } else {
       const columnTypesLco = buildNumericColumnTypesLco(dir, basename);
-      const importResult = await runOgr2ogr([
-        '-f', 'PostgreSQL', pgConnection, absolutePath,
-        '-oo', `ENCODING=${dbfEncoding}`,
-        '-nlt', 'PROMOTE_TO_MULTI',
-        '-nln', `${dbSchema}.${syncTableName}`,
-        ...(sourceSrs ? ['-s_srs', sourceSrs] as const : []),
-        '-t_srs', targetSrs,
-        '-lco', 'GEOMETRY_NAME=geom',
-        // 깨진 Real(22.28) 등 → 자릿수 없는 NUMERIC (본 업로드와 동일)
-        ...(columnTypesLco ? (['-lco', `COLUMN_TYPES=${columnTypesLco}`] as const) : []),
-        '-overwrite',
-      ]);
+      const prepared = await prepareShpWithValidDbfFieldNames(absolutePath);
+      let importResult: { code: number; stderr: string };
+      try {
+        importResult = await runOgr2ogr([
+          '-f', 'PostgreSQL', pgConnection, prepared.shpPath,
+          '-oo', `ENCODING=${dbfEncoding}`,
+          '-nlt', 'PROMOTE_TO_MULTI',
+          '-nln', `${dbSchema}.${syncTableName}`,
+          ...(sourceSrs ? ['-s_srs', sourceSrs] as const : []),
+          '-t_srs', targetSrs,
+          '-lco', 'GEOMETRY_NAME=geom',
+          // 깨진 Real(24.15) 등 → 폭 제거 + 자릿수 없는 NUMERIC (본 업로드와 동일)
+          ...ogrBrokenNumericFieldArgs(columnTypesLco),
+          '-overwrite',
+        ]);
+      } finally {
+        await prepared.cleanup();
+      }
       syncImportAttempted = true;
       timing.mark('ogr2ogrImport');
 
@@ -6470,16 +6726,22 @@ export async function readShpValues(params: {
 
   let syncImportAttempted = false;
   try {
-    const importRes = await runOgr2ogr([
-      '-f', 'PostgreSQL', pgConn, absolutePath,
-      '-oo', `ENCODING=${dbfEncoding}`,
-      '-nlt', 'PROMOTE_TO_MULTI',
-      '-nln', `layer.${syncTableName}`,
-      ...(sourceSrs ? ['-s_srs', sourceSrs] as const : []),
-      '-t_srs', targetSrs,
-      '-lco', 'GEOMETRY_NAME=geom',
-      '-overwrite',
-    ]);
+    const prepared = await prepareShpWithValidDbfFieldNames(absolutePath);
+    let importRes: { code: number; stderr: string };
+    try {
+      importRes = await runOgr2ogr([
+        '-f', 'PostgreSQL', pgConn, prepared.shpPath,
+        '-oo', `ENCODING=${dbfEncoding}`,
+        '-nlt', 'PROMOTE_TO_MULTI',
+        '-nln', `layer.${syncTableName}`,
+        ...(sourceSrs ? ['-s_srs', sourceSrs] as const : []),
+        '-t_srs', targetSrs,
+        '-lco', 'GEOMETRY_NAME=geom',
+        '-overwrite',
+      ]);
+    } finally {
+      await prepared.cleanup();
+    }
     syncImportAttempted = true;
 
     if (importRes.code !== 0) {

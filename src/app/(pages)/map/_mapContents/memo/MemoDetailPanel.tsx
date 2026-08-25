@@ -9,10 +9,12 @@ import { Point } from "ol/geom";
 import { Style, Circle as CircleStyle, Fill, Stroke } from "ol/style";
 import { Loader2, MapPin } from "lucide-react";
 import { call } from "@/lib/api";
+import { recordDataViewLog } from "@/lib/recordDataViewLog";
 import { formatToYmdOrText } from "@/lib/formatDateYmd";
 import { useMapContext } from "../../_mapComponents/MapContext";
 import { LAYER_ROW_NEW_ID } from "../../_mapComponents/layerRowEdit";
 import { encodeMemoRowKey, memoWmsLayerId, parseMemoRowKey } from "./memoConfig";
+import { MEMO_KEY_FIELD } from "@/lib/memoConfig";
 import { MapSideDetailScroll } from "../../_mapComponents/MapSideDetailScroll";
 
 type Props = {
@@ -153,6 +155,17 @@ export function MemoDetailPanel({ detailId, onClose, onSaved, onCreated, onDelet
       .finally(() => setLoading(false));
   }, [isCreateMode, memoKey, tableName]);
 
+  // 데이터 이력관리에 조회 저장을 위해 추가
+  useEffect(() => {
+    if (isCreateMode || !tableName || !memoKey) return;
+    recordDataViewLog({
+      tableName,
+      keyField: MEMO_KEY_FIELD,
+      keyValue: memoKey,
+      serviceName: "메모",
+    });
+  }, [isCreateMode, tableName, memoKey]);
+
   useEffect(() => {
     if (!tableName) return;
     const lid = memoWmsLayerId(tableName);
@@ -250,9 +263,9 @@ export function MemoDetailPanel({ detailId, onClose, onSaved, onCreated, onDelet
   };
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-white">
-      <div className="flex shrink-0 items-center justify-between border-b border-slate-200 px-3 py-2">
-        <p className="text-sm font-semibold text-slate-800">{isCreateMode ? "메모 등록" : "메모 상세"}</p>
+    <div className="flex h-full min-h-0 flex-col bg-background">
+      <div className="flex shrink-0 items-center justify-between border-b border-border px-3 py-2">
+        <p className="text-sm font-semibold text-foreground">{isCreateMode ? "메모 등록" : "메모 상세"}</p>
         <div className="flex items-center gap-1">
           {!isCreateMode && !isEditing && (
             <button
@@ -281,7 +294,7 @@ export function MemoDetailPanel({ detailId, onClose, onSaved, onCreated, onDelet
                 setIsEditing(false);
                 setError(null);
               }}
-              className="rounded px-2 py-1 text-[10px] text-slate-500 hover:bg-slate-100"
+              className="rounded px-2 py-1 text-[10px] text-muted-foreground hover:bg-muted/50"
             >
               취소
             </button>
@@ -289,7 +302,7 @@ export function MemoDetailPanel({ detailId, onClose, onSaved, onCreated, onDelet
           <button
             type="button"
             onClick={onClose}
-            className="rounded px-2 py-1 text-[10px] text-slate-500 hover:bg-slate-100"
+            className="rounded px-2 py-1 text-[10px] text-muted-foreground hover:bg-muted/50"
           >
             닫기
           </button>
@@ -298,7 +311,7 @@ export function MemoDetailPanel({ detailId, onClose, onSaved, onCreated, onDelet
 
       <MapSideDetailScroll className="min-h-0 flex-1 overflow-auto px-3 py-2 text-xs">
         {loading && (
-          <div className="flex items-center gap-2 py-6 text-slate-500">
+          <div className="flex items-center gap-2 py-6 text-muted-foreground">
             <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
             불러오는 중…
           </div>
@@ -309,37 +322,37 @@ export function MemoDetailPanel({ detailId, onClose, onSaved, onCreated, onDelet
         {!loading && (
           <div className="space-y-3">
             <label className="block">
-              <span className="mb-1 block text-[10px] font-medium text-slate-500">제목</span>
+              <span className="mb-1 block text-[10px] font-medium text-muted-foreground">제목</span>
               <input
                 type="text"
                 value={title}
                 readOnly={!isEditing}
                 onChange={(e) => setTitle(e.target.value)}
-                className="h-8 w-full rounded border border-slate-200 px-2 disabled:bg-slate-50"
+                className="h-8 w-full rounded border border-border px-2 disabled:bg-muted/30"
               />
             </label>
             <label className="block">
-              <span className="mb-1 block text-[10px] font-medium text-slate-500">작성일</span>
+              <span className="mb-1 block text-[10px] font-medium text-muted-foreground">작성일</span>
               <input
                 type="text"
                 value={createDate || "-"}
                 readOnly
-                className="h-8 w-full rounded border border-slate-200 bg-slate-50 px-2 text-slate-600"
+                className="h-8 w-full rounded border border-border bg-muted/30 px-2 text-muted-foreground"
               />
             </label>
             <label className="block">
-              <span className="mb-1 block text-[10px] font-medium text-slate-500">내용</span>
+              <span className="mb-1 block text-[10px] font-medium text-muted-foreground">내용</span>
               <textarea
                 value={contents}
                 readOnly={!isEditing}
                 onChange={(e) => setContents(e.target.value)}
                 rows={6}
-                className="w-full resize-y rounded border border-slate-200 px-2 py-1.5 disabled:bg-slate-50"
+                className="w-full resize-y rounded border border-border px-2 py-1.5 disabled:bg-muted/30"
               />
             </label>
-            <div className="rounded border border-slate-200 bg-slate-50/80 px-2 py-2">
+            <div className="rounded border border-border bg-muted/30 px-2 py-2">
               <div className="flex items-center justify-between gap-2">
-                <span className="flex items-center gap-1 text-[10px] text-slate-600">
+                <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
                   <MapPin className="h-3.5 w-3.5" aria-hidden />
                   {hasGeom || pointSet ? "위치 지정됨" : "위치 없음"}
                 </span>
@@ -354,7 +367,7 @@ export function MemoDetailPanel({ detailId, onClose, onSaved, onCreated, onDelet
                 )}
               </div>
               {isEditing && (
-                <p className="mt-1 text-[10px] text-slate-400">지도를 클릭해 메모 위치(POINT)를 지정하세요.</p>
+                <p className="mt-1 text-[10px] text-muted-foreground">지도를 클릭해 메모 위치(POINT)를 지정하세요.</p>
               )}
             </div>
             {!isCreateMode && !isEditing && (
@@ -377,5 +390,5 @@ export function MemoDetailPanel({ detailId, onClose, onSaved, onCreated, onDelet
 function cnPickBtn(active: boolean): string {
   return active
     ? "rounded border border-orange-300 bg-orange-50 px-2 py-1 text-[10px] text-orange-700"
-    : "rounded border border-[#1D6AE3]/30 bg-white px-2 py-1 text-[10px] text-[#1D6AE3] hover:bg-blue-50";
+    : "rounded border border-[#1D6AE3]/30 bg-background px-2 py-1 text-[10px] text-[#1D6AE3] hover:bg-blue-50";
 }

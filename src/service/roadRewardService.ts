@@ -6,7 +6,11 @@ import { db } from '@/database/db';
 import { sql } from 'drizzle-orm';
 import { fetchVworldCadastralGeomByPnu } from '@/lib/vworldCadastralGeom';
 import { getJijukGeomByPnu } from './excelUploadService';
-import { deleteTableRowByKey } from './layerRowService';
+import {
+  deleteTableRowByKey,
+  insertTableRow,
+  updateTableRowByKey,
+} from './layerRowService';
 
 const MAIN_TABLE = 'road_reward';
 const PARCEL_TABLE = 'road_reward_parcel';
@@ -39,12 +43,16 @@ export type RoadRewardParcelDto = {
   appraisal2Value: number;
   appliedUnitPrice: number;
   compensationAmount: number;
+  farmingCompensationAmount: number;
+  obstacleCompensationAmount: number;
   ownerAddress: string;
   ownerName: string;
+  actualOwner: string;
+  actualCultivator: string;
   note: string;
   geometry3857?: Record<string, unknown> | null;
   extent3857?: [number, number, number, number] | null;
-  mockLonLat: { lon: number; lat: number };
+  mockLonLat?: { lon: number; lat: number };
 };
 
 export type RoadRewardCaseDto = {
@@ -122,6 +130,16 @@ function findColumn(columns: string[], name: string): string | null {
   return columns.find((c) => c.toLowerCase() === lower) ?? null;
 }
 
+function selectNumCol(columns: string[], name: string): string {
+  return findColumn(columns, name) ? `r.${name}` : `NULL::float8 AS ${name}`;
+}
+
+function selectTextCol(columns: string[], name: string): string {
+  return findColumn(columns, name)
+    ? `COALESCE(r.${name}::text, '') AS ${name}`
+    : `''::text AS ${name}`;
+}
+
 /** FK 컬럼 — DB에 따라 reward_key 또는 reward_ogc_fid */
 function findParentKeyCol(columns: string[]): string | null {
   return findColumn(columns, 'reward_key') ?? findColumn(columns, 'reward_ogc_fid');
@@ -151,7 +169,7 @@ function extentFromRow(row: Record<string, unknown>): [number, number, number, n
 function extentCenterLonLat(
   extent: [number, number, number, number] | null
 ): { lon: number; lat: number } {
-  if (!extent) return { lon: 129.4, lat: 36.99 };
+  if (!extent) return { lon: 0, lat: 0 };
   const cx = (extent[0] + extent[2]) / 2;
   const cy = (extent[1] + extent[3]) / 2;
   const lon = (cx * 180) / 20037508.34;
@@ -218,12 +236,16 @@ function mapParcelRow(row: Record<string, unknown>): RoadRewardParcelDto | null 
     appraisal2Value,
     appliedUnitPrice: storedUnit || derived.appliedUnitPrice,
     compensationAmount: storedAmount || derived.compensationAmount,
+    farmingCompensationAmount: num(row.farming_compensation_amount),
+    obstacleCompensationAmount: num(row.obstacle_compensation_amount),
     ownerAddress: cell(row.owner_address),
     ownerName: cell(row.owner_name),
+    actualOwner: cell(row.actual_owner),
+    actualCultivator: cell(row.actual_cultivator),
     note: cell(row.note),
     geometry3857: parseGeom3857(row.geom3857),
     extent3857,
-    mockLonLat: extentCenterLonLat(extent3857),
+    mockLonLat: extent3857 ? extentCenterLonLat(extent3857) : undefined,
   };
 }
 
@@ -477,13 +499,19 @@ async function resolveParcelPnuAndGeomByJibun(params: {
   const emd = cell(params.eupmyeonDong);
   const included = cell(params.jibunIncluded);
   const original = cell(params.jibunOriginal);
+  const existingPnu = cell(params.existingPnu).replace(/\D/g, '');
+  const preferMountain = /^산/.test(included || original);
+
+  if (isValidPnuDigits(existingPnu)) {
+    const byPnu = await lookupJijukGeomByPnuDigits(existingPnu, preferMountain);
+    if (byPnu.geomWkt5181) return byPnu;
+  }
 
   if (included) {
     const byIncluded = await resolvePnuAndGeomWkt5181(emd, included, undefined);
     if (byIncluded.geomWkt5181) return byIncluded;
 
     if (original && original !== included) {
-      // 편입 도형 실패 시에만 당초로 완전 폴백 (pnu·geom 동일 지번)
       return resolvePnuAndGeomWkt5181(emd, original, undefined);
     }
     return byIncluded;
@@ -493,11 +521,69 @@ async function resolveParcelPnuAndGeomByJibun(params: {
     return resolvePnuAndGeomWkt5181(
       emd,
       original,
-      isValidPnuDigits(String(params.existingPnu ?? '')) ? params.existingPnu : undefined
+      isValidPnuDigits(existingPnu) ? existingPnu : undefined
     );
   }
 
-  return { pnu: '', geomWkt5181: null };
+  return { pnu: isValidPnuDigits(existingPnu) ? existingPnu : '', geomWkt5181: null };
+}
+
+/** 필지 도형을 편입 범위와 겹치는 부분만 남긴다 */
+async function clipParcelWktToParent5181(
+  parcelWkt: string,
+  parentWkt: string
+): Promise<string | null> {
+  const parcel = cell(parcelWkt);
+  const parent = cell(parentWkt);
+  if (!parcel) return null;
+  if (!parent) return parcel;
+  try {
+    const res = await db.execute(
+      sql.raw(
+        `SELECT ST_AsText(clip) AS wkt
+         FROM (
+           SELECT ST_CollectionExtract(
+             ST_MakeValid(
+               ST_Intersection(
+                 ST_MakeValid(ST_SetSRID(ST_GeomFromText('${esc(parcel)}'), 5181)),
+                 ST_MakeValid(ST_SetSRID(ST_GeomFromText('${esc(parent)}'), 5181))
+               )
+             ),
+             3
+           ) AS clip
+         ) t
+         WHERE clip IS NOT NULL
+           AND NOT ST_IsEmpty(clip)
+           AND ST_Area(clip) > 0.01`
+      )
+    );
+    const wkt = String((res.rows?.[0] as { wkt?: string } | undefined)?.wkt ?? '').trim();
+    return wkt || null;
+  } catch {
+    return parcel;
+  }
+}
+
+async function getMainGeomWkt5181(rewardOgcFid: number): Promise<string | null> {
+  const meta = await resolveTableWithSchema(MAIN_TABLE);
+  if (!meta) return null;
+  const cols = await getTableColumns(meta.schema, meta.tableName);
+  const geomCol = findColumn(cols, 'geom');
+  const keyCol = findColumn(cols, 'ogc_fid');
+  if (!geomCol || !keyCol) return null;
+  const safe = meta.tableName.replace(/"/g, '""');
+  const safeSchema = meta.schema.replace(/"/g, '""');
+  const res = await db.execute(
+    sql.raw(
+      `SELECT ST_AsText(${quoteIdent(geomCol)}) AS wkt
+       FROM "${safeSchema}"."${safe}"
+       WHERE ${quoteIdent(keyCol)} = ${Math.floor(rewardOgcFid)}
+         AND ${quoteIdent(geomCol)} IS NOT NULL
+       LIMIT 1`
+    )
+  );
+  const wkt = String((res.rows?.[0] as { wkt?: string } | undefined)?.wkt ?? '').trim();
+  return wkt || null;
 }
 
 /** pnu/geom 보강 — 편입 지번 우선. refreshAll 이면 전 행 재조회 */
@@ -525,12 +611,18 @@ export async function fillMissingParcelPnuGeom(params?: {
 
     const res = await db.execute(
       sql.raw(
-        `SELECT ogc_fid, pnu, eupmyeon_dong, jibun_original, jibun_included
+        `SELECT ogc_fid, pnu, eupmyeon_dong, jibun_original, jibun_included,
+                ${quoteIdent(parentCol)} AS reward_fid
          FROM "${safeSchema}"."${safe}"
-         WHERE COALESCE(TRIM(eupmyeon_dong), '') <> ''
-           AND (
-             COALESCE(TRIM(jibun_included), '') <> ''
-             OR COALESCE(TRIM(jibun_original), '') <> ''
+         WHERE (
+             LENGTH(REGEXP_REPLACE(COALESCE(pnu, ''), '[^0-9]', '', 'g')) >= 18
+             OR (
+               COALESCE(TRIM(eupmyeon_dong), '') <> ''
+               AND (
+                 COALESCE(TRIM(jibun_included), '') <> ''
+                 OR COALESCE(TRIM(jibun_original), '') <> ''
+               )
+             )
            )
            ${
              refreshAll
@@ -548,6 +640,7 @@ export async function fillMissingParcelPnuGeom(params?: {
     );
 
     let updated = 0;
+    const parentWktCache = new Map<number, string | null>();
     for (const raw of res.rows ?? []) {
       const row = raw as Record<string, unknown>;
       const ogcFid = Number(row.ogc_fid);
@@ -568,7 +661,22 @@ export async function fillMissingParcelPnuGeom(params?: {
         sets.push(`pnu = NULL`);
       }
       if (hasGeom && geomWkt5181) {
-        sets.push(`geom = ST_SetSRID(ST_GeomFromText('${esc(geomWkt5181)}'), 5181)`);
+        const parentFid = Number(row.reward_fid);
+        let parentWkt: string | null = null;
+        if (Number.isFinite(parentFid) && parentFid > 0) {
+          if (!parentWktCache.has(parentFid)) {
+            parentWktCache.set(parentFid, await getMainGeomWkt5181(parentFid));
+          }
+          parentWkt = parentWktCache.get(parentFid) ?? null;
+        }
+        const clipped =
+          parentWkt != null
+            ? await clipParcelWktToParent5181(geomWkt5181, parentWkt)
+            : geomWkt5181;
+        const toStore = clipped || geomWkt5181;
+        if (toStore) {
+          sets.push(`geom = ST_SetSRID(ST_GeomFromText('${esc(toStore)}'), 5181)`);
+        }
       }
       if (sets.length === 0) continue;
 
@@ -716,8 +824,12 @@ export async function listParcelsByRewardOgcFid(params: {
       r.appraisal2_value,
       r.applied_unit_price,
       r.compensation_amount,
+      ${selectNumCol(cols, 'farming_compensation_amount')},
+      ${selectNumCol(cols, 'obstacle_compensation_amount')},
       COALESCE(r.owner_address::text, '') AS owner_address,
       COALESCE(r.owner_name::text, '') AS owner_name,
+      ${selectTextCol(cols, 'actual_owner')},
+      ${selectTextCol(cols, 'actual_cultivator')},
       COALESCE(r.note::text, '') AS note
       ${geomSelect}
     FROM "${safeSchema}"."${safe}" r
@@ -894,23 +1006,24 @@ type ParcelSaveInput = {
   appraisal2Value?: number;
   appliedUnitPrice?: number;
   compensationAmount?: number;
+  farmingCompensationAmount?: number;
+  obstacleCompensationAmount?: number;
   ownerAddress?: string;
   ownerName?: string;
+  actualOwner?: string;
+  actualCultivator?: string;
   note?: string;
   geomWkt5181?: string | null;
 };
 
 /**
- * 자식 필지 geom 합집합 → 부모 road_reward.geom.
- * 필지 도형이 하나도 없으면 부모 geom 을 NULL 로 둔다.
- */
-/**
- * 필지 합집합으로 부모 geom 채움.
- * 기본은 부모 geom 이 비어 있을 때만 — 사용자가 그린 편입 범위를 덮어쓰지 않는다.
+ * 자식 필지 geom 합집합을 부모 road_reward.geom 에 반영.
+ * 기본: 그린 편입 범위가 있어도 필지 도형을 모두 포함하도록 합친다. 필지가 없으면 본표는 그대로 둔다.
+ * force: 본표를 필지 합집합으로만 교체(잔존 당초 지적 복구).
  */
 export async function recomputeMainGeomFromParcels(params?: {
   rewardOgcFid?: number | string;
-  /** true면 기존 부모 geom 도 필지 합집합으로 강제 교체 */
+  /** true면 기존 부모 geom 을 버리고 필지 합집합으로 교체 */
   force?: boolean;
 }): Promise<{ updated: number; error?: string }> {
   try {
@@ -938,26 +1051,61 @@ export async function recomputeMainGeomFromParcels(params?: {
       Number.isFinite(rewardFid) && rewardFid > 0
         ? `AND m.${quoteIdent(mainKeyCol)} = ${Math.floor(rewardFid)}`
         : '';
-    const emptyOnly = params?.force !== true;
-    const emptyFilter = emptyOnly
-      ? `AND m.${quoteIdent(mainGeomCol)} IS NULL`
-      : '';
+    const parcelUnion = `ST_Multi(
+             ST_CollectionExtract(
+               ST_MakeValid(
+                 ST_UnaryUnion(
+                   ST_Collect(ST_MakeValid(p.${quoteIdent(parcelGeomCol)}))
+                 )
+               ),
+               3
+             )
+           )`;
+    const mergedGeom =
+      params?.force === true
+        ? 'sub.union_geom'
+        : `ST_Multi(
+             ST_CollectionExtract(
+               ST_MakeValid(
+                 ST_UnaryUnion(
+                   ST_Collect(
+                     ST_MakeValid(COALESCE(m.${quoteIdent(mainGeomCol)}, sub.union_geom)),
+                     ST_MakeValid(sub.union_geom)
+                   )
+                 )
+               ),
+               3
+             )
+           )`;
+
+    const coversFilter =
+      params?.force === true
+        ? ''
+        : `AND (
+             m.${quoteIdent(mainGeomCol)} IS NULL
+             OR NOT ST_Covers(
+               ST_MakeValid(m.${quoteIdent(mainGeomCol)}),
+               ST_MakeValid(sub.union_geom)
+             )
+           )`;
 
     const res = await db.execute(
       sql.raw(
         `UPDATE "${ms}"."${mt}" m
-         SET ${quoteIdent(mainGeomCol)} = sub.union_geom
+         SET ${quoteIdent(mainGeomCol)} = ${mergedGeom}
          FROM (
            SELECT
              p.${quoteIdent(parentCol)} AS reward_fid,
-             ST_Multi(ST_UnaryUnion(ST_Collect(p.${quoteIdent(parcelGeomCol)}))) AS union_geom
+             ${parcelUnion} AS union_geom
            FROM "${ps}"."${pt}" p
            WHERE p.${quoteIdent(parcelGeomCol)} IS NOT NULL
            GROUP BY p.${quoteIdent(parentCol)}
          ) sub
          WHERE m.${quoteIdent(mainKeyCol)} = sub.reward_fid
+           AND sub.union_geom IS NOT NULL
+           AND NOT ST_IsEmpty(sub.union_geom)
          ${fidFilter}
-         ${emptyFilter}`
+         ${coversFilter}`
       )
     );
     const updated = Number((res as { rowCount?: number }).rowCount ?? 0);
@@ -1091,6 +1239,7 @@ async function repairStaleParentGeomVsParcels(params?: {
 async function syncParcels(params: {
   rewardOgcFid: number;
   parcels: ParcelSaveInput[];
+  parentWkt5181?: string | null;
 }): Promise<{ success: boolean; error?: string }> {
   const meta = await resolveTableWithSchema(PARCEL_TABLE);
   if (!meta) return { success: false, error: `${PARCEL_TABLE} 테이블이 없습니다.` };
@@ -1120,13 +1269,14 @@ async function syncParcels(params: {
       const derived = computeDerived(appraisal1Value, appraisal2Value, areaIncluded);
       const appliedUnitPrice = num(item.appliedUnitPrice) || derived.appliedUnitPrice;
       const compensationAmount = num(item.compensationAmount) || derived.compensationAmount;
+      const farmingCompensationAmount = num(item.farmingCompensationAmount);
+      const obstacleCompensationAmount = num(item.obstacleCompensationAmount);
 
       let pnu = cell(item.pnu).replace(/\D/g, '');
       let geomWkt =
         typeof item.geomWkt5181 === 'string' && item.geomWkt5181.trim()
           ? item.geomWkt5181.trim()
           : null;
-      // 편입 지번이 있으면 지적에서 pnu·geom 을 다시 맞춤 (클라이언트에 남은 당초 도형 덮어쓰기)
       if (eupmyeonDong && (jibunIncluded || jibunOriginal)) {
         const resolved = await resolveParcelPnuAndGeomByJibun({
           eupmyeonDong,
@@ -1135,10 +1285,14 @@ async function syncParcels(params: {
           existingPnu: pnu,
         });
         if (resolved.pnu) pnu = resolved.pnu;
-        if (resolved.geomWkt5181) geomWkt = resolved.geomWkt5181;
+        if (!geomWkt && resolved.geomWkt5181) geomWkt = resolved.geomWkt5181;
+      }
+      const parentWkt = cell(params.parentWkt5181);
+      if (geomWkt && parentWkt) {
+        geomWkt = (await clipParcelWktToParent5181(geomWkt, parentWkt)) ?? geomWkt;
       }
 
-      const insertCols = [
+      const insertCols: string[] = [
         quoteIdent(parentCol),
         'pnu',
         'eupmyeon_dong',
@@ -1151,11 +1305,15 @@ async function syncParcels(params: {
         'appraisal2_value',
         'applied_unit_price',
         'compensation_amount',
+        'farming_compensation_amount',
+        'obstacle_compensation_amount',
         'owner_address',
         'owner_name',
+        'actual_owner',
+        'actual_cultivator',
         'note',
       ];
-      const insertVals = [
+      const insertVals: string[] = [
         String(rewardOgcFid),
         pnu ? `'${esc(pnu)}'` : 'NULL',
         `'${esc(eupmyeonDong)}'`,
@@ -1168,8 +1326,12 @@ async function syncParcels(params: {
         String(appraisal2Value),
         String(appliedUnitPrice),
         String(compensationAmount),
+        String(farmingCompensationAmount),
+        String(obstacleCompensationAmount),
         `'${esc(cell(item.ownerAddress))}'`,
         `'${esc(cell(item.ownerName))}'`,
+        `'${esc(cell(item.actualOwner))}'`,
+        `'${esc(cell(item.actualCultivator))}'`,
         `'${esc(cell(item.note))}'`,
       ];
       if (hasGeom) {
@@ -1181,14 +1343,24 @@ async function syncParcels(params: {
         );
       }
 
+      const filteredCols: string[] = [];
+      const filteredVals: string[] = [];
+      for (let i = 0; i < insertCols.length; i++) {
+        const name = insertCols[i]!.replace(/^"+|"+$/g, '');
+        if (name === parentCol || name === 'geom' || findColumn(cols, name)) {
+          filteredCols.push(insertCols[i]!);
+          filteredVals.push(insertVals[i]!);
+        }
+      }
+
       await db.execute(
         sql.raw(
-          `INSERT INTO "${safeSchema}"."${safe}" (${insertCols.join(', ')})
-           VALUES (${insertVals.join(', ')})`
+          `INSERT INTO "${safeSchema}"."${safe}" (${filteredCols.join(', ')})
+           VALUES (${filteredVals.join(', ')})`
         )
       );
     }
-    // 부모 geom 은 그린 편입 범위 우선 — 필지 합집합으로 덮지 않음
+    // 본표는 그린 편입 범위 + 필지 도형을 모두 포함 (아래에서 합침)
     return { success: true };
   } catch (e: unknown) {
     return { success: false, error: e instanceof Error ? e.message : String(e) };
@@ -1204,10 +1376,7 @@ function sqlNum(raw: unknown): string {
   return String(num(raw));
 }
 
-/**
- * defineLayer 없이 부모 테이블에 직접 INSERT/UPDATE.
- * (layerRowService.insert/update 는 defineLayer 필드만 허용해 road_reward 가 비어 있으면 DEFAULT VALUES 빈 행이 생김)
- */
+/** 보상 건 본문 — 공통 행 저장(실제 컬럼 허용)으로 이력도 남김 */
 async function upsertMainCase(params: {
   ogcFid?: number;
   isNew: boolean;
@@ -1218,71 +1387,54 @@ async function upsertMainCase(params: {
   const meta = await resolveTableWithSchema(MAIN_TABLE);
   if (!meta) return { success: false, error: `${MAIN_TABLE} 테이블이 없습니다.` };
   const cols = await getTableColumns(meta.schema, meta.tableName);
-  const geomCol = findColumn(cols, 'geom');
-  const safe = meta.tableName.replace(/"/g, '""');
-  const safeSchema = meta.schema.replace(/"/g, '""');
 
-  const attrCols: string[] = [];
-  const attrVals: string[] = [];
+  const values: Record<string, unknown> = {};
   for (const field of CASE_ATTR_FIELDS) {
     const col = findColumn(cols, field);
     if (!col) continue;
-    attrCols.push(quoteIdent(col));
-    attrVals.push(sqlTextOrNull(params.dbValues[field]));
+    values[col] = params.dbValues[field] || null;
   }
-  if (attrCols.length === 0) {
+  if (Object.keys(values).length === 0) {
     return { success: false, error: '저장할 속성 컬럼이 없습니다.' };
   }
 
-  try {
-    if (params.isNew) {
-      const insertCols = [...attrCols];
-      const insertVals = [...attrVals];
-      if (geomCol && params.geomWkt5181) {
-        insertCols.push(quoteIdent(geomCol));
-        insertVals.push(
-          `ST_SetSRID(ST_GeomFromText('${esc(params.geomWkt5181)}'), 5181)`
-        );
-      }
-      const res = await db.execute(
-        sql.raw(
-          `INSERT INTO "${safeSchema}"."${safe}" (${insertCols.join(', ')})
-           VALUES (${insertVals.join(', ')})
-           RETURNING ogc_fid::int AS new_fid`
-        )
-      );
-      const newFid = Number((res.rows?.[0] as { new_fid?: number } | undefined)?.new_fid);
-      if (!Number.isFinite(newFid)) {
-        return { success: false, error: '신규 ogc_fid를 확인하지 못했습니다.' };
-      }
-      return { success: true, ogcFid: newFid };
+  if (params.isNew) {
+    const inserted = await insertTableRow({
+      table: MAIN_TABLE,
+      schema: meta.schema,
+      keyField: 'ogc_fid',
+      values,
+      allowPhysicalColumns: true,
+      geomWkt5181: params.geomWkt5181,
+    });
+    if (!inserted.success) {
+      return { success: false, error: inserted.error ?? '등록에 실패했습니다.' };
     }
-
-    const fid = Math.floor(Number(params.ogcFid));
-    if (!Number.isFinite(fid) || fid <= 0) {
-      return { success: false, error: 'ogc_fid가 필요합니다.' };
+    const newFid = Number(inserted.keyValue);
+    if (!Number.isFinite(newFid)) {
+      return { success: false, error: '신규 ogc_fid를 확인하지 못했습니다.' };
     }
-    const sets = attrCols.map((col, i) => `${col} = ${attrVals[i]}`);
-    if (geomCol) {
-      if (params.geomClear) {
-        sets.push(`${quoteIdent(geomCol)} = NULL`);
-      } else if (params.geomWkt5181) {
-        sets.push(
-          `${quoteIdent(geomCol)} = ST_SetSRID(ST_GeomFromText('${esc(params.geomWkt5181)}'), 5181)`
-        );
-      }
-    }
-    await db.execute(
-      sql.raw(
-        `UPDATE "${safeSchema}"."${safe}"
-         SET ${sets.join(', ')}
-         WHERE ogc_fid = ${fid}`
-      )
-    );
-    return { success: true, ogcFid: fid };
-  } catch (e: unknown) {
-    return { success: false, error: e instanceof Error ? e.message : String(e) };
+    return { success: true, ogcFid: newFid };
   }
+
+  const fid = Math.floor(Number(params.ogcFid));
+  if (!Number.isFinite(fid) || fid <= 0) {
+    return { success: false, error: 'ogc_fid가 필요합니다.' };
+  }
+  const updated = await updateTableRowByKey({
+    table: MAIN_TABLE,
+    schema: meta.schema,
+    keyField: 'ogc_fid',
+    keyValue: fid,
+    changes: values,
+    allowPhysicalColumns: true,
+    geomWkt5181: params.geomClear ? null : params.geomWkt5181,
+    geomClear: params.geomClear,
+  });
+  if (!updated.success) {
+    return { success: false, error: updated.error ?? '수정에 실패했습니다.' };
+  }
+  return { success: true, ogcFid: fid };
 }
 
 /** 건 저장(신규·수정) + 선택적 필지 동기화 */
@@ -1344,13 +1496,15 @@ export async function saveRow(params: {
     const fid = upserted.ogcFid;
 
     if (hasParcels) {
-      const sync = await syncParcels({ rewardOgcFid: fid, parcels: params.parcels! });
+      const sync = await syncParcels({
+        rewardOgcFid: fid,
+        parcels: params.parcels!,
+        parentWkt5181: geomWkt,
+      });
       if (!sync.success) return { success: false, ogcFid: fid, error: sync.error };
     }
-    // 그린 도형이 없을 때만 필지 합집합으로 부모 geom 보강
-    if (!geomWkt && params.geomClear !== true) {
-      await recomputeMainGeomFromParcels({ rewardOgcFid: fid });
-    }
+    // 그린 편입 범위가 있어도 자식 필지 도형은 본표에 모두 포함
+    await recomputeMainGeomFromParcels({ rewardOgcFid: fid });
     return { success: true, ogcFid: fid };
   } catch (e: unknown) {
     return { success: false, error: e instanceof Error ? e.message : String(e) };
@@ -1396,7 +1550,11 @@ export async function saveParcel(params: {
       existingPnu: pnu,
     });
     if (resolved.pnu) pnu = resolved.pnu;
-    if (resolved.geomWkt5181) geomWkt = resolved.geomWkt5181;
+    if (!geomWkt && resolved.geomWkt5181) geomWkt = resolved.geomWkt5181;
+  }
+  const parentWkt = await getMainGeomWkt5181(rewardOgcFid);
+  if (geomWkt && parentWkt) {
+    geomWkt = (await clipParcelWktToParent5181(geomWkt, parentWkt)) ?? geomWkt;
   }
 
   const values: Record<string, unknown> = {
@@ -1412,8 +1570,12 @@ export async function saveParcel(params: {
     appraisal2_value: appraisal2Value,
     applied_unit_price: num(parcel.appliedUnitPrice) || derived.appliedUnitPrice,
     compensation_amount: num(parcel.compensationAmount) || derived.compensationAmount,
+    farming_compensation_amount: num(parcel.farmingCompensationAmount),
+    obstacle_compensation_amount: num(parcel.obstacleCompensationAmount),
     owner_address: cell(parcel.ownerAddress),
     owner_name: cell(parcel.ownerName),
+    actual_owner: cell(parcel.actualOwner),
+    actual_cultivator: cell(parcel.actualCultivator),
     note: cell(parcel.note),
   };
 
@@ -1435,8 +1597,12 @@ export async function saveParcel(params: {
     'appraisal2_value',
     'applied_unit_price',
     'compensation_amount',
+    'farming_compensation_amount',
+    'obstacle_compensation_amount',
     'owner_address',
     'owner_name',
+    'actual_owner',
+    'actual_cultivator',
     'note',
   ] as const;
 

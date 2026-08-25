@@ -925,15 +925,11 @@ export function ShpWizardModal({
     );
     if (!statusRow) return;
     const updated = await checkSingleRow(statusRow);
-    setConsistencyRows((prev) =>
-      prev.map((r) => (r.pathOrResult === updated.pathOrResult ? updated : r))
-    );
-    setConsistencyDone((prev) => {
-      if (!prev) return prev;
-      const next = consistencyRows.map((r) =>
-        r.pathOrResult === updated.pathOrResult ? updated : r
-      );
-      return next.every((r) => !r.error && (r.isNew || !consistencyNeedsReview(r)));
+    setConsistencyRows((prev) => {
+      const next = prev.map((r) => (r.pathOrResult === updated.pathOrResult ? updated : r));
+      const allOk = next.every((r) => !r.error && (r.isNew || !consistencyNeedsReview(r)));
+      setConsistencyDone(allOk);
+      return next;
     });
   }, [statusRows, checkSingleRow, consistencyRows]);
 

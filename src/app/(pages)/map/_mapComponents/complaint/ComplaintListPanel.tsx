@@ -33,7 +33,12 @@ import { COMPLAINT_STATE_OPTIONS, getStateStyle as getStateStyleBase } from './s
 import { scheduleFitMapToExtent3857 } from '../config/mapAutoNavigation';
 import { MAP_AUTO_NAV_MAX_ZOOM } from '../config/mapDefaults';
 import { COMP_WMS_LAYER_IDS } from './complaintLayerId';
-import { fitMapToComplaintExtent3857 } from './fitComplaintMap';
+import {
+  animateComplaintToCenter3857,
+  center3857FromExtent,
+  useComplaintMapClick,
+} from './useComplaintMapClick';
+import { useComplaintMapHighlight } from './useComplaintMapHighlight';
 
 function lowerLayerIds(ids: readonly string[]): string[] {
   return ids.map((id) => id.toLowerCase());
@@ -175,31 +180,49 @@ export default function ComplaintListPanel({ refreshKey = 0 }: { refreshKey?: nu
     loadList();
   }, [loadList, refreshKey]);
 
-  const handleSelect = useCallback(
-    async (comp: CompUI) => {
+  const openDetailByCompKey = useCallback(
+    async (compKey: number) => {
       if (!setComplaintDetail) return;
       try {
         const res = await call('', 'POST', {
           service: 'complaintService',
           action: 'get',
-          params: { compKey: comp.compKey },
+          params: { compKey },
         });
         if (res?.success && res?.data) {
-          const data = res.data as CompUI & {
-            extent3857?: [number, number, number, number] | null;
-          };
+          const data = res.data as CompUI;
           setComplaintDetail(data as Parameters<typeof setComplaintDetail>[0]);
-          fitMapToComplaintExtent3857(
-            mapContext?.mapInstanceRef?.current,
-            data.extent3857,
-            () => mapContext?.applyMapViewPaddingRef?.current?.()
-          );
+          const map = mapContext?.mapInstanceRef?.current;
+          const center = center3857FromExtent(data.extent3857);
+          if (map && center) {
+            // 상세 패널이 열린 뒤 padding 반영 → 점 위치가 화면 정중앙
+            animateComplaintToCenter3857(map, center, () =>
+              mapContext?.applyMapViewPaddingRef?.current?.()
+            );
+          }
         }
       } catch (e) {
         console.error('민원 상세 조회 실패:', e);
       }
     },
     [setComplaintDetail, mapContext]
+  );
+
+  const handleSelect = useCallback(
+    async (comp: CompUI) => {
+      await openDetailByCompKey(comp.compKey);
+    },
+    [openDetailByCompKey]
+  );
+
+  useComplaintMapClick({
+    enabled: true,
+    onSelectCompKey: openDetailByCompKey,
+  });
+
+  useComplaintMapHighlight(
+    Boolean(mapContext?.mapReady),
+    complaintDetail?.geomGeoJson4326 ?? null
   );
 
   const selectedKey = complaintDetail?.compKey ?? null;
@@ -249,11 +272,13 @@ export default function ComplaintListPanel({ refreshKey = 0 }: { refreshKey?: nu
           setComplaintDetail(detail as Parameters<typeof setComplaintDetail>[0]);
           setAddDialogOpen(false);
           loadList();
-          fitMapToComplaintExtent3857(
-            mapContext?.mapInstanceRef?.current,
-            detail.extent3857,
-            () => mapContext?.applyMapViewPaddingRef?.current?.()
-          );
+          const map = mapContext?.mapInstanceRef?.current;
+          const center = center3857FromExtent(detail.extent3857);
+          if (map && center) {
+            animateComplaintToCenter3857(map, center, () =>
+              mapContext?.applyMapViewPaddingRef?.current?.()
+            );
+          }
         }
       } catch (e) {
         console.error('민원 생성 실패:', e);
@@ -433,12 +458,12 @@ export default function ComplaintListPanel({ refreshKey = 0 }: { refreshKey?: nu
       <Dialog open={addDialogOpen} onOpenChange={setAddDialogOpen}>
         <DialogContent className="sm:max-w-[600px] p-0 gap-0 max-h-[90vh] overflow-hidden flex flex-col" showCloseButton={false}>
           <DialogTitle className="sr-only">민원 추가</DialogTitle>
-          <div className="flex items-center justify-between border-b border-slate-100 px-3 py-1.5 shrink-0 bg-slate-50/40">
-            <span className="text-xs font-medium text-slate-600">민원 추가</span>
+          <div className="flex items-center justify-between border-b border-border px-3 py-1.5 shrink-0 bg-muted/30">
+            <span className="text-xs font-medium text-muted-foreground">민원 추가</span>
             <button
               type="button"
               onClick={() => setAddDialogOpen(false)}
-              className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+              className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-muted/50 hover:text-foreground"
               aria-label="닫기"
             >
               <X className="h-3.5 w-3.5" />
