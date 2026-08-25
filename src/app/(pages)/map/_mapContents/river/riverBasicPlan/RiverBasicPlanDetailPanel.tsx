@@ -23,6 +23,7 @@ import { SER_FILE_ENG } from "@/lib/serviceFileDataSerEng";
 import {
   riverBasicPlanAsDefineTable,
   riverBasicPlanGdParentDefineTable,
+  riverBasicPlanGdWmsDefineTables,
   riverBasicPlanHdDefineTable,
   riverBasicPlanIndexDefineTable,
   riverBasicPlanJdDefineTable,
@@ -122,10 +123,14 @@ export function RiverBasicPlanDetailPanel({ tab, riverName, onClose }: Props) {
   const setVisibleLayerNames = mapContext?.setVisibleLayerNames;
   const indexLayer = riverBasicPlanIndexDefineTable(tab);
   const planAsLayer = riverBasicPlanAsDefineTable(tab);
+  const jdLayer = riverBasicPlanJdDefineTable(tab);
+  const hdLayer = riverBasicPlanHdDefineTable(tab);
   const structureParent = riverBasicPlanGdParentDefineTable(tab);
   const layerByLabel = useMemo(() => layerByLabelForTab(tab), [tab]);
+  /** 구조물도 켜기 대기 — 자식 목록 도착 후 분할 레이어 ON */
+  const pendingEnableStructureChildrenRef = useRef(false);
 
-  /** 하천 선택 시 색인도·기본계획 레이어는 항상 켜짐 (탭 전환 시 상대 레이어 교체) */
+  /** 하천 선택 시 확장패널 토글칩 레이어(색인도·기본계획·종단·횡단·구조물 WMS) 항상 켜짐 */
   useEffect(() => {
     if (!riverName.trim() || !setVisibleLayerNames) return;
     const otherTab: RiverType = tab === "smallRiver" ? "river" : "smallRiver";
@@ -133,11 +138,30 @@ export function RiverBasicPlanDetailPanel({ tab, riverName, onClose }: Props) {
       const next = new Set(prev);
       next.delete(riverBasicPlanIndexDefineTable(otherTab));
       next.delete(riverBasicPlanAsDefineTable(otherTab));
+      next.delete(riverBasicPlanJdDefineTable(otherTab));
+      next.delete(riverBasicPlanHdDefineTable(otherTab));
+      for (const id of riverBasicPlanGdWmsDefineTables(otherTab)) next.delete(id);
+      next.delete(riverBasicPlanGdParentDefineTable(otherTab));
       next.add(indexLayer);
       next.add(planAsLayer);
+      next.add(jdLayer);
+      next.add(hdLayer);
+      next.delete(structureParent);
+      for (const id of riverBasicPlanGdWmsDefineTables(tab)) next.add(id);
       return next;
     });
-  }, [riverName, setVisibleLayerNames, tab, indexLayer, planAsLayer]);
+    // 지방하천: defineLayer 자식 목록이 늦게 오면 그 목록으로 재적용
+    if (tab === "river") pendingEnableStructureChildrenRef.current = true;
+  }, [
+    riverName,
+    setVisibleLayerNames,
+    tab,
+    indexLayer,
+    planAsLayer,
+    jdLayer,
+    hdLayer,
+    structureParent,
+  ]);
 
   const [plans, setPlans] = useState<PlanItem[]>([]);
   const plansRef = useRef<PlanItem[]>([]);
@@ -174,8 +198,6 @@ export function RiverBasicPlanDetailPanel({ tab, riverName, onClose }: Props) {
     initialIndex: number;
   } | null>(null);
   const [relatedDrawingLoadingKey, setRelatedDrawingLoadingKey] = useState<string | null>(null);
-  /** 구조물도 켜기 클릭 시 자식 목록이 아직 없으면, 목록 도착 후 자식만 켜기 */
-  const pendingEnableStructureChildrenRef = useRef(false);
 
   // 데이터 이력관리에 조회 저장을 위해 추가
   useEffect(() => {
