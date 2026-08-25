@@ -20,13 +20,13 @@ import {
   PARCEL_ANALYSIS_BOUNDARY_STROKE,
   PARCEL_ANALYSIS_BOUNDARY_STROKE_WIDTH,
   PARCEL_ANALYSIS_CAPTURE_PROJECTION,
-  PARCEL_ANALYSIS_MAP_FIT_PADDING,
   PARCEL_ANALYSIS_MAP_MAX_ZOOM,
   PARCEL_ANALYSIS_OUTSIDE_MASK_FILL,
   PARCEL_ANALYSIS_VWORLD_BASE_URL,
   PARCEL_ANALYSIS_VWORLD_SATELLITE_URL,
   createParcelAnalysisBasemapSource,
   createParcelAnalysisStaticMapOptions,
+  paddingForViewportFill,
   readParcelAnalysisCaptureGeometry,
   resolveBasicMapLayersForCapture,
   toCaptureDisplayGeometry,
@@ -47,22 +47,27 @@ export type ParcelAnalysisCaptureHomeView = {
 };
 
 const homeViewCache = new Map<string, ParcelAnalysisCaptureHomeView>();
+/** fit maxZoom·viewportFill 변경 시 올려 옛 캐시(줌19 고정본)를 버린다 */
+const HOME_VIEW_CACHE_VER = 'z24-f90';
 
 /**
  * 동일 분석 WKT에 대해 모든 캡처가 같은 중심·줌을 쓰도록 고정한다.
- * 여백은 최소(fit padding)만 두어 분석 영역이 화면에 가득 차게 한다.
+ * 프레임(가로로 긴 틀) 높이 기준으로 영역이 약 90%를 채우되 넘치지 않게 맞춘다.
  */
 export function resolveParcelAnalysisCaptureHomeView(wkt5181: string): ParcelAnalysisCaptureHomeView {
-  const key = wkt5181.trim();
+  const key = `${HOME_VIEW_CACHE_VER}|${wkt5181.trim()}`;
   const cached = homeViewCache.get(key);
   if (cached) return cached;
 
-  const displayGeom = toCaptureDisplayGeometry(readParcelAnalysisCaptureGeometry(key));
+  const displayGeom = toCaptureDisplayGeometry(readParcelAnalysisCaptureGeometry(wkt5181.trim()));
   const extent = displayGeom.getExtent();
-  const view = new View({ projection: PARCEL_ANALYSIS_CAPTURE_PROJECTION });
+  const view = new View({
+    projection: PARCEL_ANALYSIS_CAPTURE_PROJECTION,
+    maxZoom: PARCEL_ANALYSIS_MAP_MAX_ZOOM,
+  });
   view.fit(extent, {
     size: PARCEL_ANALYSIS_CAPTURE_SIZE,
-    padding: PARCEL_ANALYSIS_MAP_FIT_PADDING,
+    padding: paddingForViewportFill(PARCEL_ANALYSIS_CAPTURE_SIZE),
     maxZoom: PARCEL_ANALYSIS_MAP_MAX_ZOOM,
   });
 
@@ -421,6 +426,11 @@ type MapCaptureProps = {
   wmsLayerKeys?: string[];
   /** WMS 적층 순서(면→선→점)용 */
   wmsLayerGeomTypes?: Record<string, LayerDbGeometryKind>;
+  /**
+   * GeoServer 발행 레이어(소문자). 있으면 기본도·시설 WMS는 이 목록에 있는 것만 요청.
+   * 목록이 비어 있으면(조회 실패) 기존처럼 선택분 전부 시도.
+   */
+  publishedLayerKeys?: string[];
   /** 시설목록은 v6처럼 항공영상 배경 */
   showSatellite?: boolean;
   /** WMS·캡처 실패 시 아무것도 렌더하지 않음 (시설목록) */
@@ -490,10 +500,6 @@ function waitForBasemapTiles(
   return finish;
 }
 
-function resolveGeoServerBase(_configUrl: string): string {
-  return getGeoServerBase();
-}
-
 function useMapCaptureWhenVisible(rootRef: RefObject<HTMLDivElement | null>) {
   const [visible, setVisible] = useState(false);
 
@@ -518,9 +524,10 @@ function ParcelAnalysisMapCaptureInner({
   layerIds,
   wmsLayerKeys,
   wmsLayerGeomTypes,
+  publishedLayerKeys,
   showSatellite,
   hideOnFailure,
-  geoserverUrl,
+  geoserverUrl: _geoserverUrl,
   workspace,
 }: MapCaptureProps) {
   const rootRef = useRef<HTMLDivElement>(null);
@@ -534,6 +541,7 @@ function ParcelAnalysisMapCaptureInner({
   const captureKey = [
     layerIds?.join('|') ?? '',
     wmsLayerKeys?.join('|') ?? '',
+    publishedLayerKeys?.join('|') ?? '',
     showSatellite ? 'sat' : '',
     Object.entries(wmsLayerGeomTypes ?? {})
       .sort(([a], [b]) => a.localeCompare(b))
@@ -550,9 +558,21 @@ function ParcelAnalysisMapCaptureInner({
     setPreparing(true);
     if (hideOnFailure) setCaptureVisible(null);
 
+    const publishedSet =
+      publishedLayerKeys && publishedLayerKeys.length > 0
+        ? new Set(publishedLayerKeys.map((k) => k.toLowerCase()))
+        : null;
+
     const basicDefs = layerIds?.length ? resolveBasicMapLayersForCapture(layerIds) : [];
-    const basicWmsKeys = basicDefs.filter((d) => d.wmsLayer).map((d) => d.wmsLayer!);
-    const facilityKeys = (wmsLayerKeys ?? []).filter((key) => key.trim().length > 0);
+    const basicWmsKeysRaw = basicDefs.filter((d) => d.wmsLayer).map((d) => d.wmsLayer!);
+    const facilityKeysRaw = (wmsLayerKeys ?? []).filter((key) => key.trim().length > 0);
+    const filterPublished = (keys: string[]) =>
+      publishedSet ? keys.filter((k) => publishedSet.has(k.toLowerCase())) : keys;
+    const basicWmsKeys = filterPublished(basicWmsKeysRaw);
+    const facilityKeys = filterPublished(facilityKeysRaw);
+    const skippedUnpublished = [...basicWmsKeysRaw, ...facilityKeysRaw].filter(
+      (k) => publishedSet && !publishedSet.has(k.toLowerCase())
+    );
     const useSatellite = showSatellite ?? basicDefs.some((d) => d.showSatellite);
     const wmsKeys = facilityKeys.length
       ? sortLayerNamesForWmsStack(facilityKeys, wmsLayerGeomTypes ?? {})
@@ -622,8 +642,17 @@ function ParcelAnalysisMapCaptureInner({
       if (hideOnFailure) setCaptureVisible(true);
       lastCaptureSessionRef.current = captureSessionKey;
       setPreparing(false);
-      if (wmsFailures.length > 0 && !hideOnFailure) {
-        setWmsNotice(formatWmsCaptureNotice(wmsFailures, wmsKeys.length));
+      if (!hideOnFailure) {
+        const notices: string[] = [];
+        if (wmsFailures.length > 0) {
+          notices.push(formatWmsCaptureNotice(wmsFailures, wmsKeys.length));
+        }
+        if (skippedUnpublished.length > 0) {
+          notices.push(
+            `발행되지 않은 레이어는 지도에서 생략했습니다 (${skippedUnpublished.join(', ')}).`
+          );
+        }
+        if (notices.length) setWmsNotice(notices.join(' '));
       }
       teardownMap();
     };
@@ -648,6 +677,7 @@ function ParcelAnalysisMapCaptureInner({
         projection: PARCEL_ANALYSIS_CAPTURE_PROJECTION,
         center: home.center,
         resolution: home.resolution,
+        maxZoom: PARCEL_ANALYSIS_MAP_MAX_ZOOM,
       });
 
       const basemapSource = createParcelAnalysisBasemapSource(
@@ -657,7 +687,8 @@ function ParcelAnalysisMapCaptureInner({
 
       const wmsKeysLower = wmsKeys.map((k) => k.toLowerCase());
       if (wmsKeysLower.length > 0) {
-        const wmsBase = `${resolveGeoServerBase(geoserverUrl)}/${workspace}/wms`;
+        // 메인 지도(serviceLayerFactory)와 동일 베이스 URL
+        const wmsBase = `${getGeoServerBase()}/${workspace}/wms`;
         wmsPending = wmsKeysLower.length;
         for (const key of wmsKeysLower) {
           const wmsLayer = new ImageLayer({
@@ -665,7 +696,8 @@ function ParcelAnalysisMapCaptureInner({
               url: wmsBase,
               params: {
                 LAYERS: `${workspace}:${key}`,
-                STYLES: key,
+                // 빈 스타일 = 레이어 defaultStyle (이름 스타일 불일치·렌더 예외 완화)
+                STYLES: '',
                 VERSION: '1.1.1',
                 EXCEPTIONS: WMS_EXCEPTIONS,
                 TRANSPARENT: true,
@@ -730,7 +762,7 @@ function ParcelAnalysisMapCaptureInner({
       if (fallbackTimer) window.clearTimeout(fallbackTimer);
       teardownMap();
     };
-  }, [visible, captureSessionKey, geoserverUrl, workspace, hideOnFailure]);
+  }, [visible, captureSessionKey, workspace, hideOnFailure]);
 
   if (hideOnFailure && captureVisible === false) return null;
 

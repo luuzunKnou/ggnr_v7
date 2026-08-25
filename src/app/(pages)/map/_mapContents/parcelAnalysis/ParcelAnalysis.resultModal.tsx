@@ -266,7 +266,11 @@ type ResultModalProps = {
   enriching?: boolean;
   scopeAreaSqm?: number;
   itemCount?: number;
-  mapCaptureConfig?: { geoserverUrl: string; workspace: string };
+  mapCaptureConfig?: {
+    geoserverUrl: string;
+    workspace: string;
+    publishedLayerKeys?: string[];
+  };
 };
 
 type TocGroup = ParcelAnalysisTocGroup;
@@ -1112,7 +1116,11 @@ function renderSectionBody(
   result: MockParcelAnalysisResult,
   opts: {
     landEnriching?: boolean;
-    mapCaptureConfig: { geoserverUrl: string; workspace: string };
+    mapCaptureConfig: {
+      geoserverUrl: string;
+      workspace: string;
+      publishedLayerKeys?: string[];
+    };
     outerScrollRef?: RefObject<HTMLElement | null>;
   } = {
     mapCaptureConfig: { geoserverUrl: getGeoServerBase(), workspace: 'ggnr' },
@@ -1127,6 +1135,7 @@ function renderSectionBody(
         layerIds={section.basicMapLayerIds}
         geoserverUrl={opts.mapCaptureConfig.geoserverUrl}
         workspace={opts.mapCaptureConfig.workspace}
+        publishedLayerKeys={opts.mapCaptureConfig.publishedLayerKeys}
       />
     );
   }
@@ -1252,6 +1261,7 @@ function renderSectionBody(
           wkt5181={result.wkt5181}
           wmsLayerKeys={wmsKeysForMap.length ? wmsKeysForMap : undefined}
           wmsLayerGeomTypes={wmsGeomTypes}
+          publishedLayerKeys={opts.mapCaptureConfig.publishedLayerKeys}
           showSatellite
           hideOnFailure={false}
           geoserverUrl={opts.mapCaptureConfig.geoserverUrl}

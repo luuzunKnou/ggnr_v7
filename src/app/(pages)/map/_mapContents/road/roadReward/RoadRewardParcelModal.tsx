@@ -7,19 +7,19 @@ import type { VWorldAddressItem } from "../../../_mapComponents/addressSearch/vw
 import type { RoadRewardParcel, RoadRewardParcelField } from "./roadRewardMock";
 
 const fieldClass =
-  "h-7 w-full min-w-0 rounded border border-slate-300 bg-white px-1.5 text-[11px] outline-none focus:border-primary focus:ring-1 focus:ring-primary/25";
+  "h-7 w-full min-w-0 rounded border border-border bg-background px-1.5 text-[11px] text-foreground outline-none focus:border-primary focus:ring-1 focus:ring-primary/25";
 /** 조회용 — 수정 input과 동일한 테두리·높이로 값이 잘 보이게 */
 const fieldViewClass =
-  "flex min-h-7 w-full min-w-0 items-center rounded border border-slate-300 bg-white px-1.5 text-[11px] text-slate-700";
+  "flex min-h-7 w-full min-w-0 items-center rounded border border-border bg-background px-1.5 text-[11px] text-foreground";
 const fieldViewMultilineClass =
-  "min-h-[2.75rem] w-full whitespace-pre-wrap break-all rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700";
-const labelClass = "mb-0.5 block text-[11px] text-slate-500";
+  "min-h-[2.75rem] w-full whitespace-pre-wrap break-all rounded border border-border bg-background px-2 py-1 text-xs text-foreground";
+const labelClass = "mb-0.5 block text-[11px] text-muted-foreground";
 const btnPrimary =
   "inline-flex h-7 items-center gap-1 rounded border border-primary bg-primary px-2 text-[11px] font-medium text-white hover:bg-primary/90 disabled:opacity-50";
 const btnGhost =
-  "inline-flex h-7 items-center gap-1 rounded border border-slate-200 bg-white px-2 text-[11px] font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-50";
+  "inline-flex h-7 items-center gap-1 rounded border border-border bg-background px-2 text-[11px] font-medium text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-50";
 const btnDanger =
-  "inline-flex h-7 items-center gap-1 rounded border border-red-200 bg-white px-2 text-[11px] font-medium text-red-600 hover:bg-red-50 disabled:opacity-50";
+  "inline-flex h-7 items-center gap-1 rounded border border-red-200 bg-background px-2 text-[11px] font-medium text-red-600 hover:bg-red-50 disabled:opacity-50 dark:border-red-800 dark:text-red-400 dark:hover:bg-red-950/40";
 
 /** 주소 검색으로 채우는 필드 — 모달에서 개별 입력란 대신 검색 UI로 처리 */
 const PARCEL_ADDR_SEARCH_FIELDS = new Set<string>(["eupmyeonDong", "jibunOriginal"]);
@@ -99,11 +99,11 @@ export function RoadRewardParcelModal({
       onClick={close}
     >
       <div
-        className="relative flex max-h-[calc(100dvh-5rem)] w-full max-w-lg flex-col overflow-hidden rounded-[5px] border border-slate-200 bg-white shadow-2xl"
+        className="relative flex max-h-[calc(100dvh-5rem)] w-full max-w-lg flex-col overflow-hidden rounded-[5px] border border-border bg-background shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex shrink-0 items-center border-b border-slate-200 px-3 py-2">
-          <h3 id={titleId} className="text-sm font-semibold text-slate-800">
+        <div className="flex shrink-0 items-center border-b border-border px-3 py-2">
+          <h3 id={titleId} className="text-sm font-semibold text-foreground">
             {title}
           </h3>
         </div>
@@ -179,7 +179,7 @@ export function RoadRewardParcelModal({
                     <label key={field} className="col-span-2 block">
                       <span className={labelClass}>{label}</span>
                       <textarea
-                        className="min-h-[2.75rem] w-full rounded border border-slate-300 px-2 py-1 text-xs outline-none focus:border-primary focus:ring-2 focus:ring-primary/25"
+                        className="min-h-[2.75rem] w-full rounded border border-border bg-background px-2 py-1 text-xs text-foreground outline-none focus:border-primary focus:ring-2 focus:ring-primary/25"
                         rows={2}
                         value={String(parcel.note ?? "")}
                         onChange={(e) => onFieldChange("note", e.target.value)}
@@ -215,7 +215,7 @@ export function RoadRewardParcelModal({
           </div>
         </div>
 
-        <div className="flex shrink-0 items-center justify-end gap-1 border-t border-slate-200 px-3 py-1.5">
+        <div className="flex shrink-0 items-center justify-end gap-1 border-t border-border px-3 py-1.5">
           {!readOnly ? (
             <button type="button" className={btnPrimary} onClick={onSave}>
               저장

@@ -316,14 +316,14 @@ export function FmsLinkageListPanel({
             <col className="w-[90px]" />
             <col className="w-[90px]" />
           </colgroup>
-          <thead className="sticky top-0 z-[1] bg-muted/50">
+          <thead className="sticky top-0 z-[1] bg-muted">
             <tr>
               {FMS_LIST_COLUMNS.map((col) => {
                 if (!isSortKey(col.key)) {
                   return (
                     <th
                       key={col.key}
-                      className="whitespace-nowrap border-b-0 px-1.5 py-1.5 text-center font-semibold text-foreground/90 [box-shadow:inset_0_-2px_0_0_var(--border)]"
+                      className="whitespace-nowrap border-b-0 px-1.5 py-1.5 text-left font-semibold text-foreground/90 [box-shadow:inset_0_-2px_0_0_var(--border)]"
                     >
                       <span className="block truncate">{col.label}</span>
                     </th>
@@ -338,13 +338,13 @@ export function FmsLinkageListPanel({
                 return (
                   <th
                     key={sortKey}
-                    className="whitespace-nowrap border-b-0 px-1.5 py-1.5 text-center font-semibold text-foreground/90 [box-shadow:inset_0_-2px_0_0_var(--border)]"
+                    className="whitespace-nowrap border-b-0 px-1.5 py-1.5 text-left font-semibold text-foreground/90 [box-shadow:inset_0_-2px_0_0_var(--border)]"
                   >
                     <button
                       type="button"
                       onClick={() => toggleSort(sortKey)}
                       className={cn(
-                        'inline-flex max-w-full items-center justify-center gap-0.5 rounded px-0.5 py-0.5 transition-colors hover:bg-muted',
+                        'inline-flex max-w-full items-center justify-start gap-0.5 rounded px-0.5 py-0.5 transition-colors hover:bg-muted',
                         active ? 'text-primary' : 'text-foreground/90'
                       )}
                       title={
