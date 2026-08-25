@@ -110,9 +110,9 @@ export function RoadFrontageBuildingListPanel({
   const roadNetworkLayerOn = isRoadNetworkWmsVisible(mapContext?.visibleLayerNames);
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-white">
-      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-slate-200 px-3 py-1.5">
-        <span className="text-sm font-semibold text-slate-800">접도구역 건축물</span>
+    <div className="flex h-full min-h-0 flex-col bg-background">
+      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border px-3 py-1.5">
+        <span className="text-sm font-semibold text-foreground">접도구역 건축물</span>
         <div className="flex items-center gap-1">
           <LayerRowPanelButton
             type="button"
@@ -120,7 +120,7 @@ export function RoadFrontageBuildingListPanel({
             aria-label={roadNetworkLayerOn ? '도로망도 레이어 끄기' : '도로망도 레이어 켜기'}
             aria-pressed={roadNetworkLayerOn}
             onClick={() => toggleRoadNetworkWmsLayers(mapContext?.setVisibleLayerNames)}
-            className={roadNetworkLayerOn ? 'border-primary bg-primary/15 text-slate-800 hover:opacity-90' : undefined}
+            className={roadNetworkLayerOn ? 'border-primary bg-primary/15 text-foreground hover:opacity-90' : undefined}
           >
             <Layers className="h-3 w-3 shrink-0" aria-hidden />
             도로망도
@@ -135,7 +135,7 @@ export function RoadFrontageBuildingListPanel({
           <button
             type="button"
             onClick={onClose}
-            className="shrink-0 rounded p-1 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
+            className="shrink-0 rounded p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
             title="닫기"
             aria-label="닫기"
           >
@@ -144,22 +144,22 @@ export function RoadFrontageBuildingListPanel({
         </div>
       </div>
 
-      <div className="shrink-0 border-b border-slate-100 px-3 py-2">
+      <div className="shrink-0 border-b border-border px-3 py-2">
         <div className="relative">
-          <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+          <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <input
             type="search"
             value={keyword}
             onChange={(e) => setKeyword(e.target.value)}
             placeholder="검색 (도로종류, 위치, 노선번호 등)"
-            className="w-full rounded-md border border-slate-200 bg-white py-1.5 pl-8 pr-3 text-sm outline-none ring-offset-2 focus:border-slate-300 focus:ring-2 focus:ring-slate-200"
+            className="w-full rounded-md border border-border bg-background py-1.5 pl-8 pr-3 text-sm text-foreground outline-none placeholder:text-muted-foreground ring-offset-2 focus:border-primary focus:ring-2 focus:ring-primary/25"
           />
         </div>
       </div>
 
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
         {error ? (
-          <div className="shrink-0 border-b border-red-100 bg-red-50 px-3 py-2 text-xs text-red-600">
+          <div className="shrink-0 border-b border-destructive/20 bg-destructive/10 px-3 py-2 text-xs text-destructive">
             {error}
           </div>
         ) : null}
@@ -171,18 +171,18 @@ export function RoadFrontageBuildingListPanel({
               <col className="w-[72px]" />
               <col className="w-[88px]" />
             </colgroup>
-            <thead className="sticky top-0 z-[1] bg-slate-50 shadow-[0_1px_0_0_rgb(226_232_240)]">
+            <thead className="sticky top-0 z-[1] bg-muted shadow-[inset_0_-1px_0_0_var(--border)]">
               <tr>
-                <th className="whitespace-nowrap border-b border-slate-200 px-2 py-2 font-semibold text-slate-700">
+                <th className="whitespace-nowrap border-b-0 px-2 py-2 font-semibold text-foreground/90">
                   도로의 종류
                 </th>
-                <th className="whitespace-nowrap border-b border-slate-200 px-2 py-2 font-semibold text-slate-700">
+                <th className="whitespace-nowrap border-b-0 px-2 py-2 font-semibold text-foreground/90">
                   위치
                 </th>
-                <th className="whitespace-nowrap border-b border-slate-200 px-2 py-2 font-semibold text-slate-700">
+                <th className="whitespace-nowrap border-b-0 px-2 py-2 font-semibold text-foreground/90">
                   노선번호
                 </th>
-                <th className="whitespace-nowrap border-b border-slate-200 px-2 py-2 font-semibold text-slate-700">
+                <th className="whitespace-nowrap border-b-0 px-2 py-2 font-semibold text-foreground/90">
                   작성연월일
                 </th>
               </tr>
@@ -190,13 +190,13 @@ export function RoadFrontageBuildingListPanel({
             <tbody>
               {loading && items.length === 0 ? (
                 <tr>
-                  <td colSpan={4} className="px-2 py-6 text-center text-slate-500">
+                  <td colSpan={4} className="px-2 py-6 text-center text-muted-foreground">
                     불러오는 중…
                   </td>
                 </tr>
               ) : items.length === 0 ? (
                 <tr>
-                  <td colSpan={4} className="px-2 py-6 text-center text-slate-500">
+                  <td colSpan={4} className="px-2 py-6 text-center text-muted-foreground">
                     등록된 관리대장이 없습니다.
                   </td>
                 </tr>
@@ -218,15 +218,17 @@ export function RoadFrontageBuildingListPanel({
                         }
                       }}
                       className={cn(
-                        'cursor-pointer border-b border-slate-100 transition-colors hover:bg-slate-50/80',
-                        isSelected && 'bg-primary/10'
+                        'cursor-pointer border-b border-border transition-colors',
+                        isSelected
+                          ? 'bg-primary/10 dark:bg-primary/25'
+                          : 'hover:bg-muted/50'
                       )}
                     >
-                      <td className="max-w-0 truncate px-2 py-1.5 text-slate-800" title={l.roadType}>
+                      <td className="max-w-0 truncate px-2 py-1.5 text-foreground" title={l.roadType}>
                         {l.roadType || '—'}
                       </td>
                       <td
-                        className="max-w-0 truncate px-2 py-1.5 text-slate-700"
+                        className="max-w-0 truncate px-2 py-1.5 text-foreground"
                         title={l.locationAddress}
                       >
                         {formatAddressStripSidoSigungu(l.locationAddress) ||
@@ -234,13 +236,13 @@ export function RoadFrontageBuildingListPanel({
                           '(위치 미입력)'}
                       </td>
                       <td
-                        className="max-w-0 truncate px-2 py-1.5 tabular-nums text-slate-700"
+                        className="max-w-0 truncate px-2 py-1.5 tabular-nums text-foreground"
                         title={routeTitle !== '—' ? routeTitle : undefined}
                       >
                         {l.routeNo.trim() || '—'}
                       </td>
                       <td
-                        className="max-w-0 truncate px-2 py-1.5 tabular-nums text-slate-700"
+                        className="max-w-0 truncate px-2 py-1.5 tabular-nums text-foreground"
                         title={l.preparedDate}
                       >
                         {l.preparedDate || '—'}
@@ -252,7 +254,7 @@ export function RoadFrontageBuildingListPanel({
             </tbody>
           </table>
         </div>
-        <div className="shrink-0 border-t border-slate-100 px-3 py-1.5 text-[11px] text-slate-500">
+        <div className="shrink-0 border-t border-border px-3 py-1.5 text-[11px] text-muted-foreground">
           {items.length.toLocaleString()}건
         </div>
       </div>

@@ -5,12 +5,12 @@ import { createPortal } from 'react-dom';
 import type { RoadFrontageMarkerItem } from './roadFrontageMarkerMock';
 
 const fieldClass =
-  'h-7 w-full min-w-0 rounded border border-slate-300 bg-white px-1.5 text-[11px] outline-none focus:border-primary focus:ring-1 focus:ring-primary/25';
-const labelClass = 'mb-0.5 block text-[11px] text-slate-500';
+  'h-7 w-full min-w-0 rounded border border-border bg-background px-1.5 text-[11px] text-foreground outline-none focus:border-primary focus:ring-1 focus:ring-primary/25';
+const labelClass = 'mb-0.5 block text-[11px] text-muted-foreground';
 const btnPrimary =
   'inline-flex h-7 items-center gap-1 rounded border border-primary bg-primary px-2 text-[11px] font-medium text-white hover:bg-primary/90 disabled:opacity-50';
 const btnGhost =
-  'inline-flex h-7 items-center gap-1 rounded border border-slate-200 bg-white px-2 text-[11px] font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-50';
+  'inline-flex h-7 items-center gap-1 rounded border border-border bg-background px-2 text-[11px] font-medium text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-50';
 
 type Props = {
   draft: RoadFrontageMarkerItem;
@@ -70,11 +70,11 @@ export function RoadFrontageMarkerItemModal({
       onClick={close}
     >
       <div
-        className="relative flex max-h-[calc(100dvh-5rem)] w-full max-w-md flex-col overflow-hidden rounded-[5px] border border-slate-200 bg-white shadow-2xl"
+        className="relative flex max-h-[calc(100dvh-5rem)] w-full max-w-md flex-col overflow-hidden rounded-[5px] border border-border bg-background shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex shrink-0 items-center justify-between border-b border-slate-200 px-3 py-2">
-          <h3 id={titleId} className="text-sm font-semibold text-slate-800">
+        <div className="flex shrink-0 items-center justify-between border-b border-border px-3 py-2">
+          <h3 id={titleId} className="text-sm font-semibold text-foreground">
             {isNew ? '표주 추가' : '표주 수정'}
           </h3>
           <button type="button" className={btnGhost} onClick={close}>
@@ -180,13 +180,13 @@ export function RoadFrontageMarkerItemModal({
             </div>
           </div>
           {error ? (
-            <p className="rounded border border-red-200 bg-red-50 px-2 py-1.5 text-[11px] text-red-700">
+            <p className="rounded border border-red-200 bg-red-50 px-2 py-1.5 text-[11px] text-red-700 dark:border-red-800 dark:bg-red-950/40 dark:text-red-300">
               {error}
             </p>
           ) : null}
         </div>
 
-        <div className="flex shrink-0 items-center justify-end gap-1 border-t border-slate-200 px-3 py-2">
+        <div className="flex shrink-0 items-center justify-end gap-1 border-t border-border px-3 py-2">
           <button type="button" className={btnGhost} onClick={close}>
             취소
           </button>
