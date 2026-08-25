@@ -192,6 +192,11 @@ export function RoadLedgerListPanel({ onClose }: Props) {
           params: { keyword },
         });
         const data = res?.data ?? res;
+        if (typeof data?.error === "string" && data.error) {
+          setItems([]);
+          setError(data.error);
+          return;
+        }
         setItems(Array.isArray(data?.rows) ? data.rows : []);
       } catch (e: unknown) {
         setItems([]);

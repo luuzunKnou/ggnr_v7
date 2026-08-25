@@ -3,6 +3,10 @@ import { runKais, defaultDailyWindow, resolveKaisSggCode } from '@/integrations/
 import { getSafetydataDatasetById, SAFETYDATA_DATASETS } from '@/integrations/safetydata.config';
 import { getSafetydataTargetSchema } from '@/integrations/safetydataHttp';
 import { ingestSafetydataDatasetToLayer } from '@/integrations/safetydataIngest';
+import { runKrasLayerSync, type KrasLayerSyncScope } from '@/integrations/krasLayerSync';
+import type { KrasIntegrationTarget } from '@/integrations/krasLayerSync.config';
+import { runKrasFileStep, runKrasFullSync, runKorepsPriceFileSync } from '@/integrations/krasLandFileSync';
+import { appendLinkageError, formatLinkageError } from '@/integrations/linkageErrorLog';
 
 type Params = Record<string, unknown>;
 
@@ -75,7 +79,7 @@ function compactErrorMessage(e: unknown): string {
     .split(/\r?\n/)
     .map((s) => s.trim())
     .find((s) => s.length > 0) ?? 'unknown error';
-  return first.length > 320 ? `${first.slice(0, 320)}...` : first;
+  return first.length > 500 ? `${first.slice(0, 500)}...` : first;
 }
 
 async function updateIntegrationJobProgress(ijlKey: number | undefined, message: string): Promise<void> {
@@ -227,6 +231,11 @@ export async function runIntegration(p: Params) {
             const msg = compactErrorMessage(e);
             console.error(`[SAFETYDATA RUN] ${seq}/${total} FAIL ${d.id} ${d.tableNameEn} ${msg}`);
             errors.push(`${seq}/${total} ${d.id} ${d.tableNameEn}: ${msg}`);
+            void appendLinkageError({
+              system: 'SAFETYDATA',
+              title: `${d.tableNameKo} (${d.id})`,
+              detail: formatLinkageError(e),
+            });
             await updateIntegrationJobProgress(
               ijlKey,
               `실패 ${seq}/${total} | ${d.id} | ${d.tableNameEn} | ${msg}`
@@ -259,6 +268,42 @@ export async function runIntegration(p: Params) {
           ijlKey,
           `완료 1/1 | ${cfg.id} | ${r.schema}.${r.tableNameEn} | fetched=${r.rowsFetched}, inserted=${r.rowsInserted}, filteredOut=${r.rowsFilteredOut}`
         );
+      }
+    } else if (system === 'KRAS') {
+      const rawScope = String(p.target ?? p.scope ?? 'all').trim().toLowerCase();
+      const fileStep: 'catalog' | 'landinfo' | 'landown' | null =
+        rawScope === 'catalog' || rawScope === 'landinfo' || rawScope === 'landown' ? rawScope : null;
+      const shapeScope: KrasLayerSyncScope | null =
+        rawScope === 'parcel' || rawScope === 'boundary' || rawScope === 'thematic' ? rawScope : null;
+      const target: KrasIntegrationTarget = fileStep ?? shapeScope ?? 'all';
+      await updateIntegrationJobProgress(ijlKey, `진행중 | KRAS | ${target}`);
+      const r =
+        target === 'all'
+          ? await runKrasFullSync({
+              includeShape: true,
+              includePriceFile: false,
+              onProgress: (message) => updateIntegrationJobProgress(ijlKey, message),
+            })
+          : fileStep
+            ? await runKrasFileStep(fileStep, {
+                onProgress: (message) => updateIntegrationJobProgress(ijlKey, message),
+              })
+            : await runKrasLayerSync({
+                scope: shapeScope ?? 'all',
+                onProgress: (message) => updateIntegrationJobProgress(ijlKey, message),
+              });
+      await updateIntegrationJobProgress(ijlKey, r.message);
+      if (r.failed > 0 && r.success === 0) {
+        throw new Error(r.message);
+      }
+    } else if (system === 'KORPES') {
+      await updateIntegrationJobProgress(ijlKey, '진행중 | 공시지가 파일');
+      const r = await runKorepsPriceFileSync({
+        onProgress: (message) => updateIntegrationJobProgress(ijlKey, message),
+      });
+      await updateIntegrationJobProgress(ijlKey, r.message);
+      if (r.failed > 0 && r.success === 0) {
+        throw new Error(r.message);
       }
     } else if (system === 'FMS') {
       await updateIntegrationJobProgress(
@@ -306,6 +351,13 @@ export async function runIntegration(p: Params) {
   } catch (e) {
     const msg = compactErrorMessage(e);
     console.error(`[INTEGRATION] FAIL system=${system} ijlKey=${ijlKey ?? '-'} message=${msg}`);
+    if (system !== 'KRAS' && system !== 'KORPES') {
+      void appendLinkageError({
+        system,
+        title: '연계 실패',
+        detail: formatLinkageError(e),
+      });
+    }
     await pool.query(
       `update integration_job_log
        set ijl_status='FAILED', ijl_finished_at=now(), ijl_message=$2

@@ -21,6 +21,11 @@ import { createOwnershipLayers } from '../../map/_mapComponents/layerFactory/own
 import { createThematicMapLayers } from '../../map/_mapComponents/layerFactory/thematicMapLayerFactory';
 import { createServiceLayer } from '../../map/_mapComponents/layerFactory/serviceLayerFactory';
 import { loadPersistedMapState } from '../../map/_mapComponents/hooks/useMapStatePersist';
+import {
+  bindMapGeometryStackOrder,
+  mergeDefineLayerShpTypesIntoGeometryMap,
+} from '@/lib/mapLayerGeometryOrder';
+import tables from '@/config/defineLayer/tables.json';
 
 const SHAPE_EDITOR_STATE_SUFFIX = ':shape-editor';
 
@@ -79,11 +84,16 @@ export function useShapeEditorMapInstance(
       }),
     });
 
+    const unbindGeomStack = bindMapGeometryStackOrder(
+      map,
+      mergeDefineLayerShpTypesIntoGeometryMap({}, tables as unknown[])
+    );
     map.getLayers().push(createServiceLayer());
     mapInstanceRef.current = map;
     setMapReady(true);
 
     return () => {
+      unbindGeomStack();
       if (mapInstanceRef.current) {
         mapInstanceRef.current.setTarget(undefined);
         mapInstanceRef.current = null;

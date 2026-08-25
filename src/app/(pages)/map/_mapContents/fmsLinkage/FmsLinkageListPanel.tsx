@@ -8,7 +8,14 @@ import { cn } from '@/lib/utils'
 import { useMapContext } from '../../_mapComponents/MapContext'
 import { MAP_AUTO_NAV_MAX_ZOOM } from '../../_mapComponents/config/mapDefaults'
 import { scheduleFitMapToExtent3857 } from '../../_mapComponents/config/mapAutoNavigation'
-import { FMS_EMPTY_LIST_MESSAGE, FMS_LIST_COLUMNS, FMS_LIST_TITLE } from './fmsLinkageBinding'
+import {
+  defaultFmsListSystemFilter,
+  FMS_EMPTY_LIST_MESSAGE,
+  FMS_LIST_COLUMNS,
+  FMS_LIST_SYSTEM_FILTERS,
+  FMS_LIST_TITLE,
+  type FmsListSystemFilter,
+} from './fmsLinkageBinding'
 
 type ListRow = {
   id: string
@@ -72,6 +79,9 @@ export function FmsLinkageListPanel({
   const setOverlayRows = mapContext?.setFmsLinkageOverlayRows
   const [keyword, setKeyword] = useState('')
   const [debouncedKeyword, setDebouncedKeyword] = useState('')
+  const [systemFilter, setSystemFilter] = useState<FmsListSystemFilter>(() =>
+    defaultFmsListSystemFilter(system)
+  )
   const [rows, setRows] = useState<ListRow[]>([])
   const [sorts, setSorts] = useState<SortSpec[]>([])
   const [loading, setLoading] = useState(false)
@@ -112,7 +122,7 @@ export function FmsLinkageListPanel({
         const res = await call('', 'POST', {
           service: 'fmsLinkageService',
           action: 'getFmsFacilityExtent3857ByFacilNo',
-          params: { facilNo: key, system: system || undefined },
+          params: { facilNo: key, system: systemFilter || undefined },
         })
         const data = res?.data ?? res
         const ext = data?.extent3857 as unknown
@@ -135,7 +145,7 @@ export function FmsLinkageListPanel({
         onGeomToast?.('도형을 찾을 수 없습니다.')
       }
     },
-    [mapContext, system, onGeomToast]
+    [mapContext, systemFilter, onGeomToast]
   )
 
   const handleRowSelect = useCallback(
@@ -159,7 +169,7 @@ export function FmsLinkageListPanel({
     void call('', 'POST', {
       service: 'fmsLinkageService',
       action: 'getFmsFacilityList',
-      params: { keyword: debouncedKeyword, system: system || undefined },
+      params: { keyword: debouncedKeyword, system: systemFilter || undefined },
     })
       .then((res) => {
         if (cancelled) return
@@ -178,14 +188,14 @@ export function FmsLinkageListPanel({
     return () => {
       cancelled = true
     }
-  }, [debouncedKeyword, system])
+  }, [debouncedKeyword, systemFilter])
 
   useEffect(() => {
     let cancelled = false
     void call('', 'POST', {
       service: 'fmsLinkageService',
       action: 'getFmsFacilityGeomOverlayList',
-      params: { keyword: debouncedKeyword, system: system || undefined },
+      params: { keyword: debouncedKeyword, system: systemFilter || undefined },
     })
       .then((res) => {
         if (cancelled) return
@@ -216,13 +226,24 @@ export function FmsLinkageListPanel({
     return () => {
       cancelled = true
     }
-  }, [debouncedKeyword, system, setOverlayRows])
+  }, [debouncedKeyword, systemFilter, setOverlayRows])
 
   useEffect(() => {
     return () => {
       setOverlayRows?.([])
     }
   }, [setOverlayRows])
+
+  useEffect(() => {
+    setSystemFilter(defaultFmsListSystemFilter(system))
+  }, [system])
+
+  useEffect(() => {
+    if (loading) return
+    if (!selectedDetailId) return
+    if (rows.some((r) => r.id === selectedDetailId)) return
+    onSelectDetailId('')
+  }, [loading, rows, selectedDetailId, onSelectDetailId])
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-background">
@@ -250,9 +271,36 @@ export function FmsLinkageListPanel({
             className="w-full rounded-md border border-border bg-background py-1.5 pl-8 pr-3 text-sm text-foreground outline-none placeholder:text-muted-foreground focus:border-border focus:ring-2 focus:ring-ring"
           />
         </div>
-        <p className="mt-1.5 text-xs text-muted-foreground">
-          총 {rows.length.toLocaleString()}건
-        </p>
+        <div className="mt-1.5 flex items-center justify-between gap-2">
+          <div
+            className="flex min-w-0 flex-wrap items-center gap-1"
+            role="group"
+            aria-label="시스템 필터"
+          >
+            {FMS_LIST_SYSTEM_FILTERS.map((opt) => {
+              const active = systemFilter === opt.value
+              return (
+                <button
+                  key={opt.value || '__all__'}
+                  type="button"
+                  onClick={() => setSystemFilter(opt.value)}
+                  aria-pressed={active}
+                  className={cn(
+                    'rounded border px-2 py-1 text-[11px] font-medium transition-colors',
+                    active
+                      ? 'border-primary bg-primary/10 text-foreground'
+                      : 'border-border bg-background text-muted-foreground hover:border-border hover:bg-muted/50 hover:text-foreground'
+                  )}
+                >
+                  {opt.label}
+                </button>
+              )
+            })}
+          </div>
+          <p className="shrink-0 text-xs text-muted-foreground">
+            총 {rows.length.toLocaleString()}건
+          </p>
+        </div>
       </div>
 
       <div className="min-h-0 flex-1 overflow-auto scrollbar-thin">
@@ -268,14 +316,14 @@ export function FmsLinkageListPanel({
             <col className="w-[90px]" />
             <col className="w-[90px]" />
           </colgroup>
-          <thead className="sticky top-0 z-[1] bg-muted">
+          <thead className="sticky top-0 z-[1] bg-muted/50">
             <tr>
               {FMS_LIST_COLUMNS.map((col) => {
                 if (!isSortKey(col.key)) {
                   return (
                     <th
                       key={col.key}
-                      className="border-t border-b border-border px-2 py-2 font-semibold text-foreground"
+                      className="whitespace-nowrap border-b-0 px-1.5 py-1.5 text-center font-semibold text-foreground/90 [box-shadow:inset_0_-2px_0_0_var(--border)]"
                     >
                       <span className="block truncate">{col.label}</span>
                     </th>
@@ -290,14 +338,14 @@ export function FmsLinkageListPanel({
                 return (
                   <th
                     key={sortKey}
-                    className="border-t border-b border-border px-2 py-2 font-semibold text-foreground"
+                    className="whitespace-nowrap border-b-0 px-1.5 py-1.5 text-center font-semibold text-foreground/90 [box-shadow:inset_0_-2px_0_0_var(--border)]"
                   >
                     <button
                       type="button"
                       onClick={() => toggleSort(sortKey)}
                       className={cn(
-                        'inline-flex max-w-full items-center gap-0.5 rounded px-0.5 py-0.5 transition-colors hover:bg-background/80',
-                        active ? 'text-primary' : 'text-foreground'
+                        'inline-flex max-w-full items-center justify-center gap-0.5 rounded px-0.5 py-0.5 transition-colors hover:bg-muted',
+                        active ? 'text-primary' : 'text-foreground/90'
                       )}
                       title={
                         !active

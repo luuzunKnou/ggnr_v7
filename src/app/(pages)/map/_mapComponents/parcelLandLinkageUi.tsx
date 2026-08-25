@@ -85,12 +85,12 @@ const DATA_SOURCE_LABEL: Record<string, string> = {
   portal: '공공데이터포털',
   arch: '공공데이터포털',
   housing: '공공데이터포털',
-  kras: '행망',
-  koreps: '코렙스',
-  vworld: '브이월드',
+  kras: 'KRAS',
+  koreps: 'KOREPS',
+  vworld: 'V-WORLD',
 };
 
-const DATA_SOURCE_ORDER = ['세움터', '공공데이터포털', '행망', '코렙스', '브이월드'];
+const DATA_SOURCE_ORDER = ['세움터', '공공데이터포털', 'KRAS', 'KOREPS', 'V-WORLD'];
 
 export function dataSourceLabel(source?: string | null): string | undefined {
   if (source == null || source === '') return undefined;
@@ -103,7 +103,7 @@ export function dataSourceLabel(source?: string | null): string | undefined {
 function dataSourceLabels(source?: string | null): string[] {
   if (source == null || source === '') return [];
   const key = normalizeParcelLandSource(source);
-  if (key === 'mixed') return ['행망', '코렙스'];
+  if (key === 'mixed') return ['KRAS', 'KOREPS'];
   const one = dataSourceLabel(source);
   return one ? [one] : [];
 }
@@ -192,9 +192,9 @@ export function LandLinkageLegend({
   return (
     <p className="text-[10px] leading-relaxed text-muted-foreground">
       {showJijukHint ? <span className="mr-2">주소·면적 = 지적 DB</span> : null}
-      {set.has('kras') ? <span className="mr-2 font-medium text-blue-700">파랑·행망</span> : null}
-      {set.has('koreps') ? <span className="mr-2 font-medium text-indigo-700">남색·코렙스</span> : null}
-      {set.has('vworld') ? <span className="mr-2 font-medium text-emerald-700">초록·브이월드</span> : null}
+      {set.has('kras') ? <span className="mr-2 font-medium text-blue-700">파랑·KRAS</span> : null}
+      {set.has('koreps') ? <span className="mr-2 font-medium text-indigo-700">남색·KOREPS</span> : null}
+      {set.has('vworld') ? <span className="mr-2 font-medium text-emerald-700">초록·V-WORLD</span> : null}
       {set.has('mixed') ? <span className="mr-2 font-medium text-foreground">혼합 연계</span> : null}
       <span className="mr-2">소유·지목·공시 = 동일 출처</span>
       <span className="mr-2">- = 연계됐으나 값 없음</span>

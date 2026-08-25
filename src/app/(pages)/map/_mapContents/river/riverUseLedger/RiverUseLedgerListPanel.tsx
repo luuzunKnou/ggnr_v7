@@ -241,18 +241,18 @@ export function RiverUseLedgerListPanel({
         )}
         <div className="min-h-0 flex-1 overflow-auto scrollbar-thin">
           <table className="w-full min-w-[520px] border-collapse text-left text-xs">
-            <thead className="sticky top-0 z-[1] bg-muted shadow-[0_1px_0_0_var(--border)]">
+            <thead className="sticky top-0 z-[1] bg-muted/50">
               <tr>
-                <th className="whitespace-nowrap px-2 py-2 font-semibold text-foreground/90 border-b border-border">
+                <th className="whitespace-nowrap border-b-0 px-2 py-2 font-semibold text-foreground/90 [box-shadow:inset_0_-2px_0_0_var(--border)]">
                   {headers.permitNo}
                 </th>
-                <th className="min-w-[120px] px-2 py-2 font-semibold text-foreground/90 border-b border-border">
+                <th className="min-w-[120px] border-b-0 px-2 py-2 font-semibold text-foreground/90 [box-shadow:inset_0_-2px_0_0_var(--border)]">
                   {headers.spot}
                 </th>
-                <th className="whitespace-nowrap px-2 py-2 font-semibold text-foreground/90 border-b border-border">
+                <th className="whitespace-nowrap border-b-0 px-2 py-2 font-semibold text-foreground/90 [box-shadow:inset_0_-2px_0_0_var(--border)]">
                   {headers.col3}
                 </th>
-                <th className="whitespace-nowrap px-2 py-2 font-semibold text-foreground/90 border-b border-border">
+                <th className="whitespace-nowrap border-b-0 px-2 py-2 font-semibold text-foreground/90 [box-shadow:inset_0_-2px_0_0_var(--border)]">
                   {headers.col4}
                 </th>
               </tr>

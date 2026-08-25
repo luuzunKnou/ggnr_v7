@@ -324,6 +324,30 @@
     "define_table_source": "excel"
   },
   {
+    "define_table_name": "road_frontage_building",
+    "define_table_kor_name": "road_frontage_building",
+    "define_table_shp_type": "POINT",
+    "define_table_read_share": "P",
+    "define_table_write_share": "P",
+    "define_table_group": "",
+    "define_table_idx": "0",
+    "define_table_etc": "",
+    "define_table_schema": "layer",
+    "define_table_source": "shp"
+  },
+  {
+    "define_table_name": "road_use_ledger_mulgunji",
+    "define_table_kor_name": "road_use_ledger_mulgunji",
+    "define_table_shp_type": "POLYGON",
+    "define_table_read_share": "P",
+    "define_table_write_share": "P",
+    "define_table_group": "",
+    "define_table_idx": "0",
+    "define_table_etc": "",
+    "define_table_schema": "layer",
+    "define_table_source": "shp"
+  },
+  {
     "define_table_name": "roadUseLedger_02",
     "define_table_kor_name": "영양 도로점용허가내역(2023~2025)",
     "define_table_shp_type": "POLYGON",
@@ -4681,6 +4705,18 @@
     "define_table_source": "shp"
   },
   {
+    "define_table_name": "wtl_pipe_ps_gsg",
+    "define_table_kor_name": "상수 관상단고",
+    "define_table_shp_type": "POINT",
+    "define_table_read_share": "P",
+    "define_table_write_share": "P",
+    "define_table_group": "상수",
+    "define_table_idx": "0",
+    "define_table_etc": "",
+    "define_table_schema": "layer",
+    "define_table_source": "shp"
+  },
+  {
     "define_table_name": "wtl_pres_ps",
     "define_table_kor_name": "가압장",
     "define_table_shp_type": "POINT",
@@ -5008,6 +5044,42 @@
     "define_table_write_share": "P",
     "define_table_group": "숙원사업",
     "define_table_idx": "",
+    "define_table_etc": "",
+    "define_table_schema": "layer",
+    "define_table_source": "shp"
+  },
+  {
+    "define_table_name": "public_fms_facility",
+    "define_table_kor_name": "안전점검(건설)",
+    "define_table_shp_type": "POLYGON",
+    "define_table_read_share": "P",
+    "define_table_write_share": "P",
+    "define_table_group": "안전점검",
+    "define_table_idx": "0",
+    "define_table_etc": "",
+    "define_table_schema": "layer",
+    "define_table_source": "shp"
+  },
+  {
+    "define_table_name": "road_fms_facility",
+    "define_table_kor_name": "안전점검(도로)",
+    "define_table_shp_type": "POLYGON",
+    "define_table_read_share": "P",
+    "define_table_write_share": "P",
+    "define_table_group": "안전점검",
+    "define_table_idx": "0",
+    "define_table_etc": "",
+    "define_table_schema": "layer",
+    "define_table_source": "shp"
+  },
+  {
+    "define_table_name": "water_fms_facility",
+    "define_table_kor_name": "안전점검(하천)",
+    "define_table_shp_type": "POLYGON",
+    "define_table_read_share": "P",
+    "define_table_write_share": "P",
+    "define_table_group": "안전점검",
+    "define_table_idx": "0",
     "define_table_etc": "",
     "define_table_schema": "layer",
     "define_table_source": "shp"
@@ -8971,6 +9043,18 @@
   {
     "define_table_name": "swl_pipe_lm",
     "define_table_kor_name": "하수관거",
+    "define_table_shp_type": "LINE",
+    "define_table_read_share": "P",
+    "define_table_write_share": "P",
+    "define_table_group": "하수",
+    "define_table_idx": "0",
+    "define_table_etc": "",
+    "define_table_schema": "layer",
+    "define_table_source": "shp"
+  },
+  {
+    "define_table_name": "swl_pipe_lm_gsg",
+    "define_table_kor_name": "하수 관상단고",
     "define_table_shp_type": "LINE",
     "define_table_read_share": "P",
     "define_table_write_share": "P",

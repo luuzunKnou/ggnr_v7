@@ -36,8 +36,12 @@ export const roadRewardParcelColumnComments: Record<string, string> = {
   appraisal1_value: '감정평가1(원/㎡)',
   appraisal2_value: '감정평가2(원/㎡)',
   applied_unit_price: '적용단가(원/㎡)',
-  compensation_amount: '보상금액(원)',
+  compensation_amount: '토지보상금액(원)',
+  farming_compensation_amount: '영농보상금액(원)',
+  obstacle_compensation_amount: '지장물보상금액(원)',
   owner_address: '토지소유자 주소',
   owner_name: '토지소유자 성명',
+  actual_owner: '실소유자',
+  actual_cultivator: '실경작자',
   note: '비고',
 };

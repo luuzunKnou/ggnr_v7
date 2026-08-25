@@ -1,6 +1,23 @@
 /** 안전점검 목록 컬럼·상세 식별자 (화면 라벨) */
+import { systemKeyToFmsPrefix } from '@/lib/fmsLinkage/fmsBinding';
 
 export const FMS_LIST_TITLE = '안전점검';
+
+export const FMS_LIST_SYSTEM_FILTERS = [
+  { value: '', label: '전체' },
+  { value: 'river', label: '하천' },
+  { value: 'road', label: '도로' },
+  { value: 'build', label: '건설' },
+] as const;
+
+export type FmsListSystemFilter = (typeof FMS_LIST_SYSTEM_FILTERS)[number]['value'];
+
+/** 하천·도로·건설이면 해당 값, 아니면 전체 */
+export function defaultFmsListSystemFilter(system: string): FmsListSystemFilter {
+  const key = String(system ?? '').trim().toLowerCase();
+  if (systemKeyToFmsPrefix(key)) return key as FmsListSystemFilter;
+  return '';
+}
 
 export const FMS_LIST_COLUMNS = [
   { key: 'facilNo', label: '시설물번호' },

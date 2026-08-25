@@ -1,6 +1,7 @@
 /**
  * 건설안전과 사용자 일괄 등록·갱신.
  * 아이디·임시 비밀번호 = 성명. 권한 없음. 최초 로그인 시 비밀번호 변경.
+ * 재실행 시 부서·팀·성명만 맞추고, 이미 있는 계정의 비밀번호는 유지한다.
  *
  * 사용: npx tsx scripts/seed-construction-safety-users.ts build_yy dev
  *       npx tsx scripts/seed-construction-safety-users.ts build_yy demo
@@ -37,14 +38,15 @@ const USERS: { team: string; name: string }[] = [
 /** 조직도 성명: 과장 백인흠 */
 const RENAME_IDS: { from: string; to: string }[] = [{ from: '백인홍', to: '백인흠' }];
 
-const CHILD_USR_ID_TABLES = [
-  'up_map',
-  'usr_sys_grant',
-  'usr_ser_grant',
-  'usr_access_request',
-  'usr_biz_notif_state',
-  'shooting_request',
-] as const;
+/** usr_id 자식. uniqueCol 이 있으면 대상 계정과 키가 겹치는 옛 행은 삭제 후 이전 */
+const CHILD_USR_ID_TABLES: { table: string; uniqueCol?: string }[] = [
+  { table: 'up_map', uniqueCol: 'perm_key' },
+  { table: 'usr_sys_grant', uniqueCol: 'sys_key' },
+  { table: 'usr_ser_grant', uniqueCol: 'ser_eng' },
+  { table: 'usr_access_request' },
+  { table: 'usr_biz_notif_state', uniqueCol: 'notif_key' },
+  { table: 'shooting_request' },
+];
 
 function sqlLiteral(s: string): string {
   return `'${s.replace(/'/g, "''")}'`;
@@ -55,17 +57,20 @@ async function tableExists(client: pg.Client, name: string): Promise<boolean> {
   return r.rows[0]?.t != null;
 }
 
-async function renameUsrId(client: pg.Client, from: string, to: string): Promise<string> {
-  const oldRow = await client.query(`SELECT usr_id FROM usr WHERE usr_id = $1`, [from]);
-  if (!oldRow.rowCount) return `rename skip: ${from} 없음`;
-  const newRow = await client.query(`SELECT usr_id FROM usr WHERE usr_id = $1`, [to]);
-  if (newRow.rowCount) {
-    await client.query(`DELETE FROM usr WHERE usr_id = $1`, [from]);
-    return `rename: ${from} 삭제 (이미 ${to} 있음)`;
-  }
-
-  for (const table of CHILD_USR_ID_TABLES) {
+async function remapUsrIdChildren(client: pg.Client, from: string, to: string): Promise<void> {
+  for (const { table, uniqueCol } of CHILD_USR_ID_TABLES) {
     if (!(await tableExists(client, table))) continue;
+    if (uniqueCol) {
+      await client.query(
+        `DELETE FROM ${table} a
+         WHERE a.usr_id = $2
+           AND EXISTS (
+             SELECT 1 FROM ${table} b
+             WHERE b.usr_id = $1 AND b.${uniqueCol} IS NOT DISTINCT FROM a.${uniqueCol}
+           )`,
+        [to, from]
+      );
+    }
     await client.query(`UPDATE ${table} SET usr_id = $1 WHERE usr_id = $2`, [to, from]);
   }
   if (await tableExists(client, 'login_log')) {
@@ -74,6 +79,17 @@ async function renameUsrId(client: pg.Client, from: string, to: string): Promise
   if (await tableExists(client, 'user_log')) {
     await client.query(`UPDATE user_log SET ul_user = $1 WHERE ul_user = $2`, [to, from]);
     await client.query(`UPDATE user_log SET ul_work_user = $1 WHERE ul_work_user = $2`, [to, from]);
+  }
+}
+
+async function renameUsrId(client: pg.Client, from: string, to: string): Promise<string> {
+  const oldRow = await client.query(`SELECT usr_id FROM usr WHERE usr_id = $1`, [from]);
+  if (!oldRow.rowCount) return `rename skip: ${from} 없음`;
+  const newRow = await client.query(`SELECT usr_id FROM usr WHERE usr_id = $1`, [to]);
+  await remapUsrIdChildren(client, from, to);
+  if (newRow.rowCount) {
+    await client.query(`DELETE FROM usr WHERE usr_id = $1`, [from]);
+    return `rename: ${from} 삭제 (이미 ${to} 있음, 자식 행 이전)`;
   }
 
   await client.query(
@@ -143,7 +159,6 @@ async function seed(project: string, type: string): Promise<string> {
            ug_name = EXCLUDED.ug_name,
            ut_name = EXCLUDED.ut_name,
            usr_name = EXCLUDED.usr_name,
-           usr_pwd = EXCLUDED.usr_pwd,
            usr_is_del = false,
            usr_is_hidden = false,
            usr_ok_time = COALESCE(usr.usr_ok_time, EXCLUDED.usr_ok_time)

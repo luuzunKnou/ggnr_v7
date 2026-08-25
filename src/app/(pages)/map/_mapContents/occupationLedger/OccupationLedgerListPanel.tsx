@@ -335,7 +335,7 @@ export function OccupationLedgerListPanel({
               <col className="w-[88px]" />
               <col className="w-[88px]" />
             </colgroup>
-            <thead className="sticky top-0 z-[1] bg-muted shadow-[0_1px_0_0_var(--border)]">
+            <thead className="sticky top-0 z-[1] bg-muted/50">
               <tr>
                 {SORT_COLUMNS.map((col) => {
                   const sortIdx = sorts.findIndex((s) => s.key === col.key);
@@ -352,7 +352,7 @@ export function OccupationLedgerListPanel({
                     <th
                       key={col.key}
                       className={cn(
-                        'whitespace-nowrap border-b border-border px-1.5 py-1.5 font-semibold text-foreground/90',
+                        'whitespace-nowrap border-b-0 px-1.5 py-1.5 font-semibold text-foreground/90 [box-shadow:inset_0_-2px_0_0_var(--border)]',
                         alignLeft ? 'text-left' : 'text-center'
                       )}
                     >

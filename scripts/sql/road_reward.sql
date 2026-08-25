@@ -52,8 +52,12 @@ CREATE TABLE IF NOT EXISTS layer.road_reward_parcel (
   appraisal2_value double precision,
   applied_unit_price double precision,
   compensation_amount double precision,
+  farming_compensation_amount double precision,
+  obstacle_compensation_amount double precision,
   owner_address text,
   owner_name text,
+  actual_owner text,
+  actual_cultivator text,
   note text,
   CONSTRAINT road_reward_parcel_reward_ogc_fid_fkey
     FOREIGN KEY (reward_key) REFERENCES layer.road_reward (ogc_fid)
@@ -81,7 +85,11 @@ COMMENT ON COLUMN layer.road_reward_parcel.jimok IS '지목';
 COMMENT ON COLUMN layer.road_reward_parcel.appraisal1_value IS '감정평가1(원/㎡)';
 COMMENT ON COLUMN layer.road_reward_parcel.appraisal2_value IS '감정평가2(원/㎡)';
 COMMENT ON COLUMN layer.road_reward_parcel.applied_unit_price IS '적용단가(원/㎡)';
-COMMENT ON COLUMN layer.road_reward_parcel.compensation_amount IS '보상금액(원)';
+COMMENT ON COLUMN layer.road_reward_parcel.compensation_amount IS '토지보상금액(원)';
+COMMENT ON COLUMN layer.road_reward_parcel.farming_compensation_amount IS '영농보상금액(원)';
+COMMENT ON COLUMN layer.road_reward_parcel.obstacle_compensation_amount IS '지장물보상금액(원)';
 COMMENT ON COLUMN layer.road_reward_parcel.owner_address IS '토지소유자 주소';
 COMMENT ON COLUMN layer.road_reward_parcel.owner_name IS '토지소유자 성명';
+COMMENT ON COLUMN layer.road_reward_parcel.actual_owner IS '실소유자';
+COMMENT ON COLUMN layer.road_reward_parcel.actual_cultivator IS '실경작자';
 COMMENT ON COLUMN layer.road_reward_parcel.note IS '비고';

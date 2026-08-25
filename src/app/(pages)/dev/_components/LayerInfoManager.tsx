@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useMemo, useCallback, useRef } from "react"
+import { useState, useEffect, useMemo, useCallback, useRef, Fragment } from "react"
 import { Button } from "@/app/shadcnComponents/ui/button"
 import { Input } from "@/app/shadcnComponents/ui/input"
 import {
@@ -14,9 +14,9 @@ import { Save, RotateCcw, Download } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { SchemaBadge, SourceBadge } from "./layerManager/defineBadges"
 import { requestLayerManagerListRefresh, registerLayerManagerDefineRefresh } from "./layerManager/layerManagerUploadBridge"
-import { StylePreviewSwatch } from "./layerManager/StylePreviewSwatch"
+import { StyleLegendThumb, StylePreviewSwatch } from "./layerManager/StylePreviewSwatch"
 import { call } from "@/lib/api"
-import { parseSimpleStyleFromCss, type GeometryType, type StyleProps } from "@/lib/geoserverStyleUtils"
+import { parseSimpleStyleFromCss, parseSymbolFolderFromUrl, symbolFileNameFromUrl, toPublicSymbolPreviewUrl, type GeometryType, type StyleProps } from "@/lib/geoserverStyleUtils"
 import {
   fetchDefineLayerTables,
   fetchLayerDbTableList,
@@ -33,6 +33,35 @@ const GEOMETRY_TYPES: { value: GeometryType; label: string }[] = [
   { value: "LINE", label: "LINE" },
   { value: "POLYGON", label: "POLYGON" },
 ]
+
+/** 스타일 수정 모달 전용. 저장 시 SYMBOL → POINT + 심볼 주소로 보냄 */
+type StyleFormGeomType = GeometryType | "SYMBOL"
+
+const EDIT_GEOMETRY_TYPES: { value: StyleFormGeomType; label: string }[] = [
+  { value: "POINT", label: "POINT" },
+  { value: "SYMBOL", label: "SYMBOL" },
+  { value: "LINE", label: "LINE" },
+  { value: "POLYGON", label: "POLYGON" },
+]
+
+function toApiGeometryType(kind: StyleFormGeomType): GeometryType {
+  return kind === "SYMBOL" ? "POINT" : kind
+}
+
+function toApiStyleProps(kind: StyleFormGeomType, props: StyleProps): StyleProps {
+  if (kind === "SYMBOL") {
+    const symbolUrl = props.symbolUrl?.trim()
+    return { ...props, symbolUrl: symbolUrl || undefined }
+  }
+  const { symbolUrl: _drop, ...rest } = props
+  return rest
+}
+
+function guessSymbolUrl(layerName: string | null | undefined): string | undefined {
+  const name = layerName?.trim()
+  if (!name) return undefined
+  return `${GEOSERVER_DEFAULT_URL}/www/symbol/water/${name}.svg`
+}
 
 const HEX_COLOR_RE = /^#([0-9a-fA-F]{6})$/
 
@@ -75,6 +104,7 @@ const defaultStyleProps: StyleProps = {
   opacity: 1,
   labelField: "",
   size: 14,
+  markSize: 18,
 }
 
 type DefineLayerTable = Record<string, unknown> & { fields?: unknown[] }
@@ -223,11 +253,21 @@ export function LayerInfoManager({
   const [attrDeleteOpen, setAttrDeleteOpen] = useState(false)
   const [attrDeleteTarget, setAttrDeleteTarget] = useState<string | null>(null)
   const [formName, setFormName] = useState("")
-  const [formGeometryType, setFormGeometryType] = useState<GeometryType>("POLYGON")
+  const [formGeometryType, setFormGeometryType] = useState<StyleFormGeomType>("POLYGON")
   const [formProps, setFormProps] = useState<StyleProps>(defaultStyleProps)
   const [labelFieldOptions, setLabelFieldOptions] = useState<{ name: string; korName: string }[]>([])
   const [formSaving, setFormSaving] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
+  const [symbolFolders, setSymbolFolders] = useState<string[]>([])
+  const [symbolFolder, setSymbolFolder] = useState("")
+  const [newSymbolFolder, setNewSymbolFolder] = useState("")
+  const [symbolPickFile, setSymbolPickFile] = useState<File | null>(null)
+  const [symbolFolderFiles, setSymbolFolderFiles] = useState<string[]>([])
+  const [symbolLinkFile, setSymbolLinkFile] = useState("")
+  const [symbolUploading, setSymbolUploading] = useState(false)
+  const [symbolPreviewKey, setSymbolPreviewKey] = useState(0)
+  const lastSymbolUrlRef = useRef("")
+  const [pickPreviewUrl, setPickPreviewUrl] = useState("")
   const [editEditable, setEditEditable] = useState(false)
   const [actionLoading, setActionLoading] = useState<string | null>(null)
   const [autoApplyLoading, setAutoApplyLoading] = useState(false)
@@ -330,8 +370,8 @@ export function LayerInfoManager({
   }, [searchQuery])
 
   /** WMS 범례가 실패한 스타일의 CSS를 직접 조회해서 파싱 (DB 테이블 유무와 무관하게 스타일 미리보기 표시) */
-  const loadCssFallback = useCallback((key: string) => {
-    setCssFallbackMap((prev) => (prev[key] ? prev : { ...prev, [key]: "loading" }))
+  const loadCssFallback = useCallback((key: string, force = false) => {
+    setCssFallbackMap((prev) => (prev[key] && !force ? prev : { ...prev, [key]: "loading" }))
     call("", "POST", {
       service: "devTestService",
       action: "getGeoServerStyle",
@@ -529,6 +569,182 @@ export function LayerInfoManager({
     }
   }, [])
 
+  const loadSymbolFolders = useCallback(async (preferredFolder?: string | null) => {
+    try {
+      const res = await call("", "POST", {
+        service: "devTestService",
+        action: "listGeoServerSymbolFolders",
+        params: {},
+      })
+      const data = res?.data ?? res
+      const folders: string[] = data?.success && Array.isArray(data.folders) ? data.folders : []
+      setSymbolFolders(folders)
+      const prefer = preferredFolder?.trim()
+      setSymbolFolder((prev) => {
+        if (prefer && folders.includes(prefer)) return prefer
+        if (prev && folders.includes(prev)) return prev
+        if (folders.includes("water")) return "water"
+        return folders[0] ?? ""
+      })
+    } catch {
+      setSymbolFolders([])
+    }
+  }, [])
+
+  const loadSymbolFolderFiles = useCallback(async (folder: string) => {
+    if (!folder) {
+      setSymbolFolderFiles([])
+      setSymbolLinkFile("")
+      return
+    }
+    try {
+      const res = await call("", "POST", {
+        service: "devTestService",
+        action: "listGeoServerSymbolFiles",
+        params: { folder },
+      })
+      const data = res?.data ?? res
+      const files: string[] = data?.success && Array.isArray(data.files) ? data.files : []
+      setSymbolFolderFiles(files)
+      setSymbolLinkFile((prev) => (prev && files.includes(prev) ? prev : ""))
+    } catch {
+      setSymbolFolderFiles([])
+      setSymbolLinkFile("")
+    }
+  }, [])
+
+  useEffect(() => {
+    void loadSymbolFolderFiles(symbolFolder)
+  }, [symbolFolder, loadSymbolFolderFiles])
+
+  useEffect(() => {
+    if (!symbolPickFile) {
+      setPickPreviewUrl("")
+      return
+    }
+    const url = URL.createObjectURL(symbolPickFile)
+    setPickPreviewUrl(url)
+    return () => URL.revokeObjectURL(url)
+  }, [symbolPickFile])
+
+  const applySymbolUrl =
+    pickPreviewUrl ||
+    (symbolFolder && symbolLinkFile
+      ? `${GEOSERVER_DEFAULT_URL}/www/symbol/${encodeURIComponent(symbolFolder)}/${encodeURIComponent(symbolLinkFile)}`
+      : "")
+  const applySymbolName = symbolPickFile?.name || symbolLinkFile || ""
+
+  const handleCreateSymbolFolder = useCallback(async () => {
+    const name = newSymbolFolder.trim()
+    if (!name) {
+      setFormError("새 폴더 이름을 입력하세요.")
+      return
+    }
+    setSymbolUploading(true)
+    setFormError(null)
+    try {
+      const res = await call("", "POST", {
+        service: "devTestService",
+        action: "createGeoServerSymbolFolder",
+        params: { folder: name },
+      })
+      const data = res?.data ?? res
+      if (!data?.success) {
+        setFormError(data?.error ?? "폴더 생성 실패")
+        return
+      }
+      setNewSymbolFolder("")
+      setSymbolFolder(data.folder ?? name)
+      await loadSymbolFolders(data.folder ?? name)
+    } catch (e: unknown) {
+      setFormError(e instanceof Error ? e.message : "폴더 생성 실패")
+    } finally {
+      setSymbolUploading(false)
+    }
+  }, [newSymbolFolder, loadSymbolFolders])
+
+  const handleSaveSymbolFile = useCallback(async () => {
+    if (!symbolFolder) {
+      setFormError("저장할 폴더를 선택하세요.")
+      return
+    }
+    if (!symbolPickFile) {
+      setFormError("올릴 파일을 선택하세요.")
+      return
+    }
+    setSymbolUploading(true)
+    setFormError(null)
+    try {
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader()
+        reader.onload = () => resolve(String(reader.result ?? ""))
+        reader.onerror = () => reject(new Error("파일을 읽을 수 없습니다."))
+        reader.readAsDataURL(symbolPickFile)
+      })
+      const res = await call("", "POST", {
+        service: "devTestService",
+        action: "uploadGeoServerSymbolFile",
+        params: {
+          folder: symbolFolder,
+          layerName: targetLayerName,
+          fileName: symbolPickFile.name,
+          mime: symbolPickFile.type,
+          base64: dataUrl,
+        },
+      })
+      const data = res?.data ?? res
+      if (!data?.success || !data.symbolUrl) {
+        setFormError(data?.error ?? "심볼 파일 저장 실패")
+        return
+      }
+      setFormProps((p) => ({ ...p, symbolUrl: data.symbolUrl }))
+      setSymbolPickFile(null)
+      setSymbolPreviewKey((n) => n + 1)
+      await loadSymbolFolderFiles(symbolFolder)
+    } catch (e: unknown) {
+      setFormError(e instanceof Error ? e.message : "심볼 파일 저장 실패")
+    } finally {
+      setSymbolUploading(false)
+    }
+  }, [symbolFolder, symbolPickFile, targetLayerName, loadSymbolFolderFiles])
+
+  const handleLinkSymbolFile = useCallback(async () => {
+    if (!symbolFolder) {
+      setFormError("저장할 폴더를 선택하세요.")
+      return
+    }
+    if (!symbolLinkFile) {
+      setFormError("연결할 파일을 선택하세요.")
+      return
+    }
+    setSymbolUploading(true)
+    setFormError(null)
+    try {
+      const res = await call("", "POST", {
+        service: "devTestService",
+        action: "linkGeoServerSymbolFile",
+        params: {
+          folder: symbolFolder,
+          layerName: targetLayerName,
+          fileName: symbolLinkFile,
+        },
+      })
+      const data = res?.data ?? res
+      if (!data?.success || !data.symbolUrl) {
+        setFormError(data?.error ?? "심볼 파일 연결 실패")
+        return
+      }
+      setFormProps((p) => ({ ...p, symbolUrl: data.symbolUrl }))
+      lastSymbolUrlRef.current = data.symbolUrl
+      setSymbolPreviewKey((n) => n + 1)
+      setSymbolLinkFile("")
+    } catch (e: unknown) {
+      setFormError(e instanceof Error ? e.message : "심볼 파일 연결 실패")
+    } finally {
+      setSymbolUploading(false)
+    }
+  }, [symbolFolder, symbolLinkFile, targetLayerName])
+
   const openAdd = useCallback((layerName: string, shpType?: string) => {
     setTargetLayerName(layerName)
     setFormName(layerName)
@@ -565,13 +781,23 @@ export function LayerInfoManager({
       setEditEditable(!!data.editable)
       if (data.editable && data.styleProps) {
         setFormProps({ ...defaultStyleProps, ...data.styleProps })
-        setFormGeometryType((data.geometryType as GeometryType) ?? "POLYGON")
+        const symbolUrl = String(data.styleProps.symbolUrl ?? "").trim()
+        lastSymbolUrlRef.current = symbolUrl
+        const hasSymbol = Boolean(symbolUrl)
+        setFormGeometryType(
+          hasSymbol ? "SYMBOL" : ((data.geometryType as GeometryType) ?? "POLYGON")
+        )
+        setSymbolPickFile(null)
+        setPickPreviewUrl("")
+        setSymbolLinkFile("")
+        setSymbolPreviewKey((n) => n + 1)
+        void loadSymbolFolders(parseSymbolFolderFromUrl(symbolUrl))
       }
     } catch (e: unknown) {
       setFormError(e instanceof Error ? e.message : "조회 실패")
       setEditEditable(false)
     }
-  }, [loadLabelFieldOptions])
+  }, [loadLabelFieldOptions, loadSymbolFolders])
 
   const openLayerDefineDelete = useCallback((tableName: string, schema: string) => {
     setLayerDefineDeleteTarget({ tableName, schema })
@@ -739,8 +965,8 @@ export function LayerInfoManager({
         params: {
           url: GEOSERVER_DEFAULT_URL,
           name,
-          geometryType: formGeometryType,
-          styleProps: formProps,
+          geometryType: toApiGeometryType(formGeometryType),
+          styleProps: toApiStyleProps(formGeometryType, formProps),
         },
       })
       const createData = createRes?.data ?? createRes
@@ -778,6 +1004,10 @@ export function LayerInfoManager({
 
   const handleEditSubmit = useCallback(async () => {
     if (!targetStyleName || !editEditable) return
+    if (formGeometryType === "SYMBOL" && !formProps.symbolUrl?.trim()) {
+      setFormError("심볼 파일이 없습니다. POINT로 바꾸거나 심볼 파일을 확인하세요.")
+      return
+    }
     setFormSaving(true)
     setFormError(null)
     try {
@@ -787,18 +1017,28 @@ export function LayerInfoManager({
         params: {
           url: GEOSERVER_DEFAULT_URL,
           name: targetStyleName,
-          geometryType: formGeometryType,
-          styleProps: formProps,
+          geometryType: toApiGeometryType(formGeometryType),
+          styleProps: toApiStyleProps(formGeometryType, formProps),
           preserveExtraRules: true,
         },
       })
       const data = res?.data ?? res
       if (data?.success) {
+        const fallbackKey = (targetStyleName || targetLayerName || "").toLowerCase()
+        if (fallbackKey) {
+          setCssFallbackMap((prev) => ({
+            ...prev,
+            [fallbackKey]: {
+              ...toApiStyleProps(formGeometryType, formProps),
+              geometryType: toApiGeometryType(formGeometryType),
+            },
+          }))
+        }
         setEditOpen(false)
         setTargetStyleName(null)
         setTargetLayerName(null)
         setSuccessMsg(`레이어 "${targetLayerName}"의 스타일이 수정되었습니다.`)
-        setStyleVersion((v) => v + 1)
+        setStyleVersion(Date.now())
         loadStyleInfo()
         requestLayerManagerListRefresh()
       } else {
@@ -940,7 +1180,7 @@ export function LayerInfoManager({
     }
   }, [loadStyleInfo])
 
-  const renderFormFields = useCallback((geometryType: GeometryType) => {
+  const renderFormFields = useCallback((geometryType: StyleFormGeomType) => {
     const opacityField = (
       <div className="grid grid-cols-[100px_1fr] gap-2 items-center">
         <label className="text-sm">투명도</label>
@@ -955,6 +1195,53 @@ export function LayerInfoManager({
           }
         />
       </div>
+    )
+    const markSizeField = (label: string) => (
+      <div className="grid grid-cols-[100px_1fr] gap-2 items-center">
+        <label className="text-sm">{label}</label>
+        <Input
+          type="number"
+          min={1}
+          max={64}
+          value={formProps.markSize ?? 18}
+          onChange={(e) =>
+            setFormProps((p) => ({ ...p, markSize: parseFloat(e.target.value) || 18 }))
+          }
+        />
+      </div>
+    )
+    const fontSizeField = (
+      <div className="grid grid-cols-[100px_1fr] gap-2 items-center">
+        <label className="text-sm">글자크기</label>
+        <Input
+          type="number"
+          min={1}
+          value={formProps.size ?? 14}
+          onChange={(e) =>
+            setFormProps((p) => ({ ...p, size: parseFloat(e.target.value) || 14 }))
+          }
+        />
+      </div>
+    )
+    const labelFieldBlock = (
+        <div className="grid grid-cols-[100px_1fr] gap-2 items-center">
+          <label className="text-sm">라벨필드</label>
+          <select
+            value={formProps.labelField ?? ""}
+            onChange={(e) => setFormProps((p) => ({ ...p, labelField: e.target.value }))}
+            className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
+          >
+            <option value="">(없음)</option>
+            {formProps.labelField && !labelFieldOptions.some((o) => o.name === formProps.labelField) ? (
+              <option value={formProps.labelField}>{formProps.labelField}</option>
+            ) : null}
+            {labelFieldOptions.map((o) => (
+              <option key={o.name} value={o.name}>
+                {o.korName ? `${o.name} - ${o.korName}` : o.name}
+              </option>
+            ))}
+          </select>
+        </div>
     )
     const renderStrokeAndLabelFields = (showLinePreview: boolean) => (
       <>
@@ -991,40 +1278,179 @@ export function LayerInfoManager({
             }
           />
         </div>
-        <div className="grid grid-cols-[100px_1fr] gap-2 items-center">
-          <label className="text-sm">라벨필드</label>
-          <select
-            value={formProps.labelField ?? ""}
-            onChange={(e) => setFormProps((p) => ({ ...p, labelField: e.target.value }))}
-            className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
-          >
-            <option value="">(없음)</option>
-            {formProps.labelField && !labelFieldOptions.some((o) => o.name === formProps.labelField) ? (
-              <option value={formProps.labelField}>{formProps.labelField}</option>
-            ) : null}
-            {labelFieldOptions.map((o) => (
-              <option key={o.name} value={o.name}>
-                {o.korName ? `${o.name} - ${o.korName}` : o.name}
-              </option>
-            ))}
-          </select>
-        </div>
       </>
     )
+    if (geometryType === "SYMBOL") {
+      return (
+        <Fragment key="SYMBOL">
+          <div className="rounded-md border border-input p-3 space-y-3">
+            <p className="text-xs font-medium text-muted-foreground">심볼 설정</p>
+            <div className="grid grid-cols-2 gap-2">
+              <div className="flex flex-col items-center gap-1 rounded-md border border-input bg-muted/40 p-2 min-w-0">
+                <p className="text-xs text-muted-foreground">현재 심볼</p>
+                <StylePreviewSwatch
+                  key={formProps.symbolUrl?.trim() || "symbol-current"}
+                  geometryType="POINT"
+                  symbolUrl={formProps.symbolUrl}
+                  cacheBust={symbolPreviewKey}
+                />
+                {formProps.symbolUrl?.trim() ? (
+                  <a
+                    href={`${toPublicSymbolPreviewUrl(formProps.symbolUrl) ?? formProps.symbolUrl}${symbolPreviewKey ? `?v=${symbolPreviewKey}` : ""}`}
+                    download={symbolFileNameFromUrl(formProps.symbolUrl)}
+                    className="text-xs text-primary underline underline-offset-2 truncate max-w-full hover:cursor-pointer"
+                    title="클릭하면 파일을 받습니다"
+                  >
+                    {symbolFileNameFromUrl(formProps.symbolUrl)}
+                  </a>
+                ) : (
+                  <span className="text-xs text-muted-foreground">없음</span>
+                )}
+              </div>
+              <div className="flex flex-col items-center gap-1 rounded-md border border-input p-2 min-w-0">
+                <p className="text-xs text-muted-foreground">적용할 심볼</p>
+                {applySymbolUrl ? (
+                  <StylePreviewSwatch
+                    key={applySymbolUrl}
+                    geometryType="POINT"
+                    symbolUrl={applySymbolUrl}
+                  />
+                ) : (
+                  <div className="h-8 w-8 shrink-0 rounded border border-dashed border-input" />
+                )}
+                <span className="text-xs text-muted-foreground truncate max-w-full">
+                  {applySymbolName || "아래에서 고르세요"}
+                </span>
+              </div>
+            </div>
+            <div className="grid grid-cols-[100px_1fr] gap-2 items-start">
+              <label className="text-sm pt-2">저장 폴더</label>
+              <div className="flex flex-col gap-2 min-w-0">
+                <select
+                  className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
+                  value={symbolFolder}
+                  onChange={(e) => {
+                    setSymbolFolder(e.target.value)
+                    setSymbolLinkFile("")
+                    setSymbolPickFile(null)
+                  }}
+                >
+                  {symbolFolders.length === 0 ? (
+                    <option value="">폴더 없음</option>
+                  ) : (
+                    symbolFolders.map((f) => (
+                      <option key={f} value={f}>
+                        www/symbol/{f}
+                      </option>
+                    ))
+                  )}
+                </select>
+                <div className="flex items-center gap-1">
+                  <Input
+                    className="h-8"
+                    value={newSymbolFolder}
+                    onChange={(e) => setNewSymbolFolder(e.target.value)}
+                    placeholder="없으면 새 폴더 이름 입력"
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-8 shrink-0 hover:cursor-pointer"
+                    disabled={symbolUploading}
+                    onClick={() => void handleCreateSymbolFolder()}
+                  >
+                    폴더 만들기
+                  </Button>
+                </div>
+              </div>
+            </div>
+            <div className="grid grid-cols-[100px_1fr] gap-2 items-start">
+              <label className="text-sm pt-2">파일 고르기</label>
+              <div className="flex flex-col gap-1 min-w-0">
+                <div className="flex items-center gap-1">
+                  <select
+                    className="h-8 w-full rounded-md border border-input bg-background px-2 text-sm min-w-0"
+                    value={symbolLinkFile}
+                    onChange={(e) => {
+                      setSymbolLinkFile(e.target.value)
+                      setSymbolPickFile(null)
+                    }}
+                  >
+                    {symbolFolderFiles.length === 0 ? (
+                      <option value="">파일을 선택해주세요</option>
+                    ) : (
+                      <>
+                        <option value="">파일을 선택해주세요</option>
+                        {symbolFolderFiles.map((f) => (
+                          <option key={f} value={f}>
+                            {f}
+                          </option>
+                        ))}
+                      </>
+                    )}
+                  </select>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-8 shrink-0 hover:cursor-pointer"
+                    disabled={
+                      symbolUploading ||
+                      !symbolFolder ||
+                      !symbolLinkFile ||
+                      symbolLinkFile === symbolFileNameFromUrl(formProps.symbolUrl ?? "")
+                    }
+                    onClick={() => void handleLinkSymbolFile()}
+                  >
+                    이 파일로 사용
+                  </Button>
+                </div>
+                <p className="text-[11px] text-muted-foreground">폴더에 있는 파일 중 하나를 씁니다.</p>
+              </div>
+            </div>
+            <div className="grid grid-cols-[100px_1fr] gap-2 items-start">
+              <label className="text-sm pt-2">새 파일</label>
+              <div className="flex flex-col gap-1 min-w-0">
+                <input
+                  type="file"
+                  accept=".svg,.png,image/svg+xml,image/png"
+                  className="text-sm file:mr-2 file:h-8 file:rounded file:border file:border-input file:bg-background file:px-2"
+                  onChange={(e) => setSymbolPickFile(e.target.files?.[0] ?? null)}
+                />
+                <div className="flex items-center gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-8 hover:cursor-pointer"
+                    disabled={symbolUploading || !symbolFolder || !symbolPickFile}
+                    onClick={() => void handleSaveSymbolFile()}
+                  >
+                    {symbolUploading ? "저장 중..." : "올려서 사용"}
+                  </Button>
+                  {symbolPickFile ? (
+                    <span className="text-xs text-muted-foreground truncate">{symbolPickFile.name}</span>
+                  ) : (
+                    <span className="text-xs text-muted-foreground">svg 또는 png</span>
+                  )}
+                </div>
+              </div>
+            </div>
+            {markSizeField("심볼 크기")}
+          </div>
+          <div className="rounded-md border border-input p-3 space-y-3">
+            <p className="text-xs font-medium text-muted-foreground">라벨</p>
+            {labelFieldBlock}
+            {fontSizeField}
+          </div>
+        </Fragment>
+      )
+    }
     if (geometryType === "POINT") {
       return (
-        <>
-          <div className="grid grid-cols-[100px_1fr] gap-2 items-center">
-            <label className="text-sm">크기</label>
-            <Input
-              type="number"
-              min={1}
-              value={formProps.size ?? 8}
-              onChange={(e) =>
-                setFormProps((p) => ({ ...p, size: parseFloat(e.target.value) || 8 }))
-              }
-            />
-          </div>
+        <Fragment key="POINT">
+          {markSizeField("점 크기")}
           <div className="grid grid-cols-[100px_1fr] gap-2 items-center">
             <label className="text-sm">색상</label>
             <div className="flex items-center gap-2">
@@ -1045,19 +1471,23 @@ export function LayerInfoManager({
           </div>
           {opacityField}
           {renderStrokeAndLabelFields(false)}
-        </>
+          {labelFieldBlock}
+          {fontSizeField}
+        </Fragment>
       )
     }
     if (geometryType === "LINE") {
       return (
-        <>
+        <Fragment key="LINE">
           {renderStrokeAndLabelFields(true)}
           {opacityField}
-        </>
+          {labelFieldBlock}
+          {fontSizeField}
+        </Fragment>
       )
     }
     return (
-      <>
+      <Fragment key="POLYGON">
         <div className="grid grid-cols-[100px_1fr] gap-2 items-center">
           <label className="text-sm">색상</label>
           <div className="flex items-center gap-2">
@@ -1078,9 +1508,11 @@ export function LayerInfoManager({
         </div>
         {opacityField}
         {renderStrokeAndLabelFields(false)}
-      </>
+        {labelFieldBlock}
+        {fontSizeField}
+      </Fragment>
     )
-  }, [formProps, labelFieldOptions])
+  }, [formProps, labelFieldOptions, symbolFolders, symbolFolder, newSymbolFolder, symbolFolderFiles, symbolLinkFile, symbolPickFile, symbolUploading, symbolPreviewKey, applySymbolUrl, applySymbolName, handleCreateSymbolFolder, handleSaveSymbolFile, handleLinkSymbolFile])
 
   if (loading) return <p className="text-sm text-muted-foreground">로딩 중...</p>
   if (error && !config) return <p className="text-sm text-destructive">{error}</p>
@@ -1111,7 +1543,7 @@ export function LayerInfoManager({
                   type="button"
                   onClick={() => setLayerFilterMode(opt.value)}
                   className={cn(
-                    "h-6 rounded-sm px-2 text-xs transition-colors",
+                    "h-6 rounded-sm px-2 text-xs leading-none whitespace-nowrap transition-colors",
                     layerFilterMode === opt.value
                       ? "bg-primary text-primary-foreground"
                       : "text-muted-foreground hover:bg-muted"
@@ -1238,9 +1670,6 @@ export function LayerInfoManager({
                       : ""
                     const fallbackKey = (styleName || tableName || "").toLowerCase()
                     const fallbackState = fallbackKey ? cssFallbackMap[fallbackKey] : undefined
-                    const showImg = Boolean(legendUrl && canShowLegend && fallbackState === undefined)
-                    const showSwatch = fallbackState && typeof fallbackState === "object"
-                    const showLoading = fallbackState === "loading"
                     return (
                       <div
                         key={col.id}
@@ -1257,34 +1686,20 @@ export function LayerInfoManager({
                           }
                         }}
                       >
-                        {showImg && (
-                          <img
-                            src={legendUrl}
-                            alt=""
-                            className="max-h-7 max-w-full object-contain pointer-events-none"
-                            onError={() => {
-                              if (!fallbackKey) return
-                              if (hasCssStyle) loadCssFallback(fallbackKey)
-                              else setCssFallbackMap((prev) => ({ ...prev, [fallbackKey]: "error" }))
-                            }}
-                          />
-                        )}
-                        {showSwatch && (
-                          <StylePreviewSwatch
-                            geometryType={(fallbackState as StyleProps & { geometryType: GeometryType }).geometryType}
-                            fillColor={(fallbackState as StyleProps & { geometryType: GeometryType }).fillColor}
-                            strokeColor={(fallbackState as StyleProps & { geometryType: GeometryType }).strokeColor}
-                            opacity={(fallbackState as StyleProps & { geometryType: GeometryType }).opacity}
-                            showFrame={false}
-                            size="sm"
-                          />
-                        )}
-                        {showLoading && (
-                          <span className="text-xs text-muted-foreground pointer-events-none">…</span>
-                        )}
-                        {!showImg && !showSwatch && !showLoading && (
-                          <span className="text-xs text-muted-foreground pointer-events-none">—</span>
-                        )}
+                        <StyleLegendThumb
+                          key={`${tableName}-${styleVersion}`}
+                          tableName={tableName}
+                          shpType={shpType}
+                          legendUrl={legendUrl}
+                          canShowLegend={canShowLegend}
+                          fallbackState={fallbackState}
+                          cacheBust={styleVersion}
+                          onNeedCssFallback={() => {
+                            if (!fallbackKey) return
+                            if (hasCssStyle) loadCssFallback(fallbackKey)
+                            else setCssFallbackMap((prev) => ({ ...prev, [fallbackKey]: "error" }))
+                          }}
+                        />
                       </div>
                     )
                   }
@@ -1424,8 +1839,14 @@ export function LayerInfoManager({
               <label className="text-sm">도형 타입</label>
               <select
                 className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
-                value={formGeometryType}
-                onChange={(e) => setFormGeometryType(e.target.value as GeometryType)}
+                value={formGeometryType === "SYMBOL" ? "POINT" : formGeometryType}
+                onChange={(e) => {
+                  setFormGeometryType(e.target.value as GeometryType)
+                  setFormProps((p) => {
+                    const { symbolUrl: _drop, ...rest } = p
+                    return rest
+                  })
+                }}
               >
                 {GEOMETRY_TYPES.map((g) => (
                   <option key={g.value} value={g.value}>
@@ -1479,9 +1900,22 @@ export function LayerInfoManager({
                 <select
                   className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
                   value={formGeometryType}
-                  onChange={(e) => setFormGeometryType(e.target.value as GeometryType)}
+                  onChange={(e) => {
+                    const next = e.target.value as StyleFormGeomType
+                    const kept = formProps.symbolUrl?.trim() || lastSymbolUrlRef.current
+                    if (kept) lastSymbolUrlRef.current = kept
+                    setFormGeometryType(next)
+                    if (next === "SYMBOL") {
+                      const symbolUrl = kept || guessSymbolUrl(targetLayerName) || ""
+                      setFormProps((p) => ({
+                        ...p,
+                        symbolUrl: p.symbolUrl?.trim() || symbolUrl || undefined,
+                      }))
+                      void loadSymbolFolders(parseSymbolFolderFromUrl(symbolUrl))
+                    }
+                  }}
                 >
-                  {GEOMETRY_TYPES.map((g) => (
+                  {EDIT_GEOMETRY_TYPES.map((g) => (
                     <option key={g.value} value={g.value}>
                       {g.label}
                     </option>

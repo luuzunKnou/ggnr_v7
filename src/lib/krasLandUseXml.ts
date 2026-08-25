@@ -21,9 +21,34 @@ function hasElementChildren(content: string): boolean {
   return matchDirectChildElements(content).length > 0;
 }
 
+function leavesToMap(elements: Array<{ tag: string; content: string }>): KrasBodyRecord {
+  const map: KrasBodyRecord = {};
+  for (const leaf of elements) {
+    if (!hasElementChildren(leaf.content)) {
+      map[leaf.tag] = leaf.content.trim();
+    }
+  }
+  return map;
+}
+
+function pushIfAny(out: KrasBodyRecord[], map: KrasBodyRecord): void {
+  if (Object.keys(map).length) out.push(map);
+}
+
+/**
+ * BODY 안 레코드 수집.
+ * - 한 겹: ATTR → 필드
+ * - 두 겹: ATTR_SET → ATTR → 필드  (KRAS000025 LAND_USE_PLAN_CNF_ATTR_SET)
+ * - 평탄: BODY에 UNAME 등이 바로 붙음
+ */
 function collectBodyRecords(fragment: string, out: KrasBodyRecord[]): void {
   const children = matchDirectChildElements(fragment);
   if (!children.length) return;
+
+  if (children.every((c) => !hasElementChildren(c.content))) {
+    pushIfAny(out, leavesToMap(children));
+    return;
+  }
 
   for (const child of children) {
     const innerChildren = matchDirectChildElements(child.content);
@@ -31,18 +56,18 @@ function collectBodyRecords(fragment: string, out: KrasBodyRecord[]): void {
 
     if (innerChildren.some((c) => hasElementChildren(c.content))) {
       for (const inner of innerChildren) {
-        collectBodyRecords(inner.content, out);
+        const recordChildren = matchDirectChildElements(inner.content);
+        if (!recordChildren.length) continue;
+        if (recordChildren.some((c) => hasElementChildren(c.content))) {
+          collectBodyRecords(inner.content, out);
+          continue;
+        }
+        pushIfAny(out, leavesToMap(recordChildren));
       }
       continue;
     }
 
-    const map: KrasBodyRecord = {};
-    for (const leaf of innerChildren) {
-      if (!hasElementChildren(leaf.content)) {
-        map[leaf.tag] = leaf.content.trim();
-      }
-    }
-    if (Object.keys(map).length) out.push(map);
+    pushIfAny(out, leavesToMap(innerChildren));
   }
 }
 
