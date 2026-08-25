@@ -20,13 +20,13 @@ import {
   PARCEL_ANALYSIS_BOUNDARY_STROKE,
   PARCEL_ANALYSIS_BOUNDARY_STROKE_WIDTH,
   PARCEL_ANALYSIS_CAPTURE_PROJECTION,
-  PARCEL_ANALYSIS_MAP_FIT_PADDING,
   PARCEL_ANALYSIS_MAP_MAX_ZOOM,
   PARCEL_ANALYSIS_OUTSIDE_MASK_FILL,
   PARCEL_ANALYSIS_VWORLD_BASE_URL,
   PARCEL_ANALYSIS_VWORLD_SATELLITE_URL,
   createParcelAnalysisBasemapSource,
   createParcelAnalysisStaticMapOptions,
+  paddingForViewportFill,
   readParcelAnalysisCaptureGeometry,
   resolveBasicMapLayersForCapture,
   toCaptureDisplayGeometry,
@@ -46,22 +46,27 @@ export type ParcelAnalysisCaptureHomeView = {
 };
 
 const homeViewCache = new Map<string, ParcelAnalysisCaptureHomeView>();
+/** fit maxZoom·viewportFill 변경 시 올려 옛 캐시(줌19 고정본)를 버린다 */
+const HOME_VIEW_CACHE_VER = 'z24-f90';
 
 /**
  * 동일 분석 WKT에 대해 모든 캡처가 같은 중심·줌을 쓰도록 고정한다.
- * 여백은 최소(fit padding)만 두어 분석 영역이 화면에 가득 차게 한다.
+ * 프레임(가로로 긴 틀) 높이 기준으로 영역이 약 90%를 채우되 넘치지 않게 맞춘다.
  */
 export function resolveParcelAnalysisCaptureHomeView(wkt5181: string): ParcelAnalysisCaptureHomeView {
-  const key = wkt5181.trim();
+  const key = `${HOME_VIEW_CACHE_VER}|${wkt5181.trim()}`;
   const cached = homeViewCache.get(key);
   if (cached) return cached;
 
-  const displayGeom = toCaptureDisplayGeometry(readParcelAnalysisCaptureGeometry(key));
+  const displayGeom = toCaptureDisplayGeometry(readParcelAnalysisCaptureGeometry(wkt5181.trim()));
   const extent = displayGeom.getExtent();
-  const view = new View({ projection: PARCEL_ANALYSIS_CAPTURE_PROJECTION });
+  const view = new View({
+    projection: PARCEL_ANALYSIS_CAPTURE_PROJECTION,
+    maxZoom: PARCEL_ANALYSIS_MAP_MAX_ZOOM,
+  });
   view.fit(extent, {
     size: PARCEL_ANALYSIS_CAPTURE_SIZE,
-    padding: PARCEL_ANALYSIS_MAP_FIT_PADDING,
+    padding: paddingForViewportFill(PARCEL_ANALYSIS_CAPTURE_SIZE),
     maxZoom: PARCEL_ANALYSIS_MAP_MAX_ZOOM,
   });
 
@@ -650,6 +655,7 @@ function ParcelAnalysisMapCaptureInner({
         projection: PARCEL_ANALYSIS_CAPTURE_PROJECTION,
         center: home.center,
         resolution: home.resolution,
+        maxZoom: PARCEL_ANALYSIS_MAP_MAX_ZOOM,
       });
 
       const basemapSource = createParcelAnalysisBasemapSource(
