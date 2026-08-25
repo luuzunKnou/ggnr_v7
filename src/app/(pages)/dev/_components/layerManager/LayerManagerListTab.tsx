@@ -130,6 +130,7 @@ function getLegendGraphicUrl(layerName: string, styleName?: string, version?: nu
     FORMAT: "image/png",
     WIDTH: "32",
     HEIGHT: "32",
+    TRANSPARENT: "true",
     ...(version != null ? { _v: String(version) } : {}),
   })
   return `${GEOSERVER_DEFAULT_URL}/wms?${params.toString()}`
