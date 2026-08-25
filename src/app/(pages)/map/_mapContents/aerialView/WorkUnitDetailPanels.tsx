@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, type ReactNode } from 'react';
-import { Play, Plus, FileImage, FileVideo, MapPin, Download, X } from 'lucide-react';
+import { Play, Plus, FileImage, FileVideo, MapPin, Download, Trash2, X } from 'lucide-react';
 import { Button } from '@/app/shadcnComponents/ui/button';
 import { cn } from '@/lib/utils';
 import { recordDataViewLog } from '@/lib/recordDataViewLog';
@@ -26,8 +26,8 @@ function useWorkUnitViewLog(kind: string, id: string | null | undefined) {
   }, [kind, id]);
 }
 
-/** 속성정보 인라인 수정 상태 (목업 저장) */
-function useAttrEdit(unit: WorkUnitItem) {
+/** 속성정보 인라인 수정 상태 */
+function useAttrEdit(unit: WorkUnitItem, onSave?: (attrs: AttrRow[]) => Promise<void>) {
   const [editing, setEditing] = useState(false);
   const [attrs, setAttrs] = useState<AttrRow[]>(unit.attrs);
 
@@ -44,7 +44,14 @@ function useAttrEdit(unit: WorkUnitItem) {
     setAttrs(unit.attrs);
     setEditing(false);
   };
-  const save = () => {
+  const save = async () => {
+    if (onSave) {
+      try {
+        await onSave(attrs);
+      } catch {
+        return;
+      }
+    }
     updateWorkUnitAttrs(unit.kind, unit.id, { attrs });
     setEditing(false);
   };
@@ -128,7 +135,6 @@ type DetailFooterProps = {
   onStartEdit?: () => void;
   onSaveEdit?: () => void;
   onCancelEdit?: () => void;
-  hint?: string;
 };
 
 /** 시설관리 상세와 동일: 하단 수정·삭제·닫기 */
@@ -139,44 +145,40 @@ function DetailFooter({
   onStartEdit,
   onSaveEdit,
   onCancelEdit,
-  hint = '상세정보',
 }: DetailFooterProps) {
   return (
     <div className="shrink-0 border-t border-slate-200 bg-slate-50/80 px-3 py-2">
-      <div className="flex items-center justify-between gap-2">
-        <span className="text-[10px] text-[#666]">{editing ? '수정 중' : hint}</span>
-        <div className="flex flex-wrap justify-end gap-1.5">
-          {editing ? (
-            <>
-              <button
-                type="button"
-                onClick={onSaveEdit}
-                className="rounded border border-sky-600 bg-sky-600 px-2.5 py-1 text-[11px] text-white transition-colors hover:bg-sky-700"
-              >
-                저장
+      <div className="flex flex-wrap justify-end gap-1.5">
+        {editing ? (
+          <>
+            <button
+              type="button"
+              onClick={onSaveEdit}
+              className="rounded border border-sky-600 bg-sky-600 px-2.5 py-1 text-[11px] text-white transition-colors hover:bg-sky-700"
+            >
+              저장
+            </button>
+            <button type="button" onClick={onCancelEdit} className={footerBtnClass}>
+              취소
+            </button>
+          </>
+        ) : (
+          <>
+            {onStartEdit ? (
+              <button type="button" onClick={onStartEdit} className={footerBtnClass}>
+                수정
               </button>
-              <button type="button" onClick={onCancelEdit} className={footerBtnClass}>
-                취소
+            ) : null}
+            {onDelete ? (
+              <button type="button" onClick={onDelete} className={footerBtnClass}>
+                삭제
               </button>
-            </>
-          ) : (
-            <>
-              {onStartEdit ? (
-                <button type="button" onClick={onStartEdit} className={footerBtnClass}>
-                  수정
-                </button>
-              ) : null}
-              {onDelete ? (
-                <button type="button" onClick={onDelete} className={footerBtnClass}>
-                  삭제
-                </button>
-              ) : null}
-            </>
-          )}
-          <button type="button" onClick={onClose} className={footerBtnClass}>
-            닫기
-          </button>
-        </div>
+            ) : null}
+          </>
+        )}
+        <button type="button" onClick={onClose} className={footerBtnClass}>
+          닫기
+        </button>
       </div>
     </div>
   );
@@ -187,6 +189,8 @@ function WorkUnitInfoBody({
   fileSection,
   editing = false,
   attrRows,
+  editableLabels,
+  hiddenLabels,
   onChangeAttr,
   linkedRequest,
   onFolderUpload,
@@ -196,6 +200,8 @@ function WorkUnitInfoBody({
   fileSection: ReactNode;
   editing?: boolean;
   attrRows?: AttrRow[];
+  editableLabels?: string[];
+  hiddenLabels?: string[];
   onChangeAttr?: (index: number, value: string) => void;
   linkedRequest?: ShootingRequestDraft | null;
   onFolderUpload?: () => void;
@@ -240,6 +246,8 @@ function WorkUnitInfoBody({
         rows={editing ? (attrRows ?? unit.attrs) : unit.attrs}
         dense
         editable={editing}
+        editableLabels={editableLabels}
+        hiddenLabels={hiddenLabels}
         onChangeValue={onChangeAttr}
       />
       {fileSection}
@@ -263,6 +271,8 @@ type OrthoDetailProps = {
   onAddFiles?: () => void;
   onClearLink?: () => void;
   onDelete?: () => void;
+  onSaveAttrs?: (attrs: AttrRow[]) => Promise<void>;
+  onDeleteFile?: (file: WorkFileItem) => void;
 };
 
 export function OrthoWorkUnitDetailPanel({
@@ -280,9 +290,11 @@ export function OrthoWorkUnitDetailPanel({
   onAddFiles,
   onClearLink,
   onDelete,
+  onSaveAttrs,
+  onDeleteFile,
 }: OrthoDetailProps) {
   useWorkUnitViewLog('ortho', unit.id);
-  const edit = useAttrEdit(unit);
+  const edit = useAttrEdit(unit, onSaveAttrs);
   const workLabel =
     unit.attrs.find(
       (r) =>
@@ -315,6 +327,7 @@ export function OrthoWorkUnitDetailPanel({
           unit={unit}
           editing={edit.editing}
           attrRows={edit.attrs}
+          editableLabels={['작업일', '임무/작업 목적', '작성자', '메모']}
           onChangeAttr={edit.changeAttr}
           linkedRequest={viewOnly ? null : linkedRequest}
           onFolderUpload={viewOnly ? undefined : onFolderUpload}
@@ -350,6 +363,7 @@ export function OrthoWorkUnitDetailPanel({
                 onToggleCheck={onToggleFile}
                 checkableDoneOnly
                 onSelect={onSelectFile}
+                onDeleteFile={viewOnly ? undefined : onDeleteFile}
                 showLocation
                 statusMode="convert"
               />
@@ -364,7 +378,6 @@ export function OrthoWorkUnitDetailPanel({
         onStartEdit={showInfoActions ? edit.start : undefined}
         onSaveEdit={edit.save}
         onCancelEdit={edit.cancel}
-        hint={detailTab === 'flight' ? '비행기록부' : '상세정보'}
       />
     </div>
   );
@@ -383,6 +396,7 @@ type DroneDetailProps = {
   onAddFiles?: () => void;
   onClearLink?: () => void;
   onDelete?: () => void;
+  onSaveAttrs?: (attrs: AttrRow[]) => Promise<void>;
 };
 
 export function DroneWorkUnitDetailPanel({
@@ -398,9 +412,10 @@ export function DroneWorkUnitDetailPanel({
   onAddFiles,
   onClearLink,
   onDelete,
+  onSaveAttrs,
 }: DroneDetailProps) {
   useWorkUnitViewLog('drone', unit.id);
-  const edit = useAttrEdit(unit);
+  const edit = useAttrEdit(unit, onSaveAttrs);
   const workLabel =
     unit.attrs.find(
       (r) =>
@@ -433,6 +448,8 @@ export function DroneWorkUnitDetailPanel({
           unit={unit}
           editing={edit.editing}
           attrRows={edit.attrs}
+          editableLabels={['작업단위 명', '작업단위', '임무/작업 목적', '작성자', '촬영자', '메모']}
+          hiddenLabels={['연결 신청']}
           onChangeAttr={edit.changeAttr}
           linkedRequest={viewOnly ? null : linkedRequest}
           onFolderUpload={viewOnly ? undefined : onFolderUpload}
@@ -478,7 +495,6 @@ export function DroneWorkUnitDetailPanel({
         onStartEdit={showInfoActions ? edit.start : undefined}
         onSaveEdit={edit.save}
         onCancelEdit={edit.cancel}
-        hint={detailTab === 'flight' ? '비행기록부' : '상세정보'}
       />
     </div>
   );
@@ -630,7 +646,7 @@ export function DroneFileDetailPanel({ file, files = [], onClose, onDelete }: Dr
           </div>
         </section>
       </div>
-      <DetailFooter onClose={onClose} onDelete={onDelete} hint="파일 상세" />
+      <DetailFooter onClose={onClose} onDelete={onDelete} />
 
       {viewerOpen && galleryItems.length > 0 ? (
         <ServiceFileImagePreview
@@ -656,6 +672,8 @@ type PanoDetailProps = {
   onAddFiles?: () => void;
   onClearLink?: () => void;
   onDelete?: () => void;
+  onSaveAttrs?: (attrs: AttrRow[]) => Promise<void>;
+  onDeleteFile?: (file: WorkFileItem) => void;
 };
 
 export function PanoramaWorkUnitDetailPanel({
@@ -671,9 +689,11 @@ export function PanoramaWorkUnitDetailPanel({
   onAddFiles,
   onClearLink,
   onDelete,
+  onSaveAttrs,
+  onDeleteFile,
 }: PanoDetailProps) {
   useWorkUnitViewLog('panorama', unit.id);
-  const edit = useAttrEdit(unit);
+  const edit = useAttrEdit(unit, onSaveAttrs);
   const workLabel =
     unit.attrs.find(
       (r) =>
@@ -706,6 +726,8 @@ export function PanoramaWorkUnitDetailPanel({
           unit={unit}
           editing={edit.editing}
           attrRows={edit.attrs}
+          editableLabels={['작업단위 명', '작업단위', '임무/작업 목적', '작성자', '촬영자', '메모']}
+          hiddenLabels={['연결 신청']}
           onChangeAttr={edit.changeAttr}
           linkedRequest={viewOnly ? null : linkedRequest}
           onFolderUpload={viewOnly ? undefined : onFolderUpload}
@@ -737,6 +759,7 @@ export function PanoramaWorkUnitDetailPanel({
                 files={unit.files}
                 selectedId={selectedFileId}
                 onSelect={onSelectFile}
+                onDeleteFile={viewOnly ? undefined : onDeleteFile}
                 showLocation
                 statusMode="upload"
               />
@@ -751,7 +774,6 @@ export function PanoramaWorkUnitDetailPanel({
         onStartEdit={showInfoActions ? edit.start : undefined}
         onSaveEdit={edit.save}
         onCancelEdit={edit.cancel}
-        hint={detailTab === 'flight' ? '비행기록부' : '상세정보'}
       />
     </div>
   );
@@ -765,7 +787,11 @@ type SatDetailProps = {
   viewOnly?: boolean;
   linkedRequest?: ShootingRequestDraft | null;
   onFolderUpload?: () => void;
+  onAddFiles?: () => void;
   onClearLink?: () => void;
+  onDelete?: () => void;
+  onSaveAttrs?: (attrs: AttrRow[]) => Promise<void>;
+  onDeleteFile?: (file: WorkFileItem) => void;
 };
 
 export function SatelliteWorkUnitDetailPanel({
@@ -776,10 +802,14 @@ export function SatelliteWorkUnitDetailPanel({
   viewOnly = false,
   linkedRequest,
   onFolderUpload,
+  onAddFiles,
   onClearLink,
+  onDelete,
+  onSaveAttrs,
+  onDeleteFile,
 }: SatDetailProps) {
   useWorkUnitViewLog('satellite', unit.id);
-  const edit = useAttrEdit(unit);
+  const edit = useAttrEdit(unit, onSaveAttrs);
   const workLabel =
     unit.attrs.find(
       (r) =>
@@ -812,31 +842,53 @@ export function SatelliteWorkUnitDetailPanel({
           unit={unit}
           editing={edit.editing}
           attrRows={edit.attrs}
+          editableLabels={['작업일', '임무/작업 목적', '작성자', '메모']}
+          hiddenLabels={['연결 신청']}
           onChangeAttr={edit.changeAttr}
           linkedRequest={viewOnly ? null : linkedRequest}
           onFolderUpload={viewOnly ? undefined : onFolderUpload}
           onClearLink={viewOnly ? undefined : onClearLink}
           fileSection={
             <section>
-              <SectionTitle>파일 목록</SectionTitle>
+              <SectionTitle
+                action={
+                  viewOnly || !onAddFiles ? undefined : (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-7 gap-1 px-2 text-[11px]"
+                      onClick={onAddFiles}
+                    >
+                      <Plus className="h-3 w-3" />
+                      추가
+                    </Button>
+                  )
+                }
+              >
+                파일 목록
+              </SectionTitle>
               <p className="mb-2 text-[10px] text-slate-400">
-                지도 표시는 배경지도 «자체항공영상»에서 on/off 합니다.
+                변환 완료 시 배경지도 «자체항공영상»에 등록됩니다. 지도 on/off는 배경지도에서 합니다.
               </p>
-              <FileRows files={unit.files} selectedId={null} onSelect={() => {}} statusMode="convert" />
+              <FileRows
+                files={unit.files}
+                selectedId={null}
+                onSelect={() => {}}
+                onDeleteFile={viewOnly ? undefined : onDeleteFile}
+                statusMode="convert"
+              />
             </section>
           }
         />
       )}
       <DetailFooter
         onClose={onClose}
-        onDelete={
-          showInfoActions && !edit.editing ? () => window.alert('목업: 삭제 API 없음') : undefined
-        }
+        onDelete={showInfoActions && !edit.editing ? onDelete : undefined}
         editing={showInfoActions ? edit.editing : false}
         onStartEdit={showInfoActions ? edit.start : undefined}
         onSaveEdit={edit.save}
         onCancelEdit={edit.cancel}
-        hint={detailTab === 'flight' ? '비행기록부' : '상세정보'}
       />
     </div>
   );
@@ -851,6 +903,7 @@ function FileRows({
   checkableDoneOnly,
   showLocation,
   statusMode = 'upload',
+  onDeleteFile,
 }: {
   files: WorkFileItem[];
   selectedId: string | null;
@@ -859,6 +912,7 @@ function FileRows({
   onToggleCheck?: (id: string) => void;
   checkableDoneOnly?: boolean;
   showLocation?: boolean;
+  onDeleteFile?: (file: WorkFileItem) => void;
   /** ortho=변환중·변환완료, drone/pano=업로드완료 */
   statusMode?: 'convert' | 'upload';
 }) {
@@ -940,6 +994,17 @@ function FileRows({
                   </div>
                 </div>
               </button>
+              {onDeleteFile ? (
+                <button
+                  type="button"
+                  className="mt-0.5 shrink-0 rounded p-1 text-slate-400 transition-colors hover:bg-rose-50 hover:text-rose-600"
+                  onClick={() => onDeleteFile(f)}
+                  title="파일 삭제"
+                  aria-label={`${f.name} 삭제`}
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </button>
+              ) : null}
             </div>
           </li>
         );

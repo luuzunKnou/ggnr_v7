@@ -2196,6 +2196,18 @@
     "define_table_source": "shp"
   },
   {
+    "define_table_name": "road_frontage_building",
+    "define_table_kor_name": "접도구역 건축물 관리대장",
+    "define_table_shp_type": "POINT",
+    "define_table_read_share": "P",
+    "define_table_write_share": "P",
+    "define_table_group": "도로대장",
+    "define_table_idx": "0",
+    "define_table_etc": "",
+    "define_table_schema": "layer",
+    "define_table_source": "shp"
+  },
+  {
     "define_table_name": "a9990011",
     "define_table_kor_name": "실연장",
     "define_table_shp_type": "LINE",

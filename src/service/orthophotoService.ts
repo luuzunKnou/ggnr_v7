@@ -1531,3 +1531,53 @@ export async function runAerialOrthoTifToXyz(params: {
   }
 }
 
+/**
+ * 항공영상(TIF) → 자체항공영상 XYZ JPEG.
+ * 산출: tiles_jpg/{groupName}/z/x/y.jpg (배경지도 «자체항공영상» 등록)
+ * groupName 예: satellite_2026_5181_siteA
+ */
+export async function runAerialSatelliteTifToXyz(params: {
+  absSource: string;
+  sourceRelativePath: string;
+  sourceCrs: string;
+  groupName: string;
+  zoomMin?: number;
+  zoomMax?: number;
+  jpegQuality?: number;
+}): Promise<{ success: boolean; error?: string; outputRelativeDir: string }> {
+  const groupName = params.groupName.trim();
+  const outputRelativeDir = `tiles_jpg/${groupName}`;
+  if (!isSafeOrthoSegment(groupName) || !/^satellite_\d{4}/i.test(groupName)) {
+    return {
+      success: false,
+      error: '자체항공영상 그룹명이 올바르지 않습니다.',
+      outputRelativeDir,
+    };
+  }
+  const sourceBaseName = path.basename(params.absSource);
+  try {
+    await runOrthophotoJob({
+      absSource: params.absSource,
+      sourceRelativePath: params.sourceRelativePath,
+      sourceBaseName,
+      groupName,
+      sourceCrs: params.sourceCrs,
+      tileSetId: groupName,
+      zoomMin: params.zoomMin ?? 6,
+      zoomMax: params.zoomMax ?? 19,
+      jpegQuality: params.jpegQuality ?? 80,
+      outputSlugOverride: 'main',
+      tileDriver: 'JPEG',
+    });
+    const absOut = path.join(getBaseDir(), ...outputRelativeDir.split('/').filter(Boolean));
+    const hasZoom = fs.existsSync(absOut) && (await fsPromises.readdir(absOut)).some((n) => /^\d+$/.test(n));
+    if (!hasZoom) {
+      return { success: false, error: '변환 결과 타일 폴더가 없습니다.', outputRelativeDir };
+    }
+    return { success: true, outputRelativeDir };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return { success: false, error: msg, outputRelativeDir };
+  }
+}
+

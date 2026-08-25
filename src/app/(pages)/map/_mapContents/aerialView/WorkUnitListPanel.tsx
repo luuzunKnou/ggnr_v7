@@ -242,10 +242,6 @@ export function WorkUnitListPanel({
           </ul>
         )}
       </div>
-
-      <div className="shrink-0 border-t border-slate-200 bg-slate-50/80 px-3 py-1.5 text-[10px] text-slate-400">
-        목업 데이터 · 실저장 연동 전
-      </div>
     </div>
   );
 }
