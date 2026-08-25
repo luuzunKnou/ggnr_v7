@@ -12,13 +12,7 @@ import type {
   ThematicMapLayerGroup,
   ThematicMapLayerOption,
 } from './thematicMapLayerFactory';
-
-function getGeoServerBase(): string {
-  if (typeof window !== 'undefined') {
-    return `${window.location.protocol}//${window.location.hostname}:8080/geoserver`;
-  }
-  return 'http://localhost:8080/geoserver';
-}
+import { getGeoServerBase } from '@/lib/geoserverUrl';
 
 type DefineTableRow = {
   define_table_name?: string;

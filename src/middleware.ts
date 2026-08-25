@@ -27,6 +27,15 @@ export default auth((req) => {
   // basePath 사용 시 matcher만으로는 _next 제외가 깨질 수 있음 → 핸들러에서도 방어
   if (isStaticAssetPath(path)) return NextResponse.next();
 
+  // GeoServer 동일출처 프록시 (WMS img 등) — 로그인 리다이렉트 금지
+  if (
+    path === '/geoserver' ||
+    path.startsWith('/geoserver/') ||
+    path.includes('/geoserver/')
+  ) {
+    return NextResponse.next();
+  }
+
   const isApiAuth = path.startsWith('/api/auth');
   const isApi = path.startsWith('/api');
   if (isApiAuth) return NextResponse.next();

@@ -8,6 +8,7 @@ import { existsSync, readFileSync, writeFileSync } from "fs"
 import { join } from "path"
 import { unstable_noStore as noStore } from "next/cache"
 import { withBasePath } from "@/lib/basePath"
+import { getGeoServerInternalBase } from "@/lib/geoserverUrl"
 
 /** package.json 이 있는 디렉터리를 프로젝트 루트로 사용 (Next 등에서 cwd 가 달라도 동작) */
 function getProjectRoot(): string {
@@ -891,8 +892,8 @@ export function getParcelAnalysisMapConfig(_params?: unknown): {
   geoserverUrl: string
   workspace: string
 } {
-  const geoserverUrl = (process.env.GEOSERVER_URL ?? "http://localhost:8080/geoserver").replace(/\/$/, "")
-  // 메인 지도(serviceLayerFactory)와 동일하게 ggnr 워크스페이스 고정
+  // 브라우저는 getGeoServerBase()(동일출처 프록시)를 쓰고, 서버 캡처·REST는 로컬 URL
+  const geoserverUrl = getGeoServerInternalBase()
   const workspace = "ggnr"
   return { geoserverUrl, workspace }
 }

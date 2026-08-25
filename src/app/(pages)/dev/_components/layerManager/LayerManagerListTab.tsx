@@ -20,11 +20,9 @@ import { registerLayerManagerListRefresh, requestLayerManagerDefineRefresh } fro
 import { StyleLegendThumb } from "./StylePreviewSwatch"
 import { parseSimpleStyleFromCss, type GeometryType, type StyleProps } from "@/lib/geoserverStyleUtils"
 import { fetchDefineLayerTables, fetchLayerDbTableList } from "./layerManagerListCache"
+import { getGeoServerBase } from "@/lib/geoserverUrl"
 
-const GEOSERVER_DEFAULT_URL =
-  typeof window !== "undefined"
-    ? `${window.location.protocol}//${window.location.hostname}:8080/geoserver`
-    : "http://localhost:8080/geoserver"
+const GEOSERVER_DEFAULT_URL = getGeoServerBase()
 
 const GEOSERVER_WORKSPACE = "ggnr"
 

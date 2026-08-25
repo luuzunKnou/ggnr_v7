@@ -4,6 +4,7 @@
 import { spawn, execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
+import { getGeoServerInternalBase } from '@/lib/geoserverUrl';
 
 function sleep(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
@@ -19,7 +20,7 @@ function fetchTimeoutSignal(ms: number): AbortSignal {
 }
 
 export function getGeoServerBaseUrl(): string {
-  return (process.env.GEOSERVER_URL || 'http://localhost:8080/geoserver').replace(/\/$/, '');
+  return getGeoServerInternalBase();
 }
 
 export type GeoServerHealth = {

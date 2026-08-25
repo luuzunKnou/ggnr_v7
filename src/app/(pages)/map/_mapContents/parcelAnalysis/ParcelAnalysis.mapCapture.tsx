@@ -33,6 +33,7 @@ import {
 } from './parcelAnalysis.mapStyle';
 import '@/app/(pages)/map/_mapComponents/config/projections';
 import { sortLayerNamesForWmsStack, type LayerDbGeometryKind } from '@/lib/mapLayerGeometryOrder';
+import { getGeoServerBase } from '@/lib/geoserverUrl';
 
 /** 숨김 OL 지도 캡처 해상도 */
 export const PARCEL_ANALYSIS_CAPTURE_SIZE: [number, number] = [900, 400];
@@ -489,11 +490,8 @@ function waitForBasemapTiles(
   return finish;
 }
 
-function resolveGeoServerBase(configUrl: string): string {
-  if (typeof window !== 'undefined') {
-    return `${window.location.protocol}//${window.location.hostname}:8080/geoserver`;
-  }
-  return configUrl.replace(/\/$/, '') || 'http://localhost:8080/geoserver';
+function resolveGeoServerBase(_configUrl: string): string {
+  return getGeoServerBase();
 }
 
 function useMapCaptureWhenVisible(rootRef: RefObject<HTMLDivElement | null>) {

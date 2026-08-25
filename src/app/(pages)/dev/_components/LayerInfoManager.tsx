@@ -22,11 +22,9 @@ import {
   fetchLayerDbTableList,
   invalidateLayerManagerListCache,
 } from "./layerManager/layerManagerListCache"
+import { getGeoServerBase } from "@/lib/geoserverUrl"
 
-const GEOSERVER_DEFAULT_URL =
-  typeof window !== "undefined"
-    ? `${window.location.protocol}//${window.location.hostname}:8080/geoserver`
-    : "http://localhost:8080/geoserver"
+const GEOSERVER_DEFAULT_URL = getGeoServerBase()
 
 const GEOMETRY_TYPES: { value: GeometryType; label: string }[] = [
   { value: "POINT", label: "POINT" },

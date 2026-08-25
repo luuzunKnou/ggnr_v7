@@ -78,6 +78,7 @@ export function shouldPrefixAppPath(pathOrUrl: string): boolean {
   if (base && (pathname === base || pathname.startsWith(`${base}/`))) return false;
   return (
     pathname.startsWith('/api') ||
+    pathname.startsWith('/geoserver') ||
     pathname.startsWith('/proxy') ||
     pathname.startsWith('/symbol') ||
     pathname.startsWith('/image') ||

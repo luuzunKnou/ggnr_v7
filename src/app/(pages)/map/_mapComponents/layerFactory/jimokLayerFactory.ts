@@ -3,13 +3,7 @@ import ImageLayer from 'ol/layer/Image';
 import ImageWMS from 'ol/source/ImageWMS';
 import type { Map } from 'ol';
 import { WORKSPACE } from './serviceLayerFactory';
-
-function getGeoServerBase(): string {
-  if (typeof window !== 'undefined') {
-    return `${window.location.protocol}//${window.location.hostname}:8080/geoserver`;
-  }
-  return 'http://localhost:8080/geoserver';
-}
+import { getGeoServerBase } from '@/lib/geoserverUrl';
 
 /** 지목 (답·대·제방·공장용지 등) — 패널 목록·동기화용 export */
 export const JIMOK_LAYERS: { tableName: string; layerName: string; minZoom: number; maxZoom: number }[] = [

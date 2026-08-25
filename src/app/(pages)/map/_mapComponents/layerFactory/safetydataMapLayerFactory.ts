@@ -6,20 +6,14 @@ import type { Extent } from 'ol/extent';
 import { transformExtent } from 'ol/proj';
 import { call } from '@/lib/api';
 import { WORKSPACE } from './serviceLayerFactory';
-
-function getGeoServerBase(): string {
-  if (typeof window !== 'undefined') {
-    return `${window.location.protocol}//${window.location.hostname}:8080/geoserver`;
-  }
-  return 'http://localhost:8080/geoserver';
-}
+import { getGeoServerBase } from '@/lib/geoserverUrl';
 
 /**
  * 재난안전데이터(안전데이터포털 연계) — GeoServer WMS
  * SafetyMapLayerPanel 토글과 동기화
  *
- * 지도 그리기: 브라우저가 OpenLayers ImageWMS로 **직접** `host:8080/geoserver/.../wms` 에 GetMap 요청함.
- * Next `POST /api`(lib/api `call`)와 무관 — 네트워크에서 WMS는 8080, JSON 게이트웨이는 3000/api 로 구분하면 됨.
+ * 지도 그리기: 브라우저가 OpenLayers ImageWMS로 동일 출처 `/geoserver/.../wms`(rewrite)에 GetMap 요청함.
+ * Next `POST /api`(lib/api `call`)와 무관 — WMS는 geoserver 경로, JSON 게이트웨이는 /api 로 구분.
  */
 /** 병상정보 패널 — GeoServer WMS(병원 POI). `safetyMapLayerVisibility` 키와 동일 */
 export const SAFETY_HOSPITAL_POI_GEO_TABLE = 'sd_mois_hospital_poi' as const;

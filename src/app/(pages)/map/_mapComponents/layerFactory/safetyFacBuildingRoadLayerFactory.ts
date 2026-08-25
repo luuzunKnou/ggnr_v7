@@ -5,13 +5,7 @@ import ImageWMS from 'ol/source/ImageWMS';
 import { WORKSPACE } from './serviceLayerFactory';
 import { BUILDING_ROAD_LAYER_DEFS } from './buildingRoadLayerConfig';
 import { SAFETY_FAC_RELATED_TABLE_NAMES } from '../../_mapContents/safty/safetyFac/safetyFacRelatedBuildingConfig';
-
-function getGeoServerBase(): string {
-  if (typeof window !== 'undefined') {
-    return `${window.location.protocol}//${window.location.hostname}:8080/geoserver`;
-  }
-  return 'http://localhost:8080/geoserver';
-}
+import { getGeoServerBase } from '@/lib/geoserverUrl';
 
 const SAFETY_FAC_TABLE_SET = new Set(SAFETY_FAC_RELATED_TABLE_NAMES);
 

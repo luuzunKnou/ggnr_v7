@@ -5,11 +5,9 @@ import { RefreshCw } from "lucide-react"
 import { Button } from "@/app/shadcnComponents/ui/button"
 import { call } from "@/lib/api"
 import { cn } from "@/lib/utils"
+import { getGeoServerBase } from "@/lib/geoserverUrl"
 
-const GEOSERVER_DEFAULT_URL =
-  typeof window !== "undefined"
-    ? `${window.location.protocol}//${window.location.hostname}:8080/geoserver`
-    : "http://localhost:8080/geoserver"
+const GEOSERVER_DEFAULT_URL = getGeoServerBase()
 
 type GeoStatus = {
   success: boolean

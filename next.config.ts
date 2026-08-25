@@ -76,7 +76,13 @@ const nextConfig: NextConfig = {
     'pg-native',
   ],
   async rewrites() {
+    // GeoServer: 브라우저·게이트는 동일 출처 `{basePath}/geoserver` → 로컬 8080
+    const geoInternal = (
+      process.env.GEOSERVER_URL?.trim() || 'http://127.0.0.1:8080/geoserver'
+    ).replace(/\/$/, '');
     return [
+      { source: '/geoserver', destination: geoInternal },
+      { source: '/geoserver/:path*', destination: `${geoInternal}/:path*` },
       { source: '/vworldLandCharacteristics.api', destination: '/api/vworld/land-characteristics' },
       { source: '/vworldLandCharacteristics_https.api', destination: '/api/vworld/land-characteristics' },
       { source: '/vworldLandUseAttr.api', destination: '/api/vworld/land-use' },

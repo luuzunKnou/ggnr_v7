@@ -3,9 +3,10 @@ import {
   ensureGeoServerRunning,
   type EnsureGeoServerResult,
 } from '@/service/geoserverProcessService';
+import { getGeoServerInternalBase } from '@/lib/geoserverUrl';
 
 function defaultGeoUrl(): string {
-  return process.env.GEOSERVER_URL?.trim() || 'http://localhost:8080/geoserver';
+  return getGeoServerInternalBase();
 }
 
 /** GeoServer REST — 워크스페이스·PostGIS 저장소 확인·갱신 (응답 없으면 false) */
