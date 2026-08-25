@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { appFetch } from "@/lib/basePath";
 import { SER_FILE_ENG } from "@/lib/serviceFileDataSerEng";
 import {
   isImageServiceFileName,
@@ -50,7 +51,7 @@ export function RiverBasicPlanMapDrawingFromMapHandler() {
           layer,
           key,
         });
-        const res = await fetch(`/api/service-files?${qs.toString()}`, { credentials: "include" });
+        const res = await appFetch(`/api/service-files?${qs.toString()}`, { credentials: "include" });
         if (!res.ok) {
           const j = (await res.json().catch(() => ({}))) as { error?: string };
           throw new Error(typeof j.error === "string" ? j.error : "목록을 불러오지 못했습니다.");

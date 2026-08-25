@@ -1,5 +1,6 @@
 import type { CSSProperties } from 'react';
 import { darkerHex } from '@/lib/geoserverStyleUtils';
+import { withBasePath } from '@/lib/basePath';
 
 export type SafetyFacSubtypeId =
   | 'coldShelter'
@@ -32,37 +33,37 @@ export const SAFETY_FAC_SYMBOL: Record<
     color: '#2196F3',
     borderColor: '#1769aa',
     fileName: 'sd_cold_wave_shelter',
-    src: '/symbol/sd_cold_wave_shelter.svg',
+    src: withBasePath('/symbol/sd_cold_wave_shelter.svg'),
   },
   heatShelter: {
     color: '#E91E63',
     borderColor: '#a31545',
     fileName: 'sd_heat_wave_shelter',
-    src: '/symbol/sd_heat_wave_shelter.svg',
+    src: withBasePath('/symbol/sd_heat_wave_shelter.svg'),
   },
   heatMitigation: {
     color: '#FF9800',
     borderColor: '#b26a00',
     fileName: 'sd_heat_mitigation_facility',
-    src: '/symbol/sd_heat_mitigation_facility.svg',
+    src: withBasePath('/symbol/sd_heat_mitigation_facility.svg'),
   },
   eqOutdoor: {
     color: '#3F51B5',
     borderColor: '#2c387e',
     fileName: 'sd_earthquake_outdoor_evac_site',
-    src: '/symbol/sd_earthquake_outdoor_evac_site.svg',
+    src: withBasePath('/symbol/sd_earthquake_outdoor_evac_site.svg'),
   },
   tsunamiEvac: {
     color: '#673AB7',
     borderColor: '#482880',
     fileName: 'sd_tsunami_emergency_evac_site',
-    src: '/symbol/sd_tsunami_emergency_evac_site.svg',
+    src: withBasePath('/symbol/sd_tsunami_emergency_evac_site.svg'),
   },
   displacedHousing: {
     color: '#009688',
     borderColor: '#00695f',
     fileName: 'sd_mois_displaced_temp_housing',
-    src: '/symbol/sd_mois_displaced_temp_housing.svg',
+    src: withBasePath('/symbol/sd_mois_displaced_temp_housing.svg'),
   },
 };
 

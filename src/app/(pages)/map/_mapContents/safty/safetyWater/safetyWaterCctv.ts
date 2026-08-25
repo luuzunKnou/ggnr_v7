@@ -1,3 +1,4 @@
+import { appFetch } from '@/lib/basePath';
 import type { ItsCctvItem } from '../../road/roadCCTV/itsCctvTypes';
 import type { SafetyWaterStation } from './safetyWaterTypes';
 
@@ -45,7 +46,7 @@ async function fetchCctvList(params: {
     cctvType: params.cctvType,
     getType: 'xml',
   });
-  const res = await fetch(`/api/its/cctv?${sp.toString()}`);
+  const res = await appFetch(`/api/its/cctv?${sp.toString()}`);
   const data = (await res.json()) as { items?: ItsCctvItem[]; error?: string };
   if (!res.ok) {
     throw new Error(data.error ?? `HTTP ${res.status}`);

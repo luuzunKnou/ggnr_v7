@@ -3,66 +3,66 @@
 
 @custom-variant dark (&:is(.dark *));
 
-/* S-Core Dream (public/font/SCDREAM1~9.OTF) */
+/* S-Core Dream (public/font/SCDREAM1~9.OTF) — 상대경로로 basePath 반영 */
 @font-face {
   font-family: "S-Core Dream";
-  src: url("/font/SCDREAM1.OTF") format("opentype");
+  src: url("../../public/font/SCDREAM1.OTF") format("opentype");
   font-weight: 100;
   font-style: normal;
   font-display: swap;
 }
 @font-face {
   font-family: "S-Core Dream";
-  src: url("/font/SCDREAM2.OTF") format("opentype");
+  src: url("../../public/font/SCDREAM2.OTF") format("opentype");
   font-weight: 200;
   font-style: normal;
   font-display: swap;
 }
 @font-face {
   font-family: "S-Core Dream";
-  src: url("/font/SCDREAM3.OTF") format("opentype");
+  src: url("../../public/font/SCDREAM3.OTF") format("opentype");
   font-weight: 300;
   font-style: normal;
   font-display: swap;
 }
 @font-face {
   font-family: "S-Core Dream";
-  src: url("/font/SCDREAM4.OTF") format("opentype");
+  src: url("../../public/font/SCDREAM4.OTF") format("opentype");
   font-weight: 400;
   font-style: normal;
   font-display: swap;
 }
 @font-face {
   font-family: "S-Core Dream";
-  src: url("/font/SCDREAM5.OTF") format("opentype");
+  src: url("../../public/font/SCDREAM5.OTF") format("opentype");
   font-weight: 500;
   font-style: normal;
   font-display: swap;
 }
 @font-face {
   font-family: "S-Core Dream";
-  src: url("/font/SCDREAM6.OTF") format("opentype");
+  src: url("../../public/font/SCDREAM6.OTF") format("opentype");
   font-weight: 700;
   font-style: normal;
   font-display: swap;
 }
 @font-face {
   font-family: "S-Core Dream";
-  src: url("/font/SCDREAM7.OTF") format("opentype");
+  src: url("../../public/font/SCDREAM7.OTF") format("opentype");
   font-weight: 800;
   font-style: normal;
   font-display: swap;
 }
 @font-face {
   font-family: "S-Core Dream";
-  src: url("/font/SCDREAM8.OTF") format("opentype");
+  src: url("../../public/font/SCDREAM8.OTF") format("opentype");
   font-weight: 800;
   font-style: normal;
   font-display: swap;
 }
 @font-face {
   font-family: "S-Core Dream";
-  src: url("/font/SCDREAM9.OTF") format("opentype");
+  src: url("../../public/font/SCDREAM9.OTF") format("opentype");
   font-weight: 900;
   font-style: normal;
   font-display: swap;

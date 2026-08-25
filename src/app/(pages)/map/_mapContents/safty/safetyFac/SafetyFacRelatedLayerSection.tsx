@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { cn } from '@/lib/utils';
+import { appFetch } from '@/lib/basePath';
 import { useMapContext } from '../../../_mapComponents/MapContext';
 import type { SafetyFacRelatedBuildingResult } from '@/service/standardService';
 import {
@@ -29,7 +30,7 @@ export function SafetyFacRelatedLayerSection({ lon, lat }: Props) {
     setLoading(true);
     setResult(null);
     setActiveTables(new Set());
-    void fetch(`/api/safety-fac/related-buildings?lon=${lon}&lat=${lat}`)
+    void appFetch(`/api/safety-fac/related-buildings?lon=${lon}&lat=${lat}`)
       .then((r) => r.json())
       .then((json: { data?: SafetyFacRelatedBuildingResult }) => {
         if (!cancelled) setResult(json.data ?? null);

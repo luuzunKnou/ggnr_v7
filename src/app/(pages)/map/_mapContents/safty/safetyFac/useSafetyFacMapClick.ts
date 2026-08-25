@@ -6,6 +6,7 @@ import { unByKey } from 'ol/Observable';
 import { easeOut } from 'ol/easing';
 import { transform } from 'ol/proj';
 import { call } from '@/lib/api';
+import { appFetch } from '@/lib/basePath';
 import { prepareMapForPanelAwareNavigation } from '../../../_mapComponents/config/mapAutoNavigation';
 import { useMapContext } from '../../../_mapComponents/MapContext';
 import { SAFETY_FAC_PANEL_GEO_TABLE_NAMES } from '../../../_mapComponents/layerFactory/safetydataMapLayerFactory';
@@ -73,7 +74,7 @@ async function resolveIdentifyTitle(opts: {
     (fieldName ? String(pickSafetyFacAttr(opts.row, fieldName) ?? '').trim() : '');
   if (!raw || !fieldName) return raw;
   try {
-    const fres = await fetch(`/api/config/defineLayer/fields/${encodeURIComponent(opts.table)}`);
+    const fres = await appFetch(`/api/config/defineLayer/fields/${encodeURIComponent(opts.table)}`);
     const fjson = (await fres.json()) as { data?: Record<string, unknown>[] };
     const fields = Array.isArray(fjson?.data) ? fjson.data : [];
     const field = fields.find(
@@ -81,7 +82,7 @@ async function resolveIdentifyTitle(opts: {
     );
     if (!field || !isDefineFieldCodeType(field)) return raw;
     const name = String(field.define_field_name ?? '').trim();
-    const cres = await fetch(
+    const cres = await appFetch(
       `/api/config/defineLayer/codes/${encodeURIComponent(`${opts.table}__${name}`)}`
     );
     const cjson = (await cres.json()) as { data?: { define_code_name?: string; define_code_kor_name?: string }[] };
@@ -94,7 +95,7 @@ async function resolveIdentifyTitle(opts: {
 
 async function keyFieldName(table: string): Promise<string | null> {
   try {
-    const res = await fetch(`/api/config/defineLayer/fields/${encodeURIComponent(table)}`);
+    const res = await appFetch(`/api/config/defineLayer/fields/${encodeURIComponent(table)}`);
     const json = (await res.json()) as { data?: Record<string, unknown>[] };
     const fields = Array.isArray(json?.data) ? json.data : [];
     const key = fields.find((f) => defineFieldFlagTrue(f.define_field_is_key));
