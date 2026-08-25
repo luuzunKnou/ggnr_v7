@@ -34,6 +34,8 @@ type Props = {
 export default function ComplaintAdd({ onClose, onCreated }: Props) {
   const mapContext = useMapContext();
   const setComplaintDetail = mapContext?.setComplaintDetail;
+  /** 화면 기준 기본 위치 — 목록 패널 오른쪽(지도 왼쪽 끝)에서 조금 떨어뜨림 */
+  const floatingLeftPx = (mapContext?.mapPaddingLeft ?? 0) + 20;
   const [saving, setSaving] = useState(false);
 
   const handleCreate = useCallback(
@@ -100,9 +102,10 @@ export default function ComplaintAdd({ onClose, onCreated }: Props) {
 
   return (
     <MapFloatingPanel
+      viewport
       width="600px"
       maxHeight="85vh"
-      defaultPosition={{ top: 80, left: 20 }}
+      defaultPosition={{ top: 80, left: floatingLeftPx }}
       header={
         <>
           <span className="text-xs font-medium text-muted-foreground">민원 추가</span>

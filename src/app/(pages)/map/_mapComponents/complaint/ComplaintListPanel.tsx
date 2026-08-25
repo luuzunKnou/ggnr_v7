@@ -193,9 +193,14 @@ export default function ComplaintListPanel({
 
   const handleSelect = useCallback(
     async (comp: CompUI) => {
+      // 같은 행을 한 번 더 누르면 상세를 닫는다
+      if (complaintDetail?.compKey === comp.compKey) {
+        setComplaintDetail?.(null);
+        return;
+      }
       await openDetailByCompKey(comp.compKey);
     },
-    [openDetailByCompKey]
+    [openDetailByCompKey, complaintDetail?.compKey, setComplaintDetail]
   );
 
   useComplaintMapClick({

@@ -39,7 +39,7 @@ type TableOption = { tableName: string; label: string };
 type Props = {
   onClose: () => void;
   selectedDetailId: string | null;
-  onSelectDetailId: (id: string) => void;
+  onSelectDetailId: (id: string | null) => void;
   refreshKey?: number;
   onAdd?: (tableName: string) => void;
 };
@@ -139,10 +139,17 @@ export function MemoListPanel({
 
   const handleRowClick = useCallback(
     (row: ListRow) => {
+      // 같은 행을 한 번 더 누르면 상세를 닫는다
+      if (selectedDetailId === row.rowKey) {
+        focusedIdRef.current = null;
+        setHighlightGeom(null);
+        onSelectDetailId(null);
+        return;
+      }
       onSelectDetailId(row.rowKey);
       void focusMemoOnMap(row.rowKey, row.tableName, row.memoKey);
     },
-    [focusMemoOnMap, onSelectDetailId]
+    [focusMemoOnMap, onSelectDetailId, selectedDetailId]
   );
 
   useEffect(() => {

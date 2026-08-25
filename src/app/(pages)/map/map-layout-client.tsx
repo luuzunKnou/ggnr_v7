@@ -11,6 +11,7 @@ import StandardDetail from "./_mapComponents/standard/StandardDetail"
 import ComplaintListPanel from "./_mapComponents/complaint/ComplaintListPanel"
 import ComplaintDetail from "./_mapComponents/complaint/ComplaintDetail"
 import ComplaintAdd from "./_mapComponents/complaint/ComplaintAdd"
+import { MAP_FLOATING_DETAIL_CLOSE_EVENT } from "./_mapComponents/mapFloatingDetailEvent"
 import AddressInfoDetail from "./_mapComponents/AddressInfoDetail"
 import { RiverBasicPlanListPanel } from "./_mapContents/river/riverBasicPlan/RiverBasicPlanListPanel"
 import { RiverBasicPlanDetailPanel } from "./_mapContents/river/riverBasicPlan/RiverBasicPlanDetailPanel"
@@ -1440,20 +1441,54 @@ function MapLayoutContent({
     }
   }, [])
 
-  useEffect(() => {
-    if (!memoManagementOpen) {
-      setMemoDetailId(null)
-      setMemoAddTable(null)
-    }
-  }, [memoManagementOpen])
+  const setComplaintDetail = mapContext?.setComplaintDetail
 
+  /** 메모관리로 들어오면 민원 떠 있는 화면만 닫는다. 다른 부서 업무로 갈 때는 둘 다 유지 */
   useEffect(() => {
-    if (!complaintManagementOpen) setComplaintAddOpen(false)
+    if (!memoManagementOpen) return
+    setComplaintAddOpen(false)
+    setComplaintDetail?.(null)
+  }, [memoManagementOpen, setComplaintDetail])
+
+  /** 민원관리로 들어오면 메모 떠 있는 화면만 닫는다 */
+  useEffect(() => {
+    if (!complaintManagementOpen) return
+    setMemoDetailId(null)
+    setMemoAddTable(null)
   }, [complaintManagementOpen])
 
   useEffect(() => {
     if (mapContext?.complaintDetail) setComplaintAddOpen(false)
   }, [mapContext?.complaintDetail])
+
+  useEffect(() => {
+    if (!mapContext?.complaintDetail && !complaintAddOpen) return
+    setMemoDetailId(null)
+    setMemoAddTable(null)
+  }, [mapContext?.complaintDetail, complaintAddOpen])
+
+  /** 필지분석·변동이력분석에서는 민원·메모 떠 있는 화면을 남기지 않는다 */
+  useEffect(() => {
+    if (!parcelAnalysisOpen && !changeHistoryOpen) return
+    setComplaintAddOpen(false)
+    setComplaintDetail?.(null)
+    setMemoDetailId(null)
+    setMemoAddTable(null)
+  }, [parcelAnalysisOpen, changeHistoryOpen, setComplaintDetail])
+
+  /** 도형편집기를 열면 지도에 떠 있던 민원·메모 화면을 닫는다 */
+  useEffect(() => {
+    const onCloseFloating = () => {
+      setComplaintAddOpen(false)
+      setComplaintDetail?.(null)
+      setMemoDetailId(null)
+      setMemoAddTable(null)
+    }
+    window.addEventListener(MAP_FLOATING_DETAIL_CLOSE_EVENT, onCloseFloating)
+    return () => {
+      window.removeEventListener(MAP_FLOATING_DETAIL_CLOSE_EVENT, onCloseFloating)
+    }
+  }, [setComplaintDetail])
 
   useEffect(() => {
     if (!shootingPanelOpen) {
@@ -2382,11 +2417,15 @@ function MapLayoutContent({
                   onSelectDetailId={(id) => {
                     setMemoAddTable(null)
                     setMemoDetailId(id)
+                    setComplaintAddOpen(false)
+                    setComplaintDetail?.(null)
                   }}
                   refreshKey={memoListRefreshKey}
                   onAdd={(table) => {
                     setMemoDetailId(null)
                     setMemoAddTable(table)
+                    setComplaintAddOpen(false)
+                    setComplaintDetail?.(null)
                   }}
                 />
               </MapSideListPanel>
@@ -2404,7 +2443,9 @@ function MapLayoutContent({
                 <ComplaintListPanel
                   refreshKey={complaintListRefreshKey}
                   onRequestAdd={() => {
-                    mapContext?.setComplaintDetail?.(null)
+                    setComplaintDetail?.(null)
+                    setMemoDetailId(null)
+                    setMemoAddTable(null)
                     setComplaintAddOpen(true)
                   }}
                 />
@@ -2698,7 +2739,7 @@ function MapLayoutContent({
                 }
               />
               <StandardDetail />
-              {memoManagementOpen && memoAddTable && (
+              {memoAddTable && (
                 <MemoDetailPanel
                   mode="add"
                   addTableName={memoAddTable}
@@ -2710,7 +2751,7 @@ function MapLayoutContent({
                   }}
                 />
               )}
-              {memoManagementOpen && memoDetailId && (
+              {memoDetailId && (
                 <MemoDetailPanel
                   mode="edit"
                   detailId={memoDetailId}
@@ -2722,7 +2763,7 @@ function MapLayoutContent({
                   }}
                 />
               )}
-              {complaintManagementOpen && complaintAddOpen && (
+              {complaintAddOpen && (
                 <ComplaintAdd
                   onClose={() => setComplaintAddOpen(false)}
                   onCreated={() => setComplaintListRefreshKey((k) => k + 1)}

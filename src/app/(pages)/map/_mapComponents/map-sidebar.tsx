@@ -12,6 +12,7 @@ import { useMyAccessSnapshot } from '@/hooks/useMyAccessSnapshot';
 import { ResourceAccessDeniedDialog } from '@/app/(pages)/_components/AccessRequest';
 import { getOpenedKeyForSerEng } from '@/lib/mapServiceOpened';
 import { openShapeEditorMapWindow } from '@/lib/shapeEditorWindow';
+import { requestCloseMapFloatingDetail } from './mapFloatingDetailEvent';
 import {
   hasProtoUnreadNotifications,
   PROTO_NOTIF_CHANGED_EVENT,
@@ -233,6 +234,7 @@ export function MapSidebar({ indexLogoSrc }: { indexLogoSrc: string }) {
   };
 
   const handleShapeEditorClick = useCallback(() => {
+    requestCloseMapFloatingDetail();
     openShapeEditorMapWindow(systemKeyFromUrl || null);
   }, [systemKeyFromUrl]);
 
