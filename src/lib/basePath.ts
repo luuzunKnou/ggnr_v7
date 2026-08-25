@@ -108,10 +108,42 @@ export function shouldPrefixNavPath(pathOrUrl: string): boolean {
 
 /** pathname(+query 가능)에 basePath 접두. 내비게이션·open 공용 */
 export function withBasePathNav(pathOrUrl: string): string {
-  if (!shouldPrefixNavPath(pathOrUrl)) return pathOrUrl;
+  if (!pathOrUrl.startsWith('/')) return pathOrUrl;
+  // 브라우저 pathname(/build_yy/map)이 들어오면 앱 경로로 정규화 후 접두 (이중 prefix 방지)
+  const appPath = toAppPathFromBrowser(pathOrUrl);
+  const q = appPath.search(/[?#]/);
+  if (q < 0) return withBasePath(appPath);
+  return withBasePath(appPath.slice(0, q)) + appPath.slice(q);
+}
+
+/**
+ * 브라우저 pathname(+query/hash)에서 basePath 제거.
+ * `/build_yy` → `/`, `/build_yy/map?x=1` → `/map?x=1`
+ * Next router·`next` 파라미터용 (라우터는 basePath 제외 경로).
+ */
+export function stripBasePath(pathOrUrl: string): string {
+  if (!pathOrUrl.startsWith('/')) return pathOrUrl;
+  const base = getBasePath();
+  if (!base) return pathOrUrl;
+
   const q = pathOrUrl.search(/[?#]/);
-  if (q < 0) return withBasePath(pathOrUrl);
-  return withBasePath(pathOrUrl.slice(0, q)) + pathOrUrl.slice(q);
+  const pathname = q < 0 ? pathOrUrl : pathOrUrl.slice(0, q);
+  const rest = q < 0 ? '' : pathOrUrl.slice(q);
+
+  if (pathname === base) return rest ? `/${rest}` : '/';
+  if (pathname.startsWith(`${base}/`)) return pathname.slice(base.length) + rest;
+  return pathOrUrl;
+}
+
+/**
+ * window.location.pathname(+search) → 앱 상대 경로.
+ * 라우터 replace·pendingNext·로그인 후 이동에 사용.
+ */
+export function toAppPathFromBrowser(pathWithSearch: string): string {
+  if (!pathWithSearch.startsWith('/')) return pathWithSearch;
+  const stripped = stripBasePath(pathWithSearch);
+  if (stripped.startsWith('?') || stripped.startsWith('#')) return `/${stripped}`;
+  return stripped || '/';
 }
 
 function pathOnly(pathOrUrl: string): string {
