@@ -443,6 +443,8 @@ export type SelectLayerStatsResult = {
 export type FacilityCatalogResult = {
   ok: boolean;
   groups: ParcelAnalysisFacilityGroupDef[];
+  /** GeoServer 발행 레이어명(소문자) — 기본도·시설 캡처 공통 */
+  publishedLayerKeys?: string[];
 };
 
 export type BuildingLedgerResult = {
@@ -477,7 +479,11 @@ export async function getParcelAnalysisFacilityCatalog(): Promise<FacilityCatalo
   const geomTypes = geomRes.success ? geomRes.types : undefined;
 
   const groups = buildParcelAnalysisFacilityCatalogFromDbTables(dbSet, publishedSet, geomTypes);
-  return { ok: true, groups };
+  return {
+    ok: true,
+    groups,
+    publishedLayerKeys: publishedSet ? [...publishedSet] : undefined,
+  };
 }
 
 /** 분석 영역(5181)·레이어 도형 — standardService 공간검색과 동일한 SRID·교차 규칙 */

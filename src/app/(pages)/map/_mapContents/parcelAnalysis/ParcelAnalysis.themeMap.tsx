@@ -40,7 +40,9 @@ import {
   getParcelAnalysisExteriorRings,
   PARCEL_ANALYSIS_BOUNDARY_STROKE,
   PARCEL_ANALYSIS_BOUNDARY_STROKE_WIDTH,
+  PARCEL_ANALYSIS_MAP_MAX_ZOOM,
   PARCEL_ANALYSIS_OUTSIDE_MASK_FILL,
+  PARCEL_ANALYSIS_RESULT_MAP_VIEWPORT_FILL,
   PARCEL_ANALYSIS_VWORLD_SATELLITE_URL,
   resolveThemeMapFeatureStyle,
   toCaptureDisplayGeometry,
@@ -189,12 +191,9 @@ type ThemeMapProps = {
 /** 결과 지도 프레임 — 고정 높이(본문 폭 100%) */
 const MAP_HEIGHT_PX = 320;
 
-/** 테마 지도 — 노란 선택 영역이 프레임 위·아래에 약 15px 여백 */
-const THEME_MAP_FIT_PADDING: [number, number, number, number] = [15, 15, 15, 15];
-
+/** 기본도 캡처와 동일 — 프레임의 약 90%, 높이 기준으로 넘치지 않게 */
 const THEME_MAP_FIT_OPTS = {
-  padding: THEME_MAP_FIT_PADDING,
-  zoomInFactor: 1,
+  viewportFill: PARCEL_ANALYSIS_RESULT_MAP_VIEWPORT_FILL,
 } as const;
 
 function readThemeMapSize(el: HTMLElement): [number, number] {
@@ -335,7 +334,10 @@ function ParcelAnalysisThemeMapInner({
       const boundaryGeom = toCaptureDisplayGeometry(rawBoundaryGeom);
       const analysisExtent = boundaryGeom.getExtent();
       const mapSize = readThemeMapSize(targetEl);
-      const view = new View({ projection: 'EPSG:5181' });
+      const view = new View({
+        projection: 'EPSG:5181',
+        maxZoom: PARCEL_ANALYSIS_MAP_MAX_ZOOM,
+      });
       const homeView = applyThemeMapHomeView(view, analysisExtent, mapSize, THEME_MAP_FIT_OPTS);
 
       const geoJson = new GeoJSON();
