@@ -115,6 +115,11 @@ export function SafetyFacHistorySection({ hisGubun, ftrIdn }: Props) {
   };
 
   const beginEdit = (it: SafetyFacHistoryItem) => {
+    if (editingId === it.id) {
+      clearEditor();
+      setError(null);
+      return;
+    }
     setEditingId(it.id);
     setDraft(it.content);
     setError(null);
@@ -197,7 +202,7 @@ export function SafetyFacHistorySection({ hisGubun, ftrIdn }: Props) {
       <div className="mt-1 flex shrink-0 items-center justify-between gap-2">
         <button
           type="button"
-          className="flex min-w-0 flex-1 cursor-pointer items-center gap-1.5 py-1.5 text-left transition-colors hover:bg-muted/50"
+          className="flex min-w-0 cursor-pointer items-center gap-1.5 py-1.5 text-left transition-colors hover:bg-muted/50"
           onClick={() => setSectionOpen((v) => !v)}
           title={sectionOpen ? '이력 접기' : '이력 펼치기'}
         >
@@ -208,6 +213,9 @@ export function SafetyFacHistorySection({ hisGubun, ftrIdn }: Props) {
           )}
           <span className="text-[12px] font-semibold text-muted-foreground">이력</span>
         </button>
+        <span className="shrink-0 text-[11px] text-muted-foreground tabular-nums">
+          총 {items.length}건
+        </span>
       </div>
 
       {sectionOpen ? (
@@ -241,9 +249,6 @@ export function SafetyFacHistorySection({ hisGubun, ftrIdn }: Props) {
             {error ? (
               <p className="mb-1.5 shrink-0 px-0.5 text-[11px] text-destructive">{error}</p>
             ) : null}
-            <div className="mb-1 flex shrink-0 items-center justify-end">
-              <span className="text-[11px] text-muted-foreground">총 {items.length}건</span>
-            </div>
             <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded border border-border bg-background">
               {loading && items.length === 0 ? (
                 <p className="px-1.5 py-1.5 text-[11px] text-muted-foreground">불러오는 중…</p>
