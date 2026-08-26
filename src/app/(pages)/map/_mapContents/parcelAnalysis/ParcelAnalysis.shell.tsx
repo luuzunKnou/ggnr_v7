@@ -568,6 +568,7 @@ export function ParcelAnalysisOrchestrator() {
         result={displayResult}
         analyzeError={analyzeError}
         enriching={enriching}
+        area={area}
         scopeAreaSqm={area?.areaSqm ?? 0}
         itemCount={displayResult.itemCount}
         mapCaptureConfig={mapCaptureConfig}

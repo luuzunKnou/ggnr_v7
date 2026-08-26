@@ -29,7 +29,6 @@ import {
   formatChangeHistoryBackgroundLabel,
   pickNearestOrthoBackgroundId,
 } from './changeHistory.ortho';
-import { filterWmsTableNames } from './changeHistory.wms';
 import { useChangeHistory } from './changeHistoryContext';
 import {
   type ChangeHistoryAsOfFeature,
@@ -147,7 +146,7 @@ function legendKindLabel(kind: ChangeHistoryLegendInfo['kind']) {
   return '면';
 }
 
-/** 지도 도형 종류·색에 맞춘 작은 범례 */
+/** 지도 도형 종류·색·심볼에 맞춘 작은 범례 (GeoServer 스타일) */
 function LayerLegendSwatch({
   legend,
   layerName,
@@ -156,6 +155,22 @@ function LayerLegendSwatch({
   layerName: string;
 }) {
   const title = `${layerName} (${legendKindLabel(legend.kind)})`;
+  const symbol = legend.symbolUrl?.trim();
+  if (legend.kind === 'point' && symbol) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={symbol}
+        alt=""
+        title={title}
+        aria-label={title}
+        className="size-3.5 shrink-0 object-contain"
+        onError={(e) => {
+          (e.currentTarget as HTMLImageElement).style.display = 'none';
+        }}
+      />
+    );
+  }
   if (legend.kind === 'line') {
     return (
       <span
@@ -173,7 +188,7 @@ function LayerLegendSwatch({
   if (legend.kind === 'point') {
     return (
       <span
-        className="inline-block size-2 shrink-0 rounded-full"
+        className="inline-block size-2.5 shrink-0 rounded-full"
         title={title}
         aria-label={title}
         style={{
@@ -185,7 +200,7 @@ function LayerLegendSwatch({
   }
   return (
     <span
-      className="inline-block size-2 shrink-0 rounded-[1px]"
+      className="inline-block size-2.5 shrink-0 rounded-[1px]"
       title={title}
       aria-label={title}
       style={{
@@ -261,8 +276,8 @@ function unwrapPayload<T>(res: { data?: unknown; success?: boolean }): T | null 
   return (outer as T) ?? null;
 }
 
-/** 이력 보기 직후 — 타임라인·시점 도형 준비될 때까지 (필지분석 «분석 중»과 동일 계열) */
-function ChangeHistoryPreparingModal({
+/** 이력 보기·결과 준비 — 필지분석 «분석 중»과 동일 계열 */
+export function ChangeHistoryPreparingModal({
   open,
   onCancel,
 }: {
@@ -300,7 +315,14 @@ function ChangeHistoryPreparingModal({
 }
 
 export function ChangeHistoryResult() {
-  const { resultOpen, closeResult, selectedDate, setSelectedDate, layerIds, layerGroups, area } =
+  const { resultOpen } = useChangeHistory();
+  if (!resultOpen) return null;
+  return <ChangeHistoryResultBody />;
+}
+
+/** 열릴 때만 마운트 — 닫으면 상태·캐시 자동 폐기 (effect 동기 리셋 불필요) */
+function ChangeHistoryResultBody() {
+  const { closeResult, selectedDate, setSelectedDate, layerIds, layerGroups, area } =
     useChangeHistory();
   const trackRef = useRef<HTMLDivElement>(null);
   const backdropPointerSessionRef = useRef<{
@@ -329,8 +351,6 @@ export function ChangeHistoryResult() {
     isOrtho: false,
     year: null,
   });
-  /** 결과 모달 첫 진입 — 타임라인(+시점) 준비 전 로딩 모달 */
-  const [contentReady, setContentReady] = useState(false);
   const [timelineSettled, setTimelineSettled] = useState(false);
 
   const selectedLayerMeta = useMemo(() => {
@@ -352,38 +372,25 @@ export function ChangeHistoryResult() {
   }, [layerGroups]);
 
   const tableNamesKey = selectedLayerMeta.tableNames.join('|');
+  const hasTables = tableNamesKey.length > 0;
+  const timelineReady = !hasTables || timelineSettled;
 
   useEffect(() => {
-    if (!resultOpen) {
-      setContentReady(false);
-      setTimelineSettled(false);
-      setAsOfLoading(false);
-      setAsOfFeatures([]);
-      setDayDiffFeatures([]);
-      asOfCacheRef.current.clear();
-      return;
-    }
-  }, [resultOpen]);
-
-  useEffect(() => {
-    if (!resultOpen) return;
-    const tables = tableNamesKey ? tableNamesKey.split('|') : [];
-    if (tables.length === 0) {
-      setShapeEvents([]);
-      setTimelineError(null);
-      setTimelineSettled(true);
-      return;
-    }
+    if (!hasTables) return;
+    const tables = tableNamesKey.split('|');
     let cancelled = false;
-    setTimelineLoading(true);
-    setTimelineSettled(false);
-    setTimelineError(null);
-    void call('', 'POST', {
-      service: 'changeHistoryService',
-      action: 'listTimeline',
-      params: { tableNames: tables, wkt: area?.wkt ?? null },
-    })
-      .then((res) => {
+    void (async () => {
+      await Promise.resolve();
+      if (cancelled) return;
+      setTimelineLoading(true);
+      setTimelineSettled(false);
+      setTimelineError(null);
+      try {
+        const res = await call('', 'POST', {
+          service: 'changeHistoryService',
+          action: 'listTimeline',
+          params: { tableNames: tables, wkt: area?.wkt ?? null },
+        });
         if (cancelled) return;
         const data = unwrapPayload<{ events?: HistoryEvent[] }>(res);
         const events = Array.isArray(data?.events) ? data.events : [];
@@ -399,22 +406,21 @@ export function ChangeHistoryResult() {
             orthoYear: ev.orthoYear ?? (Number(String(ev.date).slice(0, 4)) || 2026),
           }))
         );
-      })
-      .catch((e: unknown) => {
+      } catch (e: unknown) {
         if (cancelled) return;
         setShapeEvents([]);
         setTimelineError(e instanceof Error ? e.message : '이력 조회 실패');
-      })
-      .finally(() => {
+      } finally {
         if (!cancelled) {
           setTimelineLoading(false);
           setTimelineSettled(true);
         }
-      });
+      }
+    })();
     return () => {
       cancelled = true;
     };
-  }, [resultOpen, tableNamesKey, area?.wkt]);
+  }, [hasTables, tableNamesKey, area?.wkt]);
 
   const historyEvents = useMemo(() => {
     const merged = mergeHistoryEvents(shapeEvents, tableLabelByName);
@@ -427,15 +433,10 @@ export function ChangeHistoryResult() {
     return historyEvents[historyEvents.length - 1] ?? null;
   }, [historyEvents, selectedDate]);
 
-  useEffect(() => {
-    if (!resultOpen || historyEvents.length === 0) return;
-    if (historyEvents.some((e) => e.date === selectedDate)) return;
-    const next = historyEvents[historyEvents.length - 1];
-    if (next) setSelectedDate(next.date);
-  }, [resultOpen, historyEvents, selectedDate, setSelectedDate]);
+  /** 타임라인에 없는 selectedDate면 마지막 이력일로 표시 (effect 동기 setState 회피) */
+  const activeDate = event?.date ?? selectedDate;
 
   useEffect(() => {
-    if (!resultOpen) return;
     let cancelled = false;
     void call('', 'POST', {
       service: 'orthophotoService',
@@ -453,7 +454,7 @@ export function ChangeHistoryResult() {
     return () => {
       cancelled = true;
     };
-  }, [resultOpen]);
+  }, []);
 
   const orthoBackgroundMapId = useMemo(() => {
     const date = event?.date ?? selectedDate;
@@ -473,17 +474,24 @@ export function ChangeHistoryResult() {
     return keys.size;
   }, [dayDiffFeatures]);
 
-  const changeItems = useMemo(
-    () => (event ? buildChangeItems(event, layerGroups) : []),
-    [event, layerGroups]
-  );
+  const changeItems = useMemo(() => {
+    if (!event) return [] as ChangeItem[];
+    // 실제 당일 변경 도형이 있는 테이블만 (타임라인 칩 ≠ 지도에 안 그린 레이어 방지)
+    const fromDiff = [
+      ...new Set(
+        dayDiffFeatures
+          .map((d) => String(d.tableName ?? '').trim())
+          .filter(Boolean)
+      ),
+    ];
+    if (fromDiff.length === 0) return [];
+    return buildChangeItems(
+      { ...event, tableNames: fromDiff, layers: fromDiff },
+      layerGroups
+    );
+  }, [event, layerGroups, dayDiffFeatures]);
 
-  const eventTableNames = event?.tableNames ?? [];
-
-  const wmsTableNames = useMemo(
-    () => filterWmsTableNames(selectedLayerMeta.tableNames),
-    [selectedLayerMeta.tableNames]
-  );
+  const eventTableNames = useMemo(() => event?.tableNames ?? [], [event?.tableNames]);
 
   const asOfTableNames = useMemo(() => {
     if (!event) return [] as string[];
@@ -500,25 +508,12 @@ export function ChangeHistoryResult() {
   const asOfDate = event?.date ?? '';
   const asOfWktKey = area?.wkt ?? '';
   const asOfRequestRef = useRef(0);
+  const canLoadAsOf = Boolean(asOfDate && asOfTablesKey);
 
   useEffect(() => {
-    if (!resultOpen || !asOfDate || !asOfTablesKey) {
-      setAsOfFeatures([]);
-      setDayDiffFeatures([]);
-      setAsOfLoading(false);
-      return;
-    }
+    if (!canLoadAsOf) return;
 
     const cacheKey = `v3\0${asOfDate}\0${asOfTablesKey}\0${asOfWktKey}`;
-    const cached = asOfCacheRef.current.get(cacheKey);
-    if (cached) {
-      asOfRequestRef.current += 1;
-      setAsOfFeatures(cached.asOf);
-      setDayDiffFeatures(cached.dayDiff);
-      setAsOfLoading(false);
-      return;
-    }
-
     const tables = asOfTablesKey.split('|');
     const reqId = ++asOfRequestRef.current;
     let cancelled = false;
@@ -529,33 +524,45 @@ export function ChangeHistoryResult() {
       setAsOfLoading(false);
     };
 
-    setAsOfLoading(true);
-    setAsOfFeatures([]);
-    setDayDiffFeatures([]);
+    void (async () => {
+      await Promise.resolve();
+      if (cancelled || reqId !== asOfRequestRef.current) return;
 
-    timeoutId = setTimeout(finishLoading, CHANGE_HISTORY_ASOF_TIMEOUT_MS);
+      const cached = asOfCacheRef.current.get(cacheKey);
+      if (cached) {
+        setAsOfFeatures(cached.asOf);
+        setDayDiffFeatures(cached.dayDiff);
+        setAsOfLoading(false);
+        return;
+      }
 
-    void Promise.all([
-      call('', 'POST', {
-        service: 'changeHistoryService',
-        action: 'featuresAsOf',
-        params: {
-          selectedDate: asOfDate,
-          tableNames: tables,
-          wkt: area?.wkt ?? null,
-        },
-      }),
-      call('', 'POST', {
-        service: 'changeHistoryService',
-        action: 'featuresDayDiff',
-        params: {
-          selectedDate: asOfDate,
-          tableNames: tables,
-          wkt: area?.wkt ?? null,
-        },
-      }),
-    ])
-      .then(([asOfRes, diffRes]) => {
+      setAsOfLoading(true);
+      setAsOfFeatures([]);
+      setDayDiffFeatures([]);
+
+      timeoutId = setTimeout(finishLoading, CHANGE_HISTORY_ASOF_TIMEOUT_MS);
+
+      try {
+        const [asOfRes, diffRes] = await Promise.all([
+          call('', 'POST', {
+            service: 'changeHistoryService',
+            action: 'featuresAsOf',
+            params: {
+              selectedDate: asOfDate,
+              tableNames: tables,
+              wkt: area?.wkt ?? null,
+            },
+          }),
+          call('', 'POST', {
+            service: 'changeHistoryService',
+            action: 'featuresDayDiff',
+            params: {
+              selectedDate: asOfDate,
+              tableNames: tables,
+              wkt: area?.wkt ?? null,
+            },
+          }),
+        ]);
         if (cancelled || reqId !== asOfRequestRef.current) return;
         const asOfData = unwrapPayload<{
           features?: Array<{
@@ -595,37 +602,29 @@ export function ChangeHistoryResult() {
         asOfCacheRef.current.set(cacheKey, { asOf: nextAsOf, dayDiff: nextDiff });
         setAsOfFeatures(nextAsOf);
         setDayDiffFeatures(nextDiff);
-      })
-      .catch(() => {
+      } catch {
         if (!cancelled && reqId === asOfRequestRef.current) {
           setAsOfFeatures([]);
           setDayDiffFeatures([]);
         }
-      })
-      .finally(() => {
+      } finally {
         if (timeoutId) clearTimeout(timeoutId);
         finishLoading();
-      });
+      }
+    })();
+
     return () => {
       cancelled = true;
       if (timeoutId) clearTimeout(timeoutId);
       asOfRequestRef.current += 1;
-      setAsOfLoading(false);
     };
-  }, [resultOpen, asOfDate, asOfTablesKey, asOfWktKey, area?.wkt]);
+  }, [canLoadAsOf, asOfDate, asOfTablesKey, asOfWktKey, area?.wkt]);
 
-  useEffect(() => {
-    if (!resultOpen || contentReady || !timelineSettled || timelineLoading) return;
-    if (historyEvents.length > 0 && !event) return;
-    setContentReady(true);
-  }, [
-    resultOpen,
-    contentReady,
-    timelineSettled,
-    timelineLoading,
-    historyEvents.length,
-    event,
-  ]);
+  const mapAsOfFeatures = canLoadAsOf ? asOfFeatures : [];
+  const mapDayDiffFeatures = canLoadAsOf ? dayDiffFeatures : [];
+
+  const contentReady =
+    timelineReady && !timelineLoading && (historyEvents.length === 0 || event != null);
 
   const emptyTimeline = !timelineLoading && historyEvents.length === 0;
   /** 변경 칩이 있으면 «없다» 긴 안내는 숨김 — 헤더 시점시설 N개만으로 충분 */
@@ -633,7 +632,7 @@ export function ChangeHistoryResult() {
     !asOfLoading &&
     event?.kind === 'shape' &&
     eventTableNames.length > 0 &&
-    asOfFeatures.length === 0 &&
+    mapAsOfFeatures.length === 0 &&
     changeItems.length === 0;
   const orthoMissingHint =
     event?.kind === 'shape' && orthoTilePayload != null && !orthoBackgroundMapId;
@@ -677,16 +676,14 @@ export function ChangeHistoryResult() {
   );
 
   useEffect(() => {
-    if (!resultOpen) return;
     const track = trackRef.current;
     if (!track) return;
-    const active = track.querySelector<HTMLElement>(`[data-date="${selectedDate}"]`);
+    const active = track.querySelector<HTMLElement>(`[data-date="${activeDate}"]`);
     if (!active) return;
     active.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' });
-  }, [selectedDate, resultOpen, timelineEvents]);
+  }, [activeDate, timelineEvents]);
 
   useEffect(() => {
-    if (!resultOpen) return;
     const html = document.documentElement;
     const body = document.body;
     const prevHtmlOverflow = html.style.overflow;
@@ -697,7 +694,7 @@ export function ChangeHistoryResult() {
       html.style.overflow = prevHtmlOverflow;
       body.style.overflow = prevBodyOverflow;
     };
-  }, [resultOpen]);
+  }, []);
 
   const clearBackdropPointerTracking = useCallback(() => {
     backdropPointerDetachRef.current?.();
@@ -748,17 +745,12 @@ export function ChangeHistoryResult() {
   );
 
   useEffect(() => {
-    if (!resultOpen) {
-      clearBackdropPointerTracking();
-    }
     return () => {
       clearBackdropPointerTracking();
     };
-  }, [resultOpen, clearBackdropPointerTracking]);
+  }, [clearBackdropPointerTracking]);
 
-  const preparing = resultOpen && !contentReady;
-
-  if (!resultOpen) return null;
+  const preparing = !contentReady;
 
   if (preparing || !event) {
     return (
@@ -797,7 +789,7 @@ export function ChangeHistoryResult() {
     );
   }
 
-  const ymd = parseYmd(selectedDate) ?? parseYmd(event.date);
+  const ymd = parseYmd(activeDate) ?? parseYmd(event.date);
   const y = ymd?.y ?? '';
   const m = ymd?.m ?? '';
   const d = ymd?.d ?? '';
@@ -849,7 +841,7 @@ export function ChangeHistoryResult() {
             <p className="mt-0.5 truncate text-xs text-muted-foreground">
               {area?.summaryLabel ?? '영역'}
             </p>
-            {area && isLargeParcelAnalysisArea(area) ? (
+            {area && isLargeParcelAnalysisArea(area) && asOfLoading ? (
               <p className="mt-1 text-[11px] leading-snug text-orange-800 dark:text-orange-200">
                 분석 영역이 넓습니다. 조회가 오래 걸릴 수 있습니다.
               </p>
@@ -967,7 +959,7 @@ export function ChangeHistoryResult() {
                     />
                     <ul className="relative flex flex-col">
                       {timelineEvents.map((ev) => {
-                        const active = ev.date === selectedDate;
+                        const active = ev.date === activeDate;
                         const isOrtho = ev.kind === 'ortho';
                         return (
                           <li key={`${ev.kind}-${ev.date}`}>
@@ -1022,9 +1014,8 @@ export function ChangeHistoryResult() {
                 wkt5181={area?.wkt ?? null}
                 selectedDate={event?.date ?? selectedDate}
                 orthoBackgroundMapId={orthoBackgroundMapId}
-                wmsTableNames={wmsTableNames}
-                asOfFeatures={asOfFeatures}
-                dayDiffFeatures={dayDiffFeatures}
+                asOfFeatures={mapAsOfFeatures}
+                dayDiffFeatures={mapDayDiffFeatures}
                 mapLoading={asOfLoading}
                 onBackgroundResolved={onMapBackgroundResolved}
               />
@@ -1038,7 +1029,7 @@ export function ChangeHistoryResult() {
                   <span className="text-muted-foreground">조회 중…</span>
                 ) : (
                   <>
-                    시설 <strong className="text-primary">{asOfFeatures.length}</strong>개
+                    시설 <strong className="text-primary">{mapAsOfFeatures.length}</strong>개
                     <span className="text-muted-foreground">
                       {' '}
                       · 변경 <strong className="text-foreground">{dayChangeCount}</strong>건
