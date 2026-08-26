@@ -551,6 +551,25 @@ async function geoserverFetch(
 }
 
 /**
+ * 데이터 스토어·스키마 캐시만 비운다 (설정·스타일은 건드리지 않음).
+ * 원본 테이블을 drop 후 다시 만든 뒤, 그 테이블을 원본으로 쓰는 레이어들이
+ * 예전 칼럼 정보를 들고 있지 않게 하려고 호출.
+ */
+export async function resetGeoServerCaches(params: { url?: string } = {}) {
+  const baseUrl = resolveGeoServerFetchBase(params?.url);
+  try {
+    const res = await geoserverFetch(baseUrl, '/rest/reset', { method: 'POST' });
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      return { success: false as const, error: `캐시 초기화 실패: ${res.status} ${text}` };
+    }
+    return { success: true as const };
+  } catch (e: unknown) {
+    return { success: false as const, error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+/**
  * FeatureType CQL 필터 설정.
  * 전체 GET+PUT 대신 cqlFilter만 부분 갱신 — Windows에서 FeatureType 디렉터리 move/AccessDenied 회피.
  */
@@ -607,6 +626,41 @@ async function findFeatureTypeDatastore(
     if (res.ok) return ds;
   }
   return null;
+}
+
+/** 기존 FeatureType이 바라보는 원본 테이블명 */
+async function getFeatureTypeNativeName(
+  baseUrl: string,
+  workspace: string,
+  datastoreName: string,
+  featureTypeName: string
+): Promise<string | null> {
+  const res = await geoserverFetch(
+    baseUrl,
+    `/rest/workspaces/${workspace}/datastores/${datastoreName}/featuretypes/${encodeURIComponent(featureTypeName)}.json`
+  );
+  if (!res.ok) return null;
+  const data = await res.json().catch(() => null);
+  const native = data?.featureType?.nativeName ?? data?.nativeName;
+  const name = String(native ?? '').trim();
+  return name || null;
+}
+
+/** 레이어에 지정된 기본 스타일명 (재생성 전 보관용) */
+async function getLayerDefaultStyleName(
+  baseUrl: string,
+  workspace: string,
+  layerName: string
+): Promise<string | null> {
+  const res = await geoserverFetch(
+    baseUrl,
+    `/rest/workspaces/${workspace}/layers/${encodeURIComponent(layerName)}.json`
+  );
+  if (!res.ok) return null;
+  const data = await res.json().catch(() => null);
+  const styleName = data?.layer?.defaultStyle?.name ?? data?.defaultStyle?.name;
+  const name = String(styleName ?? '').trim();
+  return name || null;
 }
 
 /**
@@ -1062,6 +1116,50 @@ export async function createGeoServerLayers(params: {
         `/rest/workspaces/${workspace}/datastores/${datastoreName}/featuretypes.json`,
         { method: 'POST', body: JSON.stringify(ftBody) }
       );
+
+      // 이미 있는 레이어는 POST가 409로 끝나 원본 테이블 변경이 반영되지 않는다.
+      // 정의의 원본 테이블·저장소가 달라졌으면 스타일을 보관한 뒤 삭제·재생성한다.
+      if (ftRes.status === 409) {
+        const existingDatastore = await findFeatureTypeDatastore(
+          baseUrl,
+          workspace,
+          publishName,
+          datastoreName
+        );
+        const existingNative = existingDatastore
+          ? await getFeatureTypeNativeName(baseUrl, workspace, existingDatastore, publishName)
+          : null;
+        const nativeChanged =
+          !!existingNative && existingNative.toLowerCase() !== sourceTable.table.toLowerCase();
+        const datastoreChanged = !!existingDatastore && existingDatastore !== datastoreName;
+
+        if (nativeChanged || datastoreChanged) {
+          const keptStyle = await getLayerDefaultStyleName(baseUrl, workspace, publishName);
+          const recreated = await createOrUpdateGeoServerLayer({
+            layerName: publishName,
+            url: baseUrl,
+            workspace,
+          });
+          if (!recreated.success) {
+            failed.push({
+              schema: sourceTable.schema,
+              table: defineLayerName,
+              error: recreated.error ?? '레이어 재생성 실패',
+            });
+            continue;
+          }
+          if (keptStyle) {
+            await setLayerDefaultStyle({
+              url: baseUrl,
+              workspace,
+              layerName: publishName,
+              styleName: keptStyle,
+            });
+          }
+          created.push({ schema: sourceTable.schema, table: publishName });
+          continue;
+        }
+      }
 
       if (ftRes.ok || ftRes.status === 409) {
         if (divQuery) {
