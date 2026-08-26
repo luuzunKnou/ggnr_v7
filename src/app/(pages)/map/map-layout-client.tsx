@@ -115,6 +115,7 @@ import {
 } from "@/lib/occupationLedgerBinding"
 import {
   findOpenedUseFeeSerEng,
+  getUseFeeBinding,
   isUseFeeOpenedToken,
 } from "@/lib/useFeeBinding"
 import { BuildPublicLandListPanel } from "./_mapContents/buildPublicLand/BuildPublicLandListPanel"
@@ -2784,7 +2785,8 @@ function MapLayoutContent({
                   setUsageDataAsDetailId(ledgerId)
                 }}
                 onOpenFee={(feeId) => {
-                  setOpened(["waterNglFeeList"])
+                  const feeSerEng = getUseFeeBinding({ system: systemKeyFromUrl }).serEng
+                  setOpened([feeSerEng])
                   setUseFeeDetailId(feeId)
                 }}
               />

@@ -15,7 +15,13 @@ import {
   runNextGenFeeSync,
 } from '@/lib/nextGenLinkage/syncRunner';
 import { getNglFeeListTableByPrefix } from '@/lib/nextGenLinkage/nglFeeTables';
-import { getAllUseFeeWmsLayerIds, getUseFeeBinding, USE_FEE_PREFIXES } from '@/lib/useFeeBinding';
+import {
+  getAllUseFeeWmsLayerIds,
+  getUseFeeBinding,
+  useFeePrefixToSystemKey,
+  USE_FEE_PREFIXES,
+  type UseFeePrefix,
+} from '@/lib/useFeeBinding';
 import {
   hasUseFeeGlAddrJibunLot,
   updateUseFeeGeomById,
@@ -143,8 +149,10 @@ export type UseFeeUnpaidDueNotifRow = {
   payer: string;
   dueDate: string;
   daysRemaining: number;
-  /** 알림 systemScope 판별용 */
-  dptNm: string;
+  /** water | road | public — 알림 시스템 분류 */
+  prefix: UseFeePrefix;
+  /** URL system= (river | road | build) */
+  systemScope: 'river' | 'road' | 'build';
 };
 
 /** 미납 · 납기일(최종→최초)이 N일 이내인 알림 목록 (하천·도로·국공유 전부) */
@@ -186,7 +194,8 @@ export async function getUseFeeUnpaidDueNotifications(params?: {
           payer: String(row.pyrNm ?? '').trim() || '—',
           dueDate: dueYmd,
           daysRemaining,
-          dptNm: String(row.dptNm ?? '').trim(),
+          prefix,
+          systemScope: useFeePrefixToSystemKey(prefix),
         });
       }
     }
