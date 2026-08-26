@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { call } from "@/lib/api";
+import { appFetch } from "@/lib/basePath";
 import { recordDataViewLog } from "@/lib/recordDataViewLog";
 import {
   FileText,
@@ -193,7 +194,7 @@ export function RiverBasicPlanDetailPanel({ tab, riverName, onClose }: Props) {
 
   useEffect(() => {
     let cancelled = false;
-    fetch(`/api/config/defineLayer/fields/${encodeURIComponent(indexLayer)}`)
+    appFetch(`/api/config/defineLayer/fields/${encodeURIComponent(indexLayer)}`)
       .then((r) => r.json())
       .then((body: { data?: unknown[] }) => {
         const rawFields = Array.isArray(body?.data) ? body.data : [];
@@ -682,7 +683,7 @@ export function RiverBasicPlanDetailPanel({ tab, riverName, onClose }: Props) {
         layer,
         key,
       });
-      const res = await fetch(`/api/service-files?${qs.toString()}`, { credentials: "include" });
+      const res = await appFetch(`/api/service-files?${qs.toString()}`, { credentials: "include" });
       if (!res.ok) {
         const j = (await res.json().catch(() => ({}))) as { error?: string };
         throw new Error(typeof j.error === "string" ? j.error : "목록을 불러오지 못했습니다.");

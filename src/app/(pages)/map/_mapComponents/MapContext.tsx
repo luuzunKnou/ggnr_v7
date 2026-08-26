@@ -37,7 +37,13 @@ export type SelectedDetail = {
   layerName: string;
   tableName: string;
   row: Record<string, unknown>;
-  fields: { define_field_name?: string; define_field_kor_name?: string; define_field_is_key?: string }[];
+  fields: {
+    define_field_name?: string;
+    define_field_kor_name?: string;
+    define_field_is_key?: string;
+    define_field_type?: string;
+    define_field_show_detail?: string | boolean;
+  }[];
 } | null;
 
 /** 우클릭 주소정보 패널 상태 */

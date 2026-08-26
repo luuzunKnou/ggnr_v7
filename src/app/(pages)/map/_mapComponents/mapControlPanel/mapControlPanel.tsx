@@ -87,15 +87,15 @@ function MapControlButton({
       }}
       className={cn(
         "flex h-[45px] w-full min-w-0 flex-col items-center justify-center gap-1 overflow-hidden box-border p-0 transition-colors cursor-pointer",
-        "hover:bg-slate-100 hover:text-blue-600",
-        "dark:text-white/90 dark:hover:bg-white/10 dark:hover:text-white",
-        isActive && "bg-slate-100 text-blue-600 dark:bg-white/20 dark:text-white",
+        "hover:bg-slate-100 hover:text-primary",
+        "dark:text-white/90 dark:hover:bg-white/10 dark:hover:text-primary",
+        isActive && "bg-slate-100 text-primary dark:bg-white/20 dark:text-primary",
         roundTop && "rounded-t-[4px]",
         roundBottom && "rounded-b-[4px]"
       )}
       title={item.label}
     >
-      <Icon className="w-4 h-4 shrink-0" strokeWidth={1.5} />
+      <Icon className="h-4 w-4 shrink-0" strokeWidth={1.5} />
       <span
         className={cn(
           "leading-tight text-center",
@@ -158,7 +158,7 @@ export function MapControlPanel({
                 </div>
               )
             })}
-            <div className="flex w-full flex-col overflow-hidden rounded-[5px] border border-slate-200 bg-white/95 text-foreground shadow-lg backdrop-blur-sm dark:border-white/10 dark:bg-black/55 dark:text-white/90">
+            <div className="flex w-full flex-col overflow-hidden rounded-[5px] border border-slate-200 bg-white/95 text-foreground shadow-lg backdrop-blur-sm dark:border-white/10 dark:bg-black/95 dark:text-white/90">
               {items.map((item, itemIndex) => {
                 const isActive = activeIds.includes(item.id)
                 const isFirst = itemIndex === 0

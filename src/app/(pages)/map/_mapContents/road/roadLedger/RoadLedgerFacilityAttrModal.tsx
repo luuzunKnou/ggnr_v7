@@ -130,7 +130,7 @@ export function RoadLedgerFacilityAttrModal({
           </div>
           <button
             type="button"
-            className="absolute right-3 top-3 rounded-sm p-1 text-muted-foreground opacity-90 ring-offset-white transition-opacity hover:bg-muted/50 hover:text-foreground hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-slate-300"
+            className="absolute right-3 top-3 rounded-sm p-1 text-muted-foreground opacity-90 ring-offset-background transition-opacity hover:bg-muted/50 hover:text-foreground hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring"
             aria-label="닫기"
             onClick={close}
           >

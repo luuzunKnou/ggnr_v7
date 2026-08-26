@@ -4,6 +4,7 @@
 import { db } from '@/database/db';
 import { usr } from '@/database/schema/usr';
 import { getSessionUsrId } from '@/lib/auth/guard';
+import { getGeoServerInternalBase, resolveGeoServerFetchBase } from '@/lib/geoserverUrl';
 import { eq, sql } from 'drizzle-orm';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -50,7 +51,7 @@ function ensureAutofixLogDirSync(): string {
 function geoserverWaterSymbolUrl(name: string, ext: 'svg' | 'png'): string {
   const gs =
     (typeof process !== 'undefined' && process.env?.GEOSERVER_URL) ||
-    'http://localhost:8080/geoserver';
+    getGeoServerInternalBase();
   return `${gs.replace(/\/$/, '')}/www/symbol/water/${name}.${ext}`;
 }
 
@@ -99,7 +100,7 @@ function getGeoServerSymbolRootDir(): string {
 function geoserverSymbolFileUrl(folder: string, fileName: string): string {
   const gs =
     (typeof process !== 'undefined' && process.env?.GEOSERVER_URL) ||
-    'http://localhost:8080/geoserver';
+    getGeoServerInternalBase();
   return `${gs.replace(/\/$/, '')}/www/symbol/${encodeURIComponent(folder)}/${encodeURIComponent(fileName)}`;
 }
 
@@ -426,11 +427,6 @@ export async function testDatabaseConnection() {
  * 기본 인증: admin / geoserver
  */
 export async function testGeoServer(params: { url?: string; username?: string; password?: string }) {
-  const url = params?.url?.trim();
-  if (!url) {
-    return { success: false, error: 'URL이 필요합니다.', status: null, statusText: '', version: null };
-  }
-
   const username = params?.username?.trim() || 'admin';
   const password = params?.password?.trim() || 'geoserver';
   const auth = Buffer.from(`${username}:${password}`, 'utf8').toString('base64');
@@ -439,7 +435,7 @@ export async function testGeoServer(params: { url?: string; username?: string; p
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 10000);
 
-    const baseUrl = url.replace(/\/$/, '');
+    const baseUrl = resolveGeoServerFetchBase(params?.url);
     const versionUrl = `${baseUrl}/rest/about/version.json`;
 
     const res = await fetch(versionUrl, {
@@ -496,7 +492,7 @@ function getDbConfig() {
   };
 }
 
-const GEOSERVER_DEFAULT_URL = 'http://localhost:8080/geoserver';
+const GEOSERVER_DEFAULT_URL = getGeoServerInternalBase();
 const GEOSERVER_AUTH = Buffer.from('admin:geoserver', 'utf8').toString('base64');
 
 /** 작업공간 ggnr의 namespace URI. workspace 생성 시 GeoServer가 부여하는 값과 동일 — PostGIS 저장소에도 명시해야 Web UI NamespacePanel이 정상 동작 */
@@ -621,7 +617,7 @@ export async function setupGeoServerDb(params: {
   workspace?: string;
   datastoreName?: string;
 } = {}) {
-  const baseUrl = params?.url?.trim() || GEOSERVER_DEFAULT_URL;
+  const baseUrl = resolveGeoServerFetchBase(params?.url);
   const workspace = params?.workspace?.trim() || 'ggnr';
   const db = getDbConfig();
   const targets = [
@@ -737,7 +733,7 @@ export async function verifyGeoServerDbConnection(params: {
   workspace?: string;
   datastoreName?: string;
 } = {}) {
-  const baseUrl = params?.url?.trim() || GEOSERVER_DEFAULT_URL;
+  const baseUrl = resolveGeoServerFetchBase(params?.url);
   const workspace = params?.workspace?.trim() || 'ggnr';
   const targets = [
     { name: 'postgres_layer', schema: 'layer' },
@@ -803,7 +799,7 @@ export async function getGeoServerLayerList(params: {
   url?: string;
   workspace?: string;
 } = {}) {
-  const baseUrl = params?.url?.trim() || GEOSERVER_DEFAULT_URL;
+  const baseUrl = resolveGeoServerFetchBase(params?.url);
   const workspace = params?.workspace?.trim() || 'ggnr';
 
   try {
@@ -955,7 +951,7 @@ export async function createGeoServerLayers(params: {
   url?: string;
   workspace?: string;
 } = {}) {
-  const baseUrl = params?.url?.trim() || GEOSERVER_DEFAULT_URL;
+  const baseUrl = resolveGeoServerFetchBase(params?.url);
   const workspace = params?.workspace?.trim() || 'ggnr';
 
   try {
@@ -1112,7 +1108,7 @@ export async function createOrUpdateGeoServerLayer(params: {
   url?: string;
   workspace?: string;
 }) {
-  const baseUrl = (params?.url?.trim() || GEOSERVER_DEFAULT_URL).replace(/\/$/, '');
+  const baseUrl = resolveGeoServerFetchBase(params?.url).replace(/\/$/, '');
   const workspace = params?.workspace?.trim() || 'ggnr';
   const layerName = params?.layerName?.trim().toLowerCase();
   if (!layerName) {
@@ -1268,7 +1264,7 @@ export async function syncGeoServerCqlFiltersFromDefine(params: {
   url?: string;
   workspace?: string;
 } = {}) {
-  const baseUrl = (params?.url?.trim() || GEOSERVER_DEFAULT_URL).replace(/\/$/, '');
+  const baseUrl = resolveGeoServerFetchBase(params?.url).replace(/\/$/, '');
   const workspace = params?.workspace?.trim() || 'ggnr';
 
   const updated: Array<{ layer: string; datastore: string; cql: string }> = [];
@@ -1364,7 +1360,7 @@ export type GeoServerStyleItem = { name: string; format?: string };
  * GeoServer 스타일 목록 조회 (global styles)
  */
 export async function getGeoServerStyleList(params: { url?: string } = {}) {
-  const baseUrl = params?.url?.trim() || GEOSERVER_DEFAULT_URL;
+  const baseUrl = resolveGeoServerFetchBase(params?.url);
   try {
     const res = await geoserverFetch(baseUrl, '/rest/styles.json');
     if (!res.ok) {
@@ -1392,7 +1388,7 @@ export async function getGeoServerStyleList(params: { url?: string } = {}) {
  * GeoServer 스타일 단건 조회 (메타 + CSS 본문, 파싱된 styleProps/geometryType)
  */
 export async function getGeoServerStyle(params: { url: string; name: string }) {
-  const baseUrl = (params?.url ?? GEOSERVER_DEFAULT_URL).replace(/\/$/, '');
+  const baseUrl = resolveGeoServerFetchBase(params?.url);
   const name = params?.name?.trim();
   if (!name) return { success: false, error: '스타일 이름이 필요합니다.' };
 
@@ -1448,7 +1444,7 @@ export async function createGeoServerStyle(params: {
   geometryType: GeometryType;
   styleProps: StyleProps;
 }) {
-  const baseUrl = (params?.url ?? GEOSERVER_DEFAULT_URL).replace(/\/$/, '');
+  const baseUrl = resolveGeoServerFetchBase(params?.url);
   const name = params?.name?.trim();
   if (!name) return { success: false, error: '스타일 이름이 필요합니다.' };
   const geometryType = params.geometryType ?? 'POLYGON';
@@ -1487,7 +1483,7 @@ export async function updateGeoServerStyle(params: {
   styleProps: StyleProps;
   preserveExtraRules?: boolean;
 }) {
-  const baseUrl = (params?.url ?? GEOSERVER_DEFAULT_URL).replace(/\/$/, '');
+  const baseUrl = resolveGeoServerFetchBase(params?.url);
   const name = params?.name?.trim();
   if (!name) return { success: false, error: '스타일 이름이 필요합니다.' };
   const geometryType = params.geometryType ?? 'POLYGON';
@@ -1531,7 +1527,7 @@ export async function updateGeoServerStyle(params: {
  * GeoServer 스타일 삭제
  */
 export async function deleteGeoServerStyle(params: { url?: string; name: string }) {
-  const baseUrl = (params?.url ?? GEOSERVER_DEFAULT_URL).replace(/\/$/, '');
+  const baseUrl = resolveGeoServerFetchBase(params?.url);
   const name = params?.name?.trim();
   if (!name) return { success: false, error: '스타일 이름이 필요합니다.' };
 
@@ -1559,7 +1555,7 @@ export async function putGeoServerCssStyle(params: {
   name: string;
   cssBody: string;
 }) {
-  const baseUrl = (params?.url ?? GEOSERVER_DEFAULT_URL).replace(/\/$/, '');
+  const baseUrl = resolveGeoServerFetchBase(params?.url);
   const name = params?.name?.trim().toLowerCase();
   const cssBody = params?.cssBody ?? '';
   if (!name) return { success: false, error: '스타일 이름이 필요합니다.' };
@@ -1617,7 +1613,7 @@ export type StyleApplyResult =
 export async function applyElevationContourStyle(
   params: { url?: string; workspace?: string } = {}
 ): Promise<StyleApplyResult> {
-  const baseUrl = (params?.url ?? GEOSERVER_DEFAULT_URL).replace(/\/$/, '');
+  const baseUrl = resolveGeoServerFetchBase(params?.url);
   const workspace = params?.workspace?.trim() || 'ggnr';
   const layerName = ELEVATION_LAYER_NAME;
   const cssBody = buildElevationContourCss();
@@ -1925,7 +1921,7 @@ export async function getGeoServerLayersWithStyleInfo(params: {
   url?: string;
   workspace?: string;
 } = {}) {
-  const baseUrl = (params?.url ?? GEOSERVER_DEFAULT_URL).replace(/\/$/, '');
+  const baseUrl = resolveGeoServerFetchBase(params?.url);
   const workspace = params?.workspace?.trim() || 'ggnr';
 
   try {
@@ -2025,7 +2021,7 @@ export async function setLayerDefaultStyle(params: {
   layerName: string;
   styleName: string;
 }) {
-  const baseUrl = (params?.url ?? GEOSERVER_DEFAULT_URL).replace(/\/$/, '');
+  const baseUrl = resolveGeoServerFetchBase(params?.url);
   const workspace = params?.workspace?.trim() || 'ggnr';
   const layerName = params?.layerName?.trim();
   const styleName = params?.styleName?.trim();
@@ -2074,7 +2070,7 @@ export async function getLayerGeometryType(params: {
   workspace?: string;
   layerName: string;
 }): Promise<{ success: boolean; geometryType?: GeometryType; error?: string }> {
-  const baseUrl = (params?.url ?? GEOSERVER_DEFAULT_URL).replace(/\/$/, '');
+  const baseUrl = resolveGeoServerFetchBase(params?.url);
   const workspace = params?.workspace?.trim() || 'ggnr';
   const layerNameRaw = params?.layerName?.trim();
   if (!layerNameRaw) return { success: false, error: '레이어 이름이 필요합니다.' };
@@ -2137,7 +2133,7 @@ export async function applyAllDefaultStyles(params: {
   url?: string;
   workspace?: string;
 } = {}) {
-  const baseUrl = (params?.url ?? GEOSERVER_DEFAULT_URL).replace(/\/$/, '');
+  const baseUrl = resolveGeoServerFetchBase(params?.url);
   const workspace = params?.workspace?.trim() || 'ggnr';
 
   try {
@@ -2226,7 +2222,7 @@ export async function applyDefaultStyleToLayer(params: {
   workspace?: string;
   layerName: string;
 }): Promise<StyleApplyResult> {
-  const baseUrl = (params?.url ?? GEOSERVER_DEFAULT_URL).replace(/\/$/, '');
+  const baseUrl = resolveGeoServerFetchBase(params?.url);
   const workspace = params?.workspace?.trim() || 'ggnr';
   const layerName = params?.layerName?.trim().toLowerCase();
   if (!layerName) return { success: false, error: '레이어 이름이 필요합니다.' };
@@ -2407,7 +2403,7 @@ export async function deleteLayerStyle(params: {
   workspace?: string;
   layerName: string;
 }) {
-  const baseUrl = (params?.url ?? GEOSERVER_DEFAULT_URL).replace(/\/$/, '');
+  const baseUrl = resolveGeoServerFetchBase(params?.url);
   const workspace = params?.workspace?.trim() || 'ggnr';
   const layerName = params?.layerName?.trim();
   if (!layerName) return { success: false, error: '레이어 이름이 필요합니다.' };
@@ -3405,7 +3401,7 @@ async function loadAllLayerSchemaColumns(): Promise<
  * 레이어 목록 탭과 동일 기준(DB 테이블 전체)으로 설정 누락·오류 스캔
  */
 export async function scanLayerSetupIssues(params: { url?: string } = {}) {
-  const baseUrl = (params?.url ?? GEOSERVER_DEFAULT_URL).replace(/\/$/, '');
+  const baseUrl = resolveGeoServerFetchBase(params?.url);
 
   try {
     const [listRes, defineRes, geomLayerRes, geomPublicRes, styleInfoRes, allColumns, geoServerStyleNames] =
@@ -3971,7 +3967,7 @@ export async function fixLayerSetupIssues(params: {
   // 2026-07-23 이수빈: 빌드 오류 수정
   let schema: 'layer' | 'public_layer' =
     params.schema === 'public_layer' ? 'public_layer' : 'layer';
-  const baseUrl = (params?.url ?? GEOSERVER_DEFAULT_URL).replace(/\/$/, '');
+  const baseUrl = resolveGeoServerFetchBase(params?.url);
   if (!tableName) return { success: false, error: 'tableName이 필요합니다.' };
 
   const issueList = (params.issues ?? []).filter(Boolean) as LayerSetupIssueType[];
@@ -4316,7 +4312,7 @@ export async function switchLayerTableSchema(params: {
   const tableName = String(params.tableName ?? '').trim();
   const toSchema = params.toSchema === 'public_layer' ? 'public_layer' : 'layer';
   const deleteDataHistory = !!params.deleteDataHistory && toSchema === 'public_layer';
-  const baseUrl = (params.url?.trim() || GEOSERVER_DEFAULT_URL).replace(/\/$/, '');
+  const baseUrl = resolveGeoServerFetchBase(params.url);
   const workspace = 'ggnr';
 
   if (!tableName) {

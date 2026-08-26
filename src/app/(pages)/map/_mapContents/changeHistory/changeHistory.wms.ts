@@ -6,6 +6,7 @@
 import ImageLayer from 'ol/layer/Image';
 import ImageWMS from 'ol/source/ImageWMS';
 import type ImageWrapper from 'ol/Image';
+import { getGeoServerBase } from '@/lib/geoserverUrl';
 
 const WORKSPACE = 'ggnr';
 const WMS_VIEWPORT_IMAGE_RATIO = 1.5;
@@ -17,13 +18,6 @@ export function isChangeHistoryWmsTable(tableName: string): boolean {
   if (!t) return false;
   if (t.endsWith('_dummy')) return false;
   return true;
-}
-
-function getGeoServerBase(): string {
-  if (typeof window !== 'undefined') {
-    return `${window.location.protocol}//${window.location.hostname}:8080/geoserver`;
-  }
-  return 'http://localhost:8080/geoserver';
 }
 
 function imageLoadFunctionPost(image: ImageWrapper, src: string): void {

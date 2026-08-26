@@ -8,6 +8,7 @@ import VectorLayer from 'ol/layer/Vector';
 import VectorSource from 'ol/source/Vector';
 import { fromLonLat } from 'ol/proj';
 import { Style, Fill, Stroke, Text, Icon } from 'ol/style';
+import { withBasePath } from '@/lib/basePath';
 import type { WaterLevelDelta } from './safetyWaterContext';
 import type { StationListFilterChip } from './safetyWaterListFilter';
 import { stationMatchesListFilter } from './safetyWaterListFilter';
@@ -23,8 +24,8 @@ export const SAFETY_WATER_LAYER_Z = {
 /** OL 레이어 id = public/symbol 파일 stem */
 const WATER_STATION_LAYER_ID = 'cus_waves_ps';
 const RAIN_STATION_LAYER_ID = 'cus_rainfall_ps';
-const WATER_STATION_ICON = `/symbol/${WATER_STATION_LAYER_ID}.svg`;
-const RAIN_STATION_ICON = `/symbol/${RAIN_STATION_LAYER_ID}.svg`;
+const WATER_STATION_ICON = withBasePath(`/symbol/${WATER_STATION_LAYER_ID}.svg`);
+const RAIN_STATION_ICON = withBasePath(`/symbol/${RAIN_STATION_LAYER_ID}.svg`);
 const STATION_ICON_PX = 18;
 
 /** 토글칩에 안 맞는 관측소 심볼 불투명도 */

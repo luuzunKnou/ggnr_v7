@@ -5,15 +5,9 @@ import ImageWMS from 'ol/source/ImageWMS';
 import tables from '@/config/defineLayer/tables.json';
 import { WORKSPACE } from './serviceLayerFactory';
 import { BUILDING_ROAD_LAYER_DEFS } from './buildingRoadLayerConfig';
+import { getGeoServerBase } from '@/lib/geoserverUrl';
 
 export { BUILDING_ROAD_LAYER_DEFS } from './buildingRoadLayerConfig';
-
-function getGeoServerBase(): string {
-  if (typeof window !== 'undefined') {
-    return `${window.location.protocol}//${window.location.hostname}:8080/geoserver`;
-  }
-  return 'http://localhost:8080/geoserver';
-}
 
 /** defineLayer tables.json 에 등록된 테이블명 (소문자) */
 const DEFINE_TABLE_NAMES_LOWER = new Set(

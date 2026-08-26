@@ -36,31 +36,31 @@ import { MapAdminToolsMenu } from './mapAdminTools/MapAdminToolsMenu';
 const mapSearchBarIconShell = cn(
   'shrink-0 opacity-90 rounded-[5px] backdrop-blur-sm shadow-lg border overflow-hidden',
   'bg-white/95 border-slate-200',
-  'dark:bg-black/55 dark:border-white/10'
+  'dark:bg-black/95 dark:border-white/10'
 );
 
 const mapSearchBarIconBtnInner = cn(
   'box-border flex items-center justify-center w-[30px] h-[30px] p-0 cursor-pointer transition-colors',
   'text-slate-600 dark:text-white/90',
-  'hover:bg-slate-100 hover:text-blue-600',
-  'dark:hover:bg-white/10 dark:hover:text-white'
+  'hover:bg-slate-100 hover:text-primary',
+  'dark:hover:bg-white/10 dark:hover:text-primary'
 );
 
 const mapSearchBarIconBtnActive = cn(
-  'bg-slate-100 text-blue-600',
-  'dark:bg-white/20 dark:text-white'
+  'bg-slate-100 text-primary',
+  'dark:bg-white/20 dark:text-primary'
 );
 
 /** 검색바 공통 표면 — 시스템 선택 등 넓은 컨트롤 */
 const mapSearchBarSurface = cn(
   'opacity-90 rounded-[5px] backdrop-blur-sm shadow-lg border transition-colors',
   'bg-white/95 border-slate-200',
-  'dark:bg-black/55 dark:border-white/10'
+  'dark:bg-black/95 dark:border-white/10'
 );
 
 const mapSearchBarSurfaceHover = cn(
-  'hover:bg-slate-100 hover:text-blue-600',
-  'dark:hover:bg-white/10 dark:hover:text-white'
+  'hover:bg-slate-100 hover:text-primary',
+  'dark:hover:bg-white/10 dark:hover:text-primary'
 );
 
 /** 시스템 선택 트리거 */
@@ -314,6 +314,19 @@ export function MapSearchBar({
       saveRecentQueries(next);
       return next;
     });
+  }, []);
+
+  const removeRecentQuery = useCallback((target: string) => {
+    setRecentQueries((prev) => {
+      const next = prev.filter((q) => q !== target);
+      saveRecentQueries(next);
+      return next;
+    });
+  }, []);
+
+  const clearRecentQueries = useCallback(() => {
+    setRecentQueries([]);
+    saveRecentQueries([]);
   }, []);
 
   const handleSelectAddress = useCallback(
@@ -641,28 +654,53 @@ export function MapSearchBar({
                     <div className="border-t border-slate-100 dark:border-white/10" />
                   )}
                   <div className="px-3 py-2">
-                    <p className="mb-1.5 flex items-center gap-1.5 text-[12px] font-medium text-slate-500 dark:text-white/50">
-                      <History className="h-3.5 w-3.5" />
-                      최근 검색어
-                    </p>
+                    <div className="mb-1.5 flex items-center justify-between gap-2">
+                      <p className="flex items-center gap-1.5 text-[12px] font-medium text-slate-500 dark:text-white/50">
+                        <History className="h-3.5 w-3.5" />
+                        최근 검색어
+                      </p>
+                      <button
+                        type="button"
+                        onClick={clearRecentQueries}
+                        className="cursor-pointer text-[11px] text-slate-500 transition-colors hover:text-slate-800 dark:text-white/50 dark:hover:text-white/90"
+                      >
+                        전체 삭제
+                      </button>
+                    </div>
                     <ul className="flex flex-wrap gap-1.5">
                       {recentQueries.map((q) => (
                         <li key={q}>
-                          <button
-                            type="button"
-                            title={q}
-                            onClick={() => {
-                              setQuery(q);
-                              void runSplitAddressSearch(q);
-                            }}
+                          <span
                             className={cn(
-                              'cursor-pointer rounded-[5px] px-2.5 py-1.5 text-[12px] transition-colors',
+                              'inline-flex max-w-full items-center gap-0.5 rounded-[5px] pl-2.5 text-[12px] transition-colors',
                               'bg-slate-100 text-slate-700 hover:bg-slate-200',
                               'dark:bg-white/10 dark:text-white/90 dark:hover:bg-white/15'
                             )}
                           >
-                            {q}
-                          </button>
+                            <button
+                              type="button"
+                              title={q}
+                              onClick={() => {
+                                setQuery(q);
+                                void runSplitAddressSearch(q);
+                              }}
+                              className="cursor-pointer truncate py-1.5 text-left"
+                            >
+                              {q}
+                            </button>
+                            <button
+                              type="button"
+                              title="삭제"
+                              aria-label={`${q} 삭제`}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                removeRecentQuery(q);
+                              }}
+                              className="cursor-pointer rounded-r-[5px] px-1.5 py-1.5 text-slate-500 transition-colors hover:text-slate-800 dark:text-white/50 dark:hover:text-white/90"
+                            >
+                              <X className="h-3 w-3" />
+                            </button>
+                          </span>
                         </li>
                       ))}
                     </ul>

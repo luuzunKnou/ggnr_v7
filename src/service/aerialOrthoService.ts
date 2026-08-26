@@ -14,7 +14,7 @@ import {
   isAerialUploadKind,
   sanitizeAerialFolderName,
 } from '@/lib/aerialUploadPaths';
-import { detectTifSourceCrs, runAerialOrthoTifToXyz } from '@/service/orthophotoService';
+import { detectTifSourceCrs, runAerialOrthoTifToXyz, runAerialSatelliteTifToXyz } from '@/service/orthophotoService';
 
 const GGNR_DATA_DIR = process.env.GGNR_DATA_DIR ?? 'd:\\ggnr_data_dir';
 
@@ -58,7 +58,7 @@ export function sanitizeTifOutputSlug(fileName: string): string {
   return s;
 }
 
-/** 폴더명에서 CRS 추출 — …_드론영상_5181_… */
+/** 폴더명에서 CRS 추출 — …_드론영상_5181_… / …_항공영상_5181_… */
 export function sourceCrsFromOrthoFolderName(folderName: string): string {
   const parts = folderName.split('_');
   for (const p of parts) {
@@ -66,6 +66,34 @@ export function sourceCrsFromOrthoFolderName(folderName: string): string {
   }
   return 'EPSG:5181';
 }
+
+/**
+ * 자체항공영상 배경지도 id (= tiles_jpg 폴더명)
+ * satellite_YYYY_CRS_slug  — slug 는 영문·숫자만 (한글 작업명은 wu키로 대체)
+ */
+export function satelliteGroupNameFromWorkUnit(params: {
+  folderName: string;
+  wuKey: number;
+  fileName?: string;
+}): string {
+  const parts = params.folderName.split('_');
+  const dateRaw = parts[0] ?? '';
+  const year = /^\d{8}$/.test(dateRaw) ? dateRaw.slice(0, 4) : String(new Date().getFullYear());
+  const crsPart = parts.find((p) => /^\d{4,5}$/.test(p)) ?? '5181';
+  const stem = params.fileName
+    ? path.basename(params.fileName).replace(/\.(tiff|tif)$/i, '')
+    : parts.slice(3).join('_');
+  let slug = stem
+    .replace(/[^a-zA-Z0-9_-]+/g, '_')
+    .replace(/_+/g, '_')
+    .replace(/^_|_$/g, '')
+    .slice(0, 40);
+  if (!slug) slug = `wu${params.wuKey}`;
+  if (/^\d+$/.test(slug)) slug = `t${slug}`;
+  return `satellite_${year}_${crsPart}_${slug}`;
+}
+
+type TifWorkKind = 'ortho' | 'satellite';
 
 function formatSizeLabel(bytes: number | null | undefined): string {
   if (bytes == null || !Number.isFinite(bytes) || bytes < 0) return '—';
@@ -105,7 +133,9 @@ function toOrthoItem(row: typeof tifUnit.$inferSelect): OrthoTifItem {
   };
 }
 
-export async function listOrthoWorkUnits(): Promise<{
+export async function listOrthoWorkUnits(
+  kind: TifWorkKind = 'ortho'
+): Promise<{
   units: Array<{
     wuKey: number;
     kind: string;
@@ -114,6 +144,9 @@ export async function listOrthoWorkUnits(): Promise<{
     workDate: string | null;
     fileCount: number;
     srKey: number | null;
+    workPurpose: string | null;
+    author: string | null;
+    memo: string | null;
     items: OrthoTifItem[];
   }>;
 }> {
@@ -121,7 +154,7 @@ export async function listOrthoWorkUnits(): Promise<{
   const unitsRows = await db
     .select()
     .from(workUnit)
-    .where(and(eq(workUnit.kind, 'ortho'), eq(workUnit.wuIsDel, false)))
+    .where(and(eq(workUnit.kind, kind), eq(workUnit.wuIsDel, false)))
     .orderBy(desc(workUnit.wuKey));
 
   const units = [];
@@ -136,9 +169,12 @@ export async function listOrthoWorkUnits(): Promise<{
       kind: wu.kind,
       folderName: wu.folderName,
       workName: wu.workName,
-      workDate: wu.wuCreateDate ? String(wu.wuCreateDate).slice(0, 10) : null,
+      workDate: wu.workDate ?? (wu.wuCreateDate ? String(wu.wuCreateDate).slice(0, 10) : null),
       fileCount: files.length,
       srKey: wu.srKey,
+      workPurpose: wu.workPurpose,
+      author: wu.author,
+      memo: wu.memo,
       items: files.map(toOrthoItem),
     });
   }
@@ -148,8 +184,10 @@ export async function listOrthoWorkUnits(): Promise<{
 export async function listOrthoWorkUnitTifs(params: {
   wuKey?: number;
   folderName?: string;
+  kind?: TifWorkKind;
 } = {}): Promise<{ wuKey: number; folderName: string; items: OrthoTifItem[] }> {
   await requireSession();
+  const expectedKind = params.kind ?? 'ortho';
   let wuKey =
     params.wuKey != null && Number.isFinite(Number(params.wuKey)) ? Number(params.wuKey) : null;
   const folderRaw = sanitizeAerialFolderName(params.folderName ?? '');
@@ -172,7 +210,7 @@ export async function listOrthoWorkUnitTifs(params: {
         .from(workUnit)
         .where(
           and(
-            eq(workUnit.kind, 'ortho'),
+            eq(workUnit.kind, expectedKind),
             eq(workUnit.folderName, folderRaw),
             eq(workUnit.wuIsDel, false)
           )
@@ -381,6 +419,169 @@ export async function convertOrthoWorkUnit(params: {
   return { wuKey, folderName: wu.folderName, converted, failed, items };
 }
 
+/**
+ * 항공영상 작업단위 TIF → 자체항공영상(tiles_jpg) 등록.
+ * 드론영상 변환과 같은 큐·상태 흐름, 산출만 배경지도용.
+ */
+export async function convertSatelliteWorkUnit(params: {
+  wuKey?: number;
+  folderName?: string;
+  zoomMin?: number;
+  zoomMax?: number;
+  jpegQuality?: number;
+  force?: boolean;
+} = {}): Promise<{
+  wuKey: number;
+  folderName: string;
+  converted: number;
+  failed: number;
+  items: OrthoTifItem[];
+}> {
+  const usrId = await requireSession();
+  let wuKey =
+    params.wuKey != null && Number.isFinite(Number(params.wuKey)) ? Number(params.wuKey) : null;
+  const folderRaw = sanitizeAerialFolderName(params.folderName ?? '');
+
+  let wu =
+    wuKey != null
+      ? (
+          await db
+            .select()
+            .from(workUnit)
+            .where(and(eq(workUnit.wuKey, wuKey), eq(workUnit.wuIsDel, false)))
+            .limit(1)
+        )[0]
+      : undefined;
+
+  if (!wu && folderRaw) {
+    wu = (
+      await db
+        .select()
+        .from(workUnit)
+        .where(
+          and(
+            eq(workUnit.kind, 'satellite'),
+            eq(workUnit.folderName, folderRaw),
+            eq(workUnit.wuIsDel, false)
+          )
+        )
+        .limit(1)
+    )[0];
+  }
+  if (!wu || wu.kind !== 'satellite') throwHttp(404, '항공영상 작업단위를 찾을 수 없습니다.');
+  wuKey = wu.wuKey;
+
+  const rows = await db
+    .select()
+    .from(tifUnit)
+    .where(and(eq(tifUnit.wuKey, wuKey), eq(tifUnit.tuIsDel, false)))
+    .orderBy(asc(tifUnit.tuKey));
+
+  let converted = 0;
+  let failed = 0;
+  const defaultCrs = sourceCrsFromOrthoFolderName(wu.folderName);
+
+  for (const row of rows) {
+    if (row.convertStatus === 'converting') continue;
+
+    const srcRel = row.relativePath.replace(/\\/g, '/');
+    const srcResolved = resolveWithinBase(srcRel);
+    if (!srcResolved) {
+      if (row.convertStatus === 'pending' || row.convertStatus === 'failed' || params.force) {
+        await db
+          .update(tifUnit)
+          .set({
+            convertStatus: 'failed',
+            convertError: '원본 경로가 올바르지 않습니다.',
+            convertFinishedAt: nowIso(),
+            tuUpdateDate: nowIso(),
+            tuUpdateUser: usrId,
+          })
+          .where(eq(tifUnit.tuKey, row.tuKey));
+        failed += 1;
+      }
+      continue;
+    }
+
+    const detected = await detectTifSourceCrs(srcResolved.abs);
+    const sourceCrs = detected || row.sourceCrs || defaultCrs;
+    const shouldConvert =
+      row.convertStatus === 'pending' ||
+      row.convertStatus === 'failed' ||
+      params.force === true;
+
+    if (!shouldConvert) continue;
+
+    const groupName = satelliteGroupNameFromWorkUnit({
+      folderName: wu.folderName,
+      wuKey,
+      fileName: row.fileName,
+    });
+    const tilesRel = `tiles_jpg/${groupName}`;
+
+    await db
+      .update(tifUnit)
+      .set({
+        convertStatus: 'converting',
+        convertError: null,
+        convertStartedAt: nowIso(),
+        sourceCrs,
+        tuUpdateDate: nowIso(),
+        tuUpdateUser: usrId,
+      })
+      .where(eq(tifUnit.tuKey, row.tuKey));
+
+    const result = await runAerialSatelliteTifToXyz({
+      absSource: srcResolved.abs,
+      sourceRelativePath: srcRel,
+      sourceCrs,
+      groupName,
+      zoomMin: params.zoomMin,
+      zoomMax: params.zoomMax,
+      jpegQuality: params.jpegQuality,
+    });
+
+    if (result.success) {
+      await db
+        .update(tifUnit)
+        .set({
+          convertStatus: 'done',
+          tilesRelativePath: tilesRel,
+          sourceCrs,
+          convertError: null,
+          convertFinishedAt: nowIso(),
+          tuUpdateDate: nowIso(),
+          tuUpdateUser: usrId,
+        })
+        .where(eq(tifUnit.tuKey, row.tuKey));
+      converted += 1;
+    } else {
+      await db
+        .update(tifUnit)
+        .set({
+          convertStatus: 'failed',
+          sourceCrs,
+          convertError: (result.error || '변환 실패').slice(0, 2000),
+          convertFinishedAt: nowIso(),
+          tuUpdateDate: nowIso(),
+          tuUpdateUser: usrId,
+        })
+        .where(eq(tifUnit.tuKey, row.tuKey));
+      failed += 1;
+    }
+  }
+
+  const items = (
+    await db
+      .select()
+      .from(tifUnit)
+      .where(and(eq(tifUnit.wuKey, wuKey), eq(tifUnit.tuIsDel, false)))
+      .orderBy(asc(tifUnit.tuKey))
+  ).map(toOrthoItem);
+
+  return { wuKey, folderName: wu.folderName, converted, failed, items };
+}
+
 /** 변환완료 TIF 타일 범위 (WGS84) — 체크 시 지도 fit 용 */
 export async function getOrthoTifExtentWgs84(params: { tuKey?: number } = {}): Promise<{
   tuKey: number;
@@ -519,9 +720,24 @@ export async function deleteTifUnit(params: { tuKey?: number } = {}): Promise<{
   return { tuKey, wuKey: row.wuKey, fileName: row.fileName, diskRemoved };
 }
 
-/** 작업단위 삭제 시 tif_unit 일괄 제거 (disk는 호출측에서 폴더 rm) */
+/**
+ * 작업단위 삭제 시 tif_unit·원본 TIF·변환 타일 일괄 제거.
+ * 호출측에서 작업단위 폴더 rm 을 추가로 수행한다.
+ */
 export async function deleteTifUnitsForWorkUnit(wuKey: number): Promise<number> {
-  const rows = await db.select({ tuKey: tifUnit.tuKey }).from(tifUnit).where(eq(tifUnit.wuKey, wuKey));
+  const rows = await db.select().from(tifUnit).where(eq(tifUnit.wuKey, wuKey));
+  for (const row of rows) {
+    const srcResolved = resolveWithinBase(String(row.relativePath ?? '').replace(/\\/g, '/'));
+    if (srcResolved) {
+      await fs.rm(srcResolved.abs, { force: true }).catch(() => undefined);
+    }
+    if (row.tilesRelativePath) {
+      const tilesResolved = resolveWithinBase(row.tilesRelativePath.replace(/\\/g, '/'));
+      if (tilesResolved) {
+        await fs.rm(tilesResolved.abs, { recursive: true, force: true }).catch(() => undefined);
+      }
+    }
+  }
   await db.delete(tifUnit).where(eq(tifUnit.wuKey, wuKey));
   return rows.length;
 }

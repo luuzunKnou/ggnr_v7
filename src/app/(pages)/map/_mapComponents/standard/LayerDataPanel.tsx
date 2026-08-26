@@ -17,8 +17,9 @@ import {
 } from 'lucide-react';
 import { recordDataViewLog } from '@/lib/recordDataViewLog';
 import { SER_FILE_ENG } from '@/lib/serviceFileDataSerEng';
-import { formatDetailScalarValue } from '@/lib/formatDetailScalar';
+import { formatDefineFieldDisplayValue } from '@/lib/defineLayerCodeDisplay';
 import { isLayerExtraFieldName } from '@/lib/layerExtraField';
+import { useDefineLayerCodes } from './useDefineLayerCodes';
 import { cn, formatFileSize } from '@/lib/utils';
 import {
   isImageServiceFileName,
@@ -31,7 +32,7 @@ import {
   useServiceFileData,
 } from './useServiceFileData';
 import { useMapContext } from '../MapContext';
-import { getRowKey, getRowValueByField } from './defineLayerRowUtils';
+import { getRowKey, getRowValueByField, isDefineFieldFlagTrue } from './defineLayerRowUtils';
 import { ServiceFileAttachmentThumb } from './ServiceFileAttachmentThumb';
 import { ServiceFilePdfThumb } from './ServiceFilePdfThumb';
 import { ServiceFileImagePreview, type ServiceFilePreviewItem } from './ServiceFileImagePreview';
@@ -69,6 +70,7 @@ type DefineFieldRow = {
   define_field_show_detail?: string;
   define_field_is_key?: string;
   define_field_read_only?: string | boolean;
+  define_field_type?: string;
   [key: string]: unknown;
 };
 
@@ -229,6 +231,10 @@ export function LayerDataPanel({
   const [fields, setFields] = useState<DefineFieldRow[]>([]);
   /** 상세보기 기본정보/상세정보에 쓸 전체 필드(목록 노출 여부와 무관) */
   const [detailFields, setDetailFields] = useState<DefineFieldRow[]>([]);
+  const codesByField = useDefineLayerCodes(
+    activeLayer?.tableName ?? activeLayer?.physicalTableName,
+    detailFields
+  );
   const [keyFieldName, setKeyFieldName] = useState<string | null>(null);
   const [rows, setRows] = useState<Record<string, unknown>[]>([]);
   const [loading, setLoading] = useState(false);
@@ -835,14 +841,16 @@ export function LayerDataPanel({
         // 목록 표시 설정이어도 geom류는 속성 목록에 넣지 않음 (값은 지도 하이라이트용으로만 사용)
         const fieldsList = sortedAll.filter(
           (f) =>
-            String(f.define_field_show_list ?? '').toLowerCase() === 'true' &&
+            isDefineFieldFlagTrue(f.define_field_show_list) &&
             !excludeGeomLike(String(f.define_field_name ?? ''))
         );
         setFields(fieldsList);
         setDetailFields(
           sortedAll.filter((f) => !excludeGeomLike(String(f.define_field_name ?? '')))
         );
-        const keyField = Array.isArray(rawFields) ? rawFields.find((f) => String(f.define_field_is_key ?? '').toLowerCase() === 'true') : null;
+        const keyField = Array.isArray(rawFields)
+          ? rawFields.find((f) => isDefineFieldFlagTrue(f.define_field_is_key))
+          : null;
         setKeyFieldName(keyField ? String(keyField.define_field_name ?? '').trim() || null : null);
 
         if (useKey) {
@@ -1102,8 +1110,7 @@ export function LayerDataPanel({
           keyValue: String(currentRowKey),
           keyField: keyFieldName,
           changes: basicDraft,
-          // 기본정보 탭은 show_detail=false 필드도 함께 노출·편집하므로 서버에서도 동일하게 허용
-          includeHiddenDetail: true,
+          includeHiddenDetail: false,
         },
       });
       const data = res?.data ?? res;
@@ -1173,7 +1180,7 @@ export function LayerDataPanel({
     (f) => !isGeomLikeFieldName(String(f.define_field_name ?? ''))
   );
   /** 데이터 조회와 동일: 최대 5열. 시설관리 컬럼 순서는 도로대장 설정, 헤더는 defineLayer 한글명 */
-  const listFields = useFacilityCols
+  const listFields: DefineFieldRow[] = useFacilityCols
     ? facilityColumnKeys.slice(0, 5).map((k) => {
         const kl = String(k).trim().toLowerCase();
         const meta =
@@ -1185,6 +1192,7 @@ export function LayerDataPanel({
         return {
           define_field_name: k,
           define_field_kor_name: kor || k,
+          define_field_type: meta?.define_field_type,
         };
       })
     : listFieldsAll.slice(0, 5);
@@ -1192,31 +1200,39 @@ export function LayerDataPanel({
   const isKeyField = (name: string) =>
     keyFieldName != null && name.trim().toLowerCase() === keyFieldName.trim().toLowerCase();
 
-  /** 기본정보 표시·편집 공용 필드 목록 — 키 필드·읽기전용 필드는 편집모드에서도 인풋 대신 값만 표시 */
+  const basicVisibleFields = detailFields.filter((f) =>
+    isDefineFieldFlagTrue(f.define_field_show_detail)
+  );
+
+  /** 기본정보 — 상세보기 켠 칸만. 키·읽기전용은 편집모드에서도 값만 표시 */
   const basicInfoFields: InfoField[] =
     selectedRow == null
       ? []
-      : detailFields.length === 0
+      : basicVisibleFields.length === 0 && detailFields.length === 0
       ? Object.entries(selectedRow)
           .filter(([k]) => !isGeomLikeFieldName(k))
           .map(([k, v], i) => ({
             fieldKey: k || `auto-${i}`,
             label: k,
-            value: formatDetailScalarValue(v),
-            highlight: i === 0,
+            value: formatDefineFieldDisplayValue(v, undefined, undefined),
+            highlight: isKeyField(k),
             readOnly: isKeyField(k),
           }))
-      : detailFields.map((f, i) => {
+      : basicVisibleFields.map((f, i) => {
           const key = String(f.define_field_name ?? '');
           const label = String(f.define_field_kor_name ?? f.define_field_name ?? '');
           const raw = getRowValueByField(selectedRow, key);
           const readOnly =
-            String(f.define_field_read_only ?? '').toLowerCase() === 'true' || isKeyField(key);
+            isDefineFieldFlagTrue(f.define_field_read_only) || isKeyField(key);
           return {
             fieldKey: key || `basic-${i}`,
             label,
-            value: formatDetailScalarValue(raw, { fieldType: f.define_field_type }),
-            highlight: i === 0,
+            value: formatDefineFieldDisplayValue(
+              raw,
+              f.define_field_type,
+              codesByField[key.trim().toLowerCase()]
+            ),
+            highlight: isKeyField(key),
             readOnly,
           };
         });
@@ -1321,8 +1337,19 @@ export function LayerDataPanel({
                               row as Record<string, unknown>
                             )
                           : (() => {
-                              const v = getRowValueByField(row, String(f.define_field_name));
-                              return formatDetailScalarValue(v, { fieldType: f.define_field_type });
+                              const fieldName = String(f.define_field_name ?? '');
+                              const v = getRowValueByField(row, fieldName);
+                              const meta =
+                                detailFields.find(
+                                  (df) =>
+                                    String(df.define_field_name ?? '').trim().toLowerCase() ===
+                                    fieldName.trim().toLowerCase()
+                                ) ?? f;
+                              return formatDefineFieldDisplayValue(
+                                v,
+                                meta.define_field_type,
+                                codesByField[fieldName.trim().toLowerCase()]
+                              );
                             })();
                         return (
                           <span key={String(f.define_field_name)} className="flex-1 min-w-0 truncate pl-2 first:pl-0 text-muted-foreground">

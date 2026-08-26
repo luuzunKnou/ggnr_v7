@@ -109,24 +109,24 @@ type Props = {
 
 function complaintStateStyle(state: string): { bg: string; text: string; border: string } {
   if (state === "완료") {
-    return { bg: "bg-emerald-50", text: "text-emerald-700", border: "border-emerald-200" };
+    return { bg: "bg-chart-2/15", text: "text-chart-2", border: "border-chart-2/40" };
   }
   if (state === "처리중") {
-    return { bg: "bg-amber-50", text: "text-amber-800", border: "border-amber-200" };
+    return { bg: "bg-chart-4/15", text: "text-chart-4", border: "border-chart-4/40" };
   }
-  return { bg: "bg-sky-50", text: "text-sky-700", border: "border-sky-200" };
+  return { bg: "bg-primary/10", text: "text-primary", border: "border-primary/30" };
 }
 
 const fieldClass =
-  "h-7 w-full min-w-0 rounded border border-slate-300 bg-white px-1.5 text-[11px] outline-none focus:border-primary focus:ring-1 focus:ring-primary/25";
-const labelClass = "mb-0.5 block text-[11px] text-slate-500";
+  "h-7 w-full min-w-0 rounded border border-border bg-background px-1.5 text-[11px] outline-none focus:border-primary focus:ring-1 focus:ring-primary/25";
+const labelClass = "mb-0.5 block text-[11px] text-muted-foreground";
 const attrLabelClass = "w-[5.5rem] shrink-0";
 const btnPrimary =
-  "inline-flex h-7 items-center gap-1 rounded border border-primary bg-primary px-2 text-[11px] font-medium text-white hover:bg-primary/90 disabled:opacity-50";
+  "inline-flex h-7 items-center gap-1 rounded border border-primary bg-primary px-2 text-[11px] font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50";
 const btnGhost =
-  "inline-flex h-7 items-center gap-1 rounded border border-slate-200 bg-white px-2 text-[11px] font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-50";
+  "inline-flex h-7 items-center gap-1 rounded border border-border bg-background px-2 text-[11px] font-medium text-muted-foreground hover:bg-muted/50 disabled:opacity-50";
 const btnDanger =
-  "inline-flex h-7 items-center gap-1 rounded border border-red-200 bg-white px-2 text-[11px] font-medium text-red-600 hover:bg-red-50 disabled:opacity-50";
+  "inline-flex h-7 items-center gap-1 rounded border border-destructive/30 bg-background px-2 text-[11px] font-medium text-destructive hover:bg-destructive/10 disabled:opacity-50";
 
 /** 반칸에서 한글 4~5자면 이미 넘침 → 그 이상이면 행 전체 */
 const ATTR_FULL_ROW_VALUE_LEN = 4;
@@ -149,21 +149,21 @@ function AttrRow({
   showBottomBorder: boolean;
 }) {
   return (
-    <div className={cn("flex items-stretch", showBottomBorder && "border-b border-slate-200")}>
+    <div className={cn("flex items-stretch", showBottomBorder && "border-b border-border")}>
       <div
         className={cn(
-          "flex min-w-0 shrink-0 items-center self-stretch bg-slate-100 px-1.5 py-1",
+          "flex min-w-0 shrink-0 items-center self-stretch bg-muted px-1.5 py-1",
           attrLabelClass
         )}
       >
-        <span className="min-w-0 w-full whitespace-nowrap text-[11px] leading-snug text-[#666]">
+        <span className="min-w-0 w-full whitespace-nowrap text-[11px] leading-snug text-muted-foreground">
           {label}
         </span>
       </div>
       <div className="min-w-0 flex-1 overflow-hidden px-1.5 py-1">
         {typeof value === "string" ? (
           <span
-            className="block truncate whitespace-nowrap text-[11px] leading-snug text-[#666]"
+            className="block truncate whitespace-nowrap text-[11px] leading-snug text-muted-foreground"
             title={value === "—" ? undefined : value}
           >
             {value}
@@ -182,7 +182,7 @@ function AttrTable({
   entries: { fieldKey: string; label: string; value: ReactNode; fullWidth?: boolean }[];
 }) {
   if (entries.length === 0) {
-    return <p className="text-[11px] text-slate-500">표시할 항목이 없습니다.</p>;
+    return <p className="text-[11px] text-muted-foreground">표시할 항목이 없습니다.</p>;
   }
 
   const normalized = entries.map((e) => ({
@@ -212,14 +212,14 @@ function AttrTable({
   }
 
   return (
-    <div className="overflow-hidden rounded-[5px] border border-slate-200">
+    <div className="overflow-hidden rounded-[5px] border border-border">
       {pairs.map((pair, rowIdx) => {
         const isLast = rowIdx === pairs.length - 1;
         if (!pair.right) {
           return (
             <div
               key={pair.left.fieldKey}
-              className={cn(!isLast && "border-b border-slate-200")}
+              className={cn(!isLast && "border-b border-border")}
             >
               <AttrRow label={pair.left.label} value={pair.left.value} showBottomBorder={false} />
             </div>
@@ -229,8 +229,8 @@ function AttrTable({
           <div
             key={`${pair.left.fieldKey}-${pair.right.fieldKey}`}
             className={cn(
-              "grid grid-cols-2 divide-x divide-slate-200",
-              !isLast && "border-b border-slate-200"
+              "grid grid-cols-2 divide-x divide-border",
+              !isLast && "border-b border-border"
             )}
           >
             <AttrRow label={pair.left.label} value={pair.left.value} showBottomBorder={false} />
@@ -261,7 +261,7 @@ function AttachmentThumb({
       <button
         type="button"
         onClick={onPreview}
-        className="block aspect-square w-full overflow-hidden rounded border border-slate-200 bg-slate-50"
+        className="block aspect-square w-full overflow-hidden rounded border border-border bg-muted/50"
         title={`${att.name} 미리보기`}
       >
         {isImage ? (
@@ -272,7 +272,7 @@ function AttachmentThumb({
             className="h-full w-full object-cover"
           />
         ) : (
-          <div className="flex h-full w-full flex-col items-center justify-center gap-1 text-slate-400">
+          <div className="flex h-full w-full flex-col items-center justify-center gap-1 text-muted-foreground">
             <FileText className="h-5 w-5" />
             <span className="text-[10px] font-semibold">{isPdf ? "PDF" : "파일"}</span>
           </div>
@@ -286,7 +286,7 @@ function AttachmentThumb({
               e.stopPropagation();
               onDownload();
             }}
-            className="pointer-events-auto inline-flex h-7 w-7 items-center justify-center rounded-md bg-white text-slate-700 shadow-md ring-1 ring-slate-200/80 hover:bg-slate-50 hover:text-primary"
+            className="pointer-events-auto inline-flex h-7 w-7 items-center justify-center rounded-md bg-background text-foreground/90 shadow-md ring-1 ring-border/80 hover:bg-muted/50 hover:text-primary"
             title="다운로드"
           >
             <Download className="h-4 w-4" />
@@ -299,14 +299,14 @@ function AttachmentThumb({
               e.stopPropagation();
               onDelete();
             }}
-            className="pointer-events-auto inline-flex h-7 w-7 items-center justify-center rounded-md bg-white text-red-600 shadow-md ring-1 ring-slate-200/80 hover:bg-red-50"
+            className="pointer-events-auto inline-flex h-7 w-7 items-center justify-center rounded-md bg-background text-destructive shadow-md ring-1 ring-border/80 hover:bg-destructive/10"
             title="삭제"
           >
             <Trash2 className="h-4 w-4" />
           </button>
         ) : null}
       </div>
-      <p className="mt-0.5 truncate text-[10px] text-slate-500" title={att.name}>
+      <p className="mt-0.5 truncate text-[10px] text-muted-foreground" title={att.name}>
         {att.name}
       </p>
     </div>
@@ -327,7 +327,7 @@ function AttachmentThumbGrid({
   emptyLabel?: string;
 }) {
   if (items.length === 0) {
-    return <p className="text-[11px] text-slate-400">{emptyLabel}</p>;
+    return <p className="text-[11px] text-muted-foreground">{emptyLabel}</p>;
   }
   return (
     <div className="grid grid-cols-3 gap-2">
@@ -1681,7 +1681,7 @@ export function RoadNetworkDetailPanel({
     geomBannerHost && geomEditMode
       ? createPortal(
           <div
-            className="pointer-events-none absolute z-[15] flex -translate-x-1/2 flex-col gap-1.5 rounded border border-red-300 bg-red-50/95 px-3 py-1.5 text-[11px] font-medium text-red-700 shadow-sm"
+            className="pointer-events-none absolute z-[15] flex -translate-x-1/2 flex-col gap-1.5 rounded border border-destructive/40 bg-destructive/10 px-3 py-1.5 text-[11px] font-medium text-destructive shadow-sm"
             style={
               geomCenterPixel
                 ? { left: geomCenterPixel.x, top: geomHintTopPx }
@@ -1694,7 +1694,7 @@ export function RoadNetworkDetailPanel({
                 type="button"
                 className={layerRowPanelButtonClass(
                   "default",
-                  "pointer-events-auto shrink-0 border-red-200 text-red-700 hover:bg-red-100"
+                  "pointer-events-auto shrink-0 border-destructive/30 text-destructive hover:bg-destructive/15"
                 )}
                 disabled={geomEditMode === "draw"}
                 onClick={() => geomMapOpsRef.current?.startDraw()}
@@ -1706,7 +1706,7 @@ export function RoadNetworkDetailPanel({
                   type="button"
                   className={layerRowPanelButtonClass(
                     "default",
-                    "pointer-events-auto shrink-0 border-red-200 text-red-700 hover:bg-red-100"
+                    "pointer-events-auto shrink-0 border-destructive/30 text-destructive hover:bg-destructive/15"
                   )}
                   onClick={() => geomMapOpsRef.current?.reset()}
                 >
@@ -1727,7 +1727,7 @@ export function RoadNetworkDetailPanel({
       : geomBannerHost && siteModal
         ? createPortal(
             <div
-              className="pointer-events-none absolute z-[15] flex -translate-x-1/2 flex-col gap-1.5 rounded border border-red-300 bg-red-50/95 px-3 py-1.5 text-[11px] font-medium text-red-700 shadow-sm"
+              className="pointer-events-none absolute z-[15] flex -translate-x-1/2 flex-col gap-1.5 rounded border border-destructive/40 bg-destructive/10 px-3 py-1.5 text-[11px] font-medium text-destructive shadow-sm"
               style={
                 geomCenterPixel
                   ? { left: geomCenterPixel.x, top: geomHintTopPx }
@@ -1740,7 +1740,7 @@ export function RoadNetworkDetailPanel({
                   type="button"
                   className={layerRowPanelButtonClass(
                     "default",
-                    "pointer-events-auto shrink-0 border-red-200 text-red-700 hover:bg-red-100"
+                    "pointer-events-auto shrink-0 border-destructive/30 text-destructive hover:bg-destructive/15"
                   )}
                   disabled={!siteHasPoint}
                   onClick={() => sitePointOpsRef.current?.startDraw()}
@@ -1752,7 +1752,7 @@ export function RoadNetworkDetailPanel({
                     type="button"
                     className={layerRowPanelButtonClass(
                       "default",
-                      "pointer-events-auto shrink-0 border-red-200 text-red-700 hover:bg-red-100"
+                      "pointer-events-auto shrink-0 border-destructive/30 text-destructive hover:bg-destructive/15"
                     )}
                     onClick={() => sitePointOpsRef.current?.reset()}
                   >
@@ -1774,7 +1774,7 @@ export function RoadNetworkDetailPanel({
         : geomBannerHost && endpointPickActive
           ? createPortal(
               <div
-                className="pointer-events-none absolute z-[15] flex -translate-x-1/2 flex-col gap-1.5 rounded border border-red-300 bg-red-50/95 px-3 py-1.5 text-[11px] font-medium text-red-700 shadow-sm"
+                className="pointer-events-none absolute z-[15] flex -translate-x-1/2 flex-col gap-1.5 rounded border border-destructive/40 bg-destructive/10 px-3 py-1.5 text-[11px] font-medium text-destructive shadow-sm"
                 style={
                   geomCenterPixel
                     ? { left: geomCenterPixel.x, top: geomHintTopPx }
@@ -1787,7 +1787,7 @@ export function RoadNetworkDetailPanel({
                     type="button"
                     className={layerRowPanelButtonClass(
                       "default",
-                      "pointer-events-auto shrink-0 border-red-200 text-red-700 hover:bg-red-100"
+                      "pointer-events-auto shrink-0 border-destructive/30 text-destructive hover:bg-destructive/15"
                     )}
                     onClick={() => setPointPickKind(null)}
                   >
@@ -2063,8 +2063,8 @@ export function RoadNetworkDetailPanel({
   const showAddButton = bottomTab === "maintenance" || bottomTab === "complaints";
 
   return (
-    <div className="relative flex min-h-0 h-full flex-col bg-white">
-      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-slate-200 px-3 py-1.5">
+    <div className="relative flex min-h-0 h-full flex-col bg-background">
+      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border px-3 py-1.5">
         <div className="flex min-w-0 items-center gap-1.5">
           <span
             className={cn(
@@ -2079,7 +2079,7 @@ export function RoadNetworkDetailPanel({
           <h2
             className={cn(
               "truncate text-sm font-semibold",
-              hasRoadName ? "text-slate-800" : "text-slate-500"
+              hasRoadName ? "text-foreground" : "text-muted-foreground"
             )}
             title={displayTitle}
           >
@@ -2101,7 +2101,7 @@ export function RoadNetworkDetailPanel({
           <button
             type="button"
             onClick={handleClosePanel}
-            className="shrink-0 rounded p-1 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
+            className="shrink-0 rounded p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
             title="닫기"
             aria-label="닫기"
           >
@@ -2112,7 +2112,7 @@ export function RoadNetworkDetailPanel({
 
       <section
         className={cn(
-          "border-b border-slate-200",
+          "border-b border-border",
           isNewRoad ? "flex min-h-0 flex-1 flex-col" : "shrink-0"
         )}
       >
@@ -2120,7 +2120,7 @@ export function RoadNetworkDetailPanel({
           <button
             type="button"
             onClick={() => setAttrsOpen((v) => !v)}
-            className="flex min-w-0 flex-1 items-center gap-1 text-left text-xs font-semibold text-slate-700"
+            className="flex min-w-0 flex-1 items-center gap-1 text-left text-xs font-semibold text-foreground/90"
           >
             {attrsOpen ? (
               <ChevronDown className="h-3.5 w-3.5 shrink-0" />
@@ -2188,7 +2188,7 @@ export function RoadNetworkDetailPanel({
       {!isNewRoad ? (
       <div className="relative flex min-h-0 flex-1 flex-col">
         <div
-          className="flex h-10 shrink-0 items-center justify-between gap-2 border-b border-slate-200 px-2 pt-1.5"
+          className="flex h-10 shrink-0 items-center justify-between gap-2 border-b border-border px-2 pt-1.5"
           role="tablist"
           aria-label="이력·민원·첨부"
         >
@@ -2204,7 +2204,7 @@ export function RoadNetworkDetailPanel({
                   onClick={() => setBottomTab(t.id)}
                   className={cn(
                     "relative flex shrink-0 items-center px-2.5 pb-1.5 text-[11px] font-medium transition-colors",
-                    active ? "text-primary" : "text-slate-500 hover:text-slate-700"
+                    active ? "text-primary" : "text-muted-foreground hover:text-foreground"
                   )}
                 >
                   {t.label}
@@ -2248,7 +2248,7 @@ export function RoadNetworkDetailPanel({
         </div>
 
         {(bottomTab === "maintenance" || bottomTab === "complaints") && (
-          <div className="shrink-0 space-y-1.5 border-b border-slate-100 px-3 py-1.5">
+          <div className="shrink-0 space-y-1.5 border-b border-border px-3 py-1.5">
             <input
               className={fieldClass}
               placeholder={
@@ -2276,7 +2276,7 @@ export function RoadNetworkDetailPanel({
                         "inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium transition-colors",
                         active
                           ? "border-primary bg-primary/10 text-primary"
-                          : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50"
+                          : "border-border bg-background text-muted-foreground hover:border-border hover:bg-muted/50"
                       )}
                       aria-pressed={active}
                     >
@@ -2292,7 +2292,7 @@ export function RoadNetworkDetailPanel({
         <MapSideDetailScroll className="min-h-0 flex-1 overflow-auto px-3 py-2 text-xs">
           {bottomTab === "maintenance" ? (
             filteredMaintenance.length === 0 ? (
-              <p className="py-6 text-center text-[11px] text-slate-500">
+              <p className="py-6 text-center text-[11px] text-muted-foreground">
                 {row.maintenance.length === 0
                   ? "유지보수 이력이 없습니다."
                   : "검색 결과가 없습니다."}
@@ -2318,12 +2318,12 @@ export function RoadNetworkDetailPanel({
                         "cursor-pointer rounded-[10px] border bg-card px-3 py-2.5 transition-colors",
                         focused
                           ? "border-primary/50 bg-primary/[0.06] ring-1 ring-primary/20"
-                          : "border-border/80 hover:bg-slate-50"
+                          : "border-border/80 hover:bg-muted/50"
                       )}
                     >
                       <div className="min-w-0">
                         <div className="flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
-                          <span className="inline-flex items-center gap-1 font-medium text-slate-700">
+                          <span className="inline-flex items-center gap-1 font-medium text-foreground/90">
                             <Wrench className="h-3 w-3 shrink-0" />
                             {item.workType}
                           </span>
@@ -2338,11 +2338,11 @@ export function RoadNetworkDetailPanel({
                         <p className="mt-1 text-[11px] text-muted-foreground">
                           시공: {item.contractor || "—"}
                         </p>
-                        <div className="mt-2.5 space-y-1.5 border-t border-slate-100 pt-2">
+                        <div className="mt-2.5 space-y-1.5 border-t border-border pt-2">
                           <p
                             className={cn(
                               "inline-flex max-w-full items-center gap-1 text-[11px]",
-                              item.point ? "text-slate-600" : "text-slate-400"
+                              item.point ? "text-muted-foreground" : "text-muted-foreground"
                             )}
                           >
                             <MapPin className="h-3 w-3 shrink-0" />
@@ -2354,7 +2354,7 @@ export function RoadNetworkDetailPanel({
                           </p>
                           <button
                             type="button"
-                            className="flex max-w-full items-center gap-1 text-left text-[11px] text-slate-500 hover:text-primary"
+                            className="flex max-w-full items-center gap-1 text-left text-[11px] text-muted-foreground hover:text-primary"
                             onClick={(e) => {
                               e.stopPropagation();
                               openAttachmentPreview(atts);
@@ -2375,7 +2375,7 @@ export function RoadNetworkDetailPanel({
             )
           ) : bottomTab === "complaints" ? (
             filteredComplaints.length === 0 ? (
-              <p className="py-6 text-center text-[11px] text-slate-500">
+              <p className="py-6 text-center text-[11px] text-muted-foreground">
                 {row.complaints.length === 0 ? "관련 민원이 없습니다." : "검색 결과가 없습니다."}
               </p>
             ) : (
@@ -2400,7 +2400,7 @@ export function RoadNetworkDetailPanel({
                         "cursor-pointer rounded-[10px] border bg-card px-3 py-2.5 transition-colors",
                         focused
                           ? "border-primary/50 bg-primary/[0.06] ring-1 ring-primary/20"
-                          : "border-border/80 hover:bg-slate-50"
+                          : "border-border/80 hover:bg-muted/50"
                       )}
                     >
                       <div className="min-w-0">
@@ -2425,7 +2425,7 @@ export function RoadNetworkDetailPanel({
                           </span>
                         </div>
                         <div className="mt-1.5 flex items-center gap-1 text-[11px] text-muted-foreground">
-                          <MapPin className="h-3 w-3 shrink-0 text-orange-500" />
+                          <MapPin className="h-3 w-3 shrink-0 text-chart-5" />
                           <span className="truncate">
                             {comp.point
                               ? comp.address || "주소 없음"
@@ -2435,10 +2435,10 @@ export function RoadNetworkDetailPanel({
                         <p className="mt-1 text-[12px] leading-relaxed text-foreground/90">
                           {comp.content}
                         </p>
-                        <div className="mt-2.5 space-y-1.5 border-t border-slate-100 pt-2">
+                        <div className="mt-2.5 space-y-1.5 border-t border-border pt-2">
                           <button
                             type="button"
-                            className="flex max-w-full items-center gap-1 text-left text-[11px] text-slate-500 hover:text-primary"
+                            className="flex max-w-full items-center gap-1 text-left text-[11px] text-muted-foreground hover:text-primary"
                             onClick={(e) => {
                               e.stopPropagation();
                               openAttachmentPreview(atts);
@@ -2459,7 +2459,7 @@ export function RoadNetworkDetailPanel({
             )
           ) : bottomTab === "attachments" ? (
             roadAttachments.length === 0 ? (
-              <p className="py-6 text-center text-[11px] text-slate-500">첨부파일이 없습니다.</p>
+              <p className="py-6 text-center text-[11px] text-muted-foreground">첨부파일이 없습니다.</p>
             ) : (
               <AttachmentThumbGrid
                 items={roadAttachments}
@@ -2472,9 +2472,9 @@ export function RoadNetworkDetailPanel({
               />
             )
           ) : historyNewestFirst.length === 0 ? (
-            <p className="py-6 text-center text-[11px] text-slate-500">수정이력이 없습니다.</p>
+            <p className="py-6 text-center text-[11px] text-muted-foreground">수정이력이 없습니다.</p>
           ) : (
-            <ul className="divide-y divide-slate-100 rounded border border-slate-200">
+            <ul className="divide-y divide-border rounded border border-border">
               {historyNewestFirst.map((h) => {
                 const lines = h.detail
                   .split("\n")
@@ -2485,16 +2485,16 @@ export function RoadNetworkDetailPanel({
                 return (
                   <li key={h.id} className="px-2.5 py-2">
                     <div className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5">
-                      <span className="shrink-0 rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[10px] font-semibold text-slate-700">
+                      <span className="shrink-0 rounded border border-border bg-muted/50 px-1.5 py-0.5 text-[10px] font-semibold text-foreground/90">
                         {h.action}
                       </span>
-                      <span className="text-[10px] tabular-nums text-slate-500">{h.at}</span>
-                      <span className="text-[10px] text-slate-400">{h.user}</span>
+                      <span className="text-[10px] tabular-nums text-muted-foreground">{h.at}</span>
+                      <span className="text-[10px] text-muted-foreground">{h.user}</span>
                     </div>
                     {changeLines.length > 0 ? (
                       <>
                         {titleLine.startsWith("«") ? (
-                          <p className="mt-1 text-[11px] font-medium text-slate-700">
+                          <p className="mt-1 text-[11px] font-medium text-foreground/90">
                             {titleLine}
                           </p>
                         ) : null}
@@ -2503,9 +2503,9 @@ export function RoadNetworkDetailPanel({
                             (line, i) => (
                               <li
                                 key={`${h.id}-${i}`}
-                                className="text-[11px] leading-snug text-slate-800"
+                                className="text-[11px] leading-snug text-foreground"
                               >
-                                <span className="mr-1 text-slate-400">·</span>
+                                <span className="mr-1 text-muted-foreground">·</span>
                                 {line}
                               </li>
                             )
@@ -2513,7 +2513,7 @@ export function RoadNetworkDetailPanel({
                         </ul>
                       </>
                     ) : (
-                      <p className="mt-1 text-[11px] leading-snug text-slate-800">
+                      <p className="mt-1 text-[11px] leading-snug text-foreground">
                         {titleLine}
                       </p>
                     )}
@@ -2593,22 +2593,22 @@ export function RoadNetworkDetailPanel({
 
       <Dialog open={reportOpen} onOpenChange={setReportOpen}>
         <DialogContent className="flex max-h-[min(90vh,900px)] w-[min(56rem,calc(100vw-1.5rem))] max-w-none flex-col gap-0 overflow-hidden p-0 sm:max-w-none sm:rounded-lg">
-          <DialogHeader className="shrink-0 border-b border-slate-200 px-4 py-3 text-left">
-            <DialogTitle className="text-base font-semibold text-slate-800">
+          <DialogHeader className="shrink-0 border-b border-border px-4 py-3 text-left">
+            <DialogTitle className="text-base font-semibold text-foreground">
               {row.roadName} 상세보고서
             </DialogTitle>
           </DialogHeader>
-          <div className="min-h-0 flex-1 bg-slate-100">
+          <div className="min-h-0 flex-1 bg-muted">
             {reportHtml ? (
               <iframe
                 ref={reportIframeRef}
                 title="도로망도 상세보고서 미리보기"
-                className="h-[min(70vh,720px)] w-full border-0 bg-white"
+                className="h-[min(70vh,720px)] w-full border-0 bg-background"
                 srcDoc={reportHtml}
               />
             ) : null}
           </div>
-          <DialogFooter className="gap-1 border-t border-slate-200 px-4 py-2.5 sm:space-x-0">
+          <DialogFooter className="gap-1 border-t border-border px-4 py-2.5 sm:space-x-0">
             <button type="button" className={btnGhost} onClick={() => setReportOpen(false)}>
               닫기
             </button>
@@ -2627,22 +2627,22 @@ export function RoadNetworkDetailPanel({
         }}
       >
         <DialogContent className="max-w-sm gap-0 p-0 sm:rounded-lg">
-          <DialogHeader className="border-b border-slate-200 px-4 py-3 text-left">
-            <DialogTitle className="text-sm font-semibold text-slate-800">
+          <DialogHeader className="border-b border-border px-4 py-3 text-left">
+            <DialogTitle className="text-sm font-semibold text-foreground">
               미리보기 불가
             </DialogTitle>
           </DialogHeader>
-          <div className="space-y-2 px-4 py-3 text-[12px] text-slate-600">
-            <p className="font-medium text-slate-800">{unsupportedPreview?.name}</p>
+          <div className="space-y-2 px-4 py-3 text-[12px] text-muted-foreground">
+            <p className="font-medium text-foreground">{unsupportedPreview?.name}</p>
             <p>
               {unsupportedPreview?.sizeLabel} · {unsupportedPreview?.uploadedAt}
             </p>
-            <p className="text-[11px] text-slate-500">
+            <p className="text-[11px] text-muted-foreground">
               이미지·PDF만 미리볼 수 있습니다. 압축 파일 등은 다운로드 후 확인하세요.
               (임시 데이터는 서버 파일이 없습니다.)
             </p>
           </div>
-          <DialogFooter className="border-t border-slate-200 px-4 py-2.5">
+          <DialogFooter className="border-t border-border px-4 py-2.5">
             <button
               type="button"
               className={btnPrimary}

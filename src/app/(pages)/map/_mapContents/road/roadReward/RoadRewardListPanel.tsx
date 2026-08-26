@@ -188,9 +188,9 @@ export function RoadRewardListPanel({
   };
 
   return (
-    <div className="flex min-h-0 h-full flex-col bg-white">
-      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-slate-200 px-3 py-1.5">
-        <span className="text-sm font-semibold text-slate-800">보상편입용지</span>
+    <div className="flex min-h-0 h-full flex-col bg-background">
+      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border px-3 py-1.5">
+        <span className="text-sm font-semibold text-foreground">보상편입용지</span>
         <div className="flex items-center gap-1">
           <LayerRowAddButton
             onClick={handleAdd}
@@ -199,7 +199,7 @@ export function RoadRewardListPanel({
           <button
             type="button"
             onClick={onClose}
-            className="shrink-0 rounded p-1 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
+            className="shrink-0 rounded p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
             title="닫기"
             aria-label="닫기"
           >
@@ -208,18 +208,18 @@ export function RoadRewardListPanel({
         </div>
       </div>
 
-      <div className="shrink-0 space-y-2 border-b border-slate-200 px-2.5 py-2">
+      <div className="shrink-0 space-y-2 border-b border-border px-2.5 py-2">
         <div className="relative">
-          <Search className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
+          <Search className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
           <input
             type="search"
             value={keyword}
             onChange={(e) => setKeyword(e.target.value)}
             placeholder="건명·조직·정책"
-            className="h-8 w-full rounded border border-slate-300 pl-7 pr-2.5 text-xs outline-none focus:border-primary focus:ring-2 focus:ring-primary/25"
+            className="h-8 w-full rounded border border-border bg-background pl-7 pr-2.5 text-xs text-foreground outline-none placeholder:text-muted-foreground focus:border-primary focus:ring-2 focus:ring-primary/25"
           />
         </div>
-        <div className="flex items-center justify-between gap-2 text-[11px] text-slate-500">
+        <div className="flex items-center justify-between gap-2 text-[11px] text-muted-foreground">
           <span>목록 {filtered.length.toLocaleString()}건</span>
           {loading ? (
             <span className="inline-flex items-center gap-1">
@@ -232,17 +232,17 @@ export function RoadRewardListPanel({
 
       <div className="min-h-0 flex-1 overflow-auto scrollbar-thin">
         {listError ? (
-          <div className="m-2 rounded border border-amber-200 bg-amber-50 px-2 py-1.5 text-[11px] text-amber-900">
+          <div className="m-2 rounded border border-amber-200 bg-amber-50 px-2 py-1.5 text-[11px] text-amber-900 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200">
             {listError}
           </div>
         ) : null}
         {loading && filtered.length === 0 ? (
-          <div className="flex items-center justify-center gap-2 px-3 py-8 text-[12px] text-slate-500">
+          <div className="flex items-center justify-center gap-2 px-3 py-8 text-[12px] text-muted-foreground">
             <Loader2 className="h-4 w-4 animate-spin" />
             불러오는 중…
           </div>
         ) : !loading && filtered.length === 0 ? (
-          <p className="px-3 py-2.5 text-xs text-slate-500">
+          <p className="px-3 py-2.5 text-xs text-muted-foreground">
             {cases.length === 0 ? "등록된 건이 없습니다." : "검색 결과가 없습니다."}
           </p>
         ) : (
@@ -269,10 +269,10 @@ export function RoadRewardListPanel({
                       }
                     }}
                     className={cn(
-                      "cursor-pointer border-b border-slate-200 align-middle transition-colors",
+                      "cursor-pointer border-b border-border align-middle transition-colors",
                       isSelected
                         ? "border-l-[3px] border-l-primary bg-primary/[0.11] ring-1 ring-inset ring-primary/20 hover:bg-primary/[0.14]"
-                        : "border-l-[3px] border-l-transparent hover:bg-slate-50"
+                        : "border-l-[3px] border-l-transparent hover:bg-muted/50"
                     )}
                   >
                     <td className="min-w-0 overflow-hidden px-3 py-1.5">
@@ -280,20 +280,20 @@ export function RoadRewardListPanel({
                         <p
                           className={cn(
                             "min-w-0 flex-1 truncate text-sm font-medium leading-tight",
-                            c.name.trim() ? "text-slate-800" : "text-slate-400"
+                            c.name.trim() ? "text-foreground" : "text-muted-foreground"
                           )}
                           title={displayName}
                         >
                           {displayName}
                         </p>
                         {!c.geometry3857 ? (
-                          <span className="shrink-0 rounded border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-amber-800">
+                          <span className="shrink-0 rounded border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-amber-800 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200">
                             범위미정
                           </span>
                         ) : null}
                       </div>
                     </td>
-                    <td className="whitespace-nowrap px-3 py-1.5 text-right text-[11px] tabular-nums text-slate-600">
+                    <td className="whitespace-nowrap px-3 py-1.5 text-right text-[11px] tabular-nums text-muted-foreground">
                       필지 {parcelCount.toLocaleString()}건
                     </td>
                   </tr>

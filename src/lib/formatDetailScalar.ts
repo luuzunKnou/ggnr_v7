@@ -10,6 +10,8 @@ export type FormatDetailScalarOptions = {
   empty?: string;
   /** defineLayer define_field_type — 있으면 자료형 우선 */
   fieldType?: unknown;
+  /** 코드·식별자: 천단위·날짜 추정 없이 원문 */
+  asLiteral?: boolean;
 };
 
 /** 유한 숫자 → 천단위 구분, 소수 끝 0 제거 (최대 소수 20자리) */
@@ -46,7 +48,7 @@ function tryFormatAsNumberString(s: string, strictHeuristics: boolean): string |
 
 /**
  * 상세 필드 1개 표시용. null/빈 문자열은 `empty` (기본 '-').
- * 두 번째 인자는 빈값 문자열 또는 `{ empty, fieldType }`.
+ * 두 번째 인자는 빈값 문자열 또는 `{ empty, fieldType, asLiteral }`.
  */
 export function formatDetailScalarValue(
   raw: unknown,
@@ -69,6 +71,16 @@ export function formatDetailScalarValue(
     } catch {
       return String(raw);
     }
+  }
+
+  // 코드·식별자 — 천단위·날짜 추정 없이 원문
+  if (opts.asLiteral) {
+    if (typeof raw === 'number') {
+      if (!Number.isFinite(raw)) return String(raw);
+      return String(raw);
+    }
+    const lit = String(raw).trim();
+    return lit === '' ? empty : lit;
   }
 
   // 자료형 NUMBER — 천단위 콤마

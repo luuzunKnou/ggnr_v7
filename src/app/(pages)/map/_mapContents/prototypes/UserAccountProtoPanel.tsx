@@ -6,6 +6,7 @@ import { signOut, useSession } from 'next-auth/react'
 import { useSearchParams } from 'next/navigation'
 import { LogOut, Mail, Phone, X } from 'lucide-react'
 import { call } from '@/lib/api'
+import { withBasePathNav } from '@/lib/basePath'
 import { cn } from '@/lib/utils'
 import {
   dismissAllBizNotifs,
@@ -146,7 +147,7 @@ export function UserAccountProtoPanel({
 
   const handleLogout = useCallback(async () => {
     await signOut({ redirect: false })
-    window.location.assign('/')
+    window.location.assign(withBasePathNav('/'))
   }, [])
 
   const handleDismissNotif = useCallback((item: ProtoNotifItem) => {

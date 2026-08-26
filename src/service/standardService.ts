@@ -268,6 +268,29 @@ function lookupDefineCodeLabel(tableName: string, fieldName: string, raw: string
   return map.get(normalizeCodeKey(raw));
 }
 
+function formatIdentifyCellValue(
+  tableName: string,
+  fieldName: string | null | undefined,
+  raw: unknown,
+  codeFieldNames: Set<string>
+): string {
+  if (raw == null) return '';
+  const v = String(raw).trim();
+  if (!v || !fieldName) return v;
+  if (!codeFieldNames.has(fieldName.trim().toLowerCase())) return v;
+  return lookupDefineCodeLabel(tableName, fieldName, v) ?? v;
+}
+
+function codeFieldNameSet(tableName: string): Set<string> {
+  const names = new Set<string>();
+  for (const f of loadDefineFieldRows(tableName)) {
+    if (String(f.define_field_type ?? '').trim().toUpperCase() !== 'CODE') continue;
+    const name = String(f.define_field_name ?? '').trim().toLowerCase();
+    if (name) names.add(name);
+  }
+  return names;
+}
+
 function joinDefineShownValues(
   row: Record<string, unknown>,
   fields: Record<string, unknown>[],
@@ -453,10 +476,12 @@ function getDefineFieldKorName(physicalTable: string, columnName: string): strin
 function findFirstKeywordColumnMatch(
   row: Record<string, unknown>,
   textCols: string[],
-  keywordLc: string
+  keywordLc: string,
+  physicalTable: string
 ): { fieldName: string; valuePreview: string } | null {
   if (!keywordLc) return null;
   const maxLen = 56;
+  const codeFields = codeFieldNameSet(physicalTable);
   for (const col of textCols) {
     const key = Object.keys(row).find((k) => k.toLowerCase() === col.toLowerCase());
     if (!key) continue;
@@ -465,7 +490,8 @@ function findFirstKeywordColumnMatch(
     const s = String(v).trim();
     if (s === '') continue;
     if (s.toLowerCase().includes(keywordLc)) {
-      const preview = s.length > maxLen ? `${s.slice(0, maxLen)}…` : s;
+      const mapped = formatIdentifyCellValue(physicalTable, col, s, codeFields);
+      const preview = mapped.length > maxLen ? `${mapped.slice(0, maxLen)}…` : mapped;
       return { fieldName: col, valuePreview: preview };
     }
   }
@@ -487,7 +513,7 @@ function attachKeywordMatchToFeatures(
   const kw = keywordRaw.trim().toLowerCase();
   if (!kw) return features as IdentifyFeatureOut[];
   return features.map((feat) => {
-    const hit = findFirstKeywordColumnMatch(feat.data, textCols, kw);
+    const hit = findFirstKeywordColumnMatch(feat.data, textCols, kw, physicalTable);
     if (!hit) return feat;
     const kor = getDefineFieldKorName(physicalTable, hit.fieldName);
     const out: IdentifyFeatureOut = { ...feat };
@@ -760,19 +786,7 @@ export async function identifyFeatures(params: {
         if (rawFeatures.length > 0) {
           const korName = getTableKorName(displayName);
           const titleField = getTitleFieldName(physicalTable);
-          const nonGeomCols = columns.filter((c) => c !== geomCol);
-          const features = rawFeatures.map((row) => {
-            let titleValue = '';
-            if (titleField) {
-              const key = Object.keys(row).find((k) => k.toLowerCase() === titleField.toLowerCase());
-              titleValue = key ? String(row[key] ?? '') : '';
-            }
-            if (!titleValue && nonGeomCols.length > 0) {
-              const fallback = Object.keys(row).find((k) => k.toLowerCase() === nonGeomCols[0].toLowerCase());
-              titleValue = fallback ? String(row[fallback] ?? '') : '';
-            }
-            return { titleValue, data: row };
-          });
+          const features = mapRowsToIdentifyFeatures(rawFeatures, physicalTable, columns, geomCol);
           results.push({
             tableName: displayName,
             korName,
@@ -1091,15 +1105,27 @@ function mapRowsToIdentifyFeatures(
 ): { titleValue: string; data: Record<string, unknown> }[] {
   const titleField = getTitleFieldName(physicalTable);
   const nonGeomCols = columns.filter((c) => c !== geomCol);
+  const codeFields = codeFieldNameSet(physicalTable);
   return rawFeatures.map((row) => {
     let titleValue = '';
     if (titleField) {
       const key = Object.keys(row).find((k) => k.toLowerCase() === titleField.toLowerCase());
-      titleValue = key ? String(row[key] ?? '') : '';
+      titleValue = formatIdentifyCellValue(
+        physicalTable,
+        titleField,
+        key ? row[key] : null,
+        codeFields
+      );
     }
     if (!titleValue && nonGeomCols.length > 0) {
-      const fallback = Object.keys(row).find((k) => k.toLowerCase() === nonGeomCols[0].toLowerCase());
-      titleValue = fallback ? String(row[fallback] ?? '') : '';
+      const fallbackCol = nonGeomCols[0];
+      const fallback = Object.keys(row).find((k) => k.toLowerCase() === fallbackCol.toLowerCase());
+      titleValue = formatIdentifyCellValue(
+        physicalTable,
+        fallbackCol,
+        fallback ? row[fallback] : null,
+        codeFields
+      );
     }
     return { titleValue, data: row };
   });

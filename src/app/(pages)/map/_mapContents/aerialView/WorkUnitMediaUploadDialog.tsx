@@ -109,9 +109,11 @@ export function WorkUnitMediaUploadDialog({
           <DialogTitle className="text-sm font-semibold">
             {kind === 'ortho'
               ? '드론영상(TIF) 업로드'
-              : kind === 'panorama'
-                ? '파노라마 업로드'
-                : '사진·동영상 업로드'}
+              : kind === 'satellite'
+                ? '항공영상(TIF) 업로드'
+                : kind === 'panorama'
+                  ? '파노라마 업로드'
+                  : '사진·동영상 업로드'}
           </DialogTitle>
         </DialogHeader>
 
@@ -120,6 +122,9 @@ export function WorkUnitMediaUploadDialog({
             작업단위 «{workName || folderName}» 폴더에 저장합니다. 업로드 중 창을 닫아도 중단되지
             않으며, 목록 상단에서 진행률을 볼 수 있습니다.
             {kind === 'panorama' ? ' 파노라마는 이미지 파일만 올릴 수 있습니다.' : ''}
+            {kind === 'satellite'
+              ? ' 변환 완료 시 배경지도 «자체항공영상»에 등록됩니다.'
+              : ''}
           </p>
 
           <div>
@@ -127,7 +132,11 @@ export function WorkUnitMediaUploadDialog({
               ref={inputRef}
               type="file"
               accept={
-                kind === 'ortho' ? ACCEPT_ORTHO : kind === 'panorama' ? ACCEPT_PANO : ACCEPT_MEDIA
+                kind === 'ortho' || kind === 'satellite'
+                  ? ACCEPT_ORTHO
+                  : kind === 'panorama'
+                    ? ACCEPT_PANO
+                    : ACCEPT_MEDIA
               }
               multiple
               className="hidden"

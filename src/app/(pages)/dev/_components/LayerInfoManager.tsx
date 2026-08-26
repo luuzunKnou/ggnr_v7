@@ -22,7 +22,7 @@ import {
   fetchLayerDbTableList,
   invalidateLayerManagerListCache,
 } from "./layerManager/layerManagerListCache"
-
+/** GeoServer 관리 UI·REST — BASE_PATH 프록시가 아닌 네이티브 :8080 */
 const GEOSERVER_DEFAULT_URL =
   typeof window !== "undefined"
     ? `${window.location.protocol}//${window.location.hostname}:8080/geoserver`
@@ -150,6 +150,7 @@ function getLegendGraphicUrl(layerName: string, styleName?: string, version?: nu
     FORMAT: "image/png",
     WIDTH: "32",
     HEIGHT: "32",
+    TRANSPARENT: "true",
     ...(version != null ? { _v: String(version) } : {}),
   })
   return `${base}/wms?${params.toString()}`
@@ -1543,7 +1544,7 @@ export function LayerInfoManager({
                   type="button"
                   onClick={() => setLayerFilterMode(opt.value)}
                   className={cn(
-                    "h-6 rounded-sm px-2 text-xs transition-colors",
+                    "h-6 rounded-sm px-2 text-xs leading-none whitespace-nowrap transition-colors",
                     layerFilterMode === opt.value
                       ? "bg-primary text-primary-foreground"
                       : "text-muted-foreground hover:bg-muted"

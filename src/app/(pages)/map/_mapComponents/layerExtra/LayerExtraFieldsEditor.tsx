@@ -28,9 +28,9 @@ type Props = {
 };
 
 const inputClass =
-  'min-w-0 w-full rounded border border-slate-200 bg-white px-1.5 py-0.5 text-xs outline-none focus:border-primary focus:ring-1 focus:ring-primary/30';
+  'min-w-0 w-full rounded border border-border bg-background px-1.5 py-0.5 text-xs outline-none focus:border-primary focus:ring-1 focus:ring-primary/30';
 const iconBtn =
-  'inline-flex h-6 w-6 shrink-0 items-center justify-center rounded border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-40';
+  'inline-flex h-6 w-6 shrink-0 items-center justify-center rounded border border-border bg-background text-muted-foreground hover:bg-muted disabled:opacity-40';
 const rowClass = 'flex items-center gap-x-2 px-2 py-1.5';
 /** 필드명 약 100px */
 const nameBoxClass = 'w-[100px] shrink-0';
@@ -104,18 +104,18 @@ export function LayerExtraFieldsEditor({
   return (
     <div className={cn(className)}>
       <div className="mb-1 flex items-baseline justify-between gap-2">
-        <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+        <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
           추가 속성
         </div>
         {isEditing ? (
-          <div className="text-right text-[10px] leading-snug text-slate-400">
+          <div className="text-right text-[10px] leading-snug text-muted-foreground">
             * 드래그 시 순서가 변경됩니다.
           </div>
         ) : null}
       </div>
-      <dl className="divide-y divide-slate-100 rounded border border-slate-200 bg-slate-50/50">
+      <dl className="divide-y divide-border rounded border border-border bg-muted/40">
         {items.length === 0 && !isEditing ? (
-          <div className="px-2 py-3 text-slate-500">추가 속성이 없습니다.</div>
+          <div className="px-2 py-3 text-muted-foreground">추가 속성이 없습니다.</div>
         ) : null}
 
         {items.map((row, idx) =>
@@ -131,7 +131,7 @@ export function LayerExtraFieldsEditor({
                 draggable
                 title="순서 변경"
                 aria-label="순서 변경"
-                className="inline-flex h-6 w-5 shrink-0 cursor-grab items-center justify-center text-slate-400 hover:text-slate-600 active:cursor-grabbing"
+                className="inline-flex h-6 w-5 shrink-0 cursor-grab items-center justify-center text-muted-foreground hover:text-foreground active:cursor-grabbing"
                 onDragStart={(e) => handleDragStart(e, idx)}
                 onDragEnd={() => {
                   dragIdx.current = null;
@@ -181,10 +181,10 @@ export function LayerExtraFieldsEditor({
             </div>
           ) : (
             <div key={`extra-${idx}`} className={cn(rowClass, 'items-start')}>
-              <dt className={cn(nameBoxClass, 'break-all leading-snug font-medium text-slate-600')}>
+              <dt className={cn(nameBoxClass, 'break-all leading-snug font-medium text-muted-foreground')}>
                 {row.fieldName || '—'}
               </dt>
-              <dd className="min-w-0 flex-1 break-words text-slate-800">
+              <dd className="min-w-0 flex-1 break-words text-foreground">
                 {extraTypeIsDate(row.dataType)
                   ? toDateInputValue(row.value) || row.value || '—'
                   : row.value || '—'}
@@ -198,14 +198,14 @@ export function LayerExtraFieldsEditor({
             <button
               type="button"
               onClick={addBlank}
-              className="flex h-7 min-w-0 max-w-[9.5rem] flex-1 basis-0 items-center justify-center gap-1 whitespace-nowrap rounded border border-dashed border-slate-300 bg-white px-2 text-[11px] text-slate-600 hover:bg-slate-50"
+              className="flex h-7 min-w-0 max-w-[9.5rem] flex-1 basis-0 items-center justify-center gap-1 whitespace-nowrap rounded border border-dashed border-border bg-background px-2 text-[11px] text-muted-foreground hover:bg-muted"
             >
               <Plus className="h-3 w-3 shrink-0" />
               속성을 추가해주세요
             </button>
             {unusedDefs.length > 0 ? (
               <select
-                className="h-7 min-w-0 max-w-[9.5rem] flex-1 basis-0 rounded border border-slate-200 bg-white px-1.5 text-center text-[11px] text-slate-600"
+                className="h-7 min-w-0 max-w-[9.5rem] flex-1 basis-0 rounded border border-border bg-background px-1.5 text-center text-[11px] text-muted-foreground"
                 defaultValue=""
                 onChange={(e) => {
                   const v = e.target.value;

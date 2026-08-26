@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { X } from 'lucide-react';
+import { appFetch } from '@/lib/basePath';
 import { SafetyWaterStatsPanel, type StatsKindBlock } from './SafetyWaterStatsPanel';
 import { useSafetyWater } from './safetyWaterContext';
 import {
@@ -79,7 +80,7 @@ export function SafetyWaterStatsSidePanel({ onClose }: { onClose: () => void }) 
           setLoadingByKind((prev) => ({ ...prev, [kind]: true }));
           try {
             const stations = getStatsTargetStations(kind);
-            const res = await fetch('/api/flood/observations/stats', {
+            const res = await appFetch('/api/flood/observations/stats', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({

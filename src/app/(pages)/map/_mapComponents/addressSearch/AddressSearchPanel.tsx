@@ -45,6 +45,8 @@ type Props = {
    * field: 폼 Input 한 칸 대체(결과만 드롭다운)
    */
   layout?: 'default' | 'field';
+  /** field일 때 표 칸 높이에 맞춤 */
+  compact?: boolean;
   /** true면 주소(도로명·지번)와 장소(POI)를 함께 검색 */
   includePlace?: boolean;
 };
@@ -58,6 +60,7 @@ export function AddressSearchPanel({
   onClear,
   onQueryChange,
   layout = 'default',
+  compact = false,
   includePlace = false,
 }: Props) {
   const [query, setQuery] = useState(initialQuery);
@@ -91,6 +94,19 @@ export function AddressSearchPanel({
       saveRecentQueries(next);
       return next;
     });
+  }, []);
+
+  const removeRecentQuery = useCallback((target: string) => {
+    setRecentQueries((prev) => {
+      const next = prev.filter((q) => q !== target);
+      saveRecentQueries(next);
+      return next;
+    });
+  }, []);
+
+  const clearRecentQueries = useCallback(() => {
+    setRecentQueries([]);
+    saveRecentQueries([]);
   }, []);
 
   const runSearch = useCallback(
@@ -169,8 +185,10 @@ export function AddressSearchPanel({
         }}
         className={
           isField
-            ? 'flex h-8 items-center gap-1.5 rounded-md border border-border/80 bg-muted/30 px-2'
-            : 'flex items-center gap-2 rounded-[5px] border border-slate-200 bg-white px-2 py-1.5'
+            ? compact
+              ? 'flex h-[20px] items-center gap-0.5 rounded-none border-0 bg-transparent px-0'
+              : 'flex h-8 items-center gap-1.5 rounded-md border border-border/80 bg-muted/30 px-2'
+            : 'flex items-center gap-2 rounded-[5px] border border-border bg-background px-2 py-1.5'
         }
       >
         <button
@@ -191,10 +209,12 @@ export function AddressSearchPanel({
             onQueryChange?.(next);
           }}
           placeholder={placeholder}
-          style={isField ? { fontSize: '12px' } : undefined}
+          style={isField ? { fontSize: compact ? '11px' : '12px' } : undefined}
           className={
             isField
-              ? 'h-7 min-h-7 border-0 bg-transparent px-0 text-[12px] shadow-none focus-visible:border-0 focus-visible:ring-0'
+              ? compact
+                ? 'h-[20px] min-h-0 border-0 bg-transparent px-0.5 text-[11px] shadow-none focus-visible:border-0 focus-visible:ring-0'
+                : 'h-7 min-h-7 border-0 bg-transparent px-0 text-[12px] shadow-none focus-visible:border-0 focus-visible:ring-0'
               : 'h-5 min-h-5 border-0 bg-transparent px-0 text-[12px] shadow-none focus-visible:border-0 focus-visible:ring-0'
           }
         />
@@ -211,8 +231,8 @@ export function AddressSearchPanel({
         )}
       </form>
 
-      {!vworldApiKey && (
-        <div className="rounded border border-amber-100 bg-amber-50 px-2 py-2 text-[11px] text-amber-800">
+      {!vworldApiKey && !compact && (
+        <div className="rounded border border-amber-200 bg-amber-50 px-2 py-2 text-[11px] text-amber-800 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200">
           VWorld API 키가 설정되지 않아 주소검색을 사용할 수 없습니다.
         </div>
       )}
@@ -222,7 +242,7 @@ export function AddressSearchPanel({
           className={
             isField
               ? 'absolute left-0 right-0 top-full z-30 mt-1 max-h-[220px] overflow-y-auto rounded-md border border-border bg-card shadow-md'
-              : 'max-h-[280px] overflow-y-auto rounded-[5px] border border-slate-200 bg-white'
+              : 'max-h-[280px] overflow-y-auto rounded-[5px] border border-border bg-background'
           }
         >
           {loading ? (
@@ -242,7 +262,7 @@ export function AddressSearchPanel({
                   >
                     {item.title && (
                       <div className="flex min-h-[1.25rem] items-center gap-2">
-                        <span className="w-12 shrink-0 rounded bg-emerald-100 py-0.5 text-center text-[10px] font-semibold text-emerald-800">
+                        <span className="w-12 shrink-0 rounded bg-emerald-100 py-0.5 text-center text-[10px] font-semibold text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300">
                           장소
                         </span>
                         <span className="min-w-0 flex-1 truncate text-[12px] text-foreground">
@@ -252,7 +272,7 @@ export function AddressSearchPanel({
                     )}
                     {item.roadAddress && (
                       <div className="flex min-h-[1.25rem] items-center gap-2">
-                        <span className="w-12 shrink-0 rounded bg-blue-100 py-0.5 text-center text-[10px] font-semibold text-blue-700">
+                        <span className="w-12 shrink-0 rounded bg-blue-100 py-0.5 text-center text-[10px] font-semibold text-blue-700 dark:bg-blue-950/50 dark:text-blue-300">
                           도로명
                         </span>
                         <span className="min-w-0 flex-1 truncate text-[12px] text-foreground">
@@ -263,7 +283,7 @@ export function AddressSearchPanel({
                     )}
                     {item.jibunAddress && (
                       <div className="flex min-h-[1.25rem] items-center gap-2">
-                        <span className="w-12 shrink-0 rounded bg-amber-100 py-0.5 text-center text-[10px] font-semibold text-amber-800">
+                        <span className="w-12 shrink-0 rounded bg-amber-100 py-0.5 text-center text-[10px] font-semibold text-amber-800 dark:bg-amber-950/50 dark:text-amber-300">
                           지번
                         </span>
                         <span className="min-w-0 flex-1 truncate text-[12px] text-foreground">
@@ -282,24 +302,47 @@ export function AddressSearchPanel({
             <div className="py-6 text-center text-[12px] text-muted-foreground">검색 결과가 없습니다</div>
           ) : !isField && recentQueries.length > 0 ? (
             <div className="px-3 py-2">
-              <p className="mb-1.5 flex items-center gap-1.5 text-[12px] font-medium text-muted-foreground">
-                <History className="h-3.5 w-3.5" />
-                최근 검색어
-              </p>
+              <div className="mb-1.5 flex items-center justify-between gap-2">
+                <p className="flex items-center gap-1.5 text-[12px] font-medium text-muted-foreground">
+                  <History className="h-3.5 w-3.5" />
+                  최근 검색어
+                </p>
+                <button
+                  type="button"
+                  onClick={clearRecentQueries}
+                  className="cursor-pointer text-[11px] text-muted-foreground transition-colors hover:text-foreground"
+                >
+                  전체 삭제
+                </button>
+              </div>
               <ul className="flex flex-wrap gap-1.5">
                 {recentQueries.map((q) => (
                   <li key={q}>
-                    <button
-                      type="button"
-                      title={q}
-                      onClick={() => {
-                        setQuery(q);
-                        runSearch(q);
-                      }}
-                      className="cursor-pointer rounded-[5px] bg-muted px-2.5 py-1.5 text-[12px] text-foreground transition-colors hover:bg-muted/80"
-                    >
-                      {q}
-                    </button>
+                    <span className="inline-flex max-w-full items-center gap-0.5 rounded-[5px] bg-muted pl-2.5 text-[12px] text-foreground transition-colors hover:bg-muted/80">
+                      <button
+                        type="button"
+                        title={q}
+                        onClick={() => {
+                          setQuery(q);
+                          runSearch(q);
+                        }}
+                        className="cursor-pointer truncate py-1.5 text-left"
+                      >
+                        {q}
+                      </button>
+                      <button
+                        type="button"
+                        title="삭제"
+                        aria-label={`${q} 삭제`}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          removeRecentQuery(q);
+                        }}
+                        className="cursor-pointer rounded-r-[5px] px-1.5 py-1.5 text-muted-foreground transition-colors hover:text-foreground"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </span>
                   </li>
                 ))}
               </ul>

@@ -3,6 +3,13 @@
  * row에서 값을 안전하게 조회하기 위한 유틸.
  */
 
+/** defineLayer 체크 플래그 (true / 'true' / '1') */
+export function isDefineFieldFlagTrue(v: unknown): boolean {
+  if (v === true) return true;
+  const s = String(v ?? '').trim().toLowerCase();
+  return s === 'true' || s === '1';
+}
+
 /**
  * row에서 fieldName에 해당하는 값을 대소문자 구분 없이 키 매칭하여 반환.
  */

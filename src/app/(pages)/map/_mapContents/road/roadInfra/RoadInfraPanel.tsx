@@ -880,16 +880,16 @@ export function RoadInfraPanel({
 
   return (
     <div className="flex-1 min-h-0 flex flex-col overflow-hidden opacity-[0.95]">
-      <div className="shrink-0 border-b border-slate-200 bg-white px-2.5 py-2">
-        <div className="mb-2 flex rounded-md border border-slate-200 bg-slate-50 p-0.5">
+      <div className="shrink-0 border-b border-border bg-background px-2.5 py-2">
+        <div className="mb-2 flex rounded-md border border-border bg-muted/50 p-0.5">
           <button
             type="button"
             onClick={() => setSearchTab("keyword")}
             className={cn(
               "flex-1 rounded py-1.5 text-[11px] font-medium transition-colors",
               searchTab === "keyword"
-                ? "bg-white text-primary shadow-sm"
-                : "text-slate-500 hover:text-slate-700"
+                ? "bg-background text-primary shadow-sm"
+                : "text-muted-foreground hover:text-foreground"
             )}
           >
             통합검색
@@ -903,8 +903,8 @@ export function RoadInfraPanel({
             className={cn(
               "flex-1 rounded py-1.5 text-[11px] font-medium transition-colors",
               searchTab === "shape"
-                ? "bg-white text-primary shadow-sm"
-                : "text-slate-500 hover:text-slate-700"
+                ? "bg-background text-primary shadow-sm"
+                : "text-muted-foreground hover:text-foreground"
             )}
           >
             도형검색
@@ -918,8 +918,8 @@ export function RoadInfraPanel({
             className={cn(
               "flex-1 rounded px-0.5 py-1.5 text-[10px] font-medium leading-tight transition-colors",
               searchTab === "boundary"
-                ? "bg-white text-primary shadow-sm"
-                : "text-slate-500 hover:text-slate-700"
+                ? "bg-background text-primary shadow-sm"
+                : "text-muted-foreground hover:text-foreground"
             )}
           >
             행정경계 검색
@@ -935,13 +935,13 @@ export function RoadInfraPanel({
                 if (e.key === "Enter") runKeywordSearch();
               }}
               placeholder="시설 속성 검색"
-              className="min-w-0 flex-1 rounded-md border border-slate-200 bg-white px-2 py-1.5 text-[11px] text-slate-800 placeholder:text-slate-400 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary/25"
+              className="min-w-0 flex-1 rounded-md border border-border bg-background px-2 py-1.5 text-[11px] text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary/25"
             />
             <button
               type="button"
               onClick={runKeywordSearch}
               disabled={searchLoading}
-              className="inline-flex shrink-0 items-center gap-1 rounded-md border border-primary bg-primary px-2.5 py-1.5 text-[11px] font-medium text-white transition-colors hover:bg-primary/90 disabled:opacity-50"
+              className="inline-flex shrink-0 items-center gap-1 rounded-md border border-primary bg-primary px-2.5 py-1.5 text-[11px] font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50"
             >
               <Search className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
               검색
@@ -983,7 +983,7 @@ export function RoadInfraPanel({
                       "flex min-w-[2.25rem] flex-1 flex-col items-center justify-center gap-0.5 rounded border py-1.5 text-[10px] transition-colors disabled:opacity-50",
                       isActive
                         ? "border-primary bg-primary/5 text-primary"
-                        : "border-slate-200 bg-white text-slate-400 hover:border-slate-300 hover:text-slate-600"
+                        : "border-border bg-background text-muted-foreground hover:border-border hover:text-foreground"
                     )}
                   >
                     <Icon className="h-4 w-4 shrink-0" strokeWidth={2} aria-hidden />
@@ -1012,8 +1012,8 @@ export function RoadInfraPanel({
                 className={cn(
                   "flex min-w-[2.25rem] flex-1 flex-col items-center justify-center gap-0.5 rounded border py-1.5 transition-colors",
                   spatialFilterWkt
-                    ? "border-amber-300 bg-white text-amber-600 hover:border-amber-400"
-                    : "border-slate-200 bg-white text-slate-400 hover:border-slate-300 hover:text-primary"
+                    ? "border-chart-4/50 bg-background text-chart-4 hover:border-chart-4"
+                    : "border-border bg-background text-muted-foreground hover:border-border hover:text-primary"
                 )}
               >
                 <RefreshCw className="h-4 w-4 shrink-0" strokeWidth={2} aria-hidden />
@@ -1031,7 +1031,7 @@ export function RoadInfraPanel({
                         setDataSelectValue("");
                       }}
                       disabled={searchLoading}
-                      className="h-8 w-full max-w-full rounded-md border border-slate-200 bg-white px-1 py-1 text-[11px] focus:border-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 disabled:opacity-50"
+                      className="h-8 w-full max-w-full rounded-md border border-border bg-background px-1 py-1 text-[11px] focus:border-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 disabled:opacity-50"
                     >
                       <option value="">테이블 선택</option>
                       {dataSelectTableOptions.map((name) => (
@@ -1049,7 +1049,7 @@ export function RoadInfraPanel({
                         setDataSelectValue("");
                       }}
                       disabled={!dataSelectTable || searchLoading}
-                      className="h-8 w-full max-w-full rounded-md border border-slate-200 bg-white px-1 py-1 text-[11px] focus:border-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 disabled:cursor-not-allowed disabled:opacity-60"
+                      className="h-8 w-full max-w-full rounded-md border border-border bg-background px-1 py-1 text-[11px] focus:border-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 disabled:cursor-not-allowed disabled:opacity-60"
                     >
                       <option value="">필드 선택</option>
                       {dataSelectFieldOptions.map((name) => (
@@ -1065,7 +1065,7 @@ export function RoadInfraPanel({
                     value={dataSelectValue}
                     onChange={(e) => setDataSelectValue(e.target.value)}
                     disabled={!dataSelectField || searchLoading}
-                    className="h-8 w-full max-w-full rounded-md border border-slate-200 bg-white px-1 py-1 text-[11px] focus:border-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 disabled:cursor-not-allowed disabled:opacity-60"
+                    className="h-8 w-full max-w-full rounded-md border border-border bg-background px-1 py-1 text-[11px] focus:border-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     <option value="">값 선택</option>
                     {dataSelectValueOptions.map((val) => (
@@ -1090,7 +1090,7 @@ export function RoadInfraPanel({
                     setRiSelected("");
                   }}
                   disabled={searchLoading}
-                  className="h-8 w-full rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] focus:border-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 disabled:opacity-50"
+                  className="h-8 w-full rounded-md border border-border bg-background px-2 py-1 text-[11px] focus:border-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 disabled:opacity-50"
                 >
                   <option value="">읍면동 선택</option>
                   {emdOptions.map((opt) => (
@@ -1105,7 +1105,7 @@ export function RoadInfraPanel({
                   value={riSelected}
                   onChange={(e) => setRiSelected(e.target.value)}
                   disabled={!emdSelected || searchLoading}
-                  className="h-8 w-full rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] focus:border-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 disabled:cursor-not-allowed disabled:opacity-60"
+                  className="h-8 w-full rounded-md border border-border bg-background px-2 py-1 text-[11px] focus:border-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   <option value="">리 선택</option>
                   {riOptions.map((opt) => (
@@ -1120,7 +1120,7 @@ export function RoadInfraPanel({
                 title="선택 항목을 목록에 추가"
                 onClick={addBoundaryBadgeFromDraft}
                 disabled={searchLoading}
-                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-primary bg-primary text-white transition-colors hover:bg-primary/90 disabled:opacity-50"
+                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-primary bg-primary text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50"
               >
                 <Plus className="h-4 w-4" strokeWidth={2} aria-hidden />
               </button>
@@ -1130,7 +1130,7 @@ export function RoadInfraPanel({
                 {boundaryBadges.map((b) => (
                   <span
                     key={b.key}
-                    className="flex min-h-[1.25rem] min-w-0 w-full max-w-full items-center justify-center gap-0.5 rounded-full border border-primary/25 bg-primary/8 py-0.5 pl-1 pr-0.5 text-[10px] leading-none text-slate-800"
+                    className="flex min-h-[1.25rem] min-w-0 w-full max-w-full items-center justify-center gap-0.5 rounded-full border border-primary/25 bg-primary/8 py-0.5 pl-1 pr-0.5 text-[10px] leading-none text-foreground"
                   >
                     <span className="min-w-0 max-w-[3em] flex-1 truncate text-center" title={b.label}>
                       {b.label}
@@ -1139,7 +1139,7 @@ export function RoadInfraPanel({
                       type="button"
                       title="목록에서 제거"
                       onClick={() => setBoundaryBadges((prev) => prev.filter((x) => x.key !== b.key))}
-                      className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-slate-500 transition-colors hover:bg-primary/15 hover:text-primary"
+                      className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-primary/15 hover:text-primary"
                     >
                       <X className="h-2.5 w-2.5" strokeWidth={2} aria-hidden />
                     </button>
@@ -1152,7 +1152,7 @@ export function RoadInfraPanel({
                 type="button"
                 onClick={() => void runBoundaryBadgeSearch()}
                 disabled={searchLoading || boundaryBadges.length === 0}
-                className="min-h-8 flex-1 rounded-md border border-primary bg-primary py-1.5 text-[11px] font-medium text-white transition-colors hover:bg-primary/90 disabled:opacity-50"
+                className="min-h-8 flex-1 rounded-md border border-primary bg-primary py-1.5 text-[11px] font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50"
               >
                 검색
               </button>
@@ -1161,7 +1161,7 @@ export function RoadInfraPanel({
                 title="선택·목록·지도 필터 초기화"
                 onClick={clearBoundaryTab}
                 disabled={searchLoading}
-                className="min-h-8 flex-1 rounded-md border border-slate-200 bg-white py-1.5 text-[11px] text-slate-600 transition-colors hover:border-slate-300 hover:text-primary disabled:opacity-50"
+                className="min-h-8 flex-1 rounded-md border border-border bg-background py-1.5 text-[11px] text-muted-foreground transition-colors hover:border-border hover:text-primary disabled:opacity-50"
               >
                 초기화
               </button>
@@ -1171,12 +1171,12 @@ export function RoadInfraPanel({
       </div>
 
       {searchLoading && (
-        <div className="shrink-0 border-b border-slate-100 bg-slate-50/80 px-3 py-1.5 text-[11px] text-slate-500">
+        <div className="shrink-0 border-b border-border bg-muted/50 px-3 py-1.5 text-[11px] text-muted-foreground">
           검색 중…
         </div>
       )}
       {searchHadNoResults && !searchLoading && (
-        <div className="shrink-0 border-b border-slate-100 bg-white px-3 py-2 text-center text-[11px] text-slate-500">
+        <div className="shrink-0 border-b border-border bg-background px-3 py-2 text-center text-[11px] text-muted-foreground">
           검색 결과가 없습니다.
         </div>
       )}
@@ -1184,7 +1184,7 @@ export function RoadInfraPanel({
       {/* 데이터조회 AttributeQueryUI — 레이어 그룹 영역과 동일 구조·클래스 */}
       <div className="min-h-0 flex-1 overflow-auto scrollbar-thin">
         {(layerGroups.length === 0 || layerGroups.every((g) => g.layers.length === 0)) && (
-          <div className="px-4 py-6 text-center text-sm text-slate-500">등록된 레이어가 없습니다.</div>
+          <div className="px-4 py-6 text-center text-sm text-muted-foreground">등록된 레이어가 없습니다.</div>
         )}
         {layerGroups.map((group) => {
           const filteredLayers = group.layers;
@@ -1197,26 +1197,26 @@ export function RoadInfraPanel({
 
           return (
             <div key={group.id} className="px-2 pb-2.5 pt-1 first:pt-2">
-              <div className="overflow-hidden rounded-md border border-slate-300/90 bg-white">
+              <div className="overflow-hidden rounded-md border border-border bg-background">
               <div
                 className={cn(
-                  "flex w-full items-center gap-2 bg-gradient-to-r from-slate-100 to-slate-50 px-2 py-2",
-                  isGroupOpen && "border-b border-slate-200"
+                  "flex w-full items-center gap-2 bg-gradient-to-r from-muted to-muted/50 px-2 py-2",
+                  isGroupOpen && "border-b border-border"
                 )}
               >
                 <button
                   type="button"
                   onClick={() => toggleGroup(group.id)}
-                  className="flex min-w-0 flex-1 items-center gap-1.5 rounded px-0.5 text-left transition-colors hover:bg-slate-200/40"
+                  className="flex min-w-0 flex-1 items-center gap-1.5 rounded px-0.5 text-left transition-colors hover:bg-muted/50"
                 >
                   {isGroupOpen ? (
-                    <ChevronDown className="h-3.5 w-3.5 shrink-0 text-slate-600" aria-hidden />
+                    <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden />
                   ) : (
-                    <ChevronRight className="h-3.5 w-3.5 shrink-0 text-slate-600" aria-hidden />
+                    <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden />
                   )}
                   <GroupIcon className="h-4 w-4 shrink-0 text-primary/85" aria-hidden />
-                  <span className="text-[12px] font-semibold tracking-tight text-slate-900">{group.name}</span>
-                  <span className="text-[11px] font-medium text-slate-500">({groupCount}개)</span>
+                  <span className="text-[12px] font-semibold tracking-tight text-foreground">{group.name}</span>
+                  <span className="text-[11px] font-medium text-muted-foreground">({groupCount}개)</span>
                 </button>
                 <input
                   type="checkbox"
@@ -1237,13 +1237,13 @@ export function RoadInfraPanel({
                     });
                   }}
                   onClick={(e) => e.stopPropagation()}
-                  className="h-3.5 w-3.5 shrink-0 cursor-pointer rounded border-slate-300 text-primary focus:ring-primary/30"
+                  className="h-3.5 w-3.5 shrink-0 cursor-pointer rounded border-border text-primary focus:ring-primary/30"
                   title="그룹 전체 켜기/끄기"
                 />
               </div>
 
               {isGroupOpen && (
-              <div className="bg-slate-50/90">
+              <div className="bg-muted/50">
                   {filteredLayers.map((layer) => {
                     const isVisible = visibleLayerNames.has(layer.tableName);
                     const totalCount = layerTotals[layer.tableName];
@@ -1260,24 +1260,24 @@ export function RoadInfraPanel({
                             handleLayerClick(layer);
                           }
                         }}
-                        className="flex w-full cursor-pointer items-center gap-1 border-b border-slate-100/90 py-1.5 pl-3.5 pr-2 transition-colors last:border-b-0 hover:bg-white"
+                        className="flex w-full cursor-pointer items-center gap-1 border-b border-border py-1.5 pl-3.5 pr-2 transition-colors last:border-b-0 hover:bg-background"
                       >
                         {failedLegendLayers.has(layer.tableName) ? (
                           <span
-                            className="h-5 w-5 shrink-0 rounded border border-slate-300 bg-slate-200"
+                            className="h-5 w-5 shrink-0 rounded border border-border bg-muted"
                             aria-hidden
                           />
                         ) : (
                           <img
                             src={getLegendGraphicUrl(layer.tableName, layer.tableName)}
                             alt=""
-                            className="h-5 w-5 shrink-0 rounded border border-slate-200 object-contain"
+                            className="h-5 w-5 shrink-0 rounded border border-border object-contain"
                             onError={() => onLegendError(layer.tableName)}
                           />
                         )}
                         <div className="flex min-h-[1.0rem] min-w-0 flex-1 items-center gap-1 text-left">
-                          <span className="truncate text-[11px] font-normal text-slate-700">{layer.name}</span>
-                          <span className="shrink-0 text-[11px] text-slate-400">
+                          <span className="truncate text-[11px] font-normal text-foreground/90">{layer.name}</span>
+                          <span className="shrink-0 text-[11px] text-muted-foreground">
                             ({totalCount != null ? `${totalCount.toLocaleString()}건` : "..."})
                           </span>
                         </div>
@@ -1287,7 +1287,7 @@ export function RoadInfraPanel({
                         >
                           <button
                             type="button"
-                            className="rounded p-0.5 text-slate-400 transition-colors hover:bg-slate-200/60 hover:text-primary"
+                            className="rounded p-0.5 text-muted-foreground transition-colors hover:bg-muted hover:text-primary"
                             title="필터 추가"
                             onClick={(e) => e.stopPropagation()}
                           >
@@ -1295,7 +1295,7 @@ export function RoadInfraPanel({
                           </button>
                           <button
                             type="button"
-                            className="rounded p-0.5 text-slate-400 transition-colors hover:bg-slate-200/60 hover:text-primary"
+                            className="rounded p-0.5 text-muted-foreground transition-colors hover:bg-muted hover:text-primary"
                             title="스타일 설정"
                             onClick={(e) => e.stopPropagation()}
                           >
@@ -1315,7 +1315,7 @@ export function RoadInfraPanel({
                               });
                             }}
                             onClick={(e) => e.stopPropagation()}
-                            className="h-3.5 w-3.5 shrink-0 cursor-pointer rounded border-slate-300 text-primary focus:ring-primary/30"
+                            className="h-3.5 w-3.5 shrink-0 cursor-pointer rounded border-border text-primary focus:ring-primary/30"
                             title="레이어 켜기/끄기"
                           />
                         </div>
