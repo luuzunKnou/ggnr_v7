@@ -1,4 +1,5 @@
 import { auth } from '@/auth';
+import { getBasePath } from '@/lib/basePath';
 import { NextResponse, type NextRequest } from 'next/server';
 
 /** CSS/JS·이미지 등 — basePath(/프로젝트명) 뒤에서도 인증 리다이렉트 금지 */
@@ -12,13 +13,39 @@ function isStaticAssetPath(pathname: string): boolean {
   );
 }
 
-/** basePath 유지한 앱 루트 URL (게이트에서 `/`로 떨어지지 않게) */
-function appHomeUrl(req: NextRequest): URL {
-  const home = req.nextUrl.clone();
-  home.pathname = '/';
+/** 게이트 프록시가 보는 공개 origin (x-forwarded-* 우선) */
+function publicOrigin(req: NextRequest): string {
+  const forwardedHost = req.headers.get('x-forwarded-host')?.split(',')[0]?.trim();
+  const host = forwardedHost || req.headers.get('host')?.trim() || req.nextUrl.host;
+  const forwardedProto = req.headers.get('x-forwarded-proto')?.split(',')[0]?.trim();
+  const proto =
+    forwardedProto ||
+    (req.nextUrl.protocol ? req.nextUrl.protocol.replace(/:$/, '') : '') ||
+    'http';
+  return `${proto}://${host}`;
+}
+
+/**
+ * 앱 홈으로 307 (Location은 반드시 절대 URL — 상대면 Next edge가 Invalid URL → 500).
+ * 공개 origin + getBasePath()로내어, 백엔드 Host Location이 ProxyPassReverse에
+ * 걸려 build_yy_v6build_yy 처럼 이어 붙는 경우를 줄인다.
+ *
+ * 게이트 conf (repo 밖) 권장:
+ *   ProxyPass        /build_yy  http://<next>:3000/build_yy
+ *   ProxyPassReverse /build_yy  http://<next>:3000/build_yy
+ *   — 공개·backend·BASE_PATH 모두 끝 / 없음, build_yy_v6 등 잔여 Reverse 제거
+ *   — X-Forwarded-Host / X-Forwarded-Proto 전달 권장
+ */
+function redirectToAppHome(req: NextRequest, query?: Record<string, string>): NextResponse {
+  const home = new URL(getBasePath() || '/', publicOrigin(req));
   home.search = '';
   home.hash = '';
-  return home;
+  if (query) {
+    for (const [k, v] of Object.entries(query)) {
+      home.searchParams.set(k, v);
+    }
+  }
+  return NextResponse.redirect(home);
 }
 
 export default auth((req) => {
@@ -48,15 +75,12 @@ export default auth((req) => {
     if (path === '/signup' || path.startsWith('/signup/')) return NextResponse.next();
     if (path === '/notice' || path.startsWith('/notice/')) return NextResponse.next();
     if (path === '/library' || path.startsWith('/library/')) return NextResponse.next();
-    const home = appHomeUrl(req);
     const dest = path + req.nextUrl.search;
-    home.searchParams.set('next', dest);
-    home.searchParams.set('openLogin', '1');
-    return NextResponse.redirect(home);
+    return redirectToAppHome(req, { next: dest, openLogin: '1' });
   }
 
   if (loggedIn && path === '/login') {
-    return NextResponse.redirect(appHomeUrl(req));
+    return redirectToAppHome(req);
   }
 
   return NextResponse.next();
