@@ -28,6 +28,7 @@ import {
   ParcelLandLinkageFailReasonHidden,
 } from '@/app/(pages)/map/_mapComponents/parcelLandLinkageUi';
 import { ParcelAnalysisMapCapture } from './ParcelAnalysis.mapCapture';
+import { isLargeParcelAnalysisArea, type ParcelAnalysisArea } from './parcelAnalysis.types';
 import { getGeoServerBase } from '@/lib/geoserverUrl';
 import {
   FacilityLayerLegendIcon,
@@ -266,6 +267,7 @@ type ResultModalProps = {
   enriching?: boolean;
   scopeAreaSqm?: number;
   itemCount?: number;
+  area?: ParcelAnalysisArea | null;
   mapCaptureConfig?: {
     geoserverUrl: string;
     workspace: string;
@@ -596,6 +598,7 @@ export function ParcelAnalysisResultModal({
   enriching = false,
   scopeAreaSqm = 0,
   itemCount = 0,
+  area = null,
   mapCaptureConfig = { geoserverUrl: getGeoServerBase(), workspace: 'ggnr' },
 }: ResultModalProps) {
   const [activeSectionId, setActiveSectionId] = useState<string | null>(sections[0]?.id ?? null);
@@ -625,6 +628,13 @@ export function ParcelAnalysisResultModal({
       }),
     [result.parcelCount, result.landRows, scopeAreaSqm]
   );
+
+  const resultLoading =
+    enriching ||
+    Boolean(result.landRowsProgress?.loading) ||
+    Boolean(result.landUseProgress?.loading);
+  const showLargeAreaHint =
+    area != null && isLargeParcelAnalysisArea(area) && resultLoading;
 
   const landSectionTitle = useMemo(() => {
     const areaText = `${result.totalAreaSqm.toLocaleString('ko-KR')}㎡`;
@@ -829,6 +839,11 @@ export function ParcelAnalysisResultModal({
             <p className="mt-0.5 truncate text-xs text-muted-foreground">
               [ {headerBracket} ] · 항목 {itemCount}
             </p>
+            {showLargeAreaHint ? (
+              <p className="mt-1 text-[11px] leading-snug text-orange-800 dark:text-orange-200">
+                분석 영역이 넓습니다. 조회가 오래 걸릴 수 있습니다.
+              </p>
+            ) : null}
           </div>
           <div className="flex shrink-0 items-center gap-2">
             <Button type="button" variant="outline" size="sm" onClick={onForceClose}>
