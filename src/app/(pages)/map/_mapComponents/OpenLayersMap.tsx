@@ -7,8 +7,9 @@ import { fromLonLat } from 'ol/proj';
 import { call } from '@/lib/api';
 import {
   MapControlPanel,
-  defaultMapControlGroups,
+  mapControlGroupsForSystem,
 } from './mapControlPanel/mapControlPanel';
+import type { MapControlGroup } from './mapControlPanel/mapControlPanel';
 import {
   BackgroundMapSelector,
   defaultBackgroundMapGroups,
@@ -137,7 +138,6 @@ import { isEmpty as isEmptyExtent } from 'ol/extent';
 import { AerialViewLayerPanel } from '../_mapContents/aerialView/AerialViewLayerPanel';
 import { useAerialViewCheckedMarkers } from '../_mapContents/aerialView/useAerialViewCheckedMarkers';
 import { useAerialOrthoCheckedTiles } from '../_mapContents/aerialView/useAerialOrthoCheckedTiles';
-import type { MapControlGroup } from './mapControlPanel/mapControlPanel';
 
 /** EWKT(SRID=…;)·3D 키워드(Z/M) 제거 후 ol/format/WKT 파싱용 문자열로 맞춤 */
 function normalizeSpatialFilterWktForOl(wkt: string): string {
@@ -1174,12 +1174,19 @@ export default function OpenLayersMap({
     roadCctvExtentWgs84
   );
 
-  // 전체 레이어 끄기 버튼(검색창 옆)용 콜백 등록: 지적도·건물도로·기초구간 + defineLayer 레이어 모두 끔
+  // 전체 레이어 끄기 버튼(검색창 옆)·시스템 전환용: 지적도·건물도로·기초구간 + defineLayer + 패널 체크 모두 끔
   useEffect(() => {
     if (!mapContext?.allLayersOffRef) return;
     mapContext.allLayersOffRef.current = () => {
       setActiveControls((prev) => prev.filter((id) => !LAYER_IDS_OFF_ON_ALL_OFF.includes(id)));
       mapContext?.setVisibleLayerNames?.(new Set());
+      // 우측 컨트롤 패널 체크박스 상태 (null=전체표시, 빈 Set=전체숨김)
+      setVisibleJimokLayerNames(new Set());
+      setVisibleLandownLayerNames(new Set());
+      setVisibleCadastralLayerNames(new Set());
+      setVisibleBuildingRoadLayerNames(new Set());
+      setVisibleThematicLayerNames(new Set());
+      setVisibleUndergroundFacilityLayerNames(new Set());
     };
     return () => {
       if (mapContext?.allLayersOffRef) mapContext.allLayersOffRef.current = null;
@@ -1330,14 +1337,10 @@ export default function OpenLayersMap({
   const router = useRouter();
   const searchParams = useSearchParams();
   const systemKey = searchParams.get('system') ?? '';
-  const mapControlGroups = useMemo((): MapControlGroup[] => {
-    if (systemKey === 'uav') return defaultMapControlGroups;
-    return defaultMapControlGroups.map((g) =>
-      g.id === 'base-maps'
-        ? { ...g, items: g.items.filter((item) => item.id !== 'aerial-view') }
-        : g
-    );
-  }, [systemKey]);
+  const mapControlGroups = useMemo(
+    (): MapControlGroup[] => mapControlGroupsForSystem(systemKey),
+    [systemKey]
+  );
 
   const aerialViewPanelOpen =
     activeControls.includes('aerial-view') || isAerialViewPanelExiting;

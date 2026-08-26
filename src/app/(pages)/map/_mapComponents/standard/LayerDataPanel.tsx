@@ -1215,7 +1215,7 @@ export function LayerDataPanel({
           return {
             fieldKey: key || `basic-${i}`,
             label,
-            value: formatDetailScalarValue(raw),
+            value: formatDetailScalarValue(raw, { fieldType: f.define_field_type }),
             highlight: i === 0,
             readOnly,
           };
@@ -1322,7 +1322,7 @@ export function LayerDataPanel({
                             )
                           : (() => {
                               const v = getRowValueByField(row, String(f.define_field_name));
-                              return formatDetailScalarValue(v);
+                              return formatDetailScalarValue(v, { fieldType: f.define_field_type });
                             })();
                         return (
                           <span key={String(f.define_field_name)} className="flex-1 min-w-0 truncate pl-2 first:pl-0 text-muted-foreground">

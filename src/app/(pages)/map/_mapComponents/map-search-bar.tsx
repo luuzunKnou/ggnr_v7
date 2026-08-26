@@ -482,10 +482,19 @@ export function MapSearchBar({
 
   const selectSystem = (sysKey: string) => {
     const current = new URLSearchParams(Array.from(searchParams.entries()));
+    const systemChanged = sysKey !== selectedSystemKey;
     if (sysKey) current.set('system', sysKey);
     else current.delete('system');
-    scrubOccupationLedgerFromMapSearchParams(current, sysKey);
-    scrubUseFeeFromMapSearchParams(current, sysKey);
+    if (systemChanged) {
+      // 시스템 전환: 좌측 패널·상세 쿼리 닫고 레이어 전부 끄기
+      current.delete('opened');
+      current.delete('dataTable');
+      current.delete('dataKey');
+      mapContext?.allLayersOffRef?.current?.();
+    } else {
+      scrubOccupationLedgerFromMapSearchParams(current, sysKey);
+      scrubUseFeeFromMapSearchParams(current, sysKey);
+    }
     router.push(`/map?${current.toString()}`);
     setSystemModalOpen(false);
   };

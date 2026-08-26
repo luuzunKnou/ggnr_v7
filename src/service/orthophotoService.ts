@@ -22,10 +22,268 @@ import {
 import { GGNR_DATA_PATHS } from '@/lib/ggnrDataPaths';
 import { resolveGgnrDataDir, turbopackOpaquePath } from '@/lib/turbopackFsPath';
 
-/** gdal2tiles 대용량 대비 (ms) */
-const ORTHO_JOB_TIMEOUT_MS = 3 * 60 * 60 * 1000;
+/** 무활동 감지 기본값 (ms) — stdout/stderr 수신 없이 이 시간이 지나면 kill */
+const ORTHO_ACTIVITY_TIMEOUT_MS = 10 * 60 * 1000;
+
+/** 절대 상한 24시간 고정 */
+function getOrthoMaxTimeoutMs(): number {
+  return 24 * 60 * 60 * 1000;
+}
+
+/** GGNR_DATA_DIR 아래 임시 작업 경로 (warp·타일 staging) */
+function getOrthoDataWorkDir(): string {
+  return path.join(getBaseDir(), '.tmp');
+}
 
 const PYTHON_ENV = { ...process.env, PYTHONIOENCODING: 'utf-8', PYTHONUTF8: '1' };
+
+// ─── 진행률 추적 ───────────────────────────────────────────────
+
+export type OrthoJobPhase = 'queued' | 'vrt' | 'warp' | 'tiles' | 'copy' | 'done' | 'failed';
+
+export interface OrthoJobProgress {
+  groupName: string;
+  phase: OrthoJobPhase;
+  percent: number;
+  startedAt: string;
+  phaseStartedAt: string;
+  updatedAt: string;
+  message: string;
+  /** 타일 장수 기준 예상 남은 초 (없으면 null) */
+  etaSeconds: number | null;
+  /** 예상 총 타일 장수 (warp 이후) */
+  tilesExpected: number | null;
+  /** 현재까지 생성된(또는 복사된) 타일 장수 */
+  tilesCreated: number | null;
+}
+
+const orthoJobProgressMap = new Map<string, OrthoJobProgress>();
+
+/** gdal2tiles --tilesize=512 mercator 와 동일한 타일 인덱스 산식 */
+const ORTHO_TILE_SIZE = 512;
+const ORTHO_ORIGIN_SHIFT = (2 * Math.PI * 6378137) / 2;
+
+function orthoInitialResolution(tileSize: number): number {
+  return (2 * Math.PI * 6378137) / tileSize;
+}
+
+function metersToOrthoTile(mx: number, my: number, zoom: number, tileSize = ORTHO_TILE_SIZE): { tx: number; ty: number } {
+  const res = orthoInitialResolution(tileSize) / 2 ** zoom;
+  return {
+    tx: Math.floor((mx + ORTHO_ORIGIN_SHIFT) / (res * tileSize)),
+    ty: Math.floor((ORTHO_ORIGIN_SHIFT - my) / (res * tileSize)),
+  };
+}
+
+function estimateMercatorTileCount(
+  minX: number,
+  minY: number,
+  maxX: number,
+  maxY: number,
+  zoomMin: number,
+  zoomMax: number,
+  tileSize = ORTHO_TILE_SIZE
+): number {
+  let total = 0;
+  for (let z = zoomMin; z <= zoomMax; z++) {
+    const nw = metersToOrthoTile(minX, maxY, z, tileSize);
+    const se = metersToOrthoTile(maxX, minY, z, tileSize);
+    const nx = Math.abs(se.tx - nw.tx) + 1;
+    const ny = Math.abs(se.ty - nw.ty) + 1;
+    total += nx * ny;
+  }
+  return total;
+}
+
+/** z/x/y 구조 타일 파일 수 (전체 recursive 대신 2단 readdir) */
+function countOrthoTileFiles(root: string): number {
+  let n = 0;
+  try {
+    const zooms = fs.readdirSync(turbopackOpaquePath(root), { withFileTypes: true });
+    for (const z of zooms) {
+      if (!z.isDirectory() || !/^\d+$/.test(z.name)) continue;
+      const zPath = path.join(root, z.name);
+      let xs: fs.Dirent[];
+      try {
+        xs = fs.readdirSync(turbopackOpaquePath(zPath), { withFileTypes: true });
+      } catch {
+        continue;
+      }
+      for (const x of xs) {
+        if (x.isFile()) {
+          n += 1;
+          continue;
+        }
+        if (!x.isDirectory()) continue;
+        try {
+          n += fs.readdirSync(turbopackOpaquePath(path.join(zPath, x.name))).length;
+        } catch {
+          /* ignore */
+        }
+      }
+    }
+  } catch {
+    return n;
+  }
+  return n;
+}
+
+function formatTileCount(n: number): string {
+  return n.toLocaleString('ko-KR');
+}
+
+function refreshOrthoEta(entry: OrthoJobProgress): void {
+  if (entry.phase === 'failed' || entry.phase === 'done' || entry.percent >= 100) {
+    entry.etaSeconds = null;
+    return;
+  }
+  const elapsedMs = Date.now() - new Date(entry.phaseStartedAt).getTime();
+  if (elapsedMs < 30_000) {
+    entry.etaSeconds = null;
+    return;
+  }
+  const elapsedSec = elapsedMs / 1000;
+
+  // 타일링·복사: 장수 기준
+  if (entry.phase === 'tiles' || entry.phase === 'copy') {
+    const expected = entry.tilesExpected;
+    const created = entry.tilesCreated;
+    if (expected == null || expected <= 0 || created == null || created <= 0) {
+      entry.etaSeconds = null;
+      return;
+    }
+    if (created >= expected) {
+      entry.etaSeconds = 0;
+      return;
+    }
+    const rate = created / elapsedSec;
+    if (!(rate > 0)) {
+      entry.etaSeconds = null;
+      return;
+    }
+    entry.etaSeconds = Math.max(0, Math.round((expected - created) / rate));
+    return;
+  }
+
+  // VRT·좌표 변환: GDAL stdout % 기준
+  if (entry.phase === 'warp' || entry.phase === 'vrt') {
+    const pct = entry.percent;
+    if (pct < 1) {
+      entry.etaSeconds = null;
+      return;
+    }
+    entry.etaSeconds = Math.max(0, Math.round((elapsedSec * (100 - pct)) / pct));
+    return;
+  }
+
+  entry.etaSeconds = null;
+}
+
+function setOrthoPhase(groupName: string, phase: OrthoJobPhase, percent: number, message?: string) {
+  const now = new Date().toISOString();
+  const existing = orthoJobProgressMap.get(groupName);
+  const phaseChanged = !existing || existing.phase !== phase;
+  const entry: OrthoJobProgress = {
+    groupName,
+    phase,
+    percent,
+    startedAt: existing?.startedAt ?? now,
+    phaseStartedAt: phaseChanged ? now : (existing?.phaseStartedAt ?? now),
+    updatedAt: now,
+    message: message ?? `${phase} ${percent}%`,
+    etaSeconds: existing?.etaSeconds ?? null,
+    tilesExpected: existing?.tilesExpected ?? null,
+    tilesCreated: phaseChanged && (phase === 'tiles' || phase === 'copy') ? 0 : (existing?.tilesCreated ?? null),
+  };
+  if (phase === 'queued' || phase === 'vrt' || phase === 'warp') {
+    entry.tilesCreated = null;
+    if (phase === 'queued') entry.tilesExpected = null;
+  }
+  refreshOrthoEta(entry);
+  orthoJobProgressMap.set(groupName, entry);
+}
+
+function setOrthoTilesExpected(groupName: string, tilesExpected: number) {
+  const entry = orthoJobProgressMap.get(groupName);
+  if (!entry) return;
+  entry.tilesExpected = tilesExpected > 0 ? tilesExpected : null;
+  entry.updatedAt = new Date().toISOString();
+  orthoJobProgressMap.set(groupName, entry);
+}
+
+const orthoTileCountThrottleMs = new Map<string, number>();
+
+/** 타일/복사 폴더 장수 → %·ETA·메시지 (예상 총 장수 기준) */
+function updateOrthoTileCountProgress(
+  groupName: string,
+  tilesDir: string,
+  label: '타일링' | '복사',
+  force = false
+) {
+  const entry = orthoJobProgressMap.get(groupName);
+  if (!entry || entry.phase === 'done' || entry.phase === 'failed') return;
+  if (entry.phase !== 'tiles' && entry.phase !== 'copy') return;
+  const now = Date.now();
+  const last = orthoTileCountThrottleMs.get(groupName) ?? 0;
+  // interval 폴러는 15초 — onActivity 폭주 시 최소 8초 간격
+  if (!force && now - last < 8_000) return;
+  orthoTileCountThrottleMs.set(groupName, now);
+  const created = countOrthoTileFiles(tilesDir);
+  entry.tilesCreated = created;
+  entry.updatedAt = new Date().toISOString();
+  const expected = entry.tilesExpected;
+  if (expected != null && expected > 0) {
+    entry.percent = Math.min(99, Math.max(0, Math.round((100 * created) / expected)));
+    entry.message = `${label} ${formatTileCount(created)} / ${formatTileCount(expected)}장`;
+  } else {
+    entry.message = `${label} ${formatTileCount(created)}장`;
+  }
+  refreshOrthoEta(entry);
+}
+
+function updateOrthoJobProgress(groupName: string, stdoutChunk: string) {
+  const entry = orthoJobProgressMap.get(groupName);
+  if (!entry) return;
+  // 타일·복사는 장수 기준 % 사용 — GDAL stdout % 로 덮지 않음
+  if (entry.phase === 'tiles' || entry.phase === 'copy') return;
+  const matches = [...stdoutChunk.matchAll(/(\d+)\.\.\.|(\d+)%/g)];
+  if (!matches.length) return;
+  const last = matches[matches.length - 1]!;
+  const raw = parseInt((last[1] || last[2])!, 10);
+  if (!Number.isFinite(raw)) return;
+  const pct = Math.min(99, Math.max(0, raw));
+  entry.updatedAt = new Date().toISOString();
+  if (entry.phase === 'warp') {
+    entry.percent = pct;
+    entry.message = `좌표 변환 ${raw}%`;
+    refreshOrthoEta(entry);
+  } else if (entry.phase === 'vrt') {
+    entry.percent = pct;
+    entry.message = `VRT 합본 ${raw}%`;
+    refreshOrthoEta(entry);
+  }
+}
+
+/** 타일 폴더에 파일이 늘고 있을 때 stdout이 없어도 진행 중으로 표시 */
+function touchOrthoJobActivity(groupName: string, detail?: string) {
+  const entry = orthoJobProgressMap.get(groupName);
+  if (!entry || entry.phase === 'done' || entry.phase === 'failed') return;
+  entry.updatedAt = new Date().toISOString();
+  if (detail && entry.phase === 'warp') {
+    entry.message = detail;
+  } else if (detail && entry.phase === 'tiles' && entry.tilesExpected == null && entry.tilesCreated == null) {
+    entry.message = detail;
+  }
+}
+
+export function getOrthoJobProgress(params?: { groupName?: string }): OrthoJobProgress | OrthoJobProgress[] | null {
+  if (params?.groupName) {
+    return orthoJobProgressMap.get(params.groupName) ?? null;
+  }
+  return [...orthoJobProgressMap.values()];
+}
+
+// ─── /진행률 ────────────────────────────────────────────────────
 
 const TIF_EXT = /\.(tif|tiff)$/i;
 
@@ -132,6 +390,31 @@ function gdalToolPath(
   return exeName;
 }
 
+/**
+ * Windows conda Scripts\\gdal2tiles.exe 는 env 이동 시 shebang이 깨져
+ * "failed to create process" 가 난다. 프로젝트 python으로 모듈 실행한다.
+ */
+function resolveGdal2TilesInvoke(): { cmd: string; argsPrefix: string[]; label: string } {
+  const pyCandidates = [
+    getPythonExeResolved(),
+    process.platform === 'win32'
+      ? [projectPythonEnvRoot(), 'python.exe'].join(path.sep)
+      : [projectPythonEnvRoot(), 'bin', 'python'].join(path.sep),
+  ].filter((x): x is string => !!x);
+
+  for (const py of pyCandidates) {
+    if (!opaqueExists(py)) continue;
+    return {
+      cmd: py,
+      argsPrefix: ['-m', 'osgeo_utils.gdal2tiles'],
+      label: `${py} -m osgeo_utils.gdal2tiles`,
+    };
+  }
+
+  const exe = gdalToolPath('gdal2tiles');
+  return { cmd: exe, argsPrefix: [], label: exe };
+}
+
 /** gdalToolPath 가 실제 파일 경로인지(없으면 exe 이름만 반환됨) */
 function isConcreteToolPath(p: string): boolean {
   if (process.platform === 'win32') {
@@ -219,16 +502,75 @@ function decodeChildOutput(buf: Buffer, usedCmdShell: boolean): string {
   return utf8;
 }
 
+interface RunProcessOpts {
+  activityTimeoutMs?: number;
+  maxTimeoutMs?: number;
+  onStdout?: (chunk: string) => void;
+  /** stdout이 없어도 이 경로의 파일/폴더가 변하면 활동으로 인정 */
+  activityWatchPath?: string;
+  onActivity?: () => void;
+}
+
+/** 네트워크 대용량에서도 가벼운 시그니처 (전체 파일 수 카운트 금지) */
+function probePathActivitySignature(watchPath: string): string | null {
+  try {
+    const opaque = turbopackOpaquePath(watchPath);
+    if (!fs.existsSync(opaque)) return null;
+    const st = fs.statSync(opaque);
+    if (st.isFile()) return `f:${st.size}:${Math.floor(st.mtimeMs)}`;
+
+    const entries = fs.readdirSync(opaque, { withFileTypes: true });
+    let newest = Math.floor(st.mtimeMs);
+    let parts = `d:${entries.length}`;
+    for (const e of entries) {
+      if (!e.isDirectory() && !e.isFile()) continue;
+      const child = path.join(watchPath, e.name);
+      try {
+        const cst = fs.statSync(turbopackOpaquePath(child));
+        if (cst.mtimeMs > newest) newest = Math.floor(cst.mtimeMs);
+        if (cst.isFile()) {
+          parts += `|${e.name}:${cst.size}`;
+          continue;
+        }
+        const xs = fs.readdirSync(turbopackOpaquePath(child));
+        parts += `|${e.name}:${xs.length}`;
+        if (!xs.length) continue;
+        const lastX = xs[xs.length - 1]!;
+        const xp = path.join(child, lastX);
+        const xst = fs.statSync(turbopackOpaquePath(xp));
+        if (xst.mtimeMs > newest) newest = Math.floor(xst.mtimeMs);
+        if (xst.isDirectory()) {
+          const ys = fs.readdirSync(turbopackOpaquePath(xp));
+          parts += `/${ys.length}`;
+          if (ys.length) {
+            const fp = path.join(xp, ys[ys.length - 1]!);
+            const fst = fs.statSync(turbopackOpaquePath(fp));
+            if (fst.mtimeMs > newest) newest = Math.floor(fst.mtimeMs);
+          }
+        }
+      } catch {
+        /* ignore one child */
+      }
+    }
+    return `${parts}@${newest}`;
+  } catch {
+    return null;
+  }
+}
+
 function runProcess(
   cmd: string,
   args: string[],
   cwd: string,
   timeoutMs: number,
-  childEnv: NodeJS.ProcessEnv = PYTHON_ENV
+  childEnv: NodeJS.ProcessEnv = PYTHON_ENV,
+  opts?: RunProcessOpts
 ): Promise<{ code: number; stdout: string; stderr: string }> {
+  const activityTimeout = opts?.activityTimeoutMs ?? timeoutMs;
+  const maxTimeout = opts?.maxTimeoutMs ?? getOrthoMaxTimeoutMs();
+
   return new Promise((resolve, reject) => {
     const isWin = process.platform === 'win32';
-    /** 절대·상대 경로로 exe가 지정된 경우 cmd.exe 없이 spawn (PATH 의존 제거, 인코딩도 유리) */
     const exeLooksResolved =
       path.isAbsolute(cmd) || (isWin && /^[A-Za-z]:[\\/]/.test(cmd)) || cmd.includes(path.sep);
     const usedCmdShell = isWin && !exeLooksResolved;
@@ -249,22 +591,66 @@ function runProcess(
         : spawn(cmd, args, { cwd, shell: false, env: childEnv });
     const outChunks: Buffer[] = [];
     const errChunks: Buffer[] = [];
-    if (child.stdout) child.stdout.on('data', (d) => pushChunk(outChunks, d as Buffer));
-    if (child.stderr) child.stderr.on('data', (d) => pushChunk(errChunks, d as Buffer));
-    const t = setTimeout(() => {
+    let lastActivity = Date.now();
+    const startTime = Date.now();
+    let lastWatchSig = opts?.activityWatchPath
+      ? probePathActivitySignature(opts.activityWatchPath)
+      : null;
+
+    const markActivity = () => {
+      lastActivity = Date.now();
+      try {
+        opts?.onActivity?.();
+      } catch {
+        /* ignore */
+      }
+    };
+
+    const killWithReason = (reason: string) => {
       child.kill('SIGTERM');
       const stdout = decodeChildOutput(Buffer.concat(outChunks), usedCmdShell);
       const stderr = decodeChildOutput(Buffer.concat(errChunks), usedCmdShell);
-      resolve({ code: -1, stdout, stderr: `${stderr}\n[타임아웃 ${timeoutMs}ms]`.trim() });
-    }, timeoutMs);
+      resolve({ code: -1, stdout, stderr: `${stderr}\n[${reason}]`.trim() });
+    };
+
+    const activityCheck = setInterval(() => {
+      const now = Date.now();
+      if (opts?.activityWatchPath) {
+        const sig = probePathActivitySignature(opts.activityWatchPath);
+        if (sig != null && sig !== lastWatchSig) {
+          lastWatchSig = sig;
+          markActivity();
+        }
+      }
+      if (now - startTime > maxTimeout) {
+        clearInterval(activityCheck);
+        killWithReason(`절대 상한 초과 ${Math.round(maxTimeout / 3600000)}h`);
+      } else if (now - lastActivity > activityTimeout) {
+        clearInterval(activityCheck);
+        killWithReason(`무응답 ${Math.round(activityTimeout / 60000)}분 — 자동 종료`);
+      }
+    }, 30_000);
+
+    if (child.stdout) child.stdout.on('data', (d) => {
+      markActivity();
+      pushChunk(outChunks, d as Buffer);
+      if (opts?.onStdout) {
+        try { opts.onStdout(Buffer.isBuffer(d) ? d.toString('utf8') : String(d)); } catch { /* */ }
+      }
+    });
+    if (child.stderr) child.stderr.on('data', (d) => {
+      markActivity();
+      pushChunk(errChunks, d as Buffer);
+    });
+
     child.on('close', (code) => {
-      clearTimeout(t);
+      clearInterval(activityCheck);
       const stdout = decodeChildOutput(Buffer.concat(outChunks), usedCmdShell);
       const stderr = decodeChildOutput(Buffer.concat(errChunks), usedCmdShell);
       resolve({ code: code ?? -1, stdout, stderr });
     });
     child.on('error', (err) => {
-      clearTimeout(t);
+      clearInterval(activityCheck);
       reject(err);
     });
   });
@@ -456,7 +842,7 @@ async function getSourceCornerBoxFromTif(absSource: string): Promise<SourceCorne
     throw new Error('gdalinfo 실행 파일을 찾을 수 없습니다.');
   }
   const env = buildGdalChildEnv(gdalinfo);
-  const p = await runProcess(gdalinfo, ['-json', absSource], getBaseDir(), ORTHO_JOB_TIMEOUT_MS, env);
+  const p = await runProcess(gdalinfo, ['-json', absSource], getBaseDir(), 5 * 60 * 1000, env);
   if (p.code !== 0) {
     throw new Error(`gdalinfo 실패: ${p.stderr.slice(-500)}`);
   }
@@ -972,19 +1358,13 @@ async function runOrthophotoJob(params: {
     note: `group=${gFromPath} out=${outputSlug} uiTileSet=${tileSetId} ${fmtNote}`,
   }).catch((e) => console.error('[orthophotoService] history start:', e));
 
-  const tmpRoot = path.join(base, '.tmp', `ortho_xyz_${gFromPath}_${outputSlug}_${Date.now()}`);
-  const warp3857 = path.join(tmpRoot, 'warp_3857.tif');
-  const tilesStaging = path.join(tmpRoot, 'tiles_staging');
-  const finalAbs = customOut
-    ? path.join(base, ...customOut.split('/').filter(Boolean))
-    : path.join(base, 'tiles_jpg', gFromPath);
-
   const gdalwarp = gdalToolPath('gdalwarp');
-  const gdal2tiles = gdalToolPath('gdal2tiles');
+  const gdal2tilesInvoke = resolveGdal2TilesInvoke();
 
   const logCtx = { groupName: gFromPath, outputSlug, sourceFile: sourceBaseName, tileSetUi: tileSetId };
 
-  const fail = async (note: string) => {
+  const fail = async (note: string, cleanupRoot?: string) => {
+    setOrthoPhase(groupName, 'failed', 0, note.slice(0, 200));
     console.error(
       `[orthophoto] FAIL group=${gFromPath} out=${outputSlug} file=${sourceBaseName} | ${note.slice(0, 800)}`
     );
@@ -996,7 +1376,9 @@ async function runOrthophotoJob(params: {
       status: '실패',
       note: note.slice(0, 500),
     }).catch((e) => console.error('[orthophotoService] history fail:', e));
-    await fsPromises.rm(tmpRoot, { recursive: true, force: true }).catch(() => {});
+    if (cleanupRoot) {
+      await fsPromises.rm(cleanupRoot, { recursive: true, force: true }).catch(() => {});
+    }
   };
 
   if (!isConcreteToolPath(gdalwarp) || !opaqueExists(gdalwarp)) {
@@ -1006,27 +1388,51 @@ async function runOrthophotoJob(params: {
     await fail(hint);
     return;
   }
-  if (!isConcreteToolPath(gdal2tiles) || !opaqueExists(gdal2tiles)) {
+  if (!isConcreteToolPath(gdal2tilesInvoke.cmd) || !opaqueExists(gdal2tilesInvoke.cmd)) {
     const hint =
-      'GDAL gdal2tiles 실행 파일을 찾을 수 없습니다. conda 환경에 gdal 설치 또는 GGNR_GDAL_SCRIPTS_DIR 를 확인하세요.';
-    console.error(`[orthophoto] ${hint} (resolve 결과: gdal2tiles=${gdal2tiles})`);
+      'gdal2tiles 실행용 Python을 찾을 수 없습니다. GGNR_PIPELINE_PYTHON 또는 python/env 를 확인하세요.';
+    console.error(`[orthophoto] ${hint} (resolve 결과: ${gdal2tilesInvoke.label})`);
     await fail(hint);
     return;
   }
-  orthoJobLog(logCtx, 'GDAL 경로 확인', `gdalwarp=${gdalwarp} gdal2tiles=${gdal2tiles}`);
+  orthoJobLog(logCtx, 'GDAL 경로 확인', `gdalwarp=${gdalwarp} gdal2tiles=${gdal2tilesInvoke.label}`);
   const gdalChildEnv = buildGdalChildEnv(gdalwarp);
   if (gdalChildEnv.PROJ_LIB) {
     orthoJobLog(logCtx, 'GDAL/PROJ 환경', `PROJ_LIB=${gdalChildEnv.PROJ_LIB}${gdalChildEnv.GDAL_DATA ? ` GDAL_DATA=${gdalChildEnv.GDAL_DATA}` : ''}`);
   }
 
+  const workBase = getOrthoDataWorkDir();
+  const finalAbs = customOut
+    ? path.join(base, ...customOut.split('/').filter(Boolean))
+    : path.join(base, 'tiles_jpg', gFromPath);
+
+  orthoJobLog(
+    logCtx,
+    '작업 시작',
+    `src=${sourceRelativePath}(${sourceCrs}) → ${finalRel} z=${zoomMin}-${zoomMax} ${tileDriver}${
+      tileDriver === 'JPEG' ? ` q=${jpegQuality}` : ''
+    } (EPSG:3857 타일) work=${workBase}`
+  );
+
+  const tmpRoot = path.join(workBase, `ortho_xyz_${gFromPath}_${outputSlug}_${Date.now()}`);
+  const warp3857 = path.join(tmpRoot, 'warp_3857.tif');
+  const tilesStaging = path.join(tmpRoot, 'tiles_staging');
+  let tileProgressTimer: ReturnType<typeof setInterval> | null = null;
+  const stopTileProgressPoll = () => {
+    if (tileProgressTimer) {
+      clearInterval(tileProgressTimer);
+      tileProgressTimer = null;
+    }
+  };
+  const startTileProgressPoll = (dir: string, label: '타일링' | '복사') => {
+    stopTileProgressPoll();
+    updateOrthoTileCountProgress(groupName, dir, label, true);
+    tileProgressTimer = setInterval(() => {
+      updateOrthoTileCountProgress(groupName, dir, label, true);
+    }, 15_000);
+  };
+
   try {
-    orthoJobLog(
-      logCtx,
-      '작업 시작',
-      `src=${sourceRelativePath}(${sourceCrs}) → ${finalRel} z=${zoomMin}-${zoomMax} ${tileDriver}${
-        tileDriver === 'JPEG' ? ` q=${jpegQuality}` : ''
-      } (EPSG:3857 타일)`
-    );
     orthoJobLog(logCtx, '임시 폴더 생성', tmpRoot);
 
     await fsPromises.mkdir(tmpRoot, { recursive: true });
@@ -1050,17 +1456,35 @@ async function runOrthophotoJob(params: {
       absSource,
       warp3857,
     ];
+    setOrthoPhase(groupName, 'warp', 0, '좌표 변환 중');
     orthoJobLog(logCtx, '1/3 gdalwarp 시작', `${gdalwarp} ${sourceCrs} -> EPSG:3857`);
     const warpStarted = Date.now();
-    const w = await runProcess(gdalwarp, warpArgs, base, ORTHO_JOB_TIMEOUT_MS, gdalChildEnv);
+    const w = await runProcess(gdalwarp, warpArgs, base, ORTHO_ACTIVITY_TIMEOUT_MS, gdalChildEnv, {
+      activityTimeoutMs: ORTHO_ACTIVITY_TIMEOUT_MS,
+      activityWatchPath: warp3857,
+      onStdout: (chunk) => updateOrthoJobProgress(groupName, chunk),
+      onActivity: () => touchOrthoJobActivity(groupName, '좌표 변환 중 (파일 기록)'),
+    });
     const warpMs = Date.now() - warpStarted;
     logProcessStreams(logCtx, 'gdalwarp', w);
     if (w.code !== 0) {
       orthoJobLog(logCtx, '1/3 gdalwarp 실패', `code=${w.code} ${warpMs}ms stderr_tail=${w.stderr.slice(-400).replace(/\s+/g, ' ')}`);
-      await fail(`gdalwarp 실패 code=${w.code}\n${w.stderr.slice(-2000)}`);
+      await fail(`gdalwarp 실패 code=${w.code}\n${w.stderr.slice(-2000)}`, tmpRoot);
       return;
     }
     orthoJobLog(logCtx, '1/3 gdalwarp 완료', `${warpMs}ms -> ${warp3857}`);
+
+    try {
+      const box = await getSourceCornerBoxFromTif(warp3857);
+      const expected = estimateMercatorTileCount(box.minX, box.minY, box.maxX, box.maxY, zoomMin, zoomMax);
+      setOrthoTilesExpected(groupName, expected);
+      orthoJobLog(logCtx, '예상 타일 장수', `${expected.toLocaleString('ko-KR')} (z=${zoomMin}-${zoomMax}, tilesize=${ORTHO_TILE_SIZE})`);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      console.warn(`[orthophoto] 예상 타일 장수 산출 실패: ${msg}`);
+    }
+
+    setOrthoPhase(groupName, 'tiles', 0, '타일링 시작');
 
     const zArg = `${zoomMin}-${zoomMax}`;
     const tileArgs: string[] = [
@@ -1068,7 +1492,6 @@ async function runOrthophotoJob(params: {
       '--xyz',
       '--tilesize=512',
       `--zoom=${zArg}`,
-      '--quiet',
       '--webviewer=none',
       `--tiledriver=${tileDriver}`,
       ...(tileDriver === 'JPEG' ? [`--jpeg-quality=${String(jpegQuality)}`] : []),
@@ -1079,24 +1502,48 @@ async function runOrthophotoJob(params: {
     orthoJobLog(
       logCtx,
       '2/3 gdal2tiles 시작',
-      `${gdal2tiles} profile=mercator ${tileDriver.toLowerCase()} zoom=${zArg} → ${tilesStaging}`
+      `${gdal2tilesInvoke.label} profile=mercator ${tileDriver.toLowerCase()} zoom=${zArg} → ${tilesStaging}`
     );
+    startTileProgressPoll(tilesStaging, '타일링');
     const tileStarted = Date.now();
-    const t = await runProcess(gdal2tiles, tileArgs, base, ORTHO_JOB_TIMEOUT_MS, gdalChildEnv);
+    const t = await runProcess(
+      gdal2tilesInvoke.cmd,
+      [...gdal2tilesInvoke.argsPrefix, ...tileArgs],
+      base,
+      ORTHO_ACTIVITY_TIMEOUT_MS,
+      gdalChildEnv,
+      {
+        activityTimeoutMs: ORTHO_ACTIVITY_TIMEOUT_MS,
+        activityWatchPath: tilesStaging,
+        onStdout: (chunk) => {
+          updateOrthoJobProgress(groupName, chunk);
+        },
+        onActivity: () => {
+          updateOrthoTileCountProgress(groupName, tilesStaging, '타일링');
+        },
+      }
+    );
+    stopTileProgressPoll();
+    updateOrthoTileCountProgress(groupName, tilesStaging, '타일링', true);
     const tileMs = Date.now() - tileStarted;
     logProcessStreams(logCtx, 'gdal2tiles', t);
-    if (t.code !== 0) {
+    const tileFailHint = `${t.stderr}\n${t.stdout}`;
+    if (t.code !== 0 || tileFailHint.toLowerCase().includes('failed to create process')) {
       orthoJobLog(logCtx, '2/3 gdal2tiles 실패', `code=${t.code} ${tileMs}ms stderr_tail=${t.stderr.slice(-400).replace(/\s+/g, ' ')}`);
-      await fail(`gdal2tiles 실패 code=${t.code}\n${t.stderr.slice(-2000)}`);
+      await fail(`gdal2tiles 실패 code=${t.code}\n${t.stderr.slice(-2000) || t.stdout.slice(-2000)}`, tmpRoot);
       return;
     }
     orthoJobLog(logCtx, '2/3 gdal2tiles 완료', `${tileMs}ms`);
 
+    setOrthoPhase(groupName, 'copy', 0, '결과 복사 중');
     orthoJobLog(logCtx, '3/3 결과 복사 시작', `${tilesStaging} → ${finalAbs}`);
+    startTileProgressPoll(finalAbs, '복사');
     const copyStarted = Date.now();
     await fsPromises.mkdir(path.dirname(finalAbs), { recursive: true });
     await fsPromises.rm(finalAbs, { recursive: true, force: true }).catch(() => {});
     await fsPromises.cp(tilesStaging, finalAbs, { recursive: true });
+    stopTileProgressPoll();
+    updateOrthoTileCountProgress(groupName, finalAbs, '복사', true);
     orthoJobLog(logCtx, '3/3 결과 복사 완료', `${Date.now() - copyStarted}ms → ${finalRel}`);
 
     await appendUploadConvertHistory({
@@ -1106,14 +1553,25 @@ async function runOrthophotoJob(params: {
       pathOrResult: finalRel,
       status: '완료',
     }).catch((e) => console.error('[orthophotoService] history ok:', e));
+    setOrthoPhase(groupName, 'done', 100, '완료');
+    const doneEntry = orthoJobProgressMap.get(groupName);
+    if (doneEntry) {
+      doneEntry.tilesCreated = doneEntry.tilesExpected ?? doneEntry.tilesCreated;
+      doneEntry.etaSeconds = null;
+      doneEntry.message = doneEntry.tilesExpected
+        ? `완료 ${formatTileCount(doneEntry.tilesExpected)}장`
+        : '완료';
+    }
     orthoJobLog(logCtx, '작업 전체 완료', finalRel);
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
-    console.error(`[orthophoto] EXCEPTION group=${gFromPath} out=${outputSlug} | ${msg}`);
-    await fail(msg);
-  } finally {
     await fsPromises.rm(tmpRoot, { recursive: true, force: true }).catch(() => {});
     orthoJobLog(logCtx, '임시 폴더 정리', tmpRoot);
+  } catch (e) {
+    stopTileProgressPoll();
+    const msg = e instanceof Error ? e.message : String(e);
+    console.error(`[orthophoto] EXCEPTION group=${gFromPath} out=${outputSlug} | ${msg}`);
+    await fail(msg, tmpRoot);
+  } finally {
+    stopTileProgressPoll();
   }
 }
 
@@ -1126,6 +1584,81 @@ export async function runSatelliteTifGroupToXyz(params: {
   zoomMax?: number;
   jpegQuality?: number;
 }): Promise<{ started: boolean; message: string; fileCount: number; outputSlug: string }> {
+  const prepared = await prepareSatelliteTifGroupConversion(params);
+  setOrthoPhase(prepared.groupName, 'queued', 0, '대기 중');
+  setImmediate(() => {
+    void executeSatelliteTifGroupConversion(prepared).catch((e) => {
+      const msg = e instanceof Error ? e.message : String(e);
+      console.error(`[orthophoto] 그룹 변환 예외 group=${prepared.groupName}`, e);
+      setOrthoPhase(prepared.groupName, 'failed', 0, msg.slice(0, 200));
+    });
+  });
+  const outRel = orthoOutputRel(prepared.groupName, prepared.groupOutputSlug);
+  return {
+    started: true,
+    fileCount: prepared.sorted.length,
+    outputSlug: prepared.groupOutputSlug,
+    message: `그룹 ${prepared.groupName}: ${prepared.sorted.length}개 원본→${prepared.sorted.length > 1 ? 'VRT 합본 후 ' : ''}XYZ JPEG(q${prepared.jpegQuality}) 변환을 시작했습니다. (srcCrs=${prepared.sourceCrs}, UI tileSet=${prepared.tileSetId}, z=${prepared.zoomMin}-${prepared.zoomMax}) → ${outRel}.`,
+  };
+}
+
+/**
+ * CLI/배치용 — 그룹 변환이 끝날 때까지 await (dev 서버와 별도 프로세스에서 사용).
+ */
+export async function runSatelliteTifGroupToXyzAndWait(params: {
+  groupName: string;
+  tileSetId: string;
+  sourceCrs?: string;
+  zoomMin?: number;
+  zoomMax?: number;
+  jpegQuality?: number;
+}): Promise<{
+  ok: boolean;
+  phase: OrthoJobPhase;
+  message: string;
+  fileCount: number;
+  outputSlug: string;
+}> {
+  const prepared = await prepareSatelliteTifGroupConversion(params);
+  setOrthoPhase(prepared.groupName, 'queued', 0, '대기 중');
+  try {
+    await executeSatelliteTifGroupConversion(prepared);
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    console.error(`[orthophoto] 그룹 변환 예외 group=${prepared.groupName}`, e);
+    setOrthoPhase(prepared.groupName, 'failed', 0, msg.slice(0, 200));
+  }
+  const prog = getOrthoJobProgress({ groupName: prepared.groupName });
+  const entry = prog && !Array.isArray(prog) ? prog : null;
+  const phase: OrthoJobPhase = entry?.phase ?? 'failed';
+  return {
+    ok: phase === 'done',
+    phase,
+    message: entry?.message ?? '',
+    fileCount: prepared.sorted.length,
+    outputSlug: prepared.groupOutputSlug,
+  };
+}
+
+type PreparedSatelliteGroupConversion = {
+  groupName: string;
+  tileSetId: string;
+  sourceCrs: string;
+  zoomMin: number;
+  zoomMax: number;
+  jpegQuality: number;
+  groupOutputSlug: string;
+  sorted: SatelliteTifGroupedFile[];
+};
+
+async function prepareSatelliteTifGroupConversion(params: {
+  groupName: string;
+  tileSetId: string;
+  sourceCrs?: string;
+  zoomMin?: number;
+  zoomMax?: number;
+  jpegQuality?: number;
+}): Promise<PreparedSatelliteGroupConversion> {
   await ensureBaseStructure();
   const groupName = params.groupName.trim();
   const tileSetId = params.tileSetId.trim();
@@ -1159,105 +1692,128 @@ export async function runSatelliteTifGroupToXyz(params: {
   const zoomMax = clamp(Math.floor(params.zoomMax ?? 19), zoomMin, 22);
   const jpegQuality = clamp(Math.floor(params.jpegQuality ?? 80), 1, 100);
 
-  const srcLabel = `[그룹 ${groupName}] ${sorted.length}개 파일 → ${tileSetId}`;
   console.info(
-    `[orthophoto] 큐 등록 그룹 전체: ${srcLabel} z=${zoomMin}-${zoomMax}`
+    `[orthophoto] 큐 등록 그룹 전체: [그룹 ${groupName}] ${sorted.length}개 파일 → ${tileSetId} z=${zoomMin}-${zoomMax}`
   );
 
-  setImmediate(() => {
-    void (async () => {
-      const base = getBaseDir();
-      const absPaths = sorted.map((f) => resolveSafeRelative(f.relativePath)).filter((x): x is string => !!x);
-
-      const runSingle = async (absSrc: string, rel: string, baseName: string) => {
-        await runOrthophotoJob({
-          absSource: absSrc,
-          sourceRelativePath: rel,
-          sourceBaseName: baseName,
-          groupName,
-          sourceCrs,
-          tileSetId,
-          zoomMin,
-          zoomMax,
-          jpegQuality,
-        });
-      };
-
-      if (absPaths.length === 1) {
-        await runSingle(absPaths[0]!, sorted[0]!.relativePath, path.basename(sorted[0]!.relativePath));
-        return;
-      }
-
-      const bundleDir = path.join(base, '.tmp', `ortho_group_${groupName}_${groupOutputSlug}_${Date.now()}`);
-      const vrtPath = path.join(bundleDir, 'mosaic.vrt');
-      try {
-        await fsPromises.mkdir(bundleDir, { recursive: true });
-      } catch (e) {
-        console.error(`[orthophoto] 그룹 VRT 폴더 생성 실패: ${bundleDir}`, e);
-        return;
-      }
-
-      const gdalbuildvrt = gdalToolPath('gdalbuildvrt');
-
-      if (!isConcreteToolPath(gdalbuildvrt) || !opaqueExists(gdalbuildvrt)) {
-        console.error('[orthophoto] gdalbuildvrt 를 찾을 수 없습니다. GDAL 설치 경로를 확인하세요.', gdalbuildvrt);
-        return;
-      }
-
-      const gbEnv = buildGdalChildEnv(gdalbuildvrt);
-      const gbArgs: string[] = ['-overwrite', '-allow_projection_difference', vrtPath, ...absPaths];
-      orthoJobLog(
-        { groupName, outputSlug: groupOutputSlug, sourceFile: 'mosaic.vrt', tileSetUi: tileSetId },
-        '0/3 gdalbuildvrt 시작',
-        gdalbuildvrt
-      );
-      const gb = await runProcess(gdalbuildvrt, gbArgs, base, ORTHO_JOB_TIMEOUT_MS, gbEnv);
-      logProcessStreams(
-        { groupName, outputSlug: groupOutputSlug, sourceFile: 'mosaic.vrt', tileSetUi: tileSetId },
-        'gdalbuildvrt',
-        gb
-      );
-      if (gb.code !== 0) {
-        console.error(
-          `[orthophoto] gdalbuildvrt 실패 group=${groupName} code=${gb.code}`,
-          gb.stderr.slice(-1500)
-        );
-        await fsPromises.rm(bundleDir, { recursive: true, force: true }).catch(() => {});
-        return;
-      }
-      orthoJobLog(
-        { groupName, outputSlug: groupOutputSlug, sourceFile: 'mosaic.vrt', tileSetUi: tileSetId },
-        '0/3 gdalbuildvrt 완료',
-        vrtPath
-      );
-
-      const syntheticRel = `tiles_tif/${groupName}/(mosaic_${sorted.length}files.vrt)`;
-      try {
-        await runOrthophotoJob({
-          absSource: vrtPath,
-          sourceRelativePath: syntheticRel,
-          sourceBaseName: `mosaic_${sorted.length}files.vrt`,
-          groupName,
-          sourceCrs,
-          tileSetId,
-          zoomMin,
-          zoomMax,
-          jpegQuality,
-          outputSlugOverride: groupOutputSlug,
-        });
-      } finally {
-        await fsPromises.rm(bundleDir, { recursive: true, force: true }).catch(() => {});
-      }
-    })();
-  });
-
-  const outRel = orthoOutputRel(groupName, groupOutputSlug);
   return {
-    started: true,
-    fileCount: sorted.length,
-    outputSlug: groupOutputSlug,
-    message: `그룹 ${groupName}: ${sorted.length}개 원본→${sorted.length > 1 ? 'VRT 합본 후 ' : ''}XYZ JPEG(q${jpegQuality}) 변환을 시작했습니다. (srcCrs=${sourceCrs}, UI tileSet=${tileSetId}, z=${zoomMin}-${zoomMax}) → ${outRel}.`,
+    groupName,
+    tileSetId,
+    sourceCrs,
+    zoomMin,
+    zoomMax,
+    jpegQuality,
+    groupOutputSlug,
+    sorted,
   };
+}
+
+async function executeSatelliteTifGroupConversion(prepared: PreparedSatelliteGroupConversion): Promise<void> {
+  const {
+    groupName,
+    tileSetId,
+    sourceCrs,
+    zoomMin,
+    zoomMax,
+    jpegQuality,
+    groupOutputSlug,
+    sorted,
+  } = prepared;
+  const base = getBaseDir();
+  const absPaths = sorted.map((f) => resolveSafeRelative(f.relativePath)).filter((x): x is string => !!x);
+
+  const runSingle = async (absSrc: string, rel: string, baseName: string) => {
+    await runOrthophotoJob({
+      absSource: absSrc,
+      sourceRelativePath: rel,
+      sourceBaseName: baseName,
+      groupName,
+      sourceCrs,
+      tileSetId,
+      zoomMin,
+      zoomMax,
+      jpegQuality,
+    });
+  };
+
+  if (absPaths.length === 1) {
+    await runSingle(absPaths[0]!, sorted[0]!.relativePath, path.basename(sorted[0]!.relativePath));
+    return;
+  }
+
+  const bundleDir = path.join(getOrthoDataWorkDir(), `ortho_group_${groupName}_${groupOutputSlug}_${Date.now()}`);
+  let vrtPath = '';
+  try {
+    await fsPromises.mkdir(bundleDir, { recursive: true });
+    vrtPath = path.join(bundleDir, 'mosaic.vrt');
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    console.error(`[orthophoto] 그룹 VRT 폴더 생성 실패: ${bundleDir}`, e);
+    setOrthoPhase(groupName, 'failed', 0, `VRT 폴더 생성 실패: ${msg.slice(0, 120)}`);
+    return;
+  }
+  if (!vrtPath) {
+    setOrthoPhase(groupName, 'failed', 0, 'VRT 작업 경로를 만들 수 없습니다.');
+    return;
+  }
+
+  const gdalbuildvrt = gdalToolPath('gdalbuildvrt');
+
+  if (!isConcreteToolPath(gdalbuildvrt) || !opaqueExists(gdalbuildvrt)) {
+    console.error('[orthophoto] gdalbuildvrt 를 찾을 수 없습니다. GDAL 설치 경로를 확인하세요.', gdalbuildvrt);
+    setOrthoPhase(groupName, 'failed', 0, 'gdalbuildvrt 를 찾을 수 없습니다.');
+    return;
+  }
+
+  const gbEnv = buildGdalChildEnv(gdalbuildvrt);
+  const gbArgs: string[] = ['-overwrite', '-allow_projection_difference', vrtPath, ...absPaths];
+  setOrthoPhase(groupName, 'vrt', 0, 'VRT 합본 중');
+  orthoJobLog(
+    { groupName, outputSlug: groupOutputSlug, sourceFile: 'mosaic.vrt', tileSetUi: tileSetId },
+    '0/3 gdalbuildvrt 시작',
+    gdalbuildvrt
+  );
+  const gb = await runProcess(gdalbuildvrt, gbArgs, base, ORTHO_ACTIVITY_TIMEOUT_MS, gbEnv, {
+    activityTimeoutMs: ORTHO_ACTIVITY_TIMEOUT_MS,
+    onStdout: (chunk) => updateOrthoJobProgress(groupName, chunk),
+  });
+  logProcessStreams(
+    { groupName, outputSlug: groupOutputSlug, sourceFile: 'mosaic.vrt', tileSetUi: tileSetId },
+    'gdalbuildvrt',
+    gb
+  );
+  if (gb.code !== 0) {
+    console.error(
+      `[orthophoto] gdalbuildvrt 실패 group=${groupName} code=${gb.code}`,
+      gb.stderr.slice(-1500)
+    );
+    await fsPromises.rm(bundleDir, { recursive: true, force: true }).catch(() => {});
+    setOrthoPhase(groupName, 'failed', 0, `VRT 합본 실패 code=${gb.code}`);
+    return;
+  }
+  orthoJobLog(
+    { groupName, outputSlug: groupOutputSlug, sourceFile: 'mosaic.vrt', tileSetUi: tileSetId },
+    '0/3 gdalbuildvrt 완료',
+    vrtPath
+  );
+
+  const syntheticRel = `tiles_tif/${groupName}/(mosaic_${sorted.length}files.vrt)`;
+  try {
+    await runOrthophotoJob({
+      absSource: vrtPath,
+      sourceRelativePath: syntheticRel,
+      sourceBaseName: `mosaic_${sorted.length}files.vrt`,
+      groupName,
+      sourceCrs,
+      tileSetId,
+      zoomMin,
+      zoomMax,
+      jpegQuality,
+      outputSlugOverride: groupOutputSlug,
+    });
+  } finally {
+    await fsPromises.rm(bundleDir, { recursive: true, force: true }).catch(() => {});
+  }
 }
 
 /**

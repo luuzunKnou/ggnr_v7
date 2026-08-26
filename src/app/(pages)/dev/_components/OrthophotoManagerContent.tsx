@@ -14,10 +14,27 @@ import type {
   OrthophotoCrsCandidate,
   OrthophotoTileOutputsResult,
   SatelliteTifGroupedUploadsResult,
+  OrthoJobProgress,
 } from '@/service/orthophotoService';
 import { OrthophotoCrsPreviewMap } from './OrthophotoCrsPreviewMap';
 
 const DEFAULT_TILE_SET = 'aerial-2017';
+
+function formatEtaSeconds(sec: number | null | undefined): string {
+  if (sec == null || !Number.isFinite(sec) || sec < 0) return '';
+  if (sec < 60) return '약 1분 미만';
+  const mins = Math.round(sec / 60);
+  if (mins < 60) return `약 ${mins}분`;
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  return m > 0 ? `약 ${h}시간 ${m}분` : `약 ${h}시간`;
+}
+
+function formatProgressBanner(groupName: string, p: OrthoJobProgress): string {
+  const eta = formatEtaSeconds(p.etaSeconds);
+  const etaPart = eta ? ` · 예상 남은 시간 ${eta}` : '';
+  return `${groupName}: ${p.message} (${p.percent}%)${etaPart}`;
+}
 
 /** 테이블·일괄 작업과 동일: 메타/업로드 목록의 sourceCrs로 원본 EPSG 필요 여부 판별 */
 function needsCrsSelectForGroup(g: SatelliteTifGroupedUploadsResult['groups'][number]): boolean {
@@ -58,6 +75,8 @@ export function OrthophotoManagerContent() {
   const groupedUploadsRef = useRef<SatelliteTifGroupedUploadsResult['groups']>([]);
   const outputsRef = useRef<OrthophotoTileOutputsResult>({ groups: [], legacyTileSetIds: [] });
   const batchQueueRef = useRef<string[]>([]);
+  /** 일괄 대기(waitForGroupJob) 중단용 */
+  const batchAbortRef = useRef(false);
   /** 일괄시작 → 좌표계 순차 설정 후 타일 일괄까지 이어갈 때 */
   const pendingTileBatchAfterCrsRef = useRef(false);
   const crsWizardRemainingRef = useRef<string[]>([]);
@@ -65,6 +84,92 @@ export function OrthophotoManagerContent() {
   const [batchRunning, setBatchRunning] = useState(false);
   const [batchUi, setBatchUi] = useState<{ current: number; total: number } | null>(null);
   const [crsWizardForBatch, setCrsWizardForBatch] = useState(false);
+  const [jobProgressMap, setJobProgressMap] = useState<Record<string, OrthoJobProgress>>({});
+  const [watchingCount, setWatchingCount] = useState(0);
+  const progressPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  /** API는 즉시 반환하므로, 백그라운드 작업이 끝날 때까지 그룹을 계속 추적 */
+  const watchedGroupsRef = useRef<Set<string>>(new Set());
+  const refreshRef = useRef<() => Promise<void>>(async () => {});
+
+  const syncWatchingCount = () => setWatchingCount(watchedGroupsRef.current.size);
+
+  const stopProgressWatch = useCallback(() => {
+    if (progressPollRef.current) {
+      clearInterval(progressPollRef.current);
+      progressPollRef.current = null;
+    }
+  }, []);
+
+  const pollProgress = useCallback(async () => {
+    const watched = [...watchedGroupsRef.current];
+    if (!watched.length) {
+      stopProgressWatch();
+      syncWatchingCount();
+      return;
+    }
+    try {
+      const res = await call('', 'POST', {
+        service: 'orthophotoService',
+        action: 'getOrthoJobProgress',
+        params: {},
+      });
+      const raw = res?.data ?? res;
+      const list: OrthoJobProgress[] = Array.isArray(raw)
+        ? (raw as OrthoJobProgress[])
+        : raw && typeof raw === 'object' && 'groupName' in (raw as object)
+          ? [raw as OrthoJobProgress]
+          : [];
+
+      const map: Record<string, OrthoJobProgress> = {};
+      for (const p of list) map[p.groupName] = p;
+      setJobProgressMap((prev) => ({ ...prev, ...map }));
+
+      let anyActive = false;
+      for (const groupName of watched) {
+        const p = map[groupName];
+        if (!p) {
+          anyActive = true;
+          setConvertMsg(`${groupName}: 변환 대기/시작 중…`);
+          continue;
+        }
+        if (p.phase === 'done') {
+          watchedGroupsRef.current.delete(groupName);
+          setConvertMsg(`${groupName}: 변환 완료`);
+          void refreshRef.current();
+        } else if (p.phase === 'failed') {
+          watchedGroupsRef.current.delete(groupName);
+          setConvertMsg(`변환 실패 · ${groupName} · ${p.message}`);
+          void refreshRef.current();
+        } else {
+          anyActive = true;
+          setConvertMsg(formatProgressBanner(groupName, p));
+        }
+      }
+
+      syncWatchingCount();
+      if (!anyActive && watchedGroupsRef.current.size === 0) {
+        stopProgressWatch();
+      }
+    } catch {
+      /* 폴링 실패는 다음 주기에 재시도 */
+    }
+  }, [stopProgressWatch]);
+
+  const startProgressWatch = useCallback(
+    (groupName: string) => {
+      watchedGroupsRef.current.add(groupName);
+      syncWatchingCount();
+      void pollProgress();
+      if (!progressPollRef.current) {
+        progressPollRef.current = setInterval(() => void pollProgress(), 2000);
+      }
+    },
+    [pollProgress]
+  );
+
+  useEffect(() => {
+    return () => stopProgressWatch();
+  }, [stopProgressWatch]);
 
   const refresh = useCallback(async () => {
     refreshAbortRef.current?.abort();
@@ -107,6 +212,8 @@ export function OrthophotoManagerContent() {
       }
     }
   }, []);
+
+  refreshRef.current = refresh;
 
   useEffect(() => {
     void refresh();
@@ -158,6 +265,7 @@ export function OrthophotoManagerContent() {
       setConvertMsg(typeof d?.message === 'string' ? d.message : '그룹 변환을 시작했습니다.');
       persistTilesetGroup(ts, groupName);
       if (typeof d?.outputSlug === 'string' && d.outputSlug) persistTilesetOutputSlug(ts, d.outputSlug);
+      startProgressWatch(groupName);
       await refresh();
       return true;
     } catch (err) {
@@ -171,6 +279,7 @@ export function OrthophotoManagerContent() {
   const abortCrsBatchWizard = useCallback(() => {
     pendingTileBatchAfterCrsRef.current = false;
     crsWizardRemainingRef.current = [];
+    batchAbortRef.current = true;
     setCrsWizardForBatch(false);
   }, []);
 
@@ -202,23 +311,62 @@ export function OrthophotoManagerContent() {
   };
 
   const abortBatch = useCallback((message: string) => {
+    batchAbortRef.current = true;
     batchQueueRef.current = [];
     setBatchUi(null);
     setBatchRunning(false);
     setConvertMsg(message);
   }, []);
 
+  /** 백그라운드 변환이 done/failed 될 때까지 폴링 (일괄 순차 처리용) */
+  const waitForGroupJob = useCallback(async (groupName: string): Promise<'done' | 'failed' | 'aborted'> => {
+    const maxWaitMs = 24 * 60 * 60 * 1000;
+    const started = Date.now();
+    while (Date.now() - started < maxWaitMs) {
+      if (batchAbortRef.current) return 'aborted';
+      try {
+        const res = await call('', 'POST', {
+          service: 'orthophotoService',
+          action: 'getOrthoJobProgress',
+          params: { groupName },
+        });
+        const raw = res?.data ?? res;
+        const p =
+          raw && typeof raw === 'object' && !Array.isArray(raw) && 'phase' in (raw as object)
+            ? (raw as OrthoJobProgress)
+            : null;
+        if (p) {
+          setJobProgressMap((prev) => ({ ...prev, [groupName]: p }));
+          if (p.phase === 'done') return 'done';
+          if (p.phase === 'failed') return 'failed';
+          setConvertMsg(formatProgressBanner(groupName, p));
+        }
+      } catch {
+        /* 다음 주기에 재시도 */
+      }
+      await new Promise((r) => setTimeout(r, 2000));
+    }
+    return 'failed';
+  }, []);
+
   const processBatchStep = async (index: number) => {
+    if (batchAbortRef.current) {
+      setBatchRunning(false);
+      setBatchUi(null);
+      return;
+    }
     const queue = batchQueueRef.current;
     if (index >= queue.length) {
       batchQueueRef.current = [];
       setBatchUi(null);
       setBatchRunning(false);
       setConvertMsg('일괄 작업이 모두 완료되었습니다.');
+      await refresh();
       return;
     }
-    const groupName = queue[index];
+    const groupName = queue[index]!;
     setBatchUi({ total: queue.length, current: index + 1 });
+    setConvertMsg(`일괄 ${index + 1}/${queue.length}: ${groupName} 변환 시작…`);
     await refresh();
     const groups = groupedUploadsRef.current;
     const g = groups.find((x) => x.groupName === groupName);
@@ -234,9 +382,17 @@ export function OrthophotoManagerContent() {
     }
     const ok = await runGroupConvert(groupName, sourceCrs);
     if (!ok) {
-      abortBatch('일괄 작업: 변환 오류로 중단되었습니다.');
+      abortBatch(`일괄 작업: '${groupName}' 변환 시작에 실패해 중단되었습니다.`);
       return;
     }
+    const result = await waitForGroupJob(groupName);
+    if (result === 'aborted') return;
+    if (result === 'failed') {
+      abortBatch(`일괄 작업: '${groupName}' 변환 실패로 중단되었습니다.`);
+      return;
+    }
+    setConvertMsg(`일괄 ${index + 1}/${queue.length}: ${groupName} 완료 → 다음 그룹`);
+    await refresh();
     await processBatchStep(index + 1);
   };
 
@@ -258,6 +414,7 @@ export function OrthophotoManagerContent() {
       );
       return;
     }
+    batchAbortRef.current = false;
     batchQueueRef.current = queue;
     setBatchRunning(true);
     await processBatchStep(0);
@@ -287,6 +444,7 @@ export function OrthophotoManagerContent() {
       await openCrsModal(needCrsNames[0]);
       return;
     }
+    batchAbortRef.current = false;
     const queue = unconverted.map((g) => g.groupName);
     batchQueueRef.current = queue;
     setBatchRunning(true);
@@ -336,6 +494,15 @@ export function OrthophotoManagerContent() {
     outputs.groups.some((g) => g.groupName === groupName && g.tileSetIds.length > 0) ||
     outputs.legacyTileSetIds.includes(groupName);
 
+  const statusBanner = convertMsg
+    ? {
+        tone: convertMsg.includes('실패') ? ('error' as const) : ('success' as const),
+        text: convertMsg,
+      }
+    : null;
+
+  const busy = convertingGroup != null || batchRunning || crsWizardForBatch || watchingCount > 0;
+
   return (
     <div className="flex flex-col gap-4 p-3 text-sm min-h-0 overflow-y-auto max-h-[calc(100vh-14rem)]">
       <div className="rounded-lg border border-border bg-muted/30 p-3 space-y-2">
@@ -347,7 +514,8 @@ export function OrthophotoManagerContent() {
           </li>
           <li>
             결과: <code className="text-foreground">tiles_jpg/&#123;그룹&#125;/z/x/y.jpg</code>
-            · 변환은 항상 원본 좌표계 그대로(<code className="text-[10px]">gdal2tiles --profile=raster</code>) JPEG 타일을 굽습니다. 변환 후 브라우저에 그룹·출력폴더명이 저장됩니다.
+            · 변환은 로컬 <code className="text-[10px]">X:\temp\ortho_work</code>에서 진행하고,
+            용량 부족 시 데이터 경로(<code className="text-[10px]">GGNR_DATA_DIR/.tmp</code>)로 자동 전환합니다.
           </li>
         </ul>
       </div>
@@ -370,9 +538,15 @@ export function OrthophotoManagerContent() {
       {listError && (
         <div className="rounded border border-destructive/50 bg-destructive/10 px-2 py-1 text-xs text-destructive">{listError}</div>
       )}
-      {convertMsg && (
-        <div className="rounded border border-green-600/40 bg-green-500/10 px-2 py-1 text-xs text-green-800 dark:text-green-300">
-          {convertMsg}
+      {statusBanner && (
+        <div
+          className={
+            statusBanner.tone === 'error'
+              ? 'rounded border border-destructive/50 bg-destructive/10 px-2 py-1 text-xs text-destructive'
+              : 'rounded border border-green-600/40 bg-green-500/10 px-2 py-1 text-xs text-green-800 dark:text-green-300'
+          }
+        >
+          {statusBanner.text}
         </div>
       )}
 
@@ -382,8 +556,8 @@ export function OrthophotoManagerContent() {
                 <p className="font-medium">업로드된 GeoTIFF (그룹별)</p>
             {batchUi && (
               <p className="text-[11px] text-muted-foreground">
-                일괄 변환 진행 {batchUi.current} / {batchUi.total} · 좌표계가 이미 확정된 미변환 그룹만 순서대로
-                변환합니다.
+                일괄 변환 진행 {batchUi.current} / {batchUi.total} · 한 그룹이 끝난 뒤 다음 그룹을
+                순서대로 변환합니다.
               </p>
             )}
           </div>
@@ -393,7 +567,7 @@ export function OrthophotoManagerContent() {
               variant="secondary"
               size="sm"
               className="h-8 text-xs shrink-0"
-              disabled={convertingGroup != null || batchRunning || crsWizardForBatch}
+              disabled={busy}
               onClick={() => void startBatchWork()}
             >
               <ListOrdered className="w-3.5 h-3.5 mr-1" />
@@ -412,7 +586,7 @@ export function OrthophotoManagerContent() {
                   <th className="text-left p-2 w-[14%]">좌표계</th>
                   <th className="text-left p-2 w-[22%]">예상 레이어명</th>
                   <th className="text-right p-2 w-24">파일 수</th>
-                  <th className="text-center p-2 w-24">타일 변환</th>
+                  <th className="text-center p-2 w-40">타일 변환</th>
                   <th className="text-right p-2 w-28">작업</th>
                 </tr>
               </thead>
@@ -429,9 +603,34 @@ export function OrthophotoManagerContent() {
                       <td className="p-2">{meta.expectedLayerName}</td>
                       <td className="p-2 text-right text-muted-foreground">{g.files.length}</td>
                       <td className="p-2 text-center">
-                        <span className={converted ? 'text-green-600 dark:text-green-400 font-semibold' : 'text-red-600 dark:text-red-400 font-semibold'}>
-                          {converted ? 'O' : 'X'}
-                        </span>
+                        {(() => {
+                          const prog = jobProgressMap[g.groupName];
+                          if (prog && prog.phase !== 'done' && prog.phase !== 'failed') {
+                            const eta = formatEtaSeconds(prog.etaSeconds);
+                            return (
+                              <div className="flex flex-col items-center gap-0.5 w-full">
+                                <div className="w-full h-1.5 bg-muted rounded overflow-hidden">
+                                  <div
+                                    className="h-full bg-blue-500 transition-all duration-300"
+                                    style={{ width: `${prog.percent}%` }}
+                                  />
+                                </div>
+                                <span className="text-[10px] text-muted-foreground text-center leading-tight">
+                                  {prog.percent}% · {prog.message}
+                                  {eta ? ` · ${eta}` : ''}
+                                </span>
+                              </div>
+                            );
+                          }
+                          if (prog?.phase === 'failed') {
+                            return <span className="text-red-600 dark:text-red-400 text-[10px] font-medium">실패</span>;
+                          }
+                          return (
+                            <span className={converted ? 'text-green-600 dark:text-green-400 font-semibold' : 'text-red-600 dark:text-red-400 font-semibold'}>
+                              {converted ? 'O' : 'X'}
+                            </span>
+                          );
+                        })()}
                       </td>
                       <td className="p-2 text-right">
                         <Button
@@ -439,13 +638,16 @@ export function OrthophotoManagerContent() {
                           size="sm"
                           variant="secondary"
                           className="h-7 text-xs"
-                          disabled={convertingGroup != null || batchRunning || crsWizardForBatch}
+                          disabled={busy}
                           onClick={() => {
                             if (requiresCrsSelect) void openCrsModal(g.groupName);
                             else void runGroupConvert(g.groupName, sourceCrs);
                           }}
                         >
-                          {convertingGroup === g.groupName ? (
+                          {convertingGroup === g.groupName ||
+                          (jobProgressMap[g.groupName] &&
+                            jobProgressMap[g.groupName]!.phase !== 'done' &&
+                            jobProgressMap[g.groupName]!.phase !== 'failed') ? (
                             <Loader2 className="w-3 h-3 animate-spin" />
                           ) : (
                             <>

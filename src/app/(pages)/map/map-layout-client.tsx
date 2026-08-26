@@ -499,9 +499,13 @@ function MapLayoutContent({
             ? "satellite"
             : undefined
   const shootingApprovalOpen =
-    SHOOTING_REQUEST_UI_ENABLED && openedWindows.includes(SHOOTING_APPROVAL_OPENED_KEY)
+    SHOOTING_REQUEST_UI_ENABLED &&
+    systemKeyFromUrl === "uav" &&
+    openedWindows.includes(SHOOTING_APPROVAL_OPENED_KEY)
   const shootingRequestOpen =
-    SHOOTING_REQUEST_UI_ENABLED && openedWindows.includes(SHOOTING_REQUEST_OPENED_KEY)
+    SHOOTING_REQUEST_UI_ENABLED &&
+    systemKeyFromUrl === "uav" &&
+    openedWindows.includes(SHOOTING_REQUEST_OPENED_KEY)
   /** 촬영요청·승인 모두 동일 목록 패널 (모드만 mine / approval) */
   const shootingListOpen = shootingApprovalOpen || shootingRequestOpen
   const shootingPanelOpen = shootingListOpen
@@ -1110,6 +1114,20 @@ function MapLayoutContent({
     router.push(`/map?${current.toString()}`)
   }
 
+  /** 시스템 전환 시 — 좌측 패널 닫기 + 레이어 전부 끄기 (최초 진입·system 최초 부여는 제외) */
+  const prevSystemKeyRef = useRef<string | undefined>(undefined)
+  useEffect(() => {
+    const prev = prevSystemKeyRef.current
+    prevSystemKeyRef.current = systemKeyFromUrl
+    if (prev === undefined || !prev || prev === systemKeyFromUrl) return
+    mapContext?.allLayersOffRef?.current?.()
+    if (openedWindows.length > 0 || dataTableFromUrl || dataKeyFromUrl) {
+      updateMapUrl({ opened: [], dataTable: null, dataKey: null })
+    }
+    // 시스템 키 변경에만 반응 (패널 개폐로 재실행하지 않음)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- systemKeyFromUrl only
+  }, [systemKeyFromUrl])
+
   const setOpened = (keys: string[]) => {
     updateMapUrl({ opened: keys })
   }
@@ -1363,6 +1381,7 @@ function MapLayoutContent({
   }, [shootingPanelOpen, shootingApprovalOpen, shootingRequestOpen])
 
   useEffect(() => {
+    if (systemKeyFromUrl !== 'uav') return
     if (searchParams.get('shotForm') !== 'new') return
     const current = new URLSearchParams(Array.from(searchParams.entries()))
     current.delete('shotForm')
@@ -1376,7 +1395,7 @@ function MapLayoutContent({
       setShootingRequestDetailId(null)
     }
     router.replace(`/map?${current.toString()}`)
-  }, [shootingRequestOpen, shootingApprovalOpen, searchParams, router])
+  }, [systemKeyFromUrl, shootingRequestOpen, shootingApprovalOpen, searchParams, router])
 
   const openShootingRequestForm = useCallback(() => {
     const current = new URLSearchParams(Array.from(searchParams.entries()))
@@ -2133,6 +2152,7 @@ function MapLayoutContent({
           <ShootingRequestFormModal
             open={
               SHOOTING_REQUEST_UI_ENABLED &&
+              systemKeyFromUrl === "uav" &&
               (myInfoShootingModalId != null ||
                 (shootingPanelOpen && shootingRequestDetailId === SHOOTING_REQUEST_NEW_ID))
             }

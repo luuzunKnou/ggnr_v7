@@ -226,7 +226,9 @@ export default function StandardDetail() {
                       const key = String(f.define_field_name ?? '');
                       const label = String(f.define_field_kor_name ?? f.define_field_name ?? '');
                       const raw = getRowValueByField(row, key);
-                      const value = formatDetailScalarValue(raw);
+                      const value = formatDetailScalarValue(raw, {
+                        fieldType: f.define_field_type,
+                      });
                       return { label, value, highlight: i === 0 };
                     });
                   })()}
@@ -241,7 +243,9 @@ export default function StandardDetail() {
                         const key = String(f.define_field_name ?? '');
                         const label = String(f.define_field_kor_name ?? f.define_field_name ?? '');
                         const raw = getRowValueByField(row, key);
-                        const value = formatDetailScalarValue(raw);
+                        const value = formatDetailScalarValue(raw, {
+                          fieldType: f.define_field_type,
+                        });
                         return { label, value };
                       });
                     })()}

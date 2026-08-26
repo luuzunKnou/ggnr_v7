@@ -237,3 +237,15 @@ export const defaultMapControlGroups: MapControlGroup[] = [
     ],
   },
 ]
+
+/** UAV 시스템에서만 노출하는 우측 컨트롤 */
+const UAV_ONLY_CONTROL_IDS = new Set(["aerial-view", "shooting-request"])
+
+/** 현재 시스템에 맞게 맵 컨트롤 그룹 필터 (드론영상·촬영요청 = UAV 전용) */
+export function mapControlGroupsForSystem(systemKey: string): MapControlGroup[] {
+  if (systemKey === "uav") return defaultMapControlGroups
+  return defaultMapControlGroups.map((g) => ({
+    ...g,
+    items: g.items.filter((item) => !UAV_ONLY_CONTROL_IDS.has(item.id)),
+  }))
+}
