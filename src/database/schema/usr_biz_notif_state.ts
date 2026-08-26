@@ -6,7 +6,7 @@ export const usrBizNotifState = pgTable(
   {
     id: bigserial('id', { mode: 'number' }).primaryKey(),
     usrId: varchar('usr_id').notNull(),
-    /** 예: usage-expiry:{cons_code}, use-fee-due:{id} */
+    /** 예: usage-expiry:{cons_code}, use-fee-due:{prefix}:{id} */
     notifKey: varchar('notif_key').notNull(),
     isRead: boolean('is_read').notNull().default(false),
     isDismissed: boolean('is_dismissed').notNull().default(false),

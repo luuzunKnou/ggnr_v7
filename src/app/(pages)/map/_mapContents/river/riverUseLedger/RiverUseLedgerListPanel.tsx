@@ -241,7 +241,7 @@ export function RiverUseLedgerListPanel({
         )}
         <div className="min-h-0 flex-1 overflow-auto scrollbar-thin">
           <table className="w-full min-w-[520px] border-collapse text-left text-xs">
-            <thead className="sticky top-0 z-[1] bg-muted/50">
+            <thead className="sticky top-0 z-[1] bg-muted shadow-[0_1px_0_0_var(--border)]">
               <tr>
                 <th className="whitespace-nowrap border-b-0 px-2 py-2 font-semibold text-foreground/90 [box-shadow:inset_0_-2px_0_0_var(--border)]">
                   {headers.permitNo}

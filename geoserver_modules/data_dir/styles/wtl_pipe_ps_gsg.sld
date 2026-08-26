@@ -8,13 +8,14 @@
           <sld:PointSymbolizer>
             <sld:Graphic>
               <sld:Mark>
+                <sld:WellKnownName>circle</sld:WellKnownName>
                 <sld:Fill>
-                  <sld:CssParameter name="fill">#FF9800</sld:CssParameter>
-                  <sld:CssParameter name="fill-opacity">0.85</sld:CssParameter>
+                  <sld:CssParameter name="fill">#F44336</sld:CssParameter>
+                  <sld:CssParameter name="fill-opacity">0.5</sld:CssParameter>
                 </sld:Fill>
                 <sld:Stroke>
                   <sld:CssParameter name="stroke">#FFFFFF</sld:CssParameter>
-                  <sld:CssParameter name="stroke-opacity">0.85</sld:CssParameter>
+                  <sld:CssParameter name="stroke-opacity">0.5</sld:CssParameter>
                   <sld:CssParameter name="stroke-width">1.5</sld:CssParameter>
                 </sld:Stroke>
               </sld:Mark>

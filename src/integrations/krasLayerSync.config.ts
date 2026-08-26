@@ -12,22 +12,8 @@ export const KRAS_CATALOG_QUERY_ID = 'KRAS000037';
 export const KRAS_LAND_BASIC_QUERY_ID = 'KRAS000040';
 export const KOREPS_PRICE_FILE_QUERY_ID = 'KOREPS00039';
 
-export const KRAS_LANDOWN_TABLE = 'landown';
 export const KRAS_LAND_BASIC_TABLE = 'kras000040';
 export const KOREPS_PRICE_FILE_TABLE = 'koreps00039';
-
-export const KRAS_LANDOWN_OWN_LABEL: Record<string, string> = {
-  '00': '일본인, 창씨명등',
-  '01': '개인',
-  '02': '국유지',
-  '03': '외국인, 외국공공기관',
-  '04': '시, 도유지',
-  '05': '군유지',
-  '06': '법인',
-  '07': '종중',
-  '08': '종교단체',
-  '09': '기타단체',
-};
 
 export const KRAS_LAYER_SCHEMA_CANDIDATES = ['public_layer', 'layer'] as const;
 
@@ -85,5 +71,5 @@ export const KRAS_DROP_GUARD_RATIO = 0.3;
 
 export type KrasLayerSyncScope = 'all' | 'parcel' | 'boundary' | 'thematic';
 
-/** 개발자 모드 KRAS 대상 — 도형 범위 + 목록·토지기본·소유현황 */
-export type KrasIntegrationTarget = KrasLayerSyncScope | 'catalog' | 'landinfo' | 'landown';
+/** 개발자 모드 KRAS 대상 — 도형 범위 + 목록·토지기본·소유구분 */
+export type KrasIntegrationTarget = KrasLayerSyncScope | 'catalog' | 'landinfo' | 'owngbn';
