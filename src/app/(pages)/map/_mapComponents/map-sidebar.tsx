@@ -195,7 +195,7 @@ export function MapSidebar({ indexLogoSrc }: { indexLogoSrc: string }) {
     currentSystem?.serviceList != null && currentSystem.serviceList.length > 0
       ? currentSystem.serviceList
       : null;
-  const serviceKeysInOrder: string[] = fromCurrent ?? [];
+  const serviceKeysInOrder: string[] = [...new Set(fromCurrent ?? [])];
   const serviceMap = new Map(serviceListConfig.map((s) => [s.ser_eng ?? '', s]));
   const sidebarItems: ServiceItem[] = serviceKeysInOrder
     .map((key) => serviceMap.get(key))
