@@ -10,6 +10,7 @@ import type { StyleLike } from 'ol/style/Style';
 import { call } from '@/lib/api';
 import {
   parseSimpleStyleFromCss,
+  toPublicSymbolPreviewUrl,
   type GeometryType,
   type StyleProps,
 } from '@/lib/geoserverStyleUtils';
@@ -17,8 +18,13 @@ import { getGeoServerBase } from '@/lib/geoserverUrl';
 
 const GEOSERVER_DEFAULT_URL = getGeoServerBase();
 
-const GREY_FILL = '#9ca3af';
-const GREY_STROKE = '#6b7280';
+/** 변경 전 — 항공 배경 대비: 밝은 면 + 검정 점선 */
+const GREY_FILL = '#cbd5e1';
+const GREY_STROKE = '#111111';
+/** 변경 전 면 채움 알파 (0~1) */
+const BEFORE_FILL_OPACITY = 0.5;
+/** 변경 전 선 굵기 배수 (변경 후 대비) */
+const BEFORE_STROKE_MULT = 1.85;
 
 type CachedStyleInfo = {
   styleProps: StyleProps;
@@ -29,9 +35,14 @@ type CachedStyleInfo = {
 const styleInfoCache = new Map<string, CachedStyleInfo | null>();
 const styleInflight = new Map<string, Promise<CachedStyleInfo | null>>();
 
-/** 원본 심볼 URL → 회색 data URL (실패도 null로 캐시해 재시도 폭주 방지) */
+/** 원본 심볼 URL → 회색 data URL (실패도 null로 캐시해 재시도 폭주 방지). v3=밝은 슬레이트 tint */
 const greyIconCache = new Map<string, string | null>();
 const greyIconInflight = new Map<string, Promise<string | null>>();
+const GREY_ICON_CACHE_VER = 'v3';
+
+function greyIconCacheKey(src: string): string {
+  return `${GREY_ICON_CACHE_VER}:${src}`;
+}
 
 function unwrapPayload<T>(res: { data?: unknown }): T | null {
   const outer = res.data as { data?: T; success?: boolean } | T | undefined;
@@ -89,14 +100,13 @@ async function fetchStyleInfo(tableName: string): Promise<CachedStyleInfo | null
         geometryType = parsed.geometryType;
       }
       if (!styleProps || !geometryType) {
-        // SLD/CSS·심볼 없음 → 원(점) 기본 스타일 (없는 /symbol/*.svg 강제 금지)
+        // SLD/CSS·심볼 없음 → 원(점) 기본 스타일
         styleInfoCache.set(key, DEFAULT_POINT_STYLE);
         return DEFAULT_POINT_STYLE;
       }
-      // CSS mark url 은 점 심볼용 — 404 많음. 점 표시는 지도에서 원 고정, 여기선 url 제거
-      if (styleProps.symbolUrl) {
-        const { symbolUrl: _drop, ...rest } = styleProps;
-        styleProps = rest;
+      if (styleProps.symbolUrl?.trim()) {
+        const pub = toPublicSymbolPreviewUrl(styleProps.symbolUrl) ?? styleProps.symbolUrl.trim();
+        styleProps = { ...styleProps, symbolUrl: pub };
       }
       const info: CachedStyleInfo = { styleProps, geometryType };
       styleInfoCache.set(key, info);
@@ -138,11 +148,12 @@ function loadImage(src: string): Promise<HTMLImageElement> {
 
 /** SVG/PNG → 회색조 data URL (모듈 캐시) */
 async function getGreyIconDataUrl(src: string): Promise<string | null> {
-  if (greyIconCache.has(src)) {
+  const cacheKey = greyIconCacheKey(src);
+  if (greyIconCache.has(cacheKey)) {
     // has 이후 get — 성공 string / 실패 null 모두 유효 반환값 (non-null 단언 금지)
-    return greyIconCache.get(src) as string | null;
+    return greyIconCache.get(cacheKey) as string | null;
   }
-  const pending = greyIconInflight.get(src);
+  const pending = greyIconInflight.get(cacheKey);
   if (pending) return pending;
 
   const p = (async (): Promise<string | null> => {
@@ -155,7 +166,7 @@ async function getGreyIconDataUrl(src: string): Promise<string | null> {
       canvas.height = h;
       const ctx = canvas.getContext('2d');
       if (!ctx) {
-        greyIconCache.set(src, null);
+        greyIconCache.set(cacheKey, null);
         return null;
       }
       ctx.drawImage(img, 0, 0, w, h);
@@ -165,24 +176,26 @@ async function getGreyIconDataUrl(src: string): Promise<string | null> {
         const a = d[i + 3];
         if (a === 0) continue;
         const g = Math.round(0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]);
-        d[i] = g;
-        d[i + 1] = g;
-        d[i + 2] = g;
-        d[i + 3] = Math.round(a * 0.75);
+        // 변경 전 심볼 — 밝은 슬레이트 톤 (면 채움과 맞춤)
+        const dim = Math.round(90 + g * 0.35);
+        d[i] = dim;
+        d[i + 1] = dim;
+        d[i + 2] = dim;
+        d[i + 3] = a;
       }
       ctx.putImageData(imageData, 0, 0);
       const dataUrl = canvas.toDataURL('image/png');
-      greyIconCache.set(src, dataUrl);
+      greyIconCache.set(cacheKey, dataUrl);
       return dataUrl;
     } catch {
-      greyIconCache.set(src, null);
+      greyIconCache.set(cacheKey, null);
       return null;
     } finally {
-      greyIconInflight.delete(src);
+      greyIconInflight.delete(cacheKey);
     }
   })();
 
-  greyIconInflight.set(src, p);
+  greyIconInflight.set(cacheKey, p);
   return p;
 }
 
@@ -218,8 +231,8 @@ function buildVectorStyle(
   const grey = side === 'before';
   const zIndex = grey ? 1 : 2;
   const p = info.styleProps;
-  const opacity = grey ? Math.min(p.opacity ?? 0.45, 0.4) : (p.opacity ?? 0.55);
-  const strokeW = Math.max(1, p.strokeWidth ?? 2) * (grey ? 1 : 1.15);
+  const opacity = grey ? BEFORE_FILL_OPACITY : (p.opacity ?? 0.55);
+  const strokeW = Math.max(1, p.strokeWidth ?? 2) * (grey ? BEFORE_STROKE_MULT : 1.15);
   const fillHex = grey ? GREY_FILL : (p.fillColor ?? '#808080');
   const strokeHex = grey ? GREY_STROKE : (p.strokeColor ?? p.fillColor ?? '#333333');
   const size = p.size ?? 14;
@@ -232,7 +245,7 @@ function buildVectorStyle(
         image: new Icon({
           src: iconSrc,
           scale: Math.max(0.4, size / 24),
-          opacity: grey ? 0.75 : 1,
+          opacity: 1,
         }),
       });
     }
@@ -240,8 +253,8 @@ function buildVectorStyle(
       zIndex,
       image: new CircleStyle({
         radius: Math.max(4, size / 2),
-        fill: new Fill({ color: hexToRgba(fillHex, grey ? 0.55 : 0.85) }),
-        stroke: new Stroke({ color: strokeHex, width: 1.5 }),
+        fill: new Fill({ color: hexToRgba(fillHex, 0.85) }),
+        stroke: new Stroke({ color: strokeHex, width: grey ? 2.5 : 1.5 }),
       }),
     });
   }
@@ -250,8 +263,8 @@ function buildVectorStyle(
     return new Style({
       zIndex,
       stroke: new Stroke({
-        color: hexToRgba(strokeHex, grey ? 0.7 : 0.95),
-        width: strokeW,
+        color: hexToRgba(strokeHex, grey ? 1 : 0.95),
+        width: Math.max(strokeW, grey ? 3.5 : strokeW),
         lineDash: grey ? [8, 6] : undefined,
       }),
     });
@@ -261,8 +274,8 @@ function buildVectorStyle(
     zIndex,
     fill: new Fill({ color: hexToRgba(fillHex, opacity) }),
     stroke: new Stroke({
-      color: hexToRgba(strokeHex, grey ? 0.75 : 0.95),
-      width: strokeW,
+      color: hexToRgba(strokeHex, grey ? 1 : 0.95),
+      width: Math.max(strokeW, grey ? 3.2 : strokeW),
       lineDash: grey ? [6, 5] : undefined,
     }),
   });
@@ -270,12 +283,12 @@ function buildVectorStyle(
 
 const FALLBACK_BEFORE = new Style({
   zIndex: 1,
-  stroke: new Stroke({ color: 'rgba(107,114,128,0.7)', width: 2, lineDash: [8, 6] }),
-  fill: new Fill({ color: 'rgba(156,163,175,0.2)' }),
+  stroke: new Stroke({ color: 'rgba(17,17,17,1)', width: 3.5, lineDash: [8, 6] }),
+  fill: new Fill({ color: 'rgba(203,213,225,0.5)' }),
   image: new CircleStyle({
     radius: 6,
-    fill: new Fill({ color: 'rgba(156,163,175,0.7)' }),
-    stroke: new Stroke({ color: '#6b7280', width: 1.5 }),
+    fill: new Fill({ color: 'rgba(203,213,225,0.85)' }),
+    stroke: new Stroke({ color: '#111111', width: 2.5 }),
   }),
 });
 
@@ -322,7 +335,7 @@ export function resolveCompareFeatureStyle(
       return buildVectorStyle(info, side, geomType, null);
     }
     if (side === 'before') {
-      const grey = greyIconCache.get(symbolUrl);
+      const grey = greyIconCache.get(greyIconCacheKey(symbolUrl));
       if (grey) return buildVectorStyle(info, side, geomType, grey);
       void getGreyIconDataUrl(symbolUrl).then((url) => {
         if (!url) missingIconUrls.add(symbolUrl);
@@ -351,6 +364,8 @@ export type ChangeHistoryLegendInfo = {
   kind: 'point' | 'line' | 'polygon';
   fillColor: string;
   strokeColor: string;
+  /** GeoServer CSS mark url — 점이면 아이콘 */
+  symbolUrl?: string | null;
 };
 
 export function peekCompareLegendInfo(tableName: string): ChangeHistoryLegendInfo | null {
@@ -363,5 +378,6 @@ export function peekCompareLegendInfo(tableName: string): ChangeHistoryLegendInf
     kind: resolveDrawKind(undefined, info.geometryType),
     fillColor: p.fillColor ?? '#808080',
     strokeColor: p.strokeColor ?? p.fillColor ?? '#333333',
+    symbolUrl: p.symbolUrl?.trim() || null,
   };
 }

@@ -444,15 +444,18 @@ const WITHIN_BLOCK_SORT_KEYS = new Set<VillagePatrolAssignmentSortKey>([
 
 /**
  * 편성표 목록
+ * - thead 없음: id 큰 순(최근 등록 상단)
  * - 읍면·마을·조 thead: 블록 순서(1차) — 병합 유지
  * - 성명·소속·연락처·비고 thead: 동일 블록 안(2차)
- * - thead 없음: 기본 병합 순서(마을 등장 순 → A/B/C조)
  */
 export function sortVillagePatrolAssignmentRows(
   list: VillagePatrolRow[],
   sorts?: VillagePatrolAssignmentSortSpec[] | null
 ): VillagePatrolRow[] {
   const specs = (sorts ?? []).filter((s) => ASSIGNMENT_SORT_KEYS.has(s.key))
+  if (!specs.length) {
+    return [...list].sort((a, b) => Number(b.id) - Number(a.id))
+  }
   const placeSpecs = specs.filter((s) => PLACE_SORT_KEYS.has(s.key))
   const withinSpecs = specs.filter((s) => WITHIN_BLOCK_SORT_KEYS.has(s.key))
   const villageOrder = buildVillageOrder(list)
@@ -471,7 +474,7 @@ export function sortVillagePatrolAssignmentRows(
         if (cmp !== 0) return cmp
       }
     }
-    return 0
+    return Number(b.id) - Number(a.id)
   })
 }
 

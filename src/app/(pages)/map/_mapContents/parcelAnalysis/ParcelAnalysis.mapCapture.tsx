@@ -696,8 +696,8 @@ function ParcelAnalysisMapCaptureInner({
               url: wmsBase,
               params: {
                 LAYERS: `${workspace}:${key}`,
-                // 빈 스타일 = 레이어 defaultStyle (이름 스타일 불일치·렌더 예외 완화)
-                STYLES: '',
+                // 메인 지도(재난안전·서비스 레이어)와 동일 — 레이어명 스타일 명시
+                STYLES: key,
                 VERSION: '1.1.1',
                 EXCEPTIONS: WMS_EXCEPTIONS,
                 TRANSPARENT: true,
