@@ -1190,7 +1190,7 @@ export default function OpenLayersMap({
   const roadNetworkPointPickActive =
     Boolean(mapContext?.roadNetworkPointPickActive);
 
-  // 지도 클릭 → 도형 검색. 측정·도형 그리기·도형편집·CCTV·도로망 점찍기 중에는 식별 비활성
+  // 지도 클릭 → 도형 검색. 측정·도형 그리기·도형편집·CCTV·도로망 점찍기·메모 위치 찍기 중에는 식별 비활성
   const { popupState, popupElRef, closePopup } = useFeatureIdentify(
     mapInstanceRef.current,
     mapReady,
@@ -1201,6 +1201,7 @@ export default function OpenLayersMap({
       !!layerRowGeomEdit ||
       !!spatialDrawRequest ||
       roadNetworkPointPickActive ||
+      (mapContext?.mapDrawInputSuspended ?? false) ||
       activeControls.some((id) => MEASUREMENT_IDS.includes(id))
   );
 

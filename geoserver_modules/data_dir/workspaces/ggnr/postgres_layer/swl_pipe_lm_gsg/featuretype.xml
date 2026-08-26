@@ -1,5 +1,5 @@
 <featureType>
-  <id>FeatureTypeInfoImpl--4b5b0287:1a013cef414:-307b</id>
+  <id>FeatureTypeInfoImpl--50232ad2:1a022df41e9:-608e</id>
   <name>swl_pipe_lm_gsg</name>
   <nativeName>swl_pipe_lm_gsg</nativeName>
   <namespace>
@@ -31,8 +31,6 @@
     <id>DataStoreInfoImpl-4bf97568:19c4d6c3053:-7ff9</id>
   </store>
   <serviceConfiguration>false</serviceConfiguration>
-  <internationalTitle/>
-  <internationalAbstract/>
   <maxFeatures>0</maxFeatures>
   <numDecimals>0</numDecimals>
   <padWithZeros>false</padWithZeros>

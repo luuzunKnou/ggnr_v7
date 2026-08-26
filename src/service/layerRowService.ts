@@ -27,8 +27,16 @@ const FIELDS_DIR = path.join(process.cwd(), 'src', 'config', 'defineLayer', 'fie
 const GEOM_COLUMN_NAMES = new Set(['geom', 'geometry', 'the_geom', 'shape']);
 
 function looksLikeGeomWkt(raw: string): boolean {
-  const s = String(raw ?? '').trim().toUpperCase();
+  let s = String(raw ?? '').trim().toUpperCase();
+  if (s.startsWith('SRID=')) {
+    const i = s.indexOf(';');
+    if (i >= 0) s = s.slice(i + 1).trim();
+  }
   return (
+    s.startsWith('POINT') ||
+    s.startsWith('MULTIPOINT') ||
+    s.startsWith('LINESTRING') ||
+    s.startsWith('MULTILINESTRING') ||
     s.startsWith('POLYGON') ||
     s.startsWith('MULTIPOLYGON') ||
     s.startsWith('GEOMETRYCOLLECTION')

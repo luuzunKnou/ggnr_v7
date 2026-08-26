@@ -4,15 +4,8 @@ import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react'
 import { call } from '@/lib/api';
 import { useMapContext } from '../MapContext';
 import type { CompUI } from './types';
-import type { ComplaintFormValues } from './complaint-info';
-import { ComplaintDetailPanel } from './complaint-detail-panel';
 import { Input } from '@/app/shadcnComponents/ui/input';
 import { Button } from '@/app/shadcnComponents/ui/button';
-import {
-  Dialog,
-  DialogContent,
-  DialogTitle,
-} from '@/app/shadcnComponents/ui/dialog';
 import {
   Search,
   MapPin,
@@ -26,7 +19,6 @@ import {
   CircleDot,
   ClipboardList,
   ClipboardCheck,
-  X,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { COMPLAINT_STATE_OPTIONS, getStateStyle as getStateStyleBase } from './state-options';
@@ -44,19 +36,6 @@ function lowerLayerIds(ids: readonly string[]): string[] {
   return ids.map((id) => id.toLowerCase());
 }
 
-const EMPTY_COMP: CompUI = {
-  compKey: 0,
-  compDate: null,
-  compCu: null,
-  compCt: null,
-  compCg: null,
-  compAdr: null,
-  compName: null,
-  compTel: null,
-  compContent: null,
-  compExtra: null,
-};
-
 const PAGE_SIZE = 50;
 
 /** 목록 카드 배지용: getStateStyle + 아이콘 (점검/처리중/완료만 아이콘 매핑, 나머지는 기본) */
@@ -71,7 +50,13 @@ function getStateStyle(state: string) {
   return { ...style, icon: iconMap[state] ?? <CircleDot className="h-3 w-3 text-muted-foreground" /> };
 }
 
-export default function ComplaintListPanel({ refreshKey = 0 }: { refreshKey?: number }) {
+export default function ComplaintListPanel({
+  refreshKey = 0,
+  onRequestAdd,
+}: {
+  refreshKey?: number;
+  onRequestAdd?: () => void;
+}) {
   const mapContext = useMapContext();
   const mapContextRef = useRef(mapContext);
   mapContextRef.current = mapContext;
@@ -83,8 +68,6 @@ export default function ComplaintListPanel({ refreshKey = 0 }: { refreshKey?: nu
   const [loading, setLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterState, setFilterState] = useState<string | null>(null);
-  const [addDialogOpen, setAddDialogOpen] = useState(false);
-  const [saving, setSaving] = useState(false);
 
   /** 패널 진입 시 민원관리 레이어 켜고 전체 extent로 지도 이동 */
   useEffect(() => {
@@ -210,9 +193,14 @@ export default function ComplaintListPanel({ refreshKey = 0 }: { refreshKey?: nu
 
   const handleSelect = useCallback(
     async (comp: CompUI) => {
+      // 같은 행을 한 번 더 누르면 상세를 닫는다
+      if (complaintDetail?.compKey === comp.compKey) {
+        setComplaintDetail?.(null);
+        return;
+      }
       await openDetailByCompKey(comp.compKey);
     },
-    [openDetailByCompKey]
+    [openDetailByCompKey, complaintDetail?.compKey, setComplaintDetail]
   );
 
   useComplaintMapClick({
@@ -226,68 +214,6 @@ export default function ComplaintListPanel({ refreshKey = 0 }: { refreshKey?: nu
   );
 
   const selectedKey = complaintDetail?.compKey ?? null;
-
-  const handleCreateComplaint = useCallback(
-    async (values: ComplaintFormValues) => {
-      if (!setComplaintDetail) return;
-      setSaving(true);
-      try {
-        const createRes = await call('', 'POST', {
-          service: 'complaintService',
-          action: 'create',
-          params: {
-            compDate: values.compDate || null,
-            compCu: values.compCu || null,
-            compCt: values.compCt || null,
-            compCg: values.compCg || null,
-            compAdr: values.compAdr || null,
-            compName: values.compName || null,
-            compTel: values.compTel || null,
-            compContent: values.compContent || null,
-            lon: values.lon ?? null,
-            lat: values.lat ?? null,
-          },
-        });
-        const created = createRes?.data as
-          | (CompUI & { extent3857?: [number, number, number, number] | null; compKey?: number })
-          | undefined;
-        const compKey = created?.compKey;
-        if (!compKey) {
-          console.error('민원 생성 실패: compKey 없음');
-          return;
-        }
-        // create 응답에 extent 없으면 get으로 보강
-        let detail = created;
-        if (!created?.extent3857) {
-          const getRes = await call('', 'POST', {
-            service: 'complaintService',
-            action: 'get',
-            params: { compKey },
-          });
-          if (getRes?.success && getRes?.data) {
-            detail = getRes.data as typeof created;
-          }
-        }
-        if (detail) {
-          setComplaintDetail(detail as Parameters<typeof setComplaintDetail>[0]);
-          setAddDialogOpen(false);
-          loadList();
-          const map = mapContext?.mapInstanceRef?.current;
-          const center = center3857FromExtent(detail.extent3857);
-          if (map && center) {
-            animateComplaintToCenter3857(map, center, () =>
-              mapContext?.applyMapViewPaddingRef?.current?.()
-            );
-          }
-        }
-      } catch (e) {
-        console.error('민원 생성 실패:', e);
-      } finally {
-        setSaving(false);
-      }
-    },
-    [setComplaintDetail, loadList, mapContext]
-  );
 
   const filtered = useMemo(() => {
     return complaints.filter((c) => {
@@ -332,7 +258,7 @@ export default function ComplaintListPanel({ refreshKey = 0 }: { refreshKey?: nu
             <Button
               size="sm"
               className="h-[26px] min-h-[26px] gap-1 px-2.5 text-[12px] font-light border border-border bg-muted/50 text-muted-foreground hover:border-primary hover:bg-primary/15 hover:text-primary rounded-lg"
-              onClick={() => setAddDialogOpen(true)}
+              onClick={() => onRequestAdd?.()}
             >
               <Plus className="h-3 w-3" />
               민원 추가
@@ -454,33 +380,6 @@ export default function ComplaintListPanel({ refreshKey = 0 }: { refreshKey?: nu
           </div>
         </div>
       </div>
-
-      <Dialog open={addDialogOpen} onOpenChange={setAddDialogOpen}>
-        <DialogContent className="sm:max-w-[600px] p-0 gap-0 max-h-[90vh] overflow-hidden flex flex-col" showCloseButton={false}>
-          <DialogTitle className="sr-only">민원 추가</DialogTitle>
-          <div className="flex items-center justify-between border-b border-border px-3 py-1.5 shrink-0 bg-muted/30">
-            <span className="text-xs font-medium text-muted-foreground">민원 추가</span>
-            <button
-              type="button"
-              onClick={() => setAddDialogOpen(false)}
-              className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-muted/50 hover:text-foreground"
-              aria-label="닫기"
-            >
-              <X className="h-3.5 w-3.5" />
-            </button>
-          </div>
-          <div className="flex flex-col min-h-0 overflow-auto">
-            <ComplaintDetailPanel
-              mode="add"
-              complaint={EMPTY_COMP}
-              histories={[]}
-              onSave={handleCreateComplaint}
-              onClose={() => setAddDialogOpen(false)}
-              saving={saving}
-            />
-          </div>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

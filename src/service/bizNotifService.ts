@@ -7,6 +7,7 @@ import { usrBizNotifState } from '@/database/schema/usr_biz_notif_state';
 import { getSessionUsrId } from '@/lib/auth/guard';
 import { getUsageDataAsExpiryNotifications } from '@/service/usageDataAsService';
 import { getUseFeeUnpaidDueNotifications } from '@/service/useFeeService';
+import { getUseFeeBinding } from '@/lib/useFeeBinding';
 
 export type BizNotifItem = {
   id: string;
@@ -135,17 +136,18 @@ export async function listMyBizNotifications(params?: {
   }
 
   for (const row of feeRes.items ?? []) {
+    const feeTitle = getUseFeeBinding({ prefix: row.prefix }).title;
     candidates.push({
-      id: `use-fee-due:${row.id}`,
-      notifKey: `use-fee-due:${row.id}`,
+      id: `use-fee-due:${row.prefix}:${row.id}`,
+      notifKey: `use-fee-due:${row.prefix}:${row.id}`,
       category: '미납임박',
       title: '점사용료 납기 임박',
-      name: `점사용료 ${row.chargeNo} ${row.payer}`,
+      name: `${feeTitle} ${row.chargeNo} ${row.payer}`,
       listKey: `${row.dueDate} · ${formatDaysRemainingLabel(row.daysRemaining, 'due')}`,
       important: true,
       target: 'fee',
       targetId: row.id,
-      systemScope: String(row.dptNm ?? '').trim() === '건설과' ? 'build' : 'river',
+      systemScope: row.systemScope,
     });
   }
 
