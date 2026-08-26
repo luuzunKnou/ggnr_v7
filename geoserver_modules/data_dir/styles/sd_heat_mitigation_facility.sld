@@ -43,7 +43,7 @@
           </sld:PointSymbolizer>
           <sld:TextSymbolizer>
             <sld:Label>
-              <ogc:PropertyName>addr</ogc:PropertyName>
+              <ogc:PropertyName>jibun_addr</ogc:PropertyName>
             </sld:Label>
             <sld:Font>
               <sld:CssParameter name="font-family">Nanum Gothic</sld:CssParameter>
