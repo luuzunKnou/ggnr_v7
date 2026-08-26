@@ -9,12 +9,14 @@ import {
   fetchBuildingRegisterDetail,
   fetchLandInfoConfig,
   fetchParcelIdentityAtPoint,
+  fetchParcelLandModalList,
   fetchParcelTabData,
   fetchPermitRows,
   type BuildingLedgerRow,
   type BuildingPermitSource,
   type BuildingRegisterMode,
   type BuildingRegisterRow,
+  type ParcelLandModalKind,
   type ParcelTabData,
 } from './api';
 import { BuildingPermitPanel, BuildingRegisterPanel } from './LandInfoBuildingPanels';
@@ -50,7 +52,7 @@ function openExternalMapByAddress(
 }
 
 type TabId = 'parcel' | 'buildingLedger' | 'buildingPermit';
-type ModalKind = 'price' | null;
+type ModalKind = ParcelLandModalKind | null;
 
 const TAB_LABELS: { id: TabId; label: string }[] = [
   { id: 'parcel', label: '필지정보' },
@@ -59,6 +61,35 @@ const TAB_LABELS: { id: TabId; label: string }[] = [
 ];
 
 const PRICE_MODAL_HEADERS = ['공시지가', '공시일자', '기준년도', '기준월', '지번', '비고'] as const;
+
+const MODAL_TITLES: Record<Exclude<ModalKind, null>, string> = {
+  price: '공시지가 조회',
+  move: '이동일자 연혁조회',
+  share: '공유인 조회',
+  change: '변동일자 연혁조회',
+};
+
+/** V6 통합제어 personInfo=true 와 동일 — 소유자 개인정보 길이만큼 * 마스킹 */
+function maskPersonField(value: unknown): string {
+  if (value == null) return '***';
+  const str = String(value).trim();
+  if (!str || str === '-') return str || '-';
+  return '*'.repeat(Math.max(str.length, 3));
+}
+
+function maskModalRows(kind: ParcelLandModalKind, rows: string[][]): string[][] {
+  if (kind === 'share') {
+    return rows.map((row) =>
+      row.map((cell, i) => (i === 0 || i === 1 || i === 2 ? maskPersonField(cell) : cell))
+    );
+  }
+  if (kind === 'change') {
+    return rows.map((row) =>
+      row.map((cell, i) => (i === 1 || i === 3 ? maskPersonField(cell) : cell))
+    );
+  }
+  return rows;
+}
 
 function toNumText(value: unknown): string {
   const num = Number(value);
@@ -285,6 +316,10 @@ export function LandInfoPanelContent({
   const [selectedCrs, setSelectedCrs] = useState('EPSG:5181');
   const [activeTab, setActiveTab] = useState<TabId>('parcel');
   const [modalKind, setModalKind] = useState<ModalKind>(null);
+  const [modalFetching, setModalFetching] = useState(false);
+  const [modalHeaders, setModalHeaders] = useState<string[]>([]);
+  const [modalRows, setModalRows] = useState<string[][]>([]);
+  const [modalMessage, setModalMessage] = useState<string | null>(null);
 
   const [resolvedPnu, setResolvedPnu] = useState<string | null>(pnuFromContext ?? null);
   const [resolvedParcelJibun, setResolvedParcelJibun] = useState<string | null>(null);
@@ -565,17 +600,50 @@ export function LandInfoPanelContent({
     );
   }, [parcelData, jibun, resolvedParcelJibun]);
 
-  const modalRows = useMemo(() => {
-    if (modalKind !== 'price') return [];
-    return parcelData.prices.map((row) => [
-      toText(row.pblntfPclnd ? `${toNumText(row.pblntfPclnd)}원/㎡` : '-'),
-      toText(row.pblntfDe),
-      toText(row.stdrYear),
-      toText(row.stdrMt),
-      toText(composeFullJibunFromRow(row) || row.jibun || row.mnnmSlno),
-      toText(row.registDt),
-    ]);
-  }, [modalKind, parcelData]);
+  const openLandModal = async (kind: Exclude<ModalKind, null>) => {
+    const pnu = effectivePnu;
+    if (!pnu) return;
+    setModalKind(kind);
+    setModalMessage(null);
+    setModalHeaders([]);
+    setModalRows([]);
+
+    if (kind === 'price' && parcelData.source === 'vworld') {
+      setModalHeaders([...PRICE_MODAL_HEADERS]);
+      setModalRows(
+        parcelData.prices.map((row) => [
+          toText(row.pblntfPclnd ? `${toNumText(row.pblntfPclnd)}원/㎡` : '-'),
+          toText(row.pblntfDe),
+          toText(row.stdrYear),
+          toText(row.stdrMt),
+          toText(composeFullJibunFromRow(row) || row.jibun || row.mnnmSlno),
+          toText(row.registDt),
+        ])
+      );
+      if (!parcelData.prices.length) setModalMessage('요청된 공시지가 데이터가 없습니다.');
+      return;
+    }
+
+    setModalFetching(true);
+    try {
+      const res = await fetchParcelLandModalList({ pnu, kind });
+      setModalHeaders(res.headers);
+      setModalRows(maskModalRows(kind, res.rows));
+      setModalMessage(res.error || res.message || (res.rows.length ? null : '조회 결과가 없습니다.'));
+    } catch {
+      setModalMessage('조회에 실패했습니다.');
+    } finally {
+      setModalFetching(false);
+    }
+  };
+
+  const shareCntRaw = getField(latestPossession, ['cnrsPsnCo', 'shareCnt'], '');
+  const shareCntNum = Number(String(shareCntRaw).replace(/,/g, ''));
+  const canOpenShare = Number.isFinite(shareCntNum) && shareCntNum > 0;
+  const moveDate = getField(latestChar, ['lndMoveDe', 'landMoveDate'], '');
+  const changeDate = getField(latestPossession, ['ownshipChgDe'], '');
+  const canOpenMove = Boolean(moveDate && moveDate !== '-');
+  const canOpenChange = Boolean(changeDate && changeDate !== '-');
 
   const tabBody = useMemo(() => {
     if (!effectivePnu) return <p className="text-xs text-rose-600">필지 PNU를 찾지 못했습니다.</p>;
@@ -611,13 +679,23 @@ export function LandInfoPanelContent({
               <LinkageCell k="면적" v={`${toNumText(getField(latestChar, ['lndpclAr', 'area'], '0'))}㎡`} source={parcelData.source} />
               <LinkageCell k="용도지역" v={getField(latestChar, ['prposArea1Nm', 'prposAreaDstrcCodeNm'])} source={parcelData.source} />
               <LinkageCell k="이동사유" v={getField(latestChar, ['lndMoveResnNm', 'landMoveReason'])} source={parcelData.source} />
-              <LinkageCell k="이동일자" v={getField(latestChar, ['lndMoveDe', 'landMoveDate'])} source={parcelData.source} />
+              {canOpenMove ? (
+                <LinkageCellButton
+                  k="이동일자"
+                  v={moveDate}
+                  button="연혁 조회"
+                  source={parcelData.source}
+                  onClick={() => void openLandModal('move')}
+                />
+              ) : (
+                <LinkageCell k="이동일자" v={moveDate} source={parcelData.source} />
+              )}
               <LinkageCellButton
                 k="공시지가"
                 v={`${toNumText(getField(latestPrice, ['pblntfPclnd'], '0'))}원/㎡`}
                 button="조회"
                 source={parcelData.source}
-                onClick={() => setModalKind('price')}
+                onClick={() => void openLandModal('price')}
               />
             </div>
           </section>
@@ -626,11 +704,39 @@ export function LandInfoPanelContent({
             <p className="text-xs font-semibold text-foreground">토지소유내역</p>
             <div className="grid grid-cols-[85px_1fr_85px_1fr] overflow-hidden rounded border border-border text-[12px]">
               <LinkageCell k="소유구분" v={getField(latestPossession, ['posesnSeCodeNm'])} source={parcelData.source} />
-              <LinkageCell k="공유인수" v={getField(latestPossession, ['cnrsPsnCo', 'shareCnt'])} source={parcelData.source} />
-              <LinkageCell k="소유자명" v={getField(latestPossession, ['ownerNm', 'ownerName'])} source={parcelData.source} />
-              <LinkageCell k="주소" v={getField(latestPossession, ['ownerAddr', 'address'])} source={parcelData.source} />
+              {canOpenShare ? (
+                <LinkageCellButton
+                  k="공유인수"
+                  v={shareCntRaw || '-'}
+                  button="공유인 조회"
+                  source={parcelData.source}
+                  onClick={() => void openLandModal('share')}
+                />
+              ) : (
+                <LinkageCell k="공유인수" v={shareCntRaw || '-'} source={parcelData.source} />
+              )}
+              <LinkageCell
+                k="소유자명"
+                v={maskPersonField(getField(latestPossession, ['ownerNm', 'ownerName']))}
+                source={parcelData.source}
+              />
+              <LinkageCell
+                k="주소"
+                v={maskPersonField(getField(latestPossession, ['ownerAddr', 'address']))}
+                source={parcelData.source}
+              />
               <LinkageCell k="변동원인" v={getField(latestPossession, ['ownshipChgCauseCodeNm'])} source={parcelData.source} />
-              <LinkageCell k="변동일자" v={getField(latestPossession, ['ownshipChgDe'])} source={parcelData.source} />
+              {canOpenChange ? (
+                <LinkageCellButton
+                  k="변동일자"
+                  v={changeDate}
+                  button="연혁조회"
+                  source={parcelData.source}
+                  onClick={() => void openLandModal('change')}
+                />
+              ) : (
+                <LinkageCell k="변동일자" v={changeDate} source={parcelData.source} />
+              )}
             </div>
           </section>
 
@@ -697,6 +803,12 @@ export function LandInfoPanelContent({
     latestPossession,
     latestPrice,
     loading,
+    canOpenChange,
+    canOpenMove,
+    canOpenShare,
+    changeDate,
+    moveDate,
+    shareCntRaw,
     parcelData,
     parcelData.source,
     parcelError,
@@ -807,19 +919,45 @@ export function LandInfoPanelContent({
         <div className="flex-1 min-h-0 overflow-auto p-2">{tabBody}</div>
       </section>
 
-      <Dialog open={modalKind === 'price'} onOpenChange={(open) => !open && setModalKind(null)}>
+      <Dialog
+        open={modalKind != null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setModalKind(null);
+            setModalMessage(null);
+            setModalHeaders([]);
+            setModalRows([]);
+            setModalFetching(false);
+          }
+        }}
+      >
         <DialogContent className="flex max-h-[86vh] w-[960px] max-w-[94vw] flex-col gap-0 overflow-hidden border-border bg-card p-0 text-card-foreground sm:max-w-[960px]">
           <DialogHeader className="shrink-0 border-b border-border px-4 py-3">
-            <DialogTitle className="text-sm">공시지가 조회</DialogTitle>
+            <DialogTitle className="text-sm">
+              {modalKind ? MODAL_TITLES[modalKind] : '조회'}
+            </DialogTitle>
           </DialogHeader>
           <div className="min-h-0 flex-1 overflow-auto p-4">
-            <p className="mb-2 shrink-0 text-xs text-muted-foreground">총 {modalRows.length}건</p>
-            <DataTable
-              headers={[...PRICE_MODAL_HEADERS]}
-              rows={modalRows}
-              linkageSource={parcelData.source}
-              nowrap
-            />
+            {modalFetching ? (
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" /> 불러오는 중...
+              </div>
+            ) : modalRows.length > 0 ? (
+              <>
+                <p className="mb-2 shrink-0 text-xs text-muted-foreground">
+                  총 {modalRows.length}
+                  {modalKind === 'share' ? '명' : '건'}
+                </p>
+                <DataTable
+                  headers={modalHeaders.length ? modalHeaders : [...PRICE_MODAL_HEADERS]}
+                  rows={modalRows}
+                  linkageSource={parcelData.source}
+                  nowrap
+                />
+              </>
+            ) : (
+              <p className="text-xs text-muted-foreground">{modalMessage || '조회 결과가 없습니다.'}</p>
+            )}
           </div>
         </DialogContent>
       </Dialog>

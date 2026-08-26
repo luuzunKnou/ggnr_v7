@@ -31,9 +31,14 @@ import {
 } from '@/integrations/krasGateway';
 
 const KRAS_LAND_QUERY_ID = 'KRAS000002';
+const KRAS_SHARE_QUERY_ID = 'KRAS000003';
+const KRAS_MOVE_HIST_QUERY_ID = 'KRAS000006';
+const KRAS_CHANGE_HIST_QUERY_ID = 'KRAS000007';
 const KRAS_LAND_USE_QUERY_ID = 'KRAS000025';
 const KRAS_LAYER_LIST_QUERY_ID = 'KRAS000037';
 const KOREPS_PRICE_QUERY_ID = 'KOREPS00011';
+
+export type ParcelLandModalKind = 'share' | 'move' | 'change' | 'price';
 
 function toStr(value: unknown): string {
   if (value == null) return '';
@@ -574,5 +579,191 @@ export async function fetchParcelLandInfoTab(params: { pnu?: string }): Promise<
     const msg = e instanceof Error ? e.message : String(e);
     console.warn(`[landLinkage] 필지정보 행망 예외 pnu=${pnu} ${msg}`);
     return { ...empty, error: msg, krasSkipReason: msg, hangmangCalls: skippedHangmangCalls(msg) };
+  }
+}
+
+function formatKrasYmd(raw: string): string {
+  const d = toStr(raw).replace(/\D/g, '');
+  if (d.length >= 8) return `${d.slice(0, 4)}-${d.slice(4, 6)}-${d.slice(6, 8)}`;
+  return toStr(raw);
+}
+
+function formatPriceCell(value: unknown): string {
+  const n = toNumPositive(value);
+  if (n == null) return toStr(value) || '-';
+  return `${n.toLocaleString('ko-KR')}원/㎡`;
+}
+
+function formatAreaCell(value: unknown): string {
+  const n = Number(String(value ?? '').replace(/,/g, ''));
+  if (!Number.isFinite(n)) return toStr(value) || '-';
+  return `${n.toLocaleString('ko-KR')}㎡`;
+}
+
+/** 우클릭 필지정보 모달 — 공유인·이동연혁·변동연혁·공시지가 목록 */
+export async function fetchParcelLandModalList(params: {
+  pnu?: string;
+  kind?: ParcelLandModalKind;
+}): Promise<{
+  ok: boolean;
+  kind: ParcelLandModalKind | null;
+  headers: string[];
+  rows: string[][];
+  message?: string;
+  error?: string;
+}> {
+  const pnu = toStr(params.pnu);
+  const kind = params.kind;
+  if (!kind || !['share', 'move', 'change', 'price'].includes(kind)) {
+    return { ok: false, kind: null, headers: [], rows: [], error: '조회 종류가 필요합니다.' };
+  }
+  if (!/^\d{19}$/.test(pnu)) {
+    return { ok: false, kind, headers: [], rows: [], error: '유효한 PNU(19자리)가 필요합니다.' };
+  }
+
+  const cfg = getLandLinkageConfig();
+  if (!cfg.useKras) {
+    return {
+      ok: true,
+      kind,
+      headers: [],
+      rows: [],
+      message: `개발 실행(GGNR_ENV=${(process.env.GGNR_ENV ?? '').trim() || '(없음)'})이라 행망을 호출하지 않음`,
+    };
+  }
+
+  try {
+    if (kind === 'price') {
+      const url = buildKorepsUrl(cfg);
+      if (!url) {
+        return { ok: true, kind, headers: [], rows: [], message: '공시지가 접속정보가 없습니다.' };
+      }
+      const r = await fetchLinkageXmlResult(
+        url,
+        buildKrasParam(pnu, KOREPS_PRICE_QUERY_ID, cfg, cfg.korepsKey),
+        undefined,
+        'POST'
+      );
+      if (r.error) return { ok: false, kind, headers: [], rows: [], error: r.error };
+      const parsed = parseKorepsPriceRows(r.xml);
+      const headers = ['공시지가', '공시일자', '기준년도', '기준월', '지번', '비고'];
+      const rows = parsed.map((item) => [
+        formatPriceCell(item.pannJiga ?? item.raw.PANN_JIGA),
+        formatKrasYmd(item.pannYmd),
+        item.baseYear ? `${item.baseYear}년` : '-',
+        item.baseMon ? `${item.baseMon}월` : '-',
+        item.jigaJibn || '-',
+        item.remark || '-',
+      ]);
+      return {
+        ok: true,
+        kind,
+        headers,
+        rows,
+        message: rows.length ? undefined : '요청된 공시지가 데이터가 없습니다.',
+      };
+    }
+
+    const url = buildKrasUrl(cfg);
+    if (!url || !cfg.krasKey || !cfg.sggCode) {
+      return { ok: true, kind, headers: [], rows: [], message: '토지행정망 접속정보가 없습니다.' };
+    }
+
+    const svcId =
+      kind === 'share'
+        ? KRAS_SHARE_QUERY_ID
+        : kind === 'move'
+          ? KRAS_MOVE_HIST_QUERY_ID
+          : KRAS_CHANGE_HIST_QUERY_ID;
+    const r = await fetchLinkageXmlResult(url, buildKrasParam(pnu, svcId, cfg), undefined, 'GET');
+    if (r.error) return { ok: false, kind, headers: [], rows: [], error: r.error };
+    let maps = parseKrasBodyFieldMaps(r.xml);
+
+    if (kind === 'share') {
+      maps = [...maps].sort((a, b) => Number(a.SHR_SEQNO ?? 0) - Number(b.SHR_SEQNO ?? 0));
+      const headers = [
+        '등록번호',
+        '소유자',
+        '소유자주소',
+        '구분',
+        '지분',
+        '변동원인',
+        '변동일자',
+        '말소일자',
+      ];
+      const rows = maps.map((item) => [
+        toStr(item.OWNER_REGNO) || '-',
+        toStr(item.OWNER_NM) || '-',
+        toStr(item.OWNER_ADDR) || '-',
+        toStr(item.OWN_GBN_NM) || '-',
+        toStr(item.OWN_RGT_JIBUN) || '-',
+        toStr(item.OWN_RGT_CHG_RSN_NM) || '-',
+        formatKrasYmd(toStr(item.OWN_RGT_CHG_YMD)) || '-',
+        formatKrasYmd(toStr(item.OWN_RGT_CHG_DEL_YMD)) || '-',
+      ]);
+      return {
+        ok: true,
+        kind,
+        headers,
+        rows,
+        message: rows.length ? undefined : '요청된 대상지의 공유지연명부 정보가 없습니다.',
+      };
+    }
+
+    if (kind === 'move') {
+      const headers = [
+        '이동일자',
+        '토지이동사유',
+        '지목',
+        '면적',
+        '공유인수',
+        '토지이동말소일자',
+        '관련지번',
+      ];
+      const rows = maps.map((item) => {
+        const rel = toStr(item.RELJIBUN)
+          .split(/\n/)
+          .map((s) => s.trim())
+          .filter(Boolean)
+          .join(', ');
+        return [
+          toStr(item.DYMD) || formatKrasYmd(toStr(item.LAND_MOV_YMD)) || '-',
+          toStr(item.LAND_MOV_RSN_CD_NM) || '-',
+          toStr(item.JIMOK_NM) || '-',
+          formatAreaCell(item.PAREA),
+          toStr(item.SHR_CNT) ? `${toStr(item.SHR_CNT)}명` : '-',
+          formatKrasYmd(toStr(item.LAND_MOV_DEL_YMD)) || '-',
+          rel || '-',
+        ];
+      });
+      return {
+        ok: true,
+        kind,
+        headers,
+        rows,
+        message: rows.length ? undefined : '요청된 이동연혁 데이터가 없습니다.',
+      };
+    }
+
+    const headers = ['소재지코드', '등록번호', '소유구분', '소유자', '변동원인', '변동일자', '공유인수'];
+    const rows = maps.map((item) => [
+      toStr(item.LAND_LOC_CD) || '-',
+      toStr(item.DREGNO) || '-',
+      toStr(item.OWN_GBN_NM) || '-',
+      toStr(item.OWNER_NM) || '-',
+      toStr(item.OWN_RGT_CHG_RSN_CD_NM) || '-',
+      formatKrasYmd(toStr(item.DYMD)) || '-',
+      toStr(item.SHR_CNT) ? `${toStr(item.SHR_CNT)}명` : '-',
+    ]);
+    return {
+      ok: true,
+      kind,
+      headers,
+      rows,
+      message: rows.length ? undefined : '요청된 변동연혁 데이터가 없습니다.',
+    };
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return { ok: false, kind, headers: [], rows: [], error: msg };
   }
 }

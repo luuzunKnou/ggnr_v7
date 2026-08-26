@@ -2,6 +2,7 @@
  * 선택일 기준 «변경 전» / «변경 후» **레이어 전체** 도형.
  * - 변경 후 = as-of(그날까지 반영된 최종)
  * - 변경 전 = as-of 에서 당일 append 제거 · remove/conflict(dayDiff에 있는 것만) 는 old 도형
+ * - 당일이 최초 등록(추가)만이면 변경 전을 비움
  */
 import type { ChangeHistoryAsOfFeature, ChangeHistoryDayDiffFeature } from './changeHistory.types';
 
@@ -96,6 +97,8 @@ export function buildCompareFeatures(
     before.set(rowKey(v.tableName, v.keyValue), { ...v, geom: v.geom });
   }
 
+  let dayHasBeforeOp = false;
+
   for (const d of dayDiff) {
     const table = pickTableName(d as ChangeHistoryDayDiffFeature & { table_name?: string });
     const key = String(d.keyValue ?? '').trim();
@@ -104,10 +107,10 @@ export function buildCompareFeatures(
     const op = String(d.op ?? '').toLowerCase();
     const geom = normalizeGeoJsonGeometry(d.geom);
 
-    if (op === 'append' && d.side === 'new') {
-      // as-of 에만 있고 전일에는 없던 건 — before 에서 제거가 맞음
+    if (op === 'append') {
+      // 최초 등록 — 전일 도형이 없으므로 변경 전에서 제거
       before.delete(mk);
-      if (geom?.type && !after.has(mk)) {
+      if (geom?.type && (d.side === 'new' || d.side == null) && !after.has(mk)) {
         after.set(mk, {
           tableName: table,
           keyField: d.keyField,
@@ -118,6 +121,7 @@ export function buildCompareFeatures(
       continue;
     }
     if ((op === 'remove' || op === 'conflict') && d.side === 'old' && geom?.type) {
+      dayHasBeforeOp = true;
       before.set(mk, {
         tableName: table,
         keyField: d.keyField,
@@ -125,7 +129,7 @@ export function buildCompareFeatures(
         geom,
       });
     }
-    if ((op === 'append' || op === 'conflict') && d.side === 'new' && geom?.type) {
+    if (op === 'conflict' && d.side === 'new' && geom?.type) {
       after.set(mk, {
         tableName: table,
         keyField: d.keyField,
@@ -133,6 +137,11 @@ export function buildCompareFeatures(
         geom,
       });
     }
+  }
+
+  // 당일이 최초 등록(추가)만이면 변경 전 레이어 자체를 비움 (기존 시설 회색도 숨김)
+  if (dayDiff.length > 0 && !dayHasBeforeOp) {
+    before.clear();
   }
 
   const out: ChangeHistoryCompareFeature[] = [];

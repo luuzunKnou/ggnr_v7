@@ -12,6 +12,7 @@ import {
 } from '@/app/shadcnComponents/ui/dialog'
 import { cn } from '@/lib/utils'
 import { call } from '@/lib/api'
+import { getSafetyFacBadgeStyle } from '../safetyFac/safetyFacSymbols'
 import {
   TEAMS,
   appendVillagePatrolRows,
@@ -574,17 +575,33 @@ export function VillagePatrolListPanel({ onClose }: Props) {
     })
   }
 
-  /** 성명·연락처(10~11자리) 없으면 저장 대상 아님 — 경고 없이 스킵 */
+  /** 성명·연락처(10~11자리)·읍면·마을·조 — 저장에 필요 */
+  const missingRequiredFields = (f: FormState, personOnly: boolean): string[] => {
+    const missing: string[] = []
+    if (!personOnly) {
+      if (!f.eup.trim()) missing.push('읍면')
+      if (!f.village.trim()) missing.push('마을')
+      if (!f.team.trim()) missing.push('조')
+    }
+    if (!f.name.trim()) missing.push('성명')
+    const phone = normalizePhone(f.phone)
+    if (phone.length < 10 || phone.length > 11) missing.push('연락처(10~11자리)')
+    return missing
+  }
+
+  /** 추가 행을 거의 안 채움 — 저장 시 조용히 스킵 */
+  const isEmptyCreateForm = (f: FormState): boolean =>
+    !f.name.trim() &&
+    normalizePhone(f.phone).length === 0 &&
+    !f.village.trim() &&
+    !f.note.trim()
+
   const toSavablePayload = (
     f: FormState,
     personOnly: boolean
   ): Omit<VillagePatrolRow, 'id'> | null => {
-    if (!f.name.trim()) return null
+    if (missingRequiredFields(f, personOnly).length) return null
     const phone = normalizePhone(f.phone)
-    if (phone.length < 10 || phone.length > 11) return null
-    if (!personOnly) {
-      if (!f.eup.trim() || !f.village.trim() || !f.team.trim()) return null
-    }
     return {
       eup: f.eup.trim(),
       village: f.village.trim(),
@@ -604,8 +621,17 @@ export function VillagePatrolListPanel({ onClose }: Props) {
     const delIds = pendingDeleteIdsRef.current
     const delKeys = pendingDeletePersonKeysRef.current
 
+    const incomplete: string[] = []
     const adds: Omit<VillagePatrolRow, 'id'>[] = []
+    let createIdx = 0
     for (const row of creates) {
+      createIdx += 1
+      if (isEmptyCreateForm(row.form)) continue
+      const missing = missingRequiredFields(row.form, false)
+      if (missing.length) {
+        incomplete.push(`추가 ${createIdx}행 — ${missing.join(', ')}`)
+        continue
+      }
       const payload = toSavablePayload(row.form, false)
       if (payload) adds.push(payload)
     }
@@ -615,6 +641,11 @@ export function VillagePatrolListPanel({ onClose }: Props) {
       if (delIds[id]) continue
       const orig = allRows.find((r) => r.id === id)
       if (orig && formsEqual(f, rowToForm(orig))) continue
+      const missing = missingRequiredFields(f, false)
+      if (missing.length) {
+        incomplete.push(`수정(${f.name.trim() || `id ${id}`}) — ${missing.join(', ')}`)
+        continue
+      }
       const payload = toSavablePayload(f, false)
       if (payload) updates.push({ id, patch: payload })
     }
@@ -627,6 +658,11 @@ export function VillagePatrolListPanel({ onClose }: Props) {
       if (delKeys[key]) continue
       const baseline = personBaseline(key)
       if (baseline && formsEqual(f, baseline)) continue
+      const missing = missingRequiredFields(f, true)
+      if (missing.length) {
+        incomplete.push(`인원 수정(${f.name.trim() || key}) — ${missing.join(', ')}`)
+        continue
+      }
       const payload = toSavablePayload(f, true)
       if (payload) {
         personUpdates.push({
@@ -641,6 +677,30 @@ export function VillagePatrolListPanel({ onClose }: Props) {
       }
     }
 
+    if (incomplete.length) {
+      window.alert(
+        `필수 항목을 입력해 주세요.\n(읍면·마을·조·성명·연락처)\n\n${incomplete.join('\n')}`
+      )
+      return
+    }
+
+    const removeIds = Object.keys(delIds)
+    const removePersonKeys = Object.keys(delKeys)
+    if (
+      !adds.length &&
+      !updates.length &&
+      !personUpdates.length &&
+      !removeIds.length &&
+      !removePersonKeys.length
+    ) {
+      if (creates.length) {
+        window.alert('추가 행의 필수 항목(읍면, 마을, 조, 성명, 연락처)을 입력해 주세요.')
+        return
+      }
+      resetSession()
+      return
+    }
+
     setIsSaving(true)
     setImportError(null)
     try {
@@ -648,8 +708,8 @@ export function VillagePatrolListPanel({ onClose }: Props) {
         adds,
         updates,
         personUpdates,
-        removeIds: Object.keys(delIds),
-        removePersonKeys: Object.keys(delKeys),
+        removeIds,
+        removePersonKeys,
       })
       resetSession()
     } catch (e) {
@@ -1087,35 +1147,59 @@ export function VillagePatrolListPanel({ onClose }: Props) {
             ))}
           </select>
         </div>
-        <div className="mb-2 flex flex-wrap items-center gap-x-4 gap-y-1.5">
-          <label className="flex cursor-pointer items-center gap-2 text-xs text-foreground">
-            <input
-              type="checkbox"
-              checked={uniqueOnly}
-              onChange={(e) => {
-                const on = e.target.checked
-                if (!confirmLeaveEdit()) return
-                setUniqueOnly(on)
-                if (on) setDuplicatesOnly(false)
-              }}
-              className="h-3.5 w-3.5 rounded border-border"
-            />
+        <div
+          role="group"
+          aria-label="목록 보기"
+          className="mb-2 flex flex-wrap gap-1.5"
+        >
+          <button
+            type="button"
+            role="checkbox"
+            title="전체"
+            aria-checked={!uniqueOnly && !duplicatesOnly}
+            disabled={sessionOpen}
+            onClick={() => {
+              if (!confirmLeaveEdit()) return
+              setUniqueOnly(false)
+              setDuplicatesOnly(false)
+            }}
+            className="inline-flex items-center rounded px-2.5 py-1.5 text-[11px] font-medium leading-tight transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+            style={getSafetyFacBadgeStyle('coldShelter', !uniqueOnly && !duplicatesOnly)}
+          >
+            전체
+          </button>
+          <button
+            type="button"
+            role="checkbox"
+            title="중복 제거 (같은 연락처는 1명)"
+            aria-checked={uniqueOnly}
+            disabled={sessionOpen}
+            onClick={() => {
+              if (!confirmLeaveEdit()) return
+              setUniqueOnly(true)
+              setDuplicatesOnly(false)
+            }}
+            className="inline-flex items-center rounded px-2.5 py-1.5 text-[11px] font-medium leading-tight transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+            style={getSafetyFacBadgeStyle('heatShelter', uniqueOnly)}
+          >
             중복 제거 (같은 연락처는 1명)
-          </label>
-          <label className="flex cursor-pointer items-center gap-2 text-xs text-foreground">
-            <input
-              type="checkbox"
-              checked={duplicatesOnly}
-              onChange={(e) => {
-                const on = e.target.checked
-                if (!confirmLeaveEdit()) return
-                setDuplicatesOnly(on)
-                if (on) setUniqueOnly(false)
-              }}
-              className="h-3.5 w-3.5 rounded border-border"
-            />
+          </button>
+          <button
+            type="button"
+            role="checkbox"
+            title="중복 확인 (2곳 이상 편성)"
+            aria-checked={duplicatesOnly}
+            disabled={sessionOpen}
+            onClick={() => {
+              if (!confirmLeaveEdit()) return
+              setUniqueOnly(false)
+              setDuplicatesOnly(true)
+            }}
+            className="inline-flex items-center rounded px-2.5 py-1.5 text-[11px] font-medium leading-tight transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+            style={getSafetyFacBadgeStyle('heatMitigation', duplicatesOnly)}
+          >
             중복 확인 (2곳 이상 편성)
-          </label>
+          </button>
         </div>
         {importError ? (
           <div className="rounded border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
@@ -1159,7 +1243,7 @@ export function VillagePatrolListPanel({ onClose }: Props) {
                 <col className="w-12" /> 
               </colgroup>
             )}
-            <thead className="sticky top-0 z-[1] bg-muted/50 shadow-[0_1px_0_0_var(--border)]">
+            <thead className="sticky top-0 z-[1] bg-muted shadow-[0_1px_0_0_var(--border)]">
               <tr>
                 <th className={theadThClass}>순번</th>
                 {showPersonTable ? (
