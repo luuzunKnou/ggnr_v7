@@ -1225,7 +1225,27 @@ export async function applySourceZipFile(options: ApplySourceZipOptions): Promis
       mergeStep: 'extract',
     });
     await emit('merge-apply', 'ZIP 압축 해제 시작', { mergeStep: 'extract' });
-    await extractZip(zipPath, extractDir);
+    {
+      /** Expand-Archive 등 장시간 무출력 시 프록시·브라우저가 ~60초 유휴 연결을 끊는 것 방지 */
+      const EXTRACT_HEARTBEAT_MS = 10_000;
+      let extractElapsedSec = 0;
+      let heartbeatBusy = false;
+      const heartbeatTimer = setInterval(() => {
+        if (heartbeatBusy) return;
+        extractElapsedSec += EXTRACT_HEARTBEAT_MS / 1000;
+        heartbeatBusy = true;
+        void emit('merge-apply', `ZIP 압축 해제 중... (${extractElapsedSec}초 경과)`, {
+          mergeStep: 'extract',
+        }).finally(() => {
+          heartbeatBusy = false;
+        });
+      }, EXTRACT_HEARTBEAT_MS);
+      try {
+        await extractZip(zipPath, extractDir);
+      } finally {
+        clearInterval(heartbeatTimer);
+      }
+    }
     const extractedRoot = await pickExtractedRoot(extractDir);
     await emit('merge-apply', 'ZIP 압축 해제 완료', { mergeStep: 'extract' });
 
