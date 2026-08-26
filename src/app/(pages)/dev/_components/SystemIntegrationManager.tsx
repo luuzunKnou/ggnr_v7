@@ -292,13 +292,13 @@ export function SystemIntegrationManager() {
               onChange={(e) => setKrasTarget(e.target.value)}
               disabled={loading}
             >
-              <option value="all">전체 (목록·지적·읍면동·주제도·토지기본·소유현황)</option>
+              <option value="all">전체 (목록·지적·읍면동·주제도·토지기본·소유구분)</option>
               <option value="catalog">레이어 목록</option>
               <option value="parcel">지적</option>
               <option value="boundary">읍면동</option>
               <option value="thematic">주제도</option>
               <option value="landinfo">토지기본정보</option>
-              <option value="landown">소유현황</option>
+              <option value="owngbn">소유구분</option>
             </select>
           </label>
         </div>

@@ -1,5 +1,4 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<sld:StyledLayerDescriptor xmlns:sld="http://www.opengis.net/sld" xmlns="http://www.opengis.net/sld" xmlns:gml="http://www.opengis.net/gml" xmlns:ogc="http://www.opengis.net/ogc" version="1.0.0">
+<?xml version="1.0" encoding="UTF-8"?><sld:StyledLayerDescriptor xmlns:sld="http://www.opengis.net/sld" xmlns="http://www.opengis.net/sld" xmlns:gml="http://www.opengis.net/gml" xmlns:ogc="http://www.opengis.net/ogc" version="1.0.0">
   <sld:NamedLayer>
     <sld:Name>Default layer</sld:Name>
     <sld:UserStyle>
@@ -12,7 +11,6 @@
             </sld:Geometry>
             <sld:Stroke>
               <sld:CssParameter name="stroke">#03A9F4</sld:CssParameter>
-              <sld:CssParameter name="stroke-opacity">1</sld:CssParameter>
               <sld:CssParameter name="stroke-linecap">round</sld:CssParameter>
               <sld:CssParameter name="stroke-linejoin">round</sld:CssParameter>
               <sld:CssParameter name="stroke-width">
@@ -116,6 +114,11 @@
             <sld:Fill>
               <sld:CssParameter name="fill">#0B3379</sld:CssParameter>
             </sld:Fill>
+            <sld:Priority>
+              <ogc:Function name="Area">
+                <ogc:PropertyName>geom</ogc:PropertyName>
+              </ogc:Function>
+            </sld:Priority>
             <sld:VendorOption name="conflictResolution">true</sld:VendorOption>
             <sld:VendorOption name="group">true</sld:VendorOption>
             <sld:VendorOption name="maxDisplacement">0</sld:VendorOption>
@@ -156,6 +159,11 @@
             <sld:Fill>
               <sld:CssParameter name="fill">#0B3379</sld:CssParameter>
             </sld:Fill>
+            <sld:Priority>
+              <ogc:Function name="Area">
+                <ogc:PropertyName>geom</ogc:PropertyName>
+              </ogc:Function>
+            </sld:Priority>
             <sld:VendorOption name="conflictResolution">true</sld:VendorOption>
             <sld:VendorOption name="group">true</sld:VendorOption>
             <sld:VendorOption name="maxDisplacement">0</sld:VendorOption>
@@ -196,6 +204,11 @@
             <sld:Fill>
               <sld:CssParameter name="fill">#0B3379</sld:CssParameter>
             </sld:Fill>
+            <sld:Priority>
+              <ogc:Function name="Area">
+                <ogc:PropertyName>geom</ogc:PropertyName>
+              </ogc:Function>
+            </sld:Priority>
             <sld:VendorOption name="conflictResolution">true</sld:VendorOption>
             <sld:VendorOption name="group">true</sld:VendorOption>
             <sld:VendorOption name="maxDisplacement">0</sld:VendorOption>
@@ -209,3 +222,4 @@
     </sld:UserStyle>
   </sld:NamedLayer>
 </sld:StyledLayerDescriptor>
+

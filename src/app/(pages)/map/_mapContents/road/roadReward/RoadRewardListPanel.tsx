@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from "react";
-import { Search, X, Loader2 } from "lucide-react";
+import { ArrowDown, ArrowUp, ArrowUpDown, Search, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { call } from "@/lib/api";
 import { LayerRowAddButton } from "../../../_mapComponents/layerRowEdit";
@@ -19,6 +19,23 @@ import { ROAD_REWARD_WMS_LAYER_IDS } from "./roadRewardLayerId";
 
 function lowerLayerIds(ids: readonly string[]): string[] {
   return ids.map((id) => id.toLowerCase());
+}
+
+type SortKey = "name" | "parcelCount";
+type SortDir = "asc" | "desc";
+type SortSpec = { key: SortKey; dir: SortDir };
+
+const SORT_COLUMNS: { key: SortKey; label: string; align: "left" | "right" }[] = [
+  { key: "name", label: "건명", align: "left" },
+  { key: "parcelCount", label: "필지", align: "right" },
+];
+
+function initialSortDir(key: SortKey): SortDir {
+  return key === "name" ? "asc" : "desc";
+}
+
+function parcelCountOf(c: RoadRewardCase): number {
+  return c.parcels.length || c.parcelCount || 0;
 }
 
 type Props = {
@@ -42,6 +59,7 @@ export function RoadRewardListPanel({
   const mapContextRef = useRef(mapContext);
   mapContextRef.current = mapContext;
   const [keyword, setKeyword] = useState("");
+  const [sorts, setSorts] = useState<SortSpec[]>([]);
   const [loading, setLoading] = useState(false);
   const [listError, setListError] = useState<string | null>(null);
   const initialLoadDoneRef = useRef(false);
@@ -157,6 +175,39 @@ export function RoadRewardListPanel({
     });
   }, [cases, keyword]);
 
+  /** 목록을 한 번에 받아오므로 정렬은 화면에서 처리. 여러 열을 누른 순서대로 적용 */
+  const sorted = useMemo(() => {
+    if (sorts.length === 0) return filtered;
+    const rows = [...filtered];
+    rows.sort((a, b) => {
+      for (const s of sorts) {
+        const dir = s.dir === "asc" ? 1 : -1;
+        const cmp =
+          s.key === "name"
+            ? a.name.trim().localeCompare(b.name.trim(), "ko")
+            : parcelCountOf(a) - parcelCountOf(b);
+        if (cmp !== 0) return cmp * dir;
+      }
+      return 0;
+    });
+    return rows;
+  }, [filtered, sorts]);
+
+  const toggleSort = (key: SortKey) => {
+    const initial = initialSortDir(key);
+    setSorts((prev) => {
+      const idx = prev.findIndex((s) => s.key === key);
+      if (idx < 0) return [...prev, { key, dir: initial }];
+      const cur = prev[idx];
+      if (cur.dir === initial) {
+        const next = [...prev];
+        next[idx] = { key, dir: initial === "asc" ? "desc" : "asc" };
+        return next;
+      }
+      return prev.filter((_, i) => i !== idx);
+    });
+  };
+
   const handleAdd = () => {
     // 목록·DB에 행을 만들지 않고 등록 패널만 연다
     onSelectId(ROAD_REWARD_NEW_ID);
@@ -208,7 +259,7 @@ export function RoadRewardListPanel({
         </div>
       </div>
 
-      <div className="shrink-0 space-y-2 border-b border-border px-2.5 py-2">
+      <div className="shrink-0 border-b border-border px-2.5 py-2">
         <div className="relative">
           <Search className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
           <input
@@ -219,89 +270,139 @@ export function RoadRewardListPanel({
             className="h-8 w-full rounded border border-border bg-background pl-7 pr-2.5 text-xs text-foreground outline-none placeholder:text-muted-foreground focus:border-primary focus:ring-2 focus:ring-primary/25"
           />
         </div>
-        <div className="flex items-center justify-between gap-2 text-[11px] text-muted-foreground">
-          <span>목록 {filtered.length.toLocaleString()}건</span>
-          {loading ? (
-            <span className="inline-flex items-center gap-1">
-              <Loader2 className="h-3 w-3 animate-spin" />
-              불러오는 중
-            </span>
-          ) : null}
-        </div>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-auto scrollbar-thin">
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
         {listError ? (
-          <div className="m-2 rounded border border-amber-200 bg-amber-50 px-2 py-1.5 text-[11px] text-amber-900 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200">
+          <div className="shrink-0 border-b border-destructive/20 bg-destructive/10 px-3 py-2 text-xs text-destructive">
             {listError}
           </div>
         ) : null}
-        {loading && filtered.length === 0 ? (
-          <div className="flex items-center justify-center gap-2 px-3 py-8 text-[12px] text-muted-foreground">
-            <Loader2 className="h-4 w-4 animate-spin" />
-            불러오는 중…
-          </div>
-        ) : !loading && filtered.length === 0 ? (
-          <p className="px-3 py-2.5 text-xs text-muted-foreground">
-            {cases.length === 0 ? "등록된 건이 없습니다." : "검색 결과가 없습니다."}
-          </p>
-        ) : (
-          <table className="w-full table-fixed border-collapse text-xs">
+        <div className="min-h-0 flex-1 overflow-auto scrollbar-thin">
+          <table className="w-full table-fixed border-collapse text-left text-xs">
             <colgroup>
               <col />
-              <col className="w-[90px]" />
+              <col className="w-[88px]" />
             </colgroup>
+            <thead className="sticky top-0 z-[1] bg-muted shadow-[0_1px_0_0_var(--border)]">
+              <tr>
+                {SORT_COLUMNS.map((col) => {
+                  const sortIdx = sorts.findIndex((s) => s.key === col.key);
+                  const active = sortIdx >= 0;
+                  const sortDir = active ? sorts[sortIdx].dir : null;
+                  const Icon = !active
+                    ? ArrowUpDown
+                    : sortDir === "asc"
+                      ? ArrowUp
+                      : ArrowDown;
+                  const initial = initialSortDir(col.key);
+                  const alignRight = col.align === "right";
+                  return (
+                    <th
+                      key={col.key}
+                      className={cn(
+                        "whitespace-nowrap border-b-0 px-2 py-1.5 font-semibold text-foreground/90 [box-shadow:inset_0_-2px_0_0_var(--border)]",
+                        alignRight ? "text-right" : "text-left"
+                      )}
+                    >
+                      <button
+                        type="button"
+                        onClick={() => toggleSort(col.key)}
+                        className={cn(
+                          "inline-flex max-w-full items-center gap-0.5 rounded px-0.5 py-0.5 transition-colors hover:bg-muted",
+                          alignRight ? "justify-end" : "justify-start",
+                          active ? "text-primary" : "text-foreground/90"
+                        )}
+                        title={
+                          !active
+                            ? `${col.label} 정렬 추가`
+                            : sortDir === initial
+                              ? `${col.label} 방향 바꾸기`
+                              : `${col.label} 정렬 해제`
+                        }
+                      >
+                        <span className="truncate">{col.label}</span>
+                        <Icon className="h-3 w-3 shrink-0 opacity-70" aria-hidden />
+                      </button>
+                    </th>
+                  );
+                })}
+              </tr>
+            </thead>
             <tbody>
-              {filtered.map((c) => {
-                const isSelected = c.id === selectedId;
-                const parcelCount = c.parcels.length || c.parcelCount || 0;
-                const displayName = c.name.trim() || "(건명 없음)";
-                return (
-                  <tr
-                    key={c.id}
-                    role="button"
-                    tabIndex={0}
-                    onClick={() => void handleSelect(c.id)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" || e.key === " ") {
-                        e.preventDefault();
-                        void handleSelect(c.id);
-                      }
-                    }}
-                    className={cn(
-                      "cursor-pointer border-b border-border align-middle transition-colors",
-                      isSelected
-                        ? "border-l-[3px] border-l-primary bg-primary/[0.11] ring-1 ring-inset ring-primary/20 hover:bg-primary/[0.14]"
-                        : "border-l-[3px] border-l-transparent hover:bg-muted/50"
-                    )}
+              {loading && sorted.length === 0 ? (
+                <tr>
+                  <td
+                    colSpan={SORT_COLUMNS.length}
+                    className="px-3 py-6 text-center text-xs text-muted-foreground"
                   >
-                    <td className="min-w-0 overflow-hidden px-3 py-1.5">
-                      <div className="flex min-w-0 items-center gap-1.5">
-                        <p
-                          className={cn(
-                            "min-w-0 flex-1 truncate text-sm font-medium leading-tight",
-                            c.name.trim() ? "text-foreground" : "text-muted-foreground"
-                          )}
-                          title={displayName}
-                        >
-                          {displayName}
-                        </p>
-                        {!c.geometry3857 ? (
-                          <span className="shrink-0 rounded border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-amber-800 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200">
-                            범위미정
+                    불러오는 중…
+                  </td>
+                </tr>
+              ) : sorted.length === 0 ? (
+                <tr>
+                  <td
+                    colSpan={SORT_COLUMNS.length}
+                    className="px-3 py-6 text-center text-xs text-muted-foreground"
+                  >
+                    {cases.length === 0 ? "등록된 건이 없습니다." : "검색 결과가 없습니다."}
+                  </td>
+                </tr>
+              ) : (
+                sorted.map((c) => {
+                  const isSelected = c.id === selectedId;
+                  const parcelCount = c.parcels.length || c.parcelCount || 0;
+                  const displayName = c.name.trim() || "(건명 없음)";
+                  return (
+                    <tr
+                      key={c.id}
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => void handleSelect(c.id)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          void handleSelect(c.id);
+                        }
+                      }}
+                      className={cn(
+                        "cursor-pointer border-b border-border transition-colors hover:bg-muted/50",
+                        isSelected && "bg-primary/10"
+                      )}
+                    >
+                      <td className="max-w-0 px-2 py-1.5 text-foreground" title={displayName}>
+                        <div className="flex min-w-0 items-center gap-1.5">
+                          <span
+                            className={cn(
+                              "min-w-0 truncate",
+                              c.name.trim() ? "text-foreground" : "text-muted-foreground"
+                            )}
+                          >
+                            {displayName}
                           </span>
-                        ) : null}
-                      </div>
-                    </td>
-                    <td className="whitespace-nowrap px-3 py-1.5 text-right text-[11px] tabular-nums text-muted-foreground">
-                      필지 {parcelCount.toLocaleString()}건
-                    </td>
-                  </tr>
-                );
-              })}
+                          {!c.geometry3857 ? (
+                            <span className="inline-block shrink-0 rounded-full bg-destructive/10 px-1.5 py-0.5 text-[11px] font-semibold text-destructive">
+                              범위미정
+                            </span>
+                          ) : null}
+                        </div>
+                      </td>
+                      <td className="max-w-0 truncate px-2 py-1.5 text-right tabular-nums text-foreground/90">
+                        {parcelCount.toLocaleString()}건
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
             </tbody>
           </table>
-        )}
+        </div>
+        <div className="shrink-0 border-t border-border px-3 py-1.5 text-[11px] text-muted-foreground">
+          {loading ? "불러오는 중…" : `${filtered.length.toLocaleString()}건`}
+          {!loading && filtered.length !== cases.length
+            ? ` / 전체 ${cases.length.toLocaleString()}건`
+            : ""}
+        </div>
       </div>
     </div>
   );

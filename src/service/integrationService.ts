@@ -271,8 +271,8 @@ export async function runIntegration(p: Params) {
       }
     } else if (system === 'KRAS') {
       const rawScope = String(p.target ?? p.scope ?? 'all').trim().toLowerCase();
-      const fileStep: 'catalog' | 'landinfo' | 'landown' | null =
-        rawScope === 'catalog' || rawScope === 'landinfo' || rawScope === 'landown' ? rawScope : null;
+      const fileStep: 'catalog' | 'landinfo' | 'owngbn' | null =
+        rawScope === 'catalog' || rawScope === 'landinfo' || rawScope === 'owngbn' ? rawScope : null;
       const shapeScope: KrasLayerSyncScope | null =
         rawScope === 'parcel' || rawScope === 'boundary' || rawScope === 'thematic' ? rawScope : null;
       const target: KrasIntegrationTarget = fileStep ?? shapeScope ?? 'all';

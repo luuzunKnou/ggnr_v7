@@ -4825,18 +4825,6 @@
     "define_table_source": "shp"
   },
   {
-    "define_table_name": "landown",
-    "define_table_kor_name": "소유자 구분",
-    "define_table_shp_type": "POLYGON",
-    "define_table_read_share": "P",
-    "define_table_write_share": "P",
-    "define_table_group": "소유자구분",
-    "define_table_idx": "0",
-    "define_table_etc": "",
-    "define_table_schema": "public_layer",
-    "define_table_source": "shp"
-  },
-  {
     "define_table_name": "landown_clan",
     "define_table_kor_name": "종중",
     "define_table_shp_type": "POLYGON",
@@ -4847,8 +4835,8 @@
     "define_table_etc": "",
     "define_table_schema": "public_layer",
     "define_table_source": "shp",
-    "define_table_div_query": "a7 = '07'",
-    "define_table_parents_layer": "landown"
+    "define_table_div_query": "own_gbn = '07'",
+    "define_table_parents_layer": "jijuk"
   },
   {
     "define_table_name": "landown_corporate",
@@ -4861,8 +4849,8 @@
     "define_table_etc": "",
     "define_table_schema": "public_layer",
     "define_table_source": "shp",
-    "define_table_div_query": "a7 = '06'",
-    "define_table_parents_layer": "landown"
+    "define_table_div_query": "own_gbn = '06'",
+    "define_table_parents_layer": "jijuk"
   },
   {
     "define_table_name": "landown_foreign",
@@ -4875,8 +4863,8 @@
     "define_table_etc": "",
     "define_table_schema": "public_layer",
     "define_table_source": "shp",
-    "define_table_div_query": "a7 = '03'",
-    "define_table_parents_layer": "landown"
+    "define_table_div_query": "own_gbn = '03'",
+    "define_table_parents_layer": "jijuk"
   },
   {
     "define_table_name": "landown_gukyuji",
@@ -4889,8 +4877,8 @@
     "define_table_etc": "",
     "define_table_schema": "public_layer",
     "define_table_source": "shp",
-    "define_table_div_query": "a7 = '02'",
-    "define_table_parents_layer": "landown"
+    "define_table_div_query": "own_gbn = '02'",
+    "define_table_parents_layer": "jijuk"
   },
   {
     "define_table_name": "landown_gunyuji",
@@ -4903,8 +4891,8 @@
     "define_table_etc": "",
     "define_table_schema": "public_layer",
     "define_table_source": "shp",
-    "define_table_div_query": "a7 = '05'",
-    "define_table_parents_layer": "landown"
+    "define_table_div_query": "own_gbn = '05'",
+    "define_table_parents_layer": "jijuk"
   },
   {
     "define_table_name": "landown_japan",
@@ -4917,8 +4905,8 @@
     "define_table_etc": "",
     "define_table_schema": "public_layer",
     "define_table_source": "shp",
-    "define_table_div_query": "a7 = '00'",
-    "define_table_parents_layer": "landown"
+    "define_table_div_query": "own_gbn = '00'",
+    "define_table_parents_layer": "jijuk"
   },
   {
     "define_table_name": "landown_other",
@@ -4931,8 +4919,8 @@
     "define_table_etc": "",
     "define_table_schema": "public_layer",
     "define_table_source": "shp",
-    "define_table_div_query": "a7 = '09'",
-    "define_table_parents_layer": "landown"
+    "define_table_div_query": "own_gbn = '09'",
+    "define_table_parents_layer": "jijuk"
   },
   {
     "define_table_name": "landown_person",
@@ -4945,8 +4933,8 @@
     "define_table_etc": "",
     "define_table_schema": "public_layer",
     "define_table_source": "shp",
-    "define_table_div_query": "a7 = '01'",
-    "define_table_parents_layer": "landown"
+    "define_table_div_query": "own_gbn = '01'",
+    "define_table_parents_layer": "jijuk"
   },
   {
     "define_table_name": "landown_religion",
@@ -4959,8 +4947,8 @@
     "define_table_etc": "",
     "define_table_schema": "public_layer",
     "define_table_source": "shp",
-    "define_table_div_query": "a7 = '08'",
-    "define_table_parents_layer": "landown"
+    "define_table_div_query": "own_gbn = '08'",
+    "define_table_parents_layer": "jijuk"
   },
   {
     "define_table_name": "landown_sidoyuji",
@@ -4973,8 +4961,8 @@
     "define_table_etc": "",
     "define_table_schema": "public_layer",
     "define_table_source": "shp",
-    "define_table_div_query": "a7 = '04'",
-    "define_table_parents_layer": "landown"
+    "define_table_div_query": "own_gbn = '04'",
+    "define_table_parents_layer": "jijuk"
   },
   {
     "define_table_name": "river_plan_s_as",
@@ -8443,8 +8431,8 @@
     "define_table_etc": "",
     "define_table_schema": "public_layer",
     "define_table_source": "shp",
-    "define_table_div_query": "jimok = '02'",
-    "define_table_parents_layer": "landown"
+    "define_table_div_query": "jibun LIKE '%답'",
+    "define_table_parents_layer": "jijuk"
   },
   {
     "define_table_name": "landown_dea",
@@ -8457,8 +8445,8 @@
     "define_table_etc": "",
     "define_table_schema": "public_layer",
     "define_table_source": "shp",
-    "define_table_div_query": "jimok = '08'",
-    "define_table_parents_layer": "landown"
+    "define_table_div_query": "jibun LIKE '%대'",
+    "define_table_parents_layer": "jijuk"
   },
   {
     "define_table_name": "landown_embank",
@@ -8471,8 +8459,8 @@
     "define_table_etc": "",
     "define_table_schema": "public_layer",
     "define_table_source": "shp",
-    "define_table_div_query": "jimok = '16'",
-    "define_table_parents_layer": "landown"
+    "define_table_div_query": "jibun LIKE '%제'",
+    "define_table_parents_layer": "jijuk"
   },
   {
     "define_table_name": "landown_factory",
@@ -8485,8 +8473,8 @@
     "define_table_etc": "",
     "define_table_schema": "public_layer",
     "define_table_source": "shp",
-    "define_table_div_query": "jimok = '09'",
-    "define_table_parents_layer": "landown"
+    "define_table_div_query": "jibun LIKE '%장'",
+    "define_table_parents_layer": "jijuk"
   },
   {
     "define_table_name": "landown_fishfarm",
@@ -8499,8 +8487,8 @@
     "define_table_etc": "",
     "define_table_schema": "public_layer",
     "define_table_source": "shp",
-    "define_table_div_query": "jimok = '20'",
-    "define_table_parents_layer": "landown"
+    "define_table_div_query": "jibun LIKE '%양'",
+    "define_table_parents_layer": "jijuk"
   },
   {
     "define_table_name": "landown_forest",
@@ -8513,8 +8501,8 @@
     "define_table_etc": "",
     "define_table_schema": "public_layer",
     "define_table_source": "shp",
-    "define_table_div_query": "jimok = '05'",
-    "define_table_parents_layer": "landown"
+    "define_table_div_query": "jibun LIKE '%임'",
+    "define_table_parents_layer": "jijuk"
   },
   {
     "define_table_name": "landown_fruitfarm",
@@ -8527,8 +8515,8 @@
     "define_table_etc": "",
     "define_table_schema": "public_layer",
     "define_table_source": "shp",
-    "define_table_div_query": "jimok = '03'",
-    "define_table_parents_layer": "landown"
+    "define_table_div_query": "jibun LIKE '%과'",
+    "define_table_parents_layer": "jijuk"
   },
   {
     "define_table_name": "landown_gasstation",
@@ -8541,8 +8529,8 @@
     "define_table_etc": "",
     "define_table_schema": "public_layer",
     "define_table_source": "shp",
-    "define_table_div_query": "jimok = '12'",
-    "define_table_parents_layer": "landown"
+    "define_table_div_query": "jibun LIKE '%주'",
+    "define_table_parents_layer": "jijuk"
   },
   {
     "define_table_name": "landown_graveyard",
@@ -8555,8 +8543,8 @@
     "define_table_etc": "",
     "define_table_schema": "public_layer",
     "define_table_source": "shp",
-    "define_table_div_query": "jimok = '27'",
-    "define_table_parents_layer": "landown"
+    "define_table_div_query": "jibun LIKE '%묘'",
+    "define_table_parents_layer": "jijuk"
   },
   {
     "define_table_name": "landown_gutter",
@@ -8569,8 +8557,8 @@
     "define_table_etc": "",
     "define_table_schema": "public_layer",
     "define_table_source": "shp",
-    "define_table_div_query": "jimok = '18'",
-    "define_table_parents_layer": "landown"
+    "define_table_div_query": "jibun LIKE '%구'",
+    "define_table_parents_layer": "jijuk"
   },
   {
     "define_table_name": "landown_historic",
@@ -8583,8 +8571,8 @@
     "define_table_etc": "",
     "define_table_schema": "public_layer",
     "define_table_source": "shp",
-    "define_table_div_query": "jimok = '26'",
-    "define_table_parents_layer": "landown"
+    "define_table_div_query": "jibun LIKE '%사'",
+    "define_table_parents_layer": "jijuk"
   },
   {
     "define_table_name": "landown_jeon",
@@ -8597,8 +8585,8 @@
     "define_table_etc": "",
     "define_table_schema": "public_layer",
     "define_table_source": "shp",
-    "define_table_div_query": "jimok = '01'",
-    "define_table_parents_layer": "landown"
+    "define_table_div_query": "jibun LIKE '%전'",
+    "define_table_parents_layer": "jijuk"
   },
   {
     "define_table_name": "landown_misc",
@@ -8611,8 +8599,8 @@
     "define_table_etc": "",
     "define_table_schema": "public_layer",
     "define_table_source": "shp",
-    "define_table_div_query": "jimok = '28'",
-    "define_table_parents_layer": "landown"
+    "define_table_div_query": "jibun LIKE '%잡'",
+    "define_table_parents_layer": "jijuk"
   },
   {
     "define_table_name": "landown_park",
@@ -8625,8 +8613,8 @@
     "define_table_etc": "",
     "define_table_schema": "public_layer",
     "define_table_source": "shp",
-    "define_table_div_query": "jimok = '22'",
-    "define_table_parents_layer": "landown"
+    "define_table_div_query": "jibun LIKE '%공'",
+    "define_table_parents_layer": "jijuk"
   },
   {
     "define_table_name": "landown_parking",
@@ -8639,8 +8627,8 @@
     "define_table_etc": "",
     "define_table_schema": "public_layer",
     "define_table_source": "shp",
-    "define_table_div_query": "jimok = '11'",
-    "define_table_parents_layer": "landown"
+    "define_table_div_query": "jibun LIKE '%차'",
+    "define_table_parents_layer": "jijuk"
   },
   {
     "define_table_name": "landown_pond",
@@ -8653,8 +8641,8 @@
     "define_table_etc": "",
     "define_table_schema": "public_layer",
     "define_table_source": "shp",
-    "define_table_div_query": "jimok = '19'",
-    "define_table_parents_layer": "landown"
+    "define_table_div_query": "jibun LIKE '%유'",
+    "define_table_parents_layer": "jijuk"
   },
   {
     "define_table_name": "landown_railroad",
@@ -8667,8 +8655,8 @@
     "define_table_etc": "",
     "define_table_schema": "public_layer",
     "define_table_source": "shp",
-    "define_table_div_query": "jimok = '15'",
-    "define_table_parents_layer": "landown"
+    "define_table_div_query": "jibun LIKE '%철'",
+    "define_table_parents_layer": "jijuk"
   },
   {
     "define_table_name": "landown_ranch",
@@ -8681,8 +8669,8 @@
     "define_table_etc": "",
     "define_table_schema": "public_layer",
     "define_table_source": "shp",
-    "define_table_div_query": "jimok = '04'",
-    "define_table_parents_layer": "landown"
+    "define_table_div_query": "jibun LIKE '%목'",
+    "define_table_parents_layer": "jijuk"
   },
   {
     "define_table_name": "landown_recreation",
@@ -8695,8 +8683,8 @@
     "define_table_etc": "",
     "define_table_schema": "public_layer",
     "define_table_source": "shp",
-    "define_table_div_query": "jimok = '24'",
-    "define_table_parents_layer": "landown"
+    "define_table_div_query": "jibun LIKE '%원'",
+    "define_table_parents_layer": "jijuk"
   },
   {
     "define_table_name": "landown_religi",
@@ -8709,8 +8697,8 @@
     "define_table_etc": "",
     "define_table_schema": "public_layer",
     "define_table_source": "shp",
-    "define_table_div_query": "jimok = '25'",
-    "define_table_parents_layer": "landown"
+    "define_table_div_query": "jibun LIKE '%종'",
+    "define_table_parents_layer": "jijuk"
   },
   {
     "define_table_name": "landown_river",
@@ -8723,8 +8711,8 @@
     "define_table_etc": "",
     "define_table_schema": "public_layer",
     "define_table_source": "shp",
-    "define_table_div_query": "jimok = '17'",
-    "define_table_parents_layer": "landown"
+    "define_table_div_query": "jibun LIKE '%천'",
+    "define_table_parents_layer": "jijuk"
   },
   {
     "define_table_name": "landown_road",
@@ -8737,8 +8725,8 @@
     "define_table_etc": "",
     "define_table_schema": "public_layer",
     "define_table_source": "shp",
-    "define_table_div_query": "jimok = '14'",
-    "define_table_parents_layer": "landown"
+    "define_table_div_query": "jibun LIKE '%도'",
+    "define_table_parents_layer": "jijuk"
   },
   {
     "define_table_name": "landown_saltfarm",
@@ -8751,8 +8739,8 @@
     "define_table_etc": "",
     "define_table_schema": "public_layer",
     "define_table_source": "shp",
-    "define_table_div_query": "jimok = '07'",
-    "define_table_parents_layer": "landown"
+    "define_table_div_query": "jibun LIKE '%염'",
+    "define_table_parents_layer": "jijuk"
   },
   {
     "define_table_name": "landown_school",
@@ -8765,8 +8753,8 @@
     "define_table_etc": "",
     "define_table_schema": "public_layer",
     "define_table_source": "shp",
-    "define_table_div_query": "jimok = '10'",
-    "define_table_parents_layer": "landown"
+    "define_table_div_query": "jibun LIKE '%학'",
+    "define_table_parents_layer": "jijuk"
   },
   {
     "define_table_name": "landown_sports",
@@ -8779,8 +8767,8 @@
     "define_table_etc": "",
     "define_table_schema": "public_layer",
     "define_table_source": "shp",
-    "define_table_div_query": "jimok = '23'",
-    "define_table_parents_layer": "landown"
+    "define_table_div_query": "jibun LIKE '%체'",
+    "define_table_parents_layer": "jijuk"
   },
   {
     "define_table_name": "landown_springwater",
@@ -8793,8 +8781,8 @@
     "define_table_etc": "",
     "define_table_schema": "public_layer",
     "define_table_source": "shp",
-    "define_table_div_query": "jimok = '06'",
-    "define_table_parents_layer": "landown"
+    "define_table_div_query": "jibun LIKE '%광'",
+    "define_table_parents_layer": "jijuk"
   },
   {
     "define_table_name": "landown_warehouse",
@@ -8807,8 +8795,8 @@
     "define_table_etc": "",
     "define_table_schema": "public_layer",
     "define_table_source": "shp",
-    "define_table_div_query": "jimok = '13'",
-    "define_table_parents_layer": "landown"
+    "define_table_div_query": "jibun LIKE '%창'",
+    "define_table_parents_layer": "jijuk"
   },
   {
     "define_table_name": "landown_waterworks",
@@ -8821,8 +8809,8 @@
     "define_table_etc": "",
     "define_table_schema": "public_layer",
     "define_table_source": "shp",
-    "define_table_div_query": "jimok = '21'",
-    "define_table_parents_layer": "landown"
+    "define_table_div_query": "jibun LIKE '%수'",
+    "define_table_parents_layer": "jijuk"
   },
   {
     "define_table_name": "soinn00001",

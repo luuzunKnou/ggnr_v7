@@ -7,7 +7,7 @@ const LOG = '[use-fee-sync-scheduler]';
 
 /**
  * `useFeeSync.config` 스케줄·접속값 기준. 기동 직후 실행 없음.
- * 접속값 비어 있으면 스킵. DISABLE_USE_FEE_SYNC_SCHEDULER=1 로 끔.
+ * instrumentation 에서 GGNR_ENV=prod 일 때만 등록. DISABLE_USE_FEE_SYNC_SCHEDULER=1 로도 끔.
  * 실행 결과는 수동 연계와 동일하게 연도별 integration_job_log 에 기록.
  */
 export function startUseFeeSyncScheduler(): void {

@@ -504,7 +504,7 @@ export function UseFeeListPanel({ onClose, selectedId, onSelectId, serEng }: Lis
               <col className="w-[90px]" />
               <col className="w-[80px]" />
             </colgroup>
-            <thead className="sticky top-0 z-[1] bg-muted/50">
+            <thead className="sticky top-0 z-[1] bg-muted shadow-[0_1px_0_0_var(--border)]">
               <tr>
                 {SORT_COLUMNS.map((col) => {
                   const sortIdx = sorts.findIndex((s) => s.key === col.key)

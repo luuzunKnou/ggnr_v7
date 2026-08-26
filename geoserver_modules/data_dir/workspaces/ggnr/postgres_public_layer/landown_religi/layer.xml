@@ -1,16 +1,16 @@
 <layer>
   <name>landown_religi</name>
-  <id>LayerInfoImpl--5fabfce7:19fca79c611:-71de</id>
+  <id>LayerInfoImpl--50232ad2:1a022df41e9:-61ea</id>
   <type>VECTOR</type>
   <defaultStyle>
     <id>StyleInfoImpl--30e19f83:19cb3d4f76b:-7ffc</id>
   </defaultStyle>
   <resource class="featureType">
-    <id>FeatureTypeInfoImpl--5fabfce7:19fca79c611:-71df</id>
+    <id>FeatureTypeInfoImpl--50232ad2:1a022df41e9:-61eb</id>
   </resource>
   <attribution>
     <logoWidth>0</logoWidth>
     <logoHeight>0</logoHeight>
   </attribution>
-  <dateCreated>2026-08-04 06:38:21.901 UTC</dateCreated>
+  <dateCreated>2026-08-26 06:20:41.143 UTC</dateCreated>
 </layer>
