@@ -310,6 +310,45 @@ export async function fetchParcelTabData(args: { pnu: string; vworldKey: string 
   return { ...vworld, krasSkipReason, hangmangCalls };
 }
 
+export type ParcelLandModalKind = 'share' | 'move' | 'change' | 'price';
+
+export type ParcelLandModalListResult = {
+  ok: boolean;
+  kind: ParcelLandModalKind | null;
+  headers: string[];
+  rows: string[][];
+  message?: string;
+  error?: string;
+};
+
+/** 우클릭 필지정보 — 공유인·이동/변동연혁·공시지가 모달 목록 */
+export async function fetchParcelLandModalList(args: {
+  pnu: string;
+  kind: ParcelLandModalKind;
+}): Promise<ParcelLandModalListResult> {
+  const pnu = toStr(args.pnu);
+  if (!pnu) return { ok: false, kind: args.kind, headers: [], rows: [], error: 'PNU 없음' };
+  try {
+    const res = await call('', 'POST', {
+      service: 'landLinkageService',
+      action: 'fetchParcelLandModalList',
+      params: { pnu, kind: args.kind },
+    });
+    const payload = (res?.data ?? res) as ParcelLandModalListResult;
+    return {
+      ok: payload?.ok !== false,
+      kind: payload?.kind ?? args.kind,
+      headers: Array.isArray(payload?.headers) ? payload.headers : [],
+      rows: Array.isArray(payload?.rows) ? payload.rows : [],
+      message: payload?.message,
+      error: payload?.error,
+    };
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return { ok: false, kind: args.kind, headers: [], rows: [], error: msg };
+  }
+}
+
 /** 필지 PNU 기준 최신 공시지가 1건 — 공용 브이월드 클라이언트 */
 export async function fetchLatestOfficialLandPriceForPnu(args: {
   pnu: string;
