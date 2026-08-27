@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useCallback, useRef, useEffect, useLayoutEffect, useMemo, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import dynamic from 'next/dynamic';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { cn } from '@/lib/utils';
@@ -70,6 +71,7 @@ export default function MapViewModeWrapper({
     useState<BackgroundMapGroup[]>(defaultBackgroundMapGroups);
   const [isBackgroundPanelExiting3d, setIsBackgroundPanelExiting3d] = useState(false);
   const [isAerialViewPanelExiting3d, setIsAerialViewPanelExiting3d] = useState(false);
+  const [mapControlPortalReady3d, setMapControlPortalReady3d] = useState(false);
   const [aerialViewCheckedIds3d, setAerialViewCheckedIds3d] = useState<Set<string>>(() => new Set());
   const [default3dView, setDefault3dView] = useState<MapStartView | null>(
     defaultCenter ? { ...defaultCenter, height: DEFAULT_CAMERA_HEIGHT_3D } : null
@@ -92,6 +94,10 @@ export default function MapViewModeWrapper({
   useEffect(() => {
     setDefault3dView(defaultCenter ? { ...defaultCenter, height: DEFAULT_CAMERA_HEIGHT_3D } : null);
   }, [defaultCenter]);
+
+  useEffect(() => {
+    setMapControlPortalReady3d(true);
+  }, []);
 
   useEffect(() => {
     if (!isAerialViewPanelExiting3d) return;
@@ -412,139 +418,144 @@ export default function MapViewModeWrapper({
             backgroundMapId={cesiumBackgroundMapId}
             basemapImageryVisible
           />
-          {/* 2D와 동일: 배경지도 선택 + 오른쪽 맵 컨트롤 (지적도 WMS 등)
-              래퍼 pointer-events-none — flex 빈 영역이 지도 입력을 가로채지 않게 */}
-          <div
-            className="pointer-events-none absolute right-4 z-10 flex flex-col items-end gap-3"
-            style={{ top: '60px' }}
-          >
-            <div className="pointer-events-none flex items-start gap-3">
-              {(activeControls3d.includes('background-map') || isBackgroundPanelExiting3d) && (
-                <div
-                  className={
-                    isBackgroundPanelExiting3d
-                      ? 'pointer-events-auto animate-out fade-out-0 slide-out-to-right-4 duration-[400ms]'
-                      : 'pointer-events-auto animate-in fade-in-0 slide-in-from-right-4 duration-[400ms]'
-                  }
-                >
-                  <BackgroundMapSelector
-                    groups={backgroundMapGroups3d}
-                    value={cesiumBackgroundMapId}
-                    onValueChange={applyBackgroundChoice}
-                  />
-                </div>
-              )}
-              {(activeControls3d.includes('aerial-view') || isAerialViewPanelExiting3d) && (
-                <div
-                  className={
-                    isAerialViewPanelExiting3d
-                      ? 'pointer-events-auto animate-out fade-out-0 slide-out-to-right-4 duration-[400ms]'
-                      : 'pointer-events-auto animate-in fade-in-0 slide-in-from-right-4 duration-[400ms]'
-                  }
-                >
-                  <AerialViewLayerPanel
-                    checkedUnitIds={aerialViewCheckedIds3d}
-                    onCheckedChange={setAerialViewCheckedIds3d}
-                    onClose={() => {
-                      setIsAerialViewPanelExiting3d(true);
-                      setActiveControls3d((prev) => prev.filter((x) => x !== 'aerial-view'));
-                    }}
-                  />
-                </div>
-              )}
-              <div className="pointer-events-auto">
-                <MapControlPanel
-                  groups={mapControlGroups3d}
-                  activeIds={activeControls3d}
-                  onItemClick={(id, isActive) => {
-                    if (id === 'shooting-request') {
-                      const current = new URLSearchParams(Array.from(searchParams.entries()));
-                      current.set('shotForm', 'new');
-                      router.push(`/map?${current.toString()}`);
-                      return;
-                    }
-                    if (id === 'cadastral' || id === 'thematic-map') {
-                      setActiveControls3d((prev) =>
-                        prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
-                      );
-                      return;
-                    }
-                    if (id === 'background-map') {
-                      if (isActive) {
-                        setIsBackgroundPanelExiting3d(true);
-                        setActiveControls3d((prev) =>
-                          prev.filter((item) =>
-                            MULTI_SELECT_CONTROLS_3D.includes(
-                              item as (typeof MULTI_SELECT_CONTROLS_3D)[number]
-                            )
-                          )
-                        );
-                      } else {
-                        setIsBackgroundPanelExiting3d(false);
-                        setIsAerialViewPanelExiting3d(false);
-                        setActiveControls3d((prev) => {
-                          const withoutSingle = prev.filter((item) =>
-                            MULTI_SELECT_CONTROLS_3D.includes(
-                              item as (typeof MULTI_SELECT_CONTROLS_3D)[number]
-                            )
+          {/* 2D와 동일: 우측 맵 컨트롤 body 포털(목록·상세 z-10 위). 래퍼 pointer-events-none */}
+          {mapControlPortalReady3d &&
+            createPortal(
+              <div
+                className="pointer-events-none fixed right-4 z-[40] flex flex-col items-end gap-3"
+                style={{ top: '60px' }}
+              >
+                <div className="pointer-events-none flex items-start gap-3">
+                  {(activeControls3d.includes('background-map') || isBackgroundPanelExiting3d) && (
+                    <div
+                      className={
+                        isBackgroundPanelExiting3d
+                          ? 'pointer-events-auto animate-out fade-out-0 slide-out-to-right-4 duration-[400ms]'
+                          : 'pointer-events-auto animate-in fade-in-0 slide-in-from-right-4 duration-[400ms]'
+                      }
+                    >
+                      <BackgroundMapSelector
+                        groups={backgroundMapGroups3d}
+                        value={cesiumBackgroundMapId}
+                        onValueChange={applyBackgroundChoice}
+                      />
+                    </div>
+                  )}
+                  {(activeControls3d.includes('aerial-view') || isAerialViewPanelExiting3d) && (
+                    <div
+                      className={
+                        isAerialViewPanelExiting3d
+                          ? 'pointer-events-auto animate-out fade-out-0 slide-out-to-right-4 duration-[400ms]'
+                          : 'pointer-events-auto animate-in fade-in-0 slide-in-from-right-4 duration-[400ms]'
+                      }
+                    >
+                      <AerialViewLayerPanel
+                        checkedUnitIds={aerialViewCheckedIds3d}
+                        onCheckedChange={setAerialViewCheckedIds3d}
+                        onClose={() => {
+                          setIsAerialViewPanelExiting3d(true);
+                          setActiveControls3d((prev) => prev.filter((x) => x !== 'aerial-view'));
+                        }}
+                      />
+                    </div>
+                  )}
+                  <div className="pointer-events-auto">
+                    <MapControlPanel
+                      groups={mapControlGroups3d}
+                      activeIds={activeControls3d}
+                      onItemClick={(id, isActive) => {
+                        if (id === 'shooting-request') {
+                          const current = new URLSearchParams(Array.from(searchParams.entries()));
+                          current.set('shotForm', 'new');
+                          router.push(`/map?${current.toString()}`);
+                          return;
+                        }
+                        if (id === 'cadastral' || id === 'thematic-map') {
+                          setActiveControls3d((prev) =>
+                            prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
                           );
-                          return [...withoutSingle, 'background-map'];
-                        });
-                      }
-                      return;
-                    }
-                    if (id === 'aerial-view') {
-                      if (isActive) {
-                        setIsAerialViewPanelExiting3d(true);
-                        setActiveControls3d((prev) =>
-                          prev.filter((item) =>
-                            MULTI_SELECT_CONTROLS_3D.includes(
-                              item as (typeof MULTI_SELECT_CONTROLS_3D)[number]
-                            )
-                          )
-                        );
-                      } else {
-                        setIsAerialViewPanelExiting3d(false);
-                        setIsBackgroundPanelExiting3d(false);
-                        setActiveControls3d((prev) => {
-                          const withoutSingle = prev.filter((item) =>
-                            MULTI_SELECT_CONTROLS_3D.includes(
-                              item as (typeof MULTI_SELECT_CONTROLS_3D)[number]
-                            )
-                          );
-                          return [...withoutSingle, 'aerial-view'];
-                        });
-                      }
-                    }
-                  }}
-                  onItemRightClick={(id) => {
-                    if (id === 'background-map') {
-                      if (activeControls3d.includes('background-map')) {
-                        setIsBackgroundPanelExiting3d(true);
-                        setActiveControls3d((p) => p.filter((x) => x !== 'background-map'));
-                      } else {
-                        setActiveControls3d((p) => {
-                          const next = p.filter((x) => x !== 'aerial-view');
-                          return next.includes('background-map') ? next : [...next, 'background-map'];
-                        });
-                      }
-                    }
-                    if (id === 'aerial-view') {
-                      if (activeControls3d.includes('aerial-view')) {
-                        setIsAerialViewPanelExiting3d(true);
-                        setActiveControls3d((p) => p.filter((x) => x !== 'aerial-view'));
-                      } else {
-                        setActiveControls3d((p) => {
-                          const next = p.filter((x) => x !== 'background-map');
-                          return next.includes('aerial-view') ? next : [...next, 'aerial-view'];
-                        });
-                      }
-                    }
-                  }}
-                />
-              </div>
-            </div>
-          </div>
+                          return;
+                        }
+                        if (id === 'background-map') {
+                          if (isActive) {
+                            setIsBackgroundPanelExiting3d(true);
+                            setActiveControls3d((prev) =>
+                              prev.filter((item) =>
+                                MULTI_SELECT_CONTROLS_3D.includes(
+                                  item as (typeof MULTI_SELECT_CONTROLS_3D)[number]
+                                )
+                              )
+                            );
+                          } else {
+                            setIsBackgroundPanelExiting3d(false);
+                            setIsAerialViewPanelExiting3d(false);
+                            setActiveControls3d((prev) => {
+                              const withoutSingle = prev.filter((item) =>
+                                MULTI_SELECT_CONTROLS_3D.includes(
+                                  item as (typeof MULTI_SELECT_CONTROLS_3D)[number]
+                                )
+                              );
+                              return [...withoutSingle, 'background-map'];
+                            });
+                          }
+                          return;
+                        }
+                        if (id === 'aerial-view') {
+                          if (isActive) {
+                            setIsAerialViewPanelExiting3d(true);
+                            setActiveControls3d((prev) =>
+                              prev.filter((item) =>
+                                MULTI_SELECT_CONTROLS_3D.includes(
+                                  item as (typeof MULTI_SELECT_CONTROLS_3D)[number]
+                                )
+                              )
+                            );
+                          } else {
+                            setIsAerialViewPanelExiting3d(false);
+                            setIsBackgroundPanelExiting3d(false);
+                            setActiveControls3d((prev) => {
+                              const withoutSingle = prev.filter((item) =>
+                                MULTI_SELECT_CONTROLS_3D.includes(
+                                  item as (typeof MULTI_SELECT_CONTROLS_3D)[number]
+                                )
+                              );
+                              return [...withoutSingle, 'aerial-view'];
+                            });
+                          }
+                        }
+                      }}
+                      onItemRightClick={(id) => {
+                        if (id === 'background-map') {
+                          if (activeControls3d.includes('background-map')) {
+                            setIsBackgroundPanelExiting3d(true);
+                            setActiveControls3d((p) => p.filter((x) => x !== 'background-map'));
+                          } else {
+                            setActiveControls3d((p) => {
+                              const next = p.filter((x) => x !== 'aerial-view');
+                              return next.includes('background-map')
+                                ? next
+                                : [...next, 'background-map'];
+                            });
+                          }
+                        }
+                        if (id === 'aerial-view') {
+                          if (activeControls3d.includes('aerial-view')) {
+                            setIsAerialViewPanelExiting3d(true);
+                            setActiveControls3d((p) => p.filter((x) => x !== 'aerial-view'));
+                          } else {
+                            setActiveControls3d((p) => {
+                              const next = p.filter((x) => x !== 'background-map');
+                              return next.includes('aerial-view') ? next : [...next, 'aerial-view'];
+                            });
+                          }
+                        }
+                      }}
+                    />
+                  </div>
+                </div>
+              </div>,
+              document.body
+            )}
           {/* 3D 전용 플로팅: 배경지도 + 타일셋 켜기/끄기 */}
           <div
             className={cn(

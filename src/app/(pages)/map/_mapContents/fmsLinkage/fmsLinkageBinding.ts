@@ -5,25 +5,26 @@ export const FMS_LIST_TITLE = '안전점검';
 
 export const FMS_LIST_SYSTEM_FILTERS = [
   { value: '', label: '전체' },
-  { value: 'river', label: '하천' },
+  { value: 'river', label: '상하수도' },
   { value: 'road', label: '도로' },
   { value: 'build', label: '건설' },
 ] as const;
 
 export type FmsListSystemFilter = (typeof FMS_LIST_SYSTEM_FILTERS)[number]['value'];
 
-/** 하천·도로·건설이면 해당 값, 아니면 전체 */
+/** 도로·건설이면 해당 값. 하천·그 외는 전체(상하수도만 묶인 하천 키는 전체로 연다) */
 export function defaultFmsListSystemFilter(system: string): FmsListSystemFilter {
   const key = String(system ?? '').trim().toLowerCase();
+  if (key === 'river') return '';
   if (systemKeyToFmsPrefix(key)) return key as FmsListSystemFilter;
   return '';
 }
 
 export const FMS_LIST_COLUMNS = [
-  { key: 'facilNo', label: '시설물번호' },
   { key: 'facilKind', label: '시설물종류' },
   { key: 'facilNm', label: '시설명' },
   { key: 'facilOwner', label: '소유자명' },
+  { key: 'addrFull', label: '주소' },
 ] as const;
 
 export const FMS_EMPTY_LIST_MESSAGE = '연계된 시설물이 없습니다.';
