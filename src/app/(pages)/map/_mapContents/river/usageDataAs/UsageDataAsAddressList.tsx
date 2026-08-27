@@ -1,14 +1,13 @@
 'use client'
 
-import { Plus, Trash2 } from 'lucide-react'
+import { MapPin, Plus, Trash2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { LayerRowPanelButton } from '../../../_mapComponents/layerRowEdit'
 import type { LayerRowParcelItem } from '../../../_mapComponents/layerRowEdit'
 
-/** 7건까지는 높이 증가, 그 이상은 7행 높이로 고정 후 내부 스크롤 */
-const MAX_VISIBLE_ROWS = 7
-/** py-2 + text-xs 한 줄 기준 대략 2.5rem/행 */
-const ROW_HEIGHT_REM = 2.5
+/** 카드 7개까지는 높이 증가, 그 이상은 고정 후 내부 스크롤 */
+const MAX_VISIBLE_CARDS = 7
+const CARD_STACK_REM = 3.1
 
 type Props = {
   title: string
@@ -38,8 +37,8 @@ export function UsageDataAsAddressList({
 }: Props) {
   return (
     <div className="mt-4">
-      <div className="mb-1 flex items-center justify-between gap-2">
-        <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{title}</div>
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <div className="text-[11px] font-medium text-muted-foreground">{title}</div>
         <div className="flex shrink-0 items-center gap-1">
           {isEditing && onAdd && (
             <LayerRowPanelButton className="h-6 px-2 text-[10px]" onClick={onAdd}>
@@ -56,74 +55,54 @@ export function UsageDataAsAddressList({
       ) : (
         <ul
           className={cn(
-            'list-none space-y-0 rounded border border-border bg-background',
-            items.length > MAX_VISIBLE_ROWS &&
-              'overflow-y-auto scrollbar-hide'
+            'list-none space-y-1.5',
+            items.length > MAX_VISIBLE_CARDS && 'overflow-y-auto scrollbar-hide pr-0.5'
           )}
           style={
-            items.length > MAX_VISIBLE_ROWS
-              ? { maxHeight: `${MAX_VISIBLE_ROWS * ROW_HEIGHT_REM}rem` }
+            items.length > MAX_VISIBLE_CARDS
+              ? { maxHeight: `${MAX_VISIBLE_CARDS * CARD_STACK_REM}rem` }
               : undefined
           }
         >
           {items.map((item, i) => {
             const isSelected = selectedIdx === i
-            const rowClass = cn(
-              'flex items-start gap-1 border-b border-border px-2 py-2 text-foreground last:border-b-0 transition-colors',
-              isSelected &&
-                (selectionTone === 'yellow' ? 'bg-yellow-100' : 'bg-primary/10')
-            )
-            const buttonClass = cn(
-              'min-w-0 flex-1 text-left text-xs text-foreground',
+            const cardClass = cn(
+              'flex min-h-[40px] w-full items-center justify-start gap-1.5 rounded border bg-background px-1.5 py-1.5 text-left text-[11px] font-medium leading-tight transition-colors',
               isSelected
                 ? selectionTone === 'yellow'
-                  ? 'font-medium text-yellow-800'
-                  : 'text-primary font-medium'
-                : selectionTone === 'yellow'
-                  ? 'hover:text-yellow-700'
-                  : 'hover:text-primary',
-              'disabled:cursor-default disabled:opacity-70'
+                  ? 'border-yellow-300 bg-yellow-50 text-yellow-900'
+                  : 'border-primary/40 bg-primary/5 text-primary'
+                : 'border-border text-foreground hover:bg-muted/50'
             )
 
             return (
-              <li
-                key={`${title}-${item.wmsRowKey?.keyValue ?? i}-${item.address.slice(0, 24)}`}
-                className={rowClass}
-              >
-                {isEditing ? (
-                  <>
-                    <button
-                      type="button"
-                      className={cn(buttonClass, 'flex items-start gap-1')}
-                      onClick={() => onClick?.(item, i)}
-                      title="클릭 시 위치 이동 및 선택"
-                    >
-                      <span className="mr-1 shrink-0 tabular-nums text-muted-foreground">{i + 1}.</span>
-                      <span className="min-w-0 flex-1 break-words">{item.address}</span>
-                    </button>
-                    {onRemove && (
-                      <button
-                        type="button"
-                        className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-                        onClick={() => onRemove(i)}
-                        aria-label="삭제"
-                        title="삭제"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </button>
-                    )}
-                  </>
-                ) : (
+              <li key={`${title}-${item.wmsRowKey?.keyValue ?? i}-${item.address.slice(0, 24)}`}>
+                <div className="flex items-stretch gap-1">
                   <button
                     type="button"
-                    className={buttonClass}
+                    className={cn(cardClass, 'min-w-0 flex-1')}
                     onClick={() => onClick?.(item, i)}
                     title="클릭 시 위치 이동 및 선택"
                   >
-                    <span className="mr-2 tabular-nums text-muted-foreground">{i + 1}.</span>
-                    {item.address}
+                    <MapPin
+                      className="h-3.5 w-3.5 shrink-0 text-muted-foreground"
+                      strokeWidth={1.5}
+                      aria-hidden
+                    />
+                    <span className="min-w-0 break-words">{item.address}</span>
                   </button>
-                )}
+                  {isEditing && onRemove ? (
+                    <button
+                      type="button"
+                      className="inline-flex h-[40px] w-8 shrink-0 items-center justify-center rounded border border-border text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                      onClick={() => onRemove(i)}
+                      aria-label="삭제"
+                      title="삭제"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  ) : null}
+                </div>
               </li>
             )
           })}

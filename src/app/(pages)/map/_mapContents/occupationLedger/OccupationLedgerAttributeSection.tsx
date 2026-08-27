@@ -1,7 +1,12 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import type { LayerRowDetailAttr } from '../../_mapComponents/layerRowEdit';
+import {
+  type LayerRowDetailAttr,
+  DetailAttrRow,
+  DetailAttrSectionTitle,
+  DetailAttrTable,
+} from '../../_mapComponents/layerRowEdit';
 import {
   formatAreaDisplay,
   sanitizeNumericInput,
@@ -68,14 +73,9 @@ export function OccupationLedgerAttributeSection({
 
   return (
     <>
-      <div className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-        상세 속성
-      </div>
-      <dl className="divide-y divide-border rounded border border-border bg-muted/40">
-        {visibleAttributes.length === 0 ? (
-          <div className="px-2 py-3 text-muted-foreground">표시할 속성이 없습니다.</div>
-        ) : (
-          visibleAttributes.map((row) => {
+      <DetailAttrSectionTitle>상세 속성</DetailAttrSectionTitle>
+      <DetailAttrTable empty={visibleAttributes.length === 0 ? '표시할 속성이 없습니다.' : null}>
+        {visibleAttributes.map((row, idx) => {
             const fieldLower = row.field.toLowerCase();
             const locked = readOnlyFields.has(fieldLower);
             const showInput = isEditing && !locked;
@@ -88,21 +88,15 @@ export function OccupationLedgerAttributeSection({
             const isPlace = fieldLower === PLACE_FIELD;
             const isState = fieldLower === STATE_FIELD;
             const isArea = fieldLower === AREA_FIELD;
+            const isLast = idx === visibleAttributes.length - 1;
 
             return (
-              <div
+              <DetailAttrRow
                 key={row.field}
-                className="grid grid-cols-detail-30 items-center gap-x-2 gap-y-0.5 px-2 py-1.5"
+                label={row.label}
+                isLast={isLast}
+                required={Boolean(isEditing && row.required)}
               >
-                <dt className="shrink-0 leading-none font-medium text-muted-foreground">
-                  {row.label}
-                  {isEditing && row.required ? (
-                    <span className="ml-0.5 text-destructive" aria-hidden>
-                      *
-                    </span>
-                  ) : null}
-                </dt>
-                <dd className="relative min-w-0 break-words text-foreground">
                   {showInput ? (
                     isPlace ? (
                       <OccupationLedgerPlaceInput
@@ -189,12 +183,10 @@ export function OccupationLedgerAttributeSection({
                   ) : (
                     row.value
                   )}
-                </dd>
-              </div>
+              </DetailAttrRow>
             );
-          })
-        )}
-      </dl>
+          })}
+      </DetailAttrTable>
     </>
   );
 }
