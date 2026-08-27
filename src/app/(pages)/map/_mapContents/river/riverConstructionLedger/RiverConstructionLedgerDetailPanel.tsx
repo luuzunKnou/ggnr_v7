@@ -1600,7 +1600,7 @@ export function RiverConstructionLedgerDetailPanel({ row, onClose }: Props) {
             label: "사업비_후",
             value: (
               <input
-                className={cn(fieldClass, "bg-slate-50")}
+                className={cn(fieldClass, "bg-slate-50 dark:bg-muted")}
                 value={draft.budgetAfter}
                 readOnly
                 tabIndex={-1}

@@ -1,6 +1,7 @@
 'use client';
 
-import { useRef, useState, useEffect, useCallback, useMemo } from 'react';
+import { useRef, useState, useEffect, useCallback, useMemo, type KeyboardEvent } from 'react';
+import { createPortal } from 'react-dom';
 import { useRouter, useSearchParams } from 'next/navigation';
 import 'ol/ol.css';
 import { fromLonLat } from 'ol/proj';
@@ -33,6 +34,11 @@ import {
   UNDERGROUND_FACILITY_LAYERS,
   useUndergroundFacilityLayerSync,
 } from './layerFactory/undergroundFacilityLayerFactory';
+import {
+  mirrorUndergroundFacilityIntoVisible,
+  pickUndergroundFacilityFromVisible,
+  sameStringSet,
+} from './layerFactory/undergroundFacilityMapSync';
 import { useThematicMapCatalog } from './hooks/useThematicMapCatalog';
 import { useOwnershipCatalog } from './hooks/useOwnershipCatalog';
 import { useUndergroundFacilityCatalog } from './hooks/useUndergroundFacilityCatalog';
@@ -470,9 +476,22 @@ export default function OpenLayersMap({
   const [geoserverLogLines, setGeoserverLogLines] = useState<string[]>([]);
   const { lines: consoleLines } = useConsoleCapture();
   const consoleLogRef = useRef<HTMLDivElement>(null);
+
+  /** 포커스된 로그 창에서 Ctrl/Cmd+A → 해당 창 내용만 전체 선택 (이후 Ctrl+C로 복사) */
+  const onDebugLogPanelKeyDown = useCallback((e: KeyboardEvent<HTMLDivElement>) => {
+    if (!(e.ctrlKey || e.metaKey) || e.key.toLowerCase() !== 'a') return;
+    e.preventDefault();
+    e.stopPropagation();
+    const range = document.createRange();
+    range.selectNodeContents(e.currentTarget);
+    const sel = window.getSelection();
+    sel?.removeAllRanges();
+    sel?.addRange(range);
+  }, []);
   const backgroundPanelRef = useRef<HTMLDivElement>(null);
   const mapControlFixedRef = useRef<HTMLDivElement>(null);
   const mapControlOverlayRowRef = useRef<HTMLDivElement>(null);
+  const [mapControlPortalReady, setMapControlPortalReady] = useState(false);
   const [backgroundPanelHeight, setBackgroundPanelHeight] = useState<number | null>(null);
   const [restored, setRestored] = useState(false);
   /** PostGIS geometry_columns 기반 — WMS 다중 레이어 시 면→선→점→심볼 순으로 쌓기 */
@@ -483,6 +502,9 @@ export default function OpenLayersMap({
   // 자체항공영상(배경지도) 패널 높이 측정 → 지목/소유구분 maxHeight 기준으로 사용
   const backgroundPanelVisible =
     activeControls.includes('background-map') || isBackgroundPanelExiting;
+  useEffect(() => {
+    setMapControlPortalReady(true);
+  }, []);
   useEffect(() => {
     if (!backgroundPanelVisible || !backgroundPanelRef.current) return;
     const el = backgroundPanelRef.current;
@@ -524,19 +546,16 @@ export default function OpenLayersMap({
       ro.disconnect();
       window.removeEventListener('resize', syncPaddingRight);
     };
-  }, [mapContext?.setMapPaddingRight, activeControls, extraControls]);
+  }, [mapContext?.setMapPaddingRight, activeControls, extraControls, mapControlPortalReady]);
 
   // 마운트 시 저장된 맵 상태 복원 (버튼 활성화 + 배경지도 + 레이어 목록 + 상세 패널 체크박스)
   useEffect(() => {
     const state = loadPersistedMapState(projectName);
     if (state) {
       if (state.backgroundMap) setSelectedBackgroundMap(state.backgroundMap);
-      if (state.visibleLayerNames?.length && mapContext?.setVisibleLayerNames) {
-        // 하천점용 패널 전용 레이어는 복원하지 않음 (패널 없이 켜져 클릭 무반응 방지)
-        mapContext.setVisibleLayerNames(
-          new Set(state.visibleLayerNames.filter((n) => !isUsageDataAsWmsLayerId(n)))
-        );
-      }
+      const restoredVisible = new Set(
+        (state.visibleLayerNames ?? []).filter((n) => !isUsageDataAsWmsLayerId(n))
+      );
       const jimokValid = (state.visibleJimokLayerNames ?? []).filter((t) =>
         JIMOK_LAYERS.some((l) => l.tableName === t)
       );
@@ -571,17 +590,33 @@ export default function OpenLayersMap({
       const undergroundValid = (state.visibleUndergroundFacilityLayerNames ?? []).filter((t) =>
         UNDERGROUND_FACILITY_LAYERS.some((l) => l.tableName === t)
       );
-      if (state.visibleUndergroundFacilityLayerNames != null)
+      // 데이터 조회 ↔ 지하시설물 복원값 병합
+      const undergroundTableNames = new Set(
+        UNDERGROUND_FACILITY_LAYERS.map((l) => l.tableName)
+      );
+      const mergedUnderground = new Set(undergroundValid);
+      for (const t of restoredVisible) {
+        if (undergroundTableNames.has(t)) mergedUnderground.add(t);
+      }
+      for (const t of mergedUnderground) restoredVisible.add(t);
+      if (mapContext?.setVisibleLayerNames && restoredVisible.size > 0) {
+        mapContext.setVisibleLayerNames(restoredVisible);
+      }
+      if (
+        state.visibleUndergroundFacilityLayerNames != null ||
+        mergedUnderground.size > 0
+      ) {
         setVisibleUndergroundFacilityLayerNames(
-          undergroundValid.length ? new Set(undergroundValid) : new Set()
+          mergedUnderground.size ? mergedUnderground : new Set()
         );
+      }
       const hasSelection: Record<PanelLayerId, boolean> = {
         'land-category': jimokValid.length > 0,
         ownership: landownValid.length > 0,
         cadastral: cadastralValid.length > 0,
         'building-road': buildingRoadValid.length > 0,
         'thematic-map': thematicValid.length > 0,
-        'underground-facility': undergroundValid.length > 0,
+        'underground-facility': mergedUnderground.size > 0,
       };
       setActiveControls(
         syncPanelLayerActiveControls(state.activeControls ?? [], hasSelection)
@@ -852,6 +887,73 @@ export default function OpenLayersMap({
 
   // 서비스 레이어 WMS 동기화 (visibleLayerNames → serviceLayer 파라미터)
   const visibleLayerNames = mapContext?.visibleLayerNames ?? new Set<string>();
+  const setVisibleLayerNames = mapContext?.setVisibleLayerNames;
+
+  // 데이터 조회 → 지하시설물 선택 동기화
+  useEffect(() => {
+    if (!restored || undergroundFacilityCatalogLoading) return;
+    const fromVisible = pickUndergroundFacilityFromVisible(
+      visibleLayerNames,
+      undergroundFacilityAvailableTableNames
+    );
+    setVisibleUndergroundFacilityLayerNames((prev) => {
+      const cur = prev ?? new Set<string>();
+      if (sameStringSet(cur, fromVisible)) return prev ?? fromVisible;
+      return fromVisible;
+    });
+    if (fromVisible.size === 0) return;
+    setActiveControls((prev) =>
+      prev.includes('underground-facility') ? prev : [...prev, 'underground-facility']
+    );
+  }, [
+    restored,
+    undergroundFacilityCatalogLoading,
+    visibleLayerNames,
+    undergroundFacilityAvailableTableNames,
+  ]);
+
+  // 지하시설물 → 데이터 조회 선택 동기화
+  useEffect(() => {
+    if (!restored || undergroundFacilityCatalogLoading || !setVisibleLayerNames) return;
+    if (visibleUndergroundFacilityLayerNames == null) return;
+    setVisibleLayerNames((prev) =>
+      mirrorUndergroundFacilityIntoVisible(
+        prev,
+        undergroundFacilityAvailableTableNames,
+        visibleUndergroundFacilityLayerNames
+      )
+    );
+  }, [
+    restored,
+    undergroundFacilityCatalogLoading,
+    visibleUndergroundFacilityLayerNames,
+    undergroundFacilityAvailableTableNames,
+    setVisibleLayerNames,
+  ]);
+
+  /** 지하시설물 ImageLayer로 그리는 테이블은 serviceLayer에서 제외(이중 표시 방지) */
+  const serviceVisibleLayerNames = useMemo(() => {
+    if (undergroundFacilityCatalogLoading) return visibleLayerNames;
+    const ufSelected = visibleUndergroundFacilityLayerNames;
+    if (
+      ufSelected == null ||
+      ufSelected.size === 0 ||
+      !activeControls.includes('underground-facility')
+    ) {
+      return visibleLayerNames;
+    }
+    const next = new Set(visibleLayerNames);
+    let changed = false;
+    for (const t of ufSelected) {
+      if (next.delete(t)) changed = true;
+    }
+    return changed ? next : visibleLayerNames;
+  }, [
+    visibleLayerNames,
+    visibleUndergroundFacilityLayerNames,
+    activeControls,
+    undergroundFacilityCatalogLoading,
+  ]);
 
   /** 부서업무 본표는 위, 패널에서 켠 보조 레이어(점사용료·타 점용 등)는 아래 */
   const wmsForceBottomLayerNames = useMemo(() => {
@@ -966,7 +1068,7 @@ export default function OpenLayersMap({
   useServiceLayerSync(
     mapInstanceRef.current,
     mapReady,
-    visibleLayerNames,
+    serviceVisibleLayerNames,
     undefined,
     spatialFilterWkt,
     layerGeometryTypes,
@@ -1180,6 +1282,12 @@ export default function OpenLayersMap({
     mapContext.allLayersOffRef.current = () => {
       setActiveControls((prev) => prev.filter((id) => !LAYER_IDS_OFF_ON_ALL_OFF.includes(id)));
       mapContext?.setVisibleLayerNames?.(new Set());
+      setVisibleJimokLayerNames(new Set());
+      setVisibleLandownLayerNames(new Set());
+      setVisibleCadastralLayerNames(new Set());
+      setVisibleBuildingRoadLayerNames(new Set());
+      setVisibleThematicLayerNames(new Set());
+      setVisibleUndergroundFacilityLayerNames(new Set());
     };
     return () => {
       if (mapContext?.allLayersOffRef) mapContext.allLayersOffRef.current = null;
@@ -2311,272 +2419,288 @@ export default function OpenLayersMap({
         jijukEnabled={jijukLayerEnabled}
       />
 
-      {/* 오른쪽 맵 컨트롤 패널 — 분할 시에도 화면 오른쪽 고정
-          래퍼는 pointer-events-none: 배경지도 등 하위 패널이 버튼열보다 짧을 때
-          flex 행의 빈 영역이 지도 클릭·측정·그리기를 가로채지 않도록 함 */}
-      <div
-        ref={mapControlFixedRef}
-        className="pointer-events-none fixed right-4 z-10 flex flex-col items-end gap-3"
-        style={{ top: '60px' }}
-      >
-        <div ref={mapControlOverlayRowRef} className="pointer-events-none flex items-start gap-3">
-          {/* 배경지도 선택 패널 (등장/퇴장 애니메이션, duration 400ms) */}
-          {(activeControls.includes('background-map') || isBackgroundPanelExiting) && (
-            <div
-              ref={backgroundPanelRef}
-              data-map-control-expand-panel
-              className={
-                isBackgroundPanelExiting
-                  ? `${overlayListPointerClass} animate-out fade-out-0 slide-out-to-right-4 duration-[400ms]`
-                  : `${overlayListPointerClass} animate-in fade-in-0 slide-in-from-right-4 duration-[400ms]`
-              }
-            >
-              <BackgroundMapSelector
-                groups={backgroundMapGroups}
-                value={selectedBackgroundMap}
-                onValueChange={handleBackgroundMapChange}
-                splitSelect={backgroundSplitSelect}
-              />
-            </div>
-          )}
-
-          {aerialViewPanelOpen && (
-            <div
-              data-map-control-expand-panel
-              className={
-                isAerialViewPanelExiting
-                  ? `${overlayListPointerClass} animate-out fade-out-0 slide-out-to-right-4 duration-[400ms]`
-                  : `${overlayListPointerClass} animate-in fade-in-0 slide-in-from-right-4 duration-[400ms]`
-              }
-            >
-              <AerialViewLayerPanel
-                checkedUnitIds={aerialViewCheckedIds}
-                onCheckedChange={setAerialViewCheckedIds}
-                onClose={() => {
-                  setIsAerialViewPanelExiting(true);
-                  setActiveControls((prev) => prev.filter((x) => x !== 'aerial-view'));
-                }}
-              />
-            </div>
-          )}
-
-          {openSubPanel === 'land-category' && (
-            <div data-map-control-expand-panel className={`${overlayListPointerClass} animate-in fade-in-0 slide-in-from-right-4 duration-[400ms] h-fit max-h-[calc(100vh-30px)] overflow-y-auto`}>
-              <JimokLandownLayerSelector
-                title="지목"
-                layers={jimokPanelLayers}
-                selectedTableNames={visibleJimokLayerNames ?? new Set()}
-                onSelectionChange={(next) => {
-                  const filtered = new Set(
-                    [...next].filter((t) => jimokAvailableTableNames.has(t))
-                  );
-                  setVisibleJimokLayerNames(filtered);
-                  setActiveControls((prev) =>
-                    filtered.size === 0
-                      ? prev.filter((x) => x !== 'land-category')
-                      : prev.includes('land-category')
-                        ? prev
-                        : [...prev, 'land-category']
-                  );
-                }}
-                onClose={() => setOpenSubPanel(null)}
-              />
-            </div>
-          )}
-          {openSubPanel === 'ownership' && (
-            <div data-map-control-expand-panel className={`${overlayListPointerClass} animate-in fade-in-0 slide-in-from-right-4 duration-[400ms] h-fit max-h-[calc(100vh-30px)] overflow-y-auto`}>
-              <JimokLandownLayerSelector
-                title="소유구분"
-                layers={ownershipPanelLayers}
-                selectedTableNames={visibleLandownLayerNames ?? new Set()}
-                onSelectionChange={(next) => {
-                  const filtered = new Set(
-                    [...next].filter((t) => ownershipAvailableTableNames.has(t))
-                  );
-                  setVisibleLandownLayerNames(filtered);
-                  setActiveControls((prev) =>
-                    filtered.size === 0
-                      ? prev.filter((x) => x !== 'ownership')
-                      : prev.includes('ownership')
-                        ? prev
-                        : [...prev, 'ownership']
-                  );
-                }}
-                onClose={() => setOpenSubPanel(null)}
-              />
-            </div>
-          )}
-          {openSubPanel === 'cadastral' && (
-            <div data-map-control-expand-panel className={`${overlayListPointerClass} animate-in fade-in-0 slide-in-from-right-4 duration-[400ms] h-fit max-h-[calc(100vh-30px)] overflow-y-auto`}>
-              <JimokLandownLayerSelector
-                title="지적도"
-                layers={cadastralPanelLayers}
-                selectedTableNames={visibleCadastralLayerNames ?? new Set()}
-                onSelectionChange={(next: Set<string>) => {
-                  const filtered = new Set(
-                    [...next].filter((t) => cadastralAvailableTableNames.has(t))
-                  );
-                  setVisibleCadastralLayerNames(filtered);
-                  setActiveControls((prev) =>
-                    filtered.size === 0
-                      ? prev.filter((x) => x !== 'cadastral')
-                      : prev.includes('cadastral')
-                        ? prev
-                        : [...prev, 'cadastral']
-                  );
-                }}
-                onClose={() => setOpenSubPanel(null)}
-              />
-            </div>
-          )}
-          {openSubPanel === 'building-road' && (
-            <div data-map-control-expand-panel className={`${overlayListPointerClass} animate-in fade-in-0 slide-in-from-right-4 duration-[400ms] h-fit max-h-[calc(100vh-30px)] overflow-y-auto`}>
-              <JimokLandownLayerSelector
-                title="건물·도로"
-                layers={buildingRoadPanelLayers}
-                selectedTableNames={visibleBuildingRoadLayerNames ?? new Set()}
-                onSelectionChange={(next: Set<string>) => {
-                  const filtered = new Set(
-                    [...next].filter((t) => buildingRoadAvailableTableNames.has(t))
-                  );
-                  setVisibleBuildingRoadLayerNames(filtered);
-                  setActiveControls((prev) =>
-                    filtered.size === 0
-                      ? prev.filter((x) => x !== 'building-road')
-                      : prev.includes('building-road')
-                        ? prev
-                        : [...prev, 'building-road']
-                  );
-                }}
-                onClose={() => setOpenSubPanel(null)}
-              />
-            </div>
-          )}
-          {openSubPanel === 'thematic-map' && (
-            <div data-map-control-expand-panel className={`${overlayListPointerClass} animate-in fade-in-0 slide-in-from-right-4 duration-[400ms] h-fit max-h-[calc(100vh-30px)] overflow-y-auto`}>
-              <ThematicMapLayerSelector
-                title="주제도"
-                groups={thematicPanelGroups}
-                selectedTableNames={visibleThematicLayerNames ?? new Set()}
-                onSelectionChange={(next) => {
-                  const filtered = new Set(
-                    [...next].filter((t) => thematicAvailableTableNames.has(t))
-                  );
-                  setVisibleThematicLayerNames(filtered);
-                  setActiveControls((prev) =>
-                    filtered.size === 0
-                      ? prev.filter((x) => x !== 'thematic-map')
-                      : prev.includes('thematic-map')
-                        ? prev
-                        : [...prev, 'thematic-map']
-                  );
-                }}
-                onClose={() => setOpenSubPanel(null)}
-              />
-            </div>
-          )}
-          {openSubPanel === 'underground-facility' && (
-            <div data-map-control-expand-panel className={`${overlayListPointerClass} animate-in fade-in-0 slide-in-from-right-4 duration-[400ms] h-fit max-h-[calc(100vh-30px)] overflow-y-auto`}>
-              <ThematicMapLayerSelector
-                title="지하시설물"
-                groups={undergroundFacilityPanelGroups}
-                selectedTableNames={visibleUndergroundFacilityLayerNames ?? new Set()}
-                onSelectionChange={(next) => {
-                  const filtered = new Set(
-                    [...next].filter((t) => undergroundFacilityAvailableTableNames.has(t))
-                  );
-                  setVisibleUndergroundFacilityLayerNames(filtered);
-                  setActiveControls((prev) =>
-                    filtered.size === 0
-                      ? prev.filter((x) => x !== 'underground-facility')
-                      : prev.includes('underground-facility')
-                        ? prev
-                        : [...prev, 'underground-facility']
-                  );
-                }}
-                onClose={() => setOpenSubPanel(null)}
-              />
-            </div>
-          )}
-
-          <div className="pointer-events-auto" data-map-control-menu>
-            <MapControlPanel
-              groups={mapControlGroups}
-              activeIds={
-                openSubPanel && !activeControls.includes(openSubPanel)
-                  ? [...activeControls, openSubPanel]
-                  : activeControls
-              }
-              onItemClick={handleControlClick}
-              onItemRightClick={handleItemRightClick}
-              extraAfterFirstGroup={extraControls}
-              renderItemPanel={renderMapControlItemPanel}
-            />
-          </div>
-        </div>
-      </div>
-
-      {/* 하단 디버그 패널 스택 — showDebugUi 시에만 표시 */}
-      {showDebugUi && (
-        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-10 w-full max-w-2xl px-2 flex flex-col gap-1">
-          {/* GeoServer 로그 */}
+      {/* 오른쪽 맵 컨트롤 — body 포털(목록·상세 z-10 위에 표시). 분할 시에도 화면 오른쪽 고정.
+          래퍼 pointer-events-none: 확장 패널이 버튼열보다 짧을 때 flex 빈 영역이 지도 입력을 가로채지 않음 */}
+      {mapControlPortalReady &&
+        createPortal(
           <div
-            className="font-mono text-xs leading-tight bg-black/70 text-green-400 px-2 py-1 rounded shadow overflow-y-scroll overflow-x-hidden break-words scrollbar-hide"
-            style={{ maxHeight: '7.5rem', minHeight: '2.5rem' }}
+            ref={mapControlFixedRef}
+            className="pointer-events-none fixed right-4 z-[40] flex flex-col items-end gap-3"
+            style={{ top: '60px' }}
           >
-            {geoserverLogLines.length === 0 ? (
-              <span className="text-white/60">GeoServer 로그 없음</span>
-            ) : (
-              geoserverLogLines.map((line, i) => (
-                <div key={i} className="break-words" title={line}>
-                  {line}
-                </div>
-              ))
-            )}
-          </div>
-
-          {/* Console 로그 */}
-          <div
-            ref={consoleLogRef}
-            className="font-mono text-xs leading-tight bg-black/70 text-cyan-300 px-2 py-1 rounded shadow overflow-y-scroll overflow-x-hidden break-words scrollbar-hide"
-            style={{ maxHeight: '7.5rem', minHeight: '2.5rem' }}
-          >
-            {consoleLines.length === 0 ? (
-              <span className="text-white/60">Console 로그 없음</span>
-            ) : (
-              consoleLines.map((line, i) => (
+            <div ref={mapControlOverlayRowRef} className="pointer-events-none flex items-start gap-3">
+              {/* 배경지도 선택 패널 (등장/퇴장 애니메이션, duration 400ms) */}
+              {(activeControls.includes('background-map') || isBackgroundPanelExiting) && (
                 <div
-                  key={i}
-                  className={`break-words ${
-                    line.level === 'error'
-                      ? 'text-red-400'
-                      : line.level === 'warn'
-                      ? 'text-yellow-400'
-                      : 'text-cyan-300'
-                  }`}
-                  title={line.message}
+                  ref={backgroundPanelRef}
+                  data-map-control-expand-panel
+                  className={
+                    isBackgroundPanelExiting
+                      ? `${overlayListPointerClass} animate-out fade-out-0 slide-out-to-right-4 duration-[400ms]`
+                      : `${overlayListPointerClass} animate-in fade-in-0 slide-in-from-right-4 duration-[400ms]`
+                  }
                 >
-                  <span className="text-white/50 mr-1">{line.timestamp}</span>
-                  {line.message}
+                  <BackgroundMapSelector
+                    groups={backgroundMapGroups}
+                    value={selectedBackgroundMap}
+                    onValueChange={handleBackgroundMapChange}
+                    splitSelect={backgroundSplitSelect}
+                  />
                 </div>
-              ))
-            )}
-          </div>
+              )}
 
-          {/* 줌 레벨, 좌표계, x, y */}
-          {viewInfo.zoomLevel !== null && (
-            <div className="w-full font-mono text-xs leading-tight bg-black/70 text-white/80 px-2 py-1 rounded shadow flex items-center gap-4">
-              <span>zoom: {Number(viewInfo.zoomLevel).toFixed(1)}</span>
-              {viewInfo.projectionCode && <span>{viewInfo.projectionCode}</span>}
-              {viewInfo.centerX != null && viewInfo.centerY != null && (
-                <span>
-                  x: {viewInfo.centerX.toFixed(0)} y: {viewInfo.centerY.toFixed(0)}
-                </span>
+              {aerialViewPanelOpen && (
+                <div
+                  data-map-control-expand-panel
+                  className={
+                    isAerialViewPanelExiting
+                      ? `${overlayListPointerClass} animate-out fade-out-0 slide-out-to-right-4 duration-[400ms]`
+                      : `${overlayListPointerClass} animate-in fade-in-0 slide-in-from-right-4 duration-[400ms]`
+                  }
+                >
+                  <AerialViewLayerPanel
+                    checkedUnitIds={aerialViewCheckedIds}
+                    onCheckedChange={setAerialViewCheckedIds}
+                    onClose={() => {
+                      setIsAerialViewPanelExiting(true);
+                      setActiveControls((prev) => prev.filter((x) => x !== 'aerial-view'));
+                    }}
+                  />
+                </div>
+              )}
+
+              {openSubPanel === 'land-category' && (
+                <div data-map-control-expand-panel className={`${overlayListPointerClass} animate-in fade-in-0 slide-in-from-right-4 duration-[400ms] h-fit max-h-[calc(100vh-30px)] overflow-y-auto`}>
+                  <JimokLandownLayerSelector
+                    title="지목"
+                    layers={jimokPanelLayers}
+                    selectedTableNames={visibleJimokLayerNames ?? new Set()}
+                    onSelectionChange={(next) => {
+                      const filtered = new Set(
+                        [...next].filter((t) => jimokAvailableTableNames.has(t))
+                      );
+                      setVisibleJimokLayerNames(filtered);
+                      setActiveControls((prev) =>
+                        filtered.size === 0
+                          ? prev.filter((x) => x !== 'land-category')
+                          : prev.includes('land-category')
+                            ? prev
+                            : [...prev, 'land-category']
+                      );
+                    }}
+                    onClose={() => setOpenSubPanel(null)}
+                  />
+                </div>
+              )}
+              {openSubPanel === 'ownership' && (
+                <div data-map-control-expand-panel className={`${overlayListPointerClass} animate-in fade-in-0 slide-in-from-right-4 duration-[400ms] h-fit max-h-[calc(100vh-30px)] overflow-y-auto`}>
+                  <JimokLandownLayerSelector
+                    title="소유구분"
+                    layers={ownershipPanelLayers}
+                    selectedTableNames={visibleLandownLayerNames ?? new Set()}
+                    onSelectionChange={(next) => {
+                      const filtered = new Set(
+                        [...next].filter((t) => ownershipAvailableTableNames.has(t))
+                      );
+                      setVisibleLandownLayerNames(filtered);
+                      setActiveControls((prev) =>
+                        filtered.size === 0
+                          ? prev.filter((x) => x !== 'ownership')
+                          : prev.includes('ownership')
+                            ? prev
+                            : [...prev, 'ownership']
+                      );
+                    }}
+                    onClose={() => setOpenSubPanel(null)}
+                  />
+                </div>
+              )}
+              {openSubPanel === 'cadastral' && (
+                <div data-map-control-expand-panel className={`${overlayListPointerClass} animate-in fade-in-0 slide-in-from-right-4 duration-[400ms] h-fit max-h-[calc(100vh-30px)] overflow-y-auto`}>
+                  <JimokLandownLayerSelector
+                    title="지적도"
+                    layers={cadastralPanelLayers}
+                    selectedTableNames={visibleCadastralLayerNames ?? new Set()}
+                    onSelectionChange={(next: Set<string>) => {
+                      const filtered = new Set(
+                        [...next].filter((t) => cadastralAvailableTableNames.has(t))
+                      );
+                      setVisibleCadastralLayerNames(filtered);
+                      setActiveControls((prev) =>
+                        filtered.size === 0
+                          ? prev.filter((x) => x !== 'cadastral')
+                          : prev.includes('cadastral')
+                            ? prev
+                            : [...prev, 'cadastral']
+                      );
+                    }}
+                    onClose={() => setOpenSubPanel(null)}
+                  />
+                </div>
+              )}
+              {openSubPanel === 'building-road' && (
+                <div data-map-control-expand-panel className={`${overlayListPointerClass} animate-in fade-in-0 slide-in-from-right-4 duration-[400ms] h-fit max-h-[calc(100vh-30px)] overflow-y-auto`}>
+                  <JimokLandownLayerSelector
+                    title="건물·도로"
+                    layers={buildingRoadPanelLayers}
+                    selectedTableNames={visibleBuildingRoadLayerNames ?? new Set()}
+                    onSelectionChange={(next: Set<string>) => {
+                      const filtered = new Set(
+                        [...next].filter((t) => buildingRoadAvailableTableNames.has(t))
+                      );
+                      setVisibleBuildingRoadLayerNames(filtered);
+                      setActiveControls((prev) =>
+                        filtered.size === 0
+                          ? prev.filter((x) => x !== 'building-road')
+                          : prev.includes('building-road')
+                            ? prev
+                            : [...prev, 'building-road']
+                      );
+                    }}
+                    onClose={() => setOpenSubPanel(null)}
+                  />
+                </div>
+              )}
+              {openSubPanel === 'thematic-map' && (
+                <div data-map-control-expand-panel className={`${overlayListPointerClass} animate-in fade-in-0 slide-in-from-right-4 duration-[400ms] h-fit max-h-[calc(100vh-30px)] overflow-y-auto`}>
+                  <ThematicMapLayerSelector
+                    title="주제도"
+                    groups={thematicPanelGroups}
+                    selectedTableNames={visibleThematicLayerNames ?? new Set()}
+                    onSelectionChange={(next) => {
+                      const filtered = new Set(
+                        [...next].filter((t) => thematicAvailableTableNames.has(t))
+                      );
+                      setVisibleThematicLayerNames(filtered);
+                      setActiveControls((prev) =>
+                        filtered.size === 0
+                          ? prev.filter((x) => x !== 'thematic-map')
+                          : prev.includes('thematic-map')
+                            ? prev
+                            : [...prev, 'thematic-map']
+                      );
+                    }}
+                    onClose={() => setOpenSubPanel(null)}
+                  />
+                </div>
+              )}
+              {openSubPanel === 'underground-facility' && (
+                <div data-map-control-expand-panel className={`${overlayListPointerClass} animate-in fade-in-0 slide-in-from-right-4 duration-[400ms] h-fit max-h-[calc(100vh-30px)] overflow-y-auto`}>
+                  <ThematicMapLayerSelector
+                    title="지하시설물"
+                    groups={undergroundFacilityPanelGroups}
+                    selectedTableNames={visibleUndergroundFacilityLayerNames ?? new Set()}
+                    onSelectionChange={(next) => {
+                      const filtered = new Set(
+                        [...next].filter((t) => undergroundFacilityAvailableTableNames.has(t))
+                      );
+                      setVisibleUndergroundFacilityLayerNames(filtered);
+                      setVisibleLayerNames?.((prev) =>
+                        mirrorUndergroundFacilityIntoVisible(
+                          prev,
+                          undergroundFacilityAvailableTableNames,
+                          filtered
+                        )
+                      );
+                      setActiveControls((prev) =>
+                        filtered.size === 0
+                          ? prev.filter((x) => x !== 'underground-facility')
+                          : prev.includes('underground-facility')
+                            ? prev
+                            : [...prev, 'underground-facility']
+                      );
+                    }}
+                    onClose={() => setOpenSubPanel(null)}
+                  />
+                </div>
+              )}
+
+              <div className="pointer-events-auto" data-map-control-menu>
+                <MapControlPanel
+                  groups={mapControlGroups}
+                  activeIds={
+                    openSubPanel && !activeControls.includes(openSubPanel)
+                      ? [...activeControls, openSubPanel]
+                      : activeControls
+                  }
+                  onItemClick={handleControlClick}
+                  onItemRightClick={handleItemRightClick}
+                  extraAfterFirstGroup={extraControls}
+                  renderItemPanel={renderMapControlItemPanel}
+                />
+              </div>
+            </div>
+          </div>,
+          document.body
+        )}
+
+      {/* 하단 디버그 패널 — body 포털(목록·상세 z-10 오버레이 위에 표시) */}
+      {showDebugUi &&
+        createPortal(
+          <div className="pointer-events-auto fixed bottom-4 left-1/2 z-[50] flex w-full max-w-2xl -translate-x-1/2 flex-col gap-1 px-2">
+            {/* GeoServer 로그 */}
+            <div
+              tabIndex={0}
+              onKeyDown={onDebugLogPanelKeyDown}
+              className="select-text font-mono text-xs leading-tight bg-black/70 text-green-400 px-2 py-1 rounded shadow overflow-y-scroll overflow-x-hidden break-words scrollbar-hide outline-none focus:ring-1 focus:ring-white/40"
+              style={{ maxHeight: '7.5rem', minHeight: '2.5rem' }}
+            >
+              {geoserverLogLines.length === 0 ? (
+                <span className="text-white/60">GeoServer 로그 없음</span>
+              ) : (
+                geoserverLogLines.map((line, i) => (
+                  <div key={i} className="break-words" title={line}>
+                    {line}
+                  </div>
+                ))
               )}
             </div>
-          )}
-        </div>
-      )}
+
+            {/* Console 로그 */}
+            <div
+              ref={consoleLogRef}
+              tabIndex={0}
+              onKeyDown={onDebugLogPanelKeyDown}
+              className="select-text font-mono text-xs leading-tight bg-black/70 text-cyan-300 px-2 py-1 rounded shadow overflow-y-scroll overflow-x-hidden break-words scrollbar-hide outline-none focus:ring-1 focus:ring-white/40"
+              style={{ maxHeight: '7.5rem', minHeight: '2.5rem' }}
+            >
+              {consoleLines.length === 0 ? (
+                <span className="text-white/60">Console 로그 없음</span>
+              ) : (
+                consoleLines.map((line, i) => (
+                  <div
+                    key={i}
+                    className={`break-words ${
+                      line.level === 'error'
+                        ? 'text-red-400'
+                        : line.level === 'warn'
+                          ? 'text-yellow-400'
+                          : 'text-cyan-300'
+                    }`}
+                    title={line.message}
+                  >
+                    <span className="text-white/50 mr-1">{line.timestamp}</span>
+                    {line.message}
+                  </div>
+                ))
+              )}
+            </div>
+
+            {/* 줌 레벨, 좌표계, x, y */}
+            {viewInfo.zoomLevel !== null && (
+              <div className="w-full font-mono text-xs leading-tight bg-black/70 text-white/80 px-2 py-1 rounded shadow flex items-center gap-4">
+                <span>zoom: {Number(viewInfo.zoomLevel).toFixed(1)}</span>
+                {viewInfo.projectionCode && <span>{viewInfo.projectionCode}</span>}
+                {viewInfo.centerX != null && viewInfo.centerY != null && (
+                  <span>
+                    x: {viewInfo.centerX.toFixed(0)} y: {viewInfo.centerY.toFixed(0)}
+                  </span>
+                )}
+              </div>
+            )}
+          </div>,
+          document.body
+        )}
 
       {/* 목록창(팝업) 제거: 클릭 시 바로 '지도에서 선택된 항목' 데이터 패널로 열림 */}
 

@@ -13,6 +13,7 @@ import {
   type FmsDataKind,
 } from '@/lib/fmsLinkage/fmsBinding';
 import { defaultHeaderLabels } from '@/lib/fmsLinkage/fmsHeaderSeed';
+import { formatAddressStripSidoSigungu } from '@/lib/formatAddressStripAdmin';
 
 const SKIP_DETAIL_FIELDS = new Set([
   'id',
@@ -159,7 +160,7 @@ export async function getFmsFacilityList(params?: { keyword?: string; system?: s
         facilNm: text(r.facil_nm),
         facilKind: text(r.facil_kind),
         facilOwner: text(r.facil_owner),
-        addrFull: text(r.addr_full),
+        addrFull: formatAddressStripSidoSigungu(text(r.addr_full)),
       };
     });
     return { rows, total: rows.length };
