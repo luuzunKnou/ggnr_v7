@@ -111,6 +111,7 @@ import {
 } from "./_mapContents/occupationLedger/occupationLedgerMapSync"
 import {
   findOpenedOccupationLedgerSerEng,
+  getOccupationLedgerBinding,
   isOccupationLedgerOpenedToken,
 } from "@/lib/occupationLedgerBinding"
 import {
@@ -2780,9 +2781,19 @@ function MapLayoutContent({
                 open={protoUserAccountOpen}
                 onClose={() => setProtoUserAccountOpen(false)}
                 onSelectShootingRequest={(id) => setMyInfoShootingModalId(id)}
-                onOpenLedger={(ledgerId) => {
+                onOpenLedger={(item) => {
+                  const key = String(item.notifKey ?? "")
+                  if (key.startsWith("occup-expiry:")) {
+                    const serEng = getOccupationLedgerBinding({
+                      system: item.systemScope,
+                    })?.serEng
+                    if (!serEng) return
+                    setOpened([serEng])
+                    setOccupationLedgerDetailId(item.targetId)
+                    return
+                  }
                   setOpened([USAGE_DATA_AS_OPENED_KEY])
-                  setUsageDataAsDetailId(ledgerId)
+                  setUsageDataAsDetailId(item.targetId)
                 }}
                 onOpenFee={(feeId) => {
                   const feeSerEng = getUseFeeBinding({ system: systemKeyFromUrl }).serEng
