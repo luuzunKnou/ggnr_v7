@@ -12,7 +12,10 @@ export default async function NoticeDetailPage({ params }: PageProps) {
   const postId = Number(id);
 
   return (
-    <SiteIndexShell mainClassName="container mx-auto px-4 py-4 pb-24">
+    <SiteIndexShell
+      fillViewport
+      mainClassName="container mx-auto px-4 py-4 pb-24 flex flex-1 flex-col min-h-0"
+    >
       <BoardScreen kind="notice" postId={Number.isInteger(postId) && postId > 0 ? postId : undefined} />
     </SiteIndexShell>
   );

@@ -6,7 +6,10 @@ import { call } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import {
   riverBasicPlanAsDefineTable,
+  riverBasicPlanGdWmsDefineTables,
+  riverBasicPlanHdDefineTable,
   riverBasicPlanIndexDefineTable,
+  riverBasicPlanJdDefineTable,
   buildRiverBasicPlanRiverNameCqlByLayer,
   type RiverBasicPlanTab,
 } from "@/lib/riverBasicPlanMapAttachmentLayers";
@@ -31,7 +34,13 @@ type Props = {
 };
 
 function defaultLayersForTab(tab: RiverType): readonly string[] {
-  return [riverBasicPlanIndexDefineTable(tab), riverBasicPlanAsDefineTable(tab)];
+  return [
+    riverBasicPlanIndexDefineTable(tab),
+    riverBasicPlanAsDefineTable(tab),
+    riverBasicPlanJdDefineTable(tab),
+    riverBasicPlanHdDefineTable(tab),
+    ...riverBasicPlanGdWmsDefineTables(tab),
+  ];
 }
 
 export function RiverBasicPlanListPanel({
@@ -47,6 +56,8 @@ export function RiverBasicPlanListPanel({
   const [keyword, setKeyword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /** true: 테이블 없음 등 안내(muted), false: 조회 실패(destructive) */
+  const [errorSoft, setErrorSoft] = useState(false);
   const [items, setItems] = useState<RiverItem[]>([]);
 
   /** 패널 진입·탭 변경 시 해당 탭 기본 레이어 켜기, 언마운트 시 양쪽 끄기 */
@@ -95,6 +106,7 @@ export function RiverBasicPlanListPanel({
     const t = setTimeout(async () => {
       setLoading(true);
       setError(null);
+      setErrorSoft(false);
       try {
         const res = await call("", "POST", {
           service: "riverBasicPlanService",
@@ -103,9 +115,15 @@ export function RiverBasicPlanListPanel({
         });
         const data = res?.data ?? res;
         setItems(Array.isArray(data?.rivers) ? data.rivers : []);
+        const notice = typeof data?.error === "string" ? data.error.trim() : "";
+        if (notice) {
+          setError(notice);
+          setErrorSoft(true);
+        }
       } catch (e: unknown) {
         setItems([]);
         setError(e instanceof Error ? e.message : "목록을 불러오지 못했습니다.");
+        setErrorSoft(false);
       } finally {
         setLoading(false);
       }
@@ -175,7 +193,14 @@ export function RiverBasicPlanListPanel({
         {loading ? (
           <p className="text-sm text-muted-foreground px-4 py-4">불러오는 중...</p>
         ) : error ? (
-          <p className="text-sm text-destructive px-4 py-4">{error}</p>
+          <p
+            className={cn(
+              "text-sm px-4 py-4",
+              errorSoft ? "text-muted-foreground" : "text-destructive"
+            )}
+          >
+            {error}
+          </p>
         ) : items.length === 0 ? (
           <p className="text-sm text-muted-foreground px-4 py-4">검색 결과가 없습니다.</p>
         ) : (

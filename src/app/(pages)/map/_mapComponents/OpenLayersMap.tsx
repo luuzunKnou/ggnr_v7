@@ -70,10 +70,14 @@ import { findRoadAddressByJibun, getAddressFromCoord } from './addressSearch/vwo
 import { transformCoordinate } from './services/coordinateService';
 import { collectOpenScanLayerTableNames } from '@/lib/mapServiceOpened';
 import {
+  isRiverBasicPlanAsDefineTable,
   isRiverBasicPlanIndexDefineTable,
   isRiverBasicPlanMapAttachmentDefineTable,
   riverBasicPlanIdentifyGeometryRank,
+  riverBasicPlanTabFromAsDefineTable,
 } from '@/lib/riverBasicPlanMapAttachmentLayers';
+import { MAP_AUTO_NAV_MAX_ZOOM } from './config/mapDefaults';
+import { scheduleFitMapToExtent3857 } from './config/mapAutoNavigation';
 import {
   setMapGeometryStackTypes,
   mergeDefineLayerShpTypesIntoGeometryMap,
@@ -1503,7 +1507,7 @@ export default function OpenLayersMap({
 
       const hitOpenScan = withFeat.some((r) => openScanLayers.has(String(r.tableName ?? '').trim()));
 
-      /** 패널 열림: 색인도 + 종·횡단 + 구조물 — 겹치면 포인트 → 라인 → 폴리곤. 구조물 분할은 open_scan 미등록이어도 식별되면 처리 */
+      /** 패널 열림: 색인도 + AS + 종·횡단 + 구조물 — 겹치면 포인트 → 라인 → 폴리곤. 구조물 분할은 open_scan 미등록이어도 식별되면 처리 */
       if (mapContext?.riverBasicPlanPanelOpen) {
         type RbpHit = (typeof withFeat)[number];
         const cands: { tableName: string; rank: number; wi: number; layer: RbpHit }[] = [];
@@ -1525,11 +1529,22 @@ export default function OpenLayersMap({
               wi,
               layer: r,
             });
+          } else if (isRiverBasicPlanAsDefineTable(tn)) {
+            cands.push({
+              tableName: tn,
+              rank: riverBasicPlanIdentifyGeometryRank(tn),
+              wi,
+              layer: r,
+            });
           }
         }
         if (cands.length > 0) {
           cands.sort((a, b) => {
             if (a.rank !== b.rank) return a.rank - b.rank;
+            // 폴리곤끼리면 색인도 > 기본계획(AS)
+            const aIndex = isRiverBasicPlanIndexDefineTable(a.tableName) ? 0 : 1;
+            const bIndex = isRiverBasicPlanIndexDefineTable(b.tableName) ? 0 : 1;
+            if (aIndex !== bIndex) return aIndex - bIndex;
             return a.wi - b.wi;
           });
           const best = cands[0]!;
@@ -1572,6 +1587,51 @@ export default function OpenLayersMap({
             } catch (e) {
               if (cancelled) return;
               window.alert(e instanceof Error ? e.message : '색인도 연계 정보를 불러오지 못했습니다.');
+            }
+            clearIdentifyIntake();
+            return;
+          }
+
+          if (isRiverBasicPlanAsDefineTable(best.tableName)) {
+            const riverName = pickIdentifyField(hitLayer.features[0]?.data, 'river_name');
+            if (!riverName) {
+              if (cancelled) return;
+              window.alert('선택한 기본계획에서 하천명을 읽을 수 없습니다.');
+              clearIdentifyIntake();
+              return;
+            }
+            const tab = riverBasicPlanTabFromAsDefineTable(best.tableName);
+            mapContext.applyRiverBasicPlanMapPickRef.current?.({ riverName, tab });
+            mapContext.riverBasicPlanExitIndexViewToDetailRef?.current?.();
+            try {
+              let res = await call('', 'POST', {
+                service: 'riverBasicPlanService',
+                action: 'getRiverBasicPlanIndexExtent',
+                params: { tab, riverName },
+              });
+              if (cancelled) return;
+              let data = res?.data ?? res;
+              let ext = Array.isArray(data?.extent3857) ? data.extent3857 : null;
+              if (!ext || ext.length !== 4) {
+                res = await call('', 'POST', {
+                  service: 'riverBasicPlanService',
+                  action: 'getRiverBasicPlanExtent',
+                  params: { tab, riverName },
+                });
+                if (cancelled) return;
+                data = res?.data ?? res;
+                ext = Array.isArray(data?.extent3857) ? data.extent3857 : null;
+              }
+              const map = mapInstanceRef.current;
+              if (map && ext && ext.length === 4) {
+                scheduleFitMapToExtent3857(map, ext as number[], {
+                  maxZoom: MAP_AUTO_NAV_MAX_ZOOM,
+                  pointThreshold: 1,
+                  applyMapViewPadding: () => applyMapViewPaddingRef?.current?.(),
+                });
+              }
+            } catch {
+              // 지도 이동 실패는 사용자 동작을 막지 않음
             }
             clearIdentifyIntake();
             return;
