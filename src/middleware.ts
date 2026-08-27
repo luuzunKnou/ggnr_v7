@@ -26,18 +26,17 @@ function publicOrigin(req: NextRequest): string {
 }
 
 /**
- * 앱 홈으로 307 (Location은 반드시 절대 URL — 상대면 Next edge가 Invalid URL → 500).
- * 공개 origin + getBasePath()로내어, 백엔드 Host Location이 ProxyPassReverse에
+ * 앱 홈으로 리다이렉트 (Location은 반드시 절대 URL — 상대면 Next edge가 Invalid URL → 500).
+ * 공개 origin + getBasePath()로 내어, 백엔드 Host Location이 ProxyPassReverse에
  * 걸려 build_yy_v6build_yy 처럼 이어 붙는 경우를 줄인다.
  *
- * 게이트 conf (repo 밖) 권장:
- *   ProxyPass        /build_yy  http://<next>:3000/build_yy
- *   ProxyPassReverse /build_yy  http://<next>:3000/build_yy
- *   — 공개·backend·BASE_PATH 모두 끝 / 없음, build_yy_v6 등 잔여 Reverse 제거
- *   — X-Forwarded-Host / X-Forwarded-Proto 전달 권장
+ * pathname은 basePath 있을 때 `${base}/` (끝 /) — 게이트가 /build_yy/ Reverse를 쓰는
+ * 경우 `/build_yy`(끝 없음) Location이 미매칭되어 잔여 build_yy_v6 규칙으로 오치환되는 것 방지.
+ * BASE_PATH env 값 자체는 끝 / 없음 유지. Location에만 trailing / 추가.
  */
 function redirectToAppHome(req: NextRequest, query?: Record<string, string>): NextResponse {
-  const home = new URL(getBasePath() || '/', publicOrigin(req));
+  const base = getBasePath();
+  const home = new URL(base ? `${base}/` : '/', publicOrigin(req));
   home.search = '';
   home.hash = '';
   if (query) {
