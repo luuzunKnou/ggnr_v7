@@ -5,6 +5,7 @@ import { FileText, Loader2 } from 'lucide-react';
 import { getDocument, type PDFDocumentProxy } from 'pdfjs-dist';
 import { cn } from '@/lib/utils';
 import { configurePdfJsWorker } from '@/lib/pdfjsWorker';
+import { appFetch } from '@/lib/basePath';
 import { serviceFileDataDownloadUrl, type ServiceFileDataSerEng } from './useServiceFileData';
 
 const box = { sm: 'h-8 w-8', md: 'h-9 w-9' } as const;
@@ -58,7 +59,7 @@ export function ServiceFilePdfThumb({
 
     void (async () => {
       try {
-        const res = await fetch(url, { credentials: 'include' });
+        const res = await appFetch(url, { credentials: 'include' });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const buf = await res.arrayBuffer();
         if (!alive.current) return;
