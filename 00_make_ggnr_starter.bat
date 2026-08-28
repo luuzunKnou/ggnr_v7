@@ -352,6 +352,9 @@ echo.
 echo :: cwd
 echo cd /d %ROOT%
 echo.
+echo :: G: = \\192.168.127.11\service_data — nssm has no interactive drive mapping ^(silent^)
+echo net use G: \\192.168.127.11\service_data /persistent:yes ^>nul 2^>&1
+echo.
 echo :: PATH node
 echo set PATH=%%PATH%%;%NODE_DIR%
 echo.
@@ -367,20 +370,21 @@ echo     goto build_fail
 echo   ^)
 echo ^)
 echo.
-echo :: build if no BUILD_ID
-echo if exist ".next\BUILD_ID" ^(
-echo   echo [OK] .next\BUILD_ID found - skip build
-echo   goto after_build
-echo ^)
-echo if exist ".next\" ^(
-echo   echo [WARN] .next exists but BUILD_ID missing - build with project env
+echo :: build if no BUILD_ID or BASE_PATH mismatch
+echo call npx tsx scripts/check-base-path-build.ts "%%GGNR_PROJECT%%" "%%GGNR_ENV%%"
+echo if errorlevel 1 ^(
+echo   if exist ".next\" ^(
+echo     echo [WARN] BUILD_ID/basePath mismatch - rebuild with project env
+echo   ^) else ^(
+echo     echo [OK] no .next - build with project env
+echo   ^)
+echo   call npx tsx scripts/build-with-project-env.ts "%%GGNR_PROJECT%%" "%%GGNR_ENV%%"
+echo   if errorlevel 1 goto build_fail
+echo   if not exist ".next\BUILD_ID" goto build_no_id
+echo   echo [OK] npm run build done.
 echo ^) else ^(
-echo   echo [OK] no BUILD_ID - build with project env
+echo   echo [OK] BUILD_ID + BASE_PATH match - skip build
 echo ^)
-echo call npx tsx scripts/build-with-project-env.ts "%%GGNR_PROJECT%%" "%%GGNR_ENV%%"
-echo if errorlevel 1 goto build_fail
-echo if not exist ".next\BUILD_ID" goto build_no_id
-echo echo [OK] npm run build done.
 echo goto after_build
 echo.
 echo :build_fail
