@@ -149,6 +149,13 @@ export function SafetyFacPanel({ onClose, selectedFacility, onSelectFacility }: 
     setAppliedQuery(searchText.trim());
   }, [searchText]);
 
+  const handleClearSearch = useCallback(() => {
+    setSearchText('');
+    setAppliedQuery('');
+  }, []);
+
+  const showSearchClear = Boolean(searchText.trim() || appliedQuery);
+
   const selectedSubtypeKey = useMemo(
     () => [...selectedSubtypeIds].sort().join(','),
     [selectedSubtypeIds]
@@ -585,18 +592,29 @@ export function SafetyFacPanel({ onClose, selectedFacility, onSelectFacility }: 
 
             {searchTab === 'keyword' ? (
               <div className="flex items-stretch gap-1.5">
-                <label className="sr-only" htmlFor="safety-fac-search">
-                  시설명·주소 검색
+                <label className="relative min-w-0 flex-1" htmlFor="safety-fac-search">
+                  <span className="sr-only">시설명·주소 검색</span>
+                  <input
+                    id="safety-fac-search"
+                    type="search"
+                    value={searchText}
+                    onChange={(e) => setSearchText(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
+                    placeholder="시설명·주소"
+                    className="h-full min-h-[2rem] w-full rounded-[5px] border border-border bg-background py-1.5 pl-2 pr-7 text-[12px] text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                  />
+                  {showSearchClear ? (
+                    <button
+                      type="button"
+                      title="검색 초기화"
+                      aria-label="검색 초기화"
+                      onClick={handleClearSearch}
+                      className="absolute right-1.5 top-1/2 inline-flex h-5 w-5 -translate-y-1/2 cursor-pointer items-center justify-center rounded text-muted-foreground/70 transition-colors hover:text-muted-foreground"
+                    >
+                      <X className="h-3.5 w-3.5" aria-hidden />
+                    </button>
+                  ) : null}
                 </label>
-                <input
-                  id="safety-fac-search"
-                  type="search"
-                  value={searchText}
-                  onChange={(e) => setSearchText(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
-                  placeholder="시설명·주소"
-                  className="min-w-0 flex-1 rounded-[5px] border border-border bg-background px-2 py-1.5 text-[12px] text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
-                />
                 <button
                   type="button"
                   onClick={handleSearch}

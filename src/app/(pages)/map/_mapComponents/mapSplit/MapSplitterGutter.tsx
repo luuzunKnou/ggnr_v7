@@ -63,6 +63,8 @@ export type MapSplitControlItem = {
 };
 
 const DEFAULT_ICON_INACTIVE = '#94a3b8';
+/** 분할선 이동(잠금) — 아이콘만 크게, 버튼은 한 단계 작게 */
+const LOCK_CONTROL_BTN_CLASS = 'h-5 w-5 p-0';
 
 /** 종료·닫기 — 접기 밖 고정 */
 function isPinnedOutsideCollapse(item: MapSplitControlItem): boolean {
@@ -612,9 +614,10 @@ export function MapSplitterGutter({
                       active={!ratioLocked}
                       iconActiveColor={MAP_SPLIT_GUTTER_ICON_COLOR.lock.active}
                       iconInactiveColor={MAP_SPLIT_GUTTER_ICON_COLOR.lock.inactive}
+                      className={LOCK_CONTROL_BTN_CLASS}
                       onClick={() => onRatioLockedChange(!ratioLocked)}
                     >
-                      <UnfoldHorizontal className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
+                      <UnfoldHorizontal className="h-4 w-4" strokeWidth={2} aria-hidden />
                     </MapSplitControlButton>
                     {foldableControls.map((item) => (
                       <MapSplitControlButton
@@ -638,9 +641,10 @@ export function MapSplitterGutter({
                   active={!ratioLocked}
                   iconActiveColor={MAP_SPLIT_GUTTER_ICON_COLOR.lock.active}
                   iconInactiveColor={MAP_SPLIT_GUTTER_ICON_COLOR.lock.inactive}
+                  className={LOCK_CONTROL_BTN_CLASS}
                   onClick={() => onRatioLockedChange(!ratioLocked)}
                 >
-                  <UnfoldHorizontal className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
+                  <UnfoldHorizontal className="h-4 w-4" strokeWidth={2} aria-hidden />
                 </MapSplitControlButton>
                 {foldableControls.map((item) => (
                   <MapSplitControlButton

@@ -33,7 +33,8 @@
     "geoserver": "cmd /c geoserver_modules\\scripts\\start-geoserver.bat",
     "geoserver:stop": "cmd /c geoserver_modules\\scripts\\stop-geoserver.bat",
     "road-doc:png": "powershell -ExecutionPolicy Bypass -File scripts/qcad-dwg-dxf2png.ps1",
-    "python:install-libpq": "conda run --prefix python/env conda install -c conda-forge libpq -y"
+    "python:install-libpq": "conda run --prefix python/env conda install -c conda-forge libpq -y",
+    "map:river-report": "tsx scripts/mapRiverPlanReportFolders.ts"
   },
   "dependencies": {
     "@napi-rs/canvas": "^1.0.0",
