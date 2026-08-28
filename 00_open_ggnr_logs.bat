@@ -3,7 +3,7 @@ setlocal EnableExtensions DisableDelayedExpansion
 
 :: =============================================================================
 :: Tail GGNR / GeoServer logs in two CMD windows (ASCII-only for Korean CMD)
-:: - GGNR stdout = C:\logs\GGNR_V7_stdout.log (same as nssm_install)
+:: - GGNR stdout = C:\logs\GGNR_V7_stdout.log (same as 00_nssm_install)
 :: - GeoServer   = root\geoserver_modules\data_dir\logs\geoserver.log
 :: - root = folder of this bat
 :: - Reconnects if file is missing / recreated
@@ -31,11 +31,11 @@ if "%HAVE_GGNR%"=="1" if "%HAVE_GEO%"=="1" exit /b 0
 
 :: Embed path in PS (DisableDelayedExpansion). Titles ASCII only so start quoting stays valid.
 if "%HAVE_GGNR%"=="0" (
-  start "GGNR_LOG" cmd /k powershell -NoProfile -ExecutionPolicy Bypass -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; $p='%LOG_OUT%'; while ($true) { while (-not (Test-Path -LiteralPath $p)) { Start-Sleep -Seconds 2 }; try { Get-Content -LiteralPath $p -Encoding UTF8 -Wait -Tail 10 } catch { }; Write-Host '[open_ggnr_logs] reconnect...'; Start-Sleep -Seconds 1 }"
+  start "GGNR_LOG" cmd /k powershell -NoProfile -ExecutionPolicy Bypass -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; $p='%LOG_OUT%'; while ($true) { while (-not (Test-Path -LiteralPath $p)) { Start-Sleep -Seconds 2 }; try { Get-Content -LiteralPath $p -Encoding UTF8 -Wait -Tail 10 } catch { }; Write-Host '[00_open_ggnr_logs] reconnect...'; Start-Sleep -Seconds 1 }"
 )
 
 if "%HAVE_GEO%"=="0" (
-  start "GEOSERVER_LOG" cmd /k powershell -NoProfile -ExecutionPolicy Bypass -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; $p='%GEO_LOG%'; while ($true) { while (-not (Test-Path -LiteralPath $p)) { Start-Sleep -Seconds 2 }; try { Get-Content -LiteralPath $p -Encoding UTF8 -Wait -Tail 10 } catch { }; Write-Host '[open_ggnr_logs] reconnect...'; Start-Sleep -Seconds 1 }"
+  start "GEOSERVER_LOG" cmd /k powershell -NoProfile -ExecutionPolicy Bypass -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; $p='%GEO_LOG%'; while ($true) { while (-not (Test-Path -LiteralPath $p)) { Start-Sleep -Seconds 2 }; try { Get-Content -LiteralPath $p -Encoding UTF8 -Wait -Tail 10 } catch { }; Write-Host '[00_open_ggnr_logs] reconnect...'; Start-Sleep -Seconds 1 }"
 )
 
 exit /b 0

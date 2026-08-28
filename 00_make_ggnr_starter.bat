@@ -14,7 +14,7 @@ setlocal EnableExtensions EnableDelayedExpansion
 :: - nssm = root\nssm\win64\nssm.exe
 :: - python/env_parts optional restore
 :: - if DO_NSSM=Y and not admin => require admin before build
-:: - open_ggnr_logs: skip if GGNR_LOG/GEOSERVER_LOG already open
+:: - 00_open_ggnr_logs: skip if GGNR_LOG/GEOSERVER_LOG already open
 :: - window keep: set /p. skip only if GGNR_STARTER_NO_PAUSE=1
 :: =============================================================================
 
@@ -22,10 +22,10 @@ set "ROOT=%~dp0"
 if "%ROOT:~-1%"=="\" set "ROOT=%ROOT:~0,-1%"
 set "OUT=%ROOT%\ggnr_start.bat"
 set "BUILD_OUT=%ROOT%\ggnr_build_project.bat"
-set "NSSM_BAT=%ROOT%\nssm_install_ggnr.bat"
+set "NSSM_BAT=%ROOT%\00_nssm_install_ggnr.bat"
 set "NSSM_EXE=%ROOT%\nssm\win64\nssm.exe"
 if not exist "%NSSM_EXE%" set "NSSM_EXE=%ROOT%\nssm\win32\nssm.exe"
-set "LOGS_BAT=%ROOT%\open_ggnr_logs.bat"
+set "LOGS_BAT=%ROOT%\00_open_ggnr_logs.bat"
 set "SERVICE_NAME=GGNR_V7"
 set "APP_PORT=3000"
 :: GGNR_START_NO_PAUSE is for ggnr_start/nssm only - not this starter window
@@ -228,7 +228,7 @@ echo [OK] ggnr_start.bat step done.
 if /i not "!DO_NSSM!"=="Y" (
   echo [SKIP] nssm/logs ^(DO_NSSM=!DO_NSSM!^)
   echo [DONE] generate only.
-  echo   manual: nssm_install_ggnr.bat ^(admin CMD^) -> open_ggnr_logs.bat
+  echo   manual: 00_nssm_install_ggnr.bat ^(admin CMD^) -> 00_open_ggnr_logs.bat
   echo.
   if "!PAUSE_ON_FAIL!"=="1" call :pause_keep
   exit /b 0
@@ -305,7 +305,7 @@ if not defined FAIL_EC set "FAIL_EC=1"
 echo.
 echo [EXIT] stopped with error ^(exit=!FAIL_EC!^). See messages above.
 echo        nssm log: C:\logs\nssm_install_last.log
-echo        manual: nssm_install_ggnr.bat ^(admin CMD^) -> open_ggnr_logs.bat
+echo        manual: 00_nssm_install_ggnr.bat ^(admin CMD^) -> 00_open_ggnr_logs.bat
 if "!PAUSE_ON_FAIL!"=="1" call :pause_keep
 exit /b !FAIL_EC!
 
@@ -443,8 +443,8 @@ echo   goto :end_pause
 echo ^)
 echo.
 echo echo.
-echo echo [npm run build] 프로젝트: %%GGNR_PROJECT%%
-echo echo [npm run build] 타입: %%GGNR_ENV%%
+echo echo [npm run build] project: %%GGNR_PROJECT%%
+echo echo [npm run build] type: %%GGNR_ENV%%
 echo echo npx tsx scripts/build-with-project-env.ts %%GGNR_PROJECT%% %%GGNR_ENV%%
 echo echo.
 echo.
@@ -528,7 +528,7 @@ echo.
 exit /b 0
 
 :: stop previous GGNR (service stop only, no remove) + free app port
-:: Called after successful build, immediately before nssm_install
+:: Called after successful build, immediately before 00_nssm_install
 :stop_previous_ggnr
 echo [CLEAN] stop previous GGNR if running ^(service not removed^)...
 if exist "%NSSM_EXE%" (

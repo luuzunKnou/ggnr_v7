@@ -6,7 +6,7 @@ import { GGNR_SYSTEM_LOG_DIR } from '@/lib/ggnrSystemLogDir';
 
 const LOG = '[nssm-log-backup]';
 
-/** nssm_install_ggnr.bat 과 동일 */
+/** 00_nssm_install_ggnr.bat 과 동일 */
 const LOG_DIR = GGNR_SYSTEM_LOG_DIR;
 const BACKUP_DIR = path.join(LOG_DIR, 'backup');
 const LOG_FILES = ['GGNR_V7_stdout.log', 'GGNR_V7_stderr.log'] as const;
