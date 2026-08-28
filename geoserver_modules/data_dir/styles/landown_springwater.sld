@@ -12,8 +12,6 @@
             </sld:Fill>
             <sld:Stroke>
               <sld:CssParameter name="stroke">#FFFFFF</sld:CssParameter>
-              <sld:CssParameter name="stroke-width">1</sld:CssParameter>
-              <sld:CssParameter name="stroke-opacity">1.0</sld:CssParameter>
             </sld:Stroke>
           </sld:PolygonSymbolizer>
         </sld:Rule>
@@ -22,3 +20,4 @@
     </sld:UserStyle>
   </sld:NamedLayer>
 </sld:StyledLayerDescriptor>
+
