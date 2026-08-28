@@ -140,6 +140,16 @@ function resolveSafe(relativePath: string | undefined): string | null {
   return resolveWithinBase(relativePath)?.abs ?? null;
 }
 
+function formatDataDirAccessError(dir: string, err: unknown, action: string): Error {
+  const e = err as NodeJS.ErrnoException;
+  const code = e?.code ?? 'UNKNOWN';
+  const msg = e?.message ?? String(err);
+  const base = getBaseDir();
+  return new Error(
+    `${action} failed (${code}): ${msg} — GGNR_DATA_DIR=${base}, target=${dir}`
+  );
+}
+
 export type ListDirectoryResult = {
   directories: string[];
   /** directories 와 동일 항목, 수정일 포함 */
@@ -173,13 +183,17 @@ export async function listDirectory(params: {
           rel.startsWith(FILE_DATA_ROOT_REL)) &&
         !rel.includes('..')
       ) {
-        await fs.mkdir(dir, { recursive: true });
-        stat = await fs.stat(dir);
+        try {
+          await fs.mkdir(dir, { recursive: true });
+          stat = await fs.stat(dir);
+        } catch (mkdirErr: unknown) {
+          throw formatDataDirAccessError(dir, mkdirErr, 'mkdir');
+        }
       } else {
-        throw new Error('Directory not found');
+        throw formatDataDirAccessError(dir, err, 'stat');
       }
     } else {
-      throw new Error('Directory not found');
+      throw formatDataDirAccessError(dir, err, 'stat');
     }
   }
   if (!stat.isDirectory()) {
