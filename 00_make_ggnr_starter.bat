@@ -8,11 +8,13 @@ setlocal EnableExtensions EnableDelayedExpansion
 :: - node PATH = directory of "where node"
 :: - npm ci from package-lock (Y/N; auto if GGNR_START_NO_PAUSE=1)
 :: - then npm run build (GGNR_PROJECT/ENV -> BASE_PATH). fail => pause
+:: - stop previous GGNR / free port 3000 AFTER successful build (before nssm)
 :: - ggnr_start.bat: skip build if BUILD_ID exists -> start
 :: - project / type / npm / overwrite / nssm asked once up front
 :: - nssm = root\nssm\win64\nssm.exe
 :: - python/env_parts optional restore
-:: - if DO_NSSM=Y and not admin => stop before build
+:: - if DO_NSSM=Y and not admin => require admin before build
+:: - open_ggnr_logs: skip if GGNR_LOG/GEOSERVER_LOG already open
 :: - window keep: set /p. skip only if GGNR_STARTER_NO_PAUSE=1
 :: =============================================================================
 
@@ -120,15 +122,11 @@ echo   nssm        = !DO_NSSM!
 echo   re-register = !DO_REREG!
 echo.
 
-:: admin before build if nssm=Y
+:: admin before build if nssm=Y (keep service on :3000 during npm sync/build)
 if /i "!DO_NSSM!"=="Y" (
   call :require_admin
   if errorlevel 1 goto :fail_exit
 )
-
-:: stop previous run so npm ci / re-register is not locked
-call :stop_previous_ggnr
-echo.
 
 where node >nul 2>&1
 if errorlevel 1 (
@@ -250,6 +248,11 @@ if not exist "%LOGS_BAT%" (
   goto :fail_exit
 )
 
+:: stop after successful build so :3000 stays up during npm run build
+echo.
+call :stop_previous_ggnr
+echo.
+
 echo.
 echo [RUN] nssm register ^(1/2^)...
 echo        ^(on failure, nssm_install window stays open - check message then Enter^)
@@ -265,7 +268,7 @@ if "!NSSM_EC!"=="2" (
   echo        start GGNR_V7 from services if needed.
   echo.
   echo [RUN] log window ^(2/2^)...
-  start "" "%LOGS_BAT%"
+  start "" /min cmd /c "%LOGS_BAT%"
   echo.
   echo [DONE] generate -> ^(keep service^) -> logs
   echo.
@@ -280,7 +283,7 @@ if not "!NSSM_EC!"=="0" (
 
 echo.
 echo [RUN] log window ^(2/2^)...
-start "" "%LOGS_BAT%"
+start "" /min cmd /c "%LOGS_BAT%"
 
 echo.
 echo [DONE] generate -> nssm -> logs
@@ -361,18 +364,18 @@ echo   echo [OK] .next\BUILD_ID found - skip build
 echo   goto after_build
 echo ^)
 echo if exist ".next\" ^(
-echo   echo [WARN] .next exists but BUILD_ID missing - npm run build
+echo   echo [WARN] .next exists but BUILD_ID missing - build with project env
 echo ^) else ^(
-echo   echo [OK] no BUILD_ID - npm run build
+echo   echo [OK] no BUILD_ID - build with project env
 echo ^)
-echo call npm run build
+echo call npx tsx scripts/build-with-project-env.ts "%%GGNR_PROJECT%%" "%%GGNR_ENV%%"
 echo if errorlevel 1 goto build_fail
 echo if not exist ".next\BUILD_ID" goto build_no_id
 echo echo [OK] npm run build done.
 echo goto after_build
 echo.
 echo :build_fail
-echo echo [ERROR] npm run build failed.
+echo echo [ERROR] build-with-project-env failed.
 echo if /i not "%%GGNR_START_NO_PAUSE%%"=="1" ^(
 echo   echo Press Enter to close...
 echo   set /p "=Enter... "
@@ -438,19 +441,18 @@ if not exist "%ROOT%\node_modules\next\package.json" (
   set "FAIL_EC=1"
   exit /b 1
 )
-echo [RUN] npm run build ...
+echo [RUN] build with project env ^(BASE_PATH like CRA PUBLIC_URL^) ...
 echo        GGNR_PROJECT=%GGNR_PROJECT%  GGNR_ENV=%GGNR_ENV%
-echo        ^(next.config reads project env for BASE_PATH^)
 echo        keep this window open on failure.
 pushd "%ROOT%"
-call npm run build
+call npx tsx scripts/build-with-project-env.ts "%GGNR_PROJECT%" "%GGNR_ENV%"
 set "BUILD_EC=!errorlevel!"
 popd
 if not "!BUILD_EC!"=="0" (
   echo.
   echo ===== BUILD FAILED =====
-  echo [ERROR] npm run build failed ^(exit=!BUILD_EC!^)
-  echo         check TypeScript/Next logs above.
+  echo [ERROR] build-with-project-env failed ^(exit=!BUILD_EC!^)
+  echo         check TypeScript/Next logs above. For gate, demo BASE_PATH must be baked in.
   set "FAIL_EC=!BUILD_EC!"
   exit /b !BUILD_EC!
 )
@@ -467,6 +469,7 @@ echo.
 exit /b 0
 
 :: stop previous GGNR (service stop only, no remove) + free app port
+:: Called after successful build, immediately before nssm_install
 :stop_previous_ggnr
 echo [CLEAN] stop previous GGNR if running ^(service not removed^)...
 if exist "%NSSM_EXE%" (

@@ -89,8 +89,12 @@ export const config = {
   /**
    * 게이트: dggskorea/[프로젝트명] → Next basePath.
    * 요청 path가 `/uav_ulsan/_next/static/...` 형태여도 _next·확장자 정적파일은 미들웨어 제외.
+   *
+   * `'/'` 필수: basePath+trailingSlash 홈(`/build_yy/`)은 앱 경로 `/` 인데,
+   * 아래 캡처 패턴만으로는 루트가 미매칭되어 빈 200이 된다 (Next 16).
    */
   matcher: [
+    '/',
     '/((?!api/auth|_next/|(?:[^/]+/)+_next/|favicon.ico|.*\\.(?:css|js|map|mjs|cjs|svg|png|jpg|jpeg|gif|webp|ico|woff2?|ttf|eot|mp4|webm|ogg|mov)$).*)',
   ],
 };

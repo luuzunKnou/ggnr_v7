@@ -6,16 +6,21 @@ import { LoginModalProvider } from "@/app/login-modal-context";
 import { ActiveNoticeModal } from "@/app/(pages)/_components/notice/ActiveNoticeModal";
 import { ForcedPasswordChangeModal } from "@/app/(pages)/_components/ForcedPasswordChangeModal";
 import { BasePathClientPatch } from "@/app/BasePathClientPatch";
+import { getBasePath } from "@/lib/basePath";
 import { getIndexLogoSrc, getSystemKorName } from "@/service/configService";
 
 export async function generateMetadata(): Promise<Metadata> {
   const icon = getIndexLogoSrc();
   const title = getSystemKorName();
+  // Next metadata 가 basePath 를 한 번 더 붙이므로, withBasePath 된 값은 제거해 중복 방지
+  const base = getBasePath();
+  const iconPath =
+    base && icon.startsWith(`${base}/`) ? icon.slice(base.length) : icon;
   return {
     title,
     icons: {
-      icon: [{ url: icon, type: "image/svg+xml" }],
-      apple: icon,
+      icon: [{ url: iconPath, type: "image/svg+xml" }],
+      apple: iconPath,
     },
   };
 }

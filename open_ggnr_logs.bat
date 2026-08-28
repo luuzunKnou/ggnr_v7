@@ -7,6 +7,7 @@ setlocal EnableExtensions DisableDelayedExpansion
 :: - GeoServer   = root\geoserver_modules\data_dir\logs\geoserver.log
 :: - root = folder of this bat
 :: - Reconnects if file is missing / recreated
+:: - Skip start if window title GGNR_LOG / GEOSERVER_LOG already open
 :: =============================================================================
 
 set "ROOT=%~dp0"
@@ -18,17 +19,23 @@ set "GEO_LOG=%ROOT%\geoserver_modules\data_dir\logs\geoserver.log"
 
 if not exist "%LOG_DIR%" mkdir "%LOG_DIR%"
 
-echo.
-echo [open_ggnr_logs] root   = %ROOT%
-echo [open_ggnr_logs] GGNR   = %LOG_OUT%
-echo [open_ggnr_logs] GeoSrv = %GEO_LOG%
-echo.
-echo Opening two log windows. Close a window to stop that tail.
-echo.
+:: Detect existing log windows by MainWindowTitle (exact title from start "...")
+set "HAVE_GGNR=0"
+set "HAVE_GEO=0"
+for /f "usebackq delims=" %%A in (`powershell -NoProfile -ExecutionPolicy Bypass -Command "$t=@((Get-Process -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowTitle }).MainWindowTitle); if ($t -contains 'GGNR_LOG') { 'GGNR' }; if ($t -contains 'GEOSERVER_LOG') { 'GEO' }"`) do (
+  if /i "%%A"=="GGNR" set "HAVE_GGNR=1"
+  if /i "%%A"=="GEO" set "HAVE_GEO=1"
+)
+
+if "%HAVE_GGNR%"=="1" if "%HAVE_GEO%"=="1" exit /b 0
 
 :: Embed path in PS (DisableDelayedExpansion). Titles ASCII only so start quoting stays valid.
-start "GGNR_LOG" cmd /k powershell -NoProfile -ExecutionPolicy Bypass -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; $p='%LOG_OUT%'; while ($true) { while (-not (Test-Path -LiteralPath $p)) { Start-Sleep -Seconds 2 }; try { Get-Content -LiteralPath $p -Encoding UTF8 -Wait -Tail 10 } catch { }; Write-Host '[open_ggnr_logs] reconnect...'; Start-Sleep -Seconds 1 }"
+if "%HAVE_GGNR%"=="0" (
+  start "GGNR_LOG" cmd /k powershell -NoProfile -ExecutionPolicy Bypass -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; $p='%LOG_OUT%'; while ($true) { while (-not (Test-Path -LiteralPath $p)) { Start-Sleep -Seconds 2 }; try { Get-Content -LiteralPath $p -Encoding UTF8 -Wait -Tail 10 } catch { }; Write-Host '[open_ggnr_logs] reconnect...'; Start-Sleep -Seconds 1 }"
+)
 
-start "GEOSERVER_LOG" cmd /k powershell -NoProfile -ExecutionPolicy Bypass -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; $p='%GEO_LOG%'; while ($true) { while (-not (Test-Path -LiteralPath $p)) { Start-Sleep -Seconds 2 }; try { Get-Content -LiteralPath $p -Encoding UTF8 -Wait -Tail 10 } catch { }; Write-Host '[open_ggnr_logs] reconnect...'; Start-Sleep -Seconds 1 }"
+if "%HAVE_GEO%"=="0" (
+  start "GEOSERVER_LOG" cmd /k powershell -NoProfile -ExecutionPolicy Bypass -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; $p='%GEO_LOG%'; while ($true) { while (-not (Test-Path -LiteralPath $p)) { Start-Sleep -Seconds 2 }; try { Get-Content -LiteralPath $p -Encoding UTF8 -Wait -Tail 10 } catch { }; Write-Host '[open_ggnr_logs] reconnect...'; Start-Sleep -Seconds 1 }"
+)
 
 exit /b 0
