@@ -11,8 +11,7 @@ import { getProjectEnvVars } from "./scripts/load-project-env";
  * 없으면 "" → localhost/IP 루트 접속(기존과 동일).
  *
  * 주의: basePath 는 next build / next dev 기동 시점에 반영됨. env만 바꾸고 재빌드 없이 start 하면 CSS/JS 경로가 어긋날 수 있음.
- * 게이트: BASE_PATH=/build_uj (끝 / 없음) + trailingSlash:true → 공개 URL …/build_uj/
- * (gnms 등 동작 확인된 프로젝트와 동일 패턴. CRA PUBLIC_URL 에 해당)
+ * 게이트: BASE_PATH=/build_yy (끝 / 없음) → 공개 URL …/build_yy (trailingSlash 기본값 false)
  */
 function resolveBasePath(): string {
   let raw = (process.env.BASE_PATH ?? "").trim();
@@ -51,8 +50,6 @@ const cesiumStatic = path.join(__dirname, "public/cesiumStatic");
 
 const nextConfig: NextConfig = {
   ...(basePath ? { basePath } : {}),
-  /** 게이트 ProxyPass(`/project/`)와 맞춤. gnms 등 동일 */
-  trailingSlash: true,
   env: {
     BASE_PATH: basePath,
   },

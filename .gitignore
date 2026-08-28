@@ -100,15 +100,6 @@ next-env.d.ts
 # GeoServer legend 샘플 (런타임 생성)
 /geoserver_modules/data_dir/legendsamples/
 
-# ggnr_start.bat(ggnr_v7 서비스 실행용 bat. 00_make_ggnr_starter.bat으로 생성 가능해 제외)
+# 00_make_ggnr_starter.bat 실행시 생성되는 파일 (배포용 빌드 스크립트)
 /ggnr_start.bat
-
-# 로컬 조사·디버그 임시 JSON (레이어·좌표계 테스트 등)
-/tmp-*.json
-/scripts/tmp-*.json
-
-# GeoServer legend 샘플 (런타임 생성)
-/geoserver_modules/data_dir/legendsamples/
-
-# ggnr_start.bat(ggnr_v7 서비스 실행용 bat. 00_make_ggnr_starter.bat으로 생성 가능해 제외)
-/ggnr_start.bat
+/ggnr_build_project.bat
