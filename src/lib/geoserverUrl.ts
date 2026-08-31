@@ -36,8 +36,8 @@ export function resolveGeoServerFetchBase(url?: string | null): string {
       u.hostname === 'localhost' ||
       u.hostname === '::1';
     if (isGeoserverPath && !isLocalHost) return internal;
-    const internalPort = new URL(`${internal}/`).port || '80';
-    if (isGeoserverPath && isLocalHost && (u.port || '80') === internalPort) return internal;
+    // localhost:{Next}/…/geoserver → 내부 start.ini 포트(8090 등)로 직접 조회
+    if (isGeoserverPath && isLocalHost) return internal;
   } catch {
     if (/geoserver$/i.test(raw) && !/localhost|127\.0\.0\.1/i.test(raw)) return internal;
   }

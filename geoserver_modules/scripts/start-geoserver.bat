@@ -43,7 +43,7 @@ cd /d "%BIN_DIR%"
 set "GEOSERVER_HOME=%GEOSERVER_DIR%"
 set "GEOSERVER_DATA_DIR=%DATA_DIR%"
 
-REM 심볼 스타일 URL: start.ini·GEOSERVER_URL 포트로 www/symbol 절대 URL 동기화
+REM symbol style URLs: sync www/symbol to start.ini port (GEOSERVER_URL)
 set "PROJECT_ROOT=%MODULE_ROOT%\.."
 if exist "%PROJECT_ROOT%\scripts\sync-geoserver-symbol-style-urls.ts" (
   pushd "%PROJECT_ROOT%"
