@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { ChevronDown, ChevronUp } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { MAP_LAYER_PANEL_SURFACE_CLASS } from './mapLayerPanelLayout';
 
 // 배경지도 옵션 타입
 export interface BackgroundMapOption {
@@ -290,9 +291,9 @@ export function BackgroundMapSelector({
   return (
     <div
       className={cn(
-        'flex flex-col overflow-hidden rounded-[5px] bg-white opacity-90 shadow-xl',
+        'flex flex-col overflow-hidden',
+        MAP_LAYER_PANEL_SURFACE_CLASS,
         splitSelect ? 'w-64' : 'w-56',
-        'dark:border dark:border-white/10 dark:bg-black/40 dark:text-white/90 dark:opacity-100 dark:backdrop-blur-sm',
         className
       )}
     >

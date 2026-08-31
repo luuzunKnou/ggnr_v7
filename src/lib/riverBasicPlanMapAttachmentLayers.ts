@@ -62,6 +62,15 @@ export function riverBasicPlanAsDefineTable(tab: RiverBasicPlanTab): string {
   return tab === 'smallRiver' ? 'river_plan_s_as' : 'river_plan_as';
 }
 
+export function isRiverBasicPlanAsDefineTable(name: string): boolean {
+  const k = String(name ?? '').trim().toLowerCase();
+  return k === 'river_plan_as' || k === 'river_plan_s_as';
+}
+
+export function riverBasicPlanTabFromAsDefineTable(name: string): RiverBasicPlanTab {
+  return String(name ?? '').trim().toLowerCase() === 'river_plan_s_as' ? 'smallRiver' : 'river';
+}
+
 /** 탭별 색인도 define_table_name */
 export function riverBasicPlanIndexDefineTable(tab: RiverBasicPlanTab): string {
   return tab === 'smallRiver' ? RIVER_BASIC_PLAN_SMALL_INDEX_DEFINE_TABLE : RIVER_BASIC_PLAN_INDEX_DEFINE_TABLE;
@@ -80,6 +89,16 @@ export function riverBasicPlanHdDefineTable(tab: RiverBasicPlanTab): string {
 /** 탭별 구조물(부모) */
 export function riverBasicPlanGdParentDefineTable(tab: RiverBasicPlanTab): string {
   return tab === 'smallRiver' ? 'river_plan_s_gd_ps' : 'river_plan_gd_ps';
+}
+
+/**
+ * 확장패널 «구조물도» 칩과 동일한 WMS 레이어.
+ * 지방하천: 분할 자식만(부모 제외). 소하천: 부모 단일.
+ */
+export function riverBasicPlanGdWmsDefineTables(tab: RiverBasicPlanTab): readonly string[] {
+  if (tab === 'smallRiver') return RIVER_PLAN_S_GD_STRUCTURE_DEFINE_TABLES;
+  const parent = riverBasicPlanGdParentDefineTable('river');
+  return RIVER_PLAN_GD_STRUCTURE_DEFINE_TABLES.filter((n) => n !== parent);
 }
 
 /** 목록에서 하천 선택 시 WMS에 river_name 조건을 걸 수 있는 define_table_name */

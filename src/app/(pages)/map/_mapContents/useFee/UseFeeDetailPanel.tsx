@@ -4,8 +4,7 @@ import { useEffect, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { call } from '@/lib/api'
 import { recordDataViewLog } from '@/lib/recordDataViewLog'
-import { cn } from '@/lib/utils'
-import { LayerRowEditHeader } from '../../_mapComponents/layerRowEdit'
+import { LayerRowEditHeader, DetailAttrRow, DetailAttrSectionTitle, DetailAttrTable } from '../../_mapComponents/layerRowEdit'
 import { MapHitOverlapSelect } from '../../_mapComponents/MapHitOverlapSelect'
 import { useMapContext } from '../../_mapComponents/MapContext'
 import { getUseFeeBinding } from '@/lib/useFeeBinding'
@@ -131,29 +130,21 @@ export function UseFeeDetailPanel({ detailId, onClose, onSelectId, serEng }: Det
           <div className="px-1 py-6 text-center text-destructive">{error}</div>
         ) : (
           <>
-            <div className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-              상세 속성
-            </div>
-            <div className="divide-y divide-border rounded border border-border bg-muted/40">
-              {visibleAttributes.map((row) => (
-                <div
+            <DetailAttrSectionTitle>상세 속성</DetailAttrSectionTitle>
+            <DetailAttrTable
+              empty={visibleAttributes.length === 0 ? '표시할 속성이 없습니다.' : null}
+            >
+              {visibleAttributes.map((row, idx) => (
+                <DetailAttrRow
                   key={row.field}
-                  className="grid grid-cols-[6.25rem_minmax(0,1fr)] gap-x-2 gap-y-0.5 px-2 py-1.5"
+                  label={row.label}
+                  isLast={idx === visibleAttributes.length - 1}
+                  valueClassName={row.field.startsWith('vrActno') ? 'break-all tabular-nums' : undefined}
                 >
-                  <dt className="w-[6.25rem] shrink-0 overflow-hidden whitespace-nowrap font-medium text-muted-foreground">
-                    {row.label}
-                  </dt>
-                  <dd
-                    className={cn(
-                      'min-w-0 break-words text-foreground',
-                      row.field.startsWith('vrActno') && 'break-all tabular-nums'
-                    )}
-                  >
-                    {row.value}
-                  </dd>
-                </div>
+                  {row.value}
+                </DetailAttrRow>
               ))}
-            </div>
+            </DetailAttrTable>
             {showMoreButton && (
               <button
                 type="button"
@@ -167,9 +158,7 @@ export function UseFeeDetailPanel({ detailId, onClose, onSelectId, serEng }: Det
         )}
 
         <div className="mt-4">
-          <div className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-            점용대장
-          </div>
+          <DetailAttrSectionTitle>점용대장</DetailAttrSectionTitle>
           <div className="rounded border border-dashed border-border bg-muted/50 px-2 py-4 text-center text-muted-foreground">
             연계된 점용대장이 없습니다.
           </div>

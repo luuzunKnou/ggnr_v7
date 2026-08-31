@@ -3,6 +3,7 @@ import type { SafetydataRefreshSchedule } from '@/integrations/safetydata.config
 /**
  * 차세대 세외수입(점사용료) 연계 설정.
  * `useFeeSyncScheduler` / `syncRunner` 가 참조.
+ * 자동 스케줄러는 GGNR_ENV=prod 에서만 instrumentation 이 등록한다.
  */
 
 /** 배치 시각 (v6 NextGenInfoModule = 매일 01:00) */

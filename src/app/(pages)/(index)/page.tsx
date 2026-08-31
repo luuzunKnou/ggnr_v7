@@ -1,8 +1,6 @@
-import Link from "next/link"
-import { Layers, Mouse } from "lucide-react"
-
 export const dynamic = "force-dynamic"
 import { ParcelSlider } from "@/app/(pages)/(index)/parcel-slider"
+import { MapViewLink } from "@/app/(pages)/(index)/map-view-link"
 import { SystemManagementSection, type SystemItem } from "@/app/(pages)/(index)/system-management-section"
 import { SiteIndexShell } from "@/app/(pages)/(index)/site-index-shell"
 import { NoticeLibraryPreview } from "@/app/(pages)/(index)/notice-library-preview"
@@ -63,36 +61,7 @@ export default function DashboardPage() {
       <section className="mb-12 grid lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 grid md:grid-cols-2 gap-6 max-h-[355px]">
           <ParcelSlider slides={buildParcelSlides()} />
-
-          <Link
-            href="/map"
-            className="group relative block min-h-[280px] cursor-pointer overflow-hidden rounded-[5px] bg-slate-900 p-8 text-center text-white transition-opacity hover:opacity-95 flex flex-col items-center justify-center"
-          >
-            <video
-              src="/image/indexImage/backgroundVideo_02.mp4"
-              className="pointer-events-none absolute inset-0 z-0 h-full w-full origin-center object-cover scale-[1.02]"
-              muted
-              loop
-              autoPlay
-              playsInline
-              preload="auto"
-              aria-hidden
-            />
-            <div
-              className="absolute inset-0 z-[1] bg-gray-950/45 transition-colors group-hover:bg-gray-900/55"
-              aria-hidden
-            />
-            <div className="relative z-10 flex flex-col items-center justify-center">
-              <div className="mb-4 mt-4 flex h-24 w-24 items-center justify-center">
-                <Layers className="h-full w-full" strokeWidth={1.5} />
-              </div>
-              <h2 className="mb-4 mt-4 text-2xl font-bold">지도보기</h2>
-              <p className="text-sm leading-relaxed text-gray-100">
-                사용자가 원하는 위치를 직관적으로 확인하고 <br />데이터를 시각화합니다.
-              </p>
-              <Mouse className="mt-10 h-5 w-5" />
-            </div>
-          </Link>
+          <MapViewLink />
         </div>
 
         <NoticeLibraryPreview />

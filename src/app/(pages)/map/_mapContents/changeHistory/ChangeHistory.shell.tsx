@@ -13,7 +13,6 @@ import {
   Square,
   X,
 } from 'lucide-react';
-import Feature from 'ol/Feature';
 import Draw, { createBox, type DrawEvent } from 'ol/interaction/Draw';
 import Modify, { type ModifyEvent } from 'ol/interaction/Modify';
 import DoubleClickZoom from 'ol/interaction/DoubleClickZoom';
@@ -24,6 +23,7 @@ import { fromCircle } from 'ol/geom/Polygon';
 import VectorLayer from 'ol/layer/Vector';
 import VectorSource from 'ol/source/Vector';
 import { cn } from '@/lib/utils';
+import { call } from '@/lib/api';
 import { Button } from '@/app/shadcnComponents/ui/button';
 import { Switch } from '@/app/shadcnComponents/ui/switch';
 import {
@@ -45,9 +45,9 @@ import {
   useParcelAnalysisSigunguBoundary,
   type BoundaryEmdSelection,
 } from '../../_mapComponents/analysisArea';
-import { isLargeParcelAnalysisArea } from '../parcelAnalysis/parcelAnalysis.types';
+import { isLargeParcelAnalysisArea, buildLargeAreaConfirmMessage } from '../parcelAnalysis/parcelAnalysis.types';
 import { useChangeHistory, type ChangeHistoryDrawToolbarAnchor } from './changeHistoryContext';
-import { ChangeHistoryResult } from './ChangeHistory.result';
+import { ChangeHistoryPreparingModal, ChangeHistoryResult } from './ChangeHistory.result';
 import {
   type ChangeHistoryDrawTool,
   type ChangeHistoryModalStep,
@@ -381,10 +381,80 @@ export function ChangeHistorySidePanel() {
     applyingArea,
   } = useChangeHistory();
 
+  const [checkingHistory, setCheckingHistory] = useState(false);
+  const [emptyHistoryOpen, setEmptyHistoryOpen] = useState(false);
+  const checkingCancelledRef = useRef(false);
+
   const hasArea = area != null;
   const areaCleared = panelEngaged && !hasArea;
-  const canOpenResult = hasArea && layerIds.size > 0 && !resultOpen && !drawTool && !applyingArea;
+  const canOpenResult =
+    hasArea && layerIds.size > 0 && !resultOpen && !drawTool && !applyingArea && !checkingHistory;
   const largeAreaWarning = area != null && isLargeParcelAnalysisArea(area);
+
+  const cancelCheckingHistory = useCallback(() => {
+    checkingCancelledRef.current = true;
+    setCheckingHistory(false);
+  }, []);
+
+  const handleOpenResult = useCallback(async () => {
+    if (!area || layerIds.size === 0 || resultOpen || drawTool || applyingArea || checkingHistory) {
+      return;
+    }
+    // 1) 넓은 영역 경고(조회 전) — 필지분석과 동일
+    if (isLargeParcelAnalysisArea(area)) {
+      const proceed = window.confirm(buildLargeAreaConfirmMessage(area, { feature: 'changeHistory' }));
+      if (!proceed) return;
+    }
+
+    checkingCancelledRef.current = false;
+    setCheckingHistory(true);
+    try {
+      const tables = layerGroups
+        .flatMap((g) => g.items)
+        .filter((item) => layerIds.has(item.id))
+        .map((item) => item.tableName)
+        .filter(Boolean);
+      if (checkingCancelledRef.current) return;
+      if (tables.length === 0) {
+        setEmptyHistoryOpen(true);
+        return;
+      }
+      const res = await call('', 'POST', {
+        service: 'changeHistoryService',
+        action: 'listTimeline',
+        params: { tableNames: tables, wkt: area.wkt ?? null },
+      });
+      if (checkingCancelledRef.current) return;
+      const outer = res?.data as { data?: { events?: unknown[] }; events?: unknown[] } | undefined;
+      const data =
+        outer && typeof outer === 'object' && 'data' in outer && outer.data && 'events' in (outer.data as object)
+          ? outer.data
+          : (outer as { events?: unknown[] } | undefined);
+      const events = Array.isArray(data?.events) ? data.events : [];
+      if (events.length === 0) {
+        setEmptyHistoryOpen(true);
+        return;
+      }
+      // 2) 결과 오픈 — 이어지는 «이력 불러오는 중»은 결과 쪽 준비 모달
+      openResult();
+    } catch {
+      if (checkingCancelledRef.current) return;
+      setEmptyHistoryOpen(true);
+    } finally {
+      if (!checkingCancelledRef.current) {
+        setCheckingHistory(false);
+      }
+    }
+  }, [
+    area,
+    layerIds,
+    layerGroups,
+    resultOpen,
+    drawTool,
+    applyingArea,
+    checkingHistory,
+    openResult,
+  ]);
 
   return (
     <aside className="flex h-full min-h-0 w-full flex-col bg-background">
@@ -434,10 +504,38 @@ export function ChangeHistorySidePanel() {
       />
 
       <div className="shrink-0 border-t border-border bg-muted/80 px-3 py-2">
-        <Button type="button" className="w-full" size="sm" disabled={!canOpenResult} onClick={openResult}>
-          이력 보기
+        <Button
+          type="button"
+          className="w-full"
+          size="sm"
+          disabled={!canOpenResult}
+          onClick={() => void handleOpenResult()}
+        >
+          {checkingHistory ? '조회 중…' : '이력 보기'}
         </Button>
       </div>
+
+      <ChangeHistoryPreparingModal
+        open={checkingHistory && !resultOpen}
+        onCancel={cancelCheckingHistory}
+      />
+
+      <Dialog open={emptyHistoryOpen} onOpenChange={setEmptyHistoryOpen}>
+        <DialogContent className="max-w-[min(420px,calc(100vw-2rem))] gap-0 rounded-[5px] p-0">
+          <div className="border-b border-border bg-muted/50 px-4 py-3">
+            <DialogTitle className="text-base font-semibold text-foreground">변동이력 결과</DialogTitle>
+            <DialogDescription className="sr-only">변동이력 없음 안내</DialogDescription>
+          </div>
+          <p className="px-4 py-4 text-sm text-muted-foreground">
+            변동이력이 없습니다. 영역·표시 레이어를 확인해 주세요.
+          </p>
+          <DialogFooter className="gap-2 border-t border-border bg-muted/50 px-4 py-3 sm:justify-end">
+            <Button type="button" variant="outline" size="sm" onClick={() => setEmptyHistoryOpen(false)}>
+              확인
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </aside>
   );
 }

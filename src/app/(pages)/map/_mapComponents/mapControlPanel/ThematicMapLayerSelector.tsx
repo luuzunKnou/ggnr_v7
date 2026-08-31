@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronDown, ChevronRight, X } from 'lucide-react';
+import { Switch } from '@/app/shadcnComponents/ui/switch';
 import { cn } from '@/lib/utils';
 import { getLegendGraphicUrl } from '../layerFactory/serviceLayerFactory';
 import {
@@ -9,7 +10,7 @@ import {
   type ThematicMapLayerGroup,
   type ThematicMapLayerOption,
 } from '../layerFactory/thematicMapLayerFactory';
-import { MAP_LAYER_PANEL_MAX_H_CLASS } from './mapLayerPanelLayout';
+import { MAP_LAYER_PANEL_MAX_H_CLASS, MAP_LAYER_PANEL_SURFACE_CLASS } from './mapLayerPanelLayout';
 
 const FALLBACK_LEGEND_COLOR = 'rgb(148,163,184)';
 
@@ -313,12 +314,18 @@ export function ThematicMapLayerSelector({
   const selectAll = () => onSelectionChange(new Set(allTableNames));
   const selectNone = () => onSelectionChange(new Set());
 
+  const totalCount = allTableNames.length;
+  const selectedCount = allTableNames.filter((t) => selectedTableNames.has(t)).length;
+  const allSelected = totalCount > 0 && selectedCount === totalCount;
+  const someSelected = selectedCount > 0 && !allSelected;
+  const bulkTitle = allSelected ? '전체 해제' : '전체 선택';
+
   return (
     <div
       className={cn(
-        'flex w-56 flex-col overflow-hidden rounded-[5px] bg-white opacity-90 shadow-xl',
+        'flex w-56 flex-col overflow-hidden',
+        MAP_LAYER_PANEL_SURFACE_CLASS,
         MAP_LAYER_PANEL_MAX_H_CLASS,
-        'dark:border dark:border-white/10 dark:bg-black/40 dark:text-white/90 dark:opacity-100 dark:backdrop-blur-sm',
         className
       )}
     >
@@ -338,22 +345,21 @@ export function ThematicMapLayerSelector({
       </div>
 
       {showBulkActions ? (
-        <div className="flex shrink-0 items-center gap-1.5 border-b border-slate-100 px-3 py-1.5 dark:border-white/10">
-          <button
-            type="button"
-            onClick={selectAll}
-            className="text-[11px] text-blue-600 hover:underline dark:text-blue-400"
-          >
-            전체 선택
-          </button>
-          <span className="text-slate-300 dark:text-white/30">|</span>
-          <button
-            type="button"
-            onClick={selectNone}
-            className="text-[11px] text-slate-500 hover:underline dark:text-white/60"
-          >
-            전체 해제
-          </button>
+        <div className="flex shrink-0 items-center justify-between gap-2 border-b border-slate-100 px-3 py-1.5 dark:border-white/10">
+          <p className="text-[10px] text-slate-500 dark:text-white/60">
+            {selectedCount}/{totalCount} 선택
+          </p>
+          <Switch
+            id="thematic-map-layer-all"
+            aria-label={bulkTitle}
+            title={bulkTitle}
+            checked={allSelected}
+            indeterminate={someSelected}
+            onCheckedChange={(on) => {
+              if (on || someSelected) selectAll();
+              else selectNone();
+            }}
+          />
         </div>
       ) : null}
 

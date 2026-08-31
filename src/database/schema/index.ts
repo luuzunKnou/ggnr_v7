@@ -39,6 +39,7 @@ export * from './road_frontage_building';
 export * from './road_frontage_marker';
 export * from './road_reward';
 export * from './road_use_ledger';
+export * from './safedata_history';
 export * from './ser';
 export * from './serd';
 export * from './serp_map';

@@ -85,17 +85,28 @@ function buildPnuFromLevel4Lc(baseCode: unknown, parcelText: unknown): string | 
   return `${lc}${landType}${bonbun}${bubun}`;
 }
 
+/** 접속 지자체(푸터 주소 파싱) — 검색 후보에서 해당 지역을 상단으로 */
+export interface PreferRegion {
+  sido?: string;
+  sigungu?: string;
+}
+
 export interface SearchAddressOptions {
   /** VWorld API 키 (미지정 시 VWORLD_API_KEY 사용) */
   apiKey?: string;
   /** 좌표계 (기본 EPSG:4326) */
   crs?: string;
-  /** 최대 결과 개수 (기본 5) */
+  /** 최대 결과 개수 (기본 5) — 화면에 반환할 건수 */
   maxResults?: number;
   /** 주소 타입: place=장소, address=주소 */
   type?: 'place' | 'address';
   /** category: road=도로명, parcel=지번, both=도로명+지번 동시 검색 (type=address일 때 필수) */
   category?: 'road' | 'parcel' | 'both';
+  /**
+   * 지정 시 API에서 더 많이 받은 뒤 지역 점수 정렬 → maxResults만 반환.
+   * (표시 건수는 그대로, 우리 지역이 상위 풀에 들어오게 함)
+   */
+  preferRegion?: PreferRegion;
 }
 
 export interface SearchPlaceOptions {
@@ -105,6 +116,77 @@ export interface SearchPlaceOptions {
   crs?: string;
   /** 최대 결과 개수 (기본 5) */
   maxResults?: number;
+  preferRegion?: PreferRegion;
+}
+
+/** preferRegion 있을 때 API에서 받을 후보 풀 크기 (VWorld size 상한 20) */
+const PREFER_REGION_FETCH_POOL = 20;
+
+const RE_QUERY_HAS_SIDO = /([가-힣]+)(특별자치도|특별자치시|특별시|광역시|도)/u;
+const RE_QUERY_HAS_SIGUNGU = /([가-힣]+)(시|군|구)/u;
+
+/**
+ * 읍·면·동·번지·도로명만 친 경우 API 검색어 앞에 시도·시군구를 붙인다.
+ * 입력창 표시용 문자열은 바꾸지 않고, 호출부에서 검색 API에만 사용.
+ * 이미 시도·시군구가 있으면 그대로 둔다.
+ */
+export function withPreferRegionPrefix(
+  query: string,
+  region?: PreferRegion
+): string {
+  const trimmed = String(query ?? '').trim();
+  if (!trimmed) return '';
+  const sido = region?.sido?.trim() ?? '';
+  const sigungu = region?.sigungu?.trim() ?? '';
+  if (!sido && !sigungu) return trimmed;
+
+  const compact = trimmed.replace(/\s+/g, '');
+  if (sigungu && compact.includes(sigungu.replace(/\s+/g, ''))) return trimmed;
+  if (sido && compact.includes(sido.replace(/\s+/g, ''))) return trimmed;
+  if (RE_QUERY_HAS_SIDO.test(trimmed) || RE_QUERY_HAS_SIGUNGU.test(trimmed)) {
+    return trimmed;
+  }
+
+  const prefix = [sido, sigungu].filter(Boolean).join(' ');
+  return `${prefix} ${trimmed}`;
+}
+
+function regionScore(item: VWorldAddressItem, region?: PreferRegion): number {
+  if (!region) return 0;
+  const hay = [item.roadAddress, item.jibunAddress, item.address, item.title]
+    .filter(Boolean)
+    .join(' ');
+  const sg = region.sigungu?.trim();
+  const sd = region.sido?.trim();
+  if (sg && hay.includes(sg)) return 2;
+  if (sd && hay.includes(sd)) return 1;
+  return 0;
+}
+
+function sortAndSliceByPreferRegion(
+  items: VWorldAddressItem[],
+  maxResults: number,
+  preferRegion?: PreferRegion
+): VWorldAddressItem[] {
+  if (!preferRegion || (!preferRegion.sigungu?.trim() && !preferRegion.sido?.trim())) {
+    return items.slice(0, maxResults);
+  }
+  return [...items]
+    .sort((a, b) => regionScore(b, preferRegion) - regionScore(a, preferRegion))
+    .slice(0, maxResults);
+}
+
+/** 시군구(없으면 시도)가 주소에 포함되면 접속 지자체 결과로 본다 */
+export function matchesPreferRegion(
+  item: VWorldAddressItem,
+  region?: PreferRegion
+): boolean {
+  if (!region) return true;
+  const sg = region.sigungu?.trim();
+  const sd = region.sido?.trim();
+  if (!sg && !sd) return true;
+  if (sg) return regionScore(item, region) >= 2;
+  return regionScore(item, region) >= 1;
 }
 
 /**
@@ -114,8 +196,10 @@ export async function searchAddress(
   query: string,
   options?: SearchAddressOptions
 ): Promise<VWorldAddressItem[]> {
-  const trimmed = query?.trim();
-  if (!trimmed) return [];
+  const raw = query?.trim();
+  if (!raw) return [];
+  const preferRegion = options?.preferRegion;
+  const trimmed = withPreferRegionPrefix(raw, preferRegion);
 
   const apiKey =
     options?.apiKey ??
@@ -125,29 +209,40 @@ export async function searchAddress(
   const maxResults = options?.maxResults ?? 5;
   const type = options?.type ?? 'address';
   const category = options?.category ?? 'both';
+  const usePreferPool = Boolean(
+    preferRegion?.sigungu?.trim() || preferRegion?.sido?.trim()
+  );
+  /** preferRegion이면 더 많이 받아 정렬 후 maxResults로 자름 */
+  const fetchPool = usePreferPool
+    ? PREFER_REGION_FETCH_POOL
+    : maxResults;
 
   if (type === 'address' && category === 'both') {
-    const perCategory = Math.min(Math.ceil(maxResults / 2), 10);
+    const perCategory = Math.min(Math.ceil(fetchPool / 2), 10);
     const opts: SearchAddressOptions = { ...options, maxResults: perCategory };
     return Promise.all([
       searchAddressOne(trimmed, { ...opts, category: 'road' }, apiKey),
       searchAddressOne(trimmed, { ...opts, category: 'parcel' }, apiKey),
-    ]).then(([roadItems, parcelItems]) => {
+    ]).then(async ([roadItems, parcelItems]) => {
       const seen = new Set<string>();
       const merged: VWorldAddressItem[] = [];
+      const mergeCap = usePreferPool ? fetchPool : maxResults;
       for (const item of [...roadItems, ...parcelItems]) {
         const key = item.id ?? `${item.point.x.toFixed(6)},${item.point.y.toFixed(6)}`;
         if (seen.has(key)) continue;
         seen.add(key);
         merged.push(item);
-        if (merged.length >= maxResults) break;
+        if (merged.length >= mergeCap) break;
       }
-      return merged;
+      const ranked = sortAndSliceByPreferRegion(merged, maxResults, preferRegion);
+      return ranked;
     });
   }
 
   const singleCategory = category === 'both' ? 'road' : category;
-  return searchAddressOne(trimmed, { ...options, category: singleCategory }, apiKey);
+  return searchAddressOne(trimmed, { ...options, category: singleCategory, maxResults: fetchPool }, apiKey).then(
+    (items) => sortAndSliceByPreferRegion(items, maxResults, preferRegion)
+  );
 }
 
 /**
@@ -157,15 +252,28 @@ export async function searchPlace(
   query: string,
   options?: SearchPlaceOptions
 ): Promise<VWorldAddressItem[]> {
-  const trimmed = query?.trim();
-  if (!trimmed) return [];
+  const raw = query?.trim();
+  if (!raw) return [];
+  const preferRegion = options?.preferRegion;
+  const trimmed = withPreferRegionPrefix(raw, preferRegion);
 
   const apiKey =
     options?.apiKey ??
     (typeof process !== 'undefined' ? process.env.VWORLD_API_KEY : undefined) ??
     '';
 
-  return searchPlaceOne(trimmed, options ?? {}, apiKey);
+  const maxResults = options?.maxResults ?? 5;
+  const usePreferPool = Boolean(
+    preferRegion?.sigungu?.trim() || preferRegion?.sido?.trim()
+  );
+  const fetchPool = usePreferPool ? PREFER_REGION_FETCH_POOL : maxResults;
+
+  const items = await searchPlaceOne(
+    trimmed,
+    { ...options, maxResults: fetchPool },
+    apiKey
+  );
+  return sortAndSliceByPreferRegion(items, maxResults, preferRegion);
 }
 
 function coordKey(item: VWorldAddressItem): string {
@@ -190,6 +298,7 @@ export async function searchAddressAndPlace(
       apiKey: options?.apiKey,
       crs: options?.crs,
       maxResults,
+      preferRegion: options?.preferRegion,
     }),
   ]);
 

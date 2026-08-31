@@ -448,6 +448,11 @@ export function getLandLinkageConfig(_params?: unknown): {
   }
 }
 
+/** runtime.env 시군구 코드. 법정동·행정동 코드 목록 필터에 사용 */
+export function getSggCode(_params?: unknown): { sggCode: string } {
+  return { sggCode: getRuntimeEnvVars().SGG_CODE?.trim() ?? "" }
+}
+
 const SAFETYDATA_DSSP_IF_00117 = "https://www.safetydata.go.kr/V2/api/DSSP-IF-00117"
 
 /** 침수흔적도 DSSP-IF-00117 기본 serviceKey (`SAFETYDATA_API_KEY`가 있으면 그 값을 우선) */

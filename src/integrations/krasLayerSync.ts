@@ -33,9 +33,10 @@ import {
 } from '@/integrations/krasLayerSync.config';
 
 export type { KrasLayerSyncScope };
+import { ensureJijukOwnGbnColumn } from '@/integrations/krasJijukOwnGbn';
 import { readProjectRuntimeEnvVars } from '@/lib/runtimeEnvFile';
 import { getLandLinkageConfig } from '@/service/configService';
-import { createOrUpdateGeoServerLayer } from '@/service/devTestService';
+import { createOrUpdateGeoServerLayer, resetGeoServerCaches } from '@/service/devTestService';
 import { createTableFromShp } from '@/service/shpUploadService';
 import { fillLayerKornameForParent } from '@/integrations/thematicLayerKorname';
 
@@ -438,6 +439,14 @@ async function syncOne(
         );
       }
     }
+    if (target.kind === 'parcel') {
+      // 도형 교체로 사라진 소유구분 칼럼을 먼저 되살린다. 값은 토지기본정보 단계 뒤에 채운다
+      try {
+        await ensureJijukOwnGbnColumn(schema, target.targetTable);
+      } catch (e) {
+        console.warn(`${LOG} own_gbn ${target.targetTable}:`, e instanceof Error ? e.message : e);
+      }
+    }
     try {
       await createOrUpdateGeoServerLayer({ layerName: target.targetTable });
     } catch (e) {
@@ -504,6 +513,12 @@ export async function runKrasLayerSync(opts?: {
           throw new Error(`${line} (중단 ${seq}/${total})`);
         }
       }
+    }
+
+    if (success > 0) {
+      // 교체된 원본 테이블을 부모로 쓰는 분할 레이어들이 예전 칼럼 정보를 들고 있지 않게 캐시만 비운다
+      const reset = await resetGeoServerCaches();
+      if (!reset.success) console.warn(`${LOG} geoserver reset: ${reset.error}`);
     }
 
     const message = `완료 ${success}/${total}, 유지 ${skipped}, 실패 ${failed}\n${details.join('\n')}`;

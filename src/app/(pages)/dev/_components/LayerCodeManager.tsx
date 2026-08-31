@@ -8,6 +8,12 @@ import { cn } from "@/lib/utils"
 import { call } from "@/lib/api"
 import type { LayerDefineEmbedProps } from "./layerManager/types"
 import { fetchDefineLayerTables, fetchLayerDbTableList } from "./layerManager/layerManagerListCache"
+import {
+  filterCodesBySggPrefix,
+  isLegalOrAdminDongField,
+  mergeSggFilteredCodesForSave,
+  normalizeSggPrefix,
+} from "@/lib/defineLayerSggCodeFilter"
 
 type DefineLayerTable = Record<string, unknown>
 type DefineField = Record<string, unknown>
@@ -52,11 +58,36 @@ export function LayerCodeManager({
   const [successMsg, setSuccessMsg] = useState<string | null>(null)
   const [newCodeName, setNewCodeName] = useState("")
   const [newCodeKorName, setNewCodeKorName] = useState("")
+  const [sggPrefix, setSggPrefix] = useState("")
+  const [sggReady, setSggReady] = useState(false)
+  const [sggViewFiltered, setSggViewFiltered] = useState(true)
+  const [allCodeCount, setAllCodeCount] = useState(0)
   const fieldListContainerRef = useRef<HTMLDivElement>(null)
+  const allCodesRef = useRef<DefineCode[]>([])
+  const sggViewFilteredRef = useRef(true)
 
   useEffect(() => {
     if (fixedTableKey) setSelectedTableKey(fixedTableKey)
   }, [fixedTableKey])
+
+  useEffect(() => {
+    let cancelled = false
+    call("", "POST", { service: "configService", action: "getSggCode", params: {} })
+      .then((res) => {
+        if (cancelled) return
+        const data = (res?.data ?? res) as { sggCode?: string }
+        setSggPrefix(normalizeSggPrefix(data?.sggCode))
+      })
+      .catch(() => {
+        if (!cancelled) setSggPrefix("")
+      })
+      .finally(() => {
+        if (!cancelled) setSggReady(true)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   // CODE 필드가 있는 테이블 키 목록
   useEffect(() => {
@@ -144,32 +175,72 @@ export function LayerCodeManager({
       .finally(() => setLoadingFields(false))
   }, [selectedTableKey])
 
-  // 선택한 필드의 코드 로드
+  const applySggFilter = useMemo(() => {
+    if (!selectedFieldKey || !selectedTableKey) return false
+    const field = codeFields.find((f) => `${selectedTableKey}__${String(f.define_field_name ?? "")}` === selectedFieldKey)
+    if (!field) return false
+    return isLegalOrAdminDongField(field.define_field_name, field.define_field_kor_name)
+  }, [selectedFieldKey, selectedTableKey, codeFields])
+
+  const canSggFilter = applySggFilter && sggPrefix.length >= 5
+  const sggFilterActive = canSggFilter && sggViewFiltered
+
+  const applyCodesView = useCallback(
+    (all: DefineCode[], filterOn: boolean) => {
+      const visible = filterOn && canSggFilter ? filterCodesBySggPrefix(all, sggPrefix) : all
+      setCodes(visible)
+      originalCodesRef.current = new Map(
+        (visible as Record<string, unknown>[]).map((c, idx) => [idx, c])
+      )
+      setDeletedIndices(new Set())
+    },
+    [canSggFilter, sggPrefix]
+  )
+
+  // 선택한 필드의 코드 로드. 법정동·행정동은 기본으로 시군구 앞자리만 표시
   useEffect(() => {
     if (!selectedFieldKey) {
       setCodes([])
+      setAllCodeCount(0)
+      allCodesRef.current = []
       setDeletedIndices(new Set())
       originalCodesRef.current = new Map()
+      sggViewFilteredRef.current = true
+      setSggViewFiltered(true)
       return
     }
+    if (applySggFilter && !sggReady) {
+      setLoadingCodes(true)
+      return
+    }
+    sggViewFilteredRef.current = true
+    setSggViewFiltered(true)
+    let cancelled = false
     setLoadingCodes(true)
     setDeletedIndices(new Set())
     fetch(`/api/config/defineLayer/codes/${encodeURIComponent(selectedFieldKey)}`)
       .then((res) => res.json())
       .then((body) => {
-        if (body.success && Array.isArray(body.data)) {
-          setCodes(body.data)
-          originalCodesRef.current = new Map(
-            (body.data as Record<string, unknown>[]).map((c, idx) => [idx, c])
-          )
-        } else {
-          setCodes([])
-          originalCodesRef.current = new Map()
-        }
+        if (cancelled) return
+        const all: DefineCode[] = body.success && Array.isArray(body.data) ? body.data : []
+        allCodesRef.current = all
+        setAllCodeCount(all.length)
+        const filterOn = canSggFilter && sggViewFilteredRef.current
+        applyCodesView(all, filterOn)
       })
-      .catch(() => setCodes([]))
-      .finally(() => setLoadingCodes(false))
-  }, [selectedFieldKey])
+      .catch(() => {
+        if (cancelled) return
+        allCodesRef.current = []
+        setAllCodeCount(0)
+        applyCodesView([], false)
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingCodes(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [selectedFieldKey, sggPrefix, applySggFilter, sggReady, canSggFilter, applyCodesView])
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedLayerListSearch(layerListSearch), 300)
@@ -257,13 +328,33 @@ export function LayerCodeManager({
     setNewCodeKorName("")
   }, [newCodeName, newCodeKorName])
 
+  const setSggView = useCallback(
+    (filterOn: boolean) => {
+      if (!canSggFilter || filterOn === sggViewFiltered) return
+      const visibleToKeep = codes.filter((_, idx) => !deletedIndices.has(idx))
+      if (sggViewFiltered) {
+        allCodesRef.current = mergeSggFilteredCodesForSave(allCodesRef.current, visibleToKeep, sggPrefix)
+      } else {
+        allCodesRef.current = visibleToKeep
+      }
+      setAllCodeCount(allCodesRef.current.length)
+      sggViewFilteredRef.current = filterOn
+      setSggViewFiltered(filterOn)
+      applyCodesView(allCodesRef.current, filterOn)
+    },
+    [canSggFilter, codes, deletedIndices, sggViewFiltered, sggPrefix, applyCodesView]
+  )
+
   const saveConfig = useCallback(async () => {
     if (!selectedFieldKey) return
     setSaving(true)
     setSuccessMsg(null)
     setError(null)
     try {
-      const toSave = codes.filter((_, idx) => !deletedIndices.has(idx))
+      const visibleToSave = codes.filter((_, idx) => !deletedIndices.has(idx))
+      const toSave = sggFilterActive
+        ? mergeSggFilteredCodesForSave(allCodesRef.current, visibleToSave, sggPrefix)
+        : visibleToSave
       const res = await fetch(`/api/config/defineLayer/codes/${encodeURIComponent(selectedFieldKey)}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -271,9 +362,11 @@ export function LayerCodeManager({
       })
       const body = await res.json()
       if (body.success) {
-        setCodes(toSave)
+        allCodesRef.current = toSave
+        setAllCodeCount(toSave.length)
+        setCodes(visibleToSave)
         originalCodesRef.current = new Map(
-          (toSave as Record<string, unknown>[]).map((c, idx) => [idx, c])
+          (visibleToSave as Record<string, unknown>[]).map((c, idx) => [idx, c])
         )
         setDeletedIndices(new Set())
         setSuccessMsg("저장되었습니다.")
@@ -283,7 +376,7 @@ export function LayerCodeManager({
     } finally {
       setSaving(false)
     }
-  }, [selectedFieldKey, codes, deletedIndices])
+  }, [selectedFieldKey, codes, deletedIndices, sggFilterActive, sggPrefix])
 
   if (loadingTables) return <p className="text-sm text-muted-foreground">테이블 목록 로딩 중...</p>
 
@@ -473,9 +566,45 @@ export function LayerCodeManager({
                 <RotateCcw className="w-4 h-4 mr-1.5 opacity-70" />
                 초기화
               </Button>
+              {canSggFilter ? (
+                <>
+                  <div className="flex items-center gap-1 rounded-md border p-0.5 w-fit">
+                    <button
+                      type="button"
+                      onClick={() => setSggView(true)}
+                      disabled={loadingCodes}
+                      className={cn(
+                        "h-6 rounded-sm px-2 text-xs transition-colors",
+                        sggViewFiltered
+                          ? "bg-primary text-primary-foreground"
+                          : "text-muted-foreground hover:bg-muted"
+                      )}
+                    >
+                      시군구 {sggPrefix}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setSggView(false)}
+                      disabled={loadingCodes}
+                      className={cn(
+                        "h-6 rounded-sm px-2 text-xs transition-colors",
+                        !sggViewFiltered
+                          ? "bg-primary text-primary-foreground"
+                          : "text-muted-foreground hover:bg-muted"
+                      )}
+                    >
+                      전체
+                    </button>
+                  </div>
+                  <span className="text-sm text-muted-foreground">
+                    {codes.length}개 / {allCodeCount}개
+                  </span>
+                </>
+              ) : (
+                <span className="text-sm text-muted-foreground">{codes.length}개</span>
+              )}
               {successMsg && <span className="text-sm text-green-600">{successMsg}</span>}
               {error && <span className="text-sm text-destructive">{error}</span>}
-              <span className="text-sm text-muted-foreground">{codes.length}개</span>
             </div>
             {loadingCodes ? (
               <p className="text-sm text-muted-foreground py-4 shrink-0">코드 로딩 중...</p>

@@ -151,6 +151,14 @@ async function withClient<T>(params: DbConnectionParams, fn: (client: Client) =>
   }
 }
 
+/** 외부에서 단일 연결로 여러 조회를 묶을 때 사용 (소스 업로드 dbCompare 등) */
+export async function runWithDbClient<T>(
+  params: DbConnectionParams,
+  fn: (client: Client) => Promise<T>
+): Promise<T> {
+  return withClient(params, fn);
+}
+
 /**
  * 스키마 목록 조회
  */
@@ -1203,7 +1211,7 @@ export type SchemaSyncReport = {
   executedSql: string[];
 };
 
-async function getTableColumnComparisonWithClient(
+export async function getTableColumnComparisonWithClient(
   client: Client,
   schema: string,
   table: string

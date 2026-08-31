@@ -4,6 +4,10 @@ import { useRef } from 'react';
 import type { DragEvent } from 'react';
 import { Plus, Minus, GripVertical } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import {
+  DetailAttrRow,
+  DetailAttrTable,
+} from '../layerRowEdit/DetailAttrTable';
 import { toDateInputValue } from '@/lib/usageDataAsFieldUtils';
 
 export type LayerExtraEditorItem = {
@@ -103,23 +107,17 @@ export function LayerExtraFieldsEditor({
 
   return (
     <div className={cn(className)}>
-      <div className="mb-1 flex items-baseline justify-between gap-2">
-        <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-          추가 속성
-        </div>
+      <div className="mb-2 flex items-baseline justify-between gap-2">
+        <div className="text-[11px] font-medium text-muted-foreground">추가 속성</div>
         {isEditing ? (
           <div className="text-right text-[10px] leading-snug text-muted-foreground">
             * 드래그 시 순서가 변경됩니다.
           </div>
         ) : null}
       </div>
-      <dl className="divide-y divide-border rounded border border-border bg-muted/40">
-        {items.length === 0 && !isEditing ? (
-          <div className="px-2 py-3 text-muted-foreground">추가 속성이 없습니다.</div>
-        ) : null}
-
-        {items.map((row, idx) =>
-          isEditing ? (
+      {isEditing ? (
+        <div className="divide-y divide-border overflow-hidden rounded border border-border">
+          {items.map((row, idx) => (
             <div
               key={`extra-${idx}`}
               className={rowClass}
@@ -179,21 +177,7 @@ export function LayerExtraFieldsEditor({
                 </button>
               </dd>
             </div>
-          ) : (
-            <div key={`extra-${idx}`} className={cn(rowClass, 'items-start')}>
-              <dt className={cn(nameBoxClass, 'break-all leading-snug font-medium text-muted-foreground')}>
-                {row.fieldName || '—'}
-              </dt>
-              <dd className="min-w-0 flex-1 break-words text-foreground">
-                {extraTypeIsDate(row.dataType)
-                  ? toDateInputValue(row.value) || row.value || '—'
-                  : row.value || '—'}
-              </dd>
-            </div>
-          )
-        )}
-
-        {isEditing ? (
+          ))}
           <div className="flex items-center justify-center gap-1.5 px-2 py-1.5">
             <button
               type="button"
@@ -222,8 +206,22 @@ export function LayerExtraFieldsEditor({
               </select>
             ) : null}
           </div>
-        ) : null}
-      </dl>
+        </div>
+      ) : (
+        <DetailAttrTable empty={items.length === 0 ? '추가 속성이 없습니다.' : null}>
+          {items.map((row, idx) => (
+            <DetailAttrRow
+              key={`extra-${idx}`}
+              label={row.fieldName || '—'}
+              isLast={idx === items.length - 1}
+            >
+              {extraTypeIsDate(row.dataType)
+                ? toDateInputValue(row.value) || row.value || '—'
+                : row.value || '—'}
+            </DetailAttrRow>
+          ))}
+        </DetailAttrTable>
+      )}
     </div>
   );
 }

@@ -1,10 +1,10 @@
 'use client';
 
 /**
- * 변동이력 결과 — 살아 있는 OpenLayers 지도 (3차).
+ * 변동이력 결과 — 살아 있는 OpenLayers 지도.
  * - 배경: 디스크 등록 자체 정사(선택일 이하 최근 연도) · 없으면 VWorld 항공
  * - 영역 WKT(5181) + sync_log as-of 시점 도형 + 당일 전·후(old/new) 겹침
- * - 선택 운영 레이어: 전용 ImageWMS 콤마 + 영역 INTERSECTS (메인 serviceLayer 미사용)
+ * - 운영 WMS(최신본)는 쓰지 않음 — 이력 벡터만 (빈 날이면 빈 지도)
  * - 영역 fit은 영역이 바뀔 때만 (날짜 변경 시 좌표 고정)
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -15,8 +15,6 @@ import WKT from 'ol/format/WKT';
 import GeoJSON from 'ol/format/GeoJSON';
 import type { Geometry } from 'ol/geom';
 import Polygon from 'ol/geom/Polygon';
-import type ImageLayer from 'ol/layer/Image';
-import type ImageWMS from 'ol/source/ImageWMS';
 import VectorLayer from 'ol/layer/Vector';
 import VectorSource from 'ol/source/Vector';
 import { isEmpty } from 'ol/extent';
@@ -52,15 +50,12 @@ import {
 } from './changeHistory.styleCache';
 import type { ChangeHistoryAsOfFeature, ChangeHistoryDayDiffFeature } from './changeHistory.types';
 import {
-  applyChangeHistoryWmsParams,
-  buildChangeHistoryWmsParams,
-  CHANGE_HISTORY_WMS_DEBOUNCE_MS,
-  createChangeHistoryWmsLayer,
-} from './changeHistory.wms';
-import {
   formatChangeHistoryBackgroundLabel,
 } from './changeHistory.ortho';
 import { Switch } from '@/app/shadcnComponents/ui/switch';
+
+const EMPTY_ASOF: ChangeHistoryAsOfFeature[] = [];
+const EMPTY_DAY_DIFF: ChangeHistoryDayDiffFeature[] = [];
 
 /** 스타일 실패 시에도 점은 보이게 — 변경 후(z=2)가 변경 전(z=1) 위 */
 const EMERGENCY_POINT_AFTER = new Style({
@@ -75,8 +70,8 @@ const EMERGENCY_POINT_BEFORE = new Style({
   zIndex: 1,
   image: new CircleStyle({
     radius: 7,
-    fill: new Fill({ color: 'rgba(156, 163, 175, 0.85)' }),
-    stroke: new Stroke({ color: '#6b7280', width: 2 }),
+    fill: new Fill({ color: 'rgba(203, 213, 225, 0.85)' }),
+    stroke: new Stroke({ color: '#111111', width: 2.5 }),
   }),
 });
 const EMERGENCY_LINE_AFTER = new Style({
@@ -85,7 +80,7 @@ const EMERGENCY_LINE_AFTER = new Style({
 });
 const EMERGENCY_LINE_BEFORE = new Style({
   zIndex: 1,
-  stroke: new Stroke({ color: 'rgba(107, 114, 128, 0.85)', width: 2.5, lineDash: [8, 6] }),
+  stroke: new Stroke({ color: 'rgba(17, 17, 17, 1)', width: 4, lineDash: [8, 6] }),
 });
 const EMERGENCY_POLY_AFTER = new Style({
   zIndex: 2,
@@ -94,8 +89,8 @@ const EMERGENCY_POLY_AFTER = new Style({
 });
 const EMERGENCY_POLY_BEFORE = new Style({
   zIndex: 1,
-  fill: new Fill({ color: 'rgba(156, 163, 175, 0.2)' }),
-  stroke: new Stroke({ color: 'rgba(107, 114, 128, 0.85)', width: 2, lineDash: [6, 5] }),
+  fill: new Fill({ color: 'rgba(203, 213, 225, 0.5)' }),
+  stroke: new Stroke({ color: 'rgba(17, 17, 17, 1)', width: 3.5, lineDash: [6, 5] }),
 });
 
 /** 읍면·리 행정경계 — 면 채우면 분석 영역을 덮어 건물 등이 안 보임. 테두리만. */
@@ -107,7 +102,7 @@ const ADMIN_OUTLINE_AFTER = new Style({
 const ADMIN_OUTLINE_BEFORE = new Style({
   zIndex: 2,
   fill: new Fill({ color: 'rgba(0,0,0,0)' }),
-  stroke: new Stroke({ color: 'rgba(107, 114, 128, 0.9)', width: 2, lineDash: [6, 4] }),
+  stroke: new Stroke({ color: 'rgba(17, 17, 17, 1)', width: 3.5, lineDash: [6, 4] }),
 });
 
 function isAdminSectionTable(tableName: string): boolean {
@@ -246,13 +241,19 @@ function pickChangeHistoryBackground(orthoMapId: string | null): {
   return { layer: createResultBasemapBackground(), isBasemapFallback: true };
 }
 
+/** 레이어 생성 없이 배경이 항공 폴백인지 여부만 */
+function isBasemapFallbackId(orthoMapId: string | null): boolean {
+  if (!orthoMapId || !isLocalOrthoBackgroundId(orthoMapId)) return true;
+  if (isDynamicOrthoBackgroundId(orthoMapId)) return false;
+  // 비동적 자체 정사 id면 정사로 간주 (실제 레이어 생성 실패는 pick 쪽에서 폴백)
+  return false;
+}
+
 export type ChangeHistoryLiveMapProps = {
   wkt5181: string | null;
   selectedDate: string;
   /** 디스크에서 고른 자체 정사 배경 id (없으면 VWorld) */
   orthoBackgroundMapId: string | null;
-  /** 좌측 선택 레이어의 실 GeoServer 테이블명 (WMS 콤마) */
-  wmsTableNames: string[];
   /** 서버 as-of 결과(없으면 빈 도형) */
   asOfFeatures?: ChangeHistoryAsOfFeature[];
   /** 선택일 당일 전·후 도형 — 변경 전 레이어 복원에 사용 */
@@ -266,9 +267,8 @@ export type ChangeHistoryLiveMapProps = {
 
 export function ChangeHistoryLiveMap({
   wkt5181,
-  selectedDate,
+  selectedDate: _selectedDate,
   orthoBackgroundMapId,
-  wmsTableNames,
   asOfFeatures: asOfFeaturesProp,
   dayDiffFeatures: dayDiffFeaturesProp,
   mapLoading = false,
@@ -283,43 +283,71 @@ export function ChangeHistoryLiveMap({
   const featSourceRef = useRef(new VectorSource());
   const featLayerRef = useRef<VectorLayer<VectorSource> | null>(null);
   const bgLayerRef = useRef<BaseLayer | null>(null);
-  const wmsLayerRef = useRef<ImageLayer<ImageWMS> | null>(null);
   const fittedWktRef = useRef<string | null>(null);
   const didFitContentRef = useRef(false);
-  const wmsTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [isBasemapFallback, setIsBasemapFallback] = useState(true);
+  const paintGenRef = useRef(0);
   const [showBefore, setShowBefore] = useState(true);
   const [showAfter, setShowAfter] = useState(true);
+  /** 스타일 prefetch + 도형 일괄 추가 끝날 때까지 */
+  const [paintLoading, setPaintLoading] = useState(false);
 
-  const asOfFeatures = asOfFeaturesProp ?? [];
-  const dayDiffFeatures = dayDiffFeaturesProp ?? [];
-
-  const wmsParams = useMemo(
-    () =>
-      buildChangeHistoryWmsParams({
-        tableNames: wmsTableNames,
-        areaWkt5181: wkt5181,
-        selectedDate,
-      }),
-    [wmsTableNames, wkt5181, selectedDate]
+  const asOfFeatures = asOfFeaturesProp ?? EMPTY_ASOF;
+  const dayDiffFeatures = dayDiffFeaturesProp ?? EMPTY_DAY_DIFF;
+  const isBasemapFallback = useMemo(
+    () => isBasemapFallbackId(orthoBackgroundMapId),
+    [orthoBackgroundMapId]
   );
+  void _selectedDate;
+
+  const compareRowsBase = useMemo(() => {
+    const rows = buildCompareFeatures(asOfFeatures, dayDiffFeatures);
+    if (rows.length === 0 && asOfFeatures.length > 0) {
+      asOfFeatures.forEach((f, index) => {
+        const table = String(f.tableName ?? '').trim();
+        const key = String(f.keyValue ?? '').trim();
+        const geom = normalizeGeoJsonGeometry(f.geom);
+        if (!geom?.type) return;
+        rows.push({
+          tableName: table || 'unknown',
+          keyField: f.keyField,
+          keyValue: key || `__noid:${index}`,
+          side: 'after',
+          geom,
+        });
+      });
+    }
+    return rows;
+  }, [asOfFeatures, dayDiffFeatures]);
+
+  const hasBefore = useMemo(
+    () => compareRowsBase.some((r) => r.side === 'before'),
+    [compareRowsBase]
+  );
+
+  useEffect(() => {
+    setShowBefore(hasBefore);
+  }, [hasBefore]);
 
   useEffect(() => {
     const el = rootRef.current;
     if (!el || mapRef.current) return;
 
+    const boundarySource = boundarySourceRef.current;
+    const maskSource = maskSourceRef.current;
+    const featSource = featSourceRef.current;
+
     const boundaryLayer = new VectorLayer({
-      source: boundarySourceRef.current,
+      source: boundarySource,
       style: BOUNDARY_STYLE,
       zIndex: 21,
     });
     const maskLayer = new VectorLayer({
-      source: maskSourceRef.current,
+      source: maskSource,
       style: OUTSIDE_MASK_STYLE,
       zIndex: 20,
     });
     const featLayer = new VectorLayer({
-      source: featSourceRef.current,
+      source: featSource,
       /** 변경 후가 변경 전 위에 그려지도록 */
       renderOrder: (a, b) => {
         const sa = (a.get('compareSide') as string) === 'after' ? 1 : 0;
@@ -332,10 +360,6 @@ export function ChangeHistoryLiveMap({
         if (f.get('adminOutline')) {
           return side === 'before' ? ADMIN_OUTLINE_BEFORE : ADMIN_OUTLINE_AFTER;
         }
-        // 점: SVG 404·Icon 실패가 많아 원으로 고정. 선·면은 GeoServer 색(실제 도형 종류 기준).
-        if (gType === 'Point' || gType === 'MultiPoint') {
-          return side === 'before' ? EMERGENCY_POINT_BEFORE : EMERGENCY_POINT_AFTER;
-        }
         try {
           const table = String(f.get('tableName') ?? '');
           const styled = resolveCompareFeatureStyle(table, side, gType, () => {
@@ -346,6 +370,9 @@ export function ChangeHistoryLiveMap({
         } catch {
           // fall through
         }
+        if (gType === 'Point' || gType === 'MultiPoint') {
+          return side === 'before' ? EMERGENCY_POINT_BEFORE : EMERGENCY_POINT_AFTER;
+        }
         if (gType === 'Polygon' || gType === 'MultiPolygon') {
           return side === 'before' ? EMERGENCY_POLY_BEFORE : EMERGENCY_POLY_AFTER;
         }
@@ -355,18 +382,14 @@ export function ChangeHistoryLiveMap({
     });
     featLayerRef.current = featLayer;
 
-    const wmsLayer = createChangeHistoryWmsLayer();
-    wmsLayerRef.current = wmsLayer;
-
-    const { layer: bg, isBasemapFallback: basemapFb } = pickChangeHistoryBackground(orthoBackgroundMapId);
+    const { layer: bg } = pickChangeHistoryBackground(orthoBackgroundMapId);
     bg.set('name', 'changeHistoryBg');
     bg.setZIndex?.(0);
     bgLayerRef.current = bg;
-    setIsBasemapFallback(basemapFb);
 
     const map = new Map({
       target: el,
-      layers: [bg, wmsLayer, featLayer, maskLayer, boundaryLayer],
+      layers: [bg, featLayer, maskLayer, boundaryLayer],
       view: new View({
         projection: 'EPSG:3857',
         center: [14135000, 4510000],
@@ -379,7 +402,7 @@ export function ChangeHistoryLiveMap({
     });
     mapRef.current = map;
 
-    const syncMask = () => updateOutsideMask(map, areaGeomRef.current, maskSourceRef.current);
+    const syncMask = () => updateOutsideMask(map, areaGeomRef.current, maskSource);
     const ensureMapSize = () => {
       const w = el.clientWidth;
       const h = el.clientHeight;
@@ -416,16 +439,15 @@ export function ChangeHistoryLiveMap({
       cancelAnimationFrame(rafId);
       for (const id of sizeTimerIds) clearTimeout(id);
       resizeObserver.disconnect();
-      if (wmsTimerRef.current) clearTimeout(wmsTimerRef.current);
       map.un('moveend', syncMask);
       map.setTarget(undefined);
       mapRef.current = null;
       bgLayerRef.current = null;
-      wmsLayerRef.current = null;
       featLayerRef.current = null;
       areaGeomRef.current = null;
-      boundarySourceRef.current.clear();
-      maskSourceRef.current.clear();
+      boundarySource.clear();
+      maskSource.clear();
+      featSource.clear();
       fittedWktRef.current = null;
       didFitContentRef.current = false;
     };
@@ -435,7 +457,7 @@ export function ChangeHistoryLiveMap({
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
-    const { layer: next, isBasemapFallback: basemapFb } = pickChangeHistoryBackground(orthoBackgroundMapId);
+    const { layer: next } = pickChangeHistoryBackground(orthoBackgroundMapId);
     next.set('name', 'changeHistoryBg');
     next.setZIndex?.(0);
     const layers = map.getLayers();
@@ -443,7 +465,6 @@ export function ChangeHistoryLiveMap({
     if (prev) layers.remove(prev);
     layers.insertAt(0, next);
     bgLayerRef.current = next;
-    setIsBasemapFallback(basemapFb);
   }, [orthoBackgroundMapId]);
 
   useEffect(() => {
@@ -456,25 +477,6 @@ export function ChangeHistoryLiveMap({
       year: isBasemapFallback ? null : year,
     });
   }, [isBasemapFallback, orthoBackgroundMapId, onBackgroundResolved]);
-
-  // 3-5: GetMap 디바운스 — 발행 레이어 정의는 변경하지 않음
-  // 시점 벡터(변경 전·후)가 있으면 운영 WMS는 숨김 — 최신본·이중 표시 혼선 방지
-  // 조회 중(mapLoading)에도 WMS 숨김 — 운영본·구 도형 깜빡임 방지
-  useEffect(() => {
-    const layer = wmsLayerRef.current;
-    if (!layer) return;
-    const hideWms =
-      mapLoading || asOfFeatures.length > 0 || dayDiffFeatures.length > 0;
-    layer.setVisible(!hideWms);
-    if (hideWms) return;
-    if (wmsTimerRef.current) clearTimeout(wmsTimerRef.current);
-    wmsTimerRef.current = setTimeout(() => {
-      applyChangeHistoryWmsParams(layer, wmsParams);
-    }, CHANGE_HISTORY_WMS_DEBOUNCE_MS);
-    return () => {
-      if (wmsTimerRef.current) clearTimeout(wmsTimerRef.current);
-    };
-  }, [wmsParams, asOfFeatures.length, dayDiffFeatures.length, mapLoading]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -531,46 +533,62 @@ export function ChangeHistoryLiveMap({
 
   useEffect(() => {
     const source = featSourceRef.current;
-    source.clear();
-    let compareRows = buildCompareFeatures(asOfFeatures, dayDiffFeatures);
+    let cancelled = false;
+    const gen = ++paintGenRef.current;
 
-    // asOf 는 있는데 비교 목록이 비면(정규화·키 누락 등) 변경 후로라도 표시
-    if (compareRows.length === 0 && asOfFeatures.length > 0 && showAfter) {
-      asOfFeatures.forEach((f, index) => {
-        const table = String(f.tableName ?? '').trim();
-        const key = String(f.keyValue ?? '').trim();
-        const geom = normalizeGeoJsonGeometry(f.geom);
-        if (!geom?.type) return;
-        compareRows.push({
-          tableName: table || 'unknown',
-          keyField: f.keyField,
-          // length 기반 fallback은 push로 length가 바뀌며 충돌·불안정 — 원본 인덱스로 고정
-          keyValue: key || `__noid:${index}`,
-          side: 'after',
-          geom,
-        });
+    void (async () => {
+      await Promise.resolve();
+      if (cancelled) return;
+
+      source.clear();
+
+      if (mapLoading) {
+        setPaintLoading(false);
+        return;
+      }
+
+      const visibleRows = compareRowsBase.filter((row) => {
+        if (row.side === 'before' && (!hasBefore || !showBefore)) return false;
+        if (row.side === 'after' && !showAfter) return false;
+        return true;
       });
-    }
 
-    const tables = [...new Set(compareRows.map((r) => r.tableName).filter(Boolean))];
-    void prefetchCompareStyles(tables).then(() => {
+      if (visibleRows.length === 0) {
+        setPaintLoading(false);
+        return;
+      }
+
+      setPaintLoading(true);
+      const tables = [...new Set(visibleRows.map((r) => r.tableName).filter(Boolean))];
+
+      try {
+        await prefetchCompareStyles(tables);
+      } catch {
+        /* 스타일 실패해도 emergency 스타일로 일괄 표시 */
+      }
+      if (cancelled || gen !== paintGenRef.current) return;
+
+      for (const row of visibleRows) {
+        const geom = normalizeGeoJsonGeometry(row.geom) ?? row.geom;
+        const g = readGeom5181To3857(geom);
+        if (!g) continue;
+        const f = new Feature({ geometry: g });
+        f.setId(`${row.side}:${row.tableName}:${row.keyValue}`);
+        f.set('compareSide', row.side);
+        f.set('tableName', row.tableName);
+        if (isAdminSectionTable(row.tableName)) f.set('adminOutline', true);
+        source.addFeature(f);
+      }
       featLayerRef.current?.changed();
-    });
+      if (gen === paintGenRef.current) setPaintLoading(false);
+    })();
 
-    for (const row of compareRows) {
-      if (row.side === 'before' && !showBefore) continue;
-      if (row.side === 'after' && !showAfter) continue;
-      const geom = normalizeGeoJsonGeometry(row.geom) ?? row.geom;
-      const g = readGeom5181To3857(geom);
-      if (!g) continue;
-      const f = new Feature({ geometry: g });
-      f.setId(`${row.side}:${row.tableName}:${row.keyValue}`);
-      f.set('compareSide', row.side);
-      f.set('tableName', row.tableName);
-      if (isAdminSectionTable(row.tableName)) f.set('adminOutline', true);
-      source.addFeature(f);
-    }
-  }, [asOfFeatures, dayDiffFeatures, showBefore, showAfter]);
+    return () => {
+      cancelled = true;
+    };
+  }, [compareRowsBase, hasBefore, showBefore, showAfter, mapLoading]);
+
+  const overlayLoading = mapLoading || paintLoading;
 
   const zoomBy = (delta: number) => {
     const view = mapRef.current?.getView();
@@ -614,15 +632,22 @@ export function ChangeHistoryLiveMap({
     >
       <div ref={rootRef} className="absolute inset-0" />
       <div className="absolute left-2.5 top-2.5 z-[1] flex flex-col gap-1.5 rounded-md border border-border/60 bg-background/95 px-2.5 py-2 shadow-sm">
-        <label className="flex items-center justify-between gap-3 text-[11px] text-foreground">
+        <label
+          className={
+            hasBefore
+              ? 'flex items-center justify-between gap-3 text-[11px] text-foreground'
+              : 'flex items-center justify-between gap-3 text-[11px] text-muted-foreground'
+          }
+        >
           <span className="inline-flex items-center gap-1.5">
-            <span className="inline-block h-0.5 w-4 border-t-2 border-dashed border-slate-400" aria-hidden />
+            <span className="inline-block h-0.5 w-4 border-t-2 border-dashed border-neutral-900" aria-hidden />
             변경 전
           </span>
           <Switch
-            checked={showBefore}
+            checked={hasBefore && showBefore}
             onCheckedChange={setShowBefore}
-            title="변경 전 레이어 표시"
+            disabled={!hasBefore}
+            title={hasBefore ? '변경 전 레이어 표시' : '최초 등록만 있어 변경 전 도형이 없습니다'}
             aria-label="변경 전 레이어 표시"
           />
         </label>
@@ -672,7 +697,7 @@ export function ChangeHistoryLiveMap({
       <div className="pointer-events-none absolute bottom-2.5 right-2.5 z-[1]">
         <div className="rounded bg-black/70 px-2 py-1 text-[11px] text-white/85">{statusLine}</div>
       </div>
-      {mapLoading ? (
+      {overlayLoading ? (
         <div
           className="absolute inset-0 z-[2] flex items-center justify-center bg-black/45"
           role="status"

@@ -32,5 +32,5 @@ export const MAP_SPLIT_CONTROL_VERTICAL_MAX_RATIO = MAP_SPLIT_CONTROL_OFFSET_MAX
 export const MAP_SPLIT_CONTROL_EDGE_SHAKE_MS = 180;
 /** 거터 hit 영역 — flex 3px 유지, 음수 margin으로 pill 전체 클릭 수용 */
 export const MAP_SPLIT_GUTTER_HIT_CROSS_PX = 48;
-/** 우측 지도 메뉴(z-10) 아래 — 분할선·pill이 메뉴를 덮지 않음 */
+/** 우측 지도 메뉴(포털 z-40) 아래 — 분할선·pill이 메뉴를 덮지 않음 */
 export const MAP_SPLIT_GUTTER_Z_INDEX = 9;
