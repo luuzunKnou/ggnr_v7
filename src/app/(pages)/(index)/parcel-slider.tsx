@@ -1,7 +1,7 @@
 "use client"
 
 import React, { useState, useEffect } from "react"
-import { withBasePathNav } from "@/lib/basePath"
+import { withBasePath, withBasePathNav } from "@/lib/basePath"
 
 interface ParcelSlide {
   title: string
@@ -53,7 +53,7 @@ export function ParcelSlider({ slides }: ParcelSliderProps) {
           >
             {slide.image ? (
               <img
-                src={slide.image}
+                src={withBasePath(slide.image)}
                 alt=""
                 className="absolute inset-0 h-full w-full object-cover pointer-events-none select-none"
                 draggable={false}

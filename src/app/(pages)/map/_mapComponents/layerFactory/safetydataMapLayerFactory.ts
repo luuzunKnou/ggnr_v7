@@ -39,9 +39,10 @@ export const SAFETY_MAP_GEOSERVER_OVERLAYS: {
 }[] = [
   /** 침수흔적도(moisFloodTrace)는 safemap IF_0092_WMS — SafetyMapLayerPanel */
   /** 물놀이관리지역(waterPlayManaged)는 safemap IF_0044_WMS — SafetyMapLayerPanel */
-  { panelId: 'sd_cold_wave_shelter', tableName: 'sd_cold_wave_shelter', zIndex: 119, opacity: 0.88 },
+  /** 겹침 순서(위→아래): 한파쉼터 > 무더위쉼터 > 폭염저감시설 */
+  { panelId: 'sd_heat_mitigation_facility', tableName: 'sd_heat_mitigation_facility', zIndex: 119, opacity: 0.88 },
   { panelId: 'sd_heat_wave_shelter', tableName: 'sd_heat_wave_shelter', zIndex: 120, opacity: 0.88 },
-  { panelId: 'sd_heat_mitigation_facility', tableName: 'sd_heat_mitigation_facility', zIndex: 121, opacity: 0.88 },
+  { panelId: 'sd_cold_wave_shelter', tableName: 'sd_cold_wave_shelter', zIndex: 121, opacity: 0.88 },
   {
     panelId: 'sd_earthquake_outdoor_evac_site',
     tableName: 'sd_earthquake_outdoor_evac_site',
@@ -170,7 +171,10 @@ export function useSafetydataMapLayerSync(map: Map | null, mapReady: boolean, vi
       if (!l.get('safetyMapGeoLayer')) return;
       const tableName = l.get('layerTableName') as string | undefined;
       const row = SAFETY_MAP_GEOSERVER_OVERLAYS.find((r) => r.tableName === tableName);
-      if (row) l.setOpacity(row.opacity);
+      if (row) {
+        l.setOpacity(row.opacity);
+        l.setZIndex(row.zIndex);
+      }
       l.setVisible(tableName != null && visibleTables.has(tableName));
       l.setExtent(emd3857);
     });

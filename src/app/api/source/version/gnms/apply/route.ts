@@ -1,4 +1,5 @@
 import { NextRequest } from 'next/server';
+import { startNdjsonStreamKeepalive } from '@/lib/ndjsonStreamKeepalive';
 import { getSessionUsrId } from '@/lib/auth/guard';
 import { pickClientIpFromRequest } from '@/lib/requestClientMeta';
 import { includeNodeModulesFromProfile } from '@/app/(pages)/dev/_components/sourceUpload/sourceUploadProfiles';
@@ -40,6 +41,7 @@ export async function POST(req: NextRequest) {
     const yieldEventLoop = () => new Promise<void>((r) => setImmediate(r));
     const stream = new ReadableStream<Uint8Array>({
       async start(controller) {
+        const stopKeepalive = startNdjsonStreamKeepalive(controller, encoder);
         const send = async (line: NdjsonProgressLine | NdjsonResultLine | NdjsonErrorLine) => {
           controller.enqueue(encoder.encode(`${JSON.stringify(line)}\n`));
           await yieldEventLoop();
@@ -78,6 +80,8 @@ export async function POST(req: NextRequest) {
               /* already closed */
             }
           }
+        } finally {
+          stopKeepalive();
         }
       },
     });

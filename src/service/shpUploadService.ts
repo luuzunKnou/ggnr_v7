@@ -26,8 +26,9 @@ import {
   shouldStoreFullHistoryGeom,
 } from '@/lib/syncLogGeom';
 
+import { getGeoServerInternalBase } from '@/lib/geoserverUrl';
+
 const GGNR_DATA_DIR = process.env.GGNR_DATA_DIR ?? 'd:\\ggnr_data_dir';
-const GEOSERVER_DEFAULT_URL = 'http://localhost:8080/geoserver';
 const GEOSERVER_AUTH = Buffer.from('admin:geoserver', 'utf8').toString('base64');
 const WORKSPACE = 'ggnr';
 
@@ -1061,7 +1062,7 @@ export async function getShpStatusList(params?: { relativePath?: string; recursi
     return { rows: [], path: resultPath };
   }
 
-  const baseUrl = GEOSERVER_DEFAULT_URL;
+  const baseUrl = getGeoServerInternalBase();
   let layerNames: string[] = [];
   let styleNames: string[] = [];
   try {
@@ -2309,7 +2310,7 @@ export async function runShpPostProcess(params: {
   const pathOrResult = params?.pathOrResult?.trim();
   if (!pathOrResult) return { success: false, error: 'pathOrResult가 필요합니다.' };
 
-  const baseUrl = (params?.url ?? GEOSERVER_DEFAULT_URL).replace(/\/$/, '');
+  const baseUrl = (params?.url ?? getGeoServerInternalBase()).replace(/\/$/, '');
   const absolutePath = path.join(GGNR_DATA_DIR, pathOrResult.replace(/\//g, path.sep));
   const basename = path.basename(pathOrResult, '.shp');
   const normalizedName = shpTableNameFromRelPath(pathOrResult);
@@ -2505,7 +2506,7 @@ export async function getLayerStatusList(params?: {
       }
     }
 
-    const baseUrl = GEOSERVER_DEFAULT_URL;
+    const baseUrl = getGeoServerInternalBase();
     let geoLayerSet = new Set<string>();
     let geoStyleSet = new Set<string>();
     try {

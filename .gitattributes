@@ -1,6 +1,9 @@
 # 저장·작업 트리 모두 LF. Windows autocrlf가 줄바꿈만 다른 파일로 표시하지 않게 함.
 * text=auto eol=lf
 
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
 *.png binary
 *.jpg binary
 *.jpeg binary

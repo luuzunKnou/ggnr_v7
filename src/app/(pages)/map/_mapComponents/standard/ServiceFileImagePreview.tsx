@@ -17,9 +17,8 @@ import {
   Download,
   Printer,
 } from 'lucide-react';
-import { getDocument, type PDFDocumentProxy } from 'pdfjs-dist';
 import { cn } from '@/lib/utils';
-import { configurePdfJsWorker } from '@/lib/pdfjsWorker';
+import { ServiceFilePdfPreviewStage } from './ServiceFilePdfPreviewStage';
 
 export type ServiceFilePreviewItem = {
   url: string;
@@ -70,6 +69,68 @@ export async function downloadServiceFilePreviewBlob(url: string, fileName: stri
   } finally {
     window.setTimeout(() => URL.revokeObjectURL(objectUrl), 4000);
   }
+}
+
+function uniqueZipEntryName(fileName: string, used: Set<string>): string {
+  if (!used.has(fileName)) {
+    used.add(fileName);
+    return fileName;
+  }
+  const dot = fileName.lastIndexOf('.');
+  const stem = dot > 0 ? fileName.slice(0, dot) : fileName;
+  const ext = dot > 0 ? fileName.slice(dot) : '';
+  let i = 2;
+  while (used.has(`${stem}_${i}${ext}`)) i += 1;
+  const next = `${stem}_${i}${ext}`;
+  used.add(next);
+  return next;
+}
+
+/** 미리보기 목록 전체를 ZIP으로 저장 */
+export async function downloadServiceFilePreviewItemsZip(
+  items: { url: string; fileName: string }[],
+  zipFileName: string
+): Promise<void> {
+  if (items.length === 0) throw new Error('empty');
+  const { zipSync } = await import('fflate');
+  const zipEntries: Record<string, Uint8Array> = {};
+  const usedNames = new Set<string>();
+
+  for (const item of items) {
+    const res = await fetch(item.url, { credentials: 'include' });
+    if (!res.ok) throw new Error('download failed');
+    const buf = new Uint8Array(await res.arrayBuffer());
+    zipEntries[uniqueZipEntryName(item.fileName, usedNames)] = buf;
+  }
+
+  const zipped = zipSync(zipEntries);
+  const blob = new Blob([zipped], { type: 'application/zip' });
+  const objectUrl = URL.createObjectURL(blob);
+  const safeName = zipFileName.toLowerCase().endsWith('.zip') ? zipFileName : `${zipFileName}.zip`;
+  try {
+    const a = document.createElement('a');
+    a.href = objectUrl;
+    a.download = safeName;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  } finally {
+    window.setTimeout(() => URL.revokeObjectURL(objectUrl), 4000);
+  }
+}
+
+export function buildServiceFilePreviewListZipName(
+  items: { fileName: string }[],
+  currentIndex: number
+): string {
+  const cur = items[clampPreviewIndex(currentIndex, items.length)]?.fileName ?? 'PDF';
+  const base = cur.replace(/\.pdf$/i, '').trim() || 'PDF';
+  return `${base}_PDF목록.zip`;
+}
+
+function clampPreviewIndex(index: number, len: number): number {
+  if (len <= 0) return 0;
+  return Math.min(Math.max(0, index), len - 1);
 }
 
 /**
@@ -162,134 +223,6 @@ function toolbarBtnClass(disabled?: boolean): string {
   return cn(
     'flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-white/90 transition-colors hover:bg-background/10',
     disabled && 'pointer-events-none opacity-35'
-  );
-}
-
-function PdfPreviewStage({
-  url,
-  pageNumber,
-  onPagesReady,
-}: {
-  url: string;
-  pageNumber: number;
-  onPagesReady: (n: number) => void;
-}) {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const pdfRef = useRef<PDFDocumentProxy | null>(null);
-  const loadUrlRef = useRef<string | null>(null);
-  const [phase, setPhase] = useState<'loading' | 'ready' | 'error'>('loading');
-  const alive = useRef(true);
-  const onPagesReadyRef = useRef(onPagesReady);
-  onPagesReadyRef.current = onPagesReady;
-
-  useEffect(() => {
-    alive.current = true;
-    configurePdfJsWorker();
-    return () => {
-      alive.current = false;
-    };
-  }, []);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    const run = async () => {
-      setPhase('loading');
-      try {
-        let pdf = pdfRef.current;
-        const needNewDoc = loadUrlRef.current !== url;
-        if (needNewDoc) {
-          if (pdf) {
-            await pdf.destroy().catch(() => {});
-            pdfRef.current = null;
-          }
-          loadUrlRef.current = url;
-          const res = await fetch(url, { credentials: 'include' });
-          if (!res.ok) throw new Error('fetch');
-          const buf = await res.arrayBuffer();
-          if (cancelled || !alive.current) return;
-          const loadingTask = getDocument({ data: new Uint8Array(buf) });
-          pdf = await loadingTask.promise;
-          if (cancelled || !alive.current) {
-            await pdf.destroy().catch(() => {});
-            return;
-          }
-          pdfRef.current = pdf;
-          onPagesReadyRef.current(pdf.numPages);
-        }
-
-        pdf = pdfRef.current;
-        if (!pdf) return;
-
-        const total = pdf.numPages;
-        const pageIdx = clamp(pageNumber, 1, total);
-        const page = await pdf.getPage(pageIdx);
-        if (cancelled || !alive.current) return;
-
-        const canvas = canvasRef.current;
-        if (!canvas) return;
-        const ctx = canvas.getContext('2d');
-        if (!ctx) throw new Error('no ctx');
-
-        const maxW = Math.min(window.innerWidth * 0.96, 1800);
-        const maxH = Math.min(window.innerHeight * 0.85, 1400);
-        const vp1 = page.getViewport({ scale: 1 });
-        const sc = Math.min(maxW / vp1.width, maxH / vp1.height, 4);
-        const viewport = page.getViewport({ scale: sc });
-        canvas.width = Math.ceil(viewport.width);
-        canvas.height = Math.ceil(viewport.height);
-        const renderTask = page.render({ canvasContext: ctx, viewport });
-        await renderTask.promise;
-        if (cancelled || !alive.current) return;
-        setPhase('ready');
-      } catch {
-        if (!cancelled && alive.current) setPhase('error');
-      }
-    };
-
-    void run();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [url, pageNumber]);
-
-  useEffect(() => {
-    return () => {
-      void pdfRef.current?.destroy().catch(() => {});
-      pdfRef.current = null;
-      loadUrlRef.current = null;
-    };
-  }, []);
-
-  if (phase === 'error') {
-    return (
-      <div className="rounded border border-white/20 bg-background/5 px-4 py-6 text-center text-sm text-white/80">
-        PDF를 불러오지 못했습니다.
-      </div>
-    );
-  }
-
-  return (
-    <div className="relative flex min-h-[min(40vh,200px)] items-center justify-center">
-      {phase === 'loading' ? (
-        <div
-          className="absolute inset-0 z-10 flex items-center justify-center rounded bg-black/25"
-          aria-busy="true"
-        >
-          <Loader2 className="h-10 w-10 animate-spin text-white/60" aria-hidden />
-        </div>
-      ) : null}
-      <canvas
-        ref={canvasRef}
-        className={cn(
-          // 100%는 부모 높이 auto일 때 무효 → vh/vw만 사용 (원본 캔버스가 잘려 확대처럼 보이는 문제 방지)
-          'h-auto w-auto max-h-[85vh] max-w-[96vw] object-contain shadow-2xl transition-opacity duration-150',
-          phase !== 'ready' ? 'opacity-0' : 'opacity-100'
-        )}
-        aria-hidden={phase !== 'ready'}
-      />
-    </div>
   );
 }
 
@@ -634,7 +567,7 @@ export function ServiceFileImagePreview({ items, initialIndex, onClose }: Props)
                 className="block h-auto w-auto max-h-[85vh] max-w-[96vw] object-contain shadow-2xl"
               />
             ) : (
-              <PdfPreviewStage
+              <ServiceFilePdfPreviewStage
                 key={current.url}
                 url={current.url}
                 pageNumber={pdfPage}

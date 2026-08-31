@@ -1,6 +1,6 @@
 import fs from 'node:fs/promises';
 import dns from 'node:dns/promises';
-import { Agent } from 'undici';
+import { Agent, request as undiciRequest } from 'undici';
 import { buildGnmsUploadApiBase, DEFAULT_GNMS_URL } from '@/lib/gnmsSourceUrl';
 import { getGnmsUrl } from '@/service/configService';
 import {
@@ -240,14 +240,160 @@ async function readResponseJson(res: Response): Promise<{ json: JsonRecord; text
   }
 }
 
+const COMPLETE_POLL_INTERVAL_MS = 5_000;
+
 /** complete(병합+압축해제) 및 npm install 은 대용량에서 5분 이상 걸릴 수 있음 */
 const COMPLETE_FETCH_TIMEOUT_MS = 30 * 60 * 1000;
+
+/** Apache httpd 등 앞단 프록시가 upstream 응답 대기 중 끊을 때 (병합·압축 해제 장시간) */
+function isProxyGatewayHttpError(status: number, text: string): boolean {
+  if (status === 502 || status === 504) return true;
+  const lower = text.trim().toLowerCase();
+  return lower.includes('proxy error') || lower.includes('<title>502 proxy error</title>');
+}
+
+function formatRemoteStageHttpError(stage: string, status: number, text: string): string {
+  if (isProxyGatewayHttpError(status, text)) {
+    return (
+      `${stage} 단계: 게이트웨이 프록시 시간 초과 (HTTP ${status}). ` +
+      '원격 GNMS에서 병합·압축 해제는 계속될 수 있습니다. ' +
+      'dggs.kr/gnms 앞단 ProxyTimeout 증설 또는 SOURCE_UPLOAD_REMOTE_BASE(내부 URL) 설정을 검토하세요.'
+    );
+  }
+  if (text.trim().startsWith('<!DOCTYPE') || text.trim().startsWith('<html')) {
+    return `${stage} 단계: HTTP ${status} (HTML 오류 응답)`;
+  }
+  return text.slice(0, 800) || `${stage} 단계 HTTP ${status}`;
+}
+
+async function fetchRemoteBundleMeta(
+  initUrl: string,
+  uploadId: string
+): Promise<{ found: boolean; mergeCompleted: boolean; meta: JsonRecord }> {
+  const url = `${initUrl}?uploadId=${encodeURIComponent(uploadId)}`;
+  const res = await fetchWithTimeout(
+    url,
+    { method: 'GET', headers: buildRemoteAuthHeaders(false) },
+    30_000
+  );
+  const { json, text } = await readResponseJson(res);
+  if (!res.ok) {
+    logStage('bundle-meta', { uploadId, status: res.status, body: text.slice(0, 200) });
+    return { found: false, mergeCompleted: false, meta: {} };
+  }
+  const meta = (json.meta ?? {}) as JsonRecord;
+  return {
+    found: true,
+    mergeCompleted: meta.mergeCompleted === true,
+    meta,
+  };
+}
+
+/** complete POST 가 502 등으로 끊겨도 원격 mergeCompleted=true 이면 성공으로 복구 */
+async function waitForRemoteMergeCompleted(params: {
+  initUrl: string;
+  uploadId: string;
+  progressId?: string;
+  sentChunks: number;
+  expectedChunks: number;
+}): Promise<JsonRecord> {
+  const started = Date.now();
+  let polls = 0;
+  while (Date.now() - started < COMPLETE_FETCH_TIMEOUT_MS) {
+    polls += 1;
+    const snap = await fetchRemoteBundleMeta(params.initUrl, params.uploadId);
+    if (snap.mergeCompleted) {
+      logStage('complete-recover', {
+        uploadId: params.uploadId,
+        polls,
+        elapsedMs: Date.now() - started,
+      });
+      return {
+        ok: true,
+        npmInstallPending: true,
+        recoveredFromProxy: true,
+        ...snap.meta,
+      };
+    }
+    if (params.progressId) {
+      setUploadProgressPhase(
+        params.progressId,
+        'complete',
+        `원격 병합/압축 해제 확인 중… (프록시 응답 지연, ${polls}회)`,
+        {
+          sentChunks: params.sentChunks,
+          expectedChunks: params.expectedChunks,
+          progressPct: 72,
+        }
+      );
+    }
+    await new Promise<void>((resolve) => {
+      setTimeout(resolve, COMPLETE_POLL_INTERVAL_MS);
+    });
+  }
+  throw new Error(
+    '원격 병합 완료 대기 시간 초과. GNMS 작업 완료 여부를 확인한 뒤, 프록시 ProxyTimeout 증설 또는 SOURCE_UPLOAD_REMOTE_BASE(내부 URL)로 재시도하세요.'
+  );
+}
 
 /** Node fetch(undici) 기본 headersTimeout=300s — complete 응답 대기용 */
 const longRunningFetchAgent = new Agent({
   headersTimeout: COMPLETE_FETCH_TIMEOUT_MS,
   bodyTimeout: COMPLETE_FETCH_TIMEOUT_MS,
 });
+
+const CHUNK_POST_TIMEOUT_MS = 120_000;
+
+/** 청크 POST — Next 번들 fetch + Buffer 풀 조합 detached ArrayBuffer 회피 */
+const chunkUploadAgent = new Agent({
+  headersTimeout: CHUNK_POST_TIMEOUT_MS,
+  bodyTimeout: CHUNK_POST_TIMEOUT_MS,
+});
+
+type BinaryHttpResponse = {
+  status: number;
+  json: JsonRecord;
+  text: string;
+};
+
+async function postBinaryWithTimeout(
+  url: string,
+  body: Uint8Array,
+  headers: Record<string, string>,
+  timeoutMs = CHUNK_POST_TIMEOUT_MS
+): Promise<BinaryHttpResponse> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await undiciRequest(url, {
+      method: 'POST',
+      headers: {
+        ...headers,
+        'content-length': String(body.byteLength),
+      },
+      body,
+      dispatcher: chunkUploadAgent,
+      signal: controller.signal,
+    });
+    const text = await res.body.text();
+    let json: JsonRecord = {};
+    if (text) {
+      try {
+        json = JSON.parse(text) as JsonRecord;
+      } catch {
+        json = {};
+      }
+    }
+    return { status: res.statusCode, json, text };
+  } catch (err) {
+    if (err instanceof Error && err.name === 'AbortError') {
+      throw new Error(`요청 시간 초과 (${timeoutMs}ms)`);
+    }
+    throw new Error(formatFetchCause(err));
+  } finally {
+    clearTimeout(timer);
+  }
+}
 
 type UndiciFetchInit = RequestInit & { dispatcher?: Agent };
 
@@ -625,20 +771,20 @@ export async function uploadZipByChunks(params: UploadZipParams): Promise<Remote
       const remain = totalSize - position;
       const want = Math.min(chunkSize, Math.max(remain, 0));
       if (want <= 0) break;
-      const buf = Buffer.allocUnsafe(want);
-      const read = await fh.read(buf, 0, want, position);
+      const chunkBytes = new Uint8Array(want);
+      const read = await fh.read(chunkBytes, 0, want, position);
       if (read.bytesRead <= 0) break;
       position += read.bytesRead;
 
       const byteLength = read.bytesRead;
+      const chunkBody =
+        byteLength === chunkBytes.byteLength
+          ? chunkBytes
+          : Uint8Array.from(chunkBytes.subarray(0, byteLength));
       const url = `${chunkUrl}?uploadId=${encodeURIComponent(uploadId)}&chunkIndex=${chunkIndex}&totalChunks=${expectedChunks}`;
-      let chunkRes: Response;
+      let chunkRes: BinaryHttpResponse;
       try {
-        chunkRes = await fetchWithTimeout(
-          url,
-          { method: 'POST', body: buf.subarray(0, byteLength), headers: chunkHeaders },
-          120_000
-        );
+        chunkRes = await postBinaryWithTimeout(url, chunkBody, chunkHeaders, CHUNK_POST_TIMEOUT_MS);
       } catch (err) {
         const message = `청크 ${chunkIndex + 1}/${expectedChunks} 전송 실패: ${formatFetchCause(err)}`;
         logStage('chunk', { i: chunkIndex + 1, N: expectedChunks, byteLength, url, error: message });
@@ -659,13 +805,13 @@ export async function uploadZipByChunks(params: UploadZipParams): Promise<Remote
         });
       }
 
-      const { json: chunkJson, text: chunkText } = await readResponseJson(chunkRes);
+      const { json: chunkJson, text: chunkText, status: chunkStatus } = chunkRes;
       const chunkErr =
-        !chunkRes.ok || chunkJson.error || chunkJson.ok === false
+        chunkStatus < 200 || chunkStatus >= 300 || chunkJson.error || chunkJson.ok === false
           ? String(
               chunkJson.error ??
                 chunkJson.message ??
-                (chunkText.slice(0, 800) || `HTTP ${chunkRes.status}`)
+                (chunkText.slice(0, 800) || `HTTP ${chunkStatus}`)
             )
           : null;
 
@@ -674,7 +820,7 @@ export async function uploadZipByChunks(params: UploadZipParams): Promise<Remote
         N: expectedChunks,
         byteLength,
         url,
-        status: chunkRes.status,
+        status: chunkStatus,
         response: chunkJson,
       });
 
@@ -683,7 +829,7 @@ export async function uploadZipByChunks(params: UploadZipParams): Promise<Remote
         stages.push({
           id: 'chunk',
           ok: false,
-          status: chunkRes.status,
+          status: chunkStatus,
           error: message,
           detail: `sent=${sentChunks}/${expectedChunks}`,
         });
@@ -691,7 +837,7 @@ export async function uploadZipByChunks(params: UploadZipParams): Promise<Remote
         throw new RemoteUploadError({
           stage: 'chunk',
           message,
-          status: chunkRes.status,
+          status: chunkStatus,
           responseBody: chunkText,
           chunkIndex,
           sentChunks,
@@ -778,34 +924,72 @@ export async function uploadZipByChunks(params: UploadZipParams): Promise<Remote
   }
 
   let { json: completeJson, text: completeText } = await readResponseJson(completeRes);
+  let completeStatus = completeRes.status;
   logStage('complete', {
     url: completeUrl,
     request: completeBody,
-    status: completeRes.status,
+    status: completeStatus,
     response: completeJson,
   });
 
   if (!isCompleteSuccess(completeJson, completeRes.ok)) {
-    const message =
-      completeJson.error ??
-      completeJson.message ??
-      (completeText.slice(0, 800) || 'complete 응답이 올바르지 않습니다.');
-    stages.push({
-      id: 'complete',
-      ok: false,
-      status: completeRes.status,
-      error: message,
-    });
-    reportFail(progressId, 'complete', message, { sentChunks, expectedChunks });
-    throw new RemoteUploadError({
-      stage: 'complete',
-      message,
-      status: completeRes.status,
-      responseBody: completeText,
-      stages,
-      sentChunks,
-      expectedChunks,
-    });
+    if (isProxyGatewayHttpError(completeStatus, completeText)) {
+      logStage('complete', { proxyGateway: true, uploadId, action: 'poll-merge' });
+      try {
+        completeJson = await waitForRemoteMergeCompleted({
+          initUrl,
+          uploadId,
+          progressId,
+          sentChunks,
+          expectedChunks,
+        });
+        completeText = JSON.stringify(completeJson);
+        completeStatus = 200;
+        logStage('complete', { recoveredFromProxy: true, uploadId, response: completeJson });
+      } catch (recoverErr) {
+        const message =
+          recoverErr instanceof Error
+            ? recoverErr.message
+            : formatRemoteStageHttpError('complete', completeStatus, completeText);
+        stages.push({
+          id: 'complete',
+          ok: false,
+          status: completeStatus,
+          error: message,
+        });
+        reportFail(progressId, 'complete', message, { sentChunks, expectedChunks });
+        throw new RemoteUploadError({
+          stage: 'complete',
+          message,
+          status: completeStatus,
+          responseBody: completeText,
+          stages,
+          sentChunks,
+          expectedChunks,
+        });
+      }
+    } else {
+      const message =
+        completeJson.error ??
+        completeJson.message ??
+        formatRemoteStageHttpError('complete', completeStatus, completeText);
+      stages.push({
+        id: 'complete',
+        ok: false,
+        status: completeStatus,
+        error: message,
+      });
+      reportFail(progressId, 'complete', message, { sentChunks, expectedChunks });
+      throw new RemoteUploadError({
+        stage: 'complete',
+        message,
+        status: completeStatus,
+        responseBody: completeText,
+        stages,
+        sentChunks,
+        expectedChunks,
+      });
+    }
   }
 
   const completeDetail = [
@@ -813,6 +997,7 @@ export async function uploadZipByChunks(params: UploadZipParams): Promise<Remote
     completeJson.extractedPath ? `extracted=${String(completeJson.extractedPath)}` : null,
     completeJson.savedPath ? `saved=${String(completeJson.savedPath)}` : null,
     completeJson.totalSize != null ? `size=${String(completeJson.totalSize)}` : null,
+    completeJson.recoveredFromProxy === true ? 'recovered=proxy-poll' : null,
   ]
     .filter(Boolean)
     .join(', ');
@@ -820,7 +1005,7 @@ export async function uploadZipByChunks(params: UploadZipParams): Promise<Remote
   stages.push({
     id: 'complete',
     ok: true,
-    status: completeRes.status,
+    status: completeStatus,
     detail: completeDetail || 'complete 성공',
   });
 

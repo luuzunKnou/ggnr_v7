@@ -8,21 +8,24 @@ setlocal EnableExtensions EnableDelayedExpansion
 :: - node PATH = directory of "where node"
 :: - npm ci from package-lock (Y/N; auto if GGNR_START_NO_PAUSE=1)
 :: - then npm run build (GGNR_PROJECT/ENV -> BASE_PATH). fail => pause
-:: - ggnr_start.bat: skip build if BUILD_ID exists -> start
+:: - stop previous GGNR / free port 3000 AFTER successful build (before nssm)
+:: - ggnr_start.bat + ggnr_build_project.bat generated from project/type prompts
 :: - project / type / npm / overwrite / nssm asked once up front
 :: - nssm = root\nssm\win64\nssm.exe
 :: - python/env_parts optional restore
-:: - if DO_NSSM=Y and not admin => stop before build
+:: - if DO_NSSM=Y and not admin => require admin before build
+:: - 00_open_ggnr_logs: skip if GGNR_LOG/GEOSERVER_LOG already open
 :: - window keep: set /p. skip only if GGNR_STARTER_NO_PAUSE=1
 :: =============================================================================
 
 set "ROOT=%~dp0"
 if "%ROOT:~-1%"=="\" set "ROOT=%ROOT:~0,-1%"
 set "OUT=%ROOT%\ggnr_start.bat"
-set "NSSM_BAT=%ROOT%\nssm_install_ggnr.bat"
+set "BUILD_OUT=%ROOT%\ggnr_build_project.bat"
+set "NSSM_BAT=%ROOT%\00_nssm_install_ggnr.bat"
 set "NSSM_EXE=%ROOT%\nssm\win64\nssm.exe"
 if not exist "%NSSM_EXE%" set "NSSM_EXE=%ROOT%\nssm\win32\nssm.exe"
-set "LOGS_BAT=%ROOT%\open_ggnr_logs.bat"
+set "LOGS_BAT=%ROOT%\00_open_ggnr_logs.bat"
 set "SERVICE_NAME=GGNR_V7"
 set "APP_PORT=3000"
 :: GGNR_START_NO_PAUSE is for ggnr_start/nssm only - not this starter window
@@ -120,15 +123,11 @@ echo   nssm        = !DO_NSSM!
 echo   re-register = !DO_REREG!
 echo.
 
-:: admin before build if nssm=Y
+:: admin before build if nssm=Y (keep service on :3000 during npm sync/build)
 if /i "!DO_NSSM!"=="Y" (
   call :require_admin
   if errorlevel 1 goto :fail_exit
 )
-
-:: stop previous run so npm ci / re-register is not locked
-call :stop_previous_ggnr
-echo.
 
 where node >nul 2>&1
 if errorlevel 1 (
@@ -195,23 +194,31 @@ if exist "%OUT%" (
   )
 )
 
-echo [RUN] post-build: ggnr_start.bat / nssm / logs
+echo [RUN] post-build: ggnr_start.bat / ggnr_build_project.bat / nssm / logs
 if "!SKIP_WRITE!"=="0" (
   echo [RUN] writing ggnr_start.bat ...
   call :write_ggnr_start
+  if errorlevel 1 goto :fail_exit
+  echo [RUN] writing ggnr_build_project.bat ...
+  call :write_ggnr_build_project
   if errorlevel 1 goto :fail_exit
   if not exist "%OUT%" (
     echo [ERROR] failed to create ggnr_start.bat
     goto :fail_exit
   )
+  if not exist "%BUILD_OUT%" (
+    echo [ERROR] failed to create ggnr_build_project.bat
+    goto :fail_exit
+  )
   echo [OK] created: %OUT%
+  echo [OK] created: %BUILD_OUT%
 ) else (
   if not exist "%OUT%" (
     echo [ERROR] ggnr_start.bat missing.
     goto :fail_exit
   )
-  echo [WARN] keeping existing ggnr_start.bat
-  echo        new project/type were NOT written into it.
+  echo [WARN] keeping existing ggnr_start.bat / ggnr_build_project.bat
+  echo        new project/type were NOT written into them.
   echo        re-run with overwrite=Y to update.
   echo.
 )
@@ -221,7 +228,7 @@ echo [OK] ggnr_start.bat step done.
 if /i not "!DO_NSSM!"=="Y" (
   echo [SKIP] nssm/logs ^(DO_NSSM=!DO_NSSM!^)
   echo [DONE] generate only.
-  echo   manual: nssm_install_ggnr.bat ^(admin CMD^) -> open_ggnr_logs.bat
+  echo   manual: 00_nssm_install_ggnr.bat ^(admin CMD^) -> 00_open_ggnr_logs.bat
   echo.
   if "!PAUSE_ON_FAIL!"=="1" call :pause_keep
   exit /b 0
@@ -250,6 +257,11 @@ if not exist "%LOGS_BAT%" (
   goto :fail_exit
 )
 
+:: stop after successful build so :3000 stays up during npm run build
+echo.
+call :stop_previous_ggnr
+echo.
+
 echo.
 echo [RUN] nssm register ^(1/2^)...
 echo        ^(on failure, nssm_install window stays open - check message then Enter^)
@@ -265,7 +277,7 @@ if "!NSSM_EC!"=="2" (
   echo        start GGNR_V7 from services if needed.
   echo.
   echo [RUN] log window ^(2/2^)...
-  start "" "%LOGS_BAT%"
+  start "" /min cmd /c "%LOGS_BAT%"
   echo.
   echo [DONE] generate -> ^(keep service^) -> logs
   echo.
@@ -280,7 +292,7 @@ if not "!NSSM_EC!"=="0" (
 
 echo.
 echo [RUN] log window ^(2/2^)...
-start "" "%LOGS_BAT%"
+start "" /min cmd /c "%LOGS_BAT%"
 
 echo.
 echo [DONE] generate -> nssm -> logs
@@ -293,7 +305,7 @@ if not defined FAIL_EC set "FAIL_EC=1"
 echo.
 echo [EXIT] stopped with error ^(exit=!FAIL_EC!^). See messages above.
 echo        nssm log: C:\logs\nssm_install_last.log
-echo        manual: nssm_install_ggnr.bat ^(admin CMD^) -> open_ggnr_logs.bat
+echo        manual: 00_nssm_install_ggnr.bat ^(admin CMD^) -> 00_open_ggnr_logs.bat
 if "!PAUSE_ON_FAIL!"=="1" call :pause_keep
 exit /b !FAIL_EC!
 
@@ -340,6 +352,9 @@ echo.
 echo :: cwd
 echo cd /d %ROOT%
 echo.
+echo :: G: = \\192.168.127.11\service_data — nssm has no interactive drive mapping ^(silent^)
+echo net use G: \\192.168.127.11\service_data /persistent:yes ^>nul 2^>&1
+echo.
 echo :: PATH node
 echo set PATH=%%PATH%%;%NODE_DIR%
 echo.
@@ -355,24 +370,25 @@ echo     goto build_fail
 echo   ^)
 echo ^)
 echo.
-echo :: build if no BUILD_ID
-echo if exist ".next\BUILD_ID" ^(
-echo   echo [OK] .next\BUILD_ID found - skip build
-echo   goto after_build
-echo ^)
-echo if exist ".next\" ^(
-echo   echo [WARN] .next exists but BUILD_ID missing - npm run build
+echo :: build if no BUILD_ID or BASE_PATH mismatch
+echo call npx tsx scripts/check-base-path-build.ts "%%GGNR_PROJECT%%" "%%GGNR_ENV%%"
+echo if errorlevel 1 ^(
+echo   if exist ".next\" ^(
+echo     echo [WARN] BUILD_ID/basePath mismatch - rebuild with project env
+echo   ^) else ^(
+echo     echo [OK] no .next - build with project env
+echo   ^)
+echo   call npx tsx scripts/build-with-project-env.ts "%%GGNR_PROJECT%%" "%%GGNR_ENV%%"
+echo   if errorlevel 1 goto build_fail
+echo   if not exist ".next\BUILD_ID" goto build_no_id
+echo   echo [OK] npm run build done.
 echo ^) else ^(
-echo   echo [OK] no BUILD_ID - npm run build
+echo   echo [OK] BUILD_ID + BASE_PATH match - skip build
 echo ^)
-echo call npm run build
-echo if errorlevel 1 goto build_fail
-echo if not exist ".next\BUILD_ID" goto build_no_id
-echo echo [OK] npm run build done.
 echo goto after_build
 echo.
 echo :build_fail
-echo echo [ERROR] npm run build failed.
+echo echo [ERROR] build-with-project-env failed.
 echo if /i not "%%GGNR_START_NO_PAUSE%%"=="1" ^(
 echo   echo Press Enter to close...
 echo   set /p "=Enter... "
@@ -407,6 +423,56 @@ echo exit /b 1
 if not exist "%OUT%" exit /b 1
 exit /b 0
 
+:: ---------------------------------------------------------------------------
+:: write ggnr_build_project.bat - manual BASE_PATH build (no prompts)
+:: ---------------------------------------------------------------------------
+:write_ggnr_build_project
+> "%BUILD_OUT%" (
+echo @echo off
+echo setlocal EnableExtensions
+echo set "BUILD_EC=1"
+echo.
+echo :: ggnr_v7 manual build - generated by 00_make_ggnr_starter.bat
+echo.
+echo chcp 65001 ^> nul
+echo cd /d %ROOT%
+echo set PATH=%%PATH%%;%NODE_DIR%
+echo.
+echo set "GGNR_PROJECT=%PROJECT_NAME%"
+echo set "GGNR_ENV=%ENV_NAME%"
+echo.
+echo if not exist "node_modules\next\package.json" ^(
+echo   echo [ERROR] next not installed. Run npm ci or npm install first.
+echo   goto :end_pause
+echo ^)
+echo.
+echo echo.
+echo echo [npm run build] project: %%GGNR_PROJECT%%
+echo echo [npm run build] type: %%GGNR_ENV%%
+echo echo npx tsx scripts/build-with-project-env.ts %%GGNR_PROJECT%% %%GGNR_ENV%%
+echo echo.
+echo.
+echo call npx tsx scripts/build-with-project-env.ts "%%GGNR_PROJECT%%" "%%GGNR_ENV%%"
+echo set "BUILD_EC=%%errorlevel%%"
+echo.
+echo if not "%%BUILD_EC%%"=="0" ^(
+echo   echo [ERROR] build failed ^(exit=%%BUILD_EC%%^)
+echo ^) else if exist ".next\BUILD_ID" ^(
+echo   echo [OK] build done. BUILD_ID=
+echo   type ".next\BUILD_ID"
+echo ^) else ^(
+echo   echo [ERROR] .next\BUILD_ID missing after build.
+echo   set "BUILD_EC=1"
+echo ^)
+echo.
+echo :end_pause
+echo echo.
+echo pause
+echo exit /b %%BUILD_EC%%
+)
+if not exist "%BUILD_OUT%" exit /b 1
+exit /b 0
+
 :: npm ci if lock exists, else npm install
 :run_npm_sync
 pushd "%ROOT%"
@@ -438,19 +504,18 @@ if not exist "%ROOT%\node_modules\next\package.json" (
   set "FAIL_EC=1"
   exit /b 1
 )
-echo [RUN] npm run build ...
+echo [RUN] build with project env ^(BASE_PATH like CRA PUBLIC_URL^) ...
 echo        GGNR_PROJECT=%GGNR_PROJECT%  GGNR_ENV=%GGNR_ENV%
-echo        ^(next.config reads project env for BASE_PATH^)
 echo        keep this window open on failure.
 pushd "%ROOT%"
-call npm run build
+call npx tsx scripts/build-with-project-env.ts "%GGNR_PROJECT%" "%GGNR_ENV%"
 set "BUILD_EC=!errorlevel!"
 popd
 if not "!BUILD_EC!"=="0" (
   echo.
   echo ===== BUILD FAILED =====
-  echo [ERROR] npm run build failed ^(exit=!BUILD_EC!^)
-  echo         check TypeScript/Next logs above.
+  echo [ERROR] build-with-project-env failed ^(exit=!BUILD_EC!^)
+  echo         check TypeScript/Next logs above. For gate, demo BASE_PATH must be baked in.
   set "FAIL_EC=!BUILD_EC!"
   exit /b !BUILD_EC!
 )
@@ -466,7 +531,8 @@ type "%ROOT%\.next\BUILD_ID"
 echo.
 exit /b 0
 
-:: stop previous GGNR (service stop only, no remove) + free app port
+:: stop previous GGNR (service stop only, no remove) + GeoServer + free app port
+:: Called after successful build, immediately before 00_nssm_install
 :stop_previous_ggnr
 echo [CLEAN] stop previous GGNR if running ^(service not removed^)...
 if exist "%NSSM_EXE%" (
@@ -484,6 +550,11 @@ if exist "%NSSM_EXE%" (
 ) else (
   echo [CLEAN] nssm.exe missing - skip service stop. check port only.
 )
+call "%ROOT%\00_geoserver_port_helpers.bat" stop
+timeout /t 2 /nobreak >nul
+call "%ROOT%\00_geoserver_port_helpers.bat" resolve
+echo [CLEAN] geoserver port = !GEO_PORT!
+call :kill_listen_port !GEO_PORT!
 call :kill_listen_port %APP_PORT%
 call :kill_ggnr_start_cmds
 echo [CLEAN] previous run cleanup done.
