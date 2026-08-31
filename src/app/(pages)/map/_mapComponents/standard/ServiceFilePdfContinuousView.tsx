@@ -2,13 +2,12 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Loader2 } from 'lucide-react';
-import { type PDFDocumentProxy, type TextLayer } from 'pdfjs-dist';
+import { type PDFDocumentProxy } from 'pdfjs-dist';
 import { cn } from '@/lib/utils';
 import { configurePdfJsWorker } from '@/lib/pdfjsWorker';
 import { acquirePdfDocument, releasePdfDocument } from './pdfDocumentCache';
-import { cancelPdfTextLayer, renderPdfTextLayer } from './renderPdfTextLayer';
-import { scheduleLazyPdfTextLayer, type LazyTextLayerHandle } from './lazyPdfTextLayer';
 import {
+  STAGE_DPR_MAX,
   STAGE_MAX_ZOOM,
   STAGE_MIN_ZOOM,
   type PdfPreviewFitMode,
@@ -22,8 +21,6 @@ const MAX_CANVAS_LONG_EDGE = 8192;
 const PAGE_GAP_PX = 12;
 /** canvas prefetch — 뷰포트 밖 여유 */
 const CANVAS_ROOT_MARGIN = '320px 0px';
-/** TextLayer — 실제 화면에 들어온 페이지만 */
-const TEXT_LAYER_ROOT_MARGIN = '80px 0px';
 
 function releaseCanvasMemory(canvas: HTMLCanvasElement | null): void {
   if (!canvas) return;
@@ -41,6 +38,7 @@ type ContinuousPageProps = {
   rotation: number;
   scrollRoot: HTMLElement | null;
   onHeightReady: (pageNumber: number, height: number) => void;
+  onCanvasReady?: (pageNumber: number) => void;
 };
 
 function ContinuousPage({
@@ -51,25 +49,17 @@ function ContinuousPage({
   rotation,
   scrollRoot,
   onHeightReady,
+  onCanvasReady,
 }: ContinuousPageProps) {
   const rootRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const textLayerRef = useRef<HTMLDivElement>(null);
   const [inView, setInView] = useState(false);
-  const [textLayerEligible, setTextLayerEligible] = useState(false);
   const [phase, setPhase] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle');
   const renderTaskRef = useRef<{ cancel: () => void } | null>(null);
-  const textLayerTaskRef = useRef<TextLayer | null>(null);
-  const lazyTextLayerRef = useRef<LazyTextLayerHandle | null>(null);
   const onHeightReadyRef = useRef(onHeightReady);
+  const onCanvasReadyRef = useRef(onCanvasReady);
   onHeightReadyRef.current = onHeightReady;
-
-  const cancelTextLayer = useCallback(() => {
-    lazyTextLayerRef.current?.cancel();
-    lazyTextLayerRef.current = null;
-    cancelPdfTextLayer(textLayerTaskRef.current, textLayerRef.current);
-    textLayerTaskRef.current = null;
-  }, []);
+  onCanvasReadyRef.current = onCanvasReady;
 
   useEffect(() => {
     const el = rootRef.current;
@@ -85,25 +75,13 @@ function ContinuousPage({
     );
     canvasObs.observe(el);
 
-    const textObs = new IntersectionObserver(
-      (entries) => {
-        for (const entry of entries) {
-          if (entry.target === el) setTextLayerEligible(entry.isIntersecting);
-        }
-      },
-      { root: scrollRoot, rootMargin: TEXT_LAYER_ROOT_MARGIN }
-    );
-    textObs.observe(el);
-
     return () => {
       canvasObs.disconnect();
-      textObs.disconnect();
     };
   }, [scrollRoot]);
 
   useEffect(() => {
     if (!inView) {
-      cancelTextLayer();
       renderTaskRef.current?.cancel();
       renderTaskRef.current = null;
       releaseCanvasMemory(canvasRef.current);
@@ -124,7 +102,7 @@ function ContinuousPage({
         const ctx = canvas.getContext('2d');
         if (!ctx) throw new Error('no ctx');
 
-        const dpr = Math.min(typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1, 3);
+        const dpr = Math.min(typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1, STAGE_DPR_MAX);
         const maxW = Math.min(window.innerWidth * 0.96, 1800);
         const maxH = Math.min(window.innerHeight * 0.85, 1400);
         const vp1 = page.getViewport({ scale: 1, rotation });
@@ -161,6 +139,7 @@ function ContinuousPage({
         if (cancelled) return;
 
         setPhase('ready');
+        onCanvasReadyRef.current?.(pageNumber);
       } catch {
         if (!cancelled) setPhase('error');
       }
@@ -171,82 +150,8 @@ function ContinuousPage({
       cancelled = true;
       renderTaskRef.current?.cancel();
       renderTaskRef.current = null;
-      cancelTextLayer();
     };
-  }, [inView, pdf, pageNumber, fitMode, renderScale, rotation, cancelTextLayer]);
-
-  /** canvas 준비·뷰포트 진입 시 TextLayer lazy 스케줄 */
-  useEffect(() => {
-    if (!textLayerEligible || phase !== 'ready' || !inView) {
-      if (!textLayerEligible) cancelTextLayer();
-      return;
-    }
-
-    let cancelled = false;
-
-    const run = async () => {
-      const page = await pdf.getPage(pageNumber);
-      if (cancelled || !textLayerEligible) return;
-
-      const canvas = canvasRef.current;
-      if (!canvas || canvas.width < 1) return;
-
-      const dpr = Math.min(typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1, 3);
-      const maxW = Math.min(window.innerWidth * 0.96, 1800);
-      const maxH = Math.min(window.innerHeight * 0.85, 1400);
-      const vp1 = page.getViewport({ scale: 1, rotation });
-      const fitSc =
-        fitMode === 'width'
-          ? Math.min(maxW / vp1.width, STAGE_MAX_ZOOM)
-          : Math.min(maxW / vp1.width, maxH / vp1.height, STAGE_MAX_ZOOM);
-      const zoom = clamp(renderScale, STAGE_MIN_ZOOM, STAGE_MAX_ZOOM);
-      let renderSc = fitSc * zoom;
-      let viewport = page.getViewport({ scale: renderSc, rotation });
-      const longEdge = Math.max(viewport.width, viewport.height);
-      if (longEdge > MAX_CANVAS_LONG_EDGE) {
-        renderSc *= MAX_CANVAS_LONG_EDGE / longEdge;
-        viewport = page.getViewport({ scale: renderSc, rotation });
-      }
-
-      const textContainer = textLayerRef.current;
-      if (!textContainer) return;
-
-      cancelTextLayer();
-      lazyTextLayerRef.current = scheduleLazyPdfTextLayer(async (signal) => {
-        if (cancelled || signal.aborted || !textLayerEligible) return;
-        try {
-          textLayerTaskRef.current = await renderPdfTextLayer({
-            page,
-            viewport,
-            container: textContainer,
-            signal,
-          });
-        } catch (err) {
-          if (err instanceof DOMException && err.name === 'AbortError') return;
-        }
-      });
-    };
-
-    void run();
-    return () => {
-      cancelled = true;
-      cancelTextLayer();
-    };
-  }, [
-    textLayerEligible,
-    phase,
-    inView,
-    pdf,
-    pageNumber,
-    fitMode,
-    renderScale,
-    rotation,
-    cancelTextLayer,
-  ]);
-
-  useEffect(() => {
-    return () => cancelTextLayer();
-  }, [cancelTextLayer]);
+  }, [inView, pdf, pageNumber, fitMode, renderScale, rotation]);
 
   return (
     <div
@@ -273,10 +178,6 @@ function ContinuousPage({
             ref={canvasRef}
             className="relative z-0 block shadow-2xl"
           />
-          <div
-            ref={textLayerRef}
-            className="textLayer absolute left-0 top-0 z-[1]"
-          />
         </div>
       </div>
     </div>
@@ -293,6 +194,7 @@ type Props = {
   scrollToPageToken: number;
   onPagesReady: (n: number) => void;
   onVisiblePageChange: (n: number) => void;
+  onMainCanvasReady?: () => void;
   scrollContainerRef?: React.RefObject<HTMLDivElement | null>;
 };
 
@@ -307,6 +209,7 @@ export function ServiceFilePdfContinuousView({
   scrollToPageToken,
   onPagesReady,
   onVisiblePageChange,
+  onMainCanvasReady,
   scrollContainerRef,
 }: Props) {
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -319,10 +222,13 @@ export function ServiceFilePdfContinuousView({
   const loadUrlRef = useRef<string | null>(null);
   const scrollSyncLockRef = useRef(false);
   const visibilityRef = useRef<Map<number, number>>(new Map());
+  const mainReadyNotifiedRef = useRef(false);
   const onPagesReadyRef = useRef(onPagesReady);
   const onVisiblePageChangeRef = useRef(onVisiblePageChange);
+  const onMainCanvasReadyRef = useRef(onMainCanvasReady);
   onPagesReadyRef.current = onPagesReady;
   onVisiblePageChangeRef.current = onVisiblePageChange;
+  onMainCanvasReadyRef.current = onMainCanvasReady;
 
   const assignScrollRoot = useCallback(
     (el: HTMLDivElement | null) => {
@@ -334,6 +240,10 @@ export function ServiceFilePdfContinuousView({
     },
     [scrollContainerRef]
   );
+
+  useEffect(() => {
+    mainReadyNotifiedRef.current = false;
+  }, [url]);
 
   useEffect(() => {
     configurePdfJsWorker();
@@ -393,6 +303,12 @@ export function ServiceFilePdfContinuousView({
 
   const handleHeightReady = useCallback((_pageNumber: number, _height: number) => {
     /* placeholder heights handled by canvas layout */
+  }, []);
+
+  const handleCanvasReady = useCallback((pageNumber: number) => {
+    if (pageNumber !== 1 || mainReadyNotifiedRef.current) return;
+    mainReadyNotifiedRef.current = true;
+    onMainCanvasReadyRef.current?.();
   }, []);
 
   /** 사이드바·툴바 등 명시적 페이지 이동 시에만 스크롤 */
@@ -513,6 +429,7 @@ export function ServiceFilePdfContinuousView({
             rotation={rotation}
             scrollRoot={scrollRoot}
             onHeightReady={handleHeightReady}
+            onCanvasReady={handleCanvasReady}
           />
         ))}
       </div>

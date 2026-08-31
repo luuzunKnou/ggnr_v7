@@ -36,7 +36,7 @@ import {
   buildServiceFilePreviewListZipName,
   printServiceFilePreviewBlob,
 } from './ServiceFileImagePreview';
-import { setPdfViewerFocusUrl } from './pdfDocumentCache';
+import { setPdfViewerFocusUrl, getCachedPdfNumPages, prefetchPdfDocument } from './pdfDocumentCache';
 
 export type ServiceFilePdfPreviewItem = {
   url: string;
@@ -104,6 +104,8 @@ export function ServiceFilePdfPreview({ items, initialIndex, onClose }: Props) {
   const [pageInput, setPageInput] = useState('1');
   /** 연속 보기 — 사이드바·툴바 등 명시적 페이지 이동 시에만 스크롤 */
   const [continuousScrollToken, setContinuousScrollToken] = useState(0);
+  /** 메인 canvas 첫 렌더 완료 — 썸네일 등 부가 로드 지연 */
+  const [mainCanvasReady, setMainCanvasReady] = useState(false);
 
   const draggingRef = useRef(false);
   const lastPointerRef = useRef({ x: 0, y: 0 });
@@ -141,16 +143,34 @@ export function ServiceFilePdfPreview({ items, initialIndex, onClose }: Props) {
   }, [initialIndex, items.length, itemsKey]);
 
   useEffect(() => {
+    const item = items[index];
+    const cachedPages = item?.url ? getCachedPdfNumPages(item.url) : null;
+
     setScale(1);
     setRenderScale(1);
     setFitMode('page');
     setRotation(0);
     setPan({ x: 0, y: 0 });
     setPdfPage(1);
-    setPdfNumPages(0);
-    setPdfPagesLoading(true);
     setPageInput('1');
-  }, [index]);
+    setMainCanvasReady(false);
+
+    if (cachedPages != null) {
+      setPdfNumPages(cachedPages);
+      setPdfPagesLoading(false);
+    } else {
+      setPdfNumPages(0);
+      setPdfPagesLoading(true);
+    }
+  }, [index, items]);
+
+  useEffect(() => {
+    if (!current?.url) return;
+    for (const ni of [index - 1, index + 1]) {
+      const neighbor = items[ni]?.url;
+      if (neighbor) prefetchPdfDocument(neighbor);
+    }
+  }, [index, items, current?.url]);
 
   useEffect(() => {
     if (current?.url) setPdfViewerFocusUrl(current.url);
@@ -171,7 +191,12 @@ export function ServiceFilePdfPreview({ items, initialIndex, onClose }: Props) {
     setScale(1);
     setRenderScale(1);
     setPan({ x: 0, y: 0 });
+    setMainCanvasReady(false);
   }, [current?.url]);
+
+  const handleMainCanvasReady = useCallback(() => {
+    setMainCanvasReady(true);
+  }, []);
 
   /** 2단계 LOD: 휠·버튼 줌 멈춘 뒤 renderScale 확정 → canvas 재렌더 */
   useEffect(() => {
@@ -758,7 +783,8 @@ export function ServiceFilePdfPreview({ items, initialIndex, onClose }: Props) {
                       url={current.url}
                       pageNumber={pn}
                       active={pn === pdfPage}
-                      priority={pn === pdfPage}
+                      priority={mainCanvasReady && pn === pdfPage}
+                      loadEnabled={mainCanvasReady}
                       onClick={() => navigateToPdfPage(pn)}
                       thumbMaxPx={PDF_PAGE_THUMB_DISPLAY_PX}
                     />
@@ -802,6 +828,7 @@ export function ServiceFilePdfPreview({ items, initialIndex, onClose }: Props) {
                 fitMode={fitMode}
                 renderScale={renderScale}
                 onPagesReady={setPdfNumPagesStable}
+                onMainCanvasReady={handleMainCanvasReady}
               />
             </div>
           </div>
@@ -816,6 +843,7 @@ export function ServiceFilePdfPreview({ items, initialIndex, onClose }: Props) {
               scrollToPageToken={continuousScrollToken}
               onPagesReady={setPdfNumPagesStable}
               onVisiblePageChange={onContinuousVisiblePageChange}
+              onMainCanvasReady={handleMainCanvasReady}
               scrollContainerRef={continuousScrollRef}
             />
           )}
@@ -957,7 +985,7 @@ export function ServiceFilePdfPreview({ items, initialIndex, onClose }: Props) {
             ? '휠로 이전·다음 페이지 · Ctrl+휠 확대·축소'
             : '휠로 확대·축소'}
         {viewMode === 'single'
-          ? ' · 드래그로 텍스트 선택 · Space 또는 Alt+드래그로 화면 이동 · 더블클릭 시 초기화'
+          ? ' · Space 또는 Alt+드래그로 화면 이동 · 더블클릭 시 초기화'
           : ''}
         {canNav ? ' · ← → 이전·다음 파일' : ''}
         {canPdfPage && viewMode === 'single' ? ' · PDF ↑↓ 또는 Page Up / Down' : ''}

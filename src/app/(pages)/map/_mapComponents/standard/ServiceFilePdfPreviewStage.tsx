@@ -5,10 +5,7 @@ import { Loader2 } from 'lucide-react';
 import { type PDFDocumentProxy } from 'pdfjs-dist';
 import { cn } from '@/lib/utils';
 import { configurePdfJsWorker } from '@/lib/pdfjsWorker';
-import { acquirePdfDocument, releasePdfDocument } from './pdfDocumentCache';
-import { cancelPdfTextLayer, renderPdfTextLayer } from './renderPdfTextLayer';
-import { scheduleLazyPdfTextLayer, type LazyTextLayerHandle } from './lazyPdfTextLayer';
-import type { TextLayer } from 'pdfjs-dist';
+import { acquirePdfDocument, isPdfDocumentReady, releasePdfDocument } from './pdfDocumentCache';
 
 function clamp(n: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, n));
@@ -16,6 +13,8 @@ function clamp(n: number, min: number, max: number): number {
 
 export const STAGE_MIN_ZOOM = 0.25;
 export const STAGE_MAX_ZOOM = 5;
+/** 메인 canvas DPR 상한 — 첫 렌더 비용 절감 */
+export const STAGE_DPR_MAX = 2;
 
 export type PdfPreviewFitMode = 'page' | 'width';
 
@@ -27,32 +26,35 @@ export function ServiceFilePdfPreviewStage({
   url,
   pageNumber,
   onPagesReady,
+  onMainCanvasReady,
   fitMode = 'page',
   renderScale = 1,
 }: {
   url: string;
   pageNumber: number;
   onPagesReady: (n: number) => void;
+  /** 첫 메인 canvas 렌더 완료 시 1회 호출 — 썸네일 등 부가 로드 지연용 */
+  onMainCanvasReady?: () => void;
   /** page=화면에 페이지 전체, width=가로 너비 맞춤 */
   fitMode?: PdfPreviewFitMode;
   /** pdf.js viewport scale = fit × renderScale (LOD 확정 배율) */
   renderScale?: number;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const textLayerRef = useRef<HTMLDivElement>(null);
   const pdfRef = useRef<PDFDocumentProxy | null>(null);
   const heldUrlRef = useRef<string | null>(null);
   const loadUrlRef = useRef<string | null>(null);
   const lastPageRef = useRef<number>(0);
   const hasRenderedRef = useRef(false);
+  const mainReadyNotifiedRef = useRef(false);
   const renderTaskRef = useRef<{ cancel: () => void } | null>(null);
-  const textLayerTaskRef = useRef<TextLayer | null>(null);
-  const lazyTextLayerRef = useRef<LazyTextLayerHandle | null>(null);
   const [phase, setPhase] = useState<'loading' | 'ready' | 'error'>('loading');
   const [upgrading, setUpgrading] = useState(false);
   const alive = useRef(true);
   const onPagesReadyRef = useRef(onPagesReady);
+  const onMainCanvasReadyRef = useRef(onMainCanvasReady);
   onPagesReadyRef.current = onPagesReady;
+  onMainCanvasReadyRef.current = onMainCanvasReady;
 
   useEffect(() => {
     alive.current = true;
@@ -63,6 +65,10 @@ export function ServiceFilePdfPreviewStage({
   }, []);
 
   useEffect(() => {
+    mainReadyNotifiedRef.current = false;
+  }, [url]);
+
+  useEffect(() => {
     let cancelled = false;
 
     const run = async () => {
@@ -70,10 +76,15 @@ export function ServiceFilePdfPreviewStage({
       const pageChanged = lastPageRef.current !== pageNumber;
       const isLodUpgrade = hasRenderedRef.current && !needNewDoc && !pageChanged;
 
+      const docAlreadyCached = needNewDoc && isPdfDocumentReady(url);
+
       if (isLodUpgrade) {
         setUpgrading(true);
-      } else {
+      } else if (!docAlreadyCached) {
         setPhase('loading');
+        setUpgrading(false);
+        hasRenderedRef.current = false;
+      } else {
         setUpgrading(false);
         hasRenderedRef.current = false;
       }
@@ -118,7 +129,7 @@ export function ServiceFilePdfPreviewStage({
         const ctx = canvas.getContext('2d');
         if (!ctx) throw new Error('no ctx');
 
-        const dpr = Math.min(typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1, 3);
+        const dpr = Math.min(typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1, STAGE_DPR_MAX);
         const maxW = Math.min(window.innerWidth * 0.96, 1800);
         const maxH = Math.min(window.innerHeight * 0.85, 1400);
         const vp1 = page.getViewport({ scale: 1 });
@@ -160,27 +171,9 @@ export function ServiceFilePdfPreviewStage({
         setUpgrading(false);
         setPhase('ready');
 
-        const textContainer = textLayerRef.current;
-        if (textContainer) {
-          lazyTextLayerRef.current?.cancel();
-          lazyTextLayerRef.current = null;
-          cancelPdfTextLayer(textLayerTaskRef.current, textContainer);
-          textLayerTaskRef.current = null;
-
-          lazyTextLayerRef.current = scheduleLazyPdfTextLayer(async (signal) => {
-            if (cancelled || !alive.current || signal.aborted) return;
-            try {
-              textLayerTaskRef.current = await renderPdfTextLayer({
-                page,
-                viewport,
-                container: textContainer,
-                signal,
-              });
-            } catch (err) {
-              if (err instanceof DOMException && err.name === 'AbortError') return;
-              /* 스캔 PDF 등 텍스트 없음 — canvas만 표시 */
-            }
-          });
+        if (!mainReadyNotifiedRef.current) {
+          mainReadyNotifiedRef.current = true;
+          onMainCanvasReadyRef.current?.();
         }
       } catch {
         if (!cancelled && alive.current) {
@@ -196,19 +189,11 @@ export function ServiceFilePdfPreviewStage({
       cancelled = true;
       renderTaskRef.current?.cancel();
       renderTaskRef.current = null;
-      lazyTextLayerRef.current?.cancel();
-      lazyTextLayerRef.current = null;
-      cancelPdfTextLayer(textLayerTaskRef.current, textLayerRef.current);
-      textLayerTaskRef.current = null;
     };
   }, [url, pageNumber, fitMode, renderScale]);
 
   useEffect(() => {
     return () => {
-      lazyTextLayerRef.current?.cancel();
-      lazyTextLayerRef.current = null;
-      cancelPdfTextLayer(textLayerTaskRef.current, textLayerRef.current);
-      textLayerTaskRef.current = null;
       if (heldUrlRef.current) {
         releasePdfDocument(heldUrlRef.current);
         heldUrlRef.current = null;
@@ -217,6 +202,7 @@ export function ServiceFilePdfPreviewStage({
       loadUrlRef.current = null;
       lastPageRef.current = 0;
       hasRenderedRef.current = false;
+      mainReadyNotifiedRef.current = false;
     };
   }, []);
 
@@ -249,21 +235,14 @@ export function ServiceFilePdfPreviewStage({
           <Loader2 className="h-4 w-4 animate-spin text-white/70" aria-hidden />
         </div>
       ) : null}
-      <div className="relative inline-block">
-        <canvas
-          ref={canvasRef}
-          className={cn(
-            'relative z-0 block shadow-2xl transition-opacity duration-150',
-            showBlockingLoader ? 'opacity-0' : 'opacity-100'
-          )}
-          aria-hidden={showBlockingLoader}
-        />
-        <div
-          ref={textLayerRef}
-          className="textLayer absolute left-0 top-0 z-[1]"
-          aria-hidden={showBlockingLoader}
-        />
-      </div>
+      <canvas
+        ref={canvasRef}
+        className={cn(
+          'relative z-0 block shadow-2xl transition-opacity duration-150',
+          showBlockingLoader ? 'opacity-0' : 'opacity-100'
+        )}
+        aria-hidden={showBlockingLoader}
+      />
     </div>
   );
 }

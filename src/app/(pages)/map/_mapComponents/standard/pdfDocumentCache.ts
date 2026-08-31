@@ -15,18 +15,67 @@ type CacheEntry = {
 
 const cache = new Map<string, CacheEntry>();
 
+/** refCount=0 상태로 유지할 최근 PDF 상한 — 파일 전환 시 재파싱 방지 */
+const WARM_CACHE_MAX = 4;
+
 let viewerFocusUrl: string | null = null;
+/** refCount=0 idle 문서 LRU (오래된 것부터 evict) */
+const warmIdleUrls: string[] = [];
 
 export function getPdfViewerFocusUrl(): string | null {
   return viewerFocusUrl;
 }
 
-/** 뷰어가 보는 URL만 유지 — 그 외 in-flight load 즉시 취소 */
+function touchWarmIdle(url: string): void {
+  const idx = warmIdleUrls.indexOf(url);
+  if (idx >= 0) warmIdleUrls.splice(idx, 1);
+  warmIdleUrls.push(url);
+}
+
+function removeWarmIdle(url: string): void {
+  const idx = warmIdleUrls.indexOf(url);
+  if (idx >= 0) warmIdleUrls.splice(idx, 1);
+}
+
+function evictWarmIdle(): void {
+  while (warmIdleUrls.length > WARM_CACHE_MAX) {
+    const evict = warmIdleUrls.shift();
+    if (!evict || evict === viewerFocusUrl) continue;
+    const entry = cache.get(evict);
+    if (entry && entry.refCount === 0 && entry.doc) {
+      void entry.doc.destroy().catch(() => {});
+      cache.delete(evict);
+    }
+  }
+}
+
+/** 파싱 완료된 PDF가 캐시에 있는지 (동기) */
+export function isPdfDocumentReady(url: string): boolean {
+  const entry = cache.get(url);
+  return Boolean(entry?.doc && !entry.cancelled);
+}
+
+/** 캐시된 PDF 페이지 수 — 파일 전환 시 사이드바 즉시 표시용 */
+export function getCachedPdfNumPages(url: string): number | null {
+  const entry = cache.get(url);
+  if (entry?.doc && !entry.cancelled) return entry.doc.numPages;
+  return null;
+}
+
+/**
+ * 뷰어 포커스 URL 갱신.
+ * 진행 중(in-flight) 로드만 취소하고, 파싱 완료 문서는 warm cache에 유지한다.
+ */
 export function setPdfViewerFocusUrl(url: string | null): void {
   viewerFocusUrl = url;
   for (const cachedUrl of [...cache.keys()]) {
-    if (cachedUrl !== url) cancelPdfDocument(cachedUrl);
+    if (cachedUrl === url) continue;
+    const entry = cache.get(cachedUrl);
+    if (entry && !entry.doc && !entry.cancelled) {
+      cancelPdfDocument(cachedUrl);
+    }
   }
+  evictWarmIdle();
 }
 
 function throwIfAborted(entry: CacheEntry, url: string): void {
@@ -67,6 +116,7 @@ export function cancelPdfDocument(url: string): void {
     void entry.doc.destroy().catch(() => {});
     entry.doc = null;
   }
+  removeWarmIdle(url);
   cache.delete(url);
 }
 
@@ -95,6 +145,7 @@ export async function acquirePdfDocument(url: string): Promise<PDFDocumentProxy>
       })
       .catch((err) => {
         if (cache.get(url) === newEntry) {
+          removeWarmIdle(url);
           cache.delete(url);
         }
         throw err;
@@ -103,6 +154,7 @@ export async function acquirePdfDocument(url: string): Promise<PDFDocumentProxy>
     cache.set(url, entry);
   }
 
+  removeWarmIdle(url);
   entry.refCount += 1;
   try {
     const doc = await entry.promise;
@@ -110,6 +162,10 @@ export async function acquirePdfDocument(url: string): Promise<PDFDocumentProxy>
     return doc;
   } catch (err) {
     entry.refCount = Math.max(0, entry.refCount - 1);
+    if (entry.refCount === 0 && entry.doc && !entry.cancelled) {
+      touchWarmIdle(url);
+      evictWarmIdle();
+    }
     throw err;
   }
 }
@@ -119,7 +175,18 @@ export function releasePdfDocument(url: string): void {
   if (!entry) return;
   entry.refCount = Math.max(0, entry.refCount - 1);
   if (entry.refCount === 0 && entry.doc && !entry.cancelled) {
-    void entry.doc.destroy().catch(() => {});
-    cache.delete(url);
+    touchWarmIdle(url);
+    evictWarmIdle();
   }
+}
+
+/** 백그라운드 fetch·파싱 — 인접 파일 전환 가속 */
+export function prefetchPdfDocument(url: string): void {
+  if (!url || isPdfDocumentReady(url)) return;
+  const existing = cache.get(url);
+  if (existing && !existing.cancelled) return;
+
+  void acquirePdfDocument(url)
+    .then(() => releasePdfDocument(url))
+    .catch(() => {});
 }

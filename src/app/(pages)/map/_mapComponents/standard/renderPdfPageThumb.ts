@@ -5,9 +5,9 @@ import {
   releasePdfDocument,
 } from './pdfDocumentCache';
 
-const THUMB_JPEG_QUALITY = 0.82;
+const THUMB_JPEG_QUALITY = 0.65;
 /** 사이드바 썸네일 DPR 상한 — 렌더 비용 절감 */
-const THUMB_DPR_MAX = 1.25;
+const THUMB_DPR_MAX = 1;
 const THUMB_RENDER_CONCURRENCY = 2;
 const THUMB_CACHE_MAX = 240;
 

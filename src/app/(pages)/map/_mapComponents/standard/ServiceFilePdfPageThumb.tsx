@@ -6,7 +6,7 @@ import { cn } from '@/lib/utils';
 import { getPdfPageThumbDataUrl } from './renderPdfPageThumb';
 
 /** 사이드바(240px) 기준 썸네일 표시 너비 */
-export const PDF_PAGE_THUMB_DISPLAY_PX = 220;
+export const PDF_PAGE_THUMB_DISPLAY_PX = 180;
 
 type Phase = 'idle' | 'loading' | 'ready' | 'error';
 
@@ -21,6 +21,7 @@ export function ServiceFilePdfPageThumb({
   className,
   thumbMaxPx = PDF_PAGE_THUMB_DISPLAY_PX,
   priority = false,
+  loadEnabled = true,
 }: {
   url: string;
   pageNumber: number;
@@ -31,6 +32,8 @@ export function ServiceFilePdfPageThumb({
   thumbMaxPx?: number;
   /** true면 IntersectionObserver 없이 즉시 렌더 (현재 페이지) */
   priority?: boolean;
+  /** false면 메인 canvas 준비 전까지 썸네일 렌더 지연 */
+  loadEnabled?: boolean;
 }) {
   const rootRef = useRef<HTMLButtonElement>(null);
   const [visible, setVisible] = useState(priority);
@@ -59,7 +62,7 @@ export function ServiceFilePdfPageThumb({
   }, [priority]);
 
   useEffect(() => {
-    if (!visible) return;
+    if (!visible || !loadEnabled) return;
     alive.current = true;
     setPhase('loading');
     setDataUrl(null);
@@ -81,7 +84,7 @@ export function ServiceFilePdfPageThumb({
       alive.current = false;
       ac.abort();
     };
-  }, [visible, url, pageNumber, thumbMaxPx]);
+  }, [visible, loadEnabled, url, pageNumber, thumbMaxPx]);
 
   return (
     <button
