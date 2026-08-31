@@ -531,7 +531,7 @@ type "%ROOT%\.next\BUILD_ID"
 echo.
 exit /b 0
 
-:: stop previous GGNR (service stop only, no remove) + free app port
+:: stop previous GGNR (service stop only, no remove) + GeoServer + free app port
 :: Called after successful build, immediately before 00_nssm_install
 :stop_previous_ggnr
 echo [CLEAN] stop previous GGNR if running ^(service not removed^)...
@@ -550,6 +550,11 @@ if exist "%NSSM_EXE%" (
 ) else (
   echo [CLEAN] nssm.exe missing - skip service stop. check port only.
 )
+call "%ROOT%\00_geoserver_port_helpers.bat" stop
+timeout /t 2 /nobreak >nul
+call "%ROOT%\00_geoserver_port_helpers.bat" resolve
+echo [CLEAN] geoserver port = !GEO_PORT!
+call :kill_listen_port !GEO_PORT!
 call :kill_listen_port %APP_PORT%
 call :kill_ggnr_start_cmds
 echo [CLEAN] previous run cleanup done.
