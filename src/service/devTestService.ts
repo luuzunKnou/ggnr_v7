@@ -10,6 +10,11 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {
   buildCssFromSimpleStyle,
+  buildCssForLayerStyle,
+  THEMATIC_MAP_LABEL_EXPRESSION,
+  THEMATIC_MAP_LABEL_WITH_ALIAS_EXPRESSION,
+  THEMATIC_MAP_LABEL_FONT_SIZE,
+  usesThematicAliasLabel,
   darkerHex,
   getMaterialToneColor,
   parseSimpleStyleFromCss,
@@ -25,6 +30,7 @@ import { normalizeDefineTableSource, dedupeDefineLayerTablesByName } from '@/lib
 export { startGeoServer, stopGeoServer } from '@/service/geoserverProcessService';
 import { GGNR_DATA_PATHS } from '@/lib/ggnrDataPaths';
 import { resolveGgnrDataDir, turbopackOpaquePath } from '@/lib/turbopackFsPath';
+import { KRAS_THEMATIC_DEFINE_GROUPS } from '@/integrations/krasLayerSync.config';
 
 const GGNR_DATA_DIR = resolveGgnrDataDir();
 
@@ -1451,7 +1457,7 @@ export async function createGeoServerStyle(params: {
   const styleProps = params.styleProps ?? {};
 
   try {
-    const cssBody = buildCssFromSimpleStyle(geometryType, styleProps);
+    const cssBody = buildCssForLayerStyle(geometryType, styleProps);
     const path = `/rest/styles?name=${encodeURIComponent(name)}`;
     const postRes = await geoserverFetch(baseUrl, path, {
       method: 'POST',
@@ -1489,6 +1495,7 @@ export async function updateGeoServerStyle(params: {
   const geometryType = params.geometryType ?? 'POLYGON';
   const styleProps = params.styleProps ?? {};
   const preserveExtraRules = params.preserveExtraRules !== false;
+  const thematicLabel = (styleProps.labelField ?? '').includes('layer_korname');
 
   try {
     const getRes = await geoserverFetch(baseUrl, `/rest/styles/${encodeURIComponent(name)}.css`, {
@@ -1496,10 +1503,12 @@ export async function updateGeoServerStyle(params: {
     });
     const existingCss = getRes.ok ? await getRes.text() : '';
 
-    const newStarBlock = buildCssFromSimpleStyle(geometryType, styleProps);
-    const cssBody = preserveExtraRules && existingCss
-      ? replaceDefaultRuleInCss(existingCss, newStarBlock)
-      : newStarBlock;
+    const newStarBlock = buildCssForLayerStyle(geometryType, styleProps);
+    // 주제도 emd형 단일 규칙은 이전 z-index 분리 라벨 블록을 남기지 않음
+    const cssBody =
+      preserveExtraRules && existingCss && !thematicLabel
+        ? replaceDefaultRuleInCss(existingCss, newStarBlock)
+        : newStarBlock;
 
     const putRes = await geoserverFetch(baseUrl, `/rest/styles/${encodeURIComponent(name)}`, {
       method: 'PUT',
@@ -2256,6 +2265,18 @@ export async function applyDefaultStyleToLayer(params: {
     const color = getMaterialToneColor(hash);
     let styleProps: StyleProps;
 
+    const defineRow =
+      defineRes.success && defineRes.tables?.length
+        ? defineRes.tables.find(
+            (r) => String(r.define_table_name ?? '').trim().toLowerCase() === layerName
+          )
+        : undefined;
+    const isThematicChild =
+      Boolean(String(defineRow?.define_table_parents_layer ?? '').trim()) &&
+      (KRAS_THEMATIC_DEFINE_GROUPS as readonly string[]).includes(
+        String(defineRow?.define_table_group ?? '').trim()
+      );
+
     if (geometryType === 'POINT') {
       const symbolUrl = resolveSymbolUrlForLayer(layerName);
       styleProps = {
@@ -2273,15 +2294,24 @@ export async function applyDefaultStyleToLayer(params: {
         opacity: 0.5,
       };
     } else {
+      const korName = String(defineRow?.define_table_kor_name ?? '');
+      const thematicLabel = isThematicChild
+        ? usesThematicAliasLabel(korName)
+          ? THEMATIC_MAP_LABEL_WITH_ALIAS_EXPRESSION
+          : THEMATIC_MAP_LABEL_EXPRESSION
+        : undefined;
       styleProps = {
         fillColor: color,
         strokeColor: '#FFFFFF',
         strokeWidth: 1,
         opacity: 0.3,
+        ...(thematicLabel
+          ? { labelField: thematicLabel, size: THEMATIC_MAP_LABEL_FONT_SIZE }
+          : {}),
       };
     }
 
-    const cssBody = buildCssFromSimpleStyle(geometryType, styleProps);
+    const cssBody = buildCssForLayerStyle(geometryType, styleProps);
 
     // 고아 css만 있고 카탈로그에 없으면 GeoServer가 already exists로 오판 → PUT만 되고 목록엔 안 잡힘
     let catalogExists = await geoServerStyleExists(baseUrl, layerName);

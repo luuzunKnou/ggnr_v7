@@ -320,6 +320,77 @@ export function buildCssFromSimpleStyle(
   return `${geomBlock}\n\n${labelBlock}`;
 }
 
+/** 주제도 라벨 — 기본 종류명만. 도로폭(광로·소로·대로·중로)은 alias 포함 식 */
+export const THEMATIC_MAP_LABEL_EXPRESSION = 'layer_korname';
+
+export const THEMATIC_MAP_LABEL_WITH_ALIAS_EXPRESSION =
+  "if_then_else(isNull(alias), layer_korname, if_then_else(equalTo(alias, ''), layer_korname, Concatenate(Concatenate(layer_korname, ' ('), Concatenate(alias, ')'))))";
+
+/** 주제도 라벨 기본 글자 크기 */
+export const THEMATIC_MAP_LABEL_FONT_SIZE = 12;
+
+const ROAD_WIDTH_KOR_PREFIX = /^(광로|소로|대로|중로)/;
+
+export function usesThematicAliasLabel(korName: string): boolean {
+  return ROAD_WIDTH_KOR_PREFIX.test(String(korName ?? '').trim());
+}
+
+/**
+ * 주제도 폴리곤 CSS — emd.css와 같이 단일 * 규칙에 도형+라벨.
+ * font-fill은 면 색, halo는 흰색 (항공·배경 위 가독성).
+ */
+export function buildThematicMapPolygonCss(styleProps: StyleProps): string {
+  const f = styleProps.fillColor ?? DEFAULT_PROPS.fillColor!;
+  const s = styleProps.strokeColor ?? DEFAULT_PROPS.strokeColor!;
+  const sw = styleProps.strokeWidth ?? DEFAULT_PROPS.strokeWidth!;
+  const op = styleProps.opacity ?? DEFAULT_PROPS.opacity!;
+  const label = styleProps.labelField?.trim() || THEMATIC_MAP_LABEL_EXPRESSION;
+  const fontSize = styleProps.size ?? THEMATIC_MAP_LABEL_FONT_SIZE;
+
+  return `* {
+  fill: ${f};
+  stroke: ${s};
+  stroke-width: ${sw};
+  fill-opacity: ${op};
+  stroke-opacity: 1.0;
+
+  label: [${label}];
+  label-anchor: 0.5 0.5;
+  label-geometry: [centroid(geom)];
+
+  font-family: ${LABEL_STYLE_DEFAULTS.fontFamily};
+  font-size: ${fontSize};
+  font-weight: ${LABEL_STYLE_DEFAULTS.fontWeight};
+  font-fill: ${f};
+
+  halo-color: #FFFFFF;
+  halo-radius: 3;
+  halo-opacity: 0.9;
+
+  label-conflict-resolution: true;
+  label-group: true;
+  label-max-displacement: 0;
+  label-priority: [area(geom)];
+  label-fit-goodness: 0.1;
+}
+`;
+}
+
+/** layer_korname 라벨이면 주제도(emd형) CSS 빌더 사용 */
+export function buildCssForLayerStyle(
+  geometryType: GeometryType,
+  styleProps: StyleProps
+): string {
+  const label = styleProps.labelField?.trim() ?? '';
+  if (
+    geometryType === 'POLYGON' &&
+    (label.includes('layer_korname') || label === 'layer_korname')
+  ) {
+    return buildThematicMapPolygonCss(styleProps);
+  }
+  return buildCssFromSimpleStyle(geometryType, styleProps);
+}
+
 /**
  * 첫 * { ... } 도형 블록을 newStarBlock으로 교체.
  * newStarBlock에 라벨 전용 규칙이 포함될 수 있으므로,

@@ -11,6 +11,8 @@
  *   npm run ortho:batch -- build_yy dev
  *
  * 기본: 미변환 그룹만, 좌표계 있는 그룹만, 한 그룹 완료 후 다음.
+ * 작업은 로컬 SSD 우선(temp/ortho_work), 여유 부족 시 GGNR_DATA_DIR/.tmp.
+ * 완료 후 tiles_jpg 로 robocopy(다른 드라이브) 또는 rename(같은 드라이브).
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -184,7 +186,7 @@ async function main(): Promise<void> {
 
   const dataDir = (process.env.GGNR_DATA_DIR ?? '').trim();
   console.log(
-    `${LOG} project=${args.project} type=${args.type} dataDir=${dataDir || '(default)'} tileSet=${args.tileSetId} z=${args.zoomMin}-${args.zoomMax} q=${args.jpegQuality}`
+    `${LOG} project=${args.project} type=${args.type} dataDir=${dataDir || '(default)'} tileSet=${args.tileSetId} z=${args.zoomMin}-${args.zoomMax} q=${args.jpegQuality} (로컬 우선 → 부족 시 G 데이터 경로, robocopy/rename 배포)`
   );
 
   // env 로드 후 서비스 import (DB 풀이 env를 읽음)
@@ -270,7 +272,7 @@ async function main(): Promise<void> {
         console.log(line);
         lastLine = line;
       }
-    }, 10_000);
+    }, 60_000);
 
     let result: Awaited<ReturnType<typeof ortho.runSatelliteTifGroupToXyzAndWait>>;
     try {
@@ -281,6 +283,7 @@ async function main(): Promise<void> {
         zoomMin: args.zoomMin,
         zoomMax: args.zoomMax,
         jpegQuality: args.jpegQuality,
+        localOnly: true,
       });
     } catch (e) {
       clearInterval(poll);

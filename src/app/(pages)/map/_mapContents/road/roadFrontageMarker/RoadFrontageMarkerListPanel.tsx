@@ -1,12 +1,11 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Layers, Search, X } from 'lucide-react';
+import { call } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { LayerRowAddButton, LayerRowPanelButton } from '../../../_mapComponents/layerRowEdit';
 import { useMapContext } from '../../../_mapComponents/MapContext';
-import { scheduleFitMapToExtent3857 } from '../../../_mapComponents/config/mapAutoNavigation';
-import { MAP_AUTO_NAV_MAX_ZOOM } from '../../../_mapComponents/config/mapDefaults';
 import {
   isRoadNetworkWmsVisible,
   toggleRoadNetworkWmsLayers,
@@ -15,52 +14,115 @@ import {
   ROAD_FRONTAGE_MARKER_NEW_ID,
   ROAD_FRONTAGE_MARKER_ROAD_TYPES,
   isNewRoadFrontageMarkerId,
-  markersExtent3857,
+  type RoadFrontageMarkerItem,
   type RoadFrontageMarkerLedger,
 } from './roadFrontageMarkerMock';
+import { fitMapToMarkerPoints, useRoadFrontageMarkerMapHighlight } from './useRoadFrontageMarkerMapHighlight';
 
 type Props = {
-  ledgers: RoadFrontageMarkerLedger[];
   selectedId: string | null;
   onSelectId: (id: string) => void;
   onAdd?: () => void;
   onClose: () => void;
+  refreshKey?: number;
 };
 
 export function RoadFrontageMarkerListPanel({
-  ledgers,
   selectedId,
   onSelectId,
   onAdd,
   onClose,
+  refreshKey = 0,
 }: Props) {
   const mapContext = useMapContext();
   const [keyword, setKeyword] = useState('');
   const [roadTypeFilter, setRoadTypeFilter] = useState('');
+  const [items, setItems] = useState<RoadFrontageMarkerLedger[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const listScrollRef = useRef<HTMLDivElement | null>(null);
 
-  const filtered = useMemo(() => {
-    const saved = ledgers.filter((l) => !isNewRoadFrontageMarkerId(l.id));
-    const kw = keyword.trim().toLowerCase();
-    return saved.filter((l) => {
-      if (roadTypeFilter && l.roadType !== roadTypeFilter) return false;
-      if (!kw) return true;
-      const markerText = l.markers
-        .map((m) => [m.ownerName, m.ownerAddress, m.county, m.myeon, m.ri, m.lotNo].join(' '))
-        .join(' ');
-      return [l.roadType, l.routeName, markerText].join(' ').toLowerCase().includes(kw);
-    });
-  }, [ledgers, keyword, roadTypeFilter]);
+  useEffect(() => {
+    const t = setTimeout(async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const res = await call('', 'POST', {
+          service: 'roadFrontageMarkerService',
+          action: 'list',
+          params: { keyword, roadType: roadTypeFilter || undefined },
+        });
+        if (res?.success === false) {
+          setItems([]);
+          setError(String(res.error ?? '목록을 불러오지 못했습니다.'));
+          return;
+        }
+        const data = res?.data ?? res;
+        setItems(Array.isArray(data) ? data : []);
+      } catch (e: unknown) {
+        setItems([]);
+        const msg =
+          e instanceof Error && e.message.trim()
+            ? e.message
+            : typeof e === 'object' && e && 'error' in e && typeof (e as { error?: unknown }).error === 'string'
+              ? String((e as { error: string }).error)
+              : '목록을 불러오지 못했습니다.';
+        setError(msg);
+      } finally {
+        setLoading(false);
+      }
+    }, 250);
+    return () => clearTimeout(t);
+  }, [keyword, roadTypeFilter, refreshKey]);
+
+  const filtered = useMemo(() => items.filter((l) => !isNewRoadFrontageMarkerId(l.id)), [items]);
+
+  /** 목록에 보이는 노선의 표주 점 전부 */
+  const listMarkers = useMemo((): RoadFrontageMarkerItem[] => {
+    const out: RoadFrontageMarkerItem[] = [];
+    for (const ledger of filtered) {
+      for (const m of ledger.markers ?? []) out.push(m);
+    }
+    return out;
+  }, [filtered]);
+
+  const mapReady = mapContext?.mapReady ?? false;
+  const map = mapReady ? (mapContext?.mapInstanceRef?.current ?? null) : null;
+  const detailOpen = Boolean(selectedId) && !isNewRoadFrontageMarkerId(String(selectedId ?? ''));
+
+  /** 상세가 열려 있으면 상세가 레이어를 갱신. 목록만 있을 때 전체 점 표시 */
+  useRoadFrontageMarkerMapHighlight(map, listMarkers, null, {
+    removeOnUnmount: true,
+    enabled: !detailOpen,
+  });
+
+  useEffect(() => {
+    if (loading || detailOpen || !map || listMarkers.length === 0) return;
+    fitMapToMarkerPoints(map, listMarkers);
+  }, [loading, detailOpen, map, listMarkers]);
 
   const handleSelect = (ledger: RoadFrontageMarkerLedger) => {
     onSelectId(ledger.id);
-    const map = mapContext?.mapInstanceRef?.current;
-    const extent = markersExtent3857(ledger.markers);
-    if (!map || !extent) return;
-    scheduleFitMapToExtent3857(map, extent, {
-      maxZoom: MAP_AUTO_NAV_MAX_ZOOM,
-      applyMapViewPadding: () => mapContext?.applyMapViewPaddingRef?.current?.(),
-    });
+    const olMap = mapContext?.mapReady
+      ? (mapContext.mapInstanceRef?.current ?? null)
+      : null;
+    fitMapToMarkerPoints(olMap, ledger.markers);
   };
+
+  useEffect(() => {
+    const key = String(selectedId ?? '').trim();
+    if (!key || isNewRoadFrontageMarkerId(key)) return;
+    const scroller = listScrollRef.current;
+    if (!scroller) return;
+    const el = scroller.querySelector(`[data-road-frontage-marker-row="${CSS.escape(key)}"]`);
+    if (!(el instanceof HTMLElement)) return;
+    const scrollerRect = scroller.getBoundingClientRect();
+    const elRect = el.getBoundingClientRect();
+    const delta =
+      elRect.top + elRect.height / 2 - (scrollerRect.top + scrollerRect.height / 2);
+    if (Math.abs(delta) < 4) return;
+    scroller.scrollBy({ top: delta, behavior: 'smooth' });
+  }, [selectedId, filtered]);
 
   const roadNetworkLayerOn = isRoadNetworkWmsVisible(mapContext?.visibleLayerNames);
 
@@ -99,48 +161,56 @@ export function RoadFrontageMarkerListPanel({
         </div>
       </div>
 
-      <div className="shrink-0 space-y-2 border-b border-border px-2.5 py-2">
+      <div className="shrink-0 space-y-2 border-b border-border px-3 py-2">
         <div className="relative">
-          <Search className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+          <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <input
             type="search"
             value={keyword}
             onChange={(e) => setKeyword(e.target.value)}
-            placeholder="노선명·소유자·지번"
-            className="h-8 w-full rounded border border-border bg-background pl-7 pr-2.5 text-xs text-foreground outline-none placeholder:text-muted-foreground focus:border-primary focus:ring-2 focus:ring-primary/25"
+            placeholder="검색 (노선명·소유자 등)"
+            className="w-full rounded-md border border-border bg-background py-1.5 pl-8 pr-3 text-sm text-foreground outline-none placeholder:text-muted-foreground ring-offset-2 focus:border-primary focus:ring-2 focus:ring-primary/25"
           />
         </div>
         <div className="flex flex-wrap gap-1">
-          {[{ value: '', label: '전체' }, ...ROAD_FRONTAGE_MARKER_ROAD_TYPES.map((t) => ({ value: t, label: t }))].map(
-            (opt) => {
-              const active = roadTypeFilter === opt.value;
-              return (
-                <button
-                  key={opt.value || '__all__'}
-                  type="button"
-                  onClick={() => setRoadTypeFilter(opt.value)}
-                  className={cn(
-                    'rounded border px-2 py-1 text-[11px] font-medium transition-colors',
-                    active
-                      ? 'border-primary bg-primary/10 text-foreground dark:bg-primary/25'
-                      : 'border-border bg-background text-muted-foreground hover:border-primary/40 hover:text-foreground'
-                  )}
-                >
-                  {opt.label}
-                </button>
-              );
-            }
-          )}
+          <button
+            type="button"
+            onClick={() => setRoadTypeFilter('')}
+            className={cn(
+              'rounded border px-2 py-0.5 text-[11px]',
+              !roadTypeFilter
+                ? 'border-primary bg-primary/15 text-foreground'
+                : 'border-border bg-background text-muted-foreground hover:bg-muted'
+            )}
+          >
+            전체
+          </button>
+          {ROAD_FRONTAGE_MARKER_ROAD_TYPES.map((t) => (
+            <button
+              key={t}
+              type="button"
+              onClick={() => setRoadTypeFilter(t)}
+              className={cn(
+                'rounded border px-2 py-0.5 text-[11px]',
+                roadTypeFilter === t
+                  ? 'border-primary bg-primary/15 text-foreground'
+                  : 'border-border bg-background text-muted-foreground hover:bg-muted'
+              )}
+            >
+              {t}
+            </button>
+          ))}
         </div>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-auto scrollbar-thin">
-        {filtered.length === 0 ? (
-          <p className="px-3 py-6 text-center text-xs text-muted-foreground">
-            {ledgers.length === 0 ? '등록된 관리대장이 없습니다.' : '검색 결과가 없습니다.'}
-          </p>
-        ) : (
-          <table className="w-full table-fixed border-collapse text-left text-xs">
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+        {error ? (
+          <div className="shrink-0 border-b border-destructive/20 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+            {error}
+          </div>
+        ) : null}
+        <div ref={listScrollRef} className="min-h-0 flex-1 overflow-auto scrollbar-thin">
+          <table className="w-full min-w-[280px] table-fixed border-collapse text-left text-xs">
             <colgroup>
               <col className="w-[88px]" />
               <col />
@@ -156,46 +226,57 @@ export function RoadFrontageMarkerListPanel({
               </tr>
             </thead>
             <tbody>
-              {filtered.map((l) => {
-                const isSelected = l.id === selectedId;
-                return (
-                  <tr
-                    key={l.id}
-                    role="button"
-                    tabIndex={0}
-                    onClick={() => handleSelect(l)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' || e.key === ' ') {
-                        e.preventDefault();
-                        handleSelect(l);
-                      }
-                    }}
-                    className={cn(
-                      'cursor-pointer border-b border-border transition-colors',
-                      isSelected
-                        ? 'bg-primary/10 dark:bg-primary/25'
-                        : 'hover:bg-muted/50'
-                    )}
-                  >
-                    <td className="px-2 py-1.5">
-                      <span className="inline-block max-w-full truncate rounded-full bg-muted px-1.5 py-0.5 text-[11px] font-semibold text-foreground">
+              {loading && filtered.length === 0 ? (
+                <tr>
+                  <td colSpan={2} className="px-2 py-6 text-center text-muted-foreground">
+                    불러오는 중…
+                  </td>
+                </tr>
+              ) : filtered.length === 0 ? (
+                <tr>
+                  <td colSpan={2} className="px-2 py-6 text-center text-muted-foreground">
+                    등록된 관리대장이 없습니다.
+                  </td>
+                </tr>
+              ) : (
+                filtered.map((l) => {
+                  const isSelected = l.id === selectedId;
+                  return (
+                    <tr
+                      key={l.id}
+                      data-road-frontage-marker-row={l.id}
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => handleSelect(l)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          handleSelect(l);
+                        }
+                      }}
+                      className={cn(
+                        'cursor-pointer border-b border-border transition-colors',
+                        isSelected
+                          ? 'bg-primary/10 dark:bg-primary/25'
+                          : 'hover:bg-muted/50'
+                      )}
+                    >
+                      <td className="max-w-0 truncate px-2 py-1.5 text-foreground" title={l.roadType}>
                         {l.roadType || '—'}
-                      </span>
-                    </td>
-                    <td className="truncate px-2 py-1.5 text-foreground" title={l.routeName || undefined}>
-                      {l.routeName || '(노선명 미입력)'}
-                    </td>
-                  </tr>
-                );
-              })}
+                      </td>
+                      <td className="max-w-0 truncate px-2 py-1.5 text-foreground" title={l.routeName}>
+                        {l.routeName || '(노선명 미입력)'}
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
             </tbody>
           </table>
-        )}
-      </div>
-
-      <div className="shrink-0 border-t border-border px-3 py-1.5 text-[11px] text-muted-foreground">
-        목록 {filtered.length.toLocaleString()}건
-        {roadTypeFilter ? ` / 전체 ${ledgers.length.toLocaleString()}건` : ''}
+        </div>
+        <div className="shrink-0 border-t border-border px-3 py-1.5 text-[11px] text-muted-foreground">
+          {filtered.length.toLocaleString()}건
+        </div>
       </div>
     </div>
   );

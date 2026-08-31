@@ -35,6 +35,149 @@ function getOrthoDataWorkDir(): string {
   return path.join(getBaseDir(), '.tmp');
 }
 
+/** 배치 CLI — 로컬 SSD 우선 (부족 시 GGNR_DATA_DIR/.tmp) */
+function getOrthoLocalWorkDir(): string {
+  const cwdRoot = path.parse(process.cwd()).root || path.parse(getBaseDir()).root;
+  return path.join(cwdRoot, 'temp', 'ortho_work');
+}
+
+/** warp TIF + 타일 staging 여유 (바이트) */
+const ORTHO_TILE_STAGING_RESERVE_BYTES = 15 * 1024 ** 3;
+const ORTHO_WORK_MARGIN_BYTES = 5 * 1024 ** 3;
+/** 예상 실패 시 로컬 최소 필요량 (대략 80GB warp + 타일) */
+const ORTHO_LOCAL_WARP_FALLBACK_BYTES = 80 * 1024 ** 3;
+
+function getPathFreeBytes(targetPath: string): number | null {
+  try {
+    const resolved = path.resolve(targetPath);
+    let probe = turbopackOpaquePath(resolved);
+    if (!fs.existsSync(probe)) {
+      probe = turbopackOpaquePath(path.dirname(resolved));
+    }
+    const st = fs.statfsSync(probe);
+    return Number(st.bfree) * Number(st.bsize);
+  } catch {
+    return null;
+  }
+}
+
+type OrthoLogCtx = { groupName: string; outputSlug: string; sourceFile: string; tileSetUi: string };
+
+/** 배치(localOnly): 로컬 여유가 warp+타일에 부족하면 GGNR_DATA_DIR/.tmp */
+async function resolveOrthoWorkBase(params: {
+  preferLocal: boolean;
+  absSource: string;
+  sourceCrs: string;
+  gdalwarp: string;
+  gdalChildEnv: NodeJS.ProcessEnv;
+  logCtx: OrthoLogCtx;
+}): Promise<string> {
+  const dataDir = getOrthoDataWorkDir();
+  if (!params.preferLocal) return dataDir;
+
+  const localDir = getOrthoLocalWorkDir();
+  const previewDir = path.join(dataDir, `ortho_work_size_${Date.now()}`);
+  const est = await estimateWarpOutputBytes({
+    absSource: params.absSource,
+    sourceCrs: params.sourceCrs,
+    gdalwarp: params.gdalwarp,
+    gdalChildEnv: params.gdalChildEnv,
+    workDir: previewDir,
+  });
+  const warpNeed = est?.bytes ?? ORTHO_LOCAL_WARP_FALLBACK_BYTES;
+  const required = warpNeed + ORTHO_TILE_STAGING_RESERVE_BYTES + ORTHO_WORK_MARGIN_BYTES;
+  const freeLocal = getPathFreeBytes(localDir);
+
+  if (freeLocal != null && freeLocal >= required) {
+    orthoJobLog(
+      params.logCtx,
+      '작업 경로(로컬)',
+      `${localDir} · 여유 ${formatByteSize(freeLocal)} / 필요 ${formatByteSize(required)}`
+    );
+    return localDir;
+  }
+
+  const reason =
+    freeLocal == null
+      ? '로컬 디스크 여유 확인 실패'
+      : `로컬 여유 ${formatByteSize(freeLocal)} < 필요 ${formatByteSize(required)}`;
+  orthoJobLog(params.logCtx, '작업 경로 G 폴백', `${reason} → ${dataDir}`);
+  return dataDir;
+}
+
+function sameVolumePath(a: string, b: string): boolean {
+  const ra = path.parse(path.resolve(a)).root.replace(/\\/g, '/').toLowerCase();
+  const rb = path.parse(path.resolve(b)).root.replace(/\\/g, '/').toLowerCase();
+  return ra.length > 0 && ra === rb;
+}
+
+/** robocopy exit 0~7 = 성공 (파일 복사·추가 파일 등) */
+function isRobocopySuccess(code: number | null): boolean {
+  return code != null && code >= 0 && code <= 7;
+}
+
+/** 크로스 볼륨: robocopy /MOVE (실패 시 false) */
+async function robocopyMoveDir(src: string, dest: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    const child = spawn(
+      'robocopy',
+      [src, dest, '/E', '/MOVE', '/R:2', '/W:5', '/MT:8', '/NFL', '/NDL', '/NJH', '/NJS', '/NP'],
+      { windowsHide: true }
+    );
+    let err = '';
+    child.stderr?.on('data', (d: Buffer | string) => {
+      err += Buffer.isBuffer(d) ? d.toString('utf8') : String(d);
+    });
+    child.on('error', (e) => {
+      console.error('[orthophoto] robocopy spawn 실패:', e);
+      resolve(false);
+    });
+    child.on('close', (code) => {
+      if (isRobocopySuccess(code)) {
+        resolve(true);
+        return;
+      }
+      console.error(`[orthophoto] robocopy 실패 code=${code} ${err.slice(-400)}`);
+      resolve(false);
+    });
+  });
+}
+
+/**
+ * tiles_staging → tiles_jpg 배포.
+ * 같은 볼륨: rename(이동), 다른 볼륨(Win): robocopy /MOVE, 그 외: fs.cp + 원본 삭제.
+ */
+async function publishOrthoTiles(params: {
+  tilesStaging: string;
+  finalAbs: string;
+  logCtx: { groupName: string; outputSlug: string; sourceFile: string; tileSetUi: string };
+}): Promise<'rename' | 'robocopy' | 'copy'> {
+  const { tilesStaging, finalAbs, logCtx } = params;
+  await fsPromises.mkdir(path.dirname(finalAbs), { recursive: true });
+  await fsPromises.rm(finalAbs, { recursive: true, force: true }).catch(() => {});
+
+  if (sameVolumePath(tilesStaging, finalAbs)) {
+    await fsPromises.rename(tilesStaging, finalAbs);
+    orthoJobLog(logCtx, '3/3 결과 이동(rename)', `${tilesStaging} → ${finalAbs}`);
+    return 'rename';
+  }
+
+  if (process.platform === 'win32') {
+    const ok = await robocopyMoveDir(tilesStaging, finalAbs);
+    if (ok) {
+      orthoJobLog(logCtx, '3/3 결과 배포(robocopy)', `${tilesStaging} → ${finalAbs}`);
+      await fsPromises.rm(tilesStaging, { recursive: true, force: true }).catch(() => {});
+      return 'robocopy';
+    }
+    console.warn('[orthophoto] robocopy 실패 — fs.cp 폴백');
+  }
+
+  await fsPromises.cp(tilesStaging, finalAbs, { recursive: true });
+  await fsPromises.rm(tilesStaging, { recursive: true, force: true }).catch(() => {});
+  orthoJobLog(logCtx, '3/3 결과 복사(fs.cp)', `${tilesStaging} → ${finalAbs}`);
+  return 'copy';
+}
+
 const PYTHON_ENV = { ...process.env, PYTHONIOENCODING: 'utf-8', PYTHONUTF8: '1' };
 
 // ─── 진행률 추적 ───────────────────────────────────────────────
@@ -49,12 +192,16 @@ export interface OrthoJobProgress {
   phaseStartedAt: string;
   updatedAt: string;
   message: string;
-  /** 타일 장수 기준 예상 남은 초 (없으면 null) */
+  /** 타일 장수·warp 용량 기준 예상 남은 초 (없으면 null) */
   etaSeconds: number | null;
   /** 예상 총 타일 장수 (warp 이후) */
   tilesExpected: number | null;
   /** 현재까지 생성된(또는 복사된) 타일 장수 */
   tilesCreated: number | null;
+  /** warp 출력 TIF 예상 바이트 (비압축 GTiff 추정) */
+  warpBytesExpected: number | null;
+  /** warp 출력 TIF 현재 바이트 */
+  warpBytesWritten: number | null;
 }
 
 const orthoJobProgressMap = new Map<string, OrthoJobProgress>();
@@ -132,6 +279,26 @@ function formatTileCount(n: number): string {
   return n.toLocaleString('ko-KR');
 }
 
+function formatByteSize(bytes: number): string {
+  if (!Number.isFinite(bytes) || bytes < 0) return '0B';
+  if (bytes < 1024) return `${Math.round(bytes)}B`;
+  const kb = bytes / 1024;
+  if (kb < 1024) return `${kb < 10 ? kb.toFixed(1) : Math.round(kb)}KB`;
+  const mb = kb / 1024;
+  if (mb < 1024) return `${mb < 10 ? mb.toFixed(1) : Math.round(mb)}MB`;
+  const gb = mb / 1024;
+  return `${gb < 10 ? gb.toFixed(2) : gb.toFixed(1)}GB`;
+}
+
+function gdalDataTypeBytes(typeName: string): number {
+  const t = typeName.trim().toLowerCase();
+  if (t === 'byte' || t === 'uint8') return 1;
+  if (t === 'uint16' || t === 'int16' || t === 'cint16') return 2;
+  if (t === 'uint32' || t === 'int32' || t === 'float32' || t === 'cint32' || t === 'cfloat32') return 4;
+  if (t === 'float64' || t === 'cfloat64') return 8;
+  return 1;
+}
+
 function refreshOrthoEta(entry: OrthoJobProgress): void {
   if (entry.phase === 'failed' || entry.phase === 'done' || entry.percent >= 100) {
     entry.etaSeconds = null;
@@ -165,8 +332,34 @@ function refreshOrthoEta(entry: OrthoJobProgress): void {
     return;
   }
 
-  // VRT·좌표 변환: GDAL stdout % 기준
-  if (entry.phase === 'warp' || entry.phase === 'vrt') {
+  // 좌표 변환: warp TIF 용량 기준 (stdout %는 버퍼링으로 실시간 아님)
+  if (entry.phase === 'warp') {
+    const expected = entry.warpBytesExpected;
+    const written = entry.warpBytesWritten;
+    if (expected != null && expected > 0 && written != null && written > 0) {
+      if (written >= expected) {
+        entry.etaSeconds = 0;
+        return;
+      }
+      const rate = written / elapsedSec;
+      if (!(rate > 0)) {
+        entry.etaSeconds = null;
+        return;
+      }
+      entry.etaSeconds = Math.max(0, Math.round((expected - written) / rate));
+      return;
+    }
+    const pct = entry.percent;
+    if (pct < 1) {
+      entry.etaSeconds = null;
+      return;
+    }
+    entry.etaSeconds = Math.max(0, Math.round((elapsedSec * (100 - pct)) / pct));
+    return;
+  }
+
+  // VRT: GDAL stdout % 기준 (보통 짧음)
+  if (entry.phase === 'vrt') {
     const pct = entry.percent;
     if (pct < 1) {
       entry.etaSeconds = null;
@@ -194,13 +387,67 @@ function setOrthoPhase(groupName: string, phase: OrthoJobPhase, percent: number,
     etaSeconds: existing?.etaSeconds ?? null,
     tilesExpected: existing?.tilesExpected ?? null,
     tilesCreated: phaseChanged && (phase === 'tiles' || phase === 'copy') ? 0 : (existing?.tilesCreated ?? null),
+    warpBytesExpected: phaseChanged && phase === 'warp' ? null : (existing?.warpBytesExpected ?? null),
+    warpBytesWritten: phaseChanged && phase === 'warp' ? 0 : (existing?.warpBytesWritten ?? null),
   };
   if (phase === 'queued' || phase === 'vrt' || phase === 'warp') {
     entry.tilesCreated = null;
-    if (phase === 'queued') entry.tilesExpected = null;
+    if (phase === 'queued') {
+      entry.tilesExpected = null;
+      entry.warpBytesExpected = null;
+      entry.warpBytesWritten = null;
+    }
+  }
+  if (phase !== 'warp' && phase !== 'queued') {
+    // tiles/copy/done 등 — warp 용량 필드는 유지하지 않음
+    entry.warpBytesExpected = null;
+    entry.warpBytesWritten = null;
   }
   refreshOrthoEta(entry);
   orthoJobProgressMap.set(groupName, entry);
+}
+
+function setOrthoWarpBytesExpected(groupName: string, bytesExpected: number) {
+  const entry = orthoJobProgressMap.get(groupName);
+  if (!entry || entry.phase !== 'warp') return;
+  entry.warpBytesExpected = bytesExpected > 0 ? bytesExpected : null;
+  entry.updatedAt = new Date().toISOString();
+  if (entry.warpBytesExpected != null && (entry.warpBytesWritten == null || entry.warpBytesWritten <= 0)) {
+    entry.message = `좌표 변환 0 / ${formatByteSize(entry.warpBytesExpected)}`;
+  }
+  refreshOrthoEta(entry);
+  orthoJobProgressMap.set(groupName, entry);
+}
+
+const orthoWarpByteThrottleMs = new Map<string, number>();
+
+/** warp TIF 파일 크기 → %·ETA·메시지 (예상 용량 기준) */
+function updateOrthoWarpByteProgress(groupName: string, warpFile: string, force = false) {
+  const entry = orthoJobProgressMap.get(groupName);
+  if (!entry || entry.phase !== 'warp') return;
+  const now = Date.now();
+  const last = orthoWarpByteThrottleMs.get(groupName) ?? 0;
+  if (!force && now - last < 60_000) return;
+  orthoWarpByteThrottleMs.set(groupName, now);
+
+  let written = 0;
+  try {
+    if (opaqueExists(warpFile)) {
+      written = fs.statSync(turbopackOpaquePath(warpFile)).size;
+    }
+  } catch {
+    written = entry.warpBytesWritten ?? 0;
+  }
+  entry.warpBytesWritten = written;
+  entry.updatedAt = new Date().toISOString();
+  const expected = entry.warpBytesExpected;
+  if (expected != null && expected > 0) {
+    entry.percent = Math.min(99, Math.max(0, Math.round((100 * written) / expected)));
+    entry.message = `좌표 변환 ${formatByteSize(written)} / ${formatByteSize(expected)}`;
+  } else {
+    entry.message = written > 0 ? `좌표 변환 중 ${formatByteSize(written)}` : '좌표 변환 중';
+  }
+  refreshOrthoEta(entry);
 }
 
 function setOrthoTilesExpected(groupName: string, tilesExpected: number) {
@@ -225,8 +472,8 @@ function updateOrthoTileCountProgress(
   if (entry.phase !== 'tiles' && entry.phase !== 'copy') return;
   const now = Date.now();
   const last = orthoTileCountThrottleMs.get(groupName) ?? 0;
-  // interval 폴러는 15초 — onActivity 폭주 시 최소 8초 간격
-  if (!force && now - last < 8_000) return;
+  // interval 폴러는 60초 — onActivity 폭주 시 동일 간격으로 제한
+  if (!force && now - last < 60_000) return;
   orthoTileCountThrottleMs.set(groupName, now);
   const created = countOrthoTileFiles(tilesDir);
   entry.tilesCreated = created;
@@ -246,6 +493,8 @@ function updateOrthoJobProgress(groupName: string, stdoutChunk: string) {
   if (!entry) return;
   // 타일·복사는 장수 기준 % 사용 — GDAL stdout % 로 덮지 않음
   if (entry.phase === 'tiles' || entry.phase === 'copy') return;
+  // warp는 파일 용량 기준 — stdout %는 버퍼링으로 실시간 아님
+  if (entry.phase === 'warp' && entry.warpBytesExpected != null && entry.warpBytesExpected > 0) return;
   const matches = [...stdoutChunk.matchAll(/(\d+)\.\.\.|(\d+)%/g)];
   if (!matches.length) return;
   const last = matches[matches.length - 1]!;
@@ -261,18 +510,6 @@ function updateOrthoJobProgress(groupName: string, stdoutChunk: string) {
     entry.percent = pct;
     entry.message = `VRT 합본 ${raw}%`;
     refreshOrthoEta(entry);
-  }
-}
-
-/** 타일 폴더에 파일이 늘고 있을 때 stdout이 없어도 진행 중으로 표시 */
-function touchOrthoJobActivity(groupName: string, detail?: string) {
-  const entry = orthoJobProgressMap.get(groupName);
-  if (!entry || entry.phase === 'done' || entry.phase === 'failed') return;
-  entry.updatedAt = new Date().toISOString();
-  if (detail && entry.phase === 'warp') {
-    entry.message = detail;
-  } else if (detail && entry.phase === 'tiles' && entry.tilesExpected == null && entry.tilesCreated == null) {
-    entry.message = detail;
   }
 }
 
@@ -863,6 +1100,62 @@ async function getSourceCornerBoxFromTif(absSource: string): Promise<SourceCorne
   return { minX: Math.min(...xs), minY: Math.min(...ys), maxX: Math.max(...xs), maxY: Math.max(...ys) };
 }
 
+/**
+ * gdalwarp -of VRT 로 출력 픽셀 크기만 산출 → 비압축 GTiff 예상 바이트.
+ * (stdout % 버퍼링과 무관하게 warp 전에 예상 용량을 잡기 위함)
+ */
+async function estimateWarpOutputBytes(params: {
+  absSource: string;
+  sourceCrs: string;
+  gdalwarp: string;
+  gdalChildEnv: NodeJS.ProcessEnv;
+  workDir: string;
+}): Promise<{ bytes: number; width: number; height: number; bandBytes: number } | null> {
+  const { absSource, sourceCrs, gdalwarp, gdalChildEnv, workDir } = params;
+  const gdalinfo = gdalToolPath('gdalinfo');
+  if (!isConcreteToolPath(gdalinfo) || !opaqueExists(gdalinfo)) return null;
+
+  const vrtPath = path.join(workDir, `warp_size_preview_${Date.now()}.vrt`);
+  try {
+    await fsPromises.mkdir(workDir, { recursive: true });
+    const w = await runProcess(
+      gdalwarp,
+      ['-q', '-overwrite', '-of', 'VRT', '-s_srs', sourceCrs, '-t_srs', 'EPSG:3857', '-r', 'bilinear', absSource, vrtPath],
+      getBaseDir(),
+      10 * 60 * 1000,
+      gdalChildEnv
+    );
+    if (w.code !== 0 || !opaqueExists(vrtPath)) {
+      console.warn(`[orthophoto] warp 용량 미리보기 VRT 실패 code=${w.code}`);
+      return null;
+    }
+    const info = await runProcess(gdalinfo, ['-json', vrtPath], getBaseDir(), 5 * 60 * 1000, buildGdalChildEnv(gdalinfo));
+    if (info.code !== 0) return null;
+    let parsed: {
+      size?: number[];
+      bands?: { type?: string }[];
+    };
+    try {
+      parsed = JSON.parse(info.stdout);
+    } catch {
+      return null;
+    }
+    const width = Number(parsed.size?.[0]);
+    const height = Number(parsed.size?.[1]);
+    if (!(width > 0) || !(height > 0)) return null;
+    const bands = Array.isArray(parsed.bands) && parsed.bands.length ? parsed.bands : [{ type: 'Byte' }];
+    const bandBytes = bands.reduce((sum, b) => sum + gdalDataTypeBytes(String(b.type ?? 'Byte')), 0);
+    if (!(bandBytes > 0)) return null;
+    return { bytes: width * height * bandBytes, width, height, bandBytes };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    console.warn(`[orthophoto] warp 용량 추정 실패: ${msg}`);
+    return null;
+  } finally {
+    await fsPromises.rm(vrtPath, { force: true }).catch(() => {});
+  }
+}
+
 async function getEmdUnionSqlParts(): Promise<{ geomExpr: string; srid: number }> {
   const gc = await pool.query(
     `SELECT f_geometry_column AS name, srid
@@ -1308,6 +1601,10 @@ async function runOrthophotoJob(params: {
    * 드론영상 오버레이는 PNG(알파 유지) 권장.
    */
   tileDriver?: 'JPEG' | 'PNG';
+  /** 배치 CLI — 로컬 SSD 우선 (부족 시 GGNR_DATA_DIR/.tmp), 배포는 robocopy 등 */
+  localOnly?: boolean;
+  /** 그룹 VRT 등에서 작업 경로를 미리 정한 경우 */
+  workBaseOverride?: string;
 }): Promise<void> {
   const {
     absSource,
@@ -1322,6 +1619,8 @@ async function runOrthophotoJob(params: {
     outputSlugOverride,
     finalOutputDirRel,
     tileDriver = 'JPEG',
+    localOnly = false,
+    workBaseOverride,
   } = params;
   let gFromPath: string;
   let outputSlug: string;
@@ -1401,7 +1700,18 @@ async function runOrthophotoJob(params: {
     orthoJobLog(logCtx, 'GDAL/PROJ 환경', `PROJ_LIB=${gdalChildEnv.PROJ_LIB}${gdalChildEnv.GDAL_DATA ? ` GDAL_DATA=${gdalChildEnv.GDAL_DATA}` : ''}`);
   }
 
-  const workBase = getOrthoDataWorkDir();
+  const workBase =
+    workBaseOverride ??
+    (localOnly
+      ? await resolveOrthoWorkBase({
+          preferLocal: true,
+          absSource,
+          sourceCrs,
+          gdalwarp,
+          gdalChildEnv,
+          logCtx,
+        })
+      : getOrthoDataWorkDir());
   const finalAbs = customOut
     ? path.join(base, ...customOut.split('/').filter(Boolean))
     : path.join(base, 'tiles_jpg', gFromPath);
@@ -1409,19 +1719,30 @@ async function runOrthophotoJob(params: {
   orthoJobLog(
     logCtx,
     '작업 시작',
-    `src=${sourceRelativePath}(${sourceCrs}) → ${finalRel} z=${zoomMin}-${zoomMax} ${tileDriver}${
-      tileDriver === 'JPEG' ? ` q=${jpegQuality}` : ''
-    } (EPSG:3857 타일) work=${workBase}`
+    localOnly
+      ? `src=${sourceRelativePath}(${sourceCrs}) z=${zoomMin}-${zoomMax} ${tileDriver}${
+          tileDriver === 'JPEG' ? ` q=${jpegQuality}` : ''
+        } (EPSG:3857) work=${workBase} → 배포 ${finalRel}`
+      : `src=${sourceRelativePath}(${sourceCrs}) → ${finalRel} z=${zoomMin}-${zoomMax} ${tileDriver}${
+          tileDriver === 'JPEG' ? ` q=${jpegQuality}` : ''
+        } (EPSG:3857 타일) work=${workBase}`
   );
 
   const tmpRoot = path.join(workBase, `ortho_xyz_${gFromPath}_${outputSlug}_${Date.now()}`);
   const warp3857 = path.join(tmpRoot, 'warp_3857.tif');
   const tilesStaging = path.join(tmpRoot, 'tiles_staging');
   let tileProgressTimer: ReturnType<typeof setInterval> | null = null;
+  let warpProgressTimer: ReturnType<typeof setInterval> | null = null;
   const stopTileProgressPoll = () => {
     if (tileProgressTimer) {
       clearInterval(tileProgressTimer);
       tileProgressTimer = null;
+    }
+  };
+  const stopWarpProgressPoll = () => {
+    if (warpProgressTimer) {
+      clearInterval(warpProgressTimer);
+      warpProgressTimer = null;
     }
   };
   const startTileProgressPoll = (dir: string, label: '타일링' | '복사') => {
@@ -1429,7 +1750,14 @@ async function runOrthophotoJob(params: {
     updateOrthoTileCountProgress(groupName, dir, label, true);
     tileProgressTimer = setInterval(() => {
       updateOrthoTileCountProgress(groupName, dir, label, true);
-    }, 15_000);
+    }, 60_000);
+  };
+  const startWarpProgressPoll = (warpFile: string) => {
+    stopWarpProgressPoll();
+    updateOrthoWarpByteProgress(groupName, warpFile, true);
+    warpProgressTimer = setInterval(() => {
+      updateOrthoWarpByteProgress(groupName, warpFile, true);
+    }, 60_000);
   };
 
   try {
@@ -1458,13 +1786,38 @@ async function runOrthophotoJob(params: {
     ];
     setOrthoPhase(groupName, 'warp', 0, '좌표 변환 중');
     orthoJobLog(logCtx, '1/3 gdalwarp 시작', `${gdalwarp} ${sourceCrs} -> EPSG:3857`);
+
+    try {
+      const est = await estimateWarpOutputBytes({
+        absSource,
+        sourceCrs,
+        gdalwarp,
+        gdalChildEnv,
+        workDir: tmpRoot,
+      });
+      if (est) {
+        setOrthoWarpBytesExpected(groupName, est.bytes);
+        orthoJobLog(
+          logCtx,
+          '예상 warp 용량',
+          `${formatByteSize(est.bytes)} (${est.width.toLocaleString('ko-KR')}×${est.height.toLocaleString('ko-KR')}, ${est.bandBytes}B/px)`
+        );
+      }
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      console.warn(`[orthophoto] 예상 warp 용량 산출 실패: ${msg}`);
+    }
+
+    startWarpProgressPoll(warp3857);
     const warpStarted = Date.now();
     const w = await runProcess(gdalwarp, warpArgs, base, ORTHO_ACTIVITY_TIMEOUT_MS, gdalChildEnv, {
       activityTimeoutMs: ORTHO_ACTIVITY_TIMEOUT_MS,
       activityWatchPath: warp3857,
       onStdout: (chunk) => updateOrthoJobProgress(groupName, chunk),
-      onActivity: () => touchOrthoJobActivity(groupName, '좌표 변환 중 (파일 기록)'),
+      onActivity: () => updateOrthoWarpByteProgress(groupName, warp3857),
     });
+    stopWarpProgressPoll();
+    updateOrthoWarpByteProgress(groupName, warp3857, true);
     const warpMs = Date.now() - warpStarted;
     logProcessStreams(logCtx, 'gdalwarp', w);
     if (w.code !== 0) {
@@ -1534,17 +1887,37 @@ async function runOrthophotoJob(params: {
       return;
     }
     orthoJobLog(logCtx, '2/3 gdal2tiles 완료', `${tileMs}ms`);
+    updateOrthoTileCountProgress(groupName, tilesStaging, '타일링', true);
 
-    setOrthoPhase(groupName, 'copy', 0, '결과 복사 중');
-    orthoJobLog(logCtx, '3/3 결과 복사 시작', `${tilesStaging} → ${finalAbs}`);
+    try {
+      await fsPromises.rm(warp3857, { force: true });
+      orthoJobLog(logCtx, '중간 warp TIF 삭제', warp3857);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      console.warn(`[orthophoto] warp TIF 삭제 실패: ${warp3857} — ${msg}`);
+    }
+
+    setOrthoPhase(groupName, 'copy', 0, '결과 배포 중');
+    const deployModeHint = sameVolumePath(tilesStaging, finalAbs)
+      ? 'rename'
+      : process.platform === 'win32'
+        ? 'robocopy'
+        : 'copy';
+    orthoJobLog(logCtx, '3/3 결과 배포 시작', `${tilesStaging} → ${finalAbs} (${deployModeHint})`);
     startTileProgressPoll(finalAbs, '복사');
     const copyStarted = Date.now();
-    await fsPromises.mkdir(path.dirname(finalAbs), { recursive: true });
-    await fsPromises.rm(finalAbs, { recursive: true, force: true }).catch(() => {});
-    await fsPromises.cp(tilesStaging, finalAbs, { recursive: true });
-    stopTileProgressPoll();
+    let mode: 'rename' | 'robocopy' | 'copy' = 'copy';
+    try {
+      mode = await publishOrthoTiles({ tilesStaging, finalAbs, logCtx });
+    } finally {
+      stopTileProgressPoll();
+    }
     updateOrthoTileCountProgress(groupName, finalAbs, '복사', true);
-    orthoJobLog(logCtx, '3/3 결과 복사 완료', `${Date.now() - copyStarted}ms → ${finalRel}`);
+    orthoJobLog(
+      logCtx,
+      '3/3 결과 배포 완료',
+      `${Date.now() - copyStarted}ms mode=${mode} → ${finalRel}`
+    );
 
     await appendUploadConvertHistory({
       at: new Date().toISOString(),
@@ -1552,6 +1925,7 @@ async function runOrthophotoJob(params: {
       sourceFile: sourceBaseName,
       pathOrResult: finalRel,
       status: '완료',
+      note: `deploy=${mode}${localOnly ? ' localWork' : ''}`,
     }).catch((e) => console.error('[orthophotoService] history ok:', e));
     setOrthoPhase(groupName, 'done', 100, '완료');
     const doneEntry = orthoJobProgressMap.get(groupName);
@@ -1567,11 +1941,13 @@ async function runOrthophotoJob(params: {
     orthoJobLog(logCtx, '임시 폴더 정리', tmpRoot);
   } catch (e) {
     stopTileProgressPoll();
+    stopWarpProgressPoll();
     const msg = e instanceof Error ? e.message : String(e);
     console.error(`[orthophoto] EXCEPTION group=${gFromPath} out=${outputSlug} | ${msg}`);
     await fail(msg, tmpRoot);
   } finally {
     stopTileProgressPoll();
+    stopWarpProgressPoll();
   }
 }
 
@@ -1612,6 +1988,8 @@ export async function runSatelliteTifGroupToXyzAndWait(params: {
   zoomMin?: number;
   zoomMax?: number;
   jpegQuality?: number;
+  /** 배치 CLI — 로컬 SSD 작업 후 tiles_jpg 자동 배포(robocopy/rename) */
+  localOnly?: boolean;
 }): Promise<{
   ok: boolean;
   phase: OrthoJobPhase;
@@ -1649,6 +2027,7 @@ type PreparedSatelliteGroupConversion = {
   jpegQuality: number;
   groupOutputSlug: string;
   sorted: SatelliteTifGroupedFile[];
+  localOnly: boolean;
 };
 
 async function prepareSatelliteTifGroupConversion(params: {
@@ -1658,6 +2037,7 @@ async function prepareSatelliteTifGroupConversion(params: {
   zoomMin?: number;
   zoomMax?: number;
   jpegQuality?: number;
+  localOnly?: boolean;
 }): Promise<PreparedSatelliteGroupConversion> {
   await ensureBaseStructure();
   const groupName = params.groupName.trim();
@@ -1705,6 +2085,7 @@ async function prepareSatelliteTifGroupConversion(params: {
     jpegQuality,
     groupOutputSlug,
     sorted,
+    localOnly: params.localOnly === true,
   };
 }
 
@@ -1718,6 +2099,7 @@ async function executeSatelliteTifGroupConversion(prepared: PreparedSatelliteGro
     jpegQuality,
     groupOutputSlug,
     sorted,
+    localOnly,
   } = prepared;
   const base = getBaseDir();
   const absPaths = sorted.map((f) => resolveSafeRelative(f.relativePath)).filter((x): x is string => !!x);
@@ -1733,6 +2115,7 @@ async function executeSatelliteTifGroupConversion(prepared: PreparedSatelliteGro
       zoomMin,
       zoomMax,
       jpegQuality,
+      localOnly,
     });
   };
 
@@ -1741,7 +2124,10 @@ async function executeSatelliteTifGroupConversion(prepared: PreparedSatelliteGro
     return;
   }
 
-  const bundleDir = path.join(getOrthoDataWorkDir(), `ortho_group_${groupName}_${groupOutputSlug}_${Date.now()}`);
+  const bundleDir = path.join(
+    getOrthoDataWorkDir(),
+    `ortho_group_${groupName}_${groupOutputSlug}_${Date.now()}`
+  );
   let vrtPath = '';
   try {
     await fsPromises.mkdir(bundleDir, { recursive: true });
@@ -1798,6 +2184,18 @@ async function executeSatelliteTifGroupConversion(prepared: PreparedSatelliteGro
   );
 
   const syntheticRel = `tiles_tif/${groupName}/(mosaic_${sorted.length}files.vrt)`;
+  const gdalwarp = gdalToolPath('gdalwarp');
+  const gbEnvForResolve = buildGdalChildEnv(gdalbuildvrt);
+  const workBase = localOnly
+    ? await resolveOrthoWorkBase({
+        preferLocal: true,
+        absSource: vrtPath,
+        sourceCrs,
+        gdalwarp,
+        gdalChildEnv: gbEnvForResolve,
+        logCtx: { groupName, outputSlug: groupOutputSlug, sourceFile: 'mosaic.vrt', tileSetUi: tileSetId },
+      })
+    : getOrthoDataWorkDir();
   try {
     await runOrthophotoJob({
       absSource: vrtPath,
@@ -1810,6 +2208,8 @@ async function executeSatelliteTifGroupConversion(prepared: PreparedSatelliteGro
       zoomMax,
       jpegQuality,
       outputSlugOverride: groupOutputSlug,
+      localOnly,
+      workBaseOverride: workBase,
     });
   } finally {
     await fsPromises.rm(bundleDir, { recursive: true, force: true }).catch(() => {});

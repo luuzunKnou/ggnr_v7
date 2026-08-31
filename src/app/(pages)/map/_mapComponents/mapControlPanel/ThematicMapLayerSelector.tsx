@@ -13,6 +13,33 @@ import { MAP_LAYER_PANEL_MAX_H_CLASS } from './mapLayerPanelLayout';
 
 const FALLBACK_LEGEND_COLOR = 'rgb(148,163,184)';
 
+/** 범례 GetLegendGraphic 동시 요청 상한 — Next 프록시 aborted/ECONNRESET 완화 */
+const LEGEND_MAX_CONCURRENT = 4;
+
+type LegendQueueTask = () => void;
+const legendWaitQueue: LegendQueueTask[] = [];
+let legendActiveCount = 0;
+
+function acquireLegendSlot(): Promise<void> {
+  return new Promise((resolve) => {
+    const tryRun = () => {
+      if (legendActiveCount < LEGEND_MAX_CONCURRENT) {
+        legendActiveCount += 1;
+        resolve();
+        return;
+      }
+      legendWaitQueue.push(tryRun);
+    };
+    tryRun();
+  });
+}
+
+function releaseLegendSlot() {
+  legendActiveCount = Math.max(0, legendActiveCount - 1);
+  const next = legendWaitQueue.shift();
+  if (next) next();
+}
+
 /** @deprecated mapLayerPanelLayout 으로 이동 — 호환 re-export */
 export { MAP_LAYER_PANEL_MAX_H_CLASS } from './mapLayerPanelLayout';
 
@@ -44,13 +71,96 @@ function GroupSelectCheckbox({
   );
 }
 
+/**
+ * GetLegendGraphic img — 슬롯 제한 + 실패 시 1회 재시도(캐시버스트).
+ * 영구 회색 고정 금지(예전 failedLegendLayers Set 이 랜덤 고착 원인).
+ */
+function ThematicLegendIcon({
+  tableName,
+  legendColor,
+}: {
+  tableName: string;
+  legendColor?: string;
+}) {
+  const [src, setSrc] = useState<string | null>(null);
+  const [failed, setFailed] = useState(false);
+  const attemptRef = useRef(0);
+  const heldSlotRef = useRef(false);
+
+  const releaseIfHeld = useCallback(() => {
+    if (!heldSlotRef.current) return;
+    heldSlotRef.current = false;
+    releaseLegendSlot();
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    setFailed(false);
+    setSrc(null);
+    attemptRef.current = 0;
+
+    (async () => {
+      await acquireLegendSlot();
+      if (cancelled) {
+        releaseLegendSlot();
+        return;
+      }
+      heldSlotRef.current = true;
+      setSrc(getLegendGraphicUrl(tableName, tableName));
+    })();
+
+    return () => {
+      cancelled = true;
+      releaseIfHeld();
+    };
+  }, [tableName, releaseIfHeld]);
+
+  const onLoad = () => {
+    releaseIfHeld();
+  };
+
+  const onError = () => {
+    releaseIfHeld();
+    if (attemptRef.current < 1) {
+      attemptRef.current += 1;
+      const base = getLegendGraphicUrl(tableName, tableName);
+      const bust = `${base}${base.includes('?') ? '&' : '?'}_r=${Date.now()}`;
+      void (async () => {
+        await acquireLegendSlot();
+        heldSlotRef.current = true;
+        setSrc(bust);
+      })();
+      return;
+    }
+    setFailed(true);
+  };
+
+  if (failed || !src) {
+    return (
+      <span
+        className="h-5 w-5 shrink-0 rounded border border-slate-300 dark:border-white/20"
+        style={{ backgroundColor: legendColor ?? FALLBACK_LEGEND_COLOR }}
+        aria-hidden
+      />
+    );
+  }
+
+  return (
+    <img
+      src={src}
+      alt=""
+      className="h-5 w-5 shrink-0 rounded border border-slate-200 object-contain dark:border-white/20"
+      onLoad={onLoad}
+      onError={onError}
+    />
+  );
+}
+
 function ThematicMapGroupSection({
   group,
   selectedTableNames,
   onToggle,
   onToggleGroup,
-  failedLegendLayers,
-  onLegendError,
   defaultExpanded = false,
   showGroupBulk = true,
 }: {
@@ -58,8 +168,6 @@ function ThematicMapGroupSection({
   selectedTableNames: Set<string>;
   onToggle: (tableName: string, checked: boolean) => void;
   onToggleGroup: (tableNames: string[], checked: boolean) => void;
-  failedLegendLayers: Set<string>;
-  onLegendError: (tableName: string) => void;
   defaultExpanded?: boolean;
   showGroupBulk?: boolean;
 }) {
@@ -115,8 +223,6 @@ function ThematicMapGroupSection({
         <div className="pb-1">
           {group.layers.map((option: ThematicMapLayerOption) => {
             const checked = selectedTableNames.has(option.tableName);
-            const useFallback = failedLegendLayers.has(option.tableName);
-            const legendUrl = getLegendGraphicUrl(option.tableName, option.tableName);
             return (
               <label
                 key={option.tableName}
@@ -127,20 +233,10 @@ function ThematicMapGroupSection({
                 )}
               >
                 <span className="flex min-w-0 flex-1 items-center gap-2">
-                  {useFallback ? (
-                    <span
-                      className="h-5 w-5 shrink-0 rounded border border-slate-300 dark:border-white/20"
-                      style={{ backgroundColor: FALLBACK_LEGEND_COLOR }}
-                      aria-hidden
-                    />
-                  ) : (
-                    <img
-                      src={legendUrl}
-                      alt=""
-                      className="h-5 w-5 shrink-0 rounded border border-slate-200 object-contain dark:border-white/20"
-                      onError={() => onLegendError(option.tableName)}
-                    />
-                  )}
+                  <ThematicLegendIcon
+                    tableName={option.tableName}
+                    legendColor={option.legendColor}
+                  />
                   <span
                     className={cn(
                       'truncate text-xs',
@@ -182,7 +278,7 @@ export interface ThematicMapLayerSelectorProps {
 
 /**
  * 주제도 — 그룹 접기 + 개별/그룹 체크.
- * 최대 높이: 화면 하단 10px 여백, 스크롤은 목록 안쪽.
+ * 범례는 GetLegendGraphic(동시 4개·실패 1회 재시도).
  */
 export function ThematicMapLayerSelector({
   groups = THEMATIC_MAP_LAYER_GROUPS,
@@ -197,11 +293,6 @@ export function ThematicMapLayerSelector({
     () => groups.flatMap((g) => g.layers.map((l) => l.tableName)),
     [groups]
   );
-
-  const [failedLegendLayers, setFailedLegendLayers] = useState<Set<string>>(new Set());
-  const onLegendError = useCallback((tableName: string) => {
-    setFailedLegendLayers((prev) => new Set(prev).add(tableName));
-  }, []);
 
   const toggle = (tableName: string, checked: boolean) => {
     const next = new Set(selectedTableNames);
@@ -279,8 +370,6 @@ export function ThematicMapLayerSelector({
               selectedTableNames={selectedTableNames}
               onToggle={toggle}
               onToggleGroup={toggleGroup}
-              failedLegendLayers={failedLegendLayers}
-              onLegendError={onLegendError}
               showGroupBulk={showBulkActions}
             />
           ))

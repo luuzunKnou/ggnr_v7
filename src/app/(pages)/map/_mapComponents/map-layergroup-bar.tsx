@@ -47,6 +47,7 @@ function getLegendGraphicUrl(layerName: string): string {
     FORMAT: 'image/png',
     WIDTH: '48',
     HEIGHT: '48',
+    LEGEND_OPTIONS: 'forceLabels:off',
   });
   return `${base}/wms?${params.toString()}`;
 }

@@ -18,6 +18,9 @@ const WMS_VIEWPORT_IMAGE_RATIO = 1.5;
 
 /**
  * GeoServer WMS GetLegendGraphic URL — 범례 이미지 요청용
+ *
+ * forceLabels:off — 라벨 스타일이어도 20×20 아이콘에 글자를 넣지 않음
+ * (동시 다량 요청 시 프록시 aborted 줄이려면 호출부에서 lazy/throttle 권장)
  */
 export function getLegendGraphicUrl(layerName: string, styleName?: string): string {
   const base = getGeoServerBase();
@@ -28,6 +31,7 @@ export function getLegendGraphicUrl(layerName: string, styleName?: string): stri
     LAYER: `${WORKSPACE}:${layerName}`,
     WIDTH: '20',
     HEIGHT: '20',
+    LEGEND_OPTIONS: 'forceLabels:off',
   });
   if (styleName) params.set('STYLE', styleName);
   return `${base}/wms?${params.toString()}`;

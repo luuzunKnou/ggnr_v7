@@ -94,6 +94,7 @@ import { useAddressParcelHighlight } from './hooks/useAddressParcelHighlight';
 import { useRoadLedgerMapHighlight } from './hooks/useRoadLedgerMapHighlight';
 import { useRoadNetworkMapHighlight } from './hooks/useRoadNetworkMapHighlight';
 import { useRoadNetworkOverlayLayer } from './hooks/useRoadNetworkOverlayLayer';
+import { useRoadFrontageMarkerPointPickLayer } from './hooks/useRoadFrontageMarkerPointPickLayer';
 import { useRiverConstructionLedgerMapHighlight } from './hooks/useRiverConstructionLedgerMapHighlight';
 import { useRiverConstructionLedgerOverlayLayer } from './hooks/useRiverConstructionLedgerOverlayLayer';
 import { useFmsFacilityOverlayLayer } from '../_mapContents/fmsLinkage/useFmsFacilityOverlayLayer';
@@ -1132,6 +1133,7 @@ export default function OpenLayersMap({
   useRoadLedgerMapHighlight(mapReady);
   useRoadNetworkMapHighlight(mapReady);
   useRoadNetworkOverlayLayer(mapReady);
+  useRoadFrontageMarkerPointPickLayer(mapReady);
   useRiverConstructionLedgerMapHighlight(mapReady);
   useRiverConstructionLedgerOverlayLayer(mapReady);
   useFmsFacilityOverlayLayer(mapReady);
@@ -1193,9 +1195,12 @@ export default function OpenLayersMap({
     };
   }, [mapContext]);
 
-  /** 도로망 점찍기 중에만 identify 비활성 — 배경은 GeoServer WMS 클릭 선택 */
+  /** 도로망·표주 점찍기 중에만 identify 비활성 — 배경은 GeoServer WMS 클릭 선택 */
   const roadNetworkPointPickActive =
     Boolean(mapContext?.roadNetworkPointPickActive);
+  const roadFrontageMarkerPointPickActive = Boolean(
+    mapContext?.roadFrontageMarkerPointPickActive
+  );
 
   // 지도 클릭 → 도형 검색. 측정·도형 그리기·도형편집·CCTV·도로망 점찍기 중에는 식별 비활성
   const { popupState, popupElRef, closePopup } = useFeatureIdentify(
@@ -1208,6 +1213,7 @@ export default function OpenLayersMap({
       !!layerRowGeomEdit ||
       !!spatialDrawRequest ||
       roadNetworkPointPickActive ||
+      roadFrontageMarkerPointPickActive ||
       activeControls.some((id) => MEASUREMENT_IDS.includes(id))
   );
 

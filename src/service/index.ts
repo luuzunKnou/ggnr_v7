@@ -29,6 +29,7 @@ import * as roadLedgerService from './roadLedgerService';
 import * as roadNetworkService from './roadNetworkService';
 import * as roadUseLedgerService from './roadUseLedgerService';
 import * as roadFrontageBuildingService from './roadFrontageBuildingService';
+import * as roadFrontageMarkerService from './roadFrontageMarkerService';
 import * as riverUseLedgerService from './riverUseLedgerService';
 import * as usageDataAsService from './usageDataAsService';
 import * as occupationLedgerService from './occupationLedgerService';
@@ -98,6 +99,7 @@ export {
   roadNetworkService,
   roadUseLedgerService,
   roadFrontageBuildingService,
+  roadFrontageMarkerService,
   riverUseLedgerService,
   usageDataAsService,
   occupationLedgerService,
