@@ -5,6 +5,7 @@ import { db } from '@/database/db';
 import { usr } from '@/database/schema/usr';
 import { getSessionUsrId } from '@/lib/auth/guard';
 import { getGeoServerInternalBase, resolveGeoServerFetchBase } from '@/lib/geoserverUrl';
+import { geoserverWwwSymbolUrl } from '@/lib/geoserverSymbolPath';
 import { eq, sql } from 'drizzle-orm';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -48,12 +49,9 @@ function ensureAutofixLogDirSync(): string {
   return dir;
 }
 
-/** GeoServer www 심볼 경로 (data_dir/www/symbol/water). GEOSERVER_URL 없으면 localhost:8080/geoserver */
+/** GeoServer www 심볼 URL (start.ini·GEOSERVER_URL 포트) */
 function geoserverWaterSymbolUrl(name: string, ext: 'svg' | 'png'): string {
-  const gs =
-    (typeof process !== 'undefined' && process.env?.GEOSERVER_URL) ||
-    getGeoServerInternalBase();
-  return `${gs.replace(/\/$/, '')}/www/symbol/water/${name}.${ext}`;
+  return geoserverWwwSymbolUrl('water', `${name}.${ext}`);
 }
 
 /**
@@ -99,10 +97,7 @@ function getGeoServerSymbolRootDir(): string {
 }
 
 function geoserverSymbolFileUrl(folder: string, fileName: string): string {
-  const gs =
-    (typeof process !== 'undefined' && process.env?.GEOSERVER_URL) ||
-    getGeoServerInternalBase();
-  return `${gs.replace(/\/$/, '')}/www/symbol/${encodeURIComponent(folder)}/${encodeURIComponent(fileName)}`;
+  return geoserverWwwSymbolUrl(folder, fileName);
 }
 
 function assertSafeSymbolFolder(folder: string): string | null {
