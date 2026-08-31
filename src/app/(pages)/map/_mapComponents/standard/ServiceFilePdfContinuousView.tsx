@@ -2,9 +2,12 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Loader2 } from 'lucide-react';
-import { getDocument, type PDFDocumentProxy } from 'pdfjs-dist';
+import { type PDFDocumentProxy, type TextLayer } from 'pdfjs-dist';
 import { cn } from '@/lib/utils';
 import { configurePdfJsWorker } from '@/lib/pdfjsWorker';
+import { acquirePdfDocument, releasePdfDocument } from './pdfDocumentCache';
+import { cancelPdfTextLayer, renderPdfTextLayer } from './renderPdfTextLayer';
+import { scheduleLazyPdfTextLayer, type LazyTextLayerHandle } from './lazyPdfTextLayer';
 import {
   STAGE_MAX_ZOOM,
   STAGE_MIN_ZOOM,
@@ -17,6 +20,18 @@ function clamp(n: number, min: number, max: number): number {
 
 const MAX_CANVAS_LONG_EDGE = 8192;
 const PAGE_GAP_PX = 12;
+/** canvas prefetch — 뷰포트 밖 여유 */
+const CANVAS_ROOT_MARGIN = '320px 0px';
+/** TextLayer — 실제 화면에 들어온 페이지만 */
+const TEXT_LAYER_ROOT_MARGIN = '80px 0px';
+
+function releaseCanvasMemory(canvas: HTMLCanvasElement | null): void {
+  if (!canvas) return;
+  canvas.width = 0;
+  canvas.height = 0;
+  canvas.style.width = '';
+  canvas.style.height = '';
+}
 
 type ContinuousPageProps = {
   pdf: PDFDocumentProxy;
@@ -39,27 +54,63 @@ function ContinuousPage({
 }: ContinuousPageProps) {
   const rootRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [visible, setVisible] = useState(false);
+  const textLayerRef = useRef<HTMLDivElement>(null);
+  const [inView, setInView] = useState(false);
+  const [textLayerEligible, setTextLayerEligible] = useState(false);
   const [phase, setPhase] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle');
   const renderTaskRef = useRef<{ cancel: () => void } | null>(null);
+  const textLayerTaskRef = useRef<TextLayer | null>(null);
+  const lazyTextLayerRef = useRef<LazyTextLayerHandle | null>(null);
   const onHeightReadyRef = useRef(onHeightReady);
   onHeightReadyRef.current = onHeightReady;
+
+  const cancelTextLayer = useCallback(() => {
+    lazyTextLayerRef.current?.cancel();
+    lazyTextLayerRef.current = null;
+    cancelPdfTextLayer(textLayerTaskRef.current, textLayerRef.current);
+    textLayerTaskRef.current = null;
+  }, []);
 
   useEffect(() => {
     const el = rootRef.current;
     if (!el || scrollRoot == null) return;
-    const obs = new IntersectionObserver(
+
+    const canvasObs = new IntersectionObserver(
       (entries) => {
-        if (entries.some((e) => e.isIntersecting)) setVisible(true);
+        for (const entry of entries) {
+          if (entry.target === el) setInView(entry.isIntersecting);
+        }
       },
-      { root: scrollRoot, rootMargin: '240px 0px' }
+      { root: scrollRoot, rootMargin: CANVAS_ROOT_MARGIN }
     );
-    obs.observe(el);
-    return () => obs.disconnect();
+    canvasObs.observe(el);
+
+    const textObs = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (entry.target === el) setTextLayerEligible(entry.isIntersecting);
+        }
+      },
+      { root: scrollRoot, rootMargin: TEXT_LAYER_ROOT_MARGIN }
+    );
+    textObs.observe(el);
+
+    return () => {
+      canvasObs.disconnect();
+      textObs.disconnect();
+    };
   }, [scrollRoot]);
 
   useEffect(() => {
-    if (!visible) return;
+    if (!inView) {
+      cancelTextLayer();
+      renderTaskRef.current?.cancel();
+      renderTaskRef.current = null;
+      releaseCanvasMemory(canvasRef.current);
+      setPhase('idle');
+      return;
+    }
+
     let cancelled = false;
 
     const run = async () => {
@@ -108,6 +159,7 @@ function ContinuousPage({
         await renderTask.promise;
         renderTaskRef.current = null;
         if (cancelled) return;
+
         setPhase('ready');
       } catch {
         if (!cancelled) setPhase('error');
@@ -119,8 +171,82 @@ function ContinuousPage({
       cancelled = true;
       renderTaskRef.current?.cancel();
       renderTaskRef.current = null;
+      cancelTextLayer();
     };
-  }, [visible, pdf, pageNumber, fitMode, renderScale, rotation]);
+  }, [inView, pdf, pageNumber, fitMode, renderScale, rotation, cancelTextLayer]);
+
+  /** canvas 준비·뷰포트 진입 시 TextLayer lazy 스케줄 */
+  useEffect(() => {
+    if (!textLayerEligible || phase !== 'ready' || !inView) {
+      if (!textLayerEligible) cancelTextLayer();
+      return;
+    }
+
+    let cancelled = false;
+
+    const run = async () => {
+      const page = await pdf.getPage(pageNumber);
+      if (cancelled || !textLayerEligible) return;
+
+      const canvas = canvasRef.current;
+      if (!canvas || canvas.width < 1) return;
+
+      const dpr = Math.min(typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1, 3);
+      const maxW = Math.min(window.innerWidth * 0.96, 1800);
+      const maxH = Math.min(window.innerHeight * 0.85, 1400);
+      const vp1 = page.getViewport({ scale: 1, rotation });
+      const fitSc =
+        fitMode === 'width'
+          ? Math.min(maxW / vp1.width, STAGE_MAX_ZOOM)
+          : Math.min(maxW / vp1.width, maxH / vp1.height, STAGE_MAX_ZOOM);
+      const zoom = clamp(renderScale, STAGE_MIN_ZOOM, STAGE_MAX_ZOOM);
+      let renderSc = fitSc * zoom;
+      let viewport = page.getViewport({ scale: renderSc, rotation });
+      const longEdge = Math.max(viewport.width, viewport.height);
+      if (longEdge > MAX_CANVAS_LONG_EDGE) {
+        renderSc *= MAX_CANVAS_LONG_EDGE / longEdge;
+        viewport = page.getViewport({ scale: renderSc, rotation });
+      }
+
+      const textContainer = textLayerRef.current;
+      if (!textContainer) return;
+
+      cancelTextLayer();
+      lazyTextLayerRef.current = scheduleLazyPdfTextLayer(async (signal) => {
+        if (cancelled || signal.aborted || !textLayerEligible) return;
+        try {
+          textLayerTaskRef.current = await renderPdfTextLayer({
+            page,
+            viewport,
+            container: textContainer,
+            signal,
+          });
+        } catch (err) {
+          if (err instanceof DOMException && err.name === 'AbortError') return;
+        }
+      });
+    };
+
+    void run();
+    return () => {
+      cancelled = true;
+      cancelTextLayer();
+    };
+  }, [
+    textLayerEligible,
+    phase,
+    inView,
+    pdf,
+    pageNumber,
+    fitMode,
+    renderScale,
+    rotation,
+    cancelTextLayer,
+  ]);
+
+  useEffect(() => {
+    return () => cancelTextLayer();
+  }, [cancelTextLayer]);
 
   return (
     <div
@@ -142,13 +268,16 @@ function ContinuousPage({
             페이지 {pageNumber}를 불러오지 못했습니다.
           </div>
         ) : null}
-        <canvas
-          ref={canvasRef}
-          className={cn(
-            'block shadow-2xl',
-            phase === 'ready' ? 'opacity-100' : 'absolute h-0 w-0 overflow-hidden opacity-0'
-          )}
-        />
+        <div className={cn(phase === 'ready' ? 'relative inline-block' : 'absolute h-0 w-0 overflow-hidden opacity-0')}>
+          <canvas
+            ref={canvasRef}
+            className="relative z-0 block shadow-2xl"
+          />
+          <div
+            ref={textLayerRef}
+            className="textLayer absolute left-0 top-0 z-[1]"
+          />
+        </div>
       </div>
     </div>
   );
@@ -186,6 +315,7 @@ export function ServiceFilePdfContinuousView({
   const [numPages, setNumPages] = useState(0);
   const [loadPhase, setLoadPhase] = useState<'loading' | 'ready' | 'error'>('loading');
   const pdfRef = useRef<PDFDocumentProxy | null>(null);
+  const heldUrlRef = useRef<string | null>(null);
   const loadUrlRef = useRef<string | null>(null);
   const scrollSyncLockRef = useRef(false);
   const visibilityRef = useRef<Map<number, number>>(new Map());
@@ -219,23 +349,21 @@ export function ServiceFilePdfContinuousView({
         return;
       }
 
-      if (pdfRef.current) {
-        await pdfRef.current.destroy().catch(() => {});
+      if (heldUrlRef.current && heldUrlRef.current !== url) {
+        releasePdfDocument(heldUrlRef.current);
+        heldUrlRef.current = null;
         pdfRef.current = null;
       }
       loadUrlRef.current = null;
 
       try {
-        const res = await fetch(url, { credentials: 'include' });
-        if (!res.ok) throw new Error('fetch');
-        const buf = await res.arrayBuffer();
-        if (cancelled) return;
-        const doc = await getDocument({ data: new Uint8Array(buf) }).promise;
+        const doc = await acquirePdfDocument(url);
         if (cancelled) {
-          await doc.destroy().catch(() => {});
+          releasePdfDocument(url);
           return;
         }
         pdfRef.current = doc;
+        heldUrlRef.current = url;
         loadUrlRef.current = url;
         setPdf(doc);
         setNumPages(doc.numPages);
@@ -254,7 +382,10 @@ export function ServiceFilePdfContinuousView({
 
   useEffect(() => {
     return () => {
-      void pdfRef.current?.destroy().catch(() => {});
+      if (heldUrlRef.current) {
+        releasePdfDocument(heldUrlRef.current);
+        heldUrlRef.current = null;
+      }
       pdfRef.current = null;
       loadUrlRef.current = null;
     };
@@ -360,7 +491,7 @@ export function ServiceFilePdfContinuousView({
     <div
       ref={assignScrollRoot}
       className={cn(
-        'min-h-0 flex-1 cursor-pointer px-2 py-3',
+        'min-h-0 flex-1 cursor-default px-2 py-3',
         scrollSideways ? 'overflow-auto' : 'overflow-y-auto overflow-x-hidden'
       )}
     >

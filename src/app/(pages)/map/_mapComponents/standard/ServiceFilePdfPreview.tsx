@@ -36,6 +36,7 @@ import {
   buildServiceFilePreviewListZipName,
   printServiceFilePreviewBlob,
 } from './ServiceFileImagePreview';
+import { setPdfViewerFocusUrl } from './pdfDocumentCache';
 
 export type ServiceFilePdfPreviewItem = {
   url: string;
@@ -94,7 +95,8 @@ export function ServiceFilePdfPreview({ items, initialIndex, onClose }: Props) {
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [dragging, setDragging] = useState(false);
   const [pdfPage, setPdfPage] = useState(1);
-  const [pdfNumPages, setPdfNumPages] = useState(1);
+  const [pdfNumPages, setPdfNumPages] = useState(0);
+  const [pdfPagesLoading, setPdfPagesLoading] = useState(true);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [pdfListSearchDraft, setPdfListSearchDraft] = useState('');
   const [pdfListSearch, setPdfListSearch] = useState('');
@@ -105,6 +107,8 @@ export function ServiceFilePdfPreview({ items, initialIndex, onClose }: Props) {
 
   const draggingRef = useRef(false);
   const lastPointerRef = useRef({ x: 0, y: 0 });
+  const spaceHeldRef = useRef(false);
+  const [spaceHeld, setSpaceHeld] = useState(false);
   const wheelTargetRef = useRef<HTMLDivElement>(null);
   const pageThumbScrollRef = useRef<HTMLDivElement>(null);
   const wheelNavRef = useRef({ pdfNumPages: 1, viewMode: 'single' as PdfViewMode });
@@ -120,7 +124,13 @@ export function ServiceFilePdfPreview({ items, initialIndex, onClose }: Props) {
 
   const setPdfNumPagesStable = useCallback((n: number) => {
     setPdfNumPages(Math.max(1, n));
+    setPdfPagesLoading(false);
   }, []);
+
+  const handleClose = useCallback(() => {
+    setPdfViewerFocusUrl(null);
+    onClose();
+  }, [onClose]);
 
   useEffect(() => {
     setMounted(true);
@@ -137,9 +147,18 @@ export function ServiceFilePdfPreview({ items, initialIndex, onClose }: Props) {
     setRotation(0);
     setPan({ x: 0, y: 0 });
     setPdfPage(1);
-    setPdfNumPages(1);
+    setPdfNumPages(0);
+    setPdfPagesLoading(true);
     setPageInput('1');
   }, [index]);
+
+  useEffect(() => {
+    if (current?.url) setPdfViewerFocusUrl(current.url);
+  }, [current?.url]);
+
+  useEffect(() => {
+    return () => setPdfViewerFocusUrl(null);
+  }, []);
 
   /** 단일 페이지 모드: 페이지 전환 시 이동만 초기화 (확대율 유지) */
   useEffect(() => {
@@ -217,7 +236,7 @@ export function ServiceFilePdfPreview({ items, initialIndex, onClose }: Props) {
     document.body.style.overflow = 'hidden';
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        onClose();
+        handleClose();
         return;
       }
 
@@ -274,7 +293,7 @@ export function ServiceFilePdfPreview({ items, initialIndex, onClose }: Props) {
       document.body.style.overflow = prevOverflow;
       window.removeEventListener('keydown', onKey);
     };
-  }, [onClose, items.length, pdfNumPages]);
+  }, [handleClose, items.length, pdfNumPages]);
 
   const goPrev = useCallback(() => {
     setIndex((i) => (i - 1 + items.length) % items.length);
@@ -416,6 +435,34 @@ export function ServiceFilePdfPreview({ items, initialIndex, onClose }: Props) {
 
   useEffect(() => {
     if (!mounted) return;
+    const isEditableTarget = (target: EventTarget | null): boolean => {
+      if (!(target instanceof HTMLElement)) return false;
+      const tag = target.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return true;
+      return target.isContentEditable;
+    };
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.code !== 'Space' || e.repeat || isEditableTarget(e.target)) return;
+      spaceHeldRef.current = true;
+      setSpaceHeld(true);
+      if (viewModeRef.current === 'single') e.preventDefault();
+    };
+    const onKeyUp = (e: KeyboardEvent) => {
+      if (e.code !== 'Space') return;
+      spaceHeldRef.current = false;
+      setSpaceHeld(false);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    window.addEventListener('keyup', onKeyUp);
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('keyup', onKeyUp);
+    };
+  }, [mounted]);
+
+  useEffect(() => {
+    if (!mounted) return;
     const el = wheelTargetRef.current;
     if (!el) return;
     const onWheelNative = (e: WheelEvent) => {
@@ -451,6 +498,8 @@ export function ServiceFilePdfPreview({ items, initialIndex, onClose }: Props) {
 
   const onPointerDown = useCallback((e: React.PointerEvent) => {
     if (e.button !== 0) return;
+    if (!(e.altKey || spaceHeldRef.current)) return;
+    e.preventDefault();
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
     draggingRef.current = true;
     setDragging(true);
@@ -477,10 +526,10 @@ export function ServiceFilePdfPreview({ items, initialIndex, onClose }: Props) {
     setDragging(false);
   }, []);
 
-  const pageNumbers = useMemo(
-    () => Array.from({ length: pdfNumPages }, (_, i) => i + 1),
-    [pdfNumPages]
-  );
+  const pageNumbers = useMemo(() => {
+    if (pdfPagesLoading || pdfNumPages < 1) return [];
+    return Array.from({ length: pdfNumPages }, (_, i) => i + 1);
+  }, [pdfNumPages, pdfPagesLoading]);
 
   if (!mounted || typeof document === 'undefined') return null;
   if (items.length === 0 || current == null) return null;
@@ -586,7 +635,7 @@ export function ServiceFilePdfPreview({ items, initialIndex, onClose }: Props) {
           <span className="mx-0.5 hidden h-5 w-px bg-background/25 sm:block" aria-hidden />
           <button
             type="button"
-            onClick={onClose}
+            onClick={handleClose}
             className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-white/90 transition-colors hover:bg-background/10"
             title="닫기"
             aria-label="닫기"
@@ -690,18 +739,26 @@ export function ServiceFilePdfPreview({ items, initialIndex, onClose }: Props) {
             <div className="flex min-h-0 flex-1 flex-col px-2 py-2">
               <div className="mb-2 flex items-baseline justify-between gap-2">
                 <p className="text-[12px] font-semibold text-white/80">페이지</p>
-                <span className="shrink-0 text-[11px] tabular-nums text-white/55">총 {pdfNumPages}건</span>
+                <span className="shrink-0 text-[11px] tabular-nums text-white/55">
+                  {pdfPagesLoading ? '로딩중...' : `총 ${pdfNumPages}건`}
+                </span>
               </div>
               <div
                 ref={pageThumbScrollRef}
                 className="flex min-h-0 flex-1 flex-col items-center space-y-1.5 overflow-y-auto pb-2"
               >
+                {pdfPagesLoading ? (
+                  <div className="flex flex-1 items-center justify-center py-8">
+                    <Loader2 className="h-6 w-6 animate-spin text-white/40" aria-hidden />
+                  </div>
+                ) : null}
                 {pageNumbers.map((pn) => (
                   <div key={`${current.url}-${pn}`} data-page={pn} className="flex w-full justify-center">
                     <ServiceFilePdfPageThumb
                       url={current.url}
                       pageNumber={pn}
                       active={pn === pdfPage}
+                      priority={pn === pdfPage}
                       onClick={() => navigateToPdfPage(pn)}
                       thumbMaxPx={PDF_PAGE_THUMB_DISPLAY_PX}
                     />
@@ -716,8 +773,9 @@ export function ServiceFilePdfPreview({ items, initialIndex, onClose }: Props) {
           ref={wheelTargetRef}
           className={cn(
             'relative flex min-h-0 min-w-0 flex-1 flex-col',
-            viewMode === 'single' && (dragging ? 'cursor-grabbing touch-none select-none' : 'cursor-grab touch-none select-none'),
-            viewMode === 'continuous' && 'cursor-pointer'
+            viewMode === 'single' &&
+              (dragging ? 'cursor-grabbing touch-none' : spaceHeld ? 'cursor-grab' : 'cursor-auto'),
+            viewMode === 'continuous' && 'cursor-auto'
           )}
           onPointerDown={viewMode === 'single' ? onPointerDown : undefined}
           onPointerMove={viewMode === 'single' ? onPointerMove : undefined}
@@ -817,7 +875,9 @@ export function ServiceFilePdfPreview({ items, initialIndex, onClose }: Props) {
             title="페이지 번호 입력"
             aria-label="페이지 번호 입력"
           />
-          <span className="text-[11px] tabular-nums text-white/55">/ {pdfNumPages}</span>
+          <span className="text-[11px] tabular-nums text-white/55">
+            / {pdfPagesLoading ? '…' : pdfNumPages}
+          </span>
         </div>
         <button
           type="button"
@@ -896,7 +956,9 @@ export function ServiceFilePdfPreview({ items, initialIndex, onClose }: Props) {
           : canPdfPage
             ? '휠로 이전·다음 페이지 · Ctrl+휠 확대·축소'
             : '휠로 확대·축소'}
-        {viewMode === 'single' ? ' · 확대 시 끌어서 이동 · 더블클릭 시 초기화' : ''}
+        {viewMode === 'single'
+          ? ' · 드래그로 텍스트 선택 · Space 또는 Alt+드래그로 화면 이동 · 더블클릭 시 초기화'
+          : ''}
         {canNav ? ' · ← → 이전·다음 파일' : ''}
         {canPdfPage && viewMode === 'single' ? ' · PDF ↑↓ 또는 Page Up / Down' : ''}
         {canPdfPage && viewMode === 'continuous' ? ' · ↑↓ 스크롤' : ''}

@@ -2,11 +2,9 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { FileText, Loader2 } from 'lucide-react';
-import { getDocument, type PDFDocumentProxy } from 'pdfjs-dist';
 import { cn } from '@/lib/utils';
-import { configurePdfJsWorker } from '@/lib/pdfjsWorker';
-import { appFetch } from '@/lib/basePath';
 import { serviceFileDataDownloadUrl, type ServiceFileDataSerEng } from './useServiceFileData';
+import { getPdfPageThumbDataUrl } from './renderPdfPageThumb';
 
 const box = { sm: 'h-8 w-8', md: 'h-9 w-9' } as const;
 const iconSz = { sm: 'h-3.5 w-3.5', md: 'h-4 w-4' } as const;
@@ -46,69 +44,28 @@ export function ServiceFilePdfThumb({
   const [dataUrl, setDataUrl] = useState<string | null>(null);
   const url = serviceFileDataDownloadUrl(serEng, layerSegment, keyValue, fileName, { subfolder });
   const alive = useRef(true);
-  const loadingTaskRef = useRef<ReturnType<typeof getDocument> | null>(null);
-  const pdfRef = useRef<PDFDocumentProxy | null>(null);
 
   useEffect(() => {
     alive.current = true;
     setPhase('loading');
     setDataUrl(null);
-    loadingTaskRef.current = null;
-    pdfRef.current = null;
-    configurePdfJsWorker();
 
-    void (async () => {
-      try {
-        const res = await appFetch(url, { credentials: 'include' });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const buf = await res.arrayBuffer();
+    const ac = new AbortController();
+    void getPdfPageThumbDataUrl(url, 1, thumbMaxPx, ac.signal)
+      .then((thumb) => {
         if (!alive.current) return;
-
-        const lt = getDocument({ data: new Uint8Array(buf) });
-        loadingTaskRef.current = lt;
-        const pdf = await lt.promise;
-        loadingTaskRef.current = null;
-        if (!alive.current) {
-          await pdf.destroy().catch(() => {});
-          return;
-        }
-        pdfRef.current = pdf;
-
-        const page = await pdf.getPage(1);
-        const base = page.getViewport({ scale: 1 });
-        const maxPx = Math.max(32, Math.min(thumbMaxPx, 2048));
-        const scale = maxPx / Math.max(base.width, base.height, 1);
-        const viewport = page.getViewport({ scale });
-        const canvas = document.createElement('canvas');
-        const ctx = canvas.getContext('2d');
-        if (!ctx) throw new Error('no canvas context');
-
-        canvas.width = Math.ceil(viewport.width);
-        canvas.height = Math.ceil(viewport.height);
-        const renderTask = page.render({ canvasContext: ctx, viewport });
-        await renderTask.promise;
-        if (!alive.current) {
-          pdfRef.current = null;
-          await pdf.destroy().catch(() => {});
-          return;
-        }
-
-        const jpeg = canvas.toDataURL('image/jpeg', 0.82);
-        setDataUrl(jpeg);
+        setDataUrl(thumb);
         setPhase('ready');
-        pdfRef.current = null;
-        await pdf.destroy().catch(() => {});
-      } catch {
-        if (alive.current) setPhase('error');
-      }
-    })();
+      })
+      .catch((err: unknown) => {
+        if (!alive.current) return;
+        if (err instanceof DOMException && err.name === 'AbortError') return;
+        setPhase('error');
+      });
 
     return () => {
       alive.current = false;
-      void loadingTaskRef.current?.destroy?.();
-      loadingTaskRef.current = null;
-      void pdfRef.current?.destroy?.();
-      pdfRef.current = null;
+      ac.abort();
     };
   }, [url, thumbMaxPx]);
 

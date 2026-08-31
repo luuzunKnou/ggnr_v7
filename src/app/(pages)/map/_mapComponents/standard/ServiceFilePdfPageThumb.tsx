@@ -2,10 +2,8 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { FileText, Loader2 } from 'lucide-react';
-import { getDocument, type PDFDocumentProxy } from 'pdfjs-dist';
 import { cn } from '@/lib/utils';
-import { configurePdfJsWorker } from '@/lib/pdfjsWorker';
-import { appFetch } from '@/lib/basePath';
+import { getPdfPageThumbDataUrl } from './renderPdfPageThumb';
 
 /** 사이드바(240px) 기준 썸네일 표시 너비 */
 export const PDF_PAGE_THUMB_DISPLAY_PX = 220;
@@ -22,6 +20,7 @@ export function ServiceFilePdfPageThumb({
   onClick,
   className,
   thumbMaxPx = PDF_PAGE_THUMB_DISPLAY_PX,
+  priority = false,
 }: {
   url: string;
   pageNumber: number;
@@ -30,15 +29,20 @@ export function ServiceFilePdfPageThumb({
   className?: string;
   /** 썸네일 표시 너비(CSS px). 렌더는 DPR 배율 적용 */
   thumbMaxPx?: number;
+  /** true면 IntersectionObserver 없이 즉시 렌더 (현재 페이지) */
+  priority?: boolean;
 }) {
   const rootRef = useRef<HTMLButtonElement>(null);
-  const [visible, setVisible] = useState(false);
+  const [visible, setVisible] = useState(priority);
   const [phase, setPhase] = useState<Phase>('idle');
   const [dataUrl, setDataUrl] = useState<string | null>(null);
   const alive = useRef(true);
-  const pdfRef = useRef<PDFDocumentProxy | null>(null);
 
   useEffect(() => {
+    if (priority) {
+      setVisible(true);
+      return;
+    }
     const el = rootRef.current;
     if (!el) return;
     const obs = new IntersectionObserver(
@@ -52,69 +56,30 @@ export function ServiceFilePdfPageThumb({
     );
     obs.observe(el);
     return () => obs.disconnect();
-  }, []);
+  }, [priority]);
 
   useEffect(() => {
     if (!visible) return;
     alive.current = true;
     setPhase('loading');
     setDataUrl(null);
-    configurePdfJsWorker();
 
-    void (async () => {
-      try {
-        const res = await appFetch(url, { credentials: 'include' });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const buf = await res.arrayBuffer();
+    const ac = new AbortController();
+    void getPdfPageThumbDataUrl(url, pageNumber, thumbMaxPx, ac.signal)
+      .then((thumb) => {
         if (!alive.current) return;
-
-        const pdf = await getDocument({ data: new Uint8Array(buf) }).promise;
-        if (!alive.current) {
-          await pdf.destroy().catch(() => {});
-          return;
-        }
-        pdfRef.current = pdf;
-
-        const total = pdf.numPages;
-        const pageIdx = Math.min(Math.max(1, pageNumber), total);
-        const page = await pdf.getPage(pageIdx);
-        const base = page.getViewport({ scale: 1 });
-        const dpr = Math.min(typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1, 2.5);
-        const displayPx = Math.max(64, thumbMaxPx);
-        const fitScale = displayPx / Math.max(base.width, base.height, 1);
-        const viewport = page.getViewport({ scale: fitScale });
-
-        const canvas = document.createElement('canvas');
-        const ctx = canvas.getContext('2d');
-        if (!ctx) throw new Error('no ctx');
-
-        const pxW = Math.ceil(viewport.width);
-        const pxH = Math.ceil(viewport.height);
-        canvas.width = Math.floor(pxW * dpr);
-        canvas.height = Math.floor(pxH * dpr);
-
-        const transform: [number, number, number, number, number, number] | undefined =
-          dpr !== 1 ? [dpr, 0, 0, dpr, 0, 0] : undefined;
-
-        await page.render({ canvasContext: ctx, viewport, transform }).promise;
-        if (!alive.current) {
-          await pdf.destroy().catch(() => {});
-          return;
-        }
-
-        setDataUrl(canvas.toDataURL('image/png'));
+        setDataUrl(thumb);
         setPhase('ready');
-        pdfRef.current = null;
-        await pdf.destroy().catch(() => {});
-      } catch {
-        if (alive.current) setPhase('error');
-      }
-    })();
+      })
+      .catch((err: unknown) => {
+        if (!alive.current) return;
+        if (err instanceof DOMException && err.name === 'AbortError') return;
+        setPhase('error');
+      });
 
     return () => {
       alive.current = false;
-      void pdfRef.current?.destroy?.();
-      pdfRef.current = null;
+      ac.abort();
     };
   }, [visible, url, pageNumber, thumbMaxPx]);
 
