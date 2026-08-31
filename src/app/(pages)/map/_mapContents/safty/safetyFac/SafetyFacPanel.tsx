@@ -596,7 +596,7 @@ export function SafetyFacPanel({ onClose, selectedFacility, onSelectFacility }: 
                   <span className="sr-only">시설명·주소 검색</span>
                   <input
                     id="safety-fac-search"
-                    type="search"
+                    type="text"
                     value={searchText}
                     onChange={(e) => setSearchText(e.target.value)}
                     onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
