@@ -17,17 +17,15 @@ import { requestLayerManagerListRefresh, registerLayerManagerDefineRefresh } fro
 import { StyleLegendThumb, StylePreviewSwatch } from "./layerManager/StylePreviewSwatch"
 import { call } from "@/lib/api"
 import { parseSimpleStyleFromCss, parseSymbolFolderFromUrl, symbolFileNameFromUrl, toPublicSymbolPreviewUrl, type GeometryType, type StyleProps } from "@/lib/geoserverStyleUtils"
+import { getGeoServerBase } from "@/lib/geoserverUrl"
 import {
   fetchDefineLayerTables,
   fetchLayerDbTableList,
   invalidateLayerManagerListCache,
   saveDefineLayerTablesConfig,
 } from "./layerManager/layerManagerListCache"
-/** GeoServer 관리 UI·REST — BASE_PATH 프록시가 아닌 네이티브 :8080 */
-const GEOSERVER_DEFAULT_URL =
-  typeof window !== "undefined"
-    ? `${window.location.protocol}//${window.location.hostname}:8080/geoserver`
-    : "http://localhost:8080/geoserver"
+
+const GEOSERVER_DEFAULT_URL = getGeoServerBase()
 
 const GEOMETRY_TYPES: { value: GeometryType; label: string }[] = [
   { value: "POINT", label: "POINT" },

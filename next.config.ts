@@ -3,6 +3,7 @@ import path from "path";
 import CopyPlugin from "copy-webpack-plugin";
 import webpack from "webpack";
 import { getProjectEnvVars } from "./scripts/load-project-env";
+import { resolveGeoServerInternalUrl } from "./scripts/resolve-geoserver-url";
 
 /**
  * [project].env 의 [dev|demo|prod] 섹션 BASE_PATH → Next basePath.
@@ -76,10 +77,8 @@ const nextConfig: NextConfig = {
     'pg-native',
   ],
   async rewrites() {
-    // GeoServer: 브라우저·게이트는 동일 출처 `{basePath}/geoserver` → 로컬 8080
-    const geoInternal = (
-      process.env.GEOSERVER_URL?.trim() || 'http://127.0.0.1:8080/geoserver'
-    ).replace(/\/$/, '');
+    // GeoServer: 브라우저·게이트는 동일 출처 `{basePath}/geoserver` → start.ini·GEOSERVER_URL
+    const geoInternal = resolveGeoServerInternalUrl();
     return [
       { source: '/geoserver', destination: geoInternal },
       { source: '/geoserver/:path*', destination: `${geoInternal}/:path*` },
