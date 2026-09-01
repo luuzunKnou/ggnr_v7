@@ -16,7 +16,18 @@ function zoomToBuffer(zoom: number): number {
 
 /** 목록·지도 선택 시 목표 줌 (재난대응시설과 동일) */
 export const COMPLAINT_CLICK_ZOOM = 18;
-const COMPLAINT_FLY_MS = 600;
+export const COMPLAINT_FLY_MS = 600;
+
+let complaintFlySeq = 0;
+let complaintFlyCompleteListener: (() => void) | null = null;
+
+/** 민원 지도 이동이 끝나면 한 번 호출. 범위 강조를 확대 후에 띄울 때 사용 */
+export function subscribeComplaintFlyComplete(fn: () => void): () => void {
+  complaintFlyCompleteListener = fn;
+  return () => {
+    if (complaintFlyCompleteListener === fn) complaintFlyCompleteListener = null;
+  };
+}
 
 function pickCompKey(row: Record<string, unknown>): number | null {
   const raw = row.comp_key ?? row.compKey ?? row.COMP_KEY;
@@ -40,9 +51,12 @@ export function center3857FromExtent(
 export function animateComplaintToCenter3857(
   map: Map,
   center3857: [number, number],
-  applyMapViewPadding?: (() => void) | null
+  applyMapViewPadding?: (() => void) | null,
+  onComplete?: () => void
 ) {
+  const seq = ++complaintFlySeq;
   const run = () => {
+    if (seq !== complaintFlySeq) return;
     prepareMapForPanelAwareNavigation(map, applyMapViewPadding);
     const view = map.getView();
     view.cancelAnimations();
@@ -52,12 +66,19 @@ export function animateComplaintToCenter3857(
       COMPLAINT_CLICK_ZOOM
     );
     const resolution = view.getResolutionForZoom(targetZoom);
-    view.animate({
-      center: center3857,
-      resolution,
-      duration: COMPLAINT_FLY_MS,
-      easing: easeOut,
-    });
+    view.animate(
+      {
+        center: center3857,
+        resolution,
+        duration: COMPLAINT_FLY_MS,
+        easing: easeOut,
+      },
+      () => {
+        if (seq !== complaintFlySeq) return;
+        complaintFlyCompleteListener?.();
+        onComplete?.();
+      }
+    );
   };
   queueMicrotask(() => {
     requestAnimationFrame(() => {

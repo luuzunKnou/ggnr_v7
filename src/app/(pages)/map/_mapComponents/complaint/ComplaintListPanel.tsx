@@ -73,6 +73,16 @@ export default function ComplaintListPanel({
   useEffect(() => {
     const ctx = mapContextRef.current;
     const layerIds = lowerLayerIds(COMP_WMS_LAYER_IDS);
+    const leftover = ctx?.mapInstanceRef?.current
+      ?.getLayers()
+      .getArray()
+      .find((l) => l.get('serviceLayer') === true);
+    if (leftover?.get('complaintFlyHidden') === true) {
+      const prev = leftover.get('complaintFlyPrevOpacity');
+      leftover.setOpacity(typeof prev === 'number' ? prev : 1);
+      leftover.unset('complaintFlyHidden');
+      leftover.unset('complaintFlyPrevOpacity');
+    }
     if (!ctx?.setVisibleLayerNames) return;
 
     ctx.setVisibleLayerNames((prev) => {
@@ -210,7 +220,8 @@ export default function ComplaintListPanel({
 
   useComplaintMapHighlight(
     Boolean(mapContext?.mapReady),
-    complaintDetail?.geomGeoJson4326 ?? null
+    complaintDetail?.geomGeoJson4326 ?? null,
+    complaintDetail?.compKey ?? null
   );
 
   const selectedKey = complaintDetail?.compKey ?? null;
