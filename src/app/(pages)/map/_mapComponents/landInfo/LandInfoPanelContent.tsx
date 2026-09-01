@@ -10,7 +10,6 @@ import {
   fetchParcelIdentityAtPoint,
   fetchParcelTabData,
   fetchPermitRows,
-  fetchPersonInfoMaskEnabled,
   type BuildingLedgerRow,
   type BuildingPermitSource,
   type BuildingRegisterMode,
@@ -185,7 +184,6 @@ export function LandInfoPanelContent({
   const [resolvedRoad, setResolvedRoad] = useState<string | null>(null);
   const [vworldKey, setVworldKey] = useState('');
   const [dataPortalKey, setDataPortalKey] = useState('');
-  const [personInfoMaskEnabled, setPersonInfoMaskEnabled] = useState(false);
 
   const [parcelError, setParcelError] = useState<string | null>(null);
   const [parcelFetching, setParcelFetching] = useState(false);
@@ -227,16 +225,6 @@ export function LandInfoPanelContent({
     () => transformCoordinate(coordinate, viewProjection, 'EPSG:4326'),
     [coordinate, viewProjection]
   );
-
-  useEffect(() => {
-    let alive = true;
-    void fetchPersonInfoMaskEnabled().then((enabled) => {
-      if (alive) setPersonInfoMaskEnabled(enabled);
-    });
-    return () => {
-      alive = false;
-    };
-  }, []);
 
   useEffect(() => {
     let alive = true;
@@ -482,7 +470,6 @@ export function LandInfoPanelContent({
           pnu={effectivePnu}
           vworldKey={vworldKey}
           resolveLoading={loading || identityResolving}
-          personInfoMaskEnabled={personInfoMaskEnabled}
           parcelData={parcelData}
           parcelFetching={parcelFetching}
           parcelError={parcelError}
@@ -514,7 +501,6 @@ export function LandInfoPanelContent({
   }, [
     activeTab,
     identityResolving,
-    personInfoMaskEnabled,
     buildingLedgerFetching,
     buildingLedgerNotice,
     buildingRegisterBuildings,
@@ -534,7 +520,7 @@ export function LandInfoPanelContent({
   ]);
 
   return (
-    <div className="flex flex-col min-h-0 text-sm text-foreground">
+    <div className="flex flex-col min-h-0 bg-background text-sm text-foreground">
       <section className="px-3 py-2 border-b border-border">
         <div className="space-y-2 text-[12px] text-foreground">
           <div className="flex items-center gap-2 flex-wrap">
@@ -631,7 +617,7 @@ export function LandInfoPanelContent({
             </button>
           ))}
         </div>
-        <div className="flex-1 min-h-0 overflow-auto p-2">{tabBody}</div>
+        <div className="flex-1 min-h-0 overflow-auto bg-background p-2">{tabBody}</div>
       </section>
 
     </div>
