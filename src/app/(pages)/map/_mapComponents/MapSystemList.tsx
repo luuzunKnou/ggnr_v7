@@ -10,6 +10,7 @@ import { useMyAccessSnapshot } from '@/hooks/useMyAccessSnapshot';
 import { ResourceAccessDeniedDialog } from '@/app/(pages)/_components/AccessRequest';
 import { scrubOccupationLedgerFromMapSearchParams } from '@/lib/occupationLedgerBinding';
 import { scrubUseFeeFromMapSearchParams } from '@/lib/useFeeBinding';
+import { scrubMapSearchParamsOnSystemSwitch } from '@/lib/mapSystemSwitch';
 import { useMapContext } from '@/app/(pages)/map/_mapComponents/MapContext';
 
 type SystemItem = {
@@ -108,9 +109,8 @@ export function MapSystemList() {
       current.delete('system');
     }
     if (systemChanged) {
-      current.delete('opened');
-      current.delete('dataTable');
-      current.delete('dataKey');
+      const target = systemList.find((s) => s.sys_key === sysKey);
+      scrubMapSearchParamsOnSystemSwitch(current, sysKey, target?.serviceList ?? []);
       mapContext?.allLayersOffRef?.current?.();
     } else {
       scrubOccupationLedgerFromMapSearchParams(current, sysKey);

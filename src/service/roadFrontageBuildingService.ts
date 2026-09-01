@@ -262,11 +262,15 @@ function ensureWmsLayerOnce(): Promise<void> {
   return wmsEnsureOnce;
 }
 
-export async function list(params: { keyword?: string } = {}) {
+export async function list(params: { keyword?: string; roadType?: string } = {}) {
   try {
     void ensureWmsLayerOnce();
     const keyword = emptyToNull(params?.keyword);
+    const roadType = emptyToNull(params?.roadType);
     const conditions = [eq(roadFrontageBuilding.isDel, false)];
+    if (roadType) {
+      conditions.push(eq(roadFrontageBuilding.roadType, roadType));
+    }
     if (keyword) {
       const like = `%${keyword}%`;
       conditions.push(
