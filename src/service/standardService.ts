@@ -1612,11 +1612,11 @@ const SAFETY_FACILITY_DISPLAY: Record<
     lonKeys: ['lo'],
     latKeys: ['la'],
   },
-  sd_civil_defense_shelter: {
-    nameKeys: ['fclt_nm'],
-    addressKeys: ['fclt_addr_rona', 'fclt_addr_lotno'],
-    phoneKeys: ['mng_inst_telno'],
-  },
+  // sd_civil_defense_shelter: {
+  //   nameKeys: ['fclt_nm'],
+  //   addressKeys: ['fclt_addr_rona', 'fclt_addr_lotno'],
+  //   phoneKeys: ['mng_inst_telno'],
+  // },
   sd_mois_displaced_temp_housing: {
     nameKeys: ['vt_acmdfclty_nm'],
     addressKeys: ['dtl_adres', 'rn_dtl_adres', 'korean_ctprvn_nm', 'sgg_rn'],

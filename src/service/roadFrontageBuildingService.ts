@@ -2,7 +2,7 @@
  * 접도구역 기존 건축물(공작물) 관리대장
  * 업무 키는 ftr_idn. detail/confirm·첨부도 ftr_idn으로 연결.
  */
-import { and, asc, eq, ilike, or, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, ilike, or, sql, type SQL } from 'drizzle-orm';
 import { db } from '@/database/db';
 import {
   roadFrontageBuilding,
@@ -262,10 +262,70 @@ function ensureWmsLayerOnce(): Promise<void> {
   return wmsEnsureOnce;
 }
 
-export async function list(params: { keyword?: string } = {}) {
+type RoadFrontageBuildingListSortKey = 'roadType' | 'locAdr' | 'routeNo' | 'preYmd';
+
+type RoadFrontageBuildingListSortSpec = {
+  key: RoadFrontageBuildingListSortKey;
+  dir: 'asc' | 'desc';
+};
+
+const ROAD_FRONTAGE_BUILDING_LIST_SORT_KEYS = new Set<string>([
+  'roadType',
+  'locAdr',
+  'routeNo',
+  'preYmd',
+]);
+
+function parseRoadFrontageBuildingListSortSpecs(params?: {
+  sorts?: unknown;
+}): RoadFrontageBuildingListSortSpec[] {
+  const raw = params?.sorts;
+  if (!Array.isArray(raw) || raw.length === 0) return [];
+  const out: RoadFrontageBuildingListSortSpec[] = [];
+  const seen = new Set<string>();
+  for (const item of raw) {
+    if (!item || typeof item !== 'object') continue;
+    const key = String((item as { key?: unknown }).key ?? '').trim();
+    if (!ROAD_FRONTAGE_BUILDING_LIST_SORT_KEYS.has(key) || seen.has(key)) continue;
+    seen.add(key);
+    const dirRaw = String((item as { dir?: unknown }).dir ?? '').trim().toLowerCase();
+    out.push({
+      key: key as RoadFrontageBuildingListSortKey,
+      dir: dirRaw === 'asc' ? 'asc' : 'desc',
+    });
+  }
+  return out;
+}
+
+function buildRoadFrontageBuildingListOrderBy(
+  sortSpecs: RoadFrontageBuildingListSortSpec[]
+): SQL[] {
+  if (sortSpecs.length === 0) {
+    return [asc(roadFrontageBuilding.ftrIdn), asc(roadFrontageBuilding.id)];
+  }
+  const order: SQL[] = sortSpecs.map((s) => {
+    const col =
+      s.key === 'roadType'
+        ? roadFrontageBuilding.roadType
+        : s.key === 'locAdr'
+          ? roadFrontageBuilding.locAdr
+          : s.key === 'routeNo'
+            ? roadFrontageBuilding.routeNo
+            : roadFrontageBuilding.preYmd;
+    return s.dir === 'asc' ? asc(col) : desc(col);
+  });
+  order.push(asc(roadFrontageBuilding.ftrIdn), asc(roadFrontageBuilding.id));
+  return order;
+}
+
+export async function list(params: {
+  keyword?: string;
+  sorts?: Array<{ key?: string; dir?: string }>;
+} = {}) {
   try {
     void ensureWmsLayerOnce();
     const keyword = emptyToNull(params?.keyword);
+    const sortSpecs = parseRoadFrontageBuildingListSortSpecs(params);
     const conditions = [eq(roadFrontageBuilding.isDel, false)];
     if (keyword) {
       const like = `%${keyword}%`;
@@ -286,7 +346,7 @@ export async function list(params: { keyword?: string } = {}) {
       .select()
       .from(roadFrontageBuilding)
       .where(and(...conditions))
-      .orderBy(asc(roadFrontageBuilding.ftrIdn), asc(roadFrontageBuilding.id));
+      .orderBy(...buildRoadFrontageBuildingListOrderBy(sortSpecs));
     return Promise.all(
       rows.map(async (row) => {
         const ch = await loadChildren(tx(row.ftrIdn));

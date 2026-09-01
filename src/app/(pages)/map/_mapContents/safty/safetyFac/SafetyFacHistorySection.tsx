@@ -5,6 +5,7 @@ import { useSession } from 'next-auth/react';
 import { ChevronDown, ChevronRight, Trash2, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { call } from '@/lib/api';
+import { MapSideDetailScroll } from '../../../_mapComponents/MapSideDetailScroll';
 import {
   LayerRowAddButton,
   LayerRowPanelButton,
@@ -27,6 +28,10 @@ type Props = {
 };
 
 const HISTORY_TABLE_COL_COUNT = 5;
+
+/** 안전점검 상세 속성표 th 배경과 동일 */
+const SAFETY_FAC_TABLE_TH_CLASS =
+  'border-b border-border bg-slate-100 px-1.5 py-1.5 align-middle text-[11px] font-semibold text-slate-500 dark:bg-muted dark:text-muted-foreground';
 
 function mapApiItem(raw: Record<string, unknown>): SafetyFacHistoryItem | null {
   const id = raw.id ?? raw.historyKey;
@@ -252,30 +257,28 @@ export function SafetyFacHistorySection({ hisGubun, ftrIdn }: Props) {
   };
 
   return (
-    <div className="mt-3 flex min-h-0 flex-1 flex-col border-t border-border">
-      <div className="mt-1 flex shrink-0 items-center justify-between gap-2">
+    <section className="standard-detail-section flex min-h-0 min-w-0 flex-1 flex-col !border-b-0">
+      <div className="standard-detail-section-header shrink-0">
         <button
           type="button"
-          className="flex min-w-0 cursor-pointer items-center gap-1.5 py-1.5 text-left transition-colors hover:bg-muted/50"
+          className="standard-detail-section-toggle"
           onClick={() => setSectionOpen((v) => !v)}
           title={sectionOpen ? '이력 접기' : '이력 펼치기'}
         >
           {sectionOpen ? (
-            <ChevronDown className="h-3.5 w-3.5 shrink-0 text-primary" />
+            <ChevronDown className="standard-detail-section-chevron" />
           ) : (
-            <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+            <ChevronRight className="standard-detail-section-chevron" />
           )}
-          <span className="text-[12px] font-semibold text-muted-foreground">이력</span>
+          <span className="standard-detail-section-toggle-label">이력</span>
         </button>
-        <span className="shrink-0 text-[11px] text-muted-foreground tabular-nums">
-          총 {items.length}건
-        </span>
+        <span className="standard-detail-hit-count">총 {items.length}건</span>
       </div>
 
       {sectionOpen ? (
-        <div className="mt-2 flex min-h-0 flex-1 flex-col">
+        <MapSideDetailScroll className="standard-detail-scroll min-h-0 flex-1 flex-col">
           <div className="flex shrink-0 items-center gap-1.5">
-            <div className="relative min-w-0 flex-1">
+            <div className="standard-search-wrap min-w-0 flex-1">
               <input
                 type="text"
                 value={searchText}
@@ -288,7 +291,7 @@ export function SafetyFacHistorySection({ hisGubun, ftrIdn }: Props) {
                 }}
                 placeholder="작성자·내용 검색"
                 title="작성자·내용 검색"
-                className="h-7 w-full rounded border border-border bg-background pl-2 pr-7 text-[11px] text-foreground outline-none focus:border-primary"
+                className="standard-search-input h-7 py-1 pl-2 pr-7 text-[11px]"
               />
               {showSearchClear ? (
                 <button
@@ -315,48 +318,33 @@ export function SafetyFacHistorySection({ hisGubun, ftrIdn }: Props) {
 
           <div className="mt-2 flex min-h-0 flex-1 flex-col">
             {error ? (
-              <p className="mb-1.5 shrink-0 px-0.5 text-[11px] text-destructive">{error}</p>
+              <p className="standard-detail-error-spaced shrink-0">{error}</p>
             ) : null}
             <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded border border-border bg-background">
-              <div className="min-h-0 flex-1 overflow-y-scroll overscroll-contain">
-                <table className="w-full min-w-full table-fixed border-collapse text-[11px] text-foreground">
+              <div className="scrollbar-thin min-h-0 flex-1 overflow-y-auto overscroll-contain">
+                <table className="standard-list-table text-[11px] text-foreground">
                   <colgroup>
-                    <col className="w-[2rem]" />
+                    <col className="w-8" />
                     <col />
-                    <col className="w-[4rem]" />
+                    <col className="w-16" />
                     <col className="w-[4.5rem]" />
-                    <col className="w-[2rem]" />
+                    <col className="w-8" />
                   </colgroup>
-                  <thead className="sticky top-0 z-[1]">
-                    <tr className="border-b border-border bg-muted">
-                      <th
-                        scope="col"
-                        className="bg-muted px-1 py-1.5 text-center text-[12px] font-medium text-foreground/90"
-                      >
+                  <thead className="standard-table-thead bg-slate-100 dark:bg-muted">
+                    <tr>
+                      <th scope="col" className={cn(SAFETY_FAC_TABLE_TH_CLASS, 'text-center')}>
                         No
                       </th>
-                      <th
-                        scope="col"
-                        className="bg-muted px-1.5 py-1.5 text-left text-[12px] font-medium text-foreground/90"
-                      >
+                      <th scope="col" className={cn(SAFETY_FAC_TABLE_TH_CLASS, 'text-left')}>
                         내용
                       </th>
-                      <th
-                        scope="col"
-                        className="bg-muted px-1.5 py-1.5 text-left text-[12px] font-medium text-foreground/90"
-                      >
+                      <th scope="col" className={cn(SAFETY_FAC_TABLE_TH_CLASS, 'text-left')}>
                         작성자
                       </th>
-                      <th
-                        scope="col"
-                        className="bg-muted px-1.5 py-1.5 text-left text-[12px] font-medium text-foreground/90"
-                      >
+                      <th scope="col" className={cn(SAFETY_FAC_TABLE_TH_CLASS, 'text-left')}>
                         작성일시
                       </th>
-                      <th
-                        scope="col"
-                        className="bg-muted px-1 py-1.5 text-left text-[12px] font-medium text-foreground/90"
-                      >
+                      <th scope="col" className={cn(SAFETY_FAC_TABLE_TH_CLASS, 'text-left')}>
                         <span className="sr-only">삭제</span>
                       </th>
                     </tr>
@@ -364,19 +352,13 @@ export function SafetyFacHistorySection({ hisGubun, ftrIdn }: Props) {
                   <tbody>
                     {loading && items.length === 0 ? (
                       <tr>
-                        <td
-                          colSpan={HISTORY_TABLE_COL_COUNT}
-                          className="px-1.5 py-1.5 text-center text-muted-foreground"
-                        >
+                        <td colSpan={HISTORY_TABLE_COL_COUNT} className="standard-table-empty">
                           불러오는 중…
                         </td>
                       </tr>
                     ) : items.length === 0 ? (
                       <tr>
-                        <td
-                          colSpan={HISTORY_TABLE_COL_COUNT}
-                          className="px-1.5 py-1.5 text-center text-muted-foreground"
-                        >
+                        <td colSpan={HISTORY_TABLE_COL_COUNT} className="standard-table-empty">
                           이력이 없습니다.
                         </td>
                       </tr>
@@ -389,10 +371,8 @@ export function SafetyFacHistorySection({ hisGubun, ftrIdn }: Props) {
                             role="button"
                             tabIndex={0}
                             className={cn(
-                              'cursor-pointer border-b border-border last:border-b-0',
-                              selected
-                                ? 'bg-primary/[0.11] ring-1 ring-inset ring-primary/20 hover:bg-primary/[0.14]'
-                                : 'hover:bg-muted/40'
+                              'standard-list-row border-b border-border last:border-b-0',
+                              selected && 'standard-list-row-selected'
                             )}
                             onClick={() => beginEdit(it)}
                             onKeyDown={(e) => {
@@ -402,23 +382,20 @@ export function SafetyFacHistorySection({ hisGubun, ftrIdn }: Props) {
                               }
                             }}
                           >
-                            <td className="px-1 py-1.5 text-center align-middle tabular-nums text-muted-foreground">
+                            <td className="standard-table-td-compact text-center tabular-nums text-muted-foreground">
                               {index + 1}
                             </td>
                             <td
-                              className="min-w-0 truncate px-1.5 py-1.5 text-left align-middle"
+                              className="standard-table-td-text min-w-0 truncate"
                               title={it.content}
                             >
                               {it.content}
                             </td>
-                            <td
-                              className="truncate px-1.5 py-1.5 text-left align-middle"
-                              title={it.author}
-                            >
+                            <td className="standard-table-td-text truncate" title={it.author}>
                               {it.author}
                             </td>
                             <td
-                              className="truncate px-1.5 py-1.5 text-left align-middle text-[10px] text-muted-foreground"
+                              className="standard-table-td-date truncate text-[10px]"
                               title={it.createdAt}
                             >
                               {it.createdAt}
@@ -450,7 +427,7 @@ export function SafetyFacHistorySection({ hisGubun, ftrIdn }: Props) {
           </div>
 
           {composerOpen ? (
-            <div className="mt-2 flex shrink-0 flex-col border-t border-border pt-2">
+            <div className="standard-detail-section-divider-padded flex shrink-0 flex-col">
               <div className="flex h-[4.5rem] items-stretch gap-1.5">
                 <textarea
                   value={draft}
@@ -460,7 +437,7 @@ export function SafetyFacHistorySection({ hisGubun, ftrIdn }: Props) {
                   }
                   title="이력 내용"
                   disabled={saving}
-                  className="box-border h-full min-h-0 min-w-0 flex-1 resize-none rounded-2xl border border-border bg-muted/30 px-3 py-2 text-[11px] leading-snug text-foreground outline-none focus:border-primary disabled:opacity-60"
+                  className="standard-detail-input box-border h-full min-h-0 min-w-0 flex-1 resize-none rounded-2xl px-3 py-2 leading-snug disabled:opacity-60"
                 />
                 <div className="flex h-full shrink-0 flex-col gap-1">
                   <LayerRowPanelButton
@@ -484,8 +461,8 @@ export function SafetyFacHistorySection({ hisGubun, ftrIdn }: Props) {
               </div>
             </div>
           ) : null}
-        </div>
+        </MapSideDetailScroll>
       ) : null}
-    </div>
+    </section>
   );
 }

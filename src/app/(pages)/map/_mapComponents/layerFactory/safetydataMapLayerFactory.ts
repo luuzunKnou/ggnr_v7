@@ -28,7 +28,7 @@ export const SAFETY_FAC_PANEL_GEO_TABLE_NAMES: readonly string[] = [
   'sd_heat_mitigation_facility',
   'sd_earthquake_outdoor_evac_site',
   'sd_tsunami_emergency_evac_site',
-  'sd_civil_defense_shelter',
+  // 'sd_civil_defense_shelter',
   'sd_mois_displaced_temp_housing',
 ] as const;
 
@@ -56,12 +56,12 @@ export const SAFETY_MAP_GEOSERVER_OVERLAYS: {
     zIndex: 123,
     opacity: 0.88,
   },
-  {
-    panelId: 'sd_civil_defense_shelter',
-    tableName: 'sd_civil_defense_shelter',
-    zIndex: 124,
-    opacity: 0.88,
-  },
+  // {
+  //   panelId: 'sd_civil_defense_shelter',
+  //   tableName: 'sd_civil_defense_shelter',
+  //   zIndex: 124,
+  //   opacity: 0.88,
+  // },
   {
     panelId: 'sd_mois_displaced_temp_housing',
     tableName: 'sd_mois_displaced_temp_housing',

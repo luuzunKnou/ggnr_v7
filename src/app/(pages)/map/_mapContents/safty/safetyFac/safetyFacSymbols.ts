@@ -8,7 +8,7 @@ export type SafetyFacSubtypeId =
   | 'heatMitigation'
   | 'eqOutdoor'
   | 'tsunamiEvac'
-  | 'civilDefense'
+  // | 'civilDefense'
   | 'displacedHousing';
 
 export type SafetyFacFacilityRow = {
@@ -60,12 +60,12 @@ export const SAFETY_FAC_SYMBOL: Record<
     fileName: 'sd_tsunami_emergency_evac_site',
     src: withBasePath('/symbol/sd_tsunami_emergency_evac_site.svg'),
   },
-  civilDefense: {
-    color: '#795548',
-    borderColor: '#5d4037',
-    fileName: 'sd_civil_defense_shelter',
-    src: withBasePath('/symbol/sd_civil_defense_shelter.svg'),
-  },
+  // civilDefense: {
+  //   color: '#795548',
+  //   borderColor: '#5d4037',
+  //   fileName: 'sd_civil_defense_shelter',
+  //   src: withBasePath('/symbol/sd_civil_defense_shelter.svg'),
+  // },
   displacedHousing: {
     color: '#009688',
     borderColor: '#00695f',
@@ -80,7 +80,7 @@ export const SAFETY_FAC_SUBTYPE_TO_TABLE: Record<SafetyFacSubtypeId, string> = {
   heatMitigation: 'sd_heat_mitigation_facility',
   eqOutdoor: 'sd_earthquake_outdoor_evac_site',
   tsunamiEvac: 'sd_tsunami_emergency_evac_site',
-  civilDefense: 'sd_civil_defense_shelter',
+  // civilDefense: 'sd_civil_defense_shelter',
   displacedHousing: 'sd_mois_displaced_temp_housing',
 };
 
@@ -95,7 +95,7 @@ export const SAFETY_FAC_LIST_CHIP_LABEL: Record<SafetyFacSubtypeId, string> = {
   heatMitigation: '폭염저감',
   eqOutdoor: '지진옥외',
   tsunamiEvac: '지진해일',
-  civilDefense: '민방위',
+  // civilDefense: '민방위',
   displacedHousing: '임시주거',
 };
 

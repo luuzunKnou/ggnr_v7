@@ -151,6 +151,10 @@
   @apply bg-destructive/10 text-destructive;
 }
 
+@utility standard-road-rank-badge {
+  @apply shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold leading-none;
+}
+
 @utility standard-table-td-text {
   @apply max-w-0 truncate px-2 py-1.5 text-foreground;
 }
