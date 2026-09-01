@@ -67,23 +67,31 @@ function formatInspectionPeriod(item: Pick<InspectionRow, 'startYmd' | 'endYmd'>
   return `${item.startYmd || '—'} ~ ${item.endYmd || '—'}`
 }
 
+const FMS_ATTR_LABEL_CLASS =
+  'flex h-full shrink-0 items-center whitespace-nowrap border-b border-border bg-slate-100 px-2 py-1.5 align-middle font-semibold text-slate-500 dark:bg-muted dark:text-muted-foreground'
+const FMS_ATTR_VALUE_CLASS =
+  'flex min-w-0 items-start break-words border-b border-border bg-background px-2 py-1.5 text-slate-900 dark:text-foreground'
+
 function AttrRows({ items }: { items: DetailAttr[] }) {
   return (
-    <div className="standard-detail-attr-table">
+    <div className="overflow-hidden rounded border border-border">
       {items.map((item, idx) => (
-        <div key={item.field} className="contents">
-          <div
+        <div
+          key={item.field}
+          className="grid grid-cols-[8.25rem_minmax(0,1fr)]"
+        >
+          <dt
             className={cn(
-              'standard-detail-attr-label',
-              idx < items.length - 1 && 'standard-detail-attr-cell-border'
+              FMS_ATTR_LABEL_CLASS,
+              idx === items.length - 1 && 'border-b-0'
             )}
           >
             {item.label}
-          </div>
-          <div
+          </dt>
+          <dd
             className={cn(
-              'standard-detail-attr-value text-foreground',
-              idx < items.length - 1 && 'standard-detail-attr-cell-border'
+              FMS_ATTR_VALUE_CLASS,
+              idx === items.length - 1 && 'border-b-0'
             )}
           >
             {item.field === 'state_grade' ? (
@@ -91,7 +99,7 @@ function AttrRows({ items }: { items: DetailAttr[] }) {
             ) : (
               item.value || '—'
             )}
-          </div>
+          </dd>
         </div>
       ))}
     </div>
