@@ -8,6 +8,8 @@ import { existsSync, readFileSync, writeFileSync } from "fs"
 import { join } from "path"
 import { unstable_noStore as noStore } from "next/cache"
 import { getGeoServerInternalBase } from "@/lib/geoserverUrl"
+import { db } from "@/database/db"
+import { sql } from "drizzle-orm"
 
 /** package.json 이 있는 디렉터리를 프로젝트 루트로 사용 (Next 등에서 cwd 가 달라도 동작) */
 function getProjectRoot(): string {
@@ -1005,4 +1007,19 @@ export function getParcelAnalysisMapConfig(_params?: unknown): {
   const geoserverUrl = getGeoServerInternalBase()
   const workspace = "ggnr"
   return { geoserverUrl, workspace }
+}
+
+/** V6 system_control.personInfo — true면 필지정보 소유자명 등 마스킹 */
+export async function getPersonInfoMaskEnabled(_params?: unknown): Promise<{ enabled: boolean }> {
+  try {
+    const res = await db.execute(
+      sql.raw(`SELECT sc_value FROM system_control WHERE sc_name = 'personInfo' LIMIT 1`)
+    )
+    const val = String((res.rows?.[0] as { sc_value?: unknown })?.sc_value ?? "")
+      .trim()
+      .toLowerCase()
+    return { enabled: val === "true" }
+  } catch {
+    return { enabled: false }
+  }
 }

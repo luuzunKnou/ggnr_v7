@@ -23,7 +23,6 @@ const inputClass =
   'rounded border border-border bg-background px-1.5 py-0.5 text-xs outline-none focus:border-primary focus:ring-1 focus:ring-primary/30';
 const readonlyInputClass =
   'cursor-default rounded border border-border bg-muted px-1.5 py-0.5 text-xs text-foreground/90 outline-none';
-/** 도로망 유지보수 «추가»와 동일 primary 톤, 입력 높이보다 약간 낮게 */
 const btnAutoCalc =
   'inline-flex h-6 shrink-0 items-center rounded border border-primary bg-primary px-2 text-[11px] font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50';
 const areaInputClass =

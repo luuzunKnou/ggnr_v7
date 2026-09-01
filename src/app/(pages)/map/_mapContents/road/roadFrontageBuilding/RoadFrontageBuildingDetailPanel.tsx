@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent, type ReactNode } from 'react';
 import { useSession } from 'next-auth/react';
-import { Check, CircleAlert, Download, Loader2, Paperclip, Pencil, Plus, Printer, Trash2, X } from 'lucide-react';
+import { Check, ChevronDown, ChevronRight, CircleAlert, Download, Loader2, Minus, Paperclip, Pencil, Plus, Printer, Trash2, X } from 'lucide-react';
 import { call } from '@/lib/api';
 import { formatAddressStripSidoSigungu } from '@/lib/formatAddressStripAdmin';
 import { cn } from '@/lib/utils';
@@ -75,12 +75,12 @@ const fieldClass =
   'h-[20px] w-full min-w-0 border-0 bg-transparent px-0.5 text-[11px] leading-none text-foreground outline-none focus:bg-muted/50';
 /** type=date 는 leading-none·기본 달력 아이콘 때문에 연·월·일이 잘려 별도 보정 */
 const dateFieldClass = `${fieldClass} input-date-compact`;
-const btnPrimary =
+const actionBtn =
+  'standard-detail-action-btn inline-flex h-7 items-center gap-1';
+const actionBtnPrimary =
   'inline-flex h-7 items-center gap-1 rounded border border-primary bg-primary px-2 text-[11px] font-medium text-white hover:bg-primary/90 disabled:opacity-50';
-const btnGhost =
-  'inline-flex h-7 items-center gap-1 rounded border border-border bg-background px-2 text-[11px] font-medium text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-50';
-const btnDanger =
-  'inline-flex h-7 items-center gap-1 rounded border border-red-200 bg-background px-2 text-[11px] font-medium text-red-600 hover:bg-red-50 disabled:opacity-50 dark:border-red-800 dark:text-red-400 dark:hover:bg-red-950/40';
+const actionBtnDanger =
+  'standard-detail-action-btn-danger inline-flex h-7 items-center gap-1';
 const BORDER = 'border-[1px] border-solid border-foreground/80';
 const FORM_TH_BG = 'bg-muted';
 const PAPER_SIZE_LABEL = '364mm × 257mm [백상지 200g/m²]';
@@ -280,13 +280,13 @@ function ActionDialog({
         ) : (
           <div className="flex justify-end gap-1.5 border-t border-border bg-muted px-3 py-2.5">
             {action.cancelLabel ? (
-              <button type="button" className={btnGhost} onClick={onClose} disabled={busy}>
+              <button type="button" className={actionBtn} onClick={onClose} disabled={busy}>
                 {action.cancelLabel}
               </button>
             ) : null}
             <button
               type="button"
-              className={action.danger ? btnDanger : btnPrimary}
+              className={action.danger ? actionBtnDanger : actionBtnPrimary}
               onClick={onConfirm}
               disabled={busy}
             >
@@ -595,12 +595,12 @@ function RowToolbarRow({
         <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
           <p className="text-[11px] leading-snug text-muted-foreground">{hint}</p>
           <div className="flex shrink-0 items-center gap-2">
-            <button type="button" className={btnGhost} onClick={onAdd}>
+            <button type="button" className={actionBtn} onClick={onAdd}>
               <Plus className="h-3 w-3" />
               행 추가
             </button>
             {canRemoveLast ? (
-              <button type="button" className={btnGhost} onClick={onRemoveLast}>
+              <button type="button" className={actionBtn} onClick={onRemoveLast}>
                 <Trash2 className="h-3 w-3" />
                 마지막 행 삭제
               </button>
@@ -645,6 +645,7 @@ export function RoadFrontageBuildingDetailPanel({
     ? null
     : String(draft.ftrIdn || saved?.ftrIdn || '').trim() || null;
   const [attachRefreshNonce, setAttachRefreshNonce] = useState(0);
+  const [attachOpen, setAttachOpen] = useState(true);
   const [pendingFormFiles, setPendingFormFiles] = useState<
     Partial<Record<RoadFrontageBuildingFormAttachId, File>>
   >({});
@@ -1428,20 +1429,20 @@ export function RoadFrontageBuildingDetailPanel({
 
   if (loading && !isCreateMode) {
     return (
-      <div className="flex h-full min-h-0 flex-col bg-background">
-        <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border px-3 py-1.5">
-          <span className="text-sm font-semibold text-foreground">접도구역 건축물</span>
+      <div className="standard-panel-root">
+        <div className="standard-panel-header">
+          <span className="standard-panel-title">접도구역 건축물</span>
           <button
             type="button"
             onClick={onClose}
-            className="shrink-0 rounded p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            className="standard-panel-close"
             title="닫기"
             aria-label="닫기"
           >
             <X className="h-4 w-4" />
           </button>
         </div>
-        <p className="flex items-center justify-center gap-1 px-3 py-6 text-center text-xs text-muted-foreground">
+        <p className="standard-detail-scroll standard-detail-loading justify-center">
           <Loader2 className="h-3.5 w-3.5 animate-spin" />
           불러오는 중…
         </p>
@@ -1451,20 +1452,20 @@ export function RoadFrontageBuildingDetailPanel({
 
   if (!saved && !isCreateMode) {
     return (
-      <div className="flex h-full min-h-0 flex-col bg-background">
-        <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border px-3 py-1.5">
-          <span className="text-sm font-semibold text-foreground">접도구역 건축물</span>
+      <div className="standard-panel-root">
+        <div className="standard-panel-header">
+          <span className="standard-panel-title">접도구역 건축물</span>
           <button
             type="button"
             onClick={onClose}
-            className="shrink-0 rounded p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            className="standard-panel-close"
             title="닫기"
             aria-label="닫기"
           >
             <X className="h-4 w-4" />
           </button>
         </div>
-        <p className="px-3 py-6 text-center text-xs text-muted-foreground">
+        <p className="standard-detail-scroll px-3 py-6 text-center text-muted-foreground">
           {loadError || '선택한 관리대장을 찾을 수 없습니다.'}
         </p>
       </div>
@@ -1534,19 +1535,19 @@ export function RoadFrontageBuildingDetailPanel({
   };
 
   return (
-    <div className="relative flex h-full min-h-0 flex-col bg-muted">
-      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border bg-background px-3 py-1.5">
-        <span className="min-w-0 truncate text-sm font-semibold text-foreground">
+    <div className="standard-panel-root relative bg-muted">
+      <div className="standard-panel-header bg-background">
+        <span className="standard-panel-title truncate">
           {isCreateMode
             ? '관리대장 등록'
             : String(current.locAdr ?? '').trim() || '(위치 미입력)'}
         </span>
-        <div className="flex shrink-0 items-center gap-1">
+        <div className="standard-detail-section-header-actions">
           {!isEditing ? (
             <>
               <button
                 type="button"
-                className={btnGhost}
+                className={actionBtn}
                 onClick={() =>
                   void printRoadFrontageBuildingForm({ ...current, formAttaches, photos })
                 }
@@ -1554,23 +1555,23 @@ export function RoadFrontageBuildingDetailPanel({
                 <Printer className="h-3 w-3" />
                 인쇄
               </button>
-              <button type="button" className={btnGhost} onClick={beginEdit}>
+              <button type="button" className={actionBtn} onClick={beginEdit}>
                 <Pencil className="h-3 w-3" />
                 수정
               </button>
-              <button type="button" className={btnDanger} onClick={askDelete} disabled={deleting}>
+              <button type="button" className={actionBtnDanger} onClick={askDelete} disabled={deleting}>
                 <Trash2 className="h-3 w-3" />
                 삭제
               </button>
             </>
           ) : (
             <>
-              <button type="button" className={btnGhost} onClick={askCancel}>
+              <button type="button" className={actionBtn} onClick={askCancel}>
                 취소
               </button>
               <button
                 type="button"
-                className={btnPrimary}
+                className={actionBtnPrimary}
                 onClick={() => void handleSave()}
                 disabled={saving || locationCapturing}
               >
@@ -1581,7 +1582,7 @@ export function RoadFrontageBuildingDetailPanel({
           <button
             type="button"
             onClick={isEditing ? askCancel : onClose}
-            className="shrink-0 rounded p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            className="standard-panel-close"
             title="닫기"
             aria-label="닫기"
           >
@@ -1590,7 +1591,7 @@ export function RoadFrontageBuildingDetailPanel({
         </div>
       </div>
 
-      <MapSideDetailScroll className="min-h-0 flex-1 overflow-auto px-2 py-1.5 text-xs">
+      <MapSideDetailScroll className="standard-detail-scroll">
         <div className="rfb-form-print-root text-xs">
         <div className="rfb-print-page">
         <div className="mb-0 flex items-start justify-between gap-2 text-[10px] leading-none text-muted-foreground">
@@ -2116,26 +2117,43 @@ export function RoadFrontageBuildingDetailPanel({
           }}
         />
 
-        <section className="mt-3 pb-1">
-          <div className="mb-1 flex items-center justify-between gap-2">
-            <span className="flex items-center gap-1 text-[11px] font-semibold text-foreground">
-              <Paperclip className="h-3.5 w-3.5" />
-              첨부파일
-              {photos.length > 0 ? ` (${photos.length.toLocaleString()})` : ''}
-            </span>
-            {isEditing ? (
-              <button
-                type="button"
-                className={btnGhost}
-                onClick={() => photoInputRef.current?.click()}
-              >
-                <Plus className="h-3 w-3" />
-                등록
-              </button>
+        <section className="standard-detail-section-divider">
+          <div className="standard-detail-section-header standard-detail-section-header-bleed">
+            <button
+              type="button"
+              onClick={() => setAttachOpen((v) => !v)}
+              className="standard-detail-section-toggle"
+              title="첨부파일"
+            >
+              {attachOpen ? (
+                <ChevronDown className="standard-detail-section-chevron" />
+              ) : (
+                <ChevronRight className="standard-detail-section-chevron" />
+              )}
+              <span className="standard-detail-section-toggle-label inline-flex items-center gap-1">
+                <Paperclip className="h-3.5 w-3.5" />
+                첨부파일
+                {photos.length > 0 ? ` (${photos.length.toLocaleString()})` : ''}
+              </span>
+            </button>
+            {attachOpen && isEditing ? (
+              <div className="standard-detail-section-header-actions">
+                <button
+                  type="button"
+                  className={actionBtn}
+                  onClick={() => photoInputRef.current?.click()}
+                  title="등록"
+                >
+                  <Plus className="h-3 w-3" />
+                  등록
+                </button>
+              </div>
             ) : null}
           </div>
+          {attachOpen ? (
+          <>
           {photoItems.length === 0 ? (
-            <p className="rounded border border-dashed border-border bg-background py-4 text-center text-[11px] text-muted-foreground">
+            <p className="standard-detail-empty-dashed-compact">
               {isEditing ? '등록을 눌러 사진을 넣으세요.' : '등록된 첨부파일이 없습니다.'}
             </p>
           ) : (
@@ -2205,6 +2223,8 @@ export function RoadFrontageBuildingDetailPanel({
               e.target.value = '';
             }}
           />
+          </>
+          ) : null}
         </section>
       </MapSideDetailScroll>
       {attachPreview ? (

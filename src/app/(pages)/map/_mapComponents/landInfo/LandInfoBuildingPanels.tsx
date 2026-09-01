@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useMemo, useState } from 'react';
+import { cn } from '@/lib/utils';
 import {
   fetchBuildingFloorList,
   fetchBuildingRegisterByDong,
@@ -10,6 +11,17 @@ import {
   type BuildingRegisterRow,
 } from './api';
 import { BuildingDataSourceLine } from '@/app/(pages)/map/_mapComponents/parcelLandLinkageUi';
+import {
+  LAND_INFO_LABEL_CELL,
+  LAND_INFO_LIST_ROW_ODD,
+  LAND_INFO_LIST_TD,
+  LAND_INFO_LIST_TH,
+  LAND_INFO_LIST_THEAD,
+  LAND_INFO_TABLE_BTN,
+  LAND_INFO_TABLE_TEXT,
+  LAND_INFO_TABLE_WRAP,
+  LAND_INFO_VALUE_CELL,
+} from './landInfoTableStyles';
 
 function isNumericZero(text: string): boolean {
   if (!/^-?\d+(?:\.\d+)?$/.test(text)) return false;
@@ -122,13 +134,8 @@ function ThTd({
 }) {
   return (
     <>
-      <th className="bg-muted px-2 py-1.5 text-left text-[11px] font-medium text-muted-foreground border border-border align-top break-keep">
-        {label}
-      </th>
-      <td
-        colSpan={colSpan}
-        className="px-2 py-1.5 text-[11px] text-foreground border border-border align-top break-words"
-      >
+      <th className={LAND_INFO_LABEL_CELL}>{label}</th>
+      <td colSpan={colSpan} className={LAND_INFO_VALUE_CELL}>
         {value}
       </td>
     </>
@@ -137,8 +144,8 @@ function ThTd({
 
 function DetailTable({ children }: { children: React.ReactNode }) {
   return (
-    <div className="rounded border border-border overflow-hidden">
-      <table className="w-full table-fixed border-collapse text-[11px]">
+    <div className={cn(LAND_INFO_TABLE_WRAP, 'overflow-hidden')}>
+      <table className={cn('w-full table-fixed border-collapse', LAND_INFO_TABLE_TEXT)}>
         <colgroup>
           <col className="w-[20%]" />
           <col className="w-[30%]" />
@@ -163,7 +170,7 @@ function RecapDetail({ data }: { data: BuildingRegisterRow }) {
           colSpan={viol ? 1 : 3}
         />
         {viol ? (
-          <td className="px-2 py-1.5 text-[11px] font-semibold text-red-600 dark:text-red-400 border border-border">
+          <td className={cn(LAND_INFO_VALUE_CELL, 'font-semibold text-red-600 dark:text-red-400')}>
             위반건축물
           </td>
         ) : null}
@@ -187,14 +194,11 @@ function RecapDetail({ data }: { data: BuildingRegisterRow }) {
         ? jijigus.map((v, i) => (
             <tr key={`j-${i}`}>
               {i === 0 ? (
-                <th
-                  rowSpan={jijigus.length}
-                  className="w-[28%] bg-muted px-2 py-1.5 text-left text-[11px] font-medium text-muted-foreground border border-border align-top"
-                >
+                <th rowSpan={jijigus.length} className={cn(LAND_INFO_LABEL_CELL, 'w-[28%] align-top')}>
                   지역지구구역
                 </th>
               ) : null}
-              <td colSpan={3} className="px-2 py-1.5 text-[11px] text-foreground border border-border">
+              <td colSpan={3} className={LAND_INFO_VALUE_CELL}>
                 {v}
               </td>
             </tr>
@@ -243,7 +247,7 @@ function TitleDetail({ data }: { data: BuildingRegisterRow }) {
           colSpan={viol ? 1 : 3}
         />
         {viol ? (
-          <td className="px-2 py-1.5 text-[11px] font-semibold text-red-600 dark:text-red-400 border border-border">
+          <td className={cn(LAND_INFO_VALUE_CELL, 'font-semibold text-red-600 dark:text-red-400')}>
             위반건축물
           </td>
         ) : null}
@@ -273,14 +277,11 @@ function TitleDetail({ data }: { data: BuildingRegisterRow }) {
         ? jijigus.map((v, i) => (
             <tr key={`j-${i}`}>
               {i === 0 ? (
-                <th
-                  rowSpan={jijigus.length}
-                  className="w-[28%] bg-muted px-2 py-1.5 text-left text-[11px] font-medium text-muted-foreground border border-border align-top"
-                >
+                <th rowSpan={jijigus.length} className={cn(LAND_INFO_LABEL_CELL, 'w-[28%] align-top')}>
                   지역지구구역
                 </th>
               ) : null}
-              <td colSpan={3} className="px-2 py-1.5 text-[11px] text-foreground border border-border">
+              <td colSpan={3} className={LAND_INFO_VALUE_CELL}>
                 {v}
               </td>
             </tr>
@@ -330,28 +331,26 @@ function ChildListTable({
   onDongLookup?: (bldNm: string) => void;
 }) {
   const isRecap = mode === 'recap';
-  const th = 'px-2 py-1.5 border border-border';
-  const td = 'px-2 py-1 border border-border';
   return (
-    <div className="overflow-x-auto rounded border border-border">
-      <table className="w-full table-auto border-collapse text-[11px]">
-        <thead>
-          <tr className="bg-muted text-muted-foreground">
+    <div className={LAND_INFO_TABLE_WRAP}>
+      <table className={cn('w-full table-auto border-collapse', LAND_INFO_TABLE_TEXT)}>
+        <thead className={LAND_INFO_LIST_THEAD}>
+          <tr>
             {isRecap ? (
               <>
-                <th className={`${th} whitespace-nowrap`}>구분</th>
-                <th className={`${th} text-left`}>건물명</th>
-                <th className={`${th} text-left`}>용도</th>
-                <th className={`${th} text-left`}>주구조</th>
-                <th className={`${th} whitespace-nowrap text-right`}>면적(㎡)</th>
-                <th className={`${th} whitespace-nowrap w-[1%]`}>조회</th>
+                <th className={cn(LAND_INFO_LIST_TH, 'whitespace-nowrap')}>구분</th>
+                <th className={LAND_INFO_LIST_TH}>건물명</th>
+                <th className={LAND_INFO_LIST_TH}>용도</th>
+                <th className={LAND_INFO_LIST_TH}>주구조</th>
+                <th className={cn(LAND_INFO_LIST_TH, 'whitespace-nowrap text-right')}>면적(㎡)</th>
+                <th className={cn(LAND_INFO_LIST_TH, 'whitespace-nowrap w-[1%]')}>조회</th>
               </>
             ) : (
               <>
-                <th className={`${th} whitespace-nowrap`}>층별</th>
-                <th className={`${th} text-left`}>구조</th>
-                <th className={`${th} text-left`}>용도</th>
-                <th className={`${th} whitespace-nowrap text-right`}>면적(㎡)</th>
+                <th className={cn(LAND_INFO_LIST_TH, 'whitespace-nowrap')}>층별</th>
+                <th className={LAND_INFO_LIST_TH}>구조</th>
+                <th className={LAND_INFO_LIST_TH}>용도</th>
+                <th className={cn(LAND_INFO_LIST_TH, 'whitespace-nowrap text-right')}>면적(㎡)</th>
               </>
             )}
           </tr>
@@ -361,7 +360,7 @@ function ChildListTable({
             <tr>
               <td
                 colSpan={isRecap ? 6 : 4}
-                className="px-2 py-3 text-center text-muted-foreground border border-border"
+                className={cn(LAND_INFO_LIST_TD, 'py-3 text-center text-muted-foreground')}
               >
                 하위 정보가 없습니다.
               </td>
@@ -369,21 +368,23 @@ function ChildListTable({
           ) : (
             childRows.map((row, i) =>
               isRecap ? (
-                <tr key={i}>
-                  <td className={`${td} whitespace-nowrap text-center`}>
+                <tr key={i} className={LAND_INFO_LIST_ROW_ODD}>
+                  <td className={cn(LAND_INFO_LIST_TD, 'whitespace-nowrap text-center')}>
                     {fmt(ledgerTypeLabel(field(row, 'type')))}
                   </td>
-                  <td className={td}>{fmt(field(row, 'bld_nm', 'bldNm'))}</td>
-                  <td className={td}>{fmt(field(row, 'main_prpos_cd_nm', 'mainPurpsCdNm'))}</td>
-                  <td className={td}>
+                  <td className={LAND_INFO_LIST_TD}>{fmt(field(row, 'bld_nm', 'bldNm'))}</td>
+                  <td className={LAND_INFO_LIST_TD}>{fmt(field(row, 'main_prpos_cd_nm', 'mainPurpsCdNm'))}</td>
+                  <td className={LAND_INFO_LIST_TD}>
                     {fmt(field(row, 'main_strct_cd_nm', 'mainStrctCdNm', 'strct_cd_nm', 'strctCdNm'))}
                   </td>
-                  <td className={`${td} whitespace-nowrap text-right`}>{fmt(field(row, 'totarea', 'totArea'))}</td>
-                  <td className={`${td} whitespace-nowrap text-center`}>
+                  <td className={cn(LAND_INFO_LIST_TD, 'whitespace-nowrap text-right')}>
+                    {fmt(field(row, 'totarea', 'totArea'))}
+                  </td>
+                  <td className={cn(LAND_INFO_LIST_TD, 'whitespace-nowrap text-center')}>
                     {field(row, 'type') !== '동' && onDongLookup ? (
                       <button
                         type="button"
-                        className="inline-flex shrink-0 whitespace-nowrap rounded border border-border px-1.5 py-0.5 text-[10px] hover:bg-muted"
+                        className={cn(LAND_INFO_TABLE_BTN, 'inline-flex whitespace-nowrap px-1.5')}
                         onClick={() => onDongLookup(field(row, 'bld_nm', 'bldNm'))}
                         title="조회"
                       >
@@ -395,11 +396,15 @@ function ChildListTable({
                   </td>
                 </tr>
               ) : (
-                <tr key={i}>
-                  <td className={`${td} whitespace-nowrap text-center`}>{fmt(field(row, 'flrno_nm', 'flrNoNm'))}</td>
-                  <td className={td}>{fmt(field(row, 'strct_cd_nm', 'strctCdNm'))}</td>
-                  <td className={td}>{fmt(field(row, 'main_prpos_cd_nm', 'mainPurpsCdNm'))}</td>
-                  <td className={`${td} whitespace-nowrap text-right`}>{fmt(field(row, 'area', 'area'))}</td>
+                <tr key={i} className={LAND_INFO_LIST_ROW_ODD}>
+                  <td className={cn(LAND_INFO_LIST_TD, 'whitespace-nowrap text-center')}>
+                    {fmt(field(row, 'flrno_nm', 'flrNoNm'))}
+                  </td>
+                  <td className={LAND_INFO_LIST_TD}>{fmt(field(row, 'strct_cd_nm', 'strctCdNm'))}</td>
+                  <td className={LAND_INFO_LIST_TD}>{fmt(field(row, 'main_prpos_cd_nm', 'mainPurpsCdNm'))}</td>
+                  <td className={cn(LAND_INFO_LIST_TD, 'whitespace-nowrap text-right')}>
+                    {fmt(field(row, 'area', 'area'))}
+                  </td>
                 </tr>
               )
             )
@@ -532,7 +537,7 @@ export function BuildingRegisterPanel({
           </button>
         ) : localBuildings.length > 0 ? (
           <select
-            className="max-w-[14rem] rounded border border-border bg-background px-1.5 py-0.5 text-[11px] text-foreground"
+            className="max-w-[14rem] rounded border border-border bg-background px-1.5 py-0.5 text-[12px] text-foreground"
             value={selectedSeq}
             onChange={(e) => void handleSelectChange(e.target.value)}
           >
@@ -638,7 +643,7 @@ export function BuildingPermitPanel({
         <p className="min-w-0 text-xs font-semibold text-foreground">건축허가대장</p>
         {rows.length > 0 ? (
           <select
-            className="max-w-[14rem] shrink-0 rounded border border-border bg-background px-1.5 py-0.5 text-[11px] text-foreground"
+            className="max-w-[14rem] shrink-0 rounded border border-border bg-background px-1.5 py-0.5 text-[12px] text-foreground"
             value={selectedKey}
             onChange={(e) => setSelectedKey(e.target.value)}
           >
