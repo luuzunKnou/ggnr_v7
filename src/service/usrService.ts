@@ -5,6 +5,7 @@ import { ug } from '@/database/schema/ug';
 import { ut } from '@/database/schema/ut';
 import { perm } from '@/database/schema/perm';
 import { upMap } from '@/database/schema/up_map';
+import { tempPasswordCandidates } from '@/lib/auth/hangulQwerty';
 import { hashPassword, isForbiddenNewPassword, isTemporaryPassword } from '@/lib/auth/password';
 import { getSessionUsrId } from '@/lib/auth/guard';
 import { recordUserLog, UL_CAT_USER } from '@/service/userLogService';
@@ -220,6 +221,28 @@ export async function listUsers(_params?: unknown) {
         : [];
       return { ...u, permNames };
     });
+
+    const deptRank = (ugName: string | null | undefined): number => {
+      const ug = String(ugName ?? '').trim();
+      if (ug === '관리자') return 0;
+      if (ug === '개발자') return 1;
+      return 2;
+    };
+
+    data.sort((a, b) => {
+      const ra = deptRank(a.ugName);
+      const rb = deptRank(b.ugName);
+      if (ra !== rb) return ra - rb;
+      const ugCmp = String(a.ugName ?? '').localeCompare(String(b.ugName ?? ''), 'ko');
+      if (ugCmp !== 0) return ugCmp;
+      const utCmp = String(a.utName ?? '').localeCompare(String(b.utName ?? ''), 'ko');
+      if (utCmp !== 0) return utCmp;
+      const aLead = a.permNames?.includes('팀장') ? 0 : 1;
+      const bLead = b.permNames?.includes('팀장') ? 0 : 1;
+      if (aLead !== bLead) return aLead - bLead;
+      return String(a.usrId).localeCompare(String(b.usrId), 'ko');
+    });
+
     return { success: true, data };
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : '사용자 목록 조회 실패';
@@ -343,7 +366,7 @@ export async function submitSignUp(params: Record<string, unknown>) {
   const passwordRaw = String(params.usr_pwd ?? '').trim();
   const passwordConfirm = String(params.usr_pwd_confirm ?? '').trim();
   if (!usrId) return { success: false, error: '아이디는 필수입니다.' };
-  if (usrId === 'su') return { success: false, error: '사용할 수 없는 아이디입니다.' };
+  if (usrId === 'su' || usrId === 'admin') return { success: false, error: '사용할 수 없는 아이디입니다.' };
   if (!ugName) return { success: false, error: '부서는 필수입니다.' };
   if (!utName) return { success: false, error: '팀은 필수입니다.' };
   if (!passwordRaw) return { success: false, error: '비밀번호는 필수입니다.' };
@@ -691,11 +714,88 @@ export async function updateUser(params: Record<string, unknown>) {
   }
 }
 
+function buildResetTempPassword(usrId: string): string {
+  const candidates = tempPasswordCandidates(usrId);
+  if (candidates.length >= 2 && candidates[1] !== candidates[0]) return candidates[1];
+  return candidates[0] ?? usrId;
+}
+
+/** 관리자: 임시 비밀번호로 초기화 (아이디·영문자판 규칙) */
+export async function resetUserPassword(params: Record<string, unknown>) {
+  const operator = await requireLoggedIn();
+  const usrId = String(params.usr_id ?? '').trim();
+  if (!usrId) return { success: false, error: 'usr_id는 필수입니다.' };
+  if (usrId === 'su') return { success: false, error: '슈퍼관리자 계정은 초기화할 수 없습니다.' };
+
+  try {
+    const [row] = await db
+      .select({ ugName: usr.ugName })
+      .from(usr)
+      .where(and(eq(usr.usrId, usrId), or(eq(usr.usrIsDel, false), isNull(usr.usrIsDel))))
+      .limit(1);
+    if (!row) return { success: false, error: '사용자를 찾을 수 없습니다.' };
+
+    const tempPassword = buildResetTempPassword(usrId);
+    const hashed = await hashPassword(tempPassword);
+    await db
+      .update(usr)
+      .set({ usrPwd: hashed, usrLoginFailCnt: 0 })
+      .where(eq(usr.usrId, usrId));
+
+    void recordUserLog({
+      ulCat: UL_CAT_USER,
+      ulContents: '비밀번호 초기화',
+      ulType: '수정',
+      ulUser: usrId,
+      ulGroup: row.ugName,
+      ulWorkUser: operator,
+    });
+    return { success: true, data: { tempPassword } };
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : '비밀번호 초기화 실패';
+    return { success: false, error: message };
+  }
+}
+
+/** 관리자: 로그인 인증오류 횟수 초기화 */
+export async function resetUserLoginFailCnt(params: Record<string, unknown>) {
+  const operator = await requireLoggedIn();
+  const usrId = String(params.usr_id ?? '').trim();
+  if (!usrId) return { success: false, error: 'usr_id는 필수입니다.' };
+  if (usrId === 'su') return { success: false, error: '슈퍼관리자 계정은 초기화할 수 없습니다.' };
+
+  try {
+    const [row] = await db
+      .select({ ugName: usr.ugName, usrLoginFailCnt: usr.usrLoginFailCnt })
+      .from(usr)
+      .where(and(eq(usr.usrId, usrId), or(eq(usr.usrIsDel, false), isNull(usr.usrIsDel))))
+      .limit(1);
+    if (!row) return { success: false, error: '사용자를 찾을 수 없습니다.' };
+
+    await db.update(usr).set({ usrLoginFailCnt: 0 }).where(eq(usr.usrId, usrId));
+    void recordUserLog({
+      ulCat: UL_CAT_USER,
+      ulContents: '인증오류 초기화',
+      ulType: '수정',
+      ulUser: usrId,
+      ulGroup: row.ugName,
+      ulWorkUser: operator,
+      ulDetail: `이전 횟수: ${row.usrLoginFailCnt ?? 0}`,
+    });
+    return { success: true };
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : '인증오류 초기화 실패';
+    return { success: false, error: message };
+  }
+}
+
 export async function deleteUser(params: Record<string, unknown>) {
   const operator = await requireLoggedIn();
   const usrId = String(params.usr_id ?? '').trim();
   if (!usrId) return { success: false, error: 'usr_id는 필수입니다.' };
-  if (usrId === 'su') return { success: false, error: 'su 계정은 삭제할 수 없습니다.' };
+  if (usrId === 'su' || usrId === 'admin') {
+    return { success: false, error: '슈퍼관리자 계정은 삭제할 수 없습니다.' };
+  }
   try {
     const [before] = await db
       .select({ ugName: usr.ugName })

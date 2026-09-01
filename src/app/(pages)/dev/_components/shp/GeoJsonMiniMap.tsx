@@ -87,6 +87,7 @@ export function GeoJsonMiniMap({ geometry, dataProjection = 'EPSG:4326', classNa
       controls: defaults({ zoom: false, attribution: false }),
     });
     mapRef.current = map;
+    requestAnimationFrame(() => map.updateSize());
 
     return () => {
       map.setTarget(undefined);
@@ -153,20 +154,20 @@ export function GeoJsonMiniMap({ geometry, dataProjection = 'EPSG:4326', classNa
   return (
     <div className={className}>
       {label && (
-        <h4 className="text-xs font-semibold text-muted-foreground mb-1.5">{label}</h4>
+        <h4 className="mb-1.5 text-xs font-semibold text-muted-foreground">{label}</h4>
       )}
-      <div className="relative w-full rounded border bg-muted/20" style={{ height: 180 }}>
+      <div className="relative h-[180px] w-full">
         <div
           ref={containerRef}
-          className="absolute inset-0 rounded"
+          className="absolute inset-0 overflow-hidden rounded border border-white/90 bg-muted/20 shadow-[0_0_0_1px_rgba(0,0,0,0.4),0_1px_2px_rgba(0,0,0,0.04)]"
         />
         <button
           type="button"
           onClick={goToInitialView}
-          className="absolute bottom-1 right-1 rounded-[30px] bg-background/90 border border-border p-1.5 text-muted-foreground hover:text-foreground hover:bg-background"
+          className="absolute bottom-1 right-1 z-10 rounded-[30px] border border-border bg-background/90 p-1.5 text-muted-foreground hover:bg-background hover:text-foreground"
           title="초기 위치로"
         >
-          <Locate className="w-3.5 h-3.5" />
+          <Locate className="h-3.5 w-3.5" />
         </button>
       </div>
     </div>

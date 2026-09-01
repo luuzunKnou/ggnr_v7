@@ -2,8 +2,10 @@
 
 import { useEffect, useRef, type ReactNode } from "react"
 import { useRouter } from "next/navigation"
-import { useSession } from "next-auth/react"
+import { signOut, useSession } from "next-auth/react"
+import { withBasePathNav } from "@/lib/basePath"
 import { Users, Shield, Database, BarChart3 } from "lucide-react"
+import { isSuperUser } from "@/lib/auth/superUser"
 import { AdminConsoleLayout, type AdminConsoleMenuGroup } from "@/app/(pages)/_components/AdminConsoleLayout"
 import { PermissionFeatureManager } from "@/app/(pages)/dev/_components/PermissionFeatureManager"
 import { AccessRequestQueue } from "@/app/(pages)/dev/_components/AccessRequestQueue"
@@ -156,15 +158,24 @@ export default function SysManagerPage() {
   const deniedRef = useRef(false)
 
   useEffect(() => {
+    if (status === "unauthenticated") {
+      router.replace("/")
+      return
+    }
     if (status !== "authenticated") return
-    if (session?.user?.id === "su") return
+    if (isSuperUser(session?.user?.id)) return
     if (deniedRef.current) return
     deniedRef.current = true
     window.alert("권한이 없습니다")
     router.replace("/")
   }, [status, session?.user?.id, router])
 
-  if (status === "loading" || status !== "authenticated") {
+  const handleLogout = async () => {
+    await signOut({ redirect: false })
+    window.location.assign(withBasePathNav("/"))
+  }
+
+  if (status === "loading") {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background text-sm text-muted-foreground">
         확인 중…
@@ -172,7 +183,11 @@ export default function SysManagerPage() {
     )
   }
 
-  if (session?.user?.id !== "su") {
+  if (status === "unauthenticated") {
+    return null
+  }
+
+  if (!isSuperUser(session?.user?.id)) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background text-sm text-muted-foreground">
         권한이 없습니다
@@ -194,6 +209,7 @@ export default function SysManagerPage() {
       }
       consoleArea="sysManager"
       autoCollapseMenuIds={SYS_AUTO_COLLAPSE_MENU_IDS}
+      onLogout={handleLogout}
     />
   )
 }
