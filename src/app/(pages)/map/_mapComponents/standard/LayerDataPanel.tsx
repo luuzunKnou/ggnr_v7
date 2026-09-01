@@ -1763,7 +1763,7 @@ export function LayerDataPanel({
                       <th
                         key={fieldName}
                         className={cn(
-                          'min-w-0 truncate border-b border-border px-2 py-1.5 align-middle text-[12px] font-semibold text-slate-500 dark:text-muted-foreground',
+                          'min-w-0 truncate border-b border-border px-2 py-1.5 align-middle text-[12px] font-medium text-slate-500 dark:text-muted-foreground',
                           isNumberCol ? 'text-center' : 'text-left'
                         )}
                         title={headerLabel}
