@@ -1,6 +1,8 @@
 import {
   ROAD_FRONTAGE_BUILDING_DEFAULT_WRITER_DEPT,
   ROAD_FRONTAGE_BUILDING_LOCATION_KINDS,
+  detailLocationCellDisplay,
+  detailLocationFieldValue,
   emptyRoadFrontageBuildingFormAttachShotDates,
   emptyRoadFrontageBuildingFormAttaches,
   type RoadFrontageBuildingLedger,
@@ -30,9 +32,14 @@ function ymdBlank(iso: string) {
   return `${m[1]} 년 ${Number(m[2])} 월 ${Number(m[3])} 일`;
 }
 
-function sqm(v: number | null) {
-  if (v == null || !Number.isFinite(v)) return '';
-  return v.toLocaleString(undefined, { maximumFractionDigits: 2 });
+function sqm(v: string | number | null | undefined) {
+  const s = String(v ?? '').trim();
+  if (!s) return '';
+  const n = Number(s.replace(/[^\d.-]/g, ''));
+  if (Number.isFinite(n) && String(n) === s.replace(/,/g, '')) {
+    return n.toLocaleString(undefined, { maximumFractionDigits: 2 });
+  }
+  return esc(s);
 }
 
 function abcd(marks: string[]) {
@@ -80,7 +87,7 @@ async function inlineAttachSrcs(srcs?: string[]): Promise<string[]> {
  */
 function printDocTitle(ledger: RoadFrontageBuildingLedger): string {
   const tag =
-    String(ledger.serialNo ?? '').trim() || String(ledger.locationAddress ?? '').trim();
+    String(ledger.serialNo ?? '').trim() || String(ledger.locAdr ?? '').trim();
   return ['접도구역 기존 건축물(공작물) 관리대장', tag]
     .filter(Boolean)
     .join('_')
@@ -94,12 +101,13 @@ function formHtml(ledger: RoadFrontageBuildingLedger, docTitle: string) {
   while (details.length < 5) {
     details.push({
       id: `d${details.length}`,
-      dongNo: null,
-      installedDate: '',
+      dongNo: '',
+      instYmd: '',
       structure: '',
       usageType: '',
-      areaSqm: null,
-      locationKind: '',
+      areaSqm: '',
+      locAdrR: '',
+      locAdrC: '',
       badMarks: [],
     });
   }
@@ -107,23 +115,24 @@ function formHtml(ledger: RoadFrontageBuildingLedger, docTitle: string) {
   while (confirms.length < 6) {
     confirms.push({
       id: `c${confirms.length}`,
-      confirmDate: '',
-      confirmerName: '',
-      approverName: '',
+      checkYmd: '',
+      checkNam: '',
+      appNam: '',
     });
   }
 
-  const routeName = String(ledger.routeName ?? '').trim();
-  const route = routeName ? `${tx(ledger.routeNo)} (${tx(routeName)})` : tx(ledger.routeNo);
+  const routeNam = String(ledger.routeNam ?? '').trim();
+  const route = routeNam ? `${tx(ledger.routeNo)} (${tx(routeNam)})` : tx(ledger.routeNo);
 
   const dRows = details
     .map((d) => {
-      const loc = ROAD_FRONTAGE_BUILDING_LOCATION_KINDS.map(
-        (k) => `<td>${d.locationKind === k ? '○' : ''}</td>`
-      ).join('');
+      const loc = ROAD_FRONTAGE_BUILDING_LOCATION_KINDS.map((k) => {
+        const display = detailLocationCellDisplay(detailLocationFieldValue(d, k));
+        return `<td>${display}</td>`;
+      }).join('');
       return `<tr class="dr">
-        <td>${d.dongNo ?? ''}</td>
-        <td>${ymd(d.installedDate)}</td>
+        <td>${tx(d.dongNo)}</td>
+        <td>${ymd(d.instYmd)}</td>
         <td>${tx(d.structure)}</td>
         <td>${tx(d.usageType)}</td>
         <td class="ar">${sqm(d.areaSqm)}</td>
@@ -136,14 +145,14 @@ function formHtml(ledger: RoadFrontageBuildingLedger, docTitle: string) {
   const cRows = confirms
     .map(
       (c) => `<tr class="cr">
-        <td class="ct">${ymd(c.confirmDate)}</td>
-        <td class="sg"><div class="sgin"><b>${tx(c.confirmerName)}</b><span>(서명 또는 인)</span></div></td>
-        <td class="sg"><div class="sgin"><b>${tx(c.approverName)}</b><span>(서명 또는 인)</span></div></td>
+        <td class="ct">${ymd(c.checkYmd)}</td>
+        <td class="sg"><div class="sgin"><b>${tx(c.checkNam)}</b><span>(서명 또는 인)</span></div></td>
+        <td class="sg"><div class="sgin"><b>${tx(c.appNam)}</b><span>(서명 또는 인)</span></div></td>
       </tr>`
     )
     .join('');
 
-  const who = [ledger.writerDept || ROAD_FRONTAGE_BUILDING_DEFAULT_WRITER_DEPT, ledger.writerName, ledger.writtenAt]
+  const who = [ledger.writeDept || ROAD_FRONTAGE_BUILDING_DEFAULT_WRITER_DEPT, ledger.writeNam, ledger.writeYmd]
     .map((x) => String(x ?? '').trim())
     .filter(Boolean)
     .join(' / ');
@@ -248,7 +257,7 @@ table.m td { border: 0; height: auto; padding: 0.2mm 1mm; font-size: 9.5pt; text
       <td><div class="r1in"><span class="lk">도로의 종류</span><span class="rv">${tx(ledger.roadType)}</span></div></td>
       <td><div class="r1in"><span class="lk">노선번호<br/>(노선명)</span><span class="rv">${route}</span></div></td>
       <td><div class="r1in"><span class="lk">일련번호</span><span class="rv">${tx(ledger.serialNo)}</span></div></td>
-      <td><div class="r1in"><span class="lk">작성 연월일</span><span class="rv">${ymd(ledger.preparedDate)}</span></div></td>
+      <td><div class="r1in"><span class="lk">작성 연월일</span><span class="rv">${ymd(ledger.preYmd)}</span></div></td>
     </tr>
   </table>
 
@@ -263,36 +272,36 @@ table.m td { border: 0; height: auto; padding: 0.2mm 1mm; font-size: 9.5pt; text
       <th class="side" rowspan="3">건축물(공작물)</th>
       <td class="fld" colspan="2">
         <span class="k">위치</span>
-        <span class="b">${tx(ledger.locationAddress)}</span>
+        <span class="b">${tx(ledger.locAdr)}</span>
       </td>
       <td class="fld">
         <span class="k">현 거주자</span>
-        <span class="ph">${phoneMark(ledger.residentPhone)}</span>
-        <span class="b">${tx(ledger.residentName)}</span>
+        <span class="ph">${phoneMark(ledger.resiNum)}</span>
+        <span class="b">${tx(ledger.resiNam)}</span>
       </td>
     </tr>
     <tr>
       <th class="lab">건축물<br/>(공작물)<br/>소유자</th>
       <td class="fld">
         <span class="tiny">성명(법인인 경우에는 법인명 및 대표자의 성명)</span>
-        <span class="ph">${phoneMark(ledger.buildingOwnerPhone)}</span>
-        <span class="b">${tx(ledger.buildingOwnerName)}</span>
+        <span class="ph">${phoneMark(ledger.buildOnum)}</span>
+        <span class="b">${tx(ledger.buildOnam)}</span>
       </td>
       <td class="fld">
         <span class="tiny">주소(법인인 경우에는 주된 사무소의 소재지)</span>
-        <span class="b">${tx(ledger.buildingOwnerAddress)}</span>
+        <span class="b">${tx(ledger.buildOadr)}</span>
       </td>
     </tr>
     <tr>
       <th class="lab">토지<br/>소유자</th>
       <td class="fld">
         <span class="tiny">성명(법인인 경우에는 법인명 및 대표자의 성명)</span>
-        <span class="ph">${phoneMark(ledger.landOwnerPhone)}</span>
-        <span class="b">${tx(ledger.landOwnerName)}</span>
+        <span class="ph">${phoneMark(ledger.landOnum)}</span>
+        <span class="b">${tx(ledger.landOnam)}</span>
       </td>
       <td class="fld">
         <span class="tiny">주소(법인인 경우에는 주된 사무소의 소재지)</span>
-        <span class="b">${tx(ledger.landOwnerAddress)}</span>
+        <span class="b">${tx(ledger.landOadr)}</span>
       </td>
     </tr>
   </table>

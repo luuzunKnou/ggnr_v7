@@ -5,17 +5,14 @@ import { Search, X } from "lucide-react";
 import { call } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import {
-  riverBasicPlanAsDefineTable,
-  riverBasicPlanGdWmsDefineTables,
-  riverBasicPlanHdDefineTable,
-  riverBasicPlanIndexDefineTable,
-  riverBasicPlanJdDefineTable,
+  riverBasicPlanRiverNameFilterableLayers,
   buildRiverBasicPlanRiverNameCqlByLayer,
   type RiverBasicPlanTab,
 } from "@/lib/riverBasicPlanMapAttachmentLayers";
 import { useMapContext } from "../../../_mapComponents/MapContext";
 import { MAP_AUTO_NAV_MAX_ZOOM } from "../../../_mapComponents/config/mapDefaults";
 import { scheduleFitMapToExtent3857 } from "../../../_mapComponents/config/mapAutoNavigation";
+import { useRiverBasicPlanExistingMapLayers } from "./useRiverBasicPlanExistingMapLayers";
 
 type RiverType = RiverBasicPlanTab;
 
@@ -34,13 +31,7 @@ type Props = {
 };
 
 function defaultLayersForTab(tab: RiverType): readonly string[] {
-  return [
-    riverBasicPlanIndexDefineTable(tab),
-    riverBasicPlanAsDefineTable(tab),
-    riverBasicPlanJdDefineTable(tab),
-    riverBasicPlanHdDefineTable(tab),
-    ...riverBasicPlanGdWmsDefineTables(tab),
-  ];
+  return riverBasicPlanRiverNameFilterableLayers(tab);
 }
 
 export function RiverBasicPlanListPanel({
@@ -56,26 +47,34 @@ export function RiverBasicPlanListPanel({
   const [keyword, setKeyword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  /** true: 테이블 없음 등 안내(muted), false: 조회 실패(destructive) */
-  const [errorSoft, setErrorSoft] = useState(false);
   const [items, setItems] = useState<RiverItem[]>([]);
+  const existingMapLayers = useRiverBasicPlanExistingMapLayers(tab);
 
-  /** 패널 진입·탭 변경 시 해당 탭 기본 레이어 켜기, 언마운트 시 양쪽 끄기 */
+  /**
+   * 탭 전환: 상대 탭 레이어 끄기. 언마운트 시 양쪽·CQL 해제.
+   * 현재 탭 WMS는 목록 건수가 있을 때만 켠다(미구축 시 빈 GetMap → Issues 방지).
+   */
   useEffect(() => {
     const ctx = mapContextRef.current;
     if (!ctx?.setVisibleLayerNames) return;
-    const onLayers = defaultLayersForTab(tab);
+    const thisTabLayers = defaultLayersForTab(tab);
     const offLayers = defaultLayersForTab(tab === "smallRiver" ? "river" : "smallRiver");
+    const onLayers = existingMapLayers ?? [];
     ctx.setVisibleLayerNames((prev) => {
       const next = new Set(prev);
       let changed = false;
       for (const id of offLayers) {
         if (next.delete(id)) changed = true;
       }
-      for (const id of onLayers) {
-        if (!next.has(id)) {
-          next.add(id);
-          changed = true;
+      for (const id of thisTabLayers) {
+        if (!onLayers.includes(id) && next.delete(id)) changed = true;
+      }
+      if (existingMapLayers != null) {
+        for (const id of onLayers) {
+          if (!next.has(id)) {
+            next.add(id);
+            changed = true;
+          }
         }
       }
       return changed ? next : prev;
@@ -86,14 +85,38 @@ export function RiverBasicPlanListPanel({
       c.setVisibleLayerNames((prev) => {
         const next = new Set(prev);
         let changed = false;
-        for (const id of [...onLayers, ...offLayers]) {
+        for (const id of [...thisTabLayers, ...offLayers]) {
           if (next.delete(id)) changed = true;
         }
         return changed ? next : prev;
       });
       c.setServiceWmsCqlByLayer?.(null);
     };
-  }, [tab]);
+  }, [tab, existingMapLayers]);
+
+  useEffect(() => {
+    const ctx = mapContextRef.current;
+    if (!ctx?.setVisibleLayerNames || loading) return;
+    const onLayers = defaultLayersForTab(tab);
+    const enableCurrent = !error && items.length > 0;
+    ctx.setVisibleLayerNames((prev) => {
+      const next = new Set(prev);
+      let changed = false;
+      if (enableCurrent) {
+        for (const id of onLayers) {
+          if (!next.has(id)) {
+            next.add(id);
+            changed = true;
+          }
+        }
+      } else {
+        for (const id of onLayers) {
+          if (next.delete(id)) changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [tab, loading, error, items.length]);
 
   /** 목록에서 하천 선택 시 해당 하천만 WMS 표시 */
   useEffect(() => {
@@ -106,7 +129,6 @@ export function RiverBasicPlanListPanel({
     const t = setTimeout(async () => {
       setLoading(true);
       setError(null);
-      setErrorSoft(false);
       try {
         const res = await call("", "POST", {
           service: "riverBasicPlanService",
@@ -115,15 +137,10 @@ export function RiverBasicPlanListPanel({
         });
         const data = res?.data ?? res;
         setItems(Array.isArray(data?.rivers) ? data.rivers : []);
-        const notice = typeof data?.error === "string" ? data.error.trim() : "";
-        if (notice) {
-          setError(notice);
-          setErrorSoft(true);
-        }
       } catch (e: unknown) {
         setItems([]);
+        // 네트워크·인증 등 실제 실패만 표시. 테이블 없음·무자료는 서버가 빈 목록으로 반환함
         setError(e instanceof Error ? e.message : "목록을 불러오지 못했습니다.");
-        setErrorSoft(false);
       } finally {
         setLoading(false);
       }
@@ -193,14 +210,7 @@ export function RiverBasicPlanListPanel({
         {loading ? (
           <p className="text-sm text-muted-foreground px-4 py-4">불러오는 중...</p>
         ) : error ? (
-          <p
-            className={cn(
-              "text-sm px-4 py-4",
-              errorSoft ? "text-muted-foreground" : "text-destructive"
-            )}
-          >
-            {error}
-          </p>
+          <p className="text-sm px-4 py-4 text-destructive">{error}</p>
         ) : items.length === 0 ? (
           <p className="text-sm text-muted-foreground px-4 py-4">검색 결과가 없습니다.</p>
         ) : (

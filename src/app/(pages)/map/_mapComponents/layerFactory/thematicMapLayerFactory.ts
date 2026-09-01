@@ -22,6 +22,8 @@ export type ThematicMapLayerOption = {
   parentTableName?: string;
   /** DB 분할 조건 → WMS CQL_FILTER */
   cqlFilter?: string;
+  /** 목록 범례 고정 색 (CSS fill). 없으면 회색 */
+  legendColor?: string;
   minZoom: number;
   maxZoom: number;
 };
@@ -82,7 +84,8 @@ function hasPublicTable(existing: Set<string>, name: string): boolean {
  */
 export function buildThematicMapLayerGroups(
   existingPublicTables?: Set<string> | null,
-  layersWithData?: Set<string> | null
+  layersWithData?: Set<string> | null,
+  legendColors?: Record<string, string> | null
 ): ThematicMapLayerGroup[] {
   const rows = tables as DefineTableRow[];
 
@@ -132,11 +135,13 @@ export function buildThematicMapLayerGroups(
     if (dataNamesLower && !dataNamesLower.has(tableName.toLowerCase())) continue;
 
     const list = byGroup.get(group) ?? [];
+    const legendColor = legendColors?.[tableName.toLowerCase()];
     list.push({
       tableName,
       layerName,
       parentTableName,
       cqlFilter,
+      ...(legendColor ? { legendColor } : {}),
       minZoom: 8,
       maxZoom: 30,
     });

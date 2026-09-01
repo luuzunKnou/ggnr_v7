@@ -10,6 +10,7 @@ import { useMyAccessSnapshot } from '@/hooks/useMyAccessSnapshot';
 import { ResourceAccessDeniedDialog } from '@/app/(pages)/_components/AccessRequest';
 import { scrubOccupationLedgerFromMapSearchParams } from '@/lib/occupationLedgerBinding';
 import { scrubUseFeeFromMapSearchParams } from '@/lib/useFeeBinding';
+import { useMapContext } from '@/app/(pages)/map/_mapComponents/MapContext';
 
 type SystemItem = {
   sys_key: string;
@@ -37,6 +38,7 @@ function firstAllowedSystemKey(list: SystemItem[], snap: ClientAccessSnapshot): 
 export function MapSystemList() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const mapContext = useMapContext();
   const systemKeyFromUrl = searchParams.get('system') ?? '';
   const { snapshot, loading: accessLoading } = useMyAccessSnapshot();
 
@@ -81,11 +83,13 @@ export function MapSystemList() {
     if (systemKeyFromUrl && !urlAllowed && firstAllowed) {
       const current = new URLSearchParams(Array.from(searchParams.entries()));
       current.set('system', firstAllowed);
-      scrubOccupationLedgerFromMapSearchParams(current, firstAllowed);
-      scrubUseFeeFromMapSearchParams(current, firstAllowed);
+      current.delete('opened');
+      current.delete('dataTable');
+      current.delete('dataKey');
+      mapContext?.allLayersOffRef?.current?.();
       router.replace(`/map?${current.toString()}`);
     }
-  }, [accessLoading, snapshot, systemList, systemKeyFromUrl, searchParams, router]);
+  }, [accessLoading, snapshot, systemList, systemKeyFromUrl, searchParams, router, mapContext]);
 
   useEffect(() => {
     const onVisible = () => {
@@ -97,13 +101,21 @@ export function MapSystemList() {
 
   const selectSystem = (sysKey: string) => {
     const current = new URLSearchParams(Array.from(searchParams.entries()));
+    const systemChanged = sysKey !== systemKeyFromUrl;
     if (sysKey) {
       current.set('system', sysKey);
     } else {
       current.delete('system');
     }
-    scrubOccupationLedgerFromMapSearchParams(current, sysKey);
-    scrubUseFeeFromMapSearchParams(current, sysKey);
+    if (systemChanged) {
+      current.delete('opened');
+      current.delete('dataTable');
+      current.delete('dataKey');
+      mapContext?.allLayersOffRef?.current?.();
+    } else {
+      scrubOccupationLedgerFromMapSearchParams(current, sysKey);
+      scrubUseFeeFromMapSearchParams(current, sysKey);
+    }
     router.push(`/map?${current.toString()}`);
   };
 

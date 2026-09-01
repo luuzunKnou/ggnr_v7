@@ -74,7 +74,7 @@ const PROTO_PANEL_TABS = SHOOTING_REQUEST_UI_ENABLED
 type Props = {
   open: boolean
   onClose: () => void
-  onOpenLedger: (ledgerId: string) => void
+  onOpenLedger: (item: ProtoNotifItem) => void
   onOpenFee: (feeId: string) => void
   /** 내 촬영요청 행 선택 시 (신청서 모달 등) */
   onSelectShootingRequest?: (id: string) => void

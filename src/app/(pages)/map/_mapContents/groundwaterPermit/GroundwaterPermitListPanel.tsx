@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Search, X } from 'lucide-react'
 import { call } from '@/lib/api'
 import { cn } from '@/lib/utils'
@@ -8,7 +8,9 @@ import {
   groundwaterPermitStatusClass,
   type GroundwaterPermitStatusCode,
 } from '@/lib/groundwaterPermitStatus'
+import { useMapContext } from '../../_mapComponents/MapContext'
 import { useGroundwaterPermitMapHighlight } from './useGroundwaterPermitMapHighlight'
+import { GROUNDWATER_PERMIT_WMS_LAYER_ID } from './groundwaterPermitLayerId'
 
 type ListRow = {
   id: string
@@ -31,12 +33,42 @@ export function GroundwaterPermitListPanel({
   selectedDetailId,
   onSelectDetailId,
 }: Props) {
+  const mapContext = useMapContext()
+  const mapContextRef = useRef(mapContext)
+  mapContextRef.current = mapContext
+  const layerAddedByPanelRef = useRef(false)
+
   const [keyword, setKeyword] = useState('')
   const [debouncedKeyword, setDebouncedKeyword] = useState('')
   const [rows, setRows] = useState<ListRow[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const { clearHighlight } = useGroundwaterPermitMapHighlight()
+
+  /** 패널 열면 지하수 개발허가 레이어를 켜고, 이 패널이 켠 경우만 닫을 때 끈다 */
+  useEffect(() => {
+    const ctx = mapContextRef.current
+    const lid = GROUNDWATER_PERMIT_WMS_LAYER_ID.toLowerCase()
+    if (!ctx?.setVisibleLayerNames) return
+    const alreadyOn = (ctx.visibleLayerNames ?? new Set<string>()).has(lid)
+    if (!alreadyOn) {
+      ctx.setVisibleLayerNames((prev) => new Set(prev).add(lid))
+      layerAddedByPanelRef.current = true
+    } else {
+      layerAddedByPanelRef.current = false
+    }
+    return () => {
+      const c = mapContextRef.current
+      if (!layerAddedByPanelRef.current || !c?.setVisibleLayerNames) return
+      c.setVisibleLayerNames((prev) => {
+        if (!prev.has(lid)) return prev
+        const next = new Set(prev)
+        next.delete(lid)
+        return next
+      })
+      layerAddedByPanelRef.current = false
+    }
+  }, [])
 
   const handleClose = useCallback(() => {
     clearHighlight()

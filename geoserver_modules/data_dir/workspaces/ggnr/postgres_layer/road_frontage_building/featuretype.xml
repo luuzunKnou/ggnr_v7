@@ -1,5 +1,5 @@
 <featureType>
-  <id>FeatureTypeInfoImpl-64e85031:1a01dd80ac3:2df7</id>
+  <id>FeatureTypeInfoImpl-4b150771:1a017b80e5b:-39a7</id>
   <name>road_frontage_building</name>
   <nativeName>road_frontage_building</nativeName>
   <namespace>
@@ -12,17 +12,17 @@
   </keywords>
   <srs>EPSG:5181</srs>
   <nativeBoundingBox>
-    <minx>390752.6729100576</minx>
-    <maxx>393758.53051959793</maxx>
-    <miny>362552.087008115</miny>
-    <maxy>365949.64125988027</maxy>
+    <minx>0.0</minx>
+    <maxx>-1.0</maxx>
+    <miny>0.0</miny>
+    <maxy>-1.0</maxy>
     <crs class="projected">EPSG:5181</crs>
   </nativeBoundingBox>
   <latLonBoundingBox>
-    <minx>129.1356818580175</minx>
-    <maxx>129.17017602106725</maxx>
-    <miny>36.74178283073343</miny>
-    <maxy>36.772986104599774</maxy>
+    <minx>124.84847767680762</minx>
+    <maxx>124.84848865053446</maxx>
+    <miny>33.47495973610326</miny>
+    <maxy>33.474968932506</maxy>
     <crs>EPSG:4326</crs>
   </latLonBoundingBox>
   <projectionPolicy>FORCE_DECLARED</projectionPolicy>

@@ -4,5 +4,23 @@
   stroke-width: 1;
   fill-opacity: 0.3;
   stroke-opacity: 1.0;
-  z-index: 0;
+
+  label: [layer_korname];
+  label-anchor: 0.5 0.5;
+  label-geometry: [centroid(geom)];
+
+  font-family: "Nanum Gothic", "Malgun Gothic", "SansSerif";
+  font-size: 12;
+  font-weight: bold;
+  font-fill: #3F51B5;
+
+  halo-color: #FFFFFF;
+  halo-radius: 3;
+  halo-opacity: 0.9;
+
+  label-conflict-resolution: true;
+  label-group: true;
+  label-max-displacement: 0;
+  label-priority: [area(geom)];
+  label-fit-goodness: 0.1;
 }
