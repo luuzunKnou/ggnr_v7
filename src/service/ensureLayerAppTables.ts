@@ -205,66 +205,359 @@ CREATE TABLE IF NOT EXISTS layer.road_frontage_building (
   geom geometry(Point, 5181),
   lon double precision,
   lat double precision,
+  ftr_idn text,
   road_type text,
   route_no text,
-  route_name text,
+  route_nam text,
   serial_no text,
-  prepared_date text,
-  location_address text,
-  resident_name text,
-  resident_phone text,
-  building_owner_name text,
-  building_owner_phone text,
-  building_owner_address text,
-  land_owner_name text,
-  land_owner_phone text,
-  land_owner_address text,
-  writer_dept text,
-  writer_name text,
-  written_at text,
-  attach_shot_before text,
-  attach_shot_after text,
+  pre_ymd text,
+  loc_adr text,
+  resi_nam text,
+  resi_num text,
+  build_onam text,
+  build_onum text,
+  build_oadr text,
+  land_onam text,
+  land_onum text,
+  land_oadr text,
+  write_dept text,
+  write_nam text,
+  write_ymd text,
+  before_ymd text,
+  after_ymd text,
   is_del boolean NOT NULL DEFAULT false,
-  create_date text,
-  create_user text,
-  update_date text,
-  update_user text
+  crea_ymd text,
+  crea_nam text,
+  upd_ymd text,
+  upd_nam text
 );
 CREATE INDEX IF NOT EXISTS road_frontage_building_geom_gix
   ON layer.road_frontage_building USING GIST (geom);
+CREATE UNIQUE INDEX IF NOT EXISTS road_frontage_building_ftr_idn_uidx
+  ON layer.road_frontage_building (ftr_idn)
+  WHERE ftr_idn IS NOT NULL AND btrim(ftr_idn) <> '';
 COMMENT ON TABLE layer.road_frontage_building IS '접도구역 기존 건축물 관리대장';
+`;
+
+/** 기존 풀어쓴 영문 컬럼 → DBF 축약명 (한 번만 적용) */
+const ROAD_FRONTAGE_BUILDING_ALIGN_SQL = `
+DO $align$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'layer' AND table_name = 'road_frontage_building' AND column_name = 'route_name'
+  ) THEN
+    ALTER TABLE layer.road_frontage_building RENAME COLUMN route_name TO route_nam;
+  END IF;
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'layer' AND table_name = 'road_frontage_building' AND column_name = 'prepared_date'
+  ) THEN
+    ALTER TABLE layer.road_frontage_building RENAME COLUMN prepared_date TO pre_ymd;
+  END IF;
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'layer' AND table_name = 'road_frontage_building' AND column_name = 'location_address'
+  ) THEN
+    ALTER TABLE layer.road_frontage_building RENAME COLUMN location_address TO loc_adr;
+  END IF;
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'layer' AND table_name = 'road_frontage_building' AND column_name = 'resident_name'
+  ) THEN
+    ALTER TABLE layer.road_frontage_building RENAME COLUMN resident_name TO resi_nam;
+  END IF;
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'layer' AND table_name = 'road_frontage_building' AND column_name = 'resident_phone'
+  ) THEN
+    ALTER TABLE layer.road_frontage_building RENAME COLUMN resident_phone TO resi_num;
+  END IF;
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'layer' AND table_name = 'road_frontage_building' AND column_name = 'building_owner_name'
+  ) THEN
+    ALTER TABLE layer.road_frontage_building RENAME COLUMN building_owner_name TO build_onam;
+  END IF;
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'layer' AND table_name = 'road_frontage_building' AND column_name = 'building_owner_phone'
+  ) THEN
+    ALTER TABLE layer.road_frontage_building RENAME COLUMN building_owner_phone TO build_onum;
+  END IF;
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'layer' AND table_name = 'road_frontage_building' AND column_name = 'building_owner_address'
+  ) THEN
+    ALTER TABLE layer.road_frontage_building RENAME COLUMN building_owner_address TO build_oadr;
+  END IF;
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'layer' AND table_name = 'road_frontage_building' AND column_name = 'land_owner_name'
+  ) THEN
+    ALTER TABLE layer.road_frontage_building RENAME COLUMN land_owner_name TO land_onam;
+  END IF;
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'layer' AND table_name = 'road_frontage_building' AND column_name = 'land_owner_phone'
+  ) THEN
+    ALTER TABLE layer.road_frontage_building RENAME COLUMN land_owner_phone TO land_onum;
+  END IF;
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'layer' AND table_name = 'road_frontage_building' AND column_name = 'land_owner_address'
+  ) THEN
+    ALTER TABLE layer.road_frontage_building RENAME COLUMN land_owner_address TO land_oadr;
+  END IF;
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'layer' AND table_name = 'road_frontage_building' AND column_name = 'writer_dept'
+  ) THEN
+    ALTER TABLE layer.road_frontage_building RENAME COLUMN writer_dept TO write_dept;
+  END IF;
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'layer' AND table_name = 'road_frontage_building' AND column_name = 'writer_name'
+  ) THEN
+    ALTER TABLE layer.road_frontage_building RENAME COLUMN writer_name TO write_nam;
+  END IF;
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'layer' AND table_name = 'road_frontage_building' AND column_name = 'written_at'
+  ) THEN
+    ALTER TABLE layer.road_frontage_building RENAME COLUMN written_at TO write_ymd;
+  END IF;
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'layer' AND table_name = 'road_frontage_building' AND column_name = 'attach_shot_before'
+  ) THEN
+    ALTER TABLE layer.road_frontage_building RENAME COLUMN attach_shot_before TO before_ymd;
+  END IF;
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'layer' AND table_name = 'road_frontage_building' AND column_name = 'attach_shot_after'
+  ) THEN
+    ALTER TABLE layer.road_frontage_building RENAME COLUMN attach_shot_after TO after_ymd;
+  END IF;
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'layer' AND table_name = 'road_frontage_building' AND column_name = 'create_date'
+  ) THEN
+    ALTER TABLE layer.road_frontage_building RENAME COLUMN create_date TO crea_ymd;
+  END IF;
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'layer' AND table_name = 'road_frontage_building' AND column_name = 'create_user'
+  ) THEN
+    ALTER TABLE layer.road_frontage_building RENAME COLUMN create_user TO crea_nam;
+  END IF;
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'layer' AND table_name = 'road_frontage_building' AND column_name = 'update_date'
+  ) THEN
+    ALTER TABLE layer.road_frontage_building RENAME COLUMN update_date TO upd_ymd;
+  END IF;
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'layer' AND table_name = 'road_frontage_building' AND column_name = 'update_user'
+  ) THEN
+    ALTER TABLE layer.road_frontage_building RENAME COLUMN update_user TO upd_nam;
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'layer' AND table_name = 'road_frontage_building' AND column_name = 'ftr_idn'
+  ) THEN
+    ALTER TABLE layer.road_frontage_building ADD COLUMN ftr_idn text;
+  END IF;
+  UPDATE layer.road_frontage_building
+  SET ftr_idn = 'JD' || lpad(id::text, 4, '0')
+  WHERE ftr_idn IS NULL OR btrim(ftr_idn) = '';
+END
+$align$;
+`;
+
+const ROAD_FRONTAGE_BUILDING_FTR_IDN_INDEX_SQL = `
+CREATE UNIQUE INDEX IF NOT EXISTS road_frontage_building_ftr_idn_uidx
+  ON layer.road_frontage_building (ftr_idn)
+  WHERE ftr_idn IS NOT NULL AND btrim(ftr_idn) <> '';
 `;
 
 const ROAD_FRONTAGE_BUILDING_DETAIL_SQL = `
 CREATE TABLE IF NOT EXISTS layer.road_frontage_building_detail (
   id SERIAL PRIMARY KEY,
-  parent_id integer NOT NULL REFERENCES layer.road_frontage_building (id) ON DELETE CASCADE,
-  dong_no integer,
-  installed_date text,
+  ftr_idn text NOT NULL,
+  dong_no text,
+  inst_ymd text,
   structure text,
   usage_type text,
-  area_sqm double precision,
-  location_kind text,
+  area_sqm text,
+  loc_adr_r text,
+  loc_adr_c text,
   bad_marks text,
   sort_no integer NOT NULL DEFAULT 0
 );
-CREATE INDEX IF NOT EXISTS road_frontage_building_detail_parent_id_idx
-  ON layer.road_frontage_building_detail (parent_id);
+CREATE INDEX IF NOT EXISTS road_frontage_building_detail_ftr_idn_idx
+  ON layer.road_frontage_building_detail (ftr_idn);
 COMMENT ON TABLE layer.road_frontage_building_detail IS '접도구역 건축물 내용';
+`;
+
+/** 건축물내용 컬럼을 수급 DBF명으로 맞춤 */
+const ROAD_FRONTAGE_BUILDING_DETAIL_ALIGN_SQL = `
+DO $align$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'layer' AND table_name = 'road_frontage_building_detail' AND column_name = 'installed_date'
+  ) THEN
+    ALTER TABLE layer.road_frontage_building_detail RENAME COLUMN installed_date TO inst_ymd;
+  END IF;
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'layer' AND table_name = 'road_frontage_building_detail'
+      AND column_name = 'dong_no' AND data_type = 'integer'
+  ) THEN
+    ALTER TABLE layer.road_frontage_building_detail
+      ALTER COLUMN dong_no TYPE text USING NULLIF(dong_no::text, '');
+  END IF;
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'layer' AND table_name = 'road_frontage_building_detail'
+      AND column_name = 'area_sqm' AND data_type = 'double precision'
+  ) THEN
+    ALTER TABLE layer.road_frontage_building_detail
+      ALTER COLUMN area_sqm TYPE text USING NULLIF(trim(to_char(area_sqm, 'FM999999999.999999')), '');
+  END IF;
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'layer' AND table_name = 'road_frontage_building_detail' AND column_name = 'location_kind'
+  ) THEN
+    IF NOT EXISTS (
+      SELECT 1 FROM information_schema.columns
+      WHERE table_schema = 'layer' AND table_name = 'road_frontage_building_detail' AND column_name = 'loc_adr_r'
+    ) THEN
+      ALTER TABLE layer.road_frontage_building_detail ADD COLUMN loc_adr_r text;
+    END IF;
+    IF NOT EXISTS (
+      SELECT 1 FROM information_schema.columns
+      WHERE table_schema = 'layer' AND table_name = 'road_frontage_building_detail' AND column_name = 'loc_adr_c'
+    ) THEN
+      ALTER TABLE layer.road_frontage_building_detail ADD COLUMN loc_adr_c text;
+    END IF;
+    UPDATE layer.road_frontage_building_detail
+    SET loc_adr_r = CASE WHEN location_kind = '도로예정지' THEN 'Y' ELSE loc_adr_r END,
+        loc_adr_c = CASE WHEN location_kind = '접도구역' THEN 'Y' ELSE loc_adr_c END
+    WHERE location_kind IS NOT NULL AND btrim(location_kind) <> '';
+    ALTER TABLE layer.road_frontage_building_detail DROP COLUMN location_kind;
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'layer' AND table_name = 'road_frontage_building_detail' AND column_name = 'ftr_idn'
+  ) THEN
+    ALTER TABLE layer.road_frontage_building_detail ADD COLUMN ftr_idn text;
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'layer' AND table_name = 'road_frontage_building_detail' AND column_name = 'loc_adr_r'
+  ) THEN
+    ALTER TABLE layer.road_frontage_building_detail ADD COLUMN loc_adr_r text;
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'layer' AND table_name = 'road_frontage_building_detail' AND column_name = 'loc_adr_c'
+  ) THEN
+    ALTER TABLE layer.road_frontage_building_detail ADD COLUMN loc_adr_c text;
+  END IF;
+  -- parent_id → ftr_idn 키로 전환
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'layer' AND table_name = 'road_frontage_building_detail' AND column_name = 'parent_id'
+  ) THEN
+    UPDATE layer.road_frontage_building_detail d
+    SET ftr_idn = p.ftr_idn
+    FROM layer.road_frontage_building p
+    WHERE d.parent_id = p.id
+      AND (d.ftr_idn IS NULL OR btrim(d.ftr_idn) = '')
+      AND p.ftr_idn IS NOT NULL AND btrim(p.ftr_idn) <> '';
+    ALTER TABLE layer.road_frontage_building_detail DROP CONSTRAINT IF EXISTS road_frontage_building_detail_parent_id_fkey;
+    ALTER TABLE layer.road_frontage_building_detail DROP COLUMN parent_id;
+  END IF;
+  DELETE FROM layer.road_frontage_building_detail WHERE ftr_idn IS NULL OR btrim(ftr_idn) = '';
+  BEGIN
+    ALTER TABLE layer.road_frontage_building_detail ALTER COLUMN ftr_idn SET NOT NULL;
+  EXCEPTION WHEN others THEN
+    NULL;
+  END;
+END
+$align$;
+CREATE INDEX IF NOT EXISTS road_frontage_building_detail_ftr_idn_idx
+  ON layer.road_frontage_building_detail (ftr_idn);
 `;
 
 const ROAD_FRONTAGE_BUILDING_CONFIRM_SQL = `
 CREATE TABLE IF NOT EXISTS layer.road_frontage_building_confirm (
   id SERIAL PRIMARY KEY,
-  parent_id integer NOT NULL REFERENCES layer.road_frontage_building (id) ON DELETE CASCADE,
-  confirm_date text,
-  confirmer_name text,
-  approver_name text,
+  ftr_idn text NOT NULL,
+  check_ymd text,
+  check_nam text,
+  app_nam text,
   sort_no integer NOT NULL DEFAULT 0
 );
-CREATE INDEX IF NOT EXISTS road_frontage_building_confirm_parent_id_idx
-  ON layer.road_frontage_building_confirm (parent_id);
+CREATE INDEX IF NOT EXISTS road_frontage_building_confirm_ftr_idn_idx
+  ON layer.road_frontage_building_confirm (ftr_idn);
 COMMENT ON TABLE layer.road_frontage_building_confirm IS '접도구역 건축물 확인 결과';
+`;
+
+/** 확인결과 컬럼을 수급 DBF명으로 맞춤 + ftr_idn 키 */
+const ROAD_FRONTAGE_BUILDING_CONFIRM_ALIGN_SQL = `
+DO $align$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'layer' AND table_name = 'road_frontage_building_confirm' AND column_name = 'confirm_date'
+  ) THEN
+    ALTER TABLE layer.road_frontage_building_confirm RENAME COLUMN confirm_date TO check_ymd;
+  END IF;
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'layer' AND table_name = 'road_frontage_building_confirm' AND column_name = 'confirmer_name'
+  ) THEN
+    ALTER TABLE layer.road_frontage_building_confirm RENAME COLUMN confirmer_name TO check_nam;
+  END IF;
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'layer' AND table_name = 'road_frontage_building_confirm' AND column_name = 'approver_name'
+  ) THEN
+    ALTER TABLE layer.road_frontage_building_confirm RENAME COLUMN approver_name TO app_nam;
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'layer' AND table_name = 'road_frontage_building_confirm' AND column_name = 'ftr_idn'
+  ) THEN
+    ALTER TABLE layer.road_frontage_building_confirm ADD COLUMN ftr_idn text;
+  END IF;
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'layer' AND table_name = 'road_frontage_building_confirm' AND column_name = 'parent_id'
+  ) THEN
+    UPDATE layer.road_frontage_building_confirm c
+    SET ftr_idn = p.ftr_idn
+    FROM layer.road_frontage_building p
+    WHERE c.parent_id = p.id
+      AND (c.ftr_idn IS NULL OR btrim(c.ftr_idn) = '')
+      AND p.ftr_idn IS NOT NULL AND btrim(p.ftr_idn) <> '';
+    ALTER TABLE layer.road_frontage_building_confirm DROP CONSTRAINT IF EXISTS road_frontage_building_confirm_parent_id_fkey;
+    ALTER TABLE layer.road_frontage_building_confirm DROP COLUMN parent_id;
+  END IF;
+  DELETE FROM layer.road_frontage_building_confirm WHERE ftr_idn IS NULL OR btrim(ftr_idn) = '';
+  BEGIN
+    ALTER TABLE layer.road_frontage_building_confirm ALTER COLUMN ftr_idn SET NOT NULL;
+  EXCEPTION WHEN others THEN
+    NULL;
+  END;
+END
+$align$;
+CREATE INDEX IF NOT EXISTS road_frontage_building_confirm_ftr_idn_idx
+  ON layer.road_frontage_building_confirm (ftr_idn);
 `;
 
 const WORK_UNIT_SQL = `
@@ -818,16 +1111,36 @@ export async function ensureRoadFrontageBuildingTables(result?: EnsureResult): P
     createSql: ROAD_FRONTAGE_BUILDING_SQL,
     result: out,
   });
+  try {
+    // DO 블록은 ';' 분할하면 깨지므로 pool로 한 번에 실행
+    await pool.query(ROAD_FRONTAGE_BUILDING_ALIGN_SQL);
+    await pool.query(ROAD_FRONTAGE_BUILDING_FTR_IDN_INDEX_SQL);
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    out.errors.push(`layer.road_frontage_building align: ${msg}`);
+  }
   await ensureBaseTable({
     table: 'road_frontage_building_detail',
     createSql: ROAD_FRONTAGE_BUILDING_DETAIL_SQL,
     result: out,
   });
+  try {
+    await pool.query(ROAD_FRONTAGE_BUILDING_DETAIL_ALIGN_SQL);
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    out.errors.push(`layer.road_frontage_building_detail align: ${msg}`);
+  }
   await ensureBaseTable({
     table: 'road_frontage_building_confirm',
     createSql: ROAD_FRONTAGE_BUILDING_CONFIRM_SQL,
     result: out,
   });
+  try {
+    await pool.query(ROAD_FRONTAGE_BUILDING_CONFIRM_ALIGN_SQL);
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    out.errors.push(`layer.road_frontage_building_confirm align: ${msg}`);
+  }
   try {
     await pool.query(`DROP TABLE IF EXISTS layer.road_frontage_building_attach`);
   } catch (e: unknown) {
