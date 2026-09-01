@@ -42,13 +42,14 @@ interface SidebarButtonProps {
 }
 
 function SidebarButton({ icon, label, onClick, isActive, disabled, iconOnly, className }: SidebarButtonProps) {
+  const labelPlain = label.replace(/\n/g, ' ');
   return (
     <button
       type="button"
       onClick={onClick}
       disabled={disabled}
-      title={label}
-      aria-label={label}
+      title={labelPlain}
+      aria-label={labelPlain}
       className={cn(
         'flex w-[65px] flex-col items-center justify-center text-white/90 transition-colors hover:bg-white/10 hover:text-white',
         iconOnly ? 'py-2.5' : 'pb-[7px] pt-[7px]',
@@ -59,7 +60,9 @@ function SidebarButton({ icon, label, onClick, isActive, disabled, iconOnly, cla
     >
       {icon}
       {!iconOnly && (
-        <span className="break-keep pt-[4px] text-center text-[10.5px] font-light">{label}</span>
+        <span className="break-keep whitespace-pre-line pt-[4px] text-center text-[10.5px] font-light">
+          {label}
+        </span>
       )}
     </button>
   );

@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { Loader2 } from 'lucide-react';
 import { COORDINATE_SYSTEM_OPTIONS, type AddressInfoPanelProps } from './shared';
 import { transformCoordinate } from '../services/coordinateService';
 import {
@@ -9,6 +10,7 @@ import {
   fetchParcelIdentityAtPoint,
   fetchParcelTabData,
   fetchPermitRows,
+  fetchPersonInfoMaskEnabled,
   type BuildingLedgerRow,
   type BuildingPermitSource,
   type BuildingRegisterMode,
@@ -183,9 +185,11 @@ export function LandInfoPanelContent({
   const [resolvedRoad, setResolvedRoad] = useState<string | null>(null);
   const [vworldKey, setVworldKey] = useState('');
   const [dataPortalKey, setDataPortalKey] = useState('');
+  const [personInfoMaskEnabled, setPersonInfoMaskEnabled] = useState(false);
 
   const [parcelError, setParcelError] = useState<string | null>(null);
   const [parcelFetching, setParcelFetching] = useState(false);
+  const [identityResolving, setIdentityResolving] = useState(false);
   const [parcelData, setParcelData] = useState<ParcelTabData>({
     characteristics: [],
     landUses: [],
@@ -226,6 +230,16 @@ export function LandInfoPanelContent({
 
   useEffect(() => {
     let alive = true;
+    void fetchPersonInfoMaskEnabled().then((enabled) => {
+      if (alive) setPersonInfoMaskEnabled(enabled);
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    let alive = true;
     fetchLandInfoConfig().then((cfg) => {
       if (!alive) return;
       setVworldKey(cfg.vworldKey);
@@ -241,11 +255,16 @@ export function LandInfoPanelContent({
     /** 새 우클릭 시 부모 pnu가 null로 리셋되므로, 이전 필지 resolved 잔존 방지 */
     if (!pnuFromContext) setResolvedPnu(null);
     setResolvedParcelJibun(null);
-    fetchParcelIdentityAtPoint(coordinate, viewProjection).then((id) => {
-      if (!alive) return;
-      if (!pnuFromContext) setResolvedPnu(id.pnu);
-      setResolvedParcelJibun(id.jibunFromParcel);
-    });
+    setIdentityResolving(true);
+    fetchParcelIdentityAtPoint(coordinate, viewProjection)
+      .then((id) => {
+        if (!alive) return;
+        if (!pnuFromContext) setResolvedPnu(id.pnu);
+        setResolvedParcelJibun(id.jibunFromParcel);
+      })
+      .finally(() => {
+        if (alive) setIdentityResolving(false);
+      });
     return () => {
       alive = false;
     };
@@ -447,13 +466,23 @@ export function LandInfoPanelContent({
   }, [parcelData, jibun, resolvedParcelJibun]);
 
   const tabBody = useMemo(() => {
-    if (!effectivePnu) return <p className="text-xs text-rose-600">필지 PNU를 찾지 못했습니다.</p>;
+    if (!effectivePnu) {
+      if (identityResolving || loading) {
+        return (
+          <div className="flex h-full min-h-[120px] items-center justify-center gap-2 text-xs text-muted-foreground">
+            <Loader2 className="h-4 w-4 animate-spin" /> 필지 식별 중...
+          </div>
+        );
+      }
+      return <p className="text-xs text-rose-600">필지 PNU를 찾지 못했습니다.</p>;
+    }
     if (activeTab === 'parcel') {
       return (
         <LandInfoParcelPanel
           pnu={effectivePnu}
           vworldKey={vworldKey}
-          resolveLoading={loading}
+          resolveLoading={loading || identityResolving}
+          personInfoMaskEnabled={personInfoMaskEnabled}
           parcelData={parcelData}
           parcelFetching={parcelFetching}
           parcelError={parcelError}
@@ -484,6 +513,8 @@ export function LandInfoPanelContent({
     );
   }, [
     activeTab,
+    identityResolving,
+    personInfoMaskEnabled,
     buildingLedgerFetching,
     buildingLedgerNotice,
     buildingRegisterBuildings,
