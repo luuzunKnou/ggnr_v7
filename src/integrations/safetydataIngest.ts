@@ -280,6 +280,18 @@ type SpatialResolved =
       yField: string;
       sourceSrid: number | 'auto';
     }
+  | {
+      mode: 'dms';
+      publishGeoserver: boolean;
+      geomColumn: string;
+      lonDegField: string;
+      lonMinField: string;
+      lonSecField: string;
+      latDegField: string;
+      latMinField: string;
+      latSecField: string;
+      sourceSrid: number | 'auto';
+    }
   | { mode: 'auto'; publishGeoserver: boolean; geomColumn: string; sourceSrid: number | 'auto' };
 
 function resolveSpatialConfig(cfg: SafetydataDatasetConfig, sampleRows: Record<string, unknown>[]): SpatialResolved {
@@ -302,6 +314,26 @@ function resolveSpatialConfig(cfg: SafetydataDatasetConfig, sampleRows: Record<s
       geomColumn,
       xField,
       yField,
+      sourceSrid: spatial?.sourceSrid ?? 'auto',
+    };
+  }
+  if (mode === 'dms') {
+    const lonDegField = (spatial?.lonDegField ?? 'LOT_PROVIN').trim() || 'LOT_PROVIN';
+    const lonMinField = (spatial?.lonMinField ?? 'LOT_MIN').trim() || 'LOT_MIN';
+    const lonSecField = (spatial?.lonSecField ?? 'LOT_SEC').trim() || 'LOT_SEC';
+    const latDegField = (spatial?.latDegField ?? 'LAT_PROVIN').trim() || 'LAT_PROVIN';
+    const latMinField = (spatial?.latMinField ?? 'LAT_MIN').trim() || 'LAT_MIN';
+    const latSecField = (spatial?.latSecField ?? 'LAT_SEC').trim() || 'LAT_SEC';
+    return {
+      mode: 'dms',
+      publishGeoserver,
+      geomColumn,
+      lonDegField,
+      lonMinField,
+      lonSecField,
+      latDegField,
+      latMinField,
+      latSecField,
       sourceSrid: spatial?.sourceSrid ?? 'auto',
     };
   }
@@ -385,6 +417,17 @@ function parseMaybeNumber(v: unknown): number | null {
   if (!s) return null;
   const n = Number(s);
   return Number.isFinite(n) ? n : null;
+}
+
+/** DMS(도·분·초) → 십진 좌표. 부호는 도(deg) 값을 따른다. */
+function dmsToDecimal(degRaw: unknown, minRaw: unknown, secRaw: unknown): number | null {
+  const deg = parseMaybeNumber(degRaw);
+  const min = parseMaybeNumber(minRaw);
+  const sec = parseMaybeNumber(secRaw);
+  if (deg == null || min == null || sec == null) return null;
+  const sign = deg < 0 ? -1 : 1;
+  const abs = Math.abs(deg) + min / 60 + sec / 3600;
+  return sign * abs;
 }
 
 function normalizeSridOrTarget(v: unknown): number {
@@ -717,6 +760,37 @@ async function insertRows(
                     `ST_Transform(ST_SetSRID(ST_MakePoint($${param++}, $${param++}), ${srid}), ${TARGET_SRID})`
                   );
                   values.push(xv, yv);
+                } else {
+                  fragments.push('NULL::geometry');
+                }
+              } else {
+                fragments.push('NULL::geometry');
+              }
+            } else if (spatial.mode === 'dms') {
+              const lonDegKey = hasOwnCaseInsensitive(row, spatial.lonDegField) ?? spatial.lonDegField;
+              const lonMinKey = hasOwnCaseInsensitive(row, spatial.lonMinField) ?? spatial.lonMinField;
+              const lonSecKey = hasOwnCaseInsensitive(row, spatial.lonSecField) ?? spatial.lonSecField;
+              const latDegKey = hasOwnCaseInsensitive(row, spatial.latDegField) ?? spatial.latDegField;
+              const latMinKey = hasOwnCaseInsensitive(row, spatial.latMinField) ?? spatial.latMinField;
+              const latSecKey = hasOwnCaseInsensitive(row, spatial.latSecField) ?? spatial.latSecField;
+              const lon = dmsToDecimal(
+                lonDegKey in row ? row[lonDegKey] : null,
+                lonMinKey in row ? row[lonMinKey] : null,
+                lonSecKey in row ? row[lonSecKey] : null
+              );
+              const lat = dmsToDecimal(
+                latDegKey in row ? row[latDegKey] : null,
+                latMinKey in row ? row[latMinKey] : null,
+                latSecKey in row ? row[latSecKey] : null
+              );
+              if (lon != null && lat != null) {
+                const maxAbs = Math.max(Math.abs(lon), Math.abs(lat));
+                const srid = spatial.sourceSrid === 'auto' ? sridFromWktOrXyAuto(maxAbs) : spatial.sourceSrid;
+                if (isValidCoordForSrid(srid, lon, lat)) {
+                  fragments.push(
+                    `ST_Transform(ST_SetSRID(ST_MakePoint($${param++}, $${param++}), ${srid}), ${TARGET_SRID})`
+                  );
+                  values.push(lon, lat);
                 } else {
                   fragments.push('NULL::geometry');
                 }

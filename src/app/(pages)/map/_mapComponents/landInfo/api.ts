@@ -231,7 +231,7 @@ export async function resolveParcelIdentityLikeMapClick(args: {
 
   if (!pnu && vworldKey && addressHint) {
     try {
-      const results = await searchAddress(addressHint, { apiKey: vworldKey, limit: 1 });
+      const results = await searchAddress(addressHint, { apiKey: vworldKey, maxResults: 1 });
       const item = results[0];
       pnu = normalizePnu(item?.id) ?? pnu;
       if (!jibunFromParcel) {

@@ -1,7 +1,7 @@
 /**
  * 접도구역 표주·표지 관리대장
  */
-import { and, asc, eq, ilike, or, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, ilike, or, sql, type SQL } from 'drizzle-orm';
 import { db } from '@/database/db';
 import {
   roadFrontageMarker,
@@ -363,10 +363,58 @@ async function loadMarkers(parentId: number): Promise<RoadFrontageMarkerItem[]> 
   });
 }
 
-export async function list(params: { keyword?: string; roadType?: string } = {}) {
+type RoadFrontageMarkerListSortKey = 'roadType' | 'routeName';
+
+type RoadFrontageMarkerListSortSpec = {
+  key: RoadFrontageMarkerListSortKey;
+  dir: 'asc' | 'desc';
+};
+
+const ROAD_FRONTAGE_MARKER_LIST_SORT_KEYS = new Set<string>(['roadType', 'routeName']);
+
+function parseRoadFrontageMarkerListSortSpecs(params?: {
+  sorts?: unknown;
+}): RoadFrontageMarkerListSortSpec[] {
+  const raw = params?.sorts;
+  if (!Array.isArray(raw) || raw.length === 0) return [];
+  const out: RoadFrontageMarkerListSortSpec[] = [];
+  const seen = new Set<string>();
+  for (const item of raw) {
+    if (!item || typeof item !== 'object') continue;
+    const key = String((item as { key?: unknown }).key ?? '').trim();
+    if (!ROAD_FRONTAGE_MARKER_LIST_SORT_KEYS.has(key) || seen.has(key)) continue;
+    seen.add(key);
+    const dirRaw = String((item as { dir?: unknown }).dir ?? '').trim().toLowerCase();
+    out.push({
+      key: key as RoadFrontageMarkerListSortKey,
+      dir: dirRaw === 'asc' ? 'asc' : 'desc',
+    });
+  }
+  return out;
+}
+
+function buildRoadFrontageMarkerListOrderBy(
+  sortSpecs: RoadFrontageMarkerListSortSpec[]
+): SQL[] {
+  if (sortSpecs.length === 0) return [asc(roadFrontageMarker.id)];
+  const order: SQL[] = sortSpecs.map((s) => {
+    const col =
+      s.key === 'roadType' ? roadFrontageMarker.roadType : roadFrontageMarker.routeName;
+    return s.dir === 'asc' ? asc(col) : desc(col);
+  });
+  order.push(asc(roadFrontageMarker.id));
+  return order;
+}
+
+export async function list(params: {
+  keyword?: string;
+  roadType?: string;
+  sorts?: Array<{ key?: string; dir?: string }>;
+} = {}) {
   try {
     const keyword = emptyToNull(params?.keyword);
     const roadType = emptyToNull(params?.roadType);
+    const sortSpecs = parseRoadFrontageMarkerListSortSpecs(params);
     const conditions = [];
     if (roadType) {
       conditions.push(eq(roadFrontageMarker.roadType, roadType));
@@ -397,7 +445,7 @@ export async function list(params: { keyword?: string; roadType?: string } = {})
       .select()
       .from(roadFrontageMarker)
       .where(conditions.length ? and(...conditions) : undefined)
-      .orderBy(asc(roadFrontageMarker.id));
+      .orderBy(...buildRoadFrontageMarkerListOrderBy(sortSpecs));
     return Promise.all(
       rows.map(async (row) => {
         const markers = await loadMarkers(row.id);

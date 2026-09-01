@@ -110,6 +110,32 @@ function ParcelListColGroup({ editing }: { editing: boolean }) {
 
 const PARCEL_LIST_TABLE_CLASS = "w-full table-fixed border-collapse text-[11px]";
 
+/** 필지 목록 행 스크롤 — top은 sticky thead 아래 목록 최상단에 맞춤 */
+function scrollParcelListRow(row: HTMLTableRowElement, mode: "nearest" | "top") {
+  if (mode === "nearest") {
+    row.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    return;
+  }
+  let node: HTMLElement | null = row.parentElement;
+  while (node) {
+    const { overflowY } = getComputedStyle(node);
+    if (
+      (overflowY === "auto" || overflowY === "scroll") &&
+      node.scrollHeight > node.clientHeight
+    ) {
+      const thead = node.querySelector("thead");
+      const theadH = thead?.getBoundingClientRect().height ?? 0;
+      const containerTop = node.getBoundingClientRect().top;
+      const targetTop = row.getBoundingClientRect().top;
+      const nextTop = Math.max(0, targetTop - containerTop + node.scrollTop - theadH);
+      node.scrollTo({ top: nextTop, behavior: "smooth" });
+      return;
+    }
+    node = node.parentElement;
+  }
+  row.scrollIntoView({ block: "start", behavior: "smooth" });
+}
+
 const PARCEL_LIST_TH_BASE =
   "min-w-0 border-b border-border bg-muted font-semibold text-foreground";
 
@@ -340,6 +366,8 @@ export function RoadRewardDetailPanel({
 
   const [selectedParcelId, setSelectedParcelId] = useState<string | null>(null);
   const parcelRowEls = useRef(new Map<string, HTMLTableRowElement>());
+  /** 지도 필지 선택 시 목록을 최상단(sticky thead 아래)으로 스크롤 */
+  const scrollParcelRowToTopRef = useRef(false);
   const [parcelModal, setParcelModal] = useState<ParcelModalState | null>(null);
   const parcelModalRef = useRef(parcelModal);
   parcelModalRef.current = parcelModal;
@@ -485,6 +513,7 @@ export function RoadRewardDetailPanel({
     if (!focusParcelId || isCreateMode) return;
     const parcel = displayParcels.find((p) => p.id === focusParcelId);
     if (!parcel) return;
+    scrollParcelRowToTopRef.current = true;
     setSelectedParcelId(focusParcelId);
     const map = mapContext?.mapInstanceRef?.current;
     if (map) {
@@ -496,9 +525,14 @@ export function RoadRewardDetailPanel({
 
   useEffect(() => {
     if (!selectedParcelId) return;
-    parcelRowEls.current
-      .get(selectedParcelId)
-      ?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    const row = parcelRowEls.current.get(selectedParcelId);
+    if (!row) return;
+    const scrollMode = scrollParcelRowToTopRef.current ? "top" : "nearest";
+    scrollParcelRowToTopRef.current = false;
+    const frame = window.requestAnimationFrame(() => {
+      scrollParcelListRow(row, scrollMode);
+    });
+    return () => window.cancelAnimationFrame(frame);
   }, [selectedParcelId]);
 
   const finishCaseGeomEdit = () => {
@@ -1215,17 +1249,13 @@ export function RoadRewardDetailPanel({
                 : "등록된 필지가 없습니다."}
             </p>
           ) : (
-            <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded border border-border">
-              <table className={cn(PARCEL_LIST_TABLE_CLASS, "shrink-0")}>
+            <MapSideDetailScroll className="min-h-0 flex-1 overflow-y-auto rounded border border-border">
+              <table className={PARCEL_LIST_TABLE_CLASS}>
                 <ParcelListColGroup editing={isEditing} />
-                <thead className="bg-muted">
+                <thead className="standard-table-thead">
                   <ParcelListHeaderRow editing={isEditing} />
                 </thead>
-              </table>
-              <MapSideDetailScroll className="min-h-0 flex-1 overflow-y-auto scrollbar-thin">
-                <table className={PARCEL_LIST_TABLE_CLASS}>
-                  <ParcelListColGroup editing={isEditing} />
-                  <tbody>
+                <tbody>
                     {displayParcels.map((p) => {
                       const isSelected = p.id === selectedParcelId;
                       const addr = `${p.eupmyeonDong} ${p.jibunIncluded || p.jibunOriginal}`.trim();
@@ -1253,8 +1283,8 @@ export function RoadRewardDetailPanel({
                               : "클릭하면 필지 상세를 봅니다"
                           }
                           className={cn(
-                            "h-7 cursor-pointer border-b border-border last:border-b-0 hover:bg-muted/50",
-                            isSelected && "bg-primary/5"
+                            "standard-list-row h-7 last:border-b-0",
+                            isSelected && "standard-list-row-selected"
                           )}
                         >
                           <ParcelListCell
@@ -1315,10 +1345,9 @@ export function RoadRewardDetailPanel({
                         </tr>
                       );
                     })}
-                  </tbody>
-                </table>
-              </MapSideDetailScroll>
-            </div>
+                </tbody>
+              </table>
+            </MapSideDetailScroll>
           )}
         </div>
       </section>

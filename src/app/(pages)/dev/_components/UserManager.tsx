@@ -587,11 +587,12 @@ export function UserManager() {
                       {row.ugName} / {row.utName}
                     </span>
                     {row.permNames?.includes("팀장") ? (
-                      <Crown
-                        className="h-3.5 w-3.5 shrink-0 text-amber-600"
-                        aria-label="팀장"
-                        title="팀장"
-                      />
+                      <span title="팀장">
+                        <Crown
+                          className="h-3.5 w-3.5 shrink-0 text-amber-600"
+                          aria-label="팀장"
+                        />
+                      </span>
                     ) : null}
                   </span>
                 </td>

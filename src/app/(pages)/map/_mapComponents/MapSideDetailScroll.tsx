@@ -8,16 +8,12 @@ import {
 } from 'react';
 import { cn } from '@/lib/utils';
 
-/** 실제 세로 스크롤이 생길 때만 너비조절 핸들과 겹치지 않도록 오른쪽 여유 */
-const SCROLL_CLEARANCE_MR = 'mr-[10px]';
-
-export type MapSideDetailScrollProps = ComponentPropsWithoutRef<'div'>;
-
 /**
  * 상세 패널 본문 스크롤 영역.
- * 점용대장과 동일하게 scrollbar-thin 적용.
- * 내용이 넘칠 때만 margin-right 10px — 스크롤 없으면 여백 없음.
+ * 내용이 넘칠 때만 세로 스크롤·오른쪽 여유(10px) — 스크롤 없으면 여백·스크롤바 없음.
  */
+export type MapSideDetailScrollProps = ComponentPropsWithoutRef<'div'>;
+
 export function MapSideDetailScroll({
   className,
   children,
@@ -50,7 +46,11 @@ export function MapSideDetailScroll({
   return (
     <div
       ref={ref}
-      className={cn('scrollbar-thin', className, overflowY && SCROLL_CLEARANCE_MR)}
+      className={cn(
+        'scrollbar-thin min-h-0',
+        overflowY ? 'mr-[10px] overflow-y-auto overscroll-contain' : '!mr-0 overflow-y-hidden',
+        className,
+      )}
       {...rest}
     >
       {children}

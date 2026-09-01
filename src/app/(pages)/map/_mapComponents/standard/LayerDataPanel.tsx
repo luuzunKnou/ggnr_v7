@@ -1149,7 +1149,7 @@ export function LayerDataPanel({
         .then((res) => {
           if (seq !== loadPageSeqRef.current) return;
           const data = res?.data ?? res;
-          const dataRows = Array.isArray(data?.rows) ? data.rows : [];
+          const dataRows: Record<string, unknown>[] = Array.isArray(data?.rows) ? data.rows : [];
           const dataTotal = typeof data?.total === 'number' ? data.total : total;
           // 행·칸 수를 같이 맞춰 한 렌더에 반영 (30칸+7행 / 7칸+30행 방지)
           setListPageSize(ps);
@@ -1763,7 +1763,7 @@ export function LayerDataPanel({
                       <th
                         key={fieldName}
                         className={cn(
-                          'min-w-0 truncate border-b border-border px-2 py-1.5 align-middle text-[12px] font-semibold text-slate-500 dark:text-muted-foreground',
+                          'min-w-0 truncate border-b border-border px-2 py-1.5 align-middle text-[12px] font-medium text-slate-500 dark:text-muted-foreground',
                           isNumberCol ? 'text-center' : 'text-left'
                         )}
                         title={headerLabel}

@@ -6121,6 +6121,18 @@
     "define_table_source": "shp"
   },
   {
+    "define_table_name": "sd_civil_defense_shelter",
+    "define_table_kor_name": "민방위 대피소",
+    "define_table_shp_type": "POINT",
+    "define_table_read_share": "P",
+    "define_table_write_share": "P",
+    "define_table_group": "재난안전지도",
+    "define_table_idx": "0",
+    "define_table_etc": "",
+    "define_table_schema": "layer",
+    "define_table_source": "shp"
+  },
+  {
     "define_table_name": "sd_earthquake_outdoor_evac_site",
     "define_table_kor_name": "지진옥외대피장소",
     "define_table_shp_type": "POINT",
@@ -9939,6 +9951,30 @@
     "define_table_read_share": "P",
     "define_table_write_share": "P",
     "define_table_group": "LPG배관",
+    "define_table_idx": "0",
+    "define_table_etc": "",
+    "define_table_schema": "layer",
+    "define_table_source": "shp"
+  },
+  {
+    "define_table_name": "radiation_shelter",
+    "define_table_kor_name": "방사선 대피소",
+    "define_table_shp_type": "POINT",
+    "define_table_read_share": "P",
+    "define_table_write_share": "P",
+    "define_table_group": "재난안전지도",
+    "define_table_idx": "0",
+    "define_table_etc": "",
+    "define_table_schema": "layer",
+    "define_table_source": "shp"
+  },
+  {
+    "define_table_name": "water_play_sign",
+    "define_table_kor_name": "물놀이 표지판",
+    "define_table_shp_type": "POINT",
+    "define_table_read_share": "P",
+    "define_table_write_share": "P",
+    "define_table_group": "재난안전지도",
     "define_table_idx": "0",
     "define_table_etc": "",
     "define_table_schema": "layer",

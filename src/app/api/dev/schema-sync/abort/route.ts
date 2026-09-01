@@ -3,6 +3,7 @@ import { getSessionUsrId } from '@/lib/auth/guard';
 import { abortPendingSchemaApply } from '@/service/sourceVersionService';
 
 export const dynamic = 'force-dynamic';
+export const maxDuration = 1800;
 
 /** 스키마 안내 모달 [중단] — 적용 직전 백업 롤백 */
 export async function POST(req: NextRequest) {

@@ -35,6 +35,8 @@ export * from './ngl_fee_list';
 export * from './ngl_query_table';
 export * from './notice';
 export * from './perm';
+export * from './radiation_shelter';
+export * from './water_play_sign';
 export * from './road_frontage_building';
 export * from './road_frontage_marker';
 export * from './road_reward';

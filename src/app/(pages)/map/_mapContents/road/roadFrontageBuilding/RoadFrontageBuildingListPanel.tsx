@@ -1,23 +1,46 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Layers, Search, X } from 'lucide-react';
+import { ArrowDown, ArrowUp, ArrowUpDown, Layers, Search, X } from 'lucide-react';
 import { call } from '@/lib/api';
 import { formatAddressStripSidoSigungu } from '@/lib/formatAddressStripAdmin';
 import { cn } from '@/lib/utils';
 import { LayerRowAddButton, LayerRowPanelButton } from '../../../_mapComponents/layerRowEdit';
 import { useMapContext } from '../../../_mapComponents/MapContext';
 import {
-  isRoadNetworkWmsVisible,
-  toggleRoadNetworkWmsLayers,
-} from '../roadNetwork/roadNetworkMapSync';
-import {
   ROAD_FRONTAGE_BUILDING_NEW_ID,
-  formatRouteNoName,
   isNewRoadFrontageBuildingId,
   type RoadFrontageBuildingLedger,
 } from './roadFrontageBuildingMock';
 import { useRoadFrontageBuildingMapHighlight } from './useRoadFrontageBuildingMapHighlight';
+import {
+  isRoadNetworkWmsVisible,
+  toggleRoadNetworkWmsLayers,
+} from '../roadNetwork/roadNetworkMapSync';
+import { getRoadFrontageMarkerRoadTypeBadgeStyle } from '../roadFrontageMarker/roadFrontageMarkerFormat';
+
+type SortKey = 'roadType' | 'locAdr' | 'preYmd';
+type SortDir = 'asc' | 'desc';
+type SortSpec = { key: SortKey; dir: SortDir };
+
+const SORT_COLUMNS: { key: SortKey; label: string; align?: 'left' | 'center' }[] = [
+  { key: 'roadType', label: '종류' },
+  { key: 'locAdr', label: '위치' },
+  { key: 'preYmd', label: '작성연월일' },
+];
+
+function initialSortDir(_key: SortKey): SortDir {
+  return 'asc';
+}
+
+/** 종류 열 — 도로종류-노선번호 */
+function formatRoadTypeRouteLabel(roadType: string, routeNo: string): string {
+  const type = roadType.trim();
+  const route = routeNo.trim();
+  if (!type && !route) return '—';
+  if (type && route) return `${type}-${route}`;
+  return type || route;
+}
 
 type Props = {
   selectedId: string | null;
@@ -43,6 +66,7 @@ export function RoadFrontageBuildingListPanel({
   const mapContext = useMapContext();
   const { highlightLedger, clearHighlight } = useRoadFrontageBuildingMapHighlight();
   const [keyword, setKeyword] = useState('');
+  const [sorts, setSorts] = useState<SortSpec[]>([]);
   const [items, setItems] = useState<RoadFrontageBuildingLedger[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -56,7 +80,10 @@ export function RoadFrontageBuildingListPanel({
         const res = await call('', 'POST', {
           service: 'roadFrontageBuildingService',
           action: 'list',
-          params: { keyword },
+          params: {
+            keyword,
+            sorts: sorts.length > 0 ? sorts : undefined,
+          },
         });
         if (res?.success === false) {
           setItems([]);
@@ -79,7 +106,22 @@ export function RoadFrontageBuildingListPanel({
       }
     }, 250);
     return () => clearTimeout(t);
-  }, [keyword, refreshKey]);
+  }, [keyword, refreshKey, sorts]);
+
+  const toggleSort = (key: SortKey) => {
+    const initial = initialSortDir(key);
+    setSorts((prev) => {
+      const idx = prev.findIndex((s) => s.key === key);
+      if (idx < 0) return [...prev, { key, dir: initial }];
+      const cur = prev[idx];
+      if (cur.dir === initial) {
+        const next = [...prev];
+        next[idx] = { key, dir: initial === 'asc' ? 'desc' : 'asc' };
+        return next;
+      }
+      return prev.filter((_, i) => i !== idx);
+    });
+  };
 
   const handleClose = useCallback(() => {
     clearHighlight();
@@ -184,29 +226,57 @@ export function RoadFrontageBuildingListPanel({
         <div ref={listScrollRef} className="standard-list-scroll">
           <table className="standard-list-table min-w-[360px] w-full table-fixed">
             <colgroup>
-              <col className="w-[100px]" />
+              <col className="w-[88px]" />
               <col />
-              <col className="w-[72px]" />
               <col className="w-[88px]" />
             </colgroup>
             <thead className="standard-table-thead">
               <tr>
-                <th className="standard-table-th standard-table-th-left">도로의 종류</th>
-                <th className="standard-table-th standard-table-th-left">위치</th>
-                <th className="standard-table-th standard-table-th-left">노선번호</th>
-                <th className="standard-table-th standard-table-th-left">작성연월일</th>
+                {SORT_COLUMNS.map((col) => {
+                  const sortIdx = sorts.findIndex((s) => s.key === col.key);
+                  const active = sortIdx >= 0;
+                  const sortDir = active ? sorts[sortIdx].dir : null;
+                  const Icon = !active
+                    ? ArrowUpDown
+                    : sortDir === 'asc'
+                      ? ArrowUp
+                      : ArrowDown;
+                  const initial = initialSortDir(col.key);
+                  return (
+                    <th key={col.key} className="standard-table-th standard-table-th-left">
+                      <button
+                        type="button"
+                        onClick={() => toggleSort(col.key)}
+                        className={cn(
+                          'standard-sort-button standard-sort-button-left',
+                          active && 'standard-sort-button-active'
+                        )}
+                        title={
+                          !active
+                            ? `${col.label} 정렬 추가`
+                            : sortDir === initial
+                              ? `${col.label} 방향 바꾸기`
+                              : `${col.label} 정렬 해제`
+                        }
+                      >
+                        <span className="truncate">{col.label}</span>
+                        <Icon className="h-3 w-3 shrink-0 opacity-70" aria-hidden />
+                      </button>
+                    </th>
+                  );
+                })}
               </tr>
             </thead>
             <tbody>
               {loading && items.length === 0 ? (
                 <tr>
-                  <td colSpan={4} className="standard-table-empty">
+                  <td colSpan={3} className="standard-table-empty">
                     불러오는 중…
                   </td>
                 </tr>
               ) : items.length === 0 ? (
                 <tr>
-                  <td colSpan={4} className="standard-table-empty">
+                  <td colSpan={3} className="standard-table-empty">
                     등록된 관리대장이 없습니다.
                   </td>
                 </tr>
@@ -214,7 +284,9 @@ export function RoadFrontageBuildingListPanel({
                 items.map((l) => {
                   const rowKey = String(l.ftrIdn || l.id || '').trim();
                   const isSelected = rowKey === selectedId;
-                  const routeTitle = formatRouteNoName(l.routeNo, l.routeNam);
+                  const roadTypeRouteLabel = formatRoadTypeRouteLabel(l.roadType, l.routeNo);
+                  const locDisplay =
+                    formatAddressStripSidoSigungu(l.locAdr) || l.locAdr || '(위치 미입력)';
                   return (
                     <tr
                       key={rowKey || l.id}
@@ -230,19 +302,21 @@ export function RoadFrontageBuildingListPanel({
                       }}
                       className={cn('standard-list-row', isSelected && 'standard-list-row-selected')}
                     >
-                      <td className="standard-table-td-text" title={l.roadType}>
-                        {l.roadType || '—'}
+                      <td className="standard-table-td-compact">
+                        {roadTypeRouteLabel !== '—' ? (
+                          <span
+                            className="standard-road-rank-badge inline-block max-w-full truncate"
+                            style={getRoadFrontageMarkerRoadTypeBadgeStyle(l.roadType)}
+                            title={roadTypeRouteLabel}
+                          >
+                            {roadTypeRouteLabel}
+                          </span>
+                        ) : (
+                          '—'
+                        )}
                       </td>
                       <td className="standard-table-td-text" title={l.locAdr}>
-                        {formatAddressStripSidoSigungu(l.locAdr) ||
-                          l.locAdr ||
-                          '(위치 미입력)'}
-                      </td>
-                      <td
-                        className="standard-table-td-date"
-                        title={routeTitle !== '—' ? routeTitle : undefined}
-                      >
-                        {l.routeNo.trim() || '—'}
+                        {locDisplay}
                       </td>
                       <td className="standard-table-td-date" title={l.preYmd}>
                         {l.preYmd || '—'}

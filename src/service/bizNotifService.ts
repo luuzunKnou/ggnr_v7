@@ -5,7 +5,7 @@ import { and, eq, inArray, sql } from 'drizzle-orm';
 import { db } from '@/database/db';
 import { usrBizNotifState } from '@/database/schema/usr_biz_notif_state';
 import { getSessionUsrId } from '@/lib/auth/guard';
-import { getUsageDataAsExpiryNotifications, usageDataAsTableExists } from '@/service/usageDataAsService';
+import { getUsageDataAsExpiryNotifications, usageDataAsTableExists, type UsageDataAsExpiryNotifRow } from '@/service/usageDataAsService';
 import { getOccupationLedgerExpiryNotifications } from '@/service/occupationLedgerService';
 import { getUseFeeUnpaidDueNotifications } from '@/service/useFeeService';
 import { getUseFeeBinding } from '@/lib/useFeeBinding';
@@ -146,7 +146,7 @@ export async function listMyBizNotifications(params?: {
   const [uljinExpiryRes, occupExpiryRes, feeRes] = await Promise.all([
     useUljinLedger
       ? getUsageDataAsExpiryNotifications({ withinDays })
-      : Promise.resolve({ items: [] }),
+      : Promise.resolve({ items: [] as UsageDataAsExpiryNotifRow[], error: undefined }),
     getOccupationLedgerExpiryNotifications({ withinDays }),
     getUseFeeUnpaidDueNotifications({ withinDays }),
   ]);
