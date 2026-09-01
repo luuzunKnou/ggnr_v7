@@ -166,7 +166,7 @@ export function SampleListPanel({ onClose }: Props) {
 
       <div className="standard-list-body">
         <div ref={listScrollRef} className="standard-list-scroll">
-          <table className="standard-list-table">
+          <table className="standard-list-table min-w-[596px]">
             <colgroup>
               <col className="w-[60px]" />
               <col className="w-[180px]" />

@@ -62,6 +62,55 @@ async function columnExists(schema: string, table: string, column: string): Prom
   return (res.rows?.length ?? 0) > 0;
 }
 
+/** 구형 영문 컬럼 → DBF 축약명. 대상 컬럼이 이미 있으면 값 병합 후 구형 컬럼 제거 */
+function legacyColumnRenameSql(table: string, fromCol: string, toCol: string): string {
+  const t = table.replace(/'/g, "''");
+  return `
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'layer' AND table_name = '${t}' AND column_name = '${fromCol}'
+  ) AND NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'layer' AND table_name = '${t}' AND column_name = '${toCol}'
+  ) THEN
+    ALTER TABLE layer.${table} RENAME COLUMN ${fromCol} TO ${toCol};
+  ELSIF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'layer' AND table_name = '${t}' AND column_name = '${fromCol}'
+  ) AND EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'layer' AND table_name = '${t}' AND column_name = '${toCol}'
+  ) THEN
+    UPDATE layer.${table}
+    SET ${toCol} = COALESCE(NULLIF(btrim(${toCol}), ''), ${fromCol})
+    WHERE ${fromCol} IS NOT NULL;
+    ALTER TABLE layer.${table} DROP COLUMN ${fromCol};
+  END IF;`;
+}
+
+const ROAD_FRONTAGE_BUILDING_LEGACY_RENAMES: Array<[string, string]> = [
+  ['route_name', 'route_nam'],
+  ['prepared_date', 'pre_ymd'],
+  ['location_address', 'loc_adr'],
+  ['resident_name', 'resi_nam'],
+  ['resident_phone', 'resi_num'],
+  ['building_owner_name', 'build_onam'],
+  ['building_owner_phone', 'build_onum'],
+  ['building_owner_address', 'build_oadr'],
+  ['land_owner_name', 'land_onam'],
+  ['land_owner_phone', 'land_onum'],
+  ['land_owner_address', 'land_oadr'],
+  ['writer_dept', 'write_dept'],
+  ['writer_name', 'write_nam'],
+  ['written_at', 'write_ymd'],
+  ['attach_shot_before', 'before_ymd'],
+  ['attach_shot_after', 'after_ymd'],
+  ['create_date', 'crea_ymd'],
+  ['create_user', 'crea_nam'],
+  ['update_date', 'upd_ymd'],
+  ['update_user', 'upd_nam'],
+];
+
 async function schemaExists(schema: string): Promise<boolean> {
   const res = await pool.query(
     `SELECT 1 FROM information_schema.schemata WHERE schema_name = $1 LIMIT 1`,

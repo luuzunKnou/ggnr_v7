@@ -310,7 +310,7 @@ export function RoadRewardListPanel({
           </div>
         ) : null}
         <div className="standard-list-scroll">
-          <table className="standard-list-table w-full table-fixed">
+          <table className="standard-list-table min-w-0 w-full table-fixed">
             <colgroup>
               <col />
               <col className="w-[88px]" />

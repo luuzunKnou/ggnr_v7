@@ -110,35 +110,74 @@ function ParcelListColGroup({ editing }: { editing: boolean }) {
 
 const PARCEL_LIST_TABLE_CLASS = "w-full table-fixed border-collapse text-[11px]";
 
+const PARCEL_LIST_TH_BASE =
+  "min-w-0 border-b border-border bg-muted font-semibold text-foreground";
+
+const PARCEL_LIST_COL = {
+  addr: {
+    th: `${PARCEL_LIST_TH_BASE} pl-1.5 pr-1 text-left`,
+    td: "min-w-0 py-0 pl-1.5 pr-1 text-left text-foreground",
+  },
+  jimok: {
+    th: `${PARCEL_LIST_TH_BASE} px-1 text-center`,
+    td: "min-w-0 px-1 py-0 text-center text-foreground",
+  },
+  area: {
+    th: `${PARCEL_LIST_TH_BASE} px-1 text-center whitespace-nowrap`,
+    td: "min-w-0 px-1 py-0 text-center tabular-nums text-foreground",
+  },
+  amount: {
+    th: `${PARCEL_LIST_TH_BASE} pl-1 pr-1.5 text-right whitespace-nowrap`,
+    td: "min-w-0 py-0 pl-1 pr-1.5 text-right tabular-nums text-foreground",
+  },
+} as const;
+
+function ParcelListCell({
+  align,
+  title,
+  children,
+  className,
+}: {
+  align: "left" | "center" | "right";
+  title?: string;
+  children: ReactNode;
+  className?: string;
+}) {
+  const wrapClass =
+    align === "center"
+      ? "flex min-w-0 justify-center"
+      : align === "right"
+        ? "flex min-w-0 justify-end"
+        : "min-w-0";
+  return (
+    <td className={cn(className, "align-middle")} title={title}>
+      <div className={wrapClass}>
+        <span className="block min-w-0 max-w-full truncate">{children}</span>
+      </div>
+    </td>
+  );
+}
+
 function ParcelListHeaderRow({ editing }: { editing: boolean }) {
   return (
     <tr className="h-7">
-      <th
-        scope="col"
-        className="min-w-0 border-b border-border bg-muted pl-1.5 pr-1 text-left font-semibold text-foreground"
-      >
+      <th scope="col" className={PARCEL_LIST_COL.addr.th}>
         주소
       </th>
-      <th
-        scope="col"
-        className="min-w-0 border-b border-border bg-muted px-1 text-center font-semibold text-foreground"
-      >
+      <th scope="col" className={PARCEL_LIST_COL.jimok.th}>
         지목
       </th>
-      <th
-        scope="col"
-        className="min-w-0 border-b border-border bg-muted px-1 text-center font-semibold whitespace-nowrap text-foreground"
-      >
+      <th scope="col" className={PARCEL_LIST_COL.area.th}>
         편입면적(㎡)
       </th>
-      <th
-        scope="col"
-        className="min-w-0 border-b border-border bg-muted pl-1 pr-1.5 text-right font-semibold whitespace-nowrap text-foreground"
-      >
+      <th scope="col" className={PARCEL_LIST_COL.amount.th}>
         합계(원)
       </th>
       {editing ? (
-        <th scope="col" className="border-b border-border bg-muted font-semibold text-foreground">
+        <th
+          scope="col"
+          className="border-b border-border bg-muted px-0 text-center font-semibold text-foreground"
+        >
           <span className="sr-only">수정·삭제</span>
         </th>
       ) : null}
@@ -1218,30 +1257,34 @@ export function RoadRewardDetailPanel({
                             isSelected && "bg-primary/5"
                           )}
                         >
-                          <td
-                            className="min-w-0 truncate py-0 pl-1.5 pr-1 text-left text-foreground"
+                          <ParcelListCell
+                            align="left"
+                            className={PARCEL_LIST_COL.addr.td}
                             title={addr || undefined}
                           >
                             {addr || "—"}
-                          </td>
-                          <td
-                            className="min-w-0 truncate px-1 py-0 text-center text-foreground"
+                          </ParcelListCell>
+                          <ParcelListCell
+                            align="center"
+                            className={PARCEL_LIST_COL.jimok.td}
                             title={p.jimok || undefined}
                           >
                             {formatCell(p.jimok)}
-                          </td>
-                          <td
-                            className="min-w-0 truncate px-1 py-0 text-center tabular-nums text-foreground"
+                          </ParcelListCell>
+                          <ParcelListCell
+                            align="center"
+                            className={PARCEL_LIST_COL.area.td}
                             title={areaLabel}
                           >
                             {areaLabel}
-                          </td>
-                          <td
-                            className="min-w-0 truncate py-0 pl-1 pr-1.5 text-right tabular-nums text-foreground"
+                          </ParcelListCell>
+                          <ParcelListCell
+                            align="right"
+                            className={PARCEL_LIST_COL.amount.td}
                             title={amountLabel}
                           >
                             {amountLabel}
-                          </td>
+                          </ParcelListCell>
                           {isEditing ? (
                             <td className="px-0 py-0">
                               <div
