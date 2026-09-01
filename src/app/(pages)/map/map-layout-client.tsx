@@ -33,6 +33,15 @@ import { VillagePatrolListPanel } from "./_mapContents/safty/villagePatrol/Villa
 import { SafetyHospitalBadPanel } from "./_mapContents/safty/safetyHospitalBad/SafetyHospitalBadPanel"
 import { SafetyJsjReservoirPanel } from "./_mapContents/safty/saftyJsj/SafetyJsjReservoirPanel"
 import { RoadDocManualPanel } from "./_mapContents/road/roadDoc/roadDocManualPanel"
+import { RoadWorkHandbookListPanel } from "./_mapContents/road/roadWorkHandbook/RoadWorkHandbookListPanel"
+import { RoadWorkHandbookDetailPanel } from "./_mapContents/road/roadWorkHandbook/RoadWorkHandbookDetailPanel"
+import { RoadWorkHandbookMapProvider } from "./_mapContents/road/roadWorkHandbook/roadWorkHandbookMapContext"
+import { RoadWorkHandbookMapHandler } from "./_mapContents/road/roadWorkHandbook/RoadWorkHandbookMapHandler"
+import {
+  handbookMapSessionKey,
+  type HandbookDetailSelection,
+  type HandbookViewMode,
+} from "./_mapContents/road/roadWorkHandbook/roadWorkHandbookData"
 import { RoadCctvPanel } from "./_mapContents/road/roadCCTV/RoadCctvPanel"
 import { RoadInfraPanel } from "./_mapContents/road/roadInfra/RoadInfraPanel"
 import {
@@ -111,6 +120,7 @@ import {
 } from "./_mapContents/occupationLedger/occupationLedgerMapSync"
 import {
   findOpenedOccupationLedgerSerEng,
+  getOccupationLedgerBinding,
   isOccupationLedgerOpenedToken,
 } from "@/lib/occupationLedgerBinding"
 import {
@@ -238,6 +248,13 @@ const ROAD_DOC_PANEL_DEFAULT_WIDTH = 380
 const ROAD_DOC_PANEL_MIN_WIDTH = 280
 const ROAD_DOC_PANEL_MAX_WIDTH = 640
 
+const ROAD_WORK_HANDBOOK_PANEL_DEFAULT_WIDTH = 380
+const ROAD_WORK_HANDBOOK_PANEL_MIN_WIDTH = 320
+const ROAD_WORK_HANDBOOK_PANEL_MAX_WIDTH = 560
+const ROAD_WORK_HANDBOOK_DETAIL_DEFAULT_WIDTH = 400
+const ROAD_WORK_HANDBOOK_DETAIL_MIN_WIDTH = 320
+const ROAD_WORK_HANDBOOK_DETAIL_MAX_WIDTH = 640
+
 const ROAD_CCTV_PANEL_DEFAULT_WIDTH = 380
 const ROAD_CCTV_PANEL_MIN_WIDTH = 300
 const ROAD_CCTV_PANEL_MAX_WIDTH = 560
@@ -282,6 +299,7 @@ const SAFETY_HOSPITAL_BED_OPENED_KEY = "safetyBedState"
 /** serviceList `ser_eng`: jsjWaterLevel — 저수지 수위(saftyJsj) */
 const JSJ_WATER_LEVEL_OPENED_KEY = "jsjWaterLevel"
 const ROAD_DOC_OPENED_KEY = "roadDoc"
+const ROAD_WORK_HANDBOOK_OPENED_KEY = "roadWorkHandbook"
 const ROAD_CCTV_OPENED_KEY = "roadCCTV"
 const ROAD_INFRA_OPENED_KEY = "roadInfra"
 const ROAD_USE_LEDGER_OPENED_KEY = "roadUseLedger"
@@ -504,6 +522,7 @@ function MapLayoutContent({
   const safetyHospitalBedOpen = openedWindows.includes(SAFETY_HOSPITAL_BED_OPENED_KEY)
   const jsjWaterLevelOpen = openedWindows.includes(JSJ_WATER_LEVEL_OPENED_KEY)
   const roadDocOpen = openedWindows.includes(ROAD_DOC_OPENED_KEY)
+  const roadWorkHandbookOpen = openedWindows.includes(ROAD_WORK_HANDBOOK_OPENED_KEY)
   const roadCctvOpen = openedWindows.includes(ROAD_CCTV_OPENED_KEY)
   const roadInfraOpen = openedWindows.includes(ROAD_INFRA_OPENED_KEY)
   const parcelAnalysisOpen = openedWindows.includes(PARCEL_ANALYSIS_OPENED_KEY)
@@ -578,6 +597,9 @@ function MapLayoutContent({
   const [occupationLedgerDetailId, setOccupationLedgerDetailId] = useState<string | null>(null)
   const [occupationLedgerListRefreshKey, setOccupationLedgerListRefreshKey] = useState(0)
   const occupationLedgerDetailOpen = occupationLedgerOpen && Boolean(occupationLedgerDetailId)
+  const [roadWorkHandbookDetail, setRoadWorkHandbookDetail] = useState<HandbookDetailSelection | null>(null)
+  const [roadWorkHandbookMode, setRoadWorkHandbookMode] = useState<HandbookViewMode>("target")
+  const roadWorkHandbookDetailOpen = roadWorkHandbookOpen && roadWorkHandbookDetail != null
   /** 보상편입용지 — DB(road_reward) 조회·저장 */
   const [roadRewardCases, setRoadRewardCases] = useState<RoadRewardCase[]>([])
   const [roadRewardSelectedId, setRoadRewardSelectedId] = useState<string | null>(null)
@@ -685,6 +707,12 @@ function MapLayoutContent({
   )
   const [jsjReservoirPanelWidth, setJsjReservoirPanelWidth] = useState(JSJ_RESERVOIR_PANEL_DEFAULT_WIDTH)
   const [roadDocPanelWidth, setRoadDocPanelWidth] = useState(ROAD_DOC_PANEL_DEFAULT_WIDTH)
+  const [roadWorkHandbookPanelWidth, setRoadWorkHandbookPanelWidth] = useState(
+    ROAD_WORK_HANDBOOK_PANEL_DEFAULT_WIDTH
+  )
+  const [roadWorkHandbookDetailWidth, setRoadWorkHandbookDetailWidth] = useState(
+    ROAD_WORK_HANDBOOK_DETAIL_DEFAULT_WIDTH
+  )
   const [roadCctvPanelWidth, setRoadCctvPanelWidth] = useState(ROAD_CCTV_PANEL_DEFAULT_WIDTH)
   const [roadInfraPanelWidth, setRoadInfraPanelWidth] = useState(ROAD_INFRA_PANEL_DEFAULT_WIDTH)
   const [parcelAnalysisPanelWidth, setParcelAnalysisPanelWidth] = useState(PARCEL_ANALYSIS_PANEL_DEFAULT_WIDTH)
@@ -795,6 +823,8 @@ function MapLayoutContent({
     (safetyHospitalBedOpen ? safetyHospitalBedPanelWidth : 0) +
     (jsjWaterLevelOpen ? jsjReservoirPanelWidth : 0) +
     (roadDocOpen ? roadDocPanelWidth : 0) +
+    (roadWorkHandbookOpen ? roadWorkHandbookPanelWidth : 0) +
+    (roadWorkHandbookDetailOpen ? roadWorkHandbookDetailWidth : 0) +
     (roadCctvOpen ? roadCctvPanelWidth : 0) +
     // (useLedgerProtoOpen ? useLedgerProtoPanelWidth : 0) +
     // (useLedgerProtoDetailOpen ? useLedgerProtoDetailWidth : 0) +
@@ -904,7 +934,12 @@ function MapLayoutContent({
   const jsjReservoirPanelLeftPx =
     safetyHospitalBedPanelLeftPx + (safetyHospitalBedOpen ? safetyHospitalBedPanelWidth : 0)
   const roadDocPanelLeftPx = jsjReservoirPanelLeftPx + (jsjWaterLevelOpen ? jsjReservoirPanelWidth : 0)
-  const roadCctvPanelLeftPx = roadDocPanelLeftPx + (roadDocOpen ? roadDocPanelWidth : 0)
+  const roadWorkHandbookPanelLeftPx =
+    roadDocPanelLeftPx + (roadDocOpen ? roadDocPanelWidth : 0)
+  const roadWorkHandbookDetailLeftPx =
+    roadWorkHandbookPanelLeftPx + (roadWorkHandbookOpen ? roadWorkHandbookPanelWidth : 0)
+  const roadCctvPanelLeftPx =
+    roadWorkHandbookDetailLeftPx + (roadWorkHandbookDetailOpen ? roadWorkHandbookDetailWidth : 0)
   // 점용대장(프) 더미 leftPx 비활성 — 점사용료는 CCTV 다음에 바로 배치
   // const useLedgerProtoPanelLeftPx =
   //   roadCctvPanelLeftPx + (roadCctvOpen ? roadCctvPanelWidth : 0)
@@ -1366,6 +1401,13 @@ function MapLayoutContent({
   }, [occupationLedgerOpen])
 
   useEffect(() => {
+    if (!roadWorkHandbookOpen) {
+      setRoadWorkHandbookDetail(null)
+      setRoadWorkHandbookMode("target")
+    }
+  }, [roadWorkHandbookOpen])
+
+  useEffect(() => {
     setOccupationLedgerDetailId(null)
   }, [occupationLedgerSerEng])
 
@@ -1601,6 +1643,13 @@ function MapLayoutContent({
 
   const handleCloseRoadDoc = () => {
     const next = openedWindows.filter((w) => w !== ROAD_DOC_OPENED_KEY)
+    setOpened(next)
+  }
+
+  const handleCloseRoadWorkHandbook = () => {
+    setRoadWorkHandbookDetail(null)
+    setRoadWorkHandbookMode("target")
+    const next = openedWindows.filter((w) => w !== ROAD_WORK_HANDBOOK_OPENED_KEY)
     setOpened(next)
   }
 
@@ -2597,6 +2646,50 @@ function MapLayoutContent({
               </MapSideListPanel>
             </div>
           )}
+          {roadWorkHandbookOpen && (
+            <RoadWorkHandbookMapProvider
+              sessionKey={handbookMapSessionKey(roadWorkHandbookMode, roadWorkHandbookDetail)}
+            >
+              <div className="contents">
+                <div className="pointer-events-auto shrink-0">
+                  <MapSideListPanel
+                    width={roadWorkHandbookPanelWidth}
+                    minWidth={ROAD_WORK_HANDBOOK_PANEL_MIN_WIDTH}
+                    maxWidth={ROAD_WORK_HANDBOOK_PANEL_MAX_WIDTH}
+                    leftOffsetPx={roadWorkHandbookPanelLeftPx}
+                    onWidthChange={setRoadWorkHandbookPanelWidth}
+                    contentClassName="overflow-hidden"
+                  >
+                  <RoadWorkHandbookListPanel
+                    onClose={handleCloseRoadWorkHandbook}
+                    mode={roadWorkHandbookMode}
+                    onModeChange={setRoadWorkHandbookMode}
+                    selected={roadWorkHandbookDetail}
+                    onSelect={setRoadWorkHandbookDetail}
+                  />
+                  </MapSideListPanel>
+                </div>
+                {roadWorkHandbookDetail && (
+                  <div className="pointer-events-auto shrink-0">
+                    <MapSideListPanel
+                      width={roadWorkHandbookDetailWidth}
+                      minWidth={ROAD_WORK_HANDBOOK_DETAIL_MIN_WIDTH}
+                      maxWidth={ROAD_WORK_HANDBOOK_DETAIL_MAX_WIDTH}
+                      leftOffsetPx={roadWorkHandbookDetailLeftPx}
+                      onWidthChange={setRoadWorkHandbookDetailWidth}
+                      contentClassName="overflow-hidden"
+                    >
+                      <RoadWorkHandbookDetailPanel
+                        selection={roadWorkHandbookDetail}
+                        onClose={() => setRoadWorkHandbookDetail(null)}
+                      />
+                    </MapSideListPanel>
+                  </div>
+                )}
+                <RoadWorkHandbookMapHandler />
+              </div>
+            </RoadWorkHandbookMapProvider>
+          )}
           {roadCctvOpen && (
             <div className="pointer-events-auto shrink-0">
               <MapSideListPanel
@@ -2780,9 +2873,19 @@ function MapLayoutContent({
                 open={protoUserAccountOpen}
                 onClose={() => setProtoUserAccountOpen(false)}
                 onSelectShootingRequest={(id) => setMyInfoShootingModalId(id)}
-                onOpenLedger={(ledgerId) => {
+                onOpenLedger={(item) => {
+                  const key = String(item.notifKey ?? "")
+                  if (key.startsWith("occup-expiry:")) {
+                    const serEng = getOccupationLedgerBinding({
+                      system: item.systemScope,
+                    })?.serEng
+                    if (!serEng) return
+                    setOpened([serEng])
+                    setOccupationLedgerDetailId(item.targetId)
+                    return
+                  }
                   setOpened([USAGE_DATA_AS_OPENED_KEY])
-                  setUsageDataAsDetailId(ledgerId)
+                  setUsageDataAsDetailId(item.targetId)
                 }}
                 onOpenFee={(feeId) => {
                   const feeSerEng = getUseFeeBinding({ system: systemKeyFromUrl }).serEng

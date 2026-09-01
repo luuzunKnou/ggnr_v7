@@ -13,7 +13,10 @@ import {
 } from '@/lib/occupationPermitNo';
 import {
   getOccupationLedgerBinding,
+  OCCUPATION_LEDGER_PREFIXES,
+  occupationLedgerPrefixToSystemKey,
   type OccupationLedgerBinding,
+  type OccupationLedgerPrefix,
 } from '@/lib/occupationLedgerBinding';
 import {
   getEditableFieldDefinitionsForTable,
@@ -39,6 +42,17 @@ export type OccupationLedgerListRow = {
   status: string;
 };
 
+export type OccupationLedgerExpiryNotifRow = {
+  rowKey: string;
+  name: string;
+  endDate: string;
+  daysRemaining: number;
+  prefix: OccupationLedgerPrefix;
+  systemScope: 'river' | 'road' | 'build';
+};
+
+const EXPIRY_NOTIF_DEFAULT_WITHIN_DAYS = 15;
+
 export type OccupationLedgerDetailAttr = {
   field: string;
   label: string;
@@ -53,6 +67,22 @@ function esc(value: string): string {
 
 function quoteIdent(name: string): string {
   return `"${String(name).replace(/"/g, '""')}"`;
+}
+
+function startOfLocalDayMs(raw: string | Date): number | null {
+  if (raw instanceof Date) {
+    if (Number.isNaN(raw.getTime())) return null;
+    return new Date(raw.getFullYear(), raw.getMonth(), raw.getDate()).getTime();
+  }
+  const ymd = tryFormatToYmd(String(raw ?? '').trim());
+  if (!ymd) return null;
+  const [y, m, d] = ymd.split('-').map(Number);
+  if (!y || !m || !d) return null;
+  return new Date(y, m - 1, d).getTime();
+}
+
+function diffLocalCalendarDays(fromMs: number, toMs: number): number {
+  return Math.round((toMs - fromMs) / 86_400_000);
 }
 
 function resolveBinding(params?: {
@@ -382,6 +412,56 @@ export async function getOccupationLedgerList(params?: {
   } catch (e: unknown) {
     return { rows: [], error: e instanceof Error ? e.message : String(e), title: binding.title };
   }
+}
+
+/** 점용종료일이 N일 이내인 공통점용 알림 목록 (하천·도로·국공유지) */
+export async function getOccupationLedgerExpiryNotifications(params?: {
+  withinDays?: number;
+}): Promise<{ items: OccupationLedgerExpiryNotifRow[]; error?: string }> {
+  const withinDays = Math.max(
+    1,
+    Math.min(365, Math.trunc(Number(params?.withinDays ?? EXPIRY_NOTIF_DEFAULT_WITHIN_DAYS)))
+  );
+  const todayMs = startOfLocalDayMs(new Date());
+  if (todayMs == null) return { items: [] };
+
+  const items: OccupationLedgerExpiryNotifRow[] = [];
+  const errors: string[] = [];
+  for (const prefix of OCCUPATION_LEDGER_PREFIXES) {
+    const binding = getOccupationLedgerBinding({ prefix });
+    if (!binding) continue;
+    const list = await getOccupationLedgerList({ serEng: binding.serEng });
+    if (list.error) {
+      if (/테이블이 없습니다/.test(list.error)) continue;
+      errors.push(list.error);
+      continue;
+    }
+    for (const row of list.rows) {
+      const endYmd = tryFormatToYmd(String(row.endDate ?? '').trim());
+      if (!endYmd) continue;
+      const endMs = startOfLocalDayMs(endYmd);
+      if (endMs == null) continue;
+      const daysRemaining = diffLocalCalendarDays(todayMs, endMs);
+      if (daysRemaining < 0 || daysRemaining > withinDays) continue;
+      items.push({
+        rowKey: row.rowKey,
+        name: row.name || row.rowKey,
+        endDate: endYmd,
+        daysRemaining,
+        prefix,
+        systemScope: occupationLedgerPrefixToSystemKey(prefix),
+      });
+    }
+  }
+
+  items.sort((a, b) => {
+    if (a.daysRemaining !== b.daysRemaining) return a.daysRemaining - b.daysRemaining;
+    if (a.endDate !== b.endDate) return a.endDate.localeCompare(b.endDate);
+    if (a.prefix !== b.prefix) return a.prefix.localeCompare(b.prefix);
+    return a.rowKey.localeCompare(b.rowKey);
+  });
+
+  return errors.length ? { items, error: errors.join(' | ') } : { items };
 }
 
 /** 지도 이동용 extent — 점용 본표(geom)만. 필지·물건지 합치면 중심이 어긋남 */

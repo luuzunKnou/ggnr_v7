@@ -176,11 +176,18 @@ export async function getUseFeeUnpaidDueNotifications(params?: {
     const items: UseFeeUnpaidDueNotifRow[] = [];
     for (const prefix of USE_FEE_PREFIXES) {
       const nglFeeList = getNglFeeListTableByPrefix(prefix);
-      const rows = await db
-        .select()
-        .from(nglFeeList)
-        .where(eq(nglFeeList.feeStatus, '미납'))
-        .limit(10000);
+      let rows: (typeof nglFeeList.$inferSelect)[] = [];
+      try {
+        rows = await db
+          .select()
+          .from(nglFeeList)
+          .where(eq(nglFeeList.feeStatus, '미납'))
+          .limit(10000);
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        if (/does not exist/i.test(msg) || /테이블이 없습니다/.test(msg)) continue;
+        throw e;
+      }
       for (const row of rows) {
         const dueYmd = toYmd(listDateYmd(row));
         if (!dueYmd) continue;

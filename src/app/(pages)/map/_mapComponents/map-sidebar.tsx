@@ -7,9 +7,6 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { ChevronDown, ChevronUp, UserRound } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { call } from '@/lib/api';
-import { sidebarServicePolicy } from '@/lib/accessClient';
-import { useMyAccessSnapshot } from '@/hooks/useMyAccessSnapshot';
-import { ResourceAccessDeniedDialog } from '@/app/(pages)/_components/AccessRequest';
 import { getOpenedKeyForSerEng } from '@/lib/mapServiceOpened';
 import { openShapeEditorMapWindow } from '@/lib/shapeEditorWindow';
 import { requestCloseMapFloatingDetail } from './mapFloatingDetailEvent';
@@ -122,10 +119,6 @@ export function MapSidebar({ indexLogoSrc }: { indexLogoSrc: string }) {
 
   const [serviceListConfig, setServiceListConfig] = useState<ServiceItem[]>([]);
   const [systemList, setSystemList] = useState<{ sys_key: string; serviceList?: string[] }[]>([]);
-  const [deniedSerOpen, setDeniedSerOpen] = useState(false);
-  const [deniedSerEng, setDeniedSerEng] = useState('');
-  const [bootProject, setBootProject] = useState('');
-  const { snapshot } = useMyAccessSnapshot();
 
   const systemKeyFromUrl = searchParams.get('system') ?? '';
 
@@ -171,12 +164,6 @@ export function MapSidebar({ indexLogoSrc }: { indexLogoSrc: string }) {
   useEffect(() => {
     fetchServiceList();
     fetchSystemList();
-    call('', 'POST', { service: 'configService', action: 'getBootProject', params: {} })
-      .then((res) => {
-        const data = res?.data ?? res;
-        setBootProject(String(data?.project ?? '').trim());
-      })
-      .catch(() => setBootProject(''));
   }, [fetchServiceList, fetchSystemList]);
 
   useEffect(() => {
@@ -200,13 +187,7 @@ export function MapSidebar({ indexLogoSrc }: { indexLogoSrc: string }) {
   const serviceMap = new Map(serviceListConfig.map((s) => [s.ser_eng ?? '', s]));
   const sidebarItems: ServiceItem[] = serviceKeysInOrder
     .map((key) => serviceMap.get(key))
-    .filter((s): s is ServiceItem => s != null)
-    .filter((item) => {
-      // 비공개 Y → 관리자 포함 사이드바에서 숨김
-      if (item.ser_is_private === true) return false;
-      if (bootProject === 'build_uj' && item.ser_eng === 'riverUseLedger') return false;
-      return true;
-    });
+    .filter((s): s is ServiceItem => s != null);
 
   // master(jdong): roadDataFlow 열림 시 다른 메뉴 잠금 제거
 
@@ -315,19 +296,12 @@ export function MapSidebar({ indexLogoSrc }: { indexLogoSrc: string }) {
               const serEng = item.ser_eng ?? '';
               const openedKey = getOpenedKeyForSerEng(serEng);
               const label = item.ser_kor ?? serEng;
-              const isPriv = item.ser_is_private === true;
-              const policy = isPriv ? sidebarServicePolicy(snapshot, serEng, true) : 'open';
               const onSvcClick =
-                policy === 'block'
-                  ? () => {
-                      setDeniedSerEng(serEng);
-                      setDeniedSerOpen(true);
-                    }
-                  : serEng === 'shapeEditor'
-                    ? handleShapeEditorClick
-                    : serEng === 'parcelAnalysis'
-                      ? () => toggleWindow(getOpenedKeyForSerEng(serEng))
-                      : () => toggleWindow(openedKey);
+                serEng === 'shapeEditor'
+                  ? handleShapeEditorClick
+                  : serEng === 'parcelAnalysis'
+                    ? () => toggleWindow(getOpenedKeyForSerEng(serEng))
+                    : () => toggleWindow(openedKey);
               return (
                 <SidebarButton
                   key={serEng}
@@ -335,7 +309,6 @@ export function MapSidebar({ indexLogoSrc }: { indexLogoSrc: string }) {
                   label={label}
                   onClick={onSvcClick}
                   isActive={
-                    policy !== 'block' &&
                     serEng !== 'shapeEditor' &&
                     openedWindows.includes(openedKey)
                   }
@@ -380,12 +353,6 @@ export function MapSidebar({ indexLogoSrc }: { indexLogoSrc: string }) {
           <ImportantNotifSidebarBubble anchorRef={myInfoAnchorRef} />
         </div>
       </div>
-      <ResourceAccessDeniedDialog
-        open={deniedSerOpen}
-        onOpenChange={setDeniedSerOpen}
-        resource="service"
-        serEng={deniedSerEng}
-      />
     </aside>
   );
 }

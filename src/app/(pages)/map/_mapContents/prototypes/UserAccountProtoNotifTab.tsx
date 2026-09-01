@@ -28,7 +28,7 @@ type Props = {
   onDismiss: (item: ProtoNotifItem) => void
   onDismissAll: () => void
   onMarkRead: (item: ProtoNotifItem) => void
-  onOpenLedger: (ledgerId: string) => void
+  onOpenLedger: (item: ProtoNotifItem) => void
   onOpenFee: (feeId: string) => void
   onClosePanel: () => void
 }
@@ -60,7 +60,7 @@ export function UserAccountProtoNotifTab({
   const openItem = (item: ProtoNotifItem) => {
     onMarkRead(item)
     if (item.target === 'fee') onOpenFee(item.targetId)
-    else onOpenLedger(item.targetId)
+    else onOpenLedger(item)
     onClosePanel()
   }
 

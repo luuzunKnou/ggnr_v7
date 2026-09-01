@@ -229,6 +229,11 @@ function diffLocalCalendarDays(fromMs: number, toMs: number): number {
   return Math.round((toMs - fromMs) / 86_400_000);
 }
 
+/** 울진 하천점용 본표 존재 여부 — 알림 출처 분기용 */
+export async function usageDataAsTableExists(): Promise<boolean> {
+  return (await resolveTableWithSchema(MAIN_TABLE)) != null;
+}
+
 /** 점용종료일이 N일 이내인 하천점용대장 알림 목록 */
 export async function getUsageDataAsExpiryNotifications(params?: {
   withinDays?: number;
@@ -238,7 +243,11 @@ export async function getUsageDataAsExpiryNotifications(params?: {
     Math.min(365, Math.trunc(Number(params?.withinDays ?? EXPIRY_NOTIF_DEFAULT_WITHIN_DAYS)))
   );
   const list = await getUsageDataAsList();
-  if (list.error) return { items: [], error: list.error };
+  if (list.error) {
+    // 울진 전용 테이블 — 없는 프로젝트에서는 후보만 비우고 오류로 올리지 않음
+    if (/테이블이 없습니다/.test(list.error)) return { items: [] };
+    return { items: [], error: list.error };
+  }
 
   const todayMs = startOfLocalDayMs(new Date());
   if (todayMs == null) return { items: [] };
