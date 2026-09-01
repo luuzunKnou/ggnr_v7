@@ -1,5 +1,4 @@
 import type { NextRequest } from 'next/server';
-import { pickHostMachinePrivateIpv4 } from '@/lib/hostMachineIpv4';
 export { normalizeClientIp } from '@/lib/normalizeClientIp';
 import { normalizeClientIp } from '@/lib/normalizeClientIp';
 
@@ -77,6 +76,9 @@ export function pickClientIp(
   if (effectiveServer && isPrivateIpv4(effectiveServer)) return effectiveServer;
 
   if (options?.osFallback) {
+    const { pickHostMachinePrivateIpv4 } =
+      // eslint-disable-next-line @typescript-eslint/no-require-imports -- server-only, 클라이언트 번들 제외
+      require('@/lib/hostMachineIpv4') as typeof import('@/lib/hostMachineIpv4');
     const osNicIp = pickHostMachinePrivateIpv4();
     if (osNicIp && isPrivateIpv4(osNicIp)) return osNicIp;
   }
