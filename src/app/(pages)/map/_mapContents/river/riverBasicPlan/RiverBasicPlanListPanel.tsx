@@ -5,17 +5,14 @@ import { Search, X } from "lucide-react";
 import { call } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import {
-  riverBasicPlanAsDefineTable,
-  riverBasicPlanGdWmsDefineTables,
-  riverBasicPlanHdDefineTable,
-  riverBasicPlanIndexDefineTable,
-  riverBasicPlanJdDefineTable,
+  riverBasicPlanRiverNameFilterableLayers,
   buildRiverBasicPlanRiverNameCqlByLayer,
   type RiverBasicPlanTab,
 } from "@/lib/riverBasicPlanMapAttachmentLayers";
 import { useMapContext } from "../../../_mapComponents/MapContext";
 import { MAP_AUTO_NAV_MAX_ZOOM } from "../../../_mapComponents/config/mapDefaults";
 import { scheduleFitMapToExtent3857 } from "../../../_mapComponents/config/mapAutoNavigation";
+import { useRiverBasicPlanExistingMapLayers } from "./useRiverBasicPlanExistingMapLayers";
 
 type RiverType = RiverBasicPlanTab;
 
@@ -34,13 +31,7 @@ type Props = {
 };
 
 function defaultLayersForTab(tab: RiverType): readonly string[] {
-  return [
-    riverBasicPlanIndexDefineTable(tab),
-    riverBasicPlanAsDefineTable(tab),
-    riverBasicPlanJdDefineTable(tab),
-    riverBasicPlanHdDefineTable(tab),
-    ...riverBasicPlanGdWmsDefineTables(tab),
-  ];
+  return riverBasicPlanRiverNameFilterableLayers(tab);
 }
 
 export function RiverBasicPlanListPanel({
@@ -59,23 +50,30 @@ export function RiverBasicPlanListPanel({
   /** true: 테이블 없음 등 안내(muted), false: 조회 실패(destructive) */
   const [errorSoft, setErrorSoft] = useState(false);
   const [items, setItems] = useState<RiverItem[]>([]);
+  const existingMapLayers = useRiverBasicPlanExistingMapLayers(tab);
 
-  /** 패널 진입·탭 변경 시 해당 탭 기본 레이어 켜기, 언마운트 시 양쪽 끄기 */
+  /** 패널 진입·탭 변경 시 있는 테이블만 켜기, 없으면 끄기. 언마운트 시 양쪽 끄기 */
   useEffect(() => {
     const ctx = mapContextRef.current;
     if (!ctx?.setVisibleLayerNames) return;
-    const onLayers = defaultLayersForTab(tab);
+    const thisTabLayers = defaultLayersForTab(tab);
     const offLayers = defaultLayersForTab(tab === "smallRiver" ? "river" : "smallRiver");
+    const onLayers = existingMapLayers ?? [];
     ctx.setVisibleLayerNames((prev) => {
       const next = new Set(prev);
       let changed = false;
       for (const id of offLayers) {
         if (next.delete(id)) changed = true;
       }
-      for (const id of onLayers) {
-        if (!next.has(id)) {
-          next.add(id);
-          changed = true;
+      for (const id of thisTabLayers) {
+        if (!onLayers.includes(id) && next.delete(id)) changed = true;
+      }
+      if (existingMapLayers != null) {
+        for (const id of onLayers) {
+          if (!next.has(id)) {
+            next.add(id);
+            changed = true;
+          }
         }
       }
       return changed ? next : prev;
@@ -86,14 +84,14 @@ export function RiverBasicPlanListPanel({
       c.setVisibleLayerNames((prev) => {
         const next = new Set(prev);
         let changed = false;
-        for (const id of [...onLayers, ...offLayers]) {
+        for (const id of [...thisTabLayers, ...offLayers]) {
           if (next.delete(id)) changed = true;
         }
         return changed ? next : prev;
       });
       c.setServiceWmsCqlByLayer?.(null);
     };
-  }, [tab]);
+  }, [tab, existingMapLayers]);
 
   /** 목록에서 하천 선택 시 해당 하천만 WMS 표시 */
   useEffect(() => {

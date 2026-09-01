@@ -765,6 +765,7 @@ function memoCreateSql(tableName: string): string {
 CREATE TABLE IF NOT EXISTS layer."${t}" (
   memo_key SERIAL PRIMARY KEY,
   geom geometry(Point, 5181),
+  address text,
   memo_title text,
   memo_contents text,
   memo_create_date text,
@@ -1281,6 +1282,23 @@ export async function ensureNextGenLinkageTables(result?: EnsureResult): Promise
   return out;
 }
 
+/** 기존 memo_* 테이블에 주소 컬럼 보강 */
+async function ensureMemoAddressColumn(tableName: string, result: EnsureResult): Promise<void> {
+  const fq = `layer.${tableName}`;
+  try {
+    if ((await tableExists('layer', tableName)) !== 'BASE TABLE') return;
+    if (await columnExists('layer', tableName, 'address')) return;
+    await db.execute(sql.raw(`ALTER TABLE layer."${tableName.replace(/"/g, '""')}" ADD COLUMN address text`));
+    await db.execute(
+      sql.raw(`COMMENT ON COLUMN layer."${tableName.replace(/"/g, '""')}".address IS '주소'`)
+    );
+    result.created.push(`${fq}.address`);
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    result.errors.push(`${fq}.address: ${msg}`);
+  }
+}
+
 export async function ensureMemoTables(result?: EnsureResult): Promise<EnsureResult> {
   const out: EnsureResult = result ?? { created: [], moved: [], existed: [], errors: [] };
   await ensureSchemaLayer();
@@ -1290,6 +1308,7 @@ export async function ensureMemoTables(result?: EnsureResult): Promise<EnsureRes
       createSql: memoCreateSql(m.tableName),
       result: out,
     });
+    await ensureMemoAddressColumn(m.tableName, out);
   }
   return out;
 }

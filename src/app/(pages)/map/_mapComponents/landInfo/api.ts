@@ -15,6 +15,7 @@ import {
   sortPricesLatestFirst,
   type LandInfoMapConfig,
 } from '@/lib/vworldParcelLandClient';
+import { getAddressFromCoord, searchAddress } from '../addressSearch/vworldAddressSearch';
 import { transformCoordinate } from '../services/coordinateService';
 
 type JsonObject = Record<string, unknown>;
@@ -191,6 +192,57 @@ function parsePortalRows(text: string): BuildingLedgerRow[] {
   const jsonRows = parseJsonRows(text);
   if (jsonRows.length) return jsonRows;
   return parseXmlRows(text);
+}
+
+export function normalizePnu(value: unknown): string | null {
+  const digits = String(value ?? '').replace(/\D/g, '');
+  return /^\d{19}$/.test(digits) ? digits : null;
+}
+
+/** 우클릭 필지정보와 동일 — 지적 → 역지오코딩 → (필요 시) 주소검색 PNU */
+export async function resolveParcelIdentityLikeMapClick(args: {
+  coordinate3857: [number, number];
+  vworldKey?: string;
+  addressHint?: string;
+}): Promise<ParcelIdentity> {
+  const vworldKey = String(args.vworldKey ?? '').trim();
+  const addressHint = String(args.addressHint ?? '').trim();
+
+  const fromJijuk = await fetchParcelIdentityAtPoint(args.coordinate3857, 'EPSG:3857');
+  let pnu = fromJijuk.pnu;
+  let jibunFromParcel = fromJijuk.jibunFromParcel;
+
+  if (vworldKey) {
+    const wgs84 = transformCoordinate(args.coordinate3857, 'EPSG:3857', 'EPSG:4326');
+    if (wgs84) {
+      const [lon, lat] = wgs84;
+      try {
+        const geocode = await getAddressFromCoord(lon, lat, { apiKey: vworldKey });
+        if (geocode) {
+          pnu = pnu ?? normalizePnu(geocode.pnu);
+          const geocodeJibun = String(geocode.jibun ?? '').trim();
+          if (geocodeJibun) jibunFromParcel = geocodeJibun;
+        }
+      } catch {
+        /* 역지오코딩 실패 시 다음 폴백 */
+      }
+    }
+  }
+
+  if (!pnu && vworldKey && addressHint) {
+    try {
+      const results = await searchAddress(addressHint, { apiKey: vworldKey, limit: 1 });
+      const item = results[0];
+      pnu = normalizePnu(item?.id) ?? pnu;
+      if (!jibunFromParcel) {
+        jibunFromParcel = String(item?.jibunAddress ?? '').trim() || null;
+      }
+    } catch {
+      /* 주소검색 폴백 실패 */
+    }
+  }
+
+  return { pnu, jibunFromParcel };
 }
 
 export async function fetchParcelIdentityAtPoint(

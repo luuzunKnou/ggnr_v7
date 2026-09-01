@@ -1,12 +1,12 @@
 <layer>
   <name>soinn00001</name>
-  <id>LayerInfoImpl-soinn00001:20260731:1421</id>
+  <id>LayerInfoImpl--4fca501:1a05b44e440:-7feb</id>
   <type>VECTOR</type>
   <defaultStyle>
     <id>StyleInfoImpl-soinn00001:20260731:1421</id>
   </defaultStyle>
   <resource class="featureType">
-    <id>FeatureTypeInfoImpl-soinn00001:20260731:1421</id>
+    <id>FeatureTypeInfoImpl--4fca501:1a05b44e440:-7fec</id>
   </resource>
   <queryable>true</queryable>
   <opaque>false</opaque>
@@ -14,5 +14,6 @@
     <logoWidth>0</logoWidth>
     <logoHeight>0</logoHeight>
   </attribution>
-  <dateCreated>2026-07-31 05:21:00.000 UTC</dateCreated>
+  <dateCreated>2026-09-01 04:41:47.915 UTC</dateCreated>
+  <dateModified>2026-09-01 04:41:50.657 UTC</dateModified>
 </layer>

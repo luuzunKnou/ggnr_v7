@@ -3,7 +3,7 @@ import type { Map, MapBrowserEvent } from 'ol';
 import Overlay from 'ol/Overlay';
 import { unByKey } from 'ol/Observable';
 import { call } from '@/lib/api';
-import { getGeoServerBase } from '@/lib/geoserverUrl';
+import { getLegendGraphicUrl } from '../layerFactory/serviceLayerFactory';
 
 export interface IdentifyFeatureItem {
   titleValue: string;
@@ -37,21 +37,8 @@ function zoomToBuffer(zoom: number): number {
   return 300_000 * Math.pow(0.54, zoom);
 }
 
-const WORKSPACE = 'ggnr';
-
 export function getLegendUrl(layerName: string): string {
-  const base = getGeoServerBase();
-  const params = new URLSearchParams({
-    SERVICE: 'WMS',
-    REQUEST: 'GetLegendGraphic',
-    VERSION: '1.0.0',
-    LAYER: `${WORKSPACE}:${layerName}`,
-    STYLE: layerName,
-    FORMAT: 'image/png',
-    WIDTH: '20',
-    HEIGHT: '20',
-  });
-  return `${base}/wms?${params.toString()}`;
+  return getLegendGraphicUrl(layerName, layerName);
 }
 
 /**

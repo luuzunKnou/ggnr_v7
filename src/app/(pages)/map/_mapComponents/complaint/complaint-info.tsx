@@ -12,11 +12,14 @@ import {
   FileText,
   Check,
   X,
+  Crosshair,
 } from 'lucide-react';
 import { Input } from '@/app/shadcnComponents/ui/input';
 import { Button } from '@/app/shadcnComponents/ui/button';
 import { useMapContext } from '../MapContext';
 import { AddressSearchPanel } from '../addressSearch/AddressSearchPanel';
+import { useMapPointPick } from '../addressSearch/useMapPointPick';
+import { cn } from '@/lib/utils';
 
 export type ComplaintFormValues = {
   compName: string;
@@ -93,6 +96,18 @@ export function ComplaintInfo({ complaint, onSave, onDelete, onClose, saving = f
   const vworldApiKey = mapContext?.vworldApiKey ?? '';
   const [form, setForm] = useState<ComplaintFormValues>(() => toFormValues(complaint));
 
+  const { pickMode, startPick, stopPick, clearDraftPoint } = useMapPointPick({
+    vworldApiKey,
+    onPicked: ({ lon, lat, address }) => {
+      setForm((prev) => ({
+        ...prev,
+        compAdr: address || prev.compAdr,
+        lon,
+        lat,
+      }));
+    },
+  });
+
   useEffect(() => {
     setForm(toFormValues(complaint));
   }, [complaint.compKey, complaint.compName, complaint.compTel, complaint.compDate, complaint.compCg, complaint.compCt, complaint.compCu, complaint.compAdr, complaint.compContent]);
@@ -159,31 +174,54 @@ export function ComplaintInfo({ complaint, onSave, onDelete, onClose, saving = f
             주소
           </span>
           <div className="min-w-0 flex-1">
-            <AddressSearchPanel
-              layout="field"
-              includePlace
-              vworldApiKey={vworldApiKey}
-              initialQuery={form.compAdr}
-              placeholder="주소/지번/장소 검색"
-              onSelect={(item) => {
-                const adr =
-                  (item.roadAddress ?? '').trim() ||
-                  (item.jibunAddress ?? '').trim() ||
-                  (item.title ?? '').trim() ||
-                  (item.address ?? '').trim();
-                const lon = Number(item.point?.x);
-                const lat = Number(item.point?.y);
-                setForm((prev) => ({
-                  ...prev,
-                  compAdr: adr || prev.compAdr,
-                  lon: Number.isFinite(lon) ? lon : null,
-                  lat: Number.isFinite(lat) ? lat : null,
-                }));
-              }}
-              onClear={() =>
-                setForm((prev) => ({ ...prev, compAdr: '', lon: null, lat: null }))
-              }
-            />
+            <div className="flex items-start gap-2">
+              <div className="min-w-0 flex-1">
+                <AddressSearchPanel
+                  layout="field"
+                  includePlace
+                  vworldApiKey={vworldApiKey}
+                  initialQuery={form.compAdr}
+                  placeholder="주소/지번/장소 검색"
+                  onSelect={(item) => {
+                    const adr =
+                      (item.roadAddress ?? '').trim() ||
+                      (item.jibunAddress ?? '').trim() ||
+                      (item.title ?? '').trim() ||
+                      (item.address ?? '').trim();
+                    const lon = Number(item.point?.x);
+                    const lat = Number(item.point?.y);
+                    setForm((prev) => ({
+                      ...prev,
+                      compAdr: adr || prev.compAdr,
+                      lon: Number.isFinite(lon) ? lon : null,
+                      lat: Number.isFinite(lat) ? lat : null,
+                    }));
+                  }}
+                  onClear={() =>
+                    setForm((prev) => ({ ...prev, compAdr: '', lon: null, lat: null }))
+                  }
+                />
+              </div>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                title={pickMode ? '위치 지정 취소' : '지도에서 위치 찍기'}
+                aria-label={pickMode ? '위치 지정 취소' : '지도에서 위치 찍기'}
+                onClick={pickMode ? stopPick : startPick}
+                className={cn(
+                  'h-8 w-8 shrink-0 p-0',
+                  pickMode
+                    ? 'border-orange-300 bg-orange-50 text-orange-700 hover:bg-orange-50'
+                    : 'border-border bg-background text-muted-foreground hover:border-primary hover:bg-primary/15 hover:text-primary'
+                )}
+              >
+                {pickMode ? <X className="h-3.5 w-3.5" /> : <Crosshair className="h-3.5 w-3.5" />}
+              </Button>
+            </div>
+            {pickMode && (
+              <p className="mt-1 text-[11px] text-muted-foreground">지도를 클릭해 민원 위치를 지정하세요.</p>
+            )}
           </div>
         </div>
         <div className="flex items-start gap-2">
@@ -220,7 +258,10 @@ export function ComplaintInfo({ complaint, onSave, onDelete, onClose, saving = f
           <Button
             size="sm"
             title={saving ? '저장 중…' : '저장'}
-            onClick={() => onSave(form)}
+            onClick={async () => {
+              await onSave(form);
+              clearDraftPoint();
+            }}
             disabled={saving}
             className="h-[26px] min-h-[26px] cursor-pointer gap-1 px-2.5 text-[12px] font-light border border-border bg-muted/50 text-muted-foreground hover:border-primary hover:bg-primary/15 hover:text-primary disabled:cursor-not-allowed"
           >
