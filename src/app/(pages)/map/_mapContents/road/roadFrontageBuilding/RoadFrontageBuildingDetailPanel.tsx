@@ -82,7 +82,8 @@ const btnGhost =
 const btnDanger =
   'inline-flex h-7 items-center gap-1 rounded border border-red-200 bg-background px-2 text-[11px] font-medium text-red-600 hover:bg-red-50 disabled:opacity-50 dark:border-red-800 dark:text-red-400 dark:hover:bg-red-950/40';
 const BORDER = 'border-[1px] border-solid border-foreground/80';
-const FORM_TH_BG = 'bg-muted';
+/** 표 헤더 — 인쇄 서식(#CBC6DD)과 동일 톤. muted(#f5f5f5)와 secondary가 같아 구분 불가 */
+const FORM_TH_BG = 'bg-[#CBC6DD] dark:bg-zinc-600';
 const PAPER_SIZE_LABEL = '364mm × 257mm [백상지 200g/m²]';
 /** 원본 서식 건축물 내용 칸 수 */
 const FORM_DETAIL_MIN_ROWS = 5;
@@ -1601,7 +1602,7 @@ export function RoadFrontageBuildingDetailPanel({
           접도구역의 기존 건축물(공작물) 관리대장
         </h2>
 
-        <div className="rfb-print-page-form bg-background [&_table+table]:-mt-px">
+        <div className="rfb-print-page-form [&_table+table]:-mt-px">
           <table className={formTableClass}>
             <colgroup>
               <col style={{ width: '4.25rem' }} />

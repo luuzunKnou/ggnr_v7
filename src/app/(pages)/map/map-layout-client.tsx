@@ -400,8 +400,8 @@ const ROAD_REWARD_DETAIL_MAX_WIDTH = 720
 
 /** serviceList `ser_eng`: roadFrontageBuilding — 접도구역 건축물 관리대장(목업) */
 const ROAD_FRONTAGE_BUILDING_OPENED_KEY = "roadFrontageBuilding"
-const ROAD_FRONTAGE_BUILDING_PANEL_DEFAULT_WIDTH = 420
-const ROAD_FRONTAGE_BUILDING_PANEL_MIN_WIDTH = 360
+const ROAD_FRONTAGE_BUILDING_PANEL_DEFAULT_WIDTH = 440
+const ROAD_FRONTAGE_BUILDING_PANEL_MIN_WIDTH = 380
 const ROAD_FRONTAGE_BUILDING_PANEL_MAX_WIDTH = 640
 const ROAD_FRONTAGE_BUILDING_DETAIL_DEFAULT_WIDTH = 800
 const ROAD_FRONTAGE_BUILDING_DETAIL_MIN_WIDTH = 640
@@ -1210,17 +1210,13 @@ function MapLayoutContent({
     router.push(`/map?${current.toString()}`)
   }
 
-  /** 시스템 전환 시 — 좌측 패널 닫기 + 레이어 전부 끄기 (최초 진입·system 최초 부여는 제외) */
+  /** 시스템 전환 시 — 레이어 전부 끄기 (opened URL 은 selectSystem 에서 serviceList 기준 scrub) */
   const prevSystemKeyRef = useRef<string | undefined>(undefined)
   useEffect(() => {
     const prev = prevSystemKeyRef.current
     prevSystemKeyRef.current = systemKeyFromUrl
     if (prev === undefined || !prev || prev === systemKeyFromUrl) return
     mapContext?.allLayersOffRef?.current?.()
-    if (openedWindows.length > 0 || dataTableFromUrl || dataKeyFromUrl) {
-      updateMapUrl({ opened: [], dataTable: null, dataKey: null })
-    }
-    // 시스템 키 변경에만 반응 (패널 개폐로 재실행하지 않음)
     // eslint-disable-next-line react-hooks/exhaustive-deps -- systemKeyFromUrl only
   }, [systemKeyFromUrl])
 
