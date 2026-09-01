@@ -22,7 +22,13 @@ import { usrSerGrant } from '@/database/schema/usr_ser_grant';
 import { usrSysGrant } from '@/database/schema/usr_sys_grant';
 import { upMap } from '@/database/schema/up_map';
 import { usr } from '@/database/schema/usr';
-import { getServiceList, getSystemList, getSystemListAll, getEnabledSystemsRaw } from '@/service/configService';
+import {
+  getProjectAvailableServiceEngSet,
+  getServiceList,
+  getSystemList,
+  getSystemListAll,
+  getEnabledSystemsRaw,
+} from '@/service/configService';
 import { loadUserAccess } from '@/lib/auth/access';
 import { listConsoleMenuCatalog as buildConsoleMenuCatalog } from '@/lib/consoleMenuAccess/registry';
 
@@ -142,6 +148,8 @@ export async function removeUserFromPerm(p: Params) {
 
 export async function listPrivateSers(_p: Params) {
   requireSession(_p);
+  /** DISABLED_SERVICES 제외 — 이 프로젝트 메뉴에 없는 비공개는 권한 매핑 대상에서도 제외 */
+  const availableEng = getProjectAvailableServiceEngSet();
   const dbRows = await db
     .select({
       serEng: ser.serEng,
@@ -162,6 +170,7 @@ export async function listPrivateSers(_p: Params) {
   const byEng = new Map<string, Row>();
   for (const r of dbRows) {
     if (!r.serEng) continue;
+    if (!availableEng.has(r.serEng)) continue;
     byEng.set(r.serEng, {
       serEng: r.serEng,
       serKor: r.serKor,
@@ -172,6 +181,7 @@ export async function listPrivateSers(_p: Params) {
   for (const s of getServiceList().ser) {
     const eng = s.ser_eng?.trim();
     if (!eng || s.ser_is_private !== true) continue;
+    if (!availableEng.has(eng)) continue;
     if (!byEng.has(eng)) {
       byEng.set(eng, {
         serEng: eng,
@@ -182,6 +192,7 @@ export async function listPrivateSers(_p: Params) {
     }
   }
   return [...byEng.values()]
+    .filter((r) => availableEng.has(r.serEng))
     .sort((a, b) => a._sort - b._sort || a.serEng.localeCompare(b.serEng))
     .map(({ serEng, serKor, serIsPrivate }) => ({ serEng, serKor, serIsPrivate }));
 }

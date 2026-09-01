@@ -90,7 +90,7 @@ export function SafetyFacRelatedLayerSection({ lon, lat }: Props) {
   if (lon == null || lat == null) return null;
 
   return (
-    <div className="grid grid-cols-4 gap-1.5">
+    <div className="grid grid-cols-4 gap-1">
       {SAFETY_FAC_RELATED_LAYER_DEFS.map(({ key, tableName, label }) => {
         const count = result?.[key] ?? 0;
         const hasData = count > 0;
@@ -109,7 +109,7 @@ export function SafetyFacRelatedLayerSection({ lon, lat }: Props) {
             onClick={() => toggleTable(tableName, count)}
             disabled={!hasData || !setLayerState}
             className={cn(
-              'inline-flex h-auto min-h-[24px] min-w-0 items-center justify-center rounded border px-0.5 py-1 text-[9px] leading-tight',
+              'inline-flex h-auto min-h-[22px] min-w-0 items-center justify-center rounded border px-1 py-0.5 text-[10px] leading-tight tracking-tight',
               !hasData || !setLayerState
                 ? 'pointer-events-none border-border bg-muted/50 text-muted-foreground opacity-60'
                 : active

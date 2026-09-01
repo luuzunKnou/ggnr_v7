@@ -9,6 +9,7 @@ import { spawn, type ChildProcess, execFileSync } from 'node:child_process';
 import path from 'node:path';
 import { ensureDbUser } from './create-db-user';
 import { loadProjectEnv } from './load-project-env';
+import { resolveGeoServerInternalUrl } from './resolve-geoserver-url';
 import { NPM_INSTALL_DEV_ARGS, resolveNpmInstallEnv } from '../src/lib/npmApplyEnv';
 import { reloadProjectRuntimeEnv } from '../src/lib/projectEnvReload';
 
@@ -624,6 +625,9 @@ async function main(): Promise<void> {
 
   loadProjectEnv(PROJECT, TYPE);
   loadRuntimeEnv(PROJECT);
+  if (!process.env.GEOSERVER_URL?.trim()) {
+    process.env.GEOSERVER_URL = resolveGeoServerInternalUrl();
+  }
   if (!process.env.AUTH_SECRET?.trim() && !process.env.NEXTAUTH_SECRET?.trim()) {
     process.env.AUTH_SECRET = 'ggnr-dev-auth-secret-change-me';
   }

@@ -32,6 +32,7 @@ import { useMapContext } from "../../../_mapComponents/MapContext";
 import { MAP_AUTO_NAV_MAX_ZOOM } from "../../../_mapComponents/config/mapDefaults";
 import { scheduleFitMapToExtent3857 } from "../../../_mapComponents/config/mapAutoNavigation";
 import { getRowKey, getRowValueByField } from "../../../_mapComponents/standard/defineLayerRowUtils";
+import { useRiverBasicPlanExistingMapLayers } from "./useRiverBasicPlanExistingMapLayers";
 import {
   isImageServiceFileName,
   isPdfServiceFileName,
@@ -44,6 +45,10 @@ import {
   ServiceFileImagePreview,
   type ServiceFilePreviewItem,
 } from "../../../_mapComponents/standard/ServiceFileImagePreview";
+import {
+  ServiceFilePdfPreview,
+  type ServiceFilePdfPreviewItem,
+} from "../../../_mapComponents/standard/ServiceFilePdfPreview";
 import { getRiverBasicPlanDetailFields } from "./riverBasicPlanDetailFields";
 
 /** 연도 필드는 천단위 콤마 없이 표시 (예: 2,024 → 2024) */
@@ -127,13 +132,19 @@ export function RiverBasicPlanDetailPanel({ tab, riverName, onClose }: Props) {
   const hdLayer = riverBasicPlanHdDefineTable(tab);
   const structureParent = riverBasicPlanGdParentDefineTable(tab);
   const layerByLabel = useMemo(() => layerByLabelForTab(tab), [tab]);
+  const existingMapLayers = useRiverBasicPlanExistingMapLayers(tab);
+  const existingMapLayerSet = useMemo(
+    () => new Set((existingMapLayers ?? []).map((n) => n.toLowerCase())),
+    [existingMapLayers]
+  );
   /** 구조물도 켜기 대기 — 자식 목록 도착 후 분할 레이어 ON */
   const pendingEnableStructureChildrenRef = useRef(false);
 
-  /** 하천 선택 시 확장패널 토글칩 레이어(색인도·기본계획·종단·횡단·구조물 WMS) 항상 켜짐 */
+  /** 하천 선택 시 확장패널 토글칩 레이어(색인도·기본계획·종단·횡단·구조물 WMS) — 있는 테이블만 */
   useEffect(() => {
-    if (!riverName.trim() || !setVisibleLayerNames) return;
+    if (!riverName.trim() || !setVisibleLayerNames || existingMapLayers == null) return;
     const otherTab: RiverType = tab === "smallRiver" ? "river" : "smallRiver";
+    const allow = (name: string) => existingMapLayerSet.has(name.toLowerCase());
     setVisibleLayerNames((prev) => {
       const next = new Set(prev);
       next.delete(riverBasicPlanIndexDefineTable(otherTab));
@@ -142,12 +153,19 @@ export function RiverBasicPlanDetailPanel({ tab, riverName, onClose }: Props) {
       next.delete(riverBasicPlanHdDefineTable(otherTab));
       for (const id of riverBasicPlanGdWmsDefineTables(otherTab)) next.delete(id);
       next.delete(riverBasicPlanGdParentDefineTable(otherTab));
-      next.add(indexLayer);
-      next.add(planAsLayer);
-      next.add(jdLayer);
-      next.add(hdLayer);
+      if (allow(indexLayer)) next.add(indexLayer);
+      else next.delete(indexLayer);
+      if (allow(planAsLayer)) next.add(planAsLayer);
+      else next.delete(planAsLayer);
+      if (allow(jdLayer)) next.add(jdLayer);
+      else next.delete(jdLayer);
+      if (allow(hdLayer)) next.add(hdLayer);
+      else next.delete(hdLayer);
       next.delete(structureParent);
-      for (const id of riverBasicPlanGdWmsDefineTables(tab)) next.add(id);
+      for (const id of riverBasicPlanGdWmsDefineTables(tab)) {
+        if (allow(id)) next.add(id);
+        else next.delete(id);
+      }
       return next;
     });
     // 지방하천: defineLayer 자식 목록이 늦게 오면 그 목록으로 재적용
@@ -161,6 +179,8 @@ export function RiverBasicPlanDetailPanel({ tab, riverName, onClose }: Props) {
     jdLayer,
     hdLayer,
     structureParent,
+    existingMapLayers,
+    existingMapLayerSet,
   ]);
 
   const [plans, setPlans] = useState<PlanItem[]>([]);
@@ -198,6 +218,12 @@ export function RiverBasicPlanDetailPanel({ tab, riverName, onClose }: Props) {
     initialIndex: number;
   } | null>(null);
   const [relatedDrawingLoadingKey, setRelatedDrawingLoadingKey] = useState<string | null>(null);
+  const [reportPdfPreview, setReportPdfPreview] = useState<{
+    items: ServiceFilePdfPreviewItem[];
+    initialIndex: number;
+  } | null>(null);
+  const [reportPdfLoading, setReportPdfLoading] = useState(false);
+  const reportPdfBusyRef = useRef(false);
 
   // 데이터 이력관리에 조회 저장을 위해 추가
   useEffect(() => {
@@ -389,6 +415,8 @@ export function RiverBasicPlanDetailPanel({ tab, riverName, onClose }: Props) {
     setIndexAttachmentPreview(null);
     setRelatedDrawingPreview(null);
     setRelatedDrawingLoadingKey(null);
+    setReportPdfPreview(null);
+    setReportPdfLoading(false);
     indexFitDoneRef.current = null;
     pendingPlanFromMapRef.current = null;
   }, [tab, riverName]);
@@ -731,6 +759,63 @@ export function RiverBasicPlanDetailPanel({ tab, riverName, onClose }: Props) {
     }
   }, [mapContext?.riverBasicPlanMapDrawingPreviewControllerRef]);
 
+  const openReportPdfViewer = useCallback(async () => {
+    if (reportPdfBusyRef.current) return;
+    if (!selected) {
+      window.alert("기본계획을 선택하세요.");
+      return;
+    }
+    if (loadingDetail) {
+      window.alert("기본계획 정보를 불러오는 중입니다. 잠시 후 다시 시도하세요.");
+      return;
+    }
+    const rawFid = detail?.ogc_fid;
+    const ogcFid =
+      typeof rawFid === "number" && Number.isFinite(rawFid)
+        ? rawFid
+        : typeof rawFid === "string" && rawFid.trim() !== ""
+          ? rawFid.trim()
+          : null;
+    if (ogcFid == null) {
+      window.alert("기본계획을 선택하세요.");
+      return;
+    }
+    reportPdfBusyRef.current = true;
+    setReportPdfLoading(true);
+    try {
+      const qs = new URLSearchParams({
+        serEng: SER_FILE_ENG.riverBasicPlan,
+        layer: planAsLayer,
+        key: String(ogcFid),
+      });
+      const res = await appFetch(`/api/service-files?${qs.toString()}`, { credentials: "include" });
+      if (!res.ok) {
+        const j = (await res.json().catch(() => ({}))) as { error?: string };
+        throw new Error(typeof j.error === "string" ? j.error : "목록을 불러오지 못했습니다.");
+      }
+      const data = (await res.json()) as { files?: { name: string }[] };
+      const files = Array.isArray(data.files) ? data.files : [];
+      const items: ServiceFilePdfPreviewItem[] = files
+        .filter((f) => isPdfServiceFileName(f.name))
+        .map((f) => ({
+          url: serviceFileDataDownloadUrl(SER_FILE_ENG.riverBasicPlan, planAsLayer, ogcFid, f.name),
+          fileName: f.name,
+        }));
+      if (items.length === 0) {
+        window.alert("보고서 PDF가 없습니다.");
+        return;
+      }
+      setIndexAttachmentPreview(null);
+      setRelatedDrawingPreview(null);
+      setReportPdfPreview({ items, initialIndex: 0 });
+    } catch (e) {
+      window.alert(e instanceof Error ? e.message : "보고서를 불러오지 못했습니다.");
+    } finally {
+      reportPdfBusyRef.current = false;
+      setReportPdfLoading(false);
+    }
+  }, [selected, loadingDetail, detail?.ogc_fid, planAsLayer]);
+
   const detailEntries = useMemo(() => {
     const row = detail ?? {};
     return planDetailFields.map((f) => ({
@@ -916,6 +1001,7 @@ export function RiverBasicPlanDetailPanel({ tab, riverName, onClose }: Props) {
       <div className="shrink-0 border-b border-border px-3 py-2 bg-background">
         <div className="flex gap-1.5">
           {actionButtons.map(({ label, icon: Icon }) => {
+            const isReport = label === "보고서";
             const layerName = layerByLabel[label];
             const isStructureGroup = label === "구조물도";
             const layerOn = isStructureGroup
@@ -925,35 +1011,47 @@ export function RiverBasicPlanDetailPanel({ tab, riverName, onClose }: Props) {
               : layerName
                 ? visibleLayerNames.has(layerName)
                 : false;
+            const reportActive = isReport && reportPdfPreview != null;
             return (
               <button
                 key={label}
                 type="button"
                 title={
-                  layerName
-                    ? isStructureGroup
-                      ? "구조물도 분할 레이어만 한꺼번에 켜기/끄기(부모 WMS 제외)"
-                      : "데이터 조회 레이어와 동일하게 켜기/끄기"
-                    : undefined
+                  isReport
+                    ? "보고서 PDF 보기"
+                    : layerName
+                      ? isStructureGroup
+                        ? "구조물도 분할 레이어만 한꺼번에 켜기/끄기(부모 WMS 제외)"
+                        : "데이터 조회 레이어와 동일하게 켜기/끄기"
+                      : undefined
                 }
                 onClick={() => {
-                  if (label === "보고서") {
+                  if (isReport) {
+                    void openReportPdfViewer();
                     return;
                   }
                   if (isStructureGroup) toggleStructureLayerGroup();
                   else if (layerName) toggleServiceLayer(layerName);
                 }}
-                disabled={label !== "보고서" && !layerName}
+                disabled={isReport ? undefined : !layerName}
                 className={cn(
                   "h-7 text-[11px] rounded border flex-1 min-w-0 whitespace-nowrap inline-flex items-center justify-center gap-1",
-                  layerName
-                    ? layerOn
+                  isReport
+                    ? reportActive
                       ? "border-primary/45 bg-primary/10 text-foreground hover:bg-primary/15"
                       : "border-border bg-muted/50 text-foreground/90 hover:bg-muted"
-                    : "border-border bg-muted/50 text-foreground/90 hover:bg-muted opacity-80",
+                    : layerName
+                      ? layerOn
+                        ? "border-primary/45 bg-primary/10 text-foreground hover:bg-primary/15"
+                        : "border-border bg-muted/50 text-foreground/90 hover:bg-muted"
+                      : "border-border bg-muted/50 text-foreground/90 hover:bg-muted opacity-80",
                 )}
               >
-                <Icon className="h-3.5 w-3.5 shrink-0" />
+                {isReport && reportPdfLoading ? (
+                  <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" aria-hidden />
+                ) : (
+                  <Icon className="h-3.5 w-3.5 shrink-0" />
+                )}
                 {label}
               </button>
             );
@@ -1232,6 +1330,13 @@ export function RiverBasicPlanDetailPanel({ tab, riverName, onClose }: Props) {
         items={relatedDrawingPreview.items}
         initialIndex={relatedDrawingPreview.initialIndex}
         onClose={() => setRelatedDrawingPreview(null)}
+      />
+    )}
+    {reportPdfPreview != null && (
+      <ServiceFilePdfPreview
+        items={reportPdfPreview.items}
+        initialIndex={reportPdfPreview.initialIndex}
+        onClose={() => setReportPdfPreview(null)}
       />
     )}
     </>

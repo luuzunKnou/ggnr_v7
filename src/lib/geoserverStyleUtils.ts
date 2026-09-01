@@ -437,11 +437,11 @@ export function toPublicSymbolPreviewUrl(symbolUrlOrName: string): string | null
   return null;
 }
 
-/** 심볼 주소에서 폴더명 추출. `.../www/symbol/{폴더}/{파일}` 형식만 인식 */
+/** 심볼 주소에서 폴더명 추출. `…/www/symbol/{폴더}/{파일}` 또는 `../www/symbol/…` 형식 */
 export function parseSymbolFolderFromUrl(symbolUrl: string): string | null {
   const raw = String(symbolUrl ?? '').trim();
   if (!raw) return null;
-  const m = raw.split(/[?#]/)[0].match(/\/www\/symbol\/([^/]+)\/[^/]+\.(?:svg|png)$/i);
+  const m = raw.split(/[?#]/)[0].match(/(?:\.\.\/)?www\/symbol\/([^/]+)\/[^/]+\.(?:svg|png)$/i);
   if (!m) return null;
   try {
     return decodeURIComponent(m[1]);

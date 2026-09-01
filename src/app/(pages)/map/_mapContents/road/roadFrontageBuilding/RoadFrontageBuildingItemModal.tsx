@@ -6,8 +6,11 @@ import { cn } from '@/lib/utils';
 import {
   ROAD_FRONTAGE_BUILDING_BAD_MARKS,
   ROAD_FRONTAGE_BUILDING_LOCATION_KINDS,
+  detailLocationKind,
+  flagsFromLocationKind,
   type RoadFrontageBuildingConfirmItem,
   type RoadFrontageBuildingDetailItem,
+  type RoadFrontageBuildingLocationKind,
 } from './roadFrontageBuildingMock';
 
 const fieldClass =
@@ -64,11 +67,11 @@ export function RoadFrontageBuildingItemModal(props: Props) {
 
   const handleSubmit = () => {
     if (props.kind === 'detail') {
-      if (props.draft.areaSqm == null || !Number.isFinite(props.draft.areaSqm)) {
+      if (!String(props.draft.areaSqm ?? '').trim()) {
         setError('면적을 입력해 주세요.');
         return;
       }
-    } else if (!props.draft.confirmDate.trim()) {
+    } else if (!props.draft.checkYmd.trim()) {
       setError('확인연월일을 입력해 주세요.');
       return;
     }
@@ -154,15 +157,9 @@ function DetailForm({
         <div>
           <span className={labelClass}>동 구분</span>
           <input
-            type="number"
             className={fieldClass}
-            value={draft.dongNo ?? ''}
-            onChange={(e) =>
-              onChange({
-                ...draft,
-                dongNo: e.target.value.trim() === '' ? null : Number(e.target.value),
-              })
-            }
+            value={draft.dongNo}
+            onChange={(e) => onChange({ ...draft, dongNo: e.target.value })}
           />
         </div>
         <div>
@@ -170,8 +167,8 @@ function DetailForm({
           <input
             type="date"
             className={fieldClass}
-            value={draft.installedDate}
-            onChange={(e) => onChange({ ...draft, installedDate: e.target.value })}
+            value={draft.instYmd}
+            onChange={(e) => onChange({ ...draft, instYmd: e.target.value })}
           />
         </div>
         <div>
@@ -191,29 +188,23 @@ function DetailForm({
           />
         </div>
         <div>
-          <span className={labelClass}>면적(㎡)</span>
+          <span className={labelClass}>면적</span>
           <input
-            type="number"
-            step="0.01"
             className={fieldClass}
-            value={draft.areaSqm ?? ''}
-            onChange={(e) =>
-              onChange({
-                ...draft,
-                areaSqm: e.target.value.trim() === '' ? null : Number(e.target.value),
-              })
-            }
+            value={draft.areaSqm}
+            onChange={(e) => onChange({ ...draft, areaSqm: e.target.value })}
+            placeholder="예: 35㎡"
           />
         </div>
         <div>
           <span className={labelClass}>위치</span>
           <select
             className={fieldClass}
-            value={draft.locationKind}
+            value={detailLocationKind(draft)}
             onChange={(e) =>
               onChange({
                 ...draft,
-                locationKind: e.target.value as RoadFrontageBuildingDetailItem['locationKind'],
+                ...flagsFromLocationKind(e.target.value as RoadFrontageBuildingLocationKind | ''),
               })
             }
           >
@@ -269,24 +260,24 @@ function ConfirmForm({
         <input
           type="date"
           className={fieldClass}
-          value={draft.confirmDate}
-          onChange={(e) => onChange({ ...draft, confirmDate: e.target.value })}
+          value={draft.checkYmd}
+          onChange={(e) => onChange({ ...draft, checkYmd: e.target.value })}
         />
       </div>
       <div>
         <span className={labelClass}>확인자 성명</span>
         <input
           className={fieldClass}
-          value={draft.confirmerName}
-          onChange={(e) => onChange({ ...draft, confirmerName: e.target.value })}
+          value={draft.checkNam}
+          onChange={(e) => onChange({ ...draft, checkNam: e.target.value })}
         />
       </div>
       <div>
         <span className={labelClass}>결재자 성명</span>
         <input
           className={fieldClass}
-          value={draft.approverName}
-          onChange={(e) => onChange({ ...draft, approverName: e.target.value })}
+          value={draft.appNam}
+          onChange={(e) => onChange({ ...draft, appNam: e.target.value })}
         />
       </div>
     </div>

@@ -8,6 +8,12 @@ type DefineLayerTablesBody = {
   error?: string
 }
 
+type DefineLayerTablesPayload = {
+  success?: boolean
+  tables?: Record<string, unknown>[]
+  error?: string
+}
+
 type DbTableListPayload = {
   success?: boolean
   error?: string
@@ -38,19 +44,54 @@ export function fetchDefineLayerTables(force = false): Promise<DefineLayerTables
     return Promise.resolve(tablesCached)
   }
   if (!force && tablesInflight) return tablesInflight
-  tablesInflight = fetch("/api/config/defineLayer")
-    .then((r) => r.json() as Promise<DefineLayerTablesBody>)
-    .then((body) => {
-      if (body?.success && Array.isArray(body.data)) {
+  tablesInflight = call("", "POST", {
+    service: "devTestService",
+    action: "getDefineLayerTables",
+    params: {},
+  })
+    .then((res) => {
+      const inner = (res?.data ?? res) as DefineLayerTablesPayload
+      const body: DefineLayerTablesBody = {
+        success: !!inner?.success,
+        data: inner?.tables,
+        error: inner?.error,
+      }
+      if (body.success && Array.isArray(body.data)) {
         tablesCached = body
         tablesAt = Date.now()
       }
       return body
     })
+    .catch((e: unknown): DefineLayerTablesBody => ({
+      success: false,
+      error: e instanceof Error ? e.message : "defineLayer 요청 실패",
+    }))
     .finally(() => {
       tablesInflight = null
     })
   return tablesInflight
+}
+
+export async function saveDefineLayerTablesConfig(
+  tables: Record<string, unknown>[]
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const res = await call("", "POST", {
+      service: "devTestService",
+      action: "saveDefineLayerTables",
+      params: { tables },
+    })
+    const inner = (res?.data ?? res) as { success?: boolean; error?: string }
+    if (inner?.success) {
+      invalidateLayerManagerListCache()
+    }
+    return { success: !!inner?.success, error: inner?.error }
+  } catch (e: unknown) {
+    return {
+      success: false,
+      error: e instanceof Error ? e.message : "defineLayer 저장 실패",
+    }
+  }
 }
 
 export function fetchLayerDbTableList(force = false): Promise<DbTableListPayload> {

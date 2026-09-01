@@ -1,28 +1,28 @@
 <featureType>
-  <id>FeatureTypeInfoImpl-soinn00001:20260731:1421</id>
+  <id>FeatureTypeInfoImpl--4fca501:1a05b44e440:-7fec</id>
   <name>soinn00001</name>
   <nativeName>SOINN00001</nativeName>
   <namespace>
     <id>NamespaceInfoImpl-4bf97568:19c4d6c3053:-7ffa</id>
   </namespace>
-  <title>지하수 개발허가</title>
+  <title>SOINN00001</title>
   <keywords>
     <string>features</string>
-    <string>soinn00001</string>
+    <string>SOINN00001</string>
   </keywords>
   <srs>EPSG:5181</srs>
   <nativeBoundingBox>
-    <minx>330483.80109962</minx>
-    <maxx>377703.50609571</maxx>
-    <miny>314057.15711939</miny>
-    <maxy>368121.64393628</maxy>
+    <minx>-6795017.147671605</minx>
+    <maxx>404294.9140580527</maxx>
+    <miny>336687.2431427605</miny>
+    <maxy>1.6296433439417448E7</maxy>
     <crs class="projected">EPSG:5181</crs>
   </nativeBoundingBox>
   <latLonBoundingBox>
-    <minx>128.45295459767016</minx>
-    <maxx>128.99096215522002</maxx>
-    <miny>36.3081719678941</miny>
-    <maxy>36.80276061295088</maxy>
+    <minx>-180.0</minx>
+    <maxx>180.0</maxx>
+    <miny>-45.52268908469754</miny>
+    <maxy>90.0</maxy>
     <crs>EPSG:4326</crs>
   </latLonBoundingBox>
   <projectionPolicy>FORCE_DECLARED</projectionPolicy>

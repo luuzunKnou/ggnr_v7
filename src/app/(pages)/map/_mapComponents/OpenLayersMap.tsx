@@ -47,6 +47,7 @@ import { useBuildingRoadCatalog } from './hooks/useBuildingRoadCatalog';
 import { useCadastralCatalog } from './hooks/useCadastralCatalog';
 import { useJimokCatalog } from './hooks/useJimokCatalog';
 import { useMapInstance } from './hooks/useMapInstance';
+import { MapScaleIndicator } from './hooks/MapScaleIndicator';
 import { useMapContext } from './MapContext';
 import { useBackgroundLayer } from './hooks/useBackgroundLayer';
 import { useMapStatePersist, loadPersistedMapState } from './hooks/useMapStatePersist';
@@ -830,6 +831,23 @@ export default function OpenLayersMap({
     mapContext?.setMapSplitSecondaryBackgroundId,
   ]);
 
+  /** 지도분할 — 배경지도 패널만 열고 나머지 우측 메뉴·확장 패널 닫기 */
+  const openBackgroundMapPanelExclusive = useCallback(() => {
+    setOpenSubPanel(null);
+    setIsBackgroundPanelExiting(false);
+    setIsAerialViewPanelExiting(false);
+    setIsResetPanelExiting(false);
+    setActiveControls((prev) => {
+      const next = prev.filter(
+        (item) =>
+          item !== 'aerial-view' &&
+          item !== 'reset-measurements' &&
+          !MEASUREMENT_IDS.includes(item)
+      );
+      return next.includes('background-map') ? next : [...next, 'background-map'];
+    });
+  }, []);
+
   /** 지도분할 — 배경 동기화 OFF 전환 시 배경지도 패널 자동 열기 */
   const prevMapSplitBasemapSyncRef = useRef(mapContext?.mapSplitBasemapSync ?? true);
   useEffect(() => {
@@ -840,13 +858,12 @@ export default function OpenLayersMap({
 
     if (kind !== 'map' || wasSync === sync || sync) return;
 
-    setIsBackgroundPanelExiting(false);
-    setIsAerialViewPanelExiting(false);
-    setActiveControls((prev) => {
-      const next = prev.filter((item) => item !== 'aerial-view');
-      return next.includes('background-map') ? next : [...next, 'background-map'];
-    });
-  }, [mapContext?.mapSplitSecondaryKind, mapContext?.mapSplitBasemapSync]);
+    openBackgroundMapPanelExclusive();
+  }, [
+    mapContext?.mapSplitSecondaryKind,
+    mapContext?.mapSplitBasemapSync,
+    openBackgroundMapPanelExclusive,
+  ]);
 
   const backgroundSplitSelect =
     mapContext?.mapSplitSecondaryKind === 'map' &&
@@ -2259,12 +2276,7 @@ export default function OpenLayersMap({
         setIsBackgroundPanelExiting(true);
         setActiveControls((prev) => prev.filter((item) => item !== 'background-map'));
       } else {
-        setOpenSubPanel(null);
-        setIsAerialViewPanelExiting(false);
-        setActiveControls((prev) => {
-          const next = prev.filter((item) => item !== 'aerial-view');
-          return next.includes('background-map') ? next : [...next, 'background-map'];
-        });
+        openBackgroundMapPanelExclusive();
       }
       return;
     }
@@ -2455,6 +2467,7 @@ export default function OpenLayersMap({
   return (
     <div className="relative w-full h-full">
       <div ref={mapRef} className="w-full h-full bg-black [&_.ol-viewport]:bg-black" />
+      <MapScaleIndicator map={mapReady ? mapInstanceRef.current : null} mapReady={mapReady} />
 
       <LayerRowGeomEditHandler centerPixel={centerPixel} />
 

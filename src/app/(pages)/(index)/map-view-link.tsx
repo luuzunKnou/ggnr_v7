@@ -2,7 +2,7 @@
 
 import { Layers, Mouse } from "lucide-react"
 import { useEffect, useRef } from "react"
-import { withBasePathNav } from "@/lib/basePath"
+import { withBasePath, withBasePathNav } from "@/lib/basePath"
 
 export function MapViewLink() {
   const videoRef = useRef<HTMLVideoElement>(null)
@@ -65,7 +65,7 @@ export function MapViewLink() {
     >
       <video
         ref={videoRef}
-        src="/image/indexImage/backgroundVideo_02.mp4"
+        src={withBasePath("/image/indexImage/backgroundVideo_02.mp4")}
         className="pointer-events-none absolute inset-0 z-0 h-full w-full object-cover"
         muted
         loop

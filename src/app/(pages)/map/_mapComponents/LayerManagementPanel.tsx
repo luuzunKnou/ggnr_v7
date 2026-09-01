@@ -3,8 +3,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Settings, ChevronDown, ChevronRight, X, Search, SlidersHorizontal, Palette, Trash2, Star } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { getGeoServerBase } from '@/lib/geoserverUrl';
-import { WORKSPACE } from './layerFactory/serviceLayerFactory';
+import { getLegendGraphicUrl } from './layerFactory/serviceLayerFactory';
 import type { LayerFilterRow } from './map-layergroup-bar';
 
 type DefineLayerRow = {
@@ -38,21 +37,6 @@ function serviceLayersForGroup(
   );
 }
 
-/** GeoServer WMS GetLegendGraphic URL (범례 이미지) */
-function getLegendGraphicUrl(layerName: string): string {
-  const base = getGeoServerBase();
-  const params = new URLSearchParams({
-    SERVICE: 'WMS',
-    REQUEST: 'GetLegendGraphic',
-    VERSION: '1.0.0',
-    LAYER: `${WORKSPACE}:${layerName}`,
-    STYLE: layerName,
-    FORMAT: 'image/png',
-    WIDTH: '48',
-    HEIGHT: '48',
-    LEGEND_OPTIONS: 'forceLabels:off',
-  });
-  return `${base}/wms?${params.toString()}`;
 }
 
 export function LayerManagementPanel({

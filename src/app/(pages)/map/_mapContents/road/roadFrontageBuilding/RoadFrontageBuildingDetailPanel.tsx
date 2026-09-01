@@ -2,20 +2,24 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent, type ReactNode } from 'react';
 import { useSession } from 'next-auth/react';
-import { Check, CircleAlert, Loader2, Paperclip, Pencil, Plus, Printer, Trash2, X } from 'lucide-react';
+import { Check, CircleAlert, Download, Loader2, Paperclip, Pencil, Plus, Printer, Trash2, X } from 'lucide-react';
 import { call } from '@/lib/api';
 import { formatAddressStripSidoSigungu } from '@/lib/formatAddressStripAdmin';
 import { cn } from '@/lib/utils';
 import { AddressSearchPanel } from '../../../_mapComponents/addressSearch/AddressSearchPanel';
 import type { VWorldAddressItem } from '../../../_mapComponents/addressSearch/vworldAddressSearch';
-import { scheduleFitMapToExtent3857 } from '../../../_mapComponents/config/mapAutoNavigation';
-import { MAP_AUTO_NAV_MAX_ZOOM } from '../../../_mapComponents/config/mapDefaults';
 import { useMapContext } from '../../../_mapComponents/MapContext';
 import { MapSideDetailScroll } from '../../../_mapComponents/MapSideDetailScroll';
 import {
+  ServiceFileImagePreview,
+  type ServiceFilePreviewItem,
+} from '../../../_mapComponents/standard/ServiceFileImagePreview';
+import {
   isImageServiceFileName,
+  triggerServiceFileDownload,
   useServiceFileChunkedUpload,
   useServiceFileData,
+  withServiceFileThumbQuery,
 } from '../../../_mapComponents/standard/useServiceFileData';
 import {
   ServiceFileImagePreview,
@@ -43,16 +47,20 @@ import {
   emptyRoadFrontageBuildingFormAttaches,
   formatRoadFrontageBuildingWrittenAt,
   formatRouteNoName,
+  detailLocationCellDisplay,
+  detailLocationFieldValue,
+  flagsFromLocationKind,
   isNewRoadFrontageBuildingId,
-  ledgerExtent3857,
   ROAD_FRONTAGE_BUILDING_DEFAULT_WRITER_DEPT,
   type RoadFrontageBuildingConfirmItem,
   type RoadFrontageBuildingDetailItem,
   type RoadFrontageBuildingFormAttachId,
   type RoadFrontageBuildingLedger,
+  type RoadFrontageBuildingLocationKind,
 } from './roadFrontageBuildingMock';
 import { printRoadFrontageBuildingForm } from './roadFrontageBuildingPrint';
 import { captureLocationMapWithPoint } from './roadFrontageBuildingLocationCapture';
+import { useRoadFrontageBuildingMapHighlight } from './useRoadFrontageBuildingMapHighlight';
 
 const FORM_ATTACH_SLOTS: RoadFrontageBuildingFormAttachId[] = [
   'locationMap',
@@ -542,7 +550,7 @@ function asLedgerRows(ledger: RoadFrontageBuildingLedger): RoadFrontageBuildingL
     ...ledger,
     details,
     confirmHistory,
-    locationAddress: String(ledger.locationAddress ?? ''),
+    locAdr: String(ledger.locAdr ?? ''),
   };
 }
 
@@ -619,8 +627,8 @@ export function RoadFrontageBuildingDetailPanel({
   const mapContext = useMapContext();
   const vworldApiKey = mapContext?.vworldApiKey ?? '';
   const isCreateMode = isNewRoadFrontageBuildingId(ledgerId);
-  const fileKey = isCreateMode ? null : String(ledgerId ?? '').trim() || null;
   const { upload: uploadChunked } = useServiceFileChunkedUpload();
+  const { highlightAt } = useRoadFrontageBuildingMapHighlight();
 
   const [saved, setSaved] = useState<RoadFrontageBuildingLedger | null>(null);
   const [loading, setLoading] = useState(!isCreateMode);
@@ -636,6 +644,10 @@ export function RoadFrontageBuildingDetailPanel({
         })
       : createEmptyRoadFrontageBuildingLedger()
   );
+  /** 첨부파일 경로 키 — 대장 숫자 id가 아니라 ftr_idn */
+  const fileKey = isCreateMode
+    ? null
+    : String(draft.ftrIdn || saved?.ftrIdn || '').trim() || null;
   const [attachRefreshNonce, setAttachRefreshNonce] = useState(0);
   const [pendingFormFiles, setPendingFormFiles] = useState<
     Partial<Record<RoadFrontageBuildingFormAttachId, File>>
@@ -652,6 +664,10 @@ export function RoadFrontageBuildingDetailPanel({
   const pendingLocationRecaptureRef = useRef<{ lon: number; lat: number } | null>(null);
   const [locationCapturing, setLocationCapturing] = useState(false);
   const [actionDialog, setActionDialog] = useState<ActionDialogState | null>(null);
+  const [attachPreview, setAttachPreview] = useState<{
+    items: ServiceFilePreviewItem[];
+    index: number;
+  } | null>(null);
 
   const showNotice = useCallback((title: string, message: string) => {
     setActionDialog({
@@ -791,7 +807,7 @@ export function RoadFrontageBuildingDetailPanel({
     void call('', 'POST', {
       service: 'roadFrontageBuildingService',
       action: 'get',
-      params: { id: ledgerId },
+      params: { ftrIdn: ledgerId },
     })
       .then((res) => {
         if (cancelled) return;
@@ -843,19 +859,40 @@ export function RoadFrontageBuildingDetailPanel({
     return next;
   }, [attachRefreshNonce, diskFolderFiles, fileKey, pendingFormUrls]);
 
-  const photos = useMemo(() => {
+  const photoItems = useMemo((): ServiceFilePreviewItem[] => {
     const disk =
       fileKey == null
         ? []
-        : extraFiles.files.map((f) =>
-            roadFrontageBuildingFileUrl(
-              fileKey,
-              f.name,
-              ROAD_FRONTAGE_BUILDING_EXTRA_ATTACH_FOLDER
-            )
-          );
-    return [...disk, ...pendingExtraUrls];
-  }, [extraFiles.files, fileKey, pendingExtraUrls]);
+        : extraFiles.files
+            .filter((f) => isImageServiceFileName(f.name))
+            .map((f) => ({
+              url: roadFrontageBuildingFileUrl(
+                fileKey,
+                f.name,
+                ROAD_FRONTAGE_BUILDING_EXTRA_ATTACH_FOLDER
+              ),
+              fileName: f.name,
+              kind: 'image' as const,
+            }));
+    const pending = pendingExtraFiles.map((file, i) => ({
+      url: pendingExtraUrls[i] ?? '',
+      fileName: file.name,
+      kind: 'image' as const,
+    }));
+    return [...disk, ...pending].filter((p) => Boolean(p.url));
+  }, [extraFiles.files, fileKey, pendingExtraFiles, pendingExtraUrls]);
+
+  const photos = useMemo(() => photoItems.map((p) => p.url), [photoItems]);
+
+  const openAttachPreview = (index: number) => {
+    if (!photoItems.length) return;
+    const i = Math.max(0, Math.min(index, photoItems.length - 1));
+    setAttachPreview({ items: photoItems, index: i });
+  };
+
+  const downloadAttach = (item: ServiceFilePreviewItem) => {
+    triggerServiceFileDownload(item.url, item.fileName);
+  };
 
   const attachmentPreviewItems = useMemo((): ServiceFilePreviewItem[] => {
     const items: ServiceFilePreviewItem[] = [];
@@ -950,16 +987,16 @@ export function RoadFrontageBuildingDetailPanel({
   };
 
   const handleSave = async () => {
-    const writerName =
+    const writeNam =
       session?.user?.name?.trim() ||
       (session?.user?.id === 'su' ? '슈퍼관리자' : '') ||
       session?.user?.id ||
-      draft.writerName;
+      draft.writeNam;
     const stamped: RoadFrontageBuildingLedger = {
       ...draft,
-      writerDept: String(draft.writerDept ?? '').trim() || ROAD_FRONTAGE_BUILDING_DEFAULT_WRITER_DEPT,
-      writerName: String(writerName ?? '').trim() || String(draft.writerName ?? '').trim(),
-      writtenAt: formatRoadFrontageBuildingWrittenAt(),
+      writeDept: String(draft.writeDept ?? '').trim() || ROAD_FRONTAGE_BUILDING_DEFAULT_WRITER_DEPT,
+      writeNam: String(writeNam ?? '').trim() || String(draft.writeNam ?? '').trim(),
+      writeYmd: formatRoadFrontageBuildingWrittenAt(),
       formAttaches: emptyRoadFrontageBuildingFormAttaches(),
       photos: [],
     };
@@ -986,13 +1023,13 @@ export function RoadFrontageBuildingDetailPanel({
         return;
       }
       const row = (res?.data ?? res) as RoadFrontageBuildingLedger | null;
-      const savedId = String(row?.id ?? '').trim();
-      if (!row || !savedId) {
-        showNotice('저장 실패', '저장 후 번호를 확인하지 못했습니다.');
+      const savedFtrIdn = String(row?.ftrIdn || row?.id || '').trim();
+      if (!row || !savedFtrIdn) {
+        showNotice('저장 실패', '저장 후 시설식별번호를 확인하지 못했습니다.');
         return;
       }
       try {
-        await uploadPendingFiles(savedId);
+        await uploadPendingFiles(savedFtrIdn);
         setPendingFormFiles({});
         setPendingExtraFiles([]);
       } catch (e: unknown) {
@@ -1007,7 +1044,7 @@ export function RoadFrontageBuildingDetailPanel({
         setDraft(asLedgerRows(row));
         setIsEditing(false);
         setAttachRefreshNonce((n) => n + 1);
-        if (isCreateMode) onCreated?.(savedId);
+        if (isCreateMode) onCreated?.(savedFtrIdn);
         else onSaved?.();
         return;
       }
@@ -1015,7 +1052,7 @@ export function RoadFrontageBuildingDetailPanel({
       setDraft(asLedgerRows(row));
       setIsEditing(false);
       setAttachRefreshNonce((n) => n + 1);
-      if (isCreateMode) onCreated?.(savedId);
+      if (isCreateMode) onCreated?.(savedFtrIdn);
       else onSaved?.();
       showSuccess(
         isCreateMode ? '등록' : '저장',
@@ -1035,7 +1072,7 @@ export function RoadFrontageBuildingDetailPanel({
       const res = await call('', 'POST', {
         service: 'roadFrontageBuildingService',
         action: 'remove',
-        params: { id: saved.id },
+        params: { ftrIdn: saved.ftrIdn || saved.id },
       });
       if (res?.success === false) {
         showNotice('삭제 실패', String(res.error ?? '삭제에 실패했습니다.'));
@@ -1120,15 +1157,14 @@ export function RoadFrontageBuildingDetailPanel({
           : null;
       setDraft((prev) => ({
         ...prev,
-        locationAddress: adr,
+        locAdr: adr,
         mockLonLat: nextLonLat ?? prev.mockLonLat,
       }));
+      if (!nextLonLat) return;
+      const pointKey = String(draft.ftrIdn || saved?.ftrIdn || ledgerId).trim() || ledgerId;
+      highlightAt(nextLonLat.lon, nextLonLat.lat, pointKey, { fit: true });
       const map = mapContext?.mapInstanceRef?.current;
-      if (!map || !nextLonLat) return;
-      scheduleFitMapToExtent3857(map, ledgerExtent3857({ mockLonLat: nextLonLat }), {
-        maxZoom: MAP_AUTO_NAV_MAX_ZOOM,
-        applyMapViewPadding: () => mapContext?.applyMapViewPaddingRef?.current?.(),
-      });
+      if (!map) return;
       const hasExisting = Boolean(
         pendingFormFiles.locationMap ||
           (formAttaches.locationMap ?? [])[0] ||
@@ -1151,14 +1187,18 @@ export function RoadFrontageBuildingDetailPanel({
     [
       captureAndStoreLocationMap,
       diskFolderFiles.locationMap.length,
+      draft.ftrIdn,
       formAttaches.locationMap,
+      highlightAt,
+      ledgerId,
       mapContext,
       pendingFormFiles.locationMap,
+      saved?.ftrIdn,
     ]
   );
 
   const clearLocationSearch = useCallback(() => {
-    setDraft((prev) => ({ ...prev, locationAddress: '' }));
+    setDraft((prev) => ({ ...prev, locAdr: '' }));
   }, []);
 
   const addDetail = () => {
@@ -1437,7 +1477,7 @@ export function RoadFrontageBuildingDetailPanel({
 
   const details = Array.isArray(current.details) ? current.details : [];
   const confirmHistory = Array.isArray(current.confirmHistory) ? current.confirmHistory : [];
-  const routeTextRaw = formatRouteNoName(current.routeNo, current.routeName);
+  const routeTextRaw = formatRouteNoName(current.routeNo, current.routeNam);
   const routeText = routeTextRaw === '—' ? '' : routeTextRaw;
   const detailPadCount = Math.max(0, FORM_DETAIL_MIN_ROWS - details.length);
   const confirmPadCount = Math.max(0, FORM_CONFIRM_MIN_ROWS - confirmHistory.length);
@@ -1503,7 +1543,7 @@ export function RoadFrontageBuildingDetailPanel({
         <span className="min-w-0 truncate text-sm font-semibold text-foreground">
           {isCreateMode
             ? '관리대장 등록'
-            : String(current.locationAddress ?? '').trim() || '(위치 미입력)'}
+            : String(current.locAdr ?? '').trim() || '(위치 미입력)'}
         </span>
         <div className="flex shrink-0 items-center gap-1">
           {!isEditing ? (
@@ -1610,7 +1650,7 @@ export function RoadFrontageBuildingDetailPanel({
                         setDraft((prev) => ({
                           ...prev,
                           routeNo: e.target.value,
-                          routeName: '',
+                          routeNam: '',
                         }))
                       }
                     />
@@ -1628,12 +1668,12 @@ export function RoadFrontageBuildingDetailPanel({
                 </Td>
                 <Th className="whitespace-nowrap">작성 연월일</Th>
                 <Td className="whitespace-nowrap overflow-visible">
-                  <CellValue editing={isEditing} nowrap value={formatFormDate(current.preparedDate)}>
+                  <CellValue editing={isEditing} nowrap value={formatFormDate(current.preYmd)}>
                     <input
                       type="date"
                       className={cn(dateFieldClass, 'min-w-[7rem]')}
-                      value={current.preparedDate}
-                      onChange={(e) => handleDraftField('preparedDate', e.target.value)}
+                      value={current.preYmd}
+                      onChange={(e) => handleDraftField('preYmd', e.target.value)}
                     />
                   </CellValue>
                 </Td>
@@ -1656,15 +1696,15 @@ export function RoadFrontageBuildingDetailPanel({
                 </SideTh>
                 <Th>위치</Th>
                 <Td className="relative z-20 overflow-visible">
-                  <CellValue editing={isEditing} value={dash(current.locationAddress)}>
+                  <CellValue editing={isEditing} value={dash(current.locAdr)}>
                     <AddressSearchPanel
                       layout="field"
                       compact
                       vworldApiKey={vworldApiKey}
-                      initialQuery={current.locationAddress}
+                      initialQuery={current.locAdr}
                       placeholder="주소/지번 검색"
                       onSelect={applyLocationFromSearch}
-                      onQueryChange={(q) => handleDraftField('locationAddress', q)}
+                      onQueryChange={(q) => handleDraftField('locAdr', q)}
                       onClear={clearLocationSearch}
                     />
                   </CellValue>
@@ -1673,10 +1713,10 @@ export function RoadFrontageBuildingDetailPanel({
                 <Td>
                   <NameWithPhone
                     editing={isEditing}
-                    name={current.residentName}
-                    phone={current.residentPhone}
-                    onName={(v) => handleDraftField('residentName', v)}
-                    onPhone={(v) => handleDraftField('residentPhone', v)}
+                    name={current.resiNam}
+                    phone={current.resiNum}
+                    onName={(v) => handleDraftField('resiNam', v)}
+                    onPhone={(v) => handleDraftField('resiNum', v)}
                   />
                 </Td>
               </tr>
@@ -1685,19 +1725,19 @@ export function RoadFrontageBuildingDetailPanel({
                 <Td>
                   <NameWithPhone
                     editing={isEditing}
-                    name={current.buildingOwnerName}
-                    phone={current.buildingOwnerPhone}
-                    onName={(v) => handleDraftField('buildingOwnerName', v)}
-                    onPhone={(v) => handleDraftField('buildingOwnerPhone', v)}
+                    name={current.buildOnam}
+                    phone={current.buildOnum}
+                    onName={(v) => handleDraftField('buildOnam', v)}
+                    onPhone={(v) => handleDraftField('buildOnum', v)}
                   />
                 </Td>
                 <Th>주소</Th>
                 <Td>
-                  <CellValue editing={isEditing} value={dash(current.buildingOwnerAddress)}>
+                  <CellValue editing={isEditing} value={dash(current.buildOadr)}>
                     <input
                       className={fieldClass}
-                      value={current.buildingOwnerAddress}
-                      onChange={(e) => handleDraftField('buildingOwnerAddress', e.target.value)}
+                      value={current.buildOadr}
+                      onChange={(e) => handleDraftField('buildOadr', e.target.value)}
                     />
                   </CellValue>
                 </Td>
@@ -1707,19 +1747,19 @@ export function RoadFrontageBuildingDetailPanel({
                 <Td>
                   <NameWithPhone
                     editing={isEditing}
-                    name={current.landOwnerName}
-                    phone={current.landOwnerPhone}
-                    onName={(v) => handleDraftField('landOwnerName', v)}
-                    onPhone={(v) => handleDraftField('landOwnerPhone', v)}
+                    name={current.landOnam}
+                    phone={current.landOnum}
+                    onName={(v) => handleDraftField('landOnam', v)}
+                    onPhone={(v) => handleDraftField('landOnum', v)}
                   />
                 </Td>
                 <Th>주소</Th>
                 <Td>
-                  <CellValue editing={isEditing} value={dash(current.landOwnerAddress)}>
+                  <CellValue editing={isEditing} value={dash(current.landOadr)}>
                     <input
                       className={fieldClass}
-                      value={current.landOwnerAddress}
-                      onChange={(e) => handleDraftField('landOwnerAddress', e.target.value)}
+                      value={current.landOadr}
+                      onChange={(e) => handleDraftField('landOadr', e.target.value)}
                     />
                   </CellValue>
                 </Td>
@@ -1757,17 +1797,12 @@ export function RoadFrontageBuildingDetailPanel({
                   <Td className={cn(`${FORM_ROW_H} text-center tabular-nums`)}>
                     {isEditing ? (
                       <input
-                        type="number"
                         className={cn(fieldClass, 'text-center')}
-                        value={d.dongNo ?? ''}
-                        onChange={(e) =>
-                          patchDetail(d.id, {
-                            dongNo: e.target.value.trim() === '' ? null : Number(e.target.value),
-                          })
-                        }
+                        value={d.dongNo}
+                        onChange={(e) => patchDetail(d.id, { dongNo: e.target.value })}
                       />
                     ) : (
-                      d.dongNo ?? ''
+                      d.dongNo
                     )}
                   </Td>
                   <Td className="text-center tabular-nums">
@@ -1775,11 +1810,11 @@ export function RoadFrontageBuildingDetailPanel({
                       <input
                         type="date"
                         className={cn(dateFieldClass, 'text-center')}
-                        value={d.installedDate}
-                        onChange={(e) => patchDetail(d.id, { installedDate: e.target.value })}
+                        value={d.instYmd}
+                        onChange={(e) => patchDetail(d.id, { instYmd: e.target.value })}
                       />
                     ) : (
-                      formatFormDate(d.installedDate)
+                      formatFormDate(d.instYmd)
                     )}
                   </Td>
                   <Td className="text-center">
@@ -1807,15 +1842,9 @@ export function RoadFrontageBuildingDetailPanel({
                   <Td className="text-right tabular-nums">
                     {isEditing ? (
                       <input
-                        type="number"
-                        step="0.01"
                         className={cn(fieldClass, 'text-right')}
-                        value={d.areaSqm ?? ''}
-                        onChange={(e) =>
-                          patchDetail(d.id, {
-                            areaSqm: e.target.value.trim() === '' ? null : Number(e.target.value),
-                          })
-                        }
+                        value={d.areaSqm}
+                        onChange={(e) => patchDetail(d.id, { areaSqm: e.target.value })}
                       />
                     ) : (
                       formatArea(d.areaSqm)
@@ -1827,11 +1856,14 @@ export function RoadFrontageBuildingDetailPanel({
                       className="text-center text-[13px]"
                       onClick={
                         isEditing
-                          ? () => patchDetail(d.id, { locationKind: kind })
+                          ? () =>
+                              patchDetail(d.id, {
+                                ...flagsFromLocationKind(kind as RoadFrontageBuildingLocationKind),
+                              })
                           : undefined
                       }
                     >
-                      {d.locationKind === kind ? '○' : ''}
+                      {detailLocationCellDisplay(detailLocationFieldValue(d, kind))}
                     </Td>
                   ))}
                   <Td className="px-1">
@@ -1888,11 +1920,11 @@ export function RoadFrontageBuildingDetailPanel({
                       <input
                         type="date"
                         className={cn(dateFieldClass, 'text-center')}
-                        value={c.confirmDate}
-                        onChange={(e) => patchConfirm(c.id, { confirmDate: e.target.value })}
+                        value={c.checkYmd}
+                        onChange={(e) => patchConfirm(c.id, { checkYmd: e.target.value })}
                       />
                     ) : (
-                      formatFormDate(c.confirmDate)
+                      formatFormDate(c.checkYmd)
                     )}
                   </Td>
                   <Td colSpan={3} className={FORM_CONFIRM_ROW_H}>
@@ -1900,11 +1932,11 @@ export function RoadFrontageBuildingDetailPanel({
                       <input
                         className={fieldClass}
                         placeholder="성명"
-                        value={c.confirmerName}
-                        onChange={(e) => patchConfirm(c.id, { confirmerName: e.target.value })}
+                        value={c.checkNam}
+                        onChange={(e) => patchConfirm(c.id, { checkNam: e.target.value })}
                       />
                     ) : (
-                      <SignSlot name={c.confirmerName} />
+                      <SignSlot name={c.checkNam} />
                     )}
                   </Td>
                   <Td colSpan={3} className={FORM_CONFIRM_ROW_H}>
@@ -1912,11 +1944,11 @@ export function RoadFrontageBuildingDetailPanel({
                       <input
                         className={fieldClass}
                         placeholder="성명"
-                        value={c.approverName}
-                        onChange={(e) => patchConfirm(c.id, { approverName: e.target.value })}
+                        value={c.appNam}
+                        onChange={(e) => patchConfirm(c.id, { appNam: e.target.value })}
                       />
                     ) : (
-                      <SignSlot name={c.approverName} />
+                      <SignSlot name={c.appNam} />
                     )}
                   </Td>
                 </tr>
@@ -1949,9 +1981,9 @@ export function RoadFrontageBuildingDetailPanel({
           <div className="mt-1 flex items-end justify-between gap-3 px-0.5 text-[10px] leading-tight text-muted-foreground">
             <span>
               {[
-                String(current.writerDept ?? '').trim() || ROAD_FRONTAGE_BUILDING_DEFAULT_WRITER_DEPT,
-                String(current.writerName ?? '').trim(),
-                String(current.writtenAt ?? '').trim(),
+                String(current.writeDept ?? '').trim() || ROAD_FRONTAGE_BUILDING_DEFAULT_WRITER_DEPT,
+                String(current.writeNam ?? '').trim(),
+                String(current.writeYmd ?? '').trim(),
               ]
                 .filter(Boolean)
                 .join(' / ')}
@@ -2106,42 +2138,62 @@ export function RoadFrontageBuildingDetailPanel({
               </button>
             ) : null}
           </div>
-          {photos.length === 0 ? (
+          {photoItems.length === 0 ? (
             <p className="rounded border border-dashed border-border bg-background py-4 text-center text-[11px] text-muted-foreground">
               {isEditing ? '등록을 눌러 사진을 넣으세요.' : '등록된 첨부파일이 없습니다.'}
             </p>
           ) : (
             <div className="grid grid-cols-3 gap-1">
-              {photos.map((src, index) => (
+              {photoItems.map((item, index) => (
                 <div
-                  key={`${index}-${src.slice(0, 24)}`}
-                  role="button"
-                  tabIndex={0}
-                  title="크게 보기"
-                  className="relative h-[5.5rem] cursor-pointer overflow-hidden rounded border border-border bg-background focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
-                  onClick={() => openAttachmentPreview(src)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
-                      e.preventDefault();
-                      openAttachmentPreview(src);
-                    }
-                  }}
+                  key={`${item.fileName}-${index}`}
+                  className="group relative h-[5.5rem] overflow-hidden rounded border border-border bg-background"
                 >
-                  <img src={src} alt="" className="h-full w-full object-contain" />
-                  {isEditing ? (
+                  <button
+                    type="button"
+                    title={`${item.fileName} 미리보기`}
+                    aria-label={`${item.fileName} 미리보기`}
+                    onClick={() => openAttachPreview(index)}
+                    className="block h-full w-full"
+                  >
+                    <img
+                      src={
+                        item.url.startsWith('blob:')
+                          ? item.url
+                          : withServiceFileThumbQuery(item.url, 160)
+                      }
+                      alt=""
+                      className="h-full w-full object-contain"
+                    />
+                  </button>
+                  <div className="pointer-events-none absolute inset-x-0 top-0 flex justify-end gap-0.5 p-0.5 opacity-0 transition-opacity group-hover:opacity-100">
                     <button
                       type="button"
-                      title="삭제"
-                      aria-label="삭제"
+                      title="다운로드"
+                      aria-label="다운로드"
                       onClick={(e) => {
                         e.stopPropagation();
-                        void removePhoto(index);
+                        downloadAttach(item);
                       }}
-                      className="absolute right-0.5 top-0.5 rounded bg-background/90 p-0.5 text-muted-foreground hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/40 dark:hover:text-red-400"
+                      className="pointer-events-auto rounded bg-background/90 p-0.5 text-muted-foreground shadow-sm ring-1 ring-border/80 hover:bg-muted hover:text-foreground"
                     >
-                      <Trash2 className="h-3 w-3" />
+                      <Download className="h-3 w-3" />
                     </button>
-                  ) : null}
+                    {isEditing ? (
+                      <button
+                        type="button"
+                        title="삭제"
+                        aria-label="삭제"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          void removePhoto(index);
+                        }}
+                        className="pointer-events-auto rounded bg-background/90 p-0.5 text-muted-foreground shadow-sm ring-1 ring-border/80 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/40 dark:hover:text-red-400"
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </button>
+                    ) : null}
+                  </div>
                 </div>
               ))}
             </div>
@@ -2159,6 +2211,13 @@ export function RoadFrontageBuildingDetailPanel({
           />
         </section>
       </MapSideDetailScroll>
+      {attachPreview ? (
+        <ServiceFileImagePreview
+          items={attachPreview.items}
+          initialIndex={attachPreview.index}
+          onClose={() => setAttachPreview(null)}
+        />
+      ) : null}
       {actionDialog ? (
         <ActionDialog
           action={actionDialog}

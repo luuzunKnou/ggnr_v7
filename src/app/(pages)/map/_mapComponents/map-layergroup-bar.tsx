@@ -31,27 +31,8 @@ import { useMapContext } from './MapContext';
 import { LayerManagementPanel } from './LayerManagementPanel';
 import { cn } from '@/lib/utils';
 import { call } from '@/lib/api';
-import { getGeoServerBase } from '@/lib/geoserverUrl';
-import { WORKSPACE } from './layerFactory/serviceLayerFactory';
 import { getLayerGroupIconMap, defaultLayerGroupIcon } from '@/config/layerGroupIcon';
-
-/** GeoServer WMS GetLegendGraphic URL (범례 이미지) */
-function getLegendGraphicUrl(layerName: string): string {
-  const base = getGeoServerBase();
-  const params = new URLSearchParams({
-    SERVICE: 'WMS',
-    REQUEST: 'GetLegendGraphic',
-    VERSION: '1.0.0',
-    LAYER: `${WORKSPACE}:${layerName}`,
-    STYLE: layerName,
-    FORMAT: 'image/png',
-    WIDTH: '48',
-    HEIGHT: '48',
-    LEGEND_OPTIONS: 'forceLabels:off',
-  });
-  return `${base}/wms?${params.toString()}`;
-}
-
+import { getLegendGraphicUrl } from './layerFactory/serviceLayerFactory';
 import type { LayerFilterRow } from './layerFactory/serviceLayerFactory';
 export type { LayerFilterRow };
 

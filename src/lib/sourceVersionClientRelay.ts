@@ -348,7 +348,7 @@ async function readRelayCompleteNdjson(
 
   if (!result) {
     throw new Error(
-      '적용 응답이 중간에 끊겼습니다. ZIP 압축 해제가 길면 네트워크·프록시 유휴 제한으로 끊길 수 있습니다. 다시 시도하거나 서버 프록시 timeout을 늘리세요.'
+      '적용 응답이 중간에 끊겼습니다. 장시간 단계 중 게이트·프록시 유휴 제한으로 끊길 수 있습니다. 서버 [SourceCodeUpload] 로그를 확인하거나 프록시 timeout을 늘린 뒤 다시 시도하세요.'
     );
   }
   return result;
@@ -604,7 +604,7 @@ export async function relayLatestSourceFromGnms(options: {
     } else if (!isRelayTimeoutError(e) && isRestartDisconnectError(e) && !relayCompleted) {
       /** 압축 해제 등 장구간 무출력 중 연결 끊김 — 재시작 전 끊김은 실패로 안내 */
       const clearer = new Error(
-        '적용 중 네트워크 연결이 끊겼습니다. ZIP 압축 해제가 길면 중간 장비(프록시) 유휴 제한(~60초)으로 끊기는 경우가 많습니다. 다시 시도하세요.'
+        '적용 중 연결이 끊겼습니다. 압축 해제·집계·타입 검사 등 장시간 단계에서 게이트·프록시 유휴 제한(~60초)으로 끊길 수 있습니다. 서버 콘솔 [SourceCodeUpload] 로그로 진행 여부를 확인한 뒤 다시 시도하세요.'
       );
       log(`ERROR: ${clearer.message}`);
       const failVer =
