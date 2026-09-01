@@ -1624,6 +1624,10 @@ const SAFETY_FACILITY_DISPLAY: Record<
     lonKeys: ['lo', 'lot'],
     latKeys: ['la', 'lat'],
   },
+  radiation_shelter: {
+    nameKeys: ['ftn_nm'],
+    addressKeys: ['addr'],
+  },
 };
 
 function rowVal(row: Record<string, unknown>, k: string): unknown {

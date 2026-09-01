@@ -901,6 +901,20 @@ CREATE INDEX IF NOT EXISTS cons_data_solo_as_cons_code_idx ON layer.cons_data_so
 COMMENT ON TABLE layer.cons_data_solo_as IS '공사대장_개별';
 `;
 
+const RADIATION_SHELTER_SQL = `
+CREATE TABLE IF NOT EXISTS layer.radiation_shelter (
+  id SERIAL PRIMARY KEY,
+  ftn_nm text,
+  addr text,
+  actc_tnop integer,
+  remark text,
+  geom geometry(Point, 5181)
+);
+CREATE INDEX IF NOT EXISTS radiation_shelter_ftn_nm_idx ON layer.radiation_shelter (ftn_nm);
+CREATE INDEX IF NOT EXISTS radiation_shelter_addr_idx ON layer.radiation_shelter (addr);
+COMMENT ON TABLE layer.radiation_shelter IS '방사선 대피소';
+`;
+
 const VILLAGE_PATROL_SQL = `
 CREATE TABLE IF NOT EXISTS layer.village_patrol (
   id SERIAL PRIMARY KEY,
@@ -1662,6 +1676,17 @@ export async function ensureConsDataAsTables(result?: EnsureResult): Promise<Ens
   return out;
 }
 
+export async function ensureRadiationShelterTable(result?: EnsureResult): Promise<EnsureResult> {
+  const out: EnsureResult = result ?? { created: [], moved: [], existed: [], errors: [] };
+  await ensureSchemaLayer();
+  await ensureBaseTable({
+    table: 'radiation_shelter',
+    createSql: RADIATION_SHELTER_SQL,
+    result: out,
+  });
+  return out;
+}
+
 export async function ensureVillagePatrolTable(result?: EnsureResult): Promise<EnsureResult> {
   const out: EnsureResult = result ?? { created: [], moved: [], existed: [], errors: [] };
   await ensureSchemaLayer();
@@ -1712,6 +1737,7 @@ export async function ensureLayerAppTables(): Promise<EnsureResult> {
     await ensureAerialWorkUnitTables(result);
     await ensureRoadRewardTables(result);
     await ensureConsDataAsTables(result);
+    await ensureRadiationShelterTable(result);
     await ensureVillagePatrolTable(result);
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);

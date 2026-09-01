@@ -1,8 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { useSession } from 'next-auth/react';
-import { ChevronDown, ChevronRight, Trash2, X } from 'lucide-react';
+import { ChevronDown, ChevronRight, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { call } from '@/lib/api';
 import { MapSideDetailScroll } from '../../../_mapComponents/MapSideDetailScroll';
@@ -10,6 +9,7 @@ import {
   LayerRowAddButton,
   LayerRowPanelButton,
 } from '@/app/(pages)/map/_mapComponents/layerRowEdit';
+import { SafetyFacHistoryModal } from './SafetyFacHistoryModal';
 
 export type SafetyFacHistoryItem = {
   id: string;
@@ -18,7 +18,7 @@ export type SafetyFacHistoryItem = {
   content: string;
 };
 
-type HistoryComposerMode = 'closed' | 'add' | 'edit';
+type HistoryModalMode = 'add' | 'edit';
 
 type Props = {
   /** 시설물 종류 — 레이어(테이블)명 → his_gubun */
@@ -27,7 +27,7 @@ type Props = {
   ftrIdn: string;
 };
 
-const HISTORY_TABLE_COL_COUNT = 5;
+const HISTORY_TABLE_COL_COUNT = 4;
 
 /** 안전점검 상세 속성표 th 배경과 동일 */
 const SAFETY_FAC_TABLE_TH_CLASS =
@@ -45,44 +45,21 @@ function mapApiItem(raw: Record<string, unknown>): SafetyFacHistoryItem | null {
 }
 
 export function SafetyFacHistorySection({ hisGubun, ftrIdn }: Props) {
-  const { data: session } = useSession();
   const [items, setItems] = useState<SafetyFacHistoryItem[]>([]);
   const [searchText, setSearchText] = useState('');
   const [appliedQuery, setAppliedQuery] = useState('');
-  const [draft, setDraft] = useState('');
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [composerMode, setComposerMode] = useState<HistoryComposerMode>('closed');
+  const [modalMode, setModalMode] = useState<HistoryModalMode | null>(null);
+  const [modalItem, setModalItem] = useState<SafetyFacHistoryItem | null>(null);
   const [sectionOpen, setSectionOpen] = useState(true);
   const [loading, setLoading] = useState(false);
-  const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const isEditMode = composerMode === 'edit' && editingId != null;
-  const composerOpen = composerMode !== 'closed';
-
-  /** 시설 전환·저장 완료 시 — 입력·편집 선택 모두 해제 */
-  const clearEditor = useCallback(() => {
-    setDraft('');
-    setEditingId(null);
-    setComposerMode('closed');
-  }, []);
-
-  /** 초기화 — 입력란 내용만 비움 (편집·추가 모드 유지) */
-  const clearDraftOnly = useCallback(() => {
-    setDraft('');
-  }, []);
-
   const loadList = useCallback(
-    async (search: string, options?: { openInitial?: boolean }) => {
+    async (search: string) => {
       const gubun = hisGubun.trim();
       const idn = ftrIdn.trim();
       if (!gubun || !idn) {
         setItems([]);
-        if (options?.openInitial) {
-          setComposerMode('add');
-          setEditingId(null);
-          setDraft('');
-        }
         return;
       }
       setLoading(true);
@@ -101,11 +78,6 @@ export function SafetyFacHistorySection({ hisGubun, ftrIdn }: Props) {
         if (data?.error || data?.success === false) {
           setError(String(data?.error ?? '이력을 불러오지 못했습니다.'));
           setItems([]);
-          if (options?.openInitial) {
-            setComposerMode('add');
-            setEditingId(null);
-            setDraft('');
-          }
           return;
         }
         const list = Array.isArray(data?.data) ? data.data : [];
@@ -113,26 +85,9 @@ export function SafetyFacHistorySection({ hisGubun, ftrIdn }: Props) {
           .map((row: Record<string, unknown>) => mapApiItem(row))
           .filter((x: SafetyFacHistoryItem | null): x is SafetyFacHistoryItem => x != null);
         setItems(nextItems);
-        if (options?.openInitial) {
-          if (nextItems.length > 0) {
-            const first = nextItems[0];
-            setComposerMode('edit');
-            setEditingId(first.id);
-            setDraft(first.content);
-          } else {
-            setComposerMode('add');
-            setEditingId(null);
-            setDraft('');
-          }
-        }
       } catch {
         setError('이력을 불러오지 못했습니다.');
         setItems([]);
-        if (options?.openInitial) {
-          setComposerMode('add');
-          setEditingId(null);
-          setDraft('');
-        }
       } finally {
         setLoading(false);
       }
@@ -145,10 +100,9 @@ export function SafetyFacHistorySection({ hisGubun, ftrIdn }: Props) {
     setAppliedQuery('');
     setSectionOpen(true);
     setError(null);
-    setComposerMode('closed');
-    setEditingId(null);
-    setDraft('');
-    void loadList('', { openInitial: true });
+    setModalMode(null);
+    setModalItem(null);
+    void loadList('');
   }, [hisGubun, ftrIdn, loadList]);
 
   const handleSearch = () => {
@@ -166,94 +120,24 @@ export function SafetyFacHistorySection({ hisGubun, ftrIdn }: Props) {
   const showSearchClear = Boolean(searchText.trim() || appliedQuery);
 
   const handleAdd = () => {
-    setComposerMode('add');
-    setEditingId(null);
-    setDraft('');
+    setModalMode('add');
+    setModalItem(null);
     setError(null);
   };
 
-  const beginEdit = (it: SafetyFacHistoryItem) => {
-    if (editingId === it.id && composerMode === 'edit') {
-      clearEditor();
-      setError(null);
-      return;
-    }
-    setComposerMode('edit');
-    setEditingId(it.id);
-    setDraft(it.content);
+  const openEditModal = (it: SafetyFacHistoryItem) => {
+    setModalMode('edit');
+    setModalItem(it);
     setError(null);
   };
 
-  const handleSubmit = async () => {
-    const content = draft.trim();
-    if (!content || saving) return;
-    const gubun = hisGubun.trim();
-    const idn = ftrIdn.trim();
-    if (!gubun || !idn) return;
-
-    setSaving(true);
-    setError(null);
-    try {
-      if (isEditMode && editingId) {
-        const res = await call('', 'POST', {
-          service: 'safedataHistoryService',
-          action: 'update',
-          params: { id: Number(editingId), contents: content },
-        });
-        const data = res?.data ?? res;
-        if (data?.error || data?.success === false) {
-          setError(String(data?.error ?? '수정에 실패했습니다.'));
-          return;
-        }
-      } else {
-        const createdBy =
-          String(session?.user?.name ?? '').trim() ||
-          String(session?.user?.id ?? '').trim() ||
-          undefined;
-        const res = await call('', 'POST', {
-          service: 'safedataHistoryService',
-          action: 'create',
-          params: {
-            hisGubun: gubun,
-            ftrIdn: idn,
-            contents: content,
-            createdBy,
-          },
-        });
-        const data = res?.data ?? res;
-        if (data?.error || data?.success === false) {
-          setError(String(data?.error ?? '저장에 실패했습니다.'));
-          return;
-        }
-      }
-      clearEditor();
-      await loadList(appliedQuery);
-    } catch {
-      setError(isEditMode ? '수정에 실패했습니다.' : '저장에 실패했습니다.');
-    } finally {
-      setSaving(false);
-    }
+  const closeModal = () => {
+    setModalMode(null);
+    setModalItem(null);
   };
 
-  const handleDelete = async (it: SafetyFacHistoryItem) => {
-    if (!window.confirm('이 이력을 삭제할까요?')) return;
-    setError(null);
-    try {
-      const res = await call('', 'POST', {
-        service: 'safedataHistoryService',
-        action: 'remove',
-        params: { id: Number(it.id) },
-      });
-      const data = res?.data ?? res;
-      if (data?.error || data?.success === false) {
-        setError(String(data?.error ?? '삭제에 실패했습니다.'));
-        return;
-      }
-      if (editingId === it.id) clearEditor();
-      await loadList(appliedQuery);
-    } catch {
-      setError('삭제에 실패했습니다.');
-    }
+  const handleSaved = () => {
+    void loadList(appliedQuery);
   };
 
   return (
@@ -276,7 +160,7 @@ export function SafetyFacHistorySection({ hisGubun, ftrIdn }: Props) {
       </div>
 
       {sectionOpen ? (
-        <MapSideDetailScroll className="standard-detail-scroll min-h-0 flex-1 flex-col">
+        <div className="standard-detail-scroll flex min-h-0 flex-1 flex-col">
           <div className="flex shrink-0 items-center gap-1.5">
             <div className="standard-search-wrap min-w-0 flex-1">
               <input
@@ -313,7 +197,7 @@ export function SafetyFacHistorySection({ hisGubun, ftrIdn }: Props) {
             >
               검색
             </LayerRowPanelButton>
-            <LayerRowAddButton onClick={handleAdd} disabled={loading || saving} />
+            <LayerRowAddButton onClick={handleAdd} disabled={loading} />
           </div>
 
           <div className="mt-2 flex min-h-0 flex-1 flex-col">
@@ -321,14 +205,13 @@ export function SafetyFacHistorySection({ hisGubun, ftrIdn }: Props) {
               <p className="standard-detail-error-spaced shrink-0">{error}</p>
             ) : null}
             <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded border border-border bg-background">
-              <div className="scrollbar-thin min-h-0 flex-1 overflow-y-auto overscroll-contain">
+              <MapSideDetailScroll className="min-h-0 flex-1">
                 <table className="standard-list-table text-[11px] text-foreground">
                   <colgroup>
                     <col className="w-8" />
                     <col />
                     <col className="w-16" />
                     <col className="w-[4.5rem]" />
-                    <col className="w-8" />
                   </colgroup>
                   <thead className="standard-table-thead bg-slate-100 dark:bg-muted">
                     <tr>
@@ -343,9 +226,6 @@ export function SafetyFacHistorySection({ hisGubun, ftrIdn }: Props) {
                       </th>
                       <th scope="col" className={cn(SAFETY_FAC_TABLE_TH_CLASS, 'text-left')}>
                         작성일시
-                      </th>
-                      <th scope="col" className={cn(SAFETY_FAC_TABLE_TH_CLASS, 'text-left')}>
-                        <span className="sr-only">삭제</span>
                       </th>
                     </tr>
                   </thead>
@@ -364,7 +244,8 @@ export function SafetyFacHistorySection({ hisGubun, ftrIdn }: Props) {
                       </tr>
                     ) : (
                       items.map((it, index) => {
-                        const selected = editingId === it.id && composerMode === 'edit';
+                        const selected =
+                          modalMode === 'edit' && modalItem?.id === it.id;
                         return (
                           <tr
                             key={it.id}
@@ -374,11 +255,11 @@ export function SafetyFacHistorySection({ hisGubun, ftrIdn }: Props) {
                               'standard-list-row border-b border-border last:border-b-0',
                               selected && 'standard-list-row-selected'
                             )}
-                            onClick={() => beginEdit(it)}
+                            onClick={() => openEditModal(it)}
                             onKeyDown={(e) => {
                               if (e.key === 'Enter' || e.key === ' ') {
                                 e.preventDefault();
-                                beginEdit(it);
+                                openEditModal(it);
                               }
                             }}
                           >
@@ -400,68 +281,27 @@ export function SafetyFacHistorySection({ hisGubun, ftrIdn }: Props) {
                             >
                               {it.createdAt}
                             </td>
-                            <td className="px-0.5 py-1 align-middle">
-                              <div className="flex items-center justify-start">
-                                <button
-                                  type="button"
-                                  className="inline-flex h-6 w-6 cursor-pointer items-center justify-center rounded text-muted-foreground hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/40"
-                                  title="삭제"
-                                  aria-label="삭제"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    void handleDelete(it);
-                                  }}
-                                >
-                                  <Trash2 className="h-3 w-3" />
-                                </button>
-                              </div>
-                            </td>
                           </tr>
                         );
                       })
                     )}
                   </tbody>
                 </table>
-              </div>
+              </MapSideDetailScroll>
             </div>
           </div>
+        </div>
+      ) : null}
 
-          {composerOpen ? (
-            <div className="standard-detail-section-divider-padded flex shrink-0 flex-col">
-              <div className="flex h-[4.5rem] items-stretch gap-1.5">
-                <textarea
-                  value={draft}
-                  onChange={(e) => setDraft(e.target.value)}
-                  placeholder={
-                    isEditMode ? '수정할 내용을 입력하세요' : '이력 내용을 입력하세요'
-                  }
-                  title="이력 내용"
-                  disabled={saving}
-                  className="standard-detail-input box-border h-full min-h-0 min-w-0 flex-1 resize-none rounded-2xl px-3 py-2 leading-snug disabled:opacity-60"
-                />
-                <div className="flex h-full shrink-0 flex-col gap-1">
-                  <LayerRowPanelButton
-                    onClick={() => void handleSubmit()}
-                    disabled={!draft.trim() || saving}
-                    loading={saving}
-                    title={isEditMode ? '수정' : '저장'}
-                    className="min-h-0 min-w-[3.25rem] flex-1 justify-center"
-                  >
-                    {isEditMode ? '수정' : '저장'}
-                  </LayerRowPanelButton>
-                  <LayerRowPanelButton
-                    onClick={clearDraftOnly}
-                    disabled={saving || !draft.trim()}
-                    title="초기화"
-                    className="min-h-0 min-w-[3.25rem] flex-1 justify-center"
-                  >
-                    초기화
-                  </LayerRowPanelButton>
-                </div>
-              </div>
-            </div>
-          ) : null}
-        </MapSideDetailScroll>
+      {modalMode ? (
+        <SafetyFacHistoryModal
+          mode={modalMode}
+          hisGubun={hisGubun}
+          ftrIdn={ftrIdn}
+          item={modalItem ?? undefined}
+          onClose={closeModal}
+          onSaved={handleSaved}
+        />
       ) : null}
     </section>
   );

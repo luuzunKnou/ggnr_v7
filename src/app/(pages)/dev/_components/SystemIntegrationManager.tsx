@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/app/shadcnComponents
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/app/shadcnComponents/ui/table"
 import { call } from "@/lib/api"
 
-type SystemKey = "KAIS" | "KRAS" | "KORPES" | "SEUMTEO" | "SAEOL" | "SAFETYDATA" | "FMS" | "NEXTGEN"
+type SystemKey = "KAIS" | "KRAS" | "KORPES" | "SEUMTEO" | "SAEOL" | "SAFETYDATA" | "FMS" | "NEXTGEN" | "GEOM"
 
 type LogRow = {
   ijl_key: number
@@ -34,6 +34,16 @@ type SafetydataDetailLogRow = {
   log_safetydata_response_code: string | null
   log_safetydata_response_msg: string | null
   log_safetydata_status: string
+}
+
+type GeomIntegrationTableRow = {
+  tableName: string
+  geomColumn: string
+}
+
+type GeomIntegrationColumnRow = {
+  columnName: string
+  dataType: string
 }
 
 type ParsedDetail = {
@@ -130,6 +140,7 @@ export function SystemIntegrationManager() {
         { key: "SAFETYDATA", label: "재난안전데이터" },
         { key: "FMS", label: "FMS" },
         { key: "NEXTGEN", label: "차세대" },
+        { key: "GEOM", label: "GEOM" },
       ] as const,
     []
   )
@@ -145,6 +156,12 @@ export function SystemIntegrationManager() {
   const [safetyDatasetId, setSafetyDatasetId] = useState<string>("__ALL__")
   const [krasTarget, setKrasTarget] = useState<string>("all")
   const [safetyDetailRows, setSafetyDetailRows] = useState<SafetydataDetailLogRow[]>([])
+  const [geomTables, setGeomTables] = useState<GeomIntegrationTableRow[]>([])
+  const [geomTablesLoading, setGeomTablesLoading] = useState(false)
+  const [geomTableName, setGeomTableName] = useState("")
+  const [geomColumns, setGeomColumns] = useState<GeomIntegrationColumnRow[]>([])
+  const [geomColumnsLoading, setGeomColumnsLoading] = useState(false)
+  const [geomAddressColumn, setGeomAddressColumn] = useState("")
 
   const latestJob = rows[0]
   const latestParsedJob = parseJob(latestJob?.ijl_message ?? "")
@@ -183,6 +200,55 @@ export function SystemIntegrationManager() {
     }
   }
 
+  const fetchGeomTables = async () => {
+    setGeomTablesLoading(true)
+    try {
+      const res = await call("", "POST", {
+        service: "integrationService",
+        action: "listGeomIntegrationTables",
+        params: {},
+      })
+      const rows = (res?.data?.rows ?? []) as GeomIntegrationTableRow[]
+      setGeomTables(rows)
+      if (!geomTableName && rows[0]?.tableName) {
+        setGeomTableName(rows[0].tableName)
+      }
+    } catch {
+      setGeomTables([])
+    } finally {
+      setGeomTablesLoading(false)
+    }
+  }
+
+  const fetchGeomColumns = async (tableName: string) => {
+    if (!tableName) {
+      setGeomColumns([])
+      setGeomAddressColumn("")
+      return
+    }
+    setGeomColumnsLoading(true)
+    try {
+      const res = await call("", "POST", {
+        service: "integrationService",
+        action: "listGeomIntegrationColumns",
+        params: { tableName },
+      })
+      const rows = (res?.data?.rows ?? []) as GeomIntegrationColumnRow[]
+      setGeomColumns(rows)
+      const textCols = rows.filter((c) =>
+        /character|text|varchar|citext/i.test(c.dataType)
+      )
+      const preferred = textCols.find((c) => /addr|adres|address|rona|position/i.test(c.columnName))
+      const nextCol = preferred?.columnName ?? textCols[0]?.columnName ?? rows[0]?.columnName ?? ""
+      setGeomAddressColumn(nextCol)
+    } catch {
+      setGeomColumns([])
+      setGeomAddressColumn("")
+    } finally {
+      setGeomColumnsLoading(false)
+    }
+  }
+
   const fetchSafetydataDetailLogs = async (opts?: { silent?: boolean }) => {
     if (!opts?.silent) setDetailLogsLoading(true)
     try {
@@ -206,8 +272,17 @@ export function SystemIntegrationManager() {
       fetchSafetydataDatasets()
       fetchSafetydataDetailLogs()
     }
+    if (active === "GEOM") {
+      void fetchGeomTables()
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active])
+
+  useEffect(() => {
+    if (active !== "GEOM") return
+    void fetchGeomColumns(geomTableName)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active, geomTableName])
 
   /** 연계 실행 중에는 로그를 주기적으로 당겨와 진행 상황이 멈춰 보이지 않게 함 */
   useEffect(() => {
@@ -239,6 +314,10 @@ export function SystemIntegrationManager() {
       }
       if (active === "KRAS") {
         params.target = krasTarget
+      }
+      if (active === "GEOM") {
+        params.tableName = geomTableName
+        params.addressColumn = geomAddressColumn
       }
       const runPromise = call("", "POST", {
         service: "integrationService",
@@ -326,11 +405,54 @@ export function SystemIntegrationManager() {
         </div>
       ) : null}
 
+      {active === "GEOM" ? (
+        <div className="flex flex-col gap-2 shrink-0">
+          <label className="text-sm text-muted-foreground flex flex-wrap items-center gap-2">
+            <span>테이블</span>
+            <select
+              className="border rounded-md px-2 py-1.5 text-sm bg-background min-w-[12rem] max-w-full"
+              value={geomTableName}
+              onChange={(e) => setGeomTableName(e.target.value)}
+              disabled={geomTablesLoading || loading}
+            >
+              {geomTables.map((t) => (
+                <option key={t.tableName} value={t.tableName}>
+                  layer.{t.tableName}
+                </option>
+              ))}
+            </select>
+            {geomTablesLoading ? <span className="text-xs">목록 불러오는 중…</span> : null}
+          </label>
+          <label className="text-sm text-muted-foreground flex flex-wrap items-center gap-2">
+            <span>주소 컬럼</span>
+            <select
+              className="border rounded-md px-2 py-1.5 text-sm bg-background min-w-[12rem] max-w-full"
+              value={geomAddressColumn}
+              onChange={(e) => setGeomAddressColumn(e.target.value)}
+              disabled={geomColumnsLoading || loading || !geomTableName}
+            >
+              {geomColumns.map((c) => (
+                <option key={c.columnName} value={c.columnName}>
+                  {c.columnName} ({c.dataType})
+                </option>
+              ))}
+            </select>
+            {geomColumnsLoading ? <span className="text-xs">컬럼 불러오는 중…</span> : null}
+          </label>
+        </div>
+      ) : null}
+
       <Card className="shrink-0">
         <CardHeader className="pb-2 flex flex-row items-center justify-between gap-2 flex-nowrap">
           <CardTitle className="text-base min-w-0 truncate">시스템 연계 - {active}</CardTitle>
           <div className="flex items-center gap-2 shrink-0">
-            <Button type="button" size="sm" className="min-w-[5.5rem]" onClick={run} disabled={loading}>
+            <Button
+              type="button"
+              size="sm"
+              className="min-w-[5.5rem]"
+              onClick={run}
+              disabled={loading || (active === "GEOM" && (!geomTableName || !geomAddressColumn))}
+            >
               {loading ? "연계 중…" : "연계 시작"}
             </Button>
             <Button

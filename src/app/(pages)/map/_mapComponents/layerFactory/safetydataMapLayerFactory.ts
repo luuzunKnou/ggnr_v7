@@ -18,6 +18,9 @@ import { getGeoServerBase } from '@/lib/geoserverUrl';
 /** 병상정보 패널 — GeoServer WMS(병원 POI). `safetyMapLayerVisibility` 키와 동일 */
 export const SAFETY_HOSPITAL_POI_GEO_TABLE = 'sd_mois_hospital_poi' as const;
 
+/** 방사선 대피소 패널 — GeoServer WMS */
+export const RADIATION_SHELTER_GEO_TABLE = 'radiation_shelter' as const;
+
 /** 저수지 수위 패널(saftyJsj) — GeoServer WMS(저수지 제원 포인트) */
 export const SAFETY_RESERVOIR_MASTER_GEO_TABLE = 'sd_reservoir_master' as const;
 
@@ -80,6 +83,12 @@ export const SAFETY_MAP_GEOSERVER_OVERLAYS: {
     panelId: SAFETY_RESERVOIR_MASTER_GEO_TABLE,
     tableName: SAFETY_RESERVOIR_MASTER_GEO_TABLE,
     zIndex: 127,
+    opacity: 0.88,
+  },
+  {
+    panelId: RADIATION_SHELTER_GEO_TABLE,
+    tableName: RADIATION_SHELTER_GEO_TABLE,
+    zIndex: 128,
     opacity: 0.88,
   },
 ];

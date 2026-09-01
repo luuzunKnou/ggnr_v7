@@ -19,9 +19,9 @@ import {
 import { SafetyFacRelatedLayerSection } from './SafetyFacRelatedLayerSection';
 import { SafetyFacHistorySection } from './SafetyFacHistorySection';
 
-/** 안전점검 상세 속성표 th·라벨 배경과 동일 */
+/** 안전점검 상세 속성표 th·라벨 — 이력 thead와 동일 배경·글자색 */
 const SAFETY_FAC_ATTR_LABEL_CLASS =
-  'standard-detail-attr-label bg-slate-100 dark:bg-muted';
+  'standard-detail-attr-label bg-slate-100 text-slate-500 dark:bg-muted dark:text-muted-foreground';
 
 /** 라벨 글자 수 기준 컬럼 폭(rem). 한 줄 유지·과대 확장 방지 */
 function maxLabelColumnRem(labels: string[]): number {
