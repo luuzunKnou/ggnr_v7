@@ -82,8 +82,8 @@ const actionBtnPrimary =
 const actionBtnDanger =
   'standard-detail-action-btn-danger inline-flex h-7 items-center gap-1';
 const BORDER = 'border-[1px] border-solid border-foreground/80';
-/** 표 헤더 — 인쇄 서식(#CBC6DD)과 동일 톤. muted(#f5f5f5)와 secondary가 같아 구분 불가 */
-const FORM_TH_BG = 'bg-[#CBC6DD] dark:bg-zinc-600';
+/** 표 헤더 — muted(#f5f5f5)와 구분되는 연한 청회색 */
+const FORM_TH_BG = 'bg-[#E4E9F0] dark:bg-zinc-600';
 const PAPER_SIZE_LABEL = '364mm × 257mm [백상지 200g/m²]';
 /** 원본 서식 건축물 내용 칸 수 */
 const FORM_DETAIL_MIN_ROWS = 5;
