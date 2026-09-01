@@ -127,9 +127,9 @@ export function RoadFrontageMarkerListPanel({
   const roadNetworkLayerOn = isRoadNetworkWmsVisible(mapContext?.visibleLayerNames);
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-background">
-      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border px-3 py-1.5">
-        <span className="text-sm font-semibold text-foreground">접도구역 표주</span>
+    <div className="standard-panel-root">
+      <div className="standard-panel-header">
+        <span className="standard-panel-title">접도구역 표주</span>
         <div className="flex items-center gap-1">
           <LayerRowPanelButton
             type="button"
@@ -137,7 +137,12 @@ export function RoadFrontageMarkerListPanel({
             aria-label={roadNetworkLayerOn ? '도로망도 레이어 끄기' : '도로망도 레이어 켜기'}
             aria-pressed={roadNetworkLayerOn}
             onClick={() => toggleRoadNetworkWmsLayers(mapContext?.setVisibleLayerNames)}
-            className={roadNetworkLayerOn ? 'border-primary bg-primary/15 text-foreground hover:opacity-90' : undefined}
+            className={cn(
+              'standard-layer-toggle-chip',
+              roadNetworkLayerOn
+                ? 'standard-layer-toggle-chip-active'
+                : 'standard-layer-toggle-chip-inactive'
+            )}
           >
             <Layers className="h-3 w-3 shrink-0" aria-hidden />
             도로망도
@@ -152,7 +157,7 @@ export function RoadFrontageMarkerListPanel({
           <button
             type="button"
             onClick={onClose}
-            className="shrink-0 rounded p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            className="standard-panel-close"
             title="닫기"
             aria-label="닫기"
           >
@@ -161,81 +166,65 @@ export function RoadFrontageMarkerListPanel({
         </div>
       </div>
 
-      <div className="shrink-0 space-y-2 border-b border-border px-3 py-2">
-        <div className="relative">
-          <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+      <div className="standard-filter-section">
+        <div className="standard-search-wrap">
+          <Search className="standard-search-icon" />
           <input
             type="search"
             value={keyword}
             onChange={(e) => setKeyword(e.target.value)}
-            placeholder="검색 (노선명·소유자 등)"
-            className="w-full rounded-md border border-border bg-background py-1.5 pl-8 pr-3 text-sm text-foreground outline-none placeholder:text-muted-foreground ring-offset-2 focus:border-primary focus:ring-2 focus:ring-primary/25"
+            placeholder="노선명·소유자·지번"
+            className="standard-search-input"
           />
         </div>
-        <div className="flex flex-wrap gap-1">
-          <button
-            type="button"
-            onClick={() => setRoadTypeFilter('')}
-            className={cn(
-              'rounded border px-2 py-0.5 text-[11px]',
-              !roadTypeFilter
-                ? 'border-primary bg-primary/15 text-foreground'
-                : 'border-border bg-background text-muted-foreground hover:bg-muted'
-            )}
-          >
-            전체
-          </button>
-          {ROAD_FRONTAGE_MARKER_ROAD_TYPES.map((t) => (
-            <button
-              key={t}
-              type="button"
-              onClick={() => setRoadTypeFilter(t)}
-              className={cn(
-                'rounded border px-2 py-0.5 text-[11px]',
-                roadTypeFilter === t
-                  ? 'border-primary bg-primary/15 text-foreground'
-                  : 'border-border bg-background text-muted-foreground hover:bg-muted'
-              )}
-            >
-              {t}
-            </button>
-          ))}
+        <div className="standard-filter-chips">
+          {[{ value: '', label: '전체' }, ...ROAD_FRONTAGE_MARKER_ROAD_TYPES.map((t) => ({ value: t, label: t }))].map(
+            (opt) => {
+              const active = roadTypeFilter === opt.value;
+              return (
+                <button
+                  key={opt.value || '__all__'}
+                  type="button"
+                  onClick={() => setRoadTypeFilter(opt.value)}
+                  className={cn('standard-filter-chip', active && 'standard-filter-chip-active')}
+                >
+                  {opt.label}
+                </button>
+              );
+            }
+          )}
         </div>
       </div>
 
-      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+      <div className="standard-list-body">
         {error ? (
           <div className="shrink-0 border-b border-destructive/20 bg-destructive/10 px-3 py-2 text-xs text-destructive">
             {error}
           </div>
         ) : null}
-        <div ref={listScrollRef} className="min-h-0 flex-1 overflow-auto scrollbar-thin">
-          <table className="w-full min-w-[280px] table-fixed border-collapse text-left text-xs">
+        <div ref={listScrollRef} className="standard-list-scroll">
+          <table className="standard-list-table min-w-0 w-full table-fixed">
             <colgroup>
               <col className="w-[88px]" />
               <col />
             </colgroup>
-            <thead className="sticky top-0 z-[1] bg-muted shadow-[inset_0_-1px_0_0_var(--border)]">
+            <thead className="standard-table-thead">
               <tr>
-                <th className="whitespace-nowrap border-b-0 px-2 py-2 font-semibold text-foreground/90">
-                  도로의 종류
-                </th>
-                <th className="whitespace-nowrap border-b-0 px-2 py-2 font-semibold text-foreground/90">
-                  노선명
-                </th>
+                <th className="standard-table-th standard-table-th-left">도로의 종류</th>
+                <th className="standard-table-th standard-table-th-left">노선명</th>
               </tr>
             </thead>
             <tbody>
               {loading && filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={2} className="px-2 py-6 text-center text-muted-foreground">
+                  <td colSpan={2} className="standard-table-empty">
                     불러오는 중…
                   </td>
                 </tr>
               ) : filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={2} className="px-2 py-6 text-center text-muted-foreground">
-                    등록된 관리대장이 없습니다.
+                  <td colSpan={2} className="standard-table-empty">
+                    {items.length === 0 ? '등록된 관리대장이 없습니다.' : '검색 결과가 없습니다.'}
                   </td>
                 </tr>
               ) : (
@@ -254,17 +243,14 @@ export function RoadFrontageMarkerListPanel({
                           handleSelect(l);
                         }
                       }}
-                      className={cn(
-                        'cursor-pointer border-b border-border transition-colors',
-                        isSelected
-                          ? 'bg-primary/10 dark:bg-primary/25'
-                          : 'hover:bg-muted/50'
-                      )}
+                      className={cn('standard-list-row', isSelected && 'standard-list-row-selected')}
                     >
-                      <td className="max-w-0 truncate px-2 py-1.5 text-foreground" title={l.roadType}>
-                        {l.roadType || '—'}
+                      <td className="standard-table-td-compact">
+                        <span className="standard-status-badge standard-status-badge-muted">
+                          {l.roadType || '—'}
+                        </span>
                       </td>
-                      <td className="max-w-0 truncate px-2 py-1.5 text-foreground" title={l.routeName}>
+                      <td className="standard-table-td-text" title={l.routeName || undefined}>
                         {l.routeName || '(노선명 미입력)'}
                       </td>
                     </tr>
@@ -274,8 +260,11 @@ export function RoadFrontageMarkerListPanel({
             </tbody>
           </table>
         </div>
-        <div className="shrink-0 border-t border-border px-3 py-1.5 text-[11px] text-muted-foreground">
+        <div className="standard-list-footer">
           {filtered.length.toLocaleString()}건
+          {roadTypeFilter || keyword.trim()
+            ? ` / 전체 ${items.length.toLocaleString()}건`
+            : ''}
         </div>
       </div>
     </div>

@@ -10,6 +10,7 @@ export const SER_FILE_ENG = {
   riverConstructionLedger: 'riverConstructionLedger',
   smallRiverUseLedger: 'smallRiverUseLedger',
   roadUseLedger: 'roadUseLedger',
+  roadLedger: 'roadLedger',
   roadFrontageBuilding: 'roadFrontageBuilding',
   waterworksLedger: 'waterworksLedger',
   complaint: 'complaint',

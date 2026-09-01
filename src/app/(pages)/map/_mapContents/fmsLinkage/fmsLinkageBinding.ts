@@ -12,12 +12,11 @@ export const FMS_LIST_SYSTEM_FILTERS = [
 
 export type FmsListSystemFilter = (typeof FMS_LIST_SYSTEM_FILTERS)[number]['value'];
 
-/** 도로·건설이면 해당 값. 하천·그 외는 전체(상하수도만 묶인 하천 키는 전체로 연다) */
+/** 도로·건설·상하수도(하천)면 URL system에 맞춤. 그 외(roadFMS 등)는 도로 */
 export function defaultFmsListSystemFilter(system: string): FmsListSystemFilter {
   const key = String(system ?? '').trim().toLowerCase();
-  if (key === 'river') return '';
   if (systemKeyToFmsPrefix(key)) return key as FmsListSystemFilter;
-  return '';
+  return 'road';
 }
 
 export const FMS_LIST_COLUMNS = [

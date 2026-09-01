@@ -17,6 +17,12 @@
 import { db, pool } from '@/database/db';
 import { sql } from 'drizzle-orm';
 import { MEMO_TABLES } from '@/lib/memoConfig';
+import {
+  ROAD_FRONTAGE_BUILDING_CONFIRM_LAYER_COLUMNS,
+  ROAD_FRONTAGE_BUILDING_DETAIL_LAYER_COLUMNS,
+  ROAD_FRONTAGE_BUILDING_LAYER_COLUMNS,
+  type RoadFrontageBuildingLayerColumnDef,
+} from '@/database/schema/road_frontage_building';
 
 type EnsureResult = {
   created: string[];
@@ -55,6 +61,55 @@ async function columnExists(schema: string, table: string, column: string): Prom
   );
   return (res.rows?.length ?? 0) > 0;
 }
+
+/** 구형 영문 컬럼 → DBF 축약명. 대상 컬럼이 이미 있으면 값 병합 후 구형 컬럼 제거 */
+function legacyColumnRenameSql(table: string, fromCol: string, toCol: string): string {
+  const t = table.replace(/'/g, "''");
+  return `
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'layer' AND table_name = '${t}' AND column_name = '${fromCol}'
+  ) AND NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'layer' AND table_name = '${t}' AND column_name = '${toCol}'
+  ) THEN
+    ALTER TABLE layer.${table} RENAME COLUMN ${fromCol} TO ${toCol};
+  ELSIF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'layer' AND table_name = '${t}' AND column_name = '${fromCol}'
+  ) AND EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'layer' AND table_name = '${t}' AND column_name = '${toCol}'
+  ) THEN
+    UPDATE layer.${table}
+    SET ${toCol} = COALESCE(NULLIF(btrim(${toCol}), ''), ${fromCol})
+    WHERE ${fromCol} IS NOT NULL;
+    ALTER TABLE layer.${table} DROP COLUMN ${fromCol};
+  END IF;`;
+}
+
+const ROAD_FRONTAGE_BUILDING_LEGACY_RENAMES: Array<[string, string]> = [
+  ['route_name', 'route_nam'],
+  ['prepared_date', 'pre_ymd'],
+  ['location_address', 'loc_adr'],
+  ['resident_name', 'resi_nam'],
+  ['resident_phone', 'resi_num'],
+  ['building_owner_name', 'build_onam'],
+  ['building_owner_phone', 'build_onum'],
+  ['building_owner_address', 'build_oadr'],
+  ['land_owner_name', 'land_onam'],
+  ['land_owner_phone', 'land_onum'],
+  ['land_owner_address', 'land_oadr'],
+  ['writer_dept', 'write_dept'],
+  ['writer_name', 'write_nam'],
+  ['written_at', 'write_ymd'],
+  ['attach_shot_before', 'before_ymd'],
+  ['attach_shot_after', 'after_ymd'],
+  ['create_date', 'crea_ymd'],
+  ['create_user', 'crea_nam'],
+  ['update_date', 'upd_ymd'],
+  ['update_user', 'upd_nam'],
+];
 
 async function schemaExists(schema: string): Promise<boolean> {
   const res = await pool.query(
@@ -97,6 +152,109 @@ async function execSqlStatements(raw: string): Promise<void> {
     .filter((s) => s.length > 0);
   for (const part of parts) {
     await db.execute(sql.raw(part));
+  }
+}
+
+async function copyLegacyColumnData(
+  table: string,
+  targetCol: string,
+  def: RoadFrontageBuildingLayerColumnDef
+): Promise<void> {
+  if (def.legacyCopyExpr) {
+    if (def.legacyCopyExpr.includes('ftr_idn') && !(await columnExists('layer', table, 'ftr_idn'))) {
+      return;
+    }
+    if (
+      def.legacyCopyExpr.includes('loc_adr_r') &&
+      !(await columnExists('layer', table, 'loc_adr_r')) &&
+      !(await columnExists('layer', table, 'loc_adr_c'))
+    ) {
+      return;
+    }
+    const expr = def.legacyCopyExpr.includes('ftr_idn')
+      ? `CASE WHEN TRIM(ftr_idn::text) ~ '^[0-9]+$' THEN TRIM(ftr_idn::text)::integer ELSE NULL END`
+      : def.legacyCopyExpr;
+    await db.execute(
+      sql.raw(
+        `UPDATE layer.${table}
+         SET ${targetCol} = ${expr}
+         WHERE ${targetCol} IS NULL`
+      )
+    );
+    return;
+  }
+  if (!def.legacyFrom) return;
+  if (!(await columnExists('layer', table, def.legacyFrom))) return;
+  await db.execute(
+    sql.raw(
+      `UPDATE layer.${table}
+       SET ${targetCol} = ${def.legacyFrom}
+       WHERE ${targetCol} IS NULL AND ${def.legacyFrom} IS NOT NULL`
+    )
+  );
+}
+
+/** 기존 테이블에 누락 컬럼 ADD + 구형 컬럼 값 복사 */
+async function ensureLayerTableColumns(
+  table: string,
+  columns: RoadFrontageBuildingLayerColumnDef[],
+  result: EnsureResult
+): Promise<void> {
+  const fq = `layer.${table}`;
+  try {
+    if ((await tableExists('layer', table)) !== 'BASE TABLE') return;
+
+    for (const col of columns) {
+      if (await columnExists('layer', table, col.name)) continue;
+      await db.execute(sql.raw(`ALTER TABLE layer.${table} ADD COLUMN ${col.name} ${col.ddl}`));
+      try {
+        await copyLegacyColumnData(table, col.name, col);
+      } catch (copyErr: unknown) {
+        const msg = copyErr instanceof Error ? copyErr.message : String(copyErr);
+        result.errors.push(`${fq}.${col.name}.legacyCopy: ${msg}`);
+      }
+      if (col.comment) {
+        await db.execute(
+          sql.raw(
+            `COMMENT ON COLUMN layer.${table}.${col.name} IS '${col.comment.replace(/'/g, "''")}'`
+          )
+        );
+      }
+      result.created.push(`${fq}.${col.name}`);
+    }
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    result.errors.push(`${fq}.columns: ${msg}`);
+  }
+}
+
+async function ensureRoadFrontageBuildingColumns(result: EnsureResult): Promise<void> {
+  await ensureLayerTableColumns('road_frontage_building', ROAD_FRONTAGE_BUILDING_LAYER_COLUMNS, result);
+  await ensureLayerTableColumns(
+    'road_frontage_building_detail',
+    ROAD_FRONTAGE_BUILDING_DETAIL_LAYER_COLUMNS,
+    result
+  );
+  await ensureLayerTableColumns(
+    'road_frontage_building_confirm',
+    ROAD_FRONTAGE_BUILDING_CONFIRM_LAYER_COLUMNS,
+    result
+  );
+
+  try {
+    await db.execute(
+      sql.raw(`
+        CREATE INDEX IF NOT EXISTS road_frontage_building_geom_gix
+          ON layer.road_frontage_building USING GIST (geom);
+        CREATE INDEX IF NOT EXISTS road_frontage_building_detail_parent_id_idx
+          ON layer.road_frontage_building_detail (parent_id);
+        CREATE INDEX IF NOT EXISTS road_frontage_building_confirm_parent_id_idx
+          ON layer.road_frontage_building_confirm (parent_id);
+      `)
+    );
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    result.errors.push(`layer.road_frontage_building.indexes: ${msg}`);
   }
 }
 
@@ -1169,6 +1327,7 @@ export async function ensureRoadFrontageBuildingTables(result?: EnsureResult): P
     createSql: ROAD_FRONTAGE_BUILDING_CONFIRM_SQL,
     result: out,
   });
+  await ensureRoadFrontageBuildingColumns(out);
   try {
     await pool.query(ROAD_FRONTAGE_BUILDING_CONFIRM_ALIGN_SQL);
   } catch (e: unknown) {

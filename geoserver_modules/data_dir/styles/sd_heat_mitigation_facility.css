@@ -1,5 +1,4 @@
-/* emd와 동일: 단일 규칙 + 글꼴 목록 → TextSymbolizer 3개로 펼침
- * 라벨은 GeoServer 발행 컬럼만 사용 (jibun_addr 미발행 시 WMS 전체 실패 방지) */
+/* emd와 동일: 단일 규칙 + 글꼴 목록 → TextSymbolizer 3개로 펼침 */
 * {
   mark: url("sd_heat_mitigation_facility.svg");
   mark-mime: "image/svg+xml";

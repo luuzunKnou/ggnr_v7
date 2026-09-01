@@ -510,8 +510,8 @@ export function RoadFrontageMarkerDetailPanel({
     if (!canEditMarkers) return;
     focusMarker(item);
     markerPointSnapshotRef.current = {
-      lon: item.lon,
-      lat: item.lat,
+      lon: item.lon ?? null,
+      lat: item.lat ?? null,
       installLocation: item.installLocation,
       landCategory: item.landCategory,
     };
@@ -915,23 +915,20 @@ export function RoadFrontageMarkerDetailPanel({
           readOnly={itemModal.mode === 'view'}
           vworldApiKey={vworldApiKey}
           onChange={(next) => {
-            let draftForFly: RoadFrontageMarkerItem | null = null;
             setItemModal((prev) => {
               if (!prev || prev.mode === 'view') return prev;
               const draft = typeof next === 'function' ? next(prev.draft) : next;
-              draftForFly = draft;
+              if (
+                draft.lon != null &&
+                draft.lat != null &&
+                Number.isFinite(draft.lon) &&
+                Number.isFinite(draft.lat)
+              ) {
+                setSelectedMarkerId(draft.id);
+                flyToMarker(map, draft);
+              }
               return { ...prev, draft };
             });
-            if (
-              draftForFly &&
-              draftForFly.lon != null &&
-              draftForFly.lat != null &&
-              Number.isFinite(draftForFly.lon) &&
-              Number.isFinite(draftForFly.lat)
-            ) {
-              setSelectedMarkerId(draftForFly.id);
-              flyToMarker(map, draftForFly);
-            }
           }}
           onSubmit={submitItemModal}
           onClose={() => setItemModal(null)}

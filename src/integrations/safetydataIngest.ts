@@ -1,5 +1,6 @@
 import { pool } from '@/database/db';
 import { fetchWithRetry, withAdvisoryLock } from '@/integrations/core';
+import { createOrUpdateGeoServerLayer, resetGeoServerCaches } from '@/service/devTestService';
 import type { Pool, PoolClient } from 'pg';
 
 /** CREATE/DROP/INSERT를 같은 DB 트랜잭션에서 실행하기 위한 실행자 */
@@ -1055,6 +1056,27 @@ export async function ingestSafetydataDatasetToLayer(
 
       if (cfg.fillGeomAddr) {
         await fillGeomAddrColumn(schema, table);
+      }
+
+      const spatial = resolveSpatialConfig(cfg, []);
+      if (spatial.publishGeoserver && spatial.mode !== 'none') {
+        try {
+          const layerRes = await createOrUpdateGeoServerLayer({ layerName: table });
+          if (!layerRes.success) {
+            console.warn(
+              `[SAFETYDATA GEOSERVER] ${table}: ${'error' in layerRes ? layerRes.error : '레이어 재발행 실패'}`
+            );
+          } else {
+            const reset = await resetGeoServerCaches();
+            if (!reset.success) {
+              console.warn(
+                `[SAFETYDATA GEOSERVER] ${table}: ${'error' in reset ? reset.error : '캐시 초기화 실패'}`
+              );
+            }
+          }
+        } catch (e) {
+          console.warn(`[SAFETYDATA GEOSERVER] ${table}:`, e instanceof Error ? e.message : e);
+        }
       }
 
       return result;

@@ -1,8 +1,8 @@
 <GeoServerTileLayer>
-  <id>LayerInfoImpl--2053d3:19d606c4ff1:30de</id>
+  <id>LayerInfoImpl-17589e65:1a0409cd98a:-7f2e</id>
   <enabled>true</enabled>
   <inMemoryCached>true</inMemoryCached>
-  <name>ggnr:sd_heat_mitigation_facility</name>
+  <name>ggnr:landown_corporate</name>
   <mimeFormats>
     <string>image/png</string>
     <string>image/jpeg</string>
@@ -10,25 +10,9 @@
   <gridSubsets>
     <gridSubset>
       <gridSetName>EPSG:4326</gridSetName>
-      <extent>
-        <coords>
-          <double>125.86472443785708</double>
-          <double>33.34204590200197</double>
-          <double>129.6637471814693</double>
-          <double>38.47294304762885</double>
-        </coords>
-      </extent>
     </gridSubset>
     <gridSubset>
       <gridSetName>EPSG:900913</gridSetName>
-      <extent>
-        <coords>
-          <double>1.4011197033257946E7</double>
-          <double>3940793.3413501447</double>
-          <double>1.4434102310588924E7</double>
-          <double>4646453.933169883</double>
-        </coords>
-      </extent>
     </gridSubset>
   </gridSubsets>
   <metaWidthHeight>
@@ -42,7 +26,7 @@
       <key>STYLES</key>
       <defaultValue></defaultValue>
       <availableStyles class="sorted-set"/>
-      <defaultStyle>sd_heat_mitigation_facility</defaultStyle>
+      <defaultStyle>generic</defaultStyle>
     </styleParameterFilter>
   </parameterFilters>
   <gutter>0</gutter>

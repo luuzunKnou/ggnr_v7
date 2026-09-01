@@ -1,0 +1,76 @@
+{
+  "$schema": "https://raw.githubusercontent.com/microsoft/vscode-css-languageservice/main/docs/customData.schema.json",
+  "version": 1.1,
+  "atDirectives": [
+    {
+      "name": "@utility",
+      "description": "Tailwind v4 — 커스텀 utility 등록",
+      "references": [
+        {
+          "name": "Documentation",
+          "url": "https://tailwindcss.com/docs/functions-and-directives#utility-directive"
+        }
+      ]
+    },
+    {
+      "name": "@apply",
+      "description": "Tailwind — utility 클래스를 CSS에 인라인 적용",
+      "references": [
+        {
+          "name": "Documentation",
+          "url": "https://tailwindcss.com/docs/functions-and-directives#apply-directive"
+        }
+      ]
+    },
+    {
+      "name": "@theme",
+      "description": "Tailwind v4 — 디자인 토큰(색·폰트·breakpoint) 정의",
+      "references": [
+        {
+          "name": "Documentation",
+          "url": "https://tailwindcss.com/docs/functions-and-directives#theme-directive"
+        }
+      ]
+    },
+    {
+      "name": "@custom-variant",
+      "description": "Tailwind v4 — 커스텀 variant 정의",
+      "references": [
+        {
+          "name": "Documentation",
+          "url": "https://tailwindcss.com/docs/functions-and-directives#custom-variant-directive"
+        }
+      ]
+    },
+    {
+      "name": "@source",
+      "description": "Tailwind v4 — content 감지 소스 지정",
+      "references": [
+        {
+          "name": "Documentation",
+          "url": "https://tailwindcss.com/docs/functions-and-directives#source-directive"
+        }
+      ]
+    },
+    {
+      "name": "@variant",
+      "description": "Tailwind v4 — CSS 내부에서 variant 적용",
+      "references": [
+        {
+          "name": "Documentation",
+          "url": "https://tailwindcss.com/docs/functions-and-directives#variant-directive"
+        }
+      ]
+    },
+    {
+      "name": "@reference",
+      "description": "Tailwind v4 — @apply/@variant용 theme 참조 import",
+      "references": [
+        {
+          "name": "Documentation",
+          "url": "https://tailwindcss.com/docs/functions-and-directives#reference-directive"
+        }
+      ]
+    }
+  ]
+}

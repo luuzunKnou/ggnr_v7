@@ -38,11 +38,6 @@
 .tmp/
 debug-*.log
 
-# 업무 문서 (brief·plan·report — 로컬 작성, 커밋 제외)
-/docs/brief/
-/docs/plan/
-/docs/reports/
-
 # debug
 npm-debug.log*
 yarn-debug.log*

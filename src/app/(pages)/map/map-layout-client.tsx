@@ -3,6 +3,7 @@
 
 import React, { useState, useEffect, useLayoutEffect, useCallback, useRef, useMemo, Suspense } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
+import { useSession } from "next-auth/react"
 import { X } from "lucide-react"
 import Map3DDataPanel from "./_mapComponents/Map3DDataPanel"
 import StandardList from "./_mapComponents/standard/StandardList"
@@ -159,6 +160,13 @@ import { MapContextProvider, useMapContext } from "./_mapComponents/MapContext"
 import { applyViewPaddingPreservingVisualCenter } from "./_mapComponents/config/mapVisualCenter"
 import { MapSideListPanel } from "./_mapComponents/MapSideListPanel"
 import { SearchBarOffsetContext } from "./searchBarOffsetContext"
+import { SampleListPanel } from "./_mapContents/sample/SampleListPanel"
+import {
+  DESIGN_SAMPLE_OPENED_KEY,
+  DESIGN_SAMPLE_PANEL_DEFAULT_WIDTH,
+  DESIGN_SAMPLE_PANEL_MAX_WIDTH,
+  DESIGN_SAMPLE_PANEL_MIN_WIDTH,
+} from "./_mapContents/sample/sampleConfig"
 
 const SIDEBAR_WIDTH = 65
 const SEARCH_BAR_MARGIN = 20
@@ -347,7 +355,7 @@ const GROUNDWATER_PERMIT_DETAIL_MAX_WIDTH = 640
 const FMS_PANEL_MIN_WIDTH = 440
 const FMS_PANEL_DEFAULT_WIDTH = FMS_PANEL_MIN_WIDTH
 const FMS_PANEL_MAX_WIDTH = 800
-const FMS_DETAIL_DEFAULT_WIDTH = 400
+const FMS_DETAIL_DEFAULT_WIDTH = 445
 const FMS_DETAIL_MIN_WIDTH = 380
 const FMS_DETAIL_MAX_WIDTH = 500
 
@@ -412,10 +420,9 @@ const ROAD_FRONTAGE_MARKER_OPENED_KEY = "roadFrontageMarker"
 const ROAD_FRONTAGE_MARKER_PANEL_DEFAULT_WIDTH = 320
 const ROAD_FRONTAGE_MARKER_PANEL_MIN_WIDTH = 260
 const ROAD_FRONTAGE_MARKER_PANEL_MAX_WIDTH = 480
-/** 표주 열(지목·소유자·설치 위치)에 맞춘 폭 */
-const ROAD_FRONTAGE_MARKER_DETAIL_DEFAULT_WIDTH = 460
-const ROAD_FRONTAGE_MARKER_DETAIL_MIN_WIDTH = 420
-const ROAD_FRONTAGE_MARKER_DETAIL_MAX_WIDTH = 580
+const ROAD_FRONTAGE_MARKER_DETAIL_DEFAULT_WIDTH = 570
+const ROAD_FRONTAGE_MARKER_DETAIL_MIN_WIDTH = 460
+const ROAD_FRONTAGE_MARKER_DETAIL_MAX_WIDTH = 780
 
 function MapLayoutContent({
   children,
@@ -426,6 +433,8 @@ function MapLayoutContent({
 }) {
   const router = useRouter()
   const searchParams = useSearchParams()
+  const { data: session } = useSession()
+  const isSuperUser = session?.user?.id === "su"
   const mapContext = useMapContext()
   /** Provider `value`는 매 렌더 새 객체 — effect deps에 `mapContext` 넣으면 visibleLayerNames만 바뀌어도 재실행됨 */
   const mapInstanceRef = mapContext?.mapInstanceRef
@@ -467,6 +476,7 @@ function MapLayoutContent({
   const setRoadCctvPanelOpen = mapContext?.setRoadCctvPanelOpen
   const setSafetyFacPanelOpen = mapContext?.setSafetyFacPanelOpen
   const setComplaintPanelOpen = mapContext?.setComplaintPanelOpen
+  const setRoadRewardPanelOpen = mapContext?.setRoadRewardPanelOpen
   const setRoadCctvOverlay = mapContext?.setRoadCctvOverlay
   const setRoadCctvUnderlayMode = mapContext?.setRoadCctvUnderlayMode
   const setRoadCctvExtentWgs84 = mapContext?.setRoadCctvExtentWgs84
@@ -583,6 +593,8 @@ function MapLayoutContent({
   const groundwaterPermitOpen = openedWindows.includes(GROUNDWATER_PERMIT_OPENED_KEY)
   const fmsLinkageOpen = openedWindows.some((w) => isFmsOpenedToken(w))
   const fmsLinkageDetailOpen = fmsLinkageOpen && Boolean(fmsLinkageDetailId)
+  const designSampleOpen =
+    isSuperUser && openedWindows.includes(DESIGN_SAMPLE_OPENED_KEY)
   const [buildPublicLandSelectedId, setBuildPublicLandSelectedId] = useState<string | null>(null)
   const [buildPublicLandListRefreshKey, setBuildPublicLandListRefreshKey] = useState(0)
   const buildPublicLandDetailOpen = buildPublicLandOpen && Boolean(buildPublicLandSelectedId)
@@ -604,6 +616,7 @@ function MapLayoutContent({
   /** 보상편입용지 — DB(road_reward) 조회·저장 */
   const [roadRewardCases, setRoadRewardCases] = useState<RoadRewardCase[]>([])
   const [roadRewardSelectedId, setRoadRewardSelectedId] = useState<string | null>(null)
+  const [roadRewardFocusParcelId, setRoadRewardFocusParcelId] = useState<string | null>(null)
   const roadRewardDetailOpen = roadRewardOpen && Boolean(roadRewardSelectedId)
   /** 접도구역 건축물 관리대장 */
   const [roadFrontageBuildingSelectedId, setRoadFrontageBuildingSelectedId] = useState<
@@ -766,6 +779,7 @@ function MapLayoutContent({
   )
   const [fmsLinkagePanelWidth, setFmsLinkagePanelWidth] = useState(FMS_PANEL_DEFAULT_WIDTH)
   const [fmsLinkageDetailWidth, setFmsLinkageDetailWidth] = useState(FMS_DETAIL_DEFAULT_WIDTH)
+  const [samplePanelWidth, setSamplePanelWidth] = useState(DESIGN_SAMPLE_PANEL_DEFAULT_WIDTH)
   const [fmsGeomToastMsg, setFmsGeomToastMsg] = useState<string | null>(null)
   const [memoPanelWidth, setMemoPanelWidth] = useState(MEMO_PANEL_DEFAULT_WIDTH)
   const [layerDataPanelWidth, setLayerDataPanelWidth] = useState(LAYER_DATA_PANEL_DEFAULT_WIDTH)
@@ -828,7 +842,8 @@ function MapLayoutContent({
     (groundwaterPermitOpen ? groundwaterPermitPanelWidth : 0) +
     (groundwaterPermitDetailOpen ? groundwaterPermitDetailWidth : 0) +
     (fmsLinkageOpen ? fmsLinkagePanelWidth : 0) +
-    (fmsLinkageDetailOpen ? fmsLinkageDetailWidth : 0)
+    (fmsLinkageDetailOpen ? fmsLinkageDetailWidth : 0) +
+    (designSampleOpen ? samplePanelWidth : 0)
   const searchBarOffset = {
     leftPx: SIDEBAR_WIDTH + totalListPanelWidth + SEARCH_BAR_MARGIN,
     topPx: 16,
@@ -953,6 +968,8 @@ function MapLayoutContent({
     (groundwaterPermitDetailOpen ? groundwaterPermitDetailWidth : 0)
   const fmsLinkageDetailLeftPx =
     fmsLinkagePanelLeftPx + (fmsLinkageOpen ? fmsLinkagePanelWidth : 0)
+  const samplePanelLeftPx =
+    fmsLinkageDetailLeftPx + (fmsLinkageDetailOpen ? fmsLinkageDetailWidth : 0)
 
   const mapPaddingLeft = SIDEBAR_WIDTH + totalListPanelWidth
   /** 패딩은 useLayoutEffect — 자식 useEffect(도로대장 fit 등)보다 먼저 적용되어야 함.
@@ -1111,6 +1128,10 @@ function MapLayoutContent({
   useEffect(() => {
     setComplaintPanelOpen?.(complaintManagementOpen)
   }, [setComplaintPanelOpen, complaintManagementOpen])
+
+  useEffect(() => {
+    setRoadRewardPanelOpen?.(roadRewardOpen)
+  }, [setRoadRewardPanelOpen, roadRewardOpen])
 
   useEffect(() => {
     if (!roadCctvOpen) {
@@ -1309,6 +1330,7 @@ function MapLayoutContent({
 
   const handleCloseRoadReward = () => {
     setRoadRewardSelectedId(null)
+    setRoadRewardFocusParcelId(null)
     const next = openedWindows.filter((w) => w !== ROAD_REWARD_OPENED_KEY)
     setOpened(next)
   }
@@ -1356,6 +1378,11 @@ function MapLayoutContent({
     setFmsLinkageSelectedId?.(null)
     setFmsLinkageOverlayRows?.([])
     const next = openedWindows.filter((w) => !isFmsOpenedToken(w))
+    setOpened(next)
+  }
+
+  const handleCloseDesignSample = () => {
+    const next = openedWindows.filter((w) => w !== DESIGN_SAMPLE_OPENED_KEY)
     setOpened(next)
   }
 
@@ -1418,7 +1445,10 @@ function MapLayoutContent({
   }, [occupationLedgerSerEng])
 
   useEffect(() => {
-    if (!roadRewardOpen) setRoadRewardSelectedId(null)
+    if (!roadRewardOpen) {
+      setRoadRewardSelectedId(null)
+      setRoadRewardFocusParcelId(null)
+    }
   }, [roadRewardOpen])
 
   useEffect(() => {
@@ -2311,6 +2341,7 @@ function MapLayoutContent({
                   selectedId={roadRewardSelectedId}
                   onCasesChange={setRoadRewardCases}
                   onSelectId={setRoadRewardSelectedId}
+                  onFocusParcelId={setRoadRewardFocusParcelId}
                   onClose={handleCloseRoadReward}
                 />
               </MapSideListPanel>
@@ -2330,9 +2361,16 @@ function MapLayoutContent({
                   caseId={roadRewardSelectedId}
                   cases={roadRewardCases}
                   onCasesChange={setRoadRewardCases}
-                  onClose={() => setRoadRewardSelectedId(null)}
-                  onDeleted={() => setRoadRewardSelectedId(null)}
+                  onClose={() => {
+                    setRoadRewardSelectedId(null)
+                    setRoadRewardFocusParcelId(null)
+                  }}
+                  onDeleted={() => {
+                    setRoadRewardSelectedId(null)
+                    setRoadRewardFocusParcelId(null)
+                  }}
                   onCaseIdChange={setRoadRewardSelectedId}
+                  focusParcelId={roadRewardFocusParcelId}
                   overlayLeftPx={roadRewardPanelLeftPx}
                   overlayWidthPx={
                     roadRewardPanelWidth +
@@ -2827,6 +2865,19 @@ function MapLayoutContent({
                   toastMsg={fmsGeomToastMsg}
                   onToastClear={() => setFmsGeomToastMsg(null)}
                 />
+              </MapSideListPanel>
+            </div>
+          )}
+          {designSampleOpen && (
+            <div className="pointer-events-auto shrink-0">
+              <MapSideListPanel
+                width={samplePanelWidth}
+                minWidth={DESIGN_SAMPLE_PANEL_MIN_WIDTH}
+                maxWidth={DESIGN_SAMPLE_PANEL_MAX_WIDTH}
+                leftOffsetPx={samplePanelLeftPx}
+                onWidthChange={setSamplePanelWidth}
+              >
+                <SampleListPanel onClose={handleCloseDesignSample} />
               </MapSideListPanel>
             </div>
           )}
