@@ -310,7 +310,7 @@ export function FmsLinkageListPanel({
             className="w-full rounded-md border border-border bg-background py-1.5 pl-8 pr-3 text-sm text-foreground outline-none placeholder:text-muted-foreground focus:border-border focus:ring-2 focus:ring-ring"
           />
         </div>
-        <div className="mt-1.5 flex items-center justify-between gap-2">
+        <div className="mt-1.5 flex items-center gap-2">
           <div
             className="flex min-w-0 flex-wrap items-center gap-1"
             role="group"
@@ -336,12 +336,10 @@ export function FmsLinkageListPanel({
               )
             })}
           </div>
-          <p className="shrink-0 text-xs text-muted-foreground">
-            총 {rows.length.toLocaleString()}건
-          </p>
         </div>
       </div>
 
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
       <div ref={tableScrollRef} className="min-h-0 flex-1 overflow-auto scrollbar-thin">
         {error && (
           <div className="shrink-0 border-b border-destructive/20 bg-destructive/10 px-3 py-2 text-xs text-destructive">
@@ -407,13 +405,13 @@ export function FmsLinkageListPanel({
           <tbody>
             {loading && rows.length === 0 ? (
               <tr>
-                <td colSpan={FMS_LIST_COLUMNS.length} className="px-3 py-8 text-center text-muted-foreground">
+                <td colSpan={FMS_LIST_COLUMNS.length} className="px-3 py-6 text-center text-muted-foreground">
                   불러오는 중…
                 </td>
               </tr>
             ) : displayRows.length === 0 ? (
               <tr>
-                <td colSpan={FMS_LIST_COLUMNS.length} className="px-3 py-8 text-center text-muted-foreground">
+                <td colSpan={FMS_LIST_COLUMNS.length} className="px-3 py-6 text-center text-muted-foreground">
                   {error ? '데이터를 표시할 수 없습니다.' : FMS_EMPTY_LIST_MESSAGE}
                 </td>
               </tr>
@@ -437,16 +435,16 @@ export function FmsLinkageListPanel({
                       isSelected ? 'bg-primary/10 dark:bg-primary/25' : 'hover:bg-muted/50'
                     )}
                   >
-                    <td className="truncate px-2 py-2 text-foreground" title={row.facilKind}>
+                    <td className="truncate px-1.5 py-1.5 text-foreground" title={row.facilKind}>
                       {row.facilKind || '—'}
                     </td>
-                    <td className="truncate px-2 py-2 font-medium text-foreground" title={row.facilNm}>
+                    <td className="truncate px-1.5 py-1.5 font-medium text-foreground" title={row.facilNm}>
                       {row.facilNm || '—'}
                     </td>
-                    <td className="truncate px-2 py-2 text-foreground" title={row.facilOwner}>
+                    <td className="truncate px-1.5 py-1.5 text-foreground" title={row.facilOwner}>
                       {row.facilOwner || '—'}
                     </td>
-                    <td className="truncate px-2 py-2 text-foreground" title={row.addrFull}>
+                    <td className="truncate px-1.5 py-1.5 text-foreground" title={row.addrFull}>
                       {row.addrFull || '—'}
                     </td>
                   </tr>
@@ -455,6 +453,10 @@ export function FmsLinkageListPanel({
             )}
           </tbody>
         </table>
+      </div>
+        <div className="shrink-0 border-t border-border px-3 py-1.5 text-[11px] text-muted-foreground">
+          {rows.length.toLocaleString()}건
+        </div>
       </div>
     </div>
   )

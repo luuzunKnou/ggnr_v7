@@ -1,5 +1,4 @@
 /** 안전점검 목록 컬럼·상세 식별자 (화면 라벨) */
-import { systemKeyToFmsPrefix } from '@/lib/fmsLinkage/fmsBinding';
 
 export const FMS_LIST_TITLE = '안전점검';
 
@@ -12,11 +11,12 @@ export const FMS_LIST_SYSTEM_FILTERS = [
 
 export type FmsListSystemFilter = (typeof FMS_LIST_SYSTEM_FILTERS)[number]['value'];
 
-/** 도로·건설이면 해당 값. 하천·그 외는 전체(상하수도만 묶인 하천 키는 전체로 연다) */
+/** 안전점검 메뉴 진입 시 기본 도로. 그 외는 전체 */
 export function defaultFmsListSystemFilter(system: string): FmsListSystemFilter {
   const key = String(system ?? '').trim().toLowerCase();
-  if (key === 'river') return '';
-  if (systemKeyToFmsPrefix(key)) return key as FmsListSystemFilter;
+  if (key === 'build') return 'road';
+  if (key === 'river') return 'road';
+  if (key === 'road') return 'road';
   return '';
 }
 
