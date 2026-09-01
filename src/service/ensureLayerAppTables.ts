@@ -3,6 +3,7 @@
  * - 추가속성 정의: public.layer_extra_def
  * - 도로점용: road_use_ledger, road_use_ledger_jijuk
  * - 접도구역 건축물: road_frontage_building(+_detail|_confirm)
+ * - 접도구역 표주: road_frontage_marker(+_item)
  * - 공통점용: water|road|public_occupationledger(+_jijuk|_mgj) — 9개
  * - 점사용료: water|road|public_ngl_fee_list — 3개
  * - FMS: water|road|public_fms_facility + _fms_inspection — 6개
@@ -505,6 +506,39 @@ CREATE TABLE IF NOT EXISTS layer.road_frontage_building_confirm (
 CREATE INDEX IF NOT EXISTS road_frontage_building_confirm_ftr_idn_idx
   ON layer.road_frontage_building_confirm (ftr_idn);
 COMMENT ON TABLE layer.road_frontage_building_confirm IS '접도구역 건축물 확인 결과';
+`;
+
+const ROAD_FRONTAGE_MARKER_SQL = `
+CREATE TABLE IF NOT EXISTS layer.road_frontage_marker (
+  id SERIAL PRIMARY KEY,
+  road_type text,
+  route_name text,
+  geom geometry(MultiPoint, 5181)
+);
+CREATE INDEX IF NOT EXISTS road_frontage_marker_geom_gix
+  ON layer.road_frontage_marker USING GIST (geom);
+COMMENT ON TABLE layer.road_frontage_marker IS '접도구역 표주 관리대장';
+`;
+
+const ROAD_FRONTAGE_MARKER_ITEM_SQL = `
+CREATE TABLE IF NOT EXISTS layer.road_frontage_marker_item (
+  id SERIAL PRIMARY KEY,
+  parent_id integer NOT NULL REFERENCES layer.road_frontage_marker (id) ON DELETE CASCADE,
+  station_distance text,
+  owner_name text,
+  owner_address text,
+  sign text,
+  remark text,
+  install_location text,
+  land_category text,
+  pnu text,
+  geom geometry(Point, 5181)
+);
+CREATE INDEX IF NOT EXISTS road_frontage_marker_item_parent_id_idx
+  ON layer.road_frontage_marker_item (parent_id);
+CREATE INDEX IF NOT EXISTS road_frontage_marker_item_geom_gix
+  ON layer.road_frontage_marker_item USING GIST (geom);
+COMMENT ON TABLE layer.road_frontage_marker_item IS '접도구역 표주 점';
 `;
 
 /** 확인결과 컬럼을 수급 DBF명으로 맞춤 + ftr_idn 키 */
@@ -1150,6 +1184,77 @@ export async function ensureRoadFrontageBuildingTables(result?: EnsureResult): P
   return out;
 }
 
+export async function ensureRoadFrontageMarkerTables(result?: EnsureResult): Promise<EnsureResult> {
+  const out: EnsureResult = result ?? { created: [], moved: [], existed: [], errors: [] };
+  await ensureSchemaLayer();
+  await ensureBaseTable({
+    table: 'road_frontage_marker',
+    createSql: ROAD_FRONTAGE_MARKER_SQL,
+    result: out,
+  });
+  await ensureBaseTable({
+    table: 'road_frontage_marker_item',
+    createSql: ROAD_FRONTAGE_MARKER_ITEM_SQL,
+    result: out,
+  });
+  const markerParentCols: Array<{ name: string; ddl: string }> = [
+    { name: 'geom', ddl: 'geometry(MultiPoint, 5181)' },
+  ];
+  for (const col of markerParentCols) {
+    try {
+      if (await columnExists('layer', 'road_frontage_marker', col.name)) continue;
+      await db.execute(
+        sql.raw(`ALTER TABLE layer.road_frontage_marker ADD COLUMN ${col.name} ${col.ddl}`)
+      );
+      out.created.push(`layer.road_frontage_marker.${col.name}`);
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      out.errors.push(`layer.road_frontage_marker.${col.name}: ${msg}`);
+    }
+  }
+  try {
+    await db.execute(
+      sql.raw(
+        `CREATE INDEX IF NOT EXISTS road_frontage_marker_geom_gix
+         ON layer.road_frontage_marker USING GIST (geom)`
+      )
+    );
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    out.errors.push(`layer.road_frontage_marker_geom_gix: ${msg}`);
+  }
+  const markerItemCols: Array<{ name: string; ddl: string }> = [
+    { name: 'install_location', ddl: 'text' },
+    { name: 'land_category', ddl: 'text' },
+    { name: 'pnu', ddl: 'text' },
+    { name: 'geom', ddl: 'geometry(Point, 5181)' },
+  ];
+  for (const col of markerItemCols) {
+    try {
+      if (await columnExists('layer', 'road_frontage_marker_item', col.name)) continue;
+      await db.execute(
+        sql.raw(`ALTER TABLE layer.road_frontage_marker_item ADD COLUMN ${col.name} ${col.ddl}`)
+      );
+      out.created.push(`layer.road_frontage_marker_item.${col.name}`);
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      out.errors.push(`layer.road_frontage_marker_item.${col.name}: ${msg}`);
+    }
+  }
+  try {
+    await db.execute(
+      sql.raw(
+        `CREATE INDEX IF NOT EXISTS road_frontage_marker_item_geom_gix
+         ON layer.road_frontage_marker_item USING GIST (geom)`
+      )
+    );
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    out.errors.push(`layer.road_frontage_marker_item_geom_gix: ${msg}`);
+  }
+  return out;
+}
+
 /** 공통 점용대장 본대·필지·물건지 × water|road|public (9개) */
 export async function ensureOccupationLedgerTables(result?: EnsureResult): Promise<EnsureResult> {
   const out: EnsureResult = result ?? { created: [], moved: [], existed: [], errors: [] };
@@ -1439,6 +1544,7 @@ export async function ensureLayerAppTables(): Promise<EnsureResult> {
     await ensureLayerExtraDefTable(result);
     await ensureRoadUseLedgerTables(result);
     await ensureRoadFrontageBuildingTables(result);
+    await ensureRoadFrontageMarkerTables(result);
     await ensureOccupationLedgerTables(result);
     await ensureNglFeeListTables(result);
     await ensureFmsTables(result);

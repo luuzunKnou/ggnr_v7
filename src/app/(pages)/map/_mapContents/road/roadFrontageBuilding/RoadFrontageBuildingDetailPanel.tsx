@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent, type ReactNode } from 'react';
 import { useSession } from 'next-auth/react';
-import { Check, CircleAlert, Download, Loader2, Minus, Paperclip, Pencil, Plus, Printer, Trash2, X } from 'lucide-react';
+import { Check, CircleAlert, Download, Loader2, Paperclip, Pencil, Plus, Printer, Trash2, X } from 'lucide-react';
 import { call } from '@/lib/api';
 import { formatAddressStripSidoSigungu } from '@/lib/formatAddressStripAdmin';
 import { cn } from '@/lib/utils';
@@ -32,6 +32,7 @@ import {
 } from './roadFrontageBuildingFiles';
 import {
   ROAD_FRONTAGE_BUILDING_BAD_MARKS,
+  ROAD_FRONTAGE_BUILDING_FORM_ATTACH_TABS,
   ROAD_FRONTAGE_BUILDING_LOCATION_KINDS,
   ROAD_FRONTAGE_BUILDING_NEW_ID,
   ROAD_FRONTAGE_BUILDING_ROAD_TYPES,
@@ -188,31 +189,6 @@ function SideTh({
   );
 }
 
-function CrudBtn({
-  kind,
-  label,
-  onClick,
-}: {
-  kind: 'plus' | 'minus';
-  label: string;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      title={label}
-      aria-label={label}
-      onClick={(e) => {
-        e.stopPropagation();
-        onClick();
-      }}
-      className="inline-flex h-3.5 w-3.5 items-center justify-center rounded border border-border bg-background text-muted-foreground hover:bg-muted hover:text-foreground"
-    >
-      {kind === 'plus' ? <Plus className="h-2.5 w-2.5" /> : <Minus className="h-2.5 w-2.5" />}
-    </button>
-  );
-}
-
 type Props = {
   ledgerId: string;
   onClose: () => void;
@@ -352,6 +328,7 @@ function FormAttachPane({
   editing,
   onAdd,
   onRemove,
+  onPreview,
   picker = true,
   capturing = false,
   emptyHint,
@@ -360,6 +337,7 @@ function FormAttachPane({
   editing: boolean;
   onAdd: () => void;
   onRemove: (index: number) => void;
+  onPreview?: () => void;
   picker?: boolean;
   capturing?: boolean;
   emptyHint?: string;
@@ -370,10 +348,31 @@ function FormAttachPane({
     setImgFailed(false);
   }, [main]);
   const showImg = Boolean(main) && !imgFailed && !capturing;
+  const canPreview = showImg && Boolean(onPreview);
+  const canPickEmpty = editing && picker && !main && !capturing;
   return (
     <div
-      className="rfb-form-attach-pane relative h-full w-full overflow-hidden bg-background"
-      onClick={editing && picker && !main ? onAdd : undefined}
+      className={cn(
+        'rfb-form-attach-pane relative h-full w-full overflow-hidden bg-background',
+        (canPreview || canPickEmpty) && 'cursor-pointer'
+      )}
+      title={canPreview ? '크게 보기' : undefined}
+      role={canPreview ? 'button' : undefined}
+      tabIndex={canPreview ? 0 : undefined}
+      onClick={() => {
+        if (canPreview) onPreview?.();
+        else if (canPickEmpty) onAdd();
+      }}
+      onKeyDown={
+        canPreview
+          ? (e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                onPreview?.();
+              }
+            }
+          : undefined
+      }
     >
       {capturing ? (
         <div className="flex h-full items-center justify-center gap-1 text-[10px] text-muted-foreground">
@@ -540,28 +539,6 @@ function BadMarksCell({
   );
 }
 
-function RowCrud({
-  onAdd,
-  onRemove,
-  align = 'end',
-}: {
-  onAdd: () => void;
-  onRemove?: () => void;
-  align?: 'start' | 'end';
-}) {
-  return (
-    <div
-      className={cn(
-        'absolute top-1/2 z-[1] flex -translate-y-1/2 gap-0.5',
-        align === 'start' ? 'left-0.5' : 'right-0.5'
-      )}
-    >
-      <CrudBtn kind="plus" label="행 추가" onClick={onAdd} />
-      {onRemove ? <CrudBtn kind="minus" label="행 삭제" onClick={onRemove} /> : null}
-    </div>
-  );
-}
-
 function asLedgerRows(ledger: RoadFrontageBuildingLedger): RoadFrontageBuildingLedger {
   const details = Array.isArray(ledger.details) ? ledger.details : [];
   const confirmHistory = Array.isArray(ledger.confirmHistory) ? ledger.confirmHistory : [];
@@ -573,15 +550,66 @@ function asLedgerRows(ledger: RoadFrontageBuildingLedger): RoadFrontageBuildingL
   };
 }
 
+function padEditableRows<T>(list: T[], min: number, create: () => T): T[] {
+  if (list.length >= min) return list;
+  return [...list, ...Array.from({ length: min - list.length }, () => create())];
+}
+
+/** 수정·등록 시 서식 기본 칸 수만큼 빈 입력 행을 채워 바로 칠 수 있게 한다. */
 function withEditableRows(ledger: RoadFrontageBuildingLedger): RoadFrontageBuildingLedger {
   const next = asLedgerRows(ledger);
   return {
     ...next,
-    details: next.details.length ? next.details : [createEmptyRoadFrontageBuildingDetail()],
-    confirmHistory: next.confirmHistory.length
-      ? next.confirmHistory
-      : [createEmptyRoadFrontageBuildingConfirm()],
+    details: padEditableRows(
+      next.details,
+      FORM_DETAIL_MIN_ROWS,
+      createEmptyRoadFrontageBuildingDetail
+    ),
+    confirmHistory: padEditableRows(
+      next.confirmHistory,
+      FORM_CONFIRM_MIN_ROWS,
+      createEmptyRoadFrontageBuildingConfirm
+    ),
   };
+}
+
+function RowToolbarRow({
+  onAdd,
+  onRemoveLast,
+  canRemoveLast,
+  hint,
+}: {
+  onAdd: () => void;
+  onRemoveLast: () => void;
+  canRemoveLast: boolean;
+  hint: string;
+}) {
+  return (
+    <tr className="print:hidden">
+      <td
+        colSpan={8}
+        className={cn(
+          'box-border border-[1px] border-solid border-foreground/80 bg-muted/50 px-3 py-2.5 align-middle'
+        )}
+      >
+        <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+          <p className="text-[11px] leading-snug text-muted-foreground">{hint}</p>
+          <div className="flex shrink-0 items-center gap-2">
+            <button type="button" className={btnGhost} onClick={onAdd}>
+              <Plus className="h-3 w-3" />
+              행 추가
+            </button>
+            {canRemoveLast ? (
+              <button type="button" className={btnGhost} onClick={onRemoveLast}>
+                <Trash2 className="h-3 w-3" />
+                마지막 행 삭제
+              </button>
+            ) : null}
+          </div>
+        </div>
+      </td>
+    </tr>
+  );
 }
 
 export function RoadFrontageBuildingDetailPanel({
@@ -621,6 +649,10 @@ export function RoadFrontageBuildingDetailPanel({
     Partial<Record<RoadFrontageBuildingFormAttachId, File>>
   >({});
   const [pendingExtraFiles, setPendingExtraFiles] = useState<File[]>([]);
+  const [attachmentImagePreview, setAttachmentImagePreview] = useState<{
+    items: ServiceFilePreviewItem[];
+    initialIndex: number;
+  } | null>(null);
   const photoInputRef = useRef<HTMLInputElement>(null);
   const formAttachInputRef = useRef<HTMLInputElement>(null);
   const formAttachSlotRef = useRef<RoadFrontageBuildingFormAttachId>('layoutPlan');
@@ -857,6 +889,48 @@ export function RoadFrontageBuildingDetailPanel({
   const downloadAttach = (item: ServiceFilePreviewItem) => {
     triggerServiceFileDownload(item.url, item.fileName);
   };
+
+  const attachmentPreviewItems = useMemo((): ServiceFilePreviewItem[] => {
+    const items: ServiceFilePreviewItem[] = [];
+    for (const tab of ROAD_FRONTAGE_BUILDING_FORM_ATTACH_TABS) {
+      const url = (formAttaches[tab.id] ?? [])[0];
+      if (!url) continue;
+      items.push({ url, fileName: tab.title, kind: 'image' });
+    }
+    if (fileKey) {
+      for (const file of extraFiles.files) {
+        if (!isImageServiceFileName(file.name)) continue;
+        items.push({
+          url: roadFrontageBuildingFileUrl(
+            fileKey,
+            file.name,
+            ROAD_FRONTAGE_BUILDING_EXTRA_ATTACH_FOLDER
+          ),
+          fileName: file.name,
+          kind: 'image',
+        });
+      }
+    }
+    pendingExtraFiles.forEach((file, index) => {
+      const url = pendingExtraUrls[index];
+      if (!url) return;
+      items.push({ url, fileName: file.name || `첨부 ${index + 1}`, kind: 'image' });
+    });
+    return items;
+  }, [extraFiles.files, fileKey, formAttaches, pendingExtraFiles, pendingExtraUrls]);
+
+  const openAttachmentPreview = useCallback(
+    (focusUrl?: string) => {
+      if (attachmentPreviewItems.length === 0) return;
+      let initialIndex = 0;
+      if (focusUrl) {
+        const idx = attachmentPreviewItems.findIndex((item) => item.url === focusUrl);
+        if (idx >= 0) initialIndex = idx;
+      }
+      setAttachmentImagePreview({ items: attachmentPreviewItems, initialIndex });
+    },
+    [attachmentPreviewItems]
+  );
 
   const beginEdit = () => {
     setDraft(withEditableRows(saved ?? draft));
@@ -1123,29 +1197,39 @@ export function RoadFrontageBuildingDetailPanel({
     setDraft((prev) => ({ ...prev, locAdr: '' }));
   }, []);
 
-  const addDetailAt = (index: number) => {
+  const addDetail = () => {
+    setDraft((prev) => ({
+      ...prev,
+      details: [
+        ...(Array.isArray(prev.details) ? prev.details : []),
+        createEmptyRoadFrontageBuildingDetail(),
+      ],
+    }));
+  };
+
+  const addConfirm = () => {
+    setDraft((prev) => ({
+      ...prev,
+      confirmHistory: [
+        ...(Array.isArray(prev.confirmHistory) ? prev.confirmHistory : []),
+        createEmptyRoadFrontageBuildingConfirm(),
+      ],
+    }));
+  };
+
+  const removeLastDetail = () => {
     setDraft((prev) => {
-      const details = [...(Array.isArray(prev.details) ? prev.details : [])];
-      details.splice(index, 0, createEmptyRoadFrontageBuildingDetail());
-      return { ...prev, details };
+      const details = Array.isArray(prev.details) ? prev.details : [];
+      if (details.length <= FORM_DETAIL_MIN_ROWS) return prev;
+      return { ...prev, details: details.slice(0, -1) };
     });
   };
 
-  const addConfirmAt = (index: number) => {
+  const removeLastConfirm = () => {
     setDraft((prev) => {
-      const confirmHistory = [...(Array.isArray(prev.confirmHistory) ? prev.confirmHistory : [])];
-      confirmHistory.splice(index, 0, createEmptyRoadFrontageBuildingConfirm());
-      return { ...prev, confirmHistory };
-    });
-  };
-
-  const removeDetail = (id: string) => {
-    setDraft((prev) => {
-      const details = (Array.isArray(prev.details) ? prev.details : []).filter((d) => d.id !== id);
-      return {
-        ...prev,
-        details: details.length ? details : [createEmptyRoadFrontageBuildingDetail()],
-      };
+      const confirmHistory = Array.isArray(prev.confirmHistory) ? prev.confirmHistory : [];
+      if (confirmHistory.length <= FORM_CONFIRM_MIN_ROWS) return prev;
+      return { ...prev, confirmHistory: confirmHistory.slice(0, -1) };
     });
   };
 
@@ -1170,20 +1254,6 @@ export function RoadFrontageBuildingDetailPanel({
         };
       }),
     }));
-  };
-
-  const removeConfirm = (id: string) => {
-    setDraft((prev) => {
-      const confirmHistory = (Array.isArray(prev.confirmHistory) ? prev.confirmHistory : []).filter(
-        (c) => c.id !== id
-      );
-      return {
-        ...prev,
-        confirmHistory: confirmHistory.length
-          ? confirmHistory
-          : [createEmptyRoadFrontageBuildingConfirm()],
-      };
-    });
   };
 
   const patchConfirm = (id: string, patch: Partial<RoadFrontageBuildingConfirmItem>) => {
@@ -1407,8 +1477,10 @@ export function RoadFrontageBuildingDetailPanel({
   const routeText = routeTextRaw === '—' ? '' : routeTextRaw;
   const detailPadCount = Math.max(0, FORM_DETAIL_MIN_ROWS - details.length);
   const confirmPadCount = Math.max(0, FORM_CONFIRM_MIN_ROWS - confirmHistory.length);
-  const detailRowSpan = 2 + Math.max(details.length, FORM_DETAIL_MIN_ROWS);
-  const confirmRowSpan = 1 + Math.max(confirmHistory.length, FORM_CONFIRM_MIN_ROWS);
+  const detailRowSpan =
+    2 + Math.max(details.length, FORM_DETAIL_MIN_ROWS) + (isEditing ? 1 : 0);
+  const confirmRowSpan =
+    1 + Math.max(confirmHistory.length, FORM_CONFIRM_MIN_ROWS) + (isEditing ? 1 : 0);
 
   const askDelete = () => {
     setActionDialog({
@@ -1716,9 +1788,9 @@ export function RoadFrontageBuildingDetailPanel({
                 <Th className="px-0.5 text-[10px]">도로예정지</Th>
                 <Th className="px-0.5 text-[10px]">접도구역</Th>
               </tr>
-              {details.map((d, index) => (
+              {details.map((d) => (
                 <tr key={d.id}>
-                  <Td className={cn(`${FORM_ROW_H} relative text-center tabular-nums`, isEditing && 'pl-5')}>
+                  <Td className={cn(`${FORM_ROW_H} text-center tabular-nums`)}>
                     {isEditing ? (
                       <input
                         className={cn(fieldClass, 'text-center')}
@@ -1728,13 +1800,6 @@ export function RoadFrontageBuildingDetailPanel({
                     ) : (
                       d.dongNo
                     )}
-                    {isEditing ? (
-                      <RowCrud
-                        align="start"
-                        onAdd={() => addDetailAt(index + 1)}
-                        onRemove={() => removeDetail(d.id)}
-                      />
-                    ) : null}
                   </Td>
                   <Td className="text-center tabular-nums">
                     {isEditing ? (
@@ -1806,20 +1871,30 @@ export function RoadFrontageBuildingDetailPanel({
                   </Td>
                 </tr>
               ))}
-              {Array.from({ length: detailPadCount }, (_, i) => (
-                <tr key={`detail-pad-${i}`}>
-                  <Td className={`${FORM_ROW_H} text-center`}>{'\u00a0'}</Td>
-                  <Td className={`${FORM_ROW_H} text-center`}>{'\u00a0'}</Td>
-                  <Td className={`${FORM_ROW_H} text-center`}>{'\u00a0'}</Td>
-                  <Td className={`${FORM_ROW_H} text-center`}>{'\u00a0'}</Td>
-                  <Td className={`${FORM_ROW_H} text-center`}>{'\u00a0'}</Td>
-                  <Td className={`${FORM_ROW_H} text-center`}>{'\u00a0'}</Td>
-                  <Td className={`${FORM_ROW_H} text-center`}>{'\u00a0'}</Td>
-                  <Td className={`${FORM_ROW_H} px-1`}>
-                    <BadMarksCell marks={[]} />
-                  </Td>
-                </tr>
-              ))}
+              {!isEditing
+                ? Array.from({ length: detailPadCount }, (_, i) => (
+                    <tr key={`detail-pad-${i}`}>
+                      <Td className={`${FORM_ROW_H} text-center`}>{'\u00a0'}</Td>
+                      <Td className={`${FORM_ROW_H} text-center`}>{'\u00a0'}</Td>
+                      <Td className={`${FORM_ROW_H} text-center`}>{'\u00a0'}</Td>
+                      <Td className={`${FORM_ROW_H} text-center`}>{'\u00a0'}</Td>
+                      <Td className={`${FORM_ROW_H} text-center`}>{'\u00a0'}</Td>
+                      <Td className={`${FORM_ROW_H} text-center`}>{'\u00a0'}</Td>
+                      <Td className={`${FORM_ROW_H} text-center`}>{'\u00a0'}</Td>
+                      <Td className={`${FORM_ROW_H} px-1`}>
+                        <BadMarksCell marks={[]} />
+                      </Td>
+                    </tr>
+                  ))
+                : null}
+              {isEditing ? (
+                <RowToolbarRow
+                  hint="기본 칸보다 더 필요하면 행을 추가하세요. 비운 칸은 저장되지 않습니다."
+                  onAdd={addDetail}
+                  onRemoveLast={removeLastDetail}
+                  canRemoveLast={details.length > FORM_DETAIL_MIN_ROWS}
+                />
+              ) : null}
             </tbody>
           </table>
 
@@ -1834,7 +1909,7 @@ export function RoadFrontageBuildingDetailPanel({
                 <Th colSpan={3} className={FORM_CONFIRM_ROW_H}>확인자</Th>
                 <Th colSpan={3} className={FORM_CONFIRM_ROW_H}>결재자</Th>
               </tr>
-              {confirmHistory.map((c, index) => (
+              {confirmHistory.map((c) => (
                 <tr key={c.id}>
                   <Td colSpan={2} className={`${FORM_CONFIRM_ROW_H} text-center tabular-nums`}>
                     {isEditing ? (
@@ -1860,7 +1935,7 @@ export function RoadFrontageBuildingDetailPanel({
                       <SignSlot name={c.checkNam} />
                     )}
                   </Td>
-                  <Td colSpan={3} className={cn(FORM_CONFIRM_ROW_H, 'relative', isEditing && 'pr-7')}>
+                  <Td colSpan={3} className={FORM_CONFIRM_ROW_H}>
                     {isEditing ? (
                       <input
                         className={fieldClass}
@@ -1871,31 +1946,32 @@ export function RoadFrontageBuildingDetailPanel({
                     ) : (
                       <SignSlot name={c.appNam} />
                     )}
-                    {isEditing ? (
-                      <RowCrud
-                        onAdd={() => addConfirmAt(index + 1)}
-                        onRemove={() => removeConfirm(c.id)}
-                      />
-                    ) : null}
                   </Td>
                 </tr>
               ))}
-              {Array.from({ length: confirmPadCount }, (_, i) => (
-                <tr key={`confirm-pad-${i}`}>
-                  <Td colSpan={2} className={`${FORM_CONFIRM_ROW_H} text-center`}>
-                    {'\u00a0'}
-                  </Td>
-                  <Td colSpan={3} className={FORM_CONFIRM_ROW_H}>
-                    <SignSlot />
-                  </Td>
-                  <Td colSpan={3} className={cn(FORM_CONFIRM_ROW_H, 'relative', isEditing && 'pr-7')}>
-                    <SignSlot />
-                    {isEditing && i === confirmPadCount - 1 ? (
-                      <RowCrud onAdd={() => addConfirmAt(confirmHistory.length)} />
-                    ) : null}
-                  </Td>
-                </tr>
-              ))}
+              {!isEditing
+                ? Array.from({ length: confirmPadCount }, (_, i) => (
+                    <tr key={`confirm-pad-${i}`}>
+                      <Td colSpan={2} className={`${FORM_CONFIRM_ROW_H} text-center`}>
+                        {'\u00a0'}
+                      </Td>
+                      <Td colSpan={3} className={FORM_CONFIRM_ROW_H}>
+                        <SignSlot />
+                      </Td>
+                      <Td colSpan={3} className={FORM_CONFIRM_ROW_H}>
+                        <SignSlot />
+                      </Td>
+                    </tr>
+                  ))
+                : null}
+              {isEditing ? (
+                <RowToolbarRow
+                  hint="기본 칸보다 더 필요하면 행을 추가하세요. 비운 칸은 저장되지 않습니다."
+                  onAdd={addConfirm}
+                  onRemoveLast={removeLastConfirm}
+                  canRemoveLast={confirmHistory.length > FORM_CONFIRM_MIN_ROWS}
+                />
+              ) : null}
             </tbody>
           </table>
           <div className="mt-1 flex items-end justify-between gap-3 px-0.5 text-[10px] leading-tight text-muted-foreground">
@@ -1939,6 +2015,7 @@ export function RoadFrontageBuildingDetailPanel({
                     emptyHint="위치에서 주소를 고르면 지도가 담깁니다"
                     onAdd={() => {}}
                     onRemove={() => {}}
+                    onPreview={() => openAttachmentPreview((formAttaches.locationMap ?? [])[0])}
                   />
                 </Td>
                 <Td className={`${FORM_ATTACH_BOX} p-0 align-top`}>
@@ -1947,6 +2024,7 @@ export function RoadFrontageBuildingDetailPanel({
                     editing={isEditing}
                     onAdd={() => requestFormAttachPicker('layoutPlan')}
                     onRemove={() => requestRemoveFormAttach('layoutPlan')}
+                    onPreview={() => openAttachmentPreview((formAttaches.layoutPlan ?? [])[0])}
                   />
                 </Td>
               </tr>
@@ -2006,6 +2084,7 @@ export function RoadFrontageBuildingDetailPanel({
                     editing={isEditing}
                     onAdd={() => requestFormAttachPicker('before')}
                     onRemove={() => requestRemoveFormAttach('before')}
+                    onPreview={() => openAttachmentPreview((formAttaches.before ?? [])[0])}
                   />
                 </Td>
                 <Td className={`${FORM_ATTACH_BOX} p-0 align-top`}>
@@ -2014,6 +2093,7 @@ export function RoadFrontageBuildingDetailPanel({
                     editing={isEditing}
                     onAdd={() => requestFormAttachPicker('after')}
                     onRemove={() => requestRemoveFormAttach('after')}
+                    onPreview={() => openAttachmentPreview((formAttaches.after ?? [])[0])}
                   />
                 </Td>
               </tr>
@@ -2143,6 +2223,13 @@ export function RoadFrontageBuildingDetailPanel({
             setActionDialog(null);
           }}
           onConfirm={runAction}
+        />
+      ) : null}
+      {attachmentImagePreview != null ? (
+        <ServiceFileImagePreview
+          items={attachmentImagePreview.items}
+          initialIndex={attachmentImagePreview.initialIndex}
+          onClose={() => setAttachmentImagePreview(null)}
         />
       ) : null}
     </div>
