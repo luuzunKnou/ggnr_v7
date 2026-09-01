@@ -204,7 +204,7 @@ export default function SysManagerPage() {
       defaultMenuId="userManager"
       getDescription={getSysAdminDescription}
       renderContent={renderSysAdminContent}
-      renderTitleExtra={(menuId) =>
+      renderHeaderActions={(menuId) =>
         menuId === "layerManager" ? <LayerManagerUploadButtons /> : null
       }
       consoleArea="sysManager"
