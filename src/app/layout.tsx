@@ -6,10 +6,11 @@ import { LoginModalProvider } from "@/app/login-modal-context";
 import { ActiveNoticeModal } from "@/app/(pages)/_components/notice/ActiveNoticeModal";
 import { ForcedPasswordChangeModal } from "@/app/(pages)/_components/ForcedPasswordChangeModal";
 import { BasePathClientPatch } from "@/app/BasePathClientPatch";
+import { withBasePath } from "@/lib/basePath";
 import { getIndexLogoSrc, getSystemKorName } from "@/service/configService";
 
 export async function generateMetadata(): Promise<Metadata> {
-  const icon = getIndexLogoSrc();
+  const icon = withBasePath(getIndexLogoSrc());
   const title = getSystemKorName();
   return {
     title,

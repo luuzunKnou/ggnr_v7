@@ -347,7 +347,9 @@ async function readRelayCompleteNdjson(
   if (buffer.trim()) handleLine(buffer);
 
   if (!result) {
-    throw new Error('relay complete 결과(result) 행이 없습니다');
+    throw new Error(
+      '적용 응답이 중간에 끊겼습니다. 장시간 단계 중 게이트·프록시 유휴 제한으로 끊길 수 있습니다. 서버 [SourceCodeUpload] 로그를 확인하거나 프록시 timeout을 늘린 뒤 다시 시도하세요.'
+    );
   }
   return result;
 }
@@ -599,6 +601,22 @@ export async function relayLatestSourceFromGnms(options: {
   } catch (e: unknown) {
     if (isUserAbortError(e)) {
       log('사용자가 취소했습니다. 로컬 서버가 GNMS 수신을 중단합니다.');
+    } else if (!isRelayTimeoutError(e) && isRestartDisconnectError(e) && !relayCompleted) {
+      /** 압축 해제 등 장구간 무출력 중 연결 끊김 — 재시작 전 끊김은 실패로 안내 */
+      const clearer = new Error(
+        '적용 중 연결이 끊겼습니다. 압축 해제·집계·타입 검사 등 장시간 단계에서 게이트·프록시 유휴 제한(~60초)으로 끊길 수 있습니다. 서버 콘솔 [SourceCodeUpload] 로그로 진행 여부를 확인한 뒤 다시 시도하세요.'
+      );
+      log(`ERROR: ${clearer.message}`);
+      const failVer =
+        historyVersionLabel || folder.trim() || gnmsVersion?.trim() || '';
+      await recordVersionHistoryClient({
+        historyType: 'apply_latest',
+        status: 'fail',
+        message: clearer.message,
+        option: applyLatestHistoryOptions(includeNodeModules, restartMode),
+        version: failVer || undefined,
+      }).catch(() => {});
+      throw clearer;
     }
     /** 재시작 정상 끊김·적용 완료·서버가 이미 실패 이력 남긴 경우 클라이언트 중복 기록 생략 */
     const serverHistoryRecorded =

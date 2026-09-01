@@ -502,7 +502,16 @@ async function loadShpRows(
     const res = await db.execute(sql.raw(q));
     return (res.rows as SyncRow[]) ?? [];
   } catch {
-    if (clipWkt) return loadShpRows(tableNames, asOfDate, wkt, dateMode, null, cityUnionSql);
+    // 자르기·시군 합집합 SQL 실패 시 단계적으로 완화
+    if (clipWkt && cityUnionSql) {
+      return loadShpRows(tableNames, asOfDate, wkt, dateMode, clipWkt, null);
+    }
+    if (clipWkt) {
+      return loadShpRows(tableNames, asOfDate, wkt, dateMode, null, cityUnionSql);
+    }
+    if (cityUnionSql) {
+      return loadShpRows(tableNames, asOfDate, wkt, dateMode, null, null);
+    }
     throw new Error('sync_log 조회 실패');
   }
 }
@@ -562,7 +571,15 @@ async function loadExcelRows(
     const res = await db.execute(sql.raw(q));
     return (res.rows as SyncRow[]) ?? [];
   } catch {
-    if (clipWkt) return loadExcelRows(tableNames, asOfDate, wkt, dateMode, null, cityUnionSql);
+    if (clipWkt && cityUnionSql) {
+      return loadExcelRows(tableNames, asOfDate, wkt, dateMode, clipWkt, null);
+    }
+    if (clipWkt) {
+      return loadExcelRows(tableNames, asOfDate, wkt, dateMode, null, cityUnionSql);
+    }
+    if (cityUnionSql) {
+      return loadExcelRows(tableNames, asOfDate, wkt, dateMode, null, null);
+    }
     return [];
   }
 }
@@ -599,9 +616,41 @@ function resolveAsOfFromRows(rows: SyncRow[]): ChangeHistoryAsOfFeature[] {
   return [...map.values()];
 }
 
+/** 당일 변경을 지도에 그릴 도형이 있는지 — dayDiff와 동일 기준. */
+function rowHasDrawableClippedGeom(row: SyncRow): boolean {
+  const op = String(row.operation ?? '').toLowerCase();
+  if (op === 'append' || op === 'conflict') {
+    const newGeom = parseGeoJson(row.new_gj) ?? (op === 'append' ? parseGeoJson(row.old_gj) : null);
+    if (newGeom?.type) return true;
+  }
+  if (op === 'remove' || op === 'conflict') {
+    if (parseGeoJson(row.old_gj)?.type) return true;
+  }
+  return false;
+}
+
+/** 타임라인용 — 행에서 그릴 후보 도형(자르기 전) 추출 */
+function collectTimelineDrawableGeoms(
+  row: SyncRow
+): { geom: { type: string; coordinates?: unknown } }[] {
+  const op = String(row.operation ?? '').toLowerCase();
+  const out: { geom: { type: string; coordinates?: unknown } }[] = [];
+  if (op === 'append' || op === 'conflict') {
+    const newGeom = parseGeoJson(row.new_gj) ?? (op === 'append' ? parseGeoJson(row.old_gj) : null);
+    if (newGeom?.type) out.push({ geom: newGeom });
+  }
+  if (op === 'remove' || op === 'conflict') {
+    const oldGeom = parseGeoJson(row.old_gj);
+    if (oldGeom?.type) out.push({ geom: oldGeom });
+  }
+  return out;
+}
+
 /**
  * 영역·선택 레이어 기준 타임라인(도형일).
  * 정사일은 클라 목업/추후 연동 — 여기서는 shape만.
+ * 영역과 교차하는 로그를 가져온 뒤, 자른 도형이 남는 날만 넣는다.
+ * (행마다 시군 합집합 자르기 SQL을 걸면 타임라인 전체 조회가 실패·타임아웃하기 쉬움)
  */
 export async function listTimeline(params?: {
   tableNames?: string[];
@@ -613,21 +662,45 @@ export async function listTimeline(params?: {
     return { events: [] as ChangeHistoryTimelineEvent[] };
   }
 
+  // 영역 교차만 — 시점/당일 조회와 달리 전 기간 + 행별 시군 clip SQL 금지
   const [shp, excel] = await Promise.all([
     loadShpRows(tableNames, null, wkt),
     loadExcelRows(tableNames, null, wkt),
   ]);
   const rows = [...shp, ...excel];
 
-  const byDate = new Map<string, SyncRow[]>();
+  type DatedRow = { date: string; row: SyncRow };
+  const visible: DatedRow[] = [];
   for (const row of rows) {
-    // kept·Multi/CRS 표기만 노이즈 제외 — 추가·삭제·표속성·도형종류·좌표 변경 포함
     if (!isVisibleTimelineChange(row)) continue;
+    if (!rowHasDrawableClippedGeom(row)) continue;
     const d = dateKey(row.applied_at);
     if (!d) continue;
-    const list = byDate.get(d) ?? [];
+    visible.push({ date: d, row });
+  }
+
+  let keepDates: Set<string> | null = null;
+  if (wkt && visible.length > 0) {
+    const tagged: { date: string; geom: { type: string; coordinates?: unknown } }[] = [];
+    for (const { date, row } of visible) {
+      for (const g of collectTimelineDrawableGeoms(row)) {
+        tagged.push({ date, geom: g.geom });
+      }
+    }
+    if (tagged.length > 0) {
+      const clipped = await clipFeatureGeomsToAreaWkt(tagged, wkt);
+      keepDates = new Set(clipped.map((c) => c.date));
+    } else {
+      keepDates = new Set();
+    }
+  }
+
+  const byDate = new Map<string, SyncRow[]>();
+  for (const { date, row } of visible) {
+    if (keepDates && !keepDates.has(date)) continue;
+    const list = byDate.get(date) ?? [];
     list.push(row);
-    byDate.set(d, list);
+    byDate.set(date, list);
   }
 
   const events: ChangeHistoryTimelineEvent[] = [];

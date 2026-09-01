@@ -55,11 +55,10 @@ export function StylePreviewSwatch({
   const sizeClass = size === "sm" ? "h-7 w-7" : "h-8 w-8"
   return (
     <div
-      className={showFrame ? `relative ${sizeClass} shrink-0 rounded border border-input overflow-hidden` : `relative ${sizeClass} shrink-0 overflow-hidden`}
-      style={
+      className={
         showFrame
-          ? { backgroundImage: "repeating-conic-gradient(#ccc 0% 25%, #fff 0% 50%) 0 0/10px 10px" }
-          : undefined
+          ? `relative ${sizeClass} shrink-0 rounded border border-input overflow-hidden [background-image:repeating-conic-gradient(#ccc_0%_25%,#fff_0%_50%)] dark:[background-image:repeating-conic-gradient(#3f3f46_0%_25%,#27272a_0%_50%)] [background-size:10px_10px]`
+          : `relative ${sizeClass} shrink-0 overflow-hidden`
       }
       title={title}
     >
@@ -150,22 +149,26 @@ export function StyleLegendThumb({
 
   if (phase === "svg") {
     return (
-      <img
-        src={`/symbol/${tableName}.svg${q}`}
-        alt=""
-        className="max-h-7 max-w-full object-contain pointer-events-none"
-        onError={() => setPhase("png")}
-      />
+      <span className="inline-flex items-center justify-center overflow-hidden rounded border border-border/60 bg-muted/40 p-0.5 dark:bg-muted/60">
+        <img
+          src={`/symbol/${tableName}.svg${q}`}
+          alt=""
+          className="h-6 w-6 object-contain pointer-events-none"
+          onError={() => setPhase("png")}
+        />
+      </span>
     )
   }
   if (phase === "png") {
     return (
-      <img
-        src={`/symbol/${tableName}.png${q}`}
-        alt=""
-        className="max-h-7 max-w-full object-contain pointer-events-none"
-        onError={() => setPhase("rest")}
-      />
+      <span className="inline-flex items-center justify-center overflow-hidden rounded border border-border/60 bg-muted/40 p-0.5 dark:bg-muted/60">
+        <img
+          src={`/symbol/${tableName}.png${q}`}
+          alt=""
+          className="h-6 w-6 object-contain pointer-events-none"
+          onError={() => setPhase("rest")}
+        />
+      </span>
     )
   }
 
@@ -175,24 +178,28 @@ export function StyleLegendThumb({
   return (
     <>
       {showImg && (
-        <img
-          src={legendUrl}
-          alt=""
-          className="max-h-7 max-w-full object-contain pointer-events-none"
-          onError={onNeedCssFallback}
-        />
+        <span className="inline-flex items-center justify-center overflow-hidden rounded border border-border/60 bg-muted/40 p-0.5 dark:bg-muted/60">
+          <img
+            src={legendUrl}
+            alt=""
+            className="h-6 w-6 object-contain pointer-events-none"
+            onError={onNeedCssFallback}
+          />
+        </span>
       )}
       {showSwatch && (
-        <StylePreviewSwatch
-          geometryType={fallbackState.geometryType}
-          fillColor={fallbackState.fillColor}
-          strokeColor={fallbackState.strokeColor}
-          opacity={fallbackState.opacity}
-          symbolUrl={fallbackState.symbolUrl}
-          showFrame={false}
-          size="sm"
-          cacheBust={cacheBust}
-        />
+        <span className="inline-flex items-center justify-center overflow-hidden rounded border border-border/60 bg-muted/40 p-0.5 dark:bg-muted/60">
+          <StylePreviewSwatch
+            geometryType={fallbackState.geometryType}
+            fillColor={fallbackState.fillColor}
+            strokeColor={fallbackState.strokeColor}
+            opacity={fallbackState.opacity}
+            symbolUrl={fallbackState.symbolUrl}
+            showFrame={false}
+            size="sm"
+            cacheBust={cacheBust}
+          />
+        </span>
       )}
       {showLoading && <span className="text-xs text-muted-foreground pointer-events-none">…</span>}
       {!showImg && !showSwatch && !showLoading && (

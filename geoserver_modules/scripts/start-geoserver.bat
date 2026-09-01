@@ -42,4 +42,14 @@ REM 5. Run startup.bat — no unlimited ggnr_log append
 cd /d "%BIN_DIR%"
 set "GEOSERVER_HOME=%GEOSERVER_DIR%"
 set "GEOSERVER_DATA_DIR=%DATA_DIR%"
+
+REM symbol style URLs: sync www/symbol to start.ini port (GEOSERVER_URL)
+set "PROJECT_ROOT=%MODULE_ROOT%\.."
+if exist "%PROJECT_ROOT%\scripts\sync-geoserver-symbol-style-urls.ts" (
+  pushd "%PROJECT_ROOT%"
+  call npx tsx scripts/sync-geoserver-symbol-style-urls.ts
+  if errorlevel 1 echo [WARN] symbol style URL sync failed - continuing GeoServer start.
+  popd
+)
+
 call startup.bat

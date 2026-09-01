@@ -6,6 +6,7 @@ import { signOut, useSession } from 'next-auth/react'
 import { useSearchParams } from 'next/navigation'
 import { LogOut, Mail, Phone, X } from 'lucide-react'
 import { call } from '@/lib/api'
+import { withBasePathNav } from '@/lib/basePath'
 import { cn } from '@/lib/utils'
 import {
   dismissAllBizNotifs,
@@ -73,7 +74,7 @@ const PROTO_PANEL_TABS = SHOOTING_REQUEST_UI_ENABLED
 type Props = {
   open: boolean
   onClose: () => void
-  onOpenLedger: (ledgerId: string) => void
+  onOpenLedger: (item: ProtoNotifItem) => void
   onOpenFee: (feeId: string) => void
   /** 내 촬영요청 행 선택 시 (신청서 모달 등) */
   onSelectShootingRequest?: (id: string) => void
@@ -146,7 +147,7 @@ export function UserAccountProtoPanel({
 
   const handleLogout = useCallback(async () => {
     await signOut({ redirect: false })
-    window.location.assign('/')
+    window.location.assign(withBasePathNav('/'))
   }, [])
 
   const handleDismissNotif = useCallback((item: ProtoNotifItem) => {
@@ -193,6 +194,7 @@ export function UserAccountProtoPanel({
           <PanelTabBar
             tabs={PROTO_PANEL_TABS}
             activeTab={activeTab}
+            notifCount={notifItems.length}
             notifUnreadCount={unreadNotifCount}
             shootingCount={shootingCount}
             onToggleTab={(tabId) => setActiveTab((prev) => (prev === tabId ? null : tabId))}
@@ -307,12 +309,14 @@ function ProfileSection({
 function PanelTabBar({
   tabs,
   activeTab,
+  notifCount,
   notifUnreadCount,
   shootingCount,
   onToggleTab,
 }: {
   tabs: typeof PROTO_PANEL_TABS
   activeTab: ProtoPanelTabId | null
+  notifCount: number
   notifUnreadCount: number
   shootingCount: number
   onToggleTab: (tabId: ProtoPanelTabId) => void
@@ -322,8 +326,9 @@ function PanelTabBar({
       {tabs.map((tab) => {
         const active = activeTab === tab.id
         const count =
-          tab.id === 'notif' ? notifUnreadCount : tab.id === 'shooting' ? shootingCount : 0
-        const showCount = tab.id === 'notif' ? count > 0 : tab.id === 'shooting'
+          tab.id === 'notif' ? notifCount : tab.id === 'shooting' ? shootingCount : 0
+        const showCount = tab.id === 'notif' || tab.id === 'shooting'
+        const emphasizeUnread = tab.id === 'notif' && notifUnreadCount > 0
         return (
           <button
             key={tab.id}
@@ -342,7 +347,7 @@ function PanelTabBar({
               <span
                 className={cn(
                   'inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full px-1 text-[10px] font-medium tabular-nums ring-1',
-                  tab.id === 'notif'
+                  emphasizeUnread
                     ? 'bg-red-50 text-red-600 ring-red-100'
                     : 'bg-muted/40 text-muted-foreground ring-border'
                 )}

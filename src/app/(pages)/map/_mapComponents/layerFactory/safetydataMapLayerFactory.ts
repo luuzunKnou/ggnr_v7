@@ -6,20 +6,14 @@ import type { Extent } from 'ol/extent';
 import { transformExtent } from 'ol/proj';
 import { call } from '@/lib/api';
 import { WORKSPACE } from './serviceLayerFactory';
-
-function getGeoServerBase(): string {
-  if (typeof window !== 'undefined') {
-    return `${window.location.protocol}//${window.location.hostname}:8080/geoserver`;
-  }
-  return 'http://localhost:8080/geoserver';
-}
+import { getGeoServerBase } from '@/lib/geoserverUrl';
 
 /**
  * 재난안전데이터(안전데이터포털 연계) — GeoServer WMS
  * SafetyMapLayerPanel 토글과 동기화
  *
- * 지도 그리기: 브라우저가 OpenLayers ImageWMS로 **직접** `host:8080/geoserver/.../wms` 에 GetMap 요청함.
- * Next `POST /api`(lib/api `call`)와 무관 — 네트워크에서 WMS는 8080, JSON 게이트웨이는 3000/api 로 구분하면 됨.
+ * 지도 그리기: 브라우저가 OpenLayers ImageWMS로 동일 출처 `/geoserver/.../wms`(rewrite)에 GetMap 요청함.
+ * Next `POST /api`(lib/api `call`)와 무관 — WMS는 geoserver 경로, JSON 게이트웨이는 /api 로 구분.
  */
 /** 병상정보 패널 — GeoServer WMS(병원 POI). `safetyMapLayerVisibility` 키와 동일 */
 export const SAFETY_HOSPITAL_POI_GEO_TABLE = 'sd_mois_hospital_poi' as const;
@@ -45,9 +39,10 @@ export const SAFETY_MAP_GEOSERVER_OVERLAYS: {
 }[] = [
   /** 침수흔적도(moisFloodTrace)는 safemap IF_0092_WMS — SafetyMapLayerPanel */
   /** 물놀이관리지역(waterPlayManaged)는 safemap IF_0044_WMS — SafetyMapLayerPanel */
-  { panelId: 'sd_cold_wave_shelter', tableName: 'sd_cold_wave_shelter', zIndex: 119, opacity: 0.88 },
+  /** 겹침 순서(위→아래): 한파쉼터 > 무더위쉼터 > 폭염저감시설 */
+  { panelId: 'sd_heat_mitigation_facility', tableName: 'sd_heat_mitigation_facility', zIndex: 119, opacity: 0.88 },
   { panelId: 'sd_heat_wave_shelter', tableName: 'sd_heat_wave_shelter', zIndex: 120, opacity: 0.88 },
-  { panelId: 'sd_heat_mitigation_facility', tableName: 'sd_heat_mitigation_facility', zIndex: 121, opacity: 0.88 },
+  { panelId: 'sd_cold_wave_shelter', tableName: 'sd_cold_wave_shelter', zIndex: 121, opacity: 0.88 },
   {
     panelId: 'sd_earthquake_outdoor_evac_site',
     tableName: 'sd_earthquake_outdoor_evac_site',
@@ -176,7 +171,10 @@ export function useSafetydataMapLayerSync(map: Map | null, mapReady: boolean, vi
       if (!l.get('safetyMapGeoLayer')) return;
       const tableName = l.get('layerTableName') as string | undefined;
       const row = SAFETY_MAP_GEOSERVER_OVERLAYS.find((r) => r.tableName === tableName);
-      if (row) l.setOpacity(row.opacity);
+      if (row) {
+        l.setOpacity(row.opacity);
+        l.setZIndex(row.zIndex);
+      }
       l.setVisible(tableName != null && visibleTables.has(tableName));
       l.setExtent(emd3857);
     });

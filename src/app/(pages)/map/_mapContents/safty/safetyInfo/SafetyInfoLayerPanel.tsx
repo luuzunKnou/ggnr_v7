@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState, type Dispatch, type SetStateAction } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   Activity,
   AlertTriangle,
@@ -68,17 +68,6 @@ const DATASET_TITLE_ICON: Record<string, LucideIcon> = {
   'sd-228': BellRing,
   'sd-751': HeartHandshake,
 };
-
-/** 구호·문자·뉴스: 미리보기 건수 (데이터셋별 오버라이드 가능) */
-const PREVIEW_LIMIT_OTHER = 5;
-const PREVIEW_LIMIT_BY_DATASET: Record<string, number> = {
-  'sd-1066': 3,
-  'sd-751': 3,
-};
-
-function getPreviewLimit(datasetId: string): number {
-  return PREVIEW_LIMIT_BY_DATASET[datasetId] ?? PREVIEW_LIMIT_OTHER;
-}
 
 function formatFieldValue(v: unknown): string {
   if (v == null) return '';
@@ -491,58 +480,25 @@ function isDisasterOngoing(row: Record<string, unknown>): boolean {
 
 type PreparedFeed = {
   rows: Record<string, unknown>[];
-  moreCount: number;
-  showMoreToggle: boolean;
   summary?: string;
 };
 
 function prepareFeedRows(
   datasetId: string,
   items: Record<string, unknown>[],
-  expanded: boolean,
   sortFromDb?: boolean
 ): PreparedFeed {
   const sorted = sortFromDb ? [...items] : sortItemsLatestFirst(datasetId, items);
 
   if (datasetId === 'sd-1066') {
-    const limit = getPreviewLimit('sd-1066');
     const ongoing = sorted.filter((r) => isDisasterOngoing(r as Record<string, unknown>));
     const ended = sorted.filter((r) => !isDisasterOngoing(r as Record<string, unknown>));
-    const hiddenWhenCollapsed = Math.max(0, ongoing.length - limit) + ended.length;
-    if (expanded) {
-      return {
-        rows: [...ongoing, ...ended],
-        moreCount: hiddenWhenCollapsed,
-        showMoreToggle: hiddenWhenCollapsed > 0,
-      };
-    }
-    return {
-      rows: ongoing.slice(0, limit),
-      moreCount: hiddenWhenCollapsed,
-      showMoreToggle: hiddenWhenCollapsed > 0,
-    };
+    return { rows: [...ongoing, ...ended] };
   }
 
-  const previewLimit = getPreviewLimit(datasetId);
-  if (sorted.length <= previewLimit) {
-    return {
-      rows: sorted,
-      moreCount: 0,
-      showMoreToggle: false,
-      summary: `${sorted.length}건`,
-    };
-  }
-  if (expanded) {
-    return {
-      rows: sorted,
-      moreCount: sorted.length - previewLimit,
-      showMoreToggle: true,
-    };
-  }
   return {
-    rows: sorted.slice(0, previewLimit),
-    moreCount: sorted.length - previewLimit,
-    showMoreToggle: true,
+    rows: sorted,
+    summary: `${sorted.length}건`,
   };
 }
 
@@ -553,8 +509,6 @@ function formatTime(d: Date) {
 type SafetyInfoDatasetArticleProps = {
   item: FeedMeta;
   feeds: Record<string, FeedState>;
-  feedExpanded: Record<string, boolean>;
-  setFeedExpanded: Dispatch<SetStateAction<Record<string, boolean>>>;
   /** 뉴스 열 등: 카드·목록이 남은 높이를 채우고 스크롤 */
   fillColumnHeight?: boolean;
 };
@@ -562,15 +516,12 @@ type SafetyInfoDatasetArticleProps = {
 function SafetyInfoDatasetArticle({
   item,
   feeds,
-  feedExpanded,
-  setFeedExpanded,
   fillColumnHeight = false,
 }: SafetyInfoDatasetArticleProps) {
   const st = feeds[item.datasetId];
-  const expanded = Boolean(feedExpanded[item.datasetId]);
   const prepared =
     st && !st.loading && !st.error && st.items.length > 0
-      ? prepareFeedRows(item.datasetId, st.items, expanded, st.sortFromDb)
+      ? prepareFeedRows(item.datasetId, st.items, st.sortFromDb)
       : null;
   const TitleIcon = DATASET_TITLE_ICON[item.datasetId];
 
@@ -610,15 +561,11 @@ function SafetyInfoDatasetArticle({
               <p className={cn('mb-2 text-[11px] text-muted-foreground', fillColumnHeight && 'shrink-0')}>{prepared.summary}</p>
             ) : null}
             {prepared.rows.length === 0 ? (
-              <p className="text-[11px] text-muted-foreground">
-                {item.datasetId === 'sd-1066' && !expanded
-                  ? '진행중인 재난이 없습니다.'
-                  : '표시할 데이터가 없습니다.'}
-              </p>
+              <p className="text-[11px] text-muted-foreground">표시할 데이터가 없습니다.</p>
             ) : (
               <div
                 className={cn(
-                  'scrollbar-hide space-y-2 overflow-y-auto pr-0.5',
+                  'scrollbar-thin !mr-0 space-y-2 overflow-y-auto',
                   fillColumnHeight ? 'min-h-0 flex-1' : 'max-h-[280px]'
                 )}
               >
@@ -651,23 +598,6 @@ function SafetyInfoDatasetArticle({
                 )}
               </div>
             )}
-            {prepared.showMoreToggle ? (
-              <button
-                type="button"
-                onClick={() =>
-                  setFeedExpanded((prev) => ({
-                    ...prev,
-                    [item.datasetId]: !expanded,
-                  }))
-                }
-                className={cn(
-                  'mt-2 w-full rounded border border-border bg-background py-1.5 text-[11px] font-medium text-primary hover:bg-muted/50',
-                  fillColumnHeight && 'shrink-0'
-                )}
-              >
-                {expanded ? '접기' : `더 보기 (${prepared.moreCount}건)`}
-              </button>
-            ) : null}
           </>
         ) : null}
       </div>
@@ -682,8 +612,6 @@ type Props = {
 export function SafetyInfoLayerPanel({ onClose }: Props) {
   const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
   const [refreshing, setRefreshing] = useState(false);
-  /** 데이터셋별「더 보기」펼침 — 새로고침 시 초기화 */
-  const [feedExpanded, setFeedExpanded] = useState<Record<string, boolean>>({});
   const [feeds, setFeeds] = useState<Record<string, FeedState>>(() => {
     const init: Record<string, FeedState> = {};
     for (const id of ALL_DATASET_IDS) {
@@ -694,7 +622,6 @@ export function SafetyInfoLayerPanel({ onClose }: Props) {
 
   const loadFeeds = useCallback(async () => {
     setRefreshing(true);
-    setFeedExpanded({});
     setFeeds((prev) => {
       const next = { ...prev };
       for (const id of ALL_DATASET_IDS) {
@@ -816,8 +743,6 @@ export function SafetyInfoLayerPanel({ onClose }: Props) {
                 key={item.datasetId}
                 item={item}
                 feeds={feeds}
-                feedExpanded={feedExpanded}
-                setFeedExpanded={setFeedExpanded}
                 fillColumnHeight={item.datasetId === 'sd-46'}
               />
             ))}
@@ -829,8 +754,6 @@ export function SafetyInfoLayerPanel({ onClose }: Props) {
               key={item.datasetId}
               item={item}
               feeds={feeds}
-              feedExpanded={feedExpanded}
-              setFeedExpanded={setFeedExpanded}
               fillColumnHeight
             />
           ))}

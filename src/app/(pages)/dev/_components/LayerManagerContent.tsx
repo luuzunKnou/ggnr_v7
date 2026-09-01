@@ -17,11 +17,9 @@ import { LayerInfoManager } from "./LayerInfoManager"
 import { LayerAttrManager } from "./LayerAttrManager"
 import { LayerCodeManager } from "./LayerCodeManager"
 import { LayerExtraManager } from "./LayerExtraManager"
+import { getGeoServerBase } from "@/lib/geoserverUrl"
 
-const GEOSERVER_DEFAULT_URL =
-  typeof window !== "undefined"
-    ? `${window.location.protocol}//${window.location.hostname}:8080/geoserver`
-    : "http://localhost:8080/geoserver"
+const GEOSERVER_DEFAULT_URL = getGeoServerBase()
 
 const MAIN_TABS = [
   { id: "list", label: "레이어 목록" },
@@ -129,65 +127,81 @@ export function LayerManagerContent() {
         onSuccess={handleUploadSuccess}
       />
 
-      <div className="flex-1 min-h-0 overflow-hidden relative">
+      <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
         <div
-          className="absolute inset-0 flex flex-col"
-          style={{ display: activeTab === "list" ? "flex" : "none" }}
+          className={cn(
+            "flex flex-1 min-h-0 flex-col overflow-hidden",
+            activeTab !== "list" && "hidden"
+          )}
         >
           <LayerManagerListTab />
         </div>
         {visitedTabs.has("historyShp") ? (
           <div
-            className="absolute inset-0 flex flex-col"
-            style={{ display: activeTab === "historyShp" ? "flex" : "none" }}
+            className={cn(
+              "flex flex-1 min-h-0 flex-col overflow-hidden",
+              activeTab !== "historyShp" && "hidden"
+            )}
           >
             <ShpHistoryTab embedded active={activeTab === "historyShp"} />
           </div>
         ) : null}
         {visitedTabs.has("historyExcel") ? (
           <div
-            className="absolute inset-0 flex flex-col"
-            style={{ display: activeTab === "historyExcel" ? "flex" : "none" }}
+            className={cn(
+              "flex flex-1 min-h-0 flex-col overflow-hidden",
+              activeTab !== "historyExcel" && "hidden"
+            )}
           >
             <ExlHistoryTab embedded />
           </div>
         ) : null}
         {visitedTabs.has("defineLayer") ? (
           <div
-            className="absolute inset-0 flex flex-col overflow-hidden"
-            style={{ display: activeTab === "defineLayer" ? "flex" : "none" }}
+            className={cn(
+              "flex flex-1 min-h-0 flex-col overflow-hidden",
+              activeTab !== "defineLayer" && "hidden"
+            )}
           >
             <LayerInfoManager />
           </div>
         ) : null}
         {visitedTabs.has("defineField") ? (
           <div
-            className="absolute inset-0 flex flex-col overflow-hidden"
-            style={{ display: activeTab === "defineField" ? "flex" : "none" }}
+            className={cn(
+              "flex flex-1 min-h-0 flex-col overflow-hidden",
+              activeTab !== "defineField" && "hidden"
+            )}
           >
             <LayerAttrManager />
           </div>
         ) : null}
         {visitedTabs.has("defineCode") ? (
           <div
-            className="absolute inset-0 flex flex-col overflow-hidden"
-            style={{ display: activeTab === "defineCode" ? "flex" : "none" }}
+            className={cn(
+              "flex flex-1 min-h-0 flex-col overflow-hidden",
+              activeTab !== "defineCode" && "hidden"
+            )}
           >
             <LayerCodeManager />
           </div>
         ) : null}
         {visitedTabs.has("defineExtra") ? (
           <div
-            className="absolute inset-0 flex flex-col overflow-hidden"
-            style={{ display: activeTab === "defineExtra" ? "flex" : "none" }}
+            className={cn(
+              "flex flex-1 min-h-0 flex-col overflow-hidden",
+              activeTab !== "defineExtra" && "hidden"
+            )}
           >
             <LayerExtraManager />
           </div>
         ) : null}
         {visitedTabs.has("autoSetup") ? (
           <div
-            className="absolute inset-0 flex flex-col overflow-hidden"
-            style={{ display: activeTab === "autoSetup" ? "flex" : "none" }}
+            className={cn(
+              "flex flex-1 min-h-0 flex-col overflow-hidden",
+              activeTab !== "autoSetup" && "hidden"
+            )}
           >
             <LayerManagerAutoSetupTab onIssueCountChange={handleAutoSetupIssueCountChange} />
           </div>

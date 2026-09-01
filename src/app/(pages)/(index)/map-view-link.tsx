@@ -1,8 +1,8 @@
 "use client"
 
-import Link from "next/link"
 import { Layers, Mouse } from "lucide-react"
 import { useEffect, useRef } from "react"
+import { withBasePath, withBasePathNav } from "@/lib/basePath"
 
 export function MapViewLink() {
   const videoRef = useRef<HTMLVideoElement>(null)
@@ -55,13 +55,17 @@ export function MapViewLink() {
   }, [])
 
   return (
-    <Link
-      href="/map"
-      className="group relative block min-h-[280px] cursor-pointer overflow-hidden rounded-[5px] bg-slate-900 p-8 text-center text-white transition-opacity hover:opacity-95 flex flex-col items-center justify-center"
+    <button
+      type="button"
+      title="지도보기"
+      onClick={() => {
+        window.location.assign(withBasePathNav("/map"))
+      }}
+      className="group relative block min-h-[280px] w-full cursor-pointer overflow-hidden rounded-[5px] bg-slate-900 p-8 text-center text-white transition-opacity hover:opacity-95 flex flex-col items-center justify-center"
     >
       <video
         ref={videoRef}
-        src="/image/indexImage/backgroundVideo_02.mp4"
+        src={withBasePath("/image/indexImage/backgroundVideo_02.mp4")}
         className="pointer-events-none absolute inset-0 z-0 h-full w-full object-cover"
         muted
         loop
@@ -80,11 +84,12 @@ export function MapViewLink() {
         </div>
         <h2 className="mb-4 mt-4 text-2xl font-bold">지도보기</h2>
         <p className="text-sm leading-relaxed text-gray-100">
-          사용자가 원하는 위치를 직관적으로 확인하고  
-          <br />데이터를 시각화합니다.
+          사용자가 원하는 위치를 직관적으로 확인하고
+          <br />
+          데이터를 시각화합니다.
         </p>
         <Mouse className="mt-10 h-5 w-5" />
       </div>
-    </Link>
+    </button>
   )
 }

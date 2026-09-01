@@ -1,19 +1,16 @@
 <layer>
   <name>landown_gunyuji</name>
-  <id>LayerInfoImpl--3f73bcf1:19cc7f9cfc4:-55e7</id>
+  <id>LayerInfoImpl--50232ad2:1a022df41e9:-6206</id>
   <type>VECTOR</type>
   <defaultStyle>
-    <id>StyleInfoImpl-7fe1d2d6:19cb369c421:-24e0</id>
+    <id>StyleInfoImpl--30e19f83:19cb3d4f76b:-7ffc</id>
   </defaultStyle>
   <resource class="featureType">
-    <id>FeatureTypeInfoImpl--3f73bcf1:19cc7f9cfc4:-55e8</id>
+    <id>FeatureTypeInfoImpl--50232ad2:1a022df41e9:-6207</id>
   </resource>
-  <queryable>true</queryable>
-  <opaque>false</opaque>
   <attribution>
     <logoWidth>0</logoWidth>
     <logoHeight>0</logoHeight>
   </attribution>
-  <dateCreated>2026-03-07 11:07:04.2 UTC</dateCreated>
-  <dateModified>2026-07-13 05:29:13.345 UTC</dateModified>
+  <dateCreated>2026-08-26 06:20:05.93 UTC</dateCreated>
 </layer>

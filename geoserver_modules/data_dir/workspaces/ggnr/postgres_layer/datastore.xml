@@ -12,7 +12,7 @@
     <entry key="preparedStatements">false</entry>
     <entry key="database">build_yy</entry>
     <entry key="port">5433</entry>
-    <entry key="passwd">crypt1:14ZkHtF5LAUcjQZEa4CEvXc3p5h2P7kv</entry>
+    <entry key="passwd">crypt1:yDZ6VhPJyG3eQikgV8lijQjiIlHEVzQ+</entry>
     <entry key="validate connections">true</entry>
     <entry key="host">192.168.127.32</entry>
     <entry key="dbtype">postgis</entry>
@@ -22,6 +22,6 @@
   </connectionParameters>
   <__default>false</__default>
   <dateCreated>2026-02-11 16:00:05.307 UTC</dateCreated>
-  <dateModified>2026-08-06 07:29:56.316 UTC</dateModified>
+  <dateModified>2026-04-10 09:46:18.888 UTC</dateModified>
   <disableOnConnFailure>false</disableOnConnFailure>
 </dataStore>

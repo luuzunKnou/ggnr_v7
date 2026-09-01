@@ -4,6 +4,7 @@
  */
 
 import { call } from '@/lib/api';
+import { appFetch, withBasePath } from '@/lib/basePath';
 import type { AerialKind } from './aerialMediaTypes';
 import {
   beginClientUploadJob,
@@ -203,8 +204,8 @@ export function startAerialMediaUpload(
           const start = chunkIndex * chunkSize;
           const end = Math.min(start + chunkSize, file.size);
           const blob = file.slice(start, end);
-          const url = `/api/upload/chunk?uploadId=${encodeURIComponent(uploadId)}&chunkIndex=${chunkIndex}&totalChunks=${expectedChunks}`;
-          const res = await fetch(url, { method: 'POST', body: blob, signal });
+          const url = `${withBasePath('/api/upload/chunk')}?uploadId=${encodeURIComponent(uploadId)}&chunkIndex=${chunkIndex}&totalChunks=${expectedChunks}`;
+          const res = await appFetch(url, { method: 'POST', body: blob, signal });
           if (!res.ok) {
             const errText = await res.text();
             let errMsg = `청크 ${chunkIndex + 1} 전송 실패`;

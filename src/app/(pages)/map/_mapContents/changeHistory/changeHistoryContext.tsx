@@ -24,10 +24,6 @@ import {
   useParcelAnalysisMapZoom,
   type BoundaryEmdSelection,
 } from '../../_mapComponents/analysisArea';
-import {
-  buildLargeAreaConfirmMessage,
-  isLargeParcelAnalysisArea,
-} from '../parcelAnalysis/parcelAnalysis.types';
 import { DEFAULT_HISTORY_DATE } from './changeHistory.timeline';
 import {
   CHANGE_HISTORY_OPENED_KEY,
@@ -380,18 +376,33 @@ export function ChangeHistoryProvider({ children }: { children: ReactNode }) {
   /** 진입 시 영역 지정 모달 — URL에 이미 opened 있어도 필지분석과 동일하게 염 */
   useEffect(() => {
     if (!isOpen) return;
-    setModalOpen(true);
-    setModalStep('choose');
-    setBoundarySessionDraftState([]);
-    setPanelEngaged(false);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- 진입 시 1회
+    let cancelled = false;
+    void (async () => {
+      await Promise.resolve();
+      if (cancelled) return;
+      setModalOpen(true);
+      setModalStep('choose');
+      setBoundarySessionDraftState([]);
+      setPanelEngaged(false);
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [isOpen]);
 
   /** 사이드바에서 메뉴만 끌 때 그리기 요청 잔존 방지 */
   useEffect(() => {
     if (isOpen) return;
-    setSpatialDrawRequest?.(null);
-    resetZoomFlag();
+    let cancelled = false;
+    void (async () => {
+      await Promise.resolve();
+      if (cancelled) return;
+      setSpatialDrawRequest?.(null);
+      resetZoomFlag();
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [isOpen, setSpatialDrawRequest, resetZoomFlag]);
 
   /** 진입 시 1회 — 사업 시군구 범위로 지도 확대 (필지분석과 동일) */
@@ -555,14 +566,9 @@ export function ChangeHistoryProvider({ children }: { children: ReactNode }) {
   }, [setSpatialDrawRequest, clearDrawSession, setBoundarySessionDraft]);
 
   const openResult = useCallback(() => {
-    if (area && isLargeParcelAnalysisArea(area)) {
-      const proceed = window.confirm(
-        buildLargeAreaConfirmMessage(area, { feature: 'changeHistory' })
-      );
-      if (!proceed) return;
-    }
+    // 넓은 영역 확인은 «이력 보기» 클릭 직후(조회 전)에만 — 필지분석과 동일
     setResultOpen(true);
-  }, [area]);
+  }, []);
 
   const value = useMemo<ChangeHistoryContextValue>(
     () => ({

@@ -9,6 +9,7 @@ import { spawn, type ChildProcess, execFileSync } from 'node:child_process';
 import path from 'node:path';
 import { ensureDbUser } from './create-db-user';
 import { loadProjectEnv } from './load-project-env';
+import { resolveGeoServerInternalUrl } from './resolve-geoserver-url';
 import { NPM_INSTALL_DEV_ARGS, resolveNpmInstallEnv } from '../src/lib/npmApplyEnv';
 import { reloadProjectRuntimeEnv } from '../src/lib/projectEnvReload';
 
@@ -274,6 +275,75 @@ function runNpmBuildSync(): void {
     env: process.env,
   });
   console.log('[SourceCodeUpload] npm run build OK');
+}
+
+/** next.config resolveBasePath 와 동일 규칙 — 게이트용 env BASE_PATH 정규화 */
+function normalizeBasePath(raw: string): string {
+  let p = (raw ?? '').trim();
+  if (!p) return '';
+  if (/^https?:\/\//i.test(p)) {
+    try {
+      p = new URL(p).pathname;
+    } catch {
+      /* keep */
+    }
+  }
+  p = p.replace(/\/+$/, '');
+  if (!p || p === '/') return '';
+  return p.startsWith('/') ? p : `/${p}`;
+}
+
+function expectedBasePathFromEnv(): string {
+  return normalizeBasePath(process.env.BASE_PATH ?? '');
+}
+
+/** `.next` 에 박힌 basePath (없으면 null = 빌드 없음) */
+function readBuiltBasePath(): string | null {
+  const p = path.join(process.cwd(), '.next', 'required-server-files.json');
+  if (!fs.existsSync(p)) return null;
+  try {
+    const j = JSON.parse(fs.readFileSync(p, 'utf-8')) as {
+      config?: { basePath?: string };
+    };
+    return normalizeBasePath(String(j.config?.basePath ?? ''));
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * start 전: env BASE_PATH 와 빌드 basePath 가 다르면 재빌드.
+ * (demo 게이트 /build_yy 인데 root 빌드로 start 하면 게이트 접속 실패)
+ */
+function ensureStartBasePathBuild(): void {
+  const expected = expectedBasePathFromEnv();
+  const built = readBuiltBasePath();
+  if (built === null) {
+    console.log('[run] .next 없음 — BASE_PATH 반영을 위해 npm run build 실행...');
+    runNpmBuildSync();
+    return;
+  }
+  if (built === expected) {
+    if (expected) {
+      console.log(`[run] 빌드 basePath=${expected || '(루트)'} — 게이트/로컬 경로 일치`);
+    }
+    return;
+  }
+  console.warn(
+    `[run] 빌드 basePath="${built || '(루트)'}" ≠ env BASE_PATH="${expected || '(루트)'}" — 재빌드합니다.`
+  );
+  console.warn(
+    '[run] 게이트(dggs.kr/[프로젝트]/)는 build·start 모두 같은 BASE_PATH 로 빌드해야 합니다.'
+  );
+  runNpmBuildSync();
+  const after = readBuiltBasePath();
+  if (after !== expected) {
+    console.error(
+      `[run] 재빌드 후에도 basePath="${after || '(루트)'}" (기대: "${expected || '(루트)'}"). next.config·env 를 확인하세요.`
+    );
+    process.exit(1);
+  }
+  console.log(`[run] 재빌드 완료 basePath=${after || '(루트)'}`);
 }
 
 async function setupDbOnRelaunch(logPrefix: string): Promise<void> {
@@ -555,6 +625,9 @@ async function main(): Promise<void> {
 
   loadProjectEnv(PROJECT, TYPE);
   loadRuntimeEnv(PROJECT);
+  if (!process.env.GEOSERVER_URL?.trim()) {
+    process.env.GEOSERVER_URL = resolveGeoServerInternalUrl();
+  }
   if (!process.env.AUTH_SECRET?.trim() && !process.env.NEXTAUTH_SECRET?.trim()) {
     process.env.AUTH_SECRET = 'ggnr-dev-auth-secret-change-me';
   }
@@ -575,7 +648,7 @@ async function main(): Promise<void> {
     const bp = (process.env.BASE_PATH ?? '').trim();
     if (bp) {
       console.log(
-        `[run] BASE_PATH=${bp.startsWith('/') ? bp : `/${bp}`} (게이트: dggskorea${bp.startsWith('/') ? bp : `/${bp}`}) — next ${COMMAND === 'dev' ? 'dev' : 'build·start'} 시 동일 값이어야 CSS/JS 경로가 맞음`
+        `[run] BASE_PATH=${bp.startsWith('/') ? bp : `/${bp}`} (게이트: dggs.kr${bp.startsWith('/') ? bp : `/${bp}`}) — next ${COMMAND === 'dev' ? 'dev' : 'build·start'} 시 동일 값이어야 CSS/JS 경로가 맞음`
       );
     }
   }
@@ -605,6 +678,9 @@ async function main(): Promise<void> {
 
   console.log('[run] DB setup done.');
   const nextCmd = COMMAND as NextCmd;
+  if (nextCmd === 'start') {
+    ensureStartBasePathBuild();
+  }
   startLauncherPoll(nextCmd);
   await ensurePortFreeForNext(getAppListenPort());
   spawnNext(nextCmd);

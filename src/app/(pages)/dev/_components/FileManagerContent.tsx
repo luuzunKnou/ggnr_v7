@@ -16,6 +16,7 @@ import {
   Upload,
 } from 'lucide-react';
 import { call } from '@/lib/api';
+import { appFetch, withBasePath } from '@/lib/basePath';
 import { cn } from '@/lib/utils';
 import { Button } from '@/app/shadcnComponents/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/app/shadcnComponents/ui/card';
@@ -552,10 +553,14 @@ export function FileManagerContent() {
     try {
       if (selectedRows.length === 1 && selectedRows[0]!.kind === 'file') {
         const row = selectedRows[0]!;
-        const res = await fetch(`/api/file-manager/download?path=${encodeURIComponent(row.relativePath)}`, {
-          method: 'GET',
-          cache: 'no-store',
-        });
+        const res = await appFetch(
+          `/api/file-manager/download?path=${encodeURIComponent(row.relativePath)}`,
+          {
+            method: 'GET',
+            cache: 'no-store',
+            credentials: 'include',
+          }
+        );
         if (!res.ok) {
           const text = await res.text();
           throw new Error(text || '다운로드 실패');
@@ -566,9 +571,10 @@ export function FileManagerContent() {
           fileNameFromDisposition(res.headers.get('content-disposition')) ?? row.name
         );
       } else {
-        const res = await fetch('/api/file-manager/download-zip', {
+        const res = await appFetch(withBasePath('/api/file-manager/download-zip'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
           body: JSON.stringify({ paths: selectedRows.map((row) => row.relativePath) }),
         });
         if (!res.ok) {

@@ -6,7 +6,7 @@ import { cn } from '@/lib/utils';
 const iconShell = cn(
   'shrink-0 opacity-90 rounded-[5px] backdrop-blur-sm shadow-lg border overflow-hidden',
   'bg-white/95 border-slate-200',
-  'dark:bg-black/55 dark:border-white/10'
+  'dark:bg-black/95 dark:border-white/10'
 );
 
 const iconBtnInner = cn(

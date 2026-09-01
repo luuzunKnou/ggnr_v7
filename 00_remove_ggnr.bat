@@ -1,40 +1,41 @@
 @echo off
-chcp 65001 >nul
 setlocal EnableExtensions EnableDelayedExpansion
 
 :: =============================================================================
-:: GGNR_V7 서비스 제거 + 80·3000 포트 점유 종료 (관리자 권한으로 실행)
-:: - nssm 위치: root\nssm\win64\nssm.exe (nssm_install_ggnr.bat 과 동일)
-:: - 순서: 1) nssm stop/remove GGNR_V7  2) 80·3000 포트 Listen 프로세스 종료
-:: - 종료 시 항상 pause — 로그 확인 후 수동으로 창 닫기
+:: Remove GGNR_V7 service + free GeoServer port + app port 3000 (Administrator)
+:: Encoding: ASCII only (no Hangul). Safe on Korean CMD (CP949) and UTF-8 editors.
+:: - nssm: root\nssm\win64\nssm.exe (same as 00_nssm_install_ggnr.bat)
+:: - steps: 1) nssm stop/remove GGNR_V7  2) GeoServer graceful stop + geo port
+::          3) kill Listen on app port only
+:: - GeoServer port: GEOSERVER_URL / start.ini / default 8080 (never hardcoded 80)
 :: =============================================================================
 
 set "SERVICE_NAME=GGNR_V7"
-set "GEO_PORT=80"
 set "APP_PORT=3000"
 set "ROOT=%~dp0"
 if "%ROOT:~-1%"=="\" set "ROOT=%ROOT:~0,-1%"
 set "EXIT_EC=0"
 
+call "%ROOT%\00_geoserver_port_helpers.bat" resolve
+set "GEO_PORT=!GEO_PORT!"
+
 echo.
 echo [remove-ggnr] root    = %ROOT%
 echo [remove-ggnr] service = %SERVICE_NAME%
-echo [remove-ggnr] geo port= %GEO_PORT%
+echo [remove-ggnr] geo port= !GEO_PORT! ^(resolved^)
 echo [remove-ggnr] app port= %APP_PORT%
 echo.
 
-:: 관리자 여부
 net session >nul 2>&1
 if errorlevel 1 (
-  echo [오류] 관리자 실행이 아닙니다.
-  echo         이 스크립트는 관리자 CMD에서 실행해야 합니다.
-  echo         CMD를 마우스 오른쪽 버튼 → «관리자 권한으로 실행» 후 다시 실행하세요.
+  echo [ERROR] Not running as administrator.
+  echo         Run this script from an elevated CMD.
+  echo         Right-click CMD - Run as administrator, then retry.
   set "EXIT_EC=1"
   goto :end_pause
 )
-echo [확인] 관리자 권한으로 실행 중입니다.
+echo [OK] Running as administrator.
 
-:: nssm 찾기 (프로젝트 내부: root\nssm\win64\nssm.exe)
 set "NSSM=%ROOT%\nssm\win64\nssm.exe"
 if not exist "%NSSM%" set "NSSM=%ROOT%\nssm\win32\nssm.exe"
 if not exist "%NSSM%" (
@@ -49,104 +50,99 @@ if not exist "%NSSM%" (
 
 :nssm_found
 if not exist "%NSSM%" (
-  echo [오류] nssm.exe 를 찾지 못했습니다.
-  echo   기대 경로: %ROOT%\nssm\win64\nssm.exe
+  echo [ERROR] nssm.exe not found.
+  echo   expected: %ROOT%\nssm\win64\nssm.exe
   set "EXIT_EC=1"
   goto :end_pause
 )
 echo [remove-ggnr] nssm    = %NSSM%
 echo.
 
-:: ---------------------------------------------------------------------------
-:: 1) nssm remove GGNR_V7
-:: ---------------------------------------------------------------------------
-echo [1/2] nssm 서비스 %SERVICE_NAME% 중지·제거...
+echo [1/3] nssm remove %SERVICE_NAME% ...
 "%NSSM%" status %SERVICE_NAME% >nul 2>&1
 if errorlevel 1 (
-  echo [안내] 서비스 %SERVICE_NAME% 가 등록되어 있지 않습니다. ^(제거 생략^)
+  echo [INFO] Service %SERVICE_NAME% is not registered. ^(skip^)
 ) else (
   echo [remove-ggnr] stop %SERVICE_NAME% ...
   "%NSSM%" stop %SERVICE_NAME% confirm >nul 2>&1
   echo [remove-ggnr] remove %SERVICE_NAME% ...
   "%NSSM%" remove %SERVICE_NAME% confirm
   if errorlevel 1 (
-    echo [오류] nssm remove 실패
-    echo         수동: "%NSSM%" stop %SERVICE_NAME% confirm
-    echo               "%NSSM%" remove %SERVICE_NAME% confirm
+    echo [ERROR] nssm remove failed
+    echo         try: "%NSSM%" stop %SERVICE_NAME% confirm
+    echo              "%NSSM%" remove %SERVICE_NAME% confirm
     set "EXIT_EC=1"
     goto :end_pause
   )
-  echo [완료] 서비스 %SERVICE_NAME% 제거됨.
+  echo [OK] Service %SERVICE_NAME% removed.
 )
 echo.
 
-:: ---------------------------------------------------------------------------
-:: 2) 80·3000 포트 Listen 프로세스 종료
-::    (findstr :80 단독은 8000·8080 등도 잡히므로 LISTENING + :포트 경계를 맞춤)
-:: ---------------------------------------------------------------------------
-echo [2/2] 포트 %GEO_PORT%, %APP_PORT% Listen 프로세스 검색·종료...
-call :kill_listen_port %GEO_PORT%
+echo [2/3] stop GeoServer ^(graceful, then port !GEO_PORT! if still listening^) ...
+call "%ROOT%\00_geoserver_port_helpers.bat" stop
+timeout /t 2 /nobreak >nul
+call :kill_listen_port !GEO_PORT!
 echo.
+
+echo [3/3] free Listen on app port %APP_PORT% ...
 call :kill_listen_port %APP_PORT%
 
 echo.
 if "!EXIT_EC!"=="0" (
-  echo [완료] remove_ggnr 작업이 끝났습니다.
+  echo [OK] remove_ggnr finished.
   echo   1^) nssm remove %SERVICE_NAME%
-  echo   2^) 포트 %GEO_PORT%, %APP_PORT% 정리
+  echo   2^) GeoServer port !GEO_PORT! cleared
+  echo   3^) app port %APP_PORT% cleared
 ) else (
-  echo [종료] 오류로 중단되었습니다 ^(exit=!EXIT_EC!^). 위 메시지를 확인하세요.
+  echo [ERROR] stopped with errors ^(exit=!EXIT_EC!^). See messages above.
 )
 
 :end_pause
 echo.
 echo -----------------------------------------------------------
-echo  로그를 확인한 뒤, 아무 키나 누르면 창이 닫힙니다.
+echo  Press any key to close this window.
 echo -----------------------------------------------------------
 pause
 exit /b !EXIT_EC!
 
-:: ---------------------------------------------------------------------------
-:: %1 = Listen 포트. 해당 포트 PID 종료 후 재확인.
-:: ---------------------------------------------------------------------------
 :kill_listen_port
 set "KP=%~1"
-echo ----- 포트 %KP% -----
-echo       netstat 참고 ^(현재 LISTENING^):
+echo ----- port %KP% -----
+echo       netstat ^(only LISTENING on :%KP%^):
 netstat -ano | findstr /R /C:":%KP% .*LISTENING"
 if errorlevel 1 (
-  echo [안내] 포트 %KP% Listen 없음.
+  echo [INFO] port %KP% not listening.
   goto :eof
 )
 
 set "KILLED=0"
 for /f "tokens=5" %%P in ('netstat -ano ^| findstr /R /C:":%KP% .*LISTENING"') do (
   if not "%%P"=="0" (
-    echo [remove-ggnr] taskkill /f /pid %%P
-    taskkill /F /PID %%P >nul 2>&1
+    echo [remove-ggnr] taskkill /f /pid %%P /T
+    taskkill /F /PID %%P /T >nul 2>&1
     if not errorlevel 1 (
       set /a KILLED+=1
-      echo [완료] PID %%P 종료
+      echo [OK] PID %%P killed
     ) else (
-      echo [경고] PID %%P 종료 실패 ^(이미 종료되었거나 권한 부족^)
+      echo [WARN] PID %%P kill failed ^(already gone or access denied^)
     )
   )
 )
 
 if "!KILLED!"=="0" (
-  echo [안내] 종료한 PID 없음 ^(파싱 실패 시 수동^):
+  echo [INFO] no PID killed ^(parse miss or empty^):
   echo         netstat -ano ^| findstr :%KP%
   echo         taskkill /f /pid [PID]
 ) else (
-  echo [완료] 포트 %KP% 관련 프로세스 !KILLED!건 종료 시도함.
+  echo [OK] port %KP%: tried to kill !KILLED! process^(es^).
 )
 
 timeout /t 1 /nobreak >nul
 netstat -ano | findstr /R /C:":%KP% .*LISTENING" >nul 2>&1
 if errorlevel 1 (
-  echo [확인] 포트 %KP% Listen 없음.
+  echo [OK] port %KP% is free.
 ) else (
-  echo [경고] 포트 %KP% 가 아직 Listen 중입니다. 수동 확인하세요.
+  echo [WARN] port %KP% still listening. Check manually:
   netstat -ano | findstr /R /C:":%KP% .*LISTENING"
 )
 goto :eof

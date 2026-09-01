@@ -163,7 +163,7 @@ export function VillagePatrolSuggestInput({
               style={{ top: box.top, left: box.left, width: 'auto', minWidth: box.width }}
             >
               {suggestions.length === 0 ? (
-                <li className="whitespace-nowrap bg-amber-50 px-2.5 py-1.5 text-[11px] font-semibold text-amber-700 dark:bg-amber-950/40 dark:text-amber-200">
+                <li className="whitespace-nowrap bg-chart-4/15 px-2.5 py-1.5 text-[11px] font-semibold text-chart-4">
                   {value.trim() ? '새 값으로 저장됩니다' : '등록된 값 없음'}
                 </li>
               ) : (

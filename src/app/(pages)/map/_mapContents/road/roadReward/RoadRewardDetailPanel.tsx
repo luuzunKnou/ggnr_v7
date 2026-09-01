@@ -85,14 +85,14 @@ type Props = {
 };
 
 const fieldClass =
-  "h-7 w-full min-w-0 rounded border border-slate-300 bg-white px-1.5 text-[11px] outline-none focus:border-primary focus:ring-1 focus:ring-primary/25";
+  "h-7 w-full min-w-0 rounded border border-border bg-background px-1.5 text-[11px] text-foreground outline-none focus:border-primary focus:ring-1 focus:ring-primary/25";
 const attrLabelClass = "w-[64px] shrink-0";
 const btnPrimary =
   "inline-flex h-7 items-center gap-1 rounded border border-primary bg-primary px-2 text-[11px] font-medium text-white hover:bg-primary/90 disabled:opacity-50";
 const btnGhost =
-  "inline-flex h-7 items-center gap-1 rounded border border-slate-200 bg-white px-2 text-[11px] font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-50";
+  "inline-flex h-7 items-center gap-1 rounded border border-border bg-background px-2 text-[11px] font-medium text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-50";
 const btnDanger =
-  "inline-flex h-7 items-center gap-1 rounded border border-red-200 bg-white px-2 text-[11px] font-medium text-red-600 hover:bg-red-50 disabled:opacity-50";
+  "inline-flex h-7 items-center gap-1 rounded border border-red-200 bg-background px-2 text-[11px] font-medium text-red-600 hover:bg-red-50 disabled:opacity-50 dark:border-red-800 dark:text-red-400 dark:hover:bg-red-950/40";
 
 type ParcelModalState = { mode: "new" | "edit" | "view"; draft: RoadRewardParcel };
 
@@ -130,17 +130,17 @@ function AttrRow({
     <div className="flex items-start">
       <div
         className={cn(
-          "flex min-w-0 shrink-0 items-center self-stretch bg-slate-100 px-1.5 py-1",
+          "flex min-w-0 shrink-0 items-center self-stretch bg-muted px-1.5 py-1",
           attrLabelClass
         )}
       >
-        <span className="min-w-0 w-full whitespace-normal break-keep text-left text-[11px] leading-snug text-[#666]">
+        <span className="min-w-0 w-full whitespace-normal break-keep text-left text-[11px] leading-snug text-muted-foreground">
           {label}
         </span>
       </div>
-      <div className="min-w-0 flex-1 px-1.5 py-1">
+      <div className="min-w-0 flex-1 bg-background px-1.5 py-1">
         {typeof value === "string" ? (
-          <span className="break-all text-[11px] leading-snug text-[#666]">{value}</span>
+          <span className="break-all text-[11px] leading-snug text-foreground">{value}</span>
         ) : (
           value
         )}
@@ -155,7 +155,7 @@ function AttrTable({
   entries: { fieldKey: string; label: string; value: ReactNode; fullWidth?: boolean }[];
 }) {
   if (entries.length === 0) {
-    return <p className="text-[11px] text-slate-500">표시할 항목이 없습니다.</p>;
+    return <p className="text-[11px] text-muted-foreground">표시할 항목이 없습니다.</p>;
   }
 
   const pairs: { left: (typeof entries)[number]; right?: (typeof entries)[number] }[] = [];
@@ -177,12 +177,12 @@ function AttrTable({
   }
 
   return (
-    <div className="overflow-hidden rounded-[5px] border border-slate-200">
+    <div className="overflow-hidden rounded-[5px] border border-border">
       {pairs.map((pair, rowIdx) => {
         const isLast = rowIdx === pairs.length - 1;
         if (!pair.right) {
           return (
-            <div key={pair.left.fieldKey} className={cn(!isLast && "border-b border-slate-200")}>
+            <div key={pair.left.fieldKey} className={cn(!isLast && "border-b border-border")}>
               <AttrRow label={pair.left.label} value={pair.left.value} />
             </div>
           );
@@ -191,8 +191,8 @@ function AttrTable({
           <div
             key={`${pair.left.fieldKey}-${pair.right.fieldKey}`}
             className={cn(
-              "grid grid-cols-2 divide-x divide-slate-200",
-              !isLast && "border-b border-slate-200"
+              "grid grid-cols-2 divide-x divide-border",
+              !isLast && "border-b border-border"
             )}
           >
             <AttrRow label={pair.left.label} value={pair.left.value} />
@@ -641,7 +641,7 @@ export function RoadRewardDetailPanel({
     geomBannerHost && isEditing && caseGeomEditMode != null
       ? createPortal(
           <div
-            className="pointer-events-none absolute z-[15] flex -translate-x-1/2 flex-col gap-1.5 rounded border border-red-300 bg-red-50/95 px-3 py-1.5 text-[11px] font-medium text-red-700 shadow-sm"
+            className="pointer-events-none absolute z-[15] flex -translate-x-1/2 flex-col gap-1.5 rounded border border-red-300 bg-red-50/95 px-3 py-1.5 text-[11px] font-medium text-red-700 shadow-sm dark:border-red-800 dark:bg-red-950/80 dark:text-red-300"
             style={
               geomCenterPixel
                 ? { left: geomCenterPixel.x, top: geomHintTopPx }
@@ -654,7 +654,7 @@ export function RoadRewardDetailPanel({
                 type="button"
                 className={layerRowPanelButtonClass(
                   "default",
-                  "pointer-events-auto shrink-0 border-red-200 text-red-700 hover:bg-red-100"
+                  "pointer-events-auto shrink-0 border-red-200 text-red-700 hover:bg-red-100 dark:border-red-800 dark:text-red-300 dark:hover:bg-red-950/50"
                 )}
                 disabled={caseGeomEditMode === "draw"}
                 onClick={handleAddCaseGeom}
@@ -666,7 +666,7 @@ export function RoadRewardDetailPanel({
                   type="button"
                   className={layerRowPanelButtonClass(
                     "default",
-                    "pointer-events-auto shrink-0 border-red-200 text-red-700 hover:bg-red-100"
+                    "pointer-events-auto shrink-0 border-red-200 text-red-700 hover:bg-red-100 dark:border-red-800 dark:text-red-300 dark:hover:bg-red-950/50"
                   )}
                   onClick={handleResetCaseGeom}
                 >
@@ -688,11 +688,11 @@ export function RoadRewardDetailPanel({
 
   if (!caseItem) {
     return (
-      <div className="flex min-h-0 h-full flex-col bg-white">
-        <div className="flex shrink-0 items-center justify-between gap-2 border-b border-slate-200 px-3 py-1.5">
-          <span className="text-sm font-semibold text-slate-800">보상편입용지 상세</span>
+      <div className="flex min-h-0 h-full flex-col bg-background">
+        <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border px-3 py-1.5">
+          <span className="text-sm font-semibold text-foreground">보상편입용지 상세</span>
         </div>
-        <div className="px-3 py-6 text-center text-xs text-slate-500">
+        <div className="px-3 py-6 text-center text-xs text-muted-foreground">
           삭제되었거나 존재하지 않는 건입니다.
         </div>
       </div>
@@ -1004,15 +1004,15 @@ export function RoadRewardDetailPanel({
     : caseItem.name.trim() || "(건명 없음)";
 
   return (
-    <div className="relative flex min-h-0 h-full flex-col bg-white">
-      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-slate-200 px-3 py-2">
+    <div className="relative flex min-h-0 h-full flex-col bg-background">
+      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border px-3 py-2">
         <div className="min-w-0">
           <h2
             className={cn(
               "truncate text-sm font-semibold",
               (isEditing ? (caseDraft.name ?? "").trim() : caseItem.name.trim())
-                ? "text-slate-800"
-                : "text-slate-400"
+                ? "text-foreground"
+                : "text-muted-foreground"
             )}
             title={headerName}
           >
@@ -1022,7 +1022,7 @@ export function RoadRewardDetailPanel({
         <button
           type="button"
           onClick={isCreateMode ? discardCreateDraft : onClose}
-          className="shrink-0 rounded p-1 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
+          className="shrink-0 rounded p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
           title="닫기"
           aria-label="닫기"
         >
@@ -1030,12 +1030,12 @@ export function RoadRewardDetailPanel({
         </button>
       </div>
 
-      <section className="shrink-0 border-b border-slate-200">
+      <section className="shrink-0 border-b border-border">
         <div className="flex items-center gap-1 px-2 py-1.5">
           <button
             type="button"
             onClick={() => setAttrsOpen((v) => !v)}
-            className="flex min-w-0 flex-1 items-center gap-1 text-left text-xs font-semibold text-slate-700"
+            className="flex min-w-0 flex-1 items-center gap-1 text-left text-xs font-semibold text-foreground"
           >
             {attrsOpen ? (
               <ChevronDown className="h-3.5 w-3.5 shrink-0" />
@@ -1095,7 +1095,7 @@ export function RoadRewardDetailPanel({
 
       <div className="relative flex min-h-0 flex-1 flex-col">
         <div
-          className="flex h-10 shrink-0 items-center justify-between gap-2 border-b border-slate-200 px-2 pt-1.5"
+          className="flex h-10 shrink-0 items-center justify-between gap-2 border-b border-border px-2 pt-1.5"
           role="tablist"
           aria-label="필지목록"
         >
@@ -1108,36 +1108,36 @@ export function RoadRewardDetailPanel({
             >
               필지목록 ({displayParcels.length.toLocaleString()})
               {loadingParcels ? (
-                <span className="ml-1 text-[10px] font-normal text-slate-400">조회 중…</span>
+                <span className="ml-1 text-[10px] font-normal text-muted-foreground">조회 중…</span>
               ) : null}
               <span className="absolute inset-x-1 bottom-1 h-0.5 rounded-full bg-primary" />
             </button>
           </div>
         </div>
 
-        <MapSideDetailScroll className="min-h-0 flex-1 overflow-auto px-3 py-2 text-xs">
+        <MapSideDetailScroll className="min-h-0 flex-1 overflow-auto px-2 py-2 text-xs">
           {displayParcels.length === 0 ? (
-            <p className="py-6 text-center text-[11px] text-slate-500">
+            <p className="py-6 text-center text-[11px] text-muted-foreground">
               {isEditing
                 ? "도형을 그리거나 수정하면 필지목록이 자동으로 채워집니다."
                 : "등록된 필지가 없습니다."}
             </p>
           ) : (
-            <div className="w-full overflow-hidden rounded border border-slate-200 text-[11px]">
+            <div className="w-full overflow-hidden rounded border border-border text-[11px]">
               <div
                 className={cn(
-                  "grid h-7 items-center border-b border-slate-200 bg-slate-50",
+                  "grid h-7 items-center border-b border-border bg-muted",
                   isEditing
                     ? "grid-cols-[minmax(0,1fr)_54px_5.75rem_90px_3rem]"
                     : "grid-cols-[minmax(0,1fr)_54px_5.75rem_90px]"
                 )}
               >
-                <div className="min-w-0 pl-1.5 pr-1 text-left font-semibold text-slate-700">주소</div>
-                <div className="min-w-0 px-1 text-center font-semibold text-slate-700">지목</div>
-                <div className="min-w-0 px-1 text-center font-semibold text-slate-700 whitespace-nowrap">
+                <div className="min-w-0 pl-1.5 pr-1 text-left font-semibold text-foreground">주소</div>
+                <div className="min-w-0 px-1 text-center font-semibold text-foreground">지목</div>
+                <div className="min-w-0 px-1 text-center font-semibold text-foreground whitespace-nowrap">
                   편입면적(㎡)
                 </div>
-                <div className="min-w-0 pl-1 pr-1.5 text-right font-semibold text-slate-700 whitespace-nowrap">
+                <div className="min-w-0 pl-1 pr-1.5 text-right font-semibold text-foreground whitespace-nowrap">
                   합계(원)
                 </div>
                 {isEditing ? <div aria-hidden /> : null}
@@ -1165,7 +1165,7 @@ export function RoadRewardDetailPanel({
                         : "클릭하면 필지 상세를 봅니다"
                     }
                     className={cn(
-                      "grid h-7 cursor-pointer items-center border-b border-slate-100 last:border-b-0 hover:bg-slate-50",
+                      "grid h-7 cursor-pointer items-center border-b border-border last:border-b-0 hover:bg-muted/50",
                       isEditing
                         ? "grid-cols-[minmax(0,1fr)_54px_5.75rem_90px_3rem]"
                         : "grid-cols-[minmax(0,1fr)_54px_5.75rem_90px]",
@@ -1173,25 +1173,25 @@ export function RoadRewardDetailPanel({
                     )}
                   >
                     <div
-                      className="min-w-0 truncate pl-1.5 pr-1 text-left text-slate-800"
+                      className="min-w-0 truncate pl-1.5 pr-1 text-left text-foreground"
                       title={addr || undefined}
                     >
                       {addr || "—"}
                     </div>
                     <div
-                      className="min-w-0 truncate px-1 text-center text-slate-800"
+                      className="min-w-0 truncate px-1 text-center text-foreground"
                       title={p.jimok || undefined}
                     >
                       {formatCell(p.jimok)}
                     </div>
                     <div
-                      className="min-w-0 truncate px-1 text-center tabular-nums text-slate-800"
+                      className="min-w-0 truncate px-1 text-center tabular-nums text-foreground"
                       title={areaLabel}
                     >
                       {areaLabel}
                     </div>
                     <div
-                      className="min-w-0 truncate pl-1 pr-1.5 text-right tabular-nums text-slate-800"
+                      className="min-w-0 truncate pl-1 pr-1.5 text-right tabular-nums text-foreground"
                       title={amountLabel}
                     >
                       {amountLabel}
@@ -1204,7 +1204,7 @@ export function RoadRewardDetailPanel({
                         <button
                           type="button"
                           onClick={() => handleOpenEditParcel(p)}
-                          className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded text-slate-400 hover:bg-primary/10 hover:text-primary"
+                          className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-primary/10 hover:text-primary"
                           aria-label="필지 수정"
                           title="수정"
                         >
@@ -1213,7 +1213,7 @@ export function RoadRewardDetailPanel({
                         <button
                           type="button"
                           onClick={() => handleDeleteParcelFromList(p.id)}
-                          className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded text-slate-400 hover:bg-red-50 hover:text-red-600"
+                          className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/40 dark:hover:text-red-400"
                           aria-label="필지 삭제"
                           title="삭제"
                         >

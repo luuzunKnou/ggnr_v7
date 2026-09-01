@@ -5,7 +5,8 @@
  */
 export const MAP_SPLIT_GUTTER_ICON_COLOR = {
   lock: {
-    active: '#60a5fa', // blue-400
+    // 분할선 이동 가능(활성)만 눈에 띄게, 잠금(비활성)은 기존 회색
+    active: '#1b9cff',
     inactive: '#94a3b8', // slate-400
   },
   /** 접기/펼치기 */

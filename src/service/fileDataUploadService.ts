@@ -8,8 +8,11 @@ import path from 'node:path';
 import { db } from '@/database/db';
 import { sql } from 'drizzle-orm';
 import { getDefineLayerTables, getLayerTableList } from './devTestService';
+import { resolveGgnrDataDir } from '@/lib/turbopackFsPath';
 
-const GGNR_DATA_DIR = process.env.GGNR_DATA_DIR ?? 'd:\\ggnr_data_dir';
+function getGgnrDataDir(): string {
+  return resolveGgnrDataDir();
+}
 const DEFINE_LAYER_FIELDS_DIR = path.join(process.cwd(), 'src', 'config', 'defineLayer', 'fields');
 const FILE_DATA_PREFIX = 'file_data';
 const HISTORY_FILE = '.meta/file_data_upload_history.json';
@@ -35,7 +38,7 @@ function getKeyFieldName(tableName: string): string | null {
 }
 
 function resolveFileDataRoot(relativePath?: string): { abs: string; rel: string } | null {
-  const base = path.resolve(GGNR_DATA_DIR);
+  const base = path.resolve(getGgnrDataDir());
   const raw = (relativePath ?? FILE_DATA_PREFIX).trim().replace(/^[/\\]+/, '');
   if (!raw.startsWith(FILE_DATA_PREFIX) || raw.includes('..')) {
     const rel = FILE_DATA_PREFIX;
@@ -246,7 +249,7 @@ export async function saveFileDataUploadLog(params: {
   try {
     const rp = (params.relativePath ?? FILE_DATA_PREFIX).trim().replace(/^[/\\]+/, '');
     const safeRp = rp.startsWith(FILE_DATA_PREFIX) ? rp : FILE_DATA_PREFIX;
-    const dir = path.join(GGNR_DATA_DIR, ...safeRp.split('/'));
+    const dir = path.join(getGgnrDataDir(), ...safeRp.split('/'));
     await fs.mkdir(dir, { recursive: true });
 
     const now = new Date();
@@ -290,7 +293,7 @@ export async function saveFileDataUploadLog(params: {
     lines.push('');
 
     await fs.writeFile(logPath, lines.join('\n'), 'utf-8');
-    return { success: true, logPath: path.relative(GGNR_DATA_DIR, logPath).replace(/\\/g, '/') };
+    return { success: true, logPath: path.relative(getGgnrDataDir(), logPath).replace(/\\/g, '/') };
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);
     return { success: false, error: msg };
@@ -312,7 +315,7 @@ export type FileDataHistoryEntry = {
 };
 
 async function readFileDataHistory(): Promise<FileDataHistoryEntry[]> {
-  const filePath = path.join(GGNR_DATA_DIR, HISTORY_FILE);
+  const filePath = path.join(getGgnrDataDir(), HISTORY_FILE);
   try {
     const raw = await fs.readFile(filePath, 'utf-8');
     const data = JSON.parse(raw) as unknown;
@@ -323,9 +326,9 @@ async function readFileDataHistory(): Promise<FileDataHistoryEntry[]> {
 }
 
 async function writeFileDataHistory(entries: FileDataHistoryEntry[]): Promise<void> {
-  const dir = path.join(GGNR_DATA_DIR, path.dirname(HISTORY_FILE));
+  const dir = path.join(getGgnrDataDir(), path.dirname(HISTORY_FILE));
   await fs.mkdir(dir, { recursive: true });
-  const filePath = path.join(GGNR_DATA_DIR, HISTORY_FILE);
+  const filePath = path.join(getGgnrDataDir(), HISTORY_FILE);
   const max = 200;
   const trimmed = entries.slice(0, max);
   await fs.writeFile(filePath, JSON.stringify(trimmed, null, 0), 'utf-8');
@@ -397,6 +400,6 @@ export async function getFileDataUploadHistory(params?: { limit?: number }): Pro
   const entries = await readFileDataHistory();
   return {
     entries: entries.slice(0, limit),
-    path: path.join(GGNR_DATA_DIR, HISTORY_FILE),
+    path: path.join(getGgnrDataDir(), HISTORY_FILE),
   };
 }

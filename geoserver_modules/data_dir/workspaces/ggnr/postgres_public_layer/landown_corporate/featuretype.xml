@@ -1,28 +1,28 @@
 <featureType>
-  <id>FeatureTypeInfoImpl--5fabfce7:19fca79c611:-61e6</id>
+  <id>FeatureTypeInfoImpl--50232ad2:1a022df41e9:-621f</id>
   <name>landown_corporate</name>
-  <nativeName>landown</nativeName>
+  <nativeName>jijuk</nativeName>
   <namespace>
     <id>NamespaceInfoImpl-4bf97568:19c4d6c3053:-7ffa</id>
   </namespace>
-  <title>landown</title>
+  <title>jijuk</title>
   <keywords>
     <string>features</string>
-    <string>landown</string>
+    <string>jijuk</string>
   </keywords>
   <srs>EPSG:5181</srs>
   <nativeBoundingBox>
-    <minx>385219.92534203816</minx>
-    <maxx>421236.88860658125</maxx>
-    <miny>352230.3886122091</miny>
-    <maxy>406930.2637509289</maxy>
+    <minx>377455.39733063336</minx>
+    <maxx>401712.757964659</maxx>
+    <miny>336226.88033053325</miny>
+    <maxy>375384.1870947203</maxy>
     <crs class="projected">EPSG:5181</crs>
   </nativeBoundingBox>
   <latLonBoundingBox>
-    <minx>129.07127797724291</minx>
-    <maxx>129.48968579185646</maxx>
-    <miny>36.64285440249458</miny>
-    <maxy>37.14311057454112</maxy>
+    <minx>128.98081028125182</minx>
+    <maxx>129.26170399625258</maxx>
+    <miny>36.503083800644845</miny>
+    <maxy>36.86053159793966</maxy>
     <crs>EPSG:4326</crs>
   </latLonBoundingBox>
   <projectionPolicy>FORCE_DECLARED</projectionPolicy>
@@ -33,7 +33,7 @@
   </store>
   <serviceConfiguration>false</serviceConfiguration>
   <simpleConversionEnabled>false</simpleConversionEnabled>
-  <cqlFilter>a7 = &apos;06&apos;</cqlFilter>
+  <cqlFilter>own_gbn = &apos;06&apos;</cqlFilter>
   <maxFeatures>0</maxFeatures>
   <numDecimals>0</numDecimals>
   <padWithZeros>false</padWithZeros>

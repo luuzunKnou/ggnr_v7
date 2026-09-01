@@ -7,6 +7,7 @@ export { LayerRowPanelButton } from "./LayerRowPanelButton";
 export { layerRowPanelButtonClass } from "./layerRowPanelButtonStyles";
 export { LayerRowEditHeader, LayerRowEditFooter, LayerRowEditToolbar } from "./LayerRowEditHeader";
 export { LayerRowAttributeSection } from "./LayerRowAttributeSection";
+export { DetailAttrTable, DetailAttrRow, DetailAttrSectionTitle } from "./DetailAttrTable";
 export { LayerParcelListSection } from "./LayerParcelListSection";
 export { LayerParcelTextSection } from "./LayerParcelTextSection";
 export { LayerParcelAddModal } from "./LayerParcelAddModal";

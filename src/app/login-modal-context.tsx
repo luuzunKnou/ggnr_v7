@@ -9,7 +9,7 @@ import {
   Suspense,
 } from 'react';
 import { useSession, signIn } from 'next-auth/react';
-import { useSearchParams, useRouter } from 'next/navigation';
+import { useSearchParams, useRouter, usePathname } from 'next/navigation';
 import {
   Dialog,
   DialogContent,
@@ -22,6 +22,7 @@ import { Input } from '@/app/shadcnComponents/ui/input';
 import { SignUpApplyForm } from '@/app/(pages)/(index)/SignUpApplyForm';
 import { call } from '@/lib/api';
 import { AUTH_REQUIRED_EVENT } from '@/lib/authRequiredEvent';
+import { toAppPathFromBrowser, withBasePathNav } from '@/lib/basePath';
 
 type LoginModalContextValue = {
   openLogin: () => void;
@@ -47,6 +48,8 @@ function OpenFromUrlEffect({
 }) {
   const searchParams = useSearchParams();
   const router = useRouter();
+  // Next usePathname 은 basePath 제외 — window.location.pathname 을 replace에 쓰면 /build_yy/build_yy 이중 prefix
+  const pathname = usePathname();
 
   useEffect(() => {
     const openLogin = searchParams.get('openLogin') === '1';
@@ -54,7 +57,7 @@ function OpenFromUrlEffect({
     if (!openLogin && !openSignUp) return;
 
     const next = searchParams.get('next') ?? '';
-    if (next.startsWith('/')) setPendingNext(next);
+    if (next.startsWith('/')) setPendingNext(toAppPathFromBrowser(next));
 
     if (openSignUp) {
       setSignUpOpen(true);
@@ -64,11 +67,15 @@ function OpenFromUrlEffect({
       setSignUpOpen(false);
     }
 
-    const u = new URL(window.location.href);
-    u.searchParams.delete('openLogin');
-    u.searchParams.delete('openSignUp');
-    router.replace(u.pathname + (u.search ? u.search : ''), { scroll: false });
-  }, [searchParams, router, setLoginOpen, setSignUpOpen, setPendingNext]);
+    const cleaned = new URLSearchParams(searchParams.toString());
+    cleaned.delete('openLogin');
+    cleaned.delete('openSignUp');
+    // next 는 모달 pending 으로 옮긴 뒤 URL에서 제거 (주소창 정리)
+    cleaned.delete('next');
+    const qs = cleaned.toString();
+    const appPath = pathname || '/';
+    router.replace(qs ? `${appPath}?${qs}` : appPath, { scroll: false });
+  }, [searchParams, router, pathname, setLoginOpen, setSignUpOpen, setPendingNext]);
 
   return null;
 }
@@ -149,15 +156,15 @@ function LoginModalDialog({
       }
       const here =
         typeof window !== 'undefined'
-          ? `${window.location.pathname}${window.location.search}`
+          ? toAppPathFromBrowser(`${window.location.pathname}${window.location.search}`)
           : '/';
-      const dest =
+      const destRaw =
         pendingNext && pendingNext.startsWith('/')
           ? pendingNext
           : here.startsWith('/')
             ? here
             : '/';
-      window.location.href = dest;
+      window.location.href = withBasePathNav(toAppPathFromBrowser(destRaw));
     } catch {
       setError('로그인에 실패했습니다.');
       setLoading(false);
@@ -258,9 +265,11 @@ export function LoginModalProvider({ children }: { children: React.ReactNode }) 
   const openLogin = useCallback(() => {
     if (typeof window !== 'undefined') {
       const n = new URLSearchParams(window.location.search).get('next');
-      if (n && n.startsWith('/')) setPendingNext(n);
+      if (n && n.startsWith('/')) setPendingNext(toAppPathFromBrowser(n));
       else {
-        const here = `${window.location.pathname}${window.location.search}`;
+        const here = toAppPathFromBrowser(
+          `${window.location.pathname}${window.location.search}`
+        );
         if (here.startsWith('/')) setPendingNext(here);
       }
     }

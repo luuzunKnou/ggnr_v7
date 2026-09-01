@@ -10,6 +10,8 @@ import { LayerDataPanel } from "./_mapComponents/standard/LayerDataPanel"
 import StandardDetail from "./_mapComponents/standard/StandardDetail"
 import ComplaintListPanel from "./_mapComponents/complaint/ComplaintListPanel"
 import ComplaintDetail from "./_mapComponents/complaint/ComplaintDetail"
+import ComplaintAdd from "./_mapComponents/complaint/ComplaintAdd"
+import { MAP_FLOATING_DETAIL_CLOSE_EVENT } from "./_mapComponents/mapFloatingDetailEvent"
 import AddressInfoDetail from "./_mapComponents/AddressInfoDetail"
 import { RiverBasicPlanListPanel } from "./_mapContents/river/riverBasicPlan/RiverBasicPlanListPanel"
 import { RiverBasicPlanDetailPanel } from "./_mapContents/river/riverBasicPlan/RiverBasicPlanDetailPanel"
@@ -31,6 +33,15 @@ import { VillagePatrolListPanel } from "./_mapContents/safty/villagePatrol/Villa
 import { SafetyHospitalBadPanel } from "./_mapContents/safty/safetyHospitalBad/SafetyHospitalBadPanel"
 import { SafetyJsjReservoirPanel } from "./_mapContents/safty/saftyJsj/SafetyJsjReservoirPanel"
 import { RoadDocManualPanel } from "./_mapContents/road/roadDoc/roadDocManualPanel"
+import { RoadWorkHandbookListPanel } from "./_mapContents/road/roadWorkHandbook/RoadWorkHandbookListPanel"
+import { RoadWorkHandbookDetailPanel } from "./_mapContents/road/roadWorkHandbook/RoadWorkHandbookDetailPanel"
+import { RoadWorkHandbookMapProvider } from "./_mapContents/road/roadWorkHandbook/roadWorkHandbookMapContext"
+import { RoadWorkHandbookMapHandler } from "./_mapContents/road/roadWorkHandbook/RoadWorkHandbookMapHandler"
+import {
+  handbookMapSessionKey,
+  type HandbookDetailSelection,
+  type HandbookViewMode,
+} from "./_mapContents/road/roadWorkHandbook/roadWorkHandbookData"
 import { RoadCctvPanel } from "./_mapContents/road/roadCCTV/RoadCctvPanel"
 import { RoadInfraPanel } from "./_mapContents/road/roadInfra/RoadInfraPanel"
 import {
@@ -109,10 +120,12 @@ import {
 } from "./_mapContents/occupationLedger/occupationLedgerMapSync"
 import {
   findOpenedOccupationLedgerSerEng,
+  getOccupationLedgerBinding,
   isOccupationLedgerOpenedToken,
 } from "@/lib/occupationLedgerBinding"
 import {
   findOpenedUseFeeSerEng,
+  getUseFeeBinding,
   isUseFeeOpenedToken,
 } from "@/lib/useFeeBinding"
 import { BuildPublicLandListPanel } from "./_mapContents/buildPublicLand/BuildPublicLandListPanel"
@@ -167,9 +180,6 @@ const COMPLAINT_PANEL_MAX_WIDTH = 900
 const MEMO_PANEL_DEFAULT_WIDTH = 420
 const MEMO_PANEL_MIN_WIDTH = 320
 const MEMO_PANEL_MAX_WIDTH = 720
-const MEMO_DETAIL_DEFAULT_WIDTH = 400
-const MEMO_DETAIL_MIN_WIDTH = 320
-const MEMO_DETAIL_MAX_WIDTH = 640
 
 const MAP_3D_DATA_PANEL_DEFAULT_WIDTH = 360
 const MAP_3D_DATA_PANEL_MIN_WIDTH = 280
@@ -238,6 +248,13 @@ const ROAD_DOC_PANEL_DEFAULT_WIDTH = 380
 const ROAD_DOC_PANEL_MIN_WIDTH = 280
 const ROAD_DOC_PANEL_MAX_WIDTH = 640
 
+const ROAD_WORK_HANDBOOK_PANEL_DEFAULT_WIDTH = 380
+const ROAD_WORK_HANDBOOK_PANEL_MIN_WIDTH = 320
+const ROAD_WORK_HANDBOOK_PANEL_MAX_WIDTH = 560
+const ROAD_WORK_HANDBOOK_DETAIL_DEFAULT_WIDTH = 400
+const ROAD_WORK_HANDBOOK_DETAIL_MIN_WIDTH = 320
+const ROAD_WORK_HANDBOOK_DETAIL_MAX_WIDTH = 640
+
 const ROAD_CCTV_PANEL_DEFAULT_WIDTH = 380
 const ROAD_CCTV_PANEL_MIN_WIDTH = 300
 const ROAD_CCTV_PANEL_MAX_WIDTH = 560
@@ -282,6 +299,7 @@ const SAFETY_HOSPITAL_BED_OPENED_KEY = "safetyBedState"
 /** serviceList `ser_eng`: jsjWaterLevel — 저수지 수위(saftyJsj) */
 const JSJ_WATER_LEVEL_OPENED_KEY = "jsjWaterLevel"
 const ROAD_DOC_OPENED_KEY = "roadDoc"
+const ROAD_WORK_HANDBOOK_OPENED_KEY = "roadWorkHandbook"
 const ROAD_CCTV_OPENED_KEY = "roadCCTV"
 const ROAD_INFRA_OPENED_KEY = "roadInfra"
 const ROAD_USE_LEDGER_OPENED_KEY = "roadUseLedger"
@@ -332,13 +350,13 @@ const GROUNDWATER_PERMIT_DETAIL_DEFAULT_WIDTH = 400
 const GROUNDWATER_PERMIT_DETAIL_MIN_WIDTH = 320
 const GROUNDWATER_PERMIT_DETAIL_MAX_WIDTH = 640
 
-/** 안전점검 — ser_eng roadFMS */
-const FMS_PANEL_DEFAULT_WIDTH = 500
+/** 안전점검 — ser_eng roadFMS. 목록 최소=기본 440 */
 const FMS_PANEL_MIN_WIDTH = 440
-const FMS_PANEL_MAX_WIDTH = 650
-const FMS_DETAIL_DEFAULT_WIDTH = 420
-const FMS_DETAIL_MIN_WIDTH = 320
-const FMS_DETAIL_MAX_WIDTH = 640
+const FMS_PANEL_DEFAULT_WIDTH = FMS_PANEL_MIN_WIDTH
+const FMS_PANEL_MAX_WIDTH = 800
+const FMS_DETAIL_DEFAULT_WIDTH = 400
+const FMS_DETAIL_MIN_WIDTH = 380
+const FMS_DETAIL_MAX_WIDTH = 500
 
 const RIVER_USE_LEDGER_PANEL_DEFAULT_WIDTH = 660
 const RIVER_USE_LEDGER_PANEL_MIN_WIDTH = 480
@@ -504,6 +522,7 @@ function MapLayoutContent({
   const safetyHospitalBedOpen = openedWindows.includes(SAFETY_HOSPITAL_BED_OPENED_KEY)
   const jsjWaterLevelOpen = openedWindows.includes(JSJ_WATER_LEVEL_OPENED_KEY)
   const roadDocOpen = openedWindows.includes(ROAD_DOC_OPENED_KEY)
+  const roadWorkHandbookOpen = openedWindows.includes(ROAD_WORK_HANDBOOK_OPENED_KEY)
   const roadCctvOpen = openedWindows.includes(ROAD_CCTV_OPENED_KEY)
   const roadInfraOpen = openedWindows.includes(ROAD_INFRA_OPENED_KEY)
   const parcelAnalysisOpen = openedWindows.includes(PARCEL_ANALYSIS_OPENED_KEY)
@@ -578,6 +597,9 @@ function MapLayoutContent({
   const [occupationLedgerDetailId, setOccupationLedgerDetailId] = useState<string | null>(null)
   const [occupationLedgerListRefreshKey, setOccupationLedgerListRefreshKey] = useState(0)
   const occupationLedgerDetailOpen = occupationLedgerOpen && Boolean(occupationLedgerDetailId)
+  const [roadWorkHandbookDetail, setRoadWorkHandbookDetail] = useState<HandbookDetailSelection | null>(null)
+  const [roadWorkHandbookMode, setRoadWorkHandbookMode] = useState<HandbookViewMode>("target")
+  const roadWorkHandbookDetailOpen = roadWorkHandbookOpen && roadWorkHandbookDetail != null
   /** 보상편입용지 — DB(road_reward) 조회·저장 */
   const [roadRewardCases, setRoadRewardCases] = useState<RoadRewardCase[]>([])
   const [roadRewardSelectedId, setRoadRewardSelectedId] = useState<string | null>(null)
@@ -611,9 +633,10 @@ function MapLayoutContent({
   const [protoUserAccountOpen, setProtoUserAccountOpen] = useState(false)
 
   const [memoDetailId, setMemoDetailId] = useState<string | null>(null)
+  const [memoAddTable, setMemoAddTable] = useState<string | null>(null)
   const [memoListRefreshKey, setMemoListRefreshKey] = useState(0)
-  const memoDetailOpen = memoManagementOpen && Boolean(memoDetailId)
   const [complaintListRefreshKey, setComplaintListRefreshKey] = useState(0)
+  const [complaintAddOpen, setComplaintAddOpen] = useState(false)
   const roadCctvUnderlayMode = mapContext?.roadCctvUnderlayMode ?? "traffic"
 
   /** 좌측 서비스 메뉴 전환 시 서비스 레이어 초기화 — 도로대장·시설관리는 총괄(a0020000) 즉시 유지 */
@@ -684,6 +707,12 @@ function MapLayoutContent({
   )
   const [jsjReservoirPanelWidth, setJsjReservoirPanelWidth] = useState(JSJ_RESERVOIR_PANEL_DEFAULT_WIDTH)
   const [roadDocPanelWidth, setRoadDocPanelWidth] = useState(ROAD_DOC_PANEL_DEFAULT_WIDTH)
+  const [roadWorkHandbookPanelWidth, setRoadWorkHandbookPanelWidth] = useState(
+    ROAD_WORK_HANDBOOK_PANEL_DEFAULT_WIDTH
+  )
+  const [roadWorkHandbookDetailWidth, setRoadWorkHandbookDetailWidth] = useState(
+    ROAD_WORK_HANDBOOK_DETAIL_DEFAULT_WIDTH
+  )
   const [roadCctvPanelWidth, setRoadCctvPanelWidth] = useState(ROAD_CCTV_PANEL_DEFAULT_WIDTH)
   const [roadInfraPanelWidth, setRoadInfraPanelWidth] = useState(ROAD_INFRA_PANEL_DEFAULT_WIDTH)
   const [parcelAnalysisPanelWidth, setParcelAnalysisPanelWidth] = useState(PARCEL_ANALYSIS_PANEL_DEFAULT_WIDTH)
@@ -744,7 +773,6 @@ function MapLayoutContent({
   const [fmsLinkageDetailWidth, setFmsLinkageDetailWidth] = useState(FMS_DETAIL_DEFAULT_WIDTH)
   const [fmsGeomToastMsg, setFmsGeomToastMsg] = useState<string | null>(null)
   const [memoPanelWidth, setMemoPanelWidth] = useState(MEMO_PANEL_DEFAULT_WIDTH)
-  const [memoDetailWidth, setMemoDetailWidth] = useState(MEMO_DETAIL_DEFAULT_WIDTH)
   const [layerDataPanelWidth, setLayerDataPanelWidth] = useState(LAYER_DATA_PANEL_DEFAULT_WIDTH)
   const [searchBarInputBottomPx, setSearchBarInputBottomPx] = useState(16 + 30)
 
@@ -783,7 +811,6 @@ function MapLayoutContent({
     (roadFrontageMarkerOpen ? roadFrontageMarkerPanelWidth : 0) +
     (roadFrontageMarkerDetailOpen ? roadFrontageMarkerDetailWidth : 0) +
     (memoManagementOpen ? memoPanelWidth : 0) +
-    (memoDetailOpen ? memoDetailWidth : 0) +
     (complaintManagementOpen ? complaintPanelWidth : 0) +
     (map3dDataOpen ? map3dDataPanelWidth : 0) +
     (safetyMapOpen ? safetyMapPanelWidth : 0) +
@@ -796,6 +823,8 @@ function MapLayoutContent({
     (safetyHospitalBedOpen ? safetyHospitalBedPanelWidth : 0) +
     (jsjWaterLevelOpen ? jsjReservoirPanelWidth : 0) +
     (roadDocOpen ? roadDocPanelWidth : 0) +
+    (roadWorkHandbookOpen ? roadWorkHandbookPanelWidth : 0) +
+    (roadWorkHandbookDetailOpen ? roadWorkHandbookDetailWidth : 0) +
     (roadCctvOpen ? roadCctvPanelWidth : 0) +
     // (useLedgerProtoOpen ? useLedgerProtoPanelWidth : 0) +
     // (useLedgerProtoDetailOpen ? useLedgerProtoDetailWidth : 0) +
@@ -888,7 +917,7 @@ function MapLayoutContent({
     (roadFrontageMarkerDetailOpen ? roadFrontageMarkerDetailWidth : 0)
   const memoDetailLeftPx = memoPanelLeftPx + (memoManagementOpen ? memoPanelWidth : 0)
   const complaintPanelLeftPx =
-    memoDetailLeftPx + (memoDetailOpen ? memoDetailWidth : 0)
+    memoPanelLeftPx + (memoManagementOpen ? memoPanelWidth : 0)
   const map3dPanelLeftPx = complaintPanelLeftPx + (complaintManagementOpen ? complaintPanelWidth : 0)
   const safetyMapPanelLeftPx = map3dPanelLeftPx + (map3dDataOpen ? map3dDataPanelWidth : 0)
   const safetyInfoPanelLeftPx = safetyMapPanelLeftPx + (safetyMapOpen ? safetyMapPanelWidth : 0)
@@ -905,7 +934,12 @@ function MapLayoutContent({
   const jsjReservoirPanelLeftPx =
     safetyHospitalBedPanelLeftPx + (safetyHospitalBedOpen ? safetyHospitalBedPanelWidth : 0)
   const roadDocPanelLeftPx = jsjReservoirPanelLeftPx + (jsjWaterLevelOpen ? jsjReservoirPanelWidth : 0)
-  const roadCctvPanelLeftPx = roadDocPanelLeftPx + (roadDocOpen ? roadDocPanelWidth : 0)
+  const roadWorkHandbookPanelLeftPx =
+    roadDocPanelLeftPx + (roadDocOpen ? roadDocPanelWidth : 0)
+  const roadWorkHandbookDetailLeftPx =
+    roadWorkHandbookPanelLeftPx + (roadWorkHandbookOpen ? roadWorkHandbookPanelWidth : 0)
+  const roadCctvPanelLeftPx =
+    roadWorkHandbookDetailLeftPx + (roadWorkHandbookDetailOpen ? roadWorkHandbookDetailWidth : 0)
   // 점용대장(프) 더미 leftPx 비활성 — 점사용료는 CCTV 다음에 바로 배치
   // const useLedgerProtoPanelLeftPx =
   //   roadCctvPanelLeftPx + (roadCctvOpen ? roadCctvPanelWidth : 0)
@@ -1367,6 +1401,13 @@ function MapLayoutContent({
   }, [occupationLedgerOpen])
 
   useEffect(() => {
+    if (!roadWorkHandbookOpen) {
+      setRoadWorkHandbookDetail(null)
+      setRoadWorkHandbookMode("target")
+    }
+  }, [roadWorkHandbookOpen])
+
+  useEffect(() => {
     setOccupationLedgerDetailId(null)
   }, [occupationLedgerSerEng])
 
@@ -1443,9 +1484,54 @@ function MapLayoutContent({
     }
   }, [])
 
+  const setComplaintDetail = mapContext?.setComplaintDetail
+
+  /** 메모관리로 들어오면 민원 떠 있는 화면만 닫는다. 다른 부서 업무로 갈 때는 둘 다 유지 */
   useEffect(() => {
-    if (!memoManagementOpen) setMemoDetailId(null)
-  }, [memoManagementOpen])
+    if (!memoManagementOpen) return
+    setComplaintAddOpen(false)
+    setComplaintDetail?.(null)
+  }, [memoManagementOpen, setComplaintDetail])
+
+  /** 민원관리로 들어오면 메모 떠 있는 화면만 닫는다 */
+  useEffect(() => {
+    if (!complaintManagementOpen) return
+    setMemoDetailId(null)
+    setMemoAddTable(null)
+  }, [complaintManagementOpen])
+
+  useEffect(() => {
+    if (mapContext?.complaintDetail) setComplaintAddOpen(false)
+  }, [mapContext?.complaintDetail])
+
+  useEffect(() => {
+    if (!mapContext?.complaintDetail && !complaintAddOpen) return
+    setMemoDetailId(null)
+    setMemoAddTable(null)
+  }, [mapContext?.complaintDetail, complaintAddOpen])
+
+  /** 필지분석·변동이력분석에서는 민원·메모 떠 있는 화면을 남기지 않는다 */
+  useEffect(() => {
+    if (!parcelAnalysisOpen && !changeHistoryOpen) return
+    setComplaintAddOpen(false)
+    setComplaintDetail?.(null)
+    setMemoDetailId(null)
+    setMemoAddTable(null)
+  }, [parcelAnalysisOpen, changeHistoryOpen, setComplaintDetail])
+
+  /** 도형편집기를 열면 지도에 떠 있던 민원·메모 화면을 닫는다 */
+  useEffect(() => {
+    const onCloseFloating = () => {
+      setComplaintAddOpen(false)
+      setComplaintDetail?.(null)
+      setMemoDetailId(null)
+      setMemoAddTable(null)
+    }
+    window.addEventListener(MAP_FLOATING_DETAIL_CLOSE_EVENT, onCloseFloating)
+    return () => {
+      window.removeEventListener(MAP_FLOATING_DETAIL_CLOSE_EVENT, onCloseFloating)
+    }
+  }, [setComplaintDetail])
 
   useEffect(() => {
     if (!shootingPanelOpen) {
@@ -1560,6 +1646,13 @@ function MapLayoutContent({
     setOpened(next)
   }
 
+  const handleCloseRoadWorkHandbook = () => {
+    setRoadWorkHandbookDetail(null)
+    setRoadWorkHandbookMode("target")
+    const next = openedWindows.filter((w) => w !== ROAD_WORK_HANDBOOK_OPENED_KEY)
+    setOpened(next)
+  }
+
   const handleCloseRoadCctv = () => {
     const next = openedWindows.filter((w) => w !== ROAD_CCTV_OPENED_KEY)
     setOpened(next)
@@ -1636,12 +1729,12 @@ function MapLayoutContent({
                 className="shadow-none"
               >
                 <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
-                  <div className="flex shrink-0 items-center justify-between gap-2 border-b border-slate-200 bg-white px-4 py-2.5">
-                    <span className="text-sm font-semibold text-slate-800">시설관리</span>
+                  <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border bg-background px-4 py-2.5">
+                    <span className="text-sm font-semibold text-foreground">시설관리</span>
                     <button
                       type="button"
                       onClick={handleCloseRoadInfra}
-                      className="shrink-0 rounded p-1 text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
+                      className="shrink-0 rounded p-1 text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors"
                       title="닫기"
                       aria-label="닫기"
                     >
@@ -2371,33 +2464,18 @@ function MapLayoutContent({
                 <MemoListPanel
                   onClose={handleCloseMemoManagement}
                   selectedDetailId={memoDetailId}
-                  onSelectDetailId={setMemoDetailId}
-                  refreshKey={memoListRefreshKey}
-                />
-              </MapSideListPanel>
-            </div>
-          )}
-          {memoManagementOpen && memoDetailId && (
-            <div className="pointer-events-auto shrink-0">
-              <MapSideListPanel
-                width={memoDetailWidth}
-                minWidth={MEMO_DETAIL_MIN_WIDTH}
-                maxWidth={MEMO_DETAIL_MAX_WIDTH}
-                leftOffsetPx={memoDetailLeftPx}
-                onWidthChange={setMemoDetailWidth}
-                contentClassName="overflow-hidden"
-              >
-                <MemoDetailPanel
-                  detailId={memoDetailId}
-                  onClose={() => setMemoDetailId(null)}
-                  onSaved={() => setMemoListRefreshKey((k) => k + 1)}
-                  onCreated={(newRowKey) => {
-                    setMemoListRefreshKey((k) => k + 1)
-                    setMemoDetailId(newRowKey)
+                  onSelectDetailId={(id) => {
+                    setMemoAddTable(null)
+                    setMemoDetailId(id)
+                    setComplaintAddOpen(false)
+                    setComplaintDetail?.(null)
                   }}
-                  onDeleted={() => {
+                  refreshKey={memoListRefreshKey}
+                  onAdd={(table) => {
                     setMemoDetailId(null)
-                    setMemoListRefreshKey((k) => k + 1)
+                    setMemoAddTable(table)
+                    setComplaintAddOpen(false)
+                    setComplaintDetail?.(null)
                   }}
                 />
               </MapSideListPanel>
@@ -2412,7 +2490,15 @@ function MapLayoutContent({
                 leftOffsetPx={complaintPanelLeftPx}
                 onWidthChange={setComplaintPanelWidth}
               >
-                <ComplaintListPanel refreshKey={complaintListRefreshKey} />
+                <ComplaintListPanel
+                  refreshKey={complaintListRefreshKey}
+                  onRequestAdd={() => {
+                    setComplaintDetail?.(null)
+                    setMemoDetailId(null)
+                    setMemoAddTable(null)
+                    setComplaintAddOpen(true)
+                  }}
+                />
               </MapSideListPanel>
             </div>
           )}
@@ -2560,6 +2646,50 @@ function MapLayoutContent({
               </MapSideListPanel>
             </div>
           )}
+          {roadWorkHandbookOpen && (
+            <RoadWorkHandbookMapProvider
+              sessionKey={handbookMapSessionKey(roadWorkHandbookMode, roadWorkHandbookDetail)}
+            >
+              <div className="contents">
+                <div className="pointer-events-auto shrink-0">
+                  <MapSideListPanel
+                    width={roadWorkHandbookPanelWidth}
+                    minWidth={ROAD_WORK_HANDBOOK_PANEL_MIN_WIDTH}
+                    maxWidth={ROAD_WORK_HANDBOOK_PANEL_MAX_WIDTH}
+                    leftOffsetPx={roadWorkHandbookPanelLeftPx}
+                    onWidthChange={setRoadWorkHandbookPanelWidth}
+                    contentClassName="overflow-hidden"
+                  >
+                  <RoadWorkHandbookListPanel
+                    onClose={handleCloseRoadWorkHandbook}
+                    mode={roadWorkHandbookMode}
+                    onModeChange={setRoadWorkHandbookMode}
+                    selected={roadWorkHandbookDetail}
+                    onSelect={setRoadWorkHandbookDetail}
+                  />
+                  </MapSideListPanel>
+                </div>
+                {roadWorkHandbookDetail && (
+                  <div className="pointer-events-auto shrink-0">
+                    <MapSideListPanel
+                      width={roadWorkHandbookDetailWidth}
+                      minWidth={ROAD_WORK_HANDBOOK_DETAIL_MIN_WIDTH}
+                      maxWidth={ROAD_WORK_HANDBOOK_DETAIL_MAX_WIDTH}
+                      leftOffsetPx={roadWorkHandbookDetailLeftPx}
+                      onWidthChange={setRoadWorkHandbookDetailWidth}
+                      contentClassName="overflow-hidden"
+                    >
+                      <RoadWorkHandbookDetailPanel
+                        selection={roadWorkHandbookDetail}
+                        onClose={() => setRoadWorkHandbookDetail(null)}
+                      />
+                    </MapSideListPanel>
+                  </div>
+                )}
+                <RoadWorkHandbookMapHandler />
+              </div>
+            </RoadWorkHandbookMapProvider>
+          )}
           {roadCctvOpen && (
             <div className="pointer-events-auto shrink-0">
               <MapSideListPanel
@@ -2703,6 +2833,36 @@ function MapLayoutContent({
                 }
               />
               <StandardDetail />
+              {memoAddTable && (
+                <MemoDetailPanel
+                  mode="add"
+                  addTableName={memoAddTable}
+                  onClose={() => setMemoAddTable(null)}
+                  onCreated={(newRowKey) => {
+                    setMemoAddTable(null)
+                    setMemoListRefreshKey((k) => k + 1)
+                    setMemoDetailId(newRowKey)
+                  }}
+                />
+              )}
+              {memoDetailId && (
+                <MemoDetailPanel
+                  mode="edit"
+                  detailId={memoDetailId}
+                  onClose={() => setMemoDetailId(null)}
+                  onSaved={() => setMemoListRefreshKey((k) => k + 1)}
+                  onDeleted={() => {
+                    setMemoDetailId(null)
+                    setMemoListRefreshKey((k) => k + 1)
+                  }}
+                />
+              )}
+              {complaintAddOpen && (
+                <ComplaintAdd
+                  onClose={() => setComplaintAddOpen(false)}
+                  onCreated={() => setComplaintListRefreshKey((k) => k + 1)}
+                />
+              )}
               <ComplaintDetail
                 onListRefresh={() => setComplaintListRefreshKey((k) => k + 1)}
               />
@@ -2713,12 +2873,23 @@ function MapLayoutContent({
                 open={protoUserAccountOpen}
                 onClose={() => setProtoUserAccountOpen(false)}
                 onSelectShootingRequest={(id) => setMyInfoShootingModalId(id)}
-                onOpenLedger={(ledgerId) => {
+                onOpenLedger={(item) => {
+                  const key = String(item.notifKey ?? "")
+                  if (key.startsWith("occup-expiry:")) {
+                    const serEng = getOccupationLedgerBinding({
+                      system: item.systemScope,
+                    })?.serEng
+                    if (!serEng) return
+                    setOpened([serEng])
+                    setOccupationLedgerDetailId(item.targetId)
+                    return
+                  }
                   setOpened([USAGE_DATA_AS_OPENED_KEY])
-                  setUsageDataAsDetailId(ledgerId)
+                  setUsageDataAsDetailId(item.targetId)
                 }}
                 onOpenFee={(feeId) => {
-                  setOpened(["waterNglFeeList"])
+                  const feeSerEng = getUseFeeBinding({ system: systemKeyFromUrl }).serEng
+                  setOpened([feeSerEng])
                   setUseFeeDetailId(feeId)
                 }}
               />

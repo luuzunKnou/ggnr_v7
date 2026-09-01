@@ -300,7 +300,7 @@ export function UsageDataAsListPanel({
                 <col className="w-[88px]" />
                 <col className="w-[88px]" />
               </colgroup>
-              <thead className="sticky top-0 z-[1] bg-muted/50">
+              <thead className="sticky top-0 z-[1] bg-muted shadow-[0_1px_0_0_var(--border)]">
                 <tr>
                   <th className="whitespace-nowrap border-b-0 px-2 py-2 font-semibold text-foreground/90 [box-shadow:inset_0_-2px_0_0_var(--border)]">
                     점용명

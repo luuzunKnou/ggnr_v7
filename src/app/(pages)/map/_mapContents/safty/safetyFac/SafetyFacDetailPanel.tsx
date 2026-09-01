@@ -1,9 +1,9 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { X } from 'lucide-react';
+import { ChevronDown, ChevronRight, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { MapSideDetailScroll } from '../../../_mapComponents/MapSideDetailScroll';
+import { appFetch } from '@/lib/basePath';
 import {
   buildSafetyFacCustomDetailRows,
   buildSafetyFacTitleFromDefine,
@@ -17,6 +17,7 @@ import {
   type SafetyFacFacilityRow,
 } from './safetyFacSymbols';
 import { SafetyFacRelatedLayerSection } from './SafetyFacRelatedLayerSection';
+import { SafetyFacHistorySection } from './SafetyFacHistorySection';
 
 /** 라벨 글자 수 기준 컬럼 폭(rem). 한 줄 유지·과대 확장 방지 */
 function maxLabelColumnRem(labels: string[]): number {
@@ -33,13 +34,15 @@ type Props = {
 export function SafetyFacDetailPanel({ facility, onClose }: Props) {
   const [fields, setFields] = useState<SafetyFacDefineField[]>([]);
   const [codesByField, setCodesByField] = useState<Record<string, DefineCodeRow[]>>({});
+  const [basicOpen, setBasicOpen] = useState(true);
   const chipName = SAFETY_FAC_LIST_CHIP_LABEL[facility.subtype];
 
   useEffect(() => {
     let cancelled = false;
     setFields([]);
     setCodesByField({});
-    void fetch(`/api/config/defineLayer/fields/${encodeURIComponent(facility.table)}`)
+    setBasicOpen(true);
+    void appFetch(`/api/config/defineLayer/fields/${encodeURIComponent(facility.table)}`)
       .then((r) => r.json())
       .then(async (json: { data?: SafetyFacDefineField[] }) => {
         const nextFields = Array.isArray(json?.data) ? json.data : [];
@@ -56,7 +59,7 @@ export function SafetyFacDetailPanel({ facility, onClose }: Props) {
             if (!name) return null;
             const key = `${facility.table}__${name}`;
             try {
-              const res = await fetch(`/api/config/defineLayer/codes/${encodeURIComponent(key)}`);
+              const res = await appFetch(`/api/config/defineLayer/codes/${encodeURIComponent(key)}`);
               const body = (await res.json()) as { data?: DefineCodeRow[] };
               const codes = Array.isArray(body?.data) ? body.data : [];
               return [name.toLowerCase(), codes] as const;
@@ -138,56 +141,77 @@ export function SafetyFacDetailPanel({ facility, onClose }: Props) {
         <SafetyFacRelatedLayerSection lon={facility.lon} lat={facility.lat} />
       </div>
 
-      <div className="min-h-0 flex-1 overflow-hidden border-border p-3 pt-2">
-        <MapSideDetailScroll className="h-full min-h-0 overflow-y-auto">
-          {rows.length === 0 ? (
-            <p className="text-[11px] text-muted-foreground">표시할 항목이 없습니다.</p>
-          ) : (
-            <>
-            <div className="overflow-hidden rounded-[5px] border border-border">
-              {rows.map((row, index) => (
-                <div
-                  key={`${row.label}-${index}`}
-                  className={cn('flex', index !== rows.length - 1 && 'border-b border-border')}
-                >
-                  <div
-                    className="flex shrink-0 items-start bg-muted px-2 py-1.5"
-                    style={{ width: `${labelColumnRem}rem` }}
-                  >
-                    <span className="whitespace-nowrap text-[11px] leading-snug text-muted-foreground">
-                      {row.label}
-                    </span>
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden border-border p-3 pt-2">
+        <div className="shrink-0 border-t border-border">
+          <div className="mt-1 flex items-center justify-between gap-2">
+            <button
+              type="button"
+              className="flex min-w-0 flex-1 cursor-pointer items-center gap-1.5 py-1.5 text-left transition-colors hover:bg-muted/50"
+              onClick={() => setBasicOpen((v) => !v)}
+              title={basicOpen ? '기본 정보 접기' : '기본 정보 펼치기'}
+            >
+              {basicOpen ? (
+                <ChevronDown className="h-3.5 w-3.5 shrink-0 text-primary" />
+              ) : (
+                <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+              )}
+              <span className="text-[12px] font-semibold text-muted-foreground">기본 정보</span>
+            </button>
+          </div>
+          {basicOpen ? (
+            <div className="mt-2 px-0 pb-1">
+              {rows.length === 0 ? (
+                <p className="text-[11px] text-muted-foreground">표시할 항목이 없습니다.</p>
+              ) : (
+                <>
+                  <div className="overflow-hidden rounded-[5px] border border-border">
+                    {rows.map((row, index) => (
+                      <div
+                        key={`${row.label}-${index}`}
+                        className={cn('flex', index !== rows.length - 1 && 'border-b border-border')}
+                      >
+                        <div
+                          className="flex shrink-0 items-start bg-muted px-2 py-1.5"
+                          style={{ width: `${labelColumnRem}rem` }}
+                        >
+                          <span className="whitespace-nowrap text-[11px] leading-snug text-muted-foreground">
+                            {row.label}
+                          </span>
+                        </div>
+                        <div
+                          className={cn(
+                            'flex items-start px-2 py-1.5',
+                            row.maxLength == null ? 'min-w-0 flex-1' : 'shrink-0 overflow-hidden'
+                          )}
+                          style={
+                            row.maxLength != null
+                              ? { width: `${row.maxLength}ch`, maxWidth: '100%' }
+                              : undefined
+                          }
+                        >
+                          <span
+                            className={cn(
+                              'text-[11px] leading-snug text-foreground',
+                              row.maxLength == null
+                                ? 'break-all'
+                                : 'block w-full truncate whitespace-nowrap'
+                            )}
+                            title={row.maxLength != null ? row.value : undefined}
+                          >
+                            {row.value}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
                   </div>
-                  <div
-                    className={cn(
-                      'flex items-start px-2 py-1.5',
-                      row.maxLength == null ? 'min-w-0 flex-1' : 'shrink-0 overflow-hidden'
-                    )}
-                    style={
-                      row.maxLength != null
-                        ? { width: `${row.maxLength}ch`, maxWidth: '100%' }
-                        : undefined
-                    }
-                  >
-                    <span
-                      className={cn(
-                        'text-[11px] leading-snug text-foreground',
-                        row.maxLength == null
-                          ? 'break-all'
-                          : 'block w-full truncate whitespace-nowrap'
-                      )}
-                      title={row.maxLength != null ? row.value : undefined}
-                    >
-                      {row.value}
-                    </span>
-                  </div>
-                </div>
-              ))}
+                  <p className="mt-1.5 text-[11px] text-muted-foreground">출처: 재난안전공유 플랫폼</p>
+                </>
+              )}
             </div>
-            <p className="mt-1.5 text-[11px] text-muted-foreground">출처: 재난안전공유 플랫폼</p>
-            </>
-          )}
-        </MapSideDetailScroll>
+          ) : null}
+        </div>
+
+        <SafetyFacHistorySection hisGubun={facility.table} ftrIdn={facility.id} />
       </div>
     </div>
   );

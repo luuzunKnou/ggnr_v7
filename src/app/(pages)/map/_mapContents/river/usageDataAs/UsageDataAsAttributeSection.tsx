@@ -1,7 +1,12 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import type { LayerRowDetailAttr } from "../../../_mapComponents/layerRowEdit";
+import {
+  type LayerRowDetailAttr,
+  DetailAttrRow,
+  DetailAttrSectionTitle,
+  DetailAttrTable,
+} from "../../../_mapComponents/layerRowEdit";
 import {
   USAGE_AREA_FIELDS,
   USAGE_PD_FIELD,
@@ -95,12 +100,9 @@ export function UsageDataAsAttributeSection({
 
   return (
     <>
-      <div className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">상세 속성</div>
-      <dl className="divide-y divide-border rounded border border-border bg-muted/40">
-        {attributes.length === 0 ? (
-          <div className="px-2 py-3 text-muted-foreground">표시할 속성이 없습니다.</div>
-        ) : (
-          attributes.map((row) => {
+      <DetailAttrSectionTitle>상세 속성</DetailAttrSectionTitle>
+      <DetailAttrTable empty={attributes.length === 0 ? "표시할 속성이 없습니다." : null}>
+        {attributes.map((row, idx) => {
             const fieldLower = row.field.toLowerCase();
             const locked = readOnlyFields.has(fieldLower);
             const showInput = isEditing && !locked;
@@ -117,14 +119,10 @@ export function UsageDataAsAttributeSection({
             const isRiverType = fieldLower === RIVER_TYPE_FIELD;
             const riverNameValue = resolveDraftValue(row.field) || inputValue;
             const riverTypeValue = resolveDraftValue(RIVER_TYPE_FIELD) || inputValue;
+            const isLast = idx === attributes.length - 1;
 
             return (
-              <div
-                key={row.field}
-                className="grid grid-cols-detail-30 items-center gap-x-2 gap-y-0.5 px-2 py-1.5"
-              >
-                <dt className="shrink-0 leading-none font-medium text-muted-foreground">{row.label}</dt>
-                <dd className="relative min-w-0 break-words text-foreground">
+              <DetailAttrRow key={row.field} label={row.label} isLast={isLast}>
                   {showInput ? (
                     isRiverName ? (
                       <select
@@ -261,12 +259,10 @@ export function UsageDataAsAttributeSection({
                   ) : (
                     row.value
                   )}
-                </dd>
-              </div>
+              </DetailAttrRow>
             );
-          })
-        )}
-      </dl>
+          })}
+      </DetailAttrTable>
     </>
   );
 }

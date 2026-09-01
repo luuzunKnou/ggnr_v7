@@ -1,6 +1,7 @@
 'use client';
 
 import { useSession } from 'next-auth/react';
+import { withBasePathNav } from '@/lib/basePath';
 
 const SYS_MANAGER_HREF = '/sysManager';
 
@@ -12,14 +13,14 @@ export function SysManagerNavLink() {
     if (status === 'loading') return;
     if (!session?.user) {
       // 미로그인 → /sysManager 진입 → middleware가 next·openLogin으로 로그인 유도
-      window.location.assign(SYS_MANAGER_HREF);
+      window.location.assign(withBasePathNav(SYS_MANAGER_HREF));
       return;
     }
     if (session.user.id !== 'su') {
       window.alert('권한이 없습니다');
       return;
     }
-    window.location.assign(SYS_MANAGER_HREF);
+    window.location.assign(withBasePathNav(SYS_MANAGER_HREF));
   };
 
   return (

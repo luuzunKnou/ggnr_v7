@@ -26,17 +26,22 @@ import {
   KRAS_DROP_GUARD_RATIO,
   KRAS_LAND_BASIC_QUERY_ID,
   KRAS_LAND_BASIC_TABLE,
-  KRAS_LANDOWN_OWN_LABEL,
-  KRAS_LANDOWN_TABLE,
   KRAS_LAYER_CATALOG_SCHEMA,
   KRAS_LAYER_CATALOG_TABLE,
   KRAS_LAYER_SCHEMA_CANDIDATES,
 } from '@/integrations/krasLayerSync.config';
+import {
+  JIJUK_OWN_GBN_COLUMN,
+  JIJUK_TABLE,
+  ensureJijukOwnGbnColumn,
+} from '@/integrations/krasJijukOwnGbn';
 import type { KrasLayerSyncResult } from '@/integrations/krasLayerSync';
 import { krasSyncWorkDir, pruneOldKrasSyncDays } from '@/integrations/krasSyncKeepDir';
-import { createOrUpdateGeoServerLayer } from '@/service/devTestService';
 
 const LOG = '[kras-land-file]';
+
+/** 필지 고유번호 ↔ 소유구분 대조용 임시 테이블 */
+const OWN_GBN_MAP_TABLE = 'kras_own_gbn_map';
 
 const LAND_BASIC_COLS = [
   'adm_sect_cd',
@@ -319,114 +324,83 @@ export async function refreshKrasLandBasic(): Promise<KrasStepResult> {
   });
 }
 
-function ownGbnCaseSql(alias: string): string {
-  const parts = Object.entries(KRAS_LANDOWN_OWN_LABEL)
-    .map(([code, label]) => `when ${alias}.own_gbn = '${code}' then '${label.replace(/'/g, "''")}'`)
-    .join(' ');
-  return `case ${parts} else '기타' end`;
-}
-
-export async function recreateLandownFromBasic(): Promise<KrasStepResult> {
+/**
+ * 토지기본정보의 지번 코드를 이어 붙여 필지 고유번호를 만들고,
+ * 같은 고유번호의 지적 도형에 소유구분 값을 채운다.
+ * 소유구분 레이어·지목 레이어가 지적 도형 하나만 보고 그려지도록 하는 단계.
+ */
+export async function applyOwnGbnToJijuk(): Promise<KrasStepResult> {
   if (!(await tableExists(KRAS_LAYER_CATALOG_SCHEMA, KRAS_LAND_BASIC_TABLE))) {
-    return { status: 'skip', detail: '토지기본정보 없음 — 소유현황 기존 유지' };
+    return { status: 'skip', detail: '토지기본정보 없음 — 소유구분 기존 유지' };
   }
   const basicCnt = await countRows(KRAS_LAYER_CATALOG_SCHEMA, KRAS_LAND_BASIC_TABLE);
   if (basicCnt <= 0) {
-    return { status: 'skip', detail: '토지기본정보 0건 — 소유현황 기존 유지' };
+    return { status: 'skip', detail: '토지기본정보 0건 — 소유구분 기존 유지' };
   }
 
-  const jijukSchema = await resolveLayerSchema('jijuk');
-  if (!(await tableExists(jijukSchema, 'jijuk'))) {
-    return { status: 'skip', detail: '지적 도형 없음 — 소유현황 기존 유지' };
+  const jijukSchema = await resolveLayerSchema(JIJUK_TABLE);
+  if (!(await tableExists(jijukSchema, JIJUK_TABLE))) {
+    return { status: 'skip', detail: '지적 도형 없음 — 소유구분 건너뜀' };
   }
-  const jijukCnt = await countRows(jijukSchema, 'jijuk');
+  const jijukCnt = await countRows(jijukSchema, JIJUK_TABLE);
   if (jijukCnt <= 0) {
-    return { status: 'skip', detail: '지적 도형 0건 — 소유현황 기존 유지' };
+    return { status: 'skip', detail: '지적 도형 0건 — 소유구분 건너뜀' };
   }
 
-  const landownSchema = (await tableExists('public_layer', KRAS_LANDOWN_TABLE))
-    ? 'public_layer'
-    : (await tableExists('layer', KRAS_LANDOWN_TABLE))
-      ? 'layer'
-      : 'public_layer';
+  const basic = `${qi(KRAS_LAYER_CATALOG_SCHEMA)}.${qi(KRAS_LAND_BASIC_TABLE)}`;
+  const jijuk = `${qi(jijukSchema)}.${qi(JIJUK_TABLE)}`;
+  const map = `${qi(KRAS_LAYER_CATALOG_SCHEMA)}.${qi(OWN_GBN_MAP_TABLE)}`;
+  const ownCol = qi(JIJUK_OWN_GBN_COLUMN);
 
-  const emdSchema = await resolveLayerSchema('emd');
-  const sggSchema = await resolveLayerSchema('sgg');
-  const riSchema = await resolveLayerSchema('ri');
-  const hasEmd = await tableExists(emdSchema, 'emd');
-  const hasSgg = await tableExists(sggSchema, 'sgg');
-  const hasRi = await tableExists(riSchema, 'ri');
-
-  const tmp = `${KRAS_LANDOWN_TABLE}_krastmp`;
-  await dropTable(landownSchema, tmp);
-
-  const addrParts = [
-    hasSgg ? `nullif(trim(s.sgg_nm), '')` : null,
-    hasEmd ? `nullif(trim(e.emd_nm), '')` : null,
-    hasRi ? `nullif(trim(r.ri_nm), '')` : null,
-  ].filter(Boolean);
-  const addrExpr = addrParts.length ? `concat_ws(' ', ${addrParts.join(', ')})` : `''`;
-
-  const joins = [
-    `from ${qi(KRAS_LAYER_CATALOG_SCHEMA)}.${qi(KRAS_LAND_BASIC_TABLE)} k`,
-    `join ${qi(jijukSchema)}.${qi('jijuk')} j
-       on j.pnu = k.adm_sect_cd || k.land_loc_cd || k.ledg_gbn || k.bobn || k.bubn`,
-    hasSgg ? `left join ${qi(sggSchema)}.${qi('sgg')} s on s.adm_sect_c = k.adm_sect_cd` : '',
-    hasEmd
-      ? `left join ${qi(emdSchema)}.${qi('emd')} e on e.emd_cd = substring(k.adm_sect_cd || k.land_loc_cd, 1, 8)`
-      : '',
-    hasRi ? `left join ${qi(riSchema)}.${qi('ri')} r on r.ri_cd = k.adm_sect_cd || k.land_loc_cd` : '',
-  ]
-    .filter(Boolean)
-    .join('\n');
+  await ensureJijukOwnGbnColumn(jijukSchema, JIJUK_TABLE);
+  await dropTable(KRAS_LAYER_CATALOG_SCHEMA, OWN_GBN_MAP_TABLE);
 
   try {
     await pool.query(`
-      create table ${qi(landownSchema)}.${qi(tmp)} as
-      select
-        k.adm_sect_cd || k.land_loc_cd || k.ledg_gbn || k.bobn || k.bubn as pnu,
-        k.jimok,
-        k.parea,
-        ${addrExpr} as a2,
-        ${addrExpr} as parcel_address,
-        k.own_gbn as a7,
-        ${ownGbnCaseSql('k')} as a8,
-        j.jibun,
-        j.bchk,
-        j.geom
-      ${joins}
+      create table ${map} as
+      select distinct on (p.pnu) p.pnu, p.own_gbn
+      from (
+        select
+          nullif(trim(k.adm_sect_cd || k.land_loc_cd || k.ledg_gbn || k.bobn || k.bubn), '') as pnu,
+          nullif(trim(k.own_gbn), '') as own_gbn
+        from ${basic} k
+      ) p
+      where p.pnu is not null and p.own_gbn is not null
+      order by p.pnu
     `);
-    await pool.query(
-      `alter table ${qi(landownSchema)}.${qi(tmp)} add column gid serial primary key, add column id serial`
-    );
+    const mapCnt = await countRows(KRAS_LAYER_CATALOG_SCHEMA, OWN_GBN_MAP_TABLE);
+    if (mapCnt <= 0) {
+      return { status: 'skip', detail: '토지기본정보 소유구분 없음 — 지적 소유구분 기존 유지' };
+    }
+    await pool.query(`alter table ${map} add primary key (pnu)`);
 
-    const newCnt = await countRows(landownSchema, tmp);
-    if (newCnt <= 0) {
-      await dropTable(landownSchema, tmp);
-      return { status: 'skip', detail: '소유현황 0건 — 기존 유지' };
+    const { rows: matchRows } = await pool.query<{ c: string }>(
+      `select count(*)::text as c from ${jijuk} j join ${map} m on m.pnu = j.pnu`
+    );
+    const matched = Number(matchRows[0]?.c ?? 0);
+    if (matched <= 0) {
+      return { status: 'skip', detail: '지적·토지기본정보 필지 일치 없음 — 소유구분 기존 유지' };
     }
-    const oldExists = await tableExists(landownSchema, KRAS_LANDOWN_TABLE);
-    const oldCnt = oldExists ? await countRows(landownSchema, KRAS_LANDOWN_TABLE) : 0;
-    if (oldExists && oldCnt >= KRAS_DROP_GUARD_MIN_OLD && newCnt < oldCnt * KRAS_DROP_GUARD_RATIO) {
-      await dropTable(landownSchema, tmp);
-      return {
-        status: 'skip',
-        detail: `소유현황 건수 부족(기존 ${oldCnt} → ${newCnt}), 기존 유지`,
-      };
-    }
-    await swapTables(landownSchema, tmp, KRAS_LANDOWN_TABLE);
-    try {
-      await createOrUpdateGeoServerLayer({ layerName: KRAS_LANDOWN_TABLE });
-    } catch (e) {
-      console.warn(`${LOG} geoserver landown:`, e instanceof Error ? e.message : e);
-    }
+
+    await pool.query(`
+      update ${jijuk} j
+      set ${ownCol} = m.own_gbn
+      from ${map} m
+      where j.pnu = m.pnu and coalesce(j.${ownCol}, '') <> m.own_gbn
+    `);
+    await pool.query(`
+      update ${jijuk} j
+      set ${ownCol} = null
+      where j.${ownCol} is not null
+        and not exists (select 1 from ${map} m where m.pnu = j.pnu)
+    `);
+
     return {
       status: 'ok',
-      detail: `소유현황 반영 ${landownSchema}.${KRAS_LANDOWN_TABLE} ${newCnt}건`,
+      detail: `소유구분 반영 ${jijukSchema}.${JIJUK_TABLE} ${matched}건 (지적 ${jijukCnt}건)`,
     };
-  } catch (e) {
-    await dropTable(landownSchema, tmp).catch(() => {});
-    throw e;
+  } finally {
+    await dropTable(KRAS_LAYER_CATALOG_SCHEMA, OWN_GBN_MAP_TABLE).catch(() => {});
   }
 }
 
@@ -560,13 +534,13 @@ export async function runKrasFullSync(opts?: {
     }
 
     try {
-      push(await runStep('소유현황', recreateLandownFromBasic, opts?.onProgress));
+      push(await runStep('소유구분', applyOwnGbnToJijuk, opts?.onProgress));
     } catch (e) {
       failed += 1;
       const msg = e instanceof Error ? e.message : String(e);
-      details.push(`소유현황 실패: ${msg}`);
-      await opts?.onProgress?.(`실패 | 소유현황 | ${msg}`);
-      void appendLinkageError({ system: 'KRAS', title: '소유현황', detail: formatLinkageError(e) });
+      details.push(`소유구분 실패: ${msg}`);
+      await opts?.onProgress?.(`실패 | 소유구분 | ${msg}`);
+      void appendLinkageError({ system: 'KRAS', title: '소유구분', detail: formatLinkageError(e) });
     }
 
     if (includePriceFile) {
@@ -636,7 +610,7 @@ export async function runKorepsPriceFileSync(opts?: {
 }
 
 export async function runKrasFileStep(
-  step: 'catalog' | 'landinfo' | 'landown',
+  step: 'catalog' | 'landinfo' | 'owngbn',
   opts?: { onProgress?: ProgressFn }
 ): Promise<KrasLayerSyncResult> {
   const fn =
@@ -644,8 +618,8 @@ export async function runKrasFileStep(
       ? refreshKrasLayerCatalog
       : step === 'landinfo'
         ? refreshKrasLandBasic
-        : recreateLandownFromBasic;
-  const label = step === 'catalog' ? '레이어 목록' : step === 'landinfo' ? '토지기본정보' : '소유현황';
+        : applyOwnGbnToJijuk;
+  const label = step === 'catalog' ? '레이어 목록' : step === 'landinfo' ? '토지기본정보' : '소유구분';
   try {
     return await withAdvisoryLock('KRAS-layer', async () => {
       const r = await runStep(label, fn, opts?.onProgress);

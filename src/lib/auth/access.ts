@@ -9,6 +9,7 @@ import { usrSerGrant } from '@/database/schema/usr_ser_grant';
 import { usrSysGrant } from '@/database/schema/usr_sys_grant';
 import { getServiceList, getSystemListAll } from '@/service/configService';
 import { loadConsoleMenuLevels } from '@/lib/consoleMenuAccess/server';
+import { rethrowWithPgCause } from '@/lib/rethrowWithPgCause';
 import {
   SERP_TYPE_LIST,
   SERP_TYPE_READ,
@@ -48,6 +49,15 @@ export function canUsePrivateSer(level: number, need: 'list' | 'read' | 'write')
 }
 
 export async function loadUserAccess(usrId: string): Promise<UserAccessSnapshot> {
+  try {
+    return await loadUserAccessInner(usrId);
+  } catch (e: unknown) {
+    if (e && typeof e === 'object' && 'status' in e) throw e;
+    rethrowWithPgCause(e, '권한 스냅샷 조회 실패');
+  }
+}
+
+async function loadUserAccessInner(usrId: string): Promise<UserAccessSnapshot> {
   if (isSuperUser(usrId)) {
     const privateSerRows = await db
       .select({ eng: ser.serEng })

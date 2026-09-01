@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { appFetch, withBasePath } from '@/lib/basePath';
 
 /** serviceList.config 의 ser_eng (예: dataQuery, riverBasicPlan, complaint) */
 export type ServiceFileDataSerEng = string;
@@ -34,7 +35,7 @@ export function serviceFileDataDownloadUrl(
   if (options?.thumb != null && options.thumb !== false) {
     qs.set('thumb', options.thumb === true ? '1' : String(options.thumb));
   }
-  return `/api/service-files/download?${qs.toString()}`;
+  return withBasePath(`/api/service-files/download?${qs.toString()}`);
 }
 
 /** 기존 다운로드 URL에 목록용 썸네일 쿼리 추가 */
@@ -63,7 +64,7 @@ export function serviceFileDataZipDownloadUrl(
   });
   const name = options?.layerDisplayName?.trim();
   if (name) qs.set('label', name);
-  return `/api/service-files/download-zip?${qs.toString()}`;
+  return withBasePath(`/api/service-files/download-zip?${qs.toString()}`);
 }
 
 /** 동일 출처 인증 쿠키가 포함된 GET으로 파일 다운로드 트리거 */
@@ -86,7 +87,7 @@ export async function requestServiceFileDataDelete(params: {
   subfolder?: string | null;
 }): Promise<{ ok: true } | { ok: false; error: string }> {
   const sub = String(params.subfolder ?? '').trim();
-  const res = await fetch('/api/service-files/delete', {
+  const res = await appFetch('/api/service-files/delete', {
     method: 'POST',
     credentials: 'include',
     headers: { 'Content-Type': 'application/json' },
@@ -156,7 +157,7 @@ export function useServiceFileData(params: {
     });
     if (sub && sub !== '기타') qs.set('subfolder', sub);
     if (!includeMeta) qs.set('meta', '0');
-    fetch(`/api/service-files?${qs.toString()}`, { credentials: 'include' })
+    appFetch(`/api/service-files?${qs.toString()}`, { credentials: 'include' })
       .then(async (r) => {
         if (!r.ok) {
           const j = (await r.json().catch(() => ({}))) as { error?: string };
@@ -259,7 +260,7 @@ export function useServiceFileChunkedUpload(): {
       const key = String(params.keyValue);
       const sub = String(params.subfolder ?? '').trim();
       try {
-        const initRes = await fetch('/api/service-files/upload/init', {
+        const initRes = await appFetch('/api/service-files/upload/init', {
           method: 'POST',
           credentials: 'include',
           headers: { 'Content-Type': 'application/json' },
@@ -287,7 +288,7 @@ export function useServiceFileChunkedUpload(): {
         const expectedChunks = initJson.expectedChunks ?? 1;
         if (!uploadId) throw new Error('업로드 세션을 만들 수 없습니다.');
 
-        const base = '/api/upload/chunk';
+        const base = withBasePath('/api/upload/chunk');
         for (let chunkIndex = 0; chunkIndex < expectedChunks; chunkIndex++) {
           if (signal.aborted) {
             const msg = '취소됨';
@@ -298,7 +299,7 @@ export function useServiceFileChunkedUpload(): {
           const end = Math.min(start + chunkSize, params.file.size);
           const blob = params.file.slice(start, end);
           const url = `${base}?uploadId=${encodeURIComponent(uploadId)}&chunkIndex=${chunkIndex}&totalChunks=${expectedChunks}`;
-          const res = await fetch(url, { method: 'POST', body: blob, signal });
+          const res = await appFetch(url, { method: 'POST', body: blob, signal });
           if (!res.ok) {
             const errText = await res.text();
             let errMsg = `청크 ${chunkIndex} 실패`;
@@ -318,7 +319,7 @@ export function useServiceFileChunkedUpload(): {
           }));
         }
 
-        const completeRes = await fetch('/api/service-files/upload/complete', {
+        const completeRes = await appFetch('/api/service-files/upload/complete', {
           method: 'POST',
           credentials: 'include',
           headers: { 'Content-Type': 'application/json' },

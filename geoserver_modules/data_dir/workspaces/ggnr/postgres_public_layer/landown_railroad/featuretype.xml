@@ -1,28 +1,28 @@
 <featureType>
-  <id>FeatureTypeInfoImpl--5fabfce7:19fca79c611:-71d9</id>
+  <id>FeatureTypeInfoImpl--50232ad2:1a022df41e9:-61f1</id>
   <name>landown_railroad</name>
-  <nativeName>landown</nativeName>
+  <nativeName>jijuk</nativeName>
   <namespace>
     <id>NamespaceInfoImpl-4bf97568:19c4d6c3053:-7ffa</id>
   </namespace>
-  <title>landown</title>
+  <title>jijuk</title>
   <keywords>
     <string>features</string>
-    <string>landown</string>
+    <string>jijuk</string>
   </keywords>
   <srs>EPSG:5181</srs>
   <nativeBoundingBox>
-    <minx>385413.0117536505</minx>
-    <maxx>385549.79554111866</maxx>
-    <miny>386841.1335231263</miny>
-    <maxy>386954.59568051837</maxy>
+    <minx>0.0</minx>
+    <maxx>-1.0</maxx>
+    <miny>0.0</miny>
+    <maxy>-1.0</maxy>
     <crs class="projected">EPSG:5181</crs>
   </nativeBoundingBox>
   <latLonBoundingBox>
-    <minx>129.0818601818278</minx>
-    <maxx>129.08342294938203</maxx>
-    <miny>36.96214749450835</miny>
-    <maxy>36.96319614437627</maxy>
+    <minx>124.84847767680762</minx>
+    <maxx>124.84848865053446</maxx>
+    <miny>33.47495973610326</miny>
+    <maxy>33.474968932506</maxy>
     <crs>EPSG:4326</crs>
   </latLonBoundingBox>
   <projectionPolicy>FORCE_DECLARED</projectionPolicy>
@@ -33,7 +33,7 @@
   </store>
   <serviceConfiguration>false</serviceConfiguration>
   <simpleConversionEnabled>false</simpleConversionEnabled>
-  <cqlFilter>jimok = &apos;15&apos;</cqlFilter>
+  <cqlFilter>jibun LIKE &apos;%철&apos;</cqlFilter>
   <maxFeatures>0</maxFeatures>
   <numDecimals>0</numDecimals>
   <padWithZeros>false</padWithZeros>

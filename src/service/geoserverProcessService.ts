@@ -4,6 +4,7 @@
 import { spawn, execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
+import { getGeoServerInternalBase } from '@/lib/geoserverUrl';
 
 function sleep(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
@@ -19,7 +20,7 @@ function fetchTimeoutSignal(ms: number): AbortSignal {
 }
 
 export function getGeoServerBaseUrl(): string {
-  return (process.env.GEOSERVER_URL || 'http://localhost:8080/geoserver').replace(/\/$/, '');
+  return getGeoServerInternalBase();
 }
 
 export type GeoServerHealth = {
@@ -89,10 +90,7 @@ export async function waitGeoServerReady(options?: {
   return last;
 }
 
-/**
- * GeoServer 실행 (백그라운드로 시작) — bat만. 응답 확인은 ensureGeoServerRunning 사용.
- */
-export async function startGeoServer() {
+async function runStartGeoServerBat(): Promise<{ success: boolean; error?: string }> {
   if (process.platform !== 'win32') {
     return { success: false, error: 'GeoServer start is supported on Windows only.' };
   }
@@ -142,6 +140,25 @@ export async function startGeoServer() {
       }
     }, 3000);
   });
+}
+
+/**
+ * GeoServer 실행 — bat 기동 후 start.ini 포트(8090 등) 응답 확인.
+ */
+export async function startGeoServer() {
+  const result = await ensureGeoServerRunning({
+    skipStopIfDown: true,
+    onLog: () => {},
+  });
+
+  if (result.success) {
+    return { success: true };
+  }
+
+  return {
+    success: false,
+    error: result.error ?? `기동 실패 (${result.action})`,
+  };
 }
 
 export async function stopGeoServer() {
@@ -321,7 +338,7 @@ export async function ensureGeoServerRunning(options?: {
   }
 
   log('start bat 실행...');
-  const startResult = await startGeoServer();
+  const startResult = await runStartGeoServerBat();
   if (!startResult.success) {
     log(`start bat 실패 — 응답 대기(30초): ${startResult.error ?? 'unknown'}`);
     const afterFail = await waitGeoServerReady({ timeoutMs: 30_000 });

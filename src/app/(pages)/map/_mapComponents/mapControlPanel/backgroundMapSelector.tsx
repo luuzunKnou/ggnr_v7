@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { ChevronDown, ChevronUp } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { MAP_LAYER_PANEL_SURFACE_CLASS } from './mapLayerPanelLayout';
 
 // 배경지도 옵션 타입
 export interface BackgroundMapOption {
@@ -154,7 +155,7 @@ function BackgroundMapGroupSection({
           'flex cursor-pointer items-center justify-between w-full px-3 py-2 text-[13px] font-medium transition-colors',
           'bg-slate-100 text-foreground hover:bg-slate-200',
           'dark:bg-white/10 dark:text-white/90 dark:hover:bg-white/15 dark:hover:text-white',
-          hasSelectedItem && 'text-blue-600 dark:text-white'
+          hasSelectedItem && 'text-primary'
         )}
       >
         <div className="flex items-center gap-2">
@@ -188,7 +189,7 @@ function BackgroundMapGroupSection({
                     className={cn(
                       'min-w-0 flex-1 truncate text-xs',
                       leftOn || rightOn
-                        ? 'font-medium text-blue-600 dark:text-white'
+                        ? 'font-medium text-primary'
                         : 'text-slate-700 dark:text-white/90'
                     )}
                     title={option.label}
@@ -246,7 +247,7 @@ function BackgroundMapGroupSection({
                     className={cn(
                       'truncate text-xs',
                       selectedValue === option.id
-                        ? 'font-medium text-blue-600 dark:text-white'
+                        ? 'font-medium text-primary'
                         : 'text-slate-700 dark:text-white/90'
                     )}
                   >
@@ -290,9 +291,9 @@ export function BackgroundMapSelector({
   return (
     <div
       className={cn(
-        'flex flex-col overflow-hidden rounded-[5px] bg-white opacity-90 shadow-xl',
+        'flex flex-col overflow-hidden',
+        MAP_LAYER_PANEL_SURFACE_CLASS,
         splitSelect ? 'w-64' : 'w-56',
-        'dark:border dark:border-white/10 dark:bg-black/40 dark:text-white/90 dark:opacity-100 dark:backdrop-blur-sm',
         className
       )}
     >

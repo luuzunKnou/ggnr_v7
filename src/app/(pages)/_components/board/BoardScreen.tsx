@@ -362,7 +362,7 @@ export function BoardScreen(props: { kind: BoardKind; postId?: number }) {
       : null;
 
   return (
-    <div className="flex flex-col bg-card border border-border rounded-[5px] overflow-visible">
+    <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden rounded-[5px] border border-border bg-card">
       <div className="flex items-center justify-between gap-3 px-5 py-4 border-b border-border bg-muted/20 shrink-0">
         <div className="flex items-center gap-2 min-w-0">
           {view !== 'list' ? (
@@ -410,7 +410,7 @@ export function BoardScreen(props: { kind: BoardKind; postId?: number }) {
       ) : null}
 
       {view === 'list' ? (
-        <>
+        <div className="flex min-h-0 flex-1 flex-col">
           <div className="flex items-center gap-2 px-5 py-3 border-b border-border/60 shrink-0">
             <div className="relative flex-1 max-w-sm">
               <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
@@ -440,9 +440,9 @@ export function BoardScreen(props: { kind: BoardKind; postId?: number }) {
             </Button>
           </div>
 
-          <div className="overflow-visible">
+          <div className="min-h-0 flex-1 overflow-auto">
             <table className="w-full text-sm">
-              <thead className="bg-muted border-b z-10">
+              <thead className="sticky top-0 z-10 border-b bg-muted">
                 <tr className="text-left text-xs text-muted-foreground">
                   <th className="w-14 p-2.5 font-semibold text-center">번호</th>
                   <th className="p-2.5 font-semibold">제목</th>
@@ -539,12 +539,12 @@ export function BoardScreen(props: { kind: BoardKind; postId?: number }) {
               <ChevronRight className="h-4 w-4" />
             </Button>
           </div>
-        </>
+        </div>
       ) : null}
 
       {view === 'detail' && detail ? (
-        <div className="px-5 py-5">
-          <div className="border-b border-border pb-4 mb-4">
+        <div className="flex min-h-0 flex-1 flex-col overflow-auto px-5 py-5">
+          <div className="mb-4 shrink-0 border-b border-border pb-4">
             <div className="flex flex-wrap items-center gap-2 mb-2">
               {kind === 'notice' && detail.noticeIsActive ? (
                 <span className="inline-flex items-center gap-1 rounded bg-primary/10 px-2 py-0.5 text-xs text-primary">
@@ -567,7 +567,7 @@ export function BoardScreen(props: { kind: BoardKind; postId?: number }) {
           </div>
           <div
             className={cn(
-              'prose prose-sm max-w-none text-foreground whitespace-pre-wrap break-words min-h-[200px]',
+              'prose prose-sm max-w-none flex-1 text-foreground whitespace-pre-wrap break-words',
               'dark:prose-invert'
             )}
           >
@@ -575,7 +575,9 @@ export function BoardScreen(props: { kind: BoardKind; postId?: number }) {
               <span className="text-muted-foreground">내용 없음</span>
             )}
           </div>
-          <BoardAttachmentsPanel kind={kind} postKey={detailPostKey} canEdit={loggedIn} />
+          <div className="shrink-0">
+            <BoardAttachmentsPanel kind={kind} postKey={detailPostKey} canEdit={loggedIn} />
+          </div>
         </div>
       ) : null}
 
@@ -584,7 +586,7 @@ export function BoardScreen(props: { kind: BoardKind; postId?: number }) {
       ) : null}
 
       {(view === 'write' || view === 'edit') && (
-        <div className="px-5 py-5 flex flex-col gap-4 overflow-visible">
+        <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-auto px-5 py-5">
           <div className="space-y-2">
             <label className="text-sm font-medium text-foreground">제목</label>
             <Input value={formTitle} onChange={(e) => setFormTitle(e.target.value)} className="h-9" />

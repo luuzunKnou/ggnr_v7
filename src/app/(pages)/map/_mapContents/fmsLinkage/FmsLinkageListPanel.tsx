@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { ArrowDown, ArrowUp, ArrowUpDown, Search, X } from 'lucide-react'
 import { call } from '@/lib/api'
@@ -26,11 +26,47 @@ type ListRow = {
   addrFull: string
 }
 
-type SortKey = 'facilNo' | 'facilKind' | 'facilNm' | 'facilOwner'
+type SortKey = 'facilKind' | 'facilNm' | 'facilOwner' | 'addrFull'
 type SortDir = 'asc' | 'desc'
 type SortSpec = { key: SortKey; dir: SortDir }
 
-const SORTABLE_KEYS = new Set<string>(['facilNo', 'facilKind', 'facilNm', 'facilOwner'])
+const SORTABLE_KEYS = new Set<string>(['facilKind', 'facilNm', 'facilOwner', 'addrFull'])
+
+/** 기본은 이전(종류 100·시설명 100·소유자 90·주소 150). 앞 세 컬럼은 기본 비율로 동시 확장 후 상한, 초과·잔여는 주소 */
+const LIST_COL_KIND_BASE = 100
+const LIST_COL_KIND_MAX = 120
+const LIST_COL_NM_BASE = 100
+const LIST_COL_NM_MAX = 180
+const LIST_COL_OWNER_BASE = 90
+const LIST_COL_OWNER_MAX = 180
+const LIST_COL_ADDR_BASE = 150
+const LIST_COL_REST_MIN =
+  LIST_COL_NM_BASE + LIST_COL_OWNER_BASE + LIST_COL_ADDR_BASE
+
+function computeListColWidths(tableWidth: number): [number, number, number, number] {
+  const baseTotal = LIST_COL_KIND_BASE + LIST_COL_REST_MIN
+  const growSum = LIST_COL_KIND_BASE + LIST_COL_NM_BASE + LIST_COL_OWNER_BASE
+  const extra = Math.max(0, tableWidth - baseTotal)
+
+  const kind = Math.min(
+    LIST_COL_KIND_MAX,
+    LIST_COL_KIND_BASE + (extra * LIST_COL_KIND_BASE) / growSum
+  )
+  const nm = Math.min(
+    LIST_COL_NM_MAX,
+    LIST_COL_NM_BASE + (extra * LIST_COL_NM_BASE) / growSum
+  )
+  const owner = Math.min(
+    LIST_COL_OWNER_MAX,
+    LIST_COL_OWNER_BASE + (extra * LIST_COL_OWNER_BASE) / growSum
+  )
+
+  return [kind, nm, owner, Math.max(0, tableWidth - kind - nm - owner)]
+}
+
+const LIST_COL_WIDTHS_FALLBACK = computeListColWidths(
+  LIST_COL_KIND_BASE + LIST_COL_REST_MIN
+)
 
 type Props = {
   onClose: () => void
@@ -39,27 +75,14 @@ type Props = {
   onGeomToast?: (message: string | null) => void
 }
 
-/** 서버 기본 정렬과 동일 — 번호 속 연도(4자리) → 접두 영문 제거 후 나머지 */
-function compareFacilNo(a: string, b: string): number {
-  const yearOf = (v: string) => {
-    const m = String(v ?? '').match(/[0-9]{4}/)
-    return m ? Number(m[0]) : Number.POSITIVE_INFINITY
-  }
-  const restOf = (v: string) => String(v ?? '').replace(/^[A-Za-z]+/, '')
-  const ya = yearOf(a)
-  const yb = yearOf(b)
-  if (ya !== yb) return ya - yb
-  return restOf(a).localeCompare(restOf(b), 'ko')
-}
-
 function compareText(a: string, b: string): number {
   return String(a ?? '').localeCompare(String(b ?? ''), 'ko', { sensitivity: 'base' })
 }
 
 function compareRows(a: ListRow, b: ListRow, key: SortKey): number {
-  if (key === 'facilNo') return compareFacilNo(a.facilNo, b.facilNo)
   if (key === 'facilKind') return compareText(a.facilKind, b.facilKind)
   if (key === 'facilOwner') return compareText(a.facilOwner, b.facilOwner)
+  if (key === 'addrFull') return compareText(a.addrFull, b.addrFull)
   return compareText(a.facilNm, b.facilNm)
 }
 
@@ -86,6 +109,22 @@ export function FmsLinkageListPanel({
   const [sorts, setSorts] = useState<SortSpec[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const tableScrollRef = useRef<HTMLDivElement>(null)
+  const [listColWidths, setListColWidths] = useState(LIST_COL_WIDTHS_FALLBACK)
+
+  useEffect(() => {
+    const el = tableScrollRef.current
+    if (!el) return
+    const apply = () => {
+      const w = el.clientWidth
+      if (w <= 0) return
+      setListColWidths(computeListColWidths(w))
+    }
+    apply()
+    const ro = new ResizeObserver(apply)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
 
   const displayRows = useMemo(() => {
     if (sorts.length === 0) return rows
@@ -303,7 +342,7 @@ export function FmsLinkageListPanel({
         </div>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-auto scrollbar-thin">
+      <div ref={tableScrollRef} className="min-h-0 flex-1 overflow-auto scrollbar-thin">
         {error && (
           <div className="shrink-0 border-b border-destructive/20 bg-destructive/10 px-3 py-2 text-xs text-destructive">
             {error}
@@ -311,19 +350,18 @@ export function FmsLinkageListPanel({
         )}
         <table className="w-full table-fixed border-collapse text-left text-xs">
           <colgroup>
-            <col className="w-[100px]" />
-            <col className="w-[100px]" />
-            <col className="w-[90px]" />
-            <col className="w-[90px]" />
+            {listColWidths.map((w, i) => (
+              <col key={i} style={{ width: `${w}px` }} />
+            ))}
           </colgroup>
-          <thead className="sticky top-0 z-[1] bg-muted/50">
+          <thead className="sticky top-0 z-[1] bg-muted">
             <tr>
               {FMS_LIST_COLUMNS.map((col) => {
                 if (!isSortKey(col.key)) {
                   return (
                     <th
                       key={col.key}
-                      className="whitespace-nowrap border-b-0 px-1.5 py-1.5 text-center font-semibold text-foreground/90 [box-shadow:inset_0_-2px_0_0_var(--border)]"
+                      className="whitespace-nowrap border-b-0 px-1.5 py-1.5 text-left font-semibold text-foreground/90 [box-shadow:inset_0_-2px_0_0_var(--border)]"
                     >
                       <span className="block truncate">{col.label}</span>
                     </th>
@@ -338,13 +376,13 @@ export function FmsLinkageListPanel({
                 return (
                   <th
                     key={sortKey}
-                    className="whitespace-nowrap border-b-0 px-1.5 py-1.5 text-center font-semibold text-foreground/90 [box-shadow:inset_0_-2px_0_0_var(--border)]"
+                    className="whitespace-nowrap border-b-0 px-1.5 py-1.5 text-left font-semibold text-foreground/90 [box-shadow:inset_0_-2px_0_0_var(--border)]"
                   >
                     <button
                       type="button"
                       onClick={() => toggleSort(sortKey)}
                       className={cn(
-                        'inline-flex max-w-full items-center justify-center gap-0.5 rounded px-0.5 py-0.5 transition-colors hover:bg-muted',
+                        'inline-flex max-w-full items-center justify-start gap-0.5 rounded px-0.5 py-0.5 transition-colors hover:bg-muted',
                         active ? 'text-primary' : 'text-foreground/90'
                       )}
                       title={
@@ -399,9 +437,6 @@ export function FmsLinkageListPanel({
                       isSelected ? 'bg-primary/10 dark:bg-primary/25' : 'hover:bg-muted/50'
                     )}
                   >
-                    <td className="truncate px-2 py-2 tabular-nums text-foreground" title={row.facilNo}>
-                      {row.facilNo || '—'}
-                    </td>
                     <td className="truncate px-2 py-2 text-foreground" title={row.facilKind}>
                       {row.facilKind || '—'}
                     </td>
@@ -410,6 +445,9 @@ export function FmsLinkageListPanel({
                     </td>
                     <td className="truncate px-2 py-2 text-foreground" title={row.facilOwner}>
                       {row.facilOwner || '—'}
+                    </td>
+                    <td className="truncate px-2 py-2 text-foreground" title={row.addrFull}>
+                      {row.addrFull || '—'}
                     </td>
                   </tr>
                 )
