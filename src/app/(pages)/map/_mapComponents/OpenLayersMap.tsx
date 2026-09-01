@@ -40,6 +40,7 @@ import { useBuildingRoadCatalog } from './hooks/useBuildingRoadCatalog';
 import { useCadastralCatalog } from './hooks/useCadastralCatalog';
 import { useJimokCatalog } from './hooks/useJimokCatalog';
 import { useMapInstance } from './hooks/useMapInstance';
+import { MapScaleIndicator } from './hooks/MapScaleIndicator';
 import { useMapContext } from './MapContext';
 import { useBackgroundLayer } from './hooks/useBackgroundLayer';
 import { useMapStatePersist, loadPersistedMapState } from './hooks/useMapStatePersist';
@@ -2283,6 +2284,7 @@ export default function OpenLayersMap({
   return (
     <div className="relative w-full h-full">
       <div ref={mapRef} className="w-full h-full bg-black [&_.ol-viewport]:bg-black" />
+      <MapScaleIndicator map={mapReady ? mapInstanceRef.current : null} mapReady={mapReady} />
 
       <LayerRowGeomEditHandler centerPixel={centerPixel} />
 
