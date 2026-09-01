@@ -33,7 +33,6 @@ import { VillagePatrolListPanel } from "./_mapContents/safty/villagePatrol/Villa
 import { SafetyHospitalBadPanel } from "./_mapContents/safty/safetyHospitalBad/SafetyHospitalBadPanel"
 import { SafetyJsjReservoirPanel } from "./_mapContents/safty/saftyJsj/SafetyJsjReservoirPanel"
 import { RoadDocManualPanel } from "./_mapContents/road/roadDoc/roadDocManualPanel"
-import { RoadWorkHandbookListPanel } from "./_mapContents/road/roadWorkHandbook/RoadWorkHandbookListPanel"
 import { RoadWorkHandbookDetailPanel } from "./_mapContents/road/roadWorkHandbook/RoadWorkHandbookDetailPanel"
 import { RoadWorkHandbookMapProvider } from "./_mapContents/road/roadWorkHandbook/roadWorkHandbookMapContext"
 import { RoadWorkHandbookMapHandler } from "./_mapContents/road/roadWorkHandbook/RoadWorkHandbookMapHandler"
@@ -157,6 +156,7 @@ import {
   clearServiceMenuLayerState,
   ensureRoadLedgerSummaryLayer,
 } from "@/lib/mapServiceMenuLayers"
+import { normalizeOpenedToken } from "@/lib/mapServiceOpened"
 import { MapSidebar } from "./_mapComponents/map-sidebar"
 import { MapSearchBar } from "./_mapComponents/map-search-bar"
 import { MapContextProvider, useMapContext } from "./_mapComponents/MapContext"
@@ -248,9 +248,6 @@ const ROAD_DOC_PANEL_DEFAULT_WIDTH = 380
 const ROAD_DOC_PANEL_MIN_WIDTH = 280
 const ROAD_DOC_PANEL_MAX_WIDTH = 640
 
-const ROAD_WORK_HANDBOOK_PANEL_DEFAULT_WIDTH = 380
-const ROAD_WORK_HANDBOOK_PANEL_MIN_WIDTH = 320
-const ROAD_WORK_HANDBOOK_PANEL_MAX_WIDTH = 560
 const ROAD_WORK_HANDBOOK_DETAIL_DEFAULT_WIDTH = 400
 const ROAD_WORK_HANDBOOK_DETAIL_MIN_WIDTH = 320
 const ROAD_WORK_HANDBOOK_DETAIL_MAX_WIDTH = 640
@@ -488,7 +485,8 @@ function MapLayoutContent({
     }
   }
   const rawOpened = searchParams.get("opened")?.split(",").filter(Boolean) || []
-  const openedWindows = rawOpened.map((w) => (w === "dataQuery" ? STANDARD_LIST_OPENED_KEY : w))
+  const handbookDeeplink = rawOpened.includes(ROAD_WORK_HANDBOOK_OPENED_KEY)
+  const openedWindows = rawOpened.map(normalizeOpenedToken)
   const systemKeyFromUrl = searchParams.get("system") ?? ""
   const serviceMenuKey = useMemo(
     () => openedWindows.find((w) => w !== LIST_VIEW_OPENED_KEY && w !== "layerSetting") ?? "",
@@ -522,7 +520,6 @@ function MapLayoutContent({
   const safetyHospitalBedOpen = openedWindows.includes(SAFETY_HOSPITAL_BED_OPENED_KEY)
   const jsjWaterLevelOpen = openedWindows.includes(JSJ_WATER_LEVEL_OPENED_KEY)
   const roadDocOpen = openedWindows.includes(ROAD_DOC_OPENED_KEY)
-  const roadWorkHandbookOpen = openedWindows.includes(ROAD_WORK_HANDBOOK_OPENED_KEY)
   const roadCctvOpen = openedWindows.includes(ROAD_CCTV_OPENED_KEY)
   const roadInfraOpen = openedWindows.includes(ROAD_INFRA_OPENED_KEY)
   const parcelAnalysisOpen = openedWindows.includes(PARCEL_ANALYSIS_OPENED_KEY)
@@ -599,7 +596,7 @@ function MapLayoutContent({
   const occupationLedgerDetailOpen = occupationLedgerOpen && Boolean(occupationLedgerDetailId)
   const [roadWorkHandbookDetail, setRoadWorkHandbookDetail] = useState<HandbookDetailSelection | null>(null)
   const [roadWorkHandbookMode, setRoadWorkHandbookMode] = useState<HandbookViewMode>("target")
-  const roadWorkHandbookDetailOpen = roadWorkHandbookOpen && roadWorkHandbookDetail != null
+  const roadWorkHandbookDetailOpen = roadDocOpen && roadWorkHandbookDetail != null
   /** 보상편입용지 — DB(road_reward) 조회·저장 */
   const [roadRewardCases, setRoadRewardCases] = useState<RoadRewardCase[]>([])
   const [roadRewardSelectedId, setRoadRewardSelectedId] = useState<string | null>(null)
@@ -707,9 +704,6 @@ function MapLayoutContent({
   )
   const [jsjReservoirPanelWidth, setJsjReservoirPanelWidth] = useState(JSJ_RESERVOIR_PANEL_DEFAULT_WIDTH)
   const [roadDocPanelWidth, setRoadDocPanelWidth] = useState(ROAD_DOC_PANEL_DEFAULT_WIDTH)
-  const [roadWorkHandbookPanelWidth, setRoadWorkHandbookPanelWidth] = useState(
-    ROAD_WORK_HANDBOOK_PANEL_DEFAULT_WIDTH
-  )
   const [roadWorkHandbookDetailWidth, setRoadWorkHandbookDetailWidth] = useState(
     ROAD_WORK_HANDBOOK_DETAIL_DEFAULT_WIDTH
   )
@@ -823,7 +817,6 @@ function MapLayoutContent({
     (safetyHospitalBedOpen ? safetyHospitalBedPanelWidth : 0) +
     (jsjWaterLevelOpen ? jsjReservoirPanelWidth : 0) +
     (roadDocOpen ? roadDocPanelWidth : 0) +
-    (roadWorkHandbookOpen ? roadWorkHandbookPanelWidth : 0) +
     (roadWorkHandbookDetailOpen ? roadWorkHandbookDetailWidth : 0) +
     (roadCctvOpen ? roadCctvPanelWidth : 0) +
     // (useLedgerProtoOpen ? useLedgerProtoPanelWidth : 0) +
@@ -934,10 +927,8 @@ function MapLayoutContent({
   const jsjReservoirPanelLeftPx =
     safetyHospitalBedPanelLeftPx + (safetyHospitalBedOpen ? safetyHospitalBedPanelWidth : 0)
   const roadDocPanelLeftPx = jsjReservoirPanelLeftPx + (jsjWaterLevelOpen ? jsjReservoirPanelWidth : 0)
-  const roadWorkHandbookPanelLeftPx =
-    roadDocPanelLeftPx + (roadDocOpen ? roadDocPanelWidth : 0)
   const roadWorkHandbookDetailLeftPx =
-    roadWorkHandbookPanelLeftPx + (roadWorkHandbookOpen ? roadWorkHandbookPanelWidth : 0)
+    roadDocPanelLeftPx + (roadDocOpen ? roadDocPanelWidth : 0)
   const roadCctvPanelLeftPx =
     roadWorkHandbookDetailLeftPx + (roadWorkHandbookDetailOpen ? roadWorkHandbookDetailWidth : 0)
   // 점용대장(프) 더미 leftPx 비활성 — 점사용료는 CCTV 다음에 바로 배치
@@ -1401,11 +1392,11 @@ function MapLayoutContent({
   }, [occupationLedgerOpen])
 
   useEffect(() => {
-    if (!roadWorkHandbookOpen) {
+    if (!roadDocOpen) {
       setRoadWorkHandbookDetail(null)
       setRoadWorkHandbookMode("target")
     }
-  }, [roadWorkHandbookOpen])
+  }, [roadDocOpen])
 
   useEffect(() => {
     setOccupationLedgerDetailId(null)
@@ -1642,14 +1633,11 @@ function MapLayoutContent({
   }
 
   const handleCloseRoadDoc = () => {
-    const next = openedWindows.filter((w) => w !== ROAD_DOC_OPENED_KEY)
-    setOpened(next)
-  }
-
-  const handleCloseRoadWorkHandbook = () => {
     setRoadWorkHandbookDetail(null)
     setRoadWorkHandbookMode("target")
-    const next = openedWindows.filter((w) => w !== ROAD_WORK_HANDBOOK_OPENED_KEY)
+    const next = openedWindows.filter(
+      (w) => w !== ROAD_DOC_OPENED_KEY && w !== ROAD_WORK_HANDBOOK_OPENED_KEY
+    )
     setOpened(next)
   }
 
@@ -1666,7 +1654,7 @@ function MapLayoutContent({
   const handleOpenDataPanel = useCallback(
     (tableName: string) => {
       const rawOpened = searchParams.get("opened")?.split(",").filter(Boolean) || []
-      const opened = rawOpened.map((w) => (w === "dataQuery" ? STANDARD_LIST_OPENED_KEY : w))
+      const opened = rawOpened.map(normalizeOpenedToken)
       const nextOpened = opened.includes(LIST_VIEW_OPENED_KEY) ? opened : [...opened, LIST_VIEW_OPENED_KEY]
       const current = new URLSearchParams(Array.from(searchParams.entries()))
       if (nextOpened.length > 0) current.set("opened", nextOpened.join(","))
@@ -1681,7 +1669,7 @@ function MapLayoutContent({
 
   const handleClearDataSelection = useCallback(() => {
     const rawOpened = searchParams.get("opened")?.split(",").filter(Boolean) || []
-    const opened = rawOpened.map((w) => (w === "dataQuery" ? STANDARD_LIST_OPENED_KEY : w))
+    const opened = rawOpened.map(normalizeOpenedToken)
     const next = opened.filter((w) => w !== LIST_VIEW_OPENED_KEY)
     const current = new URLSearchParams(Array.from(searchParams.entries()))
     if (next.length > 0) current.set("opened", next.join(","))
@@ -2633,40 +2621,27 @@ function MapLayoutContent({
             </div>
           )}
           {roadDocOpen && (
-            <div className="pointer-events-auto shrink-0">
-              <MapSideListPanel
-                width={roadDocPanelWidth}
-                minWidth={ROAD_DOC_PANEL_MIN_WIDTH}
-                maxWidth={ROAD_DOC_PANEL_MAX_WIDTH}
-                leftOffsetPx={roadDocPanelLeftPx}
-                onWidthChange={setRoadDocPanelWidth}
-                contentClassName="overflow-hidden"
-              >
-                <RoadDocManualPanel onClose={handleCloseRoadDoc} />
-              </MapSideListPanel>
-            </div>
-          )}
-          {roadWorkHandbookOpen && (
             <RoadWorkHandbookMapProvider
               sessionKey={handbookMapSessionKey(roadWorkHandbookMode, roadWorkHandbookDetail)}
             >
               <div className="contents">
                 <div className="pointer-events-auto shrink-0">
                   <MapSideListPanel
-                    width={roadWorkHandbookPanelWidth}
-                    minWidth={ROAD_WORK_HANDBOOK_PANEL_MIN_WIDTH}
-                    maxWidth={ROAD_WORK_HANDBOOK_PANEL_MAX_WIDTH}
-                    leftOffsetPx={roadWorkHandbookPanelLeftPx}
-                    onWidthChange={setRoadWorkHandbookPanelWidth}
+                    width={roadDocPanelWidth}
+                    minWidth={ROAD_DOC_PANEL_MIN_WIDTH}
+                    maxWidth={ROAD_DOC_PANEL_MAX_WIDTH}
+                    leftOffsetPx={roadDocPanelLeftPx}
+                    onWidthChange={setRoadDocPanelWidth}
                     contentClassName="overflow-hidden"
                   >
-                  <RoadWorkHandbookListPanel
-                    onClose={handleCloseRoadWorkHandbook}
-                    mode={roadWorkHandbookMode}
-                    onModeChange={setRoadWorkHandbookMode}
-                    selected={roadWorkHandbookDetail}
-                    onSelect={setRoadWorkHandbookDetail}
-                  />
+                    <RoadDocManualPanel
+                      onClose={handleCloseRoadDoc}
+                      handbookMode={roadWorkHandbookMode}
+                      onHandbookModeChange={setRoadWorkHandbookMode}
+                      handbookSelected={roadWorkHandbookDetail}
+                      onHandbookSelect={setRoadWorkHandbookDetail}
+                      startOnHandbook={handbookDeeplink}
+                    />
                   </MapSideListPanel>
                 </div>
                 {roadWorkHandbookDetail && (

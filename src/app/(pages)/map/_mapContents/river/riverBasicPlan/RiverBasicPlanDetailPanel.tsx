@@ -32,6 +32,7 @@ import { useMapContext } from "../../../_mapComponents/MapContext";
 import { MAP_AUTO_NAV_MAX_ZOOM } from "../../../_mapComponents/config/mapDefaults";
 import { scheduleFitMapToExtent3857 } from "../../../_mapComponents/config/mapAutoNavigation";
 import { getRowKey, getRowValueByField } from "../../../_mapComponents/standard/defineLayerRowUtils";
+import { useRiverBasicPlanExistingMapLayers } from "./useRiverBasicPlanExistingMapLayers";
 import {
   isImageServiceFileName,
   isPdfServiceFileName,
@@ -131,13 +132,19 @@ export function RiverBasicPlanDetailPanel({ tab, riverName, onClose }: Props) {
   const hdLayer = riverBasicPlanHdDefineTable(tab);
   const structureParent = riverBasicPlanGdParentDefineTable(tab);
   const layerByLabel = useMemo(() => layerByLabelForTab(tab), [tab]);
+  const existingMapLayers = useRiverBasicPlanExistingMapLayers(tab);
+  const existingMapLayerSet = useMemo(
+    () => new Set((existingMapLayers ?? []).map((n) => n.toLowerCase())),
+    [existingMapLayers]
+  );
   /** 구조물도 켜기 대기 — 자식 목록 도착 후 분할 레이어 ON */
   const pendingEnableStructureChildrenRef = useRef(false);
 
-  /** 하천 선택 시 확장패널 토글칩 레이어(색인도·기본계획·종단·횡단·구조물 WMS) 항상 켜짐 */
+  /** 하천 선택 시 확장패널 토글칩 레이어(색인도·기본계획·종단·횡단·구조물 WMS) — 있는 테이블만 */
   useEffect(() => {
-    if (!riverName.trim() || !setVisibleLayerNames) return;
+    if (!riverName.trim() || !setVisibleLayerNames || existingMapLayers == null) return;
     const otherTab: RiverType = tab === "smallRiver" ? "river" : "smallRiver";
+    const allow = (name: string) => existingMapLayerSet.has(name.toLowerCase());
     setVisibleLayerNames((prev) => {
       const next = new Set(prev);
       next.delete(riverBasicPlanIndexDefineTable(otherTab));
@@ -146,12 +153,19 @@ export function RiverBasicPlanDetailPanel({ tab, riverName, onClose }: Props) {
       next.delete(riverBasicPlanHdDefineTable(otherTab));
       for (const id of riverBasicPlanGdWmsDefineTables(otherTab)) next.delete(id);
       next.delete(riverBasicPlanGdParentDefineTable(otherTab));
-      next.add(indexLayer);
-      next.add(planAsLayer);
-      next.add(jdLayer);
-      next.add(hdLayer);
+      if (allow(indexLayer)) next.add(indexLayer);
+      else next.delete(indexLayer);
+      if (allow(planAsLayer)) next.add(planAsLayer);
+      else next.delete(planAsLayer);
+      if (allow(jdLayer)) next.add(jdLayer);
+      else next.delete(jdLayer);
+      if (allow(hdLayer)) next.add(hdLayer);
+      else next.delete(hdLayer);
       next.delete(structureParent);
-      for (const id of riverBasicPlanGdWmsDefineTables(tab)) next.add(id);
+      for (const id of riverBasicPlanGdWmsDefineTables(tab)) {
+        if (allow(id)) next.add(id);
+        else next.delete(id);
+      }
       return next;
     });
     // 지방하천: defineLayer 자식 목록이 늦게 오면 그 목록으로 재적용
@@ -165,6 +179,8 @@ export function RiverBasicPlanDetailPanel({ tab, riverName, onClose }: Props) {
     jdLayer,
     hdLayer,
     structureParent,
+    existingMapLayers,
+    existingMapLayerSet,
   ]);
 
   const [plans, setPlans] = useState<PlanItem[]>([]);

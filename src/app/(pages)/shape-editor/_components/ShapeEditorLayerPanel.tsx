@@ -234,11 +234,14 @@ export function ShapeEditorLayerPanel({
 }
 
 function getWorkLayerLegendUrl(tableName: string): string {
-  const url = new URL(getLegendGraphicUrl(tableName, tableName));
-  url.searchParams.set('LEGEND_OPTIONS', JSON.stringify({ forceLabels: false }));
-  url.searchParams.set('WIDTH', '16');
-  url.searchParams.set('HEIGHT', '16');
-  return url.toString();
+  const src = getLegendGraphicUrl(tableName, tableName);
+  const q = src.indexOf('?');
+  const path = q >= 0 ? src.slice(0, q) : src;
+  const params = new URLSearchParams(q >= 0 ? src.slice(q + 1) : '');
+  params.set('LEGEND_OPTIONS', JSON.stringify({ forceLabels: false }));
+  params.set('WIDTH', '16');
+  params.set('HEIGHT', '16');
+  return `${path}?${params.toString()}`;
 }
 
 function WorkLayerLegend({
