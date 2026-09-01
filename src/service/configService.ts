@@ -767,18 +767,123 @@ export function getSystemListDebug(): {
   if (mapStr) {
     systems = applyServiceSystemMap(systems, parseServiceSystemMap(mapStr))
   }
-  /** runtime.env DISABLED_SERVICES — 프로젝트별로 사이드바 메뉴(ser_eng) 숨김 */
-  const disabledStr = (runtime.DISABLED_SERVICES ?? "").trim()
-  if (disabledStr) {
-    const disabled = new Set(disabledStr.split(",").map((s) => s.trim()).filter(Boolean))
-    if (disabled.size > 0) {
-      systems = systems.map((s) => ({
-        ...s,
-        serviceList: (s.serviceList ?? []).filter((eng) => !disabled.has(String(eng).trim())),
-      }))
+  const serHome = buildSerEngHomeSysKeys(systems)
+  systems = applyDisabledServicesFilter(systems, runtime)
+  systems = applyPrivateShowServicesFilter(systems, serHome, runtime)
+  return { systems, debug: base.debug }
+}
+
+function parseCsvEnvSet(...parts: (string | undefined)[]): Set<string> {
+  const out = new Set<string>()
+  for (const part of parts) {
+    const s = (part ?? "").trim()
+    if (!s) continue
+    for (const item of s.split(",")) {
+      const k = item.trim()
+      if (k) out.add(k)
     }
   }
-  return { systems, debug: base.debug }
+  return out
+}
+
+/** ser_eng → systemList.config(및 SERVICE_SYSTEM_MAP)상 소속 sys_key */
+function buildSerEngHomeSysKeys(systems: SystemConfigItem[]): Map<string, string[]> {
+  const map = new Map<string, string[]>()
+  for (const s of systems) {
+    const sysKey = s.sys_key?.trim()
+    if (!sysKey) continue
+    for (const eng of s.serviceList ?? []) {
+      const e = String(eng).trim()
+      if (!e) continue
+      const prev = map.get(e) ?? []
+      if (!prev.includes(sysKey)) prev.push(sysKey)
+      map.set(e, prev)
+    }
+  }
+  return map
+}
+
+function getPrivateServiceEngSet(): Set<string> {
+  return new Set(
+    getServiceList()
+      .ser.filter((s) => s.ser_is_private === true)
+      .map((s) => s.ser_eng?.trim())
+      .filter((v): v is string => Boolean(v))
+  )
+}
+
+/**
+ * runtime SHOW_SERVICES — common ∪ project (쉼표 병합).
+ * 기능목록(serviceList.config) ser_is_private=true 인 기능은 기본 메뉴 제외,
+ * SHOW_SERVICES 에 ser_eng 가 있으면 이 프로젝트 systemList·사이드바에 포함.
+ */
+export function getShowServiceEngSet(): Set<string> {
+  noStore()
+  const common = parseEnvFileToMap(resolveCommonRuntimeEnvPath())
+  const { path: runtimeEnvPath } = resolveRuntimeEnvPath()
+  const project = parseEnvFileToMap(runtimeEnvPath)
+  return parseCsvEnvSet(common.SHOW_SERVICES, project.SHOW_SERVICES)
+}
+
+function applyPrivateShowServicesFilter(
+  systems: SystemConfigItem[],
+  serHome: Map<string, string[]>,
+  runtime: Record<string, string>
+): SystemConfigItem[] {
+  const showSet = getShowServiceEngSet()
+  const privateSet = getPrivateServiceEngSet()
+  const disabledSet = parseCsvEnvSet(runtime.DISABLED_SERVICES)
+
+  const result = systems.map((s) => ({
+    ...s,
+    serviceList: (s.serviceList ?? []).filter((eng) => {
+      const e = String(eng).trim()
+      if (!privateSet.has(e)) return true
+      return showSet.has(e)
+    }),
+  }))
+
+  const sysByKey = new Map(result.map((s) => [s.sys_key?.trim() ?? "", { ...s }]))
+  for (const eng of showSet) {
+    if (disabledSet.has(eng)) continue
+    for (const sysKey of serHome.get(eng) ?? []) {
+      const row = sysByKey.get(sysKey)
+      if (!row) continue
+      const list = row.serviceList ?? []
+      if (!list.includes(eng)) row.serviceList = [...list, eng]
+    }
+  }
+  return [...sysByKey.values()]
+}
+
+/** runtime.env DISABLED_SERVICES — 현재 프로젝트에서 메뉴·권한매핑 대상에서 제외할 ser_eng */
+export function getDisabledServiceEngSet(): Set<string> {
+  return parseCsvEnvSet(getRuntimeEnvVars().DISABLED_SERVICES)
+}
+
+/** getSystemList 적용 후 이 프로젝트에 노출 가능한 ser_eng (DISABLED_SERVICES 제외) */
+export function getProjectAvailableServiceEngSet(): Set<string> {
+  const out = new Set<string>()
+  for (const sys of getSystemList().systems) {
+    for (const eng of sys.serviceList ?? []) {
+      const key = String(eng).trim()
+      if (key) out.add(key)
+    }
+  }
+  return out
+}
+
+function applyDisabledServicesFilter(
+  systems: SystemConfigItem[],
+  runtime: Record<string, string>
+): SystemConfigItem[] {
+  /** 프로젝트별 메뉴 강제 제외 (SHOW_SERVICES·비공개보다 우선) */
+  const disabled = parseCsvEnvSet(runtime.DISABLED_SERVICES)
+  if (disabled.size === 0) return systems
+  return systems.map((s) => ({
+    ...s,
+    serviceList: (s.serviceList ?? []).filter((eng) => !disabled.has(String(eng).trim())),
+  }))
 }
 
 /**
