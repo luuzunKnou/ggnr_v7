@@ -17,7 +17,6 @@ import {
 } from '@/lib/vworldParcelLandClient';
 import { getAddressFromCoord, searchAddress } from '../addressSearch/vworldAddressSearch';
 import { transformCoordinate } from '../services/coordinateService';
-import { getAddressFromCoord } from '../addressSearch/vworldAddressSearch';
 
 type JsonObject = Record<string, unknown>;
 
