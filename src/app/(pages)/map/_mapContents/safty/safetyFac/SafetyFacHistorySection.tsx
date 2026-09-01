@@ -309,25 +309,25 @@ export function SafetyFacHistorySection({ hisGubun, ftrIdn }: Props) {
                       </th>
                       <th
                         scope="col"
-                        className="bg-muted px-1.5 py-1.5 text-center text-[12px] font-medium text-foreground/90"
+                        className="bg-muted px-1.5 py-1.5 text-left text-[12px] font-medium text-foreground/90"
                       >
                         내용
                       </th>
                       <th
                         scope="col"
-                        className="bg-muted px-1.5 py-1.5 text-center text-[12px] font-medium text-foreground/90"
+                        className="bg-muted px-1.5 py-1.5 text-left text-[12px] font-medium text-foreground/90"
                       >
                         작성자
                       </th>
                       <th
                         scope="col"
-                        className="bg-muted px-1.5 py-1.5 text-center text-[12px] font-medium text-foreground/90"
+                        className="bg-muted px-1.5 py-1.5 text-left text-[12px] font-medium text-foreground/90"
                       >
                         작성일시
                       </th>
                       <th
                         scope="col"
-                        className="bg-muted px-1 py-1.5 text-center text-[12px] font-medium text-foreground/90"
+                        className="bg-muted px-1 py-1.5 text-left text-[12px] font-medium text-foreground/90"
                       >
                         <span className="sr-only">삭제</span>
                       </th>
@@ -378,25 +378,25 @@ export function SafetyFacHistorySection({ hisGubun, ftrIdn }: Props) {
                               {index + 1}
                             </td>
                             <td
-                              className="min-w-0 truncate px-1.5 py-1.5 text-center align-middle"
+                              className="min-w-0 truncate px-1.5 py-1.5 text-left align-middle"
                               title={it.content}
                             >
                               {it.content}
                             </td>
                             <td
-                              className="truncate px-1.5 py-1.5 text-center align-middle"
+                              className="truncate px-1.5 py-1.5 text-left align-middle"
                               title={it.author}
                             >
                               {it.author}
                             </td>
                             <td
-                              className="truncate px-1.5 py-1.5 text-center align-middle text-[10px] text-muted-foreground"
+                              className="truncate px-1.5 py-1.5 text-left align-middle text-[10px] text-muted-foreground"
                               title={it.createdAt}
                             >
                               {it.createdAt}
                             </td>
                             <td className="px-0.5 py-1 align-middle">
-                              <div className="flex items-center justify-center">
+                              <div className="flex items-center justify-start">
                                 <button
                                   type="button"
                                   className="inline-flex h-6 w-6 cursor-pointer items-center justify-center rounded text-muted-foreground hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/40"
