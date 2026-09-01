@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { Search, X } from 'lucide-react'
 import { call } from '@/lib/api'
 import { cn } from '@/lib/utils'
@@ -34,9 +34,7 @@ export function GroundwaterPermitListPanel({
   onSelectDetailId,
 }: Props) {
   const mapContext = useMapContext()
-  const mapContextRef = useRef(mapContext)
-  mapContextRef.current = mapContext
-  const layerAddedByPanelRef = useRef(false)
+  const setVisibleLayerNames = mapContext?.setVisibleLayerNames
 
   const [keyword, setKeyword] = useState('')
   const [debouncedKeyword, setDebouncedKeyword] = useState('')
@@ -45,30 +43,17 @@ export function GroundwaterPermitListPanel({
   const [error, setError] = useState<string | null>(null)
   const { clearHighlight } = useGroundwaterPermitMapHighlight()
 
-  /** 패널 열면 지하수 개발허가 레이어를 켜고, 이 패널이 켠 경우만 닫을 때 끈다 */
+  /** 패널이 열려 있으면 지하수 개발허가 레이어를 항상 켠다. 닫을 때 끄지 않는다. */
   useEffect(() => {
-    const ctx = mapContextRef.current
+    if (!setVisibleLayerNames) return
     const lid = GROUNDWATER_PERMIT_WMS_LAYER_ID.toLowerCase()
-    if (!ctx?.setVisibleLayerNames) return
-    const alreadyOn = (ctx.visibleLayerNames ?? new Set<string>()).has(lid)
-    if (!alreadyOn) {
-      ctx.setVisibleLayerNames((prev) => new Set(prev).add(lid))
-      layerAddedByPanelRef.current = true
-    } else {
-      layerAddedByPanelRef.current = false
-    }
-    return () => {
-      const c = mapContextRef.current
-      if (!layerAddedByPanelRef.current || !c?.setVisibleLayerNames) return
-      c.setVisibleLayerNames((prev) => {
-        if (!prev.has(lid)) return prev
-        const next = new Set(prev)
-        next.delete(lid)
-        return next
-      })
-      layerAddedByPanelRef.current = false
-    }
-  }, [])
+    setVisibleLayerNames((prev) => {
+      for (const n of prev) {
+        if (n.toLowerCase() === lid) return prev
+      }
+      return new Set(prev).add(lid)
+    })
+  }, [setVisibleLayerNames])
 
   const handleClose = useCallback(() => {
     clearHighlight()
