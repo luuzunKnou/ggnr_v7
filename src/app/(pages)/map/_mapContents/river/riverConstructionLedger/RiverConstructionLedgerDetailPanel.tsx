@@ -2,6 +2,7 @@
 
 import {
   Fragment,
+  useCallback,
   useEffect,
   useMemo,
   useRef,
@@ -679,11 +680,14 @@ export function RiverConstructionLedgerDetailPanel({ row, onClose }: Props) {
   );
   /** 신규 필지 도형 그리기 대상 인덱스 — null이면 기존 도형 전체 자유 수정 */
   const [parcelDrawIdx, setParcelDrawIdx] = useState<number | null>(null);
+  /** 필지 추가·삭제 시에만 편집 레이어 재구성 (도형 수정만으로는 재구성 안 함) */
+  const [parcelLayerEpoch, setParcelLayerEpoch] = useState(0);
   const parcelsSnapshotRef = useRef<LayerRowParcelItem[]>([]);
   const parcelEditLayerRef = useRef<{
     layer: VectorLayer<VectorSource>;
     source: VectorSource;
   } | null>(null);
+  const syncParcelEditSourceRef = useRef<(() => void) | null>(null);
   const [attachmentFolders, setAttachmentFolders] = useState<string[]>([]);
   const [attachmentTab, setAttachmentTab] = useState<string>(CONS_ATTACH_ROOT_FOLDER);
   const [attachRefreshNonce, setAttachRefreshNonce] = useState(0);
@@ -874,10 +878,15 @@ export function RiverConstructionLedgerDetailPanel({ row, onClose }: Props) {
     );
   };
 
+  const flushParcelEditSourceToDraft = useCallback(() => {
+    syncParcelEditSourceRef.current?.();
+  }, []);
+
   const parcels = row.parcels ?? [];
 
   /** 필지 목록에 빈 행을 넣고, 바로 지도에서 도형을 그리기 시작 */
   const handleAddParcelRow = () => {
+    flushParcelEditSourceToDraft();
     const next: LayerRowParcelItem = {
       address: "",
       riverName: "",
@@ -919,10 +928,12 @@ export function RiverConstructionLedgerDetailPanel({ row, onClose }: Props) {
   };
 
   const handleRemoveParcel = (index: number) => {
+    flushParcelEditSourceToDraft();
     const next = draftParcelsRef.current.filter((_, i) => i !== index);
     draftParcelsRef.current = next;
     setDraftParcels(next);
     patchRow((r) => ({ ...r, parcels: next }));
+    setParcelLayerEpoch((v) => v + 1);
     setParcelDrawIdx((prev) => {
       if (prev == null) return null;
       if (prev === index) return null;
@@ -1037,16 +1048,19 @@ export function RiverConstructionLedgerDetailPanel({ row, onClose }: Props) {
     map.addLayer(layer);
     map.addInteraction(modify);
     parcelEditLayerRef.current = { layer, source };
+    syncParcelEditSourceRef.current = syncFromSource;
 
     return () => {
+      syncFromSource();
+      syncParcelEditSourceRef.current = null;
       modify.un("modifyend", syncFromSource);
       map.removeInteraction(modify);
       map.removeLayer(layer);
       source.clear();
       parcelEditLayerRef.current = null;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- 편집·필지 개수 변경 시에만 레이어 재구성
-  }, [editing, parcelDrawIdx, draftParcels.length, mapContext?.mapInstanceRef]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 편집·그리기 전환·필지 구조 변경 시에만 레이어 재구성
+  }, [editing, parcelDrawIdx, parcelLayerEpoch, mapContext?.mapInstanceRef]);
 
   /** 신규 필지 도형 그리기 */
   useEffect(() => {
@@ -1150,6 +1164,7 @@ export function RiverConstructionLedgerDetailPanel({ row, onClose }: Props) {
       window.alert("공사명을 입력하세요.");
       return;
     }
+    flushParcelEditSourceToDraft();
     const values = ledgerRowToConsDataAsValues({
       ...draft,
       riverNames,

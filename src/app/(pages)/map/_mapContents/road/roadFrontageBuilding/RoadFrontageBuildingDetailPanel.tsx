@@ -22,10 +22,6 @@ import {
   withServiceFileThumbQuery,
 } from '../../../_mapComponents/standard/useServiceFileData';
 import {
-  ServiceFileImagePreview,
-  type ServiceFilePreviewItem,
-} from '../../../_mapComponents/standard/ServiceFileImagePreview';
-import {
   deleteFolderFiles,
   firstFolderImageUrl,
   ROAD_FRONTAGE_BUILDING_EXTRA_ATTACH_FOLDER,
