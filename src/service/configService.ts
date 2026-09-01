@@ -826,6 +826,13 @@ export function getShowServiceEngSet(): Set<string> {
   return parseCsvEnvSet(common.SHOW_SERVICES, project.SHOW_SERVICES)
 }
 
+/** 클라이언트용. SHOW_SERVICES(공용∪프로젝트)에 ser_eng 가 있으면 shown */
+export function isShowService(params?: { serEng?: string }): { shown: boolean } {
+  const eng = typeof params?.serEng === "string" ? params.serEng.trim() : ""
+  if (!eng) return { shown: false }
+  return { shown: getShowServiceEngSet().has(eng) }
+}
+
 function applyPrivateShowServicesFilter(
   systems: SystemConfigItem[],
   serHome: Map<string, string[]>,
