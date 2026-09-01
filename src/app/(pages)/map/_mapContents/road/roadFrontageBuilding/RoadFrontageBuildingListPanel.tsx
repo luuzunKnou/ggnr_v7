@@ -1,14 +1,12 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Layers, Search, X } from 'lucide-react';
 import { call } from '@/lib/api';
 import { formatAddressStripSidoSigungu } from '@/lib/formatAddressStripAdmin';
 import { cn } from '@/lib/utils';
 import { LayerRowAddButton, LayerRowPanelButton } from '../../../_mapComponents/layerRowEdit';
 import { useMapContext } from '../../../_mapComponents/MapContext';
-import { scheduleFitMapToExtent3857 } from '../../../_mapComponents/config/mapAutoNavigation';
-import { MAP_AUTO_NAV_MAX_ZOOM } from '../../../_mapComponents/config/mapDefaults';
 import {
   isRoadNetworkWmsVisible,
   toggleRoadNetworkWmsLayers,
@@ -17,9 +15,9 @@ import {
   ROAD_FRONTAGE_BUILDING_NEW_ID,
   formatRouteNoName,
   isNewRoadFrontageBuildingId,
-  ledgerExtent3857,
   type RoadFrontageBuildingLedger,
 } from './roadFrontageBuildingMock';
+import { useRoadFrontageBuildingMapHighlight } from './useRoadFrontageBuildingMapHighlight';
 
 type Props = {
   selectedId: string | null;
@@ -43,6 +41,7 @@ export function RoadFrontageBuildingListPanel({
   refreshKey = 0,
 }: Props) {
   const mapContext = useMapContext();
+  const { highlightLedger, clearHighlight } = useRoadFrontageBuildingMapHighlight();
   const [keyword, setKeyword] = useState('');
   const [items, setItems] = useState<RoadFrontageBuildingLedger[]>([]);
   const [loading, setLoading] = useState(false);
@@ -82,15 +81,29 @@ export function RoadFrontageBuildingListPanel({
     return () => clearTimeout(t);
   }, [keyword, refreshKey]);
 
+  const handleClose = useCallback(() => {
+    clearHighlight();
+    onClose();
+  }, [clearHighlight, onClose]);
+
   const handleSelect = (ledger: RoadFrontageBuildingLedger) => {
-    onSelectId(ledger.id);
-    const map = mapContext?.mapInstanceRef?.current;
-    if (!map || !hasMapPoint(ledger)) return;
-    scheduleFitMapToExtent3857(map, ledgerExtent3857(ledger), {
-      maxZoom: MAP_AUTO_NAV_MAX_ZOOM,
-      applyMapViewPadding: () => mapContext?.applyMapViewPaddingRef?.current?.(),
-    });
+    const key = String(ledger.ftrIdn || ledger.id || '').trim();
+    if (!key) return;
+    onSelectId(key);
+    highlightLedger(ledger, { fit: true });
   };
+
+  useEffect(() => {
+    const key = String(selectedId ?? '').trim();
+    if (!key || isNewRoadFrontageBuildingId(key)) {
+      clearHighlight();
+      return;
+    }
+    const ledger = items.find((l) => String(l.ftrIdn || l.id || '').trim() === key);
+    if (ledger && hasMapPoint(ledger)) {
+      highlightLedger(ledger, { fit: false });
+    }
+  }, [selectedId, items, highlightLedger, clearHighlight]);
 
   useEffect(() => {
     const key = String(selectedId ?? '').trim();
@@ -134,7 +147,7 @@ export function RoadFrontageBuildingListPanel({
           />
           <button
             type="button"
-            onClick={onClose}
+            onClick={handleClose}
             className="shrink-0 rounded p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
             title="닫기"
             aria-label="닫기"
@@ -202,12 +215,13 @@ export function RoadFrontageBuildingListPanel({
                 </tr>
               ) : (
                 items.map((l) => {
-                  const isSelected = l.id === selectedId;
-                  const routeTitle = formatRouteNoName(l.routeNo, l.routeName);
+                  const rowKey = String(l.ftrIdn || l.id || '').trim();
+                  const isSelected = rowKey === selectedId;
+                  const routeTitle = formatRouteNoName(l.routeNo, l.routeNam);
                   return (
                     <tr
-                      key={l.id}
-                      data-road-frontage-building-row={l.id}
+                      key={rowKey || l.id}
+                      data-road-frontage-building-row={rowKey}
                       role="button"
                       tabIndex={0}
                       onClick={() => handleSelect(l)}
@@ -229,10 +243,10 @@ export function RoadFrontageBuildingListPanel({
                       </td>
                       <td
                         className="max-w-0 truncate px-2 py-1.5 text-foreground"
-                        title={l.locationAddress}
+                        title={l.locAdr}
                       >
-                        {formatAddressStripSidoSigungu(l.locationAddress) ||
-                          l.locationAddress ||
+                        {formatAddressStripSidoSigungu(l.locAdr) ||
+                          l.locAdr ||
                           '(위치 미입력)'}
                       </td>
                       <td
@@ -243,9 +257,9 @@ export function RoadFrontageBuildingListPanel({
                       </td>
                       <td
                         className="max-w-0 truncate px-2 py-1.5 tabular-nums text-foreground"
-                        title={l.preparedDate}
+                        title={l.preYmd}
                       >
-                        {l.preparedDate || '—'}
+                        {l.preYmd || '—'}
                       </td>
                     </tr>
                   );
