@@ -261,6 +261,9 @@ function skippedHangmangCalls(reason: string): HangmangCallLine[] {
     KRAS_LAYER_LIST_QUERY_ID,
     KRAS_LAND_QUERY_ID,
     KRAS_LAND_USE_QUERY_ID,
+    KRAS_SHARE_QUERY_ID,
+    KRAS_MOVE_HIST_QUERY_ID,
+    KRAS_CHANGE_HIST_QUERY_ID,
     KOREPS_PRICE_QUERY_ID,
   ].map((svcId) => ({ svcId, called: false, detail: reason }));
 }
@@ -280,7 +283,7 @@ async function probeHangmangCalls(
   const krasReady = Boolean(krasUrl && cfg.krasKey && cfg.sggCode);
   const korepsReady = Boolean(korepsUrl);
 
-  const [p037, p002, p025, pKoreps] = await Promise.all([
+  const [p037, p002, p025, p003, p006, p007, pKoreps] = await Promise.all([
     krasReady
       ? probeLinkageXml(krasUrl!, buildKrasParam(pnu, KRAS_LAYER_LIST_QUERY_ID, cfg), undefined, 'GET')
       : Promise.resolve({ ...emptyProbe, error: '키/주소 없음' }),
@@ -289,6 +292,15 @@ async function probeHangmangCalls(
       : Promise.resolve({ ...emptyProbe, error: '키/주소 없음' }),
     krasReady
       ? probeLinkageXml(krasUrl!, buildKrasParam(pnu, KRAS_LAND_USE_QUERY_ID, cfg), undefined, 'GET')
+      : Promise.resolve({ ...emptyProbe, error: '키/주소 없음' }),
+    krasReady
+      ? probeLinkageXml(krasUrl!, buildKrasParam(pnu, KRAS_SHARE_QUERY_ID, cfg), undefined, 'GET')
+      : Promise.resolve({ ...emptyProbe, error: '키/주소 없음' }),
+    krasReady
+      ? probeLinkageXml(krasUrl!, buildKrasParam(pnu, KRAS_MOVE_HIST_QUERY_ID, cfg), undefined, 'GET')
+      : Promise.resolve({ ...emptyProbe, error: '키/주소 없음' }),
+    krasReady
+      ? probeLinkageXml(krasUrl!, buildKrasParam(pnu, KRAS_CHANGE_HIST_QUERY_ID, cfg), undefined, 'GET')
       : Promise.resolve({ ...emptyProbe, error: '키/주소 없음' }),
     korepsReady
       ? probeLinkageXml(
@@ -305,6 +317,9 @@ async function probeHangmangCalls(
       hangmangCallFromProbe(KRAS_LAYER_LIST_QUERY_ID, p037),
       hangmangCallFromProbe(KRAS_LAND_QUERY_ID, p002),
       hangmangCallFromProbe(KRAS_LAND_USE_QUERY_ID, p025),
+      hangmangCallFromProbe(KRAS_SHARE_QUERY_ID, p003),
+      hangmangCallFromProbe(KRAS_MOVE_HIST_QUERY_ID, p006),
+      hangmangCallFromProbe(KRAS_CHANGE_HIST_QUERY_ID, p007),
       hangmangCallFromProbe(KOREPS_PRICE_QUERY_ID, pKoreps),
     ],
     landXml: p002.xml,

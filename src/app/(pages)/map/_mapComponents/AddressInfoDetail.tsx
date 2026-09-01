@@ -32,7 +32,7 @@ export default function AddressInfoDetail() {
 
   return createPortal(
     <div
-      className="pointer-events-auto flex h-full w-[520px] flex-col overflow-hidden rounded-l-xl border-l border-border bg-background/95 text-foreground shadow-2xl backdrop-blur-md"
+      className="pointer-events-auto flex h-full w-full min-w-0 max-w-[520px] flex-col overflow-hidden rounded-l-xl border-l border-border bg-background text-foreground shadow-2xl"
       style={{
         position: 'fixed',
         top: 0,
@@ -41,8 +41,8 @@ export default function AddressInfoDetail() {
         zIndex: ADDRESS_INFO_DETAIL_Z,
       }}
     >
-      <div className="flex shrink-0 items-center justify-between border-b border-border bg-muted/40 px-3 py-1.5">
-        <span className="flex items-center gap-1.5 text-xs font-medium text-foreground">
+      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border bg-muted/40 px-3 py-1.5">
+        <span className="flex min-w-0 flex-1 items-center gap-1.5 truncate text-xs font-medium text-foreground">
           <MapPin className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden />
           {pnuDisplay ? `필지정보 (${pnuDisplay})` : '필지정보'}
         </span>
@@ -56,7 +56,7 @@ export default function AddressInfoDetail() {
           <X className="h-3.5 w-3.5" />
         </button>
       </div>
-      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
         <AddressInfoPanel
           coordinate={addressInfoDetail.coordinate}
           viewProjection={addressInfoDetail.viewProjection}

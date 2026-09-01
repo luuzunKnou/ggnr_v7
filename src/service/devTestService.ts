@@ -5,11 +5,17 @@ import { db } from '@/database/db';
 import { usr } from '@/database/schema/usr';
 import { getSessionUsrId } from '@/lib/auth/guard';
 import { getGeoServerInternalBase, resolveGeoServerFetchBase } from '@/lib/geoserverUrl';
+import { geoserverWwwSymbolUrl } from '@/lib/geoserverSymbolPath';
 import { eq, sql } from 'drizzle-orm';
 import fs from 'node:fs';
 import path from 'node:path';
 import {
   buildCssFromSimpleStyle,
+  buildCssForLayerStyle,
+  THEMATIC_MAP_LABEL_EXPRESSION,
+  THEMATIC_MAP_LABEL_WITH_ALIAS_EXPRESSION,
+  THEMATIC_MAP_LABEL_FONT_SIZE,
+  usesThematicAliasLabel,
   darkerHex,
   getMaterialToneColor,
   parseSimpleStyleFromCss,
@@ -22,9 +28,11 @@ import {
   ELEVATION_LAYER_NAME,
 } from '@/lib/geoserverStyles/elevationContourStyle';
 import { normalizeDefineTableSource, dedupeDefineLayerTablesByName } from '@/lib/defineLayerTablesNormalize';
+import { reorderDefineLayerTablesArray } from '@/lib/defineLayerTableRowOrder';
 export { startGeoServer, stopGeoServer } from '@/service/geoserverProcessService';
 import { GGNR_DATA_PATHS } from '@/lib/ggnrDataPaths';
 import { resolveGgnrDataDir, turbopackOpaquePath } from '@/lib/turbopackFsPath';
+import { KRAS_THEMATIC_DEFINE_GROUPS } from '@/integrations/krasLayerSync.config';
 
 const GGNR_DATA_DIR = resolveGgnrDataDir();
 
@@ -47,12 +55,9 @@ function ensureAutofixLogDirSync(): string {
   return dir;
 }
 
-/** GeoServer www 심볼 경로 (data_dir/www/symbol/water). GEOSERVER_URL 없으면 localhost:8080/geoserver */
+/** GeoServer www 심볼 URL (start.ini·GEOSERVER_URL 포트) */
 function geoserverWaterSymbolUrl(name: string, ext: 'svg' | 'png'): string {
-  const gs =
-    (typeof process !== 'undefined' && process.env?.GEOSERVER_URL) ||
-    getGeoServerInternalBase();
-  return `${gs.replace(/\/$/, '')}/www/symbol/water/${name}.${ext}`;
+  return geoserverWwwSymbolUrl('water', `${name}.${ext}`);
 }
 
 /**
@@ -98,10 +103,7 @@ function getGeoServerSymbolRootDir(): string {
 }
 
 function geoserverSymbolFileUrl(folder: string, fileName: string): string {
-  const gs =
-    (typeof process !== 'undefined' && process.env?.GEOSERVER_URL) ||
-    getGeoServerInternalBase();
-  return `${gs.replace(/\/$/, '')}/www/symbol/${encodeURIComponent(folder)}/${encodeURIComponent(fileName)}`;
+  return geoserverWwwSymbolUrl(folder, fileName);
 }
 
 function assertSafeSymbolFolder(folder: string): string | null {
@@ -1549,7 +1551,7 @@ export async function createGeoServerStyle(params: {
   const styleProps = params.styleProps ?? {};
 
   try {
-    const cssBody = buildCssFromSimpleStyle(geometryType, styleProps);
+    const cssBody = buildCssForLayerStyle(geometryType, styleProps);
     const path = `/rest/styles?name=${encodeURIComponent(name)}`;
     const postRes = await geoserverFetch(baseUrl, path, {
       method: 'POST',
@@ -1587,6 +1589,7 @@ export async function updateGeoServerStyle(params: {
   const geometryType = params.geometryType ?? 'POLYGON';
   const styleProps = params.styleProps ?? {};
   const preserveExtraRules = params.preserveExtraRules !== false;
+  const thematicLabel = (styleProps.labelField ?? '').includes('layer_korname');
 
   try {
     const getRes = await geoserverFetch(baseUrl, `/rest/styles/${encodeURIComponent(name)}.css`, {
@@ -1594,10 +1597,12 @@ export async function updateGeoServerStyle(params: {
     });
     const existingCss = getRes.ok ? await getRes.text() : '';
 
-    const newStarBlock = buildCssFromSimpleStyle(geometryType, styleProps);
-    const cssBody = preserveExtraRules && existingCss
-      ? replaceDefaultRuleInCss(existingCss, newStarBlock)
-      : newStarBlock;
+    const newStarBlock = buildCssForLayerStyle(geometryType, styleProps);
+    // 주제도 emd형 단일 규칙은 이전 z-index 분리 라벨 블록을 남기지 않음
+    const cssBody =
+      preserveExtraRules && existingCss && !thematicLabel
+        ? replaceDefaultRuleInCss(existingCss, newStarBlock)
+        : newStarBlock;
 
     const putRes = await geoserverFetch(baseUrl, `/rest/styles/${encodeURIComponent(name)}`, {
       method: 'PUT',
@@ -2006,6 +2011,27 @@ export async function getDefineLayerTables(): Promise<{
   }
 }
 
+/** 레이어 설정(Layer) 화면 — tables.json 전체 저장 */
+export async function saveDefineLayerTables(params: {
+  tables: DefineLayerRow[];
+}): Promise<{ success: boolean; error?: string }> {
+  try {
+    const tables = params?.tables;
+    if (!Array.isArray(tables)) {
+      return { success: false, error: 'Invalid body: array of tables required' };
+    }
+    normalizeDefineTableSource(tables as Record<string, unknown>[]);
+    const deduped = dedupeDefineLayerTablesByName(tables as Record<string, unknown>[]);
+    const reordered = reorderDefineLayerTablesArray(deduped);
+    fs.mkdirSync(path.dirname(DEFINE_LAYER_TABLES_PATH), { recursive: true });
+    fs.writeFileSync(DEFINE_LAYER_TABLES_PATH, JSON.stringify(reordered, null, 2), 'utf-8');
+    return { success: true };
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return { success: false, error: msg };
+  }
+}
+
 const VALID_GEOMETRY_TYPES = new Set<string>(['POINT', 'LINE', 'POLYGON']);
 
 /**
@@ -2354,6 +2380,18 @@ export async function applyDefaultStyleToLayer(params: {
     const color = getMaterialToneColor(hash);
     let styleProps: StyleProps;
 
+    const defineRow =
+      defineRes.success && defineRes.tables?.length
+        ? defineRes.tables.find(
+            (r) => String(r.define_table_name ?? '').trim().toLowerCase() === layerName
+          )
+        : undefined;
+    const isThematicChild =
+      Boolean(String(defineRow?.define_table_parents_layer ?? '').trim()) &&
+      (KRAS_THEMATIC_DEFINE_GROUPS as readonly string[]).includes(
+        String(defineRow?.define_table_group ?? '').trim()
+      );
+
     if (geometryType === 'POINT') {
       const symbolUrl = resolveSymbolUrlForLayer(layerName);
       styleProps = {
@@ -2371,15 +2409,24 @@ export async function applyDefaultStyleToLayer(params: {
         opacity: 0.5,
       };
     } else {
+      const korName = String(defineRow?.define_table_kor_name ?? '');
+      const thematicLabel = isThematicChild
+        ? usesThematicAliasLabel(korName)
+          ? THEMATIC_MAP_LABEL_WITH_ALIAS_EXPRESSION
+          : THEMATIC_MAP_LABEL_EXPRESSION
+        : undefined;
       styleProps = {
         fillColor: color,
         strokeColor: '#FFFFFF',
         strokeWidth: 1,
         opacity: 0.3,
+        ...(thematicLabel
+          ? { labelField: thematicLabel, size: THEMATIC_MAP_LABEL_FONT_SIZE }
+          : {}),
       };
     }
 
-    const cssBody = buildCssFromSimpleStyle(geometryType, styleProps);
+    const cssBody = buildCssForLayerStyle(geometryType, styleProps);
 
     // 고아 css만 있고 카탈로그에 없으면 GeoServer가 already exists로 오판 → PUT만 되고 목록엔 안 잡힘
     let catalogExists = await geoServerStyleExists(baseUrl, layerName);

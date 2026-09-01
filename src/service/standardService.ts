@@ -2,12 +2,17 @@
  * StandardList용 서비스 (레이어 목록/테이블 데이터)
  * schema 파라미터로 layer / public_layer 구분 (기본값 layer)
  */
-import { db } from '@/database/db';
+import { db, pool } from '@/database/db';
 import { sql } from 'drizzle-orm';
+import {
+  KOREPS_PRICE_FILE_TABLE,
+  KRAS_LAYER_CATALOG_SCHEMA,
+} from '@/integrations/krasLayerSync.config';
 import * as fs from 'fs';
 import * as path from 'path';
 import { identifyHitPriorityRank } from '@/lib/mapLayerGeometryOrder';
 import { isFmsFacilityLayerTable } from '@/lib/fmsLinkage/fmsBinding';
+import { fetchVworldCadastralGeomByPnu } from '@/lib/vworldCadastralGeom';
 
 const DEFAULT_SCHEMA = 'layer';
 const ALLOWED_SCHEMAS = new Set(['layer', 'public_layer']);
@@ -960,6 +965,87 @@ export async function getJijukParcelAtPoint(params: { x: number; y: number }) {
   }
 }
 
+function parseGeoJsonGeomField(value: unknown): Record<string, unknown> | null {
+  if (value == null) return null;
+  let geom: unknown = value;
+  if (typeof value === 'string') {
+    try {
+      geom = JSON.parse(value) as unknown;
+    } catch {
+      return null;
+    }
+  }
+  if (!geom || typeof geom !== 'object' || !('type' in geom) || !('coordinates' in geom)) return null;
+  return geom as Record<string, unknown>;
+}
+
+function pnuCandidates(digits: string): string[] {
+  if (digits.length === 19) {
+    return [digits, `${digits.slice(0, 10)}${digits[10] === '1' ? '2' : '1'}${digits.slice(11)}`];
+  }
+  if (digits.length === 18) {
+    return [`${digits.slice(0, 10)}1${digits.slice(10)}`, `${digits.slice(0, 10)}2${digits.slice(10)}`];
+  }
+  return digits ? [digits] : [];
+}
+
+async function getJijukGeomGeoJson4326ByPnu(pnu: string): Promise<Record<string, unknown> | null> {
+  const esc = (v: string) => v.replace(/'/g, "''");
+  const digits = String(pnu ?? '').replace(/\D/g, '');
+  for (const key of pnuCandidates(digits)) {
+    try {
+      const res = await db.execute(
+        sql.raw(
+          `SELECT ST_AsGeoJSON(ST_Transform(geom, 4326))::json AS geom
+           FROM public_layer.jijuk
+           WHERE pnu = '${esc(key)}'
+           LIMIT 1`
+        )
+      );
+      const geom = parseGeoJsonGeomField((res.rows?.[0] as { geom?: unknown } | undefined)?.geom);
+      if (geom) return geom;
+    } catch {
+      /* ignore */
+    }
+  }
+  return null;
+}
+
+/**
+ * 우클릭 필지 하이라이트 — 로컬 jijuk 우선, 없으면 VWorld 연속지적 폴백.
+ */
+export async function getParcelHighlightGeom(params: {
+  x?: number;
+  y?: number;
+  pnu?: string;
+}): Promise<{ pnu: string | null; geometry4326: Record<string, unknown> | null }> {
+  let resolvedPnu = String(params.pnu ?? '').replace(/\D/g, '').slice(0, 19) || null;
+
+  if (typeof params.x === 'number' && typeof params.y === 'number') {
+    const atPoint = await getJijukParcelAtPoint({ x: params.x, y: params.y });
+    const jijuk = atPoint.results?.find((r) => String(r?.tableName ?? '').trim() === 'jijuk');
+    const row = jijuk?.features?.[0]?.data as Record<string, unknown> | undefined;
+    if (row) {
+      const rowPnu = String(row.pnu ?? '').replace(/\D/g, '').slice(0, 19);
+      if (rowPnu) resolvedPnu = rowPnu;
+      const geom = parseGeoJsonGeomField(row.geom);
+      if (geom && resolvedPnu) return { pnu: resolvedPnu, geometry4326: geom };
+    }
+  }
+
+  if (!resolvedPnu) return { pnu: null, geometry4326: null };
+
+  const localGeom = await getJijukGeomGeoJson4326ByPnu(resolvedPnu);
+  if (localGeom) return { pnu: resolvedPnu, geometry4326: localGeom };
+
+  const fromVworld = await fetchVworldCadastralGeomByPnu(resolvedPnu);
+  if (fromVworld?.geometry4326) {
+    return { pnu: fromVworld.pnu, geometry4326: fromVworld.geometry4326 };
+  }
+
+  return { pnu: resolvedPnu, geometry4326: null };
+}
+
 /**
  * 현재 지도 bbox(기본 EPSG:3857)와 교차하는 public_layer.jijuk 필지 목록.
  */
@@ -1018,6 +1104,74 @@ export async function getJijukParcelsInBbox(params: {
     return { parcels: rows };
   } catch {
     return { parcels: [] as Array<Record<string, unknown>> };
+  }
+}
+
+function formatOfficialLandPriceLabel(priceNum: number | null): string {
+  if (priceNum == null || !Number.isFinite(priceNum)) return '-';
+  return `${priceNum.toLocaleString('ko-KR')}원/㎡`;
+}
+
+function parseOfficialLandPriceNum(raw: unknown): number | null {
+  const s = String(raw ?? '')
+    .trim()
+    .replace(/,/g, '');
+  if (!s) return null;
+  const n = Number(s.replace(/[^\d.-]/g, ''));
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+/**
+ * KOREPS 공시지가 파일 테이블(land_linkage.koreps00039)에서 PNU별 최신 1건.
+ * 테이블 없거나 조회 실패 시 빈 맵 — 호출측에서 브이월드 fallback.
+ */
+export async function getLatestOfficialLandPricesByPnus(params: { pnus?: string[] }) {
+  const pnus = [
+    ...new Set(
+      (Array.isArray(params?.pnus) ? params.pnus : [])
+        .map((p) => String(p ?? '').trim())
+        .filter(Boolean)
+    ),
+  ];
+  type PriceEntry = { priceNum: number | null; priceLabel: string };
+  const empty = { prices: {} as Record<string, PriceEntry> };
+  if (!pnus.length) return empty;
+
+  const schema = KRAS_LAYER_CATALOG_SCHEMA;
+  const table = KOREPS_PRICE_FILE_TABLE;
+  try {
+    const existsRes = await pool.query<{ c: string | null }>(
+      `select to_regclass($1) as c`,
+      [`${schema}.${table}`]
+    );
+    if (!existsRes.rows[0]?.c) return empty;
+
+    const { rows } = await pool.query<{ pnu: string; pnilp: string | null }>(
+      `SELECT DISTINCT ON (btrim(pnu))
+         btrim(pnu) AS pnu,
+         btrim(pnilp) AS pnilp
+       FROM ${schema}.${table}
+       WHERE btrim(pnu) = ANY($1::text[])
+       ORDER BY btrim(pnu),
+         btrim(base_year) DESC NULLS LAST,
+         btrim(stdmt) DESC NULLS LAST,
+         btrim(pann_ymd) DESC NULLS LAST`,
+      [pnus]
+    );
+
+    const prices: Record<string, PriceEntry> = {};
+    for (const row of rows) {
+      const pnu = String(row.pnu ?? '').trim();
+      if (!pnu) continue;
+      const priceNum = parseOfficialLandPriceNum(row.pnilp);
+      prices[pnu] = {
+        priceNum,
+        priceLabel: formatOfficialLandPriceLabel(priceNum),
+      };
+    }
+    return { prices };
+  } catch {
+    return empty;
   }
 }
 

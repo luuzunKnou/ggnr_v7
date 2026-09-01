@@ -34,6 +34,7 @@ import { ResourceAccessDeniedDialog } from '@/app/(pages)/_components/AccessRequ
 import { ThemeToggle } from '@/app/(pages)/(index)/theme-toggle';
 import { scrubOccupationLedgerFromMapSearchParams } from '@/lib/occupationLedgerBinding';
 import { scrubUseFeeFromMapSearchParams } from '@/lib/useFeeBinding';
+import { scrubMapSearchParamsOnSystemSwitch } from '@/lib/mapSystemSwitch';
 import { MapAdminToolsMenu } from './mapAdminTools/MapAdminToolsMenu';
 
 /** 검색바 아이콘 버튼 — 우측 메뉴와 동일: 바깥=패널 배경, 안=투명+hover만 */
@@ -620,10 +621,17 @@ export function MapSearchBar({
 
   const selectSystem = (sysKey: string) => {
     const current = new URLSearchParams(Array.from(searchParams.entries()));
+    const systemChanged = sysKey !== selectedSystemKey;
     if (sysKey) current.set('system', sysKey);
     else current.delete('system');
-    scrubOccupationLedgerFromMapSearchParams(current, sysKey);
-    scrubUseFeeFromMapSearchParams(current, sysKey);
+    if (systemChanged) {
+      const target = systemList.find((s) => s.sys_key === sysKey);
+      scrubMapSearchParamsOnSystemSwitch(current, sysKey, target?.serviceList ?? []);
+      mapContext?.allLayersOffRef?.current?.();
+    } else {
+      scrubOccupationLedgerFromMapSearchParams(current, sysKey);
+      scrubUseFeeFromMapSearchParams(current, sysKey);
+    }
     router.push(`/map?${current.toString()}`);
     setSystemModalOpen(false);
   };

@@ -1,5 +1,6 @@
 /**
  * 접도구역 기존 건축물(공작물) 관리대장
+ * 업무 키는 ftr_idn. detail/confirm·첨부도 ftr_idn으로 연결.
  */
 import { and, asc, eq, ilike, or, sql } from 'drizzle-orm';
 import { db } from '@/database/db';
@@ -47,38 +48,27 @@ function tx(s: string | null | undefined): string {
   return String(s ?? '').trim();
 }
 
-function parseId(id: unknown): number | null {
-  const n = Number(String(id ?? '').trim());
-  if (!Number.isFinite(n) || n <= 0) return null;
-  return Math.floor(n);
-}
-
 function nowStamp(): string {
   const d = new Date();
   const p = (n: number) => String(n).padStart(2, '0');
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
 }
 
-function toNum(v: unknown): number | null {
-  if (v == null || v === '') return null;
-  const n = typeof v === 'number' ? v : Number(String(v).trim());
-  return Number.isFinite(n) ? n : null;
-}
-
 function isBlankDetail(d: RoadFrontageBuildingDetailItem): boolean {
   return (
-    toNum(d.dongNo) == null &&
-    !tx(d.installedDate) &&
+    !tx(d.dongNo) &&
+    !tx(d.instYmd) &&
     !tx(d.structure) &&
     !tx(d.usageType) &&
-    toNum(d.areaSqm) == null &&
-    !tx(d.locationKind) &&
+    !tx(d.areaSqm) &&
+    !tx(d.locAdrR) &&
+    !tx(d.locAdrC) &&
     !(d.badMarks ?? []).length
   );
 }
 
 function isBlankConfirm(c: RoadFrontageBuildingConfirmItem): boolean {
-  return !tx(c.confirmDate) && !tx(c.confirmerName) && !tx(c.approverName);
+  return !tx(c.checkYmd) && !tx(c.checkNam) && !tx(c.appNam);
 }
 
 function marksToText(marks: string[] | undefined): string | null {
@@ -93,19 +83,20 @@ function textToMarks(s: string | null | undefined): string[] {
     .filter(Boolean);
 }
 
-async function updateGeom(id: number, lon: number | null, lat: number | null) {
+/** geom 갱신용 — DB 내부 serial만 사용. 외부 API 키는 ftr_idn */
+async function updateGeomByPk(pk: number, lon: number | null, lat: number | null) {
   if (lon == null || lat == null || !Number.isFinite(lon) || !Number.isFinite(lat)) {
     await db
       .update(roadFrontageBuilding)
       .set({ geom: null })
-      .where(eq(roadFrontageBuilding.id, id));
+      .where(eq(roadFrontageBuilding.id, pk));
     return;
   }
   await db.execute(
     sql.raw(
       `UPDATE layer.road_frontage_building
        SET geom = ST_Transform(ST_SetSRID(ST_MakePoint(${lon}, ${lat}), 4326), 5181)
-       WHERE id = ${id}`
+       WHERE id = ${pk}`
     )
   );
 }
@@ -115,14 +106,13 @@ function toDetailItem(
 ): RoadFrontageBuildingDetailItem {
   return {
     id: String(row.id),
-    dongNo: toNum(row.dongNo),
-    installedDate: tx(row.installedDate),
+    dongNo: tx(row.dongNo),
+    instYmd: tx(row.instYmd),
     structure: tx(row.structure),
     usageType: tx(row.usageType),
-    areaSqm: toNum(row.areaSqm),
-    locationKind: (row.locationKind === '도로예정지' || row.locationKind === '접도구역'
-      ? row.locationKind
-      : '') as RoadFrontageBuildingDetailItem['locationKind'],
+    areaSqm: tx(row.areaSqm),
+    locAdrR: tx(row.locAdrR),
+    locAdrC: tx(row.locAdrC),
     badMarks: textToMarks(row.badMarks),
   };
 }
@@ -132,36 +122,39 @@ function toConfirmItem(
 ): RoadFrontageBuildingConfirmItem {
   return {
     id: String(row.id),
-    confirmDate: tx(row.confirmDate),
-    confirmerName: tx(row.confirmerName),
-    approverName: tx(row.approverName),
+    checkYmd: tx(row.checkYmd),
+    checkNam: tx(row.checkNam),
+    appNam: tx(row.appNam),
   };
 }
 
 function toLedger(
   row: typeof roadFrontageBuilding.$inferSelect,
   details: RoadFrontageBuildingDetailItem[],
-  confirms: RoadFrontageBuildingConfirmItem[],
+  confirms: RoadFrontageBuildingConfirmItem[]
 ): RoadFrontageBuildingLedger {
+  const ftrIdn = tx(row.ftrIdn);
   return {
-    id: String(row.id),
+    /** UI·선택·첨부 키 = ftr_idn (숫자 serial 아님) */
+    id: ftrIdn,
+    ftrIdn,
     roadType: tx(row.roadType),
     routeNo: tx(row.routeNo),
-    routeName: tx(row.routeName),
+    routeNam: tx(row.routeNam),
     serialNo: tx(row.serialNo),
-    preparedDate: tx(row.preparedDate),
-    locationAddress: tx(row.locationAddress),
-    residentName: tx(row.residentName),
-    residentPhone: tx(row.residentPhone),
-    buildingOwnerName: tx(row.buildingOwnerName),
-    buildingOwnerPhone: tx(row.buildingOwnerPhone),
-    buildingOwnerAddress: tx(row.buildingOwnerAddress),
-    landOwnerName: tx(row.landOwnerName),
-    landOwnerPhone: tx(row.landOwnerPhone),
-    landOwnerAddress: tx(row.landOwnerAddress),
-    writerDept: tx(row.writerDept) || ROAD_FRONTAGE_BUILDING_DEFAULT_WRITER_DEPT,
-    writerName: tx(row.writerName),
-    writtenAt: tx(row.writtenAt),
+    preYmd: tx(row.preYmd),
+    locAdr: tx(row.locAdr),
+    resiNam: tx(row.resiNam),
+    resiNum: tx(row.resiNum),
+    buildOnam: tx(row.buildOnam),
+    buildOnum: tx(row.buildOnum),
+    buildOadr: tx(row.buildOadr),
+    landOnam: tx(row.landOnam),
+    landOnum: tx(row.landOnum),
+    landOadr: tx(row.landOadr),
+    writeDept: tx(row.writeDept) || ROAD_FRONTAGE_BUILDING_DEFAULT_WRITER_DEPT,
+    writeNam: tx(row.writeNam),
+    writeYmd: tx(row.writeYmd),
     mockLonLat: {
       lon: row.lon ?? 0,
       lat: row.lat ?? 0,
@@ -171,23 +164,30 @@ function toLedger(
     photos: [],
     formAttaches: emptyRoadFrontageBuildingFormAttaches(),
     formAttachShotDates: {
-      before: tx(row.attachShotBefore),
-      after: tx(row.attachShotAfter),
+      before: tx(row.beforeYmd),
+      after: tx(row.afterYmd),
     },
   };
 }
 
-async function loadChildren(parentId: number) {
+async function loadChildren(ftrIdn: string) {
+  const key = ftrIdn.trim();
+  if (!key) {
+    return {
+      details: [] as RoadFrontageBuildingDetailItem[],
+      confirms: [] as RoadFrontageBuildingConfirmItem[],
+    };
+  }
   const [details, confirms] = await Promise.all([
     db
       .select()
       .from(roadFrontageBuildingDetail)
-      .where(eq(roadFrontageBuildingDetail.parentId, parentId))
+      .where(eq(roadFrontageBuildingDetail.ftrIdn, key))
       .orderBy(asc(roadFrontageBuildingDetail.sortNo), asc(roadFrontageBuildingDetail.id)),
     db
       .select()
       .from(roadFrontageBuildingConfirm)
-      .where(eq(roadFrontageBuildingConfirm.parentId, parentId))
+      .where(eq(roadFrontageBuildingConfirm.ftrIdn, key))
       .orderBy(asc(roadFrontageBuildingConfirm.sortNo), asc(roadFrontageBuildingConfirm.id)),
   ]);
   return {
@@ -253,7 +253,6 @@ function ensureWmsLayerOnce(): Promise<void> {
   if (!wmsEnsureOnce) {
     wmsEnsureOnce = ensureWmsLayer()
       .then((res) => {
-        // GeoServer 미기동 등으로 실패하면 다음 목록 조회에서 다시 시도
         if (!res.success) wmsEnsureOnce = null;
       })
       .catch(() => {
@@ -263,23 +262,27 @@ function ensureWmsLayerOnce(): Promise<void> {
   return wmsEnsureOnce;
 }
 
-export async function list(params: { keyword?: string } = {}) {
+export async function list(params: { keyword?: string; roadType?: string } = {}) {
   try {
-    // 발행이 안 돼 있으면 만들어 둔다. 실패해도 목록 조회는 계속
     void ensureWmsLayerOnce();
     const keyword = emptyToNull(params?.keyword);
+    const roadType = emptyToNull(params?.roadType);
     const conditions = [eq(roadFrontageBuilding.isDel, false)];
+    if (roadType) {
+      conditions.push(eq(roadFrontageBuilding.roadType, roadType));
+    }
     if (keyword) {
       const like = `%${keyword}%`;
       conditions.push(
         or(
-          ilike(roadFrontageBuilding.locationAddress, like),
+          ilike(roadFrontageBuilding.locAdr, like),
           ilike(roadFrontageBuilding.routeNo, like),
-          ilike(roadFrontageBuilding.routeName, like),
+          ilike(roadFrontageBuilding.routeNam, like),
           ilike(roadFrontageBuilding.roadType, like),
-          ilike(roadFrontageBuilding.buildingOwnerName, like),
-          ilike(roadFrontageBuilding.landOwnerName, like),
-          ilike(roadFrontageBuilding.serialNo, like)
+          ilike(roadFrontageBuilding.buildOnam, like),
+          ilike(roadFrontageBuilding.landOnam, like),
+          ilike(roadFrontageBuilding.serialNo, like),
+          ilike(roadFrontageBuilding.ftrIdn, like)
         )!
       );
     }
@@ -287,10 +290,10 @@ export async function list(params: { keyword?: string } = {}) {
       .select()
       .from(roadFrontageBuilding)
       .where(and(...conditions))
-      .orderBy(asc(roadFrontageBuilding.id));
+      .orderBy(asc(roadFrontageBuilding.ftrIdn), asc(roadFrontageBuilding.id));
     return Promise.all(
       rows.map(async (row) => {
-        const ch = await loadChildren(row.id);
+        const ch = await loadChildren(tx(row.ftrIdn));
         return toLedger(row, ch.details, ch.confirms);
       })
     );
@@ -299,36 +302,40 @@ export async function list(params: { keyword?: string } = {}) {
   }
 }
 
-export async function get(params: { id?: string | number }) {
-  const id = parseId(params?.id);
-  if (id == null) return null;
+export async function get(params: { ftrIdn?: string; id?: string | number } = {}) {
+  const key = tx(params.ftrIdn) || tx(params.id as string | undefined);
+  if (!key) return null;
   const [row] = await db
     .select()
     .from(roadFrontageBuilding)
-    .where(and(eq(roadFrontageBuilding.id, id), eq(roadFrontageBuilding.isDel, false)))
+    .where(and(eq(roadFrontageBuilding.ftrIdn, key), eq(roadFrontageBuilding.isDel, false)))
     .limit(1);
   if (!row) return null;
-  const ch = await loadChildren(row.id);
+  const ch = await loadChildren(tx(row.ftrIdn));
   return toLedger(row, ch.details, ch.confirms);
 }
 
-type SaveBody = Partial<RoadFrontageBuildingLedger> & { id?: string };
+type SaveBody = Partial<RoadFrontageBuildingLedger> & { id?: string; ftrIdn?: string };
 
-async function replaceChildren(parentId: number, body: SaveBody) {
-  await db.delete(roadFrontageBuildingDetail).where(eq(roadFrontageBuildingDetail.parentId, parentId));
-  await db.delete(roadFrontageBuildingConfirm).where(eq(roadFrontageBuildingConfirm.parentId, parentId));
+async function replaceChildren(ftrIdn: string, body: SaveBody) {
+  const key = ftrIdn.trim();
+  if (!key) return;
+
+  await db.delete(roadFrontageBuildingDetail).where(eq(roadFrontageBuildingDetail.ftrIdn, key));
+  await db.delete(roadFrontageBuildingConfirm).where(eq(roadFrontageBuildingConfirm.ftrIdn, key));
 
   const details = (Array.isArray(body.details) ? body.details : []).filter((d) => !isBlankDetail(d));
   if (details.length) {
     await db.insert(roadFrontageBuildingDetail).values(
       details.map((d, i) => ({
-        parentId,
-        dongNo: toNum(d.dongNo),
-        installedDate: emptyToNull(d.installedDate),
+        ftrIdn: key,
+        dongNo: emptyToNull(d.dongNo),
+        instYmd: emptyToNull(d.instYmd),
         structure: emptyToNull(d.structure),
         usageType: emptyToNull(d.usageType),
-        areaSqm: toNum(d.areaSqm),
-        locationKind: emptyToNull(d.locationKind),
+        areaSqm: emptyToNull(d.areaSqm),
+        locAdrR: emptyToNull(d.locAdrR),
+        locAdrC: emptyToNull(d.locAdrC),
         badMarks: marksToText(d.badMarks),
         sortNo: i,
       }))
@@ -341,14 +348,24 @@ async function replaceChildren(parentId: number, body: SaveBody) {
   if (confirms.length) {
     await db.insert(roadFrontageBuildingConfirm).values(
       confirms.map((c, i) => ({
-        parentId,
-        confirmDate: emptyToNull(c.confirmDate),
-        confirmerName: emptyToNull(c.confirmerName),
-        approverName: emptyToNull(c.approverName),
+        ftrIdn: key,
+        checkYmd: emptyToNull(c.checkYmd),
+        checkNam: emptyToNull(c.checkNam),
+        appNam: emptyToNull(c.appNam),
         sortNo: i,
       }))
     );
   }
+}
+
+async function nextAutoFtrIdn(): Promise<string> {
+  const [row] = await db
+    .select({ id: roadFrontageBuilding.id })
+    .from(roadFrontageBuilding)
+    .orderBy(sql`${roadFrontageBuilding.id} desc`)
+    .limit(1);
+  const n = (row?.id ?? 0) + 1;
+  return `JD${String(n).padStart(4, '0')}`;
 }
 
 export async function save(body: SaveBody = {}) {
@@ -359,72 +376,88 @@ export async function save(body: SaveBody = {}) {
   const lonVal = Number.isFinite(lon) ? lon : null;
   const latVal = Number.isFinite(lat) ? lat : null;
   const shot = body.formAttachShotDates ?? { before: '', after: '' };
+  /** 업무 키 — body.ftrIdn 우선, 없으면 body.id(이미 ftr_idn으로 쓰는 UI) */
+  let ftrKey = emptyToNull(body.ftrIdn) ?? emptyToNull(body.id);
+
   const fields = {
     lon: lonVal,
     lat: latVal,
     roadType: emptyToNull(body.roadType),
     routeNo: emptyToNull(body.routeNo),
-    routeName: emptyToNull(body.routeName),
+    routeNam: emptyToNull(body.routeNam),
     serialNo: emptyToNull(body.serialNo),
-    preparedDate: emptyToNull(body.preparedDate),
-    locationAddress: emptyToNull(body.locationAddress),
-    residentName: emptyToNull(body.residentName),
-    residentPhone: emptyToNull(body.residentPhone),
-    buildingOwnerName: emptyToNull(body.buildingOwnerName),
-    buildingOwnerPhone: emptyToNull(body.buildingOwnerPhone),
-    buildingOwnerAddress: emptyToNull(body.buildingOwnerAddress),
-    landOwnerName: emptyToNull(body.landOwnerName),
-    landOwnerPhone: emptyToNull(body.landOwnerPhone),
-    landOwnerAddress: emptyToNull(body.landOwnerAddress),
-    writerDept: emptyToNull(body.writerDept) ?? ROAD_FRONTAGE_BUILDING_DEFAULT_WRITER_DEPT,
-    writerName: emptyToNull(body.writerName) ?? usrId,
-    writtenAt: emptyToNull(body.writtenAt) ?? stamp,
-    attachShotBefore: emptyToNull(shot.before),
-    attachShotAfter: emptyToNull(shot.after),
-    updateDate: stamp,
-    updateUser: usrId,
+    preYmd: emptyToNull(body.preYmd),
+    locAdr: emptyToNull(body.locAdr),
+    resiNam: emptyToNull(body.resiNam),
+    resiNum: emptyToNull(body.resiNum),
+    buildOnam: emptyToNull(body.buildOnam),
+    buildOnum: emptyToNull(body.buildOnum),
+    buildOadr: emptyToNull(body.buildOadr),
+    landOnam: emptyToNull(body.landOnam),
+    landOnum: emptyToNull(body.landOnum),
+    landOadr: emptyToNull(body.landOadr),
+    writeDept: emptyToNull(body.writeDept) ?? ROAD_FRONTAGE_BUILDING_DEFAULT_WRITER_DEPT,
+    writeNam: emptyToNull(body.writeNam) ?? usrId,
+    writeYmd: emptyToNull(body.writeYmd) ?? stamp,
+    beforeYmd: emptyToNull(shot.before),
+    afterYmd: emptyToNull(shot.after),
+    updYmd: stamp,
+    updNam: usrId,
   };
 
-  const existingId = parseId(body.id);
-  let id = existingId;
-  if (id != null) {
+  let pk: number | null = null;
+  if (ftrKey) {
     const [found] = await db
-      .select({ id: roadFrontageBuilding.id })
+      .select({ id: roadFrontageBuilding.id, ftrIdn: roadFrontageBuilding.ftrIdn })
       .from(roadFrontageBuilding)
-      .where(and(eq(roadFrontageBuilding.id, id), eq(roadFrontageBuilding.isDel, false)))
+      .where(and(eq(roadFrontageBuilding.ftrIdn, ftrKey), eq(roadFrontageBuilding.isDel, false)))
       .limit(1);
-    if (!found) id = null;
+    if (found) pk = found.id;
   }
 
-  if (id == null) {
+  if (pk == null) {
+    if (!ftrKey) ftrKey = await nextAutoFtrIdn();
     const [inserted] = await db
       .insert(roadFrontageBuilding)
       .values({
         ...fields,
+        ftrIdn: ftrKey,
         isDel: false,
-        createDate: stamp,
-        createUser: usrId,
+        creaYmd: stamp,
+        creaNam: usrId,
       })
-      .returning({ id: roadFrontageBuilding.id });
-    id = inserted.id;
+      .returning({ id: roadFrontageBuilding.id, ftrIdn: roadFrontageBuilding.ftrIdn });
+    pk = inserted.id;
+    ftrKey = tx(inserted.ftrIdn) || ftrKey;
   } else {
-    await db.update(roadFrontageBuilding).set(fields).where(eq(roadFrontageBuilding.id, id));
+    await db
+      .update(roadFrontageBuilding)
+      .set({
+        ...fields,
+        ftrIdn: ftrKey,
+      })
+      .where(eq(roadFrontageBuilding.id, pk));
   }
 
-  await updateGeom(id, lonVal, latVal);
-  await replaceChildren(id, body);
-  return get({ id });
+  await updateGeomByPk(pk, lonVal, latVal);
+  if (ftrKey) await replaceChildren(ftrKey, body);
+  return get({ ftrIdn: ftrKey! });
 }
 
-export async function remove(params: { id?: string | number }) {
-  const id = parseId(params?.id);
-  if (id == null) return { ok: false };
+export async function remove(params: { ftrIdn?: string; id?: string | number } = {}) {
+  const key = tx(params.ftrIdn) || tx(params.id as string | undefined);
+  if (!key) return { ok: false };
+  const [row] = await db
+    .select({ id: roadFrontageBuilding.id })
+    .from(roadFrontageBuilding)
+    .where(and(eq(roadFrontageBuilding.ftrIdn, key), eq(roadFrontageBuilding.isDel, false)))
+    .limit(1);
+  if (!row) return { ok: false };
   const usrId = (await getSessionUsrId()) ?? '';
   await db
     .update(roadFrontageBuilding)
-    .set({ isDel: true, updateDate: nowStamp(), updateUser: usrId })
-    .where(eq(roadFrontageBuilding.id, id));
-  // 지도(WMS)는 테이블을 그대로 그리므로, 위치를 비워 삭제한 대장이 점으로 남지 않게 한다
-  await updateGeom(id, null, null);
+    .set({ isDel: true, updYmd: nowStamp(), updNam: usrId })
+    .where(eq(roadFrontageBuilding.id, row.id));
+  await updateGeomByPk(row.id, null, null);
   return { ok: true };
 }

@@ -3,6 +3,7 @@ import path from "path";
 import CopyPlugin from "copy-webpack-plugin";
 import webpack from "webpack";
 import { getProjectEnvVars } from "./scripts/load-project-env";
+import { resolveGeoServerInternalUrl } from "./scripts/resolve-geoserver-url";
 
 /**
  * [project].env 의 [dev|demo|prod] 섹션 BASE_PATH → Next basePath.
@@ -11,7 +12,7 @@ import { getProjectEnvVars } from "./scripts/load-project-env";
  * 없으면 "" → localhost/IP 루트 접속(기존과 동일).
  *
  * 주의: basePath 는 next build / next dev 기동 시점에 반영됨. env만 바꾸고 재빌드 없이 start 하면 CSS/JS 경로가 어긋날 수 있음.
- * 게이트 진입 예: https://dggs.kr/build_yy — BASE_PATH=/build_yy (끝 / 없음).
+ * 게이트: BASE_PATH=/build_yy (끝 / 없음) → 공개 URL …/build_yy (trailingSlash 기본값 false)
  */
 function resolveBasePath(): string {
   let raw = (process.env.BASE_PATH ?? "").trim();
@@ -76,10 +77,8 @@ const nextConfig: NextConfig = {
     'pg-native',
   ],
   async rewrites() {
-    // GeoServer: 브라우저·게이트는 동일 출처 `{basePath}/geoserver` → 로컬 8080
-    const geoInternal = (
-      process.env.GEOSERVER_URL?.trim() || 'http://127.0.0.1:8080/geoserver'
-    ).replace(/\/$/, '');
+    // GeoServer: 브라우저·게이트는 동일 출처 `{basePath}/geoserver` → start.ini·GEOSERVER_URL
+    const geoInternal = resolveGeoServerInternalUrl();
     return [
       { source: '/geoserver', destination: geoInternal },
       { source: '/geoserver/:path*', destination: `${geoInternal}/:path*` },

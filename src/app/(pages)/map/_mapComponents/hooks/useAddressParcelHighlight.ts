@@ -7,41 +7,42 @@ import VectorLayer from 'ol/layer/Vector';
 import GeoJSON from 'ol/format/GeoJSON';
 import { Style, Stroke, Fill } from 'ol/style';
 import { call } from '@/lib/api';
-import type { Map } from 'ol';
 import { useMapContext } from '../MapContext';
 import type { AddressInfoDetailState } from '../MapContext';
 import { transformCoordinate } from '../services/coordinateService';
 
-/** jijuk 테이블의 geom 필드로 필지 하이라이트 */
-function getGeomFromJijukRow(row: Record<string, unknown>): unknown {
-  const g = row?.geom;
-  if (g == null) return null;
-  let geom: unknown = g;
-  if (typeof g === 'string') {
-    try {
-      geom = JSON.parse(g) as unknown;
-    } catch {
-      return null;
-    }
-  }
-  if (!geom || typeof geom !== 'object' || !('type' in geom) || !('coordinates' in geom)) return null;
-  return geom;
+function addHighlightFeatures(
+  source: VectorSource,
+  geometry4326: Record<string, unknown>,
+  viewProjection: string
+) {
+  const geojson = {
+    type: 'FeatureCollection' as const,
+    features: [{ type: 'Feature' as const, geometry: geometry4326, properties: {} }],
+  };
+  const format = new GeoJSON();
+  const olFeatures = format.readFeatures(geojson, {
+    dataProjection: 'EPSG:4326',
+    featureProjection: viewProjection || 'EPSG:3857',
+  });
+  source.clear();
+  source.addFeatures(olFeatures);
+  return olFeatures[0]?.getGeometry?.() ?? null;
 }
 
 /**
- * 주소정보 패널이 열려 있을 때 해당 좌표의 필지(지적도)를 identify하여
- * 지도 위에 하이라이트 벡터 레이어로 표시.
+ * 주소정보 패널이 열려 있을 때 해당 필지를 지도 위에 하이라이트.
+ * 로컬 jijuk → VWorld 연속지적 폴백 (V6 drawRightCoorLayer와 동일 목적).
  */
-export function useAddressParcelHighlight(
-  map: Map | null,
-  mapReady: boolean,
-  addressInfoDetail: AddressInfoDetailState
-) {
+export function useAddressParcelHighlight(mapReady: boolean, addressInfoDetail: AddressInfoDetailState) {
   const mapContext = useMapContext();
   const layerRef = useRef<VectorLayer<VectorSource> | null>(null);
   const sourceRef = useRef<VectorSource | null>(null);
+  const addressParcelGeometryRef = mapContext?.addressParcelGeometryRef;
+  const addressParcelSeedGeom4326Ref = mapContext?.addressParcelSeedGeom4326Ref;
 
   useEffect(() => {
+    const map = mapContext?.mapInstanceRef?.current;
     if (!mapReady || !map) return;
 
     const source = new VectorSource();
@@ -62,62 +63,109 @@ export function useAddressParcelHighlight(
       map.removeLayer(layer);
       layerRef.current = null;
       sourceRef.current = null;
+      if (addressParcelGeometryRef) addressParcelGeometryRef.current = null;
     };
-  }, [map, mapReady]);
+  }, [mapReady, mapContext?.mapInstanceRef, addressParcelGeometryRef]);
 
-  // 좌표/뷰만 의존: 주소 로딩 완료 시 객체만 바뀌어도 identify를 다시 호출하지 않음 (한 번 우클릭 시 1회만 요청)
   const coordinate = addressInfoDetail?.coordinate;
   const viewProjection = addressInfoDetail?.viewProjection;
+  const pnu = addressInfoDetail?.pnu;
+  const geomSeedAt = addressInfoDetail?.geomSeedAt;
 
   useEffect(() => {
+    const map = mapContext?.mapInstanceRef?.current;
     const source = sourceRef.current;
-    if (!source) return;
+    if (!map || !source) return;
 
-    source.clear();
-    if (!coordinate || !viewProjection) return;
+    if (!coordinate || !viewProjection) {
+      source.clear();
+      if (addressParcelGeometryRef) addressParcelGeometryRef.current = null;
+      if (addressParcelSeedGeom4326Ref) addressParcelSeedGeom4326Ref.current = null;
+      return;
+    }
 
+    const seedGeom = addressParcelSeedGeom4326Ref?.current;
+    if (seedGeom && typeof seedGeom === 'object') {
+      const olGeom = addHighlightFeatures(source, seedGeom, viewProjection);
+      layerRef.current?.setZIndex(999999);
+      map.render();
+      if (addressParcelGeometryRef && olGeom) {
+        addressParcelGeometryRef.current = (
+          olGeom as { clone(): import('ol/geom').Geometry }
+        ).clone();
+      }
+    }
+
+    let cancelled = false;
     const coord3857 = transformCoordinate(coordinate, viewProjection, 'EPSG:3857');
-    if (!coord3857) return;
-
-    const [x, y] = coord3857;
+    const params: { x?: number; y?: number; pnu?: string } = {};
+    if (coord3857) {
+      params.x = coord3857[0];
+      params.y = coord3857[1];
+    }
+    const pnuDigits = String(pnu ?? '').replace(/\D/g, '').slice(0, 19);
+    if (pnuDigits) params.pnu = pnuDigits;
 
     call('', 'POST', {
       service: 'standardService',
-      action: 'getJijukParcelAtPoint',
-      params: { x, y },
+      action: 'getParcelHighlightGeom',
+      params,
     })
       .then((res: unknown) => {
-        const payload = res as { data?: { results?: { features: { data: Record<string, unknown> }[] }[] }; results?: { features: { data: Record<string, unknown> }[] }[] };
-        const data = payload?.data ?? payload;
-        const results = Array.isArray(data?.results) ? data.results : [];
-        const jijukResult = results.find((r: { tableName?: string; features?: { data: Record<string, unknown> }[] }) => r?.tableName === 'jijuk');
-        if (!jijukResult) return;
-        const firstFeature = jijukResult?.features?.[0]?.data;
-        if (!firstFeature || typeof firstFeature !== 'object') return;
-        const geom = getGeomFromJijukRow(firstFeature as Record<string, unknown>);
-        if (!geom) return;
-        const geojson = {
-          type: 'FeatureCollection' as const,
-          features: [{ type: 'Feature' as const, geometry: geom, properties: {} }],
-        };
-        const format = new GeoJSON();
-        const viewProj = viewProjection || 'EPSG:3857';
-        // DB(jijuk)는 5181 저장, API는 ST_Transform(..., 4326)으로 4326 반환 → 수신 geom은 4326. 지도 뷰는 3857.
-        const olFeatures = format.readFeatures(geojson, {
-          dataProjection: 'EPSG:4326',
-          featureProjection: viewProj,
-        });
-        source.clear();
-        source.addFeatures(olFeatures);
-        // 레이어 동기화(use*LayerSync)로 다른 레이어가 추가되어도 항상 하이라이트가 최상단에 보이도록 보장
+        if (cancelled) return;
+        const payload = (res as { data?: { pnu?: string; geometry4326?: Record<string, unknown> } })?.data ?? res;
+        const body = payload as { pnu?: string; geometry4326?: Record<string, unknown> | null };
+        const geometry4326 = body?.geometry4326;
+        if (!geometry4326 || typeof geometry4326 !== 'object') {
+          if (!seedGeom) {
+            source.clear();
+            if (addressParcelGeometryRef) addressParcelGeometryRef.current = null;
+          }
+          return;
+        }
+        const olGeom = addHighlightFeatures(source, geometry4326, viewProjection);
         layerRef.current?.setZIndex(999999);
-        map?.render();
-        const olGeom = olFeatures[0]?.getGeometry?.();
-        if (mapContext?.addressParcelGeometryRef && olGeom)
-          mapContext.addressParcelGeometryRef.current = (olGeom as { clone(): import('ol/geom').Geometry }).clone();
+        map.render();
+        if (addressParcelGeometryRef && olGeom) {
+          addressParcelGeometryRef.current = (
+            olGeom as { clone(): import('ol/geom').Geometry }
+          ).clone();
+        }
       })
       .catch(() => {
-        source.clear();
+        if (cancelled) return;
+        if (!seedGeom) {
+          source.clear();
+          if (addressParcelGeometryRef) addressParcelGeometryRef.current = null;
+        }
       });
-  }, [coordinate, map, mapContext, viewProjection]);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    addressParcelGeometryRef,
+    addressParcelSeedGeom4326Ref,
+    coordinate,
+    mapContext?.mapInstanceRef,
+    mapReady,
+    pnu,
+    geomSeedAt,
+    viewProjection,
+  ]);
+}
+
+/** 우클릭 지적 조회 직후 시드 도형 — getParcelHighlightGeom 응답 전 즉시 표시 */
+export function parseParcelGeomField(value: unknown): Record<string, unknown> | null {
+  if (value == null) return null;
+  let geom: unknown = value;
+  if (typeof value === 'string') {
+    try {
+      geom = JSON.parse(value) as unknown;
+    } catch {
+      return null;
+    }
+  }
+  if (!geom || typeof geom !== 'object' || !('type' in geom) || !('coordinates' in geom)) return null;
+  return geom as Record<string, unknown>;
 }

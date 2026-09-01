@@ -33,6 +33,21 @@ export const OCCUPATION_LEDGER_SER_ENGS = [
 
 export type OccupationLedgerSerEng = (typeof OCCUPATION_LEDGER_SER_ENGS)[number];
 
+export const OCCUPATION_LEDGER_PREFIXES = ['water', 'road', 'public'] as const;
+export type OccupationLedgerPrefix = (typeof OCCUPATION_LEDGER_PREFIXES)[number];
+
+export function isOccupationLedgerPrefix(v: string): v is OccupationLedgerPrefix {
+  return (OCCUPATION_LEDGER_PREFIXES as readonly string[]).includes(v);
+}
+
+export function occupationLedgerPrefixToSystemKey(
+  prefix: OccupationLedgerPrefix
+): 'river' | 'road' | 'build' {
+  if (prefix === 'road') return 'road';
+  if (prefix === 'public') return 'build';
+  return 'river';
+}
+
 const COMMON_FIELDS: OccupationLedgerFieldMap = {
   /** define_field_is_key · DB PK 와 동일 */
   keyField: 'ogc_fid',
@@ -113,9 +128,17 @@ export function getOccupationLedgerBinding(params: {
   serEng?: string | null;
   /** @deprecated serEng 우선. 없으면 system으로 추정 */
   system?: string | null;
+  prefix?: string | null;
 }): OccupationLedgerBinding | null {
   const eng = String(params.serEng ?? '').trim();
   if (isOccupationLedgerSerEng(eng)) return BINDINGS_BY_SER_ENG[eng];
+
+  const prefixRaw = String(params.prefix ?? '').trim().toLowerCase();
+  if (isOccupationLedgerPrefix(prefixRaw)) {
+    if (prefixRaw === 'road') return BINDINGS_BY_SER_ENG.roadOccupationLedger;
+    if (prefixRaw === 'public') return BINDINGS_BY_SER_ENG.publicOccupationLedger;
+    return BINDINGS_BY_SER_ENG.waterOccupationLedger;
+  }
 
   const system = String(params.system ?? '').trim().toLowerCase();
   if (system === 'river') return BINDINGS_BY_SER_ENG.waterOccupationLedger;
@@ -138,9 +161,6 @@ export function isOccupationLedgerWmsLayerId(
   const set = new Set(getOccupationLedgerWmsLayerIds(binding));
   return set.has(String(tableName ?? '').trim().toLowerCase());
 }
-
-const OCCUPATION_LEDGER_PREFIXES = ['water', 'road', 'public'] as const;
-type OccupationLedgerPrefix = (typeof OCCUPATION_LEDGER_PREFIXES)[number];
 
 /** water|road|public_occupationledger(+_jijuk|_mgj) 여부 */
 export function isOccupationLedgerTableName(tableName: string): boolean {

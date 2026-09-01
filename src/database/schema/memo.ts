@@ -15,6 +15,7 @@ const geomPoint5181 = customType<{ data: string | null; driverData: string | nul
 export const memo = layer.table('memo', {
   memoKey: serial('memo_key').primaryKey().notNull(),
   geom: geomPoint5181('geom'),
+  address: text('address'),
   memoTitle: text('memo_title'),
   memoContents: text('memo_contents'),
   memoCreateDate: text('memo_create_date'),
@@ -28,6 +29,7 @@ export const memoTableComment = '메모';
 export const memoColumnComments: Record<string, string> = {
   memo_key: '키',
   geom: '위치',
+  address: '주소',
   memo_title: '제목',
   memo_contents: '내용',
   memo_create_date: '작성일',

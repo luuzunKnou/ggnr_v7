@@ -582,7 +582,7 @@
     "define_field_is_required": false,
     "define_field_show_search": false,
     "define_field_show_list": "false",
-    "define_field_show_detail": true,
+    "define_field_show_detail": "false",
     "define_field_read_only": true,
     "define_field_is_key": false,
     "define_field_show_search_detail": false,

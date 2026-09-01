@@ -3,6 +3,7 @@
 
 import React, { useState, useEffect, useLayoutEffect, useCallback, useRef, useMemo, Suspense } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
+import { useSession } from "next-auth/react"
 import { X } from "lucide-react"
 import Map3DDataPanel from "./_mapComponents/Map3DDataPanel"
 import StandardList from "./_mapComponents/standard/StandardList"
@@ -33,6 +34,14 @@ import { VillagePatrolListPanel } from "./_mapContents/safty/villagePatrol/Villa
 import { SafetyHospitalBadPanel } from "./_mapContents/safty/safetyHospitalBad/SafetyHospitalBadPanel"
 import { SafetyJsjReservoirPanel } from "./_mapContents/safty/saftyJsj/SafetyJsjReservoirPanel"
 import { RoadDocManualPanel } from "./_mapContents/road/roadDoc/roadDocManualPanel"
+import { RoadWorkHandbookDetailPanel } from "./_mapContents/road/roadWorkHandbook/RoadWorkHandbookDetailPanel"
+import { RoadWorkHandbookMapProvider } from "./_mapContents/road/roadWorkHandbook/roadWorkHandbookMapContext"
+import { RoadWorkHandbookMapHandler } from "./_mapContents/road/roadWorkHandbook/RoadWorkHandbookMapHandler"
+import {
+  handbookMapSessionKey,
+  type HandbookDetailSelection,
+  type HandbookViewMode,
+} from "./_mapContents/road/roadWorkHandbook/roadWorkHandbookData"
 import { RoadCctvPanel } from "./_mapContents/road/roadCCTV/RoadCctvPanel"
 import { RoadInfraPanel } from "./_mapContents/road/roadInfra/RoadInfraPanel"
 import {
@@ -97,11 +106,7 @@ import { RoadFrontageBuildingDetailPanel } from "./_mapContents/road/roadFrontag
 import { ROAD_FRONTAGE_BUILDING_NEW_ID } from "./_mapContents/road/roadFrontageBuilding/roadFrontageBuildingMock"
 import { RoadFrontageMarkerListPanel } from "./_mapContents/road/roadFrontageMarker/RoadFrontageMarkerListPanel"
 import { RoadFrontageMarkerDetailPanel } from "./_mapContents/road/roadFrontageMarker/RoadFrontageMarkerDetailPanel"
-import {
-  ROAD_FRONTAGE_MARKER_NEW_ID,
-  createInitialRoadFrontageMarkerLedgers,
-  type RoadFrontageMarkerLedger,
-} from "./_mapContents/road/roadFrontageMarker/roadFrontageMarkerMock"
+import { ROAD_FRONTAGE_MARKER_NEW_ID } from "./_mapContents/road/roadFrontageMarker/roadFrontageMarkerMock"
 import { UsageDataAsNotifBootstrap } from "./_mapComponents/UsageDataAsNotifBootstrap"
 import { OccupationLedgerListPanel } from "./_mapContents/occupationLedger/OccupationLedgerListPanel"
 import { OccupationLedgerDetailPanel } from "./_mapContents/occupationLedger/OccupationLedgerDetailPanel"
@@ -111,6 +116,7 @@ import {
 } from "./_mapContents/occupationLedger/occupationLedgerMapSync"
 import {
   findOpenedOccupationLedgerSerEng,
+  getOccupationLedgerBinding,
   isOccupationLedgerOpenedToken,
 } from "@/lib/occupationLedgerBinding"
 import {
@@ -147,12 +153,20 @@ import {
   clearServiceMenuLayerState,
   ensureRoadLedgerSummaryLayer,
 } from "@/lib/mapServiceMenuLayers"
+import { normalizeOpenedToken } from "@/lib/mapServiceOpened"
 import { MapSidebar } from "./_mapComponents/map-sidebar"
 import { MapSearchBar } from "./_mapComponents/map-search-bar"
 import { MapContextProvider, useMapContext } from "./_mapComponents/MapContext"
 import { applyViewPaddingPreservingVisualCenter } from "./_mapComponents/config/mapVisualCenter"
 import { MapSideListPanel } from "./_mapComponents/MapSideListPanel"
 import { SearchBarOffsetContext } from "./searchBarOffsetContext"
+import { SampleListPanel } from "./_mapContents/sample/SampleListPanel"
+import {
+  DESIGN_SAMPLE_OPENED_KEY,
+  DESIGN_SAMPLE_PANEL_DEFAULT_WIDTH,
+  DESIGN_SAMPLE_PANEL_MAX_WIDTH,
+  DESIGN_SAMPLE_PANEL_MIN_WIDTH,
+} from "./_mapContents/sample/sampleConfig"
 
 const SIDEBAR_WIDTH = 65
 const SEARCH_BAR_MARGIN = 20
@@ -238,6 +252,10 @@ const ROAD_DOC_PANEL_DEFAULT_WIDTH = 380
 const ROAD_DOC_PANEL_MIN_WIDTH = 280
 const ROAD_DOC_PANEL_MAX_WIDTH = 640
 
+const ROAD_WORK_HANDBOOK_DETAIL_DEFAULT_WIDTH = 400
+const ROAD_WORK_HANDBOOK_DETAIL_MIN_WIDTH = 320
+const ROAD_WORK_HANDBOOK_DETAIL_MAX_WIDTH = 640
+
 const ROAD_CCTV_PANEL_DEFAULT_WIDTH = 380
 const ROAD_CCTV_PANEL_MIN_WIDTH = 300
 const ROAD_CCTV_PANEL_MAX_WIDTH = 560
@@ -282,6 +300,7 @@ const SAFETY_HOSPITAL_BED_OPENED_KEY = "safetyBedState"
 /** serviceList `ser_eng`: jsjWaterLevel — 저수지 수위(saftyJsj) */
 const JSJ_WATER_LEVEL_OPENED_KEY = "jsjWaterLevel"
 const ROAD_DOC_OPENED_KEY = "roadDoc"
+const ROAD_WORK_HANDBOOK_OPENED_KEY = "roadWorkHandbook"
 const ROAD_CCTV_OPENED_KEY = "roadCCTV"
 const ROAD_INFRA_OPENED_KEY = "roadInfra"
 const ROAD_USE_LEDGER_OPENED_KEY = "roadUseLedger"
@@ -336,7 +355,7 @@ const GROUNDWATER_PERMIT_DETAIL_MAX_WIDTH = 640
 const FMS_PANEL_MIN_WIDTH = 440
 const FMS_PANEL_DEFAULT_WIDTH = FMS_PANEL_MIN_WIDTH
 const FMS_PANEL_MAX_WIDTH = 800
-const FMS_DETAIL_DEFAULT_WIDTH = 400
+const FMS_DETAIL_DEFAULT_WIDTH = 445
 const FMS_DETAIL_MIN_WIDTH = 380
 const FMS_DETAIL_MAX_WIDTH = 500
 
@@ -396,12 +415,12 @@ const ROAD_FRONTAGE_BUILDING_DETAIL_DEFAULT_WIDTH = 800
 const ROAD_FRONTAGE_BUILDING_DETAIL_MIN_WIDTH = 640
 const ROAD_FRONTAGE_BUILDING_DETAIL_MAX_WIDTH = 980
 
-/** serviceList `ser_eng`: roadFrontageMarker — 접도구역 표주 관리대장(목업) */
+/** serviceList `ser_eng`: roadFrontageMarker — 접도구역 표주 관리대장 */
 const ROAD_FRONTAGE_MARKER_OPENED_KEY = "roadFrontageMarker"
 const ROAD_FRONTAGE_MARKER_PANEL_DEFAULT_WIDTH = 320
 const ROAD_FRONTAGE_MARKER_PANEL_MIN_WIDTH = 260
 const ROAD_FRONTAGE_MARKER_PANEL_MAX_WIDTH = 480
-const ROAD_FRONTAGE_MARKER_DETAIL_DEFAULT_WIDTH = 560
+const ROAD_FRONTAGE_MARKER_DETAIL_DEFAULT_WIDTH = 570
 const ROAD_FRONTAGE_MARKER_DETAIL_MIN_WIDTH = 460
 const ROAD_FRONTAGE_MARKER_DETAIL_MAX_WIDTH = 780
 
@@ -414,6 +433,8 @@ function MapLayoutContent({
 }) {
   const router = useRouter()
   const searchParams = useSearchParams()
+  const { data: session } = useSession()
+  const isSuperUser = session?.user?.id === "su"
   const mapContext = useMapContext()
   /** Provider `value`는 매 렌더 새 객체 — effect deps에 `mapContext` 넣으면 visibleLayerNames만 바뀌어도 재실행됨 */
   const mapInstanceRef = mapContext?.mapInstanceRef
@@ -438,6 +459,9 @@ function MapLayoutContent({
   const setRoadNetworkSitePointKind = mapContext?.setRoadNetworkSitePointKind
   const setRoadNetworkEndpointMarkers = mapContext?.setRoadNetworkEndpointMarkers
   const setRoadNetworkFocusedSitePointKey = mapContext?.setRoadNetworkFocusedSitePointKey
+  const setRoadFrontageMarkerPanelOpen = mapContext?.setRoadFrontageMarkerPanelOpen
+  const setRoadFrontageMarkerPointPickActive = mapContext?.setRoadFrontageMarkerPointPickActive
+  const setRoadFrontageMarkerDraftPoint = mapContext?.setRoadFrontageMarkerDraftPoint
   const setRiverConstructionLedgerSelectedId = mapContext?.setRiverConstructionLedgerSelectedId
   const setRiverConstructionLedgerPanelOpen = mapContext?.setRiverConstructionLedgerPanelOpen
   const setRiverConstructionLedgerOverlayRows = mapContext?.setRiverConstructionLedgerOverlayRows
@@ -452,6 +476,7 @@ function MapLayoutContent({
   const setRoadCctvPanelOpen = mapContext?.setRoadCctvPanelOpen
   const setSafetyFacPanelOpen = mapContext?.setSafetyFacPanelOpen
   const setComplaintPanelOpen = mapContext?.setComplaintPanelOpen
+  const setRoadRewardPanelOpen = mapContext?.setRoadRewardPanelOpen
   const setRoadCctvOverlay = mapContext?.setRoadCctvOverlay
   const setRoadCctvUnderlayMode = mapContext?.setRoadCctvUnderlayMode
   const setRoadCctvExtentWgs84 = mapContext?.setRoadCctvExtentWgs84
@@ -470,7 +495,8 @@ function MapLayoutContent({
     }
   }
   const rawOpened = searchParams.get("opened")?.split(",").filter(Boolean) || []
-  const openedWindows = rawOpened.map((w) => (w === "dataQuery" ? STANDARD_LIST_OPENED_KEY : w))
+  const handbookDeeplink = rawOpened.includes(ROAD_WORK_HANDBOOK_OPENED_KEY)
+  const openedWindows = rawOpened.map(normalizeOpenedToken)
   const systemKeyFromUrl = searchParams.get("system") ?? ""
   const serviceMenuKey = useMemo(
     () => openedWindows.find((w) => w !== LIST_VIEW_OPENED_KEY && w !== "layerSetting") ?? "",
@@ -527,9 +553,13 @@ function MapLayoutContent({
             ? "satellite"
             : undefined
   const shootingApprovalOpen =
-    SHOOTING_REQUEST_UI_ENABLED && openedWindows.includes(SHOOTING_APPROVAL_OPENED_KEY)
+    SHOOTING_REQUEST_UI_ENABLED &&
+    systemKeyFromUrl === "uav" &&
+    openedWindows.includes(SHOOTING_APPROVAL_OPENED_KEY)
   const shootingRequestOpen =
-    SHOOTING_REQUEST_UI_ENABLED && openedWindows.includes(SHOOTING_REQUEST_OPENED_KEY)
+    SHOOTING_REQUEST_UI_ENABLED &&
+    systemKeyFromUrl === "uav" &&
+    openedWindows.includes(SHOOTING_REQUEST_OPENED_KEY)
   /** 촬영요청·승인 모두 동일 목록 패널 (모드만 mine / approval) */
   const shootingListOpen = shootingApprovalOpen || shootingRequestOpen
   const shootingPanelOpen = shootingListOpen
@@ -563,6 +593,8 @@ function MapLayoutContent({
   const groundwaterPermitOpen = openedWindows.includes(GROUNDWATER_PERMIT_OPENED_KEY)
   const fmsLinkageOpen = openedWindows.some((w) => isFmsOpenedToken(w))
   const fmsLinkageDetailOpen = fmsLinkageOpen && Boolean(fmsLinkageDetailId)
+  const designSampleOpen =
+    isSuperUser && openedWindows.includes(DESIGN_SAMPLE_OPENED_KEY)
   const [buildPublicLandSelectedId, setBuildPublicLandSelectedId] = useState<string | null>(null)
   const [buildPublicLandListRefreshKey, setBuildPublicLandListRefreshKey] = useState(0)
   const buildPublicLandDetailOpen = buildPublicLandOpen && Boolean(buildPublicLandSelectedId)
@@ -578,9 +610,13 @@ function MapLayoutContent({
   const [occupationLedgerDetailId, setOccupationLedgerDetailId] = useState<string | null>(null)
   const [occupationLedgerListRefreshKey, setOccupationLedgerListRefreshKey] = useState(0)
   const occupationLedgerDetailOpen = occupationLedgerOpen && Boolean(occupationLedgerDetailId)
+  const [roadWorkHandbookDetail, setRoadWorkHandbookDetail] = useState<HandbookDetailSelection | null>(null)
+  const [roadWorkHandbookMode, setRoadWorkHandbookMode] = useState<HandbookViewMode>("target")
+  const roadWorkHandbookDetailOpen = roadDocOpen && roadWorkHandbookDetail != null
   /** 보상편입용지 — DB(road_reward) 조회·저장 */
   const [roadRewardCases, setRoadRewardCases] = useState<RoadRewardCase[]>([])
   const [roadRewardSelectedId, setRoadRewardSelectedId] = useState<string | null>(null)
+  const [roadRewardFocusParcelId, setRoadRewardFocusParcelId] = useState<string | null>(null)
   const roadRewardDetailOpen = roadRewardOpen && Boolean(roadRewardSelectedId)
   /** 접도구역 건축물 관리대장 */
   const [roadFrontageBuildingSelectedId, setRoadFrontageBuildingSelectedId] = useState<
@@ -589,13 +625,10 @@ function MapLayoutContent({
   const [roadFrontageBuildingListRefreshKey, setRoadFrontageBuildingListRefreshKey] = useState(0)
   const roadFrontageBuildingDetailOpen =
     roadFrontageBuildingOpen && Boolean(roadFrontageBuildingSelectedId)
-  /** 접도구역 표주 — 화면 목업. 샘플 데이터를 화면 상태로만 들고 있음 */
-  const [roadFrontageMarkerLedgers, setRoadFrontageMarkerLedgers] = useState<
-    RoadFrontageMarkerLedger[]
-  >(() => createInitialRoadFrontageMarkerLedgers())
   const [roadFrontageMarkerSelectedId, setRoadFrontageMarkerSelectedId] = useState<
     string | null
   >(null)
+  const [roadFrontageMarkerListRefreshKey, setRoadFrontageMarkerListRefreshKey] = useState(0)
   const roadFrontageMarkerDetailOpen =
     roadFrontageMarkerOpen && Boolean(roadFrontageMarkerSelectedId)
   // 점용대장(프) 더미 state 비활성
@@ -685,6 +718,9 @@ function MapLayoutContent({
   )
   const [jsjReservoirPanelWidth, setJsjReservoirPanelWidth] = useState(JSJ_RESERVOIR_PANEL_DEFAULT_WIDTH)
   const [roadDocPanelWidth, setRoadDocPanelWidth] = useState(ROAD_DOC_PANEL_DEFAULT_WIDTH)
+  const [roadWorkHandbookDetailWidth, setRoadWorkHandbookDetailWidth] = useState(
+    ROAD_WORK_HANDBOOK_DETAIL_DEFAULT_WIDTH
+  )
   const [roadCctvPanelWidth, setRoadCctvPanelWidth] = useState(ROAD_CCTV_PANEL_DEFAULT_WIDTH)
   const [roadInfraPanelWidth, setRoadInfraPanelWidth] = useState(ROAD_INFRA_PANEL_DEFAULT_WIDTH)
   const [parcelAnalysisPanelWidth, setParcelAnalysisPanelWidth] = useState(PARCEL_ANALYSIS_PANEL_DEFAULT_WIDTH)
@@ -743,6 +779,7 @@ function MapLayoutContent({
   )
   const [fmsLinkagePanelWidth, setFmsLinkagePanelWidth] = useState(FMS_PANEL_DEFAULT_WIDTH)
   const [fmsLinkageDetailWidth, setFmsLinkageDetailWidth] = useState(FMS_DETAIL_DEFAULT_WIDTH)
+  const [samplePanelWidth, setSamplePanelWidth] = useState(DESIGN_SAMPLE_PANEL_DEFAULT_WIDTH)
   const [fmsGeomToastMsg, setFmsGeomToastMsg] = useState<string | null>(null)
   const [memoPanelWidth, setMemoPanelWidth] = useState(MEMO_PANEL_DEFAULT_WIDTH)
   const [layerDataPanelWidth, setLayerDataPanelWidth] = useState(LAYER_DATA_PANEL_DEFAULT_WIDTH)
@@ -795,6 +832,7 @@ function MapLayoutContent({
     (safetyHospitalBedOpen ? safetyHospitalBedPanelWidth : 0) +
     (jsjWaterLevelOpen ? jsjReservoirPanelWidth : 0) +
     (roadDocOpen ? roadDocPanelWidth : 0) +
+    (roadWorkHandbookDetailOpen ? roadWorkHandbookDetailWidth : 0) +
     (roadCctvOpen ? roadCctvPanelWidth : 0) +
     // (useLedgerProtoOpen ? useLedgerProtoPanelWidth : 0) +
     // (useLedgerProtoDetailOpen ? useLedgerProtoDetailWidth : 0) +
@@ -804,7 +842,8 @@ function MapLayoutContent({
     (groundwaterPermitOpen ? groundwaterPermitPanelWidth : 0) +
     (groundwaterPermitDetailOpen ? groundwaterPermitDetailWidth : 0) +
     (fmsLinkageOpen ? fmsLinkagePanelWidth : 0) +
-    (fmsLinkageDetailOpen ? fmsLinkageDetailWidth : 0)
+    (fmsLinkageDetailOpen ? fmsLinkageDetailWidth : 0) +
+    (designSampleOpen ? samplePanelWidth : 0)
   const searchBarOffset = {
     leftPx: SIDEBAR_WIDTH + totalListPanelWidth + SEARCH_BAR_MARGIN,
     topPx: 16,
@@ -904,7 +943,10 @@ function MapLayoutContent({
   const jsjReservoirPanelLeftPx =
     safetyHospitalBedPanelLeftPx + (safetyHospitalBedOpen ? safetyHospitalBedPanelWidth : 0)
   const roadDocPanelLeftPx = jsjReservoirPanelLeftPx + (jsjWaterLevelOpen ? jsjReservoirPanelWidth : 0)
-  const roadCctvPanelLeftPx = roadDocPanelLeftPx + (roadDocOpen ? roadDocPanelWidth : 0)
+  const roadWorkHandbookDetailLeftPx =
+    roadDocPanelLeftPx + (roadDocOpen ? roadDocPanelWidth : 0)
+  const roadCctvPanelLeftPx =
+    roadWorkHandbookDetailLeftPx + (roadWorkHandbookDetailOpen ? roadWorkHandbookDetailWidth : 0)
   // 점용대장(프) 더미 leftPx 비활성 — 점사용료는 CCTV 다음에 바로 배치
   // const useLedgerProtoPanelLeftPx =
   //   roadCctvPanelLeftPx + (roadCctvOpen ? roadCctvPanelWidth : 0)
@@ -926,6 +968,8 @@ function MapLayoutContent({
     (groundwaterPermitDetailOpen ? groundwaterPermitDetailWidth : 0)
   const fmsLinkageDetailLeftPx =
     fmsLinkagePanelLeftPx + (fmsLinkageOpen ? fmsLinkagePanelWidth : 0)
+  const samplePanelLeftPx =
+    fmsLinkageDetailLeftPx + (fmsLinkageDetailOpen ? fmsLinkageDetailWidth : 0)
 
   const mapPaddingLeft = SIDEBAR_WIDTH + totalListPanelWidth
   /** 패딩은 useLayoutEffect — 자식 useEffect(도로대장 fit 등)보다 먼저 적용되어야 함.
@@ -1086,6 +1130,10 @@ function MapLayoutContent({
   }, [setComplaintPanelOpen, complaintManagementOpen])
 
   useEffect(() => {
+    setRoadRewardPanelOpen?.(roadRewardOpen)
+  }, [setRoadRewardPanelOpen, roadRewardOpen])
+
+  useEffect(() => {
     if (!roadCctvOpen) {
       setRoadCctvOverlay?.(null)
       setRoadCctvUnderlayMode?.("traffic")
@@ -1183,6 +1231,16 @@ function MapLayoutContent({
     router.push(`/map?${current.toString()}`)
   }
 
+  /** 시스템 전환 시 — 레이어 전부 끄기 (opened URL 은 selectSystem 에서 serviceList 기준 scrub) */
+  const prevSystemKeyRef = useRef<string | undefined>(undefined)
+  useEffect(() => {
+    const prev = prevSystemKeyRef.current
+    prevSystemKeyRef.current = systemKeyFromUrl
+    if (prev === undefined || !prev || prev === systemKeyFromUrl) return
+    mapContext?.allLayersOffRef?.current?.()
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- systemKeyFromUrl only
+  }, [systemKeyFromUrl])
+
   const setOpened = (keys: string[]) => {
     updateMapUrl({ opened: keys })
   }
@@ -1268,6 +1326,7 @@ function MapLayoutContent({
 
   const handleCloseRoadReward = () => {
     setRoadRewardSelectedId(null)
+    setRoadRewardFocusParcelId(null)
     const next = openedWindows.filter((w) => w !== ROAD_REWARD_OPENED_KEY)
     setOpened(next)
   }
@@ -1315,6 +1374,11 @@ function MapLayoutContent({
     setFmsLinkageSelectedId?.(null)
     setFmsLinkageOverlayRows?.([])
     const next = openedWindows.filter((w) => !isFmsOpenedToken(w))
+    setOpened(next)
+  }
+
+  const handleCloseDesignSample = () => {
+    const next = openedWindows.filter((w) => w !== DESIGN_SAMPLE_OPENED_KEY)
     setOpened(next)
   }
 
@@ -1366,11 +1430,21 @@ function MapLayoutContent({
   }, [occupationLedgerOpen])
 
   useEffect(() => {
+    if (!roadDocOpen) {
+      setRoadWorkHandbookDetail(null)
+      setRoadWorkHandbookMode("target")
+    }
+  }, [roadDocOpen])
+
+  useEffect(() => {
     setOccupationLedgerDetailId(null)
   }, [occupationLedgerSerEng])
 
   useEffect(() => {
-    if (!roadRewardOpen) setRoadRewardSelectedId(null)
+    if (!roadRewardOpen) {
+      setRoadRewardSelectedId(null)
+      setRoadRewardFocusParcelId(null)
+    }
   }, [roadRewardOpen])
 
   useEffect(() => {
@@ -1384,6 +1458,23 @@ function MapLayoutContent({
   useEffect(() => {
     if (!roadFrontageMarkerOpen) setRoadFrontageMarkerSelectedId(null)
   }, [roadFrontageMarkerOpen])
+
+  useEffect(() => {
+    setRoadFrontageMarkerPanelOpen?.(roadFrontageMarkerOpen)
+    if (!roadFrontageMarkerOpen) {
+      setRoadFrontageMarkerPointPickActive?.(false)
+      setRoadFrontageMarkerDraftPoint?.(null)
+      if (mapContext?.roadFrontageMarkerPointPickRef) {
+        mapContext.roadFrontageMarkerPointPickRef.current = null
+      }
+    }
+  }, [
+    roadFrontageMarkerOpen,
+    setRoadFrontageMarkerPanelOpen,
+    setRoadFrontageMarkerPointPickActive,
+    setRoadFrontageMarkerDraftPoint,
+    mapContext?.roadFrontageMarkerPointPickRef,
+  ])
 
   // 점용대장(프) 더미 effects 비활성
   // useEffect(() => { if (!useLedgerProtoOpen) { setUseLedgerProtoDetailId(null); setUseLedgerProtoFeeId(null) } }, [useLedgerProtoOpen])
@@ -1505,6 +1596,7 @@ function MapLayoutContent({
   }, [shootingPanelOpen, shootingApprovalOpen, shootingRequestOpen])
 
   useEffect(() => {
+    if (systemKeyFromUrl !== 'uav') return
     if (searchParams.get('shotForm') !== 'new') return
     const current = new URLSearchParams(Array.from(searchParams.entries()))
     current.delete('shotForm')
@@ -1518,7 +1610,7 @@ function MapLayoutContent({
       setShootingRequestDetailId(null)
     }
     router.replace(`/map?${current.toString()}`)
-  }, [shootingRequestOpen, shootingApprovalOpen, searchParams, router])
+  }, [systemKeyFromUrl, shootingRequestOpen, shootingApprovalOpen, searchParams, router])
 
   const openShootingRequestForm = useCallback(() => {
     const current = new URLSearchParams(Array.from(searchParams.entries()))
@@ -1600,7 +1692,11 @@ function MapLayoutContent({
   }
 
   const handleCloseRoadDoc = () => {
-    const next = openedWindows.filter((w) => w !== ROAD_DOC_OPENED_KEY)
+    setRoadWorkHandbookDetail(null)
+    setRoadWorkHandbookMode("target")
+    const next = openedWindows.filter(
+      (w) => w !== ROAD_DOC_OPENED_KEY && w !== ROAD_WORK_HANDBOOK_OPENED_KEY
+    )
     setOpened(next)
   }
 
@@ -1617,7 +1713,7 @@ function MapLayoutContent({
   const handleOpenDataPanel = useCallback(
     (tableName: string) => {
       const rawOpened = searchParams.get("opened")?.split(",").filter(Boolean) || []
-      const opened = rawOpened.map((w) => (w === "dataQuery" ? STANDARD_LIST_OPENED_KEY : w))
+      const opened = rawOpened.map(normalizeOpenedToken)
       const nextOpened = opened.includes(LIST_VIEW_OPENED_KEY) ? opened : [...opened, LIST_VIEW_OPENED_KEY]
       const current = new URLSearchParams(Array.from(searchParams.entries()))
       if (nextOpened.length > 0) current.set("opened", nextOpened.join(","))
@@ -1632,7 +1728,7 @@ function MapLayoutContent({
 
   const handleClearDataSelection = useCallback(() => {
     const rawOpened = searchParams.get("opened")?.split(",").filter(Boolean) || []
-    const opened = rawOpened.map((w) => (w === "dataQuery" ? STANDARD_LIST_OPENED_KEY : w))
+    const opened = rawOpened.map(normalizeOpenedToken)
     const next = opened.filter((w) => w !== LIST_VIEW_OPENED_KEY)
     const current = new URLSearchParams(Array.from(searchParams.entries()))
     if (next.length > 0) current.set("opened", next.join(","))
@@ -2241,6 +2337,7 @@ function MapLayoutContent({
                   selectedId={roadRewardSelectedId}
                   onCasesChange={setRoadRewardCases}
                   onSelectId={setRoadRewardSelectedId}
+                  onFocusParcelId={setRoadRewardFocusParcelId}
                   onClose={handleCloseRoadReward}
                 />
               </MapSideListPanel>
@@ -2260,9 +2357,16 @@ function MapLayoutContent({
                   caseId={roadRewardSelectedId}
                   cases={roadRewardCases}
                   onCasesChange={setRoadRewardCases}
-                  onClose={() => setRoadRewardSelectedId(null)}
-                  onDeleted={() => setRoadRewardSelectedId(null)}
+                  onClose={() => {
+                    setRoadRewardSelectedId(null)
+                    setRoadRewardFocusParcelId(null)
+                  }}
+                  onDeleted={() => {
+                    setRoadRewardSelectedId(null)
+                    setRoadRewardFocusParcelId(null)
+                  }}
                   onCaseIdChange={setRoadRewardSelectedId}
+                  focusParcelId={roadRewardFocusParcelId}
                   overlayLeftPx={roadRewardPanelLeftPx}
                   overlayWidthPx={
                     roadRewardPanelWidth +
@@ -2334,11 +2438,11 @@ function MapLayoutContent({
                 contentClassName="overflow-hidden"
               >
                 <RoadFrontageMarkerListPanel
-                  ledgers={roadFrontageMarkerLedgers}
                   selectedId={roadFrontageMarkerSelectedId}
                   onSelectId={setRoadFrontageMarkerSelectedId}
                   onAdd={() => setRoadFrontageMarkerSelectedId(ROAD_FRONTAGE_MARKER_NEW_ID)}
                   onClose={handleCloseRoadFrontageMarker}
+                  refreshKey={roadFrontageMarkerListRefreshKey}
                 />
               </MapSideListPanel>
             </div>
@@ -2356,11 +2460,16 @@ function MapLayoutContent({
                 <RoadFrontageMarkerDetailPanel
                   key={roadFrontageMarkerSelectedId}
                   ledgerId={roadFrontageMarkerSelectedId}
-                  ledgers={roadFrontageMarkerLedgers}
-                  onLedgersChange={setRoadFrontageMarkerLedgers}
                   onClose={() => setRoadFrontageMarkerSelectedId(null)}
-                  onDeleted={() => setRoadFrontageMarkerSelectedId(null)}
-                  onLedgerIdChange={setRoadFrontageMarkerSelectedId}
+                  onSaved={() => setRoadFrontageMarkerListRefreshKey((k) => k + 1)}
+                  onCreated={(newId) => {
+                    setRoadFrontageMarkerListRefreshKey((k) => k + 1)
+                    setRoadFrontageMarkerSelectedId(newId)
+                  }}
+                  onDeleted={() => {
+                    setRoadFrontageMarkerSelectedId(null)
+                    setRoadFrontageMarkerListRefreshKey((k) => k + 1)
+                  }}
                   overlayLeftPx={roadFrontageMarkerPanelLeftPx}
                   overlayWidthPx={
                     roadFrontageMarkerPanelWidth +
@@ -2373,6 +2482,7 @@ function MapLayoutContent({
           <ShootingRequestFormModal
             open={
               SHOOTING_REQUEST_UI_ENABLED &&
+              systemKeyFromUrl === "uav" &&
               (myInfoShootingModalId != null ||
                 (shootingPanelOpen && shootingRequestDetailId === SHOOTING_REQUEST_NEW_ID))
             }
@@ -2584,18 +2694,49 @@ function MapLayoutContent({
             </div>
           )}
           {roadDocOpen && (
-            <div className="pointer-events-auto shrink-0">
-              <MapSideListPanel
-                width={roadDocPanelWidth}
-                minWidth={ROAD_DOC_PANEL_MIN_WIDTH}
-                maxWidth={ROAD_DOC_PANEL_MAX_WIDTH}
-                leftOffsetPx={roadDocPanelLeftPx}
-                onWidthChange={setRoadDocPanelWidth}
-                contentClassName="overflow-hidden"
-              >
-                <RoadDocManualPanel onClose={handleCloseRoadDoc} />
-              </MapSideListPanel>
-            </div>
+            <RoadWorkHandbookMapProvider
+              sessionKey={handbookMapSessionKey(roadWorkHandbookMode, roadWorkHandbookDetail)}
+            >
+              <div className="contents">
+                <div className="pointer-events-auto shrink-0">
+                  <MapSideListPanel
+                    width={roadDocPanelWidth}
+                    minWidth={ROAD_DOC_PANEL_MIN_WIDTH}
+                    maxWidth={ROAD_DOC_PANEL_MAX_WIDTH}
+                    leftOffsetPx={roadDocPanelLeftPx}
+                    onWidthChange={setRoadDocPanelWidth}
+                    contentClassName="overflow-hidden"
+                  >
+                    <RoadDocManualPanel
+                      onClose={handleCloseRoadDoc}
+                      handbookMode={roadWorkHandbookMode}
+                      onHandbookModeChange={setRoadWorkHandbookMode}
+                      handbookSelected={roadWorkHandbookDetail}
+                      onHandbookSelect={setRoadWorkHandbookDetail}
+                      startOnHandbook={handbookDeeplink}
+                    />
+                  </MapSideListPanel>
+                </div>
+                {roadWorkHandbookDetail && (
+                  <div className="pointer-events-auto shrink-0">
+                    <MapSideListPanel
+                      width={roadWorkHandbookDetailWidth}
+                      minWidth={ROAD_WORK_HANDBOOK_DETAIL_MIN_WIDTH}
+                      maxWidth={ROAD_WORK_HANDBOOK_DETAIL_MAX_WIDTH}
+                      leftOffsetPx={roadWorkHandbookDetailLeftPx}
+                      onWidthChange={setRoadWorkHandbookDetailWidth}
+                      contentClassName="overflow-hidden"
+                    >
+                      <RoadWorkHandbookDetailPanel
+                        selection={roadWorkHandbookDetail}
+                        onClose={() => setRoadWorkHandbookDetail(null)}
+                      />
+                    </MapSideListPanel>
+                  </div>
+                )}
+                <RoadWorkHandbookMapHandler />
+              </div>
+            </RoadWorkHandbookMapProvider>
           )}
           {roadCctvOpen && (
             <div className="pointer-events-auto shrink-0">
@@ -2723,6 +2864,19 @@ function MapLayoutContent({
               </MapSideListPanel>
             </div>
           )}
+          {designSampleOpen && (
+            <div className="pointer-events-auto shrink-0">
+              <MapSideListPanel
+                width={samplePanelWidth}
+                minWidth={DESIGN_SAMPLE_PANEL_MIN_WIDTH}
+                maxWidth={DESIGN_SAMPLE_PANEL_MAX_WIDTH}
+                leftOffsetPx={samplePanelLeftPx}
+                onWidthChange={setSamplePanelWidth}
+              >
+                <SampleListPanel onClose={handleCloseDesignSample} />
+              </MapSideListPanel>
+            </div>
+          )}
           <div className="flex-1 min-w-0 relative">
             <div className="pointer-events-auto">
               <MapSearchBar
@@ -2780,9 +2934,19 @@ function MapLayoutContent({
                 open={protoUserAccountOpen}
                 onClose={() => setProtoUserAccountOpen(false)}
                 onSelectShootingRequest={(id) => setMyInfoShootingModalId(id)}
-                onOpenLedger={(ledgerId) => {
+                onOpenLedger={(item) => {
+                  const key = String(item.notifKey ?? "")
+                  if (key.startsWith("occup-expiry:")) {
+                    const serEng = getOccupationLedgerBinding({
+                      system: item.systemScope,
+                    })?.serEng
+                    if (!serEng) return
+                    setOpened([serEng])
+                    setOccupationLedgerDetailId(item.targetId)
+                    return
+                  }
                   setOpened([USAGE_DATA_AS_OPENED_KEY])
-                  setUsageDataAsDetailId(ledgerId)
+                  setUsageDataAsDetailId(item.targetId)
                 }}
                 onOpenFee={(feeId) => {
                   const feeSerEng = getUseFeeBinding({ system: systemKeyFromUrl }).serEng

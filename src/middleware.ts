@@ -26,18 +26,16 @@ function publicOrigin(req: NextRequest): string {
 }
 
 /**
- * 앱 홈으로 307 (Location은 반드시 절대 URL — 상대면 Next edge가 Invalid URL → 500).
- * 공개 origin + getBasePath()로내어, 백엔드 Host Location이 ProxyPassReverse에
+ * 앱 홈으로 리다이렉트 (Location은 반드시 절대 URL — 상대면 Next edge가 Invalid URL → 500).
+ * 공개 origin + getBasePath()로 내어, 백엔드 Host Location이 ProxyPassReverse에
  * 걸려 build_yy_v6build_yy 처럼 이어 붙는 경우를 줄인다.
  *
- * 게이트 conf (repo 밖) 권장:
- *   ProxyPass        /build_yy  http://<next>:3000/build_yy
- *   ProxyPassReverse /build_yy  http://<next>:3000/build_yy
- *   — 공개·backend·BASE_PATH 모두 끝 / 없음, build_yy_v6 등 잔여 Reverse 제거
- *   — X-Forwarded-Host / X-Forwarded-Proto 전달 권장
+ * pathname은 basePath 있을 때 `${base}` (끝 / 없음) — 게이트 ProxyPass·Reverse도 /build_yy 형태.
+ * BASE_PATH env 값과 동일하게 유지.
  */
 function redirectToAppHome(req: NextRequest, query?: Record<string, string>): NextResponse {
-  const home = new URL(getBasePath() || '/', publicOrigin(req));
+  const base = getBasePath();
+  const home = new URL(base || '/', publicOrigin(req));
   home.search = '';
   home.hash = '';
   if (query) {
@@ -90,8 +88,12 @@ export const config = {
   /**
    * 게이트: dggskorea/[프로젝트명] → Next basePath.
    * 요청 path가 `/uav_ulsan/_next/static/...` 형태여도 _next·확장자 정적파일은 미들웨어 제외.
+   *
+   * `'/'` 필수: basePath 홈(`/build_yy`)은 앱 경로 `/` 인데,
+   * 아래 캡처 패턴만으로는 루트가 미매칭되어 빈 200이 된다 (Next 16).
    */
   matcher: [
+    '/',
     '/((?!api/auth|_next/|(?:[^/]+/)+_next/|favicon.ico|.*\\.(?:css|js|map|mjs|cjs|svg|png|jpg|jpeg|gif|webp|ico|woff2?|ttf|eot|mp4|webm|ogg|mov)$).*)',
   ],
 };

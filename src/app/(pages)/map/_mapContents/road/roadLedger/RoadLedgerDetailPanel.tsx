@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { LucideIcon } from "lucide-react";
 import {
   Building2,
@@ -10,6 +10,7 @@ import {
   FileText,
   Layers,
   LayoutGrid,
+  Loader2,
   Map,
   Package,
   Shield,
@@ -19,7 +20,9 @@ import {
   X,
 } from "lucide-react";
 import { call } from "@/lib/api";
+import { appFetch } from "@/lib/basePath";
 import { recordDataViewLog } from "@/lib/recordDataViewLog";
+import { SER_FILE_ENG } from "@/lib/serviceFileDataSerEng";
 import { cn } from "@/lib/utils";
 import {
   Dialog,
@@ -30,6 +33,14 @@ import {
 import { MapSideDetailScroll } from "../../../_mapComponents/MapSideDetailScroll";
 import { useMapContext, type MapContextValue } from "../../../_mapComponents/MapContext";
 import {
+  ServiceFilePdfPreview,
+  type ServiceFilePdfPreviewItem,
+} from "../../../_mapComponents/standard/ServiceFilePdfPreview";
+import {
+  isPdfServiceFileName,
+  serviceFileDataDownloadUrl,
+} from "../../../_mapComponents/standard/useServiceFileData";
+import {
   formatRoadLedgerAttrValue,
   formatRoadLedgerDsgdateDisplay,
   formatRoadLedgerDetailTitleParen,
@@ -37,6 +48,7 @@ import {
   formatRoadLedgerNumericToken,
   formatRoadLedgerRoadRankDisplay,
   pickRoadLedgerField,
+  pickRoadLedgerOgcFid,
 } from "./roadLedgerFormat";
 import {
   getAllRoadLedgerDocLayerIds,
@@ -44,6 +56,7 @@ import {
   ROAD_LEDGER_DOC_LAYERS,
   ROAD_LEDGER_DOC_LABELS_WITH_LAYER_COUNT,
   ROAD_LEDGER_RDID_MIN_LEN_FOR_FACILITY_JOIN,
+  ROAD_LEDGER_SUMMARY_LAYER_ID,
   type RoadLedgerDocButtonKey,
   toggleRoadLedgerDocLayers,
 } from "./roadLedgerDocLayerMap";
@@ -210,6 +223,8 @@ function RoadLedgerDocActionGrid({
   facilityDataCounts,
   facilityCountsLoading,
   hasRdidForFacility,
+  reportPdfLoading,
+  reportPdfActive,
 }: {
   items: { label: RoadLedgerDocButtonKey; icon: LucideIcon }[];
   gridClassName: string;
@@ -220,6 +235,8 @@ function RoadLedgerDocActionGrid({
   facilityDataCounts: Partial<Record<RoadLedgerDocButtonKey, number>> | null;
   facilityCountsLoading: boolean;
   hasRdidForFacility: boolean;
+  reportPdfLoading: boolean;
+  reportPdfActive: boolean;
 }) {
   return (
     <div className={cn("grid gap-1.5", gridClassName)}>
@@ -241,18 +258,20 @@ function RoadLedgerDocActionGrid({
             type="button"
             title={
               isReportOnly
-                ? "보고서"
+                ? "보고서 PDF 보기"
                 : hasLayers
                   ? "클릭: 해당 공간정보 레이어 켜기 / 다시 클릭: 끄기"
                   : "연결 레이어 없음"
             }
             onClick={() => onDocClick(label)}
-            disabled={isReportOnly ? false : !setVisibleLayerNames}
+            disabled={isReportOnly ? reportPdfLoading : !setVisibleLayerNames}
             className={cn(
               "h-7 text-[11px] rounded border min-w-0 inline-flex items-center justify-center gap-0.5 px-1 leading-none whitespace-nowrap",
               !isReportOnly && !setVisibleLayerNames && "pointer-events-none opacity-50",
               isReportOnly
-                ? "border-border bg-muted/50 text-foreground/90 hover:bg-muted"
+                ? reportPdfActive
+                  ? "border-primary/45 bg-primary/[0.08] text-foreground ring-1 ring-inset ring-primary/15 hover:bg-primary/[0.11]"
+                  : "border-border bg-muted/50 text-foreground/90 hover:bg-muted"
                 : hasLayers
                   ? active
                     ? "border-primary/45 bg-primary/[0.08] text-foreground ring-1 ring-inset ring-primary/15 hover:bg-primary/[0.11]"
@@ -260,7 +279,11 @@ function RoadLedgerDocActionGrid({
                   : "border-border bg-muted/50 text-muted-foreground hover:bg-muted",
             )}
           >
-            <Icon className="h-3.5 w-3.5 shrink-0" aria-hidden />
+            {isReportOnly && reportPdfLoading ? (
+              <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" aria-hidden />
+            ) : (
+              <Icon className="h-3.5 w-3.5 shrink-0" aria-hidden />
+            )}
             <span className="min-w-0 truncate [word-break:keep-all]">{displayLabel}</span>
           </button>
         );
@@ -277,6 +300,12 @@ export function RoadLedgerDetailPanel({ row, onClose }: Props) {
   > | null>(null);
   const [facilityCountsLoading, setFacilityCountsLoading] = useState(false);
   const [existingDocLayerIds, setExistingDocLayerIds] = useState<Set<string> | null>(null);
+  const [reportPdfPreview, setReportPdfPreview] = useState<{
+    items: ServiceFilePdfPreviewItem[];
+    initialIndex: number;
+  } | null>(null);
+  const [reportPdfLoading, setReportPdfLoading] = useState(false);
+  const reportPdfBusyRef = useRef(false);
   const mapContext = useMapContext();
   const visibleLayerNames = mapContext?.visibleLayerNames ?? new Set<string>();
   const setVisibleLayerNames = mapContext?.setVisibleLayerNames;
@@ -308,9 +337,58 @@ export function RoadLedgerDetailPanel({ row, onClose }: Props) {
     [existingDocLayerIds]
   );
 
+  const openReportPdfViewer = useCallback(async () => {
+    if (reportPdfBusyRef.current) return;
+    const ogcFid = pickRoadLedgerOgcFid(row);
+    if (ogcFid == null) {
+      window.alert("노선을 선택하세요.");
+      return;
+    }
+    reportPdfBusyRef.current = true;
+    setReportPdfLoading(true);
+    try {
+      const qs = new URLSearchParams({
+        serEng: SER_FILE_ENG.roadLedger,
+        layer: ROAD_LEDGER_SUMMARY_LAYER_ID,
+        key: String(ogcFid),
+      });
+      const res = await appFetch(`/api/service-files?${qs.toString()}`, { credentials: "include" });
+      if (!res.ok) {
+        const j = (await res.json().catch(() => ({}))) as { error?: string };
+        throw new Error(typeof j.error === "string" ? j.error : "목록을 불러오지 못했습니다.");
+      }
+      const data = (await res.json()) as { files?: { name: string }[] };
+      const files = Array.isArray(data.files) ? data.files : [];
+      const items: ServiceFilePdfPreviewItem[] = files
+        .filter((f) => isPdfServiceFileName(f.name))
+        .map((f) => ({
+          url: serviceFileDataDownloadUrl(
+            SER_FILE_ENG.roadLedger,
+            ROAD_LEDGER_SUMMARY_LAYER_ID,
+            ogcFid,
+            f.name
+          ),
+          fileName: f.name,
+        }));
+      if (items.length === 0) {
+        window.alert("보고서 PDF가 없습니다.");
+        return;
+      }
+      setReportPdfPreview({ items, initialIndex: 0 });
+    } catch (e) {
+      window.alert(e instanceof Error ? e.message : "보고서를 불러오지 못했습니다.");
+    } finally {
+      reportPdfBusyRef.current = false;
+      setReportPdfLoading(false);
+    }
+  }, [row]);
+
   const handleDocButtonClick = useCallback(
     (key: RoadLedgerDocButtonKey) => {
-      if (key === "보고서") return;
+      if (key === "보고서") {
+        void openReportPdfViewer();
+        return;
+      }
       const layers = getEffectiveDocLayers(key);
       if (layers.length === 0) {
         window.alert("해당 항목에 연결된 공간정보 레이어가 아직 없습니다. (준비 중)");
@@ -319,7 +397,7 @@ export function RoadLedgerDetailPanel({ row, onClose }: Props) {
       if (!setVisibleLayerNames) return;
       setVisibleLayerNames((prev) => toggleRoadLedgerDocLayers(prev, layers));
     },
-    [getEffectiveDocLayers, setVisibleLayerNames]
+    [getEffectiveDocLayers, setVisibleLayerNames, openReportPdfViewer]
   );
 
   useEffect(() => {
@@ -416,6 +494,7 @@ export function RoadLedgerDetailPanel({ row, onClose }: Props) {
     }));
 
   return (
+    <>
     <div className="flex h-full min-h-0 w-full min-w-0 flex-col bg-background">
       <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border px-4 py-2.5">
         <div className="min-w-0 flex-1">
@@ -448,6 +527,8 @@ export function RoadLedgerDetailPanel({ row, onClose }: Props) {
               facilityDataCounts={facilityDataCounts}
               facilityCountsLoading={facilityCountsLoading}
               hasRdidForFacility={hasRdidForFacility}
+              reportPdfLoading={reportPdfLoading}
+              reportPdfActive={reportPdfPreview != null}
             />
             <RoadLedgerDocActionGrid
               items={DOC_ACTION_BUTTONS_REST}
@@ -459,6 +540,8 @@ export function RoadLedgerDetailPanel({ row, onClose }: Props) {
               facilityDataCounts={facilityDataCounts}
               facilityCountsLoading={facilityCountsLoading}
               hasRdidForFacility={hasRdidForFacility}
+              reportPdfLoading={reportPdfLoading}
+              reportPdfActive={reportPdfPreview != null}
             />
           </div>
         </div>
@@ -531,5 +614,13 @@ export function RoadLedgerDetailPanel({ row, onClose }: Props) {
         </MapSideDetailScroll>
       </div>
     </div>
+    {reportPdfPreview != null && (
+      <ServiceFilePdfPreview
+        items={reportPdfPreview.items}
+        initialIndex={reportPdfPreview.initialIndex}
+        onClose={() => setReportPdfPreview(null)}
+      />
+    )}
+    </>
   );
 }

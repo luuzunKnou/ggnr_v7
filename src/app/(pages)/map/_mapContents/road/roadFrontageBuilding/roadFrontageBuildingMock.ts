@@ -1,10 +1,29 @@
 /**
  * 접도구역 건축물 관리대장 — 화면 타입·빈 값.
+ * 대장 필드명은 수급 DBF와 동일(camelCase).
  */
 import { DEFAULT_CENTER_LAT, DEFAULT_CENTER_LON } from '../../../_mapComponents/config/mapDefaults';
 
 export const ROAD_FRONTAGE_BUILDING_ROAD_TYPES = ['지방도', '국도', '군도'] as const;
 export type RoadFrontageBuildingRoadType = (typeof ROAD_FRONTAGE_BUILDING_ROAD_TYPES)[number];
+
+/** 도로망도 목록과 동일 톤 — 국도·지방도·군도 뱃지 */
+export const ROAD_FRONTAGE_BUILDING_ROAD_TYPE_BADGE: Record<
+  RoadFrontageBuildingRoadType,
+  { bg: string; text: string; border: string }
+> = {
+  국도: { bg: 'bg-chart-3/15', text: 'text-chart-3', border: 'border-chart-3/40' },
+  지방도: { bg: 'bg-primary/10', text: 'text-primary', border: 'border-primary/30' },
+  군도: { bg: 'bg-chart-2/15', text: 'text-chart-2', border: 'border-chart-2/40' },
+};
+
+export function roadFrontageBuildingRoadTypeBadgeClass(roadType: string): string {
+  const trimmed = String(roadType ?? '').trim();
+  const key = ROAD_FRONTAGE_BUILDING_ROAD_TYPES.find((t) => t === trimmed);
+  if (!key) return 'bg-muted text-muted-foreground border-border';
+  const badge = ROAD_FRONTAGE_BUILDING_ROAD_TYPE_BADGE[key];
+  return `${badge.bg} ${badge.text} ${badge.border}`;
+}
 
 /** 불량 건축물 표시 — 복수 선택 */
 export const ROAD_FRONTAGE_BUILDING_BAD_MARKS = ['A', 'B', 'C', 'D'] as const;
@@ -14,26 +33,60 @@ export const ROAD_FRONTAGE_BUILDING_LOCATION_KINDS = ['도로예정지', '접도
 export type RoadFrontageBuildingLocationKind =
   (typeof ROAD_FRONTAGE_BUILDING_LOCATION_KINDS)[number];
 
+export function detailLocationKind(
+  d: Pick<RoadFrontageBuildingDetailItem, 'locAdrR' | 'locAdrC'>
+): RoadFrontageBuildingLocationKind | '' {
+  if (String(d.locAdrR ?? '').trim().toUpperCase() === 'Y') return '도로예정지';
+  if (String(d.locAdrC ?? '').trim().toUpperCase() === 'Y') return '접도구역';
+  return '';
+}
+
+export function detailLocationFieldValue(
+  d: Pick<RoadFrontageBuildingDetailItem, 'locAdrR' | 'locAdrC'>,
+  kind: RoadFrontageBuildingLocationKind
+): string {
+  return kind === '도로예정지' ? String(d.locAdrR ?? '').trim() : String(d.locAdrC ?? '').trim();
+}
+
+/** 화면·인쇄 — Y는 ○, 그 외 수급 원문(△, Y (137), 도로구역 내 등)은 그대로 */
+export function detailLocationCellDisplay(raw: string): string {
+  const v = String(raw ?? '').trim();
+  if (!v) return '';
+  if (v.toUpperCase() === 'Y') return '○';
+  return v;
+}
+
+export function flagsFromLocationKind(
+  kind: RoadFrontageBuildingLocationKind | ''
+): Pick<RoadFrontageBuildingDetailItem, 'locAdrR' | 'locAdrC'> {
+  return {
+    locAdrR: kind === '도로예정지' ? 'Y' : '',
+    locAdrC: kind === '접도구역' ? 'Y' : '',
+  };
+}
+
 export type RoadFrontageBuildingDetailItem = {
   id: string;
   /** 동 구분 */
-  dongNo: number | null;
+  dongNo: string;
   /** 설치연월일 */
-  installedDate: string;
+  instYmd: string;
   structure: string;
   usageType: string;
-  /** 건축물(공작물) 면적(㎡) */
-  areaSqm: number | null;
-  /** 위치 — 도로예정지 또는 접도구역 */
-  locationKind: RoadFrontageBuildingLocationKind | '';
+  /** 건축물(공작물) 면적 */
+  areaSqm: string;
+  /** 도로예정지 — 신규·수정 시 Y, 수급 원문 문자열도 보관 */
+  locAdrR: string;
+  /** 접도구역 — 신규·수정 시 Y, 수급 원문 문자열도 보관 */
+  locAdrC: string;
   badMarks: string[];
 };
 
 export type RoadFrontageBuildingConfirmItem = {
   id: string;
-  confirmDate: string;
-  confirmerName: string;
-  approverName: string;
+  checkYmd: string;
+  checkNam: string;
+  appNam: string;
 };
 
 export type RoadFrontageBuildingFormAttachId = 'locationMap' | 'layoutPlan' | 'before' | 'after';
@@ -72,29 +125,31 @@ export function formatRoadFrontageBuildingWrittenAt(d = new Date()): string {
 
 export type RoadFrontageBuildingLedger = {
   id: string;
+  /** 시설식별번호(업무 키) */
+  ftrIdn: string;
   roadType: string;
   routeNo: string;
-  routeName: string;
+  routeNam: string;
   serialNo: string;
-  preparedDate: string;
+  preYmd: string;
   /** 위치 */
-  locationAddress: string;
+  locAdr: string;
   /** 현 거주자 성명 */
-  residentName: string;
+  resiNam: string;
   /** 현 거주자 전화번호 */
-  residentPhone: string;
-  buildingOwnerName: string;
-  buildingOwnerPhone: string;
-  buildingOwnerAddress: string;
-  landOwnerName: string;
-  landOwnerPhone: string;
-  landOwnerAddress: string;
+  resiNum: string;
+  buildOnam: string;
+  buildOnum: string;
+  buildOadr: string;
+  landOnam: string;
+  landOnum: string;
+  landOadr: string;
   /** 바닥글 부서 */
-  writerDept: string;
+  writeDept: string;
   /** 바닥글 작성자 */
-  writerName: string;
+  writeNam: string;
   /** 바닥글 작성 시각 YYYY-MM-DD HH:mm:ss */
-  writtenAt: string;
+  writeYmd: string;
   /** 지도 표시 좌표(EPSG:4326) */
   mockLonLat: { lon: number; lat: number };
   details: RoadFrontageBuildingDetailItem[];
@@ -112,16 +167,16 @@ export type RoadFrontageBuildingLedgerField = {
     | 'roadType'
     | 'routeNo'
     | 'serialNo'
-    | 'preparedDate'
-    | 'locationAddress'
-    | 'residentName'
-    | 'residentPhone'
-    | 'buildingOwnerName'
-    | 'buildingOwnerPhone'
-    | 'buildingOwnerAddress'
-    | 'landOwnerName'
-    | 'landOwnerPhone'
-    | 'landOwnerAddress'
+    | 'preYmd'
+    | 'locAdr'
+    | 'resiNam'
+    | 'resiNum'
+    | 'buildOnam'
+    | 'buildOnum'
+    | 'buildOadr'
+    | 'landOnam'
+    | 'landOnum'
+    | 'landOadr'
   >;
   label: string;
   /** 상세 속성 표에서 한 줄 전체를 차지 */
@@ -138,21 +193,21 @@ export const ROAD_FRONTAGE_BUILDING_LEDGER_FIELDS: RoadFrontageBuildingLedgerFie
   { field: 'roadType', label: '도로의 종류', select: ROAD_FRONTAGE_BUILDING_ROAD_TYPES },
   { field: 'routeNo', label: '노선번호(노선명)', routePair: true },
   { field: 'serialNo', label: '일련번호' },
-  { field: 'preparedDate', label: '작성연월일', date: true },
-  { field: 'locationAddress', label: '위치', fullWidth: true },
-  { field: 'residentName', label: '현 거주자' },
-  { field: 'residentPhone', label: '현 거주자 전화번호' },
-  { field: 'buildingOwnerName', label: '건축물 소유자' },
-  { field: 'buildingOwnerPhone', label: '건축물 소유자 전화번호' },
-  { field: 'buildingOwnerAddress', label: '건축물 소유자 주소', fullWidth: true },
-  { field: 'landOwnerName', label: '토지 소유자' },
-  { field: 'landOwnerPhone', label: '토지 소유자 전화번호' },
-  { field: 'landOwnerAddress', label: '토지 소유자 주소', fullWidth: true },
+  { field: 'preYmd', label: '작성연월일', date: true },
+  { field: 'locAdr', label: '위치', fullWidth: true },
+  { field: 'resiNam', label: '현 거주자' },
+  { field: 'resiNum', label: '현 거주자 전화번호' },
+  { field: 'buildOnam', label: '건축물 소유자' },
+  { field: 'buildOnum', label: '건축물 소유자 전화번호' },
+  { field: 'buildOadr', label: '건축물 소유자 주소', fullWidth: true },
+  { field: 'landOnam', label: '토지 소유자' },
+  { field: 'landOnum', label: '토지 소유자 전화번호' },
+  { field: 'landOadr', label: '토지 소유자 주소', fullWidth: true },
 ];
 
-export function formatRouteNoName(routeNo: string, routeName: string): string {
+export function formatRouteNoName(routeNo: string, routeNam: string): string {
   const no = routeNo.trim();
-  const name = routeName.trim();
+  const name = routeNam.trim();
   if (no && name) return `${no} (${name})`;
   return no || name || '—';
 }
@@ -198,12 +253,13 @@ function mockLonLat(index: number): { lon: number; lat: number } {
 export function createEmptyRoadFrontageBuildingDetail(): RoadFrontageBuildingDetailItem {
   return {
     id: createRoadFrontageBuildingId('detail'),
-    dongNo: null,
-    installedDate: '',
+    dongNo: '',
+    instYmd: '',
     structure: '',
     usageType: '',
-    areaSqm: null,
-    locationKind: '',
+    areaSqm: '',
+    locAdrR: '',
+    locAdrC: '',
     badMarks: [],
   };
 }
@@ -211,32 +267,33 @@ export function createEmptyRoadFrontageBuildingDetail(): RoadFrontageBuildingDet
 export function createEmptyRoadFrontageBuildingConfirm(): RoadFrontageBuildingConfirmItem {
   return {
     id: createRoadFrontageBuildingId('confirm'),
-    confirmDate: '',
-    confirmerName: '',
-    approverName: '',
+    checkYmd: '',
+    checkNam: '',
+    appNam: '',
   };
 }
 
 export function createEmptyRoadFrontageBuildingLedger(): RoadFrontageBuildingLedger {
   return {
     id: createRoadFrontageBuildingId('ledger'),
+    ftrIdn: '',
     roadType: '',
     routeNo: '',
-    routeName: '',
+    routeNam: '',
     serialNo: '',
-    preparedDate: '',
-    locationAddress: '',
-    residentName: '',
-    residentPhone: '',
-    buildingOwnerName: '',
-    buildingOwnerPhone: '',
-    buildingOwnerAddress: '',
-    landOwnerName: '',
-    landOwnerPhone: '',
-    landOwnerAddress: '',
-    writerDept: ROAD_FRONTAGE_BUILDING_DEFAULT_WRITER_DEPT,
-    writerName: '',
-    writtenAt: '',
+    preYmd: '',
+    locAdr: '',
+    resiNam: '',
+    resiNum: '',
+    buildOnam: '',
+    buildOnum: '',
+    buildOadr: '',
+    landOnam: '',
+    landOnum: '',
+    landOadr: '',
+    writeDept: ROAD_FRONTAGE_BUILDING_DEFAULT_WRITER_DEPT,
+    writeNam: '',
+    writeYmd: '',
     mockLonLat: mockLonLat(90),
     details: [],
     confirmHistory: [],

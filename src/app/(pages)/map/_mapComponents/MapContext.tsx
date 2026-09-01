@@ -52,6 +52,8 @@ export type AddressInfoDetailState = {
   viewProjection: string;
   loading: boolean;
   pnu?: string | null;
+  /** 지적 조회 직후 도형 시드 — 하이라이트 재그리기 트리거 */
+  geomSeedAt?: number;
   jibun: string | null;
   road: string | null;
   buildingName?: string | null;
@@ -105,6 +107,8 @@ export type MapContextValue = {
   setAddressInfoDetail: Dispatch<SetStateAction<AddressInfoDetailState>>;
   /** 현재 주소정보 하이라이트 필지 도형(3857). 같은 필지 우클릭 시 닫기 판단용 */
   addressParcelGeometryRef: MutableRefObject<import('ol/geom').Geometry | null>;
+  /** 우클릭 지적 조회 직후 시드 GeoJSON(4326) — API 응답 전 즉시 하이라이트 */
+  addressParcelSeedGeom4326Ref: MutableRefObject<Record<string, unknown> | null>;
   /** 전체 레이어 끄기(지적도·건물도로·기초구간 + defineLayer 레이어) 콜백. OpenLayersMap에서 등록 */
   allLayersOffRef: MutableRefObject<(() => void) | null>;
   /** 도형 내 데이터만 표시할 때 사용. WKT(5181). null이면 공간 필터 없음 */
@@ -356,6 +360,17 @@ export type MapContextValue = {
   /** 목록에서 선택한 현장 점 키 (`m-{id}` / `c-{id}`) — 강조·이동 */
   roadNetworkFocusedSitePointKey: string | null;
   setRoadNetworkFocusedSitePointKey: Dispatch<SetStateAction<string | null>>;
+  /** 접도구역 표주 패널 열림 */
+  roadFrontageMarkerPanelOpen: boolean;
+  setRoadFrontageMarkerPanelOpen: Dispatch<SetStateAction<boolean>>;
+  /** 표주 모달 편집 중 지도 점 찍기 */
+  roadFrontageMarkerPointPickRef: MutableRefObject<((lon: number, lat: number) => void) | null>;
+  roadFrontageMarkerPointPickActive: boolean;
+  setRoadFrontageMarkerPointPickActive: Dispatch<SetStateAction<boolean>>;
+  roadFrontageMarkerDraftPoint: { lon: number; lat: number } | null;
+  setRoadFrontageMarkerDraftPoint: Dispatch<
+    SetStateAction<{ lon: number; lat: number } | null>
+  >;
   /** 하천 공사대장 임시 목록(CRUD 반영) */
   riverConstructionLedgerRows: RiverConstructionLedgerRow[];
   setRiverConstructionLedgerRows: Dispatch<SetStateAction<RiverConstructionLedgerRow[]>>;
@@ -406,6 +421,9 @@ export type MapContextValue = {
   /** URL 기준 민원관리 패널 열림 — 일반 식별 비활성화·지도 클릭 상세용 */
   complaintPanelOpen: boolean;
   setComplaintPanelOpen: Dispatch<SetStateAction<boolean>>;
+  /** URL 기준 보상편입용지 패널 열림 — 일반 식별 비활성화용 */
+  roadRewardPanelOpen: boolean;
+  setRoadRewardPanelOpen: Dispatch<SetStateAction<boolean>>;
   /** 재난시설 상세 — 건물·도로 WMS (켜진 테이블 + CQL). null이면 미사용 */
   safetyFacBuildingRoadLayerState: {
     visibleTableNames: Set<string>;
@@ -532,6 +550,7 @@ export function MapContextProvider({ children }: { children: React.ReactNode }) 
   const [complaintDetail, setComplaintDetail] = useState<ComplaintDetail>(null);
   const [addressInfoDetail, setAddressInfoDetail] = useState<AddressInfoDetailState>(null);
   const addressParcelGeometryRef = useRef<import('ol/geom').Geometry | null>(null);
+  const addressParcelSeedGeom4326Ref = useRef<Record<string, unknown> | null>(null);
   const [spatialFilterWkt, setSpatialFilterWkt] = useState<string | null>(null);
   const [spatialFilteredLayerNames, setSpatialFilteredLayerNames] = useState<Set<string> | null>(null);
   const [serviceWmsCqlByLayer, setServiceWmsCqlByLayer] = useState<Record<string, string> | null>(null);
@@ -647,6 +666,16 @@ export function MapContextProvider({ children }: { children: React.ReactNode }) 
   const [roadNetworkFocusedSitePointKey, setRoadNetworkFocusedSitePointKey] = useState<
     string | null
   >(null);
+  const [roadFrontageMarkerPanelOpen, setRoadFrontageMarkerPanelOpen] = useState(false);
+  const roadFrontageMarkerPointPickRef = useRef<
+    ((lon: number, lat: number) => void) | null
+  >(null);
+  const [roadFrontageMarkerPointPickActive, setRoadFrontageMarkerPointPickActive] =
+    useState(false);
+  const [roadFrontageMarkerDraftPoint, setRoadFrontageMarkerDraftPoint] = useState<{
+    lon: number;
+    lat: number;
+  } | null>(null);
   const [riverConstructionLedgerRows, setRiverConstructionLedgerRows] = useState<
     RiverConstructionLedgerRow[]
   >([]);
@@ -673,6 +702,7 @@ export function MapContextProvider({ children }: { children: React.ReactNode }) 
   const [roadCctvPanelOpen, setRoadCctvPanelOpen] = useState(false);
   const [safetyFacPanelOpen, setSafetyFacPanelOpen] = useState(false);
   const [complaintPanelOpen, setComplaintPanelOpen] = useState(false);
+  const [roadRewardPanelOpen, setRoadRewardPanelOpen] = useState(false);
   const [safetyFacBuildingRoadLayerState, setSafetyFacBuildingRoadLayerState] = useState<{
     visibleTableNames: Set<string>;
     cqlByTable: Record<string, string>;
@@ -752,6 +782,7 @@ export function MapContextProvider({ children }: { children: React.ReactNode }) 
         addressInfoDetail,
         setAddressInfoDetail,
         addressParcelGeometryRef,
+        addressParcelSeedGeom4326Ref,
         allLayersOffRef,
         spatialFilterWkt,
         setSpatialFilterWkt,
@@ -846,6 +877,13 @@ export function MapContextProvider({ children }: { children: React.ReactNode }) 
         setRoadNetworkEndpointMarkers,
         roadNetworkFocusedSitePointKey,
         setRoadNetworkFocusedSitePointKey,
+        roadFrontageMarkerPanelOpen,
+        setRoadFrontageMarkerPanelOpen,
+        roadFrontageMarkerPointPickRef,
+        roadFrontageMarkerPointPickActive,
+        setRoadFrontageMarkerPointPickActive,
+        roadFrontageMarkerDraftPoint,
+        setRoadFrontageMarkerDraftPoint,
         riverConstructionLedgerRows,
         setRiverConstructionLedgerRows,
         riverConstructionLedgerSelectedId,
@@ -874,6 +912,8 @@ export function MapContextProvider({ children }: { children: React.ReactNode }) 
         setSafetyFacPanelOpen,
         complaintPanelOpen,
         setComplaintPanelOpen,
+        roadRewardPanelOpen,
+        setRoadRewardPanelOpen,
         safetyFacBuildingRoadLayerState,
         setSafetyFacBuildingRoadLayerState,
         roadCctvUnderlayMode,

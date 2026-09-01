@@ -15,6 +15,11 @@ export async function GET() {
   try {
     names = await readdir(dir);
   } catch (e) {
+    const code =
+      typeof e === "object" && e && "code" in e ? String((e as { code?: unknown }).code) : "";
+    if (code === "ENOENT") {
+      return NextResponse.json({ files: [] as RoadDocListItem[] });
+    }
     console.error("[roadDoc/list] readdir", e);
     return NextResponse.json(
       { error: "파일 목록을 읽을 수 없습니다.", files: [] as RoadDocListItem[] },

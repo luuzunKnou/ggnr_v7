@@ -10,6 +10,7 @@ import {
 } from '@/lib/mapLayerGeometryOrder';
 import { resolveOccupationDeptWmsStyleName } from '@/lib/occupationDeptWmsStyle';
 import { getGeoServerBase } from '@/lib/geoserverUrl';
+import { withBasePath } from '@/lib/basePath';
 
 const WORKSPACE = 'ggnr';
 
@@ -17,20 +18,19 @@ const WORKSPACE = 'ggnr';
 const WMS_VIEWPORT_IMAGE_RATIO = 1.5;
 
 /**
- * GeoServer WMS GetLegendGraphic URL — 범례 이미지 요청용
+ * 범례 이미지 — 테이블이 없어도 500이 나지 않도록 앱 프록시를 탄다.
  */
 export function getLegendGraphicUrl(layerName: string, styleName?: string): string {
-  const base = getGeoServerBase();
+  const layer = String(layerName ?? '').trim();
+  if (!layer) return '';
   const params = new URLSearchParams({
-    REQUEST: 'GetLegendGraphic',
-    VERSION: '1.0.0',
-    FORMAT: 'image/png',
-    LAYER: `${WORKSPACE}:${layerName}`,
-    WIDTH: '20',
-    HEIGHT: '20',
+    layer,
+    width: '20',
+    height: '20',
   });
-  if (styleName) params.set('STYLE', styleName);
-  return `${base}/wms?${params.toString()}`;
+  const style = String(styleName ?? '').trim();
+  if (style) params.set('style', style);
+  return withBasePath(`/api/geoserver/legend?${params.toString()}`);
 }
 
 export type LayerFilterRow = { field: string; value: string };
@@ -140,40 +140,39 @@ function warnServiceWmsFallback(reason: string, detail?: unknown): void {
   }
 }
 
-async function isLikelyRasterImageBlob(blob: Blob): Promise<boolean> {
-  if (blob.size < 4) return false;
-  const head = await blob.slice(0, 4).arrayBuffer();
-  const bytes = new Uint8Array(head);
-  // PNG / JPEG / GIF
+function isRasterImageBytes(bytes: Uint8Array): boolean {
+  if (bytes.length < 8) return false;
+  let i = 0;
+  if (bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf) i = 3;
+  // ServiceExceptionReport·HTML 을 img 에 넣으면 EncodingError
+  if (bytes[i] === 0x3c) return false;
   if (bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47) return true;
   if (bytes[0] === 0xff && bytes[1] === 0xd8) return true;
   if (bytes[0] === 0x47 && bytes[1] === 0x49 && bytes[2] === 0x46) return true;
   return false;
 }
 
-async function assertWmsImageBlob(blob: Blob, contentType: string): Promise<Blob> {
-  const type = (blob.type || contentType).toLowerCase();
-  if (type.includes('xml') || type.includes('text/')) {
-    throw new Error(`WMS exception content-type: ${type || 'unknown'}`);
+async function readWmsImageBytes(res: Response): Promise<{ buffer: ArrayBuffer; mime: string }> {
+  const ct = (res.headers.get('content-type') ?? '').toLowerCase();
+  if (!res.ok || ct.includes('xml') || ct.includes('text/')) {
+    throw new Error(res.statusText || `HTTP ${res.status}`);
   }
-  if (type && !type.startsWith('image/') && type !== 'application/octet-stream') {
-    throw new Error(`unexpected WMS content-type: ${type}`);
+  const buffer = await res.arrayBuffer();
+  const bytes = new Uint8Array(buffer);
+  if (!isRasterImageBytes(bytes)) {
+    throw new Error('WMS response is not a decodable image');
   }
-  // content-type이 비었거나 octet-stream이면 매직 바이트로 XML 오응답 차단
-  if (!type || type === 'application/octet-stream') {
-    if (!(await isLikelyRasterImageBlob(blob))) {
-      throw new Error('WMS response is not a decodable image');
-    }
-  }
-  return blob;
+  const mime = ct.startsWith('image/') ? ct.split(';')[0]!.trim() : 'image/png';
+  return { buffer, mime };
 }
 
-function assignWmsBlobToImage(
+function assignWmsImage(
   img: HTMLImageElement,
-  blob: Blob,
+  buffer: ArrayBuffer,
+  mime: string,
   onDecodeFail: () => void
 ): void {
-  const blobUrl = URL.createObjectURL(blob);
+  const blobUrl = URL.createObjectURL(new Blob([buffer], { type: mime }));
   img.onload = () => URL.revokeObjectURL(blobUrl);
   img.onerror = () => {
     URL.revokeObjectURL(blobUrl);
@@ -182,10 +181,24 @@ function assignWmsBlobToImage(
   img.src = blobUrl;
 }
 
+function loadWmsImage(
+  img: HTMLImageElement,
+  request: Promise<Response>,
+  fail: (reason: string, detail?: unknown) => void
+): void {
+  request
+    .then(readWmsImageBytes)
+    .then(({ buffer, mime }) =>
+      assignWmsImage(img, buffer, mime, () => fail('image decode failed'))
+    )
+    .catch((err) => fail('WMS load failed', err));
+}
+
 /**
  * WMS GetMap 로드 (serviceLayer 전용).
  * - 짧은 URL: GET fetch — `img.src` 직결 시 XML 예외가 EncodingError로 터지는 것 방지
  * - 긴 URL: POST. AdvancedDispatchFilter 대응으로 SERVICE/REQUEST는 쿼리에 유지
+ * - 응답 매직바이트를 확인한 뒤에만 img 에 넣음 (XML·HTML 디코드 EncodingError 방지)
  * - 실패 시 투명 픽셀 + console.warn (디버깅용)
  */
 function imageLoadFunctionPost(image: ImageWrapper, src: string): void {
@@ -225,18 +238,7 @@ function imageLoadFunctionPost(image: ImageWrapper, src: string): void {
       }
     }
 
-    request
-      .then(async (r) => {
-        const ct = (r.headers.get('content-type') ?? '').toLowerCase();
-        if (!r.ok || ct.includes('xml') || ct.includes('text/')) {
-          throw new Error(r.statusText || `HTTP ${r.status}`);
-        }
-        return assertWmsImageBlob(await r.blob(), ct);
-      })
-      .then((blob) => {
-        assignWmsBlobToImage(img, blob, () => fail('image decode failed'));
-      })
-      .catch((err) => fail('WMS load failed', err));
+    loadWmsImage(img, request, fail);
   } catch (err) {
     fail('WMS load exception', err);
   }

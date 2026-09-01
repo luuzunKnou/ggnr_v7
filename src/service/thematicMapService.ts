@@ -6,6 +6,7 @@ import { sql } from 'drizzle-orm';
 import tables from '@/config/defineLayer/tables.json';
 import { getLayerTableList } from './devTestService';
 import { resolveLayerPhysicalRelName, sanitizeDefineLayerRowFilter } from './standardService';
+import { readGeoServerCssFillColors } from '@/lib/geoserverStyleFillColor';
 
 type DefineTableRow = {
   define_table_name?: string;
@@ -175,10 +176,15 @@ async function listAvailableLayerNames(
 }
 
 /**
- * 주제도 UI에 올릴 define 테이블명 목록.
+ * 주제도 UI에 올릴 define 테이블명 목록 + CSS 면 색(목록 범례).
  */
 export async function listAvailableThematicMapLayerNames() {
-  return listAvailableLayerNames(isThematicMapGroup);
+  const res = await listAvailableLayerNames(isThematicMapGroup);
+  if (!res.success) {
+    return { ...res, legendColors: {} as Record<string, string> };
+  }
+  const legendColors = readGeoServerCssFillColors(res.tableNames);
+  return { ...res, legendColors };
 }
 
 /**

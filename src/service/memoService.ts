@@ -248,6 +248,7 @@ export async function getMemoDetail(params?: {
   createUser: string;
   createGroup: string;
   hasGeom: boolean;
+  address: string;
   lon?: number | null;
   lat?: number | null;
   error?: string;
@@ -264,6 +265,7 @@ export async function getMemoDetail(params?: {
       createUser: '',
       createGroup: '',
       hasGeom: false,
+      address: '',
       error: 'table과 memoKey가 필요합니다.',
     };
   }
@@ -279,6 +281,7 @@ export async function getMemoDetail(params?: {
       createUser: '',
       createGroup: '',
       hasGeom: false,
+      address: '',
       error: '테이블을 찾을 수 없습니다.',
     };
   }
@@ -295,6 +298,7 @@ export async function getMemoDetail(params?: {
       createUser: '',
       createGroup: '',
       hasGeom: false,
+      address: '',
       error: '키 컬럼을 찾을 수 없습니다.',
     };
   }
@@ -325,6 +329,7 @@ export async function getMemoDetail(params?: {
         createUser: '',
         createGroup: '',
         hasGeom: false,
+        address: '',
         error: '메모를 찾을 수 없습니다.',
       };
     }
@@ -365,6 +370,7 @@ export async function getMemoDetail(params?: {
       createUser: names.get(createUserRaw) || createUserRaw,
       createGroup: pick('memo_create_group'),
       hasGeom,
+      address: pick('address'),
       lon,
       lat,
     };
@@ -379,6 +385,7 @@ export async function getMemoDetail(params?: {
       createUser: '',
       createGroup: '',
       hasGeom: false,
+      address: '',
       error: msg,
     };
   }
@@ -582,6 +589,55 @@ async function applyCreatorFields(params: {
   );
 }
 
+async function wkt5181FromLonLat4326(lon: number, lat: number): Promise<string | null> {
+  try {
+    const res = await db.execute(
+      sql.raw(
+        `SELECT ST_AsText(ST_Transform(ST_SetSRID(ST_MakePoint(${lon}, ${lat}), 4326), 5181)) AS wkt`
+      )
+    );
+    const wkt = String((res.rows?.[0] as { wkt?: string } | undefined)?.wkt ?? '').trim();
+    return wkt || null;
+  } catch {
+    return null;
+  }
+}
+
+function parseLonLat(
+  lon?: number | string | null,
+  lat?: number | string | null
+): { lon: number; lat: number } | null {
+  if (lon == null || lat == null) return null;
+  if (typeof lon === 'string' && lon.trim() === '') return null;
+  if (typeof lat === 'string' && lat.trim() === '') return null;
+  const x = Number(lon);
+  const y = Number(lat);
+  if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+  return { lon: x, lat: y };
+}
+
+async function resolveMemoGeomWkt(params: {
+  lon?: number | string | null;
+  lat?: number | string | null;
+  pointX3857?: number;
+  pointY3857?: number;
+  clearGeom?: boolean;
+}): Promise<{ geomWkt5181: string | null; geomClear: boolean }> {
+  if (params.clearGeom) return { geomWkt5181: null, geomClear: true };
+  const lonLat = parseLonLat(params.lon, params.lat);
+  if (lonLat) {
+    const wkt = await wkt5181FromLonLat4326(lonLat.lon, lonLat.lat);
+    return { geomWkt5181: wkt, geomClear: !wkt };
+  }
+  const x = Number(params.pointX3857);
+  const y = Number(params.pointY3857);
+  if (Number.isFinite(x) && Number.isFinite(y)) {
+    const wkt = await wkt5181FromPoint3857(x, y);
+    return { geomWkt5181: wkt, geomClear: !wkt };
+  }
+  return { geomWkt5181: null, geomClear: false };
+}
+
 async function wkt5181FromPoint3857(x: number, y: number): Promise<string | null> {
   const likely5181 = x > 50_000 && x < 1_000_000 && y > 50_000 && y < 1_000_000;
   const expr = likely5181
@@ -603,6 +659,9 @@ export async function createMemo(params?: {
   createDate?: string;
   createUser?: string;
   createGroup?: string;
+  address?: string;
+  lon?: number | null;
+  lat?: number | null;
   pointX3857?: number;
   pointY3857?: number;
 }): Promise<{ success: boolean; memoKey?: string; error?: string }> {
@@ -650,12 +709,16 @@ export async function createMemo(params?: {
   if (groupName) put('memo_create_group', groupName);
   put('memo_is_del', false);
 
-  const x = Number(params?.pointX3857);
-  const y = Number(params?.pointY3857);
-  let geomWkt5181: string | null = null;
-  if (Number.isFinite(x) && Number.isFinite(y)) {
-    geomWkt5181 = await wkt5181FromPoint3857(x, y);
-  }
+  const addressText = String(params?.address ?? '').trim();
+  if (addressText) put('address', addressText);
+
+  const { geomWkt5181 } = await resolveMemoGeomWkt({
+    lon: params?.lon,
+    lat: params?.lat,
+    pointX3857: params?.pointX3857,
+    pointY3857: params?.pointY3857,
+    clearGeom: !addressText && params?.lon == null && params?.lat == null && params?.pointX3857 == null,
+  });
 
   const inserted = await insertTableRow({
     table: tableName,
@@ -688,6 +751,9 @@ export async function updateMemo(params?: {
   title?: string;
   contents?: string;
   createDate?: string;
+  address?: string;
+  lon?: number | null;
+  lat?: number | null;
   pointX3857?: number;
   pointY3857?: number;
   clearGeom?: boolean;
@@ -718,15 +784,24 @@ export async function updateMemo(params?: {
     put('memo_create_date', d || null);
   }
 
-  let geomWkt5181: string | null = null;
-  const geomClear = params?.clearGeom === true;
-  if (!geomClear && params?.pointX3857 != null && params?.pointY3857 != null) {
-    const x = Number(params.pointX3857);
-    const y = Number(params.pointY3857);
-    if (Number.isFinite(x) && Number.isFinite(y)) {
-      geomWkt5181 = await wkt5181FromPoint3857(x, y);
-    }
+  const addressProvided = params?.address !== undefined;
+  const addressText = addressProvided ? String(params.address ?? '').trim() : undefined;
+  if (addressProvided) {
+    put('address', addressText || null);
   }
+
+  const geomClearRequested = params?.clearGeom === true;
+  const clearGeom =
+    geomClearRequested ||
+    (addressProvided && !addressText && params?.lon == null && params?.lat == null);
+
+  const { geomWkt5181, geomClear } = await resolveMemoGeomWkt({
+    lon: params?.lon,
+    lat: params?.lat,
+    pointX3857: params?.pointX3857,
+    pointY3857: params?.pointY3857,
+    clearGeom,
+  });
 
   const updated = await updateTableRowByKey({
     table: tableName,

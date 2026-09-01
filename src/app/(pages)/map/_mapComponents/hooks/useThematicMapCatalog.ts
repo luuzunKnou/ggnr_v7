@@ -24,6 +24,7 @@ export type ThematicMapCatalog = {
 export function useThematicMapCatalog(): ThematicMapCatalog {
   const [loading, setLoading] = useState(true);
   const [layersWithData, setLayersWithData] = useState<Set<string> | null>(null);
+  const [legendColors, setLegendColors] = useState<Record<string, string>>({});
 
   useEffect(() => {
     let cancelled = false;
@@ -35,9 +36,14 @@ export function useThematicMapCatalog(): ThematicMapCatalog {
     })
       .then(
         (res: {
-          data?: { success?: boolean; tableNames?: string[] };
+          data?: {
+            success?: boolean;
+            tableNames?: string[];
+            legendColors?: Record<string, string>;
+          };
           success?: boolean;
           tableNames?: string[];
+          legendColors?: Record<string, string>;
         }) => {
           if (cancelled) return;
           const data = res?.data ?? res;
@@ -45,10 +51,17 @@ export function useThematicMapCatalog(): ThematicMapCatalog {
           setLayersWithData(
             new Set(names.map((n) => String(n ?? '').trim()).filter(Boolean))
           );
+          const colors = data?.legendColors;
+          setLegendColors(
+            colors && typeof colors === 'object' && !Array.isArray(colors) ? colors : {}
+          );
         }
       )
       .catch(() => {
-        if (!cancelled) setLayersWithData(new Set());
+        if (!cancelled) {
+          setLayersWithData(new Set());
+          setLegendColors({});
+        }
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -60,9 +73,8 @@ export function useThematicMapCatalog(): ThematicMapCatalog {
 
   const groups = useMemo(() => {
     if (layersWithData == null) return [];
-    // 부모 존재·데이터 유무는 서버가 이미 반영한 tableNames로 필터
-    return buildThematicMapLayerGroups(null, layersWithData);
-  }, [layersWithData]);
+    return buildThematicMapLayerGroups(null, layersWithData, legendColors);
+  }, [layersWithData, legendColors]);
 
   const layers = useMemo(() => groups.flatMap((g) => g.layers), [groups]);
 

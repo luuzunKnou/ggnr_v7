@@ -15,6 +15,7 @@ import {
   sortPricesLatestFirst,
   type LandInfoMapConfig,
 } from '@/lib/vworldParcelLandClient';
+import { getAddressFromCoord, searchAddress } from '../addressSearch/vworldAddressSearch';
 import { transformCoordinate } from '../services/coordinateService';
 
 type JsonObject = Record<string, unknown>;
@@ -193,6 +194,57 @@ function parsePortalRows(text: string): BuildingLedgerRow[] {
   return parseXmlRows(text);
 }
 
+export function normalizePnu(value: unknown): string | null {
+  const digits = String(value ?? '').replace(/\D/g, '');
+  return /^\d{19}$/.test(digits) ? digits : null;
+}
+
+/** 우클릭 필지정보와 동일 — 지적 → 역지오코딩 → (필요 시) 주소검색 PNU */
+export async function resolveParcelIdentityLikeMapClick(args: {
+  coordinate3857: [number, number];
+  vworldKey?: string;
+  addressHint?: string;
+}): Promise<ParcelIdentity> {
+  const vworldKey = String(args.vworldKey ?? '').trim();
+  const addressHint = String(args.addressHint ?? '').trim();
+
+  const fromJijuk = await fetchParcelIdentityAtPoint(args.coordinate3857, 'EPSG:3857');
+  let pnu = fromJijuk.pnu;
+  let jibunFromParcel = fromJijuk.jibunFromParcel;
+
+  if (vworldKey) {
+    const wgs84 = transformCoordinate(args.coordinate3857, 'EPSG:3857', 'EPSG:4326');
+    if (wgs84) {
+      const [lon, lat] = wgs84;
+      try {
+        const geocode = await getAddressFromCoord(lon, lat, { apiKey: vworldKey });
+        if (geocode) {
+          pnu = pnu ?? normalizePnu(geocode.pnu);
+          const geocodeJibun = String(geocode.jibun ?? '').trim();
+          if (geocodeJibun) jibunFromParcel = geocodeJibun;
+        }
+      } catch {
+        /* 역지오코딩 실패 시 다음 폴백 */
+      }
+    }
+  }
+
+  if (!pnu && vworldKey && addressHint) {
+    try {
+      const results = await searchAddress(addressHint, { apiKey: vworldKey, limit: 1 });
+      const item = results[0];
+      pnu = normalizePnu(item?.id) ?? pnu;
+      if (!jibunFromParcel) {
+        jibunFromParcel = String(item?.jibunAddress ?? '').trim() || null;
+      }
+    } catch {
+      /* 주소검색 폴백 실패 */
+    }
+  }
+
+  return { pnu, jibunFromParcel };
+}
+
 export async function fetchParcelIdentityAtPoint(
   coordinate: [number, number],
   viewProjection: string
@@ -212,10 +264,28 @@ export async function fetchParcelIdentityAtPoint(
     const results = Array.isArray(payload?.results) ? payload.results : [];
     const jijuk = results.find((r) => String(r?.tableName ?? '').trim() === 'jijuk');
     const row = (jijuk?.features?.[0]?.data ?? null) as JsonObject | null;
-    if (!row) return { pnu: null, jibunFromParcel: null };
+    if (row) {
+      const pnu = toStr(row.pnu) || null;
+      if (pnu) {
+        return {
+          pnu,
+          jibunFromParcel: toStr(row.jibun) || null,
+        };
+      }
+    }
+  } catch {
+    /* jijuk 실패 시 브이월드 역지오코딩 폴백 */
+  }
+
+  const wgs84 = transformCoordinate(coordinate, viewProjection, 'EPSG:4326');
+  if (!wgs84) return { pnu: null, jibunFromParcel: null };
+  try {
+    const cfg = await fetchLandInfoConfig();
+    if (!cfg.vworldKey) return { pnu: null, jibunFromParcel: null };
+    const addr = await getAddressFromCoord(wgs84[0], wgs84[1], { apiKey: cfg.vworldKey });
     return {
-      pnu: toStr(row.pnu) || null,
-      jibunFromParcel: toStr(row.jibun) || null,
+      pnu: toStr(addr?.pnu) || null,
+      jibunFromParcel: toStr(addr?.jibun) || null,
     };
   } catch {
     return { pnu: null, jibunFromParcel: null };
@@ -346,6 +416,20 @@ export async function fetchParcelLandModalList(args: {
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);
     return { ok: false, kind: args.kind, headers: [], rows: [], error: msg };
+  }
+}
+
+/** V6 통합제어 personInfo — true면 소유자명 등 마스킹 */
+export async function fetchPersonInfoMaskEnabled(): Promise<boolean> {
+  try {
+    const res = await call('', 'POST', {
+      service: 'configService',
+      action: 'getPersonInfoMaskEnabled',
+    });
+    const payload = (res?.data ?? res) as { enabled?: boolean };
+    return payload?.enabled === true;
+  } catch {
+    return false;
   }
 }
 

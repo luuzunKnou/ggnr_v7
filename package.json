@@ -11,6 +11,7 @@
     "defineLayer:merge-standard": "tsx src/scripts/mergeStandardCsvIntoDefineLayer.ts",
     "prebuild": "npm run schema:index",
     "build": "next build",
+    "build:project": "tsx scripts/build-with-project-env.ts",
     "start": "tsx scripts/run.ts start",
     "lint": "eslint",
     "db:init": "tsx scripts/init-db.ts",
@@ -30,9 +31,12 @@
     "install-geoserver": "powershell -ExecutionPolicy Bypass -File geoserver_modules/scripts/install-geoserver.ps1",
     "install-geoserver-css": "powershell -ExecutionPolicy Bypass -File geoserver_modules/scripts/install-geoserver-css.ps1",
     "geoserver": "cmd /c geoserver_modules\\scripts\\start-geoserver.bat",
+    "geoserver:sync-symbol-urls": "tsx scripts/sync-geoserver-symbol-style-urls.ts",
     "geoserver:stop": "cmd /c geoserver_modules\\scripts\\stop-geoserver.bat",
     "road-doc:png": "powershell -ExecutionPolicy Bypass -File scripts/qcad-dwg-dxf2png.ps1",
-    "python:install-libpq": "conda run --prefix python/env conda install -c conda-forge libpq -y"
+    "python:install-libpq": "conda run --prefix python/env conda install -c conda-forge libpq -y",
+    "ortho:batch": "tsx scripts/ortho-batch.ts",
+    "map:river-report": "tsx scripts/mapRiverPlanReportFolders.ts"
   },
   "dependencies": {
     "@napi-rs/canvas": "^1.0.0",

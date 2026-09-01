@@ -286,6 +286,8 @@ export function ChangeHistoryLiveMap({
   const fittedWktRef = useRef<string | null>(null);
   const didFitContentRef = useRef(false);
   const paintGenRef = useRef(0);
+  const showBeforeRef = useRef(true);
+  const showAfterRef = useRef(true);
   const [showBefore, setShowBefore] = useState(true);
   const [showAfter, setShowAfter] = useState(true);
   /** 스타일 prefetch + 도형 일괄 추가 끝날 때까지 */
@@ -298,6 +300,9 @@ export function ChangeHistoryLiveMap({
     [orthoBackgroundMapId]
   );
   void _selectedDate;
+
+  showBeforeRef.current = showBefore;
+  showAfterRef.current = showAfter;
 
   const compareRowsBase = useMemo(() => {
     const rows = buildCompareFeatures(asOfFeatures, dayDiffFeatures);
@@ -354,8 +359,10 @@ export function ChangeHistoryLiveMap({
         const sb = (b.get('compareSide') as string) === 'after' ? 1 : 0;
         return sa - sb;
       },
-      style: (f): Style => {
+      style: (f): Style | Style[] => {
         const side = (f.get('compareSide') as 'before' | 'after' | undefined) ?? 'after';
+        if (side === 'before' && !showBeforeRef.current) return [];
+        if (side === 'after' && !showAfterRef.current) return [];
         const gType = f.getGeometry()?.getType();
         if (f.get('adminOutline')) {
           return side === 'before' ? ADMIN_OUTLINE_BEFORE : ADMIN_OUTLINE_AFTER;
@@ -547,19 +554,19 @@ export function ChangeHistoryLiveMap({
         return;
       }
 
-      const visibleRows = compareRowsBase.filter((row) => {
-        if (row.side === 'before' && (!hasBefore || !showBefore)) return false;
-        if (row.side === 'after' && !showAfter) return false;
+      // 전·후 도형은 한 번만 올리고, 스위치는 스타일에서 표시만 제어
+      const rowsToPaint = compareRowsBase.filter((row) => {
+        if (row.side === 'before' && !hasBefore) return false;
         return true;
       });
 
-      if (visibleRows.length === 0) {
+      if (rowsToPaint.length === 0) {
         setPaintLoading(false);
         return;
       }
 
       setPaintLoading(true);
-      const tables = [...new Set(visibleRows.map((r) => r.tableName).filter(Boolean))];
+      const tables = [...new Set(rowsToPaint.map((r) => r.tableName).filter(Boolean))];
 
       try {
         await prefetchCompareStyles(tables);
@@ -568,7 +575,7 @@ export function ChangeHistoryLiveMap({
       }
       if (cancelled || gen !== paintGenRef.current) return;
 
-      for (const row of visibleRows) {
+      for (const row of rowsToPaint) {
         const geom = normalizeGeoJsonGeometry(row.geom) ?? row.geom;
         const g = readGeom5181To3857(geom);
         if (!g) continue;
@@ -586,7 +593,12 @@ export function ChangeHistoryLiveMap({
     return () => {
       cancelled = true;
     };
-  }, [compareRowsBase, hasBefore, showBefore, showAfter, mapLoading]);
+  }, [compareRowsBase, hasBefore, mapLoading]);
+
+  /** 스위치 — 도형 재생성 없이 다시 그리기만 */
+  useEffect(() => {
+    featLayerRef.current?.changed();
+  }, [showBefore, showAfter]);
 
   const overlayLoading = mapLoading || paintLoading;
 

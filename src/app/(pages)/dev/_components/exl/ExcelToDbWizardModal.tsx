@@ -11,6 +11,7 @@ import {
 import { Button } from '@/app/shadcnComponents/ui/button';
 import { Input } from '@/app/shadcnComponents/ui/input';
 import { call } from '@/lib/api';
+import { appFetch } from '@/lib/basePath';
 import { useChunkedUpload } from '../useChunkedUpload';
 import { createExcelGeocodeCache } from '@/lib/excelUploadGeocode';
 import {
@@ -1068,7 +1069,9 @@ export function ExcelToDbWizardModal({ open, onOpenChange, folderName, fileName,
             action: 'findExcelDefineLayerByFileName',
             params: { fileName },
           }).catch(() => null),
-          fetch(`/api/file-manager/download?path=${encodeURIComponent(fileRelPath)}`),
+          appFetch(`/api/file-manager/download?path=${encodeURIComponent(fileRelPath)}`, {
+            credentials: 'include',
+          }),
         ]);
         const d = lookupRes?.data ?? lookupRes;
         if (d?.success && d.matched) {

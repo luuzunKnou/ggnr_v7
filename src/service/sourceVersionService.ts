@@ -1178,6 +1178,8 @@ export async function applySourceZipFile(options: ApplySourceZipOptions): Promis
   let geoStartedOnSuccessPath = false;
   let rollback: ApplyRollbackSnapshot | null = null;
   let mergeRelPaths: string[] = [];
+  let totalFiles = 0;
+  let preSkipped = 0;
 
   const emit = async (
     phase: ApplySourceProgressPhase,
@@ -1226,19 +1228,23 @@ export async function applySourceZipFile(options: ApplySourceZipOptions): Promis
     });
     await emit('merge-apply', 'ZIP 압축 해제 시작', { mergeStep: 'extract' });
     {
-      /** Expand-Archive 등 장시간 무출력 시 프록시·브라우저가 ~60초 유휴 연결을 끊는 것 방지 */
-      const EXTRACT_HEARTBEAT_MS = 10_000;
+      /** Expand-Archive 등 장시간 작업 — 60초 유휴 프록시 끊김 방지 (5초마다 + 즉시 1회) */
+      const EXTRACT_HEARTBEAT_MS = 5_000;
       let extractElapsedSec = 0;
       let heartbeatBusy = false;
-      const heartbeatTimer = setInterval(() => {
+      const pulseExtract = () => {
         if (heartbeatBusy) return;
-        extractElapsedSec += EXTRACT_HEARTBEAT_MS / 1000;
         heartbeatBusy = true;
         void emit('merge-apply', `ZIP 압축 해제 중... (${extractElapsedSec}초 경과)`, {
           mergeStep: 'extract',
         }).finally(() => {
           heartbeatBusy = false;
         });
+      };
+      pulseExtract();
+      const heartbeatTimer = setInterval(() => {
+        extractElapsedSec += EXTRACT_HEARTBEAT_MS / 1000;
+        pulseExtract();
       }, EXTRACT_HEARTBEAT_MS);
       try {
         await extractZip(zipPath, extractDir);
@@ -1251,11 +1257,33 @@ export async function applySourceZipFile(options: ApplySourceZipOptions): Promis
 
     const excludePrefixes = parseExcludePrefixes(includeNodeModules);
     await emit('merge-apply', '병합 대상 파일 수 집계 중...', { mergeStep: 'count' });
-    mergeRelPaths = await listMergeRelFiles(extractedRoot, excludePrefixes);
-    const { totalFiles, skippedFiles: preSkipped } = await countCopyTargets(
-      extractedRoot,
-      excludePrefixes
-    );
+    {
+      const COUNT_HEARTBEAT_MS = 5_000;
+      let countElapsedSec = 0;
+      let countBusy = false;
+      const pulseCount = () => {
+        if (countBusy) return;
+        countBusy = true;
+        void emit('merge-apply', `병합 대상 집계 중... (${countElapsedSec}초 경과)`, {
+          mergeStep: 'count',
+        }).finally(() => {
+          countBusy = false;
+        });
+      };
+      pulseCount();
+      const countTimer = setInterval(() => {
+        countElapsedSec += COUNT_HEARTBEAT_MS / 1000;
+        pulseCount();
+      }, COUNT_HEARTBEAT_MS);
+      try {
+        mergeRelPaths = await listMergeRelFiles(extractedRoot, excludePrefixes);
+        const counted = await countCopyTargets(extractedRoot, excludePrefixes);
+        totalFiles = counted.totalFiles;
+        preSkipped = counted.skippedFiles;
+      } finally {
+        clearInterval(countTimer);
+      }
+    }
     await emit('merge-apply', `병합 대상 ${totalFiles}건 (제외 예정 ${preSkipped}건)`, {
       mergeStep: 'count',
       totalFiles,

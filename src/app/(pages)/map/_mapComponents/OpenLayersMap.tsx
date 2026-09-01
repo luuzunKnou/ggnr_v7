@@ -8,8 +8,9 @@ import { fromLonLat } from 'ol/proj';
 import { call } from '@/lib/api';
 import {
   MapControlPanel,
-  defaultMapControlGroups,
+  mapControlGroupsForSystem,
 } from './mapControlPanel/mapControlPanel';
+import type { MapControlGroup } from './mapControlPanel/mapControlPanel';
 import {
   BackgroundMapSelector,
   defaultBackgroundMapGroups,
@@ -46,6 +47,7 @@ import { useBuildingRoadCatalog } from './hooks/useBuildingRoadCatalog';
 import { useCadastralCatalog } from './hooks/useCadastralCatalog';
 import { useJimokCatalog } from './hooks/useJimokCatalog';
 import { useMapInstance } from './hooks/useMapInstance';
+import { MapScaleIndicator } from './hooks/MapScaleIndicator';
 import { useMapContext } from './MapContext';
 import { useBackgroundLayer } from './hooks/useBackgroundLayer';
 import { useMapStatePersist, loadPersistedMapState } from './hooks/useMapStatePersist';
@@ -99,10 +101,11 @@ import {
   parseMapMeasurementsResetTarget,
 } from '../_mapContents/mapSplit/mapMeasurementsReset';
 import { useOfficialLandPriceMapLayer } from './hooks/useOfficialLandPriceMapLayer';
-import { useAddressParcelHighlight } from './hooks/useAddressParcelHighlight';
+import { useAddressParcelHighlight, parseParcelGeomField } from './hooks/useAddressParcelHighlight';
 import { useRoadLedgerMapHighlight } from './hooks/useRoadLedgerMapHighlight';
 import { useRoadNetworkMapHighlight } from './hooks/useRoadNetworkMapHighlight';
 import { useRoadNetworkOverlayLayer } from './hooks/useRoadNetworkOverlayLayer';
+import { useRoadFrontageMarkerPointPickLayer } from './hooks/useRoadFrontageMarkerPointPickLayer';
 import { useRiverConstructionLedgerMapHighlight } from './hooks/useRiverConstructionLedgerMapHighlight';
 import { useRiverConstructionLedgerOverlayLayer } from './hooks/useRiverConstructionLedgerOverlayLayer';
 import { useFmsFacilityOverlayLayer } from '../_mapContents/fmsLinkage/useFmsFacilityOverlayLayer';
@@ -147,7 +150,6 @@ import { isEmpty as isEmptyExtent } from 'ol/extent';
 import { AerialViewLayerPanel } from '../_mapContents/aerialView/AerialViewLayerPanel';
 import { useAerialViewCheckedMarkers } from '../_mapContents/aerialView/useAerialViewCheckedMarkers';
 import { useAerialOrthoCheckedTiles } from '../_mapContents/aerialView/useAerialOrthoCheckedTiles';
-import type { MapControlGroup } from './mapControlPanel/mapControlPanel';
 
 /** EWKT(SRID=…;)·3D 키워드(Z/M) 제거 후 ol/format/WKT 파싱용 문자열로 맞춤 */
 function normalizeSpatialFilterWktForOl(wkt: string): string {
@@ -829,6 +831,23 @@ export default function OpenLayersMap({
     mapContext?.setMapSplitSecondaryBackgroundId,
   ]);
 
+  /** 지도분할 — 배경지도 패널만 열고 나머지 우측 메뉴·확장 패널 닫기 */
+  const openBackgroundMapPanelExclusive = useCallback(() => {
+    setOpenSubPanel(null);
+    setIsBackgroundPanelExiting(false);
+    setIsAerialViewPanelExiting(false);
+    setIsResetPanelExiting(false);
+    setActiveControls((prev) => {
+      const next = prev.filter(
+        (item) =>
+          item !== 'aerial-view' &&
+          item !== 'reset-measurements' &&
+          !MEASUREMENT_IDS.includes(item)
+      );
+      return next.includes('background-map') ? next : [...next, 'background-map'];
+    });
+  }, []);
+
   /** 지도분할 — 배경 동기화 OFF 전환 시 배경지도 패널 자동 열기 */
   const prevMapSplitBasemapSyncRef = useRef(mapContext?.mapSplitBasemapSync ?? true);
   useEffect(() => {
@@ -839,13 +858,12 @@ export default function OpenLayersMap({
 
     if (kind !== 'map' || wasSync === sync || sync) return;
 
-    setIsBackgroundPanelExiting(false);
-    setIsAerialViewPanelExiting(false);
-    setActiveControls((prev) => {
-      const next = prev.filter((item) => item !== 'aerial-view');
-      return next.includes('background-map') ? next : [...next, 'background-map'];
-    });
-  }, [mapContext?.mapSplitSecondaryKind, mapContext?.mapSplitBasemapSync]);
+    openBackgroundMapPanelExclusive();
+  }, [
+    mapContext?.mapSplitSecondaryKind,
+    mapContext?.mapSplitBasemapSync,
+    openBackgroundMapPanelExclusive,
+  ]);
 
   const backgroundSplitSelect =
     mapContext?.mapSplitSecondaryKind === 'map' &&
@@ -1234,10 +1252,11 @@ export default function OpenLayersMap({
 
   // 주소정보 패널이 열려 있을 때 해당 좌표 필지 하이라이트
   const addressInfoDetail = mapContext?.addressInfoDetail ?? null;
-  useAddressParcelHighlight(mapInstanceRef.current, mapReady, addressInfoDetail);
+  useAddressParcelHighlight(mapReady, addressInfoDetail);
   useRoadLedgerMapHighlight(mapReady);
   useRoadNetworkMapHighlight(mapReady);
   useRoadNetworkOverlayLayer(mapReady);
+  useRoadFrontageMarkerPointPickLayer(mapReady);
   useRiverConstructionLedgerMapHighlight(mapReady);
   useRiverConstructionLedgerOverlayLayer(mapReady);
   useFmsFacilityOverlayLayer(mapReady);
@@ -1280,12 +1299,13 @@ export default function OpenLayersMap({
     roadCctvExtentWgs84
   );
 
-  // 전체 레이어 끄기 버튼(검색창 옆)용 콜백 등록: 지적도·건물도로·기초구간 + defineLayer 레이어 모두 끔
+  // 전체 레이어 끄기 버튼(검색창 옆)·시스템 전환용: 지적도·건물도로·기초구간 + defineLayer + 패널 체크 모두 끔
   useEffect(() => {
     if (!mapContext?.allLayersOffRef) return;
     mapContext.allLayersOffRef.current = () => {
       setActiveControls((prev) => prev.filter((id) => !LAYER_IDS_OFF_ON_ALL_OFF.includes(id)));
       mapContext?.setVisibleLayerNames?.(new Set());
+      // 우측 컨트롤 패널 체크박스 상태 (null=전체표시, 빈 Set=전체숨김)
       setVisibleJimokLayerNames(new Set());
       setVisibleLandownLayerNames(new Set());
       setVisibleCadastralLayerNames(new Set());
@@ -1298,9 +1318,12 @@ export default function OpenLayersMap({
     };
   }, [mapContext]);
 
-  /** 도로망 점찍기 중에만 identify 비활성 — 배경은 GeoServer WMS 클릭 선택 */
+  /** 도로망·표주 점찍기 중에만 identify 비활성 — 배경은 GeoServer WMS 클릭 선택 */
   const roadNetworkPointPickActive =
     Boolean(mapContext?.roadNetworkPointPickActive);
+  const roadFrontageMarkerPointPickActive = Boolean(
+    mapContext?.roadFrontageMarkerPointPickActive
+  );
 
   // 지도 클릭 → 도형 검색. 측정·도형 그리기·도형편집·CCTV·도로망 점찍기·메모 위치 찍기 중에는 식별 비활성
   const { popupState, popupElRef, closePopup } = useFeatureIdentify(
@@ -1310,9 +1333,11 @@ export default function OpenLayersMap({
     roadCctvPanelOpen ||
       (mapContext?.safetyFacPanelOpen ?? false) ||
       (mapContext?.complaintPanelOpen ?? false) ||
+      (mapContext?.roadRewardPanelOpen ?? false) ||
       !!layerRowGeomEdit ||
       !!spatialDrawRequest ||
       roadNetworkPointPickActive ||
+      roadFrontageMarkerPointPickActive ||
       (mapContext?.mapDrawInputSuspended ?? false) ||
       activeControls.some((id) => MEASUREMENT_IDS.includes(id))
   );
@@ -1355,6 +1380,9 @@ export default function OpenLayersMap({
 
       const wgs84 = transformCoordinate(coordinate, viewProjection, 'EPSG:4326');
       if (!wgs84) return;
+      if (mapContext?.addressParcelSeedGeom4326Ref) {
+        mapContext.addressParcelSeedGeom4326Ref.current = null;
+      }
       setAddressInfoDetail({
         coordinate,
         viewProjection,
@@ -1379,6 +1407,10 @@ export default function OpenLayersMap({
             const jijukResult = results.find((r) => String(r?.tableName ?? '').trim() === 'jijuk');
             const row = jijukResult?.features?.[0]?.data;
             const pnu = row?.pnu != null ? String(row.pnu).trim() : '';
+            const seedGeom = parseParcelGeomField(row?.geom);
+            if (seedGeom && mapContext?.addressParcelSeedGeom4326Ref) {
+              mapContext.addressParcelSeedGeom4326Ref.current = seedGeom;
+            }
             const parcelJibun = row?.jibun != null ? String(row.jibun).trim() : '';
             // 지적 jibun은 「1-3」「1-3잡」처럼 짧은 경우가 많음 — 전체 주소는 브이월드 역지오코딩 결과를 우선
             const parcelJibunLooksFull =
@@ -1390,6 +1422,7 @@ export default function OpenLayersMap({
                 ? {
                     ...prev,
                     pnu: prev.pnu ?? (pnu || null),
+                    geomSeedAt: seedGeom ? Date.now() : prev.geomSeedAt,
                     jibun: prev.jibun ?? (parcelJibunLooksFull ? parcelJibun : null),
                   }
                 : null
@@ -1443,14 +1476,10 @@ export default function OpenLayersMap({
   const router = useRouter();
   const searchParams = useSearchParams();
   const systemKey = searchParams.get('system') ?? '';
-  const mapControlGroups = useMemo((): MapControlGroup[] => {
-    if (systemKey === 'uav') return defaultMapControlGroups;
-    return defaultMapControlGroups.map((g) =>
-      g.id === 'base-maps'
-        ? { ...g, items: g.items.filter((item) => item.id !== 'aerial-view') }
-        : g
-    );
-  }, [systemKey]);
+  const mapControlGroups = useMemo(
+    (): MapControlGroup[] => mapControlGroupsForSystem(systemKey),
+    [systemKey]
+  );
 
   const aerialViewPanelOpen =
     activeControls.includes('aerial-view') || isAerialViewPanelExiting;
@@ -2256,12 +2285,7 @@ export default function OpenLayersMap({
         setIsBackgroundPanelExiting(true);
         setActiveControls((prev) => prev.filter((item) => item !== 'background-map'));
       } else {
-        setOpenSubPanel(null);
-        setIsAerialViewPanelExiting(false);
-        setActiveControls((prev) => {
-          const next = prev.filter((item) => item !== 'aerial-view');
-          return next.includes('background-map') ? next : [...next, 'background-map'];
-        });
+        openBackgroundMapPanelExclusive();
       }
       return;
     }
@@ -2452,6 +2476,7 @@ export default function OpenLayersMap({
   return (
     <div className="relative w-full h-full">
       <div ref={mapRef} className="w-full h-full bg-black [&_.ol-viewport]:bg-black" />
+      <MapScaleIndicator map={mapReady ? mapInstanceRef.current : null} mapReady={mapReady} />
 
       <LayerRowGeomEditHandler centerPixel={centerPixel} />
 

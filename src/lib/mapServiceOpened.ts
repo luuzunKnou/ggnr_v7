@@ -15,10 +15,18 @@ export const SER_ENG_TO_OPENED: Record<string, string> = {
   fmsLinkage: 'roadFMS',
   // occupationLedger* · *NglFeeList 는 ser_eng 그대로 opened 토큰으로 사용 (접두사로 패널 분기)
   // roadFMS 는 ser_eng 그대로 opened (안전점검 공통 화면)
+  roadWorkHandbook: 'roadDoc',
 };
 
 export function getOpenedKeyForSerEng(serEng: string): string {
   return SER_ENG_TO_OPENED[serEng] ?? serEng;
+}
+
+/** URL `opened` 토큰 정규화 — 옛 키를 현재 패널 키로 맞춤 */
+export function normalizeOpenedToken(token: string): string {
+  if (token === 'dataQuery') return 'standardList';
+  if (token === 'roadWorkHandbook') return 'roadDoc';
+  return token;
 }
 
 export type SerLayerIdentifyRule = {

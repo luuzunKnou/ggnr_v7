@@ -7,7 +7,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { Crosshair, Globe } from 'lucide-react';
 import OpenLayersMap from './OpenLayersMap';
-import { MapControlPanel, defaultMapControlGroups } from './mapControlPanel/mapControlPanel';
+import { MapControlPanel, mapControlGroupsForSystem } from './mapControlPanel/mapControlPanel';
 import type { MapControlGroup } from './mapControlPanel/mapControlPanel';
 import {
   tilesetLayerKey,
@@ -82,14 +82,10 @@ export default function MapViewModeWrapper({
   const router = useRouter();
   const searchParams = useSearchParams();
   const systemKey = searchParams.get('system') ?? '';
-  const mapControlGroups3d = useMemo((): MapControlGroup[] => {
-    if (systemKey === 'uav') return defaultMapControlGroups;
-    return defaultMapControlGroups.map((g) =>
-      g.id === 'base-maps'
-        ? { ...g, items: g.items.filter((item) => item.id !== 'aerial-view') }
-        : g
-    );
-  }, [systemKey]);
+  const mapControlGroups3d = useMemo(
+    (): MapControlGroup[] => mapControlGroupsForSystem(systemKey),
+    [systemKey]
+  );
 
   useEffect(() => {
     setDefault3dView(defaultCenter ? { ...defaultCenter, height: DEFAULT_CAMERA_HEIGHT_3D } : null);

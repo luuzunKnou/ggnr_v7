@@ -7,8 +7,9 @@
 import { existsSync, readFileSync, writeFileSync } from "fs"
 import { join } from "path"
 import { unstable_noStore as noStore } from "next/cache"
-import { withBasePath } from "@/lib/basePath"
 import { getGeoServerInternalBase } from "@/lib/geoserverUrl"
+import { db } from "@/database/db"
+import { sql } from "drizzle-orm"
 
 /** package.json 이 있는 디렉터리를 프로젝트 루트로 사용 (Next 등에서 cwd 가 달라도 동작) */
 function getProjectRoot(): string {
@@ -618,8 +619,8 @@ export function getIndexSliderImages(projectName: string): string[] {
     const base = `${projectName}_${String(i).padStart(2, "0")}`
     const jpgPath = join(dir, `${base}.jpg`)
     const pngPath = join(dir, `${base}.png`)
-    if (existsSync(jpgPath)) out.push(withBasePath(`/image/indexImage/${base}.jpg`))
-    else if (existsSync(pngPath)) out.push(withBasePath(`/image/indexImage/${base}.png`))
+    if (existsSync(jpgPath)) out.push(`/image/indexImage/${base}.jpg`)
+    else if (existsSync(pngPath)) out.push(`/image/indexImage/${base}.png`)
     else out.push("")
   }
   return out
@@ -635,9 +636,9 @@ export function getIndexLogoSrc(projectName?: string): string {
   const root = getProjectRoot()
   const dir = join(root, "public", "image", "indexImage")
   const base = `${name}_index_logo`
-  if (existsSync(join(dir, `${base}.svg`))) return withBasePath(`/image/indexImage/${base}.svg`)
-  if (existsSync(join(dir, `${base}.png`))) return withBasePath(`/image/indexImage/${base}.png`)
-  return withBasePath(`/image/indexImage/default_index_logo.svg`)
+  if (existsSync(join(dir, `${base}.svg`))) return `/image/indexImage/${base}.svg`
+  if (existsSync(join(dir, `${base}.png`))) return `/image/indexImage/${base}.png`
+  return `/image/indexImage/default_index_logo.svg`
 }
 
 export type SystemConfigItem = {
@@ -767,18 +768,130 @@ export function getSystemListDebug(): {
   if (mapStr) {
     systems = applyServiceSystemMap(systems, parseServiceSystemMap(mapStr))
   }
-  /** runtime.env DISABLED_SERVICES — 프로젝트별로 사이드바 메뉴(ser_eng) 숨김 */
-  const disabledStr = (runtime.DISABLED_SERVICES ?? "").trim()
-  if (disabledStr) {
-    const disabled = new Set(disabledStr.split(",").map((s) => s.trim()).filter(Boolean))
-    if (disabled.size > 0) {
-      systems = systems.map((s) => ({
-        ...s,
-        serviceList: (s.serviceList ?? []).filter((eng) => !disabled.has(String(eng).trim())),
-      }))
+  const serHome = buildSerEngHomeSysKeys(systems)
+  systems = applyDisabledServicesFilter(systems, runtime)
+  systems = applyPrivateShowServicesFilter(systems, serHome, runtime)
+  return { systems, debug: base.debug }
+}
+
+function parseCsvEnvSet(...parts: (string | undefined)[]): Set<string> {
+  const out = new Set<string>()
+  for (const part of parts) {
+    const s = (part ?? "").trim()
+    if (!s) continue
+    for (const item of s.split(",")) {
+      const k = item.trim()
+      if (k) out.add(k)
     }
   }
-  return { systems, debug: base.debug }
+  return out
+}
+
+/** ser_eng → systemList.config(및 SERVICE_SYSTEM_MAP)상 소속 sys_key */
+function buildSerEngHomeSysKeys(systems: SystemConfigItem[]): Map<string, string[]> {
+  const map = new Map<string, string[]>()
+  for (const s of systems) {
+    const sysKey = s.sys_key?.trim()
+    if (!sysKey) continue
+    for (const eng of s.serviceList ?? []) {
+      const e = String(eng).trim()
+      if (!e) continue
+      const prev = map.get(e) ?? []
+      if (!prev.includes(sysKey)) prev.push(sysKey)
+      map.set(e, prev)
+    }
+  }
+  return map
+}
+
+function getPrivateServiceEngSet(): Set<string> {
+  return new Set(
+    getServiceList()
+      .ser.filter((s) => s.ser_is_private === true)
+      .map((s) => s.ser_eng?.trim())
+      .filter((v): v is string => Boolean(v))
+  )
+}
+
+/**
+ * runtime SHOW_SERVICES — common ∪ project (쉼표 병합).
+ * 기능목록(serviceList.config) ser_is_private=true 인 기능은 기본 메뉴 제외,
+ * SHOW_SERVICES 에 ser_eng 가 있으면 이 프로젝트 systemList·사이드바에 포함.
+ */
+export function getShowServiceEngSet(): Set<string> {
+  noStore()
+  const common = parseEnvFileToMap(resolveCommonRuntimeEnvPath())
+  const { path: runtimeEnvPath } = resolveRuntimeEnvPath()
+  const project = parseEnvFileToMap(runtimeEnvPath)
+  return parseCsvEnvSet(common.SHOW_SERVICES, project.SHOW_SERVICES)
+}
+
+/** 클라이언트용. SHOW_SERVICES(공용∪프로젝트)에 ser_eng 가 있으면 shown */
+export function isShowService(params?: { serEng?: string }): { shown: boolean } {
+  const eng = typeof params?.serEng === "string" ? params.serEng.trim() : ""
+  if (!eng) return { shown: false }
+  return { shown: getShowServiceEngSet().has(eng) }
+}
+
+function applyPrivateShowServicesFilter(
+  systems: SystemConfigItem[],
+  serHome: Map<string, string[]>,
+  runtime: Record<string, string>
+): SystemConfigItem[] {
+  const showSet = getShowServiceEngSet()
+  const privateSet = getPrivateServiceEngSet()
+  const disabledSet = parseCsvEnvSet(runtime.DISABLED_SERVICES)
+
+  const result = systems.map((s) => ({
+    ...s,
+    serviceList: (s.serviceList ?? []).filter((eng) => {
+      const e = String(eng).trim()
+      if (!privateSet.has(e)) return true
+      return showSet.has(e)
+    }),
+  }))
+
+  const sysByKey = new Map(result.map((s) => [s.sys_key?.trim() ?? "", { ...s }]))
+  for (const eng of showSet) {
+    if (disabledSet.has(eng)) continue
+    for (const sysKey of serHome.get(eng) ?? []) {
+      const row = sysByKey.get(sysKey)
+      if (!row) continue
+      const list = row.serviceList ?? []
+      if (!list.includes(eng)) row.serviceList = [...list, eng]
+    }
+  }
+  return [...sysByKey.values()]
+}
+
+/** runtime.env DISABLED_SERVICES — 현재 프로젝트에서 메뉴·권한매핑 대상에서 제외할 ser_eng */
+export function getDisabledServiceEngSet(): Set<string> {
+  return parseCsvEnvSet(getRuntimeEnvVars().DISABLED_SERVICES)
+}
+
+/** getSystemList 적용 후 이 프로젝트에 노출 가능한 ser_eng (DISABLED_SERVICES 제외) */
+export function getProjectAvailableServiceEngSet(): Set<string> {
+  const out = new Set<string>()
+  for (const sys of getSystemList().systems) {
+    for (const eng of sys.serviceList ?? []) {
+      const key = String(eng).trim()
+      if (key) out.add(key)
+    }
+  }
+  return out
+}
+
+function applyDisabledServicesFilter(
+  systems: SystemConfigItem[],
+  runtime: Record<string, string>
+): SystemConfigItem[] {
+  /** 프로젝트별 메뉴 강제 제외 (SHOW_SERVICES·비공개보다 우선) */
+  const disabled = parseCsvEnvSet(runtime.DISABLED_SERVICES)
+  if (disabled.size === 0) return systems
+  return systems.map((s) => ({
+    ...s,
+    serviceList: (s.serviceList ?? []).filter((eng) => !disabled.has(String(eng).trim())),
+  }))
 }
 
 /**
@@ -901,4 +1014,19 @@ export function getParcelAnalysisMapConfig(_params?: unknown): {
   const geoserverUrl = getGeoServerInternalBase()
   const workspace = "ggnr"
   return { geoserverUrl, workspace }
+}
+
+/** V6 system_control.personInfo — true면 필지정보 소유자명 등 마스킹 */
+export async function getPersonInfoMaskEnabled(_params?: unknown): Promise<{ enabled: boolean }> {
+  try {
+    const res = await db.execute(
+      sql.raw(`SELECT sc_value FROM system_control WHERE sc_name = 'personInfo' LIMIT 1`)
+    )
+    const val = String((res.rows?.[0] as { sc_value?: unknown })?.sc_value ?? "")
+      .trim()
+      .toLowerCase()
+    return { enabled: val === "true" }
+  } catch {
+    return { enabled: false }
+  }
 }
