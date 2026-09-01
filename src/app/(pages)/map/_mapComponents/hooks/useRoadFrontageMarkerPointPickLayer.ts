@@ -3,6 +3,7 @@
 import { useEffect, useRef } from 'react';
 import Feature from 'ol/Feature';
 import Point from 'ol/geom/Point';
+import Collection from 'ol/Collection';
 import Modify from 'ol/interaction/Modify';
 import VectorLayer from 'ol/layer/Vector';
 import VectorSource from 'ol/source/Vector';
@@ -151,10 +152,9 @@ export function useRoadFrontageMarkerPointPickLayer(mapReady: boolean) {
       source.addFeature(draft);
 
       const modify = new Modify({
-        source,
+        features: new Collection([draft]),
         hitDetection: layer,
         insertVertexCondition: () => false,
-        filter: (f) => f.getId() === DRAFT_FEATURE_ID,
       });
       modify.on('modifyend', (evt) => {
         const features = evt.features.getArray();

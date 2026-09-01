@@ -1,0 +1,5 @@
+export const DESIGN_SAMPLE_OPENED_KEY = 'designSample';
+
+export const DESIGN_SAMPLE_PANEL_DEFAULT_WIDTH = 619;
+export const DESIGN_SAMPLE_PANEL_MIN_WIDTH = 619;
+export const DESIGN_SAMPLE_PANEL_MAX_WIDTH = 960;

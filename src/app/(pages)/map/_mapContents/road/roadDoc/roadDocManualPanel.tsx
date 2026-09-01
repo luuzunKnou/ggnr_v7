@@ -131,6 +131,9 @@ function listCadFolderChildren(
 type ManualTab = "doc" | "drawing" | "target" | "ref";
 type ApiScope = "doc" | "cad";
 
+/** 업무편람 탭(대상여부 검토·설계실무요령 자료) — 일단 비표시 */
+const ROAD_DOC_HANDBOOK_TABS_VISIBLE = false;
+
 const TAB_BTN =
   "relative -mb-px shrink-0 border-b-2 px-3 py-2 text-[12px] font-medium whitespace-nowrap transition-colors";
 
@@ -158,7 +161,9 @@ export function RoadDocManualPanel({
   onHandbookSelect: (next: HandbookDetailSelection | null) => void;
   startOnHandbook?: boolean;
 }) {
-  const [activeTab, setActiveTab] = useState<ManualTab>(startOnHandbook ? "target" : "doc");
+  const [activeTab, setActiveTab] = useState<ManualTab>(() =>
+    ROAD_DOC_HANDBOOK_TABS_VISIBLE && startOnHandbook ? "target" : "doc"
+  );
   const [docFiles, setDocFiles] = useState<RoadDocListItem[]>([]);
   const [cadFiles, setCadFiles] = useState<RoadDocListItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -168,11 +173,21 @@ export function RoadDocManualPanel({
   const [notice, setNotice] = useState<string | null>(null);
   /** 도면 탭: `roadDoc/cad` 기준 상대 경로 (빈 문자열 = 루트) */
   const [cadPath, setCadPath] = useState("");
-  const isHandbookTab = activeTab === "target" || activeTab === "ref";
+  const isHandbookTab =
+    ROAD_DOC_HANDBOOK_TABS_VISIBLE && (activeTab === "target" || activeTab === "ref");
   const mapPick = useHandbookMapPick();
+
+  useEffect(() => {
+    if (ROAD_DOC_HANDBOOK_TABS_VISIBLE) return;
+    if (activeTab !== "target" && activeTab !== "ref") return;
+    setActiveTab("doc");
+    onHandbookSelect(null);
+    mapPick?.cancelPick();
+  }, [activeTab, mapPick, onHandbookSelect]);
 
   const selectTab = useCallback(
     (tab: ManualTab) => {
+      if (!ROAD_DOC_HANDBOOK_TABS_VISIBLE && (tab === "target" || tab === "ref")) return;
       setActiveTab(tab);
       if (tab === "target" || tab === "ref") {
         if (handbookMode !== tab) onHandbookSelect(null);
@@ -448,24 +463,28 @@ export function RoadDocManualPanel({
           >
             도면
           </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={activeTab === "target"}
-            className={tabBtnClass(activeTab === "target")}
-            onClick={() => selectTab("target")}
-          >
-            대상여부 검토
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={activeTab === "ref"}
-            className={tabBtnClass(activeTab === "ref")}
-            onClick={() => selectTab("ref")}
-          >
-            설계실무요령 자료
-          </button>
+          {ROAD_DOC_HANDBOOK_TABS_VISIBLE ? (
+            <>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={activeTab === "target"}
+                className={tabBtnClass(activeTab === "target")}
+                onClick={() => selectTab("target")}
+              >
+                대상여부 검토
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={activeTab === "ref"}
+                className={tabBtnClass(activeTab === "ref")}
+                onClick={() => selectTab("ref")}
+              >
+                설계실무요령 자료
+              </button>
+            </>
+          ) : null}
         </div>
 
         {isHandbookTab ? (

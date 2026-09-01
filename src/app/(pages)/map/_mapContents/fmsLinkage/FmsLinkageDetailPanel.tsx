@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { ChevronLeft, ChevronRight, X } from 'lucide-react'
+import { ChevronDown, ChevronLeft, ChevronRight, X } from 'lucide-react'
 import { call } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { MapSideDetailScroll } from '../../_mapComponents/MapSideDetailScroll'
@@ -58,24 +58,42 @@ type Props = {
 }
 
 const INSPECTION_PAGE_SIZE = 10
+const FMS_ATTRS_SECTION_TITLE = '속성보기'
+const FMS_ATTR_GROUP_LABEL_CLASS =
+  'mb-1 text-[11px] font-semibold tracking-wide text-slate-600 dark:text-muted-foreground'
 
 function formatInspectionPeriod(item: Pick<InspectionRow, 'startYmd' | 'endYmd'>): string {
   if (!item.startYmd && !item.endYmd) return '—'
   return `${item.startYmd || '—'} ~ ${item.endYmd || '—'}`
 }
 
+const FMS_ATTR_LABEL_CLASS =
+  'flex h-full shrink-0 items-center whitespace-nowrap border-b border-border bg-slate-100 px-2 py-1.5 align-middle font-semibold text-slate-500 dark:bg-muted dark:text-muted-foreground'
+const FMS_ATTR_VALUE_CLASS =
+  'flex min-w-0 items-start break-words border-b border-border bg-background px-2 py-1.5 text-slate-900 dark:text-foreground'
+
 function AttrRows({ items }: { items: DetailAttr[] }) {
   return (
-    <div className="divide-y divide-border overflow-hidden rounded border border-border">
-      {items.map((item) => (
+    <div className="overflow-hidden rounded border border-border">
+      {items.map((item, idx) => (
         <div
           key={item.field}
           className="grid grid-cols-[8.25rem_minmax(0,1fr)]"
         >
-          <dt className="flex h-full shrink-0 items-start whitespace-nowrap bg-slate-100 px-2 py-1.5 font-medium text-slate-500 dark:bg-muted dark:text-muted-foreground">
+          <dt
+            className={cn(
+              FMS_ATTR_LABEL_CLASS,
+              idx === items.length - 1 && 'border-b-0'
+            )}
+          >
             {item.label}
           </dt>
-          <dd className="flex min-w-0 items-start break-words bg-background px-2 py-1.5 text-slate-900 dark:text-foreground">
+          <dd
+            className={cn(
+              FMS_ATTR_VALUE_CLASS,
+              idx === items.length - 1 && 'border-b-0'
+            )}
+          >
             {item.field === 'state_grade' ? (
               <StateGradeBadge grade={item.value} />
             ) : (
@@ -105,9 +123,7 @@ function GroupedAttrList({
       {visible.map((section) => (
         <div key={section.id}>
           {section.label ? (
-            <div className="mb-1 text-[11px] font-semibold tracking-wide text-slate-600 dark:text-muted-foreground">
-              {section.label}
-            </div>
+            <div className={FMS_ATTR_GROUP_LABEL_CLASS}>{section.label}</div>
           ) : null}
           <AttrRows items={section.items} />
         </div>
@@ -116,7 +132,7 @@ function GroupedAttrList({
         <button
           type="button"
           onClick={onToggleExpanded}
-          className="w-full rounded border border-border bg-background py-1.5 text-[11px] font-medium text-primary hover:bg-muted/50"
+          className="standard-detail-secondary-btn w-full py-1.5"
         >
           {expanded ? '접기' : `더보기 (${hiddenCount}건)`}
         </button>
@@ -153,6 +169,8 @@ export function FmsLinkageDetailPanel({
   const [inspections, setInspections] = useState<InspectionRow[]>([])
   const [selectedInspectionId, setSelectedInspectionId] = useState<string | null>(null)
   const [inspectionPage, setInspectionPage] = useState(1)
+  const [inspectionOpen, setInspectionOpen] = useState(true)
+  const [facilityAttrsOpen, setFacilityAttrsOpen] = useState(true)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const inspectionDetailRef = useRef<HTMLDivElement>(null)
@@ -249,7 +267,7 @@ export function FmsLinkageDetailPanel({
     latestInspection?.endYmd || latestInspection?.startYmd || '—'
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-background">
+    <div className="standard-panel-root">
       {toastMsg ? (
         <div className="pointer-events-none fixed inset-0 z-[200] flex items-center justify-center px-3">
           <div
@@ -261,14 +279,14 @@ export function FmsLinkageDetailPanel({
           </div>
         </div>
       ) : null}
-      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border px-3 py-1.5">
-        <span className="truncate text-sm font-semibold text-foreground">
+      <div className="standard-panel-header">
+        <span className="standard-panel-title truncate">
           {row?.facilNm ? `시설물 상세 · ${row.facilNm}` : '시설물 상세'}
         </span>
         <button
           type="button"
           onClick={onClose}
-          className="shrink-0 rounded p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+          className="standard-panel-close"
           title="닫기"
           aria-label="닫기"
         >
@@ -276,171 +294,208 @@ export function FmsLinkageDetailPanel({
         </button>
       </div>
 
-      <MapSideDetailScroll className="min-h-0 flex-1 overflow-auto px-3 py-2 text-[11px]">
-        {loading && attributes.length === 0 ? (
-          <div className="px-1 py-6 text-center text-muted-foreground">불러오는 중…</div>
-        ) : error && attributes.length === 0 ? (
-          <div className="px-1 py-6 text-center text-destructive">{error}</div>
-        ) : (
-          <>
-            <GroupedAttrList
-              sections={facilityGroups.sections}
-              expanded={facilityGroups.expanded}
-              onToggleExpanded={facilityGroups.toggleExpanded}
-            />
-
-            <div className="mt-3">
-              <div className="mb-1.5 text-[11px] font-semibold tracking-wide text-slate-600 dark:text-muted-foreground">
-                {FMS_INSPECTION_TITLE}
-              </div>
-              {inspections.length === 0 ? (
-                <div className="rounded border border-dashed border-border bg-muted/50 px-2 py-4 text-center text-muted-foreground">
-                  {FMS_EMPTY_INSPECTION_MESSAGE}
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded border border-border bg-slate-50 px-2.5 py-2 dark:bg-muted">
-                    <span className="inline-flex h-5 items-center gap-1.5 text-slate-500 dark:text-muted-foreground">
-                      <span className="leading-none">최근 등급</span>
-                      <StateGradeBadge grade={latestInspection?.stateGrade ?? ''} />
-                    </span>
-                    <span className="flex items-center gap-1.5 text-slate-500 dark:text-muted-foreground">
-                      최근 점검일
-                      <span className="font-medium text-slate-900 dark:text-foreground">{latestDateLabel}</span>
-                    </span>
-                    <span className="flex items-center gap-1 text-slate-500 dark:text-muted-foreground">
-                      총
-                      <span className="font-medium text-slate-900 dark:text-foreground">
-                        {inspections.length.toLocaleString()}건
-                      </span>
-                    </span>
-                  </div>
-
-                  <div className="overflow-hidden rounded border border-border">
-                    <table className="w-full table-fixed border-collapse text-left">
-                      <colgroup>
-                        <col className="w-[110px]" />
-                        <col />
-                        <col className="w-[3.75rem]" />
-                      </colgroup>
-                      <thead className="bg-slate-100 dark:bg-muted">
-                        <tr>
-                          <th className="border-b border-border px-2 py-1.5 align-middle font-semibold text-slate-500 dark:text-muted-foreground">
-                            구분
-                          </th>
-                          <th className="border-b border-border px-2 py-1.5 align-middle font-semibold text-slate-500 dark:text-muted-foreground">
-                            기간
-                          </th>
-                          <th className="border-b border-border px-2 py-1.5 text-center align-middle font-semibold text-slate-500 dark:text-muted-foreground">
-                            등급
-                          </th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {pagedInspections.map((item) => {
-                          const isSelected = selectedInspectionId === item.id
-                          const selectInspection = () => {
-                            setSelectedInspectionId((prev) =>
-                              prev === item.id ? null : item.id
-                            )
-                          }
-                          return (
-                            <tr
-                              key={item.id}
-                              role="button"
-                              tabIndex={0}
-                              aria-selected={isSelected}
-                              onClick={selectInspection}
-                              onKeyDown={(e) => {
-                                if (e.key === 'Enter' || e.key === ' ') {
-                                  e.preventDefault()
-                                  selectInspection()
-                                }
-                              }}
-                              className={cn(
-                                'cursor-pointer border-b border-border last:border-b-0 transition-colors',
-                                isSelected
-                                  ? 'bg-primary/10 dark:bg-primary/25'
-                                  : 'hover:bg-muted/50'
-                              )}
-                            >
-                              <td
-                                className="truncate px-2 py-1.5 align-middle font-medium text-slate-900 dark:text-foreground"
-                                title={item.dignGbn || '점검'}
-                              >
-                                {item.dignGbn || '점검'}
-                              </td>
-                              <td
-                                className="truncate px-2 py-1.5 align-middle tabular-nums text-slate-900 dark:text-foreground"
-                                title={formatInspectionPeriod(item)}
-                              >
-                                {formatInspectionPeriod(item)}
-                              </td>
-                              <td className="px-2 py-1.5 text-center align-middle">
-                                <StateGradeBadge grade={item.stateGrade} />
-                              </td>
-                            </tr>
-                          )
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-
-                  <div className="flex items-center justify-between gap-2 px-0.5">
-                    <button
-                      type="button"
-                      disabled={safeInspectionPage <= 1}
-                      onClick={() => setInspectionPage((p) => Math.max(1, p - 1))}
-                      className="inline-flex items-center gap-0.5 rounded px-1.5 py-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:pointer-events-none disabled:opacity-40"
-                      aria-label="이전 페이지"
-                    >
-                      <ChevronLeft className="h-3.5 w-3.5" />
-                      이전
-                    </button>
-                    <span className="tabular-nums text-muted-foreground">
-                      {safeInspectionPage} / {inspectionPageCount}
-                    </span>
-                    <button
-                      type="button"
-                      disabled={safeInspectionPage >= inspectionPageCount}
-                      onClick={() =>
-                        setInspectionPage((p) => Math.min(inspectionPageCount, p + 1))
-                      }
-                      className="inline-flex items-center gap-0.5 rounded px-1.5 py-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:pointer-events-none disabled:opacity-40"
-                      aria-label="다음 페이지"
-                    >
-                      다음
-                      <ChevronRight className="h-3.5 w-3.5" />
-                    </button>
-                  </div>
-
-                  {selectedInspection ? (
-                    <div
-                      ref={inspectionDetailRef}
-                      className="rounded border border-border bg-muted/30 px-2.5 py-2"
-                    >
-                      <div className="mb-1.5 flex flex-wrap items-baseline gap-x-1.5 text-[11px]">
-                        <span className="font-semibold text-slate-600 dark:text-foreground">점검 상세</span>
-                        <span className="font-normal text-black/40 dark:text-muted-foreground/50">·</span>
-                        <span className="font-normal text-black/50 dark:text-muted-foreground">
-                          {selectedInspection.dignGbn || '점검'}
-                          {' · '}
-                          {formatInspectionPeriod(selectedInspection)}
-                        </span>
-                      </div>
-                      <GroupedAttrList
-                        sections={inspectionGroups.sections}
-                        expanded={inspectionGroups.expanded}
-                        onToggleExpanded={inspectionGroups.toggleExpanded}
-                      />
-                    </div>
-                  ) : null}
-                </div>
-              )}
+      {loading && attributes.length === 0 ? (
+        <div className="standard-detail-scroll standard-detail-loading justify-center">불러오는 중…</div>
+      ) : error && attributes.length === 0 ? (
+        <div className="standard-detail-scroll px-3 py-6">
+          <div className="standard-detail-error">{error}</div>
+        </div>
+      ) : (
+        <>
+          <section className="standard-detail-section shrink-0">
+            <div className="standard-detail-section-header">
+              <button
+                type="button"
+                onClick={() => setFacilityAttrsOpen((v) => !v)}
+                className="standard-detail-section-toggle"
+                title={FMS_ATTRS_SECTION_TITLE}
+              >
+                {facilityAttrsOpen ? (
+                  <ChevronDown className="standard-detail-section-chevron" />
+                ) : (
+                  <ChevronRight className="standard-detail-section-chevron" />
+                )}
+                <span className="standard-detail-section-toggle-label">{FMS_ATTRS_SECTION_TITLE}</span>
+              </button>
             </div>
-          </>
-        )}
-      </MapSideDetailScroll>
+            {facilityAttrsOpen ? (
+              <div className="standard-detail-section-body text-[11px]">
+                <GroupedAttrList
+                  sections={facilityGroups.sections}
+                  expanded={facilityGroups.expanded}
+                  onToggleExpanded={facilityGroups.toggleExpanded}
+                />
+              </div>
+            ) : null}
+          </section>
+
+          <section className="standard-detail-section flex min-h-0 min-w-0 flex-1 flex-col !border-b-0">
+            <div className="standard-detail-section-header">
+              <button
+                type="button"
+                onClick={() => setInspectionOpen((v) => !v)}
+                className="standard-detail-section-toggle"
+                title={FMS_INSPECTION_TITLE}
+              >
+                {inspectionOpen ? (
+                  <ChevronDown className="standard-detail-section-chevron" />
+                ) : (
+                  <ChevronRight className="standard-detail-section-chevron" />
+                )}
+                <span className="standard-detail-section-toggle-label">{FMS_INSPECTION_TITLE}</span>
+              </button>
+            </div>
+            {inspectionOpen ? (
+              <MapSideDetailScroll className="standard-detail-scroll min-h-0 flex-1 text-[11px]">
+                {inspections.length === 0 ? (
+                  <div className="standard-detail-empty-dashed-compact">
+                    {FMS_EMPTY_INSPECTION_MESSAGE}
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded border border-border bg-slate-50 px-2.5 py-2 dark:bg-muted">
+                      <span className="inline-flex h-5 items-center gap-1.5 text-slate-500 dark:text-muted-foreground">
+                        <span className="leading-none">최근 등급</span>
+                        <StateGradeBadge grade={latestInspection?.stateGrade ?? ''} />
+                      </span>
+                      <span className="flex items-center gap-1.5 text-slate-500 dark:text-muted-foreground">
+                        최근 점검일
+                        <span className="font-medium text-slate-900 dark:text-foreground">{latestDateLabel}</span>
+                      </span>
+                      <span className="flex items-center gap-1 text-slate-500 dark:text-muted-foreground">
+                        총
+                        <span className="font-medium text-slate-900 dark:text-foreground">
+                          {inspections.length.toLocaleString()}건
+                        </span>
+                      </span>
+                    </div>
+
+                    <div className="overflow-hidden rounded border border-border">
+                      <table className="w-full table-fixed border-collapse text-left">
+                        <colgroup>
+                          <col className="w-[110px]" />
+                          <col />
+                          <col className="w-[3.75rem]" />
+                        </colgroup>
+                        <thead className="bg-slate-100 dark:bg-muted">
+                          <tr>
+                            <th className="border-b border-border px-2 py-1.5 align-middle font-semibold text-slate-500 dark:text-muted-foreground">
+                              구분
+                            </th>
+                            <th className="border-b border-border px-2 py-1.5 align-middle font-semibold text-slate-500 dark:text-muted-foreground">
+                              기간
+                            </th>
+                            <th className="border-b border-border px-2 py-1.5 text-center align-middle font-semibold text-slate-500 dark:text-muted-foreground">
+                              등급
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {pagedInspections.map((item) => {
+                            const isSelected = selectedInspectionId === item.id
+                            const selectInspection = () => {
+                              setSelectedInspectionId((prev) =>
+                                prev === item.id ? null : item.id
+                              )
+                            }
+                            return (
+                              <tr
+                                key={item.id}
+                                role="button"
+                                tabIndex={0}
+                                aria-selected={isSelected}
+                                onClick={selectInspection}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter' || e.key === ' ') {
+                                    e.preventDefault()
+                                    selectInspection()
+                                  }
+                                }}
+                                className={cn(
+                                  'cursor-pointer border-b border-border last:border-b-0 transition-colors',
+                                  isSelected
+                                    ? 'bg-primary/10 dark:bg-primary/25'
+                                    : 'hover:bg-muted/50'
+                                )}
+                              >
+                                <td
+                                  className="truncate px-2 py-1.5 align-middle font-medium text-slate-900 dark:text-foreground"
+                                  title={item.dignGbn || '점검'}
+                                >
+                                  {item.dignGbn || '점검'}
+                                </td>
+                                <td
+                                  className="truncate px-2 py-1.5 align-middle tabular-nums text-slate-900 dark:text-foreground"
+                                  title={formatInspectionPeriod(item)}
+                                >
+                                  {formatInspectionPeriod(item)}
+                                </td>
+                                <td className="px-2 py-1.5 text-center align-middle">
+                                  <StateGradeBadge grade={item.stateGrade} />
+                                </td>
+                              </tr>
+                            )
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    <div className="flex items-center justify-between gap-2 px-0.5">
+                      <button
+                        type="button"
+                        disabled={safeInspectionPage <= 1}
+                        onClick={() => setInspectionPage((p) => Math.max(1, p - 1))}
+                        className="inline-flex items-center gap-0.5 rounded px-1.5 py-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:pointer-events-none disabled:opacity-40"
+                        aria-label="이전 페이지"
+                      >
+                        <ChevronLeft className="h-3.5 w-3.5" />
+                        이전
+                      </button>
+                      <span className="tabular-nums text-muted-foreground">
+                        {safeInspectionPage} / {inspectionPageCount}
+                      </span>
+                      <button
+                        type="button"
+                        disabled={safeInspectionPage >= inspectionPageCount}
+                        onClick={() =>
+                          setInspectionPage((p) => Math.min(inspectionPageCount, p + 1))
+                        }
+                        className="inline-flex items-center gap-0.5 rounded px-1.5 py-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:pointer-events-none disabled:opacity-40"
+                        aria-label="다음 페이지"
+                      >
+                        다음
+                        <ChevronRight className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+
+                    {selectedInspection ? (
+                      <div
+                        ref={inspectionDetailRef}
+                        className="rounded border border-border bg-muted/30 px-2.5 py-2"
+                      >
+                        <div className="mb-1.5 flex flex-wrap items-baseline gap-x-1.5 text-[11px]">
+                          <span className="standard-detail-section-title">점검 상세</span>
+                          <span className="font-normal text-black/40 dark:text-muted-foreground/50">·</span>
+                          <span className="font-normal text-black/50 dark:text-muted-foreground">
+                            {selectedInspection.dignGbn || '점검'}
+                            {' · '}
+                            {formatInspectionPeriod(selectedInspection)}
+                          </span>
+                        </div>
+                        <GroupedAttrList
+                          sections={inspectionGroups.sections}
+                          expanded={inspectionGroups.expanded}
+                          onToggleExpanded={inspectionGroups.toggleExpanded}
+                        />
+                      </div>
+                    ) : null}
+                  </div>
+                )}
+              </MapSideDetailScroll>
+            ) : null}
+          </section>
+        </>
+      )}
     </div>
   )
 }

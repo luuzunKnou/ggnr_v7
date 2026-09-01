@@ -16,6 +16,10 @@ import {
   type RoadRewardCaseDtoClient,
 } from "./roadRewardApi";
 import { ROAD_REWARD_WMS_LAYER_IDS } from "./roadRewardLayerId";
+import {
+  useRoadRewardMapClick,
+  type RoadRewardMapPick,
+} from "./useRoadRewardMapClick";
 
 function lowerLayerIds(ids: readonly string[]): string[] {
   return ids.map((id) => id.toLowerCase());
@@ -43,6 +47,7 @@ type Props = {
   selectedId: string | null;
   onCasesChange: Dispatch<SetStateAction<RoadRewardCase[]>>;
   onSelectId: (id: string) => void;
+  onFocusParcelId?: (id: string | null) => void;
   onAdd?: () => void;
   onClose: () => void;
 };
@@ -52,6 +57,7 @@ export function RoadRewardListPanel({
   selectedId,
   onCasesChange,
   onSelectId,
+  onFocusParcelId,
   onAdd,
   onClose,
 }: Props) {
@@ -214,34 +220,59 @@ export function RoadRewardListPanel({
     onAdd?.();
   };
 
-  const handleSelect = async (id: string) => {
-    onSelectId(id);
-    if (isNewRoadRewardCaseId(id)) return;
-    const seq = ++selectSeqRef.current;
-    try {
-      const res = await call("", "POST", {
-        service: "roadRewardService",
-        action: "getDetailByOgcFid",
-        params: { ogcFid: Number(id), fillPnuGeom: true },
-      });
-      if (seq !== selectSeqRef.current) return;
-      const data = res?.data ?? res;
-      if (data?.error || !data?.row) return;
-      const mapped = mapRoadRewardDtoToCase(data.row as RoadRewardCaseDtoClient);
-      onCasesChange((prev) => {
-        const idx = prev.findIndex((c) => c.id === id);
-        if (idx < 0) return [...prev, mapped];
-        return prev.map((c) => (c.id === id ? mapped : c));
-      });
-    } catch {
-      /* 상세 보강 실패 시 목록 행으로 표시 */
-    }
-  };
+  const enrichCaseDetail = useCallback(
+    async (id: string) => {
+      if (isNewRoadRewardCaseId(id)) return;
+      const seq = ++selectSeqRef.current;
+      try {
+        const res = await call("", "POST", {
+          service: "roadRewardService",
+          action: "getDetailByOgcFid",
+          params: { ogcFid: Number(id), fillPnuGeom: true },
+        });
+        if (seq !== selectSeqRef.current) return;
+        const data = res?.data ?? res;
+        if (data?.error || !data?.row) return;
+        const mapped = mapRoadRewardDtoToCase(data.row as RoadRewardCaseDtoClient);
+        onCasesChange((prev) => {
+          const idx = prev.findIndex((c) => c.id === id);
+          if (idx < 0) return [...prev, mapped];
+          return prev.map((c) => (c.id === id ? mapped : c));
+        });
+      } catch {
+        /* 상세 보강 실패 시 목록 행으로 표시 */
+      }
+    },
+    [onCasesChange]
+  );
+
+  const handleSelect = useCallback(
+    async (id: string) => {
+      onFocusParcelId?.(null);
+      onSelectId(id);
+      await enrichCaseDetail(id);
+    },
+    [onFocusParcelId, onSelectId, enrichCaseDetail]
+  );
+
+  const openDetailFromMap = useCallback(
+    async (pick: RoadRewardMapPick) => {
+      onSelectId(pick.caseId);
+      onFocusParcelId?.(pick.parcelId ?? null);
+      await enrichCaseDetail(pick.caseId);
+    },
+    [onFocusParcelId, onSelectId, enrichCaseDetail]
+  );
+
+  useRoadRewardMapClick({
+    enabled: true,
+    onPick: openDetailFromMap,
+  });
 
   return (
-    <div className="flex min-h-0 h-full flex-col bg-background">
-      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border px-3 py-1.5">
-        <span className="text-sm font-semibold text-foreground">보상편입용지</span>
+    <div className="standard-panel-root">
+      <div className="standard-panel-header">
+        <span className="standard-panel-title">보상편입용지</span>
         <div className="flex items-center gap-1">
           <LayerRowAddButton
             onClick={handleAdd}
@@ -250,7 +281,7 @@ export function RoadRewardListPanel({
           <button
             type="button"
             onClick={onClose}
-            className="shrink-0 rounded p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            className="standard-panel-close"
             title="닫기"
             aria-label="닫기"
           >
@@ -259,32 +290,32 @@ export function RoadRewardListPanel({
         </div>
       </div>
 
-      <div className="shrink-0 border-b border-border px-2.5 py-2">
-        <div className="relative">
-          <Search className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+      <div className="standard-filter-section">
+        <div className="standard-search-wrap">
+          <Search className="standard-search-icon" />
           <input
             type="search"
             value={keyword}
             onChange={(e) => setKeyword(e.target.value)}
             placeholder="건명·조직·정책"
-            className="h-8 w-full rounded border border-border bg-background pl-7 pr-2.5 text-xs text-foreground outline-none placeholder:text-muted-foreground focus:border-primary focus:ring-2 focus:ring-primary/25"
+            className="standard-search-input"
           />
         </div>
       </div>
 
-      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+      <div className="standard-list-body">
         {listError ? (
           <div className="shrink-0 border-b border-destructive/20 bg-destructive/10 px-3 py-2 text-xs text-destructive">
             {listError}
           </div>
         ) : null}
-        <div className="min-h-0 flex-1 overflow-auto scrollbar-thin">
-          <table className="w-full table-fixed border-collapse text-left text-xs">
+        <div className="standard-list-scroll">
+          <table className="standard-list-table min-w-0 w-full table-fixed">
             <colgroup>
               <col />
               <col className="w-[88px]" />
             </colgroup>
-            <thead className="sticky top-0 z-[1] bg-muted shadow-[0_1px_0_0_var(--border)]">
+            <thead className="standard-table-thead">
               <tr>
                 {SORT_COLUMNS.map((col) => {
                   const sortIdx = sorts.findIndex((s) => s.key === col.key);
@@ -301,17 +332,17 @@ export function RoadRewardListPanel({
                     <th
                       key={col.key}
                       className={cn(
-                        "whitespace-nowrap border-b-0 px-2 py-1.5 font-semibold text-foreground/90 [box-shadow:inset_0_-2px_0_0_var(--border)]",
-                        alignRight ? "text-right" : "text-left"
+                        "standard-table-th",
+                        alignRight ? "standard-table-th-center" : "standard-table-th-left"
                       )}
                     >
                       <button
                         type="button"
                         onClick={() => toggleSort(col.key)}
                         className={cn(
-                          "inline-flex max-w-full items-center gap-0.5 rounded px-0.5 py-0.5 transition-colors hover:bg-muted",
-                          alignRight ? "justify-end" : "justify-start",
-                          active ? "text-primary" : "text-foreground/90"
+                          "standard-sort-button",
+                          alignRight ? "standard-sort-button-center" : "standard-sort-button-left",
+                          active && "standard-sort-button-active"
                         )}
                         title={
                           !active
@@ -332,19 +363,13 @@ export function RoadRewardListPanel({
             <tbody>
               {loading && sorted.length === 0 ? (
                 <tr>
-                  <td
-                    colSpan={SORT_COLUMNS.length}
-                    className="px-3 py-6 text-center text-xs text-muted-foreground"
-                  >
+                  <td colSpan={SORT_COLUMNS.length} className="standard-table-empty">
                     불러오는 중…
                   </td>
                 </tr>
               ) : sorted.length === 0 ? (
                 <tr>
-                  <td
-                    colSpan={SORT_COLUMNS.length}
-                    className="px-3 py-6 text-center text-xs text-muted-foreground"
-                  >
+                  <td colSpan={SORT_COLUMNS.length} className="standard-table-empty">
                     {cases.length === 0 ? "등록된 건이 없습니다." : "검색 결과가 없습니다."}
                   </td>
                 </tr>
@@ -365,12 +390,9 @@ export function RoadRewardListPanel({
                           void handleSelect(c.id);
                         }
                       }}
-                      className={cn(
-                        "cursor-pointer border-b border-border transition-colors hover:bg-muted/50",
-                        isSelected && "bg-primary/10"
-                      )}
+                      className={cn("standard-list-row", isSelected && "standard-list-row-selected")}
                     >
-                      <td className="max-w-0 px-2 py-1.5 text-foreground" title={displayName}>
+                      <td className="standard-table-td-text" title={displayName}>
                         <div className="flex min-w-0 items-center gap-1.5">
                           <span
                             className={cn(
@@ -381,13 +403,13 @@ export function RoadRewardListPanel({
                             {displayName}
                           </span>
                           {!c.geometry3857 ? (
-                            <span className="inline-block shrink-0 rounded-full bg-destructive/10 px-1.5 py-0.5 text-[11px] font-semibold text-destructive">
+                            <span className="standard-status-badge standard-status-badge-ended shrink-0">
                               범위미정
                             </span>
                           ) : null}
                         </div>
                       </td>
-                      <td className="max-w-0 truncate px-2 py-1.5 text-right tabular-nums text-foreground/90">
+                      <td className="standard-table-td-date text-right">
                         {parcelCount.toLocaleString()}건
                       </td>
                     </tr>
@@ -397,7 +419,7 @@ export function RoadRewardListPanel({
             </tbody>
           </table>
         </div>
-        <div className="shrink-0 border-t border-border px-3 py-1.5 text-[11px] text-muted-foreground">
+        <div className="standard-list-footer">
           {loading ? "불러오는 중…" : `${filtered.length.toLocaleString()}건`}
           {!loading && filtered.length !== cases.length
             ? ` / 전체 ${cases.length.toLocaleString()}건`

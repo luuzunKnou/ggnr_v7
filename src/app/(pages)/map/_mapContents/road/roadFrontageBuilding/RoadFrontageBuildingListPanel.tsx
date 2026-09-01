@@ -164,9 +164,9 @@ export function RoadFrontageBuildingListPanel({
   const roadNetworkLayerOn = isRoadNetworkWmsVisible(mapContext?.visibleLayerNames);
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-background">
-      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border px-3 py-1.5">
-        <span className="text-sm font-semibold text-foreground">접도구역 건축물</span>
+    <div className="standard-panel-root">
+      <div className="standard-panel-header">
+        <span className="standard-panel-title">접도구역 건축물</span>
         <div className="flex items-center gap-1">
           <LayerRowPanelButton
             type="button"
@@ -174,7 +174,12 @@ export function RoadFrontageBuildingListPanel({
             aria-label={roadNetworkLayerOn ? '도로망도 레이어 끄기' : '도로망도 레이어 켜기'}
             aria-pressed={roadNetworkLayerOn}
             onClick={() => toggleRoadNetworkWmsLayers(mapContext?.setVisibleLayerNames)}
-            className={roadNetworkLayerOn ? 'border-primary bg-primary/15 text-foreground hover:opacity-90' : undefined}
+            className={cn(
+              'standard-layer-toggle-chip',
+              roadNetworkLayerOn
+                ? 'standard-layer-toggle-chip-active'
+                : 'standard-layer-toggle-chip-inactive'
+            )}
           >
             <Layers className="h-3 w-3 shrink-0" aria-hidden />
             도로망도
@@ -189,7 +194,7 @@ export function RoadFrontageBuildingListPanel({
           <button
             type="button"
             onClick={handleClose}
-            className="shrink-0 rounded p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            className="standard-panel-close"
             title="닫기"
             aria-label="닫기"
           >
@@ -198,15 +203,15 @@ export function RoadFrontageBuildingListPanel({
         </div>
       </div>
 
-      <div className="shrink-0 space-y-2 border-b border-border px-3 py-2">
-        <div className="relative">
-          <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+      <div className="standard-filter-section">
+        <div className="standard-search-wrap">
+          <Search className="standard-search-icon" />
           <input
             type="search"
             value={keyword}
             onChange={(e) => setKeyword(e.target.value)}
             placeholder="검색 (도로종류, 위치, 노선번호 등)"
-            className="w-full rounded-md border border-border bg-background py-1.5 pl-8 pr-3 text-sm text-foreground outline-none placeholder:text-muted-foreground ring-offset-2 focus:border-primary focus:ring-2 focus:ring-primary/25"
+            className="standard-search-input"
           />
         </div>
         <div className="flex flex-wrap gap-1">
@@ -240,21 +245,21 @@ export function RoadFrontageBuildingListPanel({
         </div>
       </div>
 
-      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+      <div className="standard-list-body">
         {error ? (
           <div className="shrink-0 border-b border-destructive/20 bg-destructive/10 px-3 py-2 text-xs text-destructive">
             {error}
           </div>
         ) : null}
-        <div ref={listScrollRef} className="min-h-0 flex-1 overflow-auto scrollbar-thin">
-          <table className="w-full table-fixed border-collapse text-left text-xs">
+        <div ref={listScrollRef} className="standard-list-scroll">
+          <table className="standard-list-table min-w-[360px] w-full table-fixed">
             <colgroup>
               <col className="w-[5.75rem]" />
               <col />
               <col className="w-[4.25rem]" />
               <col className="w-[5.75rem]" />
             </colgroup>
-            <thead className="sticky top-0 z-[1] bg-muted shadow-[0_1px_0_0_var(--border)]">
+            <thead className="standard-table-thead">
               <tr>
                 {SORT_COLUMNS.map((col) => {
                   const sortIdx = sorts.findIndex((s) => s.key === col.key);
@@ -267,17 +272,17 @@ export function RoadFrontageBuildingListPanel({
                     <th
                       key={col.key}
                       className={cn(
-                        'whitespace-nowrap border-b-0 px-1 py-1.5 font-semibold text-foreground/90 [box-shadow:inset_0_-2px_0_0_var(--border)]',
-                        alignLeft ? 'text-left' : 'text-center'
+                        'standard-table-th',
+                        alignLeft ? 'standard-table-th-left' : 'standard-table-th-center'
                       )}
                     >
                       <button
                         type="button"
                         onClick={() => toggleSort(col.key)}
                         className={cn(
-                          'inline-flex items-center gap-0.5 whitespace-nowrap rounded px-0.5 py-0.5 transition-colors hover:bg-muted/80',
-                          alignLeft ? 'w-full justify-start' : 'mx-auto justify-center',
-                          active ? 'text-primary' : 'text-foreground/90'
+                          'standard-sort-button',
+                          alignLeft ? 'standard-sort-button-left' : 'standard-sort-button-center',
+                          active && 'standard-sort-button-active'
                         )}
                         title={
                           !active
@@ -287,7 +292,7 @@ export function RoadFrontageBuildingListPanel({
                               : `${col.label} 정렬 해제`
                         }
                       >
-                        <span>{col.label}</span>
+                        <span className="truncate">{col.label}</span>
                         <Icon className="h-3 w-3 shrink-0 opacity-70" aria-hidden />
                       </button>
                     </th>
@@ -298,13 +303,13 @@ export function RoadFrontageBuildingListPanel({
             <tbody>
               {loading && filteredItems.length === 0 ? (
                 <tr>
-                  <td colSpan={4} className="px-2 py-6 text-center text-muted-foreground">
+                  <td colSpan={4} className="standard-table-empty">
                     불러오는 중…
                   </td>
                 </tr>
               ) : filteredItems.length === 0 ? (
                 <tr>
-                  <td colSpan={4} className="px-2 py-6 text-center text-muted-foreground">
+                  <td colSpan={4} className="standard-table-empty">
                     {items.length === 0
                       ? '등록된 관리대장이 없습니다.'
                       : '선택한 도로 종류에 해당하는 목록이 없습니다.'}
@@ -329,14 +334,9 @@ export function RoadFrontageBuildingListPanel({
                           handleSelect(l);
                         }
                       }}
-                      className={cn(
-                        'cursor-pointer border-b border-border transition-colors',
-                        isSelected
-                          ? 'bg-primary/10 dark:bg-primary/25'
-                          : 'hover:bg-muted/50'
-                      )}
+                      className={cn('standard-list-row', isSelected && 'standard-list-row-selected')}
                     >
-                      <td className="px-1 py-1.5 text-center">
+                      <td className="standard-table-td-compact text-center">
                         {roadTypeLabel ? (
                           <span
                             className={cn(
@@ -351,24 +351,18 @@ export function RoadFrontageBuildingListPanel({
                           <span className="text-muted-foreground">—</span>
                         )}
                       </td>
-                      <td
-                        className="max-w-0 truncate px-2 py-1.5 text-foreground"
-                        title={l.locAdr}
-                      >
+                      <td className="standard-table-td-text" title={l.locAdr}>
                         {formatAddressStripSidoSigungu(l.locAdr) ||
                           l.locAdr ||
                           '(위치 미입력)'}
                       </td>
                       <td
-                        className="max-w-0 truncate px-2 py-1.5 tabular-nums text-center text-foreground"
+                        className="standard-table-td-date text-center"
                         title={routeTitle !== '—' ? routeTitle : undefined}
                       >
                         {l.routeNo.trim() || '—'}
                       </td>
-                      <td
-                        className="max-w-0 truncate px-2 py-1.5 tabular-nums text-center text-foreground"
-                        title={l.preYmd}
-                      >
+                      <td className="standard-table-td-date text-center" title={l.preYmd}>
                         {l.preYmd || '—'}
                       </td>
                     </tr>
@@ -378,7 +372,7 @@ export function RoadFrontageBuildingListPanel({
             </tbody>
           </table>
         </div>
-        <div className="shrink-0 border-t border-border px-3 py-1.5 text-[11px] text-muted-foreground">
+        <div className="standard-list-footer">
           {filteredItems.length.toLocaleString()}건
           {roadTypeFilter ? ` / 전체 ${items.length.toLocaleString()}건` : ''}
         </div>
