@@ -1215,17 +1215,13 @@ export function RoadRewardDetailPanel({
                 : "등록된 필지가 없습니다."}
             </p>
           ) : (
-            <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded border border-border">
-              <table className={cn(PARCEL_LIST_TABLE_CLASS, "shrink-0")}>
+            <MapSideDetailScroll className="min-h-0 flex-1 overflow-y-auto rounded border border-border">
+              <table className={PARCEL_LIST_TABLE_CLASS}>
                 <ParcelListColGroup editing={isEditing} />
-                <thead className="bg-muted">
+                <thead className="standard-table-thead">
                   <ParcelListHeaderRow editing={isEditing} />
                 </thead>
-              </table>
-              <MapSideDetailScroll className="min-h-0 flex-1 overflow-y-auto scrollbar-thin">
-                <table className={PARCEL_LIST_TABLE_CLASS}>
-                  <ParcelListColGroup editing={isEditing} />
-                  <tbody>
+                <tbody>
                     {displayParcels.map((p) => {
                       const isSelected = p.id === selectedParcelId;
                       const addr = `${p.eupmyeonDong} ${p.jibunIncluded || p.jibunOriginal}`.trim();
@@ -1315,10 +1311,9 @@ export function RoadRewardDetailPanel({
                         </tr>
                       );
                     })}
-                  </tbody>
-                </table>
-              </MapSideDetailScroll>
-            </div>
+                </tbody>
+              </table>
+            </MapSideDetailScroll>
           )}
         </div>
       </section>
