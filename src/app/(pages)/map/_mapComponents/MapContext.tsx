@@ -52,6 +52,8 @@ export type AddressInfoDetailState = {
   viewProjection: string;
   loading: boolean;
   pnu?: string | null;
+  /** 지적 조회 직후 도형 시드 — 하이라이트 재그리기 트리거 */
+  geomSeedAt?: number;
   jibun: string | null;
   road: string | null;
   buildingName?: string | null;
@@ -105,6 +107,8 @@ export type MapContextValue = {
   setAddressInfoDetail: Dispatch<SetStateAction<AddressInfoDetailState>>;
   /** 현재 주소정보 하이라이트 필지 도형(3857). 같은 필지 우클릭 시 닫기 판단용 */
   addressParcelGeometryRef: MutableRefObject<import('ol/geom').Geometry | null>;
+  /** 우클릭 지적 조회 직후 시드 GeoJSON(4326) — API 응답 전 즉시 하이라이트 */
+  addressParcelSeedGeom4326Ref: MutableRefObject<Record<string, unknown> | null>;
   /** 전체 레이어 끄기(지적도·건물도로·기초구간 + defineLayer 레이어) 콜백. OpenLayersMap에서 등록 */
   allLayersOffRef: MutableRefObject<(() => void) | null>;
   /** 도형 내 데이터만 표시할 때 사용. WKT(5181). null이면 공간 필터 없음 */
@@ -532,6 +536,7 @@ export function MapContextProvider({ children }: { children: React.ReactNode }) 
   const [complaintDetail, setComplaintDetail] = useState<ComplaintDetail>(null);
   const [addressInfoDetail, setAddressInfoDetail] = useState<AddressInfoDetailState>(null);
   const addressParcelGeometryRef = useRef<import('ol/geom').Geometry | null>(null);
+  const addressParcelSeedGeom4326Ref = useRef<Record<string, unknown> | null>(null);
   const [spatialFilterWkt, setSpatialFilterWkt] = useState<string | null>(null);
   const [spatialFilteredLayerNames, setSpatialFilteredLayerNames] = useState<Set<string> | null>(null);
   const [serviceWmsCqlByLayer, setServiceWmsCqlByLayer] = useState<Record<string, string> | null>(null);
@@ -752,6 +757,7 @@ export function MapContextProvider({ children }: { children: React.ReactNode }) 
         addressInfoDetail,
         setAddressInfoDetail,
         addressParcelGeometryRef,
+        addressParcelSeedGeom4326Ref,
         allLayersOffRef,
         spatialFilterWkt,
         setSpatialFilterWkt,

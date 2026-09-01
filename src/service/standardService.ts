@@ -8,6 +8,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { identifyHitPriorityRank } from '@/lib/mapLayerGeometryOrder';
 import { isFmsFacilityLayerTable } from '@/lib/fmsLinkage/fmsBinding';
+import { fetchVworldCadastralGeomByPnu } from '@/lib/vworldCadastralGeom';
 
 const DEFAULT_SCHEMA = 'layer';
 const ALLOWED_SCHEMAS = new Set(['layer', 'public_layer']);
@@ -958,6 +959,87 @@ export async function getJijukParcelAtPoint(params: { x: number; y: number }) {
   } catch {
     return { results: [] };
   }
+}
+
+function parseGeoJsonGeomField(value: unknown): Record<string, unknown> | null {
+  if (value == null) return null;
+  let geom: unknown = value;
+  if (typeof value === 'string') {
+    try {
+      geom = JSON.parse(value) as unknown;
+    } catch {
+      return null;
+    }
+  }
+  if (!geom || typeof geom !== 'object' || !('type' in geom) || !('coordinates' in geom)) return null;
+  return geom as Record<string, unknown>;
+}
+
+function pnuCandidates(digits: string): string[] {
+  if (digits.length === 19) {
+    return [digits, `${digits.slice(0, 10)}${digits[10] === '1' ? '2' : '1'}${digits.slice(11)}`];
+  }
+  if (digits.length === 18) {
+    return [`${digits.slice(0, 10)}1${digits.slice(10)}`, `${digits.slice(0, 10)}2${digits.slice(10)}`];
+  }
+  return digits ? [digits] : [];
+}
+
+async function getJijukGeomGeoJson4326ByPnu(pnu: string): Promise<Record<string, unknown> | null> {
+  const esc = (v: string) => v.replace(/'/g, "''");
+  const digits = String(pnu ?? '').replace(/\D/g, '');
+  for (const key of pnuCandidates(digits)) {
+    try {
+      const res = await db.execute(
+        sql.raw(
+          `SELECT ST_AsGeoJSON(ST_Transform(geom, 4326))::json AS geom
+           FROM public_layer.jijuk
+           WHERE pnu = '${esc(key)}'
+           LIMIT 1`
+        )
+      );
+      const geom = parseGeoJsonGeomField((res.rows?.[0] as { geom?: unknown } | undefined)?.geom);
+      if (geom) return geom;
+    } catch {
+      /* ignore */
+    }
+  }
+  return null;
+}
+
+/**
+ * 우클릭 필지 하이라이트 — 로컬 jijuk 우선, 없으면 VWorld 연속지적 폴백.
+ */
+export async function getParcelHighlightGeom(params: {
+  x?: number;
+  y?: number;
+  pnu?: string;
+}): Promise<{ pnu: string | null; geometry4326: Record<string, unknown> | null }> {
+  let resolvedPnu = String(params.pnu ?? '').replace(/\D/g, '').slice(0, 19) || null;
+
+  if (typeof params.x === 'number' && typeof params.y === 'number') {
+    const atPoint = await getJijukParcelAtPoint({ x: params.x, y: params.y });
+    const jijuk = atPoint.results?.find((r) => String(r?.tableName ?? '').trim() === 'jijuk');
+    const row = jijuk?.features?.[0]?.data as Record<string, unknown> | undefined;
+    if (row) {
+      const rowPnu = String(row.pnu ?? '').replace(/\D/g, '').slice(0, 19);
+      if (rowPnu) resolvedPnu = rowPnu;
+      const geom = parseGeoJsonGeomField(row.geom);
+      if (geom && resolvedPnu) return { pnu: resolvedPnu, geometry4326: geom };
+    }
+  }
+
+  if (!resolvedPnu) return { pnu: null, geometry4326: null };
+
+  const localGeom = await getJijukGeomGeoJson4326ByPnu(resolvedPnu);
+  if (localGeom) return { pnu: resolvedPnu, geometry4326: localGeom };
+
+  const fromVworld = await fetchVworldCadastralGeomByPnu(resolvedPnu);
+  if (fromVworld?.geometry4326) {
+    return { pnu: fromVworld.pnu, geometry4326: fromVworld.geometry4326 };
+  }
+
+  return { pnu: resolvedPnu, geometry4326: null };
 }
 
 /**

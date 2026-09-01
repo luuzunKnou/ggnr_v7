@@ -99,7 +99,7 @@ import {
   parseMapMeasurementsResetTarget,
 } from '../_mapContents/mapSplit/mapMeasurementsReset';
 import { useOfficialLandPriceMapLayer } from './hooks/useOfficialLandPriceMapLayer';
-import { useAddressParcelHighlight } from './hooks/useAddressParcelHighlight';
+import { useAddressParcelHighlight, parseParcelGeomField } from './hooks/useAddressParcelHighlight';
 import { useRoadLedgerMapHighlight } from './hooks/useRoadLedgerMapHighlight';
 import { useRoadNetworkMapHighlight } from './hooks/useRoadNetworkMapHighlight';
 import { useRoadNetworkOverlayLayer } from './hooks/useRoadNetworkOverlayLayer';
@@ -1250,7 +1250,7 @@ export default function OpenLayersMap({
 
   // 주소정보 패널이 열려 있을 때 해당 좌표 필지 하이라이트
   const addressInfoDetail = mapContext?.addressInfoDetail ?? null;
-  useAddressParcelHighlight(mapInstanceRef.current, mapReady, addressInfoDetail);
+  useAddressParcelHighlight(mapReady, addressInfoDetail);
   useRoadLedgerMapHighlight(mapReady);
   useRoadNetworkMapHighlight(mapReady);
   useRoadNetworkOverlayLayer(mapReady);
@@ -1371,6 +1371,9 @@ export default function OpenLayersMap({
 
       const wgs84 = transformCoordinate(coordinate, viewProjection, 'EPSG:4326');
       if (!wgs84) return;
+      if (mapContext?.addressParcelSeedGeom4326Ref) {
+        mapContext.addressParcelSeedGeom4326Ref.current = null;
+      }
       setAddressInfoDetail({
         coordinate,
         viewProjection,
@@ -1395,6 +1398,10 @@ export default function OpenLayersMap({
             const jijukResult = results.find((r) => String(r?.tableName ?? '').trim() === 'jijuk');
             const row = jijukResult?.features?.[0]?.data;
             const pnu = row?.pnu != null ? String(row.pnu).trim() : '';
+            const seedGeom = parseParcelGeomField(row?.geom);
+            if (seedGeom && mapContext?.addressParcelSeedGeom4326Ref) {
+              mapContext.addressParcelSeedGeom4326Ref.current = seedGeom;
+            }
             const parcelJibun = row?.jibun != null ? String(row.jibun).trim() : '';
             // 지적 jibun은 「1-3」「1-3잡」처럼 짧은 경우가 많음 — 전체 주소는 브이월드 역지오코딩 결과를 우선
             const parcelJibunLooksFull =
@@ -1406,6 +1413,7 @@ export default function OpenLayersMap({
                 ? {
                     ...prev,
                     pnu: prev.pnu ?? (pnu || null),
+                    geomSeedAt: seedGeom ? Date.now() : prev.geomSeedAt,
                     jibun: prev.jibun ?? (parcelJibunLooksFull ? parcelJibun : null),
                   }
                 : null
