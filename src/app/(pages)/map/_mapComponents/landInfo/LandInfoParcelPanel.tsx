@@ -18,7 +18,6 @@ import {
 import type { ParcelLandRowSource } from '@/lib/parcelLandNormalize';
 import { cn } from '@/lib/utils';
 import { PARCEL_LAND_MODAL_SIZE_CLASS } from './parcelLandModalMock';
-import { formatPersonField, maskParcelLandModalRows } from './landPersonInfoMask';
 import {
   LAND_INFO_FIELD_GRID,
   LAND_INFO_GRID_LABEL,
@@ -153,7 +152,6 @@ export type LandInfoParcelPanelProps = {
   vworldKey: string;
   /** PNU·주소 resolve 중 */
   resolveLoading?: boolean;
-  personInfoMaskEnabled?: boolean;
   /** 부모가 조회한 데이터 — 우클릭 패널에서 중복 조회 방지 */
   parcelData?: ParcelTabData;
   parcelFetching?: boolean;
@@ -164,7 +162,6 @@ export function LandInfoParcelPanel({
   pnu,
   vworldKey,
   resolveLoading = false,
-  personInfoMaskEnabled = false,
   parcelData: parcelDataProp,
   parcelFetching: parcelFetchingProp,
   parcelError: parcelErrorProp,
@@ -262,7 +259,7 @@ export function LandInfoParcelPanel({
     try {
       const res = await fetchParcelLandModalList({ pnu: trimmed, kind });
       setModalHeaders(res.headers);
-      setModalRows(maskParcelLandModalRows(kind, res.rows, personInfoMaskEnabled));
+      setModalRows(res.rows);
       setModalMessage(res.error || res.message || (res.rows.length ? null : '조회 결과가 없습니다.'));
     } catch {
       setModalMessage('조회에 실패했습니다.');
@@ -371,18 +368,12 @@ export function LandInfoParcelPanel({
               )}
               <LinkageCell
                 k="소유자명"
-                v={formatPersonField(
-                  getField(latestPossession, ['ownerNm', 'ownerName']),
-                  personInfoMaskEnabled
-                )}
+                v={getField(latestPossession, ['ownerNm', 'ownerName'])}
                 source={parcelData.source}
               />
               <LinkageCell
                 k="주소"
-                v={formatPersonField(
-                  getField(latestPossession, ['ownerAddr', 'address']),
-                  personInfoMaskEnabled
-                )}
+                v={getField(latestPossession, ['ownerAddr', 'address'])}
                 source={parcelData.source}
               />
               <LinkageCell
@@ -417,7 +408,7 @@ export function LandInfoParcelPanel({
             />
           </section>
         </div>
-        <div className="mt-auto pt-4">
+        <div className="mt-2">
           <BuildingDataSourceLine className="text-right" sources={[parcelData.source]} />
           {parcelData.hangmangCalls?.length ? (
             <div className="mt-1 space-y-0.5">

@@ -32,7 +32,7 @@ export default function AddressInfoDetail() {
 
   return createPortal(
     <div
-      className="pointer-events-auto flex h-full w-full min-w-0 max-w-[520px] flex-col overflow-hidden rounded-l-xl border-l border-border bg-background/95 text-foreground shadow-2xl backdrop-blur-md"
+      className="pointer-events-auto flex h-full w-full min-w-0 max-w-[520px] flex-col overflow-hidden rounded-l-xl border-l border-border bg-background text-foreground shadow-2xl"
       style={{
         position: 'fixed',
         top: 0,
