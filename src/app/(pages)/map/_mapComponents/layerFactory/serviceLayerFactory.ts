@@ -132,70 +132,113 @@ const TRANSPARENT_PIXEL =
 /** 이 길이 초과 시에만 POST (CQL 등으로 414 방지). 그 외는 GET — GeoServer가 POST body의 REQUEST를 못 읽는 환경 회피 */
 const WMS_GET_URL_MAX_LEN = 1800;
 
+function warnServiceWmsFallback(reason: string, detail?: unknown): void {
+  if (detail !== undefined) {
+    console.warn('[serviceLayer WMS]', reason, detail);
+  } else {
+    console.warn('[serviceLayer WMS]', reason);
+  }
+}
+
+async function isLikelyRasterImageBlob(blob: Blob): Promise<boolean> {
+  if (blob.size < 4) return false;
+  const head = await blob.slice(0, 4).arrayBuffer();
+  const bytes = new Uint8Array(head);
+  // PNG / JPEG / GIF
+  if (bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47) return true;
+  if (bytes[0] === 0xff && bytes[1] === 0xd8) return true;
+  if (bytes[0] === 0x47 && bytes[1] === 0x49 && bytes[2] === 0x46) return true;
+  return false;
+}
+
+async function assertWmsImageBlob(blob: Blob, contentType: string): Promise<Blob> {
+  const type = (blob.type || contentType).toLowerCase();
+  if (type.includes('xml') || type.includes('text/')) {
+    throw new Error(`WMS exception content-type: ${type || 'unknown'}`);
+  }
+  if (type && !type.startsWith('image/') && type !== 'application/octet-stream') {
+    throw new Error(`unexpected WMS content-type: ${type}`);
+  }
+  // content-type이 비었거나 octet-stream이면 매직 바이트로 XML 오응답 차단
+  if (!type || type === 'application/octet-stream') {
+    if (!(await isLikelyRasterImageBlob(blob))) {
+      throw new Error('WMS response is not a decodable image');
+    }
+  }
+  return blob;
+}
+
+function assignWmsBlobToImage(
+  img: HTMLImageElement,
+  blob: Blob,
+  onDecodeFail: () => void
+): void {
+  const blobUrl = URL.createObjectURL(blob);
+  img.onload = () => URL.revokeObjectURL(blobUrl);
+  img.onerror = () => {
+    URL.revokeObjectURL(blobUrl);
+    onDecodeFail();
+  };
+  img.src = blobUrl;
+}
+
 /**
- * WMS GetMap 로드.
- * - 기본: GET (img.src) — `MissingParameterValue request` 방지
- * - URL이 길 때만 POST. AdvancedDispatchFilter 대응으로 SERVICE/REQUEST는 쿼리에 유지
- * - 응답이 이미지인지 확인 (ServiceExceptionReport XML을 이미지로 넣지 않음)
+ * WMS GetMap 로드 (serviceLayer 전용).
+ * - 짧은 URL: GET fetch — `img.src` 직결 시 XML 예외가 EncodingError로 터지는 것 방지
+ * - 긴 URL: POST. AdvancedDispatchFilter 대응으로 SERVICE/REQUEST는 쿼리에 유지
+ * - 실패 시 투명 픽셀 + console.warn (디버깅용)
  */
 function imageLoadFunctionPost(image: ImageWrapper, src: string): void {
   const img = image.getImage() as HTMLImageElement;
-  const fail = () => {
+  const fail = (reason: string, detail?: unknown) => {
+    warnServiceWmsFallback(reason, detail);
     img.src = TRANSPARENT_PIXEL;
   };
+
+  if (!src) {
+    fail('empty WMS src');
+    return;
+  }
+
   try {
-    if (!src || src.length <= WMS_GET_URL_MAX_LEN) {
-      img.src = src;
-      return;
+    let request: Promise<Response>;
+
+    if (src.length <= WMS_GET_URL_MAX_LEN) {
+      request = fetch(src, { method: 'GET' });
+    } else {
+      const url = new URL(src);
+      const body = url.search.startsWith('?') ? url.search.slice(1) : url.search;
+      if (!body) {
+        request = fetch(src, { method: 'GET' });
+      } else {
+        const params = new URLSearchParams(body);
+        const service = params.get('SERVICE') ?? params.get('service') ?? 'WMS';
+        const requestName = params.get('REQUEST') ?? params.get('request') ?? 'GetMap';
+        const baseUrl =
+          `${url.origin}${url.pathname}` +
+          `?SERVICE=${encodeURIComponent(service)}&REQUEST=${encodeURIComponent(requestName)}`;
+        request = fetch(baseUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body,
+        });
+      }
     }
 
-    const url = new URL(src);
-    const body = url.search.startsWith('?') ? url.search.slice(1) : url.search;
-    if (!body) {
-      img.src = src;
-      return;
-    }
-
-    const params = new URLSearchParams(body);
-    const service = params.get('SERVICE') ?? params.get('service') ?? 'WMS';
-    const request = params.get('REQUEST') ?? params.get('request') ?? 'GetMap';
-    const baseUrl =
-      `${url.origin}${url.pathname}` +
-      `?SERVICE=${encodeURIComponent(service)}&REQUEST=${encodeURIComponent(request)}`;
-
-    fetch(baseUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body,
-    })
+    request
       .then(async (r) => {
         const ct = (r.headers.get('content-type') ?? '').toLowerCase();
         if (!r.ok || ct.includes('xml') || ct.includes('text/')) {
-          throw new Error(r.statusText || 'WMS error');
+          throw new Error(r.statusText || `HTTP ${r.status}`);
         }
-        const blob = await r.blob();
-        const blobType = (blob.type || ct).toLowerCase();
-        if (blobType && !blobType.startsWith('image/') && blobType !== 'application/octet-stream') {
-          throw new Error(`unexpected WMS content-type: ${blobType}`);
-        }
-        return blob;
+        return assertWmsImageBlob(await r.blob(), ct);
       })
       .then((blob) => {
-        const type = String(blob.type || '').toLowerCase();
-        if (type.includes('xml') || type.includes('text')) {
-          throw new Error('WMS exception');
-        }
-        const blobUrl = URL.createObjectURL(blob);
-        img.onload = () => URL.revokeObjectURL(blobUrl);
-        img.onerror = () => {
-          URL.revokeObjectURL(blobUrl);
-          fail();
-        };
-        img.src = blobUrl;
+        assignWmsBlobToImage(img, blob, () => fail('image decode failed'));
       })
-      .catch(fail);
-  } catch {
-    fail();
+      .catch((err) => fail('WMS load failed', err));
+  } catch (err) {
+    fail('WMS load exception', err);
   }
 }
 
