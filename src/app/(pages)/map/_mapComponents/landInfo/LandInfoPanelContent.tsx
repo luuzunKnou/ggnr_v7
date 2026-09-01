@@ -28,6 +28,7 @@ import {
 } from '@/app/(pages)/map/_mapComponents/parcelLandLinkageUi';
 // 2026-07-21 이수빈: 빌드 오류로 임시 처리
 import type { ParcelLandRowSource } from '@/lib/parcelLandNormalize';
+import { withBasePath } from '@/lib/basePath';
 import { formatAddressStripSidoSigungu } from '@/lib/formatAddressStripAdmin';
 import { cn } from '@/lib/utils';
 import { findRoadAddressByJibun, getAddressFromCoord } from '../addressSearch/vworldAddressSearch';
@@ -865,7 +866,7 @@ export function LandInfoPanelContent({
             aria-label="네이버 지도"
             title="네이버 지도"
           >
-            <img src="/image/addressInfoIcon/naverMap_icon.svg" alt="" className="w-5 h-5 object-contain" />
+            <img src={withBasePath('/image/addressInfoIcon/naverMap_icon.svg')} alt="" className="w-5 h-5 object-contain" />
           </button>
           <button
             type="button"
@@ -875,7 +876,7 @@ export function LandInfoPanelContent({
             aria-label="카카오 지도"
             title="카카오 지도"
           >
-            <img src="/image/addressInfoIcon/kakaoMap_icon.svg" alt="" className="w-5 h-5 object-contain" />
+            <img src={withBasePath('/image/addressInfoIcon/kakaoMap_icon.svg')} alt="" className="w-5 h-5 object-contain" />
           </button>
           <button
             type="button"
@@ -885,7 +886,7 @@ export function LandInfoPanelContent({
             aria-label="구글 지도"
             title="구글 지도"
           >
-            <img src="/image/addressInfoIcon/googleMap_icon.svg" alt="" className="w-5 h-5 object-contain" />
+            <img src={withBasePath('/image/addressInfoIcon/googleMap_icon.svg')} alt="" className="w-5 h-5 object-contain" />
           </button>
           <button
             type="button"
@@ -895,7 +896,7 @@ export function LandInfoPanelContent({
             aria-label="토지이음"
             title="토지이음"
           >
-            <img src="/image/addressInfoIcon/toji-e-um.png" alt="" className="w-5 h-5 object-contain" />
+            <img src={withBasePath('/image/addressInfoIcon/toji-e-um.png')} alt="" className="w-5 h-5 object-contain" />
           </button>
         </div>
       </section>

@@ -17,16 +17,15 @@ import { requestLayerManagerListRefresh, registerLayerManagerDefineRefresh } fro
 import { StyleLegendThumb, StylePreviewSwatch } from "./layerManager/StylePreviewSwatch"
 import { call } from "@/lib/api"
 import { parseSimpleStyleFromCss, parseSymbolFolderFromUrl, symbolFileNameFromUrl, toPublicSymbolPreviewUrl, type GeometryType, type StyleProps } from "@/lib/geoserverStyleUtils"
+import { getGeoServerBase } from "@/lib/geoserverUrl"
 import {
   fetchDefineLayerTables,
   fetchLayerDbTableList,
   invalidateLayerManagerListCache,
+  saveDefineLayerTablesConfig,
 } from "./layerManager/layerManagerListCache"
-/** GeoServer 관리 UI·REST — BASE_PATH 프록시가 아닌 네이티브 :8080 */
-const GEOSERVER_DEFAULT_URL =
-  typeof window !== "undefined"
-    ? `${window.location.protocol}//${window.location.hostname}:8080/geoserver`
-    : "http://localhost:8080/geoserver"
+
+const GEOSERVER_DEFAULT_URL = getGeoServerBase()
 
 const GEOMETRY_TYPES: { value: GeometryType; label: string }[] = [
   { value: "POINT", label: "POINT" },
@@ -522,14 +521,8 @@ export function LayerInfoManager({
         const nameB = String(rowB.define_table_name ?? "").toLowerCase()
         return nameA.localeCompare(nameB)
       })
-      const res = await fetch("/api/config/defineLayer", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ data: fullTables }),
-      })
-      const body = await res.json()
+      const body = await saveDefineLayerTablesConfig(fullTables as Record<string, unknown>[])
       if (body.success) {
-        invalidateLayerManagerListCache()
         setSuccessMsg("저장되었습니다.")
         originalTablesRef.current = new Map(
           config.tables.map((t) => [String((t as Record<string, unknown>).define_table_name ?? ""), t as Record<string, unknown>])
@@ -911,17 +904,11 @@ export function LayerInfoManager({
         const tSchema = String((t as Record<string, unknown>).define_table_schema ?? "layer").trim()
         return !(name === tableName && tSchema === schema)
       })
-      const saveRes = await fetch("/api/config/defineLayer", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ data: nextTables }),
-      })
-      const saveBody = await saveRes.json()
-      if (!saveBody?.success) {
-        setError(saveBody?.error ?? "레이어 설정 삭제 실패")
+      const saveBody = await saveDefineLayerTablesConfig(nextTables as Record<string, unknown>[])
+      if (!saveBody.success) {
+        setError(saveBody.error ?? "레이어 설정 삭제 실패")
         return
       }
-      invalidateLayerManagerListCache()
 
       setConfig({ ...config, tables: nextTables })
       setTotal(nextTables.length)
@@ -1515,9 +1502,9 @@ export function LayerInfoManager({
     )
   }, [formProps, labelFieldOptions, symbolFolders, symbolFolder, newSymbolFolder, symbolFolderFiles, symbolLinkFile, symbolPickFile, symbolUploading, symbolPreviewKey, applySymbolUrl, applySymbolName, handleCreateSymbolFolder, handleSaveSymbolFile, handleLinkSymbolFile])
 
-  if (loading) return <p className="text-sm text-muted-foreground">로딩 중...</p>
-  if (error && !config) return <p className="text-sm text-destructive">{error}</p>
-  if (!config?.tables?.length) return <p className="text-sm text-muted-foreground">테이블이 없습니다.</p>
+  if (loading) return <p className="text-sm text-muted-foreground p-2">로딩 중...</p>
+  if (error && !config) return <p className="text-sm text-destructive p-2">{error}</p>
+  if (!config?.tables?.length) return <p className="text-sm text-muted-foreground p-2">테이블이 없습니다.</p>
   if (embedded && fixedTableKey && filteredTables.length === 0) {
     return (
       <p className="text-sm text-muted-foreground p-2">

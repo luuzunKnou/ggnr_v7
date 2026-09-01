@@ -74,39 +74,67 @@ async function resolveLayerTableName(wantedLower: string): Promise<string> {
   return String(row?.table_name ?? wantedLower);
 }
 
+/** layer 스키마에 테이블이 있을 때만 실제 이름 반환, 없으면 null */
+async function resolveLayerTableNameOrNull(wantedLower: string): Promise<string | null> {
+  const res = await db.execute(
+    sql.raw(
+      `SELECT table_name
+       FROM information_schema.tables
+       WHERE table_schema = 'layer' AND lower(table_name) = '${esc(wantedLower)}'
+       LIMIT 1`
+    )
+  );
+  const row = res.rows?.[0] as { table_name?: string } | undefined;
+  const name = String(row?.table_name ?? '').trim();
+  return name || null;
+}
+
 export async function getRiverBasicPlanRiverList(params?: {
   tab?: RiverType;
   keyword?: string;
-}): Promise<{ rivers: { riverName: string; riverType: string | null; count: number }[] }> {
+}): Promise<{
+  rivers: { riverName: string; riverType: string | null; count: number }[];
+  error?: string;
+}> {
   const tab = normalizeTab(params?.tab);
   const keyword = String(params?.keyword ?? '').trim();
-  const tableName = await resolveLayerTableName(riverBasicPlanAsDefineTable(tab));
+  const logical = riverBasicPlanAsDefineTable(tab);
+  const tableName = await resolveLayerTableNameOrNull(logical);
+  if (!tableName) {
+    const label = tab === 'smallRiver' ? '소하천기본계획' : '하천기본계획';
+    return { rivers: [], error: `${label} 테이블이 없습니다.` };
+  }
   const keywordWhere = keyword ? ` AND COALESCE(river_name, '') ILIKE '%${esc(keyword)}%'` : '';
 
-  const res = await db.execute(
-    sql.raw(
-      `SELECT
-         river_name AS "riverName",
-         MAX(river_type) AS "riverType",
-         COUNT(*)::int AS "count"
-       FROM layer."${tableName.replace(/"/g, '""')}"
-       WHERE COALESCE(river_name, '') <> ''
-         ${keywordWhere}
-       GROUP BY river_name
-       ORDER BY river_name`
-    )
-  );
+  try {
+    const res = await db.execute(
+      sql.raw(
+        `SELECT
+           river_name AS "riverName",
+           MAX(river_type) AS "riverType",
+           COUNT(*)::int AS "count"
+         FROM layer."${tableName.replace(/"/g, '""')}"
+         WHERE COALESCE(river_name, '') <> ''
+           ${keywordWhere}
+         GROUP BY river_name
+         ORDER BY river_name`
+      )
+    );
 
-  return {
-    rivers: (res.rows ?? []).map((r) => {
-      const row = r as { riverName?: string; riverType?: string | null; count?: number | string };
-      return {
-        riverName: String(row.riverName ?? '').trim(),
-        riverType: row.riverType == null ? null : String(row.riverType),
-        count: Number(row.count ?? 0) || 0,
-      };
-    }).filter((r) => r.riverName),
-  };
+    return {
+      rivers: (res.rows ?? []).map((r) => {
+        const row = r as { riverName?: string; riverType?: string | null; count?: number | string };
+        return {
+          riverName: String(row.riverName ?? '').trim(),
+          riverType: row.riverType == null ? null : String(row.riverType),
+          count: Number(row.count ?? 0) || 0,
+        };
+      }).filter((r) => r.riverName),
+    };
+  } catch {
+    const label = tab === 'smallRiver' ? '소하천기본계획' : '하천기본계획';
+    return { rivers: [], error: `${label} 테이블을 조회하지 못했습니다.` };
+  }
 }
 
 /**

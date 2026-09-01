@@ -41,6 +41,8 @@ const STAGING_ALWAYS_EXCLUDE = [
   '3dtiles_pnts/',
   '3dtiles_obj/',
   '3dtiles_tiff/',
+  'python/env/',
+  'python/env_parts/',
 ] as const;
 
 /** merge용 exclude + 스테이징 전용 제외를 합치고, node_modules 는 항상 제외 */

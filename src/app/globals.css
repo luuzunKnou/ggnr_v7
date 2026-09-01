@@ -355,3 +355,14 @@ a, button {
     cursor: not-allowed;
   }
 }
+
+/* pdf.js hidden canvas (렌더 보조) */
+.hiddenCanvasElement {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 0;
+  height: 0;
+  opacity: 0;
+  pointer-events: none;
+}

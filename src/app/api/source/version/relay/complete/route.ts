@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { startNdjsonStreamKeepalive } from '@/lib/ndjsonStreamKeepalive';
 import { getSessionUsrId } from '@/lib/auth/guard';
 import { completeVersionRelay } from '@/service/sourceVersionRelayService';
 import type { ApplySourceProgressEvent } from '@/service/sourceVersionService';
@@ -25,6 +26,7 @@ export async function POST(req: NextRequest) {
     const yieldEventLoop = () => new Promise<void>((r) => setImmediate(r));
     const stream = new ReadableStream<Uint8Array>({
       async start(controller) {
+        const stopKeepalive = startNdjsonStreamKeepalive(controller, encoder);
         const send = async (line: NdjsonProgressLine | NdjsonResultLine | NdjsonErrorLine) => {
           controller.enqueue(encoder.encode(`${JSON.stringify(line)}\n`));
           await yieldEventLoop();
@@ -59,6 +61,8 @@ export async function POST(req: NextRequest) {
               /* already closed */
             }
           }
+        } finally {
+          stopKeepalive();
         }
       },
     });

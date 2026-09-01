@@ -1,13 +1,12 @@
 "use client"
 
 import React, { useState } from "react"
-import Link from "next/link"
 import { Card } from "@/app/shadcnComponents/ui/card"
 import { ChevronRight, Droplets, CloudRain, Waves, Plane } from "lucide-react"
 import { canAccessPrivateSystem } from "@/lib/accessClient"
 import { useMyAccessSnapshot } from "@/hooks/useMyAccessSnapshot"
 import { ResourceAccessDeniedDialog } from "@/app/(pages)/_components/AccessRequest"
-import { withBasePath } from "@/lib/basePath"
+import { withBasePath, withBasePathNav } from "@/lib/basePath"
 
 export type SystemItem = {
   sys_key: string
@@ -161,10 +160,19 @@ export function SystemManagementSection({ systems }: SystemManagementSectionProp
           }
 
           if (allowed) {
+            const appHref = href.startsWith("/") ? href : `/map?system=${sys.sys_key}`
             return (
-              <Link key={sys.sys_key} href={href} className="block group">
+              <button
+                key={sys.sys_key}
+                type="button"
+                title={sys.sys_kor}
+                className="block w-full cursor-pointer text-left group"
+                onClick={() => {
+                  window.location.assign(withBasePathNav(appHref))
+                }}
+              >
                 {inner}
-              </Link>
+              </button>
             )
           }
 
