@@ -642,3 +642,33 @@ export async function relayLatestSourceFromGnms(options: {
     throw e;
   }
 }
+
+export type SchemaSyncConfirmResult = {
+  ok?: boolean;
+  error?: string;
+  restart?: {
+    message?: string;
+    scheduled?: boolean;
+    requested?: boolean;
+    mode?: RestartMode;
+  };
+  rollbackDetail?: string;
+};
+
+/** 스키마 안내 [진행] — live commit (NDJSON·keepalive, 장시간 병합·빌드) */
+export async function confirmSchemaSyncApply(
+  pendingId: string,
+  onProgress?: (event: VersionRelayProgress) => void
+): Promise<SchemaSyncConfirmResult> {
+  const res = await fetch('/api/dev/schema-sync/confirm', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ pendingId }),
+  });
+  const result = await readRelayCompleteNdjson(res, (p) => onProgress?.(p));
+  if (result.ok === false || result.error) {
+    return { ok: false, error: result.error ?? '진행 확정 실패' };
+  }
+  return result as SchemaSyncConfirmResult;
+}
+

@@ -17,6 +17,7 @@ import {
   isRestartDisconnectError,
   isUserAbortError,
   relayLatestSourceFromGnms,
+  confirmSchemaSyncApply,
   type GnmsVersionListEntry,
   type RestartMode,
   type VersionRelayProgress,
@@ -233,19 +234,41 @@ export function VersionManagerContent() {
       }
       pushLog(`롤백 완료${json.rollbackDetail ? ` — ${json.rollbackDetail}` : ''}`);
     } else {
-      pushLog('스키마 안내 확인 — 재기동 예약 중…');
-      const res = await fetch('/api/dev/schema-sync/confirm', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ pendingId }),
+      pushLog('스키마 안내 확인 — commit·재기동 예약 중…');
+      const json = await confirmSchemaSyncApply(pendingId, (p) => {
+        if (p.logLine) pushLog(p.logLine.replace(/^\[SourceCodeUpload\]\s*/i, ''));
+        const mergePct =
+          p.phase === 'merge-apply'
+            ? mergeApplyStepPct(
+                p.mergeStep ?? mergeStepRef.current ?? 'copy',
+                p.appliedFiles ?? 0,
+                p.totalFiles ?? 0
+              )
+            : null;
+        const pct =
+          mergePct != null
+            ? mergePct
+            : p.phase === 'geoserver-stop'
+              ? 55
+              : p.phase === 'npm-install'
+                ? 94
+                : p.phase === 'build'
+                  ? 97
+                  : null;
+        if (pct != null || p.message) {
+          setProgress((prev) => ({
+            ...prev,
+            message: p.message,
+            pct: pct ?? prev.pct,
+          }));
+        }
+        if (p.phase === 'merge-apply' && p.appliedFiles != null && p.totalFiles != null) {
+          mergeCountRef.current = { applied: p.appliedFiles, total: p.totalFiles };
+          mergeStepRef.current = p.mergeStep ?? 'copy';
+        }
       });
-      const json = (await res.json().catch(() => ({}))) as {
-        ok?: boolean;
-        error?: string;
-        restart?: { message?: string; scheduled?: boolean };
-      };
-      if (!res.ok || json.ok === false) {
-        throw new Error(json.error ?? `진행 확정 실패 (HTTP ${res.status})`);
+      if (!json.ok) {
+        throw new Error(json.error ?? '진행 확정 실패');
       }
       if (json.restart?.message) {
         pushLog(`재시작: ${json.restart.message}`);
