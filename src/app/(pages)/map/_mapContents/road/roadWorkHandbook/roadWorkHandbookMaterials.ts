@@ -521,7 +521,6 @@ export const HANDBOOK_MATERIALS = [
     chapter: "12",
     name: "시공단계의 건설사업관리계획 수립 및 제출에 관한 안내",
     source: "국가법령정보센터 / 법령 / 건설기술 진흥법",
-    listAccessLabel: "건설기술 진흥법",
     files: [
       refLink("건설기술 진흥법", "법제처 국가법령정보센터", LINK.lawConstructionTechLaw),
     ],
