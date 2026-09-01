@@ -1,6 +1,6 @@
 /**
  * 접도구역 기존 건축물(공작물) 관리대장 (layer 스키마)
- * 기동 시 ensureLayerAppTables 가 없으면 생성한다.
+ * 기동 시 ensureLayerAppTables 가 테이블·컬럼 존재를 확인하고 없으면 생성·추가한다.
  */
 import {
   boolean,
@@ -135,3 +135,211 @@ export const roadFrontageBuildingConfirmColumnComments: Record<string, string> =
   approver_name: '결재자',
   sort_no: '정렬',
 };
+
+/** ensureLayerAppTables — 컬럼 DDL·구형 컬럼 매핑 (id 제외) */
+export type RoadFrontageBuildingLayerColumnDef = {
+  name: string;
+  ddl: string;
+  comment?: string;
+  /** 구형 단일 컬럼 → 신규 컬럼 값 복사 */
+  legacyFrom?: string;
+  /** legacyFrom 대신 SQL 표현식으로 복사 */
+  legacyCopyExpr?: string;
+};
+
+export const ROAD_FRONTAGE_BUILDING_LAYER_COLUMNS: RoadFrontageBuildingLayerColumnDef[] = [
+  { name: 'geom', ddl: 'geometry(Point,5181)', comment: roadFrontageBuildingColumnComments.geom },
+  { name: 'lon', ddl: 'double precision', comment: roadFrontageBuildingColumnComments.lon },
+  { name: 'lat', ddl: 'double precision', comment: roadFrontageBuildingColumnComments.lat },
+  { name: 'road_type', ddl: 'text', comment: roadFrontageBuildingColumnComments.road_type },
+  { name: 'route_no', ddl: 'text', comment: roadFrontageBuildingColumnComments.route_no },
+  {
+    name: 'route_name',
+    ddl: 'text',
+    comment: roadFrontageBuildingColumnComments.route_name,
+    legacyFrom: 'route_nam',
+  },
+  { name: 'serial_no', ddl: 'text', comment: roadFrontageBuildingColumnComments.serial_no },
+  {
+    name: 'prepared_date',
+    ddl: 'text',
+    comment: roadFrontageBuildingColumnComments.prepared_date,
+    legacyFrom: 'pre_ymd',
+  },
+  {
+    name: 'location_address',
+    ddl: 'text',
+    comment: roadFrontageBuildingColumnComments.location_address,
+    legacyFrom: 'loc_adr',
+  },
+  {
+    name: 'resident_name',
+    ddl: 'text',
+    comment: roadFrontageBuildingColumnComments.resident_name,
+    legacyFrom: 'resi_nam',
+  },
+  {
+    name: 'resident_phone',
+    ddl: 'text',
+    comment: roadFrontageBuildingColumnComments.resident_phone,
+    legacyFrom: 'resi_num',
+  },
+  {
+    name: 'building_owner_name',
+    ddl: 'text',
+    comment: roadFrontageBuildingColumnComments.building_owner_name,
+    legacyFrom: 'build_onam',
+  },
+  {
+    name: 'building_owner_phone',
+    ddl: 'text',
+    comment: roadFrontageBuildingColumnComments.building_owner_phone,
+    legacyFrom: 'build_onum',
+  },
+  {
+    name: 'building_owner_address',
+    ddl: 'text',
+    comment: roadFrontageBuildingColumnComments.building_owner_address,
+    legacyFrom: 'build_oadr',
+  },
+  {
+    name: 'land_owner_name',
+    ddl: 'text',
+    comment: roadFrontageBuildingColumnComments.land_owner_name,
+    legacyFrom: 'land_onam',
+  },
+  {
+    name: 'land_owner_phone',
+    ddl: 'text',
+    comment: roadFrontageBuildingColumnComments.land_owner_phone,
+    legacyFrom: 'land_onum',
+  },
+  {
+    name: 'land_owner_address',
+    ddl: 'text',
+    comment: roadFrontageBuildingColumnComments.land_owner_address,
+    legacyFrom: 'land_oadr',
+  },
+  {
+    name: 'writer_dept',
+    ddl: 'text',
+    comment: roadFrontageBuildingColumnComments.writer_dept,
+    legacyFrom: 'write_dept',
+  },
+  {
+    name: 'writer_name',
+    ddl: 'text',
+    comment: roadFrontageBuildingColumnComments.writer_name,
+    legacyFrom: 'write_nam',
+  },
+  {
+    name: 'written_at',
+    ddl: 'text',
+    comment: roadFrontageBuildingColumnComments.written_at,
+    legacyFrom: 'write_ymd',
+  },
+  {
+    name: 'attach_shot_before',
+    ddl: 'text',
+    comment: roadFrontageBuildingColumnComments.attach_shot_before,
+    legacyFrom: 'before_ymd',
+  },
+  {
+    name: 'attach_shot_after',
+    ddl: 'text',
+    comment: roadFrontageBuildingColumnComments.attach_shot_after,
+    legacyFrom: 'after_ymd',
+  },
+  {
+    name: 'is_del',
+    ddl: 'boolean NOT NULL DEFAULT false',
+    comment: roadFrontageBuildingColumnComments.is_del,
+  },
+  {
+    name: 'create_date',
+    ddl: 'text',
+    comment: roadFrontageBuildingColumnComments.create_date,
+    legacyFrom: 'crea_ymd',
+  },
+  {
+    name: 'create_user',
+    ddl: 'text',
+    comment: roadFrontageBuildingColumnComments.create_user,
+    legacyFrom: 'crea_nam',
+  },
+  {
+    name: 'update_date',
+    ddl: 'text',
+    comment: roadFrontageBuildingColumnComments.update_date,
+    legacyFrom: 'upd_ymd',
+  },
+  {
+    name: 'update_user',
+    ddl: 'text',
+    comment: roadFrontageBuildingColumnComments.update_user,
+    legacyFrom: 'upd_nam',
+  },
+];
+
+export const ROAD_FRONTAGE_BUILDING_DETAIL_LAYER_COLUMNS: RoadFrontageBuildingLayerColumnDef[] = [
+  {
+    name: 'parent_id',
+    ddl: 'integer',
+    comment: roadFrontageBuildingDetailColumnComments.parent_id,
+    legacyCopyExpr: `NULLIF(TRIM(ftr_idn::text), '')::integer`,
+  },
+  { name: 'dong_no', ddl: 'integer', comment: roadFrontageBuildingDetailColumnComments.dong_no },
+  {
+    name: 'installed_date',
+    ddl: 'text',
+    comment: roadFrontageBuildingDetailColumnComments.installed_date,
+    legacyFrom: 'inst_ymd',
+  },
+  { name: 'structure', ddl: 'text', comment: roadFrontageBuildingDetailColumnComments.structure },
+  { name: 'usage_type', ddl: 'text', comment: roadFrontageBuildingDetailColumnComments.usage_type },
+  { name: 'area_sqm', ddl: 'double precision', comment: roadFrontageBuildingDetailColumnComments.area_sqm },
+  {
+    name: 'location_kind',
+    ddl: 'text',
+    comment: roadFrontageBuildingDetailColumnComments.location_kind,
+    legacyCopyExpr: `COALESCE(NULLIF(TRIM(loc_adr_r), ''), NULLIF(TRIM(loc_adr_c), ''))`,
+  },
+  { name: 'bad_marks', ddl: 'text', comment: roadFrontageBuildingDetailColumnComments.bad_marks },
+  {
+    name: 'sort_no',
+    ddl: 'integer NOT NULL DEFAULT 0',
+    comment: roadFrontageBuildingDetailColumnComments.sort_no,
+  },
+];
+
+export const ROAD_FRONTAGE_BUILDING_CONFIRM_LAYER_COLUMNS: RoadFrontageBuildingLayerColumnDef[] = [
+  {
+    name: 'parent_id',
+    ddl: 'integer',
+    comment: roadFrontageBuildingConfirmColumnComments.parent_id,
+    legacyCopyExpr: `NULLIF(TRIM(ftr_idn::text), '')::integer`,
+  },
+  {
+    name: 'confirm_date',
+    ddl: 'text',
+    comment: roadFrontageBuildingConfirmColumnComments.confirm_date,
+    legacyFrom: 'check_ymd',
+  },
+  {
+    name: 'confirmer_name',
+    ddl: 'text',
+    comment: roadFrontageBuildingConfirmColumnComments.confirmer_name,
+    legacyFrom: 'check_nam',
+  },
+  {
+    name: 'approver_name',
+    ddl: 'text',
+    comment: roadFrontageBuildingConfirmColumnComments.approver_name,
+    legacyFrom: 'app_nam',
+  },
+  {
+    name: 'sort_no',
+    ddl: 'integer NOT NULL DEFAULT 0',
+    comment: roadFrontageBuildingConfirmColumnComments.sort_no,
+  },
+];

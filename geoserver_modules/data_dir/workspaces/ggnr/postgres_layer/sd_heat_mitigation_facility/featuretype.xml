@@ -1,5 +1,5 @@
 <featureType>
-  <id>FeatureTypeInfoImpl--2053d3:19d606c4ff1:30dd</id>
+  <id>FeatureTypeInfoImpl--192ef17d:1a0572c3a0a:-7786</id>
   <name>sd_heat_mitigation_facility</name>
   <nativeName>sd_heat_mitigation_facility</nativeName>
   <namespace>
@@ -12,17 +12,17 @@
   </keywords>
   <srs>EPSG:5181</srs>
   <nativeBoundingBox>
-    <minx>100920.828125</minx>
-    <maxx>432569.125</maxx>
-    <miny>-14026.919921875</miny>
-    <maxy>552505.3125</maxy>
+    <minx>388774.5842541797</minx>
+    <maxx>389488.42026398657</maxx>
+    <miny>353529.66758301173</miny>
+    <maxy>354022.3404055192</maxy>
     <crs class="projected">EPSG:5181</crs>
   </nativeBoundingBox>
   <latLonBoundingBox>
-    <minx>125.86472443785708</minx>
-    <maxx>129.6637471814693</maxx>
-    <miny>33.34204590200197</miny>
-    <maxy>38.47294304762885</maxy>
+    <minx>129.11132439917228</minx>
+    <maxx>129.11942495335643</maxx>
+    <miny>36.661396866512945</miny>
+    <maxy>36.66597525195288</maxy>
     <crs>EPSG:4326</crs>
   </latLonBoundingBox>
   <projectionPolicy>FORCE_DECLARED</projectionPolicy>

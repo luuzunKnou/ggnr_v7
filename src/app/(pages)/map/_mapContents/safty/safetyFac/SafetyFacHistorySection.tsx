@@ -68,11 +68,16 @@ export function SafetyFacHistorySection({ hisGubun, ftrIdn }: Props) {
   }, []);
 
   const loadList = useCallback(
-    async (search: string) => {
+    async (search: string, options?: { openInitial?: boolean }) => {
       const gubun = hisGubun.trim();
       const idn = ftrIdn.trim();
       if (!gubun || !idn) {
         setItems([]);
+        if (options?.openInitial) {
+          setComposerMode('add');
+          setEditingId(null);
+          setDraft('');
+        }
         return;
       }
       setLoading(true);
@@ -91,17 +96,38 @@ export function SafetyFacHistorySection({ hisGubun, ftrIdn }: Props) {
         if (data?.error || data?.success === false) {
           setError(String(data?.error ?? '이력을 불러오지 못했습니다.'));
           setItems([]);
+          if (options?.openInitial) {
+            setComposerMode('add');
+            setEditingId(null);
+            setDraft('');
+          }
           return;
         }
         const list = Array.isArray(data?.data) ? data.data : [];
-        setItems(
-          list
-            .map((row: Record<string, unknown>) => mapApiItem(row))
-            .filter((x: SafetyFacHistoryItem | null): x is SafetyFacHistoryItem => x != null)
-        );
+        const nextItems = list
+          .map((row: Record<string, unknown>) => mapApiItem(row))
+          .filter((x: SafetyFacHistoryItem | null): x is SafetyFacHistoryItem => x != null);
+        setItems(nextItems);
+        if (options?.openInitial) {
+          if (nextItems.length > 0) {
+            const first = nextItems[0];
+            setComposerMode('edit');
+            setEditingId(first.id);
+            setDraft(first.content);
+          } else {
+            setComposerMode('add');
+            setEditingId(null);
+            setDraft('');
+          }
+        }
       } catch {
         setError('이력을 불러오지 못했습니다.');
         setItems([]);
+        if (options?.openInitial) {
+          setComposerMode('add');
+          setEditingId(null);
+          setDraft('');
+        }
       } finally {
         setLoading(false);
       }
@@ -112,11 +138,13 @@ export function SafetyFacHistorySection({ hisGubun, ftrIdn }: Props) {
   useEffect(() => {
     setSearchText('');
     setAppliedQuery('');
-    clearEditor();
     setSectionOpen(true);
     setError(null);
-    void loadList('');
-  }, [hisGubun, ftrIdn, loadList, clearEditor]);
+    setComposerMode('closed');
+    setEditingId(null);
+    setDraft('');
+    void loadList('', { openInitial: true });
+  }, [hisGubun, ftrIdn, loadList]);
 
   const handleSearch = () => {
     const q = searchText.trim();
