@@ -1,19 +1,16 @@
 <layer>
   <name>sd_heat_mitigation_facility</name>
-  <id>LayerInfoImpl--2053d3:19d606c4ff1:30de</id>
+  <id>LayerInfoImpl--192ef17d:1a0572c3a0a:-7785</id>
   <type>VECTOR</type>
   <defaultStyle>
-    <id>StyleInfoImpl--2053d3:19d606c4ff1:30f4</id>
+    <id>StyleInfoImpl--30e19f83:19cb3d4f76b:-7ffc</id>
   </defaultStyle>
   <resource class="featureType">
-    <id>FeatureTypeInfoImpl--2053d3:19d606c4ff1:30dd</id>
+    <id>FeatureTypeInfoImpl--192ef17d:1a0572c3a0a:-7786</id>
   </resource>
-  <queryable>true</queryable>
-  <opaque>false</opaque>
   <attribution>
     <logoWidth>0</logoWidth>
     <logoHeight>0</logoHeight>
   </attribution>
-  <dateCreated>2026-04-08 11:06:27.78 UTC</dateCreated>
-  <dateModified>2026-04-08 11:06:48.235 UTC</dateModified>
+  <dateCreated>2026-09-01 02:27:13.769 UTC</dateCreated>
 </layer>

@@ -38,6 +38,7 @@ import { readProjectRuntimeEnvVars } from '@/lib/runtimeEnvFile';
 import { getLandLinkageConfig } from '@/service/configService';
 import { createOrUpdateGeoServerLayer, resetGeoServerCaches } from '@/service/devTestService';
 import { createTableFromShp } from '@/service/shpUploadService';
+import { fillLayerKornameForParent } from '@/integrations/thematicLayerKorname';
 
 const LOG = '[kras-layer-sync]';
 
@@ -419,6 +420,24 @@ async function syncOne(
       await ensureKrasGeomIndex(schema, target.targetTable);
     } catch (e) {
       console.warn(`${LOG} geom index ${target.targetTable}:`, e instanceof Error ? e.message : e);
+    }
+    if (target.kind === 'thematic') {
+      try {
+        const kor = await fillLayerKornameForParent(
+          target.targetTable,
+          schema === 'layer' ? 'layer' : 'public_layer'
+        );
+        if (!kor.skipped) {
+          console.info(
+            `${LOG} layer_korname ${target.targetTable} updated=${kor.updated} colAdded=${kor.ensuredColumn}`
+          );
+        }
+      } catch (e) {
+        console.warn(
+          `${LOG} layer_korname ${target.targetTable}:`,
+          e instanceof Error ? e.message : e
+        );
+      }
     }
     if (target.kind === 'parcel') {
       // 도형 교체로 사라진 소유구분 칼럼을 먼저 되살린다. 값은 토지기본정보 단계 뒤에 채운다

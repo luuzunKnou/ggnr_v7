@@ -68,11 +68,16 @@ export function SafetyFacHistorySection({ hisGubun, ftrIdn }: Props) {
   }, []);
 
   const loadList = useCallback(
-    async (search: string) => {
+    async (search: string, options?: { openInitial?: boolean }) => {
       const gubun = hisGubun.trim();
       const idn = ftrIdn.trim();
       if (!gubun || !idn) {
         setItems([]);
+        if (options?.openInitial) {
+          setComposerMode('add');
+          setEditingId(null);
+          setDraft('');
+        }
         return;
       }
       setLoading(true);
@@ -91,17 +96,38 @@ export function SafetyFacHistorySection({ hisGubun, ftrIdn }: Props) {
         if (data?.error || data?.success === false) {
           setError(String(data?.error ?? '이력을 불러오지 못했습니다.'));
           setItems([]);
+          if (options?.openInitial) {
+            setComposerMode('add');
+            setEditingId(null);
+            setDraft('');
+          }
           return;
         }
         const list = Array.isArray(data?.data) ? data.data : [];
-        setItems(
-          list
-            .map((row: Record<string, unknown>) => mapApiItem(row))
-            .filter((x: SafetyFacHistoryItem | null): x is SafetyFacHistoryItem => x != null)
-        );
+        const nextItems = list
+          .map((row: Record<string, unknown>) => mapApiItem(row))
+          .filter((x: SafetyFacHistoryItem | null): x is SafetyFacHistoryItem => x != null);
+        setItems(nextItems);
+        if (options?.openInitial) {
+          if (nextItems.length > 0) {
+            const first = nextItems[0];
+            setComposerMode('edit');
+            setEditingId(first.id);
+            setDraft(first.content);
+          } else {
+            setComposerMode('add');
+            setEditingId(null);
+            setDraft('');
+          }
+        }
       } catch {
         setError('이력을 불러오지 못했습니다.');
         setItems([]);
+        if (options?.openInitial) {
+          setComposerMode('add');
+          setEditingId(null);
+          setDraft('');
+        }
       } finally {
         setLoading(false);
       }
@@ -112,11 +138,13 @@ export function SafetyFacHistorySection({ hisGubun, ftrIdn }: Props) {
   useEffect(() => {
     setSearchText('');
     setAppliedQuery('');
-    clearEditor();
     setSectionOpen(true);
     setError(null);
-    void loadList('');
-  }, [hisGubun, ftrIdn, loadList, clearEditor]);
+    setComposerMode('closed');
+    setEditingId(null);
+    setDraft('');
+    void loadList('', { openInitial: true });
+  }, [hisGubun, ftrIdn, loadList]);
 
   const handleSearch = () => {
     const q = searchText.trim();
@@ -309,25 +337,25 @@ export function SafetyFacHistorySection({ hisGubun, ftrIdn }: Props) {
                       </th>
                       <th
                         scope="col"
-                        className="bg-muted px-1.5 py-1.5 text-center text-[12px] font-medium text-foreground/90"
+                        className="bg-muted px-1.5 py-1.5 text-left text-[12px] font-medium text-foreground/90"
                       >
                         내용
                       </th>
                       <th
                         scope="col"
-                        className="bg-muted px-1.5 py-1.5 text-center text-[12px] font-medium text-foreground/90"
+                        className="bg-muted px-1.5 py-1.5 text-left text-[12px] font-medium text-foreground/90"
                       >
                         작성자
                       </th>
                       <th
                         scope="col"
-                        className="bg-muted px-1.5 py-1.5 text-center text-[12px] font-medium text-foreground/90"
+                        className="bg-muted px-1.5 py-1.5 text-left text-[12px] font-medium text-foreground/90"
                       >
                         작성일시
                       </th>
                       <th
                         scope="col"
-                        className="bg-muted px-1 py-1.5 text-center text-[12px] font-medium text-foreground/90"
+                        className="bg-muted px-1 py-1.5 text-left text-[12px] font-medium text-foreground/90"
                       >
                         <span className="sr-only">삭제</span>
                       </th>
@@ -378,25 +406,25 @@ export function SafetyFacHistorySection({ hisGubun, ftrIdn }: Props) {
                               {index + 1}
                             </td>
                             <td
-                              className="min-w-0 truncate px-1.5 py-1.5 text-center align-middle"
+                              className="min-w-0 truncate px-1.5 py-1.5 text-left align-middle"
                               title={it.content}
                             >
                               {it.content}
                             </td>
                             <td
-                              className="truncate px-1.5 py-1.5 text-center align-middle"
+                              className="truncate px-1.5 py-1.5 text-left align-middle"
                               title={it.author}
                             >
                               {it.author}
                             </td>
                             <td
-                              className="truncate px-1.5 py-1.5 text-center align-middle text-[10px] text-muted-foreground"
+                              className="truncate px-1.5 py-1.5 text-left align-middle text-[10px] text-muted-foreground"
                               title={it.createdAt}
                             >
                               {it.createdAt}
                             </td>
                             <td className="px-0.5 py-1 align-middle">
-                              <div className="flex items-center justify-center">
+                              <div className="flex items-center justify-start">
                                 <button
                                   type="button"
                                   className="inline-flex h-6 w-6 cursor-pointer items-center justify-center rounded text-muted-foreground hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/40"

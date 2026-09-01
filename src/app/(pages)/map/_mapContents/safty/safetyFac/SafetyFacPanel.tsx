@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Circle, Landmark, Loader2, Pentagon, Plus, RefreshCw, Search, Square, X } from 'lucide-react';
+import { Circle, Landmark, Loader2, Pentagon, Plus, RefreshCw, Square, X } from 'lucide-react';
 import { call } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { useMapContext } from '../../../_mapComponents/MapContext';
@@ -112,7 +112,6 @@ export function SafetyFacPanel({ onClose, selectedFacility, onSelectFacility }: 
 
   const [searchTab, setSearchTab] = useState<SearchTab>('keyword');
   const [searchText, setSearchText] = useState('');
-  const [appliedQuery, setAppliedQuery] = useState('');
   const [spatialWkt, setSpatialWkt] = useState<string | null>(null);
   const [activeSpatialTool, setActiveSpatialTool] = useState<SpatialTool | null>(null);
   const [boundaryBadges, setBoundaryBadges] = useState<BoundaryBadgeItem[]>([]);
@@ -145,16 +144,11 @@ export function SafetyFacPanel({ onClose, selectedFacility, onSelectFacility }: 
     setSelectedSubtypeIds(allSubtypesOn ? [] : tabSubtypeIds);
   };
 
-  const handleSearch = useCallback(() => {
-    setAppliedQuery(searchText.trim());
-  }, [searchText]);
-
   const handleClearSearch = useCallback(() => {
     setSearchText('');
-    setAppliedQuery('');
   }, []);
 
-  const showSearchClear = Boolean(searchText.trim() || appliedQuery);
+  const showSearchClear = Boolean(searchText.trim());
 
   const selectedSubtypeKey = useMemo(
     () => [...selectedSubtypeIds].sort().join(','),
@@ -262,7 +256,7 @@ export function SafetyFacPanel({ onClose, selectedFacility, onSelectFacility }: 
       action: 'listSafetyFacilities',
       params: {
         requests,
-        search: appliedQuery,
+        search: searchText.trim(),
         ...(spatialWkt ? { wkt5181: spatialWkt } : {}),
         schema: 'layer',
         limitPerTable: 150,
@@ -310,7 +304,7 @@ export function SafetyFacPanel({ onClose, selectedFacility, onSelectFacility }: 
     return () => {
       cancelled = true;
     };
-  }, [appliedQuery, selectedSubtypeKey, selectedSubtypeIds, spatialWkt, tabDef.subtypes]);
+  }, [searchText, selectedSubtypeKey, selectedSubtypeIds, spatialWkt, tabDef.subtypes]);
 
   const flyToFacility = useCallback(
     (f: SafetyFacFacilityRow) => {
@@ -448,14 +442,6 @@ export function SafetyFacPanel({ onClose, selectedFacility, onSelectFacility }: 
     }
   }, [applySpatialWkt, boundaryBadges]);
 
-  const selectionSummary = useMemo(() => {
-    const labels = tabDef.subtypes
-      .filter((s) => selectedSubtypeIds.includes(s.id))
-      .map((s) => s.label);
-    if (labels.length === 0) return '선택 없음';
-    return labels.join(', ');
-  }, [tabDef.subtypes, selectedSubtypeIds]);
-
   const selectedKey = selectedFacility ? facilityKey(selectedFacility) : null;
   const tablistId = 'safety-fac-tabs';
   const subtypeGroupId = 'safety-fac-subtype';
@@ -591,41 +577,28 @@ export function SafetyFacPanel({ onClose, selectedFacility, onSelectFacility }: 
             </div>
 
             {searchTab === 'keyword' ? (
-              <div className="flex items-stretch gap-1.5">
-                <label className="relative min-w-0 flex-1" htmlFor="safety-fac-search">
-                  <span className="sr-only">시설명·주소 검색</span>
-                  <input
-                    id="safety-fac-search"
-                    type="text"
-                    value={searchText}
-                    onChange={(e) => setSearchText(e.target.value)}
-                    onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
-                    placeholder="시설명·주소"
-                    className="h-full min-h-[2rem] w-full rounded-[5px] border border-border bg-background py-1.5 pl-2 pr-7 text-[12px] text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
-                  />
-                  {showSearchClear ? (
-                    <button
-                      type="button"
-                      title="검색 초기화"
-                      aria-label="검색 초기화"
-                      onClick={handleClearSearch}
-                      className="absolute right-1.5 top-1/2 inline-flex h-5 w-5 -translate-y-1/2 cursor-pointer items-center justify-center rounded text-muted-foreground/70 transition-colors hover:text-muted-foreground"
-                    >
-                      <X className="h-3.5 w-3.5" aria-hidden />
-                    </button>
-                  ) : null}
-                </label>
-                <button
-                  type="button"
-                  onClick={handleSearch}
-                  className="inline-flex shrink-0 items-center gap-1 rounded-[5px] bg-primary px-2.5 py-1.5 text-[11px] font-medium text-primary-foreground hover:opacity-90"
-                  title="검색"
-                  aria-label="검색"
-                >
-                  <Search className="h-3.5 w-3.5" strokeWidth={2} />
-                  검색
-                </button>
-              </div>
+              <label className="relative block min-w-0" htmlFor="safety-fac-search">
+                <span className="sr-only">시설명·주소 검색</span>
+                <input
+                  id="safety-fac-search"
+                  type="search"
+                  value={searchText}
+                  onChange={(e) => setSearchText(e.target.value)}
+                  placeholder="시설명·주소"
+                  className="h-full min-h-[2rem] w-full rounded-[5px] border border-border bg-background py-1.5 pl-2 pr-7 text-[12px] text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                />
+                {showSearchClear ? (
+                  <button
+                    type="button"
+                    title="검색 초기화"
+                    aria-label="검색 초기화"
+                    onClick={handleClearSearch}
+                    className="absolute right-1.5 top-1/2 inline-flex h-5 w-5 -translate-y-1/2 cursor-pointer items-center justify-center rounded text-muted-foreground/70 transition-colors hover:text-muted-foreground"
+                  >
+                    <X className="h-3.5 w-3.5" aria-hidden />
+                  </button>
+                ) : null}
+              </label>
             ) : null}
 
             {searchTab === 'shape' ? (
@@ -810,14 +783,6 @@ export function SafetyFacPanel({ onClose, selectedFacility, onSelectFacility }: 
           </div>
 
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-background">
-            <div className="shrink-0 border-b border-border px-3 py-1.5">
-              <p className="text-[11px] text-muted-foreground">
-                <span>{selectionSummary}</span>
-                <span className="mx-1 text-muted-foreground/60">·</span>
-                <span className="tabular-nums">총 {facilities.length}건</span>
-              </p>
-            </div>
-
             <div className="min-h-0 flex-1 overflow-auto scrollbar-thin bg-background">
             {loadError ? (
               <p className="px-3 py-2.5 text-xs text-red-600">{loadError}</p>
@@ -905,6 +870,9 @@ export function SafetyFacPanel({ onClose, selectedFacility, onSelectFacility }: 
                 </tbody>
               </table>
             )}
+            </div>
+            <div className="shrink-0 border-t border-border px-3 py-1.5 text-[11px] text-muted-foreground tabular-nums">
+              총 {facilities.length}건
             </div>
           </div>
         </div>

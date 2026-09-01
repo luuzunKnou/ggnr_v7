@@ -8,6 +8,7 @@ import {
   riverBasicPlanHdDefineTable,
   riverBasicPlanIndexDefineTable,
   riverBasicPlanJdDefineTable,
+  riverBasicPlanRiverNameFilterableLayers,
   riverBasicPlanTabFromIndexDefineTable,
   type RiverBasicPlanTab,
 } from '@/lib/riverBasicPlanMapAttachmentLayers';
@@ -89,20 +90,40 @@ async function resolveLayerTableNameOrNull(wantedLower: string): Promise<string 
   return name || null;
 }
 
+/** 탭 기본 지도 레이어 중 layer 스키마에 실제 테이블이 있는 것만 */
+export async function getRiverBasicPlanExistingMapLayers(params?: {
+  tab?: RiverType;
+}): Promise<{ layers: string[] }> {
+  const tab = normalizeTab(params?.tab);
+  const wanted = [...riverBasicPlanRiverNameFilterableLayers(tab)];
+  if (wanted.length === 0) return { layers: [] };
+  const inList = wanted.map((n) => `'${esc(n.toLowerCase())}'`).join(',');
+  const res = await db.execute(
+    sql.raw(
+      `SELECT table_name
+       FROM information_schema.tables
+       WHERE table_schema = 'layer' AND lower(table_name) IN (${inList})`
+    )
+  );
+  const have = new Set(
+    (res.rows ?? []).map((r) => String((r as { table_name?: string }).table_name ?? '').toLowerCase()).filter(Boolean)
+  );
+  return { layers: wanted.filter((n) => have.has(n.toLowerCase())) };
+}
+
 export async function getRiverBasicPlanRiverList(params?: {
   tab?: RiverType;
   keyword?: string;
 }): Promise<{
   rivers: { riverName: string; riverType: string | null; count: number }[];
-  error?: string;
 }> {
   const tab = normalizeTab(params?.tab);
   const keyword = String(params?.keyword ?? '').trim();
   const logical = riverBasicPlanAsDefineTable(tab);
   const tableName = await resolveLayerTableNameOrNull(logical);
+  /** 테이블 없음·조회 실패는 빈 목록(에러 아님) — 소하천 미구축 환경 등 */
   if (!tableName) {
-    const label = tab === 'smallRiver' ? '소하천기본계획' : '하천기본계획';
-    return { rivers: [], error: `${label} 테이블이 없습니다.` };
+    return { rivers: [] };
   }
   const keywordWhere = keyword ? ` AND COALESCE(river_name, '') ILIKE '%${esc(keyword)}%'` : '';
 
@@ -132,8 +153,7 @@ export async function getRiverBasicPlanRiverList(params?: {
       }).filter((r) => r.riverName),
     };
   } catch {
-    const label = tab === 'smallRiver' ? '소하천기본계획' : '하천기본계획';
-    return { rivers: [], error: `${label} 테이블을 조회하지 못했습니다.` };
+    return { rivers: [] };
   }
 }
 
@@ -206,38 +226,43 @@ export async function getRiverBasicPlanYearList(params?: {
   const tab = normalizeTab(params?.tab);
   const riverName = String(params?.riverName ?? '').trim();
   if (!riverName) return { plans: [] };
-  const tableName = await resolveLayerTableName(riverBasicPlanAsDefineTable(tab));
+  const tableName = await resolveLayerTableNameOrNull(riverBasicPlanAsDefineTable(tab));
+  if (!tableName) return { plans: [] };
 
-  const res = await db.execute(
-    sql.raw(
-      `SELECT
-         COALESCE(plan_year, '') AS "planYear",
-         COALESCE(plan_name, '') AS "planName",
-         COALESCE(plan_len::text, '') AS "planLen"
-       FROM layer."${tableName.replace(/"/g, '""')}"
-       WHERE river_name = '${esc(riverName)}'
-       GROUP BY COALESCE(plan_year, ''), COALESCE(plan_name, ''), COALESCE(plan_len::text, '')
-       ORDER BY
-         CASE
-           WHEN COALESCE(plan_year, '') ~ '^[0-9]+$' THEN COALESCE(plan_year, '')::int
-           ELSE 0
-         END DESC,
-         COALESCE(plan_name, '')`
-    )
-  );
+  try {
+    const res = await db.execute(
+      sql.raw(
+        `SELECT
+           COALESCE(plan_year, '') AS "planYear",
+           COALESCE(plan_name, '') AS "planName",
+           COALESCE(plan_len::text, '') AS "planLen"
+         FROM layer."${tableName.replace(/"/g, '""')}"
+         WHERE river_name = '${esc(riverName)}'
+         GROUP BY COALESCE(plan_year, ''), COALESCE(plan_name, ''), COALESCE(plan_len::text, '')
+         ORDER BY
+           CASE
+             WHEN COALESCE(plan_year, '') ~ '^[0-9]+$' THEN COALESCE(plan_year, '')::int
+             ELSE 0
+           END DESC,
+           COALESCE(plan_name, '')`
+      )
+    );
 
-  return {
-    plans: (res.rows ?? []).map((r) => {
-      const row = r as { planYear?: string; planName?: string; planLen?: string | number | null };
-      const rawLen = row.planLen == null ? '' : String(row.planLen).trim();
-      return {
-        planYear: String(row.planYear ?? '').trim(),
-        planName: String(row.planName ?? '').trim(),
-        // GROUP BY 원문 유지 — 상세/색인도 조회 시 연장 매칭용 (표시 포맷은 UI에서)
-        planLen: rawLen,
-      };
-    }),
-  };
+    return {
+      plans: (res.rows ?? []).map((r) => {
+        const row = r as { planYear?: string; planName?: string; planLen?: string | number | null };
+        const rawLen = row.planLen == null ? '' : String(row.planLen).trim();
+        return {
+          planYear: String(row.planYear ?? '').trim(),
+          planName: String(row.planName ?? '').trim(),
+          // GROUP BY 원문 유지 — 상세/색인도 조회 시 연장 매칭용 (표시 포맷은 UI에서)
+          planLen: rawLen,
+        };
+      }),
+    };
+  } catch {
+    return { plans: [] };
+  }
 }
 
 export async function getRiverBasicPlanDetail(params?: {

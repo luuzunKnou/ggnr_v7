@@ -8,7 +8,9 @@ import {
   groundwaterPermitStatusClass,
   type GroundwaterPermitStatusCode,
 } from '@/lib/groundwaterPermitStatus'
+import { useMapContext } from '../../_mapComponents/MapContext'
 import { useGroundwaterPermitMapHighlight } from './useGroundwaterPermitMapHighlight'
+import { GROUNDWATER_PERMIT_WMS_LAYER_ID } from './groundwaterPermitLayerId'
 
 type ListRow = {
   id: string
@@ -31,12 +33,27 @@ export function GroundwaterPermitListPanel({
   selectedDetailId,
   onSelectDetailId,
 }: Props) {
+  const mapContext = useMapContext()
+  const setVisibleLayerNames = mapContext?.setVisibleLayerNames
+
   const [keyword, setKeyword] = useState('')
   const [debouncedKeyword, setDebouncedKeyword] = useState('')
   const [rows, setRows] = useState<ListRow[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const { clearHighlight } = useGroundwaterPermitMapHighlight()
+
+  /** 패널이 열려 있으면 지하수 개발허가 레이어를 항상 켠다. 닫을 때 끄지 않는다. */
+  useEffect(() => {
+    if (!setVisibleLayerNames) return
+    const lid = GROUNDWATER_PERMIT_WMS_LAYER_ID.toLowerCase()
+    setVisibleLayerNames((prev) => {
+      for (const n of prev) {
+        if (n.toLowerCase() === lid) return prev
+      }
+      return new Set(prev).add(lid)
+    })
+  }, [setVisibleLayerNames])
 
   const handleClose = useCallback(() => {
     clearHighlight()

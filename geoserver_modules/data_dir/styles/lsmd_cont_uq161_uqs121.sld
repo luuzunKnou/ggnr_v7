@@ -14,6 +14,201 @@
               <sld:CssParameter name="stroke">#FFFFFF</sld:CssParameter>
             </sld:Stroke>
           </sld:PolygonSymbolizer>
+          <sld:TextSymbolizer>
+            <sld:Geometry>
+              <ogc:Function name="centroid">
+                <ogc:PropertyName>geom</ogc:PropertyName>
+              </ogc:Function>
+            </sld:Geometry>
+            <sld:Label>
+              <ogc:Function name="if_then_else">
+                <ogc:Function name="isNull">
+                  <ogc:PropertyName>alias</ogc:PropertyName>
+                </ogc:Function>
+                <ogc:PropertyName>layer_korname</ogc:PropertyName>
+                <ogc:Function name="if_then_else">
+                  <ogc:Function name="equalTo">
+                    <ogc:PropertyName>alias</ogc:PropertyName>
+                    <ogc:Literal/>
+                  </ogc:Function>
+                  <ogc:PropertyName>layer_korname</ogc:PropertyName>
+                  <ogc:Function name="Concatenate">
+                    <ogc:Function name="Concatenate">
+                      <ogc:PropertyName>layer_korname</ogc:PropertyName>
+                      <ogc:Literal><![CDATA[ (]]></ogc:Literal>
+                    </ogc:Function>
+                    <ogc:Function name="Concatenate">
+                      <ogc:PropertyName>alias</ogc:PropertyName>
+                      <ogc:Literal>)</ogc:Literal>
+                    </ogc:Function>
+                  </ogc:Function>
+                </ogc:Function>
+              </ogc:Function>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">Nanum Gothic</sld:CssParameter>
+              <sld:CssParameter name="font-size">12</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:PointPlacement>
+                <sld:AnchorPoint>
+                  <sld:AnchorPointX>0.5</sld:AnchorPointX>
+                  <sld:AnchorPointY>0.5</sld:AnchorPointY>
+                </sld:AnchorPoint>
+              </sld:PointPlacement>
+            </sld:LabelPlacement>
+            <sld:Halo>
+              <sld:Radius>3</sld:Radius>
+              <sld:Fill>
+                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+                <sld:CssParameter name="fill-opacity">0.9</sld:CssParameter>
+              </sld:Fill>
+            </sld:Halo>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#3F51B5</sld:CssParameter>
+            </sld:Fill>
+            <sld:Priority>
+              <ogc:Function name="Area">
+                <ogc:PropertyName>geom</ogc:PropertyName>
+              </ogc:Function>
+            </sld:Priority>
+            <sld:VendorOption name="conflictResolution">true</sld:VendorOption>
+            <sld:VendorOption name="group">true</sld:VendorOption>
+            <sld:VendorOption name="maxDisplacement">0</sld:VendorOption>
+            <sld:VendorOption name="goodnessOfFit">0.1</sld:VendorOption>
+          </sld:TextSymbolizer>
+          <sld:TextSymbolizer>
+            <sld:Geometry>
+              <ogc:Function name="centroid">
+                <ogc:PropertyName>geom</ogc:PropertyName>
+              </ogc:Function>
+            </sld:Geometry>
+            <sld:Label>
+              <ogc:Function name="if_then_else">
+                <ogc:Function name="isNull">
+                  <ogc:PropertyName>alias</ogc:PropertyName>
+                </ogc:Function>
+                <ogc:PropertyName>layer_korname</ogc:PropertyName>
+                <ogc:Function name="if_then_else">
+                  <ogc:Function name="equalTo">
+                    <ogc:PropertyName>alias</ogc:PropertyName>
+                    <ogc:Literal/>
+                  </ogc:Function>
+                  <ogc:PropertyName>layer_korname</ogc:PropertyName>
+                  <ogc:Function name="Concatenate">
+                    <ogc:Function name="Concatenate">
+                      <ogc:PropertyName>layer_korname</ogc:PropertyName>
+                      <ogc:Literal><![CDATA[ (]]></ogc:Literal>
+                    </ogc:Function>
+                    <ogc:Function name="Concatenate">
+                      <ogc:PropertyName>alias</ogc:PropertyName>
+                      <ogc:Literal>)</ogc:Literal>
+                    </ogc:Function>
+                  </ogc:Function>
+                </ogc:Function>
+              </ogc:Function>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">Malgun Gothic</sld:CssParameter>
+              <sld:CssParameter name="font-size">12</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:PointPlacement>
+                <sld:AnchorPoint>
+                  <sld:AnchorPointX>0.5</sld:AnchorPointX>
+                  <sld:AnchorPointY>0.5</sld:AnchorPointY>
+                </sld:AnchorPoint>
+              </sld:PointPlacement>
+            </sld:LabelPlacement>
+            <sld:Halo>
+              <sld:Radius>3</sld:Radius>
+              <sld:Fill>
+                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+                <sld:CssParameter name="fill-opacity">0.9</sld:CssParameter>
+              </sld:Fill>
+            </sld:Halo>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#3F51B5</sld:CssParameter>
+            </sld:Fill>
+            <sld:Priority>
+              <ogc:Function name="Area">
+                <ogc:PropertyName>geom</ogc:PropertyName>
+              </ogc:Function>
+            </sld:Priority>
+            <sld:VendorOption name="conflictResolution">true</sld:VendorOption>
+            <sld:VendorOption name="group">true</sld:VendorOption>
+            <sld:VendorOption name="maxDisplacement">0</sld:VendorOption>
+            <sld:VendorOption name="goodnessOfFit">0.1</sld:VendorOption>
+          </sld:TextSymbolizer>
+          <sld:TextSymbolizer>
+            <sld:Geometry>
+              <ogc:Function name="centroid">
+                <ogc:PropertyName>geom</ogc:PropertyName>
+              </ogc:Function>
+            </sld:Geometry>
+            <sld:Label>
+              <ogc:Function name="if_then_else">
+                <ogc:Function name="isNull">
+                  <ogc:PropertyName>alias</ogc:PropertyName>
+                </ogc:Function>
+                <ogc:PropertyName>layer_korname</ogc:PropertyName>
+                <ogc:Function name="if_then_else">
+                  <ogc:Function name="equalTo">
+                    <ogc:PropertyName>alias</ogc:PropertyName>
+                    <ogc:Literal/>
+                  </ogc:Function>
+                  <ogc:PropertyName>layer_korname</ogc:PropertyName>
+                  <ogc:Function name="Concatenate">
+                    <ogc:Function name="Concatenate">
+                      <ogc:PropertyName>layer_korname</ogc:PropertyName>
+                      <ogc:Literal><![CDATA[ (]]></ogc:Literal>
+                    </ogc:Function>
+                    <ogc:Function name="Concatenate">
+                      <ogc:PropertyName>alias</ogc:PropertyName>
+                      <ogc:Literal>)</ogc:Literal>
+                    </ogc:Function>
+                  </ogc:Function>
+                </ogc:Function>
+              </ogc:Function>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">SansSerif</sld:CssParameter>
+              <sld:CssParameter name="font-size">12</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:PointPlacement>
+                <sld:AnchorPoint>
+                  <sld:AnchorPointX>0.5</sld:AnchorPointX>
+                  <sld:AnchorPointY>0.5</sld:AnchorPointY>
+                </sld:AnchorPoint>
+              </sld:PointPlacement>
+            </sld:LabelPlacement>
+            <sld:Halo>
+              <sld:Radius>3</sld:Radius>
+              <sld:Fill>
+                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+                <sld:CssParameter name="fill-opacity">0.9</sld:CssParameter>
+              </sld:Fill>
+            </sld:Halo>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#3F51B5</sld:CssParameter>
+            </sld:Fill>
+            <sld:Priority>
+              <ogc:Function name="Area">
+                <ogc:PropertyName>geom</ogc:PropertyName>
+              </ogc:Function>
+            </sld:Priority>
+            <sld:VendorOption name="conflictResolution">true</sld:VendorOption>
+            <sld:VendorOption name="group">true</sld:VendorOption>
+            <sld:VendorOption name="maxDisplacement">0</sld:VendorOption>
+            <sld:VendorOption name="goodnessOfFit">0.1</sld:VendorOption>
+          </sld:TextSymbolizer>
         </sld:Rule>
         <sld:VendorOption name="ruleEvaluation">first</sld:VendorOption>
       </sld:FeatureTypeStyle>

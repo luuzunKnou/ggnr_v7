@@ -20,6 +20,12 @@ import { roadDocPreviewPngFileName } from "@/lib/roadDocPreviewPngName";
 import { ServiceFileImagePreview } from "@/app/(pages)/map/_mapComponents/standard/ServiceFileImagePreview";
 import { ServiceFileDxfPreview } from "@/app/(pages)/map/_mapComponents/standard/ServiceFileDxfPreview";
 import { MapSideDetailScroll } from "../../../_mapComponents/MapSideDetailScroll";
+import { RoadWorkHandbookListPanel } from "../roadWorkHandbook/RoadWorkHandbookListPanel";
+import { useHandbookMapPick } from "../roadWorkHandbook/roadWorkHandbookMapContext";
+import type {
+  HandbookDetailSelection,
+  HandbookViewMode,
+} from "../roadWorkHandbook/roadWorkHandbookData";
 
 type FileKind = "hwp" | "pdf" | "image" | "zip" | "dwg" | "dxf" | "other";
 
@@ -122,11 +128,42 @@ function listCadFolderChildren(
   return { folders, files };
 }
 
-type ManualTab = "doc" | "drawing";
+type ManualTab = "doc" | "drawing" | "target" | "ref";
 type ApiScope = "doc" | "cad";
 
-export function RoadDocManualPanel({ onClose }: { onClose: () => void }) {
-  const [activeTab, setActiveTab] = useState<ManualTab>("doc");
+/** 업무편람 탭(대상여부 검토·설계실무요령 자료) — 일단 비표시 */
+const ROAD_DOC_HANDBOOK_TABS_VISIBLE = false;
+
+const TAB_BTN =
+  "relative -mb-px shrink-0 border-b-2 px-3 py-2 text-[12px] font-medium whitespace-nowrap transition-colors";
+
+function tabBtnClass(active: boolean) {
+  return cn(
+    TAB_BTN,
+    active
+      ? "border-foreground text-foreground"
+      : "border-transparent text-muted-foreground hover:text-foreground"
+  );
+}
+
+export function RoadDocManualPanel({
+  onClose,
+  handbookMode,
+  onHandbookModeChange,
+  handbookSelected,
+  onHandbookSelect,
+  startOnHandbook = false,
+}: {
+  onClose: () => void;
+  handbookMode: HandbookViewMode;
+  onHandbookModeChange: (mode: HandbookViewMode) => void;
+  handbookSelected: HandbookDetailSelection | null;
+  onHandbookSelect: (next: HandbookDetailSelection | null) => void;
+  startOnHandbook?: boolean;
+}) {
+  const [activeTab, setActiveTab] = useState<ManualTab>(() =>
+    ROAD_DOC_HANDBOOK_TABS_VISIBLE && startOnHandbook ? "target" : "doc"
+  );
   const [docFiles, setDocFiles] = useState<RoadDocListItem[]>([]);
   const [cadFiles, setCadFiles] = useState<RoadDocListItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -136,6 +173,32 @@ export function RoadDocManualPanel({ onClose }: { onClose: () => void }) {
   const [notice, setNotice] = useState<string | null>(null);
   /** 도면 탭: `roadDoc/cad` 기준 상대 경로 (빈 문자열 = 루트) */
   const [cadPath, setCadPath] = useState("");
+  const isHandbookTab =
+    ROAD_DOC_HANDBOOK_TABS_VISIBLE && (activeTab === "target" || activeTab === "ref");
+  const mapPick = useHandbookMapPick();
+
+  useEffect(() => {
+    if (ROAD_DOC_HANDBOOK_TABS_VISIBLE) return;
+    if (activeTab !== "target" && activeTab !== "ref") return;
+    setActiveTab("doc");
+    onHandbookSelect(null);
+    mapPick?.cancelPick();
+  }, [activeTab, mapPick, onHandbookSelect]);
+
+  const selectTab = useCallback(
+    (tab: ManualTab) => {
+      if (!ROAD_DOC_HANDBOOK_TABS_VISIBLE && (tab === "target" || tab === "ref")) return;
+      setActiveTab(tab);
+      if (tab === "target" || tab === "ref") {
+        if (handbookMode !== tab) onHandbookSelect(null);
+        onHandbookModeChange(tab);
+        return;
+      }
+      onHandbookSelect(null);
+      mapPick?.cancelPick();
+    },
+    [handbookMode, mapPick, onHandbookModeChange, onHandbookSelect]
+  );
 
   const fetchList = useCallback(async () => {
     setLoading(true);
@@ -316,6 +379,7 @@ export function RoadDocManualPanel({ onClose }: { onClose: () => void }) {
   const cadExplorer = useMemo(() => listCadFolderChildren(cadFiles, cadPath), [cadFiles, cadPath]);
 
   const emptyMessage = useMemo(() => {
+    if (activeTab === "target" || activeTab === "ref") return null;
     if (activeTab === "doc") {
       if (docFiles.length === 0) return "표시할 파일이 없습니다.";
       if (docDisplayFiles.length === 0) return "문서 파일이 없습니다.";
@@ -330,8 +394,10 @@ export function RoadDocManualPanel({ onClose }: { onClose: () => void }) {
       <div className="flex h-full min-h-0 flex-col bg-background">
         <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border px-4 py-2.5">
           <div className="min-w-0">
-            <h2 className="text-sm font-semibold text-foreground">업무메뉴얼</h2>
-            <p className="mt-0.5 text-[11px] text-muted-foreground">도로점용 서식 및 매뉴얼 파일</p>
+            <h2 className="text-sm font-semibold text-foreground">업무자료</h2>
+            <p className="mt-0.5 text-[11px] text-muted-foreground">
+              {isHandbookTab ? "대상여부 검토 및 설계실무요령" : "도로점용 서식 및 매뉴얼 파일"}
+            </p>
           </div>
           <div className="flex shrink-0 items-center gap-1">
             <input
@@ -351,15 +417,17 @@ export function RoadDocManualPanel({ onClose }: { onClose: () => void }) {
             >
               <Upload className={cn("h-4 w-4", uploading && "animate-pulse")} aria-hidden />
             </button>
-            <button
-              type="button"
-              title="새로고침"
-              aria-label="새로고침"
-              className="rounded p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-              onClick={() => void fetchList()}
-            >
-              <RefreshCw className={cn("h-4 w-4", (loading || cadPreparing) && "animate-spin")} aria-hidden />
-            </button>
+            {!isHandbookTab ? (
+              <button
+                type="button"
+                title="새로고침"
+                aria-label="새로고침"
+                className="rounded p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                onClick={() => void fetchList()}
+              >
+                <RefreshCw className={cn("h-4 w-4", (loading || cadPreparing) && "animate-spin")} aria-hidden />
+              </button>
+            ) : null}
             <button
               type="button"
               title="닫기"
@@ -373,21 +441,16 @@ export function RoadDocManualPanel({ onClose }: { onClose: () => void }) {
         </div>
 
         <div
-          className="flex shrink-0 gap-0 border-b border-border px-3"
+          className="flex shrink-0 gap-0 overflow-x-auto overflow-y-hidden border-b border-border px-3 scrollbar-hide"
           role="tablist"
-          aria-label="업무메뉴얼 구분"
+          aria-label="업무자료 구분"
         >
           <button
             type="button"
             role="tab"
             aria-selected={activeTab === "doc"}
-            className={cn(
-              "relative -mb-px border-b-2 px-3 py-2 text-[12px] font-medium transition-colors",
-              activeTab === "doc"
-                ? "border-foreground text-foreground"
-                : "border-transparent text-muted-foreground hover:text-foreground"
-            )}
-            onClick={() => setActiveTab("doc")}
+            className={tabBtnClass(activeTab === "doc")}
+            onClick={() => selectTab("doc")}
           >
             문서
           </button>
@@ -395,18 +458,48 @@ export function RoadDocManualPanel({ onClose }: { onClose: () => void }) {
             type="button"
             role="tab"
             aria-selected={activeTab === "drawing"}
-            className={cn(
-              "relative -mb-px border-b-2 px-3 py-2 text-[12px] font-medium transition-colors",
-              activeTab === "drawing"
-                ? "border-foreground text-foreground"
-                : "border-transparent text-muted-foreground hover:text-foreground"
-            )}
-            onClick={() => setActiveTab("drawing")}
+            className={tabBtnClass(activeTab === "drawing")}
+            onClick={() => selectTab("drawing")}
           >
             도면
           </button>
+          {ROAD_DOC_HANDBOOK_TABS_VISIBLE ? (
+            <>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={activeTab === "target"}
+                className={tabBtnClass(activeTab === "target")}
+                onClick={() => selectTab("target")}
+              >
+                대상여부 검토
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={activeTab === "ref"}
+                className={tabBtnClass(activeTab === "ref")}
+                onClick={() => selectTab("ref")}
+              >
+                설계실무요령 자료
+              </button>
+            </>
+          ) : null}
         </div>
 
+        {isHandbookTab ? (
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+            <RoadWorkHandbookListPanel
+              key={handbookMode}
+              embedded
+              onClose={onClose}
+              mode={handbookMode}
+              onModeChange={(next) => selectTab(next)}
+              selected={handbookSelected}
+              onSelect={onHandbookSelect}
+            />
+          </div>
+        ) : (
         <MapSideDetailScroll className="min-h-0 flex-1 overflow-auto px-3 py-2 text-xs">
           {loading ? (
             <p className="px-1 py-2 text-[12px] text-muted-foreground">불러오는 중…</p>
@@ -536,6 +629,7 @@ export function RoadDocManualPanel({ onClose }: { onClose: () => void }) {
             </>
           )}
         </MapSideDetailScroll>
+        )}
       </div>
 
       {mediaPreview ? (

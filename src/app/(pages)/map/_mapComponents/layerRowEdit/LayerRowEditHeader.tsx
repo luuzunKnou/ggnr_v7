@@ -120,7 +120,7 @@ export function LayerRowEditHeader({
           type="button"
           onClick={onClose}
           disabled={busy}
-          className="rounded p-1 text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground disabled:opacity-60"
+          className="shrink-0 rounded p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-60"
           title="상세 닫기"
           aria-label="상세 닫기"
         >
