@@ -201,6 +201,45 @@ function parcelGeomToWkt5181(
   }
 }
 
+/** geometry3857(면 GeoJSON) → OpenLayers Feature — readFeatures는 Feature/Collection만 안정적 */
+function featuresFromGeometry3857(
+  format: GeoJSONFormat,
+  geometry3857: Record<string, unknown>,
+  viewProj: string
+): Feature[] {
+  try {
+    const geomType = String(geometry3857.type ?? "");
+    if (geomType === "FeatureCollection" || geomType === "Feature") {
+      return format.readFeatures(geometry3857, {
+        dataProjection: viewProj,
+        featureProjection: viewProj,
+      });
+    }
+    const geom = format.readGeometry(geometry3857, {
+      dataProjection: viewProj,
+      featureProjection: viewProj,
+    });
+    return geom ? [new Feature(geom)] : [];
+  } catch {
+    return [];
+  }
+}
+
+function loadParcelFeaturesIntoSource(
+  source: VectorSource,
+  parcels: LayerRowParcelItem[],
+  format: GeoJSONFormat,
+  viewProj: string
+) {
+  source.clear();
+  for (const [i, parcel] of parcels.entries()) {
+    if (!parcel.geometry3857) continue;
+    const feats = featuresFromGeometry3857(format, parcel.geometry3857, viewProj);
+    for (const f of feats) f.set(PARCEL_IDX_KEY, i);
+    source.addFeatures(feats);
+  }
+}
+
 type AttrEntry = {
   fieldKey: string;
   label: string;
@@ -686,6 +725,7 @@ export function RiverConstructionLedgerDetailPanel({ row, onClose }: Props) {
   const parcelEditLayerRef = useRef<{
     layer: VectorLayer<VectorSource>;
     source: VectorSource;
+    modify: Modify;
   } | null>(null);
   const syncParcelEditSourceRef = useRef<(() => void) | null>(null);
   const [attachmentFolders, setAttachmentFolders] = useState<string[]>([]);
@@ -743,7 +783,7 @@ export function RiverConstructionLedgerDetailPanel({ row, onClose }: Props) {
           setDraft(toDraft(mapped));
           setRiverNamesText(normalizeRiverNames(mapped.riverNames)[0] ?? "");
         }
-        if (parcelDrawIdxRef.current == null) {
+        if (!editingRef.current && parcelDrawIdxRef.current == null) {
           const filled = withRiverNameFallback(mapped.parcels ?? []);
           parcelsSnapshotRef.current = [...filled];
           setDraftParcels(filled);
@@ -981,14 +1021,13 @@ export function RiverConstructionLedgerDetailPanel({ row, onClose }: Props) {
     }),
   });
 
-  /** 수정 모드 — 모든 필지 도형을 동시에 정점 수정 */
+  /** 수정 모드 — 편집 세션 동안 단일 레이어 유지 (추가 그리기 시에도 기존 도형 유지) */
   useEffect(() => {
-    if (!editing || parcelDrawIdx != null) return;
+    if (!editing) return;
     const map = mapContext?.mapInstanceRef?.current;
     if (!map) return;
     if (!canStartMapDrawInteraction(mapContext, "spatialSearch")) return;
 
-    mapContext?.clearMapDrawInteractionsRef?.current?.();
     setRiverFocus?.(null);
 
     const viewProj = map.getView().getProjection()?.getCode() || "EPSG:3857";
@@ -1000,22 +1039,16 @@ export function RiverConstructionLedgerDetailPanel({ row, onClose }: Props) {
       style: parcelEditStyle,
     });
 
-    for (const [i, parcel] of draftParcelsRef.current.entries()) {
-      if (!parcel.geometry3857) continue;
-      try {
-        const feats = format.readFeatures(parcel.geometry3857, {
-          dataProjection: viewProj,
-          featureProjection: viewProj,
-        });
-        for (const f of feats) f.set(PARCEL_IDX_KEY, i);
-        source.addFeatures(feats);
-      } catch {
-        // ignore invalid geometry
-      }
-    }
+    loadParcelFeaturesIntoSource(source, draftParcelsRef.current, format, viewProj);
 
     const syncFromSource = () => {
-      const byIdx = new Map<number, { geometry3857: Record<string, unknown>; extent3857: [number, number, number, number] | null }>();
+      const byIdx = new Map<
+        number,
+        {
+          geometry3857: Record<string, unknown>;
+          extent3857: [number, number, number, number] | null;
+        }
+      >();
       for (const feature of source.getFeatures()) {
         const idx = feature.get(PARCEL_IDX_KEY);
         if (typeof idx !== "number" || idx < 0) continue;
@@ -1047,7 +1080,7 @@ export function RiverConstructionLedgerDetailPanel({ row, onClose }: Props) {
     modify.on("modifyend", syncFromSource);
     map.addLayer(layer);
     map.addInteraction(modify);
-    parcelEditLayerRef.current = { layer, source };
+    parcelEditLayerRef.current = { layer, source, modify };
     syncParcelEditSourceRef.current = syncFromSource;
 
     return () => {
@@ -1059,57 +1092,42 @@ export function RiverConstructionLedgerDetailPanel({ row, onClose }: Props) {
       source.clear();
       parcelEditLayerRef.current = null;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- 편집·그리기 전환·필지 구조 변경 시에만 레이어 재구성
-  }, [editing, parcelDrawIdx, parcelLayerEpoch, mapContext?.mapInstanceRef]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 편집·필지 구조 변경 시에만 레이어 재구성
+  }, [editing, parcelLayerEpoch, mapContext?.mapInstanceRef]);
 
-  /** 신규 필지 도형 그리기 */
+  /** 신규 필지 도형 그리기 — 기존 편집 레이어는 유지하고 Draw만 겹침 */
   useEffect(() => {
-    if (!editing || parcelDrawIdx == null) return;
+    const editRef = parcelEditLayerRef.current;
     const map = mapContext?.mapInstanceRef?.current;
-    if (!map) {
-      finishParcelDraw();
-      return;
-    }
-    if (!canStartMapDrawInteraction(mapContext, "spatialSearch")) {
-      finishParcelDraw();
-      return;
-    }
-    mapContext?.clearMapDrawInteractionsRef?.current?.();
-    setRiverFocus?.(null);
+    if (!editing || parcelDrawIdx == null || !editRef || !map) return;
+
+    editRef.modify.setActive(false);
 
     const viewProj = map.getView().getProjection()?.getCode() || "EPSG:3857";
     const format = new GeoJSONFormat();
     const drawIdx = parcelDrawIdx;
 
-    const source = new VectorSource();
-    const layer = new VectorLayer({
-      source,
-      zIndex: 9999,
+    const drawSource = new VectorSource();
+    const drawLayer = new VectorLayer({
+      source: drawSource,
+      zIndex: 10000,
       style: parcelEditStyle,
     });
-    const draw = new Draw({ source, type: "Polygon", stopClick: true });
-    map.addLayer(layer);
+    const draw = new Draw({ source: drawSource, type: "Polygon", stopClick: true });
+    map.addLayer(drawLayer);
     map.addInteraction(draw);
 
     const onEnd = (evt: { feature: Feature }) => {
-      const geom = evt.feature.getGeometry();
+      const geom = evt.feature.getGeometry()?.clone();
       const coords = geom?.getType() === "Polygon" ? (geom as Polygon).getCoordinates()[0] : null;
       if (!geom || !coords || coords.length < 4) {
         window.alert("다각형은 세 점 이상이어야 합니다.");
         return;
       }
-      const geojson = format.writeGeometryObject(geom, {
-        dataProjection: viewProj,
-        featureProjection: viewProj,
-      }) as unknown as Record<string, unknown>;
-      const extent = geom.getExtent();
-      handleSetParcelGeom(
-        drawIdx,
-        geojson,
-        extent.every((v) => Number.isFinite(v))
-          ? (extent as [number, number, number, number])
-          : null
-      );
+      const feature = new Feature(geom);
+      feature.set(PARCEL_IDX_KEY, drawIdx);
+      editRef.source.addFeature(feature);
+      syncParcelEditSourceRef.current?.();
       finishParcelDraw();
     };
     draw.on("drawend", onEnd as never);
@@ -1117,11 +1135,12 @@ export function RiverConstructionLedgerDetailPanel({ row, onClose }: Props) {
     return () => {
       draw.un("drawend", onEnd as never);
       map.removeInteraction(draw);
-      map.removeLayer(layer);
-      source.clear();
+      map.removeLayer(drawLayer);
+      drawSource.clear();
+      editRef.modify.setActive(true);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- draw session keyed by index
-  }, [editing, parcelDrawIdx]);
+  }, [editing, parcelDrawIdx, parcelLayerEpoch, mapContext?.mapInstanceRef]);
 
   const beginEdit = () => {
     setDraft(toDraft(row));

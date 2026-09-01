@@ -8,7 +8,7 @@ import {
   useEffect,
   Suspense,
 } from 'react';
-import { useSession, signIn } from 'next-auth/react';
+import { useSession, signIn, getSession } from 'next-auth/react';
 import { useSearchParams, useRouter, usePathname } from 'next/navigation';
 import {
   Dialog,
@@ -148,11 +148,28 @@ function LoginModalDialog({
           );
         } else if (res.code === 'signup_pending') {
           setError('승인대기중입니다.');
+        } else if (res.code === 'login_fail_exceeded') {
+          setError('비밀번호 입력 횟수를 초과했습니다.\n관리자에게 문의하세요.');
         } else {
           setError('아이디 또는 비밀번호가 올바르지 않습니다.');
         }
         setLoading(false);
         return;
+      }
+      // 마스터 로그인: 승인대기·반려여도 통과하되 상태를 alert로 안내
+      try {
+        const s = await getSession();
+        if (s?.user?.signupStatus === 'pending') {
+          window.alert('해당 사용자 계정은 현재 승인대기 상태입니다');
+        } else if (s?.user?.signupStatus === 'rejected') {
+          window.alert('해당 사용자 계정은 반려 상태입니다');
+        }
+        const failNotice = s?.user?.loginFailNotice;
+        if (typeof failNotice === 'number' && failNotice > 0) {
+          window.alert(`해당 사용자 계정은 인증오류 ${failNotice}회 상태입니다`);
+        }
+      } catch {
+        // 안내는 부가 동작 — 로그인 자체는 유지
       }
       const here =
         typeof window !== 'undefined'

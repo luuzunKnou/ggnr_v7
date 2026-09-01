@@ -320,13 +320,18 @@ function buildRoadFrontageBuildingListOrderBy(
 
 export async function list(params: {
   keyword?: string;
+  roadType?: string;
   sorts?: Array<{ key?: string; dir?: string }>;
 } = {}) {
   try {
     void ensureWmsLayerOnce();
     const keyword = emptyToNull(params?.keyword);
+    const roadType = emptyToNull(params?.roadType);
     const sortSpecs = parseRoadFrontageBuildingListSortSpecs(params);
     const conditions = [eq(roadFrontageBuilding.isDel, false)];
+    if (roadType) {
+      conditions.push(eq(roadFrontageBuilding.roadType, roadType));
+    }
     if (keyword) {
       const like = `%${keyword}%`;
       conditions.push(

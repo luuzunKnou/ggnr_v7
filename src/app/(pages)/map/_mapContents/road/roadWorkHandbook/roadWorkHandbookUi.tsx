@@ -401,7 +401,6 @@ export function HandbookMaterialListButton({
 }) {
   const access = handbookMaterialAccess(material)
   const showAccessBadge = access !== "none"
-  const accessBadgeLabel = material.listAccessLabel
   return (
     <button
       type="button"
@@ -419,9 +418,7 @@ export function HandbookMaterialListButton({
       />
       <div className="flex min-w-0 flex-1 flex-col gap-0.5">
         <div className="flex min-w-0 items-center gap-1.5">
-          {showAccessBadge ? (
-            <HandbookFileAccessBadge access={access} label={accessBadgeLabel} />
-          ) : null}
+          {showAccessBadge ? <HandbookFileAccessBadge access={access} /> : null}
           <span
             className={cn(
               "min-w-0 truncate text-[13px] font-medium leading-snug",

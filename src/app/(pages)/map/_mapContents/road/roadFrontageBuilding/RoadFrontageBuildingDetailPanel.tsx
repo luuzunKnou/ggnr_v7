@@ -82,7 +82,8 @@ const actionBtnPrimary =
 const actionBtnDanger =
   'standard-detail-action-btn-danger inline-flex h-7 items-center gap-1';
 const BORDER = 'border-[1px] border-solid border-foreground/80';
-const FORM_TH_BG = 'bg-muted';
+/** 표 헤더 — muted(#f5f5f5)와 구분되는 연한 청회색 */
+const FORM_TH_BG = 'bg-[#E4E9F0] dark:bg-zinc-600';
 const PAPER_SIZE_LABEL = '364mm × 257mm [백상지 200g/m²]';
 /** 원본 서식 건축물 내용 칸 수 */
 const FORM_DETAIL_MIN_ROWS = 5;
@@ -1602,7 +1603,7 @@ export function RoadFrontageBuildingDetailPanel({
           접도구역의 기존 건축물(공작물) 관리대장
         </h2>
 
-        <div className="rfb-print-page-form bg-background [&_table+table]:-mt-px">
+        <div className="rfb-print-page-form [&_table+table]:-mt-px">
           <table className={formTableClass}>
             <colgroup>
               <col style={{ width: '4.25rem' }} />

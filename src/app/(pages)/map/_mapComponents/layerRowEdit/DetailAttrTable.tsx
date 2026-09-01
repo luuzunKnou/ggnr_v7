@@ -2,6 +2,10 @@
 
 import type { ReactNode } from 'react';
 import { cn } from '@/lib/utils';
+import {
+  PANEL_DETAIL_LABEL_CELL,
+  PANEL_DETAIL_VALUE_CELL,
+} from '../panelDetailTableStyles';
 
 const CELL_BORDER = 'border-b border-border';
 
@@ -48,7 +52,8 @@ export function DetailAttrRow({
     <div className="contents">
       <div
         className={cn(
-          'whitespace-nowrap bg-muted px-2.5 py-1.5 text-[11px] text-muted-foreground',
+          'whitespace-nowrap border-r border-border',
+          PANEL_DETAIL_LABEL_CELL,
           edge
         )}
       >
@@ -60,11 +65,7 @@ export function DetailAttrRow({
         ) : null}
       </div>
       <div
-        className={cn(
-          'min-w-0 break-all bg-background px-2.5 py-1.5 text-[11px] text-muted-foreground',
-          edge,
-          valueClassName
-        )}
+        className={cn('break-all', PANEL_DETAIL_VALUE_CELL, edge, valueClassName)}
       >
         {children}
       </div>

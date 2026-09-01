@@ -29,10 +29,12 @@ import { canAccessPrivateSystem } from '@/lib/accessClient';
 import { useMyAccessSnapshot } from '@/hooks/useMyAccessSnapshot';
 import { useConsoleMenuAccess } from '@/hooks/useConsoleMenuAccess';
 import { hasAnyDevConsoleAccess } from '@/lib/consoleMenuAccess/client';
+import { isSuperUser } from '@/lib/auth/superUser';
 import { ResourceAccessDeniedDialog } from '@/app/(pages)/_components/AccessRequest';
 import { ThemeToggle } from '@/app/(pages)/(index)/theme-toggle';
 import { scrubOccupationLedgerFromMapSearchParams } from '@/lib/occupationLedgerBinding';
 import { scrubUseFeeFromMapSearchParams } from '@/lib/useFeeBinding';
+import { scrubMapSearchParamsOnSystemSwitch } from '@/lib/mapSystemSwitch';
 import { MapAdminToolsMenu } from './mapAdminTools/MapAdminToolsMenu';
 
 /** 검색바 아이콘 버튼 — 우측 메뉴와 동일: 바깥=패널 배경, 안=투명+hover만 */
@@ -288,7 +290,7 @@ export function MapSearchBar({
 
   const showDebugUi = mapContext?.showDebugUi ?? false;
   const canToggleGeoserverLog = useMemo(() => {
-    if (String(session?.user?.id ?? '').trim() === 'su') return true;
+    if (isSuperUser(session?.user?.id)) return true;
     if (consoleAccessLoading) return false;
     return hasAnyDevConsoleAccess(consoleMenuLevels);
   }, [session?.user?.id, consoleAccessLoading, consoleMenuLevels]);
@@ -623,10 +625,8 @@ export function MapSearchBar({
     if (sysKey) current.set('system', sysKey);
     else current.delete('system');
     if (systemChanged) {
-      // 시스템 전환: 좌측 패널·상세 쿼리 닫고 레이어 전부 끄기
-      current.delete('opened');
-      current.delete('dataTable');
-      current.delete('dataKey');
+      const target = systemList.find((s) => s.sys_key === sysKey);
+      scrubMapSearchParamsOnSystemSwitch(current, sysKey, target?.serviceList ?? []);
       mapContext?.allLayersOffRef?.current?.();
     } else {
       scrubOccupationLedgerFromMapSearchParams(current, sysKey);

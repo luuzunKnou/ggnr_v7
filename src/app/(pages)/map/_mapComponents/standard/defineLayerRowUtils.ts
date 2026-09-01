@@ -28,3 +28,64 @@ export function getRowKey(row: Record<string, unknown>, keyFieldName: string | n
   if (v == null || v === '') return null;
   return typeof v === 'number' ? v : String(v);
 }
+
+const NUMBER_COLUMN_FIELD_NAMES = new Set(['ogc_fid', 'id']);
+
+function isOgcFidOrIdField(fieldName: string | null | undefined): boolean {
+  return NUMBER_COLUMN_FIELD_NAMES.has(String(fieldName ?? '').trim().toLowerCase());
+}
+
+/** ogc_fid·id 한글명이 ogc_fid/id/번호일 때만 목록 고정 폭 적용 */
+function isNumberColumnKorLabel(korName?: string | null | undefined): boolean {
+  const kor = String(korName ?? '').trim();
+  if (!kor) return false;
+  if (kor === '번호') return true;
+  const lower = kor.toLowerCase();
+  return lower === 'ogc_fid' || lower === 'id';
+}
+
+/** 목록 고정 폭 대상(ogc_fid·id + 한글명 ogc_fid/id/번호) */
+export function isNumberColumnField(
+  fieldName: string | null | undefined,
+  korName?: string | null | undefined
+): boolean {
+  return isOgcFidOrIdField(fieldName) && isNumberColumnKorLabel(korName);
+}
+
+/** ogc_fid·id 필드명 여부 */
+export function isOgcFidOrIdFieldName(fieldName: string | null | undefined): boolean {
+  return isOgcFidOrIdField(fieldName);
+}
+
+/** keyField를 목록 맨 앞으로 */
+export function orderDefineFieldsWithKeyFirst<T extends { define_field_name?: string | null }>(
+  fields: T[],
+  keyFieldName: string | null | undefined
+): T[] {
+  if (!keyFieldName) return fields;
+  const keyLower = keyFieldName.trim().toLowerCase();
+  const idx = fields.findIndex(
+    (f) => String(f.define_field_name ?? '').trim().toLowerCase() === keyLower
+  );
+  if (idx <= 0) return fields;
+  const next = [...fields];
+  const [keyField] = next.splice(idx, 1);
+  return [keyField, ...next];
+}
+
+/**
+ * 목록·상세 표시용 한글 라벨.
+ * ogc_fid·id 는 설정에 한글명이 없거나 영문 그대로일 때 «번호»로 표시.
+ */
+export function getDefineFieldDisplayLabel(
+  fieldName: string | null | undefined,
+  korName?: string | null | undefined
+): string {
+  const name = String(fieldName ?? '').trim();
+  const kor = String(korName ?? '').trim();
+  const lower = name.toLowerCase();
+  if (isOgcFidOrIdField(name) && (!kor || kor.toLowerCase() === lower)) {
+    return '번호';
+  }
+  return kor || name;
+}

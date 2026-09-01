@@ -6,7 +6,7 @@ import { Input } from "@/app/shadcnComponents/ui/input"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/app/shadcnComponents/ui/dialog"
 import { cn } from "@/lib/utils"
 import { call } from "@/lib/api"
-import { Building2, CalendarClock, Check, FileText, IdCard, Lock, Mail, Phone, Plus, User, Users, X } from "lucide-react"
+import { Building2, CalendarClock, Check, Crown, FileText, IdCard, KeyRound, Lock, Mail, Phone, Plus, User, Users, X } from "lucide-react"
 import { PermRoleMappingPanel } from "./perm/PermRoleMappingPanel"
 import { UgUtManageModal } from "./UgUtManageModal"
 import { USER_MANAGER_UI_STYLE } from "./userManagerUiVariants"
@@ -27,6 +27,7 @@ type UserRow = {
   usrReqTime: string | null
   usrOkTime: string | null
   usrCancleTime: string | null
+  usrLoginFailCnt?: number | null
   /** listUsers에서 조인된 권한 표시명 */
   permNames?: string[]
 }
@@ -436,6 +437,75 @@ export function UserManager() {
     }
   }
 
+  const onResetPassword = async (usrId: string) => {
+    if (!usrId || usrId === "su") return
+    if (!window.confirm(`${usrId} 계정의 비밀번호를 초기화하시겠습니까?`)) return
+    setSaving(true)
+    setModalError(null)
+    setError(null)
+    setMessage(null)
+    try {
+      const res = await call("", "POST", {
+        service: "usrService",
+        action: "resetUserPassword",
+        params: { usr_id: usrId },
+      })
+      if (res.success === false || res.data?.success === false) {
+        const msg = res.data?.error || res.error || "비밀번호 초기화 실패"
+        throw new Error(msg)
+      }
+      const tempPassword = (res.data?.data?.tempPassword ?? res.data?.tempPassword) as string | undefined
+      if (tempPassword) {
+        window.alert(`임시 비밀번호: ${tempPassword}\n\n로그인 후 비밀번호를 변경하세요.`)
+      }
+      setForm((p) => ({ ...p, usr_pwd: "", usr_pwd_confirm: "" }))
+      setMessage("비밀번호를 초기화했습니다.")
+      await loadAll()
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : "비밀번호 초기화 실패"
+      if (modalOpen) setModalError(msg)
+      else setError(msg)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const onResetLoginFailCnt = async (usrId: string, failCnt: number) => {
+    if (!usrId || failCnt <= 0) return
+    if (!window.confirm(`${usrId} 계정의 인증오류를 초기화하시겠습니까?`)) return
+    setSaving(true)
+    setError(null)
+    setMessage(null)
+    try {
+      const res = await call("", "POST", {
+        service: "usrService",
+        action: "resetUserLoginFailCnt",
+        params: { usr_id: usrId },
+      })
+      if (res.success === false || res.data?.success === false) {
+        const msg = res.data?.error || res.error || "인증오류 초기화 실패"
+        throw new Error(msg)
+      }
+      setMessage("인증오류를 초기화했습니다.")
+      await loadAll()
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "인증오류 초기화 실패")
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const onLoginFailCellClick = (
+    e: React.MouseEvent,
+    usrId: string,
+    failCnt: number | null | undefined
+  ) => {
+    const cnt = failCnt ?? 0
+    if (cnt <= 0) return
+    e.stopPropagation()
+    void onResetLoginFailCnt(usrId, cnt)
+  }
+
   return (
     <div className={uiStyle.page}>
       <div className={uiStyle.toolbar}>
@@ -497,6 +567,8 @@ export function UserManager() {
               <th className={cn("text-left", uiStyle.tableCell)}>연락처</th>
               <th className={cn("text-left w-[28%]", uiStyle.tableCell)}>권한</th>
               <th className={cn("text-left w-[22%]", uiStyle.tableCell)}>비고</th>
+              <th className={cn("w-20 text-center", uiStyle.tableCell)}>인증오류</th>
+              <th className={cn("w-24 text-center", uiStyle.tableCell)}>초기화</th>
             </tr>
           </thead>
           <tbody>
@@ -506,11 +578,24 @@ export function UserManager() {
                 className={uiStyle.tableRow}
                 onClick={() => void startEdit(row)}
               >
-                <td className={cn("whitespace-nowrap", uiStyle.tableCell)}>{idx + 1}</td>
-                <td className={uiStyle.tableCell}>{row.usrId}</td>
-                <td className={uiStyle.tableCell}>{row.usrName ?? "-"}</td>
-                <td className={uiStyle.tableCell}>{row.ugName} / {row.utName}</td>
-                <td className={uiStyle.tableCell}>{row.usrTel ?? "-"}</td>
+                <td className={cn("whitespace-nowrap truncate", uiStyle.tableCell)}>{idx + 1}</td>
+                <td className={cn("truncate", uiStyle.tableCell)}>{row.usrId}</td>
+                <td className={cn("truncate", uiStyle.tableCell)}>{row.usrName ?? "-"}</td>
+                <td className={cn("truncate", uiStyle.tableCell)}>
+                  <span className="inline-flex max-w-full items-center gap-1">
+                    <span className="truncate">
+                      {row.ugName} / {row.utName}
+                    </span>
+                    {row.permNames?.includes("팀장") ? (
+                      <Crown
+                        className="h-3.5 w-3.5 shrink-0 text-amber-600"
+                        aria-label="팀장"
+                        title="팀장"
+                      />
+                    ) : null}
+                  </span>
+                </td>
+                <td className={cn("truncate", uiStyle.tableCell)}>{row.usrTel ?? "-"}</td>
                 <td className={cn("w-[28%]", uiStyle.tableCell)}>
                   <span
                     className="block truncate"
@@ -524,11 +609,49 @@ export function UserManager() {
                     {row.usrEtc ?? "-"}
                   </span>
                 </td>
+                <td
+                  className={cn(
+                    "text-center whitespace-nowrap",
+                    uiStyle.tableCell,
+                    (row.usrLoginFailCnt ?? 0) > 0 && "cursor-pointer hover:bg-muted/40"
+                  )}
+                  title={(row.usrLoginFailCnt ?? 0) > 0 ? "클릭하여 인증오류 초기화" : undefined}
+                  onClick={(e) => onLoginFailCellClick(e, row.usrId, row.usrLoginFailCnt)}
+                >
+                  {(row.usrLoginFailCnt ?? 0) > 0 ? (
+                    <span className="font-medium text-destructive">{row.usrLoginFailCnt}회</span>
+                  ) : (
+                    "-"
+                  )}
+                </td>
+                <td
+                  className={cn(
+                    "text-center whitespace-nowrap",
+                    uiStyle.tableCell,
+                    (row.usrLoginFailCnt ?? 0) > 0 && "cursor-pointer hover:bg-muted/40"
+                  )}
+                  title={(row.usrLoginFailCnt ?? 0) > 0 ? "클릭하여 인증오류 초기화" : undefined}
+                  onClick={(e) => onLoginFailCellClick(e, row.usrId, row.usrLoginFailCnt)}
+                >
+                  {(row.usrLoginFailCnt ?? 0) > 0 ? (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      disabled={saving}
+                      className="h-6 min-h-6 px-2 text-[11px] font-light pointer-events-none"
+                    >
+                      초기화
+                    </Button>
+                  ) : (
+                    "-"
+                  )}
+                </td>
               </tr>
             ))}
             {!filteredItems.length && (
               <tr>
-                <td className={cn("text-muted-foreground", uiStyle.tableCell)} colSpan={7}>
+                <td className={cn("text-muted-foreground", uiStyle.tableCell)} colSpan={9}>
                   검색 결과가 없습니다.
                 </td>
               </tr>
@@ -708,10 +831,25 @@ export function UserManager() {
           </div>
           <div className={uiStyle.footer}>
             <div className="flex items-center justify-between gap-2 pt-1">
-              <div className="min-h-[20px] text-sm text-red-600 px-1 truncate">
-                {modalError ?? ""}
+              <div className="flex min-w-0 flex-1 items-center gap-2">
+                {modalMode === "detail" && editingUsrId && editingUsrId !== "su" ? (
+                  <Button
+                    type="button"
+                    onClick={() => void onResetPassword(editingUsrId)}
+                    disabled={saving}
+                    size="sm"
+                    variant="outline"
+                    className="h-[26px] min-h-[26px] shrink-0 gap-1 px-2.5 text-[12px] font-light border border-border bg-muted/50 text-muted-foreground hover:border-amber-500 hover:bg-amber-500/10 hover:text-amber-700"
+                  >
+                    <KeyRound className="h-3 w-3" />
+                    비밀번호 초기화
+                  </Button>
+                ) : null}
+                <div className="min-h-[20px] min-w-0 flex-1 truncate text-sm text-red-600 px-1">
+                  {modalError ?? ""}
+                </div>
               </div>
-              <div className="flex justify-end gap-2">
+              <div className="flex shrink-0 justify-end gap-2">
                 <Button
                   type="button"
                   onClick={onSubmit}

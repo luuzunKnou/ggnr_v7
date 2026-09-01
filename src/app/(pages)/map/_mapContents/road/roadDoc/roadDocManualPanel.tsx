@@ -14,6 +14,7 @@ import {
   Upload,
   X,
 } from "lucide-react";
+import { call } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import type { RoadDocListItem } from "@/lib/roadDocTypes";
 import { roadDocPreviewPngFileName } from "@/lib/roadDocPreviewPngName";
@@ -131,8 +132,8 @@ function listCadFolderChildren(
 type ManualTab = "doc" | "drawing" | "target" | "ref";
 type ApiScope = "doc" | "cad";
 
-/** 업무편람 탭(대상여부 검토·설계실무요령 자료) — 일단 비표시 */
-const ROAD_DOC_HANDBOOK_TABS_VISIBLE = false;
+/** SHOW_SERVICES 에 있으면 업무자료 안 편람 탭만 표시 (사이드바 메뉴와 무관) */
+const ROAD_WORK_HANDBOOK_SHOW_ENG = "roadWorkHandbook";
 
 const TAB_BTN =
   "relative -mb-px shrink-0 border-b-2 px-3 py-2 text-[12px] font-medium whitespace-nowrap transition-colors";
@@ -161,9 +162,9 @@ export function RoadDocManualPanel({
   onHandbookSelect: (next: HandbookDetailSelection | null) => void;
   startOnHandbook?: boolean;
 }) {
-  const [activeTab, setActiveTab] = useState<ManualTab>(() =>
-    ROAD_DOC_HANDBOOK_TABS_VISIBLE && startOnHandbook ? "target" : "doc"
-  );
+  const [handbookTabsVisible, setHandbookTabsVisible] = useState(false);
+  const handbookDeeplinkApplied = useRef(false);
+  const [activeTab, setActiveTab] = useState<ManualTab>("doc");
   const [docFiles, setDocFiles] = useState<RoadDocListItem[]>([]);
   const [cadFiles, setCadFiles] = useState<RoadDocListItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -174,20 +175,46 @@ export function RoadDocManualPanel({
   /** 도면 탭: `roadDoc/cad` 기준 상대 경로 (빈 문자열 = 루트) */
   const [cadPath, setCadPath] = useState("");
   const isHandbookTab =
-    ROAD_DOC_HANDBOOK_TABS_VISIBLE && (activeTab === "target" || activeTab === "ref");
+    handbookTabsVisible && (activeTab === "target" || activeTab === "ref");
   const mapPick = useHandbookMapPick();
 
   useEffect(() => {
-    if (ROAD_DOC_HANDBOOK_TABS_VISIBLE) return;
+    let cancelled = false;
+    void call("", "POST", {
+      service: "configService",
+      action: "isShowService",
+      params: { serEng: ROAD_WORK_HANDBOOK_SHOW_ENG },
+    })
+      .then((res) => {
+        if (cancelled) return;
+        const data = res?.data ?? res;
+        setHandbookTabsVisible(Boolean(data?.shown));
+      })
+      .catch(() => {
+        if (!cancelled) setHandbookTabsVisible(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (handbookTabsVisible) {
+      if (startOnHandbook && !handbookDeeplinkApplied.current) {
+        handbookDeeplinkApplied.current = true;
+        setActiveTab("target");
+      }
+      return;
+    }
     if (activeTab !== "target" && activeTab !== "ref") return;
     setActiveTab("doc");
     onHandbookSelect(null);
     mapPick?.cancelPick();
-  }, [activeTab, mapPick, onHandbookSelect]);
+  }, [handbookTabsVisible, startOnHandbook, activeTab, mapPick, onHandbookSelect]);
 
   const selectTab = useCallback(
     (tab: ManualTab) => {
-      if (!ROAD_DOC_HANDBOOK_TABS_VISIBLE && (tab === "target" || tab === "ref")) return;
+      if (!handbookTabsVisible && (tab === "target" || tab === "ref")) return;
       setActiveTab(tab);
       if (tab === "target" || tab === "ref") {
         if (handbookMode !== tab) onHandbookSelect(null);
@@ -197,7 +224,7 @@ export function RoadDocManualPanel({
       onHandbookSelect(null);
       mapPick?.cancelPick();
     },
-    [handbookMode, mapPick, onHandbookModeChange, onHandbookSelect]
+    [handbookTabsVisible, handbookMode, mapPick, onHandbookModeChange, onHandbookSelect]
   );
 
   const fetchList = useCallback(async () => {
@@ -463,7 +490,7 @@ export function RoadDocManualPanel({
           >
             도면
           </button>
-          {ROAD_DOC_HANDBOOK_TABS_VISIBLE ? (
+          {handbookTabsVisible ? (
             <>
               <button
                 type="button"

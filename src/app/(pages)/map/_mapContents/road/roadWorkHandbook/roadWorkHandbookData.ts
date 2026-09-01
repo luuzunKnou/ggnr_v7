@@ -28,8 +28,6 @@ export type HandbookMaterial = {
   lawViewUrl?: string
   /** HWP 비고만 있고 연결 자료 없음 (도서 참조 등) */
   notesOnly?: boolean
-  /** 목록 배지 문구 (기본: 내려받기·원문·준비중) */
-  listAccessLabel?: string
   desc?: string
   files: HandbookFile[]
 }
