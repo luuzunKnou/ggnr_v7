@@ -37,8 +37,6 @@ function serviceLayersForGroup(
   );
 }
 
-}
-
 export function LayerManagementPanel({
   categories,
   tableList,
