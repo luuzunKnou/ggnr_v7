@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Circle, Landmark, Loader2, Pentagon, Plus, RefreshCw, Square, X } from 'lucide-react';
+import { Circle, Landmark, Loader2, Pentagon, Plus, RefreshCw, Search, Square, X } from 'lucide-react';
 import { call } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { useMapContext } from '../../../_mapComponents/MapContext';
@@ -577,15 +577,19 @@ export function SafetyFacPanel({ onClose, selectedFacility, onSelectFacility }: 
             </div>
 
             {searchTab === 'keyword' ? (
-              <label className="relative block min-w-0" htmlFor="safety-fac-search">
-                <span className="sr-only">시설명·주소 검색</span>
+              <div className="standard-search-wrap min-w-0">
+                <Search className="standard-search-icon h-3.5 w-3.5" aria-hidden />
                 <input
                   id="safety-fac-search"
                   type="search"
                   value={searchText}
                   onChange={(e) => setSearchText(e.target.value)}
                   placeholder="시설명·주소"
-                  className="h-full min-h-[2rem] w-full rounded-[5px] border border-border bg-background py-1.5 pl-2 pr-7 text-[12px] text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                  aria-label="시설명·주소 검색"
+                  className={cn(
+                    'standard-search-input min-h-[2rem] rounded-[5px] py-1.5 text-[12px] placeholder:text-muted-foreground focus:border-primary focus:ring-1 focus:ring-primary [&::-webkit-search-cancel-button]:hidden [&::-webkit-search-decoration]:hidden',
+                    showSearchClear ? 'pr-7' : 'pr-3'
+                  )}
                 />
                 {showSearchClear ? (
                   <button
@@ -598,7 +602,7 @@ export function SafetyFacPanel({ onClose, selectedFacility, onSelectFacility }: 
                     <X className="h-3.5 w-3.5" aria-hidden />
                   </button>
                 ) : null}
-              </label>
+              </div>
             ) : null}
 
             {searchTab === 'shape' ? (
