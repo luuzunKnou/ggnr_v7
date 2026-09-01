@@ -222,7 +222,20 @@ function resolveDrawKind(
   return 'polygon';
 }
 
+/** table|side|kind|iconKey → Style — 토글마다 새 Style/Icon 만들지 않음 */
+const styleInstanceCache = new Map<string, Style>();
+
+function styleInstanceKey(
+  tableKey: string,
+  side: 'before' | 'after',
+  kind: 'point' | 'line' | 'polygon',
+  iconSrc: string | null
+): string {
+  return `${tableKey}|${side}|${kind}|${iconSrc ?? ''}`;
+}
+
 function buildVectorStyle(
+  tableKey: string,
   info: CachedStyleInfo,
   side: 'before' | 'after',
   geomType: string | undefined,
@@ -237,10 +250,14 @@ function buildVectorStyle(
   const strokeHex = grey ? GREY_STROKE : (p.strokeColor ?? p.fillColor ?? '#333333');
   const size = p.size ?? 14;
   const kind = resolveDrawKind(geomType, info.geometryType);
+  const cacheKey = styleInstanceKey(tableKey, side, kind, iconSrc);
+  const cached = styleInstanceCache.get(cacheKey);
+  if (cached) return cached;
 
+  let style: Style;
   if (kind === 'point') {
     if (iconSrc) {
-      return new Style({
+      style = new Style({
         zIndex,
         image: new Icon({
           src: iconSrc,
@@ -248,19 +265,18 @@ function buildVectorStyle(
           opacity: 1,
         }),
       });
+    } else {
+      style = new Style({
+        zIndex,
+        image: new CircleStyle({
+          radius: Math.max(4, size / 2),
+          fill: new Fill({ color: hexToRgba(fillHex, 0.85) }),
+          stroke: new Stroke({ color: strokeHex, width: grey ? 2.5 : 1.5 }),
+        }),
+      });
     }
-    return new Style({
-      zIndex,
-      image: new CircleStyle({
-        radius: Math.max(4, size / 2),
-        fill: new Fill({ color: hexToRgba(fillHex, 0.85) }),
-        stroke: new Stroke({ color: strokeHex, width: grey ? 2.5 : 1.5 }),
-      }),
-    });
-  }
-
-  if (kind === 'line') {
-    return new Style({
+  } else if (kind === 'line') {
+    style = new Style({
       zIndex,
       stroke: new Stroke({
         color: hexToRgba(strokeHex, grey ? 1 : 0.95),
@@ -268,17 +284,20 @@ function buildVectorStyle(
         lineDash: grey ? [8, 6] : undefined,
       }),
     });
+  } else {
+    style = new Style({
+      zIndex,
+      fill: new Fill({ color: hexToRgba(fillHex, opacity) }),
+      stroke: new Stroke({
+        color: hexToRgba(strokeHex, grey ? 1 : 0.95),
+        width: Math.max(strokeW, grey ? 3.2 : strokeW),
+        lineDash: grey ? [6, 5] : undefined,
+      }),
+    });
   }
 
-  return new Style({
-    zIndex,
-    fill: new Fill({ color: hexToRgba(fillHex, opacity) }),
-    stroke: new Stroke({
-      color: hexToRgba(strokeHex, grey ? 1 : 0.95),
-      width: Math.max(strokeW, grey ? 3.2 : strokeW),
-      lineDash: grey ? [6, 5] : undefined,
-    }),
-  });
+  styleInstanceCache.set(cacheKey, style);
+  return style;
 }
 
 const FALLBACK_BEFORE = new Style({
@@ -332,31 +351,39 @@ export function resolveCompareFeatureStyle(
 
   if (needIcon && symbolUrl) {
     if (missingIconUrls.has(symbolUrl)) {
-      return buildVectorStyle(info, side, geomType, null);
+      return buildVectorStyle(key, info, side, geomType, null);
     }
     if (side === 'before') {
       const grey = greyIconCache.get(greyIconCacheKey(symbolUrl));
-      if (grey) return buildVectorStyle(info, side, geomType, grey);
+      if (grey) return buildVectorStyle(key, info, side, geomType, grey);
       void getGreyIconDataUrl(symbolUrl).then((url) => {
         if (!url) missingIconUrls.add(symbolUrl);
         onReady();
       });
-      return buildVectorStyle(info, side, geomType, null);
+      return buildVectorStyle(key, info, side, geomType, null);
     }
     if (okIconUrls.has(symbolUrl)) {
-      return buildVectorStyle(info, side, geomType, symbolUrl);
+      return buildVectorStyle(key, info, side, geomType, symbolUrl);
     }
     void ensureIconAvailable(symbolUrl).then(() => onReady());
-    return buildVectorStyle(info, side, geomType, null);
+    return buildVectorStyle(key, info, side, geomType, null);
   }
 
-  return buildVectorStyle(info, side, geomType, null);
+  return buildVectorStyle(key, info, side, geomType, null);
 }
 
-/** 사용할 테이블 스타일을 미리 로드 (선·면용). 점 심볼 404 요청은 하지 않음 */
+/** 테이블 스타일 + 점 심볼(원색·변경 전 회색)을 미리 로드 — 토글 시 임시→확정 깜빡임 방지 */
 export async function prefetchCompareStyles(tableNames: string[]): Promise<void> {
   const uniq = [...new Set(tableNames.map((t) => t.trim()).filter(Boolean))];
   await Promise.all(uniq.map((t) => fetchStyleInfo(t)));
+  await Promise.all(
+    uniq.map(async (t) => {
+      const info = styleInfoCache.get(t.toLowerCase());
+      const symbolUrl = info?.styleProps.symbolUrl?.trim();
+      if (!symbolUrl) return;
+      await Promise.all([ensureIconAvailable(symbolUrl), getGreyIconDataUrl(symbolUrl)]);
+    })
+  );
 }
 
 /** 관련 레이어 칩 범례 — 변경 후(원색) 기준. 캐시 없으면 null */
