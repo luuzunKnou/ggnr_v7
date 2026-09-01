@@ -1,6 +1,6 @@
 import { sql } from 'drizzle-orm';
 import { db } from '@/database/db';
-import { fetchCoordFromAddress } from '@/lib/vworldAddressServer';
+import { fetchCoordFromAddress, fetchCoordFromPlace } from '@/lib/vworldAddressServer';
 
 export async function wkt5181FromLonLat4326(lon: number, lat: number): Promise<string | null> {
   try {
@@ -22,6 +22,17 @@ export async function resolveGeomWkt5181FromAddress(
   const trimmed = String(addr ?? '').trim();
   if (!trimmed) return { wkt: null, lon: null, lat: null };
   const lonLat = await fetchCoordFromAddress(trimmed);
+  if (!lonLat) return { wkt: null, lon: null, lat: null };
+  const wkt = await wkt5181FromLonLat4326(lonLat.lon, lonLat.lat);
+  return { wkt, lon: lonLat.lon, lat: lonLat.lat };
+}
+
+export async function resolveGeomWkt5181FromPlace(
+  placeName: string
+): Promise<{ wkt: string | null; lon: number | null; lat: number | null }> {
+  const trimmed = String(placeName ?? '').trim();
+  if (!trimmed) return { wkt: null, lon: null, lat: null };
+  const lonLat = await fetchCoordFromPlace(trimmed);
   if (!lonLat) return { wkt: null, lon: null, lat: null };
   const wkt = await wkt5181FromLonLat4326(lonLat.lon, lonLat.lat);
   return { wkt, lon: lonLat.lon, lat: lonLat.lat };

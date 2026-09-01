@@ -162,6 +162,7 @@ export function SystemIntegrationManager() {
   const [geomColumns, setGeomColumns] = useState<GeomIntegrationColumnRow[]>([])
   const [geomColumnsLoading, setGeomColumnsLoading] = useState(false)
   const [geomAddressColumn, setGeomAddressColumn] = useState("")
+  const [geomPlaceNameColumn, setGeomPlaceNameColumn] = useState("")
 
   const latestJob = rows[0]
   const latestParsedJob = parseJob(latestJob?.ijl_message ?? "")
@@ -224,6 +225,7 @@ export function SystemIntegrationManager() {
     if (!tableName) {
       setGeomColumns([])
       setGeomAddressColumn("")
+      setGeomPlaceNameColumn("")
       return
     }
     setGeomColumnsLoading(true)
@@ -238,12 +240,16 @@ export function SystemIntegrationManager() {
       const textCols = rows.filter((c) =>
         /character|text|varchar|citext/i.test(c.dataType)
       )
-      const preferred = textCols.find((c) => /addr|adres|address|rona|position/i.test(c.columnName))
-      const nextCol = preferred?.columnName ?? textCols[0]?.columnName ?? rows[0]?.columnName ?? ""
-      setGeomAddressColumn(nextCol)
+      const addrPreferred = textCols.find((c) => /addr|adres|address|rona|position/i.test(c.columnName))
+      const placePreferred = textCols.find((c) =>
+        /ftn_nm|facil|place|_nm|name|title|시설|장소|rstr|reare|vt_acmdfclty|fclt_nm|inst_nm/i.test(c.columnName)
+      )
+      setGeomAddressColumn(addrPreferred?.columnName ?? textCols[0]?.columnName ?? "")
+      setGeomPlaceNameColumn(placePreferred?.columnName ?? "")
     } catch {
       setGeomColumns([])
       setGeomAddressColumn("")
+      setGeomPlaceNameColumn("")
     } finally {
       setGeomColumnsLoading(false)
     }
@@ -317,7 +323,10 @@ export function SystemIntegrationManager() {
       }
       if (active === "GEOM") {
         params.tableName = geomTableName
-        params.addressColumn = geomAddressColumn
+        if (geomAddressColumn) params.addressColumn = geomAddressColumn
+        if (geomPlaceNameColumn) params.placeNameColumn = geomPlaceNameColumn
+        const geomRow = geomTables.find((t) => t.tableName === geomTableName)
+        if (geomRow?.geomColumn) params.geomColumn = geomRow.geomColumn
       }
       const runPromise = call("", "POST", {
         service: "integrationService",
@@ -431,6 +440,7 @@ export function SystemIntegrationManager() {
               onChange={(e) => setGeomAddressColumn(e.target.value)}
               disabled={geomColumnsLoading || loading || !geomTableName}
             >
+              <option value="">(사용 안 함)</option>
               {geomColumns.map((c) => (
                 <option key={c.columnName} value={c.columnName}>
                   {c.columnName} ({c.dataType})
@@ -438,6 +448,23 @@ export function SystemIntegrationManager() {
               ))}
             </select>
             {geomColumnsLoading ? <span className="text-xs">컬럼 불러오는 중…</span> : null}
+          </label>
+          <label className="text-sm text-muted-foreground flex flex-wrap items-center gap-2">
+            <span>장소명 컬럼</span>
+            <select
+              className="border rounded-md px-2 py-1.5 text-sm bg-background min-w-[12rem] max-w-full"
+              value={geomPlaceNameColumn}
+              onChange={(e) => setGeomPlaceNameColumn(e.target.value)}
+              disabled={geomColumnsLoading || loading || !geomTableName}
+            >
+              <option value="">(사용 안 함)</option>
+              {geomColumns.map((c) => (
+                <option key={`place-${c.columnName}`} value={c.columnName}>
+                  {c.columnName} ({c.dataType})
+                </option>
+              ))}
+            </select>
+            <span className="text-xs text-muted-foreground">주소 실패 시 VWorld 장소(searchPlace) 검색</span>
           </label>
         </div>
       ) : null}
@@ -451,7 +478,11 @@ export function SystemIntegrationManager() {
               size="sm"
               className="min-w-[5.5rem]"
               onClick={run}
-              disabled={loading || (active === "GEOM" && (!geomTableName || !geomAddressColumn))}
+              disabled={
+                loading ||
+                (active === "GEOM" &&
+                  (!geomTableName || (!geomAddressColumn && !geomPlaceNameColumn)))
+              }
             >
               {loading ? "연계 중…" : "연계 시작"}
             </Button>

@@ -1,5 +1,5 @@
 import { pool } from '@/database/db';
-import { resolveGeomWkt5181FromAddress } from '@/lib/geomWkt5181';
+import { resolveGeomWkt5181FromAddress, resolveGeomWkt5181FromPlace } from '@/lib/geomWkt5181';
 
 function qi(ident: string): string {
   return `"${ident.replace(/"/g, '""')}"`;
@@ -9,6 +9,12 @@ function assertSafeIdent(name: string, label: string): string {
   const n = name.trim().toLowerCase();
   if (!/^[a-z_][a-z0-9_]*$/.test(n)) throw new Error(`Invalid ${label}: ${name}`);
   return n;
+}
+
+function optionalSafeIdent(name: unknown, label: string): string | null {
+  const trimmed = String(name ?? '').trim();
+  if (!trimmed) return null;
+  return assertSafeIdent(trimmed, label);
 }
 
 export type GeomIntegrationTableRow = {
@@ -24,14 +30,14 @@ export type GeomIntegrationColumnRow = {
 export async function listGeomIntegrationTables(): Promise<{ rows: GeomIntegrationTableRow[] }> {
   const { rows } = await pool.query<GeomIntegrationTableRow>(
     `SELECT DISTINCT
-       c.table_name AS "tableName",
+       c.f_table_name AS "tableName",
        c.f_geometry_column AS "geomColumn"
      FROM geometry_columns c
      INNER JOIN information_schema.tables t
        ON t.table_schema = c.f_table_schema AND t.table_name = c.f_table_name
      WHERE c.f_table_schema = 'layer'
        AND t.table_type = 'BASE TABLE'
-     ORDER BY c.table_name ASC`
+     ORDER BY c.f_table_name ASC`
   );
   return { rows };
 }
@@ -77,14 +83,39 @@ async function resolvePrimaryKeyColumn(table: string): Promise<string> {
   throw new Error(`PK 컬럼을 찾을 수 없습니다: layer.${table}`);
 }
 
+async function resolveGeomWktForRow(params: {
+  addr: string;
+  placeName: string;
+}): Promise<{ wkt: string | null; lon: number | null; lat: number | null; source: 'address' | 'place' | null }> {
+  const addr = String(params.addr ?? '').trim();
+  const placeName = String(params.placeName ?? '').trim();
+
+  if (addr) {
+    const fromAddr = await resolveGeomWkt5181FromAddress(addr);
+    if (fromAddr.wkt) return { ...fromAddr, source: 'address' };
+  }
+  if (placeName) {
+    const fromPlace = await resolveGeomWkt5181FromPlace(placeName);
+    if (fromPlace.wkt) return { ...fromPlace, source: 'place' };
+  }
+  return { wkt: null, lon: null, lat: null, source: null };
+}
+
 export async function runGeomIntegration(params: {
   tableName: string;
-  addressColumn: string;
+  addressColumn?: string | null;
+  placeNameColumn?: string | null;
+  geomColumn?: string | null;
   ijlKey?: number;
   onProgress?: (message: string) => void | Promise<void>;
 }): Promise<{ total: number; success: number; fail: number; skip: number }> {
   const table = assertSafeIdent(params.tableName, 'table');
-  const addressColumn = assertSafeIdent(params.addressColumn, 'addressColumn');
+  const addressColumn = optionalSafeIdent(params.addressColumn, 'addressColumn');
+  const placeNameColumn = optionalSafeIdent(params.placeNameColumn, 'placeNameColumn');
+  if (!addressColumn && !placeNameColumn) {
+    throw new Error('주소 컬럼 또는 장소명 컬럼 중 하나 이상이 필요합니다.');
+  }
+
   const pkColumn = await resolvePrimaryKeyColumn(table);
 
   const { rows: colRows } = await pool.query<{ column_name: string }>(
@@ -93,18 +124,38 @@ export async function runGeomIntegration(params: {
     [table]
   );
   const colSet = new Set(colRows.map((r) => r.column_name.toLowerCase()));
-  if (!colSet.has(addressColumn)) {
+  if (addressColumn && !colSet.has(addressColumn)) {
     throw new Error(`주소 컬럼이 없습니다: ${addressColumn}`);
   }
-  if (!colSet.has('geom')) {
-    throw new Error(`geom 컬럼이 없습니다: layer.${table}`);
+  if (placeNameColumn && !colSet.has(placeNameColumn)) {
+    throw new Error(`장소명 컬럼이 없습니다: ${placeNameColumn}`);
+  }
+
+  const geomColumn = optionalSafeIdent(params.geomColumn, 'geomColumn') ?? 'geom';
+  if (!colSet.has(geomColumn)) {
+    throw new Error(`geom 컬럼이 없습니다: layer.${table}.${geomColumn}`);
   }
 
   const hasLonLat = colSet.has('lon') && colSet.has('lat');
   const fromClause = `${qi('layer')}.${qi(table)}`;
-  const selectSql = `SELECT ${qi(pkColumn)} AS pk, ${qi(addressColumn)} AS addr FROM ${fromClause}
-    WHERE btrim(COALESCE(${qi(addressColumn)}::text, '')) <> ''`;
-  const { rows } = await pool.query<{ pk: string | number; addr: string }>(selectSql);
+
+  const selectParts = [`${qi(pkColumn)} AS pk`];
+  if (addressColumn) selectParts.push(`${qi(addressColumn)} AS addr`);
+  else selectParts.push(`''::text AS addr`);
+  if (placeNameColumn) selectParts.push(`${qi(placeNameColumn)} AS place_name`);
+  else selectParts.push(`''::text AS place_name`);
+
+  const whereParts: string[] = [];
+  if (addressColumn) {
+    whereParts.push(`btrim(COALESCE(${qi(addressColumn)}::text, '')) <> ''`);
+  }
+  if (placeNameColumn) {
+    whereParts.push(`btrim(COALESCE(${qi(placeNameColumn)}::text, '')) <> ''`);
+  }
+  const whereClause = whereParts.length ? `WHERE (${whereParts.join(' OR ')})` : '';
+
+  const selectSql = `SELECT ${selectParts.join(', ')} FROM ${fromClause} ${whereClause}`;
+  const { rows } = await pool.query<{ pk: string | number; addr: string; place_name: string }>(selectSql);
 
   const total = rows.length;
   let success = 0;
@@ -119,17 +170,19 @@ export async function runGeomIntegration(params: {
     const row = rows[i];
     const pk = row.pk;
     const addr = String(row.addr ?? '').trim();
+    const placeName = String(row.place_name ?? '').trim();
     const seq = i + 1;
 
-    if (!addr) {
+    if (!addr && !placeName) {
       skip += 1;
       continue;
     }
 
-    const resolved = await resolveGeomWkt5181FromAddress(addr);
+    const resolved = await resolveGeomWktForRow({ addr, placeName });
     if (!resolved.wkt) {
       fail += 1;
-      await report(`진행 ${seq}/${total} | 성공 ${success} | 실패 ${fail} | 스킵 ${skip} | 지오코딩 실패: ${addr}`);
+      const label = [addr && `주소:${addr}`, placeName && `장소:${placeName}`].filter(Boolean).join(' | ');
+      await report(`진행 ${seq}/${total} | 성공 ${success} | 실패 ${fail} | 스킵 ${skip} | 좌표 조회 실패: ${label}`);
       continue;
     }
 
@@ -139,14 +192,14 @@ export async function runGeomIntegration(params: {
     if (hasLonLat && lonStr && latStr) {
       await pool.query(
         `UPDATE ${fromClause}
-         SET geom = ST_GeomFromText($1, 5181), lon = $2, lat = $3
+         SET ${qi(geomColumn)} = ST_GeomFromText($1, 5181), lon = $2, lat = $3
          WHERE ${qi(pkColumn)} = $4`,
         [resolved.wkt, lonStr, latStr, pk]
       );
     } else {
       await pool.query(
         `UPDATE ${fromClause}
-         SET geom = ST_GeomFromText($1, 5181)
+         SET ${qi(geomColumn)} = ST_GeomFromText($1, 5181)
          WHERE ${qi(pkColumn)} = $2`,
         [resolved.wkt, pk]
       );

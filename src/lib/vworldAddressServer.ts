@@ -187,6 +187,56 @@ export async function fetchCoordFromAddress(
   }
 }
 
+type VWorldPlaceSearchItem = {
+  point?: { x?: string | number; y?: string | number };
+};
+
+/** 장소명(POI) 검색 → WGS84 좌표 (VWorld search type=place) */
+export async function fetchCoordFromPlace(
+  query: string
+): Promise<{ lon: number; lat: number } | null> {
+  const trimmed = String(query ?? '').trim();
+  if (!trimmed) return null;
+
+  const { VWORLD_API_KEY } = getMapConfig();
+  if (!VWORLD_API_KEY) return null;
+
+  const params = new URLSearchParams({
+    service: 'search',
+    request: 'search',
+    version: '2.0',
+    crs: 'EPSG:4326',
+    size: '5',
+    page: '1',
+    query: trimmed,
+    type: 'place',
+    format: 'json',
+    errorformat: 'json',
+    key: VWORLD_API_KEY,
+  });
+
+  try {
+    const res = await fetch(`https://api.vworld.kr/req/search?${params.toString()}`, {
+      method: 'GET',
+      cache: 'no-store',
+    });
+    if (!res.ok) return null;
+    const data = (await res.json()) as {
+      response?: { status?: string; result?: { items?: VWorldPlaceSearchItem[] } };
+    };
+    if (String(data?.response?.status ?? '').toUpperCase() !== 'OK') return null;
+    const items = data.response?.result?.items ?? [];
+    for (const item of items) {
+      const lon = Number(item?.point?.x);
+      const lat = Number(item?.point?.y);
+      if (Number.isFinite(lon) && Number.isFinite(lat)) return { lon, lat };
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 type VWorldSearchItemRaw = {
   address?: { parcel?: string; road?: string };
   point?: { x?: string | number; y?: string | number };

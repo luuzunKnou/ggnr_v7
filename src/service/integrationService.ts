@@ -321,17 +321,27 @@ export async function runIntegration(p: Params) {
     } else if (system === 'GEOM') {
       const tableName = String(p.tableName ?? '').trim();
       const addressColumn = String(p.addressColumn ?? '').trim();
-      if (!tableName || !addressColumn) {
-        throw new Error('tableName과 addressColumn이 필요합니다.');
+      const placeNameColumn = String(p.placeNameColumn ?? '').trim();
+      const geomColumn = String(p.geomColumn ?? '').trim();
+      if (!tableName || (!addressColumn && !placeNameColumn)) {
+        throw new Error('tableName과 주소·장소명 컬럼 중 하나 이상이 필요합니다.');
       }
       const { runGeomIntegration } = await import('@/integrations/geomIntegration');
+      const colSummary = [
+        addressColumn ? `addr=${addressColumn}` : null,
+        placeNameColumn ? `place=${placeNameColumn}` : null,
+      ]
+        .filter(Boolean)
+        .join(', ');
       await updateIntegrationJobProgress(
         ijlKey,
-        `진행중 | GEOM | layer.${tableName} | ${addressColumn}`
+        `진행중 | GEOM | layer.${tableName} | ${colSummary}`
       );
       const r = await runGeomIntegration({
         tableName,
-        addressColumn,
+        addressColumn: addressColumn || null,
+        placeNameColumn: placeNameColumn || null,
+        geomColumn: geomColumn || null,
         ijlKey,
         onProgress: (message) => updateIntegrationJobProgress(ijlKey, message),
       });

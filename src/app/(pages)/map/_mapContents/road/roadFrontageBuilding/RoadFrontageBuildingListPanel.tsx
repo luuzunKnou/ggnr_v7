@@ -9,7 +9,6 @@ import { LayerRowAddButton, LayerRowPanelButton } from '../../../_mapComponents/
 import { useMapContext } from '../../../_mapComponents/MapContext';
 import {
   ROAD_FRONTAGE_BUILDING_NEW_ID,
-  formatRouteNoName,
   isNewRoadFrontageBuildingId,
   type RoadFrontageBuildingLedger,
 } from './roadFrontageBuildingMock';
@@ -18,15 +17,15 @@ import {
   isRoadNetworkWmsVisible,
   toggleRoadNetworkWmsLayers,
 } from '../roadNetwork/roadNetworkMapSync';
+import { getRoadFrontageMarkerRoadTypeBadgeStyle } from '../roadFrontageMarker/roadFrontageMarkerFormat';
 
-type SortKey = 'roadType' | 'locAdr' | 'routeNo' | 'preYmd';
+type SortKey = 'roadType' | 'locAdr' | 'preYmd';
 type SortDir = 'asc' | 'desc';
 type SortSpec = { key: SortKey; dir: SortDir };
 
 const SORT_COLUMNS: { key: SortKey; label: string; align?: 'left' | 'center' }[] = [
   { key: 'roadType', label: '종류' },
   { key: 'locAdr', label: '위치' },
-  { key: 'routeNo', label: '노선번호' },
   { key: 'preYmd', label: '작성연월일' },
 ];
 
@@ -229,7 +228,6 @@ export function RoadFrontageBuildingListPanel({
             <colgroup>
               <col className="w-[88px]" />
               <col />
-              <col className="w-[72px]" />
               <col className="w-[88px]" />
             </colgroup>
             <thead className="standard-table-thead">
@@ -272,13 +270,13 @@ export function RoadFrontageBuildingListPanel({
             <tbody>
               {loading && items.length === 0 ? (
                 <tr>
-                  <td colSpan={4} className="standard-table-empty">
+                  <td colSpan={3} className="standard-table-empty">
                     불러오는 중…
                   </td>
                 </tr>
               ) : items.length === 0 ? (
                 <tr>
-                  <td colSpan={4} className="standard-table-empty">
+                  <td colSpan={3} className="standard-table-empty">
                     등록된 관리대장이 없습니다.
                   </td>
                 </tr>
@@ -286,7 +284,6 @@ export function RoadFrontageBuildingListPanel({
                 items.map((l) => {
                   const rowKey = String(l.ftrIdn || l.id || '').trim();
                   const isSelected = rowKey === selectedId;
-                  const routeTitle = formatRouteNoName(l.routeNo, l.routeNam);
                   const roadTypeRouteLabel = formatRoadTypeRouteLabel(l.roadType, l.routeNo);
                   const locDisplay =
                     formatAddressStripSidoSigungu(l.locAdr) || l.locAdr || '(위치 미입력)';
@@ -305,20 +302,21 @@ export function RoadFrontageBuildingListPanel({
                       }}
                       className={cn('standard-list-row', isSelected && 'standard-list-row-selected')}
                     >
-                      <td
-                        className="standard-table-td-text"
-                        title={roadTypeRouteLabel !== '—' ? roadTypeRouteLabel : undefined}
-                      >
-                        {roadTypeRouteLabel}
+                      <td className="standard-table-td-compact">
+                        {roadTypeRouteLabel !== '—' ? (
+                          <span
+                            className="standard-road-rank-badge inline-block max-w-full truncate"
+                            style={getRoadFrontageMarkerRoadTypeBadgeStyle(l.roadType)}
+                            title={roadTypeRouteLabel}
+                          >
+                            {roadTypeRouteLabel}
+                          </span>
+                        ) : (
+                          '—'
+                        )}
                       </td>
                       <td className="standard-table-td-text" title={l.locAdr}>
                         {locDisplay}
-                      </td>
-                      <td
-                        className="standard-table-td-date"
-                        title={routeTitle !== '—' ? routeTitle : undefined}
-                      >
-                        {l.routeNo.trim() || '—'}
                       </td>
                       <td className="standard-table-td-date" title={l.preYmd}>
                         {l.preYmd || '—'}
