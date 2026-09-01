@@ -2,10 +2,11 @@
 
 import { useSession } from 'next-auth/react';
 import { withBasePathNav } from '@/lib/basePath';
+import { isSuperUser } from '@/lib/auth/superUser';
 
 const SYS_MANAGER_HREF = '/sysManager';
 
-/** Index 헤더 «시스템 관리» — 로그인 후 su만 진입, 그 외 alert */
+/** Index 헤더 «시스템 관리» — 로그인 후 슈퍼계정만 진입, 그 외 alert */
 export function SysManagerNavLink() {
   const { data: session, status } = useSession();
 
@@ -16,7 +17,7 @@ export function SysManagerNavLink() {
       window.location.assign(withBasePathNav(SYS_MANAGER_HREF));
       return;
     }
-    if (session.user.id !== 'su') {
+    if (!isSuperUser(session.user.id)) {
       window.alert('권한이 없습니다');
       return;
     }
