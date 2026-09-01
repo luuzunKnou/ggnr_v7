@@ -80,21 +80,71 @@ type Props = {
   onDeleted: () => void;
   /** 신규 저장 후 임시 id → DB ogc_fid 로 교체 */
   onCaseIdChange?: (id: string) => void;
+  /** 지도 필지 클릭 시 강조할 필지 id */
+  focusParcelId?: string | null;
   overlayLeftPx: number;
   overlayWidthPx: number;
 };
 
-const fieldClass =
-  "h-7 w-full min-w-0 rounded border border-border bg-background px-1.5 text-[11px] text-foreground outline-none focus:border-primary focus:ring-1 focus:ring-primary/25";
-const attrLabelClass = "w-[64px] shrink-0";
-const btnPrimary =
+const inputClass = "standard-detail-input h-7 w-full min-w-0 text-foreground";
+const actionBtn =
+  "standard-detail-action-btn inline-flex h-7 items-center gap-1";
+const actionBtnPrimary =
   "inline-flex h-7 items-center gap-1 rounded border border-primary bg-primary px-2 text-[11px] font-medium text-white hover:bg-primary/90 disabled:opacity-50";
-const btnGhost =
-  "inline-flex h-7 items-center gap-1 rounded border border-border bg-background px-2 text-[11px] font-medium text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-50";
-const btnDanger =
-  "inline-flex h-7 items-center gap-1 rounded border border-red-200 bg-background px-2 text-[11px] font-medium text-red-600 hover:bg-red-50 disabled:opacity-50 dark:border-red-800 dark:text-red-400 dark:hover:bg-red-950/40";
+const actionBtnDanger =
+  "standard-detail-action-btn-danger inline-flex h-7 items-center gap-1";
 
 type ParcelModalState = { mode: "new" | "edit" | "view"; draft: RoadRewardParcel };
+
+function ParcelListColGroup({ editing }: { editing: boolean }) {
+  return (
+    <colgroup>
+      <col />
+      <col className="w-[54px]" />
+      <col className="w-[5.75rem]" />
+      <col className="w-[90px]" />
+      {editing ? <col className="w-[3rem]" /> : null}
+    </colgroup>
+  );
+}
+
+const PARCEL_LIST_TABLE_CLASS = "w-full table-fixed border-collapse text-[11px]";
+
+function ParcelListHeaderRow({ editing }: { editing: boolean }) {
+  return (
+    <tr className="h-7">
+      <th
+        scope="col"
+        className="min-w-0 border-b border-border bg-muted pl-1.5 pr-1 text-left font-semibold text-foreground"
+      >
+        주소
+      </th>
+      <th
+        scope="col"
+        className="min-w-0 border-b border-border bg-muted px-1 text-center font-semibold text-foreground"
+      >
+        지목
+      </th>
+      <th
+        scope="col"
+        className="min-w-0 border-b border-border bg-muted px-1 text-center font-semibold whitespace-nowrap text-foreground"
+      >
+        편입면적(㎡)
+      </th>
+      <th
+        scope="col"
+        className="min-w-0 border-b border-border bg-muted pl-1 pr-1.5 text-right font-semibold whitespace-nowrap text-foreground"
+      >
+        합계(원)
+      </th>
+      {editing ? (
+        <th scope="col" className="border-b border-border bg-muted font-semibold text-foreground">
+          <span className="sr-only">수정·삭제</span>
+        </th>
+      ) : null}
+    </tr>
+  );
+}
 
 function toParcelItem(p: RoadRewardParcel): LayerRowParcelItem {
   const addr = `${p.eupmyeonDong} ${p.jibunIncluded || p.jibunOriginal}`.trim();
@@ -128,19 +178,14 @@ function AttrRow({
 }) {
   return (
     <div className="flex items-start">
-      <div
-        className={cn(
-          "flex min-w-0 shrink-0 items-center self-stretch bg-muted px-1.5 py-1",
-          attrLabelClass
-        )}
-      >
-        <span className="min-w-0 w-full whitespace-normal break-keep text-left text-[11px] leading-snug text-muted-foreground">
+      <div className="standard-detail-attr-label flex min-w-0 w-[64px] shrink-0 items-center self-stretch">
+        <span className="min-w-0 w-full whitespace-normal break-keep text-left leading-snug">
           {label}
         </span>
       </div>
-      <div className="min-w-0 flex-1 bg-background px-1.5 py-1">
+      <div className="standard-detail-attr-value min-w-0 flex-1 text-foreground">
         {typeof value === "string" ? (
-          <span className="break-all text-[11px] leading-snug text-foreground">{value}</span>
+          <span className="break-all leading-snug">{value}</span>
         ) : (
           value
         )}
@@ -155,7 +200,7 @@ function AttrTable({
   entries: { fieldKey: string; label: string; value: ReactNode; fullWidth?: boolean }[];
 }) {
   if (entries.length === 0) {
-    return <p className="text-[11px] text-muted-foreground">표시할 항목이 없습니다.</p>;
+    return <p className="standard-detail-attr-empty">표시할 항목이 없습니다.</p>;
   }
 
   const pairs: { left: (typeof entries)[number]; right?: (typeof entries)[number] }[] = [];
@@ -211,6 +256,7 @@ export function RoadRewardDetailPanel({
   onClose,
   onDeleted,
   onCaseIdChange,
+  focusParcelId,
   overlayLeftPx,
   overlayWidthPx,
 }: Props) {
@@ -254,6 +300,7 @@ export function RoadRewardDetailPanel({
   draftParcelsRef.current = draftParcels;
 
   const [selectedParcelId, setSelectedParcelId] = useState<string | null>(null);
+  const parcelRowEls = useRef(new Map<string, HTMLTableRowElement>());
   const [parcelModal, setParcelModal] = useState<ParcelModalState | null>(null);
   const parcelModalRef = useRef(parcelModal);
   parcelModalRef.current = parcelModal;
@@ -393,6 +440,27 @@ export function RoadRewardDetailPanel({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- caseId 전환 시에만
   }, [caseId]);
+
+  /** 지도 필지 클릭 — 부모 건 상세 오픈 후 해당 필지 선택·이동 */
+  useEffect(() => {
+    if (!focusParcelId || isCreateMode) return;
+    const parcel = displayParcels.find((p) => p.id === focusParcelId);
+    if (!parcel) return;
+    setSelectedParcelId(focusParcelId);
+    const map = mapContext?.mapInstanceRef?.current;
+    if (map) {
+      fitMapToLayerRowParcel(map, toParcelItem(parcel), {
+        applyMapViewPadding: () => mapContext?.applyMapViewPaddingRef?.current?.(),
+      });
+    }
+  }, [focusParcelId, caseId, displayParcels, isCreateMode, mapContext]);
+
+  useEffect(() => {
+    if (!selectedParcelId) return;
+    parcelRowEls.current
+      .get(selectedParcelId)
+      ?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  }, [selectedParcelId]);
 
   const finishCaseGeomEdit = () => {
     setCaseGeomEditMode(null);
@@ -992,7 +1060,7 @@ export function RoadRewardDetailPanel({
     fullWidth,
     value: (
       <input
-        className={fieldClass}
+        className={inputClass}
         value={caseDraft[field] ?? ""}
         onChange={(e) => handleDraftChange(field, e.target.value)}
       />
@@ -1004,25 +1072,23 @@ export function RoadRewardDetailPanel({
     : caseItem.name.trim() || "(건명 없음)";
 
   return (
-    <div className="relative flex min-h-0 h-full flex-col bg-background">
-      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border px-3 py-2">
-        <div className="min-w-0">
-          <h2
-            className={cn(
-              "truncate text-sm font-semibold",
-              (isEditing ? (caseDraft.name ?? "").trim() : caseItem.name.trim())
-                ? "text-foreground"
-                : "text-muted-foreground"
-            )}
-            title={headerName}
-          >
-            {headerName}
-          </h2>
-        </div>
+    <div className="standard-panel-root relative">
+      <div className="standard-panel-header">
+        <h2
+          className={cn(
+            "standard-panel-title truncate",
+            (isEditing ? (caseDraft.name ?? "").trim() : caseItem.name.trim())
+              ? "text-foreground"
+              : "text-muted-foreground"
+          )}
+          title={headerName}
+        >
+          {headerName}
+        </h2>
         <button
           type="button"
           onClick={isCreateMode ? discardCreateDraft : onClose}
-          className="shrink-0 rounded p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+          className="standard-panel-close"
           title="닫기"
           aria-label="닫기"
         >
@@ -1030,32 +1096,33 @@ export function RoadRewardDetailPanel({
         </button>
       </div>
 
-      <section className="shrink-0 border-b border-border">
-        <div className="flex items-center gap-1 px-2 py-1.5">
+      <section className="standard-detail-section">
+        <div className="standard-detail-section-header">
           <button
             type="button"
             onClick={() => setAttrsOpen((v) => !v)}
-            className="flex min-w-0 flex-1 items-center gap-1 text-left text-xs font-semibold text-foreground"
+            className="standard-detail-section-toggle"
+            title="속성정보"
           >
             {attrsOpen ? (
-              <ChevronDown className="h-3.5 w-3.5 shrink-0" />
+              <ChevronDown className="standard-detail-section-chevron" />
             ) : (
-              <ChevronRight className="h-3.5 w-3.5 shrink-0" />
+              <ChevronRight className="standard-detail-section-chevron" />
             )}
-            속성정보
+            <span className="standard-detail-section-toggle-label">속성정보</span>
           </button>
           {attrsOpen ? (
-            <div className="flex shrink-0 items-center gap-1">
+            <div className="standard-detail-section-header-actions">
               {!isEditing ? (
                 <>
-                  <button type="button" className={btnGhost} onClick={beginEdit}>
+                  <button type="button" className={actionBtn} onClick={beginEdit}>
                     <Pencil className="h-3 w-3" />
                     수정
                   </button>
                   {!isCreateMode ? (
                     <button
                       type="button"
-                      className={btnDanger}
+                      className={actionBtnDanger}
                       onClick={() => void handleDelete()}
                     >
                       <Trash2 className="h-3 w-3" />
@@ -1067,7 +1134,7 @@ export function RoadRewardDetailPanel({
                 <>
                   <button
                     type="button"
-                    className={btnGhost}
+                    className={actionBtn}
                     onClick={cancelEdit}
                     disabled={saving}
                   >
@@ -1075,7 +1142,7 @@ export function RoadRewardDetailPanel({
                   </button>
                   <button
                     type="button"
-                    className={btnPrimary}
+                    className={actionBtnPrimary}
                     onClick={() => void handleSave()}
                     disabled={saving}
                   >
@@ -1087,147 +1154,131 @@ export function RoadRewardDetailPanel({
           ) : null}
         </div>
         {attrsOpen ? (
-          <div className="max-h-[42vh] overflow-y-auto px-3 pb-2.5 scrollbar-thin">
+          <div className="standard-detail-section-body max-h-[42vh] overflow-y-auto scrollbar-thin">
             <AttrTable entries={isEditing ? caseEditEntries : caseViewEntries} />
           </div>
         ) : null}
       </section>
 
-      <div className="relative flex min-h-0 flex-1 flex-col">
-        <div
-          className="flex h-10 shrink-0 items-center justify-between gap-2 border-b border-border px-2 pt-1.5"
-          role="tablist"
-          aria-label="필지목록"
-        >
-          <div className="flex min-w-0 flex-1 items-stretch gap-0.5 self-stretch">
-            <button
-              type="button"
-              role="tab"
-              aria-selected
-              className="relative flex shrink-0 items-center px-2.5 pb-1.5 text-[11px] font-medium text-primary"
-            >
-              필지목록 ({displayParcels.length.toLocaleString()})
-              {loadingParcels ? (
-                <span className="ml-1 text-[10px] font-normal text-muted-foreground">조회 중…</span>
-              ) : null}
-              <span className="absolute inset-x-1 bottom-1 h-0.5 rounded-full bg-primary" />
-            </button>
-          </div>
+      <section className="standard-detail-section flex min-h-0 min-w-0 flex-1 flex-col !border-b-0">
+        <div className="standard-detail-section-header">
+          <span className="standard-detail-section-toggle-label">필지목록 ({displayParcels.length.toLocaleString()})</span>
+          {loadingParcels ? (
+            <span className="text-[10px] font-normal text-muted-foreground">조회 중…</span>
+          ) : null}
         </div>
 
-        <MapSideDetailScroll className="min-h-0 flex-1 overflow-auto px-2 py-2 text-xs">
+        <div className="flex min-h-0 flex-1 flex-col px-3 pb-2">
           {displayParcels.length === 0 ? (
-            <p className="py-6 text-center text-[11px] text-muted-foreground">
+            <p className="standard-detail-empty-dashed-compact">
               {isEditing
                 ? "도형을 그리거나 수정하면 필지목록이 자동으로 채워집니다."
                 : "등록된 필지가 없습니다."}
             </p>
           ) : (
-            <div className="w-full overflow-hidden rounded border border-border text-[11px]">
-              <div
-                className={cn(
-                  "grid h-7 items-center border-b border-border bg-muted",
-                  isEditing
-                    ? "grid-cols-[minmax(0,1fr)_54px_5.75rem_90px_3rem]"
-                    : "grid-cols-[minmax(0,1fr)_54px_5.75rem_90px]"
-                )}
-              >
-                <div className="min-w-0 pl-1.5 pr-1 text-left font-semibold text-foreground">주소</div>
-                <div className="min-w-0 px-1 text-center font-semibold text-foreground">지목</div>
-                <div className="min-w-0 px-1 text-center font-semibold text-foreground whitespace-nowrap">
-                  편입면적(㎡)
-                </div>
-                <div className="min-w-0 pl-1 pr-1.5 text-right font-semibold text-foreground whitespace-nowrap">
-                  합계(원)
-                </div>
-                {isEditing ? <div aria-hidden /> : null}
-              </div>
-              {displayParcels.map((p) => {
-                const isSelected = p.id === selectedParcelId;
-                const addr = `${p.eupmyeonDong} ${p.jibunIncluded || p.jibunOriginal}`.trim();
-                const areaLabel = `${formatCell(p.areaIncluded, true)}㎡`;
-                const amountLabel = `${formatCell(sumRoadRewardCompensation(p), true)}원`;
-                return (
-                  <div
-                    key={p.id}
-                    role="button"
-                    tabIndex={0}
-                    onClick={() => handleParcelRowClick(p)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" || e.key === " ") {
-                        e.preventDefault();
-                        handleParcelRowClick(p);
-                      }
-                    }}
-                    title={
-                      isEditing
-                        ? "클릭하면 지도에서 위치를 확인합니다"
-                        : "클릭하면 필지 상세를 봅니다"
-                    }
-                    className={cn(
-                      "grid h-7 cursor-pointer items-center border-b border-border last:border-b-0 hover:bg-muted/50",
-                      isEditing
-                        ? "grid-cols-[minmax(0,1fr)_54px_5.75rem_90px_3rem]"
-                        : "grid-cols-[minmax(0,1fr)_54px_5.75rem_90px]",
-                      isSelected && "bg-primary/5"
-                    )}
-                  >
-                    <div
-                      className="min-w-0 truncate pl-1.5 pr-1 text-left text-foreground"
-                      title={addr || undefined}
-                    >
-                      {addr || "—"}
-                    </div>
-                    <div
-                      className="min-w-0 truncate px-1 text-center text-foreground"
-                      title={p.jimok || undefined}
-                    >
-                      {formatCell(p.jimok)}
-                    </div>
-                    <div
-                      className="min-w-0 truncate px-1 text-center tabular-nums text-foreground"
-                      title={areaLabel}
-                    >
-                      {areaLabel}
-                    </div>
-                    <div
-                      className="min-w-0 truncate pl-1 pr-1.5 text-right tabular-nums text-foreground"
-                      title={amountLabel}
-                    >
-                      {amountLabel}
-                    </div>
-                    {isEditing ? (
-                      <div
-                        className="flex w-full shrink-0 items-center justify-center gap-0"
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        <button
-                          type="button"
-                          onClick={() => handleOpenEditParcel(p)}
-                          className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-primary/10 hover:text-primary"
-                          aria-label="필지 수정"
-                          title="수정"
+            <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded border border-border">
+              <table className={cn(PARCEL_LIST_TABLE_CLASS, "shrink-0")}>
+                <ParcelListColGroup editing={isEditing} />
+                <thead className="bg-muted">
+                  <ParcelListHeaderRow editing={isEditing} />
+                </thead>
+              </table>
+              <MapSideDetailScroll className="min-h-0 flex-1 overflow-y-auto scrollbar-thin">
+                <table className={PARCEL_LIST_TABLE_CLASS}>
+                  <ParcelListColGroup editing={isEditing} />
+                  <tbody>
+                    {displayParcels.map((p) => {
+                      const isSelected = p.id === selectedParcelId;
+                      const addr = `${p.eupmyeonDong} ${p.jibunIncluded || p.jibunOriginal}`.trim();
+                      const areaLabel = `${formatCell(p.areaIncluded, true)}㎡`;
+                      const amountLabel = `${formatCell(sumRoadRewardCompensation(p), true)}원`;
+                      return (
+                        <tr
+                          key={p.id}
+                          ref={(el) => {
+                            if (el) parcelRowEls.current.set(p.id, el);
+                            else parcelRowEls.current.delete(p.id);
+                          }}
+                          role="button"
+                          tabIndex={0}
+                          onClick={() => handleParcelRowClick(p)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" || e.key === " ") {
+                              e.preventDefault();
+                              handleParcelRowClick(p);
+                            }
+                          }}
+                          title={
+                            isEditing
+                              ? "클릭하면 지도에서 위치를 확인합니다"
+                              : "클릭하면 필지 상세를 봅니다"
+                          }
+                          className={cn(
+                            "h-7 cursor-pointer border-b border-border last:border-b-0 hover:bg-muted/50",
+                            isSelected && "bg-primary/5"
+                          )}
                         >
-                          <Pencil className="h-3 w-3" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleDeleteParcelFromList(p.id)}
-                          className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/40 dark:hover:text-red-400"
-                          aria-label="필지 삭제"
-                          title="삭제"
-                        >
-                          <Trash2 className="h-3 w-3" />
-                        </button>
-                      </div>
-                    ) : null}
-                  </div>
-                );
-              })}
+                          <td
+                            className="min-w-0 truncate py-0 pl-1.5 pr-1 text-left text-foreground"
+                            title={addr || undefined}
+                          >
+                            {addr || "—"}
+                          </td>
+                          <td
+                            className="min-w-0 truncate px-1 py-0 text-center text-foreground"
+                            title={p.jimok || undefined}
+                          >
+                            {formatCell(p.jimok)}
+                          </td>
+                          <td
+                            className="min-w-0 truncate px-1 py-0 text-center tabular-nums text-foreground"
+                            title={areaLabel}
+                          >
+                            {areaLabel}
+                          </td>
+                          <td
+                            className="min-w-0 truncate py-0 pl-1 pr-1.5 text-right tabular-nums text-foreground"
+                            title={amountLabel}
+                          >
+                            {amountLabel}
+                          </td>
+                          {isEditing ? (
+                            <td className="px-0 py-0">
+                              <div
+                                className="flex w-full shrink-0 items-center justify-center gap-0"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenEditParcel(p)}
+                                  className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-primary/10 hover:text-primary"
+                                  aria-label="필지 수정"
+                                  title="수정"
+                                >
+                                  <Pencil className="h-3 w-3" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteParcelFromList(p.id)}
+                                  className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/40 dark:hover:text-red-400"
+                                  aria-label="필지 삭제"
+                                  title="삭제"
+                                >
+                                  <Trash2 className="h-3 w-3" />
+                                </button>
+                              </div>
+                            </td>
+                          ) : null}
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </MapSideDetailScroll>
             </div>
           )}
-        </MapSideDetailScroll>
-      </div>
+        </div>
+      </section>
 
       {parcelModal ? (
         <RoadRewardParcelModal

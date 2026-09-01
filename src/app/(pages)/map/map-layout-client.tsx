@@ -344,7 +344,7 @@ const GROUNDWATER_PERMIT_DETAIL_MAX_WIDTH = 640
 const FMS_PANEL_MIN_WIDTH = 440
 const FMS_PANEL_DEFAULT_WIDTH = FMS_PANEL_MIN_WIDTH
 const FMS_PANEL_MAX_WIDTH = 800
-const FMS_DETAIL_DEFAULT_WIDTH = 400
+const FMS_DETAIL_DEFAULT_WIDTH = 445
 const FMS_DETAIL_MIN_WIDTH = 380
 const FMS_DETAIL_MAX_WIDTH = 500
 
@@ -409,7 +409,7 @@ const ROAD_FRONTAGE_MARKER_OPENED_KEY = "roadFrontageMarker"
 const ROAD_FRONTAGE_MARKER_PANEL_DEFAULT_WIDTH = 320
 const ROAD_FRONTAGE_MARKER_PANEL_MIN_WIDTH = 260
 const ROAD_FRONTAGE_MARKER_PANEL_MAX_WIDTH = 480
-const ROAD_FRONTAGE_MARKER_DETAIL_DEFAULT_WIDTH = 560
+const ROAD_FRONTAGE_MARKER_DETAIL_DEFAULT_WIDTH = 570
 const ROAD_FRONTAGE_MARKER_DETAIL_MIN_WIDTH = 460
 const ROAD_FRONTAGE_MARKER_DETAIL_MAX_WIDTH = 780
 
@@ -462,6 +462,7 @@ function MapLayoutContent({
   const setRoadCctvPanelOpen = mapContext?.setRoadCctvPanelOpen
   const setSafetyFacPanelOpen = mapContext?.setSafetyFacPanelOpen
   const setComplaintPanelOpen = mapContext?.setComplaintPanelOpen
+  const setRoadRewardPanelOpen = mapContext?.setRoadRewardPanelOpen
   const setRoadCctvOverlay = mapContext?.setRoadCctvOverlay
   const setRoadCctvUnderlayMode = mapContext?.setRoadCctvUnderlayMode
   const setRoadCctvExtentWgs84 = mapContext?.setRoadCctvExtentWgs84
@@ -593,6 +594,7 @@ function MapLayoutContent({
   /** 보상편입용지 — DB(road_reward) 조회·저장 */
   const [roadRewardCases, setRoadRewardCases] = useState<RoadRewardCase[]>([])
   const [roadRewardSelectedId, setRoadRewardSelectedId] = useState<string | null>(null)
+  const [roadRewardFocusParcelId, setRoadRewardFocusParcelId] = useState<string | null>(null)
   const roadRewardDetailOpen = roadRewardOpen && Boolean(roadRewardSelectedId)
   /** 접도구역 건축물 관리대장 */
   const [roadFrontageBuildingSelectedId, setRoadFrontageBuildingSelectedId] = useState<
@@ -1102,6 +1104,10 @@ function MapLayoutContent({
   }, [setComplaintPanelOpen, complaintManagementOpen])
 
   useEffect(() => {
+    setRoadRewardPanelOpen?.(roadRewardOpen)
+  }, [setRoadRewardPanelOpen, roadRewardOpen])
+
+  useEffect(() => {
     if (!roadCctvOpen) {
       setRoadCctvOverlay?.(null)
       setRoadCctvUnderlayMode?.("traffic")
@@ -1284,6 +1290,7 @@ function MapLayoutContent({
 
   const handleCloseRoadReward = () => {
     setRoadRewardSelectedId(null)
+    setRoadRewardFocusParcelId(null)
     const next = openedWindows.filter((w) => w !== ROAD_REWARD_OPENED_KEY)
     setOpened(next)
   }
@@ -1391,7 +1398,10 @@ function MapLayoutContent({
   }, [occupationLedgerSerEng])
 
   useEffect(() => {
-    if (!roadRewardOpen) setRoadRewardSelectedId(null)
+    if (!roadRewardOpen) {
+      setRoadRewardSelectedId(null)
+      setRoadRewardFocusParcelId(null)
+    }
   }, [roadRewardOpen])
 
   useEffect(() => {
@@ -2262,6 +2272,7 @@ function MapLayoutContent({
                   selectedId={roadRewardSelectedId}
                   onCasesChange={setRoadRewardCases}
                   onSelectId={setRoadRewardSelectedId}
+                  onFocusParcelId={setRoadRewardFocusParcelId}
                   onClose={handleCloseRoadReward}
                 />
               </MapSideListPanel>
@@ -2281,9 +2292,16 @@ function MapLayoutContent({
                   caseId={roadRewardSelectedId}
                   cases={roadRewardCases}
                   onCasesChange={setRoadRewardCases}
-                  onClose={() => setRoadRewardSelectedId(null)}
-                  onDeleted={() => setRoadRewardSelectedId(null)}
+                  onClose={() => {
+                    setRoadRewardSelectedId(null)
+                    setRoadRewardFocusParcelId(null)
+                  }}
+                  onDeleted={() => {
+                    setRoadRewardSelectedId(null)
+                    setRoadRewardFocusParcelId(null)
+                  }}
                   onCaseIdChange={setRoadRewardSelectedId}
+                  focusParcelId={roadRewardFocusParcelId}
                   overlayLeftPx={roadRewardPanelLeftPx}
                   overlayWidthPx={
                     roadRewardPanelWidth +

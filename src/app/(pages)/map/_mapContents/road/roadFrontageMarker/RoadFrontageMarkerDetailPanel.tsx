@@ -22,22 +22,16 @@ import {
   type RoadFrontageMarkerLedger,
 } from './roadFrontageMarkerMock';
 
-const fieldClass =
-  'h-7 w-full min-w-0 rounded border border-border bg-background px-1.5 text-[11px] text-foreground outline-none focus:border-primary focus:ring-1 focus:ring-primary/25';
-const ATTR_PAIR_GRID = 'grid-cols-[7.5rem_minmax(0,1fr)_7.5rem_minmax(0,1fr)]';
-const MARKER_GRID_VIEW = 'grid-cols-[32px_3.5rem_max-content_4.25rem_minmax(0,1fr)_36px_36px]';
-const MARKER_GRID_EDIT = 'grid-cols-[32px_3.5rem_max-content_4.25rem_minmax(0,1fr)_36px_36px_28px]';
-const btnPrimary =
+const inputClass = 'standard-detail-input h-7 w-full min-w-0 text-foreground';
+const actionBtn =
+  'standard-detail-action-btn inline-flex h-7 items-center gap-1';
+const actionBtnPrimary =
   'inline-flex h-7 items-center gap-1 rounded border border-primary bg-primary px-2 text-[11px] font-medium text-white hover:bg-primary/90 disabled:opacity-50';
-const btnGhost =
-  'inline-flex h-7 items-center gap-1 rounded border border-border bg-background px-2 text-[11px] font-medium text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-50';
 
 function AttrLabel({ children }: { children: ReactNode }) {
   return (
-    <div className="flex min-w-0 items-center self-stretch bg-muted px-1.5 py-1">
-      <span className="min-w-0 truncate whitespace-nowrap text-left text-[11px] leading-none text-muted-foreground">
-        {children}
-      </span>
+    <div className="standard-detail-attr-label flex min-w-0 items-center self-stretch">
+      <span className="min-w-0 truncate whitespace-nowrap text-left leading-none">{children}</span>
     </div>
   );
 }
@@ -45,9 +39,9 @@ function AttrLabel({ children }: { children: ReactNode }) {
 function AttrValue({ value }: { value: ReactNode }) {
   const textValue = typeof value === 'string' ? value : null;
   return (
-    <div className="min-w-0 bg-background px-1.5 py-1">
+    <div className="standard-detail-attr-value min-w-0 text-foreground">
       {textValue != null ? (
-        <span className="block truncate whitespace-nowrap text-[11px] leading-snug text-foreground" title={textValue}>
+        <span className="block truncate whitespace-nowrap leading-snug" title={textValue}>
           {textValue}
         </span>
       ) : (
@@ -56,6 +50,8 @@ function AttrValue({ value }: { value: ReactNode }) {
     </div>
   );
 }
+
+const ATTR_PAIR_GRID = 'grid-cols-[7.5rem_minmax(0,1fr)_7.5rem_minmax(0,1fr)]';
 
 type Props = {
   ledgerId: string;
@@ -88,6 +84,7 @@ export function RoadFrontageMarkerDetailPanel({
   );
 
   const [attrsOpen, setAttrsOpen] = useState(true);
+  const [markersOpen, setMarkersOpen] = useState(true);
   const [isEditing, setIsEditing] = useState(isCreateMode);
   const [draft, setDraft] = useState<RoadFrontageMarkerLedger>(() =>
     isCreateMode
@@ -167,34 +164,36 @@ export function RoadFrontageMarkerDetailPanel({
 
   if (!saved && !isCreateMode) {
     return (
-      <div className="flex h-full min-h-0 flex-col bg-background">
-        <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border px-3 py-1.5">
-          <span className="text-sm font-semibold text-foreground">접도구역 표주</span>
+      <div className="standard-panel-root">
+        <div className="standard-panel-header">
+          <span className="standard-panel-title">접도구역 표주</span>
           <button
             type="button"
             onClick={onClose}
-            className="shrink-0 rounded p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            className="standard-panel-close"
             title="닫기"
             aria-label="닫기"
           >
             <X className="h-4 w-4" />
           </button>
         </div>
-        <p className="px-3 py-6 text-center text-xs text-muted-foreground">선택한 관리대장을 찾을 수 없습니다.</p>
+        <p className="standard-detail-scroll px-3 py-6 text-center text-muted-foreground">
+          선택한 관리대장을 찾을 수 없습니다.
+        </p>
       </div>
     );
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-background">
-      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border px-3 py-1.5">
-        <span className="min-w-0 truncate text-sm font-semibold text-foreground">
+    <div className="standard-panel-root">
+      <div className="standard-panel-header">
+        <span className="standard-panel-title truncate">
           {isCreateMode ? '관리대장 등록' : current.routeName.trim() || '(노선명 미입력)'}
         </span>
         <button
           type="button"
           onClick={onClose}
-          className="shrink-0 rounded p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+          className="standard-panel-close"
           title="닫기"
           aria-label="닫기"
         >
@@ -202,54 +201,62 @@ export function RoadFrontageMarkerDetailPanel({
         </button>
       </div>
 
-      <section className="shrink-0 border-b border-border">
-        <div className="flex items-center justify-between gap-2 px-3 py-1.5">
+      <section className="standard-detail-section">
+        <div className="standard-detail-section-header">
           <button
             type="button"
-            className="inline-flex items-center gap-1 text-[11px] font-semibold text-foreground"
+            className="standard-detail-section-toggle"
             onClick={() => setAttrsOpen((v) => !v)}
+            title="기본정보"
           >
-            {attrsOpen ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
-            기본정보
-          </button>
-          <div className="flex items-center gap-1">
-            {!isEditing ? (
-              <>
-                <button type="button" className={btnGhost} onClick={beginEdit}>
-                  <Pencil className="h-3 w-3" />
-                  수정
-                </button>
-                <button
-                  type="button"
-                  className={btnGhost}
-                  onClick={handleDelete}
-                  disabled={isCreateMode}
-                >
-                  <Trash2 className="h-3 w-3" />
-                  삭제
-                </button>
-              </>
+            {attrsOpen ? (
+              <ChevronDown className="standard-detail-section-chevron" />
             ) : (
-              <>
-                <button type="button" className={btnGhost} onClick={cancelEdit}>
-                  취소
-                </button>
-                <button type="button" className={btnPrimary} onClick={handleSave}>
-                  {isCreateMode ? '등록' : '저장'}
-                </button>
-              </>
+              <ChevronRight className="standard-detail-section-chevron" />
             )}
-          </div>
+            <span className="standard-detail-section-toggle-label">기본정보</span>
+          </button>
+          {attrsOpen ? (
+            <div className="standard-detail-section-header-actions">
+              {!isEditing ? (
+                <>
+                  <button type="button" className={actionBtn} onClick={beginEdit} title="수정">
+                    <Pencil className="h-3 w-3" />
+                    수정
+                  </button>
+                  <button
+                    type="button"
+                    className={actionBtn}
+                    onClick={handleDelete}
+                    disabled={isCreateMode}
+                    title="삭제"
+                  >
+                    <Trash2 className="h-3 w-3" />
+                    삭제
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button type="button" className={actionBtn} onClick={cancelEdit} title="취소">
+                    취소
+                  </button>
+                  <button type="button" className={actionBtnPrimary} onClick={handleSave} title={isCreateMode ? '등록' : '저장'}>
+                    {isCreateMode ? '등록' : '저장'}
+                  </button>
+                </>
+              )}
+            </div>
+          ) : null}
         </div>
         {attrsOpen ? (
-          <div className="px-3 pb-2.5">
-            <div className={`grid ${ATTR_PAIR_GRID} overflow-hidden rounded border border-border`}>
+          <div className="standard-detail-section-body">
+            <div className={cn('grid overflow-hidden rounded border border-border', ATTR_PAIR_GRID)}>
               <AttrLabel>도로의 종류</AttrLabel>
               <AttrValue
                 value={
                   isEditing ? (
                     <select
-                      className={fieldClass}
+                      className={inputClass}
                       value={current.roadType}
                       onChange={(e) => setDraft((prev) => ({ ...prev, roadType: e.target.value }))}
                     >
@@ -270,7 +277,7 @@ export function RoadFrontageMarkerDetailPanel({
                 value={
                   isEditing ? (
                     <input
-                      className={fieldClass}
+                      className={inputClass}
                       value={current.routeName}
                       onChange={(e) => setDraft((prev) => ({ ...prev, routeName: e.target.value }))}
                     />
@@ -284,119 +291,160 @@ export function RoadFrontageMarkerDetailPanel({
         ) : null}
       </section>
 
-      <MapSideDetailScroll className="min-h-0 flex-1 overflow-auto px-3 py-2 text-xs">
-        <section className="mb-3">
-          <div className="mb-1 flex items-center justify-between gap-2">
-            <span className="text-[11px] font-semibold text-foreground">
-              표주 목록 ({markers.length.toLocaleString()})
-            </span>
-            {isEditing ? (
-              <button
-                type="button"
-                className={btnGhost}
-                onClick={() => {
-                  const nextNo =
-                    markers.reduce((max, m) => Math.max(max, m.serialNo ?? 0), 0) + 1;
-                  setItemModal({
-                    isNew: true,
-                    draft: createEmptyRoadFrontageMarkerItem(nextNo),
-                  });
-                }}
-              >
-                <Plus className="h-3 w-3" />
-                추가
-              </button>
+      <MapSideDetailScroll className="standard-detail-scroll pt-0">
+        <section className="standard-detail-section-block-first">
+          <div className="standard-detail-section-header standard-detail-section-header-bleed">
+            <button
+              type="button"
+              className="standard-detail-section-toggle"
+              onClick={() => setMarkersOpen((v) => !v)}
+              title="표주 목록"
+            >
+              {markersOpen ? (
+                <ChevronDown className="standard-detail-section-chevron" />
+              ) : (
+                <ChevronRight className="standard-detail-section-chevron" />
+              )}
+              <span className="standard-detail-section-toggle-label">
+                표주 목록 ({markers.length.toLocaleString()})
+              </span>
+            </button>
+            {markersOpen && isEditing ? (
+              <div className="standard-detail-section-header-actions">
+                <button
+                  type="button"
+                  className={actionBtn}
+                  title="추가"
+                  onClick={() => {
+                    const nextNo =
+                      markers.reduce((max, m) => Math.max(max, m.serialNo ?? 0), 0) + 1;
+                    setItemModal({
+                      isNew: true,
+                      draft: createEmptyRoadFrontageMarkerItem(nextNo),
+                    });
+                  }}
+                >
+                  <Plus className="h-3 w-3" />
+                  추가
+                </button>
+              </div>
             ) : null}
           </div>
+          {markersOpen ? (
+          <>
           {markers.length === 0 ? (
-            <p className="py-4 text-center text-[11px] text-muted-foreground">
+            <p className="standard-detail-empty-dashed-compact">
               {isEditing ? '추가를 눌러 표주를 담으세요.' : '등록된 표주가 없습니다.'}
             </p>
           ) : (
-            <div className="w-full overflow-hidden rounded border border-border text-[11px]">
-              <div
-                className={cn(
-                  'grid h-7 items-center border-b border-border bg-muted',
-                  isEditing ? MARKER_GRID_EDIT : MARKER_GRID_VIEW
-                )}
-              >
-                <div className="px-1 text-center font-semibold text-foreground">번호</div>
-                <div className="px-1 text-center font-semibold whitespace-nowrap text-foreground">지점거리</div>
-                <div className="px-1 text-left font-semibold whitespace-nowrap text-foreground">설치위치</div>
-                <div className="min-w-0 px-1 text-left font-semibold whitespace-nowrap text-foreground">소유자</div>
-                <div className="min-w-0 px-1 text-left font-semibold whitespace-nowrap text-foreground">소유자주소</div>
-                <div className="px-1 text-center font-semibold text-foreground">표지</div>
-                <div className="px-1 text-center font-semibold text-foreground">비고</div>
-                {isEditing ? <div aria-hidden /> : null}
-              </div>
-              {markers.map((m) => {
-                const loc = formatMarkerInstallLocation(m);
-                const selected = m.id === selectedMarkerId;
-                return (
-                  <div
-                    key={m.id}
-                    role="button"
-                    tabIndex={0}
-                    onClick={() => {
-                      focusMarker(m);
-                      if (isEditing) setItemModal({ isNew: false, draft: m });
-                    }}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' || e.key === ' ') {
-                        e.preventDefault();
-                        focusMarker(m);
-                        if (isEditing) setItemModal({ isNew: false, draft: m });
-                      }
-                    }}
-                    title={isEditing ? '클릭하면 내용을 수정합니다' : '클릭하면 지도가 이 표주로 이동합니다'}
-                    className={cn(
-                      'grid min-h-7 cursor-pointer items-center border-b border-border py-1 last:border-b-0',
-                      isEditing ? MARKER_GRID_EDIT : MARKER_GRID_VIEW,
-                      selected
-                        ? 'bg-primary/10 dark:bg-primary/25'
-                        : 'hover:bg-muted/50'
-                    )}
-                  >
-                    <div className="px-1 text-center tabular-nums text-foreground">{m.serialNo ?? '—'}</div>
-                    <div className="px-1 text-center tabular-nums text-foreground">
-                      {m.stationDistance || '—'}
-                    </div>
-                    <div className="px-1 text-left whitespace-nowrap text-foreground">
-                      {loc || '—'}
-                    </div>
-                    <div className="min-w-0 px-1 text-left break-keep text-foreground">
-                      {m.ownerName || '—'}
-                    </div>
-                    <div className="min-w-0 px-1 text-left leading-snug break-keep text-foreground">
-                      {m.ownerAddress || '—'}
-                    </div>
-                    <div className="truncate px-1 text-center text-foreground" title={m.sign || undefined}>
-                      {m.sign || '—'}
-                    </div>
-                    <div className="truncate px-1 text-center text-foreground" title={m.remark || undefined}>
-                      {m.remark || '—'}
-                    </div>
+            <div className="overflow-hidden rounded border border-border">
+              <table className="w-full min-w-0 table-fixed border-collapse text-left text-[11px]">
+                <colgroup>
+                  <col className="w-8" />
+                  <col className="w-14" />
+                  <col className="w-24" />
+                  <col className="w-[4.25rem]" />
+                  <col />
+                  <col className="w-9" />
+                  <col className="w-9" />
+                  {isEditing ? <col className="w-7" /> : null}
+                </colgroup>
+                <thead className="bg-muted">
+                  <tr>
+                    <th className="standard-table-th standard-table-th-center px-1">번호</th>
+                    <th className="standard-table-th standard-table-th-center px-1">지점거리</th>
+                    <th className="standard-table-th standard-table-th-left px-1">설치위치</th>
+                    <th className="standard-table-th standard-table-th-left px-1">소유자</th>
+                    <th className="standard-table-th standard-table-th-left px-1">소유자주소</th>
+                    <th className="standard-table-th standard-table-th-center px-1">표지</th>
+                    <th className="standard-table-th standard-table-th-center px-1">비고</th>
                     {isEditing ? (
-                      <div className="flex items-center justify-center">
-                        <button
-                          type="button"
-                          title="삭제"
-                          aria-label="삭제"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            removeMarker(m.id);
-                          }}
-                          className="rounded p-0.5 text-muted-foreground hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/40 dark:hover:text-red-400"
-                        >
-                          <Trash2 className="h-3 w-3" />
-                        </button>
-                      </div>
+                      <th className="standard-table-th standard-table-th-center px-0" aria-hidden />
                     ) : null}
-                  </div>
-                );
-              })}
+                  </tr>
+                </thead>
+                <tbody>
+                  {markers.map((m) => {
+                    const loc = formatMarkerInstallLocation(m);
+                    const selected = m.id === selectedMarkerId;
+                    return (
+                      <tr
+                        key={m.id}
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => {
+                          focusMarker(m);
+                          if (isEditing) setItemModal({ isNew: false, draft: m });
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            focusMarker(m);
+                            if (isEditing) setItemModal({ isNew: false, draft: m });
+                          }
+                        }}
+                        title={
+                          isEditing
+                            ? '클릭하면 내용을 수정합니다'
+                            : '클릭하면 지도가 이 표주로 이동합니다'
+                        }
+                        className={cn(
+                          'standard-list-row',
+                          selected && 'standard-list-row-selected'
+                        )}
+                      >
+                        <td className="standard-table-td-compact text-center tabular-nums text-foreground">
+                          <span className="block truncate">{m.serialNo ?? '—'}</span>
+                        </td>
+                        <td className="standard-table-td-compact text-center tabular-nums text-foreground">
+                          <span className="block truncate">{m.stationDistance || '—'}</span>
+                        </td>
+                        <td className="standard-table-td-text" title={loc || undefined}>
+                          <span className="block truncate">{loc || '—'}</span>
+                        </td>
+                        <td className="standard-table-td-text" title={m.ownerName || undefined}>
+                          <span className="block truncate">{m.ownerName || '—'}</span>
+                        </td>
+                        <td className="standard-table-td-text" title={m.ownerAddress || undefined}>
+                          <span className="block truncate">{m.ownerAddress || '—'}</span>
+                        </td>
+                        <td
+                          className="standard-table-td-compact text-center text-foreground"
+                          title={m.sign || undefined}
+                        >
+                          <span className="block truncate">{m.sign || '—'}</span>
+                        </td>
+                        <td
+                          className="standard-table-td-compact text-center text-foreground"
+                          title={m.remark || undefined}
+                        >
+                          <span className="block truncate">{m.remark || '—'}</span>
+                        </td>
+                        {isEditing ? (
+                          <td className="standard-table-td-compact px-0 text-center">
+                            <button
+                              type="button"
+                              title="삭제"
+                              aria-label="삭제"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                removeMarker(m.id);
+                              }}
+                              className="rounded p-0.5 text-muted-foreground hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/40 dark:hover:text-red-400"
+                            >
+                              <Trash2 className="h-3 w-3" />
+                            </button>
+                          </td>
+                        ) : null}
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
           )}
+          </>
+          ) : null}
         </section>
       </MapSideDetailScroll>
 
