@@ -74,9 +74,20 @@ export function getSafetydataTargetSchema(): string {
 }
 
 export function resolveSafetydataDatasetApiKey(cfg: SafetydataDatasetConfig): string {
+  const envVar = cfg.apiKeyEnvVar?.trim();
+  if (envVar) {
+    const fromEnv = process.env[envVar]?.trim();
+    if (fromEnv) return fromEnv;
+  }
   const k = cfg.apiKey?.trim();
   if (!k) throw new Error(`Missing apiKey for dataset ${cfg.id}`);
   return k;
+}
+
+export function hasSafetydataDatasetApiKey(cfg: SafetydataDatasetConfig): boolean {
+  const envVar = cfg.apiKeyEnvVar?.trim();
+  if (envVar && process.env[envVar]?.trim()) return true;
+  return Boolean(cfg.apiKey?.trim());
 }
 
 export type SafetydataFetchQuery = {

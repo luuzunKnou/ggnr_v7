@@ -1,7 +1,7 @@
 import { pool } from '@/database/db';
 import { runKais, defaultDailyWindow, resolveKaisSggCode } from '@/integrations/kais';
 import { getSafetydataDatasetById, SAFETYDATA_DATASETS } from '@/integrations/safetydata.config';
-import { getSafetydataTargetSchema } from '@/integrations/safetydataHttp';
+import { getSafetydataTargetSchema, hasSafetydataDatasetApiKey } from '@/integrations/safetydataHttp';
 import { ingestSafetydataDatasetToLayer } from '@/integrations/safetydataIngest';
 import { runKrasLayerSync, type KrasLayerSyncScope } from '@/integrations/krasLayerSync';
 import type { KrasIntegrationTarget } from '@/integrations/krasLayerSync.config';
@@ -93,7 +93,7 @@ export async function listSafetydataDatasets(_p: Params) {
       id: d.id,
       tableNameKo: d.tableNameKo,
       tableNameEn: d.tableNameEn,
-      hasApiKey: Boolean(d.apiKey?.trim()),
+      hasApiKey: hasSafetydataDatasetApiKey(d),
     })),
   };
 }
@@ -196,7 +196,7 @@ export async function runIntegration(p: Params) {
         `[SAFETYDATA RUN] runAll=${runAll} datasetId=${singleId || '__ALL__'} targetSchema=${getSafetydataTargetSchema()}`
       );
       if (runAll) {
-        const targets = SAFETYDATA_DATASETS.filter((d) => d.apiKey?.trim());
+        const targets = SAFETYDATA_DATASETS.filter((d) => hasSafetydataDatasetApiKey(d));
         const total = targets.length;
         if (total === 0) {
           throw new Error('API 키가 설정된 재난안전데이터 데이터셋이 없습니다.');

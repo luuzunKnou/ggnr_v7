@@ -109,7 +109,7 @@ export function ComplaintLandProvider({
         let searchJibun: string | null = null;
 
         if (!coord3857 && addressText && vworldKey) {
-          const results = await searchAddress(addressText, { apiKey: vworldKey, limit: 1 });
+          const results = await searchAddress(addressText, { apiKey: vworldKey, maxResults: 1 });
           const item = results[0];
           if (item) {
             searchPnu = normalizePnu(item.id);

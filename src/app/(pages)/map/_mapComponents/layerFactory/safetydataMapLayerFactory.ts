@@ -28,6 +28,7 @@ export const SAFETY_FAC_PANEL_GEO_TABLE_NAMES: readonly string[] = [
   'sd_heat_mitigation_facility',
   'sd_earthquake_outdoor_evac_site',
   'sd_tsunami_emergency_evac_site',
+  'sd_civil_defense_shelter',
   'sd_mois_displaced_temp_housing',
 ] as const;
 
@@ -56,23 +57,29 @@ export const SAFETY_MAP_GEOSERVER_OVERLAYS: {
     opacity: 0.88,
   },
   {
+    panelId: 'sd_civil_defense_shelter',
+    tableName: 'sd_civil_defense_shelter',
+    zIndex: 124,
+    opacity: 0.88,
+  },
+  {
     panelId: 'sd_mois_displaced_temp_housing',
     tableName: 'sd_mois_displaced_temp_housing',
-    zIndex: 124,
+    zIndex: 125,
     opacity: 0.88,
   },
   /** 병상정보 패널 진입 시 자동 표시 (테이블명 = WMS LAYERS / visibility 키) */
   {
     panelId: SAFETY_HOSPITAL_POI_GEO_TABLE,
     tableName: SAFETY_HOSPITAL_POI_GEO_TABLE,
-    zIndex: 125,
+    zIndex: 126,
     opacity: 0.88,
   },
   /** 저수지 수위 패널(saftyJsj) — 제원 포인트 WMS */
   {
     panelId: SAFETY_RESERVOIR_MASTER_GEO_TABLE,
     tableName: SAFETY_RESERVOIR_MASTER_GEO_TABLE,
-    zIndex: 126,
+    zIndex: 127,
     opacity: 0.88,
   },
 ];

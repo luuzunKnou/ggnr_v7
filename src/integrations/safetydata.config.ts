@@ -81,14 +81,22 @@ export type SafetydataSpatialConfig =
        * - auto: 첫 페이지 샘플로 WKT/XY 후보 자동 추론
        * - wkt: WKT 문자열 필드로 geometry 생성
        * - xy: x/y 숫자 필드로 geometry 생성
+       * - dms: 경·위도 도·분·초 필드로 geometry 생성
        * - none: geometry 생성 안 함(데이터 테이블만 유지)
        */
-      mode: 'auto' | 'wkt' | 'xy' | 'none';
+      mode: 'auto' | 'wkt' | 'xy' | 'dms' | 'none';
       /** source가 WKT면 그 필드명 (예: GEOM) */
       wktField?: string;
       /** source가 XY면 필드명 */
       xField?: string;
       yField?: string;
+      /** source가 DMS면 경도·위도 도·분·초 필드명 */
+      lonDegField?: string;
+      lonMinField?: string;
+      lonSecField?: string;
+      latDegField?: string;
+      latMinField?: string;
+      latSecField?: string;
       /**
        * source 좌표계 (target은 프로젝트 정책상 항상 EPSG:5181)
        * - 'auto': 좌표 값 범위로 4326/3857/5186 등을 추정
@@ -115,8 +123,10 @@ export type SafetydataEmdPoiJoinFilter = {
 export type SafetydataDatasetConfig = {
   id: string;
   url: string;
-  /** OpenAPI serviceKey */
+  /** OpenAPI serviceKey (apiKeyEnvVar 없을 때 fallback) */
   apiKey: string;
+  /** process.env 에서 serviceKey 를 읽을 변수명 (common.runtime.env 등) */
+  apiKeyEnvVar?: string;
   apiKeyQueryParam?: string;
   /** 포털 데이터 상세 페이지 전체 URL */
   portalUrl: string;
@@ -430,6 +440,55 @@ export const SAFETYDATA_DATASETS: SafetydataDatasetConfig[] = [
     refreshSchedule: WEEKLY_DEFAULT,
     extraRequestParams: [...SAFETYDATA_EXTRA_PARAMS_BBOX],
     spatial: { mode: 'xy', geomColumn: 'geom', xField: 'LO', yField: 'LA', sourceSrid: 4326, publishGeoserver: true },
+  },
+  {
+    id: 'sd-195',
+    url: apiUrl('/V2/api/DSSP-IF-00195'),
+    apiKey: '9MY8WB5551G26ECD',
+    portalUrl: 'https://www.safetydata.go.kr/disaster-data/view?dataSn=3526',
+    categoryKo: '재난대응시설',
+    tableNameKo: '민방위 대피소',
+    tableNameEn: 'sd_civil_defense_shelter',
+    refreshSchedule: WEEKLY_DEFAULT,
+    spatial: {
+      mode: 'dms',
+      geomColumn: 'geom',
+      lonDegField: 'LOT_PROVIN',
+      lonMinField: 'LOT_MIN',
+      lonSecField: 'LOT_SEC',
+      latDegField: 'LAT_PROVIN',
+      latMinField: 'LAT_MIN',
+      latSecField: 'LAT_SEC',
+      sourceSrid: 4326,
+      publishGeoserver: true,
+    },
+    responseFields: [
+      portalField('시군구코드', 'SGG_CD', '7'),
+      portalField('구분코드', 'SE_CD', '1'),
+      portalField('시설코드', 'FCLT_CD', '10'),
+      portalField('시설명', 'FCLT_NM', '256'),
+      portalField('시설지정일', 'FCLT_DSGN_DAY', '8'),
+      portalField('시설구분코드', 'FCLT_SE_CD', '12'),
+      portalField('읍면동코드', 'EMD_CD', '12'),
+      portalField('읍면동명', 'EMD_NM', '50'),
+      portalField('시설주소지번', 'FCLT_ADDR_LOTNO', '256'),
+      portalField('시설규모', 'FCLT_SCL', '22'),
+      portalField('규모단위', 'SCL_UNIT', '80'),
+      portalField('시설주소도로명', 'FCLT_ADDR_RONA', '256'),
+      portalField('경도도', 'LOT_PROVIN', '22'),
+      portalField('경도분', 'LOT_MIN', '22'),
+      portalField('경도초', 'LOT_SEC', '22'),
+      portalField('위도도', 'LAT_PROVIN', '22'),
+      portalField('위도분', 'LAT_MIN', '22'),
+      portalField('위도초', 'LAT_SEC', '22'),
+      portalField('지상지하구분', 'GRND_UDGD_SE', '1'),
+      portalField('대피가능인원수', 'SHNT_PSBLTY_NOPE', '10'),
+      portalField('개방여부', 'OPN_YN', '1'),
+      portalField('관리기관명', 'MNG_INST_NM', '200'),
+      portalField('평상시활용유형', 'ORTM_UTLZ_TYPE', '20'),
+      portalField('관리기관전화번호', 'MNG_INST_TELNO', '11'),
+      portalField('도로명코드', 'ROAD_NM_CD', '12'),
+    ],
   },
   // 비활성: 미사용 적재 (재난대응시설 패널은 개별 대피소 테이블만 사용)
   // {

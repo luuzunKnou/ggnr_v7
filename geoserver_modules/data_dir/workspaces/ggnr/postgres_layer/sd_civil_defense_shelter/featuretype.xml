@@ -1,0 +1,41 @@
+<featureType>
+  <id>FeatureTypeInfoImpl--67534fb7:1a05bc4ba7a:-8000</id>
+  <name>sd_civil_defense_shelter</name>
+  <nativeName>sd_civil_defense_shelter</nativeName>
+  <namespace>
+    <id>NamespaceInfoImpl-4bf97568:19c4d6c3053:-7ffa</id>
+  </namespace>
+  <title>sd_civil_defense_shelter</title>
+  <keywords>
+    <string>features</string>
+    <string>sd_civil_defense_shelter</string>
+  </keywords>
+  <srs>EPSG:5181</srs>
+  <nativeBoundingBox>
+    <minx>386227.09495346365</minx>
+    <maxx>390144.66706788284</maxx>
+    <miny>342407.7676119519</miny>
+    <maxy>354135.82590676204</maxy>
+    <crs class="projected">EPSG:5181</crs>
+  </nativeBoundingBox>
+  <latLonBoundingBox>
+    <minx>129.0801565419899</minx>
+    <maxx>129.12678862010867</maxx>
+    <miny>36.56111114685125</miny>
+    <maxy>36.66749888918877</maxy>
+    <crs>EPSG:4326</crs>
+  </latLonBoundingBox>
+  <projectionPolicy>FORCE_DECLARED</projectionPolicy>
+  <enabled>true</enabled>
+  <store class="dataStore">
+    <id>DataStoreInfoImpl-4bf97568:19c4d6c3053:-7ff9</id>
+  </store>
+  <serviceConfiguration>false</serviceConfiguration>
+  <maxFeatures>0</maxFeatures>
+  <numDecimals>0</numDecimals>
+  <padWithZeros>false</padWithZeros>
+  <forcedDecimal>false</forcedDecimal>
+  <overridingServiceSRS>false</overridingServiceSRS>
+  <skipNumberMatched>false</skipNumberMatched>
+  <circularArcPresent>false</circularArcPresent>
+</featureType>

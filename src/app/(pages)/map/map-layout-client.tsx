@@ -3,7 +3,6 @@
 
 import React, { useState, useEffect, useLayoutEffect, useCallback, useRef, useMemo, Suspense } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
-import { useSession } from "next-auth/react"
 import { X } from "lucide-react"
 import Map3DDataPanel from "./_mapComponents/Map3DDataPanel"
 import StandardList from "./_mapComponents/standard/StandardList"
@@ -160,14 +159,6 @@ import { MapContextProvider, useMapContext } from "./_mapComponents/MapContext"
 import { applyViewPaddingPreservingVisualCenter } from "./_mapComponents/config/mapVisualCenter"
 import { MapSideListPanel } from "./_mapComponents/MapSideListPanel"
 import { SearchBarOffsetContext } from "./searchBarOffsetContext"
-import { SampleListPanel } from "./_mapContents/sample/SampleListPanel"
-import {
-  DESIGN_SAMPLE_OPENED_KEY,
-  DESIGN_SAMPLE_PANEL_DEFAULT_WIDTH,
-  DESIGN_SAMPLE_PANEL_MAX_WIDTH,
-  DESIGN_SAMPLE_PANEL_MIN_WIDTH,
-} from "./_mapContents/sample/sampleConfig"
-
 const SIDEBAR_WIDTH = 65
 const SEARCH_BAR_MARGIN = 20
 /** 주소/지번 검색창과 같은 위치(px)에 맞출 때 사용. left = SIDEBAR_WIDTH + listPanelWidth + SEARCH_BAR_MARGIN, top = 16 */
@@ -433,8 +424,6 @@ function MapLayoutContent({
 }) {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const { data: session } = useSession()
-  const isSuperUser = session?.user?.id === "su"
   const mapContext = useMapContext()
   /** Provider `value`는 매 렌더 새 객체 — effect deps에 `mapContext` 넣으면 visibleLayerNames만 바뀌어도 재실행됨 */
   const mapInstanceRef = mapContext?.mapInstanceRef
@@ -593,8 +582,6 @@ function MapLayoutContent({
   const groundwaterPermitOpen = openedWindows.includes(GROUNDWATER_PERMIT_OPENED_KEY)
   const fmsLinkageOpen = openedWindows.some((w) => isFmsOpenedToken(w))
   const fmsLinkageDetailOpen = fmsLinkageOpen && Boolean(fmsLinkageDetailId)
-  const designSampleOpen =
-    isSuperUser && openedWindows.includes(DESIGN_SAMPLE_OPENED_KEY)
   const [buildPublicLandSelectedId, setBuildPublicLandSelectedId] = useState<string | null>(null)
   const [buildPublicLandListRefreshKey, setBuildPublicLandListRefreshKey] = useState(0)
   const buildPublicLandDetailOpen = buildPublicLandOpen && Boolean(buildPublicLandSelectedId)
@@ -779,7 +766,6 @@ function MapLayoutContent({
   )
   const [fmsLinkagePanelWidth, setFmsLinkagePanelWidth] = useState(FMS_PANEL_DEFAULT_WIDTH)
   const [fmsLinkageDetailWidth, setFmsLinkageDetailWidth] = useState(FMS_DETAIL_DEFAULT_WIDTH)
-  const [samplePanelWidth, setSamplePanelWidth] = useState(DESIGN_SAMPLE_PANEL_DEFAULT_WIDTH)
   const [fmsGeomToastMsg, setFmsGeomToastMsg] = useState<string | null>(null)
   const [memoPanelWidth, setMemoPanelWidth] = useState(MEMO_PANEL_DEFAULT_WIDTH)
   const [layerDataPanelWidth, setLayerDataPanelWidth] = useState(LAYER_DATA_PANEL_DEFAULT_WIDTH)
@@ -842,8 +828,7 @@ function MapLayoutContent({
     (groundwaterPermitOpen ? groundwaterPermitPanelWidth : 0) +
     (groundwaterPermitDetailOpen ? groundwaterPermitDetailWidth : 0) +
     (fmsLinkageOpen ? fmsLinkagePanelWidth : 0) +
-    (fmsLinkageDetailOpen ? fmsLinkageDetailWidth : 0) +
-    (designSampleOpen ? samplePanelWidth : 0)
+    (fmsLinkageDetailOpen ? fmsLinkageDetailWidth : 0)
   const searchBarOffset = {
     leftPx: SIDEBAR_WIDTH + totalListPanelWidth + SEARCH_BAR_MARGIN,
     topPx: 16,
@@ -968,9 +953,6 @@ function MapLayoutContent({
     (groundwaterPermitDetailOpen ? groundwaterPermitDetailWidth : 0)
   const fmsLinkageDetailLeftPx =
     fmsLinkagePanelLeftPx + (fmsLinkageOpen ? fmsLinkagePanelWidth : 0)
-  const samplePanelLeftPx =
-    fmsLinkageDetailLeftPx + (fmsLinkageDetailOpen ? fmsLinkageDetailWidth : 0)
-
   const mapPaddingLeft = SIDEBAR_WIDTH + totalListPanelWidth
   /** 패딩은 useLayoutEffect — 자식 useEffect(도로대장 fit 등)보다 먼저 적용되어야 함.
    * 거리뷰 ON일 때만 맵 중심(A)을 새 센터마크 위치에 맞춤.
@@ -1378,11 +1360,6 @@ function MapLayoutContent({
     setFmsLinkageSelectedId?.(null)
     setFmsLinkageOverlayRows?.([])
     const next = openedWindows.filter((w) => !isFmsOpenedToken(w))
-    setOpened(next)
-  }
-
-  const handleCloseDesignSample = () => {
-    const next = openedWindows.filter((w) => w !== DESIGN_SAMPLE_OPENED_KEY)
     setOpened(next)
   }
 
@@ -2865,19 +2842,6 @@ function MapLayoutContent({
                   toastMsg={fmsGeomToastMsg}
                   onToastClear={() => setFmsGeomToastMsg(null)}
                 />
-              </MapSideListPanel>
-            </div>
-          )}
-          {designSampleOpen && (
-            <div className="pointer-events-auto shrink-0">
-              <MapSideListPanel
-                width={samplePanelWidth}
-                minWidth={DESIGN_SAMPLE_PANEL_MIN_WIDTH}
-                maxWidth={DESIGN_SAMPLE_PANEL_MAX_WIDTH}
-                leftOffsetPx={samplePanelLeftPx}
-                onWidthChange={setSamplePanelWidth}
-              >
-                <SampleListPanel onClose={handleCloseDesignSample} />
               </MapSideListPanel>
             </div>
           )}

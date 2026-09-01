@@ -50,6 +50,7 @@ const TAB_DEFS: {
     subtypes: [
       { id: 'eqOutdoor', label: '지진옥외대피소' },
       { id: 'tsunamiEvac', label: '지진해일대피소' },
+      { id: 'civilDefense', label: '민방위' },
     ],
   },
   {

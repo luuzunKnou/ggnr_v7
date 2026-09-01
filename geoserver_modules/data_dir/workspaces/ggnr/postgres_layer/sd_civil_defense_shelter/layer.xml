@@ -1,0 +1,16 @@
+<layer>
+  <name>sd_civil_defense_shelter</name>
+  <id>LayerInfoImpl--67534fb7:1a05bc4ba7a:-7fff</id>
+  <type>VECTOR</type>
+  <defaultStyle>
+    <id>StyleInfoImpl--30e19f83:19cb3d4f76b:-7ffc</id>
+  </defaultStyle>
+  <resource class="featureType">
+    <id>FeatureTypeInfoImpl--67534fb7:1a05bc4ba7a:-8000</id>
+  </resource>
+  <attribution>
+    <logoWidth>0</logoWidth>
+    <logoHeight>0</logoHeight>
+  </attribution>
+  <dateCreated>2026-09-01 07:00:14.604 UTC</dateCreated>
+</layer>
