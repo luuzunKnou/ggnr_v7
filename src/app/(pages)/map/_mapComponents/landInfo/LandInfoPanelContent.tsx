@@ -12,6 +12,7 @@ import {
   fetchParcelLandModalList,
   fetchParcelTabData,
   fetchPermitRows,
+  fetchPersonInfoMaskEnabled,
   type BuildingLedgerRow,
   type BuildingPermitSource,
   type BuildingRegisterMode,
@@ -28,10 +29,23 @@ import {
 } from '@/app/(pages)/map/_mapComponents/parcelLandLinkageUi';
 // 2026-07-21 이수빈: 빌드 오류로 임시 처리
 import type { ParcelLandRowSource } from '@/lib/parcelLandNormalize';
-import { withBasePath } from '@/lib/basePath';
 import { formatAddressStripSidoSigungu } from '@/lib/formatAddressStripAdmin';
 import { cn } from '@/lib/utils';
 import { findRoadAddressByJibun, getAddressFromCoord } from '../addressSearch/vworldAddressSearch';
+import { PARCEL_LAND_MODAL_SIZE_CLASS } from './parcelLandModalMock';
+import { formatPersonField, maskParcelLandModalRows } from './landPersonInfoMask';
+import {
+  LAND_INFO_FIELD_GRID,
+  LAND_INFO_GRID_LABEL,
+  LAND_INFO_GRID_VALUE,
+  LAND_INFO_LIST_ROW_ODD,
+  LAND_INFO_LIST_TD,
+  LAND_INFO_LIST_TH,
+  LAND_INFO_LIST_THEAD,
+  LAND_INFO_TABLE_BTN,
+  LAND_INFO_TABLE_TEXT,
+  LAND_INFO_TABLE_WRAP,
+} from './landInfoTableStyles';
 
 /** 주소 문자열로 외부 지도 검색 */
 function openExternalMapByAddress(
@@ -69,28 +83,6 @@ const MODAL_TITLES: Record<Exclude<ModalKind, null>, string> = {
   share: '공유인 조회',
   change: '변동일자 연혁조회',
 };
-
-/** V6 통합제어 personInfo=true 와 동일 — 소유자 개인정보 길이만큼 * 마스킹 */
-function maskPersonField(value: unknown): string {
-  if (value == null) return '***';
-  const str = String(value).trim();
-  if (!str || str === '-') return str || '-';
-  return '*'.repeat(Math.max(str.length, 3));
-}
-
-function maskModalRows(kind: ParcelLandModalKind, rows: string[][]): string[][] {
-  if (kind === 'share') {
-    return rows.map((row) =>
-      row.map((cell, i) => (i === 0 || i === 1 || i === 2 ? maskPersonField(cell) : cell))
-    );
-  }
-  if (kind === 'change') {
-    return rows.map((row) =>
-      row.map((cell, i) => (i === 1 || i === 3 ? maskPersonField(cell) : cell))
-    );
-  }
-  return rows;
-}
 
 function toNumText(value: unknown): string {
   const num = Number(value);
@@ -249,18 +241,12 @@ function DataTable({
   const dataColCount = linkageCol ? headers.length - 1 : headers.length;
   const wrapClass = nowrap ? 'whitespace-nowrap' : 'whitespace-normal break-words';
   return (
-    <div className="overflow-auto rounded border border-border">
-      <table className="w-full table-auto text-[12px]">
-        <thead className="sticky top-0 z-10 bg-muted">
+    <div className={LAND_INFO_TABLE_WRAP}>
+      <table className={cn('w-full min-w-0 table-auto', LAND_INFO_TABLE_TEXT)}>
+        <thead className={LAND_INFO_LIST_THEAD}>
           <tr>
             {headers.map((h) => (
-              <th
-                key={h}
-                className={cn(
-                  'border-b border-r border-border px-2.5 py-1.5 text-left align-middle font-medium text-foreground last:border-r-0',
-                  wrapClass
-                )}
-              >
+              <th key={h} className={cn(LAND_INFO_LIST_TH, wrapClass)}>
                 {h}
               </th>
             ))}
@@ -271,15 +257,9 @@ function DataTable({
             const rowSource = linkageSources?.[idx] ?? linkageSource;
             const dataCells = linkageCol ? row.slice(0, dataColCount) : row;
             return (
-              <tr key={`${idx}-${row.join('|')}`} className="odd:bg-background even:bg-muted/40">
+              <tr key={`${idx}-${row.join('|')}`} className={LAND_INFO_LIST_ROW_ODD}>
                 {dataCells.map((cell, cidx) => (
-                  <td
-                    key={`${idx}-${cidx}`}
-                    className={cn(
-                      'border-b border-r border-border px-2.5 py-1.5 align-middle text-foreground last:border-r-0',
-                      wrapClass
-                    )}
-                  >
+                  <td key={`${idx}-${cidx}`} className={cn(LAND_INFO_LIST_TD, wrapClass)}>
                     <ParcelLinkageValueText
                       value={cell}
                       source={plainSet.has(cidx) ? undefined : rowSource}
@@ -287,12 +267,7 @@ function DataTable({
                   </td>
                 ))}
                 {linkageCol ? (
-                  <td
-                    className={cn(
-                      'border-b border-border px-2.5 py-1.5 align-middle text-foreground',
-                      wrapClass
-                    )}
-                  >
+                  <td className={cn(LAND_INFO_LIST_TD, wrapClass)}>
                     <ParcelLandLinkageSourceText source={rowSource} prefix={false} />
                   </td>
                 ) : null}
@@ -333,9 +308,21 @@ export function LandInfoPanelContent({
   const [resolvedRoad, setResolvedRoad] = useState<string | null>(null);
   const [vworldKey, setVworldKey] = useState('');
   const [dataPortalKey, setDataPortalKey] = useState('');
+  const [personInfoMaskEnabled, setPersonInfoMaskEnabled] = useState(false);
+
+  useEffect(() => {
+    let alive = true;
+    void fetchPersonInfoMaskEnabled().then((enabled) => {
+      if (alive) setPersonInfoMaskEnabled(enabled);
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   const [parcelError, setParcelError] = useState<string | null>(null);
   const [parcelFetching, setParcelFetching] = useState(false);
+  const [identityResolving, setIdentityResolving] = useState(false);
   const [parcelData, setParcelData] = useState<ParcelTabData>({
     characteristics: [],
     landUses: [],
@@ -391,11 +378,16 @@ export function LandInfoPanelContent({
     /** 새 우클릭 시 부모 pnu가 null로 리셋되므로, 이전 필지 resolved 잔존 방지 */
     if (!pnuFromContext) setResolvedPnu(null);
     setResolvedParcelJibun(null);
-    fetchParcelIdentityAtPoint(coordinate, viewProjection).then((id) => {
-      if (!alive) return;
-      if (!pnuFromContext) setResolvedPnu(id.pnu);
-      setResolvedParcelJibun(id.jibunFromParcel);
-    });
+    setIdentityResolving(true);
+    fetchParcelIdentityAtPoint(coordinate, viewProjection)
+      .then((id) => {
+        if (!alive) return;
+        if (!pnuFromContext) setResolvedPnu(id.pnu);
+        setResolvedParcelJibun(id.jibunFromParcel);
+      })
+      .finally(() => {
+        if (alive) setIdentityResolving(false);
+      });
     return () => {
       alive = false;
     };
@@ -625,11 +617,19 @@ export function LandInfoPanelContent({
       return;
     }
 
+    /** 이동·공유·변동 연혁은 KRAS만 — 브이월드·공공데이터포털에 동일 API 없음 */
+    if (kind !== 'price' && parcelData.source === 'vworld') {
+      setModalMessage(
+        '이동연혁·공유인·변동연혁은 토지행정망(KRAS)에서만 조회됩니다. 브이월드·공공데이터포털에는 없고, 운영(prod)에서 행망 권한이 있을 때 확인할 수 있습니다.'
+      );
+      return;
+    }
+
     setModalFetching(true);
     try {
       const res = await fetchParcelLandModalList({ pnu, kind });
       setModalHeaders(res.headers);
-      setModalRows(maskModalRows(kind, res.rows));
+      setModalRows(maskParcelLandModalRows(kind, res.rows, personInfoMaskEnabled));
       setModalMessage(res.error || res.message || (res.rows.length ? null : '조회 결과가 없습니다.'));
     } catch {
       setModalMessage('조회에 실패했습니다.');
@@ -647,7 +647,16 @@ export function LandInfoPanelContent({
   const canOpenChange = Boolean(changeDate && changeDate !== '-');
 
   const tabBody = useMemo(() => {
-    if (!effectivePnu) return <p className="text-xs text-rose-600">필지 PNU를 찾지 못했습니다.</p>;
+    if (!effectivePnu) {
+      if (loading || identityResolving) {
+        return (
+          <div className="h-full flex items-center justify-center text-muted-foreground text-xs gap-2">
+            <Loader2 className="w-4 h-4 animate-spin" /> 필지 식별 중...
+          </div>
+        );
+      }
+      return <p className="text-xs text-rose-600">필지 PNU를 찾지 못했습니다.</p>;
+    }
     if (activeTab === 'parcel') {
       const parcelLoading = loading || parcelFetching;
       if (parcelLoading) {
@@ -663,7 +672,7 @@ export function LandInfoPanelContent({
         parcelData.possessions.length === 0 &&
         parcelData.prices.length === 0;
       return (
-        <div className="min-h-full flex flex-col">
+        <div className="flex min-h-full min-w-0 flex-col">
           <div className="space-y-3 flex-1">
           {!parcelData.source && hasNoLinkageRows ? (
             <p className="text-[11px] text-muted-foreground">연계 데이터 없음</p>
@@ -675,7 +684,7 @@ export function LandInfoPanelContent({
           <LandLinkageLegendText source={parcelData.source} />
           <section className="space-y-1.5">
             <p className="text-xs font-semibold text-foreground">토지기본정보</p>
-            <div className="grid grid-cols-[85px_1fr_85px_1fr] overflow-hidden rounded border border-border text-[12px]">
+            <div className={LAND_INFO_FIELD_GRID}>
               <LinkageCell k="지목" v={getField(latestChar, ['lndcgrCodeNm', 'jimok'])} source={parcelData.source} />
               <LinkageCell k="면적" v={`${toNumText(getField(latestChar, ['lndpclAr', 'area'], '0'))}㎡`} source={parcelData.source} />
               <LinkageCell k="용도지역" v={getField(latestChar, ['prposArea1Nm', 'prposAreaDstrcCodeNm'])} source={parcelData.source} />
@@ -703,7 +712,7 @@ export function LandInfoPanelContent({
 
           <section className="space-y-1.5">
             <p className="text-xs font-semibold text-foreground">토지소유내역</p>
-            <div className="grid grid-cols-[85px_1fr_85px_1fr] overflow-hidden rounded border border-border text-[12px]">
+            <div className={LAND_INFO_FIELD_GRID}>
               <LinkageCell k="소유구분" v={getField(latestPossession, ['posesnSeCodeNm'])} source={parcelData.source} />
               {canOpenShare ? (
                 <LinkageCellButton
@@ -718,12 +727,18 @@ export function LandInfoPanelContent({
               )}
               <LinkageCell
                 k="소유자명"
-                v={maskPersonField(getField(latestPossession, ['ownerNm', 'ownerName']))}
+                v={formatPersonField(
+                  getField(latestPossession, ['ownerNm', 'ownerName']),
+                  personInfoMaskEnabled
+                )}
                 source={parcelData.source}
               />
               <LinkageCell
                 k="주소"
-                v={maskPersonField(getField(latestPossession, ['ownerAddr', 'address']))}
+                v={formatPersonField(
+                  getField(latestPossession, ['ownerAddr', 'address']),
+                  personInfoMaskEnabled
+                )}
                 source={parcelData.source}
               />
               <LinkageCell k="변동원인" v={getField(latestPossession, ['ownshipChgCauseCodeNm'])} source={parcelData.source} />
@@ -804,6 +819,7 @@ export function LandInfoPanelContent({
     latestPossession,
     latestPrice,
     loading,
+    identityResolving,
     canOpenChange,
     canOpenMove,
     canOpenShare,
@@ -817,10 +833,11 @@ export function LandInfoPanelContent({
     permitNotice,
     permitRows,
     permitSource,
+    personInfoMaskEnabled,
   ]);
 
   return (
-    <div className="flex flex-col min-h-0 text-sm text-foreground">
+    <div className="flex min-h-0 min-w-0 w-full flex-col overflow-hidden text-sm text-foreground">
       <section className="px-3 py-2 border-b border-border">
         <div className="space-y-2 text-[12px] text-foreground">
           <div className="flex items-center gap-2 flex-wrap">
@@ -837,11 +854,11 @@ export function LandInfoPanelContent({
           </div>
           {buildingName ? <div>건물명: {buildingName}</div> : null}
         </div>
-        <div className="mt-2 flex items-center gap-2">
+        <div className="mt-2 flex min-w-0 items-center gap-2">
           <select
             value={selectedCrs}
             onChange={(e) => setSelectedCrs(e.target.value)}
-            className="text-[11px] border border-border bg-background text-foreground rounded px-1 py-0.5 max-w-[130px]"
+            className="shrink-0 text-[11px] border border-border bg-background text-foreground rounded px-1 py-0.5 max-w-[130px]"
             title="좌표계"
           >
             {COORDINATE_SYSTEM_OPTIONS.map((opt) => (
@@ -850,7 +867,7 @@ export function LandInfoPanelContent({
               </option>
             ))}
           </select>
-          <span className="text-[11px] text-muted-foreground font-mono truncate">
+          <span className="min-w-0 flex-1 text-[11px] text-muted-foreground font-mono truncate">
             {xy ? `${xy.x.toFixed(4)}, ${xy.y.toFixed(4)}` : '-'}
           </span>
         </div>
@@ -866,7 +883,7 @@ export function LandInfoPanelContent({
             aria-label="네이버 지도"
             title="네이버 지도"
           >
-            <img src={withBasePath('/image/addressInfoIcon/naverMap_icon.svg')} alt="" className="w-5 h-5 object-contain" />
+            <img src="/image/addressInfoIcon/naverMap_icon.svg" alt="" className="w-5 h-5 object-contain" />
           </button>
           <button
             type="button"
@@ -876,7 +893,7 @@ export function LandInfoPanelContent({
             aria-label="카카오 지도"
             title="카카오 지도"
           >
-            <img src={withBasePath('/image/addressInfoIcon/kakaoMap_icon.svg')} alt="" className="w-5 h-5 object-contain" />
+            <img src="/image/addressInfoIcon/kakaoMap_icon.svg" alt="" className="w-5 h-5 object-contain" />
           </button>
           <button
             type="button"
@@ -886,7 +903,7 @@ export function LandInfoPanelContent({
             aria-label="구글 지도"
             title="구글 지도"
           >
-            <img src={withBasePath('/image/addressInfoIcon/googleMap_icon.svg')} alt="" className="w-5 h-5 object-contain" />
+            <img src="/image/addressInfoIcon/googleMap_icon.svg" alt="" className="w-5 h-5 object-contain" />
           </button>
           <button
             type="button"
@@ -896,12 +913,12 @@ export function LandInfoPanelContent({
             aria-label="토지이음"
             title="토지이음"
           >
-            <img src={withBasePath('/image/addressInfoIcon/toji-e-um.png')} alt="" className="w-5 h-5 object-contain" />
+            <img src="/image/addressInfoIcon/toji-e-um.png" alt="" className="w-5 h-5 object-contain" />
           </button>
         </div>
       </section>
 
-      <section className="flex-1 min-h-0 flex flex-col">
+      <section className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
         <div className="flex border-b border-border shrink-0">
           {TAB_LABELS.map((tab) => (
             <button
@@ -917,7 +934,7 @@ export function LandInfoPanelContent({
             </button>
           ))}
         </div>
-        <div className="flex-1 min-h-0 overflow-auto p-2">{tabBody}</div>
+        <div className="min-h-0 min-w-0 flex-1 overflow-auto p-2">{tabBody}</div>
       </section>
 
       <Dialog
@@ -932,13 +949,20 @@ export function LandInfoPanelContent({
           }
         }}
       >
-        <DialogContent className="flex max-h-[86vh] w-[960px] max-w-[94vw] flex-col gap-0 overflow-hidden border-border bg-card p-0 text-card-foreground sm:max-w-[960px]">
+        {/* 필지정보 패널(z=10000) 위 — layerZIndex는 인라인 z-index로 Tailwind z-50 충돌 방지 */}
+        <DialogContent
+          layerZIndex={10100}
+          className={cn(
+            'flex max-h-[86vh] min-w-0 flex-col gap-0 overflow-hidden border-border bg-card p-0 text-card-foreground',
+            PARCEL_LAND_MODAL_SIZE_CLASS
+          )}
+        >
           <DialogHeader className="shrink-0 border-b border-border px-4 py-3">
             <DialogTitle className="text-sm">
               {modalKind ? MODAL_TITLES[modalKind] : '조회'}
             </DialogTitle>
           </DialogHeader>
-          <div className="min-h-0 flex-1 overflow-auto p-4">
+          <div className="min-h-0 min-w-0 flex-1 overflow-auto p-4">
             {modalFetching ? (
               <div className="flex items-center gap-2 text-xs text-muted-foreground">
                 <Loader2 className="h-4 w-4 animate-spin" /> 불러오는 중...
@@ -970,8 +994,8 @@ export function LandInfoPanelContent({
 function LinkageCell({ k, v, source }: { k: string; v: string; source?: ParcelLandRowSource }) {
   return (
     <>
-      <div className="px-2 py-1 bg-muted border-b border-r border-border font-medium">{k}</div>
-      <div className="px-2 py-1 border-b border-border">
+      <div className={LAND_INFO_GRID_LABEL}>{k}</div>
+      <div className={LAND_INFO_GRID_VALUE}>
         <ParcelLinkageValueText value={v} source={source} />
       </div>
     </>
@@ -993,10 +1017,10 @@ function LinkageCellButton({
 }) {
   return (
     <>
-      <div className="px-2 py-1 bg-muted border-b border-r border-border font-medium">{k}</div>
-      <div className="px-2 py-1 border-b border-border flex items-start justify-between gap-2">
-        <ParcelLinkageValueText value={v} source={source} className="whitespace-normal break-words" />
-        <button type="button" className="shrink-0 text-[11px] px-2 py-0.5 border rounded border-border hover:bg-muted" onClick={onClick} title={button}>
+      <div className={LAND_INFO_GRID_LABEL}>{k}</div>
+      <div className={cn(LAND_INFO_GRID_VALUE, 'flex items-start justify-between gap-2')}>
+        <ParcelLinkageValueText value={v} source={source} className="min-w-0 whitespace-normal break-words" />
+        <button type="button" className={LAND_INFO_TABLE_BTN} onClick={onClick} title={button}>
           {button}
         </button>
       </div>
