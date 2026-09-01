@@ -2,8 +2,12 @@
  * StandardList용 서비스 (레이어 목록/테이블 데이터)
  * schema 파라미터로 layer / public_layer 구분 (기본값 layer)
  */
-import { db } from '@/database/db';
+import { db, pool } from '@/database/db';
 import { sql } from 'drizzle-orm';
+import {
+  KOREPS_PRICE_FILE_TABLE,
+  KRAS_LAYER_CATALOG_SCHEMA,
+} from '@/integrations/krasLayerSync.config';
 import * as fs from 'fs';
 import * as path from 'path';
 import { identifyHitPriorityRank } from '@/lib/mapLayerGeometryOrder';
@@ -1018,6 +1022,74 @@ export async function getJijukParcelsInBbox(params: {
     return { parcels: rows };
   } catch {
     return { parcels: [] as Array<Record<string, unknown>> };
+  }
+}
+
+function formatOfficialLandPriceLabel(priceNum: number | null): string {
+  if (priceNum == null || !Number.isFinite(priceNum)) return '-';
+  return `${priceNum.toLocaleString('ko-KR')}원/㎡`;
+}
+
+function parseOfficialLandPriceNum(raw: unknown): number | null {
+  const s = String(raw ?? '')
+    .trim()
+    .replace(/,/g, '');
+  if (!s) return null;
+  const n = Number(s.replace(/[^\d.-]/g, ''));
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+/**
+ * KOREPS 공시지가 파일 테이블(land_linkage.koreps00039)에서 PNU별 최신 1건.
+ * 테이블 없거나 조회 실패 시 빈 맵 — 호출측에서 브이월드 fallback.
+ */
+export async function getLatestOfficialLandPricesByPnus(params: { pnus?: string[] }) {
+  const pnus = [
+    ...new Set(
+      (Array.isArray(params?.pnus) ? params.pnus : [])
+        .map((p) => String(p ?? '').trim())
+        .filter(Boolean)
+    ),
+  ];
+  type PriceEntry = { priceNum: number | null; priceLabel: string };
+  const empty = { prices: {} as Record<string, PriceEntry> };
+  if (!pnus.length) return empty;
+
+  const schema = KRAS_LAYER_CATALOG_SCHEMA;
+  const table = KOREPS_PRICE_FILE_TABLE;
+  try {
+    const existsRes = await pool.query<{ c: string | null }>(
+      `select to_regclass($1) as c`,
+      [`${schema}.${table}`]
+    );
+    if (!existsRes.rows[0]?.c) return empty;
+
+    const { rows } = await pool.query<{ pnu: string; pnilp: string | null }>(
+      `SELECT DISTINCT ON (btrim(pnu))
+         btrim(pnu) AS pnu,
+         btrim(pnilp) AS pnilp
+       FROM ${schema}.${table}
+       WHERE btrim(pnu) = ANY($1::text[])
+       ORDER BY btrim(pnu),
+         btrim(base_year) DESC NULLS LAST,
+         btrim(stdmt) DESC NULLS LAST,
+         btrim(pann_ymd) DESC NULLS LAST`,
+      [pnus]
+    );
+
+    const prices: Record<string, PriceEntry> = {};
+    for (const row of rows) {
+      const pnu = String(row.pnu ?? '').trim();
+      if (!pnu) continue;
+      const priceNum = parseOfficialLandPriceNum(row.pnilp);
+      prices[pnu] = {
+        priceNum,
+        priceLabel: formatOfficialLandPriceLabel(priceNum),
+      };
+    }
+    return { prices };
+  } catch {
+    return empty;
   }
 }
 

@@ -356,6 +356,17 @@ export type MapContextValue = {
   /** 목록에서 선택한 현장 점 키 (`m-{id}` / `c-{id}`) — 강조·이동 */
   roadNetworkFocusedSitePointKey: string | null;
   setRoadNetworkFocusedSitePointKey: Dispatch<SetStateAction<string | null>>;
+  /** 접도구역 표주 패널 열림 */
+  roadFrontageMarkerPanelOpen: boolean;
+  setRoadFrontageMarkerPanelOpen: Dispatch<SetStateAction<boolean>>;
+  /** 표주 모달 편집 중 지도 점 찍기 */
+  roadFrontageMarkerPointPickRef: MutableRefObject<((lon: number, lat: number) => void) | null>;
+  roadFrontageMarkerPointPickActive: boolean;
+  setRoadFrontageMarkerPointPickActive: Dispatch<SetStateAction<boolean>>;
+  roadFrontageMarkerDraftPoint: { lon: number; lat: number } | null;
+  setRoadFrontageMarkerDraftPoint: Dispatch<
+    SetStateAction<{ lon: number; lat: number } | null>
+  >;
   /** 하천 공사대장 임시 목록(CRUD 반영) */
   riverConstructionLedgerRows: RiverConstructionLedgerRow[];
   setRiverConstructionLedgerRows: Dispatch<SetStateAction<RiverConstructionLedgerRow[]>>;
@@ -647,6 +658,16 @@ export function MapContextProvider({ children }: { children: React.ReactNode }) 
   const [roadNetworkFocusedSitePointKey, setRoadNetworkFocusedSitePointKey] = useState<
     string | null
   >(null);
+  const [roadFrontageMarkerPanelOpen, setRoadFrontageMarkerPanelOpen] = useState(false);
+  const roadFrontageMarkerPointPickRef = useRef<
+    ((lon: number, lat: number) => void) | null
+  >(null);
+  const [roadFrontageMarkerPointPickActive, setRoadFrontageMarkerPointPickActive] =
+    useState(false);
+  const [roadFrontageMarkerDraftPoint, setRoadFrontageMarkerDraftPoint] = useState<{
+    lon: number;
+    lat: number;
+  } | null>(null);
   const [riverConstructionLedgerRows, setRiverConstructionLedgerRows] = useState<
     RiverConstructionLedgerRow[]
   >([]);
@@ -846,6 +867,13 @@ export function MapContextProvider({ children }: { children: React.ReactNode }) 
         setRoadNetworkEndpointMarkers,
         roadNetworkFocusedSitePointKey,
         setRoadNetworkFocusedSitePointKey,
+        roadFrontageMarkerPanelOpen,
+        setRoadFrontageMarkerPanelOpen,
+        roadFrontageMarkerPointPickRef,
+        roadFrontageMarkerPointPickActive,
+        setRoadFrontageMarkerPointPickActive,
+        roadFrontageMarkerDraftPoint,
+        setRoadFrontageMarkerDraftPoint,
         riverConstructionLedgerRows,
         setRiverConstructionLedgerRows,
         riverConstructionLedgerSelectedId,

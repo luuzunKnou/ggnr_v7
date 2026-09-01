@@ -36,6 +36,7 @@ export * from './ngl_query_table';
 export * from './notice';
 export * from './perm';
 export * from './road_frontage_building';
+export * from './road_frontage_marker';
 export * from './road_reward';
 export * from './road_use_ledger';
 export * from './safedata_history';

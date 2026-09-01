@@ -105,11 +105,7 @@ import { RoadFrontageBuildingDetailPanel } from "./_mapContents/road/roadFrontag
 import { ROAD_FRONTAGE_BUILDING_NEW_ID } from "./_mapContents/road/roadFrontageBuilding/roadFrontageBuildingMock"
 import { RoadFrontageMarkerListPanel } from "./_mapContents/road/roadFrontageMarker/RoadFrontageMarkerListPanel"
 import { RoadFrontageMarkerDetailPanel } from "./_mapContents/road/roadFrontageMarker/RoadFrontageMarkerDetailPanel"
-import {
-  ROAD_FRONTAGE_MARKER_NEW_ID,
-  createInitialRoadFrontageMarkerLedgers,
-  type RoadFrontageMarkerLedger,
-} from "./_mapContents/road/roadFrontageMarker/roadFrontageMarkerMock"
+import { ROAD_FRONTAGE_MARKER_NEW_ID } from "./_mapContents/road/roadFrontageMarker/roadFrontageMarkerMock"
 import { UsageDataAsNotifBootstrap } from "./_mapComponents/UsageDataAsNotifBootstrap"
 import { OccupationLedgerListPanel } from "./_mapContents/occupationLedger/OccupationLedgerListPanel"
 import { OccupationLedgerDetailPanel } from "./_mapContents/occupationLedger/OccupationLedgerDetailPanel"
@@ -411,14 +407,15 @@ const ROAD_FRONTAGE_BUILDING_DETAIL_DEFAULT_WIDTH = 800
 const ROAD_FRONTAGE_BUILDING_DETAIL_MIN_WIDTH = 640
 const ROAD_FRONTAGE_BUILDING_DETAIL_MAX_WIDTH = 980
 
-/** serviceList `ser_eng`: roadFrontageMarker — 접도구역 표주 관리대장(목업) */
+/** serviceList `ser_eng`: roadFrontageMarker — 접도구역 표주 관리대장 */
 const ROAD_FRONTAGE_MARKER_OPENED_KEY = "roadFrontageMarker"
 const ROAD_FRONTAGE_MARKER_PANEL_DEFAULT_WIDTH = 320
 const ROAD_FRONTAGE_MARKER_PANEL_MIN_WIDTH = 260
 const ROAD_FRONTAGE_MARKER_PANEL_MAX_WIDTH = 480
-const ROAD_FRONTAGE_MARKER_DETAIL_DEFAULT_WIDTH = 560
-const ROAD_FRONTAGE_MARKER_DETAIL_MIN_WIDTH = 460
-const ROAD_FRONTAGE_MARKER_DETAIL_MAX_WIDTH = 780
+/** 표주 열(지목·소유자·설치 위치)에 맞춘 폭 */
+const ROAD_FRONTAGE_MARKER_DETAIL_DEFAULT_WIDTH = 460
+const ROAD_FRONTAGE_MARKER_DETAIL_MIN_WIDTH = 420
+const ROAD_FRONTAGE_MARKER_DETAIL_MAX_WIDTH = 580
 
 function MapLayoutContent({
   children,
@@ -453,6 +450,9 @@ function MapLayoutContent({
   const setRoadNetworkSitePointKind = mapContext?.setRoadNetworkSitePointKind
   const setRoadNetworkEndpointMarkers = mapContext?.setRoadNetworkEndpointMarkers
   const setRoadNetworkFocusedSitePointKey = mapContext?.setRoadNetworkFocusedSitePointKey
+  const setRoadFrontageMarkerPanelOpen = mapContext?.setRoadFrontageMarkerPanelOpen
+  const setRoadFrontageMarkerPointPickActive = mapContext?.setRoadFrontageMarkerPointPickActive
+  const setRoadFrontageMarkerDraftPoint = mapContext?.setRoadFrontageMarkerDraftPoint
   const setRiverConstructionLedgerSelectedId = mapContext?.setRiverConstructionLedgerSelectedId
   const setRiverConstructionLedgerPanelOpen = mapContext?.setRiverConstructionLedgerPanelOpen
   const setRiverConstructionLedgerOverlayRows = mapContext?.setRiverConstructionLedgerOverlayRows
@@ -543,9 +543,13 @@ function MapLayoutContent({
             ? "satellite"
             : undefined
   const shootingApprovalOpen =
-    SHOOTING_REQUEST_UI_ENABLED && openedWindows.includes(SHOOTING_APPROVAL_OPENED_KEY)
+    SHOOTING_REQUEST_UI_ENABLED &&
+    systemKeyFromUrl === "uav" &&
+    openedWindows.includes(SHOOTING_APPROVAL_OPENED_KEY)
   const shootingRequestOpen =
-    SHOOTING_REQUEST_UI_ENABLED && openedWindows.includes(SHOOTING_REQUEST_OPENED_KEY)
+    SHOOTING_REQUEST_UI_ENABLED &&
+    systemKeyFromUrl === "uav" &&
+    openedWindows.includes(SHOOTING_REQUEST_OPENED_KEY)
   /** 촬영요청·승인 모두 동일 목록 패널 (모드만 mine / approval) */
   const shootingListOpen = shootingApprovalOpen || shootingRequestOpen
   const shootingPanelOpen = shootingListOpen
@@ -608,13 +612,10 @@ function MapLayoutContent({
   const [roadFrontageBuildingListRefreshKey, setRoadFrontageBuildingListRefreshKey] = useState(0)
   const roadFrontageBuildingDetailOpen =
     roadFrontageBuildingOpen && Boolean(roadFrontageBuildingSelectedId)
-  /** 접도구역 표주 — 화면 목업. 샘플 데이터를 화면 상태로만 들고 있음 */
-  const [roadFrontageMarkerLedgers, setRoadFrontageMarkerLedgers] = useState<
-    RoadFrontageMarkerLedger[]
-  >(() => createInitialRoadFrontageMarkerLedgers())
   const [roadFrontageMarkerSelectedId, setRoadFrontageMarkerSelectedId] = useState<
     string | null
   >(null)
+  const [roadFrontageMarkerListRefreshKey, setRoadFrontageMarkerListRefreshKey] = useState(0)
   const roadFrontageMarkerDetailOpen =
     roadFrontageMarkerOpen && Boolean(roadFrontageMarkerSelectedId)
   // 점용대장(프) 더미 state 비활성
@@ -1209,6 +1210,20 @@ function MapLayoutContent({
     router.push(`/map?${current.toString()}`)
   }
 
+  /** 시스템 전환 시 — 좌측 패널 닫기 + 레이어 전부 끄기 (최초 진입·system 최초 부여는 제외) */
+  const prevSystemKeyRef = useRef<string | undefined>(undefined)
+  useEffect(() => {
+    const prev = prevSystemKeyRef.current
+    prevSystemKeyRef.current = systemKeyFromUrl
+    if (prev === undefined || !prev || prev === systemKeyFromUrl) return
+    mapContext?.allLayersOffRef?.current?.()
+    if (openedWindows.length > 0 || dataTableFromUrl || dataKeyFromUrl) {
+      updateMapUrl({ opened: [], dataTable: null, dataKey: null })
+    }
+    // 시스템 키 변경에만 반응 (패널 개폐로 재실행하지 않음)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- systemKeyFromUrl only
+  }, [systemKeyFromUrl])
+
   const setOpened = (keys: string[]) => {
     updateMapUrl({ opened: keys })
   }
@@ -1418,6 +1433,23 @@ function MapLayoutContent({
     if (!roadFrontageMarkerOpen) setRoadFrontageMarkerSelectedId(null)
   }, [roadFrontageMarkerOpen])
 
+  useEffect(() => {
+    setRoadFrontageMarkerPanelOpen?.(roadFrontageMarkerOpen)
+    if (!roadFrontageMarkerOpen) {
+      setRoadFrontageMarkerPointPickActive?.(false)
+      setRoadFrontageMarkerDraftPoint?.(null)
+      if (mapContext?.roadFrontageMarkerPointPickRef) {
+        mapContext.roadFrontageMarkerPointPickRef.current = null
+      }
+    }
+  }, [
+    roadFrontageMarkerOpen,
+    setRoadFrontageMarkerPanelOpen,
+    setRoadFrontageMarkerPointPickActive,
+    setRoadFrontageMarkerDraftPoint,
+    mapContext?.roadFrontageMarkerPointPickRef,
+  ])
+
   // 점용대장(프) 더미 effects 비활성
   // useEffect(() => { if (!useLedgerProtoOpen) { setUseLedgerProtoDetailId(null); setUseLedgerProtoFeeId(null) } }, [useLedgerProtoOpen])
   // useEffect(() => { if (useLedgerProtoOpen) setUseLedgerProtoPanelWidth(...) }, [useLedgerProtoOpen])
@@ -1538,6 +1570,7 @@ function MapLayoutContent({
   }, [shootingPanelOpen, shootingApprovalOpen, shootingRequestOpen])
 
   useEffect(() => {
+    if (systemKeyFromUrl !== 'uav') return
     if (searchParams.get('shotForm') !== 'new') return
     const current = new URLSearchParams(Array.from(searchParams.entries()))
     current.delete('shotForm')
@@ -1551,7 +1584,7 @@ function MapLayoutContent({
       setShootingRequestDetailId(null)
     }
     router.replace(`/map?${current.toString()}`)
-  }, [shootingRequestOpen, shootingApprovalOpen, searchParams, router])
+  }, [systemKeyFromUrl, shootingRequestOpen, shootingApprovalOpen, searchParams, router])
 
   const openShootingRequestForm = useCallback(() => {
     const current = new URLSearchParams(Array.from(searchParams.entries()))
@@ -2371,11 +2404,11 @@ function MapLayoutContent({
                 contentClassName="overflow-hidden"
               >
                 <RoadFrontageMarkerListPanel
-                  ledgers={roadFrontageMarkerLedgers}
                   selectedId={roadFrontageMarkerSelectedId}
                   onSelectId={setRoadFrontageMarkerSelectedId}
                   onAdd={() => setRoadFrontageMarkerSelectedId(ROAD_FRONTAGE_MARKER_NEW_ID)}
                   onClose={handleCloseRoadFrontageMarker}
+                  refreshKey={roadFrontageMarkerListRefreshKey}
                 />
               </MapSideListPanel>
             </div>
@@ -2393,11 +2426,16 @@ function MapLayoutContent({
                 <RoadFrontageMarkerDetailPanel
                   key={roadFrontageMarkerSelectedId}
                   ledgerId={roadFrontageMarkerSelectedId}
-                  ledgers={roadFrontageMarkerLedgers}
-                  onLedgersChange={setRoadFrontageMarkerLedgers}
                   onClose={() => setRoadFrontageMarkerSelectedId(null)}
-                  onDeleted={() => setRoadFrontageMarkerSelectedId(null)}
-                  onLedgerIdChange={setRoadFrontageMarkerSelectedId}
+                  onSaved={() => setRoadFrontageMarkerListRefreshKey((k) => k + 1)}
+                  onCreated={(newId) => {
+                    setRoadFrontageMarkerListRefreshKey((k) => k + 1)
+                    setRoadFrontageMarkerSelectedId(newId)
+                  }}
+                  onDeleted={() => {
+                    setRoadFrontageMarkerSelectedId(null)
+                    setRoadFrontageMarkerListRefreshKey((k) => k + 1)
+                  }}
                   overlayLeftPx={roadFrontageMarkerPanelLeftPx}
                   overlayWidthPx={
                     roadFrontageMarkerPanelWidth +
@@ -2410,6 +2448,7 @@ function MapLayoutContent({
           <ShootingRequestFormModal
             open={
               SHOOTING_REQUEST_UI_ENABLED &&
+              systemKeyFromUrl === "uav" &&
               (myInfoShootingModalId != null ||
                 (shootingPanelOpen && shootingRequestDetailId === SHOOTING_REQUEST_NEW_ID))
             }

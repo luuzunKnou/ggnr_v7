@@ -38,6 +38,8 @@ type JijukParcelRow = {
   geom?: unknown;
 };
 
+type DbPriceEntry = { priceNum: number | null; priceLabel: string };
+
 function parcelFeatureStyles(feature: Feature<Geometry>): Style[] {
   const geom = feature.getGeometry();
   if (!geom) return [];
@@ -86,15 +88,18 @@ async function mapWithConcurrency<T, R>(
   return out;
 }
 
-function formatPriceLabel(priceNum: number | null | undefined): string {
-  if (priceNum == null || !Number.isFinite(priceNum)) return '-';
-  return `${priceNum.toLocaleString('ko-KR')}원/㎡`;
+function hasUsableDbPrice(entry: DbPriceEntry | undefined): entry is DbPriceEntry {
+  return (
+    entry != null &&
+    entry.priceNum != null &&
+    Number.isFinite(entry.priceNum) &&
+    entry.priceLabel !== '-'
+  );
 }
 
-
 /**
- * 공시지가 토글 시 bbox 내 jijuk 필지 + VWorld 공시지가를 OpenLayers 벡터·텍스트로 표시.
- * 지도 이동(moveend)마다 재조회·재그림.
+ * 공시지가 토글 시 bbox 내 jijuk 필지 + 공시지가(KOREPS 파일 테이블 우선, 없으면 VWorld)를
+ * OpenLayers 벡터·텍스트로 표시. 지도 이동(moveend)마다 재조회·재그림.
  */
 export function useOfficialLandPriceMapLayer(
   map: Map | null,
@@ -178,10 +183,35 @@ export function useOfficialLandPriceMapLayer(
 
       const geoJson = new GeoJSON();
       const withGeom = parcels.filter((p) => p.geom && String(p.pnu ?? '').trim());
+      const pnus = withGeom.map((p) => String(p.pnu ?? '').trim()).filter(Boolean);
+
+      let dbPrices: Record<string, DbPriceEntry> = {};
+      if (pnus.length) {
+        try {
+          const priceRes = await call('', 'POST', {
+            service: 'standardService',
+            action: 'getLatestOfficialLandPricesByPnus',
+            params: { pnus },
+          });
+          const priceData = (priceRes?.data ?? priceRes) as {
+            prices?: Record<string, DbPriceEntry>;
+          };
+          dbPrices =
+            priceData?.prices && typeof priceData.prices === 'object' ? priceData.prices : {};
+        } catch {
+          dbPrices = {};
+        }
+      }
+
+      if (seq !== requestSeqRef.current) return;
 
       const priced = await mapWithConcurrency(withGeom, PRICE_CONCURRENCY, async (row) => {
         const pnu = String(row.pnu ?? '').trim();
         const jibun = formatJibun(row.jibun);
+        const fromDb = dbPrices[pnu];
+        if (hasUsableDbPrice(fromDb)) {
+          return { row, jibun, priceLabel: fromDb.priceLabel };
+        }
         if (!vworldKey) {
           return { row, jibun, priceLabel: '-' };
         }

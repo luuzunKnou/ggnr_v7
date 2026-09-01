@@ -1,0 +1,27 @@
+/* 지도 축척 — 우측 하단. 글자 + 100px 밑선(해상도×100m 기준) */
+.ggnr-scale-bar {
+  position: absolute;
+  right: 16px;
+  bottom: 14px;
+  left: auto;
+  z-index: 6;
+  background: transparent;
+  border: none;
+  padding: 0;
+  pointer-events: none;
+}
+
+.ggnr-scale-bar-inner {
+  box-sizing: border-box;
+  width: 100px;
+  border: 1.5px solid #111;
+  border-top: none;
+  color: #111;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.2;
+  text-align: center;
+  margin: 0;
+  padding: 0 0 1px;
+  background: transparent;
+}

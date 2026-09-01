@@ -21,7 +21,7 @@ export function resolveDefineCodeLabel(
   raw: unknown,
   empty = '-'
 ): string {
-  const formatted = formatDetailScalarValue(raw, empty, { asLiteral: true });
+  const formatted = formatDetailScalarValue(raw, { empty, asLiteral: true });
   if (formatted === empty || formatted === '') return formatted;
   if (!codes?.length) return formatted;
   const key = normalizeCodeKey(formatted);
@@ -43,5 +43,5 @@ export function formatDefineFieldDisplayValue(
   if (isDefineFieldCodeType(fieldType)) {
     return resolveDefineCodeLabel(codes, raw, empty);
   }
-  return formatDetailScalarValue(raw, empty);
+  return formatDetailScalarValue(raw, { empty, fieldType });
 }
