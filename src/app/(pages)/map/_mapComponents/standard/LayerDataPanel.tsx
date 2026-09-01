@@ -1149,7 +1149,7 @@ export function LayerDataPanel({
         .then((res) => {
           if (seq !== loadPageSeqRef.current) return;
           const data = res?.data ?? res;
-          const dataRows = Array.isArray(data?.rows) ? data.rows : [];
+          const dataRows: Record<string, unknown>[] = Array.isArray(data?.rows) ? data.rows : [];
           const dataTotal = typeof data?.total === 'number' ? data.total : total;
           // 행·칸 수를 같이 맞춰 한 렌더에 반영 (30칸+7행 / 7칸+30행 방지)
           setListPageSize(ps);

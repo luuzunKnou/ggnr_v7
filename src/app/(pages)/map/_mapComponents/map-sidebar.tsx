@@ -21,6 +21,11 @@ import { ImportantNotifSidebarBubble } from '../_mapContents/prototypes/UserAcco
 import { SHOOTING_REQUEST_UI_ENABLED } from '../_mapContents/shootingRequest/shootingRequestUiFlag';
 import { withBasePath } from '@/lib/basePath';
 
+/** ser_eng 와 serviceListIcon 파일명이 다를 때 */
+const SERVICE_ICON_ALIASES: Record<string, string> = {
+  radiationShelter: 'radiation',
+};
+
 type ServiceItem = {
   ser_eng: string | null;
   ser_kor: string | null;
@@ -252,7 +257,8 @@ export function MapSidebar({ indexLogoSrc }: { indexLogoSrc: string }) {
         />
       );
     }
-    const iconSrc = withBasePath(`/image/serviceListIcon/${serEng}.svg`);
+    const iconKey = SERVICE_ICON_ALIASES[serEng] ?? serEng;
+    const iconSrc = withBasePath(`/image/serviceListIcon/${iconKey}.svg`);
     return (
       <span
         className="w-5 h-5 shrink-0 inline-block bg-current"
