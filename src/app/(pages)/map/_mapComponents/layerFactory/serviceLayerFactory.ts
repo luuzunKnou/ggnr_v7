@@ -136,11 +136,28 @@ const TRANSPARENT_PIXEL =
 /** 이 길이 초과 시에만 POST (CQL 등으로 414 방지). 그 외는 GET — GeoServer가 POST body의 REQUEST를 못 읽는 환경 회피 */
 const WMS_GET_URL_MAX_LEN = 1800;
 
+function isUsableWmsImageBlob(blob: Blob, contentTypeHint: string): boolean {
+  const type = String(blob.type || contentTypeHint || '').toLowerCase();
+  if (type.includes('xml') || type.includes('text/') || type.includes('html')) return false;
+  if (!type) return true;
+  return type.startsWith('image/') || type === 'application/octet-stream';
+}
+
+function applyWmsImageBlob(img: HTMLImageElement, blob: Blob, fail: () => void): void {
+  const blobUrl = URL.createObjectURL(blob);
+  img.onload = () => URL.revokeObjectURL(blobUrl);
+  img.onerror = () => {
+    URL.revokeObjectURL(blobUrl);
+    fail();
+  };
+  img.src = blobUrl;
+}
+
 /**
  * WMS GetMap 로드.
- * - 기본: GET (img.src) — `MissingParameterValue request` 방지
+ * - 기본: GET fetch — 응답이 이미지인지 확인 후 blob URL 적용
+ *   (img.src에 GeoServer XML 예외를 직접 넣으면 EncodingError → Next Issues)
  * - URL이 길 때만 POST. AdvancedDispatchFilter 대응으로 SERVICE/REQUEST는 쿼리에 유지
- * - 응답이 이미지인지 확인 (ServiceExceptionReport XML을 이미지로 넣지 않음)
  */
 function imageLoadFunctionPost(image: ImageWrapper, src: string): void {
   const img = image.getImage() as HTMLImageElement;
@@ -148,55 +165,45 @@ function imageLoadFunctionPost(image: ImageWrapper, src: string): void {
     img.src = TRANSPARENT_PIXEL;
   };
   try {
-    if (!src || src.length <= WMS_GET_URL_MAX_LEN) {
-      img.src = src;
+    if (!src) {
+      fail();
       return;
     }
 
-    const url = new URL(src);
-    const body = url.search.startsWith('?') ? url.search.slice(1) : url.search;
-    if (!body) {
-      img.src = src;
-      return;
-    }
+    const useGet = src.length <= WMS_GET_URL_MAX_LEN;
+    const request = useGet
+      ? fetch(src, { method: 'GET', cache: 'no-store' })
+      : (() => {
+          const url = new URL(src);
+          const body = url.search.startsWith('?') ? url.search.slice(1) : url.search;
+          if (!body) return fetch(src, { method: 'GET', cache: 'no-store' });
+          const params = new URLSearchParams(body);
+          const service = params.get('SERVICE') ?? params.get('service') ?? 'WMS';
+          const requestName = params.get('REQUEST') ?? params.get('request') ?? 'GetMap';
+          const baseUrl =
+            `${url.origin}${url.pathname}` +
+            `?SERVICE=${encodeURIComponent(service)}&REQUEST=${encodeURIComponent(requestName)}`;
+          return fetch(baseUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body,
+            cache: 'no-store',
+          });
+        })();
 
-    const params = new URLSearchParams(body);
-    const service = params.get('SERVICE') ?? params.get('service') ?? 'WMS';
-    const request = params.get('REQUEST') ?? params.get('request') ?? 'GetMap';
-    const baseUrl =
-      `${url.origin}${url.pathname}` +
-      `?SERVICE=${encodeURIComponent(service)}&REQUEST=${encodeURIComponent(request)}`;
-
-    fetch(baseUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body,
-    })
+    request
       .then(async (r) => {
         const ct = (r.headers.get('content-type') ?? '').toLowerCase();
-        if (!r.ok || ct.includes('xml') || ct.includes('text/')) {
+        if (!r.ok || ct.includes('xml') || ct.includes('text/') || ct.includes('html')) {
           throw new Error(r.statusText || 'WMS error');
         }
         const blob = await r.blob();
-        const blobType = (blob.type || ct).toLowerCase();
-        if (blobType && !blobType.startsWith('image/') && blobType !== 'application/octet-stream') {
-          throw new Error(`unexpected WMS content-type: ${blobType}`);
+        if (!isUsableWmsImageBlob(blob, ct)) {
+          throw new Error('WMS exception');
         }
         return blob;
       })
-      .then((blob) => {
-        const type = String(blob.type || '').toLowerCase();
-        if (type.includes('xml') || type.includes('text')) {
-          throw new Error('WMS exception');
-        }
-        const blobUrl = URL.createObjectURL(blob);
-        img.onload = () => URL.revokeObjectURL(blobUrl);
-        img.onerror = () => {
-          URL.revokeObjectURL(blobUrl);
-          fail();
-        };
-        img.src = blobUrl;
-      })
+      .then((blob) => applyWmsImageBlob(img, blob, fail))
       .catch(fail);
   } catch {
     fail();

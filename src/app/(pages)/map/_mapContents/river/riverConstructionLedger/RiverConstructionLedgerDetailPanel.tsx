@@ -14,7 +14,6 @@ import {
   Download,
   FileText,
   Image as ImageIcon,
-  MapPin,
   Paperclip,
   Plus,
   Trash2,
@@ -30,7 +29,6 @@ import Polygon from "ol/geom/Polygon";
 import GeoJSONFormat from "ol/format/GeoJSON";
 import WKT from "ol/format/WKT";
 import { Style, Stroke, Fill, Circle as CircleStyle } from "ol/style";
-import { isEmpty as isEmptyExtent } from "ol/extent";
 import { cn } from "@/lib/utils";
 import { call } from "@/lib/api";
 import { appFetch } from "@/lib/basePath";
@@ -53,13 +51,13 @@ import {
 import { useMapContext } from "../../../_mapComponents/MapContext";
 import { refreshServiceWmsLayer } from "../../../_mapComponents/layerFactory/serviceLayerFactory";
 import { canStartMapDrawInteraction } from "../../../_mapComponents/mapDrawInteraction";
-import { layerRowPanelButtonClass } from "../../../_mapComponents/layerRowEdit/layerRowPanelButtonStyles";
 import {
   LayerRowEditToolbar,
   LayerRowPanelButton,
   useLayerParcelNavigation,
   type LayerRowParcelItem,
 } from "../../../_mapComponents/layerRowEdit";
+import { DrawToolbarActions } from "../../../_mapComponents/analysisArea";
 import { useMapVisualCenterPixel } from "../../../_mapComponents/hooks/useMapVisualCenterPixel";
 import {
   GEOM_EDIT_HINT_BELOW_SEARCH_GAP,
@@ -79,8 +77,11 @@ import {
   type RiverConstructionLedgerRow,
 } from "./riverConstructionLedgerMock";
 import { RiverNameSelect } from "./RiverNameSelect";
+import { refreshConsDataAsMapView } from "./riverConstructionLedgerMapSync";
 import { MapSideDetailScroll } from "../../../_mapComponents/MapSideDetailScroll";
 import { OccupationLedgerPlaceInput } from "../../occupationLedger/OccupationLedgerPlaceInput";
+
+const PARCEL_IDX_KEY = "riverConstructionLedgerParcelIdx";
 
 type Props = {
   row: RiverConstructionLedgerRow;
@@ -676,20 +677,10 @@ export function RiverConstructionLedgerDetailPanel({ row, onClose }: Props) {
   const [riverNamesText, setRiverNamesText] = useState(
     () => normalizeRiverNames(row.riverNames)[0] ?? ""
   );
-  /** 필지(개별 구간) 도형 편집 대상 — draftParcels 배열 인덱스, null이면 비활성 */
-  const [parcelGeomEditIdx, setParcelGeomEditIdx] = useState<number | null>(null);
-  /** draw: 도형 없는 필지에 새로 그리기 / modify: 기존 도형 정점 수정 */
-  const [parcelGeomEditMode, setParcelGeomEditMode] = useState<"draw" | "modify" | null>(null);
-  // 초기화처럼 모드 값은 그대로("modify")인데 도형만 바뀌는 경우 수정 세션을 강제로 다시 시작시키는 토큰
-  const [parcelGeomModifyResetToken, setParcelGeomModifyResetToken] = useState(0);
-  /** modify 세션 시작 시점의 도형·범위 스냅샷 — «초기화»용 */
-  const parcelGeomSnapshotRef = useRef<{
-    geometry3857: Record<string, unknown>;
-    extent3857: [number, number, number, number] | null;
-  } | null>(null);
+  /** 신규 필지 도형 그리기 대상 인덱스 — null이면 기존 도형 전체 자유 수정 */
+  const [parcelDrawIdx, setParcelDrawIdx] = useState<number | null>(null);
   const parcelsSnapshotRef = useRef<LayerRowParcelItem[]>([]);
-  /** 편집 중 필지 도형들을 계속 지도에 표시하는 참고 레이어(현재 그리는 중인 필지는 제외) */
-  const draftParcelLayerRef = useRef<{
+  const parcelEditLayerRef = useRef<{
     layer: VectorLayer<VectorSource>;
     source: VectorSource;
   } | null>(null);
@@ -710,8 +701,8 @@ export function RiverConstructionLedgerDetailPanel({ row, onClose }: Props) {
   const { selectParcel, movingParcelIdx } = useLayerParcelNavigation();
   const [detailLoading, setDetailLoading] = useState(false);
   const detailLoadGenRef = useRef(0);
-  const parcelGeomEditIdxRef = useRef(parcelGeomEditIdx);
-  parcelGeomEditIdxRef.current = parcelGeomEditIdx;
+  const parcelDrawIdxRef = useRef(parcelDrawIdx);
+  parcelDrawIdxRef.current = parcelDrawIdx;
   const editingRef = useRef(editing);
   editingRef.current = editing;
 
@@ -748,7 +739,7 @@ export function RiverConstructionLedgerDetailPanel({ row, onClose }: Props) {
           setDraft(toDraft(mapped));
           setRiverNamesText(normalizeRiverNames(mapped.riverNames)[0] ?? "");
         }
-        if (parcelGeomEditIdxRef.current == null) {
+        if (parcelDrawIdxRef.current == null) {
           const filled = withRiverNameFallback(mapped.parcels ?? []);
           parcelsSnapshotRef.current = [...filled];
           setDraftParcels(filled);
@@ -838,9 +829,10 @@ export function RiverConstructionLedgerDetailPanel({ row, onClose }: Props) {
   const geomHintTopPx = inputBottomPx + GEOM_EDIT_HINT_BELOW_SEARCH_GAP;
   const mapInstance = mapContext?.mapInstanceRef?.current ?? null;
   const mapPaddingLeft = mapContext?.mapPaddingLeft ?? 0;
+  const geomBannerActive = Boolean(mapInstance) && editing && !isNewRow;
   const geomCenterPixel = useMapVisualCenterPixel(
     mapInstance,
-    Boolean(mapInstance) && parcelGeomEditIdx != null,
+    geomBannerActive,
     mapPaddingLeft
   );
 
@@ -849,9 +841,7 @@ export function RiverConstructionLedgerDetailPanel({ row, onClose }: Props) {
     setRiverNamesText(normalizeRiverNames(row.riverNames)[0] ?? "");
     parcelsSnapshotRef.current = [...(row.parcels ?? [])];
     setDraftParcels(withRiverNameFallback(row.parcels ?? []));
-    setParcelGeomEditIdx(null);
-    setParcelGeomEditMode(null);
-    parcelGeomSnapshotRef.current = null;
+    setParcelDrawIdx(null);
     setGeomEditingId?.(null);
 
     const isNew = isNewRiverConstructionLedgerRow(row) || !row.name.trim();
@@ -861,9 +851,7 @@ export function RiverConstructionLedgerDetailPanel({ row, onClose }: Props) {
 
   useEffect(() => {
     return () => {
-      setParcelGeomEditIdx(null);
-      setParcelGeomEditMode(null);
-      parcelGeomSnapshotRef.current = null;
+      setParcelDrawIdx(null);
       setGeomEditingId?.(null);
     };
   }, [setGeomEditingId]);
@@ -900,9 +888,7 @@ export function RiverConstructionLedgerDetailPanel({ row, onClose }: Props) {
     draftParcelsRef.current = list;
     setDraftParcels(list);
     patchRow((r) => ({ ...r, parcels: list }));
-    parcelGeomSnapshotRef.current = null;
-    setParcelGeomEditMode("draw");
-    setParcelGeomEditIdx(list.length - 1);
+    setParcelDrawIdx(list.length - 1);
   };
 
   /** 필지 목록 특정 행의 하천명·비고 값 갱신 */
@@ -937,10 +923,12 @@ export function RiverConstructionLedgerDetailPanel({ row, onClose }: Props) {
     draftParcelsRef.current = next;
     setDraftParcels(next);
     patchRow((r) => ({ ...r, parcels: next }));
-    if (parcelGeomEditIdx === index) {
-      setParcelGeomEditIdx(null);
-      setParcelGeomEditMode(null);
-    }
+    setParcelDrawIdx((prev) => {
+      if (prev == null) return null;
+      if (prev === index) return null;
+      if (prev > index) return prev - 1;
+      return prev;
+    });
   };
 
   /** 필지 행에 지도에서 그린 도형 반영(비우려면 둘 다 null) */
@@ -957,109 +945,119 @@ export function RiverConstructionLedgerDetailPanel({ row, onClose }: Props) {
     patchRow((r) => ({ ...r, parcels: list }));
   };
 
-  /** 도형 편집 종료 — 도형추가/수정 세션을 닫고 목록으로 돌아감 */
-  const finishParcelGeomEdit = () => {
-    setParcelGeomEditIdx(null);
-    setParcelGeomEditMode(null);
-    parcelGeomSnapshotRef.current = null;
+  const finishParcelDraw = () => {
+    setParcelDrawIdx(null);
   };
 
-  /** 필지 도형 편집 버튼 — 도형 없으면 그리기(draw), 있으면 정점 수정(modify) 세션 시작. 같은 행을 다시 누르면 종료 */
-  const toggleParcelGeomEdit = (index: number) => {
-    if (parcelGeomEditIdx === index) {
-      finishParcelGeomEdit();
-      return;
-    }
-    const item = draftParcelsRef.current[index];
-    if (item?.geometry3857) {
-      parcelGeomSnapshotRef.current = {
-        geometry3857: item.geometry3857,
-        extent3857: item.extent3857 ?? null,
-      };
-      setParcelGeomEditMode("modify");
-    } else {
-      parcelGeomSnapshotRef.current = null;
-      setParcelGeomEditMode("draw");
-    }
-    setParcelGeomEditIdx(index);
-  };
-
-  /** 수정 세션 시작 시점 도형으로 되돌리기 (세션은 계속 유지) */
-  const resetParcelGeomToSnapshot = () => {
-    const idx = parcelGeomEditIdx;
-    const snap = parcelGeomSnapshotRef.current;
-    if (idx == null || !snap) return;
-    handleSetParcelGeom(idx, snap.geometry3857, snap.extent3857);
-    setParcelGeomModifyResetToken((t) => t + 1);
-  };
-
-  /** 수정 세션 중 도형 삭제 — 세션도 함께 종료(다음엔 다시 «도형추가»부터 시작) */
-  const deleteParcelGeomAndFinish = () => {
-    const idx = parcelGeomEditIdx;
+  const cancelParcelDraw = () => {
+    const idx = parcelDrawIdx;
     if (idx == null) return;
-    handleSetParcelGeom(idx, null, null);
-    finishParcelGeomEdit();
-  };
-
-  /** 수정 중엔 필지 도형들을 계속 지도에 표시 — 공사구간 전체 도형은 필지 도형들의 합으로 자동 계산되므로 별도 오버레이 대신 이 참고 레이어로 확인 */
-  useEffect(() => {
-    if (!editing) {
-      draftParcelLayerRef.current = null;
+    const item = draftParcelsRef.current[idx];
+    if (!item?.geometry3857) {
+      handleRemoveParcel(idx);
       return;
     }
+    finishParcelDraw();
+  };
+
+  const parcelEditStyle = new Style({
+    fill: new Fill({ color: "rgba(22, 163, 74, 0.25)" }),
+    stroke: new Stroke({ color: "#15803d", width: 2.5 }),
+    image: new CircleStyle({
+      radius: 5,
+      fill: new Fill({ color: "#15803d" }),
+      stroke: new Stroke({ color: "#fff", width: 1.5 }),
+    }),
+  });
+
+  /** 수정 모드 — 모든 필지 도형을 동시에 정점 수정 */
+  useEffect(() => {
+    if (!editing || parcelDrawIdx != null) return;
     const map = mapContext?.mapInstanceRef?.current;
     if (!map) return;
+    if (!canStartMapDrawInteraction(mapContext, "spatialSearch")) return;
+
+    mapContext?.clearMapDrawInteractionsRef?.current?.();
+    setRiverFocus?.(null);
+
+    const viewProj = map.getView().getProjection()?.getCode() || "EPSG:3857";
+    const format = new GeoJSONFormat();
     const source = new VectorSource();
     const layer = new VectorLayer({
       source,
-      zIndex: 9997,
-      style: new Style({
-        fill: new Fill({ color: "rgba(37, 99, 235, 0.15)" }),
-        stroke: new Stroke({ color: "#2563eb", width: 1.5 }),
-      }),
+      zIndex: 9999,
+      style: parcelEditStyle,
     });
-    map.addLayer(layer);
-    draftParcelLayerRef.current = { layer, source };
 
-    return () => {
-      map.removeLayer(layer);
-      source.clear();
-      draftParcelLayerRef.current = null;
-    };
-  }, [editing, mapContext?.mapInstanceRef]);
-
-  useEffect(() => {
-    const ref = draftParcelLayerRef.current;
-    if (!ref) return;
-    const map = mapContext?.mapInstanceRef?.current;
-    if (!map) return;
-    const viewProj = map.getView().getProjection()?.getCode() || "EPSG:3857";
-    const format = new GeoJSONFormat();
-    ref.source.clear();
-    draftParcels.forEach((p, i) => {
-      if (i === parcelGeomEditIdx || !p.geometry3857) return;
+    for (const [i, parcel] of draftParcelsRef.current.entries()) {
+      if (!parcel.geometry3857) continue;
       try {
-        const feats = format.readFeatures(p.geometry3857, {
+        const feats = format.readFeatures(parcel.geometry3857, {
           dataProjection: viewProj,
           featureProjection: viewProj,
         });
-        ref.source.addFeatures(feats);
+        for (const f of feats) f.set(PARCEL_IDX_KEY, i);
+        source.addFeatures(feats);
       } catch {
-        // ignore
+        // ignore invalid geometry
       }
-    });
-  }, [draftParcels, parcelGeomEditIdx, editing, mapContext?.mapInstanceRef]);
+    }
 
-  /** 필지(개별 구간) 도형 그리기 — 도형이 없는 필지에 폴리곤 하나를 그려 geometry3857/extent3857에 반영 */
+    const syncFromSource = () => {
+      const byIdx = new Map<number, { geometry3857: Record<string, unknown>; extent3857: [number, number, number, number] | null }>();
+      for (const feature of source.getFeatures()) {
+        const idx = feature.get(PARCEL_IDX_KEY);
+        if (typeof idx !== "number" || idx < 0) continue;
+        const geom = feature.getGeometry();
+        if (!geom) continue;
+        const geometry3857 = format.writeGeometryObject(geom, {
+          dataProjection: viewProj,
+          featureProjection: viewProj,
+        }) as unknown as Record<string, unknown>;
+        const ext = geom.getExtent();
+        byIdx.set(idx, {
+          geometry3857,
+          extent3857: ext.every((v) => Number.isFinite(v))
+            ? (ext as [number, number, number, number])
+            : null,
+        });
+      }
+      if (byIdx.size === 0) return;
+      const list = draftParcelsRef.current.map((p, i) => {
+        const next = byIdx.get(i);
+        return next ? { ...p, ...next } : p;
+      });
+      draftParcelsRef.current = list;
+      setDraftParcels(list);
+      patchRow((r) => ({ ...r, parcels: list }));
+    };
+
+    const modify = new Modify({ source });
+    modify.on("modifyend", syncFromSource);
+    map.addLayer(layer);
+    map.addInteraction(modify);
+    parcelEditLayerRef.current = { layer, source };
+
+    return () => {
+      modify.un("modifyend", syncFromSource);
+      map.removeInteraction(modify);
+      map.removeLayer(layer);
+      source.clear();
+      parcelEditLayerRef.current = null;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 편집·필지 개수 변경 시에만 레이어 재구성
+  }, [editing, parcelDrawIdx, draftParcels.length, mapContext?.mapInstanceRef]);
+
+  /** 신규 필지 도형 그리기 */
   useEffect(() => {
-    if (parcelGeomEditIdx == null || parcelGeomEditMode !== "draw") return;
+    if (!editing || parcelDrawIdx == null) return;
     const map = mapContext?.mapInstanceRef?.current;
     if (!map) {
-      finishParcelGeomEdit();
+      finishParcelDraw();
       return;
     }
     if (!canStartMapDrawInteraction(mapContext, "spatialSearch")) {
-      finishParcelGeomEdit();
+      finishParcelDraw();
       return;
     }
     mapContext?.clearMapDrawInteractionsRef?.current?.();
@@ -1067,15 +1065,13 @@ export function RiverConstructionLedgerDetailPanel({ row, onClose }: Props) {
 
     const viewProj = map.getView().getProjection()?.getCode() || "EPSG:3857";
     const format = new GeoJSONFormat();
+    const drawIdx = parcelDrawIdx;
 
     const source = new VectorSource();
     const layer = new VectorLayer({
       source,
       zIndex: 9999,
-      style: new Style({
-        fill: new Fill({ color: "rgba(22, 163, 74, 0.25)" }),
-        stroke: new Stroke({ color: "#15803d", width: 2.5 }),
-      }),
+      style: parcelEditStyle,
     });
     const draw = new Draw({ source, type: "Polygon", stopClick: true });
     map.addLayer(layer);
@@ -1094,13 +1090,13 @@ export function RiverConstructionLedgerDetailPanel({ row, onClose }: Props) {
       }) as unknown as Record<string, unknown>;
       const extent = geom.getExtent();
       handleSetParcelGeom(
-        parcelGeomEditIdx,
+        drawIdx,
         geojson,
         extent.every((v) => Number.isFinite(v))
           ? (extent as [number, number, number, number])
           : null
       );
-      finishParcelGeomEdit();
+      finishParcelDraw();
     };
     draw.on("drawend", onEnd as never);
 
@@ -1110,95 +1106,8 @@ export function RiverConstructionLedgerDetailPanel({ row, onClose }: Props) {
       map.removeLayer(layer);
       source.clear();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- draw session keyed by index·모드
-  }, [parcelGeomEditIdx, parcelGeomEditMode]);
-
-  /** 필지(개별 구간) 도형 정점 수정 — 이미 그려진 도형을 지도에서 드래그로 수정 */
-  useEffect(() => {
-    if (parcelGeomEditIdx == null || parcelGeomEditMode !== "modify") return;
-    const map = mapContext?.mapInstanceRef?.current;
-    if (!map) {
-      finishParcelGeomEdit();
-      return;
-    }
-    if (!canStartMapDrawInteraction(mapContext, "spatialSearch")) {
-      finishParcelGeomEdit();
-      return;
-    }
-    mapContext?.clearMapDrawInteractionsRef?.current?.();
-    setRiverFocus?.(null);
-
-    const viewProj = map.getView().getProjection()?.getCode() || "EPSG:3857";
-    const format = new GeoJSONFormat();
-    const geometry3857 = draftParcelsRef.current[parcelGeomEditIdx]?.geometry3857;
-    let features: Feature[] = [];
-    if (geometry3857) {
-      try {
-        features = format.readFeatures(geometry3857, {
-          dataProjection: viewProj,
-          featureProjection: viewProj,
-        });
-      } catch {
-        features = [];
-      }
-    }
-    if (features.length === 0) {
-      finishParcelGeomEdit();
-      return;
-    }
-
-    const source = new VectorSource({ features });
-    const layer = new VectorLayer({
-      source,
-      zIndex: 9999,
-      style: new Style({
-        fill: new Fill({ color: "rgba(22, 163, 74, 0.25)" }),
-        stroke: new Stroke({ color: "#15803d", width: 2.5 }),
-        image: new CircleStyle({
-          radius: 5,
-          fill: new Fill({ color: "#15803d" }),
-          stroke: new Stroke({ color: "#fff", width: 1.5 }),
-        }),
-      }),
-    });
-    const modify = new Modify({ source });
-    map.addLayer(layer);
-    map.addInteraction(modify);
-
-    const extent = source.getExtent();
-    if (!isEmptyExtent(extent)) {
-      map.getView().fit(extent, {
-        padding: [80, 80, 80, 80],
-        maxZoom: 18,
-        duration: 280,
-      });
-    }
-
-    const onModifyEnd = () => {
-      const feature = source.getFeatures()[0];
-      const geom = feature?.getGeometry();
-      if (!geom) return;
-      const geojson = format.writeGeometryObject(geom, {
-        dataProjection: viewProj,
-        featureProjection: viewProj,
-      }) as unknown as Record<string, unknown>;
-      const ext = geom.getExtent();
-      handleSetParcelGeom(
-        parcelGeomEditIdx,
-        geojson,
-        ext.every((v) => Number.isFinite(v)) ? (ext as [number, number, number, number]) : null
-      );
-    };
-    modify.on("modifyend", onModifyEnd);
-
-    return () => {
-      modify.un("modifyend", onModifyEnd);
-      map.removeInteraction(modify);
-      map.removeLayer(layer);
-      source.clear();
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- modify session keyed by index·모드·리셋 토큰
-  }, [parcelGeomEditIdx, parcelGeomEditMode, parcelGeomModifyResetToken]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- draw session keyed by index
+  }, [editing, parcelDrawIdx]);
 
   const beginEdit = () => {
     setDraft(toDraft(row));
@@ -1207,6 +1116,7 @@ export function RiverConstructionLedgerDetailPanel({ row, onClose }: Props) {
     parcelsSnapshotRef.current = [...filled];
     draftParcelsRef.current = filled;
     setDraftParcels(filled);
+    setParcelDrawIdx(null);
     setEditing(true);
   };
 
@@ -1284,9 +1194,17 @@ export function RiverConstructionLedgerDetailPanel({ row, onClose }: Props) {
       draftParcelsRef.current = savedParcels;
       setDraftParcels(savedParcels);
       parcelsSnapshotRef.current = [...savedParcels];
-      finishParcelGeomEdit();
+      finishParcelDraw();
       setEditing(false);
       setFoldersRefreshNonce((n) => n + 1);
+      if (consCode) {
+        await refreshConsDataAsMapView({
+          map: mapContext?.mapInstanceRef?.current,
+          consCode,
+          setVisibleLayerNames: mapContext?.setVisibleLayerNames,
+          applyMapViewPadding: mapContext?.applyMapViewPaddingRef?.current ?? null,
+        });
+      }
       if (data.error) window.alert(String(data.error));
     } catch (e: unknown) {
       window.alert(e instanceof Error ? e.message : "저장에 실패했습니다.");
@@ -1303,20 +1221,21 @@ export function RiverConstructionLedgerDetailPanel({ row, onClose }: Props) {
         rows.filter((r) => !isNewRiverConstructionLedgerRow(r))
       );
       mapContext?.setRiverConstructionLedgerSelectedId?.(null);
+      finishParcelDraw();
       return;
     }
     const snapParcels = [...parcelsSnapshotRef.current];
     draftParcelsRef.current = snapParcels;
     setDraftParcels(snapParcels);
     patchRow((prev) => ({ ...prev, parcels: snapParcels }));
-    finishParcelGeomEdit();
+    finishParcelDraw();
     setEditing(false);
   };
 
   const handleDelete = async () => {
     if (!window.confirm(`「${row.name || "신규 공사"}」을(를) 삭제할까요?`)) return;
     const clearDeletedFromMap = () => {
-      finishParcelGeomEdit();
+      finishParcelDraw();
       mapContext?.setRiverConstructionLedgerRows?.((rows) => rows.filter((r) => r.id !== row.id));
       mapContext?.setRiverConstructionLedgerOverlayRows?.((rows) =>
         rows.filter((r) => r.id !== row.id)
@@ -1621,65 +1540,33 @@ export function RiverConstructionLedgerDetailPanel({ row, onClose }: Props) {
     mapContext?.mapInstanceRef?.current?.getTargetElement()?.parentElement ?? null;
 
   const mapEditBanner =
-    geomBannerHost && parcelGeomEditIdx != null
+    geomBannerHost && geomBannerActive
       ? createPortal(
           <div
-            className="pointer-events-none absolute z-[15] flex -translate-x-1/2 flex-col gap-1.5 rounded border border-primary/40 bg-primary/10 px-3 py-1.5 text-[11px] font-medium text-primary shadow-sm"
+            className="pointer-events-none absolute z-[15] flex -translate-x-1/2 flex-col items-center gap-1.5"
             style={
               geomCenterPixel
                 ? { left: geomCenterPixel.x, top: geomHintTopPx }
                 : { left: "50%", top: geomHintTopPx }
             }
           >
-            <span className="whitespace-nowrap text-center">
-              {parcelGeomEditMode === "draw"
-                ? `${parcelGeomEditIdx + 1}번 필지 도형을 지도에서 그려 주세요.`
-                : `${parcelGeomEditIdx + 1}번 필지 도형 정점을 지도에서 수정하세요.`}
-            </span>
-            <div className="pointer-events-none flex flex-wrap items-center justify-center gap-2">
-              {parcelGeomEditMode === "draw" ? (
-                <button
-                  type="button"
-                  className={layerRowPanelButtonClass(
-                    "default",
-                    "pointer-events-auto shrink-0 border-primary/30 text-primary hover:bg-primary/15"
-                  )}
-                  onClick={finishParcelGeomEdit}
-                >
-                  취소
-                </button>
-              ) : (
-                <>
-                  <button
-                    type="button"
-                    className={layerRowPanelButtonClass(
-                      "default",
-                      "pointer-events-auto shrink-0 border-primary/30 text-primary hover:bg-primary/15"
-                    )}
-                    onClick={finishParcelGeomEdit}
-                  >
-                    완료
-                  </button>
-                  <button
-                    type="button"
-                    className={layerRowPanelButtonClass(
-                      "default",
-                      "pointer-events-auto shrink-0 border-primary/30 text-primary hover:bg-primary/15"
-                    )}
-                    onClick={resetParcelGeomToSnapshot}
-                  >
-                    초기화
-                  </button>
-                  <button
-                    type="button"
-                    className={layerRowPanelButtonClass("danger", "pointer-events-auto shrink-0")}
-                    onClick={deleteParcelGeomAndFinish}
-                  >
-                    삭제
-                  </button>
-                </>
-              )}
-            </div>
+            {parcelDrawIdx != null ? (
+              <DrawToolbarActions
+                drawPhase="drawing"
+                confirmDraw={finishParcelDraw}
+                redrawShape={finishParcelDraw}
+                cancelDraw={cancelParcelDraw}
+                applyDisabled={false}
+              />
+            ) : (
+              <div className="pointer-events-auto flex max-w-[min(100vw-16px,560px)] flex-wrap items-center gap-2 rounded-full border border-border bg-background/95 px-4 py-2 text-foreground shadow-lg backdrop-blur">
+                <span className="text-[12px] leading-snug sm:text-sm">
+                  {draftParcels.some((p) => p.geometry3857)
+                    ? "꼭짓점을 드래그해 모양을 수정하세요."
+                    : "「추가」를 눌러 필지 도형을 그리세요."}
+                </span>
+              </div>
+            )}
           </div>,
           geomBannerHost
         )
@@ -1761,7 +1648,10 @@ export function RiverConstructionLedgerDetailPanel({ row, onClose }: Props) {
           ) : editing ? (
             <ul className="max-h-48 list-none space-y-1.5 overflow-y-auto overscroll-contain rounded border border-border bg-background p-1.5 scrollbar-hide">
               {draftParcels.map((item, i) => (
-                <li key={i} className="flex items-center gap-1 rounded border border-border bg-muted/40 p-1">
+                <li
+                  key={i}
+                  className="flex items-center gap-1 rounded border border-border bg-muted/40 p-1"
+                >
                   <button
                     type="button"
                     className="w-4 shrink-0 text-center text-[10px] tabular-nums text-muted-foreground hover:text-primary disabled:cursor-default disabled:opacity-70"
@@ -1785,28 +1675,6 @@ export function RiverConstructionLedgerDetailPanel({ row, onClose }: Props) {
                   {movingParcelIdx === i && (
                     <span className="shrink-0 text-[10px] text-muted-foreground">이동중</span>
                   )}
-                  <button
-                    type="button"
-                    className={cn(
-                      "inline-flex h-6 w-6 shrink-0 items-center justify-center rounded",
-                      parcelGeomEditIdx === i
-                        ? "bg-primary/15 text-primary"
-                        : item.geometry3857
-                          ? "text-primary hover:bg-primary/10"
-                          : "text-muted-foreground hover:bg-muted hover:text-foreground"
-                    )}
-                    onClick={() => toggleParcelGeomEdit(i)}
-                    aria-label={item.geometry3857 ? "필지 도형 수정" : "필지 도형추가"}
-                    title={
-                      parcelGeomEditIdx === i
-                        ? "편집 중 (다시 클릭 시 종료)"
-                        : item.geometry3857
-                          ? "도형 수정·삭제"
-                          : "도형추가"
-                    }
-                  >
-                    <MapPin className="h-3.5 w-3.5" />
-                  </button>
                   <button
                     type="button"
                     className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-destructive/10 hover:text-destructive"

@@ -3625,6 +3625,27 @@ function syncKeptGeomMatchSql(
 }
 
 /**
+ * PostgreSQL 함수 인자 한도(100) — jsonb_build_object는 키·값 쌍이라 컬럼당 2인자.
+ * 한 조각당 속성 상한(여유 있게 40 = 80인자).
+ */
+const JSONB_BUILD_OBJECT_ATTR_CHUNK = 40;
+
+/** 속성 쌍 → jsonb_build_object 조각들을 || 로 합친 SQL (빈 배열이면 '{}'::jsonb) */
+function syncAttrJsonbSqlFromPairs(alias: string, attrPairs: SyncColPair[]): string {
+  if (attrPairs.length === 0) return "'{}'::jsonb";
+  const chunks: string[] = [];
+  for (let i = 0; i < attrPairs.length; i += JSONB_BUILD_OBJECT_ATTR_CHUNK) {
+    const slice = attrPairs.slice(i, i + JSONB_BUILD_OBJECT_ATTR_CHUNK);
+    const parts = slice.flatMap((p) => {
+      const col = alias === 'e' ? p.db : p.sync;
+      return [`'${p.db}'`, `${alias}."${col}"`];
+    });
+    chunks.push(`jsonb_build_object(${parts.join(', ')})`);
+  }
+  return chunks.length === 1 ? chunks[0]! : `(${chunks.join(' || ')})`;
+}
+
+/**
  * sync_log 저장용 행 JSON.
  * - geom: ST_AsGeoJSON 통째 (이력·data_log 상세용). sync_log_geom은 공간 조인용으로 병행 가능
  * - includeRollbackGeom: 레거시 호환(미사용에 가깝음). geom에 이미 좌표가 있으면 중복
@@ -3641,12 +3662,7 @@ function syncLogRowJsonSqlFromPairs(
     extraJsonbSql?: string | null;
   },
 ): string {
-  const attrParts = attrPairs.flatMap((p) => {
-    const col = alias === 'e' ? p.db : p.sync;
-    return [`'${p.db}'`, `${alias}."${col}"`];
-  });
-  let baseJson =
-    attrParts.length === 0 ? "'{}'::jsonb" : `jsonb_build_object(${attrParts.join(', ')})`;
+  let baseJson = syncAttrJsonbSqlFromPairs(alias, attrPairs);
   if (opts?.extraJsonbSql) {
     baseJson = `(${baseJson} || (${opts.extraJsonbSql}))`;
   }

@@ -56,11 +56,12 @@ export function RiverBasicPlanListPanel({
   const [keyword, setKeyword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  /** true: 테이블 없음 등 안내(muted), false: 조회 실패(destructive) */
-  const [errorSoft, setErrorSoft] = useState(false);
   const [items, setItems] = useState<RiverItem[]>([]);
 
-  /** 패널 진입·탭 변경 시 해당 탭 기본 레이어 켜기, 언마운트 시 양쪽 끄기 */
+  /**
+   * 탭 전환: 상대 탭 레이어 끄기. 언마운트 시 양쪽·CQL 해제.
+   * 현재 탭 WMS는 목록 건수가 있을 때만 켠다(미구축 시 빈 GetMap → Issues 방지).
+   */
   useEffect(() => {
     const ctx = mapContextRef.current;
     if (!ctx?.setVisibleLayerNames) return;
@@ -71,12 +72,6 @@ export function RiverBasicPlanListPanel({
       let changed = false;
       for (const id of offLayers) {
         if (next.delete(id)) changed = true;
-      }
-      for (const id of onLayers) {
-        if (!next.has(id)) {
-          next.add(id);
-          changed = true;
-        }
       }
       return changed ? next : prev;
     });
@@ -95,6 +90,30 @@ export function RiverBasicPlanListPanel({
     };
   }, [tab]);
 
+  useEffect(() => {
+    const ctx = mapContextRef.current;
+    if (!ctx?.setVisibleLayerNames || loading) return;
+    const onLayers = defaultLayersForTab(tab);
+    const enableCurrent = !error && items.length > 0;
+    ctx.setVisibleLayerNames((prev) => {
+      const next = new Set(prev);
+      let changed = false;
+      if (enableCurrent) {
+        for (const id of onLayers) {
+          if (!next.has(id)) {
+            next.add(id);
+            changed = true;
+          }
+        }
+      } else {
+        for (const id of onLayers) {
+          if (next.delete(id)) changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [tab, loading, error, items.length]);
+
   /** 목록에서 하천 선택 시 해당 하천만 WMS 표시 */
   useEffect(() => {
     const setCql = mapContextRef.current?.setServiceWmsCqlByLayer;
@@ -106,7 +125,6 @@ export function RiverBasicPlanListPanel({
     const t = setTimeout(async () => {
       setLoading(true);
       setError(null);
-      setErrorSoft(false);
       try {
         const res = await call("", "POST", {
           service: "riverBasicPlanService",
@@ -115,15 +133,10 @@ export function RiverBasicPlanListPanel({
         });
         const data = res?.data ?? res;
         setItems(Array.isArray(data?.rivers) ? data.rivers : []);
-        const notice = typeof data?.error === "string" ? data.error.trim() : "";
-        if (notice) {
-          setError(notice);
-          setErrorSoft(true);
-        }
       } catch (e: unknown) {
         setItems([]);
+        // 네트워크·인증 등 실제 실패만 표시. 테이블 없음·무자료는 서버가 빈 목록으로 반환함
         setError(e instanceof Error ? e.message : "목록을 불러오지 못했습니다.");
-        setErrorSoft(false);
       } finally {
         setLoading(false);
       }
@@ -193,14 +206,7 @@ export function RiverBasicPlanListPanel({
         {loading ? (
           <p className="text-sm text-muted-foreground px-4 py-4">불러오는 중...</p>
         ) : error ? (
-          <p
-            className={cn(
-              "text-sm px-4 py-4",
-              errorSoft ? "text-muted-foreground" : "text-destructive"
-            )}
-          >
-            {error}
-          </p>
+          <p className="text-sm px-4 py-4 text-destructive">{error}</p>
         ) : items.length === 0 ? (
           <p className="text-sm text-muted-foreground px-4 py-4">검색 결과가 없습니다.</p>
         ) : (
