@@ -1711,7 +1711,6 @@ const SAFETY_FACILITY_DISPLAY: Record<
     addressKeys: ['addr'],
   },
   water_play_sign: {
-    nameKeys: ['sign_nm'],
     addressKeys: ['addr'],
   },
 };

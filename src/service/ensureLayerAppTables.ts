@@ -918,15 +918,11 @@ COMMENT ON TABLE layer.radiation_shelter IS '방사선 대피소';
 const WATER_PLAY_SIGN_SQL = `
 CREATE TABLE IF NOT EXISTS layer.water_play_sign (
   id SERIAL PRIMARY KEY,
-  sign_nm text,
   addr text,
-  sign_type text,
   remark text,
   geom geometry(Point, 5181)
 );
-CREATE INDEX IF NOT EXISTS water_play_sign_sign_nm_idx ON layer.water_play_sign (sign_nm);
 CREATE INDEX IF NOT EXISTS water_play_sign_addr_idx ON layer.water_play_sign (addr);
-CREATE INDEX IF NOT EXISTS water_play_sign_sign_type_idx ON layer.water_play_sign (sign_type);
 COMMENT ON TABLE layer.water_play_sign IS '물놀이 표지판';
 `;
 

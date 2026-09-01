@@ -7,9 +7,7 @@ type Params = Record<string, unknown>;
 
 export type WaterPlaySignListItem = {
   id: number;
-  signNm: string;
   addr: string;
-  signType: string;
   remark: string;
   geomJson: unknown | null;
 };
@@ -35,9 +33,7 @@ function mapRow(row: Record<string, unknown>): WaterPlaySignListItem {
   }
   return {
     id: Number(row.id),
-    signNm: tx(row.sign_nm ?? row.signNm) || '-',
     addr: tx(row.addr) || '-',
-    signType: tx(row.sign_type ?? row.signType) || '-',
     remark: tx(row.remark) || '-',
     geomJson,
   };
@@ -46,9 +42,7 @@ function mapRow(row: Record<string, unknown>): WaterPlaySignListItem {
 const LIST_SELECT_SQL = `
   SELECT
     wps.id,
-    wps.sign_nm,
     wps.addr,
-    wps.sign_type,
     wps.remark,
     CASE
       WHEN wps.geom IS NOT NULL THEN ST_AsGeoJSON(ST_Transform(wps.geom, 4326))::json
@@ -66,14 +60,12 @@ export async function list(p: Params): Promise<{ items: WaterPlaySignListItem[];
   if (keyword) {
     params.push(`%${keyword}%`);
     const i = params.length;
-    whereParts.push(
-      `(wps.sign_nm ILIKE $${i} OR wps.addr ILIKE $${i} OR wps.sign_type ILIKE $${i})`
-    );
+    whereParts.push(`(wps.addr ILIKE $${i} OR wps.remark ILIKE $${i})`);
   }
   const whereClause = whereParts.length ? `WHERE ${whereParts.join(' AND ')}` : '';
 
   const countSql = `SELECT count(*)::int AS c FROM layer.water_play_sign wps ${whereClause}`;
-  const dataSql = `${LIST_SELECT_SQL} ${whereClause} ORDER BY wps.sign_nm ASC NULLS LAST, wps.id ASC LIMIT $${params.length + 1}`;
+  const dataSql = `${LIST_SELECT_SQL} ${whereClause} ORDER BY wps.addr ASC NULLS LAST, wps.id ASC LIMIT $${params.length + 1}`;
 
   const countRes = await pool.query<{ c: number }>(countSql, params);
   const total = Number(countRes.rows[0]?.c ?? 0);
