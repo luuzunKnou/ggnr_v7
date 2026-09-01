@@ -1,14 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import { Draw } from "ol/interaction";
-import VectorLayer from "ol/layer/Vector";
-import VectorSource from "ol/source/Vector";
-import { Feature } from "ol";
-import { Point } from "ol/geom";
-import { transform } from "ol/proj";
-import { Style, Circle as CircleStyle, Fill, Stroke } from "ol/style";
-import { Calendar, Check, FileText, Loader2, MapPin, Type, User, X } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Calendar, Check, Crosshair, FileText, Loader2, MapPin, Type, User, X } from "lucide-react";
 import { useSession } from "next-auth/react";
 import { call } from "@/lib/api";
 import { recordDataViewLog } from "@/lib/recordDataViewLog";
@@ -16,7 +9,8 @@ import { formatToYmdOrText } from "@/lib/formatDateYmd";
 import { Input } from "@/app/shadcnComponents/ui/input";
 import { Button } from "@/app/shadcnComponents/ui/button";
 import { useMapContext } from "../../_mapComponents/MapContext";
-import { getAddressFromCoord } from "../../_mapComponents/addressSearch/vworldAddressSearch";
+import { AddressSearchPanel } from "../../_mapComponents/addressSearch/AddressSearchPanel";
+import { useMapPointPick } from "../../_mapComponents/addressSearch/useMapPointPick";
 import { LAYER_ROW_NEW_ID } from "../../_mapComponents/layerRowEdit";
 import { encodeMemoRowKey, memoWmsLayerId, parseMemoRowKey } from "./memoConfig";
 import { MEMO_KEY_FIELD } from "@/lib/memoConfig";
@@ -33,8 +27,6 @@ type Props = {
   onCreated?: (newRowKey: string) => void;
   onDeleted?: () => void;
 };
-
-const DRAFT_LAYER_ID = "memo-draft-point";
 
 export function MemoDetailPanel({
   mode = "edit",
@@ -61,118 +53,25 @@ export function MemoDetailPanel({
   const [createDate, setCreateDate] = useState("");
   const [createUser, setCreateUser] = useState("");
   const [createGroup, setCreateGroup] = useState("");
+  const [address, setAddress] = useState("");
+  const [lon, setLon] = useState<number | null>(null);
+  const [lat, setLat] = useState<number | null>(null);
   const [hasGeom, setHasGeom] = useState(false);
-  const [pointSet, setPointSet] = useState(false);
-  const [pickMode, setPickMode] = useState(false);
-  const [locationLabel, setLocationLabel] = useState("");
-  const point3857Ref = useRef<{ x: number; y: number } | null>(null);
-  const drawLayerRef = useRef<VectorLayer<VectorSource> | null>(null);
-  const drawRef = useRef<Draw | null>(null);
 
-  const mapInstanceRef = mapContext?.mapInstanceRef;
-  const setDrawSuspended = mapContext?.setMapDrawInputSuspended;
   const setVisibleLayerNames = mapContext?.setVisibleLayerNames;
   const vworldApiKey = mapContext?.vworldApiKey ?? "";
   /** 화면 기준 기본 위치 — 목록 패널 오른쪽(지도 왼쪽 끝)에서 조금 떨어뜨림 */
   const floatingLeftPx = (mapContext?.mapPaddingLeft ?? 0) + 20;
 
-  const fillAddressFromLonLat = useCallback(
-    async (lon: number, lat: number) => {
-      if (!Number.isFinite(lon) || !Number.isFinite(lat)) {
-        setLocationLabel("");
-        return;
-      }
-      setLocationLabel("주소 조회 중…");
-      const addr = await getAddressFromCoord(lon, lat, { apiKey: vworldApiKey || undefined });
-      const text = (addr?.road || addr?.jibun || "").trim();
-      setLocationLabel(text || "주소 없음");
+  const { pickMode, startPick, stopPick, clearDraftPoint } = useMapPointPick({
+    vworldApiKey,
+    onPicked: ({ lon: pickedLon, lat: pickedLat, address: pickedAddress }) => {
+      if (pickedAddress) setAddress(pickedAddress);
+      setLon(pickedLon);
+      setLat(pickedLat);
+      setHasGeom(true);
     },
-    [vworldApiKey]
-  );
-  const fillAddressFromLonLatRef = useRef(fillAddressFromLonLat);
-  fillAddressFromLonLatRef.current = fillAddressFromLonLat;
-
-  const stopPick = useCallback(() => {
-    setPickMode(false);
-    const map = mapInstanceRef?.current;
-    if (map && drawRef.current) {
-      map.removeInteraction(drawRef.current);
-      drawRef.current = null;
-    }
-    setDrawSuspended?.(false);
-  }, [mapInstanceRef, setDrawSuspended]);
-
-  const startPick = useCallback(() => {
-    const map = mapInstanceRef?.current;
-    if (!map) {
-      window.alert("지도가 준비되지 않았습니다.");
-      return;
-    }
-    if (drawRef.current) {
-      map.removeInteraction(drawRef.current);
-      drawRef.current = null;
-    }
-    setPickMode(true);
-    setDrawSuspended?.(true);
-    if (!drawLayerRef.current) {
-      const source = new VectorSource();
-      const layer = new VectorLayer({
-        source,
-        properties: { id: DRAFT_LAYER_ID },
-        zIndex: 9999,
-        style: new Style({
-          image: new CircleStyle({
-            radius: 8,
-            fill: new Fill({ color: "rgba(29, 106, 227, 0.85)" }),
-            stroke: new Stroke({ color: "#fff", width: 2 }),
-          }),
-        }),
-      });
-      map.addLayer(layer);
-      drawLayerRef.current = layer;
-    }
-    const source = drawLayerRef.current.getSource();
-    if (!source) return;
-    const draw = new Draw({ source, type: "Point", stopClick: true });
-    draw.on("drawend", (e) => {
-      const geom = e.feature.getGeometry();
-      if (geom instanceof Point) {
-        const [x, y] = geom.getCoordinates();
-        const viewProj = map.getView().getProjection()?.getCode() || "EPSG:3857";
-        const [x3857, y3857] =
-          viewProj === "EPSG:3857" ? [x, y] : transform([x, y], viewProj, "EPSG:3857");
-        point3857Ref.current = { x: x3857, y: y3857 };
-        setPointSet(true);
-        source.clear();
-        source.addFeature(new Feature(new Point([x, y])));
-        const [lon, lat] = transform([x3857, y3857], "EPSG:3857", "EPSG:4326");
-        void fillAddressFromLonLat(lon, lat);
-      }
-      setPickMode(false);
-      if (drawRef.current) {
-        map.removeInteraction(drawRef.current);
-        drawRef.current = null;
-      }
-      setDrawSuspended?.(false);
-    });
-    map.addInteraction(draw);
-    drawRef.current = draw;
-  }, [fillAddressFromLonLat, mapInstanceRef, setDrawSuspended]);
-
-  useEffect(() => {
-    return () => {
-      const map = mapInstanceRef?.current;
-      if (map && drawRef.current) {
-        map.removeInteraction(drawRef.current);
-        drawRef.current = null;
-      }
-      if (map && drawLayerRef.current) {
-        map.removeLayer(drawLayerRef.current);
-        drawLayerRef.current = null;
-      }
-      setDrawSuspended?.(false);
-    };
-  }, [mapInstanceRef, setDrawSuspended]);
+  });
 
   useEffect(() => {
     if (isCreateMode) {
@@ -181,10 +80,10 @@ export function MemoDetailPanel({
       setCreateDate(formatToYmdOrText(new Date()));
       setCreateUser(String(session?.user?.name ?? "").trim() || String(session?.user?.id ?? "").trim());
       setCreateGroup("");
+      setAddress("");
+      setLon(null);
+      setLat(null);
       setHasGeom(false);
-      setPointSet(false);
-      setLocationLabel("");
-      point3857Ref.current = null;
       setLoading(false);
       setError(null);
       void call("", "POST", {
@@ -207,9 +106,9 @@ export function MemoDetailPanel({
     }
     setLoading(true);
     setError(null);
-    setPointSet(false);
-    setLocationLabel("");
-    point3857Ref.current = null;
+    setAddress("");
+    setLon(null);
+    setLat(null);
     void call("", "POST", {
       service: "memoService",
       action: "getMemoDetail",
@@ -226,14 +125,12 @@ export function MemoDetailPanel({
         setCreateDate(String(data.createDate ?? ""));
         setCreateUser(String(data.createUser ?? ""));
         setCreateGroup(String(data.createGroup ?? ""));
+        setAddress(String(data.address ?? ""));
         setHasGeom(Boolean(data.hasGeom));
-        const lon = Number(data.lon);
-        const lat = Number(data.lat);
-        if (Boolean(data.hasGeom) && Number.isFinite(lon) && Number.isFinite(lat)) {
-          void fillAddressFromLonLatRef.current(lon, lat);
-        } else {
-          setLocationLabel("");
-        }
+        const loadedLon = Number(data.lon);
+        const loadedLat = Number(data.lat);
+        setLon(Number.isFinite(loadedLon) ? loadedLon : null);
+        setLat(Number.isFinite(loadedLat) ? loadedLat : null);
       })
       .catch(() => setError("상세 정보를 불러오지 못했습니다."))
       .finally(() => setLoading(false));
@@ -263,17 +160,20 @@ export function MemoDetailPanel({
     setSaving(true);
     setError(null);
     try {
-      const point = point3857Ref.current;
+      const saveParams = {
+        table: tableName,
+        title,
+        contents,
+        address,
+        lon,
+        lat,
+      };
       if (isCreateMode) {
         const res = await call("", "POST", {
           service: "memoService",
           action: "createMemo",
           params: {
-            table: tableName,
-            title,
-            contents,
-            pointX3857: point?.x,
-            pointY3857: point?.y,
+            ...saveParams,
             createUser,
             createGroup,
           },
@@ -289,8 +189,8 @@ export function MemoDetailPanel({
           return;
         }
         onCreated?.(encodeMemoRowKey(tableName, newKey));
+        clearDraftPoint();
         onSaved?.();
-        stopPick();
         return;
       }
 
@@ -298,12 +198,8 @@ export function MemoDetailPanel({
         service: "memoService",
         action: "updateMemo",
         params: {
-          table: tableName,
+          ...saveParams,
           memoKey,
-          title,
-          contents,
-          pointX3857: point?.x,
-          pointY3857: point?.y,
         },
       });
       const data = res?.data ?? res;
@@ -311,13 +207,8 @@ export function MemoDetailPanel({
         setError(String(data?.error ?? "저장에 실패했습니다."));
         return;
       }
-      if (point && Number.isFinite(point.x) && Number.isFinite(point.y)) {
-        setHasGeom(true);
-        setPointSet(true);
-        const [lon, lat] = transform([point.x, point.y], "EPSG:3857", "EPSG:4326");
-        void fillAddressFromLonLat(lon, lat);
-      }
-      stopPick();
+      setHasGeom(lon != null && lat != null);
+      clearDraftPoint();
       onSaved?.();
     } catch {
       setError("저장에 실패했습니다.");
@@ -352,7 +243,7 @@ export function MemoDetailPanel({
   if (!isCreateMode && (!tableName || !memoKey || memoKey === LAYER_ROW_NEW_ID)) return null;
 
   const form = (
-      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
       <MapSideDetailScroll className="min-h-0 flex-1 overflow-auto p-4 text-xs">
         {loading && (
           <div className="flex items-center justify-center gap-2 py-12 text-sm text-muted-foreground">
@@ -417,31 +308,61 @@ export function MemoDetailPanel({
                 <span className="flex h-8 shrink-0 items-center text-muted-foreground/80">
                   <MapPin className="h-3.5 w-3.5" />
                 </span>
-                <span className="flex h-8 w-14 shrink-0 items-center text-[12px] text-muted-foreground/90">위치</span>
+                <span className="flex h-8 w-14 shrink-0 items-center text-[12px] text-muted-foreground/90">주소</span>
                 <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2">
-                    <div className="flex h-8 min-w-0 flex-1 items-center rounded-md border border-border bg-background px-3 text-[12px] text-foreground/90">
-                      <span className="truncate">
-                        {locationLabel || (hasGeom || pointSet ? "주소 없음" : "없음")}
-                      </span>
+                  <div className="flex items-start gap-2">
+                    <div className="min-w-0 flex-1">
+                      <AddressSearchPanel
+                        layout="field"
+                        includePlace
+                        vworldApiKey={vworldApiKey}
+                        initialQuery={address}
+                        placeholder="주소/지번/장소 검색"
+                        onSelect={(item) => {
+                          const adr =
+                            (item.roadAddress ?? "").trim() ||
+                            (item.jibunAddress ?? "").trim() ||
+                            (item.title ?? "").trim() ||
+                            (item.address ?? "").trim();
+                          const itemLon = Number(item.point?.x);
+                          const itemLat = Number(item.point?.y);
+                          setAddress(adr);
+                          setLon(Number.isFinite(itemLon) ? itemLon : null);
+                          setLat(Number.isFinite(itemLat) ? itemLat : null);
+                          setHasGeom(Number.isFinite(itemLon) && Number.isFinite(itemLat));
+                        }}
+                        onClear={() => {
+                          setAddress("");
+                          setLon(null);
+                          setLat(null);
+                          setHasGeom(false);
+                        }}
+                      />
                     </div>
                     <Button
                       type="button"
                       size="sm"
                       variant="outline"
+                      title={pickMode ? "위치 지정 취소" : "지도에서 위치 찍기"}
+                      aria-label={pickMode ? "위치 지정 취소" : "지도에서 위치 찍기"}
                       onClick={pickMode ? stopPick : startPick}
                       className={cn(
-                        "h-8 shrink-0 px-2.5 text-[12px] font-light",
+                        "h-8 w-8 shrink-0 p-0",
                         pickMode
                           ? "border-orange-300 bg-orange-50 text-orange-700 hover:bg-orange-50"
                           : "border-border bg-background text-muted-foreground hover:border-primary hover:bg-primary/15 hover:text-primary"
                       )}
                     >
-                      {pickMode ? "위치 지정 취소" : "지도에서 위치 찍기"}
+                      {pickMode ? <X className="h-3.5 w-3.5" /> : <Crosshair className="h-3.5 w-3.5" />}
                     </Button>
                   </div>
                   {pickMode && (
                     <p className="mt-1 text-[11px] text-muted-foreground">지도를 클릭해 메모 위치를 지정하세요.</p>
+                  )}
+                  {!address && hasGeom && !pickMode && (
+                    <p className="mt-1 text-[11px] text-muted-foreground">
+                      저장된 위치가 있으나 주소가 없습니다. 주소를 검색하거나 지도에서 위치를 지정하세요.
+                    </p>
                   )}
                 </div>
               </div>
@@ -481,7 +402,7 @@ export function MemoDetailPanel({
           </div>
         )}
       </MapSideDetailScroll>
-      </div>
+    </div>
   );
 
   return (

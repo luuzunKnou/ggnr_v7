@@ -8,9 +8,19 @@ export function getGeoServerInternalBase(): string {
   return (process.env.GEOSERVER_URL?.trim() || GEOSERVER_INTERNAL_DEFAULT).replace(/\/$/, '');
 }
 /**
+ * 브라우저 HTML(img src 등)용 동일출처 경로.
+ * rewrite: `{basePath}/geoserver` → start.ini·GEOSERVER_URL
+ * 서버에서 내부 포트(127.0.0.1:8080)를 붙이지 않는다.
+ */
+export function getGeoServerPublicBase(): string {
+  return `${getBasePath()}/geoserver`;
+}
+
+/**
  * 브라우저·동일 출처 WMS/WFS 베이스.
  * `next.config` rewrite: `/geoserver` → start.ini·GEOSERVER_URL
  * BASE_PATH·게이트(dggskorea/build_yy)에서도 hostname 직접 포트를 쓰지 않음.
+ * 범례 이미지(SSR HTML)는 getGeoServerPublicBase 를 쓴다.
  */
 export function getGeoServerBase(): string {
   if (typeof window !== 'undefined') {

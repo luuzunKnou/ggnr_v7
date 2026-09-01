@@ -8,6 +8,7 @@ import {
   riverBasicPlanHdDefineTable,
   riverBasicPlanIndexDefineTable,
   riverBasicPlanJdDefineTable,
+  riverBasicPlanRiverNameFilterableLayers,
   riverBasicPlanTabFromIndexDefineTable,
   type RiverBasicPlanTab,
 } from '@/lib/riverBasicPlanMapAttachmentLayers';
@@ -87,6 +88,27 @@ async function resolveLayerTableNameOrNull(wantedLower: string): Promise<string 
   const row = res.rows?.[0] as { table_name?: string } | undefined;
   const name = String(row?.table_name ?? '').trim();
   return name || null;
+}
+
+/** 탭 기본 지도 레이어 중 layer 스키마에 실제 테이블이 있는 것만 */
+export async function getRiverBasicPlanExistingMapLayers(params?: {
+  tab?: RiverType;
+}): Promise<{ layers: string[] }> {
+  const tab = normalizeTab(params?.tab);
+  const wanted = [...riverBasicPlanRiverNameFilterableLayers(tab)];
+  if (wanted.length === 0) return { layers: [] };
+  const inList = wanted.map((n) => `'${esc(n.toLowerCase())}'`).join(',');
+  const res = await db.execute(
+    sql.raw(
+      `SELECT table_name
+       FROM information_schema.tables
+       WHERE table_schema = 'layer' AND lower(table_name) IN (${inList})`
+    )
+  );
+  const have = new Set(
+    (res.rows ?? []).map((r) => String((r as { table_name?: string }).table_name ?? '').toLowerCase()).filter(Boolean)
+  );
+  return { layers: wanted.filter((n) => have.has(n.toLowerCase())) };
 }
 
 export async function getRiverBasicPlanRiverList(params?: {

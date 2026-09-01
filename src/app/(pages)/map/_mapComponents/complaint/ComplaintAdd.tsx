@@ -12,6 +12,12 @@ import {
   animateComplaintToCenter3857,
   center3857FromExtent,
 } from './useComplaintMapClick';
+import {
+  COMPLAINT_DETAIL_PANEL_DEFAULT_TOP,
+  COMPLAINT_DETAIL_PANEL_MAX_HEIGHT,
+  COMPLAINT_DETAIL_PANEL_WIDTH,
+  COMPLAINT_DETAIL_PANEL_Z_INDEX,
+} from './complaintPanelLayout';
 
 const EMPTY_COMP: CompUI = {
   compKey: 0,
@@ -103,9 +109,10 @@ export default function ComplaintAdd({ onClose, onCreated }: Props) {
   return (
     <MapFloatingPanel
       viewport
-      width="600px"
-      maxHeight="85vh"
-      defaultPosition={{ top: 80, left: floatingLeftPx }}
+      width={COMPLAINT_DETAIL_PANEL_WIDTH}
+      maxHeight={COMPLAINT_DETAIL_PANEL_MAX_HEIGHT}
+      style={{ zIndex: COMPLAINT_DETAIL_PANEL_Z_INDEX }}
+      defaultPosition={{ top: COMPLAINT_DETAIL_PANEL_DEFAULT_TOP, left: floatingLeftPx }}
       header={
         <>
           <span className="text-xs font-medium text-muted-foreground">민원 추가</span>

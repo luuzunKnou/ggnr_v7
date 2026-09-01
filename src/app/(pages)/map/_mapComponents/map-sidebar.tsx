@@ -7,7 +7,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { ChevronDown, ChevronUp, UserRound } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { call } from '@/lib/api';
-import { getOpenedKeyForSerEng } from '@/lib/mapServiceOpened';
+import { getOpenedKeyForSerEng, normalizeOpenedToken } from '@/lib/mapServiceOpened';
 import { openShapeEditorMapWindow } from '@/lib/shapeEditorWindow';
 import { requestCloseMapFloatingDetail } from './mapFloatingDetailEvent';
 import {
@@ -68,7 +68,7 @@ export function MapSidebar({ indexLogoSrc }: { indexLogoSrc: string }) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const rawOpened = searchParams.get('opened')?.split(',').filter(Boolean) || [];
-  const openedWindows = rawOpened.map((w) => (w === 'dataQuery' ? 'standardList' : w));
+  const openedWindows = rawOpened.map(normalizeOpenedToken);
   const navScrollRef = useRef<HTMLDivElement>(null);
   const myInfoAnchorRef = useRef<HTMLDivElement>(null);
   const navScrollHoldRef = useRef<ReturnType<typeof setInterval> | null>(null);
