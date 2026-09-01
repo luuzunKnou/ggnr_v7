@@ -6,7 +6,7 @@ import { Input } from '@/app/shadcnComponents/ui/input';
 import { cn } from '@/lib/utils';
 import { call } from '@/lib/api';
 import { formatTimestampWallClock } from '@/lib/formatTimestampWallClock';
-import { normalizeClientIp } from '@/lib/requestClientMeta';
+import { normalizeClientIp } from '@/lib/normalizeClientIp';
 import { RefreshCw, Search, X } from 'lucide-react';
 import { USER_MANAGER_UI_STYLE } from './userManagerUiVariants';
 
