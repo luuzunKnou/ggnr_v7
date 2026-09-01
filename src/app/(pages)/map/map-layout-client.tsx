@@ -31,6 +31,7 @@ import { SafetyFacDetailPanel } from "./_mapContents/safty/safetyFac/SafetyFacDe
 import type { SafetyFacFacilityRow } from "./_mapContents/safty/safetyFac/safetyFacSymbols"
 import { VillagePatrolListPanel } from "./_mapContents/safty/villagePatrol/VillagePatrolListPanel"
 import { RadiationShelterPanel } from "./_mapContents/safty/radiationShelter/RadiationShelterPanel"
+import { WaterPlaySignPanel } from "./_mapContents/safty/waterPlaySign/WaterPlaySignPanel"
 import { SafetyHospitalBadPanel } from "./_mapContents/safty/safetyHospitalBad/SafetyHospitalBadPanel"
 import { SafetyJsjReservoirPanel } from "./_mapContents/safty/saftyJsj/SafetyJsjReservoirPanel"
 import { RoadDocManualPanel } from "./_mapContents/road/roadDoc/roadDocManualPanel"
@@ -236,6 +237,10 @@ const RADIATION_SHELTER_PANEL_DEFAULT_WIDTH = 420
 const RADIATION_SHELTER_PANEL_MIN_WIDTH = 320
 const RADIATION_SHELTER_PANEL_MAX_WIDTH = 720
 
+const WATER_PLAY_SIGN_PANEL_DEFAULT_WIDTH = 420
+const WATER_PLAY_SIGN_PANEL_MIN_WIDTH = 320
+const WATER_PLAY_SIGN_PANEL_MAX_WIDTH = 720
+
 const SAFETY_HOSPITAL_BED_PANEL_DEFAULT_WIDTH = 420
 const SAFETY_HOSPITAL_BED_PANEL_MIN_WIDTH = 320
 const SAFETY_HOSPITAL_BED_PANEL_MAX_WIDTH = 720
@@ -290,6 +295,7 @@ const ROAD_NETWORK_OPENED_KEY = "roadNetwork"
 const SAFETY_MAP_OPENED_KEY = "safetyMap"
 const SAFETY_INFO_OPENED_KEY = "safetyInfo"
 const SAFETY_WATER_OPENED_KEY = "safetyWater"
+const WATER_PLAY_SIGN_OPENED_KEY = "waterPlaySign"
 const SAFETY_FAC_OPENED_KEY = "safetyFac"
 const RADIATION_SHELTER_OPENED_KEY = "radiationShelter"
 const VILLAGE_PATROL_OPENED_KEY = "villagePatrol"
@@ -520,6 +526,7 @@ function MapLayoutContent({
   const safetyMapOpen = openedWindows.includes(SAFETY_MAP_OPENED_KEY)
   const safetyInfoOpen = openedWindows.includes(SAFETY_INFO_OPENED_KEY)
   const safetyWaterOpen = openedWindows.includes(SAFETY_WATER_OPENED_KEY)
+  const waterPlaySignOpen = openedWindows.includes(WATER_PLAY_SIGN_OPENED_KEY)
   const safetyFacOpen = openedWindows.includes(SAFETY_FAC_OPENED_KEY)
   const radiationShelterOpen = openedWindows.includes(RADIATION_SHELTER_OPENED_KEY)
   const villagePatrolOpen = openedWindows.includes(VILLAGE_PATROL_OPENED_KEY)
@@ -709,6 +716,9 @@ function MapLayoutContent({
   const [radiationShelterPanelWidth, setRadiationShelterPanelWidth] = useState(
     RADIATION_SHELTER_PANEL_DEFAULT_WIDTH
   )
+  const [waterPlaySignPanelWidth, setWaterPlaySignPanelWidth] = useState(
+    WATER_PLAY_SIGN_PANEL_DEFAULT_WIDTH
+  )
   const [villagePatrolPanelWidth, setVillagePatrolPanelWidth] = useState(VILLAGE_PATROL_PANEL_DEFAULT_WIDTH)
   const [safetyHospitalBedPanelWidth, setSafetyHospitalBedPanelWidth] = useState(
     SAFETY_HOSPITAL_BED_PANEL_DEFAULT_WIDTH
@@ -822,6 +832,7 @@ function MapLayoutContent({
     (safetyInfoOpen ? safetyInfoPanelWidth : 0) +
     (safetyWaterOpen ? safetyWaterPanelWidth : 0) +
     (safetyWaterOpen && safetyWaterStatsOpen ? safetyWaterStatsWidth : 0) +
+    (waterPlaySignOpen ? waterPlaySignPanelWidth : 0) +
     (safetyFacOpen ? safetyFacPanelWidth : 0) +
     (safetyFacDetailOpen ? safetyFacDetailWidth : 0) +
     (radiationShelterOpen ? radiationShelterPanelWidth : 0) +
@@ -928,8 +939,10 @@ function MapLayoutContent({
   const safetyInfoPanelLeftPx = safetyMapPanelLeftPx + (safetyMapOpen ? safetyMapPanelWidth : 0)
   const safetyWaterPanelLeftPx = safetyInfoPanelLeftPx + (safetyInfoOpen ? safetyInfoPanelWidth : 0)
   const safetyWaterStatsLeftPx = safetyWaterPanelLeftPx + (safetyWaterOpen ? safetyWaterPanelWidth : 0)
-  const safetyFacPanelLeftPx =
+  const waterPlaySignPanelLeftPx =
     safetyWaterStatsLeftPx + (safetyWaterOpen && safetyWaterStatsOpen ? safetyWaterStatsWidth : 0)
+  const safetyFacPanelLeftPx =
+    waterPlaySignPanelLeftPx + (waterPlaySignOpen ? waterPlaySignPanelWidth : 0)
   const safetyFacDetailLeftPx =
     safetyFacPanelLeftPx + (safetyFacOpen ? safetyFacPanelWidth : 0)
   const radiationShelterPanelLeftPx =
@@ -1677,6 +1690,11 @@ function MapLayoutContent({
 
   const handleCloseRadiationShelter = () => {
     const next = openedWindows.filter((w) => w !== RADIATION_SHELTER_OPENED_KEY)
+    setOpened(next)
+  }
+
+  const handleCloseWaterPlaySign = () => {
+    const next = openedWindows.filter((w) => w !== WATER_PLAY_SIGN_OPENED_KEY)
     setOpened(next)
   }
 
@@ -2617,6 +2635,20 @@ function MapLayoutContent({
               onStatsKindsChange={setSafetyWaterStatsKinds}
               onClose={handleCloseSafetyWater}
             />
+          )}
+          {waterPlaySignOpen && (
+            <div className="pointer-events-auto shrink-0">
+              <MapSideListPanel
+                width={waterPlaySignPanelWidth}
+                minWidth={WATER_PLAY_SIGN_PANEL_MIN_WIDTH}
+                maxWidth={WATER_PLAY_SIGN_PANEL_MAX_WIDTH}
+                leftOffsetPx={waterPlaySignPanelLeftPx}
+                onWidthChange={setWaterPlaySignPanelWidth}
+                contentClassName="overflow-hidden"
+              >
+                <WaterPlaySignPanel onClose={handleCloseWaterPlaySign} />
+              </MapSideListPanel>
+            </div>
           )}
           {safetyFacOpen && (
             <div className="pointer-events-auto shrink-0">

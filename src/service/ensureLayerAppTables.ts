@@ -915,6 +915,21 @@ CREATE INDEX IF NOT EXISTS radiation_shelter_addr_idx ON layer.radiation_shelter
 COMMENT ON TABLE layer.radiation_shelter IS '방사선 대피소';
 `;
 
+const WATER_PLAY_SIGN_SQL = `
+CREATE TABLE IF NOT EXISTS layer.water_play_sign (
+  id SERIAL PRIMARY KEY,
+  sign_nm text,
+  addr text,
+  sign_type text,
+  remark text,
+  geom geometry(Point, 5181)
+);
+CREATE INDEX IF NOT EXISTS water_play_sign_sign_nm_idx ON layer.water_play_sign (sign_nm);
+CREATE INDEX IF NOT EXISTS water_play_sign_addr_idx ON layer.water_play_sign (addr);
+CREATE INDEX IF NOT EXISTS water_play_sign_sign_type_idx ON layer.water_play_sign (sign_type);
+COMMENT ON TABLE layer.water_play_sign IS '물놀이 표지판';
+`;
+
 const VILLAGE_PATROL_SQL = `
 CREATE TABLE IF NOT EXISTS layer.village_patrol (
   id SERIAL PRIMARY KEY,
@@ -1687,6 +1702,17 @@ export async function ensureRadiationShelterTable(result?: EnsureResult): Promis
   return out;
 }
 
+export async function ensureWaterPlaySignTable(result?: EnsureResult): Promise<EnsureResult> {
+  const out: EnsureResult = result ?? { created: [], moved: [], existed: [], errors: [] };
+  await ensureSchemaLayer();
+  await ensureBaseTable({
+    table: 'water_play_sign',
+    createSql: WATER_PLAY_SIGN_SQL,
+    result: out,
+  });
+  return out;
+}
+
 export async function ensureVillagePatrolTable(result?: EnsureResult): Promise<EnsureResult> {
   const out: EnsureResult = result ?? { created: [], moved: [], existed: [], errors: [] };
   await ensureSchemaLayer();
@@ -1738,6 +1764,7 @@ export async function ensureLayerAppTables(): Promise<EnsureResult> {
     await ensureRoadRewardTables(result);
     await ensureConsDataAsTables(result);
     await ensureRadiationShelterTable(result);
+    await ensureWaterPlaySignTable(result);
     await ensureVillagePatrolTable(result);
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);

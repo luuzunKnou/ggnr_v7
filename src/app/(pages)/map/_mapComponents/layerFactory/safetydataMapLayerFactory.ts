@@ -21,6 +21,9 @@ export const SAFETY_HOSPITAL_POI_GEO_TABLE = 'sd_mois_hospital_poi' as const;
 /** 방사선 대피소 패널 — GeoServer WMS */
 export const RADIATION_SHELTER_GEO_TABLE = 'radiation_shelter' as const;
 
+/** 물놀이 표지판 패널 — GeoServer WMS */
+export const WATER_PLAY_SIGN_GEO_TABLE = 'water_play_sign' as const;
+
 /** 저수지 수위 패널(saftyJsj) — GeoServer WMS(저수지 제원 포인트) */
 export const SAFETY_RESERVOIR_MASTER_GEO_TABLE = 'sd_reservoir_master' as const;
 
@@ -89,6 +92,12 @@ export const SAFETY_MAP_GEOSERVER_OVERLAYS: {
     panelId: RADIATION_SHELTER_GEO_TABLE,
     tableName: RADIATION_SHELTER_GEO_TABLE,
     zIndex: 128,
+    opacity: 0.88,
+  },
+  {
+    panelId: WATER_PLAY_SIGN_GEO_TABLE,
+    tableName: WATER_PLAY_SIGN_GEO_TABLE,
+    zIndex: 129,
     opacity: 0.88,
   },
 ];

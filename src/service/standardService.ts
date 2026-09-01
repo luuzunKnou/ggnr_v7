@@ -1628,6 +1628,10 @@ const SAFETY_FACILITY_DISPLAY: Record<
     nameKeys: ['ftn_nm'],
     addressKeys: ['addr'],
   },
+  water_play_sign: {
+    nameKeys: ['sign_nm'],
+    addressKeys: ['addr'],
+  },
 };
 
 function rowVal(row: Record<string, unknown>, k: string): unknown {
