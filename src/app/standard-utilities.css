@@ -1,0 +1,164 @@
+/* Tailwind v4 @utility — 표준 UI */
+
+@utility scrollbar-thin {
+  scrollbar-width: thin;
+  scrollbar-color: rgb(203 213 225 / 0.85) transparent;
+
+  &::-webkit-scrollbar {
+    width: 5px;
+    height: 5px;
+  }
+
+  &::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  &::-webkit-scrollbar-thumb {
+    background-color: rgb(203 213 225 / 0.85);
+    border-radius: 9999px;
+  }
+
+  &::-webkit-scrollbar-thumb:hover {
+    background-color: rgb(148 163 184 / 0.95);
+  }
+}
+
+@utility standard-panel-root {
+  @apply flex h-full min-h-0 flex-col bg-background;
+}
+
+@utility standard-panel-header {
+  @apply flex shrink-0 items-center justify-between gap-2 border-b border-border px-3 py-1.5;
+}
+
+@utility standard-panel-title {
+  @apply text-sm font-semibold text-foreground;
+}
+
+@utility standard-panel-close {
+  @apply shrink-0 rounded p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground;
+}
+
+@utility standard-filter-section {
+  @apply shrink-0 space-y-2 border-b border-border px-3 py-2;
+}
+
+@utility standard-search-wrap {
+  @apply relative;
+}
+
+@utility standard-search-icon {
+  @apply pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground;
+}
+
+@utility standard-search-input {
+  @apply w-full rounded-md border border-border bg-background py-1.5 pl-8 pr-3 text-sm outline-none ring-offset-2 focus:border-border focus:ring-2 focus:ring-ring;
+}
+
+@utility standard-filter-chips {
+  @apply flex flex-wrap gap-1;
+}
+
+@utility standard-filter-chip {
+  @apply rounded border border-border bg-background px-2 py-1 text-[11px] font-medium text-muted-foreground transition-colors hover:border-border hover:text-foreground;
+}
+
+@utility standard-filter-chip-active {
+  @apply border-primary bg-primary/10 text-foreground;
+}
+
+@utility standard-filter-chip-active-* {
+  border-color: --value([color]);
+  background-color: color-mix(in oklab, --value([color]) 10%, transparent);
+  color: --value([color]);
+}
+
+@utility standard-list-body {
+  @apply flex min-h-0 flex-1 flex-col overflow-hidden;
+}
+
+@utility standard-list-scroll {
+  @apply scrollbar-thin min-h-0 flex-1 overflow-auto;
+}
+
+@utility standard-list-table {
+  @apply w-full min-w-[596px] table-fixed border-collapse text-left text-xs;
+}
+
+@utility standard-table-thead {
+  @apply sticky top-0 z-[1] bg-muted;
+  box-shadow: 0 1px 0 0 var(--border);
+}
+
+@utility standard-table-th {
+  @apply whitespace-nowrap border-b-0 px-1.5 py-1.5 font-semibold text-foreground/90;
+  box-shadow: inset 0 -2px 0 0 var(--border);
+}
+
+@utility standard-table-th-left {
+  @apply text-left;
+}
+
+@utility standard-table-th-center {
+  @apply text-center;
+}
+
+@utility standard-sort-button {
+  @apply inline-flex max-w-full items-center gap-0.5 rounded px-0.5 py-0.5 text-foreground/90 transition-colors hover:bg-muted;
+}
+
+@utility standard-sort-button-left {
+  @apply justify-start;
+}
+
+@utility standard-sort-button-center {
+  @apply justify-center;
+}
+
+@utility standard-sort-button-active {
+  @apply text-primary;
+}
+
+@utility standard-table-empty {
+  @apply px-3 py-6 text-center text-xs text-muted-foreground;
+}
+
+@utility standard-list-row {
+  @apply cursor-pointer border-b border-border transition-colors hover:bg-muted/50;
+}
+
+@utility standard-list-row-selected {
+  @apply bg-primary/10;
+}
+
+@utility standard-table-td-compact {
+  @apply px-1.5 py-1.5;
+}
+
+@utility standard-status-badge {
+  @apply inline-block rounded-full px-1.5 py-0.5 text-[11px] font-semibold;
+}
+
+@utility standard-status-badge-primary {
+  @apply bg-primary/10 text-primary;
+}
+
+@utility standard-status-badge-ended {
+  @apply bg-destructive/10 text-destructive;
+}
+
+@utility standard-table-td-text {
+  @apply max-w-0 truncate px-2 py-1.5 text-foreground;
+}
+
+@utility standard-table-td-text-muted {
+  @apply max-w-0 truncate px-2 py-1.5 text-foreground/90;
+}
+
+@utility standard-table-td-date {
+  @apply max-w-0 truncate px-2 py-1.5 tabular-nums text-foreground/90;
+}
+
+@utility standard-list-footer {
+  @apply shrink-0 border-t border-border px-3 py-1.5 text-[11px] text-muted-foreground;
+}

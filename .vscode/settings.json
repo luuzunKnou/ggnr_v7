@@ -1,3 +1,8 @@
 {
-    "glassit.alpha": 245
+    "glassit.alpha": 245,
+    "files.associations": {
+        "*.css": "tailwindcss"
+    },
+    "tailwindCSS.experimental.configFile": "src/app/globals.css",
+    "css.customData": [".vscode/tailwind.css-data.json"]
 }

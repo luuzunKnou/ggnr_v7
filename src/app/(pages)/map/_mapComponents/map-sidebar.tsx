@@ -4,7 +4,8 @@ import React, { useRef, useCallback, useState, useEffect } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { ChevronDown, ChevronUp, UserRound } from 'lucide-react';
+import { useSession } from 'next-auth/react';
+import { ChevronDown, ChevronUp, SwatchBook, UserRound } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { call } from '@/lib/api';
 import { sidebarServicePolicy } from '@/lib/accessClient';
@@ -20,6 +21,7 @@ import {
 import { ImportantNotifSidebarBubble } from '../_mapContents/prototypes/UserAccountProtoPanel';
 import { SHOOTING_REQUEST_UI_ENABLED } from '../_mapContents/shootingRequest/shootingRequestUiFlag';
 import { withBasePath } from '@/lib/basePath';
+import { DESIGN_SAMPLE_OPENED_KEY } from '../_mapContents/sample/sampleConfig';
 
 type ServiceItem = {
   ser_eng: string | null;
@@ -126,6 +128,8 @@ export function MapSidebar({ indexLogoSrc }: { indexLogoSrc: string }) {
   const [deniedSerEng, setDeniedSerEng] = useState('');
   const [bootProject, setBootProject] = useState('');
   const { snapshot } = useMyAccessSnapshot();
+  const { data: session } = useSession();
+  const isSuperUser = session?.user?.id === 'su';
 
   const systemKeyFromUrl = searchParams.get('system') ?? '';
 
@@ -356,6 +360,14 @@ export function MapSidebar({ indexLogoSrc }: { indexLogoSrc: string }) {
             </button>
           )}
         </nav>
+        {isSuperUser ? (
+          <SidebarButton
+            icon={<SwatchBook className="h-5 w-5 shrink-0" strokeWidth={1.75} aria-hidden />}
+            label="샘플"
+            onClick={() => toggleWindow(DESIGN_SAMPLE_OPENED_KEY)}
+            isActive={openedWindows.includes(DESIGN_SAMPLE_OPENED_KEY)}
+          />
+        ) : null}
         {/* 계정 구역 */}
         <div className="relative mt-1 flex w-full shrink-0 flex-col border-t border-white/15 pb-[5px] pt-1">
           <div ref={myInfoAnchorRef} className="w-full">
