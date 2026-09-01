@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { cn } from '@/lib/utils';
 import {
   fetchBuildingFloorList,
@@ -321,6 +321,15 @@ function TitleDetail({ data }: { data: BuildingRegisterRow }) {
   );
 }
 
+function isRecapRegisterView(
+  row: BuildingRegisterRow | undefined,
+  mode: BuildingRegisterMode
+): boolean {
+  if (mode === 'recap') return true;
+  const type = field(row, 'type');
+  return type === '총괄표제부' || type === '총괄';
+}
+
 function ChildListTable({
   mode,
   childRows,
@@ -441,12 +450,19 @@ export function BuildingRegisterPanel({
   const [localMode, setLocalMode] = useState(mode);
   const [showBack, setShowBack] = useState(false);
   const [busy, setBusy] = useState(false);
+  const recapSnapshotRef = useRef<{
+    buildings: BuildingRegisterRow[];
+    children: BuildingRegisterRow[];
+    mode: BuildingRegisterMode;
+    selectedSeq: string;
+  } | null>(null);
 
   useEffect(() => {
     setLocalBuildings(buildings);
     setLocalChildren(childRows);
     setLocalMode(mode);
     setShowBack(false);
+    recapSnapshotRef.current = null;
     setSelectedSeq(field(buildings[0], 'bldrgst_seqno'));
   }, [buildings, childRows, mode, pnu]);
 
@@ -477,6 +493,14 @@ export function BuildingRegisterPanel({
 
   const handleDongLookup = async (bldNm: string) => {
     if (!pnu) return;
+    if (!showBack && isRecapRegisterView(selected, localMode)) {
+      recapSnapshotRef.current = {
+        buildings: localBuildings,
+        children: localChildren,
+        mode: localMode,
+        selectedSeq: selectedSeq || field(localBuildings[0], 'bldrgst_seqno'),
+      };
+    }
     setBusy(true);
     try {
       const res = await fetchBuildingRegisterByDong({ pnu, bldNm, source });
@@ -492,6 +516,14 @@ export function BuildingRegisterPanel({
   };
 
   const handleBack = () => {
+    const snap = recapSnapshotRef.current;
+    if (snap) {
+      setLocalBuildings(snap.buildings);
+      setLocalChildren(snap.children);
+      setLocalMode(snap.mode);
+      setSelectedSeq(snap.selectedSeq || field(snap.buildings[0], 'bldrgst_seqno'));
+      recapSnapshotRef.current = null;
+    }
     setShowBack(false);
     onResetRoot?.();
   };
@@ -512,6 +544,7 @@ export function BuildingRegisterPanel({
   }
 
   const typeLabel = field(selected, 'type') || (localMode === 'recap' ? '총괄표제부' : '표제부');
+  const recapView = isRecapRegisterView(selected, localMode);
 
   return (
     <div className="min-h-full flex flex-col space-y-3">
@@ -561,26 +594,22 @@ export function BuildingRegisterPanel({
       </div>
 
       {selected ? (
-        field(selected, 'type') === '총괄표제부' ? (
-          <RecapDetail data={selected} />
-        ) : (
-          <TitleDetail data={selected} />
-        )
+        recapView ? <RecapDetail data={selected} /> : <TitleDetail data={selected} />
       ) : null}
 
       {selected ? (
         <div className="space-y-1.5">
           <p className="text-xs font-semibold text-foreground">
-            {field(selected, 'type') === '총괄표제부' ? '개별 건축물현황' : '층별 건축물현황'}
+            {recapView ? '개별 건축물현황' : '층별 건축물현황'}
           </p>
           <ChildListTable
-            mode={field(selected, 'type') === '총괄표제부' ? 'recap' : 'title'}
+            mode={recapView ? 'recap' : 'title'}
             childRows={localChildren}
-            onDongLookup={field(selected, 'type') === '총괄표제부' ? handleDongLookup : undefined}
+            onDongLookup={recapView ? handleDongLookup : undefined}
           />
         </div>
       ) : null}
-      <BuildingDataSourceLine className="mt-auto pt-2 text-right" sources={[source]} />
+      <BuildingDataSourceLine className="text-right" sources={[source]} />
     </div>
   );
 }
@@ -783,7 +812,7 @@ export function BuildingPermitPanel({
         </DetailTable>
       ) : null}
       <BuildingDataSourceLine
-        className="mt-auto pt-2 text-right"
+        className="text-right"
         sources={[source === 'arch' || source === 'housing' ? 'portal' : source]}
       />
     </div>
