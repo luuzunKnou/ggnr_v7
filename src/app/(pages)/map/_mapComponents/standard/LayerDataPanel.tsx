@@ -405,7 +405,8 @@ export function LayerDataPanel({
   const [detailFields, setDetailFields] = useState<DefineFieldRow[]>([]);
   const codesByField = useDefineLayerCodes(
     activeLayer?.tableName ?? activeLayer?.physicalTableName,
-    detailFields
+    detailFields,
+    { fallbackTableName: activeLayer?.physicalTableName }
   );
   const [keyFieldName, setKeyFieldName] = useState<string | null>(null);
   const [rows, setRows] = useState<Record<string, unknown>[]>([]);
@@ -978,6 +979,7 @@ export function LayerDataPanel({
       setListColWidthsPct(null);
       loadPageSeqRef.current += 1;
     }
+    const initSeq = loadPageSeqRef.current;
     setLoading(true);
     setError(null);
     setPage(1);
@@ -1022,6 +1024,7 @@ export function LayerDataPanel({
 
     Promise.all([fieldsPromise, dataPromise])
       .then(([fieldsRes, dataRes]) => {
+        if (initSeq !== loadPageSeqRef.current) return;
         const rawFields = (fieldsRes?.data ?? fieldsRes) as DefineFieldRow[] | undefined;
         const sortedAll = Array.isArray(rawFields)
           ? [...rawFields].sort((a, b) => parseInt(String(a.define_field_idx ?? '999999'), 10) - parseInt(String(b.define_field_idx ?? '999999'), 10))
@@ -1073,6 +1076,7 @@ export function LayerDataPanel({
               action: 'getTableData',
               params: tableDataParams,
             }).then((res) => {
+              if (initSeq !== loadPageSeqRef.current) return;
               const d = res?.data ?? res;
               const dataRows = Array.isArray(d?.rows) ? d.rows : [];
               const dataTotal = typeof d?.total === 'number' ? d.total : 0;
@@ -1095,9 +1099,14 @@ export function LayerDataPanel({
         setLoading(false);
       })
       .catch((err) => {
+        if (initSeq !== loadPageSeqRef.current) return;
         setError(err?.message ?? String(err));
         setLoading(false);
       });
+
+    return () => {
+      loadPageSeqRef.current += 1;
+    };
   }, [activeLayer, spatialFilterWkt, showCurrentListOnMap, initialDataKey, identifyResultList]);
 
   // 지도 식별 후 패널 열렸을 때 해당 행 상세 + 도형 강조·지도 이동
