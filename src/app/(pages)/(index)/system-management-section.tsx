@@ -1,11 +1,13 @@
 "use client"
 
 import React, { useState } from "react"
+import { useSession } from "next-auth/react"
 import { Card } from "@/app/shadcnComponents/ui/card"
 import { ChevronRight, Droplets, CloudRain, Waves, Plane } from "lucide-react"
 import { canAccessPrivateSystem } from "@/lib/accessClient"
 import { useMyAccessSnapshot } from "@/hooks/useMyAccessSnapshot"
 import { ResourceAccessDeniedDialog } from "@/app/(pages)/_components/AccessRequest"
+import { useLoginModal } from "@/app/login-modal-context"
 import { withBasePath, withBasePathNav } from "@/lib/basePath"
 
 export type SystemItem = {
@@ -42,6 +44,8 @@ const DEFAULT_ICONS: Record<string, React.ReactNode> = {
 }
 
 export function SystemManagementSection({ systems }: SystemManagementSectionProps) {
+  const { data: session, status } = useSession()
+  const { openLogin } = useLoginModal()
   const { snapshot, loading: accessLoading } = useMyAccessSnapshot()
   const [deniedOpen, setDeniedOpen] = useState(false)
   const [deniedSysKey, setDeniedSysKey] = useState("")
@@ -168,6 +172,11 @@ export function SystemManagementSection({ systems }: SystemManagementSectionProp
                 title={sys.sys_kor}
                 className="block w-full cursor-pointer text-left group"
                 onClick={() => {
+                  if (status === "loading") return
+                  if (!session?.user) {
+                    openLogin(appHref)
+                    return
+                  }
                   window.location.assign(withBasePathNav(appHref))
                 }}
               >
