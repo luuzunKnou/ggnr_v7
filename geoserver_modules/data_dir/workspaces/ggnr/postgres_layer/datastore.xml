@@ -12,7 +12,7 @@
     <entry key="preparedStatements">false</entry>
     <entry key="database">build_yy</entry>
     <entry key="port">5433</entry>
-    <entry key="passwd">crypt1:NkxbCA0cqfkXgnOif3J/mxwf9C4FOpvO</entry>
+    <entry key="passwd">crypt1:KmN3eZWfqpVveZaltP4p+vP/IdLJXoDi</entry>
     <entry key="validate connections">true</entry>
     <entry key="host">192.168.127.32</entry>
     <entry key="dbtype">postgis</entry>
