@@ -1,11 +1,17 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowDown, ArrowUp, ArrowUpDown, Layers, Search, X } from 'lucide-react';
 import { call } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { LayerRowAddButton, LayerRowPanelButton } from '../../../_mapComponents/layerRowEdit';
 import { useMapContext } from '../../../_mapComponents/MapContext';
+import { MAP_AUTO_NAV_MAX_ZOOM } from '../../../_mapComponents/config/mapDefaults';
+import { scheduleFitMapToExtent3857 } from '../../../_mapComponents/config/mapAutoNavigation';
+import {
+  ensureRoadFrontageWmsLayers,
+  clearRoadFrontageWmsLayers,
+} from '../roadFrontage/roadFrontageMapSync';
 import {
   isRoadNetworkWmsVisible,
   toggleRoadNetworkWmsLayers,
@@ -53,6 +59,8 @@ export function RoadFrontageMarkerListPanel({
   refreshKey = 0,
 }: Props) {
   const mapContext = useMapContext();
+  const mapContextRef = useRef(mapContext);
+  mapContextRef.current = mapContext;
   const [keyword, setKeyword] = useState('');
   const [roadTypeFilter, setRoadTypeFilter] = useState('');
   const [sorts, setSorts] = useState<SortSpec[]>([]);
@@ -60,6 +68,52 @@ export function RoadFrontageMarkerListPanel({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const listScrollRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    ensureRoadFrontageWmsLayers(mapContextRef.current?.setVisibleLayerNames, 'marker');
+    return () => {
+      clearRoadFrontageWmsLayers(mapContextRef.current?.setVisibleLayerNames, 'marker');
+    };
+  }, []);
+
+  const fitMapAfterDetailLayout = useCallback(
+    (extent3857: number[]) => {
+      const map = mapContext?.mapInstanceRef?.current;
+      if (!map) return;
+      ensureRoadFrontageWmsLayers(mapContext?.setVisibleLayerNames, 'marker');
+      window.setTimeout(() => {
+        scheduleFitMapToExtent3857(map, extent3857, {
+          maxZoom: MAP_AUTO_NAV_MAX_ZOOM,
+          applyMapViewPadding: () => mapContext?.applyMapViewPaddingRef?.current?.(),
+        });
+      }, 80);
+    },
+    [mapContext]
+  );
+
+  useEffect(() => {
+    const pickRef = mapContext?.applyRoadFrontageMarkerMapPickRef;
+    if (!pickRef) return;
+    pickRef.current = (pick) => {
+      const ledgerId = String(pick?.ledgerId ?? '').trim();
+      const markerItemId = String(pick?.markerItemId ?? '').trim();
+      if (!ledgerId || !markerItemId) return;
+      const opts = Array.isArray(pick?.overlapOptions) ? pick.overlapOptions : [];
+      mapContext?.setRoadFrontageMarkerMapHitOptions?.(opts.length > 1 ? opts : []);
+      mapContext?.setRoadFrontageMarkerPendingItemPick?.({ ledgerId, markerItemId });
+      onSelectId(ledgerId);
+      if (
+        Array.isArray(pick?.extent3857) &&
+        pick.extent3857.length === 4 &&
+        pick.extent3857.every((v) => Number.isFinite(Number(v)))
+      ) {
+        fitMapAfterDetailLayout(pick.extent3857.map(Number));
+      }
+    };
+    return () => {
+      pickRef.current = null;
+    };
+  }, [mapContext, onSelectId, fitMapAfterDetailLayout]);
 
   useEffect(() => {
     const t = setTimeout(async () => {
@@ -113,10 +167,10 @@ export function RoadFrontageMarkerListPanel({
   const map = mapReady ? (mapContext?.mapInstanceRef?.current ?? null) : null;
   const detailOpen = Boolean(selectedId) && !isNewRoadFrontageMarkerId(String(selectedId ?? ''));
 
-  /** 상세가 열려 있으면 상세가 레이어를 갱신. 목록만 있을 때 전체 점 표시 */
+  /** 목록·상세 모두 WMS로 표시 — 벡터 오버레이는 상세 패널이 담당 */
   useRoadFrontageMarkerMapHighlight(map, listMarkers, null, {
     removeOnUnmount: true,
-    enabled: !detailOpen,
+    enabled: false,
   });
 
   useEffect(() => {
@@ -139,8 +193,24 @@ export function RoadFrontageMarkerListPanel({
     });
   };
 
-  const handleSelect = (ledger: RoadFrontageMarkerLedger) => {
+  const handleSelect = async (ledger: RoadFrontageMarkerLedger) => {
+    mapContext?.setRoadFrontageMarkerMapHitOptions?.([]);
     onSelectId(ledger.id);
+    try {
+      const res = await call('', 'POST', {
+        service: 'roadFrontageMarkerService',
+        action: 'getExtent3857ByLedgerId',
+        params: { id: ledger.id },
+      });
+      const data = res?.data ?? res;
+      const ext = data?.extent3857 as unknown;
+      if (Array.isArray(ext) && ext.length === 4) {
+        fitMapAfterDetailLayout(ext.map(Number));
+        return;
+      }
+    } catch {
+      /* fallback */
+    }
     const olMap = mapContext?.mapReady
       ? (mapContext.mapInstanceRef?.current ?? null)
       : null;

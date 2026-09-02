@@ -23,14 +23,21 @@ import {
 import "../../../_mapComponents/config/projections";
 import Draw from "ol/interaction/Draw";
 import Modify from "ol/interaction/Modify";
+import type { Geometry } from "ol/geom";
+import { createEmpty, extend as extendExtent } from "ol/extent";
 import VectorLayer from "ol/layer/Vector";
 import VectorSource from "ol/source/Vector";
 import Feature from "ol/Feature";
 import Polygon from "ol/geom/Polygon";
+import MultiPolygon from "ol/geom/MultiPolygon";
 import GeoJSONFormat from "ol/format/GeoJSON";
 import WKT from "ol/format/WKT";
 import { Style, Stroke, Fill, Circle as CircleStyle } from "ol/style";
 import { cn } from "@/lib/utils";
+import {
+  occupationFillRgba,
+  occupationStrokeRgba,
+} from "@/lib/occupationLayerStyle";
 import { call } from "@/lib/api";
 import { appFetch } from "@/lib/basePath";
 import { recordDataViewLog } from "@/lib/recordDataViewLog";
@@ -54,11 +61,19 @@ import { refreshServiceWmsLayer } from "../../../_mapComponents/layerFactory/ser
 import { canStartMapDrawInteraction } from "../../../_mapComponents/mapDrawInteraction";
 import {
   LayerRowEditToolbar,
-  LayerRowPanelButton,
+  LayerParcelAddModal,
   useLayerParcelNavigation,
   type LayerRowParcelItem,
 } from "../../../_mapComponents/layerRowEdit";
-import { DrawToolbarActions } from "../../../_mapComponents/analysisArea";
+import { resolveParcelGeoms } from "../../../_mapComponents/layerRowEdit/resolveParcelGeoms";
+import { useLayerRowParcelHighlight } from "../../../_mapComponents/layerRowEdit/useLayerRowParcelHighlight";
+import {
+  DrawToolbarActions,
+  useDrawToolbarPosition,
+  type DrawToolbarMapAnchor,
+} from "../../../_mapComponents/analysisArea";
+import { UsageDataAsAddressList } from "../usageDataAs/UsageDataAsAddressList";
+import { CONS_DATA_AS_SOLO_WMS_LAYER_ID } from "./consDataAsLayerId";
 import { useMapVisualCenterPixel } from "../../../_mapComponents/hooks/useMapVisualCenterPixel";
 import {
   GEOM_EDIT_HINT_BELOW_SEARCH_GAP,
@@ -75,14 +90,13 @@ import {
   withRiverNameFallback,
   type ConsDataAsApiRow,
   type RiverConstructionLedgerAttachment,
+  type RiverConstructionLedgerGeom,
   type RiverConstructionLedgerRow,
 } from "./riverConstructionLedgerMock";
 import { RiverNameSelect } from "./RiverNameSelect";
-import { refreshConsDataAsMapView } from "./riverConstructionLedgerMapSync";
+import { refreshConsDataAsMapView, ensureConsDataAsWmsLayersVisible } from "./riverConstructionLedgerMapSync";
 import { MapSideDetailScroll } from "../../../_mapComponents/MapSideDetailScroll";
 import { OccupationLedgerPlaceInput } from "../../occupationLedger/OccupationLedgerPlaceInput";
-
-const PARCEL_IDX_KEY = "riverConstructionLedgerParcelIdx";
 
 type Props = {
   row: RiverConstructionLedgerRow;
@@ -179,8 +193,8 @@ function toDraft(row: RiverConstructionLedgerRow): AttrDraft {
 }
 
 /**
- * 필지(개별 구간) 도형(GeoJSON, EPSG:3857) → 저장용 WKT(5181).
- * 지도에서 직접 그린 좌표라 3857 → 5181 변환만 하면 된다(4326 경유 불필요).
+ * 필지(개별) 도형(GeoJSON, EPSG:3857) → 저장용 WKT(5181).
+ * 목록 클릭 시 지도 강조 표시용으로 solo 테이블에 저장한다.
  */
 function parcelGeomToWkt5181(
   geometry3857: Record<string, unknown> | null | undefined
@@ -225,19 +239,139 @@ function featuresFromGeometry3857(
   }
 }
 
-function loadParcelFeaturesIntoSource(
+function writeCombinedWkt5181FromSource(source: VectorSource): string | null {
+  const format = new WKT();
+  const polygonCoords: number[][][][] = [];
+  for (const feature of source.getFeatures()) {
+    const geom = feature.getGeometry()?.clone();
+    if (!geom) continue;
+    geom.transform("EPSG:3857", "EPSG:5181");
+    const type = geom.getType();
+    if (type === "Polygon") {
+      polygonCoords.push((geom as Polygon).getCoordinates());
+    } else if (type === "MultiPolygon") {
+      for (const coords of (geom as MultiPolygon).getCoordinates()) {
+        polygonCoords.push(coords);
+      }
+    }
+  }
+  if (polygonCoords.length === 0) return null;
+  if (polygonCoords.length === 1) {
+    return format.writeGeometry(new Polygon(polygonCoords[0]));
+  }
+  return format.writeGeometry(new MultiPolygon(polygonCoords));
+}
+
+function parseJijukParcelItems(raw: Record<string, unknown>[]): LayerRowParcelItem[] {
+  const items: LayerRowParcelItem[] = [];
+  for (const x of raw) {
+    const address = String(x?.address ?? "").trim();
+    const pnu = String(x?.pnu ?? "").trim();
+    const geometry3857 =
+      x?.geometry3857 != null && typeof x.geometry3857 === "object"
+        ? (x.geometry3857 as Record<string, unknown>)
+        : undefined;
+    const extRaw = x?.extent3857 as unknown;
+    const extent3857 =
+      Array.isArray(extRaw) && extRaw.length === 4 && extRaw.every((v) => Number.isFinite(Number(v)))
+        ? (extRaw.map((v) => Number(v)) as [number, number, number, number])
+        : null;
+    if (!address && !pnu) continue;
+    items.push({
+      address: address || pnu,
+      pnu: pnu || undefined,
+      extent3857,
+      ...(geometry3857 ? { geometry3857 } : {}),
+    });
+  }
+  return items;
+}
+
+function mergeAutoParcelsIntoList(
+  prev: LayerRowParcelItem[],
+  autoItems: LayerRowParcelItem[],
+  replaceAuto: boolean
+): LayerRowParcelItem[] {
+  const auto = autoItems.map((item) => ({
+    ...item,
+    manualAdd: false as const,
+    keepOnReplace: false as const,
+  }));
+  if (!replaceAuto) {
+    const seen = new Set(prev.map((p) => p.address.toLowerCase()));
+    const merged = [...prev];
+    for (const item of auto) {
+      const key = item.address.toLowerCase();
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      merged.push(item);
+    }
+    return merged;
+  }
+  const manual = prev.filter((p) => p.manualAdd === true);
+  const seen = new Set(manual.map((p) => p.address.toLowerCase()));
+  const merged = [...manual];
+  for (const item of auto) {
+    const key = item.address.toLowerCase();
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    merged.push(item);
+  }
+  return merged;
+}
+
+function loadBoundaryGeomIntoSource(
   source: VectorSource,
-  parcels: LayerRowParcelItem[],
+  mainGeom: RiverConstructionLedgerGeom | null,
   format: GeoJSONFormat,
   viewProj: string
 ) {
   source.clear();
-  for (const [i, parcel] of parcels.entries()) {
-    if (!parcel.geometry3857) continue;
-    const feats = featuresFromGeometry3857(format, parcel.geometry3857, viewProj);
-    for (const f of feats) f.set(PARCEL_IDX_KEY, i);
-    source.addFeatures(feats);
+  if (mainGeom?.type === "MultiPolygon" && Array.isArray(mainGeom.coordinates)) {
+    const features = format.readFeatures(
+      {
+        type: "FeatureCollection",
+        features: [{ type: "Feature", geometry: mainGeom, properties: {} }],
+      },
+      { dataProjection: "EPSG:4326", featureProjection: viewProj }
+    );
+    source.addFeatures(features);
   }
+}
+
+function replaceSourceFeaturesFromWkt5181(
+  source: VectorSource,
+  wkt5181: string,
+  viewProj: string
+) {
+  source.clear();
+  const wktFormat = new WKT();
+  const geom = wktFormat.readGeometry(wkt5181, {
+    dataProjection: "EPSG:5181",
+    featureProjection: viewProj,
+  });
+  if (!geom) return;
+  source.addFeature(new Feature(geom));
+}
+
+function buildBoundaryToolbarAnchor(source: VectorSource): DrawToolbarMapAnchor | null {
+  const features = source.getFeatures();
+  if (features.length === 0) return null;
+  const extent = createEmpty();
+  let has = false;
+  for (const feature of features) {
+    const geom = feature.getGeometry();
+    if (!geom) continue;
+    extendExtent(extent, geom.getExtent());
+    has = true;
+  }
+  if (!has) return null;
+  return { topCenter: [(extent[0] + extent[2]) / 2, extent[3]] };
+}
+
+function buildBoundaryToolbarAnchorFromGeom(geom: Geometry): DrawToolbarMapAnchor {
+  const ext = geom.getExtent();
+  return { topCenter: [(ext[0] + ext[2]) / 2, ext[3]] };
 }
 
 type AttrEntry = {
@@ -717,15 +851,13 @@ export function RiverConstructionLedgerDetailPanel({ row, onClose }: Props) {
   const [riverNamesText, setRiverNamesText] = useState(
     () => normalizeRiverNames(row.riverNames)[0] ?? ""
   );
-  /** 신규 필지 도형 그리기 대상 인덱스 — null이면 기존 도형 전체 자유 수정 */
-  const [parcelDrawIdx, setParcelDrawIdx] = useState<number | null>(null);
-  /** 필지 추가·삭제 시에만 편집 레이어 재구성 (도형 수정만으로는 재구성 안 함) */
-  const [parcelLayerEpoch, setParcelLayerEpoch] = useState(0);
+  const boundaryGeomRef = useRef(row.geom);
+  boundaryGeomRef.current = row.geom;
   const parcelsSnapshotRef = useRef<LayerRowParcelItem[]>([]);
   const parcelEditLayerRef = useRef<{
     layer: VectorLayer<VectorSource>;
     source: VectorSource;
-    modify: Modify;
+    modify: Modify | null;
   } | null>(null);
   const syncParcelEditSourceRef = useRef<(() => void) | null>(null);
   const [attachmentFolders, setAttachmentFolders] = useState<string[]>([]);
@@ -742,13 +874,35 @@ export function RiverConstructionLedgerDetailPanel({ row, onClose }: Props) {
   const [draftParcels, setDraftParcels] = useState<LayerRowParcelItem[]>(() => row.parcels ?? []);
   const draftParcelsRef = useRef(draftParcels);
   draftParcelsRef.current = draftParcels;
-  const { selectParcel, movingParcelIdx } = useLayerParcelNavigation();
+  const {
+    selectParcel,
+    selectedParcelIdx,
+    clearSelection: clearParcelSelection,
+  } = useLayerParcelNavigation(CONS_DATA_AS_SOLO_WMS_LAYER_ID);
   const [detailLoading, setDetailLoading] = useState(false);
+  const [drawPhase, setDrawPhase] = useState<"drawing" | "editing" | "managed">("drawing");
+  const [hasBoundaryGeom, setHasBoundaryGeom] = useState(false);
+  const [toolbarAnchor, setToolbarAnchor] = useState<DrawToolbarMapAnchor | null>(null);
+  const [parcelAddModalOpen, setParcelAddModalOpen] = useState(false);
+  const [highlightParcel, setHighlightParcel] = useState<LayerRowParcelItem | null>(null);
+  const toolbarRef = useRef<HTMLDivElement>(null);
+  const mapOpsRef = useRef<{
+    confirmApply: () => void;
+    redrawShape: () => void;
+    cancelDraw: () => void;
+    addGeom: () => void;
+    modifyGeom: () => void;
+    deleteGeom: () => void;
+  } | null>(null);
+  const pendingApplyRef = useRef(false);
+  const baselineWktRef = useRef<string | null>(null);
+  const isDrawActiveRef = useRef(false);
+  const drawPhaseRef = useRef(drawPhase);
+  drawPhaseRef.current = drawPhase;
   const detailLoadGenRef = useRef(0);
-  const parcelDrawIdxRef = useRef(parcelDrawIdx);
-  parcelDrawIdxRef.current = parcelDrawIdx;
   const editingRef = useRef(editing);
   editingRef.current = editing;
+  const applyJijukParcelsRef = useRef<((opts?: { silent?: boolean }) => Promise<void>) | null>(null);
 
   /** 목록 클릭은 extent만 — 상세·필지 도형은 패널에서 보강 */
   useEffect(() => {
@@ -783,7 +937,7 @@ export function RiverConstructionLedgerDetailPanel({ row, onClose }: Props) {
           setDraft(toDraft(mapped));
           setRiverNamesText(normalizeRiverNames(mapped.riverNames)[0] ?? "");
         }
-        if (!editingRef.current && parcelDrawIdxRef.current == null) {
+        if (!editingRef.current) {
           const filled = withRiverNameFallback(mapped.parcels ?? []);
           parcelsSnapshotRef.current = [...filled];
           setDraftParcels(filled);
@@ -873,19 +1027,43 @@ export function RiverConstructionLedgerDetailPanel({ row, onClose }: Props) {
   const geomHintTopPx = inputBottomPx + GEOM_EDIT_HINT_BELOW_SEARCH_GAP;
   const mapInstance = mapContext?.mapInstanceRef?.current ?? null;
   const mapPaddingLeft = mapContext?.mapPaddingLeft ?? 0;
-  const geomBannerActive = Boolean(mapInstance) && editing && !isNewRow;
+  const geomBannerActive = Boolean(mapInstance) && editing;
   const geomCenterPixel = useMapVisualCenterPixel(
     mapInstance,
     geomBannerActive,
     mapPaddingLeft
   );
+  const shapeToolbarActive = geomBannerActive && drawPhase === "editing" && toolbarAnchor != null;
+  const toolbarPlacement = useDrawToolbarPosition(
+    mapContext?.mapInstanceRef ?? { current: null },
+    toolbarAnchor,
+    toolbarRef,
+    shapeToolbarActive
+  );
+
+  useEffect(() => {
+    if (!editing) {
+      setDrawPhase("drawing");
+      setHasBoundaryGeom(false);
+      setToolbarAnchor(null);
+      clearParcelSelection();
+    } else {
+      setHighlightParcel(null);
+    }
+  }, [editing, clearParcelSelection]);
+
+  useEffect(() => {
+    setHighlightParcel(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- row.id 전환 시만
+  }, [row.id]);
+
+  useLayerRowParcelHighlight(highlightParcel, "blue");
 
   useEffect(() => {
     setDraft(toDraft(row));
     setRiverNamesText(normalizeRiverNames(row.riverNames)[0] ?? "");
     parcelsSnapshotRef.current = [...(row.parcels ?? [])];
     setDraftParcels(withRiverNameFallback(row.parcels ?? []));
-    setParcelDrawIdx(null);
     setGeomEditingId?.(null);
 
     const isNew = isNewRiverConstructionLedgerRow(row) || !row.name.trim();
@@ -895,15 +1073,14 @@ export function RiverConstructionLedgerDetailPanel({ row, onClose }: Props) {
 
   useEffect(() => {
     return () => {
-      setParcelDrawIdx(null);
       setGeomEditingId?.(null);
     };
   }, [setGeomEditingId]);
 
   /** 속성·필지 수정 중엔 공사구간 전체 도형(오버레이)을 숨기고, 대신 필지별 도형 참고 레이어를 보여준다 */
   useEffect(() => {
-    setGeomEditingId?.(editing && !isNewRow ? row.id : null);
-  }, [editing, isNewRow, row.id, setGeomEditingId]);
+    setGeomEditingId?.(editing ? row.id : null);
+  }, [editing, row.id, setGeomEditingId]);
 
   /** 편집 중엔 입력창의 값을, 아닐 땐 저장된 값을 기준으로 표시 (단일 값) */
   const riverNames = editing
@@ -918,110 +1095,112 @@ export function RiverConstructionLedgerDetailPanel({ row, onClose }: Props) {
     );
   };
 
-  const flushParcelEditSourceToDraft = useCallback(() => {
-    syncParcelEditSourceRef.current?.();
+  const flushParcelEditSourceToDraft = useCallback(async () => {
+    const source = parcelEditLayerRef.current?.source;
+    if (source && writeCombinedWkt5181FromSource(source)) {
+      await applyJijukParcelsRef.current?.({ silent: true });
+    }
   }, []);
 
   const parcels = row.parcels ?? [];
 
-  /** 필지 목록에 빈 행을 넣고, 바로 지도에서 도형을 그리기 시작 */
-  const handleAddParcelRow = () => {
-    flushParcelEditSourceToDraft();
-    const next: LayerRowParcelItem = {
-      address: "",
-      riverName: "",
-      remark: "",
-      extent3857: null,
-    };
-    const list = [...draftParcelsRef.current, next];
-    draftParcelsRef.current = list;
-    setDraftParcels(list);
-    patchRow((r) => ({ ...r, parcels: list }));
-    setParcelDrawIdx(list.length - 1);
-  };
+  const applyJijukParcelsToDraft = useCallback(
+    async (opts?: { silent?: boolean; replaceAuto?: boolean }) => {
+      const source = parcelEditLayerRef.current?.source;
+      const wkt5181 = source ? writeCombinedWkt5181FromSource(source) : null;
+      const replaceAuto = opts?.replaceAuto !== false;
+      if (!wkt5181) {
+        const merged = mergeAutoParcelsIntoList(draftParcelsRef.current, [], replaceAuto);
+        draftParcelsRef.current = merged;
+        setDraftParcels(merged);
+        patchRow((r) => ({ ...r, parcels: merged }));
+        return;
+      }
+      try {
+        const res = await call("", "POST", {
+          service: "layerRowService",
+          action: "listJijukParcelsByGeomWkt5181",
+          params: { wkt5181 },
+        });
+        const data = res?.data ?? res;
+        if (data?.error) {
+          if (!opts?.silent) window.alert(String(data.error));
+          return;
+        }
+        const raw = Array.isArray(data?.parcels) ? data.parcels : [];
+        const items = parseJijukParcelItems(raw as Record<string, unknown>[]);
+        const merged = mergeAutoParcelsIntoList(draftParcelsRef.current, items, replaceAuto);
+        draftParcelsRef.current = merged;
+        setDraftParcels(merged);
+        patchRow((r) => ({ ...r, parcels: merged }));
+      } catch {
+        if (!opts?.silent) window.alert("필지목록을 불러오지 못했습니다.");
+      }
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- patchRow from map context
+    []
+  );
 
-  /** 필지 목록 특정 행의 하천명·비고 값 갱신 */
-  const handleUpdateParcelField = (
-    index: number,
-    field: "riverName" | "remark",
-    value: string
-  ) => {
-    const list = draftParcelsRef.current.map((p, i) => {
-      if (i !== index) return p;
-      const riverName = field === "riverName" ? value : (p.riverName ?? "");
-      const remark = field === "remark" ? value : (p.remark ?? "");
-      const displayText = [riverName, remark]
-        .map((s) => s.trim())
-        .filter(Boolean)
-        .join(" · ");
-      return {
-        ...p,
-        riverName,
-        remark,
-        address: displayText || "",
-        displayText: displayText || undefined,
+  useEffect(() => {
+    applyJijukParcelsRef.current = applyJijukParcelsToDraft;
+  }, [applyJijukParcelsToDraft]);
+
+  const addDraftParcel = useCallback(
+    (item: LayerRowParcelItem) => {
+      const key = item.address.toLowerCase();
+      const nextItem: LayerRowParcelItem = {
+        ...item,
+        manualAdd: true,
+        keepOnReplace: true,
       };
-    });
-    draftParcelsRef.current = list;
-    setDraftParcels(list);
-    patchRow((r) => ({ ...r, parcels: list }));
-  };
+      const list = draftParcelsRef.current;
+      if (list.some((p) => p.address.toLowerCase() === key)) return;
+      const merged = [...list, nextItem];
+      draftParcelsRef.current = merged;
+      setDraftParcels(merged);
+      patchRow((r) => ({ ...r, parcels: merged }));
+      void resolveParcelGeoms([nextItem]).then((resolvedList) => {
+        const resolved = resolvedList[0];
+        if (!resolved?.geometry3857 && !resolved?.pnu) return;
+        const updated = draftParcelsRef.current.map((p) =>
+          p.address.toLowerCase() === key
+            ? {
+                ...nextItem,
+                pnu: resolved.pnu ?? nextItem.pnu,
+                extent3857: resolved.extent3857 ?? nextItem.extent3857,
+                geometry3857: resolved.geometry3857 ?? nextItem.geometry3857,
+                manualAdd: true as const,
+                keepOnReplace: true as const,
+              }
+            : p
+        );
+        draftParcelsRef.current = updated;
+        setDraftParcels(updated);
+        patchRow((r) => ({ ...r, parcels: updated }));
+      });
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- patchRow from map context
+    []
+  );
 
-  const handleRemoveParcel = (index: number) => {
-    flushParcelEditSourceToDraft();
+  const removeDraftParcel = useCallback((index: number) => {
     const next = draftParcelsRef.current.filter((_, i) => i !== index);
     draftParcelsRef.current = next;
     setDraftParcels(next);
     patchRow((r) => ({ ...r, parcels: next }));
-    setParcelLayerEpoch((v) => v + 1);
-    setParcelDrawIdx((prev) => {
-      if (prev == null) return null;
-      if (prev === index) return null;
-      if (prev > index) return prev - 1;
-      return prev;
-    });
-  };
+  }, []);
 
-  /** 필지 행에 지도에서 그린 도형 반영(비우려면 둘 다 null) */
-  const handleSetParcelGeom = (
-    index: number,
-    geometry3857: Record<string, unknown> | null,
-    extent3857: [number, number, number, number] | null
-  ) => {
-    const list = draftParcelsRef.current.map((p, i) =>
-      i === index ? { ...p, geometry3857, extent3857 } : p
-    );
-    draftParcelsRef.current = list;
-    setDraftParcels(list);
-    patchRow((r) => ({ ...r, parcels: list }));
-  };
-
-  const finishParcelDraw = () => {
-    setParcelDrawIdx(null);
-  };
-
-  const cancelParcelDraw = () => {
-    const idx = parcelDrawIdx;
-    if (idx == null) return;
-    const item = draftParcelsRef.current[idx];
-    if (!item?.geometry3857) {
-      handleRemoveParcel(idx);
-      return;
-    }
-    finishParcelDraw();
-  };
-
-  const parcelEditStyle = new Style({
-    fill: new Fill({ color: "rgba(22, 163, 74, 0.25)" }),
-    stroke: new Stroke({ color: "#15803d", width: 2.5 }),
+  const boundaryEditStyle = new Style({
+    stroke: new Stroke({ color: occupationStrokeRgba("parentActive"), width: 2.5 }),
+    fill: new Fill({ color: occupationFillRgba("parentActive") }),
     image: new CircleStyle({
       radius: 5,
-      fill: new Fill({ color: "#15803d" }),
+      fill: new Fill({ color: occupationFillRgba("parentActive", 0.95) }),
       stroke: new Stroke({ color: "#fff", width: 1.5 }),
     }),
   });
 
-  /** 수정 모드 — 편집 세션 동안 단일 레이어 유지 (추가 그리기 시에도 기존 도형 유지) */
+  /** 수정 모드 — 하천점용과 동일 Draw·적용·관리 단계 */
   useEffect(() => {
     if (!editing) return;
     const map = mapContext?.mapInstanceRef?.current;
@@ -1036,111 +1215,205 @@ export function RiverConstructionLedgerDetailPanel({ row, onClose }: Props) {
     const layer = new VectorLayer({
       source,
       zIndex: 9999,
-      style: parcelEditStyle,
+      style: boundaryEditStyle,
     });
 
-    loadParcelFeaturesIntoSource(source, draftParcelsRef.current, format, viewProj);
+    loadBoundaryGeomIntoSource(
+      source,
+      boundaryGeomRef.current ?? null,
+      format,
+      viewProj
+    );
 
-    const syncFromSource = () => {
-      const byIdx = new Map<
-        number,
-        {
-          geometry3857: Record<string, unknown>;
-          extent3857: [number, number, number, number] | null;
-        }
-      >();
-      for (const feature of source.getFeatures()) {
-        const idx = feature.get(PARCEL_IDX_KEY);
-        if (typeof idx !== "number" || idx < 0) continue;
-        const geom = feature.getGeometry();
-        if (!geom) continue;
-        const geometry3857 = format.writeGeometryObject(geom, {
-          dataProjection: viewProj,
-          featureProjection: viewProj,
-        }) as unknown as Record<string, unknown>;
-        const ext = geom.getExtent();
-        byIdx.set(idx, {
-          geometry3857,
-          extent3857: ext.every((v) => Number.isFinite(v))
-            ? (ext as [number, number, number, number])
-            : null,
-        });
-      }
-      if (byIdx.size === 0) return;
-      const list = draftParcelsRef.current.map((p, i) => {
-        const next = byIdx.get(i);
-        return next ? { ...p, ...next } : p;
-      });
-      draftParcelsRef.current = list;
-      setDraftParcels(list);
-      patchRow((r) => ({ ...r, parcels: list }));
+    let draw: Draw | null = null;
+    let modify: Modify | null = null;
+
+    const syncHasBoundary = () => {
+      setHasBoundaryGeom(source.getFeatures().length > 0);
     };
 
-    const modify = new Modify({ source });
-    modify.on("modifyend", syncFromSource);
+    const syncToolbarAnchor = () => {
+      setToolbarAnchor(buildBoundaryToolbarAnchor(source));
+    };
+
+    const clearToolbarAnchor = () => {
+      setToolbarAnchor(null);
+    };
+
+    const rememberBaseline = () => {
+      baselineWktRef.current = writeCombinedWkt5181FromSource(source);
+      parcelsSnapshotRef.current = [...draftParcelsRef.current];
+    };
+
+    const detachModify = () => {
+      if (modify) {
+        map.removeInteraction(modify);
+        modify.dispose();
+        modify = null;
+      }
+    };
+
+    const detachDraw = () => {
+      if (draw) {
+        map.removeInteraction(draw);
+        draw.dispose();
+        draw = null;
+        isDrawActiveRef.current = false;
+      }
+    };
+
+    const goManaged = () => {
+      detachDraw();
+      detachModify();
+      pendingApplyRef.current = false;
+      syncToolbarAnchor();
+      syncHasBoundary();
+      setDrawPhase("managed");
+    };
+
+    const attachModify = () => {
+      detachModify();
+      modify = new Modify({ source });
+      let anchorRaf = 0;
+      const scheduleAnchor = () => {
+        if (anchorRaf) return;
+        anchorRaf = requestAnimationFrame(() => {
+          anchorRaf = 0;
+          syncToolbarAnchor();
+        });
+      };
+      modify.on("modifyend", () => {
+        syncHasBoundary();
+        scheduleAnchor();
+        setDrawPhase("editing");
+      });
+      map.addInteraction(modify);
+      syncToolbarAnchor();
+      setDrawPhase("editing");
+    };
+
+    const startDraw = (opts?: { clearParents?: boolean }) => {
+      const clearParents = opts?.clearParents !== false;
+      detachDraw();
+      detachModify();
+      if (clearParents) {
+        source.clear();
+        setHasBoundaryGeom(false);
+        clearToolbarAnchor();
+      }
+      pendingApplyRef.current = true;
+      setDrawPhase("drawing");
+      draw = new Draw({ source, type: "Polygon", stopClick: true });
+      draw.on("drawend", (e) => {
+        const geom = e.feature.getGeometry();
+        requestAnimationFrame(() => {
+          syncHasBoundary();
+          pendingApplyRef.current = true;
+          if (geom) {
+            setToolbarAnchor(
+              buildBoundaryToolbarAnchor(source) ?? buildBoundaryToolbarAnchorFromGeom(geom)
+            );
+          } else {
+            syncToolbarAnchor();
+          }
+          detachDraw();
+          attachModify();
+        });
+      });
+      map.addInteraction(draw);
+      isDrawActiveRef.current = true;
+    };
+
+    const restoreBaselineOrManaged = () => {
+      const baseline = baselineWktRef.current;
+      detachDraw();
+      detachModify();
+      if (baseline) {
+        replaceSourceFeaturesFromWkt5181(source, baseline, viewProj);
+        syncHasBoundary();
+        draftParcelsRef.current = [...parcelsSnapshotRef.current];
+        setDraftParcels([...parcelsSnapshotRef.current]);
+        patchRow((r) => ({ ...r, parcels: [...parcelsSnapshotRef.current] }));
+      } else {
+        source.clear();
+        setHasBoundaryGeom(false);
+      }
+      pendingApplyRef.current = false;
+      goManaged();
+    };
+
+    mapOpsRef.current = {
+      confirmApply: () => {
+        const wkt = writeCombinedWkt5181FromSource(source);
+        if (!wkt) {
+          window.alert("그린 도형이 없습니다. 지도에 도형을 그려 주세요.");
+          return;
+        }
+        pendingApplyRef.current = false;
+        rememberBaseline();
+        void applyJijukParcelsRef.current?.({ silent: true });
+        goManaged();
+      },
+      redrawShape: () => {
+        const manual = draftParcelsRef.current.filter((p) => p.manualAdd === true);
+        draftParcelsRef.current = manual;
+        setDraftParcels(manual);
+        patchRow((r) => ({ ...r, parcels: manual }));
+        startDraw({ clearParents: true });
+      },
+      cancelDraw: () => {
+        restoreBaselineOrManaged();
+      },
+      addGeom: () => {
+        startDraw({ clearParents: false });
+      },
+      modifyGeom: () => {
+        if (source.getFeatures().length === 0) {
+          startDraw({ clearParents: false });
+          return;
+        }
+        rememberBaseline();
+        pendingApplyRef.current = true;
+        attachModify();
+      },
+      deleteGeom: () => {
+        detachDraw();
+        source.clear();
+        setHasBoundaryGeom(false);
+        baselineWktRef.current = null;
+        void applyJijukParcelsRef.current?.({ silent: true });
+        clearToolbarAnchor();
+        goManaged();
+      },
+    };
+
     map.addLayer(layer);
-    map.addInteraction(modify);
     parcelEditLayerRef.current = { layer, source, modify };
-    syncParcelEditSourceRef.current = syncFromSource;
+    syncParcelEditSourceRef.current = () => {
+      void applyJijukParcelsRef.current?.({ silent: true });
+    };
+
+    const initialWkt = writeCombinedWkt5181FromSource(source);
+    baselineWktRef.current = initialWkt;
+    syncHasBoundary();
+
+    if (initialWkt) {
+      goManaged();
+    } else {
+      startDraw({ clearParents: true });
+    }
 
     return () => {
-      syncFromSource();
+      mapOpsRef.current = null;
       syncParcelEditSourceRef.current = null;
-      modify.un("modifyend", syncFromSource);
-      map.removeInteraction(modify);
+      detachDraw();
+      detachModify();
       map.removeLayer(layer);
       source.clear();
       parcelEditLayerRef.current = null;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- 편집·필지 구조 변경 시에만 레이어 재구성
-  }, [editing, parcelLayerEpoch, mapContext?.mapInstanceRef]);
-
-  /** 신규 필지 도형 그리기 — 기존 편집 레이어는 유지하고 Draw만 겹침 */
-  useEffect(() => {
-    const editRef = parcelEditLayerRef.current;
-    const map = mapContext?.mapInstanceRef?.current;
-    if (!editing || parcelDrawIdx == null || !editRef || !map) return;
-
-    editRef.modify.setActive(false);
-
-    const viewProj = map.getView().getProjection()?.getCode() || "EPSG:3857";
-    const format = new GeoJSONFormat();
-    const drawIdx = parcelDrawIdx;
-
-    const drawSource = new VectorSource();
-    const drawLayer = new VectorLayer({
-      source: drawSource,
-      zIndex: 10000,
-      style: parcelEditStyle,
-    });
-    const draw = new Draw({ source: drawSource, type: "Polygon", stopClick: true });
-    map.addLayer(drawLayer);
-    map.addInteraction(draw);
-
-    const onEnd = (evt: { feature: Feature }) => {
-      const geom = evt.feature.getGeometry()?.clone();
-      const coords = geom?.getType() === "Polygon" ? (geom as Polygon).getCoordinates()[0] : null;
-      if (!geom || !coords || coords.length < 4) {
-        window.alert("다각형은 세 점 이상이어야 합니다.");
-        return;
-      }
-      const feature = new Feature(geom);
-      feature.set(PARCEL_IDX_KEY, drawIdx);
-      editRef.source.addFeature(feature);
-      syncParcelEditSourceRef.current?.();
-      finishParcelDraw();
-    };
-    draw.on("drawend", onEnd as never);
-
-    return () => {
-      draw.un("drawend", onEnd as never);
-      map.removeInteraction(draw);
-      map.removeLayer(drawLayer);
-      drawSource.clear();
-      editRef.modify.setActive(true);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- draw session keyed by index
-  }, [editing, parcelDrawIdx, parcelLayerEpoch, mapContext?.mapInstanceRef]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 편집 진입·종료 시에만 레이어 구성
+  }, [editing, mapContext?.mapInstanceRef]);
 
   const beginEdit = () => {
     setDraft(toDraft(row));
@@ -1149,18 +1422,26 @@ export function RiverConstructionLedgerDetailPanel({ row, onClose }: Props) {
     parcelsSnapshotRef.current = [...filled];
     draftParcelsRef.current = filled;
     setDraftParcels(filled);
-    setParcelDrawIdx(null);
     setEditing(true);
   };
 
   const parcelsToSavePayload = (list: LayerRowParcelItem[]) =>
     list
       .map((p) => ({
-        riverName: (p.riverName ?? "").trim(),
-        remark: (p.remark ?? "").trim(),
+        address: (p.address ?? "").trim(),
         geomWkt5181: parcelGeomToWkt5181(p.geometry3857),
       }))
-      .filter((p) => p.riverName || p.remark || p.geomWkt5181);
+      .filter((p) => p.address || p.geomWkt5181);
+
+  const getBoundaryGeomWkt5181ForSave = (): {
+    geomWkt5181: string | null;
+    geomClear: boolean;
+  } => {
+    const source = parcelEditLayerRef.current?.source;
+    if (!source) return { geomWkt5181: null, geomClear: false };
+    const wkt = writeCombinedWkt5181FromSource(source);
+    return { geomWkt5181: wkt, geomClear: !wkt };
+  };
 
   const applyMappedRow = (mapped: RiverConstructionLedgerRow) => {
     mapContext?.setRiverConstructionLedgerRows?.((rows) => {
@@ -1174,16 +1455,35 @@ export function RiverConstructionLedgerDetailPanel({ row, onClose }: Props) {
     );
   };
 
-  const handleParcelClick = (item: LayerRowParcelItem, idx: number) => {
-    void selectParcel(item, idx);
-  };
+  const handleParcelClick = useCallback(
+    (item: LayerRowParcelItem, idx: number) => {
+      if (selectedParcelIdx === idx) {
+        clearParcelSelection();
+        setHighlightParcel(null);
+        return;
+      }
+      ensureConsDataAsWmsLayersVisible(mapContext?.setVisibleLayerNames);
+      void selectParcel(item, idx, {
+        onHighlight: setHighlightParcel,
+        enableWmsLayer: false,
+        useItemGeometry: true,
+      });
+    },
+    [
+      clearParcelSelection,
+      mapContext?.setVisibleLayerNames,
+      selectParcel,
+      selectedParcelIdx,
+    ]
+  );
 
   const handleSave = async () => {
     if (!draft.name.trim()) {
       window.alert("공사명을 입력하세요.");
       return;
     }
-    flushParcelEditSourceToDraft();
+    await flushParcelEditSourceToDraft();
+    const { geomWkt5181, geomClear } = getBoundaryGeomWkt5181ForSave();
     const values = ledgerRowToConsDataAsValues({
       ...draft,
       riverNames,
@@ -1197,7 +1497,9 @@ export function RiverConstructionLedgerDetailPanel({ row, onClose }: Props) {
           consCode: isNewRow ? undefined : row.id,
           isNew: isNewRow,
           values,
-          parcels: isNewRow ? undefined : parcelsToSavePayload(draftParcelsRef.current),
+          geomWkt5181,
+          geomClear,
+          parcels: parcelsToSavePayload(draftParcelsRef.current),
         },
       });
       const data = res?.data ?? res;
@@ -1228,7 +1530,6 @@ export function RiverConstructionLedgerDetailPanel({ row, onClose }: Props) {
       draftParcelsRef.current = savedParcels;
       setDraftParcels(savedParcels);
       parcelsSnapshotRef.current = [...savedParcels];
-      finishParcelDraw();
       setEditing(false);
       setFoldersRefreshNonce((n) => n + 1);
       if (consCode) {
@@ -1251,25 +1552,27 @@ export function RiverConstructionLedgerDetailPanel({ row, onClose }: Props) {
     setDraft(toDraft(row));
     setRiverNamesText(normalizeRiverNames(row.riverNames)[0] ?? "");
     if (isNewRow) {
+      draftParcelsRef.current = [];
+      setDraftParcels([]);
+      parcelsSnapshotRef.current = [];
+      boundaryGeomRef.current = null;
       mapContext?.setRiverConstructionLedgerRows?.((rows) =>
         rows.filter((r) => !isNewRiverConstructionLedgerRow(r))
       );
       mapContext?.setRiverConstructionLedgerSelectedId?.(null);
-      finishParcelDraw();
+      setGeomEditingId?.(null);
       return;
     }
     const snapParcels = [...parcelsSnapshotRef.current];
     draftParcelsRef.current = snapParcels;
     setDraftParcels(snapParcels);
     patchRow((prev) => ({ ...prev, parcels: snapParcels }));
-    finishParcelDraw();
     setEditing(false);
   };
 
   const handleDelete = async () => {
     if (!window.confirm(`「${row.name || "신규 공사"}」을(를) 삭제할까요?`)) return;
     const clearDeletedFromMap = () => {
-      finishParcelDraw();
       mapContext?.setRiverConstructionLedgerRows?.((rows) => rows.filter((r) => r.id !== row.id));
       mapContext?.setRiverConstructionLedgerOverlayRows?.((rows) =>
         rows.filter((r) => r.id !== row.id)
@@ -1573,36 +1876,51 @@ export function RiverConstructionLedgerDetailPanel({ row, onClose }: Props) {
   const geomBannerHost =
     mapContext?.mapInstanceRef?.current?.getTargetElement()?.parentElement ?? null;
 
+  const drawToolbar = (
+    <DrawToolbarActions
+      drawPhase={drawPhase}
+      confirmDraw={() => mapOpsRef.current?.confirmApply()}
+      redrawShape={() => mapOpsRef.current?.redrawShape()}
+      cancelDraw={() => mapOpsRef.current?.cancelDraw()}
+      applyDisabled={drawPhase === "editing" && !hasBoundaryGeom}
+      addGeom={() => mapOpsRef.current?.addGeom()}
+      modifyGeom={() => mapOpsRef.current?.modifyGeom()}
+      deleteGeom={() => mapOpsRef.current?.deleteGeom()}
+      showDeleteGeom={hasBoundaryGeom}
+      showModifyGeom={hasBoundaryGeom}
+    />
+  );
+
   const mapEditBanner =
-    geomBannerHost && geomBannerActive
+    geomBannerActive && (drawPhase === "editing" || geomBannerHost)
       ? createPortal(
-          <div
-            className="pointer-events-none absolute z-[15] flex -translate-x-1/2 flex-col items-center gap-1.5"
-            style={
-              geomCenterPixel
-                ? { left: geomCenterPixel.x, top: geomHintTopPx }
-                : { left: "50%", top: geomHintTopPx }
-            }
-          >
-            {parcelDrawIdx != null ? (
-              <DrawToolbarActions
-                drawPhase="drawing"
-                confirmDraw={finishParcelDraw}
-                redrawShape={finishParcelDraw}
-                cancelDraw={cancelParcelDraw}
-                applyDisabled={false}
-              />
-            ) : (
-              <div className="pointer-events-auto flex max-w-[min(100vw-16px,560px)] flex-wrap items-center gap-2 rounded-full border border-border bg-background/95 px-4 py-2 text-foreground shadow-lg backdrop-blur">
-                <span className="text-[12px] leading-snug sm:text-sm">
-                  {draftParcels.some((p) => p.geometry3857)
-                    ? "꼭짓점을 드래그해 모양을 수정하세요."
-                    : "「추가」를 눌러 필지 도형을 그리세요."}
-                </span>
-              </div>
-            )}
-          </div>,
-          geomBannerHost
+          drawPhase === "drawing" || drawPhase === "managed" ? (
+            <div
+              className="pointer-events-none absolute z-[15] flex -translate-x-1/2 flex-col items-center gap-1.5"
+              style={
+                geomCenterPixel
+                  ? { left: geomCenterPixel.x, top: geomHintTopPx }
+                  : { left: "50%", top: geomHintTopPx }
+              }
+            >
+              {drawToolbar}
+            </div>
+          ) : (
+            <div
+              ref={toolbarRef}
+              className="pointer-events-none fixed z-[1200] flex flex-col items-start gap-1.5"
+              style={
+                toolbarPlacement
+                  ? { left: toolbarPlacement.left, top: toolbarPlacement.top }
+                  : geomCenterPixel
+                    ? { left: geomCenterPixel.x, top: geomHintTopPx, transform: "translateX(-50%)" }
+                    : { left: "50%", top: geomHintTopPx, transform: "translateX(-50%)" }
+              }
+            >
+              {drawToolbar}
+            </div>
+          ),
+          drawPhase === "editing" ? document.body : geomBannerHost!
         )
       : null;
 
@@ -1628,8 +1946,8 @@ export function RiverConstructionLedgerDetailPanel({ row, onClose }: Props) {
         </button>
       </div>
 
-      {/* 본문 전체가 하나로 스크롤 — 상세 속성 · 필지 · 첨부파일 순서로 자연스럽게 이어짐 */}
-      <MapSideDetailScroll className="flex min-h-0 flex-1 flex-col overflow-auto px-3 py-2 text-xs">
+      {/* 속성·필지는 고정, 첨부만 남은 높이에서 스크롤 */}
+      <MapSideDetailScroll className="flex min-h-0 flex-1 flex-col overflow-hidden px-3 py-2 text-xs">
         <div className="sticky top-0 z-10 mb-1 flex shrink-0 items-center justify-between gap-2 bg-background py-0.5">
           <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
             상세 속성
@@ -1652,108 +1970,37 @@ export function RiverConstructionLedgerDetailPanel({ row, onClose }: Props) {
             />
           </div>
         </div>
-        <AttrTable entries={editing ? editEntries : viewEntries} />
-
-        {!isNewRow ? (
-        <div className="mt-4">
-          <div className="mb-1 flex items-center justify-between gap-2">
-            <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-              필지목록
-              {(editing ? draftParcels : parcels).length > 0 ? (
-                <span className="ml-1 font-normal normal-case text-muted-foreground">
-                  ({(editing ? draftParcels : parcels).length})
-                </span>
-              ) : null}
-            </div>
-            {editing ? (
-              <LayerRowPanelButton className="h-6 px-2 text-[10px]" onClick={handleAddParcelRow}>
-                <Plus className="h-3 w-3 shrink-0" aria-hidden />
-                추가
-              </LayerRowPanelButton>
-            ) : null}
-          </div>
-
-          {(editing ? draftParcels : parcels).length === 0 ? (
-            <div className="rounded border border-dashed border-border bg-muted/50 px-2 py-2 text-muted-foreground">
-              {editing
-                ? "「추가」를 누르면 지도에서 바로 도형을 그릴 수 있습니다. 하천명·비고도 입력하세요."
-                : "등록된 필지가 없습니다."}
-            </div>
-          ) : editing ? (
-            <ul className="max-h-48 list-none space-y-1.5 overflow-y-auto overscroll-contain rounded border border-border bg-background p-1.5 scrollbar-hide">
-              {draftParcels.map((item, i) => (
-                <li
-                  key={i}
-                  className="flex items-center gap-1 rounded border border-border bg-muted/40 p-1"
-                >
-                  <button
-                    type="button"
-                    className="w-4 shrink-0 text-center text-[10px] tabular-nums text-muted-foreground hover:text-primary disabled:cursor-default disabled:opacity-70"
-                    onClick={() => handleParcelClick(item, i)}
-                    title="클릭 시 위치 이동"
-                  >
-                    {i + 1}
-                  </button>
-                  <RiverNameSelect
-                    className={cn(fieldClass, "flex-1")}
-                    placeholder="하천명 검색/선택"
-                    value={item.riverName ?? ""}
-                    onChange={(v) => handleUpdateParcelField(i, "riverName", v)}
-                  />
-                  <input
-                    className={cn(fieldClass, "flex-1")}
-                    placeholder="비고"
-                    value={item.remark ?? ""}
-                    onChange={(e) => handleUpdateParcelField(i, "remark", e.target.value)}
-                  />
-                  {movingParcelIdx === i && (
-                    <span className="shrink-0 text-[10px] text-muted-foreground">이동중</span>
-                  )}
-                  <button
-                    type="button"
-                    className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-                    onClick={() => handleRemoveParcel(i)}
-                    aria-label="필지 삭제"
-                    title="삭제"
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </button>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <ul className="max-h-48 list-none space-y-0 overflow-y-auto overscroll-contain rounded border border-border bg-background scrollbar-hide">
-              {parcels.map((item, i) => (
-                <li
-                  key={i}
-                  className="flex items-start gap-1 border-b border-border px-2 py-1.5 text-foreground last:border-b-0"
-                >
-                  <button
-                    type="button"
-                    className="flex w-full min-w-0 items-start gap-1 text-left hover:text-primary disabled:cursor-default disabled:opacity-70"
-                    onClick={() => handleParcelClick(item, i)}
-                    title="클릭 시 위치 이동"
-                  >
-                    <span className="mr-1 shrink-0 tabular-nums text-muted-foreground">{i + 1}.</span>
-                    <span className="min-w-0 flex-1 break-words">
-                      {item.displayText?.trim() ||
-                        [item.riverName, item.remark].filter(Boolean).join(" · ") ||
-                        item.address ||
-                        "—"}
-                    </span>
-                    {movingParcelIdx === i && (
-                      <span className="ml-1 shrink-0 text-[11px] text-muted-foreground">이동 중…</span>
-                    )}
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
+        <div className="shrink-0">
+          <AttrTable entries={editing ? editEntries : viewEntries} />
         </div>
+
+        {(editing || !isNewRow) ? (
+          <div className="shrink-0">
+            <UsageDataAsAddressList
+              title="필지목록"
+              className="mt-2"
+              maxVisibleCards={5}
+              isEditing={editing}
+              items={editing ? draftParcels : parcels}
+              selectedIdx={selectedParcelIdx}
+              onAdd={editing ? () => setParcelAddModalOpen(true) : undefined}
+              onRemove={editing ? removeDraftParcel : undefined}
+              onClick={handleParcelClick}
+              emptyHintEdit="도형을 그리거나 수정하면 필지목록이 자동으로 채워집니다. 「추가」로 직접 등록할 수도 있습니다."
+              emptyHintView="등록된 필지가 없습니다."
+            />
+            <LayerParcelAddModal
+              open={parcelAddModalOpen}
+              onOpenChange={setParcelAddModalOpen}
+              vworldApiKey={vworldApiKey}
+              title="필지 추가"
+              onAdd={addDraftParcel}
+            />
+          </div>
         ) : null}
 
         {!isNewRow ? (
-        <div className="mt-4 flex min-h-[12rem] flex-1 flex-col">
+        <div className="mt-3 flex min-h-0 flex-1 flex-col">
           <div className="mb-1 flex shrink-0 items-center justify-between gap-2">
             <div className="flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
               <Paperclip className="h-3.5 w-3.5" />
