@@ -3,7 +3,6 @@
 
 import React, { useState, useEffect, useLayoutEffect, useCallback, useRef, useMemo, Suspense } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
-import { useSession } from "next-auth/react"
 import { X } from "lucide-react"
 import Map3DDataPanel from "./_mapComponents/Map3DDataPanel"
 import StandardList from "./_mapComponents/standard/StandardList"
@@ -31,6 +30,8 @@ import { SafetyFacPanel } from "./_mapContents/safty/safetyFac/SafetyFacPanel"
 import { SafetyFacDetailPanel } from "./_mapContents/safty/safetyFac/SafetyFacDetailPanel"
 import type { SafetyFacFacilityRow } from "./_mapContents/safty/safetyFac/safetyFacSymbols"
 import { VillagePatrolListPanel } from "./_mapContents/safty/villagePatrol/VillagePatrolListPanel"
+import { RadiationShelterPanel } from "./_mapContents/safty/radiationShelter/RadiationShelterPanel"
+import { WaterPlaySignPanel } from "./_mapContents/safty/waterPlaySign/WaterPlaySignPanel"
 import { SafetyHospitalBadPanel } from "./_mapContents/safty/safetyHospitalBad/SafetyHospitalBadPanel"
 import { SafetyJsjReservoirPanel } from "./_mapContents/safty/saftyJsj/SafetyJsjReservoirPanel"
 import { RoadDocManualPanel } from "./_mapContents/road/roadDoc/roadDocManualPanel"
@@ -160,14 +161,6 @@ import { MapContextProvider, useMapContext } from "./_mapComponents/MapContext"
 import { applyViewPaddingPreservingVisualCenter } from "./_mapComponents/config/mapVisualCenter"
 import { MapSideListPanel } from "./_mapComponents/MapSideListPanel"
 import { SearchBarOffsetContext } from "./searchBarOffsetContext"
-import { SampleListPanel } from "./_mapContents/sample/SampleListPanel"
-import {
-  DESIGN_SAMPLE_OPENED_KEY,
-  DESIGN_SAMPLE_PANEL_DEFAULT_WIDTH,
-  DESIGN_SAMPLE_PANEL_MAX_WIDTH,
-  DESIGN_SAMPLE_PANEL_MIN_WIDTH,
-} from "./_mapContents/sample/sampleConfig"
-
 const SIDEBAR_WIDTH = 65
 const SEARCH_BAR_MARGIN = 20
 /** 주소/지번 검색창과 같은 위치(px)에 맞출 때 사용. left = SIDEBAR_WIDTH + listPanelWidth + SEARCH_BAR_MARGIN, top = 16 */
@@ -240,6 +233,14 @@ const VILLAGE_PATROL_PANEL_DEFAULT_WIDTH = 910
 const VILLAGE_PATROL_PANEL_MIN_WIDTH = 640
 const VILLAGE_PATROL_PANEL_MAX_WIDTH = 1320
 
+const RADIATION_SHELTER_PANEL_DEFAULT_WIDTH = 420
+const RADIATION_SHELTER_PANEL_MIN_WIDTH = 320
+const RADIATION_SHELTER_PANEL_MAX_WIDTH = 720
+
+const WATER_PLAY_SIGN_PANEL_DEFAULT_WIDTH = 420
+const WATER_PLAY_SIGN_PANEL_MIN_WIDTH = 320
+const WATER_PLAY_SIGN_PANEL_MAX_WIDTH = 720
+
 const SAFETY_HOSPITAL_BED_PANEL_DEFAULT_WIDTH = 420
 const SAFETY_HOSPITAL_BED_PANEL_MIN_WIDTH = 320
 const SAFETY_HOSPITAL_BED_PANEL_MAX_WIDTH = 720
@@ -279,7 +280,7 @@ const BUILD_PUBLIC_LAND_DETAIL_DEFAULT_WIDTH = ROAD_USE_LEDGER_DETAIL_DEFAULT_WI
 const BUILD_PUBLIC_LAND_DETAIL_MIN_WIDTH = ROAD_USE_LEDGER_DETAIL_MIN_WIDTH
 const BUILD_PUBLIC_LAND_DETAIL_MAX_WIDTH = ROAD_USE_LEDGER_DETAIL_MAX_WIDTH
 
-const LAYER_DATA_PANEL_DEFAULT_WIDTH = 400
+const LAYER_DATA_PANEL_DEFAULT_WIDTH = 450
 const LAYER_DATA_PANEL_MIN_WIDTH = 360
 const LAYER_DATA_PANEL_MAX_WIDTH = 900
 
@@ -294,7 +295,9 @@ const ROAD_NETWORK_OPENED_KEY = "roadNetwork"
 const SAFETY_MAP_OPENED_KEY = "safetyMap"
 const SAFETY_INFO_OPENED_KEY = "safetyInfo"
 const SAFETY_WATER_OPENED_KEY = "safetyWater"
+const WATER_PLAY_SIGN_OPENED_KEY = "waterPlaySign"
 const SAFETY_FAC_OPENED_KEY = "safetyFac"
+const RADIATION_SHELTER_OPENED_KEY = "radiationShelter"
 const VILLAGE_PATROL_OPENED_KEY = "villagePatrol"
 const SAFETY_HOSPITAL_BED_OPENED_KEY = "safetyBedState"
 /** serviceList `ser_eng`: jsjWaterLevel — 저수지 수위(saftyJsj) */
@@ -433,8 +436,6 @@ function MapLayoutContent({
 }) {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const { data: session } = useSession()
-  const isSuperUser = session?.user?.id === "su"
   const mapContext = useMapContext()
   /** Provider `value`는 매 렌더 새 객체 — effect deps에 `mapContext` 넣으면 visibleLayerNames만 바뀌어도 재실행됨 */
   const mapInstanceRef = mapContext?.mapInstanceRef
@@ -525,7 +526,9 @@ function MapLayoutContent({
   const safetyMapOpen = openedWindows.includes(SAFETY_MAP_OPENED_KEY)
   const safetyInfoOpen = openedWindows.includes(SAFETY_INFO_OPENED_KEY)
   const safetyWaterOpen = openedWindows.includes(SAFETY_WATER_OPENED_KEY)
+  const waterPlaySignOpen = openedWindows.includes(WATER_PLAY_SIGN_OPENED_KEY)
   const safetyFacOpen = openedWindows.includes(SAFETY_FAC_OPENED_KEY)
+  const radiationShelterOpen = openedWindows.includes(RADIATION_SHELTER_OPENED_KEY)
   const villagePatrolOpen = openedWindows.includes(VILLAGE_PATROL_OPENED_KEY)
   const safetyHospitalBedOpen = openedWindows.includes(SAFETY_HOSPITAL_BED_OPENED_KEY)
   const jsjWaterLevelOpen = openedWindows.includes(JSJ_WATER_LEVEL_OPENED_KEY)
@@ -593,8 +596,6 @@ function MapLayoutContent({
   const groundwaterPermitOpen = openedWindows.includes(GROUNDWATER_PERMIT_OPENED_KEY)
   const fmsLinkageOpen = openedWindows.some((w) => isFmsOpenedToken(w))
   const fmsLinkageDetailOpen = fmsLinkageOpen && Boolean(fmsLinkageDetailId)
-  const designSampleOpen =
-    isSuperUser && openedWindows.includes(DESIGN_SAMPLE_OPENED_KEY)
   const [buildPublicLandSelectedId, setBuildPublicLandSelectedId] = useState<string | null>(null)
   const [buildPublicLandListRefreshKey, setBuildPublicLandListRefreshKey] = useState(0)
   const buildPublicLandDetailOpen = buildPublicLandOpen && Boolean(buildPublicLandSelectedId)
@@ -712,6 +713,12 @@ function MapLayoutContent({
   const [safetyFacDetail, setSafetyFacDetail] = useState<SafetyFacFacilityRow | null>(null)
   const [safetyFacDetailWidth, setSafetyFacDetailWidth] = useState(SAFETY_FAC_DETAIL_DEFAULT_WIDTH)
   const safetyFacDetailOpen = safetyFacOpen && safetyFacDetail != null
+  const [radiationShelterPanelWidth, setRadiationShelterPanelWidth] = useState(
+    RADIATION_SHELTER_PANEL_DEFAULT_WIDTH
+  )
+  const [waterPlaySignPanelWidth, setWaterPlaySignPanelWidth] = useState(
+    WATER_PLAY_SIGN_PANEL_DEFAULT_WIDTH
+  )
   const [villagePatrolPanelWidth, setVillagePatrolPanelWidth] = useState(VILLAGE_PATROL_PANEL_DEFAULT_WIDTH)
   const [safetyHospitalBedPanelWidth, setSafetyHospitalBedPanelWidth] = useState(
     SAFETY_HOSPITAL_BED_PANEL_DEFAULT_WIDTH
@@ -779,7 +786,6 @@ function MapLayoutContent({
   )
   const [fmsLinkagePanelWidth, setFmsLinkagePanelWidth] = useState(FMS_PANEL_DEFAULT_WIDTH)
   const [fmsLinkageDetailWidth, setFmsLinkageDetailWidth] = useState(FMS_DETAIL_DEFAULT_WIDTH)
-  const [samplePanelWidth, setSamplePanelWidth] = useState(DESIGN_SAMPLE_PANEL_DEFAULT_WIDTH)
   const [fmsGeomToastMsg, setFmsGeomToastMsg] = useState<string | null>(null)
   const [memoPanelWidth, setMemoPanelWidth] = useState(MEMO_PANEL_DEFAULT_WIDTH)
   const [layerDataPanelWidth, setLayerDataPanelWidth] = useState(LAYER_DATA_PANEL_DEFAULT_WIDTH)
@@ -826,8 +832,10 @@ function MapLayoutContent({
     (safetyInfoOpen ? safetyInfoPanelWidth : 0) +
     (safetyWaterOpen ? safetyWaterPanelWidth : 0) +
     (safetyWaterOpen && safetyWaterStatsOpen ? safetyWaterStatsWidth : 0) +
+    (waterPlaySignOpen ? waterPlaySignPanelWidth : 0) +
     (safetyFacOpen ? safetyFacPanelWidth : 0) +
     (safetyFacDetailOpen ? safetyFacDetailWidth : 0) +
+    (radiationShelterOpen ? radiationShelterPanelWidth : 0) +
     (villagePatrolOpen ? villagePatrolPanelWidth : 0) +
     (safetyHospitalBedOpen ? safetyHospitalBedPanelWidth : 0) +
     (jsjWaterLevelOpen ? jsjReservoirPanelWidth : 0) +
@@ -842,8 +850,7 @@ function MapLayoutContent({
     (groundwaterPermitOpen ? groundwaterPermitPanelWidth : 0) +
     (groundwaterPermitDetailOpen ? groundwaterPermitDetailWidth : 0) +
     (fmsLinkageOpen ? fmsLinkagePanelWidth : 0) +
-    (fmsLinkageDetailOpen ? fmsLinkageDetailWidth : 0) +
-    (designSampleOpen ? samplePanelWidth : 0)
+    (fmsLinkageDetailOpen ? fmsLinkageDetailWidth : 0)
   const searchBarOffset = {
     leftPx: SIDEBAR_WIDTH + totalListPanelWidth + SEARCH_BAR_MARGIN,
     topPx: 16,
@@ -932,12 +939,16 @@ function MapLayoutContent({
   const safetyInfoPanelLeftPx = safetyMapPanelLeftPx + (safetyMapOpen ? safetyMapPanelWidth : 0)
   const safetyWaterPanelLeftPx = safetyInfoPanelLeftPx + (safetyInfoOpen ? safetyInfoPanelWidth : 0)
   const safetyWaterStatsLeftPx = safetyWaterPanelLeftPx + (safetyWaterOpen ? safetyWaterPanelWidth : 0)
-  const safetyFacPanelLeftPx =
+  const waterPlaySignPanelLeftPx =
     safetyWaterStatsLeftPx + (safetyWaterOpen && safetyWaterStatsOpen ? safetyWaterStatsWidth : 0)
+  const safetyFacPanelLeftPx =
+    waterPlaySignPanelLeftPx + (waterPlaySignOpen ? waterPlaySignPanelWidth : 0)
   const safetyFacDetailLeftPx =
     safetyFacPanelLeftPx + (safetyFacOpen ? safetyFacPanelWidth : 0)
-  const villagePatrolPanelLeftPx =
+  const radiationShelterPanelLeftPx =
     safetyFacDetailLeftPx + (safetyFacDetailOpen ? safetyFacDetailWidth : 0)
+  const villagePatrolPanelLeftPx =
+    radiationShelterPanelLeftPx + (radiationShelterOpen ? radiationShelterPanelWidth : 0)
   const safetyHospitalBedPanelLeftPx =
     villagePatrolPanelLeftPx + (villagePatrolOpen ? villagePatrolPanelWidth : 0)
   const jsjReservoirPanelLeftPx =
@@ -968,9 +979,6 @@ function MapLayoutContent({
     (groundwaterPermitDetailOpen ? groundwaterPermitDetailWidth : 0)
   const fmsLinkageDetailLeftPx =
     fmsLinkagePanelLeftPx + (fmsLinkageOpen ? fmsLinkagePanelWidth : 0)
-  const samplePanelLeftPx =
-    fmsLinkageDetailLeftPx + (fmsLinkageDetailOpen ? fmsLinkageDetailWidth : 0)
-
   const mapPaddingLeft = SIDEBAR_WIDTH + totalListPanelWidth
   /** 패딩은 useLayoutEffect — 자식 useEffect(도로대장 fit 등)보다 먼저 적용되어야 함.
    * 거리뷰 ON일 때만 맵 중심(A)을 새 센터마크 위치에 맞춤.
@@ -1377,11 +1385,6 @@ function MapLayoutContent({
     setOpened(next)
   }
 
-  const handleCloseDesignSample = () => {
-    const next = openedWindows.filter((w) => w !== DESIGN_SAMPLE_OPENED_KEY)
-    setOpened(next)
-  }
-
   useEffect(() => {
     if (!roadUseLedgerOpen) setRoadUseLedgerDetailId(null)
   }, [roadUseLedgerOpen])
@@ -1678,6 +1681,16 @@ function MapLayoutContent({
 
   const handleCloseVillagePatrol = () => {
     const next = openedWindows.filter((w) => w !== VILLAGE_PATROL_OPENED_KEY)
+    setOpened(next)
+  }
+
+  const handleCloseRadiationShelter = () => {
+    const next = openedWindows.filter((w) => w !== RADIATION_SHELTER_OPENED_KEY)
+    setOpened(next)
+  }
+
+  const handleCloseWaterPlaySign = () => {
+    const next = openedWindows.filter((w) => w !== WATER_PLAY_SIGN_OPENED_KEY)
     setOpened(next)
   }
 
@@ -2619,6 +2632,20 @@ function MapLayoutContent({
               onClose={handleCloseSafetyWater}
             />
           )}
+          {waterPlaySignOpen && (
+            <div className="pointer-events-auto shrink-0">
+              <MapSideListPanel
+                width={waterPlaySignPanelWidth}
+                minWidth={WATER_PLAY_SIGN_PANEL_MIN_WIDTH}
+                maxWidth={WATER_PLAY_SIGN_PANEL_MAX_WIDTH}
+                leftOffsetPx={waterPlaySignPanelLeftPx}
+                onWidthChange={setWaterPlaySignPanelWidth}
+                contentClassName="overflow-hidden"
+              >
+                <WaterPlaySignPanel onClose={handleCloseWaterPlaySign} />
+              </MapSideListPanel>
+            </div>
+          )}
           {safetyFacOpen && (
             <div className="pointer-events-auto shrink-0">
               <MapSideListPanel
@@ -2650,6 +2677,20 @@ function MapLayoutContent({
                   facility={safetyFacDetail}
                   onClose={() => setSafetyFacDetail(null)}
                 />
+              </MapSideListPanel>
+            </div>
+          )}
+          {radiationShelterOpen && (
+            <div className="pointer-events-auto shrink-0">
+              <MapSideListPanel
+                width={radiationShelterPanelWidth}
+                minWidth={RADIATION_SHELTER_PANEL_MIN_WIDTH}
+                maxWidth={RADIATION_SHELTER_PANEL_MAX_WIDTH}
+                leftOffsetPx={radiationShelterPanelLeftPx}
+                onWidthChange={setRadiationShelterPanelWidth}
+                contentClassName="overflow-hidden"
+              >
+                <RadiationShelterPanel onClose={handleCloseRadiationShelter} />
               </MapSideListPanel>
             </div>
           )}
@@ -2861,19 +2902,6 @@ function MapLayoutContent({
                   toastMsg={fmsGeomToastMsg}
                   onToastClear={() => setFmsGeomToastMsg(null)}
                 />
-              </MapSideListPanel>
-            </div>
-          )}
-          {designSampleOpen && (
-            <div className="pointer-events-auto shrink-0">
-              <MapSideListPanel
-                width={samplePanelWidth}
-                minWidth={DESIGN_SAMPLE_PANEL_MIN_WIDTH}
-                maxWidth={DESIGN_SAMPLE_PANEL_MAX_WIDTH}
-                leftOffsetPx={samplePanelLeftPx}
-                onWidthChange={setSamplePanelWidth}
-              >
-                <SampleListPanel onClose={handleCloseDesignSample} />
               </MapSideListPanel>
             </div>
           )}

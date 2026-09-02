@@ -22,6 +22,7 @@ import {
   ChevronLeft,
   ChevronRight,
   ChevronsRight,
+  MapPinOff,
 } from "lucide-react"
 import { call } from "@/lib/api"
 import { GeoJsonMiniMap } from "../shp/GeoJsonMiniMap"
@@ -69,6 +70,19 @@ type HistoryRow = {
 }
 
 const PAGE_SIZE = 20
+
+const DETAIL_PANEL_FRAME =
+  "overflow-hidden rounded border border-neutral-300 dark:border-neutral-600"
+
+const DETAIL_PANEL_DIVIDER = "border-neutral-300 dark:border-neutral-600"
+
+const DETAIL_HEADER_ROW = `flex w-full items-stretch divide-x divide-neutral-300 border-b text-xs dark:divide-neutral-600 ${DETAIL_PANEL_DIVIDER}`
+
+const DETAIL_HEADER_CELL_MUTED =
+  "flex shrink-0 items-center justify-center bg-muted px-2 py-0.5 font-medium"
+
+const DETAIL_HEADER_CELL =
+  "flex items-center justify-center bg-white px-2 py-0.5 font-medium dark:bg-background"
 
 function defaultRange() {
   const now = new Date()
@@ -123,25 +137,110 @@ function parseGeoJsonGeometry(raw?: string): Record<string, unknown> | null {
   }
 }
 
-function GeomEmptySlot({ label, text }: { label?: string; text?: string }) {
+function isGeomRawEmpty(raw?: string): boolean {
+  const s = String(raw ?? "").trim()
+  return !s || s === "—" || s === "도형 없음"
+}
+
+type GeomEmptyKind = "before-new" | "before-missing" | "after-missing" | "invalid" | "generic-empty"
+
+function resolveGeomEmptyKind(params: {
+  label?: string
+  raw?: string
+  workType?: HistoryRow["workType"]
+}): GeomEmptyKind {
+  const raw = String(params.raw ?? "").trim()
+  if (!isGeomRawEmpty(raw)) {
+    if (parseGeoJsonGeometry(raw)) return "generic-empty"
+    return "invalid"
+  }
+  if (params.label === "변경 전") {
+    return params.workType === "추가" ? "before-new" : "before-missing"
+  }
+  if (params.label === "변경 후") return "after-missing"
+  if (params.workType === "추가") return "before-new"
+  return "generic-empty"
+}
+
+const GEOM_EMPTY_CONTENT: Record<
+  GeomEmptyKind,
+  { title: string; desc: string; boxClass: string; iconClass: string }
+> = {
+  "before-new": {
+    title: "변경 전 도형 없음",
+    desc: "신규 추가된 데이터입니다",
+    boxClass: "border-2 border-dashed border-border bg-muted/10",
+    iconClass: "text-muted-foreground/50",
+  },
+  "before-missing": {
+    title: "이전 도형 없음",
+    desc: "등록·변경 이전 도형이 없습니다",
+    boxClass: "border-2 border-dashed border-border bg-muted/10",
+    iconClass: "text-muted-foreground/50",
+  },
+  "after-missing": {
+    title: "변경 후 도형 없음",
+    desc: "삭제되었거나 도형이 없습니다",
+    boxClass: "border-2 border-dashed border-border bg-muted/10",
+    iconClass: "text-muted-foreground/50",
+  },
+  invalid: {
+    title: "도형 정보를 표시할 수 없음",
+    desc: "저장된 형식을 읽을 수 없습니다",
+    boxClass: "border-2 border-dashed border-amber-500/70 bg-amber-50/60 dark:border-amber-600/60 dark:bg-amber-950/20",
+    iconClass: "text-amber-600/70 dark:text-amber-400/70",
+  },
+  "generic-empty": {
+    title: "도형 없음",
+    desc: "표시할 도형이 없습니다",
+    boxClass: "border-2 border-dashed border-border bg-muted/10",
+    iconClass: "text-muted-foreground/50",
+  },
+}
+
+function GeomEmptySlot({
+  label,
+  kind,
+}: {
+  label?: string
+  kind: GeomEmptyKind
+}) {
+  const content = GEOM_EMPTY_CONTENT[kind]
   return (
     <div>
       {label ? (
         <h4 className="mb-1.5 text-xs font-semibold text-muted-foreground">{label}</h4>
       ) : null}
-      <div className="flex h-[180px] items-center justify-center rounded border bg-muted/20 text-xs text-muted-foreground">
-        {cellText(text)}
+      <div
+        className={`flex h-[180px] flex-col items-center justify-center gap-1.5 overflow-hidden rounded-md px-3 text-center ${content.boxClass}`}
+      >
+        <MapPinOff className={`h-8 w-8 ${content.iconClass}`} aria-hidden />
+        <p className="text-xs font-medium text-foreground/80">{content.title}</p>
+        <p className="text-[11px] text-muted-foreground">{content.desc}</p>
       </div>
     </div>
   )
 }
 
-function GeomPreviewSlot({ label, raw }: { label?: string; raw?: string }) {
+function GeomPreviewSlot({
+  label,
+  raw,
+  workType,
+}: {
+  label?: string
+  raw?: string
+  workType?: HistoryRow["workType"]
+}) {
   const geom = parseGeoJsonGeometry(raw)
   if (geom) {
     return <GeoJsonMiniMap geometry={geom} dataProjection="EPSG:5181" label={label} />
   }
-  return <GeomEmptySlot label={label} text={raw} />
+  return (
+    <GeomEmptySlot
+      label={label}
+      kind={resolveGeomEmptyKind({ label, raw, workType })}
+    />
+  )
 }
 
 export function LayerManageHistoryTab() {
@@ -483,17 +582,17 @@ export function LayerManageHistoryTab() {
             <col className="w-[5rem]" />
           </colgroup>
           <thead className="sticky top-0 z-10">
-            <tr className="text-center">
-              <th className="py-1.5 px-3 font-medium border-r bg-muted">순번</th>
-              <th className="py-1.5 px-3 font-medium border-r bg-muted">일자</th>
-              <th className="py-1.5 px-3 font-medium border-r bg-muted">사용자 아이디</th>
-              <th className="py-1.5 px-3 font-medium border-r bg-muted">사용자 이름</th>
-              <th className="py-1.5 px-3 font-medium border-r bg-muted">그룹명</th>
-              <th className="py-1.5 px-3 font-medium border-r bg-muted">레이어명</th>
-              <th className="py-1.5 px-3 font-medium border-r bg-muted">구분</th>
-              <th className="py-1.5 px-3 font-medium border-r bg-muted">내용</th>
-              <th className="py-1.5 px-3 font-medium border-r bg-muted">작업분류</th>
-              <th className="py-1.5 px-3 font-medium bg-muted">상세보기</th>
+            <tr>
+              <th className="py-1.5 px-3 font-medium border-r bg-muted text-center">순번</th>
+              <th className="py-1.5 px-3 font-medium border-r bg-muted text-left">일자</th>
+              <th className="py-1.5 px-3 font-medium border-r bg-muted text-left">사용자 아이디</th>
+              <th className="py-1.5 px-3 font-medium border-r bg-muted text-left">사용자 이름</th>
+              <th className="py-1.5 px-3 font-medium border-r bg-muted text-left">그룹명</th>
+              <th className="py-1.5 px-3 font-medium border-r bg-muted text-left">레이어명</th>
+              <th className="py-1.5 px-3 font-medium border-r bg-muted text-left">구분</th>
+              <th className="py-1.5 px-3 font-medium border-r bg-muted text-left">내용</th>
+              <th className="py-1.5 px-3 font-medium border-r bg-muted text-center">작업분류</th>
+              <th className="py-1.5 px-3 font-medium bg-muted text-center">상세보기</th>
             </tr>
           </thead>
           <tbody>
@@ -507,58 +606,58 @@ export function LayerManageHistoryTab() {
               rows.map((r, idx) => (
                 <tr
                   key={r.id}
-                  className={`border-t text-center hover:bg-muted/40 ${
+                  className={`border-t hover:bg-muted/40 ${
                     r.canDetail ? "cursor-pointer" : ""
                   }`}
                   onClick={() => {
                     if (r.canDetail) void openDetail(r)
                   }}
                 >
-                  <td className="h-[32px] px-3 align-middle tabular-nums">
+                  <td className="h-[32px] px-3 align-middle tabular-nums text-center">
                     {(page - 1) * PAGE_SIZE + idx + 1}
                   </td>
-                  <td className="h-[32px] px-3 align-middle whitespace-nowrap">
+                  <td className="h-[32px] px-3 align-middle whitespace-nowrap text-left">
                     {cellText(r.date)}
                   </td>
                   <td
-                    className="h-[32px] px-3 align-middle truncate"
+                    className="h-[32px] px-3 align-middle truncate text-left"
                     title={r.userId || undefined}
                   >
                     {cellText(r.userId)}
                   </td>
                   <td
-                    className="h-[32px] px-3 align-middle truncate"
+                    className="h-[32px] px-3 align-middle truncate text-left"
                     title={r.userName || undefined}
                   >
                     {cellText(r.userName)}
                   </td>
                   <td
-                    className="h-[32px] px-3 align-middle truncate"
+                    className="h-[32px] px-3 align-middle truncate text-left"
                     title={r.groupName || undefined}
                   >
                     {cellText(r.groupName)}
                   </td>
                   <td
-                    className="h-[32px] px-3 align-middle truncate"
+                    className="h-[32px] px-3 align-middle truncate text-left"
                     title={r.layerName || undefined}
                   >
                     {cellText(r.layerName)}
                   </td>
                   <td
-                    className="h-[32px] px-3 align-middle truncate"
+                    className="h-[32px] px-3 align-middle truncate text-left"
                     title={r.category || undefined}
                   >
                     {cellText(r.category)}
                   </td>
                   <td
-                    className="h-[32px] px-3 align-middle"
+                    className="h-[32px] px-3 align-middle text-left"
                     title={
                       r.workType === "저장" && r.saveType
                         ? `${r.saveType} | ${cellText(r.keyField)} | ${cellText(r.keyValue)}`
                         : `${cellText(r.keyField)} | ${cellText(r.keyValue)}`
                     }
                   >
-                    <div className="flex items-center min-w-0 gap-0 justify-center">
+                    <div className="flex items-center min-w-0 gap-0 justify-start">
                       {r.workType === "저장" && r.saveType ? (
                         <>
                           <span className="shrink-0 font-medium text-foreground whitespace-nowrap">
@@ -569,7 +668,7 @@ export function LayerManageHistoryTab() {
                           </span>
                         </>
                       ) : null}
-                      <span className="truncate text-muted-foreground max-w-[38%] text-right">
+                      <span className="truncate text-muted-foreground max-w-[38%] text-left">
                         {cellText(r.keyField)}
                       </span>
                       <span className="shrink-0 px-1.5 text-muted-foreground/60" aria-hidden>
@@ -580,10 +679,10 @@ export function LayerManageHistoryTab() {
                       </span>
                     </div>
                   </td>
-                  <td className="h-[32px] px-3 align-middle whitespace-nowrap">
+                  <td className="h-[32px] px-3 align-middle whitespace-nowrap text-center">
                     {cellText(r.workType)}
                   </td>
-                  <td className="h-[32px] px-3 align-middle">
+                  <td className="h-[32px] px-3 align-middle text-center">
                     {r.canDetail ? (
                       <button
                         type="button"
@@ -666,7 +765,9 @@ export function LayerManageHistoryTab() {
                 {cellText(detailRow.groupName)} / {cellText(detailRow.layerName)} ·{" "}
                 {cellText(detailRow.category)} · {cellText(detailRow.keyField)} |{" "}
                 {cellText(detailRow.keyValue)} · {cellText(detailRow.workType)}
-                <span className="ml-1 text-[10px] opacity-70">({detailRow.source})</span>
+                {detailRow.source === "SHP" || detailRow.source === "Excel" ? (
+                  <span className="ml-1 text-[10px] opacity-70">({detailRow.source})</span>
+                ) : null}
               </p>
             ) : null}
             {detailRow?.canRevertAll ||
@@ -698,80 +799,93 @@ export function LayerManageHistoryTab() {
             ) : detailRow ? (
               <>
                 {geomDetails.length > 0 ? (
-                  <div className="shrink-0 space-y-2 rounded border p-2">
+                  <div className={`shrink-0 divide-y divide-neutral-300 dark:divide-neutral-600 ${DETAIL_PANEL_FRAME}`}>
                     {geomDetails.map((d) => (
-                      <div key={d.name} className="space-y-1.5">
-                        <div className="flex items-center justify-between gap-2">
-                          <span className="text-xs font-medium">{d.name}</span>
-                          {d.canRevert && d.ddKey ? (
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              className="h-8 w-8 p-1.5"
-                              disabled={actionLoading}
-                              onClick={() => void handleRevertField(d)}
-                              title="되돌리기"
-                              aria-label="되돌리기"
-                            >
-                              <Undo2 className="w-3.5 h-3.5" />
-                            </Button>
-                          ) : null}
-                        </div>
-                        {isCompare ? (
-                          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                            <GeomPreviewSlot label="변경 전" raw={d.before} />
-                            <GeomPreviewSlot label="변경 후" raw={d.after} />
+                      <div key={d.name}>
+                        <div className={DETAIL_HEADER_ROW}>
+                          <div className={`${DETAIL_HEADER_CELL_MUTED} w-[100px]`}>속성명</div>
+                          <div
+                            className={`${DETAIL_HEADER_CELL} min-w-0 flex-1 justify-start break-all whitespace-pre-wrap px-5 text-left`}
+                          >
+                            {d.name}
                           </div>
-                        ) : (
-                          <GeomPreviewSlot
-                            label={detailRow.workType === "추가" ? "추가" : "값"}
-                            raw={d.value ?? d.after}
-                          />
-                        )}
+                          <div className={`${DETAIL_HEADER_CELL} w-[16%] shrink-0`}>
+                            {d.canRevert && d.ddKey ? (
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="h-6 w-6 p-1"
+                                disabled={actionLoading}
+                                onClick={() => void handleRevertField(d)}
+                                title="되돌리기"
+                                aria-label="되돌리기"
+                              >
+                                <Undo2 className="w-3 h-3" />
+                              </Button>
+                            ) : (
+                              "—"
+                            )}
+                          </div>
+                        </div>
+                        <div className="p-4">
+                          {isCompare ? (
+                            <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+                              <GeomPreviewSlot label="변경 전" raw={d.before} workType={detailRow.workType} />
+                              <GeomPreviewSlot label="변경 후" raw={d.after} workType={detailRow.workType} />
+                            </div>
+                          ) : (
+                            <GeomPreviewSlot
+                              label={detailRow.workType === "추가" ? "추가" : "값"}
+                              raw={d.value ?? d.after}
+                              workType={detailRow.workType}
+                            />
+                          )}
+                        </div>
                       </div>
                     ))}
                   </div>
                 ) : null}
                 {attrDetails.length > 0 ? (
-                  <div className="min-h-0 overflow-x-hidden rounded border">
+                  <div className={`min-h-0 ${DETAIL_PANEL_FRAME}`}>
                     {isCompare ? (
-                      <table className="w-full table-fixed text-xs">
+                      <>
+                        <div className={`sticky top-0 z-[1] ${DETAIL_HEADER_ROW}`}>
+                          <div className={`${DETAIL_HEADER_CELL_MUTED} w-[20%]`}>속성명</div>
+                          <div className={`${DETAIL_HEADER_CELL} w-[32%] shrink-0`}>변경 전</div>
+                          <div className={`${DETAIL_HEADER_CELL} w-[32%] shrink-0`}>변경 후</div>
+                          <div className={`${DETAIL_HEADER_CELL} w-[16%] shrink-0`}>되돌리기</div>
+                        </div>
+                        <table className="w-full table-fixed text-xs">
                         <colgroup>
                           <col className="w-[20%]" />
                           <col className="w-[32%]" />
                           <col className="w-[32%]" />
                           <col className="w-[16%]" />
                         </colgroup>
-                        <thead className="sticky top-0 bg-muted">
-                          <tr className="text-center">
-                            <th className="py-1.5 px-2 font-medium border-r">속성명</th>
-                            <th className="py-1.5 px-2 font-medium border-r">변경 전</th>
-                            <th className="py-1.5 px-2 font-medium border-r">변경 후</th>
-                            <th className="py-1.5 px-2 font-medium">되돌리기</th>
-                          </tr>
-                        </thead>
-                        <tbody>
+                        <tbody className="[&>tr+tr]:border-t">
                           {attrDetails.map((d) => (
-                            <tr key={d.name} className="border-t text-center align-top">
-                              <td className="py-1.5 px-2 break-all whitespace-pre-wrap">{d.name}</td>
-                              <td className="py-1.5 px-2 text-muted-foreground break-all whitespace-pre-wrap">
+                            <tr key={d.name} className="text-center align-middle">
+                              <td className="py-0.5 px-2 align-middle text-center break-all whitespace-pre-wrap">
+                                {d.name}
+                              </td>
+                              <td className="py-0.5 px-2 align-middle text-center text-muted-foreground break-all whitespace-pre-wrap">
                                 {d.before ?? "—"}
                               </td>
-                              <td className="py-1.5 px-2 break-all whitespace-pre-wrap">
+                              <td className="py-0.5 px-2 align-middle text-center break-all whitespace-pre-wrap">
                                 {d.after ?? "—"}
                               </td>
-                              <td className="py-1.5 px-2">
+                              <td className="py-0.5 px-2 align-middle text-center">
                                 {d.canRevert && d.ddKey ? (
                                   <Button
                                     size="sm"
                                     variant="ghost"
-                                    className="h-8 w-8 p-1.5"
+                                    className="h-6 w-6 p-1"
                                     disabled={actionLoading}
                                     onClick={() => void handleRevertField(d)}
                                     title="되돌리기"
                                     aria-label="되돌리기"
                                   >
-                                    <Undo2 className="w-3.5 h-3.5" />
+                                    <Undo2 className="w-3 h-3" />
                                   </Button>
                                 ) : (
                                   "—"
@@ -781,41 +895,43 @@ export function LayerManageHistoryTab() {
                           ))}
                         </tbody>
                       </table>
+                      </>
                     ) : (
-                      <table className="w-full table-fixed text-xs">
+                      <>
+                        <div className={`sticky top-0 z-[1] ${DETAIL_HEADER_ROW}`}>
+                          <div className={`${DETAIL_HEADER_CELL_MUTED} w-[28%]`}>속성명</div>
+                          <div className={`${DETAIL_HEADER_CELL} w-[56%] shrink-0`}>
+                            {detailRow.workType === "추가" ? "추가" : "값"}
+                          </div>
+                          <div className={`${DETAIL_HEADER_CELL} w-[16%] shrink-0`}>되돌리기</div>
+                        </div>
+                        <table className="w-full table-fixed text-xs">
                         <colgroup>
                           <col className="w-[28%]" />
                           <col className="w-[56%]" />
                           <col className="w-[16%]" />
                         </colgroup>
-                        <thead className="sticky top-0 bg-muted">
-                          <tr className="text-center">
-                            <th className="py-1.5 px-2 font-medium border-r">속성명</th>
-                            <th className="py-1.5 px-2 font-medium border-r">
-                              {detailRow.workType === "추가" ? "추가" : "값"}
-                            </th>
-                            <th className="py-1.5 px-2 font-medium">되돌리기</th>
-                          </tr>
-                        </thead>
-                        <tbody>
+                        <tbody className="[&>tr+tr]:border-t">
                           {attrDetails.map((d) => (
-                            <tr key={d.name} className="border-t text-center align-top">
-                              <td className="py-1.5 px-2 break-all whitespace-pre-wrap">{d.name}</td>
-                              <td className="py-1.5 px-2 break-all whitespace-pre-wrap">
+                            <tr key={d.name} className="text-center align-middle">
+                              <td className="py-0.5 px-2 align-middle text-center break-all whitespace-pre-wrap">
+                                {d.name}
+                              </td>
+                              <td className="py-0.5 px-2 align-middle text-center break-all whitespace-pre-wrap">
                                 {d.value ?? d.after ?? "—"}
                               </td>
-                              <td className="py-1.5 px-2">
+                              <td className="py-0.5 px-2 align-middle text-center">
                                 {d.canRevert && d.ddKey ? (
                                   <Button
                                     size="sm"
                                     variant="ghost"
-                                    className="h-8 w-8 p-1.5"
+                                    className="h-6 w-6 p-1"
                                     disabled={actionLoading}
                                     onClick={() => void handleRevertField(d)}
                                     title="되돌리기"
                                     aria-label="되돌리기"
                                   >
-                                    <Undo2 className="w-3.5 h-3.5" />
+                                    <Undo2 className="w-3 h-3" />
                                   </Button>
                                 ) : (
                                   "—"
@@ -825,6 +941,7 @@ export function LayerManageHistoryTab() {
                           ))}
                         </tbody>
                       </table>
+                      </>
                     )}
                   </div>
                 ) : geomDetails.length === 0 ? (

@@ -19,6 +19,10 @@ import {
 import { SafetyFacRelatedLayerSection } from './SafetyFacRelatedLayerSection';
 import { SafetyFacHistorySection } from './SafetyFacHistorySection';
 
+/** 안전점검 상세 속성표 th·라벨 — 이력 thead와 동일 배경·글자색 */
+const SAFETY_FAC_ATTR_LABEL_CLASS =
+  'standard-detail-attr-label bg-slate-100 text-slate-500 dark:bg-muted dark:text-muted-foreground';
+
 /** 라벨 글자 수 기준 컬럼 폭(rem). 한 줄 유지·과대 확장 방지 */
 function maxLabelColumnRem(labels: string[]): number {
   if (labels.length === 0) return 6.5;
@@ -107,11 +111,8 @@ export function SafetyFacDetailPanel({ facility, onClose }: Props) {
   }, [facility.detailAttrs, facility.name, facility.table, fields, codesByField]);
 
   return (
-    <div
-      className="flex h-full min-h-0 w-full min-w-0 flex-col overflow-hidden bg-background"
-      aria-label="재난대응시설 상세"
-    >
-      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border px-4 py-2.5">
+    <div className="standard-panel-root" aria-label="재난대응시설 상세">
+      <div className="standard-panel-header">
         <div className="flex min-w-0 flex-1 items-center gap-1.5">
           <span
             className="inline-flex shrink-0 items-center rounded px-2.5 py-1.5 text-[10px] font-semibold leading-none"
@@ -119,17 +120,14 @@ export function SafetyFacDetailPanel({ facility, onClose }: Props) {
           >
             {chipName}
           </span>
-          <p
-            className="min-w-0 truncate text-sm font-semibold leading-snug text-foreground"
-            title={headerTitle}
-          >
+          <p className="standard-panel-title min-w-0 truncate leading-snug" title={headerTitle}>
             {headerTitle || '—'}
           </p>
         </div>
         <button
           type="button"
           onClick={onClose}
-          className="shrink-0 rounded p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+          className="standard-panel-close"
           title="닫기"
           aria-label="닫기"
         >
@@ -137,82 +135,86 @@ export function SafetyFacDetailPanel({ facility, onClose }: Props) {
         </button>
       </div>
 
-      <div className="shrink-0 border-border bg-background px-3 py-2 pb-0">
-        <SafetyFacRelatedLayerSection lon={facility.lon} lat={facility.lat} />
-      </div>
-
-      <div className="flex min-h-0 flex-1 flex-col overflow-hidden border-border p-3 pt-2">
-        <div className="shrink-0 border-t border-border">
-          <div className="mt-1 flex items-center justify-between gap-2">
-            <button
-              type="button"
-              className="flex min-w-0 flex-1 cursor-pointer items-center gap-1.5 py-1.5 text-left transition-colors hover:bg-muted/50"
-              onClick={() => setBasicOpen((v) => !v)}
-              title={basicOpen ? '기본 정보 접기' : '기본 정보 펼치기'}
-            >
-              {basicOpen ? (
-                <ChevronDown className="h-3.5 w-3.5 shrink-0 text-primary" />
-              ) : (
-                <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-              )}
-              <span className="text-[12px] font-semibold text-muted-foreground">기본 정보</span>
-            </button>
-          </div>
-          {basicOpen ? (
-            <div className="mt-2 px-0 pb-1">
-              {rows.length === 0 ? (
-                <p className="text-[11px] text-muted-foreground">표시할 항목이 없습니다.</p>
-              ) : (
-                <>
-                  <div className="overflow-hidden rounded-[5px] border border-border">
-                    {rows.map((row, index) => (
-                      <div
-                        key={`${row.label}-${index}`}
-                        className={cn('flex', index !== rows.length - 1 && 'border-b border-border')}
-                      >
-                        <div
-                          className="flex shrink-0 items-start bg-muted px-2 py-1.5"
-                          style={{ width: `${labelColumnRem}rem` }}
-                        >
-                          <span className="whitespace-nowrap text-[11px] leading-snug text-muted-foreground">
-                            {row.label}
-                          </span>
-                        </div>
-                        <div
-                          className={cn(
-                            'flex items-start px-2 py-1.5',
-                            row.maxLength == null ? 'min-w-0 flex-1' : 'shrink-0 overflow-hidden'
-                          )}
-                          style={
-                            row.maxLength != null
-                              ? { width: `${row.maxLength}ch`, maxWidth: '100%' }
-                              : undefined
-                          }
-                        >
-                          <span
-                            className={cn(
-                              'text-[11px] leading-snug text-foreground',
-                              row.maxLength == null
-                                ? 'break-all'
-                                : 'block w-full truncate whitespace-nowrap'
-                            )}
-                            title={row.maxLength != null ? row.value : undefined}
-                          >
-                            {row.value}
-                          </span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                  <p className="mt-1.5 text-[11px] text-muted-foreground">출처: 재난안전공유 플랫폼</p>
-                </>
-              )}
-            </div>
-          ) : null}
+      <section className="standard-detail-section shrink-0">
+        <div className="standard-detail-section-body">
+          <SafetyFacRelatedLayerSection lon={facility.lon} lat={facility.lat} />
         </div>
+      </section>
 
-        <SafetyFacHistorySection hisGubun={facility.table} ftrIdn={facility.id} />
-      </div>
+      <section className="standard-detail-section shrink-0">
+        <div className="standard-detail-section-header">
+          <button
+            type="button"
+            className="standard-detail-section-toggle"
+            onClick={() => setBasicOpen((v) => !v)}
+            title={basicOpen ? '기본 정보 접기' : '기본 정보 펼치기'}
+          >
+            {basicOpen ? (
+              <ChevronDown className="standard-detail-section-chevron" />
+            ) : (
+              <ChevronRight className="standard-detail-section-chevron" />
+            )}
+            <span className="standard-detail-section-toggle-label">기본 정보</span>
+          </button>
+        </div>
+        {basicOpen ? (
+          <div className="standard-detail-section-body">
+            {rows.length === 0 ? (
+              <p className="standard-detail-attr-empty">표시할 항목이 없습니다.</p>
+            ) : (
+              <>
+                <div className="overflow-hidden rounded border border-border">
+                  {rows.map((row, index) => (
+                    <div
+                      key={`${row.label}-${index}`}
+                      className={cn(
+                        'flex',
+                        index !== rows.length - 1 && 'border-b border-border'
+                      )}
+                    >
+                      <div
+                        className={cn(
+                          SAFETY_FAC_ATTR_LABEL_CLASS,
+                          'flex shrink-0 items-start self-stretch'
+                        )}
+                        style={{ width: `${labelColumnRem}rem` }}
+                      >
+                        <span className="whitespace-nowrap leading-snug">{row.label}</span>
+                      </div>
+                      <div
+                        className={cn(
+                          'standard-detail-attr-value min-w-0 text-foreground',
+                          row.maxLength == null ? 'flex-1' : 'shrink-0 overflow-hidden'
+                        )}
+                        style={
+                          row.maxLength != null
+                            ? { width: `${row.maxLength}ch`, maxWidth: '100%' }
+                            : undefined
+                        }
+                      >
+                        <span
+                          className={cn(
+                            'leading-snug',
+                            row.maxLength == null
+                              ? 'break-all'
+                              : 'block w-full truncate whitespace-nowrap'
+                          )}
+                          title={row.maxLength != null ? row.value : undefined}
+                        >
+                          {row.value}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <p className="standard-detail-hint mt-1.5">출처: 재난안전공유 플랫폼</p>
+              </>
+            )}
+          </div>
+        ) : null}
+      </section>
+
+      <SafetyFacHistorySection hisGubun={facility.table} ftrIdn={facility.id} />
     </div>
   );
 }

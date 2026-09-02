@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { ChevronDown, ChevronLeft, ChevronRight, X } from 'lucide-react'
 import { call } from '@/lib/api'
 import { cn } from '@/lib/utils'
@@ -175,22 +175,28 @@ export function FmsLinkageDetailPanel({
   const [error, setError] = useState<string | null>(null)
   const inspectionDetailRef = useRef<HTMLDivElement>(null)
 
-  useLayoutEffect(() => {
+  useEffect(() => {
     if (!selectedInspectionId) return
     const el = inspectionDetailRef.current
     if (!el) return
-    let node: HTMLElement | null = el.parentElement
-    while (node) {
-      const { overflowY } = getComputedStyle(node)
-      if (
-        (overflowY === 'auto' || overflowY === 'scroll') &&
-        node.scrollHeight > node.clientHeight
-      ) {
-        node.scrollTop = node.scrollHeight
-        break
+    const frame = window.requestAnimationFrame(() => {
+      let node: HTMLElement | null = el.parentElement
+      while (node) {
+        const { overflowY } = getComputedStyle(node)
+        if (
+          (overflowY === 'auto' || overflowY === 'scroll') &&
+          node.scrollHeight > node.clientHeight
+        ) {
+          const containerTop = node.getBoundingClientRect().top
+          const targetTop = el.getBoundingClientRect().top
+          const nextTop = Math.max(0, targetTop - containerTop + node.scrollTop)
+          node.scrollTo({ top: nextTop, behavior: 'smooth' })
+          break
+        }
+        node = node.parentElement
       }
-      node = node.parentElement
-    }
+    })
+    return () => window.cancelAnimationFrame(frame)
   }, [selectedInspectionId])
 
   useEffect(() => {
@@ -346,7 +352,7 @@ export function FmsLinkageDetailPanel({
               </button>
             </div>
             {inspectionOpen ? (
-              <MapSideDetailScroll className="standard-detail-scroll min-h-0 flex-1 text-[11px]">
+              <MapSideDetailScroll className="standard-detail-scroll scroll-smooth min-h-0 flex-1 text-[11px]">
                 {inspections.length === 0 ? (
                   <div className="standard-detail-empty-dashed-compact">
                     {FMS_EMPTY_INSPECTION_MESSAGE}

@@ -8,7 +8,7 @@ import {
   useEffect,
   Suspense,
 } from 'react';
-import { useSession, signIn } from 'next-auth/react';
+import { useSession, signIn, getSession } from 'next-auth/react';
 import { useSearchParams, useRouter, usePathname } from 'next/navigation';
 import {
   Dialog,
@@ -25,7 +25,8 @@ import { AUTH_REQUIRED_EVENT } from '@/lib/authRequiredEvent';
 import { toAppPathFromBrowser, withBasePathNav } from '@/lib/basePath';
 
 type LoginModalContextValue = {
-  openLogin: () => void;
+  /** next: 로그인 성공 후 이동할 앱 경로. 없으면 현재 주소 */
+  openLogin: (next?: string) => void;
   openSignUp: () => void;
 };
 
@@ -33,7 +34,7 @@ const LoginModalContext = createContext<LoginModalContextValue | null>(null);
 
 export function useLoginModal() {
   const ctx = useContext(LoginModalContext);
-  if (!ctx) return { openLogin: () => {}, openSignUp: () => {} };
+  if (!ctx) return { openLogin: (_next?: string) => {}, openSignUp: () => {} };
   return ctx;
 }
 
@@ -148,11 +149,28 @@ function LoginModalDialog({
           );
         } else if (res.code === 'signup_pending') {
           setError('승인대기중입니다.');
+        } else if (res.code === 'login_fail_exceeded') {
+          setError('비밀번호 입력 횟수를 초과했습니다.\n관리자에게 문의하세요.');
         } else {
           setError('아이디 또는 비밀번호가 올바르지 않습니다.');
         }
         setLoading(false);
         return;
+      }
+      // 마스터 로그인: 승인대기·반려여도 통과하되 상태를 alert로 안내
+      try {
+        const s = await getSession();
+        if (s?.user?.signupStatus === 'pending') {
+          window.alert('해당 사용자 계정은 현재 승인대기 상태입니다');
+        } else if (s?.user?.signupStatus === 'rejected') {
+          window.alert('해당 사용자 계정은 반려 상태입니다');
+        }
+        const failNotice = s?.user?.loginFailNotice;
+        if (typeof failNotice === 'number' && failNotice > 0) {
+          window.alert(`해당 사용자 계정은 인증오류 ${failNotice}회 상태입니다`);
+        }
+      } catch {
+        // 안내는 부가 동작 — 로그인 자체는 유지
       }
       const here =
         typeof window !== 'undefined'
@@ -262,15 +280,19 @@ export function LoginModalProvider({ children }: { children: React.ReactNode }) 
   const [signUpOpen, setSignUpOpen] = useState(false);
   const [pendingNext, setPendingNext] = useState('');
 
-  const openLogin = useCallback(() => {
+  const openLogin = useCallback((next?: string) => {
     if (typeof window !== 'undefined') {
-      const n = new URLSearchParams(window.location.search).get('next');
-      if (n && n.startsWith('/')) setPendingNext(toAppPathFromBrowser(n));
-      else {
-        const here = toAppPathFromBrowser(
-          `${window.location.pathname}${window.location.search}`
-        );
-        if (here.startsWith('/')) setPendingNext(here);
+      if (next && next.startsWith('/')) {
+        setPendingNext(toAppPathFromBrowser(next));
+      } else {
+        const n = new URLSearchParams(window.location.search).get('next');
+        if (n && n.startsWith('/')) setPendingNext(toAppPathFromBrowser(n));
+        else {
+          const here = toAppPathFromBrowser(
+            `${window.location.pathname}${window.location.search}`
+          );
+          if (here.startsWith('/')) setPendingNext(here);
+        }
       }
     }
     setSignUpOpen(false);

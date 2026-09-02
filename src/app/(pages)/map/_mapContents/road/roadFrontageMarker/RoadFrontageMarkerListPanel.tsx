@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Layers, Search, X } from 'lucide-react';
+import { ArrowDown, ArrowUp, ArrowUpDown, Layers, Search, X } from 'lucide-react';
 import { call } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { LayerRowAddButton, LayerRowPanelButton } from '../../../_mapComponents/layerRowEdit';
@@ -17,7 +17,25 @@ import {
   type RoadFrontageMarkerItem,
   type RoadFrontageMarkerLedger,
 } from './roadFrontageMarkerMock';
+import { getRoadFrontageMarkerRoadTypeBadgeClass } from './roadFrontageMarkerFormat';
 import { fitMapToMarkerPoints, useRoadFrontageMarkerMapHighlight } from './useRoadFrontageMarkerMapHighlight';
+
+type SortKey = 'roadType' | 'routeName';
+type SortDir = 'asc' | 'desc';
+type SortSpec = { key: SortKey; dir: SortDir };
+
+const SORT_COLUMNS: { key: SortKey; label: string }[] = [
+  { key: 'roadType', label: '종류' },
+  { key: 'routeName', label: '노선명' },
+];
+
+function initialSortDir(_key: SortKey): SortDir {
+  return 'asc';
+}
+
+function markerCountOf(ledger: RoadFrontageMarkerLedger): number {
+  return ledger.markers?.length ?? 0;
+}
 
 type Props = {
   selectedId: string | null;
@@ -37,6 +55,7 @@ export function RoadFrontageMarkerListPanel({
   const mapContext = useMapContext();
   const [keyword, setKeyword] = useState('');
   const [roadTypeFilter, setRoadTypeFilter] = useState('');
+  const [sorts, setSorts] = useState<SortSpec[]>([]);
   const [items, setItems] = useState<RoadFrontageMarkerLedger[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -50,7 +69,11 @@ export function RoadFrontageMarkerListPanel({
         const res = await call('', 'POST', {
           service: 'roadFrontageMarkerService',
           action: 'list',
-          params: { keyword, roadType: roadTypeFilter || undefined },
+          params: {
+            keyword,
+            roadType: roadTypeFilter || undefined,
+            sorts: sorts.length > 0 ? sorts : undefined,
+          },
         });
         if (res?.success === false) {
           setItems([]);
@@ -73,7 +96,7 @@ export function RoadFrontageMarkerListPanel({
       }
     }, 250);
     return () => clearTimeout(t);
-  }, [keyword, roadTypeFilter, refreshKey]);
+  }, [keyword, roadTypeFilter, refreshKey, sorts]);
 
   const filtered = useMemo(() => items.filter((l) => !isNewRoadFrontageMarkerId(l.id)), [items]);
 
@@ -100,6 +123,21 @@ export function RoadFrontageMarkerListPanel({
     if (loading || detailOpen || !map || listMarkers.length === 0) return;
     fitMapToMarkerPoints(map, listMarkers);
   }, [loading, detailOpen, map, listMarkers]);
+
+  const toggleSort = (key: SortKey) => {
+    const initial = initialSortDir(key);
+    setSorts((prev) => {
+      const idx = prev.findIndex((s) => s.key === key);
+      if (idx < 0) return [...prev, { key, dir: initial }];
+      const cur = prev[idx];
+      if (cur.dir === initial) {
+        const next = [...prev];
+        next[idx] = { key, dir: initial === 'asc' ? 'desc' : 'asc' };
+        return next;
+      }
+      return prev.filter((_, i) => i !== idx);
+    });
+  };
 
   const handleSelect = (ledger: RoadFrontageMarkerLedger) => {
     onSelectId(ledger.id);
@@ -207,29 +245,64 @@ export function RoadFrontageMarkerListPanel({
             <colgroup>
               <col className="w-[88px]" />
               <col />
+              <col className="w-[72px]" />
             </colgroup>
             <thead className="standard-table-thead">
               <tr>
-                <th className="standard-table-th standard-table-th-left">도로의 종류</th>
-                <th className="standard-table-th standard-table-th-left">노선명</th>
+                {SORT_COLUMNS.map((col) => {
+                  const sortIdx = sorts.findIndex((s) => s.key === col.key);
+                  const active = sortIdx >= 0;
+                  const sortDir = active ? sorts[sortIdx].dir : null;
+                  const Icon = !active
+                    ? ArrowUpDown
+                    : sortDir === 'asc'
+                      ? ArrowUp
+                      : ArrowDown;
+                  const initial = initialSortDir(col.key);
+                  return (
+                    <th key={col.key} className="standard-table-th standard-table-th-left">
+                      <button
+                        type="button"
+                        onClick={() => toggleSort(col.key)}
+                        className={cn(
+                          'standard-sort-button standard-sort-button-left',
+                          active && 'standard-sort-button-active'
+                        )}
+                        title={
+                          !active
+                            ? `${col.label} 정렬 추가`
+                            : sortDir === initial
+                              ? `${col.label} 방향 바꾸기`
+                              : `${col.label} 정렬 해제`
+                        }
+                      >
+                        <span className="truncate">{col.label}</span>
+                        <Icon className="h-3 w-3 shrink-0 opacity-70" aria-hidden />
+                      </button>
+                    </th>
+                  );
+                })}
+                <th className="standard-table-th standard-table-th-center" aria-hidden="true" />
               </tr>
             </thead>
             <tbody>
               {loading && filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={2} className="standard-table-empty">
+                  <td colSpan={3} className="standard-table-empty">
                     불러오는 중…
                   </td>
                 </tr>
               ) : filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={2} className="standard-table-empty">
+                  <td colSpan={3} className="standard-table-empty">
                     {items.length === 0 ? '등록된 관리대장이 없습니다.' : '검색 결과가 없습니다.'}
                   </td>
                 </tr>
               ) : (
                 filtered.map((l) => {
                   const isSelected = l.id === selectedId;
+                  const roadTypeLabel = l.roadType?.trim() || '—';
+                  const markerCount = markerCountOf(l);
                   return (
                     <tr
                       key={l.id}
@@ -246,12 +319,19 @@ export function RoadFrontageMarkerListPanel({
                       className={cn('standard-list-row', isSelected && 'standard-list-row-selected')}
                     >
                       <td className="standard-table-td-compact">
-                        <span className="standard-status-badge standard-status-badge-muted">
-                          {l.roadType || '—'}
-                        </span>
+                        {l.roadType?.trim() ? (
+                          <span className={getRoadFrontageMarkerRoadTypeBadgeClass(l.roadType)}>
+                            {roadTypeLabel}
+                          </span>
+                        ) : (
+                          '—'
+                        )}
                       </td>
                       <td className="standard-table-td-text" title={l.routeName || undefined}>
                         {l.routeName || '(노선명 미입력)'}
+                      </td>
+                      <td className="standard-table-td-date text-right">
+                        {markerCount.toLocaleString()}건
                       </td>
                     </tr>
                   );

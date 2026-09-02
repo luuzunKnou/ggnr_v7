@@ -5,6 +5,7 @@ import { upMap } from '@/database/schema/up_map';
 import { usrSerGrant } from '@/database/schema/usr_ser_grant';
 import { getAllConsolePermEngs, isConsolePermEng } from '@/lib/consoleMenuAccess/registry';
 import { SERP_TYPE_WRITE } from '@/database/schema/serp_map';
+import { isSuperUser } from '@/lib/auth/superUser';
 
 /** serp_map·usr_ser_grant 기준 콘솔 메뉴(permEng) 단계 */
 export async function loadConsoleMenuLevels(usrId: string): Promise<Record<string, number>> {
@@ -12,7 +13,7 @@ export async function loadConsoleMenuLevels(usrId: string): Promise<Record<strin
   const levels: Record<string, number> = {};
   for (const e of allEngs) levels[e] = 0;
 
-  if (usrId === 'su') {
+  if (isSuperUser(usrId)) {
     for (const e of allEngs) levels[e] = SERP_TYPE_WRITE;
     return levels;
   }

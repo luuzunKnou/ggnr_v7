@@ -204,6 +204,42 @@
     "define_table_source": "excel"
   },
   {
+    "define_table_name": "aa",
+    "define_table_kor_name": "aa",
+    "define_table_shp_type": "POLYGON",
+    "define_table_read_share": "P",
+    "define_table_write_share": "P",
+    "define_table_group": "",
+    "define_table_idx": "0",
+    "define_table_etc": "",
+    "define_table_schema": "layer",
+    "define_table_source": "shp"
+  },
+  {
+    "define_table_name": "aa_mulgunji",
+    "define_table_kor_name": "aa_mulgunji",
+    "define_table_shp_type": "POLYGON",
+    "define_table_read_share": "P",
+    "define_table_write_share": "P",
+    "define_table_group": "",
+    "define_table_idx": "0",
+    "define_table_etc": "",
+    "define_table_schema": "layer",
+    "define_table_source": "shp"
+  },
+  {
+    "define_table_name": "d0023372_1",
+    "define_table_kor_name": "d0023372_1",
+    "define_table_shp_type": "POLYGON",
+    "define_table_read_share": "P",
+    "define_table_write_share": "P",
+    "define_table_group": "",
+    "define_table_idx": "0",
+    "define_table_etc": "",
+    "define_table_schema": "layer",
+    "define_table_source": "shp"
+  },
+  {
     "define_table_name": "elevation",
     "define_table_kor_name": "등고선",
     "define_table_shp_type": "LINE",
@@ -237,6 +273,30 @@
     "define_table_idx": "0",
     "define_table_etc": "",
     "define_table_schema": "layer",
+    "define_table_source": "shp"
+  },
+  {
+    "define_table_name": "lsmd_cont_ub210",
+    "define_table_kor_name": "lsmd_cont_ub210",
+    "define_table_shp_type": "POLYGON",
+    "define_table_read_share": "P",
+    "define_table_write_share": "P",
+    "define_table_group": "",
+    "define_table_idx": "0",
+    "define_table_etc": "",
+    "define_table_schema": "public_layer",
+    "define_table_source": "shp"
+  },
+  {
+    "define_table_name": "lsmd_cont_um221",
+    "define_table_kor_name": "lsmd_cont_um221",
+    "define_table_shp_type": "POLYGON",
+    "define_table_read_share": "P",
+    "define_table_write_share": "P",
+    "define_table_group": "",
+    "define_table_idx": "0",
+    "define_table_etc": "",
+    "define_table_schema": "public_layer",
     "define_table_source": "shp"
   },
   {
@@ -322,6 +382,30 @@
     "define_table_etc": "",
     "define_table_schema": "layer",
     "define_table_source": "excel"
+  },
+  {
+    "define_table_name": "road_frontage_marker",
+    "define_table_kor_name": "road_frontage_marker",
+    "define_table_shp_type": "POINT",
+    "define_table_read_share": "P",
+    "define_table_write_share": "P",
+    "define_table_group": "",
+    "define_table_idx": "0",
+    "define_table_etc": "",
+    "define_table_schema": "layer",
+    "define_table_source": "shp"
+  },
+  {
+    "define_table_name": "road_frontage_marker_item",
+    "define_table_kor_name": "road_frontage_marker_item",
+    "define_table_shp_type": "POINT",
+    "define_table_read_share": "P",
+    "define_table_write_share": "P",
+    "define_table_group": "",
+    "define_table_idx": "0",
+    "define_table_etc": "",
+    "define_table_schema": "layer",
+    "define_table_source": "shp"
   },
   {
     "define_table_name": "road_use_ledger_mulgunji",
@@ -1982,7 +2066,7 @@
   {
     "define_table_name": "a0020000",
     "define_table_kor_name": "도로대장총괄",
-    "define_table_shp_type": "LINE",
+    "define_table_shp_type": "POLYGON",
     "define_table_read_share": "P",
     "define_table_write_share": "P",
     "define_table_group": "도로대장",
@@ -2294,7 +2378,7 @@
   {
     "define_table_name": "c0520000",
     "define_table_kor_name": "중앙분리대",
-    "define_table_shp_type": "POLYGON",
+    "define_table_shp_type": "LINE",
     "define_table_read_share": "P",
     "define_table_write_share": "P",
     "define_table_group": "도로대장",
@@ -6027,6 +6111,18 @@
   {
     "define_table_name": "sd_cold_wave_shelter",
     "define_table_kor_name": "한파쉼터",
+    "define_table_shp_type": "POINT",
+    "define_table_read_share": "P",
+    "define_table_write_share": "P",
+    "define_table_group": "재난안전지도",
+    "define_table_idx": "0",
+    "define_table_etc": "",
+    "define_table_schema": "layer",
+    "define_table_source": "shp"
+  },
+  {
+    "define_table_name": "sd_civil_defense_shelter",
+    "define_table_kor_name": "민방위 대피소",
     "define_table_shp_type": "POINT",
     "define_table_read_share": "P",
     "define_table_write_share": "P",
@@ -9858,6 +9954,42 @@
     "define_table_idx": "0",
     "define_table_etc": "",
     "define_table_schema": "layer",
+    "define_table_source": "shp"
+  },
+  {
+    "define_table_name": "radiation_shelter",
+    "define_table_kor_name": "방사선 대피소",
+    "define_table_shp_type": "POINT",
+    "define_table_read_share": "P",
+    "define_table_write_share": "P",
+    "define_table_group": "재난안전지도",
+    "define_table_idx": "0",
+    "define_table_etc": "",
+    "define_table_schema": "layer",
+    "define_table_source": "shp"
+  },
+  {
+    "define_table_name": "water_play_sign",
+    "define_table_kor_name": "물놀이 표지판",
+    "define_table_shp_type": "POINT",
+    "define_table_read_share": "P",
+    "define_table_write_share": "P",
+    "define_table_group": "재난안전지도",
+    "define_table_idx": "0",
+    "define_table_etc": "",
+    "define_table_schema": "layer",
+    "define_table_source": "shp"
+  },
+  {
+    "define_table_name": "lsmd_cont_um732",
+    "define_table_kor_name": "lsmd_cont_um732",
+    "define_table_shp_type": "POLYGON",
+    "define_table_read_share": "P",
+    "define_table_write_share": "P",
+    "define_table_group": "",
+    "define_table_idx": "0",
+    "define_table_etc": "",
+    "define_table_schema": "public_layer",
     "define_table_source": "shp"
   }
 ]

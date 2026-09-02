@@ -36,7 +36,6 @@ import {
 
 const fieldClass =
   'h-7 w-full min-w-0 rounded border border-border bg-background px-1.5 text-[11px] text-foreground outline-none focus:border-primary focus:ring-1 focus:ring-primary/25';
-const attrLabelClass = 'w-[64px] shrink-0';
 const btnPrimary =
   'inline-flex h-7 items-center gap-1 rounded border border-primary bg-primary px-2 text-[11px] font-medium text-white hover:bg-primary/90 disabled:opacity-50';
 const btnGhost =
@@ -47,19 +46,14 @@ const btnDanger =
 function AttrRow({ label, value }: { label: string; value: ReactNode }) {
   return (
     <div className="flex items-start">
-      <div
-        className={cn(
-          'flex min-w-0 shrink-0 items-center self-stretch bg-muted px-1.5 py-1',
-          attrLabelClass
-        )}
-      >
-        <span className="min-w-0 w-full whitespace-normal break-keep text-left text-[11px] leading-snug text-muted-foreground">
+      <div className="standard-detail-attr-label flex min-w-0 w-[64px] shrink-0 items-center self-stretch">
+        <span className="min-w-0 w-full whitespace-normal break-keep text-left leading-snug">
           {label}
         </span>
       </div>
-      <div className="min-w-0 flex-1 bg-background px-1.5 py-1">
+      <div className="standard-detail-attr-value min-w-0 flex-1 text-foreground">
         {typeof value === 'string' ? (
-          <span className="block truncate text-[11px] leading-snug text-foreground" title={value}>
+          <span className="block truncate leading-snug" title={value}>
             {value}
           </span>
         ) : (
@@ -553,52 +547,54 @@ export function RoadFrontageMarkerDetailPanel({
 
   if (loading) {
     return (
-      <div className="flex h-full min-h-0 flex-col bg-background">
-        <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border px-3 py-2">
-          <span className="text-sm font-semibold text-foreground">접도구역 표주 상세</span>
+      <div className="standard-panel-root">
+        <div className="standard-panel-header">
+          <span className="standard-panel-title">접도구역 표주 상세</span>
           <button
             type="button"
             onClick={onClose}
-            className="shrink-0 rounded p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            className="standard-panel-close"
             title="닫기"
             aria-label="닫기"
           >
             <X className="h-4 w-4" />
           </button>
         </div>
-        <p className="px-3 py-6 text-center text-xs text-muted-foreground">불러오는 중…</p>
+        <div className="standard-detail-scroll standard-detail-loading justify-center">불러오는 중…</div>
       </div>
     );
   }
 
   if (!saved && !isCreateMode) {
     return (
-      <div className="flex h-full min-h-0 flex-col bg-background">
-        <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border px-3 py-2">
-          <span className="text-sm font-semibold text-foreground">접도구역 표주 상세</span>
+      <div className="standard-panel-root">
+        <div className="standard-panel-header">
+          <span className="standard-panel-title">접도구역 표주 상세</span>
           <button
             type="button"
             onClick={onClose}
-            className="shrink-0 rounded p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            className="standard-panel-close"
             title="닫기"
             aria-label="닫기"
           >
             <X className="h-4 w-4" />
           </button>
         </div>
-        <p className="px-3 py-6 text-center text-xs text-muted-foreground">
-          {loadError || '선택한 관리대장을 찾을 수 없습니다.'}
-        </p>
+        <div className="standard-detail-scroll px-3 py-6">
+          <p className="text-center text-xs text-muted-foreground">
+            {loadError || '선택한 관리대장을 찾을 수 없습니다.'}
+          </p>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="relative flex h-full min-h-0 flex-col bg-background">
-      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border px-3 py-2">
+    <div className="relative standard-panel-root">
+      <div className="standard-panel-header">
         <h2
           className={cn(
-            'min-w-0 truncate text-sm font-semibold',
+            'standard-panel-title min-w-0 truncate',
             current.routeName.trim() || isCreateMode ? 'text-foreground' : 'text-muted-foreground'
           )}
           title={isCreateMode ? '관리대장 등록' : current.routeName.trim() || '(노선명 미입력)'}
@@ -608,7 +604,7 @@ export function RoadFrontageMarkerDetailPanel({
         <button
           type="button"
           onClick={onClose}
-          className="shrink-0 rounded p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+          className="standard-panel-close"
           title="닫기"
           aria-label="닫기"
         >
@@ -616,22 +612,23 @@ export function RoadFrontageMarkerDetailPanel({
         </button>
       </div>
 
-      <section className="shrink-0 border-b border-border">
-        <div className="flex items-center gap-1 px-2 py-1.5">
+      <section className="standard-detail-section shrink-0">
+        <div className="standard-detail-section-header">
           <button
             type="button"
             onClick={() => setAttrsOpen((v) => !v)}
-            className="flex min-w-0 flex-1 items-center gap-1 text-left text-xs font-semibold text-foreground"
+            className="standard-detail-section-toggle"
+            title="기본정보"
           >
             {attrsOpen ? (
-              <ChevronDown className="h-3.5 w-3.5 shrink-0" />
+              <ChevronDown className="standard-detail-section-chevron" />
             ) : (
-              <ChevronRight className="h-3.5 w-3.5 shrink-0" />
+              <ChevronRight className="standard-detail-section-chevron" />
             )}
-            기본정보
+            <span className="standard-detail-section-toggle-label">기본정보</span>
           </button>
           {attrsOpen ? (
-            <div className="flex shrink-0 items-center gap-1">
+            <div className="standard-detail-section-header-actions">
               {!isEditing ? (
                 <>
                   <button type="button" className={btnGhost} onClick={beginEdit}>
@@ -668,7 +665,7 @@ export function RoadFrontageMarkerDetailPanel({
           ) : null}
         </div>
         {attrsOpen ? (
-          <div className="max-h-[42vh] overflow-y-auto px-3 pb-2.5 scrollbar-thin">
+          <div className="standard-detail-section-body max-h-[42vh] overflow-y-auto scrollbar-thin">
             <div className="overflow-hidden rounded-[5px] border border-border">
               <div className="grid grid-cols-2 divide-x divide-border">
                 <AttrRow

@@ -1,7 +1,7 @@
 [
   {
     "define_field_name": "id",
-    "define_field_kor_name": "id",
+    "define_field_kor_name": "번호",
     "define_field_type": "integer",
     "define_field_is_required": false,
     "define_field_show_search": false,

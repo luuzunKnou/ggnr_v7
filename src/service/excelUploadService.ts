@@ -1328,7 +1328,7 @@ export async function createDefineTableAndFieldsForExcel(params: {
     let idx = 1;
     fieldList.push({
       define_field_name: 'id',
-      define_field_kor_name: 'id',
+      define_field_kor_name: '번호',
       define_field_type: 'NUMBER',
       define_field_idx: idx++,
       define_field_is_required: false,
@@ -1478,7 +1478,7 @@ export async function createDefineTableAndFieldsForExcel(params: {
         };
         pushJ({
           define_field_name: 'id',
-          define_field_kor_name: 'id',
+          define_field_kor_name: '번호',
           define_field_type: 'NUMBER',
           define_field_is_required: false,
           define_field_show_search: false,
@@ -1624,7 +1624,7 @@ export async function createDefineTableAndFieldsForExcel(params: {
         };
         pushM({
           define_field_name: 'id',
-          define_field_kor_name: 'id',
+          define_field_kor_name: '번호',
           define_field_type: 'NUMBER',
           define_field_is_required: false,
           define_field_show_search: false,

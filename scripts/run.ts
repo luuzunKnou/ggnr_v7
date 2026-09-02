@@ -477,8 +477,7 @@ function spawnNext(cmd: NextCmd): void {
   // Windows + cwd 공백: shell:true 일 때 미인용 경로가 잘림 → next.cmd 인용
   const bin =
     process.platform === 'win32' && /[\s()]/.test(nextBin) ? `"${nextBin}"` : nextBin;
-  // Tailwind v4 @utility(standard-utilities.css) — Turbopack에서 import 유틸 누락 → dev는 webpack
-  const args = cmd === 'dev' ? [cmd, '--webpack'] : [cmd];
+  const args = cmd === 'dev' && /\s/.test(process.cwd()) ? [cmd, '--webpack'] : [cmd];
   console.log(`[run] starting Next.js (${cmd})...`);
   const proc = spawn(bin, args, {
     cwd: process.cwd(),

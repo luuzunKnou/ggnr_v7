@@ -21,7 +21,7 @@ function normalizeLawUrl(url: string): string {
 
 function stripCdata(raw: string): string {
   const trimmed = raw.trim()
-  const cdata = trimmed.match(/^<!\[CDATA\[([\s\S]*?)\]\]>$/s)?.[1]
+  const cdata = trimmed.match(/^<!\[CDATA\[([\s\S]*?)\]\]>$/)?.[1]
   return (cdata ?? trimmed).trim()
 }
 

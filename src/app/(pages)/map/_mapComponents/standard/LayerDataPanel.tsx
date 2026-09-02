@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react';
+import React, { useState, useCallback, useRef, useEffect, useLayoutEffect, useMemo } from 'react';
 import { call } from '@/lib/api';
 import {
   FileText,
@@ -32,7 +32,7 @@ import {
   useServiceFileData,
 } from './useServiceFileData';
 import { useMapContext } from '../MapContext';
-import { getRowKey, getRowValueByField, isDefineFieldFlagTrue } from './defineLayerRowUtils';
+import { getDefineFieldDisplayLabel, getRowKey, getRowValueByField, isDefineFieldFlagTrue, isNumberColumnField, orderDefineFieldsWithKeyFirst } from './defineLayerRowUtils';
 import { ServiceFileAttachmentThumb } from './ServiceFileAttachmentThumb';
 import { ServiceFilePdfThumb } from './ServiceFilePdfThumb';
 import { ServiceFileImagePreview, type ServiceFilePreviewItem } from './ServiceFileImagePreview';
@@ -106,6 +106,51 @@ interface InfoField {
   readOnly?: boolean;
 }
 
+/** 목록·기본정보 라벨 폭 — CJK는 대략 2, 그 외 1 */
+function estimateDisplayTextWeight(text: string): number {
+  let w = 0;
+  for (const ch of text) {
+    w += ch.charCodeAt(0) > 0x2e80 ? 2 : 1;
+  }
+  return Math.max(w, 1);
+}
+
+/** 기본정보 좌측 속성명 열 너비(px) — 가장 긴 라벨 기준 (11px 폰트) */
+const INFO_LABEL_COL_MIN_PX = 72;
+const INFO_LABEL_COL_MAX_PX = 180;
+/** px-2 좌우 패딩 합 */
+const INFO_LABEL_COL_PAD_PX = 16;
+/** 11px 기준 대략 글자 폭 — CJK·라틴 각각 */
+const INFO_LABEL_CJK_CHAR_PX = 11;
+const INFO_LABEL_LATIN_CHAR_PX = 7.5;
+
+function estimateInfoLabelLineWidthPx(line: string): number {
+  let px = 0;
+  for (const ch of line) {
+    px += ch.charCodeAt(0) > 0x2e80 ? INFO_LABEL_CJK_CHAR_PX : INFO_LABEL_LATIN_CHAR_PX;
+  }
+  return Math.max(px, 24);
+}
+
+function computeInfoLabelColWidthPx(labels: string[]): number {
+  let maxPx = INFO_LABEL_COL_MIN_PX;
+  for (const label of labels) {
+    for (const line of label.split(/\r?\n/)) {
+      maxPx = Math.max(maxPx, Math.round(estimateInfoLabelLineWidthPx(line) + INFO_LABEL_COL_PAD_PX));
+    }
+  }
+  return Math.min(INFO_LABEL_COL_MAX_PX, maxPx);
+}
+
+/** 기본정보 행 높이(px) — h-7 */
+const INFO_ROW_HEIGHT_PX = 28;
+
+function infoFieldDisplayText(field: InfoField): string {
+  const base = field.value === '' || field.value == null ? '—' : String(field.value);
+  if (field.unit != null && field.unit !== '') return `${base} ${field.unit}`;
+  return base;
+}
+
 function InfoSection({
   title,
   fields,
@@ -122,6 +167,10 @@ function InfoSection({
   onFieldChange?: (fieldKey: string, value: string) => void;
 }) {
   const [isOpen, setIsOpen] = useState(defaultOpen);
+  const labelColWidthPx = useMemo(
+    () => computeInfoLabelColWidthPx(fields.map((f) => f.label)),
+    [fields]
+  );
   if (fields.length === 0) return null;
   return (
     <div className="border-b border-border">
@@ -130,23 +179,28 @@ function InfoSection({
         className="flex w-full items-center gap-1.5 px-4 py-2 text-left transition-colors hover:bg-muted/50"
         onClick={() => setIsOpen(!isOpen)}
       >
-        {isOpen ? <ChevronDown className="h-3.5 w-3.5 text-primary" /> : <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />}
-        <span className="text-[12px] font-semibold text-muted-foreground">{title}</span>
+        {isOpen ? <ChevronDown className="standard-detail-section-chevron text-foreground/90" /> : <ChevronRight className="standard-detail-section-chevron text-foreground/90" />}
+        <span className="text-[11px] font-semibold tracking-wide text-slate-600 dark:text-muted-foreground">{title}</span>
       </button>
       {isOpen && (
         <div className="px-3 pb-2">
-          <div className="overflow-hidden rounded border border-border">
-            {fields.map((field, index) => (
+          <div className="divide-y divide-border overflow-hidden rounded border border-border">
+            {fields.map((field) => (
               <div
                 key={field.fieldKey}
-                className={cn('flex items-stretch', index !== fields.length - 1 && 'border-b border-border')}
+                className="grid"
+                style={{
+                  gridTemplateColumns: `${labelColWidthPx}px minmax(0, 1fr)`,
+                  height: INFO_ROW_HEIGHT_PX,
+                }}
               >
-                <div className="flex min-w-0 w-[100px] shrink-0 items-start bg-muted/40 px-2.5 py-1.5">
-                  <span className="min-w-0 w-full whitespace-normal break-words text-[11px] leading-snug text-muted-foreground">
-                    {field.label}
-                  </span>
-                </div>
-                <div className="flex min-w-0 flex-1 items-center px-2.5 py-1">
+                <dt
+                  className="flex h-full min-w-0 shrink-0 items-center bg-slate-100 px-2 text-[11px] font-medium leading-none text-slate-500 dark:bg-muted dark:text-muted-foreground"
+                  title={field.label}
+                >
+                  <span className="block min-w-0 truncate">{field.label}</span>
+                </dt>
+                <dd className="flex h-full min-w-0 items-center bg-background px-2 text-[11px] leading-none text-slate-900 dark:text-foreground">
                   {editing && !field.readOnly ? (
                     <input
                       className="h-6 w-full min-w-0 rounded border border-border bg-background px-1.5 text-[11px] outline-none focus:border-primary focus:ring-1 focus:ring-primary/25"
@@ -154,12 +208,14 @@ function InfoSection({
                       onChange={(e) => onFieldChange?.(field.fieldKey, e.target.value)}
                     />
                   ) : (
-                    <span className={cn('text-[11px]', field.highlight ? 'font-medium text-primary' : 'text-muted-foreground')}>
-                      {field.value}
-                      {field.unit != null && field.unit !== '' && <span className="ml-0.5 text-muted-foreground">{field.unit}</span>}
+                    <span
+                      className={cn('block min-w-0 truncate', field.highlight && 'font-medium text-primary')}
+                      title={infoFieldDisplayText(field)}
+                    >
+                      {infoFieldDisplayText(field)}
                     </span>
                   )}
-                </div>
+                </dd>
               </div>
             ))}
           </div>
@@ -171,6 +227,122 @@ function InfoSection({
 
 const PAGE_SIZE_LIST = 30;
 const PAGE_SIZE_DETAIL = 7;
+
+/** 헤더·셀 패딩(px-2·pl-4) + 말줄임 여유 (가중치 단위) */
+const LIST_COL_TEXT_PAD_WEIGHT = 8;
+/** ogc_fid·id 컬럼 — 고정 너비(px), min=max */
+const LIST_COL_OGC_FID_FIXED_PX = 58;
+/** ogc_fid·id 외 컬럼 최소 너비(px) */
+const LIST_COL_DEFAULT_MIN_PX = 75;
+const LIST_COL_WIDTH_REF_PX = 450;
+
+function getListColMinPx(fieldName: string, korName?: string | null): number {
+  if (isNumberColumnField(fieldName, korName)) {
+    return LIST_COL_OGC_FID_FIXED_PX;
+  }
+  return LIST_COL_DEFAULT_MIN_PX;
+}
+
+function getListColMinPct(fieldName: string, korName?: string | null): number {
+  return (getListColMinPx(fieldName, korName) / LIST_COL_WIDTH_REF_PX) * 100;
+}
+
+function getOgcFidColFixedPct(): number {
+  return (LIST_COL_OGC_FID_FIXED_PX / LIST_COL_WIDTH_REF_PX) * 100;
+}
+
+/** ogc_fid 제외 컬럼만 totalPct(보통 100−고정합) 안에서 비율 분배 */
+function distributeFlexColumnWidthsPct(
+  weights: number[],
+  columnMinPcts: number[],
+  totalPct: number
+): number[] {
+  const n = weights.length;
+  if (n === 0) return [];
+  if (n === 1) return [totalPct];
+  const equal = totalPct / n;
+  const defaultMinPct = Math.max(equal * 0.72, (LIST_COL_DEFAULT_MIN_PX / LIST_COL_WIDTH_REF_PX) * 100);
+  const maxPct = Math.min(totalPct * 0.5, equal * 2.5);
+  const colMinPct = (i: number) => {
+    const extra = columnMinPcts[i];
+    if (extra != null && extra > 0) return Math.min(extra, totalPct);
+    return Math.min(defaultMinPct, totalPct);
+  };
+  let ws = weights.map((w) => Math.max(1, w));
+  for (let i = 0; i < 8; i++) {
+    const sum = ws.reduce((a, b) => a + b, 0) || 1;
+    ws = ws.map((w, idx) => {
+      const pct = (w / sum) * totalPct;
+      const minPct = colMinPct(idx);
+      if (pct < minPct) return (minPct / totalPct) * sum;
+      if (pct > maxPct) return (maxPct / totalPct) * sum;
+      return w;
+    });
+  }
+  const sum = ws.reduce((a, b) => a + b, 0) || 1;
+  const pcts = ws.map((w) => (w / sum) * totalPct);
+  const rounded = pcts.map((p) => Math.round(p * 10) / 10);
+  const drift = totalPct - rounded.reduce((a, b) => a + b, 0);
+  rounded[n - 1] = Math.round((rounded[n - 1] + drift) * 10) / 10;
+  return rounded;
+}
+
+/** 글자 가중치 → 합 100% 컬럼 폭. 번호 컬럼(한글명 기준)은 고정%, 나머지는 잔여 비율 분배 */
+function computeListColWidthsPct(
+  weights: number[],
+  cols: { name: string; kor?: string | null }[]
+): number[] {
+  const n = weights.length;
+  if (n === 0) return [];
+  if (n === 1) {
+    return isNumberColumnField(cols[0].name, cols[0].kor) ? [getOgcFidColFixedPct()] : [100];
+  }
+
+  const result = new Array<number>(n).fill(0);
+  const flexIndices: number[] = [];
+  let fixedTotal = 0;
+
+  for (let i = 0; i < n; i++) {
+    if (isNumberColumnField(cols[i].name, cols[i].kor)) {
+      result[i] = getOgcFidColFixedPct();
+      fixedTotal += result[i];
+    } else {
+      flexIndices.push(i);
+    }
+  }
+
+  const remaining = Math.max(0, 100 - fixedTotal);
+  if (flexIndices.length === 0) {
+    return result;
+  }
+  if (flexIndices.length === weights.length) {
+    return distributeFlexColumnWidthsPct(
+      weights,
+      cols.map((c) => getListColMinPct(c.name, c.kor)),
+      100
+    );
+  }
+
+  const flexWeights = flexIndices.map((i) => weights[i]);
+  const flexMinPcts = flexIndices.map((i) => getListColMinPct(cols[i].name, cols[i].kor));
+  const flexPcts = distributeFlexColumnWidthsPct(flexWeights, flexMinPcts, remaining);
+  flexIndices.forEach((idx, j) => {
+    result[idx] = flexPcts[j];
+  });
+  return result;
+}
+
+function estimateListColWeight(header: string, cellTexts: string[]): number {
+  const headerW = estimateDisplayTextWeight(header);
+  let maxW = headerW;
+  for (const t of cellTexts) {
+    maxW = Math.max(maxW, estimateDisplayTextWeight(t));
+  }
+  const withPad = maxW + LIST_COL_TEXT_PAD_WEIGHT;
+  // 헤더 전체(예: «번호»)가 말줄임되지 않도록 헤더 기준 하한
+  const headerFloor = headerW + LIST_COL_TEXT_PAD_WEIGHT + 2;
+  return Math.max(withPad, headerFloor);
+}
 
 type LayerDataPanelProps = {
   dataTable: string;
@@ -265,6 +437,21 @@ export function LayerDataPanel({
   const loadPageSeqRef = useRef(0);
   /** 상세 닫기 후 URL dataKey 반영 전, 목록 재조회로 상세가 다시 열리는 것 방지 */
   const suppressDataKeySelectRef = useRef(false);
+  /** 레이어 최초 목록 로드 시 첫 행 자동선택 1회. 상세 수동 닫기 후에는 false 유지 */
+  const pendingAutoSelectFirstRef = useRef(false);
+  /** 행 선택(클릭·자동·dataKey) 시에만 지도 fit. 페이지네이션으로 rows만 바뀌면 이동하지 않음 */
+  const pendingMapFitFromSelectionRef = useRef(false);
+  /** loadPage 후 하이라이트 복원용(키 필드 없거나 매칭 전) — 선택 전환 시에만 사용 */
+  const pendingHighlightIndexRef = useRef<number | null>(null);
+  /** 이전/다음 페이지 이동 직후 dataKey·pending 하이라이트 동기화 스킵 */
+  const paginationOnlyLoadRef = useRef(false);
+  /** 레이어 오픈 시 1회 계산한 목록 컬럼 폭(%). 페이지 이동 시 유지 */
+  const listColWidthsLayerRef = useRef<string | null>(null);
+  const [listColWidthsPct, setListColWidthsPct] = useState<number[] | null>(null);
+  const selectedRowDataRef = useRef(selectedRowData);
+  selectedRowDataRef.current = selectedRowData;
+  const keyFieldNameRef = useRef(keyFieldName);
+  keyFieldNameRef.current = keyFieldName;
 
   const prevHadIdentifyRef = useRef(false);
   /** 새 식별·검색 결과 시 목록 선택 초기화. 식별 종료 시에만 상세 상태 정리(일반 목록 조회와 충돌 방지). */
@@ -749,10 +936,19 @@ export function LayerDataPanel({
         selectionSourceRef.current?.clear();
         setRadarActive(false);
       }
-    } else {
-      showHighlightedRowOnMap(highlightedRow);
+      return;
     }
-  }, [highlightedRow, isIdentifyMode, showHighlightedRowOnMap]);
+    // 페이지 이동으로 rows만 갱신된 경우 첫 행(또는 이전 인덱스)으로 지도를 다시 맞추지 않음
+    if (!pendingMapFitFromSelectionRef.current) return;
+    const row = rows[highlightedRow] ?? selectedRowDataRef.current;
+    if (!row) return;
+    pendingMapFitFromSelectionRef.current = false;
+    if (rows[highlightedRow]) {
+      showHighlightedRowOnMap(highlightedRow);
+    } else {
+      showIdentifyFeatureOnMap(row);
+    }
+  }, [highlightedRow, rows, isIdentifyMode, showHighlightedRowOnMap, showIdentifyFeatureOnMap]);
 
   useEffect(() => {
     if (selectedIdentifyIndex == null) return;
@@ -776,6 +972,10 @@ export function LayerDataPanel({
       setSelectedIdentifyIndex(null);
       setListPageSize(PAGE_SIZE_LIST);
       suppressDataKeySelectRef.current = false;
+      pendingAutoSelectFirstRef.current = true;
+      pendingHighlightIndexRef.current = null;
+      listColWidthsLayerRef.current = null;
+      setListColWidthsPct(null);
       loadPageSeqRef.current += 1;
     }
     setLoading(true);
@@ -857,12 +1057,16 @@ export function LayerDataPanel({
           const keyData = dataRes?.data ?? dataRes;
           const row = (keyData?.row ?? null) as Record<string, unknown> | null;
           if (row) {
+            pendingAutoSelectFirstRef.current = false;
+            pendingMapFitFromSelectionRef.current = true;
+            pendingHighlightIndexRef.current = 0;
             setRows([row]);
             setTotal(1);
             setSelectedRowData(row);
             setHighlightedRow(0);
             setPage(1);
             showCurrentListOnMap([row]);
+            showIdentifyFeatureOnMap(row);
           } else {
             call('', 'POST', {
               service: 'standardService',
@@ -910,6 +1114,10 @@ export function LayerDataPanel({
   useEffect(() => {
     if (!activeLayer) {
       prevLayerRef.current = null;
+      pendingAutoSelectFirstRef.current = false;
+      pendingHighlightIndexRef.current = null;
+      listColWidthsLayerRef.current = null;
+      setListColWidthsPct(null);
       highlightSourceRef.current?.clear();
       selectionSourceRef.current?.clear();
       setRadarActive(false);
@@ -917,8 +1125,9 @@ export function LayerDataPanel({
   }, [activeLayer]);
 
   const loadPage = useCallback(
-    (newPage: number, size?: number) => {
+    (newPage: number, size?: number, opts?: { paginationOnly?: boolean }) => {
       if (!activeLayer) return;
+      const paginationOnly = opts?.paginationOnly === true;
       const ps = size ?? listPageSize;
       const savedScrollTop = listScrollRef.current?.scrollTop ?? 0;
       const seq = ++loadPageSeqRef.current;
@@ -940,13 +1149,51 @@ export function LayerDataPanel({
         .then((res) => {
           if (seq !== loadPageSeqRef.current) return;
           const data = res?.data ?? res;
-          const dataRows = Array.isArray(data?.rows) ? data.rows : [];
+          const dataRows: Record<string, unknown>[] = Array.isArray(data?.rows) ? data.rows : [];
           const dataTotal = typeof data?.total === 'number' ? data.total : total;
           // 행·칸 수를 같이 맞춰 한 렌더에 반영 (30칸+7행 / 7칸+30행 방지)
           setListPageSize(ps);
           setRows(dataRows);
           setTotal(dataTotal);
           setPage(newPage);
+          if (paginationOnly) {
+            // 페이지 이동만: 선택 상태는 유지하고, 현재 페이지에 선택 행이 있을 때만 목록 강조
+            let nextHighlight: number | null = null;
+            const selected = selectedRowDataRef.current;
+            const keyField = keyFieldNameRef.current;
+            if (selected != null && keyField) {
+              const selectedKey = getRowKey(selected, keyField);
+              if (selectedKey != null) {
+                const idx = dataRows.findIndex((r) => {
+                  const rowKey = getRowKey(r, keyField);
+                  return rowKey != null && String(rowKey) === String(selectedKey);
+                });
+                if (idx >= 0) nextHighlight = idx;
+              }
+            }
+            setHighlightedRow(nextHighlight);
+          } else {
+            // 선택 전환·상세 닫기 등: 키 매칭 → pending 인덱스로 하이라이트 복원
+            const selected = selectedRowDataRef.current;
+            const keyField = keyFieldNameRef.current;
+            const pendingIdx = pendingHighlightIndexRef.current;
+            pendingHighlightIndexRef.current = null;
+            let nextHighlight: number | null = null;
+            if (selected != null && keyField) {
+              const selectedKey = getRowKey(selected, keyField);
+              if (selectedKey != null) {
+                const idx = dataRows.findIndex((r) => {
+                  const rowKey = getRowKey(r, keyField);
+                  return rowKey != null && String(rowKey) === String(selectedKey);
+                });
+                if (idx >= 0) nextHighlight = idx;
+              }
+            }
+            if (nextHighlight == null && pendingIdx != null && pendingIdx < dataRows.length) {
+              nextHighlight = pendingIdx;
+            }
+            setHighlightedRow(nextHighlight);
+          }
           setLoading(false);
           setTimeout(() => { if (listScrollRef.current) listScrollRef.current.scrollTop = savedScrollTop; }, 0);
           showCurrentListOnMap(dataRows);
@@ -962,6 +1209,7 @@ export function LayerDataPanel({
 
   // 앱 안에서 행 선택 시 URL의 dataKey만 반영 → 선택/하이라이트 동기화 (목록↔상세 칸 수 맞춤)
   useEffect(() => {
+    if (paginationOnlyLoadRef.current) return;
     if (!activeLayer || isIdentifyMode || !keyFieldName || rows.length === 0) return;
     const key = initialDataKey != null ? String(initialDataKey).trim() : '';
     if (key === '') {
@@ -974,20 +1222,26 @@ export function LayerDataPanel({
       return rowKey != null && String(rowKey) === key;
     });
     if (idx < 0) return;
+    pendingAutoSelectFirstRef.current = false;
+    pendingMapFitFromSelectionRef.current = true;
     if (listPageSize === PAGE_SIZE_LIST && selectedRowData == null) {
       const absoluteOffset = (page - 1) * PAGE_SIZE_LIST + idx;
       const newPage = Math.floor(absoluteOffset / PAGE_SIZE_DETAIL) + 1;
       const newRowIndex = absoluteOffset % PAGE_SIZE_DETAIL;
+      pendingHighlightIndexRef.current = newRowIndex;
       setHighlightedRow(newRowIndex);
       setSelectedRowData(rows[idx] as Record<string, unknown>);
+      showIdentifyFeatureOnMap(rows[idx] as Record<string, unknown>);
       setRows([]);
       setListPageSize(PAGE_SIZE_DETAIL);
       setActiveTab((tab) => (tab === 'attach' ? 'attach' : 'basic'));
       loadPage(newPage, PAGE_SIZE_DETAIL);
       return;
     }
+    pendingHighlightIndexRef.current = idx;
     setSelectedRowData(rows[idx] as Record<string, unknown>);
     setHighlightedRow(idx);
+    showIdentifyFeatureOnMap(rows[idx] as Record<string, unknown>);
     setActiveTab((tab) => (tab === 'attach' ? 'attach' : 'basic'));
   }, [
     activeLayer,
@@ -999,6 +1253,70 @@ export function LayerDataPanel({
     selectedRowData,
     page,
     loadPage,
+    showIdentifyFeatureOnMap,
+  ]);
+
+  // 페이지 이동 직후 dataKey 동기화 스킵 플래그 해제 (dataKey effect 다음 틱)
+  useEffect(() => {
+    if (paginationOnlyLoadRef.current) {
+      paginationOnlyLoadRef.current = false;
+    }
+  }, [rows, page]);
+
+  // 레이어 최초 목록 로드 시 첫 행 자동 상세·지도 이동 (URL/지도 dataKey·수동 닫기 우선)
+  useEffect(() => {
+    if (!pendingAutoSelectFirstRef.current) return;
+    if (!activeLayer || isIdentifyMode || loading) return;
+    if (rows.length === 0) return;
+    if (selectedRowData != null) return;
+    if (listPageSize !== PAGE_SIZE_LIST) return;
+    if (suppressDataKeySelectRef.current) {
+      pendingAutoSelectFirstRef.current = false;
+      return;
+    }
+
+    const key = initialDataKey != null ? String(initialDataKey).trim() : '';
+    if (key !== '' && keyFieldName) {
+      const idx = rows.findIndex((r) => {
+        const rowKey = getRowKey(r, keyFieldName);
+        return rowKey != null && String(rowKey) === key;
+      });
+      if (idx >= 0) {
+        // dataKey 동기화 effect가 해당 행을 선택
+        pendingAutoSelectFirstRef.current = false;
+        return;
+      }
+    }
+
+    pendingAutoSelectFirstRef.current = false;
+    const rowData = rows[0] as Record<string, unknown>;
+    const keyVal = getRowKey(rowData, keyFieldName);
+    const absoluteOffset = (page - 1) * PAGE_SIZE_LIST;
+    const newPage = Math.floor(absoluteOffset / PAGE_SIZE_DETAIL) + 1;
+    const newRowIndex = absoluteOffset % PAGE_SIZE_DETAIL;
+    pendingMapFitFromSelectionRef.current = true;
+    pendingHighlightIndexRef.current = newRowIndex;
+    setHighlightedRow(newRowIndex);
+    setSelectedRowData(rowData);
+    showIdentifyFeatureOnMap(rowData);
+    setRows([]);
+    setListPageSize(PAGE_SIZE_DETAIL);
+    setActiveTab('basic');
+    onDataKeyChange?.(keyVal);
+    loadPage(newPage, PAGE_SIZE_DETAIL);
+  }, [
+    activeLayer,
+    isIdentifyMode,
+    loading,
+    rows,
+    selectedRowData,
+    listPageSize,
+    initialDataKey,
+    keyFieldName,
+    page,
+    loadPage,
+    onDataKeyChange,
+    showIdentifyFeatureOnMap,
   ]);
 
   const handleClose = () => {
@@ -1031,6 +1349,8 @@ export function LayerDataPanel({
     const firstItemOffset = (page - 1) * PAGE_SIZE_DETAIL;
     const newPage = Math.floor(firstItemOffset / PAGE_SIZE_LIST) + 1;
     suppressDataKeySelectRef.current = true;
+    pendingAutoSelectFirstRef.current = false;
+    pendingHighlightIndexRef.current = null;
     setHighlightedRow(null);
     setSelectedRowData(null);
     onDataKeyChange?.(null);
@@ -1049,16 +1369,22 @@ export function LayerDataPanel({
       const wasDetailOpen = selectedRowData != null;
       suppressDataKeySelectRef.current = false;
       if (wasDetailOpen) {
+        pendingMapFitFromSelectionRef.current = true;
+        pendingHighlightIndexRef.current = rowIndex;
         setHighlightedRow(rowIndex);
         setSelectedRowData(rowData);
+        showIdentifyFeatureOnMap(rowData);
         setActiveTab((tab) => (tab === 'attach' ? 'attach' : 'basic'));
         onDataKeyChange?.(keyVal);
       } else {
         const absoluteOffset = (page - 1) * PAGE_SIZE_LIST + rowIndex;
         const newPage = Math.floor(absoluteOffset / PAGE_SIZE_DETAIL) + 1;
         const newRowIndex = absoluteOffset % PAGE_SIZE_DETAIL;
+        pendingMapFitFromSelectionRef.current = true;
+        pendingHighlightIndexRef.current = newRowIndex;
         setHighlightedRow(newRowIndex);
         setSelectedRowData(rowData);
+        showIdentifyFeatureOnMap(rowData);
         setRows([]);
         setListPageSize(PAGE_SIZE_DETAIL);
         setActiveTab('basic');
@@ -1145,6 +1471,97 @@ export function LayerDataPanel({
     return getRoadLedgerFacilityColumnKeys(tn, sample);
   }, [activeLayer, useRoadLedgerFacilityListColumns, rows, roadLedgerFacilityTableSet]);
 
+  // 레이어 최초 목록(자동선택 전)에서 컬럼 폭 1회 산정 — 페이지 이동 시 유지
+  useLayoutEffect(() => {
+    if (!activeLayer || isIdentifyMode) return;
+    if (listColWidthsLayerRef.current === activeLayer.tableName) return;
+    if (rows.length === 0) return;
+
+    const isGeomLikeFieldName = (name: string) => {
+      const n = name.trim().toLowerCase();
+      return (
+        isLayerExtraFieldName(n) ||
+        n === 'gid' ||
+        n === 'geom' ||
+        n === 'geometry' ||
+        n === 'the_geom' ||
+        n === 'wkb_geometry' ||
+        n === 'shape'
+      );
+    };
+    const useFacilityCols =
+      Boolean(useRoadLedgerFacilityListColumns) && facilityColumnKeys.length > 0;
+    const autoFields: DefineFieldRow[] =
+      fields.length === 0 && detailFields.length === 0
+        ? Object.keys(rows[0] as Record<string, unknown>)
+            .filter((k) => !isGeomLikeFieldName(k))
+            .map((k) => ({ define_field_name: k, define_field_kor_name: k }))
+        : [];
+    const listFieldsAll = (fields.length > 0 ? fields : detailFields.length > 0 ? detailFields : autoFields).filter(
+      (f) => !isGeomLikeFieldName(String(f.define_field_name ?? ''))
+    );
+    const cols: DefineFieldRow[] = useFacilityCols
+      ? facilityColumnKeys.slice(0, 5).map((k) => {
+          const kl = String(k).trim().toLowerCase();
+          const meta =
+            detailFields.find(
+              (f) => String(f.define_field_name ?? '').trim().toLowerCase() === kl
+            ) ??
+            fields.find((f) => String(f.define_field_name ?? '').trim().toLowerCase() === kl);
+          const kor = String(meta?.define_field_kor_name ?? '').trim();
+          return {
+            define_field_name: k,
+            define_field_kor_name: getDefineFieldDisplayLabel(k, kor),
+            define_field_type: meta?.define_field_type,
+          };
+        })
+      : listFieldsAll.slice(0, 5);
+    if (cols.length === 0) return;
+
+    const weights = cols.map((f) => {
+      const header = getDefineFieldDisplayLabel(f.define_field_name, f.define_field_kor_name);
+      const fieldName = String(f.define_field_name ?? '');
+      const cellTexts: string[] = [];
+      for (const row of rows) {
+        const display = useFacilityCols
+          ? formatRoadLedgerFacilityCellValue(fieldName, row as Record<string, unknown>)
+          : (() => {
+              const v = getRowValueByField(row as Record<string, unknown>, fieldName);
+              const meta =
+                detailFields.find(
+                  (df) =>
+                    String(df.define_field_name ?? '').trim().toLowerCase() ===
+                    fieldName.trim().toLowerCase()
+                ) ?? f;
+              return formatDefineFieldDisplayValue(
+                v,
+                meta.define_field_type,
+                codesByField[fieldName.trim().toLowerCase()]
+              );
+            })();
+        cellTexts.push(String(display ?? ''));
+      }
+      return estimateListColWeight(header, cellTexts);
+    });
+
+    const listColRefs = cols.map((f) => ({
+      name: String(f.define_field_name ?? ''),
+      kor: f.define_field_kor_name,
+    }));
+
+    listColWidthsLayerRef.current = activeLayer.tableName;
+    setListColWidthsPct(computeListColWidthsPct(weights, listColRefs));
+  }, [
+    activeLayer,
+    isIdentifyMode,
+    rows,
+    fields,
+    detailFields,
+    facilityColumnKeys,
+    useRoadLedgerFacilityListColumns,
+    codesByField,
+  ]);
+
   if (!activeLayer) {
     return (
       <div className="flex-1 min-h-0 flex items-center justify-center text-sm text-muted-foreground px-4">
@@ -1191,7 +1608,7 @@ export function LayerDataPanel({
         const kor = String(meta?.define_field_kor_name ?? "").trim();
         return {
           define_field_name: k,
-          define_field_kor_name: kor || k,
+          define_field_kor_name: getDefineFieldDisplayLabel(k, kor),
           define_field_type: meta?.define_field_type,
         };
       })
@@ -1200,8 +1617,9 @@ export function LayerDataPanel({
   const isKeyField = (name: string) =>
     keyFieldName != null && name.trim().toLowerCase() === keyFieldName.trim().toLowerCase();
 
-  const basicVisibleFields = detailFields.filter((f) =>
-    isDefineFieldFlagTrue(f.define_field_show_detail)
+  const basicVisibleFields = orderDefineFieldsWithKeyFirst(
+    detailFields.filter((f) => isDefineFieldFlagTrue(f.define_field_show_detail)),
+    keyFieldName
   );
 
   /** 기본정보 — 상세보기 켠 칸만. 키·읽기전용은 편집모드에서도 값만 표시 */
@@ -1211,16 +1629,25 @@ export function LayerDataPanel({
       : basicVisibleFields.length === 0 && detailFields.length === 0
       ? Object.entries(selectedRow)
           .filter(([k]) => !isGeomLikeFieldName(k))
+          .sort(([a], [b]) => {
+            if (!keyFieldName) return 0;
+            const keyLower = keyFieldName.trim().toLowerCase();
+            const al = a.trim().toLowerCase();
+            const bl = b.trim().toLowerCase();
+            if (al === keyLower) return -1;
+            if (bl === keyLower) return 1;
+            return 0;
+          })
           .map(([k, v], i) => ({
             fieldKey: k || `auto-${i}`,
-            label: k,
+            label: getDefineFieldDisplayLabel(k),
             value: formatDefineFieldDisplayValue(v, undefined, undefined),
             highlight: isKeyField(k),
             readOnly: isKeyField(k),
           }))
       : basicVisibleFields.map((f, i) => {
           const key = String(f.define_field_name ?? '');
-          const label = String(f.define_field_kor_name ?? f.define_field_name ?? '');
+          const label = getDefineFieldDisplayLabel(key, f.define_field_kor_name);
           const raw = getRowValueByField(selectedRow, key);
           const readOnly =
             isDefineFieldFlagTrue(f.define_field_read_only) || isKeyField(key);
@@ -1242,6 +1669,12 @@ export function LayerDataPanel({
     { id: 'history', label: '이력관리', icon: History },
     { id: 'attach', label: '첨부파일', icon: Paperclip },
   ];
+
+  /** 현재 페이지 끝이 전체 건수 미만일 때만 다음 페이지 가능 (7건·30건 꽉 찬 마지막 페이지 제외) */
+  const hasNextListPage =
+    rows.length > 0 &&
+    total > 0 &&
+    (page - 1) * pageSize + rows.length < total;
 
   return (
     <>
@@ -1299,69 +1732,138 @@ export function LayerDataPanel({
             />
           )}
           {!isIdentifyMode && !error && listFields.length > 0 && (rows.length > 0 || !loading) && (
-            <>
-              <div className="flex items-start border-b border-border bg-muted/40 px-4 py-2 text-[12px] font-semibold text-muted-foreground shrink-0">
-                {listFields.map((f) => (
-                  <span
-                    key={String(f.define_field_name)}
-                    className="flex-1 min-w-0 whitespace-normal break-words pl-2 text-left leading-tight first:pl-0"
-                    title={String(f.define_field_kor_name ?? f.define_field_name)}
-                  >
-                    {String(f.define_field_kor_name ?? f.define_field_name)}
-                  </span>
-                ))}
-              </div>
-              {rows.length === 0 && (
-                <div className="px-4 py-6 text-center text-[12px] text-muted-foreground">데이터 없음</div>
-              )}
-              <div
-                className="flex-1 min-h-0"
-                style={{ display: 'grid', gridTemplateRows: `repeat(${pageSize}, 1fr)` }}
-              >
-                {rows.map((row, rowIndex) => {
-                  const isHighlighted = highlightedRow === rowIndex;
+            <table className="h-full w-full table-fixed border-collapse text-left text-[12px]">
+              <colgroup>
+                {listFields.map((f, colIndex) => {
+                  const fieldName = String(f.define_field_name ?? '');
+                  const korName = f.define_field_kor_name;
+                  const isNumberCol = isNumberColumnField(fieldName, korName);
+                  const colWidth = listColWidthsPct?.[colIndex];
+                  const colMinPx = getListColMinPx(fieldName, korName);
                   return (
-                    <button
-                      key={rowIndex}
-                      type="button"
-                      onClick={() => handleRowClick(rowIndex)}
-                      className={cn(
-                        'flex w-full items-center border-b border-border px-4 text-left text-[12px] transition-colors hover:bg-primary/5 min-h-0 overflow-hidden',
-                        isHighlighted && 'bg-primary/10'
-                      )}
-                    >
-                      {listFields.map((f) => {
-                        const display = useFacilityCols
-                          ? formatRoadLedgerFacilityCellValue(
-                              String(f.define_field_name),
-                              row as Record<string, unknown>
-                            )
-                          : (() => {
-                              const fieldName = String(f.define_field_name ?? '');
-                              const v = getRowValueByField(row, fieldName);
-                              const meta =
-                                detailFields.find(
-                                  (df) =>
-                                    String(df.define_field_name ?? '').trim().toLowerCase() ===
-                                    fieldName.trim().toLowerCase()
-                                ) ?? f;
-                              return formatDefineFieldDisplayValue(
-                                v,
-                                meta.define_field_type,
-                                codesByField[fieldName.trim().toLowerCase()]
-                              );
-                            })();
-                        return (
-                          <span key={String(f.define_field_name)} className="flex-1 min-w-0 truncate pl-2 first:pl-0 text-muted-foreground">
-                            {display}
-                          </span>
-                        );
-                      })}
-                    </button>
+                    <col
+                      key={fieldName}
+                      style={{
+                        ...(colWidth != null ? { width: `${colWidth}%` } : {}),
+                        minWidth: colMinPx,
+                        ...(isNumberCol ? { maxWidth: colMinPx } : {}),
+                      }}
+                    />
                   );
                 })}
-              </div>
-            </>
+              </colgroup>
+              <thead className="bg-slate-100 dark:bg-muted">
+                <tr>
+                  {listFields.map((f) => {
+                    const fieldName = String(f.define_field_name ?? '');
+                    const korName = f.define_field_kor_name;
+                    const isNumberCol = isNumberColumnField(fieldName, korName);
+                    const headerLabel = getDefineFieldDisplayLabel(fieldName, korName);
+                    return (
+                      <th
+                        key={fieldName}
+                        className={cn(
+                          'min-w-0 truncate border-b border-border px-2 py-1.5 align-middle text-[12px] font-medium text-slate-500 dark:text-muted-foreground',
+                          isNumberCol ? 'text-center' : 'text-left'
+                        )}
+                        title={headerLabel}
+                      >
+                        {headerLabel}
+                      </th>
+                    );
+                  })}
+                </tr>
+              </thead>
+              {rows.length === 0 ? (
+                <tbody>
+                  <tr>
+                    <td
+                      colSpan={listFields.length}
+                      className="px-4 py-6 text-center text-[12px] text-muted-foreground"
+                    >
+                      데이터 없음
+                    </td>
+                  </tr>
+                </tbody>
+              ) : (
+                <tbody className="h-full">
+                  {Array.from({ length: pageSize }, (_, rowIndex) => {
+                    const row = rows[rowIndex] as Record<string, unknown> | undefined;
+                    const rowHeightPct = 100 / pageSize;
+                    if (!row) {
+                      return (
+                        <tr
+                          key={`pad-${rowIndex}`}
+                          style={{ height: `${rowHeightPct}%` }}
+                          aria-hidden
+                        >
+                          {listFields.map((f) => (
+                            <td
+                              key={String(f.define_field_name)}
+                              className="px-2 first:pl-4 last:pr-4"
+                            />
+                          ))}
+                        </tr>
+                      );
+                    }
+                    const isHighlighted = highlightedRow === rowIndex;
+                    return (
+                      <tr
+                        key={rowIndex}
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => handleRowClick(rowIndex)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            handleRowClick(rowIndex);
+                          }
+                        }}
+                        style={{ height: `${rowHeightPct}%` }}
+                        className={cn(
+                          'cursor-pointer border-b border-border transition-colors hover:bg-primary/5',
+                          isHighlighted && 'bg-primary/10'
+                        )}
+                      >
+                        {listFields.map((f) => {
+                          const fieldName = String(f.define_field_name ?? '');
+                          const korName = f.define_field_kor_name;
+                          const isNumberCol = isNumberColumnField(fieldName, korName);
+                          const display = useFacilityCols
+                            ? formatRoadLedgerFacilityCellValue(fieldName, row)
+                            : (() => {
+                                const v = getRowValueByField(row, fieldName);
+                                const meta =
+                                  detailFields.find(
+                                    (df) =>
+                                      String(df.define_field_name ?? '').trim().toLowerCase() ===
+                                      fieldName.trim().toLowerCase()
+                                  ) ?? f;
+                                return formatDefineFieldDisplayValue(
+                                  v,
+                                  meta.define_field_type,
+                                  codesByField[fieldName.trim().toLowerCase()]
+                                );
+                              })();
+                          return (
+                            <td
+                              key={fieldName}
+                              className={cn(
+                                'min-w-0 truncate px-2 first:pl-4 last:pr-4 text-slate-900 dark:text-foreground',
+                                isNumberCol && 'text-center'
+                              )}
+                              title={display}
+                            >
+                              {display}
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              )}
+            </table>
           )}
           
         </div>
@@ -1377,8 +1879,13 @@ export function LayerDataPanel({
             <div className="flex items-center gap-1">
               <button
                 type="button"
-                disabled={page <= 1 || loading}
-                onClick={() => loadPage(page - 1)}
+                disabled={page <= 1}
+                aria-busy={loading}
+                onClick={() => {
+                  if (loading || page <= 1) return;
+                  paginationOnlyLoadRef.current = true;
+                  loadPage(page - 1, undefined, { paginationOnly: true });
+                }}
                 className="rounded border border-border bg-background px-2 py-0.5 text-[11px] text-muted-foreground disabled:opacity-50 disabled:cursor-not-allowed hover:bg-muted/50"
               >
                 이전
@@ -1386,8 +1893,13 @@ export function LayerDataPanel({
               <span className="px-1.5 text-[11px] text-muted-foreground">{page}페이지</span>
               <button
                 type="button"
-                disabled={rows.length < pageSize || loading}
-                onClick={() => loadPage(page + 1)}
+                disabled={!hasNextListPage}
+                aria-busy={loading}
+                onClick={() => {
+                  if (loading || !hasNextListPage) return;
+                  paginationOnlyLoadRef.current = true;
+                  loadPage(page + 1, undefined, { paginationOnly: true });
+                }}
                 className="rounded border border-border bg-background px-2 py-0.5 text-[11px] text-muted-foreground disabled:opacity-50 disabled:cursor-not-allowed hover:bg-muted/50"
               >
                 다음

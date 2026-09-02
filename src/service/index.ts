@@ -30,6 +30,8 @@ import * as roadNetworkService from './roadNetworkService';
 import * as roadUseLedgerService from './roadUseLedgerService';
 import * as roadFrontageBuildingService from './roadFrontageBuildingService';
 import * as roadFrontageMarkerService from './roadFrontageMarkerService';
+import * as radiationShelterService from './radiationShelterService';
+import * as waterPlaySignService from './waterPlaySignService';
 import * as riverUseLedgerService from './riverUseLedgerService';
 import * as usageDataAsService from './usageDataAsService';
 import * as occupationLedgerService from './occupationLedgerService';
@@ -101,6 +103,8 @@ export {
   roadUseLedgerService,
   roadFrontageBuildingService,
   roadFrontageMarkerService,
+  radiationShelterService,
+  waterPlaySignService,
   riverUseLedgerService,
   usageDataAsService,
   occupationLedgerService,

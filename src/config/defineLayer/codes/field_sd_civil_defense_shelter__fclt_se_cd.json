@@ -1,0 +1,18 @@
+[
+  {
+    "define_code_name": "1",
+    "define_code_kor_name": "정부지원시설"
+  },
+  {
+    "define_code_name": "2",
+    "define_code_kor_name": "지자체시설"
+  },
+  {
+    "define_code_name": "3",
+    "define_code_kor_name": "공공용시설"
+  },
+  {
+    "define_code_name": "4",
+    "define_code_kor_name": "민간시설"
+  }
+]

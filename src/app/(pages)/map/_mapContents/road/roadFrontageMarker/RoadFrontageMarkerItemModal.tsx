@@ -1,7 +1,8 @@
 'use client';
 
-import { useCallback, useEffect, useId, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
+import { cn } from '@/lib/utils';
 import { AddressSearchPanel } from '../../../_mapComponents/addressSearch/AddressSearchPanel';
 import type { VWorldAddressItem } from '../../../_mapComponents/addressSearch/vworldAddressSearch';
 import { formatAddressStripSidoSigungu } from '@/lib/formatAddressStripAdmin';
@@ -12,12 +13,14 @@ import {
 import { fetchInstallPlacePreview } from './fetchInstallPlacePreview';
 
 const fieldClass =
-  'h-7 w-full min-w-0 rounded border border-border bg-background px-1.5 text-[11px] text-foreground outline-none focus:border-primary focus:ring-1 focus:ring-primary/25';
-const fieldSearchClass =
-  'relative z-20 flex h-7 w-full min-w-0 items-center overflow-visible rounded border border-border bg-background px-1';
+  'h-7 w-full min-w-0 border-0 bg-transparent px-0.5 text-[11px] text-foreground outline-none focus:bg-muted/40';
 const fieldViewClass =
-  'flex min-h-7 w-full min-w-0 items-center rounded border border-border bg-background px-1.5 text-[11px] text-foreground';
-const labelClass = 'mb-0.5 block text-[11px] text-muted-foreground';
+  'flex min-h-7 w-full min-w-0 items-center text-[11px] text-foreground';
+const modalTableClass = 'w-full table-fixed border-collapse text-[11px]';
+const modalThClass =
+  'border border-border bg-muted px-2 py-1.5 text-left align-middle font-medium text-muted-foreground break-keep';
+const modalTdClass = 'border border-border bg-background px-1.5 py-0.5 align-middle';
+const modalSearchWrapClass = 'relative z-20 min-w-0 overflow-visible';
 const btnPrimary =
   'inline-flex h-7 items-center gap-1 rounded border border-primary bg-primary px-2 text-[11px] font-medium text-white hover:bg-primary/90 disabled:opacity-50';
 const btnGhost =
@@ -39,6 +42,22 @@ type Props = {
   overlayLeftPx: number;
   overlayWidthPx: number;
 };
+
+function ModalFormTable({ children }: { children: ReactNode }) {
+  return (
+    <div className="overflow-hidden rounded border border-border">
+      <table className={modalTableClass}>
+        <colgroup>
+          <col className="w-[22%]" />
+          <col className="w-[28%]" />
+          <col className="w-[22%]" />
+          <col className="w-[28%]" />
+        </colgroup>
+        <tbody>{children}</tbody>
+      </table>
+    </div>
+  );
+}
 
 function displayText(value: string | number | null | undefined) {
   if (value == null) return '—';
@@ -174,146 +193,145 @@ export function RoadFrontageMarkerItemModal({
         </div>
 
         <div className="min-h-0 flex-1 overflow-y-auto overflow-x-visible px-3 py-2 scrollbar-thin">
-          <div className="space-y-1.5 overflow-visible">
-            <div className="grid grid-cols-2 gap-1.5 overflow-visible">
+          <ModalFormTable>
+            <tr>
+              <th className={modalThClass}>설치 위치</th>
               {readOnly ? (
-                <>
-                  <div>
-                    <span className={labelClass}>설치 위치</span>
-                    <div className={fieldViewClass}>
-                      {displayText(normalizeMarkerInstallLocation(draft.installLocation))}
-                    </div>
+                <td className={modalTdClass}>
+                  <div className={fieldViewClass}>
+                    {displayText(normalizeMarkerInstallLocation(draft.installLocation))}
                   </div>
-                  <div>
-                    <span className={labelClass}>지목</span>
-                    <div className={fieldViewClass}>{displayText(draft.landCategory)}</div>
-                  </div>
-                  <div>
-                    <span className={labelClass}>지점거리</span>
-                    <div className={fieldViewClass}>{displayText(draft.stationDistance)}</div>
-                  </div>
-                  <div>
-                    <span className={labelClass}>표지</span>
-                    <div className={fieldViewClass}>{displayText(draft.sign)}</div>
-                  </div>
-                  <div>
-                    <span className={labelClass}>소유자 성명</span>
-                    <div className={fieldViewClass}>{displayText(draft.ownerName)}</div>
-                  </div>
-                  <div>
-                    <span className={labelClass}>소유자 주소</span>
-                    <div className={fieldViewClass}>{displayText(draft.ownerAddress)}</div>
-                  </div>
-                  <div className="col-span-2">
-                    <span className={labelClass}>비고</span>
-                    <div className={fieldViewClass}>{displayText(draft.remark)}</div>
-                  </div>
-                </>
+                </td>
               ) : (
-                <>
-                  <div className="relative z-20 min-w-0">
-                    <span className={labelClass}>설치 위치</span>
-                    <div className={fieldSearchClass}>
-                      <AddressSearchPanel
-                        vworldApiKey={vworldApiKey}
-                        layout="field"
-                        compact
-                        fieldDropdown="wide"
-                        fieldDropdownAlign="start"
-                        placeholder="주소 검색 (지번/도로명)"
-                        initialQuery={draft.installLocation}
-                        onClear={() =>
-                          onChange((prev) => ({
-                            ...prev,
-                            installLocation: '',
-                            landCategory: '',
-                            lon: null,
-                            lat: null,
-                          }))
-                        }
-                        onQueryChange={(q) =>
-                          onChange((prev) => ({
-                            ...prev,
-                            installLocation: normalizeMarkerInstallLocation(q),
-                          }))
-                        }
-                        onSelect={applyInstallFromSearch}
-                      />
-                    </div>
-                  </div>
-                  <label className="block min-w-0">
-                    <span className={labelClass}>지목</span>
-                    <input
-                      className={fieldClass}
-                      value={draft.landCategory}
-                      placeholder="예: 대"
-                      onChange={(e) => onChange({ ...draft, landCategory: e.target.value })}
-                    />
-                  </label>
-                  <label className="block min-w-0">
-                    <span className={labelClass}>지점거리</span>
-                    <input
-                      className={fieldClass}
-                      inputMode="decimal"
-                      value={draft.stationDistance}
-                      onChange={(e) =>
-                        onChange((prev) => ({
-                          ...prev,
-                          stationDistance: sanitizeStationDistance(e.target.value),
-                        }))
-                      }
-                    />
-                  </label>
-                  <label className="block min-w-0">
-                    <span className={labelClass}>표지</span>
-                    <input
-                      className={fieldClass}
-                      value={draft.sign}
-                      onChange={(e) => onChange({ ...draft, sign: e.target.value })}
-                    />
-                  </label>
-                  <label className="block min-w-0">
-                    <span className={labelClass}>소유자 성명</span>
-                    <input
-                      className={fieldClass}
-                      value={draft.ownerName}
-                      onChange={(e) => onChange({ ...draft, ownerName: e.target.value })}
-                    />
-                  </label>
-                  <div className="relative z-10 min-w-0">
-                    <span className={labelClass}>소유자 주소</span>
-                    <div className={fieldSearchClass}>
-                      <AddressSearchPanel
-                        vworldApiKey={vworldApiKey}
-                        layout="field"
-                        compact
-                        fieldDropdown="wide"
-                        fieldDropdownAlign="end"
-                        placeholder="주소 검색 (도로명/지번)"
-                        initialQuery={draft.ownerAddress}
-                        onClear={() => onChange({ ...draft, ownerAddress: '' })}
-                        onQueryChange={(q) => onChange({ ...draft, ownerAddress: q })}
-                        onSelect={applyOwnerAddressFromSearch}
-                      />
-                    </div>
-                  </div>
-                  <label className="col-span-2 block">
-                    <span className={labelClass}>비고</span>
-                    <input
-                      className={fieldClass}
-                      value={draft.remark}
-                      onChange={(e) => onChange({ ...draft, remark: e.target.value })}
-                    />
-                  </label>
-                </>
+                <td className={cn(modalTdClass, modalSearchWrapClass, 'z-20')}>
+                  <AddressSearchPanel
+                    vworldApiKey={vworldApiKey}
+                    layout="field"
+                    compact
+                    fieldDropdown="wide"
+                    fieldDropdownAlign="start"
+                    placeholder="주소 검색 (지번/도로명)"
+                    initialQuery={draft.installLocation}
+                    onClear={() =>
+                      onChange((prev) => ({
+                        ...prev,
+                        installLocation: '',
+                        landCategory: '',
+                        lon: null,
+                        lat: null,
+                      }))
+                    }
+                    onQueryChange={(q) =>
+                      onChange((prev) => ({
+                        ...prev,
+                        installLocation: normalizeMarkerInstallLocation(q),
+                      }))
+                    }
+                    onSelect={applyInstallFromSearch}
+                  />
+                </td>
               )}
-            </div>
-            {error ? (
-              <p className="rounded border border-red-200 bg-red-50 px-2 py-1.5 text-[11px] text-red-700 dark:border-red-800 dark:bg-red-950/40 dark:text-red-300">
-                {error}
-              </p>
-            ) : null}
-          </div>
+              <th className={modalThClass}>지목</th>
+              <td className={modalTdClass}>
+                {readOnly ? (
+                  <div className={fieldViewClass}>{displayText(draft.landCategory)}</div>
+                ) : (
+                  <input
+                    className={fieldClass}
+                    value={draft.landCategory}
+                    placeholder="예: 대"
+                    onChange={(e) => onChange({ ...draft, landCategory: e.target.value })}
+                  />
+                )}
+              </td>
+            </tr>
+            <tr>
+              <th className={modalThClass}>지점거리</th>
+              <td className={modalTdClass}>
+                {readOnly ? (
+                  <div className={fieldViewClass}>{displayText(draft.stationDistance)}</div>
+                ) : (
+                  <input
+                    className={fieldClass}
+                    inputMode="decimal"
+                    value={draft.stationDistance}
+                    onChange={(e) =>
+                      onChange((prev) => ({
+                        ...prev,
+                        stationDistance: sanitizeStationDistance(e.target.value),
+                      }))
+                    }
+                  />
+                )}
+              </td>
+              <th className={modalThClass}>표지</th>
+              <td className={modalTdClass}>
+                {readOnly ? (
+                  <div className={fieldViewClass}>{displayText(draft.sign)}</div>
+                ) : (
+                  <input
+                    className={fieldClass}
+                    value={draft.sign}
+                    onChange={(e) => onChange({ ...draft, sign: e.target.value })}
+                  />
+                )}
+              </td>
+            </tr>
+            <tr>
+              <th className={modalThClass}>소유자 성명</th>
+              <td className={modalTdClass}>
+                {readOnly ? (
+                  <div className={fieldViewClass}>{displayText(draft.ownerName)}</div>
+                ) : (
+                  <input
+                    className={fieldClass}
+                    value={draft.ownerName}
+                    onChange={(e) => onChange({ ...draft, ownerName: e.target.value })}
+                  />
+                )}
+              </td>
+              <th className={modalThClass}>소유자 주소</th>
+              {readOnly ? (
+                <td className={modalTdClass}>
+                  <div className={fieldViewClass}>{displayText(draft.ownerAddress)}</div>
+                </td>
+              ) : (
+                <td className={cn(modalTdClass, modalSearchWrapClass, 'z-10')}>
+                  <AddressSearchPanel
+                    vworldApiKey={vworldApiKey}
+                    layout="field"
+                    compact
+                    fieldDropdown="wide"
+                    fieldDropdownAlign="end"
+                    placeholder="주소 검색 (도로명/지번)"
+                    initialQuery={draft.ownerAddress}
+                    onClear={() => onChange({ ...draft, ownerAddress: '' })}
+                    onQueryChange={(q) => onChange({ ...draft, ownerAddress: q })}
+                    onSelect={applyOwnerAddressFromSearch}
+                  />
+                </td>
+              )}
+            </tr>
+            <tr>
+              <th className={modalThClass}>비고</th>
+              <td colSpan={3} className={modalTdClass}>
+                {readOnly ? (
+                  <div className={fieldViewClass}>{displayText(draft.remark)}</div>
+                ) : (
+                  <input
+                    className={fieldClass}
+                    value={draft.remark}
+                    onChange={(e) => onChange({ ...draft, remark: e.target.value })}
+                  />
+                )}
+              </td>
+            </tr>
+          </ModalFormTable>
+          {error ? (
+            <p className="mt-1.5 rounded border border-red-200 bg-red-50 px-2 py-1.5 text-[11px] text-red-700 dark:border-red-800 dark:bg-red-950/40 dark:text-red-300">
+              {error}
+            </p>
+          ) : null}
         </div>
 
         <div className="flex shrink-0 items-center justify-end gap-1 border-t border-border px-3 py-1.5">

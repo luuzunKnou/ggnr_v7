@@ -1,7 +1,7 @@
 [
   {
     "define_field_name": "ogc_fid",
-    "define_field_kor_name": "ogc_fid",
+    "define_field_kor_name": "번호",
     "define_field_type": "NUMBER",
     "define_field_idx": 1,
     "define_field_is_required": "true",

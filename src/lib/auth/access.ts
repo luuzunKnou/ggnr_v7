@@ -15,11 +15,9 @@ import {
   SERP_TYPE_READ,
   SERP_TYPE_WRITE,
 } from '@/database/schema/serp_map';
+import { isSuperUser } from '@/lib/auth/superUser';
 
-/** 슈퍼계정 su: 비공개 서비스·시스템 전부 허용 */
-export function isSuperUser(usrId: string | null | undefined): boolean {
-  return usrId === 'su';
-}
+export { isSuperUser } from '@/lib/auth/superUser';
 
 export type UserAccessSnapshot = {
   usrId: string;

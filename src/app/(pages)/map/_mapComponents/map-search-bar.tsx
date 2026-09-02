@@ -29,6 +29,7 @@ import { canAccessPrivateSystem } from '@/lib/accessClient';
 import { useMyAccessSnapshot } from '@/hooks/useMyAccessSnapshot';
 import { useConsoleMenuAccess } from '@/hooks/useConsoleMenuAccess';
 import { hasAnyDevConsoleAccess } from '@/lib/consoleMenuAccess/client';
+import { isSuperUser } from '@/lib/auth/superUser';
 import { ResourceAccessDeniedDialog } from '@/app/(pages)/_components/AccessRequest';
 import { ThemeToggle } from '@/app/(pages)/(index)/theme-toggle';
 import { scrubOccupationLedgerFromMapSearchParams } from '@/lib/occupationLedgerBinding';
@@ -289,7 +290,7 @@ export function MapSearchBar({
 
   const showDebugUi = mapContext?.showDebugUi ?? false;
   const canToggleGeoserverLog = useMemo(() => {
-    if (String(session?.user?.id ?? '').trim() === 'su') return true;
+    if (isSuperUser(session?.user?.id)) return true;
     if (consoleAccessLoading) return false;
     return hasAnyDevConsoleAccess(consoleMenuLevels);
   }, [session?.user?.id, consoleAccessLoading, consoleMenuLevels]);

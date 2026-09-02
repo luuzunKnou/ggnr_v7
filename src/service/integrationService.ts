@@ -1,7 +1,7 @@
 import { pool } from '@/database/db';
 import { runKais, defaultDailyWindow, resolveKaisSggCode } from '@/integrations/kais';
 import { getSafetydataDatasetById, SAFETYDATA_DATASETS } from '@/integrations/safetydata.config';
-import { getSafetydataTargetSchema } from '@/integrations/safetydataHttp';
+import { getSafetydataTargetSchema, hasSafetydataDatasetApiKey } from '@/integrations/safetydataHttp';
 import { ingestSafetydataDatasetToLayer } from '@/integrations/safetydataIngest';
 import { runKrasLayerSync, type KrasLayerSyncScope } from '@/integrations/krasLayerSync';
 import type { KrasIntegrationTarget } from '@/integrations/krasLayerSync.config';
@@ -10,7 +10,7 @@ import { appendLinkageError, formatLinkageError } from '@/integrations/linkageEr
 
 type Params = Record<string, unknown>;
 
-export type IntegrationSystem = 'KAIS' | 'KRAS' | 'KORPES' | 'SEUMTEO' | 'SAEOL' | 'SAFETYDATA' | 'FMS' | 'NEXTGEN';
+export type IntegrationSystem = 'KAIS' | 'KRAS' | 'KORPES' | 'SEUMTEO' | 'SAEOL' | 'SAFETYDATA' | 'FMS' | 'NEXTGEN' | 'GEOM';
 
 const HARDCODED_KAIS_APP_KEY = 'U01TX0FVVEgyMDIzMDUzMDE3MzU1NDExMzgxMTM=';
 
@@ -67,7 +67,8 @@ function normalizeSystem(v: unknown): IntegrationSystem {
     s === 'SAEOL' ||
     s === 'SAFETYDATA' ||
     s === 'FMS' ||
-    s === 'NEXTGEN'
+    s === 'NEXTGEN' ||
+    s === 'GEOM'
   )
     return s;
   throw new Error(`Unknown integration system: ${s}`);
@@ -87,13 +88,25 @@ async function updateIntegrationJobProgress(ijlKey: number | undefined, message:
   await pool.query(`update integration_job_log set ijl_message=$2 where ijl_key=$1`, [ijlKey, message]);
 }
 
+export async function listGeomIntegrationTables(_p: Params) {
+  const { listGeomIntegrationTables: listTables } = await import('@/integrations/geomIntegration');
+  return listTables();
+}
+
+export async function listGeomIntegrationColumns(p: Params) {
+  const tableName = String(p.tableName ?? '').trim();
+  if (!tableName) throw new Error('tableName이 필요합니다.');
+  const { listGeomIntegrationColumns: listCols } = await import('@/integrations/geomIntegration');
+  return listCols({ tableName });
+}
+
 export async function listSafetydataDatasets(_p: Params) {
   return {
     rows: SAFETYDATA_DATASETS.map((d) => ({
       id: d.id,
       tableNameKo: d.tableNameKo,
       tableNameEn: d.tableNameEn,
-      hasApiKey: Boolean(d.apiKey?.trim()),
+      hasApiKey: hasSafetydataDatasetApiKey(d),
     })),
   };
 }
@@ -196,7 +209,7 @@ export async function runIntegration(p: Params) {
         `[SAFETYDATA RUN] runAll=${runAll} datasetId=${singleId || '__ALL__'} targetSchema=${getSafetydataTargetSchema()}`
       );
       if (runAll) {
-        const targets = SAFETYDATA_DATASETS.filter((d) => d.apiKey?.trim());
+        const targets = SAFETYDATA_DATASETS.filter((d) => hasSafetydataDatasetApiKey(d));
         const total = targets.length;
         if (total === 0) {
           throw new Error('API 키가 설정된 재난안전데이터 데이터셋이 없습니다.');
@@ -304,6 +317,40 @@ export async function runIntegration(p: Params) {
       await updateIntegrationJobProgress(ijlKey, r.message);
       if (r.failed > 0 && r.success === 0) {
         throw new Error(r.message);
+      }
+    } else if (system === 'GEOM') {
+      const tableName = String(p.tableName ?? '').trim();
+      const addressColumn = String(p.addressColumn ?? '').trim();
+      const placeNameColumn = String(p.placeNameColumn ?? '').trim();
+      const geomColumn = String(p.geomColumn ?? '').trim();
+      if (!tableName || (!addressColumn && !placeNameColumn)) {
+        throw new Error('tableName과 주소·장소명 컬럼 중 하나 이상이 필요합니다.');
+      }
+      const { runGeomIntegration } = await import('@/integrations/geomIntegration');
+      const colSummary = [
+        addressColumn ? `addr=${addressColumn}` : null,
+        placeNameColumn ? `place=${placeNameColumn}` : null,
+      ]
+        .filter(Boolean)
+        .join(', ');
+      await updateIntegrationJobProgress(
+        ijlKey,
+        `진행중 | GEOM | layer.${tableName} | ${colSummary}`
+      );
+      const r = await runGeomIntegration({
+        tableName,
+        addressColumn: addressColumn || null,
+        placeNameColumn: placeNameColumn || null,
+        geomColumn: geomColumn || null,
+        ijlKey,
+        onProgress: (message) => updateIntegrationJobProgress(ijlKey, message),
+      });
+      await updateIntegrationJobProgress(
+        ijlKey,
+        `완료 | GEOM | layer.${tableName} | 성공 ${r.success} | 실패 ${r.fail} | 스킵 ${r.skip}`
+      );
+      if (r.success === 0 && r.total > 0) {
+        throw new Error(`GEOM 연계 실패: 성공 0 / 전체 ${r.total}`);
       }
     } else if (system === 'FMS') {
       await updateIntegrationJobProgress(

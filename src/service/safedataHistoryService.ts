@@ -38,6 +38,19 @@ function mapRow(r: typeof safedataHistory.$inferSelect): SafedataHistoryItem {
   };
 }
 
+function parseCreatedAtInput(raw?: string): string | undefined {
+  const s = String(raw ?? '').trim();
+  if (!s) return undefined;
+  const m = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!m) return undefined;
+  const y = Number(m[1]);
+  const mo = Number(m[2]);
+  const d = Number(m[3]);
+  const dt = new Date(y, mo - 1, d);
+  if (dt.getFullYear() !== y || dt.getMonth() !== mo - 1 || dt.getDate() !== d) return undefined;
+  return `${m[1]}-${m[2]}-${m[3]} 00:00:00`;
+}
+
 async function resolveCreatedBy(clientHint?: string): Promise<string> {
   const hint = String(clientHint ?? '').trim();
   if (hint) return hint;
@@ -103,6 +116,7 @@ export async function create(params: {
   ftrIdn?: string | number;
   contents?: string;
   createdBy?: string;
+  createdAt?: string;
 }): Promise<{ success: boolean; data?: SafedataHistoryItem; error?: string }> {
   const hisGubun = String(params?.hisGubun ?? '').trim();
   const ftrIdn = String(params?.ftrIdn ?? '').trim();
@@ -111,6 +125,11 @@ export async function create(params: {
     return { success: false, error: 'hisGubun과 ftrIdn이 필요합니다.' };
   }
   if (!contents) return { success: false, error: '내용을 입력해 주세요.' };
+
+  const createdAt = parseCreatedAtInput(params?.createdAt);
+  if (params?.createdAt != null && String(params.createdAt).trim() && !createdAt) {
+    return { success: false, error: '작성일시 형식이 올바르지 않습니다.' };
+  }
 
   try {
     const createdBy = await resolveCreatedBy(params?.createdBy);
@@ -121,6 +140,7 @@ export async function create(params: {
         ftrIdn,
         hisContents: contents,
         createdBy,
+        ...(createdAt ? { createdAt } : {}),
       })
       .returning();
     const row = rows[0];
@@ -131,20 +151,31 @@ export async function create(params: {
   }
 }
 
-/** 이력 내용 수정 (작성자·일시는 유지) */
+/** 이력 수정 (내용·작성자·작성일시) */
 export async function update(params: {
   id?: number;
   contents?: string;
+  createdBy?: string;
+  createdAt?: string;
 }): Promise<{ success: boolean; data?: SafedataHistoryItem; error?: string }> {
   const id = Number(params?.id);
   const contents = String(params?.contents ?? '').trim();
+  const createdBy = String(params?.createdBy ?? '').trim();
   if (!Number.isFinite(id) || id <= 0) return { success: false, error: 'id가 필요합니다.' };
   if (!contents) return { success: false, error: '내용을 입력해 주세요.' };
+  if (!createdBy) return { success: false, error: '작성자를 입력해 주세요.' };
+
+  const createdAt = parseCreatedAtInput(params?.createdAt);
+  if (!createdAt) return { success: false, error: '작성일시를 입력해 주세요.' };
 
   try {
     const rows = await db
       .update(safedataHistory)
-      .set({ hisContents: contents })
+      .set({
+        hisContents: contents,
+        createdBy,
+        createdAt,
+      })
       .where(eq(safedataHistory.historyKey, id))
       .returning();
     const row = rows[0];

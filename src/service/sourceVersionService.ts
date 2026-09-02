@@ -661,7 +661,8 @@ type PreparedCommitResult = {
 
 /** [진행] — prepare 세션을 live commit (Geo stop → 병합 → 빌드) */
 async function executePreparedSourceApplyCommit(
-  session: PendingSchemaConfirmSession
+  session: PendingSchemaConfirmSession,
+  onProgress?: (event: ApplySourceProgressEvent) => void | Promise<void>
 ): Promise<PreparedCommitResult> {
   const bundle = session.prepareBundle;
   if (!bundle) {
@@ -680,11 +681,19 @@ async function executePreparedSourceApplyCommit(
   let geoStartedOnSuccessPath = false;
 
   const log = (message: string) => console.log(`[SourceCodeUpload] commit: ${message}`);
+  const emit = async (
+    phase: ApplySourceProgressPhase,
+    message: string,
+    extra?: Partial<ApplySourceProgressEvent>
+  ) => {
+    log(message);
+    await onProgress?.({ phase, message, logLine: `[SourceCodeUpload] commit: ${message}`, ...extra });
+  };
 
   try {
     await enableMaintenanceForApply(`최신소스 적용 commit version=${session.version}`);
 
-    log('GeoServer 중지...');
+    await emit('geoserver-stop', 'GeoServer 중지...');
     const stopResult = await stopGeoServerAndVerify({ settleMs: GEOSERVER_STOP_SETTLE_MS });
     if (!stopResult.success) {
       throw new Error(
@@ -692,7 +701,7 @@ async function executePreparedSourceApplyCommit(
       );
     }
 
-    log('적용 직전 백업...');
+    await emit('merge-apply', '적용 직전 백업...', { mergeStep: 'backup' });
     const mergeRelPaths = await listMergeRelFiles(extractedRoot, excludePrefixes);
     rollback = await createSourceRollbackSnapshot({
       workspaceRoot,
@@ -701,12 +710,31 @@ async function executePreparedSourceApplyCommit(
       includeNext: !doRestart,
     });
 
-    log('live 병합...');
+    await emit('merge-apply', 'live 병합...', {
+      mergeStep: 'copy',
+      totalFiles,
+      appliedFiles: 0,
+      skippedFiles: 0,
+    });
     const copyResult = await copyRecursive({
       srcRoot: extractedRoot,
       dstRoot: workspaceRoot,
       excludePrefixes,
       totalFiles,
+      onProgress: (p) => {
+        void emit(
+          'merge-apply',
+          p.totalFiles > 0
+            ? `병합 ${p.appliedFiles}/${p.totalFiles}`
+            : `병합 ${p.appliedFiles}건`,
+          {
+            mergeStep: 'copy',
+            appliedFiles: p.appliedFiles,
+            skippedFiles: p.skippedFiles,
+            totalFiles: p.totalFiles,
+          }
+        );
+      },
     });
 
     const stopMessage = stopResult.message;
@@ -736,18 +764,20 @@ async function executePreparedSourceApplyCommit(
     if (doRestart && (restartMode === 'exit' || restartMode === 'launcher')) {
       if (!includeNodeModules && rollback) {
         await snapshotNodeModulesInto(rollback, workspaceRoot);
+        await emit('npm-install', 'npm install (dev)…');
         await runApplyNpmInstallDev(async (line) => {
-          log(`npm: ${line}`);
+          await emit('npm-install', line.startsWith('npm:') ? line : `npm: ${line}`);
         });
       }
       if (!isPrebuildTsxAvailable()) {
+        await emit('npm-install', 'npm install (tsx)…');
         await runApplyNpmInstallDev(async (line) => {
-          log(`npm(tsx): ${line}`);
+          await emit('npm-install', line.startsWith('npm') ? line : `npm(tsx): ${line}`);
         });
       }
-      log('사전 빌드...');
+      await emit('build', '사전 빌드…');
       await spawnNpmWithApplyLog(['run', 'build'], async (line) => {
-        log(`build: ${line}`);
+        await emit('build', line.startsWith('build:') ? line : `build: ${line}`);
       });
     }
 
@@ -792,6 +822,7 @@ async function executePreparedSourceApplyCommit(
 export async function confirmPendingSchemaApply(params: {
   pendingId: string;
   requestedBy: string;
+  onProgress?: (event: ApplySourceProgressEvent) => void | Promise<void>;
 }): Promise<SchemaConfirmResult> {
   const session = await resolvePendingSession(params.pendingId);
   if (!session) {
@@ -840,7 +871,7 @@ export async function confirmPendingSchemaApply(params: {
     let commitRollback: ApplyRollbackSnapshot | null = snapshot;
 
     if (prepareOnly) {
-      const commit = await executePreparedSourceApplyCommit(session);
+      const commit = await executePreparedSourceApplyCommit(session, params.onProgress);
       appliedFiles = commit.appliedFiles;
       skippedFiles = commit.skippedFiles;
       geoserverMessage = commit.geoserver.message;

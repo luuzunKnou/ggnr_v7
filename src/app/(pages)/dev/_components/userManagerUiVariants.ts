@@ -11,10 +11,11 @@ export const USER_MANAGER_UI_STYLE = {
   tableWrap: 'flex min-h-0 flex-1 flex-col overflow-hidden border border-border',
   tableScroll: 'min-h-0 flex-1 overflow-auto',
   table: 'w-full text-xs border-collapse',
-  tableHead: 'bg-muted [&_th]:border-b [&_th]:border-border',
+  tableHead:
+    'bg-muted h-[30px] [&_th]:h-[30px] [&_th]:max-h-[30px] [&_th]:align-middle [&_th]:overflow-hidden [&_th]:border-b [&_th]:border-border',
   tableRow:
-    'border-b border-border cursor-pointer hover:bg-muted/50 transition-colors [&>td]:border-r [&>td]:border-border/60 [&>td:last-child]:border-r-0',
-  tableCell: 'px-2 py-2',
+    'h-[30px] max-h-[30px] border-b border-border cursor-pointer hover:bg-muted/50 transition-colors [&>td]:h-[30px] [&>td]:max-h-[30px] [&>td]:align-middle [&>td]:overflow-hidden [&>td]:border-r [&>td]:border-border/60 [&>td:last-child]:border-r-0',
+  tableCell: 'px-2 py-0 align-middle',
   dialog:
     'sm:max-w-[1020px] p-0 gap-0 max-h-[92vh] overflow-hidden flex flex-col rounded-sm border-border',
   dialogHeader: 'border-b border-border px-3 py-2 bg-muted',
@@ -22,6 +23,26 @@ export const USER_MANAGER_UI_STYLE = {
   formPanel: 'rounded-sm border border-border bg-card p-3',
   sidePanel: 'rounded-sm border border-border bg-card',
   footer: 'border-t border-border px-3 py-2',
+} as const;
+
+/** 접속현황 — 집계표 기준 행 높이 25.5px */
+export const USER_STATS_HISTORY_TABLE = {
+  tableHead:
+    'bg-muted h-[25.5px] [&_th]:h-[25.5px] [&_th]:max-h-[25.5px] [&_th]:align-middle [&_th]:overflow-hidden [&_th]:border-b [&_th]:border-border',
+  tableRow:
+    'h-[25.5px] max-h-[25.5px] border-b border-border hover:bg-muted/50 transition-colors [&>td]:h-[25.5px] [&>td]:max-h-[25.5px] [&>td]:align-middle [&>td]:overflow-hidden [&>td]:border-r [&>td]:border-border/60 [&>td:last-child]:border-r-0',
+  tableRowPivot:
+    'h-[25.5px] max-h-[25.5px] border-t border-border hover:bg-muted/50 transition-colors [&>td]:h-[25.5px] [&>td]:max-h-[25.5px] [&>td]:align-middle [&>td]:overflow-hidden',
+  tableCell: 'px-2 py-0 align-middle leading-[25.5px]',
+} as const;
+
+/** 사용자 관리 이력 — 행 높이 28.5px */
+export const USER_MGMT_HISTORY_TABLE = {
+  tableHead:
+    'bg-muted h-[28.5px] [&_th]:h-[28.5px] [&_th]:max-h-[28.5px] [&_th]:align-middle [&_th]:overflow-hidden [&_th]:border-b [&_th]:border-border',
+  tableRow:
+    'h-[28.5px] max-h-[28.5px] border-b border-border hover:bg-muted/50 transition-colors [&>td]:h-[28.5px] [&>td]:max-h-[28.5px] [&>td]:align-middle [&>td]:overflow-hidden [&>td]:border-r [&>td]:border-border/60 [&>td:last-child]:border-r-0',
+  tableCell: 'px-2 py-0 align-middle leading-[28.5px]',
 } as const;
 
 export type OrgVariantStyle = {

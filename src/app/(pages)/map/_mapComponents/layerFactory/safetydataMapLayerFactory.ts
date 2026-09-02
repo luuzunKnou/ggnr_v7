@@ -18,6 +18,12 @@ import { getGeoServerBase } from '@/lib/geoserverUrl';
 /** 병상정보 패널 — GeoServer WMS(병원 POI). `safetyMapLayerVisibility` 키와 동일 */
 export const SAFETY_HOSPITAL_POI_GEO_TABLE = 'sd_mois_hospital_poi' as const;
 
+/** 방사선 대피소 패널 — GeoServer WMS */
+export const RADIATION_SHELTER_GEO_TABLE = 'radiation_shelter' as const;
+
+/** 물놀이 표지판 패널 — GeoServer WMS */
+export const WATER_PLAY_SIGN_GEO_TABLE = 'water_play_sign' as const;
+
 /** 저수지 수위 패널(saftyJsj) — GeoServer WMS(저수지 제원 포인트) */
 export const SAFETY_RESERVOIR_MASTER_GEO_TABLE = 'sd_reservoir_master' as const;
 
@@ -28,6 +34,7 @@ export const SAFETY_FAC_PANEL_GEO_TABLE_NAMES: readonly string[] = [
   'sd_heat_mitigation_facility',
   'sd_earthquake_outdoor_evac_site',
   'sd_tsunami_emergency_evac_site',
+  // 'sd_civil_defense_shelter',
   'sd_mois_displaced_temp_housing',
 ] as const;
 
@@ -55,24 +62,42 @@ export const SAFETY_MAP_GEOSERVER_OVERLAYS: {
     zIndex: 123,
     opacity: 0.88,
   },
+  // {
+  //   panelId: 'sd_civil_defense_shelter',
+  //   tableName: 'sd_civil_defense_shelter',
+  //   zIndex: 124,
+  //   opacity: 0.88,
+  // },
   {
     panelId: 'sd_mois_displaced_temp_housing',
     tableName: 'sd_mois_displaced_temp_housing',
-    zIndex: 124,
+    zIndex: 125,
     opacity: 0.88,
   },
   /** 병상정보 패널 진입 시 자동 표시 (테이블명 = WMS LAYERS / visibility 키) */
   {
     panelId: SAFETY_HOSPITAL_POI_GEO_TABLE,
     tableName: SAFETY_HOSPITAL_POI_GEO_TABLE,
-    zIndex: 125,
+    zIndex: 126,
     opacity: 0.88,
   },
   /** 저수지 수위 패널(saftyJsj) — 제원 포인트 WMS */
   {
     panelId: SAFETY_RESERVOIR_MASTER_GEO_TABLE,
     tableName: SAFETY_RESERVOIR_MASTER_GEO_TABLE,
-    zIndex: 126,
+    zIndex: 127,
+    opacity: 0.88,
+  },
+  {
+    panelId: RADIATION_SHELTER_GEO_TABLE,
+    tableName: RADIATION_SHELTER_GEO_TABLE,
+    zIndex: 128,
+    opacity: 0.88,
+  },
+  {
+    panelId: WATER_PLAY_SIGN_GEO_TABLE,
+    tableName: WATER_PLAY_SIGN_GEO_TABLE,
+    zIndex: 129,
     opacity: 0.88,
   },
 ];

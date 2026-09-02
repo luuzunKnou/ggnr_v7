@@ -131,6 +131,14 @@ const TRANSPARENT_PIXEL =
 /** 이 길이 초과 시에만 POST (CQL 등으로 414 방지). 그 외는 GET — GeoServer가 POST body의 REQUEST를 못 읽는 환경 회피 */
 const WMS_GET_URL_MAX_LEN = 1800;
 
+function warnServiceWmsFallback(reason: string, detail?: unknown): void {
+  if (detail !== undefined) {
+    console.warn('[serviceLayer WMS]', reason, detail);
+  } else {
+    console.warn('[serviceLayer WMS]', reason);
+  }
+}
+
 function isRasterImageBytes(bytes: Uint8Array): boolean {
   if (bytes.length < 8) return false;
   let i = 0;
@@ -144,12 +152,15 @@ function isRasterImageBytes(bytes: Uint8Array): boolean {
 }
 
 async function readWmsImageBytes(res: Response): Promise<{ buffer: ArrayBuffer; mime: string }> {
+  const ct = (res.headers.get('content-type') ?? '').toLowerCase();
+  if (!res.ok || ct.includes('xml') || ct.includes('text/')) {
+    throw new Error(res.statusText || `HTTP ${res.status}`);
+  }
   const buffer = await res.arrayBuffer();
   const bytes = new Uint8Array(buffer);
-  if (!res.ok || !isRasterImageBytes(bytes)) {
-    throw new Error('wms-not-image');
+  if (!isRasterImageBytes(bytes)) {
+    throw new Error('WMS response is not a decodable image');
   }
-  const ct = (res.headers.get('content-type') ?? '').toLowerCase();
   const mime = ct.startsWith('image/') ? ct.split(';')[0]!.trim() : 'image/png';
   return { buffer, mime };
 }
@@ -158,69 +169,77 @@ function assignWmsImage(
   img: HTMLImageElement,
   buffer: ArrayBuffer,
   mime: string,
-  fail: () => void
+  onDecodeFail: () => void
 ): void {
   const blobUrl = URL.createObjectURL(new Blob([buffer], { type: mime }));
   img.onload = () => URL.revokeObjectURL(blobUrl);
   img.onerror = () => {
     URL.revokeObjectURL(blobUrl);
-    fail();
+    onDecodeFail();
   };
   img.src = blobUrl;
 }
 
-function loadWmsImage(img: HTMLImageElement, request: Promise<Response>, fail: () => void): void {
+function loadWmsImage(
+  img: HTMLImageElement,
+  request: Promise<Response>,
+  fail: (reason: string, detail?: unknown) => void
+): void {
   request
     .then(readWmsImageBytes)
-    .then(({ buffer, mime }) => assignWmsImage(img, buffer, mime, fail))
-    .catch(fail);
+    .then(({ buffer, mime }) =>
+      assignWmsImage(img, buffer, mime, () => fail('image decode failed'))
+    )
+    .catch((err) => fail('WMS load failed', err));
 }
 
 /**
- * WMS GetMap 로드.
- * - 기본: GET. URL이 길 때만 POST (AdvancedDispatchFilter 대응으로 SERVICE/REQUEST는 쿼리에 유지)
+ * WMS GetMap 로드 (serviceLayer 전용).
+ * - 짧은 URL: GET fetch — `img.src` 직결 시 XML 예외가 EncodingError로 터지는 것 방지
+ * - 긴 URL: POST. AdvancedDispatchFilter 대응으로 SERVICE/REQUEST는 쿼리에 유지
  * - 응답 매직바이트를 확인한 뒤에만 img 에 넣음 (XML·HTML 디코드 EncodingError 방지)
+ * - 실패 시 투명 픽셀 + console.warn (디버깅용)
  */
 function imageLoadFunctionPost(image: ImageWrapper, src: string): void {
   const img = image.getImage() as HTMLImageElement;
-  const fail = () => {
+  const fail = (reason: string, detail?: unknown) => {
+    warnServiceWmsFallback(reason, detail);
     img.src = TRANSPARENT_PIXEL;
   };
+
+  if (!src) {
+    fail('empty WMS src');
+    return;
+  }
+
   try {
-    if (!src) {
-      fail();
-      return;
-    }
+    let request: Promise<Response>;
+
     if (src.length <= WMS_GET_URL_MAX_LEN) {
-      loadWmsImage(img, fetch(src), fail);
-      return;
+      request = fetch(src, { method: 'GET' });
+    } else {
+      const url = new URL(src);
+      const body = url.search.startsWith('?') ? url.search.slice(1) : url.search;
+      if (!body) {
+        request = fetch(src, { method: 'GET' });
+      } else {
+        const params = new URLSearchParams(body);
+        const service = params.get('SERVICE') ?? params.get('service') ?? 'WMS';
+        const requestName = params.get('REQUEST') ?? params.get('request') ?? 'GetMap';
+        const baseUrl =
+          `${url.origin}${url.pathname}` +
+          `?SERVICE=${encodeURIComponent(service)}&REQUEST=${encodeURIComponent(requestName)}`;
+        request = fetch(baseUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body,
+        });
+      }
     }
 
-    const url = new URL(src);
-    const body = url.search.startsWith('?') ? url.search.slice(1) : url.search;
-    if (!body) {
-      loadWmsImage(img, fetch(src), fail);
-      return;
-    }
-
-    const params = new URLSearchParams(body);
-    const service = params.get('SERVICE') ?? params.get('service') ?? 'WMS';
-    const request = params.get('REQUEST') ?? params.get('request') ?? 'GetMap';
-    const baseUrl =
-      `${url.origin}${url.pathname}` +
-      `?SERVICE=${encodeURIComponent(service)}&REQUEST=${encodeURIComponent(request)}`;
-
-    loadWmsImage(
-      img,
-      fetch(baseUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body,
-      }),
-      fail
-    );
-  } catch {
-    fail();
+    loadWmsImage(img, request, fail);
+  } catch (err) {
+    fail('WMS load exception', err);
   }
 }
 

@@ -365,6 +365,32 @@ export function ShpToDbWizardModal({ open, onOpenChange, folderName, relativePat
         }
       }
 
+      // 신규 테이블: define(key 등) 반영 후 sync_log 시드 — «이력 조회»용
+      if (entry.table === 'created' && dhKey != null) {
+        try {
+          const logRes = await call('', 'POST', {
+            service: 'shpUploadService',
+            action: 'recordNewLayerImportLogs',
+            params: {
+              tableName: baseName,
+              dhKey,
+              group: group || undefined,
+            },
+          });
+          const ld = logRes?.data ?? logRes;
+          if (ld?.success && typeof ld.appendedCount === 'number') {
+            entry.appendCount = ld.appendedCount;
+          } else if (typeof entry.newData === 'number' && entry.newData > 0) {
+            entry.appendCount = entry.newData;
+          }
+        } catch {
+          /* 신규 sync_log 시드 실패해도 테이블 생성은 유지 */
+          if (typeof entry.newData === 'number' && entry.newData > 0) {
+            entry.appendCount = entry.newData;
+          }
+        }
+      }
+
       flushCounts();
       return entry;
     },

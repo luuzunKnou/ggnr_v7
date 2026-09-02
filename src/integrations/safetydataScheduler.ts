@@ -1,5 +1,6 @@
 import { KAIS_REFRESH_SCHEDULE } from '@/integrations/kais.config';
 import { SAFETYDATA_DATASETS, type SafetydataRefreshSchedule } from '@/integrations/safetydata.config';
+import { hasSafetydataDatasetApiKey } from '@/integrations/safetydataHttp';
 import { calendarSlotKey, intervalSlotKey } from '@/integrations/integrationSchedule';
 import { describeSafetydataSchedule } from '@/integrations/safetydata';
 import { ingestSafetydataDatasetToLayer } from '@/integrations/safetydataIngest';
@@ -40,7 +41,7 @@ async function runIngest(datasetId: string, label: string): Promise<void> {
  *   (개발 모드에서 5분 interval만 daily 배치 시각 1회로 축소)
  */
 export function startSafetydataScheduler(): void {
-  const withKey = SAFETYDATA_DATASETS.filter((d) => d.apiKey?.trim() && !d.excludeFromAutoScheduler);
+  const withKey = SAFETYDATA_DATASETS.filter((d) => hasSafetydataDatasetApiKey(d) && !d.excludeFromAutoScheduler);
   if (withKey.length === 0) {
     console.info(`${LOG} skip: no datasets with API keys`);
     return;
