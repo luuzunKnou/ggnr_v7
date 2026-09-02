@@ -16,6 +16,9 @@ type Props = {
   selectedIdx?: number | null
   /** 목록 행 선택 강조 — primary(파랑) / yellow */
   selectionTone?: 'primary' | 'yellow'
+  /** 스크롤 전까지 보여 줄 카드 수 (기본 7) */
+  maxVisibleCards?: number
+  className?: string
   onAdd?: () => void
   onRemove?: (index: number) => void
   onClick?: (item: LayerRowParcelItem, index: number) => void
@@ -29,6 +32,8 @@ export function UsageDataAsAddressList({
   items,
   selectedIdx = null,
   selectionTone = 'primary',
+  maxVisibleCards = MAX_VISIBLE_CARDS,
+  className,
   onAdd,
   onRemove,
   onClick,
@@ -36,7 +41,7 @@ export function UsageDataAsAddressList({
   emptyHintView = '등록된 항목이 없습니다.',
 }: Props) {
   return (
-    <div className="mt-4">
+    <div className={cn('mt-4', className)}>
       <div className="mb-2 flex items-center justify-between gap-2">
         <div className="text-[11px] font-medium text-muted-foreground">{title}</div>
         <div className="flex shrink-0 items-center gap-1">
@@ -56,11 +61,11 @@ export function UsageDataAsAddressList({
         <ul
           className={cn(
             'list-none space-y-1.5',
-            items.length > MAX_VISIBLE_CARDS && 'overflow-y-auto scrollbar-hide pr-0.5'
+            items.length > maxVisibleCards && 'overflow-y-auto scrollbar-hide pr-0.5'
           )}
           style={
-            items.length > MAX_VISIBLE_CARDS
-              ? { maxHeight: `${MAX_VISIBLE_CARDS * CARD_STACK_REM}rem` }
+            items.length > maxVisibleCards
+              ? { maxHeight: `${maxVisibleCards * CARD_STACK_REM}rem` }
               : undefined
           }
         >

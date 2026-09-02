@@ -22,7 +22,6 @@ import { MAP_AUTO_NAV_MAX_ZOOM } from "../../../_mapComponents/config/mapDefault
 import { canStartMapDrawInteraction } from "../../../_mapComponents/mapDrawInteraction";
 import { LayerRowAddButton } from "../../../_mapComponents/layerRowEdit";
 import { transformCoordinate } from "../../../_mapComponents/services/coordinateService";
-import { CONS_DATA_AS_WMS_LAYER_IDS } from "./consDataAsLayerId";
 import {
   CONS_DATA_AS_NEW_ID,
   formatRiverNamesLabel,
@@ -32,10 +31,11 @@ import {
   type ConsDataAsApiRow,
 } from "./riverConstructionLedgerMock";
 import { filterRiverConstructionLedgerRowsByWkt5181 } from "./riverConstructionLedgerSpatial";
+import {
+  clearConsDataAsWmsLayers,
+  ensureConsDataAsWmsLayersVisible,
+} from "./riverConstructionLedgerMapSync";
 
-function lowerLayerIds(ids: readonly string[]): string[] {
-  return ids.map((id) => id.toLowerCase());
-}
 type SpatialTool = "rectangle" | "polygon" | "circle";
 type SearchTab = "keyword" | "shape" | "boundary";
 
@@ -79,23 +79,9 @@ export function RiverConstructionLedgerListPanel({ onClose }: Props) {
 
   const spatialDrawRequest = mapContext?.spatialDrawRequest ?? null;
 
-  /** 패널 진입 시 공사대장 레이어 켜고 전체 extent로 지도 이동 */
+  /** 패널 진입 시 공사대장 본표 WMS만 켜고 전체 extent로 지도 이동 (필지 WMS는 하천점용처럼 끔) */
   useEffect(() => {
-    const ctx = mapContextRef.current;
-    const layerIds = lowerLayerIds(CONS_DATA_AS_WMS_LAYER_IDS);
-    if (!ctx?.setVisibleLayerNames) return;
-
-    ctx.setVisibleLayerNames((prev) => {
-      const next = new Set(prev);
-      let changed = false;
-      for (const lid of layerIds) {
-        if (!next.has(lid)) {
-          next.add(lid);
-          changed = true;
-        }
-      }
-      return changed ? next : prev;
-    });
+    ensureConsDataAsWmsLayersVisible(mapContextRef.current?.setVisibleLayerNames);
 
     let cancelled = false;
     void call("", "POST", {
@@ -131,16 +117,7 @@ export function RiverConstructionLedgerListPanel({ onClose }: Props) {
 
     return () => {
       cancelled = true;
-      const c = mapContextRef.current;
-      if (!c?.setVisibleLayerNames) return;
-      c.setVisibleLayerNames((prev) => {
-        const next = new Set(prev);
-        let changed = false;
-        for (const lid of layerIds) {
-          if (next.delete(lid)) changed = true;
-        }
-        return changed ? next : prev;
-      });
+      clearConsDataAsWmsLayers(mapContextRef.current?.setVisibleLayerNames);
     };
   }, []);
 

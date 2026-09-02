@@ -128,6 +128,10 @@ import {
   isRoadNetworkWmsLayerId,
 } from '../_mapContents/road/roadNetwork/roadNetworkLayerId';
 import {
+  ROAD_FRONTAGE_BUILDING_WMS_LAYER_ID,
+  ROAD_FRONTAGE_MARKER_ITEM_WMS_LAYER_ID,
+} from '../_mapContents/road/roadFrontage/roadFrontageLayerId';
+import {
   findOpenedOccupationLedgerSerEng,
   getOccupationLedgerBinding,
   getOccupationLedgerWmsLayerIds,
@@ -1814,6 +1818,124 @@ export default function OpenLayersMap({
           mapContext.applyRoadNetworkMapPickRef.current?.({
             rowId: buildRoadNetworkRowId(tableName, ogc),
             extent3857: pickIdentifyExtent3857(roadHit.features[0]?.data),
+          });
+          clearIdentifyIntake();
+          return;
+        }
+      }
+
+      /** 접도구역 건축물: road_frontage_building → 목록·상세 선택 */
+      if (
+        mapContext?.roadFrontageBuildingPanelOpen &&
+        mapContext.applyRoadFrontageBuildingMapPickRef
+      ) {
+        const buildingLid = ROAD_FRONTAGE_BUILDING_WMS_LAYER_ID.toLowerCase();
+        const buildingHit = withFeat.find((r) => {
+          const tn = String(r.tableName ?? '')
+            .trim()
+            .toLowerCase();
+          return tn === buildingLid && r.features.length > 0;
+        });
+        if (buildingHit) {
+          const overlapOptions: {
+            value: string;
+            label: string;
+            extent3857?: [number, number, number, number] | null;
+          }[] = [];
+          const seen = new Set<string>();
+          for (const feat of buildingHit.features) {
+            const ftrIdn =
+              pickIdentifyField(feat?.data, 'ftr_idn') ||
+              pickIdentifyField(feat?.data, 'ftrIdn');
+            if (!ftrIdn || seen.has(ftrIdn)) continue;
+            seen.add(ftrIdn);
+            const label =
+              pickIdentifyField(feat?.data, 'loc_adr') ||
+              pickIdentifyField(feat?.data, 'route_nam') ||
+              ftrIdn;
+            overlapOptions.push({
+              value: ftrIdn,
+              label,
+              extent3857: pickIdentifyExtent3857(feat?.data),
+            });
+          }
+          const first = overlapOptions[0];
+          if (!first) {
+            if (!cancelled) {
+              window.alert('클릭한 건축물의 대장번호를 읽을 수 없습니다.');
+            }
+            clearIdentifyIntake();
+            return;
+          }
+          mapContext.setRoadFrontageBuildingMapHitOptions?.(
+            overlapOptions.length > 1 ? overlapOptions : []
+          );
+          mapContext.applyRoadFrontageBuildingMapPickRef.current?.({
+            ftrIdn: first.value,
+            extent3857: first.extent3857,
+            overlapOptions,
+          });
+          clearIdentifyIntake();
+          return;
+        }
+      }
+
+      /** 접도구역 표주: road_frontage_marker_item → 노선 상세 선택 */
+      if (
+        mapContext?.roadFrontageMarkerPanelOpen &&
+        mapContext.applyRoadFrontageMarkerMapPickRef
+      ) {
+        const markerLid = ROAD_FRONTAGE_MARKER_ITEM_WMS_LAYER_ID.toLowerCase();
+        const markerHit = withFeat.find((r) => {
+          const tn = String(r.tableName ?? '')
+            .trim()
+            .toLowerCase();
+          return tn === markerLid && r.features.length > 0;
+        });
+        if (markerHit) {
+          const overlapOptions: {
+            value: string;
+            label: string;
+            extent3857?: [number, number, number, number] | null;
+          }[] = [];
+          const overlapMeta: {
+            ledgerId: string;
+            markerItemId: string;
+            label: string;
+            extent3857?: [number, number, number, number] | null;
+          }[] = [];
+          const seen = new Set<string>();
+          for (const feat of markerHit.features) {
+            const markerItemId = pickIdentifyField(feat?.data, 'id');
+            const parentId =
+              pickIdentifyField(feat?.data, 'parent_id') ||
+              pickIdentifyField(feat?.data, 'parentId');
+            if (!markerItemId || !parentId || seen.has(markerItemId)) continue;
+            seen.add(markerItemId);
+            const label =
+              pickIdentifyField(feat?.data, 'install_location') ||
+              pickIdentifyField(feat?.data, 'station_distance') ||
+              markerItemId;
+            const extent3857 = pickIdentifyExtent3857(feat?.data);
+            overlapOptions.push({ value: markerItemId, label, extent3857 });
+            overlapMeta.push({ ledgerId: parentId, markerItemId, label, extent3857 });
+          }
+          const first = overlapMeta[0];
+          if (!first) {
+            if (!cancelled) {
+              window.alert('클릭한 표주의 노선 정보를 읽을 수 없습니다.');
+            }
+            clearIdentifyIntake();
+            return;
+          }
+          mapContext.setRoadFrontageMarkerMapHitOptions?.(
+            overlapOptions.length > 1 ? overlapOptions : []
+          );
+          mapContext.applyRoadFrontageMarkerMapPickRef.current?.({
+            ledgerId: first.ledgerId,
+            markerItemId: first.markerItemId,
+            extent3857: first.extent3857,
+            overlapOptions,
           });
           clearIdentifyIntake();
           return;

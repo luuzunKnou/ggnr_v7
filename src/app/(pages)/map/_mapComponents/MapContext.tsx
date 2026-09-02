@@ -363,6 +363,43 @@ export type MapContextValue = {
   /** 접도구역 표주 패널 열림 */
   roadFrontageMarkerPanelOpen: boolean;
   setRoadFrontageMarkerPanelOpen: Dispatch<SetStateAction<boolean>>;
+  /** 접도구역 건축물 패널 열림 — 지도 식별 시 목록·상세 선택 */
+  roadFrontageBuildingPanelOpen: boolean;
+  setRoadFrontageBuildingPanelOpen: Dispatch<SetStateAction<boolean>>;
+  /**
+   * 지도에서 접도구역 건축물 레이어 식별 직후 목록이 키 선택·줌하도록 호출
+   * (RoadFrontageBuildingListPanel이 등록)
+   */
+  applyRoadFrontageBuildingMapPickRef: MutableRefObject<
+    | ((pick: {
+        ftrIdn: string;
+        extent3857?: [number, number, number, number] | null;
+        overlapOptions?: MapHitOverlapOption[];
+      }) => void)
+    | null
+  >;
+  roadFrontageBuildingMapHitOptions: MapHitOverlapOption[];
+  setRoadFrontageBuildingMapHitOptions: Dispatch<SetStateAction<MapHitOverlapOption[]>>;
+  /**
+   * 지도에서 접도구역 표주 레이어 식별 직후 목록이 키 선택·줌하도록 호출
+   * (RoadFrontageMarkerListPanel이 등록)
+   */
+  applyRoadFrontageMarkerMapPickRef: MutableRefObject<
+    | ((pick: {
+        ledgerId: string;
+        markerItemId: string;
+        extent3857?: [number, number, number, number] | null;
+        overlapOptions?: MapHitOverlapOption[];
+      }) => void)
+    | null
+  >;
+  roadFrontageMarkerMapHitOptions: MapHitOverlapOption[];
+  setRoadFrontageMarkerMapHitOptions: Dispatch<SetStateAction<MapHitOverlapOption[]>>;
+  /** 지도 클릭으로 연 표주 점 — 상세 패널에서 읽기 전용 모달 오픈 */
+  roadFrontageMarkerPendingItemPick: { ledgerId: string; markerItemId: string } | null;
+  setRoadFrontageMarkerPendingItemPick: Dispatch<
+    SetStateAction<{ ledgerId: string; markerItemId: string } | null>
+  >;
   /** 표주 모달 편집 중 지도 점 찍기 */
   roadFrontageMarkerPointPickRef: MutableRefObject<((lon: number, lat: number) => void) | null>;
   roadFrontageMarkerPointPickActive: boolean;
@@ -678,6 +715,34 @@ export function MapContextProvider({ children }: { children: React.ReactNode }) 
     lon: number;
     lat: number;
   } | null>(null);
+  const [roadFrontageBuildingPanelOpen, setRoadFrontageBuildingPanelOpen] = useState(false);
+  const applyRoadFrontageBuildingMapPickRef = useRef<
+    | ((pick: {
+        ftrIdn: string;
+        extent3857?: [number, number, number, number] | null;
+        overlapOptions?: MapHitOverlapOption[];
+      }) => void)
+    | null
+  >(null);
+  const [roadFrontageBuildingMapHitOptions, setRoadFrontageBuildingMapHitOptions] = useState<
+    MapHitOverlapOption[]
+  >([]);
+  const applyRoadFrontageMarkerMapPickRef = useRef<
+    | ((pick: {
+        ledgerId: string;
+        markerItemId: string;
+        extent3857?: [number, number, number, number] | null;
+        overlapOptions?: MapHitOverlapOption[];
+      }) => void)
+    | null
+  >(null);
+  const [roadFrontageMarkerMapHitOptions, setRoadFrontageMarkerMapHitOptions] = useState<
+    MapHitOverlapOption[]
+  >([]);
+  const [roadFrontageMarkerPendingItemPick, setRoadFrontageMarkerPendingItemPick] = useState<{
+    ledgerId: string;
+    markerItemId: string;
+  } | null>(null);
   const [riverConstructionLedgerRows, setRiverConstructionLedgerRows] = useState<
     RiverConstructionLedgerRow[]
   >([]);
@@ -881,6 +946,16 @@ export function MapContextProvider({ children }: { children: React.ReactNode }) 
         setRoadNetworkFocusedSitePointKey,
         roadFrontageMarkerPanelOpen,
         setRoadFrontageMarkerPanelOpen,
+        roadFrontageBuildingPanelOpen,
+        setRoadFrontageBuildingPanelOpen,
+        applyRoadFrontageBuildingMapPickRef,
+        roadFrontageBuildingMapHitOptions,
+        setRoadFrontageBuildingMapHitOptions,
+        applyRoadFrontageMarkerMapPickRef,
+        roadFrontageMarkerMapHitOptions,
+        setRoadFrontageMarkerMapHitOptions,
+        roadFrontageMarkerPendingItemPick,
+        setRoadFrontageMarkerPendingItemPick,
         roadFrontageMarkerPointPickRef,
         roadFrontageMarkerPointPickActive,
         setRoadFrontageMarkerPointPickActive,
