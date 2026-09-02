@@ -197,13 +197,13 @@ export function renderDevMenuContent(menuId: string): ReactNode {
       )
     case "userAccessStats":
       return (
-        <div className="flex flex-col overflow-hidden min-h-0 h-[calc(100vh-14rem)]">
+        <div className="flex min-h-0 flex-col">
           <UserAccessStats />
         </div>
       )
     case "userMgmtHistory":
       return (
-        <div className="flex flex-col overflow-hidden min-h-0 h-[calc(100vh-14rem)]">
+        <div className="flex min-h-0 flex-col">
           <UserMgmtHistory />
         </div>
       )

@@ -8,7 +8,7 @@ import { call } from '@/lib/api';
 import { formatTimestampWallClock } from '@/lib/formatTimestampWallClock';
 import { normalizeClientIp } from '@/lib/normalizeClientIp';
 import { RefreshCw, Search, X } from 'lucide-react';
-import { USER_MANAGER_UI_STYLE } from './userManagerUiVariants';
+import { USER_MANAGER_UI_STYLE, USER_STATS_HISTORY_TABLE } from './userManagerUiVariants';
 
 type DateType = 'month' | 'week' | 'day';
 
@@ -31,11 +31,11 @@ type PivotRow = {
 };
 
 const uiStyle = USER_MANAGER_UI_STYLE;
-const tableRowClass =
-  'border-b border-border hover:bg-muted/50 transition-colors [&>td]:border-r [&>td]:border-border/60 [&>td:last-child]:border-r-0';
-/** 집계 표 — 가로줄만 (세로 테두리 없음), 셀 위아래 여백 축소 */
-const pivotRowClass = 'border-t border-border hover:bg-muted/50 transition-colors';
-const pivotCellClass = cn(uiStyle.tableCell, 'border-r-0 !py-1');
+const statsTable = USER_STATS_HISTORY_TABLE;
+const tableRowClass = statsTable.tableRow;
+/** 집계 표 — 가로줄만 (세로 테두리 없음) */
+const pivotRowClass = statsTable.tableRowPivot;
+const pivotCellClass = cn(statsTable.tableCell, 'border-r-0');
 
 const DATE_TYPE_LABEL: Record<DateType, string> = {
   month: '월별',
@@ -374,7 +374,7 @@ export function UserAccessStats() {
   const busy = loading || statsLoading;
 
   return (
-    <div className={cn(uiStyle.page, 'gap-3')}>
+    <div className="flex flex-col gap-3">
       <div className={cn(uiStyle.toolbar, 'flex-wrap')}>
         <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
           <span>시작</span>
@@ -497,7 +497,7 @@ export function UserAccessStats() {
           ) : null}
           <div className="min-h-0 flex-1 overflow-auto">
             <table className={cn(uiStyle.table, 'min-w-max text-[11px] [&_th]:border-r-0 [&_td]:border-r-0')}>
-              <thead className={cn('sticky top-0', uiStyle.tableHead)}>
+              <thead className={cn('sticky top-0', statsTable.tableHead)}>
                 <tr>
                   <th className={cn('whitespace-nowrap text-left', pivotCellClass)}>ID</th>
                   <th className={cn('whitespace-nowrap text-left', pivotCellClass)}>소속</th>
@@ -564,29 +564,28 @@ export function UserAccessStats() {
 
       <h3 className="shrink-0 text-sm font-medium text-foreground">접속 상세 목록</h3>
 
-      <div className={uiStyle.tableWrap}>
-        <div className={uiStyle.tableScroll}>
-        <table className={cn(uiStyle.table, 'min-w-[48rem] table-fixed')}>
-          <thead className={cn('sticky top-0', uiStyle.tableHead)}>
+      <div className="shrink-0 border border-border">
+        <table className={cn(uiStyle.table, 'min-w-[48rem] w-full table-fixed')}>
+          <thead className={cn('sticky top-0', statsTable.tableHead)}>
             <tr>
-              <th className={cn('w-14 text-left', uiStyle.tableCell)}>순번</th>
-              <th className={cn('w-40 text-left', uiStyle.tableCell)}>일시</th>
-              <th className={cn('w-28 text-left', uiStyle.tableCell)}>아이디</th>
-              <th className={cn('w-28 text-left', uiStyle.tableCell)}>이름</th>
-              <th className={cn('w-36 text-left', uiStyle.tableCell)}>부서</th>
-              <th className={cn('w-36 text-left', uiStyle.tableCell)}>IP</th>
+              <th className={cn('w-14 text-left', statsTable.tableCell)}>순번</th>
+              <th className={cn('w-40 text-left', statsTable.tableCell)}>일시</th>
+              <th className={cn('w-28 text-left', statsTable.tableCell)}>아이디</th>
+              <th className={cn('w-28 text-left', statsTable.tableCell)}>이름</th>
+              <th className={cn('w-36 text-left', statsTable.tableCell)}>부서</th>
+              <th className={cn('w-36 text-left', statsTable.tableCell)}>IP</th>
             </tr>
           </thead>
           <tbody>
             {loading ? (
               <tr className={tableRowClass}>
-                <td className={cn('text-muted-foreground', uiStyle.tableCell)} colSpan={6}>
+                <td className={cn('text-muted-foreground', statsTable.tableCell)} colSpan={6}>
                   불러오는 중…
                 </td>
               </tr>
             ) : rows.length === 0 ? (
               <tr className={tableRowClass}>
-                <td className={cn('text-muted-foreground', uiStyle.tableCell)} colSpan={6}>
+                <td className={cn('text-muted-foreground', statsTable.tableCell)} colSpan={6}>
                   조회된 접속 이력이 없습니다.
                 </td>
               </tr>
@@ -600,24 +599,24 @@ export function UserAccessStats() {
                     : r.usrName?.trim() || '—';
                 return (
                   <tr key={r.llKey} className={tableRowClass}>
-                    <td className={cn('whitespace-nowrap', uiStyle.tableCell)}>{seq}</td>
-                    <td className={cn('whitespace-nowrap', uiStyle.tableCell)}>
+                    <td className={cn('whitespace-nowrap', statsTable.tableCell)}>{seq}</td>
+                    <td className={cn('whitespace-nowrap', statsTable.tableCell)}>
                       {formatTime(r.loginTime)}
                     </td>
                     <td
-                      className={cn('truncate font-mono text-[11px]', uiStyle.tableCell)}
+                      className={cn('truncate font-mono text-[11px]', statsTable.tableCell)}
                       title={r.loginUser ?? undefined}
                     >
                       {r.loginUser ?? '—'}
                     </td>
-                    <td className={cn('truncate', uiStyle.tableCell)} title={name}>
+                    <td className={cn('truncate', statsTable.tableCell)} title={name}>
                       {name}
                     </td>
-                    <td className={cn('truncate', uiStyle.tableCell)} title={dept}>
+                    <td className={cn('truncate', statsTable.tableCell)} title={dept}>
                       {dept}
                     </td>
                     <td
-                      className={cn('truncate font-mono text-[11px]', uiStyle.tableCell)}
+                      className={cn('truncate font-mono text-[11px]', statsTable.tableCell)}
                       title={normalizeClientIp(r.loginIp) ?? r.loginIp ?? undefined}
                     >
                       {normalizeClientIp(r.loginIp) || r.loginIp?.trim() || '—'}
@@ -628,7 +627,6 @@ export function UserAccessStats() {
             )}
           </tbody>
         </table>
-        </div>
       </div>
 
       <div className="shrink-0 flex items-center justify-center gap-2 text-xs">
