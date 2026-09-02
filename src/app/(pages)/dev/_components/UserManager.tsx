@@ -470,40 +470,15 @@ export function UserManager() {
     }
   }
 
-  const onResetLoginFailCnt = async (usrId: string, failCnt: number) => {
-    if (!usrId || failCnt <= 0) return
-    if (!window.confirm(`${usrId} 계정의 인증오류를 초기화하시겠습니까?`)) return
-    setSaving(true)
-    setError(null)
-    setMessage(null)
-    try {
-      const res = await call("", "POST", {
-        service: "usrService",
-        action: "resetUserLoginFailCnt",
-        params: { usr_id: usrId },
-      })
-      if (res.success === false || res.data?.success === false) {
-        const msg = res.data?.error || res.error || "인증오류 초기화 실패"
-        throw new Error(msg)
-      }
-      setMessage("인증오류를 초기화했습니다.")
-      await loadAll()
-    } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : "인증오류 초기화 실패")
-    } finally {
-      setSaving(false)
-    }
-  }
-
   const onLoginFailCellClick = (
     e: React.MouseEvent,
     usrId: string,
     failCnt: number | null | undefined
   ) => {
     const cnt = failCnt ?? 0
-    if (cnt <= 0) return
+    if (cnt <= 0 || !usrId || usrId === "su") return
     e.stopPropagation()
-    void onResetLoginFailCnt(usrId, cnt)
+    void onResetPassword(usrId)
   }
 
   return (
@@ -616,7 +591,7 @@ export function UserManager() {
                     uiStyle.tableCell,
                     (row.usrLoginFailCnt ?? 0) > 0 && "cursor-pointer hover:bg-muted/40"
                   )}
-                  title={(row.usrLoginFailCnt ?? 0) > 0 ? "클릭하여 인증오류 초기화" : undefined}
+                  title={(row.usrLoginFailCnt ?? 0) > 0 ? "클릭하여 비밀번호 초기화" : undefined}
                   onClick={(e) => onLoginFailCellClick(e, row.usrId, row.usrLoginFailCnt)}
                 >
                   {(row.usrLoginFailCnt ?? 0) > 0 ? (
@@ -631,7 +606,7 @@ export function UserManager() {
                     uiStyle.tableCell,
                     (row.usrLoginFailCnt ?? 0) > 0 && "cursor-pointer hover:bg-muted/40"
                   )}
-                  title={(row.usrLoginFailCnt ?? 0) > 0 ? "클릭하여 인증오류 초기화" : undefined}
+                  title={(row.usrLoginFailCnt ?? 0) > 0 ? "클릭하여 비밀번호 초기화" : undefined}
                   onClick={(e) => onLoginFailCellClick(e, row.usrId, row.usrLoginFailCnt)}
                 >
                   {(row.usrLoginFailCnt ?? 0) > 0 ? (

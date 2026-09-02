@@ -179,7 +179,7 @@ function InfoSection({
         className="flex w-full items-center gap-1.5 px-4 py-2 text-left transition-colors hover:bg-muted/50"
         onClick={() => setIsOpen(!isOpen)}
       >
-        {isOpen ? <ChevronDown className="h-3.5 w-3.5 text-primary" /> : <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />}
+        {isOpen ? <ChevronDown className="standard-detail-section-chevron text-foreground/90" /> : <ChevronRight className="standard-detail-section-chevron text-foreground/90" />}
         <span className="text-[11px] font-semibold tracking-wide text-slate-600 dark:text-muted-foreground">{title}</span>
       </button>
       {isOpen && (
@@ -1794,7 +1794,6 @@ export function LayerDataPanel({
                       return (
                         <tr
                           key={`pad-${rowIndex}`}
-                          className="border-b border-border"
                           style={{ height: `${rowHeightPct}%` }}
                           aria-hidden
                         >
