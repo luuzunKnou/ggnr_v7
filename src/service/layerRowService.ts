@@ -448,13 +448,63 @@ function jijukGeom5181Sql(geomCol = 'geom'): string {
   return `ST_SetSRID(${geomColRef(geomCol)}, ${JIJUK_GEOM_SRID})`;
 }
 
+function coercePolygonExprToChildSql(poly5181: string, childGeomType: string): string {
+  const t = childGeomType.toUpperCase();
+  if (t === 'POLYGON') return `ST_GeometryN(ST_Multi(${poly5181}), 1)`;
+  return `ST_Multi(${poly5181})`;
+}
+
 /** 지적 geom(SRID 0·Polygon 흔함) → 자식 테이블 geom 제약(MultiPolygon, 5181 등) */
 function jijukGeomCoercedToChildSql(geomCol: string, childGeomType: string): string {
   const src5181 = jijukGeom5181Sql(geomCol);
   const poly = `ST_CollectionExtract(${src5181}, 3)`;
-  const t = childGeomType.toUpperCase();
-  if (t === 'POLYGON') return `ST_GeometryN(ST_Multi(${poly}), 1)`;
-  return `ST_Multi(${poly})`;
+  return coercePolygonExprToChildSql(poly, childGeomType);
+}
+
+/** 지적 ∩ 부모 도형(5181) → 자식 테이블 geom 제약 */
+function jijukGeomClippedToParentCoercedSql(
+  geomCol: string,
+  childGeomType: string,
+  parentWkt5181: string
+): string {
+  const jijukValid = `ST_MakeValid(ST_Force2D(${jijukGeom5181Sql(geomCol)}))`;
+  const parentValid = `ST_MakeValid(ST_Force2D(ST_SetSRID(ST_GeomFromText('${esc(parentWkt5181.trim())}'), ${JIJUK_GEOM_SRID})))`;
+  const clipPoly = `ST_CollectionExtract(ST_MakeValid(ST_Intersection(${jijukValid}, ${parentValid})), 3)`;
+  return coercePolygonExprToChildSql(clipPoly, childGeomType);
+}
+
+function childGeomFromGeoJson3857Sql(
+  geojson: Record<string, unknown>,
+  childGeomType: string
+): string | null {
+  let json: string;
+  try {
+    json = JSON.stringify(geojson);
+  } catch {
+    return null;
+  }
+  if (!json) return null;
+  const src = `ST_MakeValid(ST_Force2D(ST_Transform(ST_SetSRID(ST_GeomFromGeoJSON('${esc(json)}'), 3857), ${JIJUK_GEOM_SRID})))`;
+  const poly = `ST_CollectionExtract(${src}, 3)`;
+  return coercePolygonExprToChildSql(poly, childGeomType);
+}
+
+function childGeomClippedFromGeoJson3857Sql(
+  geojson: Record<string, unknown>,
+  parentWkt5181: string,
+  childGeomType: string
+): string | null {
+  let json: string;
+  try {
+    json = JSON.stringify(geojson);
+  } catch {
+    return null;
+  }
+  if (!json) return null;
+  const src = `ST_MakeValid(ST_Force2D(ST_Transform(ST_SetSRID(ST_GeomFromGeoJSON('${esc(json)}'), 3857), ${JIJUK_GEOM_SRID})))`;
+  const parentValid = `ST_MakeValid(ST_Force2D(ST_SetSRID(ST_GeomFromText('${esc(parentWkt5181.trim())}'), ${JIJUK_GEOM_SRID})))`;
+  const clipPoly = `ST_CollectionExtract(ST_MakeValid(ST_Intersection(${src}, ${parentValid})), 3)`;
+  return coercePolygonExprToChildSql(clipPoly, childGeomType);
 }
 
 async function resolveGeometryColumnType(schema: string, table: string): Promise<string> {
@@ -799,6 +849,69 @@ export async function getIntersectedGeoJson3857(params: {
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);
     return { geometry: null, error: msg };
+  }
+}
+
+/** 3857 GeoJSON을 부모 도형(WKT 5181)과 겹치는 면만 잘라 반환 */
+export async function clipGeoJson3857ToWkt5181(params: {
+  geometry3857: Record<string, unknown>;
+  parentWkt5181: string;
+}): Promise<{
+  geometry3857: Record<string, unknown> | null;
+  extent3857: [number, number, number, number] | null;
+  error?: string;
+}> {
+  const parentWkt = String(params?.parentWkt5181 ?? '').trim();
+  const childGeometry = params?.geometry3857;
+  if (!parentWkt) {
+    return { geometry3857: null, extent3857: null, error: 'parentWkt5181이 필요합니다.' };
+  }
+  if (!childGeometry || typeof childGeometry !== 'object') {
+    return { geometry3857: null, extent3857: null, error: 'geometry3857이 필요합니다.' };
+  }
+
+  let childJson: string;
+  try {
+    childJson = JSON.stringify(childGeometry);
+  } catch {
+    return { geometry3857: null, extent3857: null, error: 'GeoJSON 직렬화에 실패했습니다.' };
+  }
+
+  const tag = `ggnr${Date.now().toString(36)}`;
+  const childGeom = `ST_MakeValid(ST_Force2D(ST_SetSRID(ST_GeomFromGeoJSON($${tag}c$${childJson}$${tag}c$), 3857)))`;
+  const parentGeom3857 = `ST_Transform(ST_MakeValid(ST_Force2D(ST_SetSRID(ST_GeomFromText('${esc(parentWkt)}'), ${JIJUK_GEOM_SRID}))), 3857)`;
+  const intersectExpr = `ST_CollectionExtract(ST_MakeValid(ST_Intersection(${parentGeom3857}, ${childGeom})), 3)`;
+
+  const q = `
+    SELECT ST_AsGeoJSON(ix)::json AS geometry,
+      ST_XMin(ST_Envelope(ix))::float8 AS xmin,
+      ST_YMin(ST_Envelope(ix))::float8 AS ymin,
+      ST_XMax(ST_Envelope(ix))::float8 AS xmax,
+      ST_YMax(ST_Envelope(ix))::float8 AS ymax
+    FROM (SELECT ${intersectExpr} AS ix) s
+    WHERE s.ix IS NOT NULL
+      AND NOT ST_IsEmpty(s.ix)
+      AND ST_Area(s.ix) > 0`;
+
+  try {
+    const res = await db.execute(sql.raw(q));
+    const raw = res.rows?.[0] as
+      | { geometry?: unknown; xmin?: number; ymin?: number; xmax?: number; ymax?: number }
+      | undefined;
+    const geometry3857 = parseGeoJsonGeometry(raw?.geometry);
+    if (!geometry3857) return { geometry3857: null, extent3857: null };
+    const xmin = Number(raw?.xmin);
+    const ymin = Number(raw?.ymin);
+    const xmax = Number(raw?.xmax);
+    const ymax = Number(raw?.ymax);
+    const extent3857: [number, number, number, number] | null =
+      [xmin, ymin, xmax, ymax].every((v) => Number.isFinite(v))
+        ? [xmin, ymin, xmax, ymax]
+        : null;
+    return { geometry3857, extent3857 };
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return { geometry3857: null, extent3857: null, error: msg };
   }
 }
 
@@ -1988,11 +2101,25 @@ function buildChildJijukGeomInsertSql(opts: {
   jibunWhere: string | null;
   lon?: number;
   lat?: number;
+  parentWkt5181?: string;
 }): string | null {
-  const coerced = jijukGeomCoercedToChildSql('j.geom', opts.childGeomType);
+  const parentWkt = String(opts.parentWkt5181 ?? '').trim();
+  const coerced = parentWkt
+    ? jijukGeomClippedToParentCoercedSql('j.geom', opts.childGeomType, parentWkt)
+    : jijukGeomCoercedToChildSql('j.geom', opts.childGeomType);
+  const parentValid = parentWkt
+    ? `ST_MakeValid(ST_Force2D(ST_SetSRID(ST_GeomFromText('${esc(parentWkt)}'), ${JIJUK_GEOM_SRID})))`
+    : '';
+  const jijukValid = `ST_MakeValid(ST_Force2D(${jijukGeom5181Sql('j.geom')}))`;
+  const clipPoly = parentWkt
+    ? `ST_CollectionExtract(ST_MakeValid(ST_Intersection(${jijukValid}, ${parentValid})), 3)`
+    : '';
+  const overlapWhere = parentWkt
+    ? ` AND ST_Intersects(${jijukValid}, ${parentValid}) AND NOT ST_IsEmpty(${clipPoly}) AND ST_Area(${clipPoly}) > 0.01`
+    : '';
   const orderSql = `ORDER BY j.${quoteIdent(opts.jijukRef.orderCol)} LIMIT 1`;
   const pick = (whereSql: string) =>
-    `(SELECT ${coerced} FROM ${opts.jijukRef.qualified} j WHERE j.geom IS NOT NULL AND ${whereSql} ${orderSql})`;
+    `(SELECT ${coerced} FROM ${opts.jijukRef.qualified} j WHERE j.geom IS NOT NULL AND ${whereSql}${overlapWhere} ${orderSql})`;
   const parts: string[] = [];
   if (opts.pnuWhere) parts.push(pick(opts.pnuWhere));
   if (opts.jibunWhere) parts.push(pick(opts.jibunWhere));
@@ -2271,7 +2398,7 @@ export async function subtractParcelFromParentWkt5181(params: {
   }
 }
 
-/** 자식 필지목록 동기화 — 주소가 같은 기존 행(도형 포함)은 유지하고, 추가·삭제된 주소만 반영 */
+/** 자식 필지목록 동기화 — 주소 추가·삭제를 반영. 부모 도형이 있으면 겹치는 면만 잘라 geom 저장 */
 export async function syncChildParcelsByParentId(params: {
   schema?: string;
   childTableName: string;
@@ -2281,7 +2408,15 @@ export async function syncChildParcelsByParentId(params: {
   parentId: string;
   /** @deprecated addresses 대신 parcels 사용 */
   addresses?: string[];
-  parcels?: Array<{ address: string; pnu?: string; lon?: number; lat?: number }>;
+  parcels?: Array<{
+    address: string;
+    pnu?: string;
+    lon?: number;
+    lat?: number;
+    geometry3857?: Record<string, unknown> | null;
+  }>;
+  /** 부모 도형(WKT 5181) — 있으면 지적과 겹치는 부분만 잘라 저장 */
+  parentWkt5181?: string;
   /** 부모 연결 컬럼 외에 같이 넣을 값 (예: permit_no) */
   extraValues?: Record<string, string>;
 }): Promise<{ success: boolean; error?: string }> {
@@ -2321,6 +2456,7 @@ export async function syncChildParcelsByParentId(params: {
         x.col!.toLowerCase() !== addressCol.toLowerCase()
     );
 
+  const parentWkt = String(params?.parentWkt5181 ?? '').trim();
   const parcelRows = Array.isArray(params.parcels)
     ? params.parcels
         .map((p) => ({
@@ -2328,11 +2464,21 @@ export async function syncChildParcelsByParentId(params: {
           pnu: String(p?.pnu ?? '').trim(),
           lon: typeof p?.lon === 'number' ? p.lon : undefined,
           lat: typeof p?.lat === 'number' ? p.lat : undefined,
+          geometry3857:
+            p?.geometry3857 != null && typeof p.geometry3857 === 'object'
+              ? p.geometry3857
+              : null,
         }))
         .filter((p) => p.address)
     : Array.isArray(params.addresses)
       ? params.addresses
-          .map((a) => ({ address: String(a ?? '').trim(), pnu: '', lon: undefined, lat: undefined }))
+          .map((a) => ({
+            address: String(a ?? '').trim(),
+            pnu: '',
+            lon: undefined,
+            lat: undefined,
+            geometry3857: null as Record<string, unknown> | null,
+          }))
           .filter((p) => p.address)
       : [];
 
@@ -2370,6 +2516,7 @@ export async function syncChildParcelsByParentId(params: {
     const existingList = [...existingKeys];
     const usedExisting = new Set<string>();
     const matchedWanted = new Set<string>();
+    const wantedToExisting = new Map<string, string>();
     for (const wanted of wantedKeys) {
       const exact = existingList.find((e) => !usedExisting.has(e) && e === wanted);
       const fuzzy = existingList.find(
@@ -2379,6 +2526,7 @@ export async function syncChildParcelsByParentId(params: {
       if (!hit) continue;
       usedExisting.add(hit);
       matchedWanted.add(wanted);
+      wantedToExisting.set(wanted, hit);
     }
 
     const insertRows = wantedRows.filter((row) => {
@@ -2418,6 +2566,50 @@ export async function syncChildParcelsByParentId(params: {
       );
     }
 
+    const jijukRef = geomCol ? await resolveJijukTableRef() : null;
+    const childGeomType = geomCol ? await resolveGeometryColumnType(schema, childTable) : '';
+
+    const resolveChildGeomSql = async (row: (typeof parcelRows)[number]): Promise<string | null> => {
+      if (!geomCol) return null;
+      if (row.geometry3857 && parentWkt) {
+        return childGeomClippedFromGeoJson3857Sql(row.geometry3857, parentWkt, childGeomType);
+      }
+      if (row.geometry3857) {
+        return childGeomFromGeoJson3857Sql(row.geometry3857, childGeomType);
+      }
+      if (!jijukRef) return null;
+      const pnuDigits = await resolvePnuDigitsFromInput(row.address, row.pnu);
+      const pnuWhere = pnuDigits ? buildJijukPnuMatchWhereSql(pnuDigits) : null;
+      const jibunWhere = buildJijukJibunLotWhereSql(pnuDigits, lotLabelFromParcelAddress(row.address));
+      return buildChildJijukGeomInsertSql({
+        jijukRef,
+        childGeomType,
+        pnuWhere,
+        jibunWhere,
+        lon: row.lon,
+        lat: row.lat,
+        parentWkt5181: parentWkt || undefined,
+      });
+    };
+
+    if (geomCol && (parentWkt || parcelRows.some((p) => p.geometry3857))) {
+      for (const row of wantedRows) {
+        const wantedKey = childAddressMatchKey(row.address);
+        const existingKey = wantedToExisting.get(wantedKey);
+        if (!existingKey) continue;
+        const geomSql = await resolveChildGeomSql(row);
+        if (!geomSql) continue;
+        await db.execute(
+          sql.raw(
+            `UPDATE ${quoteIdent(schema)}.${quoteIdent(childTable)}
+             SET ${quoteIdent(geomCol)} = ${geomSql}
+             WHERE (${childOfParentSql})
+               AND lower(regexp_replace(btrim(${quoteIdent(addressCol)}::text), '[[:space:]]+', ' ', 'g')) = '${esc(existingKey)}'`
+          )
+        );
+      }
+    }
+
     if (insertRows.length === 0) return { success: true };
 
     if (serialCol) {
@@ -2428,25 +2620,10 @@ export async function syncChildParcelsByParentId(params: {
       }
     }
 
-    const jijukRef = geomCol ? await resolveJijukTableRef() : null;
-    const childGeomType = geomCol ? await resolveGeometryColumnType(schema, childTable) : '';
-
     for (const row of insertRows) {
       const addr = row.address;
-      const pnuDigits = await resolvePnuDigitsFromInput(addr, row.pnu);
-      const pnuWhere = pnuDigits ? buildJijukPnuMatchWhereSql(pnuDigits) : null;
-      const jibunWhere = buildJijukJibunLotWhereSql(pnuDigits, lotLabelFromParcelAddress(addr));
-      const geomInsert =
-        geomCol && jijukRef
-          ? buildChildJijukGeomInsertSql({
-              jijukRef,
-              childGeomType,
-              pnuWhere,
-              jibunWhere,
-              lon: row.lon,
-              lat: row.lat,
-            })
-          : null;
+      const geomInsert = await resolveChildGeomSql(row);
+      if (parentWkt && geomCol && !geomInsert) continue;
       const cols = [quoteIdent(parentCol), quoteIdent(addressCol)];
       const vals = [`'${esc(parentId)}'`, `'${esc(addr)}'`];
       const used = new Set([parentCol.toLowerCase(), addressCol.toLowerCase()]);

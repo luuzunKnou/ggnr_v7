@@ -2323,15 +2323,25 @@ export default function OpenLayersMap({
     activeControls.includes('official-land-price')
   );
 
-  /** 패널 등에서 지도 컨트롤 ON/OFF (예: 점사용료 이력 → 공시지가, 점용(프) → 지적도) */
+  /** 패널 등에서 지도 컨트롤 ON/OFF (예: 점사용료 이력 → 공시지가, 점용대장 → 지적) */
   useEffect(() => {
     const onSet = (e: Event) => {
-      const detail = (e as CustomEvent<{ id?: string; active?: boolean }>).detail;
+      const detail = (
+        e as CustomEvent<{ id?: string; active?: boolean; tableNames?: string[] }>
+      ).detail;
       const id = detail?.id?.trim();
       if (!id) return;
       const active = detail.active === true;
       if (active && id === 'cadastral') {
+        const extra = Array.isArray(detail.tableNames)
+          ? detail.tableNames.map((t) => String(t ?? '').trim().toLowerCase()).filter(Boolean)
+          : [];
         setVisibleCadastralLayerNames((prev) => {
+          if (extra.length > 0) {
+            const next = new Set(prev ?? []);
+            for (const t of extra) next.add(t);
+            return next;
+          }
           if (prev != null && prev.size > 0) return prev;
           return new Set(
             CADASTRAL_LAYERS.map((l) => l.tableName).filter((t) =>

@@ -4,9 +4,7 @@ import { useMemo, useState } from "react"
 import { Search, X } from "lucide-react"
 import { cn } from "@/lib/utils"
 import {
-  HANDBOOK_MATERIALS,
   HANDBOOK_MATCH_LABEL,
-  HANDBOOK_PROCEDURES,
   handbookMaterialFileHint,
   isSameHandbookDetail,
   matchHandbookMaterial,
@@ -17,6 +15,7 @@ import {
 } from "./roadWorkHandbookData"
 import { HandbookMaterialListButton, HandbookScaleCard, OrgBadge } from "./roadWorkHandbookUi"
 import { useHandbookMapPick } from "./roadWorkHandbookMapContext"
+import { useRoadWorkHandbookCatalog } from "./useRoadWorkHandbookCatalog"
 
 type MatchFilter = "all" | HandbookMatchStatus
 
@@ -51,6 +50,7 @@ export function RoadWorkHandbookListPanel({
   const [matchFilter, setMatchFilter] = useState<MatchFilter>("all")
   const [appliedVals, setAppliedVals] = useState<Record<string, string> | null>(null)
   const mapPick = useHandbookMapPick()
+  const { reviews, materials, loading, error } = useRoadWorkHandbookCatalog()
   const scaleVals = mapPick?.scaleVals ?? {}
   const kw = keyword.trim()
   const statusVals = appliedVals ?? EMPTY_SCALE
@@ -58,8 +58,8 @@ export function RoadWorkHandbookListPanel({
 
   const filteredProcs = useMemo(() => {
     const byKw = !kw
-      ? HANDBOOK_PROCEDURES
-      : HANDBOOK_PROCEDURES.filter(
+      ? reviews
+      : reviews.filter(
           (p) =>
             p.name.includes(kw) ||
             p.criteria.includes(kw) ||
@@ -68,11 +68,11 @@ export function RoadWorkHandbookListPanel({
         )
     if (matchFilter === "all") return byKw
     return byKw.filter((p) => matchHandbookProcedure(p, statusVals) === matchFilter)
-  }, [kw, matchFilter, statusVals])
+  }, [kw, matchFilter, reviews, statusVals])
 
   const filteredMaterials = useMemo(
-    () => HANDBOOK_MATERIALS.filter((m) => matchHandbookMaterial(m, kw)),
-    [kw]
+    () => materials.filter((m) => matchHandbookMaterial(m, kw)),
+    [kw, materials]
   )
 
   const switchMode = (next: HandbookViewMode) => {
@@ -229,7 +229,11 @@ export function RoadWorkHandbookListPanel({
       ) : null}
 
       <div className="min-h-0 flex-1 overflow-auto scrollbar-thin">
-        {mode === "target" ? (
+        {loading ? (
+          <p className="px-3 py-6 text-center text-[11px] text-muted-foreground">불러오는 중…</p>
+        ) : error ? (
+          <p className="px-3 py-6 text-center text-[11px] text-destructive">{error}</p>
+        ) : mode === "target" ? (
           <ul>
             {filteredProcs.length === 0 ? (
               <li className="px-3 py-6 text-center text-[11px] text-muted-foreground">

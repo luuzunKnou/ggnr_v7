@@ -2,11 +2,11 @@
   {
     "define_field_name": "ogc_fid",
     "define_field_kor_name": "번호",
-    "define_field_type": "integer",
-    "define_field_idx": 1,
+    "define_field_type": "NUMBER",
+    "define_field_idx": "",
     "define_field_is_required": false,
     "define_field_show_search": false,
-    "define_field_show_list": true,
+    "define_field_show_list": "false",
     "define_field_show_detail": false,
     "define_field_read_only": false,
     "define_field_is_key": "false",
@@ -27,7 +27,7 @@
   {
     "define_field_name": "geom",
     "define_field_kor_name": "geom",
-    "define_field_type": "text",
+    "define_field_type": "TEXT",
     "define_field_idx": 2,
     "define_field_is_required": false,
     "define_field_show_search": false,
@@ -52,7 +52,7 @@
   {
     "define_field_name": "ftr_idn",
     "define_field_kor_name": "ftr_idn",
-    "define_field_type": "text",
+    "define_field_type": "TEXT",
     "define_field_idx": 3,
     "define_field_is_required": false,
     "define_field_show_search": false,
@@ -77,7 +77,7 @@
   {
     "define_field_name": "cons_name",
     "define_field_kor_name": "cons_name",
-    "define_field_type": "text",
+    "define_field_type": "TEXT",
     "define_field_idx": 4,
     "define_field_is_required": false,
     "define_field_show_search": false,
@@ -102,7 +102,7 @@
   {
     "define_field_name": "ist_ymd",
     "define_field_kor_name": "ist_ymd",
-    "define_field_type": "text",
+    "define_field_type": "TEXT",
     "define_field_idx": 5,
     "define_field_is_required": false,
     "define_field_show_search": false,
@@ -127,7 +127,7 @@
   {
     "define_field_name": "mop_cde",
     "define_field_kor_name": "mop_cde",
-    "define_field_type": "text",
+    "define_field_type": "TEXT",
     "define_field_idx": 6,
     "define_field_is_required": false,
     "define_field_show_search": false,
@@ -152,7 +152,7 @@
   {
     "define_field_name": "std_dip",
     "define_field_kor_name": "std_dip",
-    "define_field_type": "number",
+    "define_field_type": "NUMBER",
     "define_field_idx": 7,
     "define_field_is_required": false,
     "define_field_show_search": false,
@@ -177,7 +177,7 @@
   {
     "define_field_name": "pip_dis",
     "define_field_kor_name": "pip_dis",
-    "define_field_type": "number",
+    "define_field_type": "NUMBER",
     "define_field_idx": 8,
     "define_field_is_required": false,
     "define_field_show_search": false,
@@ -202,7 +202,7 @@
   {
     "define_field_name": "pip_dep",
     "define_field_kor_name": "pip_dep",
-    "define_field_type": "number",
+    "define_field_type": "NUMBER",
     "define_field_idx": 9,
     "define_field_is_required": false,
     "define_field_show_search": false,
@@ -227,7 +227,7 @@
   {
     "define_field_name": "remark1",
     "define_field_kor_name": "remark1",
-    "define_field_type": "text",
+    "define_field_type": "TEXT",
     "define_field_idx": 10,
     "define_field_is_required": false,
     "define_field_show_search": false,
@@ -252,7 +252,7 @@
   {
     "define_field_name": "remark2",
     "define_field_kor_name": "remark2",
-    "define_field_type": "text",
+    "define_field_type": "TEXT",
     "define_field_idx": 11,
     "define_field_is_required": false,
     "define_field_show_search": false,
@@ -277,7 +277,7 @@
   {
     "define_field_name": "point_x",
     "define_field_kor_name": "point_x",
-    "define_field_type": "number",
+    "define_field_type": "NUMBER",
     "define_field_idx": 12,
     "define_field_is_required": false,
     "define_field_show_search": false,
@@ -302,7 +302,7 @@
   {
     "define_field_name": "point_y",
     "define_field_kor_name": "point_y",
-    "define_field_type": "number",
+    "define_field_type": "NUMBER",
     "define_field_idx": 13,
     "define_field_is_required": false,
     "define_field_show_search": false,
@@ -327,7 +327,7 @@
   {
     "define_field_name": "cons_code",
     "define_field_kor_name": "cons_code",
-    "define_field_type": "text",
+    "define_field_type": "TEXT",
     "define_field_idx": 14,
     "define_field_is_required": false,
     "define_field_show_search": false,
