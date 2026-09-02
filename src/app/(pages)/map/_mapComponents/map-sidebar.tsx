@@ -18,7 +18,6 @@ import {
   PROTO_NOTIF_CHANGED_EVENT,
 } from '../_mapContents/bizNotif/bizNotifStore';
 import { ImportantNotifSidebarBubble } from '../_mapContents/prototypes/UserAccountProtoPanel';
-import { SHOOTING_REQUEST_UI_ENABLED } from '../_mapContents/shootingRequest/shootingRequestUiFlag';
 import { withBasePath } from '@/lib/basePath';
 
 /** ser_eng 와 serviceListIcon 파일명이 다를 때 */
