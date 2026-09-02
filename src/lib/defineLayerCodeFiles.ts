@@ -104,23 +104,21 @@ export function mergeDefineLayerCodeRows(
   return Array.from(map.values());
 }
 
-function readProjectOverlayCodes(
-  project: string,
-  tableField: string
-): Array<Record<string, unknown>> {
-  const shared = parseCodesFile(getSharedProjectOverlayCodeFilePath(project, tableField));
-  if (shared.length > 0) return shared;
-  return parseCodesFile(getProjectDefineLayerCodeFilePath(project, tableField));
-}
-
 export function readDefineLayerCodes(tableField: string): Array<Record<string, unknown>> {
   const common = parseCodesFile(getCommonDefineLayerCodeFilePath(tableField));
   const overlayProject = getDefineLayerCodeOverlayProject();
   if (!overlayProject || !isDefineLayerProjectOverlayCodeField(tableField)) return common;
 
-  const overlay = readProjectOverlayCodes(overlayProject, tableField);
-  if (overlay.length === 0) return common;
-  return mergeDefineLayerCodeRows(common, overlay);
+  const sharedPath = getSharedProjectOverlayCodeFilePath(overlayProject, tableField);
+  const shared = parseCodesFile(sharedPath);
+  /** 프로젝트 공통 오버레이 — 지역 코드만 (공통 안동 등과 병합하지 않음) */
+  if (shared.length > 0) return shared;
+
+  const legacyOverlay = parseCodesFile(
+    getProjectDefineLayerCodeFilePath(overlayProject, tableField)
+  );
+  if (legacyOverlay.length === 0) return common;
+  return mergeDefineLayerCodeRows(common, legacyOverlay);
 }
 
 export function writeDefineLayerCodes(tableField: string, codes: unknown[]): string {
