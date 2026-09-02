@@ -206,7 +206,7 @@
     "define_field_show_search": "false",
     "define_field_show_list": "false",
     "define_field_show_detail": true,
-    "define_field_type": "TEXT",
+    "define_field_type": "CODE",
     "define_field_sel_list": "",
     "define_field_read_only": "false",
     "define_field_is_key": "false",
@@ -276,7 +276,7 @@
   },
   {
     "define_field_name": "geom",
-    "define_field_kor_name": "geom",
+    "define_field_kor_name": "도형",
     "define_field_is_required": "",
     "define_field_show_search": "",
     "define_field_show_list": "",
@@ -301,7 +301,7 @@
   },
   {
     "define_field_name": "gid",
-    "define_field_kor_name": "gid",
+    "define_field_kor_name": "등록순서",
     "define_field_is_required": "true",
     "define_field_show_search": "",
     "define_field_show_list": "",

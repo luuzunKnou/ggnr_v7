@@ -1,0 +1,4076 @@
+[
+  {
+    "define_code_key": "388",
+    "define_code_field_key": "4671",
+    "define_code_name": "AA200",
+    "define_code_kor_name": "문주"
+  },
+  {
+    "define_code_key": "389",
+    "define_code_field_key": "4671",
+    "define_code_name": "AA201",
+    "define_code_kor_name": "굴뚝"
+  },
+  {
+    "define_code_key": "390",
+    "define_code_field_key": "4671",
+    "define_code_name": "AB001",
+    "define_code_kor_name": "공동묘지"
+  },
+  {
+    "define_code_key": "391",
+    "define_code_field_key": "4671",
+    "define_code_name": "AB002",
+    "define_code_kor_name": "묘지"
+  },
+  {
+    "define_code_key": "392",
+    "define_code_field_key": "4671",
+    "define_code_name": "AB003",
+    "define_code_kor_name": "유적지"
+  },
+  {
+    "define_code_key": "393",
+    "define_code_field_key": "4671",
+    "define_code_name": "AB010",
+    "define_code_kor_name": "기념비"
+  },
+  {
+    "define_code_key": "394",
+    "define_code_field_key": "4671",
+    "define_code_name": "AB011",
+    "define_code_kor_name": "입상(동상)"
+  },
+  {
+    "define_code_key": "395",
+    "define_code_field_key": "4671",
+    "define_code_name": "AB020",
+    "define_code_kor_name": "성"
+  },
+  {
+    "define_code_key": "396",
+    "define_code_field_key": "4671",
+    "define_code_name": "AB100",
+    "define_code_kor_name": "선형체육및놀이시설"
+  },
+  {
+    "define_code_key": "397",
+    "define_code_field_key": "4671",
+    "define_code_name": "AB101",
+    "define_code_kor_name": "점형체육및놀이시설"
+  },
+  {
+    "define_code_key": "398",
+    "define_code_field_key": "4671",
+    "define_code_name": "AC001",
+    "define_code_kor_name": "처리시설경계"
+  },
+  {
+    "define_code_key": "399",
+    "define_code_field_key": "4671",
+    "define_code_name": "AC002",
+    "define_code_kor_name": "처리시설"
+  },
+  {
+    "define_code_key": "400",
+    "define_code_field_key": "4671",
+    "define_code_name": "AD001",
+    "define_code_kor_name": "차도"
+  },
+  {
+    "define_code_key": "401",
+    "define_code_field_key": "4671",
+    "define_code_name": "AD002",
+    "define_code_kor_name": "도로중심선"
+  },
+  {
+    "define_code_key": "402",
+    "define_code_field_key": "4671",
+    "define_code_name": "AD003",
+    "define_code_kor_name": "도로경계선"
+  },
+  {
+    "define_code_key": "403",
+    "define_code_field_key": "4671",
+    "define_code_name": "AD004",
+    "define_code_kor_name": "차도면"
+  },
+  {
+    "define_code_key": "404",
+    "define_code_field_key": "4671",
+    "define_code_name": "AD006",
+    "define_code_kor_name": "노선구간"
+  },
+  {
+    "define_code_key": "405",
+    "define_code_field_key": "4671",
+    "define_code_name": "AD007",
+    "define_code_kor_name": "사업예정지"
+  },
+  {
+    "define_code_key": "406",
+    "define_code_field_key": "4671",
+    "define_code_name": "AD008",
+    "define_code_kor_name": "굴착예정지"
+  },
+  {
+    "define_code_key": "407",
+    "define_code_field_key": "4671",
+    "define_code_name": "AD010",
+    "define_code_kor_name": "도로교차"
+  },
+  {
+    "define_code_key": "408",
+    "define_code_field_key": "4671",
+    "define_code_name": "AD020",
+    "define_code_kor_name": "도로원표"
+  },
+  {
+    "define_code_key": "409",
+    "define_code_field_key": "4671",
+    "define_code_name": "AD090",
+    "define_code_kor_name": "도시계획도로계획선"
+  },
+  {
+    "define_code_key": "410",
+    "define_code_field_key": "4671",
+    "define_code_name": "AD950",
+    "define_code_kor_name": "공사위치"
+  },
+  {
+    "define_code_key": "411",
+    "define_code_field_key": "4671",
+    "define_code_name": "AE001",
+    "define_code_kor_name": "보도"
+  },
+  {
+    "define_code_key": "412",
+    "define_code_field_key": "4671",
+    "define_code_name": "AE002",
+    "define_code_kor_name": "보도면"
+  },
+  {
+    "define_code_key": "413",
+    "define_code_field_key": "4671",
+    "define_code_name": "AE010",
+    "define_code_kor_name": "교량"
+  },
+  {
+    "define_code_key": "414",
+    "define_code_field_key": "4671",
+    "define_code_name": "AE020",
+    "define_code_kor_name": "터널"
+  },
+  {
+    "define_code_key": "415",
+    "define_code_field_key": "4671",
+    "define_code_name": "AE021",
+    "define_code_kor_name": "터널입구"
+  },
+  {
+    "define_code_key": "416",
+    "define_code_field_key": "4671",
+    "define_code_name": "AE030",
+    "define_code_kor_name": "입체교차로"
+  },
+  {
+    "define_code_key": "417",
+    "define_code_field_key": "4671",
+    "define_code_name": "AE040",
+    "define_code_kor_name": "고가도로"
+  },
+  {
+    "define_code_key": "418",
+    "define_code_field_key": "4671",
+    "define_code_name": "AE045",
+    "define_code_kor_name": "고가차도"
+  },
+  {
+    "define_code_key": "419",
+    "define_code_field_key": "4671",
+    "define_code_name": "AE050",
+    "define_code_kor_name": "지하보도"
+  },
+  {
+    "define_code_key": "420",
+    "define_code_field_key": "4671",
+    "define_code_name": "AE052",
+    "define_code_kor_name": "지하도"
+  },
+  {
+    "define_code_key": "421",
+    "define_code_field_key": "4671",
+    "define_code_name": "AE053",
+    "define_code_kor_name": "지하철입구"
+  },
+  {
+    "define_code_key": "422",
+    "define_code_field_key": "4671",
+    "define_code_name": "AE054",
+    "define_code_kor_name": "지하도입구"
+  },
+  {
+    "define_code_key": "423",
+    "define_code_field_key": "4671",
+    "define_code_name": "AE057",
+    "define_code_kor_name": "지하차도"
+  },
+  {
+    "define_code_key": "424",
+    "define_code_field_key": "4671",
+    "define_code_name": "AE100",
+    "define_code_kor_name": "육교"
+  },
+  {
+    "define_code_key": "425",
+    "define_code_field_key": "4671",
+    "define_code_name": "AE110",
+    "define_code_kor_name": "도로분리대"
+  },
+  {
+    "define_code_key": "426",
+    "define_code_field_key": "4671",
+    "define_code_name": "AE120",
+    "define_code_kor_name": "횡단보도"
+  },
+  {
+    "define_code_key": "427",
+    "define_code_field_key": "4671",
+    "define_code_name": "AE121",
+    "define_code_kor_name": "교통섬"
+  },
+  {
+    "define_code_key": "428",
+    "define_code_field_key": "4671",
+    "define_code_name": "AE122",
+    "define_code_kor_name": "과속방지턱"
+  },
+  {
+    "define_code_key": "429",
+    "define_code_field_key": "4671",
+    "define_code_name": "AE123",
+    "define_code_kor_name": "미끄럼방지시설"
+  },
+  {
+    "define_code_key": "430",
+    "define_code_field_key": "4671",
+    "define_code_name": "AE129",
+    "define_code_kor_name": "자전거도로"
+  },
+  {
+    "define_code_key": "431",
+    "define_code_field_key": "4671",
+    "define_code_name": "AE130",
+    "define_code_kor_name": "차단기"
+  },
+  {
+    "define_code_key": "432",
+    "define_code_field_key": "4671",
+    "define_code_name": "AE131",
+    "define_code_kor_name": "가로등"
+  },
+  {
+    "define_code_key": "433",
+    "define_code_field_key": "4671",
+    "define_code_name": "AE132",
+    "define_code_kor_name": "신호등"
+  },
+  {
+    "define_code_key": "434",
+    "define_code_field_key": "4671",
+    "define_code_name": "AE133",
+    "define_code_kor_name": "분전함"
+  },
+  {
+    "define_code_key": "435",
+    "define_code_field_key": "4671",
+    "define_code_name": "AE140",
+    "define_code_kor_name": "계단"
+  },
+  {
+    "define_code_key": "436",
+    "define_code_field_key": "4671",
+    "define_code_name": "AE141",
+    "define_code_kor_name": "가로등선로"
+  },
+  {
+    "define_code_key": "437",
+    "define_code_field_key": "4671",
+    "define_code_name": "AE160",
+    "define_code_kor_name": "가로수"
+  },
+  {
+    "define_code_key": "438",
+    "define_code_field_key": "4671",
+    "define_code_name": "AE170",
+    "define_code_kor_name": "전주"
+  },
+  {
+    "define_code_key": "439",
+    "define_code_field_key": "4671",
+    "define_code_name": "AE200",
+    "define_code_kor_name": "도로반사경"
+  },
+  {
+    "define_code_key": "440",
+    "define_code_field_key": "4671",
+    "define_code_name": "AE210",
+    "define_code_kor_name": "도로표지"
+  },
+  {
+    "define_code_key": "441",
+    "define_code_field_key": "4671",
+    "define_code_name": "AE211",
+    "define_code_kor_name": "교통표지"
+  },
+  {
+    "define_code_key": "442",
+    "define_code_field_key": "4671",
+    "define_code_name": "AE220",
+    "define_code_kor_name": "방지책"
+  },
+  {
+    "define_code_key": "443",
+    "define_code_field_key": "4671",
+    "define_code_name": "AE221",
+    "define_code_kor_name": "가드레일"
+  },
+  {
+    "define_code_key": "444",
+    "define_code_field_key": "4671",
+    "define_code_name": "AE222",
+    "define_code_kor_name": "가드펜스"
+  },
+  {
+    "define_code_key": "445",
+    "define_code_field_key": "4671",
+    "define_code_name": "AE230",
+    "define_code_kor_name": "주차장경계"
+  },
+  {
+    "define_code_key": "446",
+    "define_code_field_key": "4671",
+    "define_code_name": "AE240",
+    "define_code_kor_name": "주유소"
+  },
+  {
+    "define_code_key": "447",
+    "define_code_field_key": "4671",
+    "define_code_name": "AE250",
+    "define_code_kor_name": "세차장"
+  },
+  {
+    "define_code_key": "448",
+    "define_code_field_key": "4671",
+    "define_code_name": "AE260",
+    "define_code_kor_name": "정류장"
+  },
+  {
+    "define_code_key": "449",
+    "define_code_field_key": "4671",
+    "define_code_name": "AE261",
+    "define_code_kor_name": "승강장"
+  },
+  {
+    "define_code_key": "450",
+    "define_code_field_key": "4671",
+    "define_code_name": "AE270",
+    "define_code_kor_name": "휴게소"
+  },
+  {
+    "define_code_key": "451",
+    "define_code_field_key": "4671",
+    "define_code_name": "AE300",
+    "define_code_kor_name": "우체통"
+  },
+  {
+    "define_code_key": "452",
+    "define_code_field_key": "4671",
+    "define_code_name": "AE305",
+    "define_code_kor_name": "공중전화박스"
+  },
+  {
+    "define_code_key": "453",
+    "define_code_field_key": "4671",
+    "define_code_name": "AE310",
+    "define_code_kor_name": "게시판"
+  },
+  {
+    "define_code_key": "454",
+    "define_code_field_key": "4671",
+    "define_code_name": "AE315",
+    "define_code_kor_name": "조경화단"
+  },
+  {
+    "define_code_key": "455",
+    "define_code_field_key": "4671",
+    "define_code_name": "AE325",
+    "define_code_kor_name": "시계탑"
+  },
+  {
+    "define_code_key": "456",
+    "define_code_field_key": "4671",
+    "define_code_name": "AE330",
+    "define_code_kor_name": "분수"
+  },
+  {
+    "define_code_key": "457",
+    "define_code_field_key": "4671",
+    "define_code_name": "AE335",
+    "define_code_kor_name": "벤치"
+  },
+  {
+    "define_code_key": "458",
+    "define_code_field_key": "4671",
+    "define_code_name": "AE340",
+    "define_code_kor_name": "암거"
+  },
+  {
+    "define_code_key": "459",
+    "define_code_field_key": "4671",
+    "define_code_name": "AE341",
+    "define_code_kor_name": "현수막게시대"
+  },
+  {
+    "define_code_key": "460",
+    "define_code_field_key": "4671",
+    "define_code_name": "AE342",
+    "define_code_kor_name": "장애인유도블럭"
+  },
+  {
+    "define_code_key": "461",
+    "define_code_field_key": "4671",
+    "define_code_name": "AE354",
+    "define_code_kor_name": "교통광장"
+  },
+  {
+    "define_code_key": "462",
+    "define_code_field_key": "4671",
+    "define_code_name": "AE356",
+    "define_code_kor_name": "식수대"
+  },
+  {
+    "define_code_key": "463",
+    "define_code_field_key": "4671",
+    "define_code_name": "AE360",
+    "define_code_kor_name": "사설안내표지판"
+  },
+  {
+    "define_code_key": "464",
+    "define_code_field_key": "4671",
+    "define_code_name": "AE542",
+    "define_code_kor_name": "자전거보관소"
+  },
+  {
+    "define_code_key": "465",
+    "define_code_field_key": "4671",
+    "define_code_name": "AE543",
+    "define_code_kor_name": "자전거도로"
+  },
+  {
+    "define_code_key": "466",
+    "define_code_field_key": "4671",
+    "define_code_name": "AE545",
+    "define_code_kor_name": "자전거도로"
+  },
+  {
+    "define_code_key": "467",
+    "define_code_field_key": "4671",
+    "define_code_name": "AE600",
+    "define_code_kor_name": "가로화단"
+  },
+  {
+    "define_code_key": "468",
+    "define_code_field_key": "4671",
+    "define_code_name": "AE610",
+    "define_code_kor_name": "시설녹지"
+  },
+  {
+    "define_code_key": "469",
+    "define_code_field_key": "4671",
+    "define_code_name": "AE640",
+    "define_code_kor_name": "투광기"
+  },
+  {
+    "define_code_key": "470",
+    "define_code_field_key": "4671",
+    "define_code_name": "AE650",
+    "define_code_kor_name": "무인단속카메라"
+  },
+  {
+    "define_code_key": "471",
+    "define_code_field_key": "4671",
+    "define_code_name": "AE670",
+    "define_code_kor_name": "표지병"
+  },
+  {
+    "define_code_key": "472",
+    "define_code_field_key": "4671",
+    "define_code_name": "AE900",
+    "define_code_kor_name": "공동구"
+  },
+  {
+    "define_code_key": "473",
+    "define_code_field_key": "4671",
+    "define_code_name": "AE901",
+    "define_code_kor_name": "탄력봉(규제봉)"
+  },
+  {
+    "define_code_key": "474",
+    "define_code_field_key": "4671",
+    "define_code_name": "AE902",
+    "define_code_kor_name": "도로절개지"
+  },
+  {
+    "define_code_key": "475",
+    "define_code_field_key": "4671",
+    "define_code_name": "AE911",
+    "define_code_kor_name": "신호등 제어기"
+  },
+  {
+    "define_code_key": "476",
+    "define_code_field_key": "4671",
+    "define_code_name": "AE912",
+    "define_code_kor_name": "신호등 선로"
+  },
+  {
+    "define_code_key": "477",
+    "define_code_field_key": "4671",
+    "define_code_name": "AE940",
+    "define_code_kor_name": "기계식 주차장"
+  },
+  {
+    "define_code_key": "478",
+    "define_code_field_key": "4671",
+    "define_code_name": "AE941",
+    "define_code_kor_name": "주차장구획선"
+  },
+  {
+    "define_code_key": "479",
+    "define_code_field_key": "4671",
+    "define_code_name": "AE950",
+    "define_code_kor_name": "주차금지구역"
+  },
+  {
+    "define_code_key": "480",
+    "define_code_field_key": "4671",
+    "define_code_name": "AE951",
+    "define_code_kor_name": "주정차금지구역"
+  },
+  {
+    "define_code_key": "481",
+    "define_code_field_key": "4671",
+    "define_code_name": "AE960",
+    "define_code_kor_name": "볼라드"
+  },
+  {
+    "define_code_key": "482",
+    "define_code_field_key": "4671",
+    "define_code_name": "AE961",
+    "define_code_kor_name": "충격흡수시설"
+  },
+  {
+    "define_code_key": "483",
+    "define_code_field_key": "4671",
+    "define_code_name": "AE970",
+    "define_code_kor_name": "울림병"
+  },
+  {
+    "define_code_key": "484",
+    "define_code_field_key": "4671",
+    "define_code_name": "AE980",
+    "define_code_kor_name": "어린이 보호구역"
+  },
+  {
+    "define_code_key": "485",
+    "define_code_field_key": "4671",
+    "define_code_name": "AE981",
+    "define_code_kor_name": "어린이 보호구역내 시설"
+  },
+  {
+    "define_code_key": "486",
+    "define_code_field_key": "4671",
+    "define_code_name": "AE992",
+    "define_code_kor_name": "규제봉"
+  },
+  {
+    "define_code_key": "487",
+    "define_code_field_key": "4671",
+    "define_code_name": "AE994",
+    "define_code_kor_name": "사설안내표지"
+  },
+  {
+    "define_code_key": "488",
+    "define_code_field_key": "4671",
+    "define_code_name": "AE995",
+    "define_code_kor_name": "제한높이시설"
+  },
+  {
+    "define_code_key": "489",
+    "define_code_field_key": "4671",
+    "define_code_name": "AE996",
+    "define_code_kor_name": "굴착허가청구역"
+  },
+  {
+    "define_code_key": "490",
+    "define_code_field_key": "4671",
+    "define_code_name": "AE997",
+    "define_code_kor_name": "기타"
+  },
+  {
+    "define_code_key": "491",
+    "define_code_field_key": "4671",
+    "define_code_name": "AF001",
+    "define_code_kor_name": "철도"
+  },
+  {
+    "define_code_key": "492",
+    "define_code_field_key": "4671",
+    "define_code_name": "AF002",
+    "define_code_kor_name": "철도중심선"
+  },
+  {
+    "define_code_key": "493",
+    "define_code_field_key": "4671",
+    "define_code_name": "AF030",
+    "define_code_kor_name": "철도교차"
+  },
+  {
+    "define_code_key": "494",
+    "define_code_field_key": "4671",
+    "define_code_name": "AG001",
+    "define_code_kor_name": "철교"
+  },
+  {
+    "define_code_key": "495",
+    "define_code_field_key": "4671",
+    "define_code_name": "AG010",
+    "define_code_kor_name": "고가부"
+  },
+  {
+    "define_code_key": "496",
+    "define_code_field_key": "4671",
+    "define_code_name": "AG020",
+    "define_code_kor_name": "철도터널"
+  },
+  {
+    "define_code_key": "497",
+    "define_code_field_key": "4671",
+    "define_code_name": "AG100",
+    "define_code_kor_name": "플랫폼"
+  },
+  {
+    "define_code_key": "498",
+    "define_code_field_key": "4671",
+    "define_code_name": "AG101",
+    "define_code_kor_name": "플랫폼의지붕"
+  },
+  {
+    "define_code_key": "499",
+    "define_code_field_key": "4671",
+    "define_code_name": "AH001",
+    "define_code_kor_name": "저장조"
+  },
+  {
+    "define_code_key": "500",
+    "define_code_field_key": "4671",
+    "define_code_name": "AH100",
+    "define_code_kor_name": "지상관망"
+  },
+  {
+    "define_code_key": "501",
+    "define_code_field_key": "4671",
+    "define_code_name": "AI001",
+    "define_code_kor_name": "우물"
+  },
+  {
+    "define_code_key": "502",
+    "define_code_field_key": "4671",
+    "define_code_name": "AI010",
+    "define_code_kor_name": "보안등"
+  },
+  {
+    "define_code_key": "503",
+    "define_code_field_key": "4671",
+    "define_code_name": "AJ001",
+    "define_code_kor_name": "관정"
+  },
+  {
+    "define_code_key": "504",
+    "define_code_field_key": "4671",
+    "define_code_name": "AJ010",
+    "define_code_kor_name": "양/배수장경계"
+  },
+  {
+    "define_code_key": "505",
+    "define_code_field_key": "4671",
+    "define_code_name": "AJ020",
+    "define_code_kor_name": "양식장경계"
+  },
+  {
+    "define_code_key": "506",
+    "define_code_field_key": "4671",
+    "define_code_name": "AK001",
+    "define_code_kor_name": "시장경계"
+  },
+  {
+    "define_code_key": "507",
+    "define_code_field_key": "4671",
+    "define_code_name": "AZ001",
+    "define_code_kor_name": "소화전"
+  },
+  {
+    "define_code_key": "508",
+    "define_code_field_key": "4671",
+    "define_code_name": "AZ010",
+    "define_code_kor_name": "급수탑"
+  },
+  {
+    "define_code_key": "509",
+    "define_code_field_key": "4671",
+    "define_code_name": "AZ020",
+    "define_code_kor_name": "전주류"
+  },
+  {
+    "define_code_key": "510",
+    "define_code_field_key": "4671",
+    "define_code_name": "AZ030",
+    "define_code_kor_name": "환기구"
+  },
+  {
+    "define_code_key": "511",
+    "define_code_field_key": "4671",
+    "define_code_name": "AZ040",
+    "define_code_kor_name": "맨홀"
+  },
+  {
+    "define_code_key": "512",
+    "define_code_field_key": "4671",
+    "define_code_name": "AZ050",
+    "define_code_kor_name": "관측소"
+  },
+  {
+    "define_code_key": "513",
+    "define_code_field_key": "4671",
+    "define_code_name": "AZ060",
+    "define_code_kor_name": "헬기장"
+  },
+  {
+    "define_code_key": "514",
+    "define_code_field_key": "4671",
+    "define_code_name": "AZ070",
+    "define_code_kor_name": "성절토(상단)"
+  },
+  {
+    "define_code_key": "515",
+    "define_code_field_key": "4671",
+    "define_code_name": "AZ080",
+    "define_code_kor_name": "석축"
+  },
+  {
+    "define_code_key": "516",
+    "define_code_field_key": "4671",
+    "define_code_name": "AZ085",
+    "define_code_kor_name": "옹벽"
+  },
+  {
+    "define_code_key": "517",
+    "define_code_field_key": "4671",
+    "define_code_name": "AZ090",
+    "define_code_kor_name": "경사보호망"
+  },
+  {
+    "define_code_key": "518",
+    "define_code_field_key": "4671",
+    "define_code_name": "AZ120",
+    "define_code_kor_name": "적치장"
+  },
+  {
+    "define_code_key": "519",
+    "define_code_field_key": "4671",
+    "define_code_name": "AZ130",
+    "define_code_kor_name": "매립지"
+  },
+  {
+    "define_code_key": "520",
+    "define_code_field_key": "4671",
+    "define_code_name": "AZ140",
+    "define_code_kor_name": "채취장"
+  },
+  {
+    "define_code_key": "521",
+    "define_code_field_key": "4671",
+    "define_code_name": "AZ150",
+    "define_code_kor_name": "기중기"
+  },
+  {
+    "define_code_key": "522",
+    "define_code_field_key": "4671",
+    "define_code_name": "AZ900",
+    "define_code_kor_name": "차도포장"
+  },
+  {
+    "define_code_key": "523",
+    "define_code_field_key": "4671",
+    "define_code_name": "AZ901",
+    "define_code_kor_name": "보도포장"
+  },
+  {
+    "define_code_key": "524",
+    "define_code_field_key": "4671",
+    "define_code_name": "AZ902",
+    "define_code_kor_name": "기본도_통신맨홀"
+  },
+  {
+    "define_code_key": "525",
+    "define_code_field_key": "4671",
+    "define_code_name": "AZ903",
+    "define_code_kor_name": "기본도_가스맨홀"
+  },
+  {
+    "define_code_key": "526",
+    "define_code_field_key": "4671",
+    "define_code_name": "AZ904",
+    "define_code_kor_name": "기본도_기타맨홀"
+  },
+  {
+    "define_code_key": "527",
+    "define_code_field_key": "4671",
+    "define_code_name": "AZ905",
+    "define_code_kor_name": "마을"
+  },
+  {
+    "define_code_key": "528",
+    "define_code_field_key": "4671",
+    "define_code_name": "AZ935",
+    "define_code_kor_name": "굴착허가위치"
+  },
+  {
+    "define_code_key": "529",
+    "define_code_field_key": "4671",
+    "define_code_name": "AZ936",
+    "define_code_kor_name": "도로점용"
+  },
+  {
+    "define_code_key": "530",
+    "define_code_field_key": "4671",
+    "define_code_name": "AZ937",
+    "define_code_kor_name": "도로점용_선"
+  },
+  {
+    "define_code_key": "531",
+    "define_code_field_key": "4671",
+    "define_code_name": "AZ938",
+    "define_code_kor_name": "도로점용_면"
+  },
+  {
+    "define_code_key": "532",
+    "define_code_field_key": "4671",
+    "define_code_name": "AZ941",
+    "define_code_kor_name": "기본도_전력맨홀"
+  },
+  {
+    "define_code_key": "533",
+    "define_code_field_key": "4671",
+    "define_code_name": "AZ992",
+    "define_code_kor_name": "자전거보관대"
+  },
+  {
+    "define_code_key": "534",
+    "define_code_field_key": "4671",
+    "define_code_name": "AZ993",
+    "define_code_kor_name": "차량진입방지시설"
+  },
+  {
+    "define_code_key": "535",
+    "define_code_field_key": "4671",
+    "define_code_name": "AZ994",
+    "define_code_kor_name": "차량충격흡수시설"
+  },
+  {
+    "define_code_key": "536",
+    "define_code_field_key": "4671",
+    "define_code_name": "AZ997",
+    "define_code_kor_name": "기타(점)"
+  },
+  {
+    "define_code_key": "537",
+    "define_code_field_key": "4671",
+    "define_code_name": "AZ998",
+    "define_code_kor_name": "기타(선)"
+  },
+  {
+    "define_code_key": "538",
+    "define_code_field_key": "4671",
+    "define_code_name": "AZ999",
+    "define_code_kor_name": "기타(면)"
+  },
+  {
+    "define_code_key": "539",
+    "define_code_field_key": "4671",
+    "define_code_name": "BA000",
+    "define_code_kor_name": "실폭하천"
+  },
+  {
+    "define_code_key": "540",
+    "define_code_field_key": "4671",
+    "define_code_name": "BA001",
+    "define_code_kor_name": "하천경계"
+  },
+  {
+    "define_code_key": "541",
+    "define_code_field_key": "4671",
+    "define_code_name": "BA002",
+    "define_code_kor_name": "하천중심선"
+  },
+  {
+    "define_code_key": "542",
+    "define_code_field_key": "4671",
+    "define_code_name": "BA003",
+    "define_code_kor_name": "세류"
+  },
+  {
+    "define_code_key": "543",
+    "define_code_field_key": "4671",
+    "define_code_name": "BA004",
+    "define_code_kor_name": "건천"
+  },
+  {
+    "define_code_key": "544",
+    "define_code_field_key": "4671",
+    "define_code_name": "BA010",
+    "define_code_kor_name": "호수/저수지"
+  },
+  {
+    "define_code_key": "545",
+    "define_code_field_key": "4671",
+    "define_code_name": "BA020",
+    "define_code_kor_name": "폭포"
+  },
+  {
+    "define_code_key": "546",
+    "define_code_field_key": "4671",
+    "define_code_name": "BA204",
+    "define_code_kor_name": "수역경계"
+  },
+  {
+    "define_code_key": "547",
+    "define_code_field_key": "4671",
+    "define_code_name": "BB010",
+    "define_code_kor_name": "수문"
+  },
+  {
+    "define_code_key": "548",
+    "define_code_field_key": "4671",
+    "define_code_name": "BB020",
+    "define_code_kor_name": "댐(상단)"
+  },
+  {
+    "define_code_key": "549",
+    "define_code_field_key": "4671",
+    "define_code_name": "BB030",
+    "define_code_kor_name": "보"
+  },
+  {
+    "define_code_key": "550",
+    "define_code_field_key": "4671",
+    "define_code_name": "BB050",
+    "define_code_kor_name": "선착장"
+  },
+  {
+    "define_code_key": "551",
+    "define_code_field_key": "4671",
+    "define_code_name": "BB099",
+    "define_code_kor_name": "낙차공"
+  },
+  {
+    "define_code_key": "552",
+    "define_code_field_key": "4671",
+    "define_code_name": "BB199",
+    "define_code_kor_name": "하천중간점"
+  },
+  {
+    "define_code_key": "553",
+    "define_code_field_key": "4671",
+    "define_code_name": "BB991",
+    "define_code_kor_name": "하천측량기준점"
+  },
+  {
+    "define_code_key": "554",
+    "define_code_field_key": "4671",
+    "define_code_name": "BBPUS",
+    "define_code_kor_name": "하천점용구역"
+  },
+  {
+    "define_code_key": "555",
+    "define_code_field_key": "4671",
+    "define_code_name": "BC001",
+    "define_code_kor_name": "광역상수관"
+  },
+  {
+    "define_code_key": "556",
+    "define_code_field_key": "4671",
+    "define_code_name": "BC100",
+    "define_code_kor_name": "광역상수맨홀"
+  },
+  {
+    "define_code_key": "557",
+    "define_code_field_key": "4671",
+    "define_code_name": "BC118",
+    "define_code_kor_name": "광역급수탑"
+  },
+  {
+    "define_code_key": "558",
+    "define_code_field_key": "4671",
+    "define_code_name": "BC119",
+    "define_code_kor_name": "광역소화전"
+  },
+  {
+    "define_code_key": "559",
+    "define_code_field_key": "4671",
+    "define_code_name": "BC120",
+    "define_code_kor_name": "광역상수관로심도"
+  },
+  {
+    "define_code_key": "560",
+    "define_code_field_key": "4671",
+    "define_code_name": "BC200",
+    "define_code_kor_name": "광역제수밸브"
+  },
+  {
+    "define_code_key": "561",
+    "define_code_field_key": "4671",
+    "define_code_name": "BC201",
+    "define_code_kor_name": "광역역지밸브"
+  },
+  {
+    "define_code_key": "562",
+    "define_code_field_key": "4671",
+    "define_code_name": "BC202",
+    "define_code_kor_name": "광역이토밸브"
+  },
+  {
+    "define_code_key": "563",
+    "define_code_field_key": "4671",
+    "define_code_name": "BC203",
+    "define_code_kor_name": "광역배기밸브"
+  },
+  {
+    "define_code_key": "564",
+    "define_code_field_key": "4671",
+    "define_code_name": "BC204",
+    "define_code_kor_name": "광역감압밸브"
+  },
+  {
+    "define_code_key": "565",
+    "define_code_field_key": "4671",
+    "define_code_name": "BC205",
+    "define_code_kor_name": "광역안전밸브"
+  },
+  {
+    "define_code_key": "566",
+    "define_code_field_key": "4671",
+    "define_code_name": "BC901",
+    "define_code_kor_name": "광역상수터널"
+  },
+  {
+    "define_code_key": "567",
+    "define_code_field_key": "4671",
+    "define_code_name": "CA001",
+    "define_code_kor_name": "등고선"
+  },
+  {
+    "define_code_key": "568",
+    "define_code_field_key": "4671",
+    "define_code_name": "CA002",
+    "define_code_kor_name": "표고점"
+  },
+  {
+    "define_code_key": "569",
+    "define_code_field_key": "4671",
+    "define_code_name": "CC001",
+    "define_code_kor_name": "붕토지"
+  },
+  {
+    "define_code_key": "570",
+    "define_code_field_key": "4671",
+    "define_code_name": "CC002",
+    "define_code_kor_name": "사태지"
+  },
+  {
+    "define_code_key": "571",
+    "define_code_field_key": "4671",
+    "define_code_name": "CC003",
+    "define_code_kor_name": "벼랑바위"
+  },
+  {
+    "define_code_key": "572",
+    "define_code_field_key": "4671",
+    "define_code_name": "CC004",
+    "define_code_kor_name": "너덜바위"
+  },
+  {
+    "define_code_key": "573",
+    "define_code_field_key": "4671",
+    "define_code_name": "DA001",
+    "define_code_kor_name": "재배지경계"
+  },
+  {
+    "define_code_key": "574",
+    "define_code_field_key": "4671",
+    "define_code_name": "DB001",
+    "define_code_kor_name": "목장및방목경계"
+  },
+  {
+    "define_code_key": "575",
+    "define_code_field_key": "4671",
+    "define_code_name": "DC001",
+    "define_code_kor_name": "숲경계"
+  },
+  {
+    "define_code_key": "576",
+    "define_code_field_key": "4671",
+    "define_code_name": "DD001",
+    "define_code_kor_name": "경관경계"
+  },
+  {
+    "define_code_key": "577",
+    "define_code_field_key": "4671",
+    "define_code_name": "DZ001",
+    "define_code_kor_name": "기타경계"
+  },
+  {
+    "define_code_key": "578",
+    "define_code_field_key": "4671",
+    "define_code_name": "EA001",
+    "define_code_kor_name": "행정구역경계"
+  },
+  {
+    "define_code_key": "579",
+    "define_code_field_key": "4671",
+    "define_code_name": "RD401",
+    "define_code_kor_name": "시설광장"
+  },
+  {
+    "define_code_key": "580",
+    "define_code_field_key": "4671",
+    "define_code_name": "SA001",
+    "define_code_kor_name": "상수관로"
+  },
+  {
+    "define_code_key": "581",
+    "define_code_field_key": "4671",
+    "define_code_name": "SA002",
+    "define_code_kor_name": "급수관로"
+  },
+  {
+    "define_code_key": "582",
+    "define_code_field_key": "4671",
+    "define_code_name": "SA003",
+    "define_code_kor_name": "스탠드파이프"
+  },
+  {
+    "define_code_key": "583",
+    "define_code_field_key": "4671",
+    "define_code_name": "SA004",
+    "define_code_kor_name": "상수폐관로"
+  },
+  {
+    "define_code_key": "584",
+    "define_code_field_key": "4671",
+    "define_code_name": "SA100",
+    "define_code_kor_name": "상수맨홀"
+  },
+  {
+    "define_code_key": "585",
+    "define_code_field_key": "4671",
+    "define_code_name": "SA110",
+    "define_code_kor_name": "수원지"
+  },
+  {
+    "define_code_key": "586",
+    "define_code_field_key": "4671",
+    "define_code_name": "SA112",
+    "define_code_kor_name": "취수장"
+  },
+  {
+    "define_code_key": "587",
+    "define_code_field_key": "4671",
+    "define_code_name": "SA113",
+    "define_code_kor_name": "정수장"
+  },
+  {
+    "define_code_key": "588",
+    "define_code_field_key": "4671",
+    "define_code_name": "SA114",
+    "define_code_kor_name": "배수지"
+  },
+  {
+    "define_code_key": "589",
+    "define_code_field_key": "4671",
+    "define_code_name": "SA117",
+    "define_code_kor_name": "유량계"
+  },
+  {
+    "define_code_key": "590",
+    "define_code_field_key": "4671",
+    "define_code_name": "SA118",
+    "define_code_kor_name": "급수탑"
+  },
+  {
+    "define_code_key": "591",
+    "define_code_field_key": "4671",
+    "define_code_name": "SA119",
+    "define_code_kor_name": "소화전"
+  },
+  {
+    "define_code_key": "592",
+    "define_code_field_key": "4671",
+    "define_code_name": "SA120",
+    "define_code_kor_name": "저수조"
+  },
+  {
+    "define_code_key": "593",
+    "define_code_field_key": "4671",
+    "define_code_name": "SA121",
+    "define_code_kor_name": "수압계"
+  },
+  {
+    "define_code_key": "594",
+    "define_code_field_key": "4671",
+    "define_code_name": "SA122",
+    "define_code_kor_name": "급수전계량기"
+  },
+  {
+    "define_code_key": "595",
+    "define_code_field_key": "4671",
+    "define_code_name": "SA200",
+    "define_code_kor_name": "제수변"
+  },
+  {
+    "define_code_key": "596",
+    "define_code_field_key": "4671",
+    "define_code_name": "SA201",
+    "define_code_kor_name": "역지변"
+  },
+  {
+    "define_code_key": "597",
+    "define_code_field_key": "4671",
+    "define_code_name": "SA202",
+    "define_code_kor_name": "이토변"
+  },
+  {
+    "define_code_key": "598",
+    "define_code_field_key": "4671",
+    "define_code_name": "SA203",
+    "define_code_kor_name": "배기변"
+  },
+  {
+    "define_code_key": "599",
+    "define_code_field_key": "4671",
+    "define_code_name": "SA204",
+    "define_code_kor_name": "감압변"
+  },
+  {
+    "define_code_key": "600",
+    "define_code_field_key": "4671",
+    "define_code_name": "SA205",
+    "define_code_kor_name": "안전변"
+  },
+  {
+    "define_code_key": "601",
+    "define_code_field_key": "4671",
+    "define_code_name": "SA206",
+    "define_code_kor_name": "가압장"
+  },
+  {
+    "define_code_key": "602",
+    "define_code_field_key": "4671",
+    "define_code_name": "SA300",
+    "define_code_kor_name": "누수지점"
+  },
+  {
+    "define_code_key": "603",
+    "define_code_field_key": "4671",
+    "define_code_name": "SA900",
+    "define_code_kor_name": "상수관로심도"
+  },
+  {
+    "define_code_key": "604",
+    "define_code_field_key": "4671",
+    "define_code_name": "SA901",
+    "define_code_kor_name": "상수폐관로"
+  },
+  {
+    "define_code_key": "605",
+    "define_code_field_key": "4671",
+    "define_code_name": "SA902",
+    "define_code_kor_name": "상수폐관심도"
+  },
+  {
+    "define_code_key": "606",
+    "define_code_field_key": "4671",
+    "define_code_name": "SA910",
+    "define_code_kor_name": "지수전"
+  },
+  {
+    "define_code_key": "607",
+    "define_code_field_key": "4671",
+    "define_code_name": "SA920",
+    "define_code_kor_name": "통신선"
+  },
+  {
+    "define_code_key": "608",
+    "define_code_field_key": "4671",
+    "define_code_name": "SA930",
+    "define_code_kor_name": "관말"
+  },
+  {
+    "define_code_key": "609",
+    "define_code_field_key": "4671",
+    "define_code_name": "SA991",
+    "define_code_kor_name": "신축관실"
+  },
+  {
+    "define_code_key": "610",
+    "define_code_field_key": "4671",
+    "define_code_name": "SB001",
+    "define_code_kor_name": "하수관거(암거)"
+  },
+  {
+    "define_code_key": "611",
+    "define_code_field_key": "4671",
+    "define_code_name": "SB002",
+    "define_code_kor_name": "하수관거(개거)"
+  },
+  {
+    "define_code_key": "612",
+    "define_code_field_key": "4671",
+    "define_code_name": "SB003",
+    "define_code_kor_name": "하수연결관"
+  },
+  {
+    "define_code_key": "613",
+    "define_code_field_key": "4671",
+    "define_code_name": "SB004",
+    "define_code_kor_name": "측구"
+  },
+  {
+    "define_code_key": "614",
+    "define_code_field_key": "4671",
+    "define_code_name": "SB006",
+    "define_code_kor_name": "하수관말"
+  },
+  {
+    "define_code_key": "615",
+    "define_code_field_key": "4671",
+    "define_code_name": "SB100",
+    "define_code_kor_name": "역사이펀"
+  },
+  {
+    "define_code_key": "616",
+    "define_code_field_key": "4671",
+    "define_code_name": "SB101",
+    "define_code_kor_name": "하수맨홀"
+  },
+  {
+    "define_code_key": "617",
+    "define_code_field_key": "4671",
+    "define_code_name": "SB102",
+    "define_code_kor_name": "물받이"
+  },
+  {
+    "define_code_key": "618",
+    "define_code_field_key": "4671",
+    "define_code_name": "SB103",
+    "define_code_kor_name": "우수토실"
+  },
+  {
+    "define_code_key": "619",
+    "define_code_field_key": "4671",
+    "define_code_name": "SB104",
+    "define_code_kor_name": "토구"
+  },
+  {
+    "define_code_key": "620",
+    "define_code_field_key": "4671",
+    "define_code_name": "SB200",
+    "define_code_kor_name": "하수처리장"
+  },
+  {
+    "define_code_key": "621",
+    "define_code_field_key": "4671",
+    "define_code_name": "SB210",
+    "define_code_kor_name": "하수펌프장"
+  },
+  {
+    "define_code_key": "622",
+    "define_code_field_key": "4671",
+    "define_code_name": "SB220",
+    "define_code_kor_name": "유수지"
+  },
+  {
+    "define_code_key": "623",
+    "define_code_field_key": "4671",
+    "define_code_name": "SB300",
+    "define_code_kor_name": "처리구역"
+  },
+  {
+    "define_code_key": "624",
+    "define_code_field_key": "4671",
+    "define_code_name": "SB301",
+    "define_code_kor_name": "처리분구"
+  },
+  {
+    "define_code_key": "625",
+    "define_code_field_key": "4671",
+    "define_code_name": "SB310",
+    "define_code_kor_name": "배수구역"
+  },
+  {
+    "define_code_key": "626",
+    "define_code_field_key": "4671",
+    "define_code_name": "SB311",
+    "define_code_kor_name": "배수분구"
+  },
+  {
+    "define_code_key": "627",
+    "define_code_field_key": "4671",
+    "define_code_name": "SB410",
+    "define_code_kor_name": "환기구"
+  },
+  {
+    "define_code_key": "628",
+    "define_code_field_key": "4671",
+    "define_code_name": "SB500",
+    "define_code_kor_name": "온천공"
+  },
+  {
+    "define_code_key": "629",
+    "define_code_field_key": "4671",
+    "define_code_name": "SB900",
+    "define_code_kor_name": "하수관거심도"
+  },
+  {
+    "define_code_key": "630",
+    "define_code_field_key": "4671",
+    "define_code_name": "SB901",
+    "define_code_kor_name": "면형암거"
+  },
+  {
+    "define_code_key": "631",
+    "define_code_field_key": "4671",
+    "define_code_name": "SB902",
+    "define_code_kor_name": "면형개거"
+  },
+  {
+    "define_code_key": "632",
+    "define_code_field_key": "4671",
+    "define_code_name": "SB903",
+    "define_code_kor_name": "하수폐관거"
+  },
+  {
+    "define_code_key": "633",
+    "define_code_field_key": "4671",
+    "define_code_name": "SB907",
+    "define_code_kor_name": "하수폐관심도"
+  },
+  {
+    "define_code_key": "634",
+    "define_code_field_key": "4671",
+    "define_code_name": "SB910",
+    "define_code_kor_name": "하수공사위치"
+  },
+  {
+    "define_code_key": "635",
+    "define_code_field_key": "4671",
+    "define_code_name": "SB940",
+    "define_code_kor_name": "준설투입구"
+  },
+  {
+    "define_code_key": "636",
+    "define_code_field_key": "4671",
+    "define_code_name": "SC110",
+    "define_code_kor_name": "고압/저압입상주"
+  },
+  {
+    "define_code_key": "637",
+    "define_code_field_key": "4671",
+    "define_code_name": "SC210",
+    "define_code_kor_name": "전기맨홀(배전)"
+  },
+  {
+    "define_code_key": "638",
+    "define_code_field_key": "4671",
+    "define_code_name": "SC212",
+    "define_code_kor_name": "개폐기"
+  },
+  {
+    "define_code_key": "639",
+    "define_code_field_key": "4671",
+    "define_code_name": "SC220",
+    "define_code_kor_name": "배전전력구"
+  },
+  {
+    "define_code_key": "640",
+    "define_code_field_key": "4671",
+    "define_code_name": "SC221",
+    "define_code_kor_name": "전력관로(배전)"
+  },
+  {
+    "define_code_key": "641",
+    "define_code_field_key": "4671",
+    "define_code_name": "SC233",
+    "define_code_kor_name": "변압기"
+  },
+  {
+    "define_code_key": "642",
+    "define_code_field_key": "4671",
+    "define_code_name": "SC242",
+    "define_code_kor_name": "전력지중환기구(배전)"
+  },
+  {
+    "define_code_key": "643",
+    "define_code_field_key": "4671",
+    "define_code_name": "SC510",
+    "define_code_kor_name": "전기맨홀(송전)"
+  },
+  {
+    "define_code_key": "644",
+    "define_code_field_key": "4671",
+    "define_code_name": "SC520",
+    "define_code_kor_name": "전력관로(송전)"
+  },
+  {
+    "define_code_key": "645",
+    "define_code_field_key": "4671",
+    "define_code_name": "SC521",
+    "define_code_kor_name": "송전전력구"
+  },
+  {
+    "define_code_key": "646",
+    "define_code_field_key": "4671",
+    "define_code_name": "SC540",
+    "define_code_kor_name": "전력지중환기구(송전)"
+  },
+  {
+    "define_code_key": "647",
+    "define_code_field_key": "4671",
+    "define_code_name": "SC900",
+    "define_code_kor_name": "전력지중관로심도"
+  },
+  {
+    "define_code_key": "648",
+    "define_code_field_key": "4671",
+    "define_code_name": "SD001",
+    "define_code_kor_name": "통신선로"
+  },
+  {
+    "define_code_key": "649",
+    "define_code_field_key": "4671",
+    "define_code_name": "SD100",
+    "define_code_kor_name": "통신맨홀"
+  },
+  {
+    "define_code_key": "650",
+    "define_code_field_key": "4671",
+    "define_code_name": "SD300",
+    "define_code_kor_name": "통신주"
+  },
+  {
+    "define_code_key": "651",
+    "define_code_field_key": "4671",
+    "define_code_name": "SD900",
+    "define_code_kor_name": "통신심도"
+  },
+  {
+    "define_code_key": "652",
+    "define_code_field_key": "4671",
+    "define_code_name": "SE001",
+    "define_code_kor_name": "열배관"
+  },
+  {
+    "define_code_key": "653",
+    "define_code_field_key": "4671",
+    "define_code_name": "SE100",
+    "define_code_kor_name": "난방맨홀"
+  },
+  {
+    "define_code_key": "654",
+    "define_code_field_key": "4671",
+    "define_code_name": "SE111",
+    "define_code_kor_name": "에어벤트"
+  },
+  {
+    "define_code_key": "655",
+    "define_code_field_key": "4671",
+    "define_code_name": "SE112",
+    "define_code_kor_name": "핸드홀"
+  },
+  {
+    "define_code_key": "656",
+    "define_code_field_key": "4671",
+    "define_code_name": "SE114",
+    "define_code_kor_name": "누수감지기설치함"
+  },
+  {
+    "define_code_key": "657",
+    "define_code_field_key": "4671",
+    "define_code_name": "SE900",
+    "define_code_kor_name": "열배관심도"
+  },
+  {
+    "define_code_key": "658",
+    "define_code_field_key": "4671",
+    "define_code_name": "SF001",
+    "define_code_kor_name": "송유관로"
+  },
+  {
+    "define_code_key": "659",
+    "define_code_field_key": "4671",
+    "define_code_name": "SF110",
+    "define_code_kor_name": "송유관보호시설"
+  },
+  {
+    "define_code_key": "660",
+    "define_code_field_key": "4671",
+    "define_code_name": "SF200",
+    "define_code_kor_name": "저유소"
+  },
+  {
+    "define_code_key": "661",
+    "define_code_field_key": "4671",
+    "define_code_name": "SF300",
+    "define_code_kor_name": "가압소"
+  },
+  {
+    "define_code_key": "662",
+    "define_code_field_key": "4671",
+    "define_code_name": "SF400",
+    "define_code_kor_name": "밸브스테이션"
+  },
+  {
+    "define_code_key": "663",
+    "define_code_field_key": "4671",
+    "define_code_name": "SF500",
+    "define_code_kor_name": "밸브박스(송유밸브박스)"
+  },
+  {
+    "define_code_key": "664",
+    "define_code_field_key": "4671",
+    "define_code_name": "SF600",
+    "define_code_kor_name": "누유감지케이블"
+  },
+  {
+    "define_code_key": "665",
+    "define_code_field_key": "4671",
+    "define_code_name": "SF900",
+    "define_code_kor_name": "송유관로심도"
+  },
+  {
+    "define_code_key": "666",
+    "define_code_field_key": "4671",
+    "define_code_name": "SG001",
+    "define_code_kor_name": "천연가스배관"
+  },
+  {
+    "define_code_key": "667",
+    "define_code_field_key": "4671",
+    "define_code_name": "SG002",
+    "define_code_kor_name": "LPG배관"
+  },
+  {
+    "define_code_key": "668",
+    "define_code_field_key": "4671",
+    "define_code_name": "SG010",
+    "define_code_kor_name": "정압기"
+  },
+  {
+    "define_code_key": "669",
+    "define_code_field_key": "4671",
+    "define_code_name": "SG040",
+    "define_code_kor_name": "밸브(가스밸브)"
+  },
+  {
+    "define_code_key": "670",
+    "define_code_field_key": "4671",
+    "define_code_name": "SG060",
+    "define_code_kor_name": "방식전위관측함"
+  },
+  {
+    "define_code_key": "671",
+    "define_code_field_key": "4671",
+    "define_code_name": "SG100",
+    "define_code_kor_name": "천연가스맨홀"
+  },
+  {
+    "define_code_key": "672",
+    "define_code_field_key": "4671",
+    "define_code_name": "SG101",
+    "define_code_kor_name": "LPG맨홀"
+  },
+  {
+    "define_code_key": "673",
+    "define_code_field_key": "4671",
+    "define_code_name": "SG900",
+    "define_code_kor_name": "가스배관심도"
+  },
+  {
+    "define_code_key": "674",
+    "define_code_field_key": "4671",
+    "define_code_name": "UC200",
+    "define_code_kor_name": "시군구경계"
+  },
+  {
+    "define_code_key": "675",
+    "define_code_field_key": "4671",
+    "define_code_name": "UC300",
+    "define_code_kor_name": "읍면동경계(행정구역)"
+  },
+  {
+    "define_code_key": "676",
+    "define_code_field_key": "4671",
+    "define_code_name": "UC400",
+    "define_code_kor_name": "읍면동경계(법정구역)"
+  },
+  {
+    "define_code_key": "677",
+    "define_code_field_key": "4671",
+    "define_code_name": "UD301",
+    "define_code_kor_name": "택지개발예정지구"
+  },
+  {
+    "define_code_key": "678",
+    "define_code_field_key": "4671",
+    "define_code_name": "UD401",
+    "define_code_kor_name": "토지구획정리사업지구"
+  },
+  {
+    "define_code_key": "679",
+    "define_code_field_key": "4671",
+    "define_code_name": "UD601",
+    "define_code_kor_name": "주거환경개선지구"
+  },
+  {
+    "define_code_key": "680",
+    "define_code_field_key": "4671",
+    "define_code_name": "UD801",
+    "define_code_kor_name": "개발제한구역"
+  },
+  {
+    "define_code_key": "681",
+    "define_code_field_key": "4671",
+    "define_code_name": "UD901",
+    "define_code_kor_name": "도시개발구역"
+  },
+  {
+    "define_code_key": "682",
+    "define_code_field_key": "4671",
+    "define_code_name": "UE101",
+    "define_code_kor_name": "농업진흥구역"
+  },
+  {
+    "define_code_key": "683",
+    "define_code_field_key": "4671",
+    "define_code_name": "UF101",
+    "define_code_kor_name": "보전임지"
+  },
+  {
+    "define_code_key": "684",
+    "define_code_field_key": "4671",
+    "define_code_name": "UF111",
+    "define_code_kor_name": "준보전임지"
+  },
+  {
+    "define_code_key": "685",
+    "define_code_field_key": "4671",
+    "define_code_name": "UF801",
+    "define_code_kor_name": "산임지"
+  },
+  {
+    "define_code_key": "686",
+    "define_code_field_key": "4671",
+    "define_code_name": "UH101",
+    "define_code_kor_name": "산업단지"
+  },
+  {
+    "define_code_key": "687",
+    "define_code_field_key": "4671",
+    "define_code_name": "UN101",
+    "define_code_kor_name": "군사시설보호구역"
+  },
+  {
+    "define_code_key": "688",
+    "define_code_field_key": "4671",
+    "define_code_name": "UN201",
+    "define_code_kor_name": "비행안전구역"
+  },
+  {
+    "define_code_key": "689",
+    "define_code_field_key": "4671",
+    "define_code_name": "UO301",
+    "define_code_kor_name": "문화재보호구역"
+  },
+  {
+    "define_code_key": "690",
+    "define_code_field_key": "4671",
+    "define_code_name": "UQ111",
+    "define_code_kor_name": "도시지역"
+  },
+  {
+    "define_code_key": "691",
+    "define_code_field_key": "4671",
+    "define_code_name": "UQ112",
+    "define_code_kor_name": "관리지역"
+  },
+  {
+    "define_code_key": "692",
+    "define_code_field_key": "4671",
+    "define_code_name": "UQ113",
+    "define_code_kor_name": "농림지역"
+  },
+  {
+    "define_code_key": "693",
+    "define_code_field_key": "4671",
+    "define_code_name": "UQ114",
+    "define_code_kor_name": "자연환경보전지역"
+  },
+  {
+    "define_code_key": "694",
+    "define_code_field_key": "4671",
+    "define_code_name": "UQ115",
+    "define_code_kor_name": "기타용도지역"
+  },
+  {
+    "define_code_key": "695",
+    "define_code_field_key": "4671",
+    "define_code_name": "UQ121",
+    "define_code_kor_name": "경관지구"
+  },
+  {
+    "define_code_key": "696",
+    "define_code_field_key": "4671",
+    "define_code_name": "UQ122",
+    "define_code_kor_name": "미관지구"
+  },
+  {
+    "define_code_key": "697",
+    "define_code_field_key": "4671",
+    "define_code_name": "UQ123",
+    "define_code_kor_name": "고도지구"
+  },
+  {
+    "define_code_key": "698",
+    "define_code_field_key": "4671",
+    "define_code_name": "UQ124",
+    "define_code_kor_name": "방화지구"
+  },
+  {
+    "define_code_key": "699",
+    "define_code_field_key": "4671",
+    "define_code_name": "UQ125",
+    "define_code_kor_name": "방재지구"
+  },
+  {
+    "define_code_key": "700",
+    "define_code_field_key": "4671",
+    "define_code_name": "UQ126",
+    "define_code_kor_name": "보존지구"
+  },
+  {
+    "define_code_key": "701",
+    "define_code_field_key": "4671",
+    "define_code_name": "UQ127",
+    "define_code_kor_name": "시설보호지구"
+  },
+  {
+    "define_code_key": "702",
+    "define_code_field_key": "4671",
+    "define_code_name": "UQ128",
+    "define_code_kor_name": "취락지구"
+  },
+  {
+    "define_code_key": "703",
+    "define_code_field_key": "4671",
+    "define_code_name": "UQ129",
+    "define_code_kor_name": "개발진흥지구"
+  },
+  {
+    "define_code_key": "704",
+    "define_code_field_key": "4671",
+    "define_code_name": "UQ130",
+    "define_code_kor_name": "특정용도제한지구"
+  },
+  {
+    "define_code_key": "705",
+    "define_code_field_key": "4671",
+    "define_code_name": "UQ131",
+    "define_code_kor_name": "기타용도지구"
+  },
+  {
+    "define_code_key": "706",
+    "define_code_field_key": "4671",
+    "define_code_name": "UQ141",
+    "define_code_kor_name": "용도구역"
+  },
+  {
+    "define_code_key": "707",
+    "define_code_field_key": "4671",
+    "define_code_name": "UQ161",
+    "define_code_kor_name": "교통시설"
+  },
+  {
+    "define_code_key": "708",
+    "define_code_field_key": "4671",
+    "define_code_name": "UQ162",
+    "define_code_kor_name": "공간시설"
+  },
+  {
+    "define_code_key": "709",
+    "define_code_field_key": "4671",
+    "define_code_name": "UQ163",
+    "define_code_kor_name": "유통및공급시설"
+  },
+  {
+    "define_code_key": "710",
+    "define_code_field_key": "4671",
+    "define_code_name": "UQ164",
+    "define_code_kor_name": "공공문화체육시설"
+  },
+  {
+    "define_code_key": "711",
+    "define_code_field_key": "4671",
+    "define_code_name": "UQ165",
+    "define_code_kor_name": "방재시설"
+  },
+  {
+    "define_code_key": "712",
+    "define_code_field_key": "4671",
+    "define_code_name": "UQ166",
+    "define_code_kor_name": "보건위생시설"
+  },
+  {
+    "define_code_key": "713",
+    "define_code_field_key": "4671",
+    "define_code_name": "UQ167",
+    "define_code_kor_name": "환경기초시설"
+  },
+  {
+    "define_code_key": "714",
+    "define_code_field_key": "4671",
+    "define_code_name": "ZA001",
+    "define_code_kor_name": "삼각점"
+  },
+  {
+    "define_code_key": "715",
+    "define_code_field_key": "4671",
+    "define_code_name": "ZA002",
+    "define_code_kor_name": "수준점"
+  },
+  {
+    "define_code_key": "716",
+    "define_code_field_key": "4671",
+    "define_code_name": "ZA010",
+    "define_code_kor_name": "수평기준점"
+  },
+  {
+    "define_code_key": "717",
+    "define_code_field_key": "4671",
+    "define_code_name": "ZA011",
+    "define_code_kor_name": "수직기준점"
+  },
+  {
+    "define_code_key": "718",
+    "define_code_field_key": "4671",
+    "define_code_name": "ZA020",
+    "define_code_kor_name": "표정점"
+  },
+  {
+    "define_code_key": "719",
+    "define_code_field_key": "4671",
+    "define_code_name": "ZA090",
+    "define_code_kor_name": "도시기준점"
+  },
+  {
+    "define_code_key": "720",
+    "define_code_field_key": "4671",
+    "define_code_name": "ZC000",
+    "define_code_kor_name": "연속지적"
+  },
+  {
+    "define_code_key": "721",
+    "define_code_field_key": "4671",
+    "define_code_name": "ZC301",
+    "define_code_kor_name": "지류"
+  },
+  {
+    "define_code_key": "722",
+    "define_code_field_key": "4671",
+    "define_code_name": "ZC501",
+    "define_code_kor_name": "지적"
+  },
+  {
+    "define_code_key": "723",
+    "define_code_field_key": "4671",
+    "define_code_name": "ZD100",
+    "define_code_kor_name": "1/500색인도"
+  },
+  {
+    "define_code_key": "724",
+    "define_code_field_key": "4671",
+    "define_code_name": "ZD200",
+    "define_code_kor_name": "1/1000색인도"
+  },
+  {
+    "define_code_key": "725",
+    "define_code_field_key": "4671",
+    "define_code_name": "ZD300",
+    "define_code_kor_name": "1/2500색인도"
+  },
+  {
+    "define_code_key": "726",
+    "define_code_field_key": "4671",
+    "define_code_name": "ZD400",
+    "define_code_kor_name": "1/5000색인도"
+  },
+  {
+    "define_code_key": "66761",
+    "define_code_field_key": "4671",
+    "define_code_name": "AA200",
+    "define_code_kor_name": "문주"
+  },
+  {
+    "define_code_key": "66762",
+    "define_code_field_key": "4671",
+    "define_code_name": "AA201",
+    "define_code_kor_name": "굴뚝"
+  },
+  {
+    "define_code_key": "66763",
+    "define_code_field_key": "4671",
+    "define_code_name": "AB001",
+    "define_code_kor_name": "공동묘지"
+  },
+  {
+    "define_code_key": "66764",
+    "define_code_field_key": "4671",
+    "define_code_name": "AB002",
+    "define_code_kor_name": "묘지"
+  },
+  {
+    "define_code_key": "66765",
+    "define_code_field_key": "4671",
+    "define_code_name": "AB003",
+    "define_code_kor_name": "유적지"
+  },
+  {
+    "define_code_key": "66766",
+    "define_code_field_key": "4671",
+    "define_code_name": "AB010",
+    "define_code_kor_name": "기념비"
+  },
+  {
+    "define_code_key": "66767",
+    "define_code_field_key": "4671",
+    "define_code_name": "AB011",
+    "define_code_kor_name": "입상(동상)"
+  },
+  {
+    "define_code_key": "66768",
+    "define_code_field_key": "4671",
+    "define_code_name": "AB020",
+    "define_code_kor_name": "성"
+  },
+  {
+    "define_code_key": "66769",
+    "define_code_field_key": "4671",
+    "define_code_name": "AB100",
+    "define_code_kor_name": "선형체육및놀이시설"
+  },
+  {
+    "define_code_key": "66770",
+    "define_code_field_key": "4671",
+    "define_code_name": "AB101",
+    "define_code_kor_name": "점형체육및놀이시설"
+  },
+  {
+    "define_code_key": "66771",
+    "define_code_field_key": "4671",
+    "define_code_name": "AC001",
+    "define_code_kor_name": "처리시설경계"
+  },
+  {
+    "define_code_key": "66772",
+    "define_code_field_key": "4671",
+    "define_code_name": "AC002",
+    "define_code_kor_name": "처리시설"
+  },
+  {
+    "define_code_key": "66773",
+    "define_code_field_key": "4671",
+    "define_code_name": "AD002",
+    "define_code_kor_name": "도로중심선"
+  },
+  {
+    "define_code_key": "66774",
+    "define_code_field_key": "4671",
+    "define_code_name": "AD003",
+    "define_code_kor_name": "도로경계선"
+  },
+  {
+    "define_code_key": "66775",
+    "define_code_field_key": "4671",
+    "define_code_name": "AD010",
+    "define_code_kor_name": "도로교차"
+  },
+  {
+    "define_code_key": "66776",
+    "define_code_field_key": "4671",
+    "define_code_name": "AD020",
+    "define_code_kor_name": "도로원표"
+  },
+  {
+    "define_code_key": "66777",
+    "define_code_field_key": "4671",
+    "define_code_name": "AD090",
+    "define_code_kor_name": "도시계획도로계획선"
+  },
+  {
+    "define_code_key": "66778",
+    "define_code_field_key": "4671",
+    "define_code_name": "AD950",
+    "define_code_kor_name": "공사위치"
+  },
+  {
+    "define_code_key": "66779",
+    "define_code_field_key": "4671",
+    "define_code_name": "AE001",
+    "define_code_kor_name": "보도"
+  },
+  {
+    "define_code_key": "66780",
+    "define_code_field_key": "4671",
+    "define_code_name": "AE002",
+    "define_code_kor_name": "보도면"
+  },
+  {
+    "define_code_key": "66781",
+    "define_code_field_key": "4671",
+    "define_code_name": "AE010",
+    "define_code_kor_name": "교량"
+  },
+  {
+    "define_code_key": "66782",
+    "define_code_field_key": "4671",
+    "define_code_name": "AE020",
+    "define_code_kor_name": "터널"
+  },
+  {
+    "define_code_key": "66783",
+    "define_code_field_key": "4671",
+    "define_code_name": "AE021",
+    "define_code_kor_name": "터널입구"
+  },
+  {
+    "define_code_key": "66784",
+    "define_code_field_key": "4671",
+    "define_code_name": "AE030",
+    "define_code_kor_name": "입체교차로"
+  },
+  {
+    "define_code_key": "66785",
+    "define_code_field_key": "4671",
+    "define_code_name": "AE040",
+    "define_code_kor_name": "고가도로"
+  },
+  {
+    "define_code_key": "66786",
+    "define_code_field_key": "4671",
+    "define_code_name": "AE045",
+    "define_code_kor_name": "고가차도"
+  },
+  {
+    "define_code_key": "66787",
+    "define_code_field_key": "4671",
+    "define_code_name": "AE050",
+    "define_code_kor_name": "지하보도"
+  },
+  {
+    "define_code_key": "66788",
+    "define_code_field_key": "4671",
+    "define_code_name": "AE052",
+    "define_code_kor_name": "지하도"
+  },
+  {
+    "define_code_key": "66789",
+    "define_code_field_key": "4671",
+    "define_code_name": "AE053",
+    "define_code_kor_name": "지하철입구"
+  },
+  {
+    "define_code_key": "66790",
+    "define_code_field_key": "4671",
+    "define_code_name": "AE054",
+    "define_code_kor_name": "지하도입구"
+  },
+  {
+    "define_code_key": "66791",
+    "define_code_field_key": "4671",
+    "define_code_name": "AE057",
+    "define_code_kor_name": "지하차도"
+  },
+  {
+    "define_code_key": "66792",
+    "define_code_field_key": "4671",
+    "define_code_name": "AE100",
+    "define_code_kor_name": "육교"
+  },
+  {
+    "define_code_key": "66793",
+    "define_code_field_key": "4671",
+    "define_code_name": "AE110",
+    "define_code_kor_name": "도로분리대"
+  },
+  {
+    "define_code_key": "66794",
+    "define_code_field_key": "4671",
+    "define_code_name": "AE120",
+    "define_code_kor_name": "횡단보도"
+  },
+  {
+    "define_code_key": "66795",
+    "define_code_field_key": "4671",
+    "define_code_name": "AE121",
+    "define_code_kor_name": "교통섬"
+  },
+  {
+    "define_code_key": "66796",
+    "define_code_field_key": "4671",
+    "define_code_name": "AE122",
+    "define_code_kor_name": "과속방지턱"
+  },
+  {
+    "define_code_key": "66797",
+    "define_code_field_key": "4671",
+    "define_code_name": "AE123",
+    "define_code_kor_name": "미끄럼방지시설"
+  },
+  {
+    "define_code_key": "66798",
+    "define_code_field_key": "4671",
+    "define_code_name": "AE129",
+    "define_code_kor_name": "자전거도로"
+  },
+  {
+    "define_code_key": "66799",
+    "define_code_field_key": "4671",
+    "define_code_name": "AE130",
+    "define_code_kor_name": "차단기"
+  },
+  {
+    "define_code_key": "66800",
+    "define_code_field_key": "4671",
+    "define_code_name": "AE132",
+    "define_code_kor_name": "신호등"
+  },
+  {
+    "define_code_key": "66801",
+    "define_code_field_key": "4671",
+    "define_code_name": "AE133",
+    "define_code_kor_name": "분전함"
+  },
+  {
+    "define_code_key": "66802",
+    "define_code_field_key": "4671",
+    "define_code_name": "AE140",
+    "define_code_kor_name": "계단"
+  },
+  {
+    "define_code_key": "66803",
+    "define_code_field_key": "4671",
+    "define_code_name": "AE160",
+    "define_code_kor_name": "가로수"
+  },
+  {
+    "define_code_key": "66804",
+    "define_code_field_key": "4671",
+    "define_code_name": "AE170",
+    "define_code_kor_name": "전주"
+  },
+  {
+    "define_code_key": "66805",
+    "define_code_field_key": "4671",
+    "define_code_name": "AE200",
+    "define_code_kor_name": "도로반사경"
+  },
+  {
+    "define_code_key": "66806",
+    "define_code_field_key": "4671",
+    "define_code_name": "AE210",
+    "define_code_kor_name": "도로표지"
+  },
+  {
+    "define_code_key": "66807",
+    "define_code_field_key": "4671",
+    "define_code_name": "AE211",
+    "define_code_kor_name": "교통표지"
+  },
+  {
+    "define_code_key": "66808",
+    "define_code_field_key": "4671",
+    "define_code_name": "AE220",
+    "define_code_kor_name": "방지책"
+  },
+  {
+    "define_code_key": "66809",
+    "define_code_field_key": "4671",
+    "define_code_name": "AE222",
+    "define_code_kor_name": "가드펜스"
+  },
+  {
+    "define_code_key": "66810",
+    "define_code_field_key": "4671",
+    "define_code_name": "AE230",
+    "define_code_kor_name": "주차장경계"
+  },
+  {
+    "define_code_key": "66811",
+    "define_code_field_key": "4671",
+    "define_code_name": "AE240",
+    "define_code_kor_name": "주유소"
+  },
+  {
+    "define_code_key": "66812",
+    "define_code_field_key": "4671",
+    "define_code_name": "AE250",
+    "define_code_kor_name": "세차장"
+  },
+  {
+    "define_code_key": "66813",
+    "define_code_field_key": "4671",
+    "define_code_name": "AE260",
+    "define_code_kor_name": "정류장"
+  },
+  {
+    "define_code_key": "66814",
+    "define_code_field_key": "4671",
+    "define_code_name": "AE261",
+    "define_code_kor_name": "승강장"
+  },
+  {
+    "define_code_key": "66815",
+    "define_code_field_key": "4671",
+    "define_code_name": "AE270",
+    "define_code_kor_name": "휴게소"
+  },
+  {
+    "define_code_key": "66816",
+    "define_code_field_key": "4671",
+    "define_code_name": "AE300",
+    "define_code_kor_name": "우체통"
+  },
+  {
+    "define_code_key": "66817",
+    "define_code_field_key": "4671",
+    "define_code_name": "AE305",
+    "define_code_kor_name": "공중전화박스"
+  },
+  {
+    "define_code_key": "66818",
+    "define_code_field_key": "4671",
+    "define_code_name": "AE310",
+    "define_code_kor_name": "게시판"
+  },
+  {
+    "define_code_key": "66819",
+    "define_code_field_key": "4671",
+    "define_code_name": "AE315",
+    "define_code_kor_name": "조경화단"
+  },
+  {
+    "define_code_key": "66820",
+    "define_code_field_key": "4671",
+    "define_code_name": "AE325",
+    "define_code_kor_name": "시계탑"
+  },
+  {
+    "define_code_key": "66821",
+    "define_code_field_key": "4671",
+    "define_code_name": "AE330",
+    "define_code_kor_name": "분수"
+  },
+  {
+    "define_code_key": "66822",
+    "define_code_field_key": "4671",
+    "define_code_name": "AE335",
+    "define_code_kor_name": "벤치"
+  },
+  {
+    "define_code_key": "66823",
+    "define_code_field_key": "4671",
+    "define_code_name": "AE340",
+    "define_code_kor_name": "암거"
+  },
+  {
+    "define_code_key": "66824",
+    "define_code_field_key": "4671",
+    "define_code_name": "AE354",
+    "define_code_kor_name": "교통광장"
+  },
+  {
+    "define_code_key": "66825",
+    "define_code_field_key": "4671",
+    "define_code_name": "AE542",
+    "define_code_kor_name": "자전거보관소"
+  },
+  {
+    "define_code_key": "66826",
+    "define_code_field_key": "4671",
+    "define_code_name": "AE543",
+    "define_code_kor_name": "자전거도로"
+  },
+  {
+    "define_code_key": "66827",
+    "define_code_field_key": "4671",
+    "define_code_name": "AE545",
+    "define_code_kor_name": "자전거도로"
+  },
+  {
+    "define_code_key": "66828",
+    "define_code_field_key": "4671",
+    "define_code_name": "AE600",
+    "define_code_kor_name": "가로화단"
+  },
+  {
+    "define_code_key": "66829",
+    "define_code_field_key": "4671",
+    "define_code_name": "AE610",
+    "define_code_kor_name": "시설녹지"
+  },
+  {
+    "define_code_key": "66830",
+    "define_code_field_key": "4671",
+    "define_code_name": "AE640",
+    "define_code_kor_name": "투광기"
+  },
+  {
+    "define_code_key": "66831",
+    "define_code_field_key": "4671",
+    "define_code_name": "AE650",
+    "define_code_kor_name": "무인단속카메라"
+  },
+  {
+    "define_code_key": "66832",
+    "define_code_field_key": "4671",
+    "define_code_name": "AE670",
+    "define_code_kor_name": "표지병"
+  },
+  {
+    "define_code_key": "66833",
+    "define_code_field_key": "4671",
+    "define_code_name": "AE901",
+    "define_code_kor_name": "탄력봉(규제봉)"
+  },
+  {
+    "define_code_key": "66834",
+    "define_code_field_key": "4671",
+    "define_code_name": "AE900",
+    "define_code_kor_name": "공동구"
+  },
+  {
+    "define_code_key": "66835",
+    "define_code_field_key": "4671",
+    "define_code_name": "AE902",
+    "define_code_kor_name": "도로절개지"
+  },
+  {
+    "define_code_key": "66836",
+    "define_code_field_key": "4671",
+    "define_code_name": "AE911",
+    "define_code_kor_name": "신호등 제어기"
+  },
+  {
+    "define_code_key": "66837",
+    "define_code_field_key": "4671",
+    "define_code_name": "AE912",
+    "define_code_kor_name": "신호등 선로"
+  },
+  {
+    "define_code_key": "66838",
+    "define_code_field_key": "4671",
+    "define_code_name": "AE940",
+    "define_code_kor_name": "기계식 주차장"
+  },
+  {
+    "define_code_key": "66839",
+    "define_code_field_key": "4671",
+    "define_code_name": "AE941",
+    "define_code_kor_name": "주차장구획선"
+  },
+  {
+    "define_code_key": "66840",
+    "define_code_field_key": "4671",
+    "define_code_name": "AE950",
+    "define_code_kor_name": "주차금지구역"
+  },
+  {
+    "define_code_key": "66841",
+    "define_code_field_key": "4671",
+    "define_code_name": "AE951",
+    "define_code_kor_name": "주정차금지구역"
+  },
+  {
+    "define_code_key": "66842",
+    "define_code_field_key": "4671",
+    "define_code_name": "AE980",
+    "define_code_kor_name": "어린이 보호구역"
+  },
+  {
+    "define_code_key": "66843",
+    "define_code_field_key": "4671",
+    "define_code_name": "AE981",
+    "define_code_kor_name": "어린이 보호구역내 시설"
+  },
+  {
+    "define_code_key": "66844",
+    "define_code_field_key": "4671",
+    "define_code_name": "AE994",
+    "define_code_kor_name": "사설안내표지"
+  },
+  {
+    "define_code_key": "66845",
+    "define_code_field_key": "4671",
+    "define_code_name": "AE995",
+    "define_code_kor_name": "제한높이시설"
+  },
+  {
+    "define_code_key": "66846",
+    "define_code_field_key": "4671",
+    "define_code_name": "AE996",
+    "define_code_kor_name": "굴착허가청구역"
+  },
+  {
+    "define_code_key": "66847",
+    "define_code_field_key": "4671",
+    "define_code_name": "AF001",
+    "define_code_kor_name": "철도"
+  },
+  {
+    "define_code_key": "66848",
+    "define_code_field_key": "4671",
+    "define_code_name": "AF002",
+    "define_code_kor_name": "철도중심선"
+  },
+  {
+    "define_code_key": "66849",
+    "define_code_field_key": "4671",
+    "define_code_name": "AF030",
+    "define_code_kor_name": "철도교차"
+  },
+  {
+    "define_code_key": "66850",
+    "define_code_field_key": "4671",
+    "define_code_name": "AG001",
+    "define_code_kor_name": "철교"
+  },
+  {
+    "define_code_key": "66851",
+    "define_code_field_key": "4671",
+    "define_code_name": "AG010",
+    "define_code_kor_name": "고가부"
+  },
+  {
+    "define_code_key": "66852",
+    "define_code_field_key": "4671",
+    "define_code_name": "AG020",
+    "define_code_kor_name": "철도터널"
+  },
+  {
+    "define_code_key": "66853",
+    "define_code_field_key": "4671",
+    "define_code_name": "AG100",
+    "define_code_kor_name": "플랫폼"
+  },
+  {
+    "define_code_key": "66854",
+    "define_code_field_key": "4671",
+    "define_code_name": "AG101",
+    "define_code_kor_name": "플랫폼의지붕"
+  },
+  {
+    "define_code_key": "66855",
+    "define_code_field_key": "4671",
+    "define_code_name": "AH001",
+    "define_code_kor_name": "저장조"
+  },
+  {
+    "define_code_key": "66856",
+    "define_code_field_key": "4671",
+    "define_code_name": "AH100",
+    "define_code_kor_name": "지상관망"
+  },
+  {
+    "define_code_key": "66857",
+    "define_code_field_key": "4671",
+    "define_code_name": "AI001",
+    "define_code_kor_name": "우물"
+  },
+  {
+    "define_code_key": "66858",
+    "define_code_field_key": "4671",
+    "define_code_name": "AI010",
+    "define_code_kor_name": "보안등"
+  },
+  {
+    "define_code_key": "66859",
+    "define_code_field_key": "4671",
+    "define_code_name": "AJ010",
+    "define_code_kor_name": "양/배수장경계"
+  },
+  {
+    "define_code_key": "66860",
+    "define_code_field_key": "4671",
+    "define_code_name": "AJ020",
+    "define_code_kor_name": "양식장경계"
+  },
+  {
+    "define_code_key": "66861",
+    "define_code_field_key": "4671",
+    "define_code_name": "AK001",
+    "define_code_kor_name": "시장경계"
+  },
+  {
+    "define_code_key": "66862",
+    "define_code_field_key": "4671",
+    "define_code_name": "AZ001",
+    "define_code_kor_name": "소화전"
+  },
+  {
+    "define_code_key": "66863",
+    "define_code_field_key": "4671",
+    "define_code_name": "AZ010",
+    "define_code_kor_name": "급수탑"
+  },
+  {
+    "define_code_key": "66864",
+    "define_code_field_key": "4671",
+    "define_code_name": "AZ020",
+    "define_code_kor_name": "전주류"
+  },
+  {
+    "define_code_key": "66865",
+    "define_code_field_key": "4671",
+    "define_code_name": "AZ030",
+    "define_code_kor_name": "환기구"
+  },
+  {
+    "define_code_key": "66866",
+    "define_code_field_key": "4671",
+    "define_code_name": "AZ040",
+    "define_code_kor_name": "맨홀"
+  },
+  {
+    "define_code_key": "66867",
+    "define_code_field_key": "4671",
+    "define_code_name": "AZ050",
+    "define_code_kor_name": "관측소"
+  },
+  {
+    "define_code_key": "66868",
+    "define_code_field_key": "4671",
+    "define_code_name": "AZ060",
+    "define_code_kor_name": "헬기장"
+  },
+  {
+    "define_code_key": "66869",
+    "define_code_field_key": "4671",
+    "define_code_name": "AZ070",
+    "define_code_kor_name": "성절토(상단)"
+  },
+  {
+    "define_code_key": "66870",
+    "define_code_field_key": "4671",
+    "define_code_name": "AZ085",
+    "define_code_kor_name": "옹벽"
+  },
+  {
+    "define_code_key": "66871",
+    "define_code_field_key": "4671",
+    "define_code_name": "AZ090",
+    "define_code_kor_name": "경사보호망"
+  },
+  {
+    "define_code_key": "66872",
+    "define_code_field_key": "4671",
+    "define_code_name": "AZ120",
+    "define_code_kor_name": "적치장"
+  },
+  {
+    "define_code_key": "66873",
+    "define_code_field_key": "4671",
+    "define_code_name": "AZ130",
+    "define_code_kor_name": "매립지"
+  },
+  {
+    "define_code_key": "66874",
+    "define_code_field_key": "4671",
+    "define_code_name": "AZ140",
+    "define_code_kor_name": "채취장"
+  },
+  {
+    "define_code_key": "66875",
+    "define_code_field_key": "4671",
+    "define_code_name": "AZ150",
+    "define_code_kor_name": "기중기"
+  },
+  {
+    "define_code_key": "66876",
+    "define_code_field_key": "4671",
+    "define_code_name": "AZ941",
+    "define_code_kor_name": "기본도_전력맨홀"
+  },
+  {
+    "define_code_key": "66877",
+    "define_code_field_key": "4671",
+    "define_code_name": "AZ902",
+    "define_code_kor_name": "기본도_통신맨홀"
+  },
+  {
+    "define_code_key": "66878",
+    "define_code_field_key": "4671",
+    "define_code_name": "AZ903",
+    "define_code_kor_name": "기본도_가스맨홀"
+  },
+  {
+    "define_code_key": "66879",
+    "define_code_field_key": "4671",
+    "define_code_name": "AZ904",
+    "define_code_kor_name": "기본도_기타맨홀"
+  },
+  {
+    "define_code_key": "66880",
+    "define_code_field_key": "4671",
+    "define_code_name": "AZ905",
+    "define_code_kor_name": "마을"
+  },
+  {
+    "define_code_key": "66881",
+    "define_code_field_key": "4671",
+    "define_code_name": "AZ900",
+    "define_code_kor_name": "차도포장"
+  },
+  {
+    "define_code_key": "66882",
+    "define_code_field_key": "4671",
+    "define_code_name": "AZ901",
+    "define_code_kor_name": "보도포장"
+  },
+  {
+    "define_code_key": "66883",
+    "define_code_field_key": "4671",
+    "define_code_name": "AZ935",
+    "define_code_kor_name": "굴착허가위치"
+  },
+  {
+    "define_code_key": "66884",
+    "define_code_field_key": "4671",
+    "define_code_name": "AZ936",
+    "define_code_kor_name": "도로점용"
+  },
+  {
+    "define_code_key": "66885",
+    "define_code_field_key": "4671",
+    "define_code_name": "AZ937",
+    "define_code_kor_name": "도로점용_선"
+  },
+  {
+    "define_code_key": "66886",
+    "define_code_field_key": "4671",
+    "define_code_name": "AZ938",
+    "define_code_kor_name": "도로점용_면"
+  },
+  {
+    "define_code_key": "66887",
+    "define_code_field_key": "4671",
+    "define_code_name": "AZ992",
+    "define_code_kor_name": "자전거보관대"
+  },
+  {
+    "define_code_key": "66888",
+    "define_code_field_key": "4671",
+    "define_code_name": "AZ993",
+    "define_code_kor_name": "차량진입방지시설"
+  },
+  {
+    "define_code_key": "66889",
+    "define_code_field_key": "4671",
+    "define_code_name": "AZ994",
+    "define_code_kor_name": "차량충격흡수시설"
+  },
+  {
+    "define_code_key": "66890",
+    "define_code_field_key": "4671",
+    "define_code_name": "BA000",
+    "define_code_kor_name": "실폭하천"
+  },
+  {
+    "define_code_key": "66891",
+    "define_code_field_key": "4671",
+    "define_code_name": "BA001",
+    "define_code_kor_name": "하천경계"
+  },
+  {
+    "define_code_key": "66892",
+    "define_code_field_key": "4671",
+    "define_code_name": "BA002",
+    "define_code_kor_name": "하천중심선"
+  },
+  {
+    "define_code_key": "66893",
+    "define_code_field_key": "4671",
+    "define_code_name": "BA003",
+    "define_code_kor_name": "세류"
+  },
+  {
+    "define_code_key": "66894",
+    "define_code_field_key": "4671",
+    "define_code_name": "BA004",
+    "define_code_kor_name": "건천"
+  },
+  {
+    "define_code_key": "66895",
+    "define_code_field_key": "4671",
+    "define_code_name": "BA010",
+    "define_code_kor_name": "호수/저수지"
+  },
+  {
+    "define_code_key": "66896",
+    "define_code_field_key": "4671",
+    "define_code_name": "BA020",
+    "define_code_kor_name": "폭포"
+  },
+  {
+    "define_code_key": "66897",
+    "define_code_field_key": "4671",
+    "define_code_name": "BA204",
+    "define_code_kor_name": "수역경계"
+  },
+  {
+    "define_code_key": "66898",
+    "define_code_field_key": "4671",
+    "define_code_name": "BB010",
+    "define_code_kor_name": "수문"
+  },
+  {
+    "define_code_key": "66899",
+    "define_code_field_key": "4671",
+    "define_code_name": "BB020",
+    "define_code_kor_name": "댐(상단)"
+  },
+  {
+    "define_code_key": "66900",
+    "define_code_field_key": "4671",
+    "define_code_name": "BB030",
+    "define_code_kor_name": "보"
+  },
+  {
+    "define_code_key": "66901",
+    "define_code_field_key": "4671",
+    "define_code_name": "BB050",
+    "define_code_kor_name": "선착장"
+  },
+  {
+    "define_code_key": "66902",
+    "define_code_field_key": "4671",
+    "define_code_name": "BB099",
+    "define_code_kor_name": "낙차공"
+  },
+  {
+    "define_code_key": "66903",
+    "define_code_field_key": "4671",
+    "define_code_name": "BB199",
+    "define_code_kor_name": "하천중간점"
+  },
+  {
+    "define_code_key": "66904",
+    "define_code_field_key": "4671",
+    "define_code_name": "BB991",
+    "define_code_kor_name": "하천측량기준점"
+  },
+  {
+    "define_code_key": "66905",
+    "define_code_field_key": "4671",
+    "define_code_name": "BBPUS",
+    "define_code_kor_name": "하천점용구역"
+  },
+  {
+    "define_code_key": "66906",
+    "define_code_field_key": "4671",
+    "define_code_name": "CA001",
+    "define_code_kor_name": "등고선"
+  },
+  {
+    "define_code_key": "66907",
+    "define_code_field_key": "4671",
+    "define_code_name": "CA002",
+    "define_code_kor_name": "표고점"
+  },
+  {
+    "define_code_key": "66908",
+    "define_code_field_key": "4671",
+    "define_code_name": "CC001",
+    "define_code_kor_name": "붕토지"
+  },
+  {
+    "define_code_key": "66909",
+    "define_code_field_key": "4671",
+    "define_code_name": "CC002",
+    "define_code_kor_name": "사태지"
+  },
+  {
+    "define_code_key": "66910",
+    "define_code_field_key": "4671",
+    "define_code_name": "CC003",
+    "define_code_kor_name": "벼랑바위"
+  },
+  {
+    "define_code_key": "66911",
+    "define_code_field_key": "4671",
+    "define_code_name": "CC004",
+    "define_code_kor_name": "너덜바위"
+  },
+  {
+    "define_code_key": "66912",
+    "define_code_field_key": "4671",
+    "define_code_name": "DA001",
+    "define_code_kor_name": "재배지경계"
+  },
+  {
+    "define_code_key": "66913",
+    "define_code_field_key": "4671",
+    "define_code_name": "DB001",
+    "define_code_kor_name": "목장및방목경계"
+  },
+  {
+    "define_code_key": "66914",
+    "define_code_field_key": "4671",
+    "define_code_name": "DC001",
+    "define_code_kor_name": "숲경계"
+  },
+  {
+    "define_code_key": "66915",
+    "define_code_field_key": "4671",
+    "define_code_name": "DD001",
+    "define_code_kor_name": "경관경계"
+  },
+  {
+    "define_code_key": "66916",
+    "define_code_field_key": "4671",
+    "define_code_name": "DZ001",
+    "define_code_kor_name": "기타경계"
+  },
+  {
+    "define_code_key": "66917",
+    "define_code_field_key": "4671",
+    "define_code_name": "EA001",
+    "define_code_kor_name": "행정구역경계"
+  },
+  {
+    "define_code_key": "66918",
+    "define_code_field_key": "4671",
+    "define_code_name": "RD401",
+    "define_code_kor_name": "시설광장"
+  },
+  {
+    "define_code_key": "66919",
+    "define_code_field_key": "4671",
+    "define_code_name": "SA001",
+    "define_code_kor_name": "상수관로"
+  },
+  {
+    "define_code_key": "66920",
+    "define_code_field_key": "4671",
+    "define_code_name": "SA003",
+    "define_code_kor_name": "스탠드파이프"
+  },
+  {
+    "define_code_key": "66921",
+    "define_code_field_key": "4671",
+    "define_code_name": "SA004",
+    "define_code_kor_name": "상수폐관로"
+  },
+  {
+    "define_code_key": "66922",
+    "define_code_field_key": "4671",
+    "define_code_name": "SA100",
+    "define_code_kor_name": "상수맨홀"
+  },
+  {
+    "define_code_key": "66923",
+    "define_code_field_key": "4671",
+    "define_code_name": "SA110",
+    "define_code_kor_name": "수원지"
+  },
+  {
+    "define_code_key": "66924",
+    "define_code_field_key": "4671",
+    "define_code_name": "SA112",
+    "define_code_kor_name": "취수장"
+  },
+  {
+    "define_code_key": "66925",
+    "define_code_field_key": "4671",
+    "define_code_name": "SA113",
+    "define_code_kor_name": "정수장"
+  },
+  {
+    "define_code_key": "66926",
+    "define_code_field_key": "4671",
+    "define_code_name": "SA114",
+    "define_code_kor_name": "배수지"
+  },
+  {
+    "define_code_key": "66927",
+    "define_code_field_key": "4671",
+    "define_code_name": "SA117",
+    "define_code_kor_name": "유량계"
+  },
+  {
+    "define_code_key": "66928",
+    "define_code_field_key": "4671",
+    "define_code_name": "SA118",
+    "define_code_kor_name": "급수탑"
+  },
+  {
+    "define_code_key": "66929",
+    "define_code_field_key": "4671",
+    "define_code_name": "SA119",
+    "define_code_kor_name": "소화전"
+  },
+  {
+    "define_code_key": "66930",
+    "define_code_field_key": "4671",
+    "define_code_name": "SA120",
+    "define_code_kor_name": "저수조"
+  },
+  {
+    "define_code_key": "66931",
+    "define_code_field_key": "4671",
+    "define_code_name": "SA121",
+    "define_code_kor_name": "수압계"
+  },
+  {
+    "define_code_key": "66932",
+    "define_code_field_key": "4671",
+    "define_code_name": "SA122",
+    "define_code_kor_name": "급수전계량기"
+  },
+  {
+    "define_code_key": "66933",
+    "define_code_field_key": "4671",
+    "define_code_name": "SA200",
+    "define_code_kor_name": "제수변"
+  },
+  {
+    "define_code_key": "66934",
+    "define_code_field_key": "4671",
+    "define_code_name": "SA201",
+    "define_code_kor_name": "역지변"
+  },
+  {
+    "define_code_key": "66935",
+    "define_code_field_key": "4671",
+    "define_code_name": "SA202",
+    "define_code_kor_name": "이토변"
+  },
+  {
+    "define_code_key": "66936",
+    "define_code_field_key": "4671",
+    "define_code_name": "SA203",
+    "define_code_kor_name": "배기변"
+  },
+  {
+    "define_code_key": "66937",
+    "define_code_field_key": "4671",
+    "define_code_name": "SA204",
+    "define_code_kor_name": "감압변"
+  },
+  {
+    "define_code_key": "66938",
+    "define_code_field_key": "4671",
+    "define_code_name": "SA205",
+    "define_code_kor_name": "안전변"
+  },
+  {
+    "define_code_key": "66939",
+    "define_code_field_key": "4671",
+    "define_code_name": "SA206",
+    "define_code_kor_name": "가압장"
+  },
+  {
+    "define_code_key": "66940",
+    "define_code_field_key": "4671",
+    "define_code_name": "SA900",
+    "define_code_kor_name": "상수관로심도"
+  },
+  {
+    "define_code_key": "66941",
+    "define_code_field_key": "4671",
+    "define_code_name": "SA910",
+    "define_code_kor_name": "지수전"
+  },
+  {
+    "define_code_key": "66942",
+    "define_code_field_key": "4671",
+    "define_code_name": "SA920",
+    "define_code_kor_name": "통신선"
+  },
+  {
+    "define_code_key": "66943",
+    "define_code_field_key": "4671",
+    "define_code_name": "SA991",
+    "define_code_kor_name": "신축관실"
+  },
+  {
+    "define_code_key": "66944",
+    "define_code_field_key": "4671",
+    "define_code_name": "SB001",
+    "define_code_kor_name": "하수관거(암거)"
+  },
+  {
+    "define_code_key": "66945",
+    "define_code_field_key": "4671",
+    "define_code_name": "SB002",
+    "define_code_kor_name": "하수관거(개거)"
+  },
+  {
+    "define_code_key": "66946",
+    "define_code_field_key": "4671",
+    "define_code_name": "SB003",
+    "define_code_kor_name": "하수연결관"
+  },
+  {
+    "define_code_key": "66947",
+    "define_code_field_key": "4671",
+    "define_code_name": "SB004",
+    "define_code_kor_name": "측구"
+  },
+  {
+    "define_code_key": "66948",
+    "define_code_field_key": "4671",
+    "define_code_name": "SB006",
+    "define_code_kor_name": "하수관말"
+  },
+  {
+    "define_code_key": "66949",
+    "define_code_field_key": "4671",
+    "define_code_name": "SB100",
+    "define_code_kor_name": "역사이펀"
+  },
+  {
+    "define_code_key": "66950",
+    "define_code_field_key": "4671",
+    "define_code_name": "SB101",
+    "define_code_kor_name": "하수맨홀"
+  },
+  {
+    "define_code_key": "66951",
+    "define_code_field_key": "4671",
+    "define_code_name": "SB102",
+    "define_code_kor_name": "물받이"
+  },
+  {
+    "define_code_key": "66952",
+    "define_code_field_key": "4671",
+    "define_code_name": "SB103",
+    "define_code_kor_name": "우수토실"
+  },
+  {
+    "define_code_key": "66953",
+    "define_code_field_key": "4671",
+    "define_code_name": "SB104",
+    "define_code_kor_name": "토구"
+  },
+  {
+    "define_code_key": "66954",
+    "define_code_field_key": "4671",
+    "define_code_name": "SB200",
+    "define_code_kor_name": "하수처리장"
+  },
+  {
+    "define_code_key": "66955",
+    "define_code_field_key": "4671",
+    "define_code_name": "SB210",
+    "define_code_kor_name": "하수펌프장"
+  },
+  {
+    "define_code_key": "66956",
+    "define_code_field_key": "4671",
+    "define_code_name": "SB220",
+    "define_code_kor_name": "유수지"
+  },
+  {
+    "define_code_key": "66957",
+    "define_code_field_key": "4671",
+    "define_code_name": "SB300",
+    "define_code_kor_name": "처리구역"
+  },
+  {
+    "define_code_key": "66958",
+    "define_code_field_key": "4671",
+    "define_code_name": "SB301",
+    "define_code_kor_name": "처리분구"
+  },
+  {
+    "define_code_key": "66959",
+    "define_code_field_key": "4671",
+    "define_code_name": "SB310",
+    "define_code_kor_name": "배수구역"
+  },
+  {
+    "define_code_key": "66960",
+    "define_code_field_key": "4671",
+    "define_code_name": "SB311",
+    "define_code_kor_name": "배수분구"
+  },
+  {
+    "define_code_key": "66961",
+    "define_code_field_key": "4671",
+    "define_code_name": "SB410",
+    "define_code_kor_name": "환기구"
+  },
+  {
+    "define_code_key": "66962",
+    "define_code_field_key": "4671",
+    "define_code_name": "SB900",
+    "define_code_kor_name": "하수관거심도"
+  },
+  {
+    "define_code_key": "66963",
+    "define_code_field_key": "4671",
+    "define_code_name": "SB901",
+    "define_code_kor_name": "면형암거"
+  },
+  {
+    "define_code_key": "66964",
+    "define_code_field_key": "4671",
+    "define_code_name": "SB902",
+    "define_code_kor_name": "면형개거"
+  },
+  {
+    "define_code_key": "66965",
+    "define_code_field_key": "4671",
+    "define_code_name": "SB903",
+    "define_code_kor_name": "하수폐관거"
+  },
+  {
+    "define_code_key": "66966",
+    "define_code_field_key": "4671",
+    "define_code_name": "SB907",
+    "define_code_kor_name": "하수폐관심도"
+  },
+  {
+    "define_code_key": "66967",
+    "define_code_field_key": "4671",
+    "define_code_name": "SB910",
+    "define_code_kor_name": "하수공사위치"
+  },
+  {
+    "define_code_key": "66968",
+    "define_code_field_key": "4671",
+    "define_code_name": "SB940",
+    "define_code_kor_name": "준설투입구"
+  },
+  {
+    "define_code_key": "66969",
+    "define_code_field_key": "4671",
+    "define_code_name": "SC110",
+    "define_code_kor_name": "고압/저압입상주"
+  },
+  {
+    "define_code_key": "66970",
+    "define_code_field_key": "4671",
+    "define_code_name": "SC210",
+    "define_code_kor_name": "전기맨홀(배전)"
+  },
+  {
+    "define_code_key": "66971",
+    "define_code_field_key": "4671",
+    "define_code_name": "SC212",
+    "define_code_kor_name": "개폐기"
+  },
+  {
+    "define_code_key": "66972",
+    "define_code_field_key": "4671",
+    "define_code_name": "SC220",
+    "define_code_kor_name": "배전전력구"
+  },
+  {
+    "define_code_key": "66973",
+    "define_code_field_key": "4671",
+    "define_code_name": "SC221",
+    "define_code_kor_name": "전력관로(배전)"
+  },
+  {
+    "define_code_key": "66974",
+    "define_code_field_key": "4671",
+    "define_code_name": "SC233",
+    "define_code_kor_name": "변압기"
+  },
+  {
+    "define_code_key": "66975",
+    "define_code_field_key": "4671",
+    "define_code_name": "SC242",
+    "define_code_kor_name": "전력지중환기구(배전)"
+  },
+  {
+    "define_code_key": "66976",
+    "define_code_field_key": "4671",
+    "define_code_name": "SC510",
+    "define_code_kor_name": "전기맨홀(송전)"
+  },
+  {
+    "define_code_key": "66977",
+    "define_code_field_key": "4671",
+    "define_code_name": "SC520",
+    "define_code_kor_name": "전력관로(송전)"
+  },
+  {
+    "define_code_key": "66978",
+    "define_code_field_key": "4671",
+    "define_code_name": "SC521",
+    "define_code_kor_name": "송전전력구"
+  },
+  {
+    "define_code_key": "66979",
+    "define_code_field_key": "4671",
+    "define_code_name": "SC540",
+    "define_code_kor_name": "전력지중환기구(송전)"
+  },
+  {
+    "define_code_key": "66980",
+    "define_code_field_key": "4671",
+    "define_code_name": "UC200",
+    "define_code_kor_name": "시군구경계"
+  },
+  {
+    "define_code_key": "66981",
+    "define_code_field_key": "4671",
+    "define_code_name": "UC300",
+    "define_code_kor_name": "읍면동경계(행정구역)"
+  },
+  {
+    "define_code_key": "66982",
+    "define_code_field_key": "4671",
+    "define_code_name": "UC400",
+    "define_code_kor_name": "읍면동경계(법정구역)"
+  },
+  {
+    "define_code_key": "66983",
+    "define_code_field_key": "4671",
+    "define_code_name": "ZA001",
+    "define_code_kor_name": "삼각점"
+  },
+  {
+    "define_code_key": "66984",
+    "define_code_field_key": "4671",
+    "define_code_name": "ZA002",
+    "define_code_kor_name": "수준점"
+  },
+  {
+    "define_code_key": "66985",
+    "define_code_field_key": "4671",
+    "define_code_name": "ZA010",
+    "define_code_kor_name": "수평기준점"
+  },
+  {
+    "define_code_key": "66986",
+    "define_code_field_key": "4671",
+    "define_code_name": "ZA011",
+    "define_code_kor_name": "수직기준점"
+  },
+  {
+    "define_code_key": "66987",
+    "define_code_field_key": "4671",
+    "define_code_name": "ZA020",
+    "define_code_kor_name": "표정점"
+  },
+  {
+    "define_code_key": "66988",
+    "define_code_field_key": "4671",
+    "define_code_name": "ZC301",
+    "define_code_kor_name": "지류"
+  },
+  {
+    "define_code_key": "66989",
+    "define_code_field_key": "4671",
+    "define_code_name": "ZC501",
+    "define_code_kor_name": "지적"
+  },
+  {
+    "define_code_key": "66990",
+    "define_code_field_key": "4671",
+    "define_code_name": "ZD100",
+    "define_code_kor_name": "1/500색인도"
+  },
+  {
+    "define_code_key": "66991",
+    "define_code_field_key": "4671",
+    "define_code_name": "ZD200",
+    "define_code_kor_name": "1/1000색인도"
+  },
+  {
+    "define_code_key": "66992",
+    "define_code_field_key": "4671",
+    "define_code_name": "ZD300",
+    "define_code_kor_name": "1/2500색인도"
+  },
+  {
+    "define_code_key": "66993",
+    "define_code_field_key": "4671",
+    "define_code_name": "ZD400",
+    "define_code_kor_name": "1/5000색인도"
+  },
+  {
+    "define_code_key": "66994",
+    "define_code_field_key": "4671",
+    "define_code_name": "AJ001",
+    "define_code_kor_name": "관정"
+  },
+  {
+    "define_code_key": "66995",
+    "define_code_field_key": "4671",
+    "define_code_name": "ZC000",
+    "define_code_kor_name": "연속지적"
+  },
+  {
+    "define_code_key": "66996",
+    "define_code_field_key": "4671",
+    "define_code_name": "UQ111",
+    "define_code_kor_name": "도시지역"
+  },
+  {
+    "define_code_key": "66997",
+    "define_code_field_key": "4671",
+    "define_code_name": "UQ112",
+    "define_code_kor_name": "관리지역"
+  },
+  {
+    "define_code_key": "66998",
+    "define_code_field_key": "4671",
+    "define_code_name": "UQ113",
+    "define_code_kor_name": "농림지역"
+  },
+  {
+    "define_code_key": "66999",
+    "define_code_field_key": "4671",
+    "define_code_name": "UQ114",
+    "define_code_kor_name": "자연환경보전지역"
+  },
+  {
+    "define_code_key": "67000",
+    "define_code_field_key": "4671",
+    "define_code_name": "UQ115",
+    "define_code_kor_name": "기타용도지역"
+  },
+  {
+    "define_code_key": "67001",
+    "define_code_field_key": "4671",
+    "define_code_name": "UQ121",
+    "define_code_kor_name": "경관지구"
+  },
+  {
+    "define_code_key": "67002",
+    "define_code_field_key": "4671",
+    "define_code_name": "UQ122",
+    "define_code_kor_name": "미관지구"
+  },
+  {
+    "define_code_key": "67003",
+    "define_code_field_key": "4671",
+    "define_code_name": "UQ123",
+    "define_code_kor_name": "고도지구"
+  },
+  {
+    "define_code_key": "67004",
+    "define_code_field_key": "4671",
+    "define_code_name": "UQ124",
+    "define_code_kor_name": "방화지구"
+  },
+  {
+    "define_code_key": "67005",
+    "define_code_field_key": "4671",
+    "define_code_name": "UQ125",
+    "define_code_kor_name": "방재지구"
+  },
+  {
+    "define_code_key": "67006",
+    "define_code_field_key": "4671",
+    "define_code_name": "UQ126",
+    "define_code_kor_name": "보존지구"
+  },
+  {
+    "define_code_key": "67007",
+    "define_code_field_key": "4671",
+    "define_code_name": "UQ127",
+    "define_code_kor_name": "시설보호지구"
+  },
+  {
+    "define_code_key": "67008",
+    "define_code_field_key": "4671",
+    "define_code_name": "UQ128",
+    "define_code_kor_name": "취락지구"
+  },
+  {
+    "define_code_key": "67009",
+    "define_code_field_key": "4671",
+    "define_code_name": "UQ129",
+    "define_code_kor_name": "개발진흥지구"
+  },
+  {
+    "define_code_key": "67010",
+    "define_code_field_key": "4671",
+    "define_code_name": "UQ130",
+    "define_code_kor_name": "특정용도제한지구"
+  },
+  {
+    "define_code_key": "67011",
+    "define_code_field_key": "4671",
+    "define_code_name": "UQ131",
+    "define_code_kor_name": "기타용도지구"
+  },
+  {
+    "define_code_key": "67012",
+    "define_code_field_key": "4671",
+    "define_code_name": "AE960",
+    "define_code_kor_name": "볼라드"
+  },
+  {
+    "define_code_key": "67013",
+    "define_code_field_key": "4671",
+    "define_code_name": "AE961",
+    "define_code_kor_name": "충격흡수시설"
+  },
+  {
+    "define_code_key": "67014",
+    "define_code_field_key": "4671",
+    "define_code_name": "AE970",
+    "define_code_kor_name": "울림병"
+  },
+  {
+    "define_code_key": "67015",
+    "define_code_field_key": "4671",
+    "define_code_name": "AE342",
+    "define_code_kor_name": "장애인유도블럭"
+  },
+  {
+    "define_code_key": "67016",
+    "define_code_field_key": "4671",
+    "define_code_name": "AE341",
+    "define_code_kor_name": "현수막게시대"
+  },
+  {
+    "define_code_key": "67017",
+    "define_code_field_key": "4671",
+    "define_code_name": "AE356",
+    "define_code_kor_name": "식수대"
+  },
+  {
+    "define_code_key": "67018",
+    "define_code_field_key": "4671",
+    "define_code_name": "AE360",
+    "define_code_kor_name": "사설안내표지판"
+  },
+  {
+    "define_code_key": "67019",
+    "define_code_field_key": "4671",
+    "define_code_name": "SA300",
+    "define_code_kor_name": "누수지점"
+  },
+  {
+    "define_code_key": "67020",
+    "define_code_field_key": "4671",
+    "define_code_name": "SA901",
+    "define_code_kor_name": "상수폐관로"
+  },
+  {
+    "define_code_key": "67021",
+    "define_code_field_key": "4671",
+    "define_code_name": "SA902",
+    "define_code_kor_name": "상수폐관심도"
+  },
+  {
+    "define_code_key": "67022",
+    "define_code_field_key": "4671",
+    "define_code_name": "AE221",
+    "define_code_kor_name": "가드레일"
+  },
+  {
+    "define_code_key": "67023",
+    "define_code_field_key": "4671",
+    "define_code_name": "AZ080",
+    "define_code_kor_name": "석축"
+  },
+  {
+    "define_code_key": "67024",
+    "define_code_field_key": "4671",
+    "define_code_name": "SB500",
+    "define_code_kor_name": "온천공"
+  },
+  {
+    "define_code_key": "67025",
+    "define_code_field_key": "4671",
+    "define_code_name": "AD001",
+    "define_code_kor_name": "차도"
+  },
+  {
+    "define_code_key": "67026",
+    "define_code_field_key": "4671",
+    "define_code_name": "AD004",
+    "define_code_kor_name": "차도면"
+  },
+  {
+    "define_code_key": "67027",
+    "define_code_field_key": "4671",
+    "define_code_name": "AD006",
+    "define_code_kor_name": "노선구간"
+  },
+  {
+    "define_code_key": "67028",
+    "define_code_field_key": "4671",
+    "define_code_name": "AD007",
+    "define_code_kor_name": "사업예정지"
+  },
+  {
+    "define_code_key": "67029",
+    "define_code_field_key": "4671",
+    "define_code_name": "AD008",
+    "define_code_kor_name": "굴착예정지"
+  },
+  {
+    "define_code_key": "67030",
+    "define_code_field_key": "4671",
+    "define_code_name": "ZA090",
+    "define_code_kor_name": "도시기준점"
+  },
+  {
+    "define_code_key": "67031",
+    "define_code_field_key": "4671",
+    "define_code_name": "UD801",
+    "define_code_kor_name": "개발제한구역"
+  },
+  {
+    "define_code_key": "67032",
+    "define_code_field_key": "4671",
+    "define_code_name": "UD901",
+    "define_code_kor_name": "도시개발구역"
+  },
+  {
+    "define_code_key": "67033",
+    "define_code_field_key": "4671",
+    "define_code_name": "UQ162",
+    "define_code_kor_name": "공간시설"
+  },
+  {
+    "define_code_key": "67034",
+    "define_code_field_key": "4671",
+    "define_code_name": "UQ164",
+    "define_code_kor_name": "공공문화체육시설"
+  },
+  {
+    "define_code_key": "67035",
+    "define_code_field_key": "4671",
+    "define_code_name": "UQ161",
+    "define_code_kor_name": "교통시설"
+  },
+  {
+    "define_code_key": "67036",
+    "define_code_field_key": "4671",
+    "define_code_name": "UQ165",
+    "define_code_kor_name": "방재시설"
+  },
+  {
+    "define_code_key": "67037",
+    "define_code_field_key": "4671",
+    "define_code_name": "UQ166",
+    "define_code_kor_name": "보건위생시설"
+  },
+  {
+    "define_code_key": "67038",
+    "define_code_field_key": "4671",
+    "define_code_name": "UQ163",
+    "define_code_kor_name": "유통및공급시설"
+  },
+  {
+    "define_code_key": "67039",
+    "define_code_field_key": "4671",
+    "define_code_name": "UQ167",
+    "define_code_kor_name": "환경기초시설"
+  },
+  {
+    "define_code_key": "67040",
+    "define_code_field_key": "4671",
+    "define_code_name": "UN101",
+    "define_code_kor_name": "군사시설보호구역"
+  },
+  {
+    "define_code_key": "67041",
+    "define_code_field_key": "4671",
+    "define_code_name": "UO301",
+    "define_code_kor_name": "문화재보호구역"
+  },
+  {
+    "define_code_key": "67042",
+    "define_code_field_key": "4671",
+    "define_code_name": "UE101",
+    "define_code_kor_name": "농업진흥구역"
+  },
+  {
+    "define_code_key": "67043",
+    "define_code_field_key": "4671",
+    "define_code_name": "UF101",
+    "define_code_kor_name": "보전임지"
+  },
+  {
+    "define_code_key": "67044",
+    "define_code_field_key": "4671",
+    "define_code_name": "UH101",
+    "define_code_kor_name": "산업단지"
+  },
+  {
+    "define_code_key": "67045",
+    "define_code_field_key": "4671",
+    "define_code_name": "UQ141",
+    "define_code_kor_name": "용도구역"
+  },
+  {
+    "define_code_key": "67046",
+    "define_code_field_key": "4671",
+    "define_code_name": "UD601",
+    "define_code_kor_name": "주거환경개선지구"
+  },
+  {
+    "define_code_key": "67047",
+    "define_code_field_key": "4671",
+    "define_code_name": "UF111",
+    "define_code_kor_name": "준보전임지"
+  },
+  {
+    "define_code_key": "67048",
+    "define_code_field_key": "4671",
+    "define_code_name": "UD301",
+    "define_code_kor_name": "택지개발예정지구"
+  },
+  {
+    "define_code_key": "67049",
+    "define_code_field_key": "4671",
+    "define_code_name": "UD401",
+    "define_code_kor_name": "토지구획정리사업지구"
+  },
+  {
+    "define_code_key": "67050",
+    "define_code_field_key": "4671",
+    "define_code_name": "UN201",
+    "define_code_kor_name": "비행안전구역"
+  },
+  {
+    "define_code_key": "67051",
+    "define_code_field_key": "4671",
+    "define_code_name": "SA002",
+    "define_code_kor_name": "급수관로"
+  },
+  {
+    "define_code_key": "67052",
+    "define_code_field_key": "4671",
+    "define_code_name": "AE131",
+    "define_code_kor_name": "가로등"
+  },
+  {
+    "define_code_key": "67053",
+    "define_code_field_key": "4671",
+    "define_code_name": "AE141",
+    "define_code_kor_name": "가로등선로"
+  },
+  {
+    "define_code_key": "67054",
+    "define_code_field_key": "4671",
+    "define_code_name": "SA930",
+    "define_code_kor_name": "관말"
+  },
+  {
+    "define_code_key": "67055",
+    "define_code_field_key": "4671",
+    "define_code_name": "UF801",
+    "define_code_kor_name": "산임지"
+  },
+  {
+    "define_code_key": "67056",
+    "define_code_field_key": "4671",
+    "define_code_name": "AE992",
+    "define_code_kor_name": "규제봉"
+  },
+  {
+    "define_code_key": "67057",
+    "define_code_field_key": "4671",
+    "define_code_name": "SG001",
+    "define_code_kor_name": "천연가스배관"
+  },
+  {
+    "define_code_key": "67058",
+    "define_code_field_key": "4671",
+    "define_code_name": "SG100",
+    "define_code_kor_name": "천연가스맨홀"
+  },
+  {
+    "define_code_key": "67059",
+    "define_code_field_key": "4671",
+    "define_code_name": "SG101",
+    "define_code_kor_name": "LPG맨홀"
+  },
+  {
+    "define_code_key": "67060",
+    "define_code_field_key": "4671",
+    "define_code_name": "SG001",
+    "define_code_kor_name": "천연가스배관"
+  },
+  {
+    "define_code_key": "67061",
+    "define_code_field_key": "4671",
+    "define_code_name": "SG002",
+    "define_code_kor_name": "LPG배관"
+  },
+  {
+    "define_code_key": "67062",
+    "define_code_field_key": "4671",
+    "define_code_name": "SG010",
+    "define_code_kor_name": "정압기"
+  },
+  {
+    "define_code_key": "67063",
+    "define_code_field_key": "4671",
+    "define_code_name": "SG040",
+    "define_code_kor_name": "밸브(가스밸브)"
+  },
+  {
+    "define_code_key": "67064",
+    "define_code_field_key": "4671",
+    "define_code_name": "SG060",
+    "define_code_kor_name": "방식전위관측함"
+  },
+  {
+    "define_code_key": "67065",
+    "define_code_field_key": "4671",
+    "define_code_name": "SG900",
+    "define_code_kor_name": "가스배관심도"
+  },
+  {
+    "define_code_key": "67066",
+    "define_code_field_key": "4671",
+    "define_code_name": "SE100",
+    "define_code_kor_name": "난방맨홀"
+  },
+  {
+    "define_code_key": "67067",
+    "define_code_field_key": "4671",
+    "define_code_name": "SE001",
+    "define_code_kor_name": "열배관"
+  },
+  {
+    "define_code_key": "67068",
+    "define_code_field_key": "4671",
+    "define_code_name": "SE114",
+    "define_code_kor_name": "누수감지기설치함"
+  },
+  {
+    "define_code_key": "67069",
+    "define_code_field_key": "4671",
+    "define_code_name": "SE112",
+    "define_code_kor_name": "핸드홀"
+  },
+  {
+    "define_code_key": "67070",
+    "define_code_field_key": "4671",
+    "define_code_name": "SC900",
+    "define_code_kor_name": "전력지중관로심도"
+  },
+  {
+    "define_code_key": "67071",
+    "define_code_field_key": "4671",
+    "define_code_name": "SD100",
+    "define_code_kor_name": "통신맨홀"
+  },
+  {
+    "define_code_key": "67072",
+    "define_code_field_key": "4671",
+    "define_code_name": "SD001",
+    "define_code_kor_name": "통신선로"
+  },
+  {
+    "define_code_key": "67073",
+    "define_code_field_key": "4671",
+    "define_code_name": "SD900",
+    "define_code_kor_name": "통신심도"
+  },
+  {
+    "define_code_key": "67074",
+    "define_code_field_key": "4671",
+    "define_code_name": "SD300",
+    "define_code_kor_name": "통신주"
+  },
+  {
+    "define_code_key": "67075",
+    "define_code_field_key": "4671",
+    "define_code_name": "SE111",
+    "define_code_kor_name": "에어벤트"
+  },
+  {
+    "define_code_key": "67076",
+    "define_code_field_key": "4671",
+    "define_code_name": "SE900",
+    "define_code_kor_name": "열배관심도"
+  },
+  {
+    "define_code_key": "67077",
+    "define_code_field_key": "4671",
+    "define_code_name": "SF200",
+    "define_code_kor_name": "저유소"
+  },
+  {
+    "define_code_key": "67078",
+    "define_code_field_key": "4671",
+    "define_code_name": "SF001",
+    "define_code_kor_name": "송유관로"
+  },
+  {
+    "define_code_key": "67079",
+    "define_code_field_key": "4671",
+    "define_code_name": "SF110",
+    "define_code_kor_name": "송유관보호시설"
+  },
+  {
+    "define_code_key": "67080",
+    "define_code_field_key": "4671",
+    "define_code_name": "SF300",
+    "define_code_kor_name": "가압소"
+  },
+  {
+    "define_code_key": "67081",
+    "define_code_field_key": "4671",
+    "define_code_name": "SF400",
+    "define_code_kor_name": "밸브스테이션"
+  },
+  {
+    "define_code_key": "67082",
+    "define_code_field_key": "4671",
+    "define_code_name": "SF500",
+    "define_code_kor_name": "밸브박스(송유밸브박스)"
+  },
+  {
+    "define_code_key": "67083",
+    "define_code_field_key": "4671",
+    "define_code_name": "SF600",
+    "define_code_kor_name": "누유감지케이블"
+  },
+  {
+    "define_code_key": "67084",
+    "define_code_field_key": "4671",
+    "define_code_name": "SF900",
+    "define_code_kor_name": "송유관로심도"
+  },
+  {
+    "define_code_key": "67085",
+    "define_code_field_key": "4671",
+    "define_code_name": "BC100",
+    "define_code_kor_name": "광역상수맨홀"
+  },
+  {
+    "define_code_key": "67086",
+    "define_code_field_key": "4671",
+    "define_code_name": "BC001",
+    "define_code_kor_name": "광역상수관"
+  },
+  {
+    "define_code_key": "67087",
+    "define_code_field_key": "4671",
+    "define_code_name": "BC901",
+    "define_code_kor_name": "광역상수터널"
+  },
+  {
+    "define_code_key": "67088",
+    "define_code_field_key": "4671",
+    "define_code_name": "BC200",
+    "define_code_kor_name": "광역제수밸브"
+  },
+  {
+    "define_code_key": "67089",
+    "define_code_field_key": "4671",
+    "define_code_name": "BC201",
+    "define_code_kor_name": "광역역지밸브"
+  },
+  {
+    "define_code_key": "67090",
+    "define_code_field_key": "4671",
+    "define_code_name": "BC202",
+    "define_code_kor_name": "광역이토밸브"
+  },
+  {
+    "define_code_key": "67091",
+    "define_code_field_key": "4671",
+    "define_code_name": "BC203",
+    "define_code_kor_name": "광역배기밸브"
+  },
+  {
+    "define_code_key": "67092",
+    "define_code_field_key": "4671",
+    "define_code_name": "BC204",
+    "define_code_kor_name": "광역감압밸브"
+  },
+  {
+    "define_code_key": "67093",
+    "define_code_field_key": "4671",
+    "define_code_name": "BC205",
+    "define_code_kor_name": "광역안전밸브"
+  },
+  {
+    "define_code_key": "67094",
+    "define_code_field_key": "4671",
+    "define_code_name": "BC119",
+    "define_code_kor_name": "광역소화전"
+  },
+  {
+    "define_code_key": "67095",
+    "define_code_field_key": "4671",
+    "define_code_name": "BC118",
+    "define_code_kor_name": "광역급수탑"
+  },
+  {
+    "define_code_key": "67096",
+    "define_code_field_key": "4671",
+    "define_code_name": "BC120",
+    "define_code_kor_name": "광역상수관로심도"
+  },
+  {
+    "define_code_key": "67097",
+    "define_code_field_key": "4671",
+    "define_code_name": "AE997",
+    "define_code_kor_name": "기타"
+  },
+  {
+    "define_code_key": "67098",
+    "define_code_field_key": "4671",
+    "define_code_name": "AZ997",
+    "define_code_kor_name": "기타(점)"
+  },
+  {
+    "define_code_key": "67099",
+    "define_code_field_key": "4671",
+    "define_code_name": "AZ998",
+    "define_code_kor_name": "기타(선)"
+  },
+  {
+    "define_code_key": "67100",
+    "define_code_field_key": "4671",
+    "define_code_name": "AZ999",
+    "define_code_kor_name": "기타(면)"
+  }
+]

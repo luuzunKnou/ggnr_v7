@@ -1,0 +1,20 @@
+[
+  {
+    "define_code_key": "6399",
+    "define_code_field_key": "4645",
+    "define_code_name": "SB001",
+    "define_code_kor_name": "암거"
+  },
+  {
+    "define_code_key": "6400",
+    "define_code_field_key": "4645",
+    "define_code_name": "SB002",
+    "define_code_kor_name": "개거"
+  },
+  {
+    "define_code_key": "6404",
+    "define_code_field_key": "4645",
+    "define_code_name": "SB101",
+    "define_code_kor_name": "하수맨홀"
+  }
+]
