@@ -328,7 +328,7 @@ export function LayerRowGeomEditHandler({
         const res = await call("", "POST", {
           service: "layerRowService",
           action: "listJijukParcelsByGeomWkt5181",
-          params: { wkt5181: wkt },
+          params: { wkt5181: wkt, clipToSearchGeom: true },
         });
         const data = res?.data ?? res;
         if (data?.error) {

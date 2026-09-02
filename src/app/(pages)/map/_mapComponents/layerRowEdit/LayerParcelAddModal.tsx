@@ -15,7 +15,7 @@ type Props = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   vworldApiKey: string;
-  onAdd: (item: LayerRowParcelItem) => void;
+  onAdd: (item: LayerRowParcelItem) => void | boolean | Promise<void | boolean>;
   /** 모달 제목 (기본: 필지 추가) */
   title?: string;
 };
@@ -27,10 +27,11 @@ export function LayerParcelAddModal({
   onAdd,
   title = "필지 추가",
 }: Props) {
-  const handleSelect = (item: VWorldAddressItem) => {
+  const handleSelect = async (item: VWorldAddressItem) => {
     const parcel = vworldItemToParcelItem(item);
     if (!parcel) return;
-    onAdd(parcel);
+    const ok = await Promise.resolve(onAdd(parcel));
+    if (ok === false) return;
     onOpenChange(false);
   };
 

@@ -70,6 +70,7 @@ import * as fmsLinkageService from './fmsLinkageService';
 import * as groundwaterPermitService from './groundwaterPermitService';
 import * as bizNotifService from './bizNotifService';
 import * as thematicMapService from './thematicMapService';
+import * as roadWorkHandbookService from './roadWorkHandbookService';
 
 export {
   configService,
@@ -140,4 +141,5 @@ export {
   fmsLinkageService,
   groundwaterPermitService,
   bizNotifService,
+  roadWorkHandbookService,
 };

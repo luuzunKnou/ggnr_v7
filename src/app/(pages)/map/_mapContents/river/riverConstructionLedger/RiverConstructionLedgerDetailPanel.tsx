@@ -1120,7 +1120,7 @@ export function RiverConstructionLedgerDetailPanel({ row, onClose }: Props) {
         const res = await call("", "POST", {
           service: "layerRowService",
           action: "listJijukParcelsByGeomWkt5181",
-          params: { wkt5181 },
+          params: { wkt5181, clipToSearchGeom: true },
         });
         const data = res?.data ?? res;
         if (data?.error) {

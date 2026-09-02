@@ -11,6 +11,7 @@ import { Input } from '@/app/shadcnComponents/ui/input';
 import { User, Building2, FileText, X, Calendar, ClipboardList, Check } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { COMPLAINT_STATE_OPTIONS, getStateStyle } from './state-options';
+import { COMPLAINT_HISTORY_DIALOG_Z_INDEX } from './complaintPanelLayout';
 
 export type HistoryAddFormData = {
   compdDate: string;
@@ -104,7 +105,11 @@ export function HistoryAddDialog({ open, onOpenChange, compKey, onConfirm, onDel
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[500px] p-0 gap-0" showCloseButton={false}>
+      <DialogContent
+        className="sm:max-w-[500px] p-0 gap-0"
+        showCloseButton={false}
+        layerZIndex={COMPLAINT_HISTORY_DIALOG_Z_INDEX}
+      >
         <DialogTitle className="sr-only">{isEdit ? '이력 수정' : '이력 추가'}</DialogTitle>
         {/* 헤더: 민원상세보기와 동일 (접수번호 대신 설명) */}
         <div className="flex items-center justify-between border-b border-border px-3 py-1.5 shrink-0 bg-muted/30">

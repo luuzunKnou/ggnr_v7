@@ -1,10 +1,5 @@
 /** 법령정보센터 Open API XML → 첨부파일 목록 */
 
-export {
-  getHandbookLawXmlApiUrl,
-  isHandbookLawMaterialId,
-} from "@/app/(pages)/map/_mapContents/road/roadWorkHandbook/roadWorkHandbookMaterials"
-
 export type LawHandbookAttachment = {
   name: string
   url: string

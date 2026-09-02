@@ -9,6 +9,7 @@ import {
   Search,
   StickyNote,
   User,
+  X,
 } from "lucide-react";
 import { call } from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -45,7 +46,7 @@ type Props = {
 };
 
 export function MemoListPanel({
-  onClose: _onClose,
+  onClose,
   selectedDetailId,
   onSelectDetailId,
   refreshKey = 0,
@@ -226,15 +227,26 @@ export function MemoListPanel({
                 </p>
               </div>
             </div>
-            <Button
-              size="sm"
-              className="h-[26px] min-h-[26px] gap-1 px-2.5 text-[12px] font-light border border-border bg-muted/50 text-muted-foreground hover:border-primary hover:bg-primary/15 hover:text-primary rounded-lg"
-              onClick={handleAdd}
-              disabled={tableOptions.length === 0}
-            >
-              <Plus className="h-3 w-3" />
-              메모 추가
-            </Button>
+            <div className="flex items-center gap-1">
+              <Button
+                size="sm"
+                className="h-[26px] min-h-[26px] gap-1 px-2.5 text-[12px] font-light border border-border bg-muted/50 text-muted-foreground hover:border-primary hover:bg-primary/15 hover:text-primary rounded-lg"
+                onClick={handleAdd}
+                disabled={tableOptions.length === 0}
+              >
+                <Plus className="h-3 w-3" />
+                메모 추가
+              </Button>
+              <button
+                type="button"
+                onClick={onClose}
+                className="shrink-0 rounded p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                title="닫기"
+                aria-label="닫기"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
           </div>
 
           <div className="px-3 pb-2">

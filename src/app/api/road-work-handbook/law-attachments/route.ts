@@ -1,22 +1,16 @@
 import { NextResponse } from "next/server"
-import {
-  fetchLawHandbookAttachments,
-  getHandbookLawXmlApiUrl,
-  isHandbookLawMaterialId,
-} from "@/service/roadWorkHandbookLawService"
+import { fetchLawHandbookAttachments } from "@/service/roadWorkHandbookLawService"
+import { getHandbookMaterialXmlUrl } from "@/service/roadWorkHandbookService"
 
 export const dynamic = "force-dynamic"
 
-/** GET — materialId에 연결된 법령 XML에서 첨부파일 목록 */
+/** GET — 자료의 법령 XML에서 첨부파일 목록 */
 export async function GET(req: Request) {
   const materialId = new URL(req.url).searchParams.get("materialId")?.trim() ?? ""
-  if (!materialId || !isHandbookLawMaterialId(materialId)) {
-    return NextResponse.json({ error: "invalid materialId" }, { status: 400 })
-  }
-
-  const xmlApiUrl = getHandbookLawXmlApiUrl(materialId)
+  const found = await getHandbookMaterialXmlUrl({ id: materialId })
+  const xmlApiUrl = found.xmlUrl
   if (!xmlApiUrl) {
-    return NextResponse.json({ error: "not a law xml material" }, { status: 404 })
+    return NextResponse.json({ error: "invalid materialId" }, { status: 400 })
   }
 
   try {
