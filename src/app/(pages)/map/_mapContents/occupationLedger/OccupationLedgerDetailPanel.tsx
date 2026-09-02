@@ -580,6 +580,7 @@ export function OccupationLedgerDetailPanel({
   useEffect(() => {
     if (!isEditing) {
       setShowParentGeom(true);
+      ensureOccupationLedgerWmsLayers(mapContext?.setVisibleLayerNames, { serEng });
       return;
     }
     setHighlightParcel(null);
