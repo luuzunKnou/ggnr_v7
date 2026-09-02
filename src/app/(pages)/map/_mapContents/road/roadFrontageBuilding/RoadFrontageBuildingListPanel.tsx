@@ -17,7 +17,7 @@ import {
   isRoadNetworkWmsVisible,
   toggleRoadNetworkWmsLayers,
 } from '../roadNetwork/roadNetworkMapSync';
-import { getRoadFrontageMarkerRoadTypeBadgeStyle } from '../roadFrontageMarker/roadFrontageMarkerFormat';
+import { getRoadFrontageMarkerRoadTypeBadgeClass } from '../roadFrontageMarker/roadFrontageMarkerFormat';
 
 type SortKey = 'roadType' | 'locAdr' | 'preYmd';
 type SortDir = 'asc' | 'desc';
@@ -305,8 +305,10 @@ export function RoadFrontageBuildingListPanel({
                       <td className="standard-table-td-compact">
                         {roadTypeRouteLabel !== '—' ? (
                           <span
-                            className="standard-road-rank-badge inline-block max-w-full truncate"
-                            style={getRoadFrontageMarkerRoadTypeBadgeStyle(l.roadType)}
+                            className={cn(
+                              'inline-block max-w-full truncate',
+                              getRoadFrontageMarkerRoadTypeBadgeClass(l.roadType)
+                            )}
                             title={roadTypeRouteLabel}
                           >
                             {roadTypeRouteLabel}

@@ -1,3 +1,4 @@
+/* emd와 동일: 단일 규칙 + 글꼴 목록 → TextSymbolizer 3개로 펼침 (z-index 분리 시 첫 글꼴만 사용되어 궁서 폴백됨) */
 * {
   mark: url("water_play_sign.svg");
   mark-mime: "image/svg+xml";
@@ -5,7 +6,7 @@
   mark-anchor: 0.5 0.5;
   mark-offset: 0 0;
 
-  label: [sign_nm];
+  label: [addr];
   font-size: 14;
   font-fill: #0369A1;
   font-weight: bold;
