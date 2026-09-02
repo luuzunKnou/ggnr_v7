@@ -1975,10 +1975,11 @@ export function RiverConstructionLedgerDetailPanel({ row, onClose }: Props) {
         </div>
 
         {(editing || !isNewRow) ? (
-          <div className="shrink-0">
+          <div className={cn(isNewRow ? "flex min-h-0 flex-1 flex-col" : "shrink-0")}>
             <UsageDataAsAddressList
               title="필지목록"
               className="mt-2"
+              fillHeight={isNewRow}
               maxVisibleCards={5}
               isEditing={editing}
               items={editing ? draftParcels : parcels}
