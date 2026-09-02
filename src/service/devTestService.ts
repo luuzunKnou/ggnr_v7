@@ -28,6 +28,11 @@ import {
   ELEVATION_LAYER_NAME,
 } from '@/lib/geoserverStyles/elevationContourStyle';
 import { normalizeDefineTableSource, dedupeDefineLayerTablesByName } from '@/lib/defineLayerTablesNormalize';
+import {
+  getDefineLayerCodeWriteFilePath,
+  readDefineLayerCodes,
+  writeDefineLayerCodes,
+} from '@/lib/defineLayerCodeFiles';
 import { reorderDefineLayerTablesArray } from '@/lib/defineLayerTableRowOrder';
 export { startGeoServer, stopGeoServer } from '@/service/geoserverProcessService';
 import { GGNR_DATA_PATHS } from '@/lib/ggnrDataPaths';
@@ -3439,7 +3444,10 @@ export async function getGeometryByFieldValue(params: {
 }
 
 const DEFINE_LAYER_FIELDS_DIR = path.join(process.cwd(), 'src', 'config', 'defineLayer', 'fields');
-const DEFINE_LAYER_CODES_DIR = path.join(process.cwd(), 'src', 'config', 'defineLayer', 'codes');
+function readDefineCodesFile(tableName: string, fieldName: string): unknown[] {
+  const safe = `${tableName}__${fieldName}`.replace(/[^a-zA-Z0-9_-]/g, '');
+  return readDefineLayerCodes(safe);
+}
 const LAYER_SETUP_SKIP_COLUMNS = new Set(['ogc_fid', 'geom']);
 
 export type LayerSetupIssueType =
@@ -3491,19 +3499,6 @@ export type LayerSetupIssueRow = {
 function readDefineFieldsFile(tableName: string): Record<string, unknown>[] {
   const safe = String(tableName).replace(/[^a-zA-Z0-9_-]/g, '');
   const filePath = path.join(DEFINE_LAYER_FIELDS_DIR, `table_${safe}.json`);
-  try {
-    if (!fs.existsSync(filePath)) return [];
-    const raw = fs.readFileSync(filePath, 'utf-8');
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
-}
-
-function readDefineCodesFile(tableName: string, fieldName: string): unknown[] {
-  const safe = `${tableName}__${fieldName}`.replace(/[^a-zA-Z0-9_-]/g, '');
-  const filePath = path.join(DEFINE_LAYER_CODES_DIR, `field_${safe}.json`);
   try {
     if (!fs.existsSync(filePath)) return [];
     const raw = fs.readFileSync(filePath, 'utf-8');
@@ -3752,9 +3747,7 @@ export async function scanLayerSetupIssues(params: { url?: string } = {}) {
 
 async function writeDefineCodesFile(tableName: string, fieldName: string, codes: unknown[]) {
   const safe = `${tableName}__${fieldName}`.replace(/[^a-zA-Z0-9_-]/g, '');
-  const filePath = path.join(DEFINE_LAYER_CODES_DIR, `field_${safe}.json`);
-  fs.mkdirSync(path.dirname(filePath), { recursive: true });
-  fs.writeFileSync(filePath, JSON.stringify(codes, null, 2), 'utf-8');
+  writeDefineLayerCodes(safe, codes);
 }
 
 /** CODE 필드 코드 정의를 DB DISTINCT 값으로 생성 (값 없으면 미분류 1건) */
@@ -4346,9 +4339,9 @@ export async function fixLayerSetupIssues(params: {
       step(`코드 생성 대상 필드: ${codeFields.length > 0 ? codeFields.join(', ') : '(없음)'}`);
       for (const fieldName of codeFields) {
         const safeCode = `${tableName}__${fieldName}`.replace(/[^a-zA-Z0-9_-]/g, '');
-        const codesRel = `src/config/defineLayer/codes/field_${safeCode}.json`;
-        const codesAbs = path.join(DEFINE_LAYER_CODES_DIR, `field_${safeCode}.json`);
-        const codesExisted = fs.existsSync(codesAbs);
+        const codesAbs = getDefineLayerCodeWriteFilePath(safeCode);
+        const codesRel = codesAbs.replace(process.cwd() + path.sep, '').replace(/\\/g, '/');
+        const codesExisted = readDefineCodesFile(tableName, fieldName).length > 0;
         step(
           `호출: syncDefineCodesFromDb({ schema: '${schema}', tableName: '${tableName}', fieldName: '${fieldName}' })`
         );

@@ -1,13 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
-import * as fs from "fs"
-import * as path from "path"
-
-const CODES_DIR = path.join(process.cwd(), "src", "config", "defineLayer", "codes")
-
-function getFilePath(tableField: string): string {
-  const safe = String(tableField).replace(/[^a-zA-Z0-9_-]/g, "")
-  return path.join(CODES_DIR, `field_${safe}.json`)
-}
+import {
+  readDefineLayerCodes,
+  writeDefineLayerCodes,
+} from "@/lib/defineLayerCodeFiles"
 
 /** tableField = tableName__fieldName. 해당 필드의 코드 목록 조회 */
 export async function GET(
@@ -16,15 +11,7 @@ export async function GET(
 ) {
   try {
     const { tableField } = await params
-    const filePath = getFilePath(tableField)
-    if (!fs.existsSync(filePath)) {
-      return NextResponse.json({ success: true, data: [] })
-    }
-    const raw = fs.readFileSync(filePath, "utf-8")
-    const data = JSON.parse(raw)
-    if (!Array.isArray(data)) {
-      return NextResponse.json({ success: false, error: "Invalid codes format" }, { status: 500 })
-    }
+    const data = readDefineLayerCodes(tableField)
     return NextResponse.json({ success: true, data })
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e)
@@ -47,9 +34,7 @@ export async function POST(
         { status: 400 }
       )
     }
-    const filePath = getFilePath(tableField)
-    fs.mkdirSync(path.dirname(filePath), { recursive: true })
-    fs.writeFileSync(filePath, JSON.stringify(codes, null, 2), "utf-8")
+    writeDefineLayerCodes(tableField, codes)
     return NextResponse.json({ success: true })
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e)

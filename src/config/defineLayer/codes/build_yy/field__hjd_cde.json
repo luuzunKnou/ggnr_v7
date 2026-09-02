@@ -1,0 +1,322 @@
+[
+  {
+    "define_code_name": "4776025000",
+    "define_code_kor_name": "영양읍"
+  },
+  {
+    "define_code_name": "4776025021",
+    "define_code_kor_name": "영양읍 동부리"
+  },
+  {
+    "define_code_name": "4776025022",
+    "define_code_kor_name": "영양읍 서부리"
+  },
+  {
+    "define_code_name": "4776025023",
+    "define_code_kor_name": "영양읍 감천리"
+  },
+  {
+    "define_code_name": "4776025024",
+    "define_code_kor_name": "영양읍 전곡리"
+  },
+  {
+    "define_code_name": "4776025025",
+    "define_code_kor_name": "영양읍 황용리"
+  },
+  {
+    "define_code_name": "4776025026",
+    "define_code_kor_name": "영양읍 삼지리"
+  },
+  {
+    "define_code_name": "4776025027",
+    "define_code_kor_name": "영양읍 현리"
+  },
+  {
+    "define_code_name": "4776025028",
+    "define_code_kor_name": "영양읍 하원리"
+  },
+  {
+    "define_code_name": "4776025029",
+    "define_code_kor_name": "영양읍 상원리"
+  },
+  {
+    "define_code_name": "4776025030",
+    "define_code_kor_name": "영양읍 무학리"
+  },
+  {
+    "define_code_name": "4776025031",
+    "define_code_kor_name": "영양읍 무창리"
+  },
+  {
+    "define_code_name": "4776025032",
+    "define_code_kor_name": "영양읍 대천리"
+  },
+  {
+    "define_code_name": "4776025033",
+    "define_code_kor_name": "영양읍 화천리"
+  },
+  {
+    "define_code_name": "4776025034",
+    "define_code_kor_name": "영양읍 양구리"
+  },
+  {
+    "define_code_name": "4776025035",
+    "define_code_kor_name": "영양읍 기산리"
+  },
+  {
+    "define_code_name": "4776031000",
+    "define_code_kor_name": "입암면"
+  },
+  {
+    "define_code_name": "4776031034",
+    "define_code_kor_name": "입암면 신구리"
+  },
+  {
+    "define_code_name": "4776031035",
+    "define_code_kor_name": "입암면 양항리"
+  },
+  {
+    "define_code_name": "4776031036",
+    "define_code_kor_name": "입암면 연당리"
+  },
+  {
+    "define_code_name": "4776031037",
+    "define_code_kor_name": "입암면 교리"
+  },
+  {
+    "define_code_name": "4776031038",
+    "define_code_kor_name": "입암면 삼산리"
+  },
+  {
+    "define_code_name": "4776031039",
+    "define_code_kor_name": "입암면 신사리"
+  },
+  {
+    "define_code_name": "4776031040",
+    "define_code_kor_name": "입암면 대천리"
+  },
+  {
+    "define_code_name": "4776031041",
+    "define_code_kor_name": "입암면 금학리"
+  },
+  {
+    "define_code_name": "4776031042",
+    "define_code_kor_name": "입암면 산해리"
+  },
+  {
+    "define_code_name": "4776031043",
+    "define_code_kor_name": "입암면 노달리"
+  },
+  {
+    "define_code_name": "4776031044",
+    "define_code_kor_name": "입암면 방전리"
+  },
+  {
+    "define_code_name": "4776031045",
+    "define_code_kor_name": "입암면 병옥리"
+  },
+  {
+    "define_code_name": "4776031046",
+    "define_code_kor_name": "입암면 흥구리"
+  },
+  {
+    "define_code_name": "4776032000",
+    "define_code_kor_name": "청기면"
+  },
+  {
+    "define_code_name": "4776032034",
+    "define_code_kor_name": "청기면 정족리"
+  },
+  {
+    "define_code_name": "4776032035",
+    "define_code_kor_name": "청기면 토곡리"
+  },
+  {
+    "define_code_name": "4776032036",
+    "define_code_kor_name": "청기면 사리"
+  },
+  {
+    "define_code_name": "4776032037",
+    "define_code_kor_name": "청기면 청기리"
+  },
+  {
+    "define_code_name": "4776032038",
+    "define_code_kor_name": "청기면 구매리"
+  },
+  {
+    "define_code_name": "4776032039",
+    "define_code_kor_name": "청기면 저리"
+  },
+  {
+    "define_code_name": "4776032040",
+    "define_code_kor_name": "청기면 산운리"
+  },
+  {
+    "define_code_name": "4776032041",
+    "define_code_kor_name": "청기면 토구리"
+  },
+  {
+    "define_code_name": "4776032042",
+    "define_code_kor_name": "청기면 무진리"
+  },
+  {
+    "define_code_name": "4776032043",
+    "define_code_kor_name": "청기면 행화리"
+  },
+  {
+    "define_code_name": "4776032044",
+    "define_code_kor_name": "청기면 당리"
+  },
+  {
+    "define_code_name": "4776032045",
+    "define_code_kor_name": "청기면 상청리"
+  },
+  {
+    "define_code_name": "4776032046",
+    "define_code_kor_name": "청기면 기포리"
+  },
+  {
+    "define_code_name": "4776033000",
+    "define_code_kor_name": "일월면"
+  },
+  {
+    "define_code_name": "4776033032",
+    "define_code_kor_name": "일월면 주곡리"
+  },
+  {
+    "define_code_name": "4776033033",
+    "define_code_kor_name": "일월면 곡강리"
+  },
+  {
+    "define_code_name": "4776033034",
+    "define_code_kor_name": "일월면 문암리"
+  },
+  {
+    "define_code_name": "4776033035",
+    "define_code_kor_name": "일월면 오리리"
+  },
+  {
+    "define_code_name": "4776033036",
+    "define_code_kor_name": "일월면 용화리"
+  },
+  {
+    "define_code_name": "4776033037",
+    "define_code_kor_name": "일월면 도계리"
+  },
+  {
+    "define_code_name": "4776033038",
+    "define_code_kor_name": "일월면 섬촌리"
+  },
+  {
+    "define_code_name": "4776033039",
+    "define_code_kor_name": "일월면 가천리"
+  },
+  {
+    "define_code_name": "4776033040",
+    "define_code_kor_name": "일월면 도곡리"
+  },
+  {
+    "define_code_name": "4776033041",
+    "define_code_kor_name": "일월면 칠성리"
+  },
+  {
+    "define_code_name": "4776033042",
+    "define_code_kor_name": "일월면 가곡리"
+  },
+  {
+    "define_code_name": "4776034000",
+    "define_code_kor_name": "수비면"
+  },
+  {
+    "define_code_name": "4776034030",
+    "define_code_kor_name": "수비면 수하리"
+  },
+  {
+    "define_code_name": "4776034031",
+    "define_code_kor_name": "수비면 발리리"
+  },
+  {
+    "define_code_name": "4776034032",
+    "define_code_kor_name": "수비면 신원리"
+  },
+  {
+    "define_code_name": "4776034033",
+    "define_code_kor_name": "수비면 죽파리"
+  },
+  {
+    "define_code_name": "4776034034",
+    "define_code_kor_name": "수비면 오기리"
+  },
+  {
+    "define_code_name": "4776034035",
+    "define_code_kor_name": "수비면 계리"
+  },
+  {
+    "define_code_name": "4776034036",
+    "define_code_kor_name": "수비면 본신리"
+  },
+  {
+    "define_code_name": "4776034037",
+    "define_code_kor_name": "수비면 신암리"
+  },
+  {
+    "define_code_name": "4776034038",
+    "define_code_kor_name": "수비면 송하리"
+  },
+  {
+    "define_code_name": "4776035000",
+    "define_code_kor_name": "석보면"
+  },
+  {
+    "define_code_name": "4776035034",
+    "define_code_kor_name": "석보면 원리리"
+  },
+  {
+    "define_code_name": "4776035035",
+    "define_code_kor_name": "석보면 옥계리"
+  },
+  {
+    "define_code_name": "4776035036",
+    "define_code_kor_name": "석보면 주남리"
+  },
+  {
+    "define_code_name": "4776035037",
+    "define_code_kor_name": "석보면 요원리"
+  },
+  {
+    "define_code_name": "4776035038",
+    "define_code_kor_name": "석보면 택전리"
+  },
+  {
+    "define_code_name": "4776035039",
+    "define_code_kor_name": "석보면 신평리"
+  },
+  {
+    "define_code_name": "4776035040",
+    "define_code_kor_name": "석보면 포산리"
+  },
+  {
+    "define_code_name": "4776035041",
+    "define_code_kor_name": "석보면 소계리"
+  },
+  {
+    "define_code_name": "4776035042",
+    "define_code_kor_name": "석보면 화매리"
+  },
+  {
+    "define_code_name": "4776035043",
+    "define_code_kor_name": "석보면 답곡리"
+  },
+  {
+    "define_code_name": "4776035044",
+    "define_code_kor_name": "석보면 홍계리"
+  },
+  {
+    "define_code_name": "4776035045",
+    "define_code_kor_name": "석보면 지경리"
+  },
+  {
+    "define_code_name": "4776035046",
+    "define_code_kor_name": "석보면 삼의리"
+  }
+]
