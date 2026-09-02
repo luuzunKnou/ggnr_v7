@@ -137,13 +137,13 @@ function renderSysAdminContent(menuId: string): ReactNode {
       return <PlaceholderPanel title={menuLabel(menuId)} />
     case "userAccessStats":
       return (
-        <div className="flex flex-col overflow-hidden min-h-0 h-[calc(100vh-14rem)]">
+        <div className="flex min-h-0 flex-col">
           <UserAccessStats />
         </div>
       )
     case "userMgmtHistory":
       return (
-        <div className="flex flex-col overflow-hidden min-h-0 h-[calc(100vh-14rem)]">
+        <div className="flex min-h-0 flex-col">
           <UserMgmtHistory />
         </div>
       )
@@ -204,7 +204,7 @@ export default function SysManagerPage() {
       defaultMenuId="userManager"
       getDescription={getSysAdminDescription}
       renderContent={renderSysAdminContent}
-      renderTitleExtra={(menuId) =>
+      renderHeaderActions={(menuId) =>
         menuId === "layerManager" ? <LayerManagerUploadButtons /> : null
       }
       consoleArea="sysManager"

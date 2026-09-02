@@ -21,6 +21,62 @@ export function getRowValueByField(row: Record<string, unknown>, fieldName: stri
   return found != null ? row[found] : undefined;
 }
 
+function snakeToCamel(fieldName: string): string {
+  return fieldName.replace(/_([a-z0-9])/gi, (_, c: string) => c.toUpperCase());
+}
+
+/** define_field_name(snake) ↔ 서비스 camelCase 행 모두 조회 */
+export function getRowValueByDefineField(row: Record<string, unknown>, fieldName: string): unknown {
+  const direct = getRowValueByField(row, fieldName);
+  if (direct !== undefined) return direct;
+  const camel = snakeToCamel(fieldName);
+  if (camel !== fieldName) {
+    const camelVal = getRowValueByField(row, camel);
+    if (camelVal !== undefined) return camelVal;
+  }
+  const compact = fieldName.replace(/_/g, '').toLowerCase();
+  const found = Object.keys(row).find((k) => k.replace(/_/g, '').toLowerCase() === compact);
+  return found != null ? row[found] : undefined;
+}
+
+const GEOM_DEFINE_FIELD_NAMES = new Set([
+  'geom',
+  'geometry',
+  'the_geom',
+  'wkb_geometry',
+  'shape',
+  'geojson',
+]);
+
+export function isGeomLikeDefineFieldName(name: string | null | undefined): boolean {
+  return GEOM_DEFINE_FIELD_NAMES.has(String(name ?? '').trim().toLowerCase());
+}
+
+export type DefineFieldLike = {
+  define_field_name?: string | null;
+  define_field_kor_name?: string | null;
+  define_field_idx?: string | number | null;
+  define_field_show_list?: unknown;
+  define_field_type?: string | null;
+};
+
+export function defineFieldIdxNum(f: DefineFieldLike): number {
+  const n = parseInt(String(f.define_field_idx ?? '999999'), 10);
+  return Number.isFinite(n) ? n : 999999;
+}
+
+/** define_field_show_list=true, geom 제외, define_field_idx 순 */
+export function selectDefineLayerListFields(fields: DefineFieldLike[]): DefineFieldLike[] {
+  return [...fields]
+    .filter((f) => {
+      const name = String(f.define_field_name ?? '').trim();
+      if (!name) return false;
+      if (isGeomLikeDefineFieldName(name)) return false;
+      return isDefineFieldFlagTrue(f.define_field_show_list);
+    })
+    .sort((a, b) => defineFieldIdxNum(a) - defineFieldIdxNum(b));
+}
+
 /** define_field_is_key 로 지정된 컬럼명으로 행 키값 추출 */
 export function getRowKey(row: Record<string, unknown>, keyFieldName: string | null): string | number | null {
   if (!keyFieldName) return null;

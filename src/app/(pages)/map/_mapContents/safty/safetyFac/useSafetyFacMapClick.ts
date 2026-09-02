@@ -4,7 +4,9 @@ import { useEffect, useRef } from 'react';
 import type { Map, MapBrowserEvent } from 'ol';
 import { unByKey } from 'ol/Observable';
 import { easeOut } from 'ol/easing';
+import GeoJSONFormat from 'ol/format/GeoJSON';
 import { transform } from 'ol/proj';
+import '../../../_mapComponents/config/projections';
 import { call } from '@/lib/api';
 import { appFetch } from '@/lib/basePath';
 import { prepareMapForPanelAwareNavigation } from '../../../_mapComponents/config/mapAutoNavigation';
@@ -137,6 +139,34 @@ type Props = {
 const SAFETY_FAC_CLICK_ZOOM = 18;
 const SAFETY_FAC_FLY_MS = 600;
 
+function lonLatFromGeoJsonCentroid(geom: unknown): { lon: number; lat: number } | null {
+  let parsed: unknown = geom;
+  if (typeof geom === 'string') {
+    try {
+      parsed = JSON.parse(geom) as unknown;
+    } catch {
+      return null;
+    }
+  }
+  if (!parsed || typeof parsed !== 'object' || !('type' in parsed)) return null;
+  try {
+    const format = new GeoJSONFormat();
+    const features = format.readFeatures(
+      { type: 'Feature', geometry: parsed as Record<string, unknown>, properties: {} },
+      { dataProjection: 'EPSG:4326', featureProjection: 'EPSG:4326' }
+    );
+    const olGeom = features[0]?.getGeometry();
+    if (!olGeom) return null;
+    const ext = olGeom.getExtent();
+    const lon = (ext[0]! + ext[2]!) / 2;
+    const lat = (ext[1]! + ext[3]!) / 2;
+    if (!Number.isFinite(lon) || !Number.isFinite(lat)) return null;
+    return { lon, lat };
+  } catch {
+    return null;
+  }
+}
+
 function lonLatFromFacility(f: SafetyFacFacilityRow): { lon: number; lat: number } | null {
   const asNum = (v: unknown): number | undefined => {
     if (typeof v === 'number' && Number.isFinite(v)) return v;
@@ -163,12 +193,15 @@ function lonLatFromFacility(f: SafetyFacFacilityRow): { lon: number; lat: number
   if (fromGeom) return fromGeom;
   if (f.geomJson && typeof f.geomJson === 'string') {
     try {
-      return tryPoint(JSON.parse(f.geomJson) as unknown);
+      const p = tryPoint(JSON.parse(f.geomJson) as unknown);
+      if (p) return p;
     } catch {
       /* ignore */
     }
   }
-  return null;
+
+  const geomRaw = f.geomJson ?? getSafetyFacGeomJson(f.detailAttrs);
+  return lonLatFromGeoJsonCentroid(geomRaw);
 }
 
 /** 해당 좌표가 보이는 지도 중앙이 되도록 이동·확대 (패널 padding 반영, easeOut) */
@@ -279,16 +312,11 @@ export function useSafetyFacMapClick({ enabled, facilities, onSelectFacility }: 
             ? String(keyRaw).trim()
             : `${table}-map`;
 
-        const flyFromClick = (fallback: SafetyFacFacilityRow) => {
-          const coord = evt.coordinate as [number, number];
+        const flyToFacility = (facility: SafetyFacFacilityRow) => {
           const pad = () => {
             mapContext?.applyMapViewPaddingRef?.current?.();
           };
-          if (Number.isFinite(coord[0]) && Number.isFinite(coord[1])) {
-            animateSafetyFacToCenter3857(evt.map, coord, pad);
-          } else {
-            animateSafetyFacToFacility(evt.map, fallback, pad);
-          }
+          animateSafetyFacToFacility(evt.map, facility, pad);
         };
 
         const listHit = facilitiesRef.current.find((f) => f.table === table && f.id === id);
@@ -299,7 +327,7 @@ export function useSafetyFacMapClick({ enabled, facilities, onSelectFacility }: 
             ...(geomJson != null && listHit.geomJson == null ? { geomJson } : {}),
           };
           onSelectRef.current(selected);
-          flyFromClick(selected);
+          flyToFacility(selected);
           return;
         }
 
@@ -311,7 +339,7 @@ export function useSafetyFacMapClick({ enabled, facilities, onSelectFacility }: 
         });
         const fromIdentify = facilityFromIdentify({ table, subtype, data: row, titleValue, id });
         onSelectRef.current(fromIdentify);
-        flyFromClick(fromIdentify);
+        flyToFacility(fromIdentify);
       } catch {
         /* 클릭 식별 실패는 무시 */
       }
