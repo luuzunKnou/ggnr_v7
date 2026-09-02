@@ -352,9 +352,6 @@ echo.
 echo :: cwd
 echo cd /d %ROOT%
 echo.
-echo :: G: = \\192.168.127.11\service_data — nssm has no interactive drive mapping ^(silent^)
-echo net use G: \\192.168.127.11\service_data /persistent:yes ^>nul 2^>&1
-echo.
 echo :: PATH node
 echo set PATH=%%PATH%%;%NODE_DIR%
 echo.
