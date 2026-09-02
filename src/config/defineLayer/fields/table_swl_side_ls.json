@@ -201,7 +201,7 @@
   },
   {
     "define_field_name": "geom",
-    "define_field_kor_name": "geom",
+    "define_field_kor_name": "도형",
     "define_field_is_required": "false",
     "define_field_show_search": "false",
     "define_field_show_list": "false",
@@ -226,7 +226,7 @@
   },
   {
     "define_field_name": "gid",
-    "define_field_kor_name": "gid",
+    "define_field_kor_name": "등록순서",
     "define_field_is_required": "false",
     "define_field_show_search": "false",
     "define_field_show_list": "false",
@@ -503,10 +503,10 @@
     "define_field_name": "ogc_fid",
     "define_field_kor_name": "번호",
     "define_field_type": "NUMBER",
-    "define_field_idx": 5,
+    "define_field_idx": "",
     "define_field_is_required": false,
     "define_field_show_search": false,
-    "define_field_show_list": true,
+    "define_field_show_list": "false",
     "define_field_show_detail": false,
     "define_field_read_only": false,
     "define_field_is_key": false,
@@ -526,7 +526,7 @@
   },
   {
     "define_field_name": "byc_len",
-    "define_field_kor_name": "byc_len",
+    "define_field_kor_name": "연장",
     "define_field_type": "NUMBER",
     "define_field_idx": 6,
     "define_field_is_required": false,
@@ -551,7 +551,7 @@
   },
   {
     "define_field_name": "std_hol",
-    "define_field_kor_name": "std_hol",
+    "define_field_kor_name": "가로길이",
     "define_field_type": "NUMBER",
     "define_field_idx": 7,
     "define_field_is_required": false,
@@ -576,7 +576,7 @@
   },
   {
     "define_field_name": "std_vel",
-    "define_field_kor_name": "std_vel",
+    "define_field_kor_name": "세로길이",
     "define_field_type": "NUMBER",
     "define_field_idx": 8,
     "define_field_is_required": false,
@@ -601,7 +601,7 @@
   },
   {
     "define_field_name": "sph_lin",
-    "define_field_kor_name": "sph_lin",
+    "define_field_kor_name": "차선통로수",
     "define_field_type": "NUMBER",
     "define_field_idx": 9,
     "define_field_is_required": false,

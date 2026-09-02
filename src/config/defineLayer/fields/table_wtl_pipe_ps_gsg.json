@@ -26,7 +26,7 @@
   },
   {
     "define_field_name": "geom",
-    "define_field_kor_name": "geom",
+    "define_field_kor_name": "도형",
     "define_field_type": "TEXT",
     "define_field_idx": 2,
     "define_field_is_required": false,
@@ -51,8 +51,8 @@
   },
   {
     "define_field_name": "ftr_cde",
-    "define_field_kor_name": "ftr_cde",
-    "define_field_type": "TEXT",
+    "define_field_kor_name": "지형지물부호",
+    "define_field_type": "CODE",
     "define_field_idx": 3,
     "define_field_is_required": false,
     "define_field_show_search": false,
@@ -76,7 +76,7 @@
   },
   {
     "define_field_name": "pip_dep",
-    "define_field_kor_name": "pip_dep",
+    "define_field_kor_name": "심도",
     "define_field_type": "NUMBER",
     "define_field_idx": 4,
     "define_field_is_required": false,

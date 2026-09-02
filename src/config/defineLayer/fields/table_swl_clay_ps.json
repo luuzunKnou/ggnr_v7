@@ -251,7 +251,7 @@
   },
   {
     "define_field_name": "geom",
-    "define_field_kor_name": "geom",
+    "define_field_kor_name": "도형",
     "define_field_is_required": "false",
     "define_field_show_search": "false",
     "define_field_show_list": "false",
@@ -276,7 +276,7 @@
   },
   {
     "define_field_name": "gid",
-    "define_field_kor_name": "gid",
+    "define_field_kor_name": "등록순서",
     "define_field_is_required": "false",
     "define_field_show_search": "false",
     "define_field_show_list": "false",
