@@ -25,6 +25,26 @@ export const USER_MANAGER_UI_STYLE = {
   footer: 'border-t border-border px-3 py-2',
 } as const;
 
+/** 접속현황 — 집계표 기준 행 높이 25.5px */
+export const USER_STATS_HISTORY_TABLE = {
+  tableHead:
+    'bg-muted h-[25.5px] [&_th]:h-[25.5px] [&_th]:max-h-[25.5px] [&_th]:align-middle [&_th]:overflow-hidden [&_th]:border-b [&_th]:border-border',
+  tableRow:
+    'h-[25.5px] max-h-[25.5px] border-b border-border hover:bg-muted/50 transition-colors [&>td]:h-[25.5px] [&>td]:max-h-[25.5px] [&>td]:align-middle [&>td]:overflow-hidden [&>td]:border-r [&>td]:border-border/60 [&>td:last-child]:border-r-0',
+  tableRowPivot:
+    'h-[25.5px] max-h-[25.5px] border-t border-border hover:bg-muted/50 transition-colors [&>td]:h-[25.5px] [&>td]:max-h-[25.5px] [&>td]:align-middle [&>td]:overflow-hidden',
+  tableCell: 'px-2 py-0 align-middle leading-[25.5px]',
+} as const;
+
+/** 사용자 관리 이력 — 행 높이 28.5px */
+export const USER_MGMT_HISTORY_TABLE = {
+  tableHead:
+    'bg-muted h-[28.5px] [&_th]:h-[28.5px] [&_th]:max-h-[28.5px] [&_th]:align-middle [&_th]:overflow-hidden [&_th]:border-b [&_th]:border-border',
+  tableRow:
+    'h-[28.5px] max-h-[28.5px] border-b border-border hover:bg-muted/50 transition-colors [&>td]:h-[28.5px] [&>td]:max-h-[28.5px] [&>td]:align-middle [&>td]:overflow-hidden [&>td]:border-r [&>td]:border-border/60 [&>td:last-child]:border-r-0',
+  tableCell: 'px-2 py-0 align-middle leading-[28.5px]',
+} as const;
+
 export type OrgVariantStyle = {
   orgTabs: string;
   orgTabActive: string;
