@@ -938,7 +938,9 @@ export async function getJijukParcelAtPoint(params: { x: number; y: number }) {
 
   const point = `ST_SetSRID(ST_MakePoint(${x}, ${y}), ${srid})`;
   const pointInTable = `ST_Transform(${point}, ${tableSrid})`;
-  const queryStr = `SELECT "gid", "pnu", "jibun", "bchk", ST_AsGeoJSON(ST_Transform("${geomCol}", 4326))::json AS "${geomCol}" FROM "${schema}"."${tableName}" WHERE ST_Intersects("${geomCol}", ${pointInTable}) LIMIT 50`;
+  // jijuk.geom 좌표는 5181인데 SRID 메타가 0인 DB가 많음 — 엑셀·도로 연계와 동일하게 SetSRID 후 intersect
+  const jijukGeom5181 = `ST_SetSRID("${geomCol}", COALESCE(NULLIF(ST_SRID("${geomCol}"), 0), ${tableSrid}))`;
+  const queryStr = `SELECT "gid", "pnu", "jibun", "bchk", ST_AsGeoJSON(ST_Transform(${jijukGeom5181}, 4326))::json AS "${geomCol}" FROM "${schema}"."${tableName}" WHERE ST_Intersects(${jijukGeom5181}, ${pointInTable}) LIMIT 50`;
 
   try {
     const dataRes = await db.execute(sql.raw(queryStr));
