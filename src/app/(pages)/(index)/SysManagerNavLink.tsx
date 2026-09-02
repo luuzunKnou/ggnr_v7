@@ -1,6 +1,7 @@
 'use client';
 
 import { useSession } from 'next-auth/react';
+import { useLoginModal } from '@/app/login-modal-context';
 import { withBasePathNav } from '@/lib/basePath';
 import { isSuperUser } from '@/lib/auth/superUser';
 
@@ -9,12 +10,12 @@ const SYS_MANAGER_HREF = '/sysManager';
 /** Index 헤더 «시스템 관리» — 로그인 후 슈퍼계정만 진입, 그 외 alert */
 export function SysManagerNavLink() {
   const { data: session, status } = useSession();
+  const { openLogin } = useLoginModal();
 
   const goOrDeny = () => {
     if (status === 'loading') return;
     if (!session?.user) {
-      // 미로그인 → /sysManager 진입 → middleware가 next·openLogin으로 로그인 유도
-      window.location.assign(withBasePathNav(SYS_MANAGER_HREF));
+      openLogin(SYS_MANAGER_HREF);
       return;
     }
     if (!isSuperUser(session.user.id)) {
