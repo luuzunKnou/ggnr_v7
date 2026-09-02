@@ -7,6 +7,12 @@ import { formatAddressStripSidoSigungu } from '@/lib/formatAddressStripAdmin';
 import { cn } from '@/lib/utils';
 import { LayerRowAddButton, LayerRowPanelButton } from '../../../_mapComponents/layerRowEdit';
 import { useMapContext } from '../../../_mapComponents/MapContext';
+import { MAP_AUTO_NAV_MAX_ZOOM } from '../../../_mapComponents/config/mapDefaults';
+import { scheduleFitMapToExtent3857 } from '../../../_mapComponents/config/mapAutoNavigation';
+import {
+  ensureRoadFrontageWmsLayers,
+  clearRoadFrontageWmsLayers,
+} from '../roadFrontage/roadFrontageMapSync';
 import {
   ROAD_FRONTAGE_BUILDING_NEW_ID,
   isNewRoadFrontageBuildingId,
@@ -64,6 +70,8 @@ export function RoadFrontageBuildingListPanel({
   refreshKey = 0,
 }: Props) {
   const mapContext = useMapContext();
+  const mapContextRef = useRef(mapContext);
+  mapContextRef.current = mapContext;
   const { highlightLedger, clearHighlight } = useRoadFrontageBuildingMapHighlight();
   const [keyword, setKeyword] = useState('');
   const [sorts, setSorts] = useState<SortSpec[]>([]);
@@ -71,6 +79,50 @@ export function RoadFrontageBuildingListPanel({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const listScrollRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    ensureRoadFrontageWmsLayers(mapContextRef.current?.setVisibleLayerNames, 'building');
+    return () => {
+      clearRoadFrontageWmsLayers(mapContextRef.current?.setVisibleLayerNames, 'building');
+    };
+  }, []);
+
+  const fitMapAfterDetailLayout = useCallback(
+    (extent3857: number[]) => {
+      const map = mapContext?.mapInstanceRef?.current;
+      if (!map) return;
+      ensureRoadFrontageWmsLayers(mapContext?.setVisibleLayerNames, 'building');
+      window.setTimeout(() => {
+        scheduleFitMapToExtent3857(map, extent3857, {
+          maxZoom: MAP_AUTO_NAV_MAX_ZOOM,
+          applyMapViewPadding: () => mapContext?.applyMapViewPaddingRef?.current?.(),
+        });
+      }, 80);
+    },
+    [mapContext]
+  );
+
+  useEffect(() => {
+    const pickRef = mapContext?.applyRoadFrontageBuildingMapPickRef;
+    if (!pickRef) return;
+    pickRef.current = (pick) => {
+      const ftrIdn = String(pick?.ftrIdn ?? '').trim();
+      if (!ftrIdn) return;
+      const opts = Array.isArray(pick?.overlapOptions) ? pick.overlapOptions : [];
+      mapContext?.setRoadFrontageBuildingMapHitOptions?.(opts.length > 1 ? opts : []);
+      onSelectId(ftrIdn);
+      if (
+        Array.isArray(pick?.extent3857) &&
+        pick.extent3857.length === 4 &&
+        pick.extent3857.every((v) => Number.isFinite(Number(v)))
+      ) {
+        fitMapAfterDetailLayout(pick.extent3857.map(Number));
+      }
+    };
+    return () => {
+      pickRef.current = null;
+    };
+  }, [mapContext, onSelectId, fitMapAfterDetailLayout]);
 
   useEffect(() => {
     const t = setTimeout(async () => {
@@ -108,6 +160,31 @@ export function RoadFrontageBuildingListPanel({
     return () => clearTimeout(t);
   }, [keyword, refreshKey, sorts]);
 
+  /** 목록만 열린 상태 — 레이어 전체 범위로 지도 이동 */
+  useEffect(() => {
+    if (loading) return;
+    const key = String(selectedId ?? '').trim();
+    if (key && !isNewRoadFrontageBuildingId(key)) return;
+    const map = mapContext?.mapInstanceRef?.current;
+    if (!map) return;
+    void (async () => {
+      try {
+        const res = await call('', 'POST', {
+          service: 'roadFrontageBuildingService',
+          action: 'getListExtent3857',
+          params: { keyword },
+        });
+        const data = res?.data ?? res;
+        const ext = data?.extent3857 as unknown;
+        if (Array.isArray(ext) && ext.length === 4) {
+          fitMapAfterDetailLayout(ext.map(Number));
+        }
+      } catch {
+        /* 위치 없으면 이동 생략 */
+      }
+    })();
+  }, [loading, keyword, refreshKey, selectedId, mapContext, fitMapAfterDetailLayout]);
+
   const toggleSort = (key: SortKey) => {
     const initial = initialSortDir(key);
     setSorts((prev) => {
@@ -128,11 +205,26 @@ export function RoadFrontageBuildingListPanel({
     onClose();
   }, [clearHighlight, onClose]);
 
-  const handleSelect = (ledger: RoadFrontageBuildingLedger) => {
+  const handleSelect = async (ledger: RoadFrontageBuildingLedger) => {
     const key = String(ledger.ftrIdn || ledger.id || '').trim();
     if (!key) return;
+    mapContext?.setRoadFrontageBuildingMapHitOptions?.([]);
     onSelectId(key);
-    highlightLedger(ledger, { fit: true });
+    highlightLedger(ledger, { fit: false });
+    try {
+      const res = await call('', 'POST', {
+        service: 'roadFrontageBuildingService',
+        action: 'getExtent3857ByKey',
+        params: { ftrIdn: key },
+      });
+      const data = res?.data ?? res;
+      const ext = data?.extent3857 as unknown;
+      if (Array.isArray(ext) && ext.length === 4) {
+        fitMapAfterDetailLayout(ext.map(Number));
+      }
+    } catch {
+      /* 도형 없으면 지도 이동 생략 */
+    }
   };
 
   useEffect(() => {

@@ -28,8 +28,8 @@ const SOLO_TABLE = 'cons_data_solo_as';
 const DEFAULT_SCHEMA = 'layer';
 const KEY_FIELD = 'cons_code';
 const CHILD_PARENT_FIELD = 'cons_code';
-/** solo 주소 대용 컬럼 (parcel_address/usage_loc 없음) */
-const SOLO_ADDRESS_FIELD = 'remark';
+/** solo 필지 주소 컬럼 */
+const SOLO_ADDRESS_FIELD = 'address';
 const FILE_LAYER = 'cons_data_as';
 /** 키 루트에 파일이 있을 때 UI 탭명 */
 export const CONS_DATA_AS_ROOT_FOLDER_LABEL = '기타';
@@ -71,8 +71,6 @@ export type ConsDataAsGeom = {
 
 export type ConsDataAsParcelItem = {
   address: string;
-  riverName?: string;
-  remark?: string;
   pnu?: string;
   extent3857: [number, number, number, number] | null;
   /** GeoJSON geometry (EPSG:3857) — 지도에서 그린 필지(소구간) 도형 */
@@ -398,9 +396,7 @@ export async function listParcelsByConsCode(params: {
   const parentCol = findColumn(cols, CHILD_PARENT_FIELD);
   if (!parentCol) return { items: [] };
 
-  const remarkCol = findColumn(cols, SOLO_ADDRESS_FIELD);
-  const soloCodeCol = findColumn(cols, 'solo_code');
-  const riverNameCol = findColumn(cols, 'river_name');
+  const addressCol = findColumn(cols, SOLO_ADDRESS_FIELD);
   const hasGeom = findColumn(cols, 'geom');
   const hasOgcFid = findColumn(cols, 'ogc_fid');
   const hasId = findColumn(cols, 'id');
@@ -412,14 +408,8 @@ export async function listParcelsByConsCode(params: {
       ? quoteIdent('id')
       : quoteIdent(parentCol);
 
-  const remarkExpr = remarkCol
-    ? `NULLIF(TRIM(COALESCE(r.${quoteIdent(remarkCol)}::text, '')), '')`
-    : `NULL::text`;
-  const soloExpr = soloCodeCol
-    ? `NULLIF(TRIM(COALESCE(r.${quoteIdent(soloCodeCol)}::text, '')), '')`
-    : `NULL::text`;
-  const riverExpr = riverNameCol
-    ? `NULLIF(TRIM(COALESCE(r.${quoteIdent(riverNameCol)}::text, '')), '')`
+  const addressExpr = addressCol
+    ? `NULLIF(TRIM(COALESCE(r.${quoteIdent(addressCol)}::text, '')), '')`
     : `NULL::text`;
 
   const extentSelect = hasGeom
@@ -438,9 +428,7 @@ export async function listParcelsByConsCode(params: {
 
   const sqlText = `
     SELECT
-      COALESCE(${remarkExpr}, ${soloExpr}, ${riverExpr}, '') AS addr,
-      COALESCE(${riverExpr}, '') AS river_name,
-      COALESCE(${remarkExpr}, '') AS remark
+      COALESCE(${addressExpr}, '') AS address
       ${extentSelect}
     FROM "${safeSchema}"."${safe}" r
     WHERE r.${quoteIdent(parentCol)}::text = '${esc(consCode)}'
@@ -451,9 +439,7 @@ export async function listParcelsByConsCode(params: {
     const items = (res.rows ?? [])
       .map((r) => {
         const row = r as Record<string, unknown>;
-        const riverName = String(row.river_name ?? '').trim();
-        const remark = String(row.remark ?? '').trim();
-        const address = String(row.addr ?? '').trim() || riverName || remark;
+        const address = String(row.address ?? '').trim();
         const xmin = Number(row.xmin);
         const ymin = Number(row.ymin);
         const xmax = Number(row.xmax);
@@ -477,64 +463,45 @@ export async function listParcelsByConsCode(params: {
         }
         return {
           address,
-          riverName,
-          remark,
           extent3857,
           ...(geometry3857 ? { geometry3857 } : {}),
         };
       })
-      .filter(
-        (x) =>
-          x.address ||
-          x.riverName ||
-          x.remark ||
-          x.geometry3857 ||
-          x.extent3857
-      );
+      .filter((x) => x.address || x.geometry3857 || x.extent3857);
     return { items };
   } catch (e: unknown) {
     return { items: [], error: e instanceof Error ? e.message : String(e) };
   }
 }
 
-/** 지도 이동용 extent — 단일 공사 */
+/** 지도 이동용 extent — 공사구간 본표(geom)만. 필지 합치면 중심이 어긋남 */
 export async function getExtent3857ByConsCode(params: {
   consCode?: string;
 }): Promise<{ extent3857: [number, number, number, number] | null; error?: string }> {
   const keyRaw = String(params?.consCode ?? '').trim();
   if (!keyRaw) return { extent3857: null, error: '공사코드가 필요합니다.' };
 
-  const geomSelects: string[] = [];
-  for (const table of [MAIN_TABLE, SOLO_TABLE]) {
-    const meta = await resolveTableWithSchema(table);
-    if (!meta) continue;
-    const cols = await getTableColumns(meta.schema, meta.tableName);
-    const keyCol =
-      table === MAIN_TABLE
-        ? findColumn(cols, KEY_FIELD)
-        : findColumn(cols, CHILD_PARENT_FIELD);
-    const geomCol = findColumn(cols, 'geom');
-    if (!keyCol || !geomCol) continue;
-    const safe = meta.tableName.replace(/"/g, '""');
-    const safeSchema = meta.schema.replace(/"/g, '""');
-    geomSelects.push(
-      `SELECT ST_Transform(t.${quoteIdent(geomCol)}, 3857) AS g
-       FROM "${safeSchema}"."${safe}" t
-       WHERE t.${quoteIdent(keyCol)}::text = '${esc(keyRaw)}' AND t.${quoteIdent(geomCol)} IS NOT NULL`
-    );
+  const mainMeta = await resolveTableWithSchema(MAIN_TABLE);
+  if (!mainMeta) {
+    return { extent3857: null, error: '위치(도형)를 찾을 수 없습니다.' };
   }
-
-  if (geomSelects.length === 0) {
+  const cols = await getTableColumns(mainMeta.schema, mainMeta.tableName);
+  const keyCol = findColumn(cols, KEY_FIELD);
+  const geomCol = findColumn(cols, 'geom');
+  if (!keyCol || !geomCol) {
     return { extent3857: null, error: '위치(도형)를 찾을 수 없습니다.' };
   }
 
+  const safe = mainMeta.tableName.replace(/"/g, '""');
+  const safeSchema = mainMeta.schema.replace(/"/g, '""');
   const sqlText = `
     SELECT ST_XMin(ext)::float8 AS xmin, ST_YMin(ext)::float8 AS ymin,
            ST_XMax(ext)::float8 AS xmax, ST_YMax(ext)::float8 AS ymax
     FROM (
-      SELECT ST_Extent(g)::box2d AS ext
-      FROM (${geomSelects.join(' UNION ALL ')}) u
-      WHERE g IS NOT NULL
+      SELECT ST_Extent(ST_Transform(t.${quoteIdent(geomCol)}, 3857))::box2d AS ext
+      FROM "${safeSchema}"."${safe}" t
+      WHERE t.${quoteIdent(keyCol)}::text = '${esc(keyRaw)}'
+        AND t.${quoteIdent(geomCol)} IS NOT NULL
     ) s
     WHERE ext IS NOT NULL`;
 
@@ -691,15 +658,12 @@ export async function listRiverNamesFromZones(params?: {
 }
 
 /**
- * 필지(solo) 동기화 — 지적 주소검색 대신 하천명·비고 텍스트를 직접 입력받고,
- * 지도에서 그린 도형(geomWkt5181, 있으면)을 geom 컬럼에 함께 저장한다.
+ * 필지(solo) 동기화 — 주소와 필지 도형(geomWkt5181). 도형은 목록 클릭 시 지도 표시용.
  */
 async function syncSoloParcels(params: {
   consCode: string;
   parcels: Array<{
     address?: string;
-    riverName?: string;
-    remark?: string;
     geomWkt5181?: string | null;
   }>;
 }): Promise<{ success: boolean; error?: string }> {
@@ -708,15 +672,13 @@ async function syncSoloParcels(params: {
 
   const items = (params.parcels ?? [])
     .map((it) => ({
-      riverName: String(it?.riverName ?? '').trim(),
-      // remark 미지정 시(구버전 address 기반 값) address 로 대체
-      remark: String(it?.remark ?? it?.address ?? '').trim(),
+      address: String(it?.address ?? '').trim(),
       geomWkt5181:
         typeof it?.geomWkt5181 === 'string' && it.geomWkt5181.trim()
           ? it.geomWkt5181.trim()
           : null,
     }))
-    .filter((it) => it.riverName || it.remark || it.geomWkt5181);
+    .filter((it) => it.address || it.geomWkt5181);
 
   const meta = await resolveTableWithSchema(SOLO_TABLE);
   if (!meta) return { success: false, error: `${SOLO_TABLE} 테이블이 없습니다.` };
@@ -725,8 +687,7 @@ async function syncSoloParcels(params: {
   const cols = await getTableColumns(schema, tableName);
   const parentCol = findColumn(cols, CHILD_PARENT_FIELD);
   if (!parentCol) return { success: false, error: '자식 테이블에 부모키 컬럼이 없습니다.' };
-  const remarkCol = findColumn(cols, SOLO_ADDRESS_FIELD);
-  const riverNameCol = findColumn(cols, 'river_name');
+  const addressCol = findColumn(cols, SOLO_ADDRESS_FIELD);
   const geomCol = findColumn(cols, 'geom');
   const safe = tableName.replace(/"/g, '""');
   const safeSchema = schema.replace(/"/g, '""');
@@ -741,17 +702,12 @@ async function syncSoloParcels(params: {
     for (const item of items) {
       const insertCols = [quoteIdent(parentCol)];
       const insertVals = [`'${esc(consCode)}'`];
-      if (remarkCol) {
-        insertCols.push(quoteIdent(remarkCol));
-        insertVals.push(`'${esc(item.remark)}'`);
-      }
-      if (riverNameCol) {
-        insertCols.push(quoteIdent(riverNameCol));
-        insertVals.push(`'${esc(item.riverName)}'`);
+      if (addressCol) {
+        insertCols.push(quoteIdent(addressCol));
+        insertVals.push(`'${esc(item.address)}'`);
       }
       if (geomCol && item.geomWkt5181) {
         insertCols.push(quoteIdent(geomCol));
-        // 필지 도형은 폴리곤 1개씩 그리므로 컬럼 타입(MULTIPOLYGON)에 맞춰 ST_Multi로 감싼다
         insertVals.push(
           `ST_Multi(ST_SetSRID(ST_GeomFromText('${esc(item.geomWkt5181)}'), 5181))`
         );
@@ -770,9 +726,8 @@ async function syncSoloParcels(params: {
 }
 
 /**
- * 공사구간 전체 도형(cons_data_as.geom) 재계산 — 필지(cons_data_solo_as) 도형들의 합집합.
- * 원본 데이터(shp 임포트)도 이 관계를 그대로 따르므로, 공사구간 전체 도형은 따로 그리지 않고
- * 필지별로 그린 도형을 합쳐 자동으로 채운다. 도형 있는 필지가 하나도 없으면 전체 도형도 비운다.
+ * 공사구간 전체 도형(cons_data_as.geom) 재계산 — solo 도형 합집합(레거시·shp 임포트).
+ * UI에서 공사구간 도형을 직접 저장한 경우에는 호출하지 않는다.
  */
 async function recomputeConsMainGeomFromParcels(consCode: string): Promise<void> {
   try {
@@ -818,16 +773,19 @@ export async function saveRow(params: {
   consCode?: string;
   isNew?: boolean;
   values?: Record<string, unknown>;
+  /** 공사구간(본표) 도형 — 지도에서 그린 폴리곤 */
+  geomWkt5181?: string | null;
+  geomClear?: boolean;
   parcels?: Array<{
     address?: string;
-    riverName?: string;
-    remark?: string;
     geomWkt5181?: string | null;
   }>;
 }): Promise<{ success: boolean; consCode?: string; error?: string }> {
   const values = { ...(params.values ?? {}) };
   let consCode = String(params.consCode ?? values.cons_code ?? '').trim();
   const isNew = params.isNew === true || !consCode;
+  const boundaryGeomWkt = String(params.geomWkt5181 ?? '').trim();
+  const hasExplicitBoundary = Boolean(boundaryGeomWkt) || params.geomClear === true;
 
   if (isNew) {
     if (!consCode) {
@@ -842,6 +800,7 @@ export async function saveRow(params: {
       keyField: KEY_FIELD,
       values,
       includeHiddenDetail: true,
+      geomWkt5181: boundaryGeomWkt || undefined,
     });
     if (!inserted.success) {
       return { success: false, error: inserted.error ?? '등록에 실패했습니다.' };
@@ -864,6 +823,8 @@ export async function saveRow(params: {
       keyValue: consCode,
       changes: values,
       includeHiddenDetail: true,
+      geomWkt5181: boundaryGeomWkt || undefined,
+      geomClear: params.geomClear === true,
     });
     if (!updated.success) {
       return { success: false, error: updated.error ?? '수정에 실패했습니다.' };
@@ -875,7 +836,9 @@ export async function saveRow(params: {
     if (!sync.success) {
       return { success: false, consCode, error: sync.error ?? '필지 동기화에 실패했습니다.' };
     }
-    await recomputeConsMainGeomFromParcels(consCode);
+    if (!hasExplicitBoundary) {
+      await recomputeConsMainGeomFromParcels(consCode);
+    }
     if (sync.error) return { success: true, consCode, error: sync.error };
   }
 

@@ -167,8 +167,6 @@ export type ConsDataAsApiRow = {
   geom?: RiverConstructionLedgerGeom | null;
   parcels?: Array<{
     address?: string;
-    riverName?: string;
-    remark?: string;
     pnu?: string;
     extent3857?: [number, number, number, number] | null;
     geometry3857?: Record<string, unknown> | null;
@@ -310,17 +308,8 @@ export function getMockRiverFocus(riverName: string): {
   return { riverName: name, extent3857, geom };
 }
 
-/**
- * 편집모드 진입 시 — 예전 주소검색 방식으로 등록된 필지는 하천명·비고 값이 비어 있어
- * 입력란이 빈칸으로 보인다. 기존 address 값을 하천명 입력란에 채워 편집 중 사라지지 않게 한다.
- */
 export function withRiverNameFallback(items: LayerRowParcelItem[]): LayerRowParcelItem[] {
-  return items.map((p) => {
-    if (p.riverName?.trim() || p.remark?.trim()) return p;
-    const addr = String(p.address ?? "").trim();
-    if (!addr || addr === "—") return p;
-    return { ...p, riverName: addr };
-  });
+  return items;
 }
 
 export function rowHasRiver(row: RiverConstructionLedgerRow, riverName: string): boolean {
@@ -342,11 +331,9 @@ export function mapConsDataAsApiToLedgerRow(api: ConsDataAsApiRow): RiverConstru
   const riverName = String(api.riverName ?? "").trim();
   const parcels: LayerRowParcelItem[] = (api.parcels ?? [])
     .map((p) => {
-      const riverName = String(p?.riverName ?? "").trim();
-      const remark = String(p?.remark ?? "").trim();
-      const address = String(p?.address ?? "").trim() || remark || riverName;
+      const address = String(p?.address ?? "").trim();
       const geometry3857 = p?.geometry3857 ?? null;
-      if (!address && !riverName && !remark && !geometry3857) return null;
+      if (!address && !geometry3857) return null;
       const pnu = String(p?.pnu ?? "").trim();
       const ext = p?.extent3857;
       const extent3857 =
@@ -360,17 +347,11 @@ export function mapConsDataAsApiToLedgerRow(api: ConsDataAsApiRow): RiverConstru
               number,
             ])
           : null;
-      const displayParts = [riverName, remark].filter(Boolean);
-      const displayText =
-        displayParts.length > 0 ? displayParts.join(" · ") : undefined;
       const item: LayerRowParcelItem = {
-        address: address || displayText || "—",
+        address: address || "—",
         extent3857,
         ...(geometry3857 ? { geometry3857 } : {}),
-        ...(displayText ? { displayText } : {}),
         ...(pnu ? { pnu } : {}),
-        ...(riverName ? { riverName } : {}),
-        ...(remark ? { remark } : {}),
       };
       return item;
     })

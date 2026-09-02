@@ -522,3 +522,89 @@ export async function remove(params: { ftrIdn?: string; id?: string | number } =
   await updateGeomByPk(row.id, null, null);
   return { ok: true };
 }
+
+export async function getListExtent3857(params: {
+  keyword?: string;
+  roadType?: string;
+} = {}): Promise<{ extent3857: [number, number, number, number] | null; error?: string }> {
+  try {
+    const keyword = emptyToNull(params?.keyword);
+    const roadType = emptyToNull(params?.roadType);
+    const result = await db.execute(
+      sql`
+        SELECT ST_XMin(ext)::float8 AS xmin, ST_YMin(ext)::float8 AS ymin,
+               ST_XMax(ext)::float8 AS xmax, ST_YMax(ext)::float8 AS ymax
+        FROM (
+          SELECT ST_Extent(ST_Transform(t.geom, 3857))::box2d AS ext
+          FROM layer.road_frontage_building t
+          WHERE COALESCE(t.is_del, false) = false
+            AND t.geom IS NOT NULL
+            ${keyword ? sql`AND (
+              t.loc_adr ILIKE ${`%${keyword}%`}
+              OR t.route_no ILIKE ${`%${keyword}%`}
+              OR t.route_nam ILIKE ${`%${keyword}%`}
+              OR t.road_type ILIKE ${`%${keyword}%`}
+              OR t.build_onam ILIKE ${`%${keyword}%`}
+              OR t.land_onam ILIKE ${`%${keyword}%`}
+              OR t.serial_no ILIKE ${`%${keyword}%`}
+              OR t.ftr_idn ILIKE ${`%${keyword}%`}
+            )` : sql``}
+            ${roadType ? sql`AND t.road_type = ${roadType}` : sql``}
+        ) s
+        WHERE ext IS NOT NULL
+      `
+    );
+    const row = (result as { rows?: Record<string, unknown>[] }).rows?.[0];
+    const xmin = Number(row?.xmin);
+    const ymin = Number(row?.ymin);
+    const xmax = Number(row?.xmax);
+    const ymax = Number(row?.ymax);
+    if (![xmin, ymin, xmax, ymax].every(Number.isFinite)) {
+      return { extent3857: null, error: '표시할 위치가 없습니다.' };
+    }
+    return { extent3857: [xmin, ymin, xmax, ymax] };
+  } catch (e: unknown) {
+    return {
+      extent3857: null,
+      error: e instanceof Error ? e.message : '위치(도형)를 찾을 수 없습니다.',
+    };
+  }
+}
+
+export async function getExtent3857ByKey(params: {
+  ftrIdn?: string;
+  id?: string | number;
+}): Promise<{ extent3857: [number, number, number, number] | null; error?: string }> {
+  const key = tx(params.ftrIdn) || tx(params.id as string | undefined);
+  if (!key) return { extent3857: null, error: '키가 필요합니다.' };
+  try {
+    const rows = await db.execute(
+      sql.raw(`
+        SELECT ST_XMin(ext)::float8 AS xmin, ST_YMin(ext)::float8 AS ymin,
+               ST_XMax(ext)::float8 AS xmax, ST_YMax(ext)::float8 AS ymax
+        FROM (
+          SELECT ST_Extent(ST_Transform(t.geom, 3857))::box2d AS ext
+          FROM layer.road_frontage_building t
+          WHERE t.ftr_idn = '${key.replace(/'/g, "''")}'
+            AND t.geom IS NOT NULL
+            AND COALESCE(t.is_del, false) = false
+        ) s
+        WHERE ext IS NOT NULL
+      `)
+    );
+    const row = (rows as { rows?: Record<string, unknown>[] }).rows?.[0];
+    const xmin = Number(row?.xmin);
+    const ymin = Number(row?.ymin);
+    const xmax = Number(row?.xmax);
+    const ymax = Number(row?.ymax);
+    if (![xmin, ymin, xmax, ymax].every(Number.isFinite)) {
+      return { extent3857: null, error: '위치(도형)를 찾을 수 없습니다.' };
+    }
+    return { extent3857: [xmin, ymin, xmax, ymax] };
+  } catch (e: unknown) {
+    return {
+      extent3857: null,
+      error: e instanceof Error ? e.message : '위치(도형)를 찾을 수 없습니다.',
+    };
+  }
+}
