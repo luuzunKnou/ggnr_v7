@@ -429,8 +429,15 @@ export function UsageDataAsDetailPanel({
   );
 
   useEffect(() => {
-    if (!isEditing) setShowParentGeom(true);
-  }, [isEditing]);
+    if (!isEditing) {
+      setShowParentGeom(true);
+      ensureUsageDataAsWmsLayersVisible(mapContext?.setVisibleLayerNames);
+      return;
+    }
+    ensureUsageDataAsWmsLayersVisible(mapContext?.setVisibleLayerNames, {
+      omitMain: Boolean(mapContext?.layerRowGeomEdit),
+    });
+  }, [isEditing, mapContext?.layerRowGeomEdit, mapContext?.setVisibleLayerNames]);
 
   const focusParentGeomOnMap = useCallback(() => {
     setShowParentGeom(true);
@@ -439,7 +446,9 @@ export function UsageDataAsDetailPanel({
     const map = mapContext?.mapInstanceRef?.current;
     const cached = parentExtentRef.current;
     if (map && cached) {
-      ensureUsageDataAsWmsLayersVisible(mapContext?.setVisibleLayerNames);
+      ensureUsageDataAsWmsLayersVisible(mapContext?.setVisibleLayerNames, {
+        omitMain: Boolean(mapContext?.layerRowGeomEdit),
+      });
       scheduleFitMapToExtent3857(map, cached, {
         maxZoom: MAP_AUTO_NAV_MAX_ZOOM,
         applyMapViewPadding: () => mapContext?.applyMapViewPaddingRef?.current?.(),
@@ -496,7 +505,9 @@ export function UsageDataAsDetailPanel({
         setHighlightVariant("red");
         setHighlightParcel(merged);
         clearSoloSelection();
-        ensureUsageDataAsWmsLayersVisible(mapContext?.setVisibleLayerNames);
+        ensureUsageDataAsWmsLayersVisible(mapContext?.setVisibleLayerNames, {
+          omitMain: Boolean(mapContext?.layerRowGeomEdit),
+        });
         const map = mapContext?.mapInstanceRef?.current;
         if (map) {
           fitMapToLayerRowParcel(map, merged, {
@@ -506,7 +517,7 @@ export function UsageDataAsDetailPanel({
         }
       });
     },
-    [clearSoloSelection, mapContext?.applyMapViewPaddingRef, mapContext?.mapInstanceRef, mapContext?.setVisibleLayerNames]
+    [clearSoloSelection, mapContext?.applyMapViewPaddingRef, mapContext?.layerRowGeomEdit, mapContext?.mapInstanceRef, mapContext?.setVisibleLayerNames]
   );
 
   const handleRemoveMgj = useCallback((index: number) => {
@@ -527,7 +538,9 @@ export function UsageDataAsDetailPanel({
       clearMgjSelection();
       setShowParentGeom(false);
       setHighlightVariant("blue");
-      ensureUsageDataAsWmsLayersVisible(mapContext?.setVisibleLayerNames);
+      ensureUsageDataAsWmsLayersVisible(mapContext?.setVisibleLayerNames, {
+        omitMain: Boolean(mapContext?.layerRowGeomEdit),
+      });
       void (async () => {
         const clipped = await resolveParcelItemIntersectParentForHighlight(item, {
           childTable: USAGE_DATA_AS_SOLO_WMS_LAYER_ID,
@@ -547,6 +560,7 @@ export function UsageDataAsDetailPanel({
       clearSoloSelection,
       detailId,
       focusParentGeomOnMap,
+      mapContext?.layerRowGeomEdit,
       mapContext?.setVisibleLayerNames,
       preset.keyField,
       selectSoloParcel,
@@ -564,7 +578,9 @@ export function UsageDataAsDetailPanel({
       clearSoloSelection();
       setShowParentGeom(false);
       setHighlightVariant("red");
-      ensureUsageDataAsWmsLayersVisible(mapContext?.setVisibleLayerNames);
+      ensureUsageDataAsWmsLayersVisible(mapContext?.setVisibleLayerNames, {
+        omitMain: Boolean(mapContext?.layerRowGeomEdit),
+      });
       void selectMgjParcel(item, idx, {
         onHighlight: setHighlightParcel,
         enableWmsLayer: false,
@@ -574,6 +590,7 @@ export function UsageDataAsDetailPanel({
       clearMgjSelection,
       clearSoloSelection,
       focusParentGeomOnMap,
+      mapContext?.layerRowGeomEdit,
       mapContext?.setVisibleLayerNames,
       selectMgjParcel,
       selectedMgjIdx,

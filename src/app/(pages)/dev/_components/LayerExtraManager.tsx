@@ -228,9 +228,9 @@ export function LayerExtraManager({
 
   const addItem = () => {
     const fieldName = newFieldName.trim()
-    if (!fieldName) { setError("필드명을 입력하세요."); return }
+    if (!fieldName) { setError("속성명을 입력하세요."); return }
     if (items.some((it) => it.fieldName.toLowerCase() === fieldName.toLowerCase())) {
-      setError("이미 있는 필드명입니다."); return
+      setError("이미 있는 속성명입니다."); return
     }
     const sortOrder = newSortOrder.trim()
       ? Number(newSortOrder)
@@ -414,7 +414,7 @@ export function LayerExtraManager({
             {/* 추가 입력 행 (Code 탭 동일 스타일) */}
             <div className="grid grid-cols-[1fr_1fr_1fr_auto] gap-2 border border-border bg-muted/20 p-2 shrink-0 items-center">
               <Input
-                placeholder="필드명"
+                placeholder="속성명"
                 value={newFieldName}
                 onChange={(e) => setNewFieldName(e.target.value)}
                 className="h-8 rounded-none text-sm"
@@ -462,7 +462,7 @@ export function LayerExtraManager({
                     )}
                   >
                     <div className="px-1 py-1 flex items-center min-w-0">레이어명</div>
-                    <div className="px-1 py-1 flex items-center min-w-0">필드명</div>
+                    <div className="px-1 py-1 flex items-center min-w-0">속성명</div>
                     <div className="px-1 py-1 flex items-center justify-center shrink-0">데이터타입</div>
                     <div className="px-1 py-1 flex items-center justify-center shrink-0">순서</div>
                     <div className="px-1 py-1 flex items-center justify-center shrink-0">삭제</div>
@@ -504,7 +504,7 @@ export function LayerExtraManager({
                   <p className="p-4 text-sm text-muted-foreground">로딩 중...</p>
                 ) : items.length === 0 ? (
                   <p className="p-4 text-sm text-muted-foreground">
-                    정의된 추가속성이 없습니다. 위에서 필드명·타입·순서를 입력하고 「추가」를 누르세요.
+                    정의된 추가속성이 없습니다. 위에서 속성명·타입·순서를 입력하고 「추가」를 누르세요.
                   </p>
                 ) : (
                   (() => {
@@ -543,7 +543,7 @@ export function LayerExtraManager({
                                     title={selectedTableKey}
                                   />
                                 </div>
-                                {/* 필드명 */}
+                                {/* 속성명 */}
                                 <div className="px-1 py-1 flex items-center min-w-0">
                                   <Input
                                     value={row.fieldName}

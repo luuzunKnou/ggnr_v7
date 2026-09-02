@@ -36,13 +36,13 @@ export const USER_STATS_HISTORY_TABLE = {
   tableCell: 'px-2 py-0 align-middle leading-[25.5px]',
 } as const;
 
-/** 사용자 관리 이력 — 행 높이 28.5px */
+/** 사용자 관리 이력 — 행 높이 30px */
 export const USER_MGMT_HISTORY_TABLE = {
   tableHead:
-    'bg-muted h-[28.5px] [&_th]:h-[28.5px] [&_th]:max-h-[28.5px] [&_th]:align-middle [&_th]:overflow-hidden [&_th]:border-b [&_th]:border-border',
+    'bg-muted h-[30px] [&_th]:h-[30px] [&_th]:max-h-[30px] [&_th]:align-middle [&_th]:overflow-hidden [&_th]:border-b [&_th]:border-border',
   tableRow:
-    'h-[28.5px] max-h-[28.5px] border-b border-border hover:bg-muted/50 transition-colors [&>td]:h-[28.5px] [&>td]:max-h-[28.5px] [&>td]:align-middle [&>td]:overflow-hidden [&>td]:border-r [&>td]:border-border/60 [&>td:last-child]:border-r-0',
-  tableCell: 'px-2 py-0 align-middle leading-[28.5px]',
+    'h-[30px] max-h-[30px] border-b border-border hover:bg-muted/50 transition-colors [&>td]:h-[30px] [&>td]:max-h-[30px] [&>td]:align-middle [&>td]:overflow-hidden [&>td]:border-r [&>td]:border-border/60 [&>td:last-child]:border-r-0',
+  tableCell: 'px-2 py-0 align-middle',
 } as const;
 
 export type OrgVariantStyle = {
