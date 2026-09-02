@@ -13,6 +13,7 @@ import * as path from 'path';
 import { identifyHitPriorityRank } from '@/lib/mapLayerGeometryOrder';
 import { isFmsFacilityLayerTable } from '@/lib/fmsLinkage/fmsBinding';
 import { fetchVworldCadastralGeomByPnu } from '@/lib/vworldCadastralGeom';
+import { readDefineLayerCodes } from '@/lib/defineLayerCodeFiles';
 
 const DEFAULT_SCHEMA = 'layer';
 const ALLOWED_SCHEMAS = new Set(['layer', 'public_layer']);
@@ -197,7 +198,6 @@ export async function getTableData(params: {
 }
 
 const FIELDS_DIR = path.join(process.cwd(), 'src', 'config', 'defineLayer', 'fields');
-const CODES_DIR = path.join(process.cwd(), 'src', 'config', 'defineLayer', 'codes');
 
 /** 테이블 필드 설정에서 define_field_is_key === 'true' 인 필드명 반환 (첨부 폴더 키와 동일) */
 export function getDefineTableKeyFieldName(tableName: string): string | null {
@@ -247,20 +247,15 @@ function normalizeCodeKey(raw: string): string {
 function loadDefineCodeLabelMap(tableName: string, fieldName: string): Map<string, string> {
   const tableField = `${tableName}__${fieldName}`.replace(/[^a-zA-Z0-9_-]/g, '');
   const labels = new Map<string, string>();
-  const filePath = path.join(CODES_DIR, `field_${tableField}.json`);
   try {
-    if (fs.existsSync(filePath)) {
-      const parsed = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
-      if (Array.isArray(parsed)) {
-        for (const row of parsed as { define_code_name?: string; define_code_kor_name?: string }[]) {
-          const name = String(row?.define_code_name ?? '').trim();
-          if (!name) continue;
-          const kor = String(row?.define_code_kor_name ?? '').trim();
-          const label = kor || name;
-          const key = normalizeCodeKey(name);
-          labels.set(key, label);
-        }
-      }
+    const parsed = readDefineLayerCodes(tableField);
+    for (const row of parsed as { define_code_name?: string; define_code_kor_name?: string }[]) {
+      const name = String(row?.define_code_name ?? '').trim();
+      if (!name) continue;
+      const kor = String(row?.define_code_kor_name ?? '').trim();
+      const label = kor || name;
+      const key = normalizeCodeKey(name);
+      labels.set(key, label);
     }
   } catch {
     /* 코드 파일 없음·파싱 실패는 원본 값 유지 */

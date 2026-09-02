@@ -1,0 +1,26 @@
+[
+  {
+    "define_code_key": "319",
+    "define_code_field_key": "4654",
+    "define_code_name": "LIT000",
+    "define_code_kor_name": "미분류"
+  },
+  {
+    "define_code_key": "320",
+    "define_code_field_key": "4654",
+    "define_code_name": "LIT001",
+    "define_code_kor_name": "간선"
+  },
+  {
+    "define_code_key": "321",
+    "define_code_field_key": "4654",
+    "define_code_name": "LIT002",
+    "define_code_kor_name": "지선"
+  },
+  {
+    "define_code_key": "322",
+    "define_code_field_key": "4654",
+    "define_code_name": "LIT999",
+    "define_code_kor_name": "기타"
+  }
+]
