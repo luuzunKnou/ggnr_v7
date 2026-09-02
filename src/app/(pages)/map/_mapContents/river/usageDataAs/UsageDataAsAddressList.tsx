@@ -16,8 +16,10 @@ type Props = {
   selectedIdx?: number | null
   /** 목록 행 선택 강조 — primary(파랑) / yellow */
   selectionTone?: 'primary' | 'yellow'
-  /** 스크롤 전까지 보여 줄 카드 수 (기본 7) */
+  /** 스크롤 전까지 보여 줄 카드 수 (기본 7). fillHeight 이면 무시 */
   maxVisibleCards?: number
+  /** true면 남은 패널 높이를 채우고 목록만 내부 스크롤 */
+  fillHeight?: boolean
   className?: string
   onAdd?: () => void
   onRemove?: (index: number) => void
@@ -33,6 +35,7 @@ export function UsageDataAsAddressList({
   selectedIdx = null,
   selectionTone = 'primary',
   maxVisibleCards = MAX_VISIBLE_CARDS,
+  fillHeight = false,
   className,
   onAdd,
   onRemove,
@@ -41,8 +44,8 @@ export function UsageDataAsAddressList({
   emptyHintView = '등록된 항목이 없습니다.',
 }: Props) {
   return (
-    <div className={cn('mt-4', className)}>
-      <div className="mb-2 flex items-center justify-between gap-2">
+    <div className={cn('mt-4', fillHeight && 'flex min-h-0 flex-1 flex-col', className)}>
+      <div className="mb-2 flex shrink-0 items-center justify-between gap-2">
         <div className="text-[11px] font-medium text-muted-foreground">{title}</div>
         <div className="flex shrink-0 items-center gap-1">
           {isEditing && onAdd && (
@@ -54,17 +57,24 @@ export function UsageDataAsAddressList({
         </div>
       </div>
       {items.length === 0 ? (
-        <div className="rounded border border-dashed border-border bg-muted/50 px-2 py-3 text-muted-foreground">
+        <div
+          className={cn(
+            'rounded border border-dashed border-border bg-muted/50 px-2 py-3 text-muted-foreground',
+            fillHeight && 'min-h-0 flex-1'
+          )}
+        >
           {isEditing ? emptyHintEdit : emptyHintView}
         </div>
       ) : (
         <ul
           className={cn(
             'list-none space-y-1.5',
-            items.length > maxVisibleCards && 'overflow-y-auto scrollbar-hide pr-0.5'
+            fillHeight
+              ? 'min-h-0 flex-1 overflow-y-auto scrollbar-hide pr-0.5'
+              : items.length > maxVisibleCards && 'overflow-y-auto scrollbar-hide pr-0.5'
           )}
           style={
-            items.length > maxVisibleCards
+            !fillHeight && items.length > maxVisibleCards
               ? { maxHeight: `${maxVisibleCards * CARD_STACK_REM}rem` }
               : undefined
           }
