@@ -3,6 +3,8 @@
  * @see https://www.vworld.kr/dev/v4dv_search2_s001.do
  */
 
+import { withBasePath } from '@/lib/basePath';
+
 const VWORLD_SEARCH_BASE = 'https://api.vworld.kr/req/search';
 const VWORLD_ADDRESS_BASE = 'https://api.vworld.kr/req/address';
 
@@ -385,7 +387,9 @@ async function searchAddressViaProxy(
 ): Promise<VWorldAddressItem[] | 'upstream_failed' | null> {
   if (typeof window === 'undefined') return null;
   try {
-    const res = await fetch(`/api/vworld/search?${params.toString()}`, { cache: 'no-store' });
+    const res = await fetch(`${withBasePath('/api/vworld/search')}?${params.toString()}`, {
+      cache: 'no-store',
+    });
     if (!res.ok) return 'upstream_failed';
     const data = (await res.json()) as VWorldSearchResponse;
     return parseSearchResponse(data, maxResults);
@@ -403,7 +407,6 @@ function searchAddressOne(
   const proxyParams = buildSearchParams(trimmed, { ...options, type: 'address' });
   return searchAddressViaProxy(proxyParams, maxResults).then((viaProxy) => {
     if (Array.isArray(viaProxy)) return viaProxy;
-    if (viaProxy === 'upstream_failed') return [];
     if (!apiKey) {
       console.warn('[vworldAddressSearch] VWORLD_API_KEY not set');
       return [];
@@ -429,7 +432,6 @@ function searchPlaceOne(
     const finish = (items: VWorldAddressItem[]) =>
       items.map((it) => ({ ...it, kind: 'place' as const }));
     if (Array.isArray(viaProxy)) return finish(viaProxy);
-    if (viaProxy === 'upstream_failed') return [];
     if (!apiKey) {
       console.warn('[vworldAddressSearch] VWORLD_API_KEY not set');
       return [];
