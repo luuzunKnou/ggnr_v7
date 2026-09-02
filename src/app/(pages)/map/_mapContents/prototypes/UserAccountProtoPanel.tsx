@@ -25,7 +25,7 @@ import {
   MyShootingRequestTab,
   useMyShootingRequestCount,
 } from '../shootingRequest/MyShootingRequestTab'
-import { SHOOTING_REQUEST_UI_ENABLED } from '../shootingRequest/shootingRequestUiFlag'
+import { useShootingRequestUiEnabled } from '../shootingRequest/useShootingRequestUiEnabled'
 
 /** 프로토 내 정보 패널 */
 const PANEL_SHELL_ROUND = 'rounded-[5px]'
@@ -61,15 +61,11 @@ function profileInitials(name: string): string {
   return trimmed.length <= 2 ? trimmed : trimmed.slice(-2)
 }
 
-/** 패널 하단 탭 — 추후 탭 추가 시 이 배열에만 항목 추가 */
 const PROTO_PANEL_TABS_ALL = [
   { id: 'shooting', label: '촬영요청' },
   { id: 'notif', label: '알림' },
 ] as const
 type ProtoPanelTabId = (typeof PROTO_PANEL_TABS_ALL)[number]['id']
-const PROTO_PANEL_TABS = SHOOTING_REQUEST_UI_ENABLED
-  ? PROTO_PANEL_TABS_ALL
-  : PROTO_PANEL_TABS_ALL.filter((t) => t.id !== 'shooting')
 
 type Props = {
   open: boolean
@@ -90,17 +86,21 @@ export function UserAccountProtoPanel({
   const { data: session, status } = useSession()
   const searchParams = useSearchParams()
   const system = String(searchParams.get('system') ?? '').trim()
+  const shootingUiEnabled = useShootingRequestUiEnabled()
+  const panelTabs = shootingUiEnabled
+    ? PROTO_PANEL_TABS_ALL
+    : PROTO_PANEL_TABS_ALL.filter((t) => t.id !== 'shooting')
   const [notifItems, setNotifItemsLocal] = useState(getProtoNotifs)
   const [activeTab, setActiveTab] = useState<ProtoPanelTabId | null>(null)
   const [profile, setProfile] = useState<MyProfileView>(() => profileFromSession(null))
   const [profileLoading, setProfileLoading] = useState(false)
-  const shootingCount = useMyShootingRequestCount(SHOOTING_REQUEST_UI_ENABLED && open)
+  const shootingCount = useMyShootingRequestCount(shootingUiEnabled && open)
 
   useEffect(() => {
-    if (!SHOOTING_REQUEST_UI_ENABLED && activeTab === 'shooting') {
+    if (!shootingUiEnabled && activeTab === 'shooting') {
       setActiveTab(null)
     }
-  }, [activeTab])
+  }, [activeTab, shootingUiEnabled])
 
   useEffect(() => {
     if (!open || status === 'loading') return
@@ -192,7 +192,7 @@ export function UserAccountProtoPanel({
 
         <div className={cn('flex flex-col overflow-hidden', activeTab != null && 'min-h-0 flex-1')}>
           <PanelTabBar
-            tabs={PROTO_PANEL_TABS}
+            tabs={panelTabs}
             activeTab={activeTab}
             notifCount={notifItems.length}
             notifUnreadCount={unreadNotifCount}
@@ -200,7 +200,7 @@ export function UserAccountProtoPanel({
             onToggleTab={(tabId) => setActiveTab((prev) => (prev === tabId ? null : tabId))}
           />
 
-          {SHOOTING_REQUEST_UI_ENABLED && activeTab === 'shooting' ? (
+          {shootingUiEnabled && activeTab === 'shooting' ? (
             <MyShootingRequestTab
               open={open && activeTab === 'shooting'}
               onSelectRequest={(id) => {
@@ -314,7 +314,7 @@ function PanelTabBar({
   shootingCount,
   onToggleTab,
 }: {
-  tabs: typeof PROTO_PANEL_TABS
+  tabs: readonly { id: ProtoPanelTabId; label: string }[]
   activeTab: ProtoPanelTabId | null
   notifCount: number
   notifUnreadCount: number
