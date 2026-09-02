@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Calendar, Check, FileText, Loader2, User, X } from 'lucide-react';
+import { Calendar, Check, FileText, Loader2, Trash2, User, X } from 'lucide-react';
 import { useSession } from 'next-auth/react';
 import { call } from '@/lib/api';
 import { formatToYmdOrText } from '@/lib/formatDateYmd';
@@ -38,6 +38,7 @@ export function SafetyFacHistoryModal({
   const [author, setAuthor] = useState('');
   const [createdAt, setCreatedAt] = useState('');
   const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -66,6 +67,32 @@ export function SafetyFacHistoryModal({
     setCreatedAt(formatToYmdOrText(item?.createdAt ?? ''));
     setError(null);
   }, [isCreateMode, item, session?.user?.id, session?.user?.name]);
+
+  const handleDelete = async () => {
+    if (isCreateMode || !item?.id || deleting || saving) return;
+    if (!window.confirm('이 이력을 삭제할까요?')) return;
+
+    setDeleting(true);
+    setError(null);
+    try {
+      const res = await call('', 'POST', {
+        service: 'safedataHistoryService',
+        action: 'remove',
+        params: { id: Number(item.id) },
+      });
+      const data = res?.data ?? res;
+      if (data?.error || data?.success === false) {
+        setError(String(data?.error ?? '삭제에 실패했습니다.'));
+        return;
+      }
+      onSaved();
+      onClose();
+    } catch {
+      setError('삭제에 실패했습니다.');
+    } finally {
+      setDeleting(false);
+    }
+  };
 
   const handleSave = async () => {
     const trimmed = content.trim();
@@ -183,10 +210,33 @@ export function SafetyFacHistoryModal({
             </div>
           </div>
           <div className="mt-3 flex items-center justify-end gap-2">
+            {!isCreateMode && item?.id ? (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => void handleDelete()}
+                disabled={saving || deleting}
+                title="삭제"
+                className="mr-auto h-[26px] min-h-[26px] cursor-pointer gap-1 border border-border bg-muted/50 px-2.5 text-[12px] font-light text-red-600 hover:border-red-200 hover:bg-red-50 hover:text-red-700 disabled:cursor-not-allowed dark:hover:bg-red-950/30"
+              >
+                {deleting ? (
+                  <>
+                    <Loader2 className="h-3 w-3 animate-spin" aria-hidden />
+                    삭제 중…
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="h-3 w-3" />
+                    삭제
+                  </>
+                )}
+              </Button>
+            ) : null}
             <Button
               size="sm"
               onClick={() => void handleSave()}
-              disabled={saving || !content.trim() || !author.trim() || !createdAt.trim()}
+              disabled={saving || deleting || !content.trim() || !author.trim() || !createdAt.trim()}
+              title="저장"
               className="h-[26px] min-h-[26px] cursor-pointer gap-1 border border-border bg-muted/50 px-2.5 text-[12px] font-light text-muted-foreground hover:border-primary hover:bg-primary/15 hover:text-primary disabled:cursor-not-allowed"
             >
               {saving ? (
@@ -205,7 +255,8 @@ export function SafetyFacHistoryModal({
               size="sm"
               variant="outline"
               onClick={onClose}
-              disabled={saving}
+              disabled={saving || deleting}
+              title="닫기"
               className="h-[26px] min-h-[26px] cursor-pointer gap-1 border border-border bg-muted/50 px-2.5 text-[12px] font-light text-muted-foreground hover:border-border hover:bg-muted/50 hover:text-foreground"
             >
               <X className="h-3 w-3" />
