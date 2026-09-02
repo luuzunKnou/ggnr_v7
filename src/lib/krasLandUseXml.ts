@@ -21,12 +21,23 @@ function hasElementChildren(content: string): boolean {
   return matchDirectChildElements(content).length > 0;
 }
 
-function leavesToMap(elements: Array<{ tag: string; content: string }>): KrasBodyRecord {
+/** v6 createXmlMap — 자식 요소가 있어도 textContent(하위 텍스트)를 한 필드값으로 */
+function fieldValueFromElement(content: string): string {
+  const trimmed = content.trim();
+  if (!hasElementChildren(trimmed)) return trimmed;
+  const children = matchDirectChildElements(trimmed);
+  if (!children.length) return trimmed;
+  return children
+    .map((c) => fieldValueFromElement(c.content))
+    .filter(Boolean)
+    .join('\n');
+}
+
+function fieldMapFromElements(elements: Array<{ tag: string; content: string }>): KrasBodyRecord {
   const map: KrasBodyRecord = {};
-  for (const leaf of elements) {
-    if (!hasElementChildren(leaf.content)) {
-      map[leaf.tag] = leaf.content.trim();
-    }
+  for (const el of elements) {
+    const value = fieldValueFromElement(el.content);
+    if (value) map[el.tag] = value;
   }
   return map;
 }
@@ -46,7 +57,7 @@ function collectBodyRecords(fragment: string, out: KrasBodyRecord[]): void {
   if (!children.length) return;
 
   if (children.every((c) => !hasElementChildren(c.content))) {
-    pushIfAny(out, leavesToMap(children));
+    pushIfAny(out, fieldMapFromElements(children));
     return;
   }
 
@@ -58,16 +69,12 @@ function collectBodyRecords(fragment: string, out: KrasBodyRecord[]): void {
       for (const inner of innerChildren) {
         const recordChildren = matchDirectChildElements(inner.content);
         if (!recordChildren.length) continue;
-        if (recordChildren.some((c) => hasElementChildren(c.content))) {
-          collectBodyRecords(inner.content, out);
-          continue;
-        }
-        pushIfAny(out, leavesToMap(recordChildren));
+        pushIfAny(out, fieldMapFromElements(recordChildren));
       }
       continue;
     }
 
-    pushIfAny(out, leavesToMap(innerChildren));
+    pushIfAny(out, fieldMapFromElements(innerChildren));
   }
 }
 
