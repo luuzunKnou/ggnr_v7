@@ -410,10 +410,14 @@ export function LayerRowGeomEditHandler({
     if (!edit || !map || !wktRef) return;
 
     const layerName = edit.layerName.toLowerCase();
-    setVisibleLayerNames?.((prev) => {
-      if (prev.has(layerName)) return prev;
-      return new Set(prev).add(layerName);
-    });
+    const childLayerName = String(edit.childLayerName ?? "").trim().toLowerCase();
+    // 수정 모드는 본표·필지 WMS를 숨긴 채 편집 레이어만 쓴다. 여기서 본표만 다시 켜면 옛 도형이 겹친다.
+    if (edit.mode !== "modify") {
+      setVisibleLayerNames?.((prev) => {
+        if (prev.has(layerName)) return prev;
+        return new Set(prev).add(layerName);
+      });
+    }
 
     const source = new VectorSource();
     geomEditSourceRef.current = source;
@@ -492,6 +496,9 @@ export function LayerRowGeomEditHandler({
         });
         const data = res?.data ?? res;
         if (data?.error) return;
+
+        // 저장 전까지 본표 WMS는 옛 도형 — 차감 결과가 가려지지 않게 숨긴다
+        hideParentWms();
 
         if (data?.cleared || !data?.wkt5181) {
           removeFeaturesByKind(source, LAYER_ROW_KIND_PARENT);
@@ -596,24 +603,35 @@ export function LayerRowGeomEditHandler({
       });
     };
 
-    let parentWmsHidden = false;
+    /** 저장 전 옛 도형이 편집 결과를 가리지 않게 — 본표와 필지 레이어를 함께 숨긴다 */
+    const editedWmsLayerNames = [layerName, childLayerName].filter(
+      (n): n is string => n.length > 0
+    );
+    let hiddenWmsLayerNames: string[] = [];
     const hideParentWms = () => {
       if (!setVisibleLayerNames || edit.mode !== "modify") return;
       setVisibleLayerNames((prev) => {
-        const hit = [...prev].find((n) => n.toLowerCase() === layerName);
-        if (!hit) return prev;
-        parentWmsHidden = true;
+        const hits = [...prev].filter((n) => editedWmsLayerNames.includes(n.toLowerCase()));
+        if (hits.length === 0) return prev;
+        hiddenWmsLayerNames = [...new Set([...hiddenWmsLayerNames, ...hits])];
         const next = new Set(prev);
-        next.delete(hit);
+        for (const hit of hits) next.delete(hit);
         return next;
       });
     };
     const restoreParentWms = () => {
-      if (!setVisibleLayerNames || !parentWmsHidden) return;
-      parentWmsHidden = false;
+      if (!setVisibleLayerNames || hiddenWmsLayerNames.length === 0) return;
+      const restoreNames = hiddenWmsLayerNames;
+      hiddenWmsLayerNames = [];
       setVisibleLayerNames((prev) => {
-        if ([...prev].some((n) => n.toLowerCase() === layerName)) return prev;
-        return new Set(prev).add(layerName);
+        const next = new Set(prev);
+        let changed = false;
+        for (const name of restoreNames) {
+          if ([...next].some((n) => n.toLowerCase() === name.toLowerCase())) continue;
+          next.add(name);
+          changed = true;
+        }
+        return changed ? next : prev;
       });
     };
 

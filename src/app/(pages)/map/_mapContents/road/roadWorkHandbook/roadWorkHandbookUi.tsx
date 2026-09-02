@@ -31,7 +31,7 @@ function orgBadgeClass(org: HandbookOrg) {
 
 export function OrgBadge({ org }: { org: HandbookOrg }) {
   return (
-    <span className={cn("shrink-0 rounded px-1.5 py-0.5 text-[9px] font-medium leading-none", orgBadgeClass(org))}>
+    <span className={cn("shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium leading-none", orgBadgeClass(org))}>
       {org}
     </span>
   )
@@ -39,7 +39,7 @@ export function OrgBadge({ org }: { org: HandbookOrg }) {
 
 function SectionLabel({ children }: { children: ReactNode }) {
   return (
-    <p className="border-b border-border/70 pb-1 text-[11px] font-semibold text-foreground">{children}</p>
+    <p className="border-b border-border/70 pb-1 text-[12px] font-semibold text-foreground">{children}</p>
   )
 }
 
@@ -55,7 +55,7 @@ function GuideLineRow({ line }: { line: HandbookGuideLine }) {
         )}
         aria-hidden
       />
-      <p className="min-w-0 break-keep text-[12px] leading-relaxed text-foreground">{line.text}</p>
+      <p className="min-w-0 break-keep text-[11px] leading-relaxed text-foreground">{line.text}</p>
     </li>
   )
 }
@@ -166,7 +166,7 @@ export function ProcedureGuideCard({ proc }: { proc: HandbookProcedure }) {
     return (
       <div className="rounded-[5px] border border-border/90 bg-card p-3 text-left shadow-sm">
         <p className="border-b border-border/70 pb-1 text-[12px] font-semibold text-foreground">규모로 본 결과</p>
-        <p className="mt-2 break-keep text-[12px] leading-relaxed text-muted-foreground">
+        <p className="mt-2 break-keep text-[11px] leading-relaxed text-muted-foreground">
           이 절차는 길이·면적·공사비로 대상 여부를 정하지 않습니다. 대상 기준을 직접 확인합니다.
         </p>
       </div>
@@ -184,7 +184,7 @@ export function ProcedureGuideCard({ proc }: { proc: HandbookProcedure }) {
             ))}
           </ul>
         ) : (
-          <p className="text-[12px] leading-relaxed text-muted-foreground">
+          <p className="text-[11px] leading-relaxed text-muted-foreground">
             왼쪽에서 규모를 넣으면 이 절차 기준과 비교합니다.
           </p>
         )}
@@ -216,7 +216,7 @@ export function ProcedureDetailCard({ proc }: { proc: HandbookProcedure }) {
             <div className="mt-2">
               <p className="break-keep text-[12px] font-semibold leading-snug text-foreground">{law.name}</p>
               {law.articles ? (
-                <p className="mt-1 break-keep text-[12px] leading-relaxed text-muted-foreground">{law.articles}</p>
+                <p className="mt-1 break-keep text-[11px] leading-relaxed text-muted-foreground">{law.articles}</p>
               ) : null}
             </div>
           </section>
@@ -225,10 +225,10 @@ export function ProcedureDetailCard({ proc }: { proc: HandbookProcedure }) {
             <ol className="mt-2 space-y-2">
               {proc.criteriaItems.map((item, index) => (
                 <li key={item} className="grid grid-cols-[1rem_minmax(0,1fr)] gap-x-2">
-                  <span className="text-[12px] font-medium leading-relaxed tabular-nums text-muted-foreground">
+                  <span className="text-[11px] font-medium leading-relaxed tabular-nums text-muted-foreground">
                     {index + 1}
                   </span>
-                  <p className="break-keep text-[12px] leading-relaxed text-foreground">{item}</p>
+                  <p className="break-keep text-[11px] leading-relaxed text-foreground">{item}</p>
                 </li>
               ))}
             </ol>
@@ -236,17 +236,17 @@ export function ProcedureDetailCard({ proc }: { proc: HandbookProcedure }) {
           {proc.note ? (
             <section>
               <SectionLabel>추가 안내</SectionLabel>
-              <p className="mt-2 break-keep text-[12px] leading-relaxed text-foreground">{proc.note}</p>
+              <p className="mt-2 break-keep text-[11px] leading-relaxed text-foreground">{proc.note}</p>
             </section>
           ) : null}
-          <dl className="space-y-1.5 border-t border-b border-border/60 py-2.5 text-[12px]">
+          <dl className="space-y-1.5 border-t border-b border-border/60 py-2.5">
             <div className="flex justify-between gap-2">
-              <dt className="shrink-0 font-semibold text-foreground">수행시기</dt>
-              <dd className="min-w-0 text-right text-foreground">{proc.when}</dd>
+              <dt className="shrink-0 text-[12px] font-semibold text-foreground">수행시기</dt>
+              <dd className="min-w-0 text-right text-[11px] text-foreground">{proc.when}</dd>
             </div>
             <div className="flex justify-between gap-2">
-              <dt className="shrink-0 font-semibold text-foreground">시행주체</dt>
-              <dd className="min-w-0 text-right text-foreground">{proc.org}</dd>
+              <dt className="shrink-0 text-[12px] font-semibold text-foreground">시행주체</dt>
+              <dd className="min-w-0 text-right text-[11px] text-foreground">{proc.org}</dd>
             </div>
           </dl>
         </div>
@@ -301,7 +301,7 @@ function HandbookFileCardInner({
     <>
       <FileText className="h-4 w-4 shrink-0 text-destructive" strokeWidth={1.75} aria-hidden />
       <span className="min-w-0 flex-1">
-        <span className="block truncate text-[13px] font-medium text-foreground" title={file.name}>
+        <span className="block truncate text-[12px] font-medium text-foreground" title={file.name}>
           {file.name}
         </span>
         <span className="mt-0.5 flex min-w-0 items-center gap-1">
@@ -330,19 +330,19 @@ function MaterialInfoCard({ material }: { material: HandbookMaterial }) {
   const valueClass = "font-normal leading-relaxed text-foreground"
 
   return (
-    <div className="rounded-[5px] border border-border/90 bg-card p-3 text-left text-[12px] shadow-sm">
+    <div className="rounded-[5px] border border-border/90 bg-card p-3 text-left shadow-sm">
       <dl className="space-y-3">
         <div className="flex justify-between gap-2 border-b border-border/60 pb-2.5">
-          <dt className={cn("shrink-0", labelClass)}>제목</dt>
-          <dd className={cn("min-w-0 text-right break-keep", valueClass)}>{material.name}</dd>
+          <dt className={cn("shrink-0 text-[12px]", labelClass)}>제목</dt>
+          <dd className={cn("min-w-0 text-right break-keep text-[11px]", valueClass)}>{material.name}</dd>
         </div>
         <div>
-          <dt className={cn("border-b border-border/70 pb-1", labelClass)}>비고</dt>
-          <dd className={cn("mt-2 break-keep", valueClass)}>{material.source}</dd>
+          <dt className={cn("border-b border-border/70 pb-1 text-[12px]", labelClass)}>비고</dt>
+          <dd className={cn("mt-2 break-keep text-[11px]", valueClass)}>{material.source}</dd>
         </div>
       </dl>
       {material.desc ? (
-        <p className={cn("mt-3 break-keep border-t border-border/60 pt-3", valueClass)}>{material.desc}</p>
+        <p className={cn("mt-3 break-keep border-t border-border/60 pt-3 text-[11px]", valueClass)}>{material.desc}</p>
       ) : null}
     </div>
   )
@@ -421,7 +421,7 @@ export function HandbookMaterialListButton({
           {showAccessBadge ? <HandbookFileAccessBadge access={access} /> : null}
           <span
             className={cn(
-              "min-w-0 truncate text-[13px] font-medium leading-snug",
+              "min-w-0 truncate text-[12px] font-medium leading-snug",
               selected ? "text-primary" : "text-foreground"
             )}
           >
@@ -519,7 +519,7 @@ export function MaterialFilesPanel({
     <div className="flex flex-col gap-2">
       <MaterialInfoCard material={material} />
       {displayFiles.length > 0 || showLawViewLink ? (
-        <p className="px-0.5 text-[11px] font-medium text-foreground">자료 {fileCountLabel}</p>
+        <p className="px-0.5 text-[12px] font-medium text-foreground">자료 {fileCountLabel}</p>
       ) : null}
       {lawLoading ? (
         <p className="flex items-center gap-1.5 px-0.5 text-[11px] text-muted-foreground">

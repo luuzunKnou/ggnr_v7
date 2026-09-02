@@ -57,9 +57,9 @@ export function ensureOccupationLedgerWmsLayers(
   params?: {
     serEng?: string | null;
     system?: string | null;
-    /** true면 필지·물건지 WMS도 켬. 기본은 본표만 (목록 선택 시 자식 도형 숨김) */
-    includeChildren?: boolean;
-    /** true면 본표 WMS를 켜지 않고, 켜져 있으면 끔 (도형 다시 그리기 중 기존 도형 숨김) */
+    /** true면 물건지 WMS도 켬. 기본은 본표+필지 (물건지는 목록 선택 시에만) */
+    includeMgj?: boolean;
+    /** true면 본표·필지 WMS를 켜지 않고, 켜져 있으면 끔 (도형 편집 중 저장된 도형 숨김) */
     omitMain?: boolean;
   }
 ) {
@@ -69,30 +69,29 @@ export function ensureOccupationLedgerWmsLayers(
     system: params?.system,
   });
   if (!binding) return;
-  const mainId = binding.mainTable.trim().toLowerCase();
-  const childIds = [binding.jijukTable, binding.mgjTable].map((t) => t.trim().toLowerCase());
-  const includeChildren = params?.includeChildren === true;
+  /** 부서업무 진입부터 본표와 필지를 함께 표시 */
+  const mainIds = [binding.mainTable, binding.jijukTable].map((t) => t.trim().toLowerCase());
+  const mgjId = binding.mgjTable.trim().toLowerCase();
+  const includeMgj = params?.includeMgj === true;
   const omitMain = params?.omitMain === true;
   setVisibleLayerNames((prev) => {
     const next = new Set(prev);
     let changed = false;
-    if (omitMain) {
-      if (next.delete(mainId)) changed = true;
-    } else if (!next.has(mainId)) {
-      next.add(mainId);
-      changed = true;
-    }
-    if (includeChildren) {
-      for (const id of childIds) {
-        if (!next.has(id)) {
-          next.add(id);
-          changed = true;
-        }
-      }
-    } else {
-      for (const id of childIds) {
+    for (const id of mainIds) {
+      if (omitMain) {
         if (next.delete(id)) changed = true;
+      } else if (!next.has(id)) {
+        next.add(id);
+        changed = true;
       }
+    }
+    if (includeMgj) {
+      if (!next.has(mgjId)) {
+        next.add(mgjId);
+        changed = true;
+      }
+    } else if (next.delete(mgjId)) {
+      changed = true;
     }
     return changed ? next : prev;
   });
