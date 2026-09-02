@@ -192,9 +192,15 @@ export function mergeDefineLayerShpTypesIntoGeometryMap(
 
 /**
  * 동일 기하 타입 안에서도 항상 맨 아래(먼저 그리기)에 깔 레이어.
- * 예: 점용시설물은 점용 본표 WMS보다 아래에.
+ * 예: 점용시설물·점용 필지는 점용 본표 WMS보다 아래에.
  */
-const WMS_STACK_ALWAYS_BOTTOM = new Set(['usage_data_sisul_as']);
+const WMS_STACK_ALWAYS_BOTTOM = new Set([
+  'usage_data_sisul_as',
+  'usage_data_as_solo',
+  'water_occupationledger_jijuk',
+  'road_occupationledger_jijuk',
+  'public_occupationledger_jijuk',
+]);
 
 function wmsStackForceBottomRank(name: string, extraBottom?: Set<string>): number {
   const n = String(name ?? '').trim().toLowerCase();
