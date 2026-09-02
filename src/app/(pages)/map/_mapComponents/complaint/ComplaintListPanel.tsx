@@ -19,6 +19,7 @@ import {
   CircleDot,
   ClipboardList,
   ClipboardCheck,
+  X,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { COMPLAINT_STATE_OPTIONS, getStateStyle as getStateStyleBase } from './state-options';
@@ -53,9 +54,11 @@ function getStateStyle(state: string) {
 export default function ComplaintListPanel({
   refreshKey = 0,
   onRequestAdd,
+  onClose,
 }: {
   refreshKey?: number;
   onRequestAdd?: () => void;
+  onClose?: () => void;
 }) {
   const mapContext = useMapContext();
   const mapContextRef = useRef(mapContext);
@@ -266,14 +269,27 @@ export default function ComplaintListPanel({
                 </p>
               </div>
             </div>
-            <Button
-              size="sm"
-              className="h-[26px] min-h-[26px] gap-1 px-2.5 text-[12px] font-light border border-border bg-muted/50 text-muted-foreground hover:border-primary hover:bg-primary/15 hover:text-primary rounded-lg"
-              onClick={() => onRequestAdd?.()}
-            >
-              <Plus className="h-3 w-3" />
-              민원 추가
-            </Button>
+            <div className="flex items-center gap-1">
+              <Button
+                size="sm"
+                className="h-[26px] min-h-[26px] gap-1 px-2.5 text-[12px] font-light border border-border bg-muted/50 text-muted-foreground hover:border-primary hover:bg-primary/15 hover:text-primary rounded-lg"
+                onClick={() => onRequestAdd?.()}
+              >
+                <Plus className="h-3 w-3" />
+                민원 추가
+              </Button>
+              {onClose ? (
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="shrink-0 rounded p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                  title="닫기"
+                  aria-label="닫기"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              ) : null}
+            </div>
           </div>
 
           <div className="px-3 pb-2">
