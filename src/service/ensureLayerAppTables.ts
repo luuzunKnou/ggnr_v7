@@ -915,13 +915,30 @@ COMMENT ON TABLE layer.radiation_shelter IS '방사선 대피소';
 const WATER_PLAY_SIGN_SQL = `
 CREATE TABLE IF NOT EXISTS layer.water_play_sign (
   id SERIAL PRIMARY KEY,
+  sido text,
+  sgg text,
   addr text,
+  addr_detail text,
+  gubun text,
+  is_warnig text,
+  safebox_cnt integer,
+  sign_cnt integer,
   remark text,
   geom geometry(Point, 5181)
 );
 CREATE INDEX IF NOT EXISTS water_play_sign_addr_idx ON layer.water_play_sign (addr);
 COMMENT ON TABLE layer.water_play_sign IS '물놀이 표지판';
 `;
+
+const WATER_PLAY_SIGN_LAYER_COLUMNS: Array<{ name: string; ddl: string }> = [
+  { name: 'sido', ddl: 'text' },
+  { name: 'sgg', ddl: 'text' },
+  { name: 'addr_detail', ddl: 'text' },
+  { name: 'gubun', ddl: 'text' },
+  { name: 'is_warnig', ddl: 'text' },
+  { name: 'safebox_cnt', ddl: 'integer' },
+  { name: 'sign_cnt', ddl: 'integer' },
+];
 
 const VILLAGE_PATROL_SQL = `
 CREATE TABLE IF NOT EXISTS layer.village_patrol (
@@ -1755,6 +1772,18 @@ export async function ensureWaterPlaySignTable(result?: EnsureResult): Promise<E
     createSql: WATER_PLAY_SIGN_SQL,
     result: out,
   });
+  for (const col of WATER_PLAY_SIGN_LAYER_COLUMNS) {
+    try {
+      if (await columnExists('layer', 'water_play_sign', col.name)) continue;
+      await db.execute(
+        sql.raw(`ALTER TABLE layer.water_play_sign ADD COLUMN ${col.name} ${col.ddl}`)
+      );
+      out.created.push(`layer.water_play_sign.${col.name}`);
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      out.errors.push(`layer.water_play_sign.${col.name}: ${msg}`);
+    }
+  }
   return out;
 }
 

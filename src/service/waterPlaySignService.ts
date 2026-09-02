@@ -7,7 +7,14 @@ type Params = Record<string, unknown>;
 
 export type WaterPlaySignListItem = {
   id: number;
+  sido: string;
+  sgg: string;
   addr: string;
+  addrDetail: string;
+  gubun: string;
+  isWarnig: string;
+  safeboxCnt: number | null;
+  signCnt: number | null;
   remark: string;
   geomJson: unknown | null;
 };
@@ -22,6 +29,12 @@ function parseId(v: unknown): number | null {
   return Math.floor(n);
 }
 
+function parseOptionalInt(v: unknown): number | null {
+  const n = Number(String(v ?? '').trim());
+  if (!Number.isFinite(n)) return null;
+  return Math.floor(n);
+}
+
 function mapRow(row: Record<string, unknown>): WaterPlaySignListItem {
   let geomJson: unknown = row.geom_json ?? row.geomJson ?? null;
   if (typeof geomJson === 'string') {
@@ -33,7 +46,14 @@ function mapRow(row: Record<string, unknown>): WaterPlaySignListItem {
   }
   return {
     id: Number(row.id),
+    sido: tx(row.sido) || '-',
+    sgg: tx(row.sgg) || '-',
     addr: tx(row.addr) || '-',
+    addrDetail: tx(row.addr_detail ?? row.addrDetail) || '-',
+    gubun: tx(row.gubun) || '-',
+    isWarnig: tx(row.is_warnig ?? row.isWarnig) || '-',
+    safeboxCnt: parseOptionalInt(row.safebox_cnt ?? row.safeboxCnt),
+    signCnt: parseOptionalInt(row.sign_cnt ?? row.signCnt),
     remark: tx(row.remark) || '-',
     geomJson,
   };
@@ -42,7 +62,14 @@ function mapRow(row: Record<string, unknown>): WaterPlaySignListItem {
 const LIST_SELECT_SQL = `
   SELECT
     wps.id,
+    wps.sido,
+    wps.sgg,
     wps.addr,
+    wps.addr_detail,
+    wps.gubun,
+    wps.is_warnig,
+    wps.safebox_cnt,
+    wps.sign_cnt,
     wps.remark,
     CASE
       WHEN wps.geom IS NOT NULL THEN ST_AsGeoJSON(ST_Transform(wps.geom, 4326))::json
@@ -60,7 +87,14 @@ export async function list(p: Params): Promise<{ items: WaterPlaySignListItem[];
   if (keyword) {
     params.push(`%${keyword}%`);
     const i = params.length;
-    whereParts.push(`(wps.addr ILIKE $${i} OR wps.remark ILIKE $${i})`);
+    whereParts.push(`(
+      wps.sido ILIKE $${i}
+      OR wps.sgg ILIKE $${i}
+      OR wps.addr ILIKE $${i}
+      OR wps.addr_detail ILIKE $${i}
+      OR wps.gubun ILIKE $${i}
+      OR wps.remark ILIKE $${i}
+    )`);
   }
   const whereClause = whereParts.length ? `WHERE ${whereParts.join(' AND ')}` : '';
 
