@@ -508,9 +508,10 @@ export function RoadRewardDetailPanel({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- caseId 전환 시에만
   }, [caseId]);
 
-  /** 지도 필지 클릭 — 부모 건 상세 오픈 후 해당 필지 선택·이동 */
+  /** 지도 필지 클릭 — 부모 건 상세 오픈 후 해당 필지 선택·이동(조회 상세는 닫음) */
   useEffect(() => {
     if (!focusParcelId || isCreateMode) return;
+    setParcelModal((m) => (m?.mode === "view" ? null : m));
     const parcel = displayParcels.find((p) => p.id === focusParcelId);
     if (!parcel) return;
     scrollParcelRowToTopRef.current = true;

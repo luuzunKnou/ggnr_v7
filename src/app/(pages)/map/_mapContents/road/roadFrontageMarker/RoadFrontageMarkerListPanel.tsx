@@ -17,7 +17,7 @@ import {
   type RoadFrontageMarkerItem,
   type RoadFrontageMarkerLedger,
 } from './roadFrontageMarkerMock';
-import { getRoadFrontageMarkerRoadTypeBadgeStyle } from './roadFrontageMarkerFormat';
+import { getRoadFrontageMarkerRoadTypeBadgeClass } from './roadFrontageMarkerFormat';
 import { fitMapToMarkerPoints, useRoadFrontageMarkerMapHighlight } from './useRoadFrontageMarkerMapHighlight';
 
 type SortKey = 'roadType' | 'routeName';
@@ -320,10 +320,7 @@ export function RoadFrontageMarkerListPanel({
                     >
                       <td className="standard-table-td-compact">
                         {l.roadType?.trim() ? (
-                          <span
-                            className="standard-road-rank-badge"
-                            style={getRoadFrontageMarkerRoadTypeBadgeStyle(l.roadType)}
-                          >
+                          <span className={getRoadFrontageMarkerRoadTypeBadgeClass(l.roadType)}>
                             {roadTypeLabel}
                           </span>
                         ) : (
