@@ -1,0 +1,134 @@
+[
+  {
+    "define_code_key": "1",
+    "define_code_field_key": "4652",
+    "define_code_name": "SBA000",
+    "define_code_kor_name": "미분류"
+  },
+  {
+    "define_code_key": "2",
+    "define_code_field_key": "4652",
+    "define_code_name": "SBA001",
+    "define_code_kor_name": "합류관"
+  },
+  {
+    "define_code_key": "3",
+    "define_code_field_key": "4652",
+    "define_code_name": "SBA002",
+    "define_code_kor_name": "차집관"
+  },
+  {
+    "define_code_key": "4",
+    "define_code_field_key": "4652",
+    "define_code_name": "SBA003",
+    "define_code_kor_name": "우수관"
+  },
+  {
+    "define_code_key": "5",
+    "define_code_field_key": "4652",
+    "define_code_name": "SBA004",
+    "define_code_kor_name": "오수관"
+  },
+  {
+    "define_code_key": "6",
+    "define_code_field_key": "4652",
+    "define_code_name": "SBA900",
+    "define_code_kor_name": "가상관"
+  },
+  {
+    "define_code_key": "909",
+    "define_code_field_key": "4652",
+    "define_code_name": "SBA901",
+    "define_code_kor_name": "고지배수"
+  },
+  {
+    "define_code_key": "910",
+    "define_code_field_key": "4652",
+    "define_code_name": "SBA902",
+    "define_code_kor_name": "공동구"
+  },
+  {
+    "define_code_key": "911",
+    "define_code_field_key": "4652",
+    "define_code_name": "SBA903",
+    "define_code_kor_name": "압송관"
+  },
+  {
+    "define_code_key": "912",
+    "define_code_field_key": "4652",
+    "define_code_name": "SBA904",
+    "define_code_kor_name": "오수불탐관로"
+  },
+  {
+    "define_code_key": "913",
+    "define_code_field_key": "4652",
+    "define_code_name": "SBA905",
+    "define_code_kor_name": "오수중심선"
+  },
+  {
+    "define_code_key": "914",
+    "define_code_field_key": "4652",
+    "define_code_name": "SBA906",
+    "define_code_kor_name": "우수불탐관로"
+  },
+  {
+    "define_code_key": "915",
+    "define_code_field_key": "4652",
+    "define_code_name": "SBA907",
+    "define_code_kor_name": "차집불탐관로"
+  },
+  {
+    "define_code_key": "916",
+    "define_code_field_key": "4652",
+    "define_code_name": "SBA908",
+    "define_code_kor_name": "차집중심선"
+  },
+  {
+    "define_code_key": "917",
+    "define_code_field_key": "4652",
+    "define_code_name": "SBA909",
+    "define_code_kor_name": "축산오폐수관"
+  },
+  {
+    "define_code_key": "918",
+    "define_code_field_key": "4652",
+    "define_code_name": "SBA910",
+    "define_code_kor_name": "폐관"
+  },
+  {
+    "define_code_key": "919",
+    "define_code_field_key": "4652",
+    "define_code_name": "SBA911",
+    "define_code_kor_name": "폐수관"
+  },
+  {
+    "define_code_key": "920",
+    "define_code_field_key": "4652",
+    "define_code_name": "SBA912",
+    "define_code_kor_name": "하수불탐관"
+  },
+  {
+    "define_code_key": "921",
+    "define_code_field_key": "4652",
+    "define_code_name": "SBA913",
+    "define_code_kor_name": "합류불탐관로"
+  },
+  {
+    "define_code_key": "922",
+    "define_code_field_key": "4652",
+    "define_code_name": "SBA914",
+    "define_code_kor_name": "해수인입및배출관"
+  },
+  {
+    "define_code_key": "923",
+    "define_code_field_key": "4652",
+    "define_code_name": "SBA915",
+    "define_code_kor_name": "화학공장오폐수관"
+  },
+  {
+    "define_code_key": "924",
+    "define_code_field_key": "4652",
+    "define_code_name": "SBA999",
+    "define_code_kor_name": "기타"
+  }
+]
