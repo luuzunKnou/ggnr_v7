@@ -52,6 +52,44 @@ function draftValueEqual(a: string, b: string): boolean {
 const GEOM_ATTR_FIELDS = new Set(["geom", "geometry", "the_geom", "shape"]);
 const PERMIT_ATTR_FIELDS = new Set(["permit_no", "perm_num"]);
 
+function parcelHasSubtractGeom(item: LayerRowParcelItem): boolean {
+  if (item.geometry3857 != null && typeof item.geometry3857 === "object") return true;
+  return String(item.pnu ?? "").trim().length >= 18;
+}
+
+/**
+ * 저장된 필지 행의 도형 — 주소·PNU로 지적을 못 찾을 때(행정리 표기 등) 자식 테이블 geom 사용.
+ * 필지목록 삭제 시 부모 도형에서 그 영역을 빼기 위한 폴백.
+ */
+async function fetchSavedParcelGeom3857(
+  preset: LayerRowEditPreset,
+  item: LayerRowParcelItem
+): Promise<Record<string, unknown> | null> {
+  const table = String(preset.childTableName ?? "").trim();
+  const keyField = String(item.wmsRowKey?.keyField ?? "").trim();
+  const keyValue = String(item.wmsRowKey?.keyValue ?? "").trim();
+  if (!table || !keyField || !keyValue) return null;
+  try {
+    const res = await call("", "POST", {
+      service: "layerRowService",
+      action: "getTableRowGeomGeoJson3857",
+      params: {
+        table,
+        schema: preset.schema ?? "layer",
+        keyField,
+        keyValue,
+      },
+    });
+    const data = res?.data ?? res;
+    const geometry = data?.geometry;
+    return geometry != null && typeof geometry === "object"
+      ? (geometry as Record<string, unknown>)
+      : null;
+  } catch {
+    return null;
+  }
+}
+
 function looksLikeGeomWkt(raw: string | null | undefined): boolean {
   const s = String(raw ?? "").trim().toUpperCase();
   return (
@@ -150,6 +188,7 @@ export function useLayerRowEdit({
       if (layerRowGeomEditDirtyRef) layerRowGeomEditDirtyRef.current = false;
       setLayerRowGeomEdit({
         layerName: preset.tableName,
+        childLayerName: preset.childTableName,
         schema: preset.schema,
         keyField: preset.keyField ?? "id",
         keyValue,
@@ -164,6 +203,7 @@ export function useLayerRowEdit({
       mapContext?.clearMapDrawInteractionsRef,
       mapContext?.setSpatialDrawRequest,
       preset.allowEmptyGeom,
+      preset.childTableName,
       preset.keyField,
       preset.requirePeriodAndGeomOnSave,
       preset.schema,
@@ -450,17 +490,18 @@ export function useLayerRowEdit({
       if (!removed) return;
       void (async () => {
         let target = removed!;
-        const hasSubtractGeom =
-          target.geometry3857 != null ||
-          String(target.pnu ?? "").trim().length >= 18;
-        if (!hasSubtractGeom) {
+        if (!parcelHasSubtractGeom(target)) {
           const [resolved] = await resolveParcelGeoms([target]);
           if (resolved) target = resolved;
+        }
+        if (!parcelHasSubtractGeom(target)) {
+          const savedGeom = await fetchSavedParcelGeom3857(preset, target);
+          if (savedGeom) target = { ...target, geometry3857: savedGeom };
         }
         void layerRowParcelRemoveRef?.current?.(target);
       })();
     },
-    [layerRowParcelRemoveRef]
+    [layerRowParcelRemoveRef, preset]
   );
 
   const syncChildParcels = useCallback(

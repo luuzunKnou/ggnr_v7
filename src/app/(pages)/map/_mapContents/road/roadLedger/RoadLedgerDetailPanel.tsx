@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { LucideIcon } from "lucide-react";
 import {
   Building2,
@@ -20,7 +20,6 @@ import {
   X,
 } from "lucide-react";
 import { call } from "@/lib/api";
-import { appFetch } from "@/lib/basePath";
 import { recordDataViewLog } from "@/lib/recordDataViewLog";
 import { SER_FILE_ENG } from "@/lib/serviceFileDataSerEng";
 import { cn } from "@/lib/utils";
@@ -39,6 +38,7 @@ import {
 import {
   isPdfServiceFileName,
   serviceFileDataDownloadUrl,
+  useServiceFileData,
 } from "../../../_mapComponents/standard/useServiceFileData";
 import {
   formatRoadLedgerAttrValue,
@@ -225,6 +225,8 @@ function RoadLedgerDocActionGrid({
   hasRdidForFacility,
   reportPdfLoading,
   reportPdfActive,
+  reportFileListLoading,
+  reportPdfAvailable,
 }: {
   items: { label: RoadLedgerDocButtonKey; icon: LucideIcon }[];
   gridClassName: string;
@@ -237,6 +239,8 @@ function RoadLedgerDocActionGrid({
   hasRdidForFacility: boolean;
   reportPdfLoading: boolean;
   reportPdfActive: boolean;
+  reportFileListLoading: boolean;
+  reportPdfAvailable: boolean;
 }) {
   return (
     <div className={cn("grid gap-1.5", gridClassName)}>
@@ -246,6 +250,8 @@ function RoadLedgerDocActionGrid({
         const hasLayers = layers.length > 0;
         const active =
           !isReportOnly && hasLayers && isRoadLedgerDocGroupActive(visibleLayerNames, layers);
+        const reportDisabled =
+          isReportOnly && (reportFileListLoading || reportPdfLoading || !reportPdfAvailable);
         const showCount = ROAD_LEDGER_DOC_LABELS_WITH_LAYER_COUNT.includes(label);
         const dataN = facilityDataCounts?.[label];
         const displayLabel =
@@ -258,20 +264,26 @@ function RoadLedgerDocActionGrid({
             type="button"
             title={
               isReportOnly
-                ? "보고서 PDF 보기"
+                ? reportFileListLoading
+                  ? "보고서 확인 중"
+                  : reportPdfAvailable
+                    ? "보고서 PDF 보기"
+                    : "보고서 PDF 없음"
                 : hasLayers
                   ? "클릭: 해당 공간정보 레이어 켜기 / 다시 클릭: 끄기"
                   : "연결 레이어 없음"
             }
             onClick={() => onDocClick(label)}
-            disabled={isReportOnly ? reportPdfLoading : !setVisibleLayerNames}
+            disabled={isReportOnly ? reportDisabled : !setVisibleLayerNames}
             className={cn(
               "h-7 text-[11px] rounded border min-w-0 inline-flex items-center justify-center gap-0.5 px-1 leading-none whitespace-nowrap",
               !isReportOnly && !setVisibleLayerNames && "pointer-events-none opacity-50",
               isReportOnly
-                ? reportPdfActive
-                  ? "border-primary/45 bg-primary/[0.08] text-foreground ring-1 ring-inset ring-primary/15 hover:bg-primary/[0.11]"
-                  : "border-border bg-muted/50 text-foreground/90 hover:bg-muted"
+                ? reportDisabled
+                  ? "border-border bg-muted/50 text-muted-foreground opacity-50 cursor-not-allowed"
+                  : reportPdfActive
+                    ? "border-primary/45 bg-primary/[0.08] text-foreground ring-1 ring-inset ring-primary/15 hover:bg-primary/[0.11]"
+                    : "border-border bg-muted/50 text-foreground/90 hover:bg-muted"
                 : hasLayers
                   ? active
                     ? "border-primary/45 bg-primary/[0.08] text-foreground ring-1 ring-inset ring-primary/15 hover:bg-primary/[0.11]"
@@ -279,7 +291,7 @@ function RoadLedgerDocActionGrid({
                   : "border-border bg-muted/50 text-muted-foreground hover:bg-muted",
             )}
           >
-            {isReportOnly && reportPdfLoading ? (
+            {isReportOnly && (reportFileListLoading || reportPdfLoading) ? (
               <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" aria-hidden />
             ) : (
               <Icon className="h-3.5 w-3.5 shrink-0" aria-hidden />
@@ -309,6 +321,34 @@ export function RoadLedgerDetailPanel({ row, onClose }: Props) {
   const mapContext = useMapContext();
   const visibleLayerNames = mapContext?.visibleLayerNames ?? new Set<string>();
   const setVisibleLayerNames = mapContext?.setVisibleLayerNames;
+  const reportOgcFid = pickRoadLedgerOgcFid(row);
+
+  const reportFileQuery = useServiceFileData({
+    serEng: SER_FILE_ENG.roadLedger,
+    enabled: reportOgcFid != null,
+    layerSegment: ROAD_LEDGER_SUMMARY_LAYER_ID,
+    keyValue: reportOgcFid,
+    includeMeta: false,
+  });
+
+  const reportPdfItems = useMemo((): ServiceFilePdfPreviewItem[] => {
+    if (reportOgcFid == null) return [];
+    return reportFileQuery.files
+      .filter((f) => isPdfServiceFileName(f.name))
+      .map((f) => ({
+        url: serviceFileDataDownloadUrl(
+          SER_FILE_ENG.roadLedger,
+          ROAD_LEDGER_SUMMARY_LAYER_ID,
+          reportOgcFid,
+          f.name
+        ),
+        fileName: f.name,
+      }));
+  }, [reportFileQuery.files, reportOgcFid]);
+
+  const reportPdfAvailable = reportPdfItems.length > 0;
+  const reportButtonDisabled =
+    reportOgcFid == null || reportFileQuery.loading || !reportPdfAvailable || reportPdfLoading;
 
   // 데이터 이력관리에 조회 저장을 위해 추가
   useEffect(() => {
@@ -338,50 +378,17 @@ export function RoadLedgerDetailPanel({ row, onClose }: Props) {
   );
 
   const openReportPdfViewer = useCallback(async () => {
-    if (reportPdfBusyRef.current) return;
-    const ogcFid = pickRoadLedgerOgcFid(row);
-    if (ogcFid == null) {
-      window.alert("노선을 선택하세요.");
-      return;
-    }
+    if (reportPdfBusyRef.current || reportButtonDisabled) return;
+    if (reportOgcFid == null || reportPdfItems.length === 0) return;
     reportPdfBusyRef.current = true;
     setReportPdfLoading(true);
     try {
-      const qs = new URLSearchParams({
-        serEng: SER_FILE_ENG.roadLedger,
-        layer: ROAD_LEDGER_SUMMARY_LAYER_ID,
-        key: String(ogcFid),
-      });
-      const res = await appFetch(`/api/service-files?${qs.toString()}`, { credentials: "include" });
-      if (!res.ok) {
-        const j = (await res.json().catch(() => ({}))) as { error?: string };
-        throw new Error(typeof j.error === "string" ? j.error : "목록을 불러오지 못했습니다.");
-      }
-      const data = (await res.json()) as { files?: { name: string }[] };
-      const files = Array.isArray(data.files) ? data.files : [];
-      const items: ServiceFilePdfPreviewItem[] = files
-        .filter((f) => isPdfServiceFileName(f.name))
-        .map((f) => ({
-          url: serviceFileDataDownloadUrl(
-            SER_FILE_ENG.roadLedger,
-            ROAD_LEDGER_SUMMARY_LAYER_ID,
-            ogcFid,
-            f.name
-          ),
-          fileName: f.name,
-        }));
-      if (items.length === 0) {
-        window.alert("보고서 PDF가 없습니다.");
-        return;
-      }
-      setReportPdfPreview({ items, initialIndex: 0 });
-    } catch (e) {
-      window.alert(e instanceof Error ? e.message : "보고서를 불러오지 못했습니다.");
+      setReportPdfPreview({ items: reportPdfItems, initialIndex: 0 });
     } finally {
       reportPdfBusyRef.current = false;
       setReportPdfLoading(false);
     }
-  }, [row]);
+  }, [reportOgcFid, reportPdfItems, reportButtonDisabled]);
 
   const handleDocButtonClick = useCallback(
     (key: RoadLedgerDocButtonKey) => {
@@ -529,6 +536,8 @@ export function RoadLedgerDetailPanel({ row, onClose }: Props) {
               hasRdidForFacility={hasRdidForFacility}
               reportPdfLoading={reportPdfLoading}
               reportPdfActive={reportPdfPreview != null}
+              reportFileListLoading={reportFileQuery.loading}
+              reportPdfAvailable={reportPdfAvailable}
             />
             <RoadLedgerDocActionGrid
               items={DOC_ACTION_BUTTONS_REST}
@@ -542,6 +551,8 @@ export function RoadLedgerDetailPanel({ row, onClose }: Props) {
               hasRdidForFacility={hasRdidForFacility}
               reportPdfLoading={reportPdfLoading}
               reportPdfActive={reportPdfPreview != null}
+              reportFileListLoading={reportFileQuery.loading}
+              reportPdfAvailable={reportPdfAvailable}
             />
           </div>
         </div>

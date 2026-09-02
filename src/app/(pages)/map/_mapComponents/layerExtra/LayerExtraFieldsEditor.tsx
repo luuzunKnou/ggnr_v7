@@ -1,9 +1,17 @@
 'use client';
 
-import { useRef } from 'react';
-import type { DragEvent } from 'react';
+import { useRef, useState } from 'react';
+import type { DragEvent, FormEvent } from 'react';
 import { Plus, Minus, GripVertical } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/app/shadcnComponents/ui/dialog';
+import { Button } from '@/app/shadcnComponents/ui/button';
 import {
   DetailAttrRow,
   DetailAttrTable,
@@ -22,6 +30,8 @@ export type LayerExtraDefOption = {
   dataType: string;
 };
 
+type ExtraDataType = 'varchar' | 'integer' | 'date';
+
 type Props = {
   items: LayerExtraEditorItem[];
   isEditing: boolean;
@@ -36,11 +46,20 @@ const inputClass =
 const iconBtn =
   'inline-flex h-6 w-6 shrink-0 items-center justify-center rounded border border-border bg-background text-muted-foreground hover:bg-muted disabled:opacity-40';
 const rowClass = 'flex items-center gap-x-2 px-2 py-1.5';
-/** 필드명 약 100px */
+/** 속성명 약 100px */
 const nameBoxClass = 'w-[100px] shrink-0';
 
-function extraTypeIsDate(raw: string): boolean {
-  return String(raw ?? '').trim().toLowerCase() === 'date';
+const EXTRA_DATA_TYPE_OPTIONS: { value: ExtraDataType; label: string }[] = [
+  { value: 'varchar', label: '문자' },
+  { value: 'integer', label: '숫자' },
+  { value: 'date', label: '날짜' },
+];
+
+function extraTypeKind(raw: string): ExtraDataType {
+  const t = String(raw ?? '').trim().toLowerCase();
+  if (t === 'date') return 'date';
+  if (t === 'integer' || t === 'int' || t === 'number' || t === 'numeric') return 'integer';
+  return 'varchar';
 }
 
 /** 추가속성 행 편집 (공용) — 업무 화면에서 끼워 씀 */
@@ -52,6 +71,10 @@ export function LayerExtraFieldsEditor({
   className,
 }: Props) {
   const dragIdx = useRef<number | null>(null);
+  const [addOpen, setAddOpen] = useState(false);
+  const [addName, setAddName] = useState('');
+  const [addType, setAddType] = useState<ExtraDataType>('varchar');
+  const [addError, setAddError] = useState<string | null>(null);
 
   const updateAt = (index: number, patch: Partial<LayerExtraEditorItem>) => {
     onChange(items.map((it, i) => (i === index ? { ...it, ...patch } : it)));
@@ -61,12 +84,39 @@ export function LayerExtraFieldsEditor({
     onChange(items.filter((_, i) => i !== index));
   };
 
-  const addBlank = () => {
+  const openAddModal = () => {
+    setAddName('');
+    setAddType('varchar');
+    setAddError(null);
+    setAddOpen(true);
+  };
+
+  const handleAddOpenChange = (open: boolean) => {
+    setAddOpen(open);
+    if (!open) {
+      setAddName('');
+      setAddType('varchar');
+      setAddError(null);
+    }
+  };
+
+  const submitAdd = (e?: FormEvent) => {
+    e?.preventDefault();
+    const name = addName.trim();
+    if (!name) {
+      setAddError('속성명을 입력하세요.');
+      return;
+    }
+    if (items.some((it) => it.fieldName.toLowerCase() === name.toLowerCase())) {
+      setAddError('이미 있는 속성명입니다.');
+      return;
+    }
     const nextOrder = (items.reduce((m, it) => Math.max(m, it.sortOrder), 0) || 0) + 1;
     onChange([
       ...items,
-      { fieldName: '', dataType: 'text', value: '', sortOrder: nextOrder },
+      { fieldName: name, dataType: addType, value: '', sortOrder: nextOrder },
     ]);
+    handleAddOpenChange(false);
   };
 
   const addFromDef = (name: string) => {
@@ -78,7 +128,7 @@ export function LayerExtraFieldsEditor({
       ...items,
       {
         fieldName: name.trim(),
-        dataType: String(def?.dataType ?? 'text').trim() || 'text',
+        dataType: String(def?.dataType ?? 'varchar').trim() || 'varchar',
         value: '',
         sortOrder: nextOrder,
       },
@@ -104,6 +154,41 @@ export function LayerExtraFieldsEditor({
   const unusedDefs = availableDefs.filter(
     (d) => !items.some((it) => it.fieldName.toLowerCase() === d.fieldName.toLowerCase())
   );
+
+  const renderValueInput = (row: LayerExtraEditorItem, idx: number) => {
+    const kind = extraTypeKind(row.dataType);
+    if (kind === 'date') {
+      return (
+        <input
+          type="date"
+          className={inputClass}
+          value={toDateInputValue(row.value)}
+          onChange={(e) => updateAt(idx, { value: e.target.value })}
+        />
+      );
+    }
+    if (kind === 'integer') {
+      return (
+        <input
+          type="number"
+          inputMode="numeric"
+          step={1}
+          className={inputClass}
+          value={row.value}
+          placeholder="값"
+          onChange={(e) => updateAt(idx, { value: e.target.value })}
+        />
+      );
+    }
+    return (
+      <input
+        className={inputClass}
+        value={row.value}
+        placeholder="값"
+        onChange={(e) => updateAt(idx, { value: e.target.value })}
+      />
+    );
+  };
 
   return (
     <div className={cn(className)}>
@@ -146,27 +231,13 @@ export function LayerExtraFieldsEditor({
                       width: `${Math.max(6, [...String(row.fieldName ?? '')].length)}em`,
                     }}
                     value={row.fieldName}
-                    placeholder="필드명"
+                    placeholder="속성명"
                     onChange={(e) => updateAt(idx, { fieldName: e.target.value })}
                   />
                 </div>
               </dt>
               <dd className="flex min-w-0 flex-1 items-center gap-1">
-                {extraTypeIsDate(row.dataType) ? (
-                  <input
-                    type="date"
-                    className={inputClass}
-                    value={toDateInputValue(row.value)}
-                    onChange={(e) => updateAt(idx, { value: e.target.value })}
-                  />
-                ) : (
-                  <input
-                    className={inputClass}
-                    value={row.value}
-                    placeholder="값"
-                    onChange={(e) => updateAt(idx, { value: e.target.value })}
-                  />
-                )}
+                {renderValueInput(row, idx)}
                 <button
                   type="button"
                   className={iconBtn}
@@ -181,7 +252,7 @@ export function LayerExtraFieldsEditor({
           <div className="flex items-center justify-center gap-1.5 px-2 py-1.5">
             <button
               type="button"
-              onClick={addBlank}
+              onClick={openAddModal}
               className="flex h-7 min-w-0 max-w-[9.5rem] flex-1 basis-0 items-center justify-center gap-1 whitespace-nowrap rounded border border-dashed border-border bg-background px-2 text-[11px] text-muted-foreground hover:bg-muted"
             >
               <Plus className="h-3 w-3 shrink-0" />
@@ -215,13 +286,80 @@ export function LayerExtraFieldsEditor({
               label={row.fieldName || '—'}
               isLast={idx === items.length - 1}
             >
-              {extraTypeIsDate(row.dataType)
+              {extraTypeKind(row.dataType) === 'date'
                 ? toDateInputValue(row.value) || row.value || '—'
                 : row.value || '—'}
             </DetailAttrRow>
           ))}
         </DetailAttrTable>
       )}
+
+      <Dialog open={addOpen} onOpenChange={handleAddOpenChange}>
+        <DialogContent
+          className="gap-0 overflow-hidden rounded-[10px] border-border/80 p-0 sm:max-w-[360px]"
+          layerZIndex={140}
+        >
+          <DialogHeader className="border-b border-border bg-gradient-to-b from-muted/30 to-background px-4 py-3">
+            <DialogTitle className="text-sm font-semibold text-foreground">속성 추가</DialogTitle>
+          </DialogHeader>
+          <form onSubmit={submitAdd}>
+            <div className="flex flex-col gap-3 px-4 py-3">
+              <label className="flex flex-col gap-1">
+                <span className="text-[11px] text-muted-foreground">속성명</span>
+                <input
+                  autoFocus
+                  className={cn(inputClass, 'h-8')}
+                  value={addName}
+                  placeholder="속성명"
+                  onChange={(e) => {
+                    setAddName(e.target.value);
+                    if (addError) setAddError(null);
+                  }}
+                />
+              </label>
+              <fieldset className="flex flex-col gap-1.5">
+                <legend className="text-[11px] text-muted-foreground">자료형</legend>
+                <div className="flex gap-1">
+                  {EXTRA_DATA_TYPE_OPTIONS.map((opt) => {
+                    const selected = addType === opt.value;
+                    return (
+                      <button
+                        key={opt.value}
+                        type="button"
+                        onClick={() => setAddType(opt.value)}
+                        className={cn(
+                          'h-7 flex-1 rounded border text-[11px]',
+                          selected
+                            ? 'border-primary bg-primary/10 text-foreground'
+                            : 'border-border bg-background text-muted-foreground hover:bg-muted'
+                        )}
+                      >
+                        {opt.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </fieldset>
+              {addError ? (
+                <p className="text-[11px] text-destructive">{addError}</p>
+              ) : null}
+            </div>
+            <DialogFooter className="border-t border-border px-4 py-2.5">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => handleAddOpenChange(false)}
+              >
+                취소
+              </Button>
+              <Button type="submit" size="sm">
+                추가
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

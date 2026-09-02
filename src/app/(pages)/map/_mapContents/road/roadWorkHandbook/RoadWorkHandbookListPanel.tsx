@@ -263,7 +263,7 @@ export function RoadWorkHandbookListPanel({
                         <div className="flex min-w-0 items-center gap-1.5">
                           <span
                             className={cn(
-                              "shrink-0 rounded px-1.5 py-0.5 text-[9px] font-medium leading-none",
+                              "shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium leading-none",
                               matchBadgeClass(status)
                             )}
                           >

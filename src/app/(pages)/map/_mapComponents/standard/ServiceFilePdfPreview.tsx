@@ -24,6 +24,7 @@ import {
   GalleryThumbnails,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { zoomPreviewAtPointer } from './previewZoomAtCursor';
 import {
   ServiceFilePdfPreviewStage,
   type PdfPreviewFitMode,
@@ -51,7 +52,7 @@ type Props = {
 
 const MIN_SCALE = 0.25;
 const MAX_SCALE = 5;
-const ZOOM_STEP_WHEEL = 0.12;
+const ZOOM_STEP_WHEEL = 0.18;
 const ZOOM_STEP_BUTTON = 0.35;
 const SIDEBAR_WIDTH = 240;
 /** 휠·버튼 줌 멈춘 뒤 LOD 재렌더 대기(ms) */
@@ -89,6 +90,10 @@ export function ServiceFilePdfPreview({ items, initialIndex, onClose }: Props) {
   const [viewMode, setViewMode] = useState<PdfViewMode>('single');
   const scaleRef = useRef(1);
   scaleRef.current = scale;
+  const panRef = useRef(pan);
+  panRef.current = pan;
+  const rotationRef = useRef(rotation);
+  rotationRef.current = rotation;
   const viewModeRef = useRef<PdfViewMode>('single');
   viewModeRef.current = viewMode;
   const [rotation, setRotation] = useState(0);
@@ -113,10 +118,9 @@ export function ServiceFilePdfPreview({ items, initialIndex, onClose }: Props) {
   const [spaceHeld, setSpaceHeld] = useState(false);
   const wheelTargetRef = useRef<HTMLDivElement>(null);
   const pageThumbScrollRef = useRef<HTMLDivElement>(null);
-  const wheelNavRef = useRef({ pdfNumPages: 1, viewMode: 'single' as PdfViewMode });
-  wheelNavRef.current = { pdfNumPages, viewMode };
+  const wheelNavRef = useRef({ viewMode: 'single' as PdfViewMode });
+  wheelNavRef.current = { viewMode };
   const continuousScrollRef = useRef<HTMLDivElement | null>(null);
-  const lastPdfWheelNavAtRef = useRef(0);
   const attachActionBusyRef = useRef(false);
   const [attachBusy, setAttachBusy] = useState<'download' | 'print' | null>(null);
   const [downloadMenuOpen, setDownloadMenuOpen] = useState(false);
@@ -133,6 +137,28 @@ export function ServiceFilePdfPreview({ items, initialIndex, onClose }: Props) {
     setPdfViewerFocusUrl(null);
     onClose();
   }, [onClose]);
+
+  const applyZoomStep = useCallback((scaleDelta: number, pointer: { x: number; y: number } | null) => {
+    const el = wheelTargetRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    const result = zoomPreviewAtPointer(
+      panRef.current,
+      pointer,
+      { width: rect.width, height: rect.height },
+      scaleRef.current,
+      scaleDelta,
+      MIN_SCALE,
+      MAX_SCALE,
+      rotationRef.current
+    );
+    if (!result) return;
+    setPan(result.pan);
+    setScale(result.scale);
+  }, []);
+
+  const applyZoomStepRef = useRef(applyZoomStep);
+  applyZoomStepRef.current = applyZoomStep;
 
   useEffect(() => {
     setMounted(true);
@@ -265,6 +291,9 @@ export function ServiceFilePdfPreview({ items, initialIndex, onClose }: Props) {
         return;
       }
 
+      const pdfPageArrowNav =
+        viewModeRef.current === 'single' && pdfNumPages > 1;
+
       if (viewModeRef.current === 'continuous') {
         const scrollEl = continuousScrollRef.current;
         if (scrollEl && pdfNumPages > 1) {
@@ -280,19 +309,27 @@ export function ServiceFilePdfPreview({ items, initialIndex, onClose }: Props) {
           }
         }
       } else if (pdfNumPages > 1) {
-        if (e.key === 'PageDown' || e.key === 'ArrowDown') {
+        if (
+          e.key === 'PageDown' ||
+          e.key === 'ArrowDown' ||
+          e.key === 'ArrowRight'
+        ) {
           e.preventDefault();
           setPdfPage((p) => Math.min(pdfNumPages, p + 1));
           return;
         }
-        if (e.key === 'PageUp' || e.key === 'ArrowUp') {
+        if (
+          e.key === 'PageUp' ||
+          e.key === 'ArrowUp' ||
+          e.key === 'ArrowLeft'
+        ) {
           e.preventDefault();
           setPdfPage((p) => Math.max(1, p - 1));
           return;
         }
       }
 
-      if (items.length > 1) {
+      if (items.length > 1 && !pdfPageArrowNav) {
         if (e.key === 'ArrowLeft') {
           e.preventDefault();
           setIndex((i) => (i - 1 + items.length) % items.length);
@@ -306,11 +343,11 @@ export function ServiceFilePdfPreview({ items, initialIndex, onClose }: Props) {
       }
       if (e.key === '+' || e.key === '=') {
         e.preventDefault();
-        setScale((s) => clamp(s + ZOOM_STEP_BUTTON, MIN_SCALE, MAX_SCALE));
+        applyZoomStepRef.current(ZOOM_STEP_BUTTON, null);
       }
       if (e.key === '-' || e.key === '_') {
         e.preventDefault();
-        setScale((s) => clamp(s - ZOOM_STEP_BUTTON, MIN_SCALE, MAX_SCALE));
+        applyZoomStepRef.current(-ZOOM_STEP_BUTTON, null);
       }
     };
     window.addEventListener('keydown', onKey);
@@ -337,12 +374,12 @@ export function ServiceFilePdfPreview({ items, initialIndex, onClose }: Props) {
   }, [navigateToPdfPage, pdfPage]);
 
   const zoomIn = useCallback(() => {
-    setScale((s) => clamp(s + ZOOM_STEP_BUTTON, MIN_SCALE, MAX_SCALE));
-  }, []);
+    applyZoomStep(ZOOM_STEP_BUTTON, null);
+  }, [applyZoomStep]);
 
   const zoomOut = useCallback(() => {
-    setScale((s) => clamp(s - ZOOM_STEP_BUTTON, MIN_SCALE, MAX_SCALE));
-  }, []);
+    applyZoomStep(-ZOOM_STEP_BUTTON, null);
+  }, [applyZoomStep]);
 
   const rotateCw = useCallback(() => {
     setRotation((r) => (r + 90) % 360);
@@ -491,31 +528,20 @@ export function ServiceFilePdfPreview({ items, initialIndex, onClose }: Props) {
     const el = wheelTargetRef.current;
     if (!el) return;
     const onWheelNative = (e: WheelEvent) => {
-      const { pdfNumPages: totalPages, viewMode: mode } = wheelNavRef.current;
-      const isPdfMulti = totalPages > 1;
+      const { viewMode: mode } = wheelNavRef.current;
       const zoomWithWheel = e.ctrlKey || e.metaKey;
 
       if (mode === 'continuous' && !zoomWithWheel) {
         return;
       }
 
-      if (mode === 'single' && isPdfMulti && !zoomWithWheel) {
-        e.preventDefault();
-        if (Math.abs(e.deltaY) < 2) return;
-        const now = performance.now();
-        if (now - lastPdfWheelNavAtRef.current < 120) return;
-        lastPdfWheelNavAtRef.current = now;
-        if (e.deltaY > 0) {
-          setPdfPage((p) => Math.min(wheelNavRef.current.pdfNumPages, p + 1));
-        } else {
-          setPdfPage((p) => Math.max(1, p - 1));
-        }
-        return;
-      }
-
       e.preventDefault();
+      const rect = el.getBoundingClientRect();
       const delta = e.deltaY > 0 ? -ZOOM_STEP_WHEEL : ZOOM_STEP_WHEEL;
-      setScale((s) => clamp(s + delta, MIN_SCALE, MAX_SCALE));
+      applyZoomStepRef.current(delta, {
+        x: e.clientX - rect.left,
+        y: e.clientY - rect.top,
+      });
     };
     el.addEventListener('wheel', onWheelNative, { passive: false, capture: true });
     return () => el.removeEventListener('wheel', onWheelNative, { capture: true });
@@ -982,13 +1008,12 @@ export function ServiceFilePdfPreview({ items, initialIndex, onClose }: Props) {
             ? '스크롤로 페이지 이동 · Ctrl+휠 확대·축소'
             : '스크롤 · Ctrl+휠 확대·축소'
           : canPdfPage
-            ? '휠로 이전·다음 페이지 · Ctrl+휠 확대·축소'
+            ? '휠로 확대·축소 · 방향키로 이전·다음 페이지'
             : '휠로 확대·축소'}
         {viewMode === 'single'
           ? ' · Space 또는 Alt+드래그로 화면 이동 · 더블클릭 시 초기화'
           : ''}
-        {canNav ? ' · ← → 이전·다음 파일' : ''}
-        {canPdfPage && viewMode === 'single' ? ' · PDF ↑↓ 또는 Page Up / Down' : ''}
+        {canNav && !canPdfPage ? ' · ← → 이전·다음 파일' : ''}
         {canPdfPage && viewMode === 'continuous' ? ' · ↑↓ 스크롤' : ''}
       </p>
     </div>,

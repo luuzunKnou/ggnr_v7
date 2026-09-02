@@ -890,15 +890,12 @@ CREATE TABLE IF NOT EXISTS layer.cons_data_solo_as (
   ogc_fid serial PRIMARY KEY,
   geom geometry(MultiPolygon, 5181),
   cons_code text,
-  river_type text,
-  river_code text,
-  river_name text,
-  solo_code text,
-  remark text
+  address text
 );
 CREATE INDEX IF NOT EXISTS cons_data_solo_as_geom_gix ON layer.cons_data_solo_as USING GIST (geom);
 CREATE INDEX IF NOT EXISTS cons_data_solo_as_cons_code_idx ON layer.cons_data_solo_as (cons_code);
 COMMENT ON TABLE layer.cons_data_solo_as IS '공사대장_개별';
+COMMENT ON COLUMN layer.cons_data_solo_as.address IS '주소';
 `;
 
 const RADIATION_SHELTER_SQL = `
@@ -918,17 +915,30 @@ COMMENT ON TABLE layer.radiation_shelter IS '방사선 대피소';
 const WATER_PLAY_SIGN_SQL = `
 CREATE TABLE IF NOT EXISTS layer.water_play_sign (
   id SERIAL PRIMARY KEY,
-  sign_nm text,
+  sido text,
+  sgg text,
   addr text,
-  sign_type text,
+  addr_detail text,
+  gubun text,
+  is_warnig text,
+  safebox_cnt integer,
+  sign_cnt integer,
   remark text,
   geom geometry(Point, 5181)
 );
-CREATE INDEX IF NOT EXISTS water_play_sign_sign_nm_idx ON layer.water_play_sign (sign_nm);
 CREATE INDEX IF NOT EXISTS water_play_sign_addr_idx ON layer.water_play_sign (addr);
-CREATE INDEX IF NOT EXISTS water_play_sign_sign_type_idx ON layer.water_play_sign (sign_type);
 COMMENT ON TABLE layer.water_play_sign IS '물놀이 표지판';
 `;
+
+const WATER_PLAY_SIGN_LAYER_COLUMNS: Array<{ name: string; ddl: string }> = [
+  { name: 'sido', ddl: 'text' },
+  { name: 'sgg', ddl: 'text' },
+  { name: 'addr_detail', ddl: 'text' },
+  { name: 'gubun', ddl: 'text' },
+  { name: 'is_warnig', ddl: 'text' },
+  { name: 'safebox_cnt', ddl: 'integer' },
+  { name: 'sign_cnt', ddl: 'integer' },
+];
 
 const VILLAGE_PATROL_SQL = `
 CREATE TABLE IF NOT EXISTS layer.village_patrol (
@@ -1674,6 +1684,57 @@ export async function ensureRoadRewardTables(result?: EnsureResult): Promise<Ens
   return out;
 }
 
+/** 공사대장 필지 — 주소 컬럼 보강·구형 컬럼 제거 */
+async function ensureConsDataSoloAsSchema(result: EnsureResult): Promise<void> {
+  const table = 'cons_data_solo_as';
+  const fq = `layer.${table}`;
+  try {
+    if ((await tableExists('layer', table)) !== 'BASE TABLE') return;
+
+    if (!(await columnExists('layer', table, 'address'))) {
+      await db.execute(sql.raw(`ALTER TABLE layer.${table} ADD COLUMN address text`));
+      await db.execute(sql.raw(`COMMENT ON COLUMN layer.${table}.address IS '주소'`));
+      result.created.push(`${fq}.address`);
+    }
+
+    if (await columnExists('layer', table, 'remark')) {
+      await db.execute(
+        sql.raw(
+          `UPDATE layer.${table}
+           SET address = COALESCE(
+             NULLIF(btrim(address), ''),
+             NULLIF(btrim(remark), ''),
+             NULLIF(btrim(river_name), ''),
+             NULLIF(btrim(solo_code), '')
+           )
+           WHERE address IS NULL OR btrim(address) = ''`
+        )
+      );
+    } else if (await columnExists('layer', table, 'river_name')) {
+      await db.execute(
+        sql.raw(
+          `UPDATE layer.${table}
+           SET address = COALESCE(
+             NULLIF(btrim(address), ''),
+             NULLIF(btrim(river_name), ''),
+             NULLIF(btrim(solo_code), '')
+           )
+           WHERE address IS NULL OR btrim(address) = ''`
+        )
+      );
+    }
+
+    for (const col of ['river_type', 'river_code', 'river_name', 'solo_code', 'remark'] as const) {
+      if (!(await columnExists('layer', table, col))) continue;
+      await db.execute(sql.raw(`ALTER TABLE layer.${table} DROP COLUMN ${col}`));
+      result.moved.push(`${fq}.${col}(dropped)`);
+    }
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    result.errors.push(`${fq}: ${msg}`);
+  }
+}
+
 /** 공사대장 · 개별(필지) */
 export async function ensureConsDataAsTables(result?: EnsureResult): Promise<EnsureResult> {
   const out: EnsureResult = result ?? { created: [], moved: [], existed: [], errors: [] };
@@ -1688,6 +1749,7 @@ export async function ensureConsDataAsTables(result?: EnsureResult): Promise<Ens
     createSql: CONS_DATA_SOLO_AS_SQL,
     result: out,
   });
+  await ensureConsDataSoloAsSchema(out);
   return out;
 }
 
@@ -1710,6 +1772,18 @@ export async function ensureWaterPlaySignTable(result?: EnsureResult): Promise<E
     createSql: WATER_PLAY_SIGN_SQL,
     result: out,
   });
+  for (const col of WATER_PLAY_SIGN_LAYER_COLUMNS) {
+    try {
+      if (await columnExists('layer', 'water_play_sign', col.name)) continue;
+      await db.execute(
+        sql.raw(`ALTER TABLE layer.water_play_sign ADD COLUMN ${col.name} ${col.ddl}`)
+      );
+      out.created.push(`layer.water_play_sign.${col.name}`);
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      out.errors.push(`layer.water_play_sign.${col.name}: ${msg}`);
+    }
+  }
   return out;
 }
 

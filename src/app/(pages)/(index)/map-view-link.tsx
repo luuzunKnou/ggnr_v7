@@ -2,10 +2,14 @@
 
 import { Layers, Mouse } from "lucide-react"
 import { useEffect, useRef } from "react"
+import { useSession } from "next-auth/react"
+import { useLoginModal } from "@/app/login-modal-context"
 import { withBasePath, withBasePathNav } from "@/lib/basePath"
 
 export function MapViewLink() {
   const videoRef = useRef<HTMLVideoElement>(null)
+  const { data: session, status } = useSession()
+  const { openLogin } = useLoginModal()
 
   useEffect(() => {
     const el = videoRef.current
@@ -59,6 +63,11 @@ export function MapViewLink() {
       type="button"
       title="지도보기"
       onClick={() => {
+        if (status === "loading") return
+        if (!session?.user) {
+          openLogin("/map")
+          return
+        }
         window.location.assign(withBasePathNav("/map"))
       }}
       className="group relative block min-h-[280px] w-full cursor-pointer overflow-hidden rounded-[5px] bg-slate-900 p-8 text-center text-white transition-opacity hover:opacity-95 flex flex-col items-center justify-center"

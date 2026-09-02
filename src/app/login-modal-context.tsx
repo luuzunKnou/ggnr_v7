@@ -25,7 +25,8 @@ import { AUTH_REQUIRED_EVENT } from '@/lib/authRequiredEvent';
 import { toAppPathFromBrowser, withBasePathNav } from '@/lib/basePath';
 
 type LoginModalContextValue = {
-  openLogin: () => void;
+  /** next: 로그인 성공 후 이동할 앱 경로. 없으면 현재 주소 */
+  openLogin: (next?: string) => void;
   openSignUp: () => void;
 };
 
@@ -33,7 +34,7 @@ const LoginModalContext = createContext<LoginModalContextValue | null>(null);
 
 export function useLoginModal() {
   const ctx = useContext(LoginModalContext);
-  if (!ctx) return { openLogin: () => {}, openSignUp: () => {} };
+  if (!ctx) return { openLogin: (_next?: string) => {}, openSignUp: () => {} };
   return ctx;
 }
 
@@ -115,6 +116,26 @@ function LoginModalDialog({
     }
   }, [open]);
 
+  async function loadRejectReasonMessage(id: string) {
+    let reason = '';
+    try {
+      const hint = await call('', 'POST', {
+        service: 'usrService',
+        action: 'getSignUpRejectReason',
+        params: { usr_id: id },
+      });
+      const inner = hint?.data as
+        | { data?: { reason?: string | null }; success?: boolean }
+        | undefined;
+      reason = String(inner?.data?.reason ?? '').trim();
+    } catch {
+      reason = '';
+    }
+    return reason
+      ? `반려되었습니다.\n사유: ${reason}\n재가입신청을 하시거나 담당자에게 문의하세요.`
+      : '반려가 되었으니 재가입신청을 하시거나 담당자에게 문의하세요.';
+  }
+
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError('');
@@ -125,30 +146,13 @@ function LoginModalDialog({
         password,
         redirect: false,
       });
+      const errCode = res?.code ?? undefined;
       if (res?.error) {
-        if (res.code === 'signup_rejected') {
-          let reason = '';
-          try {
-            const hint = await call('', 'POST', {
-              service: 'usrService',
-              action: 'getSignUpRejectReason',
-              params: { usr_id: usrId },
-            });
-            const inner = hint?.data as
-              | { data?: { reason?: string | null }; success?: boolean }
-              | undefined;
-            reason = String(inner?.data?.reason ?? '').trim();
-          } catch {
-            reason = '';
-          }
-          setError(
-            reason
-              ? `반려되었습니다.\n사유: ${reason}\n재가입신청을 하시거나 담당자에게 문의하세요.`
-              : '반려가 되었으니 재가입신청을 하시거나 담당자에게 문의하세요.'
-          );
-        } else if (res.code === 'signup_pending') {
+        if (errCode === 'signup_rejected') {
+          setError(await loadRejectReasonMessage(usrId));
+        } else if (errCode === 'signup_pending') {
           setError('승인대기중입니다.');
-        } else if (res.code === 'login_fail_exceeded') {
+        } else if (errCode === 'login_fail_exceeded') {
           setError('비밀번호 입력 횟수를 초과했습니다.\n관리자에게 문의하세요.');
         } else {
           setError('아이디 또는 비밀번호가 올바르지 않습니다.');
@@ -156,7 +160,7 @@ function LoginModalDialog({
         setLoading(false);
         return;
       }
-      // 마스터 로그인: 승인대기·반려여도 통과하되 상태를 alert로 안내
+      // master 로그인: 승인대기·반려·인증오류 누적도 통과하되 상태 안내 (v6 동일)
       try {
         const s = await getSession();
         if (s?.user?.signupStatus === 'pending') {
@@ -244,10 +248,12 @@ function SignUpModalDialog({
   open,
   onOpenChange,
   onOpenLogin,
+  formKey,
 }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
   onOpenLogin: () => void;
+  formKey: number;
 }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -261,7 +267,7 @@ function SignUpModalDialog({
         <div className="pt-1">
           {open ? (
             <SignUpApplyForm
-              key="signup-modal"
+              key={`signup-modal-${formKey}`}
               variant="modal"
               uiVariant={2}
               onRequestLogin={onOpenLogin}
@@ -277,26 +283,43 @@ function SignUpModalDialog({
 export function LoginModalProvider({ children }: { children: React.ReactNode }) {
   const [loginOpen, setLoginOpen] = useState(false);
   const [signUpOpen, setSignUpOpen] = useState(false);
+  const [signUpFormKey, setSignUpFormKey] = useState(0);
   const [pendingNext, setPendingNext] = useState('');
 
-  const openLogin = useCallback(() => {
+  const openLogin = useCallback((next?: string) => {
     if (typeof window !== 'undefined') {
-      const n = new URLSearchParams(window.location.search).get('next');
-      if (n && n.startsWith('/')) setPendingNext(toAppPathFromBrowser(n));
-      else {
-        const here = toAppPathFromBrowser(
-          `${window.location.pathname}${window.location.search}`
-        );
-        if (here.startsWith('/')) setPendingNext(here);
+      if (next && next.startsWith('/')) {
+        setPendingNext(toAppPathFromBrowser(next));
+      } else {
+        const n = new URLSearchParams(window.location.search).get('next');
+        if (n && n.startsWith('/')) setPendingNext(toAppPathFromBrowser(n));
+        else {
+          const here = toAppPathFromBrowser(
+            `${window.location.pathname}${window.location.search}`
+          );
+          if (here.startsWith('/')) setPendingNext(here);
+        }
       }
     }
     setSignUpOpen(false);
     setLoginOpen(true);
   }, []);
 
+  /** 가입신청 완료 → 로그인: 닫힘 애니메이션 후 로그인 모달 (동시 전환 시 클릭 무반응 방지) */
+  const switchToLoginFromSignUp = useCallback(() => {
+    setSignUpOpen(false);
+    setSignUpFormKey((k) => k + 1);
+    window.setTimeout(() => setLoginOpen(true), 0);
+  }, []);
+
   const openSignUp = useCallback(() => {
     setLoginOpen(false);
     setSignUpOpen(true);
+  }, []);
+
+  const onSignUpOpenChange = useCallback((v: boolean) => {
+    setSignUpOpen(v);
+    if (!v) setSignUpFormKey((k) => k + 1);
   }, []);
 
   const onClearNext = useCallback(() => setPendingNext(''), []);
@@ -326,8 +349,9 @@ export function LoginModalProvider({ children }: { children: React.ReactNode }) 
       />
       <SignUpModalDialog
         open={signUpOpen}
-        onOpenChange={setSignUpOpen}
-        onOpenLogin={openLogin}
+        onOpenChange={onSignUpOpenChange}
+        onOpenLogin={switchToLoginFromSignUp}
+        formKey={signUpFormKey}
       />
     </LoginModalContext.Provider>
   );

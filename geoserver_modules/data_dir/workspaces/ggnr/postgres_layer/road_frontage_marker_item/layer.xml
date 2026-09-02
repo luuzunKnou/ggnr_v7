@@ -1,0 +1,19 @@
+<layer>
+  <name>road_frontage_marker_item</name>
+  <id>LayerInfoImpl-7b089fba:1a05fb2fa35:-7f7d</id>
+  <type>VECTOR</type>
+  <defaultStyle>
+    <id>StyleInfoImpl-7b089fba:1a05fb2fa35:-7f7c</id>
+  </defaultStyle>
+  <resource class="featureType">
+    <id>FeatureTypeInfoImpl-7b089fba:1a05fb2fa35:-7f7e</id>
+  </resource>
+  <queryable>true</queryable>
+  <opaque>false</opaque>
+  <attribution>
+    <logoWidth>0</logoWidth>
+    <logoHeight>0</logoHeight>
+  </attribution>
+  <dateCreated>2026-09-02 01:43:09.799 UTC</dateCreated>
+  <dateModified>2026-09-02 01:43:10.241 UTC</dateModified>
+</layer>

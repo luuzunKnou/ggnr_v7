@@ -5,42 +5,51 @@ import { scheduleFitMapToExtent3857 } from "../../../_mapComponents/config/mapAu
 import { MAP_AUTO_NAV_MAX_ZOOM } from "../../../_mapComponents/config/mapDefaults";
 import { clearUseFeeWmsLayer } from "../../useFee/useFeeMapSync";
 import {
-  USAGE_DATA_AS_CHILD_WMS_LAYER_IDS,
+  USAGE_DATA_AS_MGJ_WMS_LAYER_ID,
   USAGE_DATA_AS_PANEL_WMS_LAYER_IDS,
   USAGE_DATA_AS_SISUL_WMS_LAYER_ID,
+  USAGE_DATA_AS_SOLO_WMS_LAYER_ID,
   USAGE_DATA_AS_WMS_LAYER_ID,
 } from "./usageDataAsLayerId";
 
 /**
- * 하천점용 WMS — 기본은 본표만 켜고 필지·물건지는 끔.
- * includeChildren=true 일 때만 자식도 함께 켠다.
+ * 하천점용 WMS — 기본은 본표와 필지를 함께 켜고 물건지는 끔.
+ * includeMgj=true 일 때만 물건지도 켠다.
  */
 export function ensureUsageDataAsWmsLayersVisible(
   setVisibleLayerNames?: (updater: (prev: Set<string>) => Set<string>) => void,
-  opts?: { includeChildren?: boolean }
+  opts?: {
+    includeMgj?: boolean;
+    /** true면 본표·필지 WMS를 끔 (도형 편집 중 저장된 도형 숨김) */
+    omitMain?: boolean;
+  }
 ): void {
   if (!setVisibleLayerNames) return;
-  const mainId = USAGE_DATA_AS_WMS_LAYER_ID.toLowerCase();
-  const childIds = USAGE_DATA_AS_CHILD_WMS_LAYER_IDS.map((id) => id.toLowerCase());
-  const includeChildren = opts?.includeChildren === true;
+  /** 부서업무 진입부터 본표와 필지를 함께 표시 */
+  const mainIds = [USAGE_DATA_AS_WMS_LAYER_ID, USAGE_DATA_AS_SOLO_WMS_LAYER_ID].map((id) =>
+    id.toLowerCase()
+  );
+  const mgjId = USAGE_DATA_AS_MGJ_WMS_LAYER_ID.toLowerCase();
+  const includeMgj = opts?.includeMgj === true;
+  const omitMain = opts?.omitMain === true;
   setVisibleLayerNames((prev) => {
     const next = new Set(prev);
     let changed = false;
-    if (!next.has(mainId)) {
-      next.add(mainId);
-      changed = true;
-    }
-    if (includeChildren) {
-      for (const lid of childIds) {
-        if (!next.has(lid)) {
-          next.add(lid);
-          changed = true;
-        }
-      }
-    } else {
-      for (const lid of childIds) {
+    for (const lid of mainIds) {
+      if (omitMain) {
         if (next.delete(lid)) changed = true;
+      } else if (!next.has(lid)) {
+        next.add(lid);
+        changed = true;
       }
+    }
+    if (includeMgj) {
+      if (!next.has(mgjId)) {
+        next.add(mgjId);
+        changed = true;
+      }
+    } else if (next.delete(mgjId)) {
+      changed = true;
     }
     return changed ? next : prev;
   });

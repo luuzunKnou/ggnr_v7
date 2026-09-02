@@ -1,6 +1,8 @@
 "use client"
 
 import React, { useState, useEffect } from "react"
+import { useSession } from "next-auth/react"
+import { useLoginModal } from "@/app/login-modal-context"
 import { withBasePath, withBasePathNav } from "@/lib/basePath"
 
 interface ParcelSlide {
@@ -16,6 +18,8 @@ interface ParcelSliderProps {
 
 export function ParcelSlider({ slides }: ParcelSliderProps) {
   const [currentIndex, setCurrentIndex] = useState(0)
+  const { data: session, status } = useSession()
+  const { openLogin } = useLoginModal()
 
   const goToSlide = (index: number) => {
     setCurrentIndex(index)
@@ -127,6 +131,11 @@ export function ParcelSlider({ slides }: ParcelSliderProps) {
         type="button"
         title="바로가기"
         onClick={() => {
+          if (status === "loading") return
+          if (!session?.user) {
+            openLogin("/map")
+            return
+          }
           window.location.assign(withBasePathNav("/map"))
         }}
         className="absolute z-10 bottom-[calc(1rem+30px+0.5rem)] left-1/2 -translate-x-1/2 inline-flex cursor-pointer items-center gap-2 bg-white/10 hover:bg-white/20 backdrop-blur px-6 py-3 text-sm font-medium transition-colors text-white rounded-[5px]"

@@ -4,25 +4,14 @@
  */
 import { DEFAULT_CENTER_LAT, DEFAULT_CENTER_LON } from '../../../_mapComponents/config/mapDefaults';
 
+import { getRoadFrontageMarkerRoadTypeBadgeClass } from '../roadFrontageMarker/roadFrontageMarkerFormat';
+
 export const ROAD_FRONTAGE_BUILDING_ROAD_TYPES = ['지방도', '국도', '군도'] as const;
 export type RoadFrontageBuildingRoadType = (typeof ROAD_FRONTAGE_BUILDING_ROAD_TYPES)[number];
 
-/** 도로망도 목록과 동일 톤 — 국도·지방도·군도 뱃지 */
-export const ROAD_FRONTAGE_BUILDING_ROAD_TYPE_BADGE: Record<
-  RoadFrontageBuildingRoadType,
-  { bg: string; text: string; border: string }
-> = {
-  국도: { bg: 'bg-chart-3/15', text: 'text-chart-3', border: 'border-chart-3/40' },
-  지방도: { bg: 'bg-primary/10', text: 'text-primary', border: 'border-primary/30' },
-  군도: { bg: 'bg-chart-2/15', text: 'text-chart-2', border: 'border-chart-2/40' },
-};
-
+/** @deprecated 목록은 getRoadFrontageMarkerRoadTypeBadgeClass 사용 */
 export function roadFrontageBuildingRoadTypeBadgeClass(roadType: string): string {
-  const trimmed = String(roadType ?? '').trim();
-  const key = ROAD_FRONTAGE_BUILDING_ROAD_TYPES.find((t) => t === trimmed);
-  if (!key) return 'bg-muted text-muted-foreground border-border';
-  const badge = ROAD_FRONTAGE_BUILDING_ROAD_TYPE_BADGE[key];
-  return `${badge.bg} ${badge.text} ${badge.border}`;
+  return getRoadFrontageMarkerRoadTypeBadgeClass(roadType);
 }
 
 /** 불량 건축물 표시 — 복수 선택 */

@@ -1,5 +1,6 @@
+/* emd와 동일: 단일 규칙 + 글꼴 목록 → TextSymbolizer 3개로 펼침 (z-index 분리 시 첫 글꼴만 사용되어 궁서 폴백됨) */
 * {
-  mark: url("radiation_shelter.svg");
+  mark: url("http://127.0.0.1:8090/geoserver/www/symbol/safety/radiation_shelter.svg");
   mark-mime: "image/svg+xml";
   mark-size: [min(18, 5 + sqrt(100000 / env('wms_scale_denominator', 10000)) * 4.0)];
   mark-anchor: 0.5 0.5;

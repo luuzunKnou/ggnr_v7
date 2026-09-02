@@ -101,6 +101,14 @@ const nextConfig: NextConfig = {
     incomingRequests: { ignore: [/\/api/] },
   },
   webpack: (config, { isServer }) => {
+    // pg는 JS 드라이버만 사용. 선택 모듈 pg-native가 없어 웹팩이 매번 찾아 경고·컴파일 지연이 남
+    config.resolve.alias = {
+      ...(config.resolve.alias as Record<string, unknown>),
+      "pg-native": false,
+    };
+    config.plugins.push(
+      new webpack.IgnorePlugin({ resourceRegExp: /^pg-native$/ })
+    );
     if (!isServer) {
       config.plugins.push(
         new CopyPlugin({

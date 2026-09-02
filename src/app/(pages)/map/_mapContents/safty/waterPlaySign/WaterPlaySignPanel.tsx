@@ -1,13 +1,15 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { Loader2, MapPin, Search, X } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Search, X } from "lucide-react";
 import { fromLonLat } from "ol/proj";
 import { call } from "@/lib/api";
 import { useMapContext } from "../../../_mapComponents/MapContext";
 import { WATER_PLAY_SIGN_GEO_TABLE } from "../../../_mapComponents/layerFactory/safetydataMapLayerFactory";
 import type { WaterPlaySignListItem } from "@/service/waterPlaySignService";
 import { useWaterPlaySignMapHighlight } from "./useWaterPlaySignMapHighlight";
+import { SafetyLayerListTable } from "../SafetyLayerListTable";
+import { useSafetyLayerListColumns } from "../useSafetyLayerListColumns";
 
 type Props = {
   onClose: () => void;
@@ -21,9 +23,17 @@ export function WaterPlaySignPanel({ onClose }: Props) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [keyword, setKeyword] = useState("");
+  const [debouncedKeyword, setDebouncedKeyword] = useState("");
   const [selected, setSelected] = useState<WaterPlaySignListItem | null>(null);
+  const listScrollRef = useRef<HTMLDivElement | null>(null);
+  const { columns, columnsLoading } = useSafetyLayerListColumns("water_play_sign");
 
   useWaterPlaySignMapHighlight(mapReady, selected);
+
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedKeyword(keyword.trim()), 250);
+    return () => clearTimeout(t);
+  }, [keyword]);
 
   const fetchList = useCallback(async (kw?: string) => {
     setLoading(true);
@@ -46,8 +56,8 @@ export function WaterPlaySignPanel({ onClose }: Props) {
   }, []);
 
   useEffect(() => {
-    void fetchList();
-  }, [fetchList]);
+    void fetchList(debouncedKeyword);
+  }, [debouncedKeyword, fetchList]);
 
   useEffect(() => {
     const setVis = mapContext?.setSafetyMapLayerVisibility;
@@ -59,10 +69,6 @@ export function WaterPlaySignPanel({ onClose }: Props) {
   }, [mapContext?.setSafetyMapLayerVisibility]);
 
   const totalCount = useMemo(() => items.length, [items.length]);
-
-  const onSearch = useCallback(() => {
-    void fetchList(keyword.trim());
-  }, [fetchList, keyword]);
 
   const onClickRow = useCallback(
     (row: WaterPlaySignListItem) => {
@@ -85,91 +91,52 @@ export function WaterPlaySignPanel({ onClose }: Props) {
   );
 
   return (
-    <div className="flex flex-1 min-h-0 flex-col overflow-hidden bg-white">
-      <div className="shrink-0 border-b border-slate-200 px-4 py-3">
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0 flex-1">
-            <h2 className="text-[12px] font-semibold leading-tight text-slate-800">물놀이 표지판</h2>
-            <p className="mt-1 text-[12px] leading-snug text-muted-foreground">
-              표지판명·주소·종류 목록입니다. 행을 클릭하면 지도에서 위치를 확인합니다.
-            </p>
-            <p className="mt-1.5 text-[11px] font-medium text-primary/90">총 {totalCount}건</p>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="shrink-0 rounded p-1 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
-            title="닫기"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        </div>
-        <div className="mt-2 flex items-center gap-1.5">
+    <div className="standard-panel-root">
+      <div className="standard-panel-header">
+        <span className="standard-panel-title">물놀이 표지판</span>
+        <button
+          type="button"
+          onClick={onClose}
+          className="standard-panel-close"
+          title="닫기"
+          aria-label="닫기"
+        >
+          <X className="h-4 w-4" />
+        </button>
+      </div>
+
+      <div className="standard-filter-section">
+        <div className="standard-search-wrap">
+          <Search className="standard-search-icon" />
           <input
             type="search"
             value={keyword}
             onChange={(e) => setKeyword(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") onSearch();
-            }}
-            placeholder="표지판명·주소·종류 검색"
-            className="min-w-0 flex-1 rounded border border-slate-200 px-2 py-1.5 text-[12px]"
+            placeholder="주소·비고 검색"
+            className="standard-search-input"
           />
-          <button
-            type="button"
-            onClick={onSearch}
-            className="inline-flex items-center gap-0.5 rounded border border-slate-200 px-2 py-1.5 text-[11px] font-medium text-slate-700 hover:bg-slate-50"
-            title="검색"
-          >
-            <Search className="h-3.5 w-3.5" />
-            검색
-          </button>
         </div>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-auto bg-slate-50/70 p-3">
-        {loading ? (
-          <div className="flex items-center gap-2 rounded border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600">
-            <Loader2 className="h-4 w-4 animate-spin" />
-            목록 불러오는 중...
+      <div className="standard-list-body">
+        {error ? (
+          <div className="shrink-0 border-b border-destructive/20 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+            {error}
           </div>
-        ) : error ? (
-          <div className="rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>
-        ) : items.length === 0 ? (
-          <div className="rounded border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600">
-            표시할 물놀이 표지판이 없습니다.
-          </div>
-        ) : (
-          <ul className="space-y-0">
-            {items.map((row) => {
-              const active = selected?.id === row.id;
-              return (
-                <li key={row.id}>
-                  <button
-                    type="button"
-                    onClick={() => onClickRow(row)}
-                    className={`w-full cursor-pointer border-b border-border px-3 py-2 text-left transition-colors ${
-                      active
-                        ? "border-l-[3px] border-l-primary bg-primary/[0.11] ring-1 ring-inset ring-primary/20 hover:bg-primary/[0.14]"
-                        : "border-l-[3px] border-l-transparent hover:bg-slate-100"
-                    }`}
-                    title={`${row.signNm} — ${row.addr}`}
-                  >
-                    <p className="text-[12px] font-semibold text-slate-900 truncate">{row.signNm}</p>
-                    <p className="mt-0.5 flex items-start gap-1 text-[11px] text-slate-600">
-                      <MapPin className="mt-0.5 h-3 w-3 shrink-0" />
-                      <span className="line-clamp-2">{row.addr}</span>
-                    </p>
-                    <p className="mt-1 text-[11px] text-slate-500">
-                      {row.signType !== "-" ? row.signType : "종류 미입력"}
-                      {row.remark && row.remark !== "-" ? ` · ${row.remark}` : ""}
-                    </p>
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-        )}
+        ) : null}
+        <div ref={listScrollRef} className="standard-list-scroll">
+          <SafetyLayerListTable
+            columns={columns}
+            items={items}
+            loading={loading || columnsLoading}
+            emptyMessage="표시할 물놀이 표지판이 없습니다."
+            selectedId={selected?.id ?? null}
+            getRowId={(row) => row.id}
+            onRowClick={onClickRow}
+            rowDataAttr="data-water-play-sign-row"
+          />
+        </div>
+        <div className="standard-list-footer">{totalCount.toLocaleString()}건</div>
       </div>
     </div>
   );

@@ -250,6 +250,32 @@ export function RoadFrontageMarkerDetailPanel({
     fitMapToMarkerPoints(map, displayMarkers);
   }, [map, loading, ledgerId]);
 
+  /** 지도 레이어 클릭 → 노선 상세 + 표주 읽기 전용 모달 */
+  useEffect(() => {
+    const pending = mapContext?.roadFrontageMarkerPendingItemPick;
+    if (!pending || pending.ledgerId !== ledgerId || loading) return;
+    const markers = isEditing ? draft.markers : (saved?.markers ?? draft.markers);
+    const item = markers.find((m) => m.id === pending.markerItemId);
+    if (!item) return;
+    mapContext?.setRoadFrontageMarkerPendingItemPick?.(null);
+    setSelectedMarkerId(item.id);
+    if (item.lon != null && item.lat != null) {
+      flyToMarker(map, item);
+    }
+    if (!isEditing) {
+      setItemModal({ mode: 'view', draft: { ...item } });
+    }
+  }, [
+    mapContext?.roadFrontageMarkerPendingItemPick,
+    mapContext?.setRoadFrontageMarkerPendingItemPick,
+    ledgerId,
+    loading,
+    isEditing,
+    saved,
+    draft.markers,
+    map,
+  ]);
+
   useEffect(() => {
     if (!pointPickRef) return;
     if (!mapPickActive) {

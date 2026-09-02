@@ -461,6 +461,7 @@ function MapLayoutContent({
   const setRoadNetworkEndpointMarkers = mapContext?.setRoadNetworkEndpointMarkers
   const setRoadNetworkFocusedSitePointKey = mapContext?.setRoadNetworkFocusedSitePointKey
   const setRoadFrontageMarkerPanelOpen = mapContext?.setRoadFrontageMarkerPanelOpen
+  const setRoadFrontageBuildingPanelOpen = mapContext?.setRoadFrontageBuildingPanelOpen
   const setRoadFrontageMarkerPointPickActive = mapContext?.setRoadFrontageMarkerPointPickActive
   const setRoadFrontageMarkerDraftPoint = mapContext?.setRoadFrontageMarkerDraftPoint
   const setRiverConstructionLedgerSelectedId = mapContext?.setRiverConstructionLedgerSelectedId
@@ -1455,6 +1456,10 @@ function MapLayoutContent({
   }, [roadFrontageBuildingOpen])
 
   useEffect(() => {
+    setRoadFrontageBuildingPanelOpen?.(roadFrontageBuildingOpen)
+  }, [roadFrontageBuildingOpen, setRoadFrontageBuildingPanelOpen])
+
+  useEffect(() => {
     setRoadFrontageBuildingPanelWidth(ROAD_FRONTAGE_BUILDING_PANEL_DEFAULT_WIDTH)
   }, [])
 
@@ -1467,6 +1472,7 @@ function MapLayoutContent({
     if (!roadFrontageMarkerOpen) {
       setRoadFrontageMarkerPointPickActive?.(false)
       setRoadFrontageMarkerDraftPoint?.(null)
+      mapContext?.setRoadFrontageMarkerPendingItemPick?.(null)
       if (mapContext?.roadFrontageMarkerPointPickRef) {
         mapContext.roadFrontageMarkerPointPickRef.current = null
       }
@@ -1477,6 +1483,7 @@ function MapLayoutContent({
     setRoadFrontageMarkerPointPickActive,
     setRoadFrontageMarkerDraftPoint,
     mapContext?.roadFrontageMarkerPointPickRef,
+    mapContext?.setRoadFrontageMarkerPendingItemPick,
   ])
 
   // 점용대장(프) 더미 effects 비활성

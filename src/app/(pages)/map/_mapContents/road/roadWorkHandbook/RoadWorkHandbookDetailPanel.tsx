@@ -28,7 +28,7 @@ export function RoadWorkHandbookDetailPanel({ selection, searchKeyword, onClose 
   return (
     <div className="flex h-full min-h-0 flex-col bg-background">
       <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border px-3 py-1.5">
-        <span className="min-w-0 truncate text-sm font-semibold text-foreground">{title}</span>
+        <span className="min-w-0 truncate text-[12px] font-semibold text-foreground">{title}</span>
         <button
           type="button"
           onClick={onClose}

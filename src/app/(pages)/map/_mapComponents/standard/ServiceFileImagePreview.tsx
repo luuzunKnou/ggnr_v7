@@ -18,6 +18,7 @@ import {
   Printer,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { zoomPreviewAtPointer } from './previewZoomAtCursor';
 import { ServiceFilePdfPreviewStage } from './ServiceFilePdfPreviewStage';
 
 export type ServiceFilePreviewItem = {
@@ -38,7 +39,7 @@ type Props = {
 
 const MIN_SCALE = 0.25;
 const MAX_SCALE = 5;
-const ZOOM_STEP_WHEEL = 0.12;
+const ZOOM_STEP_WHEEL = 0.18;
 const ZOOM_STEP_BUTTON = 0.35;
 
 function clamp(n: number, min: number, max: number): number {
@@ -245,10 +246,12 @@ export function ServiceFileImagePreview({ items, initialIndex, onClose }: Props)
   const draggingRef = useRef(false);
   const lastPointerRef = useRef({ x: 0, y: 0 });
   const wheelTargetRef = useRef<HTMLDivElement>(null);
-  /** 휠로 PDF 페이지 넘길 때 최신 index/items/pdfNumPages 참조 */
-  const wheelNavRef = useRef({ index: 0, items, pdfNumPages: 1 });
-  wheelNavRef.current = { index, items, pdfNumPages };
-  const lastPdfWheelNavAtRef = useRef(0);
+  const scaleRef = useRef(1);
+  scaleRef.current = scale;
+  const panRef = useRef(pan);
+  panRef.current = pan;
+  const rotationRef = useRef(rotation);
+  rotationRef.current = rotation;
   const attachActionBusyRef = useRef(false);
   const [attachBusy, setAttachBusy] = useState<'download' | 'print' | null>(null);
 
@@ -257,6 +260,28 @@ export function ServiceFileImagePreview({ items, initialIndex, onClose }: Props)
   const setPdfNumPagesStable = useCallback((n: number) => {
     setPdfNumPages(Math.max(1, n));
   }, []);
+
+  const applyZoomStep = useCallback((scaleDelta: number, pointer: { x: number; y: number } | null) => {
+    const el = wheelTargetRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    const result = zoomPreviewAtPointer(
+      panRef.current,
+      pointer,
+      { width: rect.width, height: rect.height },
+      scaleRef.current,
+      scaleDelta,
+      MIN_SCALE,
+      MAX_SCALE,
+      rotationRef.current
+    );
+    if (!result) return;
+    setPan(result.pan);
+    setScale(result.scale);
+  }, []);
+
+  const applyZoomStepRef = useRef(applyZoomStep);
+  applyZoomStepRef.current = applyZoomStep;
 
   useEffect(() => {
     setMounted(true);
@@ -285,20 +310,29 @@ export function ServiceFileImagePreview({ items, initialIndex, onClose }: Props)
       const cur = items[index];
       const isPdf = cur?.kind === 'pdf';
 
-      if (isPdf && pdfNumPages > 1) {
-        if (e.key === 'PageDown' || e.key === 'ArrowDown') {
+      const pdfPageNav = isPdf && pdfNumPages > 1;
+      if (pdfPageNav) {
+        if (
+          e.key === 'PageDown' ||
+          e.key === 'ArrowDown' ||
+          e.key === 'ArrowRight'
+        ) {
           e.preventDefault();
           setPdfPage((p) => Math.min(pdfNumPages, p + 1));
           return;
         }
-        if (e.key === 'PageUp' || e.key === 'ArrowUp') {
+        if (
+          e.key === 'PageUp' ||
+          e.key === 'ArrowUp' ||
+          e.key === 'ArrowLeft'
+        ) {
           e.preventDefault();
           setPdfPage((p) => Math.max(1, p - 1));
           return;
         }
       }
 
-      if (items.length > 1) {
+      if (items.length > 1 && !pdfPageNav) {
         if (e.key === 'ArrowLeft') {
           e.preventDefault();
           setIndex((i) => (i - 1 + items.length) % items.length);
@@ -312,11 +346,11 @@ export function ServiceFileImagePreview({ items, initialIndex, onClose }: Props)
       }
       if (e.key === '+' || e.key === '=') {
         e.preventDefault();
-        setScale((s) => clamp(s + ZOOM_STEP_BUTTON, MIN_SCALE, MAX_SCALE));
+        applyZoomStepRef.current(ZOOM_STEP_BUTTON, null);
       }
       if (e.key === '-' || e.key === '_') {
         e.preventDefault();
-        setScale((s) => clamp(s - ZOOM_STEP_BUTTON, MIN_SCALE, MAX_SCALE));
+        applyZoomStepRef.current(-ZOOM_STEP_BUTTON, null);
       }
     };
     window.addEventListener('keydown', onKey);
@@ -343,12 +377,12 @@ export function ServiceFileImagePreview({ items, initialIndex, onClose }: Props)
   }, [pdfNumPages]);
 
   const zoomIn = useCallback(() => {
-    setScale((s) => clamp(s + ZOOM_STEP_BUTTON, MIN_SCALE, MAX_SCALE));
-  }, []);
+    applyZoomStep(ZOOM_STEP_BUTTON, null);
+  }, [applyZoomStep]);
 
   const zoomOut = useCallback(() => {
-    setScale((s) => clamp(s - ZOOM_STEP_BUTTON, MIN_SCALE, MAX_SCALE));
-  }, []);
+    applyZoomStep(-ZOOM_STEP_BUTTON, null);
+  }, [applyZoomStep]);
 
   const rotateCw = useCallback(() => {
     setRotation((r) => (r + 90) % 360);
@@ -404,28 +438,13 @@ export function ServiceFileImagePreview({ items, initialIndex, onClose }: Props)
     const el = wheelTargetRef.current;
     if (!el) return;
     const onWheelNative = (e: WheelEvent) => {
-      const { index: idx, items: list, pdfNumPages: totalPages } = wheelNavRef.current;
-      const cur = list[idx];
-      const isPdfMulti = cur?.kind === 'pdf' && totalPages > 1;
-      const zoomWithWheel = e.ctrlKey || e.metaKey;
-
-      if (isPdfMulti && !zoomWithWheel) {
-        e.preventDefault();
-        if (Math.abs(e.deltaY) < 2) return;
-        const now = performance.now();
-        if (now - lastPdfWheelNavAtRef.current < 120) return;
-        lastPdfWheelNavAtRef.current = now;
-        if (e.deltaY > 0) {
-          setPdfPage((p) => Math.min(wheelNavRef.current.pdfNumPages, p + 1));
-        } else {
-          setPdfPage((p) => Math.max(1, p - 1));
-        }
-        return;
-      }
-
       e.preventDefault();
+      const rect = el.getBoundingClientRect();
       const delta = e.deltaY > 0 ? -ZOOM_STEP_WHEEL : ZOOM_STEP_WHEEL;
-      setScale((s) => clamp(s + delta, MIN_SCALE, MAX_SCALE));
+      applyZoomStepRef.current(delta, {
+        x: e.clientX - rect.left,
+        y: e.clientY - rect.top,
+      });
     };
     el.addEventListener('wheel', onWheelNative, { passive: false });
     return () => el.removeEventListener('wheel', onWheelNative);
@@ -649,12 +668,10 @@ export function ServiceFileImagePreview({ items, initialIndex, onClose }: Props)
         </button>
       </div>
       <p className="shrink-0 px-3 pb-2 text-center text-[10px] text-white/45">
-        {canPdfPage
-          ? '휠로 이전·다음 페이지 · Ctrl+휠 확대·축소'
-          : '휠로 확대·축소'}
+        휠로 확대·축소
         {' · 확대 시 끌어서 이동 · 더블클릭 시 초기화'}
-        {canNav ? ' · ← → 이전·다음 파일' : ''}
-        {canPdfPage ? ' · PDF ↑↓ 또는 Page Up / Down' : ''}
+        {canNav && !canPdfPage ? ' · ← → 이전·다음 파일' : ''}
+        {canPdfPage ? ' · 방향키로 이전·다음 페이지' : ''}
       </p>
     </div>,
     document.body

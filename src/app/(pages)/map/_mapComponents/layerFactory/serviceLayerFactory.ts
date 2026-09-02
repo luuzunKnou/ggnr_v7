@@ -8,7 +8,6 @@ import {
   markLayerGeomStack,
   type LayerDbGeometryKind,
 } from '@/lib/mapLayerGeometryOrder';
-import { resolveOccupationDeptWmsStyleName } from '@/lib/occupationDeptWmsStyle';
 import { getGeoServerBase } from '@/lib/geoserverUrl';
 import { withBasePath } from '@/lib/basePath';
 
@@ -304,7 +303,7 @@ export function refreshServiceWmsLayer(map: OLMap | null | undefined): void {
  * occupationDeptPanelOpen 변경 시 serviceLayer WMS 파라미터를 자동 동기화하는 훅.
  * spatialFilterWkt(5181 WKT)가 있으면 각 레이어 CQL에 INTERSECTS(geom, wkt)를 추가해 도형 내 데이터만 표시.
  * serviceWmsCqlByLayer는 레이어별 추가 속성 CQL(기본계획도 선택 하천 등).
- * occupationDeptPanelOpen이면 점용 부서업무 레이어에 울진 팔레트 스타일을 적용.
+ * 부서업무 점용은 본표·필지 실레이어(테이블명 스타일)만 켠다.
  * layerGeometryTypes가 있으면 WMS LAYERS 순서를 면→선→점→심볼(아래→위)으로 맞춘다.
  */
 export function useServiceLayerSync(
@@ -318,8 +317,8 @@ export function useServiceLayerSync(
   hiddenFeaturesByLayer?: Map<string, HiddenWmsFeatureKey[]>,
   /** 레이어별 추가 CQL (define_table_name → CQL). null이면 없음 */
   serviceWmsCqlByLayer?: Record<string, string> | null,
-  /** 공통 점용 부서업무 패널 열림 — 울진과 동일 팔레트 스타일 사용 */
-  occupationDeptPanelOpen?: boolean,
+  /** 더 이상 부서업무 전용 스타일을 쓰지 않음. 호출부 호환용 */
+  _occupationDeptPanelOpen?: boolean,
   /**
    * WMS에서 본표보다 아래에 깔 레이어 id
    * (부서업무 본표는 위, 패널에서 켠 점사용료 등은 아래)
@@ -333,7 +332,6 @@ export function useServiceLayerSync(
   const extraCqlRef = useRef(serviceWmsCqlByLayer);
   extraCqlRef.current = serviceWmsCqlByLayer;
   const lastSyncKeyRef = useRef<string | null>(null);
-  const deptOpen = occupationDeptPanelOpen === true;
   const forceBottomKey = Array.from(wmsForceBottomLayerNames ?? [])
     .map((n) => String(n).trim().toLowerCase())
     .filter(Boolean)
@@ -385,10 +383,7 @@ export function useServiceLayerSync(
       wmsForceBottomLayerNames
     );
     const layersParam = names.map((n) => `${WORKSPACE}:${n}`).join(',');
-    // 부서업무 점용: 울진 usage_data_as* 스타일 재사용 / 데이터조회: 테이블명(기본 SLD)
-    const stylesParam = names
-      .map((n) => resolveOccupationDeptWmsStyleName(n, deptOpen) ?? n)
-      .join(',');
+    const stylesParam = names.join(',');
     const filters = filterRef.current;
     const wkt = typeof spatialFilterWkt === 'string' && spatialFilterWkt.trim() ? spatialFilterWkt.trim() : null;
     const hidden = hiddenRef.current;
@@ -450,7 +445,6 @@ export function useServiceLayerSync(
     layerGeometryTypes,
     hiddenFeaturesByLayer,
     serviceWmsCqlByLayer,
-    deptOpen,
     forceBottomKey,
     wmsForceBottomLayerNames,
   ]);

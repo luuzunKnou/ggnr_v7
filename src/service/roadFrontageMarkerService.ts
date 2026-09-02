@@ -18,6 +18,78 @@ import {
   splitInstallLocationAndJimok,
 } from '@/app/(pages)/map/_mapContents/road/roadFrontageMarker/roadFrontageMarkerAddress';
 import { getJijukGeomByPnu, getPnuFromAddress } from '@/service/excelUploadService';
+import {
+  applyDefaultStyleToLayer,
+  createOrUpdateGeoServerLayer,
+  getGeoServerLayerList,
+  getGeoServerStyleList,
+  setLayerDefaultStyle,
+} from '@/service/devTestService';
+
+const MARKER_ITEM_LAYER_ID = 'road_frontage_marker_item';
+
+/**
+ * 지도 레이어 목록에서 표주 점을 그리려면 GeoServer 발행이 필요.
+ * 없을 때만 만든다.
+ */
+export async function ensureWmsLayer(): Promise<{
+  success: boolean;
+  layerCreated?: boolean;
+  styleCreated?: boolean;
+  error?: string;
+}> {
+  let layerCreated = false;
+  let styleCreated = false;
+
+  try {
+    const listRes = await getGeoServerLayerList();
+    const layerNames = (listRes.layers ?? []).map((n) => String(n).toLowerCase());
+    if (!layerNames.includes(MARKER_ITEM_LAYER_ID)) {
+      const layerRes = await createOrUpdateGeoServerLayer({ layerName: MARKER_ITEM_LAYER_ID });
+      if (!layerRes.success) {
+        return { success: false, error: layerRes.error ?? 'GeoServer 레이어 생성 실패' };
+      }
+      layerCreated = true;
+    }
+
+    const styleList = await getGeoServerStyleList();
+    const hasStyle = (styleList.styles ?? []).some(
+      (s) => String(s?.name ?? '').toLowerCase() === MARKER_ITEM_LAYER_ID
+    );
+    if (!hasStyle) {
+      const styleRes = await applyDefaultStyleToLayer({ layerName: MARKER_ITEM_LAYER_ID });
+      if (!styleRes.success) {
+        return { success: false, layerCreated, error: styleRes.error ?? 'GeoServer 스타일 생성 실패' };
+      }
+      styleCreated = true;
+    } else if (layerCreated) {
+      await setLayerDefaultStyle({ layerName: MARKER_ITEM_LAYER_ID, styleName: MARKER_ITEM_LAYER_ID });
+    }
+
+    return { success: true, layerCreated, styleCreated };
+  } catch (e: unknown) {
+    return {
+      success: false,
+      layerCreated,
+      styleCreated,
+      error: e instanceof Error ? e.message : String(e),
+    };
+  }
+}
+
+let wmsEnsureOnce: Promise<void> | null = null;
+function ensureWmsLayerOnce(): Promise<void> {
+  if (!wmsEnsureOnce) {
+    wmsEnsureOnce = ensureWmsLayer()
+      .then((res) => {
+        if (!res.success) wmsEnsureOnce = null;
+      })
+      .catch(() => {
+        wmsEnsureOnce = null;
+      });
+  }
+  return wmsEnsureOnce;
+}
 
 function dbCause(e: unknown): Error {
   let cur: unknown = e;
@@ -412,6 +484,7 @@ export async function list(params: {
   sorts?: Array<{ key?: string; dir?: string }>;
 } = {}) {
   try {
+    void ensureWmsLayerOnce();
     const keyword = emptyToNull(params?.keyword);
     const roadType = emptyToNull(params?.roadType);
     const sortSpecs = parseRoadFrontageMarkerListSortSpecs(params);
@@ -641,4 +714,40 @@ export async function fillMissingInstallLocationAndGeom(params?: {
   }
 
   return { updated, withGeom, failed };
+}
+
+export async function getExtent3857ByLedgerId(params: {
+  id?: string | number;
+}): Promise<{ extent3857: [number, number, number, number] | null; error?: string }> {
+  const parentId = parseId(params?.id);
+  if (parentId == null) return { extent3857: null, error: '키가 필요합니다.' };
+  try {
+    const rows = await db.execute(
+      sql.raw(`
+        SELECT ST_XMin(ext)::float8 AS xmin, ST_YMin(ext)::float8 AS ymin,
+               ST_XMax(ext)::float8 AS xmax, ST_YMax(ext)::float8 AS ymax
+        FROM (
+          SELECT ST_Extent(ST_Transform(i.geom, 3857))::box2d AS ext
+          FROM layer.road_frontage_marker_item i
+          WHERE i.parent_id = ${parentId}
+            AND i.geom IS NOT NULL
+        ) s
+        WHERE ext IS NOT NULL
+      `)
+    );
+    const row = (rows as { rows?: Record<string, unknown>[] }).rows?.[0];
+    const xmin = Number(row?.xmin);
+    const ymin = Number(row?.ymin);
+    const xmax = Number(row?.xmax);
+    const ymax = Number(row?.ymax);
+    if (![xmin, ymin, xmax, ymax].every(Number.isFinite)) {
+      return { extent3857: null, error: '위치(도형)를 찾을 수 없습니다.' };
+    }
+    return { extent3857: [xmin, ymin, xmax, ymax] };
+  } catch (e: unknown) {
+    return {
+      extent3857: null,
+      error: e instanceof Error ? e.message : '위치(도형)를 찾을 수 없습니다.',
+    };
+  }
 }

@@ -1,7 +1,7 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
-import { Search, X } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { ArrowDown, ArrowUp, ArrowUpDown, Search, X } from 'lucide-react'
 import { call } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import {
@@ -11,6 +11,12 @@ import {
 import { useMapContext } from '../../_mapComponents/MapContext'
 import { useGroundwaterPermitMapHighlight } from './useGroundwaterPermitMapHighlight'
 import { GROUNDWATER_PERMIT_WMS_LAYER_ID } from './groundwaterPermitLayerId'
+import {
+  initialGroundwaterPermitSortDir,
+  sortGroundwaterPermitListRows,
+  type GroundwaterPermitListSortKey,
+  type GroundwaterPermitListSortSpec,
+} from './groundwaterPermitListSort'
 
 type ListRow = {
   id: string
@@ -21,6 +27,20 @@ type ListRow = {
   statusCode: GroundwaterPermitStatusCode
   statusLabel: string
 }
+
+type SortDir = GroundwaterPermitListSortSpec['dir']
+
+const SORT_COLUMNS: {
+  key: GroundwaterPermitListSortKey
+  label: string
+  align?: 'left' | 'center'
+}[] = [
+  { key: 'nameOrTrade', label: '상호또는성명' },
+  { key: 'developLocation', label: '개발위치' },
+  { key: 'permitStartDate', label: '허가유효시작일' },
+  { key: 'permitEndDate', label: '허가유효종료일' },
+  { key: 'statusLabel', label: '상태', align: 'center' },
+]
 
 type Props = {
   onClose: () => void
@@ -38,6 +58,7 @@ export function GroundwaterPermitListPanel({
 
   const [keyword, setKeyword] = useState('')
   const [debouncedKeyword, setDebouncedKeyword] = useState('')
+  const [sorts, setSorts] = useState<GroundwaterPermitListSortSpec[]>([])
   const [rows, setRows] = useState<ListRow[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -100,14 +121,34 @@ export function GroundwaterPermitListPanel({
     }
   }, [debouncedKeyword])
 
+  const sortedRows = useMemo(
+    () => sortGroundwaterPermitListRows(rows, sorts),
+    [rows, sorts]
+  )
+
+  const toggleSort = (key: GroundwaterPermitListSortKey) => {
+    const initial = initialGroundwaterPermitSortDir(key)
+    setSorts((prev) => {
+      const idx = prev.findIndex((s) => s.key === key)
+      if (idx < 0) return [...prev, { key, dir: initial }]
+      const cur = prev[idx]
+      if (cur.dir === initial) {
+        const next = [...prev]
+        next[idx] = { key, dir: initial === 'asc' ? 'desc' : 'asc' }
+        return next
+      }
+      return prev.filter((s) => s.key !== key)
+    })
+  }
+
   return (
-    <div className="flex h-full min-h-0 flex-col bg-background">
-      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border px-3 py-1.5">
-        <span className="text-sm font-semibold text-foreground">지하수 개발허가</span>
+    <div className="standard-panel-root">
+      <div className="standard-panel-header">
+        <span className="standard-panel-title">지하수 개발허가</span>
         <button
           type="button"
           onClick={handleClose}
-          className="shrink-0 rounded p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+          className="standard-panel-close"
           title="닫기"
           aria-label="닫기"
         >
@@ -115,109 +156,125 @@ export function GroundwaterPermitListPanel({
         </button>
       </div>
 
-      <div className="shrink-0 border-b border-border px-3 py-2">
-        <div className="relative">
-          <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+      <div className="standard-filter-section">
+        <div className="standard-search-wrap">
+          <Search className="standard-search-icon" />
           <input
             type="search"
             value={keyword}
             onChange={(e) => setKeyword(e.target.value)}
             placeholder="검색 (상호, 위치, 상태…)"
-            className="w-full rounded-md border border-border bg-background py-1.5 pl-8 pr-3 text-sm text-foreground outline-none ring-offset-2 placeholder:text-muted-foreground focus:border-border focus:ring-2 focus:ring-border"
+            className="standard-search-input"
           />
         </div>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-auto scrollbar-thin">
-        {error && (
+      <div className="standard-list-body">
+        {error ? (
           <div className="shrink-0 border-b border-destructive/20 bg-destructive/10 px-3 py-2 text-xs text-destructive">
             {error}
           </div>
-        )}
-        <table className="w-full min-w-[640px] border-collapse text-left text-xs">
-          <thead className="sticky top-0 z-[1] bg-muted shadow-[0_1px_0_0_hsl(var(--border))]">
-            <tr>
-              <th className="min-w-[110px] border-b border-border px-2 py-2 font-semibold text-foreground/90">
-                상호또는성명
-              </th>
-              <th className="min-w-[160px] border-b border-border px-2 py-2 font-semibold text-foreground/90">
-                개발위치
-              </th>
-              <th className="whitespace-nowrap border-b border-border px-2 py-2 font-semibold text-foreground/90">
-                허가유효시작일
-              </th>
-              <th className="whitespace-nowrap border-b border-border px-2 py-2 font-semibold text-foreground/90">
-                허가유효종료일
-              </th>
-              <th className="whitespace-nowrap border-b border-border px-2 py-2 font-semibold text-foreground/90">
-                상태
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {loading && rows.length === 0 ? (
+        ) : null}
+        <div className="standard-list-scroll">
+          <table className="standard-list-table min-w-[640px]">
+            <thead className="standard-table-thead">
               <tr>
-                <td colSpan={5} className="px-3 py-8 text-center text-muted-foreground">
-                  불러오는 중…
-                </td>
-              </tr>
-            ) : rows.length === 0 ? (
-              <tr>
-                <td colSpan={5} className="px-3 py-8 text-center text-muted-foreground">
-                  {error ? '데이터를 표시할 수 없습니다.' : '조회된 항목이 없습니다.'}
-                </td>
-              </tr>
-            ) : (
-              rows.map((row) => {
-                const isSelected = selectedDetailId === row.id
-                return (
-                  <tr
-                    key={row.id}
-                    role="button"
-                    tabIndex={0}
-                    onClick={() => handleRowSelect(row.id)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' || e.key === ' ') {
-                        e.preventDefault()
-                        handleRowSelect(row.id)
-                      }
-                    }}
-                    className={cn(
-                      'cursor-pointer border-b border-border transition-colors',
-                      isSelected
-                        ? 'border-l-[3px] border-l-primary bg-primary/[0.11] ring-1 ring-inset ring-primary/20 hover:bg-primary/[0.14]'
-                        : 'hover:bg-muted/50'
-                    )}
-                  >
-                    <td className="px-2 py-2 font-medium text-foreground">{row.nameOrTrade || '—'}</td>
-                    <td
-                      className="max-w-[220px] truncate px-2 py-2 text-foreground/90"
-                      title={row.developLocation}
+                {SORT_COLUMNS.map((col) => {
+                  const sortIdx = sorts.findIndex((s) => s.key === col.key)
+                  const active = sortIdx >= 0
+                  const sortDir: SortDir | null = active ? sorts[sortIdx].dir : null
+                  const Icon = !active ? ArrowUpDown : sortDir === 'asc' ? ArrowUp : ArrowDown
+                  const initial = initialGroundwaterPermitSortDir(col.key)
+                  const alignRight = col.align === 'center'
+                  return (
+                    <th
+                      key={col.key}
+                      className={cn(
+                        'standard-table-th',
+                        alignRight ? 'standard-table-th-center' : 'standard-table-th-left'
+                      )}
                     >
-                      {row.developLocation || '—'}
-                    </td>
-                    <td className="whitespace-nowrap px-2 py-2 tabular-nums text-foreground/90">
-                      {row.permitStartDate || '—'}
-                    </td>
-                    <td className="whitespace-nowrap px-2 py-2 tabular-nums text-foreground/90">
-                      {row.permitEndDate || '—'}
-                    </td>
-                    <td className="px-2 py-2">
-                      <span
+                      <button
+                        type="button"
+                        onClick={() => toggleSort(col.key)}
                         className={cn(
-                          'inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ring-1 ring-inset',
-                          groundwaterPermitStatusClass(row.statusCode)
+                          'standard-sort-button',
+                          alignRight ? 'standard-sort-button-center' : 'standard-sort-button-left',
+                          active && 'standard-sort-button-active'
                         )}
+                        title={
+                          !active
+                            ? `${col.label} 정렬 추가`
+                            : sortDir === initial
+                              ? `${col.label} 방향 바꾸기`
+                              : `${col.label} 정렬 해제`
+                        }
                       >
-                        {row.statusLabel}
-                      </span>
-                    </td>
-                  </tr>
-                )
-              })
-            )}
-          </tbody>
-        </table>
+                        <span className="truncate">{col.label}</span>
+                        <Icon className="h-3 w-3 shrink-0 opacity-70" aria-hidden />
+                      </button>
+                    </th>
+                  )
+                })}
+              </tr>
+            </thead>
+            <tbody>
+              {loading && sortedRows.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="standard-table-empty">
+                    불러오는 중…
+                  </td>
+                </tr>
+              ) : sortedRows.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="standard-table-empty">
+                    {error ? '데이터를 표시할 수 없습니다.' : '조회된 항목이 없습니다.'}
+                  </td>
+                </tr>
+              ) : (
+                sortedRows.map((row) => {
+                  const isSelected = selectedDetailId === row.id
+                  return (
+                    <tr
+                      key={row.id}
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => handleRowSelect(row.id)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault()
+                          handleRowSelect(row.id)
+                        }
+                      }}
+                      className={cn(
+                        'standard-list-row',
+                        isSelected && 'standard-list-row-selected'
+                      )}
+                    >
+                      <td className="standard-table-td-text font-medium">{row.nameOrTrade || '—'}</td>
+                      <td className="standard-table-td-text max-w-[220px] truncate" title={row.developLocation}>
+                        {row.developLocation || '—'}
+                      </td>
+                      <td className="standard-table-td-date">{row.permitStartDate || '—'}</td>
+                      <td className="standard-table-td-date">{row.permitEndDate || '—'}</td>
+                      <td className="standard-table-td-compact text-center">
+                        <span
+                          className={cn(
+                            'inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ring-1 ring-inset',
+                            groundwaterPermitStatusClass(row.statusCode)
+                          )}
+                        >
+                          {row.statusLabel}
+                        </span>
+                      </td>
+                    </tr>
+                  )
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+        <div className="standard-list-footer">{sortedRows.length.toLocaleString()}건</div>
       </div>
     </div>
   )

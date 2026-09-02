@@ -225,6 +225,40 @@ export function RiverBasicPlanDetailPanel({ tab, riverName, onClose }: Props) {
   const [reportPdfLoading, setReportPdfLoading] = useState(false);
   const reportPdfBusyRef = useRef(false);
 
+  const reportOgcFid = useMemo(() => {
+    const rawFid = detail?.ogc_fid;
+    if (typeof rawFid === "number" && Number.isFinite(rawFid)) return rawFid;
+    if (typeof rawFid === "string" && rawFid.trim() !== "") return rawFid.trim();
+    return null;
+  }, [detail?.ogc_fid]);
+
+  const reportFileQuery = useServiceFileData({
+    serEng: SER_FILE_ENG.riverBasicPlan,
+    enabled: selected != null && reportOgcFid != null && !loadingDetail,
+    layerSegment: planAsLayer,
+    keyValue: reportOgcFid,
+    includeMeta: false,
+  });
+
+  const reportPdfItems = useMemo((): ServiceFilePdfPreviewItem[] => {
+    if (reportOgcFid == null) return [];
+    return reportFileQuery.files
+      .filter((f) => isPdfServiceFileName(f.name))
+      .map((f) => ({
+        url: serviceFileDataDownloadUrl(SER_FILE_ENG.riverBasicPlan, planAsLayer, reportOgcFid, f.name),
+        fileName: f.name,
+      }));
+  }, [reportFileQuery.files, planAsLayer, reportOgcFid]);
+
+  const hasReportPdf = reportPdfItems.length > 0;
+  const reportButtonDisabled =
+    !selected ||
+    loadingDetail ||
+    reportOgcFid == null ||
+    reportFileQuery.loading ||
+    !hasReportPdf ||
+    reportPdfLoading;
+
   // 데이터 이력관리에 조회 저장을 위해 추가
   useEffect(() => {
     const name = String(riverName ?? "").trim();
@@ -760,61 +794,19 @@ export function RiverBasicPlanDetailPanel({ tab, riverName, onClose }: Props) {
   }, [mapContext?.riverBasicPlanMapDrawingPreviewControllerRef]);
 
   const openReportPdfViewer = useCallback(async () => {
-    if (reportPdfBusyRef.current) return;
-    if (!selected) {
-      window.alert("기본계획을 선택하세요.");
-      return;
-    }
-    if (loadingDetail) {
-      window.alert("기본계획 정보를 불러오는 중입니다. 잠시 후 다시 시도하세요.");
-      return;
-    }
-    const rawFid = detail?.ogc_fid;
-    const ogcFid =
-      typeof rawFid === "number" && Number.isFinite(rawFid)
-        ? rawFid
-        : typeof rawFid === "string" && rawFid.trim() !== ""
-          ? rawFid.trim()
-          : null;
-    if (ogcFid == null) {
-      window.alert("기본계획을 선택하세요.");
-      return;
-    }
+    if (reportPdfBusyRef.current || reportButtonDisabled) return;
+    if (!selected || reportOgcFid == null || reportPdfItems.length === 0) return;
     reportPdfBusyRef.current = true;
     setReportPdfLoading(true);
     try {
-      const qs = new URLSearchParams({
-        serEng: SER_FILE_ENG.riverBasicPlan,
-        layer: planAsLayer,
-        key: String(ogcFid),
-      });
-      const res = await appFetch(`/api/service-files?${qs.toString()}`, { credentials: "include" });
-      if (!res.ok) {
-        const j = (await res.json().catch(() => ({}))) as { error?: string };
-        throw new Error(typeof j.error === "string" ? j.error : "목록을 불러오지 못했습니다.");
-      }
-      const data = (await res.json()) as { files?: { name: string }[] };
-      const files = Array.isArray(data.files) ? data.files : [];
-      const items: ServiceFilePdfPreviewItem[] = files
-        .filter((f) => isPdfServiceFileName(f.name))
-        .map((f) => ({
-          url: serviceFileDataDownloadUrl(SER_FILE_ENG.riverBasicPlan, planAsLayer, ogcFid, f.name),
-          fileName: f.name,
-        }));
-      if (items.length === 0) {
-        window.alert("보고서 PDF가 없습니다.");
-        return;
-      }
       setIndexAttachmentPreview(null);
       setRelatedDrawingPreview(null);
-      setReportPdfPreview({ items, initialIndex: 0 });
-    } catch (e) {
-      window.alert(e instanceof Error ? e.message : "보고서를 불러오지 못했습니다.");
+      setReportPdfPreview({ items: reportPdfItems, initialIndex: 0 });
     } finally {
       reportPdfBusyRef.current = false;
       setReportPdfLoading(false);
     }
-  }, [selected, loadingDetail, detail?.ogc_fid, planAsLayer]);
+  }, [selected, reportOgcFid, reportPdfItems, reportButtonDisabled]);
 
   const detailEntries = useMemo(() => {
     const row = detail ?? {};
@@ -1012,13 +1004,20 @@ export function RiverBasicPlanDetailPanel({ tab, riverName, onClose }: Props) {
                 ? visibleLayerNames.has(layerName)
                 : false;
             const reportActive = isReport && reportPdfPreview != null;
+            const reportBusy = isReport && (reportFileQuery.loading || reportPdfLoading);
             return (
               <button
                 key={label}
                 type="button"
                 title={
                   isReport
-                    ? "보고서 PDF 보기"
+                    ? reportFileQuery.loading
+                      ? "보고서 확인 중"
+                      : !selected || loadingDetail || reportOgcFid == null
+                        ? "기본계획을 선택하세요"
+                        : hasReportPdf
+                          ? "보고서 PDF 보기"
+                          : "보고서 PDF 없음"
                     : layerName
                       ? isStructureGroup
                         ? "구조물도 분할 레이어만 한꺼번에 켜기/끄기(부모 WMS 제외)"
@@ -1033,13 +1032,15 @@ export function RiverBasicPlanDetailPanel({ tab, riverName, onClose }: Props) {
                   if (isStructureGroup) toggleStructureLayerGroup();
                   else if (layerName) toggleServiceLayer(layerName);
                 }}
-                disabled={isReport ? undefined : !layerName}
+                disabled={isReport ? reportButtonDisabled : !layerName}
                 className={cn(
                   "h-7 text-[11px] rounded border flex-1 min-w-0 whitespace-nowrap inline-flex items-center justify-center gap-1",
                   isReport
-                    ? reportActive
-                      ? "border-primary/45 bg-primary/10 text-foreground hover:bg-primary/15"
-                      : "border-border bg-muted/50 text-foreground/90 hover:bg-muted"
+                    ? reportButtonDisabled
+                      ? "border-border bg-muted/50 text-muted-foreground opacity-50 cursor-not-allowed"
+                      : reportActive
+                        ? "border-primary/45 bg-primary/10 text-foreground hover:bg-primary/15"
+                        : "border-border bg-muted/50 text-foreground/90 hover:bg-muted"
                     : layerName
                       ? layerOn
                         ? "border-primary/45 bg-primary/10 text-foreground hover:bg-primary/15"
@@ -1047,7 +1048,7 @@ export function RiverBasicPlanDetailPanel({ tab, riverName, onClose }: Props) {
                       : "border-border bg-muted/50 text-foreground/90 hover:bg-muted opacity-80",
                 )}
               >
-                {isReport && reportPdfLoading ? (
+                {reportBusy ? (
                   <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" aria-hidden />
                 ) : (
                   <Icon className="h-3.5 w-3.5 shrink-0" />
