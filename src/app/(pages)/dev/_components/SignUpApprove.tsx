@@ -6,7 +6,7 @@ import { Input } from '@/app/shadcnComponents/ui/input';
 import { cn } from '@/lib/utils';
 import { call } from '@/lib/api';
 import { RefreshCw } from 'lucide-react';
-import { USER_MANAGER_UI_STYLE } from './userManagerUiVariants';
+import { USER_MANAGER_UI_STYLE, USER_MGMT_HISTORY_TABLE } from './userManagerUiVariants';
 
 type SignUpRow = {
   usrId: string;
@@ -68,8 +68,8 @@ const FILTERS: { id: StatusFilter; label: string }[] = [
 ];
 
 const uiStyle = USER_MANAGER_UI_STYLE;
-const tableRowClass =
-  'border-b border-border hover:bg-muted/50 transition-colors [&>td]:border-r [&>td]:border-border/60 [&>td:last-child]:border-r-0';
+const approveTable = USER_MGMT_HISTORY_TABLE;
+const tableRowClass = approveTable.tableRow;
 
 export function SignUpApprove() {
   const [rows, setRows] = useState<SignUpRow[]>([]);
@@ -244,30 +244,30 @@ export function SignUpApprove() {
       <div className={uiStyle.tableWrap}>
         <div className={uiStyle.tableScroll}>
         <table className={cn(uiStyle.table, 'min-w-[72rem] table-fixed')}>
-          <thead className={cn('sticky top-0', uiStyle.tableHead)}>
+          <thead className={cn('sticky top-0', approveTable.tableHead)}>
             <tr>
-              <th className={cn('w-20 text-left', uiStyle.tableCell)}>상태</th>
-              <th className={cn('w-24 text-left', uiStyle.tableCell)}>아이디</th>
-              <th className={cn('w-20 text-left', uiStyle.tableCell)}>이름</th>
-              <th className={cn('w-36 text-left', uiStyle.tableCell)}>부서/팀</th>
-              <th className={cn('w-28 text-left', uiStyle.tableCell)}>연락처</th>
-              <th className={cn('w-40 text-left', uiStyle.tableCell)}>이메일</th>
-              <th className={cn('w-40 text-left', uiStyle.tableCell)}>비고</th>
-              <th className={cn('w-36 text-left', uiStyle.tableCell)}>신청시간</th>
-              <th className={cn('w-40 text-left', uiStyle.tableCell)}>반려사유</th>
-              <th className={cn('w-[8.5rem] text-left', uiStyle.tableCell)}>처리</th>
+              <th className={cn('w-20 text-left', approveTable.tableCell)}>상태</th>
+              <th className={cn('w-24 text-left', approveTable.tableCell)}>아이디</th>
+              <th className={cn('w-20 text-left', approveTable.tableCell)}>이름</th>
+              <th className={cn('w-36 text-left', approveTable.tableCell)}>부서/팀</th>
+              <th className={cn('w-28 text-left', approveTable.tableCell)}>연락처</th>
+              <th className={cn('w-40 text-left', approveTable.tableCell)}>이메일</th>
+              <th className={cn('w-40 text-left', approveTable.tableCell)}>비고</th>
+              <th className={cn('w-36 text-left', approveTable.tableCell)}>신청시간</th>
+              <th className={cn('w-40 text-left', approveTable.tableCell)}>반려사유</th>
+              <th className={cn('w-[8.5rem] text-left', approveTable.tableCell)}>처리</th>
             </tr>
           </thead>
           <tbody>
             {loading ? (
               <tr className={tableRowClass}>
-                <td className={cn('text-muted-foreground', uiStyle.tableCell)} colSpan={10}>
+                <td className={cn('text-muted-foreground', approveTable.tableCell)} colSpan={10}>
                   불러오는 중…
                 </td>
               </tr>
             ) : filteredRows.length === 0 ? (
               <tr className={tableRowClass}>
-                <td className={cn('text-muted-foreground', uiStyle.tableCell)} colSpan={10}>
+                <td className={cn('text-muted-foreground', approveTable.tableCell)} colSpan={10}>
                   {emptyText}
                 </td>
               </tr>
@@ -278,47 +278,47 @@ export function SignUpApprove() {
                 const dept = `${r.ugName} / ${r.utName}`;
                 return (
                   <tr key={r.usrId} className={tableRowClass}>
-                    <td className={cn('whitespace-nowrap', uiStyle.tableCell)}>
+                    <td className={cn('whitespace-nowrap', approveTable.tableCell)}>
                       <span className={STATUS_CLASS[status]}>{STATUS_LABEL[status]}</span>
                     </td>
                     <td
-                      className={cn('truncate font-mono text-[11px]', uiStyle.tableCell)}
+                      className={cn('truncate font-mono text-[11px]', approveTable.tableCell)}
                       title={r.usrId}
                     >
                       {r.usrId}
                     </td>
                     <td
-                      className={cn('truncate', uiStyle.tableCell)}
+                      className={cn('truncate', approveTable.tableCell)}
                       title={r.usrName ?? undefined}
                     >
                       {r.usrName ?? '—'}
                     </td>
-                    <td className={cn('truncate', uiStyle.tableCell)} title={dept}>
+                    <td className={cn('truncate', approveTable.tableCell)} title={dept}>
                       {dept}
                     </td>
                     <td
-                      className={cn('truncate whitespace-nowrap', uiStyle.tableCell)}
+                      className={cn('truncate whitespace-nowrap', approveTable.tableCell)}
                       title={r.usrTel ?? undefined}
                     >
                       {r.usrTel ?? '—'}
                     </td>
                     <td
-                      className={cn('truncate', uiStyle.tableCell)}
+                      className={cn('truncate', approveTable.tableCell)}
                       title={r.usrMail ?? undefined}
                     >
                       {r.usrMail ?? '—'}
                     </td>
                     <td
-                      className={cn('truncate', uiStyle.tableCell)}
+                      className={cn('truncate', approveTable.tableCell)}
                       title={r.usrEtc?.trim() ? r.usrEtc : undefined}
                     >
                       {r.usrEtc?.trim() ? r.usrEtc : '—'}
                     </td>
-                    <td className={cn('whitespace-nowrap', uiStyle.tableCell)}>
+                    <td className={cn('whitespace-nowrap', approveTable.tableCell)}>
                       {formatTime(r.usrReqTime)}
                     </td>
                     <td
-                      className={cn('truncate', uiStyle.tableCell)}
+                      className={cn('truncate', approveTable.tableCell)}
                       title={
                         status === 'rejected' && r.usrRejectReason?.trim()
                           ? r.usrRejectReason
@@ -331,7 +331,7 @@ export function SignUpApprove() {
                           : '—'
                         : '—'}
                     </td>
-                    <td className={uiStyle.tableCell}>
+                    <td className={approveTable.tableCell}>
                       {pending ? (
                         rejectingId === r.usrId ? (
                           <div className="flex flex-col gap-1.5">
