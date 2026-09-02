@@ -1,14 +1,15 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Loader2, Search, X } from "lucide-react";
+import { Search, X } from "lucide-react";
 import { fromLonLat } from "ol/proj";
 import { call } from "@/lib/api";
-import { cn } from "@/lib/utils";
 import { useMapContext } from "../../../_mapComponents/MapContext";
 import { RADIATION_SHELTER_GEO_TABLE } from "../../../_mapComponents/layerFactory/safetydataMapLayerFactory";
 import type { RadiationShelterListItem } from "@/service/radiationShelterService";
 import { useRadiationShelterMapHighlight } from "./useRadiationShelterMapHighlight";
+import { SafetyLayerListTable } from "../SafetyLayerListTable";
+import { useSafetyLayerListColumns } from "../useSafetyLayerListColumns";
 
 type Props = {
   onClose: () => void;
@@ -25,6 +26,7 @@ export function RadiationShelterPanel({ onClose }: Props) {
   const [debouncedKeyword, setDebouncedKeyword] = useState("");
   const [selected, setSelected] = useState<RadiationShelterListItem | null>(null);
   const listScrollRef = useRef<HTMLDivElement | null>(null);
+  const { columns, columnsLoading } = useSafetyLayerListColumns("radiation_shelter");
 
   useRadiationShelterMapHighlight(mapReady, selected);
 
@@ -123,72 +125,16 @@ export function RadiationShelterPanel({ onClose }: Props) {
           </div>
         ) : null}
         <div ref={listScrollRef} className="standard-list-scroll">
-          <table className="standard-list-table min-w-[360px] w-full table-fixed">
-            <colgroup>
-              <col className="w-[34%]" />
-              <col />
-              <col className="w-[72px]" />
-            </colgroup>
-            <thead className="standard-table-thead">
-              <tr>
-                <th className="standard-table-th standard-table-th-left">시설명</th>
-                <th className="standard-table-th standard-table-th-left">주소</th>
-                <th className="standard-table-th standard-table-th-center">수용인원</th>
-              </tr>
-            </thead>
-            <tbody>
-              {loading && items.length === 0 ? (
-                <tr>
-                  <td colSpan={3} className="standard-table-empty">
-                    <span className="inline-flex items-center gap-2">
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                      불러오는 중…
-                    </span>
-                  </td>
-                </tr>
-              ) : items.length === 0 ? (
-                <tr>
-                  <td colSpan={3} className="standard-table-empty">
-                    표시할 방사선 대피소가 없습니다.
-                  </td>
-                </tr>
-              ) : (
-                items.map((row) => {
-                  const active = selected?.id === row.id;
-                  const capacity =
-                    row.actcTnop != null ? `${row.actcTnop}명` : "—";
-                  return (
-                    <tr
-                      key={row.id}
-                      data-radiation-shelter-row={row.id}
-                      tabIndex={0}
-                      onClick={() => onClickRow(row)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" || e.key === " ") {
-                          e.preventDefault();
-                          onClickRow(row);
-                        }
-                      }}
-                      className={cn(
-                        "standard-list-row",
-                        active && "standard-list-row-selected"
-                      )}
-                    >
-                      <td className="standard-table-td-text" title={row.ftnNm}>
-                        {row.ftnNm}
-                      </td>
-                      <td className="standard-table-td-text-muted" title={row.addr}>
-                        {row.addr}
-                      </td>
-                      <td className="standard-table-td-date text-center" title={capacity}>
-                        {capacity}
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
+          <SafetyLayerListTable
+            columns={columns}
+            items={items}
+            loading={loading || columnsLoading}
+            emptyMessage="표시할 방사선 대피소가 없습니다."
+            selectedId={selected?.id ?? null}
+            getRowId={(row) => row.id}
+            onRowClick={onClickRow}
+            rowDataAttr="data-radiation-shelter-row"
+          />
         </div>
         <div className="standard-list-footer">{totalCount.toLocaleString()}건</div>
       </div>

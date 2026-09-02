@@ -27,6 +27,12 @@ function tx(v: unknown): string {
   return String(v ?? '').trim();
 }
 
+function parseOptionalInt(v: unknown): number | null {
+  const n = Number(tx(v));
+  if (!Number.isFinite(n)) return null;
+  return Math.floor(n);
+}
+
 /** 간단 CSV 파서 — 따옴표 필드 지원 */
 function parseCsv(text: string): CsvRow[] {
   const lines = text.replace(/^\uFEFF/, '').split(/\r?\n/).filter((l) => l.trim());
@@ -77,23 +83,6 @@ function fullAddr(row: CsvRow): string {
   return [sido, sgg, addr].filter(Boolean).join(' ');
 }
 
-function buildRemark(row: CsvRow): string {
-  const parts: string[] = [];
-  const detail = tx(row.addr_detail);
-  const gubun = tx(row.gubun);
-  const warning = tx(row.is_warnig);
-  const safebox = tx(row.safebox_cnt);
-  const signCnt = tx(row.sign_cnt);
-  const remark = tx(row.remark);
-  if (detail) parts.push(detail);
-  if (gubun) parts.push(gubun);
-  if (warning) parts.push(`경고:${warning}`);
-  if (safebox) parts.push(`안전함:${safebox}`);
-  if (signCnt) parts.push(`표지:${signCnt}`);
-  if (remark) parts.push(remark);
-  return parts.join(' ');
-}
-
 async function main() {
   const fileArg = process.argv[2];
   const filePath = resolve(fileArg ?? 'C:\\Users\\user\\Downloads\\물놀이표지판.csv');
@@ -109,10 +98,17 @@ async function main() {
 
   for (let i = 0; i < rows.length; i++) {
     const row = rows[i];
+    const sido = tx(row.sido);
+    const sgg = tx(row.sgg);
     const addr = fullAddr(row);
-    const remark = buildRemark(row);
+    const addrDetail = tx(row.addr_detail);
+    const gubun = tx(row.gubun);
+    const isWarnig = tx(row.is_warnig);
+    const safeboxCnt = parseOptionalInt(row.safebox_cnt);
+    const signCnt = parseOptionalInt(row.sign_cnt);
+    const remark = tx(row.remark);
 
-    if (!addr && !remark) {
+    if (!addr && !remark && !addrDetail) {
       skip += 1;
       console.log(`[${i + 1}] SKIP — 빈 행`);
       continue;
@@ -130,10 +126,22 @@ async function main() {
 
     try {
       await pool.query(
-        `INSERT INTO layer.water_play_sign (addr, remark, geom)
-         VALUES ($1, $2,
-           CASE WHEN $3::text IS NOT NULL THEN ST_GeomFromText($3, 5181) ELSE NULL END)`,
-        [addr || null, remark || null, geomWkt]
+        `INSERT INTO layer.water_play_sign (
+          sido, sgg, addr, addr_detail, gubun, is_warnig, safebox_cnt, sign_cnt, remark, geom
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9,
+          CASE WHEN $10::text IS NOT NULL THEN ST_GeomFromText($10, 5181) ELSE NULL END)`,
+        [
+          sido || null,
+          sgg || null,
+          addr || null,
+          addrDetail || null,
+          gubun || null,
+          isWarnig || null,
+          safeboxCnt,
+          signCnt,
+          remark || null,
+          geomWkt,
+        ]
       );
       success += 1;
       console.log(`[${i + 1}] OK — ${addr}${geomWkt ? '' : ' (geom 없음)'}`);
