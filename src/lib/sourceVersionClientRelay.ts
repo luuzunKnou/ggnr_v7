@@ -658,12 +658,16 @@ export type SchemaSyncConfirmResult = {
 /** 스키마 안내 [진행] — live commit (NDJSON·keepalive, 장시간 병합·빌드) */
 export async function confirmSchemaSyncApply(
   pendingId: string,
-  onProgress?: (event: VersionRelayProgress) => void
+  onProgress?: (event: VersionRelayProgress) => void,
+  schemaMemo?: string | null
 ): Promise<SchemaSyncConfirmResult> {
   const res = await fetch('/api/dev/schema-sync/confirm', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ pendingId }),
+    body: JSON.stringify({
+      pendingId,
+      schemaMemo: typeof schemaMemo === 'string' && schemaMemo.trim() ? schemaMemo.trim() : undefined,
+    }),
   });
   const result = await readRelayCompleteNdjson(res, (p) => onProgress?.(p));
   if (result.ok === false || result.error) {
