@@ -1355,7 +1355,15 @@ function MapLayoutContent({
 
   const handleCloseMemoManagement = () => {
     setMemoDetailId(null)
+    setMemoAddTable(null)
     const next = openedWindows.filter((w) => w !== MEMO_OPENED_KEY)
+    setOpened(next)
+  }
+
+  const handleCloseComplaintManagement = () => {
+    setComplaintAddOpen(false)
+    mapContext?.setComplaintDetail?.(null)
+    const next = openedWindows.filter((w) => w !== COMPLAINT_OPENED_KEY)
     setOpened(next)
   }
 
@@ -2575,6 +2583,7 @@ function MapLayoutContent({
               >
                 <ComplaintListPanel
                   refreshKey={complaintListRefreshKey}
+                  onClose={handleCloseComplaintManagement}
                   onRequestAdd={() => {
                     setComplaintDetail?.(null)
                     setMemoDetailId(null)

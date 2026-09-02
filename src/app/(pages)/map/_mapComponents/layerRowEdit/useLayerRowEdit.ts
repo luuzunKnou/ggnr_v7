@@ -14,6 +14,7 @@ import {
   sameParcelAddressList,
 } from "./layerRowParcelUtils";
 import { resolveParcelGeoms } from "./resolveParcelGeoms";
+import { clipParcelItemToParentWkt } from "./clipParcelItemToParentWkt";
 import {
   validateDefineRequiredFields,
   validateOccupationPeriodAndGeom,
@@ -97,6 +98,21 @@ function looksLikeGeomWkt(raw: string | null | undefined): boolean {
     s.startsWith("MULTIPOLYGON") ||
     s.startsWith("GEOMETRYCOLLECTION")
   );
+}
+
+function isOccupationLedgerTable(tableName: string): boolean {
+  const tbl = String(tableName ?? "").toLowerCase();
+  return (
+    tbl === "water_occupationledger" ||
+    tbl === "road_occupationledger" ||
+    tbl === "public_occupationledger"
+  );
+}
+
+function parentWktFromEditRef(raw: string | null | undefined): string {
+  const wkt = String(raw ?? "").trim();
+  if (!wkt || wkt === LAYER_ROW_GEOM_CLEAR_SENTINEL) return "";
+  return looksLikeGeomWkt(wkt) ? wkt : "";
 }
 
 type UseLayerRowEditArgs = {
@@ -436,49 +452,99 @@ export function useLayerRowEdit({
     return changes;
   }, [attributes, draft, isCreateMode, readOnlyFields]);
 
-  const addDraftParcel = useCallback((item: LayerRowParcelItem) => {
-    const key = item.address.toLowerCase();
-    const nextItem: LayerRowParcelItem = {
-      ...item,
-      showMapGeom: drawChildGeomOnMap,
-      keepOnReplace: true,
-      manualAdd: true,
-    };
-    setDraftParcels((prev) => {
-      if (prev.some((p) => p.address.toLowerCase() === key)) return prev;
-      return [...prev, nextItem];
-    });
-    void resolveParcelGeoms([nextItem]).then(([resolved]) => {
-      if (!resolved?.geometry3857 && !resolved?.pnu) return;
-      const merged: LayerRowParcelItem = {
-        ...nextItem,
-        pnu: resolved.pnu ?? nextItem.pnu,
-        extent3857: resolved.extent3857 ?? nextItem.extent3857,
-        geometry3857: resolved.geometry3857 ?? nextItem.geometry3857,
+  const addDraftParcel = useCallback(
+    async (item: LayerRowParcelItem): Promise<boolean> => {
+      const key = item.address.toLowerCase();
+      const parentWkt = parentWktFromEditRef(layerRowGeomEditWktRef?.current);
+      if (!parentWkt && isOccupationLedgerTable(preset.tableName)) {
+        window.alert("도형을 먼저 지정하거나 수정해 주세요.");
+        return false;
+      }
+
+      const nextItem: LayerRowParcelItem = {
+        ...item,
         showMapGeom: drawChildGeomOnMap,
         keepOnReplace: true,
         manualAdd: true,
       };
-      setDraftParcels((prev) =>
-        prev.map((p) => (p.address.toLowerCase() === key ? merged : p))
-      );
-      if (!drawChildGeomOnMap) return;
-      const map = mapContext?.mapInstanceRef?.current;
-      if (map) {
-        fitMapToLayerRowParcel(map, merged, {
-          wmsLayerId,
-          setVisibleLayerNames: mapContext?.setVisibleLayerNames,
-          applyMapViewPadding: mapContext?.applyMapViewPaddingRef?.current,
+
+      if (parentWkt) {
+        const [resolved] = await resolveParcelGeoms([nextItem]);
+        const toClip = resolved ?? nextItem;
+        const clipped = await clipParcelItemToParentWkt(toClip, parentWkt);
+        if (!clipped?.geometry3857) {
+          window.alert("그린 도형과 겹치는 필지만 추가할 수 있습니다.");
+          return false;
+        }
+        const merged: LayerRowParcelItem = {
+          ...nextItem,
+          ...clipped,
+          showMapGeom: drawChildGeomOnMap,
+          keepOnReplace: true,
+          manualAdd: true,
+        };
+        let duplicated = false;
+        setDraftParcels((prev) => {
+          if (prev.some((p) => p.address.toLowerCase() === key)) {
+            duplicated = true;
+            return prev;
+          }
+          return [...prev, merged];
         });
+        if (duplicated) return true;
+        if (drawChildGeomOnMap) {
+          const map = mapContext?.mapInstanceRef?.current;
+          if (map) {
+            fitMapToLayerRowParcel(map, merged, {
+              wmsLayerId,
+              setVisibleLayerNames: mapContext?.setVisibleLayerNames,
+              applyMapViewPadding: mapContext?.applyMapViewPaddingRef?.current,
+            });
+          }
+        }
+        return true;
       }
-    });
-  }, [
-    drawChildGeomOnMap,
-    mapContext?.applyMapViewPaddingRef,
-    mapContext?.mapInstanceRef,
-    mapContext?.setVisibleLayerNames,
-    wmsLayerId,
-  ]);
+
+      setDraftParcels((prev) => {
+        if (prev.some((p) => p.address.toLowerCase() === key)) return prev;
+        return [...prev, nextItem];
+      });
+      void resolveParcelGeoms([nextItem]).then(([resolved]) => {
+        if (!resolved?.geometry3857 && !resolved?.pnu) return;
+        const merged: LayerRowParcelItem = {
+          ...nextItem,
+          pnu: resolved.pnu ?? nextItem.pnu,
+          extent3857: resolved.extent3857 ?? nextItem.extent3857,
+          geometry3857: resolved.geometry3857 ?? nextItem.geometry3857,
+          showMapGeom: drawChildGeomOnMap,
+          keepOnReplace: true,
+          manualAdd: true,
+        };
+        setDraftParcels((prev) =>
+          prev.map((p) => (p.address.toLowerCase() === key ? merged : p))
+        );
+        if (!drawChildGeomOnMap) return;
+        const map = mapContext?.mapInstanceRef?.current;
+        if (map) {
+          fitMapToLayerRowParcel(map, merged, {
+            wmsLayerId,
+            setVisibleLayerNames: mapContext?.setVisibleLayerNames,
+            applyMapViewPadding: mapContext?.applyMapViewPaddingRef?.current,
+          });
+        }
+      });
+      return true;
+    },
+    [
+      drawChildGeomOnMap,
+      layerRowGeomEditWktRef,
+      mapContext?.applyMapViewPaddingRef,
+      mapContext?.mapInstanceRef,
+      mapContext?.setVisibleLayerNames,
+      preset.tableName,
+      wmsLayerId,
+    ]
+  );
 
   const removeDraftParcel = useCallback(
     (index: number) => {
@@ -508,7 +574,10 @@ export function useLayerRowEdit({
     async (parentId: string) => {
       const childTableName = String(preset.childTableName ?? "").trim();
       if (!childTableName) return { ok: true as const };
-      if (!isCreateMode && sameParcelAddressList(draftParcels, initialParcels)) {
+      const parentWkt = parentWktFromEditRef(layerRowGeomEditWktRef?.current);
+      const geomDirty = layerRowGeomEditDirtyRef?.current === true;
+      const parcelsChanged = isCreateMode || !sameParcelAddressList(draftParcels, initialParcels);
+      if (!parcelsChanged && !geomDirty) {
         return { ok: true as const };
       }
       const addresses = parcelAddressesFromItems(draftParcels);
@@ -517,16 +586,13 @@ export function useLayerRowEdit({
         pnu: String(p.pnu ?? "").trim() || undefined,
         lon: p.point4326?.x,
         lat: p.point4326?.y,
+        geometry3857: p.geometry3857 ?? null,
       }));
       const extraValues: Record<string, string> = {};
       const permitKey = Object.keys(draft).find((k) => k.toLowerCase() === "permit_no");
       const permitVal = permitKey ? String(draft[permitKey] ?? "").trim() : "";
       if (permitVal) extraValues.permit_no = permitVal;
-      const tbl = String(preset.tableName ?? "").toLowerCase();
-      const isOccLedger =
-        tbl === "water_occupationledger" ||
-        tbl === "road_occupationledger" ||
-        tbl === "public_occupationledger";
+      const isOccLedger = isOccupationLedgerTable(preset.tableName);
       if (isOccLedger && !permitVal) {
         return { ok: false as const, error: "허가번호가 없어 필지를 저장할 수 없습니다." };
       }
@@ -543,6 +609,7 @@ export function useLayerRowEdit({
           parcels,
           addresses,
           extraValues,
+          parentWkt5181: parentWkt || undefined,
         },
       });
       const data = res?.data ?? res;
@@ -556,6 +623,8 @@ export function useLayerRowEdit({
       draftParcels,
       initialParcels,
       isCreateMode,
+      layerRowGeomEditDirtyRef,
+      layerRowGeomEditWktRef,
       preset.childAddressField,
       preset.childParentField,
       preset.childTableName,
@@ -570,12 +639,7 @@ export function useLayerRowEdit({
     try {
       const changes = collectChanges();
       if (isCreateMode) {
-        const tbl = String(preset.tableName ?? "").toLowerCase();
-        const isOccLedger =
-          tbl === "water_occupationledger" ||
-          tbl === "road_occupationledger" ||
-          tbl === "public_occupationledger";
-        if (isOccLedger) {
+        if (isOccupationLedgerTable(preset.tableName)) {
           const permitKey =
             Object.keys(draft).find((k) => k.toLowerCase() === "permit_no") ?? "permit_no";
           const permitVal = String(draft[permitKey] ?? "").trim();

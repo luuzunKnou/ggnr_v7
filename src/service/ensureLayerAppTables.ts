@@ -13,6 +13,7 @@
  * - 보상편입: road_reward, road_reward_parcel
  * - 공사대장: cons_data_as, cons_data_solo_as
  * - 마을순찰대: village_patrol
+ * - 도로 업무편람: rd_work_target_review, rd_hbook_mat
  */
 import { db, pool } from '@/database/db';
 import { sql } from 'drizzle-orm';
@@ -958,6 +959,58 @@ CREATE INDEX IF NOT EXISTS village_patrol_phone_idx
 COMMENT ON TABLE layer.village_patrol IS '마을순찰대 편성 명단';
 `;
 
+const RD_WORK_TARGET_REVIEW_SQL = `
+CREATE TABLE IF NOT EXISTS layer.rd_work_target_review (
+  id serial4 PRIMARY KEY,
+  seq_no integer,
+  title varchar,
+  criteria varchar,
+  law varchar,
+  timing varchar,
+  tgt_content varchar,
+  impl_org varchar,
+  remark varchar,
+  formula jsonb
+);
+CREATE INDEX IF NOT EXISTS rd_work_target_review_seq_no_idx
+  ON layer.rd_work_target_review (seq_no);
+COMMENT ON TABLE layer.rd_work_target_review IS '대상여부 검토';
+COMMENT ON COLUMN layer.rd_work_target_review.id IS '키';
+COMMENT ON COLUMN layer.rd_work_target_review.seq_no IS '번호';
+COMMENT ON COLUMN layer.rd_work_target_review.title IS '제목';
+COMMENT ON COLUMN layer.rd_work_target_review.criteria IS '기준';
+COMMENT ON COLUMN layer.rd_work_target_review.law IS '법령';
+COMMENT ON COLUMN layer.rd_work_target_review.timing IS '수행시기';
+COMMENT ON COLUMN layer.rd_work_target_review.tgt_content IS '대상기준 내용';
+COMMENT ON COLUMN layer.rd_work_target_review.impl_org IS '시행주체';
+COMMENT ON COLUMN layer.rd_work_target_review.remark IS '비고';
+COMMENT ON COLUMN layer.rd_work_target_review.formula IS '계산식';
+`;
+
+const RD_HBOOK_MAT_SQL = `
+CREATE TABLE IF NOT EXISTS layer.rd_hbook_mat (
+  id serial4 PRIMARY KEY,
+  seq_no integer,
+  category varchar,
+  title varchar,
+  remark varchar,
+  mat_url varchar,
+  xml_url varchar,
+  orig_url varchar
+);
+CREATE INDEX IF NOT EXISTS rd_hbook_mat_seq_no_idx
+  ON layer.rd_hbook_mat (seq_no);
+COMMENT ON TABLE layer.rd_hbook_mat IS '설계실무요령 자료';
+COMMENT ON COLUMN layer.rd_hbook_mat.id IS '키';
+COMMENT ON COLUMN layer.rd_hbook_mat.seq_no IS '번호';
+COMMENT ON COLUMN layer.rd_hbook_mat.category IS '분류';
+COMMENT ON COLUMN layer.rd_hbook_mat.title IS '제목';
+COMMENT ON COLUMN layer.rd_hbook_mat.remark IS '비고';
+COMMENT ON COLUMN layer.rd_hbook_mat.mat_url IS '자료 링크';
+COMMENT ON COLUMN layer.rd_hbook_mat.xml_url IS '자료 xml';
+COMMENT ON COLUMN layer.rd_hbook_mat.orig_url IS '원문';
+`;
+
 /** 기존 중복 정리 후 편성 유니크 인덱스 확보 */
 async function ensureVillagePatrolAssignmentUnique(result: EnsureResult): Promise<void> {
   const fq = 'layer.village_patrol';
@@ -1799,6 +1852,22 @@ export async function ensureVillagePatrolTable(result?: EnsureResult): Promise<E
   return out;
 }
 
+export async function ensureRoadWorkHandbookTables(result?: EnsureResult): Promise<EnsureResult> {
+  const out: EnsureResult = result ?? { created: [], moved: [], existed: [], errors: [] };
+  await ensureSchemaLayer();
+  await ensureBaseTable({
+    table: 'rd_work_target_review',
+    createSql: RD_WORK_TARGET_REVIEW_SQL,
+    result: out,
+  });
+  await ensureBaseTable({
+    table: 'rd_hbook_mat',
+    createSql: RD_HBOOK_MAT_SQL,
+    result: out,
+  });
+  return out;
+}
+
 /** public.layer_extra_def — 추가속성 정의 (점용 본대 extra 컬럼과는 별개) */
 export async function ensureLayerExtraDefTable(result?: EnsureResult): Promise<EnsureResult> {
   const out: EnsureResult = result ?? { created: [], moved: [], existed: [], errors: [] };
@@ -1840,6 +1909,7 @@ export async function ensureLayerAppTables(): Promise<EnsureResult> {
     await ensureRadiationShelterTable(result);
     await ensureWaterPlaySignTable(result);
     await ensureVillagePatrolTable(result);
+    await ensureRoadWorkHandbookTables(result);
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);
     result.errors.push(msg);

@@ -1,13 +1,9 @@
 "use client"
 
 import { X } from "lucide-react"
-import {
-  HANDBOOK_MATERIALS,
-  HANDBOOK_PROCEDURES,
-  handbookChapterLabel,
-  type HandbookDetailSelection,
-} from "./roadWorkHandbookData"
+import { handbookChapterLabel, type HandbookDetailSelection } from "./roadWorkHandbookData"
 import { MaterialFilesPanel, ProcedureDetailCard } from "./roadWorkHandbookUi"
+import { useRoadWorkHandbookCatalog } from "./useRoadWorkHandbookCatalog"
 
 type Props = {
   selection: HandbookDetailSelection
@@ -16,10 +12,11 @@ type Props = {
 }
 
 export function RoadWorkHandbookDetailPanel({ selection, searchKeyword, onClose }: Props) {
+  const { reviews, materials, loading, error } = useRoadWorkHandbookCatalog()
   const proc =
-    selection.kind === "target" ? (HANDBOOK_PROCEDURES.find((p) => p.no === selection.no) ?? null) : null
+    selection.kind === "target" ? (reviews.find((p) => p.no === selection.no) ?? null) : null
   const material =
-    selection.kind === "ref" ? (HANDBOOK_MATERIALS.find((m) => m.id === selection.materialId) ?? null) : null
+    selection.kind === "ref" ? (materials.find((m) => m.id === selection.materialId) ?? null) : null
   const title =
     selection.kind === "ref" && material
       ? handbookChapterLabel(material.chapter)
@@ -40,7 +37,11 @@ export function RoadWorkHandbookDetailPanel({ selection, searchKeyword, onClose 
         </button>
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto bg-muted/30 p-3 scrollbar-thin">
-        {proc ? (
+        {loading ? (
+          <p className="px-1 py-6 text-center text-[11px] text-muted-foreground">불러오는 중…</p>
+        ) : error ? (
+          <p className="px-1 py-6 text-center text-[11px] text-destructive">{error}</p>
+        ) : proc ? (
           <ProcedureDetailCard key={proc.no} proc={proc} />
         ) : material ? (
           <MaterialFilesPanel key={material.id} material={material} highlightKeyword={searchKeyword} />
