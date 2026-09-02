@@ -1,5 +1,5 @@
 * {
-  mark: url("http://127.0.0.1:8080/geoserver/www/symbol/water/wtl_leak_ps.png");
+  mark: url("http://127.0.0.1:8090/geoserver/www/symbol/water/wtl_leak_ps.png");
   mark-mime: "image/png";
   mark-size: [min(18, 5 + sqrt(100000 / env('wms_scale_denominator', 10000)) * 4.0)];
 }
