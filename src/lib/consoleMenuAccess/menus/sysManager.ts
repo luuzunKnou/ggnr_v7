@@ -6,7 +6,7 @@ export const SYS_MANAGER_CONSOLE_MENUS = [
   { id: 'userManager', label: '사용자관리' },
   { id: 'permissionFeature', label: '권한관리' },
   { id: 'accessRequestQueue', label: '권한 신청 처리' },
-  { id: 'layerManager', label: '레이어관리' },
+  { id: 'layerManager', label: '레이어 관리' },
   { id: 'dataHistoryManager', label: '데이터 이력관리' },
   { id: 'featureUsageStats', label: '기능별 사용현황' },
   { id: 'userAccessStats', label: '사용자 접속현황' },

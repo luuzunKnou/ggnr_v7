@@ -25,7 +25,8 @@ import { AUTH_REQUIRED_EVENT } from '@/lib/authRequiredEvent';
 import { toAppPathFromBrowser, withBasePathNav } from '@/lib/basePath';
 
 type LoginModalContextValue = {
-  openLogin: () => void;
+  /** next: 로그인 성공 후 이동할 앱 경로. 없으면 현재 주소 */
+  openLogin: (next?: string) => void;
   openSignUp: () => void;
 };
 
@@ -33,7 +34,7 @@ const LoginModalContext = createContext<LoginModalContextValue | null>(null);
 
 export function useLoginModal() {
   const ctx = useContext(LoginModalContext);
-  if (!ctx) return { openLogin: () => {}, openSignUp: () => {} };
+  if (!ctx) return { openLogin: (_next?: string) => {}, openSignUp: () => {} };
   return ctx;
 }
 
@@ -279,15 +280,19 @@ export function LoginModalProvider({ children }: { children: React.ReactNode }) 
   const [signUpOpen, setSignUpOpen] = useState(false);
   const [pendingNext, setPendingNext] = useState('');
 
-  const openLogin = useCallback(() => {
+  const openLogin = useCallback((next?: string) => {
     if (typeof window !== 'undefined') {
-      const n = new URLSearchParams(window.location.search).get('next');
-      if (n && n.startsWith('/')) setPendingNext(toAppPathFromBrowser(n));
-      else {
-        const here = toAppPathFromBrowser(
-          `${window.location.pathname}${window.location.search}`
-        );
-        if (here.startsWith('/')) setPendingNext(here);
+      if (next && next.startsWith('/')) {
+        setPendingNext(toAppPathFromBrowser(next));
+      } else {
+        const n = new URLSearchParams(window.location.search).get('next');
+        if (n && n.startsWith('/')) setPendingNext(toAppPathFromBrowser(n));
+        else {
+          const here = toAppPathFromBrowser(
+            `${window.location.pathname}${window.location.search}`
+          );
+          if (here.startsWith('/')) setPendingNext(here);
+        }
       }
     }
     setSignUpOpen(false);
