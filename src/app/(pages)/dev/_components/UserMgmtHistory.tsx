@@ -13,7 +13,7 @@ import { cn } from '@/lib/utils';
 import { call } from '@/lib/api';
 import { formatTimestampWallClock } from '@/lib/formatTimestampWallClock';
 import { HelpCircle, RefreshCw, Search, X } from 'lucide-react';
-import { USER_MANAGER_UI_STYLE } from './userManagerUiVariants';
+import { USER_MANAGER_UI_STYLE, USER_MGMT_HISTORY_TABLE } from './userManagerUiVariants';
 
 type HistoryRow = {
   ulKey: number;
@@ -28,8 +28,8 @@ type HistoryRow = {
 };
 
 const uiStyle = USER_MANAGER_UI_STYLE;
-const tableRowClass =
-  'border-b border-border hover:bg-muted/50 transition-colors [&>td]:border-r [&>td]:border-border/60 [&>td:last-child]:border-r-0';
+const historyTable = USER_MGMT_HISTORY_TABLE;
+const tableRowClass = historyTable.tableRow;
 
 /** 한 줄 파싱: "항목: 전 → 후" / "항목: 전 -> 후" / "전 → 후" / "전 -> 후" */
 type DetailLine = { field: string; before: string; after: string } | { raw: string };
@@ -277,29 +277,29 @@ export function UserMgmtHistory() {
       <div className={uiStyle.tableWrap}>
         <div className={uiStyle.tableScroll}>
         <table className={cn(uiStyle.table, 'min-w-[56rem] table-fixed')}>
-          <thead className={cn('sticky top-0', uiStyle.tableHead)}>
+          <thead className={cn('sticky top-0', historyTable.tableHead)}>
             <tr>
-              <th className={cn('w-14 text-left', uiStyle.tableCell)}>순번</th>
-              <th className={cn('w-36 text-left', uiStyle.tableCell)}>일시</th>
-              <th className={cn('w-24 text-left', uiStyle.tableCell)}>작업자</th>
-              <th className={cn('w-24 text-left', uiStyle.tableCell)}>사용자</th>
-              <th className={cn('w-24 text-left', uiStyle.tableCell)}>이름</th>
-              <th className={cn('w-28 text-left', uiStyle.tableCell)}>부서</th>
-              <th className={cn('w-40 text-left', uiStyle.tableCell)}>내용</th>
-              <th className={cn('w-20 text-left', uiStyle.tableCell)}>분류</th>
-              <th className={cn('w-20 text-left', uiStyle.tableCell)}>상세</th>
+              <th className={cn('w-14 text-left', historyTable.tableCell)}>순번</th>
+              <th className={cn('w-36 text-left', historyTable.tableCell)}>일시</th>
+              <th className={cn('w-24 text-left', historyTable.tableCell)}>작업자</th>
+              <th className={cn('w-24 text-left', historyTable.tableCell)}>사용자</th>
+              <th className={cn('w-24 text-left', historyTable.tableCell)}>이름</th>
+              <th className={cn('w-28 text-left', historyTable.tableCell)}>부서</th>
+              <th className={cn('w-40 text-left', historyTable.tableCell)}>내용</th>
+              <th className={cn('w-20 text-left', historyTable.tableCell)}>분류</th>
+              <th className={cn('w-20 text-left', historyTable.tableCell)}>상세</th>
             </tr>
           </thead>
           <tbody>
             {loading ? (
               <tr className={tableRowClass}>
-                <td className={cn('text-muted-foreground', uiStyle.tableCell)} colSpan={9}>
+                <td className={cn('text-muted-foreground', historyTable.tableCell)} colSpan={9}>
                   불러오는 중…
                 </td>
               </tr>
             ) : rows.length === 0 ? (
               <tr className={tableRowClass}>
-                <td className={cn('text-muted-foreground', uiStyle.tableCell)} colSpan={9}>
+                <td className={cn('text-muted-foreground', historyTable.tableCell)} colSpan={9}>
                   조회된 이력이 없습니다. (테이블 미생성 시 SQL 적용이 필요합니다)
                 </td>
               </tr>
@@ -309,27 +309,27 @@ export function UserMgmtHistory() {
                 const showDetail = hasDetail(r.ulType, r.ulDetail);
                 return (
                   <tr key={r.ulKey} className={tableRowClass}>
-                    <td className={cn('whitespace-nowrap', uiStyle.tableCell)}>{seq}</td>
-                    <td className={cn('whitespace-nowrap', uiStyle.tableCell)}>
+                    <td className={cn('whitespace-nowrap', historyTable.tableCell)}>{seq}</td>
+                    <td className={cn('whitespace-nowrap', historyTable.tableCell)}>
                       {formatTime(r.ulDate)}
                     </td>
-                    <td className={cn('truncate font-mono text-[11px]', uiStyle.tableCell)} title={r.ulWorkUser ?? undefined}>
+                    <td className={cn('truncate font-mono text-[11px]', historyTable.tableCell)} title={r.ulWorkUser ?? undefined}>
                       {r.ulWorkUser ?? '—'}
                     </td>
-                    <td className={cn('truncate font-mono text-[11px]', uiStyle.tableCell)} title={r.ulUser ?? undefined}>
+                    <td className={cn('truncate font-mono text-[11px]', historyTable.tableCell)} title={r.ulUser ?? undefined}>
                       {r.ulUser ?? '—'}
                     </td>
-                    <td className={cn('truncate', uiStyle.tableCell)} title={r.usrName ?? undefined}>
+                    <td className={cn('truncate', historyTable.tableCell)} title={r.usrName ?? undefined}>
                       {r.usrName ?? '—'}
                     </td>
-                    <td className={cn('truncate', uiStyle.tableCell)} title={r.ulGroup ?? undefined}>
+                    <td className={cn('truncate', historyTable.tableCell)} title={r.ulGroup ?? undefined}>
                       {r.ulGroup ?? '—'}
                     </td>
-                    <td className={cn('truncate', uiStyle.tableCell)} title={r.ulContents ?? undefined}>
+                    <td className={cn('truncate', historyTable.tableCell)} title={r.ulContents ?? undefined}>
                       {r.ulContents ?? '—'}
                     </td>
-                    <td className={cn('whitespace-nowrap', uiStyle.tableCell)}>{r.ulType ?? '—'}</td>
-                    <td className={uiStyle.tableCell}>
+                    <td className={cn('whitespace-nowrap', historyTable.tableCell)}>{r.ulType ?? '—'}</td>
+                    <td className={historyTable.tableCell}>
                       {showDetail ? (
                         <button
                           type="button"
