@@ -561,6 +561,8 @@ export type MapContextValue = {
 export type LayerRowGeomEditState = {
   /** GeoServer 레이어명 (define_table_name) */
   layerName: string;
+  /** 필지 자식 레이어명 — 편집 중 본표와 함께 숨김 (저장 전 옛 도형 가림 방지) */
+  childLayerName?: string;
   /** DB 스키마 (기본 layer) */
   schema?: string;
   keyField: string;

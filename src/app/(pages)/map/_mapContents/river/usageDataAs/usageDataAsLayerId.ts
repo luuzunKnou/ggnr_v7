@@ -5,7 +5,7 @@ export const USAGE_DATA_AS_MGJ_WMS_LAYER_ID = "usage_data_as_mgj";
 /** 울진 점용시설물 — 목록 패널에서 on/off (본표와 별도) */
 export const USAGE_DATA_AS_SISUL_WMS_LAYER_ID = "usage_data_sisul_as";
 
-/** 필지·물건지 WMS (목록/오픈 시에는 끄고, 상세에서 행 클릭 시에만 켬) */
+/** 필지·물건지 WMS (부서업무 진입 시 필지는 본표와 함께 켬, 물건지는 상세에서만) */
 export const USAGE_DATA_AS_CHILD_WMS_LAYER_IDS = [
   USAGE_DATA_AS_SOLO_WMS_LAYER_ID,
   USAGE_DATA_AS_MGJ_WMS_LAYER_ID,

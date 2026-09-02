@@ -1100,7 +1100,7 @@ export default function OpenLayersMap({
     layerGeometryTypes,
     undefined,
     serviceWmsCqlByLayer,
-    mapContext?.occupationLedgerPanelOpen === true,
+    false,
     wmsForceBottomLayerNames
   );
 
