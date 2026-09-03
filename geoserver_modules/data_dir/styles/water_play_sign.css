@@ -6,7 +6,7 @@
   mark-anchor: 0.5 0.5;
   mark-offset: 0 0;
 
-  label: [addr];
+  label: [if_then_else(isNull(addr_detail), addr, if_then_else(equalTo(addr_detail, ''), addr, addr_detail))];
   font-size: 14;
   font-fill: #0369A1;
   font-weight: bold;

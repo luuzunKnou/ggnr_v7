@@ -139,6 +139,24 @@ export function getVisibleSafetyMapGeoTables(visibility: Record<string, boolean 
   return s;
 }
 
+/** DB 저장·삭제 후 안전데이터 GeoServer WMS(ImageWMS) 캐시 갱신 */
+export function refreshSafetyMapGeoLayer(map: Map | null | undefined, tableName: string): void {
+  if (!map || !tableName) return;
+  const stamp = String(Date.now());
+  map.getLayers().getArray().forEach((l) => {
+    if (!l.get('safetyMapGeoLayer')) return;
+    if (l.get('layerTableName') !== tableName) return;
+    const source = (l as ImageLayer<ImageWMS>).getSource();
+    if (!source) return;
+    if (typeof source.updateParams === 'function') {
+      source.updateParams({ ...source.getParams(), _dc: stamp });
+    }
+    source.changed();
+    l.changed();
+  });
+  map.render();
+}
+
 function emdWgs84To3857Extent(d: {
   minX: unknown;
   maxX: unknown;

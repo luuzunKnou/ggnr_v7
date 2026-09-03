@@ -1,0 +1,18 @@
+[
+  {
+    "define_code_name": "하천",
+    "define_code_kor_name": "하천"
+  },
+  {
+    "define_code_name": "못",
+    "define_code_kor_name": "못"
+  },
+  {
+    "define_code_name": "계곡",
+    "define_code_kor_name": "계곡"
+  },
+  {
+    "define_code_name": "저수지",
+    "define_code_kor_name": "저수지"
+  }
+]

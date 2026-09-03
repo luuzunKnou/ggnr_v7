@@ -2772,6 +2772,21 @@ function pickOrderColumn(cols: Set<string>, nameCol: string): string {
 /**
  * 읍면동(emd) 목록 조회. emd_cd, 이름 반환.
  */
+export async function getPublicLayerSggNames(_params: Record<string, unknown> = {}) {
+  const { fetchPublicLayerSggNames } = await import('@/lib/publicLayerSgg');
+  const names = await fetchPublicLayerSggNames();
+  return { names };
+}
+
+/** 주소 표시 접두 제거용 시도·시군구 (sgg LIMIT 1 + adm_sect_c→sidoCodes) */
+export async function getPublicLayerAddressPrefixes(_params: Record<string, unknown> = {}) {
+  const { fetchPublicLayerAddressPrefixes } = await import('@/lib/publicLayerSgg');
+  return fetchPublicLayerAddressPrefixes();
+}
+
+/**
+ * 읍면동(emd) 목록 조회. emd_cd, 이름 반환.
+ */
 export async function getEmdRiOptions(params: { schema?: string } = {}) {
   const schema = (params?.schema ?? EMD_RI_SCHEMA).trim() || EMD_RI_SCHEMA;
   const result: { emd: EmdRiOption[]; error?: string } = { emd: [] };
