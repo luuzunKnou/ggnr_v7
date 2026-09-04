@@ -226,16 +226,16 @@ export function WaterPlaySignDetailPanel({
 
   const headerTitle = useMemo(() => {
     if (isEditing) {
-      const addr = (form.addr ?? '').trim();
-      if (addr) return formatWaterPlaySignAddressDisplay(addr, addressPrefixes);
+      const detail = (form.addr_detail ?? '').trim();
+      if (detail) return detail;
       return isCreateMode ? '등록' : '—';
     }
     if (item) {
-      const addr = item.addr && item.addr !== '-' ? item.addr : '';
-      if (addr) return formatWaterPlaySignAddressDisplay(addr, addressPrefixes);
+      const detail = item.addrDetail && item.addrDetail !== '-' ? String(item.addrDetail).trim() : '';
+      if (detail) return detail;
     }
     return '—';
-  }, [isEditing, form.addr, isCreateMode, item, addressPrefixes]);
+  }, [isEditing, form.addr_detail, isCreateMode, item]);
 
   const updateForm = useCallback((field: string, value: string) => {
     setForm((prev) => ({ ...prev, [field]: value }));
@@ -431,9 +431,18 @@ export function WaterPlaySignDetailPanel({
                     (selected.jibunAddress ?? '').trim() ||
                     (selected.title ?? '').trim() ||
                     (selected.address ?? '').trim();
+                  const placeTitle = (selected.title ?? '').trim();
                   const pickLon = Number(selected.point?.x);
                   const pickLat = Number(selected.point?.y);
-                  applyAddressToForm(adr);
+                  const { addr, sido, sgg } = parseSidoSggFromAddress(adr);
+                  setForm((prev) => {
+                    const next: Record<string, string> = { ...prev, addr, sido, sgg };
+                    // 장소(searchPlace) title — 상세주소(시설명 역할) 비어 있을 때만 자동입력
+                    if (placeTitle && !(prev.addr_detail ?? '').trim()) {
+                      next.addr_detail = placeTitle;
+                    }
+                    return next;
+                  });
                   if (Number.isFinite(pickLon) && Number.isFinite(pickLat)) {
                     setLon(pickLon);
                     setLat(pickLat);

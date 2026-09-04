@@ -25,6 +25,9 @@ export const RADIATION_SHELTER_GEO_TABLE = 'radiation_shelter' as const;
 /** 물놀이 표지판 패널 — GeoServer WMS */
 export const WATER_PLAY_SIGN_GEO_TABLE = 'water_play_sign' as const;
 
+/** 물놀이 관리지역 — 표지판 패널에서 토글하는 GeoServer WMS */
+export const WATER_PLAY_MGMT_ZONE_GEO_TABLE = 'sd_water_play_mgmt_zone' as const;
+
 /** 저수지 수위 패널(saftyJsj) — GeoServer WMS(저수지 제원 포인트) */
 export const SAFETY_RESERVOIR_MASTER_GEO_TABLE = 'sd_reservoir_master' as const;
 
@@ -46,7 +49,7 @@ export const SAFETY_MAP_GEOSERVER_OVERLAYS: {
   opacity: number;
 }[] = [
   /** 침수흔적도(moisFloodTrace)는 safemap IF_0092_WMS — SafetyMapLayerPanel */
-  /** 물놀이관리지역(waterPlayManaged)는 safemap IF_0044_WMS — SafetyMapLayerPanel */
+  /** 물놀이관리지역 WMS 오버레이는 아래 WATER_PLAY_MGMT_ZONE_GEO_TABLE (표지판 패널 토글) */
   /** 겹침 순서(위→아래): 한파쉼터 > 무더위쉼터 > 폭염저감시설 */
   { panelId: 'sd_heat_mitigation_facility', tableName: 'sd_heat_mitigation_facility', zIndex: 119, opacity: 0.88 },
   { panelId: 'sd_heat_wave_shelter', tableName: 'sd_heat_wave_shelter', zIndex: 120, opacity: 0.88 },
@@ -99,6 +102,12 @@ export const SAFETY_MAP_GEOSERVER_OVERLAYS: {
     panelId: WATER_PLAY_SIGN_GEO_TABLE,
     tableName: WATER_PLAY_SIGN_GEO_TABLE,
     zIndex: 129,
+    opacity: 0.88,
+  },
+  {
+    panelId: WATER_PLAY_MGMT_ZONE_GEO_TABLE,
+    tableName: WATER_PLAY_MGMT_ZONE_GEO_TABLE,
+    zIndex: 130,
     opacity: 0.88,
   },
 ];

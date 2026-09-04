@@ -1,12 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
-import { Search, RefreshCw, X, Download } from "lucide-react";
+import { useSession } from "next-auth/react";
+import { Search, RefreshCw, X, Download, Layers } from "lucide-react";
 import { call } from "@/lib/api";
 import type { DefineCodeRow } from "@/lib/defineLayerCodeDisplay";
 import { cn } from "@/lib/utils";
 import { useMapContext } from "../../../_mapComponents/MapContext";
 import {
+  WATER_PLAY_MGMT_ZONE_GEO_TABLE,
   WATER_PLAY_SIGN_GEO_TABLE,
   refreshSafetyMapGeoLayer,
 } from "../../../_mapComponents/layerFactory/safetydataMapLayerFactory";
@@ -16,6 +18,7 @@ import { LayerRowPanelButton } from "../../../_mapComponents/layerRowEdit/LayerR
 import type { WaterPlaySignListItem } from "@/service/waterPlaySignService";
 import { useWaterPlaySignMapHighlight } from "./useWaterPlaySignMapHighlight";
 import { useWaterPlaySignMapClick } from "./useWaterPlaySignMapClick";
+import { WaterPlayMgmtZoneDetailFloating } from "./WaterPlayMgmtZoneDetailFloating";
 import { SafetyLayerListTable } from "../SafetyLayerListTable";
 import { useSafetyLayerListColumns } from "../useSafetyLayerListColumns";
 import {
@@ -51,6 +54,9 @@ export function WaterPlaySignPanel({
   onSelectDetailId,
   listRefreshKey = 0,
 }: Props) {
+  const { data: session } = useSession();
+  /** 슈퍼관리자(su) 계정에서만 물놀이 관리지역 레이어 토글 표시 */
+  const showMgmtZoneToggle = session?.user?.id === "su";
   const mapContext = useMapContext();
   const mapContextRef = useRef(mapContext);
   mapContextRef.current = mapContext;
@@ -71,9 +77,13 @@ export function WaterPlaySignPanel({
   );
   const [sorts, setSorts] = useState<WaterPlaySignListSortSpec[]>([]);
   const [exporting, setExporting] = useState(false);
+  const [mgmtDetailRow, setMgmtDetailRow] = useState<Record<string, unknown> | null>(null);
   const listScrollRef = useRef<HTMLDivElement | null>(null);
   const { columns, columnsLoading } = useSafetyLayerListColumns(WATER_PLAY_SIGN_TABLE);
   const addressPrefixes = usePublicLayerAddressPrefixes();
+  const mgmtLayerOn =
+    showMgmtZoneToggle &&
+    mapContext?.safetyMapLayerVisibility?.[WATER_PLAY_MGMT_ZONE_GEO_TABLE] === true;
 
   useEffect(() => {
     let cancelled = false;
@@ -107,12 +117,43 @@ export function WaterPlaySignPanel({
 
   useWaterPlaySignMapHighlight(mapReady, selectedRow);
 
+  const handleMgmtHit = useCallback((row: Record<string, unknown>) => {
+    setMgmtDetailRow(row);
+  }, []);
+
   useWaterPlaySignMapClick({
     mapReady,
     panelOpen: true,
     items,
     onSelectDetailId: (id) => onSelectDetailId(id),
+    mgmtLayerOn,
+    onMgmtHit: handleMgmtHit,
   });
+
+  const toggleMgmtLayer = useCallback(() => {
+    if (!showMgmtZoneToggle) return;
+    const setVis = mapContext?.setSafetyMapLayerVisibility;
+    if (!setVis) return;
+    const nextOn = mapContext?.safetyMapLayerVisibility?.[WATER_PLAY_MGMT_ZONE_GEO_TABLE] !== true;
+    if (!nextOn) setMgmtDetailRow(null);
+    setVis((prev) => ({ ...prev, [WATER_PLAY_MGMT_ZONE_GEO_TABLE]: nextOn }));
+  }, [
+    showMgmtZoneToggle,
+    mapContext?.setSafetyMapLayerVisibility,
+    mapContext?.safetyMapLayerVisibility,
+  ]);
+
+  /** su 외 시스템에서는 관리지역 레이어·플로팅 정리 */
+  useEffect(() => {
+    if (showMgmtZoneToggle) return;
+    setMgmtDetailRow(null);
+    const setVis = mapContext?.setSafetyMapLayerVisibility;
+    if (!setVis) return;
+    setVis((prev) => {
+      if (prev[WATER_PLAY_MGMT_ZONE_GEO_TABLE] !== true) return prev;
+      return { ...prev, [WATER_PLAY_MGMT_ZONE_GEO_TABLE]: false };
+    });
+  }, [showMgmtZoneToggle, mapContext?.setSafetyMapLayerVisibility]);
 
   useEffect(() => {
     let cancelled = false;
@@ -250,7 +291,12 @@ export function WaterPlaySignPanel({
     if (!setVis) return;
     setVis((prev) => ({ ...prev, [WATER_PLAY_SIGN_GEO_TABLE]: true }));
     return () => {
-      setVis((prev) => ({ ...prev, [WATER_PLAY_SIGN_GEO_TABLE]: false }));
+      setMgmtDetailRow(null);
+      setVis((prev) => ({
+        ...prev,
+        [WATER_PLAY_SIGN_GEO_TABLE]: false,
+        [WATER_PLAY_MGMT_ZONE_GEO_TABLE]: false,
+      }));
     };
   }, [mapContext?.setSafetyMapLayerVisibility]);
 
@@ -390,10 +436,29 @@ export function WaterPlaySignPanel({
   );
 
   return (
+    <>
     <div className="standard-panel-root">
       <div className="standard-panel-header">
         <span className="standard-panel-title">물놀이 표지판</span>
         <div className="flex shrink-0 items-center gap-1">
+          {showMgmtZoneToggle ? (
+            <button
+              type="button"
+              title={mgmtLayerOn ? "물놀이 관리지역 레이어 끄기" : "물놀이 관리지역 레이어 켜기"}
+              aria-label={mgmtLayerOn ? "물놀이 관리지역 레이어 끄기" : "물놀이 관리지역 레이어 켜기"}
+              aria-pressed={mgmtLayerOn}
+              onClick={toggleMgmtLayer}
+              className={cn(
+                "inline-flex cursor-pointer items-center gap-1 rounded px-2.5 py-1.5 text-[10px] font-medium leading-tight transition-colors",
+                mgmtLayerOn
+                  ? "border border-primary/40 bg-primary/14 text-primary"
+                  : "border border-border bg-background text-muted-foreground hover:border-border"
+              )}
+            >
+              <Layers className="h-3 w-3 shrink-0" aria-hidden />
+              물놀이 관리지역
+            </button>
+          ) : null}
           <LayerRowPanelButton
             type="button"
             onClick={() => void handleExportExcel()}
@@ -572,5 +637,10 @@ export function WaterPlaySignPanel({
         </div>
       </div>
     </div>
+    <WaterPlayMgmtZoneDetailFloating
+      row={mgmtDetailRow}
+      onClose={() => setMgmtDetailRow(null)}
+    />
+    </>
   );
 }

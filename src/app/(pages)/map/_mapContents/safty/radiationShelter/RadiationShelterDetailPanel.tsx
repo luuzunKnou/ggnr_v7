@@ -381,9 +381,17 @@ export function RadiationShelterDetailPanel({
                     (selected.jibunAddress ?? '').trim() ||
                     (selected.title ?? '').trim() ||
                     (selected.address ?? '').trim();
+                  const placeTitle = (selected.title ?? '').trim();
                   const pickLon = Number(selected.point?.x);
                   const pickLat = Number(selected.point?.y);
-                  updateForm('addr', adr);
+                  setForm((prev) => {
+                    const next: Record<string, string> = { ...prev, addr: adr };
+                    // 장소(searchPlace) title — 시설명 비어 있을 때만 자동입력
+                    if (placeTitle && !(prev.ftn_nm ?? '').trim()) {
+                      next.ftn_nm = placeTitle;
+                    }
+                    return next;
+                  });
                   if (Number.isFinite(pickLon) && Number.isFinite(pickLat)) {
                     setLon(pickLon);
                     setLat(pickLat);
