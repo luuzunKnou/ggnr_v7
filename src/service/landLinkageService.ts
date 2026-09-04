@@ -610,8 +610,10 @@ function formatPriceCell(value: unknown): string {
 }
 
 function formatAreaCell(value: unknown): string {
-  const n = Number(String(value ?? '').replace(/,/g, ''));
-  if (!Number.isFinite(n)) return toStr(value) || '-';
+  const raw = String(value ?? '').trim();
+  if (!raw) return '-';
+  const n = Number(raw.replace(/,/g, ''));
+  if (!Number.isFinite(n)) return raw || '-';
   return `${n.toLocaleString('ko-KR')}㎡`;
 }
 
@@ -736,7 +738,8 @@ export async function fetchParcelLandModalList(params: {
         '관련지번',
       ];
       const rows = maps.map((item) => {
-        const rel = toStr(item.RELJIBUN)
+        const rel = toStr(item.RELJIBUN) || toStr(item.RELJIBUN_LIST);
+        const relJoined = rel
           .split(/\n/)
           .map((s) => s.trim())
           .filter(Boolean)
@@ -748,7 +751,7 @@ export async function fetchParcelLandModalList(params: {
           formatAreaCell(item.PAREA),
           toStr(item.SHR_CNT) ? `${toStr(item.SHR_CNT)}명` : '-',
           formatKrasYmd(toStr(item.LAND_MOV_DEL_YMD)) || '-',
-          rel || '-',
+          relJoined || '-',
         ];
       });
       return {

@@ -453,7 +453,7 @@ export function MaterialFilesPanel({
   const [lawError, setLawError] = useState<string | null>(null)
 
   useEffect(() => {
-    if (material.notesOnly || !material.lawXmlKey) {
+    if (material.notesOnly || !material.xmlUrl) {
       setLawFiles(null)
       setLawError(null)
       setLawLoading(false)
@@ -487,7 +487,7 @@ export function MaterialFilesPanel({
     return () => {
       cancelled = true
     }
-  }, [material.id, material.lawXmlKey, material.notesOnly])
+  }, [material.id, material.xmlUrl, material.notesOnly])
 
   if (material.notesOnly) {
     return (
@@ -499,13 +499,13 @@ export function MaterialFilesPanel({
 
   const staticFiles = material.files
   const resolvedLawFiles = lawFiles ?? []
-  const displayFiles = material.lawXmlKey ? resolvedLawFiles : staticFiles
+  const displayFiles = material.xmlUrl ? resolvedLawFiles : staticFiles
   const showLawViewLink =
-    Boolean(material.lawXmlKey) &&
+    Boolean(material.xmlUrl) &&
     !lawLoading &&
     resolvedLawFiles.length === 0 &&
     Boolean(material.lawViewUrl)
-  const fileCountLabel = material.lawXmlKey
+  const fileCountLabel = material.xmlUrl
     ? lawLoading
       ? "조회 중…"
       : resolvedLawFiles.length > 0
@@ -556,7 +556,7 @@ export function MaterialFilesPanel({
           </li>
         </ul>
       ) : null}
-      {material.lawXmlKey &&
+      {material.xmlUrl &&
       !lawLoading &&
       !lawError &&
       resolvedLawFiles.length === 0 &&

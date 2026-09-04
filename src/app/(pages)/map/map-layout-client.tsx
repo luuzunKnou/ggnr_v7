@@ -85,7 +85,7 @@ import {
   beginMediaRegistration,
   findShootingRequest,
 } from "./_mapContents/shootingRequest/shootingRequestMockStore"
-import { SHOOTING_REQUEST_UI_ENABLED } from "./_mapContents/shootingRequest/shootingRequestUiFlag"
+import { useShootingRequestUiEnabled } from "./_mapContents/shootingRequest/useShootingRequestUiEnabled"
 import {
   aerialKindToOpenedKey,
   shootTypeToAerialKind,
@@ -436,6 +436,7 @@ function MapLayoutContent({
 }) {
   const router = useRouter()
   const searchParams = useSearchParams()
+  const shootingUiEnabled = useShootingRequestUiEnabled()
   const mapContext = useMapContext()
   /** Provider `value`는 매 렌더 새 객체 — effect deps에 `mapContext` 넣으면 visibleLayerNames만 바뀌어도 재실행됨 */
   const mapInstanceRef = mapContext?.mapInstanceRef
@@ -557,11 +558,11 @@ function MapLayoutContent({
             ? "satellite"
             : undefined
   const shootingApprovalOpen =
-    SHOOTING_REQUEST_UI_ENABLED &&
+    shootingUiEnabled &&
     systemKeyFromUrl === "uav" &&
     openedWindows.includes(SHOOTING_APPROVAL_OPENED_KEY)
   const shootingRequestOpen =
-    SHOOTING_REQUEST_UI_ENABLED &&
+    shootingUiEnabled &&
     systemKeyFromUrl === "uav" &&
     openedWindows.includes(SHOOTING_REQUEST_OPENED_KEY)
   /** 촬영요청·승인 모두 동일 목록 패널 (모드만 mine / approval) */
@@ -1354,7 +1355,15 @@ function MapLayoutContent({
 
   const handleCloseMemoManagement = () => {
     setMemoDetailId(null)
+    setMemoAddTable(null)
     const next = openedWindows.filter((w) => w !== MEMO_OPENED_KEY)
+    setOpened(next)
+  }
+
+  const handleCloseComplaintManagement = () => {
+    setComplaintAddOpen(false)
+    mapContext?.setComplaintDetail?.(null)
+    const next = openedWindows.filter((w) => w !== COMPLAINT_OPENED_KEY)
     setOpened(next)
   }
 
@@ -2501,10 +2510,11 @@ function MapLayoutContent({
           )}
           <ShootingRequestFormModal
             open={
-              SHOOTING_REQUEST_UI_ENABLED &&
-              systemKeyFromUrl === "uav" &&
+              shootingUiEnabled &&
               (myInfoShootingModalId != null ||
-                (shootingPanelOpen && shootingRequestDetailId === SHOOTING_REQUEST_NEW_ID))
+                (systemKeyFromUrl === "uav" &&
+                  shootingPanelOpen &&
+                  shootingRequestDetailId === SHOOTING_REQUEST_NEW_ID))
             }
             detailId={
               myInfoShootingModalId ??
@@ -2573,6 +2583,7 @@ function MapLayoutContent({
               >
                 <ComplaintListPanel
                   refreshKey={complaintListRefreshKey}
+                  onClose={handleCloseComplaintManagement}
                   onRequestAdd={() => {
                     setComplaintDetail?.(null)
                     setMemoDetailId(null)

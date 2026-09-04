@@ -401,6 +401,21 @@ function indexNoFromConsCode(consCode: string, ogcFid: number): { label: string;
   return { label: String(n), order: n };
 }
 
+/** 종단·횡단·구조물 도형 중심이 색인도 폴리곤 내부에 있는지 (경계 제외) */
+function relatedCentroidWithinIndexSql(indexAlias = 'idx', tableAlias = 't'): string {
+  return `ST_Within(ST_Centroid(${tableAlias}.geom), ${indexAlias}.geom)`;
+}
+
+/** 색인도 ↔ 종단·횡단·구조물: 동일 river_code (색인도 코드 없으면 조건 생략) */
+function relatedMatchesIndexRiverCodeSql(indexAlias = 'idx', tableAlias = 't'): string {
+  const idxCode = `TRIM(COALESCE(${indexAlias}.river_code::text, ''))`;
+  const tCode = `TRIM(COALESCE(${tableAlias}.river_code::text, ''))`;
+  return `(
+    ${idxCode} = ''
+    OR ${tCode} = ${idxCode}
+  )`;
+}
+
 /**
  * 선택 기본계획 1건 (geom + 하천명·차수).
  * 색인도는 공간교차만 하면 타 하천·타 차수 시트가 섞여 같은 번호가 중복되므로
@@ -609,7 +624,7 @@ function parseExtent3857(row: {
 }
 
 /**
- * 선택한 기본계획 폴리곤과 교차하는 색인도 1건 + 해당 색인도 폴리곤과 교차하는 종단/횡단/구조물 시설 목록
+ * 선택한 기본계획 폴리곤과 교차하는 색인도 1건 + 중심이 색인도 안이고 river_code 가 같은 종단/횡단/구조물 목록
  */
 export async function getRiverBasicPlanIndexView(params?: {
   tab?: RiverType;
@@ -749,7 +764,10 @@ export async function getRiverBasicPlanIndexView(params?: {
         ST_YMax(ST_Transform(t.geom, 3857))::float8 AS ymax
       FROM layer."${safeT}" t
       INNER JOIN layer."${safeIdx}" idx ON idx.ogc_fid = ${idxOgcFid}
-      WHERE idx.geom IS NOT NULL AND ST_Intersects(t.geom, idx.geom)
+      WHERE idx.geom IS NOT NULL
+        AND t.geom IS NOT NULL
+        AND ${relatedCentroidWithinIndexSql('idx', 't')}
+        AND ${relatedMatchesIndexRiverCodeSql('idx', 't')}
       ORDER BY t.ogc_fid ASC
     `;
     try {
@@ -807,7 +825,10 @@ export async function getRiverBasicPlanIndexView(params?: {
         ST_YMax(ST_Transform(t.geom, 3857))::float8 AS ymax
       FROM layer."${safeT}" t
       INNER JOIN layer."${safeIdx}" idx ON idx.ogc_fid = ${idxOgcFid}
-      WHERE idx.geom IS NOT NULL AND ST_Intersects(t.geom, idx.geom)
+      WHERE idx.geom IS NOT NULL
+        AND t.geom IS NOT NULL
+        AND ${relatedCentroidWithinIndexSql('idx', 't')}
+        AND ${relatedMatchesIndexRiverCodeSql('idx', 't')}
       ORDER BY t.ogc_fid ASC
     `;
     try {

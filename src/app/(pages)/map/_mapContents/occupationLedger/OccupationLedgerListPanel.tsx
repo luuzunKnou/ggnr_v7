@@ -23,6 +23,7 @@ import { LAYER_ROW_NEW_ID, LayerRowAddButton, LayerRowPanelButton } from '../../
 import {
   clearOccupationLedgerWmsLayers,
   ensureOccupationLedgerWmsLayers,
+  setOccupationLedgerCadastralOverlay,
 } from './occupationLedgerMapSync';
 import { isUseFeeWmsVisible, toggleUseFeeWmsLayer } from '../useFee/useFeeMapSync';
 import { occupationLayerToggleActiveStyle } from '@/lib/occupationLayerStyle';
@@ -89,8 +90,10 @@ export function OccupationLedgerListPanel({
 
   useEffect(() => {
     ensureOccupationLedgerWmsLayers(mapContextRef.current?.setVisibleLayerNames, { serEng });
+    setOccupationLedgerCadastralOverlay(true);
     return () => {
       clearOccupationLedgerWmsLayers(mapContextRef.current?.setVisibleLayerNames, { serEng });
+      setOccupationLedgerCadastralOverlay(false);
     };
   }, [serEng]);
 

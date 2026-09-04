@@ -57,9 +57,9 @@ export function ensureOccupationLedgerWmsLayers(
   params?: {
     serEng?: string | null;
     system?: string | null;
-    /** true면 물건지 WMS도 켬. 기본은 본표+필지 (물건지는 목록 선택 시에만) */
+    /** true면 물건지 WMS도 켬. 기본은 본표 (물건지는 목록 선택 시에만) */
     includeMgj?: boolean;
-    /** true면 본표·필지 WMS를 켜지 않고, 켜져 있으면 끔 (도형 편집 중 저장된 도형 숨김) */
+    /** true면 본표 WMS를 켜지 않고, 켜져 있으면 끔 (도형 편집 중 저장된 도형 숨김) */
     omitMain?: boolean;
   }
 ) {
@@ -69,22 +69,22 @@ export function ensureOccupationLedgerWmsLayers(
     system: params?.system,
   });
   if (!binding) return;
-  /** 부서업무 진입부터 본표와 필지를 함께 표시 */
-  const mainIds = [binding.mainTable, binding.jijukTable].map((t) => t.trim().toLowerCase());
+  const mainId = binding.mainTable.trim().toLowerCase();
+  const jijukId = binding.jijukTable.trim().toLowerCase();
   const mgjId = binding.mgjTable.trim().toLowerCase();
   const includeMgj = params?.includeMgj === true;
   const omitMain = params?.omitMain === true;
   setVisibleLayerNames((prev) => {
     const next = new Set(prev);
     let changed = false;
-    for (const id of mainIds) {
-      if (omitMain) {
-        if (next.delete(id)) changed = true;
-      } else if (!next.has(id)) {
-        next.add(id);
-        changed = true;
-      }
+    if (omitMain) {
+      if (next.delete(mainId)) changed = true;
+    } else if (!next.has(mainId)) {
+      next.add(mainId);
+      changed = true;
     }
+    /** 부서업무는 점용 필지 대신 지적도를 씀 */
+    if (next.delete(jijukId)) changed = true;
     if (includeMgj) {
       if (!next.has(mgjId)) {
         next.add(mgjId);
@@ -95,6 +95,18 @@ export function ensureOccupationLedgerWmsLayers(
     }
     return changed ? next : prev;
   });
+}
+
+/** 부서업무 점용 — 지적(연속지적) 켜기/끄기. 점용 필지 WMS 대신 사용 */
+export function setOccupationLedgerCadastralOverlay(active: boolean): void {
+  if (typeof window === 'undefined') return;
+  window.dispatchEvent(
+    new CustomEvent('ggnr-map-control-set', {
+      detail: active
+        ? { id: 'cadastral', active: true, tableNames: ['jijuk'] }
+        : { id: 'cadastral', active: false },
+    })
+  );
 }
 
 /** 저장·상세 갱신 후 WMS·뷰 동기화 (하천점용과 동일) */
