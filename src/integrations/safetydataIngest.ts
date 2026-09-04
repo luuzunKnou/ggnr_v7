@@ -67,8 +67,13 @@ import {
   type SafetydataApiColumnSpec,
   type SafetydataDatasetConfig,
 } from '@/integrations/safetydata.config';
+import { getSafemapDatasetById } from '@/integrations/safemap.config';
 import { buildSafetydataFetchUrl, getSafetydataTargetSchema } from '@/integrations/safetydataHttp';
 import { fetchNormalizedJibunFromAddressSearch } from '@/lib/vworldAddressServer';
+
+function resolveIngestDatasetById(datasetId: string): SafetydataDatasetConfig | undefined {
+  return getSafetydataDatasetById(datasetId) ?? getSafemapDatasetById(datasetId);
+}
 
 const TARGET_SRID = 5181;
 const EMD_SCHEMA = (process.env.SAFETYDATA_EMD_SCHEMA ?? 'public_layer').trim() || 'public_layer';
@@ -994,8 +999,8 @@ export async function ingestSafetydataDatasetToLayer(
   datasetId: string,
   options: SafetydataIngestOptions = {}
 ): Promise<SafetydataIngestResult> {
-  const cfg = getSafetydataDatasetById(datasetId);
-  if (!cfg) throw new Error(`Unknown safetydata dataset: ${datasetId}`);
+  const cfg = resolveIngestDatasetById(datasetId);
+  if (!cfg) throw new Error(`Unknown safetydata/safemap dataset: ${datasetId}`);
 
   const prereqs = cfg.ingestPrerequisiteDatasetIds ?? [];
   if (!options.skipPrerequisites && prereqs.length > 0) {
