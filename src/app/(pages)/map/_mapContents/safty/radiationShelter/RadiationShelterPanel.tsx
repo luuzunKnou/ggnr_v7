@@ -1,13 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
-import { Search, RefreshCw, X } from "lucide-react";
+import { Search, RefreshCw, X, Download } from "lucide-react";
 import { call } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { useMapContext } from "../../../_mapComponents/MapContext";
 import { RADIATION_SHELTER_GEO_TABLE, refreshSafetyMapGeoLayer } from "../../../_mapComponents/layerFactory/safetydataMapLayerFactory";
 import { LAYER_ROW_NEW_ID } from "../../../_mapComponents/layerRowEdit";
 import { LayerRowAddButton } from "../../../_mapComponents/layerRowEdit/LayerRowAddButton";
+import { LayerRowPanelButton } from "../../../_mapComponents/layerRowEdit/LayerRowPanelButton";
 import type { RadiationShelterListItem } from "@/service/radiationShelterService";
 import { useRadiationShelterMapHighlight } from "./useRadiationShelterMapHighlight";
 import { useRadiationShelterMapClick } from "./useRadiationShelterMapClick";
@@ -21,6 +22,7 @@ import {
 } from "./radiationShelterListSort";
 import { formatRadiationShelterAddressDisplay } from "./radiationShelterAddressDisplay";
 import { flyToRadiationShelterRow } from "./radiationShelterMapFly";
+import { exportRadiationShelterExcel } from "./radiationShelterExcel";
 import {
   applyRadiationShelterLayerCql,
 } from "./radiationShelterLayerCql";
@@ -55,6 +57,7 @@ export function RadiationShelterPanel({
   const [emdFilter, setEmdFilter] = useState("");
   const [emdOptions, setEmdOptions] = useState<{ code: string; name: string }[]>([]);
   const [sorts, setSorts] = useState<RadiationShelterListSortSpec[]>([]);
+  const [exporting, setExporting] = useState(false);
   const listScrollRef = useRef<HTMLDivElement | null>(null);
   const { columns, columnsLoading } = useSafetyLayerListColumns("radiation_shelter");
   const addressPrefixes = usePublicLayerAddressPrefixes();
@@ -254,6 +257,30 @@ export function RadiationShelterPanel({
     [selectedDetailId, onSelectDetailId, flyToRow]
   );
 
+  /** 화면 필터와 무관하게 전체 목록을 참고 서식으로 내려받기 */
+  const handleExportExcel = useCallback(async () => {
+    if (exporting) return;
+    setExporting(true);
+    try {
+      const res = await call("", "POST", {
+        service: "radiationShelterService",
+        action: "list",
+        params: {
+          keyword: "",
+          emdCode: "",
+          limit: 5000,
+        },
+      });
+      const data = res?.data ?? res;
+      const rows = Array.isArray(data?.items) ? (data.items as RadiationShelterListItem[]) : [];
+      exportRadiationShelterExcel(rows, addressPrefixes);
+    } catch (e: unknown) {
+      window.alert(e instanceof Error ? e.message : "명단 다운로드에 실패했습니다.");
+    } finally {
+      setExporting(false);
+    }
+  }, [exporting, addressPrefixes]);
+
   const selectedListId =
     selectedDetailId != null && selectedDetailId !== LAYER_ROW_NEW_ID
       ? selectedDetailId
@@ -272,6 +299,16 @@ export function RadiationShelterPanel({
       <div className="standard-panel-header">
         <span className="standard-panel-title">방사선 대피소</span>
         <div className="flex shrink-0 items-center gap-1">
+          <LayerRowPanelButton
+            type="button"
+            onClick={() => void handleExportExcel()}
+            title="명단 다운로드"
+            disabled={exporting}
+            loading={exporting}
+          >
+            <Download className="h-3 w-3 shrink-0" aria-hidden />
+            명단 다운로드
+          </LayerRowPanelButton>
           <LayerRowAddButton
             onClick={() => onSelectDetailId(LAYER_ROW_NEW_ID)}
             disabled={selectedDetailId === LAYER_ROW_NEW_ID}

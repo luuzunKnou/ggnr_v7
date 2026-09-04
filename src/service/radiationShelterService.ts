@@ -70,7 +70,7 @@ const LIST_SELECT_SQL = `
 export async function list(p: Params): Promise<{ items: RadiationShelterListItem[]; total: number }> {
   const keyword = tx(p.keyword);
   const emdCode = tx(p.emdCode ?? p.emd_cd);
-  const limit = Math.min(500, Math.max(1, Number(p.limit ?? 200)));
+  const limit = Math.min(5000, Math.max(1, Number(p.limit ?? 200)));
 
   const whereParts: string[] = [];
   const params: unknown[] = [];
