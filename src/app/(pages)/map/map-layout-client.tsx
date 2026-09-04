@@ -479,6 +479,7 @@ function MapLayoutContent({
   const setRoadCctvPanelOpen = mapContext?.setRoadCctvPanelOpen
   const setSafetyFacPanelOpen = mapContext?.setSafetyFacPanelOpen
   const setComplaintPanelOpen = mapContext?.setComplaintPanelOpen
+  const setMemoPanelOpen = mapContext?.setMemoPanelOpen
   const setRoadRewardPanelOpen = mapContext?.setRoadRewardPanelOpen
   const setRoadCctvOverlay = mapContext?.setRoadCctvOverlay
   const setRoadCctvUnderlayMode = mapContext?.setRoadCctvUnderlayMode
@@ -1138,6 +1139,10 @@ function MapLayoutContent({
   useEffect(() => {
     setComplaintPanelOpen?.(complaintManagementOpen)
   }, [setComplaintPanelOpen, complaintManagementOpen])
+
+  useEffect(() => {
+    setMemoPanelOpen?.(memoManagementOpen)
+  }, [setMemoPanelOpen, memoManagementOpen])
 
   useEffect(() => {
     setRoadRewardPanelOpen?.(roadRewardOpen)

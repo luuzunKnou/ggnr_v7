@@ -1,7 +1,7 @@
 /**
  * 점사용료 — water|road|public_ngl_fee_list 조회 + 차세대 수동 연계
  */
-import { and, asc, desc, eq, ilike, or, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, ilike, inArray, or, sql } from 'drizzle-orm';
 import { db } from '@/database/db';
 import {
   type NglFeeList,
@@ -485,6 +485,37 @@ export async function getUseFeeList(params?: {
     };
   } catch (e) {
     return { rows: [], total: 0, error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+/** 점용 허가번호(대장번호)로 겹친 점사용료 후보 */
+export async function listUseFeeHitsByLedgerNos(params?: {
+  ledgerNos?: string[];
+  serEng?: string;
+  system?: string;
+}): Promise<{ rows: { id: string; ledgerNo: string }[]; error?: string }> {
+  const nos = [
+    ...new Set(
+      (params?.ledgerNos ?? [])
+        .map((s) => String(s ?? '').trim())
+        .filter(Boolean)
+    ),
+  ].slice(0, 50);
+  if (nos.length === 0) return { rows: [] };
+  const nglFeeList = resolveFeeTable(params);
+  try {
+    const rows = await db
+      .select({ id: nglFeeList.id, ledgerNo: nglFeeList.ledgerNo })
+      .from(nglFeeList)
+      .where(inArray(nglFeeList.ledgerNo, nos));
+    return {
+      rows: rows.map((r) => ({
+        id: String(r.id),
+        ledgerNo: String(r.ledgerNo ?? ''),
+      })),
+    };
+  } catch (e) {
+    return { rows: [], error: e instanceof Error ? e.message : String(e) };
   }
 }
 

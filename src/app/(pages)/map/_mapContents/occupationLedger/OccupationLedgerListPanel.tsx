@@ -143,7 +143,9 @@ export function OccupationLedgerListPanel({
       const rawKey = String(pick?.rowKey ?? '').trim();
       if (!rawKey) return;
       const opts = Array.isArray(pick?.overlapOptions) ? pick.overlapOptions : [];
-      mapContext?.setOccupationLedgerMapHitOptions?.(opts.length > 1 ? opts : []);
+      if (opts.length > 1) {
+        mapContext?.setOccupationLedgerMapHitOptions?.(opts);
+      }
       void (async () => {
         let rowKey = rawKey;
         try {

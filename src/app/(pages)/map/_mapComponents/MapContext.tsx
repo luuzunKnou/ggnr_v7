@@ -458,6 +458,9 @@ export type MapContextValue = {
   /** URL 기준 민원관리 패널 열림 — 일반 식별 비활성화·지도 클릭 상세용 */
   complaintPanelOpen: boolean;
   setComplaintPanelOpen: Dispatch<SetStateAction<boolean>>;
+  /** URL 기준 메모관리 패널 열림 — 일반 식별 비활성화·지도 클릭 상세용 */
+  memoPanelOpen: boolean;
+  setMemoPanelOpen: Dispatch<SetStateAction<boolean>>;
   /** URL 기준 보상편입용지 패널 열림 — 일반 식별 비활성화용 */
   roadRewardPanelOpen: boolean;
   setRoadRewardPanelOpen: Dispatch<SetStateAction<boolean>>;
@@ -769,6 +772,7 @@ export function MapContextProvider({ children }: { children: React.ReactNode }) 
   const [roadCctvPanelOpen, setRoadCctvPanelOpen] = useState(false);
   const [safetyFacPanelOpen, setSafetyFacPanelOpen] = useState(false);
   const [complaintPanelOpen, setComplaintPanelOpen] = useState(false);
+  const [memoPanelOpen, setMemoPanelOpen] = useState(false);
   const [roadRewardPanelOpen, setRoadRewardPanelOpen] = useState(false);
   const [safetyFacBuildingRoadLayerState, setSafetyFacBuildingRoadLayerState] = useState<{
     visibleTableNames: Set<string>;
@@ -989,6 +993,8 @@ export function MapContextProvider({ children }: { children: React.ReactNode }) 
         setSafetyFacPanelOpen,
         complaintPanelOpen,
         setComplaintPanelOpen,
+        memoPanelOpen,
+        setMemoPanelOpen,
         roadRewardPanelOpen,
         setRoadRewardPanelOpen,
         safetyFacBuildingRoadLayerState,

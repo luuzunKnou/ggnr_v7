@@ -170,7 +170,9 @@ export function UseFeeListPanel({ onClose, selectedId, onSelectId, serEng }: Lis
       const id = String(pick?.id ?? '').trim()
       if (!id) return
       const opts = Array.isArray(pick?.overlapOptions) ? pick.overlapOptions : []
-      mapContext?.setUseFeeMapHitOptions?.(opts.length > 1 ? opts : [])
+      if (opts.length > 1) {
+        mapContext?.setUseFeeMapHitOptions?.(opts)
+      }
 
       const clickedExt = pick?.extent3857
       if (

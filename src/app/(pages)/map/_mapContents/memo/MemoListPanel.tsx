@@ -23,6 +23,7 @@ import {
   center3857FromExtent,
   useMemoMapHighlight,
 } from "./useMemoMapHighlight";
+import { useMemoMapClick } from "./useMemoMapClick";
 
 type ListRow = {
   rowKey: string;
@@ -66,6 +67,13 @@ export function MemoListPanel({
   const [highlightGeom, setHighlightGeom] = useState<Record<string, unknown> | null>(null);
 
   useMemoMapHighlight(Boolean(mapContext?.mapReady), highlightGeom);
+
+  useMemoMapClick({
+    enabled: true,
+    onSelectRowKey: (rowKey) => {
+      onSelectDetailId(rowKey);
+    },
+  });
 
   useEffect(() => {
     void call("", "POST", {
