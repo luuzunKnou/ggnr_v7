@@ -32,7 +32,6 @@ import {
 } from "./waterPlaySignLayerCql";
 import { buildSafetyLayerIdInCql } from "../applySafetyMapGeoLayerCql";
 import { usePublicLayerAddressPrefixes } from "../usePublicLayerAddressPrefixes";
-import { useWaterPlayManagedSafemapLayer } from "./useWaterPlayManagedSafemapLayer";
 
 type DetailId = number | typeof LAYER_ROW_NEW_ID | null;
 
@@ -75,7 +74,6 @@ export function WaterPlaySignPanel({
   const listScrollRef = useRef<HTMLDivElement | null>(null);
   const { columns, columnsLoading } = useSafetyLayerListColumns(WATER_PLAY_SIGN_TABLE);
   const addressPrefixes = usePublicLayerAddressPrefixes();
-  const waterPlayManaged = useWaterPlayManagedSafemapLayer();
 
   useEffect(() => {
     let cancelled = false;
@@ -394,35 +392,7 @@ export function WaterPlaySignPanel({
   return (
     <div className="standard-panel-root">
       <div className="standard-panel-header">
-        <div className="flex min-w-0 flex-1 items-center gap-2">
-          <span className="standard-panel-title">물놀이 표지판</span>
-          <button
-            type="button"
-            role="switch"
-            title={
-              waterPlayManaged.failed
-                ? "물놀이 관리지역 호출실패: 관리자에게 문의하세요"
-                : waterPlayManaged.on
-                  ? "물놀이 관리지역 끄기"
-                  : "물놀이 관리지역 켜기"
-            }
-            aria-checked={waterPlayManaged.on}
-            aria-busy={waterPlayManaged.loading || undefined}
-            aria-invalid={waterPlayManaged.failed || undefined}
-            onClick={waterPlayManaged.toggle}
-            className={cn(
-              "inline-flex shrink-0 cursor-pointer items-center rounded px-2.5 py-1.5 text-[10px] font-medium leading-tight transition-colors",
-              waterPlayManaged.failed
-                ? "border border-destructive/50 bg-destructive/10 text-destructive"
-                : waterPlayManaged.on
-                  ? "border border-primary/40 bg-primary/14 text-primary"
-                  : "border border-border bg-background text-muted-foreground hover:border-border"
-            )}
-          >
-            물놀이 관리지역
-            {waterPlayManaged.loading ? " …" : null}
-          </button>
-        </div>
+        <span className="standard-panel-title">물놀이 표지판</span>
         <div className="flex shrink-0 items-center gap-1">
           <LayerRowPanelButton
             type="button"
