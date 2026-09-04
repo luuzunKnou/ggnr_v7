@@ -1289,7 +1289,7 @@ export default function OpenLayersMap({
   useRoadCctvMapLayer(
     mapReady,
     mapInstanceRef.current,
-    Boolean(roadCctvOverlay),
+    roadCctvPanelOpen && Boolean(roadCctvOverlay),
     roadCctvOverlay?.items ?? [],
     roadCctvOverlay?.selectedKey ?? null,
     onRoadCctvSelectKey
