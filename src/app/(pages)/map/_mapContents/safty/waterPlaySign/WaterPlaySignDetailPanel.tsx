@@ -156,7 +156,12 @@ export function WaterPlaySignDetailPanel({
       setLon(pickedLon);
       setLat(pickedLat);
       if (address) applyAddressToForm(address);
-      flyToWaterPlaySignLonLat(mapContext?.mapInstanceRef?.current ?? null, pickedLon, pickedLat);
+      flyToWaterPlaySignLonLat(
+        mapContext?.mapInstanceRef?.current ?? null,
+        pickedLon,
+        pickedLat,
+        () => mapContext?.applyMapViewPaddingRef?.current?.()
+      );
     },
   });
 
@@ -275,11 +280,12 @@ export function WaterPlaySignDetailPanel({
       clearDraftPoint();
       stopPick();
       const map = mapContext?.mapInstanceRef?.current ?? null;
+      const applyPad = () => mapContext?.applyMapViewPaddingRef?.current?.();
       const savedItem = (data?.item ?? null) as WaterPlaySignListItem | null;
       if (savedItem) {
-        flyToWaterPlaySignRow(map, savedItem);
+        flyToWaterPlaySignRow(map, savedItem, applyPad);
       } else {
-        flyToWaterPlaySignLonLat(map, lon, lat);
+        flyToWaterPlaySignLonLat(map, lon, lat, applyPad);
       }
       onListRefresh?.();
       onCreated?.(newId);
@@ -318,11 +324,12 @@ export function WaterPlaySignDetailPanel({
       stopPick();
       setEditMode(false);
       const map = mapContext?.mapInstanceRef?.current ?? null;
+      const applyPad = () => mapContext?.applyMapViewPaddingRef?.current?.();
       const savedItem = (data?.item ?? null) as WaterPlaySignListItem | null;
       if (savedItem) {
-        flyToWaterPlaySignRow(map, savedItem);
+        flyToWaterPlaySignRow(map, savedItem, applyPad);
       } else {
-        flyToWaterPlaySignLonLat(map, lon, lat);
+        flyToWaterPlaySignLonLat(map, lon, lat, applyPad);
       }
       onListRefresh?.();
       await loadDetail();

@@ -56,6 +56,11 @@
   @apply w-full rounded-md border border-border bg-background py-1.5 pl-8 pr-3 text-sm outline-none ring-offset-2 focus:border-border focus:ring-2 focus:ring-ring;
 }
 
+/** 목록 패널 필터 select — villagePatrol과 동일 높이·글자, 너비만 축소 */
+@utility standard-filter-select {
+  @apply max-w-[5.5rem] shrink-0 cursor-pointer rounded-md border border-border bg-background px-2 py-1.5 text-xs text-foreground scheme-light dark:scheme-dark focus:border-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30;
+}
+
 @utility standard-filter-chips {
   @apply flex flex-wrap gap-1;
 }

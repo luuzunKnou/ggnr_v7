@@ -2,6 +2,10 @@
  * 물놀이 표지판 — layer.water_play_sign 목록·상세·CRUD
  */
 import { pool } from '@/database/db';
+import {
+  resolveBoundaryWkt5181,
+  sqlIntersectsBoundaryWkt,
+} from './publicLayerBoundaryGeom';
 
 type Params = Record<string, unknown>;
 
@@ -86,8 +90,9 @@ const LIST_SELECT_SQL = `
 
 export async function list(p: Params): Promise<{ items: WaterPlaySignListItem[]; total: number }> {
   const keyword = tx(p.keyword);
-  const emdNm = tx(p.emdNm ?? p.emd_nm);
-  const limit = Math.min(500, Math.max(1, Number(p.limit ?? 200)));
+  const emdCode = tx(p.emdCode ?? p.emd_cd);
+  const riCode = tx(p.riCode ?? p.ri_cd);
+  const limit = Math.min(5000, Math.max(1, Number(p.limit ?? 200)));
 
   const whereParts: string[] = [];
   const params: unknown[] = [];
@@ -103,10 +108,10 @@ export async function list(p: Params): Promise<{ items: WaterPlaySignListItem[];
       OR wps.remark ILIKE $${i}
     )`);
   }
-  if (emdNm) {
-    params.push(`%${emdNm}%`);
-    const i = params.length;
-    whereParts.push(`wps.addr ILIKE $${i}`);
+  const boundaryWkt = await resolveBoundaryWkt5181({ emdCode, riCode });
+  if (boundaryWkt) {
+    params.push(boundaryWkt);
+    whereParts.push(sqlIntersectsBoundaryWkt('wps.geom', params.length));
   }
   const gubun = tx(p.gubun);
   if (gubun) {

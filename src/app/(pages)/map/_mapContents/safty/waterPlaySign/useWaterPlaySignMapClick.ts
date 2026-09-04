@@ -9,7 +9,6 @@ import { useMapContext } from '../../../_mapComponents/MapContext';
 import { WATER_PLAY_SIGN_GEO_TABLE } from '../../../_mapComponents/layerFactory/safetydataMapLayerFactory';
 import { getRowValueByDefineField } from '../../../_mapComponents/standard/defineLayerRowUtils';
 import type { WaterPlaySignListItem } from '@/service/waterPlaySignService';
-import { flyToWaterPlaySignRow } from './waterPlaySignMapFly';
 
 function zoomToBuffer(zoom: number): number {
   return 300_000 * Math.pow(0.54, zoom);
@@ -91,7 +90,6 @@ export function useWaterPlaySignMapClick({
         if (!id) return;
 
         onSelectRef.current(id);
-        flyToWaterPlaySignRow(map, itemsRef.current.find((r) => r.id === id) ?? null);
       } catch {
         /* 식별 실패 무시 */
       }

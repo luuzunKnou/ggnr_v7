@@ -2834,17 +2834,13 @@ export async function getEmdRiOptions(params: { schema?: string } = {}) {
 }
 
 /**
- * 선택한 읍면동(emd_cd) 하위 리(ri) 목록 조회.
- * ri_cd에 emd_cd를 포함하는 행만 (ri_cd LIKE emd_cd || '%').
+ * 리(ri) 목록 조회. emdCode가 있으면 해당 읍면동(emd_cd)으로 시작하는 ri_cd만,
+ * 없으면 전체 리(ri_nm) 옵션.
  */
-export async function getRiOptionsByEmd(params: { schema?: string; emdCode: string } = { emdCode: '' }) {
+export async function getRiOptionsByEmd(params: { schema?: string; emdCode?: string } = {}) {
   const schema = (params?.schema ?? EMD_RI_SCHEMA).trim() || EMD_RI_SCHEMA;
   const emdCode = String(params?.emdCode ?? '').trim();
   const result: { ri: EmdRiOption[]; error?: string } = { ri: [] };
-
-  if (!emdCode) {
-    return result;
-  }
 
   let cols: Set<string>;
   try {
@@ -2859,6 +2855,10 @@ export async function getRiOptionsByEmd(params: { schema?: string; emdCode: stri
   }
 
   const safeEmdCode = emdCode.replace(/'/g, "''");
+  const whereEmd = emdCode
+    ? `"ri_cd" LIKE '${safeEmdCode}' || '%' AND `
+    : '';
+
   for (const nameCol of RI_LIST_NAME_COLUMNS) {
     if (!cols.has(nameCol)) continue;
     const orderCol = pickOrderColumn(cols, nameCol);
@@ -2866,8 +2866,7 @@ export async function getRiOptionsByEmd(params: { schema?: string; emdCode: stri
       const res = await db.execute(
         sql.raw(
           `SELECT "ri_cd" AS code, "${nameCol}" AS name FROM "${schema}"."ri"
-           WHERE "ri_cd" LIKE '${safeEmdCode}' || '%'
-             AND "${nameCol}" IS NOT NULL AND TRIM(COALESCE("${nameCol}"::text, '')) <> ''
+           WHERE ${whereEmd}"${nameCol}" IS NOT NULL AND TRIM(COALESCE("${nameCol}"::text, '')) <> ''
            ORDER BY "${orderCol}"`
         )
       );

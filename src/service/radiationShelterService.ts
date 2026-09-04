@@ -2,6 +2,10 @@
  * 방사선 대피소 — layer.radiation_shelter 목록·상세
  */
 import { pool } from '@/database/db';
+import {
+  resolveBoundaryWkt5181,
+  sqlIntersectsBoundaryWkt,
+} from './publicLayerBoundaryGeom';
 
 type Params = Record<string, unknown>;
 
@@ -65,7 +69,7 @@ const LIST_SELECT_SQL = `
 
 export async function list(p: Params): Promise<{ items: RadiationShelterListItem[]; total: number }> {
   const keyword = tx(p.keyword);
-  const emdNm = tx(p.emdNm ?? p.emd_nm);
+  const emdCode = tx(p.emdCode ?? p.emd_cd);
   const limit = Math.min(500, Math.max(1, Number(p.limit ?? 200)));
 
   const whereParts: string[] = [];
@@ -77,10 +81,10 @@ export async function list(p: Params): Promise<{ items: RadiationShelterListItem
       `(rs.ftn_nm ILIKE $${i} OR rs.addr ILIKE $${i} OR rs.remark ILIKE $${i} OR rs.actc_tnop::text ILIKE $${i})`
     );
   }
-  if (emdNm) {
-    params.push(`%${emdNm}%`);
-    const i = params.length;
-    whereParts.push(`rs.addr ILIKE $${i}`);
+  const boundaryWkt = await resolveBoundaryWkt5181({ emdCode });
+  if (boundaryWkt) {
+    params.push(boundaryWkt);
+    whereParts.push(sqlIntersectsBoundaryWkt('rs.geom', params.length));
   }
   const whereClause = whereParts.length ? `WHERE ${whereParts.join(' AND ')}` : '';
 

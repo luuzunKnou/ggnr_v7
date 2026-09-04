@@ -21,6 +21,10 @@ import {
 } from "./radiationShelterListSort";
 import { formatRadiationShelterAddressDisplay } from "./radiationShelterAddressDisplay";
 import { flyToRadiationShelterRow } from "./radiationShelterMapFly";
+import {
+  applyRadiationShelterLayerCql,
+} from "./radiationShelterLayerCql";
+import { buildSafetyLayerIdInCql } from "../applySafetyMapGeoLayerCql";
 import { usePublicLayerAddressPrefixes } from "../usePublicLayerAddressPrefixes";
 
 type DetailId = number | typeof LAYER_ROW_NEW_ID | null;
@@ -89,7 +93,7 @@ export function RadiationShelterPanel({
     };
   }, []);
 
-  const fetchList = useCallback(async (kw?: string, emdNm?: string) => {
+  const fetchList = useCallback(async (kw?: string, emdCode?: string) => {
     setLoading(true);
     setError(null);
     try {
@@ -98,7 +102,7 @@ export function RadiationShelterPanel({
         action: "list",
         params: {
           keyword: kw ?? "",
-          emdNm: emdNm ?? "",
+          emdCode: emdCode ?? "",
           limit: 200,
         },
       });
@@ -113,9 +117,40 @@ export function RadiationShelterPanel({
     }
   }, []);
 
+  const emdFilterCode = useMemo(
+    () => (!emdFilter ? "" : (emdOptions.find((o) => o.name === emdFilter)?.code ?? "").trim()),
+    [emdFilter, emdOptions]
+  );
+
   useEffect(() => {
-    void fetchList(appliedKeyword, emdFilter);
-  }, [appliedKeyword, emdFilter, fetchList, listRefreshKey]);
+    void fetchList(appliedKeyword, emdFilterCode);
+  }, [appliedKeyword, emdFilterCode, fetchList, listRefreshKey]);
+
+  /** 목록 필터와 동일 건만 WMS 표시 — 목록 id로 CQL (경계 WKT GET 실패·전체 잔상 방지) */
+  useEffect(() => {
+    if (!mapReady) return;
+    const mapInst = mapContextRef.current?.mapInstanceRef?.current ?? null;
+    const hasFilter =
+      appliedKeyword.trim().length > 0 || emdFilterCode.trim().length > 0;
+
+    if (!hasFilter) {
+      applyRadiationShelterLayerCql(mapInst, null);
+      return;
+    }
+    if (loading) return;
+
+    applyRadiationShelterLayerCql(
+      mapInst,
+      buildSafetyLayerIdInCql(items.map((r) => r.id))
+    );
+  }, [mapReady, appliedKeyword, emdFilterCode, items, loading]);
+
+  useEffect(() => {
+    return () => {
+      const mapInst = mapContextRef.current?.mapInstanceRef?.current ?? null;
+      applyRadiationShelterLayerCql(mapInst, null);
+    };
+  }, []);
 
   useEffect(() => {
     if (!listRefreshKey) return;

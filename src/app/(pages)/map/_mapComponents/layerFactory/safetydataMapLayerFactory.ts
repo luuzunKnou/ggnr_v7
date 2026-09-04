@@ -7,6 +7,7 @@ import { transformExtent } from 'ol/proj';
 import { call } from '@/lib/api';
 import { WORKSPACE } from './serviceLayerFactory';
 import { getGeoServerBase } from '@/lib/geoserverUrl';
+import { geoserverWmsImageLoadFunction } from '@/lib/geoserverWmsImageLoad';
 
 /**
  * 재난안전데이터(안전데이터포털 연계) — GeoServer WMS
@@ -117,9 +118,13 @@ export function createSafetydataMapLayers(): ImageLayer<ImageWMS>[] {
         params: {
           LAYERS: `${WORKSPACE}:${tableName}`,
           STYLES: tableName,
+          TRANSPARENT: true,
+          EXCEPTIONS: 'application/vnd.ogc.se_xml',
         },
         serverType: 'geoserver',
         ratio: 1.5,
+        // 읍면동 INTERSECTS WKT 등 긴 CQL은 GET 414 → 이전(전체) 이미지가 남는 문제 방지
+        imageLoadFunction: geoserverWmsImageLoadFunction,
       }),
     });
     layer.set('name', tableName);

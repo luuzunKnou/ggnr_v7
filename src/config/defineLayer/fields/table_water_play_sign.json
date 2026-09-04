@@ -151,7 +151,7 @@
   },
   {
     "define_field_name": "is_warnig",
-    "define_field_kor_name": "관리지역 위험구역 여부",
+    "define_field_kor_name": "관리지역 위험구역",
     "define_field_type": "CODE",
     "define_field_idx": "4",
     "define_field_is_required": false,

@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
-import { Search, RefreshCw, X } from "lucide-react";
+import { Search, RefreshCw, X, Download } from "lucide-react";
 import { call } from "@/lib/api";
 import type { DefineCodeRow } from "@/lib/defineLayerCodeDisplay";
 import { cn } from "@/lib/utils";
@@ -12,6 +12,7 @@ import {
 } from "../../../_mapComponents/layerFactory/safetydataMapLayerFactory";
 import { LAYER_ROW_NEW_ID } from "../../../_mapComponents/layerRowEdit";
 import { LayerRowAddButton } from "../../../_mapComponents/layerRowEdit/LayerRowAddButton";
+import { LayerRowPanelButton } from "../../../_mapComponents/layerRowEdit/LayerRowPanelButton";
 import type { WaterPlaySignListItem } from "@/service/waterPlaySignService";
 import { useWaterPlaySignMapHighlight } from "./useWaterPlaySignMapHighlight";
 import { useWaterPlaySignMapClick } from "./useWaterPlaySignMapClick";
@@ -25,6 +26,11 @@ import {
 } from "./waterPlaySignListSort";
 import { formatWaterPlaySignAddressDisplay } from "./waterPlaySignAddressDisplay";
 import { flyToWaterPlaySignRow } from "./waterPlaySignMapFly";
+import { exportWaterPlaySignExcel } from "./waterPlaySignExcel";
+import {
+  applyWaterPlaySignLayerCql,
+} from "./waterPlaySignLayerCql";
+import { buildSafetyLayerIdInCql } from "../applySafetyMapGeoLayerCql";
 import { usePublicLayerAddressPrefixes } from "../usePublicLayerAddressPrefixes";
 
 type DetailId = number | typeof LAYER_ROW_NEW_ID | null;
@@ -46,20 +52,25 @@ export function WaterPlaySignPanel({
   listRefreshKey = 0,
 }: Props) {
   const mapContext = useMapContext();
+  const mapContextRef = useRef(mapContext);
+  mapContextRef.current = mapContext;
   const mapReady = mapContext?.mapReady ?? false;
-  const map = mapContext?.mapInstanceRef?.current ?? null;
+  const lastFlownDetailIdRef = useRef<number | null>(null);
   const [items, setItems] = useState<WaterPlaySignListItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [keyword, setKeyword] = useState("");
   const [appliedKeyword, setAppliedKeyword] = useState("");
   const [emdFilter, setEmdFilter] = useState("");
+  const [riFilter, setRiFilter] = useState("");
   const [gubunFilter, setGubunFilter] = useState("");
   const [emdOptions, setEmdOptions] = useState<{ code: string; name: string }[]>([]);
+  const [riOptions, setRiOptions] = useState<{ code: string; name: string }[]>([]);
   const [gubunChipOptions, setGubunChipOptions] = useState<{ value: string; label: string }[]>(
     []
   );
   const [sorts, setSorts] = useState<WaterPlaySignListSortSpec[]>([]);
+  const [exporting, setExporting] = useState(false);
   const listScrollRef = useRef<HTMLDivElement | null>(null);
   const { columns, columnsLoading } = useSafetyLayerListColumns(WATER_PLAY_SIGN_TABLE);
   const addressPrefixes = usePublicLayerAddressPrefixes();
@@ -123,7 +134,53 @@ export function WaterPlaySignPanel({
     };
   }, []);
 
-  const fetchList = useCallback(async (kw?: string, emdNm?: string, gubun?: string) => {
+  /** 읍면동 미선택 → 전체 리 / 선택 → emd_cd로 시작하는 ri_cd만 */
+  useEffect(() => {
+    let cancelled = false;
+    if (emdFilter && emdOptions.length === 0) return;
+
+    const emdCode = !emdFilter
+      ? ""
+      : (emdOptions.find((o) => o.name === emdFilter)?.code ?? "").trim();
+
+    if (emdFilter && !emdCode) {
+      setRiOptions([]);
+      setRiFilter("");
+      return;
+    }
+
+    void call("", "POST", {
+      service: "devTestService",
+      action: "getRiOptionsByEmd",
+      params: { schema: "public_layer", emdCode },
+    })
+      .then((res) => {
+        if (cancelled) return;
+        const data = res?.data ?? res;
+        const next = Array.isArray(data?.ri) ? (data.ri as { code: string; name: string }[]) : [];
+        setRiOptions(next);
+        setRiFilter((prev) => {
+          if (!prev) return "";
+          return next.some((o) => o.code === prev) ? prev : "";
+        });
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setRiOptions([]);
+          setRiFilter("");
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [emdFilter, emdOptions]);
+
+  const emdFilterCode = useMemo(
+    () => (!emdFilter ? "" : (emdOptions.find((o) => o.name === emdFilter)?.code ?? "").trim()),
+    [emdFilter, emdOptions]
+  );
+
+  const fetchList = useCallback(async (kw?: string, emdCode?: string, gubun?: string, riCode?: string) => {
     setLoading(true);
     setError(null);
     try {
@@ -132,7 +189,8 @@ export function WaterPlaySignPanel({
         action: "list",
         params: {
           keyword: kw ?? "",
-          emdNm: emdNm ?? "",
+          emdCode: emdCode ?? "",
+          riCode: riCode ?? "",
           gubun: gubun ?? "",
           limit: 200,
         },
@@ -149,8 +207,37 @@ export function WaterPlaySignPanel({
   }, []);
 
   useEffect(() => {
-    void fetchList(appliedKeyword, emdFilter, gubunFilter);
-  }, [appliedKeyword, emdFilter, gubunFilter, fetchList, listRefreshKey]);
+    void fetchList(appliedKeyword, emdFilterCode, gubunFilter, riFilter);
+  }, [appliedKeyword, emdFilterCode, gubunFilter, riFilter, fetchList, listRefreshKey]);
+
+  /** 목록 필터와 동일 건만 WMS 표시 — 목록 id로 CQL (경계 WKT GET 실패·전체 잔상 방지) */
+  useEffect(() => {
+    if (!mapReady) return;
+    const mapInst = mapContextRef.current?.mapInstanceRef?.current ?? null;
+    const hasFilter =
+      appliedKeyword.trim().length > 0 ||
+      emdFilterCode.trim().length > 0 ||
+      riFilter.trim().length > 0 ||
+      gubunFilter.trim().length > 0;
+
+    if (!hasFilter) {
+      applyWaterPlaySignLayerCql(mapInst, null);
+      return;
+    }
+    if (loading) return;
+
+    applyWaterPlaySignLayerCql(
+      mapInst,
+      buildSafetyLayerIdInCql(items.map((r) => r.id))
+    );
+  }, [mapReady, appliedKeyword, emdFilterCode, riFilter, gubunFilter, items, loading]);
+
+  useEffect(() => {
+    return () => {
+      const mapInst = mapContextRef.current?.mapInstanceRef?.current ?? null;
+      applyWaterPlaySignLayerCql(mapInst, null);
+    };
+  }, []);
 
   useEffect(() => {
     if (!listRefreshKey) return;
@@ -213,6 +300,7 @@ export function WaterPlaySignPanel({
     setKeyword("");
     setAppliedKeyword("");
     setEmdFilter("");
+    setRiFilter("");
     setGubunFilter("");
   }, []);
 
@@ -223,13 +311,70 @@ export function WaterPlaySignPanel({
     [columns]
   );
 
+  const applyMapViewPadding = useCallback(
+    () => mapContextRef.current?.applyMapViewPaddingRef?.current?.(),
+    []
+  );
+
+  const flyToRow = useCallback(
+    (row: WaterPlaySignListItem | null | undefined) => {
+      const map = mapContextRef.current?.mapInstanceRef?.current ?? null;
+      flyToWaterPlaySignRow(map, row, applyMapViewPadding);
+    },
+    [applyMapViewPadding]
+  );
+
+  /** 상세 선택(목록·지도 식별) 시 패널 padding 반영 후 좌표로 이동 */
+  useEffect(() => {
+    if (!mapReady) return;
+    if (selectedDetailId == null || selectedDetailId === LAYER_ROW_NEW_ID) {
+      lastFlownDetailIdRef.current = null;
+      return;
+    }
+    if (lastFlownDetailIdRef.current === selectedDetailId) return;
+    const row = items.find((r) => r.id === selectedDetailId) ?? null;
+    if (!row) return;
+    lastFlownDetailIdRef.current = selectedDetailId;
+    flyToRow(row);
+  }, [mapReady, selectedDetailId, items, flyToRow]);
+
   const onClickRow = useCallback(
     (row: WaterPlaySignListItem) => {
+      if (selectedDetailId === row.id) {
+        lastFlownDetailIdRef.current = null;
+        flyToRow(row);
+        return;
+      }
+      lastFlownDetailIdRef.current = null;
       onSelectDetailId(row.id);
-      flyToWaterPlaySignRow(map, row);
     },
-    [map, onSelectDetailId]
+    [selectedDetailId, onSelectDetailId, flyToRow]
   );
+
+  /** 화면 필터와 무관하게 전체 목록을 참고 서식으로 내려받기 */
+  const handleExportExcel = useCallback(async () => {
+    if (exporting) return;
+    setExporting(true);
+    try {
+      const res = await call("", "POST", {
+        service: "waterPlaySignService",
+        action: "list",
+        params: {
+          keyword: "",
+          emdNm: "",
+          gubun: "",
+          limit: 5000,
+        },
+      });
+      const data = res?.data ?? res;
+      const rows = Array.isArray(data?.items) ? (data.items as WaterPlaySignListItem[]) : [];
+      exportWaterPlaySignExcel(rows, addressPrefixes);
+    } catch (e: unknown) {
+      window.alert(e instanceof Error ? e.message : "명단 다운로드에 실패했습니다.");
+    } finally {
+      setExporting(false);
+    }
+  }, [exporting, addressPrefixes]);
 
   const selectedListId =
     selectedDetailId != null && selectedDetailId !== LAYER_ROW_NEW_ID
@@ -249,6 +394,16 @@ export function WaterPlaySignPanel({
       <div className="standard-panel-header">
         <span className="standard-panel-title">물놀이 표지판</span>
         <div className="flex shrink-0 items-center gap-1">
+          <LayerRowPanelButton
+            type="button"
+            onClick={() => void handleExportExcel()}
+            title="명단 다운로드"
+            disabled={exporting}
+            loading={exporting}
+          >
+            <Download className="h-3 w-3 shrink-0" aria-hidden />
+            명단 다운로드
+          </LayerRowPanelButton>
           <LayerRowAddButton
             onClick={() => onSelectDetailId(LAYER_ROW_NEW_ID)}
             disabled={selectedDetailId === LAYER_ROW_NEW_ID}
@@ -304,12 +459,12 @@ export function WaterPlaySignPanel({
             초기화
           </button>
         </div>
-        <div className="flex flex-wrap items-start gap-1.5">
+        <div className="flex flex-wrap items-center gap-1.5">
           <select
             value={emdFilter}
             onChange={(e) => setEmdFilter(e.target.value)}
             title="읍·면·동"
-            className="h-[26px] shrink-0 cursor-pointer rounded border border-border bg-background px-2 py-0 text-[10px] leading-tight text-foreground focus:border-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 scheme-light dark:scheme-dark"
+            className="standard-filter-select"
           >
             <option value="">읍·면·동 전체</option>
             {emdOptions.map((opt) => (
@@ -318,11 +473,24 @@ export function WaterPlaySignPanel({
               </option>
             ))}
           </select>
+          <select
+            value={riFilter}
+            onChange={(e) => setRiFilter(e.target.value)}
+            title="리"
+            className="standard-filter-select"
+          >
+            <option value="">리 전체</option>
+            {riOptions.map((opt) => (
+              <option key={opt.code} value={opt.code}>
+                {opt.name}
+              </option>
+            ))}
+          </select>
           {gubunChipOptions.length > 0 ? (
             <div
               role="radiogroup"
               aria-label="구분 필터"
-              className="flex min-w-0 flex-1 flex-wrap gap-1.5"
+              className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5"
             >
               <button
                 type="button"
