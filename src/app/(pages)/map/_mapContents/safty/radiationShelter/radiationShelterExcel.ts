@@ -44,10 +44,43 @@ function styled(v: string | number, style?: CellStyle): XLSX.CellObject {
   return { v, t: typeof v === 'number' ? 'n' : 's', s: baseStyle(style) };
 }
 
+/** 수량은 숫자 유지 + 엑셀 쉼표 스타일(#,##0) */
+const QTY_NUM_FMT = '#,##0';
+
+function styledQty(v: number, style?: CellStyle): XLSX.CellObject {
+  return {
+    v,
+    t: 'n',
+    z: QTY_NUM_FMT,
+    s: baseStyle({ ...style, numFmt: QTY_NUM_FMT }),
+  };
+}
+
 function dashToEmpty(v: unknown): string {
   const t = String(v ?? '').trim();
   if (!t || t === '-') return '';
   return t;
+}
+
+/** 시도 접두만 제거 (시군구·이하 유지) */
+function addrOmitSido(addr: string, prefixes: PublicLayerAddressPrefixes): string {
+  let t = dashToEmpty(addr);
+  const sido = String(prefixes.sidoName ?? '').trim();
+  if (sido && t.startsWith(sido)) {
+    t = t.slice(sido.length).replace(/^\s+/, '').trim();
+  }
+  return t;
+}
+
+/** 비고 정렬: 영어(라틴) 선행 → 한글 → 기타·빈값 */
+function remarkSortGroup(remark: string): number {
+  const t = remark.trim();
+  if (!t) return 3;
+  const ch = t[0]!;
+  if (/[A-Za-z]/.test(ch)) return 0;
+  const code = ch.codePointAt(0) ?? 0;
+  if (code >= 0xac00 && code <= 0xd7a3) return 1;
+  return 2;
 }
 
 type ExportRow = {
@@ -57,18 +90,24 @@ type ExportRow = {
   remark: string;
 };
 
-function toExportRows(items: RadiationShelterListItem[]): ExportRow[] {
+function toExportRows(
+  items: RadiationShelterListItem[],
+  prefixes: PublicLayerAddressPrefixes
+): ExportRow[] {
   const rows: ExportRow[] = items.map((item) => ({
     ftnNm: dashToEmpty(item.ftnNm),
-    // 화면 목록은 시도·시군구 접두를 숨기지만, 명단은 주소 전체
-    addr: dashToEmpty(item.addr),
+    addr: addrOmitSido(item.addr, prefixes),
     actcTnop: item.actcTnop,
     remark: dashToEmpty(item.remark),
   }));
   rows.sort((a, b) => {
-    const byAddr = a.addr.localeCompare(b.addr, 'ko');
-    if (byAddr !== 0) return byAddr;
-    return a.ftnNm.localeCompare(b.ftnNm, 'ko');
+    const ga = remarkSortGroup(a.remark);
+    const gb = remarkSortGroup(b.remark);
+    if (ga !== gb) return ga - gb;
+    const locale = ga === 0 ? 'en' : 'ko';
+    const byRemark = a.remark.localeCompare(b.remark, locale, { sensitivity: 'base' });
+    if (byRemark !== 0) return byRemark;
+    return a.addr.localeCompare(b.addr, 'ko');
   });
   return rows;
 }
@@ -101,7 +140,7 @@ function buildSheet(
   items: RadiationShelterListItem[],
   prefixes: PublicLayerAddressPrefixes
 ): XLSX.WorkSheet {
-  const rows = toExportRows(items);
+  const rows = toExportRows(items, prefixes);
   const merges: XLSX.Range[] = [];
   const ws: XLSX.WorkSheet = {};
 
@@ -190,6 +229,10 @@ function buildSheet(
       ...dataStyle,
       alignment: { horizontal: 'left', vertical: 'center', wrapText: true },
     };
+    const rightStyle: CellStyle = {
+      ...dataStyle,
+      alignment: { horizontal: 'right', vertical: 'center', wrapText: true },
+    };
 
     set(r, 0, styled('', { border: undefined }));
     set(r, col(0), styled(i + 1, dataStyle));
@@ -198,14 +241,36 @@ function buildSheet(
     set(
       r,
       col(3),
-      styled(
-        row.actcTnop != null && Number.isFinite(row.actcTnop) ? row.actcTnop : '',
-        dataStyle
-      )
+      row.actcTnop != null && Number.isFinite(row.actcTnop)
+        ? styledQty(row.actcTnop, rightStyle)
+        : styled('', rightStyle)
     );
     set(r, col(4), styled(row.remark, leftStyle));
     r += 1;
   }
+
+  const sumRow = r;
+  const sumStyle: CellStyle = {
+    font: { name: FONT_NAME, sz: 10, bold: true, color: { rgb: '000000' } },
+    fill: headerFill,
+    alignment: { horizontal: 'center', vertical: 'center', wrapText: true },
+    border: thinBorder(),
+  };
+  const sumRightStyle: CellStyle = {
+    ...sumStyle,
+    alignment: { horizontal: 'right', vertical: 'center', wrapText: true },
+  };
+  set(sumRow, 0, styled('', { border: undefined }));
+  set(sumRow, col(0), styled('합계', sumStyle));
+  set(sumRow, col(1), styled('', sumStyle));
+  set(sumRow, col(2), styled('', sumStyle));
+  set(sumRow, col(3), styledQty(capacitySum, sumRightStyle));
+  set(sumRow, col(4), styled('', sumStyle));
+  merges.push({
+    s: { r: sumRow, c: col(0) },
+    e: { r: sumRow, c: col(2) },
+  });
+  r += 1;
 
   const tableR0 = HEADER_ROW;
   const tableR1 = Math.max(r - 1, HEADER_ROW);
@@ -213,22 +278,25 @@ function buildSheet(
   const tableC1 = col(COL_COUNT - 1);
   applyThickOuterBorder(ws, tableR0, tableR1, tableC0, tableC1);
 
+  const headerRowHpt = 22;
+  const rowHeights: NonNullable<XLSX.WorkSheet['!rows']> = [
+    { hpt: 12 },
+    { hpt: 32 },
+    { hpt: 12 },
+    { hpt: 20 },
+  ];
+  rowHeights[HEADER_ROW] = { hpt: headerRowHpt };
+  rowHeights[sumRow] = { hpt: headerRowHpt };
   ws['!merges'] = merges;
   ws['!cols'] = [
     { wch: 3 },
     { wch: 6 },
     { wch: 28 },
-    { wch: 36 },
+    { wch: 48 }, // 주소
     { wch: 10 },
     { wch: 18 },
   ];
-  ws['!rows'] = [
-    { hpt: 12 },
-    { hpt: 32 },
-    { hpt: 12 },
-    { hpt: 20 },
-    { hpt: 22 },
-  ];
+  ws['!rows'] = rowHeights;
   ws['!ref'] = XLSX.utils.encode_range({
     s: { r: 0, c: 0 },
     e: { r: tableR1, c: tableC1 },

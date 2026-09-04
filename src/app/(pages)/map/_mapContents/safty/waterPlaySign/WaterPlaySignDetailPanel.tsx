@@ -74,7 +74,7 @@ function emptyFormFromFields(fields: DefineFieldLike[]): Record<string, string> 
 function formFromItem(item: WaterPlaySignListItem): Record<string, string> {
   const fmt = (v: string) => (v && v !== '-' ? v : '');
   const fmtNum = (n: number | null) =>
-    n != null && Number.isFinite(n) ? n.toLocaleString('ko-KR') : '';
+    n != null && Number.isFinite(n) ? String(n) : '';
   return {
     sido: fmt(item.sido),
     sgg: fmt(item.sgg),
@@ -492,12 +492,13 @@ export function WaterPlaySignDetailPanel({
             inputMode="numeric"
             value={form[fieldName] ?? ''}
             onChange={(e) => {
-              const v = e.target.value.replace(/[^\d,]/g, '');
+              const v = e.target.value.replace(/[^\d]/g, '');
               updateForm(fieldName, v);
             }}
             onBlur={() => {
               const n = parseNumberInput(form[fieldName] ?? '');
-              if (n != null) updateForm(fieldName, n.toLocaleString('ko-KR'));
+              if (n != null) updateForm(fieldName, String(n));
+              else updateForm(fieldName, '');
             }}
             className={FIELD_INPUT_CLASS}
             placeholder="-"

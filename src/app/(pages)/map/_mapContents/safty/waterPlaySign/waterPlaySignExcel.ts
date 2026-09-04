@@ -55,9 +55,35 @@ function styled(v: string | number, style?: CellStyle): XLSX.CellObject {
   return { v, t: typeof v === 'number' ? 'n' : 's', s: baseStyle(style) };
 }
 
+/** 수량은 숫자 유지 + 엑셀 쉼표 스타일(#,##0) */
+const QTY_NUM_FMT = '#,##0';
+
+function styledQty(v: number, style?: CellStyle): XLSX.CellObject {
+  return {
+    v,
+    t: 'n',
+    z: QTY_NUM_FMT,
+    s: baseStyle({ ...style, numFmt: QTY_NUM_FMT }),
+  };
+}
+
 function dashToEmpty(v: unknown): string {
   const t = String(v ?? '').trim();
   if (!t || t === '-') return '';
+  return t;
+}
+
+/** 시도 축약 — 1글자+3글자 (예: 충청북도→충북) */
+function abbreviateSido(sido: string): string {
+  const t = dashToEmpty(sido);
+  if (t.length >= 3) return `${t[0]}${t[2]}`;
+  return t;
+}
+
+/** 관리지역 위험구역 여부 — '여'만 표시, '부'·빈값은 공백 */
+function isWarnigForExcel(v: unknown): string {
+  const t = dashToEmpty(v);
+  if (!t || t === '부') return '';
   return t;
 }
 
@@ -120,11 +146,11 @@ function toExportRows(
     return {
       localAddr,
       groupKey: eupMyeonDongGroupKey(localAddr),
-      sido: dashToEmpty(item.sido),
+      sido: abbreviateSido(item.sido),
       sgg: dashToEmpty(item.sgg),
       addrDetail: dashToEmpty(item.addrDetail),
       gubun: dashToEmpty(item.gubun),
-      isWarnig: dashToEmpty(item.isWarnig),
+      isWarnig: isWarnigForExcel(item.isWarnig),
       safeboxCnt: item.safeboxCnt,
       signCnt: item.signCnt,
       remark: dashToEmpty(item.remark),
@@ -251,9 +277,14 @@ function buildSheet(
     0
   );
 
+  const headerRightStyle: CellStyle = {
+    ...headerStyle,
+    alignment: { horizontal: 'right', vertical: 'center', wrapText: true },
+  };
+
   for (let i = 0; i < COL_COUNT; i++) {
-    if (i === 7) set(HEADER_SUM_ROW, col(i), styled(safeboxSum, headerStyle));
-    else if (i === 8) set(HEADER_SUM_ROW, col(i), styled(signSum, headerStyle));
+    if (i === 7) set(HEADER_SUM_ROW, col(i), styledQty(safeboxSum, headerRightStyle));
+    else if (i === 8) set(HEADER_SUM_ROW, col(i), styledQty(signSum, headerRightStyle));
     else set(HEADER_SUM_ROW, col(i), styled('', headerStyle));
   }
 
@@ -290,6 +321,10 @@ function buildSheet(
       ...dataStyle,
       alignment: { horizontal: 'left', vertical: 'center', wrapText: true },
     };
+    const qtyStyle: CellStyle = {
+      ...dataStyle,
+      alignment: { horizontal: 'right', vertical: 'center', wrapText: true },
+    };
 
     set(r, 0, styled('', { border: undefined }));
     set(r, col(0), styled(i + 1, dataStyle));
@@ -302,12 +337,16 @@ function buildSheet(
     set(
       r,
       col(7),
-      styled(row.safeboxCnt != null && Number.isFinite(row.safeboxCnt) ? row.safeboxCnt : '', dataStyle)
+      row.safeboxCnt != null && Number.isFinite(row.safeboxCnt)
+        ? styledQty(row.safeboxCnt, qtyStyle)
+        : styled('', qtyStyle)
     );
     set(
       r,
       col(8),
-      styled(row.signCnt != null && Number.isFinite(row.signCnt) ? row.signCnt : '', dataStyle)
+      row.signCnt != null && Number.isFinite(row.signCnt)
+        ? styledQty(row.signCnt, qtyStyle)
+        : styled('', qtyStyle)
     );
     set(r, col(9), styled(row.remark, dataStyle));
     r += 1;
@@ -325,12 +364,12 @@ function buildSheet(
     { wch: 6 },
     { wch: 8 },
     { wch: 10 },
-    { wch: 28 },
-    { wch: 22 },
+    { wch: 37 }, // 주소 (≈254px)
+    { wch: 32 }, // 상세위치 (≈228px)
     { wch: 8 },
     { wch: 10 },
-    { wch: 8 },
-    { wch: 8 },
+    { wch: 8 }, // 구조함 수량
+    { wch: 8 }, // 표지판 수량 — 구조함과 동일
     { wch: 14 },
   ];
   ws['!rows'] = [

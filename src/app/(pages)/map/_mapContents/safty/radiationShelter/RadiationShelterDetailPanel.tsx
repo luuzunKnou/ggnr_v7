@@ -73,9 +73,7 @@ function emptyFormFromFields(fields: DefineFieldLike[]): Record<string, string> 
 function formFromItem(item: RadiationShelterListItem): Record<string, string> {
   const fmt = (v: string) => (v && v !== '-' ? v : '');
   const actc =
-    item.actcTnop != null && Number.isFinite(item.actcTnop)
-      ? item.actcTnop.toLocaleString('ko-KR')
-      : '';
+    item.actcTnop != null && Number.isFinite(item.actcTnop) ? String(item.actcTnop) : '';
   return {
     ftn_nm: fmt(item.ftnNm),
     addr: fmt(item.addr),
@@ -444,12 +442,13 @@ export function RadiationShelterDetailPanel({
             inputMode="numeric"
             value={form[fieldName] ?? ''}
             onChange={(e) => {
-              const v = e.target.value.replace(/[^\d,]/g, '');
+              const v = e.target.value.replace(/[^\d]/g, '');
               updateForm(fieldName, v);
             }}
             onBlur={() => {
               const n = parseNumberInput(form[fieldName] ?? '');
-              if (n != null) updateForm(fieldName, n.toLocaleString('ko-KR'));
+              if (n != null) updateForm(fieldName, String(n));
+              else updateForm(fieldName, '');
             }}
             className={FIELD_INPUT_CLASS}
             placeholder="-"
