@@ -7,8 +7,11 @@ import path from 'node:path';
 import { PassThrough } from 'node:stream';
 import archiver from 'archiver';
 import { fileDataRelativeDir, isServiceFileDataTmpMarkedFileName } from '@/lib/serviceFileData';
+import { resolveGgnrDataDir } from '@/lib/turbopackFsPath';
 
-const GGNR_DATA_DIR = process.env.GGNR_DATA_DIR ?? 'd:\\ggnr_data_dir';
+function getZipDataDir(): string {
+  return resolveGgnrDataDir();
+}
 
 /** Asia/Seoul 기준 YYYYMMDDHHmmss (14자리) */
 export function seoulCompactTimestampForZip(): string {
@@ -96,7 +99,7 @@ export async function createServiceFileDataZipStream(params: {
 }): Promise<{ stream: PassThrough; downloadFileName: string }> {
   const rel = fileDataRelativeDir(params.layerName, params.keyValue);
   if (!rel) throw new Error('Invalid path');
-  const dir = path.join(GGNR_DATA_DIR, ...rel.split('/'));
+  const dir = path.join(getZipDataDir(), ...rel.split('/'));
   const files = await collectFilesRecursive(dir);
   if (files.length === 0) {
     throw new Error('다운로드할 첨부파일이 없습니다.');

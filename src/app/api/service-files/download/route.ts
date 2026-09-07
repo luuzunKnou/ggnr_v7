@@ -5,8 +5,7 @@ import { getSessionUsrId } from '@/lib/auth/guard';
 import { userCanAccessServiceFileData } from '@/lib/serviceFileDataAccess';
 import { isAllowedServiceFileDataDownloadPath } from '@/lib/serviceFileData';
 import { parseSerEngForServiceFileData } from '@/lib/serviceFileDataPolicy';
-
-const GGNR_DATA_DIR = process.env.GGNR_DATA_DIR ?? 'd:\\ggnr_data_dir';
+import { resolveGgnrDataDir } from '@/lib/turbopackFsPath';
 
 export const dynamic = 'force-dynamic';
 
@@ -64,13 +63,14 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'path 쿼리가 필요합니다.' }, { status: 400 });
   }
 
-  const normalized = pathParam.replace(/\//g, path.sep).replace(/^[/\\]+/, '');
+  const normalized = pathParam.replace(/\\/g, '/').replace(/^\/+/, '');
   if (!isAllowedServiceFileDataDownloadPath(normalized)) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
-  const resolved = path.resolve(GGNR_DATA_DIR, normalized);
-  const base = path.resolve(GGNR_DATA_DIR);
+  const baseDir = resolveGgnrDataDir();
+  const resolved = path.resolve(baseDir, ...normalized.split('/').filter(Boolean));
+  const base = path.resolve(baseDir);
   const rel = path.relative(base, resolved);
   if (!rel || rel.startsWith('..') || path.isAbsolute(rel)) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });

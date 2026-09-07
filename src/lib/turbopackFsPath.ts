@@ -1,3 +1,4 @@
+import fs from 'node:fs';
 import path from 'node:path';
 
 /**
@@ -17,13 +18,38 @@ function joinUncRoot(uncRoot: string, rest: string): string {
 }
 
 /**
+ * GGNR_DATA_UNC_ROOT — 출처는 src/config/projects/common.runtime.env 고정.
+ * (프로젝트 .env / *.runtime.env 값은 쓰지 않음)
+ */
+export function resolveGgnrDataUncRoot(): string {
+  try {
+    const envFile = path.join(process.cwd(), 'src', 'config', 'projects', 'common.runtime.env');
+    if (fs.existsSync(envFile)) {
+      for (const line of fs.readFileSync(envFile, 'utf-8').split(/\r?\n/)) {
+        const trimmed = line.trim();
+        if (!trimmed || trimmed.startsWith('#')) continue;
+        const eq = trimmed.indexOf('=');
+        if (eq <= 0) continue;
+        const key = trimmed.slice(0, eq).trim();
+        if (key !== 'GGNR_DATA_UNC_ROOT') continue;
+        const value = trimmed.slice(eq + 1).trim();
+        if (value) return value;
+      }
+    }
+  } catch {
+    /* ignore */
+  }
+  return (process.env.GGNR_DATA_UNC_ROOT ?? '').trim();
+}
+
+/**
  * G: → \\192.168.127.11\service_data 등 UNC 루트 치환.
  * Windows 서비스(nssm)·Node는 로그인 세션의 드라이브 매핑(G:)을 못 보므로
- * GGNR_DATA_UNC_ROOT 가 있으면 GGNR_DATA_DIR 의 드라이브 문자를 UNC 로 바꾼다.
+ * common.runtime.env 의 GGNR_DATA_UNC_ROOT 가 있으면 GGNR_DATA_DIR 드라이브 문자를 UNC 로 바꾼다.
  */
 function applyWindowsUncDataRoot(rawPath: string): string {
   if (process.platform !== 'win32') return rawPath;
-  const uncRoot = (process.env.GGNR_DATA_UNC_ROOT ?? '').trim();
+  const uncRoot = resolveGgnrDataUncRoot();
   if (!uncRoot) return rawPath;
   const driveMatch = /^([a-zA-Z]):[\\/]/.exec(rawPath);
   if (!driveMatch) return rawPath;
