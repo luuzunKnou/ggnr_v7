@@ -15,6 +15,7 @@ setlocal EnableExtensions EnableDelayedExpansion
 :: - python/env_parts optional restore
 :: - if DO_NSSM=Y and not admin => require admin before build
 :: - 00_open_ggnr_logs: skip if GGNR_LOG/GEOSERVER_LOG already open
+:: - nssm ObjectName: from project.env NSSM_OBJECT_NAME/PASS when demo
 :: - window keep: set /p. skip only if GGNR_STARTER_NO_PAUSE=1
 :: =============================================================================
 

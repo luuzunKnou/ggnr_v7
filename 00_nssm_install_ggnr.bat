@@ -9,6 +9,8 @@ setlocal EnableExtensions EnableDelayedExpansion
 :: - logs = C:\logs\GGNR_V7_stdout.log / GGNR_V7_stderr.log
 :: - existing service: Y/N remove and re-register (N => exit 2)
 :: - GGNR_NSSM_REREG=Y|N skips re-register prompt (00_make_ggnr_starter)
+:: - ObjectName: GGNR_NSSM_OBJECT_NAME/PASS, else project.env [env]
+::   NSSM_OBJECT_NAME / NSSM_OBJECT_PASS (demo G: share)
 :: - on failure: pause + C:\logs\nssm_install_last.log
 :: - on success: pause unless GGNR_NSSM_FROM_STARTER=1
 :: =============================================================================
@@ -173,6 +175,11 @@ if defined NSSM_PROJECT if defined NSSM_ENV (
 "%NSSM%" set %SERVICE_NAME% AppRotateBytes 10485760
 "%NSSM%" set %SERVICE_NAME% AppRotateOnline 1
 
+:: ObjectName: env override, else src/config/projects/<project>.env [env] NSSM_OBJECT_*
+if defined GGNR_NSSM_OBJECT_NAME if defined GGNR_NSSM_OBJECT_PASS goto :object_name_ready
+call :load_nssm_object_from_project_env
+:object_name_ready
+
 :: demo: run service as G: share account (not LocalSystem) so UNC/file_data works
 if defined GGNR_NSSM_OBJECT_NAME if defined GGNR_NSSM_OBJECT_PASS (
   echo [nssm-install] ObjectName=!GGNR_NSSM_OBJECT_NAME! ^(demo G: share account^)
@@ -183,7 +190,7 @@ if defined GGNR_NSSM_OBJECT_NAME if defined GGNR_NSSM_OBJECT_PASS (
     goto :fail_end
   )
 ) else (
-  echo [nssm-install] ObjectName kept default ^(LocalSystem^) - no GGNR_NSSM_OBJECT_* from starter.
+  echo [nssm-install] ObjectName kept default ^(LocalSystem^) - no GGNR_NSSM_OBJECT_* / project.env NSSM_OBJECT_*.
 )
 
 echo [nssm-install] Starting service...
@@ -326,3 +333,37 @@ if not exist "%LOG_DIR%\linkage" (
   echo [nssm-install] created: %LOG_DIR%\linkage
 )
 exit /b 0
+
+:: ---------------------------------------------------------------------------
+:: Read NSSM_OBJECT_NAME / NSSM_OBJECT_PASS from projects\<project>.env [<env>]
+:: Fills GGNR_NSSM_OBJECT_NAME / GGNR_NSSM_OBJECT_PASS when missing.
+:: ---------------------------------------------------------------------------
+:load_nssm_object_from_project_env
+if not defined NSSM_PROJECT goto :eof
+if not defined NSSM_ENV goto :eof
+set "PROJ_ENV_FILE=%ROOT%\src\config\projects\!NSSM_PROJECT!.env"
+set "PS_READ_NSSM=%ROOT%\scripts\read-nssm-object-from-env.ps1"
+if not exist "!PROJ_ENV_FILE!" (
+  echo [nssm-install] no project.env for ObjectName: !PROJ_ENV_FILE!
+  goto :eof
+)
+if not exist "!PS_READ_NSSM!" (
+  echo [WARN] missing script: !PS_READ_NSSM!
+  goto :eof
+)
+echo [nssm-install] reading NSSM_OBJECT_* from !NSSM_PROJECT!.env [!NSSM_ENV!]
+set "PS_OBJ_OUT="
+for /f "usebackq delims=" %%L in (`powershell -NoProfile -ExecutionPolicy Bypass -File "!PS_READ_NSSM!" -EnvFile "!PROJ_ENV_FILE!" -Section "!NSSM_ENV!"`) do (
+  set "PS_OBJ_OUT=1"
+  set "LINE=%%L"
+  if /i "!LINE:~0,5!"=="NAME=" if not defined GGNR_NSSM_OBJECT_NAME set "GGNR_NSSM_OBJECT_NAME=!LINE:~5!"
+  if /i "!LINE:~0,5!"=="PASS=" if not defined GGNR_NSSM_OBJECT_PASS set "GGNR_NSSM_OBJECT_PASS=!LINE:~5!"
+)
+if defined GGNR_NSSM_OBJECT_NAME if defined GGNR_NSSM_OBJECT_PASS (
+  echo [nssm-install] loaded ObjectName from project.env: !GGNR_NSSM_OBJECT_NAME!
+) else if defined PS_OBJ_OUT (
+  echo [WARN] project.env NSSM_OBJECT_* incomplete ^(need both NAME and PASS^)
+) else (
+  echo [nssm-install] no NSSM_OBJECT_* in project.env [!NSSM_ENV!]
+)
+goto :eof
