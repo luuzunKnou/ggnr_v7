@@ -147,6 +147,30 @@ export function getOccupationLedgerBinding(params: {
   return null;
 }
 
+/**
+ * 이 시스템에서 열어 둘 점용대장.
+ * 메뉴 목록이 있으면 그 안의 점용대장만 (건설에 도로점용·국공유지점용이 같이 있는 경우).
+ * 목록이 없으면 시스템 1개 기본값.
+ */
+export function getAllowedOccupationLedgerSerEngs(
+  system?: string | null,
+  serviceList?: readonly string[] | null
+): OccupationLedgerSerEng[] {
+  if (serviceList != null) {
+    return serviceList
+      .map((s) => String(s ?? '').trim())
+      .filter(isOccupationLedgerSerEng);
+  }
+  const one = getOccupationLedgerBinding({ system })?.serEng;
+  return one ? [one] : [];
+}
+
+function prefixForOccupationSerEng(eng: OccupationLedgerSerEng): OccupationLedgerPrefix {
+  if (eng === 'roadOccupationLedger') return 'road';
+  if (eng === 'publicOccupationLedger') return 'public';
+  return 'water';
+}
+
 export function getOccupationLedgerWmsLayerIds(binding: OccupationLedgerBinding): string[] {
   return [binding.mainTable, binding.jijukTable, binding.mgjTable].map((t) =>
     t.trim().toLowerCase()
@@ -188,23 +212,34 @@ export function getOccupationLedgerPrefixForSystem(
  */
 export function isOccupationLedgerTableAllowedForSystem(
   tableName: string,
-  system: string | null | undefined
+  system: string | null | undefined,
+  serviceList?: readonly string[] | null
 ): boolean {
   if (!isOccupationLedgerTableName(tableName)) return true;
-  const prefix = getOccupationLedgerPrefixForSystem(system);
-  if (!prefix) return false;
+  const prefixes = new Set(
+    getAllowedOccupationLedgerSerEngs(system, serviceList).map(prefixForOccupationSerEng)
+  );
+  if (prefixes.size === 0) return false;
   const t = String(tableName ?? '').trim().toLowerCase();
-  return t === `${prefix}_occupationledger` || t.startsWith(`${prefix}_occupationledger_`);
+  for (const prefix of prefixes) {
+    if (t === `${prefix}_occupationledger` || t.startsWith(`${prefix}_occupationledger_`)) {
+      return true;
+    }
+  }
+  return false;
 }
 
 /** 현재 시스템에 속하지 않는 점용대장 WMS 테이블 id 목록 */
 export function getForeignOccupationLedgerTableIds(
-  system: string | null | undefined
+  system: string | null | undefined,
+  serviceList?: readonly string[] | null
 ): string[] {
-  const allowed = getOccupationLedgerPrefixForSystem(system);
+  const allowed = new Set(
+    getAllowedOccupationLedgerSerEngs(system, serviceList).map(prefixForOccupationSerEng)
+  );
   const ids: string[] = [];
   for (const p of OCCUPATION_LEDGER_PREFIXES) {
-    if (allowed && p === allowed) continue;
+    if (allowed.has(p)) continue;
     ids.push(
       `${p}_occupationledger`,
       `${p}_occupationledger_jijuk`,
@@ -217,19 +252,20 @@ export function getForeignOccupationLedgerTableIds(
 /** 시스템 전환 시 opened·dataTable 에서 다른 시스템 점용대장 토큰 제거 */
 export function scrubOccupationLedgerFromMapSearchParams(
   params: URLSearchParams,
-  system: string | null | undefined
+  system: string | null | undefined,
+  serviceList?: readonly string[] | null
 ): void {
-  const allowedSerEng = getOccupationLedgerBinding({ system })?.serEng ?? null;
+  const allowedSerEng = new Set(getAllowedOccupationLedgerSerEngs(system, serviceList));
   const opened = (params.get('opened') ?? '').split(',').filter(Boolean);
   const nextOpened = opened.filter((token) => {
     if (!isOccupationLedgerOpenedToken(token)) return true;
-    return allowedSerEng != null && token === allowedSerEng;
+    return allowedSerEng.has(token);
   });
   if (nextOpened.length > 0) params.set('opened', nextOpened.join(','));
   else params.delete('opened');
 
   const dataTable = String(params.get('dataTable') ?? '').trim();
-  if (dataTable && !isOccupationLedgerTableAllowedForSystem(dataTable, system)) {
+  if (dataTable && !isOccupationLedgerTableAllowedForSystem(dataTable, system, serviceList)) {
     params.delete('dataTable');
     params.delete('dataKey');
   }

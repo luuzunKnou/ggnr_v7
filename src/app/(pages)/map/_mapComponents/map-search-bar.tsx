@@ -629,8 +629,9 @@ export function MapSearchBar({
       scrubMapSearchParamsOnSystemSwitch(current, sysKey, target?.serviceList ?? []);
       mapContext?.allLayersOffRef?.current?.();
     } else {
-      scrubOccupationLedgerFromMapSearchParams(current, sysKey);
-      scrubUseFeeFromMapSearchParams(current, sysKey);
+      const target = systemList.find((s) => s.sys_key === sysKey);
+      scrubOccupationLedgerFromMapSearchParams(current, sysKey, target?.serviceList ?? []);
+      scrubUseFeeFromMapSearchParams(current, sysKey, target?.serviceList ?? []);
     }
     router.push(`/map?${current.toString()}`);
     setSystemModalOpen(false);

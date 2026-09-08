@@ -37,10 +37,11 @@ export function clearOccupationLedgerWmsLayers(
 /** 시스템 전환 시 — 현재 시스템이 아닌 점용대장 레이어만 끄기 */
 export function clearForeignOccupationLedgerWmsLayers(
   setVisibleLayerNames: SetVisible | null | undefined,
-  system?: string | null
+  system?: string | null,
+  serviceList?: readonly string[] | null
 ) {
   if (!setVisibleLayerNames) return;
-  const ids = getForeignOccupationLedgerTableIds(system);
+  const ids = getForeignOccupationLedgerTableIds(system, serviceList);
   if (ids.length === 0) return;
   setVisibleLayerNames((prev) => {
     let changed = false;

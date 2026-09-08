@@ -121,10 +121,11 @@ export function clearUseFeeWmsLayer(setVisibleLayerNames?: SetVisible | null): v
 /** 시스템 전환 시 — 다른 시스템 점사용료 WMS만 끄기 */
 export function clearForeignUseFeeWmsLayers(
   setVisibleLayerNames?: SetVisible | null,
-  system?: string | null
+  system?: string | null,
+  serviceList?: readonly string[] | null
 ): void {
   if (!setVisibleLayerNames) return
-  const ids = getForeignUseFeeWmsLayerIds(system).map((id) => id.toLowerCase())
+  const ids = getForeignUseFeeWmsLayerIds(system, serviceList).map((id) => id.toLowerCase())
   if (ids.length === 0) return
   setVisibleLayerNames((prev) => {
     let changed = false
