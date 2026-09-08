@@ -1108,16 +1108,6 @@ function MapLayoutContent({
     setUseFeePanelOpen?.(useFeeOpen)
   }, [setUseFeePanelOpen, useFeeOpen])
 
-  /** 시스템 전환 시 — 다른 시스템 점용대장(하천·도로·국공유지) WMS만 끄기 */
-  useEffect(() => {
-    clearForeignOccupationLedgerWmsLayers(setVisibleLayerNames, systemKeyFromUrl)
-  }, [systemKeyFromUrl, setVisibleLayerNames])
-
-  /** 시스템 전환 시 — 다른 시스템 점사용료 WMS만 끄기 */
-  useEffect(() => {
-    clearForeignUseFeeWmsLayers(setVisibleLayerNames, systemKeyFromUrl)
-  }, [systemKeyFromUrl, setVisibleLayerNames])
-
   useEffect(() => {
     setRoadLedgerPanelOpen?.(roadLedgerOpen)
   }, [setRoadLedgerPanelOpen, roadLedgerOpen])
@@ -1325,6 +1315,22 @@ function MapLayoutContent({
       })
       .catch(() => setSystemListForOpened([]))
   }, [])
+
+  /** 시스템 전환 시 — 현재 시스템 메뉴에 없는 점용대장 WMS만 끄기 */
+  useEffect(() => {
+    if (systemListForOpened.length === 0) return
+    const serviceList =
+      systemListForOpened.find((s) => s.sys_key === systemKeyFromUrl)?.serviceList ?? []
+    clearForeignOccupationLedgerWmsLayers(setVisibleLayerNames, systemKeyFromUrl, serviceList)
+  }, [systemKeyFromUrl, setVisibleLayerNames, systemListForOpened])
+
+  /** 시스템 전환 시 — 현재 시스템 메뉴에 없는 점사용료 WMS만 끄기 */
+  useEffect(() => {
+    if (systemListForOpened.length === 0) return
+    const serviceList =
+      systemListForOpened.find((s) => s.sys_key === systemKeyFromUrl)?.serviceList ?? []
+    clearForeignUseFeeWmsLayers(setVisibleLayerNames, systemKeyFromUrl, serviceList)
+  }, [systemKeyFromUrl, setVisibleLayerNames, systemListForOpened])
 
   /**
    * system 변경 → 레이어 전부 끄기 + 전환 scrub.
