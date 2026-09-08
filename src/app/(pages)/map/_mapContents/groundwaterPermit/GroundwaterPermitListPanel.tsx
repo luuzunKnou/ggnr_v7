@@ -9,7 +9,11 @@ import {
   type GroundwaterPermitStatusCode,
 } from '@/lib/groundwaterPermitStatus'
 import { useMapContext } from '../../_mapComponents/MapContext'
-import { useGroundwaterPermitMapHighlight } from './useGroundwaterPermitMapHighlight'
+import {
+  groundwaterPermitNextHighlightFitRef,
+  useGroundwaterPermitMapHighlight,
+} from './useGroundwaterPermitMapHighlight'
+import { useGroundwaterPermitMapClick } from './useGroundwaterPermitMapClick'
 import { GROUNDWATER_PERMIT_WMS_LAYER_ID } from './groundwaterPermitLayerId'
 import {
   initialGroundwaterPermitSortDir,
@@ -64,6 +68,13 @@ export function GroundwaterPermitListPanel({
   const [error, setError] = useState<string | null>(null)
   const { clearHighlight } = useGroundwaterPermitMapHighlight()
 
+  useGroundwaterPermitMapClick({
+    enabled: true,
+    onSelectId: (id) => {
+      onSelectDetailId(id)
+    },
+  })
+
   /** 패널이 열려 있으면 지하수 개발허가 레이어를 항상 켠다. 닫을 때 끄지 않는다. */
   useEffect(() => {
     if (!setVisibleLayerNames) return
@@ -83,6 +94,7 @@ export function GroundwaterPermitListPanel({
 
   const handleRowSelect = useCallback(
     (id: string) => {
+      groundwaterPermitNextHighlightFitRef.current = true
       onSelectDetailId(id)
     },
     [onSelectDetailId]

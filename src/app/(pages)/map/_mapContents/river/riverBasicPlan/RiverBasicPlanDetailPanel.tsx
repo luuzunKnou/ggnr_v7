@@ -34,6 +34,7 @@ import { MAP_AUTO_NAV_MAX_ZOOM } from "../../../_mapComponents/config/mapDefault
 import { scheduleFitMapToExtent3857 } from "../../../_mapComponents/config/mapAutoNavigation";
 import { getRowKey, getRowValueByField } from "../../../_mapComponents/standard/defineLayerRowUtils";
 import { useRiverBasicPlanExistingMapLayers } from "./useRiverBasicPlanExistingMapLayers";
+import { useRiverBasicPlanIndexHighlight } from "./useRiverBasicPlanIndexHighlight";
 import {
   isImageServiceFileName,
   isPdfServiceFileName,
@@ -120,6 +121,38 @@ type PlanItem = {
   planLen: string;
 };
 
+/** 연장 숫자 문자열 정규화 (20860.0000000000 → 20860) */
+function planLenMatchKey(raw: string | undefined | null): string {
+  const t = String(raw ?? "").trim().replace(/,/g, "");
+  if (!t) return "";
+  const n = Number(t);
+  return Number.isFinite(n) ? String(n) : t;
+}
+
+/** 지도 색인도 pick → 연도 목록에서 기본계획 1건 (연장 우선) */
+function findPlanItemFromMapPick(
+  list: PlanItem[],
+  planYear: string,
+  planName: string,
+  planLen: string,
+): PlanItem | undefined {
+  if (list.length === 0 || !(planYear || planName || planLen)) return undefined;
+  const lenKey = planLenMatchKey(planLen);
+  if (lenKey) {
+    const withLen = list.find(
+      (p) =>
+        p.planYear === planYear &&
+        p.planName === planName &&
+        planLenMatchKey(p.planLen) === lenKey,
+    );
+    if (withLen) return withLen;
+  }
+  return (
+    list.find((p) => p.planYear === planYear && p.planName === planName) ||
+    (planYear ? list.find((p) => p.planYear === planYear) : undefined)
+  );
+}
+
 type Props = {
   tab: RiverType;
   riverName: string;
@@ -193,8 +226,12 @@ export function RiverBasicPlanDetailPanel({ tab, riverName, onClose }: Props) {
   const [plans, setPlans] = useState<PlanItem[]>([]);
   const plansRef = useRef<PlanItem[]>([]);
   plansRef.current = plans;
-  /** 연도 목록 비동기 로드 전·후 map pick의 planYear/planName 적용 */
-  const pendingPlanFromMapRef = useRef<{ planYear: string; planName: string } | null>(null);
+  /** 연도 목록 비동기 로드 전·후 map pick의 planYear/planName/planLen 적용 */
+  const pendingPlanFromMapRef = useRef<{
+    planYear: string;
+    planName: string;
+    planLen: string;
+  } | null>(null);
   const [selected, setSelected] = useState<PlanItem | null>(null);
   const [detail, setDetail] = useState<Record<string, unknown> | null>(null);
   const [loadingPlan, setLoadingPlan] = useState(false);
@@ -209,6 +246,17 @@ export function RiverBasicPlanDetailPanel({ tab, riverName, onClose }: Props) {
   const [indexListLoading, setIndexListLoading] = useState(false);
   const [indexListError, setIndexListError] = useState<string | null>(null);
   const setRiverBasicPlanIndexFromMap = mapContext?.setRiverBasicPlanIndexFromMap;
+
+  /** 색인도 상세 선택 시 데이터조회와 동일 펄스 폴리곤 강조 */
+  const indexHighlightOgcFid =
+    indexViewMode && mapRequestedIndexOgcFid != null && Number.isFinite(mapRequestedIndexOgcFid)
+      ? Math.floor(mapRequestedIndexOgcFid)
+      : null;
+  useRiverBasicPlanIndexHighlight(
+    indexLayer,
+    indexHighlightOgcFid,
+    Boolean(mapContext?.mapReady) && indexHighlightOgcFid != null
+  );
   /** 기본계획(AS) 상세보기 필드 — 하드코딩 */
   const planDetailFields = useMemo(() => getRiverBasicPlanDetailFields(tab), [tab]);
   /** define_field_is_key — 데이터 조회 첨부와 동일 (file_data/river_d_index/{키}/) */
@@ -390,14 +438,13 @@ export function RiverBasicPlanDetailPanel({ tab, riverName, onClose }: Props) {
         setPlans(nextPlans);
         let sel = nextPlans[0] ?? null;
         const pending = pendingPlanFromMapRef.current;
-        if (pending && (pending.planYear || pending.planName)) {
-          const hit =
-            nextPlans.find(
-              (p) => p.planYear === pending.planYear && p.planName === pending.planName,
-            ) ||
-            (pending.planYear
-              ? nextPlans.find((p) => p.planYear === pending.planYear)
-              : undefined);
+        if (pending && (pending.planYear || pending.planName || pending.planLen)) {
+          const hit = findPlanItemFromMapPick(
+            nextPlans,
+            pending.planYear,
+            pending.planName,
+            pending.planLen,
+          );
           if (hit) sel = hit;
           pendingPlanFromMapRef.current = null;
         }
@@ -476,13 +523,12 @@ export function RiverBasicPlanDetailPanel({ tab, riverName, onClose }: Props) {
     if (!req || !Number.isFinite(req.indexOgcFid)) return;
     const planYear = String(req.planYear ?? "").trim();
     const planName = String(req.planName ?? "").trim();
-    pendingPlanFromMapRef.current = { planYear, planName };
+    const planLen = String(req.planLen ?? "").trim();
+    pendingPlanFromMapRef.current = { planYear, planName, planLen };
 
     const list = plansRef.current;
-    if (list.length > 0 && (planYear || planName)) {
-      const hit =
-        list.find((p) => p.planYear === planYear && p.planName === planName) ||
-        (planYear ? list.find((p) => p.planYear === planYear) : undefined);
+    if (list.length > 0 && (planYear || planName || planLen)) {
+      const hit = findPlanItemFromMapPick(list, planYear, planName, planLen);
       if (hit) {
         setSelected(hit);
         pendingPlanFromMapRef.current = null;

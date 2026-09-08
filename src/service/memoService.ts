@@ -421,11 +421,13 @@ async function readMemoMapFocus(params: {
   lat4326: number | null;
 }> {
   const g = quoteIdent(params.geomCol);
+  // MultiPoint 등 Point가 아닌 geom 은 ST_X/ST_Y 불가 → 대표점으로 중심, GeoJSON은 원본 유지
+  const pt = `ST_PointOnSurface(${g})`;
   const q = `SELECT
-               ST_X(ST_Transform(${g}, 3857))::float8 AS x,
-               ST_Y(ST_Transform(${g}, 3857))::float8 AS y,
-               ST_X(ST_Transform(${g}, 4326))::float8 AS lon,
-               ST_Y(ST_Transform(${g}, 4326))::float8 AS lat,
+               ST_X(ST_Transform(${pt}, 3857))::float8 AS x,
+               ST_Y(ST_Transform(${pt}, 3857))::float8 AS y,
+               ST_X(ST_Transform(${pt}, 4326))::float8 AS lon,
+               ST_Y(ST_Transform(${pt}, 4326))::float8 AS lat,
                ST_AsGeoJSON(ST_Transform(${g}, 4326))::text AS g
              FROM ${quoteIdent(params.schema)}.${quoteIdent(params.table)}
              WHERE ${quoteIdent(params.keyCol)}::text = '${esc(params.memoKey)}'

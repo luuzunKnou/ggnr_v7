@@ -870,9 +870,13 @@ export function LayerDataPanel({
     [mapContext, rows]
   );
 
-  /** 지도 식별 항목 선택 시: 도형 강조 + 패널 padding 반영해 지도 이동·확대 (목록 행 선택과 동일) */
+  /**
+   * 식별·행 선택 시 도형 강조.
+   * fit 기본 true(목록·URL 선택). 지도 객체 클릭은 fit:false — 강조만.
+   */
   const showIdentifyFeatureOnMap = useCallback(
-    (record: Record<string, unknown>) => {
+    (record: Record<string, unknown>, opts?: { fit?: boolean }) => {
+      const doFit = opts?.fit !== false;
       const mapInstance = mapContext?.mapInstanceRef?.current;
       const source = selectionSourceRef.current;
       if (!mapInstance || !source) return;
@@ -889,12 +893,14 @@ export function LayerDataPanel({
       const geomType = features[0].getGeometry()?.getType();
       if (geomType === 'Point' || geomType === 'MultiPoint') features[0].set('isRadarPoint', true);
       source.addFeatures(features);
-      const ext = source.getExtent();
-      if (ext.every((v) => isFinite(v))) {
-        scheduleFitMapToExtent3857(mapInstance, ext as [number, number, number, number], {
-          maxZoom: Math.min(16, MAP_AUTO_NAV_MAX_ZOOM),
-          applyMapViewPadding: () => mapContext?.applyMapViewPaddingRef?.current?.(),
-        });
+      if (doFit) {
+        const ext = source.getExtent();
+        if (ext.every((v) => isFinite(v))) {
+          scheduleFitMapToExtent3857(mapInstance, ext as [number, number, number, number], {
+            maxZoom: Math.min(16, MAP_AUTO_NAV_MAX_ZOOM),
+            applyMapViewPadding: () => mapContext?.applyMapViewPaddingRef?.current?.(),
+          });
+        }
       }
       setRadarActive(true);
     },
@@ -1109,15 +1115,26 @@ export function LayerDataPanel({
     };
   }, [activeLayer, spatialFilterWkt, showCurrentListOnMap, initialDataKey, identifyResultList]);
 
-  // 지도 식별 후 패널 열렸을 때 해당 행 상세 + 도형 강조·지도 이동
+  // 지도 객체 클릭(식별) → 상세·강조만 (맵 무브 없음)
   useEffect(() => {
     if (!isIdentifyMode || identifySelectedRow == null || !setIdentifySelectedRow) return;
-    const idx = identifyFlat.findIndex((item) => item.feature.data === identifySelectedRow);
-    setSelectedRowData(identifySelectedRow);
+    const row = identifySelectedRow;
+    const idx = identifyFlat.findIndex((item) => item.feature.data === row);
+    setSelectedRowData(row);
     setSelectedIdentifyIndex(idx >= 0 ? idx : null);
     setActiveTab('basic');
-    showIdentifyFeatureOnMap(identifySelectedRow);
     setIdentifySelectedRow(null);
+    // 레이어 생성·activeLayer null 클리어 이후 강조 (첫 패널 오픈 레이스 방지)
+    let cancelled = false;
+    queueMicrotask(() => {
+      requestAnimationFrame(() => {
+        if (cancelled) return;
+        showIdentifyFeatureOnMap(row, { fit: false });
+      });
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [isIdentifyMode, identifySelectedRow, identifyFlat, setIdentifySelectedRow, showIdentifyFeatureOnMap]);
 
   useEffect(() => {
@@ -1127,11 +1144,14 @@ export function LayerDataPanel({
       pendingHighlightIndexRef.current = null;
       listColWidthsLayerRef.current = null;
       setListColWidthsPct(null);
-      highlightSourceRef.current?.clear();
-      selectionSourceRef.current?.clear();
-      setRadarActive(false);
+      // 식별으로 패널이 열릴 때 activeLayer 로드 전에 강조를 지우면 첫 선택이 비어 보임
+      if (!isIdentifyMode) {
+        highlightSourceRef.current?.clear();
+        selectionSourceRef.current?.clear();
+        setRadarActive(false);
+      }
     }
-  }, [activeLayer]);
+  }, [activeLayer, isIdentifyMode]);
 
   const loadPage = useCallback(
     (newPage: number, size?: number, opts?: { paginationOnly?: boolean }) => {
@@ -1345,7 +1365,7 @@ export function LayerDataPanel({
     setSelectedRowData(feature.data);
     setSelectedIdentifyIndex(index);
     setActiveTab('basic');
-    showIdentifyFeatureOnMap(feature.data);
+    showIdentifyFeatureOnMap(feature.data, { fit: false });
   };
 
   const closeDetail = () => {

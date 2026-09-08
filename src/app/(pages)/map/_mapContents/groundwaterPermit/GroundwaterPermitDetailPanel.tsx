@@ -5,7 +5,7 @@ import { ChevronDown, ChevronRight, Loader2 } from 'lucide-react'
 import { call } from '@/lib/api'
 import { recordDataViewLog } from '@/lib/recordDataViewLog'
 import { GROUNDWATER_PERMIT_DETAIL_SECTIONS } from './groundwaterPermitSections'
-import { useGroundwaterPermitMapHighlight } from './useGroundwaterPermitMapHighlight'
+import { useGroundwaterPermitMapHighlight, groundwaterPermitNextHighlightFitRef } from './useGroundwaterPermitMapHighlight'
 import {
   DetailAttrRow,
   DetailAttrTable,
@@ -42,10 +42,12 @@ export function GroundwaterPermitDetailPanel({ detailId, onClose }: Props) {
     setOpenSectionIds(new Set([DEFAULT_OPEN_SECTION_ID]))
   }, [detailId])
 
-  /** 상세 진입 시 데이터조회와 동일한 포인트 레이더 강조 */
+  /** 상세 진입 시 포인트 레이더 강조 (지도 클릭은 fit 생략) */
   useEffect(() => {
     if (!detailId) return
-    void highlightById(detailId)
+    const fit = groundwaterPermitNextHighlightFitRef.current
+    groundwaterPermitNextHighlightFitRef.current = true
+    void highlightById(detailId, { fit })
     return () => {
       clearHighlight()
     }

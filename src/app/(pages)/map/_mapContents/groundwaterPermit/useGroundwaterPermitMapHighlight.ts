@@ -14,10 +14,14 @@ import { compareFeaturesByGeometryStackOrder } from '@/lib/mapLayerGeometryOrder
 import {
   createDataQuerySelectionRowHighlightStyle,
   DATA_QUERY_SELECTION_PULSE_STEP,
+  insertLayerBelowServiceLayer,
 } from '@/lib/mapDataQueryMapHighlight'
 import { useMapContext } from '../../_mapComponents/MapContext'
 import { scheduleFitMapToExtent3857 } from '../../_mapComponents/config/mapAutoNavigation'
 import { MAP_AUTO_NAV_MAX_ZOOM } from '../../_mapComponents/config/mapDefaults'
+
+/** 다음 highlightById 호출 시 맵 이동 여부 — 목록 true / 지도 클릭 false */
+export const groundwaterPermitNextHighlightFitRef = { current: true }
 
 /** 데이터조회 레이더 + 중심 점(레이더만 있으면 위치가 흐려 보임) */
 function createGroundwaterPermitHighlightStyle(getPulsePhase: () => number): StyleFunction {
@@ -82,11 +86,10 @@ function ensureSharedLayer(map: OLMap): VectorSource {
     source,
     renderOrder: compareFeaturesByGeometryStackOrder,
     style: createGroundwaterPermitHighlightStyle(() => sharedPulsePhase),
-    zIndex: 9600,
   })
   layer.set(LAYER_PROP, true)
-  // 포인트는 WMS 위에 올려 중심 점·레이더가 가리지 않게 함
-  map.addLayer(layer)
+  // 데이터조회와 동일 — 서비스 WMS(기본 레이어) 아래에 두어 라벨을 가리지 않음
+  insertLayerBelowServiceLayer(map, layer)
 
   sharedMap = map
   sharedSource = source
@@ -109,7 +112,8 @@ function disposeSharedLayerIfUnused() {
 }
 
 /**
- * 지하수 개발허가 선택/상세 → 데이터조회와 동일한 포인트 레이더 강조 + 지도 이동
+ * 지하수 개발허가 선택/상세 → 데이터조회와 동일한 포인트 레이더 강조.
+ * 맵 이동은 options.fit (기본 true). 지도 객체 클릭은 fit:false.
  */
 export function useGroundwaterPermitMapHighlight() {
   const mapContext = useMapContext()

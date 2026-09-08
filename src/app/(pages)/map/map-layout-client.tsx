@@ -501,6 +501,7 @@ function MapLayoutContent({
   const setSafetyFacPanelOpen = mapContext?.setSafetyFacPanelOpen
   const setComplaintPanelOpen = mapContext?.setComplaintPanelOpen
   const setMemoPanelOpen = mapContext?.setMemoPanelOpen
+  const setGroundwaterPermitPanelOpen = mapContext?.setGroundwaterPermitPanelOpen
   const setRoadRewardPanelOpen = mapContext?.setRoadRewardPanelOpen
   const setRoadCctvOverlay = mapContext?.setRoadCctvOverlay
   const setRoadCctvUnderlayMode = mapContext?.setRoadCctvUnderlayMode
@@ -1196,6 +1197,10 @@ function MapLayoutContent({
   useEffect(() => {
     setMemoPanelOpen?.(memoManagementOpen)
   }, [setMemoPanelOpen, memoManagementOpen])
+
+  useEffect(() => {
+    setGroundwaterPermitPanelOpen?.(groundwaterPermitOpen)
+  }, [setGroundwaterPermitPanelOpen, groundwaterPermitOpen])
 
   useEffect(() => {
     setRoadRewardPanelOpen?.(roadRewardOpen)

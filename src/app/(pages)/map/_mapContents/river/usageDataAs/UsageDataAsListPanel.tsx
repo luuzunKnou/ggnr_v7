@@ -68,8 +68,10 @@ export function UsageDataAsListPanel({
   }, []);
 
   const listScrollRef = useRef<HTMLDivElement | null>(null);
-  /** 지도 픽이 클릭 도형으로 맞춘 경우 — selectedDetailId 자동 fit 1회 건너뜀 */
+  /** 지도 픽 시 selectedDetailId 자동 fit 1회 건너뜀 */
   const skipAutoFitOnceRef = useRef(false);
+  const selectedDetailIdRef = useRef(selectedDetailId);
+  selectedDetailIdRef.current = selectedDetailId;
 
   const ensureUsageLayersVisible = useCallback(() => {
     ensureUsageDataAsWmsLayersVisible(mapContext?.setVisibleLayerNames);
@@ -123,7 +125,7 @@ export function UsageDataAsListPanel({
 
   /**
    * 상세 선택(목록·알림 등) 시 본표 범위로 지도 이동.
-   * 알림 컴포넌트는 상세 ID만 넣고, 이동은 여기서 처리한다.
+   * 지도 객체 클릭은 skipAutoFitOnceRef 로 건너뛴다.
    */
   useEffect(() => {
     const key = String(selectedDetailId ?? "").trim();
@@ -149,7 +151,7 @@ export function UsageDataAsListPanel({
     [selectedDetailId, onSelectDetailId, fitMapToDetailKey, mapContext]
   );
 
-  /** 지도에서 점용 레이어 클릭 → 목록·상세 선택 + 클릭 도형을 지도 중앙에 맞춤 */
+  /** 지도에서 점용 레이어 클릭 → 목록·상세 선택만 (맵 이동 없음, 강조는 상세 연동 유지) */
   useEffect(() => {
     const pickRef = mapContext?.applyUsageDataAsMapPickRef;
     if (!pickRef) return;
@@ -161,23 +163,15 @@ export function UsageDataAsListPanel({
       if (opts.length > 1) {
         mapContextRef.current?.setUsageDataAsMapHitOptions?.(opts);
       }
-      const clickedExt = pick?.extent3857;
-      if (
-        Array.isArray(clickedExt) &&
-        clickedExt.length === 4 &&
-        clickedExt.every((v) => Number.isFinite(Number(v)))
-      ) {
-        skipAutoFitOnceRef.current = true;
-        onSelectDetailId(consCode);
-        fitMapAfterDetailLayout(clickedExt.map(Number));
-        return;
-      }
+      const alreadySelected = String(selectedDetailIdRef.current ?? "").trim() === consCode;
+      if (alreadySelected) return;
+      skipAutoFitOnceRef.current = true;
       onSelectDetailId(consCode);
     };
     return () => {
       pickRef.current = null;
     };
-  }, [mapContext?.applyUsageDataAsMapPickRef, onSelectDetailId, fitMapAfterDetailLayout]);
+  }, [mapContext?.applyUsageDataAsMapPickRef, onSelectDetailId]);
 
   useEffect(() => {
     if (!selectedDetailId || selectedDetailId === LAYER_ROW_NEW_ID) return;

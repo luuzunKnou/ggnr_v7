@@ -5,36 +5,37 @@ import type { MapBrowserEvent } from 'ol';
 import { unByKey } from 'ol/Observable';
 import { call } from '@/lib/api';
 import { useMapContext } from '../../_mapComponents/MapContext';
-import { encodeMemoRowKey, MEMO_SCHEMA, MEMO_TABLES } from './memoConfig';
+import { GROUNDWATER_PERMIT_WMS_LAYER_ID } from './groundwaterPermitLayerId';
+import { groundwaterPermitNextHighlightFitRef } from './useGroundwaterPermitMapHighlight';
 
-/** d = 300000 * 0.54^z — 민원·재난대응시설 식별과 동일 */
+/** d = 300000 * 0.54^z — 메모·민원 식별과 동일 */
 function zoomToBuffer(zoom: number): number {
   return 300_000 * Math.pow(0.54, zoom);
 }
 
-const MEMO_TABLE_SET = new Set(
-  MEMO_TABLES.map((t) => t.tableName.toLowerCase())
-);
+const LAYER_ID = GROUNDWATER_PERMIT_WMS_LAYER_ID.toLowerCase();
 
-function pickMemoKey(row: Record<string, unknown>): string | null {
-  const raw = row.memo_key ?? row.memoKey ?? row.MEMO_KEY;
-  const s = String(raw ?? '').trim();
-  return s || null;
+function pickSoinnKey(row: Record<string, unknown>): string | null {
+  const raw =
+    row.soinn_key ?? row.soinnKey ?? row.SOINN_KEY ?? row.Soinn_Key ?? row.id;
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n <= 0) return null;
+  return String(Math.floor(n));
 }
 
 type Props = {
   enabled: boolean;
-  onSelectRowKey: (rowKey: string) => void | Promise<void>;
+  onSelectId: (id: string) => void | Promise<void>;
 };
 
 /**
- * 메모관리 패널이 열린 동안 메모 레이어만 식별.
- * 클릭 시 상세를 열고, 강조·이동은 목록 쪽에서 처리한다(지도 클릭은 이동 없음).
+ * 지하수 개발허가 패널이 열린 동안 soinn00001 만 식별.
+ * 클릭 시 상세를 열고, 강조는 상세 훅에서 처리(지도 클릭은 맵 이동 없음).
  */
-export function useMemoMapClick({ enabled, onSelectRowKey }: Props) {
+export function useGroundwaterPermitMapClick({ enabled, onSelectId }: Props) {
   const mapContext = useMapContext();
-  const onSelectRef = useRef(onSelectRowKey);
-  onSelectRef.current = onSelectRowKey;
+  const onSelectRef = useRef(onSelectId);
+  onSelectRef.current = onSelectId;
 
   useEffect(() => {
     if (!enabled) return;
@@ -61,8 +62,8 @@ export function useMemoMapClick({ enabled, onSelectRowKey }: Props) {
             x,
             y,
             buffer: bufferMeters,
-            tables: MEMO_TABLES.map((t) => t.tableName),
-            schema: MEMO_SCHEMA,
+            tables: [GROUNDWATER_PERMIT_WMS_LAYER_ID],
+            schema: 'layer',
           },
         });
         const data = res?.data ?? res;
@@ -71,24 +72,20 @@ export function useMemoMapClick({ enabled, onSelectRowKey }: Props) {
           const table = String(r?.tableName ?? '')
             .trim()
             .toLowerCase();
-          return MEMO_TABLE_SET.has(table) && Array.isArray(r?.features) && r.features.length > 0;
+          return table === LAYER_ID && Array.isArray(r?.features) && r.features.length > 0;
         }) as
           | {
               tableName?: string;
               features?: { data?: Record<string, unknown> }[];
             }
           | undefined;
-        const table = String(first?.tableName ?? '')
-          .trim()
-          .toLowerCase();
-        if (!MEMO_TABLE_SET.has(table)) return;
-
         const row = first?.features?.[0]?.data;
         if (!row) return;
-        const memoKey = pickMemoKey(row);
-        if (!memoKey) return;
+        const id = pickSoinnKey(row);
+        if (!id) return;
 
-        await onSelectRef.current(encodeMemoRowKey(table, memoKey));
+        groundwaterPermitNextHighlightFitRef.current = false;
+        await onSelectRef.current(id);
       } catch {
         /* 클릭 식별 실패는 무시 */
       }

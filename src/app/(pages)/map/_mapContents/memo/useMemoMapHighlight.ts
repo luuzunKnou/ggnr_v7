@@ -15,6 +15,7 @@ import { prepareMapForPanelAwareNavigation } from "../../_mapComponents/config/m
 import {
   createDataQuerySelectionRowHighlightStyle,
   DATA_QUERY_SELECTION_PULSE_STEP,
+  insertLayerBelowServiceLayer,
 } from "@/lib/mapDataQueryMapHighlight";
 
 const MEMO_CLICK_ZOOM = 18;
@@ -121,12 +122,11 @@ export function useMemoMapHighlight(
     sourceRef.current = source;
     const layer = new VectorLayer({
       source,
-      zIndex: 10000,
       renderOrder: compareFeaturesByGeometryStackOrder,
       style: createDataQuerySelectionRowHighlightStyle(() => pulsePhaseRef.current),
     });
     layer.set("memoHighlight", true);
-    map.addLayer(layer);
+    insertLayerBelowServiceLayer(map, layer);
 
     const pending = featuresFromGeom(map, geomRef.current);
     if (pending.length > 0) {
