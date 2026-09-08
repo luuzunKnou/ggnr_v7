@@ -26,6 +26,9 @@
 # misc
 .DS_Store
 *.pem
+# Git Bash `>nul` 이 Windows에서 파일로 생김 (예약 장치명 — 커밋 불가)
+/nul
+/NUL
 .cursor/local/
 .cursor/plans/
 .cursor/rules/_personal/

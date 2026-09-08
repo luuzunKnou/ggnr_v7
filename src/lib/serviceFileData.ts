@@ -95,18 +95,23 @@ export function isServiceFileDataTmpMarkedFileName(fileName: string): boolean {
   return fileName.endsWith('.tmp');
 }
 
-/** OS가 폴더 탐색 시 만드는 캐시·설정 파일 — 첨부 목록·다운로드에서 제외 */
+/** OS가 폴더 탐색 시 만드는 캐시·설정 파일·폴더 — 첨부 목록·다운로드에서 제외 */
 const SERVICE_FILE_DATA_SYSTEM_JUNK = new Set([
+  'thumbs',
   'thumbs.db',
   'ehthumbs.db',
   'desktop.ini',
   '.ds_store',
 ]);
 
+/** Thumbs.db, Thumbs_기타.db, Thumbs_도면.db 등 탐색기 미리보기 캐시 */
+const THUMBS_DB_RE = /^(eh)?thumbs.*\.db$/i;
+
 export function isServiceFileDataSystemJunkFileName(fileName: string): boolean {
-  const name = String(fileName ?? '').trim();
+  const name = String(fileName ?? '').trim().toLowerCase();
   if (!name) return false;
-  return SERVICE_FILE_DATA_SYSTEM_JUNK.has(name.toLowerCase());
+  if (SERVICE_FILE_DATA_SYSTEM_JUNK.has(name)) return true;
+  return THUMBS_DB_RE.test(name);
 }
 
 /** 목록·다운로드·루트파일 판정에서 숨길 파일 */
