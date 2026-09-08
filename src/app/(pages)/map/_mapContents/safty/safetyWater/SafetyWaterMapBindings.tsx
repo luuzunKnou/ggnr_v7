@@ -13,7 +13,7 @@ export function SafetyWaterMapBindings() {
     map,
     stations,
     selectedStationId,
-    focusStation,
+    selectStationFromMap,
     focusCctvFromMap,
     setListOpen,
     cctvLayerItems,
@@ -39,7 +39,7 @@ export function SafetyWaterMapBindings() {
     stationIdsWithCctv,
     stationListSearchQuery,
     (id) => {
-      focusStation(id);
+      selectStationFromMap(id);
       setListOpen(false);
     }
   );

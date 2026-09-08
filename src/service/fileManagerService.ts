@@ -14,7 +14,7 @@ import {
   shouldHideServiceFileDataFileName,
 } from '@/lib/serviceFileData';
 import { GGNR_BASE_STRUCTURE, GGNR_DATA_PATHS } from '@/lib/ggnrDataPaths';
-import { resolveGgnrDataDir, turbopackOpaquePath } from '@/lib/turbopackFsPath';
+import { resolveGgnrDataDir, resolveGgnrDataUncRoot, turbopackOpaquePath } from '@/lib/turbopackFsPath';
 
 // 사업명 폴더 없이 데이터 루트가 곧 베이스. 환경변수 GGNR_DATA_DIR로 덮을 수 있음.
 function getBaseDir(): string {
@@ -461,16 +461,48 @@ export async function listServiceFileDataFiles(params: {
   const resolved = resolveWithinBase(rel);
   if (!resolved) return [];
 
+  const layerKey = params.layerName.trim().toLowerCase();
+  const logRiverPlanReportPath =
+    layerKey === 'river_plan_as' || layerKey === 'river_plan_s_as';
+  const uncRoot = logRiverPlanReportPath ? resolveGgnrDataUncRoot() : '';
+
   let entries: import('node:fs').Dirent[];
   try {
     entries = await fs.readdir(resolved.abs, { withFileTypes: true });
-  } catch {
+  } catch (err: unknown) {
+    if (logRiverPlanReportPath) {
+      const code = (err as NodeJS.ErrnoException)?.code;
+      console.info(
+        '[riverBasicPlan:report] path missing or unreadable',
+        JSON.stringify({
+          GGNR_DATA_DIR: resolved.base,
+          GGNR_DATA_UNC_ROOT: uncRoot || null,
+          relative: rel,
+          absolute: resolved.abs,
+          code: code ?? null,
+        }),
+      );
+    }
     return [];
   }
 
   const fileEntries = entries.filter(
     (e) => e.isFile() && !shouldHideServiceFileDataFileName(e.name)
   );
+  if (logRiverPlanReportPath) {
+    const dirs = entries.filter((e) => e.isDirectory()).map((e) => e.name);
+    console.info(
+      '[riverBasicPlan:report] list',
+      JSON.stringify({
+        GGNR_DATA_DIR: resolved.base,
+        GGNR_DATA_UNC_ROOT: uncRoot || null,
+        relative: rel,
+        absolute: resolved.abs,
+        files: fileEntries.map((e) => e.name),
+        dirs,
+      }),
+    );
+  }
   const includeMeta = params.includeMeta !== false;
 
   if (!includeMeta) {

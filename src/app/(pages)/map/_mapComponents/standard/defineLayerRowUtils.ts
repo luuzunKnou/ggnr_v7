@@ -57,7 +57,10 @@ export type DefineFieldLike = {
   define_field_kor_name?: string | null;
   define_field_idx?: string | number | null;
   define_field_show_list?: unknown;
+  define_field_show_detail?: unknown;
+  define_field_sort_type?: string | null;
   define_field_type?: string | null;
+  define_field_show_title?: unknown;
 };
 
 export function defineFieldIdxNum(f: DefineFieldLike): number {
@@ -75,6 +78,29 @@ export function selectDefineLayerListFields(fields: DefineFieldLike[]): DefineFi
       return isDefineFieldFlagTrue(f.define_field_show_list);
     })
     .sort((a, b) => defineFieldIdxNum(a) - defineFieldIdxNum(b));
+}
+
+/** define_field_show_detail=true, geom 제외, define_field_idx 순 */
+export function selectDefineLayerDetailFields(fields: DefineFieldLike[]): DefineFieldLike[] {
+  return [...fields]
+    .filter((f) => {
+      const name = String(f.define_field_name ?? '').trim();
+      if (!name) return false;
+      if (isGeomLikeDefineFieldName(name)) return false;
+      return isDefineFieldFlagTrue(f.define_field_show_detail);
+    })
+    .sort((a, b) => defineFieldIdxNum(a) - defineFieldIdxNum(b));
+}
+
+/** define_field_sort_type → asc|desc (없으면 null) */
+export function defineFieldInitialSortDir(
+  field: DefineFieldLike,
+  fallback: 'asc' | 'desc' = 'asc'
+): 'asc' | 'desc' {
+  const raw = String(field.define_field_sort_type ?? '').trim().toUpperCase();
+  if (raw === 'ASC') return 'asc';
+  if (raw === 'DESC') return 'desc';
+  return fallback;
 }
 
 /** define_field_is_key 로 지정된 컬럼명으로 행 키값 추출 */

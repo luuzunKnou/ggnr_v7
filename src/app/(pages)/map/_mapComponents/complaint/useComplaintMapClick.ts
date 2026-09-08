@@ -95,7 +95,7 @@ type Props = {
 
 /**
  * 민원관리 패널이 열린 동안 `comp` 레이어만 식별.
- * 클릭 시 상세를 열고, 중심 이동은 상세(extent) 기준으로 호출측에서 수행한다.
+ * 클릭 시 상세를 연다. 지도 이동은 목록 선택 시에만 호출측에서 수행한다.
  */
 export function useComplaintMapClick({ enabled, onSelectCompKey }: Props) {
   const mapContext = useMapContext();

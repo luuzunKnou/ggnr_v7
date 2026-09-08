@@ -173,11 +173,25 @@ if defined NSSM_PROJECT if defined NSSM_ENV (
 "%NSSM%" set %SERVICE_NAME% AppRotateBytes 10485760
 "%NSSM%" set %SERVICE_NAME% AppRotateOnline 1
 
+:: demo: run service as G: share account (not LocalSystem) so UNC/file_data works
+if defined GGNR_NSSM_OBJECT_NAME if defined GGNR_NSSM_OBJECT_PASS (
+  echo [nssm-install] ObjectName=!GGNR_NSSM_OBJECT_NAME! ^(demo G: share account^)
+  "%NSSM%" set %SERVICE_NAME% ObjectName "!GGNR_NSSM_OBJECT_NAME!" "!GGNR_NSSM_OBJECT_PASS!"
+  if errorlevel 1 (
+    echo [ERROR] nssm ObjectName set failed. Check account/password ^(Log on as a service right^).
+    set "EXIT_EC=1"
+    goto :fail_end
+  )
+) else (
+  echo [nssm-install] ObjectName kept default ^(LocalSystem^) - no GGNR_NSSM_OBJECT_* from starter.
+)
+
 echo [nssm-install] Starting service...
 "%NSSM%" start %SERVICE_NAME%
 if errorlevel 1 (
   echo [ERROR] Service start failed.
   echo         Check ggnr_start.bat project/env and node PATH.
+  echo         If demo ObjectName was set: grant "Log on as a service" to that account.
   echo         status: "%NSSM%" status %SERVICE_NAME%
   echo         stdout: %LOG_OUT%
   echo         stderr: %LOG_ERR%

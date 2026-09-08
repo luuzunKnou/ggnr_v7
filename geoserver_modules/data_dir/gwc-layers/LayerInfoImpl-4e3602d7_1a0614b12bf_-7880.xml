@@ -1,5 +1,5 @@
 <GeoServerTileLayer>
-  <id>LayerInfoImpl--2053d3:19d606c4ff1:30f0</id>
+  <id>LayerInfoImpl-4e3602d7:1a0614b12bf:-7880</id>
   <enabled>true</enabled>
   <inMemoryCached>true</inMemoryCached>
   <name>ggnr:sd_water_play_mgmt_zone</name>
@@ -10,25 +10,9 @@
   <gridSubsets>
     <gridSubset>
       <gridSetName>EPSG:4326</gridSetName>
-      <extent>
-        <coords>
-          <double>126.36181980839305</double>
-          <double>33.44042134374342</double>
-          <double>129.47434725053955</double>
-          <double>38.301733452053526</double>
-        </coords>
-      </extent>
     </gridSubset>
     <gridSubset>
       <gridSetName>EPSG:900913</gridSetName>
-      <extent>
-        <coords>
-          <double>1.4066533436781704E7</double>
-          <double>3953909.505983065</double>
-          <double>1.4413018406721542E7</double>
-          <double>4622138.757884318</double>
-        </coords>
-      </extent>
     </gridSubset>
   </gridSubsets>
   <metaWidthHeight>
@@ -42,7 +26,7 @@
       <key>STYLES</key>
       <defaultValue></defaultValue>
       <availableStyles class="sorted-set"/>
-      <defaultStyle>sd_water_play_mgmt_zone</defaultStyle>
+      <defaultStyle>generic</defaultStyle>
     </styleParameterFilter>
   </parameterFilters>
   <gutter>0</gutter>

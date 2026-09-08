@@ -6,7 +6,8 @@
   mark-anchor: 0.5 0.5;
   mark-offset: 0 0;
 
-  label: [addr];
+  /* addr 폴백: 공백 split 후 앞 2토큰(시도·시군구) 제거 */
+  label: [if_then_else(isNull(addr_detail), strReplace(addr, '^[^ ]+ +[^ ]+ +', '', true), if_then_else(equalTo(addr_detail, ''), strReplace(addr, '^[^ ]+ +[^ ]+ +', '', true), addr_detail))];
   font-size: 14;
   font-fill: #0369A1;
   font-weight: bold;
