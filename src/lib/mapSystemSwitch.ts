@@ -31,19 +31,11 @@ export function isOpenedTokenAllowedForServiceList(
   return collectAllowedOpenedKeys(serviceList).has(normalized);
 }
 
-/**
- * 시스템 전환 시 URL opened·상세 쿼리 정리.
- * 대상 시스템에도 있는 기능( serviceList )이면 패널 유지, 없으면 제거.
- */
-export function scrubMapSearchParamsOnSystemSwitch(
+function applyOpenedAndLedgerScrub(
   params: URLSearchParams,
   targetSystemKey: string,
-  targetServiceList: string[]
+  nextOpened: string[]
 ): void {
-  const opened = (params.get('opened') ?? '').split(',').filter(Boolean);
-  const nextOpened = opened.filter((token) =>
-    isOpenedTokenAllowedForServiceList(token, targetServiceList)
-  );
   if (nextOpened.length > 0) params.set('opened', nextOpened.join(','));
   else params.delete('opened');
 
@@ -56,4 +48,39 @@ export function scrubMapSearchParamsOnSystemSwitch(
     params.delete('dataTable');
     params.delete('dataKey');
   }
+}
+
+/**
+ * 현재 시스템 serviceList 에 없는 opened 만 제거.
+ * layerSetting 등 보조 토큰은 유지.
+ */
+export function scrubOpenedNotAllowedForSystem(
+  params: URLSearchParams,
+  targetSystemKey: string,
+  targetServiceList: string[]
+): void {
+  const opened = (params.get('opened') ?? '').split(',').filter(Boolean);
+  const nextOpened = opened.filter((token) => {
+    const normalized = normalizeOpenedToken(String(token ?? '').trim());
+    if (AUXILIARY_OPENED_TOKENS.has(normalized)) return true;
+    return isOpenedTokenAllowedForServiceList(token, targetServiceList);
+  });
+  applyOpenedAndLedgerScrub(params, targetSystemKey, nextOpened);
+}
+
+/**
+ * 시스템 전환 시 URL opened·상세 쿼리 정리.
+ * 대상 시스템에도 있는 기능( serviceList )이면 패널 유지, 없으면 제거.
+ * layerSetting 등 보조 토큰도 닫는다.
+ */
+export function scrubMapSearchParamsOnSystemSwitch(
+  params: URLSearchParams,
+  targetSystemKey: string,
+  targetServiceList: string[]
+): void {
+  const opened = (params.get('opened') ?? '').split(',').filter(Boolean);
+  const nextOpened = opened.filter((token) =>
+    isOpenedTokenAllowedForServiceList(token, targetServiceList)
+  );
+  applyOpenedAndLedgerScrub(params, targetSystemKey, nextOpened);
 }

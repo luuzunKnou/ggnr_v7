@@ -155,6 +155,11 @@ import {
   ensureRoadLedgerSummaryLayer,
 } from "@/lib/mapServiceMenuLayers"
 import { normalizeOpenedToken } from "@/lib/mapServiceOpened"
+import {
+  scrubMapSearchParamsOnSystemSwitch,
+  scrubOpenedNotAllowedForSystem,
+} from "@/lib/mapSystemSwitch"
+import { call } from "@/lib/api"
 import { MapSidebar } from "./_mapComponents/map-sidebar"
 import { MapSearchBar } from "./_mapComponents/map-search-bar"
 import { MapContextProvider, useMapContext } from "./_mapComponents/MapContext"
@@ -1241,15 +1246,62 @@ function MapLayoutContent({
     router.push(`/map?${current.toString()}`)
   }
 
-  /** 시스템 전환 시 — 레이어 전부 끄기 (opened URL 은 selectSystem 에서 serviceList 기준 scrub) */
+  /** 현재 시스템 serviceList — opened 유효성·전환 scrub 용 */
+  const [systemListForOpened, setSystemListForOpened] = useState<
+    { sys_key: string; serviceList?: string[] }[]
+  >([])
+  useEffect(() => {
+    call("", "POST", { service: "configService", action: "getSystemList", params: {} })
+      .then((res) => {
+        const data = res?.data ?? res
+        const systems = Array.isArray(data?.systems) ? data.systems : []
+        setSystemListForOpened(
+          systems.map((s: { sys_key?: string; serviceList?: string[] }) => ({
+            sys_key: String(s?.sys_key ?? "").trim(),
+            serviceList: Array.isArray(s?.serviceList) ? s.serviceList : [],
+          }))
+        )
+      })
+      .catch(() => setSystemListForOpened([]))
+  }, [])
+
+  /**
+   * system 변경 → 레이어 전부 끄기 + 전환 scrub.
+   * opened 가 현재 시스템 메뉴에 없으면 → 패널 URL 정리 + 레이어 끄기.
+   */
   const prevSystemKeyRef = useRef<string | undefined>(undefined)
+  const openedParamKey = searchParams.get("opened") ?? ""
   useEffect(() => {
     const prev = prevSystemKeyRef.current
+    const systemChanged =
+      prev !== undefined && Boolean(prev) && prev !== systemKeyFromUrl
     prevSystemKeyRef.current = systemKeyFromUrl
-    if (prev === undefined || !prev || prev === systemKeyFromUrl) return
-    mapContext?.allLayersOffRef?.current?.()
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- systemKeyFromUrl only
-  }, [systemKeyFromUrl])
+
+    if (systemChanged) {
+      mapContext?.allLayersOffRef?.current?.()
+    }
+
+    if (systemListForOpened.length === 0) return
+
+    const target = systemListForOpened.find((s) => s.sys_key === systemKeyFromUrl)
+    const serviceList = target?.serviceList ?? []
+    const current = new URLSearchParams(Array.from(searchParams.entries()))
+    const before = current.toString()
+
+    if (systemChanged) {
+      scrubMapSearchParamsOnSystemSwitch(current, systemKeyFromUrl, serviceList)
+    } else {
+      scrubOpenedNotAllowedForSystem(current, systemKeyFromUrl, serviceList)
+    }
+
+    if (current.toString() === before) return
+
+    if (!systemChanged) {
+      mapContext?.allLayersOffRef?.current?.()
+    }
+    router.replace(`/map?${current.toString()}`)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- system·opened·목록 기준
+  }, [systemKeyFromUrl, openedParamKey, systemListForOpened])
 
   const setOpened = (keys: string[]) => {
     updateMapUrl({ opened: keys })
