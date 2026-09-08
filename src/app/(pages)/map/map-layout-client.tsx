@@ -1361,7 +1361,7 @@ function MapLayoutContent({
 
   /**
    * system 변경 → 레이어 전부 끄기 + 전환 scrub.
-   * opened 가 현재 시스템 메뉴에 없으면 → 패널 URL 정리 + 레이어 끄기.
+   * 부서업무만 바꿀 때(opened 정리)는 지적도·건물 등 우측 레이어는 끄지 않음.
    */
   const prevSystemKeyRef = useRef<string | undefined>(undefined)
   const openedParamKey = searchParams.get("opened") ?? ""
@@ -1390,9 +1390,6 @@ function MapLayoutContent({
 
     if (current.toString() === before) return
 
-    if (!systemChanged) {
-      mapContext?.allLayersOffRef?.current?.()
-    }
     router.replace(`/map?${current.toString()}`)
     // eslint-disable-next-line react-hooks/exhaustive-deps -- system·opened·목록 기준
   }, [systemKeyFromUrl, openedParamKey, systemListForOpened])

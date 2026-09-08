@@ -994,6 +994,8 @@ export default function OpenLayersMap({
   // 데이터 조회 → 지하시설물 선택 동기화
   useEffect(() => {
     if (!restored || undergroundFacilityCatalogLoading) return;
+    // 부서업무 전환으로 서비스 레이어만 비운 경우에는 우측 지하시설물을 끄지 않음
+    if (visibleLayerNames.size === 0) return;
     const fromVisible = pickUndergroundFacilityFromVisible(
       visibleLayerNames,
       undergroundFacilityAvailableTableNames
