@@ -1,8 +1,14 @@
 import { randomUUID } from 'crypto';
 import fs from 'fs';
 import path from 'path';
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { db } from '@/database/db';
+import {
+  publicNglFeeList,
+  roadNglFeeList,
+  waterNglFeeList,
+  type NglFeeListTable,
+} from '@/database/schema/ngl_fee_list';
 import { nglQueryTable } from '@/database/schema/ngl_query_table';
 import {
   USE_FEE_SYNC_DEFAULT_START_YEAR,
@@ -23,7 +29,6 @@ import {
   isUseFeePrefixAllowedBySystems,
 } from '@/lib/useFeeBinding';
 import { getEnabledSystemKeysFromRuntime } from '@/lib/runtimeEnvFile';
-import type { NglFeeListTable } from '@/database/schema/ngl_fee_list';
 
 const LOG = '[nextGenLinkage]';
 
@@ -39,7 +44,43 @@ function padLvyNo(n: number): string {
   return String(n).padStart(6, '0');
 }
 
-function parseFyrList(fyr?: string | null): string[] {
+function yearRange(from: number, to: number): string[] {
+  const list: string[] = [];
+  for (let y = from; y <= to; y++) list.push(String(y));
+  return list;
+}
+
+async function maxFyrOfTable(table: NglFeeListTable): Promise<number | null> {
+  try {
+    const [row] = await db
+      .select({
+        m: sql<number | null>`max(case when btrim(${table.fyr}) ~ '^[0-9]{4}$' then btrim(${table.fyr})::integer end)`,
+      })
+      .from(table);
+    const n = row?.m == null ? NaN : Number(row.m);
+    return Number.isFinite(n) ? n : null;
+  } catch {
+    return null;
+  }
+}
+
+/** 하천·도로·국공유지 점사용료에 저장된 회계연도 최댓값. 없으면 null */
+async function getMaxStoredFyr(): Promise<number | null> {
+  const years = await Promise.all([
+    maxFyrOfTable(waterNglFeeList),
+    maxFyrOfTable(roadNglFeeList),
+    maxFyrOfTable(publicNglFeeList),
+  ]);
+  const nums = years.filter((y): y is number => y != null);
+  if (!nums.length) return null;
+  return Math.max(...nums);
+}
+
+/**
+ * 연도 미지정 시: 데이터가 없으면 2000~올해(최초 적재).
+ * 있으면 회계연도 최댓값부터 올해까지(최댓값이 올해면 올해만).
+ */
+async function resolveFyrList(fyr?: string | null): Promise<string[]> {
   const raw = (fyr ?? '').trim();
   if (raw) {
     return raw
@@ -48,9 +89,12 @@ function parseFyrList(fyr?: string | null): string[] {
       .filter(Boolean);
   }
   const end = new Date().getFullYear();
-  const list: string[] = [];
-  for (let y = USE_FEE_SYNC_DEFAULT_START_YEAR; y <= end; y++) list.push(String(y));
-  return list;
+  const maxStored = await getMaxStoredFyr();
+  if (maxStored == null) {
+    return yearRange(USE_FEE_SYNC_DEFAULT_START_YEAR, end);
+  }
+  const start = Math.min(Math.max(maxStored, USE_FEE_SYNC_DEFAULT_START_YEAR), end);
+  return yearRange(start, end);
 }
 
 function buildHeader(ifId: string, srcOrgCd: string, srcSysCd: string) {
@@ -338,7 +382,7 @@ export async function runNextGenFeeSync(params?: { fyr?: string }): Promise<Next
       };
     }
 
-    const fyrList = parseFyrList(params?.fyr);
+    const fyrList = await resolveFyrList(params?.fyr);
     const fyrFrom = fyrList[0] ?? '';
     const fyrTo = fyrList[fyrList.length - 1] ?? '';
     console.info(

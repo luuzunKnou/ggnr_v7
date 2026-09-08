@@ -63,7 +63,6 @@ export function UsageDataAsListPanel({
     return () => {
       // 이 패널이 켠 것만 아니라 점용 WMS 전부 끔 (시스템 이동·재진입 잔상 방지)
       clearUsageDataAsWmsLayers(mapContextRef.current?.setVisibleLayerNames);
-      setUsageDataAsCadastralOverlay(false);
     };
   }, []);
 

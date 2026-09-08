@@ -45,7 +45,8 @@ function applyOpenedAndLedgerScrub(
 
   const openedAfter = (params.get('opened') ?? '').split(',').filter(Boolean);
   const hasListView = openedAfter.some((t) => normalizeOpenedToken(t) === 'listView');
-  if (hasListView) {
+  // listView가 없을 때만 dataTable·dataKey 정리. (있으면 유지 — 잘못 지우면 패널이 열렸다 바로 닫힘)
+  if (!hasListView) {
     params.delete('dataTable');
     params.delete('dataKey');
   }

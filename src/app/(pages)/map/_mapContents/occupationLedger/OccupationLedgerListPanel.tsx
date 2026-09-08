@@ -98,7 +98,6 @@ export function OccupationLedgerListPanel({
     setOccupationLedgerCadastralOverlay(true);
     return () => {
       clearOccupationLedgerWmsLayers(mapContextRef.current?.setVisibleLayerNames, { serEng });
-      setOccupationLedgerCadastralOverlay(false);
     };
   }, [serEng]);
 

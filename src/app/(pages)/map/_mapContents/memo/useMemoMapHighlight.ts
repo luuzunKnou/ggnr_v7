@@ -1,25 +1,18 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import type { Feature } from "ol";
-import type { Map as OLMap } from "ol";
-import { transform } from "ol/proj";
-import { easeOut } from "ol/easing";
+import type { Feature, Map as OLMap } from "ol";
 import VectorSource from "ol/source/Vector";
 import VectorLayer from "ol/layer/Vector";
 import GeoJSONFormat from "ol/format/GeoJSON";
 import "../../_mapComponents/config/projections";
 import { useMapContext } from "../../_mapComponents/MapContext";
 import { compareFeaturesByGeometryStackOrder } from "@/lib/mapLayerGeometryOrder";
-import { prepareMapForPanelAwareNavigation } from "../../_mapComponents/config/mapAutoNavigation";
 import {
   createDataQuerySelectionRowHighlightStyle,
   DATA_QUERY_SELECTION_PULSE_STEP,
   insertLayerBelowServiceLayer,
 } from "@/lib/mapDataQueryMapHighlight";
-
-const MEMO_CLICK_ZOOM = 18;
-const MEMO_FLY_MS = 600;
 
 function looksLikeGeoJsonGeometry(v: unknown): v is Record<string, unknown> & { type: unknown } {
   if (!v || typeof v !== "object" || !("type" in v)) return false;
@@ -34,38 +27,6 @@ export function center3857FromExtent(extent: unknown): [number, number] | null {
   const nums = extent.map((v) => Number(v));
   if (!nums.every((n) => Number.isFinite(n))) return null;
   return [(nums[0]! + nums[2]!) / 2, (nums[1]! + nums[3]!) / 2];
-}
-
-export function animateMemoToCenter3857(
-  map: OLMap,
-  center3857: [number, number],
-  applyMapViewPadding?: (() => void) | null
-) {
-  const run = () => {
-    prepareMapForPanelAwareNavigation(map, applyMapViewPadding);
-    const view = map.getView();
-    view.cancelAnimations();
-    const viewProj = view.getProjection()?.getCode() || "EPSG:3857";
-    const center =
-      viewProj === "EPSG:3857" ? center3857 : transform(center3857, "EPSG:3857", viewProj);
-    const currentZoom = view.getZoom();
-    const targetZoom = Math.max(
-      Number.isFinite(currentZoom) ? (currentZoom as number) : 0,
-      MEMO_CLICK_ZOOM
-    );
-    const resolution = view.getResolutionForZoom(targetZoom);
-    view.animate({
-      center,
-      resolution,
-      duration: MEMO_FLY_MS,
-      easing: easeOut,
-    });
-  };
-  queueMicrotask(() => {
-    requestAnimationFrame(() => {
-      requestAnimationFrame(run);
-    });
-  });
 }
 
 function featuresFromGeom(

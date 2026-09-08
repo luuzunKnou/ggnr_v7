@@ -224,9 +224,23 @@ export function AttributeQueryUI({ activeTableName, onOpenDataPanel, onClearData
   const setDataQueryMapPickEnabled = mapContext?.setDataQueryMapPickEnabled;
   /** 부모가 매 렌더 새 함수를 넘기는 경우(map-layout handleOpenDataPanel 등) → 검색 콜백 체인이 흔들려 읍면동 effect 무한루프 */
   const onOpenDataPanelRef = useRef(onOpenDataPanel);
+  const onClearDataSelectionRef = useRef(onClearDataSelection);
+  /**
+   * URL activeTableName이 push 직후 한 박자 늦음.
+   * 토글 의도를 로컬로 잡아 3번째 클릭이 잘못된 분기로 가지 않게 함.
+   * null = URL 따름, '' = 닫힘 의도, 그 외 = 해당 테이블 열림 의도
+   */
+  const pendingActiveTableRef = useRef<string | null>(null);
   useLayoutEffect(() => {
     onOpenDataPanelRef.current = onOpenDataPanel;
-  }, [onOpenDataPanel]);
+    onClearDataSelectionRef.current = onClearDataSelection;
+  }, [onOpenDataPanel, onClearDataSelection]);
+  useEffect(() => {
+    const pending = pendingActiveTableRef.current;
+    if (pending == null) return;
+    const urlActive = activeTableName ?? '';
+    if (pending === urlActive) pendingActiveTableRef.current = null;
+  }, [activeTableName]);
   /** 도형 검색 중(그리기 대기/진행)이거나 검색결과가 표시된 상태일 때만 도형 버튼 on */
   const isSpatialSearchActive = !!(spatialFilterWkt || spatialDrawRequest);
 
@@ -1027,10 +1041,16 @@ export function AttributeQueryUI({ activeTableName, onOpenDataPanel, onClearData
   }, [activeTool, dataSelectTable, dataSelectField, dataSelectValue, applySpatialSearchFromWkt5181, setIdentifyResultList]);
 
   const handleLayerClick = (layer: LayerItemMeta) => {
-    if (activeTableName === layer.tableName) {
+    const effectiveActive =
+      pendingActiveTableRef.current != null
+        ? pendingActiveTableRef.current
+        : (activeTableName ?? '');
+    if (effectiveActive === layer.tableName) {
+      pendingActiveTableRef.current = '';
       setIdentifyResultList?.(null);
-      onClearDataSelection?.();
+      onClearDataSelectionRef.current?.();
     } else {
+      pendingActiveTableRef.current = layer.tableName;
       setIdentifyResultList?.(null);
       onOpenDataPanelRef.current?.(layer.tableName);
       if (setVisibleLayerNames && !visibleLayerNames.has(layer.tableName)) {

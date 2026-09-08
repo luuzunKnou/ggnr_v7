@@ -20,6 +20,8 @@ type Props = {
   maxVisibleCards?: number
   /** true면 남은 패널 높이를 채우고 목록만 내부 스크롤 */
   fillHeight?: boolean
+  /** 제목 글자 스타일 (기본: text-[11px] font-medium text-muted-foreground) */
+  titleClassName?: string
   className?: string
   onAdd?: () => void
   onRemove?: (index: number) => void
@@ -36,6 +38,7 @@ export function UsageDataAsAddressList({
   selectionTone = 'primary',
   maxVisibleCards = MAX_VISIBLE_CARDS,
   fillHeight = false,
+  titleClassName,
   className,
   onAdd,
   onRemove,
@@ -46,7 +49,13 @@ export function UsageDataAsAddressList({
   return (
     <div className={cn('mt-4', fillHeight && 'flex min-h-0 flex-1 flex-col', className)}>
       <div className="mb-2 flex shrink-0 items-center justify-between gap-2">
-        <div className="text-[11px] font-medium text-muted-foreground">{title}</div>
+        <div
+          className={cn(
+            titleClassName ?? 'text-[11px] font-medium text-muted-foreground'
+          )}
+        >
+          {title}
+        </div>
         <div className="flex shrink-0 items-center gap-1">
           {isEditing && onAdd && (
             <LayerRowPanelButton className="h-6 px-2 text-[10px]" onClick={onAdd}>
@@ -70,8 +79,8 @@ export function UsageDataAsAddressList({
           className={cn(
             'list-none space-y-1.5',
             fillHeight
-              ? 'min-h-0 flex-1 overflow-y-auto scrollbar-hide pr-0.5'
-              : items.length > maxVisibleCards && 'overflow-y-auto scrollbar-hide pr-0.5'
+              ? 'min-h-0 flex-1 overflow-y-auto scrollbar-thin pr-0.5'
+              : items.length > maxVisibleCards && 'overflow-y-auto scrollbar-thin pr-0.5'
           )}
           style={
             !fillHeight && items.length > maxVisibleCards

@@ -678,7 +678,7 @@ function MapLayoutContent({
   const [complaintAddOpen, setComplaintAddOpen] = useState(false)
   const roadCctvUnderlayMode = mapContext?.roadCctvUnderlayMode ?? "traffic"
 
-  /** 좌측 서비스 메뉴 전환 시 서비스 레이어 초기화 — 도로대장·시설관리는 총괄(a0020000) 즉시 유지 */
+  /** 좌측 서비스 메뉴 전환 시 서비스 레이어 초기화 — 도로대장만 총괄(a0020000) 유지 */
   const prevServiceMenuRef = useRef<string | null>(null)
   useLayoutEffect(() => {
     const skipRoadLedgerSummary =
@@ -701,7 +701,7 @@ function MapLayoutContent({
         skipRoadLedgerSummary,
       })
     } else if (!skipRoadLedgerSummary) {
-      if (serviceMenuKey === ROAD_LEDGER_OPENED_KEY || serviceMenuKey === ROAD_INFRA_OPENED_KEY) {
+      if (serviceMenuKey === ROAD_LEDGER_OPENED_KEY) {
         ensureRoadLedgerSummaryLayer(layerCtx)
       }
     }
@@ -1212,12 +1212,7 @@ function MapLayoutContent({
       setRoadCctvUnderlayMode?.("traffic")
       setRoadCctvExtentWgs84?.(null)
       const id = ROAD_LEDGER_SUMMARY_LAYER_ID.toLowerCase()
-      if (roadInfraOpen) {
-        setVisibleLayerNames?.((prev) => {
-          if (prev.has(id)) return prev
-          return new Set(prev).add(id)
-        })
-      } else if (!roadLedgerOpen) {
+      if (!roadLedgerOpen) {
         /** 도로대장 목록이 열려 있으면 RoadLedgerListPanel이 총괄 레이어를 관리하므로 건드리지 않음 */
         setVisibleLayerNames?.((prev) => {
           if (!prev.has(id)) return prev
@@ -1229,7 +1224,6 @@ function MapLayoutContent({
     }
   }, [
     roadCctvOpen,
-    roadInfraOpen,
     roadLedgerOpen,
     setRoadCctvOverlay,
     setRoadCctvUnderlayMode,
@@ -1243,13 +1237,6 @@ function MapLayoutContent({
     setIdentifyResultList?.(null)
     setIdentifySelectedRow?.(null)
   }, [roadCctvOpen, setIdentifyResultList, setIdentifySelectedRow])
-
-  /** 시설관리 진입 시 도로대장 총괄(a0020000) 레이어 표시 — CCTV가 통행 모드일 때는 제외(배타) */
-  useEffect(() => {
-    if (!roadInfraOpen || !setVisibleLayerNames) return
-    if (roadCctvOpen && roadCctvUnderlayMode === "traffic") return
-    ensureRoadLedgerSummaryLayer({ setVisibleLayerNames })
-  }, [roadInfraOpen, roadCctvOpen, roadCctvUnderlayMode, setVisibleLayerNames])
 
   /**
    * CCTV 패널: 통행 타일 vs 도로대장 총괄(a0020000) 배타.
@@ -1287,8 +1274,48 @@ function MapLayoutContent({
     dataKey?: string | number | null
   }
 
+  /**
+   * React searchParams·window.location 모두 router.push 직후 한 박자 늦을 수 있음.
+   * 마지막 push 쿼리를 ref로 기억해, dataKey 자동선택 등이 닫힌 URL을 다시 push하지 않게 한다.
+   * (토글 3번째 클릭: 열림 → 곧이어 꺼짐 레이스)
+   */
+  const pendingMapQueryRef = useRef<string | null>(null)
+
+  const getLatestMapSearchParams = useCallback(() => {
+    if (pendingMapQueryRef.current != null) {
+      return new URLSearchParams(pendingMapQueryRef.current)
+    }
+    if (typeof window !== "undefined") {
+      const path = window.location.pathname
+      if (path === "/map" || path.endsWith("/map")) {
+        return new URLSearchParams(window.location.search)
+      }
+    }
+    return new URLSearchParams(Array.from(searchParams.entries()))
+  }, [searchParams])
+
+  const pushMapQuery = useCallback(
+    (params: URLSearchParams) => {
+      const qs = params.toString()
+      pendingMapQueryRef.current = qs
+      router.push(`/map?${qs}`)
+    },
+    [router]
+  )
+
+  useEffect(() => {
+    if (pendingMapQueryRef.current == null) return
+    const pending = new URLSearchParams(pendingMapQueryRef.current)
+    const sameOpened = (searchParams.get("opened") ?? "") === (pending.get("opened") ?? "")
+    const sameTable = (searchParams.get("dataTable") ?? "") === (pending.get("dataTable") ?? "")
+    const sameKey = (searchParams.get("dataKey") ?? "") === (pending.get("dataKey") ?? "")
+    if (sameOpened && sameTable && sameKey) {
+      pendingMapQueryRef.current = null
+    }
+  }, [searchParams])
+
   const updateMapUrl = (updates: MapUrlUpdates) => {
-    const current = new URLSearchParams(Array.from(searchParams.entries()))
+    const current = getLatestMapSearchParams()
     if (updates.opened !== undefined) {
       if (updates.opened.length > 0) current.set("opened", updates.opened.join(","))
       else current.delete("opened")
@@ -1301,7 +1328,7 @@ function MapLayoutContent({
       if (updates.dataKey != null && updates.dataKey !== "") current.set("dataKey", String(updates.dataKey))
       else current.delete("dataKey")
     }
-    router.push(`/map?${current.toString()}`)
+    pushMapQuery(current)
   }
 
   /** 현재 시스템 serviceList — opened 유효성·전환 scrub 용 */
@@ -1891,31 +1918,31 @@ function MapLayoutContent({
 
   const handleOpenDataPanel = useCallback(
     (tableName: string) => {
-      const rawOpened = searchParams.get("opened")?.split(",").filter(Boolean) || []
+      const current = getLatestMapSearchParams()
+      const rawOpened = current.get("opened")?.split(",").filter(Boolean) || []
       const opened = rawOpened.map(normalizeOpenedToken)
       const nextOpened = opened.includes(LIST_VIEW_OPENED_KEY) ? opened : [...opened, LIST_VIEW_OPENED_KEY]
-      const current = new URLSearchParams(Array.from(searchParams.entries()))
       if (nextOpened.length > 0) current.set("opened", nextOpened.join(","))
       else current.delete("opened")
       if (tableName) current.set("dataTable", tableName)
       else current.delete("dataTable")
       current.delete("dataKey")
-      router.push(`/map?${current.toString()}`)
+      pushMapQuery(current)
     },
-    [searchParams, router]
+    [getLatestMapSearchParams, pushMapQuery]
   )
 
   const handleClearDataSelection = useCallback(() => {
-    const rawOpened = searchParams.get("opened")?.split(",").filter(Boolean) || []
+    const current = getLatestMapSearchParams()
+    const rawOpened = current.get("opened")?.split(",").filter(Boolean) || []
     const opened = rawOpened.map(normalizeOpenedToken)
     const next = opened.filter((w) => w !== LIST_VIEW_OPENED_KEY)
-    const current = new URLSearchParams(Array.from(searchParams.entries()))
     if (next.length > 0) current.set("opened", next.join(","))
     else current.delete("opened")
     current.delete("dataTable")
     current.delete("dataKey")
-    router.push(`/map?${current.toString()}`)
-  }, [searchParams, router])
+    pushMapQuery(current)
+  }, [getLatestMapSearchParams, pushMapQuery])
 
   const handleDataKeyChange = (keyValue: string | number | null) => {
     updateMapUrl({ dataKey: keyValue })

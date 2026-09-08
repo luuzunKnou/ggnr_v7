@@ -15,7 +15,7 @@ type ServiceMenuLayerClearTarget = Partial<
 >;
 
 /** 도로대장 총괄(a0020000)을 기본으로 켜 두는 좌측 서비스 메뉴 */
-export const SERVICE_MENUS_WITH_ROAD_LEDGER_SUMMARY = new Set(['roadLedger', 'roadInfra']);
+export const SERVICE_MENUS_WITH_ROAD_LEDGER_SUMMARY = new Set(['roadLedger']);
 
 export type ClearServiceMenuLayerOptions = {
   /** 전환 직후 열릴 서비스 메뉴 키(opened) */

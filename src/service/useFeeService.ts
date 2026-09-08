@@ -772,7 +772,7 @@ export async function getUseFeeExtent3857ById(params: {
   }
 }
 
-/** 수동 연계 (운영/점검용). fyr 미입력 시 2000~현재연도. 완료를 기다리지 않고 시작만 알림 */
+/** 수동 연계 (운영/점검용). fyr 미입력 시 데이터 없으면 2000~올해, 있으면 저장된 최댓값~올해. 완료를 기다리지 않고 시작만 알림 */
 export async function runNextGenSync(params?: { fyr?: string }) {
   await requireMapAdminToolsAccess();
   const block = getNextGenFeeSyncBlockReason();
