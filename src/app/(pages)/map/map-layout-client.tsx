@@ -501,6 +501,7 @@ function MapLayoutContent({
   const setSafetyFacPanelOpen = mapContext?.setSafetyFacPanelOpen
   const setComplaintPanelOpen = mapContext?.setComplaintPanelOpen
   const setMemoPanelOpen = mapContext?.setMemoPanelOpen
+  const setGroundwaterPermitPanelOpen = mapContext?.setGroundwaterPermitPanelOpen
   const setRoadRewardPanelOpen = mapContext?.setRoadRewardPanelOpen
   const setRoadCctvOverlay = mapContext?.setRoadCctvOverlay
   const setRoadCctvUnderlayMode = mapContext?.setRoadCctvUnderlayMode
@@ -642,6 +643,8 @@ function MapLayoutContent({
   const [roadRewardCases, setRoadRewardCases] = useState<RoadRewardCase[]>([])
   const [roadRewardSelectedId, setRoadRewardSelectedId] = useState<string | null>(null)
   const [roadRewardFocusParcelId, setRoadRewardFocusParcelId] = useState<string | null>(null)
+  /** 목록 클릭 시 지도 맞춤, 지도 객체 선택 시 맞춤 생략(강조만) */
+  const [roadRewardAutoFitMap, setRoadRewardAutoFitMap] = useState(true)
   const roadRewardDetailOpen = roadRewardOpen && Boolean(roadRewardSelectedId)
   /** 접도구역 건축물 관리대장 */
   const [roadFrontageBuildingSelectedId, setRoadFrontageBuildingSelectedId] = useState<
@@ -1196,6 +1199,10 @@ function MapLayoutContent({
   }, [setMemoPanelOpen, memoManagementOpen])
 
   useEffect(() => {
+    setGroundwaterPermitPanelOpen?.(groundwaterPermitOpen)
+  }, [setGroundwaterPermitPanelOpen, groundwaterPermitOpen])
+
+  useEffect(() => {
     setRoadRewardPanelOpen?.(roadRewardOpen)
   }, [setRoadRewardPanelOpen, roadRewardOpen])
 
@@ -1480,6 +1487,7 @@ function MapLayoutContent({
   const handleCloseRoadReward = () => {
     setRoadRewardSelectedId(null)
     setRoadRewardFocusParcelId(null)
+    setRoadRewardAutoFitMap(true)
     const next = openedWindows.filter((w) => w !== ROAD_REWARD_OPENED_KEY)
     setOpened(next)
   }
@@ -2533,6 +2541,7 @@ function MapLayoutContent({
                   onCasesChange={setRoadRewardCases}
                   onSelectId={setRoadRewardSelectedId}
                   onFocusParcelId={setRoadRewardFocusParcelId}
+                  onAutoFitMapChange={setRoadRewardAutoFitMap}
                   onClose={handleCloseRoadReward}
                 />
               </MapSideListPanel>
@@ -2562,6 +2571,7 @@ function MapLayoutContent({
                   }}
                   onCaseIdChange={setRoadRewardSelectedId}
                   focusParcelId={roadRewardFocusParcelId}
+                  autoFitMap={roadRewardAutoFitMap}
                   overlayLeftPx={roadRewardPanelLeftPx}
                   overlayWidthPx={
                     roadRewardPanelWidth +
