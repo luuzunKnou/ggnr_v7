@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowDown, ArrowUp, ArrowUpDown, Layers, Search, X } from 'lucide-react';
+import { ArrowDown, ArrowUp, ArrowUpDown, Layers, MapPin, Search, X } from 'lucide-react';
 import { call } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import {
@@ -25,6 +25,7 @@ import {
   ensureOccupationLedgerWmsLayers,
   setOccupationLedgerCadastralOverlay,
 } from './occupationLedgerMapSync';
+import { refreshServiceWmsLayer } from '../../_mapComponents/layerFactory/serviceLayerFactory';
 import { isUseFeeWmsVisible, toggleUseFeeWmsLayer } from '../useFee/useFeeMapSync';
 import { occupationLayerToggleActiveStyle } from '@/lib/occupationLayerStyle';
 
@@ -55,6 +56,8 @@ const SORT_COLUMNS: { key: SortKey; label: string }[] = [
 ];
 
 const HEADER_ALIGN_LEFT = new Set<SortKey>(['name', 'place']);
+/** 점용장소 도형 채우기 단추 — 당분간 숨김 */
+const SHOW_OCCUP_PLACE_GEOM_BUTTON = false;
 
 type Props = {
   serEng: string;
@@ -87,6 +90,8 @@ export function OccupationLedgerListPanel({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [items, setItems] = useState<ListRow[]>([]);
+  const [geomFillBusy, setGeomFillBusy] = useState(false);
+  const [geomFillMsg, setGeomFillMsg] = useState<string | null>(null);
 
   useEffect(() => {
     ensureOccupationLedgerWmsLayers(mapContextRef.current?.setVisibleLayerNames, { serEng });
@@ -111,6 +116,47 @@ export function OccupationLedgerListPanel({
     },
     [mapContext, serEng]
   );
+
+  const handleFillGeomFromPlace = useCallback(async () => {
+    if (geomFillBusy) return;
+    if (
+      !window.confirm(
+        '점용장소로 지적 도형을 넣고, 종료일 기준으로 상태를 진행중/종료로 넣습니다. 못 찾는 도형은 비웁니다. 실행할까요?'
+      )
+    ) {
+      return;
+    }
+    setGeomFillBusy(true);
+    setGeomFillMsg(null);
+    setError(null);
+    try {
+      const res = await call('', 'POST', {
+        service: 'occupationLedgerService',
+        action: 'fillOccupationLedgerGeomFromOccupPlace',
+        params: { serEng },
+      });
+      const data = res?.data ?? res;
+      if (data?.error) {
+        setError(String(data.error));
+        return;
+      }
+      const main = data?.main ?? { filled: 0, cleared: 0 };
+      const jijuk = data?.jijuk ?? { filled: 0, cleared: 0 };
+      const state = data?.state ?? { inProgress: 0, ended: 0 };
+      setGeomFillMsg(
+        `본표 ${Number(main.filled) || 0}건 넣음 · ${Number(main.cleared) || 0}건 비움 / 필지 ${Number(jijuk.filled) || 0}건 넣음 · ${Number(jijuk.cleared) || 0}건 비움 / 상태 진행중 ${Number(state.inProgress) || 0} · 종료 ${Number(state.ended) || 0}`
+      );
+      ensureOccupationLedgerWmsLayers(mapContext?.setVisibleLayerNames, { serEng });
+      refreshServiceWmsLayer(mapContext?.mapInstanceRef?.current);
+      requestAnimationFrame(() =>
+        refreshServiceWmsLayer(mapContext?.mapInstanceRef?.current)
+      );
+    } catch {
+      setError('점용장소 도형을 넣지 못했습니다.');
+    } finally {
+      setGeomFillBusy(false);
+    }
+  }, [geomFillBusy, mapContext, serEng]);
 
   const handleRowClick = useCallback(
     async (rowKey: string) => {
@@ -143,7 +189,9 @@ export function OccupationLedgerListPanel({
       const rawKey = String(pick?.rowKey ?? '').trim();
       if (!rawKey) return;
       const opts = Array.isArray(pick?.overlapOptions) ? pick.overlapOptions : [];
-      mapContext?.setOccupationLedgerMapHitOptions?.(opts.length > 1 ? opts : []);
+      if (opts.length > 1) {
+        mapContext?.setOccupationLedgerMapHitOptions?.(opts);
+      }
       void (async () => {
         let rowKey = rawKey;
         try {
@@ -159,19 +207,13 @@ export function OccupationLedgerListPanel({
           /* 해석 실패 시 원본 키로 상세 오픈 */
         }
         onSelectDetailId(rowKey);
-        if (
-          Array.isArray(pick?.extent3857) &&
-          pick.extent3857.length === 4 &&
-          pick.extent3857.every((v) => Number.isFinite(Number(v)))
-        ) {
-          fitMapAfterDetailLayout(pick.extent3857.map(Number));
-        }
+        /** 지도 도형 클릭은 현재 화면을 유지한다. 목록 행 클릭만 맞춤. */
       })();
     };
     return () => {
       pickRef.current = null;
     };
-  }, [mapContext, onSelectDetailId, fitMapAfterDetailLayout, serEng]);
+  }, [mapContext, onSelectDetailId, serEng]);
 
   useEffect(() => {
     const t = setTimeout(async () => {
@@ -271,6 +313,19 @@ export function OccupationLedgerListPanel({
             <Layers className="h-3 w-3 shrink-0" aria-hidden />
             점사용료
           </LayerRowPanelButton>
+          {SHOW_OCCUP_PLACE_GEOM_BUTTON ? (
+            <LayerRowPanelButton
+              type="button"
+              title="점용장소로 지적 도형 넣기"
+              aria-label="점용장소로 지적 도형 넣기"
+              loading={geomFillBusy}
+              disabled={geomFillBusy}
+              onClick={() => void handleFillGeomFromPlace()}
+            >
+              <MapPin className="h-3 w-3 shrink-0" aria-hidden />
+              점용장소 도형
+            </LayerRowPanelButton>
+          ) : null}
           <LayerRowAddButton
             onClick={() => {
               if (onAdd) onAdd();
@@ -327,6 +382,11 @@ export function OccupationLedgerListPanel({
         {error && (
           <div className="shrink-0 border-b border-destructive/20 bg-destructive/10 px-3 py-2 text-xs text-destructive">
             {error}
+          </div>
+        )}
+        {SHOW_OCCUP_PLACE_GEOM_BUTTON && geomFillMsg && !error && (
+          <div className="shrink-0 border-b border-border bg-muted/40 px-3 py-2 text-xs text-foreground">
+            {geomFillMsg}
           </div>
         )}
         <div ref={listScrollRef} className="min-h-0 flex-1 overflow-auto scrollbar-thin">

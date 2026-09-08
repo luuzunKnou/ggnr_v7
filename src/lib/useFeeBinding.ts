@@ -106,6 +106,24 @@ export function getUseFeeBinding(params: {
   return BINDINGS_BY_SER_ENG.waterNglFeeList;
 }
 
+/**
+ * 이 시스템에서 열어 둘 점사용료.
+ * 메뉴 목록이 있으면 그 안의 점사용료만 (건설에 도로·국공유지가 같이 있는 경우).
+ * 목록이 없으면 시스템 1개 기본값.
+ */
+export function getAllowedUseFeeSerEngs(
+  system?: string | null,
+  serviceList?: readonly string[] | null
+): UseFeeSerEng[] {
+  if (serviceList != null) {
+    return serviceList
+      .map((s) => String(s ?? '').trim())
+      .map((t) => (t === 'useFee' ? 'waterNglFeeList' : t))
+      .filter(isUseFeeSerEng);
+  }
+  return [getUseFeeBinding({ system }).serEng];
+}
+
 /** WMS/본표 레이어 id. string만 주면 system 키로 취급(레거시). */
 export function getUseFeeWmsLayerId(
   params?: string | null | { serEng?: string | null; system?: string | null }
@@ -156,22 +174,30 @@ export function isUseFeePrefixAllowedBySystems(
 }
 
 /** 현재 시스템에 속하지 않는 점사용료 WMS id */
-export function getForeignUseFeeWmsLayerIds(system?: string | null): string[] {
-  const allowed = getUseFeeBinding({ system }).mainTable.toLowerCase();
-  return getAllUseFeeWmsLayerIds().filter((id) => id.toLowerCase() !== allowed);
+export function getForeignUseFeeWmsLayerIds(
+  system?: string | null,
+  serviceList?: readonly string[] | null
+): string[] {
+  const allowed = new Set(
+    getAllowedUseFeeSerEngs(system, serviceList).map((eng) =>
+      BINDINGS_BY_SER_ENG[eng].mainTable.toLowerCase()
+    )
+  );
+  return getAllUseFeeWmsLayerIds().filter((id) => !allowed.has(id.toLowerCase()));
 }
 
 /** 시스템 전환 시 opened 에서 다른 시스템 점사용료 토큰 제거 */
 export function scrubUseFeeFromMapSearchParams(
   params: URLSearchParams,
-  system: string | null | undefined
+  system: string | null | undefined,
+  serviceList?: readonly string[] | null
 ): void {
-  const allowed = getUseFeeBinding({ system }).serEng;
+  const allowed = new Set(getAllowedUseFeeSerEngs(system, serviceList));
   const opened = (params.get('opened') ?? '').split(',').filter(Boolean);
   const nextOpened = opened.filter((token) => {
     if (!isUseFeeOpenedToken(token)) return true;
     const eng = token === 'useFee' ? 'waterNglFeeList' : token;
-    return eng === allowed;
+    return isUseFeeSerEng(eng) && allowed.has(eng);
   });
   if (nextOpened.length > 0) params.set('opened', nextOpened.join(','));
   else params.delete('opened');

@@ -266,9 +266,17 @@ const ROAD_DOC_PANEL_DEFAULT_WIDTH = 380
 const ROAD_DOC_PANEL_MIN_WIDTH = 280
 const ROAD_DOC_PANEL_MAX_WIDTH = 640
 
-const ROAD_WORK_HANDBOOK_DETAIL_DEFAULT_WIDTH = 400
-const ROAD_WORK_HANDBOOK_DETAIL_MIN_WIDTH = 320
-const ROAD_WORK_HANDBOOK_DETAIL_MAX_WIDTH = 640
+const ROAD_DOC_HANDBOOK_PANEL_DEFAULT_WIDTH = 720
+const ROAD_DOC_HANDBOOK_PANEL_MIN_WIDTH = 560
+const ROAD_DOC_HANDBOOK_PANEL_MAX_WIDTH = 960
+
+const ROAD_WORK_HANDBOOK_DETAIL_DEFAULT_WIDTH = 420
+const ROAD_WORK_HANDBOOK_DETAIL_MIN_WIDTH = 400
+const ROAD_WORK_HANDBOOK_DETAIL_MAX_WIDTH = 960
+
+const ROAD_WORK_HANDBOOK_REF_DETAIL_DEFAULT_WIDTH = 400
+const ROAD_WORK_HANDBOOK_REF_DETAIL_MIN_WIDTH = 320
+const ROAD_WORK_HANDBOOK_REF_DETAIL_MAX_WIDTH = 640
 
 const ROAD_CCTV_PANEL_DEFAULT_WIDTH = 380
 const ROAD_CCTV_PANEL_MIN_WIDTH = 300
@@ -492,6 +500,7 @@ function MapLayoutContent({
   const setRoadCctvPanelOpen = mapContext?.setRoadCctvPanelOpen
   const setSafetyFacPanelOpen = mapContext?.setSafetyFacPanelOpen
   const setComplaintPanelOpen = mapContext?.setComplaintPanelOpen
+  const setMemoPanelOpen = mapContext?.setMemoPanelOpen
   const setRoadRewardPanelOpen = mapContext?.setRoadRewardPanelOpen
   const setRoadCctvOverlay = mapContext?.setRoadCctvOverlay
   const setRoadCctvUnderlayMode = mapContext?.setRoadCctvUnderlayMode
@@ -759,8 +768,15 @@ function MapLayoutContent({
   )
   const [jsjReservoirPanelWidth, setJsjReservoirPanelWidth] = useState(JSJ_RESERVOIR_PANEL_DEFAULT_WIDTH)
   const [roadDocPanelWidth, setRoadDocPanelWidth] = useState(ROAD_DOC_PANEL_DEFAULT_WIDTH)
+  const [roadDocHandbookPanelWidth, setRoadDocHandbookPanelWidth] = useState(
+    ROAD_DOC_HANDBOOK_PANEL_DEFAULT_WIDTH
+  )
+  const [roadDocHandbookWide, setRoadDocHandbookWide] = useState(false)
   const [roadWorkHandbookDetailWidth, setRoadWorkHandbookDetailWidth] = useState(
     ROAD_WORK_HANDBOOK_DETAIL_DEFAULT_WIDTH
+  )
+  const [roadWorkHandbookRefDetailWidth, setRoadWorkHandbookRefDetailWidth] = useState(
+    ROAD_WORK_HANDBOOK_REF_DETAIL_DEFAULT_WIDTH
   )
   const [roadCctvPanelWidth, setRoadCctvPanelWidth] = useState(ROAD_CCTV_PANEL_DEFAULT_WIDTH)
   const [roadInfraPanelWidth, setRoadInfraPanelWidth] = useState(ROAD_INFRA_PANEL_DEFAULT_WIDTH)
@@ -825,6 +841,12 @@ function MapLayoutContent({
   const [layerDataPanelWidth, setLayerDataPanelWidth] = useState(LAYER_DATA_PANEL_DEFAULT_WIDTH)
   const [searchBarInputBottomPx, setSearchBarInputBottomPx] = useState(16 + 30)
 
+  const roadWorkHandbookActiveDetailWidth =
+    roadWorkHandbookDetail?.kind === "ref"
+      ? roadWorkHandbookRefDetailWidth
+      : roadWorkHandbookDetailWidth
+  const roadWorkHandbookDetailIsTarget = roadWorkHandbookDetail?.kind !== "ref"
+
   /** 열린 MapSideListPanel 너비 합 → 검색창/레이어바 left 기준 (패널 추가 시 여기만 합산) */
   const totalListPanelWidth =
     (roadInfraOpen ? roadInfraPanelWidth : 0) +
@@ -875,8 +897,8 @@ function MapLayoutContent({
     (villagePatrolOpen ? villagePatrolPanelWidth : 0) +
     (safetyHospitalBedOpen ? safetyHospitalBedPanelWidth : 0) +
     (jsjWaterLevelOpen ? jsjReservoirPanelWidth : 0) +
-    (roadDocOpen ? roadDocPanelWidth : 0) +
-    (roadWorkHandbookDetailOpen ? roadWorkHandbookDetailWidth : 0) +
+    (roadDocOpen ? (roadDocHandbookWide ? roadDocHandbookPanelWidth : roadDocPanelWidth) : 0) +
+    (roadWorkHandbookDetailOpen ? roadWorkHandbookActiveDetailWidth : 0) +
     (roadCctvOpen ? roadCctvPanelWidth : 0) +
     // (useLedgerProtoOpen ? useLedgerProtoPanelWidth : 0) +
     // (useLedgerProtoDetailOpen ? useLedgerProtoDetailWidth : 0) +
@@ -995,10 +1017,13 @@ function MapLayoutContent({
   const jsjReservoirPanelLeftPx =
     safetyHospitalBedPanelLeftPx + (safetyHospitalBedOpen ? safetyHospitalBedPanelWidth : 0)
   const roadDocPanelLeftPx = jsjReservoirPanelLeftPx + (jsjWaterLevelOpen ? jsjReservoirPanelWidth : 0)
+  const roadDocActivePanelWidth = roadDocHandbookWide
+    ? roadDocHandbookPanelWidth
+    : roadDocPanelWidth
   const roadWorkHandbookDetailLeftPx =
-    roadDocPanelLeftPx + (roadDocOpen ? roadDocPanelWidth : 0)
+    roadDocPanelLeftPx + (roadDocOpen ? roadDocActivePanelWidth : 0)
   const roadCctvPanelLeftPx =
-    roadWorkHandbookDetailLeftPx + (roadWorkHandbookDetailOpen ? roadWorkHandbookDetailWidth : 0)
+    roadWorkHandbookDetailLeftPx + (roadWorkHandbookDetailOpen ? roadWorkHandbookActiveDetailWidth : 0)
   // 점용대장(프) 더미 leftPx 비활성 — 점사용료는 CCTV 다음에 바로 배치
   // const useLedgerProtoPanelLeftPx =
   //   roadCctvPanelLeftPx + (roadCctvOpen ? roadCctvPanelWidth : 0)
@@ -1085,16 +1110,6 @@ function MapLayoutContent({
     setUseFeePanelOpen?.(useFeeOpen)
   }, [setUseFeePanelOpen, useFeeOpen])
 
-  /** 시스템 전환 시 — 다른 시스템 점용대장(하천·도로·국공유지) WMS만 끄기 */
-  useEffect(() => {
-    clearForeignOccupationLedgerWmsLayers(setVisibleLayerNames, systemKeyFromUrl)
-  }, [systemKeyFromUrl, setVisibleLayerNames])
-
-  /** 시스템 전환 시 — 다른 시스템 점사용료 WMS만 끄기 */
-  useEffect(() => {
-    clearForeignUseFeeWmsLayers(setVisibleLayerNames, systemKeyFromUrl)
-  }, [systemKeyFromUrl, setVisibleLayerNames])
-
   useEffect(() => {
     setRoadLedgerPanelOpen?.(roadLedgerOpen)
   }, [setRoadLedgerPanelOpen, roadLedgerOpen])
@@ -1177,6 +1192,10 @@ function MapLayoutContent({
   useEffect(() => {
     setComplaintPanelOpen?.(complaintManagementOpen)
   }, [setComplaintPanelOpen, complaintManagementOpen])
+
+  useEffect(() => {
+    setMemoPanelOpen?.(memoManagementOpen)
+  }, [setMemoPanelOpen, memoManagementOpen])
 
   useEffect(() => {
     setRoadRewardPanelOpen?.(roadRewardOpen)
@@ -1298,6 +1317,22 @@ function MapLayoutContent({
       })
       .catch(() => setSystemListForOpened([]))
   }, [])
+
+  /** 시스템 전환 시 — 현재 시스템 메뉴에 없는 점용대장 WMS만 끄기 */
+  useEffect(() => {
+    if (systemListForOpened.length === 0) return
+    const serviceList =
+      systemListForOpened.find((s) => s.sys_key === systemKeyFromUrl)?.serviceList ?? []
+    clearForeignOccupationLedgerWmsLayers(setVisibleLayerNames, systemKeyFromUrl, serviceList)
+  }, [systemKeyFromUrl, setVisibleLayerNames, systemListForOpened])
+
+  /** 시스템 전환 시 — 현재 시스템 메뉴에 없는 점사용료 WMS만 끄기 */
+  useEffect(() => {
+    if (systemListForOpened.length === 0) return
+    const serviceList =
+      systemListForOpened.find((s) => s.sys_key === systemKeyFromUrl)?.serviceList ?? []
+    clearForeignUseFeeWmsLayers(setVisibleLayerNames, systemKeyFromUrl, serviceList)
+  }, [systemKeyFromUrl, setVisibleLayerNames, systemListForOpened])
 
   /**
    * system 변경 → 레이어 전부 끄기 + 전환 scrub.
@@ -1533,6 +1568,7 @@ function MapLayoutContent({
     if (!roadDocOpen) {
       setRoadWorkHandbookDetail(null)
       setRoadWorkHandbookMode("target")
+      setRoadDocHandbookWide(false)
     }
   }, [roadDocOpen])
 
@@ -2920,11 +2956,21 @@ function MapLayoutContent({
               <div className="contents">
                 <div className="pointer-events-auto shrink-0">
                   <MapSideListPanel
-                    width={roadDocPanelWidth}
-                    minWidth={ROAD_DOC_PANEL_MIN_WIDTH}
-                    maxWidth={ROAD_DOC_PANEL_MAX_WIDTH}
+                    width={roadDocActivePanelWidth}
+                    minWidth={
+                      roadDocHandbookWide
+                        ? ROAD_DOC_HANDBOOK_PANEL_MIN_WIDTH
+                        : ROAD_DOC_PANEL_MIN_WIDTH
+                    }
+                    maxWidth={
+                      roadDocHandbookWide
+                        ? ROAD_DOC_HANDBOOK_PANEL_MAX_WIDTH
+                        : ROAD_DOC_PANEL_MAX_WIDTH
+                    }
                     leftOffsetPx={roadDocPanelLeftPx}
-                    onWidthChange={setRoadDocPanelWidth}
+                    onWidthChange={
+                      roadDocHandbookWide ? setRoadDocHandbookPanelWidth : setRoadDocPanelWidth
+                    }
                     contentClassName="overflow-hidden"
                   >
                     <RoadDocManualPanel
@@ -2934,17 +2980,30 @@ function MapLayoutContent({
                       handbookSelected={roadWorkHandbookDetail}
                       onHandbookSelect={setRoadWorkHandbookDetail}
                       startOnHandbook={handbookDeeplink}
+                      onHandbookWideChange={setRoadDocHandbookWide}
                     />
                   </MapSideListPanel>
                 </div>
                 {roadWorkHandbookDetail && (
                   <div className="pointer-events-auto shrink-0">
                     <MapSideListPanel
-                      width={roadWorkHandbookDetailWidth}
-                      minWidth={ROAD_WORK_HANDBOOK_DETAIL_MIN_WIDTH}
-                      maxWidth={ROAD_WORK_HANDBOOK_DETAIL_MAX_WIDTH}
+                      width={roadWorkHandbookActiveDetailWidth}
+                      minWidth={
+                        roadWorkHandbookDetailIsTarget
+                          ? ROAD_WORK_HANDBOOK_DETAIL_MIN_WIDTH
+                          : ROAD_WORK_HANDBOOK_REF_DETAIL_MIN_WIDTH
+                      }
+                      maxWidth={
+                        roadWorkHandbookDetailIsTarget
+                          ? ROAD_WORK_HANDBOOK_DETAIL_MAX_WIDTH
+                          : ROAD_WORK_HANDBOOK_REF_DETAIL_MAX_WIDTH
+                      }
                       leftOffsetPx={roadWorkHandbookDetailLeftPx}
-                      onWidthChange={setRoadWorkHandbookDetailWidth}
+                      onWidthChange={
+                        roadWorkHandbookDetailIsTarget
+                          ? setRoadWorkHandbookDetailWidth
+                          : setRoadWorkHandbookRefDetailWidth
+                      }
                       contentClassName="overflow-hidden"
                     >
                       <RoadWorkHandbookDetailPanel
