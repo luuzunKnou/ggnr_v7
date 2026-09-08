@@ -15,6 +15,9 @@ type Props = {
   preview: SchemaSyncPreviewResult | null;
   loading?: boolean;
   busyAction?: boolean;
+  /** 체크 시 다음 적용부터 모달 없이 진행 */
+  autoContinue: boolean;
+  onAutoContinueChange: (checked: boolean) => void;
   onContinue: () => void;
   onAbort: () => void;
 };
@@ -52,6 +55,8 @@ export function SchemaSyncPreviewModal({
   preview,
   loading,
   busyAction,
+  autoContinue,
+  onAutoContinueChange,
   onContinue,
   onAbort,
 }: Props) {
@@ -145,26 +150,41 @@ export function SchemaSyncPreviewModal({
           )}
         </div>
 
-        <DialogFooter className="gap-2 sm:justify-end">
-          <Button
-            type="button"
-            title="중단"
-            variant="outline"
-            className="cursor-pointer"
-            disabled={actionsDisabled}
-            onClick={onAbort}
+        <DialogFooter className="flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <label
+            className="flex cursor-pointer items-center gap-1.5 text-xs text-muted-foreground"
+            title="자동 진행"
           >
-            중단
-          </Button>
-          <Button
-            type="button"
-            title="진행"
-            className="cursor-pointer"
-            disabled={actionsDisabled}
-            onClick={onContinue}
-          >
-            진행
-          </Button>
+            <input
+              type="checkbox"
+              className="cursor-pointer"
+              checked={autoContinue}
+              disabled={actionsDisabled}
+              onChange={(e) => onAutoContinueChange(e.target.checked)}
+            />
+            자동 진행 (다음부터 모달 없이)
+          </label>
+          <div className="flex gap-2 sm:justify-end">
+            <Button
+              type="button"
+              title="중단"
+              variant="outline"
+              className="cursor-pointer"
+              disabled={actionsDisabled}
+              onClick={onAbort}
+            >
+              중단
+            </Button>
+            <Button
+              type="button"
+              title="진행"
+              className="cursor-pointer"
+              disabled={actionsDisabled}
+              onClick={onContinue}
+            >
+              진행
+            </Button>
+          </div>
         </DialogFooter>
       </DialogContent>
     </Dialog>

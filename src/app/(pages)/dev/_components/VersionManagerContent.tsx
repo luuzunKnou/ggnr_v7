@@ -44,6 +44,26 @@ import { SchemaSyncPreviewModal } from './SchemaSyncPreviewModal';
 import type { SchemaSyncPreviewResult } from '@/lib/schemaSyncPreviewTypes';
 import { formatSchemaSyncHistoryMemo } from '@/lib/schemaSyncHistoryMemo';
 
+/** 스키마 안내 모달 생략(자동 진행) — 브라우저에 유지 */
+const SCHEMA_SYNC_AUTO_CONTINUE_LS = 'ggnr.dev.schemaSyncAutoContinue';
+
+function readSchemaSyncAutoContinue(): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    return window.localStorage.getItem(SCHEMA_SYNC_AUTO_CONTINUE_LS) === '1';
+  } catch {
+    return false;
+  }
+}
+
+function writeSchemaSyncAutoContinue(checked: boolean) {
+  try {
+    window.localStorage.setItem(SCHEMA_SYNC_AUTO_CONTINUE_LS, checked ? '1' : '0');
+  } catch {
+    /* ignore */
+  }
+}
+
 type SideProgress = {
   message: string;
   pct: number | null;
@@ -58,6 +78,17 @@ function emptySideProgress(): SideProgress {
 function pickDefaultFolder(entries: GnmsVersionListEntry[]): string {
   const latest = entries.find((e) => e.isLatest);
   return (latest ?? entries[0])?.folder ?? '';
+}
+
+function emptySchemaPreviewFailure(error: string): SchemaSyncPreviewResult {
+  return {
+    ok: false,
+    error,
+    counts: { create: 0, drop: 0, delete: 0, alter: 0 },
+    items: [],
+    warnings: [],
+    hasDataLoss: false,
+  };
 }
 
 export function VersionManagerContent() {
@@ -77,6 +108,8 @@ export function VersionManagerContent() {
   const [schemaModalOpen, setSchemaModalOpen] = useState(false);
   const [schemaPreview, setSchemaPreview] = useState<SchemaSyncPreviewResult | null>(null);
   const [schemaPreviewLoading, setSchemaPreviewLoading] = useState(false);
+  const [schemaSyncAutoContinue, setSchemaSyncAutoContinue] = useState(false);
+  const schemaSyncAutoContinueRef = useRef(false);
   const schemaDecisionRef = useRef<((action: 'continue' | 'abort') => void) | null>(null);
   const logRef = useRef<string[]>([]);
   const versionDetailRef = useRef('');
@@ -106,6 +139,18 @@ export function VersionManagerContent() {
   useEffect(() => {
     prefetchClientMachineIp();
   }, []);
+
+  useEffect(() => {
+    const v = readSchemaSyncAutoContinue();
+    setSchemaSyncAutoContinue(v);
+    schemaSyncAutoContinueRef.current = v;
+  }, []);
+
+  const setSchemaSyncAutoContinuePersist = (checked: boolean) => {
+    schemaSyncAutoContinueRef.current = checked;
+    setSchemaSyncAutoContinue(checked);
+    writeSchemaSyncAutoContinue(checked);
+  };
 
   const refreshAppliedVersion = async () => {
     try {
@@ -168,53 +213,53 @@ export function VersionManagerContent() {
     setProgress((p) => ({ ...p, logs: next }));
   };
 
-  /** 병합 반영 후 스키마 집계 모달 → 진행=재기동 / 중단=백업 롤백 */
+  /** 병합 반영 후 스키마 집계 모달 → 진행=재기동 / 중단=백업 롤백 (자동 진행 시 모달 생략) */
   const waitSchemaPreviewAck = async (
     pendingId: string | undefined
   ): Promise<'continue' | 'abort'> => {
+    const autoContinue = schemaSyncAutoContinueRef.current;
     setSchemaPreviewLoading(true);
     setSchemaPreview(null);
-    setSchemaModalOpen(true);
-    pushLog('스키마 변경 미리보기 조회 중…');
+    if (!autoContinue) setSchemaModalOpen(true);
+    pushLog(
+      autoContinue
+        ? '스키마 변경 미리보기 조회 중… (자동 진행)'
+        : '스키마 변경 미리보기 조회 중…'
+    );
     let previewResult: SchemaSyncPreviewResult | null = null;
     try {
       const res = await fetch('/api/dev/schema-sync/preview', { cache: 'no-store' });
       const json = (await res.json()) as SchemaSyncPreviewResult & { error?: string };
       if (!res.ok && !json.counts) {
-        previewResult = {
-          ok: false,
-          error: json.error ?? `HTTP ${res.status}`,
-          counts: { create: 0, drop: 0, delete: 0, alter: 0 },
-          items: [],
-          warnings: [],
-          hasDataLoss: false,
-        };
+        previewResult = emptySchemaPreviewFailure(json.error ?? `HTTP ${res.status}`);
         setSchemaPreview(previewResult);
       } else {
         previewResult = json;
         setSchemaPreview(json);
       }
     } catch (e: unknown) {
-      previewResult = {
-        ok: false,
-        error: e instanceof Error ? e.message : '미리보기 실패',
-        counts: { create: 0, drop: 0, delete: 0, alter: 0 },
-        items: [],
-        warnings: [],
-        hasDataLoss: false,
-      };
+      previewResult = emptySchemaPreviewFailure(
+        e instanceof Error ? e.message : '미리보기 실패'
+      );
       setSchemaPreview(previewResult);
     } finally {
       setSchemaPreviewLoading(false);
     }
 
-    const action = await new Promise<'continue' | 'abort'>((resolve) => {
-      schemaDecisionRef.current = (a) => {
-        schemaDecisionRef.current = null;
-        setSchemaModalOpen(false);
-        resolve(a);
-      };
-    });
+    let action: 'continue' | 'abort';
+    if (autoContinue) {
+      pushLog('스키마 안내 자동 진행 — 모달 생략');
+      setSchemaModalOpen(false);
+      action = 'continue';
+    } else {
+      action = await new Promise<'continue' | 'abort'>((resolve) => {
+        schemaDecisionRef.current = (a) => {
+          schemaDecisionRef.current = null;
+          setSchemaModalOpen(false);
+          resolve(a);
+        };
+      });
+    }
 
     if (!pendingId?.trim()) {
       throw new Error(
@@ -818,6 +863,22 @@ export function VersionManagerContent() {
                 </label>
               </div>
             </div>
+            <div className={sectionClass}>
+              <div className="text-xs text-muted-foreground">스키마 안내</div>
+              <label
+                className="flex cursor-pointer items-center gap-1.5 text-xs"
+                title="자동 진행"
+              >
+                <input
+                  type="checkbox"
+                  className="cursor-pointer"
+                  checked={schemaSyncAutoContinue}
+                  disabled={busy}
+                  onChange={(e) => setSchemaSyncAutoContinuePersist(e.target.checked)}
+                />
+                자동 진행 (Drizzle 스키마 안내 모달 없이)
+              </label>
+            </div>
           </div>
           <div className="flex flex-wrap items-center gap-2 pt-1">
             <Button
@@ -888,6 +949,8 @@ export function VersionManagerContent() {
         open={schemaModalOpen}
         preview={schemaPreview}
         loading={schemaPreviewLoading}
+        autoContinue={schemaSyncAutoContinue}
+        onAutoContinueChange={setSchemaSyncAutoContinuePersist}
         onContinue={() => {
           schemaDecisionRef.current?.('continue');
         }}
