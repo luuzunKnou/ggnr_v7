@@ -6,7 +6,7 @@ import { unByKey } from 'ol/Observable';
 import { call } from '@/lib/api';
 import { useMapContext } from '../../_mapComponents/MapContext';
 import { GROUNDWATER_PERMIT_WMS_LAYER_ID } from './groundwaterPermitLayerId';
-import { groundwaterPermitNextHighlightFitRef } from './useGroundwaterPermitMapHighlight';
+import { setGroundwaterPermitHighlightFit } from './useGroundwaterPermitMapHighlight';
 
 /** d = 300000 * 0.54^z — 메모·민원 식별과 동일 */
 function zoomToBuffer(zoom: number): number {
@@ -84,7 +84,7 @@ export function useGroundwaterPermitMapClick({ enabled, onSelectId }: Props) {
         const id = pickSoinnKey(row);
         if (!id) return;
 
-        groundwaterPermitNextHighlightFitRef.current = false;
+        setGroundwaterPermitHighlightFit(id, false);
         await onSelectRef.current(id);
       } catch {
         /* 클릭 식별 실패는 무시 */

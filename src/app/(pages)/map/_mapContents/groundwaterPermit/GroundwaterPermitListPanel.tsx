@@ -10,7 +10,7 @@ import {
 } from '@/lib/groundwaterPermitStatus'
 import { useMapContext } from '../../_mapComponents/MapContext'
 import {
-  groundwaterPermitNextHighlightFitRef,
+  setGroundwaterPermitHighlightFit,
   useGroundwaterPermitMapHighlight,
 } from './useGroundwaterPermitMapHighlight'
 import { useGroundwaterPermitMapClick } from './useGroundwaterPermitMapClick'
@@ -94,7 +94,7 @@ export function GroundwaterPermitListPanel({
 
   const handleRowSelect = useCallback(
     (id: string) => {
-      groundwaterPermitNextHighlightFitRef.current = true
+      setGroundwaterPermitHighlightFit(id, true)
       onSelectDetailId(id)
     },
     [onSelectDetailId]

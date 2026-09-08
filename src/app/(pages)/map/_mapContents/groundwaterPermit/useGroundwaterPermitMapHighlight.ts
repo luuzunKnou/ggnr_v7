@@ -20,8 +20,26 @@ import { useMapContext } from '../../_mapComponents/MapContext'
 import { scheduleFitMapToExtent3857 } from '../../_mapComponents/config/mapAutoNavigation'
 import { MAP_AUTO_NAV_MAX_ZOOM } from '../../_mapComponents/config/mapDefaults'
 
-/** 다음 highlightById 호출 시 맵 이동 여부 — 목록 true / 지도 클릭 false */
-export const groundwaterPermitNextHighlightFitRef = { current: true }
+/**
+ * 상세 강조 시 맵 이동 여부 (id별).
+ * 단일 boolean ref는 Strict Mode effect 재실행 때 false→true 로 바뀌어
+ * 지도 첫 클릭에도 fit 이 다시 켜진다. id별 Map 으로 유지한다.
+ * 목록 선택 true / 지도 클릭 false. 미등록 id 는 fit true.
+ */
+export const groundwaterPermitHighlightFitByIdRef = {
+  current: new Map<string, boolean>(),
+}
+
+export function setGroundwaterPermitHighlightFit(id: string, fit: boolean) {
+  groundwaterPermitHighlightFitByIdRef.current.set(id, fit)
+}
+
+/** 읽기만 하고 지우지 않음 — Strict Mode 재실행에도 동일 fit 유지 */
+export function getGroundwaterPermitHighlightFit(id: string): boolean {
+  const m = groundwaterPermitHighlightFitByIdRef.current
+  if (m.has(id)) return m.get(id) === true
+  return true
+}
 
 /** 데이터조회 레이더 + 중심 점(레이더만 있으면 위치가 흐려 보임) */
 function createGroundwaterPermitHighlightStyle(getPulsePhase: () => number): StyleFunction {
