@@ -1231,7 +1231,7 @@ export function LayerDataPanel({
 
         if (isListRestore && restoreDone) {
           const data = dataRes?.data ?? dataRes;
-          const dataRows = Array.isArray(data?.rows) ? data.rows : [];
+          const dataRows: Record<string, unknown>[] = Array.isArray(data?.rows) ? data.rows : [];
           const dataTotal =
             typeof data?.total === 'number'
               ? data.total
@@ -1263,8 +1263,8 @@ export function LayerDataPanel({
             pendingMapFitFromSelectionRef.current = true;
             pendingHighlightIndexRef.current = idx;
             setHighlightedRow(idx);
-            setSelectedRowData(dataRows[idx] as Record<string, unknown>);
-            showIdentifyFeatureOnMap(dataRows[idx] as Record<string, unknown>);
+            setSelectedRowData(dataRows[idx]);
+            showIdentifyFeatureOnMap(dataRows[idx]);
           } else if (restoreDone.selectedRow) {
             setSelectedRowData(restoreDone.selectedRow);
             showIdentifyFeatureOnMap(restoreDone.selectedRow);
