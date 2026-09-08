@@ -243,6 +243,12 @@ npm -v`}</CodeBlock>
                   </li>
                 </ul>
               </li>
+              <li>
+                시연일 경우 nssm에 G드라이브 접근 권한 설정하기
+                <div className="mt-1">
+                  <CodeBlock>{`nssm set GGNR_V7 ObjectName ".\사용자이름" "비밀번호"`}</CodeBlock>
+                </div>
+              </li>
             </ol>
           </section>
 
