@@ -258,8 +258,9 @@ export function scrubOccupationLedgerFromMapSearchParams(
   const allowedSerEng = new Set(getAllowedOccupationLedgerSerEngs(system, serviceList));
   const opened = (params.get('opened') ?? '').split(',').filter(Boolean);
   const nextOpened = opened.filter((token) => {
-    if (!isOccupationLedgerOpenedToken(token)) return true;
-    return allowedSerEng.has(token);
+    const t = String(token ?? '').trim();
+    if (!isOccupationLedgerSerEng(t)) return true;
+    return allowedSerEng.has(t);
   });
   if (nextOpened.length > 0) params.set('opened', nextOpened.join(','));
   else params.delete('opened');
