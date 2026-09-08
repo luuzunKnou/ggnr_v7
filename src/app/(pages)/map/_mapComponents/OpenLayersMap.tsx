@@ -1636,36 +1636,6 @@ export default function OpenLayersMap({
             const tab = riverBasicPlanTabFromAsDefineTable(best.tableName);
             mapContext.applyRiverBasicPlanMapPickRef.current?.({ riverName, tab });
             mapContext.riverBasicPlanExitIndexViewToDetailRef?.current?.();
-            try {
-              let res = await call('', 'POST', {
-                service: 'riverBasicPlanService',
-                action: 'getRiverBasicPlanIndexExtent',
-                params: { tab, riverName },
-              });
-              if (cancelled) return;
-              let data = res?.data ?? res;
-              let ext = Array.isArray(data?.extent3857) ? data.extent3857 : null;
-              if (!ext || ext.length !== 4) {
-                res = await call('', 'POST', {
-                  service: 'riverBasicPlanService',
-                  action: 'getRiverBasicPlanExtent',
-                  params: { tab, riverName },
-                });
-                if (cancelled) return;
-                data = res?.data ?? res;
-                ext = Array.isArray(data?.extent3857) ? data.extent3857 : null;
-              }
-              const map = mapInstanceRef.current;
-              if (map && ext && ext.length === 4) {
-                scheduleFitMapToExtent3857(map, ext as number[], {
-                  maxZoom: MAP_AUTO_NAV_MAX_ZOOM,
-                  pointThreshold: 1,
-                  applyMapViewPadding: () => applyMapViewPaddingRef?.current?.(),
-                });
-              }
-            } catch {
-              // 지도 이동 실패는 사용자 동작을 막지 않음
-            }
             clearIdentifyIntake();
             return;
           }
