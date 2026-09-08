@@ -135,7 +135,9 @@ import {
   findOpenedOccupationLedgerSerEng,
   getOccupationLedgerBinding,
   getOccupationLedgerWmsLayerIds,
+  type OccupationLedgerBinding,
 } from '@/lib/occupationLedgerBinding';
+import { findOpenedUseFeeSerEng, getUseFeeBinding } from '@/lib/useFeeBinding';
 import { getAllUseFeeWmsLayerIds, getUseFeeWmsLayerId } from '../_mapContents/useFee/useFeeLayerId';
 import {
   USE_FEE_PUBLIC_OCCUPATION_WMS_LAYER_ID,
@@ -242,6 +244,80 @@ function pickIdentifyExtent3857(
   } catch {
     return null;
   }
+}
+
+type IdentifyOverlapOption = {
+  value: string;
+  label: string;
+  extent3857?: [number, number, number, number] | null;
+};
+
+type IdentifyHitLayer = {
+  tableName?: string;
+  features: { data?: Record<string, unknown> }[];
+};
+
+/** 공통 점용대장 identify — 본표 우선, 겹친 도형 전부 (필지·물건지는 허가번호) */
+function collectOccupationIdentifyHits(
+  withFeat: IdentifyHitLayer[],
+  binding: OccupationLedgerBinding
+): { rowKey: string; permitNo: string; extent3857: IdentifyOverlapOption['extent3857'] }[] {
+  const layerIds = getOccupationLedgerWmsLayerIds(binding);
+  const layerSet = new Set(layerIds);
+  const jijuk = binding.jijukTable.toLowerCase();
+  const mgj = binding.mgjTable.toLowerCase();
+  const ranked = withFeat
+    .map((r, wi) => {
+      const tn = String(r.tableName ?? '')
+        .trim()
+        .toLowerCase();
+      if (!layerSet.has(tn) || r.features.length === 0) return null;
+      const rank = tn === jijuk ? 0 : tn === mgj ? 1 : 2;
+      return { wi, rank, layer: r };
+    })
+    .filter((x): x is NonNullable<typeof x> => x != null)
+    .sort((a, b) => (a.rank !== b.rank ? a.rank - b.rank : a.wi - b.wi));
+  if (ranked.length === 0) return [];
+
+  const keyField = binding.fields.keyField;
+  const childParentField = binding.fields.childParentField;
+  const mainId = binding.mainTable.toLowerCase();
+  const parentRanked = ranked.filter((x) => {
+    const tn = String(x.layer.tableName ?? '')
+      .trim()
+      .toLowerCase();
+    return tn === mainId;
+  });
+  const scan = parentRanked.length > 0 ? parentRanked : ranked;
+  const hits: {
+    rowKey: string;
+    permitNo: string;
+    extent3857: IdentifyOverlapOption['extent3857'];
+  }[] = [];
+  const seen = new Set<string>();
+  for (const { layer } of scan) {
+    const tn = String(layer.tableName ?? '')
+      .trim()
+      .toLowerCase();
+    const pickField = tn === mainId ? keyField : childParentField;
+    for (const feat of layer.features) {
+      const rowKey =
+        pickIdentifyField(feat?.data, pickField) ||
+        (tn !== mainId ? pickIdentifyField(feat?.data, 'permit_no') : '');
+      if (!rowKey || seen.has(rowKey)) continue;
+      seen.add(rowKey);
+      const permit =
+        pickIdentifyField(feat?.data, 'permit_no') ||
+        pickIdentifyField(feat?.data, 'work_name') ||
+        rowKey;
+      hits.push({
+        rowKey,
+        permitNo: pickIdentifyField(feat?.data, 'permit_no') || permit,
+        extent3857: pickIdentifyExtent3857(feat?.data),
+      });
+    }
+  }
+  return hits;
 }
 
 // 다중 선택 가능한 아이템 ID 목록
@@ -1337,6 +1413,7 @@ export default function OpenLayersMap({
     roadCctvPanelOpen ||
       (mapContext?.safetyFacPanelOpen ?? false) ||
       (mapContext?.complaintPanelOpen ?? false) ||
+      (mapContext?.memoPanelOpen ?? false) ||
       (mapContext?.roadRewardPanelOpen ?? false) ||
       !!layerRowGeomEdit ||
       !!spatialDrawRequest ||
@@ -1951,60 +2028,13 @@ export default function OpenLayersMap({
         const serEng = findOpenedOccupationLedgerSerEng(openedRaw);
         const binding = getOccupationLedgerBinding({ serEng });
         if (binding) {
-          const layerIds = getOccupationLedgerWmsLayerIds(binding);
-          const layerSet = new Set(layerIds);
-          const jijuk = binding.jijukTable.toLowerCase();
-          const mgj = binding.mgjTable.toLowerCase();
-          const ranked = withFeat
-            .map((r, wi) => {
-              const tn = String(r.tableName ?? '')
-                .trim()
-                .toLowerCase();
-              if (!layerSet.has(tn) || r.features.length === 0) return null;
-              const rank = tn === jijuk ? 0 : tn === mgj ? 1 : 2;
-              return { wi, rank, layer: r };
-            })
-            .filter((x): x is NonNullable<typeof x> => x != null)
-            .sort((a, b) => (a.rank !== b.rank ? a.rank - b.rank : a.wi - b.wi));
-          if (ranked.length > 0) {
-            const keyField = binding.fields.keyField;
-            const childParentField = binding.fields.childParentField;
-            const mainId = binding.mainTable.toLowerCase();
-            const parentRanked = ranked.filter((x) => {
-              const tn = String(x.layer.tableName ?? '')
-                .trim()
-                .toLowerCase();
-              return tn === mainId;
-            });
-            const scan = parentRanked.length > 0 ? parentRanked : ranked;
-            const overlapOptions: {
-              value: string;
-              label: string;
-              extent3857?: [number, number, number, number] | null;
-            }[] = [];
-            const seen = new Set<string>();
-            for (const { layer } of scan) {
-              const tn = String(layer.tableName ?? '')
-                .trim()
-                .toLowerCase();
-              const pickField = tn === mainId ? keyField : childParentField;
-              for (const feat of layer.features) {
-                const rowKey =
-                  pickIdentifyField(feat?.data, pickField) ||
-                  (tn !== mainId ? pickIdentifyField(feat?.data, 'permit_no') : '');
-                if (!rowKey || seen.has(rowKey)) continue;
-                seen.add(rowKey);
-                const permit =
-                  pickIdentifyField(feat?.data, 'permit_no') ||
-                  pickIdentifyField(feat?.data, 'work_name') ||
-                  rowKey;
-                overlapOptions.push({
-                  value: rowKey,
-                  label: permit,
-                  extent3857: pickIdentifyExtent3857(feat?.data),
-                });
-              }
-            }
+          const hits = collectOccupationIdentifyHits(withFeat, binding);
+          if (hits.length > 0) {
+            const overlapOptions: IdentifyOverlapOption[] = hits.map((h) => ({
+              value: h.rowKey,
+              label: h.permitNo || h.rowKey,
+              extent3857: h.extent3857,
+            }));
             const first = overlapOptions[0];
             if (!first) {
               if (!cancelled) {
@@ -2013,6 +2043,9 @@ export default function OpenLayersMap({
               clearIdentifyIntake();
               return;
             }
+            mapContext.setOccupationLedgerMapHitOptions?.(
+              overlapOptions.length > 1 ? overlapOptions : []
+            );
             mapContext.applyOccupationLedgerMapPickRef.current?.({
               rowKey: first.value,
               extent3857: first.extent3857,
@@ -2024,27 +2057,31 @@ export default function OpenLayersMap({
         }
       }
 
-      /** 점사용료: water|road|public_ngl_fee_list → 목록·상세 선택 */
+      /** 점사용료: 본표 + 점용 오버레이(공통점용과 동일 겹침 목록) */
       if (mapContext?.useFeePanelOpen && mapContext.applyUseFeeMapPickRef) {
+        const openedRaw = searchParams.get('opened')?.split(',').filter(Boolean) || [];
         const system = String(searchParams.get('system') ?? '').trim();
-        const feeLid = getUseFeeWmsLayerId(system || 'river').toLowerCase();
-        const feeHit = withFeat.find((r) => {
+        const feeSerEng = findOpenedUseFeeSerEng(openedRaw);
+        const feeBinding = getUseFeeBinding({
+          serEng: feeSerEng,
+          system: system || undefined,
+        });
+        const feeLid = getUseFeeWmsLayerId({
+          serEng: feeSerEng,
+          system: system || undefined,
+        }).toLowerCase();
+
+        const overlapOptions: IdentifyOverlapOption[] = [];
+        const seenFeeId = new Set<string>();
+        for (const r of withFeat) {
           const tn = String(r.tableName ?? '')
             .trim()
             .toLowerCase();
-          return tn === feeLid && r.features.length > 0;
-        });
-        if (feeHit) {
-          const overlapOptions: {
-            value: string;
-            label: string;
-            extent3857?: [number, number, number, number] | null;
-          }[] = [];
-          const seen = new Set<string>();
-          for (const feat of feeHit.features) {
+          if (tn !== feeLid) continue;
+          for (const feat of r.features) {
             const feeId = pickIdentifyField(feat?.data, 'id');
-            if (!feeId || seen.has(feeId)) continue;
-            seen.add(feeId);
+            if (!feeId || seenFeeId.has(feeId)) continue;
+            seenFeeId.add(feeId);
             const ledger =
               pickIdentifyField(feat?.data, 'ledger_no') ||
               pickIdentifyField(feat?.data, 'ledgerNo') ||
@@ -2055,14 +2092,77 @@ export default function OpenLayersMap({
               extent3857: pickIdentifyExtent3857(feat?.data),
             });
           }
-          const first = overlapOptions[0];
-          if (!first) {
-            if (!cancelled) {
-              window.alert('클릭한 점사용료 도형의 번호를 읽을 수 없습니다.');
-            }
-            clearIdentifyIntake();
-            return;
+        }
+
+        const occBinding = getOccupationLedgerBinding({ system: feeBinding.systemKey });
+        const permitNos: string[] = [];
+        const permitExtent = new Map<string, IdentifyOverlapOption['extent3857']>();
+        if (occBinding) {
+          for (const h of collectOccupationIdentifyHits(withFeat, occBinding)) {
+            const no = String(h.permitNo ?? '').trim();
+            if (!no) continue;
+            permitNos.push(no);
+            if (!permitExtent.has(no)) permitExtent.set(no, h.extent3857);
           }
+        }
+        const usageLayerSet = new Set(
+          USAGE_DATA_AS_WMS_LAYER_IDS.map((id) => id.toLowerCase())
+        );
+        for (const r of withFeat) {
+          const tn = String(r.tableName ?? '')
+            .trim()
+            .toLowerCase();
+          if (!usageLayerSet.has(tn) || r.features.length === 0) continue;
+          for (const feat of r.features) {
+            const no =
+              pickIdentifyConsCode(feat?.data) ||
+              pickIdentifyField(feat?.data, 'perm_num') ||
+              pickIdentifyField(feat?.data, 'permit_no');
+            if (!no) continue;
+            permitNos.push(no);
+            if (!permitExtent.has(no)) {
+              permitExtent.set(no, pickIdentifyExtent3857(feat?.data));
+            }
+          }
+        }
+
+        const uniquePermits = [...new Set(permitNos)].slice(0, 50);
+        if (uniquePermits.length > 0) {
+          try {
+            const lookupRes = await call('', 'POST', {
+              service: 'useFeeService',
+              action: 'listUseFeeHitsByLedgerNos',
+              params: {
+                ledgerNos: uniquePermits,
+                serEng: feeSerEng ?? feeBinding.serEng,
+                system: system || feeBinding.systemKey,
+              },
+            });
+            if (cancelled) return;
+            const lookupData = lookupRes?.data ?? lookupRes;
+            const lookupRows = Array.isArray(lookupData?.rows) ? lookupData.rows : [];
+            for (const raw of lookupRows) {
+              const feeId = String((raw as { id?: unknown })?.id ?? '').trim();
+              if (!feeId || seenFeeId.has(feeId)) continue;
+              seenFeeId.add(feeId);
+              const ledger =
+                String((raw as { ledgerNo?: unknown })?.ledgerNo ?? '').trim() || feeId;
+              overlapOptions.push({
+                value: feeId,
+                label: ledger,
+                extent3857: permitExtent.get(ledger) ?? null,
+              });
+            }
+          } catch {
+            /* 점용→점사용료 조회 실패 시 본표 히트만 사용 */
+          }
+        }
+
+        const first = overlapOptions[0];
+        if (first) {
+          mapContext.setUseFeeMapHitOptions?.(
+            overlapOptions.length > 1 ? overlapOptions : []
+          );
           mapContext.applyUseFeeMapPickRef.current?.({
             id: first.value,
             extent3857: first.extent3857,

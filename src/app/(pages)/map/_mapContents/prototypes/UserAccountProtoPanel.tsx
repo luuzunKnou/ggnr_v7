@@ -21,6 +21,7 @@ import {
   type ProtoNotifItem,
 } from '../bizNotif/bizNotifStore'
 import { UserAccountProtoNotifTab } from './UserAccountProtoNotifTab'
+import { UserAccountMoreTab } from './UserAccountMoreTab'
 import {
   MyShootingRequestTab,
   useMyShootingRequestCount,
@@ -31,8 +32,9 @@ import { useShootingRequestUiEnabled } from '../shootingRequest/useShootingReque
 const PANEL_SHELL_ROUND = 'rounded-[5px]'
 const PANEL_ROUND = 'rounded-sm'
 const BUBBLE_ROUND = 'rounded-[2px]'
-const PANEL_PAD = 'px-3 py-3'
 const TEXT_BODY = 'text-xs'
+/** 더보기 탭 — 당분간 숨김 */
+export const SHOW_USER_ACCOUNT_MORE_TAB = false
 
 type MyProfileView = {
   usrId: string
@@ -66,6 +68,7 @@ const PROTO_PANEL_TABS_ALL = [
   { id: 'notif', label: '알림' },
 ] as const
 type ProtoPanelTabId = (typeof PROTO_PANEL_TABS_ALL)[number]['id']
+type PanelSection = 'account' | 'more'
 
 type Props = {
   open: boolean
@@ -92,6 +95,7 @@ export function UserAccountProtoPanel({
     : PROTO_PANEL_TABS_ALL.filter((t) => t.id !== 'shooting')
   const [notifItems, setNotifItemsLocal] = useState(getProtoNotifs)
   const [activeTab, setActiveTab] = useState<ProtoPanelTabId | null>(null)
+  const [panelSection, setPanelSection] = useState<PanelSection>('account')
   const [profile, setProfile] = useState<MyProfileView>(() => profileFromSession(null))
   const [profileLoading, setProfileLoading] = useState(false)
   const shootingCount = useMyShootingRequestCount(shootingUiEnabled && open)
@@ -165,7 +169,14 @@ export function UserAccountProtoPanel({
   useEffect(() => {
     if (!open) return
     setActiveTab(null)
+    setPanelSection('account')
   }, [open])
+
+  useEffect(() => {
+    if (!SHOW_USER_ACCOUNT_MORE_TAB && panelSection === 'more') {
+      setPanelSection('account')
+    }
+  }, [panelSection])
 
   const unreadNotifCount = notifItems.filter((n) => !n.read).length
 
@@ -185,60 +196,113 @@ export function UserAccountProtoPanel({
           PANEL_SHELL_ROUND
         )}
         role="dialog"
-        aria-label="내 정보"
+        aria-label={panelSection === 'more' ? '더보기' : '내 정보'}
       >
-        <PanelHeader onClose={onClose} />
-        <ProfileSection profile={profile} loading={profileLoading} onLogout={handleLogout} />
+        <PanelHeader
+          section={panelSection}
+          onSectionChange={setPanelSection}
+          onClose={onClose}
+        />
+        {panelSection === 'more' ? (
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+            <UserAccountMoreTab onClosePanel={onClose} />
+          </div>
+        ) : (
+          <>
+            <ProfileSection profile={profile} loading={profileLoading} onLogout={handleLogout} />
 
-        <div className={cn('flex flex-col overflow-hidden', activeTab != null && 'min-h-0 flex-1')}>
-          <PanelTabBar
-            tabs={panelTabs}
-            activeTab={activeTab}
-            notifCount={notifItems.length}
-            notifUnreadCount={unreadNotifCount}
-            shootingCount={shootingCount}
-            onToggleTab={(tabId) => setActiveTab((prev) => (prev === tabId ? null : tabId))}
-          />
+            <div className={cn('flex flex-col overflow-hidden', activeTab != null && 'min-h-0 flex-1')}>
+              <PanelTabBar
+                tabs={panelTabs}
+                activeTab={activeTab}
+                notifCount={notifItems.length}
+                notifUnreadCount={unreadNotifCount}
+                shootingCount={shootingCount}
+                onToggleTab={(tabId) => setActiveTab((prev) => (prev === tabId ? null : tabId))}
+              />
 
-          {shootingUiEnabled && activeTab === 'shooting' ? (
-            <MyShootingRequestTab
-              open={open && activeTab === 'shooting'}
-              onSelectRequest={(id) => {
-                onClose()
-                onSelectShootingRequest?.(id)
-              }}
-            />
-          ) : null}
+              {shootingUiEnabled && activeTab === 'shooting' ? (
+                <MyShootingRequestTab
+                  open={open && activeTab === 'shooting'}
+                  onSelectRequest={(id) => {
+                    onClose()
+                    onSelectShootingRequest?.(id)
+                  }}
+                />
+              ) : null}
 
-          {activeTab === 'notif' ? (
-            <UserAccountProtoNotifTab
-              items={notifItems}
-              onDismiss={handleDismissNotif}
-              onDismissAll={handleDismissAllNotifs}
-              onMarkRead={handleMarkNotifRead}
-              onOpenLedger={onOpenLedger}
-              onOpenFee={onOpenFee}
-              onClosePanel={onClose}
-            />
-          ) : null}
-        </div>
+              {activeTab === 'notif' ? (
+                <UserAccountProtoNotifTab
+                  items={notifItems}
+                  onDismiss={handleDismissNotif}
+                  onDismissAll={handleDismissAllNotifs}
+                  onMarkRead={handleMarkNotifRead}
+                  onOpenLedger={onOpenLedger}
+                  onOpenFee={onOpenFee}
+                  onClosePanel={onClose}
+                />
+              ) : null}
+            </div>
+          </>
+        )}
       </div>
     </>
   )
 }
 
-function PanelHeader({ onClose }: { onClose: () => void }) {
+function PanelHeader({
+  section,
+  onSectionChange,
+  onClose,
+}: {
+  section: PanelSection
+  onSectionChange: (section: PanelSection) => void
+  onClose: () => void
+}) {
+  const sectionTabs = (
+    [
+      { id: 'account', label: '내 정보' },
+      ...(SHOW_USER_ACCOUNT_MORE_TAB ? ([{ id: 'more', label: '더보기' }] as const) : []),
+    ] as const
+  )
   return (
     <div
       className={cn(
-        'flex shrink-0 items-center justify-between border-b border-border bg-muted/30',
-        PANEL_PAD
+        'flex shrink-0 items-end justify-between gap-2 border-b border-border bg-muted/30 px-3',
       )}
     >
-      <span className="text-xs font-medium text-muted-foreground">내 정보</span>
+      <div className="flex min-w-0 items-end">
+        {sectionTabs.length <= 1 ? (
+          <span className="relative -mb-px inline-flex items-center border-b-2 border-foreground px-2.5 py-2.5 text-xs font-medium text-foreground">
+            내 정보
+          </span>
+        ) : (
+          sectionTabs.map((tab) => {
+            const active = section === tab.id
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => onSectionChange(tab.id)}
+                className={cn(
+                  'relative -mb-px inline-flex items-center border-b-2 px-2.5 py-2.5 text-xs font-medium transition-colors',
+                  active
+                    ? 'border-foreground text-foreground'
+                    : 'border-transparent text-muted-foreground hover:text-foreground'
+                )}
+              >
+                {tab.label}
+              </button>
+            )
+          })
+        )}
+      </div>
       <button
         type="button"
-        className={cn('rounded-sm p-1 text-muted-foreground hover:bg-muted/50 hover:text-foreground', PANEL_ROUND)}
+        className={cn(
+          'mb-1.5 rounded-sm p-1 text-muted-foreground hover:bg-muted/50 hover:text-foreground',
+          PANEL_ROUND
+        )}
         onClick={onClose}
         aria-label="닫기"
       >

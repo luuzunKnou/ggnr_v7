@@ -154,6 +154,7 @@ export function RoadDocManualPanel({
   handbookSelected,
   onHandbookSelect,
   startOnHandbook = false,
+  onHandbookWideChange,
 }: {
   onClose: () => void;
   handbookMode: HandbookViewMode;
@@ -161,6 +162,7 @@ export function RoadDocManualPanel({
   handbookSelected: HandbookDetailSelection | null;
   onHandbookSelect: (next: HandbookDetailSelection | null) => void;
   startOnHandbook?: boolean;
+  onHandbookWideChange?: (wide: boolean) => void;
 }) {
   const [handbookTabsVisible, setHandbookTabsVisible] = useState(false);
   const handbookDeeplinkApplied = useRef(false);
@@ -177,6 +179,10 @@ export function RoadDocManualPanel({
   const isHandbookTab =
     handbookTabsVisible && (activeTab === "target" || activeTab === "ref");
   const mapPick = useHandbookMapPick();
+
+  useEffect(() => {
+    onHandbookWideChange?.(isHandbookTab && activeTab === "target");
+  }, [isHandbookTab, activeTab, onHandbookWideChange]);
 
   useEffect(() => {
     let cancelled = false;

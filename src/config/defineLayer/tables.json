@@ -300,6 +300,18 @@
     "define_table_source": "shp"
   },
   {
+    "define_table_name": "lsmd_cont_um732",
+    "define_table_kor_name": "lsmd_cont_um732",
+    "define_table_shp_type": "POLYGON",
+    "define_table_read_share": "P",
+    "define_table_write_share": "P",
+    "define_table_group": "",
+    "define_table_idx": "0",
+    "define_table_etc": "",
+    "define_table_schema": "public_layer",
+    "define_table_source": "shp"
+  },
+  {
     "define_table_name": "ngl_fee_list",
     "define_table_kor_name": "ngl_fee_list",
     "define_table_shp_type": "POLYGON",
@@ -382,30 +394,6 @@
     "define_table_etc": "",
     "define_table_schema": "layer",
     "define_table_source": "excel"
-  },
-  {
-    "define_table_name": "road_frontage_marker",
-    "define_table_kor_name": "접도구역 표주 관리대장",
-    "define_table_shp_type": "POINT",
-    "define_table_read_share": "P",
-    "define_table_write_share": "P",
-    "define_table_group": "접도구역",
-    "define_table_idx": "0",
-    "define_table_etc": "",
-    "define_table_schema": "layer",
-    "define_table_source": "shp"
-  },
-  {
-    "define_table_name": "road_frontage_marker_item",
-    "define_table_kor_name": "접도구역 표주",
-    "define_table_shp_type": "POINT",
-    "define_table_read_share": "P",
-    "define_table_write_share": "P",
-    "define_table_group": "접도구역",
-    "define_table_idx": "0",
-    "define_table_etc": "",
-    "define_table_schema": "layer",
-    "define_table_source": "shp"
   },
   {
     "define_table_name": "road_use_ledger_mulgunji",
@@ -2598,18 +2586,6 @@
     "define_table_read_share": "P",
     "define_table_write_share": "P",
     "define_table_group": "도로대장",
-    "define_table_idx": "0",
-    "define_table_etc": "",
-    "define_table_schema": "layer",
-    "define_table_source": "shp"
-  },
-  {
-    "define_table_name": "road_frontage_building",
-    "define_table_kor_name": "접도구역 건축물",
-    "define_table_shp_type": "POINT",
-    "define_table_read_share": "P",
-    "define_table_write_share": "P",
-    "define_table_group": "접도구역",
     "define_table_idx": "0",
     "define_table_etc": "",
     "define_table_schema": "layer",
@@ -6109,8 +6085,8 @@
     "define_table_source": "shp"
   },
   {
-    "define_table_name": "sd_cold_wave_shelter",
-    "define_table_kor_name": "한파쉼터",
+    "define_table_name": "radiation_shelter",
+    "define_table_kor_name": "방사선 대피소",
     "define_table_shp_type": "POINT",
     "define_table_read_share": "P",
     "define_table_write_share": "P",
@@ -6123,6 +6099,18 @@
   {
     "define_table_name": "sd_civil_defense_shelter",
     "define_table_kor_name": "민방위 대피소",
+    "define_table_shp_type": "POINT",
+    "define_table_read_share": "P",
+    "define_table_write_share": "P",
+    "define_table_group": "재난안전지도",
+    "define_table_idx": "0",
+    "define_table_etc": "",
+    "define_table_schema": "layer",
+    "define_table_source": "shp"
+  },
+  {
+    "define_table_name": "sd_cold_wave_shelter",
+    "define_table_kor_name": "한파쉼터",
     "define_table_shp_type": "POINT",
     "define_table_read_share": "P",
     "define_table_write_share": "P",
@@ -6268,6 +6256,18 @@
     "define_table_name": "sd_water_play_risk_zone",
     "define_table_kor_name": "물놀이 위험지역",
     "define_table_shp_type": "POLYGON",
+    "define_table_read_share": "P",
+    "define_table_write_share": "P",
+    "define_table_group": "재난안전지도",
+    "define_table_idx": "0",
+    "define_table_etc": "",
+    "define_table_schema": "layer",
+    "define_table_source": "shp"
+  },
+  {
+    "define_table_name": "water_play_sign",
+    "define_table_kor_name": "물놀이 표지판",
+    "define_table_shp_type": "POINT",
     "define_table_read_share": "P",
     "define_table_write_share": "P",
     "define_table_group": "재난안전지도",
@@ -6524,6 +6524,42 @@
     "define_table_write_share": "P",
     "define_table_group": "점용대장",
     "define_table_idx": "",
+    "define_table_etc": "",
+    "define_table_schema": "layer",
+    "define_table_source": "shp"
+  },
+  {
+    "define_table_name": "road_frontage_building",
+    "define_table_kor_name": "접도구역 건축물",
+    "define_table_shp_type": "POINT",
+    "define_table_read_share": "P",
+    "define_table_write_share": "P",
+    "define_table_group": "접도구역",
+    "define_table_idx": "0",
+    "define_table_etc": "",
+    "define_table_schema": "layer",
+    "define_table_source": "shp"
+  },
+  {
+    "define_table_name": "road_frontage_marker",
+    "define_table_kor_name": "접도구역 표주 관리대장",
+    "define_table_shp_type": "POINT",
+    "define_table_read_share": "P",
+    "define_table_write_share": "P",
+    "define_table_group": "접도구역",
+    "define_table_idx": "0",
+    "define_table_etc": "",
+    "define_table_schema": "layer",
+    "define_table_source": "shp"
+  },
+  {
+    "define_table_name": "road_frontage_marker_item",
+    "define_table_kor_name": "접도구역 표주",
+    "define_table_shp_type": "POINT",
+    "define_table_read_share": "P",
+    "define_table_write_share": "P",
+    "define_table_group": "접도구역",
+    "define_table_idx": "0",
     "define_table_etc": "",
     "define_table_schema": "layer",
     "define_table_source": "shp"
@@ -9954,42 +9990,6 @@
     "define_table_idx": "0",
     "define_table_etc": "",
     "define_table_schema": "layer",
-    "define_table_source": "shp"
-  },
-  {
-    "define_table_name": "radiation_shelter",
-    "define_table_kor_name": "방사선 대피소",
-    "define_table_shp_type": "POINT",
-    "define_table_read_share": "P",
-    "define_table_write_share": "P",
-    "define_table_group": "재난안전지도",
-    "define_table_idx": "0",
-    "define_table_etc": "",
-    "define_table_schema": "layer",
-    "define_table_source": "shp"
-  },
-  {
-    "define_table_name": "water_play_sign",
-    "define_table_kor_name": "물놀이 표지판",
-    "define_table_shp_type": "POINT",
-    "define_table_read_share": "P",
-    "define_table_write_share": "P",
-    "define_table_group": "재난안전지도",
-    "define_table_idx": "0",
-    "define_table_etc": "",
-    "define_table_schema": "layer",
-    "define_table_source": "shp"
-  },
-  {
-    "define_table_name": "lsmd_cont_um732",
-    "define_table_kor_name": "lsmd_cont_um732",
-    "define_table_shp_type": "POLYGON",
-    "define_table_read_share": "P",
-    "define_table_write_share": "P",
-    "define_table_group": "",
-    "define_table_idx": "0",
-    "define_table_etc": "",
-    "define_table_schema": "public_layer",
     "define_table_source": "shp"
   }
 ]
