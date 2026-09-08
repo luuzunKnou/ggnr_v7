@@ -76,8 +76,9 @@ export function MapSystemList() {
     if (!systemKeyFromUrl && firstAllowed) {
       const current = new URLSearchParams(Array.from(searchParams.entries()));
       current.set('system', firstAllowed);
-      scrubOccupationLedgerFromMapSearchParams(current, firstAllowed);
-      scrubUseFeeFromMapSearchParams(current, firstAllowed);
+      const firstMeta = systemList.find((s) => s.sys_key === firstAllowed);
+      scrubOccupationLedgerFromMapSearchParams(current, firstAllowed, firstMeta?.serviceList ?? []);
+      scrubUseFeeFromMapSearchParams(current, firstAllowed, firstMeta?.serviceList ?? []);
       router.replace(`/map?${current.toString()}`);
       return;
     }
@@ -113,8 +114,9 @@ export function MapSystemList() {
       scrubMapSearchParamsOnSystemSwitch(current, sysKey, target?.serviceList ?? []);
       mapContext?.allLayersOffRef?.current?.();
     } else {
-      scrubOccupationLedgerFromMapSearchParams(current, sysKey);
-      scrubUseFeeFromMapSearchParams(current, sysKey);
+      const target = systemList.find((s) => s.sys_key === sysKey);
+      scrubOccupationLedgerFromMapSearchParams(current, sysKey, target?.serviceList ?? []);
+      scrubUseFeeFromMapSearchParams(current, sysKey, target?.serviceList ?? []);
     }
     router.push(`/map?${current.toString()}`);
   };

@@ -209,6 +209,9 @@ export function StreetViewPanel({
   const [sdkReady, setSdkReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [noPano, setNoPano] = useState(false);
+  const noPanoRef = useRef(false);
+  /** getNearestPanoId 실패한 요청 좌표 — 화살표 이동 후 재조회 판단용 */
+  const noPanoRequestKeyRef = useRef('');
   const [panoReady, setPanoReady] = useState(false);
   /** 이전 파노라마가 실제로 열린 좌표 — 알림 시 복귀용 (호출 좌표 아님) */
   const [lastSuccessPos, setLastSuccessPos] = useState<{ lng: number; lat: number } | null>(null);
@@ -240,6 +243,19 @@ export function StreetViewPanel({
   }, []);
   const scheduleSnapReadyRef = useRef(scheduleSnapReady);
   scheduleSnapReadyRef.current = scheduleSnapReady;
+
+  useEffect(() => {
+    noPanoRef.current = noPano;
+  }, [noPano]);
+
+  const resolvePanoSearchRadiusM = useCallback(() => {
+    try {
+      const n = getPanoSearchRadiusMRef.current?.();
+      return n != null && Number.isFinite(n) && n > 0 ? n : PANO_SEARCH_RADIUS_FALLBACK_M;
+    } catch {
+      return PANO_SEARCH_RADIUS_FALLBACK_M;
+    }
+  }, []);
 
   const reportFailure = (raw: unknown, fallback?: string) => {
     const explained = explainKakaoRoadviewFailure(raw);
@@ -338,6 +354,41 @@ export function StreetViewPanel({
       }
     };
 
+    /** noPano 알림 중 화살표 등으로 다른 위치 파노가 열리면 재조회 후 알림 해제 */
+    const tryClearNoPanoAfterMove = () => {
+      if (!noPanoRef.current) return;
+      const rv = roadviewRef.current;
+      const client = clientRef.current;
+      if (!rv || !client) return;
+      try {
+        const pos = rv.getPosition();
+        if (!pos) return;
+        const currentKey = posKey(pos.getLng(), pos.getLat());
+        if (currentKey === noPanoRequestKeyRef.current) return;
+        client.getNearestPanoId(pos, (() => {
+          try {
+            const n = getPanoSearchRadiusMRef.current?.();
+            return n != null && Number.isFinite(n) && n > 0 ? n : PANO_SEARCH_RADIUS_FALLBACK_M;
+          } catch {
+            return PANO_SEARCH_RADIUS_FALLBACK_M;
+          }
+        })(), (panoId) => {
+          if (!noPanoRef.current || panoId == null) return;
+          noPanoRequestKeyRef.current = '';
+          noPanoRef.current = false;
+          setNoPano(false);
+          setPanoReady(true);
+          setError(null);
+          everPanoReadyRef.current = true;
+          lastPanoIdRef.current = panoId;
+          lastFetchKeyRef.current = currentKey;
+          scheduleSnapReadyRef.current();
+        });
+      } catch {
+        /* ignore */
+      }
+    };
+
     const onInit = () => {
       if (initTimerRef.current) {
         clearTimeout(initTimerRef.current);
@@ -345,6 +396,8 @@ export function StreetViewPanel({
       }
       everPanoReadyRef.current = true;
       setPanoReady(true);
+      noPanoRequestKeyRef.current = '';
+      noPanoRef.current = false;
       setNoPano(false);
       setError(null);
       // 호출 좌표가 아니라 실제로 열린 파노 위치
@@ -359,6 +412,7 @@ export function StreetViewPanel({
     };
 
     const onPositionChanged = () => {
+      tryClearNoPanoAfterMove();
       // 화살표 이동 등으로 열린 파노 위치가 바뀌면 복귀 기준도 갱신
       rememberLoadedRoadviewPos();
       if (skipEchoRef.current) return;
@@ -646,6 +700,8 @@ export function StreetViewPanel({
     lastFetchKeyRef.current = fetchKey;
 
     let cancelled = false;
+    noPanoRequestKeyRef.current = '';
+    noPanoRef.current = false;
     setNoPano(false);
     emitRoadviewSnapInvalidate(containerRef.current);
     if (initTimerRef.current) {
@@ -674,19 +730,14 @@ export function StreetViewPanel({
 
     const position = new window.kakao.maps.LatLng(lat, lng);
     try {
-      const radiusM = (() => {
-        try {
-          const n = getPanoSearchRadiusMRef.current?.();
-          return n != null && Number.isFinite(n) && n > 0 ? n : PANO_SEARCH_RADIUS_FALLBACK_M;
-        } catch {
-          return PANO_SEARCH_RADIUS_FALLBACK_M;
-        }
-      })();
+      const radiusM = resolvePanoSearchRadiusM();
       client.getNearestPanoId(position, radiusM, (panoId) => {
         if (cancelled) {
           return;
         }
         if (panoId == null) {
+          noPanoRequestKeyRef.current = fetchKey;
+          noPanoRef.current = true;
           setNoPano(true);
           setPanoReady(false);
           lastPanoIdRef.current = null;
@@ -694,6 +745,8 @@ export function StreetViewPanel({
           scheduleSnapReadyRef.current();
           return;
         }
+        noPanoRequestKeyRef.current = '';
+        noPanoRef.current = false;
         setNoPano(false);
         skipEchoRef.current = true;
         try {
@@ -739,7 +792,7 @@ export function StreetViewPanel({
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- panDeg intentionally omitted
-  }, [sdkReady, lng, lat]);
+  }, [sdkReady, lng, lat, resolvePanoSearchRadiusM]);
 
   useEffect(() => {
     if (!sdkReady) return;

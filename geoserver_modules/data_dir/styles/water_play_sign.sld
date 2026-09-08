@@ -35,15 +35,34 @@
                 <sld:AnchorPointX>0.5</sld:AnchorPointX>
                 <sld:AnchorPointY>0.5</sld:AnchorPointY>
               </sld:AnchorPoint>
-              <sld:Displacement>
-                <sld:DisplacementX>0</sld:DisplacementX>
-                <sld:DisplacementY>0</sld:DisplacementY>
-              </sld:Displacement>
             </sld:Graphic>
           </sld:PointSymbolizer>
           <sld:TextSymbolizer>
             <sld:Label>
-              <ogc:PropertyName>addr</ogc:PropertyName>
+              <ogc:Function name="if_then_else">
+                <ogc:Function name="isNull">
+                  <ogc:PropertyName>addr_detail</ogc:PropertyName>
+                </ogc:Function>
+                <ogc:Function name="strReplace">
+                  <ogc:PropertyName>addr</ogc:PropertyName>
+                  <ogc:Literal>^[^ ]+ +[^ ]+ +</ogc:Literal>
+                  <ogc:Literal></ogc:Literal>
+                  <ogc:Literal>true</ogc:Literal>
+                </ogc:Function>
+                <ogc:Function name="if_then_else">
+                  <ogc:Function name="equalTo">
+                    <ogc:PropertyName>addr_detail</ogc:PropertyName>
+                    <ogc:Literal/>
+                  </ogc:Function>
+                  <ogc:Function name="strReplace">
+                  <ogc:PropertyName>addr</ogc:PropertyName>
+                  <ogc:Literal>^[^ ]+ +[^ ]+ +</ogc:Literal>
+                  <ogc:Literal></ogc:Literal>
+                  <ogc:Literal>true</ogc:Literal>
+                </ogc:Function>
+                  <ogc:PropertyName>addr_detail</ogc:PropertyName>
+                </ogc:Function>
+              </ogc:Function>
             </sld:Label>
             <sld:Font>
               <sld:CssParameter name="font-family">Nanum Gothic</sld:CssParameter>
@@ -75,7 +94,30 @@
           </sld:TextSymbolizer>
           <sld:TextSymbolizer>
             <sld:Label>
-              <ogc:PropertyName>addr</ogc:PropertyName>
+              <ogc:Function name="if_then_else">
+                <ogc:Function name="isNull">
+                  <ogc:PropertyName>addr_detail</ogc:PropertyName>
+                </ogc:Function>
+                <ogc:Function name="strReplace">
+                  <ogc:PropertyName>addr</ogc:PropertyName>
+                  <ogc:Literal>^[^ ]+ +[^ ]+ +</ogc:Literal>
+                  <ogc:Literal></ogc:Literal>
+                  <ogc:Literal>true</ogc:Literal>
+                </ogc:Function>
+                <ogc:Function name="if_then_else">
+                  <ogc:Function name="equalTo">
+                    <ogc:PropertyName>addr_detail</ogc:PropertyName>
+                    <ogc:Literal/>
+                  </ogc:Function>
+                  <ogc:Function name="strReplace">
+                  <ogc:PropertyName>addr</ogc:PropertyName>
+                  <ogc:Literal>^[^ ]+ +[^ ]+ +</ogc:Literal>
+                  <ogc:Literal></ogc:Literal>
+                  <ogc:Literal>true</ogc:Literal>
+                </ogc:Function>
+                  <ogc:PropertyName>addr_detail</ogc:PropertyName>
+                </ogc:Function>
+              </ogc:Function>
             </sld:Label>
             <sld:Font>
               <sld:CssParameter name="font-family">Malgun Gothic</sld:CssParameter>
@@ -107,7 +149,30 @@
           </sld:TextSymbolizer>
           <sld:TextSymbolizer>
             <sld:Label>
-              <ogc:PropertyName>addr</ogc:PropertyName>
+              <ogc:Function name="if_then_else">
+                <ogc:Function name="isNull">
+                  <ogc:PropertyName>addr_detail</ogc:PropertyName>
+                </ogc:Function>
+                <ogc:Function name="strReplace">
+                  <ogc:PropertyName>addr</ogc:PropertyName>
+                  <ogc:Literal>^[^ ]+ +[^ ]+ +</ogc:Literal>
+                  <ogc:Literal></ogc:Literal>
+                  <ogc:Literal>true</ogc:Literal>
+                </ogc:Function>
+                <ogc:Function name="if_then_else">
+                  <ogc:Function name="equalTo">
+                    <ogc:PropertyName>addr_detail</ogc:PropertyName>
+                    <ogc:Literal/>
+                  </ogc:Function>
+                  <ogc:Function name="strReplace">
+                  <ogc:PropertyName>addr</ogc:PropertyName>
+                  <ogc:Literal>^[^ ]+ +[^ ]+ +</ogc:Literal>
+                  <ogc:Literal></ogc:Literal>
+                  <ogc:Literal>true</ogc:Literal>
+                </ogc:Function>
+                  <ogc:PropertyName>addr_detail</ogc:PropertyName>
+                </ogc:Function>
+              </ogc:Function>
             </sld:Label>
             <sld:Font>
               <sld:CssParameter name="font-family">SansSerif</sld:CssParameter>
@@ -143,3 +208,4 @@
     </sld:UserStyle>
   </sld:NamedLayer>
 </sld:StyledLayerDescriptor>
+

@@ -16,13 +16,12 @@ import { cn } from "@/lib/utils";
 import { Input } from "@/app/shadcnComponents/ui/input";
 import { Button } from "@/app/shadcnComponents/ui/button";
 import { useMapContext } from "../../_mapComponents/MapContext";
+import { MAP_AUTO_NAV_MAX_ZOOM } from "../../_mapComponents/config/mapDefaults";
+import { scheduleFitMapToExtent3857 } from "../../_mapComponents/config/mapAutoNavigation";
 import { refreshServiceWmsLayer } from "../../_mapComponents/layerFactory/serviceLayerFactory";
 import { memoWmsLayerId, parseMemoRowKey } from "./memoConfig";
-import {
-  animateMemoToCenter3857,
-  center3857FromExtent,
-  useMemoMapHighlight,
-} from "./useMemoMapHighlight";
+import { useMemoMapHighlight } from "./useMemoMapHighlight";
+import { useMemoMapClick } from "./useMemoMapClick";
 
 type ListRow = {
   rowKey: string;
@@ -66,6 +65,13 @@ export function MemoListPanel({
   const [highlightGeom, setHighlightGeom] = useState<Record<string, unknown> | null>(null);
 
   useMemoMapHighlight(Boolean(mapContext?.mapReady), highlightGeom);
+
+  useMemoMapClick({
+    enabled: true,
+    onSelectRowKey: (rowKey) => {
+      onSelectDetailId(rowKey);
+    },
+  });
 
   useEffect(() => {
     void call("", "POST", {
@@ -125,11 +131,19 @@ export function MemoListPanel({
       const geom = data?.geomGeoJson4326;
       setHighlightGeom(geom && typeof geom === "object" ? (geom as Record<string, unknown>) : null);
       const map = mapContextRef.current?.mapInstanceRef?.current;
-      const center = center3857FromExtent(data?.extent3857);
-      if (map && center) {
-        animateMemoToCenter3857(map, center, () =>
-          mapContextRef.current?.applyMapViewPaddingRef?.current?.()
-        );
+      const extent = data?.extent3857;
+      if (
+        map &&
+        Array.isArray(extent) &&
+        extent.length === 4 &&
+        extent.every((v: unknown) => Number.isFinite(Number(v)))
+      ) {
+        scheduleFitMapToExtent3857(map, extent.map(Number), {
+          maxZoom: MAP_AUTO_NAV_MAX_ZOOM,
+          pointZoom: 18,
+          applyMapViewPadding: () =>
+            mapContextRef.current?.applyMapViewPaddingRef?.current?.(),
+        });
       }
     } catch {
       setHighlightGeom(null);

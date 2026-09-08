@@ -31,7 +31,9 @@ import { SafetyFacDetailPanel } from "./_mapContents/safty/safetyFac/SafetyFacDe
 import type { SafetyFacFacilityRow } from "./_mapContents/safty/safetyFac/safetyFacSymbols"
 import { VillagePatrolListPanel } from "./_mapContents/safty/villagePatrol/VillagePatrolListPanel"
 import { RadiationShelterPanel } from "./_mapContents/safty/radiationShelter/RadiationShelterPanel"
+import { RadiationShelterDetailPanel } from "./_mapContents/safty/radiationShelter/RadiationShelterDetailPanel"
 import { WaterPlaySignPanel } from "./_mapContents/safty/waterPlaySign/WaterPlaySignPanel"
+import { WaterPlaySignDetailPanel } from "./_mapContents/safty/waterPlaySign/WaterPlaySignDetailPanel"
 import { SafetyHospitalBadPanel } from "./_mapContents/safty/safetyHospitalBad/SafetyHospitalBadPanel"
 import { SafetyJsjReservoirPanel } from "./_mapContents/safty/saftyJsj/SafetyJsjReservoirPanel"
 import { RoadDocManualPanel } from "./_mapContents/road/roadDoc/roadDocManualPanel"
@@ -241,10 +243,16 @@ const VILLAGE_PATROL_PANEL_MAX_WIDTH = 1320
 const RADIATION_SHELTER_PANEL_DEFAULT_WIDTH = 420
 const RADIATION_SHELTER_PANEL_MIN_WIDTH = 320
 const RADIATION_SHELTER_PANEL_MAX_WIDTH = 720
+const RADIATION_SHELTER_DETAIL_DEFAULT_WIDTH = 400
+const RADIATION_SHELTER_DETAIL_MIN_WIDTH = 320
+const RADIATION_SHELTER_DETAIL_MAX_WIDTH = 640
 
-const WATER_PLAY_SIGN_PANEL_DEFAULT_WIDTH = 420
-const WATER_PLAY_SIGN_PANEL_MIN_WIDTH = 320
-const WATER_PLAY_SIGN_PANEL_MAX_WIDTH = 720
+const WATER_PLAY_SIGN_PANEL_DEFAULT_WIDTH = 560
+const WATER_PLAY_SIGN_PANEL_MIN_WIDTH = 360
+const WATER_PLAY_SIGN_PANEL_MAX_WIDTH = 900
+const WATER_PLAY_SIGN_DETAIL_DEFAULT_WIDTH = 400
+const WATER_PLAY_SIGN_DETAIL_MIN_WIDTH = 320
+const WATER_PLAY_SIGN_DETAIL_MAX_WIDTH = 640
 
 const SAFETY_HOSPITAL_BED_PANEL_DEFAULT_WIDTH = 420
 const SAFETY_HOSPITAL_BED_PANEL_MIN_WIDTH = 320
@@ -258,9 +266,17 @@ const ROAD_DOC_PANEL_DEFAULT_WIDTH = 380
 const ROAD_DOC_PANEL_MIN_WIDTH = 280
 const ROAD_DOC_PANEL_MAX_WIDTH = 640
 
-const ROAD_WORK_HANDBOOK_DETAIL_DEFAULT_WIDTH = 400
-const ROAD_WORK_HANDBOOK_DETAIL_MIN_WIDTH = 320
-const ROAD_WORK_HANDBOOK_DETAIL_MAX_WIDTH = 640
+const ROAD_DOC_HANDBOOK_PANEL_DEFAULT_WIDTH = 720
+const ROAD_DOC_HANDBOOK_PANEL_MIN_WIDTH = 560
+const ROAD_DOC_HANDBOOK_PANEL_MAX_WIDTH = 960
+
+const ROAD_WORK_HANDBOOK_DETAIL_DEFAULT_WIDTH = 420
+const ROAD_WORK_HANDBOOK_DETAIL_MIN_WIDTH = 400
+const ROAD_WORK_HANDBOOK_DETAIL_MAX_WIDTH = 960
+
+const ROAD_WORK_HANDBOOK_REF_DETAIL_DEFAULT_WIDTH = 400
+const ROAD_WORK_HANDBOOK_REF_DETAIL_MIN_WIDTH = 320
+const ROAD_WORK_HANDBOOK_REF_DETAIL_MAX_WIDTH = 640
 
 const ROAD_CCTV_PANEL_DEFAULT_WIDTH = 380
 const ROAD_CCTV_PANEL_MIN_WIDTH = 300
@@ -484,6 +500,7 @@ function MapLayoutContent({
   const setRoadCctvPanelOpen = mapContext?.setRoadCctvPanelOpen
   const setSafetyFacPanelOpen = mapContext?.setSafetyFacPanelOpen
   const setComplaintPanelOpen = mapContext?.setComplaintPanelOpen
+  const setMemoPanelOpen = mapContext?.setMemoPanelOpen
   const setRoadRewardPanelOpen = mapContext?.setRoadRewardPanelOpen
   const setRoadCctvOverlay = mapContext?.setRoadCctvOverlay
   const setRoadCctvUnderlayMode = mapContext?.setRoadCctvUnderlayMode
@@ -658,7 +675,7 @@ function MapLayoutContent({
   const [complaintAddOpen, setComplaintAddOpen] = useState(false)
   const roadCctvUnderlayMode = mapContext?.roadCctvUnderlayMode ?? "traffic"
 
-  /** 좌측 서비스 메뉴 전환 시 서비스 레이어 초기화 — 도로대장·시설관리는 총괄(a0020000) 즉시 유지 */
+  /** 좌측 서비스 메뉴 전환 시 서비스 레이어 초기화 — 도로대장만 총괄(a0020000) 유지 */
   const prevServiceMenuRef = useRef<string | null>(null)
   useLayoutEffect(() => {
     const skipRoadLedgerSummary =
@@ -681,7 +698,7 @@ function MapLayoutContent({
         skipRoadLedgerSummary,
       })
     } else if (!skipRoadLedgerSummary) {
-      if (serviceMenuKey === ROAD_LEDGER_OPENED_KEY || serviceMenuKey === ROAD_INFRA_OPENED_KEY) {
+      if (serviceMenuKey === ROAD_LEDGER_OPENED_KEY) {
         ensureRoadLedgerSummaryLayer(layerCtx)
       }
     }
@@ -723,17 +740,41 @@ function MapLayoutContent({
   const [radiationShelterPanelWidth, setRadiationShelterPanelWidth] = useState(
     RADIATION_SHELTER_PANEL_DEFAULT_WIDTH
   )
+  const [radiationShelterDetailId, setRadiationShelterDetailId] = useState<
+    number | typeof LAYER_ROW_NEW_ID | null
+  >(null)
+  const radiationShelterDetailOpen =
+    radiationShelterOpen && radiationShelterDetailId != null
+  const [radiationShelterDetailWidth, setRadiationShelterDetailWidth] = useState(
+    RADIATION_SHELTER_DETAIL_DEFAULT_WIDTH
+  )
+  const [radiationShelterListRefreshKey, setRadiationShelterListRefreshKey] = useState(0)
   const [waterPlaySignPanelWidth, setWaterPlaySignPanelWidth] = useState(
     WATER_PLAY_SIGN_PANEL_DEFAULT_WIDTH
   )
+  const [waterPlaySignDetailId, setWaterPlaySignDetailId] = useState<
+    number | typeof LAYER_ROW_NEW_ID | null
+  >(null)
+  const waterPlaySignDetailOpen = waterPlaySignOpen && waterPlaySignDetailId != null
+  const [waterPlaySignDetailWidth, setWaterPlaySignDetailWidth] = useState(
+    WATER_PLAY_SIGN_DETAIL_DEFAULT_WIDTH
+  )
+  const [waterPlaySignListRefreshKey, setWaterPlaySignListRefreshKey] = useState(0)
   const [villagePatrolPanelWidth, setVillagePatrolPanelWidth] = useState(VILLAGE_PATROL_PANEL_DEFAULT_WIDTH)
   const [safetyHospitalBedPanelWidth, setSafetyHospitalBedPanelWidth] = useState(
     SAFETY_HOSPITAL_BED_PANEL_DEFAULT_WIDTH
   )
   const [jsjReservoirPanelWidth, setJsjReservoirPanelWidth] = useState(JSJ_RESERVOIR_PANEL_DEFAULT_WIDTH)
   const [roadDocPanelWidth, setRoadDocPanelWidth] = useState(ROAD_DOC_PANEL_DEFAULT_WIDTH)
+  const [roadDocHandbookPanelWidth, setRoadDocHandbookPanelWidth] = useState(
+    ROAD_DOC_HANDBOOK_PANEL_DEFAULT_WIDTH
+  )
+  const [roadDocHandbookWide, setRoadDocHandbookWide] = useState(false)
   const [roadWorkHandbookDetailWidth, setRoadWorkHandbookDetailWidth] = useState(
     ROAD_WORK_HANDBOOK_DETAIL_DEFAULT_WIDTH
+  )
+  const [roadWorkHandbookRefDetailWidth, setRoadWorkHandbookRefDetailWidth] = useState(
+    ROAD_WORK_HANDBOOK_REF_DETAIL_DEFAULT_WIDTH
   )
   const [roadCctvPanelWidth, setRoadCctvPanelWidth] = useState(ROAD_CCTV_PANEL_DEFAULT_WIDTH)
   const [roadInfraPanelWidth, setRoadInfraPanelWidth] = useState(ROAD_INFRA_PANEL_DEFAULT_WIDTH)
@@ -798,6 +839,12 @@ function MapLayoutContent({
   const [layerDataPanelWidth, setLayerDataPanelWidth] = useState(LAYER_DATA_PANEL_DEFAULT_WIDTH)
   const [searchBarInputBottomPx, setSearchBarInputBottomPx] = useState(16 + 30)
 
+  const roadWorkHandbookActiveDetailWidth =
+    roadWorkHandbookDetail?.kind === "ref"
+      ? roadWorkHandbookRefDetailWidth
+      : roadWorkHandbookDetailWidth
+  const roadWorkHandbookDetailIsTarget = roadWorkHandbookDetail?.kind !== "ref"
+
   /** 열린 MapSideListPanel 너비 합 → 검색창/레이어바 left 기준 (패널 추가 시 여기만 합산) */
   const totalListPanelWidth =
     (roadInfraOpen ? roadInfraPanelWidth : 0) +
@@ -840,14 +887,16 @@ function MapLayoutContent({
     (safetyWaterOpen ? safetyWaterPanelWidth : 0) +
     (safetyWaterOpen && safetyWaterStatsOpen ? safetyWaterStatsWidth : 0) +
     (waterPlaySignOpen ? waterPlaySignPanelWidth : 0) +
+    (waterPlaySignDetailOpen ? waterPlaySignDetailWidth : 0) +
     (safetyFacOpen ? safetyFacPanelWidth : 0) +
     (safetyFacDetailOpen ? safetyFacDetailWidth : 0) +
     (radiationShelterOpen ? radiationShelterPanelWidth : 0) +
+    (radiationShelterDetailOpen ? radiationShelterDetailWidth : 0) +
     (villagePatrolOpen ? villagePatrolPanelWidth : 0) +
     (safetyHospitalBedOpen ? safetyHospitalBedPanelWidth : 0) +
     (jsjWaterLevelOpen ? jsjReservoirPanelWidth : 0) +
-    (roadDocOpen ? roadDocPanelWidth : 0) +
-    (roadWorkHandbookDetailOpen ? roadWorkHandbookDetailWidth : 0) +
+    (roadDocOpen ? (roadDocHandbookWide ? roadDocHandbookPanelWidth : roadDocPanelWidth) : 0) +
+    (roadWorkHandbookDetailOpen ? roadWorkHandbookActiveDetailWidth : 0) +
     (roadCctvOpen ? roadCctvPanelWidth : 0) +
     // (useLedgerProtoOpen ? useLedgerProtoPanelWidth : 0) +
     // (useLedgerProtoDetailOpen ? useLedgerProtoDetailWidth : 0) +
@@ -948,23 +997,31 @@ function MapLayoutContent({
   const safetyWaterStatsLeftPx = safetyWaterPanelLeftPx + (safetyWaterOpen ? safetyWaterPanelWidth : 0)
   const waterPlaySignPanelLeftPx =
     safetyWaterStatsLeftPx + (safetyWaterOpen && safetyWaterStatsOpen ? safetyWaterStatsWidth : 0)
-  const safetyFacPanelLeftPx =
+  const waterPlaySignDetailLeftPx =
     waterPlaySignPanelLeftPx + (waterPlaySignOpen ? waterPlaySignPanelWidth : 0)
+  const safetyFacPanelLeftPx =
+    waterPlaySignDetailLeftPx + (waterPlaySignDetailOpen ? waterPlaySignDetailWidth : 0)
   const safetyFacDetailLeftPx =
     safetyFacPanelLeftPx + (safetyFacOpen ? safetyFacPanelWidth : 0)
   const radiationShelterPanelLeftPx =
     safetyFacDetailLeftPx + (safetyFacDetailOpen ? safetyFacDetailWidth : 0)
-  const villagePatrolPanelLeftPx =
+  const radiationShelterDetailLeftPx =
     radiationShelterPanelLeftPx + (radiationShelterOpen ? radiationShelterPanelWidth : 0)
+  const villagePatrolPanelLeftPx =
+    radiationShelterDetailLeftPx +
+    (radiationShelterDetailOpen ? radiationShelterDetailWidth : 0)
   const safetyHospitalBedPanelLeftPx =
     villagePatrolPanelLeftPx + (villagePatrolOpen ? villagePatrolPanelWidth : 0)
   const jsjReservoirPanelLeftPx =
     safetyHospitalBedPanelLeftPx + (safetyHospitalBedOpen ? safetyHospitalBedPanelWidth : 0)
   const roadDocPanelLeftPx = jsjReservoirPanelLeftPx + (jsjWaterLevelOpen ? jsjReservoirPanelWidth : 0)
+  const roadDocActivePanelWidth = roadDocHandbookWide
+    ? roadDocHandbookPanelWidth
+    : roadDocPanelWidth
   const roadWorkHandbookDetailLeftPx =
-    roadDocPanelLeftPx + (roadDocOpen ? roadDocPanelWidth : 0)
+    roadDocPanelLeftPx + (roadDocOpen ? roadDocActivePanelWidth : 0)
   const roadCctvPanelLeftPx =
-    roadWorkHandbookDetailLeftPx + (roadWorkHandbookDetailOpen ? roadWorkHandbookDetailWidth : 0)
+    roadWorkHandbookDetailLeftPx + (roadWorkHandbookDetailOpen ? roadWorkHandbookActiveDetailWidth : 0)
   // 점용대장(프) 더미 leftPx 비활성 — 점사용료는 CCTV 다음에 바로 배치
   // const useLedgerProtoPanelLeftPx =
   //   roadCctvPanelLeftPx + (roadCctvOpen ? roadCctvPanelWidth : 0)
@@ -1051,16 +1108,6 @@ function MapLayoutContent({
     setUseFeePanelOpen?.(useFeeOpen)
   }, [setUseFeePanelOpen, useFeeOpen])
 
-  /** 시스템 전환 시 — 다른 시스템 점용대장(하천·도로·국공유지) WMS만 끄기 */
-  useEffect(() => {
-    clearForeignOccupationLedgerWmsLayers(setVisibleLayerNames, systemKeyFromUrl)
-  }, [systemKeyFromUrl, setVisibleLayerNames])
-
-  /** 시스템 전환 시 — 다른 시스템 점사용료 WMS만 끄기 */
-  useEffect(() => {
-    clearForeignUseFeeWmsLayers(setVisibleLayerNames, systemKeyFromUrl)
-  }, [systemKeyFromUrl, setVisibleLayerNames])
-
   useEffect(() => {
     setRoadLedgerPanelOpen?.(roadLedgerOpen)
   }, [setRoadLedgerPanelOpen, roadLedgerOpen])
@@ -1145,6 +1192,10 @@ function MapLayoutContent({
   }, [setComplaintPanelOpen, complaintManagementOpen])
 
   useEffect(() => {
+    setMemoPanelOpen?.(memoManagementOpen)
+  }, [setMemoPanelOpen, memoManagementOpen])
+
+  useEffect(() => {
     setRoadRewardPanelOpen?.(roadRewardOpen)
   }, [setRoadRewardPanelOpen, roadRewardOpen])
 
@@ -1154,12 +1205,7 @@ function MapLayoutContent({
       setRoadCctvUnderlayMode?.("traffic")
       setRoadCctvExtentWgs84?.(null)
       const id = ROAD_LEDGER_SUMMARY_LAYER_ID.toLowerCase()
-      if (roadInfraOpen) {
-        setVisibleLayerNames?.((prev) => {
-          if (prev.has(id)) return prev
-          return new Set(prev).add(id)
-        })
-      } else if (!roadLedgerOpen) {
+      if (!roadLedgerOpen) {
         /** 도로대장 목록이 열려 있으면 RoadLedgerListPanel이 총괄 레이어를 관리하므로 건드리지 않음 */
         setVisibleLayerNames?.((prev) => {
           if (!prev.has(id)) return prev
@@ -1171,7 +1217,6 @@ function MapLayoutContent({
     }
   }, [
     roadCctvOpen,
-    roadInfraOpen,
     roadLedgerOpen,
     setRoadCctvOverlay,
     setRoadCctvUnderlayMode,
@@ -1185,13 +1230,6 @@ function MapLayoutContent({
     setIdentifyResultList?.(null)
     setIdentifySelectedRow?.(null)
   }, [roadCctvOpen, setIdentifyResultList, setIdentifySelectedRow])
-
-  /** 시설관리 진입 시 도로대장 총괄(a0020000) 레이어 표시 — CCTV가 통행 모드일 때는 제외(배타) */
-  useEffect(() => {
-    if (!roadInfraOpen || !setVisibleLayerNames) return
-    if (roadCctvOpen && roadCctvUnderlayMode === "traffic") return
-    ensureRoadLedgerSummaryLayer({ setVisibleLayerNames })
-  }, [roadInfraOpen, roadCctvOpen, roadCctvUnderlayMode, setVisibleLayerNames])
 
   /**
    * CCTV 패널: 통행 타일 vs 도로대장 총괄(a0020000) 배타.
@@ -1304,6 +1342,22 @@ function MapLayoutContent({
       })
       .catch(() => setSystemListForOpened([]))
   }, [])
+
+  /** 시스템 전환 시 — 현재 시스템 메뉴에 없는 점용대장 WMS만 끄기 */
+  useEffect(() => {
+    if (systemListForOpened.length === 0) return
+    const serviceList =
+      systemListForOpened.find((s) => s.sys_key === systemKeyFromUrl)?.serviceList ?? []
+    clearForeignOccupationLedgerWmsLayers(setVisibleLayerNames, systemKeyFromUrl, serviceList)
+  }, [systemKeyFromUrl, setVisibleLayerNames, systemListForOpened])
+
+  /** 시스템 전환 시 — 현재 시스템 메뉴에 없는 점사용료 WMS만 끄기 */
+  useEffect(() => {
+    if (systemListForOpened.length === 0) return
+    const serviceList =
+      systemListForOpened.find((s) => s.sys_key === systemKeyFromUrl)?.serviceList ?? []
+    clearForeignUseFeeWmsLayers(setVisibleLayerNames, systemKeyFromUrl, serviceList)
+  }, [systemKeyFromUrl, setVisibleLayerNames, systemListForOpened])
 
   /**
    * system 변경 → 레이어 전부 끄기 + 전환 scrub.
@@ -1538,6 +1592,7 @@ function MapLayoutContent({
     if (!roadDocOpen) {
       setRoadWorkHandbookDetail(null)
       setRoadWorkHandbookMode("target")
+      setRoadDocHandbookWide(false)
     }
   }, [roadDocOpen])
 
@@ -1611,6 +1666,26 @@ function MapLayoutContent({
   useEffect(() => {
     if (!groundwaterPermitOpen) setGroundwaterPermitDetailId(null)
   }, [groundwaterPermitOpen])
+
+  useEffect(() => {
+    if (!radiationShelterOpen) setRadiationShelterDetailId(null)
+  }, [radiationShelterOpen])
+
+  useEffect(() => {
+    if (!waterPlaySignOpen) setWaterPlaySignDetailId(null)
+  }, [waterPlaySignOpen])
+
+  useEffect(() => {
+    if (radiationShelterDetailOpen) {
+      setRadiationShelterDetailWidth(RADIATION_SHELTER_DETAIL_DEFAULT_WIDTH)
+    }
+  }, [radiationShelterDetailOpen])
+
+  useEffect(() => {
+    if (waterPlaySignDetailOpen) {
+      setWaterPlaySignDetailWidth(WATER_PLAY_SIGN_DETAIL_DEFAULT_WIDTH)
+    }
+  }, [waterPlaySignDetailOpen])
 
   useEffect(() => {
     setFmsLinkagePanelOpen?.(fmsLinkageOpen)
@@ -1793,11 +1868,13 @@ function MapLayoutContent({
   }
 
   const handleCloseRadiationShelter = () => {
+    setRadiationShelterDetailId(null)
     const next = openedWindows.filter((w) => w !== RADIATION_SHELTER_OPENED_KEY)
     setOpened(next)
   }
 
   const handleCloseWaterPlaySign = () => {
+    setWaterPlaySignDetailId(null)
     const next = openedWindows.filter((w) => w !== WATER_PLAY_SIGN_OPENED_KEY)
     setOpened(next)
   }
@@ -2752,7 +2829,32 @@ function MapLayoutContent({
                 onWidthChange={setWaterPlaySignPanelWidth}
                 contentClassName="overflow-hidden"
               >
-                <WaterPlaySignPanel onClose={handleCloseWaterPlaySign} />
+                <WaterPlaySignPanel
+                  onClose={handleCloseWaterPlaySign}
+                  selectedDetailId={waterPlaySignDetailId}
+                  onSelectDetailId={setWaterPlaySignDetailId}
+                  listRefreshKey={waterPlaySignListRefreshKey}
+                />
+              </MapSideListPanel>
+            </div>
+          )}
+          {waterPlaySignDetailOpen && waterPlaySignDetailId != null && (
+            <div className="pointer-events-auto shrink-0">
+              <MapSideListPanel
+                width={waterPlaySignDetailWidth}
+                minWidth={WATER_PLAY_SIGN_DETAIL_MIN_WIDTH}
+                maxWidth={WATER_PLAY_SIGN_DETAIL_MAX_WIDTH}
+                leftOffsetPx={waterPlaySignDetailLeftPx}
+                onWidthChange={setWaterPlaySignDetailWidth}
+                contentClassName="overflow-hidden"
+              >
+                <WaterPlaySignDetailPanel
+                  detailId={waterPlaySignDetailId}
+                  onClose={() => setWaterPlaySignDetailId(null)}
+                  onListRefresh={() => setWaterPlaySignListRefreshKey((k) => k + 1)}
+                  onCreated={(newId) => setWaterPlaySignDetailId(newId)}
+                  onDeleted={() => setWaterPlaySignDetailId(null)}
+                />
               </MapSideListPanel>
             </div>
           )}
@@ -2800,7 +2902,32 @@ function MapLayoutContent({
                 onWidthChange={setRadiationShelterPanelWidth}
                 contentClassName="overflow-hidden"
               >
-                <RadiationShelterPanel onClose={handleCloseRadiationShelter} />
+                <RadiationShelterPanel
+                  onClose={handleCloseRadiationShelter}
+                  selectedDetailId={radiationShelterDetailId}
+                  onSelectDetailId={setRadiationShelterDetailId}
+                  listRefreshKey={radiationShelterListRefreshKey}
+                />
+              </MapSideListPanel>
+            </div>
+          )}
+          {radiationShelterDetailOpen && radiationShelterDetailId != null && (
+            <div className="pointer-events-auto shrink-0">
+              <MapSideListPanel
+                width={radiationShelterDetailWidth}
+                minWidth={RADIATION_SHELTER_DETAIL_MIN_WIDTH}
+                maxWidth={RADIATION_SHELTER_DETAIL_MAX_WIDTH}
+                leftOffsetPx={radiationShelterDetailLeftPx}
+                onWidthChange={setRadiationShelterDetailWidth}
+                contentClassName="overflow-hidden"
+              >
+                <RadiationShelterDetailPanel
+                  detailId={radiationShelterDetailId}
+                  onClose={() => setRadiationShelterDetailId(null)}
+                  onListRefresh={() => setRadiationShelterListRefreshKey((k) => k + 1)}
+                  onCreated={(newId) => setRadiationShelterDetailId(newId)}
+                  onDeleted={() => setRadiationShelterDetailId(null)}
+                />
               </MapSideListPanel>
             </div>
           )}
@@ -2851,11 +2978,21 @@ function MapLayoutContent({
               <div className="contents">
                 <div className="pointer-events-auto shrink-0">
                   <MapSideListPanel
-                    width={roadDocPanelWidth}
-                    minWidth={ROAD_DOC_PANEL_MIN_WIDTH}
-                    maxWidth={ROAD_DOC_PANEL_MAX_WIDTH}
+                    width={roadDocActivePanelWidth}
+                    minWidth={
+                      roadDocHandbookWide
+                        ? ROAD_DOC_HANDBOOK_PANEL_MIN_WIDTH
+                        : ROAD_DOC_PANEL_MIN_WIDTH
+                    }
+                    maxWidth={
+                      roadDocHandbookWide
+                        ? ROAD_DOC_HANDBOOK_PANEL_MAX_WIDTH
+                        : ROAD_DOC_PANEL_MAX_WIDTH
+                    }
                     leftOffsetPx={roadDocPanelLeftPx}
-                    onWidthChange={setRoadDocPanelWidth}
+                    onWidthChange={
+                      roadDocHandbookWide ? setRoadDocHandbookPanelWidth : setRoadDocPanelWidth
+                    }
                     contentClassName="overflow-hidden"
                   >
                     <RoadDocManualPanel
@@ -2865,17 +3002,30 @@ function MapLayoutContent({
                       handbookSelected={roadWorkHandbookDetail}
                       onHandbookSelect={setRoadWorkHandbookDetail}
                       startOnHandbook={handbookDeeplink}
+                      onHandbookWideChange={setRoadDocHandbookWide}
                     />
                   </MapSideListPanel>
                 </div>
                 {roadWorkHandbookDetail && (
                   <div className="pointer-events-auto shrink-0">
                     <MapSideListPanel
-                      width={roadWorkHandbookDetailWidth}
-                      minWidth={ROAD_WORK_HANDBOOK_DETAIL_MIN_WIDTH}
-                      maxWidth={ROAD_WORK_HANDBOOK_DETAIL_MAX_WIDTH}
+                      width={roadWorkHandbookActiveDetailWidth}
+                      minWidth={
+                        roadWorkHandbookDetailIsTarget
+                          ? ROAD_WORK_HANDBOOK_DETAIL_MIN_WIDTH
+                          : ROAD_WORK_HANDBOOK_REF_DETAIL_MIN_WIDTH
+                      }
+                      maxWidth={
+                        roadWorkHandbookDetailIsTarget
+                          ? ROAD_WORK_HANDBOOK_DETAIL_MAX_WIDTH
+                          : ROAD_WORK_HANDBOOK_REF_DETAIL_MAX_WIDTH
+                      }
                       leftOffsetPx={roadWorkHandbookDetailLeftPx}
-                      onWidthChange={setRoadWorkHandbookDetailWidth}
+                      onWidthChange={
+                        roadWorkHandbookDetailIsTarget
+                          ? setRoadWorkHandbookDetailWidth
+                          : setRoadWorkHandbookRefDetailWidth
+                      }
                       contentClassName="overflow-hidden"
                     >
                       <RoadWorkHandbookDetailPanel

@@ -211,7 +211,7 @@ export function SafetyFacHistorySection({ hisGubun, ftrIdn }: Props) {
                     <col className="w-8" />
                     <col />
                     <col className="w-16" />
-                    <col className="w-[4.5rem]" />
+                    <col className="w-[5.75rem]" />
                   </colgroup>
                   <thead className="standard-table-thead bg-slate-100 dark:bg-muted">
                     <tr>
@@ -276,7 +276,7 @@ export function SafetyFacHistorySection({ hisGubun, ftrIdn }: Props) {
                               {it.author}
                             </td>
                             <td
-                              className="standard-table-td-date truncate text-[10px]"
+                              className="standard-table-td-date max-w-none overflow-visible whitespace-nowrap text-[10px]"
                               title={it.createdAt}
                             >
                               {it.createdAt}

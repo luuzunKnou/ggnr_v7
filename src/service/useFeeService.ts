@@ -1,7 +1,7 @@
 /**
  * 점사용료 — water|road|public_ngl_fee_list 조회 + 차세대 수동 연계
  */
-import { and, asc, desc, eq, ilike, or, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, ilike, inArray, or, sql } from 'drizzle-orm';
 import { db } from '@/database/db';
 import {
   type NglFeeList,
@@ -488,6 +488,37 @@ export async function getUseFeeList(params?: {
   }
 }
 
+/** 점용 허가번호(대장번호)로 겹친 점사용료 후보 */
+export async function listUseFeeHitsByLedgerNos(params?: {
+  ledgerNos?: string[];
+  serEng?: string;
+  system?: string;
+}): Promise<{ rows: { id: string; ledgerNo: string }[]; error?: string }> {
+  const nos = [
+    ...new Set(
+      (params?.ledgerNos ?? [])
+        .map((s) => String(s ?? '').trim())
+        .filter(Boolean)
+    ),
+  ].slice(0, 50);
+  if (nos.length === 0) return { rows: [] };
+  const nglFeeList = resolveFeeTable(params);
+  try {
+    const rows = await db
+      .select({ id: nglFeeList.id, ledgerNo: nglFeeList.ledgerNo })
+      .from(nglFeeList)
+      .where(inArray(nglFeeList.ledgerNo, nos));
+    return {
+      rows: rows.map((r) => ({
+        id: String(r.id),
+        ledgerNo: String(r.ledgerNo ?? ''),
+      })),
+    };
+  } catch (e) {
+    return { rows: [], error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
 const DETAIL_FIELD_ORDER: { key: keyof NglFeeList; db: string }[] = [
   { key: 'feeStatus', db: 'fee_status' },
   { key: 'lvyNo', db: 'lvy_no' },
@@ -741,7 +772,7 @@ export async function getUseFeeExtent3857ById(params: {
   }
 }
 
-/** 수동 연계 (운영/점검용). fyr 미입력 시 2000~현재연도. 완료를 기다리지 않고 시작만 알림 */
+/** 수동 연계 (운영/점검용). fyr 미입력 시 데이터 없으면 2000~올해, 있으면 저장된 최댓값~올해. 완료를 기다리지 않고 시작만 알림 */
 export async function runNextGenSync(params?: { fyr?: string }) {
   await requireMapAdminToolsAccess();
   const block = getNextGenFeeSyncBlockReason();

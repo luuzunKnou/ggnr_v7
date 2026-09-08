@@ -34,13 +34,14 @@ export function isOpenedTokenAllowedForServiceList(
 function applyOpenedAndLedgerScrub(
   params: URLSearchParams,
   targetSystemKey: string,
-  nextOpened: string[]
+  nextOpened: string[],
+  serviceList: string[]
 ): void {
   if (nextOpened.length > 0) params.set('opened', nextOpened.join(','));
   else params.delete('opened');
 
-  scrubOccupationLedgerFromMapSearchParams(params, targetSystemKey);
-  scrubUseFeeFromMapSearchParams(params, targetSystemKey);
+  scrubOccupationLedgerFromMapSearchParams(params, targetSystemKey, serviceList);
+  scrubUseFeeFromMapSearchParams(params, targetSystemKey, serviceList);
 
   const openedAfter = (params.get('opened') ?? '').split(',').filter(Boolean);
   const hasListView = openedAfter.some((t) => normalizeOpenedToken(t) === 'listView');
@@ -66,7 +67,7 @@ export function scrubOpenedNotAllowedForSystem(
     if (AUXILIARY_OPENED_TOKENS.has(normalized)) return true;
     return isOpenedTokenAllowedForServiceList(token, targetServiceList);
   });
-  applyOpenedAndLedgerScrub(params, targetSystemKey, nextOpened);
+  applyOpenedAndLedgerScrub(params, targetSystemKey, nextOpened, targetServiceList);
 }
 
 /**
@@ -83,5 +84,5 @@ export function scrubMapSearchParamsOnSystemSwitch(
   const nextOpened = opened.filter((token) =>
     isOpenedTokenAllowedForServiceList(token, targetServiceList)
   );
-  applyOpenedAndLedgerScrub(params, targetSystemKey, nextOpened);
+  applyOpenedAndLedgerScrub(params, targetSystemKey, nextOpened, targetServiceList);
 }

@@ -1,11 +1,56 @@
+/* 물놀이 표지판과 동일 심볼·라벨 패턴. manage_cd별 원 배경색·라벨색 */
 * {
-  mark: symbol(circle);
-  mark-size: [min(18, 5 + sqrt(100000 / env('wms_scale_denominator', 10000)) * 1.5)];
-  :mark {
-    fill: #2196F3;
-    stroke: #FFFFFF;
-    stroke-width: 1.5;
-    stroke-opacity: 1.5;
-    fill-opacity: 1.5;
-  }
+  mark: url("http://127.0.0.1:8090/geoserver/www/symbol/safety/water_play_mgmt_zone_default.svg");
+  mark-mime: "image/svg+xml";
+  mark-size: [min(18, 5 + sqrt(100000 / env('wms_scale_denominator', 10000)) * 4.0)];
+  mark-anchor: 0.5 0.5;
+  mark-offset: 0 0;
+
+  label: [plc_nm];
+  font-size: 14;
+  font-fill: #EAB308;
+  font-weight: bold;
+  font-family: "Nanum Gothic", "Malgun Gothic", "SansSerif";
+  halo-radius: 2;
+  halo-color: #FFFFFF;
+  label-anchor: 0.5 1.0;
+  label-offset: 0 -16;
+}
+
+[manage_cd = 2],
+[manage_cd = '2'] {
+  mark: url("http://127.0.0.1:8090/geoserver/www/symbol/safety/water_play_mgmt_zone_2.svg");
+  mark-mime: "image/svg+xml";
+  mark-size: [min(18, 5 + sqrt(100000 / env('wms_scale_denominator', 10000)) * 4.0)];
+  mark-anchor: 0.5 0.5;
+  mark-offset: 0 0;
+
+  label: [plc_nm];
+  font-size: 14;
+  font-fill: #16A34A;
+  font-weight: bold;
+  font-family: "Nanum Gothic", "Malgun Gothic", "SansSerif";
+  halo-radius: 2;
+  halo-color: #FFFFFF;
+  label-anchor: 0.5 1.0;
+  label-offset: 0 -16;
+}
+
+[manage_cd = 3],
+[manage_cd = '3'] {
+  mark: url("http://127.0.0.1:8090/geoserver/www/symbol/safety/water_play_mgmt_zone_3.svg");
+  mark-mime: "image/svg+xml";
+  mark-size: [min(18, 5 + sqrt(100000 / env('wms_scale_denominator', 10000)) * 4.0)];
+  mark-anchor: 0.5 0.5;
+  mark-offset: 0 0;
+
+  label: [plc_nm];
+  font-size: 14;
+  font-fill: #DC2626;
+  font-weight: bold;
+  font-family: "Nanum Gothic", "Malgun Gothic", "SansSerif";
+  halo-radius: 2;
+  halo-color: #FFFFFF;
+  label-anchor: 0.5 1.0;
+  label-offset: 0 -16;
 }

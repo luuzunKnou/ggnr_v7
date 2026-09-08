@@ -21,6 +21,7 @@ type HistoryPayload = {
   geoserverMsg?: string;
   message?: string;
   option?: string[];
+  memo?: string;
 };
 
 export type ApplyRestartReadyState = {
@@ -89,6 +90,8 @@ export async function flushPendingVersionHistory(): Promise<void> {
     status: 'success',
     message,
     option,
+    memo:
+      typeof payload.memo === 'string' && payload.memo.trim() ? payload.memo.trim() : undefined,
     version: resolveAppliedVersionLabel(
       typeof payload.version === 'string' ? payload.version.trim() : undefined
     ),

@@ -12,7 +12,7 @@
  * 사용:
  *   run.ts setupDb(start) → runAdditiveSchemaSync()
  *   npx tsx scripts/drizzle-push-additive.ts          # apply
- *   npx tsx scripts/drizzle-push-additive.ts preview  # JSON → stdout, 로그 → stderr
+ *   npx tsx scripts/drizzle-push-additive.ts preview  # JSON → stdout, preview 집계 로그만 stderr
  */
 import { drizzle } from 'drizzle-orm/node-postgres';
 import { is, sql } from 'drizzle-orm';
@@ -605,7 +605,7 @@ export async function runAdditiveSchemaSync(): Promise<AdditiveSyncResult> {
   const collected = await collectStatements({ quiet: false });
   try {
     if (collected.errorKind === 'env') {
-      console.warn(`${LOG} skip(env) — DB env 없음, additive sync 생략`);
+      console.log(`${LOG} skip(env) — DB env 없음, additive sync 생략`);
       console.log(`${LOG} done — applied=0 skipped=0 failed=0`);
       return empty;
     }
@@ -615,15 +615,15 @@ export async function runAdditiveSchemaSync(): Promise<AdditiveSyncResult> {
     }
 
     if (collected.hasDataLoss || collected.warnings.length > 0) {
-      console.warn(
-        `${LOG} warn(dataLoss) — drizzle 경고 ${collected.warnings.length}건 (삭제·truncate 후보는 미실행)`
+      console.log(
+        `${LOG} info(dataLoss) — drizzle 경고 ${collected.warnings.length}건 (삭제·truncate 후보는 미실행)`
       );
       for (const w of collected.warnings.slice(0, MAX_WARN_SAMPLES)) {
-        console.warn(`${LOG} warn(dataLoss) — ${shorten(String(w), 240)}`);
+        console.log(`${LOG} info(dataLoss) — ${shorten(String(w), 240)}`);
       }
       if (collected.warnings.length > MAX_WARN_SAMPLES) {
-        console.warn(
-          `${LOG} warn(dataLoss) — …외 ${collected.warnings.length - MAX_WARN_SAMPLES}건`
+        console.log(
+          `${LOG} info(dataLoss) — …외 ${collected.warnings.length - MAX_WARN_SAMPLES}건`
         );
       }
     }
@@ -648,19 +648,19 @@ export async function runAdditiveSchemaSync(): Promise<AdditiveSyncResult> {
       if (category === 'drop') {
         counts.skipped += 1;
         counts.skippedDrop += 1;
-        console.warn(`${LOG} skip(DROP) — ${shorten(stmt)} 미실행 (데이터 보존)`);
+        console.log(`${LOG} skip(DROP) — ${shorten(stmt)} 미실행 (데이터 보존)`);
         continue;
       }
       if (category === 'alter') {
         counts.skipped += 1;
         counts.skippedAlter += 1;
-        console.warn(`${LOG} skip(ALTER) — ${shorten(stmt)} 미실행 (고정 정책)`);
+        console.log(`${LOG} skip(ALTER) — ${shorten(stmt)} 미실행 (고정 정책)`);
         continue;
       }
       if (category === 'delete') {
         counts.skipped += 1;
         counts.skippedDestructive += 1;
-        console.warn(`${LOG} skip(destructive) — ${shorten(stmt)} 미실행`);
+        console.log(`${LOG} skip(destructive) — ${shorten(stmt)} 미실행`);
         continue;
       }
 
@@ -689,7 +689,7 @@ export async function runAdditiveSchemaSync(): Promise<AdditiveSyncResult> {
       console.log(`${LOG} applied: … and ${counts.applied - MAX_APPLIED_LOG} more`);
     }
     if (counts.skippedAlter > 0) {
-      console.warn(
+      console.log(
         `${LOG} skip(ALTER) — 코드와 DB가 다를 수 있음. 필요 시 개발자 PC에서 수동 반영`
       );
     }

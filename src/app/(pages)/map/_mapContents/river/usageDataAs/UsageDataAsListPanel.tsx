@@ -16,6 +16,7 @@ import {
   clearUsageDataAsWmsLayers,
   ensureUsageDataAsWmsLayersVisible,
   isUsageDataAsSisulWmsVisible,
+  setUsageDataAsCadastralOverlay,
   toggleUsageDataAsSisulWmsLayer,
 } from "./usageDataAsMapSync";
 import {
@@ -58,6 +59,7 @@ export function UsageDataAsListPanel({
 
   useEffect(() => {
     ensureUsageDataAsWmsLayersVisible(mapContextRef.current?.setVisibleLayerNames);
+    setUsageDataAsCadastralOverlay(true);
     return () => {
       // 이 패널이 켠 것만 아니라 점용 WMS 전부 끔 (시스템 이동·재진입 잔상 방지)
       clearUsageDataAsWmsLayers(mapContextRef.current?.setVisibleLayerNames);

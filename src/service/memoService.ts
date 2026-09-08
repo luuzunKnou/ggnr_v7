@@ -421,24 +421,38 @@ async function readMemoMapFocus(params: {
   lat4326: number | null;
 }> {
   const g = quoteIdent(params.geomCol);
+  /** SRID 0이면 프로젝트 저장 좌표계(5181). ST_X는 점만 되므로 범위·표면점으로 조회 */
+  const geom5181 = `CASE WHEN ST_SRID(${g}) = 0 THEN ST_SetSRID(${g}, 5181) ELSE ${g} END`;
+  const g3857 = `ST_Transform(${geom5181}, 3857)`;
+  const g4326 = `ST_Transform(${geom5181}, 4326)`;
   const q = `SELECT
-               ST_X(ST_Transform(${g}, 3857))::float8 AS x,
-               ST_Y(ST_Transform(${g}, 3857))::float8 AS y,
-               ST_X(ST_Transform(${g}, 4326))::float8 AS lon,
-               ST_Y(ST_Transform(${g}, 4326))::float8 AS lat,
-               ST_AsGeoJSON(ST_Transform(${g}, 4326))::text AS g
+               ST_XMin(${g3857})::float8 AS xmin,
+               ST_YMin(${g3857})::float8 AS ymin,
+               ST_XMax(${g3857})::float8 AS xmax,
+               ST_YMax(${g3857})::float8 AS ymax,
+               ST_X(ST_Transform(ST_PointOnSurface(${geom5181}), 4326))::float8 AS lon,
+               ST_Y(ST_Transform(ST_PointOnSurface(${geom5181}), 4326))::float8 AS lat,
+               ST_AsGeoJSON(${g4326})::text AS g
              FROM ${quoteIdent(params.schema)}.${quoteIdent(params.table)}
              WHERE ${quoteIdent(params.keyCol)}::text = '${esc(params.memoKey)}'
                AND ${g} IS NOT NULL
              LIMIT 1`;
   const res = await db.execute(sql.raw(q));
-  const row = res.rows?.[0] as { x?: unknown; y?: unknown; lon?: unknown; lat?: unknown; g?: unknown } | undefined;
-  const x = Number(row?.x);
-  const y = Number(row?.y);
+  const row = res.rows?.[0] as {
+    xmin?: unknown;
+    ymin?: unknown;
+    xmax?: unknown;
+    ymax?: unknown;
+    lon?: unknown;
+    lat?: unknown;
+    g?: unknown;
+  } | undefined;
+  const coords = [Number(row?.xmin), Number(row?.ymin), Number(row?.xmax), Number(row?.ymax)];
+  const extent3857 = coords.every((v) => Number.isFinite(v))
+    ? (coords as [number, number, number, number])
+    : null;
   const lon = Number(row?.lon);
   const lat = Number(row?.lat);
-  const extent3857 =
-    Number.isFinite(x) && Number.isFinite(y) ? ([x, y, x, y] as [number, number, number, number]) : null;
   return {
     extent3857,
     geomGeoJson4326: parseGeoJsonGeometry(row?.g),

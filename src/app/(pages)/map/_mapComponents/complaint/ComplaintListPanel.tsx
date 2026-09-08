@@ -177,8 +177,9 @@ export default function ComplaintListPanel({
   }, [loadList, refreshKey]);
 
   const openDetailByCompKey = useCallback(
-    async (compKey: number) => {
+    async (compKey: number, options?: { flyToMap?: boolean }) => {
       if (!setComplaintDetail) return;
+      const flyToMap = options?.flyToMap !== false;
       try {
         const res = await call('', 'POST', {
           service: 'complaintService',
@@ -188,6 +189,7 @@ export default function ComplaintListPanel({
         if (res?.success && res?.data) {
           const data = res.data as CompUI;
           setComplaintDetail(data as Parameters<typeof setComplaintDetail>[0]);
+          if (!flyToMap) return;
           const map = mapContext?.mapInstanceRef?.current;
           const center = center3857FromExtent(data.extent3857);
           if (map && center) {
@@ -211,14 +213,14 @@ export default function ComplaintListPanel({
         setComplaintDetail?.(null);
         return;
       }
-      await openDetailByCompKey(comp.compKey);
+      await openDetailByCompKey(comp.compKey, { flyToMap: true });
     },
     [openDetailByCompKey, complaintDetail?.compKey, setComplaintDetail]
   );
 
   useComplaintMapClick({
     enabled: true,
-    onSelectCompKey: openDetailByCompKey,
+    onSelectCompKey: (compKey) => openDetailByCompKey(compKey, { flyToMap: false }),
   });
 
   useComplaintMapHighlight(

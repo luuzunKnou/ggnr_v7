@@ -85,8 +85,6 @@ export function UseFeeListPanel({ onClose, selectedId, onSelectId, serEng }: Lis
   const loadingMoreRef = useRef(false)
   const rowsLenRef = useRef(0)
   const totalRef = useRef(0)
-  /** 지도 픽이 클릭 도형으로 맞춘 경우 — selectedId 자동 fit 1회 건너뜀 */
-  const skipAutoFitOnceRef = useRef(false)
   rowsLenRef.current = rows.length
   totalRef.current = total
 
@@ -154,41 +152,22 @@ export function UseFeeListPanel({ onClose, selectedId, onSelectId, serEng }: Lis
   )
 
   useEffect(() => {
-    const key = String(selectedId ?? '').trim()
-    if (!key) return
-    if (skipAutoFitOnceRef.current) {
-      skipAutoFitOnceRef.current = false
-      return
-    }
-    void fitMapToFeeId(key)
-  }, [selectedId, fitMapToFeeId])
-
-  useEffect(() => {
     const pickRef = mapContext?.applyUseFeeMapPickRef
     if (!pickRef) return
     pickRef.current = (pick) => {
       const id = String(pick?.id ?? '').trim()
       if (!id) return
       const opts = Array.isArray(pick?.overlapOptions) ? pick.overlapOptions : []
-      mapContext?.setUseFeeMapHitOptions?.(opts.length > 1 ? opts : [])
-
-      const clickedExt = pick?.extent3857
-      if (
-        Array.isArray(clickedExt) &&
-        clickedExt.length === 4 &&
-        clickedExt.every((v) => Number.isFinite(Number(v)))
-      ) {
-        skipAutoFitOnceRef.current = true
-        onSelectId(id)
-        fitMapAfterDetailLayout(clickedExt.map(Number))
-        return
+      if (opts.length > 1) {
+        mapContext?.setUseFeeMapHitOptions?.(opts)
       }
+      /** 지도 도형 클릭은 현재 화면을 유지한다. 목록 행 클릭만 맞춤. */
       onSelectId(id)
     }
     return () => {
       pickRef.current = null
     }
-  }, [mapContext, onSelectId, fitMapAfterDetailLayout])
+  }, [mapContext, onSelectId])
 
   useEffect(() => {
     if (!selectedId) return
@@ -210,13 +189,10 @@ export function UseFeeListPanel({ onClose, selectedId, onSelectId, serEng }: Lis
     (id: string) => {
       if (!id) return
       mapContext?.setUseFeeMapHitOptions?.([])
-      if (id === selectedId) {
-        void fitMapToFeeId(id)
-        return
-      }
       onSelectId(id)
+      void fitMapToFeeId(id)
     },
-    [selectedId, onSelectId, fitMapToFeeId, mapContext]
+    [onSelectId, fitMapToFeeId, mapContext]
   )
 
   useEffect(() => {

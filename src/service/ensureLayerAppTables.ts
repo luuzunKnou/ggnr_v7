@@ -1507,6 +1507,37 @@ export async function ensureRoadFrontageMarkerTables(result?: EnsureResult): Pro
 }
 
 /** 공통 점용대장 본대·필지·물건지 × water|road|public (9개) */
+/** 기존 필지·물건지 테이블에 허가번호 컬럼 보강 (CREATE IF NOT EXISTS 로는 안 붙음) */
+async function ensureOccupationLedgerChildPermitNo(result: EnsureResult): Promise<void> {
+  for (const prefix of OCCUPATION_PREFIXES) {
+    const base = `${prefix}_occupationledger`;
+    for (const suffix of ['_jijuk', '_mgj'] as const) {
+      const table = `${base}${suffix}`;
+      const fq = `layer.${table}`;
+      try {
+        if ((await tableExists('layer', table)) !== 'BASE TABLE') continue;
+        if (!(await columnExists('layer', table, 'permit_no'))) {
+          await db.execute(
+            sql.raw(`ALTER TABLE layer.${table} ADD COLUMN IF NOT EXISTS permit_no text`)
+          );
+          result.created.push(`${fq}.permit_no`);
+        }
+        await db.execute(
+          sql.raw(
+            `CREATE INDEX IF NOT EXISTS ${table}_permit_no_idx ON layer.${table} (permit_no)`
+          )
+        );
+        await db.execute(
+          sql.raw(`COMMENT ON COLUMN layer.${table}.permit_no IS '본표 허가번호'`)
+        );
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : String(e);
+        result.errors.push(`${fq}.permit_no: ${msg}`);
+      }
+    }
+  }
+}
+
 export async function ensureOccupationLedgerTables(result?: EnsureResult): Promise<EnsureResult> {
   const out: EnsureResult = result ?? { created: [], moved: [], existed: [], errors: [] };
   await ensureSchemaLayer();
@@ -1528,6 +1559,7 @@ export async function ensureOccupationLedgerTables(result?: EnsureResult): Promi
       result: out,
     });
   }
+  await ensureOccupationLedgerChildPermitNo(out);
   return out;
 }
 
