@@ -196,6 +196,23 @@ if errorlevel 1 (
   echo         stdout: %LOG_OUT%
   echo         stderr: %LOG_ERR%
   "%NSSM%" status %SERVICE_NAME%
+  echo.
+  echo ----- last stderr ^(if any^) -----
+  if exist "%LOG_ERR%" (
+    powershell -NoProfile -Command "Get-Content -LiteralPath '%LOG_ERR%' -Tail 40 -ErrorAction SilentlyContinue"
+  ) else (
+    echo ^(no stderr file yet^)
+  )
+  echo ----- last stdout ^(if any^) -----
+  if exist "%LOG_OUT%" (
+    powershell -NoProfile -Command "Get-Content -LiteralPath '%LOG_OUT%' -Tail 40 -ErrorAction SilentlyContinue"
+  ) else (
+    echo ^(no stdout file yet^)
+  )
+  echo --------------------------------
+  echo.
+  echo [HINT] If ggnr_start.bat has a broken redirect like "2>" without "^&1", CMD exits instantly.
+  echo        Re-run 00_make_ggnr_starter.bat with overwrite=Y to regenerate ggnr_start.bat.
   set "EXIT_EC=1"
   goto :fail_end
 )
@@ -234,10 +251,10 @@ exit /b !EXIT_EC!
 
 :pause_keep
 echo -----------------------------------------------------------
-echo  Press Enter to close this window.
+echo  Press any key to close this window.
 echo  ^(install log: %INSTALL_LOG%^)
 echo -----------------------------------------------------------
-set /p "=Enter... "
+pause >nul
 goto :eof
 
 :log_line

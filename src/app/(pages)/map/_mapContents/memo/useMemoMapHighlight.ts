@@ -11,6 +11,7 @@ import { compareFeaturesByGeometryStackOrder } from "@/lib/mapLayerGeometryOrder
 import {
   createDataQuerySelectionRowHighlightStyle,
   DATA_QUERY_SELECTION_PULSE_STEP,
+  insertLayerBelowServiceLayer,
 } from "@/lib/mapDataQueryMapHighlight";
 
 function looksLikeGeoJsonGeometry(v: unknown): v is Record<string, unknown> & { type: unknown } {
@@ -82,12 +83,11 @@ export function useMemoMapHighlight(
     sourceRef.current = source;
     const layer = new VectorLayer({
       source,
-      zIndex: 10000,
       renderOrder: compareFeaturesByGeometryStackOrder,
       style: createDataQuerySelectionRowHighlightStyle(() => pulsePhaseRef.current),
     });
     layer.set("memoHighlight", true);
-    map.addLayer(layer);
+    insertLayerBelowServiceLayer(map, layer);
 
     const pending = featuresFromGeom(map, geomRef.current);
     if (pending.length > 0) {

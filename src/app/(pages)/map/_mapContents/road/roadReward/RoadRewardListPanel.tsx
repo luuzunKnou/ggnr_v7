@@ -48,6 +48,8 @@ type Props = {
   onCasesChange: Dispatch<SetStateAction<RoadRewardCase[]>>;
   onSelectId: (id: string) => void;
   onFocusParcelId?: (id: string | null) => void;
+  /** 목록 선택 시 true, 지도 객체 선택 시 false — 상세 패널의 지도 이동·확대 여부 */
+  onAutoFitMapChange?: (fit: boolean) => void;
   onAdd?: () => void;
   onClose: () => void;
 };
@@ -58,6 +60,7 @@ export function RoadRewardListPanel({
   onCasesChange,
   onSelectId,
   onFocusParcelId,
+  onAutoFitMapChange,
   onAdd,
   onClose,
 }: Props) {
@@ -248,20 +251,23 @@ export function RoadRewardListPanel({
 
   const handleSelect = useCallback(
     async (id: string) => {
+      onAutoFitMapChange?.(true);
       onFocusParcelId?.(null);
       onSelectId(id);
       await enrichCaseDetail(id);
     },
-    [onFocusParcelId, onSelectId, enrichCaseDetail]
+    [onAutoFitMapChange, onFocusParcelId, onSelectId, enrichCaseDetail]
   );
 
   const openDetailFromMap = useCallback(
     async (pick: RoadRewardMapPick) => {
+      // 지도 객체 선택: 강조만 유지, 이동·확대는 하지 않음
+      onAutoFitMapChange?.(false);
       onSelectId(pick.caseId);
       onFocusParcelId?.(pick.parcelId ?? null);
       await enrichCaseDetail(pick.caseId);
     },
-    [onFocusParcelId, onSelectId, enrichCaseDetail]
+    [onAutoFitMapChange, onFocusParcelId, onSelectId, enrichCaseDetail]
   );
 
   useRoadRewardMapClick({
