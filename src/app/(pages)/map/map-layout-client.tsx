@@ -2074,6 +2074,7 @@ function MapLayoutContent({
                   dataTable={dataTableFromUrl}
                   onClose={handleCloseDataPanel}
                   onDataKeyChange={handleDataKeyChange}
+                  onDataTableChange={handleOpenDataPanel}
                   initialDataKey={dataKeyFromUrl || undefined}
                   useRoadLedgerFacilityListColumns={roadInfraOpen}
                 />
