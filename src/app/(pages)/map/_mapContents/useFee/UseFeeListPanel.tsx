@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState, type UIEvent } from 'react'
 import { useSearchParams } from 'next/navigation'
-import { ArrowDown, ArrowUp, ArrowUpDown, Layers, MapPin, Search, X } from 'lucide-react'
+import { ArrowDown, ArrowUp, ArrowUpDown, Layers, Search, X } from 'lucide-react'
 import { call } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { getUseFeeBinding } from '@/lib/useFeeBinding'
@@ -10,7 +10,6 @@ import { useMapContext } from '../../_mapComponents/MapContext'
 import { MAP_AUTO_NAV_MAX_ZOOM } from '../../_mapComponents/config/mapDefaults'
 import { scheduleFitMapToExtent3857 } from '../../_mapComponents/config/mapAutoNavigation'
 import { LayerRowPanelButton } from '../../_mapComponents/layerRowEdit'
-import { refreshServiceWmsLayer } from '../../_mapComponents/layerFactory/serviceLayerFactory'
 import {
   clearUseFeeOccupationLedgerWmsLayers,
   clearUseFeeWmsLayer,
@@ -81,8 +80,6 @@ export function UseFeeListPanel({ onClose, selectedId, onSelectId, serEng }: Lis
   const [loading, setLoading] = useState(false)
   const [loadingMore, setLoadingMore] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [geomFillBusy, setGeomFillBusy] = useState(false)
-  const [geomFillMsg, setGeomFillMsg] = useState<string | null>(null)
   const [isUljinRiver, setIsUljinRiver] = useState(false)
   const listScrollRef = useRef<HTMLDivElement | null>(null)
   const loadingMoreRef = useRef(false)
@@ -187,44 +184,6 @@ export function UseFeeListPanel({ onClose, selectedId, onSelectId, serEng }: Lis
     if (Math.abs(delta) < 4) return
     scroller.scrollBy({ top: delta, behavior: 'smooth' })
   }, [selectedId, rows])
-
-  const handleFillGeomFromGlAddr = useCallback(async () => {
-    if (geomFillBusy) return
-    if (
-      !window.confirm(
-        '물건지주소로 지적 도형을 넣습니다. 지번이 없거나 못 찾는 건은 건너뜁니다. 이미 도형이 있는 건은 그대로 둡니다. 실행할까요?'
-      )
-    ) {
-      return
-    }
-    setGeomFillBusy(true)
-    setGeomFillMsg(null)
-    setError(null)
-    try {
-      const res = await call('', 'POST', {
-        service: 'useFeeService',
-        action: 'backfillUseFeeGlAddrGeom',
-        params: { ...feeQuery, limit: 20000 },
-      })
-      const data = res?.data ?? res
-      if (data?.error) {
-        setError(String(data.error))
-        return
-      }
-      setGeomFillMsg(
-        `조회 ${Number(data?.scanned) || 0}건 · 넣음 ${Number(data?.updated) || 0}건 · 지번없음 ${Number(data?.skippedNoJibun) || 0} · 못찾음 ${Number(data?.skippedNotFound) || 0}`
-      )
-      ensureUseFeeWmsLayer(mapContext?.setVisibleLayerNames, feeQuery)
-      refreshServiceWmsLayer(mapContext?.mapInstanceRef?.current)
-      requestAnimationFrame(() =>
-        refreshServiceWmsLayer(mapContext?.mapInstanceRef?.current)
-      )
-    } catch {
-      setError('물건지 도형을 넣지 못했습니다.')
-    } finally {
-      setGeomFillBusy(false)
-    }
-  }, [geomFillBusy, mapContext, serEng, system])
 
   const handleRowClick = useCallback(
     (id: string) => {
@@ -427,17 +386,6 @@ export function UseFeeListPanel({ onClose, selectedId, onSelectId, serEng }: Lis
             <Layers className="h-3 w-3 shrink-0" aria-hidden />
             {occupationTarget.label}
           </LayerRowPanelButton>
-          <LayerRowPanelButton
-            type="button"
-            title="물건지주소로 지적 도형 넣기"
-            aria-label="물건지주소로 지적 도형 넣기"
-            loading={geomFillBusy}
-            disabled={geomFillBusy}
-            onClick={() => void handleFillGeomFromGlAddr()}
-          >
-            <MapPin className="h-3 w-3 shrink-0" aria-hidden />
-            물건지 도형
-          </LayerRowPanelButton>
           <button
             type="button"
             onClick={onClose}
@@ -518,11 +466,6 @@ export function UseFeeListPanel({ onClose, selectedId, onSelectId, serEng }: Lis
       </div>
 
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-        {geomFillMsg && !error && (
-          <div className="shrink-0 border-b border-border bg-muted/40 px-3 py-2 text-xs text-foreground">
-            {geomFillMsg}
-          </div>
-        )}
         <div
           ref={listScrollRef}
           className="min-h-0 flex-1 overflow-auto scrollbar-thin"

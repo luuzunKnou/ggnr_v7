@@ -93,14 +93,12 @@ export function isUsageDataAsSisulWmsVisible(
   return visibleLayerNames.has(USAGE_DATA_AS_SISUL_WMS_LAYER_ID.toLowerCase());
 }
 
-/** 부서업무 점용 — 지적(연속지적) 켜기/끄기. 공통점용과 동일 */
+/** 부서업무 점용 — 연속지적만 추가로 켬. 읍면동·리 등 사용자가 켠 지적도는 끄지 않음 */
 export function setUsageDataAsCadastralOverlay(active: boolean): void {
-  if (typeof window === "undefined") return;
+  if (typeof window === "undefined" || !active) return;
   window.dispatchEvent(
     new CustomEvent("ggnr-map-control-set", {
-      detail: active
-        ? { id: "cadastral", active: true, tableNames: ["jijuk"] }
-        : { id: "cadastral", active: false },
+      detail: { id: "cadastral", active: true, tableNames: ["jijuk"] },
     })
   );
 }
