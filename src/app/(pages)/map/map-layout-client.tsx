@@ -1267,8 +1267,48 @@ function MapLayoutContent({
     dataKey?: string | number | null
   }
 
+  /**
+   * React searchParams·window.location 모두 router.push 직후 한 박자 늦을 수 있음.
+   * 마지막 push 쿼리를 ref로 기억해, dataKey 자동선택 등이 닫힌 URL을 다시 push하지 않게 한다.
+   * (토글 3번째 클릭: 열림 → 곧이어 꺼짐 레이스)
+   */
+  const pendingMapQueryRef = useRef<string | null>(null)
+
+  const getLatestMapSearchParams = useCallback(() => {
+    if (pendingMapQueryRef.current != null) {
+      return new URLSearchParams(pendingMapQueryRef.current)
+    }
+    if (typeof window !== "undefined") {
+      const path = window.location.pathname
+      if (path === "/map" || path.endsWith("/map")) {
+        return new URLSearchParams(window.location.search)
+      }
+    }
+    return new URLSearchParams(Array.from(searchParams.entries()))
+  }, [searchParams])
+
+  const pushMapQuery = useCallback(
+    (params: URLSearchParams) => {
+      const qs = params.toString()
+      pendingMapQueryRef.current = qs
+      router.push(`/map?${qs}`)
+    },
+    [router]
+  )
+
+  useEffect(() => {
+    if (pendingMapQueryRef.current == null) return
+    const pending = new URLSearchParams(pendingMapQueryRef.current)
+    const sameOpened = (searchParams.get("opened") ?? "") === (pending.get("opened") ?? "")
+    const sameTable = (searchParams.get("dataTable") ?? "") === (pending.get("dataTable") ?? "")
+    const sameKey = (searchParams.get("dataKey") ?? "") === (pending.get("dataKey") ?? "")
+    if (sameOpened && sameTable && sameKey) {
+      pendingMapQueryRef.current = null
+    }
+  }, [searchParams])
+
   const updateMapUrl = (updates: MapUrlUpdates) => {
-    const current = new URLSearchParams(Array.from(searchParams.entries()))
+    const current = getLatestMapSearchParams()
     if (updates.opened !== undefined) {
       if (updates.opened.length > 0) current.set("opened", updates.opened.join(","))
       else current.delete("opened")
@@ -1281,7 +1321,7 @@ function MapLayoutContent({
       if (updates.dataKey != null && updates.dataKey !== "") current.set("dataKey", String(updates.dataKey))
       else current.delete("dataKey")
     }
-    router.push(`/map?${current.toString()}`)
+    pushMapQuery(current)
   }
 
   /** 현재 시스템 serviceList — opened 유효성·전환 scrub 용 */
@@ -1870,31 +1910,31 @@ function MapLayoutContent({
 
   const handleOpenDataPanel = useCallback(
     (tableName: string) => {
-      const rawOpened = searchParams.get("opened")?.split(",").filter(Boolean) || []
+      const current = getLatestMapSearchParams()
+      const rawOpened = current.get("opened")?.split(",").filter(Boolean) || []
       const opened = rawOpened.map(normalizeOpenedToken)
       const nextOpened = opened.includes(LIST_VIEW_OPENED_KEY) ? opened : [...opened, LIST_VIEW_OPENED_KEY]
-      const current = new URLSearchParams(Array.from(searchParams.entries()))
       if (nextOpened.length > 0) current.set("opened", nextOpened.join(","))
       else current.delete("opened")
       if (tableName) current.set("dataTable", tableName)
       else current.delete("dataTable")
       current.delete("dataKey")
-      router.push(`/map?${current.toString()}`)
+      pushMapQuery(current)
     },
-    [searchParams, router]
+    [getLatestMapSearchParams, pushMapQuery]
   )
 
   const handleClearDataSelection = useCallback(() => {
-    const rawOpened = searchParams.get("opened")?.split(",").filter(Boolean) || []
+    const current = getLatestMapSearchParams()
+    const rawOpened = current.get("opened")?.split(",").filter(Boolean) || []
     const opened = rawOpened.map(normalizeOpenedToken)
     const next = opened.filter((w) => w !== LIST_VIEW_OPENED_KEY)
-    const current = new URLSearchParams(Array.from(searchParams.entries()))
     if (next.length > 0) current.set("opened", next.join(","))
     else current.delete("opened")
     current.delete("dataTable")
     current.delete("dataKey")
-    router.push(`/map?${current.toString()}`)
-  }, [searchParams, router])
+    pushMapQuery(current)
+  }, [getLatestMapSearchParams, pushMapQuery])
 
   const handleDataKeyChange = (keyValue: string | number | null) => {
     updateMapUrl({ dataKey: keyValue })

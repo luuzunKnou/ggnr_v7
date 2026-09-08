@@ -12,10 +12,13 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import {
+  ChevronDown,
+  ChevronRight,
   Download,
   FileText,
   Image as ImageIcon,
   Paperclip,
+  Pencil,
   Plus,
   Trash2,
   X,
@@ -60,7 +63,6 @@ import { useMapContext } from "../../../_mapComponents/MapContext";
 import { refreshServiceWmsLayer } from "../../../_mapComponents/layerFactory/serviceLayerFactory";
 import { canStartMapDrawInteraction } from "../../../_mapComponents/mapDrawInteraction";
 import {
-  LayerRowEditToolbar,
   LayerParcelAddModal,
   useLayerParcelNavigation,
   type LayerRowParcelItem,
@@ -109,6 +111,12 @@ const btnPrimary =
   "inline-flex h-7 items-center gap-1 rounded border border-primary bg-primary px-2 text-[11px] font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50";
 const btnSecondary =
   "inline-flex h-7 items-center gap-1 rounded border border-border bg-background px-2 text-[11px] font-medium text-foreground/90 hover:bg-muted/50 disabled:opacity-50";
+const actionBtn =
+  "standard-detail-action-btn inline-flex h-7 items-center gap-1";
+const actionBtnPrimary =
+  "inline-flex h-7 items-center gap-1 rounded border border-primary bg-primary px-2 text-[11px] font-medium text-white hover:bg-primary/90 disabled:opacity-50";
+const actionBtnDanger =
+  "standard-detail-action-btn-danger inline-flex h-7 items-center gap-1";
 
 type AttrDraft = {
   name: string;
@@ -884,6 +892,7 @@ export function RiverConstructionLedgerDetailPanel({ row, onClose }: Props) {
   const [hasBoundaryGeom, setHasBoundaryGeom] = useState(false);
   const [toolbarAnchor, setToolbarAnchor] = useState<DrawToolbarMapAnchor | null>(null);
   const [parcelAddModalOpen, setParcelAddModalOpen] = useState(false);
+  const [attrsOpen, setAttrsOpen] = useState(true);
   const [highlightParcel, setHighlightParcel] = useState<LayerRowParcelItem | null>(null);
   const toolbarRef = useRef<HTMLDivElement>(null);
   const mapOpsRef = useRef<{
@@ -1065,6 +1074,7 @@ export function RiverConstructionLedgerDetailPanel({ row, onClose }: Props) {
     parcelsSnapshotRef.current = [...(row.parcels ?? [])];
     setDraftParcels(withRiverNameFallback(row.parcels ?? []));
     setGeomEditingId?.(null);
+    setAttrsOpen(true);
 
     const isNew = isNewRiverConstructionLedgerRow(row) || !row.name.trim();
     setEditing(isNew);
@@ -1422,6 +1432,7 @@ export function RiverConstructionLedgerDetailPanel({ row, onClose }: Props) {
     parcelsSnapshotRef.current = [...filled];
     draftParcelsRef.current = filled;
     setDraftParcels(filled);
+    setAttrsOpen(true);
     setEditing(true);
   };
 
@@ -1946,41 +1957,91 @@ export function RiverConstructionLedgerDetailPanel({ row, onClose }: Props) {
         </button>
       </div>
 
-      {/* 속성·필지는 고정, 첨부만 남은 높이에서 스크롤 */}
-      <MapSideDetailScroll className="flex min-h-0 flex-1 flex-col overflow-hidden px-3 py-2 text-xs">
-        <div className="sticky top-0 z-10 mb-1 flex shrink-0 items-center justify-between gap-2 bg-background py-0.5">
-          <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-            상세 속성
-            {detailLoading ? (
-              <span className="ml-1.5 font-normal normal-case tracking-normal text-muted-foreground">
-                불러오는 중…
-              </span>
+      {/* 속성(접기)·필지 고정(필지 최대 3칸), 첨부는 최소 높이 보장·남는 공간 사용. 부족하면 패널 전체 스크롤 */}
+      <MapSideDetailScroll className="flex min-h-0 flex-1 flex-col px-3 py-2 text-xs">
+        <section className="shrink-0">
+          <div className="sticky top-0 z-10 -mx-1 mb-1 flex min-h-8 items-center gap-1 bg-background py-0.5">
+            <button
+              type="button"
+              onClick={() => setAttrsOpen((v) => !v)}
+              className="standard-detail-section-toggle"
+              title={attrsOpen ? "속성정보 접기" : "속성정보 펼치기"}
+            >
+              {attrsOpen ? (
+                <ChevronDown className="standard-detail-section-chevron" />
+              ) : (
+                <ChevronRight className="standard-detail-section-chevron" />
+              )}
+              <span className="standard-detail-section-toggle-label">속성정보</span>
+              {detailLoading ? (
+                <span className="ml-1.5 text-[11px] font-normal text-muted-foreground">
+                  불러오는 중…
+                </span>
+              ) : null}
+            </button>
+            {attrsOpen ? (
+              <div className="standard-detail-section-header-actions">
+                {!editing ? (
+                  <>
+                    <button type="button" className={actionBtn} onClick={beginEdit}>
+                      <Pencil className="h-3 w-3" />
+                      수정
+                    </button>
+                    {!isNewRow ? (
+                      <button
+                        type="button"
+                        className={actionBtnDanger}
+                        disabled={deleting || saving}
+                        onClick={() => void handleDelete()}
+                      >
+                        <Trash2 className="h-3 w-3" />
+                        {deleting ? "삭제 중…" : "삭제"}
+                      </button>
+                    ) : null}
+                  </>
+                ) : (
+                  <>
+                    <button
+                      type="button"
+                      className={actionBtn}
+                      onClick={handleCancel}
+                      disabled={saving || deleting}
+                    >
+                      취소
+                    </button>
+                    <button
+                      type="button"
+                      className={actionBtnPrimary}
+                      onClick={() => void handleSave()}
+                      disabled={saving || deleting}
+                    >
+                      {saving ? "저장 중…" : isNewRow ? "등록" : "저장"}
+                    </button>
+                  </>
+                )}
+              </div>
             ) : null}
           </div>
-          <div className="flex shrink-0 items-center gap-1">
-            <LayerRowEditToolbar
-              isEditing={editing}
-              isCreateMode={isNewRow}
-              saving={saving}
-              deleting={deleting}
-              onEdit={beginEdit}
-              onSave={() => void handleSave()}
-              onCancel={handleCancel}
-              onDelete={() => void handleDelete()}
-            />
-          </div>
-        </div>
-        <div className="shrink-0">
-          <AttrTable entries={editing ? editEntries : viewEntries} />
-        </div>
+          {attrsOpen ? (
+            <div className="shrink-0">
+              <AttrTable entries={editing ? editEntries : viewEntries} />
+            </div>
+          ) : null}
+        </section>
 
         {(editing || !isNewRow) ? (
-          <div className={cn(isNewRow ? "flex min-h-0 flex-1 flex-col" : "shrink-0")}>
+          <div
+            className={cn(
+              "mt-3 border-t border-border pt-2",
+              isNewRow ? "flex min-h-0 flex-1 flex-col" : "shrink-0"
+            )}
+          >
             <UsageDataAsAddressList
-              title="필지목록"
-              className="mt-2"
+              title={`필지목록 (${(editing ? draftParcels : parcels).length.toLocaleString()})`}
+              titleClassName="standard-detail-section-toggle-label"
+              className="mt-0"
               fillHeight={isNewRow}
-              maxVisibleCards={5}
+              maxVisibleCards={3}
               isEditing={editing}
               items={editing ? draftParcels : parcels}
               selectedIdx={selectedParcelIdx}
@@ -2001,9 +2062,9 @@ export function RiverConstructionLedgerDetailPanel({ row, onClose }: Props) {
         ) : null}
 
         {!isNewRow ? (
-        <div className="mt-3 flex min-h-0 flex-1 flex-col">
+        <div className="mt-3 flex min-h-[12rem] flex-1 flex-col border-t border-border pt-2">
           <div className="mb-1 flex shrink-0 items-center justify-between gap-2">
-            <div className="flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+            <div className="standard-detail-section-toggle-label flex items-center gap-1">
               <Paperclip className="h-3.5 w-3.5" />
               첨부파일
             </div>
@@ -2070,7 +2131,7 @@ export function RiverConstructionLedgerDetailPanel({ row, onClose }: Props) {
 
               <div
                 ref={attachScrollRef}
-                className="min-h-0 flex-1 overflow-y-auto overscroll-contain scrollbar-hide"
+                className="min-h-0 flex-1 overflow-y-auto overscroll-contain scrollbar-thin"
               >
                 {!attachmentsReady || filesLoading ? (
                   <p className="py-3 text-center text-[11px] text-muted-foreground">첨부 목록 불러오는 중…</p>

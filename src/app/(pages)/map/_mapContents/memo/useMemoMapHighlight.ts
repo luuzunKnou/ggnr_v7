@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import type { Feature } from "ol";
+import type { Feature, Map as OLMap } from "ol";
 import VectorSource from "ol/source/Vector";
 import VectorLayer from "ol/layer/Vector";
 import GeoJSONFormat from "ol/format/GeoJSON";
