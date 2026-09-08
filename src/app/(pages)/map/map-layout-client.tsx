@@ -675,7 +675,7 @@ function MapLayoutContent({
   const [complaintAddOpen, setComplaintAddOpen] = useState(false)
   const roadCctvUnderlayMode = mapContext?.roadCctvUnderlayMode ?? "traffic"
 
-  /** 좌측 서비스 메뉴 전환 시 서비스 레이어 초기화 — 도로대장·시설관리는 총괄(a0020000) 즉시 유지 */
+  /** 좌측 서비스 메뉴 전환 시 서비스 레이어 초기화 — 도로대장만 총괄(a0020000) 유지 */
   const prevServiceMenuRef = useRef<string | null>(null)
   useLayoutEffect(() => {
     const skipRoadLedgerSummary =
@@ -698,7 +698,7 @@ function MapLayoutContent({
         skipRoadLedgerSummary,
       })
     } else if (!skipRoadLedgerSummary) {
-      if (serviceMenuKey === ROAD_LEDGER_OPENED_KEY || serviceMenuKey === ROAD_INFRA_OPENED_KEY) {
+      if (serviceMenuKey === ROAD_LEDGER_OPENED_KEY) {
         ensureRoadLedgerSummaryLayer(layerCtx)
       }
     }
@@ -1205,12 +1205,7 @@ function MapLayoutContent({
       setRoadCctvUnderlayMode?.("traffic")
       setRoadCctvExtentWgs84?.(null)
       const id = ROAD_LEDGER_SUMMARY_LAYER_ID.toLowerCase()
-      if (roadInfraOpen) {
-        setVisibleLayerNames?.((prev) => {
-          if (prev.has(id)) return prev
-          return new Set(prev).add(id)
-        })
-      } else if (!roadLedgerOpen) {
+      if (!roadLedgerOpen) {
         /** 도로대장 목록이 열려 있으면 RoadLedgerListPanel이 총괄 레이어를 관리하므로 건드리지 않음 */
         setVisibleLayerNames?.((prev) => {
           if (!prev.has(id)) return prev
@@ -1222,7 +1217,6 @@ function MapLayoutContent({
     }
   }, [
     roadCctvOpen,
-    roadInfraOpen,
     roadLedgerOpen,
     setRoadCctvOverlay,
     setRoadCctvUnderlayMode,
@@ -1236,13 +1230,6 @@ function MapLayoutContent({
     setIdentifyResultList?.(null)
     setIdentifySelectedRow?.(null)
   }, [roadCctvOpen, setIdentifyResultList, setIdentifySelectedRow])
-
-  /** 시설관리 진입 시 도로대장 총괄(a0020000) 레이어 표시 — CCTV가 통행 모드일 때는 제외(배타) */
-  useEffect(() => {
-    if (!roadInfraOpen || !setVisibleLayerNames) return
-    if (roadCctvOpen && roadCctvUnderlayMode === "traffic") return
-    ensureRoadLedgerSummaryLayer({ setVisibleLayerNames })
-  }, [roadInfraOpen, roadCctvOpen, roadCctvUnderlayMode, setVisibleLayerNames])
 
   /**
    * CCTV 패널: 통행 타일 vs 도로대장 총괄(a0020000) 배타.
