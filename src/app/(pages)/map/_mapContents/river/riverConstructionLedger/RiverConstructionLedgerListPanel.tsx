@@ -2,6 +2,9 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  ArrowDown,
+  ArrowUp,
+  ArrowUpDown,
   Circle,
   Landmark,
   Pentagon,
@@ -30,6 +33,12 @@ import {
   mapConsDataAsApiToLedgerRow,
   type ConsDataAsApiRow,
 } from "./riverConstructionLedgerMock";
+import {
+  initialRiverConstructionLedgerSortDir,
+  sortRiverConstructionLedgerListRows,
+  type RiverConstructionLedgerListSortKey,
+  type RiverConstructionLedgerListSortSpec,
+} from "./riverConstructionLedgerListSort";
 import { filterRiverConstructionLedgerRowsByWkt5181 } from "./riverConstructionLedgerSpatial";
 import {
   clearConsDataAsWmsLayers,
@@ -38,6 +47,17 @@ import {
 
 type SpatialTool = "rectangle" | "polygon" | "circle";
 type SearchTab = "keyword" | "shape" | "boundary";
+type SortKey = RiverConstructionLedgerListSortKey;
+type SortSpec = RiverConstructionLedgerListSortSpec;
+
+const SORT_COLUMNS: { key: SortKey; label: string }[] = [
+  { key: "name", label: "공사명" },
+  { key: "river", label: "하천" },
+  { key: "companyName", label: "업체명" },
+  { key: "startDate", label: "착수일자" },
+];
+
+const HEADER_ALIGN_LEFT = new Set<SortKey>(["name", "companyName"]);
 
 type BoundaryBadgeItem = {
   key: string;
@@ -65,6 +85,7 @@ export function RiverConstructionLedgerListPanel({ onClose }: Props) {
   const setRiverFocus = mapContext?.setRiverConstructionLedgerRiverFocus;
 
   const [keyword, setKeyword] = useState("");
+  const [sorts, setSorts] = useState<SortSpec[]>([]);
   const [loading, setLoading] = useState(false);
   const [listError, setListError] = useState<string | null>(null);
   const [spatialWkt, setSpatialWkt] = useState<string | null>(null);
@@ -381,7 +402,7 @@ export function RiverConstructionLedgerListPanel({ onClose }: Props) {
     [rows, spatialWkt]
   );
 
-  const items = useMemo(() => {
+  const filteredItems = useMemo(() => {
     const q = keyword.trim().toLowerCase();
     return spatialFiltered.filter((row) => {
       if (isNewRiverConstructionLedgerRow(row)) return false;
@@ -397,6 +418,26 @@ export function RiverConstructionLedgerListPanel({ onClose }: Props) {
       return hay.includes(q);
     });
   }, [keyword, spatialFiltered]);
+
+  const items = useMemo(
+    () => sortRiverConstructionLedgerListRows(filteredItems, sorts),
+    [filteredItems, sorts]
+  );
+
+  const toggleSort = (key: SortKey) => {
+    const initial = initialRiverConstructionLedgerSortDir(key);
+    setSorts((prev) => {
+      const idx = prev.findIndex((s) => s.key === key);
+      if (idx < 0) return [...prev, { key, dir: initial }];
+      const cur = prev[idx];
+      if (cur.dir === initial) {
+        const next = [...prev];
+        next[idx] = { key, dir: initial === "asc" ? "desc" : "asc" };
+        return next;
+      }
+      return prev.filter((_, i) => i !== idx);
+    });
+  };
 
   useEffect(() => {
     setOverlayRows?.(items);
@@ -643,36 +684,77 @@ export function RiverConstructionLedgerListPanel({ onClose }: Props) {
 
       <div className="min-h-0 flex-1 overflow-auto scrollbar-thin">
         {listError ? (
-          <p className="px-3 py-2.5 text-xs text-destructive">{listError}</p>
+          <div className="shrink-0 border-b border-destructive/20 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+            {listError}
+          </div>
         ) : null}
-        {loading && items.length === 0 ? (
-          <p className="px-3 py-2.5 text-xs text-muted-foreground">불러오는 중…</p>
-        ) : items.length === 0 ? (
-          <p className="px-3 py-2.5 text-xs text-muted-foreground">검색 결과가 없습니다.</p>
-        ) : (
-          <table className="w-full table-fixed border-collapse text-left text-xs">
-            <colgroup>
-              <col />
-              <col className="w-[4.5rem]" />
-              <col className="w-[4.75rem]" />
-              <col className="w-[5.25rem]" />
-            </colgroup>
-            <thead className="sticky top-0 z-[1] bg-muted/50">
+        <table className="standard-list-table">
+          <colgroup>
+            <col />
+            <col className="w-[4.5rem]" />
+            <col className="w-[4.75rem]" />
+            <col className="w-[5.25rem]" />
+          </colgroup>
+          <thead className="standard-table-thead">
+            <tr>
+              {SORT_COLUMNS.map((col) => {
+                const sortIdx = sorts.findIndex((s) => s.key === col.key);
+                const active = sortIdx >= 0;
+                const sortDir = active ? sorts[sortIdx].dir : null;
+                const Icon = !active
+                  ? ArrowUpDown
+                  : sortDir === "asc"
+                    ? ArrowUp
+                    : ArrowDown;
+                const initial = initialRiverConstructionLedgerSortDir(col.key);
+                const alignLeft = HEADER_ALIGN_LEFT.has(col.key);
+                return (
+                  <th
+                    key={col.key}
+                    className={cn(
+                      "standard-table-th",
+                      alignLeft ? "standard-table-th-left" : "standard-table-th-center"
+                    )}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => toggleSort(col.key)}
+                      className={cn(
+                        "standard-sort-button",
+                        alignLeft ? "standard-sort-button-left" : "standard-sort-button-center",
+                        active && "standard-sort-button-active"
+                      )}
+                      title={
+                        !active
+                          ? `${col.label} 정렬 추가`
+                          : sortDir === initial
+                            ? `${col.label} 방향 바꾸기`
+                            : `${col.label} 정렬 해제`
+                      }
+                    >
+                      <span className="truncate">{col.label}</span>
+                      <Icon className="h-3 w-3 shrink-0 opacity-70" aria-hidden />
+                    </button>
+                  </th>
+                );
+              })}
+            </tr>
+          </thead>
+          <tbody>
+            {loading && items.length === 0 ? (
               <tr>
-                <th className="border-b-0 px-2 py-2 font-semibold text-foreground/90 [box-shadow:inset_0_-2px_0_0_var(--border)]">공사명</th>
-                <th className="whitespace-nowrap border-b-0 px-2 py-2 font-semibold text-foreground/90 [box-shadow:inset_0_-2px_0_0_var(--border)]">
-                  하천
-                </th>
-                <th className="whitespace-nowrap border-b-0 px-2 py-2 font-semibold text-foreground/90 [box-shadow:inset_0_-2px_0_0_var(--border)]">
-                  업체명
-                </th>
-                <th className="whitespace-nowrap border-b-0 px-2 py-2 font-semibold text-foreground/90 [box-shadow:inset_0_-2px_0_0_var(--border)]">
-                  착수일자
-                </th>
+                <td colSpan={SORT_COLUMNS.length} className="standard-table-empty">
+                  불러오는 중…
+                </td>
               </tr>
-            </thead>
-            <tbody>
-              {items.map((row) => {
+            ) : items.length === 0 ? (
+              <tr>
+                <td colSpan={SORT_COLUMNS.length} className="standard-table-empty">
+                  검색 결과가 없습니다.
+                </td>
+              </tr>
+            ) : (
+              items.map((row) => {
                 const isSelected = selectedId === row.id;
                 return (
                   <tr
@@ -688,38 +770,27 @@ export function RiverConstructionLedgerListPanel({ onClose }: Props) {
                         void selectRow(row.id);
                       }
                     }}
-                    className={cn(
-                      "border-b border-border cursor-pointer hover:bg-muted/50 transition-colors",
-                      isSelected && "bg-primary/10"
-                    )}
+                    className={cn("standard-list-row", isSelected && "standard-list-row-selected")}
                   >
-                    <td
-                      className="min-w-0 truncate px-2 py-1.5 text-foreground"
-                      title={row.name}
-                    >
+                    <td className="standard-table-td-text" title={row.name}>
                       {row.name || "—"}
                     </td>
                     <td
-                      className="min-w-0 truncate px-2 py-1.5 text-foreground/90"
+                      className="standard-table-td-text-muted"
                       title={formatRiverNamesLabel(row.riverNames)}
                     >
                       {formatRiverNamesShort(row.riverNames)}
                     </td>
-                    <td
-                      className="min-w-0 truncate px-2 py-1.5 text-foreground/90"
-                      title={row.companyName}
-                    >
+                    <td className="standard-table-td-text-muted" title={row.companyName}>
                       {row.companyName || "—"}
                     </td>
-                    <td className="whitespace-nowrap px-2 py-1.5 text-foreground/90">
-                      {row.startDate || "—"}
-                    </td>
+                    <td className="standard-table-td-date">{row.startDate || "—"}</td>
                   </tr>
                 );
-              })}
-            </tbody>
-          </table>
-        )}
+              })
+            )}
+          </tbody>
+        </table>
       </div>
     </div>
   );

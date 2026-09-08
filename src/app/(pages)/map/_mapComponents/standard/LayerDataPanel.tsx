@@ -432,7 +432,8 @@ export function LayerDataPanel({
   const selectionLayerRef = useRef<VectorLayer<VectorSource> | null>(null);
   const pulsePhaseRef = useRef(0);
   const [radarActive, setRadarActive] = useState(false);
-  const prevLayerRef = useRef<string | null>(null);
+  /** 목록 초기 로드 키(테이블|공간필터|식별여부). 중단된 로드는 cleanup에서 null로 되돌려 재시도 */
+  const prevListLoadKeyRef = useRef<string | null>(null);
   const [selectedIdentifyIndex, setSelectedIdentifyIndex] = useState<number | null>(null);
   /** loadPage 응답 순서 보장 — 늦게 도착한 7건 응답이 30건 목록을 덮지 않게 */
   const loadPageSeqRef = useRef(0);
@@ -956,12 +957,28 @@ export function LayerDataPanel({
     selectedIdentifyRowRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
   }, [selectedIdentifyIndex, selectedRowData]);
 
+  /**
+   * 목록 초기 로드.
+   * - 로드 키: 테이블 + 공간필터 + 식별모드 (행 선택 dataKey·identify 결과 객체 변경은 재조회하지 않음)
+   * - cleanup에서 미완료 로드 키를 비워, Strict Mode 재마운트·의존성 재실행 시 조기 return으로
+   *   loading이 영구 true로 남는 레이스를 방지한다.
+   */
   useEffect(() => {
     if (!activeLayer) return;
     const isIdentify = isIdentifyMode;
-    // 같은 테이블이면 재조회하지 않음 (앱 안에서 행 선택 시 전체 목록 유지)
-    if (prevLayerRef.current === activeLayer.tableName && !isIdentify) return;
-    prevLayerRef.current = activeLayer.tableName;
+    const loadKey = [
+      activeLayer.tableName,
+      activeLayer.physicalTableName,
+      activeLayer.schema,
+      activeLayer.rowFilterSql ?? '',
+      spatialFilterWkt ?? '',
+      isIdentify ? 'id' : 'list',
+    ].join('|');
+    if (prevListLoadKeyRef.current === loadKey) return;
+
+    let cancelled = false;
+    let settled = false;
+    prevListLoadKeyRef.current = loadKey;
 
     setFields([]);
     setDetailFields([]);
@@ -1002,7 +1019,9 @@ export function LayerDataPanel({
     const fieldsPromise = fetch(
       `/api/config/defineLayer/fields/${encodeURIComponent(activeLayer.physicalTableName)}`
     ).then((r) => r.json());
-    const useKey = !isIdentify && initialDataKey != null && String(initialDataKey).trim() !== '';
+    // 최초 오픈 시 URL dataKey만 사용(행 클릭으로 dataKey가 바뀌어도 이 effect는 재실행하지 않음)
+    const keyAtOpen = initialDataKey != null ? String(initialDataKey).trim() : '';
+    const useKey = !isIdentify && keyAtOpen !== '';
     const dataPromise = isIdentify
       ? Promise.resolve({ rows: [] as Record<string, unknown>[], total: 0 })
       : useKey
@@ -1012,7 +1031,7 @@ export function LayerDataPanel({
           params: {
             table: activeLayer.physicalTableName,
             schema: activeLayer.schema,
-            keyValue: initialDataKey!.trim(),
+            keyValue: keyAtOpen,
             ...(activeLayer.rowFilterSql ? { rowFilter: activeLayer.rowFilterSql } : {}),
           },
         })
@@ -1024,7 +1043,7 @@ export function LayerDataPanel({
 
     Promise.all([fieldsPromise, dataPromise])
       .then(([fieldsRes, dataRes]) => {
-        if (initSeq !== loadPageSeqRef.current) return;
+        if (cancelled || initSeq !== loadPageSeqRef.current) return;
         const rawFields = (fieldsRes?.data ?? fieldsRes) as DefineFieldRow[] | undefined;
         const sortedAll = Array.isArray(rawFields)
           ? [...rawFields].sort((a, b) => parseInt(String(a.define_field_idx ?? '999999'), 10) - parseInt(String(b.define_field_idx ?? '999999'), 10))
@@ -1076,7 +1095,7 @@ export function LayerDataPanel({
               action: 'getTableData',
               params: tableDataParams,
             }).then((res) => {
-              if (initSeq !== loadPageSeqRef.current) return;
+              if (cancelled || initSeq !== loadPageSeqRef.current) return;
               const d = res?.data ?? res;
               const dataRows = Array.isArray(d?.rows) ? d.rows : [];
               const dataTotal = typeof d?.total === 'number' ? d.total : 0;
@@ -1096,18 +1115,31 @@ export function LayerDataPanel({
           setRows([]);
           setTotal(identifyResultList?.results?.reduce((s, r) => s + r.features.length, 0) ?? 0);
         }
+        settled = true;
         setLoading(false);
       })
       .catch((err) => {
-        if (initSeq !== loadPageSeqRef.current) return;
+        if (cancelled || initSeq !== loadPageSeqRef.current) return;
+        settled = true;
         setError(err?.message ?? String(err));
         setLoading(false);
       });
 
     return () => {
+      cancelled = true;
       loadPageSeqRef.current += 1;
+      // 미완료 로드만 키를 비움 → 재실행 시 조기 return으로 loading 고정되는 것 방지
+      if (!settled && prevListLoadKeyRef.current === loadKey) {
+        prevListLoadKeyRef.current = null;
+      }
     };
-  }, [activeLayer, spatialFilterWkt, showCurrentListOnMap, initialDataKey, identifyResultList]);
+    // initialDataKey·identifyResultList·콜백은 로드 키에 넣지 않음(행 선택·식별 결과 갱신 시 전체 재조회로 loading 레이스 유발)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- showCurrentListOnMap/showIdentifyFeatureOnMap/identifyResultList/initialDataKey 의도적 제외
+  }, [
+    activeLayer,
+    spatialFilterWkt,
+    isIdentifyMode,
+  ]);
 
   // 지도 식별 후 패널 열렸을 때 해당 행 상세 + 도형 강조·지도 이동
   useEffect(() => {
@@ -1122,7 +1154,7 @@ export function LayerDataPanel({
 
   useEffect(() => {
     if (!activeLayer) {
-      prevLayerRef.current = null;
+      prevListLoadKeyRef.current = null;
       pendingAutoSelectFirstRef.current = false;
       pendingHighlightIndexRef.current = null;
       listColWidthsLayerRef.current = null;
@@ -1331,6 +1363,17 @@ export function LayerDataPanel({
   const handleClose = () => {
     mapContext?.setIdentifyResultList?.(null);
     onClose?.();
+  };
+
+  /** 지도 식별·검색 결과 → 패널은 유지하고 해당 레이어 목록으로 복귀 */
+  const handleBackFromIdentify = () => {
+    mapContext?.setIdentifyResultList?.(null);
+    mapContext?.setIdentifySelectedRow?.(null);
+    setSelectedRowData(null);
+    setSelectedIdentifyIndex(null);
+    selectionSourceRef.current?.clear();
+    setRadarActive(false);
+    onDataKeyChange?.(null);
   };
 
   const handleIdentifyItemClick = (item: { layer: IdentifyLayerResult; feature: IdentifyFeatureItem; index: number }) => {
@@ -1688,7 +1731,7 @@ export function LayerDataPanel({
   return (
     <>
     <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
-      {/* 상세 열림 시 패널 닫기는 레이어 목록과 동일하게 헤더 우측 X */}
+      {/* 상세 열림 시: 일반 목록은 패널 닫기(X), 지도 식별·검색은 목록으로 이전(X) */}
       <div className="flex items-center justify-between gap-2 border-b border-border px-4 py-2.5 shrink-0 bg-background">
         <div className="min-w-0 flex-1">
           <h3 className="text-sm font-semibold text-foreground truncate">{activeLayer.name}</h3>
@@ -1696,13 +1739,13 @@ export function LayerDataPanel({
             <span className="text-[11px] text-muted-foreground">{activeLayer.tableName}</span>
           )}
         </div>
-        {hasDetail && (
+        {(hasDetail || isIdentifyMode) && (
           <button
             type="button"
-            onClick={handleClose}
+            onClick={isIdentifyMode ? handleBackFromIdentify : handleClose}
             className="shrink-0 rounded p-1 text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
-            title="닫기"
-            aria-label="닫기"
+            title={isIdentifyMode ? '이전' : '닫기'}
+            aria-label={isIdentifyMode ? '이전' : '닫기'}
           >
             <X className="h-4 w-4" />
           </button>
@@ -1736,8 +1779,9 @@ export function LayerDataPanel({
               selectedIndex={selectedIdentifyIndex}
               selectedRowRef={selectedIdentifyRowRef}
               onItemClick={handleIdentifyItemClick}
-              onClose={handleClose}
+              onClose={handleBackFromIdentify}
               showFooterClose={!hasDetail}
+              footerActionLabel="이전"
             />
           )}
           {!isIdentifyMode && !error && listFields.length > 0 && (rows.length > 0 || !loading) && (

@@ -30,8 +30,10 @@ type Props = {
   selectedRowRef?: RefObject<HTMLButtonElement | null>;
   onItemClick: (item: IdentifyHitListFlatItem) => void;
   onClose: () => void;
-  /** false: 하단 닫기 숨김 (데이터조회 상세 열림 시 LayerDataPanel과 동일) */
+  /** false: 하단 닫기·이전 숨김 (데이터조회 상세 열림 시 LayerDataPanel과 동일) */
   showFooterClose?: boolean;
+  /** 하단 버튼 문구. 지도 식별·검색 후 목록으로 돌아갈 때는 «이전» */
+  footerActionLabel?: string;
 };
 
 export function IdentifyHitListBlock({
@@ -42,6 +44,7 @@ export function IdentifyHitListBlock({
   onItemClick,
   onClose,
   showFooterClose = true,
+  footerActionLabel = '닫기',
 }: Props) {
   const identifyFlat = flattenIdentifyResults(results);
   const isEmpty = identifyFlat.length === 0;
@@ -113,7 +116,7 @@ export function IdentifyHitListBlock({
             onClick={onClose}
             className="rounded border border-border bg-background px-2.5 py-0.5 text-[11px] text-muted-foreground transition-colors hover:bg-muted/50"
           >
-            닫기
+            {footerActionLabel}
           </button>
         )}
       </div>
