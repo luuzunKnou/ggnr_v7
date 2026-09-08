@@ -252,12 +252,22 @@ function RoadLedgerDocActionGrid({
           !isReportOnly && hasLayers && isRoadLedgerDocGroupActive(visibleLayerNames, layers);
         const reportDisabled =
           isReportOnly && (reportFileListLoading || reportPdfLoading || !reportPdfAvailable);
-        const showCount = ROAD_LEDGER_DOC_LABELS_WITH_LAYER_COUNT.includes(label);
+        const showCount =
+          ROAD_LEDGER_DOC_LABELS_WITH_LAYER_COUNT.includes(label) && label !== "매설물도";
         const dataN = facilityDataCounts?.[label];
+        /** 매설물도 — 노선 건수 0이면 비활성만 (별도 안내 문구 없음) */
+        const buriedMapDisabled =
+          label === "매설물도" &&
+          hasRdidForFacility &&
+          !facilityCountsLoading &&
+          typeof facilityDataCounts?.["매설물도"] === "number" &&
+          facilityDataCounts["매설물도"] === 0;
+        const layerButtonDisabled = !setVisibleLayerNames || !hasLayers || buriedMapDisabled;
         const displayLabel =
           showCount && hasRdidForFacility
             ? `${label} (${facilityCountsLoading ? "…" : typeof dataN === "number" ? dataN : "—"})`
             : label;
+        const disabledLook = isReportOnly ? reportDisabled : layerButtonDisabled;
         return (
           <button
             key={label}
@@ -269,26 +279,23 @@ function RoadLedgerDocActionGrid({
                   : reportPdfAvailable
                     ? "보고서 PDF 보기"
                     : "보고서 PDF 없음"
-                : hasLayers
-                  ? "클릭: 해당 공간정보 레이어 켜기 / 다시 클릭: 끄기"
-                  : "연결 레이어 없음"
+                : layerButtonDisabled
+                  ? undefined
+                  : "클릭: 해당 공간정보 레이어 켜기 / 다시 클릭: 끄기"
             }
             onClick={() => onDocClick(label)}
-            disabled={isReportOnly ? reportDisabled : !setVisibleLayerNames}
+            disabled={isReportOnly ? reportDisabled : layerButtonDisabled}
             className={cn(
               "h-7 text-[11px] rounded border min-w-0 inline-flex items-center justify-center gap-0.5 px-1 leading-none whitespace-nowrap",
-              !isReportOnly && !setVisibleLayerNames && "pointer-events-none opacity-50",
-              isReportOnly
-                ? reportDisabled
-                  ? "border-border bg-muted/50 text-muted-foreground opacity-50 cursor-not-allowed"
-                  : reportPdfActive
+              disabledLook
+                ? "border-border bg-muted/50 text-muted-foreground opacity-50 cursor-not-allowed"
+                : isReportOnly
+                  ? reportPdfActive
                     ? "border-primary/45 bg-primary/[0.08] text-foreground ring-1 ring-inset ring-primary/15 hover:bg-primary/[0.11]"
                     : "border-border bg-muted/50 text-foreground/90 hover:bg-muted"
-                : hasLayers
-                  ? active
+                  : active
                     ? "border-primary/45 bg-primary/[0.08] text-foreground ring-1 ring-inset ring-primary/15 hover:bg-primary/[0.11]"
-                    : "border-border bg-muted/50 text-foreground/90 hover:bg-muted"
-                  : "border-border bg-muted/50 text-muted-foreground hover:bg-muted",
+                    : "border-border bg-muted/50 text-foreground/90 hover:bg-muted",
             )}
           >
             {isReportOnly && (reportFileListLoading || reportPdfLoading) ? (

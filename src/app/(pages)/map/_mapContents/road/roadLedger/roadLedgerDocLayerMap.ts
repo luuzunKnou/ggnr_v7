@@ -22,6 +22,7 @@ export type RoadLedgerDocButtonKey =
 
 /** UI에서 `주요시설 (N)` 형태로 표시할 버튼 — N은 레이어 개수가 아니라 노선별 실데이터 건수(API) */
 export const ROAD_LEDGER_DOC_LABELS_WITH_LAYER_COUNT: readonly RoadLedgerDocButtonKey[] = [
+  "매설물도",
   "주요시설",
   "안전시설",
   "부대시설",
