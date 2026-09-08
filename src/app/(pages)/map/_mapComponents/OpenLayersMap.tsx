@@ -110,6 +110,7 @@ import { useRiverConstructionLedgerMapHighlight } from './hooks/useRiverConstruc
 import { useRiverConstructionLedgerOverlayLayer } from './hooks/useRiverConstructionLedgerOverlayLayer';
 import { useFmsFacilityOverlayLayer } from '../_mapContents/fmsLinkage/useFmsFacilityOverlayLayer';
 import { useRoadCctvMapLayer } from '../_mapContents/road/roadCCTV/useRoadCctvMapLayer';
+import { useRoadCctvMapHighlight } from '../_mapContents/road/roadCCTV/useRoadCctvMapHighlight';
 import { useItsTrafficTileLayer } from '../_mapContents/road/roadCCTV/useItsTrafficTileLayer';
 import { LayerRowGeomEditHandler } from './layerRowEdit/LayerRowGeomEditHandler';
 import { canStartMapDrawInteraction, type MapDrawInteractionKind } from './mapDrawInteraction';
@@ -1347,20 +1348,10 @@ export default function OpenLayersMap({
   const roadCctvUnderlayMode = mapContext?.roadCctvUnderlayMode ?? 'traffic';
   const onRoadCctvSelectKey = useCallback(
     (key: string) => {
-      const items = roadCctvOverlay?.items ?? [];
-      const it = items.find((x) => x.key === key);
+      // 지도 객체 클릭 — 선택·강조만 (맵 이동 없음). 목록 클릭 이동은 RoadCctvPanel
       setRoadCctvOverlay?.((prev) => (prev ? { ...prev, selectedKey: key } : null));
-      const map = mapInstanceRef.current;
-      if (map && it) {
-        const c = fromLonLat([it.coordx, it.coordy]);
-        map.getView().animate({
-          center: c,
-          zoom: Math.max(map.getView().getZoom() ?? 14, 14),
-          duration: 350,
-        });
-      }
     },
-    [setRoadCctvOverlay, roadCctvOverlay?.items]
+    [setRoadCctvOverlay]
   );
   useRoadCctvMapLayer(
     mapReady,
@@ -1369,6 +1360,13 @@ export default function OpenLayersMap({
     roadCctvOverlay?.items ?? [],
     roadCctvOverlay?.selectedKey ?? null,
     onRoadCctvSelectKey
+  );
+  useRoadCctvMapHighlight(
+    mapReady,
+    mapInstanceRef.current,
+    roadCctvPanelOpen && Boolean(roadCctvOverlay),
+    roadCctvOverlay?.items ?? [],
+    roadCctvOverlay?.selectedKey ?? null
   );
 
   const roadCctvExtentWgs84 = mapContext?.roadCctvExtentWgs84 ?? null;
@@ -1414,6 +1412,7 @@ export default function OpenLayersMap({
       (mapContext?.safetyFacPanelOpen ?? false) ||
       (mapContext?.complaintPanelOpen ?? false) ||
       (mapContext?.memoPanelOpen ?? false) ||
+      (mapContext?.groundwaterPermitPanelOpen ?? false) ||
       (mapContext?.roadRewardPanelOpen ?? false) ||
       !!layerRowGeomEdit ||
       !!spatialDrawRequest ||
@@ -1693,6 +1692,7 @@ export default function OpenLayersMap({
                 indexOgcFid: fid,
                 planYear: String(pdata?.planYear ?? '').trim(),
                 planName: String(pdata?.planName ?? '').trim(),
+                planLen: String(pdata?.planLen ?? '').trim(),
               });
             } catch (e) {
               if (cancelled) return;
@@ -1713,36 +1713,6 @@ export default function OpenLayersMap({
             const tab = riverBasicPlanTabFromAsDefineTable(best.tableName);
             mapContext.applyRiverBasicPlanMapPickRef.current?.({ riverName, tab });
             mapContext.riverBasicPlanExitIndexViewToDetailRef?.current?.();
-            try {
-              let res = await call('', 'POST', {
-                service: 'riverBasicPlanService',
-                action: 'getRiverBasicPlanIndexExtent',
-                params: { tab, riverName },
-              });
-              if (cancelled) return;
-              let data = res?.data ?? res;
-              let ext = Array.isArray(data?.extent3857) ? data.extent3857 : null;
-              if (!ext || ext.length !== 4) {
-                res = await call('', 'POST', {
-                  service: 'riverBasicPlanService',
-                  action: 'getRiverBasicPlanExtent',
-                  params: { tab, riverName },
-                });
-                if (cancelled) return;
-                data = res?.data ?? res;
-                ext = Array.isArray(data?.extent3857) ? data.extent3857 : null;
-              }
-              const map = mapInstanceRef.current;
-              if (map && ext && ext.length === 4) {
-                scheduleFitMapToExtent3857(map, ext as number[], {
-                  maxZoom: MAP_AUTO_NAV_MAX_ZOOM,
-                  pointThreshold: 1,
-                  applyMapViewPadding: () => applyMapViewPaddingRef?.current?.(),
-                });
-              }
-            } catch {
-              // 지도 이동 실패는 사용자 동작을 막지 않음
-            }
             clearIdentifyIntake();
             return;
           }

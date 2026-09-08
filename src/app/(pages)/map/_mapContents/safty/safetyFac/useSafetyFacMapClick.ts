@@ -25,6 +25,20 @@ function zoomToBuffer(zoom: number): number {
   return 300_000 * Math.pow(0.54, zoom);
 }
 
+/**
+ * 시설명 TextSymbolizer(DisplacementY≈-16, font≈14) 클릭도 점 식별에 포함.
+ * 화면 픽셀 → 지도 미터로 환산해 기본 버퍼와 더 큰 쪽을 쓴다.
+ */
+function safetyFacIdentifyBufferMeters(map: Map, zoom: number): number {
+  const base = zoomToBuffer(zoom);
+  const resolution = map.getView().getResolution();
+  if (!Number.isFinite(resolution) || (resolution as number) <= 0) return base;
+  /** 아이콘 반경 + 라벨 오프셋·글자 높이 여유 (px) */
+  const labelHitPx = 52;
+  const labelMeters = (resolution as number) * labelHitPx;
+  return Math.max(base, labelMeters);
+}
+
 const GEOM_KEYS = new Set(['geom', 'geometry', 'the_geom', 'wkb_geometry', 'shape', 'geojson']);
 
 function stripGeom(row: Record<string, unknown>): Record<string, unknown> {
@@ -279,7 +293,7 @@ export function useSafetyFacMapClick({ enabled, facilities, onSelectFacility }: 
       if (tables.length === 0) return;
 
       const zoom = evt.map.getView().getZoom() ?? 10;
-      const bufferMeters = zoomToBuffer(zoom);
+      const bufferMeters = safetyFacIdentifyBufferMeters(evt.map, zoom);
       const [x, y] = evt.coordinate as [number, number];
 
       try {

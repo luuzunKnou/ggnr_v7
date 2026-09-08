@@ -169,6 +169,8 @@ export async function getRiverBasicPlanPickFromIndex(params?: {
   riverName: string;
   planYear: string;
   planName: string;
+  /** GROUP BY 연도와 동일 — 동일 연도·계획명에 연장이 여러 건일 때 구분 */
+  planLen: string;
   tab: RiverType;
 } | null> {
   const fid = Number(params?.indexOgcFid);
@@ -191,7 +193,8 @@ export async function getRiverBasicPlanPickFromIndex(params?: {
     sql.raw(`SELECT
       COALESCE(p.river_name, '') AS "riverName",
       COALESCE(p.plan_year, '') AS "planYear",
-      COALESCE(p.plan_name, '') AS "planName"
+      COALESCE(p.plan_name, '') AS "planName",
+      COALESCE(p.plan_len::text, '') AS "planLen"
     FROM layer."${safeIdx}" i
     INNER JOIN layer."${safeAs}" p
       ON p.geom IS NOT NULL AND i.geom IS NOT NULL AND ST_Intersects(i.geom, p.geom)
@@ -206,7 +209,7 @@ export async function getRiverBasicPlanPickFromIndex(params?: {
   );
 
   const row = res.rows?.[0] as
-    | { riverName?: string; planYear?: string; planName?: string }
+    | { riverName?: string; planYear?: string; planName?: string; planLen?: string | number | null }
     | undefined;
   const riverName = String(row?.riverName ?? '').trim();
   if (!riverName) return null;
@@ -215,6 +218,7 @@ export async function getRiverBasicPlanPickFromIndex(params?: {
     riverName,
     planYear: String(row?.planYear ?? '').trim(),
     planName: String(row?.planName ?? '').trim(),
+    planLen: row?.planLen == null ? '' : String(row.planLen).trim(),
     tab,
   };
 }

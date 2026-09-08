@@ -1,6 +1,7 @@
 'use client';
 
 import { useSafetyWater } from './safetyWaterContext';
+import { useSafetyWaterMapHighlight } from './useSafetyWaterMapHighlight';
 import { useSafetyWaterMapLayer } from './useSafetyWaterMapLayer';
 import { useSafetyWaterMapZoom } from './useSafetyWaterMapZoom';
 import { useSafetyWaterNearbyCctvLayer } from './useSafetyWaterNearbyCctvLayer';
@@ -13,6 +14,7 @@ export function SafetyWaterMapBindings() {
     map,
     stations,
     selectedStationId,
+    selectedStation,
     selectStationFromMap,
     focusCctvFromMap,
     setListOpen,
@@ -43,6 +45,7 @@ export function SafetyWaterMapBindings() {
       setListOpen(false);
     }
   );
+  useSafetyWaterMapHighlight(mapReady, map, true, selectedStation);
   useSafetyWaterRiskLayer(mapReady, map, true, riskAreas);
   /** 전체=전부 파랑, 특정=목록만 파랑·나머지 흐림, 선택=빨강(패널 open 시) */
   useSafetyWaterNearbyCctvLayer(
