@@ -1,6 +1,7 @@
 import { pool } from '@/database/db';
 import { runKais, defaultDailyWindow, resolveKaisSggCode } from '@/integrations/kais';
 import { getSafetydataDatasetById, SAFETYDATA_DATASETS } from '@/integrations/safetydata.config';
+import { getSafemapDatasetById, SAFEMAP_DATASETS } from '@/integrations/safemap.config';
 import { getSafetydataTargetSchema, hasSafetydataDatasetApiKey } from '@/integrations/safetydataHttp';
 import { ingestSafetydataDatasetToLayer } from '@/integrations/safetydataIngest';
 import { runKrasLayerSync, type KrasLayerSyncScope } from '@/integrations/krasLayerSync';
@@ -10,7 +11,17 @@ import { appendLinkageError, formatLinkageError } from '@/integrations/linkageEr
 
 type Params = Record<string, unknown>;
 
-export type IntegrationSystem = 'KAIS' | 'KRAS' | 'KORPES' | 'SEUMTEO' | 'SAEOL' | 'SAFETYDATA' | 'FMS' | 'NEXTGEN' | 'GEOM';
+export type IntegrationSystem =
+  | 'KAIS'
+  | 'KRAS'
+  | 'KORPES'
+  | 'SEUMTEO'
+  | 'SAEOL'
+  | 'SAFETYDATA'
+  | 'SAFEMAP'
+  | 'FMS'
+  | 'NEXTGEN'
+  | 'GEOM';
 
 const HARDCODED_KAIS_APP_KEY = 'U01TX0FVVEgyMDIzMDUzMDE3MzU1NDExMzgxMTM=';
 
@@ -66,6 +77,7 @@ function normalizeSystem(v: unknown): IntegrationSystem {
     s === 'SEUMTEO' ||
     s === 'SAEOL' ||
     s === 'SAFETYDATA' ||
+    s === 'SAFEMAP' ||
     s === 'FMS' ||
     s === 'NEXTGEN' ||
     s === 'GEOM'
@@ -111,9 +123,33 @@ export async function listSafetydataDatasets(_p: Params) {
   };
 }
 
+export async function listSafemapDatasets(_p: Params) {
+  return {
+    rows: SAFEMAP_DATASETS.map((d) => ({
+      id: d.id,
+      tableNameKo: d.tableNameKo,
+      tableNameEn: d.tableNameEn,
+      hasApiKey: hasSafetydataDatasetApiKey(d),
+    })),
+  };
+}
+
 export async function listSafetydataDetailLogs(p: Params) {
   await ensureIntegrationTables();
   const limit = Math.max(1, Math.min(200, Number(p.limit ?? 100)));
+  const idPrefix = String(p.idPrefix ?? '').trim();
+  const excludeIdPrefix = String(p.excludeIdPrefix ?? '').trim();
+  const clauses: string[] = [];
+  const params: unknown[] = [limit];
+  if (idPrefix) {
+    params.push(`${idPrefix}%`);
+    clauses.push(`log_safetydata_dataset_id like $${params.length}`);
+  }
+  if (excludeIdPrefix) {
+    params.push(`${excludeIdPrefix}%`);
+    clauses.push(`log_safetydata_dataset_id not like $${params.length}`);
+  }
+  const where = clauses.length ? `where ${clauses.join(' and ')}` : '';
   const { rows } = await pool.query(
     `select
        log_safetydata_key,
@@ -126,9 +162,10 @@ export async function listSafetydataDetailLogs(p: Params) {
        log_safetydata_response_msg,
        log_safetydata_status
      from log_safetydata
+     ${where}
      order by log_safetydata_key desc
      limit $1`,
-    [limit]
+    params
   );
   return { rows };
 }
@@ -276,6 +313,82 @@ export async function runIntegration(p: Params) {
         const r = await ingestSafetydataDatasetToLayer(singleId);
         console.error(
           `[SAFETYDATA RUN] 1/1 DONE ${cfg.id} table=${r.schema}.${r.tableNameEn} fetched=${r.rowsFetched} inserted=${r.rowsInserted} filteredOut=${r.rowsFilteredOut}`
+        );
+        await updateIntegrationJobProgress(
+          ijlKey,
+          `완료 1/1 | ${cfg.id} | ${r.schema}.${r.tableNameEn} | fetched=${r.rowsFetched}, inserted=${r.rowsInserted}, filteredOut=${r.rowsFilteredOut}`
+        );
+      }
+    } else if (system === 'SAFEMAP') {
+      const runAll = p.runAll === true || String(p.datasetId ?? '') === '__ALL__';
+      const singleId = p.datasetId != null ? String(p.datasetId).trim() : '';
+      console.error(
+        `[SAFEMAP RUN] runAll=${runAll} datasetId=${singleId || '__ALL__'} targetSchema=${getSafetydataTargetSchema()}`
+      );
+      if (runAll) {
+        const targets = SAFEMAP_DATASETS.filter((d) => hasSafetydataDatasetApiKey(d));
+        const total = targets.length;
+        if (total === 0) {
+          throw new Error('API 키가 설정된 생활안전정보 데이터셋이 없습니다. (SAFEMAP_API_KEY)');
+        }
+        const errors: string[] = [];
+        const summaries: string[] = [];
+        for (let i = 0; i < targets.length; i++) {
+          const d = targets[i];
+          const seq = i + 1;
+          console.error(`[SAFEMAP RUN] ${seq}/${total} START ${d.id} -> ${d.tableNameEn}`);
+          await updateIntegrationJobProgress(
+            ijlKey,
+            `진행중 ${seq}/${total} | ${d.id} | ${d.tableNameKo} -> ${getSafetydataTargetSchema()}.${d.tableNameEn}`
+          );
+          try {
+            const r = await ingestSafetydataDatasetToLayer(d.id);
+            console.error(
+              `[SAFEMAP RUN] ${seq}/${total} DONE ${d.id} table=${r.schema}.${r.tableNameEn} fetched=${r.rowsFetched} inserted=${r.rowsInserted} filteredOut=${r.rowsFilteredOut}`
+            );
+            summaries.push(
+              `${seq}/${total} ${d.id} ${r.schema}.${r.tableNameEn} fetched=${r.rowsFetched} inserted=${r.rowsInserted} filteredOut=${r.rowsFilteredOut}`
+            );
+            await updateIntegrationJobProgress(
+              ijlKey,
+              `완료 ${seq}/${total} | ${d.id} | ${r.schema}.${r.tableNameEn} | fetched=${r.rowsFetched}, inserted=${r.rowsInserted}, filteredOut=${r.rowsFilteredOut}`
+            );
+          } catch (e) {
+            const msg = compactErrorMessage(e);
+            console.error(`[SAFEMAP RUN] ${seq}/${total} FAIL ${d.id} ${d.tableNameEn} ${msg}`);
+            errors.push(`${seq}/${total} ${d.id} ${d.tableNameEn}: ${msg}`);
+            void appendLinkageError({
+              system: 'SAFEMAP',
+              title: `${d.tableNameKo} (${d.id})`,
+              detail: formatLinkageError(e),
+            });
+            await updateIntegrationJobProgress(
+              ijlKey,
+              `실패 ${seq}/${total} | ${d.id} | ${d.tableNameEn} | ${msg}`
+            );
+          }
+        }
+        if (errors.length) {
+          throw new Error(errors.join('\n'));
+        }
+        await updateIntegrationJobProgress(
+          ijlKey,
+          `전체 완료 ${total}/${total}\n${summaries.join('\n')}`
+        );
+      } else {
+        if (!singleId || singleId === '__ALL__') {
+          throw new Error('datasetId가 필요합니다. 데이터셋을 선택하거나 전체 실행을 선택하세요.');
+        }
+        const cfg = getSafemapDatasetById(singleId);
+        if (!cfg) throw new Error(`Unknown safemap dataset: ${singleId}`);
+        console.error(`[SAFEMAP RUN] 1/1 START ${cfg.id} -> ${cfg.tableNameEn}`);
+        await updateIntegrationJobProgress(
+          ijlKey,
+          `진행중 1/1 | ${cfg.id} | ${cfg.tableNameKo} -> ${getSafetydataTargetSchema()}.${cfg.tableNameEn}`
+        );
+        const r = await ingestSafetydataDatasetToLayer(singleId);
+        console.error(
+          `[SAFEMAP RUN] 1/1 DONE ${cfg.id} table=${r.schema}.${r.tableNameEn} fetched=${r.rowsFetched} inserted=${r.rowsInserted} filteredOut=${r.rowsFilteredOut}`
         );
         await updateIntegrationJobProgress(
           ijlKey,

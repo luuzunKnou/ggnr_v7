@@ -1243,21 +1243,35 @@ export function RoadRewardDetailPanel({
         </div>
 
         <div className="flex min-h-0 flex-1 flex-col px-3 pb-2">
-          {displayParcels.length === 0 ? (
-            <p className="standard-detail-empty-dashed-compact">
-              {isEditing
-                ? "도형을 그리거나 수정하면 필지목록이 자동으로 채워집니다."
-                : "등록된 필지가 없습니다."}
-            </p>
-          ) : (
-            <MapSideDetailScroll className="min-h-0 flex-1 overflow-y-auto rounded border border-border">
-              <table className={PARCEL_LIST_TABLE_CLASS}>
-                <ParcelListColGroup editing={isEditing} />
-                <thead className="standard-table-thead">
-                  <ParcelListHeaderRow editing={isEditing} />
-                </thead>
-                <tbody>
-                    {displayParcels.map((p) => {
+          <MapSideDetailScroll className="min-h-0 flex-1 overflow-y-auto rounded border border-border">
+            <table className={PARCEL_LIST_TABLE_CLASS}>
+              <ParcelListColGroup editing={isEditing} />
+              <thead className="standard-table-thead">
+                <ParcelListHeaderRow editing={isEditing} />
+              </thead>
+              <tbody>
+                {loadingParcels && displayParcels.length === 0 ? (
+                  <tr>
+                    <td
+                      colSpan={isEditing ? 5 : 4}
+                      className="standard-table-empty"
+                    >
+                      조회 중…
+                    </td>
+                  </tr>
+                ) : displayParcels.length === 0 ? (
+                  <tr>
+                    <td
+                      colSpan={isEditing ? 5 : 4}
+                      className="standard-table-empty"
+                    >
+                      {isEditing
+                        ? "도형을 그리거나 수정하면 필지목록이 자동으로 채워집니다."
+                        : "목록이 없습니다."}
+                    </td>
+                  </tr>
+                ) : (
+                  displayParcels.map((p) => {
                       const isSelected = p.id === selectedParcelId;
                       const addr = `${p.eupmyeonDong} ${p.jibunIncluded || p.jibunOriginal}`.trim();
                       const areaLabel = `${formatCell(p.areaIncluded, true)}㎡`;
@@ -1284,7 +1298,7 @@ export function RoadRewardDetailPanel({
                               : "클릭하면 필지 상세를 봅니다"
                           }
                           className={cn(
-                            "standard-list-row h-7 last:border-b-0",
+                            "standard-list-row h-7",
                             isSelected && "standard-list-row-selected"
                           )}
                         >
@@ -1345,11 +1359,11 @@ export function RoadRewardDetailPanel({
                           ) : null}
                         </tr>
                       );
-                    })}
-                </tbody>
-              </table>
-            </MapSideDetailScroll>
-          )}
+                  })
+                )}
+              </tbody>
+            </table>
+          </MapSideDetailScroll>
         </div>
       </section>
 

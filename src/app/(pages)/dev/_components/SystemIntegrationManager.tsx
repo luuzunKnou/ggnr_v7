@@ -6,7 +6,17 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/app/shadcnComponents
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/app/shadcnComponents/ui/table"
 import { call } from "@/lib/api"
 
-type SystemKey = "KAIS" | "KRAS" | "KORPES" | "SEUMTEO" | "SAEOL" | "SAFETYDATA" | "FMS" | "NEXTGEN" | "GEOM"
+type SystemKey =
+  | "KAIS"
+  | "KRAS"
+  | "KORPES"
+  | "SEUMTEO"
+  | "SAEOL"
+  | "SAFETYDATA"
+  | "SAFEMAP"
+  | "FMS"
+  | "NEXTGEN"
+  | "GEOM"
 
 type LogRow = {
   ijl_key: number
@@ -65,6 +75,10 @@ type ParsedJob = {
 }
 
 const INTEGRATION_POLL_MS = 2000
+
+function isOpenApiDatasetSystem(system: SystemKey): system is "SAFETYDATA" | "SAFEMAP" {
+  return system === "SAFETYDATA" || system === "SAFEMAP"
+}
 
 function formatDt(v: unknown): string {
   const s = String(v ?? "")
@@ -138,9 +152,10 @@ export function SystemIntegrationManager() {
         { key: "SEUMTEO", label: "세움터" },
         { key: "SAEOL", label: "새올" },
         { key: "SAFETYDATA", label: "재난안전데이터" },
+        { key: "SAFEMAP", label: "생활안전정보" },
         { key: "FMS", label: "FMS" },
         { key: "NEXTGEN", label: "차세대" },
-        { key: "GEOM", label: "GEOM" },
+        { key: "GEOM", label: "VWORD 좌표 검색" },
       ] as const,
     []
   )
@@ -185,15 +200,16 @@ export function SystemIntegrationManager() {
     }
   }
 
-  const fetchSafetydataDatasets = async () => {
+  const fetchOpenApiDatasets = async (system: "SAFETYDATA" | "SAFEMAP") => {
     setSafetyDatasetsLoading(true)
     try {
       const res = await call("", "POST", {
         service: "integrationService",
-        action: "listSafetydataDatasets",
+        action: system === "SAFEMAP" ? "listSafemapDatasets" : "listSafetydataDatasets",
         params: {},
       })
       setSafetyDatasets((res?.data?.rows ?? []) as SafetydataDatasetRow[])
+      setSafetyDatasetId("__ALL__")
     } catch {
       setSafetyDatasets([])
     } finally {
@@ -255,13 +271,19 @@ export function SystemIntegrationManager() {
     }
   }
 
-  const fetchSafetydataDetailLogs = async (opts?: { silent?: boolean }) => {
+  const fetchSafetydataDetailLogs = async (
+    system: "SAFETYDATA" | "SAFEMAP",
+    opts?: { silent?: boolean }
+  ) => {
     if (!opts?.silent) setDetailLogsLoading(true)
     try {
+      const params: Record<string, unknown> = { limit: 100 }
+      if (system === "SAFEMAP") params.idPrefix = "sm-"
+      else params.excludeIdPrefix = "sm-"
       const res = await call("", "POST", {
         service: "integrationService",
         action: "listSafetydataDetailLogs",
-        params: { limit: 100 },
+        params,
       })
       setSafetyDetailRows((res?.data?.rows ?? []) as SafetydataDetailLogRow[])
     } catch {
@@ -274,9 +296,9 @@ export function SystemIntegrationManager() {
   useEffect(() => {
     setError("")
     fetchLogs(active)
-    if (active === "SAFETYDATA") {
-      fetchSafetydataDatasets()
-      fetchSafetydataDetailLogs()
+    if (isOpenApiDatasetSystem(active)) {
+      fetchOpenApiDatasets(active)
+      fetchSafetydataDetailLogs(active)
     }
     if (active === "GEOM") {
       void fetchGeomTables()
@@ -295,8 +317,8 @@ export function SystemIntegrationManager() {
     if (!loading) return
     const id = window.setInterval(() => {
       void fetchLogs(active, { silent: true })
-      if (active === "SAFETYDATA") {
-        void fetchSafetydataDetailLogs({ silent: true })
+      if (isOpenApiDatasetSystem(active)) {
+        void fetchSafetydataDetailLogs(active, { silent: true })
       }
     }, INTEGRATION_POLL_MS)
     return () => {
@@ -310,7 +332,7 @@ export function SystemIntegrationManager() {
     setError("")
     try {
       const params: Record<string, unknown> = { system: active, mode: "daily" }
-      if (active === "SAFETYDATA") {
+      if (isOpenApiDatasetSystem(active)) {
         if (safetyDatasetId === "__ALL__") {
           params.runAll = true
           params.datasetId = "__ALL__"
@@ -336,22 +358,23 @@ export function SystemIntegrationManager() {
       // STARTED 로그가 찍힐 시간을 조금 준 뒤 즉시 1회 동기화
       await new Promise((resolve) => window.setTimeout(resolve, 250))
       await fetchLogs(active)
-      if (active === "SAFETYDATA") await fetchSafetydataDetailLogs()
+      if (isOpenApiDatasetSystem(active)) await fetchSafetydataDetailLogs(active)
       await runPromise
       await fetchLogs(active)
-      if (active === "SAFETYDATA") await fetchSafetydataDetailLogs()
+      if (isOpenApiDatasetSystem(active)) await fetchSafetydataDetailLogs(active)
     } catch (e) {
       setError(formatApiError(e))
       await fetchLogs(active)
-      if (active === "SAFETYDATA") await fetchSafetydataDetailLogs()
+      if (isOpenApiDatasetSystem(active)) await fetchSafetydataDetailLogs(active)
     } finally {
       setLoading(false)
     }
   }
 
-  const refreshSafetydataOnly = async () => {
+  const refreshOpenApiOnly = async () => {
+    if (!isOpenApiDatasetSystem(active)) return
     await fetchLogs(active)
-    await fetchSafetydataDetailLogs()
+    await fetchSafetydataDetailLogs(active)
   }
 
   return (
@@ -392,7 +415,7 @@ export function SystemIntegrationManager() {
         </div>
       ) : null}
 
-      {active === "SAFETYDATA" ? (
+      {isOpenApiDatasetSystem(active) ? (
         <div className="flex flex-col gap-2 shrink-0">
           <label className="text-sm text-muted-foreground flex flex-wrap items-center gap-2">
             <span>데이터셋</span>
@@ -491,10 +514,10 @@ export function SystemIntegrationManager() {
               variant="outline"
               size="sm"
               className="min-w-[5.5rem]"
-              onClick={() => (active === "SAFETYDATA" ? refreshSafetydataOnly() : fetchLogs(active))}
-              disabled={logsLoading || (active === "SAFETYDATA" && detailLogsLoading)}
+              onClick={() => (isOpenApiDatasetSystem(active) ? refreshOpenApiOnly() : fetchLogs(active))}
+              disabled={logsLoading || (isOpenApiDatasetSystem(active) && detailLogsLoading)}
             >
-              {logsLoading || (active === "SAFETYDATA" && detailLogsLoading) ? "새로고침…" : "새로고침"}
+              {logsLoading || (isOpenApiDatasetSystem(active) && detailLogsLoading) ? "새로고침…" : "새로고침"}
             </Button>
           </div>
         </CardHeader>
@@ -505,7 +528,7 @@ export function SystemIntegrationManager() {
         ) : null}
       </Card>
 
-      {active !== "SAFETYDATA" ? (
+      {!isOpenApiDatasetSystem(active) ? (
         <Card className="min-h-0 flex flex-col">
           <CardHeader className="pb-2">
             <CardTitle className="text-base">실행 로그</CardTitle>
@@ -575,94 +598,96 @@ export function SystemIntegrationManager() {
             </CardContent>
           </Card>
 
-          <Card className="min-h-0 flex flex-col">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base">실행 로그 (integration_job_log)</CardTitle>
-            </CardHeader>
-            <CardContent className="min-h-0 overflow-y-scroll overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>시작시각</TableHead>
-                    <TableHead>상태</TableHead>
-                    <TableHead>진행</TableHead>
-                    <TableHead>데이터셋</TableHead>
-                    <TableHead>대상테이블</TableHead>
-                    <TableHead>건수요약</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {rows.length === 0 ? (
+          <div className="min-h-0 flex-1 flex flex-row gap-3">
+            <Card className="min-h-0 min-w-0 flex-1 flex flex-col">
+              <CardHeader className="pb-2 shrink-0">
+                <CardTitle className="text-base">실행 로그 (integration_job_log)</CardTitle>
+              </CardHeader>
+              <CardContent className="min-h-0 flex-1 overflow-y-scroll overflow-x-auto">
+                <Table>
+                  <TableHeader>
                     <TableRow>
-                      <TableCell colSpan={6} className="text-muted-foreground">
-                        {logsLoading ? "불러오는 중…" : "로그가 없습니다."}
-                      </TableCell>
+                      <TableHead>시작시각</TableHead>
+                      <TableHead>상태</TableHead>
+                      <TableHead>진행</TableHead>
+                      <TableHead>데이터셋</TableHead>
+                      <TableHead>대상테이블</TableHead>
+                      <TableHead>건수요약</TableHead>
                     </TableRow>
-                  ) : (
-                    rows.map((r) => {
-                      const p = parseJob(r.ijl_message)
-                      return (
-                        <TableRow key={r.ijl_key}>
-                          <TableCell className="whitespace-nowrap">{formatDt(r.ijl_started_at)}</TableCell>
-                          <TableCell>{r.ijl_status}</TableCell>
-                          <TableCell className="whitespace-nowrap">{p.progress}</TableCell>
-                          <TableCell className="whitespace-nowrap">{p.dataset}</TableCell>
-                          <TableCell className="whitespace-nowrap">{p.table}</TableCell>
-                          <TableCell className="whitespace-nowrap">{p.metrics}</TableCell>
-                        </TableRow>
-                      )
-                    })
-                  )}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
-
-          <Card className="min-h-0 flex flex-col">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base">데이터셋 결과 (log_safetydata)</CardTitle>
-            </CardHeader>
-            <CardContent className="min-h-0 overflow-y-scroll overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>요청시각</TableHead>
-                    <TableHead>데이터셋</TableHead>
-                    <TableHead>상태</TableHead>
-                    <TableHead>대상테이블</TableHead>
-                    <TableHead className="text-right">가져옴</TableHead>
-                    <TableHead className="text-right">적재</TableHead>
-                    <TableHead className="text-right">필터제외</TableHead>
-                    <TableHead className="text-right">페이지</TableHead>
-                    <TableHead>메시지</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {parsedDetails.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={9} className="text-muted-foreground">
-                        {detailLogsLoading ? "불러오는 중…" : "상세 로그가 없습니다."}
-                      </TableCell>
-                    </TableRow>
-                  ) : (
-                    parsedDetails.map(({ row, parsed }) => (
-                      <TableRow key={row.log_safetydata_key}>
-                        <TableCell className="whitespace-nowrap">{formatDt(row.log_safetydata_request_date)}</TableCell>
-                        <TableCell className="whitespace-nowrap">{row.log_safetydata_dataset_id}</TableCell>
-                        <TableCell>{row.log_safetydata_status}</TableCell>
-                        <TableCell className="whitespace-nowrap">{parsed.table}</TableCell>
-                        <TableCell className="text-right tabular-nums">{parsed.fetched ?? "-"}</TableCell>
-                        <TableCell className="text-right tabular-nums">{parsed.inserted ?? "-"}</TableCell>
-                        <TableCell className="text-right tabular-nums">{parsed.filteredOut ?? "-"}</TableCell>
-                        <TableCell className="text-right tabular-nums">{parsed.pages ?? "-"}</TableCell>
-                        <TableCell className="whitespace-normal break-all max-w-[24rem]">{parsed.raw}</TableCell>
+                  </TableHeader>
+                  <TableBody>
+                    {rows.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={6} className="text-muted-foreground">
+                          {logsLoading ? "불러오는 중…" : "로그가 없습니다."}
+                        </TableCell>
                       </TableRow>
-                    ))
-                  )}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
+                    ) : (
+                      rows.map((r) => {
+                        const p = parseJob(r.ijl_message)
+                        return (
+                          <TableRow key={r.ijl_key}>
+                            <TableCell className="whitespace-nowrap">{formatDt(r.ijl_started_at)}</TableCell>
+                            <TableCell>{r.ijl_status}</TableCell>
+                            <TableCell className="whitespace-nowrap">{p.progress}</TableCell>
+                            <TableCell className="whitespace-nowrap">{p.dataset}</TableCell>
+                            <TableCell className="whitespace-nowrap">{p.table}</TableCell>
+                            <TableCell className="whitespace-nowrap">{p.metrics}</TableCell>
+                          </TableRow>
+                        )
+                      })
+                    )}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+
+            <Card className="min-h-0 min-w-0 flex-1 flex flex-col">
+              <CardHeader className="pb-2 shrink-0">
+                <CardTitle className="text-base">데이터셋 결과 (log_safetydata)</CardTitle>
+              </CardHeader>
+              <CardContent className="min-h-0 flex-1 overflow-y-scroll overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>요청시각</TableHead>
+                      <TableHead>데이터셋</TableHead>
+                      <TableHead>상태</TableHead>
+                      <TableHead>대상테이블</TableHead>
+                      <TableHead className="text-right">가져옴</TableHead>
+                      <TableHead className="text-right">적재</TableHead>
+                      <TableHead className="text-right">필터제외</TableHead>
+                      <TableHead className="text-right">페이지</TableHead>
+                      <TableHead>메시지</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {parsedDetails.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={9} className="text-muted-foreground">
+                          {detailLogsLoading ? "불러오는 중…" : "상세 로그가 없습니다."}
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      parsedDetails.map(({ row, parsed }) => (
+                        <TableRow key={row.log_safetydata_key}>
+                          <TableCell className="whitespace-nowrap">{formatDt(row.log_safetydata_request_date)}</TableCell>
+                          <TableCell className="whitespace-nowrap">{row.log_safetydata_dataset_id}</TableCell>
+                          <TableCell>{row.log_safetydata_status}</TableCell>
+                          <TableCell className="whitespace-nowrap">{parsed.table}</TableCell>
+                          <TableCell className="text-right tabular-nums">{parsed.fetched ?? "-"}</TableCell>
+                          <TableCell className="text-right tabular-nums">{parsed.inserted ?? "-"}</TableCell>
+                          <TableCell className="text-right tabular-nums">{parsed.filteredOut ?? "-"}</TableCell>
+                          <TableCell className="text-right tabular-nums">{parsed.pages ?? "-"}</TableCell>
+                          <TableCell className="whitespace-normal break-all max-w-[24rem]">{parsed.raw}</TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          </div>
         </>
       )}
     </div>

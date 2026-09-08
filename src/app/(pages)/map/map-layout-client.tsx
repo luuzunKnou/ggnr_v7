@@ -31,7 +31,9 @@ import { SafetyFacDetailPanel } from "./_mapContents/safty/safetyFac/SafetyFacDe
 import type { SafetyFacFacilityRow } from "./_mapContents/safty/safetyFac/safetyFacSymbols"
 import { VillagePatrolListPanel } from "./_mapContents/safty/villagePatrol/VillagePatrolListPanel"
 import { RadiationShelterPanel } from "./_mapContents/safty/radiationShelter/RadiationShelterPanel"
+import { RadiationShelterDetailPanel } from "./_mapContents/safty/radiationShelter/RadiationShelterDetailPanel"
 import { WaterPlaySignPanel } from "./_mapContents/safty/waterPlaySign/WaterPlaySignPanel"
+import { WaterPlaySignDetailPanel } from "./_mapContents/safty/waterPlaySign/WaterPlaySignDetailPanel"
 import { SafetyHospitalBadPanel } from "./_mapContents/safty/safetyHospitalBad/SafetyHospitalBadPanel"
 import { SafetyJsjReservoirPanel } from "./_mapContents/safty/saftyJsj/SafetyJsjReservoirPanel"
 import { RoadDocManualPanel } from "./_mapContents/road/roadDoc/roadDocManualPanel"
@@ -155,6 +157,11 @@ import {
   ensureRoadLedgerSummaryLayer,
 } from "@/lib/mapServiceMenuLayers"
 import { normalizeOpenedToken } from "@/lib/mapServiceOpened"
+import {
+  scrubMapSearchParamsOnSystemSwitch,
+  scrubOpenedNotAllowedForSystem,
+} from "@/lib/mapSystemSwitch"
+import { call } from "@/lib/api"
 import { MapSidebar } from "./_mapComponents/map-sidebar"
 import { MapSearchBar } from "./_mapComponents/map-search-bar"
 import { MapContextProvider, useMapContext } from "./_mapComponents/MapContext"
@@ -236,10 +243,16 @@ const VILLAGE_PATROL_PANEL_MAX_WIDTH = 1320
 const RADIATION_SHELTER_PANEL_DEFAULT_WIDTH = 420
 const RADIATION_SHELTER_PANEL_MIN_WIDTH = 320
 const RADIATION_SHELTER_PANEL_MAX_WIDTH = 720
+const RADIATION_SHELTER_DETAIL_DEFAULT_WIDTH = 400
+const RADIATION_SHELTER_DETAIL_MIN_WIDTH = 320
+const RADIATION_SHELTER_DETAIL_MAX_WIDTH = 640
 
-const WATER_PLAY_SIGN_PANEL_DEFAULT_WIDTH = 420
-const WATER_PLAY_SIGN_PANEL_MIN_WIDTH = 320
-const WATER_PLAY_SIGN_PANEL_MAX_WIDTH = 720
+const WATER_PLAY_SIGN_PANEL_DEFAULT_WIDTH = 560
+const WATER_PLAY_SIGN_PANEL_MIN_WIDTH = 360
+const WATER_PLAY_SIGN_PANEL_MAX_WIDTH = 900
+const WATER_PLAY_SIGN_DETAIL_DEFAULT_WIDTH = 400
+const WATER_PLAY_SIGN_DETAIL_MIN_WIDTH = 320
+const WATER_PLAY_SIGN_DETAIL_MAX_WIDTH = 640
 
 const SAFETY_HOSPITAL_BED_PANEL_DEFAULT_WIDTH = 420
 const SAFETY_HOSPITAL_BED_PANEL_MIN_WIDTH = 320
@@ -727,9 +740,26 @@ function MapLayoutContent({
   const [radiationShelterPanelWidth, setRadiationShelterPanelWidth] = useState(
     RADIATION_SHELTER_PANEL_DEFAULT_WIDTH
   )
+  const [radiationShelterDetailId, setRadiationShelterDetailId] = useState<
+    number | typeof LAYER_ROW_NEW_ID | null
+  >(null)
+  const radiationShelterDetailOpen =
+    radiationShelterOpen && radiationShelterDetailId != null
+  const [radiationShelterDetailWidth, setRadiationShelterDetailWidth] = useState(
+    RADIATION_SHELTER_DETAIL_DEFAULT_WIDTH
+  )
+  const [radiationShelterListRefreshKey, setRadiationShelterListRefreshKey] = useState(0)
   const [waterPlaySignPanelWidth, setWaterPlaySignPanelWidth] = useState(
     WATER_PLAY_SIGN_PANEL_DEFAULT_WIDTH
   )
+  const [waterPlaySignDetailId, setWaterPlaySignDetailId] = useState<
+    number | typeof LAYER_ROW_NEW_ID | null
+  >(null)
+  const waterPlaySignDetailOpen = waterPlaySignOpen && waterPlaySignDetailId != null
+  const [waterPlaySignDetailWidth, setWaterPlaySignDetailWidth] = useState(
+    WATER_PLAY_SIGN_DETAIL_DEFAULT_WIDTH
+  )
+  const [waterPlaySignListRefreshKey, setWaterPlaySignListRefreshKey] = useState(0)
   const [villagePatrolPanelWidth, setVillagePatrolPanelWidth] = useState(VILLAGE_PATROL_PANEL_DEFAULT_WIDTH)
   const [safetyHospitalBedPanelWidth, setSafetyHospitalBedPanelWidth] = useState(
     SAFETY_HOSPITAL_BED_PANEL_DEFAULT_WIDTH
@@ -857,9 +887,11 @@ function MapLayoutContent({
     (safetyWaterOpen ? safetyWaterPanelWidth : 0) +
     (safetyWaterOpen && safetyWaterStatsOpen ? safetyWaterStatsWidth : 0) +
     (waterPlaySignOpen ? waterPlaySignPanelWidth : 0) +
+    (waterPlaySignDetailOpen ? waterPlaySignDetailWidth : 0) +
     (safetyFacOpen ? safetyFacPanelWidth : 0) +
     (safetyFacDetailOpen ? safetyFacDetailWidth : 0) +
     (radiationShelterOpen ? radiationShelterPanelWidth : 0) +
+    (radiationShelterDetailOpen ? radiationShelterDetailWidth : 0) +
     (villagePatrolOpen ? villagePatrolPanelWidth : 0) +
     (safetyHospitalBedOpen ? safetyHospitalBedPanelWidth : 0) +
     (jsjWaterLevelOpen ? jsjReservoirPanelWidth : 0) +
@@ -965,14 +997,19 @@ function MapLayoutContent({
   const safetyWaterStatsLeftPx = safetyWaterPanelLeftPx + (safetyWaterOpen ? safetyWaterPanelWidth : 0)
   const waterPlaySignPanelLeftPx =
     safetyWaterStatsLeftPx + (safetyWaterOpen && safetyWaterStatsOpen ? safetyWaterStatsWidth : 0)
-  const safetyFacPanelLeftPx =
+  const waterPlaySignDetailLeftPx =
     waterPlaySignPanelLeftPx + (waterPlaySignOpen ? waterPlaySignPanelWidth : 0)
+  const safetyFacPanelLeftPx =
+    waterPlaySignDetailLeftPx + (waterPlaySignDetailOpen ? waterPlaySignDetailWidth : 0)
   const safetyFacDetailLeftPx =
     safetyFacPanelLeftPx + (safetyFacOpen ? safetyFacPanelWidth : 0)
   const radiationShelterPanelLeftPx =
     safetyFacDetailLeftPx + (safetyFacDetailOpen ? safetyFacDetailWidth : 0)
-  const villagePatrolPanelLeftPx =
+  const radiationShelterDetailLeftPx =
     radiationShelterPanelLeftPx + (radiationShelterOpen ? radiationShelterPanelWidth : 0)
+  const villagePatrolPanelLeftPx =
+    radiationShelterDetailLeftPx +
+    (radiationShelterDetailOpen ? radiationShelterDetailWidth : 0)
   const safetyHospitalBedPanelLeftPx =
     villagePatrolPanelLeftPx + (villagePatrolOpen ? villagePatrolPanelWidth : 0)
   const jsjReservoirPanelLeftPx =
@@ -1270,15 +1307,62 @@ function MapLayoutContent({
     router.push(`/map?${current.toString()}`)
   }
 
-  /** 시스템 전환 시 — 레이어 전부 끄기 (opened URL 은 selectSystem 에서 serviceList 기준 scrub) */
+  /** 현재 시스템 serviceList — opened 유효성·전환 scrub 용 */
+  const [systemListForOpened, setSystemListForOpened] = useState<
+    { sys_key: string; serviceList?: string[] }[]
+  >([])
+  useEffect(() => {
+    call("", "POST", { service: "configService", action: "getSystemList", params: {} })
+      .then((res) => {
+        const data = res?.data ?? res
+        const systems = Array.isArray(data?.systems) ? data.systems : []
+        setSystemListForOpened(
+          systems.map((s: { sys_key?: string; serviceList?: string[] }) => ({
+            sys_key: String(s?.sys_key ?? "").trim(),
+            serviceList: Array.isArray(s?.serviceList) ? s.serviceList : [],
+          }))
+        )
+      })
+      .catch(() => setSystemListForOpened([]))
+  }, [])
+
+  /**
+   * system 변경 → 레이어 전부 끄기 + 전환 scrub.
+   * opened 가 현재 시스템 메뉴에 없으면 → 패널 URL 정리 + 레이어 끄기.
+   */
   const prevSystemKeyRef = useRef<string | undefined>(undefined)
+  const openedParamKey = searchParams.get("opened") ?? ""
   useEffect(() => {
     const prev = prevSystemKeyRef.current
+    const systemChanged =
+      prev !== undefined && Boolean(prev) && prev !== systemKeyFromUrl
     prevSystemKeyRef.current = systemKeyFromUrl
-    if (prev === undefined || !prev || prev === systemKeyFromUrl) return
-    mapContext?.allLayersOffRef?.current?.()
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- systemKeyFromUrl only
-  }, [systemKeyFromUrl])
+
+    if (systemChanged) {
+      mapContext?.allLayersOffRef?.current?.()
+    }
+
+    if (systemListForOpened.length === 0) return
+
+    const target = systemListForOpened.find((s) => s.sys_key === systemKeyFromUrl)
+    const serviceList = target?.serviceList ?? []
+    const current = new URLSearchParams(Array.from(searchParams.entries()))
+    const before = current.toString()
+
+    if (systemChanged) {
+      scrubMapSearchParamsOnSystemSwitch(current, systemKeyFromUrl, serviceList)
+    } else {
+      scrubOpenedNotAllowedForSystem(current, systemKeyFromUrl, serviceList)
+    }
+
+    if (current.toString() === before) return
+
+    if (!systemChanged) {
+      mapContext?.allLayersOffRef?.current?.()
+    }
+    router.replace(`/map?${current.toString()}`)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- system·opened·목록 기준
+  }, [systemKeyFromUrl, openedParamKey, systemListForOpened])
 
   const setOpened = (keys: string[]) => {
     updateMapUrl({ opened: keys })
@@ -1551,6 +1635,26 @@ function MapLayoutContent({
   }, [groundwaterPermitOpen])
 
   useEffect(() => {
+    if (!radiationShelterOpen) setRadiationShelterDetailId(null)
+  }, [radiationShelterOpen])
+
+  useEffect(() => {
+    if (!waterPlaySignOpen) setWaterPlaySignDetailId(null)
+  }, [waterPlaySignOpen])
+
+  useEffect(() => {
+    if (radiationShelterDetailOpen) {
+      setRadiationShelterDetailWidth(RADIATION_SHELTER_DETAIL_DEFAULT_WIDTH)
+    }
+  }, [radiationShelterDetailOpen])
+
+  useEffect(() => {
+    if (waterPlaySignDetailOpen) {
+      setWaterPlaySignDetailWidth(WATER_PLAY_SIGN_DETAIL_DEFAULT_WIDTH)
+    }
+  }, [waterPlaySignDetailOpen])
+
+  useEffect(() => {
     setFmsLinkagePanelOpen?.(fmsLinkageOpen)
     if (!fmsLinkageOpen) {
       setFmsLinkageSelectedId?.(null)
@@ -1731,11 +1835,13 @@ function MapLayoutContent({
   }
 
   const handleCloseRadiationShelter = () => {
+    setRadiationShelterDetailId(null)
     const next = openedWindows.filter((w) => w !== RADIATION_SHELTER_OPENED_KEY)
     setOpened(next)
   }
 
   const handleCloseWaterPlaySign = () => {
+    setWaterPlaySignDetailId(null)
     const next = openedWindows.filter((w) => w !== WATER_PLAY_SIGN_OPENED_KEY)
     setOpened(next)
   }
@@ -2690,7 +2796,32 @@ function MapLayoutContent({
                 onWidthChange={setWaterPlaySignPanelWidth}
                 contentClassName="overflow-hidden"
               >
-                <WaterPlaySignPanel onClose={handleCloseWaterPlaySign} />
+                <WaterPlaySignPanel
+                  onClose={handleCloseWaterPlaySign}
+                  selectedDetailId={waterPlaySignDetailId}
+                  onSelectDetailId={setWaterPlaySignDetailId}
+                  listRefreshKey={waterPlaySignListRefreshKey}
+                />
+              </MapSideListPanel>
+            </div>
+          )}
+          {waterPlaySignDetailOpen && waterPlaySignDetailId != null && (
+            <div className="pointer-events-auto shrink-0">
+              <MapSideListPanel
+                width={waterPlaySignDetailWidth}
+                minWidth={WATER_PLAY_SIGN_DETAIL_MIN_WIDTH}
+                maxWidth={WATER_PLAY_SIGN_DETAIL_MAX_WIDTH}
+                leftOffsetPx={waterPlaySignDetailLeftPx}
+                onWidthChange={setWaterPlaySignDetailWidth}
+                contentClassName="overflow-hidden"
+              >
+                <WaterPlaySignDetailPanel
+                  detailId={waterPlaySignDetailId}
+                  onClose={() => setWaterPlaySignDetailId(null)}
+                  onListRefresh={() => setWaterPlaySignListRefreshKey((k) => k + 1)}
+                  onCreated={(newId) => setWaterPlaySignDetailId(newId)}
+                  onDeleted={() => setWaterPlaySignDetailId(null)}
+                />
               </MapSideListPanel>
             </div>
           )}
@@ -2738,7 +2869,32 @@ function MapLayoutContent({
                 onWidthChange={setRadiationShelterPanelWidth}
                 contentClassName="overflow-hidden"
               >
-                <RadiationShelterPanel onClose={handleCloseRadiationShelter} />
+                <RadiationShelterPanel
+                  onClose={handleCloseRadiationShelter}
+                  selectedDetailId={radiationShelterDetailId}
+                  onSelectDetailId={setRadiationShelterDetailId}
+                  listRefreshKey={radiationShelterListRefreshKey}
+                />
+              </MapSideListPanel>
+            </div>
+          )}
+          {radiationShelterDetailOpen && radiationShelterDetailId != null && (
+            <div className="pointer-events-auto shrink-0">
+              <MapSideListPanel
+                width={radiationShelterDetailWidth}
+                minWidth={RADIATION_SHELTER_DETAIL_MIN_WIDTH}
+                maxWidth={RADIATION_SHELTER_DETAIL_MAX_WIDTH}
+                leftOffsetPx={radiationShelterDetailLeftPx}
+                onWidthChange={setRadiationShelterDetailWidth}
+                contentClassName="overflow-hidden"
+              >
+                <RadiationShelterDetailPanel
+                  detailId={radiationShelterDetailId}
+                  onClose={() => setRadiationShelterDetailId(null)}
+                  onListRefresh={() => setRadiationShelterListRefreshKey((k) => k + 1)}
+                  onCreated={(newId) => setRadiationShelterDetailId(newId)}
+                  onDeleted={() => setRadiationShelterDetailId(null)}
+                />
               </MapSideListPanel>
             </div>
           )}

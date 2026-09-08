@@ -36,7 +36,15 @@ export function useRoadCctvMapLayer(
   onSelectKeyRef.current = onSelectKey;
 
   useEffect(() => {
-    if (!mapReady || !map || !active) return;
+    if (!mapReady || !map) return;
+
+    if (!active) {
+      if (layerRef.current) {
+        map.removeLayer(layerRef.current);
+        layerRef.current = null;
+      }
+      return;
+    }
 
     const source = new VectorSource();
     const layer = new VectorLayer({
@@ -68,7 +76,7 @@ export function useRoadCctvMapLayer(
     return () => {
       map.un('singleclick', onClick);
       map.removeLayer(layer);
-      layerRef.current = null;
+      if (layerRef.current === layer) layerRef.current = null;
     };
   }, [mapReady, map, active]);
 

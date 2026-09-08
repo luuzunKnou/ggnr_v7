@@ -137,6 +137,8 @@ export type SafetydataDatasetConfig = {
   queryParams?: Record<string, string>;
   /** 기본 4종 외 API 전용 요청변수 */
   extraRequestParams?: SafetydataApiColumnSpec[];
+  /** true면 SAFETYDATA_GLOBAL_BBOX·날짜 기본값을 URL에 붙이지 않음 (safemap 등) */
+  skipGlobalBbox?: boolean;
   /** 오픈API 출력결과(Response Element) — 포털 문서 기준 */
   responseFields?: SafetydataApiColumnSpec[];
   /** 공간(geom) 생성·발행 메타 */

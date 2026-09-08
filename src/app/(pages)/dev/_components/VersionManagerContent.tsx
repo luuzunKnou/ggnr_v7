@@ -42,6 +42,7 @@ import {
 } from '@/lib/gnmsVersionLabel';
 import { SchemaSyncPreviewModal } from './SchemaSyncPreviewModal';
 import type { SchemaSyncPreviewResult } from '@/lib/schemaSyncPreviewTypes';
+import { formatSchemaSyncHistoryMemo } from '@/lib/schemaSyncHistoryMemo';
 
 type SideProgress = {
   message: string;
@@ -175,30 +176,34 @@ export function VersionManagerContent() {
     setSchemaPreview(null);
     setSchemaModalOpen(true);
     pushLog('스키마 변경 미리보기 조회 중…');
+    let previewResult: SchemaSyncPreviewResult | null = null;
     try {
       const res = await fetch('/api/dev/schema-sync/preview', { cache: 'no-store' });
       const json = (await res.json()) as SchemaSyncPreviewResult & { error?: string };
       if (!res.ok && !json.counts) {
-        setSchemaPreview({
+        previewResult = {
           ok: false,
           error: json.error ?? `HTTP ${res.status}`,
           counts: { create: 0, drop: 0, delete: 0, alter: 0 },
           items: [],
           warnings: [],
           hasDataLoss: false,
-        });
+        };
+        setSchemaPreview(previewResult);
       } else {
+        previewResult = json;
         setSchemaPreview(json);
       }
     } catch (e: unknown) {
-      setSchemaPreview({
+      previewResult = {
         ok: false,
         error: e instanceof Error ? e.message : '미리보기 실패',
         counts: { create: 0, drop: 0, delete: 0, alter: 0 },
         items: [],
         warnings: [],
         hasDataLoss: false,
-      });
+      };
+      setSchemaPreview(previewResult);
     } finally {
       setSchemaPreviewLoading(false);
     }
@@ -235,6 +240,7 @@ export function VersionManagerContent() {
       pushLog(`롤백 완료${json.rollbackDetail ? ` — ${json.rollbackDetail}` : ''}`);
     } else {
       pushLog('스키마 안내 확인 — commit·재기동 예약 중…');
+      const schemaMemo = formatSchemaSyncHistoryMemo(previewResult);
       const json = await confirmSchemaSyncApply(pendingId, (p) => {
         if (p.logLine) pushLog(p.logLine.replace(/^\[SourceCodeUpload\]\s*/i, ''));
         const mergePct =
@@ -266,7 +272,7 @@ export function VersionManagerContent() {
           mergeCountRef.current = { applied: p.appliedFiles, total: p.totalFiles };
           mergeStepRef.current = p.mergeStep ?? 'copy';
         }
-      });
+      }, schemaMemo);
       if (!json.ok) {
         throw new Error(json.error ?? '진행 확정 실패');
       }

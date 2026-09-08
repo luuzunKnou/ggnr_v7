@@ -21,11 +21,16 @@ export async function POST(req: NextRequest) {
       return Response.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const body = (await req.json().catch(() => ({}))) as { pendingId?: string };
+    const body = (await req.json().catch(() => ({}))) as {
+      pendingId?: string;
+      schemaMemo?: string;
+    };
     const pendingId = typeof body.pendingId === 'string' ? body.pendingId.trim() : '';
     if (!pendingId) {
       return Response.json({ ok: false, error: 'pendingId가 필요합니다.' }, { status: 400 });
     }
+    const schemaMemo =
+      typeof body.schemaMemo === 'string' && body.schemaMemo.trim() ? body.schemaMemo.trim() : undefined;
 
     const encoder = new TextEncoder();
     const yieldEventLoop = () => new Promise<void>((r) => setImmediate(r));
@@ -40,6 +45,7 @@ export async function POST(req: NextRequest) {
           const result = await confirmPendingSchemaApply({
             pendingId,
             requestedBy: String(usrId),
+            schemaMemo,
             onProgress: async (event) => {
               await send({ type: 'progress', ...event });
             },

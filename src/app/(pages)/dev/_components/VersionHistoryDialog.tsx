@@ -418,6 +418,12 @@ export function VersionHistoryDialog({
                       {row.mvhMemo?.trim() ? row.mvhMemo.trim() : '-'}
                     </div>
                   )}
+                  {row.mvhHistoryType === 'apply_latest' && row.mvhMemo?.trim() && (
+                    <div className="whitespace-pre-wrap break-all text-foreground">
+                      <span className="text-muted-foreground">스키마: </span>
+                      {row.mvhMemo.trim()}
+                    </div>
+                  )}
                   <div className="whitespace-pre-wrap break-all text-foreground">
                     <span className="text-muted-foreground">본문: </span>
                     {(row.mvhMessage ?? '').trim() ? row.mvhMessage : '-'}

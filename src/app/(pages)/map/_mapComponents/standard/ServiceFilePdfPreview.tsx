@@ -92,6 +92,8 @@ export function ServiceFilePdfPreview({ items, initialIndex, onClose }: Props) {
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const scaleRef = useRef(1);
   scaleRef.current = scale;
+  const [rotation, setRotation] = useState(0);
+  const [pan, setPan] = useState({ x: 0, y: 0 });
   const panRef = useRef(pan);
   panRef.current = pan;
   const rotationRef = useRef(rotation);

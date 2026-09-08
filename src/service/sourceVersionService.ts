@@ -822,6 +822,7 @@ async function executePreparedSourceApplyCommit(
 export async function confirmPendingSchemaApply(params: {
   pendingId: string;
   requestedBy: string;
+  schemaMemo?: string;
   onProgress?: (event: ApplySourceProgressEvent) => void | Promise<void>;
 }): Promise<SchemaConfirmResult> {
   const session = await resolvePendingSession(params.pendingId);
@@ -902,6 +903,7 @@ export async function confirmPendingSchemaApply(params: {
     const runNpmInstallBefore = false;
     const runBuildAfterExit = false;
     const ipTrim = clientIp?.trim() || undefined;
+    const historyMemo = params.schemaMemo?.trim() || undefined;
 
     await writeRestartSignal(signalFile, {
       at: new Date().toISOString(),
@@ -927,6 +929,7 @@ export async function confirmPendingSchemaApply(params: {
             geoserverMsg: geoserverMessage,
             message: successMessage,
             option: historyOption,
+            memo: historyMemo,
           }
         : null,
       launcherConsumed: false,
@@ -940,6 +943,7 @@ export async function confirmPendingSchemaApply(params: {
         status: 'success',
         message: successMessage,
         option: historyOption,
+        memo: historyMemo,
         version: historyVersion,
         ip: ipTrim,
       });
