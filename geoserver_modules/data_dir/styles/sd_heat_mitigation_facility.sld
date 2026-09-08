@@ -35,10 +35,6 @@
                 <sld:AnchorPointX>0.5</sld:AnchorPointX>
                 <sld:AnchorPointY>0.5</sld:AnchorPointY>
               </sld:AnchorPoint>
-              <sld:Displacement>
-                <sld:DisplacementX>0</sld:DisplacementX>
-                <sld:DisplacementY>0</sld:DisplacementY>
-              </sld:Displacement>
             </sld:Graphic>
           </sld:PointSymbolizer>
           <sld:TextSymbolizer>
@@ -143,3 +139,4 @@
     </sld:UserStyle>
   </sld:NamedLayer>
 </sld:StyledLayerDescriptor>
+

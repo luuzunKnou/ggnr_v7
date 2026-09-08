@@ -1,5 +1,5 @@
 <featureType>
-  <id>FeatureTypeInfoImpl--2053d3:19d606c4ff1:30ed</id>
+  <id>FeatureTypeInfoImpl-7b089fba:1a05fb2fa35:-7e68</id>
   <name>sd_tsunami_emergency_evac_site</name>
   <nativeName>sd_tsunami_emergency_evac_site</nativeName>
   <namespace>
@@ -12,17 +12,17 @@
   </keywords>
   <srs>EPSG:5181</srs>
   <nativeBoundingBox>
-    <minx>321635.53125</minx>
-    <maxx>433031.875</maxx>
-    <miny>167751.15625</miny>
-    <maxy>562633.75</maxy>
+    <minx>0.0</minx>
+    <maxx>-1.0</maxx>
+    <miny>0.0</miny>
+    <maxy>-1.0</maxy>
     <crs class="projected">EPSG:5181</crs>
   </nativeBoundingBox>
   <latLonBoundingBox>
-    <minx>128.3323706900128</minx>
-    <maxx>129.67240850687693</maxx>
-    <miny>34.97909004957961</miny>
-    <maxy>38.555941247038284</maxy>
+    <minx>124.84847767680762</minx>
+    <maxx>124.84848865053446</maxx>
+    <miny>33.47495973610326</miny>
+    <maxy>33.474968932506</maxy>
     <crs>EPSG:4326</crs>
   </latLonBoundingBox>
   <projectionPolicy>FORCE_DECLARED</projectionPolicy>
