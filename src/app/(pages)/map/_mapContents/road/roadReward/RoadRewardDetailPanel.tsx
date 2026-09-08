@@ -82,6 +82,11 @@ type Props = {
   onCaseIdChange?: (id: string) => void;
   /** 지도 필지 클릭 시 강조할 필지 id */
   focusParcelId?: string | null;
+  /**
+   * true: 건·필지 선택 시 지도 이동·확대 (목록 클릭).
+   * false: 이동·확대 생략, 강조 레이어만 (지도 객체 선택).
+   */
+  autoFitMap?: boolean;
   overlayLeftPx: number;
   overlayWidthPx: number;
 };
@@ -322,6 +327,7 @@ export function RoadRewardDetailPanel({
   onDeleted,
   onCaseIdChange,
   focusParcelId,
+  autoFitMap = true,
   overlayLeftPx,
   overlayWidthPx,
 }: Props) {
@@ -486,8 +492,9 @@ export function RoadRewardDetailPanel({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- caseId 전환 시에만
   }, [caseId]);
 
-  /** 목록에서 건 선택 시 편입 범위(또는 필지목록) 위치로 지도 이동 */
+  /** 목록에서 건 선택 시 편입 범위(또는 필지목록) 위치로 지도 이동 — 지도 객체 선택은 생략 */
   useEffect(() => {
+    if (!autoFitMap) return;
     if (!caseItem || isCreateMode) return;
     const map = mapContext?.mapInstanceRef?.current;
     if (!map) return;
@@ -505,10 +512,10 @@ export function RoadRewardDetailPanel({
         applyMapViewPadding: applyPad,
       });
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- caseId 전환 시에만
-  }, [caseId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- caseId·autoFitMap 전환 시에만
+  }, [caseId, autoFitMap]);
 
-  /** 지도 필지 클릭 — 부모 건 상세 오픈 후 해당 필지 선택·이동(조회 상세는 닫음) */
+  /** 지도 필지 클릭 — 부모 건 상세 오픈 후 해당 필지 선택(강조). 이동은 autoFitMap일 때만 */
   useEffect(() => {
     if (!focusParcelId || isCreateMode) return;
     setParcelModal((m) => (m?.mode === "view" ? null : m));
@@ -516,13 +523,14 @@ export function RoadRewardDetailPanel({
     if (!parcel) return;
     scrollParcelRowToTopRef.current = true;
     setSelectedParcelId(focusParcelId);
+    if (!autoFitMap) return;
     const map = mapContext?.mapInstanceRef?.current;
     if (map) {
       fitMapToLayerRowParcel(map, toParcelItem(parcel), {
         applyMapViewPadding: () => mapContext?.applyMapViewPaddingRef?.current?.(),
       });
     }
-  }, [focusParcelId, caseId, displayParcels, isCreateMode, mapContext]);
+  }, [focusParcelId, caseId, displayParcels, isCreateMode, mapContext, autoFitMap]);
 
   useEffect(() => {
     if (!selectedParcelId) return;
