@@ -93,6 +93,18 @@ export function isUsageDataAsSisulWmsVisible(
   return visibleLayerNames.has(USAGE_DATA_AS_SISUL_WMS_LAYER_ID.toLowerCase());
 }
 
+/** 부서업무 점용 — 지적(연속지적) 켜기/끄기. 공통점용과 동일 */
+export function setUsageDataAsCadastralOverlay(active: boolean): void {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(
+    new CustomEvent("ggnr-map-control-set", {
+      detail: active
+        ? { id: "cadastral", active: true, tableNames: ["jijuk"] }
+        : { id: "cadastral", active: false },
+    })
+  );
+}
+
 /** 저장·상세 갱신 후 WMS·뷰 동기화 */
 export async function refreshUsageDataAsMapView(opts: {
   map: Map | null | undefined;

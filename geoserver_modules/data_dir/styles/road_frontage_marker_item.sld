@@ -10,7 +10,7 @@
               <sld:Mark>
                 <sld:WellKnownName>circle</sld:WellKnownName>
                 <sld:Fill>
-                  <sld:CssParameter name="fill">#2196F3</sld:CssParameter>
+                  <sld:CssParameter name="fill">#FF9800</sld:CssParameter>
                   <sld:CssParameter name="fill-opacity">0.5</sld:CssParameter>
                 </sld:Fill>
                 <sld:Stroke>

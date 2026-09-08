@@ -4,7 +4,7 @@ import React, { useRef, useCallback, useState, useEffect } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { ChevronDown, ChevronUp, UserRound } from 'lucide-react';
+import { ChevronDown, ChevronUp, Ellipsis, UserRound } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { call } from '@/lib/api';
 import { sidebarServicePolicy } from '@/lib/accessClient';
@@ -17,7 +17,7 @@ import {
   hasProtoUnreadNotifications,
   PROTO_NOTIF_CHANGED_EVENT,
 } from '../_mapContents/bizNotif/bizNotifStore';
-import { ImportantNotifSidebarBubble } from '../_mapContents/prototypes/UserAccountProtoPanel';
+import { ImportantNotifSidebarBubble, SHOW_USER_ACCOUNT_MORE_TAB } from '../_mapContents/prototypes/UserAccountProtoPanel';
 import { withBasePath } from '@/lib/basePath';
 
 /** ser_eng 와 serviceListIcon 파일명이 다를 때 */
@@ -208,8 +208,7 @@ export function MapSidebar({ indexLogoSrc }: { indexLogoSrc: string }) {
     .map((key) => serviceMap.get(key))
     .filter((s): s is ServiceItem => s != null)
     .filter((item) => {
-      // 비공개 Y → 관리자 포함 사이드바에서 숨김
-      if (item.ser_is_private === true) return false;
+      // 비공개는 시스템 목록에서 이미 걸러짐. SHOW_SERVICES 에 있으면 여기까지 오므로 다시 숨기지 않음
       if (bootProject === 'build_uj' && item.ser_eng === 'riverUseLedger') return false;
       return true;
     });
@@ -369,16 +368,25 @@ export function MapSidebar({ indexLogoSrc }: { indexLogoSrc: string }) {
             <SidebarButton
               icon={
                 <span
-                  className="relative inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-white"
+                  className="relative inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-white"
                   style={{ backgroundColor: 'var(--color-blue-600)' }}
                 >
-                  <UserRound className="h-4 w-4" strokeWidth={2} aria-hidden />
+                  <UserRound className="h-5 w-5" strokeWidth={2} aria-hidden />
+                  {SHOW_USER_ACCOUNT_MORE_TAB ? (
+                    <span
+                      className="absolute -bottom-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-black/75 text-white ring-1 ring-white/40"
+                      aria-hidden
+                    >
+                      <Ellipsis className="h-3 w-3" strokeWidth={2.5} />
+                    </span>
+                  ) : null}
                   {protoNotifUnread ? (
-                    <span className="absolute -right-0.5 -top-0.5 h-1.5 w-1.5 rounded-full bg-red-500" />
+                    <span className="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full bg-red-500" />
                   ) : null}
                 </span>
               }
-              label="내 정보"
+              label={SHOW_USER_ACCOUNT_MORE_TAB ? '내 정보 더보기' : '내 정보'}
+              iconOnly
               onClick={() => {
                 window.dispatchEvent(new CustomEvent('ggnr-proto-user-account-toggle'));
               }}
