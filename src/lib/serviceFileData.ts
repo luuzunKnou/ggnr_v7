@@ -5,6 +5,39 @@
 
 const UNSAFE_SEGMENT = /[\0\/\\]/;
 
+/**
+ * 게이트(BASE_PATH)·프록시가 쿼리의 한글·비ASCII 파일명을 깨뜨리는 경우 대비.
+ * 상대경로를 ASCII-only base64url 로 실어 보낸다.
+ */
+export function encodeServiceFileDataPathB64(relativePath: string): string {
+  const bytes = new TextEncoder().encode(relativePath);
+  let bin = '';
+  for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]!);
+  const b64 =
+    typeof btoa === 'function' ? btoa(bin) : Buffer.from(bytes).toString('base64');
+  return b64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
+}
+
+/** pathB64 → UTF-8 상대경로. 실패 시 null */
+export function decodeServiceFileDataPathB64(pathB64: string): string | null {
+  const raw = String(pathB64 ?? '').trim();
+  if (!raw || !/^[A-Za-z0-9_-]+$/.test(raw)) return null;
+  try {
+    const b64 = raw.replace(/-/g, '+').replace(/_/g, '/');
+    const pad = b64.length % 4 === 0 ? '' : '='.repeat(4 - (b64.length % 4));
+    const padded = b64 + pad;
+    if (typeof Buffer !== 'undefined') {
+      return Buffer.from(padded, 'base64').toString('utf8');
+    }
+    const binary = atob(padded);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    return new TextDecoder().decode(bytes);
+  } catch {
+    return null;
+  }
+}
+
 /** 단일 경로 세그먼트(폴더명) 검증 */
 export function assertSafeFileDataSegment(segment: string): string | null {
   const t = segment.trim();
