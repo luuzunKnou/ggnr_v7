@@ -6,7 +6,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { PassThrough } from 'node:stream';
 import archiver from 'archiver';
-import { fileDataRelativeDir, isServiceFileDataTmpMarkedFileName } from '@/lib/serviceFileData';
+import { fileDataRelativeDir, shouldHideServiceFileDataFileName } from '@/lib/serviceFileData';
 import { resolveGgnrDataDir } from '@/lib/turbopackFsPath';
 
 function getZipDataDir(): string {
@@ -78,7 +78,7 @@ async function collectFilesRecursive(
   for (const ent of entries) {
     const name = String(ent.name ?? '');
     if (!name || name === '.' || name === '..') continue;
-    if (isServiceFileDataTmpMarkedFileName(name)) continue;
+    if (shouldHideServiceFileDataFileName(name)) continue;
     const absPath = path.join(absDir, name);
     const entryName = prefix ? `${prefix}/${name}` : name;
     if (ent.isDirectory()) {

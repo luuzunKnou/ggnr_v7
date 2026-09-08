@@ -1,9 +1,15 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import { Layers, Search, X } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ArrowDown, ArrowUp, ArrowUpDown, Layers, Search, X } from "lucide-react";
 import { call } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import {
+  initialOccupationLedgerSortDir,
+  sortOccupationLedgerListRows,
+  type OccupationLedgerListSortKey,
+  type OccupationLedgerListSortSpec,
+} from "@/lib/occupationLedgerListSort";
 import { useMapContext } from "../../../_mapComponents/MapContext";
 import { MAP_AUTO_NAV_MAX_ZOOM } from "../../../_mapComponents/config/mapDefaults";
 import { scheduleFitMapToExtent3857 } from "../../../_mapComponents/config/mapAutoNavigation";
@@ -33,6 +39,18 @@ type ListRow = {
   endDate: string;
 };
 
+type SortKey = Exclude<OccupationLedgerListSortKey, "status">;
+type SortSpec = OccupationLedgerListSortSpec;
+
+const SORT_COLUMNS: { key: SortKey; label: string }[] = [
+  { key: "name", label: "점용명" },
+  { key: "place", label: "점용장소" },
+  { key: "startDate", label: "점용시작일" },
+  { key: "endDate", label: "점용종료일" },
+];
+
+const HEADER_ALIGN_LEFT = new Set<SortKey>(["name", "place"]);
+
 type Props = {
   onClose: () => void;
   selectedDetailId: string | null;
@@ -53,6 +71,7 @@ export function UsageDataAsListPanel({
   mapContextRef.current = mapContext;
 
   const [keyword, setKeyword] = useState("");
+  const [sorts, setSorts] = useState<SortSpec[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [items, setItems] = useState<ListRow[]>([]);
@@ -186,7 +205,7 @@ export function UsageDataAsListPanel({
       elRect.top + elRect.height / 2 - (scrollerRect.top + scrollerRect.height / 2);
     if (Math.abs(delta) < 4) return;
     scroller.scrollBy({ top: delta, behavior: "smooth" });
-  }, [selectedDetailId, items]);
+  }, [selectedDetailId, items, sorts]);
 
   useEffect(() => {
     const t = setTimeout(async () => {
@@ -214,6 +233,28 @@ export function UsageDataAsListPanel({
     }, 250);
     return () => clearTimeout(t);
   }, [keyword, refreshKey]);
+
+  const sortedItems = useMemo(() => {
+    return sortOccupationLedgerListRows(
+      items.map((row) => ({ ...row, status: "" })),
+      sorts
+    );
+  }, [items, sorts]);
+
+  const toggleSort = (key: SortKey) => {
+    const initial = initialOccupationLedgerSortDir(key);
+    setSorts((prev) => {
+      const idx = prev.findIndex((s) => s.key === key);
+      if (idx < 0) return [...prev, { key, dir: initial }];
+      const cur = prev[idx];
+      if (cur.dir === initial) {
+        const next = [...prev];
+        next[idx] = { key, dir: initial === "asc" ? "desc" : "asc" };
+        return next;
+      }
+      return prev.filter((_, i) => i !== idx);
+    });
+  };
 
   const sisulLayerOn = isUsageDataAsSisulWmsVisible(mapContext?.visibleLayerNames);
   const useFeeLayerOn = isUseFeeWmsVisible(mapContext?.visibleLayerNames, 'river');
@@ -286,34 +327,79 @@ export function UsageDataAsListPanel({
           <div className="shrink-0 border-b border-destructive/20 bg-destructive/10 px-3 py-2 text-xs text-destructive">{error}</div>
         )}
         <div ref={listScrollRef} className="min-h-0 flex-1 overflow-auto scrollbar-thin">
-          {loading ? (
-            <div className="px-3 py-6 text-center text-xs text-muted-foreground">불러오는 중…</div>
-          ) : (
-            <table className="w-full min-w-[548px] table-fixed border-collapse text-left text-xs">
-              <colgroup>
-                <col className="w-[180px]" />
-                <col className="w-[192px]" />
-                <col className="w-[88px]" />
-                <col className="w-[88px]" />
-              </colgroup>
-              <thead className="sticky top-0 z-[1] bg-muted shadow-[0_1px_0_0_var(--border)]">
+          <table className="w-full min-w-[548px] table-fixed border-collapse text-left text-xs">
+            <colgroup>
+              <col className="w-[180px]" />
+              <col className="w-[192px]" />
+              <col className="w-[88px]" />
+              <col className="w-[88px]" />
+            </colgroup>
+            <thead className="sticky top-0 z-[1] bg-muted shadow-[0_1px_0_0_var(--border)]">
+              <tr>
+                {SORT_COLUMNS.map((col) => {
+                  const sortIdx = sorts.findIndex((s) => s.key === col.key);
+                  const active = sortIdx >= 0;
+                  const sortDir = active ? sorts[sortIdx].dir : null;
+                  const Icon = !active
+                    ? ArrowUpDown
+                    : sortDir === "asc"
+                      ? ArrowUp
+                      : ArrowDown;
+                  const initial = initialOccupationLedgerSortDir(col.key);
+                  const alignLeft = HEADER_ALIGN_LEFT.has(col.key);
+                  return (
+                    <th
+                      key={col.key}
+                      className={cn(
+                        "whitespace-nowrap border-b-0 px-1.5 py-1.5 font-semibold text-foreground/90 [box-shadow:inset_0_-2px_0_0_var(--border)]",
+                        alignLeft ? "text-left" : "text-center"
+                      )}
+                    >
+                      <button
+                        type="button"
+                        onClick={() => toggleSort(col.key)}
+                        className={cn(
+                          "inline-flex max-w-full items-center gap-0.5 rounded px-0.5 py-0.5 transition-colors hover:bg-muted",
+                          alignLeft ? "justify-start" : "justify-center",
+                          active ? "text-primary" : "text-foreground/90"
+                        )}
+                        title={
+                          !active
+                            ? `${col.label} 정렬 추가`
+                            : sortDir === initial
+                              ? `${col.label} 방향 바꾸기`
+                              : `${col.label} 정렬 해제`
+                        }
+                      >
+                        <span className="truncate">{col.label}</span>
+                        <Icon className="h-3 w-3 shrink-0 opacity-70" aria-hidden />
+                      </button>
+                    </th>
+                  );
+                })}
+              </tr>
+            </thead>
+            <tbody>
+              {loading ? (
                 <tr>
-                  <th className="whitespace-nowrap border-b-0 px-2 py-2 font-semibold text-foreground/90 [box-shadow:inset_0_-2px_0_0_var(--border)]">
-                    점용명
-                  </th>
-                  <th className="whitespace-nowrap border-b-0 px-2 py-2 font-semibold text-foreground/90 [box-shadow:inset_0_-2px_0_0_var(--border)]">
-                    점용장소
-                  </th>
-                  <th className="whitespace-nowrap border-b-0 px-2 py-2 font-semibold text-foreground/90 [box-shadow:inset_0_-2px_0_0_var(--border)]">
-                    점용시작일
-                  </th>
-                  <th className="whitespace-nowrap border-b-0 px-2 py-2 font-semibold text-foreground/90 [box-shadow:inset_0_-2px_0_0_var(--border)]">
-                    점용종료일
-                  </th>
+                  <td
+                    colSpan={SORT_COLUMNS.length}
+                    className="px-3 py-6 text-center text-xs text-muted-foreground"
+                  >
+                    불러오는 중…
+                  </td>
                 </tr>
-              </thead>
-              <tbody>
-                {items.map((row) => {
+              ) : sortedItems.length === 0 && !error ? (
+                <tr>
+                  <td
+                    colSpan={SORT_COLUMNS.length}
+                    className="px-3 py-6 text-center text-xs text-muted-foreground"
+                  >
+                    목록이 비어 있습니다. 데이터 적재 후 새로고침하세요.
+                  </td>
+                </tr>
+              ) : (
+                sortedItems.map((row) => {
                   const isSelected = selectedDetailId === row.rowKey;
                   return (
                     <tr
@@ -353,13 +439,13 @@ export function UsageDataAsListPanel({
                       </td>
                     </tr>
                   );
-                })}
-              </tbody>
-            </table>
-          )}
+                })
+              )}
+            </tbody>
+          </table>
         </div>
         <div className="shrink-0 border-t border-border px-3 py-1.5 text-[11px] text-muted-foreground">
-          {items.length.toLocaleString()}건
+          {sortedItems.length.toLocaleString()}건
         </div>
       </div>
     </div>
