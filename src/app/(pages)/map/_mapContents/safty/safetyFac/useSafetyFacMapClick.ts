@@ -312,13 +312,6 @@ export function useSafetyFacMapClick({ enabled, facilities, onSelectFacility }: 
             ? String(keyRaw).trim()
             : `${table}-map`;
 
-        const flyToFacility = (facility: SafetyFacFacilityRow) => {
-          const pad = () => {
-            mapContext?.applyMapViewPaddingRef?.current?.();
-          };
-          animateSafetyFacToFacility(evt.map, facility, pad);
-        };
-
         const listHit = facilitiesRef.current.find((f) => f.table === table && f.id === id);
         const geomJson = getSafetyFacGeomJson(row);
         if (listHit) {
@@ -327,7 +320,6 @@ export function useSafetyFacMapClick({ enabled, facilities, onSelectFacility }: 
             ...(geomJson != null && listHit.geomJson == null ? { geomJson } : {}),
           };
           onSelectRef.current(selected);
-          flyToFacility(selected);
           return;
         }
 
@@ -339,7 +331,6 @@ export function useSafetyFacMapClick({ enabled, facilities, onSelectFacility }: 
         });
         const fromIdentify = facilityFromIdentify({ table, subtype, data: row, titleValue, id });
         onSelectRef.current(fromIdentify);
-        flyToFacility(fromIdentify);
       } catch {
         /* 클릭 식별 실패는 무시 */
       }
@@ -357,6 +348,5 @@ export function useSafetyFacMapClick({ enabled, facilities, onSelectFacility }: 
     mapContext?.mapMeasureTool,
     mapContext?.mapDrawInputSuspended,
     mapContext?.layerRowGeomEdit,
-    mapContext?.applyMapViewPaddingRef,
   ]);
 }

@@ -48,7 +48,6 @@ export function RadiationShelterPanel({
   const mapContextRef = useRef(mapContext);
   mapContextRef.current = mapContext;
   const mapReady = mapContext?.mapReady ?? false;
-  const lastFlownDetailIdRef = useRef<number | null>(null);
   const [items, setItems] = useState<RadiationShelterListItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -230,29 +229,13 @@ export function RadiationShelterPanel({
     [applyMapViewPadding]
   );
 
-  /** 상세 선택(목록·지도 식별) 시 패널 padding 반영 후 좌표로 이동 */
-  useEffect(() => {
-    if (!mapReady) return;
-    if (selectedDetailId == null || selectedDetailId === LAYER_ROW_NEW_ID) {
-      lastFlownDetailIdRef.current = null;
-      return;
-    }
-    if (lastFlownDetailIdRef.current === selectedDetailId) return;
-    const row = items.find((r) => r.id === selectedDetailId) ?? null;
-    if (!row) return;
-    lastFlownDetailIdRef.current = selectedDetailId;
-    flyToRow(row);
-  }, [mapReady, selectedDetailId, items, flyToRow]);
-
+  /** 목록 행 클릭 시에만 지도 이동 (지도 객체 클릭은 선택·강조만) */
   const onClickRow = useCallback(
     (row: RadiationShelterListItem) => {
-      if (selectedDetailId === row.id) {
-        lastFlownDetailIdRef.current = null;
-        flyToRow(row);
-        return;
+      if (selectedDetailId !== row.id) {
+        onSelectDetailId(row.id);
       }
-      lastFlownDetailIdRef.current = null;
-      onSelectDetailId(row.id);
+      flyToRow(row);
     },
     [selectedDetailId, onSelectDetailId, flyToRow]
   );
