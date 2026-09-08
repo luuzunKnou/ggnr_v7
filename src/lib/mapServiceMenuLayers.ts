@@ -77,7 +77,7 @@ export function ensureRoadLedgerSummaryLayer(
   });
 }
 
-/** 좌측 서비스(서브메뉴) 전환 시 끌 레이어·검색 상태. 우측 public_layer(지적도 등)는 별도 상태. */
+/** 좌측 서비스(서브메뉴) 전환 시 끌 레이어·검색 상태. 우측 지적도·건물 등은 별도 상태라 여기서 끄지 않음. */
 export function clearServiceMenuLayerState(
   ctx: ServiceMenuLayerClearTarget | null | undefined,
   options?: ClearServiceMenuLayerOptions
