@@ -8,6 +8,7 @@
  * - 점사용료: water|road|public_ngl_fee_list — 3개
  * - FMS: water|road|public_fms_facility + _fms_inspection — 6개
  * - 차세대 연계: next_gen_linkage.ngl_error_log, ngl_query_table
+ * - 토지행정망 파일: land_linkage (목록·토지기본·공시지가)
  * - 메모: memo 및 memo_* 계열
  * - 영상: work_unit, file_unit
  * - 보상편입: road_reward, road_reward_parcel
@@ -18,6 +19,7 @@
 import { db, pool } from '@/database/db';
 import { sql } from 'drizzle-orm';
 import { MEMO_TABLES } from '@/lib/memoConfig';
+import { KRAS_LAYER_CATALOG_SCHEMA } from '@/integrations/krasLayerSync.config';
 import {
   ROAD_FRONTAGE_BUILDING_CONFIRM_LAYER_COLUMNS,
   ROAD_FRONTAGE_BUILDING_DETAIL_LAYER_COLUMNS,
@@ -144,6 +146,18 @@ async function ensureSchemaLayer(): Promise<void> {
 async function ensureSchemaNextGenLinkage(): Promise<void> {
   if (await schemaExists('next_gen_linkage')) return;
   await db.execute(sql.raw(`CREATE SCHEMA IF NOT EXISTS next_gen_linkage`));
+}
+
+async function ensureSchemaLandLinkage(): Promise<void> {
+  if (await schemaExists(KRAS_LAYER_CATALOG_SCHEMA)) return;
+  try {
+    await pool.query(`CREATE SCHEMA IF NOT EXISTS "${KRAS_LAYER_CATALOG_SCHEMA.replace(/"/g, '""')}"`);
+  } catch (e: unknown) {
+    if (await schemaExists(KRAS_LAYER_CATALOG_SCHEMA)) return;
+    const code = pgErrCode(e);
+    if (code === '42P06' || code === '42501') return;
+    throw e;
+  }
 }
 
 async function execSqlStatements(raw: string): Promise<void> {
@@ -1926,6 +1940,7 @@ export async function ensureLayerAppTables(): Promise<EnsureResult> {
   const result: EnsureResult = { created: [], moved: [], existed: [], errors: [] };
   try {
     await ensureSchemaLayer();
+    await ensureSchemaLandLinkage();
     await ensureLayerExtraDefTable(result);
     await ensureRoadUseLedgerTables(result);
     await ensureRoadFrontageBuildingTables(result);
