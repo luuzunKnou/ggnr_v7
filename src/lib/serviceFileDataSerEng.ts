@@ -7,6 +7,8 @@ export const SER_FILE_ENG = {
   dataQuery: 'dataQuery',
   riverBasicPlan: 'riverBasicPlan',
   riverUseLedger: 'riverUseLedger',
+  /** 울진 하천점용 — file_data/usage_data_as/{cons_code}/ */
+  usageDataAs: 'usageDataAs',
   riverConstructionLedger: 'riverConstructionLedger',
   smallRiverUseLedger: 'smallRiverUseLedger',
   roadUseLedger: 'roadUseLedger',

@@ -372,14 +372,12 @@ export function MapSidebar({ indexLogoSrc }: { indexLogoSrc: string }) {
                   style={{ backgroundColor: 'var(--color-blue-600)' }}
                 >
                   <UserRound className="h-5 w-5" strokeWidth={2} aria-hidden />
-                  {SHOW_USER_ACCOUNT_MORE_TAB ? (
-                    <span
-                      className="absolute -bottom-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-black/75 text-white ring-1 ring-white/40"
-                      aria-hidden
-                    >
-                      <Ellipsis className="h-3 w-3" strokeWidth={2.5} />
-                    </span>
-                  ) : null}
+                  <span
+                    className="absolute -bottom-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-black/75 text-white ring-1 ring-white/40"
+                    aria-hidden
+                  >
+                    <Ellipsis className="h-3 w-3" strokeWidth={2.5} />
+                  </span>
                   {protoNotifUnread ? (
                     <span className="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full bg-red-500" />
                   ) : null}

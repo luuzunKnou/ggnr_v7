@@ -60,6 +60,10 @@ import {
   type RoadLedgerDocButtonKey,
   toggleRoadLedgerDocLayers,
 } from "./roadLedgerDocLayerMap";
+import {
+  fetchRoadLedgerDefineFieldLabels,
+  resolveRoadLedgerFieldLabel,
+} from "./roadLedgerDefineFieldLabels";
 import { RoadLedgerFacilityListSection } from "./RoadLedgerFacilityListSection";
 
 /** 하천 기본계획 상세와 동일 버튼 스타일 + 라벨별 아이콘 (라벨 키는 roadLedgerDocLayerMap 과 일치) */
@@ -133,28 +137,37 @@ function primaryCellDisplay(field: string, raw: unknown): string {
 
 function DetailInfoRow({
   field,
-  showBottomBorder,
   labelClassName,
+  className,
 }: {
   field: { fieldKey: string; label: string; value: string };
-  showBottomBorder: boolean;
   labelClassName: string;
+  className?: string;
 }) {
   return (
-    <div className={cn("flex", showBottomBorder && "border-b border-border")}>
+    <div className={cn("flex h-full min-h-0 min-w-0", className)}>
       <div
         className={cn(
-          "flex min-w-0 shrink-0 items-start bg-muted px-2 py-1.5",
+          "flex shrink-0 items-start self-stretch bg-muted px-2 py-1.5",
           labelClassName,
         )}
       >
-        <span className="min-w-0 w-full whitespace-normal break-words text-[11px] leading-snug text-muted-foreground">
+        <span className="min-w-0 w-full whitespace-normal break-words text-[11px] leading-snug text-muted-foreground [word-break:keep-all]">
           {field.label}
         </span>
       </div>
-      <div className="flex min-w-0 flex-1 items-start px-2 py-1.5">
+      <div className="flex min-w-0 flex-1 items-start self-stretch px-2 py-1.5">
         <span className="break-all text-[11px] leading-snug text-muted-foreground">{field.value}</span>
       </div>
+    </div>
+  );
+}
+
+function DetailInfoEmptyCell({ labelClassName }: { labelClassName: string }) {
+  return (
+    <div className="flex h-full min-w-0" aria-hidden>
+      <div className={cn("shrink-0 self-stretch bg-muted px-2 py-1.5", labelClassName)} />
+      <div className="min-w-0 flex-1 self-stretch px-2 py-1.5" />
     </div>
   );
 }
@@ -168,42 +181,37 @@ export function DetailInfoTable({
     return <p className="text-[11px] text-muted-foreground">표시할 항목이 없습니다.</p>;
   }
 
-  const mid = Math.ceil(entries.length / 2);
-  const leftCol = entries.slice(0, mid);
-  const rightCol = entries.slice(mid);
-  const labelW = "w-[min(5.5rem,32%)]";
-
-  if (entries.length === 1) {
-    const field = entries[0]!;
-    return (
-      <div className="overflow-hidden rounded-[5px] border border-border">
-        <DetailInfoRow field={field} showBottomBorder={false} labelClassName="w-[100px]" />
-      </div>
-    );
+  /** 한글 라벨 줄바꿈 대비 — 한 줄(좌·우 쌍) 높이를 같이 맞춤 */
+  const labelW = "w-[min(7.5rem,40%)]";
+  const rows: Array<{
+    left: (typeof entries)[number];
+    right: (typeof entries)[number] | null;
+  }> = [];
+  for (let i = 0; i < entries.length; i += 2) {
+    rows.push({ left: entries[i]!, right: entries[i + 1] ?? null });
   }
 
   return (
-    <div className="grid grid-cols-2 divide-x divide-border overflow-hidden rounded-[5px] border border-border">
-      <div className="min-w-0">
-        {leftCol.map((field, index) => (
-          <DetailInfoRow
-            key={field.fieldKey}
-            field={field}
-            showBottomBorder={index !== leftCol.length - 1}
-            labelClassName={labelW}
-          />
-        ))}
-      </div>
-      <div className="min-w-0">
-        {rightCol.map((field, index) => (
-          <DetailInfoRow
-            key={field.fieldKey}
-            field={field}
-            showBottomBorder={index !== rightCol.length - 1}
-            labelClassName={labelW}
-          />
-        ))}
-      </div>
+    <div className="overflow-hidden rounded-[5px] border border-border">
+      {rows.map((row, rowIndex) => {
+        const isLast = rowIndex === rows.length - 1;
+        return (
+          <div
+            key={`${row.left.fieldKey}-${row.right?.fieldKey ?? "empty"}`}
+            className={cn(
+              "grid grid-cols-2 items-stretch divide-x divide-border",
+              !isLast && "border-b border-border",
+            )}
+          >
+            <DetailInfoRow field={row.left} labelClassName={labelW} />
+            {row.right ? (
+              <DetailInfoRow field={row.right} labelClassName={labelW} />
+            ) : (
+              <DetailInfoEmptyCell labelClassName={labelW} />
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -314,6 +322,7 @@ function RoadLedgerDocActionGrid({
 export function RoadLedgerDetailPanel({ row, onClose }: Props) {
   const [attrOpen, setAttrOpen] = useState(true);
   const [detailModalOpen, setDetailModalOpen] = useState(false);
+  const [detailFieldLabels, setDetailFieldLabels] = useState<Record<string, string>>({});
   const [facilityDataCounts, setFacilityDataCounts] = useState<Partial<
     Record<RoadLedgerDocButtonKey, number>
   > | null>(null);
@@ -497,15 +506,28 @@ export function RoadLedgerDetailPanel({ row, onClose }: Props) {
     };
   }, [hasRdidForFacility, rdid]);
 
+  useEffect(() => {
+    let cancelled = false;
+    void fetchRoadLedgerDefineFieldLabels(ROAD_LEDGER_SUMMARY_LAYER_ID).then((labels) => {
+      if (!cancelled) setDetailFieldLabels(labels);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const otherEntries = Object.entries(row)
-    .filter(([k]) => k.toLowerCase() !== "geom")
+    .filter(([k]) => {
+      const lk = k.toLowerCase();
+      return lk !== "geom" && lk !== "geometry" && lk !== "the_geom" && lk !== "wkb_geometry" && lk !== "shape";
+    })
     .filter(([k]) => !PRIMARY_ATTR_KEYS.has(k.toLowerCase()))
-    .sort(([a], [b]) => a.localeCompare(b, "ko"))
     .map(([key, val]) => ({
       fieldKey: key,
-      label: key,
+      label: resolveRoadLedgerFieldLabel(detailFieldLabels, key),
       value: cellText(key, val),
-    }));
+    }))
+    .sort((a, b) => a.label.localeCompare(b.label, "ko"));
 
   return (
     <>

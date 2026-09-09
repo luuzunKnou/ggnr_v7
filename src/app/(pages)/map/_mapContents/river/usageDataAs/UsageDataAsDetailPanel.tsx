@@ -46,6 +46,7 @@ import { computeAreaSqmFromWkt5181 } from "../../../_mapComponents/analysisArea"
 import { splitUsagePeriod } from "@/lib/usageDataAsFieldUtils";
 import { currentPermitYear } from "@/lib/occupationPermitNo";
 import { MapSideDetailScroll } from "../../../_mapComponents/MapSideDetailScroll";
+import { UsageDataAsAttachmentSection } from "./UsageDataAsAttachmentSection";
 
 type Props = {
   detailId: string;
@@ -690,14 +691,21 @@ export function UsageDataAsDetailPanel({
             )}
 
             {!isCreateMode && (
-              <div className="mt-4">
-                <div className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                  점사용료 이력
+              <>
+                <div className="mt-4">
+                  <div className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                    점사용료 이력
+                  </div>
+                  <div className="rounded border border-dashed border-border bg-muted/50 px-2 py-4 text-center text-muted-foreground">
+                    연계된 점사용료가 없습니다.
+                  </div>
                 </div>
-                <div className="rounded border border-dashed border-border bg-muted/50 px-2 py-4 text-center text-muted-foreground">
-                  연계된 점사용료가 없습니다.
-                </div>
-              </div>
+                <UsageDataAsAttachmentSection
+                  fileKey={detailId}
+                  zipLabel={draftFieldValue("usage_name") || detailId}
+                  ready={!loading}
+                />
+              </>
             )}
           </>
         )}
