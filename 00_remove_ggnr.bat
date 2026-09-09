@@ -2,7 +2,7 @@
 setlocal EnableExtensions EnableDelayedExpansion
 
 :: =============================================================================
-:: Remove GGNR_V7 service + free GeoServer port + app port 3000 (Administrator)
+:: Remove GGNR_V7 service + free GeoServer port + app port (Administrator)
 :: Encoding: ASCII only (no Hangul). Safe on Korean CMD (CP949) and UTF-8 editors.
 :: - nssm: root\nssm\win64\nssm.exe (same as 00_nssm_install_ggnr.bat)
 :: - steps: 1) nssm stop/remove GGNR_V7  2) GeoServer graceful stop + geo port
@@ -11,7 +11,7 @@ setlocal EnableExtensions EnableDelayedExpansion
 :: =============================================================================
 
 set "SERVICE_NAME=GGNR_V7"
-set "APP_PORT=3000"
+set "APP_PORT=80"
 set "ROOT=%~dp0"
 if "%ROOT:~-1%"=="\" set "ROOT=%ROOT:~0,-1%"
 set "EXIT_EC=0"
