@@ -66,13 +66,6 @@ export function MemoListPanel({
 
   useMemoMapHighlight(Boolean(mapContext?.mapReady), highlightGeom);
 
-  useMemoMapClick({
-    enabled: true,
-    onSelectRowKey: (rowKey) => {
-      onSelectDetailId(rowKey);
-    },
-  });
-
   useEffect(() => {
     void call("", "POST", {
       service: "memoService",
@@ -116,11 +109,19 @@ export function MemoListPanel({
   }, [ensureLayerVisible, tableOptions]);
 
   const focusedIdRef = useRef<string | null>(null);
+  /** 목록 클릭·저장 후: true / 지도 객체 클릭: false — 지도 이동만 제어 */
+  const fitOnFocusRef = useRef(true);
 
-  const focusMemoOnMap = useCallback(async (rowKey: string, tableName: string, memoKey: string) => {
+  const focusMemoOnMap = useCallback(async (
+    rowKey: string,
+    tableName: string,
+    memoKey: string,
+    opts?: { fit?: boolean }
+  ) => {
     focusedIdRef.current = rowKey;
     ensureLayerVisible(tableName);
-    setNavigatingId(rowKey);
+    const doFit = opts?.fit !== false;
+    if (doFit) setNavigatingId(rowKey);
     try {
       const res = await call("", "POST", {
         service: "memoService",
@@ -130,6 +131,7 @@ export function MemoListPanel({
       const data = res?.data ?? res;
       const geom = data?.geomGeoJson4326;
       setHighlightGeom(geom && typeof geom === "object" ? (geom as Record<string, unknown>) : null);
+      if (!doFit) return;
       const map = mapContextRef.current?.mapInstanceRef?.current;
       const extent = data?.extent3857;
       if (
@@ -148,9 +150,17 @@ export function MemoListPanel({
     } catch {
       setHighlightGeom(null);
     } finally {
-      setNavigatingId(null);
+      if (doFit) setNavigatingId(null);
     }
   }, [ensureLayerVisible]);
+
+  useMemoMapClick({
+    enabled: true,
+    onSelectRowKey: (rowKey) => {
+      fitOnFocusRef.current = false;
+      onSelectDetailId(rowKey);
+    },
+  });
 
   const handleRowClick = useCallback(
     (row: ListRow) => {
@@ -161,8 +171,9 @@ export function MemoListPanel({
         onSelectDetailId(null);
         return;
       }
+      fitOnFocusRef.current = true;
       onSelectDetailId(row.rowKey);
-      void focusMemoOnMap(row.rowKey, row.tableName, row.memoKey);
+      void focusMemoOnMap(row.rowKey, row.tableName, row.memoKey, { fit: true });
     },
     [focusMemoOnMap, onSelectDetailId, selectedDetailId]
   );
@@ -179,7 +190,9 @@ export function MemoListPanel({
       setHighlightGeom(null);
       return;
     }
-    void focusMemoOnMap(selectedDetailId, parsed.tableName, parsed.memoKey);
+    const fit = fitOnFocusRef.current;
+    fitOnFocusRef.current = true;
+    void focusMemoOnMap(selectedDetailId, parsed.tableName, parsed.memoKey, { fit });
   }, [focusMemoOnMap, selectedDetailId]);
 
   const prevRefreshKeyRef = useRef(refreshKey);
@@ -190,7 +203,7 @@ export function MemoListPanel({
     const parsed = parseMemoRowKey(selectedDetailId);
     if (!parsed) return;
     refreshServiceWmsLayer(mapContextRef.current?.mapInstanceRef?.current);
-    void focusMemoOnMap(selectedDetailId, parsed.tableName, parsed.memoKey);
+    void focusMemoOnMap(selectedDetailId, parsed.tableName, parsed.memoKey, { fit: true });
   }, [focusMemoOnMap, refreshKey, selectedDetailId]);
 
   useEffect(() => {

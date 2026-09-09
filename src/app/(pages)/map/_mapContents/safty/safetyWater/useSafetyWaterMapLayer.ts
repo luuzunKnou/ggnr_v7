@@ -14,8 +14,10 @@ import type { StationListFilterChip } from './safetyWaterListFilter';
 import { stationMatchesListFilter } from './safetyWaterListFilter';
 import type { SafetyWaterStation, SafetyWaterStationKind } from './safetyWaterTypes';
 
-/** CCTV < 강수량 관측소 < 수위 관측소 */
+/** 선택강조 < CCTV < 강수량 관측소 < 수위 관측소 */
 export const SAFETY_WATER_LAYER_Z = {
+  /** 빨간 펄스 — 아이콘·CCTV 아래 */
+  highlight: 117,
   cctv: 118,
   rainStation: 119,
   waterStation: 120,

@@ -205,12 +205,15 @@ export type MapContextValue = {
     indexOgcFid: number;
     planYear?: string;
     planName?: string;
+    /** 동일 연도·계획명에 연장이 여러 건일 때 구분 */
+    planLen?: string;
   } | null;
   setRiverBasicPlanIndexFromMap: Dispatch<
     SetStateAction<{
       indexOgcFid: number;
       planYear?: string;
       planName?: string;
+      planLen?: string;
     } | null>
   >;
   /** 종단·횡단·구조물도 지도 식별 시 도면보기 — RiverBasicPlanMapDrawingFromMapHandler가 소비 */
@@ -461,6 +464,9 @@ export type MapContextValue = {
   /** URL 기준 메모관리 패널 열림 — 일반 식별 비활성화·지도 클릭 상세용 */
   memoPanelOpen: boolean;
   setMemoPanelOpen: Dispatch<SetStateAction<boolean>>;
+  /** URL 기준 지하수 개발허가 패널 열림 — 일반 식별 비활성화·지도 클릭 상세용 */
+  groundwaterPermitPanelOpen: boolean;
+  setGroundwaterPermitPanelOpen: Dispatch<SetStateAction<boolean>>;
   /** URL 기준 보상편입용지 패널 열림 — 일반 식별 비활성화용 */
   roadRewardPanelOpen: boolean;
   setRoadRewardPanelOpen: Dispatch<SetStateAction<boolean>>;
@@ -632,6 +638,7 @@ export function MapContextProvider({ children }: { children: React.ReactNode }) 
     indexOgcFid: number;
     planYear?: string;
     planName?: string;
+    planLen?: string;
   } | null>(null);
   const [riverBasicPlanDrawingFromMap, setRiverBasicPlanDrawingFromMap] = useState<{
     fileLayer: string;
@@ -773,6 +780,7 @@ export function MapContextProvider({ children }: { children: React.ReactNode }) 
   const [safetyFacPanelOpen, setSafetyFacPanelOpen] = useState(false);
   const [complaintPanelOpen, setComplaintPanelOpen] = useState(false);
   const [memoPanelOpen, setMemoPanelOpen] = useState(false);
+  const [groundwaterPermitPanelOpen, setGroundwaterPermitPanelOpen] = useState(false);
   const [roadRewardPanelOpen, setRoadRewardPanelOpen] = useState(false);
   const [safetyFacBuildingRoadLayerState, setSafetyFacBuildingRoadLayerState] = useState<{
     visibleTableNames: Set<string>;
@@ -995,6 +1003,8 @@ export function MapContextProvider({ children }: { children: React.ReactNode }) 
         setComplaintPanelOpen,
         memoPanelOpen,
         setMemoPanelOpen,
+        groundwaterPermitPanelOpen,
+        setGroundwaterPermitPanelOpen,
         roadRewardPanelOpen,
         setRoadRewardPanelOpen,
         safetyFacBuildingRoadLayerState,

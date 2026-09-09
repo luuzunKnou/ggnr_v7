@@ -554,7 +554,9 @@ export async function listServiceFileDataFolders(params: {
   for (const e of entries) {
     if (e.isDirectory()) {
       const t = String(e.name ?? '').trim();
-      if (t && t !== '.' && t !== '..') folders.push(t);
+      if (t && t !== '.' && t !== '..' && !shouldHideServiceFileDataFileName(t)) {
+        folders.push(t);
+      }
     } else if (e.isFile() && !shouldHideServiceFileDataFileName(e.name)) {
       hasRootFiles = true;
     }

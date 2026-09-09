@@ -15,6 +15,7 @@ setlocal EnableExtensions EnableDelayedExpansion
 :: - python/env_parts optional restore
 :: - if DO_NSSM=Y and not admin => require admin before build
 :: - 00_open_ggnr_logs: skip if GGNR_LOG/GEOSERVER_LOG already open
+:: - nssm ObjectName: from project.env NSSM_OBJECT_NAME/PASS when demo
 :: - window keep: set /p. skip only if GGNR_STARTER_NO_PAUSE=1
 :: =============================================================================
 
@@ -62,15 +63,6 @@ echo(!ENV_NAME!| findstr /C:" " >nul 2>&1
 if not errorlevel 1 (
   echo [ERROR] Type must not contain spaces.
   goto :fail_exit
-)
-
-:: demo: G: share credentials + connect (UNC from common.runtime.env)
-set "DEMO_GDRIVE_USER="
-set "DEMO_GDRIVE_PASS="
-set "DEMO_GDRIVE_OBJECT="
-if /i "!ENV_NAME!"=="demo" (
-  call :ensure_demo_gdrive
-  if errorlevel 1 goto :fail_exit
 )
 
 set "OVERWRITE=Y"
@@ -130,9 +122,6 @@ echo   npm sync    = !DO_NPM_SYNC!
 echo   overwrite   = !OVERWRITE!
 echo   nssm        = !DO_NSSM!
 echo   re-register = !DO_REREG!
-if /i "!ENV_NAME!"=="demo" (
-  echo   demo G:     = connected ^(account=!DEMO_GDRIVE_USER!^)
-)
 echo.
 
 :: admin before build if nssm=Y (keep service on :3000 during npm sync/build)
@@ -281,17 +270,9 @@ set "GGNR_NSSM_REREG=!DO_REREG!"
 set "GGNR_NSSM_PROJECT=%PROJECT_NAME%"
 set "GGNR_NSSM_ENV=%ENV_NAME%"
 set "GGNR_NSSM_FROM_STARTER=1"
-if /i "!ENV_NAME!"=="demo" if defined DEMO_GDRIVE_OBJECT (
-  set "GGNR_NSSM_OBJECT_NAME=!DEMO_GDRIVE_OBJECT!"
-  set "GGNR_NSSM_OBJECT_PASS=!DEMO_GDRIVE_PASS!"
-  echo [INFO] nssm ObjectName will be !DEMO_GDRIVE_OBJECT! ^(demo G: share account^)
-)
 call "%NSSM_BAT%"
 set "NSSM_EC=!ERRORLEVEL!"
 set "GGNR_NSSM_FROM_STARTER="
-set "GGNR_NSSM_OBJECT_NAME="
-set "GGNR_NSSM_OBJECT_PASS="
-if exist "%TEMP%\ggnr_demo_gdrive.env" del /f /q "%TEMP%\ggnr_demo_gdrive.env" >nul 2>&1
 if "!NSSM_EC!"=="2" (
   echo [INFO] kept existing GGNR_V7 ^(no re-register^).
   echo        start GGNR_V7 from services if needed.
@@ -328,41 +309,6 @@ echo        nssm log: C:\logs\nssm_install_last.log
 echo        manual: 00_nssm_install_ggnr.bat ^(admin CMD^) -> 00_open_ggnr_logs.bat
 if "!PAUSE_ON_FAIL!"=="1" call :pause_keep
 exit /b !FAIL_EC!
-
-:: ---------------------------------------------------------------------------
-:ensure_demo_gdrive
-set "DEMO_ENV_FILE=%TEMP%\ggnr_demo_gdrive.env"
-if exist "%DEMO_ENV_FILE%" del /f /q "%DEMO_ENV_FILE%" >nul 2>&1
-echo.
-echo [RUN] demo G: attachment drive ^(UNC from common.runtime.env^)...
-if defined GGNR_DEMO_GDRIVE_USER if defined GGNR_DEMO_GDRIVE_PASS (
-  powershell -NoProfile -ExecutionPolicy Bypass -File "%ROOT%\scripts\ensure-demo-g-drive.ps1" -Root "%ROOT%" -OutFile "%DEMO_ENV_FILE%" -User "%GGNR_DEMO_GDRIVE_USER%" -Password "%GGNR_DEMO_GDRIVE_PASS%"
-) else (
-  powershell -NoProfile -ExecutionPolicy Bypass -File "%ROOT%\scripts\ensure-demo-g-drive.ps1" -Root "%ROOT%" -OutFile "%DEMO_ENV_FILE%"
-)
-if errorlevel 1 (
-  echo [ERROR] demo G: connect / credential prompt failed.
-  set "FAIL_EC=1"
-  exit /b 1
-)
-if not exist "%DEMO_ENV_FILE%" (
-  echo [ERROR] demo credential file missing: %DEMO_ENV_FILE%
-  set "FAIL_EC=1"
-  exit /b 1
-)
-for /f "usebackq tokens=1,* delims==" %%A in ("%DEMO_ENV_FILE%") do (
-  if /i "%%A"=="GGNR_DEMO_GDRIVE_USER" set "DEMO_GDRIVE_USER=%%B"
-  if /i "%%A"=="GGNR_DEMO_GDRIVE_PASS" set "DEMO_GDRIVE_PASS=%%B"
-  if /i "%%A"=="GGNR_DEMO_GDRIVE_OBJECT" set "DEMO_GDRIVE_OBJECT=%%B"
-)
-if not defined DEMO_GDRIVE_USER (
-  echo [ERROR] demo account not parsed from credential file.
-  set "FAIL_EC=1"
-  exit /b 1
-)
-if not defined DEMO_GDRIVE_OBJECT set "DEMO_GDRIVE_OBJECT=.\!DEMO_GDRIVE_USER!"
-echo [OK] demo G: ready. account=!DEMO_GDRIVE_USER! object=!DEMO_GDRIVE_OBJECT!
-exit /b 0
 
 :: ---------------------------------------------------------------------------
 :pause_keep

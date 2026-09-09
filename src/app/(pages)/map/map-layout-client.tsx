@@ -501,6 +501,7 @@ function MapLayoutContent({
   const setSafetyFacPanelOpen = mapContext?.setSafetyFacPanelOpen
   const setComplaintPanelOpen = mapContext?.setComplaintPanelOpen
   const setMemoPanelOpen = mapContext?.setMemoPanelOpen
+  const setGroundwaterPermitPanelOpen = mapContext?.setGroundwaterPermitPanelOpen
   const setRoadRewardPanelOpen = mapContext?.setRoadRewardPanelOpen
   const setRoadCctvOverlay = mapContext?.setRoadCctvOverlay
   const setRoadCctvUnderlayMode = mapContext?.setRoadCctvUnderlayMode
@@ -642,6 +643,8 @@ function MapLayoutContent({
   const [roadRewardCases, setRoadRewardCases] = useState<RoadRewardCase[]>([])
   const [roadRewardSelectedId, setRoadRewardSelectedId] = useState<string | null>(null)
   const [roadRewardFocusParcelId, setRoadRewardFocusParcelId] = useState<string | null>(null)
+  /** 목록 클릭 시 지도 맞춤, 지도 객체 선택 시 맞춤 생략(강조만) */
+  const [roadRewardAutoFitMap, setRoadRewardAutoFitMap] = useState(true)
   const roadRewardDetailOpen = roadRewardOpen && Boolean(roadRewardSelectedId)
   /** 접도구역 건축물 관리대장 */
   const [roadFrontageBuildingSelectedId, setRoadFrontageBuildingSelectedId] = useState<
@@ -1196,6 +1199,10 @@ function MapLayoutContent({
   }, [setMemoPanelOpen, memoManagementOpen])
 
   useEffect(() => {
+    setGroundwaterPermitPanelOpen?.(groundwaterPermitOpen)
+  }, [setGroundwaterPermitPanelOpen, groundwaterPermitOpen])
+
+  useEffect(() => {
     setRoadRewardPanelOpen?.(roadRewardOpen)
   }, [setRoadRewardPanelOpen, roadRewardOpen])
 
@@ -1361,7 +1368,7 @@ function MapLayoutContent({
 
   /**
    * system 변경 → 레이어 전부 끄기 + 전환 scrub.
-   * opened 가 현재 시스템 메뉴에 없으면 → 패널 URL 정리 + 레이어 끄기.
+   * 부서업무만 바꿀 때(opened 정리)는 지적도·건물 등 우측 레이어는 끄지 않음.
    */
   const prevSystemKeyRef = useRef<string | undefined>(undefined)
   const openedParamKey = searchParams.get("opened") ?? ""
@@ -1390,9 +1397,6 @@ function MapLayoutContent({
 
     if (current.toString() === before) return
 
-    if (!systemChanged) {
-      mapContext?.allLayersOffRef?.current?.()
-    }
     router.replace(`/map?${current.toString()}`)
     // eslint-disable-next-line react-hooks/exhaustive-deps -- system·opened·목록 기준
   }, [systemKeyFromUrl, openedParamKey, systemListForOpened])
@@ -1483,6 +1487,7 @@ function MapLayoutContent({
   const handleCloseRoadReward = () => {
     setRoadRewardSelectedId(null)
     setRoadRewardFocusParcelId(null)
+    setRoadRewardAutoFitMap(true)
     const next = openedWindows.filter((w) => w !== ROAD_REWARD_OPENED_KEY)
     setOpened(next)
   }
@@ -2069,6 +2074,7 @@ function MapLayoutContent({
                   dataTable={dataTableFromUrl}
                   onClose={handleCloseDataPanel}
                   onDataKeyChange={handleDataKeyChange}
+                  onDataTableChange={handleOpenDataPanel}
                   initialDataKey={dataKeyFromUrl || undefined}
                   useRoadLedgerFacilityListColumns={roadInfraOpen}
                 />
@@ -2536,6 +2542,7 @@ function MapLayoutContent({
                   onCasesChange={setRoadRewardCases}
                   onSelectId={setRoadRewardSelectedId}
                   onFocusParcelId={setRoadRewardFocusParcelId}
+                  onAutoFitMapChange={setRoadRewardAutoFitMap}
                   onClose={handleCloseRoadReward}
                 />
               </MapSideListPanel>
@@ -2565,6 +2572,7 @@ function MapLayoutContent({
                   }}
                   onCaseIdChange={setRoadRewardSelectedId}
                   focusParcelId={roadRewardFocusParcelId}
+                  autoFitMap={roadRewardAutoFitMap}
                   overlayLeftPx={roadRewardPanelLeftPx}
                   overlayWidthPx={
                     roadRewardPanelWidth +

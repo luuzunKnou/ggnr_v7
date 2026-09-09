@@ -36,7 +36,7 @@ import { getDefineFieldDisplayLabel, getRowKey, getRowValueByField, isDefineFiel
 import { ServiceFileAttachmentThumb } from './ServiceFileAttachmentThumb';
 import { ServiceFilePdfThumb } from './ServiceFilePdfThumb';
 import { ServiceFileImagePreview, type ServiceFilePreviewItem } from './ServiceFileImagePreview';
-import type { IdentifyLayerResult, IdentifyFeatureItem } from '../hooks/useFeatureIdentify';
+import type { IdentifyLayerResult, IdentifyFeatureItem, IdentifyPopupState } from '../hooks/useFeatureIdentify';
 import { IdentifyHitListBlock } from './IdentifyHitListBlock';
 import { compareFeaturesByGeometryStackOrder } from '@/lib/mapLayerGeometryOrder';
 import {
@@ -348,9 +348,40 @@ type LayerDataPanelProps = {
   dataTable: string;
   onClose?: () => void;
   onDataKeyChange?: (keyValue: string | number | null) => void;
+  /** 지도 식별 «이전»으로 돌아갈 때 dataTable URL 복원 */
+  onDataTableChange?: (tableName: string) => void;
   initialDataKey?: string;
   /** true: 도로대장 시설 목록과 동일한 컬럼·표시(코드표 기반). 시설관리에서 연 경우에만 켬 */
   useRoadLedgerFacilityListColumns?: boolean;
+};
+
+type IdentifyHistoryEntry =
+  | {
+      kind: 'identify';
+      identify: IdentifyPopupState;
+      dataTable: string;
+      selectedRow: Record<string, unknown> | null;
+      selectedIdentifyIndex: number | null;
+    }
+  | {
+      kind: 'list';
+      dataTable: string;
+      dataKey: string | null;
+      selectedRow: Record<string, unknown> | null;
+      /** 5번 클릭 직후와 동일한 목록(30/7)·페이지·하이라이트 */
+      listPageSize: number;
+      page: number;
+      highlightedRow: number | null;
+      total: number;
+    };
+
+type ListHistoryRestore = {
+  dataKey: string | null;
+  selectedRow: Record<string, unknown> | null;
+  listPageSize: number;
+  page: number;
+  highlightedRow: number | null;
+  total: number;
 };
 
 function flattenIdentifyResults(
@@ -379,6 +410,7 @@ export function LayerDataPanel({
   dataTable,
   onClose,
   onDataKeyChange,
+  onDataTableChange,
   initialDataKey,
   useRoadLedgerFacilityListColumns = false,
 }: LayerDataPanelProps) {
@@ -456,6 +488,91 @@ export function LayerDataPanel({
   keyFieldNameRef.current = keyFieldName;
 
   const prevHadIdentifyRef = useRef(false);
+  /** 지도·검색 식별 결과 히스토리(브라우저 뒤로가기처럼 «이전»으로 한 단계씩) */
+  const identifyHistoryRef = useRef<IdentifyHistoryEntry[]>([]);
+  const identifyHistorySkipRef = useRef(false);
+  const identifyHistorySkipClearRef = useRef(false);
+  /** 목록→식별 직전 화면으로 «이전»할 때, 식별 종료 effect가 선택을 지우지 않도록 */
+  const restoreListSelectionRef = useRef<ListHistoryRestore | null>(null);
+  /** 목록 복원 중 — 초기 로드가 선택·목록 상태를 덮어쓰지 않게 */
+  const restoringListFromHistoryRef = useRef<ListHistoryRestore | null>(null);
+  const identifySnapshotRef = useRef<{
+    identify: IdentifyPopupState | null;
+    dataTable: string;
+    selectedRow: Record<string, unknown> | null;
+    selectedIdentifyIndex: number | null;
+    listPageSize: number;
+    page: number;
+    highlightedRow: number | null;
+    total: number;
+  }>({
+    identify: null,
+    dataTable: '',
+    selectedRow: null,
+    selectedIdentifyIndex: null,
+    listPageSize: PAGE_SIZE_LIST,
+    page: 1,
+    highlightedRow: null,
+    total: 0,
+  });
+
+  /** 새 식별·검색이 들어오면 직전 화면(목록 또는 이전 식별)을 스택에 push */
+  useEffect(() => {
+    const skipping = identifyHistorySkipRef.current;
+    if (skipping) {
+      identifyHistorySkipRef.current = false;
+    }
+
+    const prev = identifySnapshotRef.current;
+    const identifyChanged = prev.identify !== identifyResultList;
+    if (!skipping && identifyChanged) {
+      if (identifyResultList != null && prev.identify != null) {
+        identifyHistoryRef.current.push({
+          kind: 'identify',
+          identify: prev.identify,
+          dataTable: prev.dataTable,
+          selectedRow: prev.selectedRow,
+          selectedIdentifyIndex: prev.selectedIdentifyIndex,
+        });
+      } else if (identifyResultList != null && prev.identify == null) {
+        const row = prev.selectedRow;
+        const keyVal = row != null ? getRowKey(row, keyFieldNameRef.current) : null;
+        identifyHistoryRef.current.push({
+          kind: 'list',
+          dataTable: prev.dataTable,
+          dataKey: keyVal != null ? String(keyVal) : null,
+          selectedRow: row,
+          listPageSize: prev.listPageSize,
+          page: prev.page,
+          highlightedRow: prev.highlightedRow,
+          total: prev.total,
+        });
+      } else if (identifyResultList == null) {
+        identifyHistoryRef.current = [];
+      }
+    }
+
+    identifySnapshotRef.current = {
+      identify: identifyResultList,
+      dataTable: dataTable.trim(),
+      selectedRow: selectedRowDataRef.current,
+      selectedIdentifyIndex: selectedIdentifyIndex,
+      listPageSize,
+      page,
+      highlightedRow,
+      total,
+    };
+  }, [
+    identifyResultList,
+    dataTable,
+    selectedIdentifyIndex,
+    selectedRowData,
+    listPageSize,
+    page,
+    highlightedRow,
+    total,
+  ]);
+
   /** 새 식별·검색 결과 시 목록 선택 초기화. 식별 종료 시에만 상세 상태 정리(일반 목록 조회와 충돌 방지). */
   useEffect(() => {
     const total =
@@ -464,13 +581,26 @@ export function LayerDataPanel({
       identifyResultList != null &&
       (total > 0 || (Boolean(identifyResultList.listHeaderLabel?.trim()) && total === 0));
     if (hasIdentify) {
-      setSelectedIdentifyIndex(null);
-      setSelectedRowData(null);
+      if (identifyHistorySkipClearRef.current) {
+        identifyHistorySkipClearRef.current = false;
+      } else {
+        setSelectedIdentifyIndex(null);
+        setSelectedRowData(null);
+      }
     } else if (prevHadIdentifyRef.current) {
-      setSelectedIdentifyIndex(null);
-      setSelectedRowData(null);
-      selectionSourceRef.current?.clear();
-      setRadarActive(false);
+      const restore = restoreListSelectionRef.current;
+      if (restore) {
+        restoreListSelectionRef.current = null;
+        pendingAutoSelectFirstRef.current = false;
+        suppressDataKeySelectRef.current = false;
+        setSelectedIdentifyIndex(null);
+        setSelectedRowData(restore.selectedRow);
+      } else {
+        setSelectedIdentifyIndex(null);
+        setSelectedRowData(null);
+        selectionSourceRef.current?.clear();
+        setRadarActive(false);
+      }
     }
     prevHadIdentifyRef.current = hasIdentify;
   }, [identifyResultList]);
@@ -871,9 +1001,13 @@ export function LayerDataPanel({
     [mapContext, rows]
   );
 
-  /** 지도 식별 항목 선택 시: 도형 강조 + 패널 padding 반영해 지도 이동·확대 (목록 행 선택과 동일) */
+  /**
+   * 식별·행 선택 시 도형 강조.
+   * fit 기본 true(목록·URL 선택). 지도 객체 클릭은 fit:false — 강조만.
+   */
   const showIdentifyFeatureOnMap = useCallback(
-    (record: Record<string, unknown>) => {
+    (record: Record<string, unknown>, opts?: { fit?: boolean }) => {
+      const doFit = opts?.fit !== false;
       const mapInstance = mapContext?.mapInstanceRef?.current;
       const source = selectionSourceRef.current;
       if (!mapInstance || !source) return;
@@ -890,12 +1024,14 @@ export function LayerDataPanel({
       const geomType = features[0].getGeometry()?.getType();
       if (geomType === 'Point' || geomType === 'MultiPoint') features[0].set('isRadarPoint', true);
       source.addFeatures(features);
-      const ext = source.getExtent();
-      if (ext.every((v) => isFinite(v))) {
-        scheduleFitMapToExtent3857(mapInstance, ext as [number, number, number, number], {
-          maxZoom: Math.min(16, MAP_AUTO_NAV_MAX_ZOOM),
-          applyMapViewPadding: () => mapContext?.applyMapViewPaddingRef?.current?.(),
-        });
+      if (doFit) {
+        const ext = source.getExtent();
+        if (ext.every((v) => isFinite(v))) {
+          scheduleFitMapToExtent3857(mapInstance, ext as [number, number, number, number], {
+            maxZoom: Math.min(16, MAP_AUTO_NAV_MAX_ZOOM),
+            applyMapViewPadding: () => mapContext?.applyMapViewPaddingRef?.current?.(),
+          });
+        }
       }
       setRadarActive(true);
     },
@@ -983,14 +1119,22 @@ export function LayerDataPanel({
     setFields([]);
     setDetailFields([]);
     setKeyFieldName(null);
+    const restoreState = restoringListFromHistoryRef.current;
+    const isListRestore = !isIdentify && restoreState != null;
+    const restorePs = isListRestore
+      ? Math.max(1, restoreState.listPageSize || PAGE_SIZE_DETAIL)
+      : PAGE_SIZE_LIST;
+    const restorePage = isListRestore ? Math.max(1, restoreState.page || 1) : 1;
     if (!isIdentify) {
       setRows([]);
       setHighlightedRow(null);
-      setSelectedRowData(null);
+      if (!isListRestore) {
+        setSelectedRowData(null);
+      }
       setSelectedIdentifyIndex(null);
-      setListPageSize(PAGE_SIZE_LIST);
+      setListPageSize(restorePs);
       suppressDataKeySelectRef.current = false;
-      pendingAutoSelectFirstRef.current = true;
+      pendingAutoSelectFirstRef.current = !isListRestore;
       pendingHighlightIndexRef.current = null;
       listColWidthsLayerRef.current = null;
       setListColWidthsPct(null);
@@ -999,29 +1143,32 @@ export function LayerDataPanel({
     const initSeq = loadPageSeqRef.current;
     setLoading(true);
     setError(null);
-    setPage(1);
+    setPage(isListRestore ? restorePage : 1);
     setTotal(0);
     if (!isIdentify) setActiveTab('basic');
     if (!isIdentify) {
       highlightSourceRef.current?.clear();
-      selectionSourceRef.current?.clear();
-      setRadarActive(false);
+      if (!isListRestore) {
+        selectionSourceRef.current?.clear();
+        setRadarActive(false);
+      }
     }
 
     const tableDataParams = {
       table: activeLayer.physicalTableName,
       schema: activeLayer.schema,
-      limit: PAGE_SIZE_LIST,
-      offset: 0,
+      limit: isListRestore ? restorePs : PAGE_SIZE_LIST,
+      offset: isListRestore ? (restorePage - 1) * restorePs : 0,
       ...(spatialFilterWkt ? { spatialWkt: spatialFilterWkt, spatialSrid: 5181 } : {}),
       ...(activeLayer.rowFilterSql ? { rowFilter: activeLayer.rowFilterSql } : {}),
     };
     const fieldsPromise = fetch(
       `/api/config/defineLayer/fields/${encodeURIComponent(activeLayer.physicalTableName)}`
     ).then((r) => r.json());
-    // 최초 오픈 시 URL dataKey만 사용(행 클릭으로 dataKey가 바뀌어도 이 effect는 재실행하지 않음)
-    const keyAtOpen = initialDataKey != null ? String(initialDataKey).trim() : '';
-    const useKey = !isIdentify && keyAtOpen !== '';
+    // 목록 복원: 클릭 당시와 같은 페이지·건수로 getTableData (1건 key 조회 금지)
+    const keyAtOpen =
+      !isListRestore && initialDataKey != null ? String(initialDataKey).trim() : '';
+    const useKey = !isIdentify && !isListRestore && keyAtOpen !== '';
     const dataPromise = isIdentify
       ? Promise.resolve({ rows: [] as Record<string, unknown>[], total: 0 })
       : useKey
@@ -1044,6 +1191,10 @@ export function LayerDataPanel({
     Promise.all([fieldsPromise, dataPromise])
       .then(([fieldsRes, dataRes]) => {
         if (cancelled || initSeq !== loadPageSeqRef.current) return;
+        const restoreDone = restoringListFromHistoryRef.current;
+        if (isListRestore) {
+          restoringListFromHistoryRef.current = null;
+        }
         const rawFields = (fieldsRes?.data ?? fieldsRes) as DefineFieldRow[] | undefined;
         const sortedAll = Array.isArray(rawFields)
           ? [...rawFields].sort((a, b) => parseInt(String(a.define_field_idx ?? '999999'), 10) - parseInt(String(b.define_field_idx ?? '999999'), 10))
@@ -1073,7 +1224,55 @@ export function LayerDataPanel({
         const keyField = Array.isArray(rawFields)
           ? rawFields.find((f) => isDefineFieldFlagTrue(f.define_field_is_key))
           : null;
-        setKeyFieldName(keyField ? String(keyField.define_field_name ?? '').trim() || null : null);
+        const resolvedKeyFieldName = keyField
+          ? String(keyField.define_field_name ?? '').trim() || null
+          : null;
+        setKeyFieldName(resolvedKeyFieldName);
+
+        if (isListRestore && restoreDone) {
+          const data = dataRes?.data ?? dataRes;
+          const dataRows: Record<string, unknown>[] = Array.isArray(data?.rows) ? data.rows : [];
+          const dataTotal =
+            typeof data?.total === 'number'
+              ? data.total
+              : restoreDone.total > 0
+                ? restoreDone.total
+                : 0;
+          pendingAutoSelectFirstRef.current = false;
+          setListPageSize(restorePs);
+          setPage(restorePage);
+          setRows(dataRows);
+          setTotal(dataTotal);
+          showCurrentListOnMap(dataRows);
+
+          const key = restoreDone.dataKey != null ? String(restoreDone.dataKey).trim() : '';
+          let idx =
+            restoreDone.highlightedRow != null &&
+            restoreDone.highlightedRow >= 0 &&
+            restoreDone.highlightedRow < dataRows.length
+              ? restoreDone.highlightedRow
+              : -1;
+          if (key && resolvedKeyFieldName) {
+            const found = dataRows.findIndex((r) => {
+              const rowKey = getRowKey(r, resolvedKeyFieldName);
+              return rowKey != null && String(rowKey) === key;
+            });
+            if (found >= 0) idx = found;
+          }
+          if (idx >= 0 && dataRows[idx]) {
+            pendingMapFitFromSelectionRef.current = true;
+            pendingHighlightIndexRef.current = idx;
+            setHighlightedRow(idx);
+            setSelectedRowData(dataRows[idx]);
+            showIdentifyFeatureOnMap(dataRows[idx]);
+          } else if (restoreDone.selectedRow) {
+            setSelectedRowData(restoreDone.selectedRow);
+            showIdentifyFeatureOnMap(restoreDone.selectedRow);
+          }
+          settled = true;
+          setLoading(false);
+          return;
+        }
 
         if (useKey) {
           const keyData = dataRes?.data ?? dataRes;
@@ -1120,6 +1319,9 @@ export function LayerDataPanel({
       })
       .catch((err) => {
         if (cancelled || initSeq !== loadPageSeqRef.current) return;
+        if (isListRestore) {
+          restoringListFromHistoryRef.current = null;
+        }
         settled = true;
         setError(err?.message ?? String(err));
         setLoading(false);
@@ -1141,15 +1343,26 @@ export function LayerDataPanel({
     isIdentifyMode,
   ]);
 
-  // 지도 식별 후 패널 열렸을 때 해당 행 상세 + 도형 강조·지도 이동
+  // 지도 객체 클릭(식별) → 상세·강조만 (맵 무브 없음)
   useEffect(() => {
     if (!isIdentifyMode || identifySelectedRow == null || !setIdentifySelectedRow) return;
-    const idx = identifyFlat.findIndex((item) => item.feature.data === identifySelectedRow);
-    setSelectedRowData(identifySelectedRow);
+    const row = identifySelectedRow;
+    const idx = identifyFlat.findIndex((item) => item.feature.data === row);
+    setSelectedRowData(row);
     setSelectedIdentifyIndex(idx >= 0 ? idx : null);
     setActiveTab('basic');
-    showIdentifyFeatureOnMap(identifySelectedRow);
     setIdentifySelectedRow(null);
+    // 레이어 생성·activeLayer null 클리어 이후 강조 (첫 패널 오픈 레이스 방지)
+    let cancelled = false;
+    queueMicrotask(() => {
+      requestAnimationFrame(() => {
+        if (cancelled) return;
+        showIdentifyFeatureOnMap(row, { fit: false });
+      });
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [isIdentifyMode, identifySelectedRow, identifyFlat, setIdentifySelectedRow, showIdentifyFeatureOnMap]);
 
   useEffect(() => {
@@ -1159,11 +1372,14 @@ export function LayerDataPanel({
       pendingHighlightIndexRef.current = null;
       listColWidthsLayerRef.current = null;
       setListColWidthsPct(null);
-      highlightSourceRef.current?.clear();
-      selectionSourceRef.current?.clear();
-      setRadarActive(false);
+      // 식별으로 패널이 열릴 때 activeLayer 로드 전에 강조를 지우면 첫 선택이 비어 보임
+      if (!isIdentifyMode) {
+        highlightSourceRef.current?.clear();
+        selectionSourceRef.current?.clear();
+        setRadarActive(false);
+      }
     }
-  }, [activeLayer]);
+  }, [activeLayer, isIdentifyMode]);
 
   const loadPage = useCallback(
     (newPage: number, size?: number, opts?: { paginationOnly?: boolean }) => {
@@ -1361,12 +1577,64 @@ export function LayerDataPanel({
   ]);
 
   const handleClose = () => {
+    identifyHistoryRef.current = [];
     mapContext?.setIdentifyResultList?.(null);
     onClose?.();
   };
 
-  /** 지도 식별·검색 결과 → 패널은 유지하고 해당 레이어 목록으로 복귀 */
+  /**
+   * «이전»: 직전 화면으로 한 단계 복귀(브라우저 뒤로가기).
+   * - 직전이 지도·검색 식별이면 그 식별 화면
+   * - 직전이 목록(예: 5번 행 선택)이면 그 선택 상태로 복귀
+   * - 스택이 비면 식별만 해제
+   */
   const handleBackFromIdentify = () => {
+    const prev = identifyHistoryRef.current.pop();
+    if (prev?.kind === 'identify') {
+      identifyHistorySkipRef.current = true;
+      identifyHistorySkipClearRef.current = true;
+      mapContext?.setIdentifyResultList?.(prev.identify);
+      mapContext?.setIdentifySelectedRow?.(null);
+      setSelectedRowData(prev.selectedRow);
+      setSelectedIdentifyIndex(prev.selectedIdentifyIndex);
+      setActiveTab('basic');
+      if (prev.selectedRow) {
+        showIdentifyFeatureOnMap(prev.selectedRow);
+      } else {
+        selectionSourceRef.current?.clear();
+        setRadarActive(false);
+      }
+      if (prev.dataTable && prev.dataTable !== dataTable.trim()) {
+        onDataTableChange?.(prev.dataTable);
+      }
+      onDataKeyChange?.(null);
+      return;
+    }
+
+    if (prev?.kind === 'list') {
+      const restorePayload: ListHistoryRestore = {
+        dataKey: prev.dataKey,
+        selectedRow: prev.selectedRow,
+        listPageSize: prev.listPageSize,
+        page: prev.page,
+        highlightedRow: prev.highlightedRow,
+        total: prev.total,
+      };
+      identifyHistorySkipRef.current = true;
+      restoreListSelectionRef.current = restorePayload;
+      restoringListFromHistoryRef.current = restorePayload;
+      pendingAutoSelectFirstRef.current = false;
+      suppressDataKeySelectRef.current = false;
+      mapContext?.setIdentifyResultList?.(null);
+      mapContext?.setIdentifySelectedRow?.(null);
+      setSelectedIdentifyIndex(null);
+      if (prev.dataTable && prev.dataTable !== dataTable.trim()) {
+        onDataTableChange?.(prev.dataTable);
+      }
+      onDataKeyChange?.(prev.dataKey);
+      return;
+    }
+
     mapContext?.setIdentifyResultList?.(null);
     mapContext?.setIdentifySelectedRow?.(null);
     setSelectedRowData(null);
@@ -1388,7 +1656,7 @@ export function LayerDataPanel({
     setSelectedRowData(feature.data);
     setSelectedIdentifyIndex(index);
     setActiveTab('basic');
-    showIdentifyFeatureOnMap(feature.data);
+    showIdentifyFeatureOnMap(feature.data, { fit: false });
   };
 
   const closeDetail = () => {
