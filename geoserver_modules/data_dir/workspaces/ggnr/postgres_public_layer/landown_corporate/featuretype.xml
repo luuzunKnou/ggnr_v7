@@ -1,6 +1,6 @@
 <featureType>
-  <id>FeatureTypeInfoImpl-767e4f41:19f1613ef30:38e3</id>
-  <name>jijuk</name>
+  <id>FeatureTypeInfoImpl--1bcb52e7:1a0837eafcb:-7e1b</id>
+  <name>landown_corporate</name>
   <nativeName>jijuk</nativeName>
   <namespace>
     <id>NamespaceInfoImpl-4bf97568:19c4d6c3053:-7ffa</id>
@@ -12,27 +12,28 @@
   </keywords>
   <srs>EPSG:5181</srs>
   <nativeBoundingBox>
-    <minx>377136.72997657</minx>
-    <maxx>406588.12914078</maxx>
-    <miny>334597.22495385</miny>
-    <maxy>444951.36467021</maxy>
+    <minx>385219.8892621045</minx>
+    <maxx>421236.8492891598</maxx>
+    <miny>352230.43498221296</miny>
+    <maxy>406930.30539678596</maxy>
     <crs class="projected">EPSG:5181</crs>
   </nativeBoundingBox>
   <latLonBoundingBox>
-    <minx>128.9768818523373</minx>
-    <maxx>129.3355342630378</maxx>
-    <miny>36.487370846758466</miny>
-    <maxy>37.48704972403547</maxy>
+    <minx>129.07127758519525</minx>
+    <maxx>129.48968536207065</maxx>
+    <miny>36.64285482908801</miny>
+    <maxy>37.143110956687046</maxy>
     <crs>EPSG:4326</crs>
   </latLonBoundingBox>
   <projectionPolicy>FORCE_DECLARED</projectionPolicy>
   <enabled>true</enabled>
+  <advertised>true</advertised>
   <store class="dataStore">
     <id>DataStoreInfoImpl-4bf97568:19c4d6c3053:-7ff8</id>
   </store>
   <serviceConfiguration>false</serviceConfiguration>
-  <internationalTitle/>
-  <internationalAbstract/>
+  <simpleConversionEnabled>false</simpleConversionEnabled>
+  <cqlFilter>own_gbn = &apos;06&apos;</cqlFilter>
   <maxFeatures>0</maxFeatures>
   <numDecimals>0</numDecimals>
   <padWithZeros>false</padWithZeros>
@@ -40,4 +41,5 @@
   <overridingServiceSRS>false</overridingServiceSRS>
   <skipNumberMatched>false</skipNumberMatched>
   <circularArcPresent>false</circularArcPresent>
+  <encodeMeasures>false</encodeMeasures>
 </featureType>
