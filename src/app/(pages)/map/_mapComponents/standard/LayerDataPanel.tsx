@@ -376,6 +376,7 @@ type IdentifyHistoryEntry =
     };
 
 type ListHistoryRestore = {
+  dataTable: string;
   dataKey: string | null;
   selectedRow: Record<string, unknown> | null;
   listPageSize: number;
@@ -383,6 +384,43 @@ type ListHistoryRestore = {
   highlightedRow: number | null;
   total: number;
 };
+
+/** 이력용 행 키 — is_key 없으면 ogc_fid/gid/id 사용(하천구역 번호 등) */
+function resolveHistoryRowKey(
+  row: Record<string, unknown> | null | undefined,
+  keyFieldName: string | null
+): string | null {
+  if (!row) return null;
+  const fromKey = getRowKey(row, keyFieldName);
+  if (fromKey != null && String(fromKey).trim() !== '') return String(fromKey);
+  for (const f of ['ogc_fid', 'gid', 'id']) {
+    const v = getRowValueByField(row, f);
+    if (v != null && String(v).trim() !== '') return String(v);
+  }
+  return null;
+}
+
+function findRowIndexByHistoryKey(
+  rows: Record<string, unknown>[],
+  key: string,
+  keyFieldName: string | null
+): number {
+  if (!key) return -1;
+  const tryFields = [
+    keyFieldName,
+    'ogc_fid',
+    'gid',
+    'id',
+  ].filter((f, i, arr): f is string => !!f && arr.indexOf(f) === i);
+  for (const field of tryFields) {
+    const idx = rows.findIndex((r) => {
+      const rowKey = getRowKey(r, field) ?? getRowValueByField(r, field);
+      return rowKey != null && String(rowKey) === key;
+    });
+    if (idx >= 0) return idx;
+  }
+  return -1;
+}
 
 function flattenIdentifyResults(
   results: IdentifyLayerResult[]
@@ -490,6 +528,8 @@ export function LayerDataPanel({
   const prevHadIdentifyRef = useRef(false);
   /** 지도·검색 식별 결과 히스토리(브라우저 뒤로가기처럼 «이전»으로 한 단계씩) */
   const identifyHistoryRef = useRef<IdentifyHistoryEntry[]>([]);
+  /** 라벨·동작용 — 스택 깊이(0이면 «닫기») */
+  const [identifyHistoryDepth, setIdentifyHistoryDepth] = useState(0);
   const identifyHistorySkipRef = useRef(false);
   const identifyHistorySkipClearRef = useRef(false);
   /** 목록→식별 직전 화면으로 «이전»할 때, 식별 종료 effect가 선택을 지우지 않도록 */
@@ -534,21 +574,31 @@ export function LayerDataPanel({
           selectedRow: prev.selectedRow,
           selectedIdentifyIndex: prev.selectedIdentifyIndex,
         });
+        setIdentifyHistoryDepth(identifyHistoryRef.current.length);
       } else if (identifyResultList != null && prev.identify == null) {
-        const row = prev.selectedRow;
-        const keyVal = row != null ? getRowKey(row, keyFieldNameRef.current) : null;
-        identifyHistoryRef.current.push({
-          kind: 'list',
-          dataTable: prev.dataTable,
-          dataKey: keyVal != null ? String(keyVal) : null,
-          selectedRow: row,
-          listPageSize: prev.listPageSize,
-          page: prev.page,
-          highlightedRow: prev.highlightedRow,
-          total: prev.total,
-        });
+        // 패널이 닫힌 채 지도만 클릭해 연 경우는 복원할 목록이 없음 → push 안 함(«닫기»)
+        const hasListToRestore =
+          prev.selectedRow != null ||
+          prev.total > 0 ||
+          (prev.highlightedRow != null && prev.highlightedRow >= 0);
+        if (hasListToRestore) {
+          const row = prev.selectedRow;
+          const keyVal = resolveHistoryRowKey(row, keyFieldNameRef.current);
+          identifyHistoryRef.current.push({
+            kind: 'list',
+            dataTable: prev.dataTable,
+            dataKey: keyVal,
+            selectedRow: row,
+            listPageSize: prev.listPageSize,
+            page: prev.page,
+            highlightedRow: prev.highlightedRow,
+            total: prev.total,
+          });
+          setIdentifyHistoryDepth(identifyHistoryRef.current.length);
+        }
       } else if (identifyResultList == null) {
         identifyHistoryRef.current = [];
+        setIdentifyHistoryDepth(0);
       }
     }
 
@@ -1102,6 +1152,18 @@ export function LayerDataPanel({
   useEffect(() => {
     if (!activeLayer) return;
     const isIdentify = isIdentifyMode;
+    const restorePending = restoringListFromHistoryRef.current;
+    // 지도 클릭으로 dataTable이 바뀐 뒤 «이전» 시: URL 테이블이 맞을 때까지 복원 플래그 유지
+    if (
+      !isIdentify &&
+      restorePending != null &&
+      restorePending.dataTable.trim().toLowerCase() !==
+        activeLayer.tableName.trim().toLowerCase()
+    ) {
+      pendingAutoSelectFirstRef.current = false;
+      return;
+    }
+
     const loadKey = [
       activeLayer.tableName,
       activeLayer.physicalTableName,
@@ -1191,7 +1253,8 @@ export function LayerDataPanel({
     Promise.all([fieldsPromise, dataPromise])
       .then(([fieldsRes, dataRes]) => {
         if (cancelled || initSeq !== loadPageSeqRef.current) return;
-        const restoreDone = restoringListFromHistoryRef.current;
+        // 복원 페이로드는 이 로드가 대상 테이블일 때만 소비
+        const restoreDone = isListRestore ? restoreState : null;
         if (isListRestore) {
           restoringListFromHistoryRef.current = null;
         }
@@ -1246,18 +1309,16 @@ export function LayerDataPanel({
           showCurrentListOnMap(dataRows);
 
           const key = restoreDone.dataKey != null ? String(restoreDone.dataKey).trim() : '';
-          let idx =
+          let idx = key
+            ? findRowIndexByHistoryKey(dataRows, key, resolvedKeyFieldName)
+            : -1;
+          if (
+            idx < 0 &&
             restoreDone.highlightedRow != null &&
             restoreDone.highlightedRow >= 0 &&
             restoreDone.highlightedRow < dataRows.length
-              ? restoreDone.highlightedRow
-              : -1;
-          if (key && resolvedKeyFieldName) {
-            const found = dataRows.findIndex((r) => {
-              const rowKey = getRowKey(r, resolvedKeyFieldName);
-              return rowKey != null && String(rowKey) === key;
-            });
-            if (found >= 0) idx = found;
+          ) {
+            idx = restoreDone.highlightedRow;
           }
           if (idx >= 0 && dataRows[idx]) {
             pendingMapFitFromSelectionRef.current = true;
@@ -1578,18 +1639,19 @@ export function LayerDataPanel({
 
   const handleClose = () => {
     identifyHistoryRef.current = [];
+    setIdentifyHistoryDepth(0);
     mapContext?.setIdentifyResultList?.(null);
     onClose?.();
   };
 
   /**
-   * «이전»: 직전 화면으로 한 단계 복귀(브라우저 뒤로가기).
-   * - 직전이 지도·검색 식별이면 그 식별 화면
-   * - 직전이 목록(예: 5번 행 선택)이면 그 선택 상태로 복귀
-   * - 스택이 비면 식별만 해제
+   * 식별 화면 하단·헤더 동작.
+   * - 스택이 있으면 «이전»(직전 목록·식별으로 복귀)
+   * - 스택이 없으면 «닫기»(패널이 닫힌 채 지도만 클릭한 경우 등)
    */
   const handleBackFromIdentify = () => {
     const prev = identifyHistoryRef.current.pop();
+    setIdentifyHistoryDepth(identifyHistoryRef.current.length);
     if (prev?.kind === 'identify') {
       identifyHistorySkipRef.current = true;
       identifyHistorySkipClearRef.current = true;
@@ -1613,6 +1675,7 @@ export function LayerDataPanel({
 
     if (prev?.kind === 'list') {
       const restorePayload: ListHistoryRestore = {
+        dataTable: prev.dataTable,
         dataKey: prev.dataKey,
         selectedRow: prev.selectedRow,
         listPageSize: prev.listPageSize,
@@ -1635,14 +1698,11 @@ export function LayerDataPanel({
       return;
     }
 
-    mapContext?.setIdentifyResultList?.(null);
-    mapContext?.setIdentifySelectedRow?.(null);
-    setSelectedRowData(null);
-    setSelectedIdentifyIndex(null);
-    selectionSourceRef.current?.clear();
-    setRadarActive(false);
-    onDataKeyChange?.(null);
+    handleClose();
   };
+
+  const identifyNavLabel = identifyHistoryDepth > 0 ? '이전' : '닫기';
+  const handleIdentifyNav = identifyHistoryDepth > 0 ? handleBackFromIdentify : handleClose;
 
   const handleIdentifyItemClick = (item: { layer: IdentifyLayerResult; feature: IdentifyFeatureItem; index: number }) => {
     const { feature, index } = item;
@@ -1999,7 +2059,7 @@ export function LayerDataPanel({
   return (
     <>
     <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
-      {/* 상세 열림 시: 일반 목록은 패널 닫기(X), 지도 식별·검색은 목록으로 이전(X) */}
+      {/* 상세 열림 시: 일반 목록은 패널 닫기(X), 지도 식별은 이력 있으면 이전·없으면 닫기 */}
       <div className="flex items-center justify-between gap-2 border-b border-border px-4 py-2.5 shrink-0 bg-background">
         <div className="min-w-0 flex-1">
           <h3 className="text-sm font-semibold text-foreground truncate">{activeLayer.name}</h3>
@@ -2010,10 +2070,10 @@ export function LayerDataPanel({
         {(hasDetail || isIdentifyMode) && (
           <button
             type="button"
-            onClick={isIdentifyMode ? handleBackFromIdentify : handleClose}
+            onClick={isIdentifyMode ? handleIdentifyNav : handleClose}
             className="shrink-0 rounded p-1 text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
-            title={isIdentifyMode ? '이전' : '닫기'}
-            aria-label={isIdentifyMode ? '이전' : '닫기'}
+            title={isIdentifyMode ? identifyNavLabel : '닫기'}
+            aria-label={isIdentifyMode ? identifyNavLabel : '닫기'}
           >
             <X className="h-4 w-4" />
           </button>
@@ -2047,9 +2107,9 @@ export function LayerDataPanel({
               selectedIndex={selectedIdentifyIndex}
               selectedRowRef={selectedIdentifyRowRef}
               onItemClick={handleIdentifyItemClick}
-              onClose={handleBackFromIdentify}
+              onClose={handleIdentifyNav}
               showFooterClose={!hasDetail}
-              footerActionLabel="이전"
+              footerActionLabel={identifyNavLabel}
             />
           )}
           {!isIdentifyMode && !error && listFields.length > 0 && (rows.length > 0 || !loading) && (

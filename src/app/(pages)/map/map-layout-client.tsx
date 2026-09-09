@@ -161,6 +161,10 @@ import {
   scrubMapSearchParamsOnSystemSwitch,
   scrubOpenedNotAllowedForSystem,
 } from "@/lib/mapSystemSwitch"
+import {
+  readLastMapSystemKey,
+  writeLastMapSystemKey,
+} from "./_mapComponents/hooks/useMapStatePersist"
 import { call } from "@/lib/api"
 import { MapSidebar } from "./_mapComponents/map-sidebar"
 import { MapSearchBar } from "./_mapComponents/map-search-bar"
@@ -1369,14 +1373,25 @@ function MapLayoutContent({
   /**
    * system 변경 → 레이어 전부 끄기 + 전환 scrub.
    * 부서업무만 바꿀 때(opened 정리)는 지적도·건물 등 우측 레이어는 끄지 않음.
+   * 홈→지도 재진입은 remount 로 prev 가 비므로 sessionStorage 마지막 시스템으로 시드.
    */
   const prevSystemKeyRef = useRef<string | undefined>(undefined)
+  const seededLastSystemRef = useRef(false)
   const openedParamKey = searchParams.get("opened") ?? ""
   useEffect(() => {
+    if (!seededLastSystemRef.current) {
+      seededLastSystemRef.current = true
+      if (prevSystemKeyRef.current === undefined) {
+        const last = readLastMapSystemKey()
+        if (last != null && last !== "") prevSystemKeyRef.current = last
+      }
+    }
+
     const prev = prevSystemKeyRef.current
     const systemChanged =
       prev !== undefined && Boolean(prev) && prev !== systemKeyFromUrl
     prevSystemKeyRef.current = systemKeyFromUrl
+    if (systemKeyFromUrl) writeLastMapSystemKey(systemKeyFromUrl)
 
     if (systemChanged) {
       mapContext?.allLayersOffRef?.current?.()

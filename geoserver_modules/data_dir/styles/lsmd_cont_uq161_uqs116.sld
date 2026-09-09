@@ -33,9 +33,14 @@
                   </ogc:Function>
                   <ogc:PropertyName>layer_korname</ogc:PropertyName>
                   <ogc:Function name="Concatenate">
-                    <ogc:PropertyName>layer_korname</ogc:PropertyName>
-                    <ogc:Literal><![CDATA[ ]]></ogc:Literal>
-                    <ogc:PropertyName>alias</ogc:PropertyName>
+                    <ogc:Function name="Concatenate">
+                      <ogc:PropertyName>layer_korname</ogc:PropertyName>
+                      <ogc:Literal><![CDATA[ (]]></ogc:Literal>
+                    </ogc:Function>
+                    <ogc:Function name="Concatenate">
+                      <ogc:PropertyName>alias</ogc:PropertyName>
+                      <ogc:Literal>)</ogc:Literal>
+                    </ogc:Function>
                   </ogc:Function>
                 </ogc:Function>
               </ogc:Function>
@@ -93,9 +98,14 @@
                   </ogc:Function>
                   <ogc:PropertyName>layer_korname</ogc:PropertyName>
                   <ogc:Function name="Concatenate">
-                    <ogc:PropertyName>layer_korname</ogc:PropertyName>
-                    <ogc:Literal><![CDATA[ ]]></ogc:Literal>
-                    <ogc:PropertyName>alias</ogc:PropertyName>
+                    <ogc:Function name="Concatenate">
+                      <ogc:PropertyName>layer_korname</ogc:PropertyName>
+                      <ogc:Literal><![CDATA[ (]]></ogc:Literal>
+                    </ogc:Function>
+                    <ogc:Function name="Concatenate">
+                      <ogc:PropertyName>alias</ogc:PropertyName>
+                      <ogc:Literal>)</ogc:Literal>
+                    </ogc:Function>
                   </ogc:Function>
                 </ogc:Function>
               </ogc:Function>
@@ -153,9 +163,14 @@
                   </ogc:Function>
                   <ogc:PropertyName>layer_korname</ogc:PropertyName>
                   <ogc:Function name="Concatenate">
-                    <ogc:PropertyName>layer_korname</ogc:PropertyName>
-                    <ogc:Literal><![CDATA[ ]]></ogc:Literal>
-                    <ogc:PropertyName>alias</ogc:PropertyName>
+                    <ogc:Function name="Concatenate">
+                      <ogc:PropertyName>layer_korname</ogc:PropertyName>
+                      <ogc:Literal><![CDATA[ (]]></ogc:Literal>
+                    </ogc:Function>
+                    <ogc:Function name="Concatenate">
+                      <ogc:PropertyName>alias</ogc:PropertyName>
+                      <ogc:Literal>)</ogc:Literal>
+                    </ogc:Function>
                   </ogc:Function>
                 </ogc:Function>
               </ogc:Function>
