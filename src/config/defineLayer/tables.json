@@ -253,7 +253,7 @@
   },
   {
     "define_table_name": "lard_lawst_ri_budr",
-    "define_table_kor_name": "lard_lawst_ri_budr",
+    "define_table_kor_name": "법정구역리경계",
     "define_table_shp_type": "POLYGON",
     "define_table_read_share": "P",
     "define_table_write_share": "P",
@@ -265,7 +265,7 @@
   },
   {
     "define_table_name": "lard_lawst_umd_budr",
-    "define_table_kor_name": "lard_lawst_umd_budr",
+    "define_table_kor_name": "법정구역읍면동경계",
     "define_table_shp_type": "POLYGON",
     "define_table_read_share": "P",
     "define_table_write_share": "P",
@@ -309,18 +309,6 @@
     "define_table_idx": "0",
     "define_table_etc": "",
     "define_table_schema": "public_layer",
-    "define_table_source": "shp"
-  },
-  {
-    "define_table_name": "ngl_fee_list",
-    "define_table_kor_name": "ngl_fee_list",
-    "define_table_shp_type": "POLYGON",
-    "define_table_read_share": "P",
-    "define_table_write_share": "P",
-    "define_table_group": "",
-    "define_table_idx": "0",
-    "define_table_etc": "",
-    "define_table_schema": "layer",
     "define_table_source": "shp"
   },
   {
