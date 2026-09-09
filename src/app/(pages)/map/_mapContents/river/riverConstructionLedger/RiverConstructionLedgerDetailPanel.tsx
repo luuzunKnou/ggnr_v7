@@ -2033,14 +2033,18 @@ export function RiverConstructionLedgerDetailPanel({ row, onClose }: Props) {
           <div
             className={cn(
               "mt-3 border-t border-border pt-2",
-              isNewRow ? "flex min-h-0 flex-1 flex-col" : "shrink-0"
+              isNewRow && (editing ? draftParcels : parcels).length > 0
+                ? "flex min-h-0 flex-1 flex-col"
+                : "shrink-0"
             )}
           >
             <UsageDataAsAddressList
               title={`필지목록 (${(editing ? draftParcels : parcels).length.toLocaleString()})`}
               titleClassName="standard-detail-section-toggle-label"
               className="mt-0"
-              fillHeight={isNewRow}
+              fillHeight={
+                isNewRow && (editing ? draftParcels : parcels).length > 0
+              }
               maxVisibleCards={3}
               isEditing={editing}
               items={editing ? draftParcels : parcels}
@@ -2048,7 +2052,7 @@ export function RiverConstructionLedgerDetailPanel({ row, onClose }: Props) {
               onAdd={editing ? () => setParcelAddModalOpen(true) : undefined}
               onRemove={editing ? removeDraftParcel : undefined}
               onClick={handleParcelClick}
-              emptyHintEdit="도형을 그리거나 수정하면 필지목록이 자동으로 채워집니다. 「추가」로 직접 등록할 수도 있습니다."
+              emptyHintEdit="지도에서 도형을 그리면 자동으로 채워집니다. 「추가」로 직접 등록할 수도 있습니다."
               emptyHintView="등록된 필지가 없습니다."
             />
             <LayerParcelAddModal
