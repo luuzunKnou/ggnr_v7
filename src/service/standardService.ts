@@ -533,11 +533,40 @@ function getTableKorName(tableName: string): string {
   return row ? String(row.define_table_kor_name ?? tableName) : tableName;
 }
 
-/** 지도 식별: 켜 둔 레이어 이름 → DB 물리 테이블 + 선택적 행 필터 (분할 레이어) */
+/** WMS 레이어별 추가 CQL(예: river_name='…') → identify WHERE에 쓸 SQL 조각 */
+function resolveIdentifyExtraRowFilter(
+  displayName: string,
+  tableFilters?: Record<string, string> | null
+): string | null {
+  if (!tableFilters) return null;
+  const raw =
+    tableFilters[displayName] ??
+    tableFilters[displayName.toLowerCase()] ??
+    Object.entries(tableFilters).find(([k]) => k.trim().toLowerCase() === displayName)?.[1];
+  const s = String(raw ?? '').trim();
+  if (!s || s === 'INCLUDE') return null;
+  return sanitizeDefineLayerRowFilter(s);
+}
+
+function mergeIdentifyRowFilters(
+  splitOrBase: string | null,
+  extra: string | null
+): string | null {
+  if (splitOrBase && extra) return `(${splitOrBase}) AND (${extra})`;
+  return splitOrBase ?? extra;
+}
+
+/** 지도 식별: 켜 둔 레이어 이름 → DB 물리 테이블 + 선택적 행 필터 (분할 레이어 + WMS CQL) */
 function resolveIdentifyLayerTargets(
   names: string[],
-  schema: string
-): Array<{ displayName: string; physicalTable: string; rowFilter: string | null }> {
+  schema: string,
+  tableFilters?: Record<string, string> | null
+): Array<{
+  displayName: string;
+  physicalTable: string;
+  rowFilter: string | null;
+  isSplitLayer: boolean;
+}> {
   const tables = getTablesJson();
   const schemaLc = schema.toLowerCase();
   const visibleLc = names.map((n) => String(n ?? '').trim().toLowerCase()).filter(Boolean);
@@ -556,17 +585,28 @@ function resolveIdentifyLayerTargets(
     if (parent && divQ) parentsWithVisibleSplitChild.add(parent);
   }
 
-  const out: Array<{ displayName: string; physicalTable: string; rowFilter: string | null }> = [];
+  const out: Array<{
+    displayName: string;
+    physicalTable: string;
+    rowFilter: string | null;
+    isSplitLayer: boolean;
+  }> = [];
   for (const raw of names) {
     const displayName = String(raw ?? '').trim().toLowerCase();
     if (!displayName) continue;
     if (parentsWithVisibleSplitChild.has(displayName)) continue;
 
+    const extraRf = resolveIdentifyExtraRowFilter(displayName, tableFilters);
     const row = tables.find(
       (r) => String(r.define_table_name ?? '').trim().toLowerCase() === displayName
     );
     if (!row) {
-      out.push({ displayName, physicalTable: displayName, rowFilter: null });
+      out.push({
+        displayName,
+        physicalTable: displayName,
+        rowFilter: mergeIdentifyRowFilters(null, extraRf),
+        isSplitLayer: false,
+      });
       continue;
     }
     const rowSchema = String(row.define_table_schema ?? 'layer').trim().toLowerCase() || 'layer';
@@ -576,9 +616,19 @@ function resolveIdentifyLayerTargets(
     if (parent && divQ) {
       const rf = sanitizeDefineLayerRowFilter(divQ);
       if (!rf) continue;
-      out.push({ displayName, physicalTable: parent.toLowerCase(), rowFilter: rf });
+      out.push({
+        displayName,
+        physicalTable: parent.toLowerCase(),
+        rowFilter: mergeIdentifyRowFilters(rf, extraRf),
+        isSplitLayer: true,
+      });
     } else {
-      out.push({ displayName, physicalTable: displayName, rowFilter: null });
+      out.push({
+        displayName,
+        physicalTable: displayName,
+        rowFilter: mergeIdentifyRowFilters(null, extraRf),
+        isSplitLayer: false,
+      });
     }
   }
   return out;
@@ -630,6 +680,11 @@ export async function identifyFeatures(params: {
   tables: string[];
   srid?: number;
   schema?: string;
+  /**
+   * 레이어별 추가 행 필터 (WMS CQL과 동일 문법, 예: river_name='한강').
+   * 화면에 보이는 범위만 식별되도록 serviceWmsCqlByLayer 등을 그대로 전달.
+   */
+  tableFilters?: Record<string, string> | null;
 }) {
   const { x, y, tables, srid = 3857 } = params;
   const buffer = typeof params.buffer === 'number' && params.buffer >= 0 ? params.buffer : 10;
@@ -638,7 +693,7 @@ export async function identifyFeatures(params: {
   if (!Array.isArray(tables) || tables.length === 0) return { results: [] };
   if (typeof x !== 'number' || typeof y !== 'number') return { results: [] };
 
-  const targets = resolveIdentifyLayerTargets(tables, schema);
+  const targets = resolveIdentifyLayerTargets(tables, schema, params.tableFilters ?? null);
   if (targets.length === 0) return { results: [] };
 
   // 지도 클릭 데이터 목록 로그 (서버)
@@ -661,7 +716,7 @@ export async function identifyFeatures(params: {
   const queries: string[] = [];
 
   await Promise.all(
-    targets.map(async ({ displayName, physicalTable, rowFilter }) => {
+    targets.map(async ({ displayName, physicalTable, rowFilter, isSplitLayer }) => {
       const tableLower = physicalTable;
       const resolvedRel = await resolveLayerPhysicalRelName(schema, tableLower);
       if (!resolvedRel) return;
@@ -791,7 +846,7 @@ export async function identifyFeatures(params: {
             tableName: displayName,
             korName,
             titleField,
-            isSplitLayer: rowFilter != null,
+            isSplitLayer,
             features,
             identifyGeomRank: identifyHitPriorityRank(geomTypeRaw),
           });
@@ -1323,7 +1378,7 @@ export async function searchDefineLayersByGeometry(params: {
   const results: LayerOut[] = [];
 
   await Promise.all(
-    targets.map(async ({ displayName, physicalTable, rowFilter }) => {
+    targets.map(async ({ displayName, physicalTable, rowFilter, isSplitLayer }) => {
       const tableLower = physicalTable;
       const resolvedRel = await resolveLayerPhysicalRelName(schema, tableLower);
       if (!resolvedRel) return;
@@ -1416,7 +1471,7 @@ export async function searchDefineLayersByGeometry(params: {
           tableName: displayName,
           korName,
           titleField,
-          isSplitLayer: rowFilter != null,
+          isSplitLayer,
           features,
           identifyGeomRank: identifyHitPriorityRank(geomTypeRaw),
         });
@@ -1484,7 +1539,7 @@ export async function searchDefineLayersByKeyword(params: {
   const results: LayerOutKw[] = [];
 
   await Promise.all(
-    targets.map(async ({ displayName, physicalTable, rowFilter }) => {
+    targets.map(async ({ displayName, physicalTable, rowFilter, isSplitLayer }) => {
       const tableLower = physicalTable;
       const resolvedRel = await resolveLayerPhysicalRelName(schema, tableLower);
       if (!resolvedRel) return;
@@ -1588,7 +1643,7 @@ export async function searchDefineLayersByKeyword(params: {
           tableName: displayName,
           korName,
           titleField,
-          isSplitLayer: rowFilter != null,
+          isSplitLayer,
           features,
           identifyGeomRank: identifyHitPriorityRank(geomTypeRaw),
         });

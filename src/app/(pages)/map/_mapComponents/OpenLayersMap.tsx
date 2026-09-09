@@ -1421,7 +1421,8 @@ export default function OpenLayersMap({
       roadNetworkPointPickActive ||
       roadFrontageMarkerPointPickActive ||
       (mapContext?.mapDrawInputSuspended ?? false) ||
-      activeControls.some((id) => MEASUREMENT_IDS.includes(id))
+      activeControls.some((id) => MEASUREMENT_IDS.includes(id)),
+    serviceWmsCqlByLayer
   );
 
   // 좌측 새 식별이 오면 우측 대기분 제거(좌측 우선)
@@ -1670,10 +1671,23 @@ export default function OpenLayersMap({
               return;
             }
             try {
+              const prefer = mapContext.riverBasicPlanSelectedPlanRef?.current;
               const pickRes = await call('', 'POST', {
                 service: 'riverBasicPlanService',
                 action: 'getRiverBasicPlanPickFromIndex',
-                params: { indexOgcFid: fid, indexDefineTable: best.tableName },
+                params: {
+                  indexOgcFid: fid,
+                  indexDefineTable: best.tableName,
+                  ...(prefer
+                    ? {
+                        preferPlanYear: prefer.planYear,
+                        preferPlanName: prefer.planName,
+                        ...(String(prefer.planLen ?? '').trim()
+                          ? { preferPlanLen: prefer.planLen }
+                          : {}),
+                      }
+                    : {}),
+                },
               });
               if (cancelled) return;
               const pdata = pickRes?.data ?? pickRes;
@@ -1705,7 +1719,8 @@ export default function OpenLayersMap({
           }
 
           if (isRiverBasicPlanAsDefineTable(best.tableName)) {
-            const riverName = pickIdentifyField(hitLayer.features[0]?.data, 'river_name');
+            const row = hitLayer.features[0]?.data;
+            const riverName = pickIdentifyField(row, 'river_name');
             if (!riverName) {
               if (cancelled) return;
               window.alert('선택한 기본계획에서 하천명을 읽을 수 없습니다.');
@@ -1714,6 +1729,18 @@ export default function OpenLayersMap({
             }
             const tab = riverBasicPlanTabFromAsDefineTable(best.tableName);
             mapContext.applyRiverBasicPlanMapPickRef.current?.({ riverName, tab });
+            const planYear = pickIdentifyField(row, 'plan_year') ?? '';
+            const planName = pickIdentifyField(row, 'plan_name') ?? '';
+            const planLen = pickIdentifyField(row, 'plan_len') ?? '';
+            if (planYear || planName || planLen) {
+              /** indexOgcFid <= 0 → 연도만 맞추고 색인 상세는 열지 않음 */
+              mapContext.setRiverBasicPlanIndexFromMap({
+                indexOgcFid: 0,
+                planYear,
+                planName,
+                planLen,
+              });
+            }
             mapContext.riverBasicPlanExitIndexViewToDetailRef?.current?.();
             clearIdentifyIntake();
             return;

@@ -28,6 +28,7 @@ import {
   riverBasicPlanHdDefineTable,
   riverBasicPlanIndexDefineTable,
   riverBasicPlanJdDefineTable,
+  buildRiverBasicPlanMapCqlByLayer,
 } from "@/lib/riverBasicPlanMapAttachmentLayers";
 import { useMapContext } from "../../../_mapComponents/MapContext";
 import { MAP_AUTO_NAV_MAX_ZOOM } from "../../../_mapComponents/config/mapDefaults";
@@ -166,6 +167,8 @@ export function RiverBasicPlanDetailPanel({ tab, riverName, onClose }: Props) {
   const mapContext = useMapContext();
   const visibleLayerNames = mapContext?.visibleLayerNames ?? new Set<string>();
   const setVisibleLayerNames = mapContext?.setVisibleLayerNames;
+  const setServiceWmsCqlByLayer = mapContext?.setServiceWmsCqlByLayer;
+  const selectedPlanRef = mapContext?.riverBasicPlanSelectedPlanRef;
   const indexLayer = riverBasicPlanIndexDefineTable(tab);
   const planAsLayer = riverBasicPlanAsDefineTable(tab);
   const jdLayer = riverBasicPlanJdDefineTable(tab);
@@ -247,6 +250,47 @@ export function RiverBasicPlanDetailPanel({ tab, riverName, onClose }: Props) {
   const [indexListError, setIndexListError] = useState<string | null>(null);
   const setRiverBasicPlanIndexFromMap = mapContext?.setRiverBasicPlanIndexFromMap;
 
+  /** 선택 기본계획 → 지도 CQL(기본계획도는 연도·명·연장까지). 식별과 WMS를 상세와 맞춤 */
+  useEffect(() => {
+    if (!setServiceWmsCqlByLayer || !riverName.trim()) return;
+    setServiceWmsCqlByLayer(
+      buildRiverBasicPlanMapCqlByLayer(tab, riverName, selected)
+    );
+  }, [tab, riverName, selected, setServiceWmsCqlByLayer]);
+
+  /** 색인도 식별 시 현재 선택 연도 우선 매칭용 */
+  useEffect(() => {
+    if (!selectedPlanRef) return;
+    selectedPlanRef.current = selected
+      ? {
+          planYear: selected.planYear,
+          planName: selected.planName,
+          planLen: selected.planLen,
+        }
+      : null;
+    return () => {
+      selectedPlanRef.current = null;
+    };
+  }, [selected, selectedPlanRef]);
+
+  /** 색인도 상세 진입 시 해당 기본계획도(AS) 레이어가 꺼져 있으면 다시 켬 */
+  useEffect(() => {
+    if (!indexViewMode || !setVisibleLayerNames || existingMapLayers == null) return;
+    if (!existingMapLayerSet.has(planAsLayer.toLowerCase())) return;
+    setVisibleLayerNames((prev) => {
+      if (prev.has(planAsLayer)) return prev;
+      const next = new Set(prev);
+      next.add(planAsLayer);
+      return next;
+    });
+  }, [
+    indexViewMode,
+    planAsLayer,
+    setVisibleLayerNames,
+    existingMapLayers,
+    existingMapLayerSet,
+  ]);
+
   /** 색인도 상세 선택 시 데이터조회와 동일 펄스 폴리곤 강조 */
   const indexHighlightOgcFid =
     indexViewMode && mapRequestedIndexOgcFid != null && Number.isFinite(mapRequestedIndexOgcFid)
@@ -257,6 +301,19 @@ export function RiverBasicPlanDetailPanel({ tab, riverName, onClose }: Props) {
     indexHighlightOgcFid,
     Boolean(mapContext?.mapReady) && indexHighlightOgcFid != null
   );
+
+  /** 색인도 상세목록(종단·횡단·구조물) 선택 강조 */
+  const [relatedHighlight, setRelatedHighlight] = useState<{
+    table: string;
+    ogcFid: number;
+  } | null>(null);
+  useRiverBasicPlanIndexHighlight(
+    relatedHighlight?.table ?? "",
+    relatedHighlight?.ogcFid ?? null,
+    Boolean(mapContext?.mapReady) && relatedHighlight != null,
+    "riverBasicPlanRelatedHighlight"
+  );
+
   /** 기본계획(AS) 상세보기 필드 — 하드코딩 */
   const planDetailFields = useMemo(() => getRiverBasicPlanDetailFields(tab), [tab]);
   /** define_field_is_key — 데이터 조회 첨부와 동일 (file_data/river_d_index/{키}/) */
@@ -513,6 +570,7 @@ export function RiverBasicPlanDetailPanel({ tab, riverName, onClose }: Props) {
     setIndexAttachmentPreview(null);
     setRelatedDrawingPreview(null);
     setRelatedDrawingLoadingKey(null);
+    setRelatedHighlight(null);
     setReportPdfPreview(null);
     setReportPdfLoading(false);
     pendingPlanFromMapRef.current = null;
@@ -535,8 +593,16 @@ export function RiverBasicPlanDetailPanel({ tab, riverName, onClose }: Props) {
       }
     }
 
-    setIndexViewMode(true);
-    setMapRequestedIndexOgcFid(Math.floor(req.indexOgcFid));
+    const fid = Math.floor(req.indexOgcFid);
+    if (fid > 0) {
+      setIndexViewMode(true);
+      setMapRequestedIndexOgcFid(fid);
+    } else {
+      setIndexViewMode(false);
+      setMapRequestedIndexOgcFid(null);
+      setIndexBundle(null);
+      setIndexError(null);
+    }
     setRiverBasicPlanIndexFromMap?.(null);
   }, [mapContext?.riverBasicPlanIndexFromMap, setRiverBasicPlanIndexFromMap]);
 
@@ -548,6 +614,7 @@ export function RiverBasicPlanDetailPanel({ tab, riverName, onClose }: Props) {
     setIndexAttachmentPreview(null);
     setRelatedDrawingPreview(null);
     setRelatedDrawingLoadingKey(null);
+    setRelatedHighlight(null);
   }, []);
 
   const exitRef = mapContext?.riverBasicPlanExitIndexViewToDetailRef;
@@ -561,6 +628,7 @@ export function RiverBasicPlanDetailPanel({ tab, riverName, onClose }: Props) {
 
   useEffect(() => {
     if (!indexViewMode || !riverName || !selected || mapRequestedIndexOgcFid == null) return;
+    setRelatedHighlight(null);
     let alive = true;
     const run = async () => {
       setIndexLoading(true);
@@ -1239,15 +1307,32 @@ export function RiverBasicPlanDetailPanel({ tab, riverName, onClose }: Props) {
                       {indexBundle.related.map((r) => {
                         const rowKey = `${r.fileLayer}\0${r.fileKey}`;
                         const drawingBusy = relatedDrawingLoadingKey === rowKey;
+                        const relatedSelected =
+                          relatedHighlight != null &&
+                          relatedHighlight.ogcFid === r.ogcFid &&
+                          relatedHighlight.table === r.table;
                         return (
                           <li key={`${r.kind}-${r.table}-${r.ogcFid}`}>
                             <div className="flex items-stretch min-h-[30px]">
                               <button
                                 type="button"
-                                className="flex-1 min-w-0 text-left px-3 py-2 text-xs hover:bg-muted/50 flex items-center gap-2"
+                                className={cn(
+                                  "flex-1 min-w-0 text-left px-3 py-2 text-xs flex items-center gap-2",
+                                  relatedSelected
+                                    ? "bg-primary/10 text-primary"
+                                    : "hover:bg-muted/50"
+                                )}
+                                title={r.label}
                                 onClick={() => {
                                   closeRiverBasicPlanDrawingOverlays();
                                   ensureRelatedItemLayerVisible(r);
+                                  const table = String(r.table ?? "").trim();
+                                  const fid = Number(r.ogcFid);
+                                  if (table && Number.isFinite(fid) && fid > 0) {
+                                    setRelatedHighlight({ table, ogcFid: Math.floor(fid) });
+                                  } else {
+                                    setRelatedHighlight(null);
+                                  }
                                   const ext = r.extent3857;
                                   const ok =
                                     Array.isArray(ext) &&
