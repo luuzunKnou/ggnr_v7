@@ -1,9 +1,12 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import type { FeatureLike } from "ol/Feature";
 import VectorLayer from "ol/layer/Vector";
 import VectorSource from "ol/source/Vector";
 import GeoJSON from "ol/format/GeoJSON";
+import { Stroke, Style } from "ol/style";
+import type { StyleFunction } from "ol/style/Style";
 import { call } from "@/lib/api";
 import { compareFeaturesByGeometryStackOrder } from "@/lib/mapLayerGeometryOrder";
 import {
@@ -14,7 +17,33 @@ import {
 import { useMapContext } from "../../../_mapComponents/MapContext";
 
 /**
- * 하천기본계획 색인도 선택 — 데이터조회 선택 행과 동일한 붉은 펄스 폴리곤 강조.
+ * 색인도 강조 — 데이터조회와 동일 펄스 선, 폴리곤은 윤곽만(면 채움 없음).
+ */
+function createRiverBasicPlanIndexHighlightStyle(
+  getPulsePhase: () => number
+): StyleFunction {
+  const base = createDataQuerySelectionRowHighlightStyle(getPulsePhase);
+  return (feature: FeatureLike, resolution: number) => {
+    const geomType = feature.getGeometry()?.getType();
+    if (geomType === "Polygon" || geomType === "MultiPolygon") {
+      const t = Math.sin(getPulsePhase());
+      const whiteOp = 0.6 + 0.35 * t;
+      const redOp = 0.5 + 0.3 * t;
+      return [
+        new Style({
+          stroke: new Stroke({ color: `rgba(255, 255, 255, ${whiteOp})`, width: 7 + t }),
+        }),
+        new Style({
+          stroke: new Stroke({ color: `rgba(220, 38, 38, ${redOp})`, width: 4 + 0.8 * t }),
+        }),
+      ];
+    }
+    return base(feature, resolution);
+  };
+}
+
+/**
+ * 하천기본계획 색인도 선택 — 붉은 펄스 윤곽 강조(폴리곤 fill 없음).
  * 도형은 ogc_fid 로 조회. 지도 이동(fit)은 호출측에서 유지.
  */
 export function useRiverBasicPlanIndexHighlight(
@@ -48,7 +77,7 @@ export function useRiverBasicPlanIndexHighlight(
     const layer = new VectorLayer({
       source,
       renderOrder: compareFeaturesByGeometryStackOrder,
-      style: createDataQuerySelectionRowHighlightStyle(() => pulsePhaseRef.current),
+      style: createRiverBasicPlanIndexHighlightStyle(() => pulsePhaseRef.current),
     });
     layer.set("riverBasicPlanIndexHighlight", true);
     insertLayerBelowServiceLayer(map, layer);
