@@ -158,13 +158,17 @@ export async function getRiverBasicPlanRiverList(params?: {
 }
 
 /**
- * 색인도 피처와 공간으로 겹치는 기본계획 1건을 찾아
+ * 색인도 피처와 공간·속성(하천명·차수)으로 맞는 기본계획 1건을 찾아
  * 하천·연도·탭(지방/소하천)을 맞출 때 사용.
  * indexDefineTable: river_d_index | river_s_index
+ * preferPlan*: 현재 상세에서 선택한 기본계획이 색인도와 맞으면 그 건을 우선.
  */
 export async function getRiverBasicPlanPickFromIndex(params?: {
   indexOgcFid?: number;
   indexDefineTable?: string;
+  preferPlanYear?: string;
+  preferPlanName?: string;
+  preferPlanLen?: string;
 }): Promise<{
   riverName: string;
   planYear: string;
@@ -188,17 +192,82 @@ export async function getRiverBasicPlanPickFromIndex(params?: {
   const asTable = await resolveLayerTableName(riverBasicPlanAsDefineTable(tab));
   const safeIdx = idxTable.replace(/"/g, '""');
   const safeAs = asTable.replace(/"/g, '""');
+  const pinnedSql = Math.floor(fid);
 
-  const res = await db.execute(
-    sql.raw(`SELECT
+  /** 색인도 목록과 동일: 교차 + 같은 하천(+ 차수코드) */
+  const matchJoin = `p.geom IS NOT NULL AND i.geom IS NOT NULL
+      AND ST_Intersects(i.geom, p.geom)
+      AND COALESCE(i.river_name, '') = COALESCE(p.river_name, '')
+      AND (
+        COALESCE(p.rivp_code, '') = ''
+        OR COALESCE(i.rivp_code, '') = COALESCE(p.rivp_code, '')
+      )`;
+
+  const selectPlan = `SELECT
       COALESCE(p.river_name, '') AS "riverName",
       COALESCE(p.plan_year, '') AS "planYear",
       COALESCE(p.plan_name, '') AS "planName",
       COALESCE(p.plan_len::text, '') AS "planLen"
     FROM layer."${safeIdx}" i
     INNER JOIN layer."${safeAs}" p
-      ON p.geom IS NOT NULL AND i.geom IS NOT NULL AND ST_Intersects(i.geom, p.geom)
-    WHERE i.ogc_fid = ${Math.floor(fid)}
+      ON ${matchJoin}
+    WHERE i.ogc_fid = ${pinnedSql}`;
+
+  const mapRow = (
+    row:
+      | { riverName?: string; planYear?: string; planName?: string; planLen?: string | number | null }
+      | undefined
+  ) => {
+    const riverName = String(row?.riverName ?? '').trim();
+    if (!riverName) return null;
+    return {
+      riverName,
+      planYear: String(row?.planYear ?? '').trim(),
+      planName: String(row?.planName ?? '').trim(),
+      planLen: row?.planLen == null ? '' : String(row.planLen).trim(),
+      tab,
+    };
+  };
+
+  const preferYear = String(params?.preferPlanYear ?? '').trim();
+  const preferName = String(params?.preferPlanName ?? '').trim();
+  const preferLenRaw = params?.preferPlanLen;
+  if (preferYear || preferName || preferLenRaw !== undefined) {
+    const preferParts: string[] = [];
+    if (preferYear) preferParts.push(`COALESCE(p.plan_year, '') = '${esc(preferYear)}'`);
+    if (preferName) preferParts.push(`COALESCE(p.plan_name, '') = '${esc(preferName)}'`);
+    if (preferLenRaw !== undefined) {
+      const len = normalizePlanLenParam(preferLenRaw);
+      if (len === '') {
+        preferParts.push(`COALESCE(p.plan_len::text, '') = ''`);
+      } else if (/^-?\d+(\.\d+)?([eE][+-]?\d+)?$/.test(len)) {
+        preferParts.push(
+          `(COALESCE(p.plan_len::text, '') ~ '^-?[0-9]+(\\.[0-9]+)?([eE][+-]?[0-9]+)?$' AND p.plan_len::float8 = '${esc(len)}'::float8)`,
+        );
+      } else {
+        preferParts.push(`COALESCE(p.plan_len::text, '') = '${esc(len)}'`);
+      }
+    }
+    if (preferParts.length > 0) {
+      const preferRes = await db.execute(
+        sql.raw(
+          `${selectPlan}
+           AND ${preferParts.join(' AND ')}
+           ORDER BY p.ogc_fid ASC
+           LIMIT 1`
+        )
+      );
+      const preferred = mapRow(
+        preferRes.rows?.[0] as
+          | { riverName?: string; planYear?: string; planName?: string; planLen?: string | number | null }
+          | undefined
+      );
+      if (preferred) return preferred;
+    }
+  }
+
+  const res = await db.execute(
+    sql.raw(`${selectPlan}
     ORDER BY
       CASE
         WHEN COALESCE(p.plan_year, '') ~ '^[0-9]+$' THEN COALESCE(p.plan_year, '')::int
@@ -208,19 +277,11 @@ export async function getRiverBasicPlanPickFromIndex(params?: {
     LIMIT 1`)
   );
 
-  const row = res.rows?.[0] as
-    | { riverName?: string; planYear?: string; planName?: string; planLen?: string | number | null }
-    | undefined;
-  const riverName = String(row?.riverName ?? '').trim();
-  if (!riverName) return null;
-
-  return {
-    riverName,
-    planYear: String(row?.planYear ?? '').trim(),
-    planName: String(row?.planName ?? '').trim(),
-    planLen: row?.planLen == null ? '' : String(row.planLen).trim(),
-    tab,
-  };
+  return mapRow(
+    res.rows?.[0] as
+      | { riverName?: string; planYear?: string; planName?: string; planLen?: string | number | null }
+      | undefined
+  );
 }
 
 export async function getRiverBasicPlanYearList(params?: {

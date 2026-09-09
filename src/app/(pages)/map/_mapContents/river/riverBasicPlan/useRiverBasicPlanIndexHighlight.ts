@@ -43,13 +43,15 @@ function createRiverBasicPlanIndexHighlightStyle(
 }
 
 /**
- * 하천기본계획 색인도 선택 — 붉은 펄스 윤곽 강조(폴리곤 fill 없음).
+ * 하천기본계획 색인도·상세목록 선택 — 붉은 펄스 강조(폴리곤은 윤곽만).
  * 도형은 ogc_fid 로 조회. 지도 이동(fit)은 호출측에서 유지.
+ * layerProp 으로 색인도/상세목록 강조 레이어를 동시에 둘 수 있음.
  */
 export function useRiverBasicPlanIndexHighlight(
   indexTable: string,
   ogcFid: number | null,
-  active: boolean
+  active: boolean,
+  layerProp = "riverBasicPlanIndexHighlight"
 ) {
   const mapContext = useMapContext();
   const sourceRef = useRef<VectorSource | null>(null);
@@ -79,7 +81,7 @@ export function useRiverBasicPlanIndexHighlight(
       renderOrder: compareFeaturesByGeometryStackOrder,
       style: createRiverBasicPlanIndexHighlightStyle(() => pulsePhaseRef.current),
     });
-    layer.set("riverBasicPlanIndexHighlight", true);
+    layer.set(layerProp, true);
     insertLayerBelowServiceLayer(map, layer);
 
     return () => {
@@ -87,7 +89,7 @@ export function useRiverBasicPlanIndexHighlight(
       sourceRef.current = null;
       setRadarActive(false);
     };
-  }, [mapContext?.mapInstanceRef]);
+  }, [mapContext?.mapInstanceRef, layerProp]);
 
   useEffect(() => {
     const source = sourceRef.current;
