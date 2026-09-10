@@ -509,7 +509,7 @@ export async function runIntegration(p: Params) {
       const dateFilter = dateRaw || null;
       await updateIntegrationJobProgress(
         ijlKey,
-        `진행중 | GNMS | logs+backup → 원격 업로드${dateFilter ? ` date=${dateFilter}` : ' (전체)'}`
+        `진행중 | GNMS | logs+backup+linkage → 원격 업로드${dateFilter ? ` date=${dateFilter}` : ' (전체)'}`
       );
       const saved = await uploadLocalServiceLogsToRemoteGnms({ dateFilter });
       await updateIntegrationJobProgress(

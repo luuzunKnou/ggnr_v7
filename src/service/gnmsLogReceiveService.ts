@@ -180,6 +180,13 @@ function isCandidateLogName(name: string): boolean {
   return false;
 }
 
+/** linkage 폴더: YYYY-MM-DD.log → 업로드명 YYYY-MM-DD_linkage.log */
+const LINKAGE_DAY_LOG_RE = /^(\d{4}-\d{2}-\d{2})\.log$/i;
+
+export function linkageUploadFileName(dateYmd: string): string {
+  return `${dateYmd}_linkage.log`;
+}
+
 export type GatheredLogFile = {
   fileName: string;
   data: Buffer;
@@ -188,9 +195,10 @@ export type GatheredLogFile = {
 };
 
 /**
- * C:\\logs 활성·회전본 + backup 폴더 수집.
+ * C:\\logs 활성·회전본 + backup + linkage 폴더 수집.
  * dateFilter(yyyy-mm-dd) 있으면 해당 날짜만, 없으면 전부.
  * 활성 로그(날짜 없는 이름)는 오늘 날짜로 분류하며, 필터가 오늘이 아니면 제외.
+ * linkage: YYYY-MM-DD.log 를 YYYY-MM-DD_linkage.log 로 올려 보냄.
  */
 export async function gatherLocalServiceLogs(params?: {
   dateFilter?: string | null;
@@ -199,6 +207,7 @@ export async function gatherLocalServiceLogs(params?: {
   const { GGNR_SYSTEM_LOG_DIR } = await import('@/lib/ggnrSystemLogDir');
   const logDir = params?.logDir?.trim() || GGNR_SYSTEM_LOG_DIR;
   const backupDir = path.join(logDir, 'backup');
+  const linkageDir = path.join(logDir, 'linkage');
   const filterRaw = (params?.dateFilter ?? '').trim();
   const filter = filterRaw ? assertLogDate(filterRaw) : null;
   const today = todayYmd();
@@ -245,6 +254,41 @@ export async function gatherLocalServiceLogs(params?: {
     }
   }
 
+  let linkageEntries: string[] = [];
+  try {
+    linkageEntries = await fs.readdir(linkageDir);
+  } catch {
+    linkageEntries = [];
+  }
+  for (const name of linkageEntries) {
+    const m = LINKAGE_DAY_LOG_RE.exec(name);
+    if (!m) continue;
+    const fileDate = m[1]!;
+    if (filter && fileDate !== filter) continue;
+
+    const abs = path.join(linkageDir, name);
+    let st;
+    try {
+      st = await fs.stat(abs);
+    } catch {
+      continue;
+    }
+    if (!st.isFile()) continue;
+
+    const uploadName = linkageUploadFileName(fileDate);
+    const key = `${fileDate}|${uploadName}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+
+    const data = await fs.readFile(abs);
+    out.push({
+      fileName: uploadName,
+      data,
+      date: fileDate,
+      sourcePath: abs,
+    });
+  }
+
   return out;
 }
 
@@ -287,7 +331,7 @@ export async function uploadLocalServiceLogsToRemoteGnms(params?: {
       new Error(
         params?.dateFilter
           ? `해당 날짜(${params.dateFilter})의 로그 파일이 없습니다.`
-          : 'C:\\logs 및 backup 에서 수집할 로그가 없습니다.'
+          : 'C:\\logs·backup·linkage 에서 수집할 로그가 없습니다.'
       ),
       { status: 400 }
     );
