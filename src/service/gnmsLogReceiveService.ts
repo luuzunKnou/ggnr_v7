@@ -248,7 +248,7 @@ export async function gatherLocalServiceLogs(params?: {
   return out;
 }
 
-/** 기동 인자 project/type으로 로컬 로그를 모아 원격 GNMS `POST /api/logs` 로 전송 (소스 업로드와 동일 base·Bearer) */
+/** 기동 인자 project/type으로 로컬 로그를 모아 원격 GNMS `POST /api/logs` 로 전송 (소스 업로드와 동일 undici·Bearer) */
 export async function uploadLocalServiceLogsToRemoteGnms(params?: {
   dateFilter?: string | null;
 }): Promise<{
@@ -272,52 +272,45 @@ export async function uploadLocalServiceLogsToRemoteGnms(params?: {
     );
   }
 
-  const { getRemoteLogsApiUrl, SOURCE_UPLOAD_REMOTE_BEARER } = await import(
+  const { getRemoteLogsApiUrl, postRemoteLogsMultipart } = await import(
     '@/service/sourceUploadRemote'
   );
   const remoteUrl = getRemoteLogsApiUrl();
 
-  const byDate = new Map<string, GnmsLogFileInput[]>();
-  for (const g of gathered) {
-    const list = byDate.get(g.date) ?? [];
-    list.push({ fileName: g.fileName, data: g.data });
-    byDate.set(g.date, list);
-  }
-
   const dirs: string[] = [];
   const savedFiles: string[] = [];
 
-  for (const [date, files] of byDate) {
-    const form = new FormData();
-    form.set('project', boot.project);
-    form.set('type', boot.type);
-    form.set('date', date);
-    for (const f of files) {
-      const bytes = new Uint8Array(f.data);
-      form.append('files', new Blob([bytes]), f.fileName);
-    }
-
-    const headers: Record<string, string> = {};
-    if (SOURCE_UPLOAD_REMOTE_BEARER) {
-      headers.Authorization = `Bearer ${SOURCE_UPLOAD_REMOTE_BEARER}`;
-    }
-
-    const res = await fetch(remoteUrl, { method: 'POST', headers, body: form });
-    const json = (await res.json().catch(() => ({}))) as {
+  /** 파일 단위 전송 — 대용량 multipart 게이트 잘림·boundary 이슈 완화 */
+  for (const g of gathered) {
+    const res = await postRemoteLogsMultipart({
+      fields: {
+        project: boot.project,
+        type: boot.type,
+        date: g.date,
+      },
+      files: [{ fieldName: 'file', fileName: g.fileName, data: g.data }],
+    });
+    const json = res.json as {
       error?: string;
       ok?: boolean;
       dir?: string;
       savedFiles?: string[];
     };
-    if (!res.ok) {
+    if (res.status < 200 || res.status >= 300) {
       throw Object.assign(
-        new Error(json.error || `GNMS 로그 업로드 실패 (HTTP ${res.status})`),
+        new Error(
+          (typeof json.error === 'string' && json.error) ||
+            res.text.slice(0, 400) ||
+            `GNMS 로그 업로드 실패 (HTTP ${res.status})`
+        ),
         { status: res.status >= 400 && res.status < 600 ? res.status : 500 }
       );
     }
-    if (json.dir) dirs.push(json.dir);
-    const names = Array.isArray(json.savedFiles) ? json.savedFiles : files.map((f) => f.fileName);
-    savedFiles.push(...names.map((f) => `${date}/${f}`));
+    if (typeof json.dir === 'string' && json.dir && !dirs.includes(json.dir)) {
+      dirs.push(json.dir);
+    }
+    const names = Array.isArray(json.savedFiles) ? json.savedFiles : [g.fileName];
+    savedFiles.push(...names.map((f) => `${g.date}/${f}`));
   }
 
   return {
