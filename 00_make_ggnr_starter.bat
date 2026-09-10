@@ -230,7 +230,7 @@ echo [OK] ggnr_start.bat step done.
 if /i not "!DO_NSSM!"=="Y" (
   echo [SKIP] nssm/logs ^(DO_NSSM=!DO_NSSM!^)
   echo [DONE] generate only.
-  echo   manual: 00_nssm_install_ggnr.bat ^(admin CMD^) -> 00_open_ggnr_logs.bat
+  echo   manual: 00_nssm_install_ggnr.bat ^(admin CMD^) -^> 00_open_ggnr_logs.bat
   echo.
   if "!PAUSE_ON_FAIL!"=="1" call :pause_keep
   exit /b 0
@@ -281,7 +281,7 @@ if "!NSSM_EC!"=="2" (
   echo [RUN] log window ^(2/2^)...
   start "" /min cmd /c "%LOGS_BAT%"
   echo.
-  echo [DONE] generate -> ^(keep service^) -> logs
+  echo [DONE] generate -^> ^(keep service^) -^> logs
   echo.
   if "!PAUSE_ON_FAIL!"=="1" call :pause_keep
   exit /b 0
@@ -297,7 +297,7 @@ echo [RUN] log window ^(2/2^)...
 start "" /min cmd /c "%LOGS_BAT%"
 
 echo.
-echo [DONE] generate -> nssm -> logs
+echo [DONE] generate -^> nssm -^> logs
 echo.
 if "!PAUSE_ON_FAIL!"=="1" call :pause_keep
 exit /b 0
@@ -307,7 +307,7 @@ if not defined FAIL_EC set "FAIL_EC=1"
 echo.
 echo [EXIT] stopped with error ^(exit=!FAIL_EC!^). See messages above.
 echo        nssm log: C:\logs\nssm_install_last.log
-echo        manual: 00_nssm_install_ggnr.bat ^(admin CMD^) -> 00_open_ggnr_logs.bat
+echo        manual: 00_nssm_install_ggnr.bat ^(admin CMD^) -^> 00_open_ggnr_logs.bat
 if "!PAUSE_ON_FAIL!"=="1" call :pause_keep
 exit /b !FAIL_EC!
 
@@ -325,7 +325,7 @@ net session >nul 2>&1
 if errorlevel 1 (
   echo [ERROR] not running as administrator.
   echo         nssm register requires admin CMD.
-  echo         Right-click CMD -> Run as administrator, then retry.
+  echo         Right-click CMD -^> Run as administrator, then retry.
   set "FAIL_EC=1"
   exit /b 1
 )

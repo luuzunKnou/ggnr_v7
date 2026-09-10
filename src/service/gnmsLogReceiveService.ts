@@ -248,6 +248,27 @@ export async function gatherLocalServiceLogs(params?: {
   return out;
 }
 
+/** Next 기본 body 버퍼 10MB 미만 — multipart 헤더·필드 여유 두고 8MB 단위 분할 */
+const LOG_PART_MAX_BYTES = 8 * 1024 * 1024;
+
+export function splitLogFileForUpload(
+  fileName: string,
+  data: Buffer
+): { fileName: string; data: Buffer }[] {
+  if (data.byteLength <= LOG_PART_MAX_BYTES) {
+    return [{ fileName, data }];
+  }
+  const total = Math.ceil(data.byteLength / LOG_PART_MAX_BYTES);
+  const parts: { fileName: string; data: Buffer }[] = [];
+  for (let i = 0; i < total; i++) {
+    const start = i * LOG_PART_MAX_BYTES;
+    const end = Math.min(start + LOG_PART_MAX_BYTES, data.byteLength);
+    const partName = `${fileName}.part${String(i + 1).padStart(3, '0')}of${String(total).padStart(3, '0')}`;
+    parts.push({ fileName: partName, data: Buffer.from(data.subarray(start, end)) });
+  }
+  return parts;
+}
+
 /** 기동 인자 project/type으로 로컬 로그를 모아 원격 GNMS `POST /api/logs` 로 전송 (소스 업로드와 동일 undici·Bearer) */
 export async function uploadLocalServiceLogsToRemoteGnms(params?: {
   dateFilter?: string | null;
@@ -279,44 +300,48 @@ export async function uploadLocalServiceLogsToRemoteGnms(params?: {
 
   const dirs: string[] = [];
   const savedFiles: string[] = [];
+  let uploadedParts = 0;
 
-  /** 파일 단위 전송 — 대용량 multipart 게이트 잘림·boundary 이슈 완화 */
   for (const g of gathered) {
-    const res = await postRemoteLogsMultipart({
-      fields: {
-        project: boot.project,
-        type: boot.type,
-        date: g.date,
-      },
-      files: [{ fieldName: 'file', fileName: g.fileName, data: g.data }],
-    });
-    const json = res.json as {
-      error?: string;
-      ok?: boolean;
-      dir?: string;
-      savedFiles?: string[];
-    };
-    if (res.status < 200 || res.status >= 300) {
-      throw Object.assign(
-        new Error(
-          (typeof json.error === 'string' && json.error) ||
-            res.text.slice(0, 400) ||
-            `GNMS 로그 업로드 실패 (HTTP ${res.status})`
-        ),
-        { status: res.status >= 400 && res.status < 600 ? res.status : 500 }
-      );
+    const parts = splitLogFileForUpload(g.fileName, g.data);
+    for (const part of parts) {
+      const res = await postRemoteLogsMultipart({
+        fields: {
+          project: boot.project,
+          type: boot.type,
+          date: g.date,
+        },
+        files: [{ fieldName: 'file', fileName: part.fileName, data: part.data }],
+      });
+      const json = res.json as {
+        error?: string;
+        ok?: boolean;
+        dir?: string;
+        savedFiles?: string[];
+      };
+      if (res.status < 200 || res.status >= 300) {
+        throw Object.assign(
+          new Error(
+            (typeof json.error === 'string' && json.error) ||
+              res.text.slice(0, 400) ||
+              `GNMS 로그 업로드 실패 (HTTP ${res.status}) file=${part.fileName}`
+          ),
+          { status: res.status >= 400 && res.status < 600 ? res.status : 500 }
+        );
+      }
+      uploadedParts += 1;
+      if (typeof json.dir === 'string' && json.dir && !dirs.includes(json.dir)) {
+        dirs.push(json.dir);
+      }
+      const names = Array.isArray(json.savedFiles) ? json.savedFiles : [part.fileName];
+      savedFiles.push(...names.map((f) => `${g.date}/${f}`));
     }
-    if (typeof json.dir === 'string' && json.dir && !dirs.includes(json.dir)) {
-      dirs.push(json.dir);
-    }
-    const names = Array.isArray(json.savedFiles) ? json.savedFiles : [g.fileName];
-    savedFiles.push(...names.map((f) => `${g.date}/${f}`));
   }
 
   return {
     project: boot.project,
     type: boot.type,
-    fileCount: gathered.length,
+    fileCount: uploadedParts,
     dirs,
     savedFiles,
     remoteUrl,
