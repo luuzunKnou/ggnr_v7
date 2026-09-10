@@ -50,7 +50,13 @@ import { useMapInstance } from './hooks/useMapInstance';
 import { MapScaleIndicator } from './hooks/MapScaleIndicator';
 import { useMapContext } from './MapContext';
 import { useBackgroundLayer } from './hooks/useBackgroundLayer';
-import { useMapStatePersist, loadPersistedMapState } from './hooks/useMapStatePersist';
+import {
+  useMapStatePersist,
+  loadPersistedMapState,
+  shouldSkipPersistedLayerRestore,
+  readLastMapSystemKey,
+  writeLastMapSystemKey,
+} from './hooks/useMapStatePersist';
 import { useServiceLayerSync } from './layerFactory/serviceLayerFactory';
 import {
   useCadastralLayerSync,
@@ -396,6 +402,8 @@ export default function OpenLayersMap({
 }: OpenLayersMapProps = {}) {
   const mapRef = useRef<HTMLDivElement>(null);
   const mapContext = useMapContext();
+  const searchParams = useSearchParams();
+  const systemKeyFromUrl = searchParams.get('system') ?? '';
   /** Provider value는 매 렌더 새 객체 — identify effect deps에 mapContext 넣지 않기 위해 ref 유지 */
   const mapContextRef = useRef(mapContext);
   mapContextRef.current = mapContext;
@@ -636,81 +644,101 @@ export default function OpenLayersMap({
   }, [mapContext?.setMapPaddingRight, activeControls, extraControls, mapControlPortalReady]);
 
   // 마운트 시 저장된 맵 상태 복원 (버튼 활성화 + 배경지도 + 레이어 목록 + 상세 패널 체크박스)
+  // 홈에서 다른 시스템으로 들어오면 이전 시스템 레이어는 복원하지 않음 (지도 내 시스템 전환과 동일)
   useEffect(() => {
     const state = loadPersistedMapState(projectName);
     if (state) {
       if (state.backgroundMap) setSelectedBackgroundMap(state.backgroundMap);
-      const restoredVisible = new Set(
-        (state.visibleLayerNames ?? []).filter((n) => !isUsageDataAsWmsLayerId(n))
+      const skipLayers = shouldSkipPersistedLayerRestore(
+        state.systemKey,
+        systemKeyFromUrl,
+        readLastMapSystemKey()
       );
-      const jimokValid = (state.visibleJimokLayerNames ?? []).filter((t) =>
-        JIMOK_LAYERS.some((l) => l.tableName === t)
-      );
-      if (state.visibleJimokLayerNames != null)
-        setVisibleJimokLayerNames(jimokValid.length ? new Set(jimokValid) : new Set());
-      const landownValid = (state.visibleLandownLayerNames ?? []).filter((t) =>
-        OWNERSHIP_LAYERS.some((l) => l.tableName === t)
-      );
-      if (state.visibleLandownLayerNames != null)
-        setVisibleLandownLayerNames(landownValid.length ? new Set(landownValid) : new Set());
-      const cadastralValid = (state.visibleCadastralLayerNames ?? []).filter((t) =>
-        CADASTRAL_LAYERS.some((l) => l.tableName === t)
-      );
-      if (state.visibleCadastralLayerNames != null)
-        setVisibleCadastralLayerNames(
-          cadastralValid.length ? new Set(cadastralValid) : new Set()
+      if (skipLayers) {
+        setActiveControls(
+          (state.activeControls ?? []).filter((id) => !LAYER_IDS_OFF_ON_ALL_OFF.includes(id))
         );
-      const buildingRoadValid = (state.visibleBuildingRoadLayerNames ?? []).filter((t) =>
-        BUILDING_ROAD_LAYERS.some((l) => l.tableName === t)
-      );
-      if (state.visibleBuildingRoadLayerNames != null)
-        setVisibleBuildingRoadLayerNames(
-          buildingRoadValid.length ? new Set(buildingRoadValid) : new Set()
+        setVisibleJimokLayerNames(new Set());
+        setVisibleLandownLayerNames(new Set());
+        setVisibleCadastralLayerNames(new Set());
+        setVisibleBuildingRoadLayerNames(new Set());
+        setVisibleThematicLayerNames(new Set());
+        setVisibleUndergroundFacilityLayerNames(new Set());
+        mapContext?.setVisibleLayerNames?.(new Set());
+      } else {
+        const restoredVisible = new Set(
+          (state.visibleLayerNames ?? []).filter((n) => !isUsageDataAsWmsLayerId(n))
         );
-      const thematicValid = (state.visibleThematicLayerNames ?? []).filter((t) =>
-        THEMATIC_MAP_LAYERS.some((l) => l.tableName === t)
-      );
-      if (state.visibleThematicLayerNames != null)
-        setVisibleThematicLayerNames(
-          thematicValid.length ? new Set(thematicValid) : new Set()
+        const jimokValid = (state.visibleJimokLayerNames ?? []).filter((t) =>
+          JIMOK_LAYERS.some((l) => l.tableName === t)
         );
-      const undergroundValid = (state.visibleUndergroundFacilityLayerNames ?? []).filter((t) =>
-        UNDERGROUND_FACILITY_LAYERS.some((l) => l.tableName === t)
-      );
-      // 데이터 조회 ↔ 지하시설물 복원값 병합
-      const undergroundTableNames = new Set(
-        UNDERGROUND_FACILITY_LAYERS.map((l) => l.tableName)
-      );
-      const mergedUnderground = new Set(undergroundValid);
-      for (const t of restoredVisible) {
-        if (undergroundTableNames.has(t)) mergedUnderground.add(t);
+        if (state.visibleJimokLayerNames != null)
+          setVisibleJimokLayerNames(jimokValid.length ? new Set(jimokValid) : new Set());
+        const landownValid = (state.visibleLandownLayerNames ?? []).filter((t) =>
+          OWNERSHIP_LAYERS.some((l) => l.tableName === t)
+        );
+        if (state.visibleLandownLayerNames != null)
+          setVisibleLandownLayerNames(landownValid.length ? new Set(landownValid) : new Set());
+        const cadastralValid = (state.visibleCadastralLayerNames ?? []).filter((t) =>
+          CADASTRAL_LAYERS.some((l) => l.tableName === t)
+        );
+        if (state.visibleCadastralLayerNames != null)
+          setVisibleCadastralLayerNames(
+            cadastralValid.length ? new Set(cadastralValid) : new Set()
+          );
+        const buildingRoadValid = (state.visibleBuildingRoadLayerNames ?? []).filter((t) =>
+          BUILDING_ROAD_LAYERS.some((l) => l.tableName === t)
+        );
+        if (state.visibleBuildingRoadLayerNames != null)
+          setVisibleBuildingRoadLayerNames(
+            buildingRoadValid.length ? new Set(buildingRoadValid) : new Set()
+          );
+        const thematicValid = (state.visibleThematicLayerNames ?? []).filter((t) =>
+          THEMATIC_MAP_LAYERS.some((l) => l.tableName === t)
+        );
+        if (state.visibleThematicLayerNames != null)
+          setVisibleThematicLayerNames(
+            thematicValid.length ? new Set(thematicValid) : new Set()
+          );
+        const undergroundValid = (state.visibleUndergroundFacilityLayerNames ?? []).filter((t) =>
+          UNDERGROUND_FACILITY_LAYERS.some((l) => l.tableName === t)
+        );
+        // 데이터 조회 ↔ 지하시설물 복원값 병합
+        const undergroundTableNames = new Set(
+          UNDERGROUND_FACILITY_LAYERS.map((l) => l.tableName)
+        );
+        const mergedUnderground = new Set(undergroundValid);
+        for (const t of restoredVisible) {
+          if (undergroundTableNames.has(t)) mergedUnderground.add(t);
+        }
+        for (const t of mergedUnderground) restoredVisible.add(t);
+        if (mapContext?.setVisibleLayerNames && restoredVisible.size > 0) {
+          mapContext.setVisibleLayerNames(restoredVisible);
+        }
+        if (
+          state.visibleUndergroundFacilityLayerNames != null ||
+          mergedUnderground.size > 0
+        ) {
+          setVisibleUndergroundFacilityLayerNames(
+            mergedUnderground.size ? mergedUnderground : new Set()
+          );
+        }
+        const hasSelection: Record<PanelLayerId, boolean> = {
+          'land-category': jimokValid.length > 0,
+          ownership: landownValid.length > 0,
+          cadastral: cadastralValid.length > 0,
+          'building-road': buildingRoadValid.length > 0,
+          'thematic-map': thematicValid.length > 0,
+          'underground-facility': mergedUnderground.size > 0,
+        };
+        setActiveControls(
+          syncPanelLayerActiveControls(state.activeControls ?? [], hasSelection)
+        );
       }
-      for (const t of mergedUnderground) restoredVisible.add(t);
-      if (mapContext?.setVisibleLayerNames && restoredVisible.size > 0) {
-        mapContext.setVisibleLayerNames(restoredVisible);
-      }
-      if (
-        state.visibleUndergroundFacilityLayerNames != null ||
-        mergedUnderground.size > 0
-      ) {
-        setVisibleUndergroundFacilityLayerNames(
-          mergedUnderground.size ? mergedUnderground : new Set()
-        );
-      }
-      const hasSelection: Record<PanelLayerId, boolean> = {
-        'land-category': jimokValid.length > 0,
-        ownership: landownValid.length > 0,
-        cadastral: cadastralValid.length > 0,
-        'building-road': buildingRoadValid.length > 0,
-        'thematic-map': thematicValid.length > 0,
-        'underground-facility': mergedUnderground.size > 0,
-      };
-      setActiveControls(
-        syncPanelLayerActiveControls(state.activeControls ?? [], hasSelection)
-      );
     }
+    if (systemKeyFromUrl) writeLastMapSystemKey(systemKeyFromUrl);
     setRestored(true);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-only restore
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-only restore (system from first paint URL)
   }, [projectName]);
 
   // DB 부모 테이블 기준으로 가용한 주제도 자식만 선택·표시 유지
@@ -1121,7 +1149,8 @@ export default function OpenLayersMap({
     activeControls,
     visibleLayerNames,
     layerPanelSelections,
-    projectName
+    projectName,
+    systemKeyFromUrl
   );
   const spatialFilterWkt = mapContext?.spatialFilterWkt ?? null;
   const serviceWmsCqlByLayer = mapContext?.serviceWmsCqlByLayer ?? null;
@@ -1557,8 +1586,7 @@ export default function OpenLayersMap({
   useMapContextMenu(mapInstanceRef.current, mapReady, handleContextMenu);
 
   const router = useRouter();
-  const searchParams = useSearchParams();
-  const systemKey = searchParams.get('system') ?? '';
+  const systemKey = systemKeyFromUrl;
   const mapControlGroups = useMemo(
     (): MapControlGroup[] => mapControlGroupsForSystem(systemKey),
     [systemKey]

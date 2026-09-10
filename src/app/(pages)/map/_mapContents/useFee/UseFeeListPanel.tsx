@@ -347,9 +347,9 @@ export function UseFeeListPanel({ onClose, selectedId, onSelectId, serEng }: Lis
 
   const feeBinding = getUseFeeBinding({ serEng, system })
   const occupationTarget = getUseFeeOccupationLedgerTarget({
-    system,
     serEng,
-    isUljinRiver,
+    system: feeBinding.systemKey,
+    isUljinRiver: isUljinRiver && feeBinding.prefix === 'water',
   })
   const occupationLayerOn = isUseFeeOccupationLedgerWmsVisible(
     mapContext?.visibleLayerNames,

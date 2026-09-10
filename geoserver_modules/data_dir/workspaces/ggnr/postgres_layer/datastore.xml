@@ -11,6 +11,7 @@
     <entry key="Estimated extends">false</entry>
     <entry key="preparedStatements">false</entry>
     <entry key="database">build_uj</entry>
+    <entry key="database">build_uj</entry>
     <entry key="port">5433</entry>
     <entry key="passwd">crypt1:CSvgNWb5qnPXGa6OXHRzEDYD394v9BXP</entry>
     <entry key="validate connections">true</entry>
@@ -18,6 +19,7 @@
     <entry key="dbtype">postgis</entry>
     <entry key="namespace">http://ggnr</entry>
     <entry key="Loose bbox">true</entry>
+    <entry key="user">build_uj</entry>
     <entry key="user">build_uj</entry>
   </connectionParameters>
   <__default>false</__default>

@@ -14,6 +14,7 @@ import { identifyHitPriorityRank } from '@/lib/mapLayerGeometryOrder';
 import { isFmsFacilityLayerTable } from '@/lib/fmsLinkage/fmsBinding';
 import { fetchVworldCadastralGeomByPnu } from '@/lib/vworldCadastralGeom';
 import { readDefineLayerCodes } from '@/lib/defineLayerCodeFiles';
+import { isLayerExtraFieldName } from '@/lib/layerExtraField';
 
 const DEFAULT_SCHEMA = 'layer';
 const ALLOWED_SCHEMAS = new Set(['layer', 'public_layer']);
@@ -173,6 +174,21 @@ export async function getTableData(params: {
     if (isFmsFacilityLayerTable(table) && facilNoCol) {
       const safeFacilNo = facilNoCol.replace(/"/g, '""');
       orderClause = ` ORDER BY (substring("${safeFacilNo}" from '[0-9]{4}'))::integer ASC NULLS LAST, regexp_replace("${safeFacilNo}", '^[A-Za-z]+', '') ASC NULLS LAST`;
+    } else {
+      // 기본: 목록 첫 열(define 목록표시 1순위) 오름차순. 없으면 ogc_fid/gid/첫 속성열
+      const orderCol = resolveDefaultListOrderColumn(tableGuess, table, columns);
+      if (orderCol) {
+        const safeOrder = orderCol.replace(/"/g, '""');
+        const tieBreak =
+          columns.find((c) => {
+            const n = c.toLowerCase();
+            return (n === 'ogc_fid' || n === 'gid') && c.toLowerCase() !== orderCol.toLowerCase();
+          }) ?? null;
+        const safeTie = tieBreak ? tieBreak.replace(/"/g, '""') : '';
+        orderClause = tieBreak
+          ? ` ORDER BY "${safeOrder}" ASC NULLS LAST, "${safeTie}" ASC NULLS LAST`
+          : ` ORDER BY "${safeOrder}" ASC NULLS LAST`;
+      }
     }
 
     const [countRes, dataRes] = await Promise.all([
@@ -198,6 +214,62 @@ export async function getTableData(params: {
 }
 
 const FIELDS_DIR = path.join(process.cwd(), 'src', 'config', 'defineLayer', 'fields');
+
+function isGeomLikeOrderColumnName(name: string): boolean {
+  const n = name.trim().toLowerCase();
+  return (
+    isLayerExtraFieldName(n) ||
+    n === 'geom' ||
+    n === 'geometry' ||
+    n === 'the_geom' ||
+    n === 'wkb_geometry' ||
+    n === 'shape'
+  );
+}
+
+/**
+ * 데이터 조회 목록 기본 정렬 열.
+ * defineLayer «목록 표시» 중 첫 열 → ogc_fid/gid → 그 외 첫 속성열.
+ */
+function resolveDefaultListOrderColumn(
+  tableGuess: string,
+  physicalTable: string,
+  columns: string[]
+): string | null {
+  const findCol = (want: string): string | null => {
+    const w = want.trim().toLowerCase();
+    if (!w || isGeomLikeOrderColumnName(w)) return null;
+    return columns.find((c) => c.toLowerCase() === w) ?? null;
+  };
+
+  const defineRows = [
+    ...loadDefineFieldRows(tableGuess),
+    ...(tableGuess.toLowerCase() !== physicalTable.toLowerCase()
+      ? loadDefineFieldRows(physicalTable)
+      : []),
+  ];
+  const seen = new Set<string>();
+  const listFields = defineRows
+    .filter((f) => defineFlagTrue(f.define_field_show_list))
+    .sort((a, b) => defineFieldIdxNum(a) - defineFieldIdxNum(b));
+  for (const f of listFields) {
+    const name = String(f.define_field_name ?? '').trim();
+    const key = name.toLowerCase();
+    if (!name || seen.has(key)) continue;
+    seen.add(key);
+    const hit = findCol(name);
+    if (hit) return hit;
+  }
+
+  for (const pref of ['ogc_fid', 'gid', 'id']) {
+    const hit = findCol(pref);
+    if (hit) return hit;
+  }
+  for (const c of columns) {
+    if (!isGeomLikeOrderColumnName(c)) return c;
+  }
+  return null;
+}
 
 /** 테이블 필드 설정에서 define_field_is_key === 'true' 인 필드명 반환 (첨부 폴더 키와 동일) */
 export function getDefineTableKeyFieldName(tableName: string): string | null {

@@ -66,13 +66,15 @@ export function UsageDataAsAddressList({
         </div>
       </div>
       {items.length === 0 ? (
-        <div
-          className={cn(
-            'rounded border border-dashed border-border bg-muted/50 px-2 py-3 text-muted-foreground',
-            fillHeight && 'min-h-0 flex-1'
-          )}
-        >
-          {isEditing ? emptyHintEdit : emptyHintView}
+        <div className="shrink-0 rounded border border-border bg-muted/30 px-3 py-4 text-center">
+          <MapPin
+            className="mx-auto mb-1.5 h-4 w-4 text-muted-foreground/60"
+            strokeWidth={1.5}
+            aria-hidden
+          />
+          <p className="text-[11px] leading-relaxed text-muted-foreground">
+            {isEditing ? emptyHintEdit : emptyHintView}
+          </p>
         </div>
       ) : (
         <ul
