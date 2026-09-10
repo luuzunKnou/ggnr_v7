@@ -248,8 +248,8 @@ export async function gatherLocalServiceLogs(params?: {
   return out;
 }
 
-/** 기동 인자 project/type으로 로컬 로그를 날짜별 저장 */
-export async function archiveLocalServiceLogsToGnmsRoot(params?: {
+/** 기동 인자 project/type으로 로컬 로그를 모아 원격 GNMS `POST /api/logs` 로 전송 (소스 업로드와 동일 base·Bearer) */
+export async function uploadLocalServiceLogsToRemoteGnms(params?: {
   dateFilter?: string | null;
 }): Promise<{
   project: string;
@@ -257,6 +257,7 @@ export async function archiveLocalServiceLogsToGnmsRoot(params?: {
   fileCount: number;
   dirs: string[];
   savedFiles: string[];
+  remoteUrl: string;
 }> {
   const boot = getGnmsLogBootContext();
   const gathered = await gatherLocalServiceLogs({ dateFilter: params?.dateFilter });
@@ -271,6 +272,11 @@ export async function archiveLocalServiceLogsToGnmsRoot(params?: {
     );
   }
 
+  const { getRemoteLogsApiUrl, SOURCE_UPLOAD_REMOTE_BEARER } = await import(
+    '@/service/sourceUploadRemote'
+  );
+  const remoteUrl = getRemoteLogsApiUrl();
+
   const byDate = new Map<string, GnmsLogFileInput[]>();
   for (const g of gathered) {
     const list = byDate.get(g.date) ?? [];
@@ -280,15 +286,38 @@ export async function archiveLocalServiceLogsToGnmsRoot(params?: {
 
   const dirs: string[] = [];
   const savedFiles: string[] = [];
+
   for (const [date, files] of byDate) {
-    const r = await saveGnmsLogFiles({
-      project: boot.project,
-      type: boot.type,
-      date,
-      files,
-    });
-    dirs.push(r.dir);
-    savedFiles.push(...r.savedFiles.map((f) => `${date}/${f}`));
+    const form = new FormData();
+    form.set('project', boot.project);
+    form.set('type', boot.type);
+    form.set('date', date);
+    for (const f of files) {
+      const bytes = new Uint8Array(f.data);
+      form.append('files', new Blob([bytes]), f.fileName);
+    }
+
+    const headers: Record<string, string> = {};
+    if (SOURCE_UPLOAD_REMOTE_BEARER) {
+      headers.Authorization = `Bearer ${SOURCE_UPLOAD_REMOTE_BEARER}`;
+    }
+
+    const res = await fetch(remoteUrl, { method: 'POST', headers, body: form });
+    const json = (await res.json().catch(() => ({}))) as {
+      error?: string;
+      ok?: boolean;
+      dir?: string;
+      savedFiles?: string[];
+    };
+    if (!res.ok) {
+      throw Object.assign(
+        new Error(json.error || `GNMS 로그 업로드 실패 (HTTP ${res.status})`),
+        { status: res.status >= 400 && res.status < 600 ? res.status : 500 }
+      );
+    }
+    if (json.dir) dirs.push(json.dir);
+    const names = Array.isArray(json.savedFiles) ? json.savedFiles : files.map((f) => f.fileName);
+    savedFiles.push(...names.map((f) => `${date}/${f}`));
   }
 
   return {
@@ -297,5 +326,26 @@ export async function archiveLocalServiceLogsToGnmsRoot(params?: {
     fileCount: gathered.length,
     dirs,
     savedFiles,
+    remoteUrl,
+  };
+}
+
+/** @deprecated 로컬 저장 — `uploadLocalServiceLogsToRemoteGnms` 사용 */
+export async function archiveLocalServiceLogsToGnmsRoot(params?: {
+  dateFilter?: string | null;
+}): Promise<{
+  project: string;
+  type: string;
+  fileCount: number;
+  dirs: string[];
+  savedFiles: string[];
+}> {
+  const r = await uploadLocalServiceLogsToRemoteGnms(params);
+  return {
+    project: r.project,
+    type: r.type,
+    fileCount: r.fileCount,
+    dirs: r.dirs,
+    savedFiles: r.savedFiles,
   };
 }

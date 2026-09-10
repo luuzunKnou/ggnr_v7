@@ -1,7 +1,7 @@
 import fs from 'node:fs/promises';
 import dns from 'node:dns/promises';
 import { Agent, request as undiciRequest } from 'undici';
-import { buildGnmsUploadApiBase, DEFAULT_GNMS_URL } from '@/lib/gnmsSourceUrl';
+import { buildGnmsUploadApiBase, DEFAULT_GNMS_URL, normalizeGnmsOrigin } from '@/lib/gnmsSourceUrl';
 import { getGnmsUrl } from '@/service/configService';
 import {
   failUploadProgress,
@@ -142,6 +142,17 @@ export function getRemoteUploadBase(): string {
     fromEnv ||
     buildGnmsUploadApiBase(DEFAULT_GNMS_URL);
   return base.replace(/\/+$/, '');
+}
+
+/** GNMS 로그 수신 API — `http://dggs.kr/gnms/api/logs` */
+export function getRemoteLogsApiUrl(): string {
+  const fromRuntime = getGnmsUrl()?.trim();
+  const origin = normalizeGnmsOrigin(fromRuntime || DEFAULT_GNMS_URL);
+  if (!origin) {
+    return `${DEFAULT_GNMS_URL.replace(/\/+$/, '')}/api/logs`;
+  }
+  if (/\/api\/logs$/i.test(origin)) return origin;
+  return `${origin.replace(/\/+$/, '')}/api/logs`;
 }
 
 export function buildRemoteAuthHeaders(json = true): Record<string, string> {

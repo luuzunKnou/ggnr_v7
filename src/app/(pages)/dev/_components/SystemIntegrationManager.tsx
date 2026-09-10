@@ -502,7 +502,7 @@ export function SystemIntegrationManager() {
               전체
             </button>
             <span className="text-xs text-muted-foreground">
-              비우면 C:\logs + backup 전체 · 지정 시 해당 날짜만
+              비우면 C:\logs + backup 전체 → GNMS · 지정 시 해당 날짜만
             </span>
           </label>
         </div>

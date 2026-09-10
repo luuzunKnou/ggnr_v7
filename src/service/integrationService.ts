@@ -504,17 +504,17 @@ export async function runIntegration(p: Params) {
       console.error(`[INTEGRATION] DONE system=${system} ijlKey=${ijlKey ?? '-'} status=${r.jobStatus}`);
       return { ijlKey, system, ok: r.jobStatus === 'SUCCESS' };
     } else if (system === 'GNMS') {
-      const { archiveLocalServiceLogsToGnmsRoot } = await import('@/service/gnmsLogReceiveService');
+      const { uploadLocalServiceLogsToRemoteGnms } = await import('@/service/gnmsLogReceiveService');
       const dateRaw = String(p.date ?? '').trim();
       const dateFilter = dateRaw || null;
       await updateIntegrationJobProgress(
         ijlKey,
-        `진행중 | GNMS | logs+backup 수집${dateFilter ? ` date=${dateFilter}` : ' (전체)'}`
+        `진행중 | GNMS | logs+backup → 원격 업로드${dateFilter ? ` date=${dateFilter}` : ' (전체)'}`
       );
-      const saved = await archiveLocalServiceLogsToGnmsRoot({ dateFilter });
+      const saved = await uploadLocalServiceLogsToRemoteGnms({ dateFilter });
       await updateIntegrationJobProgress(
         ijlKey,
-        `완료 | GNMS | project=${saved.project} type=${saved.type} files=${saved.fileCount} | ${saved.savedFiles.join(', ')}`
+        `완료 | GNMS | ${saved.remoteUrl} | project=${saved.project} type=${saved.type} files=${saved.fileCount} | ${saved.savedFiles.join(', ')}`
       );
     } else {
       throw new Error('Not implemented yet');
