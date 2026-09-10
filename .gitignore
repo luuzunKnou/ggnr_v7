@@ -105,4 +105,5 @@ next-env.d.ts
 
 # 00_make_ggnr_starter.bat 실행시 생성되는 파일 (배포용 빌드 스크립트)
 /ggnr_start.bat
+/00_ggnr_build_project.bat
 /ggnr_build_project.bat
