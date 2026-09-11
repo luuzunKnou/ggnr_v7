@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { Check, ChevronLeft, ChevronRight, Plus, RotateCcw, Search, Settings2, X } from 'lucide-react'
+import { Check, ChevronLeft, ChevronRight, Plus, RotateCcw, Settings2, X } from 'lucide-react'
 import { call } from '@/lib/api'
 import { withBasePath, withBasePathNav } from '@/lib/basePath'
 import { getOpenedKeyForSerEng } from '@/lib/mapServiceOpened'
@@ -12,6 +12,12 @@ import { openShapeEditorMapWindow } from '@/lib/shapeEditorWindow'
 
 type Props = {
   onClosePanel: () => void
+  /** 촬영요청·알림 옆 칸이 열려 있으면 바로가기 설정을 닫음 */
+  suppressSettings?: boolean
+  onOpenSettings?: () => void
+  matchHeightPx?: number | null
+  /** 바깥 막에서 내 정보 칸을 빼 단추가 눌리게 함 */
+  overlayClipPath?: string
 }
 
 type ServiceItem = {
@@ -210,7 +216,13 @@ function ServiceGlyph({ item }: { item: ServiceItem }) {
 }
 
 /** 내 정보 패널 — 더보기(즐겨찾기·검색·기능 목록) */
-export function UserAccountMoreTab({ onClosePanel }: Props) {
+export function UserAccountMoreTab({
+  onClosePanel,
+  suppressSettings = false,
+  onOpenSettings,
+  matchHeightPx = null,
+  overlayClipPath,
+}: Props) {
   const router = useRouter()
   const searchParams = useSearchParams()
   const systemKey = String(searchParams.get('system') ?? '').trim()
@@ -218,7 +230,6 @@ export function UserAccountMoreTab({ onClosePanel }: Props) {
   const [services, setServices] = useState<ServiceItem[]>([])
   const [systems, setSystems] = useState<SystemItem[]>([])
   const [bootProject, setBootProject] = useState('')
-  const [keyword, setKeyword] = useState('')
   const [favorites, setFavorites] = useState<string[]>([])
   const [settingOpen, setSettingOpen] = useState(false)
   const [draft, setDraft] = useState<string[]>([])
@@ -300,34 +311,11 @@ export function UserAccountMoreTab({ onClosePanel }: Props) {
     [bootProject, serviceMap]
   )
 
-  const allItems = useMemo(() => {
-    const seen = new Set<string>()
-    const out: ServiceItem[] = []
-    for (const eng of ALWAYS_SHOW_ENGS) {
-      const item = serviceMap.get(eng)
-      if (!item || seen.has(eng)) continue
-      seen.add(eng)
-      out.push(item)
-    }
-    for (const sys of systems) {
-      for (const eng of sys.serviceList) {
-        if (!visibleEng(eng) || seen.has(eng)) continue
-        const item = serviceMap.get(eng)
-        if (!item) continue
-        seen.add(eng)
-        out.push(item)
-      }
-    }
-    return out
-  }, [serviceMap, systems, visibleEng])
-
-  const filteredItems = useMemo(() => {
-    const q = keyword.trim().toLowerCase()
-    if (!q) return allItems
-    return allItems.filter(
-      (s) => s.ser_kor.toLowerCase().includes(q) || s.ser_eng.toLowerCase().includes(q)
-    )
-  }, [allItems, keyword])
+  const basicItems = useMemo(
+    () =>
+      ALWAYS_SHOW_ENGS.map((eng) => serviceMap.get(eng)).filter((s): s is ServiceItem => s != null),
+    [serviceMap]
+  )
 
   const settingGroups = useMemo(() => {
     const used = new Set<string>()
@@ -337,7 +325,7 @@ export function UserAccountMoreTab({ onClosePanel }: Props) {
     )
     if (basics.length) {
       for (const s of basics) used.add(s.ser_eng)
-      groups.push({ key: 'basic', title: '기본', items: basics })
+      groups.push({ key: 'basic', title: '공통', items: basics })
     }
     for (const sys of systems) {
       const items = sys.serviceList
@@ -351,7 +339,16 @@ export function UserAccountMoreTab({ onClosePanel }: Props) {
     return groups
   }, [serviceMap, systems, visibleEng])
 
+  useEffect(() => {
+    if (suppressSettings) setSettingOpen(false)
+  }, [suppressSettings])
+
   const openSettings = () => {
+    if (settingOpen) {
+      setSettingOpen(false)
+      return
+    }
+    onOpenSettings?.()
     setDraft(favorites)
     setSettingOpen(true)
   }
@@ -401,11 +398,13 @@ export function UserAccountMoreTab({ onClosePanel }: Props) {
             <button
               type="button"
               className="fixed inset-0 z-[120] bg-transparent"
+              style={overlayClipPath ? { clipPath: overlayClipPath } : undefined}
               aria-label="바로가기 설정 닫기"
               onClick={() => setSettingOpen(false)}
             />
             <div
-              className="fixed bottom-[7px] left-[419px] z-[130] flex h-[min(520px,calc(100vh-80px))] w-[400px] flex-col overflow-hidden rounded-[5px] border border-border bg-background shadow-2xl"
+              className="fixed bottom-[7px] left-[419px] z-[130] flex w-[400px] flex-col overflow-hidden rounded-[5px] border border-border bg-background shadow-2xl"
+              style={matchHeightPx ? { height: matchHeightPx } : undefined}
               role="dialog"
               aria-label="바로가기 설정"
             >
@@ -473,7 +472,7 @@ export function UserAccountMoreTab({ onClosePanel }: Props) {
       : null
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+    <div className="flex shrink-0 flex-col">
       {settingsModal}
       <div className="shrink-0 border-b border-border px-2.5 pb-1.5 pt-1.5">
         <div className="mb-1 flex items-center justify-between">
@@ -503,27 +502,13 @@ export function UserAccountMoreTab({ onClosePanel }: Props) {
         )}
       </div>
 
-      <div className="shrink-0 border-b border-border px-2.5 py-1.5">
-        <div className="relative">
-          <Search className="pointer-events-none absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <input
-            type="search"
-            value={keyword}
-            onChange={(e) => setKeyword(e.target.value)}
-            placeholder="기능을 검색하세요"
-            className="h-8 w-full rounded-md border border-border bg-background py-1 pl-8 pr-2 text-[11px] outline-none focus:ring-2 focus:ring-border"
-          />
-        </div>
-      </div>
-
-      <div className="min-h-0 flex-1 overflow-y-auto scrollbar-thin">
-        {filteredItems.length === 0 ? (
-          <p className="px-3 py-5 text-center text-xs text-muted-foreground">
-            {keyword.trim() ? '검색된 기능이 없습니다.' : '표시할 기능이 없습니다.'}
-          </p>
+      <div className="shrink-0">
+        <p className="px-2.5 pt-1.5 text-[11px] font-medium text-muted-foreground">공통</p>
+        {basicItems.length === 0 ? (
+          <p className="px-3 py-5 text-center text-xs text-muted-foreground">표시할 기능이 없습니다.</p>
         ) : (
-          <div className="grid grid-cols-4 gap-y-0.5 px-1 py-1.5">
-            {filteredItems.map((item) => (
+          <div className="grid grid-cols-4 px-1 py-1.5">
+            {basicItems.map((item) => (
               <button
                 key={item.ser_eng}
                 type="button"

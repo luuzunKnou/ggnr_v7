@@ -52,6 +52,7 @@ export function ShootingRequestFormModal({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
         showCloseButton={false}
+        layerZIndex={160}
         className="flex h-[min(62vh,500px)] w-[min(100vw-2rem,46rem)] max-w-none flex-col gap-0 overflow-hidden p-0"
       >
         <DialogHeader className="sr-only">
