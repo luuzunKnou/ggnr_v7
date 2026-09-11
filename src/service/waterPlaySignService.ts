@@ -99,11 +99,13 @@ export async function list(p: Params): Promise<{ items: WaterPlaySignListItem[];
   if (keyword) {
     params.push(`%${keyword}%`);
     const i = params.length;
+    // 통합검색: 시도·시군구·주소·상세주소·구분·비고 (+ 주소+상세주소 이어붙인 문구)
     whereParts.push(`(
       wps.sido ILIKE $${i}
       OR wps.sgg ILIKE $${i}
       OR wps.addr ILIKE $${i}
       OR wps.addr_detail ILIKE $${i}
+      OR concat_ws(' ', nullif(trim(coalesce(wps.addr, '')), ''), nullif(trim(coalesce(wps.addr_detail, '')), '')) ILIKE $${i}
       OR wps.gubun ILIKE $${i}
       OR wps.remark ILIKE $${i}
     )`);

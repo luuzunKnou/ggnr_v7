@@ -21,7 +21,8 @@ export type IntegrationSystem =
   | 'SAFEMAP'
   | 'FMS'
   | 'NEXTGEN'
-  | 'GEOM';
+  | 'GEOM'
+  | 'GNMS';
 
 const HARDCODED_KAIS_APP_KEY = 'U01TX0FVVEgyMDIzMDUzMDE3MzU1NDExMzgxMTM=';
 
@@ -80,7 +81,8 @@ function normalizeSystem(v: unknown): IntegrationSystem {
     s === 'SAFEMAP' ||
     s === 'FMS' ||
     s === 'NEXTGEN' ||
-    s === 'GEOM'
+    s === 'GEOM' ||
+    s === 'GNMS'
   )
     return s;
   throw new Error(`Unknown integration system: ${s}`);
@@ -168,6 +170,11 @@ export async function listSafetydataDetailLogs(p: Params) {
     params
   );
   return { rows };
+}
+
+export async function getGnmsLogBootContext(_p: Params) {
+  const { getGnmsLogBootContext: getBoot } = await import('@/service/gnmsLogReceiveService');
+  return getBoot();
 }
 
 export async function runIntegration(p: Params) {
@@ -496,6 +503,19 @@ export async function runIntegration(p: Params) {
       );
       console.error(`[INTEGRATION] DONE system=${system} ijlKey=${ijlKey ?? '-'} status=${r.jobStatus}`);
       return { ijlKey, system, ok: r.jobStatus === 'SUCCESS' };
+    } else if (system === 'GNMS') {
+      const { uploadLocalServiceLogsToRemoteGnms } = await import('@/service/gnmsLogReceiveService');
+      const dateRaw = String(p.date ?? '').trim();
+      const dateFilter = dateRaw || null;
+      await updateIntegrationJobProgress(
+        ijlKey,
+        `진행중 | GNMS | logs+backup+linkage → 원격 업로드${dateFilter ? ` date=${dateFilter}` : ' (전체)'}`
+      );
+      const saved = await uploadLocalServiceLogsToRemoteGnms({ dateFilter });
+      await updateIntegrationJobProgress(
+        ijlKey,
+        `완료 | GNMS | ${saved.remoteUrl} | project=${saved.project} type=${saved.type} files=${saved.fileCount} | ${saved.savedFiles.join(', ')}`
+      );
     } else {
       throw new Error('Not implemented yet');
     }

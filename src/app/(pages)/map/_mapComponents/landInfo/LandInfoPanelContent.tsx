@@ -1,7 +1,7 @@
 'use client';
 
-import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { Loader2 } from 'lucide-react';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { Check, Copy, Loader2 } from 'lucide-react';
 import { COORDINATE_SYSTEM_OPTIONS, type AddressInfoPanelProps } from './shared';
 import { transformCoordinate } from '../services/coordinateService';
 import {
@@ -20,7 +20,49 @@ import { BuildingPermitPanel, BuildingRegisterPanel } from './LandInfoBuildingPa
 import { LandInfoParcelPanel } from './LandInfoParcelPanel';
 import { withBasePath } from '@/lib/basePath';
 import { formatAddressStripSidoSigungu } from '@/lib/formatAddressStripAdmin';
+import { copyTextToClipboard } from '@/lib/utils';
 import { findRoadAddressByJibun, getAddressFromCoord } from '../addressSearch/vworldAddressSearch';
+
+function canCopyAddress(value: string | null | undefined): boolean {
+  const t = String(value ?? '').trim();
+  return Boolean(t) && t !== '-' && t !== '조회 중...';
+}
+
+function AddressCopyButton({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+    };
+  }, []);
+
+  const handleCopy = useCallback(async () => {
+    if (!canCopyAddress(text)) return;
+    const ok = await copyTextToClipboard(text.trim());
+    if (!ok) return;
+    setCopied(true);
+    if (timerRef.current) clearTimeout(timerRef.current);
+    timerRef.current = setTimeout(() => setCopied(false), 1500);
+  }, [text]);
+
+  const disabled = !canCopyAddress(text);
+  const label = copied ? '복사됨' : '복사';
+
+  return (
+    <button
+      type="button"
+      onClick={() => void handleCopy()}
+      disabled={disabled}
+      title={label}
+      aria-label={label}
+      className="inline-flex h-5 w-5 shrink-0 cursor-pointer items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+    >
+      {copied ? <Check className="h-3 w-3 text-primary" aria-hidden /> : <Copy className="h-3 w-3" aria-hidden />}
+    </button>
+  );
+}
 
 /** 주소 문자열로 외부 지도 검색 */
 function openExternalMapByAddress(
@@ -527,13 +569,15 @@ export function LandInfoPanelContent({
             <span className="shrink-0 w-12 text-center text-[10px] font-semibold py-0.5 rounded bg-amber-100 text-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
               지번
             </span>
-            <span>{loading ? '조회 중...' : displayJibunAddress}</span>
+            <span className="min-w-0 flex-1 break-all">{loading ? '조회 중...' : displayJibunAddress}</span>
+            {!loading ? <AddressCopyButton text={displayJibunAddress} /> : null}
           </div>
           <div className="flex items-center gap-2 flex-wrap">
             <span className="shrink-0 w-12 text-center text-[10px] font-semibold py-0.5 rounded bg-blue-100 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300">
               도로명
             </span>
-            <span>{loading ? '조회 중...' : displayRoadAddress}</span>
+            <span className="min-w-0 flex-1 break-all">{loading ? '조회 중...' : displayRoadAddress}</span>
+            {!loading ? <AddressCopyButton text={displayRoadAddress} /> : null}
           </div>
           {buildingName ? <div>건물명: {buildingName}</div> : null}
         </div>

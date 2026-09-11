@@ -4,10 +4,9 @@ import path from 'node:path';
 import { Readable } from 'node:stream';
 import { NextRequest, NextResponse } from 'next/server';
 import { getSessionUsrId } from '@/lib/auth/guard';
+import { resolveGgnrDataDir } from '@/lib/turbopackFsPath';
 
 export const dynamic = 'force-dynamic';
-
-const GGNR_DATA_DIR = process.env.GGNR_DATA_DIR ?? 'd:\\ggnr_data_dir';
 
 function contentTypeForFile(name: string): string {
   const ext = path.extname(name).toLowerCase();
@@ -57,7 +56,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
-  const base = path.resolve(GGNR_DATA_DIR);
+  const base = path.resolve(resolveGgnrDataDir());
   const resolved = path.resolve(base, ...normalized.split('/').filter(Boolean));
   const rel = path.relative(base, resolved);
   if (!rel || rel.startsWith('..') || path.isAbsolute(rel)) {

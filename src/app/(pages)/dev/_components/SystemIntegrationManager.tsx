@@ -17,6 +17,7 @@ type SystemKey =
   | "FMS"
   | "NEXTGEN"
   | "GEOM"
+  | "GNMS"
 
 type LogRow = {
   ijl_key: number
@@ -156,6 +157,7 @@ export function SystemIntegrationManager() {
         { key: "FMS", label: "FMS" },
         { key: "NEXTGEN", label: "차세대" },
         { key: "GEOM", label: "VWORD 좌표 검색" },
+        { key: "GNMS", label: "GNMS" },
       ] as const,
     []
   )
@@ -178,6 +180,8 @@ export function SystemIntegrationManager() {
   const [geomColumnsLoading, setGeomColumnsLoading] = useState(false)
   const [geomAddressColumn, setGeomAddressColumn] = useState("")
   const [geomPlaceNameColumn, setGeomPlaceNameColumn] = useState("")
+  const [gnmsDate, setGnmsDate] = useState("")
+  const [gnmsBoot, setGnmsBoot] = useState<{ project: string; type: string } | null>(null)
 
   const latestJob = rows[0]
   const latestParsedJob = parseJob(latestJob?.ijl_message ?? "")
@@ -303,6 +307,23 @@ export function SystemIntegrationManager() {
     if (active === "GEOM") {
       void fetchGeomTables()
     }
+    if (active === "GNMS") {
+      void (async () => {
+        try {
+          const res = await call("", "POST", {
+            service: "integrationService",
+            action: "getGnmsLogBootContext",
+            params: {},
+          })
+          setGnmsBoot({
+            project: String(res?.data?.project ?? ""),
+            type: String(res?.data?.type ?? ""),
+          })
+        } catch {
+          setGnmsBoot(null)
+        }
+      })()
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active])
 
@@ -331,6 +352,22 @@ export function SystemIntegrationManager() {
     setLoading(true)
     setError("")
     try {
+      if (active === "GNMS") {
+        const date = gnmsDate.trim()
+        const params: Record<string, unknown> = { system: "GNMS" }
+        if (date) params.date = date
+        const runPromise = call("", "POST", {
+          service: "integrationService",
+          action: "runIntegration",
+          params,
+        })
+        await new Promise((resolve) => window.setTimeout(resolve, 250))
+        await fetchLogs(active)
+        await runPromise
+        await fetchLogs(active)
+        return
+      }
+
       const params: Record<string, unknown> = { system: active, mode: "daily" }
       if (isOpenApiDatasetSystem(active)) {
         if (safetyDatasetId === "__ALL__") {
@@ -433,6 +470,40 @@ export function SystemIntegrationManager() {
               ))}
             </select>
             {safetyDatasetsLoading ? <span className="text-xs">목록 불러오는 중…</span> : null}
+          </label>
+        </div>
+      ) : null}
+
+      {active === "GNMS" ? (
+        <div className="flex flex-col gap-2 shrink-0">
+          <p className="text-sm text-muted-foreground">
+            project / type (기동 인자):{" "}
+            <span className="font-medium text-foreground">
+              {gnmsBoot ? `${gnmsBoot.project} / ${gnmsBoot.type}` : "불러오는 중…"}
+            </span>
+          </p>
+          <label className="text-sm text-muted-foreground flex flex-wrap items-center gap-2">
+            <span>date</span>
+            <input
+              type="date"
+              className="border rounded-md px-2 py-1.5 text-sm bg-background min-w-[12rem] max-w-full"
+              value={gnmsDate}
+              onChange={(e) => setGnmsDate(e.target.value)}
+              disabled={loading}
+              title="date"
+            />
+            <button
+              type="button"
+              className="cursor-pointer text-xs text-primary underline"
+              title="전체"
+              disabled={loading}
+              onClick={() => setGnmsDate("")}
+            >
+              전체
+            </button>
+            <span className="text-xs text-muted-foreground">
+              비우면 C:\logs + backup 전체 → GNMS · 지정 시 해당 날짜만
+            </span>
           </label>
         </div>
       ) : null}

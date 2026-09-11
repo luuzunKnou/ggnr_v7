@@ -2,9 +2,11 @@ import { NextRequest, NextResponse } from 'next/server';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { GGNR_DATA_PATHS } from '@/lib/ggnrDataPaths';
+import { resolveGgnrDataDir } from '@/lib/turbopackFsPath';
 
-const GGNR_DATA_DIR = process.env.GGNR_DATA_DIR ?? 'd:\\ggnr_data_dir';
-const BASE_DIR = path.join(GGNR_DATA_DIR, GGNR_DATA_PATHS.dtilesTiff);
+function getBaseDir(): string {
+  return path.join(resolveGgnrDataDir(), GGNR_DATA_PATHS.dtilesTiff);
+}
 
 function getContentType(filename: string): string {
   const ext = path.extname(filename).toLowerCase();
@@ -22,6 +24,7 @@ export async function GET(
     return NextResponse.json({ error: 'Path required' }, { status: 400 });
   }
 
+  const BASE_DIR = getBaseDir();
   const resolved = path.normalize(path.join(BASE_DIR, ...pathSegments));
 
   if (!resolved.startsWith(BASE_DIR)) {

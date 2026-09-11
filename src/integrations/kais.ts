@@ -5,6 +5,7 @@ import iconv from 'iconv-lite';
 
 import { pool } from '@/database/db';
 import { BinaryStreamReader, ensureDir, extractZip, fetchWithRetry, findTokenInFilename, geoserverFetch, resolveOgr2ogrRun, runCommand, withAdvisoryLock, yyyymmdd } from '@/integrations/core';
+import { resolveGgnrDataDir } from '@/lib/turbopackFsPath';
 
 type KaisMode = 'initial' | 'daily';
 
@@ -18,7 +19,8 @@ type KaisParams = {
   to: string; // yyyymmdd
   sggCode?: string; // optional filter
   baseUrl?: string; // default update.juso.go.kr
-  downloadRoot?: string; // default <GGNR_DATA_DIR>/integrations/kais
+  /** default: resolveGgnrDataDir()/integrations/kais (G:→UNC 포함) */
+  downloadRoot?: string;
 };
 
 type ReceiveRecord = {
@@ -429,8 +431,7 @@ async function publishGeoServerLayer(layerName: string): Promise<void> {
 }
 
 function defaultDownloadRoot(): string {
-  const root = process.env.GGNR_DATA_DIR ?? 'd:\\ggnr_data_dir';
-  return path.join(root, 'integrations', 'kais');
+  return path.join(resolveGgnrDataDir(), 'integrations', 'kais');
 }
 
 async function receiveZipRecords(params: KaisParams): Promise<ReceiveRecord[]> {
