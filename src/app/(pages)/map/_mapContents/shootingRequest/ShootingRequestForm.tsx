@@ -115,8 +115,22 @@ export function ShootingRequestForm({
     initial?.scopeLabel,
   ]);
 
+  const isSatellite = form.shootType === 'satellite';
+
   const setField = <K extends keyof typeof form>(key: K, value: (typeof form)[K]) => {
-    setForm((prev) => ({ ...prev, [key]: value }));
+    setForm((prev) => {
+      if (key === 'shootType' && value === 'satellite') {
+        return {
+          ...prev,
+          shootType: 'satellite',
+          hasScope: false,
+          scopeLabel: '',
+          scopeWkt: '',
+          address: '',
+        };
+      }
+      return { ...prev, [key]: value };
+    });
     setNotice(null);
   };
 
@@ -160,7 +174,7 @@ export function ShootingRequestForm({
 
   const handleSubmit = async () => {
     if (readOnly || submitting) return;
-    if (!form.hasScope || !form.scopeWkt?.trim()) {
+    if (form.shootType !== 'satellite' && (!form.hasScope || !form.scopeWkt?.trim())) {
       setNotice('촬영지역 범위를 먼저 지정하세요.');
       return;
     }
@@ -172,7 +186,11 @@ export function ShootingRequestForm({
     setSubmitting(true);
     setNotice(null);
     try {
-      await onSubmit(form);
+      const payload =
+        form.shootType === 'satellite'
+          ? { ...form, hasScope: false, scopeLabel: '', scopeWkt: '', address: '' }
+          : form;
+      await onSubmit(payload);
       setNotice('신청이 접수되었습니다.');
     } catch (err) {
       const msg = err instanceof Error ? err.message : '신청 접수에 실패했습니다.';
@@ -186,8 +204,9 @@ export function ShootingRequestForm({
     if (downloading) return;
     setDownloading(true);
     try {
+      const skipScope = form.shootType === 'satellite';
       let scopeMapDataUrl: string | null = null;
-      if (form.hasScope && form.scopeWkt?.trim()) {
+      if (!skipScope && form.hasScope && form.scopeWkt?.trim()) {
         scopeMapDataUrl = await scopeMapToDataUrl(form.scopeWkt);
       }
       await downloadShootingRequestDocument({
@@ -196,16 +215,16 @@ export function ShootingRequestForm({
         phone: form.phone,
         manager: form.manager,
         purpose: form.purpose,
-        address: form.address,
-        hasScope: form.hasScope,
-        scopeLabel: form.scopeLabel,
+        address: skipScope ? '' : form.address,
+        hasScope: skipScope ? false : form.hasScope,
+        scopeLabel: skipScope ? '' : form.scopeLabel,
         scopeMapDataUrl,
         shootDate: form.shootDate,
         useDate: form.useDate,
         shootType: form.shootType,
         detailRequest: form.detailRequest,
       });
-      if (form.hasScope && form.scopeWkt?.trim() && !scopeMapDataUrl) {
+      if (!skipScope && form.hasScope && form.scopeWkt?.trim() && !scopeMapDataUrl) {
         setNotice('PDF는 저장됐지만 위치도 지도를 넣지 못했습니다. 다시 시도해 주세요.');
       }
     } catch {
@@ -319,75 +338,77 @@ export function ShootingRequestForm({
                   />
                 </td>
               </tr>
-              <tr>
-                <th className={cn(labelCell, cellBorder)}>
-                  촬영지역
-                  <br />
-                  <span className="font-normal text-muted-foreground">(위치도)</span>
-                </th>
-                <td className={cn(valueCell, cellBorder)}>
-                  <div className="space-y-1.5 py-0.5">
-                    <div className="flex items-center gap-2">
-                      <span className="shrink-0 text-[10px] text-muted-foreground">- 지번</span>
-                      <Input
-                        value={form.address}
-                        onChange={(e) => setField('address', e.target.value)}
-                        disabled={readOnly}
-                        className="h-7 flex-1 border-border text-[11px]"
-                        placeholder="예: 방어동"
-                      />
-                    </div>
-
-                    <div
-                      className={cn(
-                        'relative overflow-hidden rounded-md border border-dashed',
-                        form.hasScope && form.scopeWkt
-                          ? 'border-sky-400 bg-muted/40'
-                          : 'border-border bg-muted/30'
-                      )}
-                    >
-                      {form.hasScope && form.scopeWkt ? (
-                        <div className="relative aspect-[16/9] w-full">
-                          <ScopePreviewMap
-                            key={form.scopeWkt}
-                            wkt5181={form.scopeWkt}
-                            className="absolute inset-0"
-                          />
-                          <div className="pointer-events-none absolute bottom-1.5 left-1.5 rounded bg-background/90 px-1.5 py-0.5 text-[10px] font-medium text-sky-800 shadow-sm ring-1 ring-sky-200/80">
-                            {form.scopeLabel || '범위 지정됨'}
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="flex aspect-[16/9] flex-col items-center justify-center gap-2 p-3 text-center">
-                          <MapPinned className="h-7 w-7 text-muted-foreground/40" />
-                          <p className="text-[11px] text-muted-foreground">촬영 범위를 지도에 그려 주세요</p>
-                          <p className="text-[10px] text-muted-foreground">위치도 · 범위 미지정</p>
-                        </div>
-                      )}
-                    </div>
-
-                    {!readOnly ? (
-                      <div className="flex flex-wrap items-center gap-1.5">
-                        <button
-                          type="button"
-                          className="rounded border border-border bg-background px-2.5 py-1 text-[11px] text-muted-foreground transition-colors hover:bg-muted/50"
-                          onClick={startDraw}
-                        >
-                          {form.hasScope ? '범위 다시 그리기' : '범위 그리기'}
-                        </button>
-                        <button
-                          type="button"
-                          className="rounded border border-border bg-background px-2.5 py-1 text-[11px] text-muted-foreground transition-colors hover:bg-muted/50 disabled:opacity-50"
-                          onClick={clearScope}
-                          disabled={!form.hasScope}
-                        >
-                          초기화
-                        </button>
+              {!isSatellite ? (
+                <tr>
+                  <th className={cn(labelCell, cellBorder)}>
+                    촬영지역
+                    <br />
+                    <span className="font-normal text-muted-foreground">(위치도)</span>
+                  </th>
+                  <td className={cn(valueCell, cellBorder)}>
+                    <div className="space-y-1.5 py-0.5">
+                      <div className="flex items-center gap-2">
+                        <span className="shrink-0 text-[10px] text-muted-foreground">- 지번</span>
+                        <Input
+                          value={form.address}
+                          onChange={(e) => setField('address', e.target.value)}
+                          disabled={readOnly}
+                          className="h-7 flex-1 border-border text-[11px]"
+                          placeholder="예: 방어동"
+                        />
                       </div>
-                    ) : null}
-                  </div>
-                </td>
-              </tr>
+
+                      <div
+                        className={cn(
+                          'relative overflow-hidden rounded-md border border-dashed',
+                          form.hasScope && form.scopeWkt
+                            ? 'border-sky-400 bg-muted/40'
+                            : 'border-border bg-muted/30'
+                        )}
+                      >
+                        {form.hasScope && form.scopeWkt ? (
+                          <div className="relative aspect-[16/9] w-full">
+                            <ScopePreviewMap
+                              key={form.scopeWkt}
+                              wkt5181={form.scopeWkt}
+                              className="absolute inset-0"
+                            />
+                            <div className="pointer-events-none absolute bottom-1.5 left-1.5 rounded bg-background/90 px-1.5 py-0.5 text-[10px] font-medium text-sky-800 shadow-sm ring-1 ring-sky-200/80">
+                              {form.scopeLabel || '범위 지정됨'}
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="flex aspect-[16/9] flex-col items-center justify-center gap-2 p-3 text-center">
+                            <MapPinned className="h-7 w-7 text-muted-foreground/40" />
+                            <p className="text-[11px] text-muted-foreground">촬영 범위를 지도에 그려 주세요</p>
+                            <p className="text-[10px] text-muted-foreground">위치도 · 범위 미지정</p>
+                          </div>
+                        )}
+                      </div>
+
+                      {!readOnly ? (
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <button
+                            type="button"
+                            className="rounded border border-border bg-background px-2.5 py-1 text-[11px] text-muted-foreground transition-colors hover:bg-muted/50"
+                            onClick={startDraw}
+                          >
+                            {form.hasScope ? '범위 다시 그리기' : '범위 그리기'}
+                          </button>
+                          <button
+                            type="button"
+                            className="rounded border border-border bg-background px-2.5 py-1 text-[11px] text-muted-foreground transition-colors hover:bg-muted/50 disabled:opacity-50"
+                            onClick={clearScope}
+                            disabled={!form.hasScope}
+                          >
+                            초기화
+                          </button>
+                        </div>
+                      ) : null}
+                    </div>
+                  </td>
+                </tr>
+              ) : null}
               <tr>
                 <th className={cn(labelCell, cellBorder)}>촬영요청 기간</th>
                 <td className={cn(valueCell, cellBorder)}>
