@@ -131,6 +131,19 @@ import { BuildPublicLandListPanel } from "./_mapContents/buildPublicLand/BuildPu
 import { BuildPublicLandDetailPanel } from "./_mapContents/buildPublicLand/BuildPublicLandDetailPanel"
 import { MemoListPanel } from "./_mapContents/memo/MemoListPanel"
 import { MemoDetailPanel } from "./_mapContents/memo/MemoDetailPanel"
+import { GcpListPanel } from "./_mapContents/gcp/GcpListPanel"
+import { GcpDetailPanel } from "./_mapContents/gcp/GcpDetailPanel"
+import { GcpInspectDialog } from "./_mapContents/gcp/GcpInspectDialog"
+import {
+  GCP_DETAIL_DEFAULT_WIDTH,
+  GCP_DETAIL_MAX_WIDTH,
+  GCP_DETAIL_MIN_WIDTH,
+  GCP_OPENED_KEY,
+  GCP_PANEL_DEFAULT_WIDTH,
+  GCP_PANEL_MAX_WIDTH,
+  GCP_PANEL_MIN_WIDTH,
+} from "./_mapContents/gcp/gcpConfig"
+import { clearGcpCreate } from "./_mapContents/gcp/gcpProtoStore"
 // 점용대장(프) 더미 — 대장↔점사용료 실연동 전까지 비활성
 // import {
 //   UseLedgerProtoListPanel,
@@ -542,6 +555,7 @@ function MapLayoutContent({
 
   const complaintManagementOpen = openedWindows.includes(COMPLAINT_OPENED_KEY)
   const memoManagementOpen = openedWindows.includes(MEMO_OPENED_KEY)
+  const gcpOpen = openedWindows.includes(GCP_OPENED_KEY)
   const map3dDataOpen = openedWindows.includes(MAP_3D_DATA_OPENED_KEY)
   const riverBasicPlanOpen = openedWindows.includes(RIVER_BASIC_PLAN_OPENED_KEY)
   const roadLedgerOpen = openedWindows.includes(ROAD_LEDGER_OPENED_KEY)
@@ -676,6 +690,8 @@ function MapLayoutContent({
   const [protoUserAccountOpen, setProtoUserAccountOpen] = useState(false)
 
   const [memoDetailId, setMemoDetailId] = useState<string | null>(null)
+  const [gcpDetailId, setGcpDetailId] = useState<string | null>(null)
+  const [gcpInspectIds, setGcpInspectIds] = useState<string[] | null>(null)
   const [memoAddTable, setMemoAddTable] = useState<string | null>(null)
   const [memoListRefreshKey, setMemoListRefreshKey] = useState(0)
   const [complaintListRefreshKey, setComplaintListRefreshKey] = useState(0)
@@ -843,6 +859,8 @@ function MapLayoutContent({
   const [fmsLinkageDetailWidth, setFmsLinkageDetailWidth] = useState(FMS_DETAIL_DEFAULT_WIDTH)
   const [fmsGeomToastMsg, setFmsGeomToastMsg] = useState<string | null>(null)
   const [memoPanelWidth, setMemoPanelWidth] = useState(MEMO_PANEL_DEFAULT_WIDTH)
+  const [gcpPanelWidth, setGcpPanelWidth] = useState(GCP_PANEL_DEFAULT_WIDTH)
+  const [gcpDetailWidth, setGcpDetailWidth] = useState(GCP_DETAIL_DEFAULT_WIDTH)
   const [layerDataPanelWidth, setLayerDataPanelWidth] = useState(LAYER_DATA_PANEL_DEFAULT_WIDTH)
   const [searchBarInputBottomPx, setSearchBarInputBottomPx] = useState(16 + 30)
 
@@ -874,6 +892,8 @@ function MapLayoutContent({
     (aerialManageOpen ? aerialManagePanelWidth : 0) +
     (shootingListOpen ? shootingRequestPanelWidth : 0) +
     (shootingRequestDetailOpen ? shootingRequestDetailWidth : 0) +
+    (gcpOpen ? gcpPanelWidth : 0) +
+    (gcpOpen && (gcpInspectIds?.length || gcpDetailId) ? gcpDetailWidth : 0) +
     (riverConstructionLedgerOpen ? riverConstructionLedgerPanelWidth : 0) +
     (riverConstructionLedgerDetailOpen ? riverConstructionLedgerDetailWidth : 0) +
     (usageDataAsOpen ? usageDataAsPanelWidth : 0) +
@@ -961,8 +981,11 @@ function MapLayoutContent({
     aerialManagePanelLeftPx + (aerialManageOpen ? aerialManagePanelWidth : 0)
   const shootingRequestDetailLeftPx =
     shootingRequestPanelLeftPx + (shootingListOpen ? shootingRequestPanelWidth : 0)
-  const riverConstructionLedgerPanelLeftPx =
+  const gcpPanelLeftPx =
     shootingRequestDetailLeftPx + (shootingRequestDetailOpen ? shootingRequestDetailWidth : 0)
+  const gcpDetailLeftPx = gcpPanelLeftPx + (gcpOpen ? gcpPanelWidth : 0)
+  const riverConstructionLedgerPanelLeftPx =
+    gcpDetailLeftPx + (gcpOpen && (gcpInspectIds?.length || gcpDetailId) ? gcpDetailWidth : 0)
   const riverConstructionLedgerDetailLeftPx =
     riverConstructionLedgerPanelLeftPx +
     (riverConstructionLedgerOpen ? riverConstructionLedgerPanelWidth : 0)
@@ -1519,6 +1542,14 @@ function MapLayoutContent({
     setOpened(next)
   }
 
+  const handleCloseGcp = () => {
+    clearGcpCreate()
+    setGcpDetailId(null)
+    setGcpInspectIds(null)
+    const next = openedWindows.filter((w) => w !== GCP_OPENED_KEY)
+    setOpened(next)
+  }
+
   const handleCloseMemoManagement = () => {
     setMemoDetailId(null)
     setMemoAddTable(null)
@@ -1603,6 +1634,14 @@ function MapLayoutContent({
   useEffect(() => {
     if (!usageDataAsOpen) setUsageDataAsDetailId(null)
   }, [usageDataAsOpen])
+
+  useEffect(() => {
+    if (!gcpOpen) {
+      clearGcpCreate()
+      setGcpDetailId(null)
+      setGcpInspectIds(null)
+    }
+  }, [gcpOpen])
 
   useEffect(() => {
     if (!occupationLedgerOpen) setOccupationLedgerDetailId(null)
@@ -2408,6 +2447,71 @@ function MapLayoutContent({
                   listMode={shootingRequestListMode}
                   onStartMediaRegister={
                     shootingRequestListMode === 'approval' ? openMediaRegisterFromRequest : undefined
+                  }
+                />
+              </MapSideListPanel>
+            </div>
+          )}
+          {gcpOpen && (
+            <div className="pointer-events-auto shrink-0">
+              <MapSideListPanel
+                width={gcpPanelWidth}
+                minWidth={GCP_PANEL_MIN_WIDTH}
+                maxWidth={GCP_PANEL_MAX_WIDTH}
+                leftOffsetPx={gcpPanelLeftPx}
+                onWidthChange={setGcpPanelWidth}
+                contentClassName="overflow-hidden"
+              >
+                <GcpListPanel
+                  onClose={handleCloseGcp}
+                  selectedDetailId={gcpDetailId}
+                  onSelectDetailId={(id) => {
+                    setGcpInspectIds(null)
+                    setGcpDetailId(id)
+                  }}
+                  onInspect={(ids) => setGcpInspectIds(ids)}
+                />
+              </MapSideListPanel>
+            </div>
+          )}
+          {gcpOpen && gcpInspectIds && gcpInspectIds.length > 0 && (
+            <div className="pointer-events-auto shrink-0">
+              <MapSideListPanel
+                width={gcpDetailWidth}
+                minWidth={GCP_DETAIL_MIN_WIDTH}
+                maxWidth={GCP_DETAIL_MAX_WIDTH}
+                leftOffsetPx={gcpDetailLeftPx}
+                onWidthChange={setGcpDetailWidth}
+                contentClassName="overflow-hidden"
+              >
+                <GcpInspectDialog
+                  gcpIds={gcpInspectIds}
+                  onClose={() => setGcpInspectIds(null)}
+                />
+              </MapSideListPanel>
+            </div>
+          )}
+          {gcpOpen && gcpDetailId && !(gcpInspectIds && gcpInspectIds.length > 0) && (
+            <div className="pointer-events-auto shrink-0">
+              <MapSideListPanel
+                width={gcpDetailWidth}
+                minWidth={GCP_DETAIL_MIN_WIDTH}
+                maxWidth={GCP_DETAIL_MAX_WIDTH}
+                leftOffsetPx={gcpDetailLeftPx}
+                onWidthChange={setGcpDetailWidth}
+                contentClassName="overflow-hidden"
+              >
+                <GcpDetailPanel
+                  detailId={gcpDetailId}
+                  onClose={() => {
+                    clearGcpCreate()
+                    setGcpDetailId(null)
+                  }}
+                  onCreated={(id) => setGcpDetailId(id)}
+                  onInspect={(ids) => setGcpInspectIds(ids)}
+                  overlayLeftPx={gcpPanelLeftPx}
+                  overlayWidthPx={
+                    gcpPanelWidth + (gcpDetailId ? gcpDetailWidth : 0)
                   }
                 />
               </MapSideListPanel>

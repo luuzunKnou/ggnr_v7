@@ -17,7 +17,7 @@ import {
   hasProtoUnreadNotifications,
   PROTO_NOTIF_CHANGED_EVENT,
 } from '../_mapContents/bizNotif/bizNotifStore';
-import { ImportantNotifSidebarBubble, SHOW_USER_ACCOUNT_MORE_TAB } from '../_mapContents/prototypes/UserAccountProtoPanel';
+import { ImportantNotifSidebarBubble } from '../_mapContents/prototypes/UserAccountProtoPanel';
 import { withBasePath } from '@/lib/basePath';
 
 /** ser_eng 와 serviceListIcon 파일명이 다를 때 */
@@ -383,7 +383,7 @@ export function MapSidebar({ indexLogoSrc }: { indexLogoSrc: string }) {
                   ) : null}
                 </span>
               }
-              label={SHOW_USER_ACCOUNT_MORE_TAB ? '내 정보 더보기' : '내 정보'}
+              label="내 정보"
               iconOnly
               onClick={() => {
                 window.dispatchEvent(new CustomEvent('ggnr-proto-user-account-toggle'));
