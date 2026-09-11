@@ -70,7 +70,7 @@ export function MapViewLink() {
         }
         window.location.assign(withBasePathNav("/map"))
       }}
-      className="group relative block min-h-[280px] w-full cursor-pointer overflow-hidden rounded-[5px] bg-slate-900 p-8 text-center text-white transition-opacity hover:opacity-95 flex flex-col items-center justify-center"
+      className="group relative block min-h-[280px] w-full cursor-pointer overflow-hidden rounded-[5px] bg-slate-300 p-8 text-center text-white transition-opacity hover:opacity-95 flex flex-col items-center justify-center"
     >
       <video
         ref={videoRef}
