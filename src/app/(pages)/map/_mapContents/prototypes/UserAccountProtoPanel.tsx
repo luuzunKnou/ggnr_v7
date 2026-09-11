@@ -1,10 +1,10 @@
 'use client'
 
-import { useCallback, useEffect, useState, type RefObject } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react'
 import { createPortal } from 'react-dom'
 import { signOut, useSession } from 'next-auth/react'
 import { useSearchParams } from 'next/navigation'
-import { LogOut, Mail, Phone, X } from 'lucide-react'
+import { LogOut, Mail, Phone, User, X } from 'lucide-react'
 import { call } from '@/lib/api'
 import { withBasePathNav } from '@/lib/basePath'
 import { cn } from '@/lib/utils'
@@ -28,10 +28,9 @@ import {
 } from '../shootingRequest/MyShootingRequestTab'
 import { useShootingRequestUiEnabled } from '../shootingRequest/useShootingRequestUiEnabled'
 
-/** 프로토 내 정보 패널 — 알림이 최대로 펼쳐진 높이와 더보기 공통 */
+/** 프로토 내 정보 패널 — 내용만큼 높이, 공통은 한 줄 */
 const PANEL_SHELL_ROUND = 'rounded-[5px]'
-const USER_ACCOUNT_PANEL_HEIGHT = 'h-[min(520px,calc(100vh-80px))]'
-const USER_ACCOUNT_PANEL_MAX_HEIGHT = 'max-h-[min(520px,calc(100vh-80px))]'
+const USER_ACCOUNT_PANEL_HEIGHT = 'max-h-[min(520px,calc(100vh-80px))]'
 const PANEL_ROUND = 'rounded-sm'
 const BUBBLE_ROUND = 'rounded-[2px]'
 const TEXT_BODY = 'text-xs'
@@ -58,19 +57,20 @@ function profileFromSession(session: ReturnType<typeof useSession>['data']): MyP
   }
 }
 
-/** 프로필 배지 — 성 제외한 이름 두 글자(예: 김배근 → 배근) */
-function profileInitials(name: string): string {
-  const trimmed = String(name ?? '').trim()
-  if (!trimmed) return '?'
-  return trimmed.length <= 2 ? trimmed : trimmed.slice(-2)
-}
-
 const PROTO_PANEL_TABS_ALL = [
   { id: 'shooting', label: '촬영요청' },
   { id: 'notif', label: '알림' },
 ] as const
 type ProtoPanelTabId = (typeof PROTO_PANEL_TABS_ALL)[number]['id']
-type PanelSection = 'account' | 'more'
+
+const SIDE_MODAL =
+  'fixed bottom-[7px] left-[419px] z-[130] flex w-[400px] flex-col overflow-hidden rounded-[5px] border border-border bg-background shadow-2xl'
+
+/** 전체 막에서 내 정보 칸만 빼, 알림·촬영요청·바로가기 설정 단추가 눌리게 함 */
+function overlayClipExcludingRect(rect: { left: number; top: number; right: number; bottom: number } | null) {
+  if (!rect) return undefined
+  return `polygon(evenodd, 0px 0px, 100vw 0px, 100vw 100vh, 0px 100vh, 0px 0px, ${rect.left}px ${rect.top}px, ${rect.left}px ${rect.bottom}px, ${rect.right}px ${rect.bottom}px, ${rect.right}px ${rect.top}px, ${rect.left}px ${rect.top}px)`
+}
 
 type Props = {
   open: boolean
@@ -97,10 +97,37 @@ export function UserAccountProtoPanel({
     : PROTO_PANEL_TABS_ALL.filter((t) => t.id !== 'shooting')
   const [notifItems, setNotifItemsLocal] = useState(getProtoNotifs)
   const [activeTab, setActiveTab] = useState<ProtoPanelTabId | null>(null)
-  const [panelSection, setPanelSection] = useState<PanelSection>('account')
   const [profile, setProfile] = useState<MyProfileView>(() => profileFromSession(null))
   const [profileLoading, setProfileLoading] = useState(false)
   const shootingCount = useMyShootingRequestCount(shootingUiEnabled && open)
+  const panelRef = useRef<HTMLDivElement>(null)
+  const [panelHeightPx, setPanelHeightPx] = useState<number | null>(null)
+  const [panelRect, setPanelRect] = useState<{
+    left: number
+    top: number
+    right: number
+    bottom: number
+  } | null>(null)
+  const overlayClipPath = overlayClipExcludingRect(panelRect)
+
+  useLayoutEffect(() => {
+    if (!open) {
+      setPanelHeightPx(null)
+      setPanelRect(null)
+      return
+    }
+    const el = panelRef.current
+    if (!el) return
+    const sync = () => {
+      const r = el.getBoundingClientRect()
+      setPanelHeightPx(Math.round(r.height))
+      setPanelRect({ left: r.left, top: r.top, right: r.right, bottom: r.bottom })
+    }
+    sync()
+    const ro = new ResizeObserver(sync)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [open])
 
   useEffect(() => {
     if (!shootingUiEnabled && activeTab === 'shooting') {
@@ -169,10 +196,14 @@ export function UserAccountProtoPanel({
   }, [])
 
   useEffect(() => {
-    if (!open) return
-    setActiveTab(null)
-    setPanelSection('account')
+    if (!open) setActiveTab(null)
   }, [open])
+
+  useEffect(() => {
+    const onOpenNotif = () => setActiveTab('notif')
+    window.addEventListener('ggnr-proto-user-account-open-notif', onOpenNotif)
+    return () => window.removeEventListener('ggnr-proto-user-account-open-notif', onOpenNotif)
+  }, [])
 
   const unreadNotifCount = notifItems.filter((n) => !n.read).length
 
@@ -187,109 +218,98 @@ export function UserAccountProtoPanel({
         onClick={onClose}
       />
       <div
+        ref={panelRef}
         className={cn(
           'fixed bottom-[7px] left-[72px] z-[90] flex w-[340px] flex-col overflow-hidden border border-border bg-background shadow-2xl',
-          panelSection === 'more' ? USER_ACCOUNT_PANEL_HEIGHT : USER_ACCOUNT_PANEL_MAX_HEIGHT,
+          USER_ACCOUNT_PANEL_HEIGHT,
           PANEL_SHELL_ROUND
         )}
         role="dialog"
-        aria-label={panelSection === 'more' ? '더보기' : '내 정보'}
+        aria-label="내 정보"
       >
-        <PanelHeader
-          section={panelSection}
-          onSectionChange={setPanelSection}
-          onClose={onClose}
+        <PanelHeader onClose={onClose} />
+        <ProfileSection profile={profile} loading={profileLoading} onLogout={handleLogout} />
+        <PanelTabBar
+          tabs={panelTabs}
+          activeTab={activeTab}
+          notifCount={notifItems.length}
+          notifUnreadCount={unreadNotifCount}
+          shootingCount={shootingCount}
+          onToggleTab={(tabId) => setActiveTab((prev) => (prev === tabId ? null : tabId))}
         />
-        {panelSection === 'more' && SHOW_USER_ACCOUNT_MORE_TAB ? (
-          <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-            <UserAccountMoreTab onClosePanel={onClose} />
+        {SHOW_USER_ACCOUNT_MORE_TAB ? (
+          <div className="flex shrink-0 flex-col">
+            <UserAccountMoreTab
+              onClosePanel={onClose}
+              suppressSettings={activeTab != null}
+              onOpenSettings={() => setActiveTab(null)}
+              matchHeightPx={panelHeightPx}
+              overlayClipPath={overlayClipPath}
+            />
           </div>
-        ) : (
-          <>
-            <ProfileSection profile={profile} loading={profileLoading} onLogout={handleLogout} />
-            <div className={cn('flex flex-col overflow-hidden', activeTab != null && 'min-h-0 flex-1')}>
-              <PanelTabBar
-                tabs={panelTabs}
-                activeTab={activeTab}
-                notifCount={notifItems.length}
-                notifUnreadCount={unreadNotifCount}
-                shootingCount={shootingCount}
-                onToggleTab={(tabId) => setActiveTab((prev) => (prev === tabId ? null : tabId))}
-              />
-              {shootingUiEnabled && activeTab === 'shooting' ? (
-                <MyShootingRequestTab
-                  open={open && activeTab === 'shooting'}
-                  onSelectRequest={(id) => {
-                    onClose()
-                    onSelectShootingRequest?.(id)
-                  }}
-                />
-              ) : null}
-              {activeTab === 'notif' ? (
-                <UserAccountProtoNotifTab
-                  items={notifItems}
-                  onDismiss={handleDismissNotif}
-                  onDismissAll={handleDismissAllNotifs}
-                  onMarkRead={handleMarkNotifRead}
-                  onOpenLedger={onOpenLedger}
-                  onOpenFee={onOpenFee}
-                  onClosePanel={onClose}
-                />
-              ) : null}
-            </div>
-          </>
-        )}
+        ) : null}
       </div>
+      {activeTab
+        ? createPortal(
+            <>
+              <button
+                type="button"
+                className="fixed inset-0 z-[120] bg-transparent"
+                style={overlayClipPath ? { clipPath: overlayClipPath } : undefined}
+                aria-label="닫기"
+                onClick={() => setActiveTab(null)}
+              />
+              <div
+                className={SIDE_MODAL}
+                style={panelHeightPx ? { height: panelHeightPx } : undefined}
+                role="dialog"
+                aria-label={activeTab === 'shooting' ? '촬영요청' : '알림'}
+              >
+                <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border bg-muted/30 px-2.5 py-2">
+                  <p className="text-xs font-medium text-foreground">
+                    {activeTab === 'shooting' ? '촬영요청' : '알림'}
+                  </p>
+                  <button
+                    type="button"
+                    className={cn(
+                      'shrink-0 rounded-sm p-1 text-muted-foreground hover:bg-muted/50 hover:text-foreground',
+                      PANEL_ROUND
+                    )}
+                    onClick={() => setActiveTab(null)}
+                    aria-label="닫기"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+                {shootingUiEnabled && activeTab === 'shooting' ? (
+                  <MyShootingRequestTab
+                    open={open && activeTab === 'shooting'}
+                    onSelectRequest={(id) => onSelectShootingRequest?.(id)}
+                  />
+                ) : null}
+                {activeTab === 'notif' ? (
+                  <UserAccountProtoNotifTab
+                    items={notifItems}
+                    onDismiss={handleDismissNotif}
+                    onDismissAll={handleDismissAllNotifs}
+                    onMarkRead={handleMarkNotifRead}
+                    onOpenLedger={onOpenLedger}
+                    onOpenFee={onOpenFee}
+                  />
+                ) : null}
+              </div>
+            </>,
+            document.body
+          )
+        : null}
     </>
   )
 }
 
-function PanelHeader({
-  section,
-  onSectionChange,
-  onClose,
-}: {
-  section: PanelSection
-  onSectionChange: (section: PanelSection) => void
-  onClose: () => void
-}) {
+function PanelHeader({ onClose }: { onClose: () => void }) {
   return (
     <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border bg-muted/30 px-2.5 py-2">
-      {SHOW_USER_ACCOUNT_MORE_TAB ? (
-        <div
-          className="flex min-w-0 flex-1 rounded-md bg-muted p-0.5"
-          role="tablist"
-          aria-label="화면 선택"
-        >
-          {(
-            [
-              { id: 'account', label: '내 정보' },
-              { id: 'more', label: '더보기' },
-            ] as const
-          ).map((item) => {
-            const active = section === item.id
-            return (
-              <button
-                key={item.id}
-                type="button"
-                role="tab"
-                aria-selected={active}
-                onClick={() => onSectionChange(item.id)}
-                className={cn(
-                  'flex-1 rounded-sm px-2 py-1 text-sm font-medium transition-colors',
-                  active
-                    ? 'bg-background text-foreground shadow-sm'
-                    : 'text-muted-foreground hover:text-foreground'
-                )}
-              >
-                {item.label}
-              </button>
-            )
-          })}
-        </div>
-      ) : (
-        <span className="text-xs font-semibold text-foreground">내 정보</span>
-      )}
+      <span className="text-xs font-semibold text-foreground">내 정보</span>
       <button
         type="button"
         className={cn(
@@ -314,7 +334,6 @@ function ProfileSection({
   loading: boolean
   onLogout: () => void
 }) {
-  const userInitials = profileInitials(profile.name)
   const phone = profile.phone || '—'
   const email = profile.email || '—'
 
@@ -322,10 +341,10 @@ function ProfileSection({
     <div className="shrink-0 border-b border-border bg-gradient-to-br from-primary/5 via-background to-muted/30 px-3 py-2.5">
       <div className="flex items-start gap-3">
         <div
-          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-primary text-sm font-semibold tracking-tight text-primary-foreground shadow-sm"
+          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-sm"
           aria-hidden
         >
-          {userInitials}
+          <User className="h-5 w-5" strokeWidth={2} />
         </div>
         <div className="min-w-0 flex-1 pt-0.5">
           <p className="truncate text-sm font-semibold text-foreground">

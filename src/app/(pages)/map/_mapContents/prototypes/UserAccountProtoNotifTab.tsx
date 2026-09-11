@@ -30,7 +30,6 @@ type Props = {
   onMarkRead: (item: ProtoNotifItem) => void
   onOpenLedger: (item: ProtoNotifItem) => void
   onOpenFee: (feeId: string) => void
-  onClosePanel: () => void
 }
 
 export function UserAccountProtoNotifTab({
@@ -40,7 +39,6 @@ export function UserAccountProtoNotifTab({
   onMarkRead,
   onOpenLedger,
   onOpenFee,
-  onClosePanel,
 }: Props) {
   const [expiryExpanded, setExpiryExpanded] = useState(true)
   const [feeExpanded, setFeeExpanded] = useState(true)
@@ -61,7 +59,6 @@ export function UserAccountProtoNotifTab({
     onMarkRead(item)
     if (item.target === 'fee') onOpenFee(item.targetId)
     else onOpenLedger(item)
-    onClosePanel()
   }
 
   if (totalCount === 0) {
