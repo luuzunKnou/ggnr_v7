@@ -109,7 +109,7 @@ function PreviewCard(props: PreviewCardProps) {
 
 export function NoticeLibraryPreview() {
   return (
-    <div className="flex flex-col gap-[23px] max-h-[350px]">
+    <div className="flex h-full min-h-0 flex-col gap-6">
       <PreviewCard
         title="공지사항"
         listPath="/notice"

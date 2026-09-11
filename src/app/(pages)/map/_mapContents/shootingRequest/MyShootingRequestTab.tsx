@@ -56,7 +56,7 @@ export function MyShootingRequestTab({ open, onSelectRequest }: Props) {
   if (sorted.length === 0) {
     return (
       <div className="min-h-0 flex-1 overflow-y-auto px-3 py-6">
-        <p className="text-center text-[11px] text-muted-foreground">신청 내역이 없습니다.</p>
+        <p className="text-center text-xs text-muted-foreground">신청 내역이 없습니다.</p>
       </div>
     );
   }
@@ -72,12 +72,12 @@ export function MyShootingRequestTab({ open, onSelectRequest }: Props) {
               className="w-full rounded-lg border border-border bg-background px-2.5 py-1.5 text-left transition-colors hover:border-border hover:bg-muted/50"
             >
               <div className="flex items-center justify-between gap-2">
-                <span className="rounded bg-muted/40 px-1.5 py-0.5 text-[10px] tabular-nums text-muted-foreground">
+                <span className="rounded bg-muted/40 px-1.5 py-0.5 text-xs tabular-nums text-muted-foreground">
                   {row.submittedAt}
                 </span>
                 <StatusBadge status={row.status} />
               </div>
-              <p className="mt-1 truncate text-[11px] font-medium text-foreground">
+              <p className="mt-1 truncate text-xs font-medium text-foreground">
                 {row.purpose || '(목적 없음)'}
                 <span className="font-normal text-muted-foreground">
                   {' · '}

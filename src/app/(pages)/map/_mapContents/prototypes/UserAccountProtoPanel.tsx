@@ -28,13 +28,15 @@ import {
 } from '../shootingRequest/MyShootingRequestTab'
 import { useShootingRequestUiEnabled } from '../shootingRequest/useShootingRequestUiEnabled'
 
-/** 프로토 내 정보 패널 */
+/** 프로토 내 정보 패널 — 알림이 최대로 펼쳐진 높이와 더보기 공통 */
 const PANEL_SHELL_ROUND = 'rounded-[5px]'
+const USER_ACCOUNT_PANEL_HEIGHT = 'h-[min(520px,calc(100vh-80px))]'
+const USER_ACCOUNT_PANEL_MAX_HEIGHT = 'max-h-[min(520px,calc(100vh-80px))]'
 const PANEL_ROUND = 'rounded-sm'
 const BUBBLE_ROUND = 'rounded-[2px]'
 const TEXT_BODY = 'text-xs'
-/** 더보기 탭 — 당분간 숨김 */
-export const SHOW_USER_ACCOUNT_MORE_TAB = false
+/** 더보기 — 즐겨찾기·검색·시스템별 기능 */
+export const SHOW_USER_ACCOUNT_MORE_TAB = true
 
 type MyProfileView = {
   usrId: string
@@ -172,12 +174,6 @@ export function UserAccountProtoPanel({
     setPanelSection('account')
   }, [open])
 
-  useEffect(() => {
-    if (!SHOW_USER_ACCOUNT_MORE_TAB && panelSection === 'more') {
-      setPanelSection('account')
-    }
-  }, [panelSection])
-
   const unreadNotifCount = notifItems.filter((n) => !n.read).length
 
   if (!open) return null
@@ -192,7 +188,8 @@ export function UserAccountProtoPanel({
       />
       <div
         className={cn(
-          'fixed bottom-3 left-[72px] z-[90] flex max-h-[min(520px,calc(100vh-80px))] w-[340px] flex-col overflow-hidden border border-border bg-background shadow-2xl',
+          'fixed bottom-[7px] left-[72px] z-[90] flex w-[340px] flex-col overflow-hidden border border-border bg-background shadow-2xl',
+          panelSection === 'more' ? USER_ACCOUNT_PANEL_HEIGHT : USER_ACCOUNT_PANEL_MAX_HEIGHT,
           PANEL_SHELL_ROUND
         )}
         role="dialog"
@@ -203,14 +200,13 @@ export function UserAccountProtoPanel({
           onSectionChange={setPanelSection}
           onClose={onClose}
         />
-        {panelSection === 'more' ? (
+        {panelSection === 'more' && SHOW_USER_ACCOUNT_MORE_TAB ? (
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
             <UserAccountMoreTab onClosePanel={onClose} />
           </div>
         ) : (
           <>
             <ProfileSection profile={profile} loading={profileLoading} onLogout={handleLogout} />
-
             <div className={cn('flex flex-col overflow-hidden', activeTab != null && 'min-h-0 flex-1')}>
               <PanelTabBar
                 tabs={panelTabs}
@@ -220,7 +216,6 @@ export function UserAccountProtoPanel({
                 shootingCount={shootingCount}
                 onToggleTab={(tabId) => setActiveTab((prev) => (prev === tabId ? null : tabId))}
               />
-
               {shootingUiEnabled && activeTab === 'shooting' ? (
                 <MyShootingRequestTab
                   open={open && activeTab === 'shooting'}
@@ -230,7 +225,6 @@ export function UserAccountProtoPanel({
                   }}
                 />
               ) : null}
-
               {activeTab === 'notif' ? (
                 <UserAccountProtoNotifTab
                   items={notifItems}
@@ -259,54 +253,53 @@ function PanelHeader({
   onSectionChange: (section: PanelSection) => void
   onClose: () => void
 }) {
-  const sectionTabs = (
-    [
-      { id: 'account', label: '내 정보' },
-      ...(SHOW_USER_ACCOUNT_MORE_TAB ? ([{ id: 'more', label: '더보기' }] as const) : []),
-    ] as const
-  )
   return (
-    <div
-      className={cn(
-        'flex shrink-0 items-end justify-between gap-2 border-b border-border bg-muted/30 px-3',
-      )}
-    >
-      <div className="flex min-w-0 items-end">
-        {sectionTabs.length <= 1 ? (
-          <span className="relative -mb-px inline-flex items-center border-b-2 border-foreground px-2.5 py-2.5 text-xs font-medium text-foreground">
-            내 정보
-          </span>
-        ) : (
-          sectionTabs.map((tab) => {
-            const active = section === tab.id
+    <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border bg-muted/30 px-2.5 py-2">
+      {SHOW_USER_ACCOUNT_MORE_TAB ? (
+        <div
+          className="flex min-w-0 flex-1 rounded-md bg-muted p-0.5"
+          role="tablist"
+          aria-label="화면 선택"
+        >
+          {(
+            [
+              { id: 'account', label: '내 정보' },
+              { id: 'more', label: '더보기' },
+            ] as const
+          ).map((item) => {
+            const active = section === item.id
             return (
               <button
-                key={tab.id}
+                key={item.id}
                 type="button"
-                onClick={() => onSectionChange(tab.id)}
+                role="tab"
+                aria-selected={active}
+                onClick={() => onSectionChange(item.id)}
                 className={cn(
-                  'relative -mb-px inline-flex items-center border-b-2 px-2.5 py-2.5 text-xs font-medium transition-colors',
+                  'flex-1 rounded-sm px-2 py-1 text-sm font-medium transition-colors',
                   active
-                    ? 'border-foreground text-foreground'
-                    : 'border-transparent text-muted-foreground hover:text-foreground'
+                    ? 'bg-background text-foreground shadow-sm'
+                    : 'text-muted-foreground hover:text-foreground'
                 )}
               >
-                {tab.label}
+                {item.label}
               </button>
             )
-          })
-        )}
-      </div>
+          })}
+        </div>
+      ) : (
+        <span className="text-xs font-semibold text-foreground">내 정보</span>
+      )}
       <button
         type="button"
         className={cn(
-          'mb-1.5 rounded-sm p-1 text-muted-foreground hover:bg-muted/50 hover:text-foreground',
+          'shrink-0 rounded-sm p-1 text-muted-foreground hover:bg-muted/50 hover:text-foreground',
           PANEL_ROUND
         )}
         onClick={onClose}
         aria-label="닫기"
       >
-        <X className="h-3.5 w-3.5" />
+        <X className="h-4 w-4" />
       </button>
     </div>
   )
@@ -326,7 +319,7 @@ function ProfileSection({
   const email = profile.email || '—'
 
   return (
-    <div className="shrink-0 border-b border-border bg-gradient-to-br from-primary/5 via-background to-muted/30 px-3 py-3">
+    <div className="shrink-0 border-b border-border bg-gradient-to-br from-primary/5 via-background to-muted/30 px-3 py-2.5">
       <div className="flex items-start gap-3">
         <div
           className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-primary text-sm font-semibold tracking-tight text-primary-foreground shadow-sm"
@@ -339,7 +332,7 @@ function ProfileSection({
             {loading ? '불러오는 중…' : profile.name}
           </p>
           {profile.dept ? (
-            <span className="mt-1 inline-flex rounded-full bg-background px-2 py-0.5 text-[10px] font-medium text-muted-foreground ring-1 ring-border">
+            <span className="mt-1 inline-flex rounded-full bg-background px-2 py-0.5 text-xs font-medium text-muted-foreground ring-1 ring-border">
               {profile.dept}
             </span>
           ) : null}
@@ -352,17 +345,17 @@ function ProfileSection({
             PANEL_ROUND
           )}
         >
-          <LogOut className="h-3 w-3" />
+          <LogOut className="h-3.5 w-3.5" />
           로그아웃
         </button>
       </div>
       <div className="mt-3 space-y-1.5 border-t border-border/70 pt-2.5">
         <p className="flex items-center gap-2 text-[11px] text-muted-foreground">
-          <Phone className="h-3 w-3 shrink-0 text-muted-foreground" />
+          <Phone className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
           <span className="tabular-nums">{loading ? '…' : phone}</span>
         </p>
         <p className="flex items-center gap-2 text-[11px] text-muted-foreground">
-          <Mail className="h-3 w-3 shrink-0 text-muted-foreground" />
+          <Mail className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
           <span className="truncate">{loading ? '…' : email}</span>
         </p>
       </div>
@@ -386,7 +379,7 @@ function PanelTabBar({
   onToggleTab: (tabId: ProtoPanelTabId) => void
 }) {
   return (
-    <div className="flex shrink-0 items-end gap-0 border-b border-border bg-background px-3">
+    <div className="flex shrink-0 items-center gap-1.5 border-b border-border bg-background px-3 py-2">
       {tabs.map((tab) => {
         const active = activeTab === tab.id
         const count =
@@ -400,20 +393,22 @@ function PanelTabBar({
             onClick={() => onToggleTab(tab.id)}
             aria-expanded={active}
             className={cn(
-              'relative -mb-px inline-flex items-center gap-1.5 border-b-2 px-2.5 py-2.5 text-xs font-medium transition-colors',
+              'inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium transition-colors',
               active
-                ? 'border-foreground text-foreground'
-                : 'border-transparent text-muted-foreground hover:text-foreground'
+                ? 'bg-foreground text-background'
+                : 'bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground'
             )}
           >
             {tab.label}
             {showCount ? (
               <span
                 className={cn(
-                  'inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full px-1 text-[10px] font-medium tabular-nums ring-1',
-                  emphasizeUnread
-                    ? 'bg-red-50 text-red-600 ring-red-100'
-                    : 'bg-muted/40 text-muted-foreground ring-border'
+                  'inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full px-1 text-[11px] font-medium tabular-nums',
+                  active
+                    ? 'bg-background/20 text-background'
+                    : emphasizeUnread
+                      ? 'bg-red-50 text-red-600'
+                      : 'bg-background text-muted-foreground'
                 )}
               >
                 {count}
