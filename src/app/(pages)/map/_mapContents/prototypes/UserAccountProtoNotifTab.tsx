@@ -9,7 +9,7 @@ import type { ProtoNotifItem } from '../bizNotif/bizNotifStore'
 const NOTIF_ROW =
   'flex items-center gap-2 border-b border-border/80 py-2 pl-4 pr-3 last:border-b-0 hover:bg-muted/50'
 const BTN_CLEAR =
-  'shrink-0 rounded-sm px-1.5 py-0.5 text-[11px] leading-none text-muted-foreground hover:text-black'
+  'shrink-0 rounded-sm px-1.5 py-0.5 text-xs leading-none text-muted-foreground hover:text-black'
 
 function parseNotifListFields(item: ProtoNotifItem): { useName: string; key: string } {
   if (item.listKey) {
@@ -75,7 +75,7 @@ export function UserAccountProtoNotifTab({
   return (
     <>
       <div className="flex shrink-0 items-center justify-between border-b border-border bg-muted/50 px-3 py-2">
-        <span className="text-[11px] text-muted-foreground">
+        <span className="text-xs text-muted-foreground">
           총 <span className="font-medium tabular-nums text-foreground">{totalCount}</span>건
           {unreadCount > 0 ? (
             <>
@@ -152,9 +152,9 @@ function NotifGroup({
           {summary}
         </span>
         {expanded ? (
-          <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+          <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" />
         ) : (
-          <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+          <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
         )}
       </button>
       {expanded ? (
@@ -194,7 +194,7 @@ function NotifListRow({
       >
         <span
           className={cn(
-            'truncate text-[11px] font-medium leading-snug tracking-tight',
+            'truncate text-xs font-medium leading-snug tracking-tight',
             item.read ? 'text-muted-foreground/80' : 'text-muted-foreground'
           )}
         >
@@ -205,7 +205,7 @@ function NotifListRow({
         </span>
         <span
           className={cn(
-            'shrink-0 truncate text-[11px] tabular-nums leading-snug',
+            'shrink-0 truncate text-xs tabular-nums leading-snug',
             item.read ? 'text-muted-foreground/80' : 'text-muted-foreground'
           )}
         >

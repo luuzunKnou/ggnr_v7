@@ -70,12 +70,12 @@ export function MapViewLink() {
         }
         window.location.assign(withBasePathNav("/map"))
       }}
-      className="group relative block min-h-[280px] w-full cursor-pointer overflow-hidden rounded-[5px] bg-slate-900 p-8 text-center text-white transition-opacity hover:opacity-95 flex flex-col items-center justify-center"
+      className="group relative flex h-full min-h-[280px] w-full cursor-pointer flex-col items-center justify-center overflow-hidden rounded-[5px] p-8 text-center text-white transition-opacity hover:opacity-95"
     >
       <video
         ref={videoRef}
         src={withBasePath("/image/indexImage/backgroundVideo_02.mp4")}
-        className="pointer-events-none absolute inset-0 z-0 h-full w-full object-cover"
+        className="pointer-events-none absolute inset-0 z-0 block h-full w-full max-w-none scale-x-[1.01] scale-y-[0.98] object-cover"
         muted
         loop
         autoPlay
