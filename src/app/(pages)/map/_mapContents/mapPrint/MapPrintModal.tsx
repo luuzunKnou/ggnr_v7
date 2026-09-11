@@ -165,14 +165,14 @@ export function MapPrintModal({ open, onClose, snapshot, backgroundMapGroups }: 
     setSidePanel(null);
     try {
       map?.renderSync();
-      await downloadMapPrintImage(paperRef.current, map);
+      await downloadMapPrintImage(paperRef.current, map, 'map-image.png', backgroundMapId);
     } catch (e) {
       console.error(e);
       window.alert('이미지 저장에 실패했습니다.');
     } finally {
       setBusy(false);
     }
-  }, [busy, map]);
+  }, [busy, map, backgroundMapId]);
 
   const handlePrint = useCallback(() => {
     if (!paperRef.current) return;

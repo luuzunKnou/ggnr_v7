@@ -58,8 +58,8 @@ export default function DashboardPage() {
 
   return (
     <SiteIndexShell>
-      <section className="mb-12 grid lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 grid md:grid-cols-2 gap-6 max-h-[355px]">
+      <section className="mb-12 grid items-stretch gap-6 lg:h-[355px] lg:grid-cols-3">
+        <div className="grid h-full min-h-[280px] gap-6 md:grid-cols-2 lg:col-span-2">
           <ParcelSlider slides={buildParcelSlides()} />
           <MapViewLink />
         </div>

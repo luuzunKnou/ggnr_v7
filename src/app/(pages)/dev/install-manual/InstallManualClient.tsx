@@ -245,17 +245,8 @@ npm -v`}</CodeBlock>
               </li>
               <li>
                 시연일 경우 nssm에 G드라이브 접근 권한 설정하기
-                <div className="mt-1 space-y-1">
-                  <p className="text-sm text-muted-foreground">
-                    프로젝트 env <code className="rounded bg-muted px-1">[demo]</code> 에{' '}
-                    <code className="rounded bg-muted px-1">NSSM_OBJECT_NAME</code> /{' '}
-                    <code className="rounded bg-muted px-1">NSSM_OBJECT_PASS</code> 가 있으면
-                    스타터·nssm 등록 시 자동 적용됩니다.
-                  </p>
-                  <CodeBlock>{`NSSM_OBJECT_NAME=.\\administrator
-NSSM_OBJECT_PASS=Windows2019`}</CodeBlock>
-                  <p className="text-sm text-muted-foreground">수동 설정:</p>
-                  <CodeBlock>{`nssm set GGNR_V7 ObjectName ".\\사용자이름" "비밀번호"`}</CodeBlock>
+                <div className="mt-1">
+                  <CodeBlock>{`.\\nssm.exe set GGNR_V7 ObjectName ".\\[Window 계정]" "[Window 비밀번호]"`}</CodeBlock>
                 </div>
               </li>
             </ol>

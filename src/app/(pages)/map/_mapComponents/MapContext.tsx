@@ -200,6 +200,15 @@ export type MapContextValue = {
   applyRiverBasicPlanMapPickRef: MutableRefObject<
     ((pick: { riverName: string; tab: 'river' | 'smallRiver' }) => void) | null
   >;
+  /**
+   * 상세에서 선택 중인 기본계획(연도·명·연장) — 색인도 식별 시 해당 건이 맞으면 우선 매칭.
+   * DetailPanel이 갱신.
+   */
+  riverBasicPlanSelectedPlanRef: MutableRefObject<{
+    planYear: string;
+    planName: string;
+    planLen: string;
+  } | null>;
   /** 지도에서 색인도(river_d_index) 클릭 시 상세 패널이 소비 후 null로 초기화 */
   riverBasicPlanIndexFromMap: {
     indexOgcFid: number;
@@ -634,6 +643,11 @@ export function MapContextProvider({ children }: { children: React.ReactNode }) 
   const applyRiverBasicPlanMapPickRef = useRef<
     ((pick: { riverName: string; tab: 'river' | 'smallRiver' }) => void) | null
   >(null);
+  const riverBasicPlanSelectedPlanRef = useRef<{
+    planYear: string;
+    planName: string;
+    planLen: string;
+  } | null>(null);
   const [riverBasicPlanIndexFromMap, setRiverBasicPlanIndexFromMap] = useState<{
     indexOgcFid: number;
     planYear?: string;
@@ -905,6 +919,7 @@ export function MapContextProvider({ children }: { children: React.ReactNode }) 
         riverBasicPlanSelectedRiver,
         setRiverBasicPlanSelectedRiver,
         applyRiverBasicPlanMapPickRef,
+        riverBasicPlanSelectedPlanRef,
         riverBasicPlanIndexFromMap,
         setRiverBasicPlanIndexFromMap,
         riverBasicPlanDrawingFromMap,

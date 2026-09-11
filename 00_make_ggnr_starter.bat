@@ -8,7 +8,7 @@ setlocal EnableExtensions EnableDelayedExpansion
 :: - node PATH = directory of "where node"
 :: - npm ci from package-lock (Y/N; auto if GGNR_START_NO_PAUSE=1)
 :: - then npm run build (GGNR_PROJECT/ENV -> BASE_PATH). fail => pause
-:: - stop previous GGNR / free port 3000 AFTER successful build (before nssm)
+:: - stop previous GGNR / free app port (PORT) AFTER successful build (before nssm)
 :: - ggnr_start.bat + ggnr_build_project.bat generated from project/type prompts
 :: - project / type / npm / overwrite / nssm asked once up front
 :: - nssm = root\nssm\win64\nssm.exe
@@ -28,7 +28,8 @@ set "NSSM_EXE=%ROOT%\nssm\win64\nssm.exe"
 if not exist "%NSSM_EXE%" set "NSSM_EXE=%ROOT%\nssm\win32\nssm.exe"
 set "LOGS_BAT=%ROOT%\00_open_ggnr_logs.bat"
 set "SERVICE_NAME=GGNR_V7"
-set "APP_PORT=3000"
+:: app listen port written into ggnr_start.bat as PORT= (Next default was 3000)
+set "APP_PORT=80"
 :: GGNR_START_NO_PAUSE is for ggnr_start/nssm only - not this starter window
 set "PAUSE_ON_FAIL=1"
 if /i "%GGNR_STARTER_NO_PAUSE%"=="1" set "PAUSE_ON_FAIL=0"
@@ -124,7 +125,7 @@ echo   nssm        = !DO_NSSM!
 echo   re-register = !DO_REREG!
 echo.
 
-:: admin before build if nssm=Y (keep service on :3000 during npm sync/build)
+:: admin before build if nssm=Y (keep service up during npm sync/build)
 if /i "!DO_NSSM!"=="Y" (
   call :require_admin
   if errorlevel 1 goto :fail_exit
@@ -258,7 +259,7 @@ if not exist "%LOGS_BAT%" (
   goto :fail_exit
 )
 
-:: stop after successful build so :3000 stays up during npm run build
+:: stop after successful build so app port stays up during npm run build
 echo.
 call :stop_previous_ggnr
 echo.
@@ -359,6 +360,9 @@ echo.
 echo :: project
 echo set "GGNR_PROJECT=%PROJECT_NAME%"
 echo set "GGNR_ENV=%ENV_NAME%"
+echo.
+echo :: Next listen port ^(scripts/run.ts uses process.env.PORT^)
+echo set "PORT=%APP_PORT%"
 echo.
 echo :: require next
 echo if not exist "node_modules\.bin\next.cmd" ^(

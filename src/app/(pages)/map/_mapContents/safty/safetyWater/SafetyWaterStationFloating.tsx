@@ -44,6 +44,7 @@ export function SafetyWaterStationFloating({
   cctvStationIds,
 }: Props) {
   const {
+    loading,
     stationListFilterChips,
     setStationListFilterChips,
     stationListSearchQuery,
@@ -152,6 +153,7 @@ export function SafetyWaterStationFloating({
           cctvOnly={cctvOnly}
           cctvStationIds={cctvStationIds}
           waterStatusById={waterStatusById}
+          loading={loading}
         />
       </div>
     </div>
