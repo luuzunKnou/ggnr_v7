@@ -4,6 +4,7 @@ import os from 'node:os';
 import { spawn } from 'node:child_process';
 import { nanoid } from 'nanoid';
 import { registerSourceVersion } from '@/service/sourceVersionRegistryService';
+import { NPM_INSTALL_DEV_ARGS, resolveNpmInstallEnv } from '@/lib/npmApplyEnv';
 
 export const SOURCE_BUNDLE_CHUNK_SIZE = 2 * 1024 * 1024;
 
@@ -133,51 +134,72 @@ async function copyIntoWorkspace(srcRoot: string, dstRoot: string): Promise<numb
 
 export type NpmInstallProgressCallback = (line: string) => void;
 
+function npmInstallFailureMessage(output: string, code: number | null, failLabel: string): string {
+  const lines = output
+    .split(/\r?\n/)
+    .map((l) => l.trimEnd())
+    .filter((l) => l.length > 0);
+  const hint =
+    output.match(/npm ERR![^\n]*/)?.[0] ??
+    output.match(/Cannot find module[^\n]*/)?.[0] ??
+    output.match(/'patch-package'[^\n]*/i)?.[0];
+  const tail = lines.slice(-15).join('\n');
+  const parts = [`${failLabel} (exit code ${code ?? '?'})`];
+  if (hint) parts.push(hint);
+  if (tail) parts.push(tail);
+  return parts.join('\n');
+}
+
 function spawnNpmWithLines(
   args: string[],
   workspaceRoot: string,
   onLine: ((line: string) => void) | undefined,
-  labels: { ok: string; fail: string }
+  labels: { ok: string; fail: string },
+  env?: NodeJS.ProcessEnv
 ): Promise<{ ok: boolean; message: string }> {
   return new Promise((resolve) => {
     const child = spawn('npm', args, {
       cwd: workspaceRoot,
       shell: true,
       windowsHide: true,
-      env: process.env,
+      env: env ?? process.env,
     });
-    let stderr = '';
+    let combined = '';
     const emitLines = (buf: Buffer) => {
       const text = buf.toString('utf-8');
+      combined += text;
       for (const line of text.split(/\r?\n/)) {
         const trimmed = line.trimEnd();
         if (trimmed) onLine?.(trimmed);
       }
     };
     child.stdout?.on('data', emitLines);
-    child.stderr?.on('data', (buf: Buffer) => {
-      emitLines(buf);
-      stderr += buf.toString('utf-8');
-    });
+    child.stderr?.on('data', emitLines);
     child.on('error', (err) => {
       resolve({ ok: false, message: err.message });
     });
     child.on('close', (code) => {
       if ((code ?? 1) === 0) resolve({ ok: true, message: labels.ok });
-      else resolve({ ok: false, message: stderr.trim() || `${labels.fail} (code=${code})` });
+      else resolve({ ok: false, message: npmInstallFailureMessage(combined, code, labels.fail) });
     });
   });
 }
 
+/**
+ * 소스 업로드 후 원격 npm install.
+ * production NODE_ENV 에서도 patch-package(postinstall)·tsx 등 devDependencies 가 필요하므로
+ * 최신소스 적용과 동일하게 --include=dev + env 보정.
+ */
 export async function runNpmInstallAtRoot(
   workspaceRoot: string,
   onLine?: NpmInstallProgressCallback
 ): Promise<{ ok: boolean; message: string }> {
   return spawnNpmWithLines(
-    ['install', '--no-audit', '--no-fund'],
+    [...NPM_INSTALL_DEV_ARGS],
     workspaceRoot,
     onLine,
-    { ok: 'npm install 완료', fail: 'npm install 실패' }
+    { ok: 'npm install 완료', fail: 'npm install 실패' },
+    resolveNpmInstallEnv()
   );
 }
 

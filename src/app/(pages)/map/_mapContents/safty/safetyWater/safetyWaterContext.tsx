@@ -262,7 +262,8 @@ export function SafetyWaterProvider({ children, statsKinds, onStatsKindsChange }
 
   const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
   const [refreshing, setRefreshing] = useState(false);
-  const [loading, setLoading] = useState(false);
+  /** 마운트 직후 관측소 조회 — 목록이 빈 채로 «결과 없음»이 보이지 않게 초기 true */
+  const [loading, setLoading] = useState(true);
   const [obsLoading, setObsLoading] = useState(false);
   const [listOpen, setListOpen] = useState(false);
   const [stations, setStations] = useState<SafetyWaterStation[]>([]);
