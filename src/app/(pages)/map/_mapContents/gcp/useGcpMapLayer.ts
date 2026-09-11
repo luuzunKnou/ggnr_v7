@@ -139,7 +139,7 @@ export function useGcpMapLayer({
     insertLayerBelowServiceLayer(map, highlightLayer)
     highlightLayerRef.current = highlightLayer
 
-    const onClick = (evt: MapBrowserEvent<UIEvent>) => {
+    const onClick = (evt: MapBrowserEvent<PointerEvent>) => {
       if (placeModeRef.current) {
         const coord = evt.coordinate
         if (!coord || coord.length < 2) return

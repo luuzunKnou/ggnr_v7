@@ -25,7 +25,6 @@ export function GcpInspectHistoryDialog({
 }: Props) {
   const titleId = useId()
   const close = useCallback(() => onClose(), [onClose])
-  const label = item ? statusLabel(item.status) : '—'
 
   useEffect(() => {
     if (!open || overlayWidthPx <= 0) return
@@ -74,10 +73,10 @@ export function GcpInspectHistoryDialog({
                 <span
                   className={cn(
                     'inline-block rounded-full px-1.5 py-0.5 text-[11px] font-semibold',
-                    statusBadgeClass(label)
+                    statusBadgeClass(statusLabel(item.status))
                   )}
                 >
-                  {label}
+                  {statusLabel(item.status)}
                 </span>
               </DetailAttrRow>
               <DetailAttrRow label="담당자">{inspection.inspector || '—'}</DetailAttrRow>
