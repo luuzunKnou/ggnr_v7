@@ -27,8 +27,12 @@ import {
 } from '@/lib/syncLogGeom';
 
 import { getGeoServerInternalBase } from '@/lib/geoserverUrl';
+import { resolveGgnrDataDir } from '@/lib/turbopackFsPath';
 
-const GGNR_DATA_DIR = process.env.GGNR_DATA_DIR ?? 'd:\\ggnr_data_dir';
+/** 데이터 루트 — GGNR_DATA_UNC_ROOT(G:→UNC) 적용 */
+function getGgnrDataDir(): string {
+  return resolveGgnrDataDir();
+}
 const GEOSERVER_AUTH = Buffer.from('admin:geoserver', 'utf8').toString('base64');
 const WORKSPACE = 'ggnr';
 
@@ -503,7 +507,7 @@ async function prepareShpWithValidDbfFieldNames(absoluteShpPath: string): Promis
     if (changes.length === 0) return { shpPath: absoluteShpPath, cleanup: noop };
 
     const tmpDir = path.join(
-      GGNR_DATA_DIR,
+      getGgnrDataDir(),
       'tmp',
       `shp_dbf_fix_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
     );
@@ -537,7 +541,7 @@ async function prepareShpWithValidDbfFieldNames(absoluteShpPath: string): Promis
  */
 export async function getShpPrjEpsg(params: { pathOrResult: string }): Promise<{ success: boolean; epsg: number | null; error?: string }> {
   try {
-    const absolutePath = path.join(GGNR_DATA_DIR, params.pathOrResult.replace(/\//g, path.sep));
+    const absolutePath = path.join(getGgnrDataDir(), params.pathOrResult.replace(/\//g, path.sep));
     const dir = path.dirname(absolutePath);
     const basename = path.basename(absolutePath, '.shp');
     const prjPath = path.join(dir, `${basename}.prj`);
@@ -559,7 +563,7 @@ export async function getShpPrjEpsg(params: { pathOrResult: string }): Promise<{
  */
 export async function getShpEpsg(params: { pathOrResult: string }): Promise<{ success: boolean; epsg: number | null; error?: string }> {
   try {
-    const absolutePath = path.join(GGNR_DATA_DIR, params.pathOrResult.replace(/\//g, path.sep));
+    const absolutePath = path.join(getGgnrDataDir(), params.pathOrResult.replace(/\//g, path.sep));
     const dir = path.dirname(absolutePath);
     const basename = path.basename(absolutePath, '.shp');
     const folderName = path.basename(dir);
@@ -631,7 +635,7 @@ export async function detectShpCrsCandidates(params: { pathOrResult: string }): 
   try {
     const pathOrResult = params?.pathOrResult?.trim();
     if (!pathOrResult) return { success: false, error: 'pathOrResult가 필요합니다.' };
-    const absolutePath = path.join(GGNR_DATA_DIR, pathOrResult.replace(/\//g, path.sep));
+    const absolutePath = path.join(getGgnrDataDir(), pathOrResult.replace(/\//g, path.sep));
     const dir = path.dirname(absolutePath);
     const basename = path.basename(absolutePath, '.shp');
     if (isShpBundleEmptyOrUnreadable(dir, basename)) {
@@ -726,7 +730,7 @@ export async function getShpRawGeojson(params: { pathOrResult: string; maxFeatur
   try {
     const pathOrResult = params?.pathOrResult?.trim();
     if (!pathOrResult) return { success: false, error: 'pathOrResult가 필요합니다.' };
-    const absolutePath = path.join(GGNR_DATA_DIR, pathOrResult.replace(/\//g, path.sep));
+    const absolutePath = path.join(getGgnrDataDir(), pathOrResult.replace(/\//g, path.sep));
     if (!fsSync.existsSync(absolutePath)) return { success: false, error: '파일을 찾을 수 없습니다.' };
 
     const dir = path.dirname(absolutePath);
@@ -742,7 +746,7 @@ export async function getShpRawGeojson(params: { pathOrResult: string; maxFeatur
     // 미리보기만 필요하므로 변환 단계에서부터 feature 수 제한 (대용량 SHP 전체 GeoJSON화 방지)
     const maxFeatures = Math.max(1, Math.min(params?.maxFeatures ?? 2000, 5000));
 
-    const tmpDir = path.join(GGNR_DATA_DIR, 'tmp');
+    const tmpDir = path.join(getGgnrDataDir(), 'tmp');
     await fs.mkdir(tmpDir, { recursive: true });
     tmpOut = path.join(tmpDir, `shp_raw_preview_${Date.now()}_${Math.random().toString(36).slice(2)}.geojson`);
 
@@ -1033,10 +1037,10 @@ export async function getShpStatusList(params?: { relativePath?: string; recursi
   rows: ShpStatusRow[];
   path: string;
 }> {
-  const baseShp = path.join(GGNR_DATA_DIR, 'shp_data');
+  const baseShp = path.join(getGgnrDataDir(), 'shp_data');
   const relativePath = (params?.relativePath ?? 'shp_data').trim().replace(/^[/\\]+/, '');
   const dir = relativePath
-    ? path.join(GGNR_DATA_DIR, relativePath)
+    ? path.join(getGgnrDataDir(), relativePath)
     : baseShp;
   if (!dir.startsWith(baseShp)) {
     return { rows: [], path: baseShp };
@@ -1046,7 +1050,7 @@ export async function getShpStatusList(params?: { relativePath?: string; recursi
   const recursive = params?.recursive === true && relNorm !== 'shp_data';
 
   try {
-    await fs.mkdir(path.join(GGNR_DATA_DIR, 'shp_data'), { recursive: true });
+    await fs.mkdir(path.join(getGgnrDataDir(), 'shp_data'), { recursive: true });
   } catch {
     // ignore
   }
@@ -1465,7 +1469,7 @@ export async function createTableFromShp(params: {
   const pathOrResult = params?.pathOrResult?.trim();
   if (!pathOrResult) return { success: false, error: 'pathOrResult가 필요합니다.' };
 
-  const absolutePath = path.join(GGNR_DATA_DIR, pathOrResult.replace(/\//g, path.sep));
+  const absolutePath = path.join(getGgnrDataDir(), pathOrResult.replace(/\//g, path.sep));
   const basename = path.basename(pathOrResult, '.shp');
   const override = String(params.tableNameOverride ?? '').trim();
   const tableName = override
@@ -1894,7 +1898,7 @@ export async function createGeoServerLayer(params: {
   if (!pathOrResult) return { success: false, error: 'pathOrResult가 필요합니다.' };
 
   const layerName = shpTableNameFromRelPath(pathOrResult);
-  const absoluteShp = path.join(GGNR_DATA_DIR, pathOrResult.replace(/\//g, path.sep));
+  const absoluteShp = path.join(getGgnrDataDir(), pathOrResult.replace(/\//g, path.sep));
 
   const listRes = await getLayerTableList();
   if (!listRes.success || !listRes.tables) {
@@ -1933,7 +1937,7 @@ export async function createGeoServerStyleForShp(params: {
   if (!pathOrResult) return { success: false, error: 'pathOrResult가 필요합니다.' };
 
   const layerName = shpTableNameFromRelPath(pathOrResult);
-  const absoluteShp = path.join(GGNR_DATA_DIR, pathOrResult.replace(/\//g, path.sep));
+  const absoluteShp = path.join(getGgnrDataDir(), pathOrResult.replace(/\//g, path.sep));
 
   try {
     const geometryType = params.geometryType ?? (await getShpGeometryType(absoluteShp));
@@ -2311,7 +2315,7 @@ export async function runShpPostProcess(params: {
   if (!pathOrResult) return { success: false, error: 'pathOrResult가 필요합니다.' };
 
   const baseUrl = (params?.url ?? getGeoServerInternalBase()).replace(/\/$/, '');
-  const absolutePath = path.join(GGNR_DATA_DIR, pathOrResult.replace(/\//g, path.sep));
+  const absolutePath = path.join(getGgnrDataDir(), pathOrResult.replace(/\//g, path.sep));
   const basename = path.basename(pathOrResult, '.shp');
   const normalizedName = shpTableNameFromRelPath(pathOrResult);
 
@@ -2396,7 +2400,7 @@ export async function savePostProcessLog(params: {
 }): Promise<{ success: boolean; logPath?: string; error?: string }> {
   try {
     const rp = (params.relativePath ?? 'shp_data').trim().replace(/^[/\\]+/, '');
-    const dir = path.join(GGNR_DATA_DIR, rp);
+    const dir = path.join(getGgnrDataDir(), rp);
     await fs.mkdir(dir, { recursive: true });
 
     const now = new Date();
@@ -2441,7 +2445,7 @@ export async function savePostProcessLog(params: {
     lines.push('');
 
     await fs.writeFile(logPath, lines.join('\n'), 'utf-8');
-    return { success: true, logPath: path.relative(GGNR_DATA_DIR, logPath).replace(/\\/g, '/') };
+    return { success: true, logPath: path.relative(getGgnrDataDir(), logPath).replace(/\\/g, '/') };
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);
     return { success: false, error: msg };
@@ -2855,7 +2859,7 @@ export async function compareShpSchemaWithTable(params: {
 
   if (!pathOrResult) return fail('pathOrResult가 필요합니다.');
 
-  const absolutePath = path.join(GGNR_DATA_DIR, pathOrResult.replace(/\//g, path.sep));
+  const absolutePath = path.join(getGgnrDataDir(), pathOrResult.replace(/\//g, path.sep));
   const basename = path.basename(pathOrResult, '.shp');
   const tableName = shpTableNameFromRelPath(pathOrResult);
 
@@ -3406,7 +3410,7 @@ export async function resolveShpSchemaMismatch(params: {
     log.push(`임시 테이블 ${tmpName} → ${tableName} 로 교체`);
 
     try {
-      const absolutePath = path.join(GGNR_DATA_DIR, pathOrResult.replace(/\//g, path.sep));
+      const absolutePath = path.join(getGgnrDataDir(), pathOrResult.replace(/\//g, path.sep));
       const geometryType = await getShpGeometryType(absolutePath).catch(() => null);
       await ensureDefineLayerEntry(tableName, geometryType ?? 'POLYGON', undefined, dbSchema, true);
     } catch {
@@ -3896,7 +3900,7 @@ async function fetchShpFeatureGeoJsonByKey(params: {
   sourceSrsOverride?: string;
 }): Promise<{ success: true; geometry: Record<string, unknown> } | { success: false; error: string }> {
   const pathOrResult = params.pathOrResult.trim();
-  const absolutePath = path.join(GGNR_DATA_DIR, pathOrResult.replace(/\//g, path.sep));
+  const absolutePath = path.join(getGgnrDataDir(), pathOrResult.replace(/\//g, path.sep));
   try {
     await fs.stat(absolutePath);
   } catch {
@@ -3915,7 +3919,7 @@ async function fetchShpFeatureGeoJsonByKey(params: {
   }
   const dbfEncoding = resolveShapefileDbfEncoding(dir, basename);
 
-  const tmpDir = path.join(GGNR_DATA_DIR, 'tmp');
+  const tmpDir = path.join(getGgnrDataDir(), 'tmp');
   await fs.mkdir(tmpDir, { recursive: true });
   const tmpOut = path.join(tmpDir, `shp_feat_${Date.now()}_${Math.random().toString(36).slice(2)}.geojson`);
 
@@ -3984,7 +3988,7 @@ async function importShpToSyncTempForHydrate(params: {
   const pathOrResult = params.pathOrResult.trim();
   const tableName = safeTableName(params.tableName);
   const syncTableName = `_sync_${tableName}`;
-  const absolutePath = path.join(GGNR_DATA_DIR, pathOrResult.replace(/\//g, path.sep));
+  const absolutePath = path.join(getGgnrDataDir(), pathOrResult.replace(/\//g, path.sep));
   try {
     await fs.stat(absolutePath);
   } catch {
@@ -4417,7 +4421,7 @@ export async function compareShpWithTable(params: {
       ? Math.trunc(Number(params.dhKey))
       : null;
 
-  const absolutePath = path.join(GGNR_DATA_DIR, pathOrResult.replace(/\//g, path.sep));
+  const absolutePath = path.join(getGgnrDataDir(), pathOrResult.replace(/\//g, path.sep));
   const basename = path.basename(pathOrResult, '.shp');
   const tableName = shpTableNameFromRelPath(pathOrResult);
   const syncTableName = `_sync_${tableName}`;
@@ -6726,7 +6730,7 @@ export async function readShpValues(params: {
     return { success: false, rows: {}, error: '필수 파라미터가 누락되었습니다.' };
   }
 
-  const absolutePath = path.join(GGNR_DATA_DIR, shpPath.replace(/\//g, path.sep));
+  const absolutePath = path.join(getGgnrDataDir(), shpPath.replace(/\//g, path.sep));
   const syncTableName = `_sync_shpread_${tableName}`;
 
   try { await fs.stat(absolutePath); } catch {
@@ -6802,7 +6806,7 @@ export async function exportLayerTableToShp(params: {
   if (!tableName) return { success: false, error: 'tableName이 필요합니다.' };
   const schema = params?.schema === 'public_layer' ? 'public_layer' : 'layer';
 
-  const tmpBase = path.join(GGNR_DATA_DIR, 'tmp');
+  const tmpBase = path.join(getGgnrDataDir(), 'tmp');
   const tempDir = path.join(tmpBase, `shp_export_${schema}_${tableName}_${Date.now()}`);
   const outShp = path.join(tempDir, `${tableName}.shp`);
 

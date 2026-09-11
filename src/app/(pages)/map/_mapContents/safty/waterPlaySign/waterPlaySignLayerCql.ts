@@ -21,7 +21,7 @@ export function buildWaterPlaySignListCql(f: WaterPlaySignLayerFilter): string |
   if (kw) {
     const e = escCql(kw);
     parts.push(
-      `(sido ILIKE '%${e}%' OR sgg ILIKE '%${e}%' OR addr ILIKE '%${e}%' OR addr_detail ILIKE '%${e}%' OR gubun ILIKE '%${e}%' OR remark ILIKE '%${e}%')`
+      `(sido ILIKE '%${e}%' OR sgg ILIKE '%${e}%' OR addr ILIKE '%${e}%' OR addr_detail ILIKE '%${e}%' OR concatenate(addr, ' ', addr_detail) ILIKE '%${e}%' OR gubun ILIKE '%${e}%' OR remark ILIKE '%${e}%')`
     );
   }
   const boundary = cqlIntersectsBoundaryWkt(f.boundaryWkt);

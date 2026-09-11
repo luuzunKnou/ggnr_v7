@@ -5,10 +5,9 @@ import { and, eq } from 'drizzle-orm';
 import { db } from '@/database/db';
 import { tifUnit } from '@/database/schema/tif_unit';
 import { getSessionUsrId } from '@/lib/auth/guard';
+import { resolveGgnrDataDir } from '@/lib/turbopackFsPath';
 
 export const dynamic = 'force-dynamic';
-
-const GGNR_DATA_DIR = process.env.GGNR_DATA_DIR ?? 'd:\\ggnr_data_dir';
 
 /**
  * GET /api/aerial/ortho-tiles/{tuKey}/{z}/{x}/{y}.jpg
@@ -63,7 +62,7 @@ export async function GET(
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
-  const base = path.resolve(GGNR_DATA_DIR);
+  const base = path.resolve(resolveGgnrDataDir());
   const resolved = path.resolve(base, ...tilesRel.split('/').filter(Boolean), z, x, yFile);
   const rel = path.relative(base, resolved);
   if (!rel || rel.startsWith('..') || path.isAbsolute(rel)) {
