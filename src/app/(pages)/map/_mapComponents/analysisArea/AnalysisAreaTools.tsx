@@ -14,7 +14,7 @@ import { cn } from '@/lib/utils';
 import { Button } from '@/app/shadcnComponents/ui/button';
 import { useMapContext } from '../MapContext';
 import { scheduleAnimateMapToCenter3857, scheduleFitMapToExtent3857 } from '../config/mapAutoNavigation';
-import { MAP_AUTO_NAV_MAX_ZOOM } from '../config/mapDefaults';
+import { MAP_AUTO_NAV_MAX_ZOOM, MAP_LOCAL_VIEW_MIN_ZOOM } from '../config/mapDefaults';
 import { transformCoordinate } from '../services/coordinateService';
 import { ANALYSIS_AREA_STYLE } from './analysisArea.style';
 import type {
@@ -109,9 +109,9 @@ const TARGET_VIEWPORT_FILL = 1.5;
 
 /**
  * 진입 시 시군구 맞춤을 건너뛸 최소 줌.
- * 이미 동네·필지 스케일(16~19)이면 강제 축소하지 않고 현재 뷰를 유지한다.
+ * 이미 동네·필지 스케일(MAP_LOCAL_VIEW_MIN_ZOOM+)이면 강제 축소하지 않고 현재 뷰를 유지한다.
  */
-const SKIP_PROJECT_FIT_MIN_ZOOM = 16;
+const SKIP_PROJECT_FIT_MIN_ZOOM = MAP_LOCAL_VIEW_MIN_ZOOM;
 
 function extent5181To3857(
   minX: number,
