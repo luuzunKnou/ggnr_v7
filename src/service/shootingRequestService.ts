@@ -121,7 +121,12 @@ export async function create(params: CreateParams = {}) {
   if (!applicantRankName) throwHttp(400, '신청자(직급/성명)를 입력하세요.');
   if (!purpose) throwHttp(400, '신청목적을 입력하세요.');
   if (!shootTypeRaw || !isShootType(shootTypeRaw)) throwHttp(400, '촬영형태를 선택하세요.');
-  if (!hasScope || !scopeWkt) throwHttp(400, '촬영 범위를 지도에서 지정하세요.');
+
+  /** 항공영상은 시·군 전역 성격 — 촬영지역(범위) 미필수 */
+  const skipScope = shootTypeRaw === 'satellite';
+  if (!skipScope && (!hasScope || !scopeWkt)) {
+    throwHttp(400, '촬영 범위를 지도에서 지정하세요.');
+  }
 
   const now = nowIso();
   const [row] = await db
@@ -133,10 +138,10 @@ export async function create(params: CreateParams = {}) {
       phone: emptyToNull(params.phone),
       manager: emptyToNull(params.manager),
       purpose,
-      address: emptyToNull(params.address),
-      hasScope: true,
-      scopeLabel: emptyToNull(params.scopeLabel) ?? '범위 지정됨',
-      scopeWkt,
+      address: skipScope ? null : emptyToNull(params.address),
+      hasScope: skipScope ? false : true,
+      scopeLabel: skipScope ? null : (emptyToNull(params.scopeLabel) ?? '범위 지정됨'),
+      scopeWkt: skipScope ? null : scopeWkt,
       shootDate: emptyToNull(params.shootDate),
       useDate: emptyToNull(params.useDate),
       shootType: shootTypeRaw,
