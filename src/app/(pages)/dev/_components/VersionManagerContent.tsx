@@ -897,14 +897,21 @@ export function VersionManagerContent() {
             <Button type="button" variant="outline" disabled title="준비 중">
               최신소스 일부 적용(준비중)
             </Button>
-            <Button
-              type="button"
-              variant="outline"
-              disabled={!busy}
-              onClick={() => abortRef.current?.abort()}
+            <span
+              className="inline-flex"
+              title={!busy ? '적용이 진행 중이 아닙니다.' : undefined}
             >
-              취소
-            </Button>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={!busy}
+                title={busy ? '취소' : undefined}
+                onClick={() => abortRef.current?.abort()}
+                className={!busy ? undefined : 'cursor-pointer'}
+              >
+                취소
+              </Button>
+            </span>
           </div>
           <ProgressBar />
           <p className="text-xs text-muted-foreground">{progress.message}</p>

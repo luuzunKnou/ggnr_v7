@@ -375,6 +375,15 @@ export function SourceCodeUploaderContent() {
       ? 'npm install 중에는 취소할 수 없습니다. 완료될 때까지 기다려 주세요.'
       : '원격 병합/압축 해제 중에는 취소할 수 없습니다. 완료될 때까지 기다려 주세요.'
     : '원격 병합/압축 해제(또는 npm install) 중에는 취소할 수 없습니다. 완료될 때까지 기다려 주세요.';
+  const cancelDisabled = typeChecking ? false : !uploading || cancelBlocked;
+  const cancelActiveTitle = typeChecking
+    ? '타입 검사 취소'
+    : uploading
+      ? '업로드 취소'
+      : '취소';
+  const cancelDisabledTitle = cancelBlocked
+    ? cancelBlockedTitle
+    : '업로드가 진행 중이 아닙니다.';
 
   useLayoutEffect(() => {
     const el = liveLogScrollRef.current;
@@ -1113,49 +1122,42 @@ export function SourceCodeUploaderContent() {
             {typeChecking ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
             현재 코드 자동 업로드
           </Button>
-          <Button
-            type="button"
-            variant="outline"
-            disabled={
-              typeChecking
-                ? false
-                : !uploading || cancelBlocked
-            }
-            title={
-              typeChecking
-                ? '타입 검사 취소'
-                : cancelBlocked
-                  ? cancelBlockedTitle
-                  : uploading
-                    ? '업로드 취소'
-                    : '취소'
-            }
-            onClick={() => {
-              if (typeChecking) {
-                abortTypeCheck();
-                return;
-              }
-              if (cancelBlocked) return;
-              const uploadId = remoteUploadIdRef.current;
-              const progressId = progressIdRef.current;
-              if (uploadId || progressId) {
-                void fetch('/api/source/upload/cancel', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({
-                    uploadId: uploadId || undefined,
-                    progressId: progressId || undefined,
-                    reason: 'user_abort',
-                  }),
-                  keepalive: true,
-                }).catch(() => {});
-              }
-              abortControllerRef.current?.abort();
-            }}
-            className="cursor-pointer"
+          <span
+            className="inline-flex"
+            title={cancelDisabled ? cancelDisabledTitle : undefined}
           >
-            취소
-          </Button>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={cancelDisabled}
+              title={cancelDisabled ? undefined : cancelActiveTitle}
+              onClick={() => {
+                if (typeChecking) {
+                  abortTypeCheck();
+                  return;
+                }
+                if (cancelBlocked) return;
+                const uploadId = remoteUploadIdRef.current;
+                const progressId = progressIdRef.current;
+                if (uploadId || progressId) {
+                  void fetch('/api/source/upload/cancel', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      uploadId: uploadId || undefined,
+                      progressId: progressId || undefined,
+                      reason: 'user_abort',
+                    }),
+                    keepalive: true,
+                  }).catch(() => {});
+                }
+                abortControllerRef.current?.abort();
+              }}
+              className={cancelDisabled ? undefined : 'cursor-pointer'}
+            >
+              취소
+            </Button>
+          </span>
           {lastSavedRoot && <span className="truncate text-xs text-muted-foreground">전송 대상: {lastSavedRoot}</span>}
         </div>
       </div>
