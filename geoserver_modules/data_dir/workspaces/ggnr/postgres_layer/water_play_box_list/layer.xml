@@ -1,0 +1,19 @@
+<layer>
+  <name>water_play_box_list</name>
+  <id>LayerInfoImpl--79762301:1a0848f7abc:-7317</id>
+  <type>VECTOR</type>
+  <defaultStyle>
+    <id>StyleInfoImpl--79762301:1a0848f7abc:-7da3</id>
+  </defaultStyle>
+  <resource class="featureType">
+    <id>FeatureTypeInfoImpl--79762301:1a0848f7abc:-7318</id>
+  </resource>
+  <queryable>true</queryable>
+  <opaque>false</opaque>
+  <attribution>
+    <logoWidth>0</logoWidth>
+    <logoHeight>0</logoHeight>
+  </attribution>
+  <dateCreated>2026-09-14 08:22:56.205 UTC</dateCreated>
+  <dateModified>2026-09-14 08:23:04.478 UTC</dateModified>
+</layer>

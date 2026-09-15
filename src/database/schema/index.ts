@@ -66,5 +66,7 @@ export * from './usr_ser_grant';
 export * from './usr_sys_grant';
 export * from './ut';
 export * from './village_patrol';
+export * from './water_play_box_list';
 export * from './water_play_sign';
+export * from './water_play_sign_list';
 export * from './work_unit';

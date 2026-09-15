@@ -1,23 +1,25 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { useSession } from "next-auth/react";
-import { Search, RefreshCw, X, Download, Layers } from "lucide-react";
+import { Search, X, Download, Layers } from "lucide-react";
 import { call } from "@/lib/api";
 import type { DefineCodeRow } from "@/lib/defineLayerCodeDisplay";
 import { cn } from "@/lib/utils";
 import { useMapContext } from "../../../_mapComponents/MapContext";
 import {
+  WATER_PLAY_BOX_LIST_GEO_TABLE,
   WATER_PLAY_MGMT_ZONE_GEO_TABLE,
   WATER_PLAY_SIGN_GEO_TABLE,
+  WATER_PLAY_SIGN_LIST_GEO_TABLE,
   refreshSafetyMapGeoLayer,
 } from "../../../_mapComponents/layerFactory/safetydataMapLayerFactory";
 import { LAYER_ROW_NEW_ID } from "../../../_mapComponents/layerRowEdit";
 import { LayerRowAddButton } from "../../../_mapComponents/layerRowEdit/LayerRowAddButton";
 import { LayerRowPanelButton } from "../../../_mapComponents/layerRowEdit/LayerRowPanelButton";
 import type { WaterPlaySignListItem } from "@/service/waterPlaySignService";
-import { useWaterPlaySignMapHighlight } from "./useWaterPlaySignMapHighlight";
 import { useWaterPlaySignMapClick } from "./useWaterPlaySignMapClick";
+import { useWaterPlaySignParcelOutline } from "./useWaterPlaySignParcelOutline";
 import { WaterPlayMgmtZoneDetailFloating } from "./WaterPlayMgmtZoneDetailFloating";
 import { SafetyLayerListTable } from "../SafetyLayerListTable";
 import { useSafetyLayerListColumns } from "../useSafetyLayerListColumns";
@@ -48,6 +50,17 @@ type Props = {
 const WATER_PLAY_SIGN_TABLE = "water_play_sign";
 const GUBUN_CODE_KEY = `${WATER_PLAY_SIGN_TABLE}__gubun`;
 
+type WaterPlayLayerKindFilter = "all" | "box" | "sign";
+
+const WATER_PLAY_LAYER_KIND_FILTERS: {
+  value: WaterPlayLayerKindFilter;
+  label: string;
+}[] = [
+  { value: "all", label: "전체" },
+  { value: "box", label: "구조함" },
+  { value: "sign", label: "표지판" },
+];
+
 export function WaterPlaySignPanel({
   onClose,
   selectedDetailId,
@@ -76,6 +89,7 @@ export function WaterPlaySignPanel({
   );
   const [sorts, setSorts] = useState<WaterPlaySignListSortSpec[]>([]);
   const [exporting, setExporting] = useState(false);
+  const [layerKindFilter, setLayerKindFilter] = useState<WaterPlayLayerKindFilter>("all");
   const [mgmtDetailRow, setMgmtDetailRow] = useState<Record<string, unknown> | null>(null);
   const listScrollRef = useRef<HTMLDivElement | null>(null);
   const { columns, columnsLoading } = useSafetyLayerListColumns(WATER_PLAY_SIGN_TABLE);
@@ -109,16 +123,16 @@ export function WaterPlaySignPanel({
     };
   }, [listRefreshKey]);
 
+  const handleMgmtHit = useCallback((row: Record<string, unknown>) => {
+    setMgmtDetailRow(row);
+  }, []);
+
   const selectedRow = useMemo(() => {
     if (selectedDetailId == null || selectedDetailId === LAYER_ROW_NEW_ID) return null;
     return items.find((r) => r.id === selectedDetailId) ?? null;
   }, [items, selectedDetailId]);
 
-  useWaterPlaySignMapHighlight(mapReady, selectedRow);
-
-  const handleMgmtHit = useCallback((row: Record<string, unknown>) => {
-    setMgmtDetailRow(row);
-  }, []);
+  useWaterPlaySignParcelOutline(mapReady, selectedRow);
 
   useWaterPlaySignMapClick({
     mapReady,
@@ -262,42 +276,115 @@ export function WaterPlaySignPanel({
 
     if (!hasFilter) {
       applyWaterPlaySignLayerCql(mapInst, null);
+      mapContextRef.current?.setServiceWmsCqlByLayer?.((prev) => {
+        if (!prev) return prev;
+        const next = { ...prev };
+        delete next[WATER_PLAY_BOX_LIST_GEO_TABLE];
+        delete next[WATER_PLAY_SIGN_LIST_GEO_TABLE];
+        return Object.keys(next).length === 0 ? null : next;
+      });
       return;
     }
     if (loading) return;
 
-    applyWaterPlaySignLayerCql(
-      mapInst,
-      buildSafetyLayerIdInCql(items.map((r) => r.id))
-    );
+    const cql = buildSafetyLayerIdInCql(items.map((r) => r.id));
+    applyWaterPlaySignLayerCql(mapInst, cql);
+    mapContextRef.current?.setServiceWmsCqlByLayer?.((prev) => {
+      const next = { ...(prev ?? {}) };
+      if (cql) {
+        next[WATER_PLAY_BOX_LIST_GEO_TABLE] = cql;
+        next[WATER_PLAY_SIGN_LIST_GEO_TABLE] = cql;
+      } else {
+        delete next[WATER_PLAY_BOX_LIST_GEO_TABLE];
+        delete next[WATER_PLAY_SIGN_LIST_GEO_TABLE];
+      }
+      return Object.keys(next).length === 0 ? null : next;
+    });
   }, [mapReady, appliedKeyword, emdFilterCode, riFilter, gubunFilter, items, loading]);
 
   useEffect(() => {
     return () => {
       const mapInst = mapContextRef.current?.mapInstanceRef?.current ?? null;
       applyWaterPlaySignLayerCql(mapInst, null);
+      mapContextRef.current?.setServiceWmsCqlByLayer?.((prev) => {
+        if (!prev) return prev;
+        const next = { ...prev };
+        delete next[WATER_PLAY_BOX_LIST_GEO_TABLE];
+        delete next[WATER_PLAY_SIGN_LIST_GEO_TABLE];
+        return Object.keys(next).length === 0 ? null : next;
+      });
     };
   }, []);
 
   useEffect(() => {
     if (!listRefreshKey) return;
     const mapInst = mapContext?.mapInstanceRef?.current ?? null;
-    refreshSafetyMapGeoLayer(mapInst, WATER_PLAY_SIGN_GEO_TABLE);
+    refreshSafetyMapGeoLayer(mapInst, WATER_PLAY_BOX_LIST_GEO_TABLE);
+    refreshSafetyMapGeoLayer(mapInst, WATER_PLAY_SIGN_LIST_GEO_TABLE);
   }, [listRefreshKey, mapContext?.mapInstanceRef]);
+
+  useLayoutEffect(() => {
+    const setVis = mapContext?.setSafetyMapLayerVisibility;
+    const setLayers = mapContext?.setVisibleLayerNames;
+    if (setVis) {
+      setVis((prev) => ({
+        ...prev,
+        [WATER_PLAY_BOX_LIST_GEO_TABLE]: true,
+        [WATER_PLAY_SIGN_LIST_GEO_TABLE]: true,
+      }));
+    }
+    if (setLayers) {
+      setLayers((prev) => {
+        const next = new Set(prev);
+        next.delete(WATER_PLAY_SIGN_GEO_TABLE);
+        next.add(WATER_PLAY_BOX_LIST_GEO_TABLE);
+        next.add(WATER_PLAY_SIGN_LIST_GEO_TABLE);
+        return next;
+      });
+    }
+    return () => {
+      setMgmtDetailRow(null);
+      setVis?.((prev) => ({
+        ...prev,
+        [WATER_PLAY_BOX_LIST_GEO_TABLE]: false,
+        [WATER_PLAY_SIGN_LIST_GEO_TABLE]: false,
+        [WATER_PLAY_MGMT_ZONE_GEO_TABLE]: false,
+      }));
+      setLayers?.((prev) => {
+        const next = new Set(prev);
+        next.delete(WATER_PLAY_BOX_LIST_GEO_TABLE);
+        next.delete(WATER_PLAY_SIGN_LIST_GEO_TABLE);
+        next.delete(WATER_PLAY_SIGN_GEO_TABLE);
+        return next;
+      });
+    };
+  }, [mapContext?.setSafetyMapLayerVisibility, mapContext?.setVisibleLayerNames]);
 
   useEffect(() => {
     const setVis = mapContext?.setSafetyMapLayerVisibility;
-    if (!setVis) return;
-    setVis((prev) => ({ ...prev, [WATER_PLAY_SIGN_GEO_TABLE]: true }));
-    return () => {
-      setMgmtDetailRow(null);
-      setVis((prev) => ({
-        ...prev,
-        [WATER_PLAY_SIGN_GEO_TABLE]: false,
-        [WATER_PLAY_MGMT_ZONE_GEO_TABLE]: false,
-      }));
-    };
-  }, [mapContext?.setSafetyMapLayerVisibility]);
+    const setLayers = mapContext?.setVisibleLayerNames;
+    if (!setVis && !setLayers) return;
+    const showBox = layerKindFilter === "all" || layerKindFilter === "box";
+    const showSign = layerKindFilter === "all" || layerKindFilter === "sign";
+    setVis?.((prev) => ({
+      ...prev,
+      [WATER_PLAY_BOX_LIST_GEO_TABLE]: showBox,
+      [WATER_PLAY_SIGN_LIST_GEO_TABLE]: showSign,
+    }));
+    setLayers?.((prev) => {
+      const next = new Set(prev);
+      next.delete(WATER_PLAY_SIGN_GEO_TABLE);
+      if (showBox) next.add(WATER_PLAY_BOX_LIST_GEO_TABLE);
+      else next.delete(WATER_PLAY_BOX_LIST_GEO_TABLE);
+      if (showSign) next.add(WATER_PLAY_SIGN_LIST_GEO_TABLE);
+      else next.delete(WATER_PLAY_SIGN_LIST_GEO_TABLE);
+      return next;
+    });
+  }, [
+    layerKindFilter,
+    mapContext?.setSafetyMapLayerVisibility,
+    mapContext?.setVisibleLayerNames,
+  ]);
 
   const sortedItems = useMemo(
     () => sortWaterPlaySignListRows(items, sorts, columns),
@@ -305,22 +392,6 @@ export function WaterPlaySignPanel({
   );
 
   const totalCount = useMemo(() => sortedItems.length, [sortedItems.length]);
-  const safeboxSum = useMemo(
-    () =>
-      sortedItems.reduce((sum, row) => {
-        const n = row.safeboxCnt;
-        return sum + (n != null && Number.isFinite(n) ? n : 0);
-      }, 0),
-    [sortedItems]
-  );
-  const signSum = useMemo(
-    () =>
-      sortedItems.reduce((sum, row) => {
-        const n = row.signCnt;
-        return sum + (n != null && Number.isFinite(n) ? n : 0);
-      }, 0),
-    [sortedItems]
-  );
   const showSearchClear = keyword.trim().length > 0 || appliedKeyword.length > 0;
 
   const applySearch = useCallback(() => {
@@ -339,14 +410,6 @@ export function WaterPlaySignPanel({
   const handleClearSearch = useCallback(() => {
     setKeyword("");
     setAppliedKeyword("");
-  }, []);
-
-  const handleResetFilters = useCallback(() => {
-    setKeyword("");
-    setAppliedKeyword("");
-    setEmdFilter("");
-    setRiFilter("");
-    setGubunFilter("");
   }, []);
 
   const toggleSort = useCallback(
@@ -380,7 +443,6 @@ export function WaterPlaySignPanel({
     [selectedDetailId, onSelectDetailId, flyToRow]
   );
 
-  /** 화면 필터와 무관하게 전체 목록을 참고 서식으로 내려받기 */
   const handleExportExcel = useCallback(async () => {
     if (exporting) return;
     setExporting(true);
@@ -469,7 +531,7 @@ export function WaterPlaySignPanel({
       </div>
 
       <div className="standard-filter-section space-y-1.5">
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-stretch gap-1.5">
           <div className="standard-search-wrap relative min-w-0 flex-1">
             <Search className="standard-search-icon" />
             <input
@@ -496,16 +558,32 @@ export function WaterPlaySignPanel({
               </button>
             ) : null}
           </div>
-          <button
-            type="button"
-            title="초기화"
-            aria-label="초기화"
-            onClick={handleResetFilters}
-            className="inline-flex h-[34px] shrink-0 cursor-pointer items-center gap-1 rounded-md border border-border bg-background px-2.5 text-xs font-medium text-foreground transition-colors hover:border-border hover:bg-muted/50"
+          <div
+            className="flex shrink-0 rounded-md border border-border bg-muted/50 p-0.5"
+            role="group"
+            aria-label="구조함·표지판 레이어 필터"
+            title="구조함·표지판 레이어"
           >
-            <RefreshCw className="h-3.5 w-3.5 shrink-0" strokeWidth={2} aria-hidden />
-            초기화
-          </button>
+            {WATER_PLAY_LAYER_KIND_FILTERS.map((filter) => {
+              const active = layerKindFilter === filter.value;
+              return (
+                <button
+                  key={filter.value}
+                  type="button"
+                  onClick={() => setLayerKindFilter(filter.value)}
+                  className={cn(
+                    "rounded px-1.5 py-1 text-[10px] font-medium transition-colors",
+                    active
+                      ? "bg-background text-primary shadow-sm"
+                      : "text-muted-foreground hover:text-foreground"
+                  )}
+                  aria-pressed={active}
+                >
+                  {filter.label}
+                </button>
+              );
+            })}
+          </div>
         </div>
         <div className="flex flex-wrap items-center gap-1.5">
           <select
@@ -601,22 +679,15 @@ export function WaterPlaySignPanel({
             onToggleSort={toggleSort}
             initialSortDir={(key) => initialWaterPlaySignSortDir(key, columns)}
             columnWidthWeights={{
-              addr: 30,
-              addr_detail: 26,
-              gubun: 12,
-              safebox_cnt: 16,
-              sign_cnt: 16,
+              gubun: 16,
+              addr: 42,
+              addr_detail: 42,
             }}
-            columnTextAlign={{ safebox_cnt: "right", sign_cnt: "right" }}
             cellDisplayFormatters={listCellDisplayFormatters}
           />
         </div>
-        <div className="standard-list-footer flex flex-col gap-0.5 sm:flex-row sm:items-center sm:justify-between">
+        <div className="standard-list-footer">
           <span>총 {totalCount.toLocaleString()}건</span>
-          <div className="flex flex-wrap justify-end gap-x-3 gap-y-0.5 text-[11px]">
-            <span>구조함 합계: {safeboxSum.toLocaleString("ko-KR")}</span>
-            <span>표지판 합계: {signSum.toLocaleString("ko-KR")}</span>
-          </div>
         </div>
       </div>
     </div>

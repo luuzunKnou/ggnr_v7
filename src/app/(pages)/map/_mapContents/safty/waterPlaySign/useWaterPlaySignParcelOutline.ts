@@ -1,18 +1,20 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import '../../../_mapComponents/config/projections';
 import VectorSource from 'ol/source/Vector';
 import VectorLayer from 'ol/layer/Vector';
 import GeoJSONFormat from 'ol/format/GeoJSON';
 import { useMapContext } from '../../../_mapComponents/MapContext';
+import { LAYER_ROW_NEW_ID } from '../../../_mapComponents/layerRowEdit';
 import { compareFeaturesByGeometryStackOrder } from '@/lib/mapLayerGeometryOrder';
 import {
   createDataQuerySelectionRowHighlightStyle,
   DATA_QUERY_SELECTION_PULSE_STEP,
-  insertLayerBelowServiceLayer,
 } from '@/lib/mapDataQueryMapHighlight';
 import type { WaterPlaySignListItem } from '@/service/waterPlaySignService';
+
+/** 구조함(131)·표지판(132)·관리지역(130) WMS보다 아래 — 점은 필지 강조 위에 그린다 */
+const PARCEL_OUTLINE_Z = 129;
 
 function looksLikeGeoJsonGeometry(v: unknown): v is Record<string, unknown> & { type: unknown } {
   if (!v || typeof v !== 'object' || !('type' in v)) return false;
@@ -22,25 +24,26 @@ function looksLikeGeoJsonGeometry(v: unknown): v is Record<string, unknown> & { 
   return 'coordinates' in v;
 }
 
-function geomFromRow(row: WaterPlaySignListItem | null): unknown {
-  if (!row) return null;
-  const g = row.geomJson;
-  if (g == null) return null;
-  if (typeof g === 'string') {
+function geomJsonFromRow(row: WaterPlaySignListItem | null): unknown {
+  const raw = row?.geomJson;
+  if (raw == null) return null;
+  if (typeof raw === 'string') {
     try {
-      const parsed = JSON.parse(g) as unknown;
+      const parsed = JSON.parse(raw) as unknown;
       return looksLikeGeoJsonGeometry(parsed) ? parsed : null;
     } catch {
       return null;
     }
   }
-  return looksLikeGeoJsonGeometry(g) ? g : null;
+  return looksLikeGeoJsonGeometry(raw) ? raw : null;
 }
 
-/** 물놀이 표지판 선택 행 — 지도 강조 */
-export function useWaterPlaySignMapHighlight(
+/**
+ * 상세가 열린 목록 행의 부모 필지(면)를 민원·데이터조회와 같은 붉은 펄스 강조로 표시한다.
+ */
+export function useWaterPlaySignParcelOutline(
   mapReady: boolean,
-  selected: WaterPlaySignListItem | null
+  selected: WaterPlaySignListItem | null,
 ) {
   const mapContext = useMapContext();
   const layerRef = useRef<VectorLayer<VectorSource> | null>(null);
@@ -70,50 +73,56 @@ export function useWaterPlaySignMapHighlight(
       source,
       renderOrder: compareFeaturesByGeometryStackOrder,
       style: createDataQuerySelectionRowHighlightStyle(() => pulsePhaseRef.current),
+      zIndex: PARCEL_OUTLINE_Z,
     });
-    layer.set('waterPlaySignHighlight', true);
-    insertLayerBelowServiceLayer(map, layer);
+    layer.set('waterPlaySignParcelOutline', true);
+    map.addLayer(layer);
     layerRef.current = layer;
 
     return () => {
       map.removeLayer(layer);
       layerRef.current = null;
       sourceRef.current = null;
+      setRadarActive(false);
     };
-  }, [mapContext?.mapInstanceRef, mapReady]);
+  }, [mapReady, mapContext?.mapInstanceRef]);
 
   useEffect(() => {
     const map = mapContext?.mapInstanceRef?.current;
     const source = sourceRef.current;
-    if (!source) return;
+    if (!map || !source) return;
+
     source.clear();
     setRadarActive(false);
 
-    const geom = geomFromRow(selected);
-    if (!geom || !map) return;
+    if (!selected || selected.id === LAYER_ROW_NEW_ID) return;
+
+    const geomJson = geomJsonFromRow(selected);
+    if (!geomJson) return;
 
     const viewProj = map.getView().getProjection()?.getCode() || 'EPSG:3857';
-    const geojson = {
-      type: 'FeatureCollection' as const,
-      features: [
-        {
-          type: 'Feature' as const,
-          geometry: geom as Record<string, unknown>,
-          properties: {},
-        },
-      ],
-    };
-    const format = new GeoJSONFormat();
-    const features = format.readFeatures(geojson, {
-      dataProjection: 'EPSG:4326',
-      featureProjection: viewProj,
-    });
+    const features = new GeoJSONFormat().readFeatures(
+      {
+        type: 'FeatureCollection' as const,
+        features: [
+          {
+            type: 'Feature' as const,
+            geometry: geomJson as Record<string, unknown>,
+            properties: {},
+          },
+        ],
+      },
+      {
+        dataProjection: 'EPSG:4326',
+        featureProjection: viewProj,
+      }
+    );
     if (features.length === 0) return;
+
     const geomType = features[0].getGeometry()?.getType();
-    if (geomType === 'Point' || geomType === 'MultiPoint') {
-      features[0].set('isRadarPoint', true);
-    }
+    if (geomType === 'Point' || geomType === 'MultiPoint') return;
+
     source.addFeatures(features);
     setRadarActive(true);
-  }, [selected, mapContext?.mapInstanceRef]);
+  }, [mapReady, selected, mapContext?.mapInstanceRef]);
 }

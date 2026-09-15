@@ -32,6 +32,7 @@ export function splitOccupPlaceSegments(raw: string): string[] {
 export function normalizeOccupPlaceForJijuk(raw: string): string {
   let s = formatAddressStripSidoSigungu(String(raw ?? '').trim());
   if (!s) return '';
+  s = s.replace(/[（(][^）)]*[）)]/g, ' ');
   s = s.replace(/\([^)]*\)/g, ' ');
   s = s.replace(/외\s*\d+\s*(?:필지|번지)/gi, ' ');
   s = s.replace(/(\d{1,5})\s*번지\s+(\d{1,5})\s*호/gu, '$1-$2');
@@ -91,9 +92,12 @@ export function parseOccupPlaceForJijuk(
   };
 }
 
-/** 쉼표로 나눈 뒤 각 필지. 뒤 토막에 읍·면이 없으면 앞 토막 값을 쓴다. */
+/** 쉼표로 나눈 뒤 각 필지. 괄호 안은 빼고, 뒤 토막에 읍·면이 없으면 앞 토막 값을 쓴다. */
 export function parseOccupPlacePartsForJijuk(raw: string): OccupPlaceJijukParts[] {
-  const segs = splitOccupPlaceSegments(raw);
+  const stripped = String(raw ?? '')
+    .replace(/[（(][^）)]*[）)]/g, ' ')
+    .replace(/\([^)]*\)/g, ' ');
+  const segs = splitOccupPlaceSegments(stripped);
   const out: OccupPlaceJijukParts[] = [];
   let inherit: OccupPlaceInherit = {};
   for (const seg of segs) {

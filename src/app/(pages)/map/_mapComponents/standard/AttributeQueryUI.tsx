@@ -78,6 +78,9 @@ const DATA_QUERY_ETC_BLOCKLIST = new Set([
   'lsmd_adm_sect_umd',
 ]);
 
+/** 데이터 조회에 아예 내지 않을 레이어 (그룹과 무관) */
+const DATA_QUERY_LAYER_BLOCKLIST = new Set(['water_play_sign']);
+
 /** road 시스템이 꺼진 프로젝트(예: 울산 UAV)에서 데이터조회에 숨길 그룹 */
 const DATA_QUERY_GROUPS_REQUIRE_ROAD = new Set(['도로점용허가']);
 
@@ -359,6 +362,7 @@ export function AttributeQueryUI({ activeTableName, onOpenDataPanel, onClearData
 
         for (const tblName of dbSet) {
           if (parentTablesWithSplitDefs.has(tblName)) continue;
+          if (DATA_QUERY_LAYER_BLOCKLIST.has(tblName)) continue;
           const meta = metaMap.get(tblName);
           const groupName = meta?.define_table_group?.trim() || '기타';
           if (shouldSkipGroup(groupName)) continue;
@@ -390,6 +394,7 @@ export function AttributeQueryUI({ activeTableName, onOpenDataPanel, onClearData
           const parentLower = parent.toLowerCase();
           if (!dbSet.has(parentLower)) continue;
           if (dbSet.has(engLower)) continue;
+          if (DATA_QUERY_LAYER_BLOCKLIST.has(engLower)) continue;
           const groupName = String(m.define_table_group ?? '').trim() || '기타';
           if (shouldSkipGroup(groupName)) continue;
           if (groupName === '기타' && DATA_QUERY_ETC_BLOCKLIST.has(engLower)) continue;

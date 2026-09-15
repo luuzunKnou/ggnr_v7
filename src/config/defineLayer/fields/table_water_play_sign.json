@@ -78,7 +78,7 @@
     "define_field_name": "addr",
     "define_field_kor_name": "주소",
     "define_field_type": "TEXT",
-    "define_field_idx": "1",
+    "define_field_idx": "2",
     "define_field_is_required": false,
     "define_field_show_search": true,
     "define_field_show_list": "true",
@@ -97,13 +97,13 @@
     "define_field_sel_key_field": "",
     "define_field_sel_label_field": "",
     "define_field_default_value": "",
-    "define_field_show_title": true
+    "define_field_show_title": false
   },
   {
     "define_field_name": "addr_detail",
-    "define_field_kor_name": "상세 주소",
+    "define_field_kor_name": "제목",
     "define_field_type": "TEXT",
-    "define_field_idx": "2",
+    "define_field_idx": "3",
     "define_field_is_required": false,
     "define_field_show_search": true,
     "define_field_show_list": "true",
@@ -122,13 +122,13 @@
     "define_field_sel_key_field": "",
     "define_field_sel_label_field": "",
     "define_field_default_value": "",
-    "define_field_show_title": false
+    "define_field_show_title": true
   },
   {
     "define_field_name": "gubun",
     "define_field_kor_name": "구분",
     "define_field_type": "CODE",
-    "define_field_idx": "3",
+    "define_field_idx": "1",
     "define_field_is_required": false,
     "define_field_show_search": true,
     "define_field_show_list": "true",
@@ -181,7 +181,7 @@
     "define_field_idx": "5",
     "define_field_is_required": false,
     "define_field_show_search": false,
-    "define_field_show_list": "true",
+    "define_field_show_list": "false",
     "define_field_show_detail": true,
     "define_field_read_only": false,
     "define_field_is_key": false,
@@ -206,7 +206,7 @@
     "define_field_idx": "6",
     "define_field_is_required": false,
     "define_field_show_search": false,
-    "define_field_show_list": "true",
+    "define_field_show_list": "false",
     "define_field_show_detail": true,
     "define_field_read_only": false,
     "define_field_is_key": false,
@@ -251,7 +251,7 @@
   },
   {
     "define_field_name": "geom",
-    "define_field_kor_name": "좌표",
+    "define_field_kor_name": "목록 이동용 위치",
     "define_field_type": "GEOMETRY",
     "define_field_idx": "",
     "define_field_is_required": false,

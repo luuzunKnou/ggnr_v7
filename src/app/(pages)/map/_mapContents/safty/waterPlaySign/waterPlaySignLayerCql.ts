@@ -1,5 +1,8 @@
 import type { Map } from 'ol';
-import { WATER_PLAY_SIGN_GEO_TABLE } from '../../../_mapComponents/layerFactory/safetydataMapLayerFactory';
+import {
+  WATER_PLAY_BOX_LIST_GEO_TABLE,
+  WATER_PLAY_SIGN_LIST_GEO_TABLE,
+} from '../../../_mapComponents/layerFactory/safetydataMapLayerFactory';
 import { applySafetyMapGeoLayerCql } from '../applySafetyMapGeoLayerCql';
 import { cqlIntersectsBoundaryWkt } from '@/lib/boundaryGeomCql';
 
@@ -32,11 +35,17 @@ export function buildWaterPlaySignListCql(f: WaterPlaySignLayerFilter): string |
   return parts.join(' AND ');
 }
 
-/** 물놀이 표지판 GeoServer ImageWMS에 CQL_FILTER 반영·해제 */
+const WATER_PLAY_GEO_TABLES = [
+  WATER_PLAY_BOX_LIST_GEO_TABLE,
+  WATER_PLAY_SIGN_LIST_GEO_TABLE,
+] as const;
+
+/** 물놀이 표지판·구조함·표지판 위치 GeoServer ImageWMS에 CQL_FILTER 반영·해제 */
 export function applyWaterPlaySignLayerCql(
   map: Map | null | undefined,
   cql: string | null
 ): void {
-  applySafetyMapGeoLayerCql(map, WATER_PLAY_SIGN_GEO_TABLE, cql);
+  for (const table of WATER_PLAY_GEO_TABLES) {
+    applySafetyMapGeoLayerCql(map, table, cql);
+  }
 }
-
