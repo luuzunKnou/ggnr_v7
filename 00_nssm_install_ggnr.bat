@@ -176,22 +176,26 @@ if defined NSSM_PROJECT if defined NSSM_ENV (
 "%NSSM%" set %SERVICE_NAME% AppRotateOnline 1
 
 :: ObjectName: env override, else src/config/projects/<project>.env [env] NSSM_OBJECT_*
+:: Disable DelayedExpansion here so passwords with "!" (e.g. admin00!!) are not stripped.
+setlocal DisableDelayedExpansion
 if defined GGNR_NSSM_OBJECT_NAME if defined GGNR_NSSM_OBJECT_PASS goto :object_name_ready
 call :load_nssm_object_from_project_env
 :object_name_ready
 
 :: demo: run service as G: share account (not LocalSystem) so UNC/file_data works
 if defined GGNR_NSSM_OBJECT_NAME if defined GGNR_NSSM_OBJECT_PASS (
-  echo [nssm-install] ObjectName=!GGNR_NSSM_OBJECT_NAME! ^(demo G: share account^)
-  "%NSSM%" set %SERVICE_NAME% ObjectName "!GGNR_NSSM_OBJECT_NAME!" "!GGNR_NSSM_OBJECT_PASS!"
+  echo [nssm-install] ObjectName=%GGNR_NSSM_OBJECT_NAME% ^(demo G: share account^)
+  "%NSSM%" set %SERVICE_NAME% ObjectName "%GGNR_NSSM_OBJECT_NAME%" "%GGNR_NSSM_OBJECT_PASS%"
   if errorlevel 1 (
     echo [ERROR] nssm ObjectName set failed. Check account/password ^(Log on as a service right^).
+    endlocal
     set "EXIT_EC=1"
     goto :fail_end
   )
 ) else (
   echo [nssm-install] ObjectName kept default ^(LocalSystem^) - no GGNR_NSSM_OBJECT_* / project.env NSSM_OBJECT_*.
 )
+endlocal
 
 echo [nssm-install] Starting service...
 "%NSSM%" start %SERVICE_NAME%
@@ -337,33 +341,40 @@ exit /b 0
 :: ---------------------------------------------------------------------------
 :: Read NSSM_OBJECT_NAME / NSSM_OBJECT_PASS from projects\<project>.env [<env>]
 :: Fills GGNR_NSSM_OBJECT_NAME / GGNR_NSSM_OBJECT_PASS when missing.
+:: Caller must use DisableDelayedExpansion so "!" in PASS is preserved.
 :: ---------------------------------------------------------------------------
 :load_nssm_object_from_project_env
 if not defined NSSM_PROJECT goto :eof
 if not defined NSSM_ENV goto :eof
-set "PROJ_ENV_FILE=%ROOT%\src\config\projects\!NSSM_PROJECT!.env"
+set "PROJ_ENV_FILE=%ROOT%\src\config\projects\%NSSM_PROJECT%.env"
 set "PS_READ_NSSM=%ROOT%\scripts\read-nssm-object-from-env.ps1"
-if not exist "!PROJ_ENV_FILE!" (
-  echo [nssm-install] no project.env for ObjectName: !PROJ_ENV_FILE!
+if not exist "%PROJ_ENV_FILE%" (
+  echo [nssm-install] no project.env for ObjectName: %PROJ_ENV_FILE%
   goto :eof
 )
-if not exist "!PS_READ_NSSM!" (
-  echo [WARN] missing script: !PS_READ_NSSM!
+if not exist "%PS_READ_NSSM%" (
+  echo [WARN] missing script: %PS_READ_NSSM%
   goto :eof
 )
-echo [nssm-install] reading NSSM_OBJECT_* from !NSSM_PROJECT!.env [!NSSM_ENV!]
+echo [nssm-install] reading NSSM_OBJECT_* from %NSSM_PROJECT%.env [%NSSM_ENV%]
 set "PS_OBJ_OUT="
-for /f "usebackq delims=" %%L in (`powershell -NoProfile -ExecutionPolicy Bypass -File "!PS_READ_NSSM!" -EnvFile "!PROJ_ENV_FILE!" -Section "!NSSM_ENV!"`) do (
+for /f "usebackq delims=" %%L in (`powershell -NoProfile -ExecutionPolicy Bypass -File "%PS_READ_NSSM%" -EnvFile "%PROJ_ENV_FILE%" -Section "%NSSM_ENV%"`) do (
   set "PS_OBJ_OUT=1"
   set "LINE=%%L"
-  if /i "!LINE:~0,5!"=="NAME=" if not defined GGNR_NSSM_OBJECT_NAME set "GGNR_NSSM_OBJECT_NAME=!LINE:~5!"
-  if /i "!LINE:~0,5!"=="PASS=" if not defined GGNR_NSSM_OBJECT_PASS set "GGNR_NSSM_OBJECT_PASS=!LINE:~5!"
+  call :_load_nssm_object_line
 )
 if defined GGNR_NSSM_OBJECT_NAME if defined GGNR_NSSM_OBJECT_PASS (
-  echo [nssm-install] loaded ObjectName from project.env: !GGNR_NSSM_OBJECT_NAME!
+  echo [nssm-install] loaded ObjectName from project.env: %GGNR_NSSM_OBJECT_NAME%
 ) else if defined PS_OBJ_OUT (
   echo [WARN] project.env NSSM_OBJECT_* incomplete ^(need both NAME and PASS^)
 ) else (
-  echo [nssm-install] no NSSM_OBJECT_* in project.env [!NSSM_ENV!]
+  echo [nssm-install] no NSSM_OBJECT_* in project.env [%NSSM_ENV%]
 )
+goto :eof
+
+:_load_nssm_object_line
+:: LINE set by caller; use % expansion only (no !VAR!) so "!" in password survives.
+set "HEAD=%LINE:~0,5%"
+if /i "%HEAD%"=="NAME=" if not defined GGNR_NSSM_OBJECT_NAME set "GGNR_NSSM_OBJECT_NAME=%LINE:~5%"
+if /i "%HEAD%"=="PASS=" if not defined GGNR_NSSM_OBJECT_PASS set "GGNR_NSSM_OBJECT_PASS=%LINE:~5%"
 goto :eof

@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { resolveGgnrDataDir } from '@/lib/turbopackFsPath';
 
-const GGNR_DATA_DIR = process.env.GGNR_DATA_DIR ?? 'd:\\ggnr_data_dir';
-const BASE_DIR = path.normalize(path.join(GGNR_DATA_DIR, 'tiles_jpg'));
+function getTilesJpgBase(): string {
+  return path.normalize(path.join(resolveGgnrDataDir(), 'tiles_jpg'));
+}
 
 function isSafeOrthoSegment(s: string): boolean {
   return /^[a-zA-Z0-9_-]+$/.test(s);
@@ -24,6 +26,7 @@ export async function GET(
   }
 
   let resolved: string;
+  const BASE_DIR = getTilesJpgBase();
 
   const isOrthoTileFile = (yFile: string) => /^\d+\.(jpg|jpeg|png)$/i.test(yFile);
 

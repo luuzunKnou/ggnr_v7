@@ -30,9 +30,8 @@ function pushItem(items: SchemaDiffItem[], item: SchemaDiffItem): void {
 }
 
 /**
- * 소스코드 업로드 전용 — 공유 normalizeColumnTypeForCompare 결과를 한 번 더 거름.
- * 예: geometry(Geometry, 5181) vs geometry(Geometry,5181) 공백 차이.
- * dbManagerService 공유 유틸은 수정하지 않는다.
+ * 소스코드 업로드 전용 — 공유 normalizeColumnTypeForCompare 와 동일하게 공백 무시.
+ * (공유 유틸이 이미 공백을 제거하므로 이중 적용해도 결과는 동일)
  */
 function normalizeTypeForSourceUploadCompare(type: string): string {
   return type.toLowerCase().replace(/\s+/g, '');

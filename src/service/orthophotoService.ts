@@ -35,7 +35,7 @@ function getOrthoDataWorkDir(): string {
   return path.join(getBaseDir(), '.tmp');
 }
 
-/** 배치 CLI — 로컬 SSD 우선 (부족 시 GGNR_DATA_DIR/.tmp) */
+/** localOnly — 로컬 SSD 우선 (부족 시 GGNR_DATA_DIR/.tmp) */
 function getOrthoLocalWorkDir(): string {
   const cwdRoot = path.parse(process.cwd()).root || path.parse(getBaseDir()).root;
   return path.join(cwdRoot, 'temp', 'ortho_work');
@@ -63,7 +63,7 @@ function getPathFreeBytes(targetPath: string): number | null {
 
 type OrthoLogCtx = { groupName: string; outputSlug: string; sourceFile: string; tileSetUi: string };
 
-/** 배치(localOnly): 로컬 여유가 warp+타일에 부족하면 GGNR_DATA_DIR/.tmp */
+/** localOnly: 로컬 여유가 warp+타일에 부족하면 GGNR_DATA_DIR/.tmp */
 async function resolveOrthoWorkBase(params: {
   preferLocal: boolean;
   absSource: string;
@@ -1601,7 +1601,7 @@ async function runOrthophotoJob(params: {
    * 드론영상 오버레이는 PNG(알파 유지) 권장.
    */
   tileDriver?: 'JPEG' | 'PNG';
-  /** 배치 CLI — 로컬 SSD 우선 (부족 시 GGNR_DATA_DIR/.tmp), 배포는 robocopy 등 */
+  /** 로컬 SSD 우선 (부족 시 GGNR_DATA_DIR/.tmp), 배포는 robocopy 등. 화면·배치 공통 */
   localOnly?: boolean;
   /** 그룹 VRT 등에서 작업 경로를 미리 정한 경우 */
   workBaseOverride?: string;
@@ -1951,7 +1951,7 @@ async function runOrthophotoJob(params: {
   }
 }
 
-/** 그룹 내 GeoTIFF를 VRT 합성 후 한 번에 타일링(원본 좌표계 그대로 raster JPEG). */
+/** 그룹 내 GeoTIFF를 VRT 합성 후 한 번에 타일링(EPSG:3857 XYZ JPEG). */
 export async function runSatelliteTifGroupToXyz(params: {
   groupName: string;
   tileSetId: string;
@@ -1959,6 +1959,8 @@ export async function runSatelliteTifGroupToXyz(params: {
   zoomMin?: number;
   zoomMax?: number;
   jpegQuality?: number;
+  /** 화면·배치 공통 — 로컬 SSD 작업 후 tiles_jpg 배포(용량 부족 시 데이터 경로 폴백) */
+  localOnly?: boolean;
 }): Promise<{ started: boolean; message: string; fileCount: number; outputSlug: string }> {
   const prepared = await prepareSatelliteTifGroupConversion(params);
   setOrthoPhase(prepared.groupName, 'queued', 0, '대기 중');
@@ -1970,11 +1972,12 @@ export async function runSatelliteTifGroupToXyz(params: {
     });
   });
   const outRel = orthoOutputRel(prepared.groupName, prepared.groupOutputSlug);
+  const workNote = prepared.localOnly ? ' 로컬 작업 후 tiles_jpg 배포' : '';
   return {
     started: true,
     fileCount: prepared.sorted.length,
     outputSlug: prepared.groupOutputSlug,
-    message: `그룹 ${prepared.groupName}: ${prepared.sorted.length}개 원본→${prepared.sorted.length > 1 ? 'VRT 합본 후 ' : ''}XYZ JPEG(q${prepared.jpegQuality}) 변환을 시작했습니다. (srcCrs=${prepared.sourceCrs}, UI tileSet=${prepared.tileSetId}, z=${prepared.zoomMin}-${prepared.zoomMax}) → ${outRel}.`,
+    message: `그룹 ${prepared.groupName}: ${prepared.sorted.length}개 원본→${prepared.sorted.length > 1 ? 'VRT 합본 후 ' : ''}XYZ JPEG(q${prepared.jpegQuality}) 변환을 시작했습니다. (srcCrs=${prepared.sourceCrs}, UI tileSet=${prepared.tileSetId}, z=${prepared.zoomMin}-${prepared.zoomMax})${workNote} → ${outRel}.`,
   };
 }
 
@@ -1988,7 +1991,7 @@ export async function runSatelliteTifGroupToXyzAndWait(params: {
   zoomMin?: number;
   zoomMax?: number;
   jpegQuality?: number;
-  /** 배치 CLI — 로컬 SSD 작업 후 tiles_jpg 자동 배포(robocopy/rename) */
+  /** 로컬 SSD 우선 작업 후 tiles_jpg 배포(용량 부족 시 데이터 경로 폴백). 화면·배치 공통 */
   localOnly?: boolean;
 }): Promise<{
   ok: boolean;

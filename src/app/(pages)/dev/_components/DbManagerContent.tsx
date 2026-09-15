@@ -27,7 +27,8 @@ function normalizeTypeForCompare(type: string): string {
   if (["serial8", "bigint", "int8"].some((g) => t === g || t.startsWith(g))) return "bigint"
   if (["varchar", "character varying"].some((g) => t === g || t.startsWith(g))) return "varchar"
   if (["timestamp without time zone", "timestamp"].some((g) => t === g || t.startsWith(g))) return "timestamp"
-  return t
+  // geometry(Geometry, 5181) vs geometry(Geometry,5181) 등 공백만 다른 표기 통일
+  return t.replace(/\s+/g, "")
 }
 type DiffRow = {
   key: string
@@ -156,15 +157,33 @@ export function DbManagerContent() {
         params: dbConfig ? { ...dbConfig, schema, table } : { schema, table },
       })
       if (!res?.success) throw new Error(res?.error ?? "PK 동기화 실패")
-      setSyncMessage(`${tableKey} PK 추가 완료`)
+      const results = ((res?.data ?? res)?.results ?? []) as Array<{ action?: string; error?: string; detail?: string }>
+      const failed = results.filter((r) => r.action === "failed")
+      if (failed.length) {
+        const msg = failed.map((f) => f.error ?? "알 수 없음").join("; ")
+        setSyncMessage(`오류: ${msg}`)
+        window.alert(`PK 동기화 실패\n\n${tableKey}\n\n${msg}`)
+        return
+      }
+      const skipped = results.filter((r) => r.action === "skipped")
+      if (skipped.length && results.length === skipped.length) {
+        const msg = `${tableKey}: ${skipped.map((s) => s.detail ?? "스킵").join("; ")}`
+        setSyncMessage(msg)
+        window.alert(msg)
+        return
+      }
+      const msg = `${tableKey} PK 추가 완료`
+      setSyncMessage(msg)
+      window.alert(msg)
       await fetchDiff()
     } catch (err: unknown) {
       const msg = err && typeof err === "object" ? String((err as { error?: string }).error ?? (err as { message?: string }).message ?? "PK 동기화 실패") : "PK 동기화 실패"
       setSyncMessage(`오류: ${msg}`)
+      window.alert(`PK 동기화 실패\n\n${msg}`)
     } finally {
       setPkSyncingTableKey(null)
     }
-  }, [dbConfig])
+  }, [dbConfig, fetchDiff])
 
   /** 해당 행(필드 또는 테이블 행)만 동기화: 테이블 생성/삭제 또는 컬럼 추가/삭제/코멘트 */
   const runFieldSync = useCallback(
@@ -194,6 +213,9 @@ export function DbManagerContent() {
           action: "getSchemaSyncPlanForField",
           params,
         })
+        if (planRes && typeof planRes === "object" && "success" in planRes && planRes.success === false) {
+          throw new Error(String((planRes as { error?: string }).error ?? "동기화 계획 조회 실패"))
+        }
         const plan = (planRes?.data ?? planRes) as { action: 'createTable' | 'dropTable' | 'addColumn' | 'dropColumn' | 'addComment' | null }
         const actionLabels: Record<string, string> = {
           createTable: "테이블 생성 (스키마에만 있음 → DB에 생성)",
@@ -204,7 +226,9 @@ export function DbManagerContent() {
         }
         const label = plan.action ? actionLabels[plan.action] ?? plan.action : ""
         if (!plan.action || !label) {
-          setSyncMessage(`${rowKey}: 수행할 동작이 없습니다.`)
+          const msg = `${rowKey}: 수행할 동작이 없습니다.`
+          setSyncMessage(msg)
+          window.alert(msg)
           setSyncing(false)
           return
         }
@@ -217,13 +241,27 @@ export function DbManagerContent() {
           action: "applySchemaSyncForField",
           params,
         })
+        if (!res?.success) throw new Error(res?.error ?? "동기화 실패")
         const data = res?.data ?? res
-        const results = data?.results ?? []
-        const failed = results.filter((r: { action?: string }) => r.action === "failed")
-        const msg = failed.length
-          ? `실패: ${failed.map((f: { error?: string }) => f.error).join("; ")}`
-          : `완료 (${results.length}건)`
-        setSyncMessage(msg)
+        const results = (data?.results ?? []) as Array<{ action?: string; error?: string; detail?: string }>
+        const failed = results.filter((r) => r.action === "failed")
+        const skipped = results.filter((r) => r.action === "skipped")
+        if (failed.length) {
+          const msg = `실패: ${failed.map((f) => f.error ?? "알 수 없음").join("; ")}`
+          setSyncMessage(msg)
+          window.alert(`동기화 실패\n\n[${rowKey}]\n${label}\n\n${msg}`)
+        } else {
+          const detail = results
+            .map((r) => r.detail ?? r.action ?? "")
+            .filter(Boolean)
+            .join(", ")
+          const msg =
+            skipped.length && results.length === skipped.length
+              ? `스킵: ${skipped.map((s) => s.detail ?? "변경 없음").join("; ")}`
+              : `완료 (${results.length}건)${detail ? ` — ${detail}` : ""}`
+          setSyncMessage(msg)
+          window.alert(`동기화 완료\n\n[${rowKey}]\n${label}\n\n${msg}`)
+        }
         const scrollTop = diffScrollRef.current?.scrollTop ?? 0
         const scrollLeft = diffScrollRef.current?.scrollLeft ?? 0
         await fetchDiff()
@@ -241,6 +279,7 @@ export function DbManagerContent() {
             ? String((err as { error?: string; message?: string }).error ?? (err as { message?: string }).message ?? "요청 실패")
             : "요청 실패"
         setSyncMessage(`오류: ${msg}`)
+        window.alert(`동기화 실패\n\n[${rowKey}]\n\n${msg}`)
       } finally {
         setSyncing(false)
       }

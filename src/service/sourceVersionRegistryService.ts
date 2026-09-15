@@ -3,8 +3,7 @@ import fsSync from 'node:fs';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { GGNR_DATA_PATHS } from '@/lib/ggnrDataPaths';
-
-const GGNR_DATA_DIR = process.env.GGNR_DATA_DIR ?? 'd:\\ggnr_data_dir';
+import { resolveGgnrDataDir } from '@/lib/turbopackFsPath';
 
 export type SourceVersionMeta = {
   version: string;
@@ -19,7 +18,7 @@ export type SourceVersionMeta = {
 };
 
 function versionsRoot(): string {
-  return path.join(GGNR_DATA_DIR, GGNR_DATA_PATHS.sourceUpload, 'versions');
+  return path.join(resolveGgnrDataDir(), GGNR_DATA_PATHS.sourceUpload, 'versions');
 }
 
 function latestJsonPath(): string {
@@ -92,7 +91,7 @@ export async function resolveLatestZipAbsolutePath(): Promise<{ absPath: string;
   if (!meta?.zipPath) return null;
   const absPath = path.isAbsolute(meta.zipPath)
     ? meta.zipPath
-    : path.join(GGNR_DATA_DIR, meta.zipPath.replace(/\//g, path.sep));
+    : path.join(resolveGgnrDataDir(), meta.zipPath.replace(/\//g, path.sep));
   try {
     await fs.access(absPath);
     return { absPath, meta };

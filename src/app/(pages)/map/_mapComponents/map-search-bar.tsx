@@ -36,6 +36,8 @@ import { scrubOccupationLedgerFromMapSearchParams } from '@/lib/occupationLedger
 import { scrubUseFeeFromMapSearchParams } from '@/lib/useFeeBinding';
 import { scrubMapSearchParamsOnSystemSwitch } from '@/lib/mapSystemSwitch';
 import { MapAdminToolsMenu } from './mapAdminTools/MapAdminToolsMenu';
+import { scheduleAnimateMapToCenter3857 } from './config/mapAutoNavigation';
+import { MAP_LOCAL_VIEW_MIN_ZOOM } from './config/mapDefaults';
 
 /** 검색바 아이콘 버튼 — 우측 메뉴와 동일: 바깥=패널 배경, 안=투명+hover만 */
 const mapSearchBarIconShell = cn(
@@ -444,9 +446,16 @@ export function MapSearchBar({
           [item.point.x, item.point.y],
           'EPSG:4326',
           'EPSG:3857'
+        ) as [number, number];
+        const currentZoom = view.getZoom() ?? 0;
+        scheduleAnimateMapToCenter3857(
+          map,
+          center3857,
+          Math.max(currentZoom, MAP_LOCAL_VIEW_MIN_ZOOM),
+          {
+            applyMapViewPadding: () => mapContext?.applyMapViewPaddingRef?.current?.(),
+          }
         );
-        view.setCenter(center3857);
-        view.setZoom(17);
       }
       if (query.trim()) addRecentQuery(query.trim());
     },

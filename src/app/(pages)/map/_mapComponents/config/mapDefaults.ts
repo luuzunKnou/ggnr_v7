@@ -32,6 +32,13 @@ export const TILESET_MAX_CACHE_OVERFLOW_BYTES = 2 * 1024 * 1024 * 1024;
 export const MAP_AUTO_NAV_MAX_ZOOM = 19;
 
 /**
+ * 동네·필지 스케일 최소 줌.
+ * 이 값 이상이면 주소검색·필지분석 진입 등에서 강제 줌 변경을 생략하고 현재 줌을 유지한다.
+ * (미만이면 이 줌까지 확대)
+ */
+export const MAP_LOCAL_VIEW_MIN_ZOOM = 16;
+
+/**
  * EPSG:3857 표준 웹메르카터 해상도 (zoom 0 = 256px 타일 기준).
  * OpenLayers View, TileWMS, VWorld 등이 동일한 줌/해상도 체계를 쓰도록 통일.
  */

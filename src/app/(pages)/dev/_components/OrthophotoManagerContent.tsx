@@ -259,6 +259,8 @@ export function OrthophotoManagerContent() {
           tileSetId: ts,
           sourceCrs,
           jpegQuality: Number.isFinite(jq) ? jq : 80,
+          /** 배치 CLI와 동일 — 로컬 SSD 타일링 후 tiles_jpg(G) 배포 */
+          localOnly: true,
         },
       });
       const d = res?.data ?? res;
@@ -514,8 +516,10 @@ export function OrthophotoManagerContent() {
           </li>
           <li>
             결과: <code className="text-foreground">tiles_jpg/&#123;그룹&#125;/z/x/y.jpg</code>
-            · 변환은 로컬 <code className="text-[10px]">X:\temp\ortho_work</code>에서 진행하고,
-            용량 부족 시 데이터 경로(<code className="text-[10px]">GGNR_DATA_DIR/.tmp</code>)로 자동 전환합니다.
+            · 화면 «변환시작»·일괄·배치 CLI 모두 로컬{' '}
+            <code className="text-[10px]">\temp\ortho_work</code>에서 진행한 뒤 결과로 배포하고,
+            용량 부족 시 데이터 경로(<code className="text-[10px]">GGNR_DATA_DIR/.tmp</code>)로 자동
+            전환합니다.
           </li>
         </ul>
       </div>

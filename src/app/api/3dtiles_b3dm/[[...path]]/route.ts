@@ -2,9 +2,11 @@ import { NextRequest, NextResponse } from 'next/server';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { GGNR_DATA_PATHS } from '@/lib/ggnrDataPaths';
+import { resolveGgnrDataDir } from '@/lib/turbopackFsPath';
 
-const GGNR_DATA_DIR = process.env.GGNR_DATA_DIR ?? 'd:\\ggnr_data_dir';
-const TILES_ROOT = path.join(GGNR_DATA_DIR, GGNR_DATA_PATHS.dtilesB3dm);
+function getTilesRoot(): string {
+  return path.join(resolveGgnrDataDir(), GGNR_DATA_PATHS.dtilesB3dm);
+}
 
 function getContentType(filename: string): string {
   const ext = path.extname(filename).toLowerCase();
@@ -122,7 +124,7 @@ export async function GET(
   }
 
   let b3dmDir: string | null = null;
-  const candidate = path.join(TILES_ROOT, dataset);
+  const candidate = path.join(getTilesRoot(), dataset);
   try {
     const stat = await fs.stat(candidate);
     if (stat.isDirectory()) {
