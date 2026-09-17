@@ -53,7 +53,7 @@
 }
 
 @utility standard-search-input {
-  @apply w-full rounded-md border border-border bg-background py-1.5 pl-8 pr-3 text-sm outline-none ring-offset-2 focus:border-border focus:ring-2 focus:ring-ring;
+  @apply w-full rounded-md border border-border bg-background py-1.5 pl-8 pr-3 text-sm text-foreground outline-none ring-offset-2 focus:border-border focus:ring-2 focus:ring-ring scheme-light dark:scheme-dark;
 }
 
 /** 목록 패널 필터 select — villagePatrol과 동일 높이·글자, 너비만 축소 */
@@ -70,7 +70,7 @@
 }
 
 @utility standard-filter-chip-active {
-  @apply border-primary bg-primary/10 text-foreground;
+  @apply border-primary bg-primary/10 text-foreground dark:bg-primary/25;
 }
 
 @utility standard-filter-chip-active-* {
@@ -134,7 +134,7 @@
 }
 
 @utility standard-list-row-selected {
-  @apply border-l-[3px] border-l-primary bg-primary/[0.11] ring-1 ring-inset ring-primary/20 hover:bg-primary/[0.14];
+  @apply border-l-[3px] border-l-primary bg-primary/[0.11] ring-1 ring-inset ring-primary/20 hover:bg-primary/[0.14] dark:bg-primary/20 dark:hover:bg-primary/25;
 }
 
 @utility standard-table-td-compact {
@@ -150,7 +150,7 @@
 }
 
 @utility standard-status-badge-primary {
-  @apply bg-primary/10 text-primary;
+  @apply bg-primary/10 text-primary dark:bg-primary/25;
 }
 
 @utility standard-status-badge-ended {
@@ -220,7 +220,7 @@
 }
 
 @utility standard-detail-hit-select {
-  @apply h-7 min-w-0 flex-1 rounded border border-border bg-background px-1.5 text-xs text-foreground outline-none focus:border-primary;
+  @apply h-7 min-w-0 flex-1 rounded border border-border bg-background px-1.5 text-xs text-foreground outline-none focus:border-primary scheme-light dark:scheme-dark;
 }
 
 @utility standard-detail-hit-count {
@@ -310,7 +310,7 @@
 }
 
 @utility standard-detail-action-btn-danger {
-  @apply rounded border border-red-200 px-2 py-1 text-[11px] font-medium text-red-600 transition-colors hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60;
+  @apply rounded border border-red-200 px-2 py-1 text-[11px] font-medium text-red-600 transition-colors hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-red-800 dark:text-red-400 dark:hover:bg-red-950/40;
 }
 
 @utility standard-detail-action-btn-compact {
@@ -342,7 +342,7 @@
 }
 
 @utility standard-detail-input {
-  @apply rounded border border-border bg-background px-1.5 py-0.5 text-xs outline-none focus:border-primary focus:ring-1 focus:ring-primary/30;
+  @apply rounded border border-border bg-background px-1.5 py-0.5 text-xs text-foreground outline-none focus:border-primary focus:ring-1 focus:ring-primary/30 scheme-light dark:scheme-dark;
 }
 
 @utility standard-detail-input-readonly {
@@ -350,7 +350,7 @@
 }
 
 @utility standard-detail-input-area {
-  @apply h-6 min-w-0 flex-1 rounded border border-border bg-background px-1.5 text-xs outline-none focus:border-primary focus:ring-1 focus:ring-primary/30;
+  @apply h-6 min-w-0 flex-1 rounded border border-border bg-background px-1.5 text-xs text-foreground outline-none focus:border-primary focus:ring-1 focus:ring-primary/30 scheme-light dark:scheme-dark;
 }
 
 @utility standard-detail-btn-auto-calc {
@@ -378,11 +378,11 @@
 }
 
 @utility standard-detail-address-card-selected {
-  @apply border-primary/40 bg-primary/5 text-primary;
+  @apply border-primary/40 bg-primary/5 text-primary dark:bg-primary/15;
 }
 
 @utility standard-detail-address-card-selected-yellow {
-  @apply border-yellow-300 bg-yellow-50 text-yellow-900;
+  @apply border-yellow-300 bg-yellow-50 text-yellow-900 dark:border-yellow-700 dark:bg-yellow-950/40 dark:text-yellow-100;
 }
 
 @utility standard-detail-address-remove-btn {
@@ -418,7 +418,7 @@
 }
 
 @utility standard-detail-extra-def-select {
-  @apply h-7 min-w-0 max-w-[9.5rem] flex-1 basis-0 rounded border border-border bg-background px-1.5 text-center text-[11px] text-muted-foreground;
+  @apply h-7 min-w-0 max-w-[9.5rem] flex-1 basis-0 rounded border border-border bg-background px-1.5 text-center text-[11px] text-muted-foreground scheme-light dark:scheme-dark;
 }
 
 @utility standard-detail-place-wrap {
@@ -426,7 +426,7 @@
 }
 
 @utility standard-detail-place-input {
-  @apply w-full rounded border border-border bg-background py-0.5 pl-1.5 text-xs outline-none focus:border-primary focus:ring-1 focus:ring-primary/30;
+  @apply w-full rounded border border-border bg-background py-0.5 pl-1.5 text-xs text-foreground outline-none focus:border-primary focus:ring-1 focus:ring-primary/30 scheme-light dark:scheme-dark;
 }
 
 @utility standard-detail-place-search-btn {
@@ -460,7 +460,7 @@
 }
 
 @utility standard-layer-toggle-chip-active {
-  @apply border-primary/45 bg-primary/[0.08] text-foreground ring-1 ring-inset ring-primary/15 hover:bg-primary/[0.11];
+  @apply border-primary/45 bg-primary/[0.08] text-foreground ring-1 ring-inset ring-primary/15 hover:bg-primary/[0.11] dark:bg-primary/15 dark:hover:bg-primary/20;
 }
 
 @utility standard-layer-toggle-chip-inactive {
