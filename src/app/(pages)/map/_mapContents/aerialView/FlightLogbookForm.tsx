@@ -90,6 +90,10 @@ type Props = {
   headerAction?: ReactNode;
   /** 저장 성공 시 */
   onSaved?: () => void;
+  /** 헤더 제목 — 기본 무인비행장치 비행기록부, 항공영상은 촬영정보 */
+  title?: string;
+  /** 첫 섹션 제목 — 기본 비행 정보 */
+  infoSectionLabel?: string;
 };
 
 /** 촬영신청서와 동일 톤·여백 (패널 폭 ~520px 기준) */
@@ -105,7 +109,17 @@ const checkRow = 'flex h-6 items-center gap-x-3 text-[11px] text-slate-700';
 const sectionTitle = 'mb-1 text-[11px] font-semibold text-slate-800';
 
 export const FlightLogbookForm = forwardRef<FlightLogbookFormHandle, Props>(function FlightLogbookForm(
-  { workUnitLabel, srKey, onClose, embedded = false, hideActions = false, headerAction, onSaved },
+  {
+    workUnitLabel,
+    srKey,
+    onClose,
+    embedded = false,
+    hideActions = false,
+    headerAction,
+    onSaved,
+    title = '무인비행장치 비행기록부',
+    infoSectionLabel = '비행 정보',
+  },
   ref
 ) {
   const [v, setV] = useState<FlightLogbookValues>(EMPTY);
@@ -224,7 +238,7 @@ export const FlightLogbookForm = forwardRef<FlightLogbookFormHandle, Props>(func
       <div className="flex shrink-0 items-center justify-between gap-2 border-b border-slate-200 px-3 py-2">
         <div className="min-w-0">
           <h2 className="text-[12px] font-semibold leading-snug text-slate-900">
-            무인비행장치 비행기록부
+            {title}
           </h2>
           {loading ? (
             <p className="mt-0.5 text-[10px] text-slate-400">불러오는 중…</p>
@@ -254,7 +268,7 @@ export const FlightLogbookForm = forwardRef<FlightLogbookFormHandle, Props>(func
       >
         {/* 기본 */}
         <section>
-          <h3 className={sectionTitle}>비행 정보</h3>
+          <h3 className={sectionTitle}>{infoSectionLabel}</h3>
           <table className={cn('w-full table-fixed border-collapse text-[11px]', cellBorder)}>
             <colgroup>
               <col className="w-[6.5rem]" />

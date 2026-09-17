@@ -17,6 +17,8 @@ export const SER_FILE_ENG = {
   waterworksLedger: 'waterworksLedger',
   complaint: 'complaint',
   memo: 'memo',
+  /** GCP 위치 사진 1장 — file_data/gcp/{ogc_fid}/ */
+  gcp: 'gcp',
   /** 공지사항 첨부 — file_data/notice/{key}/ */
   notice: 'notice',
   /** 자료실 첨부 — file_data/board/{key}/ */
