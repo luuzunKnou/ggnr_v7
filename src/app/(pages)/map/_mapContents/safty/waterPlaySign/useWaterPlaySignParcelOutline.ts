@@ -5,7 +5,6 @@ import VectorSource from 'ol/source/Vector';
 import VectorLayer from 'ol/layer/Vector';
 import GeoJSONFormat from 'ol/format/GeoJSON';
 import { useMapContext } from '../../../_mapComponents/MapContext';
-import { LAYER_ROW_NEW_ID } from '../../../_mapComponents/layerRowEdit';
 import { compareFeaturesByGeometryStackOrder } from '@/lib/mapLayerGeometryOrder';
 import {
   createDataQuerySelectionRowHighlightStyle,
@@ -95,7 +94,7 @@ export function useWaterPlaySignParcelOutline(
     source.clear();
     setRadarActive(false);
 
-    if (!selected || selected.id === LAYER_ROW_NEW_ID) return;
+    if (!selected) return;
 
     const geomJson = geomJsonFromRow(selected);
     if (!geomJson) return;
