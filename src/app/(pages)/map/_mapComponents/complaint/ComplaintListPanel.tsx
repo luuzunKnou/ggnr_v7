@@ -13,7 +13,7 @@ import {
   User,
   ChevronRight,
   Plus,
-  MessageSquareText,
+  Users,
   CheckCircle2,
   Wrench,
   CircleDot,
@@ -262,7 +262,7 @@ export default function ComplaintListPanel({
           <div className="flex items-center justify-between px-3 pt-3 pb-2">
             <div className="flex items-center gap-2">
               <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/5">
-                <MessageSquareText className="h-4 w-4 text-primary/80" />
+                <Users className="h-4 w-4 text-primary/80" />
               </div>
               <div>
                 <h1 className="text-sm font-semibold text-foreground/90">민원관리</h1>

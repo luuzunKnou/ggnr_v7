@@ -1,7 +1,8 @@
 import fs from 'node:fs/promises';
+import path from 'node:path';
 import dns from 'node:dns/promises';
 import { Agent, request as undiciRequest } from 'undici';
-import { buildGnmsUploadApiBase, DEFAULT_GNMS_URL } from '@/lib/gnmsSourceUrl';
+import { buildGnmsUploadApiBase, DEFAULT_GNMS_URL, normalizeGnmsOrigin } from '@/lib/gnmsSourceUrl';
 import { getGnmsUrl } from '@/service/configService';
 import {
   failUploadProgress,
@@ -142,6 +143,17 @@ export function getRemoteUploadBase(): string {
     fromEnv ||
     buildGnmsUploadApiBase(DEFAULT_GNMS_URL);
   return base.replace(/\/+$/, '');
+}
+
+/** GNMS 로그 수신 API — `http://dggs.kr/gnms/api/logs` */
+export function getRemoteLogsApiUrl(): string {
+  const fromRuntime = getGnmsUrl()?.trim();
+  const origin = normalizeGnmsOrigin(fromRuntime || DEFAULT_GNMS_URL);
+  if (!origin) {
+    return `${DEFAULT_GNMS_URL.replace(/\/+$/, '')}/api/logs`;
+  }
+  if (/\/api\/logs$/i.test(origin)) return origin;
+  return `${origin.replace(/\/+$/, '')}/api/logs`;
 }
 
 export function buildRemoteAuthHeaders(json = true): Record<string, string> {
@@ -388,6 +400,97 @@ async function postBinaryWithTimeout(
   } catch (err) {
     if (err instanceof Error && err.name === 'AbortError') {
       throw new Error(`요청 시간 초과 (${timeoutMs}ms)`);
+    }
+    throw new Error(formatFetchCause(err));
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+const LOG_UPLOAD_TIMEOUT_MS = 300_000;
+
+const logUploadAgent = new Agent({
+  headersTimeout: LOG_UPLOAD_TIMEOUT_MS,
+  bodyTimeout: LOG_UPLOAD_TIMEOUT_MS,
+});
+
+/** multipart body 직접 구성 — Node FormData/Blob 이 게이트에서 boundary 누락되는 경우 회피 (소스 청크와 동일 undici) */
+export function buildMultipartFormBody(params: {
+  fields: Record<string, string>;
+  files: { fieldName: string; fileName: string; data: Buffer }[];
+}): { body: Buffer; contentType: string } {
+  const boundary = `----ggnrLogBoundary${process.hrtime.bigint().toString(16)}`;
+  const chunks: Buffer[] = [];
+  for (const [name, value] of Object.entries(params.fields)) {
+    chunks.push(
+      Buffer.from(
+        `--${boundary}\r\nContent-Disposition: form-data; name="${name}"\r\n\r\n${value}\r\n`,
+        'utf8'
+      )
+    );
+  }
+  for (const f of params.files) {
+    const safeName = path.basename(f.fileName).replace(/"/g, '');
+    chunks.push(
+      Buffer.from(
+        `--${boundary}\r\nContent-Disposition: form-data; name="${f.fieldName}"; filename="${safeName}"\r\nContent-Type: application/octet-stream\r\n\r\n`,
+        'utf8'
+      )
+    );
+    chunks.push(f.data);
+    chunks.push(Buffer.from('\r\n', 'utf8'));
+  }
+  chunks.push(Buffer.from(`--${boundary}--\r\n`, 'utf8'));
+  return {
+    body: Buffer.concat(chunks),
+    contentType: `multipart/form-data; boundary=${boundary}`,
+  };
+}
+
+/** GNMS POST /api/logs — multipart + Bearer (소스 업로드 undici 패턴) */
+export async function postRemoteLogsMultipart(params: {
+  fields: Record<string, string>;
+  files: { fieldName: string; fileName: string; data: Buffer }[];
+  timeoutMs?: number;
+}): Promise<BinaryHttpResponse> {
+  const url = getRemoteLogsApiUrl();
+  const { body, contentType } = buildMultipartFormBody({
+    fields: params.fields,
+    files: params.files,
+  });
+  const headers: Record<string, string> = {
+    'Content-Type': contentType,
+  };
+  if (SOURCE_UPLOAD_REMOTE_BEARER) {
+    headers.Authorization = `Bearer ${SOURCE_UPLOAD_REMOTE_BEARER}`;
+  }
+  const timeoutMs = params.timeoutMs ?? LOG_UPLOAD_TIMEOUT_MS;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await undiciRequest(url, {
+      method: 'POST',
+      headers: {
+        ...headers,
+        'content-length': String(body.byteLength),
+      },
+      body,
+      dispatcher: logUploadAgent,
+      signal: controller.signal,
+    });
+    const text = await res.body.text();
+    let json: JsonRecord = {};
+    if (text) {
+      try {
+        json = JSON.parse(text) as JsonRecord;
+      } catch {
+        json = {};
+      }
+    }
+    return { status: res.statusCode, json, text };
+  } catch (err) {
+    if (err instanceof Error && err.name === 'AbortError') {
+      throw new Error(`로그 업로드 시간 초과 (${timeoutMs}ms)`);
     }
     throw new Error(formatFetchCause(err));
   } finally {

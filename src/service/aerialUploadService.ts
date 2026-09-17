@@ -28,6 +28,11 @@ import {
   sourceCrsFromOrthoFolderName,
 } from '@/service/aerialOrthoService';
 import { detectTifSourceCrs } from '@/service/orthophotoService';
+
+/** exifr가 Next 번들에서 fs/zlib require 실패 시 찍는 안내 — EXIF 실패 아님 */
+console.info(
+  "[exifr] Couldn't load fs / Couldn't load zlib = Next 번들에서 exifr가 Node 모듈(fs·zlib)을 못 찾을 때 나는 안내. EXIF·GPS 오류가 아님. (이후 next.config serverExternalPackages에 exifr 추가 시 완화 가능)"
+);
 import { completeChunkedUpload, initAerialMediaUpload } from '@/service/uploadService';
 
 const APPROVAL_SER = 'shootingApproval';
