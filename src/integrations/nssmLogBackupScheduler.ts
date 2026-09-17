@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { calendarSlotKey } from '@/integrations/integrationSchedule';
-import { resolveGgnrNpmScript } from '@/lib/ggnrBootCommand';
+import { resolveGgnrNpmScript, resolveGgnrRunType } from '@/lib/ggnrBootCommand';
 import { GGNR_SYSTEM_LOG_DIR } from '@/lib/ggnrSystemLogDir';
 
 const LOG = '[nssm-log-backup]';
@@ -15,12 +15,25 @@ const ROTATED_LOG_RE = /^GGNR_V7_(stdout|stderr)-.+\.log$/i;
 
 const DAILY_SCHEDULE = { mode: 'daily' as const, hour: 0, minute: 0 };
 
-function yesterdayYmd(now: Date): string {
+function yesterdayParts(now: Date): { y: number; m: string; day: string } {
   const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
+  return {
+    y: d.getFullYear(),
+    m: String(d.getMonth() + 1).padStart(2, '0'),
+    day: String(d.getDate()).padStart(2, '0'),
+  };
+}
+
+/** 백업 파일명용 yyyyMMdd (직전 일자) */
+function yesterdayYmd(now: Date): string {
+  const { y, m, day } = yesterdayParts(now);
   return `${y}${m}${day}`;
+}
+
+/** GNMS 로그 연계 date 필터용 yyyy-mm-dd (백업 stamp와 동일 일자) */
+function yesterdayYmdDash(now: Date): string {
+  const { y, m, day } = yesterdayParts(now);
+  return `${y}-${m}-${day}`;
 }
 
 function uniqueBackupDest(fileName: string): string {
@@ -115,6 +128,7 @@ export function rotateNssmServiceLogs(now = new Date()): {
 /**
  * 매일 00:00 — C:\\logs 활성·nssm 회전 로그 → backup
  * `npm run start` 일 때만 등록(호출 측에서 가드). 기동 직후 실행 없음.
+ * type=demo 이면 백업 직후 해당 일자(어제)로 GNMS 로그 연계 API 호출.
  */
 export function startNssmLogBackupScheduler(): void {
   if (resolveGgnrNpmScript() !== 'start') {
@@ -122,7 +136,11 @@ export function startNssmLogBackupScheduler(): void {
     return;
   }
 
-  console.info(`${LOG} registered: daily 00:00, no run on startup`);
+  const runType = resolveGgnrRunType().trim().toLowerCase();
+  console.info(
+    `${LOG} registered: daily 00:00, no run on startup` +
+      (runType === 'demo' ? ', demo→GNMS log upload after backup' : '')
+  );
 
   let lastSlot: string | null = null;
 
@@ -132,6 +150,24 @@ export function startNssmLogBackupScheduler(): void {
     if (!slot) return;
     if (lastSlot === slot) return;
     lastSlot = slot;
-    void Promise.resolve().then(() => rotateNssmServiceLogs(now));
+    void Promise.resolve()
+      .then(() => rotateNssmServiceLogs(now))
+      .then(async () => {
+        if (resolveGgnrRunType().trim().toLowerCase() !== 'demo') return;
+        const date = yesterdayYmdDash(now);
+        console.info(`${LOG} demo — GNMS 로그 연계 시작 date=${date}`);
+        const { runIntegration } = await import('@/service/integrationService');
+        try {
+          const r = await runIntegration({
+            system: 'GNMS',
+            mode: 'daily',
+            trigger: 'scheduler',
+            date,
+          });
+          console.info(`${LOG} GNMS done ijlKey=${r.ijlKey ?? '-'} ok=${r.ok}`);
+        } catch (e) {
+          console.warn(`${LOG} GNMS fail:`, e instanceof Error ? e.message : e);
+        }
+      });
   }, 15_000);
 }
