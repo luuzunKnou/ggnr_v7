@@ -432,16 +432,17 @@ function schemaRemark(status?: LayerRow['schemaStatus'], detail?: string): strin
   return '';
 }
 
-function isSchemaFailed(status?: LayerRow['schemaStatus']) {
-  return status === 'mismatch' || status === 'error';
-}
-
+/** 1단계에서 진행 가능한(일치·신규) SHP만 2단계 구성요소 검사에 남긴다. 폴더에 남은 다른 파일은 제외. */
 function filterStatusRowsForLayers(rows: ShpStatusRow[], layerList: LayerRow[]) {
-  const failedNames = new Set(
-    layerList.filter((l) => isSchemaFailed(l.schemaStatus)).map((l) => l.name.toLowerCase())
+  const allowedNames = new Set(
+    layerList
+      .filter((l) => l.schemaStatus === 'ok' || l.schemaStatus === 'new')
+      .map((l) => l.name.replace(/\\/g, '/').toLowerCase())
   );
-  if (failedNames.size === 0) return rows;
-  return rows.filter((r) => !failedNames.has(r.sourceFile.toLowerCase()));
+  if (allowedNames.size === 0) return [];
+  return rows.filter((r) =>
+    allowedNames.has(String(r.sourceFile ?? '').replace(/\\/g, '/').toLowerCase())
+  );
 }
 
 type Props = {
