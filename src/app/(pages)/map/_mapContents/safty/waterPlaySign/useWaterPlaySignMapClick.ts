@@ -7,8 +7,9 @@ import '../../../_mapComponents/config/projections';
 import { call } from '@/lib/api';
 import { useMapContext } from '../../../_mapComponents/MapContext';
 import {
+  WATER_PLAY_BOX_LIST_GEO_TABLE,
   WATER_PLAY_MGMT_ZONE_GEO_TABLE,
-  WATER_PLAY_SIGN_GEO_TABLE,
+  WATER_PLAY_SIGN_LIST_GEO_TABLE,
 } from '../../../_mapComponents/layerFactory/safetydataMapLayerFactory';
 import { getRowValueByDefineField } from '../../../_mapComponents/standard/defineLayerRowUtils';
 import type { WaterPlaySignListItem } from '@/service/waterPlaySignService';
@@ -17,7 +18,8 @@ function zoomToBuffer(zoom: number): number {
   return 300_000 * Math.pow(0.54, zoom);
 }
 
-function parseRowId(row: Record<string, unknown>): number | null {
+function parseRowId(row: Record<string, unknown> | null): number | null {
+  if (!row) return null;
   const raw = getRowValueByDefineField(row, 'id');
   const n = typeof raw === 'number' ? raw : Number(String(raw ?? '').trim());
   if (!Number.isFinite(n) || n <= 0) return null;
@@ -103,15 +105,19 @@ export function useWaterPlaySignMapClick({
 
       try {
         const wantMgmt = Boolean(mgmtOnRef.current && onMgmtHitRef.current);
-        const wantSign = visRef.current[WATER_PLAY_SIGN_GEO_TABLE] === true;
-        if (!wantMgmt && !wantSign) return;
+        const wantBox = visRef.current[WATER_PLAY_BOX_LIST_GEO_TABLE] === true;
+        const wantSignList = visRef.current[WATER_PLAY_SIGN_LIST_GEO_TABLE] === true;
+        if (!wantMgmt && !wantBox && !wantSignList) return;
 
-        const [mgmtRow, signRow] = await Promise.all([
+        const [mgmtRow, boxRow, signListRow] = await Promise.all([
           wantMgmt
             ? identifyFirstRow(x, y, bufferMeters, WATER_PLAY_MGMT_ZONE_GEO_TABLE)
             : Promise.resolve(null),
-          wantSign
-            ? identifyFirstRow(x, y, bufferMeters, WATER_PLAY_SIGN_GEO_TABLE)
+          wantBox
+            ? identifyFirstRow(x, y, bufferMeters, WATER_PLAY_BOX_LIST_GEO_TABLE)
+            : Promise.resolve(null),
+          wantSignList
+            ? identifyFirstRow(x, y, bufferMeters, WATER_PLAY_SIGN_LIST_GEO_TABLE)
             : Promise.resolve(null),
         ]);
 
@@ -119,10 +125,8 @@ export function useWaterPlaySignMapClick({
           onMgmtHitRef.current(mgmtRow);
         }
 
-        if (signRow) {
-          const id = parseRowId(signRow);
-          if (id) onSelectRef.current(id);
-        }
+        const parentId = parseRowId(boxRow) ?? parseRowId(signListRow);
+        if (parentId) onSelectRef.current(parentId);
       } catch {
         /* 식별 실패 무시 */
       }

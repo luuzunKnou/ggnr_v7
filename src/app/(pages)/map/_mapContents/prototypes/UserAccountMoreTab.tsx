@@ -34,6 +34,40 @@ type SystemItem = {
 
 const FAVORITES_STORAGE_KEY = 'ggnr.proto.moreFavorites'
 const ALWAYS_SHOW_ENGS = ['notice', 'board'] as const
+const ALWAYS_SHOW_ENG_SET = new Set<string>(ALWAYS_SHOW_ENGS)
+
+type FavItem = ServiceItem & { token: string }
+
+function settingFavToken(groupKey: string, eng: string) {
+  return groupKey === 'basic' ? eng : `${groupKey}:${eng}`
+}
+
+function parseFavToken(token: string): { sysKey: string | null; eng: string } {
+  const i = token.indexOf(':')
+  if (i <= 0) return { sysKey: null, eng: token }
+  return { sysKey: token.slice(0, i), eng: token.slice(i + 1) }
+}
+
+function migrateFavoriteTokens(tokens: string[], systems: SystemItem[]): string[] {
+  const seen = new Set<string>()
+  const out: string[] = []
+  for (const token of tokens) {
+    const { sysKey, eng } = parseFavToken(token)
+    if (!eng) continue
+    const next = sysKey
+      ? token
+      : ALWAYS_SHOW_ENG_SET.has(eng)
+        ? eng
+        : (() => {
+            const first = systems.find((s) => s.serviceList.includes(eng))
+            return first ? `${first.sys_key}:${eng}` : ''
+          })()
+    if (!next || seen.has(next)) continue
+    seen.add(next)
+    out.push(next)
+  }
+  return out
+}
 const SERVICE_ICON_ALIASES: Record<string, string> = {
   radiationShelter: 'radiation',
 }
@@ -65,8 +99,8 @@ function FavoriteStrip({
   items,
   onOpen,
 }: {
-  items: ServiceItem[]
-  onOpen: (eng: string) => void
+  items: FavItem[]
+  onOpen: (token: string) => void
 }) {
   const scrollerRef = useRef<HTMLDivElement>(null)
   const dragRef = useRef({ active: false, startX: 0, startScroll: 0, moved: false })
@@ -165,11 +199,11 @@ function FavoriteStrip({
       >
         {items.map((item) => (
           <button
-            key={item.ser_eng}
+            key={item.token}
             type="button"
             onClick={() => {
               if (dragRef.current.moved) return
-              onOpen(item.ser_eng)
+              onOpen(item.token)
             }}
             className={`${FAVORITE_SLOT} w-[25%] min-w-[25%] shrink-0 select-none border-transparent text-foreground hover:bg-muted/50`}
             title={item.ser_kor}
@@ -237,6 +271,16 @@ export function UserAccountMoreTab({
   useEffect(() => {
     setFavorites(loadFavorites())
   }, [])
+
+  useEffect(() => {
+    if (!systems.length) return
+    setFavorites((prev) => {
+      const next = migrateFavoriteTokens(prev, systems)
+      if (next.length === prev.length && next.every((v, i) => v === prev[i])) return prev
+      saveFavorites(next)
+      return next
+    })
+  }, [systems])
 
   useEffect(() => {
     let cancelled = false
@@ -318,22 +362,24 @@ export function UserAccountMoreTab({
   )
 
   const settingGroups = useMemo(() => {
-    const used = new Set<string>()
     const groups: { key: string; title: string; items: ServiceItem[] }[] = []
     const basics = ALWAYS_SHOW_ENGS.map((eng) => serviceMap.get(eng)).filter(
       (s): s is ServiceItem => s != null
     )
     if (basics.length) {
-      for (const s of basics) used.add(s.ser_eng)
       groups.push({ key: 'basic', title: '공통', items: basics })
     }
     for (const sys of systems) {
-      const items = sys.serviceList
-        .filter((eng) => visibleEng(eng) && !used.has(eng))
-        .map((eng) => serviceMap.get(eng))
-        .filter((s): s is ServiceItem => s != null)
+      const seenInSystem = new Set<string>()
+      const items: ServiceItem[] = []
+      for (const eng of sys.serviceList) {
+        if (!visibleEng(eng) || seenInSystem.has(eng)) continue
+        const item = serviceMap.get(eng)
+        if (!item) continue
+        seenInSystem.add(eng)
+        items.push(item)
+      }
       if (!items.length) continue
-      for (const s of items) used.add(s.ser_eng)
       groups.push({ key: sys.sys_key, title: sys.sys_kor, items })
     }
     return groups
@@ -353,8 +399,8 @@ export function UserAccountMoreTab({
     setSettingOpen(true)
   }
 
-  const toggleDraft = (eng: string) => {
-    setDraft((prev) => (prev.includes(eng) ? prev.filter((v) => v !== eng) : [...prev, eng]))
+  const toggleDraft = (token: string) => {
+    setDraft((prev) => (prev.includes(token) ? prev.filter((v) => v !== token) : [...prev, token]))
   }
 
   const confirmDraft = () => {
@@ -363,7 +409,8 @@ export function UserAccountMoreTab({
     setSettingOpen(false)
   }
 
-  const openService = (eng: string) => {
+  const openService = (token: string) => {
+    const { sysKey, eng } = parseFavToken(token)
     const portal = PORTAL_LINKS[eng]
     if (portal) {
       onClosePanel()
@@ -372,11 +419,11 @@ export function UserAccountMoreTab({
     }
     if (eng === 'shapeEditor') {
       onClosePanel()
-      openShapeEditorMapWindow(homeSysByEng.get(eng) || systemKey || null)
+      openShapeEditorMapWindow(sysKey || homeSysByEng.get(eng) || systemKey || null)
       return
     }
     const current = new URLSearchParams(Array.from(searchParams.entries()))
-    const home = homeSysByEng.get(eng) ?? systemKey
+    const home = sysKey || homeSysByEng.get(eng) || systemKey
     const target = systems.find((s) => s.sys_key === home)
     if (home && home !== systemKey) {
       current.set('system', home)
@@ -387,9 +434,15 @@ export function UserAccountMoreTab({
     router.push(`/map?${current.toString()}`)
   }
 
-  const favoriteItems = favorites
-    .map((eng) => serviceMap.get(eng))
-    .filter((s): s is ServiceItem => s != null)
+  const favoriteItems = favorites.flatMap((token) => {
+    const { sysKey, eng } = parseFavToken(token)
+    const svc = serviceMap.get(eng)
+    if (!svc) return []
+    if (!sysKey) return [{ ...svc, token }]
+    const sys = systems.find((s) => s.sys_key === sysKey)
+    if (!sys || !sys.serviceList.includes(eng)) return []
+    return [{ ...svc, token }]
+  })
 
   const settingsModal =
     settingOpen && typeof document !== 'undefined'
@@ -418,14 +471,15 @@ export function UserAccountMoreTab({
                     <h3 className="py-1 text-[11px] font-medium text-muted-foreground">{group.title}</h3>
                     <ul className="grid grid-cols-2 gap-x-1">
                       {group.items.map((item) => {
-                        const checked = draft.includes(item.ser_eng)
+                        const token = settingFavToken(group.key, item.ser_eng)
+                        const checked = draft.includes(token)
                         return (
-                          <li key={item.ser_eng}>
+                          <li key={token}>
                             <label className="flex cursor-pointer items-center gap-2 rounded-sm px-1 py-1 text-[11px] hover:bg-muted/50">
                               <input
                                 type="checkbox"
                                 checked={checked}
-                                onChange={() => toggleDraft(item.ser_eng)}
+                                onChange={() => toggleDraft(token)}
                                 className="h-3.5 w-3.5 shrink-0"
                               />
                               <span className="truncate">{item.ser_kor}</span>

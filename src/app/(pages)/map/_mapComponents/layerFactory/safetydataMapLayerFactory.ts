@@ -22,8 +22,10 @@ export const SAFETY_HOSPITAL_POI_GEO_TABLE = 'sd_mois_hospital_poi' as const;
 /** 방사선 대피소 패널 — GeoServer WMS */
 export const RADIATION_SHELTER_GEO_TABLE = 'radiation_shelter' as const;
 
-/** 물놀이 표지판 패널 — GeoServer WMS */
+/** 물놀이 표지판 본표 — 이력 구분·목록 이동용. GeoServer 오버레이로 켜지 않음 */
 export const WATER_PLAY_SIGN_GEO_TABLE = 'water_play_sign' as const;
+export const WATER_PLAY_BOX_LIST_GEO_TABLE = 'water_play_box_list' as const;
+export const WATER_PLAY_SIGN_LIST_GEO_TABLE = 'water_play_sign_list' as const;
 
 /** 물놀이 관리지역 — 표지판 패널에서 토글하는 GeoServer WMS */
 export const WATER_PLAY_MGMT_ZONE_GEO_TABLE = 'sd_water_play_mgmt_zone' as const;
@@ -99,9 +101,15 @@ export const SAFETY_MAP_GEOSERVER_OVERLAYS: {
     opacity: 0.88,
   },
   {
-    panelId: WATER_PLAY_SIGN_GEO_TABLE,
-    tableName: WATER_PLAY_SIGN_GEO_TABLE,
-    zIndex: 129,
+    panelId: WATER_PLAY_BOX_LIST_GEO_TABLE,
+    tableName: WATER_PLAY_BOX_LIST_GEO_TABLE,
+    zIndex: 131,
+    opacity: 0.88,
+  },
+  {
+    panelId: WATER_PLAY_SIGN_LIST_GEO_TABLE,
+    tableName: WATER_PLAY_SIGN_LIST_GEO_TABLE,
+    zIndex: 132,
     opacity: 0.88,
   },
   {
