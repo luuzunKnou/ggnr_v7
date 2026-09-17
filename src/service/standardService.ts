@@ -1835,6 +1835,14 @@ const SAFETY_FACILITY_DISPLAY: Record<
     addressKeys: ['addr'],
   },
   water_play_sign: {
+    nameKeys: ['addr_detail', 'addr'],
+    addressKeys: ['addr'],
+  },
+  water_play_box_list: {
+    nameKeys: ['addr'],
+    addressKeys: ['addr'],
+  },
+  water_play_sign_list: {
     nameKeys: ['addr'],
     addressKeys: ['addr'],
   },

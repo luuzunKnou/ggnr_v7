@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ChevronDown,
   ChevronRight,
@@ -12,7 +12,7 @@ import { call } from '@/lib/api';
 import { formatDefineFieldDisplayValue, isDefineFieldCodeType } from '@/lib/defineLayerCodeDisplay';
 import { cn } from '@/lib/utils';
 import { Button } from '@/app/shadcnComponents/ui/button';
-import type { WaterPlaySignListItem } from '@/service/waterPlaySignService';
+import type { WaterPlayChildKind, WaterPlayChildPoint, WaterPlaySignListItem } from '@/service/waterPlaySignService';
 import { LAYER_ROW_NEW_ID } from '../../../_mapComponents/layerRowEdit';
 import {
   DetailAttrRow,
@@ -28,13 +28,15 @@ import { useDefineLayerCodesByFieldNames } from '../../../_mapComponents/standar
 import { AddressSearchPanel } from '../../../_mapComponents/addressSearch/AddressSearchPanel';
 import { useMapPointPick } from '../../../_mapComponents/addressSearch/useMapPointPick';
 import { useMapContext } from '../../../_mapComponents/MapContext';
-import { WATER_PLAY_SIGN_GEO_TABLE } from '../../../_mapComponents/layerFactory/safetydataMapLayerFactory';
+import { WATER_PLAY_BOX_LIST_GEO_TABLE, WATER_PLAY_SIGN_GEO_TABLE, WATER_PLAY_SIGN_LIST_GEO_TABLE, refreshSafetyMapGeoLayer } from '../../../_mapComponents/layerFactory/safetydataMapLayerFactory';
 import { formatWaterPlaySignAddressDisplay } from './waterPlaySignAddressDisplay';
 import { parseSidoSggFromAddress } from './waterPlaySignAddressParts';
 import {
+  flyToWaterPlayChildGeom,
   flyToWaterPlaySignLonLat,
   flyToWaterPlaySignRow,
 } from './waterPlaySignMapFly';
+import { WaterPlayChildPointList } from './WaterPlayChildPointList';
 import { usePublicLayerAddressPrefixes } from '../usePublicLayerAddressPrefixes';
 import { useSafetyLayerDetailColumns } from '../useSafetyLayerDetailColumns';
 import { SafetyFacHistorySection } from '../safetyFac/SafetyFacHistorySection';
@@ -89,17 +91,27 @@ function formFromItem(item: WaterPlaySignListItem): Record<string, string> {
 }
 
 function lonLatFromGeomJson(geomJson: unknown): { lon: number | null; lat: number | null } {
-  if (!geomJson || typeof geomJson !== 'object' || !('coordinates' in geomJson)) {
+  if (!geomJson || typeof geomJson !== 'object' || !('type' in geomJson)) {
     return { lon: null, lat: null };
   }
-  const coords = (geomJson as { coordinates?: number[] }).coordinates;
-  if (!Array.isArray(coords) || coords.length < 2) return { lon: null, lat: null };
-  const lon = Number(coords[0]);
-  const lat = Number(coords[1]);
-  return {
-    lon: Number.isFinite(lon) ? lon : null,
-    lat: Number.isFinite(lat) ? lat : null,
+  const g = geomJson as { type?: string; coordinates?: unknown };
+  const type = String(g.type ?? '');
+  const pickPair = (coords: unknown): { lon: number; lat: number } | null => {
+    if (!Array.isArray(coords) || coords.length < 2) return null;
+    if (typeof coords[0] === 'number' && typeof coords[1] === 'number') {
+      const lon = Number(coords[0]);
+      const lat = Number(coords[1]);
+      if (Number.isFinite(lon) && Number.isFinite(lat)) return { lon, lat };
+      return null;
+    }
+    return pickPair(coords[0]);
   };
+  if (type === 'Point') {
+    const pair = pickPair(g.coordinates);
+    return pair ?? { lon: null, lat: null };
+  }
+  const pair = pickPair(g.coordinates);
+  return pair ?? { lon: null, lat: null };
 }
 
 function parseNumberInput(raw: string): number | null {
@@ -142,17 +154,47 @@ export function WaterPlaySignDetailPanel({
   const [form, setForm] = useState<Record<string, string>>({});
   const [lon, setLon] = useState<number | null>(null);
   const [lat, setLat] = useState<number | null>(null);
+  const [boxItems, setBoxItems] = useState<WaterPlayChildPoint[]>([]);
+  const [signItems, setSignItems] = useState<WaterPlayChildPoint[]>([]);
+  const [childPickKind, setChildPickKind] = useState<WaterPlayChildKind | null>(null);
+  const [movingChild, setMovingChild] = useState<{ kind: WaterPlayChildKind; idx: number } | null>(
+    null
+  );
+  const childPickKindRef = useRef<WaterPlayChildKind | null>(null);
+  const waitingChildAddrRef = useRef(false);
+  childPickKindRef.current = childPickKind;
 
   const isEditing = isCreateMode || editMode;
+
+  const refreshGeoLayers = useCallback(() => {
+    const map = mapContext?.mapInstanceRef?.current ?? null;
+    refreshSafetyMapGeoLayer(map, WATER_PLAY_BOX_LIST_GEO_TABLE);
+    refreshSafetyMapGeoLayer(map, WATER_PLAY_SIGN_LIST_GEO_TABLE);
+  }, [mapContext?.mapInstanceRef]);
 
   const applyAddressToForm = useCallback((fullAddress: string) => {
     const { addr, sido, sgg } = parseSidoSggFromAddress(fullAddress);
     setForm((prev) => ({ ...prev, addr, sido, sgg }));
   }, []);
 
+  const addChildPointRef = useRef<
+    (kind: WaterPlayChildKind, pickedLon: number, pickedLat: number, address: string) => Promise<void>
+  >(async () => {});
+
   const { pickMode, startPick, stopPick, clearDraftPoint } = useMapPointPick({
     vworldApiKey,
     onPicked: ({ lon: pickedLon, lat: pickedLat, address }) => {
+      const kind = childPickKindRef.current;
+      if (kind) {
+        if (!waitingChildAddrRef.current) {
+          waitingChildAddrRef.current = true;
+          return;
+        }
+        waitingChildAddrRef.current = false;
+        void addChildPointRef.current(kind, pickedLon, pickedLat, address);
+        return;
+      }
+      waitingChildAddrRef.current = false;
       setLon(pickedLon);
       setLat(pickedLat);
       if (address) applyAddressToForm(address);
@@ -164,6 +206,72 @@ export function WaterPlaySignDetailPanel({
       );
     },
   });
+
+  const addChildPoint = useCallback(
+    async (kind: WaterPlayChildKind, pickedLon: number, pickedLat: number, address: string) => {
+      if (isCreateMode || typeof detailId !== 'number') {
+        setError('관리 구간을 먼저 저장하세요.');
+        return;
+      }
+      try {
+        const res = await call('', 'POST', {
+          service: 'waterPlaySignService',
+          action: 'addChild',
+          params: {
+            kind,
+            id: detailId,
+            addr: address,
+            lon: pickedLon,
+            lat: pickedLat,
+          },
+        });
+        const data = res?.data ?? res;
+        if (data?.error || data?.ok === false) {
+          setError(String(data?.error ?? '위치를 넣지 못했습니다.'));
+          return;
+        }
+        const next = data?.item as WaterPlayChildPoint | undefined;
+        if (next) {
+          if (kind === 'box') setBoxItems((prev) => [...prev, next]);
+          else setSignItems((prev) => [...prev, next]);
+        }
+        setChildPickKind(null);
+        clearDraftPoint();
+        refreshGeoLayers();
+      } catch (e: unknown) {
+        setError(e instanceof Error ? e.message : String(e));
+      }
+    },
+    [clearDraftPoint, detailId, isCreateMode, refreshGeoLayers]
+  );
+  addChildPointRef.current = addChildPoint;
+
+  const startParentPick = useCallback(() => {
+    setChildPickKind(null);
+    startPick();
+  }, [startPick]);
+
+  const startChildPick = useCallback(
+    (kind: WaterPlayChildKind) => {
+      if (isCreateMode || typeof detailId !== 'number') {
+        setError('관리 구간을 먼저 저장하세요.');
+        return;
+      }
+      setError(null);
+      waitingChildAddrRef.current = false;
+      setChildPickKind(kind);
+      clearDraftPoint();
+      startPick();
+    },
+    [clearDraftPoint, detailId, isCreateMode, startPick]
+  );
+
+  const stopAllPick = useCallback(() => {
+    waitingChildAddrRef.current = false;
+    setChildPickKind(null);
+    stopPick();
+    clearDraftPoint();
+  }, [clearDraftPoint, stopPick]);
 
   const resetEditForm = useCallback((row: WaterPlaySignListItem | null) => {
     if (!row) return;
@@ -191,6 +299,8 @@ export function WaterPlaySignDetailPanel({
         return;
       }
       setItem(row);
+      setBoxItems(Array.isArray(data?.boxItems) ? data.boxItems : []);
+      setSignItems(Array.isArray(data?.signItems) ? data.signItems : []);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -201,6 +311,8 @@ export function WaterPlaySignDetailPanel({
   useEffect(() => {
     if (isCreateMode) {
       setItem(null);
+      setBoxItems([]);
+      setSignItems([]);
       setLoading(false);
       setError(null);
       setEditMode(false);
@@ -277,8 +389,8 @@ export function WaterPlaySignDetailPanel({
         setError('등록에 실패했습니다.');
         return;
       }
-      clearDraftPoint();
-      stopPick();
+      stopAllPick();
+      refreshGeoLayers();
       const map = mapContext?.mapInstanceRef?.current ?? null;
       const applyPad = () => mapContext?.applyMapViewPaddingRef?.current?.();
       const savedItem = (data?.item ?? null) as WaterPlaySignListItem | null;
@@ -296,13 +408,13 @@ export function WaterPlaySignDetailPanel({
     }
   }, [
     buildSaveParams,
-    clearDraftPoint,
     lat,
     lon,
     mapContext?.mapInstanceRef,
     onCreated,
     onListRefresh,
-    stopPick,
+    refreshGeoLayers,
+    stopAllPick,
   ]);
 
   const handleUpdate = useCallback(async () => {
@@ -320,8 +432,8 @@ export function WaterPlaySignDetailPanel({
         setError(String(data?.error ?? '저장에 실패했습니다.'));
         return;
       }
-      clearDraftPoint();
-      stopPick();
+      stopAllPick();
+      refreshGeoLayers();
       setEditMode(false);
       const map = mapContext?.mapInstanceRef?.current ?? null;
       const applyPad = () => mapContext?.applyMapViewPaddingRef?.current?.();
@@ -340,7 +452,6 @@ export function WaterPlaySignDetailPanel({
     }
   }, [
     buildSaveParams,
-    clearDraftPoint,
     isCreateMode,
     item,
     lat,
@@ -348,7 +459,8 @@ export function WaterPlaySignDetailPanel({
     lon,
     mapContext?.mapInstanceRef,
     onListRefresh,
-    stopPick,
+    refreshGeoLayers,
+    stopAllPick,
   ]);
 
   const handleDelete = useCallback(async () => {
@@ -367,8 +479,8 @@ export function WaterPlaySignDetailPanel({
         setError(String(data?.error ?? '삭제에 실패했습니다.'));
         return;
       }
-      clearDraftPoint();
-      stopPick();
+      stopAllPick();
+      refreshGeoLayers();
       onListRefresh?.();
       onDeleted?.();
       onClose();
@@ -377,7 +489,7 @@ export function WaterPlaySignDetailPanel({
     } finally {
       setDeleting(false);
     }
-  }, [clearDraftPoint, isCreateMode, item, onClose, onDeleted, onListRefresh, stopPick]);
+  }, [isCreateMode, item, onClose, onDeleted, onListRefresh, refreshGeoLayers, stopAllPick]);
 
   const handleEdit = useCallback(() => {
     if (!item) return;
@@ -388,22 +500,57 @@ export function WaterPlaySignDetailPanel({
 
   const handleCancelEdit = useCallback(() => {
     if (isCreateMode) {
-      clearDraftPoint();
-      stopPick();
+      stopAllPick();
+      refreshGeoLayers();
       onClose();
       return;
     }
-    clearDraftPoint();
-    stopPick();
+    stopAllPick();
     setEditMode(false);
     setError(null);
     if (item) resetEditForm(item);
-  }, [clearDraftPoint, isCreateMode, item, onClose, resetEditForm, stopPick]);
+  }, [isCreateMode, item, onClose, refreshGeoLayers, resetEditForm, stopAllPick]);
 
   const handleSave = useCallback(() => {
     if (isCreateMode) void handleCreate();
     else void handleUpdate();
   }, [handleCreate, handleUpdate, isCreateMode]);
+
+  const handleRemoveChild = useCallback(
+    async (kind: WaterPlayChildKind, row: WaterPlayChildPoint) => {
+      try {
+        const res = await call('', 'POST', {
+          service: 'waterPlaySignService',
+          action: 'removeChild',
+          params: { kind, fid: row.fid },
+        });
+        const data = res?.data ?? res;
+        if (data?.error || data?.ok === false) {
+          setError(String(data?.error ?? '위치를 지우지 못했습니다.'));
+          return;
+        }
+        if (kind === 'box') setBoxItems((prev) => prev.filter((it) => it.fid !== row.fid));
+        else setSignItems((prev) => prev.filter((it) => it.fid !== row.fid));
+        refreshGeoLayers();
+      } catch (e: unknown) {
+        setError(e instanceof Error ? e.message : String(e));
+      }
+    },
+    [refreshGeoLayers]
+  );
+
+  const handleChildClick = useCallback(
+    (kind: WaterPlayChildKind, row: WaterPlayChildPoint, idx: number) => {
+      setMovingChild({ kind, idx });
+      flyToWaterPlayChildGeom(
+        mapContext?.mapInstanceRef?.current ?? null,
+        row.geomJson,
+        () => mapContext?.applyMapViewPaddingRef?.current?.()
+      );
+      window.setTimeout(() => setMovingChild(null), 600);
+    },
+    [mapContext?.applyMapViewPaddingRef, mapContext?.mapInstanceRef]
+  );
 
   const showBody = isCreateMode || (!loading && !error && item != null);
   const showLoading = !isCreateMode && loading && !item;
@@ -461,7 +608,7 @@ export function WaterPlaySignDetailPanel({
               variant="outline"
               title={pickMode ? '위치 지정 취소' : '지도에서 위치 찍기'}
               aria-label={pickMode ? '위치 지정 취소' : '지도에서 위치 찍기'}
-              onClick={pickMode ? stopPick : startPick}
+              onClick={pickMode ? stopAllPick : startParentPick}
               className={cn(
                 'h-8 w-8 shrink-0 p-0',
                 pickMode
@@ -472,7 +619,7 @@ export function WaterPlaySignDetailPanel({
               {pickMode ? <X className="h-3.5 w-3.5" /> : <Crosshair className="h-3.5 w-3.5" />}
             </Button>
           </div>
-          {pickMode ? (
+          {pickMode && !childPickKind ? (
             <p className="mt-1 text-[11px] text-muted-foreground">지도를 클릭해 위치를 지정하세요.</p>
           ) : null}
         </DetailAttrRow>
@@ -660,6 +807,31 @@ export function WaterPlaySignDetailPanel({
                 </DetailAttrTable>
               </div>
             ) : null}
+          </section>
+        ) : null}
+
+        {!isCreateMode && item ? (
+          <section className="standard-detail-section shrink-0">
+            <WaterPlayChildPointList
+              title="구조함"
+              items={boxItems}
+              isEditing={isEditing}
+              adding={childPickKind === 'box'}
+              movingIdx={movingChild?.kind === 'box' ? movingChild.idx : null}
+              onAdd={() => startChildPick('box')}
+              onRemove={(row) => void handleRemoveChild('box', row)}
+              onItemClick={(row, idx) => handleChildClick('box', row, idx)}
+            />
+            <WaterPlayChildPointList
+              title="표지판"
+              items={signItems}
+              isEditing={isEditing}
+              adding={childPickKind === 'sign'}
+              movingIdx={movingChild?.kind === 'sign' ? movingChild.idx : null}
+              onAdd={() => startChildPick('sign')}
+              onRemove={(row) => void handleRemoveChild('sign', row)}
+              onItemClick={(row, idx) => handleChildClick('sign', row, idx)}
+            />
           </section>
         ) : null}
 

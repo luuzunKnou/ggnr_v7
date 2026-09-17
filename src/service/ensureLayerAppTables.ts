@@ -939,10 +939,43 @@ CREATE TABLE IF NOT EXISTS layer.water_play_sign (
   safebox_cnt integer,
   sign_cnt integer,
   remark text,
-  geom geometry(Point, 5181)
+  geom public.geometry(MultiPolygon, 5181)
 );
 CREATE INDEX IF NOT EXISTS water_play_sign_addr_idx ON layer.water_play_sign (addr);
+CREATE INDEX IF NOT EXISTS water_play_sign_geom_gix ON layer.water_play_sign USING GIST (geom);
 COMMENT ON TABLE layer.water_play_sign IS '물놀이 표지판';
+`;
+
+const WATER_PLAY_BOX_LIST_SQL = `
+CREATE TABLE IF NOT EXISTS layer.water_play_box_list (
+  fid SERIAL PRIMARY KEY,
+  id integer NOT NULL REFERENCES layer.water_play_sign (id) ON DELETE CASCADE,
+  addr text,
+  geom geometry(Point, 5181)
+);
+CREATE INDEX IF NOT EXISTS water_play_box_list_parent_idx ON layer.water_play_box_list (id);
+CREATE INDEX IF NOT EXISTS water_play_box_list_geom_gix ON layer.water_play_box_list USING GIST (geom);
+COMMENT ON TABLE layer.water_play_box_list IS '물놀이 구조함';
+COMMENT ON COLUMN layer.water_play_box_list.fid IS '키';
+COMMENT ON COLUMN layer.water_play_box_list.id IS '관리 구간';
+COMMENT ON COLUMN layer.water_play_box_list.addr IS '주소';
+COMMENT ON COLUMN layer.water_play_box_list.geom IS '위치';
+`;
+
+const WATER_PLAY_SIGN_LIST_SQL = `
+CREATE TABLE IF NOT EXISTS layer.water_play_sign_list (
+  fid SERIAL PRIMARY KEY,
+  id integer NOT NULL REFERENCES layer.water_play_sign (id) ON DELETE CASCADE,
+  addr text,
+  geom geometry(Point, 5181)
+);
+CREATE INDEX IF NOT EXISTS water_play_sign_list_parent_idx ON layer.water_play_sign_list (id);
+CREATE INDEX IF NOT EXISTS water_play_sign_list_geom_gix ON layer.water_play_sign_list USING GIST (geom);
+COMMENT ON TABLE layer.water_play_sign_list IS '물놀이 표지판 위치';
+COMMENT ON COLUMN layer.water_play_sign_list.fid IS '키';
+COMMENT ON COLUMN layer.water_play_sign_list.id IS '관리 구간';
+COMMENT ON COLUMN layer.water_play_sign_list.addr IS '주소';
+COMMENT ON COLUMN layer.water_play_sign_list.geom IS '위치';
 `;
 
 const WATER_PLAY_SIGN_LAYER_COLUMNS: Array<{ name: string; ddl: string }> = [
@@ -1883,6 +1916,51 @@ export async function ensureWaterPlaySignTable(result?: EnsureResult): Promise<E
       out.errors.push(`layer.water_play_sign.${col.name}: ${msg}`);
     }
   }
+  try {
+    const geomTypeRes = await db.execute(
+      sql.raw(`
+        SELECT type
+        FROM geometry_columns
+        WHERE f_table_schema = 'layer' AND f_table_name = 'water_play_sign'
+        LIMIT 1
+      `)
+    );
+    const geomType = String(
+      (geomTypeRes.rows?.[0] as { type?: string } | undefined)?.type ?? ''
+    ).toUpperCase();
+    if (!geomType.includes('MULTIPOLYGON')) {
+      await db.execute(sql.raw(`
+        ALTER TABLE layer.water_play_sign
+          ALTER COLUMN geom TYPE public.geometry(MultiPolygon,5181)
+          USING NULL::public.geometry
+      `));
+    }
+    await db.execute(sql.raw(`
+      UPDATE layer.water_play_sign
+      SET geom = NULL
+      WHERE EXISTS (
+        SELECT 1
+        FROM layer.water_play_sign x
+        WHERE x.geom IS NOT NULL
+          AND GeometryType(x.geom) IN ('POINT', 'MULTIPOINT')
+      )
+    `));
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    if (!/already|same type|cannot be cast/i.test(msg)) {
+      out.errors.push(`layer.water_play_sign.geom: ${msg}`);
+    }
+  }
+  await ensureBaseTable({
+    table: 'water_play_box_list',
+    createSql: WATER_PLAY_BOX_LIST_SQL,
+    result: out,
+  });
+  await ensureBaseTable({
+    table: 'water_play_sign_list',
+    createSql: WATER_PLAY_SIGN_LIST_SQL,
+    result: out,
+  });
   return out;
 }
 
