@@ -200,7 +200,7 @@ export async function runIntegration(p: Params) {
 
   const schedulerLabel =
     trigger === 'scheduler'
-      ? `FMS 연계 스케줄러 실행 - ${new Date().toLocaleString('ko-KR', {
+      ? `${system} 연계 스케줄러 실행 - ${new Date().toLocaleString('ko-KR', {
           timeZone: 'Asia/Seoul',
           year: 'numeric',
           month: '2-digit',
