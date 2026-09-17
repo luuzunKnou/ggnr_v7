@@ -86,11 +86,9 @@ export function WorkUnitListPanel({
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-white">
-      {/* 헤더 */}
-      <div className="flex shrink-0 items-center gap-2 border-b border-slate-200 px-3 py-2.5">
+      <div className="flex shrink-0 items-center gap-2 border-b border-slate-200 px-3 py-1.5">
         <div className="min-w-0 flex-1">
-          <h2 className="truncate text-[13px] font-semibold text-slate-800">{title}</h2>
-          <p className="mt-0.5 text-[10px] text-slate-400">{filtered.length}건</p>
+          <h2 className="truncate text-[13px] font-semibold leading-none text-slate-800">{title}</h2>
         </div>
         <button
           type="button"
@@ -165,6 +163,10 @@ export function WorkUnitListPanel({
         ) : null}
 
         {banner}
+      </div>
+
+      <div className="shrink-0 border-b border-slate-100 px-3 py-1.5 text-[11px] text-slate-500">
+        {filtered.length.toLocaleString()}건
       </div>
 
       {/* 목록 — 카드형 */}

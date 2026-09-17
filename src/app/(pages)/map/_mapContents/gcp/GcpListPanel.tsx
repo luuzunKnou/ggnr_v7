@@ -148,6 +148,9 @@ export function GcpListPanel({
       </div>
 
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+        <div className="shrink-0 border-b border-border px-3 py-1.5 text-[11px] text-muted-foreground">
+          {loading ? '불러오는 중…' : `${filtered.length.toLocaleString()}건`}
+        </div>
         <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden scrollbar-thin">
           <table className="w-full table-fixed border-collapse text-left text-xs">
             <colgroup>
@@ -188,9 +191,6 @@ export function GcpListPanel({
               )}
             </tbody>
           </table>
-        </div>
-        <div className="shrink-0 border-t border-border px-3 py-1.5 text-[11px] text-muted-foreground">
-          {loading ? '불러오는 중…' : `${filtered.length.toLocaleString()}건`}
         </div>
       </div>
     </div>

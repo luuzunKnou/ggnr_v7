@@ -1025,24 +1025,21 @@ export function AerialMediaShell({
     if (next) setSelectedFileId(next.id);
   }, [panoFileIndex, panoFiles]);
 
-  const listWidth = showDroneFile ? 'w-[20rem]' : 'w-[22rem]';
-  /** 작업단위 상세 — 파일 상세 열림 시 축소해 미리보기 폭 확보 */
-  const detailWidth = showDroneFile ? 'w-[20rem]' : 'w-[28rem]';
-  /** 드론 파일 상세 — 미리보기·속성이 잘리지 않도록 */
-  const fileWidth = showDroneFile ? 'w-[34rem]' : 'w-[17rem]';
+  /** 목록 380 · 작업단위상세 420 · 파일상세 480 — 파일 열어도 상세 폭 유지, 오른쪽으로만 확장 */
+  const listWidth = 'w-[380px] shrink-0';
+  const detailWidth = 'w-[420px] shrink-0';
+  const fileWidth = 'w-[480px] shrink-0';
+  const showFileDetail =
+    showDroneFile && selectedFile != null && detailTab === 'info';
 
   useEffect(() => {
     if (!onContentWidthChange) return;
     let w = hideKindNav ? 0 : rem(7.5);
-    w += showDroneFile ? rem(20) : rem(22);
-    if (showUnitDetail) {
-      w += showDroneFile ? rem(20) : rem(28);
-    }
-    if (showDroneFile) {
-      w += rem(34);
-    }
+    w += 380;
+    if (showUnitDetail) w += 420;
+    if (showFileDetail) w += 480;
     onContentWidthChange(w + 4);
-  }, [onContentWidthChange, hideKindNav, showUnitDetail, showDroneFile]);
+  }, [onContentWidthChange, hideKindNav, showUnitDetail, showFileDetail]);
 
   /** 파노라마 오버레이: 셸(패널 묶음) 오른쪽 끝부터 화면 우측 끝까지 지도 위를 덮음 */
   const shellRef = useRef<HTMLDivElement>(null);
@@ -1110,7 +1107,7 @@ export function AerialMediaShell({
     <div
       ref={shellRef}
       className={cn(
-        'flex h-full min-h-0 overflow-hidden bg-white',
+        'flex h-full w-full min-h-0 min-w-0 overflow-hidden bg-white',
         !useRealMap && 'rounded-md border border-slate-200 shadow-sm'
       )}
     >
@@ -1161,7 +1158,7 @@ export function AerialMediaShell({
         </nav>
       ) : null}
 
-      <div className={cn('flex shrink-0 flex-col border-r border-slate-200', listWidth)}>
+      <div className={cn('flex flex-col border-r border-slate-200', listWidth)}>
         <WorkUnitListPanel
           title={listTitle}
           items={units}
@@ -1332,7 +1329,7 @@ export function AerialMediaShell({
         </div>
       ) : null}
 
-      {showDroneFile && selectedFile && detailTab === 'info' ? (
+      {showFileDetail && selectedFile ? (
         <div className={cn('flex shrink-0 flex-col', fileWidth)}>
           <DroneFileDetailPanel
             file={selectedFile}
@@ -1352,7 +1349,7 @@ export function AerialMediaShell({
       {showPanoOverlay && selectedFile && panoOverlayBox
         ? createPortal(
             <div
-              className="fixed z-30 flex flex-col overflow-hidden border-l border-slate-200 bg-slate-900 shadow-sm"
+              className="fixed z-[5] flex flex-col overflow-hidden border-l border-slate-200 bg-slate-900 shadow-sm"
               style={panoOverlayBox}
             >
               <div className="relative min-h-0 flex-1 bg-slate-900">

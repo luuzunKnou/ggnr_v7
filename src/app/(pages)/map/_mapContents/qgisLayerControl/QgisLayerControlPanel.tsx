@@ -1,11 +1,9 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState, Fragment, type MouseEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, Fragment, type MouseEvent } from 'react';
 import {
-  Check,
   ChevronDown,
   ChevronRight,
-  CircleHelp,
   Copy,
   KeyRound,
   RefreshCw,
@@ -19,14 +17,6 @@ import { isSuperUser } from '@/lib/auth/superUser';
 import { cn } from '@/lib/utils';
 import { LayerRowPanelButton } from '@/app/(pages)/map/_mapComponents/layerRowEdit';
 import { Switch } from '@/app/shadcnComponents/ui/switch';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from '@/app/shadcnComponents/ui/dialog';
-import { Button } from '@/app/shadcnComponents/ui/button';
 import { resolveClientMachineIp, prefetchClientMachineIp } from '@/lib/clientMachineIp';
 
 type UserKeyRow = {
@@ -45,6 +35,13 @@ type LayerPermRow = {
   canRead: boolean;
   canWrite: boolean;
 };
+
+/** 드론영상(ortho_tu_*)만 WMS, 나머지는 WFS */
+function layerServiceKind(row: LayerPermRow): 'WFS' | 'WMS' {
+  const group = String(row.layerGroup ?? '').trim();
+  if (group === '드론영상' || /^ortho_tu_/i.test(row.layerName)) return 'WMS';
+  return 'WFS';
+}
 
 function isLoopbackHostname(host: string): boolean {
   const h = host.trim().toLowerCase();
@@ -91,26 +88,34 @@ export function QgisLayerControlPanel({ onClose }: { onClose?: () => void }) {
   const [forbidden, setForbidden] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [statusHint, setStatusHint] = useState<string | null>(null);
+  const statusTimerRef = useRef<number | null>(null);
   /** 접힌 레이어 카테고리 — 기본은 모두 접힘 */
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(() => new Set());
-  const [connGuideOpen, setConnGuideOpen] = useState(false);
   /** localhost 대신 LAN IP — 다른 PC QGIS 접속용 */
   const [shareOrigin, setShareOrigin] = useState('');
 
   const flashStatus = (label: string) => {
+    if (statusTimerRef.current != null) {
+      window.clearTimeout(statusTimerRef.current);
+      statusTimerRef.current = null;
+    }
     setStatusHint(label);
-    window.setTimeout(() => setStatusHint(null), 1600);
+    statusTimerRef.current = window.setTimeout(() => {
+      setStatusHint(null);
+      statusTimerRef.current = null;
+    }, 1000);
   };
+
+  useEffect(() => {
+    return () => {
+      if (statusTimerRef.current != null) window.clearTimeout(statusTimerRef.current);
+    };
+  }, []);
 
   useEffect(() => {
     prefetchClientMachineIp();
     void resolveQgisShareOrigin().then(setShareOrigin);
   }, []);
-
-  useEffect(() => {
-    if (!connGuideOpen) return;
-    void resolveQgisShareOrigin().then(setShareOrigin);
-  }, [connGuideOpen]);
 
   const loadUsers = useCallback(async () => {
     setLoadingUsers(true);
@@ -159,11 +164,9 @@ export function QgisLayerControlPanel({ onClose }: { onClose?: () => void }) {
     if (!selectedUsrId) {
       setLayers([]);
       setCollapsedGroups(new Set());
-      setConnGuideOpen(false);
       return;
     }
     void loadLayers(selectedUsrId, { collapseAll: true });
-    setConnGuideOpen(false);
   }, [selectedUsrId, loadLayers]);
 
   const toggleGroupCollapsed = (group: string) => {
@@ -345,7 +348,6 @@ export function QgisLayerControlPanel({ onClose }: { onClose?: () => void }) {
         })),
       });
       await loadLayers(selectedUsrId, { collapseAll: false });
-      flashStatus('저장됨');
     } catch (e) {
       window.alert(e instanceof Error ? e.message : '저장 실패');
     } finally {
@@ -372,20 +374,25 @@ export function QgisLayerControlPanel({ onClose }: { onClose?: () => void }) {
   }
 
   return (
-    <div className="standard-panel-root">
-      <div className="standard-panel-header">
+    <div className="standard-panel-root relative">
+      {statusHint ? (
+        <div className="pointer-events-none absolute inset-0 z-[200] flex items-center justify-center px-3">
+          <div
+            className="pointer-events-none inline-block px-4 py-2 text-sm text-white shadow-md"
+            style={{ backgroundColor: 'rgba(81, 145, 228, 0.88)', borderRadius: 3 }}
+            role="status"
+          >
+            {statusHint}
+          </div>
+        </div>
+      ) : null}
+      <div className="standard-panel-header !px-4">
         <div className="flex min-w-0 items-center gap-2">
-          <KeyRound className="h-4 w-4 shrink-0 text-primary" aria-hidden />
+          <KeyRound className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
           <div className="min-w-0">
             <span className="standard-panel-title">레이어권한</span>
-            <p className="text-[11px] text-muted-foreground">
+            <p className="mt-0.5 text-[11px] leading-none text-muted-foreground">
               사용자 {users.length}명
-              {statusHint ? (
-                <span className="ml-2 inline-flex items-center gap-0.5 text-primary">
-                  <Check className="h-3 w-3" />
-                  {statusHint}
-                </span>
-              ) : null}
             </p>
           </div>
         </div>
@@ -404,51 +411,100 @@ export function QgisLayerControlPanel({ onClose }: { onClose?: () => void }) {
 
       <div className="flex min-h-0 min-w-0 flex-1 overflow-hidden">
         {/* 좌: 사용자 리스트 */}
-        <section className="flex w-[min(42%,28rem)] min-w-[260px] shrink-0 flex-col border-r border-border">
-          <div className="shrink-0 border-b border-border px-3 py-2">
-            <div className="relative">
-              <Search className="absolute top-1/2 left-2.5 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+        <section className="flex w-[480px] shrink-0 flex-col border-r border-border bg-background">
+          <div className="shrink-0 space-y-3 px-2 py-2">
+            <div className="space-y-2.5 rounded-md border border-border bg-background px-2.5 py-2.5">
+              <div className="space-y-1">
+                <p className="text-[12px] font-semibold text-foreground">QGIS 접속 주소</p>
+                <p className="truncate text-[11px] leading-relaxed text-muted-foreground">
+                  QGIS에서 레이어를 연결할 때 사용합니다. 키가 없으면 왼쪽 목록에서 먼저 발급하세요.
+                </p>
+              </div>
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[11px] font-medium text-foreground">WFS</span>
+                  <button
+                    type="button"
+                    className="inline-flex h-7 shrink-0 items-center gap-1 rounded-md border border-border bg-background px-2 text-[11px] text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-40"
+                    disabled={!wfsUrl}
+                    title="WFS 주소 복사"
+                    onClick={() => void handleCopyWfsUrl()}
+                  >
+                    <Copy className="h-3 w-3" />
+                    복사
+                  </button>
+                </div>
+                <div className="rounded-md border border-border bg-muted/30 px-2.5 py-2">
+                  <p className="break-all font-mono text-[11px] leading-relaxed text-foreground/90">
+                    {wfsUrl ?? `${connOrigin || ''}/wfs.do?key=(키 발급 필요)`}
+                  </p>
+                </div>
+              </div>
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[11px] font-medium text-foreground">WMS</span>
+                  <button
+                    type="button"
+                    className="inline-flex h-7 shrink-0 items-center gap-1 rounded-md border border-border bg-background px-2 text-[11px] text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-40"
+                    disabled={!wmsUrl}
+                    title="WMS 주소 복사"
+                    onClick={() => void handleCopyWmsUrl()}
+                  >
+                    <Copy className="h-3 w-3" />
+                    복사
+                  </button>
+                </div>
+                <div className="rounded-md border border-border bg-muted/30 px-2.5 py-2">
+                  <p className="break-all font-mono text-[11px] leading-relaxed text-foreground/90">
+                    {wmsUrl ?? `${connOrigin || ''}/wms.do?key=(키 발급 필요)`}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="standard-search-wrap">
+              <Search className="standard-search-icon" />
               <input
                 type="search"
                 value={userFilter}
                 onChange={(e) => setUserFilter(e.target.value)}
                 placeholder="아이디·이름·키 검색"
-                className="h-8 w-full rounded-lg border-transparent bg-muted/50 py-1.5 pr-3 pl-8 text-xs outline-none focus:border-border focus:bg-background focus:ring-1 focus:ring-border"
+                className="h-8 w-full rounded-md border border-border bg-background py-1.5 pl-8 pr-3 text-xs text-foreground outline-none ring-0 placeholder:text-muted-foreground focus:border-border focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0"
               />
             </div>
           </div>
 
-          <div className="standard-list-body">
+          <div className="standard-list-body border-t border-border">
             <div className="standard-list-scroll">
               {loadingUsers ? (
                 <p className="py-10 text-center text-xs text-muted-foreground">불러오는 중…</p>
               ) : filteredUsers.length === 0 ? (
                 <p className="py-10 text-center text-xs text-muted-foreground">사용자가 없습니다.</p>
               ) : (
-                <table className="standard-list-table min-w-0 w-full table-fixed">
+                <table className="standard-list-table">
                   <colgroup>
-                    <col className="w-[22%]" />
                     <col className="w-[18%]" />
+                    <col className="w-[14%]" />
                     <col />
                     <col className="w-12" />
                     <col className="w-12" />
                   </colgroup>
-                  <thead className="sticky top-0 z-[1] border-b border-border bg-muted">
+                  <thead className="standard-table-thead">
                     <tr>
-                      <th className="standard-table-th standard-table-th-left !shadow-none">아이디</th>
-                      <th className="standard-table-th standard-table-th-left !shadow-none">이름</th>
-                      <th className="standard-table-th standard-table-th-left !shadow-none">KEY</th>
-                      <th className="standard-table-th standard-table-th-center !shadow-none">재발급</th>
-                      <th className="standard-table-th standard-table-th-center !shadow-none">키삭제</th>
+                      <th className="standard-table-th standard-table-th-left">아이디</th>
+                      <th className="standard-table-th standard-table-th-left">이름</th>
+                      <th className="standard-table-th standard-table-th-left">KEY</th>
+                      <th className="standard-table-th standard-table-th-center">재발급</th>
+                      <th className="standard-table-th standard-table-th-center">키삭제</th>
                     </tr>
                   </thead>
                   <tbody>
                     {groups.map(([group, rows]) => (
                       <Fragment key={group}>
-                        <tr className="bg-muted/40">
+                        <tr className="bg-muted/60">
                           <td
                             colSpan={5}
-                            className="px-2 py-1 text-[11px] font-medium text-muted-foreground"
+                            className="border-b border-border/80 px-1.5 py-1.5 text-[11px] font-semibold text-foreground/80"
                           >
                             {group}
                             <span className="ml-1 font-normal text-muted-foreground">
@@ -462,21 +518,21 @@ export function QgisLayerControlPanel({ onClose }: { onClose?: () => void }) {
                             <tr
                               key={u.usrId}
                               className={cn(
-                                'cursor-pointer border-b border-border/70 transition-colors',
+                                'cursor-pointer border-b border-border/60 transition-colors',
                                 selected
-                                  ? 'bg-primary/[0.08] hover:bg-primary/[0.11]'
-                                  : 'hover:bg-muted/40'
+                                  ? 'bg-primary/[0.08] hover:bg-primary/[0.12]'
+                                  : 'bg-background hover:bg-muted/40'
                               )}
                               onClick={() => setSelectedUsrId(u.usrId)}
                             >
                               <td
-                                className="standard-table-td-text font-medium"
+                                className="standard-table-td-text px-1.5 font-medium text-foreground"
                                 title={u.usrId}
                               >
                                 {u.usrId}
                               </td>
                               <td
-                                className="standard-table-td-text text-muted-foreground"
+                                className="standard-table-td-text px-1.5 text-muted-foreground"
                                 title={u.usrName ?? ''}
                               >
                                 {u.usrName || '—'}
@@ -489,17 +545,20 @@ export function QgisLayerControlPanel({ onClose }: { onClose?: () => void }) {
                                     title={`${u.qgisKey} — 클릭하여 복사`}
                                     onClick={(e) => void handleCopyKey(u.qgisKey!, e)}
                                   >
-                                    <Copy className="h-3 w-3 shrink-0 opacity-70" />
+                                    <Copy className="h-3 w-3 shrink-0 text-primary" />
                                     <span className="truncate">{u.qgisKey}</span>
                                   </button>
                                 ) : (
-                                  <span className="text-[10px] text-muted-foreground">미발급</span>
+                                  <span className="inline-flex items-center gap-1 text-[10px] text-muted-foreground">
+                                    <KeyRound className="h-3 w-3 shrink-0 text-muted-foreground/45" />
+                                    미발급
+                                  </span>
                                 )}
                               </td>
                               <td className="px-0.5 py-1.5 text-center align-middle">
                                 <button
                                   type="button"
-                                  className="inline-flex rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+                                  className="inline-flex rounded-md p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"
                                   title="키 발급/재발급"
                                   onClick={(e) => {
                                     e.stopPropagation();
@@ -512,7 +571,7 @@ export function QgisLayerControlPanel({ onClose }: { onClose?: () => void }) {
                               <td className="px-0.5 py-1.5 text-center align-middle">
                                 <button
                                   type="button"
-                                  className="inline-flex rounded p-1 text-muted-foreground hover:bg-destructive/10 hover:text-destructive disabled:opacity-30"
+                                  className="inline-flex rounded-md p-1.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive disabled:opacity-30"
                                   title="키 삭제"
                                   disabled={!u.qgisKey}
                                   onClick={(e) => {
@@ -537,108 +596,36 @@ export function QgisLayerControlPanel({ onClose }: { onClose?: () => void }) {
         </section>
 
         {/* 우: 레이어 권한 테이블 */}
-        <section className="flex min-w-0 flex-1 flex-col">
-          <div className="shrink-0 space-y-2 border-b border-border px-3 py-2">
-            <div className="flex min-w-0 items-center gap-1.5">
-              <div className="min-w-0 flex-1">
-                {selectedUser ? (
-                  <p className="truncate text-xs">
-                    <span className="font-semibold text-foreground">{selectedUser.usrId}</span>
-                    {selectedUser.usrName ? (
-                      <span className="text-muted-foreground"> · {selectedUser.usrName}</span>
-                    ) : null}
-                    <span className="ml-1.5 text-[10px] text-muted-foreground">
-                      읽기 {readOnCount} · 수정 {writeOnCount}
-                    </span>
-                  </p>
-                ) : (
-                  <p className="text-xs text-muted-foreground">왼쪽에서 사용자를 선택하세요</p>
-                )}
-              </div>
-              {selectedUsrId ? (
-                <button
-                  type="button"
-                  onClick={() => setConnGuideOpen(true)}
-                  className="inline-flex h-7 shrink-0 items-center gap-1 rounded-md border border-border bg-background px-2 text-[11px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                  title="QGIS 접속 주소"
-                >
-                  <CircleHelp className="h-3.5 w-3.5" />
-                  접속 안내
-                </button>
-              ) : null}
+        <section className="flex min-w-0 flex-1 flex-col bg-background">
+          <div className="standard-filter-section !px-2">
+            <div className="min-w-0">
+              {selectedUser ? (
+                <p className="truncate text-xs">
+                  <span className="font-semibold text-foreground">{selectedUser.usrId}</span>
+                  {selectedUser.usrName ? (
+                    <span className="text-muted-foreground"> · {selectedUser.usrName}</span>
+                  ) : null}
+                  <span className="ml-1.5 text-[10px] text-muted-foreground">
+                    읽기 {readOnCount} · 수정 {writeOnCount}
+                  </span>
+                </p>
+              ) : (
+                <p className="text-xs text-muted-foreground">왼쪽에서 사용자를 선택하세요</p>
+              )}
             </div>
 
-            <div className="relative">
-              <Search className="absolute top-1/2 left-2.5 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+            <div className="standard-search-wrap">
+              <Search className="standard-search-icon" />
               <input
                 type="search"
                 value={layerFilter}
                 onChange={(e) => setLayerFilter(e.target.value)}
                 placeholder="레이어 검색"
                 disabled={!selectedUsrId}
-                className="h-8 w-full rounded-lg border-transparent bg-muted/50 py-1.5 pr-3 pl-8 text-xs outline-none focus:border-border focus:bg-background focus:ring-1 focus:ring-border disabled:opacity-50"
+                className="h-8 w-full rounded-md border border-border bg-background py-1.5 pl-8 pr-3 text-xs text-foreground outline-none ring-0 placeholder:text-muted-foreground focus:border-border focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0 disabled:cursor-not-allowed disabled:opacity-50"
               />
             </div>
           </div>
-
-          <Dialog open={connGuideOpen} onOpenChange={setConnGuideOpen}>
-            <DialogContent
-              className="gap-0 overflow-hidden p-0 sm:max-w-[440px]"
-              layerZIndex={70}
-            >
-              <DialogHeader className="border-b border-border px-4 py-3">
-                <DialogTitle className="text-sm">QGIS 접속 주소</DialogTitle>
-                <DialogDescription className="text-[11px] leading-relaxed">
-                  QGIS에서 레이어를 연결할 때 사용합니다. 키가 없으면 왼쪽 목록에서 먼저
-                  발급하세요.
-                </DialogDescription>
-              </DialogHeader>
-              <div className="space-y-3 px-4 py-3">
-                <div className="space-y-1.5">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-[11px] font-medium text-foreground">WFS</span>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="h-7 gap-1 px-2 text-[11px]"
-                      disabled={!wfsUrl}
-                      onClick={() => void handleCopyWfsUrl()}
-                    >
-                      <Copy className="h-3 w-3" />
-                      복사
-                    </Button>
-                  </div>
-                  <div className="rounded-md border border-border bg-muted/40 px-2.5 py-2">
-                    <p className="break-all font-mono text-[11px] leading-relaxed text-foreground/90">
-                      {wfsUrl ?? `${connOrigin || ''}/wfs.do?key=(키 발급 필요)`}
-                    </p>
-                  </div>
-                </div>
-                <div className="space-y-1.5">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-[11px] font-medium text-foreground">WMS</span>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="h-7 gap-1 px-2 text-[11px]"
-                      disabled={!wmsUrl}
-                      onClick={() => void handleCopyWmsUrl()}
-                    >
-                      <Copy className="h-3 w-3" />
-                      복사
-                    </Button>
-                  </div>
-                  <div className="rounded-md border border-border bg-muted/40 px-2.5 py-2">
-                    <p className="break-all font-mono text-[11px] leading-relaxed text-foreground/90">
-                      {wmsUrl ?? `${connOrigin || ''}/wms.do?key=(키 발급 필요)`}
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </DialogContent>
-          </Dialog>
 
           <div className="standard-list-body">
             <div className="standard-list-scroll">
@@ -652,25 +639,37 @@ export function QgisLayerControlPanel({ onClose }: { onClose?: () => void }) {
               ) : loadingLayers ? (
                 <p className="py-10 text-center text-xs text-muted-foreground">불러오는 중…</p>
               ) : (
-                <table className="standard-list-table min-w-0 w-full table-fixed">
+                <table className="standard-list-table">
                   <colgroup>
                     <col />
-                    <col className="w-[28%]" />
-                    <col className="w-14" />
-                    <col className="w-14" />
+                    <col style={{ width: 380 }} />
+                    <col style={{ width: 380 }} />
+                    <col style={{ width: 60 }} />
+                    <col style={{ width: 60 }} />
                   </colgroup>
-                  <thead className="sticky top-0 z-[1] border-b border-border bg-muted">
+                  <thead className="standard-table-thead">
                     <tr>
-                      <th className="standard-table-th standard-table-th-left !shadow-none">한글명</th>
-                      <th className="standard-table-th standard-table-th-left !shadow-none">영문명</th>
-                      <th className="standard-table-th standard-table-th-center !shadow-none">읽기</th>
-                      <th className="standard-table-th standard-table-th-center !shadow-none">수정</th>
+                      <th className="standard-table-th standard-table-th-left !text-[12px]">
+                        한글명
+                      </th>
+                      <th className="standard-table-th standard-table-th-left !text-[12px]">
+                        영문명
+                      </th>
+                      <th className="standard-table-th standard-table-th-left !text-[12px]">
+                        WFS/WMS
+                      </th>
+                      <th className="standard-table-th standard-table-th-center !text-[12px]">
+                        읽기
+                      </th>
+                      <th className="standard-table-th standard-table-th-center !text-[12px]">
+                        수정
+                      </th>
                     </tr>
                   </thead>
                   <tbody>
                     {filteredLayers.length === 0 ? (
                       <tr>
-                        <td colSpan={4} className="standard-table-empty">
+                        <td colSpan={5} className="standard-table-empty !px-1.5">
                           표시할 레이어가 없습니다.
                         </td>
                       </tr>
@@ -683,14 +682,14 @@ export function QgisLayerControlPanel({ onClose }: { onClose?: () => void }) {
                         const expanded = searching || !collapsedGroups.has(group);
                         return (
                           <Fragment key={group}>
-                            <tr className="bg-muted/50">
+                            <tr className="bg-muted/60">
                               <td
-                                colSpan={2}
-                                className="px-2.5 py-1.5 text-[11px] font-semibold text-foreground"
+                                colSpan={3}
+                                className="border-b border-border/80 px-1.5 py-1.5 text-[12px] font-semibold text-foreground"
                               >
                                 <button
                                   type="button"
-                                  className="inline-flex max-w-full items-center gap-1 rounded px-0.5 text-left hover:bg-muted/80"
+                                  className="inline-flex max-w-full items-center gap-1 rounded px-0.5 text-left text-[12px] hover:bg-muted"
                                   onClick={() => toggleGroupCollapsed(group)}
                                   title={expanded ? '접기' : '펼치기'}
                                   aria-expanded={expanded}
@@ -709,16 +708,17 @@ export function QgisLayerControlPanel({ onClose }: { onClose?: () => void }) {
                                   </span>
                                 </button>
                               </td>
-                              <td className="px-1 py-1.5 text-center align-middle">
+                              <td className="border-b border-border/80 px-1.5 py-1.5 text-center align-middle">
                                 <div
                                   className="flex justify-center"
                                   onClick={(e) => e.stopPropagation()}
                                 >
                                   <Switch
                                     checked={groupReadAll}
-                                    className={
+                                    className={cn(
+                                      'focus-visible:ring-0',
                                       groupReadSome && !groupReadAll ? 'opacity-70' : undefined
-                                    }
+                                    )}
                                     onCheckedChange={(v) => patchGroup(rows, { canRead: v })}
                                     aria-label={`${group} 읽기 일괄`}
                                     title={
@@ -729,18 +729,19 @@ export function QgisLayerControlPanel({ onClose }: { onClose?: () => void }) {
                                   />
                                 </div>
                               </td>
-                              <td className="px-1 py-1.5 text-center align-middle">
+                              <td className="border-b border-border/80 px-1.5 py-1.5 text-center align-middle">
                                 <div
                                   className="flex justify-center"
                                   onClick={(e) => e.stopPropagation()}
                                 >
                                   <Switch
                                     checked={groupWriteAll}
-                                    className={
+                                    className={cn(
+                                      'focus-visible:ring-0',
                                       rows.some((r) => r.canWrite) && !groupWriteAll
                                         ? 'opacity-70'
                                         : undefined
-                                    }
+                                    )}
                                     onCheckedChange={(v) => patchGroup(rows, { canWrite: v })}
                                     aria-label={`${group} 수정 일괄`}
                                     title={
@@ -753,51 +754,71 @@ export function QgisLayerControlPanel({ onClose }: { onClose?: () => void }) {
                               </td>
                             </tr>
                             {expanded
-                              ? rows.map((row) => (
-                                  <tr key={row.layerName} className="border-b border-border/70">
-                                    <td
-                                      className="standard-table-td-text pl-7"
-                                      title={row.layerTitle}
+                              ? rows.map((row) => {
+                                  const serviceKind = layerServiceKind(row);
+                                  return (
+                                    <tr
+                                      key={row.layerName}
+                                      className="border-b border-border/60 bg-muted/15 hover:bg-muted/35"
                                     >
-                                      {row.layerTitle}
-                                    </td>
-                                    <td
-                                      className="standard-table-td-compact font-mono text-[10px] text-muted-foreground"
-                                      title={row.layerName}
-                                    >
-                                      {row.layerName}
-                                    </td>
-                                    <td className="px-1 py-2 text-center align-middle">
-                                      <div className="flex justify-center">
-                                        <Switch
-                                          checked={row.canRead}
-                                          onCheckedChange={(v) =>
-                                            patchLayer(row.layerName, {
-                                              canRead: v,
-                                              canWrite: v ? row.canWrite : false,
-                                            })
-                                          }
-                                          aria-label={`${row.layerName} 읽기`}
-                                        />
-                                      </div>
-                                    </td>
-                                    <td className="px-1 py-2 text-center align-middle">
-                                      <div className="flex justify-center">
-                                        <Switch
-                                          checked={row.canWrite}
-                                          disabled={!row.canRead}
-                                          onCheckedChange={(v) =>
-                                            patchLayer(row.layerName, {
-                                              canWrite: v,
-                                              canRead: v ? true : row.canRead,
-                                            })
-                                          }
-                                          aria-label={`${row.layerName} 수정`}
-                                        />
-                                      </div>
-                                    </td>
-                                  </tr>
-                                ))
+                                      <td
+                                        className="standard-table-td-text px-1.5 pl-6 text-foreground"
+                                        title={row.layerTitle}
+                                      >
+                                        <span className="truncate">{row.layerTitle}</span>
+                                      </td>
+                                      <td
+                                        className="standard-table-td-compact px-1.5 font-mono text-[12px] text-muted-foreground"
+                                        title={row.layerName}
+                                      >
+                                        {row.layerName}
+                                      </td>
+                                      <td className="px-1.5 py-2.5 align-middle">
+                                        <span
+                                          className={cn(
+                                            'inline-flex min-w-[2.75rem] justify-center rounded px-1.5 py-0.5 text-[10px] font-semibold tracking-wide',
+                                            serviceKind === 'WMS'
+                                              ? 'bg-amber-500/15 text-amber-800 dark:text-amber-300'
+                                              : 'bg-sky-500/15 text-sky-800 dark:text-sky-300'
+                                          )}
+                                        >
+                                          {serviceKind}
+                                        </span>
+                                      </td>
+                                      <td className="px-1.5 py-2.5 text-center align-middle">
+                                        <div className="flex justify-center">
+                                          <Switch
+                                            checked={row.canRead}
+                                            className="focus-visible:ring-0"
+                                            onCheckedChange={(v) =>
+                                              patchLayer(row.layerName, {
+                                                canRead: v,
+                                                canWrite: v ? row.canWrite : false,
+                                              })
+                                            }
+                                            aria-label={`${row.layerName} 읽기`}
+                                          />
+                                        </div>
+                                      </td>
+                                      <td className="px-1.5 py-2.5 text-center align-middle">
+                                        <div className="flex justify-center">
+                                          <Switch
+                                            checked={row.canWrite}
+                                            disabled={!row.canRead}
+                                            className="focus-visible:ring-0"
+                                            onCheckedChange={(v) =>
+                                              patchLayer(row.layerName, {
+                                                canWrite: v,
+                                                canRead: v ? true : row.canRead,
+                                              })
+                                            }
+                                            aria-label={`${row.layerName} 수정`}
+                                          />
+                                        </div>
+                                      </td>
+                                    </tr>
+                                  );
+                                })
                               : null}
                           </Fragment>
                         );
@@ -808,7 +829,7 @@ export function QgisLayerControlPanel({ onClose }: { onClose?: () => void }) {
               )}
             </div>
 
-            <div className="flex shrink-0 items-center justify-end gap-1 border-t border-border bg-background px-3 py-2">
+            <div className="flex shrink-0 items-center justify-end gap-1 border-t border-border bg-background px-2 py-2.5">
               <LayerRowPanelButton
                 type="button"
                 disabled={!selectedUsrId || loadingLayers}

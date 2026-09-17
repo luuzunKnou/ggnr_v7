@@ -414,16 +414,23 @@ const RIVER_USE_LEDGER_PANEL_MAX_WIDTH = 960
 const RIVER_USE_LEDGER_DETAIL_DEFAULT_WIDTH = 400
 const RIVER_USE_LEDGER_DETAIL_MIN_WIDTH = 320
 const RIVER_USE_LEDGER_DETAIL_MAX_WIDTH = 640
-const AERIAL_MANAGE_PANEL_DEFAULT_WIDTH = 360
-const AERIAL_MANAGE_PANEL_MIN_WIDTH = 300
-/** 목록+작업단위상세+파일상세(미리보기) 동시 오픈 시 잘리지 않도록 */
-const AERIAL_MANAGE_PANEL_MAX_WIDTH = 1680
-const SHOOTING_REQUEST_PANEL_DEFAULT_WIDTH = 340
-const SHOOTING_REQUEST_PANEL_MIN_WIDTH = 280
-const SHOOTING_REQUEST_PANEL_MAX_WIDTH = 480
-const SHOOTING_REQUEST_DETAIL_DEFAULT_WIDTH = 520
-const SHOOTING_REQUEST_DETAIL_MIN_WIDTH = 420
-const SHOOTING_REQUEST_DETAIL_MAX_WIDTH = 720
+/** 드론·사진동영상·파노라마·항공·승인관리·GCP 목록 고정 */
+const MEDIA_LIST_PANEL_WIDTH = 380
+/** 작업단위·승인·GCP 등 상세 고정 */
+const MEDIA_DETAIL_PANEL_WIDTH = 420
+/** 사진·동영상 파일 상세(오른쪽) 고정 */
+const MEDIA_FILE_DETAIL_PANEL_WIDTH = 480
+const AERIAL_MANAGE_PANEL_DEFAULT_WIDTH = MEDIA_LIST_PANEL_WIDTH
+const AERIAL_MANAGE_PANEL_MIN_WIDTH = MEDIA_LIST_PANEL_WIDTH
+/** 목록(380)+작업단위상세(420)+파일상세(480) */
+const AERIAL_MANAGE_PANEL_MAX_WIDTH =
+  MEDIA_LIST_PANEL_WIDTH + MEDIA_DETAIL_PANEL_WIDTH + MEDIA_FILE_DETAIL_PANEL_WIDTH + 8
+const SHOOTING_REQUEST_PANEL_DEFAULT_WIDTH = MEDIA_LIST_PANEL_WIDTH
+const SHOOTING_REQUEST_PANEL_MIN_WIDTH = MEDIA_LIST_PANEL_WIDTH
+const SHOOTING_REQUEST_PANEL_MAX_WIDTH = MEDIA_LIST_PANEL_WIDTH
+const SHOOTING_REQUEST_DETAIL_DEFAULT_WIDTH = MEDIA_DETAIL_PANEL_WIDTH
+const SHOOTING_REQUEST_DETAIL_MIN_WIDTH = MEDIA_DETAIL_PANEL_WIDTH
+const SHOOTING_REQUEST_DETAIL_MAX_WIDTH = MEDIA_DETAIL_PANEL_WIDTH
 const RIVER_CONSTRUCTION_LEDGER_OPENED_KEY = "riverConstructionLedger"
 const RIVER_CONSTRUCTION_LEDGER_PANEL_DEFAULT_WIDTH = 560
 const RIVER_CONSTRUCTION_LEDGER_PANEL_MIN_WIDTH = 420
@@ -2398,13 +2405,14 @@ function MapLayoutContent({
             </div>
           )}
           {aerialManageOpen && (
-            <div className="pointer-events-auto shrink-0">
+            <div className="pointer-events-auto relative z-20 shrink-0">
               <MapSideListPanel
                 width={aerialManagePanelWidth}
                 minWidth={AERIAL_MANAGE_PANEL_MIN_WIDTH}
                 maxWidth={AERIAL_MANAGE_PANEL_MAX_WIDTH}
                 leftOffsetPx={aerialManagePanelLeftPx}
                 onWidthChange={setAerialManagePanelWidth}
+                resizable={false}
                 className="transition-[width] duration-200 ease-out"
                 contentClassName="overflow-hidden"
               >
@@ -2432,6 +2440,7 @@ function MapLayoutContent({
                 maxWidth={SHOOTING_REQUEST_PANEL_MAX_WIDTH}
                 leftOffsetPx={shootingRequestPanelLeftPx}
                 onWidthChange={setShootingRequestPanelWidth}
+                resizable={false}
                 contentClassName="overflow-hidden"
               >
                 <ShootingRequestPanel
@@ -2455,6 +2464,7 @@ function MapLayoutContent({
                 maxWidth={SHOOTING_REQUEST_DETAIL_MAX_WIDTH}
                 leftOffsetPx={shootingRequestDetailLeftPx}
                 onWidthChange={setShootingRequestDetailWidth}
+                resizable={false}
                 contentClassName="overflow-hidden"
               >
                 <ShootingRequestDetailPanel
@@ -2483,6 +2493,7 @@ function MapLayoutContent({
                 maxWidth={GCP_PANEL_MAX_WIDTH}
                 leftOffsetPx={gcpPanelLeftPx}
                 onWidthChange={setGcpPanelWidth}
+                resizable={false}
                 contentClassName="overflow-hidden"
               >
                 <GcpListPanel
@@ -2513,6 +2524,7 @@ function MapLayoutContent({
                 maxWidth={GCP_DETAIL_MAX_WIDTH}
                 leftOffsetPx={gcpDetailLeftPx}
                 onWidthChange={setGcpDetailWidth}
+                resizable={false}
                 contentClassName="overflow-hidden"
               >
                 <GcpDetailPanel

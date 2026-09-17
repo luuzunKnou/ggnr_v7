@@ -136,6 +136,29 @@ export function createVWorldLayer(type: VWorldLayerType): WebGLTileLayer {
 }
 
 /**
+ * VWorld 캔버스(Tile) 레이어 — 위치도·범위그리기 등 보조 지도용.
+ * WebGL 컨텍스트를 쓰지 않아 메인 지도가 간헐적으로 비는 현상을 막는다.
+ */
+export function createVWorldRasterLayer(type: VWorldLayerType): TileLayer<XYZ> {
+  const layerMap: Record<VWorldLayerType, { path: string; ext: string }> = {
+    base: { path: 'Base', ext: 'png' },
+    satellite: { path: 'Satellite', ext: 'jpeg' },
+    white: { path: 'white', ext: 'png' },
+    night: { path: 'midnight', ext: 'png' },
+  };
+  const layerInfo = layerMap[type];
+  return new TileLayer({
+    source: new XYZ({
+      url: `https://xdworld.vworld.kr/2d/${layerInfo.path}/service/{z}/{x}/{y}.${layerInfo.ext}`,
+      crossOrigin: 'anonymous',
+      maxZoom: VWORLD_MAX_ZOOM_INDEX,
+      wrapX: false,
+      attributions: '© VWorld',
+    }),
+  });
+}
+
+/**
  * 카카오맵 배경지도 레이어 생성
  * EPSG:5181 좌표계 사용
  */

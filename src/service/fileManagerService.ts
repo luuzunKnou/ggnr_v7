@@ -638,6 +638,7 @@ export async function relocateServiceFileDataKey(params: {
 
 /**
  * 첨부파일 소프트 삭제: 원본을 `{파일명}.tmp` 로 rename (목록에서 제외).
+ * SMB/미리보기 잠금(EBUSY) 시 짧게 재시도 후 copy+unlink 폴백.
  */
 export async function softDeleteServiceFileDataItem(params: {
   layerName: string;
@@ -670,12 +671,59 @@ export async function softDeleteServiceFileDataItem(params: {
     if (code === 'ENOENT') return { ok: false, error: '파일을 찾을 수 없습니다.' };
     return { ok: false, error: '확인 실패' };
   }
+
+  const isBusy = (e: unknown) => {
+    const code = (e as NodeJS.ErrnoException)?.code;
+    return code === 'EBUSY' || code === 'EPERM' || code === 'EACCES';
+  };
+  const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+  const delays = [80, 160, 320, 640, 1200];
+
+  for (let i = 0; i <= delays.length; i++) {
+    try {
+      await fs.rename(srcAbs, dstAbs);
+      return { ok: true };
+    } catch (e: unknown) {
+      const code = (e as NodeJS.ErrnoException).code;
+      if (code === 'EEXIST') return { ok: false, error: '이미 삭제된 파일이 있습니다.' };
+      if (code === 'ENOENT') return { ok: true };
+      if (!isBusy(e) || i === delays.length) break;
+      await sleep(delays[i]!);
+    }
+  }
+
+  /** rename이 잠금으로 막히면 복사 후 원본 삭제 시도 */
   try {
-    await fs.rename(srcAbs, dstAbs);
-  } catch (e: unknown) {
-    const code = (e as NodeJS.ErrnoException).code;
-    if (code === 'EEXIST') return { ok: false, error: '이미 삭제된 파일이 있습니다.' };
-    throw e;
+    try {
+      await fs.unlink(dstAbs);
+    } catch {
+      /* 기존 .tmp 없으면 무시 */
+    }
+    await nodeFs.copyFile(fsPath(srcAbs), fsPath(dstAbs));
+    for (let i = 0; i <= delays.length; i++) {
+      try {
+        await fs.unlink(srcAbs);
+        return { ok: true };
+      } catch (e: unknown) {
+        if (!isBusy(e) || i === delays.length) {
+          try {
+            await fs.unlink(dstAbs);
+          } catch {
+            /* ignore */
+          }
+          return {
+            ok: false,
+            error: '파일이 사용 중이라 삭제하지 못했습니다. 잠시 후 다시 시도해 주세요.',
+          };
+        }
+        await sleep(delays[i]!);
+      }
+    }
+  } catch {
+    return {
+      ok: false,
+      error: '파일이 사용 중이라 삭제하지 못했습니다. 잠시 후 다시 시도해 주세요.',
+    };
   }
   return { ok: true };
 }
