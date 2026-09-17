@@ -23,6 +23,11 @@ import { canStartMapDrawInteraction } from '../mapDrawInteraction';
 import { getLegendGraphicUrl } from '../layerFactory/serviceLayerFactory';
 import { transformCoordinate } from '../services/coordinateService';
 import type { IdentifyLayerResult } from '../hooks/useFeatureIdentify';
+import {
+  ORTHO_DATA_QUERY_LAYER_ID,
+  isOrthoDataQueryLayerId,
+} from '../../_mapContents/aerialView/orthoDataQueryLayerId';
+import { MapHitOverlapSelect } from '../MapHitOverlapSelect';
 
 /** layer 스키마 테이블 목록 (DB 기준) */
 type LayerSchemaTable = { schema: string; table: string };
@@ -222,6 +227,12 @@ export function AttributeQueryUI({ activeTableName, onOpenDataPanel, onClearData
   /** Provider value 객체는 매 렌더 새 참조 → useCallback deps에 mapContext 전체 넣으면 무한 effect 유발 */
   const setIdentifyResultList = mapContext?.setIdentifyResultList;
   const setDataQueryMapPickEnabled = mapContext?.setDataQueryMapPickEnabled;
+  const orthoDataQueryBboxOn = Boolean(mapContext?.orthoDataQueryBboxOn);
+  const setOrthoDataQueryBboxOn = mapContext?.setOrthoDataQueryBboxOn;
+  const setOrthoDataQueryTuKeys = mapContext?.setOrthoDataQueryTuKeys;
+  const orthoDataQueryTuKeys = mapContext?.orthoDataQueryTuKeys ?? [];
+  const orthoDataQueryHitOptions = mapContext?.orthoDataQueryHitOptions ?? [];
+  const setOrthoDataQueryHitOptions = mapContext?.setOrthoDataQueryHitOptions;
   /** 부모가 매 렌더 새 함수를 넘기는 경우(map-layout handleOpenDataPanel 등) → 검색 콜백 체인이 흔들려 읍면동 effect 무한루프 */
   const onOpenDataPanelRef = useRef(onOpenDataPanel);
   const onClearDataSelectionRef = useRef(onClearDataSelection);
@@ -416,6 +427,25 @@ export function AttributeQueryUI({ activeTableName, onOpenDataPanel, onClearData
             layers: groupMap.get(gName)!.sort((a, b) => a.name.localeCompare(b.name)),
           }))
           .filter((g) => g.layers.length > 0);
+
+        // UAV: 드론영상(가상 레이어) — bbox 폴리곤용
+        if (enabledSysKeys.has('uav')) {
+          groups.unshift({
+            id: '드론영상',
+            name: '드론영상',
+            layers: [
+              {
+                id: ORTHO_DATA_QUERY_LAYER_ID,
+                name: '드론영상',
+                tableName: ORTHO_DATA_QUERY_LAYER_ID,
+                schema: 'layer',
+                physicalTableName: ORTHO_DATA_QUERY_LAYER_ID,
+                rowFilterSql: null,
+              },
+            ],
+          });
+        }
+
         setLayerGroups(groups);
       })
       .catch(() => {
@@ -1041,6 +1071,15 @@ export function AttributeQueryUI({ activeTableName, onOpenDataPanel, onClearData
   }, [activeTool, dataSelectTable, dataSelectField, dataSelectValue, applySpatialSearchFromWkt5181, setIdentifyResultList]);
 
   const handleLayerClick = (layer: LayerItemMeta) => {
+    if (isOrthoDataQueryLayerId(layer.tableName)) {
+      const next = !orthoDataQueryBboxOn;
+      setOrthoDataQueryBboxOn?.(next);
+      if (!next) {
+        setOrthoDataQueryTuKeys?.([]);
+        setOrthoDataQueryHitOptions?.([]);
+      }
+      return;
+    }
     const effectiveActive =
       pendingActiveTableRef.current != null
         ? pendingActiveTableRef.current
@@ -1067,6 +1106,35 @@ export function AttributeQueryUI({ activeTableName, onOpenDataPanel, onClearData
 
   return (
     <div className="flex-1 min-h-0 flex flex-col overflow-hidden opacity-[0.95]">
+      {orthoDataQueryBboxOn && orthoDataQueryHitOptions.length > 1 && (
+        <MapHitOverlapSelect
+          fieldLabel="드론영상"
+          options={orthoDataQueryHitOptions}
+          value={String(orthoDataQueryTuKeys[0] ?? orthoDataQueryHitOptions[0]?.value ?? '')}
+          onChange={(id) => {
+            const tu = Number(id);
+            if (!Number.isFinite(tu)) return;
+            setOrthoDataQueryTuKeys?.([tu]);
+            const map = mapContext?.mapInstanceRef?.current;
+            if (!map) return;
+            const layers = map.getLayers().getArray();
+            for (const layer of layers) {
+              const src = (layer as { getSource?: () => { getFeatures?: () => import('ol/Feature').default[] } }).getSource?.();
+              const feats = src?.getFeatures?.() ?? [];
+              const hit = feats.find((f) => Number(f.get('tuKey')) === tu);
+              const geom = hit?.getGeometry?.();
+              if (geom) {
+                map.getView().fit(geom.getExtent(), {
+                  padding: [80, 80, 80, 80],
+                  maxZoom: 18,
+                  duration: 400,
+                });
+                break;
+              }
+            }
+          }}
+        />
+      )}
       {/* 공간검색 */}
       <div className="border-b border-border px-4 py-3 shrink-0">
         <div className="mb-2 flex rounded-md border border-border bg-muted/30 p-0.5">
@@ -1353,7 +1421,11 @@ export function AttributeQueryUI({ activeTableName, onOpenDataPanel, onClearData
           const isGroupOpen = expandedGroups.includes(group.id);
           const hasActiveLayer = filteredLayers.some((l) => activeTableName === l.tableName);
           const groupCount = filteredLayers.length;
-          const groupVisibleCount = filteredLayers.filter((l) => visibleLayerNames.has(l.tableName)).length;
+          const groupVisibleCount = filteredLayers.filter((l) =>
+            isOrthoDataQueryLayerId(l.tableName)
+              ? orthoDataQueryBboxOn
+              : visibleLayerNames.has(l.tableName)
+          ).length;
 
           return (
             <div
@@ -1391,11 +1463,23 @@ export function AttributeQueryUI({ activeTableName, onOpenDataPanel, onClearData
                   checked={groupCount > 0 && groupVisibleCount === groupCount}
                   ref={(el) => { if (el) el.indeterminate = groupVisibleCount > 0 && groupVisibleCount < groupCount; }}
                   onChange={(e) => {
-                    if (!setVisibleLayerNames) return;
                     const checked = e.target.checked;
+                    const hasOrtho = filteredLayers.some((l) => isOrthoDataQueryLayerId(l.tableName));
+                    if (hasOrtho) {
+                      setOrthoDataQueryBboxOn?.(checked);
+                      if (!checked) {
+                        setOrthoDataQueryTuKeys?.([]);
+                        setOrthoDataQueryHitOptions?.([]);
+                      }
+                    }
+                    if (!setVisibleLayerNames) return;
                     setVisibleLayerNames((prev) => {
                       const next = new Set(prev);
-                      filteredLayers.forEach((l) => { if (checked) next.add(l.tableName); else next.delete(l.tableName); });
+                      filteredLayers.forEach((l) => {
+                        if (isOrthoDataQueryLayerId(l.tableName)) return;
+                        if (checked) next.add(l.tableName);
+                        else next.delete(l.tableName);
+                      });
                       return next;
                     });
                   }}
@@ -1408,9 +1492,12 @@ export function AttributeQueryUI({ activeTableName, onOpenDataPanel, onClearData
               {isGroupOpen && (
                 <div className={cn(hasActiveLayer ? 'bg-primary/[0.03]' : 'bg-muted/30')}>
                   {filteredLayers.map((layer) => {
+                    const isOrtho = isOrthoDataQueryLayerId(layer.tableName);
                     const isActive = activeTableName === layer.tableName;
-                    const isVisible = visibleLayerNames.has(layer.tableName);
-                    const totalCount = layerTotals[layer.tableName];
+                    const isVisible = isOrtho
+                      ? orthoDataQueryBboxOn
+                      : visibleLayerNames.has(layer.tableName);
+                    const totalCount = isOrtho ? null : layerTotals[layer.tableName];
 
                     return (
                       <div
@@ -1447,33 +1534,47 @@ export function AttributeQueryUI({ activeTableName, onOpenDataPanel, onClearData
                             {layer.name}
                           </span>
                           <span className={cn('text-[11px] shrink-0', isActive ? 'text-primary/60' : 'text-muted-foreground')}>
-                            ({totalCount != null ? `${totalCount.toLocaleString()}건` : '...'})
+                            {isOrtho
+                              ? '(범위)'
+                              : `(${totalCount != null ? `${totalCount.toLocaleString()}건` : '...'})`}
                           </span>
                         </div>
                         <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
-                          <button
-                            type="button"
-                            className="p-0.5 rounded text-muted-foreground hover:text-primary hover:bg-muted/60 transition-colors"
-                            title="필터 추가"
-                            onClick={(e) => e.stopPropagation()}
-                          >
-                            <SlidersHorizontal className="w-3.5 h-3.5" strokeWidth={1.5} />
-                          </button>
-                          <button
-                            type="button"
-                            className="p-0.5 rounded text-muted-foreground hover:text-primary hover:bg-muted/60 transition-colors"
-                            title="스타일 설정"
-                            onClick={(e) => e.stopPropagation()}
-                          >
-                            <Palette className="w-3.5 h-3.5" strokeWidth={1.5} />
-                          </button>
+                          {!isOrtho && (
+                            <>
+                              <button
+                                type="button"
+                                className="p-0.5 rounded text-muted-foreground hover:text-primary hover:bg-muted/60 transition-colors"
+                                title="필터 추가"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                <SlidersHorizontal className="w-3.5 h-3.5" strokeWidth={1.5} />
+                              </button>
+                              <button
+                                type="button"
+                                className="p-0.5 rounded text-muted-foreground hover:text-primary hover:bg-muted/60 transition-colors"
+                                title="스타일 설정"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                <Palette className="w-3.5 h-3.5" strokeWidth={1.5} />
+                              </button>
+                            </>
+                          )}
                           <input
                             type="checkbox"
                             checked={isVisible}
                             onChange={(e) => {
                               e.stopPropagation();
-                              if (!setVisibleLayerNames) return;
                               const checked = e.target.checked;
+                              if (isOrtho) {
+                                setOrthoDataQueryBboxOn?.(checked);
+                                if (!checked) {
+                                  setOrthoDataQueryTuKeys?.([]);
+                                  setOrthoDataQueryHitOptions?.([]);
+                                }
+                                return;
+                              }
+                              if (!setVisibleLayerNames) return;
                               setVisibleLayerNames((prev) => {
                                 const next = new Set(prev);
                                 if (checked) next.add(layer.tableName);

@@ -5,7 +5,7 @@ import { createPortal } from 'react-dom'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Check, ChevronLeft, ChevronRight, Plus, RotateCcw, Settings2, X } from 'lucide-react'
 import { call } from '@/lib/api'
-import { withBasePath, withBasePathNav } from '@/lib/basePath'
+import { getBasePath, withBasePath, withBasePathNav } from '@/lib/basePath'
 import { getOpenedKeyForSerEng } from '@/lib/mapServiceOpened'
 import { scrubMapSearchParamsOnSystemSwitch } from '@/lib/mapSystemSwitch'
 import { openShapeEditorMapWindow } from '@/lib/shapeEditorWindow'
@@ -40,6 +40,17 @@ const SERVICE_ICON_ALIASES: Record<string, string> = {
 const PORTAL_LINKS: Record<string, string> = {
   notice: '/notice',
   board: '/library',
+  policyMap: '/policy-map',
+}
+
+/** BASE_PATH(/uav_ulsan)로 프로젝트 추정 — API 응답 전에 공통 메뉴가 비지 않게 */
+function projectHintFromBasePath(): string {
+  const base = getBasePath().replace(/^\/+|\/+$/g, '')
+  return base || ''
+}
+
+function showPolicyMapShortcut(project: string): boolean {
+  return project === 'uav_ulsan'
 }
 /** 추가 단추 테두리까지 포함한 칸 높이 — 비었을 때·있을 때 줄이 흔들리지 않게 */
 const FAVORITE_SLOT =
@@ -229,7 +240,7 @@ export function UserAccountMoreTab({
 
   const [services, setServices] = useState<ServiceItem[]>([])
   const [systems, setSystems] = useState<SystemItem[]>([])
-  const [bootProject, setBootProject] = useState('')
+  const [bootProject, setBootProject] = useState(projectHintFromBasePath)
   const [favorites, setFavorites] = useState<string[]>([])
   const [settingOpen, setSettingOpen] = useState(false)
   const [draft, setDraft] = useState<string[]>([])
@@ -289,8 +300,16 @@ export function UserAccountMoreTab({
     if (!map.has('board')) {
       map.set('board', { ser_eng: 'board', ser_kor: '자료실', ser_svg: null })
     }
+    if (showPolicyMapShortcut(bootProject) && !map.has('policyMap')) {
+      map.set('policyMap', {
+        ser_eng: 'policyMap',
+        ser_kor: '정책지도 바로가기',
+        ser_svg:
+          '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="m3 6 6-3 6 3 6-3v15l-6 3-6-3-6 3z"/><path d="M9 3v15"/><path d="M15 6v15"/><circle cx="12" cy="12" r="2.25"/><path d="M12 14.25V17"/></svg>',
+      })
+    }
     return map
-  }, [services])
+  }, [services, bootProject])
 
   const homeSysByEng = useMemo(() => {
     const map = new Map<string, string>()
@@ -311,18 +330,27 @@ export function UserAccountMoreTab({
     [bootProject, serviceMap]
   )
 
-  const basicItems = useMemo(
-    () =>
-      ALWAYS_SHOW_ENGS.map((eng) => serviceMap.get(eng)).filter((s): s is ServiceItem => s != null),
-    [serviceMap]
-  )
+  const basicItems = useMemo(() => {
+    const items = ALWAYS_SHOW_ENGS.map((eng) => serviceMap.get(eng)).filter(
+      (s): s is ServiceItem => s != null
+    )
+    if (showPolicyMapShortcut(bootProject)) {
+      const pm = serviceMap.get('policyMap')
+      if (pm) items.push(pm)
+    }
+    return items
+  }, [serviceMap, bootProject])
 
   const settingGroups = useMemo(() => {
     const used = new Set<string>()
     const groups: { key: string; title: string; items: ServiceItem[] }[] = []
-    const basics = ALWAYS_SHOW_ENGS.map((eng) => serviceMap.get(eng)).filter(
+    const basics = [...ALWAYS_SHOW_ENGS.map((eng) => serviceMap.get(eng)).filter(
       (s): s is ServiceItem => s != null
-    )
+    )]
+    if (showPolicyMapShortcut(bootProject)) {
+      const pm = serviceMap.get('policyMap')
+      if (pm) basics.push(pm)
+    }
     if (basics.length) {
       for (const s of basics) used.add(s.ser_eng)
       groups.push({ key: 'basic', title: '공통', items: basics })
@@ -337,7 +365,7 @@ export function UserAccountMoreTab({
       groups.push({ key: sys.sys_key, title: sys.sys_kor, items })
     }
     return groups
-  }, [serviceMap, systems, visibleEng])
+  }, [serviceMap, systems, visibleEng, bootProject])
 
   useEffect(() => {
     if (suppressSettings) setSettingOpen(false)

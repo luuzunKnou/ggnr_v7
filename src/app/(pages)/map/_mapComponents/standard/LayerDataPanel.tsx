@@ -37,6 +37,7 @@ import { ServiceFileAttachmentThumb } from './ServiceFileAttachmentThumb';
 import { ServiceFilePdfThumb } from './ServiceFilePdfThumb';
 import { ServiceFileImagePreview, type ServiceFilePreviewItem } from './ServiceFileImagePreview';
 import type { IdentifyLayerResult, IdentifyFeatureItem, IdentifyPopupState } from '../hooks/useFeatureIdentify';
+import { isOrthoDataQueryLayerId } from '../../_mapContents/aerialView/orthoDataQueryLayerId';
 import { IdentifyHitListBlock } from './IdentifyHitListBlock';
 import { compareFeaturesByGeometryStackOrder } from '@/lib/mapLayerGeometryOrder';
 import {
@@ -1705,7 +1706,34 @@ export function LayerDataPanel({
   const handleIdentifyNav = identifyHistoryDepth > 0 ? handleBackFromIdentify : handleClose;
 
   const handleIdentifyItemClick = (item: { layer: IdentifyLayerResult; feature: IdentifyFeatureItem; index: number }) => {
-    const { feature, index } = item;
+    const { feature, index, layer } = item;
+
+    // 드론영상 범위(가상): 우측 목록에서 고르면 해당 영상만 지도에 표시
+    if (isOrthoDataQueryLayerId(layer.tableName) || feature.data?.__orthoExtent === true) {
+      const tu = Number(feature.data?.tuKey);
+      if (Number.isFinite(tu)) {
+        mapContext?.setOrthoDataQueryTuKeys?.([tu]);
+      }
+      setSelectedRowData(feature.data);
+      setSelectedIdentifyIndex(index);
+      setActiveTab('basic');
+      const ext = feature.data?.extent3857;
+      const map = mapInstanceRef?.current;
+      if (
+        map &&
+        Array.isArray(ext) &&
+        ext.length === 4 &&
+        ext.every((n) => typeof n === 'number' && Number.isFinite(n))
+      ) {
+        map.getView().fit(ext as [number, number, number, number], {
+          padding: [80, 80, 80, 80],
+          maxZoom: 18,
+          duration: 400,
+        });
+      }
+      return;
+    }
+
     if (selectedIdentifyIndex === index && selectedRowData != null) {
       setSelectedRowData(null);
       setSelectedIdentifyIndex(null);
