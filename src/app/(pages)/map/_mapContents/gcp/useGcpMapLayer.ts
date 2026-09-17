@@ -18,7 +18,8 @@ import '../../_mapComponents/config/projections'
 import { useMapContext } from '../../_mapComponents/MapContext'
 import { scheduleFitMapToExtent3857 } from '../../_mapComponents/config/mapAutoNavigation'
 import { MAP_AUTO_NAV_MAX_ZOOM } from '../../_mapComponents/config/mapDefaults'
-import { mapColorOf, type GcpPoint } from './gcpDummyData'
+import { GCP_MAP_COLOR } from './gcpConfig'
+import type { GcpPoint } from './gcpTypes'
 
 const GCP_DRAFT_ID = '__gcp_draft__'
 const GCP_DRAFT_FILL = '#0D9488'
@@ -115,7 +116,7 @@ export function useGcpMapLayer({
         if (!point) return
         const id = String(feature.get('gcpId') ?? '')
         const selected = id === selectedIdRef.current
-        const fill = mapColorOf(point)
+        const fill = GCP_MAP_COLOR
         return new Style({
           image: new Circle({
             radius: 6,

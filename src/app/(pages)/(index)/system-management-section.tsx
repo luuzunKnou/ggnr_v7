@@ -33,6 +33,7 @@ const DEFAULT_COLORS: Record<string, string> = {
   swl: "#8B5CF6",
   water: "#06B6D4",
   uav: "#6366F1",
+  uav_view: "#ea580c",
 }
 
 /** 시스템별 기본 로고(아이콘). sys_img가 비어 있을 때 사용 */
@@ -41,6 +42,7 @@ const DEFAULT_ICONS: Record<string, React.ReactNode> = {
   swl: <CloudRain className="w-8 h-8" strokeWidth={1.5} />,
   water: <Waves className="w-8 h-8" strokeWidth={1.5} />,
   uav: <Plane className="w-8 h-8" strokeWidth={1.5} />,
+  uav_view: <Plane className="w-8 h-8" strokeWidth={1.5} />,
 }
 
 export function SystemManagementSection({ systems }: SystemManagementSectionProps) {

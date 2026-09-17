@@ -29,6 +29,8 @@ type Props = {
   onDateFromChange?: (v: string) => void;
   onDateToChange?: (v: string) => void;
   banner?: ReactNode;
+  /** 검색·업로드 아래 추가 도구 (예: 고화질 제한) */
+  toolsExtra?: ReactNode;
   emptyHint?: string;
 };
 
@@ -69,6 +71,7 @@ export function WorkUnitListPanel({
   onDateFromChange,
   onDateToChange,
   banner,
+  toolsExtra,
   emptyHint = '폴더를 업로드하거나 검색어를 바꿔 보세요.',
 }: Props) {
   const filtered = items.filter((u) => {
@@ -124,6 +127,8 @@ export function WorkUnitListPanel({
             폴더 업로드
           </Button>
         ) : null}
+
+        {toolsExtra}
 
         <div className="relative">
           <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
@@ -199,10 +204,10 @@ export function WorkUnitListPanel({
                     )}
                   >
                     <div className="flex items-center justify-between gap-2">
-                      <div className="flex min-w-0 flex-wrap items-center gap-1">
+                      <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1">
                         <span
                           className={cn(
-                            'inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-medium tabular-nums',
+                            'inline-flex h-5 items-center rounded px-1.5 text-[10px] font-medium tabular-nums',
                             selected ? 'bg-sky-100 text-sky-800' : 'bg-slate-100 text-slate-600'
                           )}
                         >
@@ -211,7 +216,7 @@ export function WorkUnitListPanel({
                         {uploadDateLabel ? (
                           <span
                             className={cn(
-                              'inline-flex items-center rounded px-1.5 py-0.5 text-[10px] tabular-nums',
+                              'inline-flex h-5 items-center rounded px-1.5 text-[10px] tabular-nums',
                               selected
                                 ? 'bg-white text-sky-700 ring-1 ring-sky-200'
                                 : 'bg-white text-slate-500 ring-1 ring-slate-200'
@@ -221,7 +226,11 @@ export function WorkUnitListPanel({
                           </span>
                         ) : null}
                       </div>
-                      {convertStatus ? <StatusBadge status={convertStatus} mode="convert" /> : null}
+                      {convertStatus ? (
+                        <div className="shrink-0">
+                          <StatusBadge status={convertStatus} mode="convert" />
+                        </div>
+                      ) : null}
                     </div>
                     <p
                       className={cn(
