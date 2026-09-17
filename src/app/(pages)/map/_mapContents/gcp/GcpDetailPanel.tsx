@@ -2,8 +2,6 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { transform } from 'ol/proj'
-import { Camera, ChevronRight, ClipboardList } from 'lucide-react'
-import { cn } from '@/lib/utils'
 import { getAddressFromCoord } from '../../_mapComponents/addressSearch/vworldAddressSearch'
 import '../../_mapComponents/config/projections'
 import { useMapContext } from '../../_mapComponents/MapContext'
@@ -17,40 +15,26 @@ import {
   LayerRowEditToolbar,
   LayerRowPanelButton,
 } from '../../_mapComponents/layerRowEdit'
-import { GCP_STATUS_OPTIONS, type GcpStatus } from './gcpConfig'
+import { call } from '@/lib/api'
+import type { GcpPoint } from './gcpTypes'
 import {
-  displayStatusOf,
-  statusBadgeClass,
-  statusLabel,
-  type GcpInspectItem,
-  type GcpInspection,
-  type GcpPoint,
-} from './gcpDummyData'
-import { GcpInspectHistoryDialog } from './GcpInspectHistoryDialog'
-import {
-  addGcpPoint,
   clearGcpCreate,
   getGcpCreateDraft,
-  getGcpPoint,
   setGcpCreateGeom,
   startGcpCreate,
-  updateGcpPointAttrs,
-} from './gcpProtoStore'
-import { useGcpProtoState } from './useGcpProtoState'
+} from './gcpCreateDraft'
+import { useGcpData } from './useGcpData'
+import { GcpPhotoSection } from './GcpPhotoSection'
 
 type Props = {
   detailId: string
   onClose: () => void
   onCreated: (id: string) => void
-  onInspect: (ids: string[]) => void
-  overlayLeftPx: number
-  overlayWidthPx: number
+  onSaved?: () => void
 }
 
 type Draft = {
   placeNote: string
-  status: GcpStatus
-  address: string
 }
 
 type CreateForm = {
@@ -59,8 +43,6 @@ type CreateForm = {
   y: string
   z: string
   placeNote: string
-  installedAt: string
-  status: GcpStatus
   address: string
 }
 
@@ -86,18 +68,12 @@ function emptyCreateForm(): CreateForm {
     y: '',
     z: '',
     placeNote: '',
-    installedAt: new Date().toISOString().slice(0, 10),
-    status: 'ok',
     address: '',
   }
 }
 
 function draftFrom(point: GcpPoint): Draft {
-  return {
-    placeNote: point.placeNote,
-    status: point.status,
-    address: point.address === '—' ? '' : point.address,
-  }
+  return { placeNote: point.placeNote }
 }
 
 const FIELD_INPUT =
@@ -105,34 +81,26 @@ const FIELD_INPUT =
 
 const CREATE_LABEL = 'flex items-center'
 
-export function GcpDetailPanel({
-  detailId,
-  onClose,
-  onCreated,
-  onInspect,
-  overlayLeftPx,
-  overlayWidthPx,
-}: Props) {
+export function GcpDetailPanel({ detailId, onClose, onCreated, onSaved }: Props) {
   const isCreateMode = detailId === LAYER_ROW_NEW_ID
   const mapContext = useMapContext()
   const vworldApiKey = mapContext?.vworldApiKey ?? ''
-  const { points, inspections, createDraft } = useGcpProtoState()
+  const { points, createDraft, refresh } = useGcpData()
   const point = isCreateMode
     ? undefined
-    : (points.find((p) => p.id === detailId) ?? getGcpPoint(detailId))
+    : points.find((p) => p.id === detailId)
   const [isEditing, setIsEditing] = useState(false)
   const [draft, setDraft] = useState<Draft | null>(null)
   const [createForm, setCreateForm] = useState<CreateForm>(emptyCreateForm)
   const [createError, setCreateError] = useState<string | null>(null)
+  const [saving, setSaving] = useState(false)
+  const [addressHint, setAddressHint] = useState('')
   const geomFromFormRef = useRef(false)
-  const [historyOpen, setHistoryOpen] = useState<{
-    inspection: GcpInspection
-    item: GcpInspectItem
-  } | null>(null)
 
   useEffect(() => {
     setIsEditing(false)
     setDraft(point ? draftFrom(point) : null)
+    setAddressHint('')
   }, [point?.id])
 
   useEffect(() => {
@@ -172,6 +140,26 @@ export function GcpDetailPanel({
     }
   }, [isCreateMode, createDraft?.geom5181, vworldApiKey])
 
+  useEffect(() => {
+    if (isCreateMode || !point) return
+    let cancelled = false
+    const fill = async () => {
+      const [lon, lat] = transform(point.geom5181, 'EPSG:5181', 'EPSG:4326')
+      if (!Number.isFinite(lon) || !Number.isFinite(lat)) return
+      const addr = await getAddressFromCoord(lon, lat, {
+        apiKey: vworldApiKey || undefined,
+        type: 'BOTH',
+      })
+      const text = (addr?.road || addr?.jibun || '').trim()
+      if (cancelled) return
+      setAddressHint(text)
+    }
+    void fill()
+    return () => {
+      cancelled = true
+    }
+  }, [isCreateMode, point?.id, point?.geom5181, vworldApiKey])
+
   const handleCreateCoordChange = (key: 'x' | 'y' | 'z', value: string) => {
     setCreateForm((prev) => {
       const next = { ...prev, [key]: value }
@@ -187,7 +175,7 @@ export function GcpDetailPanel({
     })
   }
 
-  const handleCreateSave = () => {
+  const handleCreateSave = async () => {
     const gcpnum = createForm.gcpnum.trim()
     const x = parseCoord(createForm.x)
     const y = parseCoord(createForm.y)
@@ -200,18 +188,36 @@ export function GcpDetailPanel({
       setCreateError('지도에서 위치를 지정하거나 좌표를 입력하세요.')
       return
     }
-    const id = addGcpPoint({
-      gcpnum,
-      x,
-      y,
-      z: z ?? 0,
-      geom5181: [x, y],
-      placeNote: createForm.placeNote.trim(),
-      installedAt: createForm.installedAt || new Date().toISOString().slice(0, 10),
-      status: createForm.status,
-      address: createForm.address.trim() || '—',
-    })
-    onCreated(id)
+    setSaving(true)
+    setCreateError(null)
+    try {
+      const res = await call('', 'POST', {
+        service: 'gcpService',
+        action: 'create',
+        params: {
+          gcpnum,
+          x,
+          y,
+          z: z ?? 0,
+          placeNote: createForm.placeNote.trim(),
+        },
+      })
+      if (!res?.success) {
+        setCreateError(String(res?.error ?? '등록에 실패했습니다.'))
+        return
+      }
+      const data = (res.data ?? res) as { id?: string }
+      const id = String(data.id ?? '').trim()
+      clearGcpCreate()
+      await refresh()
+      onSaved?.()
+      if (id) onCreated(id)
+      else onClose()
+    } catch {
+      setCreateError('등록에 실패했습니다.')
+    } finally {
+      setSaving(false)
+    }
   }
 
   const handleCreateCancel = () => {
@@ -220,20 +226,20 @@ export function GcpDetailPanel({
   }
 
   if (isCreateMode) {
-    const canCreate = Boolean(createForm.gcpnum.trim())
+    const canCreate = Boolean(createForm.gcpnum.trim()) && !saving
     const createToolbar = {
       isEditing: true,
       isCreateMode: true,
-      saving: false,
+      saving,
       onEdit: () => undefined,
-      onSave: handleCreateSave,
+      onSave: () => void handleCreateSave(),
       onCancel: handleCreateCancel,
       editable: true,
     }
     return (
       <div className="flex h-full min-h-0 flex-col bg-background">
         <LayerRowEditHeader
-          title="지상기준점 상세"
+          title="GCP 상세"
           actionsPlacement="footer"
           onClose={handleCreateCancel}
           {...createToolbar}
@@ -285,42 +291,18 @@ export function GcpDetailPanel({
                 value={createForm.placeNote}
                 onChange={(e) => setCreateForm((prev) => ({ ...prev, placeNote: e.target.value }))}
                 className={FIELD_INPUT}
+                placeholder="예: 맨홀 / 중앙"
               />
             </DetailAttrRow>
-            <DetailAttrRow label="최초 설치일" labelClassName={CREATE_LABEL}>
-              <input
-                type="date"
-                value={createForm.installedAt}
-                onChange={(e) => setCreateForm((prev) => ({ ...prev, installedAt: e.target.value }))}
-                className={FIELD_INPUT}
-              />
-            </DetailAttrRow>
-            <DetailAttrRow label="상태" labelClassName={CREATE_LABEL}>
-              <select
-                value={createForm.status}
-                onChange={(e) =>
-                  setCreateForm((prev) => ({ ...prev, status: e.target.value as GcpStatus }))
-                }
-                className={FIELD_INPUT}
-              >
-                {GCP_STATUS_OPTIONS.map((opt) => (
-                  <option key={opt.value} value={opt.value}>
-                    {opt.label}
-                  </option>
-                ))}
-              </select>
-            </DetailAttrRow>
-            <DetailAttrRow label="주소" isLast labelClassName={CREATE_LABEL}>
-              <input
-                value={createForm.address}
-                onChange={(e) => setCreateForm((prev) => ({ ...prev, address: e.target.value }))}
-                className={FIELD_INPUT}
-              />
+            <DetailAttrRow label="주소(참고)" isLast labelClassName={CREATE_LABEL}>
+              <span className="text-[11px] text-muted-foreground">
+                {createForm.address || '지도 위치 기준으로 표시'}
+              </span>
             </DetailAttrRow>
           </DetailAttrTable>
         </MapSideDetailScroll>
         <div className="flex shrink-0 items-center justify-end gap-1 border-t border-border bg-background px-3 py-2">
-          <LayerRowPanelButton type="button" disabled={!canCreate} onClick={handleCreateSave}>
+          <LayerRowPanelButton type="button" disabled={!canCreate} onClick={() => void handleCreateSave()}>
             등록
           </LayerRowPanelButton>
           <LayerRowPanelButton type="button" onClick={handleCreateCancel}>
@@ -335,7 +317,7 @@ export function GcpDetailPanel({
     return (
       <div className="flex h-full flex-col bg-background">
         <LayerRowEditHeader
-          title="지상기준점 상세"
+          title="GCP 상세"
           isEditing={false}
           saving={false}
           onEdit={() => undefined}
@@ -345,21 +327,34 @@ export function GcpDetailPanel({
           editable={false}
           actionsPlacement="footer"
         />
-        <p className="px-3 py-8 text-center text-xs text-muted-foreground">기준점을 찾을 수 없습니다.</p>
+        <p className="px-3 py-8 text-center text-xs text-muted-foreground">GCP를 찾을 수 없습니다.</p>
       </div>
     )
   }
 
-  const shown = displayStatusOf(point)
-  const history = inspections.filter((row) => row.items.some((item) => item.gcpId === point.id))
-
-  const handleSave = () => {
-    updateGcpPointAttrs(point.id, {
-      placeNote: draft.placeNote.trim(),
-      status: draft.status,
-      address: draft.address.trim() || '—',
-    })
-    setIsEditing(false)
+  const handleSave = async () => {
+    setSaving(true)
+    try {
+      const res = await call('', 'POST', {
+        service: 'gcpService',
+        action: 'update',
+        params: {
+          id: point.id,
+          placeNote: draft.placeNote.trim(),
+        },
+      })
+      if (!res?.success) {
+        window.alert(String(res?.error ?? '저장에 실패했습니다.'))
+        return
+      }
+      setIsEditing(false)
+      await refresh()
+      onSaved?.()
+    } catch {
+      window.alert('저장에 실패했습니다.')
+    } finally {
+      setSaving(false)
+    }
   }
 
   const handleCancelEdit = () => {
@@ -369,12 +364,12 @@ export function GcpDetailPanel({
 
   const editToolbarProps = {
     isEditing,
-    saving: false,
+    saving,
     onEdit: () => {
       setDraft(draftFrom(point))
       setIsEditing(true)
     },
-    onSave: handleSave,
+    onSave: () => void handleSave(),
     onCancel: handleCancelEdit,
     editable: true,
   }
@@ -382,7 +377,7 @@ export function GcpDetailPanel({
   return (
     <div className="flex h-full min-h-0 flex-col bg-background">
       <LayerRowEditHeader
-        title="지상기준점 상세"
+        title="GCP 상세"
         actionsPlacement="footer"
         onClose={onClose}
         {...editToolbarProps}
@@ -409,135 +404,22 @@ export function GcpDetailPanel({
                 value={draft.placeNote}
                 onChange={(e) => setDraft((prev) => (prev ? { ...prev, placeNote: e.target.value } : prev))}
                 className={FIELD_INPUT}
+                placeholder="예: 맨홀 / 중앙"
               />
             ) : (
-              point.placeNote
+              point.placeNote || '—'
             )}
           </DetailAttrRow>
-          <DetailAttrRow label="최초 설치일" valueClassName="tabular-nums">
-            {point.installedAt}
-          </DetailAttrRow>
-          <DetailAttrRow label="상태">
-            {isEditing ? (
-              <select
-                value={draft.status}
-                onChange={(e) =>
-                  setDraft((prev) => (prev ? { ...prev, status: e.target.value as GcpStatus } : prev))
-                }
-                className={FIELD_INPUT}
-              >
-                {GCP_STATUS_OPTIONS.map((opt) => (
-                  <option key={opt.value} value={opt.value}>
-                    {opt.label}
-                  </option>
-                ))}
-              </select>
-            ) : (
-              <span
-                className={cn(
-                  'inline-block rounded-full px-1.5 py-0.5 text-[11px] font-semibold',
-                  statusBadgeClass(shown)
-                )}
-              >
-                {shown}
-              </span>
-            )}
-          </DetailAttrRow>
-          <DetailAttrRow label="주소">
-            {isEditing ? (
-              <input
-                value={draft.address}
-                onChange={(e) => setDraft((prev) => (prev ? { ...prev, address: e.target.value } : prev))}
-                className={FIELD_INPUT}
-              />
-            ) : (
-              point.address
-            )}
-          </DetailAttrRow>
-          <DetailAttrRow label="최근 점검일" isLast valueClassName="tabular-nums">
-            {point.lastInspectDate || '없음'}
+          <DetailAttrRow label="주소(참고)" isLast>
+            {addressHint || '—'}
           </DetailAttrRow>
         </DetailAttrTable>
 
-        <div className="mt-4">
-          <DetailAttrSectionTitle>위치 사진</DetailAttrSectionTitle>
-          {point.photos.length === 0 ? (
-            <div className="flex h-24 items-center justify-center rounded border border-dashed border-border bg-muted/50 text-[11px] text-muted-foreground">
-              <Camera className="mr-1 h-3.5 w-3.5" />
-              등록된 사진이 없습니다.
-            </div>
-          ) : (
-            <div className="grid grid-cols-2 gap-1.5">
-              {point.photos.map((photo) => (
-                <figure key={photo.id} className="overflow-hidden rounded border border-border">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={photo.url} alt={photo.name} className="h-24 w-full object-cover" />
-                  <figcaption className="truncate px-1.5 py-1 text-[11px] text-muted-foreground">
-                    {photo.name}
-                  </figcaption>
-                </figure>
-              ))}
-            </div>
-          )}
-        </div>
-
-        <div className="mt-4">
-          <DetailAttrSectionTitle>점검 이력</DetailAttrSectionTitle>
-          {history.length === 0 ? (
-            <div className="rounded border border-dashed border-border bg-muted/50 px-2 py-4 text-center text-muted-foreground">
-              점검 이력이 없습니다.
-            </div>
-          ) : (
-            <div className="max-h-52 overflow-y-auto overflow-x-hidden rounded border border-border scrollbar-thin">
-              {history.map((row, idx) => {
-                const item = row.items.find((it) => it.gcpId === point.id)
-                if (!item) return null
-                const label = statusLabel(item.status)
-                return (
-                  <button
-                    key={row.id}
-                    type="button"
-                    onClick={() => setHistoryOpen({ inspection: row, item })}
-                    className={cn(
-                      'flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-[11px] transition-colors hover:bg-muted/50',
-                      idx < history.length - 1 && 'border-b border-border'
-                    )}
-                  >
-                    <span className="w-[5.5rem] shrink-0 tabular-nums text-foreground">{row.inspectDate}</span>
-                    <span
-                      className={cn(
-                        'inline-block rounded-full px-1.5 py-0.5 font-semibold',
-                        statusBadgeClass(label)
-                      )}
-                    >
-                      {label}
-                    </span>
-                    <ChevronRight className="ml-auto h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden />
-                  </button>
-                )
-              })}
-            </div>
-          )}
-        </div>
+        <GcpPhotoSection gcpId={point.id} canEdit />
       </MapSideDetailScroll>
 
-      <GcpInspectHistoryDialog
-        open={historyOpen != null}
-        onClose={() => setHistoryOpen(null)}
-        inspection={historyOpen?.inspection ?? null}
-        item={historyOpen?.item ?? null}
-        overlayLeftPx={overlayLeftPx}
-        overlayWidthPx={overlayWidthPx}
-      />
-
-      <div className="flex shrink-0 items-center justify-between gap-1 border-t border-border bg-background px-3 py-2">
-        <LayerRowPanelButton type="button" disabled={isEditing} onClick={() => onInspect([point.id])}>
-          <ClipboardList className="h-3 w-3 shrink-0" aria-hidden />
-          점검 추가
-        </LayerRowPanelButton>
-        <div className="flex items-center gap-1">
-          <LayerRowEditToolbar {...editToolbarProps} />
-        </div>
+      <div className="flex shrink-0 items-center justify-end gap-1 border-t border-border bg-background px-3 py-2">
+        <LayerRowEditToolbar {...editToolbarProps} />
       </div>
     </div>
   )

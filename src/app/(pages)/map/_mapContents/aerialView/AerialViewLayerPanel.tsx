@@ -125,7 +125,7 @@ export function AerialViewLayerPanel({
   return (
     <div
       className={cn(
-        'pointer-events-auto flex w-64 flex-col overflow-hidden rounded-[5px] bg-white opacity-90 shadow-xl',
+        'pointer-events-auto flex w-56 flex-col overflow-hidden rounded-[5px] bg-white opacity-90 shadow-xl',
         className
       )}
     >

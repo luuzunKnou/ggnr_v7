@@ -5,6 +5,7 @@ const layer = pgSchema('layer');
 
 /**
  * 민원 처리내역 — 접수(comp)와 같이 layer 스키마.
+ * 기동 시 ensureComplaintTables 가 없으면 생성한다.
  */
 export const compd = layer.table('compd', {
   compdKey: serial('compd_key').primaryKey().notNull(),

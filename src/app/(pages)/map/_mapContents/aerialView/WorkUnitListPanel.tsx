@@ -29,6 +29,8 @@ type Props = {
   onDateFromChange?: (v: string) => void;
   onDateToChange?: (v: string) => void;
   banner?: ReactNode;
+  /** 검색·업로드 아래 추가 도구 (예: 고화질 제한) */
+  toolsExtra?: ReactNode;
   emptyHint?: string;
 };
 
@@ -69,6 +71,7 @@ export function WorkUnitListPanel({
   onDateFromChange,
   onDateToChange,
   banner,
+  toolsExtra,
   emptyHint = '폴더를 업로드하거나 검색어를 바꿔 보세요.',
 }: Props) {
   const filtered = items.filter((u) => {
@@ -83,11 +86,9 @@ export function WorkUnitListPanel({
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-white">
-      {/* 헤더 */}
-      <div className="flex shrink-0 items-center gap-2 border-b border-slate-200 px-3 py-2.5">
+      <div className="flex shrink-0 items-center gap-2 border-b border-slate-200 px-3 py-1.5">
         <div className="min-w-0 flex-1">
-          <h2 className="truncate text-[13px] font-semibold text-slate-800">{title}</h2>
-          <p className="mt-0.5 text-[10px] text-slate-400">{filtered.length}건</p>
+          <h2 className="truncate text-[13px] font-semibold leading-none text-slate-800">{title}</h2>
         </div>
         <button
           type="button"
@@ -125,6 +126,8 @@ export function WorkUnitListPanel({
           </Button>
         ) : null}
 
+        {toolsExtra}
+
         <div className="relative">
           <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
           <Input
@@ -160,6 +163,10 @@ export function WorkUnitListPanel({
         ) : null}
 
         {banner}
+      </div>
+
+      <div className="shrink-0 border-b border-slate-100 px-3 py-1.5 text-[11px] text-slate-500">
+        {filtered.length.toLocaleString()}건
       </div>
 
       {/* 목록 — 카드형 */}
@@ -199,10 +206,10 @@ export function WorkUnitListPanel({
                     )}
                   >
                     <div className="flex items-center justify-between gap-2">
-                      <div className="flex min-w-0 flex-wrap items-center gap-1">
+                      <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1">
                         <span
                           className={cn(
-                            'inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-medium tabular-nums',
+                            'inline-flex h-5 items-center rounded px-1.5 text-[10px] font-medium tabular-nums',
                             selected ? 'bg-sky-100 text-sky-800' : 'bg-slate-100 text-slate-600'
                           )}
                         >
@@ -211,7 +218,7 @@ export function WorkUnitListPanel({
                         {uploadDateLabel ? (
                           <span
                             className={cn(
-                              'inline-flex items-center rounded px-1.5 py-0.5 text-[10px] tabular-nums',
+                              'inline-flex h-5 items-center rounded px-1.5 text-[10px] tabular-nums',
                               selected
                                 ? 'bg-white text-sky-700 ring-1 ring-sky-200'
                                 : 'bg-white text-slate-500 ring-1 ring-slate-200'
@@ -221,7 +228,11 @@ export function WorkUnitListPanel({
                           </span>
                         ) : null}
                       </div>
-                      {convertStatus ? <StatusBadge status={convertStatus} mode="convert" /> : null}
+                      {convertStatus ? (
+                        <div className="shrink-0">
+                          <StatusBadge status={convertStatus} mode="convert" />
+                        </div>
+                      ) : null}
                     </div>
                     <p
                       className={cn(

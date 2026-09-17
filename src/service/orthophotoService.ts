@@ -9,6 +9,7 @@
  */
 import fs from 'node:fs';
 import fsPromises from 'node:fs/promises';
+import os from 'node:os';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import iconv from 'iconv-lite';
@@ -22,23 +23,52 @@ import {
 import { GGNR_DATA_PATHS } from '@/lib/ggnrDataPaths';
 import { resolveGgnrDataDir, turbopackOpaquePath } from '@/lib/turbopackFsPath';
 
-/** 무활동 감지 기본값 (ms) — stdout/stderr 수신 없이 이 시간이 지나면 kill */
-const ORTHO_ACTIVITY_TIMEOUT_MS = 10 * 60 * 1000;
-
-/** 절대 상한 24시간 고정 */
-function getOrthoMaxTimeoutMs(): number {
-  return 24 * 60 * 60 * 1000;
-}
-
 /** GGNR_DATA_DIR 아래 임시 작업 경로 (warp·타일 staging) */
 function getOrthoDataWorkDir(): string {
   return path.join(getBaseDir(), '.tmp');
 }
 
-/** localOnly — 로컬 SSD 우선 (부족 시 GGNR_DATA_DIR/.tmp) */
+/**
+ * localOnly 작업 경로.
+ * - env GGNR_ORTHO_WORK_DIR (배치 --work-dir)
+ * - 기본 E:\temp\ortho_work
+ */
 function getOrthoLocalWorkDir(): string {
-  const cwdRoot = path.parse(process.cwd()).root || path.parse(getBaseDir()).root;
-  return path.join(cwdRoot, 'temp', 'ortho_work');
+  const override = (process.env.GGNR_ORTHO_WORK_DIR ?? '').trim();
+  if (override) return path.resolve(override);
+  return path.join('E:\\', 'temp', 'ortho_work');
+}
+
+/**
+ * 원본 GeoTIFF 루트 (그룹 폴더들의 부모 = tiles_tif).
+ * - env GGNR_ORTHO_SOURCE_DIR (배치 --source-dir)
+ * - 그룹 폴더를 넘기면 부모를 tiles_tif 로 사용
+ * - 기본 GGNR_DATA_DIR/tiles_tif
+ */
+function normalizeOrthoSourceTilesTifRoot(input: string): string {
+  const abs = path.resolve(input.trim());
+  if (path.basename(abs).toLowerCase() === 'tiles_tif') return abs;
+  try {
+    const entries = fs.readdirSync(abs, { withFileTypes: true });
+    const hasTif = entries.some((e) => e.isFile() && /\.tiff?$/i.test(e.name));
+    const hasSubdir = entries.some((e) => e.isDirectory());
+    if (hasTif && !hasSubdir) return path.dirname(abs);
+  } catch {
+    /* keep abs */
+  }
+  return abs;
+}
+
+function getTilesTifRoot(): string {
+  const override = (process.env.GGNR_ORTHO_SOURCE_DIR ?? '').trim();
+  if (override) return normalizeOrthoSourceTilesTifRoot(override);
+  return path.join(getBaseDir(), 'tiles_tif');
+}
+
+function pathUnderRoot(absPath: string, root: string): boolean {
+  const a = path.resolve(absPath).replace(/\\/g, '/').toLowerCase();
+  const r = path.resolve(root).replace(/\\/g, '/').toLowerCase().replace(/\/+$/, '');
+  return a === r || a.startsWith(`${r}/`);
 }
 
 /** warp TIF + 타일 staging 여유 (바이트) */
@@ -51,9 +81,14 @@ function getPathFreeBytes(targetPath: string): number | null {
   try {
     const resolved = path.resolve(targetPath);
     let probe = turbopackOpaquePath(resolved);
-    if (!fs.existsSync(probe)) {
-      probe = turbopackOpaquePath(path.dirname(resolved));
+    // 폴더가 아직 없으면 상위(드라이브 루트까지)로 올라가며 여유 조회
+    for (let i = 0; i < 8; i++) {
+      if (fs.existsSync(probe)) break;
+      const parent = path.dirname(probe);
+      if (!parent || parent === probe) break;
+      probe = turbopackOpaquePath(parent);
     }
+    if (!fs.existsSync(probe)) return null;
     const st = fs.statfsSync(probe);
     return Number(st.bfree) * Number(st.bsize);
   } catch {
@@ -76,6 +111,11 @@ async function resolveOrthoWorkBase(params: {
   if (!params.preferLocal) return dataDir;
 
   const localDir = getOrthoLocalWorkDir();
+  try {
+    fs.mkdirSync(localDir, { recursive: true });
+  } catch {
+    /* 여유 조회·작업 시 다시 실패할 수 있음 */
+  }
   const previewDir = path.join(dataDir, `ortho_work_size_${Date.now()}`);
   const est = await estimateWarpOutputBytes({
     absSource: params.absSource,
@@ -578,10 +618,18 @@ function getBaseDir(): string {
 }
 
 function resolveSafeRelative(rel: string): string | null {
-  const base = getBaseDir();
   const raw = rel.trim().replace(/^[/\\]+/, '');
+  const norm = raw.replace(/\\/g, '/');
+  if (norm.startsWith('tiles_tif/')) {
+    const tail = norm.slice('tiles_tif/'.length);
+    const root = getTilesTifRoot();
+    const resolved = path.normalize(path.join(root, ...tail.split('/').filter(Boolean)));
+    if (!pathUnderRoot(resolved, root)) return null;
+    return resolved;
+  }
+  const base = getBaseDir();
   const resolved = path.normalize(path.join(base, raw));
-  if (!resolved.startsWith(base)) return null;
+  if (!pathUnderRoot(resolved, base)) return null;
   return resolved;
 }
 
@@ -740,10 +788,15 @@ function decodeChildOutput(buf: Buffer, usedCmdShell: boolean): string {
 }
 
 interface RunProcessOpts {
+  /**
+   * 무활동 시 kill (ms). 0 이하면 무응답 종료 없음.
+   * 미지정 시 4번째 timeoutMs 인자를 사용.
+   */
   activityTimeoutMs?: number;
+  /** 절대 상한 (ms). 0 이하거나 미지정이면 상한 없음 */
   maxTimeoutMs?: number;
   onStdout?: (chunk: string) => void;
-  /** stdout이 없어도 이 경로의 파일/폴더가 변하면 활동으로 인정 */
+  /** stdout이 없어도 이 경로의 파일/폴더가 변하면 진행률 갱신용 활동으로 인정 */
   activityWatchPath?: string;
   onActivity?: () => void;
 }
@@ -804,7 +857,7 @@ function runProcess(
   opts?: RunProcessOpts
 ): Promise<{ code: number; stdout: string; stderr: string }> {
   const activityTimeout = opts?.activityTimeoutMs ?? timeoutMs;
-  const maxTimeout = opts?.maxTimeoutMs ?? getOrthoMaxTimeoutMs();
+  const maxTimeout = opts?.maxTimeoutMs ?? 0;
 
   return new Promise((resolve, reject) => {
     const isWin = process.platform === 'win32';
@@ -859,10 +912,10 @@ function runProcess(
           markActivity();
         }
       }
-      if (now - startTime > maxTimeout) {
+      if (maxTimeout > 0 && now - startTime > maxTimeout) {
         clearInterval(activityCheck);
         killWithReason(`절대 상한 초과 ${Math.round(maxTimeout / 3600000)}h`);
-      } else if (now - lastActivity > activityTimeout) {
+      } else if (activityTimeout > 0 && now - lastActivity > activityTimeout) {
         clearInterval(activityCheck);
         killWithReason(`무응답 ${Math.round(activityTimeout / 60000)}분 — 자동 종료`);
       }
@@ -1045,8 +1098,7 @@ async function collectTifsUnderDir(
  */
 export async function listSatelliteTifGroupedUploads(): Promise<SatelliteTifGroupedUploadsResult> {
   await ensureBaseStructure();
-  const base = getBaseDir();
-  const root = path.join(base, 'tiles_tif');
+  const root = getTilesTifRoot();
   const groups: SatelliteTifGroupedUploadsResult['groups'] = [];
   let top: fs.Dirent[];
   try {
@@ -1810,8 +1862,8 @@ async function runOrthophotoJob(params: {
 
     startWarpProgressPoll(warp3857);
     const warpStarted = Date.now();
-    const w = await runProcess(gdalwarp, warpArgs, base, ORTHO_ACTIVITY_TIMEOUT_MS, gdalChildEnv, {
-      activityTimeoutMs: ORTHO_ACTIVITY_TIMEOUT_MS,
+    const w = await runProcess(gdalwarp, warpArgs, base, 0, gdalChildEnv, {
+      activityTimeoutMs: 0,
       activityWatchPath: warp3857,
       onStdout: (chunk) => updateOrthoJobProgress(groupName, chunk),
       onActivity: () => updateOrthoWarpByteProgress(groupName, warp3857),
@@ -1863,10 +1915,10 @@ async function runOrthophotoJob(params: {
       gdal2tilesInvoke.cmd,
       [...gdal2tilesInvoke.argsPrefix, ...tileArgs],
       base,
-      ORTHO_ACTIVITY_TIMEOUT_MS,
+      0,
       gdalChildEnv,
       {
-        activityTimeoutMs: ORTHO_ACTIVITY_TIMEOUT_MS,
+        activityTimeoutMs: 0,
         activityWatchPath: tilesStaging,
         onStdout: (chunk) => {
           updateOrthoJobProgress(groupName, chunk);
@@ -2162,8 +2214,8 @@ async function executeSatelliteTifGroupConversion(prepared: PreparedSatelliteGro
     '0/3 gdalbuildvrt 시작',
     gdalbuildvrt
   );
-  const gb = await runProcess(gdalbuildvrt, gbArgs, base, ORTHO_ACTIVITY_TIMEOUT_MS, gbEnv, {
-    activityTimeoutMs: ORTHO_ACTIVITY_TIMEOUT_MS,
+  const gb = await runProcess(gdalbuildvrt, gbArgs, base, 0, gbEnv, {
+    activityTimeoutMs: 0,
     onStdout: (chunk) => updateOrthoJobProgress(groupName, chunk),
   });
   logProcessStreams(
@@ -2537,6 +2589,76 @@ export async function runAerialSatelliteTifToXyz(params: {
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     return { success: false, error: msg, outputRelativeDir };
+  }
+}
+
+/**
+ * WMS GetMap용 — 원본 GeoTIFF를 요청 bbox·크기의 PNG로 잘라 반환.
+ * (QGIS 레이어권한 WMS 중계)
+ */
+export async function warpExtentToPng(params: {
+  absSource: string;
+  /** targetCrs 단위 bbox: minx,miny,maxx,maxy */
+  te: [number, number, number, number];
+  width: number;
+  height: number;
+  targetEpsg: string;
+  /** 원본 TIF CRS (임베디드 CRS 없을 때 필수) */
+  sourceEpsg?: string | null;
+}): Promise<{ ok: true; buffer: Buffer } | { ok: false; error: string }> {
+  const gdalwarp = gdalToolPath('gdalwarp');
+  if (!isConcreteToolPath(gdalwarp) || !opaqueExists(gdalwarp)) {
+    return { ok: false, error: 'gdalwarp 를 찾을 수 없습니다.' };
+  }
+  const width = Math.max(1, Math.min(4096, Math.floor(params.width)));
+  const height = Math.max(1, Math.min(4096, Math.floor(params.height)));
+  const [minx, miny, maxx, maxy] = params.te;
+  if (!(maxx > minx && maxy > miny)) {
+    return { ok: false, error: 'BBOX가 올바르지 않습니다.' };
+  }
+  const epsg = String(params.targetEpsg || 'EPSG:3857').replace(/^epsg:/i, 'EPSG:');
+  const sourceEpsg = String(params.sourceEpsg ?? '')
+    .trim()
+    .replace(/^epsg:/i, 'EPSG:');
+  const workDir = await fsPromises.mkdtemp(path.join(os.tmpdir(), 'ggnr-ortho-wms-'));
+  const outPng = path.join(workDir, 'out.png');
+  const gdalEnv = buildGdalChildEnv(gdalwarp);
+  try {
+    const args = [
+      '-q',
+      '-overwrite',
+      ...(sourceEpsg ? (['-s_srs', sourceEpsg] as string[]) : []),
+      '-t_srs',
+      epsg,
+      '-te',
+      String(minx),
+      String(miny),
+      String(maxx),
+      String(maxy),
+      '-ts',
+      String(width),
+      String(height),
+      '-r',
+      'bilinear',
+      '-of',
+      'PNG',
+      '-dstalpha',
+      params.absSource,
+      outPng,
+    ];
+    const w = await runProcess(gdalwarp, args, workDir, 120_000, gdalEnv);
+    if (w.code !== 0) {
+      return {
+        ok: false,
+        error: (w.stderr || w.stdout || `gdalwarp exit ${w.code}`).slice(0, 500),
+      };
+    }
+    const buffer = await fsPromises.readFile(outPng);
+    return { ok: true, buffer };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : String(e) };
+  } finally {
+    await fsPromises.rm(workDir, { recursive: true, force: true }).catch(() => undefined);
   }
 }
 

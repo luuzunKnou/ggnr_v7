@@ -2,6 +2,7 @@
 "use client"
 
 import React, { useState, useEffect, useLayoutEffect, useCallback, useRef, useMemo, Suspense } from "react"
+import { createPortal } from "react-dom"
 import { useRouter, useSearchParams } from "next/navigation"
 import { X } from "lucide-react"
 import Map3DDataPanel from "./_mapComponents/Map3DDataPanel"
@@ -89,6 +90,10 @@ import {
 } from "./_mapContents/shootingRequest/shootingRequestMockStore"
 import { useShootingRequestUiEnabled } from "./_mapContents/shootingRequest/useShootingRequestUiEnabled"
 import {
+  isUavAdminSystemKey,
+  isUavFamilySystemKey,
+} from "./_mapContents/shootingRequest/shootingRequestUiFlag"
+import {
   aerialKindToOpenedKey,
   shootTypeToAerialKind,
 } from "./_mapContents/shootingRequest/shootTypeToAerialKind"
@@ -133,7 +138,6 @@ import { MemoListPanel } from "./_mapContents/memo/MemoListPanel"
 import { MemoDetailPanel } from "./_mapContents/memo/MemoDetailPanel"
 import { GcpListPanel } from "./_mapContents/gcp/GcpListPanel"
 import { GcpDetailPanel } from "./_mapContents/gcp/GcpDetailPanel"
-import { GcpInspectDialog } from "./_mapContents/gcp/GcpInspectDialog"
 import {
   GCP_DETAIL_DEFAULT_WIDTH,
   GCP_DETAIL_MAX_WIDTH,
@@ -143,7 +147,11 @@ import {
   GCP_PANEL_MAX_WIDTH,
   GCP_PANEL_MIN_WIDTH,
 } from "./_mapContents/gcp/gcpConfig"
-import { clearGcpCreate } from "./_mapContents/gcp/gcpProtoStore"
+import { clearGcpCreate } from "./_mapContents/gcp/gcpCreateDraft"
+import { QgisLayerControlPanel } from "./_mapContents/qgisLayerControl/QgisLayerControlPanel"
+import {
+  QGIS_LAYER_CONTROL_OPENED_KEY,
+} from "./_mapContents/qgisLayerControl/qgisLayerControlConfig"
 // 점용대장(프) 더미 — 대장↔점사용료 실연동 전까지 비활성
 // import {
 //   UseLedgerProtoListPanel,
@@ -406,16 +414,23 @@ const RIVER_USE_LEDGER_PANEL_MAX_WIDTH = 960
 const RIVER_USE_LEDGER_DETAIL_DEFAULT_WIDTH = 400
 const RIVER_USE_LEDGER_DETAIL_MIN_WIDTH = 320
 const RIVER_USE_LEDGER_DETAIL_MAX_WIDTH = 640
-const AERIAL_MANAGE_PANEL_DEFAULT_WIDTH = 360
-const AERIAL_MANAGE_PANEL_MIN_WIDTH = 300
-/** 목록+작업단위상세+파일상세(미리보기) 동시 오픈 시 잘리지 않도록 */
-const AERIAL_MANAGE_PANEL_MAX_WIDTH = 1680
-const SHOOTING_REQUEST_PANEL_DEFAULT_WIDTH = 340
-const SHOOTING_REQUEST_PANEL_MIN_WIDTH = 280
-const SHOOTING_REQUEST_PANEL_MAX_WIDTH = 480
-const SHOOTING_REQUEST_DETAIL_DEFAULT_WIDTH = 520
-const SHOOTING_REQUEST_DETAIL_MIN_WIDTH = 420
-const SHOOTING_REQUEST_DETAIL_MAX_WIDTH = 720
+/** 드론·사진동영상·파노라마·항공·승인관리·GCP 목록 고정 */
+const MEDIA_LIST_PANEL_WIDTH = 380
+/** 작업단위·승인·GCP 등 상세 고정 */
+const MEDIA_DETAIL_PANEL_WIDTH = 420
+/** 사진·동영상 파일 상세(오른쪽) 고정 */
+const MEDIA_FILE_DETAIL_PANEL_WIDTH = 480
+const AERIAL_MANAGE_PANEL_DEFAULT_WIDTH = MEDIA_LIST_PANEL_WIDTH
+const AERIAL_MANAGE_PANEL_MIN_WIDTH = MEDIA_LIST_PANEL_WIDTH
+/** 목록(380)+작업단위상세(420)+파일상세(480) */
+const AERIAL_MANAGE_PANEL_MAX_WIDTH =
+  MEDIA_LIST_PANEL_WIDTH + MEDIA_DETAIL_PANEL_WIDTH + MEDIA_FILE_DETAIL_PANEL_WIDTH + 8
+const SHOOTING_REQUEST_PANEL_DEFAULT_WIDTH = MEDIA_LIST_PANEL_WIDTH
+const SHOOTING_REQUEST_PANEL_MIN_WIDTH = MEDIA_LIST_PANEL_WIDTH
+const SHOOTING_REQUEST_PANEL_MAX_WIDTH = MEDIA_LIST_PANEL_WIDTH
+const SHOOTING_REQUEST_DETAIL_DEFAULT_WIDTH = MEDIA_DETAIL_PANEL_WIDTH
+const SHOOTING_REQUEST_DETAIL_MIN_WIDTH = MEDIA_DETAIL_PANEL_WIDTH
+const SHOOTING_REQUEST_DETAIL_MAX_WIDTH = MEDIA_DETAIL_PANEL_WIDTH
 const RIVER_CONSTRUCTION_LEDGER_OPENED_KEY = "riverConstructionLedger"
 const RIVER_CONSTRUCTION_LEDGER_PANEL_DEFAULT_WIDTH = 560
 const RIVER_CONSTRUCTION_LEDGER_PANEL_MIN_WIDTH = 420
@@ -556,6 +571,7 @@ function MapLayoutContent({
   const complaintManagementOpen = openedWindows.includes(COMPLAINT_OPENED_KEY)
   const memoManagementOpen = openedWindows.includes(MEMO_OPENED_KEY)
   const gcpOpen = openedWindows.includes(GCP_OPENED_KEY)
+  const qgisLayerControlOpen = openedWindows.includes(QGIS_LAYER_CONTROL_OPENED_KEY)
   const map3dDataOpen = openedWindows.includes(MAP_3D_DATA_OPENED_KEY)
   const riverBasicPlanOpen = openedWindows.includes(RIVER_BASIC_PLAN_OPENED_KEY)
   const roadLedgerOpen = openedWindows.includes(ROAD_LEDGER_OPENED_KEY)
@@ -588,6 +604,9 @@ function MapLayoutContent({
   const aerialManageOpenedKey =
     AERIAL_MANAGE_KIND_KEYS.find((k) => openedWindows.includes(k)) ?? null
   const aerialManageOpen = aerialManageOpenedKey != null
+  /** 조회 시스템에서는 같은 메뉴를 조회전용으로 연다 */
+  const aerialMediaViewOnly =
+    isUavFamilySystemKey(systemKeyFromUrl) && !isUavAdminSystemKey(systemKeyFromUrl)
   const aerialManageKind: AerialKind | undefined =
     aerialManageOpenedKey === AERIAL_ORTHO_OPENED_KEY
       ? "ortho"
@@ -600,11 +619,11 @@ function MapLayoutContent({
             : undefined
   const shootingApprovalOpen =
     shootingUiEnabled &&
-    systemKeyFromUrl === "uav" &&
+    isUavAdminSystemKey(systemKeyFromUrl) &&
     openedWindows.includes(SHOOTING_APPROVAL_OPENED_KEY)
   const shootingRequestOpen =
     shootingUiEnabled &&
-    systemKeyFromUrl === "uav" &&
+    isUavFamilySystemKey(systemKeyFromUrl) &&
     openedWindows.includes(SHOOTING_REQUEST_OPENED_KEY)
   /** 촬영요청·승인 모두 동일 목록 패널 (모드만 mine / approval) */
   const shootingListOpen = shootingApprovalOpen || shootingRequestOpen
@@ -691,7 +710,7 @@ function MapLayoutContent({
 
   const [memoDetailId, setMemoDetailId] = useState<string | null>(null)
   const [gcpDetailId, setGcpDetailId] = useState<string | null>(null)
-  const [gcpInspectIds, setGcpInspectIds] = useState<string[] | null>(null)
+  const [gcpListRefreshKey, setGcpListRefreshKey] = useState(0)
   const [memoAddTable, setMemoAddTable] = useState<string | null>(null)
   const [memoListRefreshKey, setMemoListRefreshKey] = useState(0)
   const [complaintListRefreshKey, setComplaintListRefreshKey] = useState(0)
@@ -863,6 +882,10 @@ function MapLayoutContent({
   const [gcpDetailWidth, setGcpDetailWidth] = useState(GCP_DETAIL_DEFAULT_WIDTH)
   const [layerDataPanelWidth, setLayerDataPanelWidth] = useState(LAYER_DATA_PANEL_DEFAULT_WIDTH)
   const [searchBarInputBottomPx, setSearchBarInputBottomPx] = useState(16 + 30)
+  const [qgisLayerPortalReady, setQgisLayerPortalReady] = useState(false)
+  useEffect(() => {
+    setQgisLayerPortalReady(true)
+  }, [])
 
   const roadWorkHandbookActiveDetailWidth =
     roadWorkHandbookDetail?.kind === "ref"
@@ -893,7 +916,7 @@ function MapLayoutContent({
     (shootingListOpen ? shootingRequestPanelWidth : 0) +
     (shootingRequestDetailOpen ? shootingRequestDetailWidth : 0) +
     (gcpOpen ? gcpPanelWidth : 0) +
-    (gcpOpen && (gcpInspectIds?.length || gcpDetailId) ? gcpDetailWidth : 0) +
+    (gcpOpen && gcpDetailId ? gcpDetailWidth : 0) +
     (riverConstructionLedgerOpen ? riverConstructionLedgerPanelWidth : 0) +
     (riverConstructionLedgerDetailOpen ? riverConstructionLedgerDetailWidth : 0) +
     (usageDataAsOpen ? usageDataAsPanelWidth : 0) +
@@ -984,8 +1007,10 @@ function MapLayoutContent({
   const gcpPanelLeftPx =
     shootingRequestDetailLeftPx + (shootingRequestDetailOpen ? shootingRequestDetailWidth : 0)
   const gcpDetailLeftPx = gcpPanelLeftPx + (gcpOpen ? gcpPanelWidth : 0)
-  const riverConstructionLedgerPanelLeftPx =
-    gcpDetailLeftPx + (gcpOpen && (gcpInspectIds?.length || gcpDetailId) ? gcpDetailWidth : 0)
+  const qgisLayerControlPanelLeftPx =
+    gcpDetailLeftPx + (gcpOpen && gcpDetailId ? gcpDetailWidth : 0)
+  /** 레이어권한은 지도 영역을 덮는 전체 화면 — 이후 패널 left는 권한 열림과 무관하게 유지 */
+  const riverConstructionLedgerPanelLeftPx = qgisLayerControlPanelLeftPx
   const riverConstructionLedgerDetailLeftPx =
     riverConstructionLedgerPanelLeftPx +
     (riverConstructionLedgerOpen ? riverConstructionLedgerPanelWidth : 0)
@@ -1545,8 +1570,12 @@ function MapLayoutContent({
   const handleCloseGcp = () => {
     clearGcpCreate()
     setGcpDetailId(null)
-    setGcpInspectIds(null)
     const next = openedWindows.filter((w) => w !== GCP_OPENED_KEY)
+    setOpened(next)
+  }
+
+  const handleCloseQgisLayerControl = () => {
+    const next = openedWindows.filter((w) => w !== QGIS_LAYER_CONTROL_OPENED_KEY)
     setOpened(next)
   }
 
@@ -1639,7 +1668,6 @@ function MapLayoutContent({
     if (!gcpOpen) {
       clearGcpCreate()
       setGcpDetailId(null)
-      setGcpInspectIds(null)
     }
   }, [gcpOpen])
 
@@ -1841,7 +1869,7 @@ function MapLayoutContent({
   }, [shootingPanelOpen, shootingApprovalOpen, shootingRequestOpen])
 
   useEffect(() => {
-    if (systemKeyFromUrl !== 'uav') return
+    if (!isUavFamilySystemKey(systemKeyFromUrl)) return
     if (searchParams.get('shotForm') !== 'new') return
     const current = new URLSearchParams(Array.from(searchParams.entries()))
     current.delete('shotForm')
@@ -1867,6 +1895,7 @@ function MapLayoutContent({
   /** 승인 건 → 촬영형태에 맞는 영상관리 + 활성 신청 연결 */
   const openMediaRegisterFromRequest = useCallback(
     (requestId: string) => {
+      if (!isUavAdminSystemKey(systemKeyFromUrl)) return
       const req = findShootingRequest(requestId)
       if (!req) return
       const started = beginMediaRegistration(requestId)
@@ -1884,7 +1913,7 @@ function MapLayoutContent({
       next.push(kindKey)
       setOpened(next)
     },
-    [openedWindows]
+    [openedWindows, systemKeyFromUrl]
   )
 
   useEffect(() => {
@@ -2376,18 +2405,20 @@ function MapLayoutContent({
             </div>
           )}
           {aerialManageOpen && (
-            <div className="pointer-events-auto shrink-0">
+            <div className="pointer-events-auto relative z-20 shrink-0">
               <MapSideListPanel
                 width={aerialManagePanelWidth}
                 minWidth={AERIAL_MANAGE_PANEL_MIN_WIDTH}
                 maxWidth={AERIAL_MANAGE_PANEL_MAX_WIDTH}
                 leftOffsetPx={aerialManagePanelLeftPx}
                 onWidthChange={setAerialManagePanelWidth}
+                resizable={false}
                 className="transition-[width] duration-200 ease-out"
                 contentClassName="overflow-hidden"
               >
                 <AerialManagePanel
                   kind={aerialManageKind}
+                  viewOnly={aerialMediaViewOnly}
                   onClose={handleCloseAerialManage}
                   onContentWidthChange={(w) => {
                     setAerialManagePanelWidth(
@@ -2409,6 +2440,7 @@ function MapLayoutContent({
                 maxWidth={SHOOTING_REQUEST_PANEL_MAX_WIDTH}
                 leftOffsetPx={shootingRequestPanelLeftPx}
                 onWidthChange={setShootingRequestPanelWidth}
+                resizable={false}
                 contentClassName="overflow-hidden"
               >
                 <ShootingRequestPanel
@@ -2432,6 +2464,7 @@ function MapLayoutContent({
                 maxWidth={SHOOTING_REQUEST_DETAIL_MAX_WIDTH}
                 leftOffsetPx={shootingRequestDetailLeftPx}
                 onWidthChange={setShootingRequestDetailWidth}
+                resizable={false}
                 contentClassName="overflow-hidden"
               >
                 <ShootingRequestDetailPanel
@@ -2460,38 +2493,30 @@ function MapLayoutContent({
                 maxWidth={GCP_PANEL_MAX_WIDTH}
                 leftOffsetPx={gcpPanelLeftPx}
                 onWidthChange={setGcpPanelWidth}
+                resizable={false}
                 contentClassName="overflow-hidden"
               >
                 <GcpListPanel
                   onClose={handleCloseGcp}
                   selectedDetailId={gcpDetailId}
-                  onSelectDetailId={(id) => {
-                    setGcpInspectIds(null)
-                    setGcpDetailId(id)
-                  }}
-                  onInspect={(ids) => setGcpInspectIds(ids)}
+                  onSelectDetailId={(id) => setGcpDetailId(id)}
+                  listRefreshKey={gcpListRefreshKey}
                 />
               </MapSideListPanel>
             </div>
           )}
-          {gcpOpen && gcpInspectIds && gcpInspectIds.length > 0 && (
-            <div className="pointer-events-auto shrink-0">
-              <MapSideListPanel
-                width={gcpDetailWidth}
-                minWidth={GCP_DETAIL_MIN_WIDTH}
-                maxWidth={GCP_DETAIL_MAX_WIDTH}
-                leftOffsetPx={gcpDetailLeftPx}
-                onWidthChange={setGcpDetailWidth}
-                contentClassName="overflow-hidden"
+          {qgisLayerControlOpen &&
+            qgisLayerPortalReady &&
+            createPortal(
+              <div
+                className="pointer-events-auto fixed inset-y-0 right-0 z-[55] flex flex-col border-l border-border bg-background shadow-lg"
+                style={{ left: qgisLayerControlPanelLeftPx }}
               >
-                <GcpInspectDialog
-                  gcpIds={gcpInspectIds}
-                  onClose={() => setGcpInspectIds(null)}
-                />
-              </MapSideListPanel>
-            </div>
-          )}
-          {gcpOpen && gcpDetailId && !(gcpInspectIds && gcpInspectIds.length > 0) && (
+                <QgisLayerControlPanel onClose={handleCloseQgisLayerControl} />
+              </div>,
+              document.body
+            )}
+          {gcpOpen && gcpDetailId && (
             <div className="pointer-events-auto shrink-0">
               <MapSideListPanel
                 width={gcpDetailWidth}
@@ -2499,6 +2524,7 @@ function MapLayoutContent({
                 maxWidth={GCP_DETAIL_MAX_WIDTH}
                 leftOffsetPx={gcpDetailLeftPx}
                 onWidthChange={setGcpDetailWidth}
+                resizable={false}
                 contentClassName="overflow-hidden"
               >
                 <GcpDetailPanel
@@ -2508,11 +2534,7 @@ function MapLayoutContent({
                     setGcpDetailId(null)
                   }}
                   onCreated={(id) => setGcpDetailId(id)}
-                  onInspect={(ids) => setGcpInspectIds(ids)}
-                  overlayLeftPx={gcpPanelLeftPx}
-                  overlayWidthPx={
-                    gcpPanelWidth + (gcpDetailId ? gcpDetailWidth : 0)
-                  }
+                  onSaved={() => setGcpListRefreshKey((k) => k + 1)}
                 />
               </MapSideListPanel>
             </div>
@@ -2808,7 +2830,7 @@ function MapLayoutContent({
             open={
               shootingUiEnabled &&
               (myInfoShootingModalId != null ||
-                (systemKeyFromUrl === "uav" &&
+                (isUavFamilySystemKey(systemKeyFromUrl) &&
                   shootingPanelOpen &&
                   shootingRequestDetailId === SHOOTING_REQUEST_NEW_ID))
             }

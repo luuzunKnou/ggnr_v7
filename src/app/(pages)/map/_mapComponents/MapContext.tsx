@@ -571,6 +571,15 @@ export type MapContextValue = {
    */
   dataQueryMapPickEnabled: boolean;
   setDataQueryMapPickEnabled: Dispatch<SetStateAction<boolean>>;
+  /** 데이터조회 «드론영상 범위» bbox 표시 */
+  orthoDataQueryBboxOn: boolean;
+  setOrthoDataQueryBboxOn: Dispatch<SetStateAction<boolean>>;
+  /** 데이터조회에서 클릭해 켠 드론영상 tuKey */
+  orthoDataQueryTuKeys: number[];
+  setOrthoDataQueryTuKeys: Dispatch<SetStateAction<number[]>>;
+  /** 드론영상 범위 클릭 시 겹친 후보 (2건 이상이면 선택 UI) */
+  orthoDataQueryHitOptions: MapHitOverlapOption[];
+  setOrthoDataQueryHitOptions: Dispatch<SetStateAction<MapHitOverlapOption[]>>;
   /** 좌측 서비스 메뉴 전환 시 증가 — 패널이 레이어를 다시 켜도록 트리거 */
   serviceMenuEpoch: number;
   bumpServiceMenuEpoch: () => void;
@@ -851,6 +860,11 @@ export function MapContextProvider({ children }: { children: React.ReactNode }) 
   >([]);
   const clearMapDrawInteractionsRef = useRef<((except?: MapDrawInteractionKind) => void) | null>(null);
   const [dataQueryMapPickEnabled, setDataQueryMapPickEnabled] = useState(true);
+  const [orthoDataQueryBboxOn, setOrthoDataQueryBboxOn] = useState(false);
+  const [orthoDataQueryTuKeys, setOrthoDataQueryTuKeys] = useState<number[]>([]);
+  const [orthoDataQueryHitOptions, setOrthoDataQueryHitOptions] = useState<
+    MapHitOverlapOption[]
+  >([]);
   const [serviceMenuEpoch, setServiceMenuEpoch] = useState(0);
   const bumpServiceMenuEpoch = useCallback(() => {
     setServiceMenuEpoch((n) => n + 1);
@@ -1041,6 +1055,12 @@ export function MapContextProvider({ children }: { children: React.ReactNode }) 
         clearMapDrawInteractionsRef,
         dataQueryMapPickEnabled,
         setDataQueryMapPickEnabled,
+        orthoDataQueryBboxOn,
+        setOrthoDataQueryBboxOn,
+        orthoDataQueryTuKeys,
+        setOrthoDataQueryTuKeys,
+        orthoDataQueryHitOptions,
+        setOrthoDataQueryHitOptions,
         serviceMenuEpoch,
         bumpServiceMenuEpoch,
       }}

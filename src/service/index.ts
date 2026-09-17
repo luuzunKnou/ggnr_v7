@@ -46,6 +46,7 @@ import * as pdfToJpgService from './pdfToJpgService';
 import * as ocrMigrationService from './ocrMigrationService';
 import * as layerRowService from './layerRowService';
 import * as layerExtraService from './layerExtraService';
+import * as gcpService from './gcpService';
 import * as mapAnalyseService from './mapAnalyseService';
 import * as elevationService from './elevationService';
 import * as floodRiskService from './floodRiskService';
@@ -59,6 +60,7 @@ import * as dataQueryHistoryService from './dataQueryHistoryService';
 import * as safedataHistoryService from './safedataHistoryService';
 import * as noticeService from './noticeService';
 import * as boardService from './boardService';
+import * as policyMapService from './policyMapService';
 import * as mngVersionHistoryService from './mngVersionHistoryService';
 import * as geoserverProcessService from './geoserverProcessService';
 import * as shootingRequestService from './shootingRequestService';
@@ -71,6 +73,7 @@ import * as groundwaterPermitService from './groundwaterPermitService';
 import * as bizNotifService from './bizNotifService';
 import * as thematicMapService from './thematicMapService';
 import * as roadWorkHandbookService from './roadWorkHandbookService';
+import * as qgisLayerControlService from './qgisLayerControlService';
 
 export {
   configService,
@@ -120,6 +123,7 @@ export {
   ocrMigrationService,
   layerRowService,
   layerExtraService,
+  gcpService,
   mapAnalyseService,
   elevationService,
   floodRiskService,
@@ -132,6 +136,7 @@ export {
   safedataHistoryService,
   noticeService,
   boardService,
+  policyMapService,
   mngVersionHistoryService,
   shootingRequestService,
   flightLogbookService,
@@ -142,4 +147,5 @@ export {
   groundwaterPermitService,
   bizNotifService,
   roadWorkHandbookService,
+  qgisLayerControlService,
 };
