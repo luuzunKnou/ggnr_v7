@@ -651,6 +651,7 @@ export type SystemConfigItem = {
   sys_col: string
   sys_link: string
   serviceList: string[]
+  /** 레이어 그룹명(define_table_group) 목록 */
   layerList: string[]
   /** 비공개 시스템(권한·신청 UI). 미설정이면 공개로 간주 */
   sys_is_private?: boolean | null

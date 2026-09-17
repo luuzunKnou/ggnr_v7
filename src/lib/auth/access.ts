@@ -4,11 +4,11 @@ import { ser } from '@/database/schema/ser';
 import { serpMap } from '@/database/schema/serp_map';
 import { sys } from '@/database/schema/sys';
 import { syspMap } from '@/database/schema/sysp_map';
-import { upMap } from '@/database/schema/up_map';
 import { usrSerGrant } from '@/database/schema/usr_ser_grant';
 import { usrSysGrant } from '@/database/schema/usr_sys_grant';
 import { getServiceList, getSystemListAll } from '@/service/configService';
 import { loadConsoleMenuLevels } from '@/lib/consoleMenuAccess/server';
+import { loadEffectivePermKeys } from '@/lib/auth/userPermKeys';
 import { rethrowWithPgCause } from '@/lib/rethrowWithPgCause';
 import {
   SERP_TYPE_LIST,
@@ -82,11 +82,7 @@ async function loadUserAccessInner(usrId: string): Promise<UserAccessSnapshot> {
     };
   }
 
-  const permRows = await db
-    .select({ k: upMap.permKey })
-    .from(upMap)
-    .where(eq(upMap.usrId, usrId));
-  const permKeys = permRows.map((r) => r.k).filter((k): k is number => k != null);
+  const permKeys = await loadEffectivePermKeys(usrId);
 
   const privateSerRows = await db
     .select({ eng: ser.serEng })
