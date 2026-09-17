@@ -80,11 +80,6 @@ export function PanoViewerNav({
 
           <div className="min-w-0 flex-1 px-1.5 text-center">
             <p className="truncate text-[11px] font-medium leading-tight text-slate-800">{fileName}</p>
-            <p className="mt-0.5 text-[10px] tabular-nums text-slate-400">
-              {index + 1}
-              <span className="mx-0.5 opacity-50">/</span>
-              {total}
-            </p>
           </div>
 
           <button
