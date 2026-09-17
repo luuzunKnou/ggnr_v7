@@ -13,6 +13,7 @@ import {
   getLayerGeometryType,
   setLayerDefaultStyle,
 } from '@/service/devTestService';
+import { ensureComplaintTables } from '@/service/ensureLayerAppTables';
 import {
   deleteTableRowByKey,
   insertTableRow,
@@ -198,6 +199,8 @@ export async function list(params: {
   offset?: number;
   compKey?: number;
 } = {}) {
+  await ensureComplaintTables();
+
   let limit = typeof params?.limit === 'number' && params.limit > 0 ? params.limit : DEFAULT_LIMIT;
   if (limit > MAX_LIMIT) limit = MAX_LIMIT;
   const offset = typeof params?.offset === 'number' && params.offset >= 0 ? params.offset : 0;

@@ -163,6 +163,7 @@ import { isEmpty as isEmptyExtent } from 'ol/extent';
 import { AerialViewLayerPanel } from '../_mapContents/aerialView/AerialViewLayerPanel';
 import { useAerialViewCheckedMarkers } from '../_mapContents/aerialView/useAerialViewCheckedMarkers';
 import { useAerialOrthoCheckedTiles } from '../_mapContents/aerialView/useAerialOrthoCheckedTiles';
+import { useOrthoExtentBboxLayer } from '../_mapContents/aerialView/useOrthoExtentBboxLayer';
 
 /** EWKT(SRID=…;)·3D 키워드(Z/M) 제거 후 ol/format/WKT 파싱용 문자열로 맞춤 */
 function normalizeSpatialFilterWktForOl(wkt: string): string {
@@ -1598,10 +1599,14 @@ export default function OpenLayersMap({
     enabled: aerialViewCheckedIds.size > 0,
     checkedUnitIds: aerialViewCheckedIds,
   });
+  const orthoDataQueryTuKeys = mapContext?.orthoDataQueryTuKeys ?? [];
+  const orthoDataQueryBboxOn = Boolean(mapContext?.orthoDataQueryBboxOn);
   useAerialOrthoCheckedTiles({
-    enabled: aerialViewCheckedIds.size > 0,
-    checkedUnitIds: aerialViewCheckedIds,
+    enabled: aerialViewCheckedIds.size > 0 || orthoDataQueryTuKeys.length > 0,
+    checkedUnitIds: aerialViewCheckedIds.size > 0 ? aerialViewCheckedIds : undefined,
+    extraTuKeys: orthoDataQueryTuKeys,
   });
+  useOrthoExtentBboxLayer(orthoDataQueryBboxOn);
 
   const totalIdentifyCount = identifyIntakePopup?.results?.reduce((s, r) => s + r.features.length, 0) ?? 0;
 

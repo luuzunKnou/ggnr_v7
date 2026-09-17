@@ -373,10 +373,10 @@ export function MapSidebar({ indexLogoSrc }: { indexLogoSrc: string }) {
                 >
                   <UserRound className="h-5 w-5" strokeWidth={2} aria-hidden />
                   <span
-                    className="absolute -bottom-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-black/75 text-white ring-1 ring-white/40"
+                    className="absolute -bottom-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full border border-white bg-[var(--color-blue-600)] text-white"
                     aria-hidden
                   >
-                    <Ellipsis className="h-3 w-3" strokeWidth={2.5} />
+                    <Ellipsis className="h-2.5 w-2.5" strokeWidth={2.5} />
                   </span>
                   {protoNotifUnread ? (
                     <span className="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full bg-red-500" />

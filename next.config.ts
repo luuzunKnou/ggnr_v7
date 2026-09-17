@@ -82,6 +82,10 @@ const nextConfig: NextConfig = {
     return [
       { source: '/geoserver', destination: geoInternal },
       { source: '/geoserver/:path*', destination: `${geoInternal}/:path*` },
+      // QGIS 레거시 호환 — key 권한 WFS/WMS 프록시
+      { source: '/wfs.do', destination: '/api/ogc/wfs' },
+      { source: '/wfsUpdate.do', destination: '/api/ogc/wfs-update' },
+      { source: '/wms.do', destination: '/api/ogc/wms' },
       { source: '/vworldLandCharacteristics.api', destination: '/api/vworld/land-characteristics' },
       { source: '/vworldLandCharacteristics_https.api', destination: '/api/vworld/land-characteristics' },
       { source: '/vworldLandUseAttr.api', destination: '/api/vworld/land-use' },

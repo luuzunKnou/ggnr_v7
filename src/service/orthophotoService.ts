@@ -9,6 +9,7 @@
  */
 import fs from 'node:fs';
 import fsPromises from 'node:fs/promises';
+import os from 'node:os';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import iconv from 'iconv-lite';
@@ -2588,6 +2589,76 @@ export async function runAerialSatelliteTifToXyz(params: {
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     return { success: false, error: msg, outputRelativeDir };
+  }
+}
+
+/**
+ * WMS GetMap용 — 원본 GeoTIFF를 요청 bbox·크기의 PNG로 잘라 반환.
+ * (QGIS 레이어권한 WMS 중계)
+ */
+export async function warpExtentToPng(params: {
+  absSource: string;
+  /** targetCrs 단위 bbox: minx,miny,maxx,maxy */
+  te: [number, number, number, number];
+  width: number;
+  height: number;
+  targetEpsg: string;
+  /** 원본 TIF CRS (임베디드 CRS 없을 때 필수) */
+  sourceEpsg?: string | null;
+}): Promise<{ ok: true; buffer: Buffer } | { ok: false; error: string }> {
+  const gdalwarp = gdalToolPath('gdalwarp');
+  if (!isConcreteToolPath(gdalwarp) || !opaqueExists(gdalwarp)) {
+    return { ok: false, error: 'gdalwarp 를 찾을 수 없습니다.' };
+  }
+  const width = Math.max(1, Math.min(4096, Math.floor(params.width)));
+  const height = Math.max(1, Math.min(4096, Math.floor(params.height)));
+  const [minx, miny, maxx, maxy] = params.te;
+  if (!(maxx > minx && maxy > miny)) {
+    return { ok: false, error: 'BBOX가 올바르지 않습니다.' };
+  }
+  const epsg = String(params.targetEpsg || 'EPSG:3857').replace(/^epsg:/i, 'EPSG:');
+  const sourceEpsg = String(params.sourceEpsg ?? '')
+    .trim()
+    .replace(/^epsg:/i, 'EPSG:');
+  const workDir = await fsPromises.mkdtemp(path.join(os.tmpdir(), 'ggnr-ortho-wms-'));
+  const outPng = path.join(workDir, 'out.png');
+  const gdalEnv = buildGdalChildEnv(gdalwarp);
+  try {
+    const args = [
+      '-q',
+      '-overwrite',
+      ...(sourceEpsg ? (['-s_srs', sourceEpsg] as string[]) : []),
+      '-t_srs',
+      epsg,
+      '-te',
+      String(minx),
+      String(miny),
+      String(maxx),
+      String(maxy),
+      '-ts',
+      String(width),
+      String(height),
+      '-r',
+      'bilinear',
+      '-of',
+      'PNG',
+      '-dstalpha',
+      params.absSource,
+      outPng,
+    ];
+    const w = await runProcess(gdalwarp, args, workDir, 120_000, gdalEnv);
+    if (w.code !== 0) {
+      return {
+        ok: false,
+        error: (w.stderr || w.stdout || `gdalwarp exit ${w.code}`).slice(0, 500),
+      };
+    }
+    const buffer = await fsPromises.readFile(outPng);
+    return { ok: true, buffer };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : String(e) };
+  } finally {
+    await fsPromises.rm(workDir, { recursive: true, force: true }).catch(() => undefined);
   }
 }
 

@@ -72,6 +72,8 @@ type DetailHeaderProps = {
   editing?: boolean;
   /** 우측 상단 X 닫기 (촬영요청·도로대장 상세와 동일) */
   onClose?: () => void;
+  /** 두 번째 탭 라벨 — 기본 비행기록부, 항공영상은 촬영정보 */
+  secondaryTabLabel?: string;
 };
 
 export function DetailHeader({
@@ -80,6 +82,7 @@ export function DetailHeader({
   onTabChange,
   editing = false,
   onClose,
+  secondaryTabLabel = '비행기록부',
 }: DetailHeaderProps) {
   return (
     <div className="shrink-0 border-b border-slate-200 bg-white">
@@ -102,7 +105,7 @@ export function DetailHeader({
           {(
             [
               { id: 'info' as const, label: '상세정보' },
-              { id: 'flight' as const, label: '비행기록부' },
+              { id: 'flight' as const, label: secondaryTabLabel },
             ] as const
           ).map((t) => {
             const active = tab === t.id;
@@ -353,8 +356,8 @@ export function OrthoWorkUnitDetailPanel({
                 파일 목록
               </SectionTitle>
               <p className="mb-2 text-[10px] leading-relaxed text-slate-400">
-                변환완료 파일만 체크하면 지도 타일을 켤 수 있습니다. (자체항공영상이 아닌 드론영상
-                오버레이)
+                변환완료 파일을 클릭하거나 체크하면 지도 타일을 켤 수 있습니다. (자체항공영상이 아닌
+                드론영상 오버레이)
               </p>
               <FileRows
                 files={unit.files}
@@ -474,7 +477,7 @@ export function DroneWorkUnitDetailPanel({
               >
                 파일 목록
               </SectionTitle>
-              <p className="mb-2 text-[10px] text-slate-400">
+              <p className="mb-2 text-[10px] leading-relaxed text-slate-400">
                 파일을 클릭하면 지도가 촬영 위치로 이동합니다. GPS 없는 동영상은 목록만 표시됩니다.
               </p>
               <FileRows
@@ -752,7 +755,7 @@ export function PanoramaWorkUnitDetailPanel({
               >
                 파일 목록
               </SectionTitle>
-              <p className="mb-2 text-[10px] text-slate-400">
+              <p className="mb-2 text-[10px] leading-relaxed text-slate-400">
                 파일을 선택하면 360 미리보기가 열립니다. GPS가 있으면 지도가 이동합니다.
               </p>
               <FileRows
@@ -787,11 +790,9 @@ type SatDetailProps = {
   viewOnly?: boolean;
   linkedRequest?: ShootingRequestDraft | null;
   onFolderUpload?: () => void;
-  onAddFiles?: () => void;
   onClearLink?: () => void;
   onDelete?: () => void;
   onSaveAttrs?: (attrs: AttrRow[]) => Promise<void>;
-  onDeleteFile?: (file: WorkFileItem) => void;
 };
 
 export function SatelliteWorkUnitDetailPanel({
@@ -802,11 +803,9 @@ export function SatelliteWorkUnitDetailPanel({
   viewOnly = false,
   linkedRequest,
   onFolderUpload,
-  onAddFiles,
   onClearLink,
   onDelete,
   onSaveAttrs,
-  onDeleteFile,
 }: SatDetailProps) {
   useWorkUnitViewLog('satellite', unit.id);
   const edit = useAttrEdit(unit, onSaveAttrs);
@@ -824,11 +823,14 @@ export function SatelliteWorkUnitDetailPanel({
         onTabChange={viewOnly ? undefined : onDetailTabChange}
         editing={edit.editing}
         onClose={onClose}
+        secondaryTabLabel="촬영정보"
       />
       {!viewOnly && detailTab === 'flight' ? (
         <div className="min-h-0 flex-1 overflow-y-auto">
           <FlightLogbookForm
             workUnitLabel={workLabel}
+            title="촬영정보"
+            infoSectionLabel="촬영 정보"
             srKey={
               linkedRequest?.id != null && Number.isFinite(Number(linkedRequest.id))
                 ? Number(linkedRequest.id)
@@ -849,36 +851,9 @@ export function SatelliteWorkUnitDetailPanel({
           onFolderUpload={viewOnly ? undefined : onFolderUpload}
           onClearLink={viewOnly ? undefined : onClearLink}
           fileSection={
-            <section>
-              <SectionTitle
-                action={
-                  viewOnly || !onAddFiles ? undefined : (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="h-7 gap-1 px-2 text-[11px]"
-                      onClick={onAddFiles}
-                    >
-                      <Plus className="h-3 w-3" />
-                      추가
-                    </Button>
-                  )
-                }
-              >
-                파일 목록
-              </SectionTitle>
-              <p className="mb-2 text-[10px] text-slate-400">
-                변환 완료 시 배경지도 «자체항공영상»에 등록됩니다. 지도 on/off는 배경지도에서 합니다.
-              </p>
-              <FileRows
-                files={unit.files}
-                selectedId={null}
-                onSelect={() => {}}
-                onDeleteFile={viewOnly ? undefined : onDeleteFile}
-                statusMode="convert"
-              />
-            </section>
+            <p className="rounded-md border border-slate-200 bg-slate-50/80 px-2.5 py-2 text-[10px] leading-relaxed text-slate-500">
+              영상 표시·on/off는 배경지도 «자체항공영상»에서 합니다.
+            </p>
           }
         />
       )}
@@ -937,7 +912,7 @@ function FileRows({
           <li key={f.id}>
             <div
               className={cn(
-                'flex items-start gap-2 rounded-lg border px-2.5 py-2.5 transition-colors',
+                'flex items-center gap-2 rounded-lg border px-2.5 py-2 transition-colors',
                 selected
                   ? 'border-sky-300 bg-sky-50 shadow-sm ring-1 ring-sky-200/70'
                   : checked
@@ -946,65 +921,73 @@ function FileRows({
               )}
             >
               {onToggleCheck ? (
-                <label className="mt-0.5 flex shrink-0 items-center">
+                <label className="flex h-7 w-4 shrink-0 items-center justify-center">
                   <input
                     type="checkbox"
-                    className="h-3.5 w-3.5 rounded border-slate-300"
+                    className="h-3.5 w-3.5 shrink-0 rounded border-slate-300 accent-sky-600"
                     checked={checked}
                     disabled={!canCheck}
                     onChange={() => onToggleCheck(f.id)}
+                    onClick={(e) => e.stopPropagation()}
                     title={canCheck ? '지도 타일 표시' : '변환 완료 후 선택 가능'}
                   />
                 </label>
               ) : null}
 
-              <button type="button" className="min-w-0 flex-1 text-left" onClick={() => onSelect(f.id)}>
-                <div className="flex items-start gap-2">
-                  <span
-                    className={cn(
-                      'mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-md',
-                      selected ? 'bg-sky-100 text-sky-700' : 'bg-slate-100 text-slate-500'
-                    )}
-                  >
-                    <FileIcon className="h-3.5 w-3.5" />
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-start justify-between gap-2">
-                      <span
-                        className={cn(
-                          'truncate text-[11px] font-medium',
-                          selected ? 'text-sky-950' : 'text-slate-800'
-                        )}
-                        title={f.name}
-                      >
-                        {f.name}
-                      </span>
-                      <StatusBadge status={f.status} mode={statusMode} />
-                    </div>
-                    <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px] text-slate-500">
-                      <span>{f.format.toUpperCase()}</span>
-                      <span>{f.sizeLabel}</span>
-                      {showLocation && f.locationLabel ? (
-                        <span className="inline-flex items-center gap-0.5 tabular-nums">
-                          <MapPin className="h-2.5 w-2.5" />
-                          {f.locationLabel}
-                        </span>
-                      ) : null}
-                    </div>
-                  </div>
+              <span
+                className={cn(
+                  'flex h-7 w-7 shrink-0 items-center justify-center rounded-md',
+                  selected ? 'bg-sky-100 text-sky-700' : 'bg-slate-100 text-slate-500'
+                )}
+                aria-hidden
+              >
+                <FileIcon className="h-3.5 w-3.5" />
+              </span>
+
+              <button
+                type="button"
+                className="min-w-0 flex-1 py-0.5 text-left"
+                onClick={() => {
+                  onSelect(f.id);
+                  // 드론영상 등: 행 클릭만으로도 체크(지도 타일)가 켜지도록
+                  if (onToggleCheck && canCheck) onToggleCheck(f.id);
+                }}
+              >
+                <p
+                  className={cn(
+                    'truncate text-[11px] font-medium leading-4',
+                    selected ? 'text-sky-950' : 'text-slate-800'
+                  )}
+                  title={f.name}
+                >
+                  {f.name}
+                </p>
+                <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px] leading-3 text-slate-500">
+                  <span>{f.format.toUpperCase()}</span>
+                  <span>{f.sizeLabel}</span>
+                  {showLocation && f.locationLabel ? (
+                    <span className="inline-flex items-center gap-0.5 tabular-nums">
+                      <MapPin className="h-2.5 w-2.5 shrink-0" />
+                      {f.locationLabel}
+                    </span>
+                  ) : null}
                 </div>
               </button>
-              {onDeleteFile ? (
-                <button
-                  type="button"
-                  className="mt-0.5 shrink-0 rounded p-1 text-slate-400 transition-colors hover:bg-rose-50 hover:text-rose-600"
-                  onClick={() => onDeleteFile(f)}
-                  title="파일 삭제"
-                  aria-label={`${f.name} 삭제`}
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                </button>
-              ) : null}
+
+              <div className="flex shrink-0 items-center gap-1">
+                <StatusBadge status={f.status} mode={statusMode} />
+                {onDeleteFile ? (
+                  <button
+                    type="button"
+                    className="flex h-7 w-7 items-center justify-center rounded-md text-slate-400 transition-colors hover:bg-rose-50 hover:text-rose-600"
+                    onClick={() => onDeleteFile(f)}
+                    title="파일 삭제"
+                    aria-label={`${f.name} 삭제`}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                ) : null}
+              </div>
             </div>
           </li>
         );

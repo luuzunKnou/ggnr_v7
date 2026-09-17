@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useSession } from 'next-auth/react';
+import { AuthSessionProvider } from '@/app/providers';
 import tables from '@/config/defineLayer/tables.json';
 import { BackgroundMapSelector, type BackgroundMapGroup } from '@/app/(pages)/map/_mapComponents/mapControlPanel/backgroundMapSelector';
 import {
@@ -53,7 +54,16 @@ type Props = {
   backgroundMapGroups: BackgroundMapGroup[];
 };
 
-export function MapPrintModal({ open, onClose, snapshot, backgroundMapGroups }: Props) {
+export function MapPrintModal(props: Props) {
+  if (!props.open || !props.snapshot) return null;
+  return (
+    <AuthSessionProvider>
+      <MapPrintModalView {...props} />
+    </AuthSessionProvider>
+  );
+}
+
+function MapPrintModalView({ open, onClose, snapshot, backgroundMapGroups }: Props) {
   const { data: session } = useSession();
   const paperRef = useRef<HTMLDivElement>(null);
   const mapHostRef = useRef<HTMLDivElement>(null);

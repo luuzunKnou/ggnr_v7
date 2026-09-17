@@ -9,6 +9,7 @@ import { db } from '@/database/db';
 import { tifUnit } from '@/database/schema/tif_unit';
 import { workUnit } from '@/database/schema/work_unit';
 import { getSessionUsrId } from '@/lib/auth/guard';
+import { isSuperUser } from '@/lib/auth/superUser';
 import {
   aerialWorkUnitRelativeDir,
   isAerialUploadKind,
@@ -17,6 +18,11 @@ import {
 import { detectTifSourceCrs, runAerialOrthoTifToXyz, runAerialSatelliteTifToXyz } from '@/service/orthophotoService';
 
 const GGNR_DATA_DIR = process.env.GGNR_DATA_DIR ?? 'd:\\ggnr_data_dir';
+
+/** 드론영상 표시 줌 제한 설정 파일 (DB 없이 공통 반영) */
+const ORTHO_ZOOM_LIMIT_REL = path.join('config', 'aerial_ortho_zoom_limit.json');
+const ORTHO_ZOOM_LIMIT_DEFAULT_MAX = 16;
+const ORTHO_ZOOM_FULL_MAX = 19;
 
 function throwHttp(status: number, message: string): never {
   throw Object.assign(new Error(message), { status });
@@ -582,15 +588,141 @@ export async function convertSatelliteWorkUnit(params: {
   return { wuKey, folderName: wu.folderName, converted, failed, items };
 }
 
-/** 변환완료 TIF 타일 범위 (WGS84) — 체크 시 지도 fit 용 */
-export async function getOrthoTifExtentWgs84(params: { tuKey?: number } = {}): Promise<{
+function tileXyToLonLat(z: number, x: number, y: number): { lon: number; lat: number } {
+  const n = 2 ** z;
+  const lon = (x / n) * 360 - 180;
+  const latRad = Math.atan(Math.sinh(Math.PI * (1 - (2 * y) / n)));
+  return { lon, lat: (latRad * 180) / Math.PI };
+}
+
+type Wgs84Extent = {
+  minLon: number | null;
+  minLat: number | null;
+  maxLon: number | null;
+  maxLat: number | null;
+};
+
+const EMPTY_EXTENT: Wgs84Extent = {
+  minLon: null,
+  minLat: null,
+  maxLon: null,
+  maxLat: null,
+};
+
+/** 프로세스 메모리 캐시 — 동일 타일 폴더 재스캔 방지 */
+const extentMemCache = new Map<string, Wgs84Extent>();
+
+/**
+ * XYZ 타일 폴더에서 WGS84 범위 산출.
+ * 최고줌의 x 폴더명만으로 min/max X, y는 양끝·중앙 열만 샘플링(전체 열 readdir 방지).
+ * 결과는 extent_wgs84.json + 메모리에 캐시.
+ */
+async function readXyzPyramidWgs84(groupDir: string): Promise<Wgs84Extent> {
+  const cacheKey = path.resolve(groupDir);
+  const mem = extentMemCache.get(cacheKey);
+  if (mem) return mem;
+
+  const diskCachePath = path.join(groupDir, 'extent_wgs84.json');
+  try {
+    const raw = await fs.readFile(diskCachePath, 'utf8');
+    const parsed = JSON.parse(raw) as Wgs84Extent;
+    if (
+      parsed &&
+      typeof parsed.minLon === 'number' &&
+      typeof parsed.minLat === 'number' &&
+      typeof parsed.maxLon === 'number' &&
+      typeof parsed.maxLat === 'number'
+    ) {
+      extentMemCache.set(cacheKey, parsed);
+      return parsed;
+    }
+  } catch {
+    /* compute below */
+  }
+
+  let zoomNames: string[] = [];
+  try {
+    const entries = await fs.readdir(groupDir, { withFileTypes: true });
+    zoomNames = entries.filter((e) => e.isDirectory() && /^\d+$/.test(e.name)).map((e) => e.name);
+  } catch {
+    extentMemCache.set(cacheKey, EMPTY_EXTENT);
+    return EMPTY_EXTENT;
+  }
+  const zooms = zoomNames.map(Number);
+  if (zooms.length === 0) {
+    extentMemCache.set(cacheKey, EMPTY_EXTENT);
+    return EMPTY_EXTENT;
+  }
+  /** 최저줌 타일 1장이 수 km를 덮어 fit 시 영상이 점으로 안 보임 → 최고줌으로 범위 산출 */
+  const z = Math.max(...zooms);
+  const zDir = path.join(groupDir, String(z));
+  let xs: number[] = [];
+  try {
+    const xDirs = await fs.readdir(zDir, { withFileTypes: true });
+    xs = xDirs
+      .filter((e) => e.isDirectory() && /^\d+$/.test(e.name))
+      .map((e) => Number(e.name))
+      .filter((n) => Number.isFinite(n))
+      .sort((a, b) => a - b);
+  } catch {
+    extentMemCache.set(cacheKey, EMPTY_EXTENT);
+    return EMPTY_EXTENT;
+  }
+  if (xs.length === 0) {
+    extentMemCache.set(cacheKey, EMPTY_EXTENT);
+    return EMPTY_EXTENT;
+  }
+  const minX = xs[0]!;
+  const maxX = xs[xs.length - 1]!;
+  const sampleXs = [...new Set([minX, maxX, xs[Math.floor(xs.length / 2)]!])];
+  const ys: number[] = [];
+  await Promise.all(
+    sampleXs.map(async (x) => {
+      try {
+        const yFiles = await fs.readdir(path.join(zDir, String(x)));
+        for (const yf of yFiles) {
+          const m = /^(\d+)\./.exec(yf);
+          if (m) ys.push(Number(m[1]));
+        }
+      } catch {
+        /* ignore */
+      }
+    })
+  );
+  if (ys.length === 0) {
+    extentMemCache.set(cacheKey, EMPTY_EXTENT);
+    return EMPTY_EXTENT;
+  }
+  const minY = Math.min(...ys);
+  const maxY = Math.max(...ys);
+  const nw = tileXyToLonLat(z, minX, minY);
+  const se = tileXyToLonLat(z, maxX + 1, maxY + 1);
+  const extent: Wgs84Extent = {
+    minLon: Math.min(nw.lon, se.lon),
+    maxLon: Math.max(nw.lon, se.lon),
+    minLat: Math.min(nw.lat, se.lat),
+    maxLat: Math.max(nw.lat, se.lat),
+  };
+  extentMemCache.set(cacheKey, extent);
+  void fs.writeFile(diskCachePath, JSON.stringify(extent), 'utf8').catch(() => undefined);
+  return extent;
+}
+
+async function extentFromTilesRelative(tilesRelativePath: string): Promise<Wgs84Extent> {
+  const tilesRel = tilesRelativePath.replace(/\\/g, '/');
+  const resolved = resolveWithinBase(tilesRel);
+  if (!resolved) return EMPTY_EXTENT;
+  return readXyzPyramidWgs84(resolved.abs);
+}
+
+/** 세션 없이 범위 산출 (WMS·내부용) */
+export async function getOrthoTifExtentWgs84Internal(params: { tuKey?: number } = {}): Promise<{
   tuKey: number;
   minLon: number | null;
   minLat: number | null;
   maxLon: number | null;
   maxLat: number | null;
 }> {
-  await requireSession();
   const tuKey =
     params.tuKey != null && Number.isFinite(Number(params.tuKey)) ? Number(params.tuKey) : null;
   if (tuKey == null) throwHttp(400, 'TIF 키가 필요합니다.');
@@ -606,79 +738,157 @@ export async function getOrthoTifExtentWgs84(params: { tuKey?: number } = {}): P
     return { tuKey, minLon: null, minLat: null, maxLon: null, maxLat: null };
   }
 
-  const tilesRel = row.tilesRelativePath.replace(/\\/g, '/');
-  const resolved = resolveWithinBase(tilesRel);
-  if (!resolved) {
-    return { tuKey, minLon: null, minLat: null, maxLon: null, maxLat: null };
-  }
-
-  const extent = await readXyzPyramidWgs84(resolved.abs);
+  const extent = await extentFromTilesRelative(row.tilesRelativePath);
   return { tuKey, ...extent };
 }
 
-function tileXyToLonLat(z: number, x: number, y: number): { lon: number; lat: number } {
-  const n = 2 ** z;
-  const lon = (x / n) * 360 - 180;
-  const latRad = Math.atan(Math.sinh(Math.PI * (1 - (2 * y) / n)));
-  return { lon, lat: (latRad * 180) / Math.PI };
-}
-
-async function readXyzPyramidWgs84(groupDir: string): Promise<{
+/** 변환완료 TIF 타일 범위 (WGS84) — 체크 시 지도 fit 용 */
+export async function getOrthoTifExtentWgs84(params: { tuKey?: number } = {}): Promise<{
+  tuKey: number;
   minLon: number | null;
   minLat: number | null;
   maxLon: number | null;
   maxLat: number | null;
 }> {
-  let zoomNames: string[] = [];
-  try {
-    const entries = await fs.readdir(groupDir, { withFileTypes: true });
-    zoomNames = entries.filter((e) => e.isDirectory() && /^\d+$/.test(e.name)).map((e) => e.name);
-  } catch {
-    return { minLon: null, minLat: null, maxLon: null, maxLat: null };
+  await requireSession();
+  return getOrthoTifExtentWgs84Internal(params);
+}
+
+export const ORTHO_WMS_LAYER_PREFIX = 'ortho_tu_';
+
+export function orthoWmsLayerName(tuKey: number): string {
+  return `${ORTHO_WMS_LAYER_PREFIX}${tuKey}`;
+}
+
+export function parseOrthoWmsTuKey(layerName: string): number | null {
+  const local = String(layerName ?? '')
+    .trim()
+    .replace(/^[^:]+:/, '');
+  const m = new RegExp(`^${ORTHO_WMS_LAYER_PREFIX}(\\d+)$`, 'i').exec(local);
+  if (!m) return null;
+  const n = Number(m[1]);
+  return Number.isFinite(n) ? n : null;
+}
+
+export type OrthoExtentItem = {
+  tuKey: number;
+  wuKey: number;
+  workName: string;
+  fileName: string;
+  title: string;
+  wmsLayerName: string;
+  minLon: number;
+  minLat: number;
+  maxLon: number;
+  maxLat: number;
+};
+
+const LIST_EXTENT_CONCURRENCY = 12;
+const LIST_EXTENT_TTL_MS = 60_000;
+let listExtentCache: { at: number; items: OrthoExtentItem[] } | null = null;
+
+function invalidateOrthoExtentListCache() {
+  listExtentCache = null;
+}
+
+/** 변환완료·범위 있는 드론영상 목록 (데이터조회 bbox / 권한 카탈로그) */
+export async function listCompletedOrthoExtents(params?: {
+  requireSession?: boolean;
+}): Promise<{ items: OrthoExtentItem[] }> {
+  if (params?.requireSession !== false) await requireSession();
+
+  const now = Date.now();
+  if (listExtentCache && now - listExtentCache.at < LIST_EXTENT_TTL_MS) {
+    return { items: listExtentCache.items };
   }
-  const zooms = zoomNames.map(Number);
-  if (zooms.length === 0) {
-    return { minLon: null, minLat: null, maxLon: null, maxLat: null };
-  }
-  /** 최저줌 타일 1장이 수 km를 덮어 fit 시 영상이 점으로 안 보임 → 최고줌으로 범위 산출 */
-  const z = Math.max(...zooms);
-  const zDir = path.join(groupDir, String(z));
-  let xNames: string[] = [];
-  try {
-    const xDirs = await fs.readdir(zDir, { withFileTypes: true });
-    xNames = xDirs.filter((e) => e.isDirectory() && /^\d+$/.test(e.name)).map((e) => e.name);
-  } catch {
-    return { minLon: null, minLat: null, maxLon: null, maxLat: null };
-  }
-  const xs: number[] = [];
-  const ys: number[] = [];
-  for (const xName of xNames) {
-    const x = Number(xName);
-    xs.push(x);
-    try {
-      const yFiles = await fs.readdir(path.join(zDir, xName));
-      for (const yf of yFiles) {
-        const m = /^(\d+)\./.exec(yf);
-        if (m) ys.push(Number(m[1]));
-      }
-    } catch {
-      /* ignore */
+
+  const rows = await db
+    .select({
+      tuKey: tifUnit.tuKey,
+      wuKey: tifUnit.wuKey,
+      fileName: tifUnit.fileName,
+      workName: workUnit.workName,
+      tilesRelativePath: tifUnit.tilesRelativePath,
+      convertStatus: tifUnit.convertStatus,
+    })
+    .from(tifUnit)
+    .innerJoin(workUnit, eq(tifUnit.wuKey, workUnit.wuKey))
+    .where(
+      and(
+        eq(tifUnit.tuIsDel, false),
+        eq(workUnit.wuIsDel, false),
+        eq(workUnit.kind, 'ortho'),
+        eq(tifUnit.convertStatus, 'done')
+      )
+    )
+    .orderBy(desc(tifUnit.tuKey))
+    .limit(300);
+
+  const items: OrthoExtentItem[] = [];
+  for (let i = 0; i < rows.length; i += LIST_EXTENT_CONCURRENCY) {
+    const chunk = rows.slice(i, i + LIST_EXTENT_CONCURRENCY);
+    const part = await Promise.all(
+      chunk.map(async (row) => {
+        if (!row.tilesRelativePath) return null;
+        const ext = await extentFromTilesRelative(row.tilesRelativePath);
+        if (
+          ext.minLon == null ||
+          ext.minLat == null ||
+          ext.maxLon == null ||
+          ext.maxLat == null
+        ) {
+          return null;
+        }
+        const workName = String(row.workName ?? '').trim() || `작업${row.wuKey}`;
+        const fileName = String(row.fileName ?? '').trim() || `tif_${row.tuKey}`;
+        return {
+          tuKey: row.tuKey,
+          wuKey: row.wuKey,
+          workName,
+          fileName,
+          title: `${workName} · ${fileName}`,
+          wmsLayerName: orthoWmsLayerName(row.tuKey),
+          minLon: ext.minLon,
+          minLat: ext.minLat,
+          maxLon: ext.maxLon,
+          maxLat: ext.maxLat,
+        } satisfies OrthoExtentItem;
+      })
+    );
+    for (const it of part) {
+      if (it) items.push(it);
     }
   }
-  if (xs.length === 0 || ys.length === 0) {
-    return { minLon: null, minLat: null, maxLon: null, maxLat: null };
+  listExtentCache = { at: now, items };
+  return { items };
+}
+
+/** 원본 TIF 절대경로 (WMS GetMap) */
+export async function resolveOrthoTifAbsPath(tuKey: number): Promise<{
+  absSource: string;
+  sourceCrs: string;
+  fileName: string;
+} | null> {
+  const row = (
+    await db
+      .select()
+      .from(tifUnit)
+      .where(and(eq(tifUnit.tuKey, tuKey), eq(tifUnit.tuIsDel, false)))
+      .limit(1)
+  )[0];
+  if (!row || row.convertStatus !== 'done') return null;
+  const rel = String(row.relativePath ?? '').replace(/\\/g, '/');
+  const resolved = resolveWithinBase(rel);
+  if (!resolved) return null;
+  try {
+    await fs.access(resolved.abs);
+  } catch {
+    return null;
   }
-  const minX = Math.min(...xs);
-  const maxX = Math.max(...xs);
-  const minY = Math.min(...ys);
-  const maxY = Math.max(...ys);
-  const nw = tileXyToLonLat(z, minX, minY);
-  const se = tileXyToLonLat(z, maxX + 1, maxY + 1);
   return {
-    minLon: Math.min(nw.lon, se.lon),
-    maxLon: Math.max(nw.lon, se.lon),
-    minLat: Math.min(nw.lat, se.lat),
-    maxLat: Math.max(nw.lat, se.lat),
+    absSource: resolved.abs,
+    sourceCrs: String(row.sourceCrs ?? 'EPSG:5181'),
+    fileName: row.fileName,
   };
 }
 
@@ -699,6 +909,7 @@ export async function deleteTifUnit(params: { tuKey?: number } = {}): Promise<{
   if (!row || row.tuIsDel) throwHttp(404, 'TIF를 찾을 수 없습니다.');
 
   await db.delete(tifUnit).where(eq(tifUnit.tuKey, tuKey));
+  invalidateOrthoExtentListCache();
 
   let diskRemoved = false;
   const srcResolved = resolveWithinBase(row.relativePath.replace(/\\/g, '/'));
@@ -713,6 +924,7 @@ export async function deleteTifUnit(params: { tuKey?: number } = {}): Promise<{
   if (row.tilesRelativePath) {
     const tilesResolved = resolveWithinBase(row.tilesRelativePath.replace(/\\/g, '/'));
     if (tilesResolved) {
+      extentMemCache.delete(path.resolve(tilesResolved.abs));
       await fs.rm(tilesResolved.abs, { recursive: true, force: true }).catch(() => undefined);
     }
   }
@@ -734,11 +946,13 @@ export async function deleteTifUnitsForWorkUnit(wuKey: number): Promise<number> 
     if (row.tilesRelativePath) {
       const tilesResolved = resolveWithinBase(row.tilesRelativePath.replace(/\\/g, '/'));
       if (tilesResolved) {
+        extentMemCache.delete(path.resolve(tilesResolved.abs));
         await fs.rm(tilesResolved.abs, { recursive: true, force: true }).catch(() => undefined);
       }
     }
   }
   await db.delete(tifUnit).where(eq(tifUnit.wuKey, wuKey));
+  invalidateOrthoExtentListCache();
   return rows.length;
 }
 
@@ -774,6 +988,91 @@ export async function insertOrthoTifUnit(params: {
     .returning();
   if (!row) throwHttp(500, 'TIF 등록에 실패했습니다.');
   return toOrthoItem(row);
+}
+
+type OrthoZoomLimitFile = {
+  enabled: boolean;
+  maxZoom: number;
+};
+
+function orthoZoomLimitAbsPath(): string {
+  return path.join(getBaseDir(), ORTHO_ZOOM_LIMIT_REL);
+}
+
+function normalizeOrthoZoomLimit(raw: Partial<OrthoZoomLimitFile> | null): OrthoZoomLimitFile {
+  const enabled = Boolean(raw?.enabled);
+  const z = Number(raw?.maxZoom);
+  const maxZoom =
+    Number.isFinite(z) && z >= 0 && z <= ORTHO_ZOOM_FULL_MAX
+      ? Math.floor(z)
+      : ORTHO_ZOOM_LIMIT_DEFAULT_MAX;
+  return { enabled, maxZoom };
+}
+
+async function readOrthoZoomLimitFile(): Promise<OrthoZoomLimitFile> {
+  try {
+    const abs = orthoZoomLimitAbsPath();
+    const text = await fs.readFile(abs, 'utf8');
+    return normalizeOrthoZoomLimit(JSON.parse(text) as Partial<OrthoZoomLimitFile>);
+  } catch {
+    return { enabled: false, maxZoom: ORTHO_ZOOM_LIMIT_DEFAULT_MAX };
+  }
+}
+
+async function writeOrthoZoomLimitFile(next: OrthoZoomLimitFile): Promise<void> {
+  const abs = orthoZoomLimitAbsPath();
+  await fs.mkdir(path.dirname(abs), { recursive: true });
+  await fs.writeFile(abs, `${JSON.stringify(next, null, 2)}\n`, 'utf8');
+}
+
+async function canManageOrthoZoomLimit(usrId: string): Promise<boolean> {
+  return isSuperUser(usrId);
+}
+
+/** 드론영상 고화질(줌) 제한 — 조회 (로그인 사용자) */
+export async function getOrthoZoomLimitSetting(): Promise<{
+  enabled: boolean;
+  maxZoom: number;
+  displayMaxZoom: number;
+  canManage: boolean;
+}> {
+  const usrId = await requireSession();
+  const file = await readOrthoZoomLimitFile();
+  const canManage = await canManageOrthoZoomLimit(usrId);
+  return {
+    enabled: file.enabled,
+    maxZoom: file.maxZoom,
+    displayMaxZoom: file.enabled ? file.maxZoom : ORTHO_ZOOM_FULL_MAX,
+    canManage,
+  };
+}
+
+/** 드론영상 고화질(줌) 제한 — 관리자만 저장 */
+export async function setOrthoZoomLimitSetting(params: {
+  enabled?: boolean;
+  maxZoom?: number;
+} = {}): Promise<{
+  enabled: boolean;
+  maxZoom: number;
+  displayMaxZoom: number;
+  canManage: boolean;
+}> {
+  const usrId = await requireSession();
+  if (!(await canManageOrthoZoomLimit(usrId))) {
+    throwHttp(403, '슈퍼계정만 변경할 수 있습니다.');
+  }
+  const cur = await readOrthoZoomLimitFile();
+  const next = normalizeOrthoZoomLimit({
+    enabled: params.enabled !== undefined ? Boolean(params.enabled) : cur.enabled,
+    maxZoom: params.maxZoom !== undefined ? Number(params.maxZoom) : cur.maxZoom,
+  });
+  await writeOrthoZoomLimitFile(next);
+  return {
+    enabled: next.enabled,
+    maxZoom: next.maxZoom,
+    displayMaxZoom: next.enabled ? next.maxZoom : ORTHO_ZOOM_FULL_MAX,
+    canManage: true,
+  };
 }
 
 /** 경로 검증용 re-export */

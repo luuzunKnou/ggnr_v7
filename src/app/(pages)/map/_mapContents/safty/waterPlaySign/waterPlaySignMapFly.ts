@@ -1,5 +1,6 @@
 import type { Map } from 'ol';
 import { easeOut } from 'ol/easing';
+import GeoJSON from 'ol/format/GeoJSON';
 import { fromLonLat } from 'ol/proj';
 import { prepareMapForPanelAwareNavigation } from '../../../_mapComponents/config/mapAutoNavigation';
 import type { WaterPlaySignListItem } from '@/service/waterPlaySignService';
@@ -44,15 +45,64 @@ export function flyToWaterPlaySignLonLat(
   }, 80);
 }
 
+function flyToGeomJson(
+  map: Map,
+  geomJson: unknown,
+  applyMapViewPadding?: (() => void) | null
+): boolean {
+  if (!geomJson || typeof geomJson !== 'object' || !('type' in geomJson)) return false;
+  const type = String((geomJson as { type?: unknown }).type ?? '');
+  if (type === 'Point') {
+    const coords = (geomJson as { coordinates?: number[] }).coordinates;
+    if (!Array.isArray(coords) || coords.length < 2) return false;
+    flyToWaterPlaySignLonLat(map, coords[0], coords[1], applyMapViewPadding);
+    return true;
+  }
+  try {
+    const geom = new GeoJSON().readGeometry(geomJson, {
+      dataProjection: 'EPSG:4326',
+      featureProjection: 'EPSG:3857',
+    });
+    const extent = geom?.getExtent();
+    if (!extent || !extent.every((n) => Number.isFinite(n))) return false;
+    const run = () => {
+      prepareMapForPanelAwareNavigation(map, applyMapViewPadding);
+      const view = map.getView();
+      view.cancelAnimations();
+      view.fit(extent, {
+        duration: WATER_PLAY_SIGN_FLY_MS,
+        easing: easeOut,
+        maxZoom: WATER_PLAY_SIGN_FLY_ZOOM + 2,
+        padding: [48, 48, 48, 48],
+      });
+    };
+    window.setTimeout(() => {
+      queueMicrotask(() => {
+        requestAnimationFrame(() => {
+          requestAnimationFrame(run);
+        });
+      });
+    }, 80);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export function flyToWaterPlaySignRow(
   map: Map | null | undefined,
   row: WaterPlaySignListItem | null | undefined,
   applyMapViewPadding?: (() => void) | null
 ): void {
   if (!map || !row) return;
-  const g = row.geomJson;
-  if (!g || typeof g !== 'object' || !('coordinates' in g)) return;
-  const coords = (g as { coordinates?: number[] }).coordinates;
-  if (!Array.isArray(coords) || coords.length < 2) return;
-  flyToWaterPlaySignLonLat(map, coords[0], coords[1], applyMapViewPadding);
+  flyToGeomJson(map, row.geomJson, applyMapViewPadding);
+}
+
+export function flyToWaterPlayChildGeom(
+  map: Map | null | undefined,
+  geomJson: unknown,
+  applyMapViewPadding?: (() => void) | null
+): void {
+  if (!map) return;
+  flyToGeomJson(map, geomJson, applyMapViewPadding);
 }

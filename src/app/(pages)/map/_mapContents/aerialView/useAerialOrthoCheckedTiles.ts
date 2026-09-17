@@ -8,12 +8,16 @@ import { transformExtent } from 'ol/proj';
 import type Tile from 'ol/Tile';
 import type ImageTile from 'ol/ImageTile';
 import { call } from '@/lib/api';
+import { GEOM_STACK_ZINDEX_BASE } from '@/lib/mapLayerGeometryOrder';
 import { useMapContext } from '../../_mapComponents/MapContext';
-import { VWORLD_MAX_ZOOM_INDEX } from '../../_mapComponents/layerFactory/backgroundLayerFactory';
 import type { WorkUnitItem } from './aerialMediaTypes';
 import { mockUnitsForKind, subscribeMockWorkUnits } from './aerialMediaMockData';
+import { useAerialOrthoZoomLimit } from './useAerialOrthoZoomLimit';
+import { AERIAL_ORTHO_TILE_FULL_MAX_ZOOM } from './aerialOrthoZoomLimit';
 
 const LAYER_PREFIX = 'aerial-ortho-tif-';
+/** 보라 bbox 위 · 일반 WMS 면(GEOM_STACK_ZINDEX_BASE) 아래 */
+const ORTHO_TILE_Z_INDEX = GEOM_STACK_ZINDEX_BASE - 1;
 
 /** JPEG nodata(순수 검정) → 투명. 원본 RGB min≈11 이라 실데이터는 남김 */
 function punchJpegBlackToAlpha(image: HTMLImageElement): string {
@@ -81,12 +85,16 @@ export function useAerialOrthoCheckedTiles(params: {
   unit?: WorkUnitItem | null;
   checkedFileIds?: Set<string>;
   checkedUnitIds?: Set<string>;
+  /** 데이터조회 bbox 클릭 등 외부에서 켠 tuKey */
+  extraTuKeys?: number[];
 }) {
-  const { enabled, unit = null, checkedFileIds, checkedUnitIds } = params;
+  const { enabled, unit = null, checkedFileIds, checkedUnitIds, extraTuKeys } = params;
   const mapContext = useMapContext();
   const layersRef = useRef<Map<string, TileLayer<XYZ>>>(new Map());
   const lastFitKeyRef = useRef('');
   const [listTick, setListTick] = useState(0);
+  const { displayMaxZoom } = useAerialOrthoZoomLimit();
+  const tileMaxZoom = displayMaxZoom ?? AERIAL_ORTHO_TILE_FULL_MAX_ZOOM;
 
   useEffect(() => {
     if (!checkedUnitIds) return;
@@ -94,23 +102,27 @@ export function useAerialOrthoCheckedTiles(params: {
   }, [checkedUnitIds]);
 
   const checkedTuKeys = useMemo(() => {
+    const keys: number[] = [];
     if (checkedUnitIds) {
       void listTick;
-      const keys: number[] = [];
       for (const u of mockUnitsForKind('ortho')) {
         if (!checkedUnitIds.has(u.id)) continue;
         for (const f of u.files) {
           if (f.status === 'done' && f.tuKey != null) keys.push(f.tuKey);
         }
       }
-      return keys.sort((a, b) => a - b);
+    } else if (unit && unit.kind === 'ortho' && checkedFileIds) {
+      for (const f of unit.files) {
+        if (checkedFileIds.has(f.id) && f.status === 'done' && f.tuKey != null) {
+          keys.push(f.tuKey);
+        }
+      }
     }
-    if (!unit || unit.kind !== 'ortho' || !checkedFileIds) return [] as number[];
-    return unit.files
-      .filter((f) => checkedFileIds.has(f.id) && f.status === 'done' && f.tuKey != null)
-      .map((f) => f.tuKey!)
-      .sort((a, b) => a - b);
-  }, [unit, checkedFileIds, checkedUnitIds, listTick]);
+    for (const k of extraTuKeys ?? []) {
+      if (Number.isFinite(k)) keys.push(Number(k));
+    }
+    return [...new Set(keys)].sort((a, b) => a - b);
+  }, [unit, checkedFileIds, checkedUnitIds, listTick, extraTuKeys]);
 
   const checkedKey = checkedTuKeys.join(',');
 
@@ -118,7 +130,8 @@ export function useAerialOrthoCheckedTiles(params: {
     const map = mapContext?.mapInstanceRef?.current;
     const unitModeOk = Boolean(unit && unit.kind === 'ortho' && checkedFileIds);
     const layerPanelModeOk = Boolean(checkedUnitIds);
-    if (!map || !enabled || (!unitModeOk && !layerPanelModeOk)) {
+    const extraOk = (extraTuKeys?.length ?? 0) > 0;
+    if (!map || !enabled || (!unitModeOk && !layerPanelModeOk && !extraOk)) {
       for (const [, layer] of layersRef.current) {
         mapContext?.mapInstanceRef?.current?.removeLayer(layer);
       }
@@ -138,19 +151,43 @@ export function useAerialOrthoCheckedTiles(params: {
 
     for (const tuKey of checkedTuKeys) {
       const key = String(tuKey);
-      if (layersRef.current.has(key)) continue;
+      const existing = layersRef.current.get(key);
+      if (existing) {
+        // 보라 bbox 위 · 일반 WMS 면 아래 — 같이 켜서 겹쳐 볼 수 있게
+        existing.setZIndex(ORTHO_TILE_Z_INDEX);
+        if (existing.get('orthoMaxZoom') !== tileMaxZoom) {
+          existing.setSource(
+            new XYZ({
+              url: `/api/aerial/ortho-tiles/${tuKey}/{z}/{x}/{y}.png`,
+              maxZoom: tileMaxZoom,
+              crossOrigin: 'anonymous',
+              tileSize: 512,
+              wrapX: false,
+              attributions: '© aerial ortho',
+              tileLoadFunction: orthoTileLoadFunction,
+            })
+          );
+          existing.set('orthoMaxZoom', tileMaxZoom);
+        }
+        continue;
+      }
       const layer = new TileLayer({
         source: new XYZ({
           url: `/api/aerial/ortho-tiles/${tuKey}/{z}/{x}/{y}.png`,
-          maxZoom: VWORLD_MAX_ZOOM_INDEX,
+          maxZoom: tileMaxZoom,
           crossOrigin: 'anonymous',
           tileSize: 512,
           wrapX: false,
           attributions: '© aerial ortho',
           tileLoadFunction: orthoTileLoadFunction,
         }),
-        properties: { id: `${LAYER_PREFIX}${key}` },
-        zIndex: 200,
+        properties: {
+          id: `${LAYER_PREFIX}${key}`,
+          orthoMaxZoom: tileMaxZoom,
+          geomStackSkip: true,
+        },
+        // 보라 bbox 위 · 일반 WMS 면 아래
+        zIndex: ORTHO_TILE_Z_INDEX,
         opacity: 1,
       });
       map.addLayer(layer);
@@ -194,7 +231,7 @@ export function useAerialOrthoCheckedTiles(params: {
           );
           m.getView().fit(extent3857, {
             duration: 450,
-            maxZoom: 19,
+            maxZoom: Math.min(19, tileMaxZoom),
             padding: [48, 48, 48, 48],
           });
         })
@@ -209,7 +246,9 @@ export function useAerialOrthoCheckedTiles(params: {
     checkedTuKeys,
     checkedFileIds,
     checkedUnitIds,
+    tileMaxZoom,
     mapContext?.mapInstanceRef,
+    extraTuKeys,
   ]);
 
   useEffect(() => {

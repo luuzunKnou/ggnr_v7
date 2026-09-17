@@ -1,19 +1,8 @@
-/* emd와 동일: 단일 규칙 + 글꼴 목록 → TextSymbolizer 3개로 펼침 (z-index 분리 시 첫 글꼴만 사용되어 궁서 폴백됨) */
+/* 관리 구간 면 — 글자 없음 */
 * {
-  mark: url("http://127.0.0.1:8090/geoserver/www/symbol/safety/water_play_sign.svg");
-  mark-mime: "image/svg+xml";
-  mark-size: [min(18, 5 + sqrt(100000 / env('wms_scale_denominator', 10000)) * 4.0)];
-  mark-anchor: 0.5 0.5;
-  mark-offset: 0 0;
-
-  /* addr 폴백: 공백 split 후 앞 2토큰(시도·시군구) 제거 */
-  label: [if_then_else(isNull(addr_detail), strReplace(addr, '^[^ ]+ +[^ ]+ +', '', true), if_then_else(equalTo(addr_detail, ''), strReplace(addr, '^[^ ]+ +[^ ]+ +', '', true), addr_detail))];
-  font-size: 14;
-  font-fill: #0369A1;
-  font-weight: bold;
-  font-family: "Nanum Gothic", "Malgun Gothic", "SansSerif";
-  halo-radius: 2;
-  halo-color: #FFFFFF;
-  label-anchor: 0.5 1.0;
-  label-offset: 0 -16;
+  fill: #0369A1;
+  stroke: #0369A1;
+  stroke-width: 1.5;
+  fill-opacity: 0.28;
+  stroke-opacity: 1.0;
 }

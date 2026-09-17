@@ -9,7 +9,7 @@ setlocal EnableExtensions EnableDelayedExpansion
 :: - npm ci from package-lock (Y/N; auto if GGNR_START_NO_PAUSE=1)
 :: - then npm run build (GGNR_PROJECT/ENV -> BASE_PATH). fail => pause
 :: - stop previous GGNR / free app port (PORT) AFTER successful build (before nssm)
-:: - ggnr_start.bat + ggnr_build_project.bat generated from project/type prompts
+:: - ggnr_start.bat + 00_ggnr_build_project.bat generated from project/type prompts
 :: - project / type / npm / overwrite / nssm asked once up front
 :: - nssm = root\nssm\win64\nssm.exe
 :: - python/env_parts optional restore
@@ -22,7 +22,7 @@ setlocal EnableExtensions EnableDelayedExpansion
 set "ROOT=%~dp0"
 if "%ROOT:~-1%"=="\" set "ROOT=%ROOT:~0,-1%"
 set "OUT=%ROOT%\ggnr_start.bat"
-set "BUILD_OUT=%ROOT%\ggnr_build_project.bat"
+set "BUILD_OUT=%ROOT%\00_ggnr_build_project.bat"
 set "NSSM_BAT=%ROOT%\00_nssm_install_ggnr.bat"
 set "NSSM_EXE=%ROOT%\nssm\win64\nssm.exe"
 if not exist "%NSSM_EXE%" set "NSSM_EXE=%ROOT%\nssm\win32\nssm.exe"
@@ -196,12 +196,12 @@ if exist "%OUT%" (
   )
 )
 
-echo [RUN] post-build: ggnr_start.bat / ggnr_build_project.bat / nssm / logs
+echo [RUN] post-build: ggnr_start.bat / 00_ggnr_build_project.bat / nssm / logs
 if "!SKIP_WRITE!"=="0" (
   echo [RUN] writing ggnr_start.bat ...
   call :write_ggnr_start
   if errorlevel 1 goto :fail_exit
-  echo [RUN] writing ggnr_build_project.bat ...
+  echo [RUN] writing 00_ggnr_build_project.bat ...
   call :write_ggnr_build_project
   if errorlevel 1 goto :fail_exit
   if not exist "%OUT%" (
@@ -209,7 +209,7 @@ if "!SKIP_WRITE!"=="0" (
     goto :fail_exit
   )
   if not exist "%BUILD_OUT%" (
-    echo [ERROR] failed to create ggnr_build_project.bat
+    echo [ERROR] failed to create 00_ggnr_build_project.bat
     goto :fail_exit
   )
   echo [OK] created: %OUT%
@@ -219,7 +219,7 @@ if "!SKIP_WRITE!"=="0" (
     echo [ERROR] ggnr_start.bat missing.
     goto :fail_exit
   )
-  echo [WARN] keeping existing ggnr_start.bat / ggnr_build_project.bat
+  echo [WARN] keeping existing ggnr_start.bat / 00_ggnr_build_project.bat
   echo        new project/type were NOT written into them.
   echo        re-run with overwrite=Y to update.
   echo.
@@ -230,7 +230,7 @@ echo [OK] ggnr_start.bat step done.
 if /i not "!DO_NSSM!"=="Y" (
   echo [SKIP] nssm/logs ^(DO_NSSM=!DO_NSSM!^)
   echo [DONE] generate only.
-  echo   manual: 00_nssm_install_ggnr.bat ^(admin CMD^) -> 00_open_ggnr_logs.bat
+  echo   manual: 00_nssm_install_ggnr.bat ^(admin CMD^) -^> 00_open_ggnr_logs.bat
   echo.
   if "!PAUSE_ON_FAIL!"=="1" call :pause_keep
   exit /b 0
@@ -281,7 +281,7 @@ if "!NSSM_EC!"=="2" (
   echo [RUN] log window ^(2/2^)...
   start "" /min cmd /c "%LOGS_BAT%"
   echo.
-  echo [DONE] generate -> ^(keep service^) -> logs
+  echo [DONE] generate -^> ^(keep service^) -^> logs
   echo.
   if "!PAUSE_ON_FAIL!"=="1" call :pause_keep
   exit /b 0
@@ -297,7 +297,7 @@ echo [RUN] log window ^(2/2^)...
 start "" /min cmd /c "%LOGS_BAT%"
 
 echo.
-echo [DONE] generate -> nssm -> logs
+echo [DONE] generate -^> nssm -^> logs
 echo.
 if "!PAUSE_ON_FAIL!"=="1" call :pause_keep
 exit /b 0
@@ -307,7 +307,7 @@ if not defined FAIL_EC set "FAIL_EC=1"
 echo.
 echo [EXIT] stopped with error ^(exit=!FAIL_EC!^). See messages above.
 echo        nssm log: C:\logs\nssm_install_last.log
-echo        manual: 00_nssm_install_ggnr.bat ^(admin CMD^) -> 00_open_ggnr_logs.bat
+echo        manual: 00_nssm_install_ggnr.bat ^(admin CMD^) -^> 00_open_ggnr_logs.bat
 if "!PAUSE_ON_FAIL!"=="1" call :pause_keep
 exit /b !FAIL_EC!
 
@@ -325,7 +325,7 @@ net session >nul 2>&1
 if errorlevel 1 (
   echo [ERROR] not running as administrator.
   echo         nssm register requires admin CMD.
-  echo         Right-click CMD -> Run as administrator, then retry.
+  echo         Right-click CMD -^> Run as administrator, then retry.
   set "FAIL_EC=1"
   exit /b 1
 )
@@ -426,7 +426,7 @@ if not exist "%OUT%" exit /b 1
 exit /b 0
 
 :: ---------------------------------------------------------------------------
-:: write ggnr_build_project.bat - manual BASE_PATH build (no prompts)
+:: write 00_ggnr_build_project.bat - manual BASE_PATH build (no prompts)
 :: ---------------------------------------------------------------------------
 :write_ggnr_build_project
 > "%BUILD_OUT%" (
