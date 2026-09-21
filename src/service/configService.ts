@@ -1006,6 +1006,24 @@ export function getEnabledSystemsRaw(_params?: unknown): string {
   return (getRuntimeEnvVars().ENABLED_SYSTEMS ?? "").trim()
 }
 
+/**
+ * runtime.env INDEX_CHART — 인덱스 하단 통계 카드 키.
+ * 쉼표 구분. 없으면 빈 배열(통계 카드 없음). 중복 제거, 파일 순서 유지.
+ */
+export function getIndexChartKeys(_params?: unknown): string[] {
+  const raw = (getRuntimeEnvVars().INDEX_CHART ?? "").trim()
+  if (!raw) return []
+  const seen = new Set<string>()
+  const keys: string[] = []
+  for (const part of raw.split(",")) {
+    const key = part.trim()
+    if (!key || seen.has(key)) continue
+    seen.add(key)
+    keys.push(key)
+  }
+  return keys
+}
+
 /** 필지분석 MapCapture WMS 설정 */
 export function getParcelAnalysisMapConfig(_params?: unknown): {
   geoserverUrl: string

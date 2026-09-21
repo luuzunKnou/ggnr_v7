@@ -107,7 +107,7 @@ export type RoadRankCodeDef = {
   toneHex: string;
 };
 
-const ROAD_RANK_CODE_KO: Record<string, RoadRankCodeDef> = {
+export const ROAD_RANK_CODE_KO: Record<string, RoadRankCodeDef> = {
   "1501": { label: "고속국도", toneHex: "#F44336" },
   "1502": { label: "일반국도", toneHex: "#E91E63" },
   "1503": { label: "특별시도", toneHex: "#9C27B0" },
@@ -119,7 +119,7 @@ const ROAD_RANK_CODE_KO: Record<string, RoadRankCodeDef> = {
   "1599": { label: "기타", toneHex: "#009688" },
 };
 
-function normalizeRoadRankCodeKey(raw: unknown): string {
+export function normalizeRoadRankCodeKey(raw: unknown): string {
   const s = String(raw ?? "").trim().replace(/\s/g, "");
   if (!s) return "";
   if (s in ROAD_RANK_CODE_KO) return s;

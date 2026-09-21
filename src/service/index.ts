@@ -74,6 +74,7 @@ import * as bizNotifService from './bizNotifService';
 import * as thematicMapService from './thematicMapService';
 import * as roadWorkHandbookService from './roadWorkHandbookService';
 import * as qgisLayerControlService from './qgisLayerControlService';
+import * as dashboardStatsService from './dashboardStatsService';
 
 export {
   configService,
@@ -148,4 +149,5 @@ export {
   bizNotifService,
   roadWorkHandbookService,
   qgisLayerControlService,
+  dashboardStatsService,
 };
