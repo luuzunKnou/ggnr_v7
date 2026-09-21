@@ -179,6 +179,7 @@ import {
 } from "@/lib/mapServiceMenuLayers"
 import { normalizeOpenedToken } from "@/lib/mapServiceOpened"
 import {
+  isOpenedTokenAllowedForServiceList,
   scrubMapSearchParamsOnSystemSwitch,
   scrubOpenedNotAllowedForSystem,
 } from "@/lib/mapSystemSwitch"
@@ -3374,21 +3375,63 @@ function MapLayoutContent({
                 onOpenLedger={(item) => {
                   const key = String(item.notifKey ?? "")
                   if (key.startsWith("occup-expiry:")) {
-                    const serEng = getOccupationLedgerBinding({
-                      system: item.systemScope,
-                    })?.serEng
+                    const prefix = key.split(":")[1] ?? ""
+                    const serEng =
+                      String(item.serEng ?? "").trim() ||
+                      getOccupationLedgerBinding({ prefix })?.serEng ||
+                      getOccupationLedgerBinding({ system: item.systemScope })?.serEng
                     if (!serEng) return
-                    setOpened([serEng])
+                    const current = new URLSearchParams(
+                      Array.from(searchParams.entries())
+                    )
+                    const curList =
+                      systemListForOpened.find((s) => s.sys_key === systemKeyFromUrl)
+                        ?.serviceList ?? []
+                    if (!isOpenedTokenAllowedForServiceList(serEng, curList)) {
+                      const found = systemListForOpened.find((s) =>
+                        isOpenedTokenAllowedForServiceList(serEng, s.serviceList ?? [])
+                      )
+                      if (found?.sys_key) current.set("system", found.sys_key)
+                    }
+                    current.set("opened", serEng)
+                    pushMapQuery(current)
                     setOccupationLedgerDetailId(item.targetId)
+                    setProtoUserAccountOpen(false)
                     return
                   }
-                  setOpened([USAGE_DATA_AS_OPENED_KEY])
+                  const current = new URLSearchParams(
+                    Array.from(searchParams.entries())
+                  )
+                  current.set("opened", USAGE_DATA_AS_OPENED_KEY)
+                  pushMapQuery(current)
                   setUsageDataAsDetailId(item.targetId)
+                  setProtoUserAccountOpen(false)
                 }}
-                onOpenFee={(feeId) => {
-                  const feeSerEng = getUseFeeBinding({ system: systemKeyFromUrl }).serEng
-                  setOpened([feeSerEng])
-                  setUseFeeDetailId(feeId)
+                onOpenFee={(item) => {
+                  const key = String(item.notifKey ?? "")
+                  const prefixFromKey = key.match(/^use-fee-due:(water|road|public):/)?.[1]
+                  const feeSerEng =
+                    String(item.serEng ?? "").trim() ||
+                    getUseFeeBinding({
+                      prefix: prefixFromKey,
+                      system: item.systemScope || systemKeyFromUrl,
+                    }).serEng
+                  const current = new URLSearchParams(
+                    Array.from(searchParams.entries())
+                  )
+                  const curList =
+                    systemListForOpened.find((s) => s.sys_key === systemKeyFromUrl)
+                      ?.serviceList ?? []
+                  if (!isOpenedTokenAllowedForServiceList(feeSerEng, curList)) {
+                    const found = systemListForOpened.find((s) =>
+                      isOpenedTokenAllowedForServiceList(feeSerEng, s.serviceList ?? [])
+                    )
+                    if (found?.sys_key) current.set("system", found.sys_key)
+                  }
+                  current.set("opened", feeSerEng)
+                  pushMapQuery(current)
+                  setUseFeeDetailId(item.targetId)
+                  setProtoUserAccountOpen(false)
                 }}
               />
             </div>
