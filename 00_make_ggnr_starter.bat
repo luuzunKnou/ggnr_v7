@@ -9,8 +9,8 @@ setlocal EnableExtensions EnableDelayedExpansion
 :: - npm ci from package-lock (Y/N; auto if GGNR_START_NO_PAUSE=1)
 :: - then npm run build (GGNR_PROJECT/ENV -> BASE_PATH). fail => pause
 :: - stop previous GGNR / free app port (PORT) AFTER successful build (before nssm)
-:: - ggnr_start.bat + 00_ggnr_build_project.bat generated from project/type prompts
-:: - project / type / npm / overwrite / nssm asked once up front
+:: - ggnr_start.bat + 00_ggnr_build_project.bat generated from project/type/port prompts
+:: - project / type / port / npm / overwrite / nssm asked once up front
 :: - nssm = root\nssm\win64\nssm.exe
 :: - python/env_parts optional restore
 :: - if DO_NSSM=Y and not admin => require admin before build
@@ -28,7 +28,7 @@ set "NSSM_EXE=%ROOT%\nssm\win64\nssm.exe"
 if not exist "%NSSM_EXE%" set "NSSM_EXE=%ROOT%\nssm\win32\nssm.exe"
 set "LOGS_BAT=%ROOT%\00_open_ggnr_logs.bat"
 set "SERVICE_NAME=GGNR_V7"
-:: app listen port written into ggnr_start.bat as PORT= (Next default was 3000)
+:: app listen port written into ggnr_start.bat as PORT= (default 80; prompted below)
 set "APP_PORT=80"
 :: GGNR_START_NO_PAUSE is for ggnr_start/nssm only - not this starter window
 set "PAUSE_ON_FAIL=1"
@@ -65,6 +65,23 @@ if not errorlevel 1 (
   echo [ERROR] Type must not contain spaces.
   goto :fail_exit
 )
+
+set "APP_PORT_IN="
+set /p "APP_PORT_IN=App listen port (PORT, default %APP_PORT%): "
+if defined APP_PORT_IN set "APP_PORT_IN=!APP_PORT_IN: =!"
+if defined APP_PORT_IN if not "!APP_PORT_IN!"=="" (
+  echo(!APP_PORT_IN!| findstr /R "^[1-9][0-9]*$" >nul 2>&1
+  if errorlevel 1 (
+    echo [ERROR] App port must be a positive integer ^(1-65535^). input=[!APP_PORT_IN!]
+    goto :fail_exit
+  )
+  if !APP_PORT_IN! GTR 65535 (
+    echo [ERROR] App port must be ^<= 65535. input=[!APP_PORT_IN!]
+    goto :fail_exit
+  )
+  set "APP_PORT=!APP_PORT_IN!"
+)
+echo [INFO] App listen port = !APP_PORT!
 
 set "OVERWRITE=Y"
 set "DO_REREG=N"

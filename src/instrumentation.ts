@@ -5,7 +5,7 @@
  * KRAS: krasLayerSync.config 매일 01:00 (목록·지적·읍면동·주제도·토지기본·소유현황·공시지가 파일).
  * 점사용료(차세대): useFeeSync.config 의 USE_FEE_SYNC_SCHEDULE — GGNR_ENV=prod 일 때만 등록.
  * FMS 안전점검: fmsSync.config 의 FMS_SYNC_SCHEDULE.
- * nssm 로그 백업: start 전용, 매일 00:00 (C:\\logs → backup).
+ * nssm 로그 백업: start 전용, 매일 00:00 (C:\\logs → backup). type=demo 이면 백업 후 GNMS 로그 연계.
  * interval(분)은 시계 격자(예 5분→:00,:05,…)에 맞춤. (next dev에서는 5분 interval만 daily 1회로 축소)
  * - process.env DISABLE_*_SCHEDULER=1 또는 runtime.env DISABLED_SCHEDULERS=useFeeSync,kais,…
  *
