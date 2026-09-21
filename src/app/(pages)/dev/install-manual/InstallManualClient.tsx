@@ -8,12 +8,13 @@ const SECTIONS = [
   { id: 'setting_file_list', label: '세팅용 파일' },
   { id: 'nodejs', label: 'Node.js 및 npm 설치' },
   { id: 'install_db', label: 'PostgreSQL 설치 및 DB 생성' },
+  { id: 'base_path', label: 'BASE_PTH 설정' },
+  { id: 'geoserver_related', label: 'geoserver 관련' },
   { id: 'package', label: '프로젝트 파일 설치/실행 및 서비스 등록' },
   { id: 'run', label: '구동' },
   { id: 'remove', label: 'Window 서비스 등록 삭제' },
   { id: 'contour', label: '기초데이터: 고도(등고선)' },
   { id: 'kais', label: '기초데이터: 건설•도로' },
-  { id: 'base_path', label: 'BASE_PTH 설정' },
 ] as const;
 
 const HEADER_BAR = 'flex h-10 shrink-0 items-center border-b';
@@ -184,6 +185,29 @@ npm -v`}</CodeBlock>
             <p>.env 수정하면서 GGNR_DATA_DIR도 확인후 수정</p>
           </section>
 
+          <section id="base_path" className="scroll-mt-4 space-y-3">
+            <h1 className="text-xl font-semibold">BASE_PTH 설정</h1>
+            <h2 className="text-base font-semibold">프로젝트 내 BASE_PATH 설정</h2>
+            <p>시연 게이트 서버 등록했을 때, [프로젝트명].env에 <code className="rounded bg-muted px-1 py-0.5">BASE_PATH</code> 설정</p>
+            <p className="text-red-500">'/프로젝트명'으로 넣어주세요.</p>
+            <h2 className="text-base font-semibold">게이트서버 설정</h2>
+            <ul className="list-decimal space-y-3 pl-5">
+              <li>192.168.127.111 VMware 이동(아이디/비번 관련은 노션 '인프라 관리' 참고)</li>
+              <li>228 선택 후 웹 콘솔 연결: 비밀번호 노션 참고</li>
+              <li>http.conf 기존 내용 참고 후 등록한 뒤 gateserver@localhost:cmd에 sudo systemctl restart httpd gateserver(암호 노션 참고)</li>
+              <li>V6/V7 규칙이 다르니 주의. 공백 확인 후 등록할 것.</li>
+            </ul>
+          </section>
+
+          <section id="geoserver_related" className="scroll-mt-4 space-y-3">
+            <h1 className="text-xl font-semibold">geoserver 관련</h1>
+            <h2 className="text-base font-semibold">geoserver PORT 변경</h2>
+            <ul className="list-decimal space-y-3 pl-5">
+              <li>geoserver-modules/geoserver/start.ini 파일 수정: jetty.http.port 수정</li>
+              <li>구동 시 변경된 PORT 확인하기 때문에, geoserver 포트는 프로젝트 구동 전 수정이 필요합니다.</li>
+            </ul>
+          </section>
+
           <section id="package" className="scroll-mt-4 space-y-3">
             <h1 className="text-xl font-semibold">프로젝트 파일 설치/실행 및 서비스 등록</h1>
             <h2 className="text-base font-semibold">TypeScript 타입 검사</h2>
@@ -248,6 +272,9 @@ npm -v`}</CodeBlock>
                 <div className="mt-1">
                   <CodeBlock>{`.\\nssm.exe set GGNR_V7 ObjectName ".\\[Window 계정]" "[Window 비밀번호]"`}</CodeBlock>
                 </div>
+              </li>
+              <li>
+                구동시 관련 포트 계속 대기중이라면 ( waiting until port [구동될 포트] is FREE...) 해당 포트가 점용중임으로 확인 후 종료가 필요함.
               </li>
             </ol>
           </section>
@@ -340,11 +367,7 @@ taskkill /f /pid [작업 중지 번호]`}</CodeBlock>
               </li>
             </ul>
           </section>
-          <section id="base_path" className="scroll-mt-4 space-y-3">
-            <h1 className="text-xl font-semibold">BASE_PTH 설정</h1>
-            <p>시연 게이트 서버 등록했을 때, [프로젝트명].env에 <code className="rounded bg-muted px-1 py-0.5">BASE_PATH</code> 설정</p>
-            <p className="text-red-500">'/프로젝트명'으로 넣어주세요.</p>
-          </section>
+          
         </article>
         </div>
       </main>
