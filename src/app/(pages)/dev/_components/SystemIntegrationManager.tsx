@@ -363,7 +363,26 @@ export function SystemIntegrationManager() {
         })
         await new Promise((resolve) => window.setTimeout(resolve, 250))
         await fetchLogs(active)
-        await runPromise
+        const result = await runPromise
+        const data = (result as { data?: Record<string, unknown> })?.data ?? result
+        if (data && (data as { browserUploadRequired?: boolean }).browserUploadRequired) {
+          const { uploadGnmsLogsFromBrowser } = await import("@/lib/gnmsLogUploadBrowser")
+          const sessionId = String((data as { sessionId?: string }).sessionId ?? "")
+          const project = String((data as { project?: string }).project ?? "")
+          const type = String((data as { type?: string }).type ?? "")
+          const files = Array.isArray((data as { files?: unknown }).files)
+            ? ((data as { files: { index: number; fileName: string; date: string; size: number }[] }).files)
+            : []
+          await uploadGnmsLogsFromBrowser({
+            sessionId,
+            project,
+            type,
+            files,
+            onLog: (line) => {
+              console.info(`[GNMS logs] ${line}`)
+            },
+          })
+        }
         await fetchLogs(active)
         return
       }
