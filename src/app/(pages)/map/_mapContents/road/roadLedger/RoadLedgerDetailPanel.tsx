@@ -118,7 +118,7 @@ function cellText(field: string, raw: unknown): string {
   return t === "" ? "—" : t;
 }
 
-function primaryCellDisplay(field: string, raw: unknown): string {
+function primaryCellDisplay(field: string, raw: unknown, project?: string | null): string {
   if (field === "dsgdate") {
     return formatRoadLedgerDsgdateDisplay(raw);
   }
@@ -126,7 +126,7 @@ function primaryCellDisplay(field: string, raw: unknown): string {
     return formatRoadLedgerLenthWithUnit(raw);
   }
   if (field === "road_rank") {
-    return formatRoadLedgerRoadRankDisplay(raw);
+    return formatRoadLedgerRoadRankDisplay(raw, project);
   }
   if (field === "sect") {
     const t = formatRoadLedgerNumericToken(raw);
@@ -260,17 +260,9 @@ function RoadLedgerDocActionGrid({
           !isReportOnly && hasLayers && isRoadLedgerDocGroupActive(visibleLayerNames, layers);
         const reportDisabled =
           isReportOnly && (reportFileListLoading || reportPdfLoading || !reportPdfAvailable);
-        const showCount =
-          ROAD_LEDGER_DOC_LABELS_WITH_LAYER_COUNT.includes(label) && label !== "매설물도";
+        const showCount = ROAD_LEDGER_DOC_LABELS_WITH_LAYER_COUNT.includes(label);
         const dataN = facilityDataCounts?.[label];
-        /** 매설물도 — 노선 건수 0이면 비활성만 (별도 안내 문구 없음) */
-        const buriedMapDisabled =
-          label === "매설물도" &&
-          hasRdidForFacility &&
-          !facilityCountsLoading &&
-          typeof facilityDataCounts?.["매설물도"] === "number" &&
-          facilityDataCounts["매설물도"] === 0;
-        const layerButtonDisabled = !setVisibleLayerNames || !hasLayers || buriedMapDisabled;
+        const layerButtonDisabled = !setVisibleLayerNames || !hasLayers;
         const displayLabel =
           showCount && hasRdidForFacility
             ? `${label} (${facilityCountsLoading ? "…" : typeof dataN === "number" ? dataN : "—"})`
@@ -333,10 +325,20 @@ export function RoadLedgerDetailPanel({ row, onClose }: Props) {
     initialIndex: number;
   } | null>(null);
   const [reportPdfLoading, setReportPdfLoading] = useState(false);
+  const [bootProject, setBootProject] = useState("");
   const reportPdfBusyRef = useRef(false);
   const mapContext = useMapContext();
   const visibleLayerNames = mapContext?.visibleLayerNames ?? new Set<string>();
   const setVisibleLayerNames = mapContext?.setVisibleLayerNames;
+
+  useEffect(() => {
+    call("", "POST", { service: "configService", action: "getBootProject", params: {} })
+      .then((res) => {
+        const data = res?.data ?? res;
+        setBootProject(String(data?.project ?? "").trim());
+      })
+      .catch(() => setBootProject(""));
+  }, []);
   const reportOgcFid = pickRoadLedgerOgcFid(row);
 
   const reportFileQuery = useServiceFileData({
@@ -473,7 +475,8 @@ export function RoadLedgerDetailPanel({ row, onClose }: Props) {
   const titleParen = formatRoadLedgerDetailTitleParen(
     pickRoadLedgerField(row, "road_rank"),
     pickRoadLedgerField(row, "road_no"),
-    pickRoadLedgerField(row, "sect")
+    pickRoadLedgerField(row, "sect"),
+    bootProject
   );
 
   useEffect(() => {
@@ -616,7 +619,7 @@ export function RoadLedgerDetailPanel({ row, onClose }: Props) {
                 <div className="overflow-hidden border border-border">
                   {PRIMARY_TABLE_ROWS.map(({ field, label }, idx) => {
                     const raw = pickRoadLedgerField(row, field);
-                    const display = primaryCellDisplay(field, raw);
+                    const display = primaryCellDisplay(field, raw, bootProject);
                     return (
                       <div
                         key={field}

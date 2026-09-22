@@ -2300,7 +2300,14 @@ export default function OpenLayersMap({
       }
 
       const isDataQueryMenu = openedTokens.includes('standardList');
-      if (!isDataQueryMenu || mapContext.dataQueryMapPickEnabled === false) {
+      const isRoadInfraMenu = openedTokens.includes('roadInfra');
+      /** 데이터조회·시설관리에서만 지도 클릭 → 목록/상세 */
+      if (isDataQueryMenu) {
+        if (mapContext.dataQueryMapPickEnabled === false) {
+          clearIdentifyIntake();
+          return;
+        }
+      } else if (!isRoadInfraMenu) {
         clearIdentifyIntake();
         return;
       }

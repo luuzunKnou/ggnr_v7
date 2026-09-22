@@ -1,5 +1,6 @@
 import { db } from '@/database/db';
 import { sql } from 'drizzle-orm';
+import { listJijukParcelsByGeomWkt5181 } from '@/service/layerRowService';
 import {
   isRiverBasicPlanIndexDefineTable,
   isRiverBasicPlanMapAttachmentDefineTable,
@@ -401,6 +402,269 @@ export async function getRiverBasicPlanExtent(params?: {
     return { extent3857: null };
   }
   return { extent3857: [xmin, ymin, xmax, ymax] };
+}
+
+/** 선택한 기본계획 면(하천 폴리곤) — 직각선 기준. EPSG:3857 GeoJSON */
+export async function getRiverBasicPlanAreaGeom3857(params?: {
+  tab?: RiverType;
+  riverName?: string;
+  planYear?: string;
+  planName?: string;
+  planLen?: string;
+}): Promise<{ geometry: Record<string, unknown> | null; error?: string }> {
+  const tab = normalizeTab(params?.tab);
+  const riverName = String(params?.riverName ?? '').trim();
+  const planYear = String(params?.planYear ?? '').trim();
+  const planName = String(params?.planName ?? '').trim();
+  if (!riverName || !planName) return { geometry: null, error: '기본계획을 선택하세요.' };
+  const tableName = await resolveLayerTableName(riverBasicPlanAsDefineTable(tab));
+  const where = planIdentityWhereParts({
+    riverName,
+    planYear,
+    planName,
+    planLen: params?.planLen,
+  }).join(' AND ');
+  try {
+    const res = await db.execute(
+      sql.raw(
+        `SELECT ST_AsGeoJSON(
+           ST_Transform(
+             ST_CollectionExtract(ST_MakeValid(ST_UnaryUnion(ST_Collect(ST_MakeValid(geom)))), 3),
+             3857
+           )
+         )::json AS geometry
+         FROM layer."${tableName.replace(/"/g, '""')}"
+         WHERE ${where} AND geom IS NOT NULL`
+      )
+    );
+    const geometry = (res.rows?.[0] as { geometry?: Record<string, unknown> } | undefined)?.geometry ?? null;
+    if (!geometry || typeof geometry !== 'object') return { geometry: null, error: '하천 도형이 없습니다.' };
+    return { geometry };
+  } catch (e: unknown) {
+    return { geometry: null, error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+/**
+ * 시작·종료 횡단선으로 하천 면을 잘라, 두 선 사이 구간만 남긴 뒤 지적 조회.
+ * 사용자기 그린 짧은 선에 모두 닿는 조각만 고른다(가로 연장선 오선택 방지).
+ */
+export async function listRiverBasicPlanPrivateLand(params?: {
+  tab?: RiverType;
+  riverName?: string;
+  planYear?: string;
+  planName?: string;
+  planLen?: string;
+  /** @deprecated 직선 띠 — line1/line2 가 있으면 무시 */
+  stripWkt3857?: string;
+  line1Wkt3857?: string;
+  line2Wkt3857?: string;
+}): Promise<{
+  parcels: {
+    address: string;
+    pnu: string;
+    ownGbn: string;
+    intersectAreaSqm: number | null;
+    geometry3857?: Record<string, unknown> | null;
+    extent3857?: [number, number, number, number] | null;
+  }[];
+  zoneGeometry3857?: Record<string, unknown> | null;
+  error?: string;
+}> {
+  const riverName = String(params?.riverName ?? '').trim();
+  const planName = String(params?.planName ?? '').trim();
+  const line1 = String(params?.line1Wkt3857 ?? '').trim();
+  const line2 = String(params?.line2Wkt3857 ?? '').trim();
+  const strip = String(params?.stripWkt3857 ?? '').trim();
+  if (!riverName || !planName) return { parcels: [], error: '기본계획을 선택하세요.' };
+
+  const useSplit = /^LINESTRING/i.test(line1) && /^LINESTRING/i.test(line2);
+  const useStrip = !useSplit && (/^POLYGON/i.test(strip) || /^MULTIPOLYGON/i.test(strip));
+  if (!useSplit && !useStrip) {
+    return { parcels: [], error: '시작선·종료선이 필요합니다.' };
+  }
+
+  const tab = normalizeTab(params?.tab);
+  const tableName = await resolveLayerTableName(riverBasicPlanAsDefineTable(tab));
+  const where = planIdentityWhereParts({
+    riverName,
+    planYear: String(params?.planYear ?? '').trim(),
+    planName,
+    planLen: params?.planLen,
+  }).join(' AND ');
+  const safeTable = tableName.replace(/"/g, '""');
+
+  /** 투영 좌표계에서 선을 양쪽으로 늘려 하천을 완전히 자르도록 함 (미터) */
+  const extendLineSql = (alias: string) => `
+    CASE
+      WHEN ST_Length(${alias}.g) < 1e-3 THEN ${alias}.g
+      ELSE ST_MakeLine(
+        ST_Translate(
+          ST_StartPoint(${alias}.g),
+          -(ST_X(ST_EndPoint(${alias}.g)) - ST_X(ST_StartPoint(${alias}.g))) / ST_Length(${alias}.g) * 50000,
+          -(ST_Y(ST_EndPoint(${alias}.g)) - ST_Y(ST_StartPoint(${alias}.g))) / ST_Length(${alias}.g) * 50000
+        ),
+        ST_Translate(
+          ST_EndPoint(${alias}.g),
+          (ST_X(ST_EndPoint(${alias}.g)) - ST_X(ST_StartPoint(${alias}.g))) / ST_Length(${alias}.g) * 50000,
+          (ST_Y(ST_EndPoint(${alias}.g)) - ST_Y(ST_StartPoint(${alias}.g))) / ST_Length(${alias}.g) * 50000
+        )
+      )
+    END`;
+
+  try {
+    const zoneSql = useSplit
+      ? `WITH src AS (
+           SELECT ST_CollectionExtract(ST_MakeValid(ST_UnaryUnion(ST_Collect(ST_MakeValid(geom)))), 3) AS g
+           FROM layer."${safeTable}"
+           WHERE ${where} AND geom IS NOT NULL
+         ),
+         target_srid AS (
+           SELECT COALESCE(NULLIF(ST_SRID(g), 0), 5181) AS s FROM src LIMIT 1
+         ),
+         l1_raw AS (
+           SELECT ST_Transform(
+             ST_MakeValid(ST_SetSRID(ST_GeomFromText('${esc(line1)}'), 3857)),
+             (SELECT s FROM target_srid)
+           ) AS g
+         ),
+         l2_raw AS (
+           SELECT ST_Transform(
+             ST_MakeValid(ST_SetSRID(ST_GeomFromText('${esc(line2)}'), 3857)),
+             (SELECT s FROM target_srid)
+           ) AS g
+         ),
+         l1 AS (SELECT ${extendLineSql('l1_raw')} AS g FROM l1_raw),
+         l2 AS (SELECT ${extendLineSql('l2_raw')} AS g FROM l2_raw),
+         split_once AS (
+           SELECT ST_Split(ST_MakeValid(s.g), l1.g) AS g
+           FROM src s, l1
+           WHERE s.g IS NOT NULL AND NOT ST_IsEmpty(s.g)
+         ),
+         split_twice AS (
+           SELECT ST_Collect(ST_Split(d.geom, (SELECT g FROM l2))) AS g
+           FROM split_once s
+           CROSS JOIN LATERAL ST_Dump(s.g) AS d
+         ),
+         parts AS (
+           SELECT (ST_Dump(ST_CollectionExtract(ST_MakeValid(g), 3))).geom AS g
+           FROM split_twice
+           WHERE g IS NOT NULL
+         ),
+         /**
+          * 사용자가 그린 짧은 시작·종료선에 모두 닿는 조각만 = 두 선 사이.
+          * 연장선 교차/반평면은 가로선이 먼 굽이를 다시 자를 때 오른쪽 구간을 잘못 고름.
+          */
+         mid AS (
+           SELECT ST_CollectionExtract(
+             ST_MakeValid(ST_UnaryUnion(ST_Collect(p.g))),
+             3
+           ) AS g
+           FROM parts p
+           CROSS JOIN l1_raw
+           CROSS JOIN l2_raw
+           WHERE ST_Area(p.g) > 1
+             AND ST_DWithin(p.g, l1_raw.g, 2)
+             AND ST_DWithin(p.g, l2_raw.g, 2)
+         )
+         SELECT
+           CASE WHEN g IS NULL OR ST_IsEmpty(g) THEN NULL ELSE ST_AsText(ST_Transform(g, 5181)) END AS wkt5181,
+           CASE WHEN g IS NULL OR ST_IsEmpty(g) THEN NULL ELSE ST_AsGeoJSON(ST_Transform(g, 3857))::json END AS geometry3857
+         FROM mid`
+      : `WITH src AS (
+           SELECT ST_CollectionExtract(ST_MakeValid(ST_UnaryUnion(ST_Collect(ST_MakeValid(geom)))), 3) AS g
+           FROM layer."${safeTable}"
+           WHERE ${where} AND geom IS NOT NULL
+         ),
+         strip AS (
+           SELECT ST_Transform(
+             ST_MakeValid(ST_SetSRID(ST_GeomFromText('${esc(strip)}'), 3857)),
+             COALESCE(NULLIF(ST_SRID((SELECT g FROM src)), 0), 5181)
+           ) AS g
+         ),
+         zone AS (
+           SELECT ST_CollectionExtract(
+             ST_MakeValid(ST_Intersection(ST_MakeValid(s.g), ST_MakeValid(st.g))),
+             3
+           ) AS g
+           FROM src s, strip st
+           WHERE s.g IS NOT NULL AND NOT ST_IsEmpty(s.g)
+         )
+         SELECT
+           CASE WHEN g IS NULL OR ST_IsEmpty(g) THEN NULL ELSE ST_AsText(ST_Transform(g, 5181)) END AS wkt5181,
+           CASE WHEN g IS NULL OR ST_IsEmpty(g) THEN NULL ELSE ST_AsGeoJSON(ST_Transform(g, 3857))::json END AS geometry3857
+         FROM zone`;
+
+    const zoneRes = await db.execute(sql.raw(zoneSql));
+    const zoneRow = zoneRes.rows?.[0] as
+      | { wkt5181?: string | null; geometry3857?: Record<string, unknown> | null }
+      | undefined;
+    const wkt5181 = String(zoneRow?.wkt5181 ?? '').trim();
+    const zoneGeometry3857 =
+      zoneRow?.geometry3857 != null && typeof zoneRow.geometry3857 === 'object'
+        ? zoneRow.geometry3857
+        : null;
+    if (!wkt5181) {
+      return {
+        parcels: [],
+        zoneGeometry3857: null,
+        error: '두 선 사이의 하천 구간을 찾지 못했습니다. 선이 하천을 가로지르는지 확인하세요.',
+      };
+    }
+
+    const hit = await listJijukParcelsByGeomWkt5181({ wkt5181, clipToSearchGeom: true, limit: 300 });
+    if (hit.error) return { parcels: [], zoneGeometry3857, error: hit.error };
+
+    const own = await loadJijukOwnGbn(hit.parcels.map((p) => p.pnu));
+    return {
+      parcels: hit.parcels.map((p) => ({
+        address: p.address,
+        pnu: p.pnu,
+        ownGbn: own.get(p.pnu) || '미상',
+        intersectAreaSqm: p.intersectAreaSqm ?? null,
+        geometry3857: p.geometry3857 ?? null,
+        extent3857: p.extent3857 ?? null,
+      })),
+      zoneGeometry3857,
+    };
+  } catch (e: unknown) {
+    return { parcels: [], error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+async function loadJijukOwnGbn(pnus: string[]): Promise<Map<string, string>> {
+  const out = new Map<string, string>();
+  const keys = [...new Set(pnus.map((p) => String(p ?? '').trim()).filter(Boolean))];
+  if (keys.length === 0) return out;
+  const col = await db.execute(
+    sql.raw(
+      `SELECT table_schema, table_name
+       FROM information_schema.columns
+       WHERE lower(table_name) = 'jijuk'
+         AND lower(column_name) = 'own_gbn'
+         AND table_schema IN ('layer', 'public_layer', 'public')
+       LIMIT 1`
+    )
+  );
+  const loc = col.rows?.[0] as { table_schema?: string; table_name?: string } | undefined;
+  const schema = String(loc?.table_schema ?? '').replace(/"/g, '""');
+  const table = String(loc?.table_name ?? '').replace(/"/g, '""');
+  if (!schema || !table) return out;
+  const inList = keys.map((p) => `'${esc(p)}'`).join(',');
+  const res = await db.execute(
+    sql.raw(
+      `SELECT pnu::text AS pnu, NULLIF(TRIM(own_gbn::text), '') AS own_gbn
+       FROM "${schema}"."${table}"
+       WHERE pnu::text IN (${inList})`
+    )
+  );
+  for (const raw of res.rows ?? []) {
+    const row = raw as { pnu?: string; own_gbn?: string | null };
+    const pnu = String(row.pnu ?? '').trim();
+    const gbn = String(row.own_gbn ?? '').trim();
+    if (pnu && gbn) out.set(pnu, gbn);
+  }
+  return out;
 }
 
 /**

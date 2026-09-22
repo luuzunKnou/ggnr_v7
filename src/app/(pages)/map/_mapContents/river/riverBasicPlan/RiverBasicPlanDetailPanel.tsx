@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useSession } from "next-auth/react";
 import { call } from "@/lib/api";
 import { appFetch } from "@/lib/basePath";
@@ -17,6 +17,8 @@ import {
   Images,
   MapPin,
   ChevronLeft,
+  ChevronDown,
+  ChevronRight,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatDetailScalarValue } from "@/lib/formatDetailScalar";
@@ -57,6 +59,12 @@ import {
   buildRiverBasicPlanReportFolderKey,
   riverBasicPlanReportRelativeDir,
 } from "./riverBasicPlanReportFolder";
+import {
+  RiverBasicPlanPrivateLandCategoryPanel,
+  RiverBasicPlanPrivateLandRoot,
+  RiverBasicPlanPrivateLandSection,
+  useRiverBasicPlanPrivateLandCategoryView,
+} from "./RiverBasicPlanPrivateLandProto";
 
 /** 연도 필드는 천단위 콤마 없이 표시 (예: 2,024 → 2024) */
 function formatRiverBasicPlanAttrValue(key: string, raw: unknown): string {
@@ -154,6 +162,19 @@ function findPlanItemFromMapPick(
   );
 }
 
+type PrivateLandScrollGateProps = {
+  children: ReactNode;
+  /** 색인도 상세 중이면 사유지 내부 화면보다 색인도를 우선 */
+  indexViewMode?: boolean;
+};
+
+/** 사유지 소유구분 선택 시 색인도 상세와 같이 스크롤 영역을 전환 */
+function PrivateLandScrollGate({ children, indexViewMode }: PrivateLandScrollGateProps) {
+  const categoryView = useRiverBasicPlanPrivateLandCategoryView();
+  if (!indexViewMode && categoryView) return <RiverBasicPlanPrivateLandCategoryPanel />;
+  return <>{children}</>;
+}
+
 type Props = {
   tab: RiverType;
   riverName: string;
@@ -241,6 +262,7 @@ export function RiverBasicPlanDetailPanel({ tab, riverName, onClose }: Props) {
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [indexViewMode, setIndexViewMode] = useState(false);
+  const [indexSectionOpen, setIndexSectionOpen] = useState(true);
   const [mapRequestedIndexOgcFid, setMapRequestedIndexOgcFid] = useState<number | null>(null);
   const [indexBundle, setIndexBundle] = useState<IndexBundle | null>(null);
   const [indexLoading, setIndexLoading] = useState(false);
@@ -1035,6 +1057,13 @@ export function RiverBasicPlanDetailPanel({ tab, riverName, onClose }: Props) {
   );
 
   return (
+    <RiverBasicPlanPrivateLandRoot
+      tab={tab}
+      riverName={riverName}
+      planYear={selected?.planYear ?? ""}
+      planName={selected?.planName ?? ""}
+      planLen={selected?.planLen ?? ""}
+    >
     <>
     <div className="flex flex-col min-h-0 h-full bg-background border-l border-border">
       <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border px-4 py-2.5 bg-background">
@@ -1188,6 +1217,7 @@ export function RiverBasicPlanDetailPanel({ tab, riverName, onClose }: Props) {
       </div>
 
       <div className="flex-1 min-h-0 overflow-auto">
+        <PrivateLandScrollGate indexViewMode={indexViewMode}>
         {indexViewMode ? (
           <>
             {indexError ? (
@@ -1423,44 +1453,66 @@ export function RiverBasicPlanDetailPanel({ tab, riverName, onClose }: Props) {
             </div>
 
             <div>
-              <p className="text-[11px] font-medium text-muted-foreground mb-2">색인도</p>
-              {indexListError ? (
-                <p className="text-sm text-destructive py-1">{indexListError}</p>
-              ) : indexListLoading ? (
-                <p className="text-sm text-muted-foreground py-1">색인도 목록 불러오는 중...</p>
-              ) : indexList.length === 0 ? (
-                <p className="text-sm text-muted-foreground py-1">표시할 색인도 목록이 없습니다.</p>
-              ) : (
-                <div className="grid grid-cols-2 gap-1.5">
-                  {indexList.map((it) => (
-                    <button
-                      key={`index-list-${it.ogcFid}`}
-                      type="button"
-                      className="flex min-h-[40px] w-full items-center justify-start gap-1.5 rounded border border-border bg-background px-1.5 py-1.5 text-left text-[11px] font-medium leading-tight text-foreground hover:bg-muted/50"
-                      title={it.badge}
-                      onClick={() => {
-                        setIndexViewMode(true);
-                        setMapRequestedIndexOgcFid(it.ogcFid);
-                        setIndexBundle(null);
-                        setIndexError(null);
-                        if (it.extent3857) fitMapToExtent3857(it.extent3857);
-                      }}
-                    >
-                      <MapPin
-                        className="h-3.5 w-3.5 shrink-0 text-muted-foreground"
-                        strokeWidth={1.5}
-                        aria-hidden
-                      />
-                      <span className="min-w-0">
-                        {indexListDisplayLabel(riverName, it.label) || it.label}
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              )}
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <button
+                  type="button"
+                  className="inline-flex min-w-0 items-center gap-1 text-[11px] font-medium text-muted-foreground hover:text-foreground"
+                  onClick={() => setIndexSectionOpen((v) => !v)}
+                  title={indexSectionOpen ? "색인도 접기" : "색인도 펼치기"}
+                >
+                  {indexSectionOpen ? (
+                    <ChevronDown className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                  ) : (
+                    <ChevronRight className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                  )}
+                  <span>색인도</span>
+                </button>
+                {!indexListLoading && !indexListError && indexList.length > 0 ? (
+                  <span className="text-[11px] text-muted-foreground">총 {indexList.length}건</span>
+                ) : null}
+              </div>
+              {indexSectionOpen ? (
+                indexListError ? (
+                  <p className="text-sm text-destructive py-1">{indexListError}</p>
+                ) : indexListLoading ? (
+                  <p className="text-sm text-muted-foreground py-1">색인도 목록 불러오는 중...</p>
+                ) : indexList.length === 0 ? (
+                  <p className="text-sm text-muted-foreground py-1">표시할 색인도 목록이 없습니다.</p>
+                ) : (
+                  <div className="grid grid-cols-2 gap-1.5">
+                    {indexList.map((it) => (
+                      <button
+                        key={`index-list-${it.ogcFid}`}
+                        type="button"
+                        className="flex min-h-[40px] w-full items-center justify-start gap-1.5 rounded border border-border bg-background px-1.5 py-1.5 text-left text-[11px] font-medium leading-tight text-foreground hover:bg-muted/50"
+                        title={it.badge}
+                        onClick={() => {
+                          setIndexViewMode(true);
+                          setMapRequestedIndexOgcFid(it.ogcFid);
+                          setIndexBundle(null);
+                          setIndexError(null);
+                          if (it.extent3857) fitMapToExtent3857(it.extent3857);
+                        }}
+                      >
+                        <MapPin
+                          className="h-3.5 w-3.5 shrink-0 text-muted-foreground"
+                          strokeWidth={1.5}
+                          aria-hidden
+                        />
+                        <span className="min-w-0">
+                          {indexListDisplayLabel(riverName, it.label) || it.label}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                )
+              ) : null}
             </div>
+
+            <RiverBasicPlanPrivateLandSection />
           </div>
         )}
+        </PrivateLandScrollGate>
       </div>
     </div>
     {indexAttachmentPreview != null && (
@@ -1485,6 +1537,7 @@ export function RiverBasicPlanDetailPanel({ tab, riverName, onClose }: Props) {
       />
     )}
     </>
+    </RiverBasicPlanPrivateLandRoot>
   );
 }
 

@@ -22,7 +22,6 @@ export type RoadLedgerDocButtonKey =
 
 /** UI에서 `주요시설 (N)` 형태로 표시할 버튼 — N은 레이어 개수가 아니라 노선별 실데이터 건수(API) */
 export const ROAD_LEDGER_DOC_LABELS_WITH_LAYER_COUNT: readonly RoadLedgerDocButtonKey[] = [
-  "매설물도",
   "주요시설",
   "안전시설",
   "부대시설",
@@ -34,10 +33,11 @@ export const ROAD_LEDGER_DOC_LABELS_WITH_LAYER_COUNT: readonly RoadLedgerDocButt
 /**
  * 클릭 시 켜지는 레이어 id 배열. 비어 있으면 공간 레이어 없음(안내용).
  * - 보고서: UI만 (도로대장총괄 a0020000 등과 연동 없음, 레이어 토글 없음)
+ * - 매설물도·지하시설물(지하매설물): 매핑 제외
  * - 주요시설: R02~R07, R15 (교량·터널·육교·지하차도·고가도로·IC·지하보도)
  * - 기하구조: R08,R16~R19 (교차시설·도로중심선교점·오르막차로·종단경사·정차대)
  * - 배수시설: R11,R12,R13,R14,R20,R21 (석축·옹벽·절개·성토·측구·배수암거)
- * - 부대시설: R29~R35,R37~R39 (방음~졸음쉼터, 생태통로 포함)
+ * - 부대시설: R29~R35,R37~R39 (방음~졸음쉼터, 생태통로 포함 — 지하매설물 제외)
  * - 안전시설: R10,R22~R28
  * - 기타시설: R40~R49 (점용 3종 분리)
  */
@@ -45,8 +45,8 @@ export const ROAD_LEDGER_DOC_LAYERS: Record<RoadLedgerDocButtonKey, string[]> = 
   보고서: [],
   /** 공간 레이어 매핑 전 — UI만 */
   도로영상: [],
-  /** 지하매설물 R31 */
-  매설물도: ["c0246120"],
+  /** 매설물도·지하매설물 — 매핑 제외 */
+  매설물도: [],
   종평면도: [],
   용지도: [],
 
@@ -67,7 +67,6 @@ export const ROAD_LEDGER_DOC_LAYERS: Record<RoadLedgerDocButtonKey, string[]> = 
   부대시설: [
     "c0536114",
     "d0023372",
-    "c0246120",
     "c0246341",
     "c9530006",
     "c9530007",

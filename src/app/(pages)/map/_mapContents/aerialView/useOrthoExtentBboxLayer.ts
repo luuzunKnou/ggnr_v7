@@ -227,11 +227,11 @@ export function useOrthoExtentBboxLayer(enabled: boolean) {
       }
     };
 
-    map.on('singleclick', onClick);
+    map.on('singleclick', onClick as never);
 
     return () => {
       cancelled = true;
-      map.un('singleclick', onClick);
+      map.un('singleclick', onClick as never);
       if (layerRef.current) {
         map.removeLayer(layerRef.current);
         layerRef.current = null;

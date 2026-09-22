@@ -107,7 +107,8 @@ export type RoadRankCodeDef = {
   toneHex: string;
 };
 
-const ROAD_RANK_CODE_KO: Record<string, RoadRankCodeDef> = {
+/** 영양·경산 등 기본 (기존) */
+const ROAD_RANK_CODE_KO_DEFAULT: Record<string, RoadRankCodeDef> = {
   "1501": { label: "고속국도", toneHex: "#F44336" },
   "1502": { label: "일반국도", toneHex: "#E91E63" },
   "1503": { label: "특별시도", toneHex: "#9C27B0" },
@@ -119,32 +120,71 @@ const ROAD_RANK_CODE_KO: Record<string, RoadRankCodeDef> = {
   "1599": { label: "기타", toneHex: "#009688" },
 };
 
-function normalizeRoadRankCodeKey(raw: unknown): string {
+/** 울진(build_uj) */
+const ROAD_RANK_CODE_KO_ULJIN: Record<string, RoadRankCodeDef> = {
+  "1501": { label: "고속국도", toneHex: "#F44336" },
+  "1502": { label: "일반국도", toneHex: "#E91E63" },
+  "1503": { label: "특별시도", toneHex: "#9C27B0" },
+  "1504": { label: "광역시도", toneHex: "#673AB7" },
+  "1505": { label: "지방도", toneHex: "#3F51B5" },
+  "1506": { label: "시도", toneHex: "#2196F3" },
+  "1507": { label: "군도", toneHex: "#03A9F4" },
+  "1508": { label: "구도", toneHex: "#00BCD4" },
+  "1599": { label: "기타", toneHex: "#009688" },
+};
+
+export function resolveRoadLedgerProjectKey(project?: string | null): string {
+  return String(project ?? process.env.GGNR_PROJECT ?? "")
+    .trim()
+    .toLowerCase();
+}
+
+export function isUljinRoadLedgerRankProject(project?: string | null): boolean {
+  return resolveRoadLedgerProjectKey(project) === "build_uj";
+}
+
+function getRoadRankCodeTable(project?: string | null): Record<string, RoadRankCodeDef> {
+  return isUljinRoadLedgerRankProject(project)
+    ? ROAD_RANK_CODE_KO_ULJIN
+    : ROAD_RANK_CODE_KO_DEFAULT;
+}
+
+function normalizeRoadRankCodeKey(raw: unknown, project?: string | null): string {
+  const table = getRoadRankCodeTable(project);
   const s = String(raw ?? "").trim().replace(/\s/g, "");
   if (!s) return "";
-  if (s in ROAD_RANK_CODE_KO) return s;
+  if (s in table) return s;
   /** 전자리가 숫자면 선행 0 제거 후 코드 조회 (01506 → 1506) */
   if (/^\d+$/.test(s)) {
     const n = parseInt(s, 10);
     if (Number.isFinite(n)) {
       const key = String(n);
-      if (key in ROAD_RANK_CODE_KO) return key;
+      if (key in table) return key;
     }
   }
   const n = Number(s.replace(/[^\d.-]/g, ""));
-  if (Number.isFinite(n) && Number.isInteger(n) && String(n) in ROAD_RANK_CODE_KO) {
+  if (Number.isFinite(n) && Number.isInteger(n) && String(n) in table) {
     return String(n);
   }
   return s;
 }
 
-/** 목록용: 괄호 안은 노선번호-구간만 `(208-1)` — ROAD_RANK 제외 */
-export function formatRoadLedgerParenRoadNoSectOnly(roadNo: unknown, sect: unknown): string {
+/**
+ * 목록용 괄호 — `(305호선 1구간)`.
+ * 제목에 이미 `N구간`이 있으면 괄호에는 호선만 `(8호선)`.
+ */
+export function formatRoadLedgerParenRoadNoSectOnly(
+  roadNo: unknown,
+  sect: unknown,
+  opts?: { sectInTitle?: boolean }
+): string {
   const no = formatRoadLedgerNumericToken(roadNo);
   const sectDisp = formatRoadLedgerNumericToken(sect);
-  const noSect = [no, sectDisp].filter(Boolean).join("-");
-  if (!noSect) return "";
-  return `(${noSect})`;
+  const parts: string[] = [];
+  if (no) parts.push(`${no}호선`);
+  if (!opts?.sectInTitle && sectDisp) parts.push(`${sectDisp}구간`);
+  if (parts.length === 0) return "";
+  return `(${parts.join(" ")})`;
 }
 
 function hexToRgba(hex: string, alpha: number): string {
@@ -161,10 +201,14 @@ function toneHexForUnknownRank(): string {
   return "#64748b";
 }
 
-/** 목록 벳지 — `ROAD_RANK_CODE_KO[].toneHex` (미등록 코드는 기본색) */
-export function getRoadLedgerRankBadgeStyle(rankRaw: unknown): CSSProperties {
-  const key = normalizeRoadRankCodeKey(rankRaw);
-  const hex = (key && ROAD_RANK_CODE_KO[key]?.toneHex) ?? toneHexForUnknownRank();
+/** 목록 벳지 — 프로젝트별 ROAD_RANK 코드표 toneHex */
+export function getRoadLedgerRankBadgeStyle(
+  rankRaw: unknown,
+  project?: string | null
+): CSSProperties {
+  const key = normalizeRoadRankCodeKey(rankRaw, project);
+  const table = getRoadRankCodeTable(project);
+  const hex = (key && table[key]?.toneHex) ?? toneHexForUnknownRank();
   return {
     backgroundColor: hexToRgba(hex, 0.14),
     color: darkerHex(hex, 0.52),
@@ -175,36 +219,46 @@ export function getRoadLedgerRankBadgeStyle(rankRaw: unknown): CSSProperties {
 }
 
 /** 표·상세: 빈 값은 —, 매핑되면 한글, 아니면 원문 */
-export function formatRoadLedgerRoadRankDisplay(raw: unknown): string {
+export function formatRoadLedgerRoadRankDisplay(
+  raw: unknown,
+  project?: string | null
+): string {
   const s = String(raw ?? "").trim();
   if (!s) return "—";
-  const key = normalizeRoadRankCodeKey(raw);
-  return ROAD_RANK_CODE_KO[key]?.label ?? s;
+  const key = normalizeRoadRankCodeKey(raw, project);
+  return getRoadRankCodeTable(project)[key]?.label ?? s;
 }
 
 /** 괄호 타이틀용: 빈 값이면 문자열 생략, 매핑되면 한글, 아니면 원문 */
-export function formatRoadLedgerRoadRankForTitle(raw: unknown): string {
+export function formatRoadLedgerRoadRankForTitle(
+  raw: unknown,
+  project?: string | null
+): string {
   const s = String(raw ?? "").trim();
   if (!s) return "";
-  const key = normalizeRoadRankCodeKey(raw);
-  return ROAD_RANK_CODE_KO[key]?.label ?? s;
+  const key = normalizeRoadRankCodeKey(raw, project);
+  return getRoadRankCodeTable(project)[key]?.label ?? s;
 }
 
 /**
- * 목록·상세 타이틀 괄호 — `(도로종류한글 노선번호-구간)` 예: `(리도 208-1)`.
- * ROAD_RANK는 코드표 한글화. road_no·sect는 전자리가 숫자일 때만 선행 0 제거.
- * 도로종류·노선번호·구간이 모두 비면 빈 문자열.
+ * 상세 타이틀 괄호 — `(도로종류한글 305호선 1구간)`.
+ * ROAD_RANK는 프로젝트별 코드표. road_no·sect는 전자리가 숫자일 때만 선행 0 제거.
  */
-export function formatRoadLedgerDetailTitleParen(rank: unknown, roadNo: unknown, sect: unknown): string {
-  const r = formatRoadLedgerRoadRankForTitle(rank);
+export function formatRoadLedgerDetailTitleParen(
+  rank: unknown,
+  roadNo: unknown,
+  sect: unknown,
+  project?: string | null
+): string {
+  const r = formatRoadLedgerRoadRankForTitle(rank, project);
   const no = formatRoadLedgerNumericToken(roadNo);
   const sectDisp = formatRoadLedgerNumericToken(sect);
-  const noSect = [no, sectDisp].filter(Boolean).join("-");
-  const inner: string[] = [];
-  if (r) inner.push(r);
-  if (noSect) inner.push(noSect);
-  if (inner.length === 0) return "";
-  return `(${inner.join(" ")})`;
+  const parts: string[] = [];
+  if (r) parts.push(r);
+  if (no) parts.push(`${no}호선`);
+  if (sectDisp) parts.push(`${sectDisp}구간`);
+  if (parts.length === 0) return "";
+  return `(${parts.join(" ")})`;
 }
 
 /** 행에서 필드명 대소문자 무시 조회 */
