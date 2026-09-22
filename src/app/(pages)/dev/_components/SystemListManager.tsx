@@ -1,7 +1,6 @@
 "use client"
 
-import { useState, useEffect, useMemo, useRef, useCallback, type CSSProperties } from "react"
-import { createPortal } from "react-dom"
+import { useState, useEffect, useMemo, useRef, useCallback } from "react"
 import { Button } from "@/app/shadcnComponents/ui/button"
 import {
   Dialog,
@@ -38,7 +37,7 @@ export type SystemItem = {
   sys_is_private?: boolean
   serviceList: string[]
   /** 레이어 그룹명(define_table_group) 목록 */
-  layerList: string[]
+  layerGroupList: string[]
 }
 
 /** 공통(config) / 커스텀(DB) 구분 */
@@ -57,20 +56,8 @@ const emptySystem = (): SystemItem => ({
   sys_link: "",
   sys_is_private: false,
   serviceList: [],
-  layerList: [],
+  layerGroupList: [],
 })
-
-/** 쉼표 구분. 그룹명에 공백이 있어 공백으로는 나누지 않음 */
-function parseListStr(s: string): string[] {
-  return s
-    .split(",")
-    .map((x) => x.trim())
-    .filter(Boolean)
-}
-
-function formatList(arr: string[]): string {
-  return Array.isArray(arr) ? arr.join(", ") : ""
-}
 
 const HANGUL_CHOSEONG = "ㄱㄲㄴㄷㄸㄹㅁㅂㅃㅅㅆㅇㅈㅉㅊㅋㅌㅍㅎ"
 const HANGUL_BASE = 0xac00
@@ -106,7 +93,252 @@ function matchesGroupQuery(label: string, query: string): boolean {
   return false
 }
 
-/** 레이어 그룹 다중선택 — 목록은 body 포털로 모달 밖에 띄움 */
+type MultiPickOption = { key: string; label: string; isPrivate?: boolean }
+
+/** 검색·다중 체크 선택 — 본문은 선택값, 목록은 위로 고정 높이 */
+function CheckboxMultiPick({
+  value,
+  onChange,
+  options,
+  disabled = false,
+  placeholder = "클릭하여 선택",
+  searchPlaceholder = "검색",
+  emptyText = "목록이 없습니다.",
+  title,
+  columns = 3,
+  formatSelected,
+  showPrivateFilter = false,
+}: {
+  value: string[]
+  onChange: (next: string[]) => void
+  options: MultiPickOption[]
+  disabled?: boolean
+  placeholder?: string
+  searchPlaceholder?: string
+  emptyText?: string
+  title?: string
+  columns?: 1 | 2 | 3
+  /** 본문 표시. 기본은 key 쉼표 나열 */
+  formatSelected?: (keys: string[], optionByKey: Map<string, MultiPickOption>) => string
+  /** 서비스 목록용 — 비공개만 보기 체크 */
+  showPrivateFilter?: boolean
+}) {
+  const rootRef = useRef<HTMLDivElement>(null)
+  const searchRef = useRef<HTMLInputElement>(null)
+  const [open, setOpen] = useState(false)
+  const [search, setSearch] = useState("")
+  const [privateOnly, setPrivateOnly] = useState(false)
+
+  const selected = useMemo(
+    () => [...new Set(value.map((x) => String(x).trim()).filter(Boolean))],
+    [value]
+  )
+  const selectedSet = useMemo(() => new Set(selected), [selected])
+  const optionByKey = useMemo(() => {
+    const m = new Map<string, MultiPickOption>()
+    for (const o of options) m.set(o.key, o)
+    return m
+  }, [options])
+
+  const filtered = useMemo(() => {
+    return options.filter((o) => {
+      if (privateOnly && o.isPrivate !== true) return false
+      const hay = `${o.label} ${o.key}`
+      return matchesGroupQuery(hay, search)
+    })
+  }, [options, search, privateOnly])
+
+  const closePanel = useCallback(() => {
+    setOpen(false)
+    setSearch("")
+    setPrivateOnly(false)
+  }, [])
+
+  const openPanel = useCallback(() => {
+    if (disabled) return
+    setOpen(true)
+    window.setTimeout(() => searchRef.current?.focus(), 0)
+  }, [disabled])
+
+  useEffect(() => {
+    if (!open) return
+    const onDoc = (e: MouseEvent) => {
+      if (rootRef.current?.contains(e.target as Node)) return
+      closePanel()
+    }
+    document.addEventListener("mousedown", onDoc)
+    return () => document.removeEventListener("mousedown", onDoc)
+  }, [open, closePanel])
+
+  const toggle = (key: string, on: boolean) => {
+    const next = new Set(selected)
+    if (on) next.add(key)
+    else next.delete(key)
+    onChange([...next])
+  }
+
+  const displayValue =
+    formatSelected?.(selected, optionByKey) ??
+    selected.map((k) => optionByKey.get(k)?.label || k).join(", ")
+
+  const colClass =
+    columns === 1 ? "grid-cols-1" : columns === 2 ? "grid-cols-2" : "grid-cols-3"
+  const emptyCol =
+    columns === 1 ? "col-span-1" : columns === 2 ? "col-span-2" : "col-span-3"
+
+  return (
+    <div className="col-span-2 relative z-20" ref={rootRef}>
+      <div className="relative">
+        <Input
+          className={cn(
+            "rounded-none font-mono text-xs pr-8 cursor-pointer",
+            open && "ring-1 ring-primary border-primary"
+          )}
+          value={displayValue}
+          disabled={disabled}
+          readOnly
+          placeholder={placeholder}
+          title={title}
+          autoComplete="off"
+          onFocus={openPanel}
+          onClick={openPanel}
+          onKeyDown={(e) => {
+            if (e.key === "Escape") closePanel()
+            if (e.key === "Enter" || e.key === "ArrowDown") {
+              e.preventDefault()
+              openPanel()
+            }
+          }}
+        />
+        {selected.length > 0 && !disabled ? (
+          <button
+            type="button"
+            className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded-full p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+            title="선택 지우기"
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={() => onChange([])}
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        ) : null}
+      </div>
+      {open && !disabled ? (
+        <div className="absolute left-0 right-0 bottom-[calc(100%+2px)] z-50 flex flex-col overflow-hidden rounded-none border border-border bg-popover text-popover-foreground shadow-md">
+          <div className="relative shrink-0 border-b border-border">
+            <Input
+              ref={searchRef}
+              className="h-7 rounded-none border-0 px-2 pr-7 font-mono text-xs shadow-none focus-visible:ring-0"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder={searchPlaceholder}
+              title={searchPlaceholder}
+              autoComplete="off"
+              onKeyDown={(e) => {
+                if (e.key === "Escape") closePanel()
+              }}
+            />
+            {search.trim() ? (
+              <button
+                type="button"
+                className="absolute right-1 top-1/2 -translate-y-1/2 rounded-full p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+                title="검색 지우기"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => {
+                  setSearch("")
+                  searchRef.current?.focus()
+                }}
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            ) : null}
+          </div>
+          {showPrivateFilter ? (
+            <label className="flex shrink-0 cursor-pointer items-center gap-1.5 border-b border-border bg-muted/30 px-2 py-1 text-[11px] text-muted-foreground hover:text-foreground">
+              <input
+                type="checkbox"
+                className="h-3 w-3 accent-primary"
+                checked={privateOnly}
+                onChange={(e) => setPrivateOnly(e.target.checked)}
+                onMouseDown={(e) => e.preventDefault()}
+              />
+              비공개 서비스만
+            </label>
+          ) : null}
+          <ul
+            className={cn(
+              "grid h-40 content-start gap-0 overflow-y-auto overscroll-contain p-0",
+              colClass
+            )}
+            role="listbox"
+            aria-multiselectable
+          >
+            {filtered.length === 0 ? (
+              <li className={cn(emptyCol, "px-2 py-1.5 text-xs text-muted-foreground")}>
+                {options.length === 0
+                  ? emptyText
+                  : privateOnly
+                    ? "비공개 서비스가 없습니다."
+                    : "일치하는 항목이 없습니다."}
+              </li>
+            ) : (
+              filtered.map((o) => {
+                const checked = selectedSet.has(o.key)
+                const line = o.label !== o.key ? `${o.key} (${o.label})` : o.label
+                return (
+                  <li key={o.key} className="min-w-0 border-b border-r border-border/40">
+                    <button
+                      type="button"
+                      role="option"
+                      aria-selected={checked}
+                      className={cn(
+                        "flex w-full cursor-pointer items-start gap-1 px-1.5 py-1 text-left text-[11px] hover:bg-muted/70",
+                        checked && "bg-muted/40"
+                      )}
+                      title={line}
+                      onMouseDown={(e) => {
+                        e.preventDefault()
+                        toggle(o.key, !checked)
+                      }}
+                    >
+                      <span
+                        className={cn(
+                          "mt-px flex h-3 w-3 shrink-0 items-center justify-center rounded-[2px] border border-border text-[9px] leading-none",
+                          checked && "border-primary bg-primary text-primary-foreground"
+                        )}
+                        aria-hidden
+                      >
+                        {checked ? "✓" : ""}
+                      </span>
+                      <span className="min-w-0 break-keep leading-snug">
+                        {line}
+                        {o.isPrivate === true ? (
+                          <span className="ml-1 text-[10px] text-muted-foreground">(비공개)</span>
+                        ) : null}
+                      </span>
+                    </button>
+                  </li>
+                )
+              })
+            )}
+          </ul>
+          <div className="flex shrink-0 justify-end border-t border-border px-1.5 py-1">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-6 rounded-none px-2 text-[11px]"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={closePanel}
+            >
+              닫기
+            </Button>
+          </div>
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
 function LayerGroupMultiPick({
   value,
   onChange,
@@ -118,206 +350,51 @@ function LayerGroupMultiPick({
   options: string[]
   disabled?: boolean
 }) {
-  const rootRef = useRef<HTMLDivElement>(null)
-  const inputRef = useRef<HTMLInputElement>(null)
-  const panelRef = useRef<HTMLDivElement>(null)
-  const [open, setOpen] = useState(false)
-  const [search, setSearch] = useState("")
-  const [filtering, setFiltering] = useState(false)
-  const [panelStyle, setPanelStyle] = useState<CSSProperties>({})
-
-  const selected = useMemo(
-    () => [...new Set(value.map((x) => String(x).trim()).filter(Boolean))],
-    [value]
+  const pickOptions = useMemo(
+    () => options.map((g) => ({ key: g, label: g })),
+    [options]
   )
-  const selectedSet = useMemo(() => new Set(selected), [selected])
-
-  const filtered = useMemo(() => {
-    return options.filter((g) => matchesGroupQuery(g, filtering ? search : ""))
-  }, [options, search, filtering])
-
-  const closePanel = useCallback(() => {
-    setOpen(false)
-    setSearch("")
-    setFiltering(false)
-  }, [])
-
-  const updatePanelPosition = useCallback(() => {
-    const el = inputRef.current
-    if (!el) return
-    const rect = el.getBoundingClientRect()
-    const gap = 2
-    const maxH = Math.min(256, Math.max(120, window.innerHeight - rect.bottom - gap - 12))
-    setPanelStyle({
-      position: "fixed",
-      top: rect.bottom + gap,
-      left: rect.left,
-      width: Math.max(rect.width, 200),
-      maxHeight: maxH,
-      zIndex: 10000,
-    })
-  }, [])
-
-  useEffect(() => {
-    if (!open) return
-    updatePanelPosition()
-    const onWin = () => updatePanelPosition()
-    window.addEventListener("resize", onWin)
-    window.addEventListener("scroll", onWin, true)
-    return () => {
-      window.removeEventListener("resize", onWin)
-      window.removeEventListener("scroll", onWin, true)
-    }
-  }, [open, updatePanelPosition, filtered.length])
-
-  useEffect(() => {
-    if (!open) return
-    const onDoc = (e: MouseEvent) => {
-      const t = e.target as Node
-      if (rootRef.current?.contains(t)) return
-      if (panelRef.current?.contains(t)) return
-      closePanel()
-    }
-    document.addEventListener("mousedown", onDoc)
-    return () => document.removeEventListener("mousedown", onDoc)
-  }, [open, closePanel])
-
-  const toggle = (group: string, on: boolean) => {
-    const next = new Set(selected)
-    if (on) next.add(group)
-    else next.delete(group)
-    onChange([...next])
-    setSearch("")
-    setFiltering(false)
-  }
-
-  const displayValue = open && filtering ? search : formatList(selected)
-  const showClear = open && filtering && search.trim() ? true : selected.length > 0
-
-  const panel =
-    open && !disabled && typeof document !== "undefined"
-      ? createPortal(
-          <div
-            ref={panelRef}
-            style={panelStyle}
-            className="flex flex-col overflow-hidden rounded-none border border-border bg-popover text-popover-foreground shadow-md"
-          >
-            <ul className="min-h-0 flex-1 overflow-y-auto py-1" role="listbox" aria-multiselectable>
-              {filtered.length === 0 ? (
-                <li className="px-3 py-2 text-xs text-muted-foreground">
-                  {options.length === 0
-                    ? "등록된 레이어 그룹이 없습니다."
-                    : "일치하는 그룹이 없습니다."}
-                </li>
-              ) : (
-                filtered.map((g) => {
-                  const id = `layer-group-${g}`
-                  const checked = selectedSet.has(g)
-                  return (
-                    <li key={g}>
-                      <label
-                        htmlFor={id}
-                        className={cn(
-                          "flex cursor-pointer items-center gap-2 px-2.5 py-1.5 text-xs hover:bg-muted/70",
-                          checked && "bg-muted/40"
-                        )}
-                      >
-                        <input
-                          id={id}
-                          type="checkbox"
-                          className="shrink-0"
-                          checked={checked}
-                          onChange={(e) => toggle(g, e.target.checked)}
-                        />
-                        <span className="min-w-0 truncate" title={g}>
-                          {g}
-                        </span>
-                      </label>
-                    </li>
-                  )
-                })
-              )}
-            </ul>
-            <div className="flex shrink-0 justify-end border-t border-border px-2 py-1.5">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="h-7 rounded-none px-2.5 text-[11px]"
-                onMouseDown={(e) => e.preventDefault()}
-                onClick={closePanel}
-              >
-                닫기
-              </Button>
-            </div>
-          </div>,
-          document.body
-        )
-      : null
-
   return (
-    <div className="col-span-2 relative" ref={rootRef}>
-      <div className="relative">
-        <Input
-          ref={inputRef}
-          className={cn(
-            "rounded-none font-mono text-xs pr-8",
-            open && "ring-1 ring-primary border-primary"
-          )}
-          value={displayValue}
-          disabled={disabled}
-          placeholder={open ? "레이어 그룹 검색" : "클릭하여 레이어 그룹 선택"}
-          title="레이어 그룹"
-          autoComplete="off"
-          onFocus={() => {
-            setOpen(true)
-            setSearch("")
-            setFiltering(true)
-          }}
-          onClick={() => {
-            setOpen(true)
-          }}
-          onChange={(e) => {
-            setOpen(true)
-            const v = e.target.value
-            if (!filtering) {
-              const prev = formatList(selected)
-              setFiltering(true)
-              setSearch(v.startsWith(prev) ? v.slice(prev.length) : v)
-              return
-            }
-            setSearch(v)
-          }}
-          onKeyDown={(e) => {
-            if (e.key === "Escape") {
-              closePanel()
-              inputRef.current?.blur()
-            }
-          }}
-        />
-        {showClear && !disabled ? (
-          <button
-            type="button"
-            className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded-full p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
-            title={open && filtering && search.trim() ? "검색 지우기" : "선택 지우기"}
-            onMouseDown={(e) => e.preventDefault()}
-            onClick={() => {
-              if (open && filtering && search.trim()) {
-                setSearch("")
-                inputRef.current?.focus()
-                return
-              }
-              onChange([])
-              setSearch("")
-              setFiltering(false)
-            }}
-          >
-            <X className="h-3.5 w-3.5" />
-          </button>
-        ) : null}
-      </div>
-      {panel}
-    </div>
+    <CheckboxMultiPick
+      value={value}
+      onChange={onChange}
+      options={pickOptions}
+      disabled={disabled}
+      placeholder="클릭하여 레이어 그룹 선택"
+      searchPlaceholder="레이어 그룹 검색"
+      emptyText="등록된 레이어 그룹이 없습니다."
+      title="레이어 그룹"
+      columns={2}
+      formatSelected={(keys) => keys.join(", ")}
+    />
+  )
+}
+
+function ServiceMultiPick({
+  value,
+  onChange,
+  options,
+  disabled = false,
+}: {
+  value: string[]
+  onChange: (next: string[]) => void
+  options: MultiPickOption[]
+  disabled?: boolean
+}) {
+  return (
+    <CheckboxMultiPick
+      value={value}
+      onChange={onChange}
+      options={options}
+      disabled={disabled}
+      placeholder="클릭하여 서비스 선택"
+      searchPlaceholder="서비스 검색 (한글명·영문명)"
+      emptyText="등록된 기능이 없습니다."
+      title="서비스 목록"
+      columns={1}
+      formatSelected={(keys) => keys.join(", ")}
+      showPrivateFilter
+    />
   )
 }
 
@@ -402,6 +479,74 @@ export function SystemListManager() {
   const [addSource, setAddSource] = useState<SystemSource | null>(null)
   const [form, setForm] = useState<SystemItem>(emptySystem())
   const [layerGroups, setLayerGroups] = useState<string[]>([])
+  const [serviceOptions, setServiceOptions] = useState<MultiPickOption[]>([])
+
+  const loadServiceOptions = async () => {
+    try {
+      const configRes = await call("", "POST", {
+        service: "configService",
+        action: "getServiceList",
+        params: {},
+      })
+      // API: { success, data: { ser: [...] } } — 기능목록관리와 동일
+      const commonList = Array.isArray(configRes?.data?.ser)
+        ? configRes.data.ser
+        : Array.isArray(configRes?.ser)
+          ? configRes.ser
+          : []
+
+      let customList: unknown[] = []
+      try {
+        const customRes = await call("", "POST", {
+          service: "serService",
+          action: "getCustomSerList",
+          params: {},
+        })
+        const customRaw = customRes?.data?.data ?? customRes?.data
+        customList = Array.isArray(customRaw) ? customRaw : []
+      } catch {
+        customList = []
+      }
+
+      type Raw = {
+        ser_eng?: string | null
+        ser_kor?: string | null
+        ser_is_del?: boolean | null
+        ser_is_private?: boolean | null | string | number
+        ser_idx?: number | null
+      }
+      const isPrivateFlag = (v: unknown) =>
+        v === true || v === "true" || v === 1 || v === "1"
+
+      const byKey = new Map<string, MultiPickOption & { ser_idx: number }>()
+      // 공통 먼저 → 커스텀은 없는 키만 추가. 같은 키면 비공개는 한쪽이라도 true면 유지
+      for (const s of [...commonList, ...customList] as Raw[]) {
+        const key = String(s.ser_eng ?? "").trim()
+        if (!key || s.ser_is_del === true) continue
+        const priv = isPrivateFlag(s.ser_is_private)
+        const prev = byKey.get(key)
+        if (prev) {
+          if (priv) prev.isPrivate = true
+          continue
+        }
+        byKey.set(key, {
+          key,
+          label: String(s.ser_kor ?? "").trim() || key,
+          isPrivate: priv,
+          ser_idx: Number(s.ser_idx) || 0,
+        })
+      }
+      const options = [...byKey.values()]
+        .sort(
+          (a, b) =>
+            a.ser_idx - b.ser_idx || (a.label || a.key).localeCompare(b.label || b.key, "ko")
+        )
+        .map(({ key, label, isPrivate }) => ({ key, label, isPrivate }))
+      setServiceOptions(options)
+    } catch {
+      setServiceOptions([])
+    }
+  }
 
   const loadLayerGroups = async () => {
     try {
@@ -447,6 +592,7 @@ export function SystemListManager() {
   useEffect(() => {
     void loadSystems()
     void loadLayerGroups()
+    void loadServiceOptions()
   }, [])
 
   useEffect(() => {
@@ -463,6 +609,8 @@ export function SystemListManager() {
     setAddSource("common")
     setForm(emptySystem())
     setDialogOpen(true)
+    void loadServiceOptions()
+    void loadLayerGroups()
   }
 
   const deleteCommonAt = (index: number) => {
@@ -502,6 +650,10 @@ export function SystemListManager() {
     setAddSource(null)
     setForm({ ...systems[index] })
     setDialogOpen(true)
+    if (systems[index]?.source === "common") {
+      void loadServiceOptions()
+      void loadLayerGroups()
+    }
   }
 
   const closeDialog = () => {
@@ -530,7 +682,7 @@ export function SystemListManager() {
       ...form,
       sys_idx: Number(form.sys_idx) || 0,
       serviceList: Array.isArray(form.serviceList) ? form.serviceList : [],
-      layerList: Array.isArray(form.layerList) ? form.layerList : [],
+      layerGroupList: Array.isArray(form.layerGroupList) ? form.layerGroupList : [],
     }
 
     if (source === "common") {
@@ -724,7 +876,7 @@ export function SystemListManager() {
                     {s.sys_detail ?? "-"}
                   </TableCell>
                   <TableCell className="text-center text-xs">{s.serviceList?.length ?? 0}</TableCell>
-                  <TableCell className="text-center text-xs">{s.layerList?.length ?? 0}</TableCell>
+                  <TableCell className="text-center text-xs">{s.layerGroupList?.length ?? 0}</TableCell>
                 </TableRow>
               ))
             )}
@@ -733,7 +885,7 @@ export function SystemListManager() {
       </div>
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto rounded-none">
+        <DialogContent className="max-w-lg overflow-visible rounded-none sm:max-w-xl">
           <DialogHeader>
             <DialogTitle>
               {editingIndex !== null
@@ -743,7 +895,7 @@ export function SystemListManager() {
                   : "커스텀 시스템 추가"}
             </DialogTitle>
           </DialogHeader>
-          <div className="grid gap-3 py-2">
+          <div className="grid gap-3 overflow-visible py-2">
             <div className="grid grid-cols-3 gap-2 items-center">
               <label className="text-sm font-medium">시스템 키</label>
               <Input
@@ -833,18 +985,17 @@ export function SystemListManager() {
               <>
                 <div className="grid grid-cols-3 gap-2 items-start">
                   <label className="text-sm font-medium pt-2">서비스 목록</label>
-                  <Input
-                    className="col-span-2 rounded-none font-mono text-xs"
-                    value={formatList(form.serviceList)}
-                    onChange={(e) => setForm((f) => ({ ...f, serviceList: parseListStr(e.target.value) }))}
-                    placeholder="쉼표로 구분"
+                  <ServiceMultiPick
+                    value={form.serviceList ?? []}
+                    onChange={(serviceList) => setForm((f) => ({ ...f, serviceList }))}
+                    options={serviceOptions}
                   />
                 </div>
                 <div className="grid grid-cols-3 gap-2 items-start">
                   <label className="text-sm font-medium pt-2">레이어 그룹</label>
                   <LayerGroupMultiPick
-                    value={form.layerList ?? []}
-                    onChange={(layerList) => setForm((f) => ({ ...f, layerList }))}
+                    value={form.layerGroupList ?? []}
+                    onChange={(layerGroupList) => setForm((f) => ({ ...f, layerGroupList }))}
                     options={layerGroups}
                   />
                 </div>

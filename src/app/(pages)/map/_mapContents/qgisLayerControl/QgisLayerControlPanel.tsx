@@ -28,6 +28,7 @@ import {
 } from '@/app/shadcnComponents/ui/dialog';
 import { Button } from '@/app/shadcnComponents/ui/button';
 import { resolveClientMachineIp, prefetchClientMachineIp } from '@/lib/clientMachineIp';
+import { useSerWriteAccess } from '@/hooks/useSerWriteAccess';
 
 type UserKeyRow = {
   usrId: string;
@@ -78,6 +79,7 @@ async function qgisCall<T>(action: string, params: Record<string, unknown> = {})
 }
 
 export function QgisLayerControlPanel({ onClose }: { onClose?: () => void }) {
+  const canWrite = useSerWriteAccess('qgisLayerControl');
   const { data: session } = useSession();
   const sessionId = session?.user?.id ?? null;
   const [users, setUsers] = useState<UserKeyRow[]>([]);
@@ -497,31 +499,39 @@ export function QgisLayerControlPanel({ onClose }: { onClose?: () => void }) {
                                 )}
                               </td>
                               <td className="px-0.5 py-1.5 text-center align-middle">
-                                <button
-                                  type="button"
-                                  className="inline-flex rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
-                                  title="키 발급/재발급"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    void handleRegenerate(u.usrId);
-                                  }}
-                                >
-                                  <RefreshCw className="h-3.5 w-3.5" />
-                                </button>
+                                {canWrite ? (
+                                  <button
+                                    type="button"
+                                    className="inline-flex rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+                                    title="키 발급/재발급"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      void handleRegenerate(u.usrId);
+                                    }}
+                                  >
+                                    <RefreshCw className="h-3.5 w-3.5" />
+                                  </button>
+                                ) : (
+                                  <span className="text-[10px] text-muted-foreground">—</span>
+                                )}
                               </td>
                               <td className="px-0.5 py-1.5 text-center align-middle">
-                                <button
-                                  type="button"
-                                  className="inline-flex rounded p-1 text-muted-foreground hover:bg-destructive/10 hover:text-destructive disabled:opacity-30"
-                                  title="키 삭제"
-                                  disabled={!u.qgisKey}
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    void handleDeleteKey(u.usrId);
-                                  }}
-                                >
-                                  <Trash2 className="h-3.5 w-3.5" />
-                                </button>
+                                {canWrite ? (
+                                  <button
+                                    type="button"
+                                    className="inline-flex rounded p-1 text-muted-foreground hover:bg-destructive/10 hover:text-destructive disabled:opacity-30"
+                                    title="키 삭제"
+                                    disabled={!u.qgisKey}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      void handleDeleteKey(u.usrId);
+                                    }}
+                                  >
+                                    <Trash2 className="h-3.5 w-3.5" />
+                                  </button>
+                                ) : (
+                                  <span className="text-[10px] text-muted-foreground">—</span>
+                                )}
                               </td>
                             </tr>
                           );
@@ -715,6 +725,7 @@ export function QgisLayerControlPanel({ onClose }: { onClose?: () => void }) {
                                   onClick={(e) => e.stopPropagation()}
                                 >
                                   <Switch
+                                    disabled={!canWrite}
                                     checked={groupReadAll}
                                     className={
                                       groupReadSome && !groupReadAll ? 'opacity-70' : undefined
@@ -735,6 +746,7 @@ export function QgisLayerControlPanel({ onClose }: { onClose?: () => void }) {
                                   onClick={(e) => e.stopPropagation()}
                                 >
                                   <Switch
+                                    disabled={!canWrite}
                                     checked={groupWriteAll}
                                     className={
                                       rows.some((r) => r.canWrite) && !groupWriteAll
@@ -771,6 +783,7 @@ export function QgisLayerControlPanel({ onClose }: { onClose?: () => void }) {
                                       <div className="flex justify-center">
                                         <Switch
                                           checked={row.canRead}
+                                          disabled={!canWrite}
                                           onCheckedChange={(v) =>
                                             patchLayer(row.layerName, {
                                               canRead: v,
@@ -785,7 +798,7 @@ export function QgisLayerControlPanel({ onClose }: { onClose?: () => void }) {
                                       <div className="flex justify-center">
                                         <Switch
                                           checked={row.canWrite}
-                                          disabled={!row.canRead}
+                                          disabled={!canWrite || !row.canRead}
                                           onCheckedChange={(v) =>
                                             patchLayer(row.layerName, {
                                               canWrite: v,
@@ -809,14 +822,16 @@ export function QgisLayerControlPanel({ onClose }: { onClose?: () => void }) {
             </div>
 
             <div className="flex shrink-0 items-center justify-end gap-1 border-t border-border bg-background px-3 py-2">
-              <LayerRowPanelButton
-                type="button"
-                disabled={!selectedUsrId || loadingLayers}
-                loading={saving}
-                onClick={() => void handleSave()}
-              >
-                {saving ? '저장 중…' : '저장'}
-              </LayerRowPanelButton>
+              {canWrite ? (
+                <LayerRowPanelButton
+                  type="button"
+                  disabled={!selectedUsrId || loadingLayers}
+                  loading={saving}
+                  onClick={() => void handleSave()}
+                >
+                  {saving ? '저장 중…' : '저장'}
+                </LayerRowPanelButton>
+              ) : null}
             </div>
           </div>
         </section>

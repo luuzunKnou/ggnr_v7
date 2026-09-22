@@ -155,6 +155,8 @@ export function PermissionFeatureManager() {
         permEtc: detailEtc.trim() ? detailEtc.trim() : null,
       });
       await loadPerms();
+      setDetailModalOpen(false);
+      setDetailModalPermKey(null);
       setMsg('저장되었습니다.');
     } catch (e: unknown) {
       setModalError(e instanceof Error ? e.message : '오류');

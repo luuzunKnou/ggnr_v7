@@ -132,7 +132,7 @@ export function MapSidebar({ indexLogoSrc }: { indexLogoSrc: string }) {
   const [deniedSerOpen, setDeniedSerOpen] = useState(false);
   const [deniedSerEng, setDeniedSerEng] = useState('');
   const [bootProject, setBootProject] = useState('');
-  const { snapshot } = useMyAccessSnapshot();
+  const { snapshot, reload } = useMyAccessSnapshot();
   const systemKeyFromUrl = searchParams.get('system') ?? '';
 
   const fetchServiceList = useCallback(() => {
@@ -208,8 +208,11 @@ export function MapSidebar({ indexLogoSrc }: { indexLogoSrc: string }) {
     .map((key) => serviceMap.get(key))
     .filter((s): s is ServiceItem => s != null)
     .filter((item) => {
-      // 비공개는 시스템 목록에서 이미 걸러짐. SHOW_SERVICES 에 있으면 여기까지 오므로 다시 숨기지 않음
       if (bootProject === 'build_uj' && item.ser_eng === 'riverUseLedger') return false;
+      // 비공개: 버튼보기(1) 이상만 표시. 없음(0)은 숨김
+      if (item.ser_is_private === true) {
+        return sidebarServicePolicy(snapshot, item.ser_eng ?? '', true) !== 'hidden';
+      }
       return true;
     });
 
@@ -326,8 +329,21 @@ export function MapSidebar({ indexLogoSrc }: { indexLogoSrc: string }) {
               const onSvcClick =
                 policy === 'block'
                   ? () => {
-                      setDeniedSerEng(serEng);
-                      setDeniedSerOpen(true);
+                      void (async () => {
+                        const snap = await reload({ silent: true });
+                        const next = sidebarServicePolicy(snap, serEng, true);
+                        if (next === 'block') {
+                          setDeniedSerEng(serEng);
+                          setDeniedSerOpen(true);
+                          return;
+                        }
+                        if (next === 'hidden') return;
+                        if (serEng === 'shapeEditor') {
+                          handleShapeEditorClick();
+                          return;
+                        }
+                        toggleWindow(getOpenedKeyForSerEng(serEng));
+                      })();
                     }
                   : serEng === 'shapeEditor'
                     ? handleShapeEditorClick

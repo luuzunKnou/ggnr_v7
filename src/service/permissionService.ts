@@ -18,8 +18,6 @@ import {
   TARGET_SER,
   TARGET_SYS,
 } from '@/database/schema/usr_access_request';
-import { usrSerGrant } from '@/database/schema/usr_ser_grant';
-import { usrSysGrant } from '@/database/schema/usr_sys_grant';
 import { upMap } from '@/database/schema/up_map';
 import { usr } from '@/database/schema/usr';
 import {
@@ -46,6 +44,37 @@ function normalizePermSysKey(v: unknown): string | null {
   if (v == null) return null;
   const s = typeof v === 'number' && Number.isFinite(v) ? String(Math.trunc(v)) : String(v).trim();
   return s || null;
+}
+
+/**
+ * 사용자 아이디와 같은 이름의 권한이 있으면 재사용, 없으면 생성 후 up_map 부여.
+ * 권한 신청 승인 시 개인 역할로 기능·시스템 매핑을 쌓는다.
+ */
+async function ensureUserPermAssigned(usrId: string): Promise<number> {
+  const id = String(usrId ?? '').trim();
+  if (!id) throw new Error('usrId required');
+
+  let [row] = await db.select().from(perm).where(eq(perm.permName, id)).limit(1);
+  if (!row) {
+    [row] = await db
+      .insert(perm)
+      .values({
+        permName: id,
+        permEtc: '권한신청 승인으로 자동 생성',
+      })
+      .returning();
+  }
+  if (!row?.permKey) throw new Error('권한 생성 실패');
+
+  const [linked] = await db
+    .select({ upKey: upMap.upKey })
+    .from(upMap)
+    .where(and(eq(upMap.usrId, id), eq(upMap.permKey, row.permKey)))
+    .limit(1);
+  if (!linked) {
+    await db.insert(upMap).values({ usrId: id, permKey: row.permKey });
+  }
+  return row.permKey;
 }
 
 async function isPrivateSysKey(sk: string): Promise<boolean> {
@@ -148,7 +177,7 @@ export async function removeUserFromPerm(p: Params) {
 
 export async function listPrivateSers(_p: Params) {
   requireSession(_p);
-  /** DISABLED_SERVICES 제외 — 이 프로젝트 메뉴에 없는 비공개는 권한 매핑 대상에서도 제외 */
+  /** 이 프로젝트 시스템 목록에 없는 비공개는 권한 매핑 대상에서도 제외 */
   const availableEng = getProjectAvailableServiceEngSet();
   const dbRows = await db
     .select({
@@ -474,22 +503,29 @@ export async function approveAccessRequest(p: Params) {
     .limit(1);
   if (!req) throw new Error('신청을 찾을 수 없습니다.');
 
+  const targetType = String(req.targetType ?? '').trim();
+  const permKey = await ensureUserPermAssigned(req.usrId);
   const now = new Date().toISOString();
-  if (req.targetType === TARGET_SER && req.serEng) {
+
+  if (targetType === TARGET_SER) {
+    const serEng = String(req.serEng ?? '').trim();
+    if (!serEng) throw new Error('serEng required');
     const level = req.requestedSerpType ?? SERP_TYPE_WRITE;
     await db
-      .delete(usrSerGrant)
-      .where(and(eq(usrSerGrant.usrId, req.usrId), eq(usrSerGrant.serEng, req.serEng)));
-    await db.insert(usrSerGrant).values({ usrId: req.usrId, serEng: req.serEng, serpType: level });
-  } else if (req.targetType === TARGET_SYS && req.sysKey != null) {
-    const exists = await db
-      .select()
-      .from(usrSysGrant)
-      .where(and(eq(usrSysGrant.usrId, req.usrId), eq(usrSysGrant.sysKey, req.sysKey)))
-      .limit(1);
-    if (exists.length === 0) {
-      await db.insert(usrSysGrant).values({ usrId: req.usrId, sysKey: req.sysKey });
+      .delete(serpMap)
+      .where(and(eq(serpMap.permKey, permKey), eq(serpMap.serEng, serEng)));
+    if (level > SERP_TYPE_NONE) {
+      await db.insert(serpMap).values({ permKey, serEng, serpType: level });
     }
+  } else if (targetType === TARGET_SYS) {
+    const sysKey = normalizePermSysKey(req.sysKey);
+    if (!sysKey) throw new Error('sysKey required');
+    await db
+      .delete(syspMap)
+      .where(and(eq(syspMap.permKey, permKey), eq(syspMap.sysKey, sysKey)));
+    await db.insert(syspMap).values({ permKey, sysKey });
+  } else {
+    throw new Error('targetType ser|sys');
   }
 
   await db
