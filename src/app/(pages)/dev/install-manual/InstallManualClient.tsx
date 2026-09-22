@@ -267,11 +267,17 @@ npm -v`}</CodeBlock>
                   </li>
                 </ul>
               </li>
+              
+            </ol>
+            <h2 className="text-base font-semibold">시연 첨부파일</h2>
+            <ol className="list-decimal space-y-3 pl-5">
               <li>
-                시연일 경우 nssm에 G드라이브 접근 권한 설정하기
-                <div className="mt-1">
-                  <CodeBlock>{`.\\nssm.exe set GGNR_V7 ObjectName ".\\[Window 계정]" "[Window 비밀번호]"`}</CodeBlock>
-                </div>
+                  시연일 경우 nssm에 G드라이브 접근 권한에 대해 따로 설정이 필요함 (C, D는 상관없음)
+                  <p>소스가 있는 루트 폴더에서 cmd 열고 아래 명령어 입력</p>
+                  <div className="mt-1">
+                    <CodeBlock>{`cd nssm\\win64
+.\\nssm.exe set GGNR_V7 ObjectName ".\\[Window 계정]" "[Window 비밀번호]"`}</CodeBlock>
+                  </div>
               </li>
               <li>
                 구동시 관련 포트 계속 대기중이라면 ( waiting until port [구동될 포트] is FREE...) 해당 포트가 점용중임으로 확인 후 종료가 필요함.
