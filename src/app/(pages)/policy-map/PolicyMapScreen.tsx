@@ -1,8 +1,9 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
-import { ExternalLink, Plus, Trash2, Upload } from 'lucide-react';
+import { ArrowLeft, ExternalLink, Plus, Trash2, Upload } from 'lucide-react';
 import { Button } from '@/app/shadcnComponents/ui/button';
 import { Input } from '@/app/shadcnComponents/ui/input';
 import { call } from '@/lib/api';
@@ -19,6 +20,7 @@ type Row = {
 };
 
 export function PolicyMapScreen() {
+  const router = useRouter();
   const { data: session, status } = useSession();
   const loggedIn = status === 'authenticated' && Boolean(session?.user?.id);
   const myId = session?.user?.id ?? '';
@@ -117,7 +119,24 @@ export function PolicyMapScreen() {
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3">
       <div className="flex shrink-0 flex-wrap items-center justify-between gap-2">
-        <h1 className="text-lg font-semibold text-foreground">정책지도 바로가기</h1>
+        <div className="flex min-w-0 items-center gap-2">
+          <button
+            type="button"
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-border/70 text-muted-foreground hover:bg-muted hover:text-foreground"
+            aria-label="뒤로"
+            title="뒤로"
+            onClick={() => {
+              if (typeof window !== 'undefined' && window.history.length > 1) {
+                router.back();
+              } else {
+                router.push('/');
+              }
+            }}
+          >
+            <ArrowLeft className="h-4 w-4" />
+          </button>
+          <h1 className="truncate text-lg font-semibold text-foreground">정책지도 바로가기</h1>
+        </div>
         {loggedIn ? (
           <Button
             type="button"

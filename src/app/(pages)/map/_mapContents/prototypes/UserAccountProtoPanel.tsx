@@ -209,7 +209,7 @@ export function UserAccountProtoPanel({
 
   if (!open) return null
 
-  return (
+  return createPortal(
     <>
       <button
         type="button"
@@ -302,7 +302,8 @@ export function UserAccountProtoPanel({
             document.body
           )
         : null}
-    </>
+    </>,
+    document.body
   )
 }
 

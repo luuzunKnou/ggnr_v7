@@ -53,7 +53,7 @@ export function ShootingRequestFormModal({
       <DialogContent
         showCloseButton={false}
         layerZIndex={160}
-        className="flex h-[min(62vh,500px)] w-[min(100vw-2rem,46rem)] max-w-none flex-col gap-0 overflow-hidden p-0"
+        className="flex h-[min(78vh,680px)] w-[min(100vw-2rem,46rem)] max-w-none flex-col gap-0 overflow-hidden p-0"
       >
         <DialogHeader className="sr-only">
           <DialogTitle>{isNew ? '촬영요청 신청서' : '촬영요청 신청서 조회'}</DialogTitle>

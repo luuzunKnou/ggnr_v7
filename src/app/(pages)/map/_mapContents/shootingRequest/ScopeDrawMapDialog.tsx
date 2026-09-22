@@ -22,7 +22,7 @@ import {
 } from '@/app/shadcnComponents/ui/dialog';
 import { cn } from '@/lib/utils';
 import '../../_mapComponents/config/projections';
-import { createVWorldLayer } from '../../_mapComponents/layerFactory/backgroundLayerFactory';
+import { createVWorldRasterLayer } from '../../_mapComponents/layerFactory/backgroundLayerFactory';
 import { transformCoordinate } from '../../_mapComponents/services/coordinateService';
 import { useMapContext } from '../../_mapComponents/MapContext';
 import {
@@ -104,7 +104,7 @@ export function ScopeDrawMapDialog({ open, onOpenChange, onConfirm }: Props) {
       map = new Map({
         target: el,
         layers: [
-          createVWorldLayer('satellite'),
+          createVWorldRasterLayer('satellite'),
           new VectorLayer({ source, style: SCOPE_STYLE, zIndex: 10 }),
         ],
         view: new View({
@@ -222,6 +222,7 @@ export function ScopeDrawMapDialog({ open, onOpenChange, onConfirm }: Props) {
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
         showCloseButton={false}
+        layerZIndex={180}
         className="flex h-[min(96vh,1080px)] w-[min(100vw-1rem,96rem)] max-w-none flex-col gap-0 overflow-hidden p-0 sm:max-w-none"
       >
         <DialogHeader className="shrink-0 space-y-0 border-b border-border px-4 py-2.5 text-left">

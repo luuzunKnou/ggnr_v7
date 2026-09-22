@@ -20,6 +20,8 @@ export type MapSideListPanelProps = {
   contentClassName?: string;
   /** 있으면 읽기 권한일 때 추가·수정·삭제 버튼 숨김 */
   serEng?: string;
+  /** false면 우측 너비 조절 핸들 숨김 (고정폭 패널) */
+  resizable?: boolean;
 };
 
 export function MapSideListPanel({
@@ -32,6 +34,7 @@ export function MapSideListPanel({
   className,
   contentClassName,
   serEng,
+  resizable = true,
 }: MapSideListPanelProps) {
   const panelRef = useRef<HTMLDivElement>(null);
   const rafRef = useRef<number | null>(null);
@@ -85,17 +88,19 @@ export function MapSideListPanel({
       )}
       style={{ width: `${width}px` }}
     >
-      <div
-        role="separator"
-        aria-label="패널 너비 조절"
-        onMouseDown={handleResizeStart}
-        className="absolute right-0 top-0 bottom-0 z-20 flex w-2.5 cursor-col-resize items-center justify-center group hover:bg-muted/50"
-        title="너비 조절"
-      >
-        <span className="pointer-events-none text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100">
-          <GripVertical className="h-4 w-4" />
-        </span>
-      </div>
+      {resizable ? (
+        <div
+          role="separator"
+          aria-label="패널 너비 조절"
+          onMouseDown={handleResizeStart}
+          className="absolute right-0 top-0 bottom-0 z-20 flex w-2.5 cursor-col-resize items-center justify-center group hover:bg-muted/50"
+          title="너비 조절"
+        >
+          <span className="pointer-events-none text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100">
+            <GripVertical className="h-4 w-4" />
+          </span>
+        </div>
+      ) : null}
 
       <div
         className={cn(

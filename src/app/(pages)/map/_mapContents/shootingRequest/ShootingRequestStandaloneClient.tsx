@@ -46,7 +46,7 @@ export function ShootingRequestStandaloneClient({
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-muted/40 px-3 py-6">
-      <div className="flex h-[min(62vh,500px)] w-full max-w-[46rem] flex-col overflow-hidden rounded-lg border border-border bg-background shadow-lg">
+      <div className="flex h-[min(78vh,680px)] w-full max-w-[46rem] flex-col overflow-hidden rounded-lg border border-border bg-background shadow-lg">
         <ShootingRequestForm
           closeLabel="닫기"
           onClose={goMap}
