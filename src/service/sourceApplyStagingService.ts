@@ -15,11 +15,17 @@ function shouldSkipStagingCopyRel(relPath: string, excludePrefixes: string[]): b
 
 /**
  * 타입검사 스테이징 전용 추가 제외 — live 병합 exclude 와 별도.
- * tsc에 불필요한 대용량·문서·런타임 산출물만 (누락 시 타입오류 위험 낮은 것).
+ * (주석에 글롭 별표-슬래시 조합을 넣지 말 것: 블록 주석이 중간에 닫힘)
+ * tsc가 긁는 ts 파일 중 불필요한 대용량·바이너리·문서·런타임 산출물.
+ * - geoserver_modules / python: 타입 검사 대상 아님 (요청)
+ * - runtime: 번들 Node 런타임(node_modules 의 d.ts 다수)
+ * - QCAD/Blender 모듈·미리보기·임시·정적 public 등
+ * scripts/ 는 프로젝트 ts 스크립트가 있어 유지.
  */
 const STAGING_ALWAYS_EXCLUDE = [
   'node_modules/',
   'geoserver_modules/',
+  'python/',
   'docs/',
   'drizzle/',
   'coverage/',
@@ -30,6 +36,9 @@ const STAGING_ALWAYS_EXCLUDE = [
   'nssm/',
   '.cursor/',
   '.cursor-runtime/',
+  '.vscode/',
+  '.tmp/',
+  '.cad-preview-work/',
   'file_data/',
   'shp_data/',
   'excel_data/',
@@ -41,8 +50,15 @@ const STAGING_ALWAYS_EXCLUDE = [
   '3dtiles_pnts/',
   '3dtiles_obj/',
   '3dtiles_tiff/',
-  'python/env/',
-  'python/env_parts/',
+  'runtime/',
+  'modules_blender/',
+  'QCAD_modules/',
+  'public/',
+  'patches/',
+  'temp/',
+  'default/',
+  'integrations/',
+  'lib/',
 ] as const;
 
 /** merge용 exclude + 스테이징 전용 제외를 합치고, node_modules 는 항상 제외 */

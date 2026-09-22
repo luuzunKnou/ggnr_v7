@@ -863,10 +863,68 @@ export function SourceCodeUploaderContent() {
             onChunkProgress: (sent, expected) => {
               setChunkProgress({ sent, expected });
               setProgressPct(Math.min(95, 40 + Math.round((sent / Math.max(expected, 1)) * 50)));
+              const chunkDone = sent >= expected && expected > 0;
               patchStages({
                 init: { state: 'done' },
-                chunk: { state: 'active', detail: `${sent}/${expected}` },
+                chunk: {
+                  state: chunkDone ? 'done' : 'active',
+                  detail: `${sent}/${expected}`,
+                },
+                ...(chunkDone
+                  ? {
+                      complete: {
+                        state: 'active' as const,
+                        detail: '요청 준비 중',
+                      },
+                    }
+                  : {}),
               });
+            },
+            onRemotePhase: (phase) => {
+              if (phase === 'init') {
+                setProgressPhase('init');
+                progressPhaseRef.current = 'init';
+                setProgressText(STAGE_LABEL.init);
+                patchStages({ init: { state: 'active' } });
+                return;
+              }
+              if (phase === 'chunk') {
+                setProgressPhase('chunk');
+                progressPhaseRef.current = 'chunk';
+                setProgressText(STAGE_LABEL.chunk);
+                patchStages({
+                  init: { state: 'done' },
+                  chunk: { state: 'active' },
+                });
+                return;
+              }
+              if (phase === 'complete') {
+                setProgressPhase('complete');
+                progressPhaseRef.current = 'complete';
+                if (completeStartedAtRef.current <= 0) {
+                  completeStartedAtRef.current = Date.now();
+                }
+                setProgressText(STAGE_LABEL.complete);
+                setProgressPct(96);
+                appendLog('원격 병합/압축 해제(complete) API 호출 시작');
+                patchStages({
+                  init: { state: 'done' },
+                  chunk: { state: 'done' },
+                  complete: { state: 'active', detail: 'GNMS 응답 대기' },
+                });
+                return;
+              }
+              if (phase === 'npmInstall') {
+                setProgressPhase('npmInstall');
+                progressPhaseRef.current = 'npmInstall';
+                setProgressText(STAGE_LABEL.npmInstall);
+                setProgressPct(98);
+                appendLog('원격 npm install API 호출 시작');
+                patchStages({
+                  complete: { state: 'done' },
+                  npmInstall: { state: 'active' },
+                });
+              }
             },
           });
           remoteUploadIdRef.current = remoteUpload.uploadId;
