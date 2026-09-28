@@ -8,11 +8,23 @@ const SECTIONS = [
   { id: 'setting_file_list', label: '세팅용 파일' },
   { id: 'nodejs', label: 'Node.js 및 npm 설치' },
   { id: 'install_db', label: 'PostgreSQL 설치 및 DB 생성' },
+  { id: 'install_db_pg18', label: '- PostgreSQL 18 버전 설치' },
+  { id: 'install_db_create', label: '- DB 생성(pgAdmin 실행)' },
+  { id: 'install_db_env', label: "- .env 파일 수정" },
   { id: 'base_path', label: 'BASE_PTH 설정' },
+  { id: 'base_path_project', label: '- 프로젝트 내 BASE_PATH 설정' },
+  { id: 'base_path_gate', label: '- 게이트서버 설정' },
   { id: 'geoserver_related', label: 'geoserver 관련' },
+  { id: 'geoserver_port', label: '- geoserver PORT 변경' },
   { id: 'package', label: '프로젝트 파일 설치/실행 및 서비스 등록' },
+  { id: 'package_tsc', label: '- TypeScript 타입 검사' },
+  { id: 'package_options', label: '- 옵션 설명' },
+  { id: 'package_build', label: '- 빌드 명령어' },
   { id: 'run', label: '구동' },
+  { id: 'run_demo_files', label: '- 시연 첨부파일' },
   { id: 'remove', label: 'Window 서비스 등록 삭제' },
+  { id: 'remove_bat', label: '- bat 실행' },
+  { id: 'remove_manual', label: '- 수동 제거' },
   { id: 'contour', label: '기초데이터: 고도(등고선)' },
   { id: 'kais', label: '기초데이터: 건설•도로' },
 ] as const;
@@ -91,17 +103,24 @@ export function InstallManualClient() {
           aria-label="목차"
           style={{ display: 'flex', flexDirection: 'column', gap: 20 }}
         >
-          {SECTIONS.map((sec) => (
-            <button
-              key={sec.id}
-              type="button"
-              title={sec.label}
-              onClick={() => scrollToSection(sec.id)}
-              className="block w-full cursor-pointer rounded-sm py-1 pl-2.5 pr-1 text-left text-xs font-medium leading-snug text-foreground hover:bg-primary/5 hover:text-primary"
-            >
-              {sec.label}
-            </button>
-          ))}
+          {SECTIONS.map((sec) => {
+            const isSub = sec.label.startsWith('- ');
+            return (
+              <button
+                key={sec.id}
+                type="button"
+                title={sec.label}
+                onClick={() => scrollToSection(sec.id)}
+                className={`block w-full cursor-pointer rounded-sm py-1 pr-1 text-left text-xs leading-snug hover:bg-primary/5 hover:text-primary ${
+                  isSub
+                    ? 'pl-4 font-normal text-muted-foreground'
+                    : 'pl-2.5 font-medium text-foreground'
+                }`}
+              >
+                {sec.label}
+              </button>
+            );
+          })}
         </nav>
       </aside>
 
@@ -124,7 +143,13 @@ export function InstallManualClient() {
 
           <section id="setting_file_list" className="scroll-mt-4 space-y-3">
             <h1 className="text-xl font-semibold">세팅용 파일</h1>
-            <h2 className="text-base font-semibold">경로</h2>
+            <p>파일 목록은 아래와 같음</p>
+            <ul className="list-decimal space-y-3 pl-5">
+              <li>FileZilla_3.67.0_win64-setup: FileZilla 설치 파일</li>
+              <li>node-v20.14.0-x64.msi: node, npm 설치 파일</li>
+              <li>npp.8.9.7.Installer.x64.exe: 노트패드 설치 파일</li>
+              <li>postgresql-18.6-1-windows-x64.exe: postgres 설치 파일</li>
+            </ul>
             <div className="mt-1">
               <CodeBlock>{`\\\\192.168.127.11\\사업수행_개발\\020 공간누리 v7\\20260819_세팅용 파일`}</CodeBlock>
             </div>
@@ -148,7 +173,7 @@ npm -v`}</CodeBlock>
 
           <section id="install_db" className="scroll-mt-4 space-y-3">
             <h1 className="text-xl font-semibold">PostgreSQL 설치 및 DB 생성</h1>
-            <h2 className="text-base font-semibold">1. PostgreSQL 18 버전 설치</h2>
+            <h2 id="install_db_pg18" className="scroll-mt-4 text-base font-semibold">1. PostgreSQL 18 버전 설치</h2>
               <ul className="list-decimal space-y-3 pl-5">
                 <li>
                   Stack Builder - Spatlal Extension 설치 - PostGIS 설치
@@ -167,7 +192,7 @@ npm -v`}</CodeBlock>
                     </div>
                 </li>
               </ul>
-            <h2 className="text-base font-semibold">2. DB 생성(pgAdmin 실행)</h2>
+            <h2 id="install_db_create" className="scroll-mt-4 text-base font-semibold">2. DB 생성(pgAdmin 실행)</h2>
               <ul className="list-decimal space-y-3 pl-5">
                 <li>
                   <code className="rounded bg-muted px-1 py-0.5">V6 DB 세팅</code> 참고
@@ -181,16 +206,19 @@ npm -v`}</CodeBlock>
                   </div>
                 </li>
               </ul>
-            <h2 className="text-base font-semibold">3. '프로젝트명'.env 파일 내 demo/prod를 생성한 DB 내용에 따라 수정</h2>
-            <p>.env 수정하면서 GGNR_DATA_DIR도 확인후 수정</p>
+            <h2 id="install_db_env" className="scroll-mt-4 text-base font-semibold">3. .env 파일 수정</h2>
+            <ul className="list-decimal space-y-3 pl-5">
+              <li>'프로젝트명'.env 파일 내 demo/prod를 생성한 DB 내용에 따라 수정</li>
+              <li>.env 수정하면서 GGNR_DATA_DIR도 확인후 수정</li>
+            </ul>
           </section>
 
           <section id="base_path" className="scroll-mt-4 space-y-3">
             <h1 className="text-xl font-semibold">BASE_PTH 설정</h1>
-            <h2 className="text-base font-semibold">프로젝트 내 BASE_PATH 설정</h2>
+            <h2 id="base_path_project" className="scroll-mt-4 text-base font-semibold">프로젝트 내 BASE_PATH 설정</h2>
             <p>시연 게이트 서버 등록했을 때, [프로젝트명].env에 <code className="rounded bg-muted px-1 py-0.5">BASE_PATH</code> 설정</p>
             <p className="text-red-500">'/프로젝트명'으로 넣어주세요.</p>
-            <h2 className="text-base font-semibold">게이트서버 설정</h2>
+            <h2 id="base_path_gate" className="scroll-mt-4 text-base font-semibold">게이트서버 설정</h2>
             <ul className="list-decimal space-y-3 pl-5">
               <li>192.168.127.111 VMware 이동(아이디/비번 관련은 노션 '인프라 관리' 참고)</li>
               <li>228 선택 후 웹 콘솔 연결: 비밀번호 노션 참고</li>
@@ -201,7 +229,7 @@ npm -v`}</CodeBlock>
 
           <section id="geoserver_related" className="scroll-mt-4 space-y-3">
             <h1 className="text-xl font-semibold">geoserver 관련</h1>
-            <h2 className="text-base font-semibold">geoserver PORT 변경</h2>
+            <h2 id="geoserver_port" className="scroll-mt-4 text-base font-semibold">geoserver PORT 변경</h2>
             <ul className="list-decimal space-y-3 pl-5">
               <li>geoserver-modules/geoserver/start.ini 파일 수정: jetty.http.port 수정</li>
               <li>구동 시 변경된 PORT 확인하기 때문에, geoserver 포트는 프로젝트 구동 전 수정이 필요합니다.</li>
@@ -210,12 +238,12 @@ npm -v`}</CodeBlock>
 
           <section id="package" className="scroll-mt-4 space-y-3">
             <h1 className="text-xl font-semibold">프로젝트 파일 설치/실행 및 서비스 등록</h1>
-            <h2 className="text-base font-semibold">TypeScript 타입 검사</h2>
+            <h2 id="package_tsc" className="scroll-mt-4 text-base font-semibold">TypeScript 타입 검사</h2>
             <ul className="list-decimal space-y-3 pl-5">
               <li><code className="rounded bg-muted px-1 py-0.5">npx tsc --noEmit</code> 타입 검사</li>
               <li>타입에러 모달이 있을 경우, 수정후 다시 다운로드하세요.</li>
             </ul>
-            <h2 className="text-base font-semibold">옵션 설명</h2>
+            <h2 id="package_options" className="scroll-mt-4 text-base font-semibold">옵션 설명</h2>
             <h3 className="text-sm font-semibold">GNMS 최신</h3>
             <p>GNMS 서버에 업로드되어 있는 최신 버전을 다운로드합니다.</p>
             <h3 className="text-sm font-semibold">현재 서버</h3>
@@ -224,11 +252,16 @@ npm -v`}</CodeBlock>
               <li>폐쇄망: node_modules를 포함한 상태로 설치파일 ZIP을 제공합니다. (<span className="text-red-500">이후 <code className="rounded bg-muted px-1 py-0.5">00_make_ggnr_starter.bat</code>에서 npm install 질문시 'n' 입력</span>)</li>
               <li>개방망: node_modules를 미포함한 상태로 설치파일 ZIP을 제공합니다.</li>
             </ol>
+            <h2 id="package_build" className="scroll-mt-4 text-base font-semibold">빌드 명령어</h2>
+            <p>빌드만 필요할 경우, cmd에 아래와 같이 입력하세요</p>
+            <div className="mt-1">
+              <CodeBlock>{`npx tsx scripts/build-with-project-env.ts [프로젝트명] [타입]`}</CodeBlock>
+            </div>
           </section>
 
           <section id="run" className="scroll-mt-4 space-y-3">
             <h1 className="text-xl font-semibold">구동</h1>
-            <ol className="list-decimal space-y-3 pl-5">
+            <ul className="list-decimal space-y-3 pl-5">
               <li>
                 VM C 드라이브 내 <code className="rounded bg-muted px-1 py-0.5">htdocs</code> 폴더
                 만들고 설치파일 ZIP 풀기(htdocs는 v6 규칙 따라 만듦)
@@ -236,7 +269,7 @@ npm -v`}</CodeBlock>
               <li>
                 <code className="rounded bg-muted px-1 py-0.5">00_make_ggnr_starter.bat</code> 관리자로
                 실행 (ggnr_start.bat 생성 및 선택 시 nssm 등록)
-                <ul className="mt-2 list-disc space-y-2 pl-5">
+                <ul className="mt-2 list-decimal space-y-2 pl-5">
                   <li>
                     node_modules 폴더 여부 확인 후 npm install 진행 질문: y/n 입력 (폐쇄망일 경우
                     node_modules 포함된 설치파일로 가져와야함)
@@ -265,13 +298,19 @@ npm -v`}</CodeBlock>
                     설치 ZIP에 python/env 분할압축본(env_parts)이 있으면 시작 시 복원하고, 없으면
                     건너뜁니다 (없어도 정상 진행).
                   </li>
-                </ul>
+                </ㅕl>
               </li>
+              
+            </ㅕ>
+            <h2 id="run_demo_files" className="scroll-mt-4 text-base font-semibold">시연 첨부파일</h2>
+            <ol className="list-decimal space-y-3 pl-5">
               <li>
-                시연일 경우 nssm에 G드라이브 접근 권한 설정하기
-                <div className="mt-1">
-                  <CodeBlock>{`.\\nssm.exe set GGNR_V7 ObjectName ".\\[Window 계정]" "[Window 비밀번호]"`}</CodeBlock>
-                </div>
+                  시연일 경우 nssm에 G드라이브 접근 권한에 대해 따로 설정이 필요함 (C, D는 상관없음)
+                  <p>소스가 있는 루트 폴더에서 cmd 열고 아래 명령어 입력</p>
+                  <div className="mt-1">
+                    <CodeBlock>{`cd nssm\\win64
+.\\nssm.exe set GGNR_V7 ObjectName ".\\[Window 계정]" "[Window 비밀번호]"`}</CodeBlock>
+                  </div>
               </li>
               <li>
                 구동시 관련 포트 계속 대기중이라면 ( waiting until port [구동될 포트] is FREE...) 해당 포트가 점용중임으로 확인 후 종료가 필요함.
@@ -281,7 +320,7 @@ npm -v`}</CodeBlock>
 
           <section id="remove" className="scroll-mt-4 space-y-3">
             <h1 className="text-xl font-semibold">Window 서비스 등록 삭제</h1>
-            <h2 className="text-base font-semibold">bat 실행</h2>
+            <h2 id="remove_bat" className="scroll-mt-4 text-base font-semibold">bat 실행</h2>
             <ol className="list-decimal space-y-1 pl-5">
               <li>
                 <code className="rounded bg-muted px-1 py-0.5">Win+R</code>:{' '}
@@ -291,7 +330,7 @@ npm -v`}</CodeBlock>
                 <code className="rounded bg-muted px-1 py-0.5">00_remove_ggnr.bat</code> 실행
               </li>
             </ol>
-            <h2 className="text-base font-semibold">수동 제거</h2>
+            <h2 id="remove_manual" className="scroll-mt-4 text-base font-semibold">수동 제거</h2>
             <ol className="list-decimal space-y-2 pl-5">
               <li>
                 <code className="rounded bg-muted px-1 py-0.5">Win+R</code>:{' '}

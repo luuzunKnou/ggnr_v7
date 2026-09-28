@@ -3,6 +3,10 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { CircleQuestionMark, Loader2, Upload } from 'lucide-react';
 import { Button } from '@/app/shadcnComponents/ui/button';
+import {
+  cancelGnmsSourceUploadFromBrowser,
+  uploadPreparedZipToGnmsFromBrowser,
+} from '@/lib/gnmsSourceUploadBrowser';
 import { resolveClientMachineIp, prefetchClientMachineIp } from '@/lib/clientMachineIp';
 import { recordVersionHistoryClient } from '@/lib/recordVersionHistoryClient';
 import {
@@ -836,6 +840,126 @@ export function SourceCodeUploaderContent() {
         throw new Error(`${stageMsg}${errText}${chunkMsg}${chunkIdx}`);
       }
 
+      if (json.browserRemoteRequired === true) {
+        appendLog('로컬 ZIP 준비 완료 — 브라우저→GNMS 원격 전송 시작');
+        patchStages({
+          zip: { state: 'done', detail: typeof json.zipName === 'string' ? json.zipName : undefined },
+          init: { state: 'active' },
+        });
+        setProgressText('브라우저→GNMS 전송 중...');
+        let remoteUpload: Awaited<ReturnType<typeof uploadPreparedZipToGnmsFromBrowser>>;
+        try {
+          remoteUpload = await uploadPreparedZipToGnmsFromBrowser({
+            progressId,
+            zipName: String(json.zipName ?? ''),
+            zipSize: Number(json.zipSize ?? 0),
+            mode: String(json.mode ?? mode),
+            date: String(json.date ?? date),
+            changeNote: String(json.changeNote ?? changeNote),
+            bundleRoot: String(json.bundleRoot ?? ''),
+            includeNodeModules,
+            signal,
+            onLog: appendLog,
+            onChunkProgress: (sent, expected) => {
+              setChunkProgress({ sent, expected });
+              setProgressPct(Math.min(95, 40 + Math.round((sent / Math.max(expected, 1)) * 50)));
+              const chunkDone = sent >= expected && expected > 0;
+              patchStages({
+                init: { state: 'done' },
+                chunk: {
+                  state: chunkDone ? 'done' : 'active',
+                  detail: `${sent}/${expected}`,
+                },
+                ...(chunkDone
+                  ? {
+                      complete: {
+                        state: 'active' as const,
+                        detail: '요청 준비 중',
+                      },
+                    }
+                  : {}),
+              });
+            },
+            onRemotePhase: (phase) => {
+              if (phase === 'init') {
+                setProgressPhase('init');
+                progressPhaseRef.current = 'init';
+                setProgressText(STAGE_LABEL.init);
+                patchStages({ init: { state: 'active' } });
+                return;
+              }
+              if (phase === 'chunk') {
+                setProgressPhase('chunk');
+                progressPhaseRef.current = 'chunk';
+                setProgressText(STAGE_LABEL.chunk);
+                patchStages({
+                  init: { state: 'done' },
+                  chunk: { state: 'active' },
+                });
+                return;
+              }
+              if (phase === 'complete') {
+                setProgressPhase('complete');
+                progressPhaseRef.current = 'complete';
+                if (completeStartedAtRef.current <= 0) {
+                  completeStartedAtRef.current = Date.now();
+                }
+                setProgressText(STAGE_LABEL.complete);
+                setProgressPct(96);
+                appendLog('원격 병합/압축 해제(complete) API 호출 시작');
+                patchStages({
+                  init: { state: 'done' },
+                  chunk: { state: 'done' },
+                  complete: { state: 'active', detail: 'GNMS 응답 대기' },
+                });
+                return;
+              }
+              if (phase === 'npmInstall') {
+                setProgressPhase('npmInstall');
+                progressPhaseRef.current = 'npmInstall';
+                setProgressText(STAGE_LABEL.npmInstall);
+                setProgressPct(98);
+                appendLog('원격 npm install API 호출 시작');
+                patchStages({
+                  complete: { state: 'done' },
+                  npmInstall: { state: 'active' },
+                });
+              }
+            },
+          });
+          remoteUploadIdRef.current = remoteUpload.uploadId;
+        } catch (remoteErr: unknown) {
+          const msg = remoteErr instanceof Error ? remoteErr.message : String(remoteErr);
+          await fetch('/api/source/upload/remote-complete', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ progressId, ok: false, error: msg }),
+          }).catch(() => {});
+          throw remoteErr;
+        }
+
+        const doneRes = await fetch('/api/source/upload/remote-complete', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            progressId,
+            ok: true,
+            remoteResult: remoteUpload,
+            remoteStages: remoteUpload.stages,
+          }),
+          signal,
+        });
+        const doneJson = (await doneRes.json().catch(() => ({}))) as Record<string, unknown>;
+        if (!doneRes.ok) {
+          throw new Error(String(doneJson.error ?? 'remote-complete 실패'));
+        }
+        json = { ...json, ...doneJson, remoteResult: remoteUpload, remoteStages: remoteUpload.stages };
+        mergeServerStages(
+          json.localStages as StageReport[] | undefined,
+          json.remoteStages as StageReport[] | undefined
+        );
+      }
+
       setLastSavedRoot(
         [json.remoteBase, json.zipName].filter(Boolean).join(' / ') || preJson.remoteBase || null
       );
@@ -1138,15 +1262,21 @@ export function SourceCodeUploaderContent() {
                 }
                 if (cancelBlocked) return;
                 const uploadId = remoteUploadIdRef.current;
+                if (uploadId) {
+                  void cancelGnmsSourceUploadFromBrowser({
+                    uploadId,
+                    log: appendLog,
+                  });
+                }
                 const progressId = progressIdRef.current;
-                if (uploadId || progressId) {
+                if (progressId) {
                   void fetch('/api/source/upload/cancel', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                      uploadId: uploadId || undefined,
-                      progressId: progressId || undefined,
+                      progressId,
                       reason: 'user_abort',
+                      localOnly: true,
                     }),
                     keepalive: true,
                   }).catch(() => {});

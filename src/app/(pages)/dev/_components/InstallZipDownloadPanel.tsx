@@ -18,7 +18,7 @@ import { resolveClientMachineIp, prefetchClientMachineIp } from '@/lib/clientMac
 import { streamDownloadFile, streamDownloadResponse } from '@/lib/streamFileDownload';
 import { recordVersionHistoryClient } from '@/lib/recordVersionHistoryClient';
 import {
-  fetchGnmsInstallZipViaLocal,
+  fetchGnmsInstallZipForBrowserSave,
   notifyGnmsLatestDownloadCancel,
 } from '@/lib/sourceVersionClientRelay';
 import { notifyDevVersionHistoryRefresh } from './devVersionHistoryBridge';
@@ -324,8 +324,8 @@ export function InstallZipDownloadPanel() {
     let gnmsFileName: string | undefined;
 
     try {
-      pushLog('GNMS 최신 설치파일 조회 시작 (로컬 서버 경유)');
-      const { downloadRes, fileName, version, jobId } = await fetchGnmsInstallZipViaLocal({
+      pushLog('GNMS 최신 설치파일 조회 시작 (브라우저 → GNMS)');
+      const { downloadRes, fileName, version, jobId } = await fetchGnmsInstallZipForBrowserSave({
         signal,
         log: pushLog,
       });
