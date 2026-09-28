@@ -261,7 +261,7 @@ npm -v`}</CodeBlock>
 
           <section id="run" className="scroll-mt-4 space-y-3">
             <h1 className="text-xl font-semibold">구동</h1>
-            <ol className="list-decimal space-y-3 pl-5">
+            <ul className="list-decimal space-y-3 pl-5">
               <li>
                 VM C 드라이브 내 <code className="rounded bg-muted px-1 py-0.5">htdocs</code> 폴더
                 만들고 설치파일 ZIP 풀기(htdocs는 v6 규칙 따라 만듦)
@@ -269,7 +269,7 @@ npm -v`}</CodeBlock>
               <li>
                 <code className="rounded bg-muted px-1 py-0.5">00_make_ggnr_starter.bat</code> 관리자로
                 실행 (ggnr_start.bat 생성 및 선택 시 nssm 등록)
-                <ul className="mt-2 list-disc space-y-2 pl-5">
+                <ul className="mt-2 list-decimal space-y-2 pl-5">
                   <li>
                     node_modules 폴더 여부 확인 후 npm install 진행 질문: y/n 입력 (폐쇄망일 경우
                     node_modules 포함된 설치파일로 가져와야함)
@@ -298,10 +298,10 @@ npm -v`}</CodeBlock>
                     설치 ZIP에 python/env 분할압축본(env_parts)이 있으면 시작 시 복원하고, 없으면
                     건너뜁니다 (없어도 정상 진행).
                   </li>
-                </ul>
+                </ㅕl>
               </li>
               
-            </ol>
+            </ㅕ>
             <h2 id="run_demo_files" className="scroll-mt-4 text-base font-semibold">시연 첨부파일</h2>
             <ol className="list-decimal space-y-3 pl-5">
               <li>
