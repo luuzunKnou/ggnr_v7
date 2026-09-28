@@ -5,6 +5,7 @@ import { Button } from "@/app/shadcnComponents/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/app/shadcnComponents/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/app/shadcnComponents/ui/table"
 import { call } from "@/lib/api"
+import { loadGnmsBrowserConfig } from "@/lib/gnmsBrowserClient"
 
 type SystemKey =
   | "KAIS"
@@ -182,6 +183,7 @@ export function SystemIntegrationManager() {
   const [geomPlaceNameColumn, setGeomPlaceNameColumn] = useState("")
   const [gnmsDate, setGnmsDate] = useState("")
   const [gnmsBoot, setGnmsBoot] = useState<{ project: string; type: string } | null>(null)
+  const [gnmsServerStatus, setGnmsServerStatus] = useState<"checking" | "ok" | "failed">("checking")
 
   const latestJob = rows[0]
   const latestParsedJob = parseJob(latestJob?.ijl_message ?? "")
@@ -308,6 +310,20 @@ export function SystemIntegrationManager() {
       void fetchGeomTables()
     }
     if (active === "GNMS") {
+      let cancelled = false
+      setGnmsServerStatus("checking")
+      void (async () => {
+        try {
+          const cfg = await loadGnmsBrowserConfig()
+          const base = (cfg.uploadBaseUrl ?? "").replace(/\/+$/, "")
+          if (!base) throw new Error("GNMS uploadBaseUrl이 없습니다")
+          const reachRes = await fetch(base, { method: "GET", cache: "no-store" })
+          if (cancelled) return
+          setGnmsServerStatus(reachRes.status < 500 ? "ok" : "failed")
+        } catch {
+          if (!cancelled) setGnmsServerStatus("failed")
+        }
+      })()
       void (async () => {
         try {
           const res = await call("", "POST", {
@@ -315,14 +331,18 @@ export function SystemIntegrationManager() {
             action: "getGnmsLogBootContext",
             params: {},
           })
+          if (cancelled) return
           setGnmsBoot({
             project: String(res?.data?.project ?? ""),
             type: String(res?.data?.type ?? ""),
           })
         } catch {
-          setGnmsBoot(null)
+          if (!cancelled) setGnmsBoot(null)
         }
       })()
+      return () => {
+        cancelled = true
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active])
@@ -495,35 +515,71 @@ export function SystemIntegrationManager() {
 
       {active === "GNMS" ? (
         <div className="flex flex-col gap-2 shrink-0">
-          <p className="text-sm text-muted-foreground">
-            project / type (기동 인자):{" "}
-            <span className="font-medium text-foreground">
-              {gnmsBoot ? `${gnmsBoot.project} / ${gnmsBoot.type}` : "불러오는 중…"}
-            </span>
-          </p>
-          <label className="text-sm text-muted-foreground flex flex-wrap items-center gap-2">
-            <span>date</span>
-            <input
-              type="date"
-              className="border rounded-md px-2 py-1.5 text-sm bg-background min-w-[12rem] max-w-full"
-              value={gnmsDate}
-              onChange={(e) => setGnmsDate(e.target.value)}
-              disabled={loading}
-              title="date"
+          <div className="flex items-center gap-2 text-sm">
+            <span className="text-muted-foreground">GNMS 서버 상태</span>
+            <span
+              className={`inline-block h-2.5 w-2.5 shrink-0 rounded-full ${
+                gnmsServerStatus === "checking"
+                  ? "animate-pulse bg-amber-500"
+                  : gnmsServerStatus === "ok"
+                    ? "bg-green-500"
+                    : "bg-red-500"
+              }`}
+              title={
+                gnmsServerStatus === "checking"
+                  ? "확인 중"
+                  : gnmsServerStatus === "ok"
+                    ? "OK"
+                    : "FAILED"
+              }
             />
-            <button
-              type="button"
-              className="cursor-pointer text-xs text-primary underline"
-              title="전체"
-              disabled={loading}
-              onClick={() => setGnmsDate("")}
+            <span
+              className={
+                gnmsServerStatus === "ok"
+                  ? "font-medium text-green-600 dark:text-green-400"
+                  : gnmsServerStatus === "failed"
+                    ? "font-medium text-red-600 dark:text-red-400"
+                    : "text-muted-foreground"
+              }
             >
-              전체
-            </button>
-            <span className="text-xs text-muted-foreground">
-              비우면 C:\logs + backup 전체 → GNMS · 지정 시 해당 날짜만
+              {gnmsServerStatus === "checking"
+                ? "확인 중"
+                : gnmsServerStatus === "ok"
+                  ? "OK"
+                  : "FAILED"}
             </span>
-          </label>
+          </div>
+          <div className="flex flex-col gap-2">
+            <p className="text-sm text-muted-foreground">
+              project / type (기동 인자):{" "}
+              <span className="font-medium text-foreground">
+                {gnmsBoot ? `${gnmsBoot.project} / ${gnmsBoot.type}` : "불러오는 중…"}
+              </span>
+            </p>
+            <label className="text-sm text-muted-foreground flex flex-wrap items-center gap-2">
+              <span>date</span>
+              <input
+                type="date"
+                className="border rounded-md px-2 py-1.5 text-sm bg-background min-w-[12rem] max-w-full"
+                value={gnmsDate}
+                onChange={(e) => setGnmsDate(e.target.value)}
+                disabled={loading}
+                title="date"
+              />
+              <button
+                type="button"
+                className="cursor-pointer text-xs text-primary underline"
+                title="전체"
+                disabled={loading}
+                onClick={() => setGnmsDate("")}
+              >
+                전체
+              </button>
+              <span className="text-xs text-muted-foreground">
+                비우면 C:\logs + backup 전체 → GNMS · 지정 시 해당 날짜만
+              </span>
+            </label>
+          </div>
         </div>
       ) : null}
 
