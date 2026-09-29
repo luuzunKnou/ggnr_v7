@@ -447,7 +447,7 @@ export async function getRiverBasicPlanAreaGeom3857(params?: {
 
 /**
  * 시작·종료 횡단선으로 하천 면을 잘라, 두 선 사이 구간만 남긴 뒤 지적 조회.
- * 사용자기 그린 짧은 선에 모두 닿는 조각만 고른다(가로 연장선 오선택 방지).
+ * 그린 선 길이와 무관하게, 선을 건너지 않고 이어진 조각 묶음 중 두 선에 모두 닿는 묶음만 고른다.
  */
 export async function listRiverBasicPlanPrivateLand(params?: {
   tab?: RiverType;
@@ -494,27 +494,28 @@ export async function listRiverBasicPlanPrivateLand(params?: {
   }).join(' AND ');
   const safeTable = tableName.replace(/"/g, '""');
 
-  /** 투영 좌표계에서 선을 양쪽으로 늘려 하천을 완전히 자르도록 함 (미터) */
+  /** 그린 선 끝이 제방에 살짝 못 미쳐도 자르도록 양끝만 조금 늘림 (미터). 길게 늘리면 먼 굽이까지 잘림 */
+  const LINE_END_MARGIN_M = 5;
   const extendLineSql = (alias: string) => `
     CASE
       WHEN ST_Length(${alias}.g) < 1e-3 THEN ${alias}.g
       ELSE ST_MakeLine(
         ST_Translate(
           ST_StartPoint(${alias}.g),
-          -(ST_X(ST_EndPoint(${alias}.g)) - ST_X(ST_StartPoint(${alias}.g))) / ST_Length(${alias}.g) * 50000,
-          -(ST_Y(ST_EndPoint(${alias}.g)) - ST_Y(ST_StartPoint(${alias}.g))) / ST_Length(${alias}.g) * 50000
+          -(ST_X(ST_EndPoint(${alias}.g)) - ST_X(ST_StartPoint(${alias}.g))) / ST_Length(${alias}.g) * ${LINE_END_MARGIN_M},
+          -(ST_Y(ST_EndPoint(${alias}.g)) - ST_Y(ST_StartPoint(${alias}.g))) / ST_Length(${alias}.g) * ${LINE_END_MARGIN_M}
         ),
         ST_Translate(
           ST_EndPoint(${alias}.g),
-          (ST_X(ST_EndPoint(${alias}.g)) - ST_X(ST_StartPoint(${alias}.g))) / ST_Length(${alias}.g) * 50000,
-          (ST_Y(ST_EndPoint(${alias}.g)) - ST_Y(ST_StartPoint(${alias}.g))) / ST_Length(${alias}.g) * 50000
+          (ST_X(ST_EndPoint(${alias}.g)) - ST_X(ST_StartPoint(${alias}.g))) / ST_Length(${alias}.g) * ${LINE_END_MARGIN_M},
+          (ST_Y(ST_EndPoint(${alias}.g)) - ST_Y(ST_StartPoint(${alias}.g))) / ST_Length(${alias}.g) * ${LINE_END_MARGIN_M}
         )
       )
     END`;
 
   try {
     const zoneSql = useSplit
-      ? `WITH src AS (
+      ? `WITH RECURSIVE src AS (
            SELECT ST_CollectionExtract(ST_MakeValid(ST_UnaryUnion(ST_Collect(ST_MakeValid(geom)))), 3) AS g
            FROM layer."${safeTable}"
            WHERE ${where} AND geom IS NOT NULL
@@ -547,25 +548,59 @@ export async function listRiverBasicPlanPrivateLand(params?: {
            CROSS JOIN LATERAL ST_Dump(s.g) AS d
          ),
          parts AS (
-           SELECT (ST_Dump(ST_CollectionExtract(ST_MakeValid(g), 3))).geom AS g
-           FROM split_twice
-           WHERE g IS NOT NULL
+           SELECT row_number() OVER () AS id, d.g
+           FROM (
+             SELECT (ST_Dump(ST_CollectionExtract(ST_MakeValid(g), 3))).geom AS g
+             FROM split_twice
+             WHERE g IS NOT NULL
+           ) d
+           WHERE ST_Area(d.g) > 0.01
+         ),
+         cut_zone AS (
+           SELECT ST_Buffer(ST_Collect(l1.g, l2.g), 2.5) AS g FROM l1, l2
          ),
          /**
-          * 사용자가 그린 짧은 시작·종료선에 모두 닿는 조각만 = 두 선 사이.
-          * 연장선 교차/반평면은 가로선이 먼 굽이를 다시 자를 때 오른쪽 구간을 잘못 고름.
+          * 조각끼리 3m 안이면 연결(하천 도형 사이 틈 허용).
+          * 맞닿은 곳이 전부 시작·종료선 위면 선을 건넌 것이라 연결하지 않음.
           */
+         edges AS (
+           SELECT a.id AS a, b.id AS b
+           FROM parts a
+           JOIN parts b ON a.id <> b.id AND ST_DWithin(a.g, b.g, 3)
+           CROSS JOIN cut_zone c
+           WHERE NOT ST_CoveredBy(
+             ST_Intersection(ST_Buffer(a.g, 1.5), ST_Buffer(b.g, 1.5)),
+             c.g
+           )
+         ),
+         comp(id, root) AS (
+           SELECT id, id FROM parts
+           UNION
+           SELECT e.b, c.root FROM comp c JOIN edges e ON e.a = c.id
+         ),
+         comp_min AS (
+           SELECT id, MIN(root) AS r FROM comp GROUP BY id
+         ),
+         comp_touch AS (
+           SELECT cm.r,
+                  bool_or(ST_DWithin(p.g, l1.g, 2)) AS t1,
+                  bool_or(ST_DWithin(p.g, l2.g, 2)) AS t2
+           FROM comp_min cm
+           JOIN parts p ON p.id = cm.id
+           CROSS JOIN l1
+           CROSS JOIN l2
+           GROUP BY cm.r
+         ),
+         /** 선을 건너지 않고 이어진 묶음 중 시작·종료선 모두에 닿는 묶음 = 두 선 사이 하천 */
          mid AS (
            SELECT ST_CollectionExtract(
              ST_MakeValid(ST_UnaryUnion(ST_Collect(p.g))),
              3
            ) AS g
            FROM parts p
-           CROSS JOIN l1_raw
-           CROSS JOIN l2_raw
-           WHERE ST_Area(p.g) > 1
-             AND ST_DWithin(p.g, l1_raw.g, 2)
-             AND ST_DWithin(p.g, l2_raw.g, 2)
+           JOIN comp_min cm ON cm.id = p.id
+           JOIN comp_touch ct ON ct.r = cm.r
+           WHERE ct.t1 AND ct.t2
          )
          SELECT
            CASE WHEN g IS NULL OR ST_IsEmpty(g) THEN NULL ELSE ST_AsText(ST_Transform(g, 5181)) END AS wkt5181,
