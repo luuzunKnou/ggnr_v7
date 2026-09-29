@@ -2471,10 +2471,21 @@ export default function OpenLayersMap({
       const id = detail?.id?.trim();
       if (!id) return;
       const active = detail.active === true;
-      if (active && id === 'cadastral') {
-        const extra = Array.isArray(detail.tableNames)
+      const extra =
+        id === 'cadastral' && Array.isArray(detail.tableNames)
           ? detail.tableNames.map((t) => String(t ?? '').trim().toLowerCase()).filter(Boolean)
           : [];
+      // 지정한 지적도만 끔 — 나머지 선택은 유지, 모두 비면 목록 비움 처리에서 버튼 해제
+      if (!active && id === 'cadastral' && extra.length > 0) {
+        setVisibleCadastralLayerNames((prev) => {
+          if (prev == null || !extra.some((t) => prev.has(t))) return prev;
+          const next = new Set(prev);
+          for (const t of extra) next.delete(t);
+          return next;
+        });
+        return;
+      }
+      if (active && id === 'cadastral') {
         setVisibleCadastralLayerNames((prev) => {
           if (extra.length > 0) {
             const next = new Set(prev ?? []);

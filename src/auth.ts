@@ -13,13 +13,6 @@ class SignUpPendingError extends CredentialsSignin {
   code = 'signup_pending';
 }
 
-/** 로그인 인증오류 5회 이상 */
-class LoginFailExceededError extends CredentialsSignin {
-  code = 'login_fail_exceeded';
-}
-
-const MAX_LOGIN_FAIL_CNT = 5;
-
 declare module 'next-auth' {
   interface User {
     /** 마스터 로그인 시 가입 승인/반려 안내용 */
@@ -108,10 +101,7 @@ export const authConfig = {
         const bypassLoginFail = usedMaster || isSuperUser(usrId);
         const failCnt = u.usrLoginFailCnt ?? 0;
 
-        if (!bypassLoginFail && failCnt >= MAX_LOGIN_FAIL_CNT) {
-          throw new LoginFailExceededError();
-        }
-
+        // 인증오류 횟수는 관리자 확인용으로만 누적 — 횟수 초과 로그인 차단은 하지 않음
         const ok = usedMaster || (await verifyPassword(u.usrPwd ?? null, password));
         if (!ok) {
           if (!bypassLoginFail) {

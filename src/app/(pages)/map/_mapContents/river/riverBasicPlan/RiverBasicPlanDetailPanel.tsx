@@ -64,6 +64,7 @@ import {
   RiverBasicPlanPrivateLandCategoryPanel,
   RiverBasicPlanPrivateLandRoot,
   RiverBasicPlanPrivateLandSection,
+  useRiverBasicPlanPrivateLandActive,
   useRiverBasicPlanPrivateLandCategoryView,
 } from "./RiverBasicPlanPrivateLandProto";
 
@@ -174,6 +175,21 @@ function PrivateLandScrollGate({ children, indexViewMode }: PrivateLandScrollGat
   const categoryView = useRiverBasicPlanPrivateLandCategoryView();
   if (!indexViewMode && categoryView) return <RiverBasicPlanPrivateLandCategoryPanel />;
   return <>{children}</>;
+}
+
+/** 색인도 목록 — 사유지 사용 중에만 높이 제한·스크롤 (사유지 영역이 밀려나지 않게) */
+function IndexListGrid({ children }: { children: ReactNode }) {
+  const privateLandActive = useRiverBasicPlanPrivateLandActive();
+  return (
+    <div
+      className={cn(
+        "grid grid-cols-2 content-start gap-1.5",
+        privateLandActive && "max-h-[300px] overflow-y-auto pr-0.5"
+      )}
+    >
+      {children}
+    </div>
+  );
 }
 
 type Props = {
@@ -1202,20 +1218,6 @@ export function RiverBasicPlanDetailPanel({ tab, riverName, onClose }: Props) {
           })}
           <RiverBasicPlanPrivateLandButton />
         </div>
-        {showReportFolderHint ? (
-          reportFolderRel ? (
-            <p
-              className="mt-1.5 text-[10px] leading-snug text-muted-foreground font-mono break-all"
-              title={reportFolderRel}
-            >
-              {reportFolderRel}
-            </p>
-          ) : selected && !loadingDetail ? (
-            <p className="mt-1.5 text-[10px] leading-snug text-muted-foreground">
-              보고서 폴더: river_type · river_code · plan_year · plan_len 확인 필요
-            </p>
-          ) : null
-        ) : null}
       </div>
 
       <div className="flex-1 min-h-0 overflow-auto">
@@ -1418,7 +1420,7 @@ export function RiverBasicPlanDetailPanel({ tab, riverName, onClose }: Props) {
             )}
           </>
         ) : (
-          <div className="p-3 space-y-4">
+          <div className="p-3 space-y-3">
             <div>
               <p className="text-[11px] font-medium text-muted-foreground mb-2">하천기본계획</p>
               {error ? (
@@ -1454,7 +1456,7 @@ export function RiverBasicPlanDetailPanel({ tab, riverName, onClose }: Props) {
               )}
             </div>
 
-            <div>
+            <div className="border-t border-border pt-3">
               <div className="mb-2 flex items-center justify-between gap-2">
                 <button
                   type="button"
@@ -1481,7 +1483,7 @@ export function RiverBasicPlanDetailPanel({ tab, riverName, onClose }: Props) {
                 ) : indexList.length === 0 ? (
                   <p className="text-sm text-muted-foreground py-1">표시할 색인도 목록이 없습니다.</p>
                 ) : (
-                  <div className="grid grid-cols-2 gap-1.5">
+                  <IndexListGrid>
                     {indexList.map((it) => (
                       <button
                         key={`index-list-${it.ogcFid}`}
@@ -1506,7 +1508,7 @@ export function RiverBasicPlanDetailPanel({ tab, riverName, onClose }: Props) {
                         </span>
                       </button>
                     ))}
-                  </div>
+                  </IndexListGrid>
                 )
               ) : null}
             </div>
@@ -1536,6 +1538,7 @@ export function RiverBasicPlanDetailPanel({ tab, riverName, onClose }: Props) {
         items={reportPdfPreview.items}
         initialIndex={reportPdfPreview.initialIndex}
         onClose={() => setReportPdfPreview(null)}
+        titleHint={showReportFolderHint ? reportFolderRel : null}
       />
     )}
     </>

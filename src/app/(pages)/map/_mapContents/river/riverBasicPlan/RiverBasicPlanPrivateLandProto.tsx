@@ -162,6 +162,12 @@ export function useRiverBasicPlanPrivateLandCategoryView(): string | null {
   return useContext(Ctx)?.categoryView ?? null;
 }
 
+/** 사유지 선 긋기·목록 표시 중인지 */
+export function useRiverBasicPlanPrivateLandActive(): boolean {
+  const phase = useContext(Ctx)?.phase ?? 'off';
+  return phase !== 'off';
+}
+
 export function RiverBasicPlanPrivateLandRoot({
   tab,
   riverName,
@@ -176,6 +182,8 @@ export function RiverBasicPlanPrivateLandRoot({
   const layerRef = useRef<VectorLayer<VectorSource> | null>(null);
   const drawRef = useRef<Draw | null>(null);
   const lineRef = useRef<LineString | null>(null);
+  /** 사유지 조회로 연속지적을 켰는지 — 닫을 때 그것만 끔 */
+  const cadastralOnRef = useRef(false);
 
   const [phase, setPhase] = useState<Phase>('off');
   const [hint, setHint] = useState('');
@@ -220,8 +228,19 @@ export function RiverBasicPlanPrivateLandRoot({
     lineRef.current = null;
   }, [mapRef]);
 
+  const turnOffCadastral = useCallback(() => {
+    if (!cadastralOnRef.current) return;
+    cadastralOnRef.current = false;
+    window.dispatchEvent(
+      new CustomEvent('ggnr-map-control-set', {
+        detail: { id: 'cadastral', active: false, tableNames: ['jijuk'] },
+      })
+    );
+  }, []);
+
   const reset = useCallback(() => {
     clearMap();
+    turnOffCadastral();
     setPhase('off');
     setHint('');
     setError('');
@@ -231,7 +250,7 @@ export function RiverBasicPlanPrivateLandRoot({
     setPickedPnu(null);
     setOwner(null);
     setOwnerError('');
-  }, [clearMap]);
+  }, [clearMap, turnOffCadastral]);
 
   const clearForRedraw = useCallback(() => {
     clearMap();
@@ -249,7 +268,13 @@ export function RiverBasicPlanPrivateLandRoot({
     reset();
   }, [planKey, reset]);
 
-  useEffect(() => () => clearMap(), [clearMap]);
+  useEffect(
+    () => () => {
+      clearMap();
+      turnOffCadastral();
+    },
+    [clearMap, turnOffCadastral]
+  );
 
   const ensureLayer = useCallback((map: OlMap) => {
     if (sourceRef.current && layerRef.current) return sourceRef.current;
@@ -378,6 +403,13 @@ export function RiverBasicPlanPrivateLandRoot({
         setPhase('done');
         setSectionOpen(true);
         setHint('');
+        // 연속지적만 추가로 켬 — 사용자가 켠 읍면동·리 지적도는 건드리지 않음
+        cadastralOnRef.current = true;
+        window.dispatchEvent(
+          new CustomEvent('ggnr-map-control-set', {
+            detail: { id: 'cadastral', active: true, tableNames: ['jijuk'] },
+          })
+        );
       } catch {
         setError('필지 목록을 불러오지 못했습니다.');
         setPhase('done');
@@ -657,7 +689,7 @@ function RiverBasicPlanPrivateLandMapGuide() {
 }
 
 export function RiverBasicPlanPrivateLandButton() {
-  const { canStart, phase, begin, reset, redraw } = useLand();
+  const { canStart, phase, begin, reset } = useLand();
   const drawing = phase === 'line1' || phase === 'line2' || phase === 'querying';
   const active = drawing || phase === 'done';
   return (
@@ -665,11 +697,7 @@ export function RiverBasicPlanPrivateLandButton() {
       type="button"
       disabled={!canStart}
       onClick={() => {
-        if (phase === 'done') {
-          redraw();
-          return;
-        }
-        if (drawing) {
+        if (active) {
           reset();
           return;
         }
@@ -681,7 +709,7 @@ export function RiverBasicPlanPrivateLandButton() {
           : drawing
             ? '사유지 선 긋기 취소'
             : phase === 'done'
-              ? '다시 선 긋기'
+              ? '사유지 닫기'
               : '시작선·종료선 사이의 소유 필지'
       }
       className={cn(
@@ -693,7 +721,7 @@ export function RiverBasicPlanPrivateLandButton() {
             : 'border-border bg-muted/50 text-foreground/90 hover:bg-muted'
       )}
     >
-      {drawing && phase !== 'done' ? (
+      {drawing ? (
         <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" aria-hidden />
       ) : (
         <Users className="h-3.5 w-3.5 shrink-0" aria-hidden />
@@ -712,7 +740,7 @@ export function RiverBasicPlanPrivateLandSection() {
   const total = groups.reduce((n, [, rows]) => n + rows.length, 0);
 
   return (
-    <div>
+    <div className="border-t border-border pt-3">
       <div className="mb-2 flex items-center justify-between gap-2">
         <button
           type="button"
