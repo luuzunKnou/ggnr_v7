@@ -298,10 +298,9 @@ npm -v`}</CodeBlock>
                     설치 ZIP에 python/env 분할압축본(env_parts)이 있으면 시작 시 복원하고, 없으면
                     건너뜁니다 (없어도 정상 진행).
                   </li>
-                </ㅕl>
+                </ul>
               </li>
-              
-            </ㅕ>
+            </ul>
             <h2 id="run_demo_files" className="scroll-mt-4 text-base font-semibold">시연 첨부파일</h2>
             <ol className="list-decimal space-y-3 pl-5">
               <li>
