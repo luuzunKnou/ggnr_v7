@@ -10,7 +10,8 @@ import {
   useState,
   type ReactNode,
 } from 'react';
-import { ChevronDown, ChevronLeft, ChevronRight, Loader2, Users } from 'lucide-react';
+import { createPortal } from 'react-dom';
+import { ChevronDown, ChevronLeft, ChevronRight, Loader2, RotateCcw, Users, X } from 'lucide-react';
 import Draw from 'ol/interaction/Draw';
 import VectorLayer from 'ol/layer/Vector';
 import VectorSource from 'ol/source/Vector';
@@ -18,7 +19,7 @@ import { Feature } from 'ol';
 import GeoJSON from 'ol/format/GeoJSON';
 import { LineString } from 'ol/geom';
 import WKT from 'ol/format/WKT';
-import { Fill, Stroke, Style } from 'ol/style';
+import { Circle as CircleStyle, Fill, Stroke, Style } from 'ol/style';
 import type { Map as OlMap } from 'ol';
 import type Geometry from 'ol/geom/Geometry';
 import { call } from '@/lib/api';
@@ -29,6 +30,11 @@ import { useMapContext } from '../../../_mapComponents/MapContext';
 import { MapSideDetailScroll } from '../../../_mapComponents/MapSideDetailScroll';
 import { scheduleFitMapToExtent3857 } from '../../../_mapComponents/config/mapAutoNavigation';
 import { MAP_AUTO_NAV_MAX_ZOOM } from '../../../_mapComponents/config/mapDefaults';
+import { useMapVisualCenterPixel } from '../../../_mapComponents/hooks/useMapVisualCenterPixel';
+import {
+  GEOM_EDIT_HINT_BELOW_SEARCH_GAP,
+  useSearchBarOffset,
+} from '../../../searchBarOffsetContext';
 
 type Phase = 'off' | 'line1' | 'line2' | 'querying' | 'done';
 
@@ -78,13 +84,20 @@ const PLAN_ATTR_VALUE =
 const TABLE_TH_CLASS =
   'border-b border-border bg-muted px-2.5 py-1.5 align-middle text-[11px] font-medium text-muted-foreground';
 
+/** 선·정점 — 기존 파란 활성화 표시 */
 const LINE_STYLE = new Style({
-  stroke: new Stroke({ color: '#2196F3', width: 2.5 }),
+  stroke: new Stroke({ color: '#2196F3', width: 3 }),
+  image: new CircleStyle({
+    radius: 5,
+    fill: new Fill({ color: 'rgba(33, 150, 243, 0.95)' }),
+    stroke: new Stroke({ color: '#fff', width: 1.5 }),
+  }),
 });
 const STRIP_STYLE = new Style({
   stroke: new Stroke({ color: '#2196F3', width: 1 }),
   fill: new Fill({ color: 'rgba(33, 150, 243, 0.15)' }),
 });
+/** 필지 (소유구분 진입 시) */
 const PARCEL_STYLE = new Style({
   stroke: new Stroke({ color: '#F59E0B', width: 2 }),
   fill: new Fill({ color: 'rgba(245, 158, 11, 0.28)' }),
@@ -125,6 +138,10 @@ type LandCtx = {
   ownerError: string;
   owner: Record<string, string> | null;
   begin: () => void;
+  /** 선·결과 지우고 종료 */
+  reset: () => void;
+  /** 선부터 다시 긋기 */
+  redraw: () => void;
   setSectionOpen: (v: boolean | ((prev: boolean) => boolean)) => void;
   openCategoryView: (label: string) => void;
   closeCategoryView: () => void;
@@ -206,6 +223,18 @@ export function RiverBasicPlanPrivateLandRoot({
   const reset = useCallback(() => {
     clearMap();
     setPhase('off');
+    setHint('');
+    setError('');
+    setParcels([]);
+    setSectionOpen(true);
+    setCategoryView(null);
+    setPickedPnu(null);
+    setOwner(null);
+    setOwnerError('');
+  }, [clearMap]);
+
+  const clearForRedraw = useCallback(() => {
+    clearMap();
     setHint('');
     setError('');
     setParcels([]);
@@ -380,7 +409,7 @@ export function RiverBasicPlanPrivateLandRoot({
         if (which === 'line1') {
           lineRef.current = geom;
           setPhase('line2');
-          setHint('종료선을 자유롭게 긋으세요');
+          setHint('종료선을 두 점으로 긋으세요');
           startDraw('line2', map);
           return;
         }
@@ -400,21 +429,22 @@ export function RiverBasicPlanPrivateLandRoot({
 
   const begin = useCallback(() => {
     if (!canStart) return;
-    if (phase === 'line1' || phase === 'line2' || phase === 'querying') {
-      reset();
-      return;
-    }
     const map = mapRef?.current ?? null;
     if (!map) {
       setError('지도가 없습니다.');
       return;
     }
-    reset();
+    clearForRedraw();
     setPhase('line1');
-    setHint('시작선을 자유롭게 긋으세요');
+    setHint('시작선을 두 점으로 긋으세요');
     setError('');
     startDraw('line1', map);
-  }, [canStart, mapRef, phase, reset, startDraw]);
+  }, [canStart, clearForRedraw, mapRef, startDraw]);
+
+  const redraw = useCallback(() => {
+    if (!canStart) return;
+    begin();
+  }, [begin, canStart]);
 
   const openCategoryView = useCallback((label: string) => {
     setCategoryView(label);
@@ -428,9 +458,7 @@ export function RiverBasicPlanPrivateLandRoot({
     setPickedPnu(null);
     setOwner(null);
     setOwnerError('');
-    const source = sourceRef.current;
-    if (source) clearParcelFeatures(source);
-  }, [clearParcelFeatures]);
+  }, []);
 
   const pick = useCallback((pnu: string) => {
     setPickedPnu((prev) => (prev === pnu ? null : pnu));
@@ -438,14 +466,18 @@ export function RiverBasicPlanPrivateLandRoot({
 
   /** 소유구분 진입·필지 선택 시 지도에 필지 표시 */
   useEffect(() => {
-    if (!categoryView) return;
+    if (phase !== 'done' || !categoryView) {
+      const source = sourceRef.current;
+      if (source && !categoryView) clearParcelFeatures(source);
+      return;
+    }
     const rows = parcels.filter((p) => (p.ownGbn || '미상') === categoryView);
     syncParcelFeatures(rows, pickedPnu, true);
-  }, [categoryView, parcels, pickedPnu, syncParcelFeatures]);
+  }, [categoryView, clearParcelFeatures, parcels, phase, pickedPnu, syncParcelFeatures]);
 
-  /** 모달 활성 시 지도에서 필지 클릭 → 목록 선택 */
+  /** 소유구분 상세 중 지도에서 필지 클릭 → 목록 선택 */
   useEffect(() => {
-    if (!categoryView) return;
+    if (!categoryView || phase !== 'done') return;
     const map = mapRef?.current ?? null;
     if (!map) return;
 
@@ -467,14 +499,14 @@ export function RiverBasicPlanPrivateLandRoot({
       );
       if (!hitPnu) return;
       evt.stopPropagation();
-      setPickedPnu(hitPnu);
+      setPickedPnu((prev) => (prev === hitPnu ? null : hitPnu));
     };
 
     map.on('singleclick', onClick);
     return () => {
       map.un('singleclick', onClick);
     };
-  }, [categoryView, mapRef]);
+  }, [categoryView, mapRef, phase]);
 
   useEffect(() => {
     if (!pickedPnu) {
@@ -527,6 +559,8 @@ export function RiverBasicPlanPrivateLandRoot({
       ownerError,
       owner,
       begin,
+      reset,
+      redraw,
       setSectionOpen,
       openCategoryView,
       closeCategoryView,
@@ -549,25 +583,109 @@ export function RiverBasicPlanPrivateLandRoot({
       phase,
       pick,
       pickedPnu,
+      redraw,
+      reset,
       sectionOpen,
     ]
   );
 
-  return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
+  return (
+    <Ctx.Provider value={value}>
+      {children}
+      <RiverBasicPlanPrivateLandMapGuide />
+    </Ctx.Provider>
+  );
+}
+
+/** 점용대장·도로망과 같이 — 검색창 아래 지도 안내 + 다시긋기·초기화 */
+function RiverBasicPlanPrivateLandMapGuide() {
+  const { phase, hint, reset, redraw } = useLand();
+  const mapContext = useMapContext();
+  const map = mapContext?.mapInstanceRef?.current ?? null;
+  const mapPaddingLeft = mapContext?.mapPaddingLeft ?? 0;
+  const active =
+    phase === 'line1' || phase === 'line2' || phase === 'querying' || phase === 'done';
+  const { inputBottomPx } = useSearchBarOffset();
+  const hintTopPx = inputBottomPx + GEOM_EDIT_HINT_BELOW_SEARCH_GAP;
+  const centerPixel = useMapVisualCenterPixel(map, active, mapPaddingLeft);
+  const bannerHost = map?.getTargetElement()?.parentElement ?? null;
+
+  if (!active || !bannerHost) return null;
+
+  const guideText =
+    phase === 'line1'
+      ? '시작선을 두 점으로 긋으세요'
+      : phase === 'line2'
+        ? '종료선을 두 점으로 긋으세요'
+        : phase === 'querying'
+          ? '겹치는 필지를 조회하는 중'
+          : hint.trim() || '시작·종료선 사이 필지를 확인하세요';
+
+  const iconBtn =
+    'pointer-events-auto inline-flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-full bg-muted text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-50';
+
+  return createPortal(
+    <div
+      className="pointer-events-none absolute z-[15] flex -translate-x-1/2 flex-col items-center gap-1.5"
+      style={
+        centerPixel
+          ? { left: centerPixel.x, top: hintTopPx }
+          : { left: '50%', top: hintTopPx }
+      }
+    >
+      <div className="pointer-events-auto flex max-w-[min(100vw-16px,560px)] flex-wrap items-center gap-1.5 rounded-full border border-border bg-background/95 py-1.5 pr-1.5 pl-4 text-foreground shadow-lg backdrop-blur">
+        <span className="text-[12px] leading-snug sm:text-sm">{guideText}</span>
+        {phase === 'done' ? (
+          <button type="button" onClick={redraw} title="다시 긋기" aria-label="다시 긋기" className={iconBtn}>
+            <RotateCcw className="size-3.5" aria-hidden />
+          </button>
+        ) : null}
+        <button
+          type="button"
+          onClick={reset}
+          title="초기화"
+          aria-label="초기화"
+          className={iconBtn}
+          disabled={phase === 'querying'}
+        >
+          <X className="size-3.5" aria-hidden />
+        </button>
+      </div>
+    </div>,
+    bannerHost
+  );
 }
 
 export function RiverBasicPlanPrivateLandButton() {
-  const { canStart, phase, begin } = useLand();
+  const { canStart, phase, begin, reset, redraw } = useLand();
   const drawing = phase === 'line1' || phase === 'line2' || phase === 'querying';
   const active = drawing || phase === 'done';
   return (
     <button
       type="button"
       disabled={!canStart}
-      onClick={begin}
-      title={canStart ? '시작선·종료선 사이의 소유 필지' : '기본계획을 선택하세요'}
+      onClick={() => {
+        if (phase === 'done') {
+          redraw();
+          return;
+        }
+        if (drawing) {
+          reset();
+          return;
+        }
+        begin();
+      }}
+      title={
+        !canStart
+          ? '기본계획을 선택하세요'
+          : drawing
+            ? '사유지 선 긋기 취소'
+            : phase === 'done'
+              ? '다시 선 긋기'
+              : '시작선·종료선 사이의 소유 필지'
+      }
       className={cn(
-        'h-7 text-[11px] rounded border flex-1 min-w-0 whitespace-nowrap inline-flex items-center justify-center gap-1',
+        'h-7 w-full text-[11px] rounded border min-w-0 whitespace-nowrap inline-flex items-center justify-center gap-1',
         !canStart
           ? 'border-border bg-muted/50 text-muted-foreground opacity-50 cursor-not-allowed'
           : active
@@ -575,7 +693,7 @@ export function RiverBasicPlanPrivateLandButton() {
             : 'border-border bg-muted/50 text-foreground/90 hover:bg-muted'
       )}
     >
-      {drawing ? (
+      {drawing && phase !== 'done' ? (
         <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" aria-hidden />
       ) : (
         <Users className="h-3.5 w-3.5 shrink-0" aria-hidden />

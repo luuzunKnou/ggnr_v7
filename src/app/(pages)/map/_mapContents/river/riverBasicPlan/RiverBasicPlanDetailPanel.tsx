@@ -60,6 +60,7 @@ import {
   riverBasicPlanReportRelativeDir,
 } from "./riverBasicPlanReportFolder";
 import {
+  RiverBasicPlanPrivateLandButton,
   RiverBasicPlanPrivateLandCategoryPanel,
   RiverBasicPlanPrivateLandRoot,
   RiverBasicPlanPrivateLandSection,
@@ -1133,7 +1134,7 @@ export function RiverBasicPlanDetailPanel({ tab, riverName, onClose }: Props) {
       </div>
 
       <div className="shrink-0 border-b border-border px-3 py-2 bg-background">
-        <div className="flex gap-1.5">
+        <div className="grid grid-cols-5 gap-1.5">
           {actionButtons.map(({ label, icon: Icon }) => {
             const isReport = label === "보고서";
             const layerName = layerByLabel[label];
@@ -1176,7 +1177,7 @@ export function RiverBasicPlanDetailPanel({ tab, riverName, onClose }: Props) {
                 }}
                 disabled={isReport ? reportButtonDisabled : !layerName}
                 className={cn(
-                  "h-7 text-[11px] rounded border flex-1 min-w-0 whitespace-nowrap inline-flex items-center justify-center gap-1",
+                  "h-7 w-full text-[11px] rounded border min-w-0 whitespace-nowrap inline-flex items-center justify-center gap-1",
                   isReport
                     ? reportButtonDisabled
                       ? "border-border bg-muted/50 text-muted-foreground opacity-50 cursor-not-allowed"
@@ -1199,6 +1200,7 @@ export function RiverBasicPlanDetailPanel({ tab, riverName, onClose }: Props) {
               </button>
             );
           })}
+          <RiverBasicPlanPrivateLandButton />
         </div>
         {showReportFolderHint ? (
           reportFolderRel ? (

@@ -10,7 +10,7 @@
     "defineLayer:rebuild": "tsx src/scripts/rebuildDefineLayerFromCsv.ts",
     "defineLayer:merge-standard": "tsx src/scripts/mergeStandardCsvIntoDefineLayer.ts",
     "prebuild": "npm run schema:index",
-    "build": "next build",
+    "build": "next build --webpack",
     "build:project": "tsx scripts/build-with-project-env.ts",
     "start": "tsx scripts/run.ts start",
     "lint": "eslint",
