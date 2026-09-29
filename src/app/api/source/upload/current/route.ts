@@ -14,11 +14,10 @@ import {
 } from '@/app/(pages)/dev/_components/sourceUpload/sourceUploadProfiles';
 import {
   RemoteUploadError,
-  cancelRemoteSourceUpload,
   getRemoteUploadBase,
-  uploadZipByChunks,
   type RemoteStageReport,
 } from '@/service/sourceUploadRemote';
+import { setPreparedSourceZip } from '@/service/sourceUploadPreparedZip';
 import {
   compareSchemaWithConnectedDb,
   formatDbCompareDialogSummary,
@@ -31,12 +30,10 @@ import {
 } from '@/service/sourceUploadScanSummary';
 import {
   buildSourceUploadFailBody,
-  buildSourceUploadSuccessBody,
   formatDbSchemaMismatchWarning,
 } from '@/lib/sourceUploadHistoryMessage';
 import { recordUploadFlowHistory } from '@/service/sourceUploadHistoryService';
 import {
-  completeUploadProgress,
   createProgressId,
   failUploadProgress,
   getUploadProgress,
@@ -167,15 +164,6 @@ function uploadErrorResponse(params: {
   );
 }
 
-function npmInstallNote(
-  includeNodeModules: boolean,
-  npmInstall?: { ok?: boolean; message?: string; skipped?: boolean }
-): string | undefined {
-  if (includeNodeModules) return 'npm install 생략';
-  if (!npmInstall) return undefined;
-  return npmInstall.message ?? (npmInstall.ok !== false ? 'npm install 완료' : 'npm install 실패');
-}
-
 export async function POST(req: NextRequest) {
   const localStages: LocalStageReport[] = [];
   let remoteStages: RemoteStageReport[] = [];
@@ -213,10 +201,8 @@ export async function POST(req: NextRequest) {
     let abortCancelSent = false;
     const notifyGnmsCancelOnAbort = () => {
       if (abortCancelSent || !progressId) return;
-      const remoteId = getUploadProgress(progressId)?.remoteUploadId?.trim();
-      if (!remoteId) return;
       abortCancelSent = true;
-      void cancelRemoteSourceUpload({ uploadId: remoteId, reason: 'user_abort' });
+      /** 원격 취소는 브라우저가 GNMS cancel 을 직접 호출합니다. */
     };
     req.signal.addEventListener('abort', notifyGnmsCancelOnAbort);
 
@@ -443,29 +429,15 @@ export async function POST(req: NextRequest) {
       ok: true,
       detail: `${zipName} (${Math.round(zipSize / 1024 / 1024)}MB)`,
     });
-    setUploadProgressPhase(progressId, 'init', `ZIP 완료 (${Math.round(zipSize / 1024 / 1024)}MB) — 원격 전송 시작`, {
-      zipName,
-      zipSize,
-    });
-
-    let remoteResult;
-    try {
-      remoteResult = await uploadZipByChunks({
-        zipPath,
+    setUploadProgressPhase(
+      progressId,
+      'init',
+      `ZIP 완료 (${Math.round(zipSize / 1024 / 1024)}MB) — 브라우저 원격 전송 대기`,
+      {
         zipName,
-        totalSize: zipSize,
-        mode,
-        date,
-        changeNote,
-        bundleRoot,
-        skipPreflight,
-        progressId,
-        includeNodeModules,
-      });
-      remoteStages = remoteResult.stages;
-    } finally {
-      await fs.rm(zipPath, { force: true }).catch(() => {});
-    }
+        zipSize,
+      }
+    );
 
     for (const f of included) {
       items.push({ file: f.relPath, category: f.category, status: 'ok' });
@@ -480,60 +452,48 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    const npmInstall = remoteResult.complete?.npmInstall as
-      | { ok?: boolean; message?: string; skipped?: boolean }
-      | undefined;
-    const npmMsg = includeNodeModules ? 'npm install 생략' : npmInstall?.message ?? 'npm install 완료';
-    localStages.push({
-      id: 'finalize',
-      ok: true,
-      detail: `성공 ${items.filter((x) => x.status === 'ok').length}, 제외 ${items.filter((x) => x.status === 'skipped').length}, ${npmMsg}`,
-    });
-    completeUploadProgress(progressId, '업로드 완료');
-
-    const okCount = items.filter((x) => x.status === 'ok').length;
-    const skippedCount = items.filter((x) => x.status === 'skipped').length;
-    const failCount = items.filter((x) => x.status === 'fail').length;
-    const historyWarnings: string[] = [];
-    if (schemaMismatch) {
-      historyWarnings.push(formatDbSchemaMismatchWarning(dbCompare.diffCount));
-    }
-    const historyRecorded = await recordUploadFlowHistory({
-      includeNodeModules,
+    setPreparedSourceZip({
+      progressId,
+      zipPath,
+      zipName,
+      zipSize,
+      mode,
+      date,
       changeNote,
-      status: 'success',
-      body: buildSourceUploadSuccessBody(
-        okCount,
-        skippedCount,
-        failCount,
-        npmInstallNote(includeNodeModules, npmInstall),
-        historyWarnings
-      ),
-      version: bundleRoot,
-      ip: clientIp,
+      bundleRoot,
+      includeNodeModules,
+      clientIp,
+      workspaceRoot,
+      items,
+      localStages,
+      scanSummary,
+      dbCompare: { diffCount: dbCompare.diffCount, summaryText: dbCompare.summaryText },
+      schemaMismatch,
+      createdAt: Date.now(),
     });
 
     return NextResponse.json({
       progressId,
+      browserRemoteRequired: true,
+      skipPreflight,
       remoteBase: getRemoteUploadBase(),
       workspaceRoot,
       zipName,
       zipSize,
       bundleRoot,
       includeNodeModules,
+      mode,
+      date,
+      changeNote,
       scanSummary,
       dbCompare: { diffCount: dbCompare.diffCount, summaryText: dbCompare.summaryText },
-      warnings: historyWarnings,
       total: items.length,
       ok: items.filter((x) => x.status === 'ok').length,
       skipped: items.filter((x) => x.status === 'skipped').length,
       fail: items.filter((x) => x.status === 'fail').length,
       warn: items.filter((x) => x.status === 'warn').length,
-      remoteResult,
       localStages,
-      remoteStages,
       items,
-      historyRecorded,
     });
   } catch (err: unknown) {
     if (err instanceof RemoteUploadError) {

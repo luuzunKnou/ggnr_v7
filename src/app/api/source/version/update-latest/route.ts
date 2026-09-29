@@ -1,31 +1,19 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { getSessionUsrId } from '@/lib/auth/guard';
-import { pickClientIpFromRequest } from '@/lib/requestClientMeta';
-import { applyLatestSourceFromGnms, normalizeRestartMode } from '@/service/sourceVersionService';
 
 export const dynamic = 'force-dynamic';
+export const maxDuration = 60;
 
-export async function POST(req: NextRequest) {
-  try {
-    const usrId = await getSessionUsrId();
-    if (!usrId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-
-    const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
-    const restart = body.restart === true;
-    const restartMode = normalizeRestartMode(body.restartMode);
-    const bodyIp = typeof body.clientIp === 'string' ? body.clientIp.trim() : '';
-    const clientIp = pickClientIpFromRequest(req, bodyIp);
-
-    const result = await applyLatestSourceFromGnms({
-      requestedBy: String(usrId),
-      clientIp,
-      restart,
-      restartMode,
-    });
-
-    return NextResponse.json({ ok: true, ...result });
-  } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : 'latest source update failed';
-    return NextResponse.json({ error: message }, { status: 500 });
+/** 서버→GNMS 직접 적용 폐기. 브라우저 relay 중계를 사용하세요. */
+export async function POST() {
+  if (!(await getSessionUsrId())) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
+  return NextResponse.json(
+    {
+      error:
+        'update-latest는 서버→GNMS 경로로 폐기되었습니다. 최신 소스 적용 UI(브라우저→GNMS→relay)를 사용하세요.',
+    },
+    { status: 410 }
+  );
 }

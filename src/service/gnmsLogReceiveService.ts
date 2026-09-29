@@ -313,16 +313,14 @@ export function splitLogFileForUpload(
   return parts;
 }
 
-/** 기동 인자 project/type으로 로컬 로그를 모아 원격 GNMS `POST /api/logs` 로 전송 (소스 업로드와 동일 undici·Bearer) */
-export async function uploadLocalServiceLogsToRemoteGnms(params?: {
+/** 기동 인자 project/type으로 로컬 로그를 모아 브라우저 업로드용 세션으로 보관 (서버→GNMS 없음) */
+export async function prepareLocalServiceLogsForBrowser(params?: {
   dateFilter?: string | null;
 }): Promise<{
+  sessionId: string;
   project: string;
   type: string;
-  fileCount: number;
-  dirs: string[];
-  savedFiles: string[];
-  remoteUrl: string;
+  files: { index: number; fileName: string; date: string; size: number }[];
 }> {
   const boot = getGnmsLogBootContext();
   const gathered = await gatherLocalServiceLogs({ dateFilter: params?.dateFilter });
@@ -337,62 +335,97 @@ export async function uploadLocalServiceLogsToRemoteGnms(params?: {
     );
   }
 
-  const { getRemoteLogsApiUrl, postRemoteLogsMultipart } = await import(
-    '@/service/sourceUploadRemote'
-  );
-  const remoteUrl = getRemoteLogsApiUrl();
-
-  const dirs: string[] = [];
-  const savedFiles: string[] = [];
-  let uploadedParts = 0;
-
+  const parts: { fileName: string; date: string; data: Buffer }[] = [];
   for (const g of gathered) {
-    const parts = splitLogFileForUpload(g.fileName, g.data);
-    for (const part of parts) {
-      const res = await postRemoteLogsMultipart({
-        fields: {
-          project: boot.project,
-          type: boot.type,
-          date: g.date,
-        },
-        files: [{ fieldName: 'file', fileName: part.fileName, data: part.data }],
-      });
-      const json = res.json as {
-        error?: string;
-        ok?: boolean;
-        dir?: string;
-        savedFiles?: string[];
-      };
-      if (res.status < 200 || res.status >= 300) {
-        throw Object.assign(
-          new Error(
-            (typeof json.error === 'string' && json.error) ||
-              res.text.slice(0, 400) ||
-              `GNMS 로그 업로드 실패 (HTTP ${res.status}) file=${part.fileName}`
-          ),
-          { status: res.status >= 400 && res.status < 600 ? res.status : 500 }
-        );
-      }
-      uploadedParts += 1;
-      if (typeof json.dir === 'string' && json.dir && !dirs.includes(json.dir)) {
-        dirs.push(json.dir);
-      }
-      const names = Array.isArray(json.savedFiles) ? json.savedFiles : [part.fileName];
-      savedFiles.push(...names.map((f) => `${g.date}/${f}`));
+    for (const part of splitLogFileForUpload(g.fileName, g.data)) {
+      parts.push({ fileName: part.fileName, date: g.date, data: part.data });
     }
   }
 
-  return {
+  const sessionId = `gnmslog_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  const g = globalThis as typeof globalThis & {
+    __ggnr_gnms_log_sessions__?: Map<
+      string,
+      { project: string; type: string; parts: typeof parts; createdAt: number }
+    >;
+  };
+  if (!g.__ggnr_gnms_log_sessions__) g.__ggnr_gnms_log_sessions__ = new Map();
+  g.__ggnr_gnms_log_sessions__.set(sessionId, {
     project: boot.project,
     type: boot.type,
-    fileCount: uploadedParts,
-    dirs,
-    savedFiles,
-    remoteUrl,
+    parts,
+    createdAt: Date.now(),
+  });
+
+  return {
+    sessionId,
+    project: boot.project,
+    type: boot.type,
+    files: parts.map((p, index) => ({
+      index,
+      fileName: p.fileName,
+      date: p.date,
+      size: p.data.byteLength,
+    })),
   };
 }
 
-/** @deprecated 로컬 저장 — `uploadLocalServiceLogsToRemoteGnms` 사용 */
+export function takePreparedGnmsLogPart(
+  sessionId: string,
+  index: number
+): { project: string; type: string; fileName: string; date: string; data: Buffer } | null {
+  const g = globalThis as typeof globalThis & {
+    __ggnr_gnms_log_sessions__?: Map<
+      string,
+      {
+        project: string;
+        type: string;
+        parts: { fileName: string; date: string; data: Buffer }[];
+        createdAt: number;
+      }
+    >;
+  };
+  const session = g.__ggnr_gnms_log_sessions__?.get(sessionId);
+  if (!session) return null;
+  const part = session.parts[index];
+  if (!part) return null;
+  return {
+    project: session.project,
+    type: session.type,
+    fileName: part.fileName,
+    date: part.date,
+    data: part.data,
+  };
+}
+
+export function clearPreparedGnmsLogSession(sessionId: string): void {
+  const g = globalThis as typeof globalThis & {
+    __ggnr_gnms_log_sessions__?: Map<string, unknown>;
+  };
+  g.__ggnr_gnms_log_sessions__?.delete(sessionId);
+}
+
+/** @deprecated 서버→GNMS 업로드 금지. prepareLocalServiceLogsForBrowser 사용 */
+export async function uploadLocalServiceLogsToRemoteGnms(params?: {
+  dateFilter?: string | null;
+}): Promise<{
+  project: string;
+  type: string;
+  fileCount: number;
+  dirs: string[];
+  savedFiles: string[];
+  remoteUrl: string;
+}> {
+  void params;
+  throw Object.assign(
+    new Error(
+      'GNMS 로그 연계는 브라우저가 /api/logs 로 직접 업로드합니다. prepareLocalServiceLogsForBrowser를 사용하세요.'
+    ),
+    { status: 410 }
+  );
+}
+
+/** @deprecated 로컬 저장 — prepareLocalServiceLogsForBrowser 사용 */
 export async function archiveLocalServiceLogsToGnmsRoot(params?: {
   dateFilter?: string | null;
 }): Promise<{
@@ -402,12 +435,13 @@ export async function archiveLocalServiceLogsToGnmsRoot(params?: {
   dirs: string[];
   savedFiles: string[];
 }> {
-  const r = await uploadLocalServiceLogsToRemoteGnms(params);
+  const prepared = await prepareLocalServiceLogsForBrowser(params);
+  clearPreparedGnmsLogSession(prepared.sessionId);
   return {
-    project: r.project,
-    type: r.type,
-    fileCount: r.fileCount,
-    dirs: r.dirs,
-    savedFiles: r.savedFiles,
+    project: prepared.project,
+    type: prepared.type,
+    fileCount: prepared.files.length,
+    dirs: [],
+    savedFiles: prepared.files.map((f) => `${f.date}/${f.fileName}`),
   };
 }

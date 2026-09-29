@@ -30,5 +30,24 @@
     ".next/dev/types/**/*.ts",
     "**/*.mts"
   ],
-  "exclude": ["node_modules", "111_extracted", "python/env", "python/env_parts"]
+  "exclude": [
+    "node_modules",
+    "111_extracted",
+    "python",
+    "python/env",
+    "python/env_parts",
+    "geoserver_modules",
+    "runtime",
+    "modules_blender",
+    "QCAD_modules",
+    "nssm",
+    ".cad-preview-work",
+    ".tmp",
+    "temp",
+    "public",
+    "patches",
+    "default",
+    "integrations",
+    "lib"
+  ]
 }
