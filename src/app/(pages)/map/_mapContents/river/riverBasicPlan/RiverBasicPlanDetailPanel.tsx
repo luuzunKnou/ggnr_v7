@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSession } from "next-auth/react";
 import { call } from "@/lib/api";
 import { appFetch } from "@/lib/basePath";
@@ -59,14 +59,6 @@ import {
   buildRiverBasicPlanReportFolderKey,
   riverBasicPlanReportRelativeDir,
 } from "./riverBasicPlanReportFolder";
-import {
-  RiverBasicPlanPrivateLandButton,
-  RiverBasicPlanPrivateLandCategoryPanel,
-  RiverBasicPlanPrivateLandRoot,
-  RiverBasicPlanPrivateLandSection,
-  useRiverBasicPlanPrivateLandActive,
-  useRiverBasicPlanPrivateLandCategoryView,
-} from "./RiverBasicPlanPrivateLandProto";
 
 /** 연도 필드는 천단위 콤마 없이 표시 (예: 2,024 → 2024) */
 function formatRiverBasicPlanAttrValue(key: string, raw: unknown): string {
@@ -161,34 +153,6 @@ function findPlanItemFromMapPick(
   return (
     list.find((p) => p.planYear === planYear && p.planName === planName) ||
     (planYear ? list.find((p) => p.planYear === planYear) : undefined)
-  );
-}
-
-type PrivateLandScrollGateProps = {
-  children: ReactNode;
-  /** 색인도 상세 중이면 사유지 내부 화면보다 색인도를 우선 */
-  indexViewMode?: boolean;
-};
-
-/** 사유지 소유구분 선택 시 색인도 상세와 같이 스크롤 영역을 전환 */
-function PrivateLandScrollGate({ children, indexViewMode }: PrivateLandScrollGateProps) {
-  const categoryView = useRiverBasicPlanPrivateLandCategoryView();
-  if (!indexViewMode && categoryView) return <RiverBasicPlanPrivateLandCategoryPanel />;
-  return <>{children}</>;
-}
-
-/** 색인도 목록 — 사유지 사용 중에만 높이 제한·스크롤 (사유지 영역이 밀려나지 않게) */
-function IndexListGrid({ children }: { children: ReactNode }) {
-  const privateLandActive = useRiverBasicPlanPrivateLandActive();
-  return (
-    <div
-      className={cn(
-        "grid grid-cols-2 content-start gap-1.5",
-        privateLandActive && "max-h-[300px] overflow-y-auto pr-0.5"
-      )}
-    >
-      {children}
-    </div>
   );
 }
 
@@ -1074,13 +1038,6 @@ export function RiverBasicPlanDetailPanel({ tab, riverName, onClose }: Props) {
   );
 
   return (
-    <RiverBasicPlanPrivateLandRoot
-      tab={tab}
-      riverName={riverName}
-      planYear={selected?.planYear ?? ""}
-      planName={selected?.planName ?? ""}
-      planLen={selected?.planLen ?? ""}
-    >
     <>
     <div className="flex flex-col min-h-0 h-full bg-background border-l border-border">
       <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border px-4 py-2.5 bg-background">
@@ -1216,12 +1173,10 @@ export function RiverBasicPlanDetailPanel({ tab, riverName, onClose }: Props) {
               </button>
             );
           })}
-          <RiverBasicPlanPrivateLandButton />
         </div>
       </div>
 
       <div className="flex-1 min-h-0 overflow-auto">
-        <PrivateLandScrollGate indexViewMode={indexViewMode}>
         {indexViewMode ? (
           <>
             {indexError ? (
@@ -1420,7 +1375,7 @@ export function RiverBasicPlanDetailPanel({ tab, riverName, onClose }: Props) {
             )}
           </>
         ) : (
-          <div className="p-3 space-y-3">
+          <div className="p-3 space-y-4">
             <div>
               <p className="text-[11px] font-medium text-muted-foreground mb-2">하천기본계획</p>
               {error ? (
@@ -1456,7 +1411,7 @@ export function RiverBasicPlanDetailPanel({ tab, riverName, onClose }: Props) {
               )}
             </div>
 
-            <div className="border-t border-border pt-3">
+            <div>
               <div className="mb-2 flex items-center justify-between gap-2">
                 <button
                   type="button"
@@ -1483,7 +1438,7 @@ export function RiverBasicPlanDetailPanel({ tab, riverName, onClose }: Props) {
                 ) : indexList.length === 0 ? (
                   <p className="text-sm text-muted-foreground py-1">표시할 색인도 목록이 없습니다.</p>
                 ) : (
-                  <IndexListGrid>
+                  <div className="grid grid-cols-2 gap-1.5">
                     {indexList.map((it) => (
                       <button
                         key={`index-list-${it.ogcFid}`}
@@ -1508,15 +1463,13 @@ export function RiverBasicPlanDetailPanel({ tab, riverName, onClose }: Props) {
                         </span>
                       </button>
                     ))}
-                  </IndexListGrid>
+                  </div>
                 )
               ) : null}
             </div>
 
-            <RiverBasicPlanPrivateLandSection />
           </div>
         )}
-        </PrivateLandScrollGate>
       </div>
     </div>
     {indexAttachmentPreview != null && (
@@ -1542,7 +1495,6 @@ export function RiverBasicPlanDetailPanel({ tab, riverName, onClose }: Props) {
       />
     )}
     </>
-    </RiverBasicPlanPrivateLandRoot>
   );
 }
 

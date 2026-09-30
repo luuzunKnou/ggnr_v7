@@ -1,4 +1,4 @@
-/* 지도 축척 — 우측 하단. 글자 + 100px 밑선(해상도×100m 기준) */
+/* 지도 축척 — 우측 하단. 글자 + 100px 밑선 */
 .ggnr-scale-bar {
   position: absolute;
   right: 16px;
@@ -9,6 +9,22 @@
   border: none;
   padding: 0;
   pointer-events: none;
+}
+
+.ggnr-scale-bar.is-editable {
+  pointer-events: auto;
+}
+
+.ggnr-scale-bar-toolbar {
+  position: static;
+  right: auto;
+  bottom: auto;
+  z-index: auto;
+  pointer-events: auto;
+}
+
+.ggnr-scale-bar-toolbar .ggnr-scale-bar-inner {
+  width: 88px;
 }
 
 .ggnr-scale-bar-inner {
@@ -25,3 +41,19 @@
   padding: 0 0 1px;
   background: transparent;
 }
+
+.ggnr-scale-bar-input {
+  display: block;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: inherit;
+  text-align: center;
+  outline: none;
+  line-height: inherit;
+}
+

@@ -2758,7 +2758,11 @@ export default function OpenLayersMap({
   return (
     <div className="relative w-full h-full">
       <div ref={mapRef} className="w-full h-full bg-black [&_.ol-viewport]:bg-black" />
-      <MapScaleIndicator map={mapReady ? mapInstanceRef.current : null} mapReady={mapReady} />
+      <MapScaleIndicator
+        map={mapReady ? mapInstanceRef.current : null}
+        mapReady={mapReady}
+        editable
+      />
 
       <LayerRowGeomEditHandler centerPixel={centerPixel} />
 
