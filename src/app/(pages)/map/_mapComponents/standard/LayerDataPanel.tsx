@@ -21,6 +21,7 @@ import { formatDefineFieldDisplayValue } from '@/lib/defineLayerCodeDisplay';
 import { isLayerExtraFieldName } from '@/lib/layerExtraField';
 import { useDefineLayerCodes } from './useDefineLayerCodes';
 import { cn, formatFileSize } from '@/lib/utils';
+import { useSerWriteAccess } from '@/hooks/useSerWriteAccess';
 import {
   isImageServiceFileName,
   isPdfServiceFileName,
@@ -454,6 +455,7 @@ export function LayerDataPanel({
   useRoadLedgerFacilityListColumns = false,
 }: LayerDataPanelProps) {
   const mapContext = useMapContext();
+  const canWriteDataQuery = useSerWriteAccess('dataQuery');
   const mapInstanceRef = mapContext?.mapInstanceRef;
   const spatialFilterWkt = mapContext?.spatialFilterWkt ?? null;
   const [activeLayer, setActiveLayer] = useState<ActiveLayerInfo | null>(null);
@@ -773,13 +775,13 @@ export function LayerDataPanel({
   /** 기본정보 수정에 쓰는 행 키 — 위 첨부·이력용과 동일 계산 */
   const currentRowKey = selectedRow != null ? getRowKey(selectedRow, keyFieldName) : null;
 
-  /** 안전점검 시설물 3테이블 — 데이터조회에서 조회만 */
+  /** 안전점검 시설물 3테이블 — 데이터조회에서 조회만. 또는 서비스 읽기 권한만 */
   const dataQueryReadOnly = useMemo(
     () =>
       isFmsFacilityLayerTable(
         activeLayer?.physicalTableName ?? activeLayer?.tableName ?? null
-      ),
-    [activeLayer?.physicalTableName, activeLayer?.tableName]
+      ) || !canWriteDataQuery,
+    [activeLayer?.physicalTableName, activeLayer?.tableName, canWriteDataQuery]
   );
 
   // 데이터 이력관리에 조회 저장을 위해 추가

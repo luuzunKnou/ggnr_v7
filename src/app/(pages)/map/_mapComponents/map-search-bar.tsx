@@ -307,7 +307,7 @@ export function MapSearchBar({
   const [systemModalOpen, setSystemModalOpen] = useState(false);
   const [deniedOpen, setDeniedOpen] = useState(false);
   const [deniedSysKey, setDeniedSysKey] = useState('');
-  const { snapshot } = useMyAccessSnapshot();
+  const { snapshot, reload } = useMyAccessSnapshot();
 
   const [mapAddressSearch, setMapAddressSearch] =
     useState<MapAddressSearchState>(MAP_ADDRESS_SEARCH_IDLE);
@@ -605,6 +605,8 @@ export function MapSearchBar({
 
   const handleSystemModalOpenChange = (open: boolean) => {
     if (!open && mustPickSystem) return;
+    /** 접근권한 모달이 위에 열린 채 닫힐 때 시스템 모달까지 같이 닫히는 Radix 중첩 방지 */
+    if (!open && deniedOpen) return;
     setSystemModalOpen(open);
   };
 
@@ -649,12 +651,24 @@ export function MapSearchBar({
   };
 
   const trySelectSystem = (sys: SystemOption) => {
-    if (!canAccessPrivateSystem(snapshot, sys.sys_key, sys.sys_is_private)) {
-      setDeniedSysKey(sys.sys_key);
-      setDeniedOpen(true);
-      return;
-    }
-    selectSystem(sys.sys_key);
+    void (async () => {
+      let snap = snapshot;
+      if (!canAccessPrivateSystem(snap, sys.sys_key, sys.sys_is_private)) {
+        snap = await reload({ silent: true });
+      }
+      if (!canAccessPrivateSystem(snap, sys.sys_key, sys.sys_is_private)) {
+        setDeniedSysKey(sys.sys_key);
+        setSystemModalOpen(false);
+        setDeniedOpen(true);
+        return;
+      }
+      selectSystem(sys.sys_key);
+    })();
+  };
+
+  const handleDeniedOpenChange = (open: boolean) => {
+    setDeniedOpen(open);
+    if (!open && mustPickSystem) setSystemModalOpen(true);
   };
 
   const submit = (nextQuery: string) => {
@@ -1083,7 +1097,7 @@ export function MapSearchBar({
               </Dialog>
               <ResourceAccessDeniedDialog
                 open={deniedOpen}
-                onOpenChange={setDeniedOpen}
+                onOpenChange={handleDeniedOpenChange}
                 resource="system"
                 sysKey={deniedSysKey}
               />

@@ -23,6 +23,7 @@ import { refreshServiceWmsLayer } from "../../_mapComponents/layerFactory/servic
 import { memoWmsLayerId, parseMemoRowKey } from "./memoConfig";
 import { useMemoMapHighlight } from "./useMemoMapHighlight";
 import { useMemoMapClick } from "./useMemoMapClick";
+import { useSerWriteAccess } from "@/hooks/useSerWriteAccess";
 
 type ListRow = {
   rowKey: string;
@@ -53,6 +54,7 @@ export function MemoListPanel({
   onAdd,
 }: Props) {
   const mapContext = useMapContext();
+  const canWrite = useSerWriteAccess();
   const mapContextRef = useRef(mapContext);
   mapContextRef.current = mapContext;
   const layersAddedRef = useRef<Set<string>>(new Set());
@@ -256,15 +258,17 @@ export function MemoListPanel({
               </div>
             </div>
             <div className="flex items-center gap-1">
-              <Button
-                size="sm"
-                className="h-[26px] min-h-[26px] gap-1 px-2.5 text-[12px] font-light border border-border bg-muted/50 text-muted-foreground hover:border-primary hover:bg-primary/15 hover:text-primary rounded-lg"
-                onClick={handleAdd}
-                disabled={tableOptions.length === 0}
-              >
-                <Plus className="h-3 w-3" />
-                메모 추가
-              </Button>
+              {canWrite ? (
+                <Button
+                  size="sm"
+                  className="h-[26px] min-h-[26px] gap-1 px-2.5 text-[12px] font-light border border-border bg-muted/50 text-muted-foreground hover:border-primary hover:bg-primary/15 hover:text-primary rounded-lg"
+                  onClick={handleAdd}
+                  disabled={tableOptions.length === 0}
+                >
+                  <Plus className="h-3 w-3" />
+                  메모 추가
+                </Button>
+              ) : null}
               <button
                 type="button"
                 onClick={onClose}

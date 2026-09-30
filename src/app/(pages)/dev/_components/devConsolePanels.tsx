@@ -21,6 +21,7 @@ import { SignUpApprove } from "./SignUpApprove"
 import { UserMgmtHistory } from "./UserMgmtHistory"
 import { UserAccessStats } from "./UserAccessStats"
 import { RuntimeEnvEditor } from "./RuntimeEnvEditor"
+import { ProjectComposeManager } from "./ProjectComposeManager"
 import { SystemIntegrationManager } from "./SystemIntegrationManager"
 import { GeocodingTestPanel } from "./GeocodingTestPanel"
 import { SourceCodeUploaderContent } from "./SourceCodeUploaderContent"
@@ -43,6 +44,7 @@ export const DEV_MENU_GROUPS: readonly AdminConsoleMenuGroup[] = [
       "permissionFeature",
       "accessRequestQueue",
       "systemVar",
+      "projectCompose",
     ],
   },
   {
@@ -134,6 +136,8 @@ export function getDevMenuDescription(menuId: string): string {
       return "지도·SHP·Excel 데이터 변경·조회·내보내기 이력을 한곳에서 검색·조회합니다."
     case "systemVar":
       return "현재 프로젝트 runtime.env (GGNR_PROJECT) 를 표에서 바로 편집합니다."
+    case "projectCompose":
+      return "프로젝트별 runtime 설정(시스템 노출·기능 숨김·레이어 그룹)을 선택·편집합니다."
     case "dbManager":
       return "데이터 가져오기 / 백업 / 업데이트"
     case "geoserverManagerLayer":
@@ -235,6 +239,12 @@ export function renderDevMenuContent(menuId: string): ReactNode {
       )
     case "systemVar":
       return <RuntimeEnvEditor />
+    case "projectCompose":
+      return (
+        <div className="flex flex-col overflow-hidden min-h-0 h-[calc(100vh-14rem)]">
+          <ProjectComposeManager />
+        </div>
+      )
     case "dbManager":
       return (
         <div className="flex flex-col overflow-hidden min-h-0 h-[calc(100vh-14rem)]">

@@ -11,6 +11,7 @@ import { randomId } from '@/lib/randomId';
 import { cn } from '@/lib/utils';
 import { ArrowLeft, ChevronLeft, ChevronRight, Search } from 'lucide-react';
 import { BoardAttachmentsPanel } from './BoardAttachmentsPanel';
+import { useSerWriteAccess } from '@/hooks/useSerWriteAccess';
 
 function readApiError(e: unknown, fallback: string): string {
   if (e instanceof Error && e.message) return e.message;
@@ -111,6 +112,7 @@ export function BoardScreen(props: { kind: BoardKind; postId?: number }) {
   const router = useRouter();
   const { data: session } = useSession();
   const loggedIn = !!session?.user;
+  const canWrite = useSerWriteAccess(kind === 'notice' ? 'notice' : 'board');
 
   const [view, setView] = useState<'list' | 'detail' | 'write' | 'edit'>(postId ? 'detail' : 'list');
   const [rows, setRows] = useState<ListRow[]>([]);
@@ -388,12 +390,12 @@ export function BoardScreen(props: { kind: BoardKind; postId?: number }) {
           )}
           <h2 className="text-lg font-bold text-foreground truncate">{meta.title}</h2>
         </div>
-        {view === 'list' && loggedIn ? (
+        {view === 'list' && loggedIn && canWrite ? (
           <Button type="button" size="sm" onClick={startWrite} className="shrink-0">
             글쓰기
           </Button>
         ) : null}
-        {view === 'detail' && loggedIn ? (
+        {view === 'detail' && loggedIn && canWrite ? (
           <div className="flex gap-2 shrink-0">
             <Button type="button" size="sm" variant="outline" onClick={startEdit}>
               수정
