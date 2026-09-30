@@ -1,9 +1,19 @@
 @echo off
+:: Double-click runs this file with a window that closes when the file ends.
+:: Re-open in a window that stays. Skip when already inside that window, or when
+:: GGNR_STARTER_NO_PAUSE=1 (unattended).
+if /i "%~1"=="__keep" goto :ggnr_starter_main
+if /i "%GGNR_STARTER_NO_PAUSE%"=="1" goto :ggnr_starter_main
+cmd /k ""%~f0" __keep"
+exit /b
+
+:ggnr_starter_main
 setlocal EnableExtensions EnableDelayedExpansion
+chcp 65001 >nul
 
 :: =============================================================================
 :: ggnr_start.bat generator + optional nssm register / log window
-:: Encoding: ASCII only (no Hangul). Safe on Korean CMD (CP949) and UTF-8 editors.
+:: Messages and prompts are Korean. First line after setlocal is chcp 65001.
 :: - root = folder of this bat
 :: - node PATH = directory of "where node"
 :: - npm ci from package-lock (Y/N; auto if GGNR_START_NO_PAUSE=1)
@@ -16,7 +26,7 @@ setlocal EnableExtensions EnableDelayedExpansion
 :: - if DO_NSSM=Y and not admin => require admin before build
 :: - 00_open_ggnr_logs: skip if GGNR_LOG/GEOSERVER_LOG already open
 :: - nssm ObjectName: from project.env NSSM_OBJECT_NAME/PASS when demo
-:: - window keep: set /p. skip only if GGNR_STARTER_NO_PAUSE=1
+:: - window stays via cmd /k. pause still waits. skip only if GGNR_STARTER_NO_PAUSE=1
 :: =============================================================================
 
 set "ROOT=%~dp0"
@@ -36,96 +46,96 @@ if /i "%GGNR_STARTER_NO_PAUSE%"=="1" set "PAUSE_ON_FAIL=0"
 set "NPM_SYNC_DONE=0"
 
 echo.
-echo [00_make_ggnr_starter] root = %ROOT%
-echo [00_make_ggnr_starter] out  = %OUT%
-if /i "%GGNR_START_NO_PAUSE%"=="1" echo [INFO] GGNR_START_NO_PAUSE=1 - auto Y for prompts ^(window kept; use GGNR_STARTER_NO_PAUSE=1 to skip pause^)
+echo [시작] 설치 경로 = %ROOT%
+echo [시작] 만들 파일 = %OUT%
+if /i "%GGNR_START_NO_PAUSE%"=="1" echo [안내] 자동 진행입니다. 창은 유지됩니다. 정지를 건너뛰려면 GGNR_STARTER_NO_PAUSE=1 을 쓰세요.
 echo.
 
 :: --- prompts (once) ---
-echo [INPUT] Enter all values below. Y/N must be Y or N.
+echo [입력] 아래 값을 입력하세요. 예/아니오는 Y 또는 N 입니다.
 echo.
-set /p "PROJECT_NAME=Project name (GGNR_PROJECT): "
+set /p "PROJECT_NAME=프로젝트 이름: "
 if not defined PROJECT_NAME (
-  echo [ERROR] Project name is empty.
+  echo [오류] 프로젝트 이름이 비어 있습니다.
   goto :fail_exit
 )
 echo(!PROJECT_NAME!| findstr /C:" " >nul 2>&1
 if not errorlevel 1 (
-  echo [ERROR] Project name must not contain spaces.
+  echo [오류] 프로젝트 이름에 공백이 있으면 안 됩니다.
   goto :fail_exit
 )
 
-set /p "ENV_NAME=Type (GGNR_ENV, dev ^| demo ^| prod): "
+set /p "ENV_NAME=구분 (dev, demo, prod): "
 if not defined ENV_NAME (
-  echo [ERROR] Type is empty.
+  echo [오류] 구분이 비어 있습니다.
   goto :fail_exit
 )
 echo(!ENV_NAME!| findstr /C:" " >nul 2>&1
 if not errorlevel 1 (
-  echo [ERROR] Type must not contain spaces.
+  echo [오류] 구분에 공백이 있으면 안 됩니다.
   goto :fail_exit
 )
 
 set "APP_PORT_IN="
-set /p "APP_PORT_IN=App listen port (PORT, default %APP_PORT%): "
+set /p "APP_PORT_IN=앱 접속 포트 (기본 %APP_PORT%): "
 if defined APP_PORT_IN set "APP_PORT_IN=!APP_PORT_IN: =!"
 if defined APP_PORT_IN if not "!APP_PORT_IN!"=="" (
   echo(!APP_PORT_IN!| findstr /R "^[1-9][0-9]*$" >nul 2>&1
   if errorlevel 1 (
-    echo [ERROR] App port must be a positive integer ^(1-65535^). input=[!APP_PORT_IN!]
+    echo [오류] 포트는 1부터 65535까지 숫자여야 합니다. 입력=[!APP_PORT_IN!]
     goto :fail_exit
   )
   if !APP_PORT_IN! GTR 65535 (
-    echo [ERROR] App port must be ^<= 65535. input=[!APP_PORT_IN!]
+    echo [오류] 포트는 65535 이하여야 합니다. 입력=[!APP_PORT_IN!]
     goto :fail_exit
   )
   set "APP_PORT=!APP_PORT_IN!"
 )
-echo [INFO] App listen port = !APP_PORT!
+echo [안내] 지정 포트 = !APP_PORT!
 
 set "OVERWRITE=Y"
 set "DO_REREG=N"
 if /i "%GGNR_START_NO_PAUSE%"=="1" (
-  echo [RUN] GGNR_START_NO_PAUSE=1 - auto Y for npm / overwrite / nssm
+  echo [실행] 자동 진행입니다. 의존성 맞춤, 덮어쓰기, 서비스 등록을 모두 예로 진행합니다.
   set "DO_NPM_SYNC=Y"
   set "DO_NSSM=Y"
   set "DO_REREG=Y"
 ) else (
   echo.
-  echo [NOTE] Prefer npm ci from package-lock.json for stable deploy.
-  echo        Even if node_modules exists, choose Y when lock may mismatch.
-  echo        Offline / air-gap: choose N ^(npm install may be unavailable^).
+  echo [안내] 안정적인 배포는 package-lock.json 기준으로 의존성을 맞추는 쪽을 권합니다.
+  echo        모듈 폴더가 있어도 package-lock.json과 다를 수 있으면 Y 를 고르세요.
+  echo        망 분리 환경이라 설치가 안 되면 N 을 고르세요.
   echo.
-  set /p "DO_NPM_SYNC=Run npm ci (or install) to sync deps? (Y/N): "
+  set /p "DO_NPM_SYNC=의존성을 맞출까요? (Y/N): "
   if exist "%OUT%" (
-    set /p "OVERWRITE=ggnr_start.bat exists. Overwrite? (Y/N): "
+    set /p "OVERWRITE=시작 파일이 있습니다. 덮어쓸까요? (Y/N): "
   )
-  set /p "DO_NSSM=Register nssm service? (Y/N): "
+  set /p "DO_NSSM=윈도우 서비스를 등록할까요? (Y/N): "
   if /i "!DO_NSSM!"=="Y" (
-    set /p "DO_REREG=If GGNR_V7 exists, delete and re-register? (Y/N): "
+    set /p "DO_REREG=기존 서비스가 있으면 지우고 다시 등록할까요? (Y/N): "
   )
 )
 
 :: normalize Y/N
 set "DO_NPM_SYNC=!DO_NPM_SYNC: =!"
 if /i not "!DO_NPM_SYNC!"=="Y" if /i not "!DO_NPM_SYNC!"=="N" (
-  echo [WARN] npm sync input not Y/N - using N ^(input=[!DO_NPM_SYNC!]^)
+  echo [경고] 의존성 맞춤 답이 Y/N 이 아니어서 N 으로 진행합니다. 입력=[!DO_NPM_SYNC!]
   set "DO_NPM_SYNC=N"
 )
 set "OVERWRITE=!OVERWRITE: =!"
 if /i not "!OVERWRITE!"=="Y" if /i not "!OVERWRITE!"=="N" (
-  echo [WARN] overwrite input not Y/N - using Y ^(input=[!OVERWRITE!]^)
+  echo [경고] 덮어쓰기 답이 Y/N 이 아니어서 Y 로 진행합니다. 입력=[!OVERWRITE!]
   set "OVERWRITE=Y"
 )
 set "DO_NSSM=!DO_NSSM: =!"
 if /i not "!DO_NSSM!"=="Y" if /i not "!DO_NSSM!"=="N" (
-  echo [WARN] nssm input not Y/N - using N ^(input=[!DO_NSSM!]^)
+  echo [경고] 서비스 등록 답이 Y/N 이 아니어서 N 으로 진행합니다. 입력=[!DO_NSSM!]
   set "DO_NSSM=N"
 )
 if /i "!DO_NSSM!"=="Y" (
   set "DO_REREG=!DO_REREG: =!"
   if /i not "!DO_REREG!"=="Y" if /i not "!DO_REREG!"=="N" (
-    echo [WARN] re-register input not Y/N - using N ^(input=[!DO_REREG!]^)
+    echo [경고] 다시 등록 답이 Y/N 이 아니어서 N 으로 진행합니다. 입력=[!DO_REREG!]
     set "DO_REREG=N"
   )
 ) else (
@@ -133,13 +143,13 @@ if /i "!DO_NSSM!"=="Y" (
 )
 
 echo.
-echo [CONFIRM]
-echo   PROJECT     = %PROJECT_NAME%
-echo   TYPE        = %ENV_NAME%
-echo   npm sync    = !DO_NPM_SYNC!
-echo   overwrite   = !OVERWRITE!
-echo   nssm        = !DO_NSSM!
-echo   re-register = !DO_REREG!
+echo [확인]
+echo   프로젝트 = %PROJECT_NAME%
+echo   구분     = %ENV_NAME%
+echo   의존성   = !DO_NPM_SYNC!
+echo   덮어쓰기 = !OVERWRITE!
+echo   서비스   = !DO_NSSM!
+echo   다시등록 = !DO_REREG!
 echo.
 
 :: admin before build if nssm=Y (keep service up during npm sync/build)
@@ -150,7 +160,7 @@ if /i "!DO_NSSM!"=="Y" (
 
 where node >nul 2>&1
 if errorlevel 1 (
-  echo [ERROR] where node failed. node not on PATH.
+  echo [오류] node 를 찾지 못했습니다. PATH 에 node 가 없습니다.
   goto :fail_exit
 )
 
@@ -162,19 +172,19 @@ for /f "delims=" %%I in ('where node') do (
 
 :node_found
 if not defined NODE_EXE (
-  echo [ERROR] could not read node.exe path.
+  echo [오류] node 실행 파일 경로를 읽지 못했습니다.
   goto :fail_exit
 )
 
 for %%I in ("%NODE_EXE%") do set "NODE_DIR=%%~dpI"
 if "%NODE_DIR:~-1%"=="\" set "NODE_DIR=%NODE_DIR:~0,-1%"
 
-echo [00_make_ggnr_starter] node.exe = %NODE_EXE%
-for /f "delims=" %%V in ('node -v 2^>nul') do echo [00_make_ggnr_starter] Node = %%V
-echo [00_make_ggnr_starter] PATH add = %NODE_DIR%
+echo [시작] node 실행 파일 = %NODE_EXE%
+for /f "delims=" %%V in ('node -v 2^>nul') do echo [시작] Node 버전 = %%V
+echo [시작] PATH 추가 = %NODE_DIR%
 echo.
 
-echo [RUN] python/env restore check ^(skip if no env_parts^)...
+echo [실행] 파이썬 환경 복원을 확인합니다. 분할 파일이 없으면 건너뜁니다...
 powershell -NoProfile -ExecutionPolicy Bypass -File "%ROOT%\scripts\restore-python-env.ps1" -Root "%ROOT%"
 if errorlevel 1 goto :fail_exit
 echo.
@@ -185,8 +195,8 @@ if /i "!DO_NPM_SYNC!"=="Y" (
   set "NPM_SYNC_DONE=1"
   echo.
 ) else (
-  echo [SKIP] dependency sync skipped.
-  echo        nssm start may fail without node_modules\next. Run npm ci in root if needed.
+  echo [건너뜀] 의존성 맞춤을 건너뜁니다.
+  echo        next 가 없으면 서비스 시작이 실패할 수 있습니다. 필요하면 루트에서 의존성을 맞춘 뒤 다시 실행하세요.
   echo.
 )
 
@@ -196,58 +206,58 @@ set "PATH=%PATH%;%NODE_DIR%"
 call :run_npm_build
 if errorlevel 1 goto :fail_exit
 echo.
-echo [OK] build done - next: ggnr_start / nssm
+echo [확인] 빌드가 끝났습니다. 다음: 시작 파일 / 서비스 등록
 echo.
-echo [CONFIRM]
-echo   cd          = %ROOT%
-echo   NODE_DIR    = %NODE_DIR%
-echo   PROJECT     = %PROJECT_NAME%
-echo   TYPE        = %ENV_NAME%
+echo [확인]
+echo   작업 폴더 = %ROOT%
+echo   node 경로 = %NODE_DIR%
+echo   프로젝트 = %PROJECT_NAME%
+echo   구분     = %ENV_NAME%
 echo.
 
 set "SKIP_WRITE=0"
 if exist "%OUT%" (
   if /i not "!OVERWRITE!"=="Y" (
-    echo [KEEP] existing ggnr_start.bat
+    echo [유지] 기존 시작 파일을 그대로 둡니다.
     set "SKIP_WRITE=1"
   )
 )
 
-echo [RUN] post-build: ggnr_start.bat / 00_ggnr_build_project.bat / nssm / logs
+echo [실행] 빌드 이후: 시작 파일 / 수동 빌드 파일 / 서비스 등록 / 로그
 if "!SKIP_WRITE!"=="0" (
-  echo [RUN] writing ggnr_start.bat ...
+  echo [실행] 시작 파일을 씁니다...
   call :write_ggnr_start
   if errorlevel 1 goto :fail_exit
-  echo [RUN] writing 00_ggnr_build_project.bat ...
+  echo [실행] 수동 빌드 파일을 씁니다...
   call :write_ggnr_build_project
   if errorlevel 1 goto :fail_exit
   if not exist "%OUT%" (
-    echo [ERROR] failed to create ggnr_start.bat
+    echo [오류] 시작 파일을 만들지 못했습니다.
     goto :fail_exit
   )
   if not exist "%BUILD_OUT%" (
-    echo [ERROR] failed to create 00_ggnr_build_project.bat
+    echo [오류] 수동 빌드 파일을 만들지 못했습니다.
     goto :fail_exit
   )
-  echo [OK] created: %OUT%
-  echo [OK] created: %BUILD_OUT%
+  echo [확인] 만들었습니다: %OUT%
+  echo [확인] 만들었습니다: %BUILD_OUT%
 ) else (
   if not exist "%OUT%" (
-    echo [ERROR] ggnr_start.bat missing.
+    echo [오류] 시작 파일이 없습니다.
     goto :fail_exit
   )
-  echo [WARN] keeping existing ggnr_start.bat / 00_ggnr_build_project.bat
-  echo        new project/type were NOT written into them.
-  echo        re-run with overwrite=Y to update.
+  echo [경고] 기존 시작 파일과 수동 빌드 파일을 유지합니다.
+  echo        이번 프로젝트와 구분은 파일에 반영되지 않았습니다.
+  echo        반영하려면 덮어쓰기를 Y 로 다시 실행하세요.
   echo.
 )
 
-echo [OK] ggnr_start.bat step done.
+echo [확인] 시작 파일 단계가 끝났습니다.
 
 if /i not "!DO_NSSM!"=="Y" (
-  echo [SKIP] nssm/logs ^(DO_NSSM=!DO_NSSM!^)
-  echo [DONE] generate only.
-  echo   manual: 00_nssm_install_ggnr.bat ^(admin CMD^) -^> 00_open_ggnr_logs.bat
+  echo [건너뜀] 서비스 등록과 로그 창을 건너뜁니다. ^(서비스=!DO_NSSM!^)
+  echo [완료] 파일 생성만 했습니다.
+  echo   수동: 관리자 명령에서 00_nssm_install_ggnr.bat 실행 후 00_open_ggnr_logs.bat
   echo.
   if "!PAUSE_ON_FAIL!"=="1" call :pause_keep
   exit /b 0
@@ -257,22 +267,22 @@ call :require_admin
 if errorlevel 1 goto :fail_exit
 
 if not exist "%ROOT%\node_modules\next\package.json" (
-  echo [ERROR] node_modules missing or next not installed.
-  echo         re-run with npm sync=Y, or npm ci in root, then nssm.
+  echo [오류] 모듈이 없거나 next 가 설치되지 않았습니다.
+  echo        의존성 맞춤을 Y 로 다시 실행하거나, 루트에서 의존성을 맞춘 뒤 서비스를 등록하세요.
   goto :fail_exit
 )
 
 if not exist "%NSSM_BAT%" (
-  echo [ERROR] missing: %NSSM_BAT%
+  echo [오류] 파일이 없습니다: %NSSM_BAT%
   goto :fail_exit
 )
 if not exist "%NSSM_EXE%" (
-  echo [ERROR] nssm.exe missing: %NSSM_EXE%
-  echo         check nssm\win64\nssm.exe in install ZIP.
+  echo [오류] nssm 실행 파일이 없습니다: %NSSM_EXE%
+  echo        설치 압축 안의 nssm\win64\nssm.exe 를 확인하세요.
   goto :fail_exit
 )
 if not exist "%LOGS_BAT%" (
-  echo [ERROR] missing: %LOGS_BAT%
+  echo [오류] 파일이 없습니다: %LOGS_BAT%
   goto :fail_exit
 )
 
@@ -282,8 +292,8 @@ call :stop_previous_ggnr
 echo.
 
 echo.
-echo [RUN] nssm register ^(1/2^)...
-echo        ^(on failure, nssm_install window stays open - check message then Enter^)
+echo [실행] 서비스 등록 ^(1/2^)...
+echo        ^(실패하면 서비스 등록 창이 열린 채로 남습니다. 메시지를 본 뒤 엔터를 누르세요.^)
 set "GGNR_NSSM_REREG=!DO_REREG!"
 set "GGNR_NSSM_PROJECT=%PROJECT_NAME%"
 set "GGNR_NSSM_ENV=%ENV_NAME%"
@@ -292,29 +302,29 @@ call "%NSSM_BAT%"
 set "NSSM_EC=!ERRORLEVEL!"
 set "GGNR_NSSM_FROM_STARTER="
 if "!NSSM_EC!"=="2" (
-  echo [INFO] kept existing GGNR_V7 ^(no re-register^).
-  echo        start GGNR_V7 from services if needed.
+  echo [안내] 기존 GGNR_V7 서비스를 유지했습니다. 다시 등록하지 않습니다.
+  echo        필요하면 서비스 관리에서 GGNR_V7 을 시작하세요.
   echo.
-  echo [RUN] log window ^(2/2^)...
-  start "" /min cmd /c "%LOGS_BAT%"
+  echo [실행] 로그 창 ^(2/2^)...
+  call :open_log_windows
   echo.
-  echo [DONE] generate -^> ^(keep service^) -^> logs
+  echo [완료] 파일 생성 후 기존 서비스를 유지하고 로그를 엽니다.
   echo.
   if "!PAUSE_ON_FAIL!"=="1" call :pause_keep
   exit /b 0
 )
 if not "!NSSM_EC!"=="0" (
-  echo [STOP] nssm register/start failed ^(exit=!NSSM_EC!^)
+  echo [중지] 서비스 등록 또는 시작에 실패했습니다 ^(종료=!NSSM_EC!^)
   set "FAIL_EC=!NSSM_EC!"
   goto :fail_exit
 )
 
 echo.
-echo [RUN] log window ^(2/2^)...
-start "" /min cmd /c "%LOGS_BAT%"
+echo [실행] 로그 창 ^(2/2^)...
+call :open_log_windows
 
 echo.
-echo [DONE] generate -^> nssm -^> logs
+echo [완료] 파일 생성, 서비스 등록, 로그 열기까지 끝났습니다.
 echo.
 if "!PAUSE_ON_FAIL!"=="1" call :pause_keep
 exit /b 0
@@ -322,31 +332,42 @@ exit /b 0
 :fail_exit
 if not defined FAIL_EC set "FAIL_EC=1"
 echo.
-echo [EXIT] stopped with error ^(exit=!FAIL_EC!^). See messages above.
-echo        nssm log: C:\logs\nssm_install_last.log
-echo        manual: 00_nssm_install_ggnr.bat ^(admin CMD^) -^> 00_open_ggnr_logs.bat
+echo [종료] 오류로 멈췄습니다 ^(종료=!FAIL_EC!^). 위 메시지를 확인하세요.
+echo      서비스 등록 로그: C:\logs\nssm_install_last.log
+echo      수동: 관리자 명령에서 00_nssm_install_ggnr.bat 실행 후 00_open_ggnr_logs.bat
 if "!PAUSE_ON_FAIL!"=="1" call :pause_keep
 exit /b !FAIL_EC!
 
 :: ---------------------------------------------------------------------------
+:open_log_windows
+if not exist "%LOGS_BAT%" (
+  echo [오류] 로그 창 파일이 없습니다: %LOGS_BAT%
+  goto :eof
+)
+echo [실행] 로그 창을 엽니다: %LOGS_BAT%
+call "%LOGS_BAT%"
+echo [확인] 로그 창 열기를 마쳤습니다.
+goto :eof
+
+:: ---------------------------------------------------------------------------
 :pause_keep
 echo -----------------------------------------------------------
-echo  Press Enter to close this window.
+echo  아무 키나 누르면 이 창이 닫힙니다.
 echo -----------------------------------------------------------
-set /p "=Enter... "
+pause >nul
 goto :eof
 
 :: ---------------------------------------------------------------------------
 :require_admin
 net session >nul 2>&1
 if errorlevel 1 (
-  echo [ERROR] not running as administrator.
-  echo         nssm register requires admin CMD.
-  echo         Right-click CMD -^> Run as administrator, then retry.
+  echo [오류] 관리자 권한이 아닙니다.
+  echo        서비스 등록은 관리자 명령 프롬프트가 필요합니다.
+  echo        명령 프롬프트를 오른쪽 단추로 누른 뒤 관리자 권한으로 실행하세요.
   set "FAIL_EC=1"
   exit /b 1
 )
-echo [OK] running as administrator.
+echo [확인] 관리자 권한으로 실행 중입니다.
 exit /b 0
 
 :: ---------------------------------------------------------------------------
@@ -384,7 +405,7 @@ echo.
 echo :: require next
 echo if not exist "node_modules\.bin\next.cmd" ^(
 echo   if not exist "node_modules\next\package.json" ^(
-echo     echo [ERROR] node_modules/next missing. Run npm ci then retry.
+echo     echo [오류] next 가 없습니다. 의존성을 맞춘 뒤 다시 실행하세요.
 echo     goto build_fail
 echo   ^)
 echo ^)
@@ -393,32 +414,32 @@ echo :: build if no BUILD_ID or BASE_PATH mismatch
 echo call npx tsx scripts/check-base-path-build.ts "%%GGNR_PROJECT%%" "%%GGNR_ENV%%"
 echo if errorlevel 1 ^(
 echo   if exist ".next\" ^(
-echo     echo [WARN] BUILD_ID/basePath mismatch - rebuild with project env
+echo     echo [경고] 빌드 결과와 기본 경로가 달라 프로젝트 환경으로 다시 빌드합니다.
 echo   ^) else ^(
-echo     echo [OK] no .next - build with project env
+echo     echo [확인] 빌드 결과가 없어 프로젝트 환경으로 빌드합니다.
 echo   ^)
 echo   call npx tsx scripts/build-with-project-env.ts "%%GGNR_PROJECT%%" "%%GGNR_ENV%%"
 echo   if errorlevel 1 goto build_fail
 echo   if not exist ".next\BUILD_ID" goto build_no_id
-echo   echo [OK] npm run build done.
+echo   echo [확인] 빌드가 끝났습니다.
 echo ^) else ^(
-echo   echo [OK] BUILD_ID + BASE_PATH match - skip build
+echo   echo [확인] 빌드 결과와 기본 경로가 같습니다. 빌드를 건너뜁니다.
 echo ^)
 echo goto after_build
 echo.
 echo :build_fail
-echo echo [ERROR] build-with-project-env failed.
+echo echo [오류] 프로젝트 환경 빌드에 실패했습니다.
 echo if /i not "%%GGNR_START_NO_PAUSE%%"=="1" ^(
-echo   echo Press Enter to close...
-echo   set /p "=Enter... "
+echo   echo 엔터를 누르면 닫힙니다...
+echo   set /p "=엔터... "
 echo ^)
 echo exit /b 1
 echo.
 echo :build_no_id
-echo echo [ERROR] BUILD_ID missing after build.
+echo echo [오류] 빌드 후에도 빌드 식별자가 없습니다.
 echo if /i not "%%GGNR_START_NO_PAUSE%%"=="1" ^(
-echo   echo Press Enter to close...
-echo   set /p "=Enter... "
+echo   echo 엔터를 누르면 닫힙니다...
+echo   set /p "=엔터... "
 echo ^)
 echo exit /b 1
 echo.
@@ -432,10 +453,10 @@ echo exit /b 0
 echo.
 echo :start_fail
 echo echo.
-echo echo [ERROR] start failed. Check logs above.
+echo echo [오류] 시작에 실패했습니다. 위 로그를 확인하세요.
 echo if /i not "%%GGNR_START_NO_PAUSE%%"=="1" ^(
-echo   echo Press Enter to close...
-echo   set /p "=Enter... "
+echo   echo 엔터를 누르면 닫힙니다...
+echo   set /p "=엔터... "
 echo ^)
 echo exit /b 1
 )
@@ -461,13 +482,13 @@ echo set "GGNR_PROJECT=%PROJECT_NAME%"
 echo set "GGNR_ENV=%ENV_NAME%"
 echo.
 echo if not exist "node_modules\next\package.json" ^(
-echo   echo [ERROR] next not installed. Run npm ci or npm install first.
+echo   echo [오류] next 가 설치되지 않았습니다. 의존성을 먼저 맞추세요.
 echo   goto :end_pause
 echo ^)
 echo.
 echo echo.
-echo echo [npm run build] project: %%GGNR_PROJECT%%
-echo echo [npm run build] type: %%GGNR_ENV%%
+echo echo [빌드] 프로젝트: %%GGNR_PROJECT%%
+echo echo [빌드] 구분: %%GGNR_ENV%%
 echo echo npx tsx scripts/build-with-project-env.ts %%GGNR_PROJECT%% %%GGNR_ENV%%
 echo echo.
 echo.
@@ -475,12 +496,12 @@ echo call npx tsx scripts/build-with-project-env.ts "%%GGNR_PROJECT%%" "%%GGNR_E
 echo set "BUILD_EC=%%errorlevel%%"
 echo.
 echo if not "%%BUILD_EC%%"=="0" ^(
-echo   echo [ERROR] build failed ^(exit=%%BUILD_EC%%^)
+echo   echo [오류] 빌드에 실패했습니다 ^(종료=%%BUILD_EC%%^)
 echo ^) else if exist ".next\BUILD_ID" ^(
-echo   echo [OK] build done. BUILD_ID=
+echo   echo [확인] 빌드가 끝났습니다. 빌드 식별자=
 echo   type ".next\BUILD_ID"
 echo ^) else ^(
-echo   echo [ERROR] .next\BUILD_ID missing after build.
+echo   echo [오류] 빌드 후에도 빌드 식별자가 없습니다.
 echo   set "BUILD_EC=1"
 echo ^)
 echo.
@@ -496,56 +517,56 @@ exit /b 0
 :run_npm_sync
 pushd "%ROOT%"
 if exist "package-lock.json" (
-  echo [RUN] npm ci ^(package-lock.json, recreate node_modules^)...
+  echo [실행] package-lock.json 기준으로 의존성을 맞춥니다. 모듈 폴더를 다시 만듭니다...
   call npm ci
 ) else (
-  echo [WARN] no package-lock.json - using npm install
+  echo [경고] package-lock.json이 없어 npm install 로 설치합니다.
   call npm install
 )
 set "NPM_EC=!errorlevel!"
 popd
 if not "!NPM_EC!"=="0" (
-  echo [ERROR] dependency sync failed ^(exit=!NPM_EC!^)
+  echo [오류] 의존성 맞춤에 실패했습니다 ^(종료=!NPM_EC!^)
   set "FAIL_EC=!NPM_EC!"
   exit /b !NPM_EC!
 )
 if not exist "%ROOT%\node_modules\next\package.json" (
-  echo [ERROR] next missing under node_modules. Check package.json / package-lock.json.
+  echo [오류] 모듈 안에 next 가 없습니다. package.json 과 package-lock.json을 확인하세요.
   set "FAIL_EC=1"
   exit /b 1
 )
-echo [OK] dependency sync done.
+echo [확인] 의존성 맞춤이 끝났습니다.
 exit /b 0
 
 :run_npm_build
 if not exist "%ROOT%\node_modules\next\package.json" (
-  echo [ERROR] next not installed - cannot build. Re-run with npm sync=Y.
+  echo [오류] next 가 설치되지 않아 빌드할 수 없습니다. 의존성 맞춤을 Y 로 다시 실행하세요.
   set "FAIL_EC=1"
   exit /b 1
 )
-echo [RUN] build with project env ^(BASE_PATH like CRA PUBLIC_URL^) ...
-echo        GGNR_PROJECT=%GGNR_PROJECT%  GGNR_ENV=%GGNR_ENV%
-echo        keep this window open on failure.
+echo [실행] 프로젝트 환경으로 빌드합니다. 기본 경로를 빌드에 넣습니다...
+echo        프로젝트=%GGNR_PROJECT%  구분=%GGNR_ENV%
+echo        실패하면 이 창을 닫지 마세요.
 pushd "%ROOT%"
 call npx tsx scripts/build-with-project-env.ts "%GGNR_PROJECT%" "%GGNR_ENV%"
 set "BUILD_EC=!errorlevel!"
 popd
 if not "!BUILD_EC!"=="0" (
   echo.
-  echo ===== BUILD FAILED =====
-  echo [ERROR] build-with-project-env failed ^(exit=!BUILD_EC!^)
-  echo         check TypeScript/Next logs above. For gate, demo BASE_PATH must be baked in.
+  echo ===== 빌드 실패 =====
+  echo [오류] 프로젝트 환경 빌드에 실패했습니다 ^(종료=!BUILD_EC!^)
+  echo        위 빌드 로그를 확인하세요. 게이트 배포는 시연 기본 경로가 빌드에 들어가야 합니다.
   set "FAIL_EC=!BUILD_EC!"
   exit /b !BUILD_EC!
 )
 if not exist "%ROOT%\.next\BUILD_ID" (
   echo.
-  echo ===== BUILD FAILED =====
-  echo [ERROR] .next\BUILD_ID missing after build.
+  echo ===== 빌드 실패 =====
+  echo [오류] 빌드 후에도 빌드 식별자가 없습니다.
   set "FAIL_EC=1"
   exit /b 1
 )
-echo [OK] npm run build done. BUILD_ID=
+echo [확인] 빌드가 끝났습니다. 빌드 식별자=
 type "%ROOT%\.next\BUILD_ID"
 echo.
 exit /b 0
@@ -553,65 +574,65 @@ exit /b 0
 :: stop previous GGNR (service stop only, no remove) + GeoServer + free app port
 :: Called after successful build, immediately before 00_nssm_install
 :stop_previous_ggnr
-echo [CLEAN] stop previous GGNR if running ^(service not removed^)...
+echo [정리] 실행 중인 서비스를 중지합니다. 서비스는 지우지 않습니다...
 if exist "%NSSM_EXE%" (
   "%NSSM_EXE%" status %SERVICE_NAME% >nul 2>&1
   if not errorlevel 1 (
     "%NSSM_EXE%" set %SERVICE_NAME% AppStopMethodSkip 1 >nul 2>&1
     "%NSSM_EXE%" set %SERVICE_NAME% AppStopMethodConsole 500 >nul 2>&1
-    echo [CLEAN] nssm stop %SERVICE_NAME% ...
+    echo [정리] 서비스 중지 %SERVICE_NAME% ...
     "%NSSM_EXE%" stop %SERVICE_NAME% confirm >nul 2>&1
     timeout /t 2 /nobreak >nul
-    echo [CLEAN] service stop requested.
+    echo [정리] 서비스 중지를 요청했습니다.
   ) else (
-    echo [CLEAN] service %SERVICE_NAME% not installed - skip service stop.
+    echo [정리] 서비스 %SERVICE_NAME% 이(가) 없어 중지를 건너뜁니다.
   )
 ) else (
-  echo [CLEAN] nssm.exe missing - skip service stop. check port only.
+  echo [정리] nssm 실행 파일이 없어 서비스 중지는 건너뜁니다. 포트만 확인합니다.
 )
 call "%ROOT%\00_geoserver_port_helpers.bat" stop
 timeout /t 2 /nobreak >nul
 call "%ROOT%\00_geoserver_port_helpers.bat" resolve
-echo [CLEAN] geoserver port = !GEO_PORT!
+echo [정리] 지오서버 포트 = !GEO_PORT!
 call :kill_listen_port !GEO_PORT!
 call :kill_listen_port %APP_PORT%
 call :kill_ggnr_start_cmds
-echo [CLEAN] previous run cleanup done.
+echo [정리] 이전 실행 정리가 끝났습니다.
 goto :eof
 
 :kill_ggnr_start_cmds
-echo [CLEAN] search leftover ggnr_start.bat cmd...
+echo [정리] 남아 있는 시작 명령 창을 찾습니다...
 powershell -NoProfile -ExecutionPolicy Bypass -Command ^
   "$procs = Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object { $_.CommandLine -and $_.CommandLine -like '*ggnr_start.bat*' };" ^
-  "if (-not $procs) { Write-Host '[CLEAN] no leftover ggnr_start cmd.'; exit 0 };" ^
-  "foreach ($p in @($procs)) { Write-Host ('[CLEAN] taskkill /F /PID {0} /T' -f $p.ProcessId); Start-Process -FilePath taskkill.exe -ArgumentList @('/F','/PID',([string]$p.ProcessId),'/T') -Wait -NoNewWindow | Out-Null }"
+  "if (-not $procs) { Write-Host '[정리] 남아 있는 시작 명령 창이 없습니다.'; exit 0 };" ^
+  "foreach ($p in @($procs)) { Write-Host ('[정리] 남은 시작 프로세스를 강제 종료합니다. PID {0}' -f $p.ProcessId); Start-Process -FilePath taskkill.exe -ArgumentList @('/F','/PID',([string]$p.ProcessId),'/T') -Wait -NoNewWindow | Out-Null }"
 goto :eof
 
 :kill_listen_port
 set "KP=%~1"
-echo [CLEAN] check Listen on port %KP% ...
+echo [정리] 포트 %KP% 사용 여부를 확인합니다...
 netstat -ano | findstr /R /C:":%KP% .*LISTENING" >nul 2>&1
 if errorlevel 1 (
-  echo [CLEAN] port %KP% not listening.
+  echo [정리] 포트 %KP% 은(는) 사용 중이 아닙니다.
   goto :eof
 )
 set "KILLED=0"
 for /f "tokens=5" %%P in ('netstat -ano ^| findstr /R /C:":%KP% .*LISTENING"') do (
   if not "%%P"=="0" (
-    echo [CLEAN] taskkill /F /PID %%P /T
+    echo [정리] 포트 사용 프로세스를 강제 종료합니다. PID %%P
     taskkill /F /PID %%P /T >nul 2>&1
     if not errorlevel 1 (
       set /a KILLED+=1
-      echo [CLEAN] killed PID %%P
+      echo [정리] 프로세스를 종료했습니다. PID %%P
     ) else (
-      echo [WARN] failed to kill PID %%P ^(gone or no permission^)
+      echo [경고] 프로세스를 종료하지 못했습니다. PID %%P ^(이미 없거나 권한이 없습니다^)
     )
   )
 )
 if "!KILLED!"=="0" (
-  echo [INFO] no PID killed on port %KP%. try admin CMD.
+  echo [안내] 포트 %KP% 에서 종료한 프로세스가 없습니다. 관리자 명령으로 다시 시도하세요.
 ) else (
-  echo [CLEAN] killed !KILLED! process^(es^) for port %KP%.
+  echo [정리] 포트 %KP% 에서 !KILLED!개 프로세스를 종료했습니다.
 )
 timeout /t 1 /nobreak >nul
 goto :eof

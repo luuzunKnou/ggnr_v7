@@ -1,20 +1,34 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { getSessionUsrId } from '@/lib/auth/guard';
-import { checkRemoteTargetReady } from '@/service/sourceUploadRemote';
+import { getRemoteUploadBase } from '@/service/sourceUploadRemote';
 
 export const dynamic = 'force-dynamic';
 
-/** 원격(GNMS) 업로드 대상 서버 연결·API 사전 점검 */
-export async function GET(_req: NextRequest) {
+/**
+ * 사전 점검 — 서버는 GNMS에 접속하지 않음.
+ * 실제 연결 확인은 브라우저가 원격 전송 시 수행.
+ */
+export async function GET() {
   try {
     if (!(await getSessionUsrId())) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
-    const result = await checkRemoteTargetReady();
-    if (!result.ok) {
-      return NextResponse.json(result, { status: 503 });
-    }
-    return NextResponse.json(result);
+    const remoteBase = getRemoteUploadBase();
+    return NextResponse.json({
+      ok: true,
+      remoteBase,
+      targetHost: '',
+      targetOrigin: '',
+      targetLabel: `URL=${remoteBase}`,
+      deferredBrowserCheck: true,
+      checks: [
+        {
+          id: 'target',
+          ok: true,
+          message: `브라우저가 ${remoteBase} 로 직접 전송합니다 (서버 outbound 없음)`,
+        },
+      ],
+    });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'preflight failed';
     return NextResponse.json({ ok: false, error: message, checks: [] }, { status: 500 });

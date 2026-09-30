@@ -504,18 +504,40 @@ export async function runIntegration(p: Params) {
       console.error(`[INTEGRATION] DONE system=${system} ijlKey=${ijlKey ?? '-'} status=${r.jobStatus}`);
       return { ijlKey, system, ok: r.jobStatus === 'SUCCESS' };
     } else if (system === 'GNMS') {
-      const { uploadLocalServiceLogsToRemoteGnms } = await import('@/service/gnmsLogReceiveService');
+      const { prepareLocalServiceLogsForBrowser } = await import('@/service/gnmsLogReceiveService');
       const dateRaw = String(p.date ?? '').trim();
       const dateFilter = dateRaw || null;
       await updateIntegrationJobProgress(
         ijlKey,
-        `진행중 | GNMS | logs+backup+linkage → 원격 업로드${dateFilter ? ` date=${dateFilter}` : ' (전체)'}`
+        `진행중 | GNMS | 로그 수집(브라우저 업로드 대기)${dateFilter ? ` date=${dateFilter}` : ' (전체)'}`
       );
-      const saved = await uploadLocalServiceLogsToRemoteGnms({ dateFilter });
+      const prepared = await prepareLocalServiceLogsForBrowser({ dateFilter });
       await updateIntegrationJobProgress(
         ijlKey,
-        `완료 | GNMS | ${saved.remoteUrl} | project=${saved.project} type=${saved.type} files=${saved.fileCount} | ${saved.savedFiles.join(', ')}`
+        `준비 | GNMS | session=${prepared.sessionId} files=${prepared.files.length} — 브라우저 업로드 필요`
       );
+      await pool.query(
+        `update integration_job_log
+         set ijl_status='SUCCESS', ijl_finished_at=now(), ijl_message=$2
+         where ijl_key=$1`,
+        [
+          ijlKey,
+          withSchedulerPrefix(
+            `브라우저 업로드 세션 준비 session=${prepared.sessionId} files=${prepared.files.length}`
+          ),
+        ]
+      );
+      console.error(`[INTEGRATION] DONE system=${system} ijlKey=${ijlKey ?? '-'} browserUpload`);
+      return {
+        ijlKey,
+        system,
+        ok: true,
+        browserUploadRequired: true,
+        sessionId: prepared.sessionId,
+        project: prepared.project,
+        type: prepared.type,
+        files: prepared.files,
+      };
     } else {
       throw new Error('Not implemented yet');
     }

@@ -30,12 +30,6 @@ function yesterdayYmd(now: Date): string {
   return `${y}${m}${day}`;
 }
 
-/** GNMS 로그 연계 date 필터용 yyyy-mm-dd (백업 stamp와 동일 일자) */
-function yesterdayYmdDash(now: Date): string {
-  const { y, m, day } = yesterdayParts(now);
-  return `${y}-${m}-${day}`;
-}
-
 function uniqueBackupDest(fileName: string): string {
   let dest = path.join(BACKUP_DIR, fileName);
   if (!fs.existsSync(dest)) return dest;
@@ -139,7 +133,9 @@ export function startNssmLogBackupScheduler(): void {
   const runType = resolveGgnrRunType().trim().toLowerCase();
   console.info(
     `${LOG} registered: daily 00:00, no run on startup` +
-      (runType === 'demo' ? ', demo→GNMS log upload after backup' : '')
+      (runType === 'demo'
+        ? ', demo→GNMS log upload skipped (브라우저 수동 연계만)'
+        : '')
   );
 
   let lastSlot: string | null = null;
@@ -152,22 +148,11 @@ export function startNssmLogBackupScheduler(): void {
     lastSlot = slot;
     void Promise.resolve()
       .then(() => rotateNssmServiceLogs(now))
-      .then(async () => {
+      .then(() => {
         if (resolveGgnrRunType().trim().toLowerCase() !== 'demo') return;
-        const date = yesterdayYmdDash(now);
-        console.info(`${LOG} demo — GNMS 로그 연계 시작 date=${date}`);
-        const { runIntegration } = await import('@/service/integrationService');
-        try {
-          const r = await runIntegration({
-            system: 'GNMS',
-            mode: 'daily',
-            trigger: 'scheduler',
-            date,
-          });
-          console.info(`${LOG} GNMS done ijlKey=${r.ijlKey ?? '-'} ok=${r.ok}`);
-        } catch (e) {
-          console.warn(`${LOG} GNMS fail:`, e instanceof Error ? e.message : e);
-        }
+        console.info(
+          `${LOG} demo — GNMS 자동 로그 연계 스킵 (브라우저 경유만 지원). 시스템 연계>GNMS에서 수동 실행하세요.`
+        );
       });
   }, 15_000);
 }
