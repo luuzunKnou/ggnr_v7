@@ -28,6 +28,9 @@ import {
   getEnabledSystemsRaw,
 } from '@/service/configService';
 import { loadUserAccess } from '@/lib/auth/access';
+import { ACCESS_REQUEST_PERM_ETC } from '@/lib/permAccessRequest';
+
+export { ACCESS_REQUEST_PERM_ETC, isAccessRequestPermEtc } from '@/lib/permAccessRequest';
 import { listConsoleMenuCatalog as buildConsoleMenuCatalog } from '@/lib/consoleMenuAccess/registry';
 
 type Params = Record<string, unknown> & { _sessionUsrId?: string };
@@ -60,7 +63,7 @@ async function ensureUserPermAssigned(usrId: string): Promise<number> {
       .insert(perm)
       .values({
         permName: id,
-        permEtc: '권한신청 승인으로 자동 생성',
+        permEtc: ACCESS_REQUEST_PERM_ETC,
       })
       .returning();
   }

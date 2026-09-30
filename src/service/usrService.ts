@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, isNotNull, isNull, or } from 'drizzle-orm';
+import { and, asc, desc, eq, isNotNull, isNull, ne, or } from 'drizzle-orm';
 import { db } from '@/database/db';
 import { usr } from '@/database/schema/usr';
 import { ug } from '@/database/schema/ug';
@@ -11,6 +11,7 @@ import { tempPasswordCandidates } from '@/lib/auth/hangulQwerty';
 import { hashPassword, isForbiddenNewPassword, isTemporaryPassword } from '@/lib/auth/password';
 import { getSessionUsrId } from '@/lib/auth/guard';
 import { recordUserLog, UL_CAT_USER } from '@/service/userLogService';
+import { ACCESS_REQUEST_PERM_ETC } from '@/lib/permAccessRequest';
 
 function strOrNull(v: unknown): string | null {
   if (v == null) return null;
@@ -252,9 +253,14 @@ export async function listUsers(_params?: unknown) {
   }
 }
 
-export async function listPermCatalog(_params?: unknown) {
+export async function listPermCatalog(params?: Record<string, unknown>) {
   await requireLoggedIn();
+  const commonOnly = params?.commonOnly === true || params?.common_only === true;
   try {
+    const visibility = or(eq(perm.permIsHidden, false), isNull(perm.permIsHidden));
+    const whereClause = commonOnly
+      ? and(visibility, or(isNull(perm.permEtc), ne(perm.permEtc, ACCESS_REQUEST_PERM_ETC)))
+      : visibility;
     const rows = await db
       .select({
         permKey: perm.permKey,
@@ -262,7 +268,7 @@ export async function listPermCatalog(_params?: unknown) {
         permEtc: perm.permEtc,
       })
       .from(perm)
-      .where(or(eq(perm.permIsHidden, false), isNull(perm.permIsHidden)))
+      .where(whereClause)
       .orderBy(asc(perm.permKey));
     return { success: true, data: rows };
   } catch (error: unknown) {

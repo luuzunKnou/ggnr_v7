@@ -21,7 +21,7 @@ import {
 import { call } from "@/lib/api"
 import { withBasePath } from "@/lib/basePath"
 import { cn } from "@/lib/utils"
-import { Trash2, Plus, X } from "lucide-react"
+import { Trash2, Plus, X, ChevronLeft, ChevronRight } from "lucide-react"
 import { fetchDefineLayerTables } from "./layerManager/layerManagerListCache"
 
 export type SystemItem = {
@@ -339,34 +339,215 @@ function CheckboxMultiPick({
   )
 }
 
-function LayerGroupMultiPick({
+function LayerGroupTransferPick({
   value,
   onChange,
   options,
+  assignedByOthers,
   disabled = false,
 }: {
   value: string[]
   onChange: (next: string[]) => void
   options: string[]
+  /** 그룹 → 이 그룹을 가진 다른 시스템 이름. 없으면 공통(미소속) */
+  assignedByOthers: ReadonlyMap<string, string[]>
   disabled?: boolean
 }) {
-  const pickOptions = useMemo(
-    () => options.map((g) => ({ key: g, label: g })),
-    [options]
+  const [leftSearch, setLeftSearch] = useState("")
+  const [rightSearch, setRightSearch] = useState("")
+  const [leftSel, setLeftSel] = useState<Set<string>>(new Set())
+  const [rightSel, setRightSel] = useState<Set<string>>(new Set())
+  const [commonOnly, setCommonOnly] = useState(false)
+
+  const selected = useMemo(
+    () => [...new Set(value.map((x) => String(x).trim()).filter(Boolean))],
+    [value]
   )
+  const selectedSet = useMemo(() => new Set(selected), [selected])
+
+  const leftItems = useMemo(() => {
+    return options
+      .filter((g) => !selectedSet.has(g))
+      .filter((g) => !commonOnly || !assignedByOthers.has(g))
+      .filter((g) => matchesGroupQuery(g, leftSearch))
+      .sort((a, b) => a.localeCompare(b, "ko"))
+  }, [options, assignedByOthers, selectedSet, leftSearch, commonOnly])
+
+  const commonCount = useMemo(
+    () => options.filter((g) => !selectedSet.has(g) && !assignedByOthers.has(g)).length,
+    [options, selectedSet, assignedByOthers]
+  )
+
+  const groupTag = (g: string) => {
+    const owners = assignedByOthers.get(g)
+    if (!owners || owners.length === 0) {
+      return { label: "공통", title: "어느 시스템에도 소속되지 않은 공통 그룹", common: true }
+    }
+    return {
+      label: owners.length === 1 ? owners[0] : `${owners[0]} 외 ${owners.length - 1}`,
+      title: `소속 시스템: ${owners.join(", ")}`,
+      common: false,
+    }
+  }
+
+  const rightItems = useMemo(() => {
+    return selected
+      .filter((g) => matchesGroupQuery(g, rightSearch))
+  }, [selected, rightSearch])
+
+  const moveToRight = (keys: string[]) => {
+    if (disabled || keys.length === 0) return
+    const next = new Set(selected)
+    for (const k of keys) next.add(k)
+    onChange([...next])
+    setLeftSel(new Set())
+  }
+
+  const moveToLeft = (keys: string[]) => {
+    if (disabled || keys.length === 0) return
+    const drop = new Set(keys)
+    onChange(selected.filter((g) => !drop.has(g)))
+    setRightSel(new Set())
+  }
+
+  const toggleSel = (side: "left" | "right", key: string) => {
+    const setter = side === "left" ? setLeftSel : setRightSel
+    setter((prev) => {
+      const next = new Set(prev)
+      if (next.has(key)) next.delete(key)
+      else next.add(key)
+      return next
+    })
+  }
+
+  const listBox = (
+    side: "left" | "right",
+    title: string,
+    items: string[],
+    sel: Set<string>,
+    search: string,
+    setSearch: (v: string) => void,
+    emptyText: string
+  ) => (
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col border border-border">
+      <div className="flex shrink-0 items-start justify-between gap-2 border-b border-border bg-muted/40 px-2 py-1.5">
+        <div className="min-w-0">
+          <p className="text-[11px] font-medium text-foreground">{title}</p>
+          <p className="text-[10px] text-muted-foreground tabular-nums">
+            {items.length}개{side === "left" ? ` · 공통 ${commonCount}개` : ""}
+          </p>
+        </div>
+        {side === "left" ? (
+          <label className="flex shrink-0 cursor-pointer items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground">
+            <input
+              type="checkbox"
+              className="h-3 w-3 accent-primary"
+              checked={commonOnly}
+              onChange={(e) => setCommonOnly(e.target.checked)}
+              disabled={disabled}
+            />
+            공통만
+          </label>
+        ) : null}
+      </div>
+      <Input
+        className="h-7 shrink-0 rounded-none border-0 border-b border-border text-xs shadow-none focus-visible:ring-0"
+        value={search}
+        onChange={(e) => setSearch(e.target.value)}
+        placeholder="검색"
+        disabled={disabled}
+      />
+      <ul className="min-h-[11rem] max-h-[14rem] flex-1 overflow-y-auto">
+        {items.length === 0 ? (
+          <li className="px-2 py-3 text-[11px] text-muted-foreground">{emptyText}</li>
+        ) : (
+          items.map((g) => {
+            const on = sel.has(g)
+            const tag = groupTag(g)
+            const showTag = side === "left" || !tag.common
+            return (
+              <li key={g}>
+                <button
+                  type="button"
+                  disabled={disabled}
+                  title={showTag ? `${g} — ${tag.title}` : g}
+                  className={cn(
+                    "flex w-full items-center gap-1.5 px-2 py-1 text-left text-[11px] hover:bg-muted/70 disabled:opacity-50",
+                    on && "bg-primary/10 font-medium"
+                  )}
+                  onClick={() => toggleSel(side, g)}
+                  onDoubleClick={() => {
+                    if (side === "left") moveToRight([g])
+                    else moveToLeft([g])
+                  }}
+                >
+                  <span className="min-w-0 flex-1 truncate">{g}</span>
+                  {showTag ? (
+                    <span
+                      className={cn(
+                        "max-w-[45%] shrink-0 truncate rounded-sm px-1 text-[9px] leading-4",
+                        tag.common
+                          ? "bg-emerald-50 text-emerald-700"
+                          : "bg-muted text-muted-foreground"
+                      )}
+                    >
+                      {side === "right" ? `공유: ${tag.label}` : tag.label}
+                    </span>
+                  ) : null}
+                </button>
+              </li>
+            )
+          })
+        )}
+      </ul>
+    </div>
+  )
+
   return (
-    <CheckboxMultiPick
-      value={value}
-      onChange={onChange}
-      options={pickOptions}
-      disabled={disabled}
-      placeholder="클릭하여 레이어 그룹 선택"
-      searchPlaceholder="레이어 그룹 검색"
-      emptyText="등록된 레이어 그룹이 없습니다."
-      title="레이어 그룹"
-      columns={2}
-      formatSelected={(keys) => keys.join(", ")}
-    />
+    <div className="col-span-2 flex min-w-0 items-stretch gap-1.5">
+      {listBox(
+        "left",
+        "추가 가능한 그룹",
+        leftItems,
+        leftSel,
+        leftSearch,
+        setLeftSearch,
+        commonOnly ? "공통 그룹이 없습니다." : "추가할 그룹이 없습니다."
+      )}
+      <div className="flex shrink-0 flex-col items-center justify-center gap-1.5 px-0.5">
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="h-8 w-8 rounded-none p-0"
+          disabled={disabled || leftSel.size === 0}
+          title="이 시스템에 추가"
+          onClick={() => moveToRight([...leftSel])}
+        >
+          <ChevronRight className="h-4 w-4" />
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="h-8 w-8 rounded-none p-0"
+          disabled={disabled || rightSel.size === 0}
+          title="이 시스템에서 빼기"
+          onClick={() => moveToLeft([...rightSel])}
+        >
+          <ChevronLeft className="h-4 w-4" />
+        </Button>
+      </div>
+      {listBox(
+        "right",
+        "이 시스템",
+        rightItems,
+        rightSel,
+        rightSearch,
+        setRightSearch,
+        "소속 그룹이 없습니다."
+      )}
+    </div>
   )
 }
 
@@ -480,6 +661,29 @@ export function SystemListManager() {
   const [form, setForm] = useState<SystemItem>(emptySystem())
   const [layerGroups, setLayerGroups] = useState<string[]>([])
   const [serviceOptions, setServiceOptions] = useState<MultiPickOption[]>([])
+
+  /** 편집 중인 시스템 제외 — 그룹별로 이미 묶여 있는 다른 공통 시스템 이름 */
+  const assignedByOthers = useMemo(() => {
+    const map = new Map<string, string[]>()
+    const editingKey =
+      editingIndex != null ? String(systems[editingIndex]?.sys_key ?? "").trim() : ""
+    const formKey = String(form.sys_key ?? "").trim()
+    const skipKey = formKey || editingKey
+    for (const s of systems) {
+      if (s.source !== "common") continue
+      const key = String(s.sys_key ?? "").trim()
+      if (skipKey && key === skipKey) continue
+      const owner = String(s.sys_kor ?? "").trim() || key
+      for (const g of s.layerGroupList ?? []) {
+        const name = String(g ?? "").trim()
+        if (!name) continue
+        const owners = map.get(name) ?? []
+        if (!owners.includes(owner)) owners.push(owner)
+        map.set(name, owners)
+      }
+    }
+    return map
+  }, [systems, editingIndex, form.sys_key])
 
   const loadServiceOptions = async () => {
     try {
@@ -885,7 +1089,7 @@ export function SystemListManager() {
       </div>
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-lg overflow-visible rounded-none sm:max-w-xl">
+        <DialogContent className="max-w-lg overflow-visible rounded-none sm:max-w-3xl">
           <DialogHeader>
             <DialogTitle>
               {editingIndex !== null
@@ -993,10 +1197,11 @@ export function SystemListManager() {
                 </div>
                 <div className="grid grid-cols-3 gap-2 items-start">
                   <label className="text-sm font-medium pt-2">레이어 그룹</label>
-                  <LayerGroupMultiPick
+                  <LayerGroupTransferPick
                     value={form.layerGroupList ?? []}
                     onChange={(layerGroupList) => setForm((f) => ({ ...f, layerGroupList }))}
                     options={layerGroups}
+                    assignedByOthers={assignedByOthers}
                   />
                 </div>
               </>
