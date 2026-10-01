@@ -1,5 +1,5 @@
 import type Map from 'ol/Map';
-import { RESOLUTIONS_3857 } from '../config/mapDefaults';
+import { VIEW_RESOLUTIONS_3857 } from '../config/mapDefaults';
 
 /** 축척 막대 너비(px) — CSS `.ggnr-scale-bar-inner` 와 동일 */
 export const SCALE_BAR_PX = 100;
@@ -62,8 +62,8 @@ export function parseScaleInput(raw: string, currentLabel?: string | null): numb
 export function applyScaleMeters(map: Map, meters: number): boolean {
   if (!Number.isFinite(meters) || meters <= 0) return false;
   const view = map.getView();
-  const minRes = RESOLUTIONS_3857[RESOLUTIONS_3857.length - 1] ?? 0.15;
-  const maxRes = RESOLUTIONS_3857[0] ?? 156543;
+  const minRes = VIEW_RESOLUTIONS_3857[VIEW_RESOLUTIONS_3857.length - 1] ?? 0.04;
+  const maxRes = VIEW_RESOLUTIONS_3857[0] ?? 156543;
   const zoom = zoomFromScaleMeters(meters);
   if (!Number.isFinite(zoom)) return false;
   view.setConstrainResolution(false);

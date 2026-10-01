@@ -3348,6 +3348,7 @@ function MapLayoutContent({
           )}
           {privateLandAnalysisOpen && (
             <PrivateLandAnalysisRoot
+              key={systemKeyFromUrl}
               system={systemKeyFromUrl}
               onDetailOpenChange={setPrivateLandAnalysisDetailSelected}
             >

@@ -23,8 +23,13 @@ const RANGING_TEXT: Partial<Record<PrivateLandAnalysisPhase, string>> = {
   start: '지도에서 하천 위 시작 위치를 찍으세요.',
   loadingBase: '하천 도형을 불러오는 중…',
   end: '하천을 따라 끝 위치를 찍으세요.',
-  ranged: '지도에서 지류 포함 여부를 정하고 적용하세요.',
+  ranged: '지도에서 적용을 누르면 바로 분석합니다.',
   applying: '구간을 계산하는 중…',
+};
+
+const CLOSED_RANGING_TEXT: Partial<Record<PrivateLandAnalysisPhase, string>> = {
+  start: '지도에서 도로를 가로질러 경계선을 찍으세요.',
+  ranged: '경계선으로 범위를 닫고 적용하세요.',
 };
 
 /** 소유구분 필터 한 줄 칸 수 — 넘치면 두 줄 */
@@ -82,10 +87,11 @@ export function PrivateLandAnalysisListPanel({ onClose }: Props) {
     selectedPnu,
     includeTributary,
     tribCutCount,
+    rangeMode,
+    closedLineCount,
     openAreaModal,
     changeArea,
     resetAll,
-    analyze,
     setOwnFilter,
     setKeyword,
     selectParcel,
@@ -94,13 +100,17 @@ export function PrivateLandAnalysisListPanel({ onClose }: Props) {
   const ownFilters = useMemo(() => ownFilterOptions(parcels.map((p) => p.ownGbn)), [parcels]);
 
   const confirmed = phase === 'applied' || phase === 'analyzing' || phase === 'result';
-  const rangingText = RANGING_TEXT[phase];
-  const canAnalyze = phase === 'applied';
+  const closed = rangeMode === 'closed';
+  const rangingText = closed ? (CLOSED_RANGING_TEXT[phase] ?? RANGING_TEXT[phase]) : RANGING_TEXT[phase];
 
   const summaryRows: SummaryRow[] = [
     { label: '구역', value: layer?.label ?? '—' },
-    { label: '대상', value: baseName || '—', highlight: true },
-    { label: '지류', value: includeTributary && tribCutCount > 0 ? `포함 ${tribCutCount}곳` : '미포함' },
+    ...(closed
+      ? [{ label: '경계선', value: `${closedLineCount}개` }]
+      : [
+          { label: '대상', value: baseName || '—', highlight: true },
+          { label: '지류', value: includeTributary && tribCutCount > 0 ? `포함 ${tribCutCount}곳` : '미포함' },
+        ]),
     ...(zoneAreaSqm != null ? [{ label: '면적', value: `약 ${formatSqm(zoneAreaSqm)}` }] : []),
   ];
 
@@ -173,17 +183,6 @@ export function PrivateLandAnalysisListPanel({ onClose }: Props) {
               재설정
             </Button>
           </div>
-
-          <Button
-            type="button"
-            className="mt-2 w-full"
-            size="sm"
-            disabled={!canAnalyze}
-            title={!confirmed ? '지도에서 구간을 적용한 뒤 분석할 수 있습니다.' : undefined}
-            onClick={analyze}
-          >
-            {phase === 'analyzing' ? '분석 중…' : '분석'}
-          </Button>
         </div>
       </div>
 
@@ -231,7 +230,7 @@ export function PrivateLandAnalysisListPanel({ onClose }: Props) {
       <div className="min-h-0 flex-1 overflow-auto scrollbar-thin">
         {phase !== 'result' ? (
           <p className="px-3 py-2.5 text-xs text-muted-foreground">
-            구간을 적용하고 분석하면 필지 목록이 표시됩니다.
+            {phase === 'analyzing' ? '필지를 분석하는 중…' : '구간을 적용하면 필지 목록이 표시됩니다.'}
           </p>
         ) : filteredParcels.length === 0 ? (
           <p className="px-3 py-2.5 text-xs text-muted-foreground">

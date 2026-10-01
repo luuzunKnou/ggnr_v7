@@ -7,7 +7,7 @@ import OSM from 'ol/source/OSM';
 import { defaults as defaultControls } from 'ol/control';
 import { defaults as defaultInteractions } from 'ol/interaction';
 import '@/app/(pages)/map/_mapComponents/config/projections';
-import { RESOLUTIONS_3857 } from '@/app/(pages)/map/_mapComponents/config/mapDefaults';
+import { VIEW_RESOLUTIONS_3857 } from '@/app/(pages)/map/_mapComponents/config/mapDefaults';
 import { createCadastralLayers, createBuildingRoadLayers } from '@/app/(pages)/map/_mapComponents/layerFactory/boundaryLayerFactory';
 import { createBasicSectionLayers } from '@/app/(pages)/map/_mapComponents/layerFactory/basicSectionLayerFactory';
 import { createJimokLayers } from '@/app/(pages)/map/_mapComponents/layerFactory/jimokLayerFactory';
@@ -86,9 +86,9 @@ export function useMapPrintMap(
       view: new View({
         center: snapshot.center,
         zoom: snapshot.zoom,
-        resolutions: RESOLUTIONS_3857,
+        resolutions: VIEW_RESOLUTIONS_3857,
         minZoom: 0,
-        maxZoom: RESOLUTIONS_3857.length - 1,
+        maxZoom: VIEW_RESOLUTIONS_3857.length - 1,
         constrainResolution: true,
       }),
       controls: defaultControls({ zoom: false, attribution: false }),

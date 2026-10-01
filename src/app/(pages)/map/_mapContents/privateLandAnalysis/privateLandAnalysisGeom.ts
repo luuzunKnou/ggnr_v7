@@ -93,6 +93,34 @@ export function shortestChordAt(geom: Polygon | MultiPolygon, segsAll: Seg[], p:
   ];
 }
 
+function cross(ox: number, oy: number, ax: number, ay: number, bx: number, by: number): number {
+  return (ax - ox) * (by - oy) - (ay - oy) * (bx - ox);
+}
+
+function chordsCross(a: Chord, b: Chord): boolean {
+  const [[ax1, ay1], [ax2, ay2]] = a;
+  const [[bx1, by1], [bx2, by2]] = b;
+  const d1 = cross(bx1, by1, bx2, by2, ax1, ay1);
+  const d2 = cross(bx1, by1, bx2, by2, ax2, ay2);
+  const d3 = cross(ax1, ay1, ax2, ay2, bx1, by1);
+  const d4 = cross(ax1, ay1, ax2, ay2, bx2, by2);
+  return d1 * d2 < 0 && d3 * d4 < 0;
+}
+
+/** 시작·끝 중심 간 최소 거리 (지도 좌표 단위, 웹메르카토르 — 한국 기준 약 1.25배 m) */
+const MIN_CHORD_GAP = 10;
+
+/** 서버 계산 전 바로 걸러낼 수 있는 잘못된 시작·끝선. 문제 없으면 null */
+export function invalidChordPair(c1: Chord, c2: Chord): string | null {
+  if (chordsCross(c1, c2)) return '시작선과 끝선이 서로 겹칩니다. 끝 위치를 다시 지정하세요.';
+  const m1: Coordinate = [(c1[0][0] + c1[1][0]) / 2, (c1[0][1] + c1[1][1]) / 2];
+  const m2: Coordinate = [(c2[0][0] + c2[1][0]) / 2, (c2[0][1] + c2[1][1]) / 2];
+  if (Math.hypot(m1[0] - m2[0], m1[1] - m2[1]) < MIN_CHORD_GAP) {
+    return '시작과 끝이 너무 가깝습니다. 구간을 조금 더 벌려 지정하세요.';
+  }
+  return null;
+}
+
 /**
  * 커서가 면 밖이면 maxDist 안의 가장 가까운 경계 지점 바로 안쪽으로 붙임.
  * 하천을 따라 끝 위치를 끌 때 제방 밖으로 살짝 벗어나도 끊기지 않게 한다.

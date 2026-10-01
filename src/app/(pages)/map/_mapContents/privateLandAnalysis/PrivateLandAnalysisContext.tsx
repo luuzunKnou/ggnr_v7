@@ -24,13 +24,19 @@ import VectorSource from 'ol/source/Vector';
 import { unByKey } from 'ol/Observable';
 import { Circle as CircleStyle, Fill, Stroke, Style } from 'ol/style';
 import { call } from '@/lib/api';
-import { ownGbnLabel, type PrivateLandAnalysisLayer } from '@/lib/privateLandAnalysisLayers';
+import {
+  ownGbnLabel,
+  privateLandRangeMode,
+  type PrivateLandAnalysisLayer,
+  type PrivateLandRangeMode,
+} from '@/lib/privateLandAnalysisLayers';
 import { useMapContext } from '../../_mapComponents/MapContext';
-import { ANALYSIS_AREA_BLUE, ANALYSIS_AREA_STYLE, type DrawToolbarMapAnchor } from '../../_mapComponents/analysisArea';
+import { ANALYSIS_AREA_BLUE, ANALYSIS_AREA_STYLE } from '../../_mapComponents/analysisArea';
 import { scheduleFitMapToExtent3857 } from '../../_mapComponents/config/mapAutoNavigation';
 import { MAP_AUTO_NAV_MAX_ZOOM } from '../../_mapComponents/config/mapDefaults';
 import {
   collectSegments,
+  invalidChordPair,
   shortestChordAt,
   snapInside,
   toAreaGeometry,
@@ -88,15 +94,32 @@ type Ctx = {
   tribCandidateCount: number;
   tribCutCount: number;
   setIncludeTributary: (on: boolean) => void;
+  /** 지류 추가 창 — 열려 있는 동안만 지도에서 지류 끝을 찍음 */
+  tributaryPicking: boolean;
+  openTributaryPick: () => void;
+  /** 완료 — 찍은 지류가 없으면 미포함으로 되돌림 */
+  closeTributaryPick: () => void;
   /** 분석 구역(레이어) 선택 모달 */
   areaModalOpen: boolean;
   openAreaModal: () => void;
   closeAreaModal: () => void;
-  /** 적용 전 지도 툴바 위치 — 구간 위쪽 가운데 */
-  toolbarAnchor: DrawToolbarMapAnchor | null;
+  /** 지정한 구간을 서버에서 확인 중 — 끝나기 전엔 적용 불가 */
+  rangeChecking: boolean;
+  /** 지정한 구간이 잘못됨 — 있으면 적용 불가, 다시 지정만 */
+  rangeError: string | null;
+  /** 구간 지정 방식 — 하천 두 선 / 도로 닫힌 범위 */
+  rangeMode: PrivateLandRangeMode;
+  /** 닫힌 범위 — 찍은 경계선 수 */
+  closedLineCount: number;
+  /** 경계선이 아직 범위를 닫지 못함 */
+  closedOpen: boolean;
+  /** 닫힌 범위 — 마지막 경계선 지우기 */
+  undoLastLine: () => void;
+  /** 화면이 넓어 레이어 면을 불러오지 않음 — 확대 필요 */
+  viewTooLarge: boolean;
   selectLayer: (table: string) => void;
+  /** 구간 확정 후 곧바로 필지 분석까지 */
   apply: () => void;
-  analyze: () => void;
   changeArea: () => void;
   resetAll: () => void;
   setOwnFilter: (v: string) => void;
@@ -114,10 +137,15 @@ export function usePrivateLandAnalysis(): Ctx {
 
 const accent = (alpha: number) => `rgba(${ANALYSIS_AREA_BLUE}, ${alpha})`;
 
-const CHORD_STYLE = new Style({ stroke: new Stroke({ color: accent(1), width: 3 }) });
-const CHORD_MOVING_STYLE = new Style({ stroke: new Stroke({ color: accent(1), width: 3, lineDash: [8, 6] }) });
+/** 찍은 선은 분석 결과에서도 남으므로 필지보다 위에 그림 */
+const CHORD_STYLE = new Style({ stroke: new Stroke({ color: accent(1), width: 3 }), zIndex: 5 });
+const CHORD_MOVING_STYLE = new Style({
+  stroke: new Stroke({ color: accent(1), width: 3, lineDash: [8, 6] }),
+  zIndex: 5,
+});
 /** 절단선 양 끝 — 필지분석 꼭짓점과 같은 점 */
 const CHORD_ENDS_STYLE = new Style({
+  zIndex: 5,
   geometry: (f) => {
     const g = f.getGeometry();
     return g instanceof LineString ? new MultiPoint(g.getCoordinates()) : undefined;
@@ -132,11 +160,6 @@ const PREVIEW_STYLE = new Style({
   stroke: new Stroke({ color: accent(0.85), width: 1.5, lineDash: [6, 4] }),
   fill: new Fill({ color: accent(0.1) }),
 });
-/** 분석 결과 표시 중 구간 — 필지가 잘 보이도록 채움 없이 점선 윤곽만 */
-const ZONE_RESULT_STYLE = new Style({
-  stroke: new Stroke({ color: accent(0.9), width: 2, lineDash: [10, 6] }),
-});
-
 /** 필지 — 목록 소유구분 배지와 같은 색 */
 const parcelStyleCache = new Map<string, Style | Style[]>();
 function parcelStyle(ownGbn: string, picked: boolean): Style | Style[] {
@@ -165,8 +188,29 @@ function chordStyles(moving: boolean): Style[] {
   return [moving ? CHORD_MOVING_STYLE : CHORD_STYLE, CHORD_ENDS_STYLE];
 }
 
+/** 닫힌 범위 — 하나로 합친 레이어 면. 다른 도형보다 아래에 그림 */
+const LAYER_BASE_STYLE = new Style({
+  stroke: new Stroke({ color: 'rgba(71, 85, 105, 0.9)', width: 1.5 }),
+  fill: new Fill({ color: 'rgba(100, 116, 139, 0.3)' }),
+  zIndex: -1,
+});
+
+/** 닫힌 범위 — 경계선 안쪽으로 잡힌 구간 미리보기 */
+const CLOSED_PREVIEW_STYLE = new Style({
+  stroke: new Stroke({ color: 'rgba(220, 38, 38, 0.95)', width: 2 }),
+  fill: new Fill({ color: 'rgba(239, 68, 68, 0.45)' }),
+});
+
+/** 분석 결과 중에는 숨기는 도형 — 구간 윤곽만. 찍은 선은 남김 */
+const RESULT_HIDDEN_KINDS = ['zone'];
+
 function featureStyle(feature: Feature<Geometry>): Style | Style[] | undefined {
+  if (feature.get('hidden')) return undefined;
   switch (feature.get('kind')) {
+    case 'layerBase':
+      return LAYER_BASE_STYLE;
+    case 'cut':
+      return chordStyles(false);
     case 'chord1':
       return chordStyles(false);
     case 'chordStart':
@@ -174,9 +218,9 @@ function featureStyle(feature: Feature<Geometry>): Style | Style[] | undefined {
     case 'chord2':
       return chordStyles(Boolean(feature.get('preview')));
     case 'preview':
-      return PREVIEW_STYLE;
+      return feature.get('closed') ? CLOSED_PREVIEW_STYLE : PREVIEW_STYLE;
     case 'zone':
-      return feature.get('faded') ? ZONE_RESULT_STYLE : ANALYSIS_AREA_STYLE;
+      return ANALYSIS_AREA_STYLE;
     case 'parcel':
       return parcelStyle(String(feature.get('ownGbn') ?? ''), Boolean(feature.get('picked')));
     case 'tribCut':
@@ -190,10 +234,6 @@ function featureStyle(feature: Feature<Geometry>): Style | Style[] | undefined {
 
 function chordGeometry(chord: Chord): LineString {
   return new LineString([chord[0], chord[1]]);
-}
-
-function anchorOf(ext: number[]): DrawToolbarMapAnchor {
-  return { topCenter: [(ext[0] + ext[2]) / 2, ext[3]] };
 }
 
 function readGeometry3857(raw: unknown): Geometry | null {
@@ -236,8 +276,29 @@ export function PrivateLandAnalysisRoot({ system, onDetailOpenChange, children }
   const [includeTributary, setIncludeTributaryState] = useState(false);
   const [tribCandidateCount, setTribCandidateCount] = useState(0);
   const [tribCutCount, setTribCutCount] = useState(0);
+  const [tributaryPicking, setTributaryPicking] = useState(false);
+  const tribPickingRef = useRef(false);
+  tribPickingRef.current = tributaryPicking;
   const [areaModalOpen, setAreaModalOpen] = useState(true);
-  const [toolbarAnchor, setToolbarAnchor] = useState<DrawToolbarMapAnchor | null>(null);
+  const [rangeChecking, setRangeChecking] = useState(false);
+  const [rangeError, setRangeError] = useState<string | null>(null);
+  /** 실제 지정 구간 확인 순번 — 지류 위 hover 미리보기와 구분 */
+  const rangeSeqRef = useRef(0);
+  const rangeBlockedRef = useRef(false);
+  rangeBlockedRef.current = rangeChecking || rangeError != null;
+  const rangeMode = privateLandRangeMode(layer);
+  const rangeModeRef = useRef(rangeMode);
+  rangeModeRef.current = rangeMode;
+  /** 닫힌 범위 — 찍은 경계선 */
+  const closedCutsRef = useRef<Chord[]>([]);
+  const [closedLineCount, setClosedLineCount] = useState(0);
+  /** 경계선이 아직 범위를 닫지 못함 — 오류가 아니라 더 찍어야 하는 상태 */
+  const [closedOpen, setClosedOpen] = useState(false);
+  const closedOpenRef = useRef(false);
+  closedOpenRef.current = closedOpen;
+  const [viewTooLarge, setViewTooLarge] = useState(false);
+  const viewTooLargeRef = useRef(false);
+  viewTooLargeRef.current = viewTooLarge;
 
   const sourceRef = useRef<VectorSource | null>(null);
   const vectorLayerRef = useRef<VectorLayer<VectorSource> | null>(null);
@@ -342,10 +403,15 @@ export function PrivateLandAnalysisRoot({ system, onDetailOpenChange, children }
     if (previewTimerRef.current != null) window.clearTimeout(previewTimerRef.current);
     previewTimerRef.current = null;
     previewSeqRef.current += 1;
-    removeKinds(['chordStart', 'chord1', 'chord2', 'preview', 'zone', 'parcel', 'tribCut', 'tribMoving']);
+    removeKinds(['chordStart', 'chord1', 'chord2', 'preview', 'zone', 'parcel', 'tribCut', 'tribMoving', 'cut']);
+    closedCutsRef.current = [];
+    setClosedLineCount(0);
+    setClosedOpen(false);
     tribMovingRef.current = false;
     includeTributaryRef.current = false;
     setIncludeTributaryState(false);
+    tribPickingRef.current = false;
+    setTributaryPicking(false);
     baseRef.current = null;
     chord1Ref.current = null;
     chord2Ref.current = null;
@@ -355,7 +421,9 @@ export function PrivateLandAnalysisRoot({ system, onDetailOpenChange, children }
     setRiverKnown(false);
     setTribCandidateCount(0);
     setTribCutCount(0);
-    setToolbarAnchor(null);
+    rangeSeqRef.current += 1;
+    setRangeChecking(false);
+    setRangeError(null);
     setBaseName('');
     setZoneAreaSqm(null);
     setParcels([]);
@@ -386,8 +454,11 @@ export function PrivateLandAnalysisRoot({ system, onDetailOpenChange, children }
       clearArea();
       const prevTable = addedLayerRef.current ?? layerRef.current?.table ?? null;
       if (prevTable && prevTable !== next.table) hideAddedLayer(prevTable);
-      addedLayerRef.current = next.table;
-      setVisibleLayerNames?.((prev) => (prev.has(next.table) ? prev : new Set(prev).add(next.table)));
+      /** 닫힌 범위는 원래 레이어 대신 하나로 합친 면을 직접 그림 */
+      if (privateLandRangeMode(next) !== 'closed') {
+        addedLayerRef.current = next.table;
+        setVisibleLayerNames?.((prev) => (prev.has(next.table) ? prev : new Set(prev).add(next.table)));
+      }
       setLayer(next);
       setPhase('start');
       setAreaModalOpen(false);
@@ -488,7 +559,15 @@ export function PrivateLandAnalysisRoot({ system, onDetailOpenChange, children }
       if (!c1 || !current) return;
       const seq = previewSeqRef.current;
       const fixed = phaseRef.current === 'ranged';
+      const realCheck = fixed && cutsOverride == null;
       const run = async () => {
+        const rangeSeq = realCheck ? ++rangeSeqRef.current : 0;
+        if (realCheck) setRangeChecking(true);
+        const settleRange = (error: string | null) => {
+          if (!realCheck || rangeSeq !== rangeSeqRef.current) return;
+          setRangeError(error);
+          setRangeChecking(false);
+        };
         const wkt = new WKT();
         try {
           const res = await call('', 'POST', {
@@ -502,19 +581,19 @@ export function PrivateLandAnalysisRoot({ system, onDetailOpenChange, children }
               ...(fixed ? tributaryParams(true, cutsOverride) : {}),
             },
           });
+          const data = res?.data ?? res;
+          const geom = readGeometry3857(data?.zoneGeometry3857);
+          settleRange(
+            geom ? null : String(data?.error || '두 선 사이의 구간을 찾지 못했습니다. 구간을 다시 지정하세요.')
+          );
           if (seq !== previewSeqRef.current) return;
           const p = phaseRef.current;
           if (p !== 'end' && p !== 'ranged') return;
-          const data = res?.data ?? res;
           removeKinds(['preview']);
-          const geom = readGeometry3857(data?.zoneGeometry3857);
           if (geom) addFeature('preview', geom);
-          if (fixed) {
-            storeTribCandidates(data?.tributaryCandidates3857);
-            if (geom) setToolbarAnchor(anchorOf(geom.getExtent()));
-          }
+          if (fixed) storeTribCandidates(data?.tributaryCandidates3857);
         } catch {
-          /* 미리보기 실패는 무시 — 적용 시 다시 계산 */
+          settleRange('구간을 확인하지 못했습니다. 구간을 다시 지정하세요.');
         }
       };
       if (delayMs <= 0) {
@@ -550,6 +629,10 @@ export function PrivateLandAnalysisRoot({ system, onDetailOpenChange, children }
       includeTributaryRef.current = on;
       setIncludeTributaryState(on);
       removeKinds(['tribMoving']);
+      if (!on) {
+        tribPickingRef.current = false;
+        setTributaryPicking(false);
+      }
       if (on || tribCutsRef.current.length === 0) return;
       tribCutsRef.current = [];
       drawTribCuts();
@@ -557,6 +640,26 @@ export function PrivateLandAnalysisRoot({ system, onDetailOpenChange, children }
     },
     [drawTribCuts, refreshRanged, removeKinds]
   );
+
+  const openTributaryPick = useCallback(() => {
+    setIncludeTributary(true);
+    tribPickingRef.current = true;
+    setTributaryPicking(true);
+  }, [setIncludeTributary]);
+
+  const closeTributaryPick = useCallback(() => {
+    tribPickingRef.current = false;
+    setTributaryPicking(false);
+    const target = mapRef?.current?.getTargetElement();
+    if (target) target.style.cursor = '';
+    if (tribMovingRef.current) {
+      removeKinds(['tribMoving']);
+      tribMovingRef.current = false;
+      const c2 = chord2Ref.current;
+      if (c2) requestZonePreview(c2, 0);
+    }
+    if (tribCutsRef.current.length === 0) setIncludeTributary(false);
+  }, [mapRef, removeKinds, requestZonePreview, setIncludeTributary]);
 
   /** 커서 아래 지류를 가로지르는 끝선과, 그 지류의 기존 끝선을 바꾼 끝선 목록 */
   const tribCutAt = useCallback(
@@ -661,7 +764,7 @@ export function PrivateLandAnalysisRoot({ system, onDetailOpenChange, children }
   const startAllowed = useCallback(
     (coord: Coordinate): boolean => {
       const view = layerViewRef.current;
-      if (!view) return true;
+      if (!view) return rangeModeRef.current !== 'closed';
       const [x1, y1, x2, y2] = view.bbox;
       if (coord[0] < x1 || coord[0] > x2 || coord[1] < y1 || coord[1] > y2) return true;
       if (!view.geom) return false;
@@ -686,11 +789,124 @@ export function PrivateLandAnalysisRoot({ system, onDetailOpenChange, children }
     [addFeature, mapRef, removeKinds]
   );
 
+  /** 닫힌 범위 — 커서 위치에서 합친 면을 가로지르는 경계선 */
+  const closedChordAt = useCallback(
+    (coord: Coordinate): Chord | null => {
+      const view = layerViewRef.current;
+      if (!view?.geom || view.segs.length === 0) return null;
+      const res = mapRef?.current?.getView().getResolution() ?? 1;
+      const p = snapInside(view.geom, coord, 2 * res);
+      return p ? shortestChordAt(view.geom, view.segs, p) : null;
+    },
+    [mapRef]
+  );
+
+  /** 닫힌 범위 — 찍은 경계선으로 둘러싼 구간 미리보기·문제 판정 */
+  const requestClosedPreview = useCallback(() => {
+    cancelPreview();
+    removeKinds(['preview']);
+    const current = layerRef.current;
+    const cuts = closedCutsRef.current;
+    const rangeSeq = ++rangeSeqRef.current;
+    if (!current || cuts.length < 2) {
+      setRangeChecking(false);
+      setRangeError(null);
+      setClosedOpen(cuts.length > 0);
+      return;
+    }
+    const seq = previewSeqRef.current;
+    setRangeChecking(true);
+    const wkt = new WKT();
+    void (async () => {
+      let error: string | null = null;
+      let geom: Geometry | null = null;
+      let open = false;
+      try {
+        const res = await call('', 'POST', {
+          service: 'privateLandAnalysisService',
+          action: 'computePrivateLandAnalysisZone',
+          params: { layer: current.table, lines: cuts.map((c) => wkt.writeGeometry(chordGeometry(c))) },
+        });
+        const data = res?.data ?? res;
+        geom = readGeometry3857(data?.zoneGeometry3857);
+        open = !geom && data?.open === true;
+        if (!geom && !open) error = String(data?.error || '경계선으로 둘러싸인 구간을 찾지 못했습니다.');
+      } catch {
+        error = '구간을 확인하지 못했습니다. 경계선을 다시 확인하세요.';
+      }
+      if (rangeSeq !== rangeSeqRef.current || seq !== previewSeqRef.current) return;
+      setRangeError(error);
+      setClosedOpen(open);
+      setRangeChecking(false);
+      if (phaseRef.current !== 'ranged') return;
+      removeKinds(['preview']);
+      if (geom) addFeature('preview', geom, { closed: true });
+    })();
+  }, [addFeature, cancelPreview, removeKinds]);
+
+  const drawClosedCuts = useCallback(() => {
+    removeKinds(['cut']);
+    for (const c of closedCutsRef.current) addFeature('cut', chordGeometry(c));
+    setClosedLineCount(closedCutsRef.current.length);
+  }, [addFeature, removeKinds]);
+
+  /** 닫힌 범위 — 지도 클릭으로 경계선 추가 */
+  const addClosedLine = useCallback(
+    (coord: Coordinate) => {
+      if (!layerViewRef.current) {
+        flash(viewTooLargeRef.current ? '지도를 더 확대한 뒤 찍으세요.' : '도로 면을 불러오는 중입니다.');
+        return;
+      }
+      const chord = closedChordAt(coord);
+      if (!chord) {
+        flash('도로 위를 찍으세요.');
+        return;
+      }
+      for (const c of closedCutsRef.current) {
+        const invalid = invalidChordPair(c, chord);
+        if (invalid) {
+          flash(invalid.includes('겹칩니다') ? '기존 경계선과 겹칩니다. 다른 위치를 찍으세요.' : '기존 경계선과 너무 가깝습니다.');
+          return;
+        }
+      }
+      closedCutsRef.current = [...closedCutsRef.current, chord];
+      drawClosedCuts();
+      if (phaseRef.current !== 'ranged') {
+        phaseRef.current = 'ranged';
+        setPhase('ranged');
+      }
+      requestClosedPreview();
+    },
+    [closedChordAt, drawClosedCuts, flash, requestClosedPreview]
+  );
+
+  const undoLastLine = useCallback(() => {
+    if (phaseRef.current !== 'ranged' || closedCutsRef.current.length === 0) return;
+    closedCutsRef.current = closedCutsRef.current.slice(0, -1);
+    drawClosedCuts();
+    if (closedCutsRef.current.length === 0) {
+      phaseRef.current = 'start';
+      setPhase('start');
+    }
+    requestClosedPreview();
+  }, [drawClosedCuts, requestClosedPreview]);
+
+  /**
+   * 화면 범위 레이어 면 — 하천은 시작 위치 찍기 전 판정용,
+   * 닫힌 범위(도로)는 하나로 합친 면을 지도에 그리고 경계선 계산에도 쓴다.
+   */
+  const closedMode = rangeMode === 'closed';
+  const layerViewActive = closedMode ? phase !== 'layer' : phase === 'start';
   useEffect(() => {
     const map = mapRef?.current;
-    if (!map || !layer || phase !== 'start') return;
+    if (!map || !layer || !layerViewActive) return;
     let seq = 0;
     let timer = 0;
+    const drawBase = (geom: Geometry | null) => {
+      if (!closedMode) return;
+      removeKinds(['layerBase']);
+      if (geom) addFeature('layerBase', geom);
+    };
     const load = async () => {
       const mine = ++seq;
       const view = map.getView();
@@ -704,12 +920,14 @@ export function PrivateLandAnalysisRoot({ system, onDetailOpenChange, children }
         if (mine !== seq) return;
         const data = res?.data ?? res;
         const geom = toAreaGeometry(readGeometry3857(data?.geometry3857));
-        layerViewRef.current =
-          data?.tooLarge || data?.error
-            ? null
-            : { geom, segs: geom ? collectSegments(geom) : [], bbox };
+        const usable = !data?.tooLarge && !data?.error;
+        layerViewRef.current = usable ? { geom, segs: geom ? collectSegments(geom) : [], bbox } : null;
+        setViewTooLarge(data?.tooLarge === true);
+        drawBase(usable ? geom : null);
       } catch {
-        if (mine === seq) layerViewRef.current = null;
+        if (mine !== seq) return;
+        layerViewRef.current = null;
+        drawBase(null);
       }
     };
     void load();
@@ -723,8 +941,10 @@ export function PrivateLandAnalysisRoot({ system, onDetailOpenChange, children }
       window.clearTimeout(timer);
       map.un('moveend', onMoveEnd);
       layerViewRef.current = null;
+      setViewTooLarge(false);
+      removeKinds(['layerBase']);
     };
-  }, [layer, mapRef, phase]);
+  }, [addFeature, closedMode, layer, layerViewActive, mapRef, removeKinds]);
 
   /** 시작·끝 지정 — 지도 클릭·이동 */
   useEffect(() => {
@@ -737,6 +957,21 @@ export function PrivateLandAnalysisRoot({ system, onDetailOpenChange, children }
     const onMove = (evt: MapBrowserEvent<PointerEvent>) => {
       if (evt.dragging) return;
       const p = phaseRef.current;
+      if (rangeModeRef.current === 'closed') {
+        if (p !== 'start' && p !== 'ranged') return;
+        lastCoord = evt.coordinate;
+        if (raf) return;
+        raf = window.requestAnimationFrame(() => {
+          raf = 0;
+          const now = phaseRef.current;
+          if ((now !== 'start' && now !== 'ranged') || !lastCoord) return;
+          const chord = closedChordAt(lastCoord);
+          if (target) target.style.cursor = chord ? 'crosshair' : 'not-allowed';
+          removeKinds(['chordStart']);
+          if (chord) addFeature('chordStart', chordGeometry(chord));
+        });
+        return;
+      }
       if (p === 'start') {
         lastCoord = evt.coordinate;
         if (raf) return;
@@ -750,13 +985,13 @@ export function PrivateLandAnalysisRoot({ system, onDetailOpenChange, children }
         return;
       }
       if (p === 'ranged') {
-        if (!includeTributaryRef.current) return;
+        if (!tribPickingRef.current) return;
         lastCoord = evt.coordinate;
         if (raf) return;
         raf = window.requestAnimationFrame(() => {
           raf = 0;
           const c2 = chord2Ref.current;
-          if (phaseRef.current !== 'ranged' || !includeTributaryRef.current || !lastCoord || !c2) return;
+          if (phaseRef.current !== 'ranged' || !tribPickingRef.current || !lastCoord || !c2) return;
           const hit = tribCutAt(lastCoord);
           if (target) target.style.cursor = hit ? 'crosshair' : '';
           removeKinds(['tribMoving']);
@@ -786,6 +1021,12 @@ export function PrivateLandAnalysisRoot({ system, onDetailOpenChange, children }
 
     const onClick = (evt: MapBrowserEvent<PointerEvent>) => {
       const p = phaseRef.current;
+      if (rangeModeRef.current === 'closed') {
+        if (p !== 'start' && p !== 'ranged') return;
+        evt.stopPropagation();
+        addClosedLine(evt.coordinate);
+        return;
+      }
       if (p === 'start') {
         evt.stopPropagation();
         if (!startAllowed(evt.coordinate)) {
@@ -805,14 +1046,22 @@ export function PrivateLandAnalysisRoot({ system, onDetailOpenChange, children }
         chord2Ref.current = chord;
         drawChord2(chord, false);
         const c1 = chord1Ref.current;
-        if (c1) setToolbarAnchor(anchorOf(new LineString([...c1, ...chord]).getExtent()));
         if (target) target.style.cursor = '';
         phaseRef.current = 'ranged';
         setPhase('ranged');
+        const invalid = c1 ? invalidChordPair(c1, chord) : null;
+        if (invalid) {
+          cancelPreview();
+          removeKinds(['preview']);
+          rangeSeqRef.current += 1;
+          setRangeChecking(false);
+          setRangeError(invalid);
+          return;
+        }
         requestZonePreview(chord, 0);
         return;
       }
-      if (p === 'ranged' && includeTributaryRef.current) {
+      if (p === 'ranged' && tribPickingRef.current && !rangeBlockedRef.current) {
         evt.stopPropagation();
         if (!pickTributaryCut(evt.coordinate)) flash('포함할 지류 위를 찍으세요.');
       }
@@ -839,6 +1088,8 @@ export function PrivateLandAnalysisRoot({ system, onDetailOpenChange, children }
       removeKinds(['chordStart']);
     };
   }, [
+    addClosedLine,
+    closedChordAt,
     cancelPreview,
     chordAt,
     drawChord2,
@@ -867,52 +1118,65 @@ export function PrivateLandAnalysisRoot({ system, onDetailOpenChange, children }
   }, []);
 
   const apply = useCallback(() => {
-    const lines = chordWkts();
     const current = layerRef.current;
-    if (!lines || !current || phaseRef.current !== 'ranged') return;
+    if (!current || phaseRef.current !== 'ranged' || rangeBlockedRef.current) return;
+    let params: Record<string, unknown>;
+    if (rangeModeRef.current === 'closed') {
+      if (closedCutsRef.current.length < 2 || closedOpenRef.current) return;
+      const wkt = new WKT();
+      params = { layer: current.table, lines: closedCutsRef.current.map((c) => wkt.writeGeometry(chordGeometry(c))) };
+      removeKinds(['chordStart']);
+    } else {
+      const lines = chordWkts();
+      if (!lines) return;
+      params = { layer: current.table, ...lines, river: riverRef.current, ...tributaryParams(false) };
+    }
+    tribPickingRef.current = false;
+    setTributaryPicking(false);
+    removeKinds(['tribMoving']);
+    tribMovingRef.current = false;
     setPhase('applying');
+    /** 분석 실패 — 구간은 그대로 두고 적용 전으로 되돌려 다시 적용할 수 있게 */
+    const backToRanged = (text: string) => {
+      removeKinds(['zone']);
+      setZoneAreaSqm(null);
+      flash(text);
+      setPhase('ranged');
+    };
     void (async () => {
       try {
         const res = await call('', 'POST', {
           service: 'privateLandAnalysisService',
           action: 'computePrivateLandAnalysisZone',
-          params: { layer: current.table, ...lines, river: riverRef.current, ...tributaryParams(false) },
+          params,
         });
         const data = res?.data ?? res;
         const geom = readGeometry3857(data?.zoneGeometry3857);
         if (data?.error || !geom) {
-          flash(data?.error ? String(data.error) : '구간을 계산하지 못했습니다.');
+          removeKinds(['preview']);
+          setRangeError(data?.error ? String(data.error) : '구간을 계산하지 못했습니다. 구간을 다시 지정하세요.');
           setPhase('ranged');
           return;
         }
-        removeKinds(['preview', 'zone', 'tribMoving']);
-        tribMovingRef.current = false;
+        removeKinds(['preview', 'zone']);
         addFeature('zone', geom);
         setZoneAreaSqm(typeof data?.areaSqm === 'number' ? data.areaSqm : null);
-        setPhase('applied');
+        setPhase('analyzing');
       } catch {
-        flash('구간을 계산하지 못했습니다.');
+        setRangeError('구간을 계산하지 못했습니다. 구간을 다시 지정하세요.');
         setPhase('ranged');
+        return;
       }
-    })();
-  }, [addFeature, chordWkts, flash, removeKinds, tributaryParams]);
 
-  const analyze = useCallback(() => {
-    const lines = chordWkts();
-    const current = layerRef.current;
-    if (!lines || !current || phaseRef.current !== 'applied') return;
-    setPhase('analyzing');
-    void (async () => {
       try {
         const res = await call('', 'POST', {
           service: 'privateLandAnalysisService',
           action: 'listPrivateLandAnalysisParcels',
-          params: { layer: current.table, ...lines, river: riverRef.current, ...tributaryParams(false) },
+          params,
         });
         const data = res?.data ?? res;
         if (data?.error) {
-          flash(String(data.error));
-          setPhase('applied');
+          backToRanged(String(data.error));
           return;
         }
         const rows = (Array.isArray(data?.parcels) ? (data.parcels as PrivateLandParcel[]) : []).map((r) => ({
@@ -935,11 +1199,10 @@ export function PrivateLandAnalysisRoot({ system, onDetailOpenChange, children }
           });
         }
       } catch {
-        flash('필지 목록을 불러오지 못했습니다.');
-        setPhase('applied');
+        backToRanged('필지 목록을 불러오지 못했습니다.');
       }
     })();
-  }, [chordWkts, flash, mapRef, setCadastral, tributaryParams]);
+  }, [addFeature, chordWkts, flash, mapRef, removeKinds, setCadastral, tributaryParams]);
 
   const filteredParcels = useMemo(() => {
     const q = keyword.trim().toLowerCase();
@@ -958,8 +1221,9 @@ export function PrivateLandAnalysisRoot({ system, onDetailOpenChange, children }
   /** 걸러진 필지만 지도에 표시 */
   useEffect(() => {
     removeKinds(['parcel']);
-    const zone = sourceRef.current?.getFeatures().find((f) => f.get('kind') === 'zone');
-    zone?.set('faded', phase === 'result');
+    for (const f of sourceRef.current?.getFeatures() ?? []) {
+      if (RESULT_HIDDEN_KINDS.includes(String(f.get('kind')))) f.set('hidden', phase === 'result');
+    }
     if (phase !== 'result') return;
     for (const p of filteredParcels) {
       const geom = readGeometry3857(p.geometry3857);
@@ -1041,13 +1305,21 @@ export function PrivateLandAnalysisRoot({ system, onDetailOpenChange, children }
       tribCandidateCount,
       tribCutCount,
       setIncludeTributary,
+      tributaryPicking,
+      openTributaryPick,
+      closeTributaryPick,
       areaModalOpen,
       openAreaModal,
       closeAreaModal,
-      toolbarAnchor,
+      rangeChecking,
+      rangeError,
+      rangeMode,
+      closedLineCount,
+      closedOpen,
+      undoLastLine,
+      viewTooLarge,
       selectLayer,
       apply,
-      analyze,
       changeArea,
       resetAll,
       setOwnFilter,
@@ -1055,12 +1327,20 @@ export function PrivateLandAnalysisRoot({ system, onDetailOpenChange, children }
       selectParcel,
     }),
     [
-      analyze,
       apply,
+      rangeMode,
+      closedLineCount,
+      closedOpen,
+      undoLastLine,
+      viewTooLarge,
+      tributaryPicking,
+      openTributaryPick,
+      closeTributaryPick,
       areaModalOpen,
       closeAreaModal,
       openAreaModal,
-      toolbarAnchor,
+      rangeChecking,
+      rangeError,
       baseName,
       busy,
       changeArea,
