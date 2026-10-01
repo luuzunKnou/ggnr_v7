@@ -138,7 +138,7 @@ export function ShootingRequestPanel({
     onSelectDetailId(null);
   };
 
-  const title = listMode === 'mine' ? '내 신청 목록' : '승인 관리';
+  const title = listMode === 'mine' ? '내 신청 목록' : '촬영요청승인';
   const countLabel = loading
     ? '불러오는 중…'
     : listMode === 'mine'
@@ -177,7 +177,7 @@ export function ShootingRequestPanel({
         {(
           [
             { id: 'mine' as const, label: '내 신청' },
-            { id: 'approval' as const, label: `승인관리${pendingCount > 0 ? ` (${pendingCount})` : ''}` },
+            { id: 'approval' as const, label: `촬영요청승인${pendingCount > 0 ? ` (${pendingCount})` : ''}` },
           ] as const
         ).map((t) => {
           const active = listMode === t.id;

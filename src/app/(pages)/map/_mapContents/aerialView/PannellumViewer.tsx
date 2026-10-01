@@ -9,6 +9,7 @@ type PannellumViewerApi = {
   resize?: () => void;
   getHfov?: () => number;
   setHfov?: (hfov: number) => void;
+  on?: (event: string, cb: () => void) => void;
 };
 
 type PannellumGlobal = {
@@ -31,17 +32,21 @@ type Props = {
   imageUrl: string;
   className?: string;
   onControlsReady?: (api: PannellumViewerHandle | null) => void;
+  /** 파노라마 이미지가 다 읽힌 뒤. 그 전에 다른 지도를 켜면 같이 느려진다. */
+  onSceneLoad?: () => void;
 };
 
 /**
  * Pannellum equirectangular 뷰어 (클라이언트 전용).
  * 기본 줌·전체화면 버튼은 주소검색 등과 겹쳐 끄고, 휠 줌·하단 바 줌만 사용.
  */
-export function PannellumViewer({ imageUrl, className, onControlsReady }: Props) {
+export function PannellumViewer({ imageUrl, className, onControlsReady, onSceneLoad }: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const viewerRef = useRef<PannellumViewerApi | null>(null);
   const onControlsReadyRef = useRef(onControlsReady);
+  const onSceneLoadRef = useRef(onSceneLoad);
   onControlsReadyRef.current = onControlsReady;
+  onSceneLoadRef.current = onSceneLoad;
   const [error, setError] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
 
@@ -87,11 +92,11 @@ export function PannellumViewer({ imageUrl, className, onControlsReady }: Props)
       try {
         await import('pannellum/build/pannellum.js');
       } catch {
-        if (!cancelled) setError('파노라마 뷰어를 불러오지 못했습니다.');
+        if (!cancelled) setError('항공뷰 뷰어를 불러오지 못했습니다.');
         return;
       }
       if (cancelled || !containerRef.current || !window.pannellum) {
-        if (!cancelled) setError('파노라마 뷰어를 불러오지 못했습니다.');
+        if (!cancelled) setError('항공뷰 뷰어를 불러오지 못했습니다.');
         return;
       }
 
@@ -115,6 +120,9 @@ export function PannellumViewer({ imageUrl, className, onControlsReady }: Props)
           return;
         }
         viewerRef.current = viewer;
+        viewer.on?.('load', () => {
+          if (!cancelled) onSceneLoadRef.current?.();
+        });
         setReady(true);
         requestAnimationFrame(() => {
           try {
@@ -125,7 +133,7 @@ export function PannellumViewer({ imageUrl, className, onControlsReady }: Props)
         });
       } catch (e) {
         if (!cancelled) {
-          setError(e instanceof Error ? e.message : '파노라마를 표시할 수 없습니다.');
+          setError(e instanceof Error ? e.message : '항공뷰를 표시할 수 없습니다.');
         }
       }
     };
@@ -152,7 +160,7 @@ export function PannellumViewer({ imageUrl, className, onControlsReady }: Props)
   }, [ready]);
 
   return (
-    <div className={cn('relative h-full w-full min-h-0 bg-black', className)}>
+    <div className={cn('relative z-0 h-full w-full min-h-0 bg-black', className)}>
       <div ref={containerRef} className="h-full w-full" />
       {error ? (
         <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/70 px-4 text-center text-[11px] text-rose-200">
@@ -160,7 +168,7 @@ export function PannellumViewer({ imageUrl, className, onControlsReady }: Props)
         </div>
       ) : null}
       {!ready && !error ? (
-        <div className="pointer-events-none absolute inset-0 flex items-center justify-center text-[11px] text-slate-400">
+        <div className="pointer-events-none absolute inset-0 flex items-center justify-center text-[11px] text-slate-300">
           뷰어 로딩…
         </div>
       ) : null}

@@ -12,6 +12,9 @@ const BTN_CLEAR =
   'shrink-0 rounded-sm px-1.5 py-0.5 text-xs leading-none text-muted-foreground hover:text-black'
 
 function parseNotifListFields(item: ProtoNotifItem): { useName: string; key: string } {
+  if (item.category === '위치없음') {
+    return { useName: item.name, key: item.listKey || '위치 없음' }
+  }
   if (item.listKey) {
     const matched = item.name.match(/^(\S+)\s+(\S+)\s+(.+)$/)
     if (matched) return { useName: matched[3], key: item.listKey }
@@ -30,6 +33,7 @@ type Props = {
   onMarkRead: (item: ProtoNotifItem) => void
   onOpenLedger: (item: ProtoNotifItem) => void
   onOpenFee: (feeId: string) => void
+  onOpenMissingGeom?: (item: ProtoNotifItem) => void
 }
 
 export function UserAccountProtoNotifTab({
@@ -39,9 +43,11 @@ export function UserAccountProtoNotifTab({
   onMarkRead,
   onOpenLedger,
   onOpenFee,
+  onOpenMissingGeom,
 }: Props) {
   const [expiryExpanded, setExpiryExpanded] = useState(true)
   const [feeExpanded, setFeeExpanded] = useState(true)
+  const [geomExpanded, setGeomExpanded] = useState(true)
 
   const expiryList = useMemo(
     () => items.filter((item) => item.category === '만료임박'),
@@ -51,13 +57,18 @@ export function UserAccountProtoNotifTab({
     () => items.filter((item) => item.category === '미납임박'),
     [items]
   )
+  const geomList = useMemo(
+    () => items.filter((item) => item.category === '위치없음'),
+    [items]
+  )
 
-  const totalCount = expiryList.length + feeList.length
+  const totalCount = expiryList.length + feeList.length + geomList.length
   const unreadCount = items.filter((n) => !n.read).length
 
   const openItem = (item: ProtoNotifItem) => {
     onMarkRead(item)
     if (item.target === 'fee') onOpenFee(item.targetId)
+    else if (item.target === 'aerial') onOpenMissingGeom?.(item)
     else onOpenLedger(item)
   }
 
@@ -95,6 +106,23 @@ export function UserAccountProtoNotifTab({
             onToggle={() => setExpiryExpanded((prev) => !prev)}
           >
             {expiryList.map((item) => (
+              <NotifListRow
+                key={item.id}
+                item={item}
+                onOpen={() => openItem(item)}
+                onDelete={() => onDismiss(item)}
+              />
+            ))}
+          </NotifGroup>
+        ) : null}
+
+        {geomList.length > 0 ? (
+          <NotifGroup
+            summary={`위치가 없는 사진·동영상이 ${geomList.length}건입니다`}
+            expanded={geomExpanded}
+            onToggle={() => setGeomExpanded((prev) => !prev)}
+          >
+            {geomList.map((item) => (
               <NotifListRow
                 key={item.id}
                 item={item}

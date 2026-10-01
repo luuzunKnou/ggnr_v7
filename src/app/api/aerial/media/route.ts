@@ -1,5 +1,7 @@
+import { createHash } from 'node:crypto';
 import { createReadStream } from 'node:fs';
 import fs from 'node:fs/promises';
+import os from 'node:os';
 import path from 'node:path';
 import { Readable } from 'node:stream';
 import { NextRequest, NextResponse } from 'next/server';
@@ -35,6 +37,40 @@ function contentDisposition(filename: string, inline: boolean): string {
   return `${kind}; filename="${ascii}"; filename*=UTF-8''${utf8}`;
 }
 
+/** 점 위 작은 카드용. 원본 드론 사진 전체를 내리지 않는다. */
+function previewWidthOf(raw: string | null): number | null {
+  const n = Number(raw);
+  if (!Number.isFinite(n)) return null;
+  const width = Math.round(n);
+  if (width < 64 || width > 960) return null;
+  return width;
+}
+
+function canPreviewImage(contentType: string): boolean {
+  return contentType === 'image/jpeg' || contentType === 'image/png' || contentType === 'image/webp';
+}
+
+async function readPreviewJpeg(resolved: string, mtimeMs: number, size: number, width: number): Promise<Buffer> {
+  const hash = createHash('sha1')
+    .update(`${resolved}|${mtimeMs}|${size}|${width}`)
+    .digest('hex');
+  const cachePath = path.join(os.tmpdir(), 'ggnr-aerial-preview', `${hash}.jpg`);
+  try {
+    return await fs.readFile(cachePath);
+  } catch {
+    /* 없으면 아래에서 만든다 */
+  }
+  const sharp = (await import('sharp')).default;
+  const buf = await sharp(resolved)
+    .rotate()
+    .resize({ width, withoutEnlargement: true, fit: 'inside' })
+    .jpeg({ quality: 74 })
+    .toBuffer();
+  await fs.mkdir(path.dirname(cachePath), { recursive: true });
+  await fs.writeFile(cachePath, buf).catch(() => undefined);
+  return buf;
+}
+
 /**
  * GET /api/aerial/media?path=aerial/drone/...&download=1
  * — GGNR_DATA_DIR 아래 aerial/ 경로만 허용. 로그인 필요.
@@ -47,6 +83,7 @@ export async function GET(req: NextRequest) {
 
   const pathParam = req.nextUrl.searchParams.get('path')?.trim() ?? '';
   const asDownload = req.nextUrl.searchParams.get('download') === '1';
+  const previewWidth = previewWidthOf(req.nextUrl.searchParams.get('w'));
   if (!pathParam) {
     return NextResponse.json({ error: 'path 파라미터가 필요합니다.' }, { status: 400 });
   }
@@ -71,6 +108,20 @@ export async function GET(req: NextRequest) {
     const fileName = path.basename(resolved);
     const size = stat.size;
     const contentType = contentTypeForFile(fileName);
+    if (previewWidth && !asDownload && canPreviewImage(contentType)) {
+      try {
+        const preview = await readPreviewJpeg(resolved, stat.mtimeMs, size, previewWidth);
+        return new NextResponse(new Uint8Array(preview), {
+          headers: {
+            'Content-Type': 'image/jpeg',
+            'Content-Length': String(preview.length),
+            'Cache-Control': 'private, max-age=86400',
+          },
+        });
+      } catch {
+        /* 축소 실패 시 원본 */
+      }
+    }
     const disposition = contentDisposition(fileName, !asDownload);
     const commonHeaders: Record<string, string> = {
       'Content-Type': contentType,

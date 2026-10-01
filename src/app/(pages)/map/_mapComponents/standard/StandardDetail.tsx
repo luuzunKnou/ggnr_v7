@@ -34,6 +34,7 @@ import { ServiceFileAttachmentThumb } from './ServiceFileAttachmentThumb';
 import { ServiceFilePdfThumb } from './ServiceFilePdfThumb';
 import { ServiceFileImagePreview, type ServiceFilePreviewItem } from './ServiceFileImagePreview';
 import { useDefineLayerCodes } from './useDefineLayerCodes';
+import { SerWriteOnly } from '@/hooks/useSerWriteAccess';
 
 type DetailTab = 'basic' | 'history' | 'attach';
 
@@ -528,12 +529,14 @@ export default function StandardDetail() {
           <div className="flex items-center justify-between gap-2">
             <span className="text-[11px] text-muted-foreground">기본정보</span>
             <div className="flex gap-2">
-              <button
-                type="button"
-                className="rounded border border-border bg-background px-3 py-1.5 text-xs text-foreground transition-colors hover:bg-muted/50"
-              >
-                수정
-              </button>
+              <SerWriteOnly serEng="dataQuery">
+                <button
+                  type="button"
+                  className="rounded border border-border bg-background px-3 py-1.5 text-xs text-foreground transition-colors hover:bg-muted/50"
+                >
+                  수정
+                </button>
+              </SerWriteOnly>
               <button
                 type="button"
                 className="rounded bg-primary px-3 py-1.5 text-xs text-primary-foreground transition-colors hover:bg-primary/90"
@@ -548,12 +551,14 @@ export default function StandardDetail() {
             <span className="text-[11px] text-muted-foreground">
               이력 {SAMPLE_HISTORY.length}건
             </span>
-            <button
-              type="button"
-              className="rounded bg-primary px-3 py-1.5 text-xs text-primary-foreground transition-colors hover:bg-primary/90"
-            >
-              이력 추가
-            </button>
+            <SerWriteOnly serEng="dataQuery">
+              <button
+                type="button"
+                className="rounded bg-primary px-3 py-1.5 text-xs text-primary-foreground transition-colors hover:bg-primary/90"
+              >
+                이력 추가
+              </button>
+            </SerWriteOnly>
           </div>
         )}
         {activeTab === 'attach' && (
@@ -565,22 +570,24 @@ export default function StandardDetail() {
                 : '—'}
             </span>
             <div className="flex flex-wrap items-center justify-end gap-2">
-              <button
-                type="button"
-                disabled={
-                  keyFieldName == null ||
-                  rowKeyForAttachments == null ||
-                  layerSegmentForFiles == null ||
-                  attachChunkUpload.state.status === 'uploading'
-                }
-                onClick={() => {
-                  attachChunkUpload.reset();
-                  attachUploadInputRef.current?.click();
-                }}
-                className="rounded bg-primary px-3 py-1.5 text-xs text-primary-foreground transition-colors hover:bg-primary/90 disabled:pointer-events-none disabled:opacity-50"
-              >
-                파일 추가
-              </button>
+              <SerWriteOnly serEng="dataQuery">
+                <button
+                  type="button"
+                  disabled={
+                    keyFieldName == null ||
+                    rowKeyForAttachments == null ||
+                    layerSegmentForFiles == null ||
+                    attachChunkUpload.state.status === 'uploading'
+                  }
+                  onClick={() => {
+                    attachChunkUpload.reset();
+                    attachUploadInputRef.current?.click();
+                  }}
+                  className="rounded bg-primary px-3 py-1.5 text-xs text-primary-foreground transition-colors hover:bg-primary/90 disabled:pointer-events-none disabled:opacity-50"
+                >
+                  파일 추가
+                </button>
+              </SerWriteOnly>
               {keyFieldName != null &&
               rowKeyForAttachments != null &&
               layerSegmentForFiles != null &&

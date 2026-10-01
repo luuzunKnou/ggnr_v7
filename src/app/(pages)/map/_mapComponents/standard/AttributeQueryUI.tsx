@@ -28,6 +28,8 @@ import {
   isOrthoDataQueryLayerId,
 } from '../../_mapContents/aerialView/orthoDataQueryLayerId';
 import { MapHitOverlapSelect } from '../MapHitOverlapSelect';
+import { allowProjectLayerTable } from '@/lib/projectLayerAllowlist';
+import { useSearchParams } from 'next/navigation';
 
 /** layer 스키마 테이블 목록 (DB 기준) */
 type LayerSchemaTable = { schema: string; table: string };
@@ -176,6 +178,8 @@ function firstDefineTableFromResults(results: IdentifyLayerResult[]): string | n
 }
 
 export function AttributeQueryUI({ activeTableName, onOpenDataPanel, onClearDataSelection }: AttributeQueryUIProps) {
+  const searchParams = useSearchParams();
+  const systemKeyFromUrl = (searchParams.get('system') ?? '').trim();
   const [searchTab, setSearchTab] = useState<AttributeQuerySearchTab>(() => {
     const p = loadPersistedSearchForm();
     if (p.dataSelectTable?.trim()) return 'shape';
@@ -311,32 +315,74 @@ export function AttributeQueryUI({ activeTableName, onOpenDataPanel, onClearData
     };
   }, [searchTab, setIdentifyResultList]);
 
-  // 데이터 조회 레이어 목록: DB 테이블 목록 + tables.json 메타(그룹, 한글명) 병합
+  // 데이터 조회 레이어 목록: DB + defineLayer 메타 → 현재 시스템 layerGroupList ∪ 미소속(공통) 그룹
   useEffect(() => {
     let cancelled = false;
     const dbPromise = call('', 'POST', { service: 'devTestService', action: 'getLayerTableList', params: {} });
     const metaPromise = fetch('/api/config/defineLayer').then((r) => r.json());
-    const sysPromise = call('', 'POST', { service: 'configService', action: 'getSystemList', params: {} });
-    Promise.all([dbPromise, metaPromise, sysPromise])
-      .then(([dbRes, metaRes, sysRes]) => {
+    const sysAllPromise = call('', 'POST', {
+      service: 'configService',
+      action: 'getSystemListAll',
+      params: {},
+    });
+    const sysEnabledPromise = call('', 'POST', {
+      service: 'configService',
+      action: 'getSystemList',
+      params: {},
+    });
+    Promise.all([dbPromise, metaPromise, sysAllPromise, sysEnabledPromise])
+      .then(([dbRes, metaRes, sysAllRes, sysEnabledRes]) => {
         if (cancelled) return;
         const dbData = dbRes?.data ?? dbRes;
         const tables: LayerSchemaTable[] = Array.isArray(dbData?.tables) ? dbData.tables : [];
         setLayerSchemaTables(tables);
 
+        type SysRow = { sys_key?: string; layerGroupList?: string[] };
+        const allSystems: SysRow[] = Array.isArray((sysAllRes?.data ?? sysAllRes)?.systems)
+          ? ((sysAllRes?.data ?? sysAllRes).systems as SysRow[])
+          : [];
+        const enabledSystems: SysRow[] = Array.isArray((sysEnabledRes?.data ?? sysEnabledRes)?.systems)
+          ? ((sysEnabledRes?.data ?? sysEnabledRes).systems as SysRow[])
+          : [];
+        const enabledSysKeys = new Set(
+          enabledSystems.map((s) => String(s.sys_key ?? '').trim().toLowerCase()).filter(Boolean)
+        );
+
         const dbSet = new Set(
           tables
             .filter((t) => (t.schema || 'layer').toLowerCase() === 'layer')
             .map((t) => t.table.toLowerCase())
-        );
-
-        const sysData = (sysRes?.data ?? sysRes) as { systems?: Array<{ sys_key?: string }> };
-        const enabledSysKeys = new Set(
-          (Array.isArray(sysData?.systems) ? sysData.systems : [])
-            .map((s) => String(s.sys_key ?? '').trim().toLowerCase())
-            .filter(Boolean)
+            .filter((name) => allowProjectLayerTable(name, enabledSysKeys))
         );
         const hideRoadOccGroups = enabledSysKeys.size > 0 && !enabledSysKeys.has('road');
+
+        /** 카탈로그·프로젝트 오버레이(ENABLED 목록)에 한 번이라도 적힌 그룹 */
+        const assignedGroups = new Set<string>();
+        for (const s of [...allSystems, ...enabledSystems]) {
+          for (const g of Array.isArray(s.layerGroupList) ? s.layerGroupList : []) {
+            const name = String(g ?? '').trim();
+            if (name) assignedGroups.add(name);
+          }
+        }
+
+        const currentKey = systemKeyFromUrl.toLowerCase();
+        /** 프로젝트 SYSTEM_LAYER_GROUPS 오버레이가 반영된 ENABLED 목록을 우선 */
+        const currentSys =
+          enabledSystems.find((s) => String(s.sys_key ?? '').trim().toLowerCase() === currentKey) ??
+          allSystems.find((s) => String(s.sys_key ?? '').trim().toLowerCase() === currentKey);
+        const currentSystemGroups = new Set(
+          (Array.isArray(currentSys?.layerGroupList) ? currentSys!.layerGroupList! : [])
+            .map((g) => String(g ?? '').trim())
+            .filter(Boolean)
+        );
+
+        /** 미소속(공통) ∪ 현재 시스템 소속. 시스템 미선택 시 전체(기존 차단 규칙만) */
+        const isGroupVisible = (groupName: string) => {
+          if (hideRoadOccGroups && DATA_QUERY_GROUPS_REQUIRE_ROAD.has(groupName)) return false;
+          if (!currentKey) return true;
+          if (!assignedGroups.has(groupName)) return true;
+          return currentSystemGroups.has(groupName);
+        };
 
         type TableMeta = {
           define_table_name?: string;
@@ -368,15 +414,12 @@ export function AttributeQueryUI({ activeTableName, onOpenDataPanel, onClearData
           if (p && divQ) parentTablesWithSplitDefs.add(p);
         }
 
-        const shouldSkipGroup = (groupName: string) =>
-          hideRoadOccGroups && DATA_QUERY_GROUPS_REQUIRE_ROAD.has(groupName);
-
         for (const tblName of dbSet) {
           if (parentTablesWithSplitDefs.has(tblName)) continue;
           if (DATA_QUERY_LAYER_BLOCKLIST.has(tblName)) continue;
           const meta = metaMap.get(tblName);
           const groupName = meta?.define_table_group?.trim() || '기타';
-          if (shouldSkipGroup(groupName)) continue;
+          if (!isGroupVisible(groupName)) continue;
           if (groupName === '기타' && DATA_QUERY_ETC_BLOCKLIST.has(tblName)) continue;
           const korName = meta?.define_table_kor_name?.trim() || tblName;
           if (!groupMap.has(groupName)) {
@@ -407,7 +450,7 @@ export function AttributeQueryUI({ activeTableName, onOpenDataPanel, onClearData
           if (dbSet.has(engLower)) continue;
           if (DATA_QUERY_LAYER_BLOCKLIST.has(engLower)) continue;
           const groupName = String(m.define_table_group ?? '').trim() || '기타';
-          if (shouldSkipGroup(groupName)) continue;
+          if (!isGroupVisible(groupName)) continue;
           if (groupName === '기타' && DATA_QUERY_ETC_BLOCKLIST.has(engLower)) continue;
           const korName = String(m.define_table_kor_name ?? '').trim() || eng;
           if (!groupMap.has(groupName)) {
@@ -424,7 +467,6 @@ export function AttributeQueryUI({ activeTableName, onOpenDataPanel, onClearData
           });
         }
 
-        // DB에는 있지만 tables.json에 없는 레이어도 '기타' 그룹에 포함(차단 목록 제외)
         const groups: LayerGroupMeta[] = groupOrder
           .map((gName) => ({
             id: gName,
@@ -433,8 +475,8 @@ export function AttributeQueryUI({ activeTableName, onOpenDataPanel, onClearData
           }))
           .filter((g) => g.layers.length > 0);
 
-        // UAV: 드론영상(가상 레이어) — bbox 폴리곤용
-        if (enabledSysKeys.has('uav')) {
+        // UAV: 드론영상 — uav 시스템(또는 시스템 미선택)일 때만
+        if (enabledSysKeys.has('uav') && (!currentKey || currentKey === 'uav')) {
           groups.unshift({
             id: '드론영상',
             name: '드론영상',
@@ -459,8 +501,10 @@ export function AttributeQueryUI({ activeTableName, onOpenDataPanel, onClearData
           setLayerGroups([]);
         }
       });
-    return () => { cancelled = true; };
-  }, []);
+    return () => {
+      cancelled = true;
+    };
+  }, [systemKeyFromUrl]);
 
   useEffect(() => {
     if (layerGroups.length === 0) return;

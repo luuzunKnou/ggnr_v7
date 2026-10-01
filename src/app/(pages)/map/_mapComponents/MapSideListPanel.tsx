@@ -3,6 +3,7 @@
 import React, { useRef, useCallback, useEffect } from 'react';
 import { GripVertical } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { SerWriteAccessProvider } from '@/hooks/useSerWriteAccess';
 
 const SIDEBAR_WIDTH = 65;
 
@@ -17,6 +18,8 @@ export type MapSideListPanelProps = {
   className?: string;
   /** 본문 래퍼(flex-1)에 추가 클래스. 예: `overflow-y-auto`로 패널 전체 스크롤 */
   contentClassName?: string;
+  /** 있으면 읽기 권한일 때 추가·수정·삭제 버튼 숨김 */
+  serEng?: string;
   /** false면 우측 너비 조절 핸들 숨김 (고정폭 패널) */
   resizable?: boolean;
 };
@@ -30,6 +33,7 @@ export function MapSideListPanel({
   children,
   className,
   contentClassName,
+  serEng,
   resizable = true,
 }: MapSideListPanelProps) {
   const panelRef = useRef<HTMLDivElement>(null);
@@ -75,7 +79,7 @@ export function MapSideListPanel({
     };
   }, [handleResize, handleResizeEnd]);
 
-  return (
+  const panel = (
     <div
       ref={panelRef}
       className={cn(
@@ -110,4 +114,10 @@ export function MapSideListPanel({
       </div>
     </div>
   );
+
+  const eng = serEng?.trim();
+  if (eng) {
+    return <SerWriteAccessProvider serEng={eng}>{panel}</SerWriteAccessProvider>;
+  }
+  return panel;
 }

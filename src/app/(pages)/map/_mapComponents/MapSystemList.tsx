@@ -41,7 +41,7 @@ export function MapSystemList() {
   const searchParams = useSearchParams();
   const mapContext = useMapContext();
   const systemKeyFromUrl = searchParams.get('system') ?? '';
-  const { snapshot, loading: accessLoading } = useMyAccessSnapshot();
+  const { snapshot, loading: accessLoading, reload } = useMyAccessSnapshot();
 
   const [systemList, setSystemList] = useState<SystemItem[]>([]);
   const [deniedOpen, setDeniedOpen] = useState(false);
@@ -122,12 +122,18 @@ export function MapSystemList() {
   };
 
   const trySelectSystem = (sys: SystemItem) => {
-    if (!canAccessPrivateSystem(snapshot, sys.sys_key, sys.sys_is_private)) {
-      setDeniedSysKey(sys.sys_key);
-      setDeniedOpen(true);
-      return;
-    }
-    selectSystem(sys.sys_key);
+    void (async () => {
+      let snap = snapshot;
+      if (!canAccessPrivateSystem(snap, sys.sys_key, sys.sys_is_private)) {
+        snap = await reload({ silent: true });
+      }
+      if (!canAccessPrivateSystem(snap, sys.sys_key, sys.sys_is_private)) {
+        setDeniedSysKey(sys.sys_key);
+        setDeniedOpen(true);
+        return;
+      }
+      selectSystem(sys.sys_key);
+    })();
   };
 
   if (systemList.length === 0) return null;

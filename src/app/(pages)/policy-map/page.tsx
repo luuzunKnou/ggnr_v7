@@ -1,15 +1,6 @@
-import { SiteIndexShell } from '@/app/(pages)/(index)/site-index-shell';
-import { PolicyMapScreen } from './PolicyMapScreen';
+import { redirect } from 'next/navigation';
 
-export const dynamic = 'force-dynamic';
-
+/** 옛 게시판 주소 — 왼쪽 메뉴 정책지도로 보낸다 */
 export default function PolicyMapPage() {
-  return (
-    <SiteIndexShell
-      fillViewport
-      mainClassName="container mx-auto flex min-h-0 flex-1 flex-col px-4 py-4 pb-24"
-    >
-      <PolicyMapScreen />
-    </SiteIndexShell>
-  );
+  redirect('/map?system=uav_view&opened=policyMap');
 }

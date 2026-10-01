@@ -17,6 +17,7 @@ import { MEMO_KEY_FIELD } from "@/lib/memoConfig";
 import { MapSideDetailScroll } from "../../_mapComponents/MapSideDetailScroll";
 import { MapFloatingPanel } from "../../_mapComponents/MapFloatingPanel";
 import { cn } from "@/lib/utils";
+import { useSerWriteAccess } from "@/hooks/useSerWriteAccess";
 
 type Props = {
   mode?: "add" | "edit";
@@ -38,6 +39,7 @@ export function MemoDetailPanel({
   onDeleted,
 }: Props) {
   const mapContext = useMapContext();
+  const canWrite = useSerWriteAccess("memo");
   const { data: session } = useSession();
   const isCreateMode = mode === "add";
   const parsed = isCreateMode ? null : parseMemoRowKey(detailId);
@@ -368,7 +370,7 @@ export function MemoDetailPanel({
               </div>
             </div>
             <div className="mt-3 flex items-center justify-end gap-2">
-              {!isCreateMode && (
+              {canWrite && !isCreateMode && (
                 <Button
                   size="sm"
                   variant="outline"
@@ -380,15 +382,17 @@ export function MemoDetailPanel({
                   {deleting ? "삭제 중…" : "삭제"}
                 </Button>
               )}
-              <Button
-                size="sm"
-                onClick={() => void handleSave()}
-                disabled={saving}
-                className="h-[26px] min-h-[26px] cursor-pointer gap-1 px-2.5 text-[12px] font-light border border-border bg-muted/50 text-muted-foreground hover:border-primary hover:bg-primary/15 hover:text-primary disabled:cursor-not-allowed"
-              >
-                <Check className="h-3 w-3" />
-                {saving ? "저장 중…" : "저장"}
-              </Button>
+              {canWrite ? (
+                <Button
+                  size="sm"
+                  onClick={() => void handleSave()}
+                  disabled={saving}
+                  className="h-[26px] min-h-[26px] cursor-pointer gap-1 px-2.5 text-[12px] font-light border border-border bg-muted/50 text-muted-foreground hover:border-primary hover:bg-primary/15 hover:text-primary disabled:cursor-not-allowed"
+                >
+                  <Check className="h-3 w-3" />
+                  {saving ? "저장 중…" : "저장"}
+                </Button>
+              ) : null}
               <Button
                 size="sm"
                 variant="outline"

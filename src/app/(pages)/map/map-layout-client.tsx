@@ -136,6 +136,7 @@ import { BuildPublicLandListPanel } from "./_mapContents/buildPublicLand/BuildPu
 import { BuildPublicLandDetailPanel } from "./_mapContents/buildPublicLand/BuildPublicLandDetailPanel"
 import { MemoListPanel } from "./_mapContents/memo/MemoListPanel"
 import { MemoDetailPanel } from "./_mapContents/memo/MemoDetailPanel"
+import { PolicyMapListPanel } from "./_mapContents/policyMap/PolicyMapListPanel"
 import { GcpListPanel } from "./_mapContents/gcp/GcpListPanel"
 import { GcpDetailPanel } from "./_mapContents/gcp/GcpDetailPanel"
 import {
@@ -192,6 +193,7 @@ import { MapSearchBar } from "./_mapComponents/map-search-bar"
 import { MapContextProvider, useMapContext } from "./_mapComponents/MapContext"
 import { applyViewPaddingPreservingVisualCenter } from "./_mapComponents/config/mapVisualCenter"
 import { MapSideListPanel } from "./_mapComponents/MapSideListPanel"
+import { SerWriteAccessProvider } from "@/hooks/useSerWriteAccess"
 import { SearchBarOffsetContext } from "./searchBarOffsetContext"
 const SIDEBAR_WIDTH = 65
 const SEARCH_BAR_MARGIN = 20
@@ -207,6 +209,9 @@ const COMPLAINT_PANEL_MIN_WIDTH = 320
 const COMPLAINT_PANEL_MAX_WIDTH = 900
 
 const MEMO_PANEL_DEFAULT_WIDTH = 420
+const POLICY_MAP_PANEL_DEFAULT_WIDTH = 380
+const POLICY_MAP_PANEL_MIN_WIDTH = 320
+const POLICY_MAP_PANEL_MAX_WIDTH = 520
 const MEMO_PANEL_MIN_WIDTH = 320
 const MEMO_PANEL_MAX_WIDTH = 720
 
@@ -334,6 +339,7 @@ const STANDARD_LIST_OPENED_KEY = "standardList"
 const LIST_VIEW_OPENED_KEY = "listView"
 const COMPLAINT_OPENED_KEY = "complaintManagement"
 const MEMO_OPENED_KEY = "memoManagement"
+const POLICY_MAP_OPENED_KEY = "policyMap"
 const MAP_3D_DATA_OPENED_KEY = "map3dData"
 const RIVER_BASIC_PLAN_OPENED_KEY = "riverBasicPlan"
 const ROAD_LEDGER_OPENED_KEY = "roadLedger"
@@ -414,7 +420,7 @@ const RIVER_USE_LEDGER_PANEL_MAX_WIDTH = 960
 const RIVER_USE_LEDGER_DETAIL_DEFAULT_WIDTH = 400
 const RIVER_USE_LEDGER_DETAIL_MIN_WIDTH = 320
 const RIVER_USE_LEDGER_DETAIL_MAX_WIDTH = 640
-/** 드론·사진동영상·파노라마·항공·승인관리·GCP 목록 고정 */
+/** 드론·사진동영상·항공뷰·항공·승인관리·GCP 목록 고정 */
 const MEDIA_LIST_PANEL_WIDTH = 380
 /** 작업단위·승인·GCP 등 상세 고정 */
 const MEDIA_DETAIL_PANEL_WIDTH = 420
@@ -570,6 +576,7 @@ function MapLayoutContent({
 
   const complaintManagementOpen = openedWindows.includes(COMPLAINT_OPENED_KEY)
   const memoManagementOpen = openedWindows.includes(MEMO_OPENED_KEY)
+  const policyMapOpen = openedWindows.includes(POLICY_MAP_OPENED_KEY)
   const gcpOpen = openedWindows.includes(GCP_OPENED_KEY)
   const qgisLayerControlOpen = openedWindows.includes(QGIS_LAYER_CONTROL_OPENED_KEY)
   const map3dDataOpen = openedWindows.includes(MAP_3D_DATA_OPENED_KEY)
@@ -829,6 +836,11 @@ function MapLayoutContent({
   const [riverUseLedgerPanelWidth, setRiverUseLedgerPanelWidth] = useState(RIVER_USE_LEDGER_PANEL_DEFAULT_WIDTH)
   const [riverUseLedgerDetailWidth, setRiverUseLedgerDetailWidth] = useState(RIVER_USE_LEDGER_DETAIL_DEFAULT_WIDTH)
   const [aerialManagePanelWidth, setAerialManagePanelWidth] = useState(AERIAL_MANAGE_PANEL_DEFAULT_WIDTH)
+  const [aerialGeomFocus, setAerialGeomFocus] = useState<{
+    unitId: string
+    fileId: string
+    token: number
+  } | null>(null)
   const [shootingRequestPanelWidth, setShootingRequestPanelWidth] = useState(
     SHOOTING_REQUEST_PANEL_DEFAULT_WIDTH
   )
@@ -878,6 +890,7 @@ function MapLayoutContent({
   const [fmsLinkageDetailWidth, setFmsLinkageDetailWidth] = useState(FMS_DETAIL_DEFAULT_WIDTH)
   const [fmsGeomToastMsg, setFmsGeomToastMsg] = useState<string | null>(null)
   const [memoPanelWidth, setMemoPanelWidth] = useState(MEMO_PANEL_DEFAULT_WIDTH)
+  const [policyMapPanelWidth, setPolicyMapPanelWidth] = useState(POLICY_MAP_PANEL_DEFAULT_WIDTH)
   const [gcpPanelWidth, setGcpPanelWidth] = useState(GCP_PANEL_DEFAULT_WIDTH)
   const [gcpDetailWidth, setGcpDetailWidth] = useState(GCP_DETAIL_DEFAULT_WIDTH)
   const [layerDataPanelWidth, setLayerDataPanelWidth] = useState(LAYER_DATA_PANEL_DEFAULT_WIDTH)
@@ -929,6 +942,7 @@ function MapLayoutContent({
     (roadFrontageBuildingDetailOpen ? roadFrontageBuildingDetailWidth : 0) +
     (roadFrontageMarkerOpen ? roadFrontageMarkerPanelWidth : 0) +
     (roadFrontageMarkerDetailOpen ? roadFrontageMarkerDetailWidth : 0) +
+    (policyMapOpen ? policyMapPanelWidth : 0) +
     (memoManagementOpen ? memoPanelWidth : 0) +
     (complaintManagementOpen ? complaintPanelWidth : 0) +
     (map3dDataOpen ? map3dDataPanelWidth : 0) +
@@ -1039,9 +1053,11 @@ function MapLayoutContent({
   const roadFrontageMarkerDetailLeftPx =
     roadFrontageMarkerPanelLeftPx +
     (roadFrontageMarkerOpen ? roadFrontageMarkerPanelWidth : 0)
-  const memoPanelLeftPx =
+  const policyMapPanelLeftPx =
     roadFrontageMarkerDetailLeftPx +
     (roadFrontageMarkerDetailOpen ? roadFrontageMarkerDetailWidth : 0)
+  const memoPanelLeftPx =
+    policyMapPanelLeftPx + (policyMapOpen ? policyMapPanelWidth : 0)
   const memoDetailLeftPx = memoPanelLeftPx + (memoManagementOpen ? memoPanelWidth : 0)
   const complaintPanelLeftPx =
     memoPanelLeftPx + (memoManagementOpen ? memoPanelWidth : 0)
@@ -1511,6 +1527,7 @@ function MapLayoutContent({
     const next = openedWindows.filter(
       (w) => !(AERIAL_MANAGE_KIND_KEYS as readonly string[]).includes(w)
     )
+    setAerialGeomFocus(null)
     setOpened(next)
   }
 
@@ -1583,6 +1600,11 @@ function MapLayoutContent({
     setMemoDetailId(null)
     setMemoAddTable(null)
     const next = openedWindows.filter((w) => w !== MEMO_OPENED_KEY)
+    setOpened(next)
+  }
+
+  const handleClosePolicyMap = () => {
+    const next = openedWindows.filter((w) => w !== POLICY_MAP_OPENED_KEY)
     setOpened(next)
   }
 
@@ -2105,8 +2127,7 @@ function MapLayoutContent({
                 minWidth={CHANGE_HISTORY_PANEL_MIN_WIDTH}
                 maxWidth={CHANGE_HISTORY_PANEL_MAX_WIDTH}
                 leftOffsetPx={changeHistoryPanelLeftPx}
-                onWidthChange={setChangeHistoryPanelWidth}
-              >
+                onWidthChange={setChangeHistoryPanelWidth} serEng="dataQuery">
                 <ChangeHistorySidePanel />
               </MapSideListPanel>
             </div>
@@ -2118,8 +2139,7 @@ function MapLayoutContent({
                 minWidth={STANDARD_LIST_MIN_WIDTH}
                 maxWidth={STANDARD_LIST_MAX_WIDTH}
                 leftOffsetPx={standardListLeftPx}
-                onWidthChange={setStandardListPanelWidth}
-              >
+                onWidthChange={setStandardListPanelWidth} serEng="dataQuery">
                 <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
                   <div className="flex items-center justify-between gap-2 border-b border-border px-4 py-2.5 shrink-0 bg-background">
                     <span className="text-sm font-semibold text-foreground">레이어 목록</span>
@@ -2151,8 +2171,7 @@ function MapLayoutContent({
                 minWidth={LAYER_DATA_PANEL_MIN_WIDTH}
                 maxWidth={LAYER_DATA_PANEL_MAX_WIDTH}
                 leftOffsetPx={layerDataPanelLeftPx}
-                onWidthChange={setLayerDataPanelWidth}
-              >
+                onWidthChange={setLayerDataPanelWidth} serEng="dataQuery">
                 <LayerDataPanel
                   dataTable={dataTableFromUrl}
                   onClose={handleCloseDataPanel}
@@ -2224,8 +2243,7 @@ function MapLayoutContent({
                 maxWidth={ROAD_LEDGER_DETAIL_MAX_WIDTH}
                 leftOffsetPx={roadLedgerDetailLeftPx}
                 onWidthChange={setRoadLedgerDetailWidth}
-                contentClassName="overflow-hidden"
-              >
+                contentClassName="overflow-hidden" serEng="roadNetwork">
                 <RoadLedgerDetailPanel
                   row={mapContext.roadLedgerIdentifyRow}
                   onClose={() => mapContext?.setRoadLedgerIdentifyRow?.(null)}
@@ -2241,8 +2259,7 @@ function MapLayoutContent({
                 maxWidth={ROAD_NETWORK_LIST_MAX_WIDTH}
                 leftOffsetPx={roadNetworkListLeftPx}
                 onWidthChange={setRoadNetworkListWidth}
-                contentClassName="overflow-hidden"
-              >
+                contentClassName="overflow-hidden" serEng="roadNetwork">
                 <RoadNetworkListPanel onClose={handleHideRoadNetwork} />
               </MapSideListPanel>
             </div>
@@ -2255,8 +2272,7 @@ function MapLayoutContent({
                 maxWidth={ROAD_NETWORK_DETAIL_MAX_WIDTH}
                 leftOffsetPx={roadNetworkDetailLeftPx}
                 onWidthChange={setRoadNetworkDetailWidth}
-                contentClassName="overflow-hidden"
-              >
+                contentClassName="overflow-hidden" serEng="roadNetwork">
                 <RoadNetworkDetailPanel
                   row={roadNetworkSelectedRow}
                   onClose={() => setRoadNetworkSelectedId?.(null)}
@@ -2276,8 +2292,7 @@ function MapLayoutContent({
                 minWidth={BUILD_PUBLIC_LAND_PANEL_MIN_WIDTH}
                 maxWidth={BUILD_PUBLIC_LAND_PANEL_MAX_WIDTH}
                 leftOffsetPx={buildPublicLandPanelLeftPx}
-                onWidthChange={setBuildPublicLandPanelWidth}
-              >
+                onWidthChange={setBuildPublicLandPanelWidth} serEng="buildPublicLand">
                 <BuildPublicLandListPanel
                   onClose={handleCloseBuildPublicLand}
                   selectedId={buildPublicLandSelectedId}
@@ -2296,8 +2311,7 @@ function MapLayoutContent({
                 maxWidth={BUILD_PUBLIC_LAND_DETAIL_MAX_WIDTH}
                 leftOffsetPx={buildPublicLandDetailLeftPx}
                 onWidthChange={setBuildPublicLandDetailWidth}
-                contentClassName="overflow-hidden"
-              >
+                contentClassName="overflow-hidden" serEng="buildPublicLand">
                 <BuildPublicLandDetailPanel
                   detailId={buildPublicLandSelectedId}
                   onClose={() => setBuildPublicLandSelectedId(null)}
@@ -2321,8 +2335,7 @@ function MapLayoutContent({
                 minWidth={ROAD_USE_LEDGER_PANEL_MIN_WIDTH}
                 maxWidth={ROAD_USE_LEDGER_PANEL_MAX_WIDTH}
                 leftOffsetPx={roadUseLedgerPanelLeftPx}
-                onWidthChange={setRoadUseLedgerPanelWidth}
-              >
+                onWidthChange={setRoadUseLedgerPanelWidth} serEng="roadUseLedger">
                 <RoadUseLedgerListPanel
                   onClose={handleCloseRoadUseLedger}
                   selectedDetailId={roadUseLedgerDetailId}
@@ -2341,8 +2354,7 @@ function MapLayoutContent({
                 maxWidth={ROAD_USE_LEDGER_DETAIL_MAX_WIDTH}
                 leftOffsetPx={roadUseLedgerDetailLeftPx}
                 onWidthChange={setRoadUseLedgerDetailWidth}
-                contentClassName="overflow-hidden"
-              >
+                contentClassName="overflow-hidden" serEng="roadUseLedger">
                 <RoadUseLedgerDetailPanel
                   detailId={roadUseLedgerDetailId}
                   onClose={() => setRoadUseLedgerDetailId(null)}
@@ -2366,8 +2378,7 @@ function MapLayoutContent({
                 minWidth={RIVER_USE_LEDGER_PANEL_MIN_WIDTH}
                 maxWidth={RIVER_USE_LEDGER_PANEL_MAX_WIDTH}
                 leftOffsetPx={riverUseLedgerPanelLeftPx}
-                onWidthChange={setRiverUseLedgerPanelWidth}
-              >
+                onWidthChange={setRiverUseLedgerPanelWidth} serEng="riverUseLedger">
                 <RiverUseLedgerListPanel
                   onClose={handleCloseRiverUseLedger}
                   selectedDetailId={riverUseLedgerDetailId}
@@ -2386,8 +2397,7 @@ function MapLayoutContent({
                 maxWidth={RIVER_USE_LEDGER_DETAIL_MAX_WIDTH}
                 leftOffsetPx={riverUseLedgerDetailLeftPx}
                 onWidthChange={setRiverUseLedgerDetailWidth}
-                contentClassName="overflow-hidden"
-              >
+                contentClassName="overflow-hidden" serEng="riverUseLedger">
                 <RiverUseLedgerDetailPanel
                   detailId={riverUseLedgerDetailId}
                   onClose={() => setRiverUseLedgerDetailId(null)}
@@ -2419,6 +2429,7 @@ function MapLayoutContent({
                 <AerialManagePanel
                   kind={aerialManageKind}
                   viewOnly={aerialMediaViewOnly}
+                  geomFocus={aerialGeomFocus}
                   onClose={handleCloseAerialManage}
                   onContentWidthChange={(w) => {
                     setAerialManagePanelWidth(
@@ -2495,6 +2506,7 @@ function MapLayoutContent({
                 onWidthChange={setGcpPanelWidth}
                 resizable={false}
                 contentClassName="overflow-hidden"
+                serEng="gcp"
               >
                 <GcpListPanel
                   onClose={handleCloseGcp}
@@ -2512,7 +2524,10 @@ function MapLayoutContent({
                 className="pointer-events-auto fixed inset-y-0 right-0 z-[55] flex flex-col border-l border-border bg-background shadow-lg"
                 style={{ left: qgisLayerControlPanelLeftPx }}
               >
-                <QgisLayerControlPanel onClose={handleCloseQgisLayerControl} />
+                <SerWriteAccessProvider serEng="qgisLayerControl">
+                  <QgisLayerControlPanel onClose={handleCloseQgisLayerControl} />
+                </SerWriteAccessProvider>
+
               </div>,
               document.body
             )}
@@ -2526,6 +2541,7 @@ function MapLayoutContent({
                 onWidthChange={setGcpDetailWidth}
                 resizable={false}
                 contentClassName="overflow-hidden"
+                serEng="gcp"
               >
                 <GcpDetailPanel
                   detailId={gcpDetailId}
@@ -2546,8 +2562,7 @@ function MapLayoutContent({
                 minWidth={RIVER_CONSTRUCTION_LEDGER_PANEL_MIN_WIDTH}
                 maxWidth={RIVER_CONSTRUCTION_LEDGER_PANEL_MAX_WIDTH}
                 leftOffsetPx={riverConstructionLedgerPanelLeftPx}
-                onWidthChange={setRiverConstructionLedgerPanelWidth}
-              >
+                onWidthChange={setRiverConstructionLedgerPanelWidth} serEng="riverConstructionLedger">
                 <RiverConstructionLedgerListPanel onClose={handleCloseRiverConstructionLedger} />
               </MapSideListPanel>
             </div>
@@ -2560,8 +2575,7 @@ function MapLayoutContent({
                 maxWidth={RIVER_CONSTRUCTION_LEDGER_DETAIL_MAX_WIDTH}
                 leftOffsetPx={riverConstructionLedgerDetailLeftPx}
                 onWidthChange={setRiverConstructionLedgerDetailWidth}
-                contentClassName="overflow-hidden"
-              >
+                contentClassName="overflow-hidden" serEng="riverConstructionLedger">
                 <RiverConstructionLedgerDetailPanel
                   key={riverConstructionLedgerSelectedRow.id}
                   row={riverConstructionLedgerSelectedRow}
@@ -2581,8 +2595,7 @@ function MapLayoutContent({
                 minWidth={USAGE_DATA_AS_PANEL_MIN_WIDTH}
                 maxWidth={USAGE_DATA_AS_PANEL_MAX_WIDTH}
                 leftOffsetPx={usageDataAsPanelLeftPx}
-                onWidthChange={setUsageDataAsPanelWidth}
-              >
+                onWidthChange={setUsageDataAsPanelWidth} serEng="usageDataAs">
                 <UsageDataAsListPanel
                   onClose={handleCloseUsageDataAs}
                   selectedDetailId={usageDataAsDetailId}
@@ -2601,8 +2614,7 @@ function MapLayoutContent({
                 maxWidth={USAGE_DATA_AS_DETAIL_MAX_WIDTH}
                 leftOffsetPx={usageDataAsDetailLeftPx}
                 onWidthChange={setUsageDataAsDetailWidth}
-                contentClassName="overflow-hidden"
-              >
+                contentClassName="overflow-hidden" serEng="usageDataAs">
                 <UsageDataAsDetailPanel
                   detailId={usageDataAsDetailId}
                   onClose={() => setUsageDataAsDetailId(null)}
@@ -2627,8 +2639,7 @@ function MapLayoutContent({
                 minWidth={OCCUPATION_LEDGER_PANEL_MIN_WIDTH}
                 maxWidth={OCCUPATION_LEDGER_PANEL_MAX_WIDTH}
                 leftOffsetPx={occupationLedgerPanelLeftPx}
-                onWidthChange={setOccupationLedgerPanelWidth}
-              >
+                onWidthChange={setOccupationLedgerPanelWidth} serEng={occupationLedgerSerEng}>
                 <OccupationLedgerListPanel
                   serEng={occupationLedgerSerEng}
                   onClose={handleCloseOccupationLedger}
@@ -2648,8 +2659,7 @@ function MapLayoutContent({
                 maxWidth={OCCUPATION_LEDGER_DETAIL_MAX_WIDTH}
                 leftOffsetPx={occupationLedgerDetailLeftPx}
                 onWidthChange={setOccupationLedgerDetailWidth}
-                contentClassName="overflow-hidden"
-              >
+                contentClassName="overflow-hidden" serEng={occupationLedgerSerEng}>
                 <OccupationLedgerDetailPanel
                   detailId={occupationLedgerDetailId}
                   serEng={occupationLedgerSerEng}
@@ -2675,8 +2685,7 @@ function MapLayoutContent({
                 minWidth={ROAD_REWARD_PANEL_MIN_WIDTH}
                 maxWidth={ROAD_REWARD_PANEL_MAX_WIDTH}
                 leftOffsetPx={roadRewardPanelLeftPx}
-                onWidthChange={setRoadRewardPanelWidth}
-              >
+                onWidthChange={setRoadRewardPanelWidth} serEng="roadReward">
                 <RoadRewardListPanel
                   cases={roadRewardCases}
                   selectedId={roadRewardSelectedId}
@@ -2697,8 +2706,7 @@ function MapLayoutContent({
                 maxWidth={ROAD_REWARD_DETAIL_MAX_WIDTH}
                 leftOffsetPx={roadRewardDetailLeftPx}
                 onWidthChange={setRoadRewardDetailWidth}
-                contentClassName="overflow-hidden"
-              >
+                contentClassName="overflow-hidden" serEng="roadReward">
                 <RoadRewardDetailPanel
                   caseId={roadRewardSelectedId}
                   cases={roadRewardCases}
@@ -2730,8 +2738,7 @@ function MapLayoutContent({
                 minWidth={ROAD_FRONTAGE_BUILDING_PANEL_MIN_WIDTH}
                 maxWidth={ROAD_FRONTAGE_BUILDING_PANEL_MAX_WIDTH}
                 leftOffsetPx={roadFrontageBuildingPanelLeftPx}
-                onWidthChange={setRoadFrontageBuildingPanelWidth}
-              >
+                onWidthChange={setRoadFrontageBuildingPanelWidth} serEng="roadFrontageBuilding">
                 <RoadFrontageBuildingListPanel
                   selectedId={roadFrontageBuildingSelectedId}
                   onSelectId={setRoadFrontageBuildingSelectedId}
@@ -2750,8 +2757,7 @@ function MapLayoutContent({
                 maxWidth={ROAD_FRONTAGE_BUILDING_DETAIL_MAX_WIDTH}
                 leftOffsetPx={roadFrontageBuildingDetailLeftPx}
                 onWidthChange={setRoadFrontageBuildingDetailWidth}
-                contentClassName="overflow-hidden"
-              >
+                contentClassName="overflow-hidden" serEng="roadFrontageBuilding">
                 <RoadFrontageBuildingDetailPanel
                   key={roadFrontageBuildingSelectedId}
                   ledgerId={roadFrontageBuildingSelectedId}
@@ -2782,8 +2788,7 @@ function MapLayoutContent({
                 maxWidth={ROAD_FRONTAGE_MARKER_PANEL_MAX_WIDTH}
                 leftOffsetPx={roadFrontageMarkerPanelLeftPx}
                 onWidthChange={setRoadFrontageMarkerPanelWidth}
-                contentClassName="overflow-hidden"
-              >
+                contentClassName="overflow-hidden" serEng="roadFrontageMarker">
                 <RoadFrontageMarkerListPanel
                   selectedId={roadFrontageMarkerSelectedId}
                   onSelectId={setRoadFrontageMarkerSelectedId}
@@ -2802,8 +2807,7 @@ function MapLayoutContent({
                 maxWidth={ROAD_FRONTAGE_MARKER_DETAIL_MAX_WIDTH}
                 leftOffsetPx={roadFrontageMarkerDetailLeftPx}
                 onWidthChange={setRoadFrontageMarkerDetailWidth}
-                contentClassName="overflow-hidden"
-              >
+                contentClassName="overflow-hidden" serEng="roadFrontageMarker">
                 <RoadFrontageMarkerDetailPanel
                   key={roadFrontageMarkerSelectedId}
                   ledgerId={roadFrontageMarkerSelectedId}
@@ -2861,6 +2865,19 @@ function MapLayoutContent({
               setShootingRequestDetailId(newId)
             }}
           />
+          {policyMapOpen && (
+            <div className="pointer-events-auto shrink-0">
+              <MapSideListPanel
+                width={policyMapPanelWidth}
+                minWidth={POLICY_MAP_PANEL_MIN_WIDTH}
+                maxWidth={POLICY_MAP_PANEL_MAX_WIDTH}
+                leftOffsetPx={policyMapPanelLeftPx}
+                onWidthChange={setPolicyMapPanelWidth}
+              >
+                <PolicyMapListPanel onClose={handleClosePolicyMap} />
+              </MapSideListPanel>
+            </div>
+          )}
           {memoManagementOpen && (
             <div className="pointer-events-auto shrink-0">
               <MapSideListPanel
@@ -2868,8 +2885,7 @@ function MapLayoutContent({
                 minWidth={MEMO_PANEL_MIN_WIDTH}
                 maxWidth={MEMO_PANEL_MAX_WIDTH}
                 leftOffsetPx={memoPanelLeftPx}
-                onWidthChange={setMemoPanelWidth}
-              >
+                onWidthChange={setMemoPanelWidth} serEng="memo">
                 <MemoListPanel
                   onClose={handleCloseMemoManagement}
                   selectedDetailId={memoDetailId}
@@ -2897,8 +2913,7 @@ function MapLayoutContent({
                 minWidth={COMPLAINT_PANEL_MIN_WIDTH}
                 maxWidth={COMPLAINT_PANEL_MAX_WIDTH}
                 leftOffsetPx={complaintPanelLeftPx}
-                onWidthChange={setComplaintPanelWidth}
-              >
+                onWidthChange={setComplaintPanelWidth} serEng="complaint">
                 <ComplaintListPanel
                   refreshKey={complaintListRefreshKey}
                   onClose={handleCloseComplaintManagement}
@@ -2976,8 +2991,7 @@ function MapLayoutContent({
                 maxWidth={WATER_PLAY_SIGN_PANEL_MAX_WIDTH}
                 leftOffsetPx={waterPlaySignPanelLeftPx}
                 onWidthChange={setWaterPlaySignPanelWidth}
-                contentClassName="overflow-hidden"
-              >
+                contentClassName="overflow-hidden" serEng="waterPlaySign">
                 <WaterPlaySignPanel
                   onClose={handleCloseWaterPlaySign}
                   selectedDetailId={waterPlaySignDetailId}
@@ -2995,8 +3009,7 @@ function MapLayoutContent({
                 maxWidth={WATER_PLAY_SIGN_DETAIL_MAX_WIDTH}
                 leftOffsetPx={waterPlaySignDetailLeftPx}
                 onWidthChange={setWaterPlaySignDetailWidth}
-                contentClassName="overflow-hidden"
-              >
+                contentClassName="overflow-hidden" serEng="waterPlaySign">
                 <WaterPlaySignDetailPanel
                   detailId={waterPlaySignDetailId}
                   onClose={() => setWaterPlaySignDetailId(null)}
@@ -3014,8 +3027,7 @@ function MapLayoutContent({
                 minWidth={SAFETY_FAC_PANEL_MIN_WIDTH}
                 maxWidth={SAFETY_FAC_PANEL_MAX_WIDTH}
                 leftOffsetPx={safetyFacPanelLeftPx}
-                onWidthChange={setSafetyFacPanelWidth}
-              >
+                onWidthChange={setSafetyFacPanelWidth} serEng="safetyFac">
                 <SafetyFacPanel
                   onClose={handleCloseSafetyFac}
                   selectedFacility={safetyFacDetail}
@@ -3032,8 +3044,7 @@ function MapLayoutContent({
                 maxWidth={SAFETY_FAC_DETAIL_MAX_WIDTH}
                 leftOffsetPx={safetyFacDetailLeftPx}
                 onWidthChange={setSafetyFacDetailWidth}
-                contentClassName="overflow-hidden"
-              >
+                contentClassName="overflow-hidden" serEng="radiationShelter">
                 <SafetyFacDetailPanel
                   facility={safetyFacDetail}
                   onClose={() => setSafetyFacDetail(null)}
@@ -3049,8 +3060,7 @@ function MapLayoutContent({
                 maxWidth={RADIATION_SHELTER_PANEL_MAX_WIDTH}
                 leftOffsetPx={radiationShelterPanelLeftPx}
                 onWidthChange={setRadiationShelterPanelWidth}
-                contentClassName="overflow-hidden"
-              >
+                contentClassName="overflow-hidden" serEng="radiationShelter">
                 <RadiationShelterPanel
                   onClose={handleCloseRadiationShelter}
                   selectedDetailId={radiationShelterDetailId}
@@ -3068,8 +3078,7 @@ function MapLayoutContent({
                 maxWidth={RADIATION_SHELTER_DETAIL_MAX_WIDTH}
                 leftOffsetPx={radiationShelterDetailLeftPx}
                 onWidthChange={setRadiationShelterDetailWidth}
-                contentClassName="overflow-hidden"
-              >
+                contentClassName="overflow-hidden" serEng="radiationShelter">
                 <RadiationShelterDetailPanel
                   detailId={radiationShelterDetailId}
                   onClose={() => setRadiationShelterDetailId(null)}
@@ -3088,8 +3097,7 @@ function MapLayoutContent({
                 maxWidth={VILLAGE_PATROL_PANEL_MAX_WIDTH}
                 leftOffsetPx={villagePatrolPanelLeftPx}
                 onWidthChange={setVillagePatrolPanelWidth}
-                contentClassName="overflow-hidden"
-              >
+                contentClassName="overflow-hidden" serEng="villagePatrol">
                 <VillagePatrolListPanel onClose={handleCloseVillagePatrol} />
               </MapSideListPanel>
             </div>
@@ -3142,8 +3150,7 @@ function MapLayoutContent({
                     onWidthChange={
                       roadDocHandbookWide ? setRoadDocHandbookPanelWidth : setRoadDocPanelWidth
                     }
-                    contentClassName="overflow-hidden"
-                  >
+                    contentClassName="overflow-hidden" serEng="roadWorkHandbook">
                     <RoadDocManualPanel
                       onClose={handleCloseRoadDoc}
                       handbookMode={roadWorkHandbookMode}
@@ -3175,8 +3182,7 @@ function MapLayoutContent({
                           ? setRoadWorkHandbookDetailWidth
                           : setRoadWorkHandbookRefDetailWidth
                       }
-                      contentClassName="overflow-hidden"
-                    >
+                      contentClassName="overflow-hidden" serEng="roadWorkHandbook">
                       <RoadWorkHandbookDetailPanel
                         selection={roadWorkHandbookDetail}
                         onClose={() => setRoadWorkHandbookDetail(null)}
@@ -3197,6 +3203,7 @@ function MapLayoutContent({
                 leftOffsetPx={roadCctvPanelLeftPx}
                 onWidthChange={setRoadCctvPanelWidth}
                 contentClassName="overflow-hidden"
+                serEng="roadCCTV"
               >
                 <RoadCctvPanel onClose={handleCloseRoadCctv} />
               </MapSideListPanel>
@@ -3210,8 +3217,7 @@ function MapLayoutContent({
                 minWidth={USE_FEE_PANEL_MIN_WIDTH}
                 maxWidth={USE_FEE_PANEL_MAX_WIDTH}
                 leftOffsetPx={useFeePanelLeftPx}
-                onWidthChange={setUseFeePanelWidth}
-              >
+                onWidthChange={setUseFeePanelWidth} serEng={useFeeSerEng}>
                 <UseFeeListPanel
                   serEng={useFeeSerEng}
                   onClose={handleCloseUseFee}
@@ -3229,8 +3235,7 @@ function MapLayoutContent({
                 maxWidth={USE_FEE_DETAIL_MAX_WIDTH}
                 leftOffsetPx={useFeeDetailLeftPx}
                 onWidthChange={setUseFeeDetailWidth}
-                contentClassName="overflow-hidden"
-              >
+                contentClassName="overflow-hidden" serEng="underWaterUse">
                 <UseFeeDetailPanel
                   serEng={useFeeSerEng}
                   detailId={useFeeDetailId}
@@ -3247,8 +3252,7 @@ function MapLayoutContent({
                 minWidth={GROUNDWATER_PERMIT_PANEL_MIN_WIDTH}
                 maxWidth={GROUNDWATER_PERMIT_PANEL_MAX_WIDTH}
                 leftOffsetPx={groundwaterPermitPanelLeftPx}
-                onWidthChange={setGroundwaterPermitPanelWidth}
-              >
+                onWidthChange={setGroundwaterPermitPanelWidth} serEng="underWaterUse">
                 <GroundwaterPermitListPanel
                   onClose={handleCloseGroundwaterPermit}
                   selectedDetailId={groundwaterPermitDetailId}
@@ -3265,8 +3269,7 @@ function MapLayoutContent({
                 maxWidth={GROUNDWATER_PERMIT_DETAIL_MAX_WIDTH}
                 leftOffsetPx={groundwaterPermitDetailLeftPx}
                 onWidthChange={setGroundwaterPermitDetailWidth}
-                contentClassName="overflow-hidden"
-              >
+                contentClassName="overflow-hidden" serEng="underWaterUse">
                 <GroundwaterPermitDetailPanel
                   detailId={groundwaterPermitDetailId}
                   onClose={() => setGroundwaterPermitDetailId(null)}
@@ -3281,8 +3284,7 @@ function MapLayoutContent({
                 minWidth={FMS_PANEL_MIN_WIDTH}
                 maxWidth={FMS_PANEL_MAX_WIDTH}
                 leftOffsetPx={fmsLinkagePanelLeftPx}
-                onWidthChange={setFmsLinkagePanelWidth}
-              >
+                onWidthChange={setFmsLinkagePanelWidth} serEng="fmsLinkage">
                 <FmsLinkageListPanel
                   onClose={handleCloseFmsLinkage}
                   selectedDetailId={fmsLinkageDetailId}
@@ -3330,40 +3332,51 @@ function MapLayoutContent({
                   (roadLedgerDetailOpen ? roadLedgerDetailWidth : 0)
                 }
               />
-              <StandardDetail />
+              <SerWriteAccessProvider serEng="dataQuery">
+                <StandardDetail />
+              </SerWriteAccessProvider>
               {memoAddTable && (
-                <MemoDetailPanel
-                  mode="add"
-                  addTableName={memoAddTable}
-                  onClose={() => setMemoAddTable(null)}
-                  onCreated={(newRowKey) => {
-                    setMemoAddTable(null)
-                    setMemoListRefreshKey((k) => k + 1)
-                    setMemoDetailId(newRowKey)
-                  }}
-                />
+                <SerWriteAccessProvider serEng="memo">
+                  <MemoDetailPanel
+                    mode="add"
+                    addTableName={memoAddTable}
+                    onClose={() => setMemoAddTable(null)}
+                    onCreated={(newRowKey) => {
+                      setMemoAddTable(null)
+                      setMemoListRefreshKey((k) => k + 1)
+                      setMemoDetailId(newRowKey)
+                    }}
+                  />
+                </SerWriteAccessProvider>
               )}
               {memoDetailId && (
-                <MemoDetailPanel
-                  mode="edit"
-                  detailId={memoDetailId}
-                  onClose={() => setMemoDetailId(null)}
-                  onSaved={() => setMemoListRefreshKey((k) => k + 1)}
-                  onDeleted={() => {
-                    setMemoDetailId(null)
-                    setMemoListRefreshKey((k) => k + 1)
-                  }}
-                />
+                <SerWriteAccessProvider serEng="memo">
+                  <MemoDetailPanel
+                    mode="edit"
+                    detailId={memoDetailId}
+                    onClose={() => setMemoDetailId(null)}
+                    onSaved={() => setMemoListRefreshKey((k) => k + 1)}
+                    onDeleted={() => {
+                      setMemoDetailId(null)
+                      setMemoListRefreshKey((k) => k + 1)
+                    }}
+                  />
+                </SerWriteAccessProvider>
               )}
               {complaintAddOpen && (
-                <ComplaintAdd
-                  onClose={() => setComplaintAddOpen(false)}
-                  onCreated={() => setComplaintListRefreshKey((k) => k + 1)}
-                />
+                <SerWriteAccessProvider serEng="complaint">
+                  <ComplaintAdd
+                    onClose={() => setComplaintAddOpen(false)}
+                    onCreated={() => setComplaintListRefreshKey((k) => k + 1)}
+                  />
+                </SerWriteAccessProvider>
               )}
-              <ComplaintDetail
-                onListRefresh={() => setComplaintListRefreshKey((k) => k + 1)}
-              />
+              <SerWriteAccessProvider serEng="complaint">
+                <ComplaintDetail
+                  onListRefresh={() => setComplaintListRefreshKey((k) => k + 1)}
+                />
+              </SerWriteAccessProvider>
+
               <AddressInfoDetail />
             </div>
             <div className="pointer-events-auto">
@@ -3389,6 +3402,17 @@ function MapLayoutContent({
                   const feeSerEng = getUseFeeBinding({ system: systemKeyFromUrl }).serEng
                   setOpened([feeSerEng])
                   setUseFeeDetailId(feeId)
+                }}
+                onOpenMissingGeom={(item) => {
+                  const matched = /^wu-(\d+):fu-(\d+)$/.exec(String(item.targetId ?? ""))
+                  if (!matched) return
+                  setAerialGeomFocus({
+                    unitId: `wu-${matched[1]}`,
+                    fileId: `fu-${matched[2]}`,
+                    token: Date.now(),
+                  })
+                  setOpened([AERIAL_DRONE_OPENED_KEY])
+                  setProtoUserAccountOpen(false)
                 }}
               />
             </div>
