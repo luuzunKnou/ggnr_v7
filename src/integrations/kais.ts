@@ -4,7 +4,7 @@ import path from 'node:path';
 import iconv from 'iconv-lite';
 
 import { pool } from '@/database/db';
-import { BinaryStreamReader, ensureDir, extractZip, fetchWithRetry, findTokenInFilename, geoserverFetch, resolveOgr2ogrRun, runCommand, withAdvisoryLock, yyyymmdd } from '@/integrations/core';
+import { BinaryStreamReader, ensureDir, extractZip, fetchWithRetry, findTokenInFilename, geoserverFetch, resolveOgr2ogrRun, runCommand, withAdvisoryLock } from '@/integrations/core';
 import { resolveGgnrDataDir } from '@/lib/turbopackFsPath';
 
 type KaisMode = 'initial' | 'daily';
@@ -434,6 +434,32 @@ function defaultDownloadRoot(): string {
   return path.join(resolveGgnrDataDir(), 'integrations', 'kais');
 }
 
+/** 저장 경로가 다운로드 폴더 자체로 줄어들면 네트워크 폴더를 파일처럼 열어 EINVAL이 난다. */
+function kaisZipDest(
+  root: string,
+  createDt: string,
+  fileName: string
+): { outDir: string; zipPath: string } | null {
+  const day = createDt.trim();
+  const base = path.basename(fileName.trim());
+  if (!/^\d{8}$/.test(day)) return null;
+  const folder = day.slice(2, 8);
+  if (!/^\d{6}$/.test(folder)) return null;
+  if (!base || base === '.' || base === '..') return null;
+  if (/[<>:"|?*\u0000]/.test(base)) return null;
+
+  const outDir = path.join(root, folder);
+  const zipPath = path.join(outDir, base);
+  const normRoot = path.normalize(root).replace(/[\\/]+$/, '');
+  const normZip = path.normalize(zipPath);
+  if (normZip === normRoot || !normZip.startsWith(normRoot + path.sep)) return null;
+  return { outDir, zipPath };
+}
+
+function seoulYyyymmdd(now = new Date()): string {
+  return now.toLocaleDateString('en-CA', { timeZone: 'Asia/Seoul' }).replace(/-/g, '');
+}
+
 async function receiveZipRecords(params: KaisParams): Promise<ReceiveRecord[]> {
   const baseUrl = params.baseUrl ?? 'http://update.juso.go.kr';
   const url = new URL('/updateInfo.do', baseUrl);
@@ -468,15 +494,30 @@ async function receiveZipRecords(params: KaisParams): Promise<ReceiveRecord[]> {
     const replay = await reader.readAscii(1);
     const createDt = (await reader.readAscii(8)).trim();
 
-    const outDir = path.join(root, createDt.slice(2, 8));
-    await ensureDir(outDir);
-
     // Python guide reads file_size + 10; keep compatibility by doing the same.
     const zipBytes = await reader.readExactly(fileSize + 10);
-    const zipPath = path.join(outDir, fileName);
-    await fs.writeFile(zipPath, Buffer.from(zipBytes));
+    const dest = kaisZipDest(root, createDt, fileName);
+    if (!dest) {
+      console.warn(
+        `[kais] 파일명 또는 날짜가 없어 저장을 건너뜁니다. cntc=${params.cntcCd} seq=${fileSeq} fileName=${JSON.stringify(fileName)} createDt=${JSON.stringify(createDt)}`
+      );
+      continue;
+    }
+    await ensureDir(dest.outDir);
+    await fs.writeFile(dest.zipPath, Buffer.from(zipBytes));
 
-    out.push({ fileSeq, fileBaseDt, fileName, fileSize, resCode, reqCode, replay, createDt, outDir, zipPath });
+    out.push({
+      fileSeq,
+      fileBaseDt,
+      fileName,
+      fileSize,
+      resCode,
+      reqCode,
+      replay,
+      createDt,
+      outDir: dest.outDir,
+      zipPath: dest.zipPath,
+    });
   }
   return out;
 }
@@ -538,8 +579,7 @@ export async function runKais(params: KaisParams): Promise<void> {
 }
 
 export function defaultDailyWindow(now = new Date()): { from: string; to: string } {
-  // Default: request today's delta
-  const d = yyyymmdd(now);
+  const d = seoulYyyymmdd(now);
   return { from: d, to: d };
 }
 
