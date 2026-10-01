@@ -151,7 +151,7 @@ import {
   USE_FEE_ROAD_OCCUPATION_WMS_LAYER_ID,
   USE_FEE_WATER_OCCUPATION_WMS_LAYER_ID,
 } from '../_mapContents/useFee/useFeeMapSync';
-import { Crosshair } from 'lucide-react';
+import { Check, Crosshair } from 'lucide-react';
 import './config/projections';
 import VectorSource from 'ol/source/Vector';
 import VectorLayer from 'ol/layer/Vector';
@@ -161,9 +161,15 @@ import Feature from 'ol/Feature';
 import { Style, Stroke, Fill } from 'ol/style';
 import { isEmpty as isEmptyExtent } from 'ol/extent';
 import { AerialViewLayerPanel } from '../_mapContents/aerialView/AerialViewLayerPanel';
-import { useAerialViewCheckedMarkers } from '../_mapContents/aerialView/useAerialViewCheckedMarkers';
+import { fitDroneUnitFiles, useAerialViewCheckedMarkers } from '../_mapContents/aerialView/useAerialViewCheckedMarkers';
+import { AerialMediaPointPopup } from '../_mapContents/aerialView/AerialMediaPointPopup';
+import { AerialPanoPointViewer } from '../_mapContents/aerialView/AerialPanoPointViewer';
 import { useAerialOrthoCheckedTiles } from '../_mapContents/aerialView/useAerialOrthoCheckedTiles';
 import { useOrthoExtentBboxLayer } from '../_mapContents/aerialView/useOrthoExtentBboxLayer';
+import { useAerialOrthoPanelBbox } from '../_mapContents/aerialView/useAerialOrthoPanelBbox';
+import { AerialViewerMetaChip } from '../_mapContents/aerialView/AerialViewerMetaChip';
+import { aerialShotMeta } from '../_mapContents/aerialView/aerialMediaTypes';
+import { mockUnitsForKind } from '../_mapContents/aerialView/aerialMediaMockData';
 
 /** EWKT(SRID=…;)·3D 키워드(Z/M) 제거 후 ol/format/WKT 파싱용 문자열로 맞춤 */
 function normalizeSpatialFilterWktForOl(wkt: string): string {
@@ -445,7 +451,22 @@ export default function OpenLayersMap({
   const [activeInteractions, setActiveInteractions] = useState<string[]>([]);
   const [isBackgroundPanelExiting, setIsBackgroundPanelExiting] = useState(false);
   const [isAerialViewPanelExiting, setIsAerialViewPanelExiting] = useState(false);
+  /** 드론영상 목록. 닫아도 체크한 영상은 지도에 남긴다 */
+  const [aerialPanelOpen, setAerialPanelOpen] = useState(false);
   const [aerialViewCheckedIds, setAerialViewCheckedIds] = useState<Set<string>>(() => new Set());
+  const [aerialListReveal, setAerialListReveal] = useState<{
+    id: string;
+    kind: 'ortho' | 'drone' | 'panorama';
+    n: number;
+  } | null>(null);
+  const [orthoMetaWuKey, setOrthoMetaWuKey] = useState<number | null>(null);
+  /** 임시: 우측 드론영상 범위가 겹칠 때 클릭 위치 목록. 되돌릴 때 이 state와 아래 메뉴만 제거 */
+  const [orthoOverlapMenu, setOrthoOverlapMenu] = useState<{
+    x: number;
+    y: number;
+    items: { wuKey: number; label: string }[];
+  } | null>(null);
+  const [orthoOverlapHoverWu, setOrthoOverlapHoverWu] = useState<number | null>(null);
   const [openSubPanel, setOpenSubPanel] = useState<
     | 'land-category'
     | 'ownership'
@@ -898,6 +919,21 @@ export default function OpenLayersMap({
     if (r) r.current = selectedBackgroundMap;
   }, [mapContext?.mapBackgroundMapIdRef, selectedBackgroundMap]);
 
+  useEffect(() => {
+    const ref = mapContext?.setMapBackgroundMapIdRef;
+    if (!ref) return;
+    ref.current = (id: string) => {
+      setSelectedBackgroundMap(id);
+      const ctx = mapContextRef.current;
+      if (ctx?.mapSplitSecondaryKind === 'map') {
+        ctx.setMapSplitSecondaryBackgroundId?.(id);
+      }
+    };
+    return () => {
+      ref.current = null;
+    };
+  }, [mapContext?.setMapBackgroundMapIdRef]);
+
   // 지도분할 ON: 좌측 맵 클릭 시 배경 포커스 = primary
   useEffect(() => {
     const map = mapReady ? mapInstanceRef.current : null;
@@ -945,12 +981,12 @@ export default function OpenLayersMap({
   const openBackgroundMapPanelExclusive = useCallback(() => {
     setOpenSubPanel(null);
     setIsBackgroundPanelExiting(false);
+    setAerialPanelOpen(false);
     setIsAerialViewPanelExiting(false);
     setIsResetPanelExiting(false);
     setActiveControls((prev) => {
       const next = prev.filter(
         (item) =>
-          item !== 'aerial-view' &&
           item !== 'reset-measurements' &&
           !MEASUREMENT_IDS.includes(item)
       );
@@ -1422,6 +1458,9 @@ export default function OpenLayersMap({
       setVisibleBuildingRoadLayerNames(new Set());
       setVisibleThematicLayerNames(new Set());
       setVisibleUndergroundFacilityLayerNames(new Set());
+      setAerialViewCheckedIds(new Set());
+      setAerialPanelOpen(false);
+      setIsAerialViewPanelExiting(false);
     };
     return () => {
       if (mapContext?.allLayersOffRef) mapContext.allLayersOffRef.current = null;
@@ -1593,11 +1632,95 @@ export default function OpenLayersMap({
     [systemKey]
   );
 
-  const aerialViewPanelOpen =
-    activeControls.includes('aerial-view') || isAerialViewPanelExiting;
-  useAerialViewCheckedMarkers({
-    enabled: aerialViewCheckedIds.size > 0,
+  const aerialViewPanelOpen = aerialPanelOpen || isAerialViewPanelExiting;
+  const aerialButtonOn = aerialPanelOpen || aerialViewCheckedIds.size > 0;
+  const leftOrthoBboxOn = (searchParams.get('opened') ?? '')
+    .split(',')
+    .some((key) => key.trim() === 'aerialOrtho');
+  const activateAerialUnit = (unitId: string) => {
+    setAerialViewCheckedIds((prev) => {
+      if (prev.has(unitId)) return prev;
+      const next = new Set(prev);
+      next.add(unitId);
+      return next;
+    });
+  };
+  const aerialMarkerPopups = useAerialViewCheckedMarkers({
+    enabled: aerialPanelOpen || aerialViewCheckedIds.size > 0,
     checkedUnitIds: aerialViewCheckedIds,
+    showAll: aerialPanelOpen,
+    fitView: false,
+    onActivate: (unitId, kind) => {
+      activateAerialUnit(unitId);
+      if (kind === 'drone' || kind === 'panorama') {
+        setAerialListReveal({ id: unitId, kind, n: Date.now() });
+      }
+      setOrthoMetaWuKey(null);
+    },
+    onDeactivate: (unitId) => {
+      setAerialViewCheckedIds((prev) => {
+        if (!prev.has(unitId)) return prev;
+        const next = new Set(prev);
+        next.delete(unitId);
+        return next;
+      });
+    },
+  });
+  const toggleOrthoUnit = (wuKey: number) => {
+    const unitId = `wu-${wuKey}`;
+    if (aerialViewCheckedIds.has(unitId)) {
+      setAerialViewCheckedIds((prev) => {
+        if (!prev.has(unitId)) return prev;
+        const next = new Set(prev);
+        next.delete(unitId);
+        return next;
+      });
+      return;
+    }
+    for (const photo of aerialMarkerPopups.photos) photo.onClose();
+    aerialMarkerPopups.pano?.onClose();
+    activateAerialUnit(unitId);
+    setAerialListReveal({ id: unitId, kind: 'ortho', n: Date.now() });
+    setOrthoMetaWuKey(wuKey);
+  };
+  const checkedOrthoWuKeys = useMemo(() => {
+    const next = new Set<number>();
+    for (const id of aerialViewCheckedIds) {
+      if (!id.startsWith('wu-')) continue;
+      const wuKey = Number(id.slice(3));
+      if (Number.isFinite(wuKey)) next.add(wuKey);
+    }
+    return next;
+  }, [aerialViewCheckedIds]);
+  useAerialOrthoPanelBbox({
+    enabled: checkedOrthoWuKeys.size > 0 && !leftOrthoBboxOn,
+    wuKeys: [...checkedOrthoWuKeys],
+    fitView: false,
+    checkedWuKeys: checkedOrthoWuKeys,
+    highlightWuKey: orthoOverlapMenu ? orthoOverlapHoverWu : null,
+    onPick: (hit) => {
+      const grouped = new Map<number, string>();
+      if (hit.overlaps && hit.overlaps.length > 1) {
+        for (const opt of hit.overlaps) {
+          const wuKey = Number(opt.value.split(':')[0]);
+          if (!Number.isFinite(wuKey) || grouped.has(wuKey)) continue;
+          const unit = mockUnitsForKind('ortho').find((row) => row.id === `wu-${wuKey}`);
+          grouped.set(wuKey, unit?.workName?.trim() || opt.label);
+        }
+      }
+      if (grouped.size > 1 && hit.clientX != null && hit.clientY != null) {
+        const width = 220;
+        const height = 40 + grouped.size * 32;
+        setOrthoOverlapMenu({
+          x: Math.max(8, Math.min(hit.clientX + 8, window.innerWidth - width - 8)),
+          y: Math.max(8, Math.min(hit.clientY + 8, window.innerHeight - height - 8)),
+          items: [...grouped.entries()].map(([wuKey, label]) => ({ wuKey, label })),
+        });
+        return;
+      }
+      setOrthoOverlapMenu(null);
+      toggleOrthoUnit(hit.wuKey);
+    },
   });
   const orthoDataQueryTuKeys = mapContext?.orthoDataQueryTuKeys ?? [];
   const orthoDataQueryBboxOn = Boolean(mapContext?.orthoDataQueryBboxOn);
@@ -1605,8 +1728,34 @@ export default function OpenLayersMap({
     enabled: aerialViewCheckedIds.size > 0 || orthoDataQueryTuKeys.length > 0,
     checkedUnitIds: aerialViewCheckedIds.size > 0 ? aerialViewCheckedIds : undefined,
     extraTuKeys: orthoDataQueryTuKeys,
+    fitView: aerialViewCheckedIds.size === 0,
   });
   useOrthoExtentBboxLayer(orthoDataQueryBboxOn);
+  useEffect(() => {
+    if (orthoMetaWuKey == null) return;
+    if (!aerialViewCheckedIds.has(`wu-${orthoMetaWuKey}`)) setOrthoMetaWuKey(null);
+  }, [aerialViewCheckedIds, orthoMetaWuKey]);
+  useEffect(() => {
+    if (!aerialViewPanelOpen) setOrthoOverlapMenu(null);
+  }, [aerialViewPanelOpen]);
+  useEffect(() => {
+    if (!orthoOverlapMenu) setOrthoOverlapHoverWu(null);
+  }, [orthoOverlapMenu]);
+  const photoId = aerialMarkerPopups.photos[0]?.file.id ?? null;
+  useEffect(() => {
+    if (photoId) setOrthoMetaWuKey(null);
+  }, [photoId]);
+  const checkedOrthoUnits = mockUnitsForKind('ortho').filter((unit) => aerialViewCheckedIds.has(unit.id));
+  const orthoMetaUnit =
+    (orthoMetaWuKey != null
+      ? checkedOrthoUnits.find((unit) => unit.id === `wu-${orthoMetaWuKey}`)
+      : null) ?? (checkedOrthoUnits.length === 1 ? checkedOrthoUnits[0] : null);
+  const mapMeta =
+    aerialMarkerPopups.pano || aerialMarkerPopups.photos.length > 0
+      ? null
+      : orthoMetaUnit
+        ? { kindLabel: '드론영상', dateLabel: '작업일', ...aerialShotMeta(orthoMetaUnit) }
+        : null;
 
   const totalIdentifyCount = identifyIntakePopup?.results?.reduce((s, r) => s + r.features.length, 0) ?? 0;
 
@@ -2516,10 +2665,9 @@ export default function OpenLayersMap({
     if (opening) {
       // 배경지도·드론영상과 배타. 퇴장 애니와 목록 slide-in이 겹치면 두 번 깜빡이므로 즉시 닫음
       setIsBackgroundPanelExiting(false);
+      setAerialPanelOpen(false);
       setIsAerialViewPanelExiting(false);
-      setActiveControls((prev) =>
-        prev.filter((x) => x !== 'background-map' && x !== 'aerial-view')
-      );
+      setActiveControls((prev) => prev.filter((x) => x !== 'background-map'));
     }
     setOpenSubPanel((prev) => (prev === id ? null : id));
     if (id === 'land-category') {
@@ -2572,16 +2720,15 @@ export default function OpenLayersMap({
       return;
     }
     if (id === 'aerial-view') {
-      if (activeControls.includes('aerial-view')) {
+      if (aerialPanelOpen) {
         setIsAerialViewPanelExiting(true);
-        setActiveControls((prev) => prev.filter((item) => item !== 'aerial-view'));
+        setAerialPanelOpen(false);
       } else {
         setOpenSubPanel(null);
         setIsBackgroundPanelExiting(false);
-        setActiveControls((prev) => {
-          const next = prev.filter((item) => item !== 'background-map');
-          return next.includes('aerial-view') ? next : [...next, 'aerial-view'];
-        });
+        setIsAerialViewPanelExiting(false);
+        setAerialPanelOpen(true);
+        setActiveControls((prev) => prev.filter((item) => item !== 'background-map'));
       }
       return;
     }
@@ -2688,20 +2835,28 @@ export default function OpenLayersMap({
             : prev;
         return withoutPeer.includes(id) ? withoutPeer : [...withoutPeer, id];
       });
-    } else if (id === 'background-map' || id === 'aerial-view') {
-      // 배경지도·드론영상: 서로 배타 + 지적도 등 목록 패널과도 배타
-      const peer = id === 'background-map' ? 'aerial-view' : 'background-map';
+    } else if (id === 'background-map') {
       if (isActive) {
-        if (id === 'background-map') setIsBackgroundPanelExiting(true);
-        else setIsAerialViewPanelExiting(true);
+        setIsBackgroundPanelExiting(true);
         setActiveControls((prev) => prev.filter((item) => item !== id));
       } else {
-        if (id === 'background-map') setIsAerialViewPanelExiting(false);
-        else setIsBackgroundPanelExiting(false);
+        setAerialPanelOpen(false);
+        setIsAerialViewPanelExiting(false);
         setActiveControls((prev) => {
-          const withoutPeer = prev.filter((item) => item !== peer);
+          const withoutPeer = prev.filter((item) => item !== 'aerial-view');
           return withoutPeer.includes(id) ? withoutPeer : [...withoutPeer, id];
         });
+      }
+    } else if (id === 'aerial-view') {
+      if (aerialPanelOpen) {
+        setIsAerialViewPanelExiting(true);
+        setAerialPanelOpen(false);
+      } else {
+        setOpenSubPanel(null);
+        setIsBackgroundPanelExiting(false);
+        setIsAerialViewPanelExiting(false);
+        setAerialPanelOpen(true);
+        setActiveControls((prev) => prev.filter((item) => item !== 'background-map'));
       }
     } else {
       // 단일 선택 항목: 배타적 토글
@@ -2757,6 +2912,68 @@ export default function OpenLayersMap({
 
   return (
     <div className="relative w-full h-full">
+      {mapMeta ? <AerialViewerMetaChip place="map" {...mapMeta} /> : null}
+      {orthoOverlapMenu
+        ? createPortal(
+            <>
+              <button
+                type="button"
+                className="fixed inset-0 z-[70] cursor-default bg-transparent"
+                aria-label="닫기"
+                onClick={() => setOrthoOverlapMenu(null)}
+              />
+              <div
+                className="fixed z-[80] w-52 overflow-hidden rounded-md border border-border bg-background py-1 shadow-md"
+                style={{ left: orthoOverlapMenu.x, top: orthoOverlapMenu.y }}
+              >
+                <p className="px-2.5 py-1 text-[11px] text-muted-foreground">
+                  이 위치 {orthoOverlapMenu.items.length}건
+                </p>
+                {orthoOverlapMenu.items.map((item) => {
+                  const on = aerialViewCheckedIds.has(`wu-${item.wuKey}`);
+                  return (
+                  <button
+                    key={item.wuKey}
+                    type="button"
+                    className="flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-xs hover:bg-muted"
+                    onMouseEnter={() => setOrthoOverlapHoverWu(item.wuKey)}
+                    onMouseLeave={() => setOrthoOverlapHoverWu(null)}
+                    onClick={() => {
+                      toggleOrthoUnit(item.wuKey);
+                    }}
+                  >
+                    <span className="min-w-0 flex-1 truncate">{item.label}</span>
+                    {on ? <Check className="h-3.5 w-3.5 shrink-0 text-primary" aria-label="켜짐" /> : null}
+                  </button>
+                  );
+                })}
+              </div>
+            </>,
+            document.body
+          )
+        : null}
+      {aerialMarkerPopups.photos.map((photo) => (
+        <AerialMediaPointPopup
+          key={photo.file.id}
+          file={photo.file}
+          files={photo.files}
+          workName={photo.workName}
+          workDate={photo.workDate}
+          onClose={photo.onClose}
+        />
+      ))}
+      {aerialMarkerPopups.pano ? (
+        <AerialPanoPointViewer
+          file={aerialMarkerPopups.pano.file}
+          files={aerialMarkerPopups.pano.files}
+          workName={aerialMarkerPopups.pano.workName}
+          shotDate={aerialMarkerPopups.pano.shotDate}
+          photographer={aerialMarkerPopups.pano.photographer}
+          onClose={aerialMarkerPopups.pano.onClose}
+          onSelect={aerialMarkerPopups.pano.onSelect}
+          onPickPoint={aerialMarkerPopups.pano.onPickPoint}
+        />
+      ) : null}
       <div ref={mapRef} className="w-full h-full bg-black [&_.ol-viewport]:bg-black" />
       <MapScaleIndicator
         map={mapReady ? mapInstanceRef.current : null}
@@ -2831,10 +3048,20 @@ export default function OpenLayersMap({
                 >
                   <AerialViewLayerPanel
                     checkedUnitIds={aerialViewCheckedIds}
-                    onCheckedChange={setAerialViewCheckedIds}
+                    reveal={aerialListReveal}
+                    onCheckedChange={(next) => {
+                      const added = [...next].filter((id) => !aerialViewCheckedIds.has(id));
+                      setAerialViewCheckedIds(next);
+                      const map = mapInstanceRef.current;
+                      if (!map) return;
+                      for (const id of added) {
+                        fitDroneUnitFiles(map, id);
+                        aerialMarkerPopups.showDroneUnitFiles(id);
+                      }
+                    }}
                     onClose={() => {
                       setIsAerialViewPanelExiting(true);
-                      setActiveControls((prev) => prev.filter((x) => x !== 'aerial-view'));
+                      setAerialPanelOpen(false);
                     }}
                   />
                 </div>
@@ -2989,11 +3216,14 @@ export default function OpenLayersMap({
               <div className="pointer-events-auto" data-map-control-menu>
                 <MapControlPanel
                   groups={mapControlGroups}
-                  activeIds={
-                    openSubPanel && !activeControls.includes(openSubPanel)
-                      ? [...activeControls, openSubPanel]
-                      : activeControls
-                  }
+                  activeIds={(() => {
+                    const base =
+                      openSubPanel && !activeControls.includes(openSubPanel)
+                        ? [...activeControls, openSubPanel]
+                        : activeControls;
+                    const withoutAerial = base.filter((id) => id !== 'aerial-view');
+                    return aerialButtonOn ? [...withoutAerial, 'aerial-view'] : withoutAerial;
+                  })()}
                   onItemClick={handleControlClick}
                   onItemRightClick={handleItemRightClick}
                   extraAfterFirstGroup={extraControls}

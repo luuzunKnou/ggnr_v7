@@ -66,6 +66,7 @@ export function useGcpMapLayer({
   const placeModeRef = useRef(placeMode)
   placeModeRef.current = placeMode
   const fittedOpenRef = useRef(false)
+  const fittedDetailIdRef = useRef<string | null>(null)
   const pulsePhaseRef = useRef(0)
   const [pulseOn, setPulseOn] = useState(false)
 
@@ -230,6 +231,26 @@ export function useGcpMapLayer({
     source.addFeature(feature)
     setPulseOn(true)
   }, [open, selectedId, points, placeCoord])
+
+  useEffect(() => {
+    if (!open || placeCoord) return
+    if (!selectedId) {
+      fittedDetailIdRef.current = null
+      return
+    }
+    if (fittedDetailIdRef.current === selectedId) return
+    const point = points.find((p) => p.id === selectedId)
+    if (!point) return
+    const map = mapContext?.mapInstanceRef?.current
+    if (!map) return
+    const [x, y] = gcpTo3857(point)
+    fittedDetailIdRef.current = selectedId
+    scheduleFitMapToExtent3857(map, [x, y, x, y], {
+      maxZoom: MAP_AUTO_NAV_MAX_ZOOM,
+      pointZoom: 18,
+      applyMapViewPadding: () => mapContext?.applyMapViewPaddingRef?.current?.(),
+    })
+  }, [open, selectedId, points, placeCoord, mapContext])
 
   useEffect(() => {
     if (!open || selectedId || placeCoord || !points.length || fittedOpenRef.current) return

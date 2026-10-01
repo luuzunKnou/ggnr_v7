@@ -16,8 +16,7 @@ type Props = {
 };
 
 /**
- * 지도 우측 하단 축척 — 줌에 따라 거리 표시 (글자 + 얇은 밑선).
- * editable이면 숫자를 입력해 축척을 맞춘다.
+ * 지도 좌측 하단 축척 — 줌에 따라 거리 표시 (글자 + 얇은 밑선).
  */
 export function MapScaleIndicator({
   map,

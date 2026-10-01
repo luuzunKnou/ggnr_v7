@@ -8,20 +8,33 @@ import { cn } from '@/lib/utils';
 import { Check, FileText, IdCard, Layers, PanelRight, Plus, Search, Server, Shield, X } from 'lucide-react';
 import { permCall } from './perm/permApi';
 import { PermRoleMappingPanel } from './perm/PermRoleMappingPanel';
+import { isAccessRequestPermEtc } from '@/lib/permAccessRequest';
 
 type Perm = { permKey: number; permName: string | null; permEtc: string | null };
 type PermDetailUserRow = { usrId: string; utName: string; usrName: string | null };
+/** 왼쪽 권한 목록: 공통 권한 vs 사용자(신청) 권한 */
+type PermSourceTab = 'manual' | 'request';
 
 const PERM_TABS = [
   { id: 'ser' as const, label: '기능별 권한관리', icon: Layers },
   { id: 'sys' as const, label: '시스템별 접속권한 관리', icon: Server },
 ];
 
+const PERM_SOURCE_TABS: { id: PermSourceTab; label: string }[] = [
+  { id: 'manual', label: '공통 권한' },
+  { id: 'request', label: '사용자 권한' },
+];
+
+function isAccessRequestPerm(p: Pick<Perm, 'permEtc'>): boolean {
+  return isAccessRequestPermEtc(p.permEtc);
+}
+
 /** 레이어 속성관리(`LayerAttrManager`) 왼쪽 목록과 동일 폭 */
 const PERM_LIST_WIDTH = 280;
 
 export function PermissionFeatureManager() {
   const [tab, setTab] = useState<'ser' | 'sys'>('ser');
+  const [permSourceTab, setPermSourceTab] = useState<PermSourceTab>('manual');
   const [perms, setPerms] = useState<Perm[]>([]);
   const [selPerm, setSelPerm] = useState<number | null>(null);
   const [addModalOpen, setAddModalOpen] = useState(false);
@@ -43,16 +56,22 @@ export function PermissionFeatureManager() {
   const [msg, setMsg] = useState('');
   const [permListSearch, setPermListSearch] = useState('');
 
+  const sourcePerms = useMemo(() => {
+    return perms.filter((p) =>
+      permSourceTab === 'request' ? isAccessRequestPerm(p) : !isAccessRequestPerm(p)
+    );
+  }, [perms, permSourceTab]);
+
   const filteredPerms = useMemo(() => {
     const q = permListSearch.trim().toLowerCase();
-    if (!q) return perms;
-    return perms.filter((p) => {
+    if (!q) return sourcePerms;
+    return sourcePerms.filter((p) => {
       const name = (p.permName ?? '').toLowerCase();
       const etc = (p.permEtc ?? '').toLowerCase();
       const key = String(p.permKey);
       return name.includes(q) || etc.includes(q) || key.includes(q);
     });
-  }, [perms, permListSearch]);
+  }, [sourcePerms, permListSearch]);
 
   const loadPerms = useCallback(async () => {
     const rows = (await permCall('listPerms')) as Perm[];
@@ -69,6 +88,17 @@ export function PermissionFeatureManager() {
       .catch((e) => setMsg(String(e.message)))
       .finally(() => setLoading(false));
   }, [loadPerms]);
+
+  useEffect(() => {
+    setSelPerm((prev) => {
+      if (prev == null) return null;
+      return sourcePerms.some((r) => r.permKey === prev) ? prev : null;
+    });
+  }, [permSourceTab, sourcePerms]);
+
+  useEffect(() => {
+    setPermListSearch('');
+  }, [permSourceTab]);
 
   useEffect(() => {
     if (!detailModalOpen || detailModalPermKey == null) {
@@ -105,6 +135,7 @@ export function PermissionFeatureManager() {
       setAddEtc('');
       setAddModalOpen(false);
       await loadPerms();
+      setPermSourceTab('manual');
       setSelPerm(row.permKey);
       setMsg('권한이 추가되었습니다.');
     } catch (e: unknown) {
@@ -155,6 +186,8 @@ export function PermissionFeatureManager() {
         permEtc: detailEtc.trim() ? detailEtc.trim() : null,
       });
       await loadPerms();
+      setDetailModalOpen(false);
+      setDetailModalPermKey(null);
       setMsg('저장되었습니다.');
     } catch (e: unknown) {
       setModalError(e instanceof Error ? e.message : '오류');
@@ -222,23 +255,56 @@ export function PermissionFeatureManager() {
           style={{ width: PERM_LIST_WIDTH }}
         >
           <div className="shrink-0 p-2 border-b bg-muted/50 space-y-2">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="w-full rounded-md gap-1.5 justify-center"
-              onClick={() => {
-                setDetailModalOpen(false);
-                setDetailModalPermKey(null);
-                setModalError(null);
-                setAddName('');
-                setAddEtc('');
-                setAddModalOpen(true);
-              }}
-            >
-              <Plus className="h-4 w-4 opacity-70" />
-              권한 추가
-            </Button>
+            <div className="flex gap-0.5 rounded-md border border-border/70 bg-background p-0.5">
+              {PERM_SOURCE_TABS.map((t) => {
+                const active = permSourceTab === t.id;
+                const count =
+                  t.id === 'request'
+                    ? perms.filter(isAccessRequestPerm).length
+                    : perms.filter((p) => !isAccessRequestPerm(p)).length;
+                return (
+                  <button
+                    key={t.id}
+                    type="button"
+                    className={cn(
+                      'flex-1 rounded px-1.5 py-1 text-[11px] font-medium transition-colors',
+                      active
+                        ? 'bg-primary text-primary-foreground'
+                        : 'text-muted-foreground hover:text-foreground hover:bg-muted/60'
+                    )}
+                    onClick={() => setPermSourceTab(t.id)}
+                  >
+                    {t.label}
+                    <span className={cn('ml-0.5 tabular-nums', active ? 'opacity-90' : 'opacity-60')}>
+                      ({count})
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+            {permSourceTab === 'manual' ? (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="w-full rounded-md gap-1.5 justify-center"
+                onClick={() => {
+                  setDetailModalOpen(false);
+                  setDetailModalPermKey(null);
+                  setModalError(null);
+                  setAddName('');
+                  setAddEtc('');
+                  setAddModalOpen(true);
+                }}
+              >
+                <Plus className="h-4 w-4 opacity-70" />
+                권한 추가
+              </Button>
+            ) : (
+              <p className="px-0.5 text-[11px] leading-snug text-muted-foreground">
+                권한 신청 승인 시 자동 생성된 사용자별 권한입니다.
+              </p>
+            )}
             <div className="relative">
               <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
               <Input
@@ -252,8 +318,12 @@ export function PermissionFeatureManager() {
           <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden">
             {loading ? (
               <p className="p-3 text-sm text-muted-foreground">목록 로딩 중…</p>
-            ) : perms.length === 0 ? (
-              <p className="p-3 text-sm text-muted-foreground">등록된 권한이 없습니다.</p>
+            ) : sourcePerms.length === 0 ? (
+              <p className="p-3 text-sm text-muted-foreground">
+                {permSourceTab === 'request'
+                  ? '사용자 권한이 없습니다.'
+                  : '공통 권한이 없습니다.'}
+              </p>
             ) : filteredPerms.length === 0 ? (
               <p className="p-3 text-sm text-muted-foreground">검색 결과가 없습니다.</p>
             ) : (

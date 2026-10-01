@@ -53,7 +53,7 @@ function notifMatchesActiveSystem(item: BizNotifCachedItem): boolean {
 
 function publishFiltered() {
   if (!activeSystem) {
-    setProtoNotifs(allCached.map(toProto));
+    setProtoNotifs(allCached.filter((i) => i.category !== '위치없음').map(toProto));
     return;
   }
   setProtoNotifs(allCached.filter(notifMatchesActiveSystem).map(toProto));

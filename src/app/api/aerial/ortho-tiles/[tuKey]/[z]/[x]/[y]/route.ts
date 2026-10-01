@@ -9,6 +9,32 @@ import { resolveGgnrDataDir } from '@/lib/turbopackFsPath';
 
 export const dynamic = 'force-dynamic';
 
+type TileMeta = { tilesRelativePath: string; convertStatus: string };
+const tileMetaCache = new Map<number, { meta: TileMeta | null; exp: number }>();
+const TILE_META_TTL_MS = 60_000;
+
+async function loadTileMeta(tuKey: number): Promise<TileMeta | null> {
+  const now = Date.now();
+  const hit = tileMetaCache.get(tuKey);
+  if (hit && hit.exp > now) return hit.meta;
+  const row = (
+    await db
+      .select({
+        tilesRelativePath: tifUnit.tilesRelativePath,
+        convertStatus: tifUnit.convertStatus,
+      })
+      .from(tifUnit)
+      .where(and(eq(tifUnit.tuKey, tuKey), eq(tifUnit.tuIsDel, false)))
+      .limit(1)
+  )[0];
+  const meta =
+    row?.tilesRelativePath && (row.convertStatus === 'done' || row.convertStatus === 'converting')
+      ? { tilesRelativePath: row.tilesRelativePath, convertStatus: row.convertStatus }
+      : null;
+  tileMetaCache.set(tuKey, { meta, exp: now + TILE_META_TTL_MS });
+  return meta;
+}
+
 /**
  * GET /api/aerial/ortho-tiles/{tuKey}/{z}/{x}/{y}.jpg
  * — tif_unit.tiles_relative_path 아래 XYZ (자체항공 /api/2dtiles 와 분리)
@@ -37,23 +63,10 @@ export async function GET(
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
-  const row = (
-    await db
-      .select({
-        tilesRelativePath: tifUnit.tilesRelativePath,
-        convertStatus: tifUnit.convertStatus,
-        tuIsDel: tifUnit.tuIsDel,
-      })
-      .from(tifUnit)
-      .where(and(eq(tifUnit.tuKey, tuKey), eq(tifUnit.tuIsDel, false)))
-      .limit(1)
-  )[0];
+  const row = await loadTileMeta(tuKey);
 
   /** 재변환 중에도 기존 타일은 계속 서빙 */
-  if (
-    !row?.tilesRelativePath ||
-    (row.convertStatus !== 'done' && row.convertStatus !== 'converting')
-  ) {
+  if (!row) {
     return NextResponse.json({ error: 'Not found' }, { status: 404 });
   }
 
@@ -87,7 +100,8 @@ export async function GET(
       return new NextResponse(buf, {
         headers: {
           'Content-Type': contentType,
-          'Cache-Control': 'private, max-age=300',
+          'Cache-Control':
+            row.convertStatus === 'done' ? 'private, max-age=86400' : 'private, max-age=60',
         },
       });
     } catch (err: unknown) {

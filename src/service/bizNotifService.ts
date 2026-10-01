@@ -15,13 +15,13 @@ import { getSystemList } from '@/service/configService';
 export type BizNotifItem = {
   id: string;
   notifKey: string;
-  category: '만료임박' | '미납임박';
+  category: '만료임박' | '미납임박' | '위치없음';
   title: string;
   name: string;
   listKey: string;
   read: boolean;
   important: true;
-  target: 'ledger' | 'fee';
+  target: 'ledger' | 'fee' | 'aerial';
   targetId: string;
   /** URL system= 필터용 — systemList 메뉴에 해당 ser_eng 가 있는 시스템 */
   systemScope: string;
@@ -151,6 +151,56 @@ async function upsertState(params: {
   }
 }
 
+/** 사진·동영상 중 위치가 없는 파일. 관리 시스템 알림용 */
+async function listMissingDroneGeomNotifications(): Promise<Omit<BizNotifItem, 'read'>[]> {
+  try {
+    const res = await db.execute(sql`
+      SELECT f.fu_key, f.file_name, w.wu_key, w.work_name
+      FROM layer.file_unit f
+      INNER JOIN layer.work_unit w ON w.wu_key = f.wu_key
+      WHERE COALESCE(f.fu_is_del, false) = false
+        AND COALESCE(w.wu_is_del, false) = false
+        AND w.kind = 'drone'
+        AND f.geom IS NULL
+        AND f.x_5181 IS NULL
+        AND f.y_5181 IS NULL
+      ORDER BY w.wu_key DESC, f.fu_key
+      LIMIT 200
+    `);
+    const rows =
+      res && typeof res === 'object' && 'rows' in res && Array.isArray((res as { rows: unknown }).rows)
+        ? (res as { rows: Array<{ fu_key?: number; file_name?: string; wu_key?: number; work_name?: string }> }).rows
+        : [];
+    const out: Omit<BizNotifItem, 'read'>[] = [];
+    for (const row of rows) {
+      const fuKey = Number(row.fu_key);
+      const wuKey = Number(row.wu_key);
+      if (!Number.isFinite(fuKey) || !Number.isFinite(wuKey)) continue;
+      const fileName = String(row.file_name ?? '').trim() || '파일';
+      const workName = String(row.work_name ?? '').trim() || '작업';
+      out.push({
+        id: `file-geom-missing:${fuKey}`,
+        notifKey: `file-geom-missing:${fuKey}`,
+        category: '위치없음',
+        title: '위치 추가',
+        name: `${workName} · ${fileName}`,
+        listKey: '사진·동영상',
+        important: true,
+        target: 'aerial',
+        targetId: `wu-${wuKey}:fu-${fuKey}`,
+        systemScope: 'uav',
+      });
+    }
+    return out;
+  } catch (e) {
+    console.warn(
+      '[bizNotif] missing geom load failed:',
+      e instanceof Error ? e.message : e
+    );
+    return [];
+  }
+}
+
 /** 전체 후보 + 서버 상태. system 있으면 해당 시스템만 */
 export async function listMyBizNotifications(params?: {
   system?: string;
@@ -174,6 +224,9 @@ export async function listMyBizNotifications(params?: {
   ]);
 
   const candidates: Omit<BizNotifItem, 'read'>[] = [];
+  for (const row of await listMissingDroneGeomNotifications()) {
+    candidates.push(row);
+  }
 
   for (const row of uljinExpiryRes.items ?? []) {
     const serEng = 'usageDataAs';
@@ -246,8 +299,14 @@ export async function listMyBizNotifications(params?: {
     items.push({ ...c, read: Boolean(st?.read) });
   }
 
+  const categoryOrder: Record<BizNotifItem['category'], number> = {
+    만료임박: 0,
+    미납임박: 1,
+    위치없음: 2,
+  };
   items.sort((a, b) => {
-    if (a.category !== b.category) return a.category === '만료임박' ? -1 : 1;
+    const byCategory = categoryOrder[a.category] - categoryOrder[b.category];
+    if (byCategory !== 0) return byCategory;
     return a.listKey.localeCompare(b.listKey);
   });
 

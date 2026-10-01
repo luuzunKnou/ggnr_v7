@@ -4,8 +4,6 @@ import { ser } from '@/database/schema/ser';
 import { serpMap } from '@/database/schema/serp_map';
 import { sys } from '@/database/schema/sys';
 import { syspMap } from '@/database/schema/sysp_map';
-import { usrSerGrant } from '@/database/schema/usr_ser_grant';
-import { usrSysGrant } from '@/database/schema/usr_sys_grant';
 import { getServiceList, getSystemListAll } from '@/service/configService';
 import { loadConsoleMenuLevels } from '@/lib/consoleMenuAccess/server';
 import { loadEffectivePermKeys } from '@/lib/auth/userPermKeys';
@@ -22,11 +20,11 @@ export { isSuperUser } from '@/lib/auth/superUser';
 export type UserAccessSnapshot = {
   usrId: string;
   permKeys: number[];
-  /** 비공개 ser_eng → max 단계 (역할+개인 max) */
+  /** 비공개 ser_eng → max 단계 (역할 serp_map) */
   privateSerLevel: Record<string, number>;
   /** 접근 가능한 비공개 sys_key (DB serial 문자열 또는 config sys_key) */
   privateSysKeys: string[];
-  /** console:{area}:{menuId} → 접근 단계 (serp_map·usr_ser_grant) */
+  /** console:{area}:{menuId} → 접근 단계 (serp_map) */
   consoleMenuLevel: Record<string, number>;
 };
 
@@ -110,14 +108,6 @@ async function loadUserAccessInner(usrId: string): Promise<UserAccessSnapshot> {
     }
   }
 
-  const personalSer = await db
-    .select()
-    .from(usrSerGrant)
-    .where(eq(usrSerGrant.usrId, usrId));
-  for (const r of personalSer) {
-    privateSerLevel[r.serEng] = Math.max(privateSerLevel[r.serEng] ?? 0, r.serpType);
-  }
-
   const privateSysRows = await db
     .select({ k: sys.sysKey })
     .from(sys)
@@ -138,14 +128,6 @@ async function loadUserAccessInner(usrId: string): Promise<UserAccessSnapshot> {
       const sk = r.sysKey != null ? String(r.sysKey).trim() : '';
       if (sk && privateSysKeySet.has(sk)) allowedSys.add(sk);
     }
-  }
-  const personalSys = await db
-    .select({ sysKey: usrSysGrant.sysKey })
-    .from(usrSysGrant)
-    .where(eq(usrSysGrant.usrId, usrId));
-  for (const r of personalSys) {
-    const sk = r.sysKey != null ? String(r.sysKey).trim() : '';
-    if (sk && privateSysKeySet.has(sk)) allowedSys.add(sk);
   }
 
   return {

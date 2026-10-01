@@ -48,9 +48,23 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    const pathRaw = String(form.get('paths') ?? '').trim();
+    let paths: string[] = [];
+    if (pathRaw) {
+      try {
+        const parsed = JSON.parse(pathRaw) as unknown;
+        if (Array.isArray(parsed)) paths = parsed.map((v) => String(v ?? ''));
+      } catch {
+        paths = [];
+      }
+    }
+
     const files: Array<{ relativePath: string; bytes: Uint8Array }> = [];
-    for (const f of collected) {
+    for (let i = 0; i < collected.length; i++) {
+      const f = collected[i]!;
+      const fromClient = paths[i]?.trim();
       const rel =
+        fromClient ||
         (typeof (f as File & { webkitRelativePath?: string }).webkitRelativePath === 'string' &&
           (f as File & { webkitRelativePath?: string }).webkitRelativePath?.trim()) ||
         f.name;

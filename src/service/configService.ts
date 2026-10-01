@@ -3,8 +3,9 @@
  * - 서버 측에서만 실행되며, 프로젝트 src/config 경로를 사용합니다.
  * - common.runtime.env + <project>.runtime.env, serviceList.config, systemList.config 는 호출 시마다 파일을 읽어 재시작 없이 반영됩니다.
  * - SERVICE_SYSTEM_MAP: 기능(ser_eng):시스템(sys_key) 를 쉼표로 나열해 해당 프로젝트만 메뉴 소속을 옮김.
+ * - SYSTEM_LAYER_GROUPS: 시스템(sys_key):그룹1,그룹2 를 | 로 나열해 해당 프로젝트만 layerGroupList 를 덮어씀.
  */
-import { existsSync, readFileSync, writeFileSync } from "fs"
+import { existsSync, readdirSync, readFileSync, writeFileSync } from "fs"
 import { join } from "path"
 import { unstable_noStore as noStore } from "next/cache"
 import { getGeoServerInternalBase } from "@/lib/geoserverUrl"
@@ -47,6 +48,43 @@ function resolveRuntimeEnvPath(): { project: string; path: string } {
   const project = (typeof process !== "undefined" ? process.env.GGNR_PROJECT : "")?.trim() ?? ""
   const path = join(root, "src", "config", "projects", `${project}.runtime.env`)
   return { project, path }
+}
+
+const PROJECT_NAME_RE = /^[a-zA-Z0-9][a-zA-Z0-9_-]*$/
+
+function resolveProjectsDir(): string {
+  return join(getProjectRoot(), "src", "config", "projects")
+}
+
+/** src/config/projects/*.runtime.env 목록 (common 제외) */
+function listRuntimeProjectNames(): string[] {
+  const dir = resolveProjectsDir()
+  if (!existsSync(dir)) return []
+  try {
+    return readdirSync(dir)
+      .filter((f) => f.endsWith(".runtime.env") && f !== "common.runtime.env")
+      .map((f) => f.slice(0, -".runtime.env".length))
+      .filter((name) => PROJECT_NAME_RE.test(name))
+      .sort((a, b) => a.localeCompare(b, "en"))
+  } catch {
+    return []
+  }
+}
+
+/** 지정 프로젝트 runtime.env 경로. 허용 목록에 없으면 오류 */
+function resolveRuntimeEnvPathFor(projectName: string): { project: string; path: string } {
+  const project = String(projectName ?? "").trim()
+  if (!project || !PROJECT_NAME_RE.test(project)) {
+    throw new Error(`유효하지 않은 프로젝트명: ${project || "(빈 값)"}`)
+  }
+  const allowed = new Set(listRuntimeProjectNames())
+  if (!allowed.has(project)) {
+    throw new Error(`프로젝트 runtime.env 없음: ${project}`)
+  }
+  return {
+    project,
+    path: join(resolveProjectsDir(), `${project}.runtime.env`),
+  }
 }
 
 function resolveCommonRuntimeEnvPath(): string {
@@ -652,7 +690,7 @@ export type SystemConfigItem = {
   sys_link: string
   serviceList: string[]
   /** 레이어 그룹명(define_table_group) 목록 */
-  layerList: string[]
+  layerGroupList: string[]
   /** 비공개 시스템(권한·신청 UI). 미설정이면 공개로 간주 */
   sys_is_private?: boolean | null
 }
@@ -672,12 +710,35 @@ function readSystemListFromDisk(): {
   }
   try {
     const raw = readFileSync(systemListPath, "utf-8")
-    const data = JSON.parse(raw) as { sys?: SystemConfigItem[]; systems?: SystemConfigItem[] }
-    const systems = Array.isArray(data.sys) ? data.sys : Array.isArray(data.systems) ? data.systems : []
+    const data = JSON.parse(raw) as { sys?: unknown[]; systems?: unknown[] }
+    const rows = Array.isArray(data.sys) ? data.sys : Array.isArray(data.systems) ? data.systems : []
+    const systems = rows.map((row) => normalizeSystemConfigItem(row))
     return { systems, debug }
   } catch (e: any) {
     return { systems: [], error: e?.message ?? "systemList.config 읽기 실패", debug }
   }
+}
+
+/** layerList(구) → layerGroupList 호환 포함 */
+function normalizeSystemConfigItem(raw: unknown): SystemConfigItem {
+  const s = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>
+  const legacyLayer = Array.isArray(s.layerList) ? (s.layerList as unknown[]) : []
+  const groups = Array.isArray(s.layerGroupList) ? (s.layerGroupList as unknown[]) : legacyLayer
+  const row: SystemConfigItem = {
+    sys_key: String(s.sys_key ?? "").trim(),
+    sys_kor: String(s.sys_kor ?? "").trim(),
+    sys_eng: s.sys_eng != null ? String(s.sys_eng).trim() : "",
+    sys_detail: s.sys_detail != null ? String(s.sys_detail).trim() : "",
+    sys_img: String(s.sys_img ?? "").trim(),
+    sys_idx: Number(s.sys_idx) || 0,
+    sys_col: String(s.sys_col ?? "").trim(),
+    sys_link: String(s.sys_link ?? "").trim(),
+    serviceList: Array.isArray(s.serviceList) ? s.serviceList.map((x) => String(x)) : [],
+    layerGroupList: groups.map((x) => String(x).trim()).filter(Boolean),
+  }
+  if (s.sys_is_private === true) row.sys_is_private = true
+  else if (s.sys_is_private === false) row.sys_is_private = false
+  return row
 }
 
 /**
@@ -769,10 +830,276 @@ export function getSystemListDebug(): {
   if (mapStr) {
     systems = applyServiceSystemMap(systems, parseServiceSystemMap(mapStr))
   }
-  const serHome = buildSerEngHomeSysKeys(systems)
   systems = applyDisabledServicesFilter(systems, runtime)
-  systems = applyPrivateShowServicesFilter(systems, serHome, runtime)
+  systems = applySystemLayerGroupsOverlay(systems, runtime)
   return { systems, debug: base.debug }
+}
+
+/**
+ * runtime.env SYSTEM_LAYER_GROUPS — 프로젝트별 시스템 레이어 그룹 오버레이.
+ * 예: wtl:상수|river:하천,하천기본계획|road:  (콜론 뒤 비움 = 해당 시스템 그룹 없음)
+ */
+function parseSystemLayerGroups(raw: string): Map<string, string[]> {
+  const out = new Map<string, string[]>()
+  for (const part of String(raw ?? "").split("|")) {
+    const t = part.trim()
+    if (!t) continue
+    const colon = t.indexOf(":")
+    if (colon <= 0) continue
+    const sysKey = t.slice(0, colon).trim()
+    const groups = t
+      .slice(colon + 1)
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean)
+    if (sysKey) out.set(sysKey, groups)
+  }
+  return out
+}
+
+function serializeSystemLayerGroups(map: Record<string, string[]>): string {
+  const parts: string[] = []
+  for (const [sysKey, groups] of Object.entries(map)) {
+    const key = String(sysKey ?? "").trim()
+    if (!key) continue
+    const list = (Array.isArray(groups) ? groups : [])
+      .map((g) => String(g ?? "").trim())
+      .filter(Boolean)
+    /** 빈 목록은 키 자체를 쓰지 않음 → 공통 systemList layerGroupList 사용 */
+    if (list.length === 0) continue
+    parts.push(`${key}:${list.join(",")}`)
+  }
+  return parts.join("|")
+}
+
+function applySystemLayerGroupsOverlay(
+  systems: SystemConfigItem[],
+  runtime: Record<string, string>
+): SystemConfigItem[] {
+  const raw = (runtime.SYSTEM_LAYER_GROUPS ?? "").trim()
+  if (!raw) return systems
+  const overlay = parseSystemLayerGroups(raw)
+  if (overlay.size === 0) return systems
+  return systems.map((s) => {
+    const key = s.sys_key?.trim() ?? ""
+    if (!overlay.has(key)) return s
+    const groups = overlay.get(key) ?? []
+    /** 체크(그룹)가 비어 있으면 오버레이 무시 → 공통 카탈로그 기준 */
+    if (groups.length === 0) return s
+    return { ...s, layerGroupList: groups }
+  })
+}
+
+/** 프로젝트 runtime.env 의 지정 키만 갱신·삭제 (다른 키·순서는 유지). value null 이면 삭제 */
+function patchRuntimeEnvKeys(
+  patch: Record<string, string | null>,
+  projectName?: string
+): { saved: number } {
+  const { project, path: runtimeEnvPath } = projectName?.trim()
+    ? resolveRuntimeEnvPathFor(projectName)
+    : resolveRuntimeEnvPath()
+  if (!project) {
+    throw new Error("GGNR_PROJECT가 설정되어 있지 않습니다.")
+  }
+  const rows = parseEnvFileToRows(runtimeEnvPath)
+  const order: string[] = []
+  const map = new Map<string, string>()
+  for (const r of rows) {
+    const k = String(r.key ?? "").trim()
+    if (!k) continue
+    if (!map.has(k)) order.push(k)
+    map.set(k, String(r.value ?? ""))
+  }
+  for (const [rawKey, value] of Object.entries(patch)) {
+    const key = String(rawKey ?? "").trim()
+    if (!key) continue
+    if (value == null) {
+      map.delete(key)
+      continue
+    }
+    if (!map.has(key)) order.push(key)
+    map.set(key, String(value))
+  }
+  const next: { key: string; value: string }[] = []
+  const seen = new Set<string>()
+  for (const k of order) {
+    if (!map.has(k) || seen.has(k)) continue
+    seen.add(k)
+    next.push({ key: k, value: map.get(k)! })
+  }
+  for (const [k, v] of map) {
+    if (seen.has(k)) continue
+    next.push({ key: k, value: v })
+  }
+  return { saved: writeEnvRowsToFile(runtimeEnvPath, next) }
+}
+
+export type ProjectComposeServiceItem = {
+  ser_eng: string
+  ser_kor: string
+  ser_menu: string
+}
+
+export type ProjectComposeSystemItem = {
+  sys_key: string
+  sys_kor: string
+  sys_idx: number
+  catalogLayerGroupList: string[]
+  layerGroupList: string[]
+  layerGroupOverridden: boolean
+}
+
+function resolveDefineLayerTablesPath(): string {
+  return join(getProjectRoot(), "src", "config", "defineLayer", "tables.json")
+}
+
+/** defineLayer tables.json 의 define_table_group 고유 목록 (시스템 목록관리와 동일 출처) */
+function collectDefineLayerGroupNames(): string[] {
+  const tablesPath = resolveDefineLayerTablesPath()
+  if (!existsSync(tablesPath)) return []
+  try {
+    const raw = readFileSync(tablesPath, "utf-8")
+    const tables = JSON.parse(raw)
+    if (!Array.isArray(tables)) return []
+    const groupSet = new Set<string>()
+    for (const row of tables) {
+      const g = String(
+        row && typeof row === "object"
+          ? (row as { define_table_group?: unknown }).define_table_group ?? ""
+          : ""
+      ).trim()
+      if (g) groupSet.add(g)
+    }
+    return [...groupSet]
+  } catch {
+    return []
+  }
+}
+
+/** 개발자 콘솔 «프로젝트 구성» 조회 */
+export function getProjectCompose(params?: { project?: string }): {
+  project: string
+  /** 현재 서버가 기동된 GGNR_PROJECT */
+  runningProject: string
+  projects: string[]
+  path: string
+  enabledSystems: string[]
+  /** ENABLED_SYSTEMS 미설정(전체 노출) 여부 */
+  enabledSystemsUnset: boolean
+  disabledServices: string[]
+  systems: ProjectComposeSystemItem[]
+  services: ProjectComposeServiceItem[]
+  layerGroupOptions: string[]
+} {
+  const running = resolveRuntimeEnvPath().project
+  const projects = listRuntimeProjectNames()
+  const requested = String(params?.project ?? "").trim()
+  const target =
+    requested && projects.includes(requested)
+      ? requested
+      : running && projects.includes(running)
+        ? running
+        : projects[0] ?? ""
+  if (!target) {
+    throw new Error("편집 가능한 프로젝트 runtime.env 가 없습니다.")
+  }
+  const { project, path: runtimeEnvPath } = resolveRuntimeEnvPathFor(target)
+  const base = readSystemListFromDisk()
+  if (base.error) throw new Error(base.error)
+  const projectVars = parseEnvFileToMap(runtimeEnvPath)
+  const enabledStr = (projectVars.ENABLED_SYSTEMS ?? "").trim()
+  const enabledSystemsUnset = !enabledStr
+  const enabledSystems = enabledSystemsUnset
+    ? base.systems.map((s) => s.sys_key).filter(Boolean)
+    : enabledStr
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean)
+  const disabledServices = [...parseCsvEnvSet(projectVars.DISABLED_SERVICES)]
+  const overlay = parseSystemLayerGroups(projectVars.SYSTEM_LAYER_GROUPS ?? "")
+  const layerGroupOptions = [
+    ...new Set([
+      ...collectDefineLayerGroupNames(),
+      ...base.systems.flatMap((s) => (s.layerGroupList ?? []).map((g) => String(g).trim()).filter(Boolean)),
+      ...[...overlay.values()].flat(),
+    ]),
+  ].sort((a, b) => a.localeCompare(b, "ko"))
+
+  const systems: ProjectComposeSystemItem[] = base.systems.map((s) => {
+    const key = s.sys_key?.trim() ?? ""
+    const catalog = Array.isArray(s.layerGroupList) ? [...s.layerGroupList] : []
+    const overlayGroups = overlay.has(key) ? (overlay.get(key) ?? []) : null
+    /** 오버레이에 그룹이 1개 이상일 때만 프로젝트 전용. 비어 있으면 UI는 빈 체크 + 공통 사용 안내 */
+    const overridden = Array.isArray(overlayGroups) && overlayGroups.length > 0
+    return {
+      sys_key: key,
+      sys_kor: s.sys_kor ?? "",
+      sys_idx: s.sys_idx ?? 0,
+      catalogLayerGroupList: catalog,
+      layerGroupList: overridden ? overlayGroups! : [],
+      layerGroupOverridden: overridden,
+    }
+  })
+
+  const ser = getServiceList().ser
+  const services: ProjectComposeServiceItem[] = ser
+    .map((row) => ({
+      ser_eng: String(row.ser_eng ?? "").trim(),
+      ser_kor: String(row.ser_kor ?? "").trim(),
+      ser_menu: String(row.ser_menu ?? "").trim(),
+    }))
+    .filter((row) => row.ser_eng)
+    .sort((a, b) => (a.ser_kor || a.ser_eng).localeCompare(b.ser_kor || b.ser_eng, "ko"))
+
+  return {
+    project,
+    runningProject: running,
+    projects,
+    path: runtimeEnvPath,
+    enabledSystems,
+    enabledSystemsUnset,
+    disabledServices,
+    systems,
+    services,
+    layerGroupOptions,
+  }
+}
+
+/** 개발자 콘솔 «프로젝트 구성» 저장 — ENABLED_SYSTEMS / DISABLED_SERVICES / SYSTEM_LAYER_GROUPS */
+export function saveProjectCompose(params: {
+  project?: string
+  enabledSystems?: string[]
+  disabledServices?: string[]
+  systemLayerGroups?: Record<string, string[]>
+}): { saved: number; project: string } {
+  const enabledSystems = Array.isArray(params?.enabledSystems)
+    ? params.enabledSystems.map((s) => String(s ?? "").trim()).filter(Boolean)
+    : null
+  const disabledServices = Array.isArray(params?.disabledServices)
+    ? params.disabledServices.map((s) => String(s ?? "").trim()).filter(Boolean)
+    : null
+  const systemLayerGroups =
+    params?.systemLayerGroups && typeof params.systemLayerGroups === "object"
+      ? params.systemLayerGroups
+      : null
+
+  const patch: Record<string, string | null> = {}
+  if (enabledSystems) {
+    patch.ENABLED_SYSTEMS = enabledSystems.length > 0 ? enabledSystems.join(",") : ""
+  }
+  if (disabledServices) {
+    patch.DISABLED_SERVICES = disabledServices.length > 0 ? disabledServices.join(",") : null
+  }
+  if (systemLayerGroups) {
+    const serialized = serializeSystemLayerGroups(systemLayerGroups)
+    patch.SYSTEM_LAYER_GROUPS = serialized || null
+  }
+  const project = String(params?.project ?? "").trim()
+  const { saved } = patchRuntimeEnvKeys(patch, project || undefined)
+  const resolved = project
+    ? resolveRuntimeEnvPathFor(project).project
+    : resolveRuntimeEnvPath().project
+  return { saved, project: resolved }
 }
 
 function parseCsvEnvSet(...parts: (string | undefined)[]): Set<string> {
@@ -788,81 +1115,11 @@ function parseCsvEnvSet(...parts: (string | undefined)[]): Set<string> {
   return out
 }
 
-/** ser_eng → systemList.config(및 SERVICE_SYSTEM_MAP)상 소속 sys_key */
-function buildSerEngHomeSysKeys(systems: SystemConfigItem[]): Map<string, string[]> {
-  const map = new Map<string, string[]>()
-  for (const s of systems) {
-    const sysKey = s.sys_key?.trim()
-    if (!sysKey) continue
-    for (const eng of s.serviceList ?? []) {
-      const e = String(eng).trim()
-      if (!e) continue
-      const prev = map.get(e) ?? []
-      if (!prev.includes(sysKey)) prev.push(sysKey)
-      map.set(e, prev)
-    }
-  }
-  return map
-}
-
-function getPrivateServiceEngSet(): Set<string> {
-  return new Set(
-    getServiceList()
-      .ser.filter((s) => s.ser_is_private === true)
-      .map((s) => s.ser_eng?.trim())
-      .filter((v): v is string => Boolean(v))
-  )
-}
-
-/**
- * runtime SHOW_SERVICES — common ∪ project (쉼표 병합).
- * 기능목록(serviceList.config) ser_is_private=true 인 기능은 기본 메뉴 제외,
- * SHOW_SERVICES 에 ser_eng 가 있으면 이 프로젝트 systemList·사이드바에 포함.
- */
-export function getShowServiceEngSet(): Set<string> {
-  noStore()
-  const common = parseEnvFileToMap(resolveCommonRuntimeEnvPath())
-  const { path: runtimeEnvPath } = resolveRuntimeEnvPath()
-  const project = parseEnvFileToMap(runtimeEnvPath)
-  return parseCsvEnvSet(common.SHOW_SERVICES, project.SHOW_SERVICES)
-}
-
-/** 클라이언트용. SHOW_SERVICES(공용∪프로젝트)에 ser_eng 가 있으면 shown */
+/** 이 프로젝트 시스템 목록(ENABLED·DISABLED 적용)에 ser_eng 가 있으면 shown */
 export function isShowService(params?: { serEng?: string }): { shown: boolean } {
   const eng = typeof params?.serEng === "string" ? params.serEng.trim() : ""
   if (!eng) return { shown: false }
-  return { shown: getShowServiceEngSet().has(eng) }
-}
-
-function applyPrivateShowServicesFilter(
-  systems: SystemConfigItem[],
-  serHome: Map<string, string[]>,
-  runtime: Record<string, string>
-): SystemConfigItem[] {
-  const showSet = getShowServiceEngSet()
-  const privateSet = getPrivateServiceEngSet()
-  const disabledSet = parseCsvEnvSet(runtime.DISABLED_SERVICES)
-
-  const result = systems.map((s) => ({
-    ...s,
-    serviceList: (s.serviceList ?? []).filter((eng) => {
-      const e = String(eng).trim()
-      if (!privateSet.has(e)) return true
-      return showSet.has(e)
-    }),
-  }))
-
-  const sysByKey = new Map(result.map((s) => [s.sys_key?.trim() ?? "", { ...s }]))
-  for (const eng of showSet) {
-    if (disabledSet.has(eng)) continue
-    for (const sysKey of serHome.get(eng) ?? []) {
-      const row = sysByKey.get(sysKey)
-      if (!row) continue
-      const list = row.serviceList ?? []
-      if (!list.includes(eng)) row.serviceList = [...list, eng]
-    }
-  }
-  return [...sysByKey.values()]
+  return { shown: getProjectAvailableServiceEngSet().has(eng) }
 }
 
 /** runtime.env DISABLED_SERVICES — 현재 프로젝트에서 메뉴·권한매핑 대상에서 제외할 ser_eng */
@@ -886,7 +1143,7 @@ function applyDisabledServicesFilter(
   systems: SystemConfigItem[],
   runtime: Record<string, string>
 ): SystemConfigItem[] {
-  /** 프로젝트별 메뉴 강제 제외 (SHOW_SERVICES·비공개보다 우선) */
+  /** 프로젝트별 메뉴 강제 제외 */
   const disabled = parseCsvEnvSet(runtime.DISABLED_SERVICES)
   if (disabled.size === 0) return systems
   return systems.map((s) => ({
@@ -915,7 +1172,11 @@ export function saveSystemList(params: { systems: SystemConfigItem[] }): { saved
       sys_col: String(s.sys_col ?? "").trim(),
       sys_link: String(s.sys_link ?? "").trim(),
       serviceList: Array.isArray(s.serviceList) ? s.serviceList : [],
-      layerList: Array.isArray(s.layerList) ? s.layerList : [],
+      layerGroupList: Array.isArray(s.layerGroupList)
+        ? s.layerGroupList
+        : Array.isArray((s as unknown as { layerList?: string[] }).layerList)
+          ? ((s as unknown as { layerList: string[] }).layerList ?? [])
+          : [],
     }
     if (s.sys_is_private === true) row.sys_is_private = true
     else if (s.sys_is_private === false) row.sys_is_private = false

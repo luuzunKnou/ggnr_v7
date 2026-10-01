@@ -18,6 +18,7 @@ import {
   COMPLAINT_DETAIL_PANEL_WIDTH,
   COMPLAINT_DETAIL_PANEL_Z_INDEX,
 } from './complaintPanelLayout';
+import { useSerWriteAccess } from '@/hooks/useSerWriteAccess';
 
 type Props = {
   onListRefresh?: () => void;
@@ -25,6 +26,7 @@ type Props = {
 
 export default function ComplaintDetail({ onListRefresh }: Props) {
   const mapContext = useMapContext();
+  const canWrite = useSerWriteAccess('complaint');
   const complaintDetail = mapContext?.complaintDetail ?? null;
   const setComplaintDetail = mapContext?.setComplaintDetail;
   /** 화면 기준 기본 위치 — 목록 패널 오른쪽(지도 왼쪽 끝)에서 조금 떨어뜨림 */
@@ -249,11 +251,11 @@ export default function ComplaintDetail({ onListRefresh }: Props) {
         <ComplaintDetailPanel
           complaint={compAsUI}
           histories={compdListAsUI}
-          onAddHistory={handleAddHistory}
-          onEditHistory={handleEditHistory}
-          onDeleteHistory={handleDeleteHistory}
-          onSave={handleSave}
-          onDelete={handleDelete}
+          onAddHistory={canWrite ? handleAddHistory : undefined}
+          onEditHistory={canWrite ? handleEditHistory : undefined}
+          onDeleteHistory={canWrite ? handleDeleteHistory : undefined}
+          onSave={canWrite ? handleSave : undefined}
+          onDelete={canWrite ? handleDelete : undefined}
           onClose={handleClose}
           saving={saving}
           deleting={deleting}

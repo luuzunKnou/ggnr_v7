@@ -13,6 +13,7 @@ import { getSessionUsrId } from '@/lib/auth/guard';
 import { isSuperUser } from '@/lib/auth/superUser';
 import { getBasePath } from '@/lib/basePath';
 import { getGeoServerInternalBase } from '@/lib/geoserverUrl';
+import { allowProjectLayerTable } from '@/lib/projectLayerAllowlist';
 
 const WORKSPACE = (process.env.GEOSERVER_WORKSPACE?.trim() || 'ggnr').replace(/\/$/, '');
 
@@ -1305,75 +1306,56 @@ export type AdminLayerPermRow = {
   canWrite: boolean;
 };
 
-/** 권한 UI용 전체 레이어 목록 — defineLayer 기준(+ GeoServer·기존권한 보강) */
+/** 권한 UI용 레이어 — 현재 DB에 있는 공간테이블만. 한글명·그룹은 정의에서 보강 */
 async function listGeoserverLayersWithTitle(): Promise<
   Array<{ layerName: string; layerTitle: string; layerGroup?: string }>
 > {
   const byName = new Map<string, { layerName: string; layerTitle: string; layerGroup?: string }>();
 
-  // 1) defineLayer tables.json — 시스템 전체 레이어 정의
   try {
-    const { getDefineLayerTables } = await import('@/service/devTestService');
-    const def = await getDefineLayerTables();
+    const { getDefineLayerTables, getLayerTableList } = await import('@/service/devTestService');
+    const [def, dbTableRes] = await Promise.all([
+      getDefineLayerTables(),
+      getLayerTableList(),
+    ]);
+    const defineByKey = new Map<
+      string,
+      { layerName: string; layerTitle: string; layerGroup?: string }
+    >();
     for (const row of def.tables ?? []) {
       const layerName = localLayerName(String(row.define_table_name ?? ''));
       if (!layerName) continue;
-      const layerTitle =
-        String(row.define_table_kor_name ?? '').trim() || layerName;
+      const layerTitle = String(row.define_table_kor_name ?? '').trim() || layerName;
       const layerGroup = String(row.define_table_group ?? '').trim() || undefined;
-      byName.set(layerName, { layerName, layerTitle, layerGroup });
+      defineByKey.set(layerName.toLowerCase(), { layerName, layerTitle, layerGroup });
+    }
+    for (const table of dbTableRes.tables ?? []) {
+      const physical = localLayerName(String(table.table ?? ''));
+      if (!physical) continue;
+      const meta = defineByKey.get(physical.toLowerCase());
+      const layerName = meta?.layerName ?? physical;
+      if (byName.has(layerName)) continue;
+      byName.set(layerName, {
+        layerName,
+        layerTitle: meta?.layerTitle || layerName,
+        layerGroup: meta?.layerGroup,
+      });
     }
   } catch {
-    /* ignore */
+    /* DB 조회 실패 시 드론영상만 */
   }
 
-  // 2) GeoServer REST 발행 레이어 (기동 중이면 보강)
   try {
-    const { getGeoServerLayerList } = await import('@/service/devTestService');
-    const gs = await getGeoServerLayerList({ workspace: WORKSPACE });
-    for (const raw of gs.layers ?? []) {
-      const layerName = localLayerName(String(raw ?? ''));
-      if (!layerName || byName.has(layerName)) continue;
-      byName.set(layerName, { layerName, layerTitle: layerName });
+    const { getSystemList } = await import('@/service/configService');
+    const sysKeys = getSystemList().systems.map((s) => s.sys_key);
+    for (const key of [...byName.keys()]) {
+      if (!allowProjectLayerTable(key, sysKeys)) byName.delete(key);
     }
   } catch {
-    /* ignore */
+    /* 시스템 목록을 못 읽으면 표 목록 유지 */
   }
 
-  // 3) WFS GetCapabilities Title (가능하면 한글 Title 보강)
-  try {
-    const url = `${getGeoServerInternalBase()}/${WORKSPACE}/wfs?service=WFS&version=1.1.0&request=GetCapabilities`;
-    const res = await fetch(url, { cache: 'no-store', signal: AbortSignal.timeout(8000) });
-    if (res.ok) {
-      const xml = await res.text();
-      const re = /<([^>\s]+:)?FeatureType\b[^>]*>[\s\S]*?<\/\1?FeatureType>/gi;
-      let m: RegExpExecArray | null;
-      while ((m = re.exec(xml))) {
-        const block = m[0];
-        const nm = block.match(/<([^>\s]+:)?Name\b[^>]*>\s*([^<]+?)\s*<\/\1?Name>/i);
-        if (!nm) continue;
-        const layerName = localLayerName(nm[2]);
-        if (!layerName) continue;
-        const titleM = block.match(/<([^>\s]+:)?Title\b[^>]*>\s*([^<]*?)\s*<\/\1?Title>/i);
-        const title = String(titleM?.[2] ?? '').trim();
-        const prev = byName.get(layerName);
-        if (prev) {
-          if (title && (!prev.layerTitle || prev.layerTitle === layerName)) {
-            byName.set(layerName, { ...prev, layerTitle: title });
-          }
-        } else {
-          byName.set(layerName, {
-            layerName,
-            layerTitle: title || layerName,
-          });
-        }
-      }
-    }
-  } catch {
-    /* GeoServer 미기동 등 — defineLayer만으로 충분 */
-  }
-
-  // 4) 변환완료 드론영상 (QGIS WMS 전용 가상 레이어)
+  // 변환완료 드론영상 (QGIS WMS 전용. 테이블이 아닌 현재 작업 영상)
   try {
     const { listOrthoCatalogForPermissions } = await import('@/service/orthoWmsRenderService');
     const ortho = await listOrthoCatalogForPermissions();
@@ -1492,10 +1474,7 @@ export async function getUserLayerPermissions(params: {
   const perms = await listLayerPermissionsByControlId(controlId);
   const byName = new Map(perms.map((p) => [localLayerName(p.layerName), p]));
   const catalog = await listGeoserverLayersWithTitle();
-  const nameSet = new Set([
-    ...catalog.map((c) => c.layerName),
-    ...perms.map((p) => localLayerName(p.layerName)).filter(Boolean),
-  ]);
+  const nameSet = new Set(catalog.map((c) => c.layerName));
   const titleByName = new Map(catalog.map((c) => [c.layerName, c.layerTitle]));
   const groupByName = new Map(
     catalog.map((c) => [c.layerName, c.layerGroup ?? ''])

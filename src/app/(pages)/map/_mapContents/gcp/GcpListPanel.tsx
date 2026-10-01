@@ -8,6 +8,7 @@ import { clearGcpCreate, setGcpCreateGeom, startGcpCreate } from './gcpCreateDra
 import type { GcpPoint } from './gcpTypes'
 import { useGcpMapLayer } from './useGcpMapLayer'
 import { useGcpData } from './useGcpData'
+import { useSerWriteAccess } from '@/hooks/useSerWriteAccess'
 
 type Props = {
   onClose: () => void
@@ -50,6 +51,7 @@ export function GcpListPanel({
   listRefreshKey = 0,
 }: Props) {
   const { points, loading, error, createDraft, refresh } = useGcpData()
+  const canWrite = useSerWriteAccess()
   const [keyword, setKeyword] = useState('')
   const [sorts, setSorts] = useState<SortSpec[]>([{ key: 'gcpnum', dir: 'asc' }])
   const isCreateOpen = selectedDetailId === LAYER_ROW_NEW_ID
@@ -110,17 +112,19 @@ export function GcpListPanel({
       <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border px-3 py-1.5">
         <span className="text-sm font-semibold text-foreground">GCP</span>
         <div className="flex items-center gap-1">
-          <LayerRowPanelButton
-            type="button"
-            disabled={isCreateOpen}
-            onClick={() => {
-              startGcpCreate()
-              onSelectDetailId(LAYER_ROW_NEW_ID)
-            }}
-          >
-            <Plus className="h-3 w-3 shrink-0" aria-hidden />
-            GCP 추가
-          </LayerRowPanelButton>
+          {canWrite ? (
+            <LayerRowPanelButton
+              type="button"
+              disabled={isCreateOpen}
+              onClick={() => {
+                startGcpCreate()
+                onSelectDetailId(LAYER_ROW_NEW_ID)
+              }}
+            >
+              <Plus className="h-3 w-3 shrink-0" aria-hidden />
+              GCP 추가
+            </LayerRowPanelButton>
+          ) : null}
           <button
             type="button"
             onClick={onClose}

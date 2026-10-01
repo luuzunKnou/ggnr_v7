@@ -794,7 +794,7 @@ CREATE TABLE IF NOT EXISTS layer.file_unit (
   file_size bigint,
   x_5181 double precision,
   y_5181 double precision,
-  geom geometry(Point, 5181),
+  geom geometry(Geometry, 5181),
   fu_is_del boolean NOT NULL DEFAULT false,
   fu_create_date timestamp,
   fu_create_user varchar,
@@ -1422,10 +1422,30 @@ async function ensureFileUnitGeom(result: EnsureResult): Promise<void> {
 
     if (!(await columnExists('layer', 'file_unit', 'geom'))) {
       await db.execute(
-        sql.raw(`ALTER TABLE layer.file_unit ADD COLUMN geom geometry(Point, 5181)`)
+        sql.raw(`ALTER TABLE layer.file_unit ADD COLUMN geom geometry(Geometry, 5181)`)
       );
       result.created.push(`${fq}.geom`);
     }
+
+    await db.execute(
+      sql.raw(`
+        DO $$
+        BEGIN
+          IF EXISTS (
+            SELECT 1 FROM geometry_columns
+            WHERE f_table_schema = 'layer'
+              AND f_table_name = 'file_unit'
+              AND f_geometry_column = 'geom'
+              AND upper(type) = 'POINT'
+          ) THEN
+            EXECUTE 'DROP INDEX IF EXISTS layer.file_unit_geom_gix';
+            EXECUTE 'DROP INDEX IF EXISTS public.file_unit_geom_gix';
+            EXECUTE 'ALTER TABLE layer.file_unit ALTER COLUMN geom TYPE geometry(Geometry, 5181) USING geom::geometry(Geometry, 5181)';
+            EXECUTE 'CREATE INDEX IF NOT EXISTS file_unit_geom_gix ON layer.file_unit USING GIST (geom)';
+          END IF;
+        END $$;
+      `)
+    );
 
     await db.execute(
       sql.raw(`
