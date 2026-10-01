@@ -14,7 +14,7 @@ const TRANSPARENT_PNG = Buffer.from(
 );
 
 function emptyLegend(): NextResponse {
-  return new NextResponse(TRANSPARENT_PNG, {
+  return new NextResponse(new Uint8Array(TRANSPARENT_PNG), {
     status: 200,
     headers: {
       'Content-Type': 'image/png',
@@ -24,7 +24,7 @@ function emptyLegend(): NextResponse {
 }
 
 function legendPng(buf: Buffer): NextResponse {
-  return new NextResponse(buf, {
+  return new NextResponse(new Uint8Array(buf), {
     status: 200,
     headers: {
       'Content-Type': 'image/png',

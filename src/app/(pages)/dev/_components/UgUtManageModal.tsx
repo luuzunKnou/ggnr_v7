@@ -267,7 +267,8 @@ export function UgUtManageModal({ open, onOpenChange, onChanged }: Props) {
 
   const loadPermCatalog = useCallback(async () => {
     try {
-      const rows = (await usrCall("listPermCatalog")) as PermRow[]
+      /** 부서/팀 부여는 공통 권한만 */
+      const rows = (await usrCall("listPermCatalog", { commonOnly: true })) as PermRow[]
       setPermList(Array.isArray(rows) ? rows : [])
     } catch {
       setPermList([])

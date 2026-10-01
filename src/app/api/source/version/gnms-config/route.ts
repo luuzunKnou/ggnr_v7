@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getSessionUsrId } from '@/lib/auth/guard';
 import { getGnmsClientConfig, isRestartCommandConfigured } from '@/service/sourceVersionService';
+import { getRemoteLogsApiUrl, getRemoteUploadBase } from '@/service/sourceUploadRemote';
 
 export const dynamic = 'force-dynamic';
 
@@ -14,6 +15,15 @@ export async function GET() {
     return NextResponse.json({
       ok: true,
       gnmsBaseUrl: cfg.gnmsBaseUrl,
+      latestUrl: cfg.latestUrl,
+      listUrl: cfg.listUrl,
+      downloadUrlFallback: cfg.downloadUrlFallback,
+      cancelUrl: cfg.cancelUrl,
+      installLatestUrl: cfg.installLatestUrl,
+      installDownloadUrl: cfg.installDownloadUrl,
+      uploadBaseUrl: getRemoteUploadBase(),
+      logsUrl: getRemoteLogsApiUrl(),
+      bearer: cfg.bearer,
       restartCommandConfigured,
     });
   } catch (err: unknown) {

@@ -5,8 +5,9 @@ import { Button } from '@/app/shadcnComponents/ui/button';
 import { Input } from '@/app/shadcnComponents/ui/input';
 import { cn } from '@/lib/utils';
 import { call } from '@/lib/api';
+import { formatTimestampWallClock } from '@/lib/formatTimestampWallClock';
 import { RefreshCw } from 'lucide-react';
-import { USER_MANAGER_UI_STYLE } from './userManagerUiVariants';
+import { USER_MANAGER_UI_STYLE, USER_MGMT_HISTORY_TABLE } from './userManagerUiVariants';
 
 /** 0=없음 1=버튼보기 2=읽기 3=쓰기 — 클라 표시용(스키마 미 import) */
 const SERP_TYPE_LABELS: Record<number, string> = {
@@ -39,15 +40,16 @@ async function permCall(action: string, params: Record<string, unknown> = {}) {
   return res.data;
 }
 
+/** 신청·처리는 toISOString(UTC) 저장 → DB naive 문자열도 UTC로 보고 서울 시각 표시 */
 function formatTime(v: string | null | undefined): string {
   if (!v) return '—';
-  try {
-    const d = new Date(v);
-    if (Number.isNaN(d.getTime())) return v;
-    return d.toLocaleString('ko-KR');
-  } catch {
-    return v;
-  }
+  const s = String(v).trim();
+  if (!s) return '—';
+  const withTz = /Z$|[+-]\d{2}:?\d{2}$/.test(s)
+    ? s
+    : `${s.includes('T') ? s : s.replace(' ', 'T')}Z`;
+  const out = formatTimestampWallClock(withTz);
+  return out || '—';
 }
 
 function rowStatus(r: Row): RowStatus {
@@ -58,7 +60,7 @@ function rowStatus(r: Row): RowStatus {
 
 function targetLabel(r: Row): string {
   if (r.targetType === 'ser') return r.serEng?.trim() || '—';
-  return r.sysKey != null ? `시스템:${r.sysKey}` : '—';
+  return r.sysKey != null ? String(r.sysKey).trim() || '—' : '—';
 }
 
 function typeLabel(targetType: string): string {
@@ -95,8 +97,8 @@ const FILTERS: { id: StatusFilter; label: string }[] = [
 ];
 
 const uiStyle = USER_MANAGER_UI_STYLE;
-const tableRowClass =
-  'border-b border-border hover:bg-muted/50 transition-colors [&>td]:border-r [&>td]:border-border/60 [&>td:last-child]:border-r-0';
+const accessTable = USER_MGMT_HISTORY_TABLE;
+const tableRowClass = accessTable.tableRow;
 
 export function AccessRequestQueue() {
   const [rows, setRows] = useState<Row[]>([]);
@@ -239,29 +241,29 @@ export function AccessRequestQueue() {
       <div className={uiStyle.tableWrap}>
         <div className={uiStyle.tableScroll}>
         <table className={cn(uiStyle.table, 'min-w-[68rem] table-fixed')}>
-          <thead className={cn('sticky top-0', uiStyle.tableHead)}>
+          <thead className={cn('sticky top-0', accessTable.tableHead)}>
             <tr>
-              <th className={cn('w-20 text-left', uiStyle.tableCell)}>상태</th>
-              <th className={cn('w-24 text-left', uiStyle.tableCell)}>신청자</th>
-              <th className={cn('w-16 text-left', uiStyle.tableCell)}>유형</th>
-              <th className={cn('w-28 text-left', uiStyle.tableCell)}>대상</th>
-              <th className={cn('w-40 text-left', uiStyle.tableCell)}>신청사유</th>
-              <th className={cn('w-24 text-left', uiStyle.tableCell)}>단계</th>
-              <th className={cn('w-40 text-left', uiStyle.tableCell)}>반려사유</th>
-              <th className={cn('w-36 text-left', uiStyle.tableCell)}>신청시간</th>
-              <th className={cn('w-[8.5rem] text-left', uiStyle.tableCell)}>처리</th>
+              <th className={cn('w-20 text-left', accessTable.tableCell)}>상태</th>
+              <th className={cn('w-24 text-left', accessTable.tableCell)}>신청자</th>
+              <th className={cn('w-16 text-left', accessTable.tableCell)}>유형</th>
+              <th className={cn('w-28 text-left', accessTable.tableCell)}>대상</th>
+              <th className={cn('w-40 text-left', accessTable.tableCell)}>신청사유</th>
+              <th className={cn('w-24 text-left', accessTable.tableCell)}>단계</th>
+              <th className={cn('w-40 text-left', accessTable.tableCell)}>반려사유</th>
+              <th className={cn('w-36 text-left', accessTable.tableCell)}>신청시간</th>
+              <th className={cn('w-[8.5rem] text-left', accessTable.tableCell)}>처리</th>
             </tr>
           </thead>
           <tbody>
             {loading ? (
               <tr className={tableRowClass}>
-                <td className={cn('text-muted-foreground', uiStyle.tableCell)} colSpan={9}>
+                <td className={cn('text-muted-foreground', accessTable.tableCell)} colSpan={9}>
                   불러오는 중…
                 </td>
               </tr>
             ) : filteredRows.length === 0 ? (
               <tr className={tableRowClass}>
-                <td className={cn('text-muted-foreground', uiStyle.tableCell)} colSpan={9}>
+                <td className={cn('text-muted-foreground', accessTable.tableCell)} colSpan={9}>
                   {emptyText}
                 </td>
               </tr>
@@ -271,36 +273,43 @@ export function AccessRequestQueue() {
                 const pending = status === 'pending';
                 const isRejecting = rejectingKey === r.uarKey;
                 return (
-                  <tr key={r.uarKey} className={tableRowClass}>
-                    <td className={cn('whitespace-nowrap', uiStyle.tableCell)}>
+                  <tr
+                    key={r.uarKey}
+                    className={cn(
+                      tableRowClass,
+                      isRejecting &&
+                        '!h-auto !max-h-none [&>td]:!h-auto [&>td]:!max-h-none [&>td]:overflow-visible [&>td]:py-1.5'
+                    )}
+                  >
+                    <td className={cn('whitespace-nowrap', accessTable.tableCell)}>
                       <span className={STATUS_CLASS[status]}>{STATUS_LABEL[status]}</span>
                     </td>
                     <td
-                      className={cn('truncate font-mono text-[11px]', uiStyle.tableCell)}
+                      className={cn('truncate font-mono text-[11px]', accessTable.tableCell)}
                       title={r.usrId}
                     >
                       {r.usrId}
                     </td>
-                    <td className={cn('whitespace-nowrap', uiStyle.tableCell)}>
+                    <td className={cn('whitespace-nowrap', accessTable.tableCell)}>
                       {typeLabel(r.targetType)}
                     </td>
                     <td
-                      className={cn('truncate font-mono text-[11px]', uiStyle.tableCell)}
+                      className={cn('truncate font-mono text-[11px]', accessTable.tableCell)}
                       title={targetLabel(r)}
                     >
                       {targetLabel(r)}
                     </td>
                     <td
-                      className={cn('truncate', uiStyle.tableCell)}
+                      className={cn('truncate', accessTable.tableCell)}
                       title={r.requestReason?.trim() ? r.requestReason : undefined}
                     >
                       {r.requestReason?.trim() ? r.requestReason : '—'}
                     </td>
-                    <td className={cn('whitespace-nowrap', uiStyle.tableCell)}>
+                    <td className={cn('whitespace-nowrap', accessTable.tableCell)}>
                       {r.targetType === 'ser' ? stepLabel(r.requestedSerpType) : '—'}
                     </td>
                     <td
-                      className={cn('truncate', uiStyle.tableCell)}
+                      className={cn('truncate', accessTable.tableCell)}
                       title={
                         status === 'rejected' && r.rejectReason?.trim()
                           ? r.rejectReason
@@ -313,10 +322,10 @@ export function AccessRequestQueue() {
                           : '—'
                         : '—'}
                     </td>
-                    <td className={cn('whitespace-nowrap', uiStyle.tableCell)}>
+                    <td className={cn('whitespace-nowrap', accessTable.tableCell)}>
                       {formatTime(r.createdAt)}
                     </td>
-                    <td className={uiStyle.tableCell}>
+                    <td className={accessTable.tableCell}>
                       {pending ? (
                         isRejecting ? (
                           <div className="flex flex-col gap-1.5">

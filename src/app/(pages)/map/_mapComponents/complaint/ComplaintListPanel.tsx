@@ -32,6 +32,7 @@ import {
   useComplaintMapClick,
 } from './useComplaintMapClick';
 import { useComplaintMapHighlight } from './useComplaintMapHighlight';
+import { useSerWriteAccess } from '@/hooks/useSerWriteAccess';
 
 function lowerLayerIds(ids: readonly string[]): string[] {
   return ids.map((id) => id.toLowerCase());
@@ -61,6 +62,7 @@ export default function ComplaintListPanel({
   onClose?: () => void;
 }) {
   const mapContext = useMapContext();
+  const canWrite = useSerWriteAccess();
   const mapContextRef = useRef(mapContext);
   mapContextRef.current = mapContext;
   const setComplaintDetail = mapContext?.setComplaintDetail;
@@ -272,14 +274,16 @@ export default function ComplaintListPanel({
               </div>
             </div>
             <div className="flex items-center gap-1">
-              <Button
-                size="sm"
-                className="h-[26px] min-h-[26px] gap-1 px-2.5 text-[12px] font-light border border-border bg-muted/50 text-muted-foreground hover:border-primary hover:bg-primary/15 hover:text-primary rounded-lg"
-                onClick={() => onRequestAdd?.()}
-              >
-                <Plus className="h-3 w-3" />
-                민원 추가
-              </Button>
+              {canWrite ? (
+                <Button
+                  size="sm"
+                  className="h-[26px] min-h-[26px] gap-1 px-2.5 text-[12px] font-light border border-border bg-muted/50 text-muted-foreground hover:border-primary hover:bg-primary/15 hover:text-primary rounded-lg"
+                  onClick={() => onRequestAdd?.()}
+                >
+                  <Plus className="h-3 w-3" />
+                  민원 추가
+                </Button>
+              ) : null}
               {onClose ? (
                 <button
                   type="button"
