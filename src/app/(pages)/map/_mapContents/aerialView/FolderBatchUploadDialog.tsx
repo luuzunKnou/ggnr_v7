@@ -114,7 +114,7 @@ export function FolderBatchUploadDialog({
       onFolderCreated?.(info);
       onOpenChange(false);
 
-      // 사진·동영상·파노라마는 파일 선택 창으로 이어지므로 완료 안내 생략
+      // 사진·동영상·항공뷰는 파일 선택 창으로 이어지므로 완료 안내 생략
       if (expectedKind !== 'drone' && expectedKind !== 'panorama') {
         window.setTimeout(() => {
           setUploadCompleteNotice({
@@ -137,27 +137,27 @@ export function FolderBatchUploadDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md gap-0 p-0 sm:max-w-lg">
-        <DialogHeader className="border-b border-slate-200 px-4 py-3">
+        <DialogHeader className="border-b border-border px-4 py-3">
           <DialogTitle className="text-sm font-semibold">작업단위 폴더 생성</DialogTitle>
         </DialogHeader>
 
         <div className="space-y-3 px-4 py-3 text-xs">
           <div>
-            <label className="mb-1 block text-[11px] font-medium text-slate-600">작업단위명</label>
+            <label className="mb-1 block text-[11px] font-medium text-muted-foreground">작업단위명</label>
             <input
               value={workName}
               onChange={(e) => setWorkName(e.target.value)}
               disabled={starting}
-              className="w-full rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-[11px] outline-none focus:border-sky-400 focus:ring-1 focus:ring-sky-200 disabled:bg-slate-50 disabled:text-slate-500"
+              className="w-full rounded-md border border-border bg-background px-2.5 py-1.5 text-[11px] outline-none focus:border-sky-400 focus:ring-1 focus:ring-sky-200 dark:ring-sky-800 disabled:bg-muted disabled:text-muted-foreground"
               placeholder="예: 울산 동구 촬영"
             />
           </div>
 
-          <p className="rounded-md border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-[10px] leading-relaxed text-slate-600">
+          <p className="rounded-md border border-border bg-muted px-2.5 py-1.5 text-[10px] leading-relaxed text-muted-foreground">
             {expectedKind === 'drone'
               ? '폴더 생성 후 사진·동영상 파일을 바로 선택할 수 있습니다.'
               : expectedKind === 'panorama'
-                ? '폴더 생성 후 파노라마 이미지를 바로 선택할 수 있습니다.'
+                ? '폴더 생성 후 항공뷰 이미지를 바로 선택할 수 있습니다.'
                 : '폴더만 생성합니다. 파일 업로드는 종류별로 이어집니다.'}
           </p>
 
@@ -168,7 +168,7 @@ export function FolderBatchUploadDialog({
           ) : null}
         </div>
 
-        <div className="flex items-center justify-end gap-2 border-t border-slate-200 px-4 py-3">
+        <div className="flex items-center justify-end gap-2 border-t border-border px-4 py-3">
           <Button type="button" variant="outline" size="sm" className="h-8 gap-1 text-xs" onClick={() => onOpenChange(false)}>
             <X className="h-3.5 w-3.5" />
             닫기

@@ -37,7 +37,7 @@ function toProto(item: BizNotifCachedItem): ProtoNotifItem {
 
 function publishFiltered() {
   if (!activeSystem) {
-    setProtoNotifs(allCached.map(toProto));
+    setProtoNotifs(allCached.filter((i) => i.category !== '위치없음').map(toProto));
     return;
   }
   const sys = activeSystem.toLowerCase();

@@ -1,9 +1,9 @@
-/* 지도 축척 — 우측 하단. 글자 + 100px 밑선(해상도×100m 기준) */
+/* 지도 축척 — 좌측 하단. 사이드바(65px) 오른쪽. 글자 + 100px 밑선 */
 .ggnr-scale-bar {
   position: absolute;
-  right: 16px;
+  left: 81px;
   bottom: 14px;
-  left: auto;
+  right: auto;
   z-index: 6;
   background: transparent;
   border: none;

@@ -19,60 +19,62 @@ const LAYER_PREFIX = 'aerial-ortho-tif-';
 /** 보라 bbox 위 · 일반 WMS 면(GEOM_STACK_ZINDEX_BASE) 아래 */
 const ORTHO_TILE_Z_INDEX = GEOM_STACK_ZINDEX_BASE - 1;
 
-/** JPEG nodata(순수 검정) → 투명. 원본 RGB min≈11 이라 실데이터는 남김 */
-function punchJpegBlackToAlpha(image: HTMLImageElement): string {
-  const canvas = document.createElement('canvas');
-  canvas.width = image.naturalWidth || image.width;
-  canvas.height = image.naturalHeight || image.height;
-  const ctx = canvas.getContext('2d');
-  if (!ctx || canvas.width === 0 || canvas.height === 0) return image.src;
-  ctx.drawImage(image, 0, 0);
-  const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-  const d = imgData.data;
-  for (let i = 0; i < d.length; i += 4) {
-    if (d[i]! <= 2 && d[i + 1]! <= 2 && d[i + 2]! <= 2) d[i + 3] = 0;
+/** JPEG nodata(순수 검정)만 투명. 검정이 없으면 원본 그대로 쓴다. */
+async function jpegBlobWithoutBlack(blob: Blob): Promise<string> {
+  const bitmap = await createImageBitmap(blob);
+  try {
+    const canvas = document.createElement('canvas');
+    canvas.width = bitmap.width;
+    canvas.height = bitmap.height;
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    if (!ctx || canvas.width === 0) return URL.createObjectURL(blob);
+    ctx.drawImage(bitmap, 0, 0);
+    const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const d = imgData.data;
+    let punched = false;
+    for (let i = 0; i < d.length; i += 4) {
+      if (d[i]! <= 2 && d[i + 1]! <= 2 && d[i + 2]! <= 2) {
+        d[i + 3] = 0;
+        punched = true;
+      }
+    }
+    if (!punched) return URL.createObjectURL(blob);
+    ctx.putImageData(imgData, 0, 0);
+    const out = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/png'));
+    return URL.createObjectURL(out ?? blob);
+  } finally {
+    bitmap.close();
   }
-  ctx.putImageData(imgData, 0, 0);
-  return canvas.toDataURL('image/png');
 }
 
 /**
- * PNG 우선, 없으면 JPG. JPG는 알파 없어서 검정이 깔리므로 순수 검정만 투명 처리.
+ * 타일은 한 번만 받는다. 서버가 JPEG를 주면 검은 테두리만 지우고, PNG는 그대로 쓴다.
  * LoadFunction 시그니처는 Tile이지만 XYZ는 ImageTile로 호출한다.
  */
 function orthoTileLoadFunction(tile: Tile, src: string) {
   const imageTile = tile as ImageTile;
   const img = imageTile.getImage() as HTMLImageElement;
-  const candidates = src.endsWith('.png')
-    ? [src, src.replace(/\.png$/i, '.jpg')]
-    : src.endsWith('.jpg') || src.endsWith('.jpeg')
-      ? [src, src.replace(/\.jpe?g$/i, '.png')]
-      : [src];
-
-  let idx = 0;
-  const loadNext = () => {
-    const url = candidates[idx];
-    if (!url) {
-      tile.setState(TileState.ERROR);
-      return;
-    }
-    const probe = new Image();
-    probe.crossOrigin = 'anonymous';
-    probe.onload = () => {
-      try {
-        const isJpeg = /\.jpe?g$/i.test(url);
-        img.src = isJpeg ? punchJpegBlackToAlpha(probe) : url;
-      } catch {
-        img.src = url;
+  void fetch(src, { credentials: 'same-origin' })
+    .then(async (res) => {
+      if (!res.ok) {
+        tile.setState(TileState.ERROR);
+        return;
       }
-    };
-    probe.onerror = () => {
-      idx += 1;
-      loadNext();
-    };
-    probe.src = url;
-  };
-  loadNext();
+      const blob = await res.blob();
+      const type = (res.headers.get('content-type') ?? blob.type).toLowerCase();
+      const url = type.includes('jpeg') || type.includes('jpg') ? await jpegBlobWithoutBlack(blob) : URL.createObjectURL(blob);
+      img.addEventListener(
+        'load',
+        () => {
+          URL.revokeObjectURL(url);
+        },
+        { once: true }
+      );
+      img.src = url;
+    })
+    .catch(() => {
+      tile.setState(TileState.ERROR);
+    });
 }
 
 /**
@@ -87,8 +89,10 @@ export function useAerialOrthoCheckedTiles(params: {
   checkedUnitIds?: Set<string>;
   /** 데이터조회 bbox 클릭 등 외부에서 켠 tuKey */
   extraTuKeys?: number[];
+  /** false면 카메라 이동은 호출측(범위 레이어)에 맡긴다 */
+  fitView?: boolean;
 }) {
-  const { enabled, unit = null, checkedFileIds, checkedUnitIds, extraTuKeys } = params;
+  const { enabled, unit = null, checkedFileIds, checkedUnitIds, extraTuKeys, fitView = true } = params;
   const mapContext = useMapContext();
   const layersRef = useRef<Map<string, TileLayer<XYZ>>>(new Map());
   const lastFitKeyRef = useRef('');
@@ -194,7 +198,7 @@ export function useAerialOrthoCheckedTiles(params: {
       layersRef.current.set(key, layer);
     }
 
-    if (checkedKey && checkedKey !== lastFitKeyRef.current && checkedTuKeys.length > 0) {
+    if (fitView && checkedKey && checkedKey !== lastFitKeyRef.current && checkedTuKeys.length > 0) {
       lastFitKeyRef.current = checkedKey;
       const focusTu = checkedTuKeys[checkedTuKeys.length - 1]!;
       void call('', 'POST', {
@@ -247,6 +251,7 @@ export function useAerialOrthoCheckedTiles(params: {
     checkedFileIds,
     checkedUnitIds,
     tileMaxZoom,
+    fitView,
     mapContext?.mapInstanceRef,
     extraTuKeys,
   ]);

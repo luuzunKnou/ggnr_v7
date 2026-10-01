@@ -28,6 +28,7 @@ import {
   isOrthoDataQueryLayerId,
 } from '../../_mapContents/aerialView/orthoDataQueryLayerId';
 import { MapHitOverlapSelect } from '../MapHitOverlapSelect';
+import { allowProjectLayerTable } from '@/lib/projectLayerAllowlist';
 import { useSearchParams } from 'next/navigation';
 
 /** layer 스키마 테이블 목록 (DB 기준) */
@@ -336,12 +337,6 @@ export function AttributeQueryUI({ activeTableName, onOpenDataPanel, onClearData
         const tables: LayerSchemaTable[] = Array.isArray(dbData?.tables) ? dbData.tables : [];
         setLayerSchemaTables(tables);
 
-        const dbSet = new Set(
-          tables
-            .filter((t) => (t.schema || 'layer').toLowerCase() === 'layer')
-            .map((t) => t.table.toLowerCase())
-        );
-
         type SysRow = { sys_key?: string; layerGroupList?: string[] };
         const allSystems: SysRow[] = Array.isArray((sysAllRes?.data ?? sysAllRes)?.systems)
           ? ((sysAllRes?.data ?? sysAllRes).systems as SysRow[])
@@ -351,6 +346,13 @@ export function AttributeQueryUI({ activeTableName, onOpenDataPanel, onClearData
           : [];
         const enabledSysKeys = new Set(
           enabledSystems.map((s) => String(s.sys_key ?? '').trim().toLowerCase()).filter(Boolean)
+        );
+
+        const dbSet = new Set(
+          tables
+            .filter((t) => (t.schema || 'layer').toLowerCase() === 'layer')
+            .map((t) => t.table.toLowerCase())
+            .filter((name) => allowProjectLayerTable(name, enabledSysKeys))
         );
         const hideRoadOccGroups = enabledSysKeys.size > 0 && !enabledSysKeys.has('road');
 

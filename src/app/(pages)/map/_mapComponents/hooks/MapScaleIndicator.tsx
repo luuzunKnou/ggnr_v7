@@ -28,7 +28,7 @@ function formatScaleFromZoom(zoom: number): string | null {
 }
 
 /**
- * 지도 우측 하단 축척 — 줌에 따라 거리 표시 (글자 + 얇은 밑선).
+ * 지도 좌측 하단 축척 — 줌에 따라 거리 표시 (글자 + 얇은 밑선).
  */
 export function MapScaleIndicator({ map, mapReady }: Props) {
   const [text, setText] = useState<string | null>(null);
