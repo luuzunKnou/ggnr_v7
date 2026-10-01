@@ -553,6 +553,16 @@ function updateOrthoJobProgress(groupName: string, stdoutChunk: string) {
   }
 }
 
+const ORTHO_BUSY_PHASE = new Set<OrthoJobPhase>(['queued', 'vrt', 'warp', 'tiles', 'copy']);
+
+/** 드론영상 타일 변환이 진행 중이면 true */
+export function isOrthoConvertBusy(): boolean {
+  for (const entry of orthoJobProgressMap.values()) {
+    if (ORTHO_BUSY_PHASE.has(entry.phase)) return true;
+  }
+  return false;
+}
+
 export function getOrthoJobProgress(params?: { groupName?: string }): OrthoJobProgress | OrthoJobProgress[] | null {
   if (params?.groupName) {
     return orthoJobProgressMap.get(params.groupName) ?? null;

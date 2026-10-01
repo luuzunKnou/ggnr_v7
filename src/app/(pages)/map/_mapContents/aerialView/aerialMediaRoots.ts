@@ -17,6 +17,8 @@ export const FOLDER_KIND_TOKEN: Record<string, AerialKind> = {
   사진동영상: 'drone',
   /** @deprecated 구 명칭 */
   드론사진동영상: 'drone',
+  항공뷰: 'panorama',
+  /** @deprecated 구 명칭 — 기존 폴더명 인식용 */
   파노라마: 'panorama',
   항공영상: 'satellite',
 };
@@ -24,6 +26,6 @@ export const FOLDER_KIND_TOKEN: Record<string, AerialKind> = {
 export const KIND_TO_FOLDER_TOKEN: Record<AerialKind, string> = {
   ortho: '드론영상',
   drone: '사진동영상',
-  panorama: '파노라마',
+  panorama: '항공뷰',
   satellite: '항공영상',
 };

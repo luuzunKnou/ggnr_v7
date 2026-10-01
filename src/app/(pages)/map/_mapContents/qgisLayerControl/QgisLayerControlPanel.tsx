@@ -16,6 +16,7 @@ import { call } from '@/lib/api';
 import { isSuperUser } from '@/lib/auth/superUser';
 import { cn } from '@/lib/utils';
 import { LayerRowPanelButton } from '@/app/(pages)/map/_mapComponents/layerRowEdit';
+import { QgisApiManual } from './QgisApiManual';
 import { Switch } from '@/app/shadcnComponents/ui/switch';
 import { resolveClientMachineIp, prefetchClientMachineIp } from '@/lib/clientMachineIp';
 
@@ -196,17 +197,6 @@ export function QgisLayerControlPanel({ onClose }: { onClose?: () => void }) {
     );
   }, [users, userFilter]);
 
-  const groups = useMemo(() => {
-    const map = new Map<string, UserKeyRow[]>();
-    for (const u of filteredUsers) {
-      const g = String(u.ugName ?? '').trim() || '기타';
-      const list = map.get(g) ?? [];
-      list.push(u);
-      map.set(g, list);
-    }
-    return [...map.entries()];
-  }, [filteredUsers]);
-
   const filteredLayers = useMemo(() => {
     const q = layerFilter.trim().toLowerCase();
     if (!q) return layers;
@@ -359,7 +349,7 @@ export function QgisLayerControlPanel({ onClose }: { onClose?: () => void }) {
     return (
       <div className="standard-panel-root">
         <div className="standard-panel-header">
-          <span className="standard-panel-title">레이어권한</span>
+          <span className="standard-panel-title">QGIS API</span>
           {onClose ? (
             <button type="button" onClick={onClose} className="standard-panel-close" aria-label="닫기">
               <X className="h-4 w-4" />
@@ -390,7 +380,7 @@ export function QgisLayerControlPanel({ onClose }: { onClose?: () => void }) {
         <div className="flex min-w-0 items-center gap-2">
           <KeyRound className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
           <div className="min-w-0">
-            <span className="standard-panel-title">레이어권한</span>
+            <span className="standard-panel-title">QGIS API</span>
             <p className="mt-0.5 text-[11px] leading-none text-muted-foreground">
               사용자 {users.length}명
             </p>
@@ -468,7 +458,7 @@ export function QgisLayerControlPanel({ onClose }: { onClose?: () => void }) {
                 type="search"
                 value={userFilter}
                 onChange={(e) => setUserFilter(e.target.value)}
-                placeholder="아이디·이름·키 검색"
+                placeholder="이름·아이디·부서·키 검색"
                 className="h-8 w-full rounded-md border border-border bg-background py-1.5 pl-8 pr-3 text-xs text-foreground outline-none ring-0 placeholder:text-muted-foreground focus:border-border focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0"
               />
             </div>
@@ -483,110 +473,103 @@ export function QgisLayerControlPanel({ onClose }: { onClose?: () => void }) {
               ) : (
                 <table className="standard-list-table">
                   <colgroup>
-                    <col className="w-[18%]" />
                     <col className="w-[14%]" />
+                    <col className="w-[16%]" />
+                    <col className="w-[16%]" />
                     <col />
                     <col className="w-12" />
                     <col className="w-12" />
                   </colgroup>
                   <thead className="standard-table-thead">
                     <tr>
-                      <th className="standard-table-th standard-table-th-left">아이디</th>
                       <th className="standard-table-th standard-table-th-left">이름</th>
+                      <th className="standard-table-th standard-table-th-left">아이디</th>
+                      <th className="standard-table-th standard-table-th-left">부서명</th>
                       <th className="standard-table-th standard-table-th-left">KEY</th>
                       <th className="standard-table-th standard-table-th-center">재발급</th>
                       <th className="standard-table-th standard-table-th-center">키삭제</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {groups.map(([group, rows]) => (
-                      <Fragment key={group}>
-                        <tr className="bg-muted/60">
+                    {filteredUsers.map((u) => {
+                      const selected = selectedUsrId === u.usrId;
+                      return (
+                        <tr
+                          key={u.usrId}
+                          className={cn(
+                            'cursor-pointer border-b border-border/60 transition-colors',
+                            selected
+                              ? 'bg-primary/[0.08] hover:bg-primary/[0.12]'
+                              : 'bg-background hover:bg-muted/40'
+                          )}
+                          onClick={() => setSelectedUsrId(u.usrId)}
+                        >
                           <td
-                            colSpan={5}
-                            className="border-b border-border/80 px-1.5 py-1.5 text-[11px] font-semibold text-foreground/80"
+                            className="standard-table-td-text px-1.5 font-medium text-foreground"
+                            title={u.usrName ?? ''}
                           >
-                            {group}
-                            <span className="ml-1 font-normal text-muted-foreground">
-                              ({rows.length})
-                            </span>
+                            {u.usrName || '—'}
+                          </td>
+                          <td
+                            className="standard-table-td-text px-1.5 text-muted-foreground"
+                            title={u.usrId}
+                          >
+                            {u.usrId}
+                          </td>
+                          <td
+                            className="standard-table-td-text px-1.5 text-muted-foreground"
+                            title={u.ugName ?? ''}
+                          >
+                            {u.ugName || '—'}
+                          </td>
+                          <td className="px-1.5 py-1.5 align-middle">
+                            {u.qgisKey ? (
+                              <button
+                                type="button"
+                                className="inline-flex max-w-full items-center gap-1 truncate font-mono text-[10px] text-primary hover:underline"
+                                title={`${u.qgisKey} — 클릭하여 복사`}
+                                onClick={(e) => void handleCopyKey(u.qgisKey!, e)}
+                              >
+                                <Copy className="h-3 w-3 shrink-0 text-primary" />
+                                <span className="truncate">{u.qgisKey}</span>
+                              </button>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 text-[10px] text-muted-foreground">
+                                <KeyRound className="h-3 w-3 shrink-0 text-muted-foreground/45" />
+                                미발급
+                              </span>
+                            )}
+                          </td>
+                          <td className="px-0.5 py-1.5 text-center align-middle">
+                            <button
+                              type="button"
+                              className="inline-flex rounded-md p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+                              title="키 발급/재발급"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                void handleRegenerate(u.usrId);
+                              }}
+                            >
+                              <RefreshCw className="h-3.5 w-3.5" />
+                            </button>
+                          </td>
+                          <td className="px-0.5 py-1.5 text-center align-middle">
+                            <button
+                              type="button"
+                              className="inline-flex rounded-md p-1.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive disabled:opacity-30"
+                              title="키 삭제"
+                              disabled={!u.qgisKey}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                void handleDeleteKey(u.usrId);
+                              }}
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
                           </td>
                         </tr>
-                        {rows.map((u) => {
-                          const selected = selectedUsrId === u.usrId;
-                          return (
-                            <tr
-                              key={u.usrId}
-                              className={cn(
-                                'cursor-pointer border-b border-border/60 transition-colors',
-                                selected
-                                  ? 'bg-primary/[0.08] hover:bg-primary/[0.12]'
-                                  : 'bg-background hover:bg-muted/40'
-                              )}
-                              onClick={() => setSelectedUsrId(u.usrId)}
-                            >
-                              <td
-                                className="standard-table-td-text px-1.5 font-medium text-foreground"
-                                title={u.usrId}
-                              >
-                                {u.usrId}
-                              </td>
-                              <td
-                                className="standard-table-td-text px-1.5 text-muted-foreground"
-                                title={u.usrName ?? ''}
-                              >
-                                {u.usrName || '—'}
-                              </td>
-                              <td className="px-1.5 py-1.5 align-middle">
-                                {u.qgisKey ? (
-                                  <button
-                                    type="button"
-                                    className="inline-flex max-w-full items-center gap-1 truncate font-mono text-[10px] text-primary hover:underline"
-                                    title={`${u.qgisKey} — 클릭하여 복사`}
-                                    onClick={(e) => void handleCopyKey(u.qgisKey!, e)}
-                                  >
-                                    <Copy className="h-3 w-3 shrink-0 text-primary" />
-                                    <span className="truncate">{u.qgisKey}</span>
-                                  </button>
-                                ) : (
-                                  <span className="inline-flex items-center gap-1 text-[10px] text-muted-foreground">
-                                    <KeyRound className="h-3 w-3 shrink-0 text-muted-foreground/45" />
-                                    미발급
-                                  </span>
-                                )}
-                              </td>
-                              <td className="px-0.5 py-1.5 text-center align-middle">
-                                <button
-                                  type="button"
-                                  className="inline-flex rounded-md p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"
-                                  title="키 발급/재발급"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    void handleRegenerate(u.usrId);
-                                  }}
-                                >
-                                  <RefreshCw className="h-3.5 w-3.5" />
-                                </button>
-                              </td>
-                              <td className="px-0.5 py-1.5 text-center align-middle">
-                                <button
-                                  type="button"
-                                  className="inline-flex rounded-md p-1.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive disabled:opacity-30"
-                                  title="키 삭제"
-                                  disabled={!u.qgisKey}
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    void handleDeleteKey(u.usrId);
-                                  }}
-                                >
-                                  <Trash2 className="h-3.5 w-3.5" />
-                                </button>
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </Fragment>
-                    ))}
+                      );
+                    })}
                   </tbody>
                 </table>
               )}
@@ -595,8 +578,9 @@ export function QgisLayerControlPanel({ onClose }: { onClose?: () => void }) {
           </div>
         </section>
 
-        {/* 우: 레이어 권한 테이블 */}
-        <section className="flex min-w-0 flex-1 flex-col bg-background">
+        {/* 우: 레이어 권한 + 좁은 사용설명 */}
+        <section className="flex min-h-0 min-w-0 flex-1 bg-background">
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col border-r border-border">
           <div className="standard-filter-section !px-2">
             <div className="min-w-0">
               {selectedUser ? (
@@ -641,11 +625,11 @@ export function QgisLayerControlPanel({ onClose }: { onClose?: () => void }) {
               ) : (
                 <table className="standard-list-table">
                   <colgroup>
-                    <col />
-                    <col style={{ width: 380 }} />
-                    <col style={{ width: 380 }} />
-                    <col style={{ width: 60 }} />
-                    <col style={{ width: 60 }} />
+                    <col style={{ width: 'calc((100% - 104px) / 3)' }} />
+                    <col style={{ width: 'calc((100% - 104px) / 3)' }} />
+                    <col style={{ width: 'calc((100% - 104px) / 3)' }} />
+                    <col style={{ width: 52 }} />
+                    <col style={{ width: 52 }} />
                   </colgroup>
                   <thead className="standard-table-thead">
                     <tr>
@@ -655,7 +639,7 @@ export function QgisLayerControlPanel({ onClose }: { onClose?: () => void }) {
                       <th className="standard-table-th standard-table-th-left !text-[12px]">
                         영문명
                       </th>
-                      <th className="standard-table-th standard-table-th-left !text-[12px]">
+                      <th className="standard-table-th standard-table-th-center !max-w-none whitespace-nowrap !text-[12px]">
                         WFS/WMS
                       </th>
                       <th className="standard-table-th standard-table-th-center !text-[12px]">
@@ -773,7 +757,7 @@ export function QgisLayerControlPanel({ onClose }: { onClose?: () => void }) {
                                       >
                                         {row.layerName}
                                       </td>
-                                      <td className="px-1.5 py-2.5 align-middle">
+                                      <td className="px-1 py-2.5 text-center align-middle">
                                         <span
                                           className={cn(
                                             'inline-flex min-w-[2.75rem] justify-center rounded px-1.5 py-0.5 text-[10px] font-semibold tracking-wide',
@@ -840,6 +824,8 @@ export function QgisLayerControlPanel({ onClose }: { onClose?: () => void }) {
               </LayerRowPanelButton>
             </div>
           </div>
+          </div>
+          <QgisApiManual />
         </section>
       </div>
     </div>

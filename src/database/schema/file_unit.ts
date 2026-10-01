@@ -1,7 +1,8 @@
 /**
  * file_unit — 영상 작업단위 파일 (사진·동영상 등)
  * layer 스키마. 파일 1건 = 1행. work_unit.wu_key 로 소속.
- * GPS 있으면 geom(Point,5181) + x_5181/y_5181 동시 저장.
+ * GPS·수동 위치가 있으면 geom(Geometry,5181) + x_5181/y_5181.
+ * 한 점이면 Point, 위치를 새로 찍으면 MultiPoint.
  */
 import {
   bigint,
@@ -19,7 +20,7 @@ const layer = pgSchema('layer');
 
 const geomPoint5181 = customType<{ data: string | null; driverData: string | null }>({
   dataType() {
-    return 'geometry(Point,5181)';
+    return 'geometry(Geometry,5181)';
   },
 });
 
@@ -37,7 +38,7 @@ export const fileUnit = layer.table('file_unit', {
   x5181: doublePrecision('x_5181'),
   /** EPSG:5181 Y — GPS 없으면 null */
   y5181: doublePrecision('y_5181'),
-  /** 촬영 위치 (좌표 있을 때만) */
+  /** 촬영 위치. 한 점 또는 여러 점 */
   geom: geomPoint5181('geom'),
   fuIsDel: boolean('fu_is_del').notNull().default(false),
   fuCreateDate: timestamp('fu_create_date', { mode: 'string' }),

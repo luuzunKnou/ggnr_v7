@@ -136,6 +136,7 @@ import { BuildPublicLandListPanel } from "./_mapContents/buildPublicLand/BuildPu
 import { BuildPublicLandDetailPanel } from "./_mapContents/buildPublicLand/BuildPublicLandDetailPanel"
 import { MemoListPanel } from "./_mapContents/memo/MemoListPanel"
 import { MemoDetailPanel } from "./_mapContents/memo/MemoDetailPanel"
+import { PolicyMapListPanel } from "./_mapContents/policyMap/PolicyMapListPanel"
 import { GcpListPanel } from "./_mapContents/gcp/GcpListPanel"
 import { GcpDetailPanel } from "./_mapContents/gcp/GcpDetailPanel"
 import {
@@ -207,6 +208,9 @@ const COMPLAINT_PANEL_MIN_WIDTH = 320
 const COMPLAINT_PANEL_MAX_WIDTH = 900
 
 const MEMO_PANEL_DEFAULT_WIDTH = 420
+const POLICY_MAP_PANEL_DEFAULT_WIDTH = 380
+const POLICY_MAP_PANEL_MIN_WIDTH = 320
+const POLICY_MAP_PANEL_MAX_WIDTH = 520
 const MEMO_PANEL_MIN_WIDTH = 320
 const MEMO_PANEL_MAX_WIDTH = 720
 
@@ -334,6 +338,7 @@ const STANDARD_LIST_OPENED_KEY = "standardList"
 const LIST_VIEW_OPENED_KEY = "listView"
 const COMPLAINT_OPENED_KEY = "complaintManagement"
 const MEMO_OPENED_KEY = "memoManagement"
+const POLICY_MAP_OPENED_KEY = "policyMap"
 const MAP_3D_DATA_OPENED_KEY = "map3dData"
 const RIVER_BASIC_PLAN_OPENED_KEY = "riverBasicPlan"
 const ROAD_LEDGER_OPENED_KEY = "roadLedger"
@@ -414,7 +419,7 @@ const RIVER_USE_LEDGER_PANEL_MAX_WIDTH = 960
 const RIVER_USE_LEDGER_DETAIL_DEFAULT_WIDTH = 400
 const RIVER_USE_LEDGER_DETAIL_MIN_WIDTH = 320
 const RIVER_USE_LEDGER_DETAIL_MAX_WIDTH = 640
-/** 드론·사진동영상·파노라마·항공·승인관리·GCP 목록 고정 */
+/** 드론·사진동영상·항공뷰·항공·승인관리·GCP 목록 고정 */
 const MEDIA_LIST_PANEL_WIDTH = 380
 /** 작업단위·승인·GCP 등 상세 고정 */
 const MEDIA_DETAIL_PANEL_WIDTH = 420
@@ -570,6 +575,7 @@ function MapLayoutContent({
 
   const complaintManagementOpen = openedWindows.includes(COMPLAINT_OPENED_KEY)
   const memoManagementOpen = openedWindows.includes(MEMO_OPENED_KEY)
+  const policyMapOpen = openedWindows.includes(POLICY_MAP_OPENED_KEY)
   const gcpOpen = openedWindows.includes(GCP_OPENED_KEY)
   const qgisLayerControlOpen = openedWindows.includes(QGIS_LAYER_CONTROL_OPENED_KEY)
   const map3dDataOpen = openedWindows.includes(MAP_3D_DATA_OPENED_KEY)
@@ -829,6 +835,11 @@ function MapLayoutContent({
   const [riverUseLedgerPanelWidth, setRiverUseLedgerPanelWidth] = useState(RIVER_USE_LEDGER_PANEL_DEFAULT_WIDTH)
   const [riverUseLedgerDetailWidth, setRiverUseLedgerDetailWidth] = useState(RIVER_USE_LEDGER_DETAIL_DEFAULT_WIDTH)
   const [aerialManagePanelWidth, setAerialManagePanelWidth] = useState(AERIAL_MANAGE_PANEL_DEFAULT_WIDTH)
+  const [aerialGeomFocus, setAerialGeomFocus] = useState<{
+    unitId: string
+    fileId: string
+    token: number
+  } | null>(null)
   const [shootingRequestPanelWidth, setShootingRequestPanelWidth] = useState(
     SHOOTING_REQUEST_PANEL_DEFAULT_WIDTH
   )
@@ -878,6 +889,7 @@ function MapLayoutContent({
   const [fmsLinkageDetailWidth, setFmsLinkageDetailWidth] = useState(FMS_DETAIL_DEFAULT_WIDTH)
   const [fmsGeomToastMsg, setFmsGeomToastMsg] = useState<string | null>(null)
   const [memoPanelWidth, setMemoPanelWidth] = useState(MEMO_PANEL_DEFAULT_WIDTH)
+  const [policyMapPanelWidth, setPolicyMapPanelWidth] = useState(POLICY_MAP_PANEL_DEFAULT_WIDTH)
   const [gcpPanelWidth, setGcpPanelWidth] = useState(GCP_PANEL_DEFAULT_WIDTH)
   const [gcpDetailWidth, setGcpDetailWidth] = useState(GCP_DETAIL_DEFAULT_WIDTH)
   const [layerDataPanelWidth, setLayerDataPanelWidth] = useState(LAYER_DATA_PANEL_DEFAULT_WIDTH)
@@ -929,6 +941,7 @@ function MapLayoutContent({
     (roadFrontageBuildingDetailOpen ? roadFrontageBuildingDetailWidth : 0) +
     (roadFrontageMarkerOpen ? roadFrontageMarkerPanelWidth : 0) +
     (roadFrontageMarkerDetailOpen ? roadFrontageMarkerDetailWidth : 0) +
+    (policyMapOpen ? policyMapPanelWidth : 0) +
     (memoManagementOpen ? memoPanelWidth : 0) +
     (complaintManagementOpen ? complaintPanelWidth : 0) +
     (map3dDataOpen ? map3dDataPanelWidth : 0) +
@@ -1039,9 +1052,11 @@ function MapLayoutContent({
   const roadFrontageMarkerDetailLeftPx =
     roadFrontageMarkerPanelLeftPx +
     (roadFrontageMarkerOpen ? roadFrontageMarkerPanelWidth : 0)
-  const memoPanelLeftPx =
+  const policyMapPanelLeftPx =
     roadFrontageMarkerDetailLeftPx +
     (roadFrontageMarkerDetailOpen ? roadFrontageMarkerDetailWidth : 0)
+  const memoPanelLeftPx =
+    policyMapPanelLeftPx + (policyMapOpen ? policyMapPanelWidth : 0)
   const memoDetailLeftPx = memoPanelLeftPx + (memoManagementOpen ? memoPanelWidth : 0)
   const complaintPanelLeftPx =
     memoPanelLeftPx + (memoManagementOpen ? memoPanelWidth : 0)
@@ -1511,6 +1526,7 @@ function MapLayoutContent({
     const next = openedWindows.filter(
       (w) => !(AERIAL_MANAGE_KIND_KEYS as readonly string[]).includes(w)
     )
+    setAerialGeomFocus(null)
     setOpened(next)
   }
 
@@ -1583,6 +1599,11 @@ function MapLayoutContent({
     setMemoDetailId(null)
     setMemoAddTable(null)
     const next = openedWindows.filter((w) => w !== MEMO_OPENED_KEY)
+    setOpened(next)
+  }
+
+  const handleClosePolicyMap = () => {
+    const next = openedWindows.filter((w) => w !== POLICY_MAP_OPENED_KEY)
     setOpened(next)
   }
 
@@ -2419,6 +2440,7 @@ function MapLayoutContent({
                 <AerialManagePanel
                   kind={aerialManageKind}
                   viewOnly={aerialMediaViewOnly}
+                  geomFocus={aerialGeomFocus}
                   onClose={handleCloseAerialManage}
                   onContentWidthChange={(w) => {
                     setAerialManagePanelWidth(
@@ -2861,6 +2883,19 @@ function MapLayoutContent({
               setShootingRequestDetailId(newId)
             }}
           />
+          {policyMapOpen && (
+            <div className="pointer-events-auto shrink-0">
+              <MapSideListPanel
+                width={policyMapPanelWidth}
+                minWidth={POLICY_MAP_PANEL_MIN_WIDTH}
+                maxWidth={POLICY_MAP_PANEL_MAX_WIDTH}
+                leftOffsetPx={policyMapPanelLeftPx}
+                onWidthChange={setPolicyMapPanelWidth}
+              >
+                <PolicyMapListPanel onClose={handleClosePolicyMap} />
+              </MapSideListPanel>
+            </div>
+          )}
           {memoManagementOpen && (
             <div className="pointer-events-auto shrink-0">
               <MapSideListPanel
@@ -3389,6 +3424,17 @@ function MapLayoutContent({
                   const feeSerEng = getUseFeeBinding({ system: systemKeyFromUrl }).serEng
                   setOpened([feeSerEng])
                   setUseFeeDetailId(feeId)
+                }}
+                onOpenMissingGeom={(item) => {
+                  const matched = /^wu-(\d+):fu-(\d+)$/.exec(String(item.targetId ?? ""))
+                  if (!matched) return
+                  setAerialGeomFocus({
+                    unitId: `wu-${matched[1]}`,
+                    fileId: `fu-${matched[2]}`,
+                    token: Date.now(),
+                  })
+                  setOpened([AERIAL_DRONE_OPENED_KEY])
+                  setProtoUserAccountOpen(false)
                 }}
               />
             </div>

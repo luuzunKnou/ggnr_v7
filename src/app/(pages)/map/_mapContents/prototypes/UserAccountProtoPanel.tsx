@@ -77,6 +77,7 @@ type Props = {
   onClose: () => void
   onOpenLedger: (item: ProtoNotifItem) => void
   onOpenFee: (feeId: string) => void
+  onOpenMissingGeom?: (item: ProtoNotifItem) => void
   /** 내 촬영요청 행 선택 시 (신청서 모달 등) */
   onSelectShootingRequest?: (id: string) => void
 }
@@ -86,6 +87,7 @@ export function UserAccountProtoPanel({
   onClose,
   onOpenLedger,
   onOpenFee,
+  onOpenMissingGeom,
   onSelectShootingRequest,
 }: Props) {
   const { data: session, status } = useSession()
@@ -295,6 +297,7 @@ export function UserAccountProtoPanel({
                     onMarkRead={handleMarkNotifRead}
                     onOpenLedger={onOpenLedger}
                     onOpenFee={onOpenFee}
+                    onOpenMissingGeom={onOpenMissingGeom}
                   />
                 ) : null}
               </div>
