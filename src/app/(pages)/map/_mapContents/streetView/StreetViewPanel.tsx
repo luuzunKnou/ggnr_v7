@@ -70,18 +70,33 @@ const KAKAO_DOMAIN_HINT = '(API 키에 등록된 도메인 확인 필요)';
 /** 카카오 오류 문구 → 사용자 안내 */
 export function explainKakaoRoadviewFailure(raw: unknown): string | null {
   if (raw instanceof KakaoMapsSdkLoadError) {
-    const lines = ['카카오 지도 SDK 로드에 실패했습니다.'];
-    if (isKakaoDomainMismatch(raw)) {
-      if (raw.scriptLoadFailed) {
-        lines.push('사용 중인 API 키에 등록되지 않은 도메인에서 접속했을 가능성이 높습니다.');
-      }
-      if (raw.kakaoOfficialMsg) lines.push(raw.kakaoOfficialMsg);
-      lines.push(`현재 접속: ${currentOrigin()}`);
-      lines.push(KAKAO_DOMAIN_HINT);
-    } else if (raw.kakaoOfficialMsg) {
-      lines.push(raw.kakaoOfficialMsg);
+    if (raw.stage === 'followup') {
+      return [
+        '카카오 스크립트는 받았습니다.',
+        '단계: 이어받는 주소',
+        't1.daumcdn.net 쪽 스크립트가 오지 않아 로드뷰를 시작하지 못했습니다.',
+      ].join('\n');
     }
-    return lines.join('\n');
+    if (raw.stage === 'domain' || isKakaoDomainMismatch(raw)) {
+      return [
+        'JavaScript SDK 도메인이 등록되지 않았습니다.',
+        '단계: 카카오 도메인 확인',
+        `현재 접속: ${currentOrigin()}`,
+        raw.kakaoOfficialMsg ?? '',
+        KAKAO_DOMAIN_HINT,
+      ]
+        .filter(Boolean)
+        .join('\n');
+    }
+    const status = raw.httpStatus != null ? `응답: ${raw.httpStatus}` : '';
+    return [
+      '카카오 스크립트를 받지 못했습니다.',
+      '단계: 서버 프록시 (dapi.kakao.com)',
+      status,
+      raw.kakaoOfficialMsg ?? '',
+    ]
+      .filter(Boolean)
+      .join('\n');
   }
 
   const text =
@@ -301,6 +316,7 @@ export function StreetViewPanel({
         if (!cancelled) {
           console.warn('[KakaoRoadview] sdk bootstrap failed', {
             origin: currentOrigin(),
+            stage: e instanceof KakaoMapsSdkLoadError ? e.stage : undefined,
             explained: explainKakaoRoadviewFailure(e),
             errorMessage: e instanceof Error ? e.message : String(e),
             kakaoOfficialMsg: e instanceof KakaoMapsSdkLoadError ? e.kakaoOfficialMsg : undefined,
@@ -452,7 +468,7 @@ export function StreetViewPanel({
     };
 
     const onError = (...args: unknown[]) => {
-      reportFailure(args[0] ?? args, '로드뷰 오류가 발생했습니다.');
+      reportFailure(args[0] ?? args, '단계: 로드뷰 표시\n로드뷰 오류가 발생했습니다.');
     };
 
     const bindRoadview = (rv: KakaoRoadview) => {
@@ -476,7 +492,7 @@ export function StreetViewPanel({
         roadviewRef.current = rv;
         return rv;
       } catch (e) {
-        reportFailure(e, '로드뷰 객체를 생성하지 못했습니다.');
+        reportFailure(e, '단계: 로드뷰 화면 생성\n로드뷰 객체를 생성하지 못했습니다.');
         roadviewRef.current = null;
         return null;
       }
@@ -585,7 +601,7 @@ export function StreetViewPanel({
           scheduleSnapReadyRef.current();
         }, PANO_INIT_TIMEOUT_MS);
       } catch (e) {
-        reportFailure(e, '로드뷰 파노라마를 다시 열지 못했습니다.');
+        reportFailure(e, '단계: 파노라마 다시 열기\n로드뷰 파노라마를 다시 열지 못했습니다.');
       } finally {
         queueMicrotask(() => {
           skipEchoRef.current = false;
@@ -715,12 +731,9 @@ export function StreetViewPanel({
         setError((prev) => {
           if (prev) return prev;
           return [
-            '로드뷰를 표시하지 못했습니다.',
-            `현재 접속 주소: ${currentOrigin()}`,
-            '',
-            '도메인 미등록·앱키 오류일 수 있습니다.',
-            '카카오 디벨로퍼스 → 플랫폼 키 → JavaScript 키',
-            '→ JavaScript SDK 도메인을 확인하세요.',
+            '카카오 스크립트는 받았습니다.',
+            '단계: 근처 로드뷰 조회',
+            '조회가 끝나지 않았습니다. 브라우저에서 rv.map.kakao.com, mts.daumcdn.net 이 막혀 있을 수 있습니다.',
           ].join('\n');
         });
         emitRoadviewSnapInvalidate(containerRef.current);
@@ -773,7 +786,7 @@ export function StreetViewPanel({
           scheduleSnapReadyRef.current();
           // lastSuccessPos는 init의 getPosition(실제 파노 좌표)에서 갱신
         } catch (e) {
-          reportFailure(e, '로드뷰 파노라마를 열지 못했습니다.');
+          reportFailure(e, '단계: 파노라마 열기\n로드뷰 파노라마를 열지 못했습니다.');
         } finally {
           queueMicrotask(() => {
             skipEchoRef.current = false;
@@ -781,7 +794,7 @@ export function StreetViewPanel({
         }
       });
     } catch (e) {
-      reportFailure(e, '근처 로드뷰 조회에 실패했습니다.');
+      reportFailure(e, '단계: 근처 로드뷰 조회\n근처 로드뷰 조회에 실패했습니다.');
     }
 
     return () => {
