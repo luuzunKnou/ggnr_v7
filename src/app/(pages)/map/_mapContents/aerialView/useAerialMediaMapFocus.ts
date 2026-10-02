@@ -149,12 +149,12 @@ export function useAerialMediaMapFocus(params: {
       const el = map.getTargetElement();
       if (el) el.style.cursor = hit ? 'pointer' : '';
     };
-    map.on('singleclick', onClick);
-    map.on('pointermove', onMove);
+    map.on('singleclick', onClick as never);
+    map.on('pointermove', onMove as never);
 
     return () => {
-      map.un('singleclick', onClick);
-      map.un('pointermove', onMove);
+      map.un('singleclick', onClick as never);
+      map.un('pointermove', onMove as never);
       const el = map.getTargetElement();
       if (el) el.style.cursor = '';
     };

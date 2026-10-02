@@ -55,11 +55,13 @@ function CancelButton({ onClick, disabled }: { onClick: () => void; disabled?: b
 function TributaryPickCard({
   cutCount,
   rangeError,
+  onUndo,
   onClear,
   onDone,
 }: {
   cutCount: number;
   rangeError: string | null;
+  onUndo: () => void;
   onClear: () => void;
   onDone: () => void;
 }) {
@@ -90,6 +92,9 @@ function TributaryPickCard({
         ) : null}
       </div>
       <div className="flex justify-end gap-2 border-t border-border bg-muted/50 px-3 py-2">
+        <button type="button" onClick={onUndo} disabled={cutCount === 0} className={BTN_MUTED}>
+          끝선 되돌리기
+        </button>
         <button type="button" onClick={onClear} disabled={cutCount === 0} className={BTN_MUTED}>
           모두 빼기
         </button>
@@ -117,8 +122,10 @@ export function PrivateLandAnalysisMapGuide() {
     tributaryPicking,
     openTributaryPick,
     closeTributaryPick,
+    undoTributaryCut,
     rangeChecking,
     rangeError,
+    riverOpen,
     rangeMode,
     closedLineCount,
     closedOpen,
@@ -147,7 +154,9 @@ export function PrivateLandAnalysisMapGuide() {
   const rangeInvalid = rangeError != null;
   const hasTributary = !closed && riverKnown && tribCandidateCount > 0;
   const tribCuts = includeTributary ? tribCutCount : 0;
-  const applyDisabled = applying || rangeChecking || rangeInvalid || (closed && (closedLineCount < 2 || closedOpen));
+  const openRiver = !closed && riverOpen;
+  const applyDisabled =
+    applying || rangeChecking || rangeInvalid || (closed && (closedLineCount < 2 || closedOpen));
   const applyLabel =
     phase === 'applying' ? '적용 중…' : phase === 'analyzing' ? '분석 중…' : rangeChecking ? '확인 중…' : '적용';
 
@@ -176,14 +185,15 @@ export function PrivateLandAnalysisMapGuide() {
         <TributaryPickCard
           cutCount={tribCuts}
           rangeError={rangeError}
+          onUndo={undoTributaryCut}
           onClear={() => setIncludeTributary(false)}
           onDone={closeTributaryPick}
         />
       ) : (
         <>
-          {hasTributary && !rangeInvalid && tribCuts === 0 && !applying ? (
+          {hasTributary && !rangeInvalid && (openRiver || tribCuts === 0) && !applying ? (
             <div className="pointer-events-auto whitespace-nowrap rounded-full border border-amber-200/90 bg-amber-50/95 px-3 py-0.5 text-[11px] font-medium leading-snug text-amber-900 shadow-sm backdrop-blur-md dark:border-amber-800 dark:bg-amber-950/80 dark:text-amber-200">
-              합류하는 지류가 있습니다 · 포함하려면 «지류 추가»
+              {openRiver ? '반대쪽 하천은 끝까지 포함됩니다 · 막으려면 «지류 추가»' : '합류하는 지류가 있습니다 · 포함하려면 «지류 추가»'}
             </div>
           ) : null}
           {closed && !applying && !rangeInvalid ? (

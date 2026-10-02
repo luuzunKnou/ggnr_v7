@@ -16,7 +16,7 @@ import type { Map as OlMap } from 'ol';
 import type { Coordinate } from 'ol/coordinate';
 import GeoJSON from 'ol/format/GeoJSON';
 import WKT from 'ol/format/WKT';
-import { LineString, MultiPoint, Polygon } from 'ol/geom';
+import { LineString, MultiLineString, MultiPoint, Polygon } from 'ol/geom';
 import type Geometry from 'ol/geom/Geometry';
 import type MultiPolygon from 'ol/geom/MultiPolygon';
 import VectorLayer from 'ol/layer/Vector';
@@ -37,10 +37,12 @@ import { MAP_AUTO_NAV_MAX_ZOOM } from '../../_mapComponents/config/mapDefaults';
 import {
   collectSegments,
   invalidChordPair,
+  seamChordNear,
   shortestChordAt,
   snapInside,
   toAreaGeometry,
   type Chord,
+  type Seam,
 } from './privateLandAnalysisGeom';
 import { hexToRgba, matchesOwnFilter, OWN_FILTER_ALL, ownGbnColor } from './privateLandAnalysisFormat';
 
@@ -48,6 +50,21 @@ import { hexToRgba, matchesOwnFilter, OWN_FILTER_ALL, ownGbnColor } from './priv
 const PREVIEW_DEBOUNCE_MS = 250;
 /** 커서가 하천 밖이어도 이 픽셀 안이면 경계 안쪽으로 붙임 */
 const SNAP_PX = 40;
+/** 커서가 도형끼리 맞닿은 경계선에서 이 픽셀 안이면 그 선을 절단선으로 사용 */
+const SEAM_SNAP_PX = 12;
+/** 같은 지류 후보에서 기존 끝선과 이 배수(선 길이 기준) 안이면 새 끝선으로 교체 */
+const TRIB_REPLACE_FACTOR = 3;
+/** 접선이 지류 후보 경계에서 이 거리(지도 단위) 안이면 그 지류의 접선으로 본다 — 후보는 본류에서 조금 떼어 계산됨 */
+const TRIB_SEAM_TOL_M = 3;
+/** 누른 채 이 픽셀 안으로 움직여도 지도 끌기가 아닌 클릭으로 본다 */
+const CLICK_MOVE_TOL_PX = 8;
+/** 누른 뒤 이 시간(ms) 안에 떼야 클릭으로 본다 */
+const CLICK_MAX_MS = 700;
+/** 클릭 위치에서 선을 못 만들면, 이 픽셀 안에서 미리보기로 보였던 선을 쓴다 */
+const CLICK_HOVER_TOL_PX = 14;
+/** 같은 자리를 이 시간(ms)·픽셀 안에 다시 누르면 한 번으로 본다 */
+const CLICK_DEDUPE_MS = 350;
+const CLICK_DEDUPE_PX = 4;
 
 export type PrivateLandAnalysisPhase =
   | 'layer'
@@ -99,6 +116,8 @@ type Ctx = {
   openTributaryPick: () => void;
   /** 완료 — 찍은 지류가 없으면 미포함으로 되돌림 */
   closeTributaryPick: () => void;
+  /** 마지막으로 찍은 지류 끝선 지우기 */
+  undoTributaryCut: () => void;
   /** 분석 구역(레이어) 선택 모달 */
   areaModalOpen: boolean;
   openAreaModal: () => void;
@@ -107,6 +126,8 @@ type Ctx = {
   rangeChecking: boolean;
   /** 지정한 구간이 잘못됨 — 있으면 적용 불가, 다시 지정만 */
   rangeError: string | null;
+  /** 이어진 하천 반대쪽 갈래를 막지 않음 — 끝까지 포함됨(안내만) */
+  riverOpen: boolean;
   /** 구간 지정 방식 — 하천 두 선 / 도로 닫힌 범위 */
   rangeMode: PrivateLandRangeMode;
   /** 닫힌 범위 — 찍은 경계선 수 */
@@ -148,7 +169,7 @@ const CHORD_ENDS_STYLE = new Style({
   zIndex: 5,
   geometry: (f) => {
     const g = f.getGeometry();
-    return g instanceof LineString ? new MultiPoint(g.getCoordinates()) : undefined;
+    return g instanceof LineString ? new MultiPoint([g.getFirstCoordinate(), g.getLastCoordinate()]) : undefined;
   },
   image: new CircleStyle({
     radius: 5,
@@ -190,8 +211,8 @@ function chordStyles(moving: boolean): Style[] {
 
 /** 닫힌 범위 — 하나로 합친 레이어 면. 다른 도형보다 아래에 그림 */
 const LAYER_BASE_STYLE = new Style({
-  stroke: new Stroke({ color: 'rgba(71, 85, 105, 0.9)', width: 1.5 }),
-  fill: new Fill({ color: 'rgba(100, 116, 139, 0.3)' }),
+  stroke: new Stroke({ color: 'rgba(217, 119, 6, 0.95)', width: 1.5 }),
+  fill: new Fill({ color: 'rgba(253, 224, 71, 0.5)' }),
   zIndex: -1,
 });
 
@@ -233,7 +254,7 @@ function featureStyle(feature: Feature<Geometry>): Style | Style[] | undefined {
 }
 
 function chordGeometry(chord: Chord): LineString {
-  return new LineString([chord[0], chord[1]]);
+  return new LineString(chord.path ?? [chord[0], chord[1]]);
 }
 
 function readGeometry3857(raw: unknown): Geometry | null {
@@ -246,6 +267,21 @@ function readGeometry3857(raw: unknown): Geometry | null {
   } catch {
     return null;
   }
+}
+
+function chordMid(c: Chord): Coordinate {
+  return [(c[0][0] + c[1][0]) / 2, (c[0][1] + c[1][1]) / 2];
+}
+
+function chordLength(c: Chord): number {
+  return Math.hypot(c[1][0] - c[0][0], c[1][1] - c[0][1]);
+}
+
+function readSeams3857(raw: unknown): Seam[] {
+  const geom = readGeometry3857(raw);
+  if (geom instanceof LineString) return [geom.getCoordinates()];
+  if (geom instanceof MultiLineString) return geom.getCoordinates();
+  return [];
 }
 
 type Props = {
@@ -286,6 +322,8 @@ export function PrivateLandAnalysisRoot({ system, onDetailOpenChange, children }
   const rangeSeqRef = useRef(0);
   const rangeBlockedRef = useRef(false);
   rangeBlockedRef.current = rangeChecking || rangeError != null;
+  /** 이어진 하천 반대쪽 갈래를 막지 않음 — 끝까지 포함됨(안내만) */
+  const [riverOpen, setRiverOpen] = useState(false);
   const rangeMode = privateLandRangeMode(layer);
   const rangeModeRef = useRef(rangeMode);
   rangeModeRef.current = rangeMode;
@@ -302,7 +340,13 @@ export function PrivateLandAnalysisRoot({ system, onDetailOpenChange, children }
 
   const sourceRef = useRef<VectorSource | null>(null);
   const vectorLayerRef = useRef<VectorLayer<VectorSource> | null>(null);
-  const baseRef = useRef<{ geom: Polygon | MultiPolygon; segs: ReturnType<typeof collectSegments> } | null>(null);
+  const baseRef = useRef<{
+    geom: Polygon | MultiPolygon;
+    segs: ReturnType<typeof collectSegments>;
+    seams: Seam[];
+    /** 다른 하천까지 합친 주변 면 — 끝 위치가 다른 하천으로 넘어갈 때 */
+    all: { geom: Polygon | MultiPolygon; segs: ReturnType<typeof collectSegments> } | null;
+  } | null>(null);
   const chord1Ref = useRef<Chord | null>(null);
   const chord2Ref = useRef<Chord | null>(null);
   /** 시작 위치 하천(본류) 기준 — 지류 제외용 */
@@ -311,6 +355,8 @@ export function PrivateLandAnalysisRoot({ system, onDetailOpenChange, children }
   /** 본류 구간에 합류하는 지류 후보 (자르기 선 계산용) */
   const tribCandidatesRef = useRef<{ geom: Polygon | MultiPolygon; segs: ReturnType<typeof collectSegments> }[]>([]);
   const tribCutsRef = useRef<Chord[]>([]);
+  /** 지류를 더하기 전 구간 — 지류 끝선이 합류부 어느 쪽인지 판정 */
+  const tribMainRef = useRef<Polygon | MultiPolygon | null>(null);
   /** 지류 위 이동 끝선으로 늘린 미리보기를 보여주는 중 */
   const tribMovingRef = useRef(false);
   /** 이 기능이 켠 레이어·연속지적만 닫을 때 끔 */
@@ -418,12 +464,14 @@ export function PrivateLandAnalysisRoot({ system, onDetailOpenChange, children }
     riverRef.current = null;
     tribCandidatesRef.current = [];
     tribCutsRef.current = [];
+    tribMainRef.current = null;
     setRiverKnown(false);
     setTribCandidateCount(0);
     setTribCutCount(0);
     rangeSeqRef.current += 1;
     setRangeChecking(false);
     setRangeError(null);
+    setRiverOpen(false);
     setBaseName('');
     setZoneAreaSqm(null);
     setParcels([]);
@@ -563,9 +611,10 @@ export function PrivateLandAnalysisRoot({ system, onDetailOpenChange, children }
       const run = async () => {
         const rangeSeq = realCheck ? ++rangeSeqRef.current : 0;
         if (realCheck) setRangeChecking(true);
-        const settleRange = (error: string | null) => {
+        const settleRange = (error: string | null, open = false) => {
           if (!realCheck || rangeSeq !== rangeSeqRef.current) return;
           setRangeError(error);
+          setRiverOpen(open);
           setRangeChecking(false);
         };
         const wkt = new WKT();
@@ -584,14 +633,28 @@ export function PrivateLandAnalysisRoot({ system, onDetailOpenChange, children }
           const data = res?.data ?? res;
           const geom = readGeometry3857(data?.zoneGeometry3857);
           settleRange(
-            geom ? null : String(data?.error || '두 선 사이의 구간을 찾지 못했습니다. 구간을 다시 지정하세요.')
+            geom ? null : String(data?.error || '두 선 사이의 구간을 찾지 못했습니다. 구간을 다시 지정하세요.'),
+            geom != null && data?.open === true
           );
           if (seq !== previewSeqRef.current) return;
           const p = phaseRef.current;
           if (p !== 'end' && p !== 'ranged') return;
           removeKinds(['preview']);
           if (geom) addFeature('preview', geom);
-          if (fixed) storeTribCandidates(data?.tributaryCandidates3857);
+          if (fixed) {
+            storeTribCandidates(data?.tributaryCandidates3857);
+            const mainGeom = toAreaGeometry(readGeometry3857(data?.mainGeometry3857));
+            if (mainGeom) tribMainRef.current = mainGeom;
+          }
+          /** 끝선 너머 하천에 찍은 지류 끝선 → 새 끝선으로 바꿈 */
+          const swap = data?.endSwapIndex;
+          const swapCut = realCheck && typeof swap === 'number' ? tribCutsRef.current[swap] : undefined;
+          if (swapCut) {
+            chord2Ref.current = swapCut;
+            tribCutsRef.current = tribCutsRef.current.filter((_, i) => i !== swap);
+            drawChord2(swapCut, false);
+            drawTribCuts();
+          }
         } catch {
           settleRange('구간을 확인하지 못했습니다. 구간을 다시 지정하세요.');
         }
@@ -605,7 +668,7 @@ export function PrivateLandAnalysisRoot({ system, onDetailOpenChange, children }
         void run();
       }, delayMs);
     },
-    [addFeature, cancelPreview, removeKinds, storeTribCandidates, tributaryParams]
+    [addFeature, cancelPreview, drawChord2, drawTribCuts, removeKinds, storeTribCandidates, tributaryParams]
   );
 
   useEffect(() => () => cancelPreview(), [cancelPreview]);
@@ -661,18 +724,57 @@ export function PrivateLandAnalysisRoot({ system, onDetailOpenChange, children }
     if (tribCutsRef.current.length === 0) setIncludeTributary(false);
   }, [mapRef, removeKinds, requestZonePreview, setIncludeTributary]);
 
+  const undoTributaryCut = useCallback(() => {
+    if (tribCutsRef.current.length === 0) return;
+    tribCutsRef.current = tribCutsRef.current.slice(0, -1);
+    drawTribCuts();
+    refreshRanged();
+  }, [drawTribCuts, refreshRanged]);
+
   /** 커서 아래 지류를 가로지르는 끝선과, 그 지류의 기존 끝선을 바꾼 끝선 목록 */
   const tribCutAt = useCallback(
     (coord: Coordinate): { chord: Chord; cuts: Chord[] } | null => {
       const res = mapRef?.current?.getView().getResolution() ?? 1;
+      const base = baseRef.current;
       for (const cand of tribCandidatesRef.current) {
         const p = snapInside(cand.geom, coord, SNAP_PX * res);
         if (!p) continue;
-        const chord = shortestChordAt(cand.geom, cand.segs, p);
-        if (!chord) continue;
+        const widthChord = shortestChordAt(cand.geom, cand.segs, p);
+        if (!widthChord) continue;
+        /** 이 지류 경계 위 접선(합류부 경계 등) 가까이면 그 접선을 끝선으로 */
+        const seam = base
+          ? seamChordNear(base.seams, coord, SEAM_SNAP_PX * res, widthChord, base.all?.segs ?? base.segs)
+          : null;
+        const seamPts = seam ? (seam.path ?? [seam[0], seam[1]]) : [];
+        const seamMid = seamPts[Math.floor(seamPts.length / 2)];
+        const onCand =
+          seamMid != null &&
+          (() => {
+            const q = cand.geom.getClosestPoint(seamMid);
+            return Math.hypot(q[0] - seamMid[0], q[1] - seamMid[1]) <= TRIB_SEAM_TOL_M + 3 * res;
+          })();
+        const chord = seam && onCand ? seam : widthChord;
+        /** 같은 후보 안, 합류부 같은 쪽의 가까운 끝선만 교체 — 큰 하천은 합류부 양쪽을 따로 막을 수 있게 */
+        const newMid = chordMid(chord);
+        const newLen = chordLength(chord);
+        const junction = tribMainRef.current?.getClosestPoint(newMid) ?? null;
+        const sameSide = (mid: Coordinate, len: number): boolean => {
+          if (!junction) return true;
+          const ax = newMid[0] - junction[0];
+          const ay = newMid[1] - junction[1];
+          const bx = mid[0] - junction[0];
+          const by = mid[1] - junction[1];
+          const minOff = 0.25 * Math.max(newLen, len);
+          if (Math.hypot(ax, ay) < minOff || Math.hypot(bx, by) < minOff) return true;
+          return ax * bx + ay * by > 0;
+        };
         const others = tribCutsRef.current.filter((c) => {
-          const mid: Coordinate = [(c[0][0] + c[1][0]) / 2, (c[0][1] + c[1][1]) / 2];
-          return !cand.geom.intersectsCoordinate(mid);
+          const mid = chordMid(c);
+          if (!cand.geom.intersectsCoordinate(mid)) return true;
+          const len = chordLength(c);
+          const reach = TRIB_REPLACE_FACTOR * Math.max(newLen, len);
+          if (Math.hypot(mid[0] - newMid[0], mid[1] - newMid[1]) > reach) return true;
+          return !sameSide(mid, len);
         });
         return { chord, cuts: [...others, chord] };
       }
@@ -696,10 +798,33 @@ export function PrivateLandAnalysisRoot({ system, onDetailOpenChange, children }
     [drawTribCuts, refreshRanged, removeKinds, tribCutAt]
   );
 
+  /** 시작 위치 찍기 전 — 화면 범위 레이어 면으로 찍을 수 있는 곳 판정 */
+  const layerViewRef = useRef<{
+    geom: Polygon | MultiPolygon | null;
+    segs: ReturnType<typeof collectSegments>;
+    seams: Seam[];
+    bbox: number[];
+  } | null>(null);
+
+  /** 시작 위치 — 커서 위치 하천 폭 방향 선과, 가까운 접선이 있으면 그 접선 */
+  const startChordAt = useCallback(
+    (coord: Coordinate): { width: Chord | null; seam: Chord | null } => {
+      const view = layerViewRef.current;
+      if (!view?.geom || view.segs.length === 0) return { width: null, seam: null };
+      const res = mapRef?.current?.getView().getResolution() ?? 1;
+      const p = snapInside(view.geom, coord, 2 * res);
+      const width = p ? shortestChordAt(view.geom, view.segs, p) : null;
+      /** 화면 범위 면은 해상도, 접선은 해상도 절반으로 단순화돼 내려옴 */
+      return { width, seam: seamChordNear(view.seams, coord, SEAM_SNAP_PX * res, width, view.segs, 2 * res) };
+    },
+    [mapRef]
+  );
+
   const pickStart = useCallback(
     async (coord: Coordinate) => {
       const current = layerRef.current;
       if (!current) return;
+      const viewSeam = startChordAt(coord).seam;
       removeKinds(['chordStart']);
       setPhase('loadingBase');
       try {
@@ -722,13 +847,21 @@ export function PrivateLandAnalysisRoot({ system, onDetailOpenChange, children }
           return;
         }
         const segs = collectSegments(geom);
-        const chord = shortestChordAt(geom, segs, coord);
-        if (!chord) {
+        const seams = readSeams3857(data.seams3857);
+        const allGeom = toAreaGeometry(readGeometry3857(data.allGeometry3857));
+        const all = allGeom ? { geom: allGeom, segs: collectSegments(allGeom) } : null;
+        const widthChord = shortestChordAt(geom, segs, coord);
+        if (!widthChord) {
           flash('이 위치에서는 하천을 가로지르는 선을 만들 수 없습니다.');
           setPhase('start');
           return;
         }
-        baseRef.current = { geom, segs };
+        const resolution = mapRef?.current?.getView().getResolution() ?? 1;
+        const chord =
+          viewSeam ??
+          seamChordNear(seams, coord, SEAM_SNAP_PX * resolution, widthChord, all?.segs ?? segs) ??
+          widthChord;
+        baseRef.current = { geom, segs, seams, all };
         chord1Ref.current = chord;
         riverRef.current = data.river && typeof data.river === 'object' ? data.river : null;
         setRiverKnown(riverRef.current != null);
@@ -740,7 +873,7 @@ export function PrivateLandAnalysisRoot({ system, onDetailOpenChange, children }
         setPhase('start');
       }
     },
-    [addFeature, flash, removeKinds]
+    [addFeature, flash, mapRef, removeKinds, startChordAt]
   );
 
   const chordAt = useCallback(
@@ -748,18 +881,19 @@ export function PrivateLandAnalysisRoot({ system, onDetailOpenChange, children }
       const base = baseRef.current;
       if (!base) return null;
       const res = mapRef?.current?.getView().getResolution() ?? 1;
+      const edgeSegs = base.all?.segs ?? base.segs;
+      /** 시작 하천 밖이지만 이어진 다른 하천 위 — 그 하천을 가로지르는 끝선 */
+      if (!base.geom.intersectsCoordinate(coord) && base.all?.geom.intersectsCoordinate(coord)) {
+        const widthChord = shortestChordAt(base.all.geom, base.all.segs, coord);
+        return seamChordNear(base.seams, coord, SEAM_SNAP_PX * res, widthChord, edgeSegs) ?? widthChord;
+      }
       const p = snapInside(base.geom, coord, SNAP_PX * res);
-      return p ? shortestChordAt(base.geom, base.segs, p) : null;
+      if (!p) return null;
+      const widthChord = shortestChordAt(base.geom, base.segs, p);
+      return seamChordNear(base.seams, coord, SEAM_SNAP_PX * res, widthChord, edgeSegs) ?? widthChord;
     },
     [mapRef]
   );
-
-  /** 시작 위치 찍기 전 — 화면 범위 레이어 면으로 찍을 수 있는 곳 판정 */
-  const layerViewRef = useRef<{
-    geom: Polygon | MultiPolygon | null;
-    segs: ReturnType<typeof collectSegments>;
-    bbox: number[];
-  } | null>(null);
 
   const startAllowed = useCallback(
     (coord: Coordinate): boolean => {
@@ -779,14 +913,11 @@ export function PrivateLandAnalysisRoot({ system, onDetailOpenChange, children }
     (coord: Coordinate | null) => {
       removeKinds(['chordStart']);
       if (!coord) return;
-      const view = layerViewRef.current;
-      if (!view?.geom || view.segs.length === 0) return;
-      const res = mapRef?.current?.getView().getResolution() ?? 1;
-      const p = snapInside(view.geom, coord, 2 * res);
-      const chord = p ? shortestChordAt(view.geom, view.segs, p) : null;
+      const { width, seam } = startChordAt(coord);
+      const chord = seam ?? width;
       if (chord) addFeature('chordStart', chordGeometry(chord));
     },
-    [addFeature, mapRef, removeKinds]
+    [addFeature, removeKinds, startChordAt]
   );
 
   /** 닫힌 범위 — 커서 위치에서 합친 면을 가로지르는 경계선 */
@@ -921,7 +1052,9 @@ export function PrivateLandAnalysisRoot({ system, onDetailOpenChange, children }
         const data = res?.data ?? res;
         const geom = toAreaGeometry(readGeometry3857(data?.geometry3857));
         const usable = !data?.tooLarge && !data?.error;
-        layerViewRef.current = usable ? { geom, segs: geom ? collectSegments(geom) : [], bbox } : null;
+        layerViewRef.current = usable
+          ? { geom, segs: geom ? collectSegments(geom) : [], seams: readSeams3857(data?.seams3857), bbox }
+          : null;
         setViewTooLarge(data?.tooLarge === true);
         drawBase(usable ? geom : null);
       } catch {
@@ -953,12 +1086,42 @@ export function PrivateLandAnalysisRoot({ system, onDetailOpenChange, children }
     const target = map.getTargetElement();
     let raf = 0;
     let lastCoord: Coordinate | null = null;
+    /** 마지막으로 미리보기가 보였던 커서 위치 — 클릭 위치에서 선을 못 만들 때 대신 사용 */
+    let hover: { phase: PrivateLandAnalysisPhase; coord: Coordinate; chord: Chord | null } | null = null;
+    let lastClick: { at: number; pixel: number[] } | null = null;
+    let down: { at: number; x: number; y: number; clicked: boolean } | null = null;
+
+    /** 사유지분석이 바꾼 커서 — 지정 단계가 끝나면(분석 적용 등) 이 커서만 되돌려 다른 지도 기능 커서는 건드리지 않음 */
+    let ownCursor: string | null = null;
+    const setCursor = (value: string) => {
+      if (!target) return;
+      target.style.cursor = value;
+      ownCursor = value;
+    };
+    const clearCursor = () => {
+      if (target && ownCursor !== null && target.style.cursor === ownCursor) target.style.cursor = '';
+      ownCursor = null;
+    };
+
+    const setHover = (coord: Coordinate, chord: Chord | null) => {
+      hover = chord ? { phase: phaseRef.current, coord, chord } : null;
+    };
+    /** 클릭 위치 근처에서 같은 단계에 미리보기로 보였던 위치 */
+    const hoverNear = (pixel: number[]): typeof hover => {
+      if (!hover || hover.phase !== phaseRef.current) return null;
+      const hp = map.getPixelFromCoordinate(hover.coord);
+      if (!hp) return null;
+      return Math.hypot(hp[0] - pixel[0], hp[1] - pixel[1]) <= CLICK_HOVER_TOL_PX ? hover : null;
+    };
 
     const onMove = (evt: MapBrowserEvent<PointerEvent>) => {
       if (evt.dragging) return;
       const p = phaseRef.current;
       if (rangeModeRef.current === 'closed') {
-        if (p !== 'start' && p !== 'ranged') return;
+        if (p !== 'start' && p !== 'ranged') {
+          clearCursor();
+          return;
+        }
         lastCoord = evt.coordinate;
         if (raf) return;
         raf = window.requestAnimationFrame(() => {
@@ -966,7 +1129,8 @@ export function PrivateLandAnalysisRoot({ system, onDetailOpenChange, children }
           const now = phaseRef.current;
           if ((now !== 'start' && now !== 'ranged') || !lastCoord) return;
           const chord = closedChordAt(lastCoord);
-          if (target) target.style.cursor = chord ? 'crosshair' : 'not-allowed';
+          setHover(lastCoord, chord);
+          setCursor(chord ? 'crosshair' : 'not-allowed');
           removeKinds(['chordStart']);
           if (chord) addFeature('chordStart', chordGeometry(chord));
         });
@@ -979,13 +1143,18 @@ export function PrivateLandAnalysisRoot({ system, onDetailOpenChange, children }
           raf = 0;
           if (phaseRef.current !== 'start' || !lastCoord) return;
           const allowed = startAllowed(lastCoord);
-          if (target) target.style.cursor = allowed ? 'crosshair' : 'not-allowed';
+          const { width, seam } = allowed ? startChordAt(lastCoord) : { width: null, seam: null };
+          setHover(lastCoord, seam ?? width);
+          setCursor(allowed ? 'crosshair' : 'not-allowed');
           drawStartChordPreview(allowed ? lastCoord : null);
         });
         return;
       }
       if (p === 'ranged') {
-        if (!tribPickingRef.current) return;
+        if (!tribPickingRef.current) {
+          clearCursor();
+          return;
+        }
         lastCoord = evt.coordinate;
         if (raf) return;
         raf = window.requestAnimationFrame(() => {
@@ -993,7 +1162,9 @@ export function PrivateLandAnalysisRoot({ system, onDetailOpenChange, children }
           const c2 = chord2Ref.current;
           if (phaseRef.current !== 'ranged' || !tribPickingRef.current || !lastCoord || !c2) return;
           const hit = tribCutAt(lastCoord);
-          if (target) target.style.cursor = hit ? 'crosshair' : '';
+          setHover(lastCoord, hit?.chord ?? null);
+          if (hit) setCursor('crosshair');
+          else clearCursor();
           removeKinds(['tribMoving']);
           if (hit) {
             addFeature('tribMoving', chordGeometry(hit.chord));
@@ -1006,39 +1177,58 @@ export function PrivateLandAnalysisRoot({ system, onDetailOpenChange, children }
         });
         return;
       }
-      if (p !== 'end') return;
+      if (p !== 'end') {
+        clearCursor();
+        return;
+      }
       lastCoord = evt.coordinate;
       if (raf) return;
       raf = window.requestAnimationFrame(() => {
         raf = 0;
         if (phaseRef.current !== 'end' || !lastCoord) return;
         const chord = chordAt(lastCoord);
-        if (target) target.style.cursor = chord ? 'crosshair' : 'not-allowed';
+        setHover(lastCoord, chord);
+        setCursor(chord ? 'crosshair' : 'not-allowed');
         drawChord2(chord, true);
         if (chord) requestZonePreview(chord, PREVIEW_DEBOUNCE_MS);
       });
     };
 
-    const onClick = (evt: MapBrowserEvent<PointerEvent>) => {
+    /** 이 단계에서 지도 클릭을 사유지분석이 가져감(다른 지도 클릭·더블클릭 확대 막음) */
+    const ownsClick = (): boolean => {
+      const p = phaseRef.current;
+      if (rangeModeRef.current === 'closed') return p === 'start' || p === 'ranged';
+      return p === 'start' || p === 'loadingBase' || p === 'end' || (p === 'ranged' && tribPickingRef.current);
+    };
+
+    const handleClick = (coordinate: Coordinate, pixel: number[]) => {
+      const now = Date.now();
+      if (
+        lastClick &&
+        now - lastClick.at < CLICK_DEDUPE_MS &&
+        Math.hypot(lastClick.pixel[0] - pixel[0], lastClick.pixel[1] - pixel[1]) <= CLICK_DEDUPE_PX
+      ) {
+        return;
+      }
+      lastClick = { at: now, pixel };
+      const near = hoverNear(pixel);
       const p = phaseRef.current;
       if (rangeModeRef.current === 'closed') {
         if (p !== 'start' && p !== 'ranged') return;
-        evt.stopPropagation();
-        addClosedLine(evt.coordinate);
+        addClosedLine(closedChordAt(coordinate) || !near ? coordinate : near.coord);
         return;
       }
       if (p === 'start') {
-        evt.stopPropagation();
-        if (!startAllowed(evt.coordinate)) {
+        const at = startAllowed(coordinate) ? coordinate : near?.coord;
+        if (!at) {
           flash('선택한 레이어 범위가 아닙니다.');
           return;
         }
-        void pickStart(evt.coordinate);
+        void pickStart(at);
         return;
       }
       if (p === 'end') {
-        evt.stopPropagation();
-        const chord = chordAt(evt.coordinate);
+        const chord = chordAt(coordinate) ?? near?.chord ?? null;
         if (!chord) {
           flash('선택한 레이어 범위가 아닙니다.');
           return;
@@ -1046,7 +1236,7 @@ export function PrivateLandAnalysisRoot({ system, onDetailOpenChange, children }
         chord2Ref.current = chord;
         drawChord2(chord, false);
         const c1 = chord1Ref.current;
-        if (target) target.style.cursor = '';
+        clearCursor();
         phaseRef.current = 'ranged';
         setPhase('ranged');
         const invalid = c1 ? invalidChordPair(c1, chord) : null;
@@ -1056,15 +1246,56 @@ export function PrivateLandAnalysisRoot({ system, onDetailOpenChange, children }
           rangeSeqRef.current += 1;
           setRangeChecking(false);
           setRangeError(invalid);
+          setRiverOpen(false);
           return;
         }
         requestZonePreview(chord, 0);
         return;
       }
-      if (p === 'ranged' && tribPickingRef.current && !rangeBlockedRef.current) {
-        evt.stopPropagation();
-        if (!pickTributaryCut(evt.coordinate)) flash('포함할 지류 위를 찍으세요.');
+      if (p === 'ranged' && tribPickingRef.current) {
+        if (pickTributaryCut(coordinate)) return;
+        if (near && pickTributaryCut(near.coord)) return;
+        flash('포함할 지류 위를 찍으세요.');
       }
+    };
+
+    const onClick = (evt: MapBrowserEvent<PointerEvent>) => {
+      if (down) down.clicked = true;
+      if (!ownsClick()) return;
+      evt.stopPropagation();
+      handleClick(evt.coordinate, evt.pixel);
+    };
+
+    const onDblClick = (evt: MapBrowserEvent<PointerEvent>) => {
+      if (ownsClick()) evt.stopPropagation();
+    };
+
+    /** 누른 채 조금 움직여 지도 끌기로 처리돼 클릭이 사라진 경우 */
+    const viewport = map.getViewport();
+    const onMapSurface = (e: PointerEvent): boolean => {
+      const el = e.target as Node | null;
+      return el != null && viewport.contains(el) && !map.getOverlayContainerStopEvent().contains(el);
+    };
+    const onPointerDown = (e: PointerEvent) => {
+      down =
+        e.isPrimary && e.button === 0 && onMapSurface(e)
+          ? { at: Date.now(), x: e.clientX, y: e.clientY, clicked: false }
+          : null;
+    };
+    const onPointerUp = (e: PointerEvent) => {
+      const d = down;
+      if (!d || !e.isPrimary || e.button !== 0) return;
+      if (Date.now() - d.at > CLICK_MAX_MS || Math.hypot(e.clientX - d.x, e.clientY - d.y) > CLICK_MOVE_TOL_PX) {
+        down = null;
+        return;
+      }
+      window.setTimeout(() => {
+        if (down === d) down = null;
+        if (d.clicked || !ownsClick()) return;
+        const pixel = map.getEventPixel(e);
+        const coordinate = map.getCoordinateFromPixel(pixel);
+        if (coordinate) handleClick(coordinate, pixel);
+      }, 0);
     };
 
     const onKey = (e: KeyboardEvent) => {
@@ -1077,11 +1308,17 @@ export function PrivateLandAnalysisRoot({ system, onDetailOpenChange, children }
     };
 
     const moveKey = map.on('pointermove', onMove as never);
-    const clickKey = map.on('singleclick', onClick as never);
+    const clickKey = map.on('click', onClick as never);
+    const dblClickKey = map.on('dblclick', onDblClick as never);
+    viewport.addEventListener('pointerdown', onPointerDown);
+    viewport.addEventListener('pointerup', onPointerUp);
     window.addEventListener('keydown', onKey);
     return () => {
       unByKey(moveKey);
       unByKey(clickKey);
+      unByKey(dblClickKey);
+      viewport.removeEventListener('pointerdown', onPointerDown);
+      viewport.removeEventListener('pointerup', onPointerUp);
       window.removeEventListener('keydown', onKey);
       if (raf) window.cancelAnimationFrame(raf);
       if (target) target.style.cursor = '';
@@ -1103,6 +1340,7 @@ export function PrivateLandAnalysisRoot({ system, onDetailOpenChange, children }
     removeKinds,
     requestZonePreview,
     startAllowed,
+    startChordAt,
     tribCutAt,
   ]);
 
@@ -1308,11 +1546,13 @@ export function PrivateLandAnalysisRoot({ system, onDetailOpenChange, children }
       tributaryPicking,
       openTributaryPick,
       closeTributaryPick,
+      undoTributaryCut,
       areaModalOpen,
       openAreaModal,
       closeAreaModal,
       rangeChecking,
       rangeError,
+      riverOpen,
       rangeMode,
       closedLineCount,
       closedOpen,
@@ -1328,6 +1568,7 @@ export function PrivateLandAnalysisRoot({ system, onDetailOpenChange, children }
     }),
     [
       apply,
+      riverOpen,
       rangeMode,
       closedLineCount,
       closedOpen,
@@ -1336,6 +1577,7 @@ export function PrivateLandAnalysisRoot({ system, onDetailOpenChange, children }
       tributaryPicking,
       openTributaryPick,
       closeTributaryPick,
+      undoTributaryCut,
       areaModalOpen,
       closeAreaModal,
       openAreaModal,

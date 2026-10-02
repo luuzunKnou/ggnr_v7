@@ -2,7 +2,7 @@
 
 import '@/app/(pages)/map/_mapComponents/config/projections';
 import { useEffect, useRef, useState } from 'react';
-import Feature from 'ol/Feature';
+import Feature, { type FeatureLike } from 'ol/Feature';
 import Map from 'ol/Map';
 import type MapBrowserEvent from 'ol/MapBrowserEvent';
 import View from 'ol/View';
@@ -58,7 +58,7 @@ const currentPointStyle = new Style({
   }),
 });
 
-function pointStyle(feature: Feature) {
+function pointStyle(feature: FeatureLike) {
   return feature.get('current') ? currentPointStyle : otherPointStyle;
 }
 
@@ -209,8 +209,8 @@ export function PanoViewerInsetMap({
       if (el) el.style.cursor = hits.some((feat) => feat.get('fileId')) ? 'pointer' : '';
     };
     const onView = () => sync();
-    map.on('singleclick', onClick);
-    map.on('pointermove', onMove);
+    map.on('singleclick', onClick as never);
+    map.on('pointermove', onMove as never);
     map.on('change:view', onView);
     sync();
     recenter();
@@ -222,8 +222,8 @@ export function PanoViewerInsetMap({
       mainLayers.un('add', syncMainLayers);
       mainLayers.un('remove', syncMainLayers);
       clearDynamicLayerMirrors(map, mirrorRegistry);
-      map.un('singleclick', onClick);
-      map.un('pointermove', onMove);
+      map.un('singleclick', onClick as never);
+      map.un('pointermove', onMove as never);
       map.un('change:view', onView);
       syncRef.current = () => {};
       recenterRef.current = () => {};

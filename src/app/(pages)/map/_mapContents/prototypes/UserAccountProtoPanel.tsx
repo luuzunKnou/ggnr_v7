@@ -76,7 +76,7 @@ type Props = {
   open: boolean
   onClose: () => void
   onOpenLedger: (item: ProtoNotifItem) => void
-  onOpenFee: (feeId: string) => void
+  onOpenFee: (item: ProtoNotifItem) => void
   onOpenMissingGeom?: (item: ProtoNotifItem) => void
   /** 내 촬영요청 행 선택 시 (신청서 모달 등) */
   onSelectShootingRequest?: (id: string) => void

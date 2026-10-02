@@ -189,6 +189,7 @@ async function listMissingDroneGeomNotifications(): Promise<Omit<BizNotifItem, '
         target: 'aerial',
         targetId: `wu-${wuKey}:fu-${fuKey}`,
         systemScope: 'uav',
+        serEng: 'aerialDrone',
       });
     }
     return out;
