@@ -2,7 +2,7 @@
 
 import '@/app/(pages)/map/_mapComponents/config/projections';
 import { useEffect, useRef, useState } from 'react';
-import Feature from 'ol/Feature';
+import Feature, { type FeatureLike } from 'ol/Feature';
 import Map from 'ol/Map';
 import type MapBrowserEvent from 'ol/MapBrowserEvent';
 import View from 'ol/View';
@@ -58,7 +58,7 @@ const currentPointStyle = new Style({
   }),
 });
 
-function pointStyle(feature: Feature) {
+function pointStyle(feature: FeatureLike) {
   return feature.get('current') ? currentPointStyle : otherPointStyle;
 }
 
@@ -194,7 +194,7 @@ export function PanoViewerInsetMap({
     };
     syncRef.current = sync;
     recenterRef.current = recenter;
-    const onClick = (evt: MapBrowserEvent<PointerEvent>) => {
+    const onClick = (evt: MapBrowserEvent) => {
       const hits = map.getFeaturesAtPixel(evt.pixel, { hitTolerance: 8 }) as Feature[];
       const picked = hits.find((feat) => feat.get('fileId'));
       if (!picked) return;
@@ -203,7 +203,7 @@ export function PanoViewerInsetMap({
       if (!unitId || !fileId) return;
       onPickRef.current?.(unitId, fileId);
     };
-    const onMove = (evt: MapBrowserEvent<PointerEvent>) => {
+    const onMove = (evt: MapBrowserEvent) => {
       const hits = map.getFeaturesAtPixel(evt.pixel, { hitTolerance: 8 }) as Feature[];
       const el = map.getTargetElement();
       if (el) el.style.cursor = hits.some((feat) => feat.get('fileId')) ? 'pointer' : '';
