@@ -58,7 +58,8 @@ function loadRuntimeEnv(projectName: string): void {
       if (eq <= 0) continue;
       const key = trimmed.slice(0, eq).trim();
       const value = trimmed.slice(eq + 1).trim();
-      if (key) (process.env as Record<string, string>)[key] = value;
+      if (!key || key === 'GGNR_DATA_DIR') continue;
+      (process.env as Record<string, string>)[key] = value;
     }
   };
   applyRuntimeEnvFile(path.join(dir, 'common.runtime.env'));

@@ -24,7 +24,7 @@ import {
 const SYS_ADMIN_MENUS = SYS_MANAGER_CONSOLE_MENUS
 
 /** 캡쳐 대분류와 동일 그룹 (개발자 콘솔 menuGroups 패턴) */
-export const SYS_MANAGER_MENU_GROUPS: readonly AdminConsoleMenuGroup[] = [
+const SYS_MANAGER_MENU_GROUPS: readonly AdminConsoleMenuGroup[] = [
   {
     id: "userManagement",
     label: "사용자관리",

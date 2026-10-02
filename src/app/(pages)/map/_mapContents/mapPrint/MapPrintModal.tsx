@@ -12,7 +12,8 @@ import {
   type MapPrintSnapshot,
   type MapPrintTool,
 } from './mapPrintTypes';
-import { downloadMapPrintImage, formatPrintDateTime, formatPrintScaleMeters, printMapPrintPaper } from './mapPrintCapture';
+import { MapScaleIndicator } from '@/app/(pages)/map/_mapComponents/hooks/MapScaleIndicator';
+import { downloadMapPrintImage, formatPrintDateTime, printMapPrintPaper } from './mapPrintCapture';
 import { useMapPrintMap } from './useMapPrintMap';
 import { useMapPrintTools } from './useMapPrintTools';
 import { MapPrintToolbar } from './MapPrintToolbar';
@@ -94,7 +95,6 @@ function MapPrintModalView({ open, onClose, snapshot, backgroundMapGroups }: Pro
     setFromSnapshot(snapshot?.visibleThematicLayerNames)
   );
   const [openControlId, setOpenControlId] = useState<PrintControlLayerId | null>(null);
-  const [scaleText, setScaleText] = useState('—');
   const [printedAt, setPrintedAt] = useState(() => formatPrintDateTime());
   const [busy, setBusy] = useState(false);
 
@@ -132,7 +132,7 @@ function MapPrintModalView({ open, onClose, snapshot, backgroundMapGroups }: Pro
     setPrintedAt(formatPrintDateTime());
   }, [open, snapshot]);
 
-  const { map } = useMapPrintMap(
+  const { map, mapReady } = useMapPrintMap(
     mapHostRef,
     open,
     snapshot,
@@ -156,16 +156,6 @@ function MapPrintModalView({ open, onClose, snapshot, backgroundMapGroups }: Pro
     color,
     stopElevationTool
   );
-
-  useEffect(() => {
-    if (!map) return;
-    const update = () => setScaleText(formatPrintScaleMeters(map));
-    update();
-    map.on('moveend', update);
-    return () => {
-      map.un('moveend', update);
-    };
-  }, [map]);
 
   const userName = String(session?.user?.name ?? '').trim() || '게스트';
 
@@ -345,10 +335,14 @@ function MapPrintModalView({ open, onClose, snapshot, backgroundMapGroups }: Pro
           <div className="map-print-footer-left">
             본 지도는 참고용이며, 복제·배포 시 관련 규정을 확인하세요.
           </div>
-          <div className="map-print-footer-right">
-            <div>축척 {scaleText}</div>
-            <div>담당자 : {userName}</div>
-            <div>{printedAt}</div>
+          <div className="map-print-footer-right-wrap">
+            <div className="map-print-footer-scale">
+              <MapScaleIndicator map={map} mapReady={mapReady} editable />
+            </div>
+            <div className="map-print-footer-right">
+              <div>담당자 : {userName}</div>
+              <div>{printedAt}</div>
+            </div>
           </div>
         </div>
       </div>

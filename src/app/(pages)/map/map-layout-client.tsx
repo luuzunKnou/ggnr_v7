@@ -180,6 +180,7 @@ import {
 } from "@/lib/mapServiceMenuLayers"
 import { normalizeOpenedToken } from "@/lib/mapServiceOpened"
 import {
+  isOpenedTokenAllowedForServiceList,
   scrubMapSearchParamsOnSystemSwitch,
   scrubOpenedNotAllowedForSystem,
 } from "@/lib/mapSystemSwitch"
@@ -193,6 +194,9 @@ import { MapSearchBar } from "./_mapComponents/map-search-bar"
 import { MapContextProvider, useMapContext } from "./_mapComponents/MapContext"
 import { applyViewPaddingPreservingVisualCenter } from "./_mapComponents/config/mapVisualCenter"
 import { MapSideListPanel } from "./_mapComponents/MapSideListPanel"
+import { PrivateLandAnalysisRoot } from "./_mapContents/privateLandAnalysis/PrivateLandAnalysisContext"
+import { PrivateLandAnalysisListPanel } from "./_mapContents/privateLandAnalysis/PrivateLandAnalysisListPanel"
+import { PrivateLandAnalysisDetailPanel } from "./_mapContents/privateLandAnalysis/PrivateLandAnalysisDetailPanel"
 import { SerWriteAccessProvider } from "@/hooks/useSerWriteAccess"
 import { SearchBarOffsetContext } from "./searchBarOffsetContext"
 const SIDEBAR_WIDTH = 65
@@ -413,6 +417,15 @@ const FMS_PANEL_MAX_WIDTH = 800
 const FMS_DETAIL_DEFAULT_WIDTH = 445
 const FMS_DETAIL_MIN_WIDTH = 380
 const FMS_DETAIL_MAX_WIDTH = 500
+
+/** 사유지분석 — ser_eng privateLandAnalysis */
+const PRIVATE_LAND_ANALYSIS_OPENED_KEY = "privateLandAnalysis"
+const PRIVATE_LAND_ANALYSIS_PANEL_DEFAULT_WIDTH = 380
+const PRIVATE_LAND_ANALYSIS_PANEL_MIN_WIDTH = 320
+const PRIVATE_LAND_ANALYSIS_PANEL_MAX_WIDTH = 640
+const PRIVATE_LAND_ANALYSIS_DETAIL_DEFAULT_WIDTH = 375
+const PRIVATE_LAND_ANALYSIS_DETAIL_MIN_WIDTH = 340
+const PRIVATE_LAND_ANALYSIS_DETAIL_MAX_WIDTH = 640
 
 const RIVER_USE_LEDGER_PANEL_DEFAULT_WIDTH = 660
 const RIVER_USE_LEDGER_PANEL_MIN_WIDTH = 480
@@ -665,6 +678,15 @@ function MapLayoutContent({
   const groundwaterPermitOpen = openedWindows.includes(GROUNDWATER_PERMIT_OPENED_KEY)
   const fmsLinkageOpen = openedWindows.some((w) => isFmsOpenedToken(w))
   const fmsLinkageDetailOpen = fmsLinkageOpen && Boolean(fmsLinkageDetailId)
+  const privateLandAnalysisOpen = openedWindows.includes(PRIVATE_LAND_ANALYSIS_OPENED_KEY)
+  const [privateLandAnalysisDetailSelected, setPrivateLandAnalysisDetailSelected] = useState(false)
+  const privateLandAnalysisDetailOpen = privateLandAnalysisOpen && privateLandAnalysisDetailSelected
+  const [privateLandAnalysisPanelWidth, setPrivateLandAnalysisPanelWidth] = useState(
+    PRIVATE_LAND_ANALYSIS_PANEL_DEFAULT_WIDTH
+  )
+  const [privateLandAnalysisDetailWidth, setPrivateLandAnalysisDetailWidth] = useState(
+    PRIVATE_LAND_ANALYSIS_DETAIL_DEFAULT_WIDTH
+  )
   const [buildPublicLandSelectedId, setBuildPublicLandSelectedId] = useState<string | null>(null)
   const [buildPublicLandListRefreshKey, setBuildPublicLandListRefreshKey] = useState(0)
   const buildPublicLandDetailOpen = buildPublicLandOpen && Boolean(buildPublicLandSelectedId)
@@ -970,7 +992,9 @@ function MapLayoutContent({
     (groundwaterPermitOpen ? groundwaterPermitPanelWidth : 0) +
     (groundwaterPermitDetailOpen ? groundwaterPermitDetailWidth : 0) +
     (fmsLinkageOpen ? fmsLinkagePanelWidth : 0) +
-    (fmsLinkageDetailOpen ? fmsLinkageDetailWidth : 0)
+    (fmsLinkageDetailOpen ? fmsLinkageDetailWidth : 0) +
+    (privateLandAnalysisOpen ? privateLandAnalysisPanelWidth : 0) +
+    (privateLandAnalysisDetailOpen ? privateLandAnalysisDetailWidth : 0)
   const searchBarOffset = {
     leftPx: SIDEBAR_WIDTH + totalListPanelWidth + SEARCH_BAR_MARGIN,
     topPx: 16,
@@ -1114,6 +1138,10 @@ function MapLayoutContent({
     (groundwaterPermitDetailOpen ? groundwaterPermitDetailWidth : 0)
   const fmsLinkageDetailLeftPx =
     fmsLinkagePanelLeftPx + (fmsLinkageOpen ? fmsLinkagePanelWidth : 0)
+  const privateLandAnalysisPanelLeftPx =
+    fmsLinkageDetailLeftPx + (fmsLinkageDetailOpen ? fmsLinkageDetailWidth : 0)
+  const privateLandAnalysisDetailLeftPx =
+    privateLandAnalysisPanelLeftPx + (privateLandAnalysisOpen ? privateLandAnalysisPanelWidth : 0)
   const mapPaddingLeft = SIDEBAR_WIDTH + totalListPanelWidth
   /** 패딩은 useLayoutEffect — 자식 useEffect(도로대장 fit 등)보다 먼저 적용되어야 함.
    * 거리뷰 ON일 때만 맵 중심(A)을 새 센터마크 위치에 맞춤.
@@ -1641,6 +1669,10 @@ function MapLayoutContent({
     setFmsLinkageOverlayRows?.([])
     const next = openedWindows.filter((w) => !isFmsOpenedToken(w))
     setOpened(next)
+  }
+
+  const handleClosePrivateLandAnalysis = () => {
+    setOpened(openedWindows.filter((w) => w !== PRIVATE_LAND_ANALYSIS_OPENED_KEY))
   }
 
   useEffect(() => {
@@ -3316,6 +3348,39 @@ function MapLayoutContent({
               </MapSideListPanel>
             </div>
           )}
+          {privateLandAnalysisOpen && (
+            <PrivateLandAnalysisRoot
+              key={systemKeyFromUrl}
+              system={systemKeyFromUrl}
+              onDetailOpenChange={setPrivateLandAnalysisDetailSelected}
+            >
+              <div className="pointer-events-auto shrink-0">
+                <MapSideListPanel
+                  width={privateLandAnalysisPanelWidth}
+                  minWidth={PRIVATE_LAND_ANALYSIS_PANEL_MIN_WIDTH}
+                  maxWidth={PRIVATE_LAND_ANALYSIS_PANEL_MAX_WIDTH}
+                  leftOffsetPx={privateLandAnalysisPanelLeftPx}
+                  onWidthChange={setPrivateLandAnalysisPanelWidth}
+                >
+                  <PrivateLandAnalysisListPanel onClose={handleClosePrivateLandAnalysis} />
+                </MapSideListPanel>
+              </div>
+              {privateLandAnalysisDetailOpen && (
+                <div className="pointer-events-auto shrink-0">
+                  <MapSideListPanel
+                    width={privateLandAnalysisDetailWidth}
+                    minWidth={PRIVATE_LAND_ANALYSIS_DETAIL_MIN_WIDTH}
+                    maxWidth={PRIVATE_LAND_ANALYSIS_DETAIL_MAX_WIDTH}
+                    leftOffsetPx={privateLandAnalysisDetailLeftPx}
+                    onWidthChange={setPrivateLandAnalysisDetailWidth}
+                    contentClassName="overflow-hidden"
+                  >
+                    <PrivateLandAnalysisDetailPanel />
+                  </MapSideListPanel>
+                </div>
+              )}
+            </PrivateLandAnalysisRoot>
+          )}
           <div className="flex-1 min-w-0 relative">
             <div className="pointer-events-auto">
               <MapSearchBar
@@ -3387,21 +3452,63 @@ function MapLayoutContent({
                 onOpenLedger={(item) => {
                   const key = String(item.notifKey ?? "")
                   if (key.startsWith("occup-expiry:")) {
-                    const serEng = getOccupationLedgerBinding({
-                      system: item.systemScope,
-                    })?.serEng
+                    const prefix = key.split(":")[1] ?? ""
+                    const serEng =
+                      String(item.serEng ?? "").trim() ||
+                      getOccupationLedgerBinding({ prefix })?.serEng ||
+                      getOccupationLedgerBinding({ system: item.systemScope })?.serEng
                     if (!serEng) return
-                    setOpened([serEng])
+                    const current = new URLSearchParams(
+                      Array.from(searchParams.entries())
+                    )
+                    const curList =
+                      systemListForOpened.find((s) => s.sys_key === systemKeyFromUrl)
+                        ?.serviceList ?? []
+                    if (!isOpenedTokenAllowedForServiceList(serEng, curList)) {
+                      const found = systemListForOpened.find((s) =>
+                        isOpenedTokenAllowedForServiceList(serEng, s.serviceList ?? [])
+                      )
+                      if (found?.sys_key) current.set("system", found.sys_key)
+                    }
+                    current.set("opened", serEng)
+                    pushMapQuery(current)
                     setOccupationLedgerDetailId(item.targetId)
+                    setProtoUserAccountOpen(false)
                     return
                   }
-                  setOpened([USAGE_DATA_AS_OPENED_KEY])
+                  const current = new URLSearchParams(
+                    Array.from(searchParams.entries())
+                  )
+                  current.set("opened", USAGE_DATA_AS_OPENED_KEY)
+                  pushMapQuery(current)
                   setUsageDataAsDetailId(item.targetId)
+                  setProtoUserAccountOpen(false)
                 }}
-                onOpenFee={(feeId) => {
-                  const feeSerEng = getUseFeeBinding({ system: systemKeyFromUrl }).serEng
-                  setOpened([feeSerEng])
-                  setUseFeeDetailId(feeId)
+                onOpenFee={(item) => {
+                  const key = String(item.notifKey ?? "")
+                  const prefixFromKey = key.match(/^use-fee-due:(water|road|public):/)?.[1]
+                  const feeSerEng =
+                    String(item.serEng ?? "").trim() ||
+                    getUseFeeBinding({
+                      prefix: prefixFromKey,
+                      system: item.systemScope || systemKeyFromUrl,
+                    }).serEng
+                  const current = new URLSearchParams(
+                    Array.from(searchParams.entries())
+                  )
+                  const curList =
+                    systemListForOpened.find((s) => s.sys_key === systemKeyFromUrl)
+                      ?.serviceList ?? []
+                  if (!isOpenedTokenAllowedForServiceList(feeSerEng, curList)) {
+                    const found = systemListForOpened.find((s) =>
+                      isOpenedTokenAllowedForServiceList(feeSerEng, s.serviceList ?? [])
+                    )
+                    if (found?.sys_key) current.set("system", found.sys_key)
+                  }
+                  current.set("opened", feeSerEng)
+                  pushMapQuery(current)
+                  setUseFeeDetailId(item.targetId)
+                  setProtoUserAccountOpen(false)
                 }}
                 onOpenMissingGeom={(item) => {
                   const matched = /^wu-(\d+):fu-(\d+)$/.exec(String(item.targetId ?? ""))

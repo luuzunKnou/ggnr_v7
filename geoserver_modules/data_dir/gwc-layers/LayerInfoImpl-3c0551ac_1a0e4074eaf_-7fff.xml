@@ -1,5 +1,5 @@
 <GeoServerTileLayer>
-  <id>LayerInfoImpl--2053d3:19d606c4ff1:30d9</id>
+  <id>LayerInfoImpl-3c0551ac:1a0e4074eaf:-7fff</id>
   <enabled>true</enabled>
   <inMemoryCached>true</inMemoryCached>
   <name>ggnr:sd_cold_wave_shelter</name>
@@ -10,25 +10,9 @@
   <gridSubsets>
     <gridSubset>
       <gridSetName>EPSG:4326</gridSetName>
-      <extent>
-        <coords>
-          <double>124.690945083469</double>
-          <double>33.06686315649075</double>
-          <double>129.68949330528054</double>
-          <double>38.57459355282203</double>
-        </coords>
-      </extent>
     </gridSubset>
     <gridSubset>
       <gridSetName>EPSG:900913</gridSetName>
-      <extent>
-        <coords>
-          <double>1.3880532513223808E7</double>
-          <double>3904182.2957548737</double>
-          <double>1.443696835598149E7</double>
-          <double>4660917.648938978</double>
-        </coords>
-      </extent>
     </gridSubset>
   </gridSubsets>
   <metaWidthHeight>
@@ -42,7 +26,7 @@
       <key>STYLES</key>
       <defaultValue></defaultValue>
       <availableStyles class="sorted-set"/>
-      <defaultStyle>sd_cold_wave_shelter</defaultStyle>
+      <defaultStyle>generic</defaultStyle>
     </styleParameterFilter>
   </parameterFilters>
   <gutter>0</gutter>
