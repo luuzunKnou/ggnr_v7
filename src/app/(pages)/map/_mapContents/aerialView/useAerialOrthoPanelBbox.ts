@@ -173,7 +173,7 @@ export function useAerialOrthoPanelBbox(params: {
       map.addLayer(activeLayerRef.current);
     }
 
-    const onClick = (evt: MapBrowserEvent<PointerEvent>) => {
+    const onClick = (evt: MapBrowserEvent) => {
       const seen = new Set<number>();
       const hits: Feature[] = [];
       const pushHit = (feat: Feature) => {
@@ -208,11 +208,11 @@ export function useAerialOrthoPanelBbox(params: {
         wuKey,
         tuKey,
         overlaps,
-        clientX: pointer.clientX,
-        clientY: pointer.clientY,
+        clientX: 'clientX' in pointer ? pointer.clientX : 0,
+        clientY: 'clientY' in pointer ? pointer.clientY : 0,
       });
     };
-    const onMove = (evt: MapBrowserEvent<PointerEvent>) => {
+    const onMove = (evt: MapBrowserEvent) => {
       if (!onPickRef.current) return;
       const hit = source.getFeaturesAtCoordinate(evt.coordinate).length > 0;
       const el = map.getTargetElement();

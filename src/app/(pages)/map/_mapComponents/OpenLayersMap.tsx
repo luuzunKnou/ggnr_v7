@@ -151,7 +151,7 @@ import {
   USE_FEE_ROAD_OCCUPATION_WMS_LAYER_ID,
   USE_FEE_WATER_OCCUPATION_WMS_LAYER_ID,
 } from '../_mapContents/useFee/useFeeMapSync';
-import { Check, Crosshair } from 'lucide-react';
+import { Crosshair } from 'lucide-react';
 import './config/projections';
 import VectorSource from 'ol/source/Vector';
 import VectorLayer from 'ol/layer/Vector';
@@ -1693,8 +1693,8 @@ export default function OpenLayersMap({
     return next;
   }, [aerialViewCheckedIds]);
   useAerialOrthoPanelBbox({
-    enabled: checkedOrthoWuKeys.size > 0 && !leftOrthoBboxOn,
-    wuKeys: [...checkedOrthoWuKeys],
+    enabled: (aerialPanelOpen || checkedOrthoWuKeys.size > 0) && !leftOrthoBboxOn,
+    wuKeys: aerialPanelOpen ? undefined : [...checkedOrthoWuKeys],
     fitView: false,
     checkedWuKeys: checkedOrthoWuKeys,
     highlightWuKey: orthoOverlapMenu ? orthoOverlapHoverWu : null,
@@ -2914,19 +2914,20 @@ export default function OpenLayersMap({
                 {orthoOverlapMenu.items.map((item) => {
                   const on = aerialViewCheckedIds.has(`wu-${item.wuKey}`);
                   return (
-                  <button
-                    key={item.wuKey}
-                    type="button"
-                    className="flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-xs hover:bg-muted"
-                    onMouseEnter={() => setOrthoOverlapHoverWu(item.wuKey)}
-                    onMouseLeave={() => setOrthoOverlapHoverWu(null)}
-                    onClick={() => {
-                      toggleOrthoUnit(item.wuKey);
-                    }}
-                  >
-                    <span className="min-w-0 flex-1 truncate">{item.label}</span>
-                    {on ? <Check className="h-3.5 w-3.5 shrink-0 text-primary" aria-label="켜짐" /> : null}
-                  </button>
+                    <label
+                      key={item.wuKey}
+                      className="flex w-full cursor-pointer items-center gap-2 px-2.5 py-1.5 text-left text-xs hover:bg-muted"
+                      onMouseEnter={() => setOrthoOverlapHoverWu(item.wuKey)}
+                      onMouseLeave={() => setOrthoOverlapHoverWu(null)}
+                    >
+                      <input
+                        type="checkbox"
+                        className="h-3.5 w-3.5 shrink-0 rounded border-gray-300"
+                        checked={on}
+                        onChange={() => toggleOrthoUnit(item.wuKey)}
+                      />
+                      <span className="min-w-0 flex-1 truncate">{item.label}</span>
+                    </label>
                   );
                 })}
               </div>

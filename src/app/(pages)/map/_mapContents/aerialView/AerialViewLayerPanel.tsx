@@ -6,6 +6,7 @@ import { Input } from '@/app/shadcnComponents/ui/input';
 import { cn } from '@/lib/utils';
 import { call } from '@/lib/api';
 import { MAP_LAYER_PANEL_SURFACE_CLASS } from '../../_mapComponents/mapControlPanel/mapLayerPanelLayout';
+import { AerialPipelineStatus } from './AerialPipelineStatus';
 import type { AerialKind, WorkUnitItem } from './aerialMediaTypes';
 import { deriveOrthoUnitStatus } from './aerialMediaTypes';
 import {
@@ -200,12 +201,13 @@ export function AerialViewLayerPanel({
             openKinds.has('panorama') && 'font-medium text-foreground'
           )}
         >
-          <span className="h-2.5 w-2.5 rotate-45 bg-orange-500" />
+          <span className="h-2.5 w-2.5 bg-orange-500" />
           항공뷰
         </button>
       </div>
 
       <div className="shrink-0 border-b border-slate-100 px-2.5 py-2 dark:border-white/10">
+        <AerialPipelineStatus />
         <div className="relative">
           <Search className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
           <Input
@@ -276,6 +278,7 @@ export function AerialViewLayerPanel({
                                     ? 'font-medium text-primary'
                                     : 'text-slate-700 dark:text-white/90'
                                 )}
+                                title={u.workName}
                               >
                                 {u.workName}
                               </span>

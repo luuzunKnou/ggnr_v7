@@ -2240,7 +2240,26 @@ export async function applyAllSchemaComments(params?: DbConnectionParams): Promi
   try {
     await withClient(connParams, async (client) => {
       const tables = getSchemaDefinedTables();
+      const schemas = [...new Set(tables.map((t) => t.schema))];
+      const existingRes = await client.query<{ table_schema: string; table_name: string }>(
+        `SELECT table_schema, table_name
+         FROM information_schema.tables
+         WHERE table_type = 'BASE TABLE' AND table_schema = ANY($1::text[])`,
+        [schemas]
+      );
+      const existingTables = new Set(existingRes.rows.map((r) => `${r.table_schema}.${r.table_name}`));
+      const colRes = await client.query<{ table_schema: string; table_name: string; column_name: string }>(
+        `SELECT table_schema, table_name, column_name
+         FROM information_schema.columns
+         WHERE table_schema = ANY($1::text[])`,
+        [schemas]
+      );
+      const existingCols = new Set(
+        colRes.rows.map((r) => `${r.table_schema}.${r.table_name}.${r.column_name}`)
+      );
+
       for (const { schema, table } of tables) {
+        if (!existingTables.has(`${schema}.${table}`)) continue;
         const tableComment = getSchemaTableComment(schema, table);
         if (tableComment && tableComment.trim()) {
           const escaped = tableComment.replace(/'/g, "''");
@@ -2250,6 +2269,7 @@ export async function applyAllSchemaComments(params?: DbConnectionParams): Promi
         const cols = getSchemaDefinedColumns(schema, table);
         if (cols) {
           for (const col of cols) {
+            if (!existingCols.has(`${schema}.${table}.${col.name}`)) continue;
             const comment = getSchemaColumnComment(schema, table, col.name) ?? col.comment;
             if (comment && String(comment).trim()) {
               const escaped = String(comment).replace(/'/g, "''");

@@ -9,6 +9,7 @@ import type { ConvertStatus, WorkUnitItem } from './aerialMediaTypes';
 import { deriveOrthoUnitStatus } from './aerialMediaTypes';
 import { fileMissingGeom } from './aerialLocationParse';
 import { MissingGeomMark, StatusBadge } from './AerialMediaUi';
+import { AerialPipelineStatus } from './AerialPipelineStatus';
 import { DroneDropFolderHint } from './DroneDropFolderHint';
 
 type Props = {
@@ -37,7 +38,7 @@ type Props = {
   toolsExtra?: ReactNode;
   /** 사진·동영상·항공뷰: 자료 폴더에 넣는 방법 */
   showDropFolderHint?: boolean;
-  dropFolderKind?: 'drone' | 'panorama';
+  dropFolderKind?: 'drone' | 'panorama' | 'ortho';
   emptyHint?: string;
 };
 
@@ -137,6 +138,7 @@ export function WorkUnitListPanel({
         ) : null}
 
         {onUpload && showDropFolderHint ? <DroneDropFolderHint kind={dropFolderKind} /> : null}
+        {showDropFolderHint ? <AerialPipelineStatus /> : null}
 
         {toolsExtra}
 

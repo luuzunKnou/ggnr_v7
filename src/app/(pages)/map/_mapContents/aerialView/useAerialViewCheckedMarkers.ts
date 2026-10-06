@@ -2,7 +2,7 @@
 
 import '@/app/(pages)/map/_mapComponents/config/projections';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import Feature from 'ol/Feature';
+import Feature, { type FeatureLike } from 'ol/Feature';
 import type MapBrowserEvent from 'ol/MapBrowserEvent';
 import Point from 'ol/geom/Point';
 import VectorLayer from 'ol/layer/Vector';
@@ -40,9 +40,9 @@ const KIND_LABEL: Record<string, string> = {
   panorama: '항공뷰',
 };
 
-const markerStyleCache = new Map<string, Style>();
+const markerStyleCache = new globalThis.Map<string, Style>();
 
-function markerStyle(feature: Feature) {
+function markerStyle(feature: FeatureLike) {
   const kind = String(feature.get('kind') ?? 'drone');
   const cached = markerStyleCache.get(kind);
   if (cached) return cached;
@@ -188,7 +188,7 @@ export function useAerialViewCheckedMarkers(params: {
       layerRef.current = layer;
     }
 
-    const onClick = (evt: MapBrowserEvent<PointerEvent>) => {
+    const onClick = (evt: MapBrowserEvent) => {
       if (!layerRef.current) return;
       const hits = map.getFeaturesAtPixel(evt.pixel, {
         layerFilter: (candidate) => candidate === layerRef.current,
@@ -225,7 +225,7 @@ export function useAerialViewCheckedMarkers(params: {
     });
     map.addOverlay(tipOverlay);
 
-    const onMove = (evt: MapBrowserEvent<PointerEvent>) => {
+    const onMove = (evt: MapBrowserEvent) => {
       if (!layerRef.current) return;
       const hits = map.getFeaturesAtPixel(evt.pixel, {
         layerFilter: (candidate) => candidate === layerRef.current,
@@ -326,7 +326,6 @@ export function useAerialViewCheckedMarkers(params: {
       {
         file,
         files: unit.files,
-        workName: unit.workName,
         workDate: unit.workDate,
         ...aerialShotMeta(unit),
         onClose: () => {
