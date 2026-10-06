@@ -1,33 +1,26 @@
 import { NextResponse } from 'next/server';
 import { getSessionUsrId } from '@/lib/auth/guard';
-import { getRemoteUploadBase } from '@/service/sourceUploadRemote';
+import { checkRemoteTargetReady } from '@/service/sourceUploadRemote';
 
 export const dynamic = 'force-dynamic';
 
-/**
- * 사전 점검 — 서버는 GNMS에 접속하지 않음.
- * 실제 연결 확인은 브라우저가 원격 전송 시 수행.
- */
+/** 소스코드 업로드 사전 점검 — 이 서버가 GNMS에 접속해 확인 */
 export async function GET() {
   try {
     if (!(await getSessionUsrId())) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
-    const remoteBase = getRemoteUploadBase();
+    const pre = await checkRemoteTargetReady();
     return NextResponse.json({
-      ok: true,
-      remoteBase,
-      targetHost: '',
-      targetOrigin: '',
-      targetLabel: `URL=${remoteBase}`,
-      deferredBrowserCheck: true,
-      checks: [
-        {
-          id: 'target',
-          ok: true,
-          message: `브라우저가 ${remoteBase} 로 직접 전송합니다 (서버 outbound 없음)`,
-        },
-      ],
+      ok: pre.ok,
+      remoteBase: pre.remoteBase,
+      targetHost: pre.targetHost,
+      targetIp: pre.targetIp,
+      targetOrigin: pre.targetOrigin,
+      targetLabel: pre.targetLabel,
+      error: pre.ok ? undefined : pre.errorSummary,
+      errorSummary: pre.errorSummary,
+      checks: pre.checks,
     });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'preflight failed';
