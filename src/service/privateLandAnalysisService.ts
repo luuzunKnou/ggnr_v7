@@ -400,6 +400,8 @@ type ZoneParams = {
   tributaryLines?: string[];
   /** 닫힌 범위 — 경계선 목록 (EPSG:3857 WKT) */
   lines?: string[];
+  /** 닫힌 범위 — 그린 도형 (EPSG:3857 WKT). 있으면 경계선 대신 도형 안 레이어 면을 구간으로 */
+  polygonWkt3857?: string;
 };
 
 type ZoneResult = {
@@ -1154,6 +1156,45 @@ async function computeClosedZone(target: Target, rawLines: unknown): Promise<Zon
   }
 }
 
+/** 닫힌 범위 — 그린 도형 넓이 상한(㎡). 넘으면 계산이 무거워 거절 */
+const MAX_SHAPE_AREA_SQM = 4_000_000;
+
+/** 닫힌 범위 — 그린 도형 안에 들어온 레이어 면(도형으로 잘라 합침)을 구간으로 */
+async function computeShapeZone(target: Target, rawWkt: unknown): Promise<ZoneResult> {
+  const empty: ZoneResult = { wkt5181: null, geometry3857: null, areaSqm: null };
+  const wkt = String(rawWkt ?? '').trim();
+  if (!/^POLYGON\s*\(/i.test(wkt)) return { ...empty, error: '도형을 다시 그리세요.' };
+  const { qualified, srid } = target;
+  const featGeom = `ST_MakeValid(ST_Transform(f.geom, ${WORK_SRID}))`;
+  try {
+    const res = await db.execute(
+      sql.raw(`WITH shape AS (
+          SELECT ST_MakeValid(ST_Transform(ST_SetSRID(ST_GeomFromText('${esc(wkt)}'), 3857), ${WORK_SRID})) AS g
+        ),
+        shape_ok AS (SELECT g FROM shape WHERE ST_Area(g) <= ${MAX_SHAPE_AREA_SQM}),
+        mid AS (
+          SELECT ST_CollectionExtract(ST_MakeValid(ST_UnaryUnion(ST_Collect(ST_Intersection(${featGeom}, s.g)))), 3) AS g
+          FROM ${qualified} f, shape_ok s
+          WHERE f.geom IS NOT NULL
+            AND f.geom && ST_Transform(s.g, ${srid})
+            AND ST_Intersects(${featGeom}, s.g)
+        )
+        ${zoneSelectSql('(SELECT NULL::geometry AS g) r', 'FALSE')},
+        (SELECT ST_Area(g) FROM shape) AS shape_area
+        FROM mid zg`)
+    );
+    const shapeArea = toNum((res.rows?.[0] as { shape_area?: unknown } | undefined)?.shape_area);
+    if (shapeArea != null && shapeArea > MAX_SHAPE_AREA_SQM) {
+      return { ...empty, error: '도형이 너무 큽니다. 2km × 2km 이내로 다시 그리세요.' };
+    }
+    const zone = readZoneRow(res.rows);
+    if (!zone?.wkt5181) return { ...empty, error: '도형 안에 도로가 없습니다. 도로 위에 다시 그리세요.' };
+    return zone;
+  } catch (e: unknown) {
+    return { ...empty, error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
 /**
  * 시작·끝선이 서로 다른 하천(지류↔큰 하천, 지류↔지류)이면 두 하천을 이어 계산.
  * 추가 끝선 중 두 하천 위 선은 반대쪽 갈래를 막고, 다른 하천 위 선은 그 지류를 끝선까지 포함한다.
@@ -1249,7 +1290,11 @@ async function computeZone(params: ZoneParams): Promise<ZoneResult> {
   const empty: ZoneResult = { wkt5181: null, geometry3857: null, areaSqm: null };
   const target = await resolveTarget(params.layer);
   if (!target) return { ...empty, error: '분석할 수 없는 레이어입니다.' };
-  if (target.mode === 'closed') return computeClosedZone(target, params.lines);
+  if (target.mode === 'closed') {
+    return params.polygonWkt3857 != null
+      ? computeShapeZone(target, params.polygonWkt3857)
+      : computeClosedZone(target, params.lines);
+  }
 
   const line1 = String(params.line1Wkt3857 ?? '').trim();
   const line2 = String(params.line2Wkt3857 ?? '').trim();
