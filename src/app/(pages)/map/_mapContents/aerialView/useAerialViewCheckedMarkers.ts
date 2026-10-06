@@ -11,7 +11,8 @@ import { getTransform } from 'ol/proj';
 import Overlay from 'ol/Overlay';
 import { Fill, Stroke, Style, Circle as CircleStyle, RegularShape } from 'ol/style';
 import { boundingExtent } from 'ol/extent';
-import type Map from 'ol/Map';
+import type OlMap from 'ol/Map';
+import type { FeatureLike } from 'ol/Feature';
 import { useMapContext } from '../../_mapComponents/MapContext';
 import { aerialShotMeta, type AerialKind, type WorkFileItem, type WorkUnitItem } from './aerialMediaTypes';
 import { mockUnitsForKind, subscribeMockWorkUnits } from './aerialMediaMockData';
@@ -59,7 +60,7 @@ function markerStyle(feature: FeatureLike) {
 }
 
 /** 사진,동영상 체크 시 그 작업의 파일 위치가 모두 지도에 들어오게 맞춘다. */
-export function fitDroneUnitFiles(map: Map, unitId: string) {
+export function fitDroneUnitFiles(map: OlMap, unitId: string) {
   const unit = mockUnitsForKind('drone').find((row) => row.id === unitId);
   if (!unit) return;
   const coords = collectFileLocations5181(unit.files)
@@ -241,12 +242,12 @@ export function useAerialViewCheckedMarkers(params: {
       tip.textContent = KIND_LABEL[String(picked.get('kind'))] ?? '';
       tipOverlay.setPosition(tip.textContent ? evt.coordinate : undefined);
     };
-    map.on('singleclick', onClick);
-    map.on('pointermove', onMove);
+    map.on('singleclick', onClick as never);
+    map.on('pointermove', onMove as never);
 
     return () => {
-      map.un('singleclick', onClick);
-      map.un('pointermove', onMove);
+      map.un('singleclick', onClick as never);
+      map.un('pointermove', onMove as never);
       map.removeOverlay(tipOverlay);
       const m = mapContext?.mapInstanceRef?.current;
       const layer = layerRef.current;

@@ -294,19 +294,27 @@ function paintFooterPanels(
 
   const paintOne = (el: HTMLElement | null, align: 'left' | 'right') => {
     if (!el) return;
-    const text = String(el.innerText ?? '').trim();
-    if (!text) return;
+    const lines =
+      align === 'right'
+        ? Array.from(el.children)
+            .filter((c) => !(c instanceof HTMLElement && c.classList.contains('map-print-footer-scale')))
+            .map((c) => String((c as HTMLElement).innerText ?? '').trim())
+            .filter(Boolean)
+        : String(el.innerText ?? '')
+            .split('\n')
+            .map((s) => s.trim())
+            .filter(Boolean);
+    if (lines.length === 0) return;
+    const r = el.getBoundingClientRect();
+    if (r.width < 1 || r.height < 1) return;
+    const x = (r.left - hostRect.left) * scaleX;
+    const y = (r.top - hostRect.top) * scaleY;
+    const boxW = r.width * scaleX;
+    const boxH = r.height * scaleY;
     const padX = 12 * scaleX;
     const padY = 7 * scaleY;
     const fontSize = Math.max(11, Math.round(12 * Math.min(scaleX, scaleY)));
-    ctx.font = `${fontSize}px sans-serif`;
-    const lines = text.split('\n').map((s) => s.trim()).filter(Boolean);
     const lineH = fontSize * 1.4;
-    const contentW = Math.max(...lines.map((ln) => ctx.measureText(ln).width), 40);
-    const boxW = contentW + padX * 2;
-    const boxH = lines.length * lineH + padY * 2;
-    const x = align === 'left' ? 0 : Math.max(0, outW - boxW);
-    const y = Math.max(0, outH - boxH);
     const radius = Math.max(4, 12 * scaleX);
 
     ctx.save();
@@ -330,17 +338,60 @@ function paintFooterPanels(
     ctx.stroke();
 
     ctx.fillStyle = '#111111';
+    ctx.font = `${fontSize}px sans-serif`;
     ctx.textBaseline = 'top';
     ctx.textAlign = align === 'left' ? 'left' : 'right';
     const tx = align === 'left' ? x + padX : x + boxW - padX;
+    const textTop = y + boxH - padY - lines.length * lineH;
     lines.forEach((ln, i) => {
-      ctx.fillText(ln, tx, y + padY + i * lineH);
+      ctx.fillText(ln, tx, textTop + i * lineH);
     });
     ctx.restore();
   };
 
   paintOne(leftEl, 'left');
   paintOne(rightEl, 'right');
+}
+
+function paintScaleBar(
+  ctx: CanvasRenderingContext2D,
+  paperEl: HTMLElement,
+  mapHost: HTMLElement,
+  outW: number,
+  outH: number
+): void {
+  const el =
+    (paperEl.querySelector('.map-print-footer-scale .ggnr-scale-bar-inner') as HTMLElement | null) ??
+    (paperEl.querySelector('.map-print-map-host .ggnr-scale-bar-inner') as HTMLElement | null);
+  if (!el) return;
+  const text = String(el.innerText || (el.querySelector('input') as HTMLInputElement | null)?.value || '').trim();
+  if (!text) return;
+  const hostRect = mapHost.getBoundingClientRect();
+  const r = el.getBoundingClientRect();
+  if (r.width < 1 || r.height < 1) return;
+  const scaleX = outW / Math.max(hostRect.width, 1);
+  const scaleY = outH / Math.max(hostRect.height, 1);
+  const x = (r.left - hostRect.left) * scaleX;
+  const y = (r.top - hostRect.top) * scaleY;
+  const w = r.width * scaleX;
+  const h = r.height * scaleY;
+  ctx.save();
+  ctx.strokeStyle = '#111111';
+  ctx.lineWidth = Math.max(1, 1.5 * Math.min(scaleX, scaleY));
+  ctx.beginPath();
+  ctx.moveTo(x, y + h);
+  ctx.lineTo(x, y + h - Math.max(3, 4 * scaleY));
+  ctx.moveTo(x + w, y + h);
+  ctx.lineTo(x + w, y + h - Math.max(3, 4 * scaleY));
+  ctx.moveTo(x, y + h);
+  ctx.lineTo(x + w, y + h);
+  ctx.stroke();
+  ctx.fillStyle = '#111111';
+  ctx.font = `${Math.max(10, Math.round(12 * Math.min(scaleX, scaleY)))}px sans-serif`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'bottom';
+  ctx.fillText(text, x + w / 2, y + h - Math.max(2, 3 * scaleY));
+  ctx.restore();
 }
 
 function canvasToPngBlob(canvas: HTMLCanvasElement): Promise<Blob> {
@@ -445,6 +496,7 @@ export async function downloadMapPrintImage(
       const scaleY = out.height / hostH;
       paintMapHtmlOverlays(ctx, mapHost, scaleX, scaleY);
       paintFooterPanels(ctx, paperEl, mapHost, out.width, out.height);
+      paintScaleBar(ctx, paperEl, mapHost, out.width, out.height);
     } else {
       out.width = hostW;
       out.height = hostH;
@@ -453,6 +505,7 @@ export async function downloadMapPrintImage(
       ctx.fillStyle = '#e8eef2';
       ctx.fillRect(0, 0, out.width, out.height);
       paintFooterPanels(ctx, paperEl, mapHost, out.width, out.height);
+      paintScaleBar(ctx, paperEl, mapHost, out.width, out.height);
     }
 
     await triggerPngDownload(out, fileName);
@@ -481,9 +534,12 @@ export function printMapPrintPaper(paperEl: HTMLElement): void {
 
 export function formatPrintScaleMeters(map: OlMap | null): string {
   if (!map) return '—';
-  const res = map.getView().getResolution();
-  if (res == null || !Number.isFinite(res)) return '—';
-  return `${(res * 100).toFixed(2)}m`;
+  const zoom = map.getView().getZoom();
+  if (zoom == null || !Number.isFinite(zoom)) return '—';
+  const meters = 7_864_320 / Math.pow(2, zoom - 1);
+  if (meters >= 1000) return `${(meters / 1000).toFixed(2)}km`;
+  if (meters < 1) return `${(meters * 1000).toFixed(2)}mm`;
+  return `${meters.toFixed(2)}m`;
 }
 
 export function formatPrintDateTime(date = new Date()): string {

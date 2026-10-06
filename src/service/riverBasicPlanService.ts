@@ -403,6 +403,41 @@ export async function getRiverBasicPlanExtent(params?: {
   return { extent3857: [xmin, ymin, xmax, ymax] };
 }
 
+export async function loadJijukOwnGbn(pnus: string[]): Promise<Map<string, string>> {
+  const out = new Map<string, string>();
+  const keys = [...new Set(pnus.map((p) => String(p ?? '').trim()).filter(Boolean))];
+  if (keys.length === 0) return out;
+  const col = await db.execute(
+    sql.raw(
+      `SELECT table_schema, table_name
+       FROM information_schema.columns
+       WHERE lower(table_name) = 'jijuk'
+         AND lower(column_name) = 'own_gbn'
+         AND table_schema IN ('layer', 'public_layer', 'public')
+       LIMIT 1`
+    )
+  );
+  const loc = col.rows?.[0] as { table_schema?: string; table_name?: string } | undefined;
+  const schema = String(loc?.table_schema ?? '').replace(/"/g, '""');
+  const table = String(loc?.table_name ?? '').replace(/"/g, '""');
+  if (!schema || !table) return out;
+  const inList = keys.map((p) => `'${esc(p)}'`).join(',');
+  const res = await db.execute(
+    sql.raw(
+      `SELECT pnu::text AS pnu, NULLIF(TRIM(own_gbn::text), '') AS own_gbn
+       FROM "${schema}"."${table}"
+       WHERE pnu::text IN (${inList})`
+    )
+  );
+  for (const raw of res.rows ?? []) {
+    const row = raw as { pnu?: string; own_gbn?: string | null };
+    const pnu = String(row.pnu ?? '').trim();
+    const gbn = String(row.own_gbn ?? '').trim();
+    if (pnu && gbn) out.set(pnu, gbn);
+  }
+  return out;
+}
+
 /**
  * 하천명·탭(지방/소하천)에 해당하는 색인도 전체 피처의 3857 bbox.
  * (기본계획 polygon extent가 아닌, 색인도 도형 기준)

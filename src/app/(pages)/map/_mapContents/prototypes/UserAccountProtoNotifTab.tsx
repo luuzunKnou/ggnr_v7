@@ -32,7 +32,7 @@ type Props = {
   onDismissAll: () => void
   onMarkRead: (item: ProtoNotifItem) => void
   onOpenLedger: (item: ProtoNotifItem) => void
-  onOpenFee: (feeId: string) => void
+  onOpenFee: (item: ProtoNotifItem) => void
   onOpenMissingGeom?: (item: ProtoNotifItem) => void
 }
 
@@ -67,7 +67,7 @@ export function UserAccountProtoNotifTab({
 
   const openItem = (item: ProtoNotifItem) => {
     onMarkRead(item)
-    if (item.target === 'fee') onOpenFee(item.targetId)
+    if (item.target === 'fee') onOpenFee(item)
     else if (item.target === 'aerial') onOpenMissingGeom?.(item)
     else onOpenLedger(item)
   }

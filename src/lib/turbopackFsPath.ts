@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { getProjectEnvVars } from '../../scripts/load-project-env';
 
 /**
  * Turbopack NFT: path.resolve/join + fs.* 에 정적 분석 가능한 경로가 있으면
@@ -57,16 +58,26 @@ function applyWindowsUncDataRoot(rawPath: string): string {
   return joinUncRoot(uncRoot, rest);
 }
 
-/** GGNR_DATA_DIR — 리터럴 d:\ggnr_data_dir / 환경변수 키 정적 추적 회피 */
+/** prod: <project>.env [prod] 의 GGNR_DATA_DIR (runtime.env 등 process.env 덮어쓰기 무시) */
+function readProdDataDirFromProjectEnv(key: string): string {
+  const project = (process.env.GGNR_PROJECT ?? '').trim();
+  if (!project) return '';
+  try {
+    return (getProjectEnvVars(project, 'prod')[key] ?? '').trim();
+  } catch {
+    return '';
+  }
+}
+
+/**
+ * GGNR_DATA_DIR — 리터럴 d:\ggnr_data_dir / 환경변수 키 정적 추적 회피.
+ * prod 는 프로젝트 .env 값을 그대로 사용 (UNC 치환 없음). dev·demo 만 G: → UNC 치환.
+ */
 export function resolveGgnrDataDir(): string {
   const key = ['GGNR', 'DATA', 'DIR'].join('_');
-  const fromEnv = process.env[key];
-  let raw: string;
-  if (fromEnv?.trim()) {
-    raw = path.normalize(fromEnv.trim());
-  } else {
-    raw = ['d:', 'ggnr_data_dir'].join(path.sep);
-  }
-  raw = applyWindowsUncDataRoot(raw);
+  const isProd = (process.env.GGNR_ENV ?? '').trim().toLowerCase() === 'prod';
+  const fromEnv = (isProd ? readProdDataDirFromProjectEnv(key) : '') || (process.env[key] ?? '').trim();
+  let raw = fromEnv ? path.normalize(fromEnv) : ['d:', 'ggnr_data_dir'].join(path.sep);
+  if (!isProd) raw = applyWindowsUncDataRoot(raw);
   return turbopackOpaquePath(raw);
 }
