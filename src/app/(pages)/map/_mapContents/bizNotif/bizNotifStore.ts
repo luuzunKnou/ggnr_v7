@@ -2,16 +2,18 @@
 
 export type ProtoNotifItem = {
   id: string
-  category: '만료임박' | '미납임박'
+  category: '만료임박' | '미납임박' | '위치없음'
   title: string
   name: string
   listKey?: string
   read: boolean
   important: boolean
-  target: 'ledger' | 'fee'
+  target: 'ledger' | 'fee' | 'aerial'
   targetId: string
   notifKey?: string
   systemScope?: string
+  /** 열 패널 ser_eng (메뉴 소속·이동용) */
+  serEng?: string
 }
 
 export const PROTO_NOTIFS: ProtoNotifItem[] = []

@@ -10,6 +10,7 @@ import exifr from 'exifr';
 import proj4 from 'proj4';
 import { db } from '@/database/db';
 import { fileUnit } from '@/database/schema/file_unit';
+import { tifUnit } from '@/database/schema/tif_unit';
 import { workUnit } from '@/database/schema/work_unit';
 import { getSessionUsrId, userHasSerAccess } from '@/lib/auth/guard';
 import {
@@ -25,20 +26,19 @@ import {
   isOrthoTifFileName,
   listOrthoWorkUnitTifs,
   listOrthoWorkUnits,
+  ORTHO_DROP_ACTOR,
   sourceCrsFromOrthoFolderName,
+  convertOrthoWorkUnit,
 } from '@/service/aerialOrthoService';
-import { detectTifSourceCrs } from '@/service/orthophotoService';
+import { detectTifSourceCrs, getOrthoJobProgress, isOrthoConvertBusy } from '@/service/orthophotoService';
 
-/** exifr가 Next 번들에서 fs/zlib require 실패 시 찍는 안내 — EXIF 실패 아님 */
-console.info(
-  "[exifr] Couldn't load fs / Couldn't load zlib = Next 번들에서 exifr가 Node 모듈(fs·zlib)을 못 찾을 때 나는 안내. EXIF·GPS 오류가 아님. (이후 next.config serverExternalPackages에 exifr 추가 시 완화 가능)"
-);
 import { completeChunkedUpload, initAerialMediaUpload } from '@/service/uploadService';
+import { endAerialWork, isAerialWorkBusy, tryBeginAerialWork, waitAerialWorkTurn } from '@/lib/aerialWorkGate';
+import { resolveGgnrDataDir } from '@/lib/turbopackFsPath';
 
 const APPROVAL_SER = 'shootingApproval';
-const GGNR_DATA_DIR = process.env.GGNR_DATA_DIR ?? 'd:\\ggnr_data_dir';
 
-/** 파일 업로드 허용 종류 — drone=사진·동영상, panorama=파노라마, ortho=드론영상 TIF, satellite=항공영상 TIF */
+/** 파일 업로드 허용 종류 — drone=사진·동영상, panorama=항공뷰, ortho=드론영상 TIF, satellite=항공영상 TIF */
 const MEDIA_FILE_KINDS = new Set<AerialUploadKind>(['drone', 'panorama', 'ortho', 'satellite']);
 
 const IMAGE_EXT = new Set(['.jpg', '.jpeg', '.png', '.webp', '.heic', '.tif', '.tiff']);
@@ -77,8 +77,13 @@ async function requireUploader(srKey?: number | null): Promise<string> {
   return usrId;
 }
 
+/** 저장·화면표시·폴더등록·좌표 읽기가 같은 자료 경로를 쓴다. */
 function getBaseDir(): string {
-  return GGNR_DATA_DIR;
+  return resolveGgnrDataDir();
+}
+
+function savedUploadAbsolutePath(relativePath: string): string {
+  return path.join(getBaseDir(), ...relativePath.split('/').filter(Boolean));
 }
 
 function resolveWithinBase(relativeDir: string): { abs: string; rel: string } | null {
@@ -122,18 +127,41 @@ function formatSizeLabel(bytes: number | null | undefined): string {
   return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
 }
 
+function logGpsMiss(absPath: string, reason: string, detail?: unknown): void {
+  const extra = detail instanceof Error ? `${detail.name}: ${detail.message}` : detail ?? '';
+  console.error('[aerial-gps]', reason, absPath, extra);
+}
+
 async function readGps5181(absPath: string): Promise<{ x: number; y: number } | null> {
   try {
-    const gps = await exifr.gps(absPath);
-    if (!gps) return null;
+    const fileBytes = await fs.readFile(absPath);
+    const gps = await exifr.gps(fileBytes);
+    if (!gps) {
+      logGpsMiss(absPath, '파일은 열렸으나 위치정보 없음', `bytes=${fileBytes.length}`);
+      return null;
+    }
     const lat = Number(gps.latitude);
     const lon = Number(gps.longitude);
-    if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
+      logGpsMiss(absPath, '위경도가 숫자가 아님', `lat=${gps.latitude} lon=${gps.longitude}`);
+      return null;
+    }
     ensureProj();
     const [x, y] = proj4('EPSG:4326', 'EPSG:5181', [lon, lat]) as [number, number];
-    if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
-    return { x: Math.round(x * 100) / 100, y: Math.round(y * 100) / 100 };
-  } catch {
+    if (!Number.isFinite(x) || !Number.isFinite(y)) {
+      logGpsMiss(absPath, '좌표변환 실패', `lat=${lat} lon=${lon}`);
+      return null;
+    }
+    const point = { x: Math.round(x * 100) / 100, y: Math.round(y * 100) / 100 };
+    console.info(
+      '[aerial-gps] 좌표 추출',
+      absPath,
+      `lat=${lat} lon=${lon} x=${point.x} y=${point.y} bytes=${fileBytes.length}`
+    );
+    return point;
+  } catch (error) {
+    const code = error && typeof error === 'object' && 'code' in error ? String(error.code) : '';
+    logGpsMiss(absPath, code ? `읽기 실패 ${code}` : '읽기 실패', error);
     return null;
   }
 }
@@ -292,7 +320,7 @@ async function updateMediaFolderWorkUnit(
       404,
       expectedKind === 'drone'
         ? '사진·동영상 작업단위를 찾을 수 없습니다.'
-        : '파노라마 작업단위를 찾을 수 없습니다.'
+        : '항공뷰 작업단위를 찾을 수 없습니다.'
     );
   }
 
@@ -402,7 +430,7 @@ export async function updateDroneWorkUnit(params: {
   return updateMediaFolderWorkUnit('drone', params);
 }
 
-/** 파노라마 작업단위명·폴더·경로·업무 속성 수정 */
+/** 항공뷰 작업단위명·폴더·경로·업무 속성 수정 */
 export async function updatePanoramaWorkUnit(params: {
   wuKey?: number;
   workName?: string;
@@ -496,7 +524,7 @@ export async function initMediaUpload(params: {
   await requireUploader(srKey);
 
   if (!isAerialUploadKind(params.kind) || !MEDIA_FILE_KINDS.has(params.kind)) {
-    throwHttp(400, '사진·동영상·파노라마 또는 드론영상 작업단위만 파일 업로드할 수 있습니다.');
+    throwHttp(400, '사진·동영상·항공뷰 또는 드론영상 작업단위만 파일 업로드할 수 있습니다.');
   }
 
   let wuKey =
@@ -543,7 +571,7 @@ export async function initMediaUpload(params: {
     }
   } else if (params.kind === 'panorama') {
     const mediaType = mediaTypeFromName(fileName);
-    if (mediaType !== 'image') throwHttp(400, '파노라마는 이미지 파일만 업로드할 수 있습니다.');
+    if (mediaType !== 'image') throwHttp(400, '항공뷰는 이미지 파일만 업로드할 수 있습니다.');
   } else {
     const mediaType = mediaTypeFromName(fileName);
     if (!mediaType) throwHttp(400, '지원하지 않는 파일 형식입니다.');
@@ -583,6 +611,8 @@ export type WorkUnitMediaItem = {
   fileSize: number | null;
   x5181: number | null;
   y5181: number | null;
+  /** 한 점 또는 여러 점. 없으면 x5181/y5181 */
+  points5181?: [number, number][] | null;
   locationLabel: string | null;
   sizeLabel: string;
   format: string;
@@ -590,6 +620,89 @@ export type WorkUnitMediaItem = {
   convertStatus?: string;
   tilesRelativePath?: string | null;
 };
+
+function resultRows<T>(res: unknown): T[] {
+  if (res && typeof res === 'object' && 'rows' in res && Array.isArray((res as { rows: unknown }).rows)) {
+    return (res as { rows: T[] }).rows;
+  }
+  if (Array.isArray(res)) return res as T[];
+  return [];
+}
+
+function geoJsonToPoints(raw: string | null | undefined): [number, number][] {
+  if (!raw) return [];
+  try {
+    const g = JSON.parse(raw) as { type?: string; coordinates?: unknown };
+    if (g.type === 'Point' && Array.isArray(g.coordinates)) {
+      const pair = g.coordinates as number[];
+      const x = Number(pair[0]);
+      const y = Number(pair[1]);
+      return Number.isFinite(x) && Number.isFinite(y) ? [[x, y]] : [];
+    }
+    if (g.type === 'MultiPoint' && Array.isArray(g.coordinates)) {
+      const out: [number, number][] = [];
+      for (const pair of g.coordinates as number[][]) {
+        const x = Number(pair?.[0]);
+        const y = Number(pair?.[1]);
+        if (Number.isFinite(x) && Number.isFinite(y)) out.push([x, y]);
+      }
+      return out;
+    }
+  } catch {
+    return [];
+  }
+  return [];
+}
+
+async function geomPointsByFuKey(wuKey: number): Promise<Map<number, [number, number][]>> {
+  const res = await db.execute(sql`
+    SELECT fu_key, ST_AsGeoJSON(geom) AS geojson
+    FROM layer.file_unit
+    WHERE wu_key = ${wuKey}
+      AND COALESCE(fu_is_del, false) = false
+      AND geom IS NOT NULL
+  `);
+  const map = new Map<number, [number, number][]>();
+  for (const row of resultRows<{ fu_key?: number; geojson?: string }>(res)) {
+    const key = Number(row.fu_key);
+    const pts = geoJsonToPoints(row.geojson);
+    if (Number.isFinite(key) && pts.length > 0) map.set(key, pts);
+  }
+  return map;
+}
+
+function attachGeomPoints(
+  items: WorkUnitMediaItem[],
+  points: Map<number, [number, number][]>
+): WorkUnitMediaItem[] {
+  return items.map((item) => {
+    if (item.fuKey == null) return item;
+    const pts = points.get(item.fuKey);
+    if (!pts || pts.length === 0) return item;
+    return { ...item, points5181: pts };
+  });
+}
+
+/** 점만 담던 컬럼을 여러 점도 저장할 수 있게 넓힌다. */
+async function widenFileUnitGeom(): Promise<void> {
+  await db.execute(sql.raw(`
+    DO $$
+    BEGIN
+      IF EXISTS (
+        SELECT 1 FROM geometry_columns
+        WHERE f_table_schema = 'layer'
+          AND f_table_name = 'file_unit'
+          AND f_geometry_column = 'geom'
+          AND upper(type) = 'POINT'
+      ) THEN
+        EXECUTE 'DROP INDEX IF EXISTS layer.file_unit_geom_gix';
+        EXECUTE 'DROP INDEX IF EXISTS public.file_unit_geom_gix';
+        EXECUTE 'ALTER TABLE layer.file_unit ALTER COLUMN geom TYPE geometry(Geometry, 5181) USING geom::geometry(Geometry, 5181)';
+        EXECUTE 'CREATE INDEX IF NOT EXISTS file_unit_geom_gix ON layer.file_unit USING GIST (geom)';
+      END IF;
+    END $$;
+  `));
+}
 
 function toMediaItem(
   row: typeof fileUnit.$inferSelect,
@@ -688,9 +801,11 @@ export async function completeMediaUpload(params: {
 
   if (!params.uploadId?.trim()) throwHttp(400, 'uploadId가 필요합니다.');
   if (!isAerialUploadKind(params.kind) || !MEDIA_FILE_KINDS.has(params.kind)) {
-    throwHttp(400, '사진·동영상·파노라마 또는 드론영상 작업단위만 파일 업로드할 수 있습니다.');
+    throwHttp(400, '사진·동영상·항공뷰 또는 드론영상 작업단위만 파일 업로드할 수 있습니다.');
   }
 
+  await waitAerialWorkTurn();
+  try {
   let wuKey =
     params.wuKey != null && Number.isFinite(Number(params.wuKey)) ? Number(params.wuKey) : null;
   const folderRaw = sanitizeAerialFolderName(params.folderName ?? '');
@@ -738,7 +853,7 @@ export async function completeMediaUpload(params: {
     }
     const absSaved = path.isAbsolute(String(saved.savedPath ?? ''))
       ? String(saved.savedPath)
-      : path.join(GGNR_DATA_DIR, ...relativePath.split('/').filter(Boolean));
+      : savedUploadAbsolutePath(relativePath);
     const detectedCrs = await detectTifSourceCrs(absSaved).catch(() => null);
     const orthoItem = await insertOrthoTifUnit({
       wuKey,
@@ -770,10 +885,10 @@ export async function completeMediaUpload(params: {
   const mediaType = mediaTypeFromName(fileName);
   if (!mediaType) throwHttp(400, '지원하지 않는 파일 형식입니다.');
   if (params.kind === 'panorama' && mediaType !== 'image') {
-    throwHttp(400, '파노라마는 이미지 파일만 업로드할 수 있습니다.');
+    throwHttp(400, '항공뷰는 이미지 파일만 업로드할 수 있습니다.');
   }
 
-  const abs = path.join(getBaseDir(), ...relativePath.split('/').filter(Boolean));
+  const abs = savedUploadAbsolutePath(relativePath);
   let x5181: number | null = null;
   let y5181: number | null = null;
   if (mediaType === 'image') {
@@ -821,6 +936,9 @@ export async function completeMediaUpload(params: {
     size: saved.size,
     item,
   };
+  } finally {
+    endAerialWork();
+  }
 }
 
 export type ListWorkUnitMediaResult = {
@@ -906,11 +1024,12 @@ export async function listWorkUnitMedia(params: {
     .where(and(eq(fileUnit.wuKey, wu.wuKey), eq(fileUnit.fuIsDel, false)))
     .orderBy(asc(fileUnit.fuKey));
 
+  const items = await enrichMediaItemsWithJibun(rows.map((r) => toMediaItem(r, wu.kind)));
   return {
     wuKey: wu.wuKey,
     kind: wu.kind,
     folderName: wu.folderName,
-    items: await enrichMediaItemsWithJibun(rows.map((r) => toMediaItem(r, wu.kind))),
+    items: attachGeomPoints(items, await geomPointsByFuKey(wu.wuKey)),
   };
 }
 
@@ -1000,7 +1119,10 @@ export async function listWorkUnits(params: { kind?: string } = {}): Promise<{
       author: wu.author,
       photographer: wu.photographer,
       memo: wu.memo,
-      items: await enrichMediaItemsWithJibun(files.map((r) => toMediaItem(r, kind))),
+      items: attachGeomPoints(
+        await enrichMediaItemsWithJibun(files.map((r) => toMediaItem(r, kind))),
+        await geomPointsByFuKey(wu.wuKey)
+      ),
     });
   }
 
@@ -1146,4 +1268,588 @@ export async function deleteFileUnit(params: { fuKey?: number } = {}): Promise<D
     fileName: row.fileName,
     diskRemoved,
   };
+}
+
+/** 사진·동영상 파일 위치. 없으면 여러 점, 있으면 한 점(또는 기존 여러 점) */
+export async function updateFileUnitGeom(params: {
+  fuKey?: number;
+  wkt?: string;
+  x5181?: number;
+  y5181?: number;
+} = {}): Promise<{ fuKey: number }> {
+  const usrId = await requireSession();
+  const fuKey =
+    params.fuKey != null && Number.isFinite(Number(params.fuKey)) ? Number(params.fuKey) : null;
+  if (fuKey == null) throwHttp(400, '파일 키가 필요합니다.');
+
+  const wkt = String(params.wkt ?? '').trim();
+  if (!/^(POINT|MULTIPOINT)\s*\(/i.test(wkt) || wkt.length > 20000 || wkt.includes(';')) {
+    throwHttp(400, '점 형식만 저장할 수 있습니다.');
+  }
+  const x = Number(params.x5181);
+  const y = Number(params.y5181);
+  if (!Number.isFinite(x) || !Number.isFinite(y)) throwHttp(400, '좌표가 올바르지 않습니다.');
+
+  await widenFileUnitGeom();
+
+  const updated = await db.execute(sql`
+    UPDATE layer.file_unit
+    SET geom = ST_SetSRID(ST_GeomFromText(${wkt}), 5181),
+        x_5181 = ${x},
+        y_5181 = ${y},
+        fu_update_date = now(),
+        fu_update_user = ${usrId}
+    WHERE fu_key = ${fuKey}
+      AND fu_is_del = false
+    RETURNING fu_key
+  `);
+  if (resultRows(updated).length === 0) throwHttp(404, '파일을 찾을 수 없습니다.');
+  return { fuKey };
+}
+
+const DRONE_DROP_ACTOR = 'scheduler';
+
+/** 직전 확인 때와 크기·수정시각이 같아야 등록. 복사 중 파일은 다음 주기에 넘긴다. */
+const droneDropWatch = new Map<string, { size: number; mtimeMs: number }>();
+
+/** 위치 읽기만 동시에. 목록 저장은 한 건씩. */
+const DROP_GPS_BATCH = 4;
+
+export type ImportDroppedDroneFoldersResult = {
+  unitsCreated: number;
+  filesRegistered: number;
+  filesWaiting: number;
+  /** 화면 업로드·변환이 진행 중이라 나머지를 다음 주기로 넘김 */
+  paused: boolean;
+};
+
+function droneDropIsStable(relativePath: string, size: number, mtimeMs: number): boolean {
+  const prev = droneDropWatch.get(relativePath);
+  droneDropWatch.set(relativePath, { size, mtimeMs });
+  return prev != null && prev.size === size && prev.mtimeMs === mtimeMs && size > 0;
+}
+
+type DropMediaKind = 'drone' | 'panorama' | 'ortho';
+
+async function ensureDroppedMediaWorkUnit(
+  kind: DropMediaKind,
+  folderName: string
+): Promise<{ wuKey: number; created: boolean } | null> {
+  const relativeDir = aerialWorkUnitRelativeDir(kind, folderName);
+  if (!relativeDir) return null;
+  const resolved = resolveWithinBase(relativeDir);
+  if (!resolved) return null;
+
+  const now = nowIso();
+  const existing = await db
+    .select()
+    .from(workUnit)
+    .where(and(eq(workUnit.kind, kind), eq(workUnit.folderName, folderName), eq(workUnit.wuIsDel, false)))
+    .limit(1);
+  const row = existing[0];
+  if (row) return { wuKey: row.wuKey, created: false };
+
+  const [ins] = await db
+    .insert(workUnit)
+    .values({
+      workName: folderName,
+      kind,
+      folderName,
+      wuIsDel: false,
+      wuCreateDate: now,
+      wuCreateUser: DRONE_DROP_ACTOR,
+      wuUpdateDate: now,
+      wuUpdateUser: DRONE_DROP_ACTOR,
+    })
+    .returning();
+  if (!ins) return null;
+  return { wuKey: ins.wuKey, created: true };
+}
+
+async function insertDroppedDroneFile(params: {
+  wuKey: number;
+  fileName: string;
+  relativePath: string;
+  mediaType: 'image' | 'video';
+  fileSize: number;
+  x5181: number | null;
+  y5181: number | null;
+}): Promise<boolean> {
+  const x5181 = params.x5181;
+  const y5181 = params.y5181;
+
+  const now = nowIso();
+  const [row] = await db
+    .insert(fileUnit)
+    .values({
+      wuKey: params.wuKey,
+      fileName: params.fileName,
+      relativePath: params.relativePath,
+      mediaType: params.mediaType,
+      fileSize: params.fileSize,
+      x5181,
+      y5181,
+      fuIsDel: false,
+      fuCreateDate: now,
+      fuCreateUser: DRONE_DROP_ACTOR,
+      fuUpdateDate: now,
+      fuUpdateUser: DRONE_DROP_ACTOR,
+    })
+    .returning();
+  if (!row) return false;
+
+  if (x5181 != null && y5181 != null) {
+    await db.execute(sql`
+      UPDATE layer.file_unit
+      SET geom = ST_SetSRID(ST_MakePoint(${x5181}, ${y5181}), 5181)
+      WHERE fu_key = ${row.fuKey}
+    `);
+  }
+  return true;
+}
+
+async function dropRootAbsoluteDir(relativeRoot: string, failMessage: string): Promise<string> {
+  await requireSession();
+  const root = resolveWithinBase(relativeRoot);
+  if (!root) throwHttp(500, failMessage);
+  return root.abs.endsWith(path.sep) ? root.abs : `${root.abs}${path.sep}`;
+}
+
+const CONVERT_BUSY = new Set(['queued', 'vrt', 'warp', 'tiles', 'copy']);
+
+function remainText(seconds: number | null): string {
+  if (seconds == null || seconds < 30) return '';
+  const minutes = Math.round(seconds / 60);
+  if (minutes < 60) return ` 남은 시간 약 ${minutes}분.`;
+  const hours = Math.floor(minutes / 60);
+  const rest = minutes % 60;
+  return rest > 0 ? ` 남은 시간 약 ${hours}시간 ${rest}분.` : ` 남은 시간 약 ${hours}시간.`;
+}
+
+export type AerialPipelineStatus = {
+  busy: boolean;
+  headline: string;
+  detail: string;
+};
+
+/** 화면에서 변환·등록이 진행 중인지. 진행 중이면 폴더 등록은 끝난 뒤 이어진다. */
+export async function getAerialPipelineStatus(): Promise<AerialPipelineStatus> {
+  await requireSession();
+  const raw = getOrthoJobProgress();
+  const jobs = (Array.isArray(raw) ? raw : raw ? [raw] : [])
+    .filter((job) => CONVERT_BUSY.has(job.phase))
+    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  if (jobs.length > 0 || isOrthoConvertBusy()) {
+    const names = await db
+      .select({ fileName: tifUnit.fileName, workName: workUnit.workName })
+      .from(tifUnit)
+      .innerJoin(workUnit, eq(tifUnit.wuKey, workUnit.wuKey))
+      .where(and(eq(tifUnit.convertStatus, 'converting'), eq(tifUnit.tuIsDel, false), eq(workUnit.wuIsDel, false)))
+      .limit(5);
+    const label = names[0]
+      ? `${names[0].workName.trim() || '드론영상'} ${names[0].fileName}`.trim()
+      : '드론영상';
+    const extra = names.length > 1 ? ` 외 ${names.length - 1}건` : '';
+    const job = jobs[0];
+    const step = job?.message?.trim() || '변환 중';
+    const pct = job && job.percent > 0 ? ` ${job.percent}%` : '';
+    return {
+      busy: true,
+      headline: `${label}${extra} 변환 중`,
+      detail: `${step}${pct}.${remainText(job?.etaSeconds ?? null)} 이 변환이 끝나기 전에는 폴더에 넣은 사진·동영상, 항공뷰, 드론영상 등록이 잠시 멈춥니다.`,
+    };
+  }
+  if (isAerialWorkBusy()) {
+    return {
+      busy: true,
+      headline: '파일 등록 중',
+      detail: '파일을 등록하는 동안 다른 폴더 확인은 기다립니다.',
+    };
+  }
+  return {
+    busy: false,
+    headline: '진행 중인 작업 없음',
+    detail: '폴더에 넣은 파일은 약 1~2분 뒤 등록됩니다.',
+  };
+}
+
+/** 사진·동영상 자료 폴더. 화면 안내용 */
+export async function getDroneDropFolderPath(): Promise<{ absoluteDir: string }> {
+  return { absoluteDir: await dropRootAbsoluteDir('aerial/drone', '사진·동영상 자료 경로를 확인할 수 없습니다.') };
+}
+
+/** 항공뷰 자료 폴더. 화면 안내용 */
+export async function getPanoramaDropFolderPath(): Promise<{ absoluteDir: string }> {
+  return { absoluteDir: await dropRootAbsoluteDir('aerial/panorama', '항공뷰 자료 경로를 확인할 수 없습니다.') };
+}
+
+/** 드론영상 자료 폴더. 화면 안내용 */
+export async function getOrthoDropFolderPath(): Promise<{ absoluteDir: string }> {
+  return { absoluteDir: await dropRootAbsoluteDir('aerial/ortho', '드론영상 자료 경로를 확인할 수 없습니다.') };
+}
+
+/**
+ * aerial/{drone|panorama} 바로 아래 폴더를 작업단위로 본다.
+ * 항공뷰는 사진만. 하위 폴더의 파일은 읽지 않는다. 이미 같은 경로로 등록된 파일은 건너뛴다.
+ */
+async function importDroppedMediaFolders(kind: DropMediaKind): Promise<ImportDroppedDroneFoldersResult> {
+  const result: ImportDroppedDroneFoldersResult = {
+    unitsCreated: 0,
+    filesRegistered: 0,
+    filesWaiting: 0,
+    paused: false,
+  };
+  const root = resolveWithinBase(kind === 'drone' ? 'aerial/drone' : 'aerial/panorama');
+  if (!root) return result;
+
+  let entries: { name: string; isDirectory: () => boolean }[];
+  try {
+    entries = await fs.readdir(root.abs, { withFileTypes: true });
+  } catch {
+    return result;
+  }
+
+  const seen = new Set<string>();
+
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue;
+    if (entry.name.startsWith('.')) continue;
+    const folderName = sanitizeAerialFolderName(entry.name);
+    if (!folderName || folderName !== entry.name) continue;
+
+    const relativeDir = aerialWorkUnitRelativeDir(kind, folderName);
+    const resolved = relativeDir ? resolveWithinBase(relativeDir) : null;
+    if (!resolved) continue;
+
+    let children: { name: string; isFile: () => boolean }[];
+    try {
+      children = await fs.readdir(resolved.abs, { withFileTypes: true });
+    } catch {
+      continue;
+    }
+
+    const existingWu = (
+      await db
+        .select({ wuKey: workUnit.wuKey })
+        .from(workUnit)
+        .where(
+          and(eq(workUnit.kind, kind), eq(workUnit.folderName, folderName), eq(workUnit.wuIsDel, false))
+        )
+        .limit(1)
+    )[0];
+    const known = new Set<string>();
+    if (existingWu) {
+      const rows = await db
+        .select({ relativePath: fileUnit.relativePath })
+        .from(fileUnit)
+        .where(eq(fileUnit.wuKey, existingWu.wuKey));
+      for (const row of rows) {
+        known.add(String(row.relativePath ?? '').replace(/\\/g, '/'));
+      }
+    }
+
+    const ready: {
+      fileName: string;
+      relativePath: string;
+      absPath: string;
+      mediaType: 'image' | 'video';
+      fileSize: number;
+    }[] = [];
+
+    for (const child of children) {
+      if (!child.isFile()) continue;
+      if (child.name.startsWith('.')) continue;
+      const mediaType = mediaTypeFromName(child.name);
+      if (!mediaType) continue;
+      if (kind === 'panorama' && mediaType !== 'image') continue;
+      const relativePath = `${resolved.rel}/${child.name}`;
+      const absPath = path.join(resolved.abs, child.name);
+      seen.add(relativePath);
+      if (known.has(relativePath)) {
+        droneDropWatch.delete(relativePath);
+        continue;
+      }
+      let st: { size: number; mtimeMs: number; isFile: () => boolean };
+      try {
+        st = await fs.stat(absPath);
+      } catch {
+        continue;
+      }
+      if (!st.isFile()) continue;
+      if (!droneDropIsStable(relativePath, st.size, st.mtimeMs)) {
+        result.filesWaiting += 1;
+        continue;
+      }
+      ready.push({
+        fileName: child.name,
+        relativePath,
+        absPath,
+        mediaType,
+        fileSize: st.size,
+      });
+    }
+
+    if (ready.length === 0) continue;
+
+    let wu: { wuKey: number; created: boolean } | null = existingWu
+      ? { wuKey: existingWu.wuKey, created: false }
+      : null;
+    let folderFailed = false;
+
+    for (let offset = 0; offset < ready.length && !folderFailed; offset += DROP_GPS_BATCH) {
+      if (isOrthoConvertBusy() || isAerialWorkBusy()) {
+        result.paused = true;
+        return result;
+      }
+      const batch = await Promise.all(
+        ready.slice(offset, offset + DROP_GPS_BATCH).map(async (file) => {
+          const gps = file.mediaType === 'image' ? await readGps5181(file.absPath) : null;
+          return { ...file, x5181: gps?.x ?? null, y5181: gps?.y ?? null };
+        })
+      );
+      for (const file of batch) {
+        if (isOrthoConvertBusy() || !tryBeginAerialWork()) {
+          result.paused = true;
+          return result;
+        }
+        try {
+          if (!wu) {
+            wu = await ensureDroppedMediaWorkUnit(kind, folderName);
+            if (!wu) {
+              folderFailed = true;
+              break;
+            }
+            if (wu.created) result.unitsCreated += 1;
+          }
+          const dup = (
+            await db
+              .select({ fuKey: fileUnit.fuKey })
+              .from(fileUnit)
+              .where(and(eq(fileUnit.wuKey, wu.wuKey), eq(fileUnit.relativePath, file.relativePath)))
+              .limit(1)
+          )[0];
+          if (dup) {
+            droneDropWatch.delete(file.relativePath);
+            continue;
+          }
+          const ok = await insertDroppedDroneFile({
+            wuKey: wu.wuKey,
+            fileName: file.fileName,
+            relativePath: file.relativePath,
+            mediaType: file.mediaType,
+            fileSize: file.fileSize,
+            x5181: file.x5181,
+            y5181: file.y5181,
+          });
+          if (ok) {
+            result.filesRegistered += 1;
+            droneDropWatch.delete(file.relativePath);
+          }
+        } catch (error) {
+          console.warn(
+            `[aerial-${kind}-folder] file skip:`,
+            file.relativePath,
+            error instanceof Error ? error.message : error
+          );
+        } finally {
+          endAerialWork();
+        }
+      }
+    }
+  }
+
+  const prefix = `${root.rel}/`;
+  for (const key of droneDropWatch.keys()) {
+    if (key.startsWith(prefix) && !seen.has(key)) droneDropWatch.delete(key);
+  }
+
+  return result;
+}
+
+/** aerial/drone 바로 아래 폴더의 사진·동영상을 등록한다. */
+export async function importDroppedDroneFolders(): Promise<ImportDroppedDroneFoldersResult> {
+  return importDroppedMediaFolders('drone');
+}
+
+/** aerial/panorama 바로 아래 폴더의 사진을 등록한다. */
+export async function importDroppedPanoramaFolders(): Promise<ImportDroppedDroneFoldersResult> {
+  return importDroppedMediaFolders('panorama');
+}
+
+let orthoDropConvertTail: Promise<void> | null = null;
+
+function kickDroppedOrthoConvert(wuKeys: number[]): void {
+  if (wuKeys.length === 0 || orthoDropConvertTail || isOrthoConvertBusy() || isAerialWorkBusy()) return;
+  orthoDropConvertTail = (async () => {
+    for (const wuKey of wuKeys) {
+      if (isOrthoConvertBusy() || isAerialWorkBusy()) break;
+      await convertOrthoWorkUnit({ wuKey, dropActor: ORTHO_DROP_ACTOR });
+    }
+  })()
+    .catch((error) => {
+      console.warn('[aerial-ortho-folder] convert skip:', error instanceof Error ? error.message : error);
+    })
+    .finally(() => {
+      orthoDropConvertTail = null;
+    });
+}
+
+/**
+ * aerial/ortho 바로 아래 폴더를 드론영상 작업단위로 본다.
+ * TIF만 등록하고, 대기 중인 파일은 타일 변환으로 넘긴다. 하위 폴더의 파일은 읽지 않는다.
+ */
+export async function importDroppedOrthoFolders(): Promise<ImportDroppedDroneFoldersResult> {
+  const result: ImportDroppedDroneFoldersResult = {
+    unitsCreated: 0,
+    filesRegistered: 0,
+    filesWaiting: 0,
+    paused: false,
+  };
+  const root = resolveWithinBase('aerial/ortho');
+  if (!root) return result;
+
+  let entries: { name: string; isDirectory: () => boolean }[];
+  try {
+    entries = await fs.readdir(root.abs, { withFileTypes: true });
+  } catch {
+    return result;
+  }
+
+  const seen = new Set<string>();
+  const touchedWuKeys: number[] = [];
+
+  for (const entry of entries) {
+    if (result.paused) break;
+    if (!entry.isDirectory() || entry.name.startsWith('.')) continue;
+    const folderName = sanitizeAerialFolderName(entry.name);
+    if (!folderName || folderName !== entry.name) continue;
+    const relativeDir = aerialWorkUnitRelativeDir('ortho', folderName);
+    const resolved = relativeDir ? resolveWithinBase(relativeDir) : null;
+    if (!resolved) continue;
+
+    let children: { name: string; isFile: () => boolean }[];
+    try {
+      children = await fs.readdir(resolved.abs, { withFileTypes: true });
+    } catch {
+      continue;
+    }
+
+    const existingWu = (
+      await db
+        .select({ wuKey: workUnit.wuKey })
+        .from(workUnit)
+        .where(and(eq(workUnit.kind, 'ortho'), eq(workUnit.folderName, folderName), eq(workUnit.wuIsDel, false)))
+        .limit(1)
+    )[0];
+    const known = new Set<string>();
+    if (existingWu) {
+      const rows = await db
+        .select({ relativePath: tifUnit.relativePath })
+        .from(tifUnit)
+        .where(and(eq(tifUnit.wuKey, existingWu.wuKey), eq(tifUnit.tuIsDel, false)));
+      for (const row of rows) known.add(String(row.relativePath ?? '').replace(/\\/g, '/'));
+    }
+
+    const ready: { fileName: string; relativePath: string; absPath: string; fileSize: number }[] = [];
+    for (const child of children) {
+      if (!child.isFile() || child.name.startsWith('.') || !isOrthoTifFileName(child.name)) continue;
+      const relativePath = `${resolved.rel}/${child.name}`;
+      const absPath = path.join(resolved.abs, child.name);
+      seen.add(relativePath);
+      if (known.has(relativePath)) {
+        droneDropWatch.delete(relativePath);
+        continue;
+      }
+      let st: { size: number; mtimeMs: number; isFile: () => boolean };
+      try {
+        st = await fs.stat(absPath);
+      } catch {
+        continue;
+      }
+      if (!st.isFile()) continue;
+      if (!droneDropIsStable(relativePath, st.size, st.mtimeMs)) {
+        result.filesWaiting += 1;
+        continue;
+      }
+      ready.push({ fileName: child.name, relativePath, absPath, fileSize: st.size });
+    }
+    if (ready.length === 0) continue;
+
+    let wu: { wuKey: number; created: boolean } | null = existingWu
+      ? { wuKey: existingWu.wuKey, created: false }
+      : null;
+    let folderFailed = false;
+    for (const file of ready) {
+      if (folderFailed) break;
+      if (isOrthoConvertBusy() || !tryBeginAerialWork()) {
+        result.paused = true;
+        break;
+      }
+      try {
+        if (!wu) {
+          wu = await ensureDroppedMediaWorkUnit('ortho', folderName);
+          if (!wu) {
+            folderFailed = true;
+            break;
+          }
+          if (wu.created) result.unitsCreated += 1;
+        }
+        const dup = (
+          await db
+            .select({ tuKey: tifUnit.tuKey })
+            .from(tifUnit)
+            .where(and(eq(tifUnit.wuKey, wu.wuKey), eq(tifUnit.relativePath, file.relativePath), eq(tifUnit.tuIsDel, false)))
+            .limit(1)
+        )[0];
+        if (dup) {
+          droneDropWatch.delete(file.relativePath);
+          continue;
+        }
+        const detected = await detectTifSourceCrs(file.absPath).catch(() => null);
+        await insertOrthoTifUnit({
+          wuKey: wu.wuKey,
+          fileName: file.fileName,
+          relativePath: file.relativePath,
+          fileSize: file.fileSize,
+          sourceCrs: detected || sourceCrsFromOrthoFolderName(folderName),
+          usrId: DRONE_DROP_ACTOR,
+        });
+        result.filesRegistered += 1;
+        droneDropWatch.delete(file.relativePath);
+        if (!touchedWuKeys.includes(wu.wuKey)) touchedWuKeys.push(wu.wuKey);
+      } catch (error) {
+        console.warn(
+          '[aerial-ortho-folder] file skip:',
+          file.relativePath,
+          error instanceof Error ? error.message : error
+        );
+      } finally {
+        endAerialWork();
+      }
+    }
+  }
+
+  const prefix = `${root.rel}/`;
+  for (const key of droneDropWatch.keys()) {
+    if (key.startsWith(prefix) && !seen.has(key)) droneDropWatch.delete(key);
+  }
+
+  if (!result.paused) {
+    const pending = await db
+      .select({ wuKey: tifUnit.wuKey })
+      .from(tifUnit)
+      .innerJoin(workUnit, eq(workUnit.wuKey, tifUnit.wuKey))
+      .where(
+        and(
+          eq(workUnit.kind, 'ortho'),
+          eq(workUnit.wuIsDel, false),
+          eq(tifUnit.tuIsDel, false),
+          eq(tifUnit.convertStatus, 'pending')
+        )
+      );
+    const wuKeys = [...new Set([...touchedWuKeys, ...pending.map((row) => row.wuKey)])];
+    kickDroppedOrthoConvert(wuKeys);
+  }
+
+  return result;
 }

@@ -45,7 +45,7 @@ async function requireSession(): Promise<string> {
 async function requireApprover(): Promise<string> {
   const usrId = await requireSession();
   const ok = await userHasSerAccess(usrId, APPROVAL_SER, 'write');
-  if (!ok) throwHttp(403, '승인관리 권한이 없습니다.');
+  if (!ok) throwHttp(403, '촬영요청승인 권한이 없습니다.');
   return usrId;
 }
 

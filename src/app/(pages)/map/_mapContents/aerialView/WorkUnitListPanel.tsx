@@ -7,7 +7,10 @@ import { Input } from '@/app/shadcnComponents/ui/input';
 import { cn } from '@/lib/utils';
 import type { ConvertStatus, WorkUnitItem } from './aerialMediaTypes';
 import { deriveOrthoUnitStatus } from './aerialMediaTypes';
-import { StatusBadge } from './AerialMediaUi';
+import { fileMissingGeom } from './aerialLocationParse';
+import { MissingGeomMark, StatusBadge } from './AerialMediaUi';
+import { AerialPipelineStatus } from './AerialPipelineStatus';
+import { DroneDropFolderHint } from './DroneDropFolderHint';
 
 type Props = {
   title: string;
@@ -24,6 +27,8 @@ type Props = {
   showStatus?: boolean;
   /** 드론영상(정사): 변환중·변환완료 배지 */
   showConvertStatus?: boolean;
+  /** 사진·동영상: 위치 없는 파일이 있으면 목록 오른쪽에 표시 */
+  showMissingGeom?: boolean;
   dateFrom?: string;
   dateTo?: string;
   onDateFromChange?: (v: string) => void;
@@ -31,6 +36,9 @@ type Props = {
   banner?: ReactNode;
   /** 검색·업로드 아래 추가 도구 (예: 고화질 제한) */
   toolsExtra?: ReactNode;
+  /** 사진·동영상·항공뷰: 자료 폴더에 넣는 방법 */
+  showDropFolderHint?: boolean;
+  dropFolderKind?: 'drone' | 'panorama' | 'ortho';
   emptyHint?: string;
 };
 
@@ -66,12 +74,15 @@ export function WorkUnitListPanel({
   onClose,
   showStatus = false,
   showConvertStatus = false,
+  showMissingGeom = false,
   dateFrom,
   dateTo,
   onDateFromChange,
   onDateToChange,
   banner,
   toolsExtra,
+  showDropFolderHint = false,
+  dropFolderKind = 'drone',
   emptyHint = '폴더를 업로드하거나 검색어를 바꿔 보세요.',
 }: Props) {
   const filtered = items.filter((u) => {
@@ -85,15 +96,15 @@ export function WorkUnitListPanel({
   const showDateFilter = Boolean(onDateFromChange && onDateToChange);
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-white">
-      <div className="flex shrink-0 items-center gap-2 border-b border-slate-200 px-3 py-1.5">
+    <div className="flex h-full min-h-0 flex-col bg-background">
+      <div className="flex shrink-0 items-center gap-2 border-b border-border px-3 py-1.5">
         <div className="min-w-0 flex-1">
-          <h2 className="truncate text-[13px] font-semibold leading-none text-slate-800">{title}</h2>
+          <h2 className="truncate text-[13px] font-semibold leading-none text-foreground">{title}</h2>
         </div>
         <button
           type="button"
           onClick={onRefresh}
-          className="shrink-0 rounded p-1 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
+          className="shrink-0 rounded p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
           title="새로고침"
           aria-label="새로고침"
         >
@@ -103,7 +114,7 @@ export function WorkUnitListPanel({
           <button
             type="button"
             onClick={onClose}
-            className="shrink-0 rounded p-1 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
+            className="shrink-0 rounded p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
             title="닫기"
             aria-label="닫기"
           >
@@ -113,7 +124,7 @@ export function WorkUnitListPanel({
       </div>
 
       {/* 도구 */}
-      <div className="shrink-0 space-y-2 border-b border-slate-100 px-3 py-2.5">
+      <div className="shrink-0 space-y-2 border-b border-border/60 px-3 py-2.5">
         {onUpload ? (
           <Button
             type="button"
@@ -126,21 +137,24 @@ export function WorkUnitListPanel({
           </Button>
         ) : null}
 
+        {onUpload && showDropFolderHint ? <DroneDropFolderHint kind={dropFolderKind} /> : null}
+        {showDropFolderHint ? <AerialPipelineStatus /> : null}
+
         {toolsExtra}
 
         <div className="relative">
-          <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
+          <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
           <Input
             value={keyword}
             onChange={(e) => onKeywordChange(e.target.value)}
             placeholder="작업명 · 작업일 검색"
-            className="h-9 border-slate-200 bg-slate-50/80 pl-8 text-xs focus-visible:bg-white"
+            className="h-9 border-border bg-muted/50 pl-8 text-xs focus-visible:bg-background"
           />
         </div>
 
         {showDateFilter ? (
-          <div className="rounded-md border border-slate-200 bg-slate-50/60 px-2.5 py-2">
-            <div className="mb-1.5 flex items-center gap-1.5 text-[10px] font-medium text-slate-500">
+          <div className="rounded-md border border-border bg-muted/40 px-2.5 py-2">
+            <div className="mb-1.5 flex items-center gap-1.5 text-[10px] font-medium text-muted-foreground">
               <CalendarDays className="h-3 w-3" />
               작업일 기간
             </div>
@@ -149,14 +163,14 @@ export function WorkUnitListPanel({
                 type="date"
                 value={dateFrom ?? ''}
                 onChange={(e) => onDateFromChange?.(e.target.value)}
-                className="h-8 min-w-0 flex-1 border-slate-200 bg-white px-1.5 text-[11px]"
+                className="h-8 min-w-0 flex-1 border-border bg-background px-1.5 text-[11px] [color-scheme:light] dark:[color-scheme:dark]"
               />
-              <span className="shrink-0 text-[10px] text-slate-400">~</span>
+              <span className="shrink-0 text-[10px] text-muted-foreground">~</span>
               <Input
                 type="date"
                 value={dateTo ?? ''}
                 onChange={(e) => onDateToChange?.(e.target.value)}
-                className="h-8 min-w-0 flex-1 border-slate-200 bg-white px-1.5 text-[11px]"
+                className="h-8 min-w-0 flex-1 border-border bg-background px-1.5 text-[11px] [color-scheme:light] dark:[color-scheme:dark]"
               />
             </div>
           </div>
@@ -165,7 +179,7 @@ export function WorkUnitListPanel({
         {banner}
       </div>
 
-      <div className="shrink-0 border-b border-slate-100 px-3 py-1.5 text-[11px] text-slate-500">
+      <div className="shrink-0 border-b border-border/60 px-3 py-1.5 text-[11px] text-muted-foreground">
         {filtered.length.toLocaleString()}건
       </div>
 
@@ -173,9 +187,9 @@ export function WorkUnitListPanel({
       <div className="min-h-0 flex-1 overflow-y-auto px-2.5 py-2">
         {filtered.length === 0 ? (
           <div className="flex flex-col items-center justify-center gap-2 px-3 py-12 text-center">
-            <FolderOpen className="h-8 w-8 text-slate-300" aria-hidden />
-            <p className="text-xs text-slate-400">검색 결과가 없습니다.</p>
-            <p className="text-[10px] text-slate-400">{emptyHint}</p>
+            <FolderOpen className="h-8 w-8 text-muted-foreground/60" aria-hidden />
+            <p className="text-xs text-muted-foreground">검색 결과가 없습니다.</p>
+            <p className="text-[10px] text-muted-foreground">{emptyHint}</p>
           </div>
         ) : (
           <ul className="space-y-2">
@@ -201,8 +215,8 @@ export function WorkUnitListPanel({
                     className={cn(
                       'w-full rounded-lg border px-3 py-2 text-left transition-colors',
                       selected
-                        ? 'border-sky-300 bg-sky-50 shadow-sm ring-1 ring-sky-200/80'
-                        : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50'
+                        ? 'border-sky-300 bg-sky-50 shadow-sm ring-1 ring-sky-200 dark:border-sky-800 dark:bg-sky-950/40 dark:ring-sky-800/80'
+                        : 'border-border bg-background hover:border-border hover:bg-muted/60'
                     )}
                   >
                     <div className="flex items-center justify-between gap-2">
@@ -210,7 +224,7 @@ export function WorkUnitListPanel({
                         <span
                           className={cn(
                             'inline-flex h-5 items-center rounded px-1.5 text-[10px] font-medium tabular-nums',
-                            selected ? 'bg-sky-100 text-sky-800' : 'bg-slate-100 text-slate-600'
+                            selected ? 'bg-sky-100 dark:bg-sky-950/50 text-sky-800 dark:text-sky-200' : 'bg-muted text-muted-foreground'
                           )}
                         >
                           {showStatus ? `${dateLabel}년` : dateLabel}
@@ -220,15 +234,17 @@ export function WorkUnitListPanel({
                             className={cn(
                               'inline-flex h-5 items-center rounded px-1.5 text-[10px] tabular-nums',
                               selected
-                                ? 'bg-white text-sky-700 ring-1 ring-sky-200'
-                                : 'bg-white text-slate-500 ring-1 ring-slate-200'
+                                ? 'bg-background text-sky-700 dark:text-sky-300 ring-1 ring-sky-200 dark:ring-sky-800'
+                                : 'bg-background text-muted-foreground ring-1 ring-border'
                             )}
                           >
                             {uploadDateLabel}
                           </span>
                         ) : null}
                       </div>
-                      {convertStatus ? (
+                      {showMissingGeom && row.files.some((file) => fileMissingGeom(file)) ? (
+                        <MissingGeomMark />
+                      ) : convertStatus ? (
                         <div className="shrink-0">
                           <StatusBadge status={convertStatus} mode="convert" />
                         </div>
@@ -237,13 +253,13 @@ export function WorkUnitListPanel({
                     <p
                       className={cn(
                         'mt-1 truncate text-[12px] leading-snug',
-                        selected ? 'font-semibold text-sky-950' : 'font-medium text-slate-800'
+                        selected ? 'font-semibold text-sky-950 dark:text-sky-100' : 'font-medium text-foreground'
                       )}
                       title={row.workName}
                     >
                       {row.workName}
                       {author ? (
-                        <span className="font-normal text-slate-400">{` · ${author}`}</span>
+                        <span className="font-normal text-muted-foreground">{` · ${author}`}</span>
                       ) : null}
                     </p>
                   </button>

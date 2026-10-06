@@ -76,7 +76,8 @@ type Props = {
   open: boolean
   onClose: () => void
   onOpenLedger: (item: ProtoNotifItem) => void
-  onOpenFee: (feeId: string) => void
+  onOpenFee: (item: ProtoNotifItem) => void
+  onOpenMissingGeom?: (item: ProtoNotifItem) => void
   /** 내 촬영요청 행 선택 시 (신청서 모달 등) */
   onSelectShootingRequest?: (id: string) => void
 }
@@ -86,6 +87,7 @@ export function UserAccountProtoPanel({
   onClose,
   onOpenLedger,
   onOpenFee,
+  onOpenMissingGeom,
   onSelectShootingRequest,
 }: Props) {
   const { data: session, status } = useSession()
@@ -137,7 +139,26 @@ export function UserAccountProtoPanel({
 
   useEffect(() => {
     if (!open || status === 'loading') return
-    void refreshBizNotifs({ system: system || null })
+    let cancelled = false
+    void call('', 'POST', { service: 'configService', action: 'getSystemList', params: {} })
+      .then((res) => {
+        if (cancelled) return
+        const data = res?.data ?? res
+        const systems = Array.isArray(data?.systems) ? data.systems : []
+        const serviceList =
+          systems.find((s: { sys_key?: string }) => String(s?.sys_key ?? '').trim() === system)
+            ?.serviceList ?? null
+        void refreshBizNotifs({
+          system: system || null,
+          serviceList: system && Array.isArray(serviceList) ? serviceList : null,
+        })
+      })
+      .catch(() => {
+        if (!cancelled) void refreshBizNotifs({ system: system || null })
+      })
+    return () => {
+      cancelled = true
+    }
   }, [open, session?.user?.id, status, system])
 
   useEffect(() => {
@@ -295,6 +316,7 @@ export function UserAccountProtoPanel({
                     onMarkRead={handleMarkNotifRead}
                     onOpenLedger={onOpenLedger}
                     onOpenFee={onOpenFee}
+                    onOpenMissingGeom={onOpenMissingGeom}
                   />
                 ) : null}
               </div>

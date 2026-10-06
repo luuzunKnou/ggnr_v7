@@ -21,7 +21,7 @@ import {
   removeOrthoFileFromStore,
   removeSatelliteUnitFromStore,
 } from './aerialMediaMockData';
-import type { AerialKind, AttrRow, WorkUnitItem } from './aerialMediaTypes';
+import { type AerialKind, type AttrRow, type WorkFileItem, type WorkUnitItem } from './aerialMediaTypes';
 import { AERIAL_KIND_LABEL } from './aerialMediaTypes';
 import { MapPlaceholder } from './AerialMediaUi';
 import { WorkUnitListPanel } from './WorkUnitListPanel';
@@ -35,8 +35,13 @@ import {
 } from './WorkUnitDetailPanels';
 import { FolderBatchUploadDialog, type FolderCreatedInfo } from './FolderBatchUploadDialog';
 import { WorkUnitMediaUploadDialog } from './WorkUnitMediaUploadDialog';
-import { useAerialMediaMapFocus } from './useAerialMediaMapFocus';
+import { AerialMediaPointPopup } from './AerialMediaPointPopup';
+import { openAerialDroneFileOnMap } from './useAerialViewCheckedMarkers';
+import { PanoViewerInsetMap } from './PanoViewerInsetMap';
+import { DroneFileGeomEdit } from './DroneFileGeomEdit';
+import { useAerialMediaMapFocus, type MediaPointPick } from './useAerialMediaMapFocus';
 import { useAerialOrthoCheckedTiles } from './useAerialOrthoCheckedTiles';
+import { useAerialOrthoPanelBbox, type OrthoBboxPick } from './useAerialOrthoPanelBbox';
 import {
   subscribeAerialMediaUploadComplete,
   type AerialMediaUploadCompleteEvent,
@@ -59,8 +64,12 @@ import { UploadCompleteDialog } from './UploadCompleteDialog';
 import { UploadProgressBanner } from './UploadProgressBanner';
 import { PanoViewerNav } from './PanoViewerNav';
 import { call } from '@/lib/api';
+import { useMapContext } from '../../_mapComponents/MapContext';
+import { refreshBizNotifs } from '../bizNotif/bizNotifClient';
+import { showSatelliteOnBackgroundMap } from './showSatelliteBackground';
 import { Switch } from '@/app/shadcnComponents/ui/switch';
 import { useAerialOrthoZoomLimit } from './useAerialOrthoZoomLimit';
+import type { MapHitOverlapOption } from '../../_mapComponents/MapHitOverlapSelect';
 
 const PannellumViewer = dynamic(() => import('./PannellumViewer'), {
   ssr: false,
@@ -83,7 +92,7 @@ function attrValue(attrs: AttrRow[], label: string, fallback = ''): string {
 }
 
 const KIND_ORDER_ALL: AerialKind[] = ['ortho', 'drone', 'panorama', 'satellite'];
-/** 조회전용: 드론영상·파노라마·사진동영상·항공 (관리 버튼·비행기록부 숨김) */
+/** 조회전용: 드론영상·항공뷰·사진동영상·항공 (관리 버튼·비행기록부 숨김) */
 const KIND_ORDER_VIEW: AerialKind[] = ['ortho', 'panorama', 'drone', 'satellite'];
 
 const rem = (n: number) => Math.round(n * 16);
@@ -98,6 +107,8 @@ type Props = {
   onClose?: () => void;
   /** 목록만/상세 열림에 맞춰 바깥 패널 폭 동기화 */
   onContentWidthChange?: (widthPx: number) => void;
+  /** 알림에서 지정한 사진·동영상 파일 */
+  geomFocus?: { unitId: string; fileId: string; token: number } | null;
 };
 
 export function AerialMediaShell({
@@ -107,7 +118,9 @@ export function AerialMediaShell({
   viewOnly = false,
   onClose,
   onContentWidthChange,
+  geomFocus = null,
 }: Props) {
+  const mapContext = useMapContext();
   const kindOrder = viewOnly ? KIND_ORDER_VIEW : KIND_ORDER_ALL;
   const [kind, setKind] = useState<AerialKind>(initialKind);
   const [keyword, setKeyword] = useState('');
@@ -115,7 +128,13 @@ export function AerialMediaShell({
   const [dateTo, setDateTo] = useState('');
   const [selectedUnitId, setSelectedUnitId] = useState<string | null>(null);
   const [selectedFileId, setSelectedFileId] = useState<string | null>(null);
+  /** 알림에서 연 경우만 파일 상세. 목록 클릭은 지도 사진,동영상 카드만 연다. */
+  const [droneFileDetailId, setDroneFileDetailId] = useState<string | null>(null);
+  const [geomEditFile, setGeomEditFile] = useState<WorkFileItem | null>(null);
+  /** 지도 점 클릭 — 넓은 파일 상세 대신 좌표 위 작은 미리보기 */
+  const [pointPopup, setPointPopup] = useState<MediaPointPick | null>(null);
   const [checkedOrthoIds, setCheckedOrthoIds] = useState<Set<string>>(new Set());
+  const [orthoOverlapOptions, setOrthoOverlapOptions] = useState<MapHitOverlapOption[]>([]);
   const [detailTab, setDetailTab] = useState<DetailTab>('info');
   const [uploadOpen, setUploadOpen] = useState(false);
   /** 상세 «이 건으로 폴더 업로드»로 연 경우에만 설정 — 목록 일반 업로드는 null */
@@ -334,7 +353,10 @@ export function AerialMediaShell({
     setKind(initialKind);
     setSelectedUnitId(null);
     setSelectedFileId(null);
+    setDroneFileDetailId(null);
+    setPointPopup(null);
     setCheckedOrthoIds(new Set());
+    setOrthoOverlapOptions([]);
     setDetailTab('info');
     setKeyword('');
     setDateFrom('');
@@ -343,6 +365,15 @@ export function AerialMediaShell({
     setUploadLinkRequestId(null);
     setMediaUploadTarget(null);
   }, [initialKind]);
+
+  useEffect(() => {
+    if (!geomFocus?.unitId || !geomFocus.fileId) return;
+    setKind('drone');
+    setSelectedUnitId(geomFocus.unitId);
+    setSelectedFileId(geomFocus.fileId);
+    setDroneFileDetailId(geomFocus.fileId);
+    setDetailTab('info');
+  }, [geomFocus?.token, geomFocus?.unitId, geomFocus?.fileId]);
 
   useSyncExternalStore(subscribeShootingRequests, getShootingRequests, getShootingRequests);
   useSyncExternalStore(subscribeUploadProgress, getUploadProgressUiVersion, getUploadProgressUiVersion);
@@ -365,7 +396,7 @@ export function AerialMediaShell({
       ? findShootingRequest(selectedUnit.linkedRequestId)
       : null;
 
-  /** 사진·동영상·파노라마·드론영상·항공영상: DB → 작업단위 목록 */
+  /** 사진·동영상·항공뷰·드론영상·항공영상: DB → 작업단위 목록 */
   useEffect(() => {
     if (kind === 'drone') {
       void refreshDroneWorkUnitList().catch(() => undefined);
@@ -394,24 +425,86 @@ export function AerialMediaShell({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- folderName·캐시된 files 기준
   }, [kind, selectedUnit?.folderName, selectedUnit?.files.length]);
 
+  const popupUnit = pointPopup ? units.find((u) => u.id === pointPopup.unitId) ?? null : null;
+  const popupFile = popupUnit?.files.find((f) => f.id === pointPopup?.fileId) ?? null;
+
+  const handleMediaPointPick = useCallback((hit: MediaPointPick) => {
+    if (kind === 'drone') {
+      setPointPopup(hit);
+      setSelectedFileId(null);
+      return;
+    }
+    setSelectedUnitId(hit.unitId);
+    setSelectedFileId(hit.fileId);
+    setDetailTab('info');
+  }, [kind]);
+
   useAerialMediaMapFocus({
     /** 항공영상은 geom 없음 · 단순 목록 조회만 — 지도 이동·마커 없음 */
     enabled: useRealMap && kind !== 'satellite',
-    unit: selectedUnit,
-    selectedFileId,
+    unit: popupUnit ?? selectedUnit,
+    selectedFileId: pointPopup?.fileId ?? selectedFileId,
+    listUnits: kind === 'drone' ? units : null,
+    listRevision: listTick,
+    onPick: kind === 'drone' || kind === 'panorama' ? handleMediaPointPick : undefined,
   });
 
   useAerialOrthoCheckedTiles({
     enabled: useRealMap && kind === 'ortho',
     unit: selectedUnit,
     checkedFileIds: checkedOrthoIds,
+    fitView: false,
+  });
+
+  const orthoPanelTuKeys = useMemo(() => {
+    if (kind !== 'ortho' || !selectedUnit) return undefined;
+    const keys: number[] = [];
+    for (const file of selectedUnit.files) {
+      if (file.tuKey != null && Number.isFinite(file.tuKey)) keys.push(file.tuKey);
+    }
+    return keys;
+  }, [kind, selectedUnit]);
+
+  const showOrthoPick = useCallback((wuKey: number, tuKey: number) => {
+    setSelectedUnitId(`wu-${wuKey}`);
+    setSelectedFileId(`tu-${tuKey}`);
+    setCheckedOrthoIds(new Set([`tu-${tuKey}`]));
+    setDetailTab('info');
+  }, []);
+
+  const handleOrthoBboxPick = useCallback(
+    (hit: OrthoBboxPick) => {
+      showOrthoPick(hit.wuKey, hit.tuKey);
+      setOrthoOverlapOptions(hit.overlaps && hit.overlaps.length > 1 ? hit.overlaps : []);
+    },
+    [showOrthoPick]
+  );
+
+  const handleOrthoOverlapChange = useCallback(
+    (id: string) => {
+      const [wuRaw, tuRaw] = id.split(':');
+      const wuKey = Number(wuRaw);
+      const tuKey = Number(tuRaw);
+      if (!Number.isFinite(wuKey) || !Number.isFinite(tuKey)) return;
+      showOrthoPick(wuKey, tuKey);
+    },
+    [showOrthoPick]
+  );
+
+  useAerialOrthoPanelBbox({
+    enabled: useRealMap && kind === 'ortho',
+    tuKeys: orthoPanelTuKeys,
+    onPick: handleOrthoBboxPick,
   });
 
   const switchKind = (next: AerialKind) => {
     setKind(next);
     setSelectedUnitId(null);
     setSelectedFileId(null);
+    setGeomEditFile(null);
+    setPointPopup(null);
     setCheckedOrthoIds(new Set());
+    setOrthoOverlapOptions([]);
     setDetailTab('info');
     setKeyword('');
     setDateFrom('');
@@ -419,9 +512,23 @@ export function AerialMediaShell({
   };
 
   const handleSelectUnit = (id: string) => {
+    setPointPopup(null);
     setSelectedUnitId(id);
     setSelectedFileId(null);
     setDetailTab('info');
+    setOrthoOverlapOptions([]);
+    const unit = units.find((u) => u.id === id);
+    if (!unit) return;
+    if (kind === 'ortho') {
+      const doneIds = unit.files
+        .filter((file) => file.status === 'done' && file.tuKey != null)
+        .map((file) => file.id);
+      setCheckedOrthoIds(new Set(doneIds));
+      return;
+    }
+    if (kind === 'satellite') {
+      showSatelliteOnBackgroundMap(mapContext, unit);
+    }
   };
 
   const openLinkedFolderUpload = (requestId: string | undefined) => {
@@ -521,7 +628,10 @@ export function AerialMediaShell({
   const closeUnitDetail = () => {
     setSelectedUnitId(null);
     setSelectedFileId(null);
+    setPointPopup(null);
     setDetailTab('info');
+    setOrthoOverlapOptions([]);
+    if (kind === 'ortho') setCheckedOrthoIds(new Set());
   };
 
   const handleSaveOrthoAttrs = async (attrs: AttrRow[]) => {
@@ -642,7 +752,7 @@ export function AerialMediaShell({
         },
       });
       if (res?.success === false) {
-        throw new Error(String(res?.error ?? '파노라마 작업단위 수정에 실패했습니다.'));
+        throw new Error(String(res?.error ?? '항공뷰 작업단위 수정에 실패했습니다.'));
       }
       await refreshPanoWorkUnitList();
     } catch (error) {
@@ -652,7 +762,7 @@ export function AerialMediaShell({
           : error instanceof Error
             ? error.message
             : '';
-      window.alert(message || '파노라마 작업단위 수정에 실패했습니다.');
+      window.alert(message || '항공뷰 작업단위 수정에 실패했습니다.');
       throw error;
     }
   };
@@ -1005,7 +1115,7 @@ export function AerialMediaShell({
   const showUnitDetail = selectedUnit != null;
   const showDroneFile = kind === 'drone' && selectedUnit != null && selectedFile != null;
   const showPanoViewer = kind === 'panorama' && selectedFile != null;
-  /** 지도 임베드 시 파노라마 뷰어는 지도 영역 전체를 덮는 오버레이로 표시 */
+  /** 지도 임베드 시 항공뷰 뷰어는 지도 영역 전체를 덮는 오버레이로 표시 */
   const showPanoOverlay = useRealMap && showPanoViewer && selectedFile != null;
 
   const panoFiles = kind === 'panorama' && selectedUnit ? selectedUnit.files : [];
@@ -1030,7 +1140,7 @@ export function AerialMediaShell({
   const detailWidth = 'w-[420px] shrink-0';
   const fileWidth = 'w-[480px] shrink-0';
   const showFileDetail =
-    showDroneFile && selectedFile != null && detailTab === 'info';
+    showDroneFile && selectedFile != null && detailTab === 'info' && droneFileDetailId === selectedFile.id;
 
   useEffect(() => {
     if (!onContentWidthChange) return;
@@ -1041,7 +1151,7 @@ export function AerialMediaShell({
     onContentWidthChange(w + 4);
   }, [onContentWidthChange, hideKindNav, showUnitDetail, showFileDetail]);
 
-  /** 파노라마 오버레이: 셸(패널 묶음) 오른쪽 끝부터 화면 우측 끝까지 지도 위를 덮음 */
+  /** 항공뷰 오버레이: 셸(패널 묶음) 오른쪽 끝부터 화면 우측 끝까지 지도 위를 덮음 */
   const shellRef = useRef<HTMLDivElement>(null);
   const [panoRect, setPanoRect] = useState<{ top: number; left: number; height: number } | null>(
     null
@@ -1049,6 +1159,7 @@ export function AerialMediaShell({
   const [panoControls, setPanoControls] = useState<
     import('./PannellumViewer').PannellumViewerHandle | null
   >(null);
+  const [panoSceneReady, setPanoSceneReady] = useState(false);
 
   useEffect(() => {
     if (!showPanoOverlay) {
@@ -1087,13 +1198,13 @@ export function AerialMediaShell({
     ? {
         ortho: '드론영상',
         drone: '사진,동영상',
-        panorama: '파노라마',
+        panorama: '항공뷰',
         satellite: '항공영상',
       }
     : {
         ortho: '드론영상',
         drone: '사진,동영상',
-        panorama: '파노라마',
+        panorama: '항공뷰',
         satellite: '항공영상',
       };
 
@@ -1107,21 +1218,21 @@ export function AerialMediaShell({
     <div
       ref={shellRef}
       className={cn(
-        'flex h-full w-full min-h-0 min-w-0 overflow-hidden bg-white',
-        !useRealMap && 'rounded-md border border-slate-200 shadow-sm'
+        'flex h-full w-full min-h-0 min-w-0 overflow-hidden bg-background',
+        !useRealMap && 'rounded-md border border-border shadow-sm'
       )}
     >
       {!hideKindNav ? (
-        <nav className="flex w-[7.5rem] shrink-0 flex-col border-r border-slate-200 bg-slate-50">
-          <div className="flex h-11 shrink-0 items-center justify-between gap-1 border-b border-slate-200 px-2.5">
-            <span className="text-[10px] font-semibold tracking-wide text-slate-500">
+        <nav className="flex w-[7.5rem] shrink-0 flex-col border-r border-border bg-muted">
+          <div className="flex h-11 shrink-0 items-center justify-between gap-1 border-b border-border px-2.5">
+            <span className="text-[10px] font-semibold tracking-wide text-muted-foreground">
               {viewOnly ? '영상조회' : '영상관리'}
             </span>
             {onClose ? (
               <button
                 type="button"
                 onClick={onClose}
-                className="shrink-0 rounded p-1 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
+                className="shrink-0 rounded p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
                 title="닫기"
                 aria-label="닫기"
               >
@@ -1140,8 +1251,8 @@ export function AerialMediaShell({
                     className={cn(
                       'w-full rounded-md px-2.5 py-2.5 text-left text-[11px] leading-snug transition-colors',
                       active
-                        ? 'bg-white font-semibold text-sky-800 shadow-sm ring-1 ring-sky-200'
-                        : 'text-slate-600 hover:bg-white/80 hover:text-slate-900'
+                        ? 'bg-background font-semibold text-sky-800 dark:text-sky-200 shadow-sm ring-1 ring-sky-200 dark:ring-sky-800'
+                        : 'text-muted-foreground hover:bg-muted hover:text-foreground'
                     )}
                   >
                     {kindShort[k]}
@@ -1151,14 +1262,14 @@ export function AerialMediaShell({
             })}
           </ul>
           {viewOnly ? (
-            <div className="border-t border-slate-200 px-2.5 py-2 text-[9px] leading-relaxed text-slate-400">
+            <div className="border-t border-border px-2.5 py-2 text-[9px] leading-relaxed text-muted-foreground">
               조회 전용
             </div>
           ) : null}
         </nav>
       ) : null}
 
-      <div className={cn('flex flex-col border-r border-slate-200', listWidth)}>
+      <div className={cn('flex flex-col border-r border-border', listWidth)}>
         <WorkUnitListPanel
           title={listTitle}
           items={units}
@@ -1171,6 +1282,9 @@ export function AerialMediaShell({
           onClose={hideKindNav ? onClose : undefined}
           showStatus={kind === 'satellite'}
           showConvertStatus={kind === 'ortho' || kind === 'satellite'}
+          showMissingGeom={kind === 'drone'}
+          showDropFolderHint={!viewOnly && (kind === 'drone' || kind === 'panorama' || kind === 'ortho')}
+          dropFolderKind={kind === 'panorama' ? 'panorama' : kind === 'ortho' ? 'ortho' : 'drone'}
           dateFrom={dateFrom}
           dateTo={dateTo}
           onDateFromChange={setDateFrom}
@@ -1178,8 +1292,8 @@ export function AerialMediaShell({
           emptyHint={viewOnly ? '검색어를 바꿔 보세요.' : undefined}
           toolsExtra={
             !viewOnly && kind === 'ortho' && canManageZoomLimit ? (
-              <div className="flex items-center justify-between gap-2 rounded-md border border-slate-200 bg-slate-50/80 px-2.5 py-2">
-                <span className="text-[11px] font-medium text-slate-700">고화질 제한</span>
+              <div className="flex items-center justify-between gap-2 rounded-md border border-border bg-muted/50 px-2.5 py-2">
+                <span className="text-[11px] font-medium text-foreground">고화질 제한</span>
                 <Switch
                   checked={zoomLimitOn}
                   disabled={zoomLimitBusy}
@@ -1200,14 +1314,14 @@ export function AerialMediaShell({
             <div className="space-y-2">
               <UploadProgressBanner jobs={uploadingJobs} />
               {kind === 'satellite' ? (
-                <p className="rounded-md border border-amber-200/80 bg-amber-50 px-2.5 py-2 text-[10px] leading-relaxed text-amber-900">
+                <p className="rounded-md border border-amber-200 dark:border-amber-800/80 bg-amber-50 dark:bg-amber-950/40 px-2.5 py-2 text-[10px] leading-relaxed text-amber-900 dark:text-amber-100">
                   {viewOnly
                     ? '지도 표시는 배경지도 «자체항공영상»에서 on/off 합니다.'
                     : '변환 완료 시 배경지도 «자체항공영상»에 등록됩니다. on/off는 배경지도에서 합니다.'}
                 </p>
               ) : null}
               {useRealMap && kind === 'ortho' && checkedOrthoIds.size > 0 ? (
-                <p className="rounded-md border border-emerald-200/80 bg-emerald-50 px-2.5 py-2 text-[10px] text-emerald-800">
+                <p className="rounded-md border border-emerald-200 dark:border-emerald-800/80 bg-emerald-50 dark:bg-emerald-950/40 px-2.5 py-2 text-[10px] text-emerald-800 dark:text-emerald-200">
                   지도에 드론영상 타일 {checkedOrthoIds.size}개 표시 중
                 </p>
               ) : null}
@@ -1217,7 +1331,7 @@ export function AerialMediaShell({
       </div>
 
       {showUnitDetail && selectedUnit && kind === 'ortho' ? (
-        <div className={cn('flex shrink-0 flex-col border-r border-slate-200', detailWidth)}>
+        <div className={cn('flex shrink-0 flex-col border-r border-border', detailWidth)}>
           <OrthoWorkUnitDetailPanel
             unit={selectedUnit}
             checkedFileIds={checkedOrthoIds}
@@ -1227,6 +1341,13 @@ export function AerialMediaShell({
             onClose={closeUnitDetail}
             detailTab={detailTab}
             onDetailTabChange={setDetailTab}
+            overlapOptions={orthoOverlapOptions}
+            overlapValue={
+              selectedFileId
+                ? `${selectedUnit.id.replace(/^wu-/, '')}:${selectedFileId.replace(/^tu-/, '')}`
+                : (orthoOverlapOptions[0]?.value ?? '')
+            }
+            onOverlapChange={handleOrthoOverlapChange}
             viewOnly={viewOnly}
             linkedRequest={detailLinkedRequest}
             onFolderUpload={() => openLinkedFolderUpload(selectedUnit.linkedRequestId)}
@@ -1247,11 +1368,16 @@ export function AerialMediaShell({
       ) : null}
 
       {showUnitDetail && selectedUnit && kind === 'drone' ? (
-        <div className={cn('flex shrink-0 flex-col border-r border-slate-200', detailWidth)}>
+        <div className={cn('flex shrink-0 flex-col border-r border-border', detailWidth)}>
           <DroneWorkUnitDetailPanel
             unit={selectedUnit}
             selectedFileId={selectedFileId}
-            onSelectFile={setSelectedFileId}
+            onSelectFile={(fileId) => {
+              setSelectedFileId(fileId);
+              setDroneFileDetailId(null);
+              setPointPopup(null);
+              openAerialDroneFileOnMap(selectedUnit.id, fileId);
+            }}
             onClose={closeUnitDetail}
             detailTab={detailTab}
             onDetailTabChange={setDetailTab}
@@ -1264,6 +1390,14 @@ export function AerialMediaShell({
               clearActiveRegistrationRequest();
             }}
             onSaveAttrs={handleSaveDroneAttrs}
+            onEditFileGeom={
+              viewOnly
+                ? undefined
+                : (file) => {
+                    setSelectedFileId(file.id);
+                    setGeomEditFile(file);
+                  }
+            }
             onDelete={() => {
               void handleDeleteDroneUnit();
             }}
@@ -1272,7 +1406,7 @@ export function AerialMediaShell({
       ) : null}
 
       {showUnitDetail && selectedUnit && kind === 'panorama' ? (
-        <div className={cn('flex shrink-0 flex-col border-r border-slate-200', detailWidth)}>
+        <div className={cn('flex shrink-0 flex-col border-r border-border', detailWidth)}>
           <PanoramaWorkUnitDetailPanel
             unit={selectedUnit}
             selectedFileId={selectedFileId}
@@ -1304,7 +1438,7 @@ export function AerialMediaShell({
       ) : null}
 
       {showUnitDetail && selectedUnit && kind === 'satellite' ? (
-        <div className={cn('flex shrink-0 flex-col border-r border-slate-200', detailWidth)}>
+        <div className={cn('flex shrink-0 flex-col border-r border-border', detailWidth)}>
           <SatelliteWorkUnitDetailPanel
             unit={selectedUnit}
             onClose={closeUnitDetail}
@@ -1329,12 +1463,27 @@ export function AerialMediaShell({
         </div>
       ) : null}
 
+      {kind === 'drone' && popupUnit && popupFile ? (
+        <AerialMediaPointPopup
+          file={popupFile}
+          files={popupUnit.files}
+          workName={popupUnit.workName}
+          workDate={popupUnit.workDate}
+          onClose={() => setPointPopup(null)}
+        />
+      ) : null}
+
       {showFileDetail && selectedFile ? (
         <div className={cn('flex shrink-0 flex-col', fileWidth)}>
           <DroneFileDetailPanel
             file={selectedFile}
             files={selectedUnit?.files}
-            onClose={() => setSelectedFileId(null)}
+            onClose={() => {
+              setSelectedFileId(null);
+              setDroneFileDetailId(null);
+              setGeomEditFile(null);
+            }}
+            onEditGeom={viewOnly ? undefined : (file) => setGeomEditFile(file)}
             onDelete={
               viewOnly
                 ? undefined
@@ -1349,7 +1498,7 @@ export function AerialMediaShell({
       {showPanoOverlay && selectedFile && panoOverlayBox
         ? createPortal(
             <div
-              className="fixed z-[5] flex flex-col overflow-hidden border-l border-slate-200 bg-slate-900 shadow-sm"
+              className="fixed z-[5] flex flex-col overflow-hidden border-l border-border bg-slate-900 shadow-sm"
               style={panoOverlayBox}
             >
               <div className="relative min-h-0 flex-1 bg-slate-900">
@@ -1357,12 +1506,16 @@ export function AerialMediaShell({
                   <PannellumViewer
                     key={selectedFile.id}
                     imageUrl={aerialMediaUrl(selectedFile.relativePath)}
-                    onControlsReady={setPanoControls}
+                    onControlsReady={(api) => {
+                      setPanoControls(api);
+                      if (!api) setPanoSceneReady(false);
+                    }}
+                    onSceneLoad={() => setPanoSceneReady(true)}
                   />
                 ) : (
-                  <div className="flex h-full flex-col items-center justify-center gap-1 text-slate-400">
+                  <div className="flex h-full flex-col items-center justify-center gap-1 text-slate-300">
                     <p className="text-xs font-medium">{selectedFile.name}</p>
-                    <p className="text-[11px] text-slate-500">미리보기 경로가 없습니다</p>
+                    <p className="text-[11px] text-slate-400">미리보기 경로가 없습니다</p>
                   </div>
                 )}
                 <PanoViewerNav
@@ -1377,6 +1530,16 @@ export function AerialMediaShell({
                   onZoomOut={panoControls ? () => panoControls.zoomOut() : undefined}
                   onClose={() => setSelectedFileId(null)}
                 />
+                {panoSceneReady ? (
+                  <PanoViewerInsetMap
+                    file={selectedFile}
+                    onPick={(unitId, fileId) => {
+                      setSelectedUnitId(unitId);
+                      setSelectedFileId(fileId);
+                      setDetailTab('info');
+                    }}
+                  />
+                ) : null}
               </div>
             </div>,
             document.body
@@ -1395,9 +1558,9 @@ export function AerialMediaShell({
               }
             >
               {checkedOrthoIds.size > 0 ? (
-                <div className="rounded-lg border border-emerald-200 bg-white/90 px-4 py-3 shadow-sm">
-                  <p className="text-xs font-medium text-emerald-800">지도용 타일 레이어 on (목업)</p>
-                  <ul className="mt-1.5 space-y-0.5 text-[10px] text-slate-600">
+                <div className="rounded-lg border border-emerald-200 dark:border-emerald-800 bg-background/90 px-4 py-3 shadow-sm">
+                  <p className="text-xs font-medium text-emerald-800 dark:text-emerald-200">지도용 타일 레이어 on (목업)</p>
+                  <ul className="mt-1.5 space-y-0.5 text-[10px] text-muted-foreground">
                     {selectedUnit?.files
                       .filter((f) => checkedOrthoIds.has(f.id))
                       .map((f) => (
@@ -1418,11 +1581,11 @@ export function AerialMediaShell({
 
           {kind === 'panorama' ? (
             <MapPlaceholder
-              title={showPanoViewer ? '파노라마 미리보기' : '지도'}
+              title={showPanoViewer ? '항공뷰 미리보기' : '지도'}
               hint={showPanoViewer ? selectedFile?.name : undefined}
             >
               {showPanoViewer && selectedFile?.relativePath ? (
-                <div className="relative h-[min(56vh,420px)] w-full max-w-3xl overflow-hidden rounded-md border border-slate-200 bg-slate-900 shadow-sm">
+                <div className="relative h-[min(56vh,420px)] w-full max-w-3xl overflow-hidden rounded-md border border-border bg-slate-900 shadow-sm">
                   <PannellumViewer
                     key={selectedFile.id}
                     imageUrl={aerialMediaUrl(selectedFile.relativePath)}
@@ -1442,8 +1605,8 @@ export function AerialMediaShell({
                   />
                 </div>
               ) : (
-                <div className="rounded-md border border-slate-200 bg-white px-4 py-3 shadow-sm">
-                  <p className="text-xs text-slate-600">파일 목록에서 파노라마를 선택하세요</p>
+                <div className="rounded-md border border-border bg-background px-4 py-3 shadow-sm">
+                  <p className="text-xs text-muted-foreground">파일 목록에서 항공뷰를 선택하세요</p>
                 </div>
               )}
             </MapPlaceholder>
@@ -1451,11 +1614,11 @@ export function AerialMediaShell({
 
           {kind === 'satellite' ? (
             <MapPlaceholder title="지도" hint="배경지도 «자체항공영상»에서 on/off">
-              <div className="rounded-lg border border-slate-300/80 bg-white/80 px-4 py-3 shadow-sm">
-                <p className="text-xs font-medium text-slate-600">항공영상 · 배경지도에서 표시</p>
-                <p className="mt-1 text-[10px] text-slate-500">목록만 제공 · 지도 on/off는 배경지도</p>
+              <div className="rounded-lg border border-border bg-background/80 px-4 py-3 shadow-sm">
+                <p className="text-xs font-medium text-muted-foreground">항공영상 · 배경지도에서 표시</p>
+                <p className="mt-1 text-[10px] text-muted-foreground">목록만 제공 · 지도 on/off는 배경지도</p>
                 {selectedUnitId ? (
-                  <p className="mt-2 text-[10px] text-sky-700">
+                  <p className="mt-2 text-[10px] text-sky-700 dark:text-sky-300">
                     선택: {units.find((u) => u.id === selectedUnitId)?.workName}
                   </p>
                 ) : null}
@@ -1495,6 +1658,17 @@ export function AerialMediaShell({
         />
       ) : null}
       {!viewOnly ? <UploadCompleteDialog notice={uploadCompleteNotice} /> : null}
+      {kind === 'drone' && geomEditFile && !viewOnly ? (
+        <DroneFileGeomEdit
+          file={geomEditFile}
+          onClose={() => setGeomEditFile(null)}
+          onSaved={() => {
+            setGeomEditFile(null);
+            void refreshDroneWorkUnitList();
+            void refreshBizNotifs();
+          }}
+        />
+      ) : null}
     </div>
   );
 }

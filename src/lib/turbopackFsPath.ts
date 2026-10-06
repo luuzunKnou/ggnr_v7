@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { getProjectEnvVars } from '../../scripts/load-project-env';
 
 /**
  * Turbopack NFT: path.resolve/join + fs.* 에 정적 분석 가능한 경로가 있으면
@@ -43,30 +44,39 @@ export function resolveGgnrDataUncRoot(): string {
 }
 
 /**
- * G: → \\192.168.127.11\service_data 등 UNC 루트 치환.
- * Windows 서비스(nssm)·Node는 로그인 세션의 드라이브 매핑(G:)을 못 보므로
- * common.runtime.env 의 GGNR_DATA_UNC_ROOT 가 있으면 GGNR_DATA_DIR 드라이브 문자를 UNC 로 바꾼다.
+ * G: 만 UNC 로 바꾼다. 로그인 세션에 매핑된 G: 는 Windows 서비스가 못 본다.
+ * C: 처럼 운영 env 에 적힌 로컬 경로는 바꾸지 않는다.
  */
 function applyWindowsUncDataRoot(rawPath: string): string {
   if (process.platform !== 'win32') return rawPath;
   const uncRoot = resolveGgnrDataUncRoot();
   if (!uncRoot) return rawPath;
   const driveMatch = /^([a-zA-Z]):[\\/]/.exec(rawPath);
-  if (!driveMatch) return rawPath;
+  if (!driveMatch || driveMatch[1].toUpperCase() !== 'G') return rawPath;
   const rest = rawPath.slice(2);
   return joinUncRoot(uncRoot, rest);
 }
 
-/** GGNR_DATA_DIR — 리터럴 d:\ggnr_data_dir / 환경변수 키 정적 추적 회피 */
+/** prod: <project>.env [prod] 의 GGNR_DATA_DIR (runtime.env 등 process.env 덮어쓰기 무시) */
+function readProdDataDirFromProjectEnv(key: string): string {
+  const project = (process.env.GGNR_PROJECT ?? '').trim();
+  if (!project) return '';
+  try {
+    return (getProjectEnvVars(project, 'prod')[key] ?? '').trim();
+  } catch {
+    return '';
+  }
+}
+
+/**
+ * GGNR_DATA_DIR — 리터럴 d:\ggnr_data_dir / 환경변수 키 정적 추적 회피.
+ * prod 는 프로젝트 .env 값을 그대로 사용 (UNC 치환 없음). dev·demo 만 G: → UNC 치환.
+ */
 export function resolveGgnrDataDir(): string {
   const key = ['GGNR', 'DATA', 'DIR'].join('_');
-  const fromEnv = process.env[key];
-  let raw: string;
-  if (fromEnv?.trim()) {
-    raw = path.normalize(fromEnv.trim());
-  } else {
-    raw = ['d:', 'ggnr_data_dir'].join(path.sep);
-  }
-  raw = applyWindowsUncDataRoot(raw);
+  const isProd = (process.env.GGNR_ENV ?? '').trim().toLowerCase() === 'prod';
+  const fromEnv = (isProd ? readProdDataDirFromProjectEnv(key) : '') || (process.env[key] ?? '').trim();
+  let raw = fromEnv ? path.normalize(fromEnv) : ['d:', 'ggnr_data_dir'].join(path.sep);
+  if (!isProd) raw = applyWindowsUncDataRoot(raw);
   return turbopackOpaquePath(raw);
 }

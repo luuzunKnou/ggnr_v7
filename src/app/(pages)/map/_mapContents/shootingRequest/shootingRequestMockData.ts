@@ -6,7 +6,7 @@ export type ShootType = 'ortho' | 'drone' | 'panorama' | 'satellite';
 export const SHOOT_TYPE_LABEL: Record<ShootType, string> = {
   ortho: '드론영상',
   drone: '사진·동영상',
-  panorama: '파노라마',
+  panorama: '항공뷰',
   satellite: '항공영상',
 };
 
