@@ -6,6 +6,7 @@ import { buildGnmsUploadApiBase, DEFAULT_GNMS_URL, normalizeGnmsOrigin } from '@
 import { getGnmsUrl } from '@/service/configService';
 import {
   failUploadProgress,
+  getUploadProgress,
   patchUploadProgress,
   setChunkProgress,
   setUploadProgressPhase,
@@ -725,6 +726,16 @@ function reportFail(progressId: string | undefined, stage: string, message: stri
   if (progressId) failUploadProgress(progressId, stage, message, extra);
 }
 
+async function abortUploadIfRequested(progressId: string | undefined, uploadId?: string): Promise<void> {
+  if (!progressId || !getUploadProgress(progressId)?.cancelled) return;
+  if (uploadId) {
+    await cancelRemoteSourceUpload({ uploadId, reason: 'user_abort' }).catch(() => {});
+  }
+  const err = new Error('사용자가 취소했습니다.');
+  err.name = 'AbortError';
+  throw err;
+}
+
 export async function uploadZipByChunks(params: UploadZipParams): Promise<RemoteUploadResult> {
   const {
     zipPath,
@@ -738,6 +749,8 @@ export async function uploadZipByChunks(params: UploadZipParams): Promise<Remote
     progressId,
     includeNodeModules = false,
   } = params;
+  await abortUploadIfRequested(progressId);
+
   const base = getRemoteUploadBase();
   const initUrl = `${base}/init`;
   const chunkUrl = `${base}/chunk`;
@@ -871,6 +884,7 @@ export async function uploadZipByChunks(params: UploadZipParams): Promise<Remote
   try {
     let position = 0;
     for (let chunkIndex = 0; chunkIndex < expectedChunks; chunkIndex++) {
+      await abortUploadIfRequested(progressId, uploadId);
       const remain = totalSize - position;
       const want = Math.min(chunkSize, Math.max(remain, 0));
       if (want <= 0) break;
@@ -1001,6 +1015,8 @@ export async function uploadZipByChunks(params: UploadZipParams): Promise<Remote
   } catch (err) {
     logStage('chunk-status', { uploadId, error: formatFetchCause(err) });
   }
+
+  await abortUploadIfRequested(progressId, uploadId);
 
   const completeBody = {
     uploadId,

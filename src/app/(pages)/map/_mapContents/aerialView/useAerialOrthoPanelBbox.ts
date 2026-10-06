@@ -203,13 +203,13 @@ export function useAerialOrthoPanelBbox(params: {
               label: String(feat.get('title') ?? feat.get('tuKey')),
             }))
           : undefined;
-      const pointer = evt.originalEvent;
+      const pointer = evt.originalEvent instanceof MouseEvent ? evt.originalEvent : null;
       onPickRef.current?.({
         wuKey,
         tuKey,
         overlaps,
-        clientX: 'clientX' in pointer ? pointer.clientX : 0,
-        clientY: 'clientY' in pointer ? pointer.clientY : 0,
+        clientX: pointer?.clientX ?? 0,
+        clientY: pointer?.clientY ?? 0,
       });
     };
     const onMove = (evt: MapBrowserEvent) => {
@@ -218,8 +218,8 @@ export function useAerialOrthoPanelBbox(params: {
       const el = map.getTargetElement();
       if (el) el.style.cursor = hit ? 'pointer' : '';
     };
-    map.on('singleclick', onClick);
-    map.on('pointermove', onMove);
+    map.on('singleclick', onClick as never);
+    map.on('pointermove', onMove as never);
 
     (async () => {
       try {
@@ -257,8 +257,8 @@ export function useAerialOrthoPanelBbox(params: {
 
     return () => {
       cancelled = true;
-      map.un('singleclick', onClick);
-      map.un('pointermove', onMove);
+      map.un('singleclick', onClick as never);
+      map.un('pointermove', onMove as never);
       const el = map.getTargetElement();
       if (el) el.style.cursor = '';
       if (layerRef.current) {

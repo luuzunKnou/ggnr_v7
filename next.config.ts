@@ -55,6 +55,10 @@ const nextConfig: NextConfig = {
     BASE_PATH: basePath,
   },
   devIndicators: false,
+  /**
+   * Turbopack은 orthophotoService 등 대형 Node 서비스 묶을 때 FATAL panic 이 난다.
+   * 운영·빌드프로그램은 `next build --webpack` (package.json build 스크립트) 사용.
+   */
   turbopack: {},
   /** conda env 등 대량 파일이 Turbopack 파일 추적에 잡히지 않게 */
   outputFileTracingExcludes: {

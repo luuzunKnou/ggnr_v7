@@ -10,6 +10,7 @@ import { getOccupationLedgerExpiryNotifications } from '@/service/occupationLedg
 import { getUseFeeUnpaidDueNotifications } from '@/service/useFeeService';
 import { getUseFeeBinding } from '@/lib/useFeeBinding';
 import { getOccupationLedgerBinding } from '@/lib/occupationLedgerBinding';
+import { getSystemList } from '@/service/configService';
 
 export type BizNotifItem = {
   id: string;
@@ -22,9 +23,30 @@ export type BizNotifItem = {
   important: true;
   target: 'ledger' | 'fee' | 'aerial';
   targetId: string;
-  /** URL system= 과 맞춤 (예: river) */
+  /** URL system= 필터용 — systemList 메뉴에 해당 ser_eng 가 있는 시스템 */
   systemScope: string;
+  /** 열 패널 opened 토큰 (roadOccupationLedger 등) */
+  serEng: string;
 };
+
+/** 데이터 접두 기본값 대신, 실제 부서업무(systemList.serviceList)에 ser_eng 이 있는 시스템으로 맞춤 */
+function resolveNotifSystemScope(serEng: string, fallback: string): string {
+  const eng = String(serEng ?? '').trim();
+  const fb = String(fallback ?? '').trim().toLowerCase();
+  if (!eng) return fb;
+  const homes: string[] = [];
+  for (const s of getSystemList().systems) {
+    const sysKey = String(s.sys_key ?? '').trim();
+    if (!sysKey) continue;
+    if ((s.serviceList ?? []).some((x) => String(x).trim() === eng)) {
+      homes.push(sysKey);
+    }
+  }
+  // 메뉴에 없으면 알림 소속도 비움 → 어떤 시스템 필터에도 안 걸림(목록 기준 필터가 우선)
+  if (homes.length === 0) return '';
+  if (fb && homes.includes(fb)) return fb;
+  return homes[0]!;
+}
 
 const WITHIN_DAYS = 15;
 
@@ -167,6 +189,7 @@ async function listMissingDroneGeomNotifications(): Promise<Omit<BizNotifItem, '
         target: 'aerial',
         targetId: `wu-${wuKey}:fu-${fuKey}`,
         systemScope: 'uav',
+        serEng: 'aerialDrone',
       });
     }
     return out;
@@ -207,6 +230,7 @@ export async function listMyBizNotifications(params?: {
   }
 
   for (const row of uljinExpiryRes.items ?? []) {
+    const serEng = 'usageDataAs';
     candidates.push({
       id: `usage-expiry:${row.rowKey}`,
       notifKey: `usage-expiry:${row.rowKey}`,
@@ -217,12 +241,15 @@ export async function listMyBizNotifications(params?: {
       important: true,
       target: 'ledger',
       targetId: row.rowKey,
-      systemScope: 'river',
+      serEng,
+      systemScope: resolveNotifSystemScope(serEng, 'river'),
     });
   }
 
   for (const row of occupExpiryRes.items ?? []) {
-    const ledgerTitle = getOccupationLedgerBinding({ prefix: row.prefix })?.title ?? '점용';
+    const binding = getOccupationLedgerBinding({ prefix: row.prefix });
+    const ledgerTitle = binding?.title ?? '점용';
+    const serEng = binding?.serEng ?? '';
     candidates.push({
       id: `occup-expiry:${row.prefix}:${row.rowKey}`,
       notifKey: `occup-expiry:${row.prefix}:${row.rowKey}`,
@@ -233,12 +260,15 @@ export async function listMyBizNotifications(params?: {
       important: true,
       target: 'ledger',
       targetId: row.rowKey,
-      systemScope: row.systemScope,
+      serEng,
+      systemScope: resolveNotifSystemScope(serEng, row.systemScope),
     });
   }
 
   for (const row of feeRes.items ?? []) {
-    const feeTitle = getUseFeeBinding({ prefix: row.prefix }).title;
+    const feeBinding = getUseFeeBinding({ prefix: row.prefix });
+    const feeTitle = feeBinding.title;
+    const serEng = feeBinding.serEng;
     candidates.push({
       id: `use-fee-due:${row.prefix}:${row.id}`,
       notifKey: `use-fee-due:${row.prefix}:${row.id}`,
@@ -249,7 +279,8 @@ export async function listMyBizNotifications(params?: {
       important: true,
       target: 'fee',
       targetId: row.id,
-      systemScope: row.systemScope,
+      serEng,
+      systemScope: resolveNotifSystemScope(serEng, row.systemScope),
     });
   }
 

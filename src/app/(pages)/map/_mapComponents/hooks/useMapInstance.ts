@@ -5,7 +5,7 @@ import OSM from 'ol/source/OSM';
 import { defaults } from 'ol/control';
 import { getTransform } from 'ol/proj';
 import '../config/projections'; // 좌표계 등록
-import { DEFAULT_CENTER_LON, DEFAULT_CENTER_LAT, DEFAULT_ZOOM_2D, RESOLUTIONS_3857 } from '../config/mapDefaults';
+import { DEFAULT_CENTER_LON, DEFAULT_CENTER_LAT, DEFAULT_ZOOM_2D, VIEW_RESOLUTIONS_3857 } from '../config/mapDefaults';
 import { createCadastralLayers, createBuildingRoadLayers } from '../layerFactory/boundaryLayerFactory';
 import { createSafetyFacBuildingRoadLayers } from '../layerFactory/safetyFacBuildingRoadLayerFactory';
 import { createBasicSectionLayers } from '../layerFactory/basicSectionLayerFactory';
@@ -76,9 +76,9 @@ export function useMapInstance(
       view: new View({
         center: initialCenter,
         zoom: initialZoom,
-        resolutions: RESOLUTIONS_3857,
+        resolutions: VIEW_RESOLUTIONS_3857,
         minZoom: 0,
-        maxZoom: RESOLUTIONS_3857.length - 1,
+        maxZoom: VIEW_RESOLUTIONS_3857.length - 1,
         constrainResolution: true,
       }),
       controls: defaults({

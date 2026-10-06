@@ -180,11 +180,19 @@
   border-top-right-radius: 15px;
 }
 
-.map-print-footer-right {
+.map-print-footer-right-wrap {
   position: absolute;
   right: 0;
   bottom: 0;
   z-index: 4;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 10px;
+}
+
+.map-print-footer-right {
+  position: static;
   padding: 7px 12px;
   font-size: 12px;
   line-height: 1.45;
@@ -196,6 +204,31 @@
   border-bottom: none;
   border-right: none;
   border-top-left-radius: 15px;
+}
+
+.map-print-footer-scale {
+  margin-right: 10px;
+  pointer-events: auto;
+}
+
+.map-print-footer-scale .ggnr-scale-bar {
+  position: static;
+  right: auto;
+  bottom: auto;
+  z-index: auto;
+}
+
+.map-print-footer-scale .ggnr-scale-bar-inner {
+  width: 108px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: color-mix(in oklab, #fff 55%, transparent);
+  padding: 4px 8px;
+  color: var(--foreground);
+}
+
+.map-print-footer-scale .ggnr-scale-bar-input {
+  cursor: text;
 }
 
 .map-print-side-panel {
@@ -411,6 +444,14 @@
 
   body.map-print-printing .map-print-ignore {
     display: none !important;
+  }
+
+  body.map-print-printing .ggnr-scale-bar,
+  body.map-print-printing .ggnr-scale-bar-inner,
+  body.map-print-printing .ggnr-scale-bar-input {
+    color: #111 !important;
+    border-color: #111 !important;
+    background: color-mix(in oklab, #fff 55%, transparent) !important;
   }
 
   @page {

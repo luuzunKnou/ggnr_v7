@@ -12,6 +12,8 @@ export type ProtoNotifItem = {
   targetId: string
   notifKey?: string
   systemScope?: string
+  /** 열 패널 ser_eng (메뉴 소속·이동용) */
+  serEng?: string
 }
 
 export const PROTO_NOTIFS: ProtoNotifItem[] = []

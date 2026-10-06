@@ -48,6 +48,18 @@ for (let z = 0; z <= 20; z++) {
   RESOLUTIONS_3857[z] = WEB_MERCATOR_MAX / Math.pow(2, z);
 }
 
+/** 지도 화면 최대 줌 — 타일 체계(20)보다 더 확대. 넘는 단계는 마지막 타일을 늘려 표시 */
+export const MAP_VIEW_MAX_ZOOM = 22;
+
+/**
+ * 지도 화면(View)용 해상도. 타일 격자는 RESOLUTIONS_3857(20단계)을 그대로 써서
+ * 서버에 없는 단계의 타일을 요청하지 않게 한다.
+ */
+export const VIEW_RESOLUTIONS_3857: number[] = [];
+for (let z = 0; z <= MAP_VIEW_MAX_ZOOM; z++) {
+  VIEW_RESOLUTIONS_3857[z] = WEB_MERCATOR_MAX / Math.pow(2, z);
+}
+
 /** EPSG:3857 표준 extent (미터) */
 const EXTENT_3857 = [-20037508.34, -20037508.34, 20037508.34, 20037508.34];
 
