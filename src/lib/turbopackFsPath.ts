@@ -44,16 +44,15 @@ export function resolveGgnrDataUncRoot(): string {
 }
 
 /**
- * G: → \\192.168.127.11\service_data 등 UNC 루트 치환.
- * Windows 서비스(nssm)·Node는 로그인 세션의 드라이브 매핑(G:)을 못 보므로
- * common.runtime.env 의 GGNR_DATA_UNC_ROOT 가 있으면 GGNR_DATA_DIR 드라이브 문자를 UNC 로 바꾼다.
+ * G: 만 UNC 로 바꾼다. 로그인 세션에 매핑된 G: 는 Windows 서비스가 못 본다.
+ * C: 처럼 운영 env 에 적힌 로컬 경로는 바꾸지 않는다.
  */
 function applyWindowsUncDataRoot(rawPath: string): string {
   if (process.platform !== 'win32') return rawPath;
   const uncRoot = resolveGgnrDataUncRoot();
   if (!uncRoot) return rawPath;
   const driveMatch = /^([a-zA-Z]):[\\/]/.exec(rawPath);
-  if (!driveMatch) return rawPath;
+  if (!driveMatch || driveMatch[1].toUpperCase() !== 'G') return rawPath;
   const rest = rawPath.slice(2);
   return joinUncRoot(uncRoot, rest);
 }

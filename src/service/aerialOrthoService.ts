@@ -235,6 +235,9 @@ export async function listOrthoWorkUnitTifs(params: {
   return { wuKey: wu.wuKey, folderName: wu.folderName, items: files.map(toOrthoItem) };
 }
 
+/** 폴더 등록 스케줄러만 넘긴다. JSON 요청으로는 이 값이 만들어지지 않는다. */
+export const ORTHO_DROP_ACTOR = Symbol.for('ggnr.orthoDropConvert');
+
 /**
  * 작업단위의 pending/failed TIF를 순차 변환.
  * 업로드 직후 큐에서 호출.
@@ -247,6 +250,7 @@ export async function convertOrthoWorkUnit(params: {
   jpegQuality?: number;
   /** true면 변환완료 건도 다시 변환 */
   force?: boolean;
+  dropActor?: symbol;
 } = {}): Promise<{
   wuKey: number;
   folderName: string;
@@ -254,7 +258,7 @@ export async function convertOrthoWorkUnit(params: {
   failed: number;
   items: OrthoTifItem[];
 }> {
-  const usrId = await requireSession();
+  const usrId = params.dropActor === ORTHO_DROP_ACTOR ? 'scheduler' : await requireSession();
   let wuKey =
     params.wuKey != null && Number.isFinite(Number(params.wuKey)) ? Number(params.wuKey) : null;
   const folderRaw = sanitizeAerialFolderName(params.folderName ?? '');
