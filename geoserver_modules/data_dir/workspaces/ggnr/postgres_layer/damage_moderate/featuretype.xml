@@ -1,28 +1,28 @@
 <featureType>
-  <id>FeatureTypeInfoImpl-4f1e7b9b:1a0f0cebe25:-7d66</id>
-  <name>sd_tsunami_emergency_evac_site</name>
-  <nativeName>sd_tsunami_emergency_evac_site</nativeName>
+  <id>FeatureTypeInfoImpl-4f1e7b9b:1a0f0cebe25:-7f0c</id>
+  <name>damage_moderate</name>
+  <nativeName>damage_moderate</nativeName>
   <namespace>
     <id>NamespaceInfoImpl-4bf97568:19c4d6c3053:-7ffa</id>
   </namespace>
-  <title>sd_tsunami_emergency_evac_site</title>
+  <title>damage_moderate</title>
   <keywords>
     <string>features</string>
-    <string>sd_tsunami_emergency_evac_site</string>
+    <string>damage_moderate</string>
   </keywords>
   <srs>EPSG:5181</srs>
   <nativeBoundingBox>
-    <minx>0.0</minx>
-    <maxx>-1.0</maxx>
-    <miny>0.0</miny>
-    <maxy>-1.0</maxy>
+    <minx>338953.9637703102</minx>
+    <maxx>378629.93997138354</maxx>
+    <miny>317648.0504936329</miny>
+    <maxy>344497.18003450823</maxy>
     <crs class="projected">EPSG:5181</crs>
   </nativeBoundingBox>
   <latLonBoundingBox>
-    <minx>124.84847767680762</minx>
-    <maxx>124.84848865053446</maxx>
-    <miny>33.47495973610326</miny>
-    <maxy>33.474968932506</maxy>
+    <minx>128.5478808118793</minx>
+    <maxx>128.9958282405411</maxx>
+    <miny>36.34034187852756</miny>
+    <maxy>36.58874787644145</maxy>
     <crs>EPSG:4326</crs>
   </latLonBoundingBox>
   <projectionPolicy>FORCE_DECLARED</projectionPolicy>
