@@ -446,8 +446,8 @@ echo.
 echo :after_build
 echo.
 echo :: start app ^(nssm AppStdout^)
-echo :: AppStopMethodSkip=1 + ^|^| call; avoids Terminate batch job Y/N
-echo call npm run start -- "%%GGNR_PROJECT%%" "%%GGNR_ENV%%" ^|^| call;
+echo :: keep the start failure code so the window shows the error instead of closing
+echo call npm run start -- "%%GGNR_PROJECT%%" "%%GGNR_ENV%%"
 echo if errorlevel 1 goto start_fail
 echo exit /b 0
 echo.

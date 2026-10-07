@@ -1,4 +1,13 @@
 @echo off
+:: Double-click uses a window that closes when this file ends.
+:: Re-open in a window that stays. Skip when the starter already called this file.
+if /i "%~1"=="__keep" goto :nssm_install_main
+if /i "%GGNR_NSSM_FROM_STARTER%"=="1" goto :nssm_install_main
+if /i "%GGNR_STARTER_NO_PAUSE%"=="1" goto :nssm_install_main
+cmd /k ""%~f0" __keep"
+exit /b
+
+:nssm_install_main
 setlocal EnableExtensions EnableDelayedExpansion
 chcp 65001 >nul
 
@@ -243,6 +252,32 @@ if errorlevel 1 (
   echo.
   echo [안내] 시작 파일의 출력 연결이 깨져 있으면 명령이 바로 끝납니다.
   echo        시작 파일 만들기를 덮어쓰기로 다시 실행하세요.
+  set "EXIT_EC=1"
+  goto :fail_end
+)
+
+echo [서비스등록] 시작 직후 상태를 확인합니다...
+timeout /t 3 /nobreak >nul
+"%NSSM%" status %SERVICE_NAME%
+"%NSSM%" status %SERVICE_NAME% | findstr /I /C:"SERVICE_RUNNING" >nul
+if errorlevel 1 (
+  echo [오류] 등록은 되었으나 서비스가 바로 멈췄습니다.
+  echo        시작 파일의 구분이 운영인지, 기동 오류 로그를 확인하세요.
+  echo        표준 출력: %LOG_OUT%
+  echo        오류 출력: %LOG_ERR%
+  echo ----- 최근 오류 출력 ^(있는 경우^) -----
+  if exist "%LOG_ERR%" (
+    powershell -NoProfile -Command "Get-Content -LiteralPath '%LOG_ERR%' -Tail 40 -ErrorAction SilentlyContinue"
+  ) else (
+    echo ^(오류 출력 파일이 아직 없습니다^)
+  )
+  echo ----- 최근 표준 출력 ^(있는 경우^) -----
+  if exist "%LOG_OUT%" (
+    powershell -NoProfile -Command "Get-Content -LiteralPath '%LOG_OUT%' -Tail 40 -ErrorAction SilentlyContinue"
+  ) else (
+    echo ^(표준 출력 파일이 아직 없습니다^)
+  )
+  echo --------------------------------
   set "EXIT_EC=1"
   goto :fail_end
 )

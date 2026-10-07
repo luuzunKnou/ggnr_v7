@@ -9,7 +9,7 @@ import { db } from '@/database/db';
 import { tifUnit } from '@/database/schema/tif_unit';
 import { workUnit } from '@/database/schema/work_unit';
 import { getSessionUsrId } from '@/lib/auth/guard';
-import { isSuperUser } from '@/lib/auth/superUser';
+import { readSystemControl, writeSystemControl } from '@/lib/systemControlStore';
 import {
   aerialWorkUnitRelativeDir,
   isAerialUploadKind,
@@ -19,8 +19,9 @@ import { detectTifSourceCrs, runAerialOrthoTifToXyz, runAerialSatelliteTifToXyz 
 
 const GGNR_DATA_DIR = process.env.GGNR_DATA_DIR ?? 'd:\\ggnr_data_dir';
 
-/** 드론영상 표시 줌 제한 설정 파일 (DB 없이 공통 반영) */
+/** 드론영상 표시 줌 제한 — 최대줌은 설정 파일, 켜짐 여부는 시스템 통합제어 */
 const ORTHO_ZOOM_LIMIT_REL = path.join('config', 'aerial_ortho_zoom_limit.json');
+const ORTHO_ZOOM_LIMIT_CONTROL = 'orthoZoomLimit';
 const ORTHO_ZOOM_LIMIT_DEFAULT_MAX = 16;
 const ORTHO_ZOOM_FULL_MAX = 19;
 
@@ -235,6 +236,9 @@ export async function listOrthoWorkUnitTifs(params: {
   return { wuKey: wu.wuKey, folderName: wu.folderName, items: files.map(toOrthoItem) };
 }
 
+/** 폴더 등록 스케줄러만 넘긴다. JSON 요청으로는 이 값이 만들어지지 않는다. */
+export const ORTHO_DROP_ACTOR = Symbol.for('ggnr.orthoDropConvert');
+
 /**
  * 작업단위의 pending/failed TIF를 순차 변환.
  * 업로드 직후 큐에서 호출.
@@ -247,6 +251,7 @@ export async function convertOrthoWorkUnit(params: {
   jpegQuality?: number;
   /** true면 변환완료 건도 다시 변환 */
   force?: boolean;
+  dropActor?: symbol;
 } = {}): Promise<{
   wuKey: number;
   folderName: string;
@@ -254,7 +259,7 @@ export async function convertOrthoWorkUnit(params: {
   failed: number;
   items: OrthoTifItem[];
 }> {
-  const usrId = await requireSession();
+  const usrId = params.dropActor === ORTHO_DROP_ACTOR ? 'scheduler' : await requireSession();
   let wuKey =
     params.wuKey != null && Number.isFinite(Number(params.wuKey)) ? Number(params.wuKey) : null;
   const folderRaw = sanitizeAerialFolderName(params.folderName ?? '');
@@ -1025,8 +1030,24 @@ async function writeOrthoZoomLimitFile(next: OrthoZoomLimitFile): Promise<void> 
   await fs.writeFile(abs, `${JSON.stringify(next, null, 2)}\n`, 'utf8');
 }
 
+/** 고화질 제한 스위치 노출·저장 — su 계정만(admin 제외, 시스템 통합제어와 동일) */
 async function canManageOrthoZoomLimit(usrId: string): Promise<boolean> {
-  return isSuperUser(usrId);
+  return usrId.trim().toLowerCase() === 'su';
+}
+
+/** 켜짐 여부는 system_control.orthoZoomLimit, 행이 없으면 기존 설정 파일 값 */
+async function resolveOrthoZoomLimitEnabled(file: OrthoZoomLimitFile): Promise<boolean> {
+  try {
+    const v = await readSystemControl(ORTHO_ZOOM_LIMIT_CONTROL);
+    return v ?? file.enabled;
+  } catch {
+    return file.enabled;
+  }
+}
+
+/** 시스템 통합제어 목록용 — 고화질 제한 켜짐 여부 */
+export async function getOrthoZoomLimitEnabled(): Promise<boolean> {
+  return resolveOrthoZoomLimitEnabled(await readOrthoZoomLimitFile());
 }
 
 /** 드론영상 고화질(줌) 제한 — 조회 (로그인 사용자) */
@@ -1038,11 +1059,12 @@ export async function getOrthoZoomLimitSetting(): Promise<{
 }> {
   const usrId = await requireSession();
   const file = await readOrthoZoomLimitFile();
+  const enabled = await resolveOrthoZoomLimitEnabled(file);
   const canManage = await canManageOrthoZoomLimit(usrId);
   return {
-    enabled: file.enabled,
+    enabled,
     maxZoom: file.maxZoom,
-    displayMaxZoom: file.enabled ? file.maxZoom : ORTHO_ZOOM_FULL_MAX,
+    displayMaxZoom: enabled ? file.maxZoom : ORTHO_ZOOM_FULL_MAX,
     canManage,
   };
 }
@@ -1059,14 +1081,16 @@ export async function setOrthoZoomLimitSetting(params: {
 }> {
   const usrId = await requireSession();
   if (!(await canManageOrthoZoomLimit(usrId))) {
-    throwHttp(403, '슈퍼계정만 변경할 수 있습니다.');
+    throwHttp(403, 'su 계정만 변경할 수 있습니다.');
   }
   const cur = await readOrthoZoomLimitFile();
+  const curEnabled = await resolveOrthoZoomLimitEnabled(cur);
   const next = normalizeOrthoZoomLimit({
-    enabled: params.enabled !== undefined ? Boolean(params.enabled) : cur.enabled,
+    enabled: params.enabled !== undefined ? Boolean(params.enabled) : curEnabled,
     maxZoom: params.maxZoom !== undefined ? Number(params.maxZoom) : cur.maxZoom,
   });
-  await writeOrthoZoomLimitFile(next);
+  await writeSystemControl(ORTHO_ZOOM_LIMIT_CONTROL, next.enabled);
+  if (next.maxZoom !== cur.maxZoom) await writeOrthoZoomLimitFile(next);
   return {
     enabled: next.enabled,
     maxZoom: next.maxZoom,

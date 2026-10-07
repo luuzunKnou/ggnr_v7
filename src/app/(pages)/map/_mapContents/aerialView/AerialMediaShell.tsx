@@ -1283,8 +1283,8 @@ export function AerialMediaShell({
           showStatus={kind === 'satellite'}
           showConvertStatus={kind === 'ortho' || kind === 'satellite'}
           showMissingGeom={kind === 'drone'}
-          showDropFolderHint={!viewOnly && (kind === 'drone' || kind === 'panorama')}
-          dropFolderKind={kind === 'panorama' ? 'panorama' : 'drone'}
+          showDropFolderHint={!viewOnly && (kind === 'drone' || kind === 'panorama' || kind === 'ortho')}
+          dropFolderKind={kind === 'panorama' ? 'panorama' : kind === 'ortho' ? 'ortho' : 'drone'}
           dateFrom={dateFrom}
           dateTo={dateTo}
           onDateFromChange={setDateFrom}

@@ -180,8 +180,22 @@ export function buildOrthoWmsLayerXml(item: {
 }): string {
   const name = escapeXml(item.wmsLayerName);
   const title = escapeXml(item.title);
-  const { minLon, minLat, maxLon, maxLat } = item;
+  return (
+    `<Layer queryable="0" opaque="0">` +
+    `<Name>${name}</Name>` +
+    `<Title>${title}</Title>` +
+    buildWmsExtentXml(item.minLon, item.minLat, item.maxLon, item.maxLat) +
+    `</Layer>`
+  );
+}
 
+/** WMS 1.3 Layer 공통 CRS·범위 XML (WGS84 범위 기준) */
+export function buildWmsExtentXml(
+  minLon: number,
+  minLat: number,
+  maxLon: number,
+  maxLat: number
+): string {
   // WMS 1.3 EPSG:4326 = lat,lon 축순서
   const box4326 = {
     minx: minLat,
@@ -200,25 +214,21 @@ export function buildOrthoWmsLayerXml(item: {
   const box5186 = wgs84ExtentToCrsBox(minLon, minLat, maxLon, maxLat, 'EPSG:5186');
 
   return (
-    `<Layer queryable="0" opaque="0">` +
-    `<Name>${name}</Name>` +
-    `<Title>${title}</Title>` +
     `<CRS>EPSG:4326</CRS>` +
     `<CRS>EPSG:3857</CRS>` +
     `<CRS>EPSG:5181</CRS>` +
     `<CRS>EPSG:5186</CRS>` +
     `<EX_GeographicBoundingBox>` +
-    `<westBound>${minLon}</westBound>` +
-    `<eastBound>${maxLon}</eastBound>` +
-    `<southBound>${minLat}</southBound>` +
-    `<northBound>${maxLat}</northBound>` +
+    `<westBoundLongitude>${minLon}</westBoundLongitude>` +
+    `<eastBoundLongitude>${maxLon}</eastBoundLongitude>` +
+    `<southBoundLatitude>${minLat}</southBoundLatitude>` +
+    `<northBoundLatitude>${maxLat}</northBoundLatitude>` +
     `</EX_GeographicBoundingBox>` +
     bboxXml('CRS:84', box84) +
     bboxXml('EPSG:4326', box4326) +
     (box3857 ? bboxXml('EPSG:3857', box3857) : '') +
     (box5181 ? bboxXml('EPSG:5181', box5181) : '') +
-    (box5186 ? bboxXml('EPSG:5186', box5186) : '') +
-    `</Layer>`
+    (box5186 ? bboxXml('EPSG:5186', box5186) : '')
   );
 }
 

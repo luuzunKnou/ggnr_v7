@@ -1,8 +1,8 @@
 <GeoServerTileLayer>
-  <id>LayerInfoImpl--2053d3:19d606c4ff1:30dc</id>
+  <id>LayerInfoImpl-4f1e7b9b:1a0f0cebe25:-7f08</id>
   <enabled>true</enabled>
   <inMemoryCached>true</inMemoryCached>
-  <name>ggnr:sd_earthquake_outdoor_evac_site</name>
+  <name>ggnr:damage_light</name>
   <mimeFormats>
     <string>image/png</string>
     <string>image/jpeg</string>
@@ -12,10 +12,10 @@
       <gridSetName>EPSG:4326</gridSetName>
       <extent>
         <coords>
-          <double>124.63380467287352</double>
-          <double>33.119108229094586</double>
-          <double>129.68825654039594</double>
-          <double>38.53180854043613</double>
+          <double>128.54782679328136</double>
+          <double>36.33928481558772</double>
+          <double>128.9961525930473</double>
+          <double>36.590604600683434</double>
         </coords>
       </extent>
     </gridSubset>
@@ -23,10 +23,10 @@
       <gridSetName>EPSG:900913</gridSetName>
       <extent>
         <coords>
-          <double>1.3874171671812601E7</double>
-          <double>3911124.2812578804</double>
-          <double>1.4436830679944307E7</double>
-          <double>4654827.336164856</double>
+          <double>1.4309878621210009E7</double>
+          <double>4347407.429813246</double>
+          <double>1.4359786020949442E7</double>
+          <double>4382194.944598302</double>
         </coords>
       </extent>
     </gridSubset>
@@ -42,7 +42,7 @@
       <key>STYLES</key>
       <defaultValue></defaultValue>
       <availableStyles class="sorted-set"/>
-      <defaultStyle>sd_earthquake_outdoor_evac_site</defaultStyle>
+      <defaultStyle>damage_light</defaultStyle>
     </styleParameterFilter>
   </parameterFilters>
   <gutter>0</gutter>

@@ -194,7 +194,7 @@ export function PanoViewerInsetMap({
     };
     syncRef.current = sync;
     recenterRef.current = recenter;
-    const onClick = (evt: MapBrowserEvent<PointerEvent>) => {
+    const onClick = (evt: MapBrowserEvent) => {
       const hits = map.getFeaturesAtPixel(evt.pixel, { hitTolerance: 8 }) as Feature[];
       const picked = hits.find((feat) => feat.get('fileId'));
       if (!picked) return;
@@ -203,7 +203,7 @@ export function PanoViewerInsetMap({
       if (!unitId || !fileId) return;
       onPickRef.current?.(unitId, fileId);
     };
-    const onMove = (evt: MapBrowserEvent<PointerEvent>) => {
+    const onMove = (evt: MapBrowserEvent) => {
       const hits = map.getFeaturesAtPixel(evt.pixel, { hitTolerance: 8 }) as Feature[];
       const el = map.getTargetElement();
       if (el) el.style.cursor = hits.some((feat) => feat.get('fileId')) ? 'pointer' : '';

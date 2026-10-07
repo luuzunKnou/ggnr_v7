@@ -126,7 +126,7 @@ export function useAerialMediaMapFocus(params: {
     }
     layerRef.current?.setVisible(true);
 
-    const onClick = (evt: MapBrowserEvent<PointerEvent>) => {
+    const onClick = (evt: MapBrowserEvent) => {
       if (!onPickRef.current || !layerRef.current) return;
       const hits = map.getFeaturesAtPixel(evt.pixel, {
         layerFilter: (candidate) => candidate === layerRef.current,
@@ -140,7 +140,7 @@ export function useAerialMediaMapFocus(params: {
         fileId: String(picked.get('fileId')),
       });
     };
-    const onMove = (evt: MapBrowserEvent<PointerEvent>) => {
+    const onMove = (evt: MapBrowserEvent) => {
       if (!layerRef.current) return;
       const hit = map.hasFeatureAtPixel(evt.pixel, {
         layerFilter: (candidate) => candidate === layerRef.current,
