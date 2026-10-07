@@ -1,5 +1,5 @@
 <GeoServerTileLayer>
-  <id>LayerInfoImpl-767e4f41:19f1613ef30:38f5</id>
+  <id>LayerInfoImpl-7b45823a:1a113f17c5f:-7f39</id>
   <enabled>true</enabled>
   <inMemoryCached>true</inMemoryCached>
   <name>ggnr:tl_sprd_manage</name>
@@ -12,10 +12,10 @@
       <gridSetName>EPSG:4326</gridSetName>
       <extent>
         <coords>
-          <double>126.189944137224</double>
-          <double>34.98322323241124</double>
-          <double>129.56610747630353</double>
-          <double>38.087125823710316</double>
+          <double>124.84847767680762</double>
+          <double>33.47495973610326</double>
+          <double>124.84848865053446</double>
+          <double>33.474968932506</double>
         </coords>
       </extent>
     </gridSubset>
@@ -23,10 +23,10 @@
       <gridSetName>EPSG:900913</gridSetName>
       <extent>
         <coords>
-          <double>1.4047400324587414E7</double>
-          <double>4161601.482018514</double>
-          <double>1.4423233108328667E7</double>
-          <double>4591741.091461631</double>
+          <double>1.3898068961297605E7</double>
+          <double>3958517.9536042567</double>
+          <double>1.3898070182887292E7</double>
+          <double>3958519.180922135</double>
         </coords>
       </extent>
     </gridSubset>
