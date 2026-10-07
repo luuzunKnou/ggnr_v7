@@ -197,6 +197,13 @@ import { MapSideListPanel } from "./_mapComponents/MapSideListPanel"
 import { PrivateLandAnalysisRoot } from "./_mapContents/privateLandAnalysis/PrivateLandAnalysisContext"
 import { PrivateLandAnalysisListPanel } from "./_mapContents/privateLandAnalysis/PrivateLandAnalysisListPanel"
 import { PrivateLandAnalysisDetailPanel } from "./_mapContents/privateLandAnalysis/PrivateLandAnalysisDetailPanel"
+import { UserDataUploadPanel } from "./_mapContents/userDataUpload/UserDataUploadPanel"
+import {
+  USER_DATA_UPLOAD_OPENED_KEY,
+  USER_DATA_UPLOAD_PANEL_DEFAULT_WIDTH,
+  USER_DATA_UPLOAD_PANEL_MAX_WIDTH,
+  USER_DATA_UPLOAD_PANEL_MIN_WIDTH,
+} from "./_mapContents/userDataUpload/userDataUploadConfig"
 import { SerWriteAccessProvider } from "@/hooks/useSerWriteAccess"
 import { SearchBarOffsetContext } from "./searchBarOffsetContext"
 const SIDEBAR_WIDTH = 65
@@ -687,6 +694,8 @@ function MapLayoutContent({
   const [privateLandAnalysisDetailWidth, setPrivateLandAnalysisDetailWidth] = useState(
     PRIVATE_LAND_ANALYSIS_DETAIL_DEFAULT_WIDTH
   )
+  const userDataUploadOpen = openedWindows.includes(USER_DATA_UPLOAD_OPENED_KEY)
+  const [userDataUploadPanelWidth, setUserDataUploadPanelWidth] = useState(USER_DATA_UPLOAD_PANEL_DEFAULT_WIDTH)
   const [buildPublicLandSelectedId, setBuildPublicLandSelectedId] = useState<string | null>(null)
   const [buildPublicLandListRefreshKey, setBuildPublicLandListRefreshKey] = useState(0)
   const buildPublicLandDetailOpen = buildPublicLandOpen && Boolean(buildPublicLandSelectedId)
@@ -994,7 +1003,8 @@ function MapLayoutContent({
     (fmsLinkageOpen ? fmsLinkagePanelWidth : 0) +
     (fmsLinkageDetailOpen ? fmsLinkageDetailWidth : 0) +
     (privateLandAnalysisOpen ? privateLandAnalysisPanelWidth : 0) +
-    (privateLandAnalysisDetailOpen ? privateLandAnalysisDetailWidth : 0)
+    (privateLandAnalysisDetailOpen ? privateLandAnalysisDetailWidth : 0) +
+    (userDataUploadOpen ? userDataUploadPanelWidth : 0)
   const searchBarOffset = {
     leftPx: SIDEBAR_WIDTH + totalListPanelWidth + SEARCH_BAR_MARGIN,
     topPx: 16,
@@ -1142,6 +1152,8 @@ function MapLayoutContent({
     fmsLinkageDetailLeftPx + (fmsLinkageDetailOpen ? fmsLinkageDetailWidth : 0)
   const privateLandAnalysisDetailLeftPx =
     privateLandAnalysisPanelLeftPx + (privateLandAnalysisOpen ? privateLandAnalysisPanelWidth : 0)
+  const userDataUploadPanelLeftPx =
+    privateLandAnalysisDetailLeftPx + (privateLandAnalysisDetailOpen ? privateLandAnalysisDetailWidth : 0)
   const mapPaddingLeft = SIDEBAR_WIDTH + totalListPanelWidth
   /** 패딩은 useLayoutEffect — 자식 useEffect(도로대장 fit 등)보다 먼저 적용되어야 함.
    * 거리뷰 ON일 때만 맵 중심(A)을 새 센터마크 위치에 맞춤.
@@ -1673,6 +1685,10 @@ function MapLayoutContent({
 
   const handleClosePrivateLandAnalysis = () => {
     setOpened(openedWindows.filter((w) => w !== PRIVATE_LAND_ANALYSIS_OPENED_KEY))
+  }
+
+  const handleCloseUserDataUpload = () => {
+    setOpened(openedWindows.filter((w) => w !== USER_DATA_UPLOAD_OPENED_KEY))
   }
 
   useEffect(() => {
@@ -3380,6 +3396,19 @@ function MapLayoutContent({
                 </div>
               )}
             </PrivateLandAnalysisRoot>
+          )}
+          {userDataUploadOpen && (
+            <div className="pointer-events-auto shrink-0">
+              <MapSideListPanel
+                width={userDataUploadPanelWidth}
+                minWidth={USER_DATA_UPLOAD_PANEL_MIN_WIDTH}
+                maxWidth={USER_DATA_UPLOAD_PANEL_MAX_WIDTH}
+                leftOffsetPx={userDataUploadPanelLeftPx}
+                onWidthChange={setUserDataUploadPanelWidth}
+              >
+                <UserDataUploadPanel onClose={handleCloseUserDataUpload} />
+              </MapSideListPanel>
+            </div>
           )}
           <div className="flex-1 min-w-0 relative">
             <div className="pointer-events-auto">

@@ -55,6 +55,7 @@ export * from './sync_log_geom';
 export * from './sys';
 export * from './sysp_map';
 export * from './sysser_map';
+export * from './system_control';
 export * from './tif_unit';
 export * from './tp_map';
 export * from './ug';
