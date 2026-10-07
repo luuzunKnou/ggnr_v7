@@ -1,16 +1,10 @@
-/** 공사대장 WMS 레이어 */
-export const CONS_DATA_AS_WMS_LAYER_ID = "cons_data_as";
-export const CONS_DATA_AS_SOLO_WMS_LAYER_ID = "cons_data_solo_as";
+import { getConsLedgerVariant, type ConsLedgerKind } from "@/lib/consLedgerVariant";
 
-export const CONS_DATA_AS_CHILD_WMS_LAYER_IDS = [
-  CONS_DATA_AS_SOLO_WMS_LAYER_ID,
-] as const;
-
-export const CONS_DATA_AS_WMS_LAYER_IDS = [
-  CONS_DATA_AS_WMS_LAYER_ID,
-  ...CONS_DATA_AS_CHILD_WMS_LAYER_IDS,
-] as const;
-
-export const CONS_DATA_AS_PANEL_WMS_LAYER_IDS = [
-  ...CONS_DATA_AS_WMS_LAYER_IDS,
-] as const;
+/** 공사대장 종류별 WMS 레이어 (본표·필지) — 하천: cons_data_as / cons_data_solo_as */
+export function consLedgerWmsLayerIds(kind: ConsLedgerKind | undefined): {
+  main: string;
+  solo: string;
+} {
+  const v = getConsLedgerVariant(kind);
+  return { main: v.mainTable, solo: v.soloTable };
+}
