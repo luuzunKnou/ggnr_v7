@@ -12,7 +12,6 @@ import Overlay from 'ol/Overlay';
 import { Fill, Stroke, Style, Circle as CircleStyle, RegularShape } from 'ol/style';
 import { boundingExtent } from 'ol/extent';
 import type OlMap from 'ol/Map';
-import type { FeatureLike } from 'ol/Feature';
 import { useMapContext } from '../../_mapComponents/MapContext';
 import { aerialShotMeta, type AerialKind, type WorkFileItem, type WorkUnitItem } from './aerialMediaTypes';
 import { mockUnitsForKind, subscribeMockWorkUnits } from './aerialMediaMockData';

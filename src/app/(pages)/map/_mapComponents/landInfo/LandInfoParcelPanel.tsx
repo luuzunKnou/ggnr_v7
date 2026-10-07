@@ -6,9 +6,11 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/app/shadcnCo
 import {
   fetchParcelLandModalList,
   fetchParcelTabData,
+  fetchPersonInfoMaskEnabled,
   type ParcelLandModalKind,
   type ParcelTabData,
 } from './api';
+import { formatPersonField } from './landPersonInfoMask';
 import {
   BuildingDataSourceLine,
   LandLinkageLegendText,
@@ -217,6 +219,17 @@ export function LandInfoParcelPanel({
   const [modalHeaders, setModalHeaders] = useState<string[]>([]);
   const [modalRows, setModalRows] = useState<string[][]>([]);
   const [modalMessage, setModalMessage] = useState<string | null>(null);
+  const [personInfoMask, setPersonInfoMask] = useState(false);
+
+  useEffect(() => {
+    let alive = true;
+    void fetchPersonInfoMaskEnabled().then((enabled) => {
+      if (alive) setPersonInfoMask(enabled);
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   const parcelData = controlled ? parcelDataProp! : internalData;
   const parcelFetching = controlled ? (parcelFetchingProp ?? false) : internalFetching;
@@ -417,7 +430,7 @@ export function LandInfoParcelPanel({
               )}
               <LinkageCell
                 k="소유자명"
-                v={getField(latestPossession, ['ownerNm', 'ownerName'])}
+                v={formatPersonField(getField(latestPossession, ['ownerNm', 'ownerName']), personInfoMask)}
                 source={parcelData.source}
                 narrow={narrow}
               />

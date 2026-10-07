@@ -21,6 +21,7 @@ import { SignUpApprove } from "./SignUpApprove"
 import { UserMgmtHistory } from "./UserMgmtHistory"
 import { UserAccessStats } from "./UserAccessStats"
 import { RuntimeEnvEditor } from "./RuntimeEnvEditor"
+import { SystemControlContent } from "./SystemControlContent"
 import { ProjectComposeManager } from "./ProjectComposeManager"
 import { SystemIntegrationManager } from "./SystemIntegrationManager"
 import { GeocodingTestPanel } from "./GeocodingTestPanel"
@@ -44,6 +45,7 @@ export const DEV_MENU_GROUPS: readonly AdminConsoleMenuGroup[] = [
       "permissionFeature",
       "accessRequestQueue",
       "systemVar",
+      "systemControl",
       "projectCompose",
     ],
   },
@@ -95,6 +97,23 @@ export const DEV_MENU_GROUPS: readonly AdminConsoleMenuGroup[] = [
   },
 ]
 
+const SU_ONLY_MENU_IDS = new Set<string>(
+  DEV_SUBMENUS.filter((m) => "suOnly" in m && m.suOnly).map((m) => m.id)
+)
+
+/** su 계정이 아니면 su 전용 메뉴·빈 그룹 제외 */
+export function devMenusForUser(usrId: string | null | undefined) {
+  const isSu = String(usrId ?? "").trim().toLowerCase() === "su"
+  if (isSu) return { menus: DEV_SUBMENUS, menuGroups: DEV_MENU_GROUPS }
+  return {
+    menus: DEV_SUBMENUS.filter((m) => !SU_ONLY_MENU_IDS.has(m.id)),
+    menuGroups: DEV_MENU_GROUPS.map((g) => ({
+      ...g,
+      menuIds: g.menuIds.filter((id) => !SU_ONLY_MENU_IDS.has(id)),
+    })).filter((g) => g.menuIds.length > 0),
+  }
+}
+
 /** 이 메뉴로 진입 시 사이드바를 자동으로 접음. 필요에 따라 메뉴 id를 추가/삭제하세요. */
 export const DEV_AUTO_COLLAPSE_MENU_IDS: readonly DevConsoleMenuId[] = ["layerManager"]
 
@@ -136,6 +155,8 @@ export function getDevMenuDescription(menuId: string): string {
       return "지도·SHP·Excel 데이터 변경·조회·내보내기 이력을 한곳에서 검색·조회합니다."
     case "systemVar":
       return "현재 프로젝트 runtime.env (GGNR_PROJECT) 를 표에서 바로 편집합니다."
+    case "systemControl":
+      return "시스템 전체에 적용되는 기능을 켜고 끕니다. (su 전용)"
     case "projectCompose":
       return "프로젝트별 runtime 설정(시스템 노출·기능 숨김·레이어 그룹)을 선택·편집합니다."
     case "dbManager":
@@ -239,6 +260,12 @@ export function renderDevMenuContent(menuId: string): ReactNode {
       )
     case "systemVar":
       return <RuntimeEnvEditor />
+    case "systemControl":
+      return (
+        <div className="flex flex-col overflow-hidden min-h-0 h-[calc(100vh-14rem)]">
+          <SystemControlContent />
+        </div>
+      )
     case "projectCompose":
       return (
         <div className="flex flex-col overflow-hidden min-h-0 h-[calc(100vh-14rem)]">

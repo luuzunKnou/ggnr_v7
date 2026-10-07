@@ -648,7 +648,23 @@ export async function detectShpCrsCandidates(params: { pathOrResult: string }): 
     }
     const box = await getShpRawExtent(absolutePath);
     if (!box) return { success: false, error: 'SHP 범위를 확인할 수 없습니다.' };
+    return await detectCrsCandidatesByExtent(box);
+  } catch (e: unknown) {
+    return { success: false, error: e instanceof Error ? e.message : String(e) };
+  }
+}
 
+/**
+ * 원시 범위(좌표계 미해석 숫자)를 한국 TM 후보 EPSG 로 각각 해석해 읍면동(emd) 경계와의 겹침으로 순위를 매긴다.
+ * 호출부는 box 값이 유한한 숫자인지 반드시 검증해야 한다 (SQL 에 그대로 들어감).
+ */
+export async function detectCrsCandidatesByExtent(box: { minX: number; minY: number; maxX: number; maxY: number }): Promise<{
+  success: boolean;
+  candidates?: ShpCrsCandidate[];
+  reference5181?: ShpCrsCandidate;
+  error?: string;
+}> {
+  try {
     const { db } = await import('@/database/db');
     const { sql } = await import('drizzle-orm');
 
