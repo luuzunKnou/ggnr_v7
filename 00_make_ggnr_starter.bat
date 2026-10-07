@@ -585,7 +585,7 @@ if exist "%NSSM_EXE%" (
     timeout /t 2 /nobreak >nul
     echo [정리] 서비스 중지를 요청했습니다.
   ) else (
-    echo [정리] 서비스 %SERVICE_NAME% 이(가) 없어 중지를 건너뜁니다.
+    echo [정리] 서비스 %SERVICE_NAME% 이^(가^) 없어 중지를 건너뜁니다.
   )
 ) else (
   echo [정리] nssm 실행 파일이 없어 서비스 중지는 건너뜁니다. 포트만 확인합니다.
@@ -613,7 +613,7 @@ set "KP=%~1"
 echo [정리] 포트 %KP% 사용 여부를 확인합니다...
 netstat -ano | findstr /R /C:":%KP% .*LISTENING" >nul 2>&1
 if errorlevel 1 (
-  echo [정리] 포트 %KP% 은(는) 사용 중이 아닙니다.
+  echo [정리] 포트 %KP% 은^(는^) 사용 중이 아닙니다.
   goto :eof
 )
 set "KILLED=0"
