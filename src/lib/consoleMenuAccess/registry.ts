@@ -5,7 +5,7 @@ import {
 } from '@/database/schema/serp_map';
 import { DEV_CONSOLE_MENUS } from './menus/dev';
 import { SYS_MANAGER_CONSOLE_MENUS } from './menus/sysManager';
-import type { ConsoleAreaDef, ConsoleAreaId } from './types';
+import type { ConsoleAreaDef, ConsoleAreaId, ConsoleMenuDef } from './types';
 
 export const CONSOLE_PERM_ENG_PREFIX = 'console:';
 
@@ -60,7 +60,8 @@ export function listConsoleMenuCatalog(): {
 }[] {
   const rows: ReturnType<typeof listConsoleMenuCatalog> = [];
   for (const [area, def] of Object.entries(CONSOLE_MENU_AREAS) as [ConsoleAreaId, ConsoleAreaDef][]) {
-    for (const m of def.menus) {
+    for (const m of def.menus as readonly ConsoleMenuDef[]) {
+      if (m.suOnly) continue;
       rows.push({
         area,
         areaLabel: def.label,

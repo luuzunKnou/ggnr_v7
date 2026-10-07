@@ -1,0 +1,41 @@
+<featureType>
+  <id>FeatureTypeInfoImpl-7b45823a:1a113f17c5f:-7b5d</id>
+  <name>swl_pipe_lm_etc</name>
+  <nativeName>swl_pipe_lm_etc</nativeName>
+  <namespace>
+    <id>NamespaceInfoImpl-4bf97568:19c4d6c3053:-7ffa</id>
+  </namespace>
+  <title>swl_pipe_lm_etc</title>
+  <keywords>
+    <string>features</string>
+    <string>swl_pipe_lm_etc</string>
+  </keywords>
+  <srs>EPSG:5181</srs>
+  <nativeBoundingBox>
+    <minx>405231.41558592673</minx>
+    <maxx>419482.7506153707</maxx>
+    <miny>310604.2736672872</miny>
+    <maxy>350302.55931817985</maxy>
+    <crs class="projected">EPSG:5181</crs>
+  </nativeBoundingBox>
+  <latLonBoundingBox>
+    <minx>129.2838841700359</minx>
+    <maxx>129.4535880965537</maxx>
+    <miny>36.26848338583557</miny>
+    <maxy>36.62907729687229</maxy>
+    <crs>EPSG:4326</crs>
+  </latLonBoundingBox>
+  <projectionPolicy>FORCE_DECLARED</projectionPolicy>
+  <enabled>true</enabled>
+  <store class="dataStore">
+    <id>DataStoreInfoImpl-4bf97568:19c4d6c3053:-7ff9</id>
+  </store>
+  <serviceConfiguration>false</serviceConfiguration>
+  <maxFeatures>0</maxFeatures>
+  <numDecimals>0</numDecimals>
+  <padWithZeros>false</padWithZeros>
+  <forcedDecimal>false</forcedDecimal>
+  <overridingServiceSRS>false</overridingServiceSRS>
+  <skipNumberMatched>false</skipNumberMatched>
+  <circularArcPresent>false</circularArcPresent>
+</featureType>

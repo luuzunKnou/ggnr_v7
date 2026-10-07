@@ -6,6 +6,7 @@ import { sql } from 'drizzle-orm';
 import {
   getAllRoadLedgerDocLayerIds,
   ROAD_LEDGER_DOC_LABELS_WITH_LAYER_COUNT,
+  ROAD_LEDGER_DOC_LIST_GROUP_LABELS,
   ROAD_LEDGER_DOC_LAYERS,
   ROAD_LEDGER_RDID_JOIN_SEGMENT_LEN,
   ROAD_LEDGER_RDID_LAYER_LEN,
@@ -344,7 +345,7 @@ export async function getRoadLedgerFacilityFeatureByOgcFid(params: {
   return { row, defineTableKorName: kor };
 }
 
-const FACILITY_GROUP_KEYS = new Set<string>(ROAD_LEDGER_DOC_LABELS_WITH_LAYER_COUNT);
+const FACILITY_GROUP_KEYS = new Set<string>(ROAD_LEDGER_DOC_LIST_GROUP_LABELS);
 
 type DefineLayerRowLite = {
   define_table_name?: string;

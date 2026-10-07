@@ -14,7 +14,6 @@ export type RiverConstructionLedgerPreviewKind = "image" | "pdf" | "other";
 export type RiverConstructionLedgerAttachmentCategory = string;
 
 export const CONS_ATTACH_ROOT_FOLDER = "기타";
-export const CONS_DATA_AS_FILE_LAYER = "cons_data_as";
 /** 목록에 넣지 않는 신규 등록 화면용 고정 id (점용·보상편입과 동일 패턴) */
 export const CONS_DATA_AS_NEW_ID = "rcl-new";
 /** 예전 timestamp 임시 행 호환 */

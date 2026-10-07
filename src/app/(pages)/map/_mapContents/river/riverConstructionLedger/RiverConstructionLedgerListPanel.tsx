@@ -15,6 +15,7 @@ import {
   X,
 } from "lucide-react";
 import { call } from "@/lib/api";
+import { getConsLedgerVariant, type ConsLedgerKind } from "@/lib/consLedgerVariant";
 import { cn } from "@/lib/utils";
 import { useMapContext } from "../../../_mapComponents/MapContext";
 import {
@@ -44,6 +45,7 @@ import {
   clearConsDataAsWmsLayers,
   ensureConsDataAsWmsLayersVisible,
 } from "./riverConstructionLedgerMapSync";
+import { hasConsLedgerField, useConsLedgerFields } from "./useConsLedgerFields";
 
 type SpatialTool = "rectangle" | "polygon" | "circle";
 type SearchTab = "keyword" | "shape" | "boundary";
@@ -67,10 +69,19 @@ type BoundaryBadgeItem = {
 };
 
 type Props = {
+  /** 하천·상수·하수 — 메뉴에 따라 대상 레이어 */
+  kind?: ConsLedgerKind;
   onClose: () => void;
 };
 
-export function RiverConstructionLedgerListPanel({ onClose }: Props) {
+export function RiverConstructionLedgerListPanel({ kind = "river", onClose }: Props) {
+  const variant = getConsLedgerVariant(kind);
+  const attrFields = useConsLedgerFields(kind);
+  const showRiver = hasConsLedgerField(attrFields, "river_name");
+  const sortColumns = useMemo(
+    () => SORT_COLUMNS.filter((c) => showRiver || c.key !== "river"),
+    [showRiver]
+  );
   const mapContext = useMapContext();
   const mapContextRef = useRef(mapContext);
   mapContextRef.current = mapContext;
@@ -102,13 +113,13 @@ export function RiverConstructionLedgerListPanel({ onClose }: Props) {
 
   /** 패널 진입 시 공사대장 본표 WMS만 켜고 전체 extent로 지도 이동 (필지 WMS는 하천점용처럼 끔) */
   useEffect(() => {
-    ensureConsDataAsWmsLayersVisible(mapContextRef.current?.setVisibleLayerNames);
+    ensureConsDataAsWmsLayersVisible(mapContextRef.current?.setVisibleLayerNames, { kind });
 
     let cancelled = false;
     void call("", "POST", {
       service: "consDataAsService",
       action: "getLayerExtent3857",
-      params: {},
+      params: { kind },
     })
       .then((res) => {
         if (cancelled) return;
@@ -138,9 +149,9 @@ export function RiverConstructionLedgerListPanel({ onClose }: Props) {
 
     return () => {
       cancelled = true;
-      clearConsDataAsWmsLayers(mapContextRef.current?.setVisibleLayerNames);
+      clearConsDataAsWmsLayers(mapContextRef.current?.setVisibleLayerNames, kind);
     };
-  }, []);
+  }, [kind]);
 
   const loadRows = useCallback(async () => {
     setLoading(true);
@@ -149,7 +160,7 @@ export function RiverConstructionLedgerListPanel({ onClose }: Props) {
       const res = await call("", "POST", {
         service: "consDataAsService",
         action: "listRows",
-        params: {},
+        params: { kind },
       });
       const data = res?.data ?? res;
       if (data?.error) {
@@ -179,7 +190,7 @@ export function RiverConstructionLedgerListPanel({ onClose }: Props) {
     } finally {
       setLoading(false);
     }
-  }, [selectedId, setRows]);
+  }, [kind, selectedId, setRows]);
 
   useEffect(() => {
     void loadRows();
@@ -197,7 +208,7 @@ export function RiverConstructionLedgerListPanel({ onClose }: Props) {
         const extRes = await call("", "POST", {
           service: "consDataAsService",
           action: "getExtent3857ByConsCode",
-          params: { consCode: rowId },
+          params: { kind, consCode: rowId },
         });
         const extData = extRes?.data ?? extRes;
         const extent = extData?.extent3857 as number[] | null | undefined;
@@ -211,7 +222,7 @@ export function RiverConstructionLedgerListPanel({ onClose }: Props) {
         /* extent 실패 시 목록 행 geom 강조에 맡김 */
       }
     },
-    [mapContext, setRiverFocus, setSelectedId]
+    [kind, mapContext, setRiverFocus, setSelectedId]
   );
 
   useEffect(() => {
@@ -409,7 +420,7 @@ export function RiverConstructionLedgerListPanel({ onClose }: Props) {
       if (!q) return true;
       const hay = [
         row.name,
-        formatRiverNamesLabel(row.riverNames),
+        showRiver ? formatRiverNamesLabel(row.riverNames) : "",
         row.companyName,
         row.startDate,
       ]
@@ -417,7 +428,7 @@ export function RiverConstructionLedgerListPanel({ onClose }: Props) {
         .toLowerCase();
       return hay.includes(q);
     });
-  }, [keyword, spatialFiltered]);
+  }, [keyword, showRiver, spatialFiltered]);
 
   const items = useMemo(
     () => sortRiverConstructionLedgerListRows(filteredItems, sorts),
@@ -459,7 +470,7 @@ export function RiverConstructionLedgerListPanel({ onClose }: Props) {
   return (
     <div className="flex min-h-0 h-full flex-col bg-background">
       <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border px-3 py-1.5">
-        <span className="text-sm font-semibold text-foreground">공사대장</span>
+        <span className="text-sm font-semibold text-foreground">{variant.title}</span>
         <div className="flex items-center gap-1">
           <LayerRowAddButton
             onClick={handleAdd}
@@ -537,7 +548,7 @@ export function RiverConstructionLedgerListPanel({ onClose }: Props) {
             <input
               value={keyword}
               onChange={(e) => setKeyword(e.target.value)}
-              placeholder="공사명·하천·업체명·착수일자"
+              placeholder={showRiver ? "공사명·하천·업체명·착수일자" : "공사명·업체명·착수일자"}
               className="h-8 w-full rounded border border-border pl-7 pr-2.5 text-xs outline-none focus:border-primary focus:ring-2 focus:ring-primary/25"
             />
           </div>
@@ -691,13 +702,13 @@ export function RiverConstructionLedgerListPanel({ onClose }: Props) {
         <table className="standard-list-table">
           <colgroup>
             <col />
-            <col className="w-[4.5rem]" />
+            {showRiver ? <col className="w-[4.5rem]" /> : null}
             <col className="w-[4.75rem]" />
             <col className="w-[5.25rem]" />
           </colgroup>
           <thead className="standard-table-thead">
             <tr>
-              {SORT_COLUMNS.map((col) => {
+              {sortColumns.map((col) => {
                 const sortIdx = sorts.findIndex((s) => s.key === col.key);
                 const active = sortIdx >= 0;
                 const sortDir = active ? sorts[sortIdx].dir : null;
@@ -743,13 +754,13 @@ export function RiverConstructionLedgerListPanel({ onClose }: Props) {
           <tbody>
             {loading && items.length === 0 ? (
               <tr>
-                <td colSpan={SORT_COLUMNS.length} className="standard-table-empty">
+                <td colSpan={sortColumns.length} className="standard-table-empty">
                   불러오는 중…
                 </td>
               </tr>
             ) : items.length === 0 ? (
               <tr>
-                <td colSpan={SORT_COLUMNS.length} className="standard-table-empty">
+                <td colSpan={sortColumns.length} className="standard-table-empty">
                   검색 결과가 없습니다.
                 </td>
               </tr>
@@ -775,12 +786,14 @@ export function RiverConstructionLedgerListPanel({ onClose }: Props) {
                     <td className="standard-table-td-text" title={row.name}>
                       {row.name || "—"}
                     </td>
-                    <td
-                      className="standard-table-td-text-muted"
-                      title={formatRiverNamesLabel(row.riverNames)}
-                    >
-                      {formatRiverNamesShort(row.riverNames)}
-                    </td>
+                    {showRiver ? (
+                      <td
+                        className="standard-table-td-text-muted"
+                        title={formatRiverNamesLabel(row.riverNames)}
+                      >
+                        {formatRiverNamesShort(row.riverNames)}
+                      </td>
+                    ) : null}
                     <td className="standard-table-td-text-muted" title={row.companyName}>
                       {row.companyName || "—"}
                     </td>

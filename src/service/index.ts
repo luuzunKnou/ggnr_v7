@@ -75,6 +75,8 @@ import * as bizNotifService from './bizNotifService';
 import * as thematicMapService from './thematicMapService';
 import * as roadWorkHandbookService from './roadWorkHandbookService';
 import * as qgisLayerControlService from './qgisLayerControlService';
+import * as userDataUploadService from './userDataUploadService';
+import * as systemControlService from './systemControlService';
 
 export {
   configService,
@@ -150,4 +152,6 @@ export {
   bizNotifService,
   roadWorkHandbookService,
   qgisLayerControlService,
+  userDataUploadService,
+  systemControlService,
 };

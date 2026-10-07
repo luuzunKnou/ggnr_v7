@@ -823,47 +823,56 @@ function isReadableWmsLayer(name: string, readable: Set<string>): boolean {
 }
 
 /**
- * WMS GetCapabilities: OnlineResource → wms.do, 읽기 허용 Layer만 유지.
- * (레거시: can_read + TIF 존재. TIF 목록이 없으면 can_read만 적용)
+ * WMS GetCapabilities — 읽기 권한 드론영상만 직접 생성.
+ * WMS는 드론영상 전용(일반 레이어는 WFS)이며, GeoServer 전역 Capabilities는
+ * 모든 워크스페이스 레이어의 DB 스키마를 검사해 공용 GeoServer에서 오류가 대량 발생한다.
  */
-export function filterWmsCapabilitiesXml(
-  xml: string,
+async function buildWmsCapabilitiesXml(
   readable: Set<string>,
-  wmsProxyUrl: string,
-  titleByNorm?: Map<string, string>
-): string {
-  const wmsHref = wmsProxyUrl.replace(/"/g, '&quot;');
+  wmsProxyUrl: string
+): Promise<string> {
+  const { buildWmsExtentXml, buildOrthoWmsLayerXml, listOrthoExtentsForWmsCaps } = await import(
+    '@/service/orthoWmsRenderService'
+  );
 
-  let out = xml
-    .replace(/\bonlineResource\s*=\s*["'][^"']*["']/gi, `onlineResource="${wmsHref}"`)
-    .replace(/\bxlink:href\s*=\s*["'][^"']*["']/gi, `xlink:href="${wmsHref}"`);
-
-  // 가장 안쪽 Layer부터 반복 제거 (중첩 Layer)
-  const leafLayerRe =
-    /<(?:[\w.]+:)?Layer\b[^>]*>(?:(?!<(?:[\w.]+:)?Layer\b)[\s\S])*?<\/(?:[\w.]+:)?Layer>/gi;
-
-  let prev = '';
-  while (out !== prev) {
-    prev = out;
-    out = out.replace(leafLayerRe, (block) => {
-      const nameM = block.match(
-        /<(?:[\w.]+:)?Name\b[^>]*>\s*([^<]+?)\s*<\/(?:[\w.]+:)?Name>/i
-      );
-      // Name 없는 그룹 Layer는 유지 (자식만 걸러짐)
-      if (!nameM) return block;
-      const rawName = nameM[1].trim();
-      if (!isReadableWmsLayer(rawName, readable)) return '';
-
-      const titleOverride = titleByNorm?.get(normalizeWmsLayerKey(rawName));
-      if (!titleOverride) return block;
-      return block.replace(
-        /<(?:[\w.]+:)?Title\b[^>]*>\s*[^<]*?\s*<\/(?:[\w.]+:)?Title>/i,
-        (t) => t.replace(/>[^<]*</, `>${escapeXml(titleOverride)}<`)
-      );
-    });
+  let orthoXml = '';
+  try {
+    const orthoLayers = await listOrthoExtentsForWmsCaps(readable);
+    if (orthoLayers.length > 0) {
+      orthoXml =
+        `<Layer><Title>드론영상</Title>` +
+        orthoLayers.map(buildOrthoWmsLayerXml).join('') +
+        `</Layer>`;
+    }
+  } catch {
+    /* ignore */
   }
 
-  return out;
+  const href = escapeXml(wmsProxyUrl);
+  const online = `<OnlineResource xlink:type="simple" xlink:href="${href}"/>`;
+  const dcp = `<DCPType><HTTP><Get>${online}</Get></HTTP></DCPType>`;
+  const fmt = (list: string[]) => list.map((f) => `<Format>${f}</Format>`).join('');
+
+  return (
+    `<?xml version="1.0" encoding="UTF-8"?>` +
+    `<WMS_Capabilities version="1.3.0" xmlns="http://www.opengis.net/wms" ` +
+    `xmlns:xlink="http://www.w3.org/1999/xlink" ` +
+    `xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" ` +
+    `xsi:schemaLocation="http://www.opengis.net/wms http://schemas.opengis.net/wms/1.3.0/capabilities_1_3_0.xsd">` +
+    `<Service><Name>WMS</Name><Title>${escapeXml(WORKSPACE)} WMS</Title>${online}</Service>` +
+    `<Capability>` +
+    `<Request>` +
+    `<GetCapabilities>${fmt(['text/xml'])}${dcp}</GetCapabilities>` +
+    `<GetMap>${fmt(['image/png'])}${dcp}</GetMap>` +
+    `</Request>` +
+    `<Exception>${fmt(['XML'])}</Exception>` +
+    `<Layer><Title>${escapeXml(WORKSPACE)}</Title>` +
+    buildWmsExtentXml(WFS_CAPS_WGS84.minx, WFS_CAPS_WGS84.miny, WFS_CAPS_WGS84.maxx, WFS_CAPS_WGS84.maxy) +
+    orthoXml +
+    `</Layer>` +
+    `</Capability>` +
+    `</WMS_Capabilities>`
+  );
 }
 
 /** GET /wms.do — key 권한 WMS 프록시 (레거시 GeoServerService.wms) */
@@ -903,6 +912,17 @@ export async function proxyWmsGet(opts: {
   }
 
   const requestName = String(requestParam(opts.searchParams, 'REQUEST') ?? '').trim();
+
+  if (/^GetCapabilities$/i.test(requestName)) {
+    const wmsUrl = `${opts.appBaseUrl}/wms.do?key=${encodeURIComponent(key)}`;
+    const xml = await buildWmsCapabilitiesXml(readable, wmsUrl);
+    return {
+      status: 200,
+      contentType: 'application/xml; charset=utf-8',
+      body: new TextEncoder().encode(xml),
+    };
+  }
+
   const layersParam =
     requestParam(opts.searchParams, 'LAYERS') ||
     requestParam(opts.searchParams, 'LAYER') ||
@@ -923,7 +943,7 @@ export async function proxyWmsGet(opts: {
     }
   }
 
-  // 드론영상 전용 GetMap — GeoServer 없이 원본 TIF 렌더
+  // WMS는 드론영상 전용 — GeoServer 없이 원본 TIF 렌더
   if (/^GetMap$/i.test(requestName) && layersParam) {
     const { parseOrthoWmsTuKey } = await import('@/service/aerialOrthoService');
     const layerList = String(layersParam)
@@ -931,102 +951,46 @@ export async function proxyWmsGet(opts: {
       .map((s) => s.trim())
       .filter(Boolean);
     const allOrtho = layerList.length > 0 && layerList.every((l) => parseOrthoWmsTuKey(l) != null);
-    if (allOrtho) {
-      const { renderOrthoWmsGetMap } = await import('@/service/orthoWmsRenderService');
-      const bbox = String(requestParam(opts.searchParams, 'BBOX') ?? '').trim();
-      const width = Number(requestParam(opts.searchParams, 'WIDTH') ?? 256);
-      const height = Number(requestParam(opts.searchParams, 'HEIGHT') ?? 256);
-      const crs =
-        requestParam(opts.searchParams, 'CRS') ||
-        requestParam(opts.searchParams, 'SRS') ||
-        'EPSG:3857';
-      const version = String(requestParam(opts.searchParams, 'VERSION') ?? '1.3.0');
-      // 다중 레이어면 첫 레이어만 (QGIS는 보통 단건)
-      return renderOrthoWmsGetMap({
-        layerName: layerList[0]!,
-        bbox,
-        width,
-        height,
-        crs: String(crs),
-        version,
-      });
+    if (!allOrtho) {
+      return {
+        status: 200,
+        contentType: 'application/xml; charset=utf-8',
+        body: buildOgcErrorBytes(
+          'WMS는 드론영상 전용입니다. 일반 레이어는 WFS 연결로 추가하세요.',
+          'LayerNotDefined',
+          'LAYERS'
+        ),
+      };
     }
-  }
-
-  const upstream = new URL(`${getGeoServerInternalBase()}/wms`);
-  for (const [k, v] of opts.searchParams.entries()) {
-    if (k.toLowerCase() === 'key') continue;
-    upstream.searchParams.append(k, v);
-  }
-
-  let res: Response;
-  try {
-    res = await fetch(upstream.toString(), {
-      cache: 'no-store',
-      signal: AbortSignal.timeout(60000),
+    const { renderOrthoWmsGetMap } = await import('@/service/orthoWmsRenderService');
+    const bbox = String(requestParam(opts.searchParams, 'BBOX') ?? '').trim();
+    const width = Number(requestParam(opts.searchParams, 'WIDTH') ?? 256);
+    const height = Number(requestParam(opts.searchParams, 'HEIGHT') ?? 256);
+    const crs =
+      requestParam(opts.searchParams, 'CRS') ||
+      requestParam(opts.searchParams, 'SRS') ||
+      'EPSG:3857';
+    const version = String(requestParam(opts.searchParams, 'VERSION') ?? '1.3.0');
+    // 다중 레이어면 첫 레이어만 (QGIS는 보통 단건)
+    return renderOrthoWmsGetMap({
+      layerName: layerList[0]!,
+      bbox,
+      width,
+      height,
+      crs: String(crs),
+      version,
     });
-  } catch (e) {
-    const detail = e instanceof Error ? e.message : String(e);
-    return {
-      status: 200,
-      contentType: 'application/xml; charset=utf-8',
-      body: buildOgcErrorBytes(
-        `GeoServer에 연결할 수 없습니다 (${getGeoServerInternalBase()}). GeoServer를 기동한 뒤 다시 시도하세요. (${detail})`,
-        'NoApplicableCode',
-        'geoserver'
-      ),
-    };
   }
 
-  const buf = new Uint8Array(await res.arrayBuffer());
-  const contentType = res.headers.get('content-type') || 'application/octet-stream';
-  const isXml = contentType.toLowerCase().includes('xml') || contentType.toLowerCase().includes('text/');
-  const isGetCapabilities = /^GetCapabilities$/i.test(requestName);
-
-  if (isXml && isGetCapabilities) {
-    const xml = new TextDecoder('utf-8').decode(buf);
-    const wmsUrl = `${opts.appBaseUrl}/wms.do?key=${encodeURIComponent(key)}`;
-    const titleByNorm = new Map<string, string>();
-    for (const r of readable) {
-      const norm = normalizeWmsLayerKey(r);
-      if (!norm || titleByNorm.has(norm)) continue;
-      const kor = loadDefineTableKorName(norm) || loadDefineTableKorName(r);
-      if (kor) titleByNorm.set(norm, kor);
-    }
-    let filtered = filterWmsCapabilitiesXml(xml, readable, wmsUrl, titleByNorm);
-    try {
-      const { listOrthoExtentsForWmsCaps, buildOrthoWmsLayerXml } = await import(
-        '@/service/orthoWmsRenderService'
-      );
-      const orthoLayers = await listOrthoExtentsForWmsCaps(readable);
-      if (orthoLayers.length > 0) {
-        const inject =
-          `<Layer>` +
-          `<Title>드론영상</Title>` +
-          orthoLayers.map(buildOrthoWmsLayerXml).join('') +
-          `</Layer>`;
-        if (/<\/Capability>/i.test(filtered)) {
-          filtered = filtered.replace(/<\/Capability>/i, `${inject}</Capability>`);
-        } else if (/<\/WMS_Capabilities>/i.test(filtered)) {
-          filtered = filtered.replace(
-            /<\/WMS_Capabilities>/i,
-            `<Capability>${inject}</Capability></WMS_Capabilities>`
-          );
-        } else {
-          filtered = `${filtered}${inject}`;
-        }
-      }
-    } catch {
-      /* ignore */
-    }
-    return {
-      status: res.status,
-      contentType: 'application/xml; charset=utf-8',
-      body: new TextEncoder().encode(filtered),
-    };
-  }
-
-  return { status: res.status, contentType, body: buf };
+  return {
+    status: 200,
+    contentType: 'application/xml; charset=utf-8',
+    body: buildOgcErrorBytes(
+      `지원하지 않는 WMS 요청입니다 (${requestName || 'REQUEST 누락'}).`,
+      'OperationNotSupported',
+      'REQUEST'
+    ),
+  };
 }
 
 /** POST /wfs.do — GetFeature 등 (Transaction 제외). 레거시처럼 GeoServer로 중계 */

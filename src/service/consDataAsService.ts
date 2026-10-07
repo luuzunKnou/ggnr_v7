@@ -1,13 +1,12 @@
 /**
- * 울진 하천 공사대장 — layer.cons_data_as / cons_data_solo_as
+ * 공사대장 — 하천(cons_data_as / cons_data_solo_as), 상수(wtl_cons_as / wtl_cons_solo_as),
+ * 하수(swl_cons_as / swl_cons_solo_as). 모든 action은 params.kind 로 대상 레이어를 고른다(기본 하천).
  */
 import { db } from '@/database/db';
 import { sql } from 'drizzle-orm';
 import { tryFormatToYmd } from '@/lib/formatDateYmd';
-import {
-  DEFAULT_CONS_DATA_AS_CONS_CODE,
-  incrementSuffixCode,
-} from '@/lib/incrementSuffixCode';
+import { incrementSuffixCode } from '@/lib/incrementSuffixCode';
+import { getConsLedgerVariant, type ConsLedgerVariant } from '@/lib/consLedgerVariant';
 import {
   assertSafeFileDataSegment,
   fileDataRelativeDir,
@@ -23,14 +22,14 @@ import {
   updateTableRowByKey,
 } from './layerRowService';
 
-const MAIN_TABLE = 'cons_data_as';
-const SOLO_TABLE = 'cons_data_solo_as';
 const DEFAULT_SCHEMA = 'layer';
 const KEY_FIELD = 'cons_code';
 const CHILD_PARENT_FIELD = 'cons_code';
-/** solo 필지 주소 컬럼 */
-const SOLO_ADDRESS_FIELD = 'address';
-const FILE_LAYER = 'cons_data_as';
+/** 필지 코드 컬럼 (있는 레이어만) — 신규 필지 자동 채번 */
+const SOLO_CODE_FIELD = 'solo_code';
+const DEFAULT_SOLO_CODE = 'SOLO_0000_0001';
+/** 필지 재저장 시 값을 보존하지 않는 컬럼 (부모키·주소·도형·PK는 새로 씀) */
+const SOLO_NON_PRESERVED_FIELDS = new Set(['ogc_fid', 'id', 'fid', CHILD_PARENT_FIELD]);
 /** 키 루트에 파일이 있을 때 UI 탭명 */
 export const CONS_DATA_AS_ROOT_FOLDER_LABEL = '기타';
 /** 신규 등록 시 자동으로 만들어 둘 첨부 하위폴더 */
@@ -125,9 +124,8 @@ async function resolveTableWithSchema(
   wantedLower: string
 ): Promise<{ tableName: string; schema: string } | null> {
   const cacheKey = wantedLower.toLowerCase();
-  if (tableMetaCache.has(cacheKey)) {
-    return tableMetaCache.get(cacheKey) ?? null;
-  }
+  const hit = tableMetaCache.get(cacheKey);
+  if (hit) return hit;
   const schemasIn = SEARCH_SCHEMAS.map((s) => `'${esc(s)}'`).join(',');
   const res = await db.execute(
     sql.raw(
@@ -139,10 +137,8 @@ async function resolveTableWithSchema(
     )
   );
   const row = res.rows?.[0] as { table_schema?: string; table_name?: string } | undefined;
-  if (!row?.table_name) {
-    tableMetaCache.set(cacheKey, null);
-    return null;
-  }
+  /** 없음은 캐시하지 않음 — SHP 업로드로 테이블이 생기면 재시작 없이 바로 조회 */
+  if (!row?.table_name) return null;
   const meta = {
     tableName: String(row.table_name).trim(),
     schema: String(row.table_schema ?? DEFAULT_SCHEMA).trim(),
@@ -173,6 +169,45 @@ async function getTableColumns(schema: string, table: string): Promise<string[]>
 function findColumn(columns: string[], name: string): string | null {
   const lower = name.toLowerCase();
   return columns.find((c) => c.toLowerCase() === lower) ?? null;
+}
+
+function findFirstColumn(columns: string[], names: readonly string[]): string | null {
+  for (const name of names) {
+    const col = findColumn(columns, name);
+    if (col) return col;
+  }
+  return null;
+}
+
+function variantOf(params?: { kind?: unknown } | null): ConsLedgerVariant {
+  return getConsLedgerVariant(params?.kind);
+}
+
+/** 레이어에 실제로 있는 속성 컬럼 (화면 표시 항목 결정용, 소문자) */
+async function listPresentAttrFields(
+  cfg: ConsLedgerVariant
+): Promise<{ fields: string[]; tableExists: boolean }> {
+  const meta = await resolveTableWithSchema(cfg.mainTable);
+  if (!meta) return { fields: [], tableExists: false };
+  const cols = await getTableColumns(meta.schema, meta.tableName);
+  return {
+    fields: ATTR_FIELDS.filter((f) => findColumn(cols, f)),
+    tableExists: true,
+  };
+}
+
+/** 메뉴 진입 시 — 레이어에 있는 속성 목록 */
+export async function getFieldInfo(params?: {
+  kind?: string;
+}): Promise<{ fields: string[]; error?: string }> {
+  const cfg = variantOf(params);
+  try {
+    const { fields, tableExists } = await listPresentAttrFields(cfg);
+    if (!tableExists) return { fields: [], error: `${cfg.mainTable} 테이블이 없습니다.` };
+    return { fields };
+  } catch (e: unknown) {
+    return { fields: [], error: e instanceof Error ? e.message : String(e) };
+  }
 }
 
 function normalizeGeom(raw: unknown): ConsDataAsGeom | null {
@@ -257,12 +292,14 @@ function mapDbRow(row: Record<string, unknown>, consCode: string): Omit<ConsData
 
 /** 목록 (키·이름·위치·하천·도형) */
 export async function listRows(params?: {
+  kind?: string;
   keyword?: string;
 }): Promise<{ rows: ConsDataAsRow[]; error?: string }> {
+  const cfg = variantOf(params);
   try {
     const keyword = String(params?.keyword ?? '').trim();
-    const meta = await resolveTableWithSchema(MAIN_TABLE);
-    if (!meta) return { rows: [], error: `${MAIN_TABLE} 테이블이 없습니다.` };
+    const meta = await resolveTableWithSchema(cfg.mainTable);
+    if (!meta) return { rows: [], error: `${cfg.mainTable} 테이블이 없습니다.` };
 
     const { tableName, schema } = meta;
     const columns = await getTableColumns(schema, tableName);
@@ -318,16 +355,18 @@ export async function listRows(params?: {
 
 /** 상세 1건 — includeParcelGeometry false면 필지 속성·extent만 (목록 클릭 성능) */
 export async function getDetailByConsCode(params: {
+  kind?: string;
   consCode?: string;
   /** 기본 true — 상세 편집용. false면 필지 GeoJSON 생략 */
   includeParcelGeometry?: boolean;
 }): Promise<{ row: ConsDataAsRow | null; error?: string }> {
+  const cfg = variantOf(params);
   const consCode = String(params?.consCode ?? '').trim();
   if (!consCode) return { row: null, error: '공사코드가 필요합니다.' };
   const includeParcelGeometry = params?.includeParcelGeometry !== false;
 
-  const meta = await resolveTableWithSchema(MAIN_TABLE);
-  if (!meta) return { row: null, error: `${MAIN_TABLE} 테이블이 없습니다.` };
+  const meta = await resolveTableWithSchema(cfg.mainTable);
+  if (!meta) return { row: null, error: `${cfg.mainTable} 테이블이 없습니다.` };
 
   const { tableName, schema } = meta;
   const columns = await getTableColumns(schema, tableName);
@@ -363,6 +402,7 @@ export async function getDetailByConsCode(params: {
     const row = res.rows?.[0] as Record<string, unknown> | undefined;
     if (!row) return { row: null, error: '해당 건을 찾을 수 없습니다.' };
     const parcels = await listParcelsByConsCode({
+      kind: cfg.kind,
       consCode,
       includeGeometry: includeParcelGeometry,
     });
@@ -380,15 +420,17 @@ export async function getDetailByConsCode(params: {
 
 /** 필지(solo) 목록 */
 export async function listParcelsByConsCode(params: {
+  kind?: string;
   consCode?: string;
   /** 기본 false — GeoJSON 생략. 상세 편집 시에만 true */
   includeGeometry?: boolean;
 }): Promise<{ items: ConsDataAsParcelItem[]; error?: string }> {
+  const cfg = variantOf(params);
   const consCode = String(params?.consCode ?? '').trim();
   if (!consCode) return { items: [] };
   const includeGeometry = params?.includeGeometry === true;
 
-  const meta = await resolveTableWithSchema(SOLO_TABLE);
+  const meta = await resolveTableWithSchema(cfg.soloTable);
   if (!meta) return { items: [] };
 
   const { tableName, schema } = meta;
@@ -396,7 +438,7 @@ export async function listParcelsByConsCode(params: {
   const parentCol = findColumn(cols, CHILD_PARENT_FIELD);
   if (!parentCol) return { items: [] };
 
-  const addressCol = findColumn(cols, SOLO_ADDRESS_FIELD);
+  const addressCol = findFirstColumn(cols, cfg.soloAddressFields);
   const hasGeom = findColumn(cols, 'geom');
   const hasOgcFid = findColumn(cols, 'ogc_fid');
   const hasId = findColumn(cols, 'id');
@@ -476,12 +518,14 @@ export async function listParcelsByConsCode(params: {
 
 /** 지도 이동용 extent — 공사구간 본표(geom)만. 필지 합치면 중심이 어긋남 */
 export async function getExtent3857ByConsCode(params: {
+  kind?: string;
   consCode?: string;
 }): Promise<{ extent3857: [number, number, number, number] | null; error?: string }> {
+  const cfg = variantOf(params);
   const keyRaw = String(params?.consCode ?? '').trim();
   if (!keyRaw) return { extent3857: null, error: '공사코드가 필요합니다.' };
 
-  const mainMeta = await resolveTableWithSchema(MAIN_TABLE);
+  const mainMeta = await resolveTableWithSchema(cfg.mainTable);
   if (!mainMeta) {
     return { extent3857: null, error: '위치(도형)를 찾을 수 없습니다.' };
   }
@@ -524,13 +568,14 @@ export async function getExtent3857ByConsCode(params: {
 }
 
 /** 메뉴 진입 시 — 공사대장 레이어 전체 extent */
-export async function getLayerExtent3857(): Promise<{
+export async function getLayerExtent3857(params?: { kind?: string }): Promise<{
   extent3857: [number, number, number, number] | null;
   error?: string;
 }> {
+  const cfg = variantOf(params);
   try {
     const geomSelects: string[] = [];
-    for (const table of [MAIN_TABLE, SOLO_TABLE]) {
+    for (const table of [cfg.mainTable, cfg.soloTable]) {
       const meta = await resolveTableWithSchema(table);
       if (!meta) continue;
       const cols = await getTableColumns(meta.schema, meta.tableName);
@@ -574,17 +619,20 @@ export async function getLayerExtent3857(): Promise<{
 }
 
 /** 신규 공사코드 */
-export async function getNextConsCode(): Promise<{ consCode: string; error?: string }> {
-  const meta = await resolveTableWithSchema(MAIN_TABLE);
+export async function getNextConsCode(params?: {
+  kind?: string;
+}): Promise<{ consCode: string; error?: string }> {
+  const cfg = variantOf(params);
+  const meta = await resolveTableWithSchema(cfg.mainTable);
   if (!meta) {
-    return { consCode: DEFAULT_CONS_DATA_AS_CONS_CODE, error: `${MAIN_TABLE} 테이블이 없습니다.` };
+    return { consCode: cfg.defaultConsCode, error: `${cfg.mainTable} 테이블이 없습니다.` };
   }
 
   const { tableName, schema } = meta;
   const columns = await getTableColumns(schema, tableName);
   const keyCol = findColumn(columns, KEY_FIELD);
   if (!keyCol) {
-    return { consCode: DEFAULT_CONS_DATA_AS_CONS_CODE, error: `${KEY_FIELD} 컬럼이 없습니다.` };
+    return { consCode: cfg.defaultConsCode, error: `${KEY_FIELD} 컬럼이 없습니다.` };
   }
 
   const safe = tableName.replace(/"/g, '""');
@@ -601,11 +649,11 @@ export async function getNextConsCode(): Promise<{ consCode: string; error?: str
   try {
     const res = await db.execute(sql.raw(sqlText));
     const last = String((res.rows?.[0] as { code?: string } | undefined)?.code ?? '').trim();
-    if (!last) return { consCode: DEFAULT_CONS_DATA_AS_CONS_CODE };
+    if (!last) return { consCode: cfg.defaultConsCode };
     return { consCode: incrementSuffixCode(last) };
   } catch (e: unknown) {
     return {
-      consCode: DEFAULT_CONS_DATA_AS_CONS_CODE,
+      consCode: cfg.defaultConsCode,
       error: e instanceof Error ? e.message : String(e),
     };
   }
@@ -657,16 +705,41 @@ export async function listRiverNamesFromZones(params?: {
   }
 }
 
+function normalizeParcelAddressKey(raw: unknown): string {
+  return String(raw ?? '').trim().replace(/\s+/g, ' ').toLowerCase();
+}
+
+/** 필지 코드 컬럼의 현재 최댓값 다음 코드 */
+async function nextSoloCode(fqTable: string, soloCodeCol: string): Promise<string> {
+  const res = await db.execute(
+    sql.raw(
+      `SELECT ${quoteIdent(soloCodeCol)}::text AS code
+       FROM ${fqTable}
+       WHERE COALESCE(${quoteIdent(soloCodeCol)}::text, '') <> ''
+       ORDER BY
+         (regexp_match(${quoteIdent(soloCodeCol)}::text, '([0-9]+)$'))[1]::bigint DESC NULLS LAST,
+         ${quoteIdent(soloCodeCol)}::text DESC
+       LIMIT 1`
+    )
+  );
+  const last = String((res.rows?.[0] as { code?: string } | undefined)?.code ?? '').trim();
+  return last ? incrementSuffixCode(last) : DEFAULT_SOLO_CODE;
+}
+
 /**
  * 필지(solo) 동기화 — 주소와 필지 도형(geomWkt5181). 도형은 목록 클릭 시 지도 표시용.
+ * 화면에 없는 필지 속성(필지코드·비고 등)은 같은 주소의 기존 행 값을 이어 쓰고,
+ * 신규 필지는 필지코드 컬럼이 있으면 다음 코드를 채번한다.
  */
 async function syncSoloParcels(params: {
+  cfg: ConsLedgerVariant;
   consCode: string;
   parcels: Array<{
     address?: string;
     geomWkt5181?: string | null;
   }>;
 }): Promise<{ success: boolean; error?: string }> {
+  const { cfg } = params;
   const consCode = String(params.consCode ?? '').trim();
   if (!consCode) return { success: false, error: '공사코드가 필요합니다.' };
 
@@ -680,23 +753,57 @@ async function syncSoloParcels(params: {
     }))
     .filter((it) => it.address || it.geomWkt5181);
 
-  const meta = await resolveTableWithSchema(SOLO_TABLE);
-  if (!meta) return { success: false, error: `${SOLO_TABLE} 테이블이 없습니다.` };
+  const meta = await resolveTableWithSchema(cfg.soloTable);
+  if (!meta) return { success: false, error: `${cfg.soloTable} 테이블이 없습니다.` };
 
   const { tableName, schema } = meta;
   const cols = await getTableColumns(schema, tableName);
   const parentCol = findColumn(cols, CHILD_PARENT_FIELD);
   if (!parentCol) return { success: false, error: '자식 테이블에 부모키 컬럼이 없습니다.' };
-  const addressCol = findColumn(cols, SOLO_ADDRESS_FIELD);
+  const addressCol = findFirstColumn(cols, cfg.soloAddressFields);
   const geomCol = findColumn(cols, 'geom');
+  const soloCodeCol = findColumn(cols, SOLO_CODE_FIELD);
+  const preservedCols = cols.filter((c) => {
+    const lower = c.toLowerCase();
+    if (SOLO_NON_PRESERVED_FIELDS.has(lower) || GEOM_COLUMN_NAMES.has(lower)) return false;
+    return !addressCol || lower !== addressCol.toLowerCase();
+  });
   const safe = tableName.replace(/"/g, '""');
   const safeSchema = schema.replace(/"/g, '""');
+  const fqTable = `"${safeSchema}"."${safe}"`;
 
   try {
+    const preservedByAddress = new Map<string, Record<string, string | null>[]>();
+    if (preservedCols.length > 0) {
+      const pkCol = findFirstColumn(cols, ['ogc_fid', 'id', 'fid']);
+      const prevRes = await db.execute(
+        sql.raw(
+          `SELECT ${addressCol ? `${quoteIdent(addressCol)}::text` : `''::text`} AS "__addr",
+                  ${preservedCols.map((c) => `${quoteIdent(c)}::text AS ${quoteIdent(c)}`).join(', ')}
+           FROM ${fqTable}
+           WHERE ${quoteIdent(parentCol)}::text = '${esc(consCode)}'
+           ${pkCol ? `ORDER BY ${quoteIdent(pkCol)}` : ''}`
+        )
+      );
+      for (const r of (prevRes.rows ?? []) as Record<string, unknown>[]) {
+        const key = normalizeParcelAddressKey(r.__addr);
+        const vals: Record<string, string | null> = {};
+        for (const c of preservedCols) {
+          const v = r[c];
+          vals[c] = v == null ? null : String(v);
+        }
+        const list = preservedByAddress.get(key) ?? [];
+        list.push(vals);
+        preservedByAddress.set(key, list);
+      }
+    }
+
+    /** 삭제 전에 조회 — 지울 행에 최댓값이 있어도 재삽입 코드와 겹치지 않게 */
+    const firstNewCode = soloCodeCol ? await nextSoloCode(fqTable, soloCodeCol) : null;
+    let nextCode: string | null = null;
+
     await db.execute(
-      sql.raw(
-        `DELETE FROM "${safeSchema}"."${safe}" WHERE ${quoteIdent(parentCol)}::text = '${esc(consCode)}'`
-      )
+      sql.raw(`DELETE FROM ${fqTable} WHERE ${quoteIdent(parentCol)}::text = '${esc(consCode)}'`)
     );
 
     for (const item of items) {
@@ -705,6 +812,20 @@ async function syncSoloParcels(params: {
       if (addressCol) {
         insertCols.push(quoteIdent(addressCol));
         insertVals.push(`'${esc(item.address)}'`);
+      }
+      const prev = preservedByAddress.get(normalizeParcelAddressKey(item.address))?.shift();
+      if (prev) {
+        for (const c of preservedCols) {
+          const v = prev[c];
+          if (v == null) continue;
+          insertCols.push(quoteIdent(c));
+          insertVals.push(`'${esc(v)}'`);
+        }
+      }
+      if (soloCodeCol && !prev?.[soloCodeCol]) {
+        nextCode = nextCode ? incrementSuffixCode(nextCode) : (firstNewCode ?? DEFAULT_SOLO_CODE);
+        insertCols.push(quoteIdent(soloCodeCol));
+        insertVals.push(`'${esc(nextCode)}'`);
       }
       if (geomCol && item.geomWkt5181) {
         insertCols.push(quoteIdent(geomCol));
@@ -729,16 +850,19 @@ async function syncSoloParcels(params: {
  * 공사구간 전체 도형(cons_data_as.geom) 재계산 — solo 도형 합집합(레거시·shp 임포트).
  * UI에서 공사구간 도형을 직접 저장한 경우에는 호출하지 않는다.
  */
-async function recomputeConsMainGeomFromParcels(consCode: string): Promise<void> {
+async function recomputeConsMainGeomFromParcels(
+  cfg: ConsLedgerVariant,
+  consCode: string
+): Promise<void> {
   try {
-    const mainMeta = await resolveTableWithSchema(MAIN_TABLE);
+    const mainMeta = await resolveTableWithSchema(cfg.mainTable);
     if (!mainMeta) return;
     const mainCols = await getTableColumns(mainMeta.schema, mainMeta.tableName);
     const mainGeomCol = findColumn(mainCols, 'geom');
     const mainKeyCol = findColumn(mainCols, KEY_FIELD);
     if (!mainGeomCol || !mainKeyCol) return;
 
-    const soloMeta = await resolveTableWithSchema(SOLO_TABLE);
+    const soloMeta = await resolveTableWithSchema(cfg.soloTable);
     if (!soloMeta) return;
     const soloCols = await getTableColumns(soloMeta.schema, soloMeta.tableName);
     const soloParentCol = findColumn(soloCols, CHILD_PARENT_FIELD);
@@ -770,6 +894,7 @@ async function recomputeConsMainGeomFromParcels(consCode: string): Promise<void>
 
 /** 저장(신규·수정) + solo 동기화 */
 export async function saveRow(params: {
+  kind?: string;
   consCode?: string;
   isNew?: boolean;
   values?: Record<string, unknown>;
@@ -781,25 +906,29 @@ export async function saveRow(params: {
     geomWkt5181?: string | null;
   }>;
 }): Promise<{ success: boolean; consCode?: string; error?: string }> {
+  const cfg = variantOf(params);
   const values = { ...(params.values ?? {}) };
   let consCode = String(params.consCode ?? values.cons_code ?? '').trim();
   const isNew = params.isNew === true || !consCode;
   const boundaryGeomWkt = String(params.geomWkt5181 ?? '').trim();
   const hasExplicitBoundary = Boolean(boundaryGeomWkt) || params.geomClear === true;
+  /** 상수·하수는 SHP로 올린 레이어 — 레이어 정의에 없어도 실제 컬럼이면 저장 */
+  const allowPhysicalColumns = cfg.kind !== 'river';
 
   if (isNew) {
     if (!consCode) {
-      const next = await getNextConsCode();
+      const next = await getNextConsCode({ kind: cfg.kind });
       consCode = next.consCode;
       if (!consCode) return { success: false, error: next.error ?? '공사코드를 생성하지 못했습니다.' };
     }
     values.cons_code = consCode;
     const inserted = await insertTableRow({
-      table: MAIN_TABLE,
+      table: cfg.mainTable,
       schema: DEFAULT_SCHEMA,
       keyField: KEY_FIELD,
       values,
       includeHiddenDetail: true,
+      allowPhysicalColumns,
       geomWkt5181: boundaryGeomWkt || undefined,
     });
     if (!inserted.success) {
@@ -808,7 +937,7 @@ export async function saveRow(params: {
     consCode = String(inserted.keyValue ?? consCode).trim();
     try {
       await ensureServiceFileDataFolders({
-        layerName: FILE_LAYER,
+        layerName: cfg.mainTable,
         keyValue: consCode,
         folders: [...CONS_DATA_AS_DEFAULT_ATTACH_FOLDERS],
       });
@@ -817,12 +946,13 @@ export async function saveRow(params: {
     }
   } else {
     const updated = await updateTableRowByKey({
-      table: MAIN_TABLE,
+      table: cfg.mainTable,
       schema: DEFAULT_SCHEMA,
       keyField: KEY_FIELD,
       keyValue: consCode,
       changes: values,
       includeHiddenDetail: true,
+      allowPhysicalColumns,
       geomWkt5181: boundaryGeomWkt || undefined,
       geomClear: params.geomClear === true,
     });
@@ -832,12 +962,12 @@ export async function saveRow(params: {
   }
 
   if (Array.isArray(params.parcels)) {
-    const sync = await syncSoloParcels({ consCode, parcels: params.parcels });
+    const sync = await syncSoloParcels({ cfg, consCode, parcels: params.parcels });
     if (!sync.success) {
       return { success: false, consCode, error: sync.error ?? '필지 동기화에 실패했습니다.' };
     }
     if (!hasExplicitBoundary) {
-      await recomputeConsMainGeomFromParcels(consCode);
+      await recomputeConsMainGeomFromParcels(cfg, consCode);
     }
     if (sync.error) return { success: true, consCode, error: sync.error };
   }
@@ -847,24 +977,28 @@ export async function saveRow(params: {
 
 /** 삭제(본문 + solo) */
 export async function deleteRow(params: {
+  kind?: string;
   consCode?: string;
 }): Promise<{ success: boolean; error?: string }> {
+  const cfg = variantOf(params);
   const consCode = String(params?.consCode ?? '').trim();
   if (!consCode) return { success: false, error: '공사코드가 필요합니다.' };
   return deleteTableRowByKey({
-    table: MAIN_TABLE,
+    table: cfg.mainTable,
     schema: DEFAULT_SCHEMA,
     keyField: KEY_FIELD,
     keyValue: consCode,
-    childTableNames: [SOLO_TABLE],
+    childTableNames: [cfg.soloTable],
     childParentField: CHILD_PARENT_FIELD,
   });
 }
 
 /** 첨부 하위폴더 탭 목록 (루트 파일 있으면 «기타») */
 export async function listAttachmentFolders(params: {
+  kind?: string;
   consCode?: string;
 }): Promise<{ folders: string[]; error?: string }> {
+  const cfg = variantOf(params);
   const consCode = String(params?.consCode ?? '').trim();
   if (!consCode) return { folders: [], error: '공사코드가 필요합니다.' };
   if (!assertSafeFileDataSegment(consCode)) {
@@ -873,7 +1007,7 @@ export async function listAttachmentFolders(params: {
 
   try {
     const { folders, hasRootFiles } = await listServiceFileDataFolders({
-      layerName: FILE_LAYER,
+      layerName: cfg.mainTable,
       keyValue: consCode,
     });
     const out = [...folders];
@@ -893,9 +1027,11 @@ export async function listAttachmentFolders(params: {
 
 /** 첨부 파일 목록 (folder=«기타» → 루트) */
 export async function listAttachmentFiles(params: {
+  kind?: string;
   consCode?: string;
   folder?: string;
 }): Promise<{ files: { name: string; size: number; modified?: string }[]; error?: string }> {
+  const cfg = variantOf(params);
   const consCode = String(params?.consCode ?? '').trim();
   if (!consCode) return { files: [], error: '공사코드가 필요합니다.' };
   const folderRaw = String(params?.folder ?? '').trim();
@@ -908,7 +1044,7 @@ export async function listAttachmentFiles(params: {
 
   try {
     const files = await listServiceFileDataFiles({
-      layerName: FILE_LAYER,
+      layerName: cfg.mainTable,
       keyValue: consCode,
       subfolder,
     });
@@ -919,10 +1055,15 @@ export async function listAttachmentFiles(params: {
 }
 
 /** 다운로드 상대경로 헬퍼 (UI용 문서화) */
-export function attachmentRelativePath(consCode: string, folder: string, fileName: string): string | null {
+export function attachmentRelativePath(
+  consCode: string,
+  folder: string,
+  fileName: string,
+  kind?: string
+): string | null {
   const sub =
     !folder || folder === CONS_DATA_AS_ROOT_FOLDER_LABEL ? undefined : folder;
-  const dir = fileDataRelativeDir(FILE_LAYER, consCode, sub);
+  const dir = fileDataRelativeDir(getConsLedgerVariant(kind).mainTable, consCode, sub);
   if (!dir) return null;
   return `${dir}/${fileName}`;
 }

@@ -14,7 +14,10 @@ export const SER_FILE_ENG = {
   roadUseLedger: 'roadUseLedger',
   roadLedger: 'roadLedger',
   roadFrontageBuilding: 'roadFrontageBuilding',
+  /** 상수도 공사대장 — file_data/wtl_cons_as/{cons_code}/ */
   waterworksLedger: 'waterworksLedger',
+  /** 하수도 공사대장 — file_data/swl_cons_as/{cons_code}/ */
+  sewerConstructionLedger: 'sewerConstructionLedger',
   complaint: 'complaint',
   memo: 'memo',
   /** GCP 위치 사진 1장 — file_data/gcp/{ogc_fid}/ */

@@ -1,8 +1,8 @@
 <GeoServerTileLayer>
-  <id>LayerInfoImpl-767e4f41:19f1613ef30:38f5</id>
+  <id>LayerInfoImpl-7b45823a:1a113f17c5f:-7796</id>
   <enabled>true</enabled>
   <inMemoryCached>true</inMemoryCached>
-  <name>ggnr:tl_sprd_manage</name>
+  <name>ggnr:ks_rd_jp_lm</name>
   <mimeFormats>
     <string>image/png</string>
     <string>image/jpeg</string>
@@ -12,10 +12,10 @@
       <gridSetName>EPSG:4326</gridSetName>
       <extent>
         <coords>
-          <double>126.189944137224</double>
-          <double>34.98322323241124</double>
-          <double>129.56610747630353</double>
-          <double>38.087125823710316</double>
+          <double>128.82514076829312</double>
+          <double>35.79944908494916</double>
+          <double>128.87305465163095</double>
+          <double>35.82307546453726</double>
         </coords>
       </extent>
     </gridSubset>
@@ -23,10 +23,10 @@
       <gridSetName>EPSG:900913</gridSetName>
       <extent>
         <coords>
-          <double>1.4047400324587414E7</double>
-          <double>4161601.482018514</double>
-          <double>1.4423233108328667E7</double>
-          <double>4591741.091461631</double>
+          <double>1.434074907169818E7</double>
+          <double>4273060.848889727</double>
+          <double>1.4346082820793275E7</double>
+          <double>4276304.057970582</double>
         </coords>
       </extent>
     </gridSubset>
@@ -42,7 +42,7 @@
       <key>STYLES</key>
       <defaultValue></defaultValue>
       <availableStyles class="sorted-set"/>
-      <defaultStyle>tl_sprd_manage</defaultStyle>
+      <defaultStyle>ks_rd_jp_lm</defaultStyle>
     </styleParameterFilter>
   </parameterFilters>
   <gutter>0</gutter>
