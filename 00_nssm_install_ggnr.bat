@@ -101,7 +101,7 @@ if errorlevel 1 (
 
 "%NSSM%" status %SERVICE_NAME% >nul 2>&1
 if not errorlevel 1 (
-  echo [서비스등록] 서비스 %SERVICE_NAME% 이(가) 이미 등록되어 있습니다.
+  echo [서비스등록] 서비스 %SERVICE_NAME% 이^(가^) 이미 등록되어 있습니다.
   if defined GGNR_NSSM_REREG (
     set "DO_REREG=%GGNR_NSSM_REREG%"
     echo [서비스등록] 다시 등록 = !DO_REREG! ^(상위 스크립트에서 전달^)
@@ -357,7 +357,7 @@ set "KP=%~1"
 echo [서비스등록] 포트 %KP% 사용 여부를 확인합니다...
 netstat -ano | findstr /R /C:":%KP% .*LISTENING" >nul 2>&1
 if errorlevel 1 (
-  echo [서비스등록] 포트 %KP% 은(는) 사용 중이 아닙니다.
+  echo [서비스등록] 포트 %KP% 은^(는^) 사용 중이 아닙니다.
   goto :eof
 )
 for /f "tokens=5" %%P in ('netstat -ano ^| findstr /R /C:":%KP% .*LISTENING"') do (
