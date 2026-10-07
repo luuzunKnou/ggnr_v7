@@ -1,0 +1,41 @@
+<featureType>
+  <id>FeatureTypeInfoImpl-7b45823a:1a113f17c5f:-7b4e</id>
+  <name>sewer_fee</name>
+  <nativeName>sewer_fee</nativeName>
+  <namespace>
+    <id>NamespaceInfoImpl-4bf97568:19c4d6c3053:-7ffa</id>
+  </namespace>
+  <title>sewer_fee</title>
+  <keywords>
+    <string>features</string>
+    <string>sewer_fee</string>
+  </keywords>
+  <srs>EPSG:5181</srs>
+  <nativeBoundingBox>
+    <minx>412607.58550391</minx>
+    <maxx>412679.32719112</maxx>
+    <miny>326742.63948453</miny>
+    <maxy>326843.29363074</maxy>
+    <crs class="projected">EPSG:5181</crs>
+  </nativeBoundingBox>
+  <latLonBoundingBox>
+    <minx>129.37030861062576</minx>
+    <maxx>129.37113538515462</maxx>
+    <miny>36.41531654660326</miny>
+    <maxy>36.416238709931214</maxy>
+    <crs>EPSG:4326</crs>
+  </latLonBoundingBox>
+  <projectionPolicy>FORCE_DECLARED</projectionPolicy>
+  <enabled>true</enabled>
+  <store class="dataStore">
+    <id>DataStoreInfoImpl-4bf97568:19c4d6c3053:-7ff9</id>
+  </store>
+  <serviceConfiguration>false</serviceConfiguration>
+  <maxFeatures>0</maxFeatures>
+  <numDecimals>0</numDecimals>
+  <padWithZeros>false</padWithZeros>
+  <forcedDecimal>false</forcedDecimal>
+  <overridingServiceSRS>false</overridingServiceSRS>
+  <skipNumberMatched>false</skipNumberMatched>
+  <circularArcPresent>false</circularArcPresent>
+</featureType>

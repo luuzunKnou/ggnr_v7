@@ -419,9 +419,15 @@ export async function recordDataLog(params: {
   }
 }
 
+/** 일괄 기록 묶음 크기·동시 묶음 수 (DB 풀 5개 중 일부만 사용) */
+const DATA_LOG_BULK_CHUNK = 100;
+const DATA_LOG_BULK_CONCURRENCY = 3;
+/** 상세 행 다중 INSERT 한 번에 넣는 행 수 (파라미터 한도 65535 / 컬럼 6) */
+const DATA_DETAIL_LOG_INSERT_CHUNK = 1000;
+
 /**
  * sync_log / excel_sync_log 스타일 행들을 일괄 data_log로 기록.
- * kept 는 건너뛴다.
+ * kept 는 건너뛴다. 100건씩 묶어 다중 INSERT, 묶음 3개 병렬.
  */
 export async function recordDataLogsFromSyncStyleRows(params: {
   source: DataLogSource;
@@ -438,31 +444,108 @@ export async function recordDataLogsFromSyncStyleRows(params: {
     oldData?: Record<string, unknown> | null;
     newData?: Record<string, unknown> | null;
   }>;
+  /** 동시 묶음 수 (기본 3, 백그라운드 복사는 더 낮게) */
+  concurrency?: number;
 }): Promise<{ success: boolean; recorded: number; skipped?: boolean; error?: string }> {
   let recorded = 0;
   try {
+    const tableName = String(params.tableName ?? '').trim();
+    if (!tableName) return { success: false, recorded, error: 'tableName이 필요합니다.' };
+    const { group, tableKorName } = resolveGroupAndKorName({
+      tableName,
+      group: params.group,
+      tableKorName: params.tableKorName,
+    });
+    const serviceName =
+      params.serviceName?.trim() ||
+      [group, tableKorName || tableName].filter(Boolean).join('-') ||
+      params.source;
+
+    const items: Array<{
+      type: DataLogType;
+      keyField: string;
+      keyValue: string;
+      oldData?: Record<string, unknown> | null;
+      newData?: Record<string, unknown> | null;
+    }> = [];
     for (const row of params.rows) {
       const type = mapSyncOpToType(row.operation);
       if (!type) continue;
       const kv = String(row.keyValue ?? '').trim();
       const kf = String(row.keyField ?? '').trim();
       if (!kv || !kf) continue;
-      const res = await recordDataLog({
-        source: params.source,
-        type,
-        user: params.user,
-        serviceName: params.serviceName,
-        tableName: params.tableName,
-        tableKorName: params.tableKorName,
-        group: params.group,
-        keyField: kf,
-        keyValue: kv,
-        batchKey: params.batchKey,
-        oldData: row.oldData,
-        newData: row.newData,
-      });
-      if (res.success) recorded += 1;
+      items.push({ type, keyField: kf, keyValue: kv, oldData: row.oldData, newData: row.newData });
     }
+
+    const chunks: typeof items[] = [];
+    for (let i = 0; i < items.length; i += DATA_LOG_BULK_CHUNK) {
+      chunks.push(items.slice(i, i + DATA_LOG_BULK_CHUNK));
+    }
+
+    const insertChunk = async (chunk: typeof items): Promise<number> => {
+      const withDetails = await Promise.all(
+        chunk.map(async (it) => ({
+          ...it,
+          details: it.oldData || it.newData
+            ? await buildDetailsFromOldNew({ type: it.type, oldData: it.oldData, newData: it.newData })
+            : [],
+        }))
+      );
+      // 상세 행이 정확한 헤더에 붙도록 dl_key를 먼저 발급받아 명시 삽입
+      const keyRes = await db.execute(sql.raw(
+        `SELECT nextval(pg_get_serial_sequence('data_log', 'dl_key'))::int AS k
+         FROM generate_series(1, ${withDetails.length})`
+      ));
+      const keys = (keyRes.rows as Array<{ k: number }>).map((r) => Number(r.k));
+      if (keys.length !== withDetails.length) throw new Error('data_log 키 발급 실패');
+
+      await db.insert(dl).values(
+        withDetails.map((it, i) => ({
+          dlKey: keys[i],
+          dlServiceKey: null,
+          dlContents: `${it.keyField} | ${it.keyValue}`,
+          dlType: it.type,
+          dlUser: params.user?.trim() || null,
+          dlServiceName: serviceName,
+          dlDate: sql`(timezone('UTC', now()))::timestamp`,
+          dlKeyField: it.keyField,
+          dlKeyValue: it.keyValue,
+          dlTableName: tableName,
+          dlTableKorName: tableKorName,
+          dlGroup: group,
+          dlSource: params.source,
+          dlBatchKey: params.batchKey ?? null,
+        }))
+      );
+
+      const detailRows = withDetails.flatMap((it, i) =>
+        it.details.map((d) => ({
+          ddDlKey: keys[i]!,
+          ddItem: d.item,
+          ddBefore: d.before ?? null,
+          ddAfter: d.after ?? null,
+          ddColName: d.colName ?? d.item,
+          ddKeyValue: it.keyValue,
+        }))
+      );
+      for (let i = 0; i < detailRows.length; i += DATA_DETAIL_LOG_INSERT_CHUNK) {
+        await db.insert(dd).values(detailRows.slice(i, i + DATA_DETAIL_LOG_INSERT_CHUNK));
+      }
+      return withDetails.length;
+    };
+
+    let nextChunk = 0;
+    const worker = async () => {
+      while (nextChunk < chunks.length) {
+        const chunk = chunks[nextChunk++]!;
+        const n = await insertChunk(chunk);
+        recorded += n;
+      }
+    };
+    const concurrency = Math.max(1, Math.trunc(params.concurrency ?? DATA_LOG_BULK_CONCURRENCY));
+    await Promise.all(
+      Array.from({ length: Math.min(concurrency, chunks.length) }, () => worker())
+    );
     return { success: true, recorded };
   } catch (e: unknown) {
     return { success: false, recorded, error: e instanceof Error ? e.message : String(e) };

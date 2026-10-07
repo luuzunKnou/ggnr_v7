@@ -35,7 +35,7 @@ export function RoadLedgerFacilityAttrModal({
 }: RoadLedgerFacilityAttrModalProps) {
   const mapContext = useMapContext();
   const pick = mapContext?.roadLedgerFacilityModal;
-  const open = Boolean(pick);
+  const open = Boolean(pick) && !pick?.inline;
   const titleId = useId();
   const [fieldLabels, setFieldLabels] = useState<Record<string, string>>({});
 

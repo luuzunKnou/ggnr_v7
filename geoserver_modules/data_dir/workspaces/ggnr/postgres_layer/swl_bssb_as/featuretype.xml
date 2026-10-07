@@ -1,0 +1,41 @@
+<featureType>
+  <id>FeatureTypeInfoImpl-7b45823a:1a113f17c5f:-7b51</id>
+  <name>swl_bssb_as</name>
+  <nativeName>swl_bssb_as</nativeName>
+  <namespace>
+    <id>NamespaceInfoImpl-4bf97568:19c4d6c3053:-7ffa</id>
+  </namespace>
+  <title>swl_bssb_as</title>
+  <keywords>
+    <string>features</string>
+    <string>swl_bssb_as</string>
+  </keywords>
+  <srs>EPSG:5181</srs>
+  <nativeBoundingBox>
+    <minx>410807.57812500035</minx>
+    <maxx>412100.43487548886</maxx>
+    <miny>327748.1442871096</miny>
+    <maxy>329251.17987060547</maxy>
+    <crs class="projected">EPSG:5181</crs>
+  </nativeBoundingBox>
+  <latLonBoundingBox>
+    <minx>129.3505290854064</minx>
+    <maxx>129.36534431265235</maxx>
+    <miny>36.424498069401125</miny>
+    <maxy>36.438316115636475</maxy>
+    <crs>EPSG:4326</crs>
+  </latLonBoundingBox>
+  <projectionPolicy>FORCE_DECLARED</projectionPolicy>
+  <enabled>true</enabled>
+  <store class="dataStore">
+    <id>DataStoreInfoImpl-4bf97568:19c4d6c3053:-7ff9</id>
+  </store>
+  <serviceConfiguration>false</serviceConfiguration>
+  <maxFeatures>0</maxFeatures>
+  <numDecimals>0</numDecimals>
+  <padWithZeros>false</padWithZeros>
+  <forcedDecimal>false</forcedDecimal>
+  <overridingServiceSRS>false</overridingServiceSRS>
+  <skipNumberMatched>false</skipNumberMatched>
+  <circularArcPresent>false</circularArcPresent>
+</featureType>

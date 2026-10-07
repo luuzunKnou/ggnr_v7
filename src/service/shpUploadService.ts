@@ -2084,7 +2084,7 @@ export type ShpBatchResultItem = {
  * - define table: tables.json에 이미 있으면 스킵
  * - define field: upsert (기존에 없는 컬럼만 추가)
  */
-export async function processShpBatch(params: {
+async function processShpBatchImpl(params: {
   relativePath?: string;
   shpPaths?: string[];
   /** pathOrResult 별 프런트에서 확정한 EPSG override (예: {'shp_data/.../a.shp': 'EPSG:5186'}) */
@@ -3313,7 +3313,7 @@ async function logShpSchemaResolveHistory(params: {
  * - recreate: 테이블·관련 객체 이름을 `_yyyyMMdd_HHmmss`으로 바꾼 뒤 SHP로 신규 생성
  * DROP COLUMN / DROP TABLE 은 수행하지 않음.
  */
-export async function resolveShpSchemaMismatch(params: {
+async function resolveShpSchemaMismatchImpl(params: {
   pathOrResult: string;
   dbSchema?: 'layer' | 'public_layer';
   mode: 'adjust' | 'recreate';
@@ -4423,7 +4423,7 @@ function createCompareTiming(tableName: string) {
  * 비교 결과를 sync_log에 미결(operation=NULL)로 저장한 뒤 임시 테이블 삭제.
  * import 시도 이후에는 성공·실패·예외와 무관하게 finally에서 임시 테이블을 DROP한다.
  */
-export async function compareShpWithTable(params: {
+async function compareShpWithTableImpl(params: {
   pathOrResult: string;
   sourceSrsOverride?: string;
   /** 있으면 이 상세 이력의 kept만 «유지 인정». 없으면 kept 무시(이전 업로드 유지가 새 비교를 가리지 않음). */
@@ -5451,26 +5451,48 @@ export async function clearSyncIntents(params: {
  * - append/conflict/remove: 의도를 미결로 되돌린 뒤 applySyncEntries로 실제 반영
  * - 확정 후 통합 data_log 에 미러 (마지막 완료 시점만)
  */
+/** 이력 복사 시 한 페이지에서 읽는 sync_log 행 수 */
+const MIRROR_DATA_LOG_PAGE = 1000;
+
+/** sync_log_geom 여러 건을 한 번에 GeoJSON으로 조회 → `${slKey}:${side}` 맵 */
+async function fetchSyncLogGeomsBulk(slKeys: number[]): Promise<Map<string, unknown>> {
+  const out = new Map<string, unknown>();
+  const keys = slKeys.filter((k) => Number.isFinite(k) && k > 0).map((k) => Math.trunc(k));
+  if (keys.length === 0) return out;
+  try {
+    const { db } = await import('@/database/db');
+    const { sql } = await import('drizzle-orm');
+    const res = await db.execute(sql.raw(
+      `SELECT slg_sl_key, slg_side, ST_AsGeoJSON(slg_geom)::jsonb AS g
+       FROM sync_log_geom
+       WHERE slg_sl_key IN (${keys.join(',')})`
+    ));
+    for (const r of res.rows as Array<{ slg_sl_key: number; slg_side: string; g: unknown }>) {
+      if (r.g != null) out.set(`${r.slg_sl_key}:${r.slg_side}`, r.g);
+    }
+  } catch {
+    /* sync_log_geom 미생성 등 — JSON geom 그대로 사용 */
+  }
+  return out;
+}
+
 /** sync_log JSON geom — 이미 GeoJSON이면 유지, 메타만 있으면 sync_log_geom/rollback으로 치환 */
-async function hydrateSyncRowFullGeom(params: {
-  slKey: number;
+function hydrateSyncRowWithGeoms(params: {
   oldData: Record<string, unknown> | null;
   newData: Record<string, unknown> | null;
-}): Promise<{
+  oldG: unknown;
+  newG: unknown;
+}): {
   oldData: Record<string, unknown> | null;
   newData: Record<string, unknown> | null;
-}> {
+} {
+  const { oldG, newG } = params;
   const oldData = params.oldData && typeof params.oldData === 'object'
     ? { ...params.oldData }
     : null;
   const newData = params.newData && typeof params.newData === 'object'
     ? { ...params.newData }
     : null;
-
-  const [oldG, newG] = await Promise.all([
-    fetchSyncLogGeomAsGeoJson(params.slKey, 'old'),
-    fetchSyncLogGeomAsGeoJson(params.slKey, 'new'),
-  ]);
 
   if (oldData) {
     if (oldG != null) oldData.geom = oldG;
@@ -5487,14 +5509,213 @@ async function hydrateSyncRowFullGeom(params: {
   return { oldData, newData };
 }
 
-async function mirrorShpDhKeyToDataLog(params: {
+type MirrorShpDataLogParams = {
   dhKey: number;
   tableName: string;
   /** usrId(usrName) 형식 */
   logUser?: string | null;
   group?: string | null;
   tableKorName?: string | null;
-}): Promise<void> {
+};
+
+type ShpMirrorMeta = { logUser: string | null; group: string | null; tableKorName: string | null };
+
+/**
+ * 서버 프로세스 단위 SHP 백그라운드 상태.
+ * - queue: 통합 이력 복사(테이블 단위 순차)
+ * - finalizing: 위저드 «완료» 후 반영이 끝나지 않은 테이블(소문자) → 만료 시각
+ * - mirroring: 통합 이력 복사 대기·진행 중 테이블 → 건수
+ * - foreground: 업로드 비교·반영 등 사용자 대기 작업 수 (있으면 복사가 양보)
+ */
+type ShpBackgroundState = {
+  queue: Promise<void>;
+  finalizing: Map<string, number>;
+  mirroring: Map<string, number>;
+  foreground: number;
+};
+
+const SHP_BACKGROUND_STATE_KEY = '__ggnrShpBackgroundState';
+/** 브라우저가 닫혀 반영 종료 신호가 오지 않아도 잠금이 영구히 남지 않게 하는 만료 */
+const SHP_FINALIZE_LOCK_TTL_MS = 15 * 60_000;
+/** 업로드 작업이 길어도 복사가 무한정 멈추지 않도록 한 페이지당 최대 대기 */
+const SHP_MIRROR_YIELD_MAX_MS = 60_000;
+/** 백그라운드 복사의 이력 묶음 동시 처리 수 (DB 풀 5개 중 업로드용 여유 확보) */
+const SHP_MIRROR_CONCURRENCY = 2;
+
+function shpBackgroundState(): ShpBackgroundState {
+  const g = globalThis as unknown as Record<string, ShpBackgroundState | undefined>;
+  if (!g[SHP_BACKGROUND_STATE_KEY]) {
+    g[SHP_BACKGROUND_STATE_KEY] = {
+      queue: Promise.resolve(),
+      finalizing: new Map(),
+      mirroring: new Map(),
+      foreground: 0,
+    };
+  }
+  return g[SHP_BACKGROUND_STATE_KEY]!;
+}
+
+function normalizeShpTableNames(names: unknown): string[] {
+  const arr = Array.isArray(names) ? names : [];
+  return [...new Set(arr.map((n) => String(n ?? '').trim().toLowerCase()).filter(Boolean))];
+}
+
+function isShpTableFinalizing(tableName: string): boolean {
+  const st = shpBackgroundState();
+  const key = tableName.trim().toLowerCase();
+  const until = st.finalizing.get(key);
+  if (until == null) return false;
+  if (until < Date.now()) {
+    st.finalizing.delete(key);
+    return false;
+  }
+  return true;
+}
+
+function shpFinalizingError(tableName: string): string {
+  return `이전 SHP 업로드의 반영이 아직 진행 중인 테이블입니다. 잠시 후 다시 시도하세요. (${tableName})`;
+}
+
+/** 위저드 «완료» 직전 — 백그라운드 반영이 끝날 때까지 같은 테이블 비교·정리·재생성 차단 */
+export async function beginShpFinalize(params: { tableNames: string[] }) {
+  const st = shpBackgroundState();
+  const until = Date.now() + SHP_FINALIZE_LOCK_TTL_MS;
+  for (const n of normalizeShpTableNames(params?.tableNames)) st.finalizing.set(n, until);
+  return { success: true };
+}
+
+/** 백그라운드 반영 종료(성공·실패 무관) — 잠금 해제 */
+export async function endShpFinalize(params: { tableNames: string[] }) {
+  const st = shpBackgroundState();
+  for (const n of normalizeShpTableNames(params?.tableNames)) st.finalizing.delete(n);
+  return { success: true };
+}
+
+/** 반영 중·이력 기록 중 테이블 조회 (tableNames 없으면 전체) */
+export async function getShpTableBusyStatus(params: { tableNames?: string[] } = {}) {
+  const st = shpBackgroundState();
+  const filter = params?.tableNames ? new Set(normalizeShpTableNames(params.tableNames)) : null;
+  const pick = (names: Iterable<string>) =>
+    [...names].filter((n) => (filter ? filter.has(n) : true));
+  return {
+    success: true,
+    finalizing: pick([...st.finalizing.keys()].filter((n) => isShpTableFinalizing(n))),
+    mirroring: pick(st.mirroring.keys()),
+  };
+}
+
+async function withShpForeground<T>(fn: () => Promise<T>): Promise<T> {
+  const st = shpBackgroundState();
+  st.foreground += 1;
+  try {
+    return await fn();
+  } finally {
+    st.foreground = Math.max(0, st.foreground - 1);
+  }
+}
+
+async function yieldToShpForeground(): Promise<void> {
+  const st = shpBackgroundState();
+  const start = Date.now();
+  while (st.foreground > 0 && Date.now() - start < SHP_MIRROR_YIELD_MAX_MS) {
+    await new Promise((r) => setTimeout(r, 500));
+  }
+}
+
+async function resolveShpMirrorMeta(params: MirrorShpDataLogParams): Promise<ShpMirrorMeta> {
+  const { db } = await import('@/database/db');
+  const { sql } = await import('drizzle-orm');
+  let logUser = String(params.logUser ?? '').trim() || null;
+  let group = String(params.group ?? '').trim() || null;
+  let tableKorName = String(params.tableKorName ?? '').trim() || null;
+  const metaRes = await db.execute(sql.raw(
+    `SELECT
+       NULLIF(btrim(lh.lh_create_user), '') AS lh_user,
+       NULLIF(btrim(dh.dh_group), '') AS dh_group,
+       NULLIF(btrim(dh.dh_kor_name), '') AS dh_kor_name
+     FROM layer_detail_history dh
+     LEFT JOIN layer_history lh ON lh.lh_key = dh.dh_lh_key
+     WHERE dh.dh_key = ${Math.trunc(params.dhKey)}
+     LIMIT 1`
+  ));
+  const meta = (metaRes.rows as Array<{
+    lh_user?: string | null;
+    dh_group?: string | null;
+    dh_kor_name?: string | null;
+  }>)?.[0];
+  if (!logUser) logUser = String(meta?.lh_user ?? '').trim() || null;
+  if (!group) group = String(meta?.dh_group ?? '').trim() || null;
+  if (!tableKorName) tableKorName = String(meta?.dh_kor_name ?? '').trim() || null;
+  return { logUser, group, tableKorName };
+}
+
+/** 회차 스냅샷 — 반영 직후 테이블 상태를 즉시 고정(뒤이은 업로드가 섞이지 않게 백그라운드로 미루지 않음) */
+async function captureShpBatchSnapshotNow(params: MirrorShpDataLogParams, meta: ShpMirrorMeta): Promise<void> {
+  try {
+    const { db } = await import('@/database/db');
+    const { sql } = await import('drizzle-orm');
+    const safeTbl = params.tableName.replace(/'/g, "''");
+    const kfRes = await db.execute(sql.raw(
+      `SELECT sl_key_field
+       FROM sync_log
+       WHERE sl_dh_key = ${Math.trunc(params.dhKey)}
+         AND LOWER(sl_table_name) = LOWER('${safeTbl}')
+         AND sl_key_field IS NOT NULL
+         AND btrim(sl_key_field) <> ''
+       LIMIT 1`
+    ));
+    const keyField = String(
+      (kfRes.rows as Array<{ sl_key_field?: string }>)[0]?.sl_key_field ?? ''
+    ).trim();
+    if (!keyField) return;
+    const { captureBatchSnapshot } = await import('./batchSnapshotService');
+    await captureBatchSnapshot({
+      batchKey: `shp:dh:${params.dhKey}`,
+      tableName: params.tableName,
+      keyField,
+      user: meta.logUser,
+      source: 'SHP 업로드',
+      group: meta.group,
+      tableKorName: meta.tableKorName,
+    });
+  } catch (snapErr) {
+    console.warn('[captureShpBatchSnapshotNow]', snapErr instanceof Error ? snapErr.message : snapErr);
+  }
+}
+
+/**
+ * 반영 확정 후 이력 마무리: 스냅샷은 즉시, 통합 이력(data_log) 복사는 백그라운드 큐(테이블 단위 순차).
+ * 위저드 응답은 스냅샷까지만 기다린다.
+ */
+async function finishShpDhKeyHistory(params: MirrorShpDataLogParams): Promise<void> {
+  let meta: ShpMirrorMeta = {
+    logUser: String(params.logUser ?? '').trim() || null,
+    group: String(params.group ?? '').trim() || null,
+    tableKorName: String(params.tableKorName ?? '').trim() || null,
+  };
+  try {
+    meta = await resolveShpMirrorMeta(params);
+  } catch (e) {
+    console.warn('[finishShpDhKeyHistory] meta', e instanceof Error ? e.message : e);
+  }
+  await captureShpBatchSnapshotNow(params, meta);
+
+  const st = shpBackgroundState();
+  const key = params.tableName.trim().toLowerCase();
+  st.mirroring.set(key, (st.mirroring.get(key) ?? 0) + 1);
+  st.queue = st.queue
+    .then(() => mirrorShpDhKeyToDataLog(params, meta))
+    .catch((e) => {
+      console.warn('[finishShpDhKeyHistory] mirror', e instanceof Error ? e.message : e);
+    })
+    .finally(() => {
+      const left = (st.mirroring.get(key) ?? 1) - 1;
+      if (left <= 0) st.mirroring.delete(key);
+      else st.mirroring.set(key, left);
+    });
+}
+
+async function mirrorShpDhKeyToDataLog(params: MirrorShpDataLogParams, meta: ShpMirrorMeta): Promise<void> {
   try {
     const { db } = await import('@/database/db');
     const { sql } = await import('drizzle-orm');
@@ -5504,70 +5725,53 @@ async function mirrorShpDhKeyToDataLog(params: {
       `SELECT 1 AS ok FROM data_log WHERE dl_batch_key = '${batchKey.replace(/'/g, "''")}' LIMIT 1`
     ));
     const alreadyMirrored = !!((already.rows as unknown[])?.length);
-
-    let logUser = String(params.logUser ?? '').trim() || null;
-    let group = String(params.group ?? '').trim() || null;
-    let tableKorName = String(params.tableKorName ?? '').trim() || null;
-    {
-      const metaRes = await db.execute(sql.raw(
-        `SELECT
-           NULLIF(btrim(lh.lh_create_user), '') AS lh_user,
-           NULLIF(btrim(dh.dh_group), '') AS dh_group,
-           NULLIF(btrim(dh.dh_kor_name), '') AS dh_kor_name
-         FROM layer_detail_history dh
-         LEFT JOIN layer_history lh ON lh.lh_key = dh.dh_lh_key
-         WHERE dh.dh_key = ${Math.trunc(params.dhKey)}
-         LIMIT 1`
-      ));
-      const meta = (metaRes.rows as Array<{
-        lh_user?: string | null;
-        dh_group?: string | null;
-        dh_kor_name?: string | null;
-      }>)?.[0];
-      if (!logUser) {
-        const u = String(meta?.lh_user ?? '').trim();
-        if (u) logUser = u;
-      }
-      if (!group) group = String(meta?.dh_group ?? '').trim() || null;
-      if (!tableKorName) tableKorName = String(meta?.dh_kor_name ?? '').trim() || null;
-    }
+    const { logUser, group, tableKorName } = meta;
 
     if (!alreadyMirrored) {
       const safeTbl = params.tableName.replace(/'/g, "''");
-      const res = await db.execute(sql.raw(
-        `SELECT sl_key, sl_key_field, sl_key_value, sl_operation, sl_old_data, sl_new_data
-         FROM sync_log
-         WHERE sl_dh_key = ${Math.trunc(params.dhKey)}
-           AND LOWER(sl_table_name) = LOWER('${safeTbl}')
-           AND sl_operation IS NOT NULL
-           AND sl_operation <> 'kept'
-           AND sl_applied_at IS NOT NULL`
-      ));
-      const rawRows = res.rows as Array<{
-        sl_key: number;
-        sl_key_field: string;
-        sl_key_value: string;
-        sl_operation: string;
-        sl_old_data: Record<string, unknown> | null;
-        sl_new_data: Record<string, unknown> | null;
-      }>;
-      const rows = [];
-      for (const r of rawRows) {
-        const hydrated = await hydrateSyncRowFullGeom({
-          slKey: r.sl_key,
-          oldData: r.sl_old_data,
-          newData: r.sl_new_data,
+      let lastSlKey = 0;
+      for (;;) {
+        await yieldToShpForeground();
+        const res = await db.execute(sql.raw(
+          `SELECT sl_key, sl_key_field, sl_key_value, sl_operation, sl_old_data, sl_new_data
+           FROM sync_log
+           WHERE sl_dh_key = ${Math.trunc(params.dhKey)}
+             AND LOWER(sl_table_name) = LOWER('${safeTbl}')
+             AND sl_operation IS NOT NULL
+             AND sl_operation <> 'kept'
+             AND sl_applied_at IS NOT NULL
+             AND sl_key > ${lastSlKey}
+           ORDER BY sl_key
+           LIMIT ${MIRROR_DATA_LOG_PAGE}`
+        ));
+        const rawRows = res.rows as Array<{
+          sl_key: number;
+          sl_key_field: string;
+          sl_key_value: string;
+          sl_operation: string;
+          sl_old_data: Record<string, unknown> | null;
+          sl_new_data: Record<string, unknown> | null;
+        }>;
+        if (rawRows.length === 0) break;
+        lastSlKey = Number(rawRows[rawRows.length - 1]!.sl_key);
+
+        const geomBySide = await fetchSyncLogGeomsBulk(rawRows.map((r) => Number(r.sl_key)));
+        const rows = rawRows.map((r) => {
+          const hydrated = hydrateSyncRowWithGeoms({
+            oldData: r.sl_old_data,
+            newData: r.sl_new_data,
+            oldG: geomBySide.get(`${r.sl_key}:old`) ?? null,
+            newG: geomBySide.get(`${r.sl_key}:new`) ?? null,
+          });
+          return {
+            keyField: r.sl_key_field,
+            keyValue: r.sl_key_value,
+            operation: r.sl_operation,
+            oldData: hydrated.oldData,
+            newData: hydrated.newData,
+          };
         });
-        rows.push({
-          keyField: r.sl_key_field,
-          keyValue: r.sl_key_value,
-          operation: r.sl_operation,
-          oldData: hydrated.oldData,
-          newData: hydrated.newData,
-        });
-      }
-      if (rows.length > 0) {
-        await recordDataLogsFromSyncStyleRows({
+        const rec = await recordDataLogsFromSyncStyleRows({
           source: 'SHP 업로드',
           tableName: params.tableName,
           tableKorName,
@@ -5576,45 +5780,21 @@ async function mirrorShpDhKeyToDataLog(params: {
           serviceName: 'SHP 업로드',
           user: logUser,
           rows,
+          concurrency: SHP_MIRROR_CONCURRENCY,
         });
+        if (!rec.success) {
+          console.warn('[mirrorShpDhKeyToDataLog] data_log', rec.error);
+          break;
+        }
+        if (rawRows.length < MIRROR_DATA_LOG_PAGE) break;
       }
-    }
-
-    try {
-      const safeTbl = params.tableName.replace(/'/g, "''");
-      const kfRes = await db.execute(sql.raw(
-        `SELECT sl_key_field
-         FROM sync_log
-         WHERE sl_dh_key = ${Math.trunc(params.dhKey)}
-           AND LOWER(sl_table_name) = LOWER('${safeTbl}')
-           AND sl_key_field IS NOT NULL
-           AND btrim(sl_key_field) <> ''
-         LIMIT 1`
-      ));
-      const keyField = String(
-        (kfRes.rows as Array<{ sl_key_field?: string }>)[0]?.sl_key_field ?? ''
-      ).trim();
-      if (keyField) {
-        const { captureBatchSnapshot } = await import('./batchSnapshotService');
-        await captureBatchSnapshot({
-          batchKey,
-          tableName: params.tableName,
-          keyField,
-          user: logUser,
-          source: 'SHP 업로드',
-          group,
-          tableKorName,
-        });
-      }
-    } catch (snapErr) {
-      console.warn('[mirrorShpDhKeyToDataLog] snapshot', snapErr instanceof Error ? snapErr.message : snapErr);
     }
   } catch (e) {
     console.warn('[mirrorShpDhKeyToDataLog]', e instanceof Error ? e.message : e);
   }
 }
 
-export async function commitSyncIntents(params: {
+async function commitSyncIntentsImpl(params: {
   tableName: string;
   dhKey: number;
   shpPath?: string;
@@ -5692,7 +5872,7 @@ export async function commitSyncIntents(params: {
       removedCount = applied.removedCount;
     }
 
-    await mirrorShpDhKeyToDataLog({
+    await finishShpDhKeyHistory({
       dhKey,
       tableName,
       logUser: params.logUser,
@@ -5714,7 +5894,7 @@ export async function commitSyncIntents(params: {
 }
 
 /** 위저드 취소: 테이블별 미반영(applied_at NULL) sync_log만 삭제. 실제 반영분·SHP 파일은 유지 */
-export async function clearUnappliedSyncLogs(params: {
+async function clearUnappliedSyncLogsImpl(params: {
   tableNames: string[];
 }): Promise<{ success: boolean; deletedCount: number; error?: string }> {
   const tableNames = [...new Set((params?.tableNames ?? []).map((n) => String(n ?? '').trim()).filter(Boolean))];
@@ -5907,7 +6087,7 @@ function enrichLightSyncLogRow(row: Record<string, unknown>): Record<string, unk
  * 이력 탭 «이력 조회»에서 신규 import 내용을 볼 수 있게 한다.
  * 동일 dhKey에 이미 로그가 있으면 재삽입하지 않는다.
  */
-export async function recordNewLayerImportLogs(params: {
+async function recordNewLayerImportLogsImpl(params: {
   tableName: string;
   dhKey: number;
   sourceSrs?: string | null;
@@ -5940,7 +6120,7 @@ export async function recordNewLayerImportLogs(params: {
     ));
     const existingCnt = (existing.rows as Array<{ cnt: number }>)[0]?.cnt ?? 0;
     if (existingCnt > 0) {
-      await mirrorShpDhKeyToDataLog({
+      await finishShpDhKeyHistory({
         dhKey,
         tableName,
         logUser: params.logUser,
@@ -5988,7 +6168,8 @@ export async function recordNewLayerImportLogs(params: {
     const safeKeyField = resolvedKeyDb.replace(/'/g, "''");
 
     const inserted = await db.execute(sql.raw(
-      `INSERT INTO sync_log (
+      `WITH ins AS (
+       INSERT INTO sync_log (
          sl_dh_key, sl_table_name, sl_key_field, sl_key_value,
          sl_operation, sl_old_data, sl_new_data, sl_applied_at, sl_rolled_back
        )
@@ -6005,10 +6186,13 @@ export async function recordNewLayerImportLogs(params: {
        FROM ${dbSchema}."${tableName}" e
        WHERE e."${resolvedKeyDb}" IS NOT NULL
          AND btrim(e."${resolvedKeyDb}"::text) <> ''
-       RETURNING sl_key`
+       RETURNING 1
+       )
+       SELECT count(*)::int AS cnt FROM ins`
     ));
+    const insertedCnt = (inserted.rows as Array<{ cnt: number }>)[0]?.cnt ?? 0;
 
-    if (storeFullGeom && geomPair && inserted.rows?.length) {
+    if (storeFullGeom && geomPair && insertedCnt > 0) {
       try {
         await db.execute(sql.raw(
           `INSERT INTO sync_log_geom (slg_sl_key, slg_side, slg_geom)
@@ -6031,14 +6215,14 @@ export async function recordNewLayerImportLogs(params: {
       }
     }
 
-    await mirrorShpDhKeyToDataLog({
+    await finishShpDhKeyHistory({
       dhKey,
       tableName,
       logUser: params.logUser,
       group: params.group,
       tableKorName: params.tableKorName,
     });
-    return { success: true, appendedCount: inserted.rows?.length ?? 0 };
+    return { success: true, appendedCount: insertedCnt };
   } catch (e: unknown) {
     return { success: false, error: e instanceof Error ? e.message : String(e) };
   }
@@ -6911,6 +7095,66 @@ export async function exportLayerTableToShp(params: {
   await fs.mkdir(tmpBase, { recursive: true }).catch(() => {});
 
   return { success: true, zipBuffer };
+}
+
+/*
+ * 백그라운드 반영·이력 복사와 겹치지 않도록 감싼 공개 진입점.
+ * - 업로드 작업 실행 중에는 통합 이력 복사가 양보
+ * - 이전 업로드 반영이 끝나지 않은 테이블은 비교·스키마 재생성 차단, 미반영 정리 제외
+ */
+
+export async function processShpBatch(params: Parameters<typeof processShpBatchImpl>[0]) {
+  return withShpForeground(() => processShpBatchImpl(params));
+}
+
+export async function resolveShpSchemaMismatch(
+  params: Parameters<typeof resolveShpSchemaMismatchImpl>[0]
+): ReturnType<typeof resolveShpSchemaMismatchImpl> {
+  const tableName = shpTableNameFromRelPath(String(params?.pathOrResult ?? '').trim());
+  if (tableName && isShpTableFinalizing(tableName)) {
+    return { success: false, error: shpFinalizingError(tableName) };
+  }
+  return withShpForeground(() => resolveShpSchemaMismatchImpl(params));
+}
+
+export async function compareShpWithTable(
+  params: Parameters<typeof compareShpWithTableImpl>[0]
+): Promise<CompareResult> {
+  const tableName = shpTableNameFromRelPath(String(params?.pathOrResult ?? '').trim());
+  if (tableName && isShpTableFinalizing(tableName)) {
+    return {
+      success: false,
+      appendCount: 0,
+      conflictCount: 0,
+      removeCount: 0,
+      unchangedCount: 0,
+      conflicts: [],
+      removes: [],
+      error: shpFinalizingError(tableName),
+    };
+  }
+  return withShpForeground(() => compareShpWithTableImpl(params));
+}
+
+export async function clearUnappliedSyncLogs(params: Parameters<typeof clearUnappliedSyncLogsImpl>[0]) {
+  const names = (params?.tableNames ?? []).filter((n) => !isShpTableFinalizing(String(n ?? '')));
+  return clearUnappliedSyncLogsImpl({ ...params, tableNames: names });
+}
+
+export async function commitSyncIntents(params: Parameters<typeof commitSyncIntentsImpl>[0]) {
+  try {
+    return await withShpForeground(() => commitSyncIntentsImpl(params));
+  } finally {
+    await endShpFinalize({ tableNames: [String(params?.tableName ?? '')] });
+  }
+}
+
+export async function recordNewLayerImportLogs(params: Parameters<typeof recordNewLayerImportLogsImpl>[0]) {
+  try {
+    return await withShpForeground(() => recordNewLayerImportLogsImpl(params));
+  } finally {
+    await endShpFinalize({ tableNames: [String(params?.tableName ?? '')] });
+  }
 }
 
 

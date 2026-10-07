@@ -44,7 +44,7 @@ import {
 import { call } from "@/lib/api";
 import { appFetch } from "@/lib/basePath";
 import { recordDataViewLog } from "@/lib/recordDataViewLog";
-import { SER_FILE_ENG } from "@/lib/serviceFileDataSerEng";
+import { getConsLedgerVariant, type ConsLedgerKind } from "@/lib/consLedgerVariant";
 import { streamDownloadFile } from "@/lib/streamFileDownload";
 import {
   ServiceFileImagePreview,
@@ -75,7 +75,8 @@ import {
   type DrawToolbarMapAnchor,
 } from "../../../_mapComponents/analysisArea";
 import { UsageDataAsAddressList } from "../usageDataAs/UsageDataAsAddressList";
-import { CONS_DATA_AS_SOLO_WMS_LAYER_ID } from "./consDataAsLayerId";
+import { consLedgerWmsLayerIds } from "./consDataAsLayerId";
+import { hasConsLedgerField, useConsLedgerFields } from "./useConsLedgerFields";
 import { useMapVisualCenterPixel } from "../../../_mapComponents/hooks/useMapVisualCenterPixel";
 import {
   GEOM_EDIT_HINT_BELOW_SEARCH_GAP,
@@ -83,7 +84,6 @@ import {
 } from "../../../searchBarOffsetContext";
 import {
   CONS_ATTACH_ROOT_FOLDER,
-  CONS_DATA_AS_FILE_LAYER,
   isNewRiverConstructionLedgerRow,
   ledgerRowToConsDataAsValues,
   mapConsDataAsApiToLedgerRow,
@@ -101,8 +101,34 @@ import { MapSideDetailScroll } from "../../../_mapComponents/MapSideDetailScroll
 import { OccupationLedgerPlaceInput } from "../../occupationLedger/OccupationLedgerPlaceInput";
 
 type Props = {
+  /** 하천·상수·하수 — 메뉴에 따라 대상 레이어 */
+  kind?: ConsLedgerKind;
   row: RiverConstructionLedgerRow;
   onClose: () => void;
+};
+
+/** 화면 속성 키 → 레이어 컬럼 (레이어에 없는 항목은 숨김) */
+const ATTR_KEY_TO_COLUMN: Record<string, string> = {
+  name: "cons_name",
+  location: "cons_locat",
+  riverNames: "river_name",
+  quantity: "cons_volum",
+  contractDate: "cont_date",
+  startDate: "start_date",
+  endDate: "done_date",
+  actualEndDate: "sdone_date",
+  companyName: "busin_name",
+  representative: "ceo_name",
+  phone: "busin_phon",
+  companyAddress: "busin_addr",
+  supervisor: "direct_pos",
+  supervisorName: "direct_nam",
+  budgetBefore: "amount_pre",
+  budgetIncrease: "amount_var",
+  budgetDecrease: "amount_cha",
+  budgetAfter: "amount_aft",
+  changeReason: "reason",
+  remark: "descript",
 };
 
 const fieldClass =
@@ -834,7 +860,11 @@ function AttachmentThumbGrid({
 
 const RIVER_TABLE_PREVIEW_MAX = 2;
 
-export function RiverConstructionLedgerDetailPanel({ row, onClose }: Props) {
+export function RiverConstructionLedgerDetailPanel({ kind = "river", row, onClose }: Props) {
+  const variant = getConsLedgerVariant(kind);
+  const fileLayer = variant.mainTable;
+  const soloLayerId = consLedgerWmsLayerIds(kind).solo;
+  const attrFields = useConsLedgerFields(kind);
   const mapContext = useMapContext();
   const attachInputRef = useRef<HTMLInputElement>(null);
   const attachScrollRef = useRef<HTMLDivElement>(null);
@@ -846,12 +876,12 @@ export function RiverConstructionLedgerDetailPanel({ row, onClose }: Props) {
     const consCode = String(row.id ?? "").trim();
     if (!consCode) return;
     recordDataViewLog({
-      tableName: "cons_data_as",
+      tableName: variant.mainTable,
       keyField: "cons_code",
       keyValue: consCode,
-      serviceName: "공사대장",
+      serviceName: variant.title,
     });
-  }, [row.id, isNewRow]);
+  }, [row.id, isNewRow, variant.mainTable, variant.title]);
 
   const [editing, setEditing] = useState(isNewRow || !row.name.trim());
   const [draft, setDraft] = useState<AttrDraft>(() => toDraft(row));
@@ -886,7 +916,7 @@ export function RiverConstructionLedgerDetailPanel({ row, onClose }: Props) {
     selectParcel,
     selectedParcelIdx,
     clearSelection: clearParcelSelection,
-  } = useLayerParcelNavigation(CONS_DATA_AS_SOLO_WMS_LAYER_ID);
+  } = useLayerParcelNavigation(soloLayerId);
   const [detailLoading, setDetailLoading] = useState(false);
   const [drawPhase, setDrawPhase] = useState<"drawing" | "editing" | "managed">("drawing");
   const [hasBoundaryGeom, setHasBoundaryGeom] = useState(false);
@@ -923,7 +953,7 @@ export function RiverConstructionLedgerDetailPanel({ row, onClose }: Props) {
     void call("", "POST", {
       service: "consDataAsService",
       action: "getDetailByConsCode",
-      params: { consCode, includeParcelGeometry: true },
+      params: { kind, consCode, includeParcelGeometry: true },
     })
       .then((res) => {
         if (cancelled || detailLoadGenRef.current !== gen) return;
@@ -966,7 +996,7 @@ export function RiverConstructionLedgerDetailPanel({ row, onClose }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- row.id 전환 시만
   }, [row.id]);
 
-  const fileSerEng = SER_FILE_ENG.riverConstructionLedger;
+  const fileSerEng = variant.serEng;
   const fileKey = isNewRow ? "" : row.id;
   const { upload: uploadChunked } = useServiceFileChunkedUpload();
   /** 상세 보강이 끝난 뒤 첨부 목록 조회 — 클릭 직후 원본 이미지 다운로드와 경합 방지 */
@@ -974,7 +1004,7 @@ export function RiverConstructionLedgerDetailPanel({ row, onClose }: Props) {
   const { files: folderFiles, loading: filesLoading } = useServiceFileData({
     serEng: fileSerEng,
     enabled: attachmentsReady && Boolean(attachmentTab),
-    layerSegment: CONS_DATA_AS_FILE_LAYER,
+    layerSegment: fileLayer,
     keyValue: fileKey || null,
     subfolder: attachmentTab,
     refreshNonce: attachRefreshNonce,
@@ -985,7 +1015,7 @@ export function RiverConstructionLedgerDetailPanel({ row, onClose }: Props) {
   const attachments = useMemo(() => {
     return folderFiles.map((f) => {
       const base = mapServiceFileToAttachment(f, attachmentTab);
-      const url = serviceFileDataDownloadUrl(fileSerEng, CONS_DATA_AS_FILE_LAYER, fileKey, f.name, {
+      const url = serviceFileDataDownloadUrl(fileSerEng, fileLayer, fileKey, f.name, {
         subfolder: attachmentTab,
       });
       return {
@@ -993,7 +1023,7 @@ export function RiverConstructionLedgerDetailPanel({ row, onClose }: Props) {
         previewUrl: base.previewKind === "image" || base.previewKind === "pdf" ? url : undefined,
       };
     });
-  }, [attachmentTab, fileKey, fileSerEng, folderFiles]);
+  }, [attachmentTab, fileKey, fileLayer, fileSerEng, folderFiles]);
 
   useEffect(() => {
     if (!attachmentsReady || !fileKey) {
@@ -1003,7 +1033,7 @@ export function RiverConstructionLedgerDetailPanel({ row, onClose }: Props) {
     let cancelled = false;
     const qs = new URLSearchParams({
       serEng: fileSerEng,
-      layer: CONS_DATA_AS_FILE_LAYER,
+      layer: fileLayer,
       key: fileKey,
       folders: "1",
     });
@@ -1027,7 +1057,7 @@ export function RiverConstructionLedgerDetailPanel({ row, onClose }: Props) {
     return () => {
       cancelled = true;
     };
-  }, [attachmentsReady, fileKey, fileSerEng, foldersRefreshNonce]);
+  }, [attachmentsReady, fileKey, fileLayer, fileSerEng, foldersRefreshNonce]);
 
   const setRiverFocus = mapContext?.setRiverConstructionLedgerRiverFocus;
   const setGeomEditingId = mapContext?.setRiverConstructionLedgerGeomEditingId;
@@ -1473,7 +1503,7 @@ export function RiverConstructionLedgerDetailPanel({ row, onClose }: Props) {
         setHighlightParcel(null);
         return;
       }
-      ensureConsDataAsWmsLayersVisible(mapContext?.setVisibleLayerNames);
+      ensureConsDataAsWmsLayersVisible(mapContext?.setVisibleLayerNames, { kind });
       void selectParcel(item, idx, {
         onHighlight: setHighlightParcel,
         enableWmsLayer: false,
@@ -1482,6 +1512,7 @@ export function RiverConstructionLedgerDetailPanel({ row, onClose }: Props) {
     },
     [
       clearParcelSelection,
+      kind,
       mapContext?.setVisibleLayerNames,
       selectParcel,
       selectedParcelIdx,
@@ -1505,6 +1536,7 @@ export function RiverConstructionLedgerDetailPanel({ row, onClose }: Props) {
         service: "consDataAsService",
         action: "saveRow",
         params: {
+          kind,
           consCode: isNewRow ? undefined : row.id,
           isNew: isNewRow,
           values,
@@ -1522,7 +1554,7 @@ export function RiverConstructionLedgerDetailPanel({ row, onClose }: Props) {
       const detailRes = await call("", "POST", {
         service: "consDataAsService",
         action: "getDetailByConsCode",
-        params: { consCode },
+        params: { kind, consCode },
       });
       const detailData = detailRes?.data ?? detailRes;
       const mapped = detailData?.row
@@ -1547,6 +1579,7 @@ export function RiverConstructionLedgerDetailPanel({ row, onClose }: Props) {
         await refreshConsDataAsMapView({
           map: mapContext?.mapInstanceRef?.current,
           consCode,
+          kind,
           setVisibleLayerNames: mapContext?.setVisibleLayerNames,
           applyMapViewPadding: mapContext?.applyMapViewPaddingRef?.current ?? null,
         });
@@ -1600,7 +1633,7 @@ export function RiverConstructionLedgerDetailPanel({ row, onClose }: Props) {
       const res = await call("", "POST", {
         service: "consDataAsService",
         action: "deleteRow",
-        params: { consCode: row.id },
+        params: { kind, consCode: row.id },
       });
       const data = res?.data ?? res;
       if (!data?.success) {
@@ -1630,7 +1663,7 @@ export function RiverConstructionLedgerDetailPanel({ row, onClose }: Props) {
       const result = await uploadChunked({
         file,
         serEng: fileSerEng,
-        layerSegment: CONS_DATA_AS_FILE_LAYER,
+        layerSegment: fileLayer,
         keyValue: fileKey,
         subfolder: folder,
       });
@@ -1649,7 +1682,7 @@ export function RiverConstructionLedgerDetailPanel({ row, onClose }: Props) {
     if (!fileKey) return;
     const result = await requestServiceFileDataDelete({
       serEng: fileSerEng,
-      layerSegment: CONS_DATA_AS_FILE_LAYER,
+      layerSegment: fileLayer,
       keyValue: fileKey,
       fileName: att.name,
       subfolder: att.category,
@@ -1666,7 +1699,7 @@ export function RiverConstructionLedgerDetailPanel({ row, onClose }: Props) {
     if (!fileKey) return;
     const url = serviceFileDataDownloadUrl(
       fileSerEng,
-      CONS_DATA_AS_FILE_LAYER,
+      fileLayer,
       fileKey,
       att.name,
       { subfolder: att.category }
@@ -1686,7 +1719,7 @@ export function RiverConstructionLedgerDetailPanel({ row, onClose }: Props) {
       "공사대장";
     const url = serviceFileDataZipDownloadUrl(
       fileSerEng,
-      CONS_DATA_AS_FILE_LAYER,
+      fileLayer,
       fileKey,
       { layerDisplayName: label }
     );
@@ -1743,7 +1776,13 @@ export function RiverConstructionLedgerDetailPanel({ row, onClose }: Props) {
       value: riverNamesCell,
     };
     // 공사명·공사위치 다음에 배치 (한 줄/반 줄은 fullWidth 맵이 결정)
-    return [entries[0]!, entries[1]!, riverEntry, ...entries.slice(2)];
+    const all = [entries[0]!, entries[1]!, riverEntry, ...entries.slice(2)];
+    // 레이어에 없는 컬럼은 숨김 (공사명은 저장 필수라 항상 표시)
+    return all.filter((e) => {
+      if (e.fieldKey === "name") return true;
+      const col = ATTR_KEY_TO_COLUMN[e.fieldKey];
+      return !col || hasConsLedgerField(attrFields, col);
+    });
   };
 
   /** 목록 전체 최장값 기준 — 행 전환해도 속성 칸 배치 고정 */
@@ -1780,7 +1819,7 @@ export function RiverConstructionLedgerDetailPanel({ row, onClose }: Props) {
         attrFullWidthByKey
       ),
     // eslint-disable-next-line react-hooks/exhaustive-deps -- riverNamesCell follows riverNames
-    [row, riverNames, attrFullWidthByKey]
+    [row, riverNames, attrFullWidthByKey, attrFields]
   );
 
   const setField = <K extends keyof AttrDraft>(key: K, value: AttrDraft[K]) => {
@@ -1881,7 +1920,7 @@ export function RiverConstructionLedgerDetailPanel({ row, onClose }: Props) {
         attrFullWidthByKey
       ),
     // eslint-disable-next-line react-hooks/exhaustive-deps -- draft + river cell
-    [draft, riverNames, riverNamesText, attrFullWidthByKey, vworldApiKey]
+    [draft, riverNames, riverNamesText, attrFullWidthByKey, vworldApiKey, attrFields]
   );
 
   const geomBannerHost =

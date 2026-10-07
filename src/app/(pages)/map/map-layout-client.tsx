@@ -97,6 +97,11 @@ import {
   aerialKindToOpenedKey,
   shootTypeToAerialKind,
 } from "./_mapContents/shootingRequest/shootTypeToAerialKind"
+import {
+  CONS_LEDGER_VARIANTS,
+  consLedgerKindFromOpened,
+  getConsLedgerVariant,
+} from "@/lib/consLedgerVariant"
 import { RiverConstructionLedgerListPanel } from "./_mapContents/river/riverConstructionLedger/RiverConstructionLedgerListPanel"
 import { RiverConstructionLedgerDetailPanel } from "./_mapContents/river/riverConstructionLedger/RiverConstructionLedgerDetailPanel"
 import {
@@ -457,7 +462,6 @@ const SHOOTING_REQUEST_PANEL_MAX_WIDTH = MEDIA_LIST_PANEL_WIDTH
 const SHOOTING_REQUEST_DETAIL_DEFAULT_WIDTH = MEDIA_DETAIL_PANEL_WIDTH
 const SHOOTING_REQUEST_DETAIL_MIN_WIDTH = MEDIA_DETAIL_PANEL_WIDTH
 const SHOOTING_REQUEST_DETAIL_MAX_WIDTH = MEDIA_DETAIL_PANEL_WIDTH
-const RIVER_CONSTRUCTION_LEDGER_OPENED_KEY = "riverConstructionLedger"
 const RIVER_CONSTRUCTION_LEDGER_PANEL_DEFAULT_WIDTH = 560
 const RIVER_CONSTRUCTION_LEDGER_PANEL_MIN_WIDTH = 420
 const RIVER_CONSTRUCTION_LEDGER_PANEL_MAX_WIDTH = 900
@@ -545,6 +549,7 @@ function MapLayoutContent({
   const setRoadFrontageMarkerPointPickActive = mapContext?.setRoadFrontageMarkerPointPickActive
   const setRoadFrontageMarkerDraftPoint = mapContext?.setRoadFrontageMarkerDraftPoint
   const setRiverConstructionLedgerSelectedId = mapContext?.setRiverConstructionLedgerSelectedId
+  const setRiverConstructionLedgerRows = mapContext?.setRiverConstructionLedgerRows
   const setRiverConstructionLedgerPanelOpen = mapContext?.setRiverConstructionLedgerPanelOpen
   const setRiverConstructionLedgerOverlayRows = mapContext?.setRiverConstructionLedgerOverlayRows
   const setRiverConstructionLedgerSelectedRiver = mapContext?.setRiverConstructionLedgerSelectedRiver
@@ -663,7 +668,10 @@ function MapLayoutContent({
     shootingPanelOpen &&
     Boolean(shootingRequestDetailId) &&
     shootingRequestDetailId !== SHOOTING_REQUEST_NEW_ID
-  const riverConstructionLedgerOpen = openedWindows.includes(RIVER_CONSTRUCTION_LEDGER_OPENED_KEY)
+  /** 하천·상수·하수 공사대장 — 같은 패널, 메뉴에 따라 대상 레이어만 다름 */
+  const consLedgerKind = consLedgerKindFromOpened(openedWindows)
+  const consLedgerSerEng = getConsLedgerVariant(consLedgerKind).serEng
+  const riverConstructionLedgerOpen = consLedgerKind != null
   const riverConstructionLedgerSelectedId = mapContext?.riverConstructionLedgerSelectedId ?? null
   const riverConstructionLedgerIsCreate =
     Boolean(riverConstructionLedgerSelectedId) &&
@@ -1260,6 +1268,26 @@ function MapLayoutContent({
     setVisibleLayerNames,
   ])
 
+  /** 상수↔하수 등 공사대장 종류 전환 시 이전 레이어 선택·목록을 비움 */
+  const prevConsLedgerKindRef = useRef(consLedgerKind)
+  useEffect(() => {
+    const prev = prevConsLedgerKindRef.current
+    prevConsLedgerKindRef.current = consLedgerKind
+    if (!prev || !consLedgerKind || prev === consLedgerKind) return
+    setRiverConstructionLedgerSelectedId?.(null)
+    setRiverConstructionLedgerRows?.([])
+    setRiverConstructionLedgerOverlayRows?.([])
+    setRiverConstructionLedgerRiverFocus?.(null)
+    setRiverConstructionLedgerGeomEditingId?.(null)
+  }, [
+    consLedgerKind,
+    setRiverConstructionLedgerRows,
+    setRiverConstructionLedgerSelectedId,
+    setRiverConstructionLedgerOverlayRows,
+    setRiverConstructionLedgerRiverFocus,
+    setRiverConstructionLedgerGeomEditingId,
+  ])
+
   useEffect(() => {
     setRiverConstructionLedgerPanelOpen?.(riverConstructionLedgerOpen)
     if (!riverConstructionLedgerOpen) {
@@ -1588,7 +1616,8 @@ function MapLayoutContent({
     setRiverConstructionLedgerOverlayRows?.([])
     setSpatialDrawRequest?.(null)
     setSpatialFilterWkt?.(null)
-    const next = openedWindows.filter((w) => w !== RIVER_CONSTRUCTION_LEDGER_OPENED_KEY)
+    const openedKey = consLedgerKind ? CONS_LEDGER_VARIANTS[consLedgerKind].openedKey : null
+    const next = openedWindows.filter((w) => w !== openedKey)
     setOpened(next)
   }
 
@@ -2610,8 +2639,12 @@ function MapLayoutContent({
                 minWidth={RIVER_CONSTRUCTION_LEDGER_PANEL_MIN_WIDTH}
                 maxWidth={RIVER_CONSTRUCTION_LEDGER_PANEL_MAX_WIDTH}
                 leftOffsetPx={riverConstructionLedgerPanelLeftPx}
-                onWidthChange={setRiverConstructionLedgerPanelWidth} serEng="riverConstructionLedger">
-                <RiverConstructionLedgerListPanel onClose={handleCloseRiverConstructionLedger} />
+                onWidthChange={setRiverConstructionLedgerPanelWidth} serEng={consLedgerSerEng}>
+                <RiverConstructionLedgerListPanel
+                  key={consLedgerKind ?? "river"}
+                  kind={consLedgerKind ?? "river"}
+                  onClose={handleCloseRiverConstructionLedger}
+                />
               </MapSideListPanel>
             </div>
           )}
@@ -2623,9 +2656,10 @@ function MapLayoutContent({
                 maxWidth={RIVER_CONSTRUCTION_LEDGER_DETAIL_MAX_WIDTH}
                 leftOffsetPx={riverConstructionLedgerDetailLeftPx}
                 onWidthChange={setRiverConstructionLedgerDetailWidth}
-                contentClassName="overflow-hidden" serEng="riverConstructionLedger">
+                contentClassName="overflow-hidden" serEng={consLedgerSerEng}>
                 <RiverConstructionLedgerDetailPanel
-                  key={riverConstructionLedgerSelectedRow.id}
+                  key={`${consLedgerKind ?? "river"}:${riverConstructionLedgerSelectedRow.id}`}
+                  kind={consLedgerKind ?? "river"}
                   row={riverConstructionLedgerSelectedRow}
                   onClose={() => {
                     setRiverConstructionLedgerRiverFocus?.(null)

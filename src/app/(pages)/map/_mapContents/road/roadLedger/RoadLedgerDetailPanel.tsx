@@ -314,6 +314,7 @@ function RoadLedgerDocActionGrid({
 export function RoadLedgerDetailPanel({ row, onClose }: Props) {
   const [attrOpen, setAttrOpen] = useState(true);
   const [detailModalOpen, setDetailModalOpen] = useState(false);
+  const [drawingOverlayHost, setDrawingOverlayHost] = useState<HTMLDivElement | null>(null);
   const [detailFieldLabels, setDetailFieldLabels] = useState<Record<string, string>>({});
   const [facilityDataCounts, setFacilityDataCounts] = useState<Partial<
     Record<RoadLedgerDocButtonKey, number>
@@ -589,7 +590,8 @@ export function RoadLedgerDetailPanel({ row, onClose }: Props) {
           </div>
         </div>
 
-        <MapSideDetailScroll className="min-h-0 flex-1 overflow-auto border-border p-3 pt-0">
+        <div className="relative flex min-h-0 flex-1 flex-col">
+        <MapSideDetailScroll className="flex min-h-0 flex-1 flex-col overflow-auto border-border p-3 pt-0">
           <div className="mt-3 border-t border-border">
             <div className="flex items-center justify-between gap-2 mt-1">
               <button
@@ -653,8 +655,11 @@ export function RoadLedgerDetailPanel({ row, onClose }: Props) {
             row={row}
             visibleLayerNames={visibleLayerNames}
             getLayersForGroup={getEffectiveDocLayers}
+            overlayHost={drawingOverlayHost}
           />
         </MapSideDetailScroll>
+        <div ref={setDrawingOverlayHost} className="absolute inset-0 z-10 empty:hidden" />
+        </div>
       </div>
     </div>
     {reportPdfPreview != null && (

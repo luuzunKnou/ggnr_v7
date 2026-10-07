@@ -53,7 +53,7 @@ import GeoJSON from 'ol/format/GeoJSON';
 import { MAP_AUTO_NAV_MAX_ZOOM } from '../config/mapDefaults';
 import { scheduleFitMapToExtent3857 } from '../config/mapAutoNavigation';
 import { isFmsFacilityLayerTable } from '@/lib/fmsLinkage/fmsBinding';
-import { getAllRoadLedgerDocLayerIds } from '../../_mapContents/road/roadLedger/roadLedgerDocLayerMap';
+import { getAllRoadLedgerFacilityLayerIds } from '../../_mapContents/road/roadLedger/roadLedgerDocLayerMap';
 import {
   formatRoadLedgerFacilityCellValue,
   getRoadLedgerFacilityColumnKeys,
@@ -1869,7 +1869,7 @@ export function LayerDataPanel({
   };
 
   const roadLedgerFacilityTableSet = useMemo(
-    () => new Set(getAllRoadLedgerDocLayerIds().map((x) => String(x).trim().toLowerCase())),
+    () => new Set(getAllRoadLedgerFacilityLayerIds()),
     []
   );
 

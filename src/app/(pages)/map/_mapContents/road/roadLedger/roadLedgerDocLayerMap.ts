@@ -30,10 +30,30 @@ export const ROAD_LEDGER_DOC_LABELS_WITH_LAYER_COUNT: readonly RoadLedgerDocButt
   "기하구조",
 ] as const;
 
+/** 도면 구분 — 목록·상세(첨부 미리보기)로 표시. 시설 구분과 같은 RDID 조인으로 건수·목록 조회 */
+export const ROAD_LEDGER_DRAWING_LABELS: readonly RoadLedgerDocButtonKey[] = [
+  "매설물도",
+  "종평면도",
+  "용지도",
+] as const;
+
+/** 버튼 건수·하단 탭 대상 전체(시설 + 도면) */
+export const ROAD_LEDGER_DOC_LIST_GROUP_LABELS: readonly RoadLedgerDocButtonKey[] = [
+  ...ROAD_LEDGER_DOC_LABELS_WITH_LAYER_COUNT,
+  ...ROAD_LEDGER_DRAWING_LABELS,
+];
+
+/** 도면 첨부 폴더·목록 분할코드 필드. 레이어 관리 키(ogc_fid)와 별개 */
+export const ROAD_LEDGER_DRAWING_FILE_KEY_FIELD = "cons_code";
+
+export function isRoadLedgerDrawingGroup(key: string): boolean {
+  return (ROAD_LEDGER_DRAWING_LABELS as readonly string[]).includes(key);
+}
+
 /**
  * 클릭 시 켜지는 레이어 id 배열. 비어 있으면 공간 레이어 없음(안내용).
  * - 보고서: UI만 (도로대장총괄 a0020000 등과 연동 없음, 레이어 토글 없음)
- * - 매설물도·지하시설물(지하매설물): 매핑 제외
+ * - 매설물도·종평면도·용지도: 도면 구역 레이어(첨부 키 cons_code)
  * - 주요시설: R02~R07, R15 (교량·터널·육교·지하차도·고가도로·IC·지하보도)
  * - 기하구조: R08,R16~R19 (교차시설·도로중심선교점·오르막차로·종단경사·정차대)
  * - 배수시설: R11,R12,R13,R14,R20,R21 (석축·옹벽·절개·성토·측구·배수암거)
@@ -45,10 +65,9 @@ export const ROAD_LEDGER_DOC_LAYERS: Record<RoadLedgerDocButtonKey, string[]> = 
   보고서: [],
   /** 공간 레이어 매핑 전 — UI만 */
   도로영상: [],
-  /** 매설물도·지하매설물 — 매핑 제외 */
-  매설물도: [],
-  종평면도: [],
-  용지도: [],
+  매설물도: ["ks_rd_jm_lm"],
+  종평면도: ["ks_rd_jp_lm"],
+  용지도: ["ks_rd_yj_lm"],
 
   주요시설: [
     "a0070000",
@@ -124,6 +143,27 @@ export function getAllRoadLedgerDocLayerIds(): string[] {
     }
   }
   return [...s];
+}
+
+/** 주요시설~기타시설 레이어 id만(도면 제외, 소문자) */
+export function getAllRoadLedgerFacilityLayerIds(): string[] {
+  const s = new Set<string>();
+  for (const key of ROAD_LEDGER_DOC_LABELS_WITH_LAYER_COUNT) {
+    for (const id of ROAD_LEDGER_DOC_LAYERS[key]) {
+      const t = String(id ?? "").trim().toLowerCase();
+      if (t) s.add(t);
+    }
+  }
+  return [...s];
+}
+
+/** 도면 구분 레이어 id인지(소문자 비교) */
+export function isRoadLedgerDrawingLayerId(id: string): boolean {
+  const t = String(id ?? "").trim().toLowerCase();
+  if (!t) return false;
+  return ROAD_LEDGER_DRAWING_LABELS.some((key) =>
+    ROAD_LEDGER_DOC_LAYERS[key].some((x) => x.toLowerCase() === t)
+  );
 }
 
 export function isRoadLedgerDocGroupActive(
