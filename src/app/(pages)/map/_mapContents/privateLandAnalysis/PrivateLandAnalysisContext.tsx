@@ -134,6 +134,8 @@ type Ctx = {
   closeAreaModal: () => void;
   /** 지정한 구간을 서버에서 확인 중 — 끝나기 전엔 적용 불가 */
   rangeChecking: boolean;
+  /** 지류 포함 구간 미리보기 계산 중 — 적용은 막지 않음(적용이 같은 계산을 이어받음) */
+  tribPreviewing: boolean;
   /** 지정한 구간이 잘못됨 — 있으면 적용 불가, 다시 지정만 */
   rangeError: string | null;
   /** 이어진 하천 반대쪽 갈래를 막지 않음 — 끝까지 포함됨(안내만) */
@@ -343,11 +345,12 @@ export function PrivateLandAnalysisRoot({ system, onDetailOpenChange, children }
   tribPickingRef.current = tributaryPicking;
   const [areaModalOpen, setAreaModalOpen] = useState(true);
   const [rangeChecking, setRangeChecking] = useState(false);
+  const [tribPreviewing, setTribPreviewing] = useState(false);
   const [rangeError, setRangeError] = useState<string | null>(null);
-  /** 실제 지정 구간 확인 순번 — 지류 위 hover 미리보기와 구분 */
+  /** 실제 지정 구간 확인 순번 — 늦게 온 이전 확인 결과 무시 */
   const rangeSeqRef = useRef(0);
   const rangeBlockedRef = useRef(false);
-  rangeBlockedRef.current = rangeChecking || rangeError != null;
+  rangeBlockedRef.current = (rangeChecking && !tribPreviewing) || rangeError != null;
   /** 이어진 하천 반대쪽 갈래를 막지 않음 — 끝까지 포함됨(안내만) */
   const [riverOpen, setRiverOpen] = useState(false);
   const rangeMode = privateLandRangeMode(layer);
@@ -389,8 +392,6 @@ export function PrivateLandAnalysisRoot({ system, onDetailOpenChange, children }
   const tribCutsRef = useRef<Chord[]>([]);
   /** 지류를 더하기 전 구간 — 지류 끝선이 합류부 어느 쪽인지 판정 */
   const tribMainRef = useRef<Polygon | MultiPolygon | null>(null);
-  /** 지류 위 이동 끝선으로 늘린 미리보기를 보여주는 중 */
-  const tribMovingRef = useRef(false);
   /** 이 기능이 켠 레이어·연속지적만 닫을 때 끔 */
   const addedLayerRef = useRef<string | null>(null);
   const cadastralOnRef = useRef(false);
@@ -488,7 +489,6 @@ export function PrivateLandAnalysisRoot({ system, onDetailOpenChange, children }
     setHasShape(false);
     setClosedLineCount(0);
     setClosedOpen(false);
-    tribMovingRef.current = false;
     includeTributaryRef.current = false;
     setIncludeTributaryState(false);
     tribPickingRef.current = false;
@@ -505,6 +505,7 @@ export function PrivateLandAnalysisRoot({ system, onDetailOpenChange, children }
     setTribCutCount(0);
     rangeSeqRef.current += 1;
     setRangeChecking(false);
+    setTribPreviewing(false);
     setRangeError(null);
     setRiverOpen(false);
     setBaseName('');
@@ -607,9 +608,9 @@ export function PrivateLandAnalysisRoot({ system, onDetailOpenChange, children }
    * 지류 요청 값. 미리보기는 합류 지류가 있는지 알기 위해 항상 후보를 받고,
    * 적용·분석은 지류를 포함해 자른 곳이 있을 때만 보낸다.
    */
-  const tributaryParams = useCallback((forPreview: boolean, cutsOverride?: Chord[]) => {
+  const tributaryParams = useCallback((forPreview: boolean) => {
     if (!riverRef.current) return {};
-    const cuts = cutsOverride ?? tribCutsRef.current;
+    const cuts = tribCutsRef.current;
     const include = includeTributaryRef.current && cuts.length > 0;
     if (!forPreview && !include) return {};
     const wkt = new WKT();
@@ -640,22 +641,28 @@ export function PrivateLandAnalysisRoot({ system, onDetailOpenChange, children }
 
   /** 두 선 사이 하천 구간(하천 모양 그대로) 미리보기 — 적용과 같은 서버 계산 */
   const requestZonePreview = useCallback(
-    (chord: Chord, delayMs: number, cutsOverride?: Chord[]) => {
+    (chord: Chord, delayMs: number) => {
       cancelPreview();
       const c1 = chord1Ref.current;
       const current = layerRef.current;
       if (!c1 || !current) return;
       const seq = previewSeqRef.current;
       const fixed = phaseRef.current === 'ranged';
-      const realCheck = fixed && cutsOverride == null;
+      const realCheck = fixed;
+      const withTribCuts = includeTributaryRef.current && tribCutsRef.current.length > 0;
       const run = async () => {
         const rangeSeq = realCheck ? ++rangeSeqRef.current : 0;
-        if (realCheck) setRangeChecking(true);
+        if (realCheck) {
+          setRangeChecking(true);
+          setTribPreviewing(withTribCuts);
+          if (withTribCuts) setRangeError(null);
+        }
         const settleRange = (error: string | null, open = false) => {
           if (!realCheck || rangeSeq !== rangeSeqRef.current) return;
           setRangeError(error);
           setRiverOpen(open);
           setRangeChecking(false);
+          setTribPreviewing(false);
         };
         const wkt = new WKT();
         try {
@@ -667,7 +674,7 @@ export function PrivateLandAnalysisRoot({ system, onDetailOpenChange, children }
               line1Wkt3857: wkt.writeGeometry(chordGeometry(c1)),
               line2Wkt3857: wkt.writeGeometry(chordGeometry(chord)),
               river: riverRef.current,
-              ...(fixed ? tributaryParams(true, cutsOverride) : {}),
+              ...(fixed ? tributaryParams(true) : {}),
             },
           });
           const data = res?.data ?? res;
@@ -755,14 +762,9 @@ export function PrivateLandAnalysisRoot({ system, onDetailOpenChange, children }
     setTributaryPicking(false);
     const target = mapRef?.current?.getTargetElement();
     if (target) target.style.cursor = '';
-    if (tribMovingRef.current) {
-      removeKinds(['tribMoving']);
-      tribMovingRef.current = false;
-      const c2 = chord2Ref.current;
-      if (c2) requestZonePreview(c2, 0);
-    }
+    removeKinds(['tribMoving']);
     if (tribCutsRef.current.length === 0) setIncludeTributary(false);
-  }, [mapRef, removeKinds, requestZonePreview, setIncludeTributary]);
+  }, [mapRef, removeKinds, setIncludeTributary]);
 
   const undoTributaryCut = useCallback(() => {
     if (tribCutsRef.current.length === 0) return;
@@ -829,7 +831,6 @@ export function PrivateLandAnalysisRoot({ system, onDetailOpenChange, children }
       const hit = tribCutAt(coord);
       if (!hit) return false;
       removeKinds(['tribMoving']);
-      tribMovingRef.current = false;
       tribCutsRef.current = hit.cuts;
       drawTribCuts();
       refreshRanged();
@@ -1313,15 +1314,9 @@ export function PrivateLandAnalysisRoot({ system, onDetailOpenChange, children }
           setHover(lastCoord, hit?.chord ?? null);
           if (hit) setCursor('crosshair');
           else clearCursor();
+          /** 지류 위 이동 중에는 끝선만 — 구간 계산(무거움)은 클릭해 확정할 때만 */
           removeKinds(['tribMoving']);
-          if (hit) {
-            addFeature('tribMoving', chordGeometry(hit.chord));
-            tribMovingRef.current = true;
-            requestZonePreview(c2, PREVIEW_DEBOUNCE_MS, hit.cuts);
-          } else if (tribMovingRef.current) {
-            tribMovingRef.current = false;
-            requestZonePreview(c2, PREVIEW_DEBOUNCE_MS);
-          }
+          if (hit) addFeature('tribMoving', chordGeometry(hit.chord));
         });
         return;
       }
@@ -1394,6 +1389,7 @@ export function PrivateLandAnalysisRoot({ system, onDetailOpenChange, children }
           removeKinds(['preview']);
           rangeSeqRef.current += 1;
           setRangeChecking(false);
+          setTribPreviewing(false);
           setRangeError(invalid);
           setRiverOpen(false);
           return;
@@ -1525,7 +1521,11 @@ export function PrivateLandAnalysisRoot({ system, onDetailOpenChange, children }
     tribPickingRef.current = false;
     setTributaryPicking(false);
     removeKinds(['tribMoving']);
-    tribMovingRef.current = false;
+    /** 진행 중인 지류 미리보기는 서버에서 같은 계산으로 이어받으므로 화면 반영만 멈춤 */
+    cancelPreview();
+    rangeSeqRef.current += 1;
+    setRangeChecking(false);
+    setTribPreviewing(false);
     setPhase('applying');
     /** 분석 실패 — 구간은 그대로 두고 적용 전으로 되돌려 다시 적용할 수 있게 */
     const backToRanged = (text: string) => {
@@ -1552,6 +1552,15 @@ export function PrivateLandAnalysisRoot({ system, onDetailOpenChange, children }
         removeKinds(['preview', 'zone']);
         addFeature('zone', geom);
         setZoneAreaSqm(typeof data?.areaSqm === 'number' ? data.areaSqm : null);
+        /** 끝선 너머 하천에 찍은 지류 끝선 → 새 끝선으로 바꿔 표시 */
+        const swap = data?.endSwapIndex;
+        const swapCut = typeof swap === 'number' ? tribCutsRef.current[swap] : undefined;
+        if (swapCut) {
+          chord2Ref.current = swapCut;
+          tribCutsRef.current = tribCutsRef.current.filter((_, i) => i !== swap);
+          drawChord2(swapCut, false);
+          drawTribCuts();
+        }
         setPhase('analyzing');
       } catch {
         setRangeError('구간을 계산하지 못했습니다. 구간을 다시 지정하세요.');
@@ -1593,7 +1602,18 @@ export function PrivateLandAnalysisRoot({ system, onDetailOpenChange, children }
         backToRanged('필지 목록을 불러오지 못했습니다.');
       }
     })();
-  }, [addFeature, chordWkts, flash, mapRef, removeKinds, setCadastral, tributaryParams]);
+  }, [
+    addFeature,
+    cancelPreview,
+    chordWkts,
+    drawChord2,
+    drawTribCuts,
+    flash,
+    mapRef,
+    removeKinds,
+    setCadastral,
+    tributaryParams,
+  ]);
 
   const filteredParcels = useMemo(() => {
     const q = keyword.trim().toLowerCase();
@@ -1704,6 +1724,7 @@ export function PrivateLandAnalysisRoot({ system, onDetailOpenChange, children }
       openAreaModal,
       closeAreaModal,
       rangeChecking,
+      tribPreviewing,
       rangeError,
       riverOpen,
       rangeMode,
@@ -1743,6 +1764,7 @@ export function PrivateLandAnalysisRoot({ system, onDetailOpenChange, children }
       closeAreaModal,
       openAreaModal,
       rangeChecking,
+      tribPreviewing,
       rangeError,
       baseName,
       busy,

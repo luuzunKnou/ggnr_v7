@@ -35,7 +35,6 @@ const CHORD_GAP_BRIDGE_M = 1.5;
 const PARCEL_LIMIT = 1000;
 
 type Geo = Record<string, unknown>;
-
 function esc(value: string): string {
   return value.replace(/'/g, "''");
 }
@@ -592,12 +591,18 @@ function zoneMidCtes(
       SELECT COALESCE(ST_Buffer(ST_Collect(l.g), 4), ST_SetSRID('POLYGON EMPTY'::geometry, ${WORK_SRID})) AS g
       FROM lines l ${cutLinesWhere}
     ),
-    edges AS (
+    parts_buf AS (SELECT id, g, ST_Buffer(g, 1.5) AS gb FROM parts),
+    edges_half AS (
       SELECT a.id AS a, b.id AS b
-      FROM parts a
-      JOIN parts b ON a.id <> b.id AND ST_DWithin(a.g, b.g, 3)
+      FROM parts_buf a
+      JOIN parts_buf b ON a.id < b.id AND ST_DWithin(a.g, b.g, 3)
       CROSS JOIN cut_zone c
-      WHERE NOT ST_CoveredBy(ST_Intersection(ST_Buffer(a.g, 1.5), ST_Buffer(b.g, 1.5)), c.g)
+      WHERE NOT ST_CoveredBy(ST_Intersection(a.gb, b.gb), c.g)
+    ),
+    edges AS (
+      SELECT a, b FROM edges_half
+      UNION ALL
+      SELECT b, a FROM edges_half
     ),
     comp(id, root) AS (
       SELECT id, id FROM parts
@@ -1221,14 +1226,18 @@ async function computeCrossZone(
     .slice(0, MAX_TRIBUTARY_LINES);
   const closeLines: string[] = [];
   const tribLines: string[] = [];
-  for (const line of cutLines) {
-    const key = await riverKeyAtLine(target, line, field);
+  const cutKeys = await Promise.all(cutLines.map((line) => riverKeyAtLine(target, line, field)));
+  cutLines.forEach((line, i) => {
+    const key = cutKeys[i];
     (key === value || key === endValue ? closeLines : tribLines).push(line);
-  }
+  });
 
-  const span = await runCrossZone(target, [line1, line2], where);
+  const [span, nearClosed] = await Promise.all([
+    runCrossZone(target, [line1, line2], where),
+    closeLines.length > 0 ? runCrossZone(target, [line1, line2, ...closeLines], where) : Promise.resolve(null),
+  ]);
   const spanCandidates = span?.geometry3857 ? [span.geometry3857] : [];
-  const near = closeLines.length > 0 ? await runCrossZone(target, [line1, line2, ...closeLines], where) : span;
+  const near = closeLines.length > 0 ? nearClosed : span;
   /** 막지 않은 반대쪽 갈래는 계산 범위를 넓혀 끝까지 포함 */
   const wide =
     near?.wkt5181 && !near.leak && near.open
@@ -1253,19 +1262,17 @@ async function computeCrossZone(
 
   const baseLines = [line1, line2, ...closeLines];
   const scope: RiverScope = { where, field };
-  const tribCandidates = await runTributaryCandidates(target, baseLines, zone.wkt5181, scope, tribLines);
+  const zoneWkt = zone.wkt5181;
+  const [tribCandidates, withTrib] = await Promise.all([
+    runTributaryCandidates(target, baseLines, zoneWkt, scope, tribLines),
+    tribLines.length > 0
+      ? runZoneWithTributaries(target, [...baseLines, ...tribLines], zoneWkt, scope, baseLines.length + 1, areaPadM)
+      : Promise.resolve(null),
+  ]);
   const candidates = [...tribCandidates, ...spanCandidates];
   const mainGeometry3857 = zone.geometry3857;
   if (tribLines.length === 0) return { ...zone, tributaryCandidates3857: candidates, mainGeometry3857 };
 
-  const withTrib = await runZoneWithTributaries(
-    target,
-    [...baseLines, ...tribLines],
-    zone.wkt5181,
-    scope,
-    baseLines.length + 1,
-    areaPadM
-  );
   if (withTrib?.leak) {
     return {
       ...empty,
@@ -1348,23 +1355,29 @@ async function computeZone(params: ZoneParams): Promise<ZoneResult> {
       }
       return null;
     };
-    if (tribLines.length > 0) {
-      const beyond = await tribLinesBeyondEnd(target, line1, line2, tribLines);
-      const swapped = beyond.length > 0 ? await trySwapEnd(beyond) : null;
+    const riverValue = String((params.river as Partial<PrivateLandRiverKey> | null | undefined)?.value ?? '').trim();
+    const mainWkt = main.wkt5181;
+    /** 서로 독립인 계산은 동시에 — 끝선 교체가 되면 나머지 결과는 버린다 */
+    const [beyond, beyondCandidates, tribCandidates, withTrib] = await Promise.all([
+      tribLines.length > 0
+        ? tribLinesBeyondEnd(target, line1, line2, tribLines)
+        : Promise.resolve([] as number[]),
+      scope.field
+        ? runBeyondEndCandidates(target, line1, line2, { field: scope.field, value: riverValue })
+        : Promise.resolve([] as Geo[]),
+      runTributaryCandidates(target, [line1, line2], mainWkt, scope, tribLines),
+      tribLines.length > 0
+        ? runZoneWithTributaries(target, [line1, line2, ...tribLines], mainWkt, scope)
+        : Promise.resolve(null),
+    ]);
+    if (beyond.length > 0) {
+      const swapped = await trySwapEnd(beyond);
       if (swapped) return swapped;
     }
-    const riverValue = String((params.river as Partial<PrivateLandRiverKey> | null | undefined)?.value ?? '').trim();
-    const beyondCandidates = scope.field
-      ? await runBeyondEndCandidates(target, line1, line2, { field: scope.field, value: riverValue })
-      : [];
-    const candidates = [
-      ...(await runTributaryCandidates(target, [line1, line2], main.wkt5181, scope, tribLines)),
-      ...beyondCandidates,
-    ];
+    const candidates = [...tribCandidates, ...beyondCandidates];
     const mainGeometry3857 = main.geometry3857;
     if (tribLines.length === 0) return { ...main, tributaryCandidates3857: candidates, mainGeometry3857 };
 
-    const withTrib = await runZoneWithTributaries(target, [line1, line2, ...tribLines], main.wkt5181, scope);
     if (withTrib?.leak) {
       return {
         ...empty,
@@ -1379,6 +1392,48 @@ async function computeZone(params: ZoneParams): Promise<ZoneResult> {
   }
 }
 
+/** 같은 구간 요청(미리보기 → 적용 → 분석) 결과 재사용 — 보관 시간·개수 */
+const ZONE_CACHE_TTL_MS = 5 * 60_000;
+const ZONE_CACHE_MAX = 50;
+const zoneCache = new Map<string, { at: number; result: Promise<ZoneResult> }>();
+
+function zoneCacheKey(p: ZoneParams): string {
+  const strs = (v: unknown) => (Array.isArray(v) ? v.map((s) => String(s).trim()) : []);
+  return JSON.stringify([
+    String(p.layer ?? ''),
+    String(p.line1Wkt3857 ?? '').trim(),
+    String(p.line2Wkt3857 ?? '').trim(),
+    p.river ? [String(p.river.field ?? ''), String(p.river.value ?? '').trim()] : null,
+    p.includeTributary === true,
+    strs(p.tributaryLines),
+    strs(p.lines),
+    String(p.polygonWkt3857 ?? '').trim(),
+  ]);
+}
+
+/** 진행 중인 같은 요청도 함께 기다린다. 오류 결과는 보관하지 않음 */
+function computeZoneCached(params: ZoneParams): Promise<ZoneResult> {
+  const key = zoneCacheKey(params);
+  const now = Date.now();
+  const hit = zoneCache.get(key);
+  if (hit && now - hit.at < ZONE_CACHE_TTL_MS) return hit.result;
+  const result = computeZone(params);
+  zoneCache.delete(key);
+  zoneCache.set(key, { at: now, result });
+  while (zoneCache.size > ZONE_CACHE_MAX) {
+    const oldest = zoneCache.keys().next().value;
+    if (oldest == null) break;
+    zoneCache.delete(oldest);
+  }
+  const drop = () => {
+    if (zoneCache.get(key)?.result === result) zoneCache.delete(key);
+  };
+  result.then((r) => {
+    if (r.error || !r.wkt5181) drop();
+  }, drop);
+  return result;
+}
+
 /** 적용·미리보기 — 두 선 사이 구간 도형 (+ 지류 후보) */
 export async function computePrivateLandAnalysisZone(params?: ZoneParams): Promise<{
   zoneGeometry3857: Geo | null;
@@ -1389,7 +1444,7 @@ export async function computePrivateLandAnalysisZone(params?: ZoneParams): Promi
   mainGeometry3857?: Geo | null;
   error?: string;
 }> {
-  const zone = await computeZone(params ?? {});
+  const zone = await computeZoneCached(params ?? {});
   return {
     zoneGeometry3857: zone.geometry3857,
     areaSqm: zone.areaSqm,
@@ -1416,7 +1471,7 @@ export async function listPrivateLandAnalysisParcels(params?: ZoneParams): Promi
   truncated?: boolean;
   error?: string;
 }> {
-  const zone = await computeZone(params ?? {});
+  const zone = await computeZoneCached(params ?? {});
   if (!zone.wkt5181) return { parcels: [], error: zone.error };
 
   const hit = await listJijukParcelsByGeomWkt5181({

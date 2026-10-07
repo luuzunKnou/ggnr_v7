@@ -101,12 +101,14 @@ function CancelButton({ onClick, disabled }: { onClick: () => void; disabled?: b
 /** 지류 추가 창 — 열려 있는 동안 지도에서 지류 끝을 찍는다 */
 function TributaryPickCard({
   cutCount,
+  previewing,
   rangeError,
   onUndo,
   onClear,
   onDone,
 }: {
   cutCount: number;
+  previewing: boolean;
   rangeError: string | null;
   onUndo: () => void;
   onClear: () => void;
@@ -132,6 +134,12 @@ function TributaryPickCard({
         <p className="font-medium text-foreground">
           추가한 지류 <span className="text-primary">{cutCount}곳</span>
         </p>
+        {previewing ? (
+          <p className="flex items-center gap-1 text-[11px] text-muted-foreground">
+            <Loader2 className="size-3 shrink-0 animate-spin" aria-hidden />
+            늘어난 구간 계산 중…
+          </p>
+        ) : null}
         {rangeError ? (
           <div className="rounded border border-destructive/30 px-2 py-1 text-[11px] font-medium text-destructive">
             <SentenceLines text={rangeError} />
@@ -145,7 +153,7 @@ function TributaryPickCard({
         <button type="button" onClick={onClear} disabled={cutCount === 0} className={BTN_MUTED}>
           모두 빼기
         </button>
-        <button type="button" onClick={onDone} className={BTN_PRIMARY}>
+        <button type="button" onClick={onDone} disabled={previewing} className={BTN_PRIMARY}>
           완료
         </button>
       </div>
@@ -171,6 +179,7 @@ export function PrivateLandAnalysisMapGuide() {
     closeTributaryPick,
     undoTributaryCut,
     rangeChecking,
+    tribPreviewing,
     rangeError,
     riverOpen,
     rangeMode,
@@ -210,13 +219,14 @@ export function PrivateLandAnalysisMapGuide() {
   const hasTributary = !closed && riverKnown && tribCandidateCount > 0;
   const tribCuts = includeTributary ? tribCutCount : 0;
   const openRiver = !closed && riverOpen;
+  const checkBlocking = rangeChecking && !tribPreviewing;
   const applyDisabled =
     applying ||
-    rangeChecking ||
+    checkBlocking ||
     rangeInvalid ||
     (shapeTool ? !hasShape : closed && (closedLineCount < 2 || closedOpen));
   const applyLabel =
-    phase === 'applying' ? '적용 중…' : phase === 'analyzing' ? '분석 중…' : rangeChecking ? '확인 중…' : '적용';
+    phase === 'applying' ? '적용 중…' : phase === 'analyzing' ? '분석 중…' : checkBlocking ? '확인 중…' : '적용';
 
   if (!bannerHost || !(pickText || message || toolbarActive)) return null;
 
@@ -243,6 +253,7 @@ export function PrivateLandAnalysisMapGuide() {
       {!toolbarActive ? null : tributaryPicking && phase === 'ranged' ? (
         <TributaryPickCard
           cutCount={tribCuts}
+          previewing={tribPreviewing}
           rangeError={rangeError}
           onUndo={undoTributaryCut}
           onClear={() => setIncludeTributary(false)}
@@ -250,6 +261,12 @@ export function PrivateLandAnalysisMapGuide() {
         />
       ) : (
         <>
+          {tribPreviewing && !applying ? (
+            <div className="pointer-events-auto flex items-center gap-1 whitespace-nowrap rounded-full border border-border/80 bg-background/95 px-3 py-0.5 text-[11px] font-medium leading-snug text-muted-foreground shadow-sm backdrop-blur-md">
+              <Loader2 className="size-3 shrink-0 animate-spin" aria-hidden />
+              지류 포함 구간 미리보기 계산 중 · 바로 적용해도 됩니다
+            </div>
+          ) : null}
           {hasTributary && !rangeInvalid && (openRiver || tribCuts === 0) && !applying ? (
             <div className="pointer-events-auto whitespace-nowrap rounded-full border border-amber-200/90 bg-amber-50/95 px-3 py-0.5 text-[11px] font-medium leading-snug text-amber-900 shadow-sm backdrop-blur-md dark:border-amber-800 dark:bg-amber-950/80 dark:text-amber-200">
               {openRiver ? '반대쪽 하천은 끝까지 포함됩니다 · 막으려면 «지류 추가»' : '합류하는 지류가 있습니다 · 포함하려면 «지류 추가»'}
