@@ -122,6 +122,7 @@ import { LayerRowGeomEditHandler } from './layerRowEdit/LayerRowGeomEditHandler'
 import { canStartMapDrawInteraction, type MapDrawInteractionKind } from './mapDrawInteraction';
 import {
   getAllRoadLedgerDocLayerIds,
+  isRoadLedgerDrawingLayerId,
   ROAD_LEDGER_RDID_MIN_LEN_FOR_FACILITY_JOIN,
 } from '../_mapContents/road/roadLedger/roadLedgerDocLayerMap';
 import { pickRoadLedgerField } from '../_mapContents/road/roadLedger/roadLedgerFormat';
@@ -2410,6 +2411,7 @@ export default function OpenLayersMap({
                   defineTableName: tableName,
                   defineTableTitle: kor || tableName,
                   pickFromMap: true,
+                  inline: isRoadLedgerDrawingLayerId(tableName),
                 });
               }
             } catch (e) {
