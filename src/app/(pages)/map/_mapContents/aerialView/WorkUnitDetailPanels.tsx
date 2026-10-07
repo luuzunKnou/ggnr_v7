@@ -91,7 +91,9 @@ export function DetailHeader({
   return (
     <div className="shrink-0 border-b border-border bg-background">
       <div className="flex h-11 items-center gap-2 px-3">
-        <h2 className="min-w-0 flex-1 truncate text-[13px] font-semibold text-foreground">{title}</h2>
+        <h2 className="min-w-0 flex-1 truncate text-[13px] font-semibold text-foreground" title={title}>
+          {title}
+        </h2>
         {onClose ? (
           <button
             type="button"
@@ -478,6 +480,11 @@ export function DroneWorkUnitDetailPanel({
 }: DroneDetailProps) {
   useWorkUnitViewLog('drone', unit.id);
   const edit = useAttrEdit(unit, onSaveAttrs);
+  const selectedFile = unit.files.find((f) => f.id === selectedFileId) ?? null;
+  const editSelectedGeom =
+    !viewOnly && !edit.editing && selectedFile && onEditFileGeom
+      ? () => onEditFileGeom(selectedFile)
+      : undefined;
   const workLabel =
     unit.attrs.find(
       (r) =>
@@ -559,6 +566,7 @@ export function DroneWorkUnitDetailPanel({
         onStartEdit={showInfoActions ? edit.start : undefined}
         onSaveEdit={edit.save}
         onCancelEdit={edit.cancel}
+        onGeomEdit={showInfoActions ? editSelectedGeom : undefined}
       />
     </div>
   );
@@ -625,7 +633,7 @@ export function DroneFileDetailPanel({ file, files = [], onClose, onDelete, onEd
       <DetailHeader title="파일 상세" onClose={onClose} />
       <div className="min-h-0 flex-1 space-y-4 overflow-auto px-3 py-3">
         <div className="rounded-lg border border-border bg-muted/50 px-3 py-2.5">
-          <p className="truncate text-[12px] font-semibold text-foreground">{file.name}</p>
+          <p className="truncate text-[12px] font-semibold text-foreground" title={file.name}>{file.name}</p>
           <div className="mt-1.5 flex flex-wrap gap-1.5">
             <span className="rounded-md bg-background px-2 py-0.5 text-[10px] text-muted-foreground ring-1 ring-border">
               {file.format.toUpperCase()}
@@ -707,7 +715,7 @@ export function DroneFileDetailPanel({ file, files = [], onClose, onDelete, onEd
                 ) : (
                   <div className="h-24 w-36 rounded border border-dashed border-slate-500/60 bg-slate-800/80" />
                 )}
-                <span className="max-w-[90%] truncate text-[11px]">{file.name}</span>
+                <span className="max-w-[90%] truncate text-[11px]" title={file.name}>{file.name}</span>
                 <span className="text-[10px] text-slate-400">미리보기 경로가 없습니다</span>
               </div>
             )}
