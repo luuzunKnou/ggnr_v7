@@ -5171,7 +5171,7 @@
   {
     "define_table_name": "river_plan_s_gd_ps",
     "define_table_kor_name": "소하천시설물",
-    "define_table_shp_type": "POINT",
+    "define_table_shp_type": "POLYGON",
     "define_table_read_share": "P",
     "define_table_write_share": "P",
     "define_table_group": "소하천",
@@ -5183,7 +5183,19 @@
   {
     "define_table_name": "river_plan_s_hd_lm",
     "define_table_kor_name": "소하천횡단면도",
-    "define_table_shp_type": "LINE",
+    "define_table_shp_type": "POLYGON",
+    "define_table_read_share": "P",
+    "define_table_write_share": "P",
+    "define_table_group": "소하천",
+    "define_table_idx": "0",
+    "define_table_etc": "",
+    "define_table_schema": "layer",
+    "define_table_source": "shp"
+  },
+  {
+    "define_table_name": "river_plan_s_jb_lm",
+    "define_table_kor_name": "소하천제방",
+    "define_table_shp_type": "POLYGON",
     "define_table_read_share": "P",
     "define_table_write_share": "P",
     "define_table_group": "소하천",
@@ -5195,7 +5207,7 @@
   {
     "define_table_name": "river_plan_s_jd_lm",
     "define_table_kor_name": "소하천종단면도",
-    "define_table_shp_type": "LINE",
+    "define_table_shp_type": "POLYGON",
     "define_table_read_share": "P",
     "define_table_write_share": "P",
     "define_table_group": "소하천",
@@ -9669,6 +9681,18 @@
     "define_table_read_share": "P",
     "define_table_write_share": "P",
     "define_table_group": "하천",
+    "define_table_idx": "0",
+    "define_table_etc": "",
+    "define_table_schema": "layer",
+    "define_table_source": "shp"
+  },
+  {
+    "define_table_name": "river_d_plan_jb_lm",
+    "define_table_kor_name": "하천제방",
+    "define_table_shp_type": "POLYGON",
+    "define_table_read_share": "P",
+    "define_table_write_share": "P",
+    "define_table_group": "하천기본계획",
     "define_table_idx": "0",
     "define_table_etc": "",
     "define_table_schema": "layer",
