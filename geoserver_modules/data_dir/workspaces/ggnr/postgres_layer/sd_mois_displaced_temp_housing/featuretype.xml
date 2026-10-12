@@ -1,0 +1,41 @@
+<featureType>
+  <id>FeatureTypeInfoImpl-3c0551ac:1a0e4074eaf:-7d36</id>
+  <name>sd_mois_displaced_temp_housing</name>
+  <nativeName>sd_mois_displaced_temp_housing</nativeName>
+  <namespace>
+    <id>NamespaceInfoImpl-4bf97568:19c4d6c3053:-7ffa</id>
+  </namespace>
+  <title>sd_mois_displaced_temp_housing</title>
+  <keywords>
+    <string>features</string>
+    <string>sd_mois_displaced_temp_housing</string>
+  </keywords>
+  <srs>EPSG:5181</srs>
+  <nativeBoundingBox>
+    <minx>390516.0446754554</minx>
+    <maxx>420232.0357724905</maxx>
+    <miny>354919.3079881824</miny>
+    <maxy>403218.6162868335</maxy>
+    <crs class="projected">EPSG:5181</crs>
+  </nativeBoundingBox>
+  <latLonBoundingBox>
+    <minx>129.13113454868838</minx>
+    <maxx>129.47729775486442</maxx>
+    <miny>36.66729547475591</miny>
+    <maxy>37.108626644805724</maxy>
+    <crs>EPSG:4326</crs>
+  </latLonBoundingBox>
+  <projectionPolicy>FORCE_DECLARED</projectionPolicy>
+  <enabled>true</enabled>
+  <store class="dataStore">
+    <id>DataStoreInfoImpl-4bf97568:19c4d6c3053:-7ff9</id>
+  </store>
+  <serviceConfiguration>false</serviceConfiguration>
+  <maxFeatures>0</maxFeatures>
+  <numDecimals>0</numDecimals>
+  <padWithZeros>false</padWithZeros>
+  <forcedDecimal>false</forcedDecimal>
+  <overridingServiceSRS>false</overridingServiceSRS>
+  <skipNumberMatched>false</skipNumberMatched>
+  <circularArcPresent>false</circularArcPresent>
+</featureType>
