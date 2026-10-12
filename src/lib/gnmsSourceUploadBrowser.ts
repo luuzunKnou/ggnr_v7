@@ -59,6 +59,23 @@ function isLikelyProxyDisconnect(err: unknown): boolean {
   );
 }
 
+function isTransientBrowserChunkError(err: unknown): boolean {
+  if (err instanceof Error && err.name === 'AbortError') return false;
+  const raw = (err instanceof Error ? err.message : String(err)).toLowerCase();
+  return (
+    err instanceof TypeError ||
+    raw.includes('failed to fetch') ||
+    raw.includes('networkerror') ||
+    raw.includes('network error') ||
+    raw.includes('load failed') ||
+    raw.includes('fetch failed') ||
+    raw.includes('econnreset') ||
+    raw.includes('timeout')
+  );
+}
+
+const BROWSER_CHUNK_RETRY_MAX = 3;
+
 function isCompleteSuccess(json: Record<string, unknown>, resOk: boolean): boolean {
   if (!resOk || json.error) return false;
   return (
@@ -245,17 +262,49 @@ export async function uploadPreparedZipToGnmsFromBrowser(
     const chunkUrl =
       `${base}/chunk?uploadId=${encodeURIComponent(uploadId)}` +
       `&chunkIndex=${chunkIndex}&totalChunks=${expectedChunks}`;
-    let chunkRes: Response;
-    try {
-      chunkRes = await fetch(chunkUrl, {
-        method: 'POST',
-        headers: gnmsAuthHeaders(bearer, { 'Content-Type': 'application/octet-stream' }),
-        body: chunkBody,
-        signal,
-        cache: 'no-store',
-      });
-    } catch (err: unknown) {
-      throw classifyGnmsNetworkError(err, `GNMS 청크 ${chunkIndex + 1}`, chunkUrl);
+    let chunkRes: Response | null = null;
+    let lastChunkErr: unknown;
+    for (let attempt = 1; attempt <= BROWSER_CHUNK_RETRY_MAX; attempt++) {
+      throwIfAborted(signal);
+      try {
+        chunkRes = await fetch(chunkUrl, {
+          method: 'POST',
+          headers: gnmsAuthHeaders(bearer, { 'Content-Type': 'application/octet-stream' }),
+          body: chunkBody,
+          signal,
+          cache: 'no-store',
+        });
+        lastChunkErr = null;
+        break;
+      } catch (err: unknown) {
+        lastChunkErr = err;
+        if (!isTransientBrowserChunkError(err) || attempt >= BROWSER_CHUNK_RETRY_MAX) {
+          await cancelGnmsSourceUploadFromBrowser({
+            uploadId,
+            signal,
+            log,
+          });
+          throw classifyGnmsNetworkError(
+            err,
+            `청크 ${chunkIndex + 1}/${expectedChunks} 전송 실패`,
+            chunkUrl
+          );
+        }
+        log(
+          `WARNING: 청크 ${chunkIndex + 1}/${expectedChunks} 일시 실패 (재시도 ${attempt}/${BROWSER_CHUNK_RETRY_MAX}) — ${
+            err instanceof Error ? err.message : String(err)
+          }`
+        );
+        await new Promise<void>((r) => setTimeout(r, 800 * attempt));
+      }
+    }
+    if (!chunkRes) {
+      await cancelGnmsSourceUploadFromBrowser({ uploadId, signal, log });
+      throw classifyGnmsNetworkError(
+        lastChunkErr,
+        `청크 ${chunkIndex + 1}/${expectedChunks} 전송 실패`,
+        chunkUrl
+      );
     }
     const chunkJson = await readJson(chunkRes);
     if (!chunkRes.ok || chunkJson.error || chunkJson.ok === false) {
@@ -269,6 +318,7 @@ export async function uploadPreparedZipToGnmsFromBrowser(
         error: message,
         detail: `sent=${sentChunks}/${expectedChunks}`,
       });
+      await cancelGnmsSourceUploadFromBrowser({ uploadId, signal, log });
       throw new Error(`청크 ${chunkIndex + 1}/${expectedChunks} 실패: ${message}`);
     }
     sentChunks += 1;
