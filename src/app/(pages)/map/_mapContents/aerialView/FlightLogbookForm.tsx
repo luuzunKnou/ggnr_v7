@@ -79,8 +79,10 @@ export type FlightLogbookFormHandle = {
 
 type Props = {
   workUnitLabel?: string;
-  /** 촬영요청 키 — 있으면 저장·조회에 사용 */
+  /** 촬영요청 키 — 저장 시 연결 */
   srKey?: number | null;
+  /** 있으면 그 장을 불러 수정. 없으면 새 장 */
+  recordKey?: number | null;
   onClose?: () => void;
   /** true면 헤더·하단 액션 최소화 (승인 디테일 임베드용) */
   embedded?: boolean;
@@ -112,6 +114,7 @@ export const FlightLogbookForm = forwardRef<FlightLogbookFormHandle, Props>(func
   {
     workUnitLabel,
     srKey,
+    recordKey = null,
     onClose,
     embedded = false,
     hideActions = false,
@@ -135,30 +138,32 @@ export const FlightLogbookForm = forwardRef<FlightLogbookFormHandle, Props>(func
   };
 
   useEffect(() => {
-    const key = srKey != null && Number.isFinite(srKey) ? Number(srKey) : null;
+    const key = recordKey != null && Number.isFinite(recordKey) ? Number(recordKey) : null;
     if (key == null) {
       setV(EMPTY);
       setFlKey(null);
+      setLoading(false);
       return;
     }
     let cancelled = false;
     setLoading(true);
     void call('', 'POST', {
       service: 'flightLogbookService',
-      action: 'getBySrKey',
-      params: { srKey: key },
+      action: 'get',
+      params: { flKey: key },
     })
       .then((res) => {
         if (cancelled) return;
         const data = res?.data ?? res;
         const item = data?.item as Record<string, unknown> | null | undefined;
         setV(valuesFromApi(item));
-        setFlKey(item?.flKey != null ? Number(item.flKey) : null);
+        setFlKey(item?.flKey != null ? Number(item.flKey) : key);
       })
       .catch(() => {
         if (cancelled) return;
         setV(EMPTY);
         setFlKey(null);
+        setNotice('비행기록부를 불러오지 못했습니다.');
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -166,7 +171,7 @@ export const FlightLogbookForm = forwardRef<FlightLogbookFormHandle, Props>(func
     return () => {
       cancelled = true;
     };
-  }, [srKey]);
+  }, [recordKey]);
 
   const handleReset = () => {
     setV(EMPTY);

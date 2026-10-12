@@ -92,6 +92,7 @@ import { useShootingRequestUiEnabled } from "./_mapContents/shootingRequest/useS
 import {
   isUavAdminSystemKey,
   isUavFamilySystemKey,
+  isUavUlsanProject,
 } from "./_mapContents/shootingRequest/shootingRequestUiFlag"
 import {
   aerialKindToOpenedKey,
@@ -509,9 +510,11 @@ const ROAD_FRONTAGE_MARKER_DETAIL_MAX_WIDTH = 780
 function MapLayoutContent({
   children,
   indexLogoSrc,
+  projectName,
 }: {
   children: React.ReactNode
   indexLogoSrc: string
+  projectName: string
 }) {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -1939,7 +1942,7 @@ function MapLayoutContent({
   }, [shootingPanelOpen, shootingApprovalOpen, shootingRequestOpen])
 
   useEffect(() => {
-    if (!isUavFamilySystemKey(systemKeyFromUrl)) return
+    if (!isUavFamilySystemKey(systemKeyFromUrl) && !isUavUlsanProject(projectName)) return
     if (searchParams.get('shotForm') !== 'new') return
     const current = new URLSearchParams(Array.from(searchParams.entries()))
     current.delete('shotForm')
@@ -1953,7 +1956,7 @@ function MapLayoutContent({
       setShootingRequestDetailId(null)
     }
     router.replace(`/map?${current.toString()}`)
-  }, [systemKeyFromUrl, shootingRequestOpen, shootingApprovalOpen, searchParams, router])
+  }, [systemKeyFromUrl, projectName, shootingRequestOpen, shootingApprovalOpen, searchParams, router])
 
   const openShootingRequestForm = useCallback(() => {
     const current = new URLSearchParams(Array.from(searchParams.entries()))
@@ -3562,16 +3565,18 @@ function MapLayoutContent({
 export default function MapLayoutClient({
   children,
   indexLogoSrc,
+  projectName = "",
 }: {
   children: React.ReactNode
   indexLogoSrc: string
+  projectName?: string
 }) {
   return (
     <MapContextProvider>
       <ParcelAnalysisProvider>
         <ChangeHistoryProvider>
           <Suspense fallback={<div className="relative w-full h-screen overflow-hidden bg-slate-100 pl-[65px]" />}>
-            <MapLayoutContent indexLogoSrc={indexLogoSrc}>{children}</MapLayoutContent>
+            <MapLayoutContent indexLogoSrc={indexLogoSrc} projectName={projectName}>{children}</MapLayoutContent>
           </Suspense>
         </ChangeHistoryProvider>
       </ParcelAnalysisProvider>

@@ -26,6 +26,13 @@ let openDroneFileOnMap: OpenDroneFileOnMap | null = null;
 export function openAerialDroneFileOnMap(unitId: string, fileId: string): void {
   openDroneFileOnMap?.(unitId, fileId);
 }
+
+let openPanoFileOnMap: OpenDroneFileOnMap | null = null;
+
+/** 항공뷰 파일 하나만 지도 카드로 연다. */
+export function openAerialPanoFileOnMap(unitId: string, fileId: string): void {
+  openPanoFileOnMap?.(unitId, fileId);
+}
 const to3857 = getTransform('EPSG:5181', 'EPSG:3857');
 
 const ALL_KINDS: AerialKind[] = ['ortho', 'drone', 'panorama', 'satellite'];
@@ -116,11 +123,11 @@ export type AerialCheckedMarkerPopups = {
 export function useAerialViewCheckedMarkers(params: {
   enabled: boolean;
   checkedUnitIds: Set<string>;
-  /** 목록이 열려 있으면 체크 전 위치도 보여주고, 클릭으로 켠다 */
+  /** true면 체크 전 사진·항공뷰 위치도 보여 준다. 오른쪽 목록은 켠 파일만 그린다 */
   showAll?: boolean;
   /** 체크한 작업만 그릴 때 화면을 맞출지. 오른쪽 목록은 체크 쪽에서 따로 맞춘다 */
   fitView?: boolean;
-  onActivate?: (unitId: string, kind?: AerialKind) => void;
+  onActivate?: (unitId: string, kind?: AerialKind, fileId?: string) => void;
   /** 사진 미리보기를 닫으면 같은 작업의 체크를 푼다 */
   onDeactivate?: (unitId: string) => void;
 }): AerialCheckedMarkerPopups {
@@ -141,7 +148,7 @@ export function useAerialViewCheckedMarkers(params: {
 
   useEffect(() => {
     openDroneFileOnMap = (unitId, fileId) => {
-      onActivateRef.current?.(unitId, 'drone');
+      onActivateRef.current?.(unitId, 'drone', fileId);
       setPanoPopup(null);
       setPhotoPopups((prev) =>
         prev.some((row) => row.unitId === unitId && row.fileId === fileId)
@@ -149,8 +156,14 @@ export function useAerialViewCheckedMarkers(params: {
           : [...prev, { unitId, fileId }]
       );
     };
+    openPanoFileOnMap = (unitId, fileId) => {
+      onActivateRef.current?.(unitId, 'panorama', fileId);
+      setPhotoPopups([]);
+      setPanoPopup({ unitId, fileId });
+    };
     return () => {
       openDroneFileOnMap = null;
+      openPanoFileOnMap = null;
     };
   }, []);
 
@@ -203,7 +216,7 @@ export function useAerialViewCheckedMarkers(params: {
         unitId: String(picked.get('unitId')),
         fileId: String(picked.get('fileId')),
       };
-      onActivateRef.current?.(hit.unitId, kind);
+      onActivateRef.current?.(hit.unitId, kind, hit.fileId);
       if (kind === 'drone') {
         setPanoPopup(null);
         setPhotoPopups((prev) =>
@@ -268,14 +281,20 @@ export function useAerialViewCheckedMarkers(params: {
     lastKeyRef.current = markerKey;
 
     source.clear();
-    const units = allStoreUnits().filter((u) =>
-      showAll ? u.kind === 'drone' || u.kind === 'panorama' : checkedUnitIds.has(u.id)
-    );
+    const fileChecked = (unitId: string, fileId: string) =>
+      checkedUnitIds.has(unitId) || checkedUnitIds.has(fileId);
+    const units = allStoreUnits().filter((u) => {
+      if (u.kind !== 'drone' && u.kind !== 'panorama') return false;
+      if (showAll) return true;
+      return u.files.some((file) => fileChecked(u.id, file.id));
+    });
     const coords3857: number[][] = [];
 
     for (const unit of units) {
       if (unit.kind === 'satellite' || unit.kind === 'ortho') continue;
-      const locs = collectFileLocations5181(unit.files);
+      const locs = collectFileLocations5181(unit.files).filter((loc) =>
+        showAll ? true : fileChecked(unit.id, loc.fileId)
+      );
       for (const loc of locs) {
         const [x, y] = to3857(loc.coord, undefined, undefined);
         if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
@@ -301,8 +320,10 @@ export function useAerialViewCheckedMarkers(params: {
   }, [enabled, markerKey, showAll, fitView, checkedUnitIds, mapContext?.mapInstanceRef]);
 
   useEffect(() => {
-    setPhotoPopups((prev) => prev.filter((row) => checkedUnitIds.has(row.unitId)));
-    setPanoPopup((prev) => (prev && checkedUnitIds.has(prev.unitId) ? prev : null));
+    const stillOn = (unitId: string, fileId: string) =>
+      checkedUnitIds.has(unitId) || checkedUnitIds.has(fileId);
+    setPhotoPopups((prev) => prev.filter((row) => stillOn(row.unitId, row.fileId)));
+    setPanoPopup((prev) => (prev && stillOn(prev.unitId, prev.fileId) ? prev : null));
   }, [checkedUnitIds]);
 
   const showDroneUnitFiles = (unitId: string) => {
@@ -318,20 +339,20 @@ export function useAerialViewCheckedMarkers(params: {
   };
 
   const photos: AerialCheckedPhotoPopup[] = photoPopups.flatMap((item) => {
-    if (!checkedUnitIds.has(item.unitId)) return [];
+    if (!checkedUnitIds.has(item.unitId) && !checkedUnitIds.has(item.fileId)) return [];
     const unit = mockUnitsForKind('drone').find((row) => row.id === item.unitId);
     const file = unit?.files.find((row) => row.id === item.fileId);
     if (!unit || !file) return [];
     return [
       {
         file,
-        files: unit.files,
+        files: [file],
         workDate: unit.workDate,
         ...aerialShotMeta(unit),
         onClose: () => {
           setPhotoPopups((prev) => {
             const next = prev.filter((row) => !(row.unitId === item.unitId && row.fileId === item.fileId));
-            if (!next.some((row) => row.unitId === item.unitId)) onDeactivateRef.current?.(item.unitId);
+            if (!next.some((row) => row.fileId === item.fileId)) onDeactivateRef.current?.(item.fileId);
             return next;
           });
         },
@@ -344,18 +365,24 @@ export function useAerialViewCheckedMarkers(params: {
     : null;
   const panoFile = panoUnit?.files.find((file) => file.id === panoPopup?.fileId) ?? null;
   const pano =
-    panoPopup && checkedUnitIds.has(panoPopup.unitId) && panoUnit && panoFile
+    panoPopup &&
+    (checkedUnitIds.has(panoPopup.unitId) || checkedUnitIds.has(panoPopup.fileId)) &&
+    panoUnit &&
+    panoFile
       ? {
           file: panoFile,
-          files: panoUnit.files,
+          files: [panoFile],
           ...aerialShotMeta(panoUnit),
           onClose: () => {
             setPanoPopup(null);
-            onDeactivateRef.current?.(panoPopup.unitId);
+            onDeactivateRef.current?.(panoPopup.fileId);
           },
-          onSelect: (fileId: string) => setPanoPopup({ unitId: panoUnit.id, fileId }),
+          onSelect: (fileId: string) => {
+            onActivateRef.current?.(panoUnit.id, 'panorama', fileId);
+            setPanoPopup({ unitId: panoUnit.id, fileId });
+          },
           onPickPoint: (unitId: string, fileId: string) => {
-            onActivateRef.current?.(unitId);
+            onActivateRef.current?.(unitId, 'panorama', fileId);
             setPanoPopup({ unitId, fileId });
           },
         }

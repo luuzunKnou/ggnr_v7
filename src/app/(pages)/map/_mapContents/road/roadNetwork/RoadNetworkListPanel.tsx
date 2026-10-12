@@ -34,6 +34,7 @@ import { filterRoadNetworkRowsByWkt5181 } from "./roadNetworkSpatial";
 import {
   clearRoadNetworkWmsLayers,
   ensureRoadNetworkWmsLayers,
+  syncRoadNetworkCountyClassCql,
 } from "./roadNetworkMapSync";
 import {
   ROAD_NETWORK_NEW_ID,
@@ -101,6 +102,7 @@ export function RoadNetworkListPanel({ onClose }: Props) {
   const setSpatialDrawRequest = mapContext?.setSpatialDrawRequest;
   const setSpatialFilterWkt = mapContext?.setSpatialFilterWkt;
   const setVisibleLayerNames = mapContext?.setVisibleLayerNames;
+  const setServiceWmsCqlByLayer = mapContext?.setServiceWmsCqlByLayer;
   const setRoadNetworkOverlayRows = mapContext?.setRoadNetworkOverlayRows;
   const setRoadNetworkRows = mapContext?.setRoadNetworkRows;
   const setRoadNetworkSelectedId = mapContext?.setRoadNetworkSelectedId;
@@ -168,13 +170,15 @@ export function RoadNetworkListPanel({ onClose }: Props) {
       typeFilter,
       openStatusFilter,
     });
-  }, [typeFilter, openStatusFilter, setVisibleLayerNames]);
+    syncRoadNetworkCountyClassCql(setServiceWmsCqlByLayer, true);
+  }, [typeFilter, openStatusFilter, setVisibleLayerNames, setServiceWmsCqlByLayer]);
 
   useEffect(() => {
     return () => {
       clearRoadNetworkWmsLayers(setVisibleLayerNames);
+      syncRoadNetworkCountyClassCql(setServiceWmsCqlByLayer, false);
     };
-  }, [setVisibleLayerNames]);
+  }, [setVisibleLayerNames, setServiceWmsCqlByLayer]);
 
   /** 지도 WMS 클릭 → 목록 선택 */
   useEffect(() => {

@@ -42,6 +42,37 @@ export function ensureRoadNetworkWmsLayers(
   });
 }
 
+/** 군도 레이어는 구분값이 군도인 선만 그린다. 농도·리도·면도는 같은 표에 있어도 제외 */
+const COUNTY_LAYER_IDS = ["rdl_county_opn_ls", "rdl_county_uopn_ls"] as const;
+export const ROAD_NETWORK_COUNTY_CLASS_CQL = "admin_clas = '군도'";
+
+type SetCql = (
+  updater: (prev: Record<string, string> | null) => Record<string, string> | null
+) => void;
+
+export function syncRoadNetworkCountyClassCql(
+  setServiceWmsCqlByLayer: SetCql | null | undefined,
+  active: boolean
+): void {
+  if (!setServiceWmsCqlByLayer) return;
+  setServiceWmsCqlByLayer((prev) => {
+    const next = { ...(prev ?? {}) };
+    if (active) {
+      for (const id of COUNTY_LAYER_IDS) next[id] = ROAD_NETWORK_COUNTY_CLASS_CQL;
+      return next;
+    }
+    let changed = false;
+    for (const id of COUNTY_LAYER_IDS) {
+      if (id in next) {
+        delete next[id];
+        changed = true;
+      }
+    }
+    if (!changed) return prev;
+    return Object.keys(next).length > 0 ? next : null;
+  });
+}
+
 /** 도로망도 패널 종료 시 WMS 끄기 */
 export function clearRoadNetworkWmsLayers(
   setVisibleLayerNames: SetVisible | null | undefined

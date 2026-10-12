@@ -54,7 +54,11 @@ type SourceDef = {
   sinuosityExpr?: string;
   detailReasonExpr?: string;
   addressExpr?: string;
+  /** 목록에서 뺄 조건. 군도 표에는 농도·리도·면도가 섞여 있어 군도만 남긴다 */
+  whereExpr?: string;
 };
+
+const COUNTY_CLASS_WHERE = `trim(both from COALESCE(t.admin_clas::text, '')) = '군도'`;
 
 const LENGTH_ATTR_EXPR = `COALESCE(NULLIF(trim(both from t.length::text), ''), '')`;
 const DEFENSE_EXPR = `COALESCE(NULLIF(trim(both from t.defense::text), ''), '')`;
@@ -122,6 +126,7 @@ const SOURCES: SourceDef[] = [
     lengthAttrExpr: LENGTH_ATTR_EXPR,
     defenseExpr: DEFENSE_EXPR,
     sinuosityExpr: SINUOSITY_EXPR,
+    whereExpr: COUNTY_CLASS_WHERE,
   },
   {
     table: 'rdl_county_uopn_ls',
@@ -133,6 +138,7 @@ const SOURCES: SourceDef[] = [
     lengthAttrExpr: LENGTH_ATTR_EXPR,
     defenseExpr: DEFENSE_EXPR,
     sinuosityExpr: SINUOSITY_EXPR,
+    whereExpr: COUNTY_CLASS_WHERE,
   },
   {
     table: 'rdl_perch_opn_ls',
@@ -252,7 +258,7 @@ function buildSelect(src: SourceDef, safeTbl: string): string {
     ${detailReasonExpr} AS "detailReason",
     ${addressExpr} AS address,
     ST_AsGeoJSON(ST_Transform(t.geom, 4326))::json AS geom
-  FROM layer."${safeTbl}" t`;
+  FROM layer."${safeTbl}" t${src.whereExpr ? ` WHERE ${src.whereExpr}` : ''}`;
 }
 
 /**
