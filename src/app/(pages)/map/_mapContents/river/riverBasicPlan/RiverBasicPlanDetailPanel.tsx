@@ -29,6 +29,7 @@ import {
   riverBasicPlanGdWmsDefineTables,
   riverBasicPlanHdDefineTable,
   riverBasicPlanIndexDefineTable,
+  riverBasicPlanJbDefineTable,
   riverBasicPlanJdDefineTable,
   buildRiverBasicPlanMapCqlByLayer,
 } from "@/lib/riverBasicPlanMapAttachmentLayers";
@@ -176,6 +177,7 @@ export function RiverBasicPlanDetailPanel({ tab, riverName, onClose }: Props) {
   const jdLayer = riverBasicPlanJdDefineTable(tab);
   const hdLayer = riverBasicPlanHdDefineTable(tab);
   const structureParent = riverBasicPlanGdParentDefineTable(tab);
+  const jbLayer = riverBasicPlanJbDefineTable(tab);
   const layerByLabel = useMemo(() => layerByLabelForTab(tab), [tab]);
   const existingMapLayers = useRiverBasicPlanExistingMapLayers(tab);
   const existingMapLayerSet = useMemo(
@@ -198,6 +200,7 @@ export function RiverBasicPlanDetailPanel({ tab, riverName, onClose }: Props) {
       next.delete(riverBasicPlanHdDefineTable(otherTab));
       for (const id of riverBasicPlanGdWmsDefineTables(otherTab)) next.delete(id);
       next.delete(riverBasicPlanGdParentDefineTable(otherTab));
+      next.delete(riverBasicPlanJbDefineTable(otherTab));
       if (allow(indexLayer)) next.add(indexLayer);
       else next.delete(indexLayer);
       if (allow(planAsLayer)) next.add(planAsLayer);
@@ -211,6 +214,8 @@ export function RiverBasicPlanDetailPanel({ tab, riverName, onClose }: Props) {
         if (allow(id)) next.add(id);
         else next.delete(id);
       }
+      if (allow(jbLayer)) next.add(jbLayer);
+      else next.delete(jbLayer);
       return next;
     });
     // 지방하천: defineLayer 자식 목록이 늦게 오면 그 목록으로 재적용
@@ -224,6 +229,7 @@ export function RiverBasicPlanDetailPanel({ tab, riverName, onClose }: Props) {
     jdLayer,
     hdLayer,
     structureParent,
+    jbLayer,
     existingMapLayers,
     existingMapLayerSet,
   ]);
@@ -970,25 +976,33 @@ export function RiverBasicPlanDetailPanel({ tab, riverName, onClose }: Props) {
     if (!setVisibleLayerNames) return;
     setVisibleLayerNames((prev) => {
       const next = new Set(prev);
+      const showJb = (on: boolean) => {
+        if (on && existingMapLayerSet.has(jbLayer.toLowerCase())) next.add(jbLayer);
+        else next.delete(jbLayer);
+      };
       if (structureChildLayerNames.length === 0) {
-        if (next.has(structureParent)) next.delete(structureParent);
-        else next.add(structureParent);
+        const on = !(next.has(structureParent) || next.has(jbLayer));
+        if (on) next.add(structureParent);
+        else next.delete(structureParent);
+        showJb(on);
         pendingEnableStructureChildrenRef.current = false;
         return next;
       }
-      const anyChildOn = structureChildLayerNames.some((n) => next.has(n));
-      if (anyChildOn) {
+      const anyOn = structureChildLayerNames.some((n) => next.has(n)) || next.has(jbLayer);
+      if (anyOn) {
         pendingEnableStructureChildrenRef.current = false;
         for (const n of structureChildLayerNames) next.delete(n);
         next.delete(structureParent);
+        showJb(false);
         return next;
       }
       next.delete(structureParent);
       pendingEnableStructureChildrenRef.current = false;
       for (const n of structureChildLayerNames) next.add(n);
+      showJb(true);
       return next;
     });
-  }, [setVisibleLayerNames, structureChildLayerNames, structureParent]);
+  }, [setVisibleLayerNames, structureChildLayerNames, structureParent, jbLayer, existingMapLayerSet]);
 
   /** 서버가 준 물리 테이블명·kind로 WMS define_table_name(종단/횡단/구조물 분할) 켜기 — 색인도 상세목록과 동일 목적 */
   const ensureRelatedItemLayerVisible = useCallback(
@@ -1015,6 +1029,14 @@ export function RiverBasicPlanDetailPanel({ tab, riverName, onClose }: Props) {
         });
         return;
       }
+      if (r.kind === "제방" || fl === jbLayer.toLowerCase()) {
+        setVisibleLayerNames((prev) => {
+          const next = new Set(prev);
+          next.add(jbLayer);
+          return next;
+        });
+        return;
+      }
       if (
         r.kind === "구조물" ||
         fl.startsWith("river_plan_gd_ps") ||
@@ -1034,7 +1056,7 @@ export function RiverBasicPlanDetailPanel({ tab, riverName, onClose }: Props) {
         });
       }
     },
-    [setVisibleLayerNames, structureChildLayerNames, structureParent, layerByLabel],
+    [setVisibleLayerNames, structureChildLayerNames, structureParent, layerByLabel, jbLayer],
   );
 
   return (
@@ -1113,9 +1135,10 @@ export function RiverBasicPlanDetailPanel({ tab, riverName, onClose }: Props) {
             const layerName = layerByLabel[label];
             const isStructureGroup = label === "구조물도";
             const layerOn = isStructureGroup
-              ? structureWmsLayerNames.length > 0
-                ? structureWmsLayerNames.some((n) => visibleLayerNames.has(n))
-                : Boolean(layerName && visibleLayerNames.has(layerName))
+              ? visibleLayerNames.has(jbLayer) ||
+                (structureWmsLayerNames.length > 0
+                  ? structureWmsLayerNames.some((n) => visibleLayerNames.has(n))
+                  : Boolean(layerName && visibleLayerNames.has(layerName)))
               : layerName
                 ? visibleLayerNames.has(layerName)
                 : false;
@@ -1290,7 +1313,7 @@ export function RiverBasicPlanDetailPanel({ tab, riverName, onClose }: Props) {
                 <div>
                   <p className="text-[11px] font-medium text-muted-foreground mb-2">상세목록</p>
                   {indexBundle.related.length === 0 ? (
-                    <p className="text-xs text-muted-foreground py-2">연결된 구조물·종단·횡단 항목이 없습니다.</p>
+                    <p className="text-xs text-muted-foreground py-2">연결된 구조물·제방·종단·횡단 항목이 없습니다.</p>
                   ) : (
                     <ul className="rounded border border-border divide-y divide-border bg-background">
                       {indexBundle.related.map((r) => {
@@ -1343,7 +1366,7 @@ export function RiverBasicPlanDetailPanel({ tab, riverName, onClose }: Props) {
                                 }}
                               >
                                 <span
-                                  className="inline-flex h-5 w-12 shrink-0 items-center justify-center truncate rounded bg-muted px-0.5 text-center text-[10px] font-medium leading-none text-muted-foreground"
+                                  className="inline-flex h-5 w-14 shrink-0 items-center justify-center truncate rounded bg-muted px-0.5 text-center text-[10px] font-medium leading-none text-muted-foreground"
                                   title={r.badge}
                                 >
                                   {r.badge}

@@ -7,6 +7,8 @@ import {
   riverBasicPlanGdParentDefineTable,
   riverBasicPlanHdDefineTable,
   riverBasicPlanIndexDefineTable,
+  riverBasicPlanJbDefineTable,
+  riverBasicPlanJbLabel,
   riverBasicPlanJdDefineTable,
   riverBasicPlanRiverNameFilterableLayers,
   riverBasicPlanTabFromIndexDefineTable,
@@ -506,6 +508,11 @@ function relatedCentroidWithinIndexSql(indexAlias = 'idx', tableAlias = 't'): st
   return `ST_Within(ST_Centroid(${tableAlias}.geom), ${indexAlias}.geom)`;
 }
 
+/** 제방처럼 여러 색인도에 걸치는 선: 선 내부가 색인도 내부를 지나면 연결 (경계 접촉만은 제외) */
+function relatedInteriorIntersectsIndexSql(indexAlias = 'idx', tableAlias = 't'): string {
+  return `ST_Relate(${tableAlias}.geom, ${indexAlias}.geom, 'T********')`;
+}
+
 /** 색인도 ↔ 종단·횡단·구조물: 동일 river_code (색인도 코드 없으면 조건 생략) */
 function relatedMatchesIndexRiverCodeSql(indexAlias = 'idx', tableAlias = 't'): string {
   const idxCode = `TRIM(COALESCE(${indexAlias}.river_code::text, ''))`;
@@ -848,15 +855,24 @@ export async function getRiverBasicPlanIndexView(params?: {
     extent3857: [number, number, number, number] | null;
   }[] = [];
 
-  /** 종단·횡단: draw_name → 제목, 배지는 종류명 */
-  const queryRelatedLm = async (logicalName: string, kindLabel: string) => {
+  /**
+   * 종단·횡단·제방(선): 제목 컬럼(종단·횡단 draw_name, 제방 jb_name) → 제목.
+   * 배지는 badge(없으면 종류명).
+   */
+  const queryRelatedLm = async (
+    logicalName: string,
+    kindLabel: string,
+    opts?: { nameColumn?: string; badge?: string; matchIntersects?: boolean }
+  ) => {
     const t = await resolveLayerTableName(logicalName.toLowerCase());
     const safeT = t.replace(/"/g, '""');
     const keySql = attachmentKeySelectSql(logicalName);
+    const nameCol = safeSqlColumnName(opts?.nameColumn ?? 'draw_name') ?? 'draw_name';
+    const badge = opts?.badge ?? kindLabel;
     const q = `
       SELECT
         t.ogc_fid AS fid,
-        TRIM(COALESCE(t.draw_name::text, '')) AS draw_name,
+        TRIM(COALESCE(t."${nameCol}"::text, '')) AS draw_name,
         ${keySql},
         ST_XMin(ST_Transform(t.geom, 3857))::float8 AS xmin,
         ST_YMin(ST_Transform(t.geom, 3857))::float8 AS ymin,
@@ -866,7 +882,11 @@ export async function getRiverBasicPlanIndexView(params?: {
       INNER JOIN layer."${safeIdx}" idx ON idx.ogc_fid = ${idxOgcFid}
       WHERE idx.geom IS NOT NULL
         AND t.geom IS NOT NULL
-        AND ${relatedCentroidWithinIndexSql('idx', 't')}
+        AND ${
+          opts?.matchIntersects
+            ? relatedInteriorIntersectsIndexSql('idx', 't')
+            : relatedCentroidWithinIndexSql('idx', 't')
+        }
         AND ${relatedMatchesIndexRiverCodeSql('idx', 't')}
       ORDER BY t.ogc_fid ASC
     `;
@@ -891,8 +911,8 @@ export async function getRiverBasicPlanIndexView(params?: {
           kind: kindLabel,
           table: t,
           ogcFid: fid,
-          label: dn || `${kindLabel} #${fid}`,
-          badge: kindLabel,
+          label: dn || `${badge} #${fid}`,
+          badge,
           fileLayer: t,
           fileKey,
           extent3857: parseExtent3857(rr),
@@ -969,6 +989,11 @@ export async function getRiverBasicPlanIndexView(params?: {
   await queryRelatedLm(riverBasicPlanJdDefineTable(tab), '종단면도');
   await queryRelatedLm(riverBasicPlanHdDefineTable(tab), '횡단면도');
   await queryRelatedStructurePoints();
+  await queryRelatedLm(riverBasicPlanJbDefineTable(tab), '제방', {
+    nameColumn: 'jb_name',
+    badge: riverBasicPlanJbLabel(tab),
+    matchIntersects: true,
+  });
 
   return {
     index: {
