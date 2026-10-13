@@ -1,5 +1,5 @@
 <featureType>
-  <id>FeatureTypeInfoImpl--450bcb41:19fd5d8c5f4:-68e6</id>
+  <id>FeatureTypeInfoImpl-7b45823a:1a113f17c5f:-7f3c</id>
   <name>tl_sprd_intrvl</name>
   <nativeName>tl_sprd_intrvl</nativeName>
   <namespace>
@@ -12,28 +12,25 @@
   </keywords>
   <srs>EPSG:5181</srs>
   <nativeBoundingBox>
-    <minx>385124.67096077</minx>
-    <maxx>421270.01256337</maxx>
-    <miny>352188.81010637</miny>
-    <maxy>407851.3308777</maxy>
+    <minx>0.0</minx>
+    <maxx>-1.0</maxx>
+    <miny>0.0</miny>
+    <maxy>-1.0</maxy>
     <crs class="projected">EPSG:5181</crs>
   </nativeBoundingBox>
   <latLonBoundingBox>
-    <minx>129.07020336950782</minx>
-    <maxx>129.49033017294113</maxx>
-    <miny>36.64247238386594</miny>
-    <maxy>37.151423286052555</maxy>
+    <minx>124.84847767680762</minx>
+    <maxx>124.84848865053446</maxx>
+    <miny>33.47495973610326</miny>
+    <maxy>33.474968932506</maxy>
     <crs>EPSG:4326</crs>
   </latLonBoundingBox>
   <projectionPolicy>FORCE_DECLARED</projectionPolicy>
   <enabled>true</enabled>
-  <advertised>true</advertised>
   <store class="dataStore">
     <id>DataStoreInfoImpl-4bf97568:19c4d6c3053:-7ff8</id>
   </store>
   <serviceConfiguration>false</serviceConfiguration>
-  <internationalTitle/>
-  <internationalAbstract/>
   <maxFeatures>0</maxFeatures>
   <numDecimals>0</numDecimals>
   <padWithZeros>false</padWithZeros>

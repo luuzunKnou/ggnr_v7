@@ -2182,13 +2182,49 @@ export function ShpWizardModal({
    * 4단계 완료: 3단계에서 만든 이력에 의도 확정·결과 문구 갱신.
    * (배치·상세 초안은 3단계 비교 시 이미 생성됨)
    */
-  const finalizeHistory = useCallback(async () => {
-    if (reportRows.length === 0) return;
-
+  /**
+   * 완료 직전(대기): 배치·상세 이력 키를 확보하고, 모달 초기화와 무관하게 쓸 값을 복사.
+   * 실제 반영·이력 기록은 모달을 닫은 뒤 백그라운드에서 이 스냅샷으로 진행한다.
+   */
+  const prepareFinalizeHistory = useCallback(async () => {
     const lhKey = await ensureWizardLhKey();
     if (!lhKey) {
       throw new Error('이력 생성에 실패했습니다.');
     }
+    for (const r of reportRows) {
+      const tableName = r.tableName;
+      if (!tableName || lookupDhKey(dhKeyByTableRef.current, tableName)) continue;
+      const status = statusRows.find((s) => s.pathOrResult === r.pathOrResult);
+      await ensureDhKeyForTable({
+        tableName,
+        shpPath: status?.pathOrResult ?? r.pathOrResult,
+        group: groupNameRef.current.trim() || r.group || undefined,
+        korName: r.korName || undefined,
+      });
+    }
+    // 백그라운드 반영이 끝날 때까지 같은 테이블의 새 비교·미반영 정리를 서버에서 차단
+    await call('', 'POST', {
+      service: 'shpUploadService',
+      action: 'beginShpFinalize',
+      params: { tableNames: reportRows.map((r) => r.tableName).filter(Boolean) },
+    }).catch(() => {});
+    return {
+      lhKey,
+      reportRows,
+      statusRows,
+      layers,
+      operatorLabel,
+      wizardGroupName: groupNameRef.current.trim(),
+      dhKeyByTable: { ...dhKeyByTableRef.current },
+      initialCompareCounts: { ...initialCompareCountsRef.current },
+    };
+  }, [reportRows, statusRows, layers, operatorLabel, ensureWizardLhKey, ensureDhKeyForTable]);
+
+  const finalizeHistory = useCallback(async (
+    snap: Awaited<ReturnType<typeof prepareFinalizeHistory>>
+  ) => {
+    const { lhKey, reportRows, statusRows, layers, operatorLabel } = snap;
+    if (reportRows.length === 0) return;
 
     for (const r of reportRows) {
       const tableName = r.tableName;
@@ -2199,16 +2235,8 @@ export function ShpWizardModal({
           (s) => tableNameFromShpPath(s.pathOrResult, s.sourceFile).toLowerCase() === tableName.toLowerCase()
         );
 
-      let dhKey = lookupDhKey(dhKeyByTableRef.current, tableName);
-      const wizardGroup = groupNameRef.current.trim() || r.group || undefined;
-      if (!dhKey) {
-        dhKey = await ensureDhKeyForTable({
-          tableName,
-          shpPath: status?.pathOrResult ?? r.pathOrResult,
-          group: wizardGroup,
-          korName: r.korName || undefined,
-        });
-      }
+      const dhKey = lookupDhKey(snap.dhKeyByTable, tableName);
+      const wizardGroup = snap.wizardGroupName || r.group || undefined;
       if (!dhKey) continue;
       const layerRow = layers.find((l) => l.name.toLowerCase() === (status?.sourceFile ?? '').toLowerCase());
       const sourceSrsOverride = layerRow?.epsg != null ? `EPSG:${layerRow.epsg}` : undefined;
@@ -2305,8 +2333,8 @@ export function ShpWizardModal({
       }
 
       const initial =
-        initialCompareCountsRef.current[tableName]
-        ?? initialCompareCountsRef.current[tableName.toLowerCase()];
+        snap.initialCompareCounts[tableName]
+        ?? snap.initialCompareCounts[tableName.toLowerCase()];
       const hasDiff = initial
         ? initial.appendCount + initial.conflictCount + initial.removeCount > 0
         : (syncAppend + syncUpdated + syncRemoved > 0);
@@ -2373,6 +2401,7 @@ export function ShpWizardModal({
       } catch {
         /* ignore */
       }
+      requestShpHistoryRefresh();
     }
 
     try {
@@ -2386,20 +2415,34 @@ export function ShpWizardModal({
     } catch {
       /* ignore */
     }
-  }, [reportRows, statusRows, layers, ensureWizardLhKey, ensureDhKeyForTable, operatorLabel]);
+  }, []);
 
   const handleComplete = async () => {
     if (step !== 4 || !reportLoaded || reportLoading || completing) return;
     setCompleting(true);
+    let snap: Awaited<ReturnType<typeof prepareFinalizeHistory>>;
     try {
-      await finalizeHistory();
-      requestShpHistoryRefresh();
+      snap = await prepareFinalizeHistory();
     } catch (e: unknown) {
       alert(e instanceof Error ? e.message : String(e));
       return;
     } finally {
       setCompleting(false);
     }
+    // 이력 반영은 모달을 닫은 뒤 백그라운드 진행 — 목록은 테이블별로 갱신
+    void finalizeHistory(snap)
+      .catch((e: unknown) => {
+        alert(`SHP 이력 기록 중 오류가 발생했습니다.\n${e instanceof Error ? e.message : String(e)}`);
+      })
+      .finally(() => {
+        void call('', 'POST', {
+          service: 'shpUploadService',
+          action: 'endShpFinalize',
+          params: { tableNames: snap.reportRows.map((r) => r.tableName).filter(Boolean) },
+        }).catch(() => {});
+        requestShpHistoryRefresh();
+      });
+    requestShpHistoryRefresh();
     resetForm();
     onOpenChange(false);
     onSuccess?.();

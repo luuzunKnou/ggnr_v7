@@ -10,6 +10,7 @@ export const SER_ENG_TO_OPENED: Record<string, string> = {
   memo: 'memoManagement',
   crossSection: 'sectionView',
   waterSupplyWork: 'waterSupply',
+  /** 상수도 공사대장 — 하천 공사대장 패널 공용 (consLedgerVariant) */
   waterworksLedger: 'constructionLedger',
   riverBasicPlan: 'riverBasicPlan',
   fmsLinkage: 'roadFMS',

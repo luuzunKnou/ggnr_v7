@@ -301,12 +301,16 @@ export type MapContextValue = {
   /** 지도 클릭으로 식별된 도로대장(a0020000) 피처 속성 — 상세 패널 표시 */
   roadLedgerIdentifyRow: Record<string, unknown> | null;
   setRoadLedgerIdentifyRow: Dispatch<SetStateAction<Record<string, unknown> | null>>;
-  /** 시설 하위 레이어 1건 — 모달 속성 + 지도 강조(geom). pickFromMap: 지도 클릭(줌 생략), 목록은 false */
+  /**
+   * 시설 하위 레이어 1건 — 모달 속성 + 지도 강조(geom). pickFromMap: 지도 클릭(줌 생략), 목록은 false.
+   * inline: 도면 구분처럼 상세 패널 안에서 표시(모달 생략, 강조만)
+   */
   roadLedgerFacilityModal: {
     row: Record<string, unknown>;
     defineTableName: string;
     defineTableTitle: string;
     pickFromMap?: boolean;
+    inline?: boolean;
   } | null;
   setRoadLedgerFacilityModal: Dispatch<
     SetStateAction<{
@@ -314,6 +318,7 @@ export type MapContextValue = {
       defineTableName: string;
       defineTableTitle: string;
       pickFromMap?: boolean;
+      inline?: boolean;
     } | null>
   >;
   /** 도로망도 임시 목록(CRUD 반영) */
@@ -711,6 +716,7 @@ export function MapContextProvider({ children }: { children: React.ReactNode }) 
     defineTableName: string;
     defineTableTitle: string;
     pickFromMap?: boolean;
+    inline?: boolean;
   } | null>(null);
   const [roadNetworkRows, setRoadNetworkRows] = useState<RoadNetworkRow[]>([]);
   const [roadNetworkSelectedId, setRoadNetworkSelectedId] = useState<string | null>(null);
