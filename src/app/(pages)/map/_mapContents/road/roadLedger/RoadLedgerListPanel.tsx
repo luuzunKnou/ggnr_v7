@@ -84,8 +84,18 @@ export function RoadLedgerListPanel({ onClose }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [items, setItems] = useState<RoadLedgerListRow[]>([]);
   const [loadingOgcFid, setLoadingOgcFid] = useState<number | null>(null);
+  const [bootProject, setBootProject] = useState("");
 
   const selectedOgcFid = pickRoadLedgerOgcFid(mapContext?.roadLedgerIdentifyRow ?? null);
+
+  useEffect(() => {
+    call("", "POST", { service: "configService", action: "getBootProject", params: {} })
+      .then((res) => {
+        const data = res?.data ?? res;
+        setBootProject(String(data?.project ?? "").trim());
+      })
+      .catch(() => setBootProject(""));
+  }, []);
 
   const handleRowClick = useCallback(
     async (ogcFid: number) => {
@@ -251,11 +261,16 @@ export function RoadLedgerListPanel({ onClose }: Props) {
             </colgroup>
             <tbody>
               {items.map((item) => {
+                const showSectSuffix = item.roadLedgerShowSectSuffix !== false;
+                const sectToken = String(item.sect ?? "").trim();
+                const sectInTitle = showSectSuffix && Boolean(sectToken);
                 const baseLine = formatRoadLedgerNameSectLabel(item.roadName, item.sect, {
-                  showSectSuffix: item.roadLedgerShowSectSuffix,
+                  showSectSuffix,
                 });
-                const parenNums = formatRoadLedgerParenRoadNoSectOnly(item.roadNo, item.sect);
-                const rankLabel = formatRoadLedgerRoadRankForTitle(item.roadRank);
+                const parenNums = formatRoadLedgerParenRoadNoSectOnly(item.roadNo, item.sect, {
+                  sectInTitle,
+                });
+                const rankLabel = formatRoadLedgerRoadRankForTitle(item.roadRank, bootProject);
                 const titleLine = [baseLine, parenNums].filter(Boolean).join(" ");
                 const dsg = item.roadLedgerDsgdate?.trim() ?? "";
                 const lenM = formatRoadLedgerLengthM(item.roadLedgerLenth ?? "");
@@ -289,7 +304,7 @@ export function RoadLedgerListPanel({ onClose }: Props) {
                         {rankLabel ? (
                           <span
                             className="shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold leading-none"
-                            style={getRoadLedgerRankBadgeStyle(item.roadRank)}
+                            style={getRoadLedgerRankBadgeStyle(item.roadRank, bootProject)}
                           >
                             {rankLabel}
                           </span>

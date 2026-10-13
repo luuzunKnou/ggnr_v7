@@ -1,0 +1,28 @@
+@mode "Flat";
+@transform "vec:PointStacker(cellSize:84, outputBBOX:env('wms_bbox'), outputWidth:env('wms_width'), outputHeight:env('wms_height'))";
+
+[count > 1] {
+  mark: symbol(circle);
+  mark-size: 24;
+  :mark {
+    fill: #0284C7;
+    stroke: #FFFFFF;
+    stroke-width: 2;
+    fill-opacity: 1;
+    stroke-opacity: 1;
+  };
+  label: [count];
+  font-size: 12;
+  font-fill: #FFFFFF;
+  font-weight: bold;
+  font-family: "Nanum Gothic", "Malgun Gothic", "SansSerif";
+  label-anchor: 0.5 0.5;
+}
+
+* {
+  mark: url("http://127.0.0.1:8090/geoserver/www/symbol/safety/water_play_sign.svg");
+  mark-mime: "image/svg+xml";
+  mark-size: [min(18, 5 + sqrt(100000 / env('wms_scale_denominator', 10000)) * 4.0)];
+  mark-anchor: 0.5 0.5;
+  mark-offset: 0 0;
+}

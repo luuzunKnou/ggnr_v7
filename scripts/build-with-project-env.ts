@@ -70,6 +70,7 @@ function main(): void {
     shell: true,
     env: process.env,
   });
+  // package.json build = next build --webpack (Turbopack orthophotoService panic 회피)
   if (r.status !== 0) {
     process.exit(r.status ?? 1);
   }

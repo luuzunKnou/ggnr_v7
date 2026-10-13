@@ -1,18 +1,18 @@
 import { NextResponse } from 'next/server';
 import { getSessionUsrId } from '@/lib/auth/guard';
-import { fetchGnmsVersionListFromServer } from '@/service/gnmsSourceFetchService';
 
 export const dynamic = 'force-dynamic';
 
+/** 브라우저가 GNMS /list 를 직접 호출합니다. 이 엔드포인트는 더 이상 사용하지 않습니다. */
 export async function GET() {
-  try {
-    if (!(await getSessionUsrId())) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-    const result = await fetchGnmsVersionListFromServer();
-    return NextResponse.json({ ok: true, ...result });
-  } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : 'GNMS 목록 조회 실패';
-    return NextResponse.json({ error: message }, { status: 500 });
+  if (!(await getSessionUsrId())) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
+  return NextResponse.json(
+    {
+      error:
+        'GNMS 버전 목록은 브라우저에서 직접 조회합니다. /api/source/version/gnms-config 의 listUrl을 사용하세요.',
+    },
+    { status: 410 }
+  );
 }

@@ -26,6 +26,9 @@
 # misc
 .DS_Store
 *.pem
+# Git Bash `>nul` 이 Windows에서 파일로 생김 (예약 장치명 — 커밋 불가)
+/nul
+/NUL
 .cursor/local/
 .cursor/plans/
 .cursor/rules/_personal/
@@ -102,4 +105,5 @@ next-env.d.ts
 
 # 00_make_ggnr_starter.bat 실행시 생성되는 파일 (배포용 빌드 스크립트)
 /ggnr_start.bat
+/00_ggnr_build_project.bat
 /ggnr_build_project.bat

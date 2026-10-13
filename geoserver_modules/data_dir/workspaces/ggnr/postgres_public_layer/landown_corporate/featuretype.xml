@@ -1,5 +1,5 @@
 <featureType>
-  <id>FeatureTypeInfoImpl--50232ad2:1a022df41e9:-621f</id>
+  <id>FeatureTypeInfoImpl--1bcb52e7:1a0837eafcb:-7e1b</id>
   <name>landown_corporate</name>
   <nativeName>jijuk</nativeName>
   <namespace>
@@ -12,17 +12,17 @@
   </keywords>
   <srs>EPSG:5181</srs>
   <nativeBoundingBox>
-    <minx>377455.39733063336</minx>
-    <maxx>401712.757964659</maxx>
-    <miny>336226.88033053325</miny>
-    <maxy>375384.1870947203</maxy>
+    <minx>385219.8892621045</minx>
+    <maxx>421236.8492891598</maxx>
+    <miny>352230.43498221296</miny>
+    <maxy>406930.30539678596</maxy>
     <crs class="projected">EPSG:5181</crs>
   </nativeBoundingBox>
   <latLonBoundingBox>
-    <minx>128.98081028125182</minx>
-    <maxx>129.26170399625258</maxx>
-    <miny>36.503083800644845</miny>
-    <maxy>36.86053159793966</maxy>
+    <minx>129.07127758519525</minx>
+    <maxx>129.48968536207065</maxx>
+    <miny>36.64285482908801</miny>
+    <maxy>37.143110956687046</maxy>
     <crs>EPSG:4326</crs>
   </latLonBoundingBox>
   <projectionPolicy>FORCE_DECLARED</projectionPolicy>

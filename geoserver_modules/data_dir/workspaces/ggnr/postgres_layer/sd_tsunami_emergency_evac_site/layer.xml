@@ -1,19 +1,16 @@
 <layer>
   <name>sd_tsunami_emergency_evac_site</name>
-  <id>LayerInfoImpl--2053d3:19d606c4ff1:30ee</id>
+  <id>LayerInfoImpl-4f1e7b9b:1a0f0cebe25:-7d65</id>
   <type>VECTOR</type>
   <defaultStyle>
-    <id>StyleInfoImpl--2053d3:19d606c4ff1:30fc</id>
+    <id>StyleInfoImpl--30e19f83:19cb3d4f76b:-7ffc</id>
   </defaultStyle>
   <resource class="featureType">
-    <id>FeatureTypeInfoImpl--2053d3:19d606c4ff1:30ed</id>
+    <id>FeatureTypeInfoImpl-4f1e7b9b:1a0f0cebe25:-7d66</id>
   </resource>
-  <queryable>true</queryable>
-  <opaque>false</opaque>
   <attribution>
     <logoWidth>0</logoWidth>
     <logoHeight>0</logoHeight>
   </attribution>
-  <dateCreated>2026-04-08 11:06:40.988 UTC</dateCreated>
-  <dateModified>2026-04-08 11:07:01.715 UTC</dateModified>
+  <dateCreated>2026-10-04 18:00:48.18 UTC</dateCreated>
 </layer>

@@ -6,12 +6,17 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from '@/app/shadcnComponents/ui/dialog';
 import { Button } from '@/app/shadcnComponents/ui/button';
 import { Input } from '@/app/shadcnComponents/ui/input';
 import { call } from '@/lib/api';
+import {
+  dismissForcedPasswordChange,
+  isForcedPasswordChangeDismissed,
+} from '@/lib/forcedPasswordChangeDismiss';
 
 type ProfilePayload = {
   success?: boolean;
@@ -33,7 +38,7 @@ function unwrapError(res: unknown): string | null {
   return null;
 }
 
-/** 임시 비밀번호(아이디=성명)로 들어온 계정은 새 비밀번호를 정할 때까지 막는다. */
+/** 임시 비밀번호(아이디=성명)로 들어온 계정은 새 비밀번호를 정할 때까지 안내한다. */
 export function ForcedPasswordChangeModal() {
   const { data: session, status } = useSession();
   const usrId = String(session?.user?.id ?? '').trim();
@@ -45,6 +50,10 @@ export function ForcedPasswordChangeModal() {
 
   useEffect(() => {
     if (status !== 'authenticated' || !usrId || usrId === 'su') {
+      setOpen(false);
+      return;
+    }
+    if (isForcedPasswordChangeDismissed(usrId)) {
       setOpen(false);
       return;
     }
@@ -74,6 +83,18 @@ export function ForcedPasswordChangeModal() {
     }
   }, [open]);
 
+  function closeAndRemember() {
+    dismissForcedPasswordChange(usrId);
+    setOpen(false);
+  }
+
+  function onOpenChange(next: boolean) {
+    /** 다른 모달이 위에 열린 뒤 닫힐 때 부모 Dialog가 같이 닫히는 중첩 닫힘 무시.
+     * 의도적 닫기는 버튼에서 closeAndRemember / 저장 성공만 사용. */
+    if (!next) return;
+    setOpen(true);
+  }
+
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError('');
@@ -90,6 +111,7 @@ export function ForcedPasswordChangeModal() {
         setSaving(false);
         return;
       }
+      dismissForcedPasswordChange(usrId);
       setOpen(false);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : '비밀번호 변경에 실패했습니다.');
@@ -100,8 +122,8 @@ export function ForcedPasswordChangeModal() {
   if (status !== 'authenticated' || !usrId || usrId === 'su') return null;
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogContent className="sm:max-w-md">
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-md" showCloseButton={false}>
         <DialogHeader>
           <DialogTitle>비밀번호 변경</DialogTitle>
           <DialogDescription>
@@ -131,9 +153,20 @@ export function ForcedPasswordChangeModal() {
               disabled={saving}
             />
           </div>
-          <Button type="submit" className="w-full" disabled={saving}>
-            {saving ? '저장 중…' : '저장 후 계속'}
-          </Button>
+          <DialogFooter className="flex-col gap-2 sm:flex-col sm:space-x-0">
+            <Button type="submit" className="w-full" disabled={saving}>
+              {saving ? '저장 중…' : '저장 후 계속'}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              className="w-full"
+              disabled={saving}
+              onClick={closeAndRemember}
+            >
+              현재 비밀번호 사용
+            </Button>
+          </DialogFooter>
         </form>
       </DialogContent>
     </Dialog>

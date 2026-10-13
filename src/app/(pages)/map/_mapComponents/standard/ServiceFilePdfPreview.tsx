@@ -48,6 +48,8 @@ type Props = {
   items: ServiceFilePdfPreviewItem[];
   initialIndex: number;
   onClose: () => void;
+  /** 제목 옆 보조 표시 (예: 관리자용 폴더 경로) */
+  titleHint?: string | null;
 };
 
 const MIN_SCALE = 0.25;
@@ -77,7 +79,7 @@ function toolbarBtnClass(disabled?: boolean, active?: boolean): string {
 /**
  * PDF 전용 전체화면 뷰어 — 사이드바(PDF 목록·페이지 썸네일) + 확대·패닝·회전·인쇄.
  */
-export function ServiceFilePdfPreview({ items, initialIndex, onClose }: Props) {
+export function ServiceFilePdfPreview({ items, initialIndex, onClose, titleHint }: Props) {
   const [mounted, setMounted] = useState(false);
   const itemsKey = useMemo(() => items.map((i) => i.fileName).join('\n'), [items]);
 
@@ -88,6 +90,8 @@ export function ServiceFilePdfPreview({ items, initialIndex, onClose }: Props) {
   const [renderScale, setRenderScale] = useState(1);
   const [fitMode, setFitMode] = useState<PdfPreviewFitMode>('page');
   const [viewMode, setViewMode] = useState<PdfViewMode>('single');
+  const [rotation, setRotation] = useState(0);
+  const [pan, setPan] = useState({ x: 0, y: 0 });
   const scaleRef = useRef(1);
   scaleRef.current = scale;
   const panRef = useRef(pan);
@@ -96,8 +100,6 @@ export function ServiceFilePdfPreview({ items, initialIndex, onClose }: Props) {
   rotationRef.current = rotation;
   const viewModeRef = useRef<PdfViewMode>('single');
   viewModeRef.current = viewMode;
-  const [rotation, setRotation] = useState(0);
-  const [pan, setPan] = useState({ x: 0, y: 0 });
   const [dragging, setDragging] = useState(false);
   const [pdfPage, setPdfPage] = useState(1);
   const [pdfNumPages, setPdfNumPages] = useState(0);
@@ -618,9 +620,19 @@ export function ServiceFilePdfPreview({ items, initialIndex, onClose }: Props) {
         >
           <Menu className="h-5 w-5" aria-hidden />
         </button>
-        <span className="min-w-0 flex-1 truncate text-xs font-medium sm:text-sm" title={current.fileName}>
-          {current.fileName}
-        </span>
+        <div className="flex min-w-0 flex-1 items-baseline gap-2">
+          <span className="min-w-0 truncate text-xs font-medium sm:text-sm" title={current.fileName}>
+            {current.fileName}
+          </span>
+          {titleHint ? (
+            <span
+              className="min-w-0 shrink truncate font-mono text-[10px] text-white/55 sm:text-[11px]"
+              title={titleHint}
+            >
+              {titleHint}
+            </span>
+          ) : null}
+        </div>
         <div className="relative flex shrink-0 items-center gap-0.5 sm:gap-1" ref={downloadMenuRef}>
           <button
             type="button"

@@ -5,19 +5,23 @@
       <sld:Name>Default Styler</sld:Name>
       <sld:FeatureTypeStyle>
         <sld:Rule>
-          <sld:PolygonSymbolizer>
-            <sld:Fill>
-              <sld:CssParameter name="fill">#3F51B5</sld:CssParameter>
-              <sld:CssParameter name="fill-opacity">0.3</sld:CssParameter>
-            </sld:Fill>
+          <sld:LineSymbolizer>
             <sld:Stroke>
               <sld:CssParameter name="stroke">#FFFFFF</sld:CssParameter>
+              <sld:CssParameter name="stroke-opacity">0.4</sld:CssParameter>
+              <sld:CssParameter name="stroke-width">3</sld:CssParameter>
             </sld:Stroke>
-          </sld:PolygonSymbolizer>
+          </sld:LineSymbolizer>
+          <sld:LineSymbolizer>
+            <sld:Stroke>
+              <sld:CssParameter name="stroke">#3F51B5</sld:CssParameter>
+              <sld:CssParameter name="stroke-opacity">0.5</sld:CssParameter>
+              <sld:CssParameter name="stroke-width">2</sld:CssParameter>
+            </sld:Stroke>
+          </sld:LineSymbolizer>
         </sld:Rule>
         <sld:VendorOption name="ruleEvaluation">first</sld:VendorOption>
       </sld:FeatureTypeStyle>
     </sld:UserStyle>
   </sld:NamedLayer>
 </sld:StyledLayerDescriptor>
-

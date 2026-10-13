@@ -736,35 +736,33 @@ export function SafetyMapLayerPanel({ onClose }: Props) {
   const showFloodTraceLegend = visible.moisFloodTrace === true;
 
   return (
-    <div className="flex flex-1 min-h-0 flex-col overflow-hidden opacity-[0.98]">
-      <div className="relative shrink-0 border-b border-border bg-gradient-to-b from-primary/5 to-background px-4 py-3">
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0 flex-1 pt-0.5">
-            <h2 className="text-[15px] font-semibold leading-tight text-foreground">재난안전지도</h2>
-            <p className="mt-1 text-[12px] leading-snug text-muted-foreground">
-              홍수·산사태·침수 등 참조 레이어를 켜고 끕니다.
-            </p>
-            <p className="mt-1.5 text-[11px] font-medium text-primary/90">
-              표시 중 {activeCount} / {LAYERS.length}
-            </p>
-            {safemapWmsOnNoKey && (
-              <p className="mt-1.5 text-[11px] text-amber-700 dark:text-amber-200">
-                하천범람·산사태·침수흔적·물놀이관리지역 등 safemap WMS 표시를 위해 runtime.env의 SAFEMAP_API_KEY를 설정하세요.
-              </p>
-            )}
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="shrink-0 rounded p-1 text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
-            title="닫기"
-            aria-label="닫기"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        </div>
+    <div className="standard-panel-root overflow-hidden">
+      <div className="standard-panel-header">
+        <span className="standard-panel-title">재난안전지도</span>
+        <button
+          type="button"
+          onClick={onClose}
+          className="standard-panel-close cursor-pointer"
+          title="닫기"
+          aria-label="닫기"
+        >
+          <X className="h-4 w-4" />
+        </button>
+      </div>
 
-        <div className="mt-3 flex items-center gap-2 border-t border-border/80 pt-3">
+      <div className="standard-filter-section">
+        <p className="text-[12px] leading-snug text-muted-foreground">
+          홍수·산사태·침수 등 참조 레이어를 켜고 끕니다.
+        </p>
+        <p className="text-[11px] font-medium text-primary/90">
+          표시 중 {activeCount} / {LAYERS.length}
+        </p>
+        {safemapWmsOnNoKey && (
+          <p className="text-[11px] text-amber-700 dark:text-amber-200">
+            하천범람·산사태·침수흔적·물놀이관리지역 등 safemap WMS 표시를 위해 runtime.env의 SAFEMAP_API_KEY를 설정하세요.
+          </p>
+        )}
+        <div className="flex items-center gap-2">
           <Layers2 className="h-3.5 w-3.5 shrink-0 text-muted-foreground" strokeWidth={1.75} />
           <span className="text-[11px] text-muted-foreground">레이어</span>
           <span className="flex-1" />

@@ -3,10 +3,12 @@ import path from 'node:path';
 import fs from 'node:fs/promises';
 import { getSessionUsrId } from '@/lib/auth/guard';
 import { userCanAccessServiceFileData } from '@/lib/serviceFileDataAccess';
-import { isAllowedServiceFileDataDownloadPath } from '@/lib/serviceFileData';
+import {
+  decodeServiceFileDataPathB64,
+  isAllowedServiceFileDataDownloadPath,
+} from '@/lib/serviceFileData';
 import { parseSerEngForServiceFileData } from '@/lib/serviceFileDataPolicy';
-
-const GGNR_DATA_DIR = process.env.GGNR_DATA_DIR ?? 'd:\\ggnr_data_dir';
+import { resolveGgnrDataDir, turbopackOpaquePath } from '@/lib/turbopackFsPath';
 
 export const dynamic = 'force-dynamic';
 
@@ -49,6 +51,17 @@ function contentTypeForFile(name: string): string {
   return map[ext] ?? 'application/octet-stream';
 }
 
+/** pathB64 우선, 없으면 레거시 path (영문 파일명 호환) */
+function resolveDownloadRelativePath(req: NextRequest): string | null {
+  const pathB64 = req.nextUrl.searchParams.get('pathB64');
+  if (pathB64 != null && pathB64.trim() !== '') {
+    return decodeServiceFileDataPathB64(pathB64);
+  }
+  const pathParam = req.nextUrl.searchParams.get('path');
+  if (!pathParam || typeof pathParam !== 'string') return null;
+  return pathParam;
+}
+
 export async function GET(req: NextRequest) {
   const usrId = await getSessionUsrId();
   const serEng = parseSerEngForServiceFileData(req.nextUrl.searchParams.get('serEng'));
@@ -59,22 +72,24 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
-  const pathParam = req.nextUrl.searchParams.get('path');
-  if (!pathParam || typeof pathParam !== 'string') {
-    return NextResponse.json({ error: 'path 쿼리가 필요합니다.' }, { status: 400 });
+  const pathParam = resolveDownloadRelativePath(req);
+  if (pathParam == null) {
+    return NextResponse.json({ error: 'path 또는 pathB64 쿼리가 필요합니다.' }, { status: 400 });
   }
 
-  const normalized = pathParam.replace(/\//g, path.sep).replace(/^[/\\]+/, '');
+  const normalized = pathParam.replace(/\\/g, '/').replace(/^\/+/, '');
   if (!isAllowedServiceFileDataDownloadPath(normalized)) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
-  const resolved = path.resolve(GGNR_DATA_DIR, normalized);
-  const base = path.resolve(GGNR_DATA_DIR);
-  const rel = path.relative(base, resolved);
+  const baseDir = resolveGgnrDataDir();
+  const base = path.resolve(baseDir);
+  const resolvedRaw = path.resolve(base, ...normalized.split('/').filter(Boolean));
+  const rel = path.relative(base, resolvedRaw);
   if (!rel || rel.startsWith('..') || path.isAbsolute(rel)) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
+  const resolved = turbopackOpaquePath(resolvedRaw);
 
   try {
     const stat = await fs.stat(resolved);

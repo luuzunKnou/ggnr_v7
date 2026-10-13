@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useSession } from 'next-auth/react';
+import { AuthSessionProvider } from '@/app/providers';
 import tables from '@/config/defineLayer/tables.json';
 import { BackgroundMapSelector, type BackgroundMapGroup } from '@/app/(pages)/map/_mapComponents/mapControlPanel/backgroundMapSelector';
 import {
@@ -11,7 +12,8 @@ import {
   type MapPrintSnapshot,
   type MapPrintTool,
 } from './mapPrintTypes';
-import { downloadMapPrintImage, formatPrintDateTime, formatPrintScaleMeters, printMapPrintPaper } from './mapPrintCapture';
+import { MapScaleIndicator } from '@/app/(pages)/map/_mapComponents/hooks/MapScaleIndicator';
+import { downloadMapPrintImage, formatPrintDateTime, printMapPrintPaper } from './mapPrintCapture';
 import { useMapPrintMap } from './useMapPrintMap';
 import { useMapPrintTools } from './useMapPrintTools';
 import { MapPrintToolbar } from './MapPrintToolbar';
@@ -53,7 +55,16 @@ type Props = {
   backgroundMapGroups: BackgroundMapGroup[];
 };
 
-export function MapPrintModal({ open, onClose, snapshot, backgroundMapGroups }: Props) {
+export function MapPrintModal(props: Props) {
+  if (!props.open || !props.snapshot) return null;
+  return (
+    <AuthSessionProvider>
+      <MapPrintModalView {...props} />
+    </AuthSessionProvider>
+  );
+}
+
+function MapPrintModalView({ open, onClose, snapshot, backgroundMapGroups }: Props) {
   const { data: session } = useSession();
   const paperRef = useRef<HTMLDivElement>(null);
   const mapHostRef = useRef<HTMLDivElement>(null);
@@ -84,7 +95,6 @@ export function MapPrintModal({ open, onClose, snapshot, backgroundMapGroups }: 
     setFromSnapshot(snapshot?.visibleThematicLayerNames)
   );
   const [openControlId, setOpenControlId] = useState<PrintControlLayerId | null>(null);
-  const [scaleText, setScaleText] = useState('—');
   const [printedAt, setPrintedAt] = useState(() => formatPrintDateTime());
   const [busy, setBusy] = useState(false);
 
@@ -122,7 +132,7 @@ export function MapPrintModal({ open, onClose, snapshot, backgroundMapGroups }: 
     setPrintedAt(formatPrintDateTime());
   }, [open, snapshot]);
 
-  const { map } = useMapPrintMap(
+  const { map, mapReady } = useMapPrintMap(
     mapHostRef,
     open,
     snapshot,
@@ -147,16 +157,6 @@ export function MapPrintModal({ open, onClose, snapshot, backgroundMapGroups }: 
     stopElevationTool
   );
 
-  useEffect(() => {
-    if (!map) return;
-    const update = () => setScaleText(formatPrintScaleMeters(map));
-    update();
-    map.on('moveend', update);
-    return () => {
-      map.un('moveend', update);
-    };
-  }, [map]);
-
   const userName = String(session?.user?.name ?? '').trim() || '게스트';
 
   const handleSaveImage = useCallback(async () => {
@@ -165,14 +165,14 @@ export function MapPrintModal({ open, onClose, snapshot, backgroundMapGroups }: 
     setSidePanel(null);
     try {
       map?.renderSync();
-      await downloadMapPrintImage(paperRef.current, map);
+      await downloadMapPrintImage(paperRef.current, map, 'map-image.png', backgroundMapId);
     } catch (e) {
       console.error(e);
       window.alert('이미지 저장에 실패했습니다.');
     } finally {
       setBusy(false);
     }
-  }, [busy, map]);
+  }, [busy, map, backgroundMapId]);
 
   const handlePrint = useCallback(() => {
     if (!paperRef.current) return;
@@ -335,10 +335,14 @@ export function MapPrintModal({ open, onClose, snapshot, backgroundMapGroups }: 
           <div className="map-print-footer-left">
             본 지도는 참고용이며, 복제·배포 시 관련 규정을 확인하세요.
           </div>
-          <div className="map-print-footer-right">
-            <div>축척 {scaleText}</div>
-            <div>담당자 : {userName}</div>
-            <div>{printedAt}</div>
+          <div className="map-print-footer-right-wrap">
+            <div className="map-print-footer-scale">
+              <MapScaleIndicator map={map} mapReady={mapReady} editable />
+            </div>
+            <div className="map-print-footer-right">
+              <div>담당자 : {userName}</div>
+              <div>{printedAt}</div>
+            </div>
           </div>
         </div>
       </div>

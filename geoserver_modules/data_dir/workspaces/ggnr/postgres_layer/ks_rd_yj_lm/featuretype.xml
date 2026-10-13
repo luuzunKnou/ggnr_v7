@@ -1,0 +1,41 @@
+<featureType>
+  <id>FeatureTypeInfoImpl-7b45823a:1a113f17c5f:-779a</id>
+  <name>ks_rd_yj_lm</name>
+  <nativeName>ks_rd_yj_lm</nativeName>
+  <namespace>
+    <id>NamespaceInfoImpl-4bf97568:19c4d6c3053:-7ffa</id>
+  </namespace>
+  <title>ks_rd_yj_lm</title>
+  <keywords>
+    <string>features</string>
+    <string>ks_rd_yj_lm</string>
+  </keywords>
+  <srs>EPSG:5181</srs>
+  <nativeBoundingBox>
+    <minx>364984.44773585</minx>
+    <maxx>369269.05643513</maxx>
+    <miny>257410.39306479</miny>
+    <maxy>259952.30377859</maxy>
+    <crs class="projected">EPSG:5181</crs>
+  </nativeBoundingBox>
+  <latLonBoundingBox>
+    <minx>128.82514076829312</minx>
+    <maxx>128.87305465163095</maxx>
+    <miny>35.79944908494916</miny>
+    <maxy>35.82307546453726</maxy>
+    <crs>EPSG:4326</crs>
+  </latLonBoundingBox>
+  <projectionPolicy>FORCE_DECLARED</projectionPolicy>
+  <enabled>true</enabled>
+  <store class="dataStore">
+    <id>DataStoreInfoImpl-4bf97568:19c4d6c3053:-7ff9</id>
+  </store>
+  <serviceConfiguration>false</serviceConfiguration>
+  <maxFeatures>0</maxFeatures>
+  <numDecimals>0</numDecimals>
+  <padWithZeros>false</padWithZeros>
+  <forcedDecimal>false</forcedDecimal>
+  <overridingServiceSRS>false</overridingServiceSRS>
+  <skipNumberMatched>false</skipNumberMatched>
+  <circularArcPresent>false</circularArcPresent>
+</featureType>

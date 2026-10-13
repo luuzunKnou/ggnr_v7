@@ -56,11 +56,18 @@ export function useFeatureIdentify(
   visibleLayerNames: Set<string>,
   /** true이면 지도 클릭 식별(identifyFeatures)을 수행하지 않음 (예: CCTV 패널 열림) */
   identifyDisabled = false,
+  /**
+   * WMS와 동일 레이어별 속성 필터 (예: 하천기본계획 선택 하천 river_name).
+   * 화면에 안 보이는 도형이 식별되지 않도록 서버 identify에 함께 전달.
+   */
+  tableFilters: Record<string, string> | null = null,
 ) {
   const visibleRef = useRef(visibleLayerNames);
   visibleRef.current = visibleLayerNames;
   const disabledRef = useRef(identifyDisabled);
   disabledRef.current = identifyDisabled;
+  const tableFiltersRef = useRef(tableFilters);
+  tableFiltersRef.current = tableFilters;
 
   const [popupState, setPopupState] = useState<IdentifyPopupState | null>(null);
   const overlayRef = useRef<Overlay | null>(null);
@@ -110,12 +117,20 @@ export function useFeatureIdentify(
       const bufferMeters = zoomToBuffer(zoom);
       const coord = evt.coordinate as [number, number];
       const [x, y] = coord;
+      const filters = tableFiltersRef.current;
 
       try {
         const res = await call('', 'POST', {
           service: 'standardService',
           action: 'identifyFeatures',
-          params: { x, y, buffer: bufferMeters, tables, schema: 'layer' },
+          params: {
+            x,
+            y,
+            buffer: bufferMeters,
+            tables,
+            schema: 'layer',
+            ...(filters && Object.keys(filters).length > 0 ? { tableFilters: filters } : {}),
+          },
         });
         const data = res?.data ?? res;
         const results: IdentifyLayerResult[] = Array.isArray(data?.results) ? data.results : [];
@@ -146,4 +161,4 @@ export function useFeatureIdentify(
   }, [map, mapReady, handleClick]);
 
   return { popupState, popupElRef, closePopup };
- }
+}

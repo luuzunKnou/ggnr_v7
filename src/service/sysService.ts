@@ -5,7 +5,7 @@ import { db } from '@/database/db';
 import { sys } from '@/database/schema/sys';
 import { asc, eq } from 'drizzle-orm';
 
-/** DB 행을 목록용 공통 형태로 변환 (snake_case, serviceList/layerList 빈 배열) */
+/** DB 행을 목록용 공통 형태로 변환 (snake_case, serviceList/layerGroupList 빈 배열) */
 function rowToSystemItem(row: {
   sysKey: number;
   sysKor: string | null;
@@ -28,7 +28,7 @@ function rowToSystemItem(row: {
     sys_link: row.sysLink ?? '',
     sys_is_private: row.sysIsPrivate === true,
     serviceList: [] as string[],
-    layerList: [] as string[],
+    layerGroupList: [] as string[],
   };
 }
 

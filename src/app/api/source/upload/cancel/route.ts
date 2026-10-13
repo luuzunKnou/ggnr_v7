@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSessionUsrId } from '@/lib/auth/guard';
-import { getUploadProgress } from '@/service/sourceUploadProgress';
+import { getUploadProgress, patchUploadProgress } from '@/service/sourceUploadProgress';
 import { cancelRemoteSourceUpload } from '@/service/sourceUploadRemote';
 
 export const dynamic = 'force-dynamic';
 
-/** 현재 코드 자동 업로드 취소 → GNMS POST …/api/source/upload/cancel */
+/** 소스코드 업로드 취소 — 서버 전송 루프를 멈추고 GNMS 세션을 취소 */
 export async function POST(req: NextRequest) {
   try {
     if (!(await getSessionUsrId())) {
@@ -13,48 +13,29 @@ export async function POST(req: NextRequest) {
     }
 
     const body = (await req.json().catch(() => ({}))) as {
-      uploadId?: string;
       progressId?: string;
       reason?: string;
+      localOnly?: boolean;
     };
 
-    let uploadId = typeof body.uploadId === 'string' ? body.uploadId.trim() : '';
     const progressId = typeof body.progressId === 'string' ? body.progressId.trim() : '';
-
-    if (!uploadId && progressId) {
-      const snap = getUploadProgress(progressId);
-      uploadId = snap?.remoteUploadId?.trim() ?? '';
-    }
-
-    if (!uploadId) {
-      return NextResponse.json(
-        { ok: false, error: 'uploadId 없음 (init 전이면 취소 통보 생략)' },
-        { status: 400 }
-      );
-    }
-
-    const result = await cancelRemoteSourceUpload({
-      uploadId,
-      reason: typeof body.reason === 'string' ? body.reason : 'user_abort',
-    });
-
-    if (!result.ok) {
-      const status = result.status >= 400 && result.status < 600 ? result.status : 502;
-      return NextResponse.json(
-        {
-          ok: false,
+    let remoteCancelled = false;
+    if (progressId) {
+      const uploadId = getUploadProgress(progressId)?.remoteUploadId?.trim();
+      patchUploadProgress(progressId, { cancelled: true });
+      if (uploadId) {
+        const cancelled = await cancelRemoteSourceUpload({
           uploadId,
-          status: result.gnmsStatus,
-          error: result.error ?? 'GNMS cancel 실패',
-        },
-        { status }
-      );
+          reason: body.reason?.trim() || 'user_abort',
+        });
+        remoteCancelled = cancelled.ok;
+      }
     }
 
     return NextResponse.json({
       ok: true,
-      uploadId,
-      status: result.gnmsStatus ?? 'cancelled',
+      localCleared: Boolean(progressId),
+      remoteCancelled,
     });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'cancel failed';

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Calendar,
   ChevronRight,
+  FileText,
   Loader2,
   Plus,
   Search,
@@ -16,13 +17,13 @@ import { cn } from "@/lib/utils";
 import { Input } from "@/app/shadcnComponents/ui/input";
 import { Button } from "@/app/shadcnComponents/ui/button";
 import { useMapContext } from "../../_mapComponents/MapContext";
+import { MAP_AUTO_NAV_MAX_ZOOM } from "../../_mapComponents/config/mapDefaults";
+import { scheduleFitMapToExtent3857 } from "../../_mapComponents/config/mapAutoNavigation";
 import { refreshServiceWmsLayer } from "../../_mapComponents/layerFactory/serviceLayerFactory";
 import { memoWmsLayerId, parseMemoRowKey } from "./memoConfig";
-import {
-  animateMemoToCenter3857,
-  center3857FromExtent,
-  useMemoMapHighlight,
-} from "./useMemoMapHighlight";
+import { useMemoMapHighlight } from "./useMemoMapHighlight";
+import { useMemoMapClick } from "./useMemoMapClick";
+import { useSerWriteAccess } from "@/hooks/useSerWriteAccess";
 
 type ListRow = {
   rowKey: string;
@@ -53,6 +54,7 @@ export function MemoListPanel({
   onAdd,
 }: Props) {
   const mapContext = useMapContext();
+  const canWrite = useSerWriteAccess();
   const mapContextRef = useRef(mapContext);
   mapContextRef.current = mapContext;
   const layersAddedRef = useRef<Set<string>>(new Set());
@@ -110,11 +112,19 @@ export function MemoListPanel({
   }, [ensureLayerVisible, tableOptions]);
 
   const focusedIdRef = useRef<string | null>(null);
+  /** 목록 클릭·저장 후: true / 지도 객체 클릭: false — 지도 이동만 제어 */
+  const fitOnFocusRef = useRef(true);
 
-  const focusMemoOnMap = useCallback(async (rowKey: string, tableName: string, memoKey: string) => {
+  const focusMemoOnMap = useCallback(async (
+    rowKey: string,
+    tableName: string,
+    memoKey: string,
+    opts?: { fit?: boolean }
+  ) => {
     focusedIdRef.current = rowKey;
     ensureLayerVisible(tableName);
-    setNavigatingId(rowKey);
+    const doFit = opts?.fit !== false;
+    if (doFit) setNavigatingId(rowKey);
     try {
       const res = await call("", "POST", {
         service: "memoService",
@@ -124,19 +134,36 @@ export function MemoListPanel({
       const data = res?.data ?? res;
       const geom = data?.geomGeoJson4326;
       setHighlightGeom(geom && typeof geom === "object" ? (geom as Record<string, unknown>) : null);
+      if (!doFit) return;
       const map = mapContextRef.current?.mapInstanceRef?.current;
-      const center = center3857FromExtent(data?.extent3857);
-      if (map && center) {
-        animateMemoToCenter3857(map, center, () =>
-          mapContextRef.current?.applyMapViewPaddingRef?.current?.()
-        );
+      const extent = data?.extent3857;
+      if (
+        map &&
+        Array.isArray(extent) &&
+        extent.length === 4 &&
+        extent.every((v: unknown) => Number.isFinite(Number(v)))
+      ) {
+        scheduleFitMapToExtent3857(map, extent.map(Number), {
+          maxZoom: MAP_AUTO_NAV_MAX_ZOOM,
+          pointZoom: 18,
+          applyMapViewPadding: () =>
+            mapContextRef.current?.applyMapViewPaddingRef?.current?.(),
+        });
       }
     } catch {
       setHighlightGeom(null);
     } finally {
-      setNavigatingId(null);
+      if (doFit) setNavigatingId(null);
     }
   }, [ensureLayerVisible]);
+
+  useMemoMapClick({
+    enabled: true,
+    onSelectRowKey: (rowKey) => {
+      fitOnFocusRef.current = false;
+      onSelectDetailId(rowKey);
+    },
+  });
 
   const handleRowClick = useCallback(
     (row: ListRow) => {
@@ -147,8 +174,9 @@ export function MemoListPanel({
         onSelectDetailId(null);
         return;
       }
+      fitOnFocusRef.current = true;
       onSelectDetailId(row.rowKey);
-      void focusMemoOnMap(row.rowKey, row.tableName, row.memoKey);
+      void focusMemoOnMap(row.rowKey, row.tableName, row.memoKey, { fit: true });
     },
     [focusMemoOnMap, onSelectDetailId, selectedDetailId]
   );
@@ -165,7 +193,9 @@ export function MemoListPanel({
       setHighlightGeom(null);
       return;
     }
-    void focusMemoOnMap(selectedDetailId, parsed.tableName, parsed.memoKey);
+    const fit = fitOnFocusRef.current;
+    fitOnFocusRef.current = true;
+    void focusMemoOnMap(selectedDetailId, parsed.tableName, parsed.memoKey, { fit });
   }, [focusMemoOnMap, selectedDetailId]);
 
   const prevRefreshKeyRef = useRef(refreshKey);
@@ -176,7 +206,7 @@ export function MemoListPanel({
     const parsed = parseMemoRowKey(selectedDetailId);
     if (!parsed) return;
     refreshServiceWmsLayer(mapContextRef.current?.mapInstanceRef?.current);
-    void focusMemoOnMap(selectedDetailId, parsed.tableName, parsed.memoKey);
+    void focusMemoOnMap(selectedDetailId, parsed.tableName, parsed.memoKey, { fit: true });
   }, [focusMemoOnMap, refreshKey, selectedDetailId]);
 
   useEffect(() => {
@@ -218,7 +248,7 @@ export function MemoListPanel({
           <div className="flex items-center justify-between px-3 pt-3 pb-2">
             <div className="flex items-center gap-2">
               <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/5">
-                <StickyNote className="h-4 w-4 text-primary/80" />
+                <FileText className="h-4 w-4 text-primary/80" />
               </div>
               <div>
                 <h1 className="text-sm font-semibold text-foreground/90">메모관리</h1>
@@ -228,15 +258,17 @@ export function MemoListPanel({
               </div>
             </div>
             <div className="flex items-center gap-1">
-              <Button
-                size="sm"
-                className="h-[26px] min-h-[26px] gap-1 px-2.5 text-[12px] font-light border border-border bg-muted/50 text-muted-foreground hover:border-primary hover:bg-primary/15 hover:text-primary rounded-lg"
-                onClick={handleAdd}
-                disabled={tableOptions.length === 0}
-              >
-                <Plus className="h-3 w-3" />
-                메모 추가
-              </Button>
+              {canWrite ? (
+                <Button
+                  size="sm"
+                  className="h-[26px] min-h-[26px] gap-1 px-2.5 text-[12px] font-light border border-border bg-muted/50 text-muted-foreground hover:border-primary hover:bg-primary/15 hover:text-primary rounded-lg"
+                  onClick={handleAdd}
+                  disabled={tableOptions.length === 0}
+                >
+                  <Plus className="h-3 w-3" />
+                  메모 추가
+                </Button>
+              ) : null}
               <button
                 type="button"
                 onClick={onClose}

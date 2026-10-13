@@ -9,115 +9,8 @@ import { KIND_TO_FOLDER_TOKEN } from './aerialMediaRoots';
 /** 드론영상 — DB 목록으로 교체. 초기값은 빈 배열(목업 시드 없음). */
 export const MOCK_ORTHO_UNITS: WorkUnitItem[] = [];
 
-export const MOCK_DRONE_UNITS: WorkUnitItem[] = [
-  {
-    id: 'drone-1',
-    workDate: '2026-07-05',
-    workName: '안동 시내 현장 점검',
-    folderName: '20260705_사진동영상_5181_안동 시내 현장 점검',
-    kind: 'drone',
-    crsHint: '5181',
-    attrs: [
-      { label: '작업단위 명', value: '안동 시내 현장 점검' },
-      { label: '작업일', value: '2026-07-05' },
-      { label: '좌표계', value: 'EPSG:5181' },
-      { label: '임무/작업 목적', value: '공사 현장 진행 점검' },
-      { label: '작성자', value: '최드론' },
-      { label: '촬영자', value: '최드론' },
-      { label: '촬영일시', value: '2026-07-05 11:30' },
-      { label: '촬영기기', value: 'DJI Mini 4 Pro' },
-      { label: '파일 포맷', value: 'JPEG / MP4' },
-      { label: '메모', value: '오전 맑음, 풍속 2m/s' },
-    ],
-    files: [
-      {
-        id: 'df-1',
-        name: 'photo_001.jpg',
-        sizeLabel: '8.2 MB',
-        format: 'jpg',
-        status: 'registered',
-        previewKind: 'image',
-        locationLabel: '354416.2, 342457.5',
-      },
-      {
-        id: 'df-2',
-        name: 'photo_002.jpg',
-        sizeLabel: '7.9 MB',
-        format: 'jpg',
-        status: 'registered',
-        previewKind: 'image',
-        locationLabel: '354859.9, 342687.5',
-      },
-      {
-        id: 'df-3',
-        name: 'clip_001.mp4',
-        sizeLabel: '124 MB',
-        format: 'mp4',
-        status: 'registered',
-        previewKind: 'video',
-        locationLabel: '353974.6, 342116.5',
-      },
-      {
-        id: 'df-4',
-        name: 'photo_003.jpg',
-        sizeLabel: '8.0 MB',
-        format: 'jpg',
-        status: 'registered',
-        previewKind: 'image',
-        locationLabel: '354605.3, 341905.8',
-      },
-    ],
-  },
-  {
-    id: 'drone-2',
-    workDate: '2026-07-04',
-    workName: '안동 남동 도로 점검',
-    folderName: '20260704_사진동영상_5181_안동 남동 도로 점검',
-    kind: 'drone',
-    crsHint: '5181',
-    attrs: [
-      { label: '작업단위 명', value: '안동 남동 도로 점검' },
-      { label: '작업일', value: '2026-07-04' },
-      { label: '좌표계', value: 'EPSG:5181' },
-      { label: '임무/작업 목적', value: '도로 포장 상태 촬영' },
-      { label: '작성자', value: '정도로' },
-      { label: '촬영자', value: '정도로' },
-      { label: '촬영일시', value: '2026-07-04 15:00' },
-      { label: '촬영기기', value: 'DJI Air 3' },
-      { label: '파일 포맷', value: 'JPEG' },
-      { label: '메모', value: '—' },
-    ],
-    files: [
-      {
-        id: 'df-5',
-        name: 'road_01.jpg',
-        sizeLabel: '6.1 MB',
-        format: 'jpg',
-        status: 'registered',
-        previewKind: 'image',
-        locationLabel: '356232.9, 341047.0',
-      },
-      {
-        id: 'df-6',
-        name: 'road_02.jpg',
-        sizeLabel: '6.4 MB',
-        format: 'jpg',
-        status: 'registered',
-        previewKind: 'image',
-        locationLabel: '356674.6, 341388.1',
-      },
-      {
-        id: 'df-7',
-        name: 'road_03.jpg',
-        sizeLabel: '6.2 MB',
-        format: 'jpg',
-        status: 'registered',
-        previewKind: 'image',
-        locationLabel: '355970.3, 340709.2',
-      },
-    ],
-  },
-];
+/** 사진·동영상 — DB 목록으로 교체. 초기 목업 점을 두면 서버 목록과 지도 점이 어긋난다. */
+export const MOCK_DRONE_UNITS: WorkUnitItem[] = [];
 
 /** 서버 listWorkUnits(panorama) 로 채움 */
 export const MOCK_PANO_UNITS: WorkUnitItem[] = [];
@@ -271,6 +164,7 @@ export function applyWorkUnitMediaFiles(
     relativePath?: string;
     x5181?: number | null;
     y5181?: number | null;
+    points5181?: [number, number][] | null;
   }>
 ): void {
   const unit = mockUnitsForKind(kind).find((u) => u.folderName === folderName);
@@ -285,6 +179,7 @@ export function applyWorkUnitMediaFiles(
     locationLabel: m.locationLabel ?? undefined,
     x5181: m.x5181 ?? undefined,
     y5181: m.y5181 ?? undefined,
+    points5181: m.points5181 ?? undefined,
     relativePath: m.relativePath,
   }));
   const st = unit.attrs.find((a) => a.label === '상태');
@@ -549,7 +444,7 @@ export function removeMediaFileFromStore(
 }
 
 /**
- * DB 작업단위 목록으로 사진·동영상 또는 파노라마 목록 교체.
+ * DB 작업단위 목록으로 사진·동영상 또는 항공뷰 목록 교체.
  */
 export function replaceMediaUnitsFromServer(
   kind: 'drone' | 'panorama',
@@ -573,6 +468,7 @@ export function replaceMediaUnitsFromServer(
       relativePath?: string;
       x5181?: number | null;
       y5181?: number | null;
+      points5181?: [number, number][] | null;
     }>;
   }>
 ): void {
@@ -591,6 +487,7 @@ export function replaceMediaUnitsFromServer(
       locationLabel: m.locationLabel ?? undefined,
       x5181: m.x5181 ?? undefined,
       y5181: m.y5181 ?? undefined,
+      points5181: m.points5181 ?? undefined,
       relativePath: m.relativePath,
     }));
     arr.push({

@@ -31,6 +31,8 @@ export const GGNR_DATA_PATHS = {
   pdfToJpg: 'PDFToJPG',
   /** OCR Data Migration (작업명 폴더에 이미지 입력) */
   ocr: 'OCR',
+  /** 정책지도 바로가기 (zip 전개 HTML) */
+  policyMap: 'policy_map',
 } as const;
 
 /** ensureBaseStructure 가 생성하는 루트 폴더 */
@@ -49,5 +51,6 @@ export const GGNR_BASE_STRUCTURE = [
   GGNR_DATA_PATHS.dtilesTiff,
   GGNR_DATA_PATHS.pdfToJpg,
   GGNR_DATA_PATHS.ocr,
+  GGNR_DATA_PATHS.policyMap,
   GGNR_DATA_PATHS.meta,
 ] as const;

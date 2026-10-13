@@ -6,6 +6,7 @@ import { sql } from 'drizzle-orm';
 import {
   getAllRoadLedgerDocLayerIds,
   ROAD_LEDGER_DOC_LABELS_WITH_LAYER_COUNT,
+  ROAD_LEDGER_DOC_LIST_GROUP_LABELS,
   ROAD_LEDGER_DOC_LAYERS,
   ROAD_LEDGER_RDID_JOIN_SEGMENT_LEN,
   ROAD_LEDGER_RDID_LAYER_LEN,
@@ -46,6 +47,83 @@ async function mapLimit<T, R>(
 
 function esc(value: string): string {
   return value.replace(/'/g, "''");
+}
+
+/** 숫자 토큰이면 노선번호·구간 숫자 동등 비교 SQL 조각 */
+function roadLedgerNumericFieldMatchSql(col: string, token: string): string | null {
+  if (!/^\d+$/.test(token)) return null;
+  const n = parseInt(token, 10);
+  if (!Number.isFinite(n)) return null;
+  return `(
+    TRIM(BOTH FROM COALESCE(${col}::text, '')) ~ '^[0-9]+$'
+    AND (TRIM(BOTH FROM ${col}::text))::bigint = ${n}
+  )`;
+}
+
+/**
+ * 검색어 파싱 — `20호선`→노선번호, `1구간`→구간, 나머지는 이름 등 일반 검색.
+ * 호선·구간이 함께 있으면 AND (예: "305호선 1구간").
+ */
+function buildRoadLedgerKeywordClause(keyword: string): string {
+  const k = String(keyword ?? '').trim();
+  if (!k) return '';
+
+  const hoseonNums = [...k.matchAll(/(\d+)\s*호선/gi)].map((m) => String(parseInt(m[1]!, 10)));
+  const guganNums = [...k.matchAll(/(\d+)\s*구간/gi)].map((m) => String(parseInt(m[1]!, 10)));
+
+  const rest = k
+    .replace(/\d+\s*호선/gi, ' ')
+    .replace(/\d+\s*구간/gi, ' ')
+    .replace(/호선/gi, ' ')
+    .replace(/구간/gi, ' ')
+    .trim();
+  const freeTokens = rest ? rest.split(/\s+/).filter(Boolean) : [];
+
+  const andParts: string[] = [];
+
+  for (const n of hoseonNums) {
+    const eq = roadLedgerNumericFieldMatchSql('road_no', n);
+    // 호선은 숫자 완전일치만 — ILIKE '%5%' 가 15호선까지 잡히지 않게
+    if (eq) andParts.push(eq);
+  }
+  for (const n of guganNums) {
+    const eq = roadLedgerNumericFieldMatchSql('sect', n);
+    if (eq) andParts.push(eq);
+  }
+
+  for (const t of freeTokens) {
+    const e = esc(t);
+    const numEqNo = roadLedgerNumericFieldMatchSql('road_no', t);
+    const numEqSect = roadLedgerNumericFieldMatchSql('sect', t);
+    const ors = [
+      `COALESCE(road_name::text, '') ILIKE '%${e}%'`,
+      `COALESCE(road_no::text, '') ILIKE '%${e}%'`,
+      `COALESCE(rdid::text, '') ILIKE '%${e}%'`,
+      `COALESCE(sect::text, '') ILIKE '%${e}%'`,
+      `COALESCE(dsgdate::text, '') ILIKE '%${e}%'`,
+      `COALESCE(lenth::text, '') ILIKE '%${e}%'`,
+      `COALESCE(road_rank::text, '') ILIKE '%${e}%'`,
+    ];
+    if (numEqNo) ors.push(numEqNo);
+    if (numEqSect) ors.push(numEqSect);
+    andParts.push(`(${ors.join(' OR ')})`);
+  }
+
+  // 호선·구간·일반어가 모두 없으면 원문 전체 OR 검색 (기존과 동일)
+  if (andParts.length === 0) {
+    const e = esc(k);
+    return ` AND (
+        COALESCE(road_name::text, '') ILIKE '%${e}%'
+        OR COALESCE(road_no::text, '') ILIKE '%${e}%'
+        OR COALESCE(rdid::text, '') ILIKE '%${e}%'
+        OR COALESCE(sect::text, '') ILIKE '%${e}%'
+        OR COALESCE(dsgdate::text, '') ILIKE '%${e}%'
+        OR COALESCE(lenth::text, '') ILIKE '%${e}%'
+        OR COALESCE(road_rank::text, '') ILIKE '%${e}%'
+      )`;
+  }
+
+  return ` AND (${andParts.join(' AND ')})`;
 }
 
 /** 목록 SQL bool — node 등에서 문자열 't'/'f'로 올 수 있음. 미인식 시 접미어 표시(보수적 true). */
@@ -100,17 +178,7 @@ export async function getRoadLedgerList(params?: {
   const tableName = await resolveLayerTableName('a0020000');
   const safeTbl = tableName.replace(/"/g, '""');
 
-  const kwClause = keyword
-    ? ` AND (
-        COALESCE(road_name::text, '') ILIKE '%${esc(keyword)}%'
-        OR COALESCE(road_no::text, '') ILIKE '%${esc(keyword)}%'
-        OR COALESCE(rdid::text, '') ILIKE '%${esc(keyword)}%'
-        OR COALESCE(sect::text, '') ILIKE '%${esc(keyword)}%'
-        OR COALESCE(dsgdate::text, '') ILIKE '%${esc(keyword)}%'
-        OR COALESCE(lenth::text, '') ILIKE '%${esc(keyword)}%'
-        OR COALESCE(road_rank::text, '') ILIKE '%${esc(keyword)}%'
-      )`
-    : '';
+  const kwClause = keyword ? buildRoadLedgerKeywordClause(keyword) : '';
 
   const res = await db.execute(
     sql.raw(
@@ -277,7 +345,7 @@ export async function getRoadLedgerFacilityFeatureByOgcFid(params: {
   return { row, defineTableKorName: kor };
 }
 
-const FACILITY_GROUP_KEYS = new Set<string>(ROAD_LEDGER_DOC_LABELS_WITH_LAYER_COUNT);
+const FACILITY_GROUP_KEYS = new Set<string>(ROAD_LEDGER_DOC_LIST_GROUP_LABELS);
 
 type DefineLayerRowLite = {
   define_table_name?: string;

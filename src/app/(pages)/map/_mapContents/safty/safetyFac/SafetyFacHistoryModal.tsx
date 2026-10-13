@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Calendar, Check, FileText, Loader2, Trash2, User, X } from 'lucide-react';
+import { Calendar, Check, FileText, Loader2, User, X } from 'lucide-react';
 import { useSession } from 'next-auth/react';
 import { call } from '@/lib/api';
 import { formatToYmdOrText } from '@/lib/formatDateYmd';
@@ -212,24 +212,16 @@ export function SafetyFacHistoryModal({
           <div className="mt-3 flex items-center justify-end gap-2">
             {!isCreateMode && item?.id ? (
               <Button
+                type="button"
                 size="sm"
                 variant="outline"
                 onClick={() => void handleDelete()}
                 disabled={saving || deleting}
-                title="삭제"
-                className="mr-auto h-[26px] min-h-[26px] cursor-pointer gap-1 border border-border bg-muted/50 px-2.5 text-[12px] font-light text-red-600 hover:border-red-200 hover:bg-red-50 hover:text-red-700 disabled:cursor-not-allowed dark:hover:bg-red-950/30"
+                title={deleting ? '삭제 중…' : '삭제'}
+                className="h-[26px] min-h-[26px] cursor-pointer gap-1 border border-border bg-muted/50 px-2.5 text-[12px] font-light text-muted-foreground hover:border-destructive hover:bg-destructive/15 hover:text-destructive disabled:cursor-not-allowed"
               >
-                {deleting ? (
-                  <>
-                    <Loader2 className="h-3 w-3 animate-spin" aria-hidden />
-                    삭제 중…
-                  </>
-                ) : (
-                  <>
-                    <Trash2 className="h-3 w-3" />
-                    삭제
-                  </>
-                )}
+                <X className="h-3 w-3" />
+                {deleting ? '삭제 중…' : '삭제'}
               </Button>
             ) : null}
             <Button

@@ -24,5 +24,5 @@ export const USE_FEE_SYNC_CONNECTION = {
 /** 동일 부과번호 연속 빈응답/실패 시 해당 (연도×인터페이스) 탐색 종료 */
 export const USE_FEE_SYNC_MAX_EMPTY_COUNT = 5;
 
-/** fyr 미지정 시 탐색 시작 연도 (~ 현재 연도) */
+/** fyr 미지정·테이블 비어 있을 때만 쓰는 탐색 시작 연도. 데이터가 있으면 저장된 최댓값~올해 */
 export const USE_FEE_SYNC_DEFAULT_START_YEAR = 2000;

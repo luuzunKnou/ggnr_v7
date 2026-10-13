@@ -43,7 +43,7 @@ export function ParcelSlider({ slides }: ParcelSliderProps) {
   }, [slides.length])
 
   return (
-    <div className="relative overflow-hidden min-h-[280px] rounded">
+    <div className="relative h-full min-h-[280px] overflow-hidden rounded">
       {/* Slides — z-0으로 두고 컨트롤(z-10)이 항상 위에 오게 함 */}
       <div className="relative z-0 min-h-[280px] h-full">
         {slides.map((slide, index) => (

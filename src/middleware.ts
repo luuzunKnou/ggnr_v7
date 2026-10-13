@@ -61,6 +61,11 @@ export default auth((req) => {
     return NextResponse.next();
   }
 
+  // QGIS WFS/WMS 권한 프록시 (key 인증) — 로그인 세션 없이 접근
+  if (path === '/wfs.do' || path === '/wfsUpdate.do' || path === '/wms.do') {
+    return NextResponse.next();
+  }
+
   const isApiAuth = path.startsWith('/api/auth');
   const isApi = path.startsWith('/api');
   if (isApiAuth) return NextResponse.next();

@@ -1,0 +1,19 @@
+diff --git a/node_modules/drizzle-kit/api.mjs b/node_modules/drizzle-kit/api.mjs
+index 416b46c..245e87f 100644
+--- a/node_modules/drizzle-kit/api.mjs
++++ b/node_modules/drizzle-kit/api.mjs
+@@ -75178,7 +75178,14 @@ var pushSchema = async (imports, drizzleInstance, schemaFilters, tablesFilter, e
+     getTablesFilterByExtensions({ extensionsFilters, dialect: "postgresql" })
+   );
+   const db = {
++    // Fix: composite PK introspect passes [$schema, $table] but sql.raw dropped params
++    // (drizzle-orm#5557). Prefer pg client.query so $1/$2 bind correctly.
+     query: async (query, params) => {
++      const client = drizzleInstance.$client;
++      if (client && typeof client.query === "function") {
++        const res = params?.length ? await client.query(query, params) : await client.query(query);
++        return res.rows;
++      }
+       const res = await drizzleInstance.execute(sql.raw(query));
+       return res.rows;
+     }

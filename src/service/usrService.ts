@@ -1,14 +1,17 @@
-import { and, asc, desc, eq, isNotNull, isNull, or } from 'drizzle-orm';
+import { and, asc, desc, eq, isNotNull, isNull, ne, or } from 'drizzle-orm';
 import { db } from '@/database/db';
 import { usr } from '@/database/schema/usr';
 import { ug } from '@/database/schema/ug';
 import { ut } from '@/database/schema/ut';
 import { perm } from '@/database/schema/perm';
 import { upMap } from '@/database/schema/up_map';
+import { gpMap } from '@/database/schema/gp_map';
+import { tpMap } from '@/database/schema/tp_map';
 import { tempPasswordCandidates } from '@/lib/auth/hangulQwerty';
 import { hashPassword, isForbiddenNewPassword, isTemporaryPassword } from '@/lib/auth/password';
 import { getSessionUsrId } from '@/lib/auth/guard';
 import { recordUserLog, UL_CAT_USER } from '@/service/userLogService';
+import { ACCESS_REQUEST_PERM_ETC } from '@/lib/permAccessRequest';
 
 function strOrNull(v: unknown): string | null {
   if (v == null) return null;
@@ -250,9 +253,14 @@ export async function listUsers(_params?: unknown) {
   }
 }
 
-export async function listPermCatalog(_params?: unknown) {
+export async function listPermCatalog(params?: Record<string, unknown>) {
   await requireLoggedIn();
+  const commonOnly = params?.commonOnly === true || params?.common_only === true;
   try {
+    const visibility = or(eq(perm.permIsHidden, false), isNull(perm.permIsHidden));
+    const whereClause = commonOnly
+      ? and(visibility, or(isNull(perm.permEtc), ne(perm.permEtc, ACCESS_REQUEST_PERM_ETC)))
+      : visibility;
     const rows = await db
       .select({
         permKey: perm.permKey,
@@ -260,7 +268,7 @@ export async function listPermCatalog(_params?: unknown) {
         permEtc: perm.permEtc,
       })
       .from(perm)
-      .where(or(eq(perm.permIsHidden, false), isNull(perm.permIsHidden)))
+      .where(whereClause)
       .orderBy(asc(perm.permKey));
     return { success: true, data: rows };
   } catch (error: unknown) {
@@ -285,6 +293,86 @@ export async function listUserPermKeys(params: Record<string, unknown>) {
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : '사용자 권한 조회 실패';
     return { success: false, error: message, data: [] };
+  }
+}
+
+export async function listUgPermKeys(params: Record<string, unknown>) {
+  await requireLoggedIn();
+  const ugName = String(params.ug_name ?? '').trim();
+  if (!ugName) return { success: false, error: '부서명은 필수입니다.', data: [] };
+  try {
+    const rows = await db
+      .select({ permKey: gpMap.permKey })
+      .from(gpMap)
+      .where(eq(gpMap.ugName, ugName));
+    const data = rows
+      .map((r) => (r.permKey == null ? null : Number(r.permKey)))
+      .filter((v): v is number => v != null && Number.isInteger(v) && v > 0);
+    return { success: true, data };
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : '부서 권한 조회 실패';
+    return { success: false, error: message, data: [] };
+  }
+}
+
+export async function setUgPerms(params: Record<string, unknown>) {
+  await requireLoggedIn();
+  const ugName = String(params.ug_name ?? '').trim();
+  const permKeys = parsePermKeys(params.perm_keys);
+  if (!ugName) return { success: false, error: '부서명은 필수입니다.' };
+  try {
+    const [row] = await db.select().from(ug).where(eq(ug.ugName, ugName)).limit(1);
+    if (!row) return { success: false, error: '대상 부서를 찾을 수 없습니다.' };
+    await db.transaction(async (tx) => {
+      await tx.delete(gpMap).where(eq(gpMap.ugName, ugName));
+      if (permKeys.length) {
+        await tx.insert(gpMap).values(permKeys.map((permKey) => ({ ugName, permKey })));
+      }
+    });
+    return { success: true, data: { ugName, permKeys } };
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : '부서 권한 저장 실패';
+    return { success: false, error: message };
+  }
+}
+
+export async function listUtPermKeys(params: Record<string, unknown>) {
+  await requireLoggedIn();
+  const utName = String(params.ut_name ?? '').trim();
+  if (!utName) return { success: false, error: '팀명은 필수입니다.', data: [] };
+  try {
+    const rows = await db
+      .select({ permKey: tpMap.permKey })
+      .from(tpMap)
+      .where(eq(tpMap.utName, utName));
+    const data = rows
+      .map((r) => (r.permKey == null ? null : Number(r.permKey)))
+      .filter((v): v is number => v != null && Number.isInteger(v) && v > 0);
+    return { success: true, data };
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : '팀 권한 조회 실패';
+    return { success: false, error: message, data: [] };
+  }
+}
+
+export async function setUtPerms(params: Record<string, unknown>) {
+  await requireLoggedIn();
+  const utName = String(params.ut_name ?? '').trim();
+  const permKeys = parsePermKeys(params.perm_keys);
+  if (!utName) return { success: false, error: '팀명은 필수입니다.' };
+  try {
+    const [row] = await db.select().from(ut).where(eq(ut.utName, utName)).limit(1);
+    if (!row) return { success: false, error: '대상 팀을 찾을 수 없습니다.' };
+    await db.transaction(async (tx) => {
+      await tx.delete(tpMap).where(eq(tpMap.utName, utName));
+      if (permKeys.length) {
+        await tx.insert(tpMap).values(permKeys.map((permKey) => ({ utName, permKey })));
+      }
+    });
+    return { success: true, data: { utName, permKeys } };
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : '팀 권한 저장 실패';
+    return { success: false, error: message };
   }
 }
 
@@ -871,6 +959,7 @@ export async function renameUg(params: Record<string, unknown>) {
       });
       await tx.update(ut).set({ ugName: newName }).where(eq(ut.ugName, oldName));
       await tx.update(usr).set({ ugName: newName }).where(eq(usr.ugName, oldName));
+      await tx.update(gpMap).set({ ugName: newName }).where(eq(gpMap.ugName, oldName));
       await tx.delete(ug).where(eq(ug.ugName, oldName));
     });
     return { success: true, data: { ugName: newName } };
@@ -973,6 +1062,7 @@ export async function renameUt(params: Record<string, unknown>) {
         .update(usr)
         .set({ utName: newName, ugName: targetUg })
         .where(eq(usr.utName, oldName));
+      await tx.update(tpMap).set({ utName: newName }).where(eq(tpMap.utName, oldName));
       await tx.delete(ut).where(eq(ut.utName, oldName));
     });
     return { success: true, data: { utName: newName, ugName: targetUg } };

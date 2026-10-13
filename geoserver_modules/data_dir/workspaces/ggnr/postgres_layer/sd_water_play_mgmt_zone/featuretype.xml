@@ -1,5 +1,5 @@
 <featureType>
-  <id>FeatureTypeInfoImpl--2053d3:19d606c4ff1:30ef</id>
+  <id>FeatureTypeInfoImpl-4e3602d7:1a0614b12bf:-7881</id>
   <name>sd_water_play_mgmt_zone</name>
   <nativeName>sd_water_play_mgmt_zone</nativeName>
   <namespace>
@@ -12,17 +12,17 @@
   </keywords>
   <srs>EPSG:5181</srs>
   <nativeBoundingBox>
-    <minx>144175.953125</minx>
-    <maxx>416527.6875</maxx>
-    <miny>-3478.293212890625</miny>
-    <maxy>533498.9375</maxy>
+    <minx>382967.977319645</minx>
+    <maxx>402644.66903666593</maxx>
+    <miny>336727.62876293925</miny>
+    <maxy>373418.67763796746</maxy>
     <crs class="projected">EPSG:5181</crs>
   </nativeBoundingBox>
   <latLonBoundingBox>
-    <minx>126.36181980839305</minx>
-    <maxx>129.47434725053955</maxx>
-    <miny>33.44042134374342</miny>
-    <maxy>38.301733452053526</maxy>
+    <minx>129.042427048509</minx>
+    <maxx>129.2716217302112</maxx>
+    <miny>36.50739610289859</miny>
+    <maxy>36.84178095824359</maxy>
     <crs>EPSG:4326</crs>
   </latLonBoundingBox>
   <projectionPolicy>FORCE_DECLARED</projectionPolicy>

@@ -14,6 +14,7 @@ import { identifyHitPriorityRank } from '@/lib/mapLayerGeometryOrder';
 import { isFmsFacilityLayerTable } from '@/lib/fmsLinkage/fmsBinding';
 import { fetchVworldCadastralGeomByPnu } from '@/lib/vworldCadastralGeom';
 import { readDefineLayerCodes } from '@/lib/defineLayerCodeFiles';
+import { isLayerExtraFieldName } from '@/lib/layerExtraField';
 
 const DEFAULT_SCHEMA = 'layer';
 const ALLOWED_SCHEMAS = new Set(['layer', 'public_layer']);
@@ -173,6 +174,21 @@ export async function getTableData(params: {
     if (isFmsFacilityLayerTable(table) && facilNoCol) {
       const safeFacilNo = facilNoCol.replace(/"/g, '""');
       orderClause = ` ORDER BY (substring("${safeFacilNo}" from '[0-9]{4}'))::integer ASC NULLS LAST, regexp_replace("${safeFacilNo}", '^[A-Za-z]+', '') ASC NULLS LAST`;
+    } else {
+      // 기본: 목록 첫 열(define 목록표시 1순위) 오름차순. 없으면 ogc_fid/gid/첫 속성열
+      const orderCol = resolveDefaultListOrderColumn(tableGuess, table, columns);
+      if (orderCol) {
+        const safeOrder = orderCol.replace(/"/g, '""');
+        const tieBreak =
+          columns.find((c) => {
+            const n = c.toLowerCase();
+            return (n === 'ogc_fid' || n === 'gid') && c.toLowerCase() !== orderCol.toLowerCase();
+          }) ?? null;
+        const safeTie = tieBreak ? tieBreak.replace(/"/g, '""') : '';
+        orderClause = tieBreak
+          ? ` ORDER BY "${safeOrder}" ASC NULLS LAST, "${safeTie}" ASC NULLS LAST`
+          : ` ORDER BY "${safeOrder}" ASC NULLS LAST`;
+      }
     }
 
     const [countRes, dataRes] = await Promise.all([
@@ -198,6 +214,62 @@ export async function getTableData(params: {
 }
 
 const FIELDS_DIR = path.join(process.cwd(), 'src', 'config', 'defineLayer', 'fields');
+
+function isGeomLikeOrderColumnName(name: string): boolean {
+  const n = name.trim().toLowerCase();
+  return (
+    isLayerExtraFieldName(n) ||
+    n === 'geom' ||
+    n === 'geometry' ||
+    n === 'the_geom' ||
+    n === 'wkb_geometry' ||
+    n === 'shape'
+  );
+}
+
+/**
+ * 데이터 조회 목록 기본 정렬 열.
+ * defineLayer «목록 표시» 중 첫 열 → ogc_fid/gid → 그 외 첫 속성열.
+ */
+function resolveDefaultListOrderColumn(
+  tableGuess: string,
+  physicalTable: string,
+  columns: string[]
+): string | null {
+  const findCol = (want: string): string | null => {
+    const w = want.trim().toLowerCase();
+    if (!w || isGeomLikeOrderColumnName(w)) return null;
+    return columns.find((c) => c.toLowerCase() === w) ?? null;
+  };
+
+  const defineRows = [
+    ...loadDefineFieldRows(tableGuess),
+    ...(tableGuess.toLowerCase() !== physicalTable.toLowerCase()
+      ? loadDefineFieldRows(physicalTable)
+      : []),
+  ];
+  const seen = new Set<string>();
+  const listFields = defineRows
+    .filter((f) => defineFlagTrue(f.define_field_show_list))
+    .sort((a, b) => defineFieldIdxNum(a) - defineFieldIdxNum(b));
+  for (const f of listFields) {
+    const name = String(f.define_field_name ?? '').trim();
+    const key = name.toLowerCase();
+    if (!name || seen.has(key)) continue;
+    seen.add(key);
+    const hit = findCol(name);
+    if (hit) return hit;
+  }
+
+  for (const pref of ['ogc_fid', 'gid', 'id']) {
+    const hit = findCol(pref);
+    if (hit) return hit;
+  }
+  for (const c of columns) {
+    if (!isGeomLikeOrderColumnName(c)) return c;
+  }
+  return null;
+}
 
 /** 테이블 필드 설정에서 define_field_is_key === 'true' 인 필드명 반환 (첨부 폴더 키와 동일) */
 export function getDefineTableKeyFieldName(tableName: string): string | null {
@@ -533,11 +605,40 @@ function getTableKorName(tableName: string): string {
   return row ? String(row.define_table_kor_name ?? tableName) : tableName;
 }
 
-/** 지도 식별: 켜 둔 레이어 이름 → DB 물리 테이블 + 선택적 행 필터 (분할 레이어) */
+/** WMS 레이어별 추가 CQL(예: river_name='…') → identify WHERE에 쓸 SQL 조각 */
+function resolveIdentifyExtraRowFilter(
+  displayName: string,
+  tableFilters?: Record<string, string> | null
+): string | null {
+  if (!tableFilters) return null;
+  const raw =
+    tableFilters[displayName] ??
+    tableFilters[displayName.toLowerCase()] ??
+    Object.entries(tableFilters).find(([k]) => k.trim().toLowerCase() === displayName)?.[1];
+  const s = String(raw ?? '').trim();
+  if (!s || s === 'INCLUDE') return null;
+  return sanitizeDefineLayerRowFilter(s);
+}
+
+function mergeIdentifyRowFilters(
+  splitOrBase: string | null,
+  extra: string | null
+): string | null {
+  if (splitOrBase && extra) return `(${splitOrBase}) AND (${extra})`;
+  return splitOrBase ?? extra;
+}
+
+/** 지도 식별: 켜 둔 레이어 이름 → DB 물리 테이블 + 선택적 행 필터 (분할 레이어 + WMS CQL) */
 function resolveIdentifyLayerTargets(
   names: string[],
-  schema: string
-): Array<{ displayName: string; physicalTable: string; rowFilter: string | null }> {
+  schema: string,
+  tableFilters?: Record<string, string> | null
+): Array<{
+  displayName: string;
+  physicalTable: string;
+  rowFilter: string | null;
+  isSplitLayer: boolean;
+}> {
   const tables = getTablesJson();
   const schemaLc = schema.toLowerCase();
   const visibleLc = names.map((n) => String(n ?? '').trim().toLowerCase()).filter(Boolean);
@@ -556,17 +657,28 @@ function resolveIdentifyLayerTargets(
     if (parent && divQ) parentsWithVisibleSplitChild.add(parent);
   }
 
-  const out: Array<{ displayName: string; physicalTable: string; rowFilter: string | null }> = [];
+  const out: Array<{
+    displayName: string;
+    physicalTable: string;
+    rowFilter: string | null;
+    isSplitLayer: boolean;
+  }> = [];
   for (const raw of names) {
     const displayName = String(raw ?? '').trim().toLowerCase();
     if (!displayName) continue;
     if (parentsWithVisibleSplitChild.has(displayName)) continue;
 
+    const extraRf = resolveIdentifyExtraRowFilter(displayName, tableFilters);
     const row = tables.find(
       (r) => String(r.define_table_name ?? '').trim().toLowerCase() === displayName
     );
     if (!row) {
-      out.push({ displayName, physicalTable: displayName, rowFilter: null });
+      out.push({
+        displayName,
+        physicalTable: displayName,
+        rowFilter: mergeIdentifyRowFilters(null, extraRf),
+        isSplitLayer: false,
+      });
       continue;
     }
     const rowSchema = String(row.define_table_schema ?? 'layer').trim().toLowerCase() || 'layer';
@@ -576,9 +688,19 @@ function resolveIdentifyLayerTargets(
     if (parent && divQ) {
       const rf = sanitizeDefineLayerRowFilter(divQ);
       if (!rf) continue;
-      out.push({ displayName, physicalTable: parent.toLowerCase(), rowFilter: rf });
+      out.push({
+        displayName,
+        physicalTable: parent.toLowerCase(),
+        rowFilter: mergeIdentifyRowFilters(rf, extraRf),
+        isSplitLayer: true,
+      });
     } else {
-      out.push({ displayName, physicalTable: displayName, rowFilter: null });
+      out.push({
+        displayName,
+        physicalTable: displayName,
+        rowFilter: mergeIdentifyRowFilters(null, extraRf),
+        isSplitLayer: false,
+      });
     }
   }
   return out;
@@ -630,6 +752,11 @@ export async function identifyFeatures(params: {
   tables: string[];
   srid?: number;
   schema?: string;
+  /**
+   * 레이어별 추가 행 필터 (WMS CQL과 동일 문법, 예: river_name='한강').
+   * 화면에 보이는 범위만 식별되도록 serviceWmsCqlByLayer 등을 그대로 전달.
+   */
+  tableFilters?: Record<string, string> | null;
 }) {
   const { x, y, tables, srid = 3857 } = params;
   const buffer = typeof params.buffer === 'number' && params.buffer >= 0 ? params.buffer : 10;
@@ -638,7 +765,7 @@ export async function identifyFeatures(params: {
   if (!Array.isArray(tables) || tables.length === 0) return { results: [] };
   if (typeof x !== 'number' || typeof y !== 'number') return { results: [] };
 
-  const targets = resolveIdentifyLayerTargets(tables, schema);
+  const targets = resolveIdentifyLayerTargets(tables, schema, params.tableFilters ?? null);
   if (targets.length === 0) return { results: [] };
 
   // 지도 클릭 데이터 목록 로그 (서버)
@@ -661,7 +788,7 @@ export async function identifyFeatures(params: {
   const queries: string[] = [];
 
   await Promise.all(
-    targets.map(async ({ displayName, physicalTable, rowFilter }) => {
+    targets.map(async ({ displayName, physicalTable, rowFilter, isSplitLayer }) => {
       const tableLower = physicalTable;
       const resolvedRel = await resolveLayerPhysicalRelName(schema, tableLower);
       if (!resolvedRel) return;
@@ -791,7 +918,7 @@ export async function identifyFeatures(params: {
             tableName: displayName,
             korName,
             titleField,
-            isSplitLayer: rowFilter != null,
+            isSplitLayer,
             features,
             identifyGeomRank: identifyHitPriorityRank(geomTypeRaw),
           });
@@ -1323,7 +1450,7 @@ export async function searchDefineLayersByGeometry(params: {
   const results: LayerOut[] = [];
 
   await Promise.all(
-    targets.map(async ({ displayName, physicalTable, rowFilter }) => {
+    targets.map(async ({ displayName, physicalTable, rowFilter, isSplitLayer }) => {
       const tableLower = physicalTable;
       const resolvedRel = await resolveLayerPhysicalRelName(schema, tableLower);
       if (!resolvedRel) return;
@@ -1416,7 +1543,7 @@ export async function searchDefineLayersByGeometry(params: {
           tableName: displayName,
           korName,
           titleField,
-          isSplitLayer: rowFilter != null,
+          isSplitLayer,
           features,
           identifyGeomRank: identifyHitPriorityRank(geomTypeRaw),
         });
@@ -1484,7 +1611,7 @@ export async function searchDefineLayersByKeyword(params: {
   const results: LayerOutKw[] = [];
 
   await Promise.all(
-    targets.map(async ({ displayName, physicalTable, rowFilter }) => {
+    targets.map(async ({ displayName, physicalTable, rowFilter, isSplitLayer }) => {
       const tableLower = physicalTable;
       const resolvedRel = await resolveLayerPhysicalRelName(schema, tableLower);
       if (!resolvedRel) return;
@@ -1588,7 +1715,7 @@ export async function searchDefineLayersByKeyword(params: {
           tableName: displayName,
           korName,
           titleField,
-          isSplitLayer: rowFilter != null,
+          isSplitLayer,
           features,
           identifyGeomRank: identifyHitPriorityRank(geomTypeRaw),
         });
@@ -1708,6 +1835,14 @@ const SAFETY_FACILITY_DISPLAY: Record<
     addressKeys: ['addr'],
   },
   water_play_sign: {
+    nameKeys: ['addr_detail', 'addr'],
+    addressKeys: ['addr'],
+  },
+  water_play_box_list: {
+    nameKeys: ['addr'],
+    addressKeys: ['addr'],
+  },
+  water_play_sign_list: {
     nameKeys: ['addr'],
     addressKeys: ['addr'],
   },

@@ -40,6 +40,8 @@ export type SourceUploadProgress = {
   includeNodeModules?: boolean;
   /** GNMS init 응답 uploadId — 취소 통보용 */
   remoteUploadId?: string;
+  /** 화면 취소. 프록시가 요청을 끊은 것과 구분 */
+  cancelled?: boolean;
   updatedAt: number;
   done: boolean;
 };

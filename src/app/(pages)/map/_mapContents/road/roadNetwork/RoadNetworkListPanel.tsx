@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSession } from "next-auth/react";
+import GeoJSONFormat from "ol/format/GeoJSON";
 import {
   Circle,
   Download,
@@ -16,7 +17,11 @@ import {
 import { call } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { useMapContext } from "../../../_mapComponents/MapContext";
-import { scheduleAnimateMapToCenter3857 } from "../../../_mapComponents/config/mapAutoNavigation";
+import {
+  scheduleAnimateMapToCenter3857,
+  scheduleFitMapToExtent3857,
+} from "../../../_mapComponents/config/mapAutoNavigation";
+import { MAP_AUTO_NAV_MAX_ZOOM } from "../../../_mapComponents/config/mapDefaults";
 import { canStartMapDrawInteraction } from "../../../_mapComponents/mapDrawInteraction";
 import {
   LayerRowAddButton,
@@ -39,9 +44,34 @@ import {
   createEmptyRoadNetworkRow,
   isNewRoadNetworkRowId,
   matchesRoadNetworkTypeFilter,
+  type RoadNetworkGeom,
   type RoadNetworkOpenStatusFilter,
   type RoadNetworkTypeFilter,
 } from "./roadNetworkMock";
+
+const LIST_FIT_PADDING = [80, 80, 80, 80] as const;
+const LIST_FIT_MAX_ZOOM = Math.min(16, MAP_AUTO_NAV_MAX_ZOOM);
+
+function extent3857FromRoadNetworkGeom(
+  geom: RoadNetworkGeom | null | undefined
+): [number, number, number, number] | null {
+  if (!geom) return null;
+  try {
+    const format = new GeoJSONFormat();
+    const features = format.readFeatures(
+      { type: "Feature", geometry: geom, properties: {} },
+      { dataProjection: "EPSG:4326", featureProjection: "EPSG:3857" }
+    );
+    if (features.length === 0) return null;
+    const g = features[0]?.getGeometry();
+    if (!g) return null;
+    const ext = g.getExtent();
+    if (!ext.every((v) => Number.isFinite(v))) return null;
+    return ext as [number, number, number, number];
+  } catch {
+    return null;
+  }
+}
 
 type SpatialTool = "rectangle" | "polygon" | "circle";
 type SearchTab = "keyword" | "shape" | "boundary";
@@ -420,6 +450,18 @@ export function RoadNetworkListPanel({ onClose }: Props) {
   const handleSelectRow = (id: string) => {
     setRoadNetworkRows?.((prev) => prev.filter((r) => !isNewRoadNetworkRowId(r.id)));
     setRoadNetworkSelectedId?.(id);
+    const row = rows.find((r) => r.id === id);
+    const geom = row?.geom ?? null;
+    if (!geom) return;
+    const map = mapContext?.mapInstanceRef?.current;
+    if (!map) return;
+    const ext = extent3857FromRoadNetworkGeom(geom);
+    if (!ext) return;
+    scheduleFitMapToExtent3857(map, ext, {
+      fitPadding: [...LIST_FIT_PADDING],
+      maxZoom: LIST_FIT_MAX_ZOOM,
+      applyMapViewPadding: () => mapContext?.applyMapViewPaddingRef?.current?.(),
+    });
   };
 
   const handleExport = () => {

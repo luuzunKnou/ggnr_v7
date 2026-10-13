@@ -55,6 +55,10 @@ const nextConfig: NextConfig = {
     BASE_PATH: basePath,
   },
   devIndicators: false,
+  /**
+   * Turbopack은 orthophotoService 등 대형 Node 서비스 묶을 때 FATAL panic 이 난다.
+   * 운영·빌드프로그램은 `next build --webpack` (package.json build 스크립트) 사용.
+   */
   turbopack: {},
   /** conda env 등 대량 파일이 Turbopack 파일 추적에 잡히지 않게 */
   outputFileTracingExcludes: {
@@ -75,6 +79,7 @@ const nextConfig: NextConfig = {
     'pdfjs-dist',
     'pg',
     'pg-native',
+    'exifr',
   ],
   async rewrites() {
     // GeoServer: 브라우저·게이트는 동일 출처 `{basePath}/geoserver` → start.ini·GEOSERVER_URL
@@ -82,6 +87,10 @@ const nextConfig: NextConfig = {
     return [
       { source: '/geoserver', destination: geoInternal },
       { source: '/geoserver/:path*', destination: `${geoInternal}/:path*` },
+      // QGIS 레거시 호환 — key 권한 WFS/WMS 프록시
+      { source: '/wfs.do', destination: '/api/ogc/wfs' },
+      { source: '/wfsUpdate.do', destination: '/api/ogc/wfs-update' },
+      { source: '/wms.do', destination: '/api/ogc/wms' },
       { source: '/vworldLandCharacteristics.api', destination: '/api/vworld/land-characteristics' },
       { source: '/vworldLandCharacteristics_https.api', destination: '/api/vworld/land-characteristics' },
       { source: '/vworldLandUseAttr.api', destination: '/api/vworld/land-use' },

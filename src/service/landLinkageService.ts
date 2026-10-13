@@ -19,6 +19,8 @@ import {
   type ParcelLandSource,
 } from '@/lib/parcelLandNormalize';
 import { getLandLinkageConfig } from '@/service/configService';
+import { isPersonInfoMaskEnabled } from '@/service/systemControlService';
+import { maskPersonFieldByLength } from '@/lib/personInfoMask';
 import {
   PARCEL_ANALYSIS_LINKAGE_CONCURRENCY,
   PARCEL_ANALYSIS_LINKAGE_TIMEOUT_MS,
@@ -575,6 +577,11 @@ export async function fetchParcelLandInfoTab(params: { pnu?: string }): Promise<
     const landRow = parseKrasLandInfoRows(probed.landXml)[0] ?? null;
     const useRows = parseKrasBodyFieldMaps(probed.useXml);
     const krasTab = mapKrasToParcelLandInfoTab(landRow, useRows);
+    if (await isPersonInfoMaskEnabled()) {
+      krasTab.possessions = krasTab.possessions.map((row) =>
+        row.ownerNm ? { ...row, ownerNm: maskPersonFieldByLength(row.ownerNm) } : row
+      );
+    }
     if (hasParcelLandInfoTabData(krasTab)) {
       return { ...krasTab, ok: true, hangmangCalls: probed.calls };
     }
@@ -695,6 +702,9 @@ export async function fetchParcelLandModalList(params: {
     const r = await fetchLinkageXmlResult(url, buildKrasParam(pnu, svcId, cfg), undefined, 'GET');
     if (r.error) return { ok: false, kind, headers: [], rows: [], error: r.error };
     let maps = parseKrasBodyFieldMaps(r.xml);
+    const ownerNm = (await isPersonInfoMaskEnabled())
+      ? (item: KrasBodyRecord) => maskPersonFieldByLength(toStr(item.OWNER_NM) || '-')
+      : (item: KrasBodyRecord) => toStr(item.OWNER_NM) || '-';
 
     if (kind === 'share') {
       maps = [...maps].sort((a, b) => Number(a.SHR_SEQNO ?? 0) - Number(b.SHR_SEQNO ?? 0));
@@ -710,7 +720,7 @@ export async function fetchParcelLandModalList(params: {
       ];
       const rows = maps.map((item) => [
         toStr(item.OWNER_REGNO) || '-',
-        toStr(item.OWNER_NM) || '-',
+        ownerNm(item),
         toStr(item.OWNER_ADDR) || '-',
         toStr(item.OWN_GBN_NM) || '-',
         toStr(item.OWN_RGT_JIBUN) || '-',
@@ -768,7 +778,7 @@ export async function fetchParcelLandModalList(params: {
       toStr(item.LAND_LOC_CD) || '-',
       toStr(item.DREGNO) || '-',
       toStr(item.OWN_GBN_NM) || '-',
-      toStr(item.OWNER_NM) || '-',
+      ownerNm(item),
       toStr(item.OWN_RGT_CHG_RSN_CD_NM) || '-',
       formatKrasYmd(toStr(item.DYMD)) || '-',
       toStr(item.SHR_CNT) ? `${toStr(item.SHR_CNT)}명` : '-',

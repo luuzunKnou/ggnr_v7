@@ -6,11 +6,15 @@ import { Button } from '@/app/shadcnComponents/ui/button';
 import { cn } from '@/lib/utils';
 import { recordDataViewLog } from '@/lib/recordDataViewLog';
 import type { AttrRow, WorkFileItem, WorkUnitItem } from './aerialMediaTypes';
-import { AttributeSection, SectionTitle, StatusBadge } from './AerialMediaUi';
+import { fileMissingGeom } from './aerialLocationParse';
+import { AttributeSection, MissingGeomMark, SectionTitle, StatusBadge } from './AerialMediaUi';
 import { updateWorkUnitAttrs } from './aerialMediaMockData';
 import { FlightLogbookForm } from './FlightLogbookForm';
 import { SHOOT_TYPE_LABEL, type ShootingRequestDraft } from '../shootingRequest/shootingRequestMockData';
 import { ServiceFileImagePreview } from '../../_mapComponents/standard/ServiceFileImagePreview';
+import type { MapHitOverlapOption } from '../../_mapComponents/MapHitOverlapSelect';
+import { IdentifyHitListBlock } from '../../_mapComponents/standard/IdentifyHitListBlock';
+import type { IdentifyLayerResult } from '../../_mapComponents/hooks/useFeatureIdentify';
 
 /** 데이터 이력관리에 조회 저장을 위해 추가 */
 function useWorkUnitViewLog(kind: string, id: string | null | undefined) {
@@ -62,7 +66,7 @@ function useAttrEdit(unit: WorkUnitItem, onSave?: (attrs: AttrRow[]) => Promise<
 export type DetailTab = 'info' | 'flight';
 
 const footerBtnClass =
-  'rounded border border-slate-200 bg-white px-2.5 py-1 text-[11px] text-[#666] transition-colors hover:bg-slate-50';
+  'rounded border border-border bg-background px-2.5 py-1 text-[11px] text-muted-foreground transition-colors hover:bg-muted/60';
 
 type DetailHeaderProps = {
   title: string;
@@ -72,6 +76,8 @@ type DetailHeaderProps = {
   editing?: boolean;
   /** 우측 상단 X 닫기 (촬영요청·도로대장 상세와 동일) */
   onClose?: () => void;
+  /** 두 번째 탭 라벨 — 기본 비행기록부, 항공영상은 촬영정보 */
+  secondaryTabLabel?: string;
 };
 
 export function DetailHeader({
@@ -80,16 +86,19 @@ export function DetailHeader({
   onTabChange,
   editing = false,
   onClose,
+  secondaryTabLabel = '비행기록부',
 }: DetailHeaderProps) {
   return (
-    <div className="shrink-0 border-b border-slate-200 bg-white">
+    <div className="shrink-0 border-b border-border bg-background">
       <div className="flex h-11 items-center gap-2 px-3">
-        <h2 className="min-w-0 flex-1 truncate text-[13px] font-semibold text-slate-800">{title}</h2>
+        <h2 className="min-w-0 flex-1 truncate text-[13px] font-semibold text-foreground" title={title}>
+          {title}
+        </h2>
         {onClose ? (
           <button
             type="button"
             onClick={onClose}
-            className="shrink-0 rounded p-1 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
+            className="shrink-0 rounded p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
             title="닫기"
             aria-label="닫기"
           >
@@ -98,11 +107,11 @@ export function DetailHeader({
         ) : null}
       </div>
       {onTabChange && !editing ? (
-        <div className="flex gap-1 bg-slate-50/80 px-2.5 pb-2">
+        <div className="flex gap-1 bg-muted/50 px-2.5 pb-2">
           {(
             [
               { id: 'info' as const, label: '상세정보' },
-              { id: 'flight' as const, label: '비행기록부' },
+              { id: 'flight' as const, label: secondaryTabLabel },
             ] as const
           ).map((t) => {
             const active = tab === t.id;
@@ -114,8 +123,8 @@ export function DetailHeader({
                 className={cn(
                   'flex-1 rounded-md px-2 py-1.5 text-[11px] transition-colors',
                   active
-                    ? 'bg-white font-semibold text-sky-800 shadow-sm ring-1 ring-sky-200'
-                    : 'text-slate-500 hover:bg-white/70 hover:text-slate-800'
+                    ? 'bg-background font-semibold text-sky-800 dark:text-sky-200 shadow-sm ring-1 ring-sky-200 dark:ring-sky-800'
+                    : 'text-muted-foreground hover:bg-muted hover:text-foreground'
                 )}
               >
                 {t.label}
@@ -135,6 +144,7 @@ type DetailFooterProps = {
   onStartEdit?: () => void;
   onSaveEdit?: () => void;
   onCancelEdit?: () => void;
+  onGeomEdit?: () => void;
 };
 
 /** 시설관리 상세와 동일: 하단 수정·삭제·닫기 */
@@ -145,40 +155,50 @@ function DetailFooter({
   onStartEdit,
   onSaveEdit,
   onCancelEdit,
+  onGeomEdit,
 }: DetailFooterProps) {
   return (
-    <div className="shrink-0 border-t border-slate-200 bg-slate-50/80 px-3 py-2">
-      <div className="flex flex-wrap justify-end gap-1.5">
-        {editing ? (
-          <>
-            <button
-              type="button"
-              onClick={onSaveEdit}
-              className="rounded border border-sky-600 bg-sky-600 px-2.5 py-1 text-[11px] text-white transition-colors hover:bg-sky-700"
-            >
-              저장
+    <div className="shrink-0 border-t border-border bg-muted/50 px-3 py-2">
+      <div className="flex items-center justify-between gap-1.5">
+        <div className="flex shrink-0">
+          {onGeomEdit && !editing ? (
+            <button type="button" onClick={onGeomEdit} className={footerBtnClass}>
+              도형수정
             </button>
-            <button type="button" onClick={onCancelEdit} className={footerBtnClass}>
-              취소
-            </button>
-          </>
-        ) : (
-          <>
-            {onStartEdit ? (
-              <button type="button" onClick={onStartEdit} className={footerBtnClass}>
-                수정
+          ) : null}
+        </div>
+        <div className="flex flex-wrap justify-end gap-1.5">
+          {editing ? (
+            <>
+              <button
+                type="button"
+                onClick={onSaveEdit}
+                className="rounded border border-sky-600 bg-sky-600 px-2.5 py-1 text-[11px] text-white transition-colors hover:bg-sky-700"
+              >
+                저장
               </button>
-            ) : null}
-            {onDelete ? (
-              <button type="button" onClick={onDelete} className={footerBtnClass}>
-                삭제
+              <button type="button" onClick={onCancelEdit} className={footerBtnClass}>
+                취소
               </button>
-            ) : null}
-          </>
-        )}
-        <button type="button" onClick={onClose} className={footerBtnClass}>
-          닫기
-        </button>
+            </>
+          ) : (
+            <>
+              {onStartEdit ? (
+                <button type="button" onClick={onStartEdit} className={footerBtnClass}>
+                  수정
+                </button>
+              ) : null}
+              {onDelete ? (
+                <button type="button" onClick={onDelete} className={footerBtnClass}>
+                  삭제
+                </button>
+              ) : null}
+            </>
+          )}
+          <button type="button" onClick={onClose} className={footerBtnClass}>
+            닫기
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -215,23 +235,23 @@ function WorkUnitInfoBody({
   return (
     <div className="min-h-0 flex-1 space-y-4 overflow-auto px-3 py-3">
       {showLinkedUpload && linkedRequest ? (
-        <div className="space-y-1.5 rounded-md border border-sky-200 bg-sky-50 px-3 py-2.5">
+        <div className="space-y-1.5 rounded-md border border-sky-200 dark:border-sky-800 bg-sky-50 dark:bg-sky-950/40 px-3 py-2.5">
           <div className="flex items-start justify-between gap-2">
-            <p className="text-[10px] font-semibold text-sky-900">승인 건으로 자료 등록</p>
+            <p className="text-[10px] font-semibold text-sky-900 dark:text-sky-100">승인 건으로 자료 등록</p>
             {onClearLink ? (
               <button
                 type="button"
-                className="shrink-0 text-[10px] text-sky-700 underline"
+                className="shrink-0 text-[10px] text-sky-700 dark:text-sky-300 underline"
                 onClick={onClearLink}
               >
                 연결 해제
               </button>
             ) : null}
           </div>
-          <p className="text-[11px] font-medium text-slate-800">
+          <p className="text-[11px] font-medium text-foreground">
             {linkedRequest.purpose || '목적 없음'}
           </p>
-          <p className="text-[10px] leading-relaxed text-slate-600">
+          <p className="text-[10px] leading-relaxed text-muted-foreground">
             {SHOOT_TYPE_LABEL[linkedRequest.shootType]} · 촬영 {linkedRequest.shootDate || '—'} ·{' '}
             {linkedRequest.address || '지번 미입력'}
           </p>
@@ -255,6 +275,26 @@ function WorkUnitInfoBody({
   );
 }
 
+function orthoOverlapResults(options: MapHitOverlapOption[]): IdentifyLayerResult[] {
+  return [
+    {
+      tableName: 'ortho_extent',
+      korName: '드론영상',
+      titleField: 'title',
+      features: options.map((opt) => ({
+        titleValue: opt.label,
+        data: { id: opt.value },
+      })),
+    },
+  ];
+}
+
+function orthoOverlapSelectedIndex(options: MapHitOverlapOption[], value: string | undefined): number | null {
+  if (!value) return 0;
+  const idx = options.findIndex((opt) => opt.value === value);
+  return idx >= 0 ? idx : 0;
+}
+
 type OrthoDetailProps = {
   unit: WorkUnitItem;
   checkedFileIds: Set<string>;
@@ -273,6 +313,10 @@ type OrthoDetailProps = {
   onDelete?: () => void;
   onSaveAttrs?: (attrs: AttrRow[]) => Promise<void>;
   onDeleteFile?: (file: WorkFileItem) => void;
+  /** 겹친 범위 — 상세 안에서 어느 영상인지 고른다 */
+  overlapOptions?: MapHitOverlapOption[];
+  overlapValue?: string;
+  onOverlapChange?: (id: string) => void;
 };
 
 export function OrthoWorkUnitDetailPanel({
@@ -292,6 +336,9 @@ export function OrthoWorkUnitDetailPanel({
   onDelete,
   onSaveAttrs,
   onDeleteFile,
+  overlapOptions,
+  overlapValue,
+  onOverlapChange,
 }: OrthoDetailProps) {
   useWorkUnitViewLog('ortho', unit.id);
   const edit = useAttrEdit(unit, onSaveAttrs);
@@ -302,7 +349,7 @@ export function OrthoWorkUnitDetailPanel({
     )?.value ?? unit.workName;
   const showInfoActions = !viewOnly && detailTab === 'info';
   return (
-    <div className="flex h-full min-h-0 flex-col bg-white">
+    <div className="flex h-full min-h-0 flex-col bg-background">
       <DetailHeader
         title="작업단위 상세"
         tab={detailTab}
@@ -310,6 +357,21 @@ export function OrthoWorkUnitDetailPanel({
         editing={edit.editing}
         onClose={onClose}
       />
+      {overlapOptions && overlapOptions.length > 1 && onOverlapChange ? (
+        <div className="flex max-h-[42%] min-h-[140px] shrink-0 flex-col overflow-hidden border-b border-border">
+          <IdentifyHitListBlock
+            results={orthoOverlapResults(overlapOptions)}
+            headerLabel="지도에서 선택된 항목"
+            selectedIndex={orthoOverlapSelectedIndex(overlapOptions, overlapValue)}
+            onItemClick={(item) => {
+              const id = String(item.feature.data.id ?? '');
+              if (id) onOverlapChange(id);
+            }}
+            onClose={onClose}
+            showFooterClose={false}
+          />
+        </div>
+      ) : null}
       {!viewOnly && detailTab === 'flight' ? (
         <div className="min-h-0 flex-1 overflow-y-auto">
           <FlightLogbookForm
@@ -352,9 +414,9 @@ export function OrthoWorkUnitDetailPanel({
               >
                 파일 목록
               </SectionTitle>
-              <p className="mb-2 text-[10px] leading-relaxed text-slate-400">
-                변환완료 파일만 체크하면 지도 타일을 켤 수 있습니다. (자체항공영상이 아닌 드론영상
-                오버레이)
+              <p className="mb-2 text-[10px] leading-relaxed text-muted-foreground">
+                변환완료 파일을 클릭하거나 체크하면 지도 타일을 켤 수 있습니다. (자체항공영상이 아닌
+                드론영상 오버레이)
               </p>
               <FileRows
                 files={unit.files}
@@ -397,6 +459,7 @@ type DroneDetailProps = {
   onClearLink?: () => void;
   onDelete?: () => void;
   onSaveAttrs?: (attrs: AttrRow[]) => Promise<void>;
+  onEditFileGeom?: (file: WorkFileItem) => void;
 };
 
 export function DroneWorkUnitDetailPanel({
@@ -413,9 +476,15 @@ export function DroneWorkUnitDetailPanel({
   onClearLink,
   onDelete,
   onSaveAttrs,
+  onEditFileGeom,
 }: DroneDetailProps) {
   useWorkUnitViewLog('drone', unit.id);
   const edit = useAttrEdit(unit, onSaveAttrs);
+  const selectedFile = unit.files.find((f) => f.id === selectedFileId) ?? null;
+  const editSelectedGeom =
+    !viewOnly && !edit.editing && selectedFile && onEditFileGeom
+      ? () => onEditFileGeom(selectedFile)
+      : undefined;
   const workLabel =
     unit.attrs.find(
       (r) =>
@@ -423,7 +492,7 @@ export function DroneWorkUnitDetailPanel({
     )?.value ?? unit.workName;
   const showInfoActions = !viewOnly && detailTab === 'info';
   return (
-    <div className="flex h-full min-h-0 flex-col bg-white">
+    <div className="flex h-full min-h-0 flex-col bg-background">
       <DetailHeader
         title="작업단위 상세"
         tab={detailTab}
@@ -474,14 +543,16 @@ export function DroneWorkUnitDetailPanel({
               >
                 파일 목록
               </SectionTitle>
-              <p className="mb-2 text-[10px] text-slate-400">
-                파일을 클릭하면 지도가 촬영 위치로 이동합니다. GPS 없는 동영상은 목록만 표시됩니다.
+              <p className="mb-2 text-[10px] leading-relaxed text-muted-foreground">
+                파일을 클릭하면 지도가 촬영 위치로 이동하고 사진,동영상으로 켜집니다. 위치가 없으면 오른쪽에 위치 추가가 표시됩니다.
               </p>
               <FileRows
                 files={unit.files}
                 selectedId={selectedFileId}
                 onSelect={onSelectFile}
                 showLocation
+                markMissingGeom
+                onEditGeom={onEditFileGeom}
                 statusMode="upload"
               />
             </section>
@@ -495,6 +566,7 @@ export function DroneWorkUnitDetailPanel({
         onStartEdit={showInfoActions ? edit.start : undefined}
         onSaveEdit={edit.save}
         onCancelEdit={edit.cancel}
+        onGeomEdit={showInfoActions ? editSelectedGeom : undefined}
       />
     </div>
   );
@@ -506,6 +578,7 @@ type DroneFileProps = {
   files?: WorkFileItem[];
   onClose: () => void;
   onDelete?: () => void;
+  onEditGeom?: (file: WorkFileItem) => void;
 };
 
 function aerialMediaUrl(relativePath: string, download = false): string {
@@ -514,7 +587,7 @@ function aerialMediaUrl(relativePath: string, download = false): string {
   return `/api/aerial/media?${q.toString()}`;
 }
 
-export function DroneFileDetailPanel({ file, files = [], onClose, onDelete }: DroneFileProps) {
+export function DroneFileDetailPanel({ file, files = [], onClose, onDelete, onEditGeom }: DroneFileProps) {
   useWorkUnitViewLog('drone-file', file.id);
   const isVideo = file.previewKind === 'video';
   const mediaSrc = file.relativePath ? aerialMediaUrl(file.relativePath) : null;
@@ -556,16 +629,16 @@ export function DroneFileDetailPanel({ file, files = [], onClose, onDelete }: Dr
   };
 
   return (
-    <div className="flex h-full min-h-0 flex-col border-l border-slate-200 bg-white">
+    <div className="flex h-full min-h-0 flex-col border-l border-border bg-background">
       <DetailHeader title="파일 상세" onClose={onClose} />
       <div className="min-h-0 flex-1 space-y-4 overflow-auto px-3 py-3">
-        <div className="rounded-lg border border-slate-200 bg-slate-50/80 px-3 py-2.5">
-          <p className="truncate text-[12px] font-semibold text-slate-800">{file.name}</p>
+        <div className="rounded-lg border border-border bg-muted/50 px-3 py-2.5">
+          <p className="truncate text-[12px] font-semibold text-foreground" title={file.name}>{file.name}</p>
           <div className="mt-1.5 flex flex-wrap gap-1.5">
-            <span className="rounded-md bg-white px-2 py-0.5 text-[10px] text-slate-600 ring-1 ring-slate-200">
+            <span className="rounded-md bg-background px-2 py-0.5 text-[10px] text-muted-foreground ring-1 ring-border">
               {file.format.toUpperCase()}
             </span>
-            <span className="rounded-md bg-white px-2 py-0.5 text-[10px] text-slate-600 ring-1 ring-slate-200">
+            <span className="rounded-md bg-background px-2 py-0.5 text-[10px] text-muted-foreground ring-1 ring-border">
               {file.sizeLabel}
             </span>
             <StatusBadge status={file.status} mode="upload" />
@@ -579,9 +652,12 @@ export function DroneFileDetailPanel({ file, files = [], onClose, onDelete }: Dr
             { label: '파일명', value: file.name },
             { label: '형식', value: file.format.toUpperCase() },
             { label: '크기', value: file.sizeLabel },
-            { label: '촬영 위치', value: file.locationLabel ?? '—' },
+            { label: '촬영 위치', value: fileMissingGeom(file) ? '위치 없음' : (file.locationLabel ?? '—') },
           ]}
         />
+        {fileMissingGeom(file) ? (
+          <p className="text-[11px] font-medium text-rose-600">위치가 없습니다. 아래 도형수정으로 추가하세요.</p>
+        ) : null}
 
         <section>
           <SectionTitle
@@ -601,7 +677,7 @@ export function DroneFileDetailPanel({ file, files = [], onClose, onDelete }: Dr
           >
             미리보기
           </SectionTitle>
-          <div className="overflow-hidden rounded-lg border border-slate-200 bg-slate-900 shadow-sm">
+          <div className="overflow-hidden rounded-lg border border-border bg-slate-900 shadow-sm">
             {mediaSrc && !isVideo ? (
               <button
                 type="button"
@@ -639,14 +715,18 @@ export function DroneFileDetailPanel({ file, files = [], onClose, onDelete }: Dr
                 ) : (
                   <div className="h-24 w-36 rounded border border-dashed border-slate-500/60 bg-slate-800/80" />
                 )}
-                <span className="max-w-[90%] truncate text-[11px]">{file.name}</span>
-                <span className="text-[10px] text-slate-500">미리보기 경로가 없습니다</span>
+                <span className="max-w-[90%] truncate text-[11px]" title={file.name}>{file.name}</span>
+                <span className="text-[10px] text-slate-400">미리보기 경로가 없습니다</span>
               </div>
             )}
           </div>
         </section>
       </div>
-      <DetailFooter onClose={onClose} onDelete={onDelete} />
+      <DetailFooter
+        onClose={onClose}
+        onDelete={onDelete}
+        onGeomEdit={onEditGeom ? () => onEditGeom(file) : undefined}
+      />
 
       {viewerOpen && galleryItems.length > 0 ? (
         <ServiceFileImagePreview
@@ -701,7 +781,7 @@ export function PanoramaWorkUnitDetailPanel({
     )?.value ?? unit.workName;
   const showInfoActions = !viewOnly && detailTab === 'info';
   return (
-    <div className="flex h-full min-h-0 flex-col bg-white">
+    <div className="flex h-full min-h-0 flex-col bg-background">
       <DetailHeader
         title="작업단위 상세"
         tab={detailTab}
@@ -752,7 +832,7 @@ export function PanoramaWorkUnitDetailPanel({
               >
                 파일 목록
               </SectionTitle>
-              <p className="mb-2 text-[10px] text-slate-400">
+              <p className="mb-2 text-[10px] leading-relaxed text-muted-foreground">
                 파일을 선택하면 360 미리보기가 열립니다. GPS가 있으면 지도가 이동합니다.
               </p>
               <FileRows
@@ -787,11 +867,9 @@ type SatDetailProps = {
   viewOnly?: boolean;
   linkedRequest?: ShootingRequestDraft | null;
   onFolderUpload?: () => void;
-  onAddFiles?: () => void;
   onClearLink?: () => void;
   onDelete?: () => void;
   onSaveAttrs?: (attrs: AttrRow[]) => Promise<void>;
-  onDeleteFile?: (file: WorkFileItem) => void;
 };
 
 export function SatelliteWorkUnitDetailPanel({
@@ -802,11 +880,9 @@ export function SatelliteWorkUnitDetailPanel({
   viewOnly = false,
   linkedRequest,
   onFolderUpload,
-  onAddFiles,
   onClearLink,
   onDelete,
   onSaveAttrs,
-  onDeleteFile,
 }: SatDetailProps) {
   useWorkUnitViewLog('satellite', unit.id);
   const edit = useAttrEdit(unit, onSaveAttrs);
@@ -817,18 +893,21 @@ export function SatelliteWorkUnitDetailPanel({
     )?.value ?? unit.workName;
   const showInfoActions = !viewOnly && detailTab === 'info';
   return (
-    <div className="flex h-full min-h-0 flex-col bg-white">
+    <div className="flex h-full min-h-0 flex-col bg-background">
       <DetailHeader
         title="작업단위 상세"
         tab={detailTab}
         onTabChange={viewOnly ? undefined : onDetailTabChange}
         editing={edit.editing}
         onClose={onClose}
+        secondaryTabLabel="촬영정보"
       />
       {!viewOnly && detailTab === 'flight' ? (
         <div className="min-h-0 flex-1 overflow-y-auto">
           <FlightLogbookForm
             workUnitLabel={workLabel}
+            title="촬영정보"
+            infoSectionLabel="촬영 정보"
             srKey={
               linkedRequest?.id != null && Number.isFinite(Number(linkedRequest.id))
                 ? Number(linkedRequest.id)
@@ -849,36 +928,9 @@ export function SatelliteWorkUnitDetailPanel({
           onFolderUpload={viewOnly ? undefined : onFolderUpload}
           onClearLink={viewOnly ? undefined : onClearLink}
           fileSection={
-            <section>
-              <SectionTitle
-                action={
-                  viewOnly || !onAddFiles ? undefined : (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="h-7 gap-1 px-2 text-[11px]"
-                      onClick={onAddFiles}
-                    >
-                      <Plus className="h-3 w-3" />
-                      추가
-                    </Button>
-                  )
-                }
-              >
-                파일 목록
-              </SectionTitle>
-              <p className="mb-2 text-[10px] text-slate-400">
-                변환 완료 시 배경지도 «자체항공영상»에 등록됩니다. 지도 on/off는 배경지도에서 합니다.
-              </p>
-              <FileRows
-                files={unit.files}
-                selectedId={null}
-                onSelect={() => {}}
-                onDeleteFile={viewOnly ? undefined : onDeleteFile}
-                statusMode="convert"
-              />
-            </section>
+            <p className="rounded-md border border-border bg-muted/50 px-2.5 py-2 text-[10px] leading-relaxed text-muted-foreground">
+              영상 표시·on/off는 배경지도 «자체항공영상»에서 합니다.
+            </p>
           }
         />
       )}
@@ -902,6 +954,8 @@ function FileRows({
   onToggleCheck,
   checkableDoneOnly,
   showLocation,
+  markMissingGeom,
+  onEditGeom,
   statusMode = 'upload',
   onDeleteFile,
 }: {
@@ -912,13 +966,15 @@ function FileRows({
   onToggleCheck?: (id: string) => void;
   checkableDoneOnly?: boolean;
   showLocation?: boolean;
+  markMissingGeom?: boolean;
+  onEditGeom?: (file: WorkFileItem) => void;
   onDeleteFile?: (file: WorkFileItem) => void;
   /** ortho=변환중·변환완료, drone/pano=업로드완료 */
   statusMode?: 'convert' | 'upload';
 }) {
   if (files.length === 0) {
     return (
-      <div className="rounded-lg border border-dashed border-slate-200 px-3 py-8 text-center text-[11px] text-slate-400">
+      <div className="rounded-lg border border-dashed border-border px-3 py-8 text-center text-[11px] text-muted-foreground">
         파일이 없습니다.
       </div>
     );
@@ -937,74 +993,85 @@ function FileRows({
           <li key={f.id}>
             <div
               className={cn(
-                'flex items-start gap-2 rounded-lg border px-2.5 py-2.5 transition-colors',
+                'flex items-center gap-2 rounded-lg border px-2.5 py-2 transition-colors',
                 selected
-                  ? 'border-sky-300 bg-sky-50 shadow-sm ring-1 ring-sky-200/70'
+                  ? 'border-sky-300 bg-sky-50 shadow-sm ring-1 ring-sky-200 dark:border-sky-800 dark:bg-sky-950/40 dark:ring-sky-800/70'
                   : checked
-                    ? 'border-emerald-200 bg-emerald-50/40'
-                    : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50'
+                    ? 'border-emerald-200 dark:border-emerald-800 bg-emerald-50/40 dark:bg-emerald-950/30'
+                    : 'border-border bg-background hover:border-border hover:bg-muted/60'
               )}
             >
               {onToggleCheck ? (
-                <label className="mt-0.5 flex shrink-0 items-center">
+                <label className="flex h-7 w-4 shrink-0 items-center justify-center">
                   <input
                     type="checkbox"
-                    className="h-3.5 w-3.5 rounded border-slate-300"
+                    className="h-3.5 w-3.5 shrink-0 rounded border-border accent-sky-600"
                     checked={checked}
                     disabled={!canCheck}
                     onChange={() => onToggleCheck(f.id)}
+                    onClick={(e) => e.stopPropagation()}
                     title={canCheck ? '지도 타일 표시' : '변환 완료 후 선택 가능'}
                   />
                 </label>
               ) : null}
 
-              <button type="button" className="min-w-0 flex-1 text-left" onClick={() => onSelect(f.id)}>
-                <div className="flex items-start gap-2">
-                  <span
-                    className={cn(
-                      'mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-md',
-                      selected ? 'bg-sky-100 text-sky-700' : 'bg-slate-100 text-slate-500'
-                    )}
-                  >
-                    <FileIcon className="h-3.5 w-3.5" />
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-start justify-between gap-2">
-                      <span
-                        className={cn(
-                          'truncate text-[11px] font-medium',
-                          selected ? 'text-sky-950' : 'text-slate-800'
-                        )}
-                        title={f.name}
-                      >
-                        {f.name}
-                      </span>
-                      <StatusBadge status={f.status} mode={statusMode} />
-                    </div>
-                    <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px] text-slate-500">
-                      <span>{f.format.toUpperCase()}</span>
-                      <span>{f.sizeLabel}</span>
-                      {showLocation && f.locationLabel ? (
-                        <span className="inline-flex items-center gap-0.5 tabular-nums">
-                          <MapPin className="h-2.5 w-2.5" />
-                          {f.locationLabel}
-                        </span>
-                      ) : null}
-                    </div>
-                  </div>
+              <span
+                className={cn(
+                  'flex h-7 w-7 shrink-0 items-center justify-center rounded-md',
+                  selected ? 'bg-sky-100 dark:bg-sky-950/50 text-sky-700 dark:text-sky-300' : 'bg-muted text-muted-foreground'
+                )}
+                aria-hidden
+              >
+                <FileIcon className="h-3.5 w-3.5" />
+              </span>
+
+              <button
+                type="button"
+                className="min-w-0 flex-1 py-0.5 text-left"
+                onClick={() => {
+                  onSelect(f.id);
+                  // 드론영상 등: 행 클릭만으로도 체크(지도 타일)가 켜지도록
+                  if (onToggleCheck && canCheck) onToggleCheck(f.id);
+                }}
+              >
+                <p
+                  className={cn(
+                    'truncate text-[11px] font-medium leading-4',
+                    selected ? 'text-sky-950 dark:text-sky-100' : 'text-foreground'
+                  )}
+                  title={f.name}
+                >
+                  {f.name}
+                </p>
+                <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px] leading-3 text-muted-foreground">
+                  <span>{f.format.toUpperCase()}</span>
+                  <span>{f.sizeLabel}</span>
+                  {showLocation && f.locationLabel ? (
+                    <span className="inline-flex items-center gap-0.5 tabular-nums">
+                      <MapPin className="h-2.5 w-2.5 shrink-0" />
+                      {f.locationLabel}
+                    </span>
+                  ) : null}
                 </div>
               </button>
-              {onDeleteFile ? (
-                <button
-                  type="button"
-                  className="mt-0.5 shrink-0 rounded p-1 text-slate-400 transition-colors hover:bg-rose-50 hover:text-rose-600"
-                  onClick={() => onDeleteFile(f)}
-                  title="파일 삭제"
-                  aria-label={`${f.name} 삭제`}
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                </button>
-              ) : null}
+
+              <div className="flex shrink-0 items-center gap-1">
+                {markMissingGeom && fileMissingGeom(f) ? (
+                  <MissingGeomMark onClick={onEditGeom ? () => onEditGeom(f) : undefined} />
+                ) : null}
+                <StatusBadge status={f.status} mode={statusMode} />
+                {onDeleteFile ? (
+                  <button
+                    type="button"
+                    className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-rose-50 dark:hover:bg-rose-950/40 hover:text-rose-600 dark:hover:text-rose-300"
+                    onClick={() => onDeleteFile(f)}
+                    title="파일 삭제"
+                    aria-label={`${f.name} 삭제`}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                ) : null}
+              </div>
             </div>
           </li>
         );

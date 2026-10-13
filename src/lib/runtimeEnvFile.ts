@@ -40,6 +40,7 @@ export const SCHEDULER_CODES = {
   kais: 'kais',
   krasLayer: 'krasLayer',
   nssmLogBackup: 'nssmLogBackup',
+  aerialDroneFolder: 'aerialDroneFolder',
 } as const;
 
 export type SchedulerCode = (typeof SCHEDULER_CODES)[keyof typeof SCHEDULER_CODES];

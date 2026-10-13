@@ -1,6 +1,6 @@
 'use client';
 
-import { Cctv } from 'lucide-react';
+import { Cctv, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
   WATER_STATUS_HEX,
@@ -23,6 +23,8 @@ type Props = {
   cctvStationIds?: Set<string>;
   /** 수위 관측소 id → 기준수위 대비 현재 상태 */
   waterStatusById?: Record<string, WaterStatusLevel>;
+  /** 관측소 목록·지도 적재 중 */
+  loading?: boolean;
 };
 
 function kindLabel(kind: SafetyWaterStation['kind']) {
@@ -45,6 +47,7 @@ export function SafetyWaterStationList({
   cctvOnly = false,
   cctvStationIds,
   waterStatusById = {},
+  loading = false,
 }: Props) {
   const allSelected = selectedId === null;
   const q = searchText.trim().toLowerCase();
@@ -55,6 +58,24 @@ export function SafetyWaterStationList({
     return `${st.name} ${st.address} ${st.code}`.toLowerCase().includes(q);
   });
   const hasAnyCctv = (cctvStationIds?.size ?? 0) > 0;
+  const initialLoading = loading && stations.length === 0;
+
+  if (initialLoading) {
+    return (
+      <div
+        className={cn(
+          'flex min-h-[8rem] flex-col items-center justify-center gap-2 px-3 py-8 text-muted-foreground',
+          className
+        )}
+        role="status"
+        aria-live="polite"
+        aria-label="관측소 불러오는 중"
+      >
+        <Loader2 className="h-5 w-5 animate-spin text-muted-foreground/70" aria-hidden />
+        <span className="text-[11px]">관측소를 불러오는 중…</span>
+      </div>
+    );
+  }
 
   return (
     <ul className={cn('min-h-0', className)} role="listbox" aria-label="관측소 목록">

@@ -43,6 +43,16 @@ function looksLikeGeomWkt(raw: string): boolean {
   );
 }
 
+/** POLYGON((…)) → MULTIPOLYGON(((…))) — MultiPolygon 컬럼에 넣을 WKT 형태 */
+function coerceWktToMultiPolygon(wkt: string): string {
+  const s = String(wkt ?? '').trim();
+  if (!s) return s;
+  if (/^MULTIPOLYGON\s*\(/i.test(s)) return s;
+  const m = /^POLYGON\s*(\([\s\S]*\))\s*$/i.exec(s);
+  if (m) return `MULTIPOLYGON (${m[1]})`;
+  return s;
+}
+
 export type DefineFieldMeta = {
   field: string;
   label: string;
@@ -915,8 +925,16 @@ export async function clipGeoJson3857ToWkt5181(params: {
   }
 }
 
-function geomSetExpr(wkt5181: string): string {
-  return `ST_SetSRID(ST_GeomFromText('${esc(wkt5181.trim())}'), 5181)`;
+/** WKT(5181) → 컬럼 geometry 타입에 맞는 WKT로 맞춘 뒤 GeomFromText. MultiPolygon에는 MULTIPOLYGON(((…))) 형태로 넣음 */
+function geomSetExpr(wkt5181: string, geomType?: string): string {
+  let wkt = String(wkt5181 ?? '').trim();
+  const t = String(geomType ?? '')
+    .trim()
+    .toUpperCase();
+  if (t === 'MULTIPOLYGON') {
+    wkt = coerceWktToMultiPolygon(wkt);
+  }
+  return `ST_SetSRID(ST_GeomFromText('${esc(wkt)}'), 5181)`;
 }
 
 async function fetchRowAttrsAsJson(params: {
@@ -1086,6 +1104,9 @@ export async function updateTableRowByKey(params: {
   } else if (geomWkt) {
     const geomCol = await resolveGeomColumn(schema, table);
     if (!geomCol) return { success: false, error: 'geometry 컬럼을 찾을 수 없습니다.' };
+    const geomTypeRaw = await resolveGeometryColumnType(schema, table);
+    const geomType = /occupationledger/i.test(tableGuess) ? 'MULTIPOLYGON' : geomTypeRaw;
+    const geomSql = geomSetExpr(geomWkt, geomType);
     // 동일 도형이면 UPDATE 생략 (WKT 왕복으로 이력에 잡히는 것 방지)
     let geomSame = false;
     try {
@@ -1095,7 +1116,7 @@ export async function updateTableRowByKey(params: {
              WHEN ${quoteIdent(geomCol)} IS NULL THEN false
              ELSE ST_Equals(
                ${quoteIdent(geomCol)},
-               ${geomSetExpr(geomWkt)}
+               ${geomSql}
              )
            END AS same
            FROM ${quoteIdent(schema)}.${quoteIdent(table)}
@@ -1108,7 +1129,7 @@ export async function updateTableRowByKey(params: {
       geomSame = false;
     }
     if (!geomSame) {
-      setParts.push(`${quoteIdent(geomCol)} = ${geomSetExpr(geomWkt)}`);
+      setParts.push(`${quoteIdent(geomCol)} = ${geomSql}`);
     }
   }
 
@@ -1328,14 +1349,34 @@ export async function insertTableRow(params: {
   if (geomWkt) {
     const geomCol = await resolveGeomColumn(schema, table);
     if (!geomCol) return { success: false, error: 'geometry 컬럼을 찾을 수 없습니다.' };
+    const geomTypeRaw = await resolveGeometryColumnType(schema, table);
+    const geomType =
+      isOccupationLedgerInsert || /occupationledger/i.test(tableGuess)
+        ? 'MULTIPOLYGON'
+        : geomTypeRaw;
     insertCols.push(quoteIdent(geomCol));
-    insertVals.push(geomSetExpr(geomWkt));
+    insertVals.push(geomSetExpr(geomWkt, geomType));
   }
+
+  /** serial PK(ogc_fid 등) 시퀀스가 MAX보다 뒤처지면 중복 방지 */
+  const bumpSerialPkIfNeeded = async () => {
+    for (const cand of ['ogc_fid', 'gid'] as const) {
+      const col = findColumnName(columnMeta.map((c) => c.name), cand);
+      if (!col || insertedColSet.has(col.toLowerCase())) continue;
+      try {
+        await bumpIntegerSerialToMax(schema, table, col);
+      } catch {
+        /* 시퀀스 없으면 무시 */
+      }
+      break;
+    }
+  };
 
   if (insertCols.length === 0) {
     const q = `INSERT INTO ${quoteIdent(schema)}.${quoteIdent(table)} DEFAULT VALUES
                RETURNING ${quoteIdent(findColumnName(columnMeta.map((c) => c.name), keyField)!)}::text AS new_key`;
     try {
+      await bumpSerialPkIfNeeded();
       const res = await db.execute(sql.raw(q));
       const row = res.rows?.[0] as { new_key?: string } | undefined;
       const keyValue = row?.new_key != null ? String(row.new_key).trim() : '';
@@ -1366,6 +1407,7 @@ export async function insertTableRow(params: {
          VALUES (${insertVals.join(', ')})`;
 
   try {
+    await bumpSerialPkIfNeeded();
     if (isOccupationLedgerInsert && ogcFidCol) {
       const res = await db.execute(sql.raw(`${insertBase} RETURNING ${quoteIdent(ogcFidCol)} AS fid`));
       const fid = String((res.rows?.[0] as { fid?: string } | undefined)?.fid ?? '').trim();
@@ -1419,8 +1461,7 @@ export async function insertTableRow(params: {
     }).catch(() => {});
     return { success: true, keyValue };
   } catch (e: unknown) {
-    const msg = e instanceof Error ? e.message : String(e);
-    return { success: false, error: msg };
+    return { success: false, error: formatDbExecuteError(e) };
   }
 }
 

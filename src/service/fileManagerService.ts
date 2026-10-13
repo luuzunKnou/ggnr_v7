@@ -14,7 +14,7 @@ import {
   shouldHideServiceFileDataFileName,
 } from '@/lib/serviceFileData';
 import { GGNR_BASE_STRUCTURE, GGNR_DATA_PATHS } from '@/lib/ggnrDataPaths';
-import { resolveGgnrDataDir, turbopackOpaquePath } from '@/lib/turbopackFsPath';
+import { resolveGgnrDataDir, resolveGgnrDataUncRoot, turbopackOpaquePath } from '@/lib/turbopackFsPath';
 
 // 사업명 폴더 없이 데이터 루트가 곧 베이스. 환경변수 GGNR_DATA_DIR로 덮을 수 있음.
 function getBaseDir(): string {
@@ -461,16 +461,48 @@ export async function listServiceFileDataFiles(params: {
   const resolved = resolveWithinBase(rel);
   if (!resolved) return [];
 
+  const layerKey = params.layerName.trim().toLowerCase();
+  const logRiverPlanReportPath =
+    layerKey === 'river_plan_as' || layerKey === 'river_plan_s_as';
+  const uncRoot = logRiverPlanReportPath ? resolveGgnrDataUncRoot() : '';
+
   let entries: import('node:fs').Dirent[];
   try {
     entries = await fs.readdir(resolved.abs, { withFileTypes: true });
-  } catch {
+  } catch (err: unknown) {
+    if (logRiverPlanReportPath) {
+      const code = (err as NodeJS.ErrnoException)?.code;
+      console.info(
+        '[riverBasicPlan:report] path missing or unreadable',
+        JSON.stringify({
+          GGNR_DATA_DIR: resolved.base,
+          GGNR_DATA_UNC_ROOT: uncRoot || null,
+          relative: rel,
+          absolute: resolved.abs,
+          code: code ?? null,
+        }),
+      );
+    }
     return [];
   }
 
   const fileEntries = entries.filter(
     (e) => e.isFile() && !shouldHideServiceFileDataFileName(e.name)
   );
+  if (logRiverPlanReportPath) {
+    const dirs = entries.filter((e) => e.isDirectory()).map((e) => e.name);
+    console.info(
+      '[riverBasicPlan:report] list',
+      JSON.stringify({
+        GGNR_DATA_DIR: resolved.base,
+        GGNR_DATA_UNC_ROOT: uncRoot || null,
+        relative: rel,
+        absolute: resolved.abs,
+        files: fileEntries.map((e) => e.name),
+        dirs,
+      }),
+    );
+  }
   const includeMeta = params.includeMeta !== false;
 
   if (!includeMeta) {
@@ -522,7 +554,9 @@ export async function listServiceFileDataFolders(params: {
   for (const e of entries) {
     if (e.isDirectory()) {
       const t = String(e.name ?? '').trim();
-      if (t && t !== '.' && t !== '..') folders.push(t);
+      if (t && t !== '.' && t !== '..' && !shouldHideServiceFileDataFileName(t)) {
+        folders.push(t);
+      }
     } else if (e.isFile() && !shouldHideServiceFileDataFileName(e.name)) {
       hasRootFiles = true;
     }
@@ -604,6 +638,7 @@ export async function relocateServiceFileDataKey(params: {
 
 /**
  * 첨부파일 소프트 삭제: 원본을 `{파일명}.tmp` 로 rename (목록에서 제외).
+ * SMB/미리보기 잠금(EBUSY) 시 짧게 재시도 후 copy+unlink 폴백.
  */
 export async function softDeleteServiceFileDataItem(params: {
   layerName: string;
@@ -636,12 +671,59 @@ export async function softDeleteServiceFileDataItem(params: {
     if (code === 'ENOENT') return { ok: false, error: '파일을 찾을 수 없습니다.' };
     return { ok: false, error: '확인 실패' };
   }
+
+  const isBusy = (e: unknown) => {
+    const code = (e as NodeJS.ErrnoException)?.code;
+    return code === 'EBUSY' || code === 'EPERM' || code === 'EACCES';
+  };
+  const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+  const delays = [80, 160, 320, 640, 1200];
+
+  for (let i = 0; i <= delays.length; i++) {
+    try {
+      await fs.rename(srcAbs, dstAbs);
+      return { ok: true };
+    } catch (e: unknown) {
+      const code = (e as NodeJS.ErrnoException).code;
+      if (code === 'EEXIST') return { ok: false, error: '이미 삭제된 파일이 있습니다.' };
+      if (code === 'ENOENT') return { ok: true };
+      if (!isBusy(e) || i === delays.length) break;
+      await sleep(delays[i]!);
+    }
+  }
+
+  /** rename이 잠금으로 막히면 복사 후 원본 삭제 시도 */
   try {
-    await fs.rename(srcAbs, dstAbs);
-  } catch (e: unknown) {
-    const code = (e as NodeJS.ErrnoException).code;
-    if (code === 'EEXIST') return { ok: false, error: '이미 삭제된 파일이 있습니다.' };
-    throw e;
+    try {
+      await fs.unlink(dstAbs);
+    } catch {
+      /* 기존 .tmp 없으면 무시 */
+    }
+    await nodeFs.copyFile(fsPath(srcAbs), fsPath(dstAbs));
+    for (let i = 0; i <= delays.length; i++) {
+      try {
+        await fs.unlink(srcAbs);
+        return { ok: true };
+      } catch (e: unknown) {
+        if (!isBusy(e) || i === delays.length) {
+          try {
+            await fs.unlink(dstAbs);
+          } catch {
+            /* ignore */
+          }
+          return {
+            ok: false,
+            error: '파일이 사용 중이라 삭제하지 못했습니다. 잠시 후 다시 시도해 주세요.',
+          };
+        }
+        await sleep(delays[i]!);
+      }
+    }
+  } catch {
+    return {
+      ok: false,
+      error: '파일이 사용 중이라 삭제하지 못했습니다. 잠시 후 다시 시도해 주세요.',
+    };
   }
   return { ok: true };
 }

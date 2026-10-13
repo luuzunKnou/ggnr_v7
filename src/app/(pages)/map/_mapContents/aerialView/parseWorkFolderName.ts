@@ -67,7 +67,7 @@ export function parseWorkFolderName(folderName: string): ParsedWorkFolder {
   if (!kind) {
     return {
       ok: false,
-      error: '구분은 드론영상·사진동영상·파노라마·항공영상 중 하나여야 합니다.',
+      error: '구분은 드론영상·사진동영상·항공뷰·항공영상 중 하나여야 합니다.',
     };
   }
   if (!/^\d{4,5}$/.test(crsHint)) {

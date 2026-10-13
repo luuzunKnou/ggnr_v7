@@ -70,18 +70,33 @@ const KAKAO_DOMAIN_HINT = '(API 키에 등록된 도메인 확인 필요)';
 /** 카카오 오류 문구 → 사용자 안내 */
 export function explainKakaoRoadviewFailure(raw: unknown): string | null {
   if (raw instanceof KakaoMapsSdkLoadError) {
-    const lines = ['카카오 지도 SDK 로드에 실패했습니다.'];
-    if (isKakaoDomainMismatch(raw)) {
-      if (raw.scriptLoadFailed) {
-        lines.push('사용 중인 API 키에 등록되지 않은 도메인에서 접속했을 가능성이 높습니다.');
-      }
-      if (raw.kakaoOfficialMsg) lines.push(raw.kakaoOfficialMsg);
-      lines.push(`현재 접속: ${currentOrigin()}`);
-      lines.push(KAKAO_DOMAIN_HINT);
-    } else if (raw.kakaoOfficialMsg) {
-      lines.push(raw.kakaoOfficialMsg);
+    if (raw.stage === 'followup') {
+      return [
+        '카카오 스크립트는 받았습니다.',
+        '단계: 이어받는 주소',
+        't1.daumcdn.net 쪽 스크립트가 오지 않아 로드뷰를 시작하지 못했습니다.',
+      ].join('\n');
     }
-    return lines.join('\n');
+    if (raw.stage === 'domain' || isKakaoDomainMismatch(raw)) {
+      return [
+        'JavaScript SDK 도메인이 등록되지 않았습니다.',
+        '단계: 카카오 도메인 확인',
+        `현재 접속: ${currentOrigin()}`,
+        raw.kakaoOfficialMsg ?? '',
+        KAKAO_DOMAIN_HINT,
+      ]
+        .filter(Boolean)
+        .join('\n');
+    }
+    const status = raw.httpStatus != null ? `응답: ${raw.httpStatus}` : '';
+    return [
+      '카카오 스크립트를 받지 못했습니다.',
+      '단계: 서버 프록시 (dapi.kakao.com)',
+      status,
+      raw.kakaoOfficialMsg ?? '',
+    ]
+      .filter(Boolean)
+      .join('\n');
   }
 
   const text =
@@ -209,6 +224,9 @@ export function StreetViewPanel({
   const [sdkReady, setSdkReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [noPano, setNoPano] = useState(false);
+  const noPanoRef = useRef(false);
+  /** getNearestPanoId 실패한 요청 좌표 — 화살표 이동 후 재조회 판단용 */
+  const noPanoRequestKeyRef = useRef('');
   const [panoReady, setPanoReady] = useState(false);
   /** 이전 파노라마가 실제로 열린 좌표 — 알림 시 복귀용 (호출 좌표 아님) */
   const [lastSuccessPos, setLastSuccessPos] = useState<{ lng: number; lat: number } | null>(null);
@@ -240,6 +258,19 @@ export function StreetViewPanel({
   }, []);
   const scheduleSnapReadyRef = useRef(scheduleSnapReady);
   scheduleSnapReadyRef.current = scheduleSnapReady;
+
+  useEffect(() => {
+    noPanoRef.current = noPano;
+  }, [noPano]);
+
+  const resolvePanoSearchRadiusM = useCallback(() => {
+    try {
+      const n = getPanoSearchRadiusMRef.current?.();
+      return n != null && Number.isFinite(n) && n > 0 ? n : PANO_SEARCH_RADIUS_FALLBACK_M;
+    } catch {
+      return PANO_SEARCH_RADIUS_FALLBACK_M;
+    }
+  }, []);
 
   const reportFailure = (raw: unknown, fallback?: string) => {
     const explained = explainKakaoRoadviewFailure(raw);
@@ -285,6 +316,7 @@ export function StreetViewPanel({
         if (!cancelled) {
           console.warn('[KakaoRoadview] sdk bootstrap failed', {
             origin: currentOrigin(),
+            stage: e instanceof KakaoMapsSdkLoadError ? e.stage : undefined,
             explained: explainKakaoRoadviewFailure(e),
             errorMessage: e instanceof Error ? e.message : String(e),
             kakaoOfficialMsg: e instanceof KakaoMapsSdkLoadError ? e.kakaoOfficialMsg : undefined,
@@ -338,6 +370,41 @@ export function StreetViewPanel({
       }
     };
 
+    /** noPano 알림 중 화살표 등으로 다른 위치 파노가 열리면 재조회 후 알림 해제 */
+    const tryClearNoPanoAfterMove = () => {
+      if (!noPanoRef.current) return;
+      const rv = roadviewRef.current;
+      const client = clientRef.current;
+      if (!rv || !client) return;
+      try {
+        const pos = rv.getPosition();
+        if (!pos) return;
+        const currentKey = posKey(pos.getLng(), pos.getLat());
+        if (currentKey === noPanoRequestKeyRef.current) return;
+        client.getNearestPanoId(pos, (() => {
+          try {
+            const n = getPanoSearchRadiusMRef.current?.();
+            return n != null && Number.isFinite(n) && n > 0 ? n : PANO_SEARCH_RADIUS_FALLBACK_M;
+          } catch {
+            return PANO_SEARCH_RADIUS_FALLBACK_M;
+          }
+        })(), (panoId) => {
+          if (!noPanoRef.current || panoId == null) return;
+          noPanoRequestKeyRef.current = '';
+          noPanoRef.current = false;
+          setNoPano(false);
+          setPanoReady(true);
+          setError(null);
+          everPanoReadyRef.current = true;
+          lastPanoIdRef.current = panoId;
+          lastFetchKeyRef.current = currentKey;
+          scheduleSnapReadyRef.current();
+        });
+      } catch {
+        /* ignore */
+      }
+    };
+
     const onInit = () => {
       if (initTimerRef.current) {
         clearTimeout(initTimerRef.current);
@@ -345,6 +412,8 @@ export function StreetViewPanel({
       }
       everPanoReadyRef.current = true;
       setPanoReady(true);
+      noPanoRequestKeyRef.current = '';
+      noPanoRef.current = false;
       setNoPano(false);
       setError(null);
       // 호출 좌표가 아니라 실제로 열린 파노 위치
@@ -359,6 +428,7 @@ export function StreetViewPanel({
     };
 
     const onPositionChanged = () => {
+      tryClearNoPanoAfterMove();
       // 화살표 이동 등으로 열린 파노 위치가 바뀌면 복귀 기준도 갱신
       rememberLoadedRoadviewPos();
       if (skipEchoRef.current) return;
@@ -398,7 +468,7 @@ export function StreetViewPanel({
     };
 
     const onError = (...args: unknown[]) => {
-      reportFailure(args[0] ?? args, '로드뷰 오류가 발생했습니다.');
+      reportFailure(args[0] ?? args, '단계: 로드뷰 표시\n로드뷰 오류가 발생했습니다.');
     };
 
     const bindRoadview = (rv: KakaoRoadview) => {
@@ -422,7 +492,7 @@ export function StreetViewPanel({
         roadviewRef.current = rv;
         return rv;
       } catch (e) {
-        reportFailure(e, '로드뷰 객체를 생성하지 못했습니다.');
+        reportFailure(e, '단계: 로드뷰 화면 생성\n로드뷰 객체를 생성하지 못했습니다.');
         roadviewRef.current = null;
         return null;
       }
@@ -531,7 +601,7 @@ export function StreetViewPanel({
           scheduleSnapReadyRef.current();
         }, PANO_INIT_TIMEOUT_MS);
       } catch (e) {
-        reportFailure(e, '로드뷰 파노라마를 다시 열지 못했습니다.');
+        reportFailure(e, '단계: 파노라마 다시 열기\n로드뷰 파노라마를 다시 열지 못했습니다.');
       } finally {
         queueMicrotask(() => {
           skipEchoRef.current = false;
@@ -646,6 +716,8 @@ export function StreetViewPanel({
     lastFetchKeyRef.current = fetchKey;
 
     let cancelled = false;
+    noPanoRequestKeyRef.current = '';
+    noPanoRef.current = false;
     setNoPano(false);
     emitRoadviewSnapInvalidate(containerRef.current);
     if (initTimerRef.current) {
@@ -659,12 +731,9 @@ export function StreetViewPanel({
         setError((prev) => {
           if (prev) return prev;
           return [
-            '로드뷰를 표시하지 못했습니다.',
-            `현재 접속 주소: ${currentOrigin()}`,
-            '',
-            '도메인 미등록·앱키 오류일 수 있습니다.',
-            '카카오 디벨로퍼스 → 플랫폼 키 → JavaScript 키',
-            '→ JavaScript SDK 도메인을 확인하세요.',
+            '카카오 스크립트는 받았습니다.',
+            '단계: 근처 로드뷰 조회',
+            '조회가 끝나지 않았습니다. 브라우저에서 rv.map.kakao.com, mts.daumcdn.net 이 막혀 있을 수 있습니다.',
           ].join('\n');
         });
         emitRoadviewSnapInvalidate(containerRef.current);
@@ -674,19 +743,14 @@ export function StreetViewPanel({
 
     const position = new window.kakao.maps.LatLng(lat, lng);
     try {
-      const radiusM = (() => {
-        try {
-          const n = getPanoSearchRadiusMRef.current?.();
-          return n != null && Number.isFinite(n) && n > 0 ? n : PANO_SEARCH_RADIUS_FALLBACK_M;
-        } catch {
-          return PANO_SEARCH_RADIUS_FALLBACK_M;
-        }
-      })();
+      const radiusM = resolvePanoSearchRadiusM();
       client.getNearestPanoId(position, radiusM, (panoId) => {
         if (cancelled) {
           return;
         }
         if (panoId == null) {
+          noPanoRequestKeyRef.current = fetchKey;
+          noPanoRef.current = true;
           setNoPano(true);
           setPanoReady(false);
           lastPanoIdRef.current = null;
@@ -694,6 +758,8 @@ export function StreetViewPanel({
           scheduleSnapReadyRef.current();
           return;
         }
+        noPanoRequestKeyRef.current = '';
+        noPanoRef.current = false;
         setNoPano(false);
         skipEchoRef.current = true;
         try {
@@ -720,7 +786,7 @@ export function StreetViewPanel({
           scheduleSnapReadyRef.current();
           // lastSuccessPos는 init의 getPosition(실제 파노 좌표)에서 갱신
         } catch (e) {
-          reportFailure(e, '로드뷰 파노라마를 열지 못했습니다.');
+          reportFailure(e, '단계: 파노라마 열기\n로드뷰 파노라마를 열지 못했습니다.');
         } finally {
           queueMicrotask(() => {
             skipEchoRef.current = false;
@@ -728,7 +794,7 @@ export function StreetViewPanel({
         }
       });
     } catch (e) {
-      reportFailure(e, '근처 로드뷰 조회에 실패했습니다.');
+      reportFailure(e, '단계: 근처 로드뷰 조회\n근처 로드뷰 조회에 실패했습니다.');
     }
 
     return () => {
@@ -739,7 +805,7 @@ export function StreetViewPanel({
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- panDeg intentionally omitted
-  }, [sdkReady, lng, lat]);
+  }, [sdkReady, lng, lat, resolvePanoSearchRadiusM]);
 
   useEffect(() => {
     if (!sdkReady) return;

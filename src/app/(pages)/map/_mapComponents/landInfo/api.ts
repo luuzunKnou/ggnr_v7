@@ -419,11 +419,11 @@ export async function fetchParcelLandModalList(args: {
   }
 }
 
-/** V6 통합제어 personInfo — true면 소유자명 등 마스킹 */
+/** 시스템 통합제어 personInfo 켜짐이면 소유자명 마스킹 */
 export async function fetchPersonInfoMaskEnabled(): Promise<boolean> {
   try {
     const res = await call('', 'POST', {
-      service: 'configService',
+      service: 'systemControlService',
       action: 'getPersonInfoMaskEnabled',
     });
     const payload = (res?.data ?? res) as { enabled?: boolean };

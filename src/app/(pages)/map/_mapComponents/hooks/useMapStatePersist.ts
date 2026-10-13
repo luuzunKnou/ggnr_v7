@@ -4,6 +4,8 @@ import { isUsageDataAsWmsLayerId } from '../../_mapContents/river/usageDataAs/us
 
 const STORAGE_KEY = 'ggnr_map_state';
 const SAVE_DEBOUNCE_MS = 300;
+/** 홈↔지도 재진입 시 시스템 변경 감지용 (탭 세션) */
+export const MAP_LAST_SYSTEM_SESSION_KEY = 'ggnr_map_last_system';
 
 function getStorageKey(projectName?: string): string {
   const name = String(projectName ?? '').trim();
@@ -16,6 +18,8 @@ export interface PersistedMapState {
   centerY: number;
   backgroundMap: string;
   activeControls: string[];
+  /** 이 상태를 저장할 때 선택된 시스템 키 (다르면 레이어 복원 생략) */
+  systemKey?: string;
   /** 데이터 조회 레이어 목록에서 켜 둔 레이어 테이블명 목록 */
   visibleLayerNames: string[];
   /** 지목/소유구분/지적도/건물도로/주제도 상세 패널 체크박스 선택 (테이블명 배열) */
@@ -25,6 +29,37 @@ export interface PersistedMapState {
   visibleBuildingRoadLayerNames?: string[];
   visibleThematicLayerNames?: string[];
   visibleUndergroundFacilityLayerNames?: string[];
+}
+
+export function readLastMapSystemKey(): string | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    return sessionStorage.getItem(MAP_LAST_SYSTEM_SESSION_KEY);
+  } catch {
+    return null;
+  }
+}
+
+export function writeLastMapSystemKey(systemKey: string): void {
+  if (typeof window === 'undefined') return;
+  const key = String(systemKey ?? '').trim();
+  if (!key) return;
+  try {
+    sessionStorage.setItem(MAP_LAST_SYSTEM_SESSION_KEY, key);
+  } catch {
+    /* ignore */
+  }
+}
+
+/** 저장된 시스템(또는 세션 마지막 시스템)과 URL 시스템이 모두 있고 다르면 레이어 복원 금지 */
+export function shouldSkipPersistedLayerRestore(
+  persistedSystemKey: string | undefined,
+  urlSystemKey: string,
+  sessionLastSystemKey?: string | null
+): boolean {
+  const prev = String(persistedSystemKey ?? sessionLastSystemKey ?? '').trim();
+  const next = String(urlSystemKey ?? '').trim();
+  return Boolean(prev) && Boolean(next) && prev !== next;
 }
 
 export function loadPersistedMapState(projectName?: string): PersistedMapState | null {
@@ -106,6 +141,7 @@ export function useMapStatePersist(
   visibleLayerNames: Set<string>,
   layerPanelSelections: PersistedLayerPanelSelections,
   projectName?: string,
+  systemKey?: string,
 ) {
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const latestRef = useRef({
@@ -113,12 +149,14 @@ export function useMapStatePersist(
     activeControls,
     visibleLayerNames,
     layerPanelSelections,
+    systemKey,
   });
   latestRef.current = {
     backgroundMap,
     activeControls,
     visibleLayerNames,
     layerPanelSelections,
+    systemKey,
   };
 
   useEffect(() => {
@@ -130,12 +168,14 @@ export function useMapStatePersist(
       const center = view.getCenter();
       if (zoom == null || !center) return;
       const sel = latestRef.current.layerPanelSelections;
+      const sys = String(latestRef.current.systemKey ?? '').trim();
       saveMapState({
         zoom,
         centerX: center[0],
         centerY: center[1],
         backgroundMap: latestRef.current.backgroundMap,
         activeControls: latestRef.current.activeControls,
+        ...(sys ? { systemKey: sys } : {}),
         // 하천점용 패널 전용 레이어는 저장하지 않음 (시스템 재진입 시 잔상·클릭 무반응 방지)
         visibleLayerNames: Array.from(latestRef.current.visibleLayerNames).filter(
           (n) => !isUsageDataAsWmsLayerId(n)
@@ -180,12 +220,14 @@ export function useMapStatePersist(
     const center = view.getCenter();
     if (zoom == null || !center) return;
     const sel = layerPanelSelections;
+    const sys = String(systemKey ?? '').trim();
     saveMapState({
       zoom,
       centerX: center[0],
       centerY: center[1],
       backgroundMap,
       activeControls,
+      ...(sys ? { systemKey: sys } : {}),
       visibleLayerNames: Array.from(visibleLayerNames),
       ...(sel.visibleJimokLayerNames && { visibleJimokLayerNames: sel.visibleJimokLayerNames }),
       ...(sel.visibleLandownLayerNames && {
@@ -212,5 +254,6 @@ export function useMapStatePersist(
     map,
     mapReady,
     projectName,
+    systemKey,
   ]);
 }

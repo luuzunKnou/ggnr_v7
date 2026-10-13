@@ -1,5 +1,5 @@
 <featureType>
-  <id>FeatureTypeInfoImpl--50232ad2:1a022df41e9:-6221</id>
+  <id>FeatureTypeInfoImpl--1bcb52e7:1a0837eafcb:-7e1d</id>
   <name>landown_clan</name>
   <nativeName>jijuk</nativeName>
   <namespace>
@@ -12,17 +12,17 @@
   </keywords>
   <srs>EPSG:5181</srs>
   <nativeBoundingBox>
-    <minx>377685.85608982854</minx>
-    <maxx>403265.50902908086</maxx>
-    <miny>335979.610174858</miny>
-    <maxy>375244.2529578591</maxy>
+    <minx>386981.46962086525</minx>
+    <maxx>421242.33277071215</maxx>
+    <miny>354010.20242153574</miny>
+    <maxy>407102.4923572293</maxy>
     <crs class="projected">EPSG:5181</crs>
   </nativeBoundingBox>
   <latLonBoundingBox>
-    <minx>128.98332450581572</minx>
-    <maxx>129.27906432551876</maxx>
-    <miny>36.500529006406744</miny>
-    <maxy>36.85922812711922</maxy>
+    <minx>129.09139883394914</minx>
+    <maxx>129.4897978400713</maxx>
+    <miny>36.658876679927346</miny>
+    <maxy>37.14431112870671</maxy>
     <crs>EPSG:4326</crs>
   </latLonBoundingBox>
   <projectionPolicy>FORCE_DECLARED</projectionPolicy>

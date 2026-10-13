@@ -135,8 +135,9 @@ function clampPreviewIndex(index: number, len: number): number {
 }
 
 /**
- * 이미지: 숨김 iframe에서 인쇄 대화상자.
- * PDF: 새 탭에서 뷰어 연 뒤 print() (브라우저 PDF UI에 따름).
+ * 이미지·PDF: 숨김 iframe에서 브라우저 인쇄 대화상자 (새 탭/팝업 없음).
+ * PDF는 blob URL을 iframe.src로 두어 파일 자체를 인쇄한다 (canvas 렌더 아님).
+ * 대용량·다페이지 PDF는 0×0 iframe에서 인쇄가 실패하므로 오프스크린 실크기 iframe + 지연·재시도.
  */
 export async function printServiceFilePreviewBlob(
   url: string,
@@ -149,20 +150,92 @@ export async function printServiceFilePreviewBlob(
   const objectUrl = URL.createObjectURL(blob);
 
   if (kind === 'pdf') {
-    const w = window.open(objectUrl, '_blank', 'noopener,noreferrer');
-    if (!w) {
-      URL.revokeObjectURL(objectUrl);
-      throw new Error('popup blocked');
-    }
-    window.setTimeout(() => {
-      try {
-        w.focus();
-        w.print();
-      } catch {
-        /* 사용자가 탭에서 수동 인쇄 가능 */
-      }
-    }, 600);
-    window.setTimeout(() => URL.revokeObjectURL(objectUrl), 120_000);
+    await new Promise<void>((resolve, reject) => {
+      const iframe = document.createElement('iframe');
+      // Chrome PDF 뷰어는 0×0이면 다페이지 문서를 준비하지 못함 → 실크기 + 화면 밖
+      iframe.setAttribute(
+        'style',
+        'position:fixed;left:-10000px;top:0;width:1024px;height:768px;border:0;opacity:0;pointer-events:none'
+      );
+      iframe.setAttribute('title', fileName || 'PDF print');
+      document.body.appendChild(iframe);
+
+      let cleaned = false;
+      const cleanup = () => {
+        if (cleaned) return;
+        cleaned = true;
+        try {
+          document.body.removeChild(iframe);
+        } catch {
+          /* ignore */
+        }
+        URL.revokeObjectURL(objectUrl);
+      };
+
+      let settled = false;
+      const finishOk = () => {
+        if (settled) return;
+        settled = true;
+        resolve();
+      };
+      const finishErr = (err: Error) => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        reject(err);
+      };
+
+      const runPrint = (): boolean => {
+        if (cleaned) return false;
+        try {
+          const win = iframe.contentWindow;
+          if (!win) return false;
+          win.focus();
+          win.print();
+          win.addEventListener('afterprint', () => window.setTimeout(cleanup, 300), {
+            once: true,
+          });
+          // afterprint 미지원·취소 시 대비 (인쇄 중 blob 유지)
+          window.setTimeout(cleanup, 180_000);
+          finishOk();
+          return true;
+        } catch {
+          return false;
+        }
+      };
+
+      const sizeMb = blob.size / (1024 * 1024);
+      // 용량이 클수록 PDF 뷰어 준비 대기 (최대 약 10초). print()는 한 번만 호출.
+      const baseDelay = Math.min(10_000, Math.max(1_200, 1_000 + sizeMb * 700));
+
+      const loadTimer = window.setTimeout(() => {
+        finishErr(new Error('pdf load timeout'));
+      }, 60_000);
+
+      iframe.addEventListener(
+        'load',
+        () => {
+          window.clearTimeout(loadTimer);
+          window.setTimeout(() => {
+            if (runPrint()) return;
+            // contentWindow 미준비 시 한 번만 재시도 (대화상자가 열린 뒤 재호출하면 닫힐 수 있음)
+            window.setTimeout(() => {
+              if (!runPrint()) finishErr(new Error('print failed'));
+            }, 2_000);
+          }, baseDelay);
+        },
+        { once: true }
+      );
+      iframe.addEventListener(
+        'error',
+        () => {
+          window.clearTimeout(loadTimer);
+          finishErr(new Error('pdf iframe error'));
+        },
+        { once: true }
+      );
+      iframe.src = objectUrl;
+    });
     return;
   }
 
@@ -172,21 +245,6 @@ export async function printServiceFilePreviewBlob(
     'position:fixed;right:0;bottom:0;width:0;height:0;border:0;opacity:0;pointer-events:none'
   );
   document.body.appendChild(iframe);
-  const doc = iframe.contentDocument;
-  if (!doc) {
-    URL.revokeObjectURL(objectUrl);
-    document.body.removeChild(iframe);
-    throw new Error('iframe');
-  }
-  const safeName = escapeHtml(fileName);
-  doc.open();
-  doc.write(
-    `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${safeName}</title></head>` +
-      `<body style="margin:0;text-align:center">` +
-      `<img src="${objectUrl}" alt="" style="max-width:100%;height:auto"/>` +
-      `</body></html>`
-  );
-  doc.close();
 
   const cleanup = () => {
     try {
@@ -206,6 +264,21 @@ export async function printServiceFilePreviewBlob(
     }
     window.setTimeout(cleanup, 2000);
   };
+
+  const doc = iframe.contentDocument;
+  if (!doc) {
+    cleanup();
+    throw new Error('iframe');
+  }
+  const safeName = escapeHtml(fileName);
+  doc.open();
+  doc.write(
+    `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${safeName}</title></head>` +
+      `<body style="margin:0;text-align:center">` +
+      `<img src="${objectUrl}" alt="" style="max-width:100%;height:auto"/>` +
+      `</body></html>`
+  );
+  doc.close();
 
   const img = doc.querySelector('img');
   if (!img) {

@@ -13,7 +13,7 @@ import {
   User,
   ChevronRight,
   Plus,
-  MessageSquareText,
+  Users,
   CheckCircle2,
   Wrench,
   CircleDot,
@@ -32,6 +32,7 @@ import {
   useComplaintMapClick,
 } from './useComplaintMapClick';
 import { useComplaintMapHighlight } from './useComplaintMapHighlight';
+import { useSerWriteAccess } from '@/hooks/useSerWriteAccess';
 
 function lowerLayerIds(ids: readonly string[]): string[] {
   return ids.map((id) => id.toLowerCase());
@@ -61,6 +62,7 @@ export default function ComplaintListPanel({
   onClose?: () => void;
 }) {
   const mapContext = useMapContext();
+  const canWrite = useSerWriteAccess();
   const mapContextRef = useRef(mapContext);
   mapContextRef.current = mapContext;
   const setComplaintDetail = mapContext?.setComplaintDetail;
@@ -177,8 +179,9 @@ export default function ComplaintListPanel({
   }, [loadList, refreshKey]);
 
   const openDetailByCompKey = useCallback(
-    async (compKey: number) => {
+    async (compKey: number, options?: { flyToMap?: boolean }) => {
       if (!setComplaintDetail) return;
+      const flyToMap = options?.flyToMap !== false;
       try {
         const res = await call('', 'POST', {
           service: 'complaintService',
@@ -188,6 +191,7 @@ export default function ComplaintListPanel({
         if (res?.success && res?.data) {
           const data = res.data as CompUI;
           setComplaintDetail(data as Parameters<typeof setComplaintDetail>[0]);
+          if (!flyToMap) return;
           const map = mapContext?.mapInstanceRef?.current;
           const center = center3857FromExtent(data.extent3857);
           if (map && center) {
@@ -211,14 +215,14 @@ export default function ComplaintListPanel({
         setComplaintDetail?.(null);
         return;
       }
-      await openDetailByCompKey(comp.compKey);
+      await openDetailByCompKey(comp.compKey, { flyToMap: true });
     },
     [openDetailByCompKey, complaintDetail?.compKey, setComplaintDetail]
   );
 
   useComplaintMapClick({
     enabled: true,
-    onSelectCompKey: openDetailByCompKey,
+    onSelectCompKey: (compKey) => openDetailByCompKey(compKey, { flyToMap: false }),
   });
 
   useComplaintMapHighlight(
@@ -260,7 +264,7 @@ export default function ComplaintListPanel({
           <div className="flex items-center justify-between px-3 pt-3 pb-2">
             <div className="flex items-center gap-2">
               <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/5">
-                <MessageSquareText className="h-4 w-4 text-primary/80" />
+                <Users className="h-4 w-4 text-primary/80" />
               </div>
               <div>
                 <h1 className="text-sm font-semibold text-foreground/90">민원관리</h1>
@@ -270,14 +274,16 @@ export default function ComplaintListPanel({
               </div>
             </div>
             <div className="flex items-center gap-1">
-              <Button
-                size="sm"
-                className="h-[26px] min-h-[26px] gap-1 px-2.5 text-[12px] font-light border border-border bg-muted/50 text-muted-foreground hover:border-primary hover:bg-primary/15 hover:text-primary rounded-lg"
-                onClick={() => onRequestAdd?.()}
-              >
-                <Plus className="h-3 w-3" />
-                민원 추가
-              </Button>
+              {canWrite ? (
+                <Button
+                  size="sm"
+                  className="h-[26px] min-h-[26px] gap-1 px-2.5 text-[12px] font-light border border-border bg-muted/50 text-muted-foreground hover:border-primary hover:bg-primary/15 hover:text-primary rounded-lg"
+                  onClick={() => onRequestAdd?.()}
+                >
+                  <Plus className="h-3 w-3" />
+                  민원 추가
+                </Button>
+              ) : null}
               {onClose ? (
                 <button
                   type="button"

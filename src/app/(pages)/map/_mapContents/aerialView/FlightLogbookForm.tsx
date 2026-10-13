@@ -90,22 +90,36 @@ type Props = {
   headerAction?: ReactNode;
   /** 저장 성공 시 */
   onSaved?: () => void;
+  /** 헤더 제목 — 기본 무인비행장치 비행기록부, 항공영상은 촬영정보 */
+  title?: string;
+  /** 첫 섹션 제목 — 기본 비행 정보 */
+  infoSectionLabel?: string;
 };
 
 /** 촬영신청서와 동일 톤·여백 (패널 폭 ~520px 기준) */
-const cellBorder = 'border border-slate-300';
+const cellBorder = 'border border-border';
 const labelCell =
-  'bg-slate-50 px-2 py-0.5 text-center text-[10px] font-medium leading-snug text-slate-700 align-middle';
-const valueCell = 'bg-white px-1.5 py-0 align-middle';
+  'bg-muted px-2 py-0.5 text-center text-[10px] font-medium leading-snug text-foreground align-middle';
+const valueCell = 'bg-background px-1.5 py-0 align-middle';
 const subLabel =
-  'bg-slate-50/80 px-1.5 py-0.5 text-center text-[10px] font-medium leading-snug text-slate-600 align-middle';
+  'bg-muted/50 px-1.5 py-0.5 text-center text-[10px] font-medium leading-snug text-muted-foreground align-middle';
 const field =
   '!h-6 !min-h-0 border-0 bg-transparent px-1 py-0 text-[11px] shadow-none focus-visible:ring-0';
-const checkRow = 'flex h-6 items-center gap-x-3 text-[11px] text-slate-700';
-const sectionTitle = 'mb-1 text-[11px] font-semibold text-slate-800';
+const checkRow = 'flex h-6 items-center gap-x-3 text-[11px] text-foreground';
+const sectionTitle = 'mb-1 text-[11px] font-semibold text-foreground';
 
 export const FlightLogbookForm = forwardRef<FlightLogbookFormHandle, Props>(function FlightLogbookForm(
-  { workUnitLabel, srKey, onClose, embedded = false, hideActions = false, headerAction, onSaved },
+  {
+    workUnitLabel,
+    srKey,
+    onClose,
+    embedded = false,
+    hideActions = false,
+    headerAction,
+    onSaved,
+    title = '무인비행장치 비행기록부',
+    infoSectionLabel = '비행 정보',
+  },
   ref
 ) {
   const [v, setV] = useState<FlightLogbookValues>(EMPTY);
@@ -216,18 +230,18 @@ export const FlightLogbookForm = forwardRef<FlightLogbookFormHandle, Props>(func
   return (
     <div
       className={cn(
-        'flex min-h-0 flex-col bg-white',
+        'flex min-h-0 flex-col bg-background',
         /* 임베드: 부모 패널 스크롤만 사용 (이중 스크롤 방지) */
         embedded ? 'h-auto' : 'h-full'
       )}
     >
-      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-slate-200 px-3 py-2">
+      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border px-3 py-2">
         <div className="min-w-0">
-          <h2 className="text-[12px] font-semibold leading-snug text-slate-900">
-            무인비행장치 비행기록부
+          <h2 className="text-[12px] font-semibold leading-snug text-foreground">
+            {title}
           </h2>
           {loading ? (
-            <p className="mt-0.5 text-[10px] text-slate-400">불러오는 중…</p>
+            <p className="mt-0.5 text-[10px] text-muted-foreground">불러오는 중…</p>
           ) : null}
         </div>
         <div className="flex shrink-0 items-center gap-2">
@@ -236,7 +250,7 @@ export const FlightLogbookForm = forwardRef<FlightLogbookFormHandle, Props>(func
             <button
               type="button"
               onClick={onClose}
-              className="rounded p-1 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
+              className="rounded p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
               title="닫기"
               aria-label="닫기"
             >
@@ -254,7 +268,7 @@ export const FlightLogbookForm = forwardRef<FlightLogbookFormHandle, Props>(func
       >
         {/* 기본 */}
         <section>
-          <h3 className={sectionTitle}>비행 정보</h3>
+          <h3 className={sectionTitle}>{infoSectionLabel}</h3>
           <table className={cn('w-full table-fixed border-collapse text-[11px]', cellBorder)}>
             <colgroup>
               <col className="w-[6.5rem]" />
@@ -561,14 +575,14 @@ export const FlightLogbookForm = forwardRef<FlightLogbookFormHandle, Props>(func
       </div>
 
       {!hideActions ? (
-        <div className="flex shrink-0 flex-col gap-1.5 border-t border-slate-200 bg-slate-50/80 px-3 py-1.5">
+        <div className="flex shrink-0 flex-col gap-1.5 border-t border-border bg-muted/50 px-3 py-1.5">
           {notice ? (
             <p
               className={cn(
                 'rounded-md border px-2.5 py-1.5 text-[10px]',
                 notice.includes('저장')
-                  ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
-                  : 'border-amber-200 bg-amber-50 text-amber-900'
+                  ? 'border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-200'
+                  : 'border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/40 text-amber-900 dark:text-amber-100'
               )}
             >
               {notice}
@@ -577,7 +591,7 @@ export const FlightLogbookForm = forwardRef<FlightLogbookFormHandle, Props>(func
           <div className="flex flex-wrap items-center justify-end gap-1.5">
             <button
               type="button"
-              className="rounded border border-slate-200 bg-white px-2.5 py-1 text-[11px] text-[#666] transition-colors hover:bg-slate-50 disabled:opacity-50"
+              className="rounded border border-border bg-background px-2.5 py-1 text-[11px] text-muted-foreground transition-colors hover:bg-muted/60 disabled:opacity-50"
               disabled={downloading || submitting}
               onClick={() => void handleDownload()}
             >
@@ -585,7 +599,7 @@ export const FlightLogbookForm = forwardRef<FlightLogbookFormHandle, Props>(func
             </button>
             <button
               type="button"
-              className="rounded border border-slate-200 bg-white px-2.5 py-1 text-[11px] text-[#666] transition-colors hover:bg-slate-50 disabled:opacity-50"
+              className="rounded border border-border bg-background px-2.5 py-1 text-[11px] text-muted-foreground transition-colors hover:bg-muted/60 disabled:opacity-50"
               disabled={submitting || loading}
               onClick={() => void handleSubmit()}
             >

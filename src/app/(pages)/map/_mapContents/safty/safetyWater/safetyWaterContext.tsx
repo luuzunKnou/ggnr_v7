@@ -168,9 +168,11 @@ type SafetyWaterContextValue = {
   uiError: FloodUiError | null;
   selectedStationId: string | null;
   setSelectedStationId: (id: string | null) => void;
-  /** 관측소 선택 + 지도 이동(동일 id 재클릭에도 이동) */
+  /** 관측소 선택 + 지도 이동(동일 id 재클릭에도 이동) — 목록용 */
   focusStation: (id: string) => void;
-  /** 지도 CCTV 클릭: 관련 수위 관측소 선택·주변 도로 모달·CCTV 재생·지도는 CCTV로 이동 */
+  /** 지도 관측소 클릭: 선택·강조만 (맵 이동 없음) */
+  selectStationFromMap: (id: string) => void;
+  /** 지도 CCTV 클릭: 관련 수위 관측소 선택·주변 도로 모달·CCTV 재생 (맵 이동 없음) */
   focusCctvFromMap: (key: string) => void;
   /** 전체 선택 + 초기와 동일한 관측소 overview fit */
   focusAllStations: () => void;
@@ -260,7 +262,8 @@ export function SafetyWaterProvider({ children, statsKinds, onStatsKindsChange }
 
   const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
   const [refreshing, setRefreshing] = useState(false);
-  const [loading, setLoading] = useState(false);
+  /** 마운트 직후 관측소 조회 — 목록이 빈 채로 «결과 없음»이 보이지 않게 초기 true */
+  const [loading, setLoading] = useState(true);
   const [obsLoading, setObsLoading] = useState(false);
   const [listOpen, setListOpen] = useState(false);
   const [stations, setStations] = useState<SafetyWaterStation[]>([]);
@@ -857,6 +860,15 @@ export function SafetyWaterProvider({ children, statsKinds, onStatsKindsChange }
     [stations, map, mapReady, mapRef, onStatsKindsChange]
   );
 
+  /** 지도 관측소 객체 클릭 — 선택·강조만, 맵 이동 없음 */
+  const selectStationFromMap = useCallback(
+    (id: string) => {
+      setSelectedStationId(id);
+      onStatsKindsChange(['rain', 'water']);
+    },
+    [onStatsKindsChange]
+  );
+
   const focusCctvFromMap = useCallback(
     (key: string) => {
       const item = cctvLayerItems.find((it) => it.key === key);
@@ -881,16 +893,8 @@ export function SafetyWaterProvider({ children, statsKinds, onStatsKindsChange }
       setListOpen(false);
       setSelectedCctvKey(key);
       setCctvOpen(true);
-
-      const instance = mapRef?.current ?? map;
-      if (!instance || !mapReady) return;
-      instance.getView().animate({
-        center: fromLonLat([item.coordx, item.coordy]),
-        zoom: Math.max(instance.getView().getZoom() ?? 14, 14),
-        duration: 350,
-      });
     },
-    [cctvLayerItems, stations, map, mapReady, mapRef, onStatsKindsChange]
+    [cctvLayerItems, stations, onStatsKindsChange]
   );
 
   const focusAllStations = useCallback(() => {
@@ -967,6 +971,7 @@ export function SafetyWaterProvider({ children, statsKinds, onStatsKindsChange }
       selectedStationId,
       setSelectedStationId,
       focusStation,
+      selectStationFromMap,
       focusCctvFromMap,
       focusAllStations,
       selectedStation,
@@ -1038,6 +1043,7 @@ export function SafetyWaterProvider({ children, statsKinds, onStatsKindsChange }
       selectedStationId,
       selectedStation,
       focusStation,
+      selectStationFromMap,
       focusCctvFromMap,
       focusAllStations,
       timeType,

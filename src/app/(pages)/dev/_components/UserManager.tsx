@@ -11,6 +11,7 @@ import { PermRoleMappingPanel } from "./perm/PermRoleMappingPanel"
 import { UgUtManageModal } from "./UgUtManageModal"
 import { USER_MANAGER_UI_STYLE } from "./userManagerUiVariants"
 import { SuggestNameInput } from "@/app/_components/SuggestNameInput"
+import { isAccessRequestPermEtc } from "@/lib/permAccessRequest"
 
 type UserRow = {
   usrId: string
@@ -35,6 +36,12 @@ type UserRow = {
 type UgRow = { ugName: string }
 type UtRow = { utName: string; ugName: string }
 type PermRow = { permKey: number; permName: string | null; permEtc: string | null }
+type PermSourceTab = "manual" | "request"
+
+const PERM_SOURCE_TABS: { id: PermSourceTab; label: string }[] = [
+  { id: "manual", label: "공통 권한" },
+  { id: "request", label: "사용자 권한" },
+]
 
 /** 시스템별 접속권한 `SysAccessSegments` 와 동일 톤의 2단 토글 */
 const USER_PERM_GRANT_OPTIONS = [
@@ -201,6 +208,7 @@ export function UserManager() {
   const [form, setForm] = useState<FormState>(emptyForm())
   const [permList, setPermList] = useState<PermRow[]>([])
   const [selectedPermKeys, setSelectedPermKeys] = useState<Set<number>>(new Set())
+  const [permSourceTab, setPermSourceTab] = useState<PermSourceTab>("manual")
   const [permLoading, setPermLoading] = useState(false)
   const [permMappingOpen, setPermMappingOpen] = useState(false)
   const [permMappingKey, setPermMappingKey] = useState<number | null>(null)
@@ -250,6 +258,20 @@ export function UserManager() {
       return searchable.includes(q)
     })
   }, [items, searchQuery])
+
+  const commonPermList = useMemo(
+    () => permList.filter((p) => !isAccessRequestPermEtc(p.permEtc)),
+    [permList]
+  )
+  /** 이 사용자에게 부여된 신청(사용자) 권한만 — 타인 신청분 전체 나열 안 함 */
+  const userPermList = useMemo(
+    () =>
+      permList.filter(
+        (p) => isAccessRequestPermEtc(p.permEtc) && selectedPermKeys.has(p.permKey)
+      ),
+    [permList, selectedPermKeys]
+  )
+  const detailPermList = permSourceTab === "request" ? userPermList : commonPermList
 
   const loadAll = async () => {
     setLoading(true)
@@ -341,6 +363,7 @@ export function UserManager() {
     setModalError(null)
     setModalMode("detail")
     setModalOpen(true)
+    setPermSourceTab("manual")
     setPermLoading(true)
     try {
       const res = await call("", "POST", {
@@ -761,14 +784,48 @@ export function UserManager() {
             </div>
             {modalMode === "detail" && (
               <div className={cn("w-[280px] shrink-0 flex flex-col min-h-0 overflow-hidden", uiStyle.sidePanel)}>
-                <div className="px-3 py-2 border-b bg-muted/30 text-xs font-medium text-muted-foreground">권한 목록</div>
+                <div className="shrink-0 space-y-2 border-b bg-muted/30 px-2 py-2">
+                  <div className="flex gap-0.5 rounded-md border border-border/70 bg-background p-0.5">
+                    {PERM_SOURCE_TABS.map((t) => {
+                      const active = permSourceTab === t.id
+                      const count = t.id === "request" ? userPermList.length : commonPermList.length
+                      return (
+                        <button
+                          key={t.id}
+                          type="button"
+                          className={cn(
+                            "flex-1 rounded px-1.5 py-1 text-[11px] font-medium transition-colors",
+                            active
+                              ? "bg-primary text-primary-foreground"
+                              : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
+                          )}
+                          onClick={() => setPermSourceTab(t.id)}
+                        >
+                          {t.label}
+                          <span className={cn("ml-0.5 tabular-nums", active ? "opacity-90" : "opacity-60")}>
+                            ({count})
+                          </span>
+                        </button>
+                      )
+                    })}
+                  </div>
+                  {permSourceTab === "request" ? (
+                    <p className="px-0.5 text-[11px] leading-snug text-muted-foreground">
+                      이 사용자에게 신청 승인으로 부여된 권한입니다.
+                    </p>
+                  ) : null}
+                </div>
                 <div className="flex-1 min-h-0 overflow-auto p-0 space-y-0">
                   {permLoading ? (
-                    <p className="text-xs text-muted-foreground px-1 py-2">권한 조회 중...</p>
-                  ) : permList.length === 0 ? (
-                    <p className="text-xs text-muted-foreground px-1 py-2">표시할 권한이 없습니다.</p>
+                    <p className="text-xs text-muted-foreground px-3 py-2">권한 조회 중...</p>
+                  ) : detailPermList.length === 0 ? (
+                    <p className="text-xs text-muted-foreground px-3 py-2">
+                      {permSourceTab === "request"
+                        ? "부여된 사용자 권한이 없습니다."
+                        : "공통 권한이 없습니다."}
+                    </p>
                   ) : (
-                    permList.map((p) => {
+                    detailPermList.map((p) => {
                       const granted = selectedPermKeys.has(p.permKey)
                       const name = (p.permName ?? "").trim() || "—"
                       return (

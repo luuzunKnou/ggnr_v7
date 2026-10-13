@@ -212,7 +212,7 @@ export type HandbookMatchStatus = "met" | "unmet" | "wait" | "check"
 
 export const HANDBOOK_MATCH_LABEL: Record<HandbookMatchStatus, string> = {
   met: "해당",
-  unmet: "미만",
+  unmet: "미달",
   wait: "입력필요",
   check: "판단",
 }
@@ -238,11 +238,11 @@ export const HANDBOOK_SCALE_FIELDS: HandbookExampleField[] = [
     label: "용도지역",
     kind: "select",
     options: [
-      { value: "보전관리", label: "보전관리지역 · 5,000㎡ 이상" },
-      { value: "생산관리", label: "생산관리지역 · 7,500㎡ 이상" },
-      { value: "계획관리", label: "계획관리지역 · 10,000㎡ 이상" },
-      { value: "농림", label: "농림지역 · 7,500㎡ 이상" },
-      { value: "자연환경보전", label: "자연환경보전지역 · 5,000㎡ 이상" },
+      { value: "보전관리", label: "보전관리지역" },
+      { value: "생산관리", label: "생산관리지역" },
+      { value: "계획관리", label: "계획관리지역" },
+      { value: "농림", label: "농림지역" },
+      { value: "자연환경보전", label: "자연환경보전지역" },
     ],
   },
   {
@@ -250,9 +250,9 @@ export const HANDBOOK_SCALE_FIELDS: HandbookExampleField[] = [
     label: "도로 종류",
     kind: "select",
     options: [
-      { value: "국도", label: "일반국도·고속국도 · 5km 이상" },
-      { value: "지방도", label: "특별시·광역시·지방도 · 3km 이상" },
-      { value: "시도", label: "시도·군도·구도 · 1km 이상" },
+      { value: "국도", label: "일반국도·고속국도" },
+      { value: "지방도", label: "특별시·광역시·지방도" },
+      { value: "시도", label: "시도·군도·구도" },
     ],
   },
   { key: "cost", label: "총공사비", unit: "억원", placeholder: "예: 100", hint: "억원" },

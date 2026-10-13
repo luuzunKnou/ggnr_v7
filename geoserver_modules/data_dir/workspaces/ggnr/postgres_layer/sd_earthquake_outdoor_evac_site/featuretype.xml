@@ -1,5 +1,5 @@
 <featureType>
-  <id>FeatureTypeInfoImpl--2053d3:19d606c4ff1:30db</id>
+  <id>FeatureTypeInfoImpl--142a32cb:1a0f5eeadac:-7ff8</id>
   <name>sd_earthquake_outdoor_evac_site</name>
   <nativeName>sd_earthquake_outdoor_evac_site</nativeName>
   <namespace>
@@ -12,17 +12,17 @@
   </keywords>
   <srs>EPSG:5181</srs>
   <nativeBoundingBox>
-    <minx>-6400.22900390625</minx>
-    <maxx>434520.1875</maxx>
-    <miny>-38729.5703125</miny>
-    <maxy>559043.875</maxy>
+    <minx>384000.4897358967</minx>
+    <maxx>396791.1707332111</maxx>
+    <miny>341434.5413297458</miny>
+    <maxy>365266.6219339484</maxy>
     <crs class="projected">EPSG:5181</crs>
   </nativeBoundingBox>
   <latLonBoundingBox>
-    <minx>124.63380467287352</minx>
-    <maxx>129.68825654039594</maxx>
-    <miny>33.119108229094586</miny>
-    <maxy>38.53180854043613</maxy>
+    <minx>129.05506771964744</minx>
+    <maxx>129.20394410721278</maxx>
+    <miny>36.55100207771839</miny>
+    <maxy>36.76816924892833</maxy>
     <crs>EPSG:4326</crs>
   </latLonBoundingBox>
   <projectionPolicy>FORCE_DECLARED</projectionPolicy>

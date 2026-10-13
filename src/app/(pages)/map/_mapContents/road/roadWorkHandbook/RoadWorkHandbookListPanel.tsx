@@ -4,7 +4,6 @@ import { useMemo, useState } from "react"
 import { Search, X } from "lucide-react"
 import { cn } from "@/lib/utils"
 import {
-  HANDBOOK_MATCH_LABEL,
   handbookMaterialFileHint,
   isSameHandbookDetail,
   matchHandbookMaterial,
@@ -13,19 +12,19 @@ import {
   type HandbookMatchStatus,
   type HandbookViewMode,
 } from "./roadWorkHandbookData"
-import { HandbookMaterialListButton, HandbookScaleCard, OrgBadge } from "./roadWorkHandbookUi"
+import { HandbookMaterialListButton, HandbookScaleCard, MatchBadge } from "./roadWorkHandbookUi"
 import { useHandbookMapPick } from "./roadWorkHandbookMapContext"
 import { useRoadWorkHandbookCatalog } from "./useRoadWorkHandbookCatalog"
 
-type MatchFilter = "all" | HandbookMatchStatus
+type MatchFilter = "all" | Exclude<HandbookMatchStatus, "wait">
 
 const EMPTY_SCALE: Record<string, string> = {}
 
-function matchBadgeClass(status: HandbookMatchStatus) {
-  if (status === "met") return "bg-primary text-white"
-  if (status === "unmet") return "bg-muted text-muted-foreground"
-  if (status === "check") return "border border-border bg-background text-muted-foreground"
-  return "bg-muted/70 text-muted-foreground"
+const MATCH_SORT_ORDER: Record<HandbookMatchStatus, number> = {
+  met: 0,
+  unmet: 1,
+  check: 2,
+  wait: 3,
 }
 
 type Props = {
@@ -66,9 +65,18 @@ export function RoadWorkHandbookListPanel({
             p.law.includes(kw) ||
             p.criteriaItems.some((item) => item.includes(kw))
         )
-    if (matchFilter === "all") return byKw
-    return byKw.filter((p) => matchHandbookProcedure(p, statusVals) === matchFilter)
-  }, [kw, matchFilter, reviews, statusVals])
+    const filtered =
+      matchFilter === "all"
+        ? byKw
+        : byKw.filter((p) => matchHandbookProcedure(p, statusVals) === matchFilter)
+    if (!appliedVals) return filtered
+    return [...filtered].sort((a, b) => {
+      const rankA = MATCH_SORT_ORDER[matchHandbookProcedure(a, statusVals)]
+      const rankB = MATCH_SORT_ORDER[matchHandbookProcedure(b, statusVals)]
+      if (rankA !== rankB) return rankA - rankB
+      return a.no - b.no
+    })
+  }, [appliedVals, kw, matchFilter, reviews, statusVals])
 
   const filteredMaterials = useMemo(
     () => materials.filter((m) => matchHandbookMaterial(m, kw)),
@@ -103,10 +111,83 @@ export function RoadWorkHandbookListPanel({
   const filterOptions: { id: MatchFilter; label: string }[] = [
     { id: "all", label: "전체" },
     { id: "met", label: "해당" },
-    { id: "unmet", label: "미만" },
-    { id: "wait", label: "입력필요" },
+    { id: "unmet", label: "미달" },
     { id: "check", label: "판단" },
   ]
+
+  const searchField = (
+    <div className="relative">
+      <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+      <input
+        type="search"
+        value={keyword}
+        onChange={(e) => setKeyword(e.target.value)}
+        placeholder={searchPlaceholder}
+        className="w-full rounded-md border border-border bg-background py-1.5 pl-8 pr-3 text-sm outline-none ring-offset-2 focus:border-border focus:ring-2 focus:ring-ring"
+      />
+    </div>
+  )
+
+  const targetList = (
+    <ul>
+      {filteredProcs.length === 0 ? (
+        <li className="px-3 py-6 text-center text-[11px] text-muted-foreground">
+          {matchFilter === "met"
+            ? "해당하는 절차가 없습니다."
+            : matchFilter === "unmet"
+              ? "기준에 미치지 않는 절차가 없습니다."
+              : matchFilter === "check"
+                  ? "판단이 필요한 절차가 없습니다."
+                  : "검색 결과가 없습니다."}
+        </li>
+      ) : (
+        filteredProcs.map((proc) => {
+          const next: HandbookDetailSelection = { kind: "target", no: proc.no }
+          const isSelected = isSameHandbookDetail(selected, next)
+          const status = matchHandbookProcedure(proc, statusVals)
+          return (
+            <li key={proc.no}>
+              <button
+                type="button"
+                title={proc.name}
+                onClick={() => onSelect(isSelected ? null : next)}
+                className={cn(
+                  "flex w-full cursor-pointer flex-col gap-0.5 border-b border-border/60 px-3 py-2.5 text-left transition-colors",
+                  isSelected && status === "unmet"
+                    ? "bg-destructive/5"
+                    : isSelected
+                      ? "bg-primary/5 dark:bg-primary/15"
+                      : "hover:bg-muted/50",
+                  status === "met" && "shadow-[inset_3px_0_0_0] shadow-primary",
+                  status === "unmet" && "shadow-[inset_3px_0_0_0] shadow-destructive"
+                )}
+              >
+                <div className="flex min-w-0 items-center gap-1.5">
+                  <MatchBadge status={status} />
+                  <span
+                    className={cn(
+                      "min-w-0 line-clamp-2 break-keep text-[12px] font-medium leading-snug",
+                      status === "met"
+                        ? "text-primary"
+                        : status === "unmet"
+                          ? "text-destructive"
+                          : "text-foreground"
+                    )}
+                  >
+                    {proc.no}. {proc.name}
+                  </span>
+                </div>
+                <span className="line-clamp-2 break-keep text-[11px] leading-snug text-muted-foreground">
+                  {proc.criteria}
+                  {proc.when !== "—" ? ` · ${proc.when}` : ""}
+                </span>
+              </button>
+            </li>
+          )
+        })
+      )}
+    </ul>
+  )
 
   return (
     <div
@@ -167,23 +248,13 @@ export function RoadWorkHandbookListPanel({
         </>
       ) : null}
 
-      <div className="shrink-0 border-b border-border px-3 py-2">
-        <div className="relative">
-          <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <input
-            type="search"
-            value={keyword}
-            onChange={(e) => setKeyword(e.target.value)}
-            placeholder={searchPlaceholder}
-            className="w-full rounded-md border border-border bg-background py-1.5 pl-8 pr-3 text-sm outline-none ring-offset-2 focus:border-border focus:ring-2 focus:ring-ring"
-          />
-        </div>
-      </div>
-
       {mode === "target" ? (
-        <>
-          <div className="shrink-0 overflow-hidden border-b border-border p-3">
-            <p className="mb-2 text-[12px] font-semibold text-foreground">사업 규모</p>
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+          <div className="shrink-0 border-b border-border px-3 py-2">{searchField}</div>
+          <div className="shrink-0 border-b border-border px-3 py-2">
+            <div className="mb-1.5">
+              <p className="text-[12px] font-semibold text-foreground">사업규모</p>
+            </div>
             <HandbookScaleCard />
             <div className="mt-1.5 flex justify-end gap-1.5">
               <button
@@ -225,97 +296,50 @@ export function RoadWorkHandbookListPanel({
               </button>
             ))}
           </div>
+          <div className="min-h-0 flex-1 overflow-auto scrollbar-thin">
+            {loading ? (
+              <p className="px-3 py-6 text-center text-[11px] text-muted-foreground">불러오는 중…</p>
+            ) : error ? (
+              <p className="px-3 py-6 text-center text-[11px] text-destructive">{error}</p>
+            ) : (
+              targetList
+            )}
+          </div>
+        </div>
+      ) : (
+        <>
+          <div className="shrink-0 border-b border-border px-3 py-2">{searchField}</div>
+          <div className="min-h-0 flex-1 overflow-auto scrollbar-thin">
+            {loading ? (
+              <p className="px-3 py-6 text-center text-[11px] text-muted-foreground">불러오는 중…</p>
+            ) : error ? (
+              <p className="px-3 py-6 text-center text-[11px] text-destructive">{error}</p>
+            ) : (
+              <ul>
+                {filteredMaterials.length === 0 ? (
+                  <li className="px-3 py-6 text-center text-[11px] text-muted-foreground">
+                    검색 결과가 없습니다.
+                  </li>
+                ) : (
+                  filteredMaterials.map((mat) => {
+                    const next: HandbookDetailSelection = { kind: "ref", materialId: mat.id }
+                    return (
+                      <li key={mat.id}>
+                        <HandbookMaterialListButton
+                          material={mat}
+                          selected={isSameHandbookDetail(selected, next)}
+                          fileHint={handbookMaterialFileHint(mat, kw)}
+                          onClick={() => selectRefMaterial(mat.id)}
+                        />
+                      </li>
+                    )
+                  })
+                )}
+              </ul>
+            )}
+          </div>
         </>
-      ) : null}
-
-      <div className="min-h-0 flex-1 overflow-auto scrollbar-thin">
-        {loading ? (
-          <p className="px-3 py-6 text-center text-[11px] text-muted-foreground">불러오는 중…</p>
-        ) : error ? (
-          <p className="px-3 py-6 text-center text-[11px] text-destructive">{error}</p>
-        ) : mode === "target" ? (
-          <ul>
-            {filteredProcs.length === 0 ? (
-              <li className="px-3 py-6 text-center text-[11px] text-muted-foreground">
-                {matchFilter === "met"
-                  ? "해당하는 절차가 없습니다."
-                  : matchFilter === "unmet"
-                    ? "미만인 절차가 없습니다."
-                    : matchFilter === "wait"
-                      ? "입력이 필요한 절차가 없습니다."
-                      : matchFilter === "check"
-                        ? "판단이 필요한 절차가 없습니다."
-                        : "검색 결과가 없습니다."}
-              </li>
-            ) : (
-              filteredProcs.map((proc) => {
-                const next: HandbookDetailSelection = { kind: "target", no: proc.no }
-                const isSelected = isSameHandbookDetail(selected, next)
-                const status = matchHandbookProcedure(proc, statusVals)
-                return (
-                  <li key={proc.no}>
-                    <button
-                      type="button"
-                      title={proc.name}
-                      onClick={() => onSelect(isSelected ? null : next)}
-                      className={cn(
-                        "flex w-full cursor-pointer items-center gap-2 border-b border-border/60 px-3 py-2.5 text-left transition-colors",
-                        isSelected ? "bg-primary/10 dark:bg-primary/25" : "hover:bg-muted/50"
-                      )}
-                    >
-                      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-                        <div className="flex min-w-0 items-center gap-1.5">
-                          <span
-                            className={cn(
-                              "shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium leading-none",
-                              matchBadgeClass(status)
-                            )}
-                          >
-                            {HANDBOOK_MATCH_LABEL[status]}
-                          </span>
-                          <OrgBadge org={proc.org} />
-                          <span
-                            className={cn(
-                              "min-w-0 truncate text-[12px] font-medium leading-none",
-                              isSelected ? "text-primary" : "text-foreground"
-                            )}
-                          >
-                            {proc.no}. {proc.name}
-                          </span>
-                        </div>
-                        <span className="truncate text-[10px] text-muted-foreground">
-                          {proc.criteria}
-                          {proc.when !== "—" ? ` · ${proc.when}` : ""}
-                        </span>
-                      </div>
-                    </button>
-                  </li>
-                )
-              })
-            )}
-          </ul>
-        ) : (
-          <ul>
-            {filteredMaterials.length === 0 ? (
-              <li className="px-3 py-6 text-center text-[11px] text-muted-foreground">검색 결과가 없습니다.</li>
-            ) : (
-              filteredMaterials.map((mat) => {
-                const next: HandbookDetailSelection = { kind: "ref", materialId: mat.id }
-                return (
-                  <li key={mat.id}>
-                    <HandbookMaterialListButton
-                      material={mat}
-                      selected={isSameHandbookDetail(selected, next)}
-                      fileHint={handbookMaterialFileHint(mat, kw)}
-                      onClick={() => selectRefMaterial(mat.id)}
-                    />
-                  </li>
-                )
-              })
-            )}
-          </ul>
-        )}
-      </div>
+      )}
     </div>
   )
 }

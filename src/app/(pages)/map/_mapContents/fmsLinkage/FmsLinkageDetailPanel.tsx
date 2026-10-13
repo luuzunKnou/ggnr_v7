@@ -175,27 +175,29 @@ export function FmsLinkageDetailPanel({
   const [error, setError] = useState<string | null>(null)
   const inspectionDetailRef = useRef<HTMLDivElement>(null)
 
-  useEffect(() => {
-    if (!selectedInspectionId) return
+  const scrollInspectionDetailIntoView = () => {
     const el = inspectionDetailRef.current
     if (!el) return
-    const frame = window.requestAnimationFrame(() => {
-      let node: HTMLElement | null = el.parentElement
-      while (node) {
-        const { overflowY } = getComputedStyle(node)
-        if (
-          (overflowY === 'auto' || overflowY === 'scroll') &&
-          node.scrollHeight > node.clientHeight
-        ) {
-          const containerTop = node.getBoundingClientRect().top
-          const targetTop = el.getBoundingClientRect().top
-          const nextTop = Math.max(0, targetTop - containerTop + node.scrollTop)
-          node.scrollTo({ top: nextTop, behavior: 'smooth' })
-          break
-        }
-        node = node.parentElement
+    let node: HTMLElement | null = el.parentElement
+    while (node) {
+      const { overflowY } = getComputedStyle(node)
+      if (
+        (overflowY === 'auto' || overflowY === 'scroll') &&
+        node.scrollHeight > node.clientHeight
+      ) {
+        const containerTop = node.getBoundingClientRect().top
+        const targetTop = el.getBoundingClientRect().top
+        const nextTop = Math.max(0, targetTop - containerTop + node.scrollTop)
+        node.scrollTo({ top: nextTop, behavior: 'smooth' })
+        break
       }
-    })
+      node = node.parentElement
+    }
+  }
+
+  useEffect(() => {
+    if (!selectedInspectionId) return
+    const frame = window.requestAnimationFrame(scrollInspectionDetailIntoView)
     return () => window.cancelAnimationFrame(frame)
   }, [selectedInspectionId])
 
@@ -269,6 +271,13 @@ export function FmsLinkageDetailPanel({
     FMS_INSPECTION_DETAIL_GROUPS,
     inspectionResetKey
   )
+
+  useEffect(() => {
+    if (!inspectionGroups.expanded || !selectedInspectionId) return
+    const frame = window.requestAnimationFrame(scrollInspectionDetailIntoView)
+    return () => window.cancelAnimationFrame(frame)
+  }, [inspectionGroups.expanded, selectedInspectionId])
+
   const latestDateLabel =
     latestInspection?.endYmd || latestInspection?.startYmd || '—'
 
@@ -325,7 +334,7 @@ export function FmsLinkageDetailPanel({
               </button>
             </div>
             {facilityAttrsOpen ? (
-              <div className="standard-detail-section-body text-[11px]">
+              <div className="standard-detail-section-body max-h-[50vh] overflow-y-auto scrollbar-thin text-[11px]">
                 <GroupedAttrList
                   sections={facilityGroups.sections}
                   expanded={facilityGroups.expanded}
@@ -335,7 +344,7 @@ export function FmsLinkageDetailPanel({
             ) : null}
           </section>
 
-          <section className="standard-detail-section flex min-h-0 min-w-0 flex-1 flex-col !border-b-0">
+          <section className="standard-detail-section flex min-h-0 min-w-0 max-h-[42vh] flex-1 flex-col !border-b-0">
             <div className="standard-detail-section-header">
               <button
                 type="button"
@@ -352,7 +361,7 @@ export function FmsLinkageDetailPanel({
               </button>
             </div>
             {inspectionOpen ? (
-              <MapSideDetailScroll className="standard-detail-scroll scroll-smooth min-h-0 flex-1 text-[11px]">
+              <MapSideDetailScroll className="standard-detail-scroll scroll-smooth min-h-0 flex-1 overflow-y-auto text-[11px]">
                 {inspections.length === 0 ? (
                   <div className="standard-detail-empty-dashed-compact">
                     {FMS_EMPTY_INSPECTION_MESSAGE}

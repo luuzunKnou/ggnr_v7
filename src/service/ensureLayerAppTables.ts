@@ -8,7 +8,9 @@
  * - 점사용료: water|road|public_ngl_fee_list — 3개
  * - FMS: water|road|public_fms_facility + _fms_inspection — 6개
  * - 차세대 연계: next_gen_linkage.ngl_error_log, ngl_query_table
+ * - 토지행정망 파일: land_linkage (목록·토지기본·공시지가)
  * - 메모: memo 및 memo_* 계열
+ * - 민원: comp, compd
  * - 영상: work_unit, file_unit
  * - 보상편입: road_reward, road_reward_parcel
  * - 공사대장: cons_data_as, cons_data_solo_as
@@ -18,6 +20,7 @@
 import { db, pool } from '@/database/db';
 import { sql } from 'drizzle-orm';
 import { MEMO_TABLES } from '@/lib/memoConfig';
+import { KRAS_LAYER_CATALOG_SCHEMA } from '@/integrations/krasLayerSync.config';
 import {
   ROAD_FRONTAGE_BUILDING_CONFIRM_LAYER_COLUMNS,
   ROAD_FRONTAGE_BUILDING_DETAIL_LAYER_COLUMNS,
@@ -144,6 +147,18 @@ async function ensureSchemaLayer(): Promise<void> {
 async function ensureSchemaNextGenLinkage(): Promise<void> {
   if (await schemaExists('next_gen_linkage')) return;
   await db.execute(sql.raw(`CREATE SCHEMA IF NOT EXISTS next_gen_linkage`));
+}
+
+async function ensureSchemaLandLinkage(): Promise<void> {
+  if (await schemaExists(KRAS_LAYER_CATALOG_SCHEMA)) return;
+  try {
+    await pool.query(`CREATE SCHEMA IF NOT EXISTS "${KRAS_LAYER_CATALOG_SCHEMA.replace(/"/g, '""')}"`);
+  } catch (e: unknown) {
+    if (await schemaExists(KRAS_LAYER_CATALOG_SCHEMA)) return;
+    const code = pgErrCode(e);
+    if (code === '42P06' || code === '42501') return;
+    throw e;
+  }
 }
 
 async function execSqlStatements(raw: string): Promise<void> {
@@ -779,7 +794,7 @@ CREATE TABLE IF NOT EXISTS layer.file_unit (
   file_size bigint,
   x_5181 double precision,
   y_5181 double precision,
-  geom geometry(Point, 5181),
+  geom geometry(Geometry, 5181),
   fu_is_del boolean NOT NULL DEFAULT false,
   fu_create_date timestamp,
   fu_create_user varchar,
@@ -789,6 +804,36 @@ CREATE TABLE IF NOT EXISTS layer.file_unit (
 CREATE INDEX IF NOT EXISTS file_unit_wu_key_idx ON layer.file_unit (wu_key);
 CREATE INDEX IF NOT EXISTS file_unit_geom_gix ON layer.file_unit USING GIST (geom);
 COMMENT ON TABLE layer.file_unit IS '영상작업단위파일';
+`;
+
+/** QGIS WFS 권한 — 사용자 키 + 레이어별 읽기·쓰기 */
+const USER_LAYER_CONTROL_SQL = `
+CREATE TABLE IF NOT EXISTS layer.user_layer_control (
+  control_id SERIAL PRIMARY KEY,
+  usr_id varchar NOT NULL,
+  qgis_key varchar,
+  CONSTRAINT user_layer_control_usr_id_unique UNIQUE (usr_id),
+  CONSTRAINT user_layer_control_usr_id_fkey
+    FOREIGN KEY (usr_id) REFERENCES public.usr(usr_id) ON DELETE CASCADE
+);
+CREATE UNIQUE INDEX IF NOT EXISTS user_layer_control_qgis_key_uidx
+  ON layer.user_layer_control (qgis_key)
+  WHERE qgis_key IS NOT NULL;
+COMMENT ON TABLE layer.user_layer_control IS '사용자별 QGIS 레이어 권한 묶음';
+`;
+
+const LAYER_CONTROL_SQL = `
+CREATE TABLE IF NOT EXISTS layer.layer_control (
+  layer_control_id SERIAL PRIMARY KEY,
+  control_id integer,
+  layer_name varchar NOT NULL,
+  can_read varchar,
+  can_write varchar,
+  CONSTRAINT uq_layer_control UNIQUE (control_id, layer_name)
+);
+CREATE INDEX IF NOT EXISTS layer_control_control_id_idx
+  ON layer.layer_control (control_id);
+COMMENT ON TABLE layer.layer_control IS 'QGIS 레이어별 읽기·쓰기 권한';
 `;
 
 /** scripts/sql/road_reward.sql 과 동일 컬럼 */
@@ -925,10 +970,43 @@ CREATE TABLE IF NOT EXISTS layer.water_play_sign (
   safebox_cnt integer,
   sign_cnt integer,
   remark text,
-  geom geometry(Point, 5181)
+  geom public.geometry(MultiPolygon, 5181)
 );
 CREATE INDEX IF NOT EXISTS water_play_sign_addr_idx ON layer.water_play_sign (addr);
+CREATE INDEX IF NOT EXISTS water_play_sign_geom_gix ON layer.water_play_sign USING GIST (geom);
 COMMENT ON TABLE layer.water_play_sign IS '물놀이 표지판';
+`;
+
+const WATER_PLAY_BOX_LIST_SQL = `
+CREATE TABLE IF NOT EXISTS layer.water_play_box_list (
+  fid SERIAL PRIMARY KEY,
+  id integer NOT NULL REFERENCES layer.water_play_sign (id) ON DELETE CASCADE,
+  addr text,
+  geom geometry(Point, 5181)
+);
+CREATE INDEX IF NOT EXISTS water_play_box_list_parent_idx ON layer.water_play_box_list (id);
+CREATE INDEX IF NOT EXISTS water_play_box_list_geom_gix ON layer.water_play_box_list USING GIST (geom);
+COMMENT ON TABLE layer.water_play_box_list IS '물놀이 구조함';
+COMMENT ON COLUMN layer.water_play_box_list.fid IS '키';
+COMMENT ON COLUMN layer.water_play_box_list.id IS '관리 구간';
+COMMENT ON COLUMN layer.water_play_box_list.addr IS '주소';
+COMMENT ON COLUMN layer.water_play_box_list.geom IS '위치';
+`;
+
+const WATER_PLAY_SIGN_LIST_SQL = `
+CREATE TABLE IF NOT EXISTS layer.water_play_sign_list (
+  fid SERIAL PRIMARY KEY,
+  id integer NOT NULL REFERENCES layer.water_play_sign (id) ON DELETE CASCADE,
+  addr text,
+  geom geometry(Point, 5181)
+);
+CREATE INDEX IF NOT EXISTS water_play_sign_list_parent_idx ON layer.water_play_sign_list (id);
+CREATE INDEX IF NOT EXISTS water_play_sign_list_geom_gix ON layer.water_play_sign_list USING GIST (geom);
+COMMENT ON TABLE layer.water_play_sign_list IS '물놀이 표지판 위치';
+COMMENT ON COLUMN layer.water_play_sign_list.fid IS '키';
+COMMENT ON COLUMN layer.water_play_sign_list.id IS '관리 구간';
+COMMENT ON COLUMN layer.water_play_sign_list.addr IS '주소';
+COMMENT ON COLUMN layer.water_play_sign_list.geom IS '위치';
 `;
 
 const WATER_PLAY_SIGN_LAYER_COLUMNS: Array<{ name: string; ddl: string }> = [
@@ -1344,10 +1422,30 @@ async function ensureFileUnitGeom(result: EnsureResult): Promise<void> {
 
     if (!(await columnExists('layer', 'file_unit', 'geom'))) {
       await db.execute(
-        sql.raw(`ALTER TABLE layer.file_unit ADD COLUMN geom geometry(Point, 5181)`)
+        sql.raw(`ALTER TABLE layer.file_unit ADD COLUMN geom geometry(Geometry, 5181)`)
       );
       result.created.push(`${fq}.geom`);
     }
+
+    await db.execute(
+      sql.raw(`
+        DO $$
+        BEGIN
+          IF EXISTS (
+            SELECT 1 FROM geometry_columns
+            WHERE f_table_schema = 'layer'
+              AND f_table_name = 'file_unit'
+              AND f_geometry_column = 'geom'
+              AND upper(type) = 'POINT'
+          ) THEN
+            EXECUTE 'DROP INDEX IF EXISTS layer.file_unit_geom_gix';
+            EXECUTE 'DROP INDEX IF EXISTS public.file_unit_geom_gix';
+            EXECUTE 'ALTER TABLE layer.file_unit ALTER COLUMN geom TYPE geometry(Geometry, 5181) USING geom::geometry(Geometry, 5181)';
+            EXECUTE 'CREATE INDEX IF NOT EXISTS file_unit_geom_gix ON layer.file_unit USING GIST (geom)';
+          END IF;
+        END $$;
+      `)
+    );
 
     await db.execute(
       sql.raw(`
@@ -1507,6 +1605,37 @@ export async function ensureRoadFrontageMarkerTables(result?: EnsureResult): Pro
 }
 
 /** 공통 점용대장 본대·필지·물건지 × water|road|public (9개) */
+/** 기존 필지·물건지 테이블에 허가번호 컬럼 보강 (CREATE IF NOT EXISTS 로는 안 붙음) */
+async function ensureOccupationLedgerChildPermitNo(result: EnsureResult): Promise<void> {
+  for (const prefix of OCCUPATION_PREFIXES) {
+    const base = `${prefix}_occupationledger`;
+    for (const suffix of ['_jijuk', '_mgj'] as const) {
+      const table = `${base}${suffix}`;
+      const fq = `layer.${table}`;
+      try {
+        if ((await tableExists('layer', table)) !== 'BASE TABLE') continue;
+        if (!(await columnExists('layer', table, 'permit_no'))) {
+          await db.execute(
+            sql.raw(`ALTER TABLE layer.${table} ADD COLUMN IF NOT EXISTS permit_no text`)
+          );
+          result.created.push(`${fq}.permit_no`);
+        }
+        await db.execute(
+          sql.raw(
+            `CREATE INDEX IF NOT EXISTS ${table}_permit_no_idx ON layer.${table} (permit_no)`
+          )
+        );
+        await db.execute(
+          sql.raw(`COMMENT ON COLUMN layer.${table}.permit_no IS '본표 허가번호'`)
+        );
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : String(e);
+        result.errors.push(`${fq}.permit_no: ${msg}`);
+      }
+    }
+  }
+}
+
 export async function ensureOccupationLedgerTables(result?: EnsureResult): Promise<EnsureResult> {
   const out: EnsureResult = result ?? { created: [], moved: [], existed: [], errors: [] };
   await ensureSchemaLayer();
@@ -1528,6 +1657,7 @@ export async function ensureOccupationLedgerTables(result?: EnsureResult): Promi
       result: out,
     });
   }
+  await ensureOccupationLedgerChildPermitNo(out);
   return out;
 }
 
@@ -1669,6 +1799,101 @@ export async function ensureMemoTables(result?: EnsureResult): Promise<EnsureRes
   return out;
 }
 
+const COMP_SQL = `
+CREATE TABLE IF NOT EXISTS layer.comp (
+  comp_key SERIAL PRIMARY KEY,
+  comp_date timestamp,
+  comp_cu varchar,
+  comp_ct varchar,
+  comp_cg varchar,
+  comp_adr varchar,
+  comp_name varchar,
+  comp_tel varchar,
+  comp_content varchar,
+  comp_extra json,
+  geom geometry(Point, 5181)
+);
+CREATE INDEX IF NOT EXISTS comp_geom_gix ON layer.comp USING GIST (geom);
+COMMENT ON TABLE layer.comp IS '민원 접수';
+COMMENT ON COLUMN layer.comp.comp_key IS '접수번호';
+COMMENT ON COLUMN layer.comp.comp_date IS '접수일자';
+COMMENT ON COLUMN layer.comp.comp_cu IS '접수자';
+COMMENT ON COLUMN layer.comp.comp_ct IS '접수팀';
+COMMENT ON COLUMN layer.comp.comp_cg IS '접수부서';
+COMMENT ON COLUMN layer.comp.comp_adr IS '주소';
+COMMENT ON COLUMN layer.comp.comp_name IS '민원인';
+COMMENT ON COLUMN layer.comp.comp_tel IS '연락처';
+COMMENT ON COLUMN layer.comp.comp_content IS '민원내용';
+COMMENT ON COLUMN layer.comp.comp_extra IS '확장컬럼';
+COMMENT ON COLUMN layer.comp.geom IS '민원 위치 (주소 기반 Point, EPSG:5181)';
+`;
+
+const COMPD_SQL = `
+CREATE TABLE IF NOT EXISTS layer.compd (
+  compd_key SERIAL PRIMARY KEY,
+  comp_key integer NOT NULL REFERENCES layer.comp(comp_key) ON DELETE CASCADE,
+  compd_date timestamp,
+  compd_cu varchar,
+  compd_ct varchar,
+  compd_cg varchar,
+  compd_state varchar,
+  compd_contents varchar,
+  compd_extra json
+);
+CREATE INDEX IF NOT EXISTS compd_comp_key_idx ON layer.compd (comp_key);
+COMMENT ON TABLE layer.compd IS '민원 처리내역';
+COMMENT ON COLUMN layer.compd.compd_key IS '처리내역 번호';
+COMMENT ON COLUMN layer.compd.comp_key IS '접수번호';
+COMMENT ON COLUMN layer.compd.compd_date IS '처리일';
+COMMENT ON COLUMN layer.compd.compd_cu IS '처리자';
+COMMENT ON COLUMN layer.compd.compd_ct IS '처리팀';
+COMMENT ON COLUMN layer.compd.compd_cg IS '처리부서';
+COMMENT ON COLUMN layer.compd.compd_state IS '처리상태';
+COMMENT ON COLUMN layer.compd.compd_contents IS '처리내용';
+COMMENT ON COLUMN layer.compd.compd_extra IS '확장컬럼';
+`;
+
+/** 기존 layer.comp 에 geom 없으면 추가 */
+async function ensureCompGeom(result: EnsureResult): Promise<void> {
+  const fq = 'layer.comp';
+  try {
+    if ((await tableExists('layer', 'comp')) !== 'BASE TABLE') return;
+    if (!(await columnExists('layer', 'comp', 'geom'))) {
+      await db.execute(
+        sql.raw(`ALTER TABLE layer.comp ADD COLUMN geom geometry(Point, 5181)`)
+      );
+      await db.execute(
+        sql.raw(`COMMENT ON COLUMN layer.comp.geom IS '민원 위치 (주소 기반 Point, EPSG:5181)'`)
+      );
+      result.created.push(`${fq}.geom`);
+    }
+    await db.execute(
+      sql.raw(`CREATE INDEX IF NOT EXISTS comp_geom_gix ON layer.comp USING GIST (geom)`)
+    );
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    result.errors.push(`${fq}.geom: ${msg}`);
+  }
+}
+
+/** 민원 접수·처리내역 layer.comp / layer.compd */
+export async function ensureComplaintTables(result?: EnsureResult): Promise<EnsureResult> {
+  const out: EnsureResult = result ?? { created: [], moved: [], existed: [], errors: [] };
+  await ensureSchemaLayer();
+  await ensureBaseTable({
+    table: 'comp',
+    createSql: COMP_SQL,
+    result: out,
+  });
+  await ensureCompGeom(out);
+  await ensureBaseTable({
+    table: 'compd',
+    createSql: COMPD_SQL,
+    result: out,
+  });
+  return out;
+}
+
 export async function ensureAerialWorkUnitTables(result?: EnsureResult): Promise<EnsureResult> {
   const out: EnsureResult = result ?? { created: [], moved: [], existed: [], errors: [] };
   await ensureSchemaLayer();
@@ -1683,6 +1908,22 @@ export async function ensureAerialWorkUnitTables(result?: EnsureResult): Promise
     result: out,
   });
   await ensureFileUnitGeom(out);
+  return out;
+}
+
+export async function ensureQgisLayerControlTables(result?: EnsureResult): Promise<EnsureResult> {
+  const out: EnsureResult = result ?? { created: [], moved: [], existed: [], errors: [] };
+  await ensureSchemaLayer();
+  await ensureBaseTable({
+    table: 'user_layer_control',
+    createSql: USER_LAYER_CONTROL_SQL,
+    result: out,
+  });
+  await ensureBaseTable({
+    table: 'layer_control',
+    createSql: LAYER_CONTROL_SQL,
+    result: out,
+  });
   return out;
 }
 
@@ -1837,6 +2078,51 @@ export async function ensureWaterPlaySignTable(result?: EnsureResult): Promise<E
       out.errors.push(`layer.water_play_sign.${col.name}: ${msg}`);
     }
   }
+  try {
+    const geomTypeRes = await db.execute(
+      sql.raw(`
+        SELECT type
+        FROM geometry_columns
+        WHERE f_table_schema = 'layer' AND f_table_name = 'water_play_sign'
+        LIMIT 1
+      `)
+    );
+    const geomType = String(
+      (geomTypeRes.rows?.[0] as { type?: string } | undefined)?.type ?? ''
+    ).toUpperCase();
+    if (!geomType.includes('MULTIPOLYGON')) {
+      await db.execute(sql.raw(`
+        ALTER TABLE layer.water_play_sign
+          ALTER COLUMN geom TYPE public.geometry(MultiPolygon,5181)
+          USING NULL::public.geometry
+      `));
+    }
+    await db.execute(sql.raw(`
+      UPDATE layer.water_play_sign
+      SET geom = NULL
+      WHERE EXISTS (
+        SELECT 1
+        FROM layer.water_play_sign x
+        WHERE x.geom IS NOT NULL
+          AND GeometryType(x.geom) IN ('POINT', 'MULTIPOINT')
+      )
+    `));
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    if (!/already|same type|cannot be cast/i.test(msg)) {
+      out.errors.push(`layer.water_play_sign.geom: ${msg}`);
+    }
+  }
+  await ensureBaseTable({
+    table: 'water_play_box_list',
+    createSql: WATER_PLAY_BOX_LIST_SQL,
+    result: out,
+  });
+  await ensureBaseTable({
+    table: 'water_play_sign_list',
+    createSql: WATER_PLAY_SIGN_LIST_SQL,
+    result: out,
+  });
   return out;
 }
 
@@ -1894,6 +2180,7 @@ export async function ensureLayerAppTables(): Promise<EnsureResult> {
   const result: EnsureResult = { created: [], moved: [], existed: [], errors: [] };
   try {
     await ensureSchemaLayer();
+    await ensureSchemaLandLinkage();
     await ensureLayerExtraDefTable(result);
     await ensureRoadUseLedgerTables(result);
     await ensureRoadFrontageBuildingTables(result);
@@ -1903,7 +2190,9 @@ export async function ensureLayerAppTables(): Promise<EnsureResult> {
     await ensureFmsTables(result);
     await ensureNextGenLinkageTables(result);
     await ensureMemoTables(result);
+    await ensureComplaintTables(result);
     await ensureAerialWorkUnitTables(result);
+    await ensureQgisLayerControlTables(result);
     await ensureRoadRewardTables(result);
     await ensureConsDataAsTables(result);
     await ensureRadiationShelterTable(result);

@@ -14,11 +14,11 @@ import {
 } from '@/app/(pages)/dev/_components/sourceUpload/sourceUploadProfiles';
 import {
   RemoteUploadError,
-  cancelRemoteSourceUpload,
   getRemoteUploadBase,
   uploadZipByChunks,
   type RemoteStageReport,
 } from '@/service/sourceUploadRemote';
+import { clearPreparedSourceZip, setPreparedSourceZip } from '@/service/sourceUploadPreparedZip';
 import {
   compareSchemaWithConnectedDb,
   formatDbCompareDialogSummary,
@@ -36,8 +36,8 @@ import {
 } from '@/lib/sourceUploadHistoryMessage';
 import { recordUploadFlowHistory } from '@/service/sourceUploadHistoryService';
 import {
-  completeUploadProgress,
   createProgressId,
+  completeUploadProgress,
   failUploadProgress,
   getUploadProgress,
   initUploadProgress,
@@ -167,15 +167,6 @@ function uploadErrorResponse(params: {
   );
 }
 
-function npmInstallNote(
-  includeNodeModules: boolean,
-  npmInstall?: { ok?: boolean; message?: string; skipped?: boolean }
-): string | undefined {
-  if (includeNodeModules) return 'npm install 생략';
-  if (!npmInstall) return undefined;
-  return npmInstall.message ?? (npmInstall.ok !== false ? 'npm install 완료' : 'npm install 실패');
-}
-
 export async function POST(req: NextRequest) {
   const localStages: LocalStageReport[] = [];
   let remoteStages: RemoteStageReport[] = [];
@@ -209,16 +200,6 @@ export async function POST(req: NextRequest) {
     if (!getUploadProgress(progressId)) {
       initUploadProgress(progressId);
     }
-
-    let abortCancelSent = false;
-    const notifyGnmsCancelOnAbort = () => {
-      if (abortCancelSent || !progressId) return;
-      const remoteId = getUploadProgress(progressId)?.remoteUploadId?.trim();
-      if (!remoteId) return;
-      abortCancelSent = true;
-      void cancelRemoteSourceUpload({ uploadId: remoteId, reason: 'user_abort' });
-    };
-    req.signal.addEventListener('abort', notifyGnmsCancelOnAbort);
 
     setUploadProgressPhase(progressId, 'scan', '소스 스캔/필터링 시작...', {
       progressPct: 5,
@@ -443,29 +424,15 @@ export async function POST(req: NextRequest) {
       ok: true,
       detail: `${zipName} (${Math.round(zipSize / 1024 / 1024)}MB)`,
     });
-    setUploadProgressPhase(progressId, 'init', `ZIP 완료 (${Math.round(zipSize / 1024 / 1024)}MB) — 원격 전송 시작`, {
-      zipName,
-      zipSize,
-    });
-
-    let remoteResult;
-    try {
-      remoteResult = await uploadZipByChunks({
-        zipPath,
+    setUploadProgressPhase(
+      progressId,
+      'init',
+      `ZIP 완료 (${Math.round(zipSize / 1024 / 1024)}MB) — GNMS 서버 전송 시작`,
+      {
         zipName,
-        totalSize: zipSize,
-        mode,
-        date,
-        changeNote,
-        bundleRoot,
-        skipPreflight,
-        progressId,
-        includeNodeModules,
-      });
-      remoteStages = remoteResult.stages;
-    } finally {
-      await fs.rm(zipPath, { force: true }).catch(() => {});
-    }
+        zipSize,
+      }
+    );
 
     for (const f of included) {
       items.push({ file: f.relPath, category: f.category, status: 'ok' });
@@ -480,20 +447,58 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    const npmInstall = remoteResult.complete?.npmInstall as
-      | { ok?: boolean; message?: string; skipped?: boolean }
-      | undefined;
-    const npmMsg = includeNodeModules ? 'npm install 생략' : npmInstall?.message ?? 'npm install 완료';
-    localStages.push({
-      id: 'finalize',
-      ok: true,
-      detail: `성공 ${items.filter((x) => x.status === 'ok').length}, 제외 ${items.filter((x) => x.status === 'skipped').length}, ${npmMsg}`,
+    setPreparedSourceZip({
+      progressId,
+      zipPath,
+      zipName,
+      zipSize,
+      mode,
+      date,
+      changeNote,
+      bundleRoot,
+      includeNodeModules,
+      clientIp,
+      workspaceRoot,
+      items,
+      localStages,
+      scanSummary,
+      dbCompare: { diffCount: dbCompare.diffCount, summaryText: dbCompare.summaryText },
+      schemaMismatch,
+      createdAt: Date.now(),
     });
-    completeUploadProgress(progressId, '업로드 완료');
+
+    const remote = await uploadZipByChunks({
+      zipPath,
+      zipName,
+      totalSize: zipSize,
+      mode,
+      date,
+      changeNote,
+      bundleRoot,
+      skipPreflight: true,
+      progressId,
+      includeNodeModules,
+    });
 
     const okCount = items.filter((x) => x.status === 'ok').length;
     const skippedCount = items.filter((x) => x.status === 'skipped').length;
     const failCount = items.filter((x) => x.status === 'fail').length;
+    const warnCount = items.filter((x) => x.status === 'warn').length;
+    const npmInstall = remote.complete.npmInstall as
+      | { ok?: boolean; message?: string; skipped?: boolean }
+      | undefined;
+    const npmMsg = includeNodeModules
+      ? 'npm install 생략'
+      : npmInstall?.skipped
+        ? 'npm install 생략'
+        : npmInstall?.ok === false
+          ? `npm install 실패: ${npmInstall.message ?? ''}`
+          : (npmInstall?.message ?? 'npm install 완료');
+    localStages.push({
+      id: 'finalize',
+      ok: true,
+      detail: `성공 ${okCount}, 제외 ${skippedCount}, ${npmMsg}`,
+    });
     const historyWarnings: string[] = [];
     if (schemaMismatch) {
       historyWarnings.push(formatDbSchemaMismatchWarning(dbCompare.diffCount));
@@ -502,40 +507,47 @@ export async function POST(req: NextRequest) {
       includeNodeModules,
       changeNote,
       status: 'success',
-      body: buildSourceUploadSuccessBody(
-        okCount,
-        skippedCount,
-        failCount,
-        npmInstallNote(includeNodeModules, npmInstall),
-        historyWarnings
-      ),
+      body: buildSourceUploadSuccessBody(okCount, skippedCount, failCount, npmMsg, historyWarnings),
       version: bundleRoot,
       ip: clientIp,
     });
+    completeUploadProgress(progressId, '업로드 완료');
+    await clearPreparedSourceZip(progressId);
 
     return NextResponse.json({
       progressId,
+      skipPreflight,
       remoteBase: getRemoteUploadBase(),
       workspaceRoot,
       zipName,
       zipSize,
       bundleRoot,
       includeNodeModules,
+      mode,
+      date,
+      changeNote,
       scanSummary,
       dbCompare: { diffCount: dbCompare.diffCount, summaryText: dbCompare.summaryText },
       warnings: historyWarnings,
       total: items.length,
-      ok: items.filter((x) => x.status === 'ok').length,
-      skipped: items.filter((x) => x.status === 'skipped').length,
-      fail: items.filter((x) => x.status === 'fail').length,
-      warn: items.filter((x) => x.status === 'warn').length,
-      remoteResult,
+      ok: okCount,
+      skipped: skippedCount,
+      fail: failCount,
+      warn: warnCount,
       localStages,
-      remoteStages,
+      remoteStages: remote.stages,
+      remoteResult: remote,
       items,
       historyRecorded,
     });
   } catch (err: unknown) {
+    if (err instanceof Error && err.name === 'AbortError') {
+      if (progressId) {
+        failUploadProgress(progressId, 'chunk', '사용자가 취소했습니다.');
+        await clearPreparedSourceZip(progressId);
+      }
+      return NextResponse.json({ error: '사용자가 취소했습니다.', cancelled: true }, { status: 499 });
+    }
     if (err instanceof RemoteUploadError) {
       remoteStages = err.stages;
       if (progressId) {
@@ -553,6 +565,7 @@ export async function POST(req: NextRequest) {
         version: bundleRootForHistory || undefined,
         ip: clientIp,
       });
+      if (progressId) await clearPreparedSourceZip(progressId);
       return uploadErrorResponse({
         message: err.message,
         failedStage: err.stage,
@@ -578,6 +591,7 @@ export async function POST(req: NextRequest) {
       version: bundleRootForHistory || undefined,
       ip: clientIp,
     });
+    if (progressId) await clearPreparedSourceZip(progressId);
     return uploadErrorResponse({
       message,
       failedStage: 'unknown',

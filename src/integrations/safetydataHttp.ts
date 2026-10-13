@@ -21,6 +21,10 @@ export function getEffectiveSafetydataQueryParams(cfg: SafetydataDatasetConfig):
     if (v !== undefined && v !== '') out[k] = v;
   }
 
+  if (cfg.skipGlobalBbox === true) {
+    return out;
+  }
+
   const extraNames = new Set((cfg.extraRequestParams ?? []).map((e) => e.nameEn));
   const hasBboxInExtra = BBOX_PARAM_KEYS.some((k) => extraNames.has(k));
 

@@ -3,6 +3,7 @@
 import React, { useRef, useCallback, useEffect } from 'react';
 import { GripVertical } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { SerWriteAccessProvider } from '@/hooks/useSerWriteAccess';
 
 const SIDEBAR_WIDTH = 65;
 
@@ -17,6 +18,10 @@ export type MapSideListPanelProps = {
   className?: string;
   /** 본문 래퍼(flex-1)에 추가 클래스. 예: `overflow-y-auto`로 패널 전체 스크롤 */
   contentClassName?: string;
+  /** 있으면 읽기 권한일 때 추가·수정·삭제 버튼 숨김 */
+  serEng?: string;
+  /** false면 우측 너비 조절 핸들 숨김 (고정폭 패널) */
+  resizable?: boolean;
 };
 
 export function MapSideListPanel({
@@ -28,6 +33,8 @@ export function MapSideListPanel({
   children,
   className,
   contentClassName,
+  serEng,
+  resizable = true,
 }: MapSideListPanelProps) {
   const panelRef = useRef<HTMLDivElement>(null);
   const rafRef = useRef<number | null>(null);
@@ -72,7 +79,7 @@ export function MapSideListPanel({
     };
   }, [handleResize, handleResizeEnd]);
 
-  return (
+  const panel = (
     <div
       ref={panelRef}
       className={cn(
@@ -81,17 +88,19 @@ export function MapSideListPanel({
       )}
       style={{ width: `${width}px` }}
     >
-      <div
-        role="separator"
-        aria-label="패널 너비 조절"
-        onMouseDown={handleResizeStart}
-        className="absolute right-0 top-0 bottom-0 z-20 flex w-2.5 cursor-col-resize items-center justify-center group hover:bg-muted/50"
-        title="너비 조절"
-      >
-        <span className="pointer-events-none text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100">
-          <GripVertical className="h-4 w-4" />
-        </span>
-      </div>
+      {resizable ? (
+        <div
+          role="separator"
+          aria-label="패널 너비 조절"
+          onMouseDown={handleResizeStart}
+          className="absolute right-0 top-0 bottom-0 z-20 flex w-2.5 cursor-col-resize items-center justify-center group hover:bg-muted/50"
+          title="너비 조절"
+        >
+          <span className="pointer-events-none text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100">
+            <GripVertical className="h-4 w-4" />
+          </span>
+        </div>
+      ) : null}
 
       <div
         className={cn(
@@ -105,4 +114,10 @@ export function MapSideListPanel({
       </div>
     </div>
   );
+
+  const eng = serEng?.trim();
+  if (eng) {
+    return <SerWriteAccessProvider serEng={eng}>{panel}</SerWriteAccessProvider>;
+  }
+  return panel;
 }

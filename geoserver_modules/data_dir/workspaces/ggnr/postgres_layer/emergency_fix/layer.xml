@@ -1,0 +1,19 @@
+<layer>
+  <name>emergency_fix</name>
+  <id>LayerInfoImpl-4f1e7b9b:1a0f0cebe25:-7f0e</id>
+  <type>VECTOR</type>
+  <defaultStyle>
+    <id>StyleInfoImpl-4f1e7b9b:1a0f0cebe25:-7f0d</id>
+  </defaultStyle>
+  <resource class="featureType">
+    <id>FeatureTypeInfoImpl-4f1e7b9b:1a0f0cebe25:-7f0f</id>
+  </resource>
+  <queryable>true</queryable>
+  <opaque>false</opaque>
+  <attribution>
+    <logoWidth>0</logoWidth>
+    <logoHeight>0</logoHeight>
+  </attribution>
+  <dateCreated>2026-09-30 06:01:19.118 UTC</dateCreated>
+  <dateModified>2026-09-30 06:01:19.417 UTC</dateModified>
+</layer>

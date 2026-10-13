@@ -25,8 +25,17 @@ import {
   buildChildOfParentWhereSql,
 } from './layerRowService';
 import { labelForOccupationLedgerField } from '@/app/(pages)/map/_mapContents/occupationLedger/occupationLedgerFieldLabels';
-import { deriveOccupationPeriodState } from '@/lib/occupationLedgerPeriodState';
+import {
+  deriveOccupationPeriodState,
+  OCCUPATION_PERIOD_STATE_ENDED,
+} from '@/lib/occupationLedgerPeriodState';
 import { sortOccupationLedgerListRows } from '@/lib/occupationLedgerListSort';
+import { parseOccupPlacePartsForJijuk } from '@/lib/occupationLedgerOccupPlaceGeom';
+import { riNameLookupCandidates, buildPnu19 } from '@/lib/excelUploadAddressNormalize';
+import {
+  getJijukGeomByPnu,
+  resolvePnuFromParsedParts,
+} from './excelUploadService';
 
 const DEFAULT_SCHEMA = 'layer';
 const GEOM_COLUMN_NAMES = new Set(['geom', 'geometry', 'the_geom', 'shape']);
@@ -887,4 +896,280 @@ export async function syncOccupationLedgerMgjByKey(params: {
   if (result.error) return { success: false, error: result.error };
   if (geomResolved.error) return { success: true, error: geomResolved.error };
   return { success: true };
+}
+
+export type OccupationLedgerGeomFillCounts = {
+  filled: number;
+  cleared: number;
+  total: number;
+};
+
+async function resolveOccupPlaceGeomWkt5181(
+  occupPlace: string,
+  cache: Map<string, string | null>
+): Promise<string | null> {
+  const raw = String(occupPlace ?? '').trim();
+  if (!raw) return null;
+  if (cache.has(raw)) return cache.get(raw) ?? null;
+  const parts = parseOccupPlacePartsForJijuk(raw);
+  if (parts.length === 0) {
+    cache.set(raw, null);
+    return null;
+  }
+  const wkts: string[] = [];
+  for (const parsed of parts) {
+    const partKey = [
+      parsed.emdName,
+      parsed.riName,
+      parsed.bonbun,
+      parsed.bubun,
+      parsed.isMountain ? '2' : '1',
+    ].join('|');
+    let wkt: string | null;
+    if (cache.has(partKey)) {
+      wkt = cache.get(partKey) ?? null;
+    } else {
+      const pnu = await resolvePnuForOccupPlacePart(parsed);
+      wkt = pnu ? String((await getJijukGeomByPnu(pnu, 5181)) ?? '').trim() || null : null;
+      cache.set(partKey, wkt);
+    }
+    if (wkt) wkts.push(wkt);
+  }
+  if (wkts.length === 0) {
+    cache.set(raw, null);
+    return null;
+  }
+  const unioned = wkts.length === 1 ? wkts[0]! : await unionWkts5181(wkts);
+  cache.set(raw, unioned);
+  return unioned;
+}
+
+async function resolvePnuForOccupPlacePart(parsed: {
+  emdName: string;
+  riName: string;
+  bonbun: string;
+  bubun: string;
+  isMountain: boolean;
+}): Promise<string | null> {
+  if (parsed.emdName) {
+    const pnuRes = await resolvePnuFromParsedParts(parsed);
+    const pnu = String(pnuRes.pnu ?? '').trim();
+    if (pnu) return pnu;
+  }
+  const riCd = await resolveUniqueRiCdByName(parsed.riName);
+  if (!riCd) return null;
+  return buildPnu19(riCd, parsed);
+}
+
+async function resolveUniqueRiCdByName(riName: string): Promise<string | null> {
+  const nameCols = ['ri_nm', 'adm_nm', 'name'] as const;
+  const found = new Set<string>();
+  for (const candidate of riNameLookupCandidates(riName)) {
+    for (const col of nameCols) {
+      try {
+        const res = await db.execute(
+          sql.raw(
+            `SELECT DISTINCT "ri_cd" AS code
+             FROM "public_layer"."ri"
+             WHERE "${col}" = '${esc(candidate)}'`
+          )
+        );
+        for (const row of (res.rows ?? []) as { code?: string }[]) {
+          const code = String(row.code ?? '').trim();
+          if (code) found.add(code);
+        }
+      } catch {
+        continue;
+      }
+    }
+    if (found.size === 1) return [...found][0]!;
+    if (found.size > 1) return null;
+  }
+  return found.size === 1 ? [...found][0]! : null;
+}
+
+async function unionWkts5181(wkts: string[]): Promise<string | null> {
+  const geoms = wkts
+    .map(
+      (w) => `ST_MakeValid(ST_SetSRID(ST_GeomFromText('${esc(w)}'), 5181))`
+    )
+    .join(', ');
+  try {
+    const res = await db.execute(
+      sql.raw(
+        `SELECT ST_AsText(
+           ST_Multi(
+             ST_CollectionExtract(
+               ST_MakeValid(ST_Union(ARRAY[${geoms}])),
+               3
+             )
+           )
+         ) AS wkt`
+      )
+    );
+    const wkt = String((res.rows?.[0] as { wkt?: string } | undefined)?.wkt ?? '').trim();
+    return wkt || null;
+  } catch {
+    return null;
+  }
+}
+
+function geomFromWkt5181Sql(wkt: string): string {
+  return `ST_Multi(
+    ST_CollectionExtract(
+      ST_MakeValid(ST_SetSRID(ST_GeomFromText('${esc(wkt)}'), 5181)),
+      3
+    )
+  )`;
+}
+
+async function fillTableGeomFromOccupPlace(opts: {
+  tableWanted: string;
+  keyField: string;
+  placeField: string;
+  cache: Map<string, string | null>;
+}): Promise<OccupationLedgerGeomFillCounts | { error: string }> {
+  const meta = await resolveTableWithSchema(opts.tableWanted);
+  if (!meta) {
+    return { filled: 0, cleared: 0, total: 0 };
+  }
+  const cols = await getTableColumns(meta.schema, meta.tableName);
+  const keyCol = findColumn(cols, opts.keyField);
+  const placeCol = findColumn(cols, opts.placeField);
+  const geomCol = findColumn(cols, 'geom');
+  if (!keyCol || !placeCol || !geomCol) {
+    return { error: `${opts.tableWanted}에 키·점용장소·도형 칸이 없습니다.` };
+  }
+  const safeSchema = meta.schema.replace(/"/g, '""');
+  const safeTable = meta.tableName.replace(/"/g, '""');
+  const res = await db.execute(
+    sql.raw(
+      `SELECT ${quoteIdent(keyCol)}::text AS k,
+              COALESCE(${quoteIdent(placeCol)}::text, '') AS p
+       FROM "${safeSchema}"."${safeTable}"
+       ORDER BY ${quoteIdent(keyCol)}`
+    )
+  );
+  const rows = (res.rows ?? []) as { k?: string; p?: string }[];
+  let filled = 0;
+  let cleared = 0;
+  for (const row of rows) {
+    const id = String(row.k ?? '').trim();
+    if (!id) continue;
+    const wkt = await resolveOccupPlaceGeomWkt5181(String(row.p ?? ''), opts.cache);
+    if (wkt) {
+      await db.execute(
+        sql.raw(
+          `UPDATE "${safeSchema}"."${safeTable}"
+           SET ${quoteIdent(geomCol)} = ${geomFromWkt5181Sql(wkt)}
+           WHERE ${quoteIdent(keyCol)}::text = '${esc(id)}'`
+        )
+      );
+      filled += 1;
+    } else {
+      await db.execute(
+        sql.raw(
+          `UPDATE "${safeSchema}"."${safeTable}"
+           SET ${quoteIdent(geomCol)} = NULL
+           WHERE ${quoteIdent(keyCol)}::text = '${esc(id)}'`
+        )
+      );
+      cleared += 1;
+    }
+  }
+  return { filled, cleared, total: rows.length };
+}
+
+export type OccupationLedgerStateFillCounts = {
+  inProgress: number;
+  ended: number;
+  total: number;
+};
+
+/** 본표 종료일 기준 — 오늘을 지나지 않았으면 진행중, 지났으면 종료 */
+async function fillMainTableStateFromEndDate(
+  binding: OccupationLedgerBinding
+): Promise<OccupationLedgerStateFillCounts | { error: string }> {
+  const empty = { inProgress: 0, ended: 0, total: 0 };
+  const meta = await resolveTableWithSchema(binding.mainTable);
+  if (!meta) return empty;
+  const cols = await getTableColumns(meta.schema, meta.tableName);
+  const keyCol = findColumn(cols, binding.fields.keyField);
+  const endCol = findColumn(cols, binding.fields.endField ?? 'perm_end_date');
+  const stateCol = findColumn(cols, 'state');
+  if (!keyCol || !endCol || !stateCol) {
+    return { error: `${binding.mainTable}에 키·종료일·상태 칸이 없습니다.` };
+  }
+  const safeSchema = meta.schema.replace(/"/g, '""');
+  const safeTable = meta.tableName.replace(/"/g, '""');
+  const res = await db.execute(
+    sql.raw(
+      `SELECT ${quoteIdent(keyCol)}::text AS k,
+              ${quoteIdent(endCol)} AS e
+       FROM "${safeSchema}"."${safeTable}"
+       ORDER BY ${quoteIdent(keyCol)}`
+    )
+  );
+  const rows = (res.rows ?? []) as { k?: string; e?: unknown }[];
+  let inProgress = 0;
+  let ended = 0;
+  for (const row of rows) {
+    const id = String(row.k ?? '').trim();
+    if (!id) continue;
+    const endYmd = tryFormatToYmd(row.e) ?? String(row.e ?? '').trim().slice(0, 10);
+    const state = deriveOccupationPeriodState(endYmd);
+    if (state === OCCUPATION_PERIOD_STATE_ENDED) ended += 1;
+    else inProgress += 1;
+    await db.execute(
+      sql.raw(
+        `UPDATE "${safeSchema}"."${safeTable}"
+         SET ${quoteIdent(stateCol)} = '${esc(state)}'
+         WHERE ${quoteIdent(keyCol)}::text = '${esc(id)}'`
+      )
+    );
+  }
+  return { inProgress, ended, total: rows.length };
+}
+
+/** 점용장소 → 지적 도형. 못 맞추면 도형을 비운다. 본표 상태는 종료일 기준으로 넣는다. */
+export async function fillOccupationLedgerGeomFromOccupPlace(params?: {
+  serEng?: string;
+  system?: string;
+}): Promise<{
+  main: OccupationLedgerGeomFillCounts;
+  jijuk: OccupationLedgerGeomFillCounts;
+  state: OccupationLedgerStateFillCounts;
+  error?: string;
+}> {
+  const empty = { filled: 0, cleared: 0, total: 0 };
+  const emptyState = { inProgress: 0, ended: 0, total: 0 };
+  const resolved = resolveBinding(params);
+  if (resolved.error || !resolved.binding) {
+    return { main: empty, jijuk: empty, state: emptyState, error: resolved.error };
+  }
+  const binding = resolved.binding;
+  const cache = new Map<string, string | null>();
+  const main = await fillTableGeomFromOccupPlace({
+    tableWanted: binding.mainTable,
+    keyField: binding.fields.keyField,
+    placeField: binding.fields.placeField,
+    cache,
+  });
+  if ('error' in main) {
+    return { main: empty, jijuk: empty, state: emptyState, error: main.error };
+  }
+  const jijuk = await fillTableGeomFromOccupPlace({
+    tableWanted: binding.jijukTable,
+    keyField: 'ogc_fid',
+    placeField: binding.fields.childAddressField,
+    cache,
+  });
+  if ('error' in jijuk) {
+    return { main, jijuk: empty, state: emptyState, error: jijuk.error };
+  }
+  const state = await fillMainTableStateFromEndDate(binding);
+  if ('error' in state) {
+    return { main, jijuk, state: emptyState, error: state.error };
+  }
+  return { main, jijuk, state };
 }

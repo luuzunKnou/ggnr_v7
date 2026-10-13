@@ -1,0 +1,44 @@
+<featureType>
+  <id>FeatureTypeInfoImpl--79762301:1a0848f7abc:-7316</id>
+  <name>water_play_sign_list</name>
+  <nativeName>water_play_sign_list</nativeName>
+  <namespace>
+    <id>NamespaceInfoImpl-4bf97568:19c4d6c3053:-7ffa</id>
+  </namespace>
+  <title>water_play_sign_list</title>
+  <keywords>
+    <string>features</string>
+    <string>water_play_sign_list</string>
+  </keywords>
+  <srs>EPSG:5181</srs>
+  <nativeBoundingBox>
+    <minx>389749.75790639024</minx>
+    <maxx>399599.30236718804</maxx>
+    <miny>337732.9636579772</miny>
+    <maxy>358329.8552035344</maxy>
+    <crs class="projected">EPSG:5181</crs>
+  </nativeBoundingBox>
+  <latLonBoundingBox>
+    <minx>129.11833130018832</minx>
+    <maxx>129.2335609502795</maxx>
+    <miny>36.517088430529846</miny>
+    <maxy>36.70457102072218</maxy>
+    <crs>EPSG:4326</crs>
+  </latLonBoundingBox>
+  <projectionPolicy>FORCE_DECLARED</projectionPolicy>
+  <enabled>true</enabled>
+  <metadata>
+    <entry key="cachingEnabled">false</entry>
+  </metadata>
+  <store class="dataStore">
+    <id>DataStoreInfoImpl-4bf97568:19c4d6c3053:-7ff9</id>
+  </store>
+  <serviceConfiguration>false</serviceConfiguration>
+  <maxFeatures>0</maxFeatures>
+  <numDecimals>0</numDecimals>
+  <padWithZeros>false</padWithZeros>
+  <forcedDecimal>false</forcedDecimal>
+  <overridingServiceSRS>false</overridingServiceSRS>
+  <skipNumberMatched>false</skipNumberMatched>
+  <circularArcPresent>false</circularArcPresent>
+</featureType>

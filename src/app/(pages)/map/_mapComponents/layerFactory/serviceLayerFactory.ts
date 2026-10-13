@@ -10,6 +10,7 @@ import {
 } from '@/lib/mapLayerGeometryOrder';
 import { getGeoServerBase } from '@/lib/geoserverUrl';
 import { withBasePath } from '@/lib/basePath';
+import { isOrthoDataQueryLayerId } from '../../_mapContents/aerialView/orthoDataQueryLayerId';
 
 const WORKSPACE = 'ggnr';
 
@@ -375,7 +376,9 @@ export function useServiceLayerSync(
       return;
     }
 
-    const rawNames = Array.from(visibleLayerNames);
+    const rawNames = Array.from(visibleLayerNames).filter(
+      (n) => !isOrthoDataQueryLayerId(n)
+    );
     // 기하 타입 없어도 강제 하단(시설물·보조 레이어) 정렬은 항상 적용
     const names = sortLayerNamesForWmsStack(
       rawNames,

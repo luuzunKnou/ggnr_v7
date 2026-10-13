@@ -51,64 +51,6 @@
               <ogc:PropertyName>cont</ogc:PropertyName>
             </sld:Label>
             <sld:Font>
-              <sld:CssParameter name="font-family">Noto Sans KR</sld:CssParameter>
-              <sld:CssParameter name="font-size">11</sld:CssParameter>
-              <sld:CssParameter name="font-style">normal</sld:CssParameter>
-              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
-            </sld:Font>
-            <sld:LabelPlacement>
-              <sld:LinePlacement>
-                <sld:PerpendicularOffset>0</sld:PerpendicularOffset>
-              </sld:LinePlacement>
-            </sld:LabelPlacement>
-            <sld:Halo>
-              <sld:Radius>1.5</sld:Radius>
-              <sld:Fill>
-                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
-              </sld:Fill>
-            </sld:Halo>
-            <sld:Fill>
-              <sld:CssParameter name="fill">#B8B8B8</sld:CssParameter>
-            </sld:Fill>
-            <sld:VendorOption name="followLine">true</sld:VendorOption>
-            <sld:VendorOption name="repeat">400</sld:VendorOption>
-            <sld:VendorOption name="group">true</sld:VendorOption>
-          </sld:TextSymbolizer>
-          <sld:TextSymbolizer>
-            <sld:Label>
-              <ogc:PropertyName>divi</ogc:PropertyName><![CDATA[ ]]>
-              <ogc:PropertyName>cont</ogc:PropertyName>
-            </sld:Label>
-            <sld:Font>
-              <sld:CssParameter name="font-family">Malgun Gothic</sld:CssParameter>
-              <sld:CssParameter name="font-size">11</sld:CssParameter>
-              <sld:CssParameter name="font-style">normal</sld:CssParameter>
-              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
-            </sld:Font>
-            <sld:LabelPlacement>
-              <sld:LinePlacement>
-                <sld:PerpendicularOffset>0</sld:PerpendicularOffset>
-              </sld:LinePlacement>
-            </sld:LabelPlacement>
-            <sld:Halo>
-              <sld:Radius>1.5</sld:Radius>
-              <sld:Fill>
-                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
-              </sld:Fill>
-            </sld:Halo>
-            <sld:Fill>
-              <sld:CssParameter name="fill">#B8B8B8</sld:CssParameter>
-            </sld:Fill>
-            <sld:VendorOption name="followLine">true</sld:VendorOption>
-            <sld:VendorOption name="repeat">400</sld:VendorOption>
-            <sld:VendorOption name="group">true</sld:VendorOption>
-          </sld:TextSymbolizer>
-          <sld:TextSymbolizer>
-            <sld:Label>
-              <ogc:PropertyName>divi</ogc:PropertyName><![CDATA[ ]]>
-              <ogc:PropertyName>cont</ogc:PropertyName>
-            </sld:Label>
-            <sld:Font>
               <sld:CssParameter name="font-family">Nanum Gothic</sld:CssParameter>
               <sld:CssParameter name="font-size">11</sld:CssParameter>
               <sld:CssParameter name="font-style">normal</sld:CssParameter>
@@ -138,7 +80,7 @@
               <ogc:PropertyName>cont</ogc:PropertyName>
             </sld:Label>
             <sld:Font>
-              <sld:CssParameter name="font-family">Pretendard</sld:CssParameter>
+              <sld:CssParameter name="font-family">Malgun Gothic</sld:CssParameter>
               <sld:CssParameter name="font-size">11</sld:CssParameter>
               <sld:CssParameter name="font-style">normal</sld:CssParameter>
               <sld:CssParameter name="font-weight">bold</sld:CssParameter>
@@ -250,64 +192,6 @@
               <ogc:PropertyName>cont</ogc:PropertyName>
             </sld:Label>
             <sld:Font>
-              <sld:CssParameter name="font-family">Noto Sans KR</sld:CssParameter>
-              <sld:CssParameter name="font-size">11</sld:CssParameter>
-              <sld:CssParameter name="font-style">normal</sld:CssParameter>
-              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
-            </sld:Font>
-            <sld:LabelPlacement>
-              <sld:LinePlacement>
-                <sld:PerpendicularOffset>0</sld:PerpendicularOffset>
-              </sld:LinePlacement>
-            </sld:LabelPlacement>
-            <sld:Halo>
-              <sld:Radius>1.5</sld:Radius>
-              <sld:Fill>
-                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
-              </sld:Fill>
-            </sld:Halo>
-            <sld:Fill>
-              <sld:CssParameter name="fill">#999999</sld:CssParameter>
-            </sld:Fill>
-            <sld:VendorOption name="followLine">true</sld:VendorOption>
-            <sld:VendorOption name="repeat">400</sld:VendorOption>
-            <sld:VendorOption name="group">true</sld:VendorOption>
-          </sld:TextSymbolizer>
-          <sld:TextSymbolizer>
-            <sld:Label>
-              <ogc:PropertyName>divi</ogc:PropertyName><![CDATA[ ]]>
-              <ogc:PropertyName>cont</ogc:PropertyName>
-            </sld:Label>
-            <sld:Font>
-              <sld:CssParameter name="font-family">Malgun Gothic</sld:CssParameter>
-              <sld:CssParameter name="font-size">11</sld:CssParameter>
-              <sld:CssParameter name="font-style">normal</sld:CssParameter>
-              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
-            </sld:Font>
-            <sld:LabelPlacement>
-              <sld:LinePlacement>
-                <sld:PerpendicularOffset>0</sld:PerpendicularOffset>
-              </sld:LinePlacement>
-            </sld:LabelPlacement>
-            <sld:Halo>
-              <sld:Radius>1.5</sld:Radius>
-              <sld:Fill>
-                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
-              </sld:Fill>
-            </sld:Halo>
-            <sld:Fill>
-              <sld:CssParameter name="fill">#999999</sld:CssParameter>
-            </sld:Fill>
-            <sld:VendorOption name="followLine">true</sld:VendorOption>
-            <sld:VendorOption name="repeat">400</sld:VendorOption>
-            <sld:VendorOption name="group">true</sld:VendorOption>
-          </sld:TextSymbolizer>
-          <sld:TextSymbolizer>
-            <sld:Label>
-              <ogc:PropertyName>divi</ogc:PropertyName><![CDATA[ ]]>
-              <ogc:PropertyName>cont</ogc:PropertyName>
-            </sld:Label>
-            <sld:Font>
               <sld:CssParameter name="font-family">Nanum Gothic</sld:CssParameter>
               <sld:CssParameter name="font-size">11</sld:CssParameter>
               <sld:CssParameter name="font-style">normal</sld:CssParameter>
@@ -337,7 +221,7 @@
               <ogc:PropertyName>cont</ogc:PropertyName>
             </sld:Label>
             <sld:Font>
-              <sld:CssParameter name="font-family">Pretendard</sld:CssParameter>
+              <sld:CssParameter name="font-family">Malgun Gothic</sld:CssParameter>
               <sld:CssParameter name="font-size">11</sld:CssParameter>
               <sld:CssParameter name="font-style">normal</sld:CssParameter>
               <sld:CssParameter name="font-weight">bold</sld:CssParameter>
@@ -462,64 +346,6 @@
               <ogc:PropertyName>cont</ogc:PropertyName>
             </sld:Label>
             <sld:Font>
-              <sld:CssParameter name="font-family">Noto Sans KR</sld:CssParameter>
-              <sld:CssParameter name="font-size">11</sld:CssParameter>
-              <sld:CssParameter name="font-style">normal</sld:CssParameter>
-              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
-            </sld:Font>
-            <sld:LabelPlacement>
-              <sld:LinePlacement>
-                <sld:PerpendicularOffset>0</sld:PerpendicularOffset>
-              </sld:LinePlacement>
-            </sld:LabelPlacement>
-            <sld:Halo>
-              <sld:Radius>1.5</sld:Radius>
-              <sld:Fill>
-                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
-              </sld:Fill>
-            </sld:Halo>
-            <sld:Fill>
-              <sld:CssParameter name="fill">#D0D0D0</sld:CssParameter>
-            </sld:Fill>
-            <sld:VendorOption name="followLine">true</sld:VendorOption>
-            <sld:VendorOption name="repeat">400</sld:VendorOption>
-            <sld:VendorOption name="group">true</sld:VendorOption>
-          </sld:TextSymbolizer>
-          <sld:TextSymbolizer>
-            <sld:Label>
-              <ogc:PropertyName>divi</ogc:PropertyName><![CDATA[ ]]>
-              <ogc:PropertyName>cont</ogc:PropertyName>
-            </sld:Label>
-            <sld:Font>
-              <sld:CssParameter name="font-family">Malgun Gothic</sld:CssParameter>
-              <sld:CssParameter name="font-size">11</sld:CssParameter>
-              <sld:CssParameter name="font-style">normal</sld:CssParameter>
-              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
-            </sld:Font>
-            <sld:LabelPlacement>
-              <sld:LinePlacement>
-                <sld:PerpendicularOffset>0</sld:PerpendicularOffset>
-              </sld:LinePlacement>
-            </sld:LabelPlacement>
-            <sld:Halo>
-              <sld:Radius>1.5</sld:Radius>
-              <sld:Fill>
-                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
-              </sld:Fill>
-            </sld:Halo>
-            <sld:Fill>
-              <sld:CssParameter name="fill">#D0D0D0</sld:CssParameter>
-            </sld:Fill>
-            <sld:VendorOption name="followLine">true</sld:VendorOption>
-            <sld:VendorOption name="repeat">400</sld:VendorOption>
-            <sld:VendorOption name="group">true</sld:VendorOption>
-          </sld:TextSymbolizer>
-          <sld:TextSymbolizer>
-            <sld:Label>
-              <ogc:PropertyName>divi</ogc:PropertyName><![CDATA[ ]]>
-              <ogc:PropertyName>cont</ogc:PropertyName>
-            </sld:Label>
-            <sld:Font>
               <sld:CssParameter name="font-family">Nanum Gothic</sld:CssParameter>
               <sld:CssParameter name="font-size">11</sld:CssParameter>
               <sld:CssParameter name="font-style">normal</sld:CssParameter>
@@ -549,7 +375,7 @@
               <ogc:PropertyName>cont</ogc:PropertyName>
             </sld:Label>
             <sld:Font>
-              <sld:CssParameter name="font-family">Pretendard</sld:CssParameter>
+              <sld:CssParameter name="font-family">Malgun Gothic</sld:CssParameter>
               <sld:CssParameter name="font-size">11</sld:CssParameter>
               <sld:CssParameter name="font-style">normal</sld:CssParameter>
               <sld:CssParameter name="font-weight">bold</sld:CssParameter>
@@ -686,64 +512,6 @@
               <ogc:PropertyName>cont</ogc:PropertyName>
             </sld:Label>
             <sld:Font>
-              <sld:CssParameter name="font-family">Noto Sans KR</sld:CssParameter>
-              <sld:CssParameter name="font-size">11</sld:CssParameter>
-              <sld:CssParameter name="font-style">normal</sld:CssParameter>
-              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
-            </sld:Font>
-            <sld:LabelPlacement>
-              <sld:LinePlacement>
-                <sld:PerpendicularOffset>0</sld:PerpendicularOffset>
-              </sld:LinePlacement>
-            </sld:LabelPlacement>
-            <sld:Halo>
-              <sld:Radius>1.5</sld:Radius>
-              <sld:Fill>
-                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
-              </sld:Fill>
-            </sld:Halo>
-            <sld:Fill>
-              <sld:CssParameter name="fill">#DCDCDC</sld:CssParameter>
-            </sld:Fill>
-            <sld:VendorOption name="followLine">true</sld:VendorOption>
-            <sld:VendorOption name="repeat">400</sld:VendorOption>
-            <sld:VendorOption name="group">true</sld:VendorOption>
-          </sld:TextSymbolizer>
-          <sld:TextSymbolizer>
-            <sld:Label>
-              <ogc:PropertyName>divi</ogc:PropertyName><![CDATA[ ]]>
-              <ogc:PropertyName>cont</ogc:PropertyName>
-            </sld:Label>
-            <sld:Font>
-              <sld:CssParameter name="font-family">Malgun Gothic</sld:CssParameter>
-              <sld:CssParameter name="font-size">11</sld:CssParameter>
-              <sld:CssParameter name="font-style">normal</sld:CssParameter>
-              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
-            </sld:Font>
-            <sld:LabelPlacement>
-              <sld:LinePlacement>
-                <sld:PerpendicularOffset>0</sld:PerpendicularOffset>
-              </sld:LinePlacement>
-            </sld:LabelPlacement>
-            <sld:Halo>
-              <sld:Radius>1.5</sld:Radius>
-              <sld:Fill>
-                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
-              </sld:Fill>
-            </sld:Halo>
-            <sld:Fill>
-              <sld:CssParameter name="fill">#DCDCDC</sld:CssParameter>
-            </sld:Fill>
-            <sld:VendorOption name="followLine">true</sld:VendorOption>
-            <sld:VendorOption name="repeat">400</sld:VendorOption>
-            <sld:VendorOption name="group">true</sld:VendorOption>
-          </sld:TextSymbolizer>
-          <sld:TextSymbolizer>
-            <sld:Label>
-              <ogc:PropertyName>divi</ogc:PropertyName><![CDATA[ ]]>
-              <ogc:PropertyName>cont</ogc:PropertyName>
-            </sld:Label>
-            <sld:Font>
               <sld:CssParameter name="font-family">Nanum Gothic</sld:CssParameter>
               <sld:CssParameter name="font-size">11</sld:CssParameter>
               <sld:CssParameter name="font-style">normal</sld:CssParameter>
@@ -773,7 +541,7 @@
               <ogc:PropertyName>cont</ogc:PropertyName>
             </sld:Label>
             <sld:Font>
-              <sld:CssParameter name="font-family">Pretendard</sld:CssParameter>
+              <sld:CssParameter name="font-family">Malgun Gothic</sld:CssParameter>
               <sld:CssParameter name="font-size">11</sld:CssParameter>
               <sld:CssParameter name="font-style">normal</sld:CssParameter>
               <sld:CssParameter name="font-weight">bold</sld:CssParameter>
@@ -907,64 +675,6 @@
               <ogc:PropertyName>cont</ogc:PropertyName>
             </sld:Label>
             <sld:Font>
-              <sld:CssParameter name="font-family">Noto Sans KR</sld:CssParameter>
-              <sld:CssParameter name="font-size">11</sld:CssParameter>
-              <sld:CssParameter name="font-style">normal</sld:CssParameter>
-              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
-            </sld:Font>
-            <sld:LabelPlacement>
-              <sld:LinePlacement>
-                <sld:PerpendicularOffset>0</sld:PerpendicularOffset>
-              </sld:LinePlacement>
-            </sld:LabelPlacement>
-            <sld:Halo>
-              <sld:Radius>1.5</sld:Radius>
-              <sld:Fill>
-                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
-              </sld:Fill>
-            </sld:Halo>
-            <sld:Fill>
-              <sld:CssParameter name="fill">#999999</sld:CssParameter>
-            </sld:Fill>
-            <sld:VendorOption name="followLine">true</sld:VendorOption>
-            <sld:VendorOption name="repeat">400</sld:VendorOption>
-            <sld:VendorOption name="group">true</sld:VendorOption>
-          </sld:TextSymbolizer>
-          <sld:TextSymbolizer>
-            <sld:Label>
-              <ogc:PropertyName>divi</ogc:PropertyName><![CDATA[ ]]>
-              <ogc:PropertyName>cont</ogc:PropertyName>
-            </sld:Label>
-            <sld:Font>
-              <sld:CssParameter name="font-family">Malgun Gothic</sld:CssParameter>
-              <sld:CssParameter name="font-size">11</sld:CssParameter>
-              <sld:CssParameter name="font-style">normal</sld:CssParameter>
-              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
-            </sld:Font>
-            <sld:LabelPlacement>
-              <sld:LinePlacement>
-                <sld:PerpendicularOffset>0</sld:PerpendicularOffset>
-              </sld:LinePlacement>
-            </sld:LabelPlacement>
-            <sld:Halo>
-              <sld:Radius>1.5</sld:Radius>
-              <sld:Fill>
-                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
-              </sld:Fill>
-            </sld:Halo>
-            <sld:Fill>
-              <sld:CssParameter name="fill">#999999</sld:CssParameter>
-            </sld:Fill>
-            <sld:VendorOption name="followLine">true</sld:VendorOption>
-            <sld:VendorOption name="repeat">400</sld:VendorOption>
-            <sld:VendorOption name="group">true</sld:VendorOption>
-          </sld:TextSymbolizer>
-          <sld:TextSymbolizer>
-            <sld:Label>
-              <ogc:PropertyName>divi</ogc:PropertyName><![CDATA[ ]]>
-              <ogc:PropertyName>cont</ogc:PropertyName>
-            </sld:Label>
-            <sld:Font>
               <sld:CssParameter name="font-family">Nanum Gothic</sld:CssParameter>
               <sld:CssParameter name="font-size">11</sld:CssParameter>
               <sld:CssParameter name="font-style">normal</sld:CssParameter>
@@ -994,7 +704,7 @@
               <ogc:PropertyName>cont</ogc:PropertyName>
             </sld:Label>
             <sld:Font>
-              <sld:CssParameter name="font-family">Pretendard</sld:CssParameter>
+              <sld:CssParameter name="font-family">Malgun Gothic</sld:CssParameter>
               <sld:CssParameter name="font-size">11</sld:CssParameter>
               <sld:CssParameter name="font-style">normal</sld:CssParameter>
               <sld:CssParameter name="font-weight">bold</sld:CssParameter>
@@ -1093,64 +803,6 @@
               <ogc:PropertyName>cont</ogc:PropertyName>
             </sld:Label>
             <sld:Font>
-              <sld:CssParameter name="font-family">Noto Sans KR</sld:CssParameter>
-              <sld:CssParameter name="font-size">11</sld:CssParameter>
-              <sld:CssParameter name="font-style">normal</sld:CssParameter>
-              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
-            </sld:Font>
-            <sld:LabelPlacement>
-              <sld:LinePlacement>
-                <sld:PerpendicularOffset>0</sld:PerpendicularOffset>
-              </sld:LinePlacement>
-            </sld:LabelPlacement>
-            <sld:Halo>
-              <sld:Radius>1.5</sld:Radius>
-              <sld:Fill>
-                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
-              </sld:Fill>
-            </sld:Halo>
-            <sld:Fill>
-              <sld:CssParameter name="fill">#999999</sld:CssParameter>
-            </sld:Fill>
-            <sld:VendorOption name="followLine">true</sld:VendorOption>
-            <sld:VendorOption name="repeat">400</sld:VendorOption>
-            <sld:VendorOption name="group">true</sld:VendorOption>
-          </sld:TextSymbolizer>
-          <sld:TextSymbolizer>
-            <sld:Label>
-              <ogc:PropertyName>divi</ogc:PropertyName><![CDATA[ ]]>
-              <ogc:PropertyName>cont</ogc:PropertyName>
-            </sld:Label>
-            <sld:Font>
-              <sld:CssParameter name="font-family">Malgun Gothic</sld:CssParameter>
-              <sld:CssParameter name="font-size">11</sld:CssParameter>
-              <sld:CssParameter name="font-style">normal</sld:CssParameter>
-              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
-            </sld:Font>
-            <sld:LabelPlacement>
-              <sld:LinePlacement>
-                <sld:PerpendicularOffset>0</sld:PerpendicularOffset>
-              </sld:LinePlacement>
-            </sld:LabelPlacement>
-            <sld:Halo>
-              <sld:Radius>1.5</sld:Radius>
-              <sld:Fill>
-                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
-              </sld:Fill>
-            </sld:Halo>
-            <sld:Fill>
-              <sld:CssParameter name="fill">#999999</sld:CssParameter>
-            </sld:Fill>
-            <sld:VendorOption name="followLine">true</sld:VendorOption>
-            <sld:VendorOption name="repeat">400</sld:VendorOption>
-            <sld:VendorOption name="group">true</sld:VendorOption>
-          </sld:TextSymbolizer>
-          <sld:TextSymbolizer>
-            <sld:Label>
-              <ogc:PropertyName>divi</ogc:PropertyName><![CDATA[ ]]>
-              <ogc:PropertyName>cont</ogc:PropertyName>
-            </sld:Label>
-            <sld:Font>
               <sld:CssParameter name="font-family">Nanum Gothic</sld:CssParameter>
               <sld:CssParameter name="font-size">11</sld:CssParameter>
               <sld:CssParameter name="font-style">normal</sld:CssParameter>
@@ -1180,7 +832,7 @@
               <ogc:PropertyName>cont</ogc:PropertyName>
             </sld:Label>
             <sld:Font>
-              <sld:CssParameter name="font-family">Pretendard</sld:CssParameter>
+              <sld:CssParameter name="font-family">Malgun Gothic</sld:CssParameter>
               <sld:CssParameter name="font-size">11</sld:CssParameter>
               <sld:CssParameter name="font-style">normal</sld:CssParameter>
               <sld:CssParameter name="font-weight">bold</sld:CssParameter>
@@ -1265,64 +917,6 @@
               <ogc:PropertyName>cont</ogc:PropertyName>
             </sld:Label>
             <sld:Font>
-              <sld:CssParameter name="font-family">Noto Sans KR</sld:CssParameter>
-              <sld:CssParameter name="font-size">11</sld:CssParameter>
-              <sld:CssParameter name="font-style">normal</sld:CssParameter>
-              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
-            </sld:Font>
-            <sld:LabelPlacement>
-              <sld:LinePlacement>
-                <sld:PerpendicularOffset>0</sld:PerpendicularOffset>
-              </sld:LinePlacement>
-            </sld:LabelPlacement>
-            <sld:Halo>
-              <sld:Radius>1.5</sld:Radius>
-              <sld:Fill>
-                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
-              </sld:Fill>
-            </sld:Halo>
-            <sld:Fill>
-              <sld:CssParameter name="fill">#999999</sld:CssParameter>
-            </sld:Fill>
-            <sld:VendorOption name="followLine">true</sld:VendorOption>
-            <sld:VendorOption name="repeat">400</sld:VendorOption>
-            <sld:VendorOption name="group">true</sld:VendorOption>
-          </sld:TextSymbolizer>
-          <sld:TextSymbolizer>
-            <sld:Label>
-              <ogc:PropertyName>divi</ogc:PropertyName><![CDATA[ ]]>
-              <ogc:PropertyName>cont</ogc:PropertyName>
-            </sld:Label>
-            <sld:Font>
-              <sld:CssParameter name="font-family">Malgun Gothic</sld:CssParameter>
-              <sld:CssParameter name="font-size">11</sld:CssParameter>
-              <sld:CssParameter name="font-style">normal</sld:CssParameter>
-              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
-            </sld:Font>
-            <sld:LabelPlacement>
-              <sld:LinePlacement>
-                <sld:PerpendicularOffset>0</sld:PerpendicularOffset>
-              </sld:LinePlacement>
-            </sld:LabelPlacement>
-            <sld:Halo>
-              <sld:Radius>1.5</sld:Radius>
-              <sld:Fill>
-                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
-              </sld:Fill>
-            </sld:Halo>
-            <sld:Fill>
-              <sld:CssParameter name="fill">#999999</sld:CssParameter>
-            </sld:Fill>
-            <sld:VendorOption name="followLine">true</sld:VendorOption>
-            <sld:VendorOption name="repeat">400</sld:VendorOption>
-            <sld:VendorOption name="group">true</sld:VendorOption>
-          </sld:TextSymbolizer>
-          <sld:TextSymbolizer>
-            <sld:Label>
-              <ogc:PropertyName>divi</ogc:PropertyName><![CDATA[ ]]>
-              <ogc:PropertyName>cont</ogc:PropertyName>
-            </sld:Label>
-            <sld:Font>
               <sld:CssParameter name="font-family">Nanum Gothic</sld:CssParameter>
               <sld:CssParameter name="font-size">11</sld:CssParameter>
               <sld:CssParameter name="font-style">normal</sld:CssParameter>
@@ -1352,7 +946,7 @@
               <ogc:PropertyName>cont</ogc:PropertyName>
             </sld:Label>
             <sld:Font>
-              <sld:CssParameter name="font-family">Pretendard</sld:CssParameter>
+              <sld:CssParameter name="font-family">Malgun Gothic</sld:CssParameter>
               <sld:CssParameter name="font-size">11</sld:CssParameter>
               <sld:CssParameter name="font-style">normal</sld:CssParameter>
               <sld:CssParameter name="font-weight">bold</sld:CssParameter>
@@ -1690,64 +1284,6 @@
               <ogc:PropertyName>cont</ogc:PropertyName>
             </sld:Label>
             <sld:Font>
-              <sld:CssParameter name="font-family">Noto Sans KR</sld:CssParameter>
-              <sld:CssParameter name="font-size">11</sld:CssParameter>
-              <sld:CssParameter name="font-style">normal</sld:CssParameter>
-              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
-            </sld:Font>
-            <sld:LabelPlacement>
-              <sld:LinePlacement>
-                <sld:PerpendicularOffset>0</sld:PerpendicularOffset>
-              </sld:LinePlacement>
-            </sld:LabelPlacement>
-            <sld:Halo>
-              <sld:Radius>1.5</sld:Radius>
-              <sld:Fill>
-                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
-              </sld:Fill>
-            </sld:Halo>
-            <sld:Fill>
-              <sld:CssParameter name="fill">#B8B8B8</sld:CssParameter>
-            </sld:Fill>
-            <sld:VendorOption name="followLine">true</sld:VendorOption>
-            <sld:VendorOption name="repeat">400</sld:VendorOption>
-            <sld:VendorOption name="group">true</sld:VendorOption>
-          </sld:TextSymbolizer>
-          <sld:TextSymbolizer>
-            <sld:Label>
-              <ogc:PropertyName>divi</ogc:PropertyName><![CDATA[ ]]>
-              <ogc:PropertyName>cont</ogc:PropertyName>
-            </sld:Label>
-            <sld:Font>
-              <sld:CssParameter name="font-family">Malgun Gothic</sld:CssParameter>
-              <sld:CssParameter name="font-size">11</sld:CssParameter>
-              <sld:CssParameter name="font-style">normal</sld:CssParameter>
-              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
-            </sld:Font>
-            <sld:LabelPlacement>
-              <sld:LinePlacement>
-                <sld:PerpendicularOffset>0</sld:PerpendicularOffset>
-              </sld:LinePlacement>
-            </sld:LabelPlacement>
-            <sld:Halo>
-              <sld:Radius>1.5</sld:Radius>
-              <sld:Fill>
-                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
-              </sld:Fill>
-            </sld:Halo>
-            <sld:Fill>
-              <sld:CssParameter name="fill">#B8B8B8</sld:CssParameter>
-            </sld:Fill>
-            <sld:VendorOption name="followLine">true</sld:VendorOption>
-            <sld:VendorOption name="repeat">400</sld:VendorOption>
-            <sld:VendorOption name="group">true</sld:VendorOption>
-          </sld:TextSymbolizer>
-          <sld:TextSymbolizer>
-            <sld:Label>
-              <ogc:PropertyName>divi</ogc:PropertyName><![CDATA[ ]]>
-              <ogc:PropertyName>cont</ogc:PropertyName>
-            </sld:Label>
-            <sld:Font>
               <sld:CssParameter name="font-family">Nanum Gothic</sld:CssParameter>
               <sld:CssParameter name="font-size">11</sld:CssParameter>
               <sld:CssParameter name="font-style">normal</sld:CssParameter>
@@ -1777,7 +1313,7 @@
               <ogc:PropertyName>cont</ogc:PropertyName>
             </sld:Label>
             <sld:Font>
-              <sld:CssParameter name="font-family">Pretendard</sld:CssParameter>
+              <sld:CssParameter name="font-family">Malgun Gothic</sld:CssParameter>
               <sld:CssParameter name="font-size">11</sld:CssParameter>
               <sld:CssParameter name="font-style">normal</sld:CssParameter>
               <sld:CssParameter name="font-weight">bold</sld:CssParameter>
@@ -1878,64 +1414,6 @@
               <ogc:PropertyName>cont</ogc:PropertyName>
             </sld:Label>
             <sld:Font>
-              <sld:CssParameter name="font-family">Noto Sans KR</sld:CssParameter>
-              <sld:CssParameter name="font-size">11</sld:CssParameter>
-              <sld:CssParameter name="font-style">normal</sld:CssParameter>
-              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
-            </sld:Font>
-            <sld:LabelPlacement>
-              <sld:LinePlacement>
-                <sld:PerpendicularOffset>0</sld:PerpendicularOffset>
-              </sld:LinePlacement>
-            </sld:LabelPlacement>
-            <sld:Halo>
-              <sld:Radius>1.5</sld:Radius>
-              <sld:Fill>
-                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
-              </sld:Fill>
-            </sld:Halo>
-            <sld:Fill>
-              <sld:CssParameter name="fill">#D0D0D0</sld:CssParameter>
-            </sld:Fill>
-            <sld:VendorOption name="followLine">true</sld:VendorOption>
-            <sld:VendorOption name="repeat">400</sld:VendorOption>
-            <sld:VendorOption name="group">true</sld:VendorOption>
-          </sld:TextSymbolizer>
-          <sld:TextSymbolizer>
-            <sld:Label>
-              <ogc:PropertyName>divi</ogc:PropertyName><![CDATA[ ]]>
-              <ogc:PropertyName>cont</ogc:PropertyName>
-            </sld:Label>
-            <sld:Font>
-              <sld:CssParameter name="font-family">Malgun Gothic</sld:CssParameter>
-              <sld:CssParameter name="font-size">11</sld:CssParameter>
-              <sld:CssParameter name="font-style">normal</sld:CssParameter>
-              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
-            </sld:Font>
-            <sld:LabelPlacement>
-              <sld:LinePlacement>
-                <sld:PerpendicularOffset>0</sld:PerpendicularOffset>
-              </sld:LinePlacement>
-            </sld:LabelPlacement>
-            <sld:Halo>
-              <sld:Radius>1.5</sld:Radius>
-              <sld:Fill>
-                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
-              </sld:Fill>
-            </sld:Halo>
-            <sld:Fill>
-              <sld:CssParameter name="fill">#D0D0D0</sld:CssParameter>
-            </sld:Fill>
-            <sld:VendorOption name="followLine">true</sld:VendorOption>
-            <sld:VendorOption name="repeat">400</sld:VendorOption>
-            <sld:VendorOption name="group">true</sld:VendorOption>
-          </sld:TextSymbolizer>
-          <sld:TextSymbolizer>
-            <sld:Label>
-              <ogc:PropertyName>divi</ogc:PropertyName><![CDATA[ ]]>
-              <ogc:PropertyName>cont</ogc:PropertyName>
-            </sld:Label>
-            <sld:Font>
               <sld:CssParameter name="font-family">Nanum Gothic</sld:CssParameter>
               <sld:CssParameter name="font-size">11</sld:CssParameter>
               <sld:CssParameter name="font-style">normal</sld:CssParameter>
@@ -1965,7 +1443,7 @@
               <ogc:PropertyName>cont</ogc:PropertyName>
             </sld:Label>
             <sld:Font>
-              <sld:CssParameter name="font-family">Pretendard</sld:CssParameter>
+              <sld:CssParameter name="font-family">Malgun Gothic</sld:CssParameter>
               <sld:CssParameter name="font-size">11</sld:CssParameter>
               <sld:CssParameter name="font-style">normal</sld:CssParameter>
               <sld:CssParameter name="font-weight">bold</sld:CssParameter>
@@ -2066,64 +1544,6 @@
               <ogc:PropertyName>cont</ogc:PropertyName>
             </sld:Label>
             <sld:Font>
-              <sld:CssParameter name="font-family">Noto Sans KR</sld:CssParameter>
-              <sld:CssParameter name="font-size">11</sld:CssParameter>
-              <sld:CssParameter name="font-style">normal</sld:CssParameter>
-              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
-            </sld:Font>
-            <sld:LabelPlacement>
-              <sld:LinePlacement>
-                <sld:PerpendicularOffset>0</sld:PerpendicularOffset>
-              </sld:LinePlacement>
-            </sld:LabelPlacement>
-            <sld:Halo>
-              <sld:Radius>1.5</sld:Radius>
-              <sld:Fill>
-                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
-              </sld:Fill>
-            </sld:Halo>
-            <sld:Fill>
-              <sld:CssParameter name="fill">#DCDCDC</sld:CssParameter>
-            </sld:Fill>
-            <sld:VendorOption name="followLine">true</sld:VendorOption>
-            <sld:VendorOption name="repeat">400</sld:VendorOption>
-            <sld:VendorOption name="group">true</sld:VendorOption>
-          </sld:TextSymbolizer>
-          <sld:TextSymbolizer>
-            <sld:Label>
-              <ogc:PropertyName>divi</ogc:PropertyName><![CDATA[ ]]>
-              <ogc:PropertyName>cont</ogc:PropertyName>
-            </sld:Label>
-            <sld:Font>
-              <sld:CssParameter name="font-family">Malgun Gothic</sld:CssParameter>
-              <sld:CssParameter name="font-size">11</sld:CssParameter>
-              <sld:CssParameter name="font-style">normal</sld:CssParameter>
-              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
-            </sld:Font>
-            <sld:LabelPlacement>
-              <sld:LinePlacement>
-                <sld:PerpendicularOffset>0</sld:PerpendicularOffset>
-              </sld:LinePlacement>
-            </sld:LabelPlacement>
-            <sld:Halo>
-              <sld:Radius>1.5</sld:Radius>
-              <sld:Fill>
-                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
-              </sld:Fill>
-            </sld:Halo>
-            <sld:Fill>
-              <sld:CssParameter name="fill">#DCDCDC</sld:CssParameter>
-            </sld:Fill>
-            <sld:VendorOption name="followLine">true</sld:VendorOption>
-            <sld:VendorOption name="repeat">400</sld:VendorOption>
-            <sld:VendorOption name="group">true</sld:VendorOption>
-          </sld:TextSymbolizer>
-          <sld:TextSymbolizer>
-            <sld:Label>
-              <ogc:PropertyName>divi</ogc:PropertyName><![CDATA[ ]]>
-              <ogc:PropertyName>cont</ogc:PropertyName>
-            </sld:Label>
-            <sld:Font>
               <sld:CssParameter name="font-family">Nanum Gothic</sld:CssParameter>
               <sld:CssParameter name="font-size">11</sld:CssParameter>
               <sld:CssParameter name="font-style">normal</sld:CssParameter>
@@ -2153,7 +1573,7 @@
               <ogc:PropertyName>cont</ogc:PropertyName>
             </sld:Label>
             <sld:Font>
-              <sld:CssParameter name="font-family">Pretendard</sld:CssParameter>
+              <sld:CssParameter name="font-family">Malgun Gothic</sld:CssParameter>
               <sld:CssParameter name="font-size">11</sld:CssParameter>
               <sld:CssParameter name="font-style">normal</sld:CssParameter>
               <sld:CssParameter name="font-weight">bold</sld:CssParameter>
@@ -2253,64 +1673,6 @@
               <ogc:PropertyName>cont</ogc:PropertyName>
             </sld:Label>
             <sld:Font>
-              <sld:CssParameter name="font-family">Noto Sans KR</sld:CssParameter>
-              <sld:CssParameter name="font-size">11</sld:CssParameter>
-              <sld:CssParameter name="font-style">normal</sld:CssParameter>
-              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
-            </sld:Font>
-            <sld:LabelPlacement>
-              <sld:LinePlacement>
-                <sld:PerpendicularOffset>0</sld:PerpendicularOffset>
-              </sld:LinePlacement>
-            </sld:LabelPlacement>
-            <sld:Halo>
-              <sld:Radius>1.5</sld:Radius>
-              <sld:Fill>
-                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
-              </sld:Fill>
-            </sld:Halo>
-            <sld:Fill>
-              <sld:CssParameter name="fill">#B8B8B8</sld:CssParameter>
-            </sld:Fill>
-            <sld:VendorOption name="followLine">true</sld:VendorOption>
-            <sld:VendorOption name="repeat">400</sld:VendorOption>
-            <sld:VendorOption name="group">true</sld:VendorOption>
-          </sld:TextSymbolizer>
-          <sld:TextSymbolizer>
-            <sld:Label>
-              <ogc:PropertyName>divi</ogc:PropertyName><![CDATA[ ]]>
-              <ogc:PropertyName>cont</ogc:PropertyName>
-            </sld:Label>
-            <sld:Font>
-              <sld:CssParameter name="font-family">Malgun Gothic</sld:CssParameter>
-              <sld:CssParameter name="font-size">11</sld:CssParameter>
-              <sld:CssParameter name="font-style">normal</sld:CssParameter>
-              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
-            </sld:Font>
-            <sld:LabelPlacement>
-              <sld:LinePlacement>
-                <sld:PerpendicularOffset>0</sld:PerpendicularOffset>
-              </sld:LinePlacement>
-            </sld:LabelPlacement>
-            <sld:Halo>
-              <sld:Radius>1.5</sld:Radius>
-              <sld:Fill>
-                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
-              </sld:Fill>
-            </sld:Halo>
-            <sld:Fill>
-              <sld:CssParameter name="fill">#B8B8B8</sld:CssParameter>
-            </sld:Fill>
-            <sld:VendorOption name="followLine">true</sld:VendorOption>
-            <sld:VendorOption name="repeat">400</sld:VendorOption>
-            <sld:VendorOption name="group">true</sld:VendorOption>
-          </sld:TextSymbolizer>
-          <sld:TextSymbolizer>
-            <sld:Label>
-              <ogc:PropertyName>divi</ogc:PropertyName><![CDATA[ ]]>
-              <ogc:PropertyName>cont</ogc:PropertyName>
-            </sld:Label>
-            <sld:Font>
               <sld:CssParameter name="font-family">Nanum Gothic</sld:CssParameter>
               <sld:CssParameter name="font-size">11</sld:CssParameter>
               <sld:CssParameter name="font-style">normal</sld:CssParameter>
@@ -2340,7 +1702,7 @@
               <ogc:PropertyName>cont</ogc:PropertyName>
             </sld:Label>
             <sld:Font>
-              <sld:CssParameter name="font-family">Pretendard</sld:CssParameter>
+              <sld:CssParameter name="font-family">Malgun Gothic</sld:CssParameter>
               <sld:CssParameter name="font-size">11</sld:CssParameter>
               <sld:CssParameter name="font-style">normal</sld:CssParameter>
               <sld:CssParameter name="font-weight">bold</sld:CssParameter>
@@ -2424,64 +1786,6 @@
               <ogc:PropertyName>cont</ogc:PropertyName>
             </sld:Label>
             <sld:Font>
-              <sld:CssParameter name="font-family">Noto Sans KR</sld:CssParameter>
-              <sld:CssParameter name="font-size">11</sld:CssParameter>
-              <sld:CssParameter name="font-style">normal</sld:CssParameter>
-              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
-            </sld:Font>
-            <sld:LabelPlacement>
-              <sld:LinePlacement>
-                <sld:PerpendicularOffset>0</sld:PerpendicularOffset>
-              </sld:LinePlacement>
-            </sld:LabelPlacement>
-            <sld:Halo>
-              <sld:Radius>1.5</sld:Radius>
-              <sld:Fill>
-                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
-              </sld:Fill>
-            </sld:Halo>
-            <sld:Fill>
-              <sld:CssParameter name="fill">#B8B8B8</sld:CssParameter>
-            </sld:Fill>
-            <sld:VendorOption name="followLine">true</sld:VendorOption>
-            <sld:VendorOption name="repeat">400</sld:VendorOption>
-            <sld:VendorOption name="group">true</sld:VendorOption>
-          </sld:TextSymbolizer>
-          <sld:TextSymbolizer>
-            <sld:Label>
-              <ogc:PropertyName>divi</ogc:PropertyName><![CDATA[ ]]>
-              <ogc:PropertyName>cont</ogc:PropertyName>
-            </sld:Label>
-            <sld:Font>
-              <sld:CssParameter name="font-family">Malgun Gothic</sld:CssParameter>
-              <sld:CssParameter name="font-size">11</sld:CssParameter>
-              <sld:CssParameter name="font-style">normal</sld:CssParameter>
-              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
-            </sld:Font>
-            <sld:LabelPlacement>
-              <sld:LinePlacement>
-                <sld:PerpendicularOffset>0</sld:PerpendicularOffset>
-              </sld:LinePlacement>
-            </sld:LabelPlacement>
-            <sld:Halo>
-              <sld:Radius>1.5</sld:Radius>
-              <sld:Fill>
-                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
-              </sld:Fill>
-            </sld:Halo>
-            <sld:Fill>
-              <sld:CssParameter name="fill">#B8B8B8</sld:CssParameter>
-            </sld:Fill>
-            <sld:VendorOption name="followLine">true</sld:VendorOption>
-            <sld:VendorOption name="repeat">400</sld:VendorOption>
-            <sld:VendorOption name="group">true</sld:VendorOption>
-          </sld:TextSymbolizer>
-          <sld:TextSymbolizer>
-            <sld:Label>
-              <ogc:PropertyName>divi</ogc:PropertyName><![CDATA[ ]]>
-              <ogc:PropertyName>cont</ogc:PropertyName>
-            </sld:Label>
-            <sld:Font>
               <sld:CssParameter name="font-family">Nanum Gothic</sld:CssParameter>
               <sld:CssParameter name="font-size">11</sld:CssParameter>
               <sld:CssParameter name="font-style">normal</sld:CssParameter>
@@ -2511,7 +1815,7 @@
               <ogc:PropertyName>cont</ogc:PropertyName>
             </sld:Label>
             <sld:Font>
-              <sld:CssParameter name="font-family">Pretendard</sld:CssParameter>
+              <sld:CssParameter name="font-family">Malgun Gothic</sld:CssParameter>
               <sld:CssParameter name="font-size">11</sld:CssParameter>
               <sld:CssParameter name="font-style">normal</sld:CssParameter>
               <sld:CssParameter name="font-weight">bold</sld:CssParameter>
@@ -2638,64 +1942,6 @@
               <ogc:PropertyName>cont</ogc:PropertyName>
             </sld:Label>
             <sld:Font>
-              <sld:CssParameter name="font-family">Noto Sans KR</sld:CssParameter>
-              <sld:CssParameter name="font-size">11</sld:CssParameter>
-              <sld:CssParameter name="font-style">normal</sld:CssParameter>
-              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
-            </sld:Font>
-            <sld:LabelPlacement>
-              <sld:LinePlacement>
-                <sld:PerpendicularOffset>0</sld:PerpendicularOffset>
-              </sld:LinePlacement>
-            </sld:LabelPlacement>
-            <sld:Halo>
-              <sld:Radius>1.5</sld:Radius>
-              <sld:Fill>
-                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
-              </sld:Fill>
-            </sld:Halo>
-            <sld:Fill>
-              <sld:CssParameter name="fill">#D0D0D0</sld:CssParameter>
-            </sld:Fill>
-            <sld:VendorOption name="followLine">true</sld:VendorOption>
-            <sld:VendorOption name="repeat">400</sld:VendorOption>
-            <sld:VendorOption name="group">true</sld:VendorOption>
-          </sld:TextSymbolizer>
-          <sld:TextSymbolizer>
-            <sld:Label>
-              <ogc:PropertyName>divi</ogc:PropertyName><![CDATA[ ]]>
-              <ogc:PropertyName>cont</ogc:PropertyName>
-            </sld:Label>
-            <sld:Font>
-              <sld:CssParameter name="font-family">Malgun Gothic</sld:CssParameter>
-              <sld:CssParameter name="font-size">11</sld:CssParameter>
-              <sld:CssParameter name="font-style">normal</sld:CssParameter>
-              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
-            </sld:Font>
-            <sld:LabelPlacement>
-              <sld:LinePlacement>
-                <sld:PerpendicularOffset>0</sld:PerpendicularOffset>
-              </sld:LinePlacement>
-            </sld:LabelPlacement>
-            <sld:Halo>
-              <sld:Radius>1.5</sld:Radius>
-              <sld:Fill>
-                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
-              </sld:Fill>
-            </sld:Halo>
-            <sld:Fill>
-              <sld:CssParameter name="fill">#D0D0D0</sld:CssParameter>
-            </sld:Fill>
-            <sld:VendorOption name="followLine">true</sld:VendorOption>
-            <sld:VendorOption name="repeat">400</sld:VendorOption>
-            <sld:VendorOption name="group">true</sld:VendorOption>
-          </sld:TextSymbolizer>
-          <sld:TextSymbolizer>
-            <sld:Label>
-              <ogc:PropertyName>divi</ogc:PropertyName><![CDATA[ ]]>
-              <ogc:PropertyName>cont</ogc:PropertyName>
-            </sld:Label>
-            <sld:Font>
               <sld:CssParameter name="font-family">Nanum Gothic</sld:CssParameter>
               <sld:CssParameter name="font-size">11</sld:CssParameter>
               <sld:CssParameter name="font-style">normal</sld:CssParameter>
@@ -2725,7 +1971,7 @@
               <ogc:PropertyName>cont</ogc:PropertyName>
             </sld:Label>
             <sld:Font>
-              <sld:CssParameter name="font-family">Pretendard</sld:CssParameter>
+              <sld:CssParameter name="font-family">Malgun Gothic</sld:CssParameter>
               <sld:CssParameter name="font-size">11</sld:CssParameter>
               <sld:CssParameter name="font-style">normal</sld:CssParameter>
               <sld:CssParameter name="font-weight">bold</sld:CssParameter>
@@ -2826,64 +2072,6 @@
               <ogc:PropertyName>cont</ogc:PropertyName>
             </sld:Label>
             <sld:Font>
-              <sld:CssParameter name="font-family">Noto Sans KR</sld:CssParameter>
-              <sld:CssParameter name="font-size">11</sld:CssParameter>
-              <sld:CssParameter name="font-style">normal</sld:CssParameter>
-              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
-            </sld:Font>
-            <sld:LabelPlacement>
-              <sld:LinePlacement>
-                <sld:PerpendicularOffset>0</sld:PerpendicularOffset>
-              </sld:LinePlacement>
-            </sld:LabelPlacement>
-            <sld:Halo>
-              <sld:Radius>1.5</sld:Radius>
-              <sld:Fill>
-                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
-              </sld:Fill>
-            </sld:Halo>
-            <sld:Fill>
-              <sld:CssParameter name="fill">#DCDCDC</sld:CssParameter>
-            </sld:Fill>
-            <sld:VendorOption name="followLine">true</sld:VendorOption>
-            <sld:VendorOption name="repeat">400</sld:VendorOption>
-            <sld:VendorOption name="group">true</sld:VendorOption>
-          </sld:TextSymbolizer>
-          <sld:TextSymbolizer>
-            <sld:Label>
-              <ogc:PropertyName>divi</ogc:PropertyName><![CDATA[ ]]>
-              <ogc:PropertyName>cont</ogc:PropertyName>
-            </sld:Label>
-            <sld:Font>
-              <sld:CssParameter name="font-family">Malgun Gothic</sld:CssParameter>
-              <sld:CssParameter name="font-size">11</sld:CssParameter>
-              <sld:CssParameter name="font-style">normal</sld:CssParameter>
-              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
-            </sld:Font>
-            <sld:LabelPlacement>
-              <sld:LinePlacement>
-                <sld:PerpendicularOffset>0</sld:PerpendicularOffset>
-              </sld:LinePlacement>
-            </sld:LabelPlacement>
-            <sld:Halo>
-              <sld:Radius>1.5</sld:Radius>
-              <sld:Fill>
-                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
-              </sld:Fill>
-            </sld:Halo>
-            <sld:Fill>
-              <sld:CssParameter name="fill">#DCDCDC</sld:CssParameter>
-            </sld:Fill>
-            <sld:VendorOption name="followLine">true</sld:VendorOption>
-            <sld:VendorOption name="repeat">400</sld:VendorOption>
-            <sld:VendorOption name="group">true</sld:VendorOption>
-          </sld:TextSymbolizer>
-          <sld:TextSymbolizer>
-            <sld:Label>
-              <ogc:PropertyName>divi</ogc:PropertyName><![CDATA[ ]]>
-              <ogc:PropertyName>cont</ogc:PropertyName>
-            </sld:Label>
-            <sld:Font>
               <sld:CssParameter name="font-family">Nanum Gothic</sld:CssParameter>
               <sld:CssParameter name="font-size">11</sld:CssParameter>
               <sld:CssParameter name="font-style">normal</sld:CssParameter>
@@ -2913,7 +2101,7 @@
               <ogc:PropertyName>cont</ogc:PropertyName>
             </sld:Label>
             <sld:Font>
-              <sld:CssParameter name="font-family">Pretendard</sld:CssParameter>
+              <sld:CssParameter name="font-family">Malgun Gothic</sld:CssParameter>
               <sld:CssParameter name="font-size">11</sld:CssParameter>
               <sld:CssParameter name="font-style">normal</sld:CssParameter>
               <sld:CssParameter name="font-weight">bold</sld:CssParameter>
@@ -3013,64 +2201,6 @@
               <ogc:PropertyName>cont</ogc:PropertyName>
             </sld:Label>
             <sld:Font>
-              <sld:CssParameter name="font-family">Noto Sans KR</sld:CssParameter>
-              <sld:CssParameter name="font-size">11</sld:CssParameter>
-              <sld:CssParameter name="font-style">normal</sld:CssParameter>
-              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
-            </sld:Font>
-            <sld:LabelPlacement>
-              <sld:LinePlacement>
-                <sld:PerpendicularOffset>0</sld:PerpendicularOffset>
-              </sld:LinePlacement>
-            </sld:LabelPlacement>
-            <sld:Halo>
-              <sld:Radius>1.5</sld:Radius>
-              <sld:Fill>
-                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
-              </sld:Fill>
-            </sld:Halo>
-            <sld:Fill>
-              <sld:CssParameter name="fill">#999999</sld:CssParameter>
-            </sld:Fill>
-            <sld:VendorOption name="followLine">true</sld:VendorOption>
-            <sld:VendorOption name="repeat">400</sld:VendorOption>
-            <sld:VendorOption name="group">true</sld:VendorOption>
-          </sld:TextSymbolizer>
-          <sld:TextSymbolizer>
-            <sld:Label>
-              <ogc:PropertyName>divi</ogc:PropertyName><![CDATA[ ]]>
-              <ogc:PropertyName>cont</ogc:PropertyName>
-            </sld:Label>
-            <sld:Font>
-              <sld:CssParameter name="font-family">Malgun Gothic</sld:CssParameter>
-              <sld:CssParameter name="font-size">11</sld:CssParameter>
-              <sld:CssParameter name="font-style">normal</sld:CssParameter>
-              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
-            </sld:Font>
-            <sld:LabelPlacement>
-              <sld:LinePlacement>
-                <sld:PerpendicularOffset>0</sld:PerpendicularOffset>
-              </sld:LinePlacement>
-            </sld:LabelPlacement>
-            <sld:Halo>
-              <sld:Radius>1.5</sld:Radius>
-              <sld:Fill>
-                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
-              </sld:Fill>
-            </sld:Halo>
-            <sld:Fill>
-              <sld:CssParameter name="fill">#999999</sld:CssParameter>
-            </sld:Fill>
-            <sld:VendorOption name="followLine">true</sld:VendorOption>
-            <sld:VendorOption name="repeat">400</sld:VendorOption>
-            <sld:VendorOption name="group">true</sld:VendorOption>
-          </sld:TextSymbolizer>
-          <sld:TextSymbolizer>
-            <sld:Label>
-              <ogc:PropertyName>divi</ogc:PropertyName><![CDATA[ ]]>
-              <ogc:PropertyName>cont</ogc:PropertyName>
-            </sld:Label>
-            <sld:Font>
               <sld:CssParameter name="font-family">Nanum Gothic</sld:CssParameter>
               <sld:CssParameter name="font-size">11</sld:CssParameter>
               <sld:CssParameter name="font-style">normal</sld:CssParameter>
@@ -3100,7 +2230,7 @@
               <ogc:PropertyName>cont</ogc:PropertyName>
             </sld:Label>
             <sld:Font>
-              <sld:CssParameter name="font-family">Pretendard</sld:CssParameter>
+              <sld:CssParameter name="font-family">Malgun Gothic</sld:CssParameter>
               <sld:CssParameter name="font-size">11</sld:CssParameter>
               <sld:CssParameter name="font-style">normal</sld:CssParameter>
               <sld:CssParameter name="font-weight">bold</sld:CssParameter>
@@ -3200,64 +2330,6 @@
               <ogc:PropertyName>cont</ogc:PropertyName>
             </sld:Label>
             <sld:Font>
-              <sld:CssParameter name="font-family">Noto Sans KR</sld:CssParameter>
-              <sld:CssParameter name="font-size">11</sld:CssParameter>
-              <sld:CssParameter name="font-style">normal</sld:CssParameter>
-              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
-            </sld:Font>
-            <sld:LabelPlacement>
-              <sld:LinePlacement>
-                <sld:PerpendicularOffset>0</sld:PerpendicularOffset>
-              </sld:LinePlacement>
-            </sld:LabelPlacement>
-            <sld:Halo>
-              <sld:Radius>1.5</sld:Radius>
-              <sld:Fill>
-                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
-              </sld:Fill>
-            </sld:Halo>
-            <sld:Fill>
-              <sld:CssParameter name="fill">#B8B8B8</sld:CssParameter>
-            </sld:Fill>
-            <sld:VendorOption name="followLine">true</sld:VendorOption>
-            <sld:VendorOption name="repeat">400</sld:VendorOption>
-            <sld:VendorOption name="group">true</sld:VendorOption>
-          </sld:TextSymbolizer>
-          <sld:TextSymbolizer>
-            <sld:Label>
-              <ogc:PropertyName>divi</ogc:PropertyName><![CDATA[ ]]>
-              <ogc:PropertyName>cont</ogc:PropertyName>
-            </sld:Label>
-            <sld:Font>
-              <sld:CssParameter name="font-family">Malgun Gothic</sld:CssParameter>
-              <sld:CssParameter name="font-size">11</sld:CssParameter>
-              <sld:CssParameter name="font-style">normal</sld:CssParameter>
-              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
-            </sld:Font>
-            <sld:LabelPlacement>
-              <sld:LinePlacement>
-                <sld:PerpendicularOffset>0</sld:PerpendicularOffset>
-              </sld:LinePlacement>
-            </sld:LabelPlacement>
-            <sld:Halo>
-              <sld:Radius>1.5</sld:Radius>
-              <sld:Fill>
-                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
-              </sld:Fill>
-            </sld:Halo>
-            <sld:Fill>
-              <sld:CssParameter name="fill">#B8B8B8</sld:CssParameter>
-            </sld:Fill>
-            <sld:VendorOption name="followLine">true</sld:VendorOption>
-            <sld:VendorOption name="repeat">400</sld:VendorOption>
-            <sld:VendorOption name="group">true</sld:VendorOption>
-          </sld:TextSymbolizer>
-          <sld:TextSymbolizer>
-            <sld:Label>
-              <ogc:PropertyName>divi</ogc:PropertyName><![CDATA[ ]]>
-              <ogc:PropertyName>cont</ogc:PropertyName>
-            </sld:Label>
-            <sld:Font>
               <sld:CssParameter name="font-family">Nanum Gothic</sld:CssParameter>
               <sld:CssParameter name="font-size">11</sld:CssParameter>
               <sld:CssParameter name="font-style">normal</sld:CssParameter>
@@ -3287,7 +2359,7 @@
               <ogc:PropertyName>cont</ogc:PropertyName>
             </sld:Label>
             <sld:Font>
-              <sld:CssParameter name="font-family">Pretendard</sld:CssParameter>
+              <sld:CssParameter name="font-family">Malgun Gothic</sld:CssParameter>
               <sld:CssParameter name="font-size">11</sld:CssParameter>
               <sld:CssParameter name="font-style">normal</sld:CssParameter>
               <sld:CssParameter name="font-weight">bold</sld:CssParameter>
@@ -3414,64 +2486,6 @@
               <ogc:PropertyName>cont</ogc:PropertyName>
             </sld:Label>
             <sld:Font>
-              <sld:CssParameter name="font-family">Noto Sans KR</sld:CssParameter>
-              <sld:CssParameter name="font-size">11</sld:CssParameter>
-              <sld:CssParameter name="font-style">normal</sld:CssParameter>
-              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
-            </sld:Font>
-            <sld:LabelPlacement>
-              <sld:LinePlacement>
-                <sld:PerpendicularOffset>0</sld:PerpendicularOffset>
-              </sld:LinePlacement>
-            </sld:LabelPlacement>
-            <sld:Halo>
-              <sld:Radius>1.5</sld:Radius>
-              <sld:Fill>
-                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
-              </sld:Fill>
-            </sld:Halo>
-            <sld:Fill>
-              <sld:CssParameter name="fill">#DCDCDC</sld:CssParameter>
-            </sld:Fill>
-            <sld:VendorOption name="followLine">true</sld:VendorOption>
-            <sld:VendorOption name="repeat">400</sld:VendorOption>
-            <sld:VendorOption name="group">true</sld:VendorOption>
-          </sld:TextSymbolizer>
-          <sld:TextSymbolizer>
-            <sld:Label>
-              <ogc:PropertyName>divi</ogc:PropertyName><![CDATA[ ]]>
-              <ogc:PropertyName>cont</ogc:PropertyName>
-            </sld:Label>
-            <sld:Font>
-              <sld:CssParameter name="font-family">Malgun Gothic</sld:CssParameter>
-              <sld:CssParameter name="font-size">11</sld:CssParameter>
-              <sld:CssParameter name="font-style">normal</sld:CssParameter>
-              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
-            </sld:Font>
-            <sld:LabelPlacement>
-              <sld:LinePlacement>
-                <sld:PerpendicularOffset>0</sld:PerpendicularOffset>
-              </sld:LinePlacement>
-            </sld:LabelPlacement>
-            <sld:Halo>
-              <sld:Radius>1.5</sld:Radius>
-              <sld:Fill>
-                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
-              </sld:Fill>
-            </sld:Halo>
-            <sld:Fill>
-              <sld:CssParameter name="fill">#DCDCDC</sld:CssParameter>
-            </sld:Fill>
-            <sld:VendorOption name="followLine">true</sld:VendorOption>
-            <sld:VendorOption name="repeat">400</sld:VendorOption>
-            <sld:VendorOption name="group">true</sld:VendorOption>
-          </sld:TextSymbolizer>
-          <sld:TextSymbolizer>
-            <sld:Label>
-              <ogc:PropertyName>divi</ogc:PropertyName><![CDATA[ ]]>
-              <ogc:PropertyName>cont</ogc:PropertyName>
-            </sld:Label>
-            <sld:Font>
               <sld:CssParameter name="font-family">Nanum Gothic</sld:CssParameter>
               <sld:CssParameter name="font-size">11</sld:CssParameter>
               <sld:CssParameter name="font-style">normal</sld:CssParameter>
@@ -3501,7 +2515,7 @@
               <ogc:PropertyName>cont</ogc:PropertyName>
             </sld:Label>
             <sld:Font>
-              <sld:CssParameter name="font-family">Pretendard</sld:CssParameter>
+              <sld:CssParameter name="font-family">Malgun Gothic</sld:CssParameter>
               <sld:CssParameter name="font-size">11</sld:CssParameter>
               <sld:CssParameter name="font-style">normal</sld:CssParameter>
               <sld:CssParameter name="font-weight">bold</sld:CssParameter>
@@ -3602,64 +2616,6 @@
               <ogc:PropertyName>cont</ogc:PropertyName>
             </sld:Label>
             <sld:Font>
-              <sld:CssParameter name="font-family">Noto Sans KR</sld:CssParameter>
-              <sld:CssParameter name="font-size">11</sld:CssParameter>
-              <sld:CssParameter name="font-style">normal</sld:CssParameter>
-              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
-            </sld:Font>
-            <sld:LabelPlacement>
-              <sld:LinePlacement>
-                <sld:PerpendicularOffset>0</sld:PerpendicularOffset>
-              </sld:LinePlacement>
-            </sld:LabelPlacement>
-            <sld:Halo>
-              <sld:Radius>1.5</sld:Radius>
-              <sld:Fill>
-                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
-              </sld:Fill>
-            </sld:Halo>
-            <sld:Fill>
-              <sld:CssParameter name="fill">#D0D0D0</sld:CssParameter>
-            </sld:Fill>
-            <sld:VendorOption name="followLine">true</sld:VendorOption>
-            <sld:VendorOption name="repeat">400</sld:VendorOption>
-            <sld:VendorOption name="group">true</sld:VendorOption>
-          </sld:TextSymbolizer>
-          <sld:TextSymbolizer>
-            <sld:Label>
-              <ogc:PropertyName>divi</ogc:PropertyName><![CDATA[ ]]>
-              <ogc:PropertyName>cont</ogc:PropertyName>
-            </sld:Label>
-            <sld:Font>
-              <sld:CssParameter name="font-family">Malgun Gothic</sld:CssParameter>
-              <sld:CssParameter name="font-size">11</sld:CssParameter>
-              <sld:CssParameter name="font-style">normal</sld:CssParameter>
-              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
-            </sld:Font>
-            <sld:LabelPlacement>
-              <sld:LinePlacement>
-                <sld:PerpendicularOffset>0</sld:PerpendicularOffset>
-              </sld:LinePlacement>
-            </sld:LabelPlacement>
-            <sld:Halo>
-              <sld:Radius>1.5</sld:Radius>
-              <sld:Fill>
-                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
-              </sld:Fill>
-            </sld:Halo>
-            <sld:Fill>
-              <sld:CssParameter name="fill">#D0D0D0</sld:CssParameter>
-            </sld:Fill>
-            <sld:VendorOption name="followLine">true</sld:VendorOption>
-            <sld:VendorOption name="repeat">400</sld:VendorOption>
-            <sld:VendorOption name="group">true</sld:VendorOption>
-          </sld:TextSymbolizer>
-          <sld:TextSymbolizer>
-            <sld:Label>
-              <ogc:PropertyName>divi</ogc:PropertyName><![CDATA[ ]]>
-              <ogc:PropertyName>cont</ogc:PropertyName>
-            </sld:Label>
-            <sld:Font>
               <sld:CssParameter name="font-family">Nanum Gothic</sld:CssParameter>
               <sld:CssParameter name="font-size">11</sld:CssParameter>
               <sld:CssParameter name="font-style">normal</sld:CssParameter>
@@ -3689,7 +2645,7 @@
               <ogc:PropertyName>cont</ogc:PropertyName>
             </sld:Label>
             <sld:Font>
-              <sld:CssParameter name="font-family">Pretendard</sld:CssParameter>
+              <sld:CssParameter name="font-family">Malgun Gothic</sld:CssParameter>
               <sld:CssParameter name="font-size">11</sld:CssParameter>
               <sld:CssParameter name="font-style">normal</sld:CssParameter>
               <sld:CssParameter name="font-weight">bold</sld:CssParameter>
@@ -3790,64 +2746,6 @@
               <ogc:PropertyName>cont</ogc:PropertyName>
             </sld:Label>
             <sld:Font>
-              <sld:CssParameter name="font-family">Noto Sans KR</sld:CssParameter>
-              <sld:CssParameter name="font-size">11</sld:CssParameter>
-              <sld:CssParameter name="font-style">normal</sld:CssParameter>
-              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
-            </sld:Font>
-            <sld:LabelPlacement>
-              <sld:LinePlacement>
-                <sld:PerpendicularOffset>0</sld:PerpendicularOffset>
-              </sld:LinePlacement>
-            </sld:LabelPlacement>
-            <sld:Halo>
-              <sld:Radius>1.5</sld:Radius>
-              <sld:Fill>
-                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
-              </sld:Fill>
-            </sld:Halo>
-            <sld:Fill>
-              <sld:CssParameter name="fill">#D0D0D0</sld:CssParameter>
-            </sld:Fill>
-            <sld:VendorOption name="followLine">true</sld:VendorOption>
-            <sld:VendorOption name="repeat">400</sld:VendorOption>
-            <sld:VendorOption name="group">true</sld:VendorOption>
-          </sld:TextSymbolizer>
-          <sld:TextSymbolizer>
-            <sld:Label>
-              <ogc:PropertyName>divi</ogc:PropertyName><![CDATA[ ]]>
-              <ogc:PropertyName>cont</ogc:PropertyName>
-            </sld:Label>
-            <sld:Font>
-              <sld:CssParameter name="font-family">Malgun Gothic</sld:CssParameter>
-              <sld:CssParameter name="font-size">11</sld:CssParameter>
-              <sld:CssParameter name="font-style">normal</sld:CssParameter>
-              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
-            </sld:Font>
-            <sld:LabelPlacement>
-              <sld:LinePlacement>
-                <sld:PerpendicularOffset>0</sld:PerpendicularOffset>
-              </sld:LinePlacement>
-            </sld:LabelPlacement>
-            <sld:Halo>
-              <sld:Radius>1.5</sld:Radius>
-              <sld:Fill>
-                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
-              </sld:Fill>
-            </sld:Halo>
-            <sld:Fill>
-              <sld:CssParameter name="fill">#D0D0D0</sld:CssParameter>
-            </sld:Fill>
-            <sld:VendorOption name="followLine">true</sld:VendorOption>
-            <sld:VendorOption name="repeat">400</sld:VendorOption>
-            <sld:VendorOption name="group">true</sld:VendorOption>
-          </sld:TextSymbolizer>
-          <sld:TextSymbolizer>
-            <sld:Label>
-              <ogc:PropertyName>divi</ogc:PropertyName><![CDATA[ ]]>
-              <ogc:PropertyName>cont</ogc:PropertyName>
-            </sld:Label>
-            <sld:Font>
               <sld:CssParameter name="font-family">Nanum Gothic</sld:CssParameter>
               <sld:CssParameter name="font-size">11</sld:CssParameter>
               <sld:CssParameter name="font-style">normal</sld:CssParameter>
@@ -3877,7 +2775,7 @@
               <ogc:PropertyName>cont</ogc:PropertyName>
             </sld:Label>
             <sld:Font>
-              <sld:CssParameter name="font-family">Pretendard</sld:CssParameter>
+              <sld:CssParameter name="font-family">Malgun Gothic</sld:CssParameter>
               <sld:CssParameter name="font-size">11</sld:CssParameter>
               <sld:CssParameter name="font-style">normal</sld:CssParameter>
               <sld:CssParameter name="font-weight">bold</sld:CssParameter>
@@ -3962,64 +2860,6 @@
               <ogc:PropertyName>cont</ogc:PropertyName>
             </sld:Label>
             <sld:Font>
-              <sld:CssParameter name="font-family">Noto Sans KR</sld:CssParameter>
-              <sld:CssParameter name="font-size">11</sld:CssParameter>
-              <sld:CssParameter name="font-style">normal</sld:CssParameter>
-              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
-            </sld:Font>
-            <sld:LabelPlacement>
-              <sld:LinePlacement>
-                <sld:PerpendicularOffset>0</sld:PerpendicularOffset>
-              </sld:LinePlacement>
-            </sld:LabelPlacement>
-            <sld:Halo>
-              <sld:Radius>1.5</sld:Radius>
-              <sld:Fill>
-                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
-              </sld:Fill>
-            </sld:Halo>
-            <sld:Fill>
-              <sld:CssParameter name="fill">#D0D0D0</sld:CssParameter>
-            </sld:Fill>
-            <sld:VendorOption name="followLine">true</sld:VendorOption>
-            <sld:VendorOption name="repeat">400</sld:VendorOption>
-            <sld:VendorOption name="group">true</sld:VendorOption>
-          </sld:TextSymbolizer>
-          <sld:TextSymbolizer>
-            <sld:Label>
-              <ogc:PropertyName>divi</ogc:PropertyName><![CDATA[ ]]>
-              <ogc:PropertyName>cont</ogc:PropertyName>
-            </sld:Label>
-            <sld:Font>
-              <sld:CssParameter name="font-family">Malgun Gothic</sld:CssParameter>
-              <sld:CssParameter name="font-size">11</sld:CssParameter>
-              <sld:CssParameter name="font-style">normal</sld:CssParameter>
-              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
-            </sld:Font>
-            <sld:LabelPlacement>
-              <sld:LinePlacement>
-                <sld:PerpendicularOffset>0</sld:PerpendicularOffset>
-              </sld:LinePlacement>
-            </sld:LabelPlacement>
-            <sld:Halo>
-              <sld:Radius>1.5</sld:Radius>
-              <sld:Fill>
-                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
-              </sld:Fill>
-            </sld:Halo>
-            <sld:Fill>
-              <sld:CssParameter name="fill">#D0D0D0</sld:CssParameter>
-            </sld:Fill>
-            <sld:VendorOption name="followLine">true</sld:VendorOption>
-            <sld:VendorOption name="repeat">400</sld:VendorOption>
-            <sld:VendorOption name="group">true</sld:VendorOption>
-          </sld:TextSymbolizer>
-          <sld:TextSymbolizer>
-            <sld:Label>
-              <ogc:PropertyName>divi</ogc:PropertyName><![CDATA[ ]]>
-              <ogc:PropertyName>cont</ogc:PropertyName>
-            </sld:Label>
-            <sld:Font>
               <sld:CssParameter name="font-family">Nanum Gothic</sld:CssParameter>
               <sld:CssParameter name="font-size">11</sld:CssParameter>
               <sld:CssParameter name="font-style">normal</sld:CssParameter>
@@ -4049,7 +2889,7 @@
               <ogc:PropertyName>cont</ogc:PropertyName>
             </sld:Label>
             <sld:Font>
-              <sld:CssParameter name="font-family">Pretendard</sld:CssParameter>
+              <sld:CssParameter name="font-family">Malgun Gothic</sld:CssParameter>
               <sld:CssParameter name="font-size">11</sld:CssParameter>
               <sld:CssParameter name="font-style">normal</sld:CssParameter>
               <sld:CssParameter name="font-weight">bold</sld:CssParameter>
@@ -4177,64 +3017,6 @@
               <ogc:PropertyName>cont</ogc:PropertyName>
             </sld:Label>
             <sld:Font>
-              <sld:CssParameter name="font-family">Noto Sans KR</sld:CssParameter>
-              <sld:CssParameter name="font-size">11</sld:CssParameter>
-              <sld:CssParameter name="font-style">normal</sld:CssParameter>
-              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
-            </sld:Font>
-            <sld:LabelPlacement>
-              <sld:LinePlacement>
-                <sld:PerpendicularOffset>0</sld:PerpendicularOffset>
-              </sld:LinePlacement>
-            </sld:LabelPlacement>
-            <sld:Halo>
-              <sld:Radius>1.5</sld:Radius>
-              <sld:Fill>
-                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
-              </sld:Fill>
-            </sld:Halo>
-            <sld:Fill>
-              <sld:CssParameter name="fill">#DCDCDC</sld:CssParameter>
-            </sld:Fill>
-            <sld:VendorOption name="followLine">true</sld:VendorOption>
-            <sld:VendorOption name="repeat">400</sld:VendorOption>
-            <sld:VendorOption name="group">true</sld:VendorOption>
-          </sld:TextSymbolizer>
-          <sld:TextSymbolizer>
-            <sld:Label>
-              <ogc:PropertyName>divi</ogc:PropertyName><![CDATA[ ]]>
-              <ogc:PropertyName>cont</ogc:PropertyName>
-            </sld:Label>
-            <sld:Font>
-              <sld:CssParameter name="font-family">Malgun Gothic</sld:CssParameter>
-              <sld:CssParameter name="font-size">11</sld:CssParameter>
-              <sld:CssParameter name="font-style">normal</sld:CssParameter>
-              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
-            </sld:Font>
-            <sld:LabelPlacement>
-              <sld:LinePlacement>
-                <sld:PerpendicularOffset>0</sld:PerpendicularOffset>
-              </sld:LinePlacement>
-            </sld:LabelPlacement>
-            <sld:Halo>
-              <sld:Radius>1.5</sld:Radius>
-              <sld:Fill>
-                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
-              </sld:Fill>
-            </sld:Halo>
-            <sld:Fill>
-              <sld:CssParameter name="fill">#DCDCDC</sld:CssParameter>
-            </sld:Fill>
-            <sld:VendorOption name="followLine">true</sld:VendorOption>
-            <sld:VendorOption name="repeat">400</sld:VendorOption>
-            <sld:VendorOption name="group">true</sld:VendorOption>
-          </sld:TextSymbolizer>
-          <sld:TextSymbolizer>
-            <sld:Label>
-              <ogc:PropertyName>divi</ogc:PropertyName><![CDATA[ ]]>
-              <ogc:PropertyName>cont</ogc:PropertyName>
-            </sld:Label>
-            <sld:Font>
               <sld:CssParameter name="font-family">Nanum Gothic</sld:CssParameter>
               <sld:CssParameter name="font-size">11</sld:CssParameter>
               <sld:CssParameter name="font-style">normal</sld:CssParameter>
@@ -4264,7 +3046,7 @@
               <ogc:PropertyName>cont</ogc:PropertyName>
             </sld:Label>
             <sld:Font>
-              <sld:CssParameter name="font-family">Pretendard</sld:CssParameter>
+              <sld:CssParameter name="font-family">Malgun Gothic</sld:CssParameter>
               <sld:CssParameter name="font-size">11</sld:CssParameter>
               <sld:CssParameter name="font-style">normal</sld:CssParameter>
               <sld:CssParameter name="font-weight">bold</sld:CssParameter>
@@ -4365,64 +3147,6 @@
               <ogc:PropertyName>cont</ogc:PropertyName>
             </sld:Label>
             <sld:Font>
-              <sld:CssParameter name="font-family">Noto Sans KR</sld:CssParameter>
-              <sld:CssParameter name="font-size">11</sld:CssParameter>
-              <sld:CssParameter name="font-style">normal</sld:CssParameter>
-              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
-            </sld:Font>
-            <sld:LabelPlacement>
-              <sld:LinePlacement>
-                <sld:PerpendicularOffset>0</sld:PerpendicularOffset>
-              </sld:LinePlacement>
-            </sld:LabelPlacement>
-            <sld:Halo>
-              <sld:Radius>1.5</sld:Radius>
-              <sld:Fill>
-                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
-              </sld:Fill>
-            </sld:Halo>
-            <sld:Fill>
-              <sld:CssParameter name="fill">#DCDCDC</sld:CssParameter>
-            </sld:Fill>
-            <sld:VendorOption name="followLine">true</sld:VendorOption>
-            <sld:VendorOption name="repeat">400</sld:VendorOption>
-            <sld:VendorOption name="group">true</sld:VendorOption>
-          </sld:TextSymbolizer>
-          <sld:TextSymbolizer>
-            <sld:Label>
-              <ogc:PropertyName>divi</ogc:PropertyName><![CDATA[ ]]>
-              <ogc:PropertyName>cont</ogc:PropertyName>
-            </sld:Label>
-            <sld:Font>
-              <sld:CssParameter name="font-family">Malgun Gothic</sld:CssParameter>
-              <sld:CssParameter name="font-size">11</sld:CssParameter>
-              <sld:CssParameter name="font-style">normal</sld:CssParameter>
-              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
-            </sld:Font>
-            <sld:LabelPlacement>
-              <sld:LinePlacement>
-                <sld:PerpendicularOffset>0</sld:PerpendicularOffset>
-              </sld:LinePlacement>
-            </sld:LabelPlacement>
-            <sld:Halo>
-              <sld:Radius>1.5</sld:Radius>
-              <sld:Fill>
-                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
-              </sld:Fill>
-            </sld:Halo>
-            <sld:Fill>
-              <sld:CssParameter name="fill">#DCDCDC</sld:CssParameter>
-            </sld:Fill>
-            <sld:VendorOption name="followLine">true</sld:VendorOption>
-            <sld:VendorOption name="repeat">400</sld:VendorOption>
-            <sld:VendorOption name="group">true</sld:VendorOption>
-          </sld:TextSymbolizer>
-          <sld:TextSymbolizer>
-            <sld:Label>
-              <ogc:PropertyName>divi</ogc:PropertyName><![CDATA[ ]]>
-              <ogc:PropertyName>cont</ogc:PropertyName>
-            </sld:Label>
-            <sld:Font>
               <sld:CssParameter name="font-family">Nanum Gothic</sld:CssParameter>
               <sld:CssParameter name="font-size">11</sld:CssParameter>
               <sld:CssParameter name="font-style">normal</sld:CssParameter>
@@ -4452,7 +3176,7 @@
               <ogc:PropertyName>cont</ogc:PropertyName>
             </sld:Label>
             <sld:Font>
-              <sld:CssParameter name="font-family">Pretendard</sld:CssParameter>
+              <sld:CssParameter name="font-family">Malgun Gothic</sld:CssParameter>
               <sld:CssParameter name="font-size">11</sld:CssParameter>
               <sld:CssParameter name="font-style">normal</sld:CssParameter>
               <sld:CssParameter name="font-weight">bold</sld:CssParameter>
@@ -4553,64 +3277,6 @@
               <ogc:PropertyName>cont</ogc:PropertyName>
             </sld:Label>
             <sld:Font>
-              <sld:CssParameter name="font-family">Noto Sans KR</sld:CssParameter>
-              <sld:CssParameter name="font-size">11</sld:CssParameter>
-              <sld:CssParameter name="font-style">normal</sld:CssParameter>
-              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
-            </sld:Font>
-            <sld:LabelPlacement>
-              <sld:LinePlacement>
-                <sld:PerpendicularOffset>0</sld:PerpendicularOffset>
-              </sld:LinePlacement>
-            </sld:LabelPlacement>
-            <sld:Halo>
-              <sld:Radius>1.5</sld:Radius>
-              <sld:Fill>
-                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
-              </sld:Fill>
-            </sld:Halo>
-            <sld:Fill>
-              <sld:CssParameter name="fill">#DCDCDC</sld:CssParameter>
-            </sld:Fill>
-            <sld:VendorOption name="followLine">true</sld:VendorOption>
-            <sld:VendorOption name="repeat">400</sld:VendorOption>
-            <sld:VendorOption name="group">true</sld:VendorOption>
-          </sld:TextSymbolizer>
-          <sld:TextSymbolizer>
-            <sld:Label>
-              <ogc:PropertyName>divi</ogc:PropertyName><![CDATA[ ]]>
-              <ogc:PropertyName>cont</ogc:PropertyName>
-            </sld:Label>
-            <sld:Font>
-              <sld:CssParameter name="font-family">Malgun Gothic</sld:CssParameter>
-              <sld:CssParameter name="font-size">11</sld:CssParameter>
-              <sld:CssParameter name="font-style">normal</sld:CssParameter>
-              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
-            </sld:Font>
-            <sld:LabelPlacement>
-              <sld:LinePlacement>
-                <sld:PerpendicularOffset>0</sld:PerpendicularOffset>
-              </sld:LinePlacement>
-            </sld:LabelPlacement>
-            <sld:Halo>
-              <sld:Radius>1.5</sld:Radius>
-              <sld:Fill>
-                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
-              </sld:Fill>
-            </sld:Halo>
-            <sld:Fill>
-              <sld:CssParameter name="fill">#DCDCDC</sld:CssParameter>
-            </sld:Fill>
-            <sld:VendorOption name="followLine">true</sld:VendorOption>
-            <sld:VendorOption name="repeat">400</sld:VendorOption>
-            <sld:VendorOption name="group">true</sld:VendorOption>
-          </sld:TextSymbolizer>
-          <sld:TextSymbolizer>
-            <sld:Label>
-              <ogc:PropertyName>divi</ogc:PropertyName><![CDATA[ ]]>
-              <ogc:PropertyName>cont</ogc:PropertyName>
-            </sld:Label>
-            <sld:Font>
               <sld:CssParameter name="font-family">Nanum Gothic</sld:CssParameter>
               <sld:CssParameter name="font-size">11</sld:CssParameter>
               <sld:CssParameter name="font-style">normal</sld:CssParameter>
@@ -4640,7 +3306,7 @@
               <ogc:PropertyName>cont</ogc:PropertyName>
             </sld:Label>
             <sld:Font>
-              <sld:CssParameter name="font-family">Pretendard</sld:CssParameter>
+              <sld:CssParameter name="font-family">Malgun Gothic</sld:CssParameter>
               <sld:CssParameter name="font-size">11</sld:CssParameter>
               <sld:CssParameter name="font-style">normal</sld:CssParameter>
               <sld:CssParameter name="font-weight">bold</sld:CssParameter>
@@ -4725,64 +3391,6 @@
               <ogc:PropertyName>cont</ogc:PropertyName>
             </sld:Label>
             <sld:Font>
-              <sld:CssParameter name="font-family">Noto Sans KR</sld:CssParameter>
-              <sld:CssParameter name="font-size">11</sld:CssParameter>
-              <sld:CssParameter name="font-style">normal</sld:CssParameter>
-              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
-            </sld:Font>
-            <sld:LabelPlacement>
-              <sld:LinePlacement>
-                <sld:PerpendicularOffset>0</sld:PerpendicularOffset>
-              </sld:LinePlacement>
-            </sld:LabelPlacement>
-            <sld:Halo>
-              <sld:Radius>1.5</sld:Radius>
-              <sld:Fill>
-                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
-              </sld:Fill>
-            </sld:Halo>
-            <sld:Fill>
-              <sld:CssParameter name="fill">#DCDCDC</sld:CssParameter>
-            </sld:Fill>
-            <sld:VendorOption name="followLine">true</sld:VendorOption>
-            <sld:VendorOption name="repeat">400</sld:VendorOption>
-            <sld:VendorOption name="group">true</sld:VendorOption>
-          </sld:TextSymbolizer>
-          <sld:TextSymbolizer>
-            <sld:Label>
-              <ogc:PropertyName>divi</ogc:PropertyName><![CDATA[ ]]>
-              <ogc:PropertyName>cont</ogc:PropertyName>
-            </sld:Label>
-            <sld:Font>
-              <sld:CssParameter name="font-family">Malgun Gothic</sld:CssParameter>
-              <sld:CssParameter name="font-size">11</sld:CssParameter>
-              <sld:CssParameter name="font-style">normal</sld:CssParameter>
-              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
-            </sld:Font>
-            <sld:LabelPlacement>
-              <sld:LinePlacement>
-                <sld:PerpendicularOffset>0</sld:PerpendicularOffset>
-              </sld:LinePlacement>
-            </sld:LabelPlacement>
-            <sld:Halo>
-              <sld:Radius>1.5</sld:Radius>
-              <sld:Fill>
-                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
-              </sld:Fill>
-            </sld:Halo>
-            <sld:Fill>
-              <sld:CssParameter name="fill">#DCDCDC</sld:CssParameter>
-            </sld:Fill>
-            <sld:VendorOption name="followLine">true</sld:VendorOption>
-            <sld:VendorOption name="repeat">400</sld:VendorOption>
-            <sld:VendorOption name="group">true</sld:VendorOption>
-          </sld:TextSymbolizer>
-          <sld:TextSymbolizer>
-            <sld:Label>
-              <ogc:PropertyName>divi</ogc:PropertyName><![CDATA[ ]]>
-              <ogc:PropertyName>cont</ogc:PropertyName>
-            </sld:Label>
-            <sld:Font>
               <sld:CssParameter name="font-family">Nanum Gothic</sld:CssParameter>
               <sld:CssParameter name="font-size">11</sld:CssParameter>
               <sld:CssParameter name="font-style">normal</sld:CssParameter>
@@ -4812,7 +3420,7 @@
               <ogc:PropertyName>cont</ogc:PropertyName>
             </sld:Label>
             <sld:Font>
-              <sld:CssParameter name="font-family">Pretendard</sld:CssParameter>
+              <sld:CssParameter name="font-family">Malgun Gothic</sld:CssParameter>
               <sld:CssParameter name="font-size">11</sld:CssParameter>
               <sld:CssParameter name="font-style">normal</sld:CssParameter>
               <sld:CssParameter name="font-weight">bold</sld:CssParameter>

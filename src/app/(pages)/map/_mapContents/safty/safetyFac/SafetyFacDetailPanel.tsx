@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { ChevronDown, ChevronRight, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { appFetch } from '@/lib/basePath';
+import { useTheme } from '@/app/(pages)/(index)/theme-provider';
 import {
   buildSafetyFacCustomDetailRows,
   buildSafetyFacTitleFromDefine,
@@ -36,6 +37,8 @@ type Props = {
 };
 
 export function SafetyFacDetailPanel({ facility, onClose }: Props) {
+  const { resolvedTheme } = useTheme();
+  const isDark = resolvedTheme === 'dark';
   const [fields, setFields] = useState<SafetyFacDefineField[]>([]);
   const [codesByField, setCodesByField] = useState<Record<string, DefineCodeRow[]>>({});
   const [basicOpen, setBasicOpen] = useState(true);
@@ -116,7 +119,7 @@ export function SafetyFacDetailPanel({ facility, onClose }: Props) {
         <div className="flex min-w-0 flex-1 items-center gap-1.5">
           <span
             className="inline-flex shrink-0 items-center rounded px-2.5 py-1.5 text-[10px] font-semibold leading-none"
-            style={getSafetyFacBadgeStyle(facility.subtype)}
+            style={getSafetyFacBadgeStyle(facility.subtype, true, isDark)}
           >
             {chipName}
           </span>

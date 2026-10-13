@@ -10,10 +10,11 @@
     "defineLayer:rebuild": "tsx src/scripts/rebuildDefineLayerFromCsv.ts",
     "defineLayer:merge-standard": "tsx src/scripts/mergeStandardCsvIntoDefineLayer.ts",
     "prebuild": "npm run schema:index",
-    "build": "next build",
+    "build": "next build --webpack",
     "build:project": "tsx scripts/build-with-project-env.ts",
     "start": "tsx scripts/run.ts start",
     "lint": "eslint",
+    "test:private-land": "tsx --test scripts/test-private-land-seams.ts",
     "db:init": "tsx scripts/init-db.ts",
     "db:create-user": "tsx scripts/create-db-user.ts",
     "db:test": "tsx scripts/test-connection.ts",
@@ -36,7 +37,8 @@
     "road-doc:png": "powershell -ExecutionPolicy Bypass -File scripts/qcad-dwg-dxf2png.ps1",
     "python:install-libpq": "conda run --prefix python/env conda install -c conda-forge libpq -y",
     "ortho:batch": "tsx scripts/ortho-batch.ts",
-    "map:river-report": "tsx scripts/mapRiverPlanReportFolders.ts"
+    "map:river-report": "tsx scripts/mapRiverPlanReportFolders.ts",
+    "postinstall": "patch-package"
   },
   "dependencies": {
     "@napi-rs/canvas": "^1.0.0",
@@ -86,6 +88,7 @@
     "drizzle-kit": "^0.31.8",
     "eslint": "^9",
     "eslint-config-next": "16.1.4",
+    "patch-package": "^8.0.1",
     "tailwindcss": "^4",
     "tsx": "^4.21.0",
     "tw-animate-css": "^1.4.0",

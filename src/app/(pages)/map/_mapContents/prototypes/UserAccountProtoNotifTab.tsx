@@ -9,9 +9,12 @@ import type { ProtoNotifItem } from '../bizNotif/bizNotifStore'
 const NOTIF_ROW =
   'flex items-center gap-2 border-b border-border/80 py-2 pl-4 pr-3 last:border-b-0 hover:bg-muted/50'
 const BTN_CLEAR =
-  'shrink-0 rounded-sm px-1.5 py-0.5 text-[11px] leading-none text-muted-foreground hover:text-black'
+  'shrink-0 rounded-sm px-1.5 py-0.5 text-xs leading-none text-muted-foreground hover:text-black'
 
 function parseNotifListFields(item: ProtoNotifItem): { useName: string; key: string } {
+  if (item.category === '위치없음') {
+    return { useName: item.name, key: item.listKey || '위치 없음' }
+  }
   if (item.listKey) {
     const matched = item.name.match(/^(\S+)\s+(\S+)\s+(.+)$/)
     if (matched) return { useName: matched[3], key: item.listKey }
@@ -29,8 +32,8 @@ type Props = {
   onDismissAll: () => void
   onMarkRead: (item: ProtoNotifItem) => void
   onOpenLedger: (item: ProtoNotifItem) => void
-  onOpenFee: (feeId: string) => void
-  onClosePanel: () => void
+  onOpenFee: (item: ProtoNotifItem) => void
+  onOpenMissingGeom?: (item: ProtoNotifItem) => void
 }
 
 export function UserAccountProtoNotifTab({
@@ -40,10 +43,11 @@ export function UserAccountProtoNotifTab({
   onMarkRead,
   onOpenLedger,
   onOpenFee,
-  onClosePanel,
+  onOpenMissingGeom,
 }: Props) {
   const [expiryExpanded, setExpiryExpanded] = useState(true)
   const [feeExpanded, setFeeExpanded] = useState(true)
+  const [geomExpanded, setGeomExpanded] = useState(true)
 
   const expiryList = useMemo(
     () => items.filter((item) => item.category === '만료임박'),
@@ -53,15 +57,19 @@ export function UserAccountProtoNotifTab({
     () => items.filter((item) => item.category === '미납임박'),
     [items]
   )
+  const geomList = useMemo(
+    () => items.filter((item) => item.category === '위치없음'),
+    [items]
+  )
 
-  const totalCount = expiryList.length + feeList.length
+  const totalCount = expiryList.length + feeList.length + geomList.length
   const unreadCount = items.filter((n) => !n.read).length
 
   const openItem = (item: ProtoNotifItem) => {
     onMarkRead(item)
-    if (item.target === 'fee') onOpenFee(item.targetId)
+    if (item.target === 'fee') onOpenFee(item)
+    else if (item.target === 'aerial') onOpenMissingGeom?.(item)
     else onOpenLedger(item)
-    onClosePanel()
   }
 
   if (totalCount === 0) {
@@ -75,7 +83,7 @@ export function UserAccountProtoNotifTab({
   return (
     <>
       <div className="flex shrink-0 items-center justify-between border-b border-border bg-muted/50 px-3 py-2">
-        <span className="text-[11px] text-muted-foreground">
+        <span className="text-xs text-muted-foreground">
           총 <span className="font-medium tabular-nums text-foreground">{totalCount}</span>건
           {unreadCount > 0 ? (
             <>
@@ -98,6 +106,23 @@ export function UserAccountProtoNotifTab({
             onToggle={() => setExpiryExpanded((prev) => !prev)}
           >
             {expiryList.map((item) => (
+              <NotifListRow
+                key={item.id}
+                item={item}
+                onOpen={() => openItem(item)}
+                onDelete={() => onDismiss(item)}
+              />
+            ))}
+          </NotifGroup>
+        ) : null}
+
+        {geomList.length > 0 ? (
+          <NotifGroup
+            summary={`위치가 없는 사진·동영상이 ${geomList.length}건입니다`}
+            expanded={geomExpanded}
+            onToggle={() => setGeomExpanded((prev) => !prev)}
+          >
+            {geomList.map((item) => (
               <NotifListRow
                 key={item.id}
                 item={item}
@@ -152,9 +177,9 @@ function NotifGroup({
           {summary}
         </span>
         {expanded ? (
-          <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+          <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" />
         ) : (
-          <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+          <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
         )}
       </button>
       {expanded ? (
@@ -194,7 +219,7 @@ function NotifListRow({
       >
         <span
           className={cn(
-            'truncate text-[11px] font-medium leading-snug tracking-tight',
+            'truncate text-xs font-medium leading-snug tracking-tight',
             item.read ? 'text-muted-foreground/80' : 'text-muted-foreground'
           )}
         >
@@ -205,7 +230,7 @@ function NotifListRow({
         </span>
         <span
           className={cn(
-            'shrink-0 truncate text-[11px] tabular-nums leading-snug',
+            'shrink-0 truncate text-xs tabular-nums leading-snug',
             item.read ? 'text-muted-foreground/80' : 'text-muted-foreground'
           )}
         >

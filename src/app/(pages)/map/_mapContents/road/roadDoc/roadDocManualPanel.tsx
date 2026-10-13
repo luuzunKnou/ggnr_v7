@@ -132,7 +132,7 @@ function listCadFolderChildren(
 type ManualTab = "doc" | "drawing" | "target" | "ref";
 type ApiScope = "doc" | "cad";
 
-/** SHOW_SERVICES 에 있으면 업무자료 안 편람 탭만 표시 (사이드바 메뉴와 무관) */
+/** 시스템 서비스 목록에 있으면 업무자료 안 편람 탭만 표시 (사이드바 메뉴와 무관) */
 const ROAD_WORK_HANDBOOK_SHOW_ENG = "roadWorkHandbook";
 
 const TAB_BTN =
@@ -154,6 +154,7 @@ export function RoadDocManualPanel({
   handbookSelected,
   onHandbookSelect,
   startOnHandbook = false,
+  onHandbookWideChange,
 }: {
   onClose: () => void;
   handbookMode: HandbookViewMode;
@@ -161,6 +162,7 @@ export function RoadDocManualPanel({
   handbookSelected: HandbookDetailSelection | null;
   onHandbookSelect: (next: HandbookDetailSelection | null) => void;
   startOnHandbook?: boolean;
+  onHandbookWideChange?: (wide: boolean) => void;
 }) {
   const [handbookTabsVisible, setHandbookTabsVisible] = useState(false);
   const handbookDeeplinkApplied = useRef(false);
@@ -177,6 +179,10 @@ export function RoadDocManualPanel({
   const isHandbookTab =
     handbookTabsVisible && (activeTab === "target" || activeTab === "ref");
   const mapPick = useHandbookMapPick();
+
+  useEffect(() => {
+    onHandbookWideChange?.(isHandbookTab && activeTab === "target");
+  }, [isHandbookTab, activeTab, onHandbookWideChange]);
 
   useEffect(() => {
     let cancelled = false;

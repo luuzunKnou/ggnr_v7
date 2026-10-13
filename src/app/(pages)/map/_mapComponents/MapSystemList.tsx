@@ -41,7 +41,7 @@ export function MapSystemList() {
   const searchParams = useSearchParams();
   const mapContext = useMapContext();
   const systemKeyFromUrl = searchParams.get('system') ?? '';
-  const { snapshot, loading: accessLoading } = useMyAccessSnapshot();
+  const { snapshot, loading: accessLoading, reload } = useMyAccessSnapshot();
 
   const [systemList, setSystemList] = useState<SystemItem[]>([]);
   const [deniedOpen, setDeniedOpen] = useState(false);
@@ -76,8 +76,9 @@ export function MapSystemList() {
     if (!systemKeyFromUrl && firstAllowed) {
       const current = new URLSearchParams(Array.from(searchParams.entries()));
       current.set('system', firstAllowed);
-      scrubOccupationLedgerFromMapSearchParams(current, firstAllowed);
-      scrubUseFeeFromMapSearchParams(current, firstAllowed);
+      const firstMeta = systemList.find((s) => s.sys_key === firstAllowed);
+      scrubOccupationLedgerFromMapSearchParams(current, firstAllowed, firstMeta?.serviceList ?? []);
+      scrubUseFeeFromMapSearchParams(current, firstAllowed, firstMeta?.serviceList ?? []);
       router.replace(`/map?${current.toString()}`);
       return;
     }
@@ -113,19 +114,26 @@ export function MapSystemList() {
       scrubMapSearchParamsOnSystemSwitch(current, sysKey, target?.serviceList ?? []);
       mapContext?.allLayersOffRef?.current?.();
     } else {
-      scrubOccupationLedgerFromMapSearchParams(current, sysKey);
-      scrubUseFeeFromMapSearchParams(current, sysKey);
+      const target = systemList.find((s) => s.sys_key === sysKey);
+      scrubOccupationLedgerFromMapSearchParams(current, sysKey, target?.serviceList ?? []);
+      scrubUseFeeFromMapSearchParams(current, sysKey, target?.serviceList ?? []);
     }
     router.push(`/map?${current.toString()}`);
   };
 
   const trySelectSystem = (sys: SystemItem) => {
-    if (!canAccessPrivateSystem(snapshot, sys.sys_key, sys.sys_is_private)) {
-      setDeniedSysKey(sys.sys_key);
-      setDeniedOpen(true);
-      return;
-    }
-    selectSystem(sys.sys_key);
+    void (async () => {
+      let snap = snapshot;
+      if (!canAccessPrivateSystem(snap, sys.sys_key, sys.sys_is_private)) {
+        snap = await reload({ silent: true });
+      }
+      if (!canAccessPrivateSystem(snap, sys.sys_key, sys.sys_is_private)) {
+        setDeniedSysKey(sys.sys_key);
+        setDeniedOpen(true);
+        return;
+      }
+      selectSystem(sys.sys_key);
+    })();
   };
 
   if (systemList.length === 0) return null;

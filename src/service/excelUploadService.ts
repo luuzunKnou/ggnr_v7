@@ -638,17 +638,17 @@ export type ResolvePnuFromAddressResult = {
   usedHangjeongToBeopjeong: boolean;
 };
 
-export async function resolvePnuFromAddress(
-  address: string
+const EMPTY_PNU_FROM_ADDRESS: ResolvePnuFromAddressResult = {
+  pnu: null,
+  originalRi: null,
+  matchedRi: null,
+  usedHangjeongToBeopjeong: false,
+};
+
+/** 읍·면·동·리·본번·부번으로 지적 키(PNU) 조회 */
+export async function resolvePnuFromParsedParts(
+  parsed: ExcelUploadParsedPnuParts
 ): Promise<ResolvePnuFromAddressResult> {
-  const empty: ResolvePnuFromAddressResult = {
-    pnu: null,
-    originalRi: null,
-    matchedRi: null,
-    usedHangjeongToBeopjeong: false,
-  };
-  const parsed = parseAddressForPnu(address);
-  if (!parsed) return empty;
   const { emdName, riName, bonbun, bubun, isMountain } = parsed;
   const esc = (v: string) => v.replace(/'/g, "''");
   let emdCd: string | null = null;
@@ -669,7 +669,7 @@ export async function resolvePnuFromAddress(
     }
   }
   if (!emdCd) {
-    return { ...empty, originalRi: riName };
+    return { ...EMPTY_PNU_FROM_ADDRESS, originalRi: riName };
   }
   const riCandidates = riNameLookupCandidates(riName);
   let riCd: string | null = null;
@@ -695,7 +695,7 @@ export async function resolvePnuFromAddress(
     if (riCd) break;
   }
   if (!riCd || !matchedRi) {
-    return { ...empty, originalRi: riName };
+    return { ...EMPTY_PNU_FROM_ADDRESS, originalRi: riName };
   }
   return {
     pnu: buildPnu19(riCd, { bonbun, bubun, isMountain }),
@@ -703,6 +703,14 @@ export async function resolvePnuFromAddress(
     matchedRi,
     usedHangjeongToBeopjeong: matchedRi !== riName,
   };
+}
+
+export async function resolvePnuFromAddress(
+  address: string
+): Promise<ResolvePnuFromAddressResult> {
+  const parsed = parseAddressForPnu(address);
+  if (!parsed) return EMPTY_PNU_FROM_ADDRESS;
+  return resolvePnuFromParsedParts(parsed);
 }
 
 export async function getPnuFromAddress(address: string): Promise<string | null> {

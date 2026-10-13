@@ -152,8 +152,6 @@ function LoginModalDialog({
           setError(await loadRejectReasonMessage(usrId));
         } else if (errCode === 'signup_pending') {
           setError('승인대기중입니다.');
-        } else if (errCode === 'login_fail_exceeded') {
-          setError('비밀번호 입력 횟수를 초과했습니다.\n관리자에게 문의하세요.');
         } else {
           setError('아이디 또는 비밀번호가 올바르지 않습니다.');
         }

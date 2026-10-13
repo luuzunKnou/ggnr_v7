@@ -1,19 +1,16 @@
 <layer>
   <name>sd_water_play_mgmt_zone</name>
-  <id>LayerInfoImpl--2053d3:19d606c4ff1:30f0</id>
+  <id>LayerInfoImpl-4e3602d7:1a0614b12bf:-7880</id>
   <type>VECTOR</type>
   <defaultStyle>
-    <id>StyleInfoImpl--2053d3:19d606c4ff1:30fd</id>
+    <id>StyleInfoImpl--30e19f83:19cb3d4f76b:-7ffc</id>
   </defaultStyle>
   <resource class="featureType">
-    <id>FeatureTypeInfoImpl--2053d3:19d606c4ff1:30ef</id>
+    <id>FeatureTypeInfoImpl-4e3602d7:1a0614b12bf:-7881</id>
   </resource>
-  <queryable>true</queryable>
-  <opaque>false</opaque>
   <attribution>
     <logoWidth>0</logoWidth>
     <logoHeight>0</logoHeight>
   </attribution>
-  <dateCreated>2026-04-08 11:06:42.783 UTC</dateCreated>
-  <dateModified>2026-04-08 11:07:03.508 UTC</dateModified>
+  <dateCreated>2026-09-04 02:18:30.757 UTC</dateCreated>
 </layer>

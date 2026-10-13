@@ -91,13 +91,11 @@ export function ResourceAccessDeniedDialog({
   const se = useMemo(() => (serEng ?? '').trim(), [serEng]);
 
   useEffect(() => {
-    if (!open) {
-      setRequestReason('');
-      setMsg('');
-      setLatest(null);
-      return;
-    }
+    if (!open) return;
     let cancelled = false;
+    setRequestReason('');
+    setMsg('');
+    setLatest(null);
     (async () => {
       setLoading(true);
       try {
@@ -198,6 +196,7 @@ export function ResourceAccessDeniedDialog({
       <DialogContent
         className={cn('rounded-md sm:max-w-md max-h-[90vh] overflow-y-auto')}
         showCloseButton={false}
+        layerZIndex={21000}
       >
         <DialogHeader>
           <DialogTitle className="text-base leading-snug flex items-center gap-2.5 font-semibold">

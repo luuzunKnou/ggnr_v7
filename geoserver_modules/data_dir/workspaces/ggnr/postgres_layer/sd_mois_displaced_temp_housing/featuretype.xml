@@ -1,5 +1,5 @@
 <featureType>
-  <id>FeatureTypeInfoImpl--2053d3:19d606c4ff1:30e3</id>
+  <id>FeatureTypeInfoImpl-3c0551ac:1a0e4074eaf:-7d36</id>
   <name>sd_mois_displaced_temp_housing</name>
   <nativeName>sd_mois_displaced_temp_housing</nativeName>
   <namespace>
@@ -12,17 +12,17 @@
   </keywords>
   <srs>EPSG:5181</srs>
   <nativeBoundingBox>
-    <minx>-4442.5908203125</minx>
-    <maxx>477602.125</maxx>
-    <miny>-44527.41015625</miny>
-    <maxy>563763.4375</maxy>
+    <minx>390516.0446754554</minx>
+    <maxx>420232.0357724905</maxx>
+    <miny>354919.3079881824</miny>
+    <maxy>403218.6162868335</maxy>
     <crs class="projected">EPSG:5181</crs>
   </nativeBoundingBox>
   <latLonBoundingBox>
-    <minx>124.65485055286999</minx>
-    <maxx>130.18331552940077</maxx>
-    <miny>33.05674558041427</miny>
-    <maxy>38.5736828264213</maxy>
+    <minx>129.13113454868838</minx>
+    <maxx>129.47729775486442</maxx>
+    <miny>36.66729547475591</miny>
+    <maxy>37.108626644805724</maxy>
     <crs>EPSG:4326</crs>
   </latLonBoundingBox>
   <projectionPolicy>FORCE_DECLARED</projectionPolicy>

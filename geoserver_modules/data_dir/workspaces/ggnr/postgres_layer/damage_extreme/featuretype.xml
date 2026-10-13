@@ -1,0 +1,41 @@
+<featureType>
+  <id>FeatureTypeInfoImpl-4f1e7b9b:1a0f0cebe25:-7f06</id>
+  <name>damage_extreme</name>
+  <nativeName>damage_extreme</nativeName>
+  <namespace>
+    <id>NamespaceInfoImpl-4bf97568:19c4d6c3053:-7ffa</id>
+  </namespace>
+  <title>damage_extreme</title>
+  <keywords>
+    <string>features</string>
+    <string>damage_extreme</string>
+  </keywords>
+  <srs>EPSG:5181</srs>
+  <nativeBoundingBox>
+    <minx>339231.03227425355</minx>
+    <maxx>378515.19397007604</maxx>
+    <miny>317936.3411903126</miny>
+    <maxy>343482.5310481071</maxy>
+    <crs class="projected">EPSG:5181</crs>
+  </nativeBoundingBox>
+  <latLonBoundingBox>
+    <minx>128.5510177236773</minx>
+    <maxx>128.99431177726154</maxx>
+    <miny>36.34295960216362</miny>
+    <maxy>36.579567425460915</maxy>
+    <crs>EPSG:4326</crs>
+  </latLonBoundingBox>
+  <projectionPolicy>FORCE_DECLARED</projectionPolicy>
+  <enabled>true</enabled>
+  <store class="dataStore">
+    <id>DataStoreInfoImpl-4bf97568:19c4d6c3053:-7ff9</id>
+  </store>
+  <serviceConfiguration>false</serviceConfiguration>
+  <maxFeatures>0</maxFeatures>
+  <numDecimals>0</numDecimals>
+  <padWithZeros>false</padWithZeros>
+  <forcedDecimal>false</forcedDecimal>
+  <overridingServiceSRS>false</overridingServiceSRS>
+  <skipNumberMatched>false</skipNumberMatched>
+  <circularArcPresent>false</circularArcPresent>
+</featureType>

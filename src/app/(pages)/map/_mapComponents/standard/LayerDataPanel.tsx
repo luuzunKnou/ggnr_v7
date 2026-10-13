@@ -21,6 +21,7 @@ import { formatDefineFieldDisplayValue } from '@/lib/defineLayerCodeDisplay';
 import { isLayerExtraFieldName } from '@/lib/layerExtraField';
 import { useDefineLayerCodes } from './useDefineLayerCodes';
 import { cn, formatFileSize } from '@/lib/utils';
+import { useSerWriteAccess } from '@/hooks/useSerWriteAccess';
 import {
   isImageServiceFileName,
   isPdfServiceFileName,
@@ -36,7 +37,8 @@ import { getDefineFieldDisplayLabel, getRowKey, getRowValueByField, isDefineFiel
 import { ServiceFileAttachmentThumb } from './ServiceFileAttachmentThumb';
 import { ServiceFilePdfThumb } from './ServiceFilePdfThumb';
 import { ServiceFileImagePreview, type ServiceFilePreviewItem } from './ServiceFileImagePreview';
-import type { IdentifyLayerResult, IdentifyFeatureItem } from '../hooks/useFeatureIdentify';
+import type { IdentifyLayerResult, IdentifyFeatureItem, IdentifyPopupState } from '../hooks/useFeatureIdentify';
+import { isOrthoDataQueryLayerId } from '../../_mapContents/aerialView/orthoDataQueryLayerId';
 import { IdentifyHitListBlock } from './IdentifyHitListBlock';
 import { compareFeaturesByGeometryStackOrder } from '@/lib/mapLayerGeometryOrder';
 import {
@@ -51,7 +53,7 @@ import GeoJSON from 'ol/format/GeoJSON';
 import { MAP_AUTO_NAV_MAX_ZOOM } from '../config/mapDefaults';
 import { scheduleFitMapToExtent3857 } from '../config/mapAutoNavigation';
 import { isFmsFacilityLayerTable } from '@/lib/fmsLinkage/fmsBinding';
-import { getAllRoadLedgerDocLayerIds } from '../../_mapContents/road/roadLedger/roadLedgerDocLayerMap';
+import { getAllRoadLedgerFacilityLayerIds } from '../../_mapContents/road/roadLedger/roadLedgerDocLayerMap';
 import {
   formatRoadLedgerFacilityCellValue,
   getRoadLedgerFacilityColumnKeys,
@@ -348,10 +350,79 @@ type LayerDataPanelProps = {
   dataTable: string;
   onClose?: () => void;
   onDataKeyChange?: (keyValue: string | number | null) => void;
+  /** 지도 식별 «이전»으로 돌아갈 때 dataTable URL 복원 */
+  onDataTableChange?: (tableName: string) => void;
   initialDataKey?: string;
   /** true: 도로대장 시설 목록과 동일한 컬럼·표시(코드표 기반). 시설관리에서 연 경우에만 켬 */
   useRoadLedgerFacilityListColumns?: boolean;
 };
+
+type IdentifyHistoryEntry =
+  | {
+      kind: 'identify';
+      identify: IdentifyPopupState;
+      dataTable: string;
+      selectedRow: Record<string, unknown> | null;
+      selectedIdentifyIndex: number | null;
+    }
+  | {
+      kind: 'list';
+      dataTable: string;
+      dataKey: string | null;
+      selectedRow: Record<string, unknown> | null;
+      /** 5번 클릭 직후와 동일한 목록(30/7)·페이지·하이라이트 */
+      listPageSize: number;
+      page: number;
+      highlightedRow: number | null;
+      total: number;
+    };
+
+type ListHistoryRestore = {
+  dataTable: string;
+  dataKey: string | null;
+  selectedRow: Record<string, unknown> | null;
+  listPageSize: number;
+  page: number;
+  highlightedRow: number | null;
+  total: number;
+};
+
+/** 이력용 행 키 — is_key 없으면 ogc_fid/gid/id 사용(하천구역 번호 등) */
+function resolveHistoryRowKey(
+  row: Record<string, unknown> | null | undefined,
+  keyFieldName: string | null
+): string | null {
+  if (!row) return null;
+  const fromKey = getRowKey(row, keyFieldName);
+  if (fromKey != null && String(fromKey).trim() !== '') return String(fromKey);
+  for (const f of ['ogc_fid', 'gid', 'id']) {
+    const v = getRowValueByField(row, f);
+    if (v != null && String(v).trim() !== '') return String(v);
+  }
+  return null;
+}
+
+function findRowIndexByHistoryKey(
+  rows: Record<string, unknown>[],
+  key: string,
+  keyFieldName: string | null
+): number {
+  if (!key) return -1;
+  const tryFields = [
+    keyFieldName,
+    'ogc_fid',
+    'gid',
+    'id',
+  ].filter((f, i, arr): f is string => !!f && arr.indexOf(f) === i);
+  for (const field of tryFields) {
+    const idx = rows.findIndex((r) => {
+      const rowKey = getRowKey(r, field) ?? getRowValueByField(r, field);
+      return rowKey != null && String(rowKey) === key;
+    });
+    if (idx >= 0) return idx;
+  }
+  return -1;
+}
 
 function flattenIdentifyResults(
   results: IdentifyLayerResult[]
@@ -379,10 +450,12 @@ export function LayerDataPanel({
   dataTable,
   onClose,
   onDataKeyChange,
+  onDataTableChange,
   initialDataKey,
   useRoadLedgerFacilityListColumns = false,
 }: LayerDataPanelProps) {
   const mapContext = useMapContext();
+  const canWriteDataQuery = useSerWriteAccess('dataQuery');
   const mapInstanceRef = mapContext?.mapInstanceRef;
   const spatialFilterWkt = mapContext?.spatialFilterWkt ?? null;
   const [activeLayer, setActiveLayer] = useState<ActiveLayerInfo | null>(null);
@@ -432,7 +505,8 @@ export function LayerDataPanel({
   const selectionLayerRef = useRef<VectorLayer<VectorSource> | null>(null);
   const pulsePhaseRef = useRef(0);
   const [radarActive, setRadarActive] = useState(false);
-  const prevLayerRef = useRef<string | null>(null);
+  /** 목록 초기 로드 키(테이블|공간필터|식별여부). 중단된 로드는 cleanup에서 null로 되돌려 재시도 */
+  const prevListLoadKeyRef = useRef<string | null>(null);
   const [selectedIdentifyIndex, setSelectedIdentifyIndex] = useState<number | null>(null);
   /** loadPage 응답 순서 보장 — 늦게 도착한 7건 응답이 30건 목록을 덮지 않게 */
   const loadPageSeqRef = useRef(0);
@@ -455,6 +529,103 @@ export function LayerDataPanel({
   keyFieldNameRef.current = keyFieldName;
 
   const prevHadIdentifyRef = useRef(false);
+  /** 지도·검색 식별 결과 히스토리(브라우저 뒤로가기처럼 «이전»으로 한 단계씩) */
+  const identifyHistoryRef = useRef<IdentifyHistoryEntry[]>([]);
+  /** 라벨·동작용 — 스택 깊이(0이면 «닫기») */
+  const [identifyHistoryDepth, setIdentifyHistoryDepth] = useState(0);
+  const identifyHistorySkipRef = useRef(false);
+  const identifyHistorySkipClearRef = useRef(false);
+  /** 목록→식별 직전 화면으로 «이전»할 때, 식별 종료 effect가 선택을 지우지 않도록 */
+  const restoreListSelectionRef = useRef<ListHistoryRestore | null>(null);
+  /** 목록 복원 중 — 초기 로드가 선택·목록 상태를 덮어쓰지 않게 */
+  const restoringListFromHistoryRef = useRef<ListHistoryRestore | null>(null);
+  const identifySnapshotRef = useRef<{
+    identify: IdentifyPopupState | null;
+    dataTable: string;
+    selectedRow: Record<string, unknown> | null;
+    selectedIdentifyIndex: number | null;
+    listPageSize: number;
+    page: number;
+    highlightedRow: number | null;
+    total: number;
+  }>({
+    identify: null,
+    dataTable: '',
+    selectedRow: null,
+    selectedIdentifyIndex: null,
+    listPageSize: PAGE_SIZE_LIST,
+    page: 1,
+    highlightedRow: null,
+    total: 0,
+  });
+
+  /** 새 식별·검색이 들어오면 직전 화면(목록 또는 이전 식별)을 스택에 push */
+  useEffect(() => {
+    const skipping = identifyHistorySkipRef.current;
+    if (skipping) {
+      identifyHistorySkipRef.current = false;
+    }
+
+    const prev = identifySnapshotRef.current;
+    const identifyChanged = prev.identify !== identifyResultList;
+    if (!skipping && identifyChanged) {
+      if (identifyResultList != null && prev.identify != null) {
+        identifyHistoryRef.current.push({
+          kind: 'identify',
+          identify: prev.identify,
+          dataTable: prev.dataTable,
+          selectedRow: prev.selectedRow,
+          selectedIdentifyIndex: prev.selectedIdentifyIndex,
+        });
+        setIdentifyHistoryDepth(identifyHistoryRef.current.length);
+      } else if (identifyResultList != null && prev.identify == null) {
+        // 패널이 닫힌 채 지도만 클릭해 연 경우는 복원할 목록이 없음 → push 안 함(«닫기»)
+        const hasListToRestore =
+          prev.selectedRow != null ||
+          prev.total > 0 ||
+          (prev.highlightedRow != null && prev.highlightedRow >= 0);
+        if (hasListToRestore) {
+          const row = prev.selectedRow;
+          const keyVal = resolveHistoryRowKey(row, keyFieldNameRef.current);
+          identifyHistoryRef.current.push({
+            kind: 'list',
+            dataTable: prev.dataTable,
+            dataKey: keyVal,
+            selectedRow: row,
+            listPageSize: prev.listPageSize,
+            page: prev.page,
+            highlightedRow: prev.highlightedRow,
+            total: prev.total,
+          });
+          setIdentifyHistoryDepth(identifyHistoryRef.current.length);
+        }
+      } else if (identifyResultList == null) {
+        identifyHistoryRef.current = [];
+        setIdentifyHistoryDepth(0);
+      }
+    }
+
+    identifySnapshotRef.current = {
+      identify: identifyResultList,
+      dataTable: dataTable.trim(),
+      selectedRow: selectedRowDataRef.current,
+      selectedIdentifyIndex: selectedIdentifyIndex,
+      listPageSize,
+      page,
+      highlightedRow,
+      total,
+    };
+  }, [
+    identifyResultList,
+    dataTable,
+    selectedIdentifyIndex,
+    selectedRowData,
+    listPageSize,
+    page,
+    highlightedRow,
+    total,
+  ]);
+
   /** 새 식별·검색 결과 시 목록 선택 초기화. 식별 종료 시에만 상세 상태 정리(일반 목록 조회와 충돌 방지). */
   useEffect(() => {
     const total =
@@ -463,13 +634,26 @@ export function LayerDataPanel({
       identifyResultList != null &&
       (total > 0 || (Boolean(identifyResultList.listHeaderLabel?.trim()) && total === 0));
     if (hasIdentify) {
-      setSelectedIdentifyIndex(null);
-      setSelectedRowData(null);
+      if (identifyHistorySkipClearRef.current) {
+        identifyHistorySkipClearRef.current = false;
+      } else {
+        setSelectedIdentifyIndex(null);
+        setSelectedRowData(null);
+      }
     } else if (prevHadIdentifyRef.current) {
-      setSelectedIdentifyIndex(null);
-      setSelectedRowData(null);
-      selectionSourceRef.current?.clear();
-      setRadarActive(false);
+      const restore = restoreListSelectionRef.current;
+      if (restore) {
+        restoreListSelectionRef.current = null;
+        pendingAutoSelectFirstRef.current = false;
+        suppressDataKeySelectRef.current = false;
+        setSelectedIdentifyIndex(null);
+        setSelectedRowData(restore.selectedRow);
+      } else {
+        setSelectedIdentifyIndex(null);
+        setSelectedRowData(null);
+        selectionSourceRef.current?.clear();
+        setRadarActive(false);
+      }
     }
     prevHadIdentifyRef.current = hasIdentify;
   }, [identifyResultList]);
@@ -591,13 +775,13 @@ export function LayerDataPanel({
   /** 기본정보 수정에 쓰는 행 키 — 위 첨부·이력용과 동일 계산 */
   const currentRowKey = selectedRow != null ? getRowKey(selectedRow, keyFieldName) : null;
 
-  /** 안전점검 시설물 3테이블 — 데이터조회에서 조회만 */
+  /** 안전점검 시설물 3테이블 — 데이터조회에서 조회만. 또는 서비스 읽기 권한만 */
   const dataQueryReadOnly = useMemo(
     () =>
       isFmsFacilityLayerTable(
         activeLayer?.physicalTableName ?? activeLayer?.tableName ?? null
-      ),
-    [activeLayer?.physicalTableName, activeLayer?.tableName]
+      ) || !canWriteDataQuery,
+    [activeLayer?.physicalTableName, activeLayer?.tableName, canWriteDataQuery]
   );
 
   // 데이터 이력관리에 조회 저장을 위해 추가
@@ -870,9 +1054,13 @@ export function LayerDataPanel({
     [mapContext, rows]
   );
 
-  /** 지도 식별 항목 선택 시: 도형 강조 + 패널 padding 반영해 지도 이동·확대 (목록 행 선택과 동일) */
+  /**
+   * 식별·행 선택 시 도형 강조.
+   * fit 기본 true(목록·URL 선택). 지도 객체 클릭은 fit:false — 강조만.
+   */
   const showIdentifyFeatureOnMap = useCallback(
-    (record: Record<string, unknown>) => {
+    (record: Record<string, unknown>, opts?: { fit?: boolean }) => {
+      const doFit = opts?.fit !== false;
       const mapInstance = mapContext?.mapInstanceRef?.current;
       const source = selectionSourceRef.current;
       if (!mapInstance || !source) return;
@@ -889,12 +1077,14 @@ export function LayerDataPanel({
       const geomType = features[0].getGeometry()?.getType();
       if (geomType === 'Point' || geomType === 'MultiPoint') features[0].set('isRadarPoint', true);
       source.addFeatures(features);
-      const ext = source.getExtent();
-      if (ext.every((v) => isFinite(v))) {
-        scheduleFitMapToExtent3857(mapInstance, ext as [number, number, number, number], {
-          maxZoom: Math.min(16, MAP_AUTO_NAV_MAX_ZOOM),
-          applyMapViewPadding: () => mapContext?.applyMapViewPaddingRef?.current?.(),
-        });
+      if (doFit) {
+        const ext = source.getExtent();
+        if (ext.every((v) => isFinite(v))) {
+          scheduleFitMapToExtent3857(mapInstance, ext as [number, number, number, number], {
+            maxZoom: Math.min(16, MAP_AUTO_NAV_MAX_ZOOM),
+            applyMapViewPadding: () => mapContext?.applyMapViewPaddingRef?.current?.(),
+          });
+        }
       }
       setRadarActive(true);
     },
@@ -956,24 +1146,60 @@ export function LayerDataPanel({
     selectedIdentifyRowRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
   }, [selectedIdentifyIndex, selectedRowData]);
 
+  /**
+   * 목록 초기 로드.
+   * - 로드 키: 테이블 + 공간필터 + 식별모드 (행 선택 dataKey·identify 결과 객체 변경은 재조회하지 않음)
+   * - cleanup에서 미완료 로드 키를 비워, Strict Mode 재마운트·의존성 재실행 시 조기 return으로
+   *   loading이 영구 true로 남는 레이스를 방지한다.
+   */
   useEffect(() => {
     if (!activeLayer) return;
     const isIdentify = isIdentifyMode;
-    // 같은 테이블이면 재조회하지 않음 (앱 안에서 행 선택 시 전체 목록 유지)
-    if (prevLayerRef.current === activeLayer.tableName && !isIdentify) return;
-    prevLayerRef.current = activeLayer.tableName;
+    const restorePending = restoringListFromHistoryRef.current;
+    // 지도 클릭으로 dataTable이 바뀐 뒤 «이전» 시: URL 테이블이 맞을 때까지 복원 플래그 유지
+    if (
+      !isIdentify &&
+      restorePending != null &&
+      restorePending.dataTable.trim().toLowerCase() !==
+        activeLayer.tableName.trim().toLowerCase()
+    ) {
+      pendingAutoSelectFirstRef.current = false;
+      return;
+    }
+
+    const loadKey = [
+      activeLayer.tableName,
+      activeLayer.physicalTableName,
+      activeLayer.schema,
+      activeLayer.rowFilterSql ?? '',
+      spatialFilterWkt ?? '',
+      isIdentify ? 'id' : 'list',
+    ].join('|');
+    if (prevListLoadKeyRef.current === loadKey) return;
+
+    let cancelled = false;
+    let settled = false;
+    prevListLoadKeyRef.current = loadKey;
 
     setFields([]);
     setDetailFields([]);
     setKeyFieldName(null);
+    const restoreState = restoringListFromHistoryRef.current;
+    const isListRestore = !isIdentify && restoreState != null;
+    const restorePs = isListRestore
+      ? Math.max(1, restoreState.listPageSize || PAGE_SIZE_DETAIL)
+      : PAGE_SIZE_LIST;
+    const restorePage = isListRestore ? Math.max(1, restoreState.page || 1) : 1;
     if (!isIdentify) {
       setRows([]);
       setHighlightedRow(null);
-      setSelectedRowData(null);
+      if (!isListRestore) {
+        setSelectedRowData(null);
+      }
       setSelectedIdentifyIndex(null);
-      setListPageSize(PAGE_SIZE_LIST);
+      setListPageSize(restorePs);
       suppressDataKeySelectRef.current = false;
-      pendingAutoSelectFirstRef.current = true;
+      pendingAutoSelectFirstRef.current = !isListRestore;
       pendingHighlightIndexRef.current = null;
       listColWidthsLayerRef.current = null;
       setListColWidthsPct(null);
@@ -982,27 +1208,32 @@ export function LayerDataPanel({
     const initSeq = loadPageSeqRef.current;
     setLoading(true);
     setError(null);
-    setPage(1);
+    setPage(isListRestore ? restorePage : 1);
     setTotal(0);
     if (!isIdentify) setActiveTab('basic');
     if (!isIdentify) {
       highlightSourceRef.current?.clear();
-      selectionSourceRef.current?.clear();
-      setRadarActive(false);
+      if (!isListRestore) {
+        selectionSourceRef.current?.clear();
+        setRadarActive(false);
+      }
     }
 
     const tableDataParams = {
       table: activeLayer.physicalTableName,
       schema: activeLayer.schema,
-      limit: PAGE_SIZE_LIST,
-      offset: 0,
+      limit: isListRestore ? restorePs : PAGE_SIZE_LIST,
+      offset: isListRestore ? (restorePage - 1) * restorePs : 0,
       ...(spatialFilterWkt ? { spatialWkt: spatialFilterWkt, spatialSrid: 5181 } : {}),
       ...(activeLayer.rowFilterSql ? { rowFilter: activeLayer.rowFilterSql } : {}),
     };
     const fieldsPromise = fetch(
       `/api/config/defineLayer/fields/${encodeURIComponent(activeLayer.physicalTableName)}`
     ).then((r) => r.json());
-    const useKey = !isIdentify && initialDataKey != null && String(initialDataKey).trim() !== '';
+    // 목록 복원: 클릭 당시와 같은 페이지·건수로 getTableData (1건 key 조회 금지)
+    const keyAtOpen =
+      !isListRestore && initialDataKey != null ? String(initialDataKey).trim() : '';
+    const useKey = !isIdentify && !isListRestore && keyAtOpen !== '';
     const dataPromise = isIdentify
       ? Promise.resolve({ rows: [] as Record<string, unknown>[], total: 0 })
       : useKey
@@ -1012,7 +1243,7 @@ export function LayerDataPanel({
           params: {
             table: activeLayer.physicalTableName,
             schema: activeLayer.schema,
-            keyValue: initialDataKey!.trim(),
+            keyValue: keyAtOpen,
             ...(activeLayer.rowFilterSql ? { rowFilter: activeLayer.rowFilterSql } : {}),
           },
         })
@@ -1024,7 +1255,12 @@ export function LayerDataPanel({
 
     Promise.all([fieldsPromise, dataPromise])
       .then(([fieldsRes, dataRes]) => {
-        if (initSeq !== loadPageSeqRef.current) return;
+        if (cancelled || initSeq !== loadPageSeqRef.current) return;
+        // 복원 페이로드는 이 로드가 대상 테이블일 때만 소비
+        const restoreDone = isListRestore ? restoreState : null;
+        if (isListRestore) {
+          restoringListFromHistoryRef.current = null;
+        }
         const rawFields = (fieldsRes?.data ?? fieldsRes) as DefineFieldRow[] | undefined;
         const sortedAll = Array.isArray(rawFields)
           ? [...rawFields].sort((a, b) => parseInt(String(a.define_field_idx ?? '999999'), 10) - parseInt(String(b.define_field_idx ?? '999999'), 10))
@@ -1054,7 +1290,53 @@ export function LayerDataPanel({
         const keyField = Array.isArray(rawFields)
           ? rawFields.find((f) => isDefineFieldFlagTrue(f.define_field_is_key))
           : null;
-        setKeyFieldName(keyField ? String(keyField.define_field_name ?? '').trim() || null : null);
+        const resolvedKeyFieldName = keyField
+          ? String(keyField.define_field_name ?? '').trim() || null
+          : null;
+        setKeyFieldName(resolvedKeyFieldName);
+
+        if (isListRestore && restoreDone) {
+          const data = dataRes?.data ?? dataRes;
+          const dataRows: Record<string, unknown>[] = Array.isArray(data?.rows) ? data.rows : [];
+          const dataTotal =
+            typeof data?.total === 'number'
+              ? data.total
+              : restoreDone.total > 0
+                ? restoreDone.total
+                : 0;
+          pendingAutoSelectFirstRef.current = false;
+          setListPageSize(restorePs);
+          setPage(restorePage);
+          setRows(dataRows);
+          setTotal(dataTotal);
+          showCurrentListOnMap(dataRows);
+
+          const key = restoreDone.dataKey != null ? String(restoreDone.dataKey).trim() : '';
+          let idx = key
+            ? findRowIndexByHistoryKey(dataRows, key, resolvedKeyFieldName)
+            : -1;
+          if (
+            idx < 0 &&
+            restoreDone.highlightedRow != null &&
+            restoreDone.highlightedRow >= 0 &&
+            restoreDone.highlightedRow < dataRows.length
+          ) {
+            idx = restoreDone.highlightedRow;
+          }
+          if (idx >= 0 && dataRows[idx]) {
+            pendingMapFitFromSelectionRef.current = true;
+            pendingHighlightIndexRef.current = idx;
+            setHighlightedRow(idx);
+            setSelectedRowData(dataRows[idx]);
+            showIdentifyFeatureOnMap(dataRows[idx]);
+          } else if (restoreDone.selectedRow) {
+            setSelectedRowData(restoreDone.selectedRow);
+            showIdentifyFeatureOnMap(restoreDone.selectedRow);
+          }
+          settled = true;
+          setLoading(false);
+          return;
+        }
 
         if (useKey) {
           const keyData = dataRes?.data ?? dataRes;
@@ -1076,7 +1358,7 @@ export function LayerDataPanel({
               action: 'getTableData',
               params: tableDataParams,
             }).then((res) => {
-              if (initSeq !== loadPageSeqRef.current) return;
+              if (cancelled || initSeq !== loadPageSeqRef.current) return;
               const d = res?.data ?? res;
               const dataRows = Array.isArray(d?.rows) ? d.rows : [];
               const dataTotal = typeof d?.total === 'number' ? d.total : 0;
@@ -1096,42 +1378,72 @@ export function LayerDataPanel({
           setRows([]);
           setTotal(identifyResultList?.results?.reduce((s, r) => s + r.features.length, 0) ?? 0);
         }
+        settled = true;
         setLoading(false);
       })
       .catch((err) => {
-        if (initSeq !== loadPageSeqRef.current) return;
+        if (cancelled || initSeq !== loadPageSeqRef.current) return;
+        if (isListRestore) {
+          restoringListFromHistoryRef.current = null;
+        }
+        settled = true;
         setError(err?.message ?? String(err));
         setLoading(false);
       });
 
     return () => {
+      cancelled = true;
       loadPageSeqRef.current += 1;
+      // 미완료 로드만 키를 비움 → 재실행 시 조기 return으로 loading 고정되는 것 방지
+      if (!settled && prevListLoadKeyRef.current === loadKey) {
+        prevListLoadKeyRef.current = null;
+      }
     };
-  }, [activeLayer, spatialFilterWkt, showCurrentListOnMap, initialDataKey, identifyResultList]);
+    // initialDataKey·identifyResultList·콜백은 로드 키에 넣지 않음(행 선택·식별 결과 갱신 시 전체 재조회로 loading 레이스 유발)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- showCurrentListOnMap/showIdentifyFeatureOnMap/identifyResultList/initialDataKey 의도적 제외
+  }, [
+    activeLayer,
+    spatialFilterWkt,
+    isIdentifyMode,
+  ]);
 
-  // 지도 식별 후 패널 열렸을 때 해당 행 상세 + 도형 강조·지도 이동
+  // 지도 객체 클릭(식별) → 상세·강조만 (맵 무브 없음)
   useEffect(() => {
     if (!isIdentifyMode || identifySelectedRow == null || !setIdentifySelectedRow) return;
-    const idx = identifyFlat.findIndex((item) => item.feature.data === identifySelectedRow);
-    setSelectedRowData(identifySelectedRow);
+    const row = identifySelectedRow;
+    const idx = identifyFlat.findIndex((item) => item.feature.data === row);
+    setSelectedRowData(row);
     setSelectedIdentifyIndex(idx >= 0 ? idx : null);
     setActiveTab('basic');
-    showIdentifyFeatureOnMap(identifySelectedRow);
     setIdentifySelectedRow(null);
+    // 레이어 생성·activeLayer null 클리어 이후 강조 (첫 패널 오픈 레이스 방지)
+    let cancelled = false;
+    queueMicrotask(() => {
+      requestAnimationFrame(() => {
+        if (cancelled) return;
+        showIdentifyFeatureOnMap(row, { fit: false });
+      });
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [isIdentifyMode, identifySelectedRow, identifyFlat, setIdentifySelectedRow, showIdentifyFeatureOnMap]);
 
   useEffect(() => {
     if (!activeLayer) {
-      prevLayerRef.current = null;
+      prevListLoadKeyRef.current = null;
       pendingAutoSelectFirstRef.current = false;
       pendingHighlightIndexRef.current = null;
       listColWidthsLayerRef.current = null;
       setListColWidthsPct(null);
-      highlightSourceRef.current?.clear();
-      selectionSourceRef.current?.clear();
-      setRadarActive(false);
+      // 식별으로 패널이 열릴 때 activeLayer 로드 전에 강조를 지우면 첫 선택이 비어 보임
+      if (!isIdentifyMode) {
+        highlightSourceRef.current?.clear();
+        selectionSourceRef.current?.clear();
+        setRadarActive(false);
+      }
     }
-  }, [activeLayer]);
+  }, [activeLayer, isIdentifyMode]);
 
   const loadPage = useCallback(
     (newPage: number, size?: number, opts?: { paginationOnly?: boolean }) => {
@@ -1329,12 +1641,101 @@ export function LayerDataPanel({
   ]);
 
   const handleClose = () => {
+    identifyHistoryRef.current = [];
+    setIdentifyHistoryDepth(0);
     mapContext?.setIdentifyResultList?.(null);
     onClose?.();
   };
 
+  /**
+   * 식별 화면 하단·헤더 동작.
+   * - 스택이 있으면 «이전»(직전 목록·식별으로 복귀)
+   * - 스택이 없으면 «닫기»(패널이 닫힌 채 지도만 클릭한 경우 등)
+   */
+  const handleBackFromIdentify = () => {
+    const prev = identifyHistoryRef.current.pop();
+    setIdentifyHistoryDepth(identifyHistoryRef.current.length);
+    if (prev?.kind === 'identify') {
+      identifyHistorySkipRef.current = true;
+      identifyHistorySkipClearRef.current = true;
+      mapContext?.setIdentifyResultList?.(prev.identify);
+      mapContext?.setIdentifySelectedRow?.(null);
+      setSelectedRowData(prev.selectedRow);
+      setSelectedIdentifyIndex(prev.selectedIdentifyIndex);
+      setActiveTab('basic');
+      if (prev.selectedRow) {
+        showIdentifyFeatureOnMap(prev.selectedRow);
+      } else {
+        selectionSourceRef.current?.clear();
+        setRadarActive(false);
+      }
+      if (prev.dataTable && prev.dataTable !== dataTable.trim()) {
+        onDataTableChange?.(prev.dataTable);
+      }
+      onDataKeyChange?.(null);
+      return;
+    }
+
+    if (prev?.kind === 'list') {
+      const restorePayload: ListHistoryRestore = {
+        dataTable: prev.dataTable,
+        dataKey: prev.dataKey,
+        selectedRow: prev.selectedRow,
+        listPageSize: prev.listPageSize,
+        page: prev.page,
+        highlightedRow: prev.highlightedRow,
+        total: prev.total,
+      };
+      identifyHistorySkipRef.current = true;
+      restoreListSelectionRef.current = restorePayload;
+      restoringListFromHistoryRef.current = restorePayload;
+      pendingAutoSelectFirstRef.current = false;
+      suppressDataKeySelectRef.current = false;
+      mapContext?.setIdentifyResultList?.(null);
+      mapContext?.setIdentifySelectedRow?.(null);
+      setSelectedIdentifyIndex(null);
+      if (prev.dataTable && prev.dataTable !== dataTable.trim()) {
+        onDataTableChange?.(prev.dataTable);
+      }
+      onDataKeyChange?.(prev.dataKey);
+      return;
+    }
+
+    handleClose();
+  };
+
+  const identifyNavLabel = identifyHistoryDepth > 0 ? '이전' : '닫기';
+  const handleIdentifyNav = identifyHistoryDepth > 0 ? handleBackFromIdentify : handleClose;
+
   const handleIdentifyItemClick = (item: { layer: IdentifyLayerResult; feature: IdentifyFeatureItem; index: number }) => {
-    const { feature, index } = item;
+    const { feature, index, layer } = item;
+
+    // 드론영상 범위(가상): 우측 목록에서 고르면 해당 영상만 지도에 표시
+    if (isOrthoDataQueryLayerId(layer.tableName) || feature.data?.__orthoExtent === true) {
+      const tu = Number(feature.data?.tuKey);
+      if (Number.isFinite(tu)) {
+        mapContext?.setOrthoDataQueryTuKeys?.([tu]);
+      }
+      setSelectedRowData(feature.data);
+      setSelectedIdentifyIndex(index);
+      setActiveTab('basic');
+      const ext = feature.data?.extent3857;
+      const map = mapInstanceRef?.current;
+      if (
+        map &&
+        Array.isArray(ext) &&
+        ext.length === 4 &&
+        ext.every((n) => typeof n === 'number' && Number.isFinite(n))
+      ) {
+        map.getView().fit(ext as [number, number, number, number], {
+          padding: [80, 80, 80, 80],
+          maxZoom: 18,
+          duration: 400,
+        });
+      }
+      return;
+    }
+
     if (selectedIdentifyIndex === index && selectedRowData != null) {
       setSelectedRowData(null);
       setSelectedIdentifyIndex(null);
@@ -1345,7 +1746,7 @@ export function LayerDataPanel({
     setSelectedRowData(feature.data);
     setSelectedIdentifyIndex(index);
     setActiveTab('basic');
-    showIdentifyFeatureOnMap(feature.data);
+    showIdentifyFeatureOnMap(feature.data, { fit: false });
   };
 
   const closeDetail = () => {
@@ -1468,7 +1869,7 @@ export function LayerDataPanel({
   };
 
   const roadLedgerFacilityTableSet = useMemo(
-    () => new Set(getAllRoadLedgerDocLayerIds().map((x) => String(x).trim().toLowerCase())),
+    () => new Set(getAllRoadLedgerFacilityLayerIds()),
     []
   );
 
@@ -1688,7 +2089,7 @@ export function LayerDataPanel({
   return (
     <>
     <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
-      {/* 상세 열림 시 패널 닫기는 레이어 목록과 동일하게 헤더 우측 X */}
+      {/* 상세 열림 시: 일반 목록은 패널 닫기(X), 지도 식별은 이력 있으면 이전·없으면 닫기 */}
       <div className="flex items-center justify-between gap-2 border-b border-border px-4 py-2.5 shrink-0 bg-background">
         <div className="min-w-0 flex-1">
           <h3 className="text-sm font-semibold text-foreground truncate">{activeLayer.name}</h3>
@@ -1696,13 +2097,13 @@ export function LayerDataPanel({
             <span className="text-[11px] text-muted-foreground">{activeLayer.tableName}</span>
           )}
         </div>
-        {hasDetail && (
+        {(hasDetail || isIdentifyMode) && (
           <button
             type="button"
-            onClick={handleClose}
+            onClick={isIdentifyMode ? handleIdentifyNav : handleClose}
             className="shrink-0 rounded p-1 text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
-            title="닫기"
-            aria-label="닫기"
+            title={isIdentifyMode ? identifyNavLabel : '닫기'}
+            aria-label={isIdentifyMode ? identifyNavLabel : '닫기'}
           >
             <X className="h-4 w-4" />
           </button>
@@ -1736,8 +2137,9 @@ export function LayerDataPanel({
               selectedIndex={selectedIdentifyIndex}
               selectedRowRef={selectedIdentifyRowRef}
               onItemClick={handleIdentifyItemClick}
-              onClose={handleClose}
+              onClose={handleIdentifyNav}
               showFooterClose={!hasDetail}
+              footerActionLabel={identifyNavLabel}
             />
           )}
           {!isIdentifyMode && !error && listFields.length > 0 && (rows.length > 0 || !loading) && (

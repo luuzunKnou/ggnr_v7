@@ -36,6 +36,8 @@ import { scrubOccupationLedgerFromMapSearchParams } from '@/lib/occupationLedger
 import { scrubUseFeeFromMapSearchParams } from '@/lib/useFeeBinding';
 import { scrubMapSearchParamsOnSystemSwitch } from '@/lib/mapSystemSwitch';
 import { MapAdminToolsMenu } from './mapAdminTools/MapAdminToolsMenu';
+import { scheduleAnimateMapToCenter3857 } from './config/mapAutoNavigation';
+import { MAP_LOCAL_VIEW_MIN_ZOOM } from './config/mapDefaults';
 
 /** 검색바 아이콘 버튼 — 우측 메뉴와 동일: 바깥=패널 배경, 안=투명+hover만 */
 const mapSearchBarIconShell = cn(
@@ -94,6 +96,8 @@ const ADDRESS_SEARCH_WIDTH_MAX_PX = 350;
 const ADDRESS_SEARCH_WIDTH_MIN_PX = 200;
 /** 확장 시 예상 너비가 이 값 미만이면 주소·시스템 선택 아이콘만 표시 */
 const ADDRESS_SEARCH_COMPACT_BELOW_PX = 200;
+/** 필지정보(10100)·레이어 그룹(9999)보다 위 — 시스템 선택은 항상 최상단 */
+const SYSTEM_SELECT_DIALOG_Z = 20100;
 /** 우측 시스템선택(텍스트)·아이콘·여백 */
 const SEARCH_BAR_RIGHT_RESERVE_FULL_PX = 380;
 /** 컴팩트 시 우측 아이콘만 예약 */
@@ -303,7 +307,7 @@ export function MapSearchBar({
   const [systemModalOpen, setSystemModalOpen] = useState(false);
   const [deniedOpen, setDeniedOpen] = useState(false);
   const [deniedSysKey, setDeniedSysKey] = useState('');
-  const { snapshot } = useMyAccessSnapshot();
+  const { snapshot, reload } = useMyAccessSnapshot();
 
   const [mapAddressSearch, setMapAddressSearch] =
     useState<MapAddressSearchState>(MAP_ADDRESS_SEARCH_IDLE);
@@ -442,9 +446,16 @@ export function MapSearchBar({
           [item.point.x, item.point.y],
           'EPSG:4326',
           'EPSG:3857'
+        ) as [number, number];
+        const currentZoom = view.getZoom() ?? 0;
+        scheduleAnimateMapToCenter3857(
+          map,
+          center3857,
+          Math.max(currentZoom, MAP_LOCAL_VIEW_MIN_ZOOM),
+          {
+            applyMapViewPadding: () => mapContext?.applyMapViewPaddingRef?.current?.(),
+          }
         );
-        view.setCenter(center3857);
-        view.setZoom(17);
       }
       if (query.trim()) addRecentQuery(query.trim());
     },
@@ -594,6 +605,8 @@ export function MapSearchBar({
 
   const handleSystemModalOpenChange = (open: boolean) => {
     if (!open && mustPickSystem) return;
+    /** 접근권한 모달이 위에 열린 채 닫힐 때 시스템 모달까지 같이 닫히는 Radix 중첩 방지 */
+    if (!open && deniedOpen) return;
     setSystemModalOpen(open);
   };
 
@@ -629,20 +642,33 @@ export function MapSearchBar({
       scrubMapSearchParamsOnSystemSwitch(current, sysKey, target?.serviceList ?? []);
       mapContext?.allLayersOffRef?.current?.();
     } else {
-      scrubOccupationLedgerFromMapSearchParams(current, sysKey);
-      scrubUseFeeFromMapSearchParams(current, sysKey);
+      const target = systemList.find((s) => s.sys_key === sysKey);
+      scrubOccupationLedgerFromMapSearchParams(current, sysKey, target?.serviceList ?? []);
+      scrubUseFeeFromMapSearchParams(current, sysKey, target?.serviceList ?? []);
     }
     router.push(`/map?${current.toString()}`);
     setSystemModalOpen(false);
   };
 
   const trySelectSystem = (sys: SystemOption) => {
-    if (!canAccessPrivateSystem(snapshot, sys.sys_key, sys.sys_is_private)) {
-      setDeniedSysKey(sys.sys_key);
-      setDeniedOpen(true);
-      return;
-    }
-    selectSystem(sys.sys_key);
+    void (async () => {
+      let snap = snapshot;
+      if (!canAccessPrivateSystem(snap, sys.sys_key, sys.sys_is_private)) {
+        snap = await reload({ silent: true });
+      }
+      if (!canAccessPrivateSystem(snap, sys.sys_key, sys.sys_is_private)) {
+        setDeniedSysKey(sys.sys_key);
+        setSystemModalOpen(false);
+        setDeniedOpen(true);
+        return;
+      }
+      selectSystem(sys.sys_key);
+    })();
+  };
+
+  const handleDeniedOpenChange = (open: boolean) => {
+    setDeniedOpen(open);
+    if (!open && mustPickSystem) setSystemModalOpen(true);
   };
 
   const submit = (nextQuery: string) => {
@@ -1005,6 +1031,7 @@ export function MapSearchBar({
               <Dialog open={systemModalOpen} onOpenChange={handleSystemModalOpenChange}>
                 <DialogContent
                   className="sm:max-w-[380px] p-0 gap-0 overflow-hidden rounded-[10px] border-slate-200/80 shadow-xl dark:border-white/10 dark:bg-black/90"
+                  layerZIndex={SYSTEM_SELECT_DIALOG_Z}
                   showCloseButton={false}
                   onPointerDownOutside={(e) => {
                     if (mustPickSystem) e.preventDefault();
@@ -1070,7 +1097,7 @@ export function MapSearchBar({
               </Dialog>
               <ResourceAccessDeniedDialog
                 open={deniedOpen}
-                onOpenChange={setDeniedOpen}
+                onOpenChange={handleDeniedOpenChange}
                 resource="system"
                 sysKey={deniedSysKey}
               />

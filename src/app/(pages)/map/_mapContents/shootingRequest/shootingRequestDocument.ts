@@ -95,6 +95,14 @@ function buildShootingRequestHtml(v: ShootingRequestDocValues): string {
   const GS = SUB_BG;
   const W = '#ffffff';
 
+  const scopeRow =
+    v.shootType === 'satellite'
+      ? ''
+      : `<tr>
+    <th style="${TH}">${mid('촬영지역<br/>(위치도)', 72, G)}</th>
+    <td colspan="4" style="${TD_TOP}">${mapHtml}</td>
+  </tr>`;
+
   return `
 <p style="font-size:10.5px;margin:0 0 2px;font-weight:400;text-align:left">[별지 제3호서식]</p>
 <div style="text-align:center;font-size:17px;font-weight:700;margin:0 0 8px;padding-bottom:5px;border-bottom:1.5px solid #000;letter-spacing:0.02em;line-height:1.3">
@@ -124,10 +132,7 @@ function buildShootingRequestHtml(v: ShootingRequestDocValues): string {
     <th style="${TH}">${mid('신청목적', H, G)}</th>
     <td colspan="4" style="${TD}">${mid(escHtml(v.purpose), H, W)}</td>
   </tr>
-  <tr>
-    <th style="${TH}">${mid('촬영지역<br/>(위치도)', 72, G)}</th>
-    <td colspan="4" style="${TD_TOP}">${mapHtml}</td>
-  </tr>
+  ${scopeRow}
   <tr>
     <th style="${TH}">${mid('촬영요청<br/>기간', 44, G)}</th>
     <td colspan="2" style="${TD}">${mid(escHtml(v.shootDate), 44, W)}</td>

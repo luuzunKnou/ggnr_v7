@@ -18,6 +18,10 @@ export async function generateMetadata(): Promise<Metadata> {
       icon: [{ url: icon, type: "image/svg+xml" }],
       apple: icon,
     },
+    /** 크롬·구글 자동번역이 DOM을 바꿔 React 예외가 나는 것 방지 */
+    other: {
+      google: "notranslate",
+    },
   };
 }
 
@@ -27,8 +31,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" suppressHydrationWarning>
-      <body className="font-sans antialiased" suppressHydrationWarning>
+    <html lang="ko" translate="no" className="notranslate" suppressHydrationWarning>
+      <body className="font-sans antialiased notranslate" translate="no" suppressHydrationWarning>
         <BasePathClientPatch />
         <AuthSessionProvider>
           <ThemeProvider>

@@ -128,20 +128,54 @@ export function buildRiverBasicPlanRiverNameCql(riverName: string): string {
   return `river_name='${v}'`;
 }
 
+/** CQL 문자열 리터럴 */
+function cqlQuote(raw: string): string {
+  return `'${String(raw ?? '').trim().replace(/'/g, "''")}'`;
+}
+
+/**
+ * 선택 하천(+선택 기본계획)에 대한 레이어별 CQL.
+ * 기본계획(AS)만 연도·계획명·연장으로 더 좁혀 상세와 지도가 맞도록 함.
+ */
+export function buildRiverBasicPlanMapCqlByLayer(
+  tab: RiverBasicPlanTab,
+  riverName: string,
+  plan?: { planYear?: string; planName?: string; planLen?: string } | null
+): Record<string, string> | null {
+  const name = String(riverName ?? '').trim();
+  if (!name) return null;
+  const riverCql = buildRiverBasicPlanRiverNameCql(name);
+  if (riverCql === 'INCLUDE') return null;
+  const out: Record<string, string> = {};
+  for (const layer of riverBasicPlanRiverNameFilterableLayers(tab)) {
+    out[layer] = riverCql;
+  }
+
+  const year = String(plan?.planYear ?? '').trim();
+  const planName = String(plan?.planName ?? '').trim();
+  const planLen = String(plan?.planLen ?? '').trim().replace(/,/g, '');
+  if (!year && !planName && !planLen) return out;
+
+  const asParts = [riverCql];
+  if (year) asParts.push(`plan_year=${cqlQuote(year)}`);
+  if (planName) asParts.push(`plan_name=${cqlQuote(planName)}`);
+  if (planLen) {
+    if (/^-?\d+(\.\d+)?([eE][+-]?\d+)?$/.test(planLen)) {
+      asParts.push(`plan_len=${planLen}`);
+    } else {
+      asParts.push(`plan_len=${cqlQuote(planLen)}`);
+    }
+  }
+  out[riverBasicPlanAsDefineTable(tab)] = asParts.join(' AND ');
+  return out;
+}
+
 /** 선택 하천·탭에 대한 레이어별 CQL 맵 (비우면 null) */
 export function buildRiverBasicPlanRiverNameCqlByLayer(
   tab: RiverBasicPlanTab,
   riverName: string
 ): Record<string, string> | null {
-  const name = String(riverName ?? '').trim();
-  if (!name) return null;
-  const cql = buildRiverBasicPlanRiverNameCql(name);
-  if (cql === 'INCLUDE') return null;
-  const out: Record<string, string> = {};
-  for (const layer of riverBasicPlanRiverNameFilterableLayers(tab)) {
-    out[layer] = cql;
-  }
-  return out;
+  return buildRiverBasicPlanMapCqlByLayer(tab, riverName, null);
 }
 
 /**

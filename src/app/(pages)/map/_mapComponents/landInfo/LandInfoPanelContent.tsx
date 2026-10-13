@@ -1,7 +1,7 @@
 'use client';
 
-import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { Loader2 } from 'lucide-react';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { Check, Copy, Loader2 } from 'lucide-react';
 import { COORDINATE_SYSTEM_OPTIONS, type AddressInfoPanelProps } from './shared';
 import { transformCoordinate } from '../services/coordinateService';
 import {
@@ -20,7 +20,49 @@ import { BuildingPermitPanel, BuildingRegisterPanel } from './LandInfoBuildingPa
 import { LandInfoParcelPanel } from './LandInfoParcelPanel';
 import { withBasePath } from '@/lib/basePath';
 import { formatAddressStripSidoSigungu } from '@/lib/formatAddressStripAdmin';
+import { copyTextToClipboard } from '@/lib/utils';
 import { findRoadAddressByJibun, getAddressFromCoord } from '../addressSearch/vworldAddressSearch';
+
+function canCopyAddress(value: string | null | undefined): boolean {
+  const t = String(value ?? '').trim();
+  return Boolean(t) && t !== '-' && t !== '조회 중...';
+}
+
+function AddressCopyButton({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+    };
+  }, []);
+
+  const handleCopy = useCallback(async () => {
+    if (!canCopyAddress(text)) return;
+    const ok = await copyTextToClipboard(text.trim());
+    if (!ok) return;
+    setCopied(true);
+    if (timerRef.current) clearTimeout(timerRef.current);
+    timerRef.current = setTimeout(() => setCopied(false), 1500);
+  }, [text]);
+
+  const disabled = !canCopyAddress(text);
+  const label = copied ? '복사됨' : '복사';
+
+  return (
+    <button
+      type="button"
+      onClick={() => void handleCopy()}
+      disabled={disabled}
+      title={label}
+      aria-label={label}
+      className="inline-flex h-5 w-5 shrink-0 cursor-pointer items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+    >
+      {copied ? <Check className="h-3 w-3 text-primary" aria-hidden /> : <Copy className="h-3 w-3" aria-hidden />}
+    </button>
+  );
+}
 
 /** 주소 문자열로 외부 지도 검색 */
 function openExternalMapByAddress(
@@ -91,75 +133,6 @@ function pickDisplayJibunAddress(args: {
   return formatAddressStripSidoSigungu(raw) || raw;
 }
 
-const EUM_LAND_DET_URL = 'https://www.eum.go.kr/web/ar/lu/luLandDet.jsp';
-const EUM_FORM_ID = 'ggnr-eum-land-det-form';
-const EUM_WINDOW_NAME = 'Eum';
-
-/** v6 RightClickTooltip.openEumm — 숨김 폼 POST로 pnu·sggcd 전달 */
-function openLandEum(pnu: string) {
-  const trimmed = String(pnu ?? '').trim();
-  if (!/^\d{19}$/.test(trimmed)) return;
-
-  const sggcd = trimmed.slice(0, 5);
-  const popup = window.open('', EUM_WINDOW_NAME, 'width=1400,height=970');
-  if (popup) {
-    popup.document.write(
-      '<html><head><title>토지이음</title></head><body><p>페이지 이동 중입니다…</p></body></html>'
-    );
-  }
-
-  let form = document.getElementById(EUM_FORM_ID) as HTMLFormElement | null;
-  if (!form) {
-    form = document.createElement('form');
-    form.id = EUM_FORM_ID;
-    form.method = 'post';
-    form.action = EUM_LAND_DET_URL;
-    form.style.display = 'none';
-
-    const fixed: Record<string, string> = {
-      selGbn: 'umd',
-      isNoScr: 'script',
-      s_type: '1',
-      mode: 'search',
-      viewType: '',
-      p_location: '',
-      p_type: '',
-      p_type1: '',
-      p_type2: '',
-      p_type3: '',
-      p_type4: '',
-      p_type5: '',
-      p_type6: '',
-      p_type7: '',
-      ucodes: '',
-      markUcodes: '',
-      adzoom: '',
-      scale: '',
-      scaleFlag: '',
-      hash: '',
-      mobile_yn: '',
-      sggcd: '',
-      pnu: '',
-    };
-    for (const [name, value] of Object.entries(fixed)) {
-      const input = document.createElement('input');
-      input.type = 'hidden';
-      input.name = name;
-      input.id = `${EUM_FORM_ID}-${name}`;
-      input.value = value;
-      form.appendChild(input);
-    }
-    document.body.appendChild(form);
-  }
-
-  const pnuEl = form.querySelector(`#${EUM_FORM_ID}-pnu`) as HTMLInputElement | null;
-  const sggcdEl = form.querySelector(`#${EUM_FORM_ID}-sggcd`) as HTMLInputElement | null;
-  if (pnuEl) pnuEl.value = trimmed;
-  if (sggcdEl) sggcdEl.value = sggcd;
-
-  form.target = EUM_WINDOW_NAME;
-  form.submit();
-}
 
 export function LandInfoPanelContent({
   coordinate,
@@ -215,6 +188,21 @@ export function LandInfoPanelContent({
   const [permitNotice, setPermitNotice] = useState<string | null>(null);
   const [permitFetching, setPermitFetching] = useState(false);
   const effectivePnu = pnuFromContext ?? resolvedPnu;
+  const eumPnu = /^\d{19}$/.test(String(effectivePnu ?? '').trim()) ? String(effectivePnu).trim() : '';
+  const [embedKind, setEmbedKind] = useState<'eum' | 'plan' | null>(null);
+  const eumFrameRef = useRef<HTMLIFrameElement>(null);
+
+  useEffect(() => {
+    setEmbedKind(null);
+  }, [eumPnu]);
+
+  useEffect(() => {
+    if (!eumPnu || (embedKind !== 'eum' && embedKind !== 'plan')) return;
+    const frame = eumFrameRef.current;
+    if (!frame) return;
+    const view = embedKind === 'plan' ? '&view=plan' : '';
+    frame.src = `/api/land-eum/page?pnu=${encodeURIComponent(eumPnu)}${view}`;
+  }, [embedKind, eumPnu]);
 
   const xy = useMemo(() => {
     const transformed = transformCoordinate(coordinate, viewProjection, selectedCrs);
@@ -520,20 +508,22 @@ export function LandInfoPanelContent({
   ]);
 
   return (
-    <div className="flex flex-col min-h-0 bg-background text-sm text-foreground">
+    <div className="flex h-full min-h-0 flex-col bg-background text-sm text-foreground">
       <section className="px-3 py-2 border-b border-border">
         <div className="space-y-2 text-[12px] text-foreground">
           <div className="flex items-center gap-2 flex-wrap">
             <span className="shrink-0 w-12 text-center text-[10px] font-semibold py-0.5 rounded bg-amber-100 text-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
               지번
             </span>
-            <span>{loading ? '조회 중...' : displayJibunAddress}</span>
+            <span className="min-w-0 flex-1 break-all">{loading ? '조회 중...' : displayJibunAddress}</span>
+            {!loading ? <AddressCopyButton text={displayJibunAddress} /> : null}
           </div>
           <div className="flex items-center gap-2 flex-wrap">
             <span className="shrink-0 w-12 text-center text-[10px] font-semibold py-0.5 rounded bg-blue-100 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300">
               도로명
             </span>
-            <span>{loading ? '조회 중...' : displayRoadAddress}</span>
+            <span className="min-w-0 flex-1 break-all">{loading ? '조회 중...' : displayRoadAddress}</span>
+            {!loading ? <AddressCopyButton text={displayRoadAddress} /> : null}
           </div>
           {buildingName ? <div>건물명: {buildingName}</div> : null}
         </div>
@@ -588,16 +578,6 @@ export function LandInfoPanelContent({
           >
             <img src={withBasePath('/image/addressInfoIcon/googleMap_icon.svg')} alt="" className="w-5 h-5 object-contain" />
           </button>
-          <button
-            type="button"
-            onClick={() => effectivePnu && openLandEum(effectivePnu)}
-            disabled={!effectivePnu || !/^\d{19}$/.test(effectivePnu)}
-            className="flex-1 min-w-0 flex items-center justify-center h-9 rounded overflow-hidden hover:bg-muted disabled:opacity-50"
-            aria-label="토지이음"
-            title="토지이음"
-          >
-            <img src={withBasePath('/image/addressInfoIcon/toji-e-um.png')} alt="" className="w-5 h-5 object-contain" />
-          </button>
         </div>
       </section>
 
@@ -607,19 +587,63 @@ export function LandInfoPanelContent({
             <button
               key={tab.id}
               type="button"
-              onClick={() => setActiveTab(tab.id)}
+              onClick={() => {
+                setEmbedKind(null);
+                setActiveTab(tab.id);
+              }}
               title={tab.label}
-              className={`flex-1 min-w-0 px-1.5 py-2 text-xs border-b-2 -mb-px ${
-                activeTab === tab.id ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'
+              className={`flex-1 min-w-0 whitespace-nowrap px-1 py-2 text-[11px] border-b-2 -mb-px ${
+                !embedKind && activeTab === tab.id
+                  ? 'border-primary text-primary'
+                  : 'border-transparent text-muted-foreground hover:text-foreground'
               }`}
             >
               {tab.label}
             </button>
           ))}
+          <button
+            type="button"
+            onClick={() => {
+              if (!eumPnu) return;
+              setEmbedKind('eum');
+            }}
+            disabled={!eumPnu}
+            title="토지이음"
+            className={`flex-1 min-w-0 whitespace-nowrap px-1 py-2 text-[11px] border-b-2 -mb-px disabled:opacity-50 ${
+              embedKind === 'eum'
+                ? 'border-primary text-primary'
+                : 'border-transparent text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            토지이음
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              if (!eumPnu) return;
+              setEmbedKind('plan');
+            }}
+            disabled={!eumPnu}
+            title="도시계획도"
+            className={`flex-1 min-w-0 whitespace-nowrap px-1 py-2 text-[11px] border-b-2 -mb-px disabled:opacity-50 ${
+              embedKind === 'plan'
+                ? 'border-primary text-primary'
+                : 'border-transparent text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            도시계획도
+          </button>
         </div>
-        <div className="flex-1 min-h-0 overflow-auto bg-background p-2">{tabBody}</div>
+        {embedKind && eumPnu ? (
+          <iframe
+            ref={eumFrameRef}
+            title={embedKind === 'plan' ? '도시계획도' : '토지이음'}
+            className="min-h-0 w-full flex-1 bg-white"
+          />
+        ) : (
+          <div className="flex-1 min-h-0 overflow-auto bg-background p-2">{tabBody}</div>
+        )}
       </section>
-
     </div>
   );
 }

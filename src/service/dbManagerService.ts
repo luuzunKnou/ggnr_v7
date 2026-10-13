@@ -850,7 +850,10 @@ export async function applyPrimaryKeySync(
       startedAt: new Date().toISOString(),
       finishedAt: new Date().toISOString(),
       options: {},
-      results: [{ schema, table, action: 'failed', error: 'DB 연결 정보 없음' }],
+      results: (() => {
+        logSchemaSyncFail(schema, table, 'DB 연결 정보 없음');
+        return [{ schema, table, action: 'failed' as const, error: 'DB 연결 정보 없음' }];
+      })(),
       executedSql: [],
     };
   }
@@ -889,13 +892,18 @@ export async function applyPrimaryKeySync(
     };
   }
 
-  await withClient(connectionParams, async (client) => {
-    const quotedCols = pkColumns.map((c) => quoteIdent(c)).join(', ');
-    const addPkSql = `ALTER TABLE ${fq(schema, table)} ADD PRIMARY KEY (${quotedCols})`;
-    executedSql.push(addPkSql);
-    await client.query(addPkSql);
-    results.push({ schema, table, action: 'columns_added', detail: `PK 추가: (${pkColumns.join(', ')})` });
-  });
+  try {
+    await withClient(connectionParams, async (client) => {
+      const quotedCols = pkColumns.map((c) => quoteIdent(c)).join(', ');
+      const addPkSql = `ALTER TABLE ${fq(schema, table)} ADD PRIMARY KEY (${quotedCols})`;
+      executedSql.push(addPkSql);
+      await client.query(addPkSql);
+      results.push({ schema, table, action: 'columns_added', detail: `PK 추가: (${pkColumns.join(', ')})` });
+    });
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    pushSchemaSyncFail(results, schema, table, msg);
+  }
 
   return {
     startedAt,
@@ -972,7 +980,8 @@ export function normalizeColumnTypeForCompare(type: string): string {
   if (inGroup(t, int8Group)) return 'bigint';
   if (inGroup(t, varcharGroup)) return 'varchar';
   if (inGroup(t, timestampGroup)) return 'timestamp';
-  return t;
+  // geometry(Geometry, 5181) vs geometry(Geometry,5181) 등 공백만 다른 표기 통일
+  return t.replace(/\s+/g, '');
 }
 
 export type SchemaSyncTableComparison = {
@@ -1211,6 +1220,20 @@ export type SchemaSyncReport = {
   executedSql: string[];
 };
 
+function logSchemaSyncFail(schema: string, table: string, error: string) {
+  console.error('[dbManager][schema-sync]', schema || '-', table || '-', error);
+}
+
+function pushSchemaSyncFail(
+  results: SchemaSyncReportItem[],
+  schema: string,
+  table: string,
+  error: string
+): void {
+  logSchemaSyncFail(schema, table, error);
+  results.push({ schema, table, action: 'failed', error });
+}
+
 export async function getTableColumnComparisonWithClient(
   client: Client,
   schema: string,
@@ -1328,12 +1351,7 @@ export async function applySchemaSync(
           detail: `테이블 생성 (${definedCols.length} 컬럼)`,
         });
       } catch (e: any) {
-        results.push({
-          schema: t.schema,
-          table: t.table,
-          action: 'failed',
-          error: e?.message ?? String(e),
-        });
+        pushSchemaSyncFail(results, t.schema, t.table, e?.message ?? String(e));
       }
     }
 
@@ -1355,12 +1373,7 @@ export async function applySchemaSync(
             detail: '테이블 코멘트 동기화',
           });
         } catch (e: any) {
-          results.push({
-            schema: t.schema,
-            table: t.table,
-            action: 'failed',
-            error: e?.message ?? String(e),
-          });
+          pushSchemaSyncFail(results, t.schema, t.table, e?.message ?? String(e));
         }
       }
 
@@ -1422,12 +1435,12 @@ export async function applySchemaSync(
             await client.query(dropColSql);
             dropped.push(colName);
           } catch (dropErr: any) {
-            results.push({
-              schema: t.schema,
-              table: t.table,
-              action: 'failed',
-              error: `DROP COLUMN ${colName}: ${dropErr?.message ?? String(dropErr)}`,
-            });
+            pushSchemaSyncFail(
+              results,
+              t.schema,
+              t.table,
+              `DROP COLUMN ${colName}: ${dropErr?.message ?? String(dropErr)}`
+            );
           }
         }
         if (dropped.length > 0) {
@@ -1445,12 +1458,7 @@ export async function applySchemaSync(
           results.push({ schema: t.schema, table: t.table, action: 'skipped', detail: '변경 없음' });
         }
       } catch (e: any) {
-        results.push({
-          schema: t.schema,
-          table: t.table,
-          action: 'failed',
-          error: e?.message ?? String(e),
-        });
+        pushSchemaSyncFail(results, t.schema, t.table, e?.message ?? String(e));
       }
     }
   });
@@ -1653,7 +1661,8 @@ export async function applySchemaSyncForField(
     };
   }
 
-  await withClient(connectionParams, async (client) => {
+  try {
+    await withClient(connectionParams, async (client) => {
     if (plan.action === 'createTable') {
       const definedCols = resolveDefinedColumns(schema, table, getSchemaDefinedColumns(schema, table));
       if (!definedCols?.length) {
@@ -1700,7 +1709,7 @@ export async function applySchemaSyncForField(
       const definedCols = resolveDefinedColumns(schema, table, getSchemaDefinedColumns(schema, table)) ?? [];
       const col = definedCols.find((c) => c.name === field);
       if (!col) {
-        results.push({ schema, table, action: 'failed', error: `스키마에 컬럼 ${field} 없음` });
+        pushSchemaSyncFail(results, schema, table, `스키마에 컬럼 ${field} 없음`);
         return;
       }
       const colType = toWritableColumnType(col.type);
@@ -1733,6 +1742,10 @@ export async function applySchemaSyncForField(
       results.push({ schema, table, action: 'column_comment_added', detail: field });
     }
   });
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    pushSchemaSyncFail(results, schema, table, msg);
+  }
 
   return {
     startedAt,
@@ -1911,7 +1924,7 @@ export async function applySchemaSyncForTable(
           results.push({ schema, table, action: 'table_comment_updated', detail: '한글명 추가' });
         } catch (e: unknown) {
           const msg = e instanceof Error ? e.message : String(e);
-          results.push({ schema, table, action: 'failed', error: `TABLE COMMENT: ${msg}` });
+          pushSchemaSyncFail(results, schema, table, `TABLE COMMENT: ${msg}`);
         }
       }
       const cols = await getTableColumnsWithComments(client, schema, table);
@@ -1927,7 +1940,7 @@ export async function applySchemaSyncForTable(
             results.push({ schema, table, action: 'column_comment_added', detail: col.name });
           } catch (e: unknown) {
             const msg = e instanceof Error ? e.message : String(e);
-            results.push({ schema, table, action: 'failed', error: `COMMENT ${col.name}: ${msg}` });
+            pushSchemaSyncFail(results, schema, table, `COMMENT ${col.name}: ${msg}`);
           }
         }
       }
@@ -1962,7 +1975,10 @@ export async function applySchemaSyncFull(
       startedAt: new Date().toISOString(),
       finishedAt: new Date().toISOString(),
       options: {},
-      results: [{ schema: '', table: '', action: 'failed', error: '연결 정보 없음' }],
+      results: (() => {
+        logSchemaSyncFail('', '', '연결 정보 없음');
+        return [{ schema: '', table: '', action: 'failed' as const, error: '연결 정보 없음' }];
+      })(),
       executedSql: [],
     };
   }
@@ -2009,7 +2025,7 @@ export async function applySchemaSyncFull(
           results.push({ schema: t.schema, table: t.table, action: 'table_comment_updated', detail: '한글명 추가' });
         } catch (e: unknown) {
           const msg = e instanceof Error ? e.message : String(e);
-          results.push({ schema: t.schema, table: t.table, action: 'failed', error: `TABLE COMMENT: ${msg}` });
+          pushSchemaSyncFail(results, t.schema, t.table, `TABLE COMMENT: ${msg}`);
         }
       }
       const cols = await getTableColumnsWithComments(client, t.schema, t.table);
@@ -2025,7 +2041,7 @@ export async function applySchemaSyncFull(
             results.push({ schema: t.schema, table: t.table, action: 'column_comment_added', detail: col.name });
           } catch (e: unknown) {
             const msg = e instanceof Error ? e.message : String(e);
-            results.push({ schema: t.schema, table: t.table, action: 'failed', error: `COMMENT ${col.name}: ${msg}` });
+            pushSchemaSyncFail(results, t.schema, t.table, `COMMENT ${col.name}: ${msg}`);
           }
         }
       }
@@ -2039,7 +2055,7 @@ export async function applySchemaSyncFull(
         results.push({ schema: t.schema, table: t.table, action: 'table_dropped', detail: '스키마에 없어 삭제' });
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : String(e);
-        results.push({ schema: t.schema, table: t.table, action: 'failed', error: msg });
+        pushSchemaSyncFail(results, t.schema, t.table, msg);
       }
     }
   });
@@ -2224,7 +2240,26 @@ export async function applyAllSchemaComments(params?: DbConnectionParams): Promi
   try {
     await withClient(connParams, async (client) => {
       const tables = getSchemaDefinedTables();
+      const schemas = [...new Set(tables.map((t) => t.schema))];
+      const existingRes = await client.query<{ table_schema: string; table_name: string }>(
+        `SELECT table_schema, table_name
+         FROM information_schema.tables
+         WHERE table_type = 'BASE TABLE' AND table_schema = ANY($1::text[])`,
+        [schemas]
+      );
+      const existingTables = new Set(existingRes.rows.map((r) => `${r.table_schema}.${r.table_name}`));
+      const colRes = await client.query<{ table_schema: string; table_name: string; column_name: string }>(
+        `SELECT table_schema, table_name, column_name
+         FROM information_schema.columns
+         WHERE table_schema = ANY($1::text[])`,
+        [schemas]
+      );
+      const existingCols = new Set(
+        colRes.rows.map((r) => `${r.table_schema}.${r.table_name}.${r.column_name}`)
+      );
+
       for (const { schema, table } of tables) {
+        if (!existingTables.has(`${schema}.${table}`)) continue;
         const tableComment = getSchemaTableComment(schema, table);
         if (tableComment && tableComment.trim()) {
           const escaped = tableComment.replace(/'/g, "''");
@@ -2234,6 +2269,7 @@ export async function applyAllSchemaComments(params?: DbConnectionParams): Promi
         const cols = getSchemaDefinedColumns(schema, table);
         if (cols) {
           for (const col of cols) {
+            if (!existingCols.has(`${schema}.${table}.${col.name}`)) continue;
             const comment = getSchemaColumnComment(schema, table, col.name) ?? col.comment;
             if (comment && String(comment).trim()) {
               const escaped = String(comment).replace(/'/g, "''");

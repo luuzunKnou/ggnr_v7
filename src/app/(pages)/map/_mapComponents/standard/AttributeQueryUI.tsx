@@ -23,6 +23,13 @@ import { canStartMapDrawInteraction } from '../mapDrawInteraction';
 import { getLegendGraphicUrl } from '../layerFactory/serviceLayerFactory';
 import { transformCoordinate } from '../services/coordinateService';
 import type { IdentifyLayerResult } from '../hooks/useFeatureIdentify';
+import {
+  ORTHO_DATA_QUERY_LAYER_ID,
+  isOrthoDataQueryLayerId,
+} from '../../_mapContents/aerialView/orthoDataQueryLayerId';
+import { MapHitOverlapSelect } from '../MapHitOverlapSelect';
+import { allowProjectLayerTable } from '@/lib/projectLayerAllowlist';
+import { useSearchParams } from 'next/navigation';
 
 /** layer 스키마 테이블 목록 (DB 기준) */
 type LayerSchemaTable = { schema: string; table: string };
@@ -77,6 +84,9 @@ const DATA_QUERY_ETC_BLOCKLIST = new Set([
   'lsmd_adm_sect_ri',
   'lsmd_adm_sect_umd',
 ]);
+
+/** 데이터 조회에 아예 내지 않을 레이어 (그룹과 무관) */
+const DATA_QUERY_LAYER_BLOCKLIST = new Set(['water_play_sign']);
 
 /** road 시스템이 꺼진 프로젝트(예: 울산 UAV)에서 데이터조회에 숨길 그룹 */
 const DATA_QUERY_GROUPS_REQUIRE_ROAD = new Set(['도로점용허가']);
@@ -168,6 +178,8 @@ function firstDefineTableFromResults(results: IdentifyLayerResult[]): string | n
 }
 
 export function AttributeQueryUI({ activeTableName, onOpenDataPanel, onClearDataSelection }: AttributeQueryUIProps) {
+  const searchParams = useSearchParams();
+  const systemKeyFromUrl = (searchParams.get('system') ?? '').trim();
   const [searchTab, setSearchTab] = useState<AttributeQuerySearchTab>(() => {
     const p = loadPersistedSearchForm();
     if (p.dataSelectTable?.trim()) return 'shape';
@@ -222,11 +234,31 @@ export function AttributeQueryUI({ activeTableName, onOpenDataPanel, onClearData
   /** Provider value 객체는 매 렌더 새 참조 → useCallback deps에 mapContext 전체 넣으면 무한 effect 유발 */
   const setIdentifyResultList = mapContext?.setIdentifyResultList;
   const setDataQueryMapPickEnabled = mapContext?.setDataQueryMapPickEnabled;
+  const orthoDataQueryBboxOn = Boolean(mapContext?.orthoDataQueryBboxOn);
+  const setOrthoDataQueryBboxOn = mapContext?.setOrthoDataQueryBboxOn;
+  const setOrthoDataQueryTuKeys = mapContext?.setOrthoDataQueryTuKeys;
+  const orthoDataQueryTuKeys = mapContext?.orthoDataQueryTuKeys ?? [];
+  const orthoDataQueryHitOptions = mapContext?.orthoDataQueryHitOptions ?? [];
+  const setOrthoDataQueryHitOptions = mapContext?.setOrthoDataQueryHitOptions;
   /** 부모가 매 렌더 새 함수를 넘기는 경우(map-layout handleOpenDataPanel 등) → 검색 콜백 체인이 흔들려 읍면동 effect 무한루프 */
   const onOpenDataPanelRef = useRef(onOpenDataPanel);
+  const onClearDataSelectionRef = useRef(onClearDataSelection);
+  /**
+   * URL activeTableName이 push 직후 한 박자 늦음.
+   * 토글 의도를 로컬로 잡아 3번째 클릭이 잘못된 분기로 가지 않게 함.
+   * null = URL 따름, '' = 닫힘 의도, 그 외 = 해당 테이블 열림 의도
+   */
+  const pendingActiveTableRef = useRef<string | null>(null);
   useLayoutEffect(() => {
     onOpenDataPanelRef.current = onOpenDataPanel;
-  }, [onOpenDataPanel]);
+    onClearDataSelectionRef.current = onClearDataSelection;
+  }, [onOpenDataPanel, onClearDataSelection]);
+  useEffect(() => {
+    const pending = pendingActiveTableRef.current;
+    if (pending == null) return;
+    const urlActive = activeTableName ?? '';
+    if (pending === urlActive) pendingActiveTableRef.current = null;
+  }, [activeTableName]);
   /** 도형 검색 중(그리기 대기/진행)이거나 검색결과가 표시된 상태일 때만 도형 버튼 on */
   const isSpatialSearchActive = !!(spatialFilterWkt || spatialDrawRequest);
 
@@ -283,32 +315,74 @@ export function AttributeQueryUI({ activeTableName, onOpenDataPanel, onClearData
     };
   }, [searchTab, setIdentifyResultList]);
 
-  // 데이터 조회 레이어 목록: DB 테이블 목록 + tables.json 메타(그룹, 한글명) 병합
+  // 데이터 조회 레이어 목록: DB + defineLayer 메타 → 현재 시스템 layerGroupList ∪ 미소속(공통) 그룹
   useEffect(() => {
     let cancelled = false;
     const dbPromise = call('', 'POST', { service: 'devTestService', action: 'getLayerTableList', params: {} });
     const metaPromise = fetch('/api/config/defineLayer').then((r) => r.json());
-    const sysPromise = call('', 'POST', { service: 'configService', action: 'getSystemList', params: {} });
-    Promise.all([dbPromise, metaPromise, sysPromise])
-      .then(([dbRes, metaRes, sysRes]) => {
+    const sysAllPromise = call('', 'POST', {
+      service: 'configService',
+      action: 'getSystemListAll',
+      params: {},
+    });
+    const sysEnabledPromise = call('', 'POST', {
+      service: 'configService',
+      action: 'getSystemList',
+      params: {},
+    });
+    Promise.all([dbPromise, metaPromise, sysAllPromise, sysEnabledPromise])
+      .then(([dbRes, metaRes, sysAllRes, sysEnabledRes]) => {
         if (cancelled) return;
         const dbData = dbRes?.data ?? dbRes;
         const tables: LayerSchemaTable[] = Array.isArray(dbData?.tables) ? dbData.tables : [];
         setLayerSchemaTables(tables);
 
+        type SysRow = { sys_key?: string; layerGroupList?: string[] };
+        const allSystems: SysRow[] = Array.isArray((sysAllRes?.data ?? sysAllRes)?.systems)
+          ? ((sysAllRes?.data ?? sysAllRes).systems as SysRow[])
+          : [];
+        const enabledSystems: SysRow[] = Array.isArray((sysEnabledRes?.data ?? sysEnabledRes)?.systems)
+          ? ((sysEnabledRes?.data ?? sysEnabledRes).systems as SysRow[])
+          : [];
+        const enabledSysKeys = new Set(
+          enabledSystems.map((s) => String(s.sys_key ?? '').trim().toLowerCase()).filter(Boolean)
+        );
+
         const dbSet = new Set(
           tables
             .filter((t) => (t.schema || 'layer').toLowerCase() === 'layer')
             .map((t) => t.table.toLowerCase())
-        );
-
-        const sysData = (sysRes?.data ?? sysRes) as { systems?: Array<{ sys_key?: string }> };
-        const enabledSysKeys = new Set(
-          (Array.isArray(sysData?.systems) ? sysData.systems : [])
-            .map((s) => String(s.sys_key ?? '').trim().toLowerCase())
-            .filter(Boolean)
+            .filter((name) => allowProjectLayerTable(name, enabledSysKeys))
         );
         const hideRoadOccGroups = enabledSysKeys.size > 0 && !enabledSysKeys.has('road');
+
+        /** 카탈로그·프로젝트 오버레이(ENABLED 목록)에 한 번이라도 적힌 그룹 */
+        const assignedGroups = new Set<string>();
+        for (const s of [...allSystems, ...enabledSystems]) {
+          for (const g of Array.isArray(s.layerGroupList) ? s.layerGroupList : []) {
+            const name = String(g ?? '').trim();
+            if (name) assignedGroups.add(name);
+          }
+        }
+
+        const currentKey = systemKeyFromUrl.toLowerCase();
+        /** 프로젝트 SYSTEM_LAYER_GROUPS 오버레이가 반영된 ENABLED 목록을 우선 */
+        const currentSys =
+          enabledSystems.find((s) => String(s.sys_key ?? '').trim().toLowerCase() === currentKey) ??
+          allSystems.find((s) => String(s.sys_key ?? '').trim().toLowerCase() === currentKey);
+        const currentSystemGroups = new Set(
+          (Array.isArray(currentSys?.layerGroupList) ? currentSys!.layerGroupList! : [])
+            .map((g) => String(g ?? '').trim())
+            .filter(Boolean)
+        );
+
+        /** 미소속(공통) ∪ 현재 시스템 소속. 시스템 미선택 시 전체(기존 차단 규칙만) */
+        const isGroupVisible = (groupName: string) => {
+          if (hideRoadOccGroups && DATA_QUERY_GROUPS_REQUIRE_ROAD.has(groupName)) return false;
+          if (!currentKey) return true;
+          if (!assignedGroups.has(groupName)) return true;
+          return currentSystemGroups.has(groupName);
+        };
 
         type TableMeta = {
           define_table_name?: string;
@@ -340,14 +414,12 @@ export function AttributeQueryUI({ activeTableName, onOpenDataPanel, onClearData
           if (p && divQ) parentTablesWithSplitDefs.add(p);
         }
 
-        const shouldSkipGroup = (groupName: string) =>
-          hideRoadOccGroups && DATA_QUERY_GROUPS_REQUIRE_ROAD.has(groupName);
-
         for (const tblName of dbSet) {
           if (parentTablesWithSplitDefs.has(tblName)) continue;
+          if (DATA_QUERY_LAYER_BLOCKLIST.has(tblName)) continue;
           const meta = metaMap.get(tblName);
           const groupName = meta?.define_table_group?.trim() || '기타';
-          if (shouldSkipGroup(groupName)) continue;
+          if (!isGroupVisible(groupName)) continue;
           if (groupName === '기타' && DATA_QUERY_ETC_BLOCKLIST.has(tblName)) continue;
           const korName = meta?.define_table_kor_name?.trim() || tblName;
           if (!groupMap.has(groupName)) {
@@ -376,8 +448,9 @@ export function AttributeQueryUI({ activeTableName, onOpenDataPanel, onClearData
           const parentLower = parent.toLowerCase();
           if (!dbSet.has(parentLower)) continue;
           if (dbSet.has(engLower)) continue;
+          if (DATA_QUERY_LAYER_BLOCKLIST.has(engLower)) continue;
           const groupName = String(m.define_table_group ?? '').trim() || '기타';
-          if (shouldSkipGroup(groupName)) continue;
+          if (!isGroupVisible(groupName)) continue;
           if (groupName === '기타' && DATA_QUERY_ETC_BLOCKLIST.has(engLower)) continue;
           const korName = String(m.define_table_kor_name ?? '').trim() || eng;
           if (!groupMap.has(groupName)) {
@@ -394,7 +467,6 @@ export function AttributeQueryUI({ activeTableName, onOpenDataPanel, onClearData
           });
         }
 
-        // DB에는 있지만 tables.json에 없는 레이어도 '기타' 그룹에 포함(차단 목록 제외)
         const groups: LayerGroupMeta[] = groupOrder
           .map((gName) => ({
             id: gName,
@@ -402,6 +474,25 @@ export function AttributeQueryUI({ activeTableName, onOpenDataPanel, onClearData
             layers: groupMap.get(gName)!.sort((a, b) => a.name.localeCompare(b.name)),
           }))
           .filter((g) => g.layers.length > 0);
+
+        // UAV: 드론영상 — uav 시스템(또는 시스템 미선택)일 때만
+        if (enabledSysKeys.has('uav') && (!currentKey || currentKey === 'uav')) {
+          groups.unshift({
+            id: '드론영상',
+            name: '드론영상',
+            layers: [
+              {
+                id: ORTHO_DATA_QUERY_LAYER_ID,
+                name: '드론영상',
+                tableName: ORTHO_DATA_QUERY_LAYER_ID,
+                schema: 'layer',
+                physicalTableName: ORTHO_DATA_QUERY_LAYER_ID,
+                rowFilterSql: null,
+              },
+            ],
+          });
+        }
+
         setLayerGroups(groups);
       })
       .catch(() => {
@@ -410,8 +501,10 @@ export function AttributeQueryUI({ activeTableName, onOpenDataPanel, onClearData
           setLayerGroups([]);
         }
       });
-    return () => { cancelled = true; };
-  }, []);
+    return () => {
+      cancelled = true;
+    };
+  }, [systemKeyFromUrl]);
 
   useEffect(() => {
     if (layerGroups.length === 0) return;
@@ -1027,10 +1120,25 @@ export function AttributeQueryUI({ activeTableName, onOpenDataPanel, onClearData
   }, [activeTool, dataSelectTable, dataSelectField, dataSelectValue, applySpatialSearchFromWkt5181, setIdentifyResultList]);
 
   const handleLayerClick = (layer: LayerItemMeta) => {
-    if (activeTableName === layer.tableName) {
+    if (isOrthoDataQueryLayerId(layer.tableName)) {
+      const next = !orthoDataQueryBboxOn;
+      setOrthoDataQueryBboxOn?.(next);
+      if (!next) {
+        setOrthoDataQueryTuKeys?.([]);
+        setOrthoDataQueryHitOptions?.([]);
+      }
+      return;
+    }
+    const effectiveActive =
+      pendingActiveTableRef.current != null
+        ? pendingActiveTableRef.current
+        : (activeTableName ?? '');
+    if (effectiveActive === layer.tableName) {
+      pendingActiveTableRef.current = '';
       setIdentifyResultList?.(null);
-      onClearDataSelection?.();
+      onClearDataSelectionRef.current?.();
     } else {
+      pendingActiveTableRef.current = layer.tableName;
       setIdentifyResultList?.(null);
       onOpenDataPanelRef.current?.(layer.tableName);
       if (setVisibleLayerNames && !visibleLayerNames.has(layer.tableName)) {
@@ -1047,6 +1155,35 @@ export function AttributeQueryUI({ activeTableName, onOpenDataPanel, onClearData
 
   return (
     <div className="flex-1 min-h-0 flex flex-col overflow-hidden opacity-[0.95]">
+      {orthoDataQueryBboxOn && orthoDataQueryHitOptions.length > 1 && (
+        <MapHitOverlapSelect
+          fieldLabel="드론영상"
+          options={orthoDataQueryHitOptions}
+          value={String(orthoDataQueryTuKeys[0] ?? orthoDataQueryHitOptions[0]?.value ?? '')}
+          onChange={(id) => {
+            const tu = Number(id);
+            if (!Number.isFinite(tu)) return;
+            setOrthoDataQueryTuKeys?.([tu]);
+            const map = mapContext?.mapInstanceRef?.current;
+            if (!map) return;
+            const layers = map.getLayers().getArray();
+            for (const layer of layers) {
+              const src = (layer as { getSource?: () => { getFeatures?: () => import('ol/Feature').default[] } }).getSource?.();
+              const feats = src?.getFeatures?.() ?? [];
+              const hit = feats.find((f) => Number(f.get('tuKey')) === tu);
+              const geom = hit?.getGeometry?.();
+              if (geom) {
+                map.getView().fit(geom.getExtent(), {
+                  padding: [80, 80, 80, 80],
+                  maxZoom: 18,
+                  duration: 400,
+                });
+                break;
+              }
+            }
+          }}
+        />
+      )}
       {/* 공간검색 */}
       <div className="border-b border-border px-4 py-3 shrink-0">
         <div className="mb-2 flex rounded-md border border-border bg-muted/30 p-0.5">
@@ -1333,7 +1470,11 @@ export function AttributeQueryUI({ activeTableName, onOpenDataPanel, onClearData
           const isGroupOpen = expandedGroups.includes(group.id);
           const hasActiveLayer = filteredLayers.some((l) => activeTableName === l.tableName);
           const groupCount = filteredLayers.length;
-          const groupVisibleCount = filteredLayers.filter((l) => visibleLayerNames.has(l.tableName)).length;
+          const groupVisibleCount = filteredLayers.filter((l) =>
+            isOrthoDataQueryLayerId(l.tableName)
+              ? orthoDataQueryBboxOn
+              : visibleLayerNames.has(l.tableName)
+          ).length;
 
           return (
             <div
@@ -1371,11 +1512,23 @@ export function AttributeQueryUI({ activeTableName, onOpenDataPanel, onClearData
                   checked={groupCount > 0 && groupVisibleCount === groupCount}
                   ref={(el) => { if (el) el.indeterminate = groupVisibleCount > 0 && groupVisibleCount < groupCount; }}
                   onChange={(e) => {
-                    if (!setVisibleLayerNames) return;
                     const checked = e.target.checked;
+                    const hasOrtho = filteredLayers.some((l) => isOrthoDataQueryLayerId(l.tableName));
+                    if (hasOrtho) {
+                      setOrthoDataQueryBboxOn?.(checked);
+                      if (!checked) {
+                        setOrthoDataQueryTuKeys?.([]);
+                        setOrthoDataQueryHitOptions?.([]);
+                      }
+                    }
+                    if (!setVisibleLayerNames) return;
                     setVisibleLayerNames((prev) => {
                       const next = new Set(prev);
-                      filteredLayers.forEach((l) => { if (checked) next.add(l.tableName); else next.delete(l.tableName); });
+                      filteredLayers.forEach((l) => {
+                        if (isOrthoDataQueryLayerId(l.tableName)) return;
+                        if (checked) next.add(l.tableName);
+                        else next.delete(l.tableName);
+                      });
                       return next;
                     });
                   }}
@@ -1388,9 +1541,12 @@ export function AttributeQueryUI({ activeTableName, onOpenDataPanel, onClearData
               {isGroupOpen && (
                 <div className={cn(hasActiveLayer ? 'bg-primary/[0.03]' : 'bg-muted/30')}>
                   {filteredLayers.map((layer) => {
+                    const isOrtho = isOrthoDataQueryLayerId(layer.tableName);
                     const isActive = activeTableName === layer.tableName;
-                    const isVisible = visibleLayerNames.has(layer.tableName);
-                    const totalCount = layerTotals[layer.tableName];
+                    const isVisible = isOrtho
+                      ? orthoDataQueryBboxOn
+                      : visibleLayerNames.has(layer.tableName);
+                    const totalCount = isOrtho ? null : layerTotals[layer.tableName];
 
                     return (
                       <div
@@ -1427,33 +1583,47 @@ export function AttributeQueryUI({ activeTableName, onOpenDataPanel, onClearData
                             {layer.name}
                           </span>
                           <span className={cn('text-[11px] shrink-0', isActive ? 'text-primary/60' : 'text-muted-foreground')}>
-                            ({totalCount != null ? `${totalCount.toLocaleString()}건` : '...'})
+                            {isOrtho
+                              ? '(범위)'
+                              : `(${totalCount != null ? `${totalCount.toLocaleString()}건` : '...'})`}
                           </span>
                         </div>
                         <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
-                          <button
-                            type="button"
-                            className="p-0.5 rounded text-muted-foreground hover:text-primary hover:bg-muted/60 transition-colors"
-                            title="필터 추가"
-                            onClick={(e) => e.stopPropagation()}
-                          >
-                            <SlidersHorizontal className="w-3.5 h-3.5" strokeWidth={1.5} />
-                          </button>
-                          <button
-                            type="button"
-                            className="p-0.5 rounded text-muted-foreground hover:text-primary hover:bg-muted/60 transition-colors"
-                            title="스타일 설정"
-                            onClick={(e) => e.stopPropagation()}
-                          >
-                            <Palette className="w-3.5 h-3.5" strokeWidth={1.5} />
-                          </button>
+                          {!isOrtho && (
+                            <>
+                              <button
+                                type="button"
+                                className="p-0.5 rounded text-muted-foreground hover:text-primary hover:bg-muted/60 transition-colors"
+                                title="필터 추가"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                <SlidersHorizontal className="w-3.5 h-3.5" strokeWidth={1.5} />
+                              </button>
+                              <button
+                                type="button"
+                                className="p-0.5 rounded text-muted-foreground hover:text-primary hover:bg-muted/60 transition-colors"
+                                title="스타일 설정"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                <Palette className="w-3.5 h-3.5" strokeWidth={1.5} />
+                              </button>
+                            </>
+                          )}
                           <input
                             type="checkbox"
                             checked={isVisible}
                             onChange={(e) => {
                               e.stopPropagation();
-                              if (!setVisibleLayerNames) return;
                               const checked = e.target.checked;
+                              if (isOrtho) {
+                                setOrthoDataQueryBboxOn?.(checked);
+                                if (!checked) {
+                                  setOrthoDataQueryTuKeys?.([]);
+                                  setOrthoDataQueryHitOptions?.([]);
+                                }
+                                return;
+                              }
+                              if (!setVisibleLayerNames) return;
                               setVisibleLayerNames((prev) => {
                                 const next = new Set(prev);
                                 if (checked) next.add(layer.tableName);
