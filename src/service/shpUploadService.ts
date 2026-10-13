@@ -112,6 +112,18 @@ function syncRowTargetWhereSql(params: {
   return `"${params.keyCol}"::text = '${safeKv}'`;
 }
 
+/** 신규 INSERT용 키. 유일 키는 값 그대로, 공간 매칭 append는 `키#s번호`에서 키만. */
+function syncInsertKeyValue(keyField: string, keyValue: string): string | number {
+  const raw = String(keyValue ?? '').trim();
+  const spatial = raw.match(/^(.*)#s\d+$/);
+  const keyText = spatial ? spatial[1]! : raw;
+  if (keyField.toLowerCase() === 'ogc_fid') {
+    const n = Number(keyText);
+    return Number.isFinite(n) ? Math.trunc(n) : keyText;
+  }
+  return keyText;
+}
+
 function extractWktParam(content: string, name: string): number | null {
   const re = new RegExp(`PARAMETER\\s*\\[\\s*["']${name}["']\\s*,\\s*(-?\\d+(?:\\.\\d+)?)`, 'i');
   const m = content.match(re);
@@ -5300,18 +5312,12 @@ export async function applySyncEntries(params: {
       const newData = newPrepared.data;
 
       if (!oldData && newData) {
-        // ogc_fid는 INSERT에서 제외하는 것이 기본이나, key가 ogc_fid이면
-        // SHP 쪽 번호를 넣지 않으면 serial이 새로 발급되어 이력 key와 불일치한다.
-        const keyIsOgcFid = kf.toLowerCase() === 'ogc_fid';
-        const fidCol = colMap.get('ogc_fid') ?? 'ogc_fid';
+        // 비교 JSON에는 정합성 키가 없다. INSERT 때만 sl_key_value로 채운다.
         const insertData: Record<string, unknown> = { ...newData };
         let cols = filterColsToTable(Object.keys(newData), colMap);
-        if (keyIsOgcFid) {
-          const kvNum = Number(String(kv).trim());
-          insertData[fidCol] = Number.isFinite(kvNum) ? Math.trunc(kvNum) : String(kv).trim();
-          if (!cols.some((c) => c.toLowerCase() === 'ogc_fid')) {
-            cols = [...cols, fidCol];
-          }
+        insertData[keyCol] = syncInsertKeyValue(kf, kv);
+        if (!cols.some((c) => c.toLowerCase() === keyCol.toLowerCase())) {
+          cols = [...cols, keyCol];
         }
         if (cols.length === 0) {
           return {
@@ -6666,12 +6672,17 @@ export async function reapplySyncRows(params: {
       const newData = newPrepared.data;
 
       if (op === 'append' && newData) {
-        const cols = filterColsToTable(Object.keys(newData), colMap);
+        const insertData: Record<string, unknown> = { ...newData };
+        let cols = filterColsToTable(Object.keys(newData), colMap);
+        insertData[keyCol] = syncInsertKeyValue(kf, kv);
+        if (!cols.some((c) => c.toLowerCase() === keyCol.toLowerCase())) {
+          cols = [...cols, keyCol];
+        }
         if (cols.length === 0) {
           return { success: false, reappliedCount: 0, error: `다시 적용할 컬럼이 없습니다. (${tbl})` };
         }
         const colNames = cols.map((c) => `"${c}"`).join(', ');
-        const vals = cols.map((c) => sqlVal(c, pickSyncDataVal(newData, c))).join(', ');
+        const vals = cols.map((c) => sqlVal(c, pickSyncDataVal(insertData, c))).join(', ');
         await db.execute(sql.raw(`INSERT INTO ${fq} (${colNames}) VALUES (${vals})`));
       } else if (op === 'conflict' && newData) {
         const cols = filterColsToTable(Object.keys(newData), colMap, [kf]);
