@@ -1,0 +1,73 @@
+/* 도로망도 선 (경산). 분류(layer)별 색·굵기, 선종류(linetype) 점선·파선. 번호 라벨은 rdl_network_ps */
+* {
+  stroke: #9E9E9E;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+[layer = '고속도로'] {
+  stroke: #2E7D32;
+  stroke-width: 4;
+  z-index: 9;
+}
+
+[layer = '국도'] {
+  stroke: #D32F2F;
+  stroke-width: 3.5;
+  z-index: 8;
+}
+
+[layer = '국가지원지방도'] {
+  stroke: #EF6C00;
+  stroke-width: 3;
+  z-index: 7;
+}
+
+[layer = '지방도'] {
+  stroke: #F9A825;
+  stroke-width: 3;
+  z-index: 6;
+}
+
+[layer = '시군도'] {
+  stroke: #1565C0;
+  stroke-width: 2.5;
+  z-index: 5;
+}
+
+[layer LIKE '면도%'] {
+  stroke: #6A1B9A;
+  stroke-width: 2;
+  z-index: 4;
+}
+
+[layer LIKE '리도%'] {
+  stroke: #00897B;
+  stroke-width: 2;
+  z-index: 3;
+}
+
+[layer LIKE '농도%'] {
+  stroke: #8D6E63;
+  stroke-width: 1.8;
+  z-index: 2;
+}
+
+[layer = '철도'] {
+  stroke: #212121;
+  stroke-width: 2.5;
+  z-index: 1;
+}
+
+[linetype = '점선'] {
+  stroke-dasharray: 2 4;
+}
+
+[linetype = '파선'] {
+  stroke-dasharray: 10 6;
+}
+
+[layer LIKE '%(파선)'] {
+  stroke-dasharray: 10 6;
+}

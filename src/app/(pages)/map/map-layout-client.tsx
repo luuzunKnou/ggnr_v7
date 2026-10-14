@@ -17,6 +17,7 @@ import AddressInfoDetail from "./_mapComponents/AddressInfoDetail"
 import { RiverBasicPlanListPanel } from "./_mapContents/river/riverBasicPlan/RiverBasicPlanListPanel"
 import { RiverBasicPlanDetailPanel } from "./_mapContents/river/riverBasicPlan/RiverBasicPlanDetailPanel"
 import { RiverBasicPlanMapDrawingFromMapHandler } from "./_mapContents/river/riverBasicPlan/RiverBasicPlanMapDrawingFromMapHandler"
+import { RiverOrthoControl } from "./_mapContents/river/riverBasicPlan/riverOrtho/RiverOrthoControl"
 import { RoadLedgerListPanel } from "./_mapContents/road/roadLedger/RoadLedgerListPanel"
 import { RoadLedgerDetailPanel } from "./_mapContents/road/roadLedger/RoadLedgerDetailPanel"
 import { RoadLedgerFacilityAttrModal } from "./_mapContents/road/roadLedger/RoadLedgerFacilityAttrModal"
@@ -3453,6 +3454,7 @@ function MapLayoutContent({
             </div>
             <div className="absolute inset-0 pointer-events-none p-4">
               {riverBasicPlanOpen && <RiverBasicPlanMapDrawingFromMapHandler />}
+              {riverBasicPlanOpen && <RiverOrthoControl tab={riverPlanTab} />}
               <RoadLedgerFacilityAttrModal
                 overlayLeftPx={roadLedgerListLeftPx}
                 overlayWidthPx={

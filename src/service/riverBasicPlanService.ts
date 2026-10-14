@@ -1,5 +1,9 @@
+import fs from 'node:fs/promises';
+import path from 'node:path';
 import { db } from '@/database/db';
 import { sql } from 'drizzle-orm';
+import { parseRiverOrthoGroup, type RiverOrthoGroup } from '@/lib/riverOrthoGroups';
+import { resolveGgnrDataDir } from '@/lib/turbopackFsPath';
 import {
   isRiverBasicPlanIndexDefineTable,
   isRiverBasicPlanMapAttachmentDefineTable,
@@ -111,6 +115,27 @@ export async function getRiverBasicPlanExistingMapLayers(params?: {
     (res.rows ?? []).map((r) => String((r as { table_name?: string }).table_name ?? '').toLowerCase()).filter(Boolean)
   );
   return { layers: wanted.filter((n) => have.has(n.toLowerCase())) };
+}
+
+/** tiles_jpg 의 하천 드론영상 그룹 (bigriver_·smallriver_), 타일 폴더가 있는 것만 */
+export async function listRiverOrthoGroups(): Promise<{ groups: RiverOrthoGroup[] }> {
+  const root = path.join(resolveGgnrDataDir(), 'tiles_jpg');
+  let entries: { name: string; isDirectory: () => boolean }[];
+  try {
+    entries = await fs.readdir(root, { withFileTypes: true });
+  } catch {
+    return { groups: [] };
+  }
+  const groups: RiverOrthoGroup[] = [];
+  for (const e of entries) {
+    if (!e.isDirectory()) continue;
+    const g = parseRiverOrthoGroup(e.name);
+    if (!g) continue;
+    const zooms = await fs.readdir(path.join(root, e.name)).catch(() => [] as string[]);
+    if (zooms.some((n) => /^\d+$/.test(n))) groups.push(g);
+  }
+  groups.sort((a, b) => b.year - a.year || a.kind.localeCompare(b.kind));
+  return { groups };
 }
 
 export async function getRiverBasicPlanRiverList(params?: {

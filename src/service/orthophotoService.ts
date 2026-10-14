@@ -76,6 +76,14 @@ const ORTHO_TILE_STAGING_RESERVE_BYTES = 15 * 1024 ** 3;
 const ORTHO_WORK_MARGIN_BYTES = 5 * 1024 ** 3;
 /** 예상 실패 시 로컬 최소 필요량 (대략 80GB warp + 타일) */
 const ORTHO_LOCAL_WARP_FALLBACK_BYTES = 80 * 1024 ** 3;
+/** 좌표 변환 임시 TIF 압축 (무손실 — 타일 해상도·화질 동일, 빈 영역 블록은 쓰지 않음) */
+const ORTHO_WARP_COMPRESS_CO = [
+  'TILED=YES',
+  'COMPRESS=DEFLATE',
+  'PREDICTOR=2',
+  'NUM_THREADS=ALL_CPUS',
+  'SPARSE_OK=TRUE',
+] as const;
 
 function getPathFreeBytes(targetPath: string): number | null {
   try {
@@ -197,9 +205,15 @@ async function publishOrthoTiles(params: {
   await fsPromises.rm(finalAbs, { recursive: true, force: true }).catch(() => {});
 
   if (sameVolumePath(tilesStaging, finalAbs)) {
-    await fsPromises.rename(tilesStaging, finalAbs);
-    orthoJobLog(logCtx, '3/3 결과 이동(rename)', `${tilesStaging} → ${finalAbs}`);
-    return 'rename';
+    try {
+      await fsPromises.rename(tilesStaging, finalAbs);
+      orthoJobLog(logCtx, '3/3 결과 이동(rename)', `${tilesStaging} → ${finalAbs}`);
+      return 'rename';
+    } catch (e) {
+      // NAS(SMB)는 폴더 rename을 EPERM으로 거부하는 경우가 있어 파일 단위 이동으로 넘긴다
+      const msg = e instanceof Error ? e.message : String(e);
+      orthoJobLog(logCtx, '3/3 rename 실패 — 파일 이동으로 전환', msg);
+    }
   }
 
   if (process.platform === 'win32') {
@@ -447,18 +461,6 @@ function setOrthoPhase(groupName: string, phase: OrthoJobPhase, percent: number,
   orthoJobProgressMap.set(groupName, entry);
 }
 
-function setOrthoWarpBytesExpected(groupName: string, bytesExpected: number) {
-  const entry = orthoJobProgressMap.get(groupName);
-  if (!entry || entry.phase !== 'warp') return;
-  entry.warpBytesExpected = bytesExpected > 0 ? bytesExpected : null;
-  entry.updatedAt = new Date().toISOString();
-  if (entry.warpBytesExpected != null && (entry.warpBytesWritten == null || entry.warpBytesWritten <= 0)) {
-    entry.message = `좌표 변환 0 / ${formatByteSize(entry.warpBytesExpected)}`;
-  }
-  refreshOrthoEta(entry);
-  orthoJobProgressMap.set(groupName, entry);
-}
-
 const orthoWarpByteThrottleMs = new Map<string, number>();
 
 /** warp TIF 파일 크기 → %·ETA·메시지 (예상 용량 기준) */
@@ -485,7 +487,8 @@ function updateOrthoWarpByteProgress(groupName: string, warpFile: string, force 
     entry.percent = Math.min(99, Math.max(0, Math.round((100 * written) / expected)));
     entry.message = `좌표 변환 ${formatByteSize(written)} / ${formatByteSize(expected)}`;
   } else {
-    entry.message = written > 0 ? `좌표 변환 중 ${formatByteSize(written)}` : '좌표 변환 중';
+    const pctLabel = entry.percent > 0 ? ` ${entry.percent}%` : ' 중';
+    entry.message = written > 0 ? `좌표 변환${pctLabel} · ${formatByteSize(written)}` : `좌표 변환${pctLabel}`;
   }
   refreshOrthoEta(entry);
 }
@@ -1688,8 +1691,8 @@ async function runOrthophotoJob(params: {
   let outputSlug: string;
   const customOut = (finalOutputDirRel ?? '').trim().replace(/\\/g, '/').replace(/^\/+|\/+$/g, '');
   if (customOut) {
-    if (customOut.includes('..') || !customOut.startsWith('aerial/ortho/')) {
-      throw new Error('finalOutputDirRel 은 aerial/ortho/ 아래여야 합니다.');
+    if (customOut.includes('..') || !/^aerial\/(ortho|basic)\//.test(customOut)) {
+      throw new Error('finalOutputDirRel 은 aerial/ortho/ 또는 aerial/basic/ 아래여야 합니다.');
     }
     gFromPath = groupName;
     outputSlug = outputSlugOverride && isSafeOrthoSegment(outputSlugOverride) ? outputSlugOverride : 'xyz';
@@ -1841,8 +1844,11 @@ async function runOrthophotoJob(params: {
       '-multi',
       '-wo',
       'NUM_THREADS=ALL_CPUS',
+      '-wo',
+      'OPTIMIZE_SIZE=TRUE',
       '-co',
       'BIGTIFF=YES',
+      ...ORTHO_WARP_COMPRESS_CO.flatMap((co) => ['-co', co]),
       absSource,
       warp3857,
     ];
@@ -1858,10 +1864,9 @@ async function runOrthophotoJob(params: {
         workDir: tmpRoot,
       });
       if (est) {
-        setOrthoWarpBytesExpected(groupName, est.bytes);
         orthoJobLog(
           logCtx,
-          '예상 warp 용량',
+          '예상 warp 크기(비압축 기준)',
           `${formatByteSize(est.bytes)} (${est.width.toLocaleString('ko-KR')}×${est.height.toLocaleString('ko-KR')}, ${est.bandBytes}B/px)`
         );
       }
@@ -1971,6 +1976,11 @@ async function runOrthophotoJob(params: {
     let mode: 'rename' | 'robocopy' | 'copy' = 'copy';
     try {
       mode = await publishOrthoTiles({ tilesStaging, finalAbs, logCtx });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      orthoJobLog(logCtx, '3/3 결과 배포 실패 — 생성된 타일 보존', tilesStaging);
+      await fail(`결과 배포 실패(타일 보존: ${tilesStaging}) ${msg}`);
+      return;
     } finally {
       stopTileProgressPoll();
     }

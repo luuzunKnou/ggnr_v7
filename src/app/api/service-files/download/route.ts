@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import path from 'node:path';
 import fs from 'node:fs/promises';
+import { createReadStream } from 'node:fs';
+import { Readable } from 'node:stream';
 import { getSessionUsrId } from '@/lib/auth/guard';
 import { userCanAccessServiceFileData } from '@/lib/serviceFileDataAccess';
 import {
@@ -47,8 +49,60 @@ function contentTypeForFile(name: string): string {
     '.zip': 'application/zip',
     '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     '.xls': 'application/vnd.ms-excel',
+    '.mp4': 'video/mp4',
+    '.mov': 'video/quicktime',
+    '.webm': 'video/webm',
   };
   return map[ext] ?? 'application/octet-stream';
+}
+
+const STREAM_VIDEO_EXTS = new Set(['.mp4', '.mov', '.webm']);
+
+/** 대용량 영상: 전체를 메모리에 올리지 않고 Range(206)로 잘라 보낸다 (재생·탐색용) */
+function streamVideoResponse(
+  req: NextRequest,
+  resolved: string,
+  filename: string,
+  size: number
+): NextResponse {
+  const commonHeaders: Record<string, string> = {
+    'Content-Type': contentTypeForFile(filename),
+    'Content-Disposition': `inline; filename="${encodeURIComponent(filename)}"`,
+    'Accept-Ranges': 'bytes',
+    'Cache-Control': 'private, max-age=300',
+  };
+  const range = req.headers.get('range');
+  if (range) {
+    const m = /^bytes=(\d*)-(\d*)$/i.exec(range.trim());
+    let start = NaN;
+    let end = NaN;
+    if (m && m[1] !== '') {
+      start = Number(m[1]);
+      end = m[2] !== '' ? Math.min(Number(m[2]), size - 1) : size - 1;
+    } else if (m && m[2] !== '') {
+      start = Math.max(0, size - Number(m[2]));
+      end = size - 1;
+    }
+    if (!Number.isFinite(start) || !Number.isFinite(end) || start > end || start >= size) {
+      return new NextResponse(null, {
+        status: 416,
+        headers: { ...commonHeaders, 'Content-Range': `bytes */${size}` },
+      });
+    }
+    const stream = Readable.toWeb(createReadStream(resolved, { start, end })) as ReadableStream;
+    return new NextResponse(stream, {
+      status: 206,
+      headers: {
+        ...commonHeaders,
+        'Content-Length': String(end - start + 1),
+        'Content-Range': `bytes ${start}-${end}/${size}`,
+      },
+    });
+  }
+  const stream = Readable.toWeb(createReadStream(resolved)) as ReadableStream;
+  return new NextResponse(stream, {
+    headers: { ...commonHeaders, 'Content-Length': String(size) },
+  });
 }
 
 /** pathB64 우선, 없으면 레거시 path (영문 파일명 호환) */
@@ -125,6 +179,10 @@ export async function GET(req: NextRequest) {
       } catch {
         // sharp 실패 시 원본으로 폴백
       }
+    }
+
+    if (STREAM_VIDEO_EXTS.has(ext)) {
+      return streamVideoResponse(req, resolved, filename, stat.size);
     }
 
     const buf = await fs.readFile(resolved);

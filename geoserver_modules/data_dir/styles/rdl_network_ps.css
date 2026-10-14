@@ -1,0 +1,75 @@
+/* 도로망도 번호 라벨 (경산). 점 표시 없이 포인트 위치에 num 라벨 + 분류(layer)별 바탕 도형 */
+* {
+  label: [num];
+  label-anchor: 0.5 0.5;
+  font-family: "Nanum Gothic", "Malgun Gothic", "SansSerif";
+  font-size: 11;
+  font-weight: bold;
+  font-fill: #212121;
+  label-conflict-resolution: false;
+  label-priority: 100;
+  shield: symbol(circle);
+  shield-resize: stretch;
+  shield-margin: 3;
+  :shield {
+    fill: #FFFFFF;
+    stroke: #424242;
+    stroke-width: 1;
+  }
+}
+
+[layer = '고속도로'] {
+  shield: symbol(square);
+  font-fill: #FFFFFF;
+  label-priority: 1000;
+  :shield {
+    fill: #2E7D32;
+    stroke: #FFFFFF;
+  }
+}
+
+[layer = '국도'] {
+  shield: symbol(circle);
+  font-fill: #FFFFFF;
+  label-priority: 900;
+  :shield {
+    fill: #D32F2F;
+    stroke: #FFFFFF;
+  }
+}
+
+[layer = '국가지원지방도'] {
+  shield: symbol(square);
+  font-fill: #FFFFFF;
+  label-priority: 800;
+  :shield {
+    fill: #EF6C00;
+    stroke: #FFFFFF;
+  }
+}
+
+[layer = '지방도'] {
+  shield: symbol(square);
+  font-fill: #212121;
+  label-priority: 700;
+  :shield {
+    fill: #F9A825;
+    stroke: #FFFFFF;
+  }
+}
+
+[layer = '시군구'] {
+  shield: symbol(circle);
+  font-fill: #FFFFFF;
+  label-priority: 600;
+  :shield {
+    fill: #1565C0;
+    stroke: #FFFFFF;
+  }
+}
+
+[layer LIKE '면리농도%'] {
+  shield: symbol(circle);
+  font-size: 10;
+  label-priority: 100;
+}

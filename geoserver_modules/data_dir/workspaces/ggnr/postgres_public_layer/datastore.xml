@@ -12,7 +12,7 @@
     <entry key="preparedStatements">false</entry>
     <entry key="database">river_yd</entry>
     <entry key="port">5433</entry>
-    <entry key="passwd">crypt1:+tJb6vC16aebamKi2FMblDv+r06W3C5B</entry>
+    <entry key="passwd">crypt1:42p7bSrhSpIrbNZ99dH4+/D8J1W2ZNVV</entry>
     <entry key="validate connections">true</entry>
     <entry key="host">192.168.127.32</entry>
     <entry key="dbtype">postgis</entry>
