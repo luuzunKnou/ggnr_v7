@@ -369,6 +369,26 @@ type BinaryHttpResponse = {
   text: string;
 };
 
+/** 일시적 네트워크 끊김 — 재시도 대상 (ECONNRESET 등) */
+function isTransientChunkNetworkError(err: unknown): boolean {
+  const raw = formatFetchCause(err).toLowerCase();
+  return (
+    raw.includes('econnreset') ||
+    raw.includes('etimedout') ||
+    raw.includes('econnrefused') ||
+    raw.includes('epipe') ||
+    raw.includes('socket hang up') ||
+    raw.includes('other side closed') ||
+    raw.includes('und_err') ||
+    raw.includes('fetch failed') ||
+    raw.includes('network') ||
+    raw.includes('요청 시간 초과')
+  );
+}
+
+const CHUNK_RETRY_MAX = 3;
+const CHUNK_RETRY_BASE_MS = 800;
+
 async function postBinaryWithTimeout(
   url: string,
   body: Uint8Array,
@@ -388,7 +408,21 @@ async function postBinaryWithTimeout(
       dispatcher: chunkUploadAgent,
       signal: controller.signal,
     });
-    const text = await res.body.text();
+    let text = '';
+    try {
+      text = await res.body.text();
+    } catch (bodyErr) {
+      // 헤더(2xx)까지 온 뒤 body만 끊긴 경우 — GNMS가 청크를 받은 것으로 간주
+      if (res.statusCode >= 200 && res.statusCode < 300) {
+        logStage('chunk-body', {
+          warning: formatFetchCause(bodyErr),
+          status: res.statusCode,
+          note: '2xx 후 body 읽기 실패 — 청크 수신으로 처리',
+        });
+        return { status: res.statusCode, json: { ok: true }, text: '' };
+      }
+      throw bodyErr;
+    }
     let json: JsonRecord = {};
     if (text) {
       try {
@@ -406,6 +440,34 @@ async function postBinaryWithTimeout(
   } finally {
     clearTimeout(timer);
   }
+}
+
+async function postChunkWithRetry(
+  url: string,
+  body: Uint8Array,
+  headers: Record<string, string>,
+  meta: { chunkIndex: number; expectedChunks: number }
+): Promise<BinaryHttpResponse> {
+  let lastErr: unknown;
+  for (let attempt = 1; attempt <= CHUNK_RETRY_MAX; attempt++) {
+    try {
+      return await postBinaryWithTimeout(url, body, headers, CHUNK_POST_TIMEOUT_MS);
+    } catch (err) {
+      lastErr = err;
+      const transient = isTransientChunkNetworkError(err);
+      logStage('chunk-retry', {
+        i: meta.chunkIndex + 1,
+        N: meta.expectedChunks,
+        attempt,
+        max: CHUNK_RETRY_MAX,
+        transient,
+        error: formatFetchCause(err),
+      });
+      if (!transient || attempt >= CHUNK_RETRY_MAX) break;
+      await new Promise<void>((r) => setTimeout(r, CHUNK_RETRY_BASE_MS * attempt));
+    }
+  }
+  throw lastErr instanceof Error ? lastErr : new Error(formatFetchCause(lastErr));
 }
 
 const LOG_UPLOAD_TIMEOUT_MS = 300_000;
@@ -901,7 +963,10 @@ export async function uploadZipByChunks(params: UploadZipParams): Promise<Remote
       const url = `${chunkUrl}?uploadId=${encodeURIComponent(uploadId)}&chunkIndex=${chunkIndex}&totalChunks=${expectedChunks}`;
       let chunkRes: BinaryHttpResponse;
       try {
-        chunkRes = await postBinaryWithTimeout(url, chunkBody, chunkHeaders, CHUNK_POST_TIMEOUT_MS);
+        chunkRes = await postChunkWithRetry(url, chunkBody, chunkHeaders, {
+          chunkIndex,
+          expectedChunks,
+        });
       } catch (err) {
         const message = `청크 ${chunkIndex + 1}/${expectedChunks} 전송 실패: ${formatFetchCause(err)}`;
         logStage('chunk', { i: chunkIndex + 1, N: expectedChunks, byteLength, url, error: message });
@@ -912,6 +977,11 @@ export async function uploadZipByChunks(params: UploadZipParams): Promise<Remote
           detail: `sent=${sentChunks}/${expectedChunks}`,
         });
         reportFail(progressId, 'chunk', message, { sentChunks, expectedChunks, chunkIndex });
+        // 불완전 청크로 complete/병합이 돌지 않도록 원격 세션 취소
+        await cancelRemoteSourceUpload({
+          uploadId,
+          reason: `chunk_fail_${chunkIndex + 1}_of_${expectedChunks}`,
+        }).catch(() => {});
         throw new RemoteUploadError({
           stage: 'chunk',
           message,
@@ -976,6 +1046,10 @@ export async function uploadZipByChunks(params: UploadZipParams): Promise<Remote
     const message = `청크 전송 불완전: ${sentChunks}/${expectedChunks}`;
     stages.push({ id: 'chunk', ok: false, error: message, detail: `sent=${sentChunks}/${expectedChunks}` });
     reportFail(progressId, 'chunk', message, { sentChunks, expectedChunks });
+    await cancelRemoteSourceUpload({
+      uploadId,
+      reason: `chunk_incomplete_${sentChunks}_of_${expectedChunks}`,
+    }).catch(() => {});
     throw new RemoteUploadError({
       stage: 'chunk',
       message,
@@ -983,6 +1057,23 @@ export async function uploadZipByChunks(params: UploadZipParams): Promise<Remote
       expectedChunks,
       stages,
     });
+  }
+
+  // 청크 실패(error) 직후 complete로 넘어가지 않도록 최종 가드
+  if (progressId) {
+    const snap = getUploadProgress(progressId);
+    if (snap?.phase === 'error' || snap?.cancelled) {
+      const message = snap.error ?? '업로드가 중단된 상태에서 병합 단계로 진행할 수 없습니다.';
+      stages.push({ id: 'chunk', ok: false, error: message });
+      await cancelRemoteSourceUpload({ uploadId, reason: 'blocked_before_complete' }).catch(() => {});
+      throw new RemoteUploadError({
+        stage: 'chunk',
+        message,
+        sentChunks,
+        expectedChunks,
+        stages,
+      });
+    }
   }
 
   stages.push({
