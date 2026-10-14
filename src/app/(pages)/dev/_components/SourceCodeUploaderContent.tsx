@@ -330,8 +330,11 @@ export function SourceCodeUploaderContent() {
   const lastPhaseLoggedRef = useRef('');
   const liveLogScrollRef = useRef<HTMLDivElement>(null);
   const uploadHistoryRecordedRef = useRef(false);
+  /** 청크 실패 등 error 확정 후 이후 progress(complete 등) 무시 */
+  const hardFailProgressIdRef = useRef<string | null>(null);
   const completeStartedAtRef = useRef(0);
   const progressPhaseRef = useRef('idle');
+  const uploadingRef = useRef(false);
   const stagesRef = useRef(stages);
   const includeNodeModulesRef = useRef(includeNodeModules);
   const changeNoteRef = useRef(changeNote);
@@ -474,6 +477,14 @@ export function SourceCodeUploaderContent() {
   };
 
   const applyProgressSnapshot = (p: UploadProgressPayload) => {
+    if (
+      hardFailProgressIdRef.current &&
+      progressIdRef.current === hardFailProgressIdRef.current &&
+      p.phase !== 'error'
+    ) {
+      // 실패 확정 후 complete/done 스냅샷으로 UI가 다시 진행 표시되는 것 방지
+      return;
+    }
     if (p.remoteUploadId?.trim()) {
       remoteUploadIdRef.current = p.remoteUploadId.trim();
     }
@@ -518,6 +529,9 @@ export function SourceCodeUploaderContent() {
         appendLog(`청크 ${p.sentChunks}/${p.expectedChunks ?? '?'} (${p.progressPct}%)`);
       }
     } else if (p.phase === 'error') {
+      if (progressIdRef.current) {
+        hardFailProgressIdRef.current = progressIdRef.current;
+      }
       appendLog(`오류 [${p.failedStage ?? '?'}] ${p.error ?? p.message}`);
     } else if (p.phase === 'scan' && p.scanIncluded != null) {
       const total = p.scanIncluded + (p.scanSkipped ?? 0);
@@ -566,7 +580,9 @@ export function SourceCodeUploaderContent() {
         if (!p) return;
         applyProgressSnapshot(p);
         if (p.done && p.phase === 'error') {
+          hardFailProgressIdRef.current = progressId;
           setRows([{ file: '(전체)', category: 'core', status: 'fail', error: p.error ?? p.message }]);
+          stopPoll();
         }
       });
     };
@@ -656,6 +672,10 @@ export function SourceCodeUploaderContent() {
   };
 
   const runUploadCurrentWorkspace = async (confirmDbMismatch = false) => {
+    if (uploadingRef.current && !confirmDbMismatch) {
+      appendLog('이미 업로드가 진행 중입니다. 중복 실행을 무시합니다.');
+      return;
+    }
     if (!confirmDbMismatch) {
       setRows([]);
       setChunkProgress(null);
@@ -665,6 +685,8 @@ export function SourceCodeUploaderContent() {
       appendLog('DB 불일치 확인 후 업로드 계속');
     }
     completeStartedAtRef.current = 0;
+    hardFailProgressIdRef.current = null;
+    uploadingRef.current = true;
     setUploading(true);
     setProgressPhase('idle');
     setProgressPct(2);
@@ -812,12 +834,14 @@ export function SourceCodeUploaderContent() {
         return;
       }
 
-      mergeServerStages(
-        json.localStages as StageReport[] | undefined,
-        json.remoteStages as StageReport[] | undefined
-      );
-
       if (!res.ok) {
+        hardFailProgressIdRef.current = progressId;
+        stopPoll();
+        // 실패 시에만 단계 반영 — 성공 경로 merge 전에 complete가 켜지지 않게
+        mergeServerStages(
+          json.localStages as StageReport[] | undefined,
+          json.remoteStages as StageReport[] | undefined
+        );
         const failedStage = typeof json.failedStage === 'string' ? json.failedStage : '';
         const stageMsg = failedStage ? `[${failedStage}] ` : '';
         const sentChunks = typeof json.sentChunks === 'number' ? json.sentChunks : null;
@@ -839,6 +863,11 @@ export function SourceCodeUploaderContent() {
         }
         throw new Error(`${stageMsg}${errText}${chunkMsg}${chunkIdx}`);
       }
+
+      mergeServerStages(
+        json.localStages as StageReport[] | undefined,
+        json.remoteStages as StageReport[] | undefined
+      );
 
       if (json.browserRemoteRequired === true) {
         appendLog('로컬 ZIP 준비 완료 — 브라우저→GNMS 원격 전송 시작');
@@ -1090,6 +1119,7 @@ export function SourceCodeUploaderContent() {
       setProgressText(`실패: ${display}`);
     } finally {
       stopPoll();
+      uploadingRef.current = false;
       setUploading(false);
       setProgressPhase('idle');
       abortControllerRef.current = null;
