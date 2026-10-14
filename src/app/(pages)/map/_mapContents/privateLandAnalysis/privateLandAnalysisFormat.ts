@@ -32,19 +32,39 @@ export function ownGbnShort(ownGbn: string): string {
   return OWN_GBN_SHORT[ownGbn] ?? ownGbn;
 }
 
-/** 분석 결과에 있는 소유구분만 필터로 — 범례 순서, 범례에 없는 값(미상 등)은 뒤에 */
-export function ownFilterOptions(ownGbns: Iterable<string>): { key: string; label: string }[] {
+/** 필터 — 구간과 겹치는 건물·건물군만 */
+export const OWN_FILTER_BUILDING = '건물';
+
+/** 분석 결과에 있는 소유구분만 필터로 — 범례 순서, 범례에 없는 값(미상 등)은 뒤에. 건물이 있으면 맨 끝에 «건물» */
+export function ownFilterOptions(ownGbns: Iterable<string>, hasBuildings = false): { key: string; label: string }[] {
   const present = new Set(ownGbns);
   const known = OWN_GBN_ORDER.filter((k) => present.has(k));
   const extra = [...present].filter((k) => k && !OWN_GBN_ORDER.includes(k)).sort();
   return [
     { key: OWN_FILTER_ALL, label: OWN_FILTER_ALL },
     ...[...known, ...extra].map((k) => ({ key: k, label: ownGbnShort(k) })),
+    ...(hasBuildings ? [{ key: OWN_FILTER_BUILDING, label: OWN_FILTER_BUILDING }] : []),
   ];
 }
 
-export function matchesOwnFilter(filter: string, ownGbn: string): boolean {
-  return filter === OWN_FILTER_ALL || ownGbn === filter;
+/** 필지는 소유구분, 건물·건물군은 «건물» 필터로만 걸린다 */
+export function matchesOwnFilter(filter: string, ownGbn: string, isBuilding = false): boolean {
+  if (filter === OWN_FILTER_ALL) return true;
+  if (filter === OWN_FILTER_BUILDING) return isBuilding;
+  return !isBuilding && ownGbn === filter;
+}
+
+/** 건물 행 배지 이름 */
+export const BUILDING_KIND_LABEL: Record<'building' | 'buildingGroup', string> = {
+  building: '건물',
+  buildingGroup: '건물군',
+};
+
+/** 건물 배지·지도 윤곽 색 */
+export const BUILDING_COLOR = '#6B7280';
+
+export function buildingBadgeStyle(): CSSProperties {
+  return badgeStyle(BUILDING_COLOR);
 }
 
 /** 소유구분 색 — 지도 소유자정보 레이어 범례(GeoServer 스타일)와 동일 */

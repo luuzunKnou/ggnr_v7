@@ -1,6 +1,6 @@
 import { db } from '@/database/db';
 import { sql } from 'drizzle-orm';
-import { listJijukParcelsByGeomWkt5181 } from '@/service/layerRowService';
+import { findJijukParcelsAtPoints5181, listJijukParcelsByGeomWkt5181 } from '@/service/layerRowService';
 import { loadJijukOwnGbn } from '@/service/riverBasicPlanService';
 import {
   findPrivateLandAnalysisLayer,
@@ -1498,5 +1498,129 @@ export async function listPrivateLandAnalysisParcels(params?: ZoneParams): Promi
     };
   } catch (e: unknown) {
     return { parcels: [], error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+export type PrivateLandBuildingKind = 'building' | 'buildingGroup';
+
+/** 구간과 겹치는지 볼 건물 레이어 (도로명주소 건물·건물군) */
+const BUILDING_LAYERS: { table: string; kind: PrivateLandBuildingKind }[] = [
+  { table: 'tl_sgco_rnadr_dong', kind: 'building' },
+  { table: 'tl_sgco_rnadr_mst', kind: 'buildingGroup' },
+];
+const BUILDING_SCHEMA_CANDIDATES = ['public_layer', 'layer'] as const;
+const BUILDING_LIMIT = 1000;
+
+async function resolveBuildingTable(table: string): Promise<{ qualified: string; srid: number } | null> {
+  const res = await db.execute(
+    sql.raw(
+      `SELECT table_schema AS s, table_name AS t
+       FROM information_schema.tables
+       WHERE table_schema IN (${BUILDING_SCHEMA_CANDIDATES.map((s) => `'${s}'`).join(',')})
+         AND lower(table_name) = '${esc(table)}'
+       ORDER BY array_position(ARRAY[${BUILDING_SCHEMA_CANDIDATES.map((s) => `'${s}'`).join(',')}]::text[], table_schema::text)
+       LIMIT 1`
+    )
+  );
+  const row = res.rows?.[0] as { s?: string; t?: string } | undefined;
+  if (!row?.s || !row.t) return null;
+  const qualified = `${quoteIdent(row.s)}.${quoteIdent(row.t)}`;
+  const sridRes = await db.execute(
+    sql.raw(`SELECT ST_SRID(geom) AS srid FROM ${qualified} WHERE geom IS NOT NULL LIMIT 1`)
+  );
+  const srid = toNum((sridRes.rows?.[0] as { srid?: unknown } | undefined)?.srid) || WORK_SRID;
+  return { qualified, srid };
+}
+
+type BuildingHitRow = {
+  id?: unknown;
+  name?: unknown;
+  area_sqm?: unknown;
+  intersect_area_sqm?: unknown;
+  pt?: unknown;
+  geometry3857?: Geo | null;
+  xmin?: unknown;
+  ymin?: unknown;
+  xmax?: unknown;
+  ymax?: unknown;
+};
+
+/** 분석 — 구간과 겹치는 건물·건물군. 놓인 필지는 건물 안쪽 한 점으로 지적에서 찾는다 */
+export async function listPrivateLandAnalysisBuildings(params?: ZoneParams): Promise<{
+  buildings: {
+    key: string;
+    kind: PrivateLandBuildingKind;
+    name: string;
+    address: string;
+    pnu: string;
+    jimok: string;
+    areaSqm: number | null;
+    intersectAreaSqm: number | null;
+    geometry3857: Geo | null;
+    extent3857: [number, number, number, number] | null;
+  }[];
+  truncated?: boolean;
+  error?: string;
+}> {
+  const zone = await computeZoneCached(params ?? {});
+  if (!zone.wkt5181) return { buildings: [], error: zone.error };
+
+  try {
+    const hits: { key: string; kind: PrivateLandBuildingKind; row: BuildingHitRow }[] = [];
+    let truncated = false;
+    for (const def of BUILDING_LAYERS) {
+      const target = await resolveBuildingTable(def.table);
+      if (!target) continue;
+      const featGeom = `ST_MakeValid(ST_Transform(f.geom, ${WORK_SRID}))`;
+      const clip = `ST_CollectionExtract(ST_MakeValid(ST_Intersection(${featGeom}, z.g)), 3)`;
+      const res = await db.execute(
+        sql.raw(
+          `WITH z AS (SELECT ST_MakeValid(ST_SetSRID(ST_GeomFromText('${esc(zone.wkt5181)}'), ${WORK_SRID})) AS g)
+           SELECT f.ctid::text AS id,
+             COALESCE(NULLIF(TRIM(to_jsonb(f)->>'buld_nm'), ''), NULLIF(TRIM(to_jsonb(f)->>'pos_bul_nm'), ''), '') AS name,
+             ROUND(ST_Area(${featGeom})::numeric, 2)::float8 AS area_sqm,
+             ROUND(ST_Area(${clip})::numeric, 2)::float8 AS intersect_area_sqm,
+             ST_AsText(ST_PointOnSurface(${featGeom})) AS pt,
+             ST_AsGeoJSON(ST_Transform(${featGeom}, 3857))::json AS geometry3857,
+             ST_XMin(ST_Transform(${featGeom}, 3857))::float8 AS xmin,
+             ST_YMin(ST_Transform(${featGeom}, 3857))::float8 AS ymin,
+             ST_XMax(ST_Transform(${featGeom}, 3857))::float8 AS xmax,
+             ST_YMax(ST_Transform(${featGeom}, 3857))::float8 AS ymax
+           FROM ${target.qualified} f, z
+           WHERE f.geom IS NOT NULL
+             AND f.geom && ST_Transform(z.g, ${target.srid})
+             AND ST_Intersects(${featGeom}, z.g)
+             AND ST_Area(${clip}) > 0.01
+           LIMIT ${BUILDING_LIMIT}`
+        )
+      );
+      const rows = (res.rows ?? []) as BuildingHitRow[];
+      if (rows.length >= BUILDING_LIMIT) truncated = true;
+      for (const row of rows) hits.push({ key: `${def.kind}:${String(row.id ?? '')}`, kind: def.kind, row });
+    }
+
+    const found = await findJijukParcelsAtPoints5181({
+      points: hits.map((h) => ({ key: h.key, wkt5181: String(h.row.pt ?? '') })),
+    });
+
+    const buildings = hits.map(({ key, kind, row }) => {
+      const parcel = found.parcels[key];
+      const ext = [row.xmin, row.ymin, row.xmax, row.ymax].map(toNum);
+      return {
+        key,
+        kind,
+        name: String(row.name ?? '').trim(),
+        address: parcel?.address ?? '',
+        pnu: parcel?.pnu ?? '',
+        jimok: parcel?.jimok ?? '',
+        areaSqm: toNum(row.area_sqm),
+        intersectAreaSqm: toNum(row.intersect_area_sqm),
+        geometry3857: row.geometry3857 && typeof row.geometry3857 === 'object' ? row.geometry3857 : null,
+        extent3857: ext.every((v) => v != null) ? (ext as [number, number, number, number]) : null,
+      };
+    });
+    return { buildings, truncated };
+  } catch (e: unknown) {
+    return { buildings: [], error: e instanceof Error ? e.message : String(e) };
   }
 }

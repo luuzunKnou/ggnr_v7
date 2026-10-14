@@ -350,6 +350,31 @@ async function fetchVworldLandUseForPnu(pnu: string, vworldKey: string): Promise
   return [...zones];
 }
 
+/** PNU 목록 — 브라우저 JSONP로 최신 소유구분 (코드 우선, 없으면 이름) */
+export async function fetchVworldOwnGbnBatch(
+  pnus: string[],
+  vworldKey: string,
+  concurrency = 8
+): Promise<Record<string, string>> {
+  const unique = [...new Set(pnus.map((p) => toStr(p)).filter((p) => /^\d{19}$/.test(p)))];
+  if (!unique.length || !vworldKey) return {};
+  const results = await mapPool(unique, concurrency, async (pnu) => {
+    const raw = await fetchVworldJsonp('https://api.vworld.kr/ned/data/getPossessionAttr', {
+      key: vworldKey,
+      pnu,
+      format: 'json',
+      numOfRows: '1000',
+    });
+    const poss = sortPossessionsLatestFirst(parseRowsFromVworld(raw, 'possessions'))[0];
+    return toStr(poss?.posesnSeCode) || toStr(poss?.posesnSeCodeNm);
+  });
+  const out: Record<string, string> = {};
+  unique.forEach((pnu, i) => {
+    if (results[i]) out[pnu] = results[i]!;
+  });
+  return out;
+}
+
 /** PNU 목록 — 브라우저 JSONP로 토지 보강 (필지분석 서버 연계 실패 시) */
 export async function fetchVworldParcelLandEnrichmentBatch(
   pnus: string[],

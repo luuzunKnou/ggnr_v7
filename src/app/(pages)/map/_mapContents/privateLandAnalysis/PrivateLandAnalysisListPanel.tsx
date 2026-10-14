@@ -8,6 +8,8 @@ import { usePrivateLandAnalysis, type PrivateLandAnalysisPhase } from './Private
 import { PrivateLandAnalysisAreaModal } from './PrivateLandAnalysisAreaModal';
 import { PrivateLandAnalysisMapGuide } from './PrivateLandAnalysisMapGuide';
 import {
+  BUILDING_KIND_LABEL,
+  buildingBadgeStyle,
   formatSqm,
   jimokBadgeStyle,
   ownGbnBadgeStyle,
@@ -84,7 +86,7 @@ export function PrivateLandAnalysisListPanel({ onClose }: Props) {
     ownFilter,
     keyword,
     filteredParcels,
-    selectedPnu,
+    selectedKey,
     includeTributary,
     tribCutCount,
     rangeMode,
@@ -97,7 +99,14 @@ export function PrivateLandAnalysisListPanel({ onClose }: Props) {
     selectParcel,
   } = usePrivateLandAnalysis();
 
-  const ownFilters = useMemo(() => ownFilterOptions(parcels.map((p) => p.ownGbn)), [parcels]);
+  const ownFilters = useMemo(
+    () =>
+      ownFilterOptions(
+        parcels.filter((p) => p.kind === 'parcel').map((p) => p.ownGbn),
+        parcels.some((p) => p.kind !== 'parcel')
+      ),
+    [parcels]
+  );
 
   const confirmed = phase === 'applied' || phase === 'analyzing' || phase === 'result';
   const closed = rangeMode === 'closed';
@@ -194,7 +203,7 @@ export function PrivateLandAnalysisListPanel({ onClose }: Props) {
               type="search"
               value={keyword}
               onChange={(e) => setKeyword(e.target.value)}
-              placeholder="주소·소유구분·지목"
+              placeholder="주소·소유구분·지목·건물명"
               className="h-8 w-full rounded border border-border pl-7 pr-2.5 text-xs outline-none focus:border-primary focus:ring-2 focus:ring-primary/25"
             />
           </div>
@@ -230,11 +239,11 @@ export function PrivateLandAnalysisListPanel({ onClose }: Props) {
       <div className="min-h-0 flex-1 overflow-auto scrollbar-thin">
         {phase !== 'result' ? (
           <p className="px-3 py-2.5 text-xs text-muted-foreground">
-            {phase === 'analyzing' ? '필지를 분석하는 중…' : '구간을 적용하면 필지 목록이 표시됩니다.'}
+            {phase === 'analyzing' ? '필지·건물을 분석하는 중…' : '구간을 적용하면 필지·건물 목록이 표시됩니다.'}
           </p>
         ) : filteredParcels.length === 0 ? (
           <p className="px-3 py-2.5 text-xs text-muted-foreground">
-            {parcels.length === 0 ? '구간과 겹치는 필지가 없습니다.' : '검색 결과가 없습니다.'}
+            {parcels.length === 0 ? '구간과 겹치는 필지·건물이 없습니다.' : '검색 결과가 없습니다.'}
           </p>
         ) : (
           <table className="w-full table-fixed border-collapse text-xs">
@@ -244,17 +253,19 @@ export function PrivateLandAnalysisListPanel({ onClose }: Props) {
             </colgroup>
             <tbody>
               {filteredParcels.map((p) => {
-                const isSelected = selectedPnu === p.pnu;
+                const isSelected = selectedKey === p.key;
+                const isBuilding = p.kind !== 'parcel';
+                const badgeLabel = p.kind === 'parcel' ? ownGbnShort(p.ownGbn) : BUILDING_KIND_LABEL[p.kind];
                 return (
                   <tr
-                    key={p.pnu || p.address}
+                    key={p.key}
                     role="button"
                     tabIndex={0}
-                    onClick={() => selectParcel(isSelected ? null : p.pnu)}
+                    onClick={() => selectParcel(isSelected ? null : p.key)}
                     onKeyDown={(e) => {
                       if (e.key === 'Enter' || e.key === ' ') {
                         e.preventDefault();
-                        selectParcel(isSelected ? null : p.pnu);
+                        selectParcel(isSelected ? null : p.key);
                       }
                     }}
                     className={cn(
@@ -268,10 +279,10 @@ export function PrivateLandAnalysisListPanel({ onClose }: Props) {
                       <div className="flex min-w-0 items-center gap-1.5">
                         <span
                           className="inline-flex w-[3.5rem] shrink-0 items-center justify-center truncate whitespace-nowrap rounded border px-1.5 py-0.5 text-[10px] font-semibold leading-none"
-                          style={ownGbnBadgeStyle(p.ownGbn)}
-                          title={p.ownGbn}
+                          style={isBuilding ? buildingBadgeStyle() : ownGbnBadgeStyle(p.ownGbn)}
+                          title={isBuilding ? p.name || badgeLabel : p.ownGbn}
                         >
-                          {ownGbnShort(p.ownGbn)}
+                          {badgeLabel}
                         </span>
                         {p.jimok ? (
                           <span
@@ -284,9 +295,9 @@ export function PrivateLandAnalysisListPanel({ onClose }: Props) {
                         ) : null}
                         <p
                           className="min-w-0 flex-1 truncate text-sm font-medium leading-tight text-foreground"
-                          title={p.address || p.pnu}
+                          title={p.address || p.pnu || p.name}
                         >
-                          {p.address || p.pnu}
+                          {p.address || p.pnu || p.name || '필지 미확인'}
                         </p>
                       </div>
                     </td>

@@ -2384,6 +2384,53 @@ export async function listJijukParcelsByGeomWkt5181(params: {
   }
 }
 
+/** 여러 점(WKT 5181)마다 그 점이 놓인 jijuk 필지 1건 — 키별로 반환, 못 찾은 점은 빠진다 */
+export async function findJijukParcelsAtPoints5181(params: {
+  points: Array<{ key: string; wkt5181: string }>;
+}): Promise<{ parcels: Record<string, JijukParcelGeomDto>; error?: string }> {
+  const points = (Array.isArray(params?.points) ? params.points : []).filter(
+    (p) => String(p?.key ?? '').trim() && /^POINT\s*\(/i.test(String(p?.wkt5181 ?? '').trim())
+  );
+  if (points.length === 0) return { parcels: {} };
+
+  const jijukRef = await resolveJijukTableRef();
+  if (!jijukRef) return { parcels: {}, error: 'jijuk 테이블을 찾을 수 없습니다.' };
+
+  const jijukGeom = jijukGeom5181Sql('j.geom');
+  const values = points
+    .map(
+      (p) =>
+        `('${esc(String(p.key).trim())}', ST_SetSRID(ST_GeomFromText('${esc(String(p.wkt5181).trim())}'), ${JIJUK_GEOM_SRID}))`
+    )
+    .join(', ');
+  const queryStr = `
+    WITH pts(point_key, g) AS (VALUES ${values})
+    SELECT pts.point_key, q.*
+    FROM pts
+    CROSS JOIN LATERAL (
+      ${jijukParcelSelectSql('j.geom', jijukRef.qualified)}
+        AND ${jijukGeom} && pts.g
+        AND ST_Intersects(ST_MakeValid(${jijukGeom}), pts.g)
+      ORDER BY j.${quoteIdent(jijukRef.orderCol)}
+      LIMIT 1
+    ) q`;
+
+  try {
+    const res = await db.execute(sql.raw(queryStr));
+    const rows = (res.rows ?? []) as Array<JijukParcelGeomRow & { point_key?: string }>;
+    const enriched = (await enrichJijukRowsWithAdminNames(rows)) as Array<JijukParcelGeomRow & { point_key?: string }>;
+    const parcels: Record<string, JijukParcelGeomDto> = {};
+    for (const row of enriched) {
+      const key = String(row.point_key ?? '').trim();
+      const mapped = key ? mapJijukRowToParcelGeom(row) : null;
+      if (mapped) parcels[key] = await finalizeJijukParcelGeom(row, mapped);
+    }
+    return { parcels };
+  } catch (e: unknown) {
+    return { parcels: {}, error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
 /** 부모 도형(WKT 5181)에서 필지 영역 제외 — 필지목록 삭제 시 부모 도형 갱신 */
 export async function subtractParcelFromParentWkt5181(params: {
   parentWkt5181: string;
