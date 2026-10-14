@@ -325,6 +325,8 @@ export function useServiceLayerSync(
    * (부서업무 본표는 위, 패널에서 켠 점사용료 등은 아래)
    */
   wmsForceBottomLayerNames?: Iterable<string>,
+  /** 레이어별 STYLES 대체 (define_table_name → 스타일명). 없으면 테이블명 */
+  serviceWmsStyleByLayer?: Record<string, string> | null,
 ) {
   const filterRef = useRef(layerFilterRows);
   filterRef.current = layerFilterRows;
@@ -386,7 +388,9 @@ export function useServiceLayerSync(
       wmsForceBottomLayerNames
     );
     const layersParam = names.map((n) => `${WORKSPACE}:${n}`).join(',');
-    const stylesParam = names.join(',');
+    const stylesParam = names
+      .map((n) => serviceWmsStyleByLayer?.[n]?.trim() || n)
+      .join(',');
     const filters = filterRef.current;
     const wkt = typeof spatialFilterWkt === 'string' && spatialFilterWkt.trim() ? spatialFilterWkt.trim() : null;
     const hidden = hiddenRef.current;
@@ -448,6 +452,7 @@ export function useServiceLayerSync(
     layerGeometryTypes,
     hiddenFeaturesByLayer,
     serviceWmsCqlByLayer,
+    serviceWmsStyleByLayer,
     forceBottomKey,
     wmsForceBottomLayerNames,
   ]);

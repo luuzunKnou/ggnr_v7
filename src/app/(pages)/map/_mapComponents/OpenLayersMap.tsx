@@ -1194,6 +1194,7 @@ export default function OpenLayersMap({
   );
   const spatialFilterWkt = mapContext?.spatialFilterWkt ?? null;
   const serviceWmsCqlByLayer = mapContext?.serviceWmsCqlByLayer ?? null;
+  const serviceWmsStyleByLayer = mapContext?.serviceWmsStyleByLayer ?? null;
 
   useEffect(() => {
     if (!mapReady) return;
@@ -1258,7 +1259,8 @@ export default function OpenLayersMap({
     undefined,
     serviceWmsCqlByLayer,
     false,
-    wmsForceBottomLayerNames
+    wmsForceBottomLayerNames,
+    serviceWmsStyleByLayer
   );
 
   // 검색 조건 도형을 지도에 표시 (WKT 5181 → 3857 변환 후 벡터 레이어)
