@@ -261,7 +261,9 @@ export function UsageDataAsDetailPanel({
   ]);
 
   const formAttributesForEdit = useMemo(() => {
-    const base = isCreateMode ? formAttributes : attributes;
+    const base = (isCreateMode ? formAttributes : attributes).filter(
+      (row) => row.showDetail !== false
+    );
     if (!isCreateMode) return base;
     return base.map((row) => {
       const fl = row.field.toLowerCase();

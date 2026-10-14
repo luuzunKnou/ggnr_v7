@@ -13,6 +13,7 @@ import { useMapContext } from "../../../_mapComponents/MapContext";
 import { MAP_AUTO_NAV_MAX_ZOOM } from "../../../_mapComponents/config/mapDefaults";
 import { scheduleFitMapToExtent3857 } from "../../../_mapComponents/config/mapAutoNavigation";
 import { useRiverBasicPlanExistingMapLayers } from "./useRiverBasicPlanExistingMapLayers";
+import { RiverOrthoControl } from "./riverOrtho/RiverOrthoControl";
 
 type RiverType = RiverBasicPlanTab;
 
@@ -204,6 +205,7 @@ export function RiverBasicPlanListPanel({
             className="w-full h-9 rounded border border-border pl-8 pr-3 text-sm outline-none focus:ring-2 focus:ring-primary/25 focus:border-primary"
           />
         </div>
+        <RiverOrthoControl tab={tab} />
       </div>
 
       <div className="flex-1 min-h-0 overflow-auto">

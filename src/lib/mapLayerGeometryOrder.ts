@@ -200,6 +200,9 @@ const WMS_STACK_ALWAYS_BOTTOM = new Set([
   'water_occupationledger_jijuk',
   'road_occupationledger_jijuk',
   'public_occupationledger_jijuk',
+  // 하천기본계획 구역 면 — 구조물도·제방(면 등록)보다 아래
+  'river_plan_as',
+  'river_plan_s_as',
 ]);
 
 function wmsStackForceBottomRank(name: string, extraBottom?: Set<string>): number {

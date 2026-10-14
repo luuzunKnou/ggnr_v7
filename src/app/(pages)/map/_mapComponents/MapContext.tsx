@@ -123,6 +123,12 @@ export type MapContextValue = {
    */
   serviceWmsCqlByLayer: Record<string, string> | null;
   setServiceWmsCqlByLayer: Dispatch<SetStateAction<Record<string, string> | null>>;
+  /**
+   * 서비스 WMS 레이어별 STYLES 대체 (define_table_name → GeoServer 스타일명).
+   * 없으면 테이블명 스타일. 하천기본계획 하천구역 «선만» 등.
+   */
+  serviceWmsStyleByLayer: Record<string, string> | null;
+  setServiceWmsStyleByLayer: Dispatch<SetStateAction<Record<string, string> | null>>;
   /** 레이어 목록에서 도형 그리기 요청. OpenLayersMap에서 구독 후 Draw 추가, 완료 시 onComplete 호출 후 null로 초기화 */
   spatialDrawRequest: {
     type: 'rectangle' | 'polygon' | 'circle';
@@ -627,6 +633,7 @@ export function MapContextProvider({ children }: { children: React.ReactNode }) 
   const [spatialFilterWkt, setSpatialFilterWkt] = useState<string | null>(null);
   const [spatialFilteredLayerNames, setSpatialFilteredLayerNames] = useState<Set<string> | null>(null);
   const [serviceWmsCqlByLayer, setServiceWmsCqlByLayer] = useState<Record<string, string> | null>(null);
+  const [serviceWmsStyleByLayer, setServiceWmsStyleByLayer] = useState<Record<string, string> | null>(null);
   const [spatialDrawRequest, setSpatialDrawRequest] = useState<{
     type: 'rectangle' | 'polygon' | 'circle';
     onComplete: (wkt5181: string) => void;
@@ -906,6 +913,8 @@ export function MapContextProvider({ children }: { children: React.ReactNode }) 
         setSpatialFilteredLayerNames,
         serviceWmsCqlByLayer,
         setServiceWmsCqlByLayer,
+        serviceWmsStyleByLayer,
+        setServiceWmsStyleByLayer,
         spatialDrawRequest,
         setSpatialDrawRequest,
         measurementActive,

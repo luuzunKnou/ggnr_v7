@@ -51,7 +51,14 @@ import {
   type Chord,
   type Seam,
 } from './privateLandAnalysisGeom';
-import { hexToRgba, matchesOwnFilter, OWN_FILTER_ALL, ownGbnColor } from './privateLandAnalysisFormat';
+import {
+  BUILDING_COLOR,
+  hexToRgba,
+  matchesOwnFilter,
+  OWN_FILTER_ALL,
+  ownGbnColor,
+} from './privateLandAnalysisFormat';
+import { usePrivateLandOwnGbnFallback } from './usePrivateLandOwnGbnFallback';
 
 /** 끝 위치 이동이 멈춘 뒤 구간 미리보기 요청 대기(ms) */
 const PREVIEW_DEBOUNCE_MS = 250;
@@ -87,7 +94,15 @@ export type PrivateLandAnalysisPhase =
 /** 닫힌 범위 지정 방식 — 경계선 찍기 / 도형(다각형·사각형·원) 그리기 */
 export type PrivateLandClosedTool = 'line' | 'polygon' | 'rect' | 'circle';
 
+/** 목록 행 종류 — 필지, 또는 구간과 겹치는 건물·건물군 */
+export type PrivateLandRowKind = 'parcel' | 'building' | 'buildingGroup';
+
 export type PrivateLandParcel = {
+  /** 목록·지도 선택 키 (필지는 PNU 기준, 건물은 레이어·행 기준) */
+  key: string;
+  kind: PrivateLandRowKind;
+  /** 건물명 (건물군만 있을 수 있음) */
+  name?: string;
   address: string;
   pnu: string;
   jimok: string;
@@ -113,7 +128,7 @@ type Ctx = {
   ownFilter: string;
   keyword: string;
   filteredParcels: PrivateLandParcel[];
-  selectedPnu: string | null;
+  selectedKey: string | null;
   selectedParcel: PrivateLandParcel | null;
   /** 시작 위치 하천 구분(하천코드·하천명)이 있어 지류 포함을 쓸 수 있음 */
   riverKnown: boolean;
@@ -164,7 +179,7 @@ type Ctx = {
   resetAll: () => void;
   setOwnFilter: (v: string) => void;
   setKeyword: (v: string) => void;
-  selectParcel: (pnu: string | null) => void;
+  selectParcel: (key: string | null) => void;
 };
 
 const PrivateLandAnalysisCtx = createContext<Ctx | null>(null);
@@ -224,6 +239,21 @@ function parcelStyle(ownGbn: string, picked: boolean): Style | Style[] {
   return style;
 }
 
+/** 건물·건물군 — 필지 위에 윤곽 위주로 */
+const BUILDING_STYLE = new Style({
+  stroke: new Stroke({ color: BUILDING_COLOR, width: 1.5 }),
+  fill: new Fill({ color: hexToRgba(BUILDING_COLOR, 0.25) }),
+  zIndex: 3,
+});
+const BUILDING_PICKED_STYLE = [
+  new Style({ stroke: new Stroke({ color: '#fff', width: 6 }), zIndex: 4 }),
+  new Style({
+    stroke: new Stroke({ color: '#111827', width: 2.5 }),
+    fill: new Fill({ color: hexToRgba(BUILDING_COLOR, 0.6) }),
+    zIndex: 5,
+  }),
+];
+
 function chordStyles(moving: boolean): Style[] {
   return [moving ? CHORD_MOVING_STYLE : CHORD_STYLE, CHORD_ENDS_STYLE];
 }
@@ -270,6 +300,8 @@ function featureStyle(feature: Feature<Geometry>): Style | Style[] | undefined {
       return ANALYSIS_AREA_STYLE;
     case 'parcel':
       return parcelStyle(String(feature.get('ownGbn') ?? ''), Boolean(feature.get('picked')));
+    case 'building':
+      return feature.get('picked') ? BUILDING_PICKED_STYLE : BUILDING_STYLE;
     case 'tribCut':
       return chordStyles(false);
     case 'tribMoving':
@@ -332,10 +364,11 @@ export function PrivateLandAnalysisRoot({ system, onDetailOpenChange, children }
   const [baseName, setBaseName] = useState('');
   const [zoneAreaSqm, setZoneAreaSqm] = useState<number | null>(null);
   const [parcels, setParcels] = useState<PrivateLandParcel[]>([]);
+  usePrivateLandOwnGbnFallback(parcels, setParcels);
   const [truncated, setTruncated] = useState(false);
   const [ownFilter, setOwnFilter] = useState(OWN_FILTER_ALL);
   const [keyword, setKeyword] = useState('');
-  const [selectedPnu, setSelectedPnu] = useState<string | null>(null);
+  const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [riverKnown, setRiverKnown] = useState(false);
   const [includeTributary, setIncludeTributaryState] = useState(false);
   const [tribCandidateCount, setTribCandidateCount] = useState(0);
@@ -483,7 +516,7 @@ export function PrivateLandAnalysisRoot({ system, onDetailOpenChange, children }
     if (previewTimerRef.current != null) window.clearTimeout(previewTimerRef.current);
     previewTimerRef.current = null;
     previewSeqRef.current += 1;
-    removeKinds(['chordStart', 'chord1', 'chord2', 'preview', 'zone', 'parcel', 'tribCut', 'tribMoving', 'cut', 'shape']);
+    removeKinds(['chordStart', 'chord1', 'chord2', 'preview', 'zone', 'parcel', 'building', 'tribCut', 'tribMoving', 'cut', 'shape']);
     closedCutsRef.current = [];
     shapeRef.current = null;
     setHasShape(false);
@@ -514,7 +547,7 @@ export function PrivateLandAnalysisRoot({ system, onDetailOpenChange, children }
     setTruncated(false);
     setOwnFilter(OWN_FILTER_ALL);
     setKeyword('');
-    setSelectedPnu(null);
+    setSelectedKey(null);
     setMessage('');
     setCadastral(false);
   }, [removeKinds, setCadastral]);
@@ -1569,25 +1602,41 @@ export function PrivateLandAnalysisRoot({ system, onDetailOpenChange, children }
       }
 
       try {
-        const res = await call('', 'POST', {
-          service: 'privateLandAnalysisService',
-          action: 'listPrivateLandAnalysisParcels',
-          params,
-        });
+        const [res, bldRes] = await Promise.all([
+          call('', 'POST', {
+            service: 'privateLandAnalysisService',
+            action: 'listPrivateLandAnalysisParcels',
+            params,
+          }),
+          /** 건물 조회 실패는 필지 결과를 막지 않는다 */
+          call('', 'POST', {
+            service: 'privateLandAnalysisService',
+            action: 'listPrivateLandAnalysisBuildings',
+            params,
+          }).catch(() => null),
+        ]);
         const data = res?.data ?? res;
         if (data?.error) {
           backToRanged(String(data.error));
           return;
         }
-        const rows = (Array.isArray(data?.parcels) ? (data.parcels as PrivateLandParcel[]) : []).map((r) => ({
-          ...r,
-          ownGbn: ownGbnLabel(r.ownGbn),
-        }));
-        setParcels(rows);
-        setTruncated(data?.truncated === true);
+        const parcelRows: PrivateLandParcel[] = (Array.isArray(data?.parcels) ? data.parcels : []).map(
+          (r: Omit<PrivateLandParcel, 'key' | 'kind'>) => ({
+            ...r,
+            key: `parcel:${r.pnu}`,
+            kind: 'parcel' as const,
+            ownGbn: ownGbnLabel(r.ownGbn),
+          })
+        );
+        const bldData = bldRes?.data ?? bldRes;
+        const buildingRows: PrivateLandParcel[] = (Array.isArray(bldData?.buildings) ? bldData.buildings : []).map(
+          (b: Omit<PrivateLandParcel, 'ownGbn'>) => ({ ...b, ownGbn: '' })
+        );
+        setParcels([...parcelRows, ...buildingRows]);
+        setTruncated(data?.truncated === true || bldData?.truncated === true);
         setOwnFilter(OWN_FILTER_ALL);
         setKeyword('');
-        setSelectedPnu(null);
+        setSelectedKey(null);
         setPhase('result');
         setCadastral(true);
         const map = mapRef?.current;
@@ -1618,35 +1667,38 @@ export function PrivateLandAnalysisRoot({ system, onDetailOpenChange, children }
   const filteredParcels = useMemo(() => {
     const q = keyword.trim().toLowerCase();
     return parcels.filter((p) => {
-      if (!matchesOwnFilter(ownFilter, p.ownGbn)) return false;
+      if (!matchesOwnFilter(ownFilter, p.ownGbn, p.kind !== 'parcel')) return false;
       if (!q) return true;
-      return `${p.address} ${p.pnu} ${p.ownGbn} ${p.jimok}`.toLowerCase().includes(q);
+      return `${p.address} ${p.pnu} ${p.ownGbn} ${p.jimok} ${p.name ?? ''}`.toLowerCase().includes(q);
     });
   }, [keyword, ownFilter, parcels]);
 
   const selectedParcel = useMemo(
-    () => (selectedPnu ? parcels.find((p) => p.pnu === selectedPnu) ?? null : null),
-    [parcels, selectedPnu]
+    () => (selectedKey ? parcels.find((p) => p.key === selectedKey) ?? null : null),
+    [parcels, selectedKey]
   );
 
-  /** 걸러진 필지만 지도에 표시 */
+  /** 걸러진 필지·건물만 지도에 표시 */
   useEffect(() => {
-    removeKinds(['parcel']);
+    removeKinds(['parcel', 'building']);
     for (const f of sourceRef.current?.getFeatures() ?? []) {
       if (RESULT_HIDDEN_KINDS.includes(String(f.get('kind')))) f.set('hidden', phase === 'result');
     }
     if (phase !== 'result') return;
     for (const p of filteredParcels) {
       const geom = readGeometry3857(p.geometry3857);
-      if (geom) addFeature('parcel', geom, { pnu: p.pnu, ownGbn: p.ownGbn, picked: p.pnu === selectedPnu });
+      if (!geom) continue;
+      const picked = p.key === selectedKey;
+      if (p.kind === 'parcel') addFeature('parcel', geom, { rowKey: p.key, ownGbn: p.ownGbn, picked });
+      else addFeature('building', geom, { rowKey: p.key, picked });
     }
-  }, [addFeature, filteredParcels, phase, removeKinds, selectedPnu]);
+  }, [addFeature, filteredParcels, phase, removeKinds, selectedKey]);
 
   const selectParcel = useCallback(
-    (pnu: string | null) => {
-      setSelectedPnu(pnu);
-      if (!pnu) return;
-      const row = parcels.find((p) => p.pnu === pnu);
+    (key: string | null) => {
+      setSelectedKey(key);
+      if (!key) return;
+      const row = parcels.find((p) => p.key === key);
       const map = mapRef?.current;
       const ext = row?.extent3857 ?? readGeometry3857(row?.geometry3857)?.getExtent() ?? null;
       if (map && ext) {
@@ -1658,7 +1710,7 @@ export function PrivateLandAnalysisRoot({ system, onDetailOpenChange, children }
     [mapRef, parcels]
   );
 
-  /** 결과 중 지도에서 필지 클릭 → 목록 선택 */
+  /** 결과 중 지도에서 필지·건물 클릭 → 목록 선택 (건물이 필지 위에 있으므로 건물 우선) */
   useEffect(() => {
     if (phase !== 'result') return;
     const map = mapRef?.current;
@@ -1666,19 +1718,27 @@ export function PrivateLandAnalysisRoot({ system, onDetailOpenChange, children }
     const onClick = (evt: MapBrowserEvent<PointerEvent>) => {
       const vl = vectorLayerRef.current;
       if (!vl) return;
-      let hit = '';
+      let parcelHit = '';
+      let buildingHit = '';
       map.forEachFeatureAtPixel(
         evt.pixel,
         (f) => {
-          if (f.get('kind') !== 'parcel') return undefined;
-          hit = String(f.get('pnu') ?? '');
-          return hit ? true : undefined;
+          const kind = f.get('kind');
+          const rowKey = String(f.get('rowKey') ?? '');
+          if (!rowKey) return undefined;
+          if (kind === 'building') {
+            buildingHit = rowKey;
+            return true;
+          }
+          if (kind === 'parcel' && !parcelHit) parcelHit = rowKey;
+          return undefined;
         },
         { hitTolerance: 3, layerFilter: (l) => l === vl }
       );
+      const hit = buildingHit || parcelHit;
       if (!hit) return;
       evt.stopPropagation();
-      setSelectedPnu(hit);
+      setSelectedKey(hit);
     };
     const key = map.on('singleclick', onClick as never);
     return () => unByKey(key);
@@ -1709,7 +1769,7 @@ export function PrivateLandAnalysisRoot({ system, onDetailOpenChange, children }
       ownFilter,
       keyword,
       filteredParcels,
-      selectedPnu,
+      selectedKey,
       selectedParcel,
       riverKnown,
       includeTributary,
@@ -1784,7 +1844,7 @@ export function PrivateLandAnalysisRoot({ system, onDetailOpenChange, children }
       selectLayer,
       selectParcel,
       selectedParcel,
-      selectedPnu,
+      selectedKey,
       setIncludeTributary,
       tribCandidateCount,
       tribCutCount,

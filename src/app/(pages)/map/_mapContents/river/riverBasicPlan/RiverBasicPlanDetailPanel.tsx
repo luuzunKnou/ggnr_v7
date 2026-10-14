@@ -19,7 +19,9 @@ import {
   ChevronLeft,
   ChevronDown,
   ChevronRight,
+  Waves,
 } from "lucide-react";
+import { RiverPlanAreaModeButton, type RiverPlanAreaMode } from "./RiverPlanAreaModeButton";
 import { cn } from "@/lib/utils";
 import { formatDetailScalarValue } from "@/lib/formatDetailScalar";
 import { SER_FILE_ENG } from "@/lib/serviceFileDataSerEng";
@@ -29,6 +31,7 @@ import {
   riverBasicPlanGdWmsDefineTables,
   riverBasicPlanHdDefineTable,
   riverBasicPlanIndexDefineTable,
+  riverBasicPlanJbDefineTable,
   riverBasicPlanJdDefineTable,
   buildRiverBasicPlanMapCqlByLayer,
 } from "@/lib/riverBasicPlanMapAttachmentLayers";
@@ -101,6 +104,9 @@ const INDEX_THUMB_FRAME = "relative w-full aspect-[3/2] overflow-hidden bg-muted
 
 type RiverType = "river" | "smallRiver";
 
+/** 기본계획도(하천구역 면) «선만» GeoServer 스타일 — 흰 외곽선만 */
+const PLAN_AS_LINE_STYLE = "river_plan_as_line";
+
 function layerByLabelForTab(tab: RiverType): Record<string, string | undefined> {
   return {
     색인도: riverBasicPlanIndexDefineTable(tab),
@@ -170,12 +176,15 @@ export function RiverBasicPlanDetailPanel({ tab, riverName, onClose }: Props) {
   const visibleLayerNames = mapContext?.visibleLayerNames ?? new Set<string>();
   const setVisibleLayerNames = mapContext?.setVisibleLayerNames;
   const setServiceWmsCqlByLayer = mapContext?.setServiceWmsCqlByLayer;
+  const serviceWmsStyleByLayer = mapContext?.serviceWmsStyleByLayer ?? null;
+  const setServiceWmsStyleByLayer = mapContext?.setServiceWmsStyleByLayer;
   const selectedPlanRef = mapContext?.riverBasicPlanSelectedPlanRef;
   const indexLayer = riverBasicPlanIndexDefineTable(tab);
   const planAsLayer = riverBasicPlanAsDefineTable(tab);
   const jdLayer = riverBasicPlanJdDefineTable(tab);
   const hdLayer = riverBasicPlanHdDefineTable(tab);
   const structureParent = riverBasicPlanGdParentDefineTable(tab);
+  const jbLayer = riverBasicPlanJbDefineTable(tab);
   const layerByLabel = useMemo(() => layerByLabelForTab(tab), [tab]);
   const existingMapLayers = useRiverBasicPlanExistingMapLayers(tab);
   const existingMapLayerSet = useMemo(
@@ -198,6 +207,7 @@ export function RiverBasicPlanDetailPanel({ tab, riverName, onClose }: Props) {
       next.delete(riverBasicPlanHdDefineTable(otherTab));
       for (const id of riverBasicPlanGdWmsDefineTables(otherTab)) next.delete(id);
       next.delete(riverBasicPlanGdParentDefineTable(otherTab));
+      next.delete(riverBasicPlanJbDefineTable(otherTab));
       if (allow(indexLayer)) next.add(indexLayer);
       else next.delete(indexLayer);
       if (allow(planAsLayer)) next.add(planAsLayer);
@@ -211,6 +221,8 @@ export function RiverBasicPlanDetailPanel({ tab, riverName, onClose }: Props) {
         if (allow(id)) next.add(id);
         else next.delete(id);
       }
+      if (allow(jbLayer)) next.add(jbLayer);
+      else next.delete(jbLayer);
       return next;
     });
     // 지방하천: defineLayer 자식 목록이 늦게 오면 그 목록으로 재적용
@@ -224,9 +236,49 @@ export function RiverBasicPlanDetailPanel({ tab, riverName, onClose }: Props) {
     jdLayer,
     hdLayer,
     structureParent,
+    jbLayer,
     existingMapLayers,
     existingMapLayerSet,
   ]);
+
+  /** 하천구역 «선만» 스타일은 탭 전환·상세 닫힘 시 해제 (다른 화면은 기본 스타일) */
+  useEffect(() => {
+    if (!setServiceWmsStyleByLayer) return;
+    return () => {
+      setServiceWmsStyleByLayer((prev) => {
+        const keys = [riverBasicPlanAsDefineTable("river"), riverBasicPlanAsDefineTable("smallRiver")];
+        if (!prev || !keys.some((k) => k in prev)) return prev;
+        const next = { ...prev };
+        for (const k of keys) delete next[k];
+        return Object.keys(next).length ? next : null;
+      });
+    };
+  }, [tab, setServiceWmsStyleByLayer]);
+
+  const areaMode: RiverPlanAreaMode = !visibleLayerNames.has(planAsLayer)
+    ? "off"
+    : serviceWmsStyleByLayer?.[planAsLayer] === PLAN_AS_LINE_STYLE
+      ? "line"
+      : "fill";
+
+  const applyAreaMode = useCallback(
+    (mode: RiverPlanAreaMode) => {
+      setVisibleLayerNames?.((prev) => {
+        if (mode === "off" ? !prev.has(planAsLayer) : prev.has(planAsLayer)) return prev;
+        const next = new Set(prev);
+        if (mode === "off") next.delete(planAsLayer);
+        else next.add(planAsLayer);
+        return next;
+      });
+      setServiceWmsStyleByLayer?.((prev) => {
+        const next = { ...(prev ?? {}) };
+        if (mode === "line") next[planAsLayer] = PLAN_AS_LINE_STYLE;
+        else delete next[planAsLayer];
+        return Object.keys(next).length ? next : null;
+      });
+    },
+    [planAsLayer, setVisibleLayerNames, setServiceWmsStyleByLayer]
+  );
 
   const [plans, setPlans] = useState<PlanItem[]>([]);
   const plansRef = useRef<PlanItem[]>([]);
@@ -935,6 +987,7 @@ export function RiverBasicPlanDetailPanel({ tab, riverName, onClose }: Props) {
 
   const actionButtons: { label: string; icon: React.ComponentType<{ className?: string }> }[] = [
     { label: "보고서", icon: FileText },
+    { label: "하천구역", icon: Waves },
     { label: "색인도", icon: Map },
     { label: "구조물도", icon: Construction },
     { label: "종단면도", icon: FlipHorizontal },
@@ -970,25 +1023,33 @@ export function RiverBasicPlanDetailPanel({ tab, riverName, onClose }: Props) {
     if (!setVisibleLayerNames) return;
     setVisibleLayerNames((prev) => {
       const next = new Set(prev);
+      const showJb = (on: boolean) => {
+        if (on && existingMapLayerSet.has(jbLayer.toLowerCase())) next.add(jbLayer);
+        else next.delete(jbLayer);
+      };
       if (structureChildLayerNames.length === 0) {
-        if (next.has(structureParent)) next.delete(structureParent);
-        else next.add(structureParent);
+        const on = !(next.has(structureParent) || next.has(jbLayer));
+        if (on) next.add(structureParent);
+        else next.delete(structureParent);
+        showJb(on);
         pendingEnableStructureChildrenRef.current = false;
         return next;
       }
-      const anyChildOn = structureChildLayerNames.some((n) => next.has(n));
-      if (anyChildOn) {
+      const anyOn = structureChildLayerNames.some((n) => next.has(n)) || next.has(jbLayer);
+      if (anyOn) {
         pendingEnableStructureChildrenRef.current = false;
         for (const n of structureChildLayerNames) next.delete(n);
         next.delete(structureParent);
+        showJb(false);
         return next;
       }
       next.delete(structureParent);
       pendingEnableStructureChildrenRef.current = false;
       for (const n of structureChildLayerNames) next.add(n);
+      showJb(true);
       return next;
     });
-  }, [setVisibleLayerNames, structureChildLayerNames, structureParent]);
+  }, [setVisibleLayerNames, structureChildLayerNames, structureParent, jbLayer, existingMapLayerSet]);
 
   /** 서버가 준 물리 테이블명·kind로 WMS define_table_name(종단/횡단/구조물 분할) 켜기 — 색인도 상세목록과 동일 목적 */
   const ensureRelatedItemLayerVisible = useCallback(
@@ -1015,6 +1076,14 @@ export function RiverBasicPlanDetailPanel({ tab, riverName, onClose }: Props) {
         });
         return;
       }
+      if (r.kind === "제방" || fl === jbLayer.toLowerCase()) {
+        setVisibleLayerNames((prev) => {
+          const next = new Set(prev);
+          next.add(jbLayer);
+          return next;
+        });
+        return;
+      }
       if (
         r.kind === "구조물" ||
         fl.startsWith("river_plan_gd_ps") ||
@@ -1034,7 +1103,7 @@ export function RiverBasicPlanDetailPanel({ tab, riverName, onClose }: Props) {
         });
       }
     },
-    [setVisibleLayerNames, structureChildLayerNames, structureParent, layerByLabel],
+    [setVisibleLayerNames, structureChildLayerNames, structureParent, layerByLabel, jbLayer],
   );
 
   return (
@@ -1107,15 +1176,19 @@ export function RiverBasicPlanDetailPanel({ tab, riverName, onClose }: Props) {
       </div>
 
       <div className="shrink-0 border-b border-border px-3 py-2 bg-background">
-        <div className="grid grid-cols-5 gap-1.5">
+        <div className="grid grid-cols-6 gap-1">
           {actionButtons.map(({ label, icon: Icon }) => {
+            if (label === "하천구역") {
+              return <RiverPlanAreaModeButton key={label} mode={areaMode} onChange={applyAreaMode} />;
+            }
             const isReport = label === "보고서";
             const layerName = layerByLabel[label];
             const isStructureGroup = label === "구조물도";
             const layerOn = isStructureGroup
-              ? structureWmsLayerNames.length > 0
-                ? structureWmsLayerNames.some((n) => visibleLayerNames.has(n))
-                : Boolean(layerName && visibleLayerNames.has(layerName))
+              ? visibleLayerNames.has(jbLayer) ||
+                (structureWmsLayerNames.length > 0
+                  ? structureWmsLayerNames.some((n) => visibleLayerNames.has(n))
+                  : Boolean(layerName && visibleLayerNames.has(layerName)))
               : layerName
                 ? visibleLayerNames.has(layerName)
                 : false;
@@ -1150,7 +1223,7 @@ export function RiverBasicPlanDetailPanel({ tab, riverName, onClose }: Props) {
                 }}
                 disabled={isReport ? reportButtonDisabled : !layerName}
                 className={cn(
-                  "h-7 w-full text-[11px] rounded border min-w-0 whitespace-nowrap inline-flex items-center justify-center gap-1",
+                  "h-7 w-full text-[11px] rounded border min-w-0 overflow-hidden px-0.5 whitespace-nowrap inline-flex items-center justify-center gap-0.5",
                   isReport
                     ? reportButtonDisabled
                       ? "border-border bg-muted/50 text-muted-foreground opacity-50 cursor-not-allowed"
@@ -1290,7 +1363,7 @@ export function RiverBasicPlanDetailPanel({ tab, riverName, onClose }: Props) {
                 <div>
                   <p className="text-[11px] font-medium text-muted-foreground mb-2">상세목록</p>
                   {indexBundle.related.length === 0 ? (
-                    <p className="text-xs text-muted-foreground py-2">연결된 구조물·종단·횡단 항목이 없습니다.</p>
+                    <p className="text-xs text-muted-foreground py-2">연결된 구조물·제방·종단·횡단 항목이 없습니다.</p>
                   ) : (
                     <ul className="rounded border border-border divide-y divide-border bg-background">
                       {indexBundle.related.map((r) => {
@@ -1343,7 +1416,7 @@ export function RiverBasicPlanDetailPanel({ tab, riverName, onClose }: Props) {
                                 }}
                               >
                                 <span
-                                  className="inline-flex h-5 w-12 shrink-0 items-center justify-center truncate rounded bg-muted px-0.5 text-center text-[10px] font-medium leading-none text-muted-foreground"
+                                  className="inline-flex h-5 w-14 shrink-0 items-center justify-center truncate rounded bg-muted px-0.5 text-center text-[10px] font-medium leading-none text-muted-foreground"
                                   title={r.badge}
                                 >
                                   {r.badge}

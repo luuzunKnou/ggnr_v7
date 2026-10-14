@@ -52,7 +52,7 @@ export function AerialViewerMetaChip({
 }
 
 /** 검색창 아래, 왼쪽 목록 오른쪽. 오른쪽 메뉴와 겹치지 않는다. */
-function useMapCorner(enabled: boolean) {
+export function useMapCorner(enabled: boolean) {
   const [corner, setCorner] = useState<{ left: number; top: number } | null>(null);
 
   useEffect(() => {
