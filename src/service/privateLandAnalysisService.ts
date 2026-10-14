@@ -1,6 +1,6 @@
 import { db } from '@/database/db';
 import { sql } from 'drizzle-orm';
-import { findJijukParcelsAtPoints5181, listJijukParcelsByGeomWkt5181 } from '@/service/layerRowService';
+import { findJijukParcelsForGeoms5181, listJijukParcelsByGeomWkt5181 } from '@/service/layerRowService';
 import { loadJijukOwnGbn } from '@/service/riverBasicPlanService';
 import {
   findPrivateLandAnalysisLayer,
@@ -1537,7 +1537,7 @@ type BuildingHitRow = {
   name?: unknown;
   area_sqm?: unknown;
   intersect_area_sqm?: unknown;
-  pt?: unknown;
+  wkt?: unknown;
   geometry3857?: Geo | null;
   xmin?: unknown;
   ymin?: unknown;
@@ -1545,7 +1545,7 @@ type BuildingHitRow = {
   ymax?: unknown;
 };
 
-/** 분석 — 구간과 겹치는 건물·건물군. 놓인 필지는 건물 안쪽 한 점으로 지적에서 찾는다 */
+/** 분석 — 구간과 겹치는 건물·건물군. 놓인 필지는 건물과 겹친 지적 중 대지 쪽(공공용 지목 뒤로)·겹친 면적 큰 순 */
 export async function listPrivateLandAnalysisBuildings(params?: ZoneParams): Promise<{
   buildings: {
     key: string;
@@ -1580,7 +1580,7 @@ export async function listPrivateLandAnalysisBuildings(params?: ZoneParams): Pro
              COALESCE(NULLIF(TRIM(to_jsonb(f)->>'buld_nm'), ''), NULLIF(TRIM(to_jsonb(f)->>'pos_bul_nm'), ''), '') AS name,
              ROUND(ST_Area(${featGeom})::numeric, 2)::float8 AS area_sqm,
              ROUND(ST_Area(${clip})::numeric, 2)::float8 AS intersect_area_sqm,
-             ST_AsText(ST_PointOnSurface(${featGeom})) AS pt,
+             ST_AsText(${featGeom}) AS wkt,
              ST_AsGeoJSON(ST_Transform(${featGeom}, 3857))::json AS geometry3857,
              ST_XMin(ST_Transform(${featGeom}, 3857))::float8 AS xmin,
              ST_YMin(ST_Transform(${featGeom}, 3857))::float8 AS ymin,
@@ -1599,8 +1599,8 @@ export async function listPrivateLandAnalysisBuildings(params?: ZoneParams): Pro
       for (const row of rows) hits.push({ key: `${def.kind}:${String(row.id ?? '')}`, kind: def.kind, row });
     }
 
-    const found = await findJijukParcelsAtPoints5181({
-      points: hits.map((h) => ({ key: h.key, wkt5181: String(h.row.pt ?? '') })),
+    const found = await findJijukParcelsForGeoms5181({
+      geoms: hits.map((h) => ({ key: h.key, wkt5181: String(h.row.wkt ?? '') })),
     });
 
     const buildings = hits.map(({ key, kind, row }) => {

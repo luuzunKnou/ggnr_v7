@@ -2385,33 +2385,46 @@ export async function listJijukParcelsByGeomWkt5181(params: {
 }
 
 /** 여러 점(WKT 5181)마다 그 점이 놓인 jijuk 필지 1건 — 키별로 반환, 못 찾은 점은 빠진다 */
-export async function findJijukParcelsAtPoints5181(params: {
-  points: Array<{ key: string; wkt5181: string }>;
+/** 건물이 걸쳐도 대장이 붙지 않는 공공용 지목 — 다른 필지와 함께 겹치면 뒤로 */
+const JIJUK_PUBLIC_USE_JIMOK = ['천', '도', '구', '제', '유', '철', '수'];
+
+/**
+ * 도형(건물 등)별 놓인 지적 필지 1건 — 겹친 필지 중 공공용 지목은 뒤로, 그 다음 겹친 면적이 큰 필지.
+ * 건물·지적 경계가 어긋나 하천·도로 필지에 더 걸쳐도 대지 쪽 필지를 고른다.
+ */
+export async function findJijukParcelsForGeoms5181(params: {
+  geoms: Array<{ key: string; wkt5181: string }>;
 }): Promise<{ parcels: Record<string, JijukParcelGeomDto>; error?: string }> {
-  const points = (Array.isArray(params?.points) ? params.points : []).filter(
-    (p) => String(p?.key ?? '').trim() && /^POINT\s*\(/i.test(String(p?.wkt5181 ?? '').trim())
+  const geoms = (Array.isArray(params?.geoms) ? params.geoms : []).filter(
+    (p) => String(p?.key ?? '').trim() && String(p?.wkt5181 ?? '').trim()
   );
-  if (points.length === 0) return { parcels: {} };
+  if (geoms.length === 0) return { parcels: {} };
 
   const jijukRef = await resolveJijukTableRef();
   if (!jijukRef) return { parcels: {}, error: 'jijuk 테이블을 찾을 수 없습니다.' };
 
   const jijukGeom = jijukGeom5181Sql('j.geom');
-  const values = points
+  const values = geoms
     .map(
       (p) =>
-        `('${esc(String(p.key).trim())}', ST_SetSRID(ST_GeomFromText('${esc(String(p.wkt5181).trim())}'), ${JIJUK_GEOM_SRID}))`
+        `('${esc(String(p.key).trim())}', ST_MakeValid(ST_SetSRID(ST_GeomFromText('${esc(String(p.wkt5181).trim())}'), ${JIJUK_GEOM_SRID})))`
     )
     .join(', ');
+  const publicJimok = JIJUK_PUBLIC_USE_JIMOK.map((v) => `'${v}'`).join(', ');
   const queryStr = `
-    WITH pts(point_key, g) AS (VALUES ${values})
-    SELECT pts.point_key, q.*
-    FROM pts
+    WITH src(geom_key, g) AS (VALUES ${values})
+    SELECT src.geom_key AS point_key, q.*
+    FROM src
     CROSS JOIN LATERAL (
-      ${jijukParcelSelectSql('j.geom', jijukRef.qualified)}
-        AND ${jijukGeom} && pts.g
-        AND ST_Intersects(ST_MakeValid(${jijukGeom}), pts.g)
-      ORDER BY j.${quoteIdent(jijukRef.orderCol)}
+      SELECT c.*
+      FROM (
+        ${jijukParcelSelectSql('j.geom', jijukRef.qualified, `ST_Intersection(ST_MakeValid(${jijukGeom}), src.g)`)}
+          AND ${jijukGeom} && src.g
+          AND ST_Intersects(ST_MakeValid(${jijukGeom}), src.g)
+      ) c
+      ORDER BY
+        CASE WHEN c.jimok IN (${publicJimok}) THEN 1 ELSE 0 END,
+        c.intersect_area_sqm DESC NULLS LAST
       LIMIT 1
     ) q`;
 
