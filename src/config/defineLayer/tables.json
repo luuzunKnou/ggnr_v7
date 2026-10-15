@@ -228,18 +228,6 @@
     "define_table_source": "shp"
   },
   {
-    "define_table_name": "cons_data_as_solo",
-    "define_table_kor_name": "cons_data_as_solo",
-    "define_table_shp_type": "POLYGON",
-    "define_table_read_share": "P",
-    "define_table_write_share": "P",
-    "define_table_group": "하천",
-    "define_table_idx": "0",
-    "define_table_etc": "",
-    "define_table_schema": "layer",
-    "define_table_source": "shp"
-  },
-  {
     "define_table_name": "d0023372_1",
     "define_table_kor_name": "d0023372_1",
     "define_table_shp_type": "POLYGON",
@@ -1706,6 +1694,30 @@
   {
     "define_table_name": "rdl_mdst_as",
     "define_table_kor_name": "중앙분리대",
+    "define_table_shp_type": "POLYGON",
+    "define_table_read_share": "P",
+    "define_table_write_share": "P",
+    "define_table_group": "도로",
+    "define_table_idx": "0",
+    "define_table_etc": "",
+    "define_table_schema": "layer",
+    "define_table_source": "shp"
+  },
+  {
+    "define_table_name": "rdl_network_ls",
+    "define_table_kor_name": "rdl_network_ls",
+    "define_table_shp_type": "POLYGON",
+    "define_table_read_share": "P",
+    "define_table_write_share": "P",
+    "define_table_group": "도로",
+    "define_table_idx": "0",
+    "define_table_etc": "",
+    "define_table_schema": "layer",
+    "define_table_source": "shp"
+  },
+  {
+    "define_table_name": "rdl_network_ps",
+    "define_table_kor_name": "rdl_network_ps",
     "define_table_shp_type": "POLYGON",
     "define_table_read_share": "P",
     "define_table_write_share": "P",
@@ -9629,6 +9641,18 @@
   {
     "define_table_name": "cons_data_as",
     "define_table_kor_name": "공사대장",
+    "define_table_shp_type": "POLYGON",
+    "define_table_read_share": "P",
+    "define_table_write_share": "P",
+    "define_table_group": "하천",
+    "define_table_idx": "0",
+    "define_table_etc": "",
+    "define_table_schema": "layer",
+    "define_table_source": "shp"
+  },
+  {
+    "define_table_name": "cons_data_as_solo",
+    "define_table_kor_name": "cons_data_as_solo",
     "define_table_shp_type": "POLYGON",
     "define_table_read_share": "P",
     "define_table_write_share": "P",

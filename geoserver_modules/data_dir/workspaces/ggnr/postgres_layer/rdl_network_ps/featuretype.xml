@@ -1,0 +1,41 @@
+<featureType>
+  <id>FeatureTypeInfoImpl-7b45823a:1a113f17c5f:-6a35</id>
+  <name>rdl_network_ps</name>
+  <nativeName>rdl_network_ps</nativeName>
+  <namespace>
+    <id>NamespaceInfoImpl-4bf97568:19c4d6c3053:-7ffa</id>
+  </namespace>
+  <title>rdl_network_ps</title>
+  <keywords>
+    <string>features</string>
+    <string>rdl_network_ps</string>
+  </keywords>
+  <srs>EPSG:5181</srs>
+  <nativeBoundingBox>
+    <minx>355088.120794171</minx>
+    <maxx>376382.5827027223</maxx>
+    <miny>247707.44296334352</miny>
+    <maxy>277474.3881679927</maxy>
+    <crs class="projected">EPSG:5181</crs>
+  </nativeBoundingBox>
+  <latLonBoundingBox>
+    <minx>128.71383195909658</minx>
+    <maxx>128.95560951751042</maxx>
+    <miny>35.71079891469547</miny>
+    <maxy>35.98253504997479</maxy>
+    <crs>EPSG:4326</crs>
+  </latLonBoundingBox>
+  <projectionPolicy>FORCE_DECLARED</projectionPolicy>
+  <enabled>true</enabled>
+  <store class="dataStore">
+    <id>DataStoreInfoImpl-4bf97568:19c4d6c3053:-7ff9</id>
+  </store>
+  <serviceConfiguration>false</serviceConfiguration>
+  <maxFeatures>0</maxFeatures>
+  <numDecimals>0</numDecimals>
+  <padWithZeros>false</padWithZeros>
+  <forcedDecimal>false</forcedDecimal>
+  <overridingServiceSRS>false</overridingServiceSRS>
+  <skipNumberMatched>false</skipNumberMatched>
+  <circularArcPresent>false</circularArcPresent>
+</featureType>

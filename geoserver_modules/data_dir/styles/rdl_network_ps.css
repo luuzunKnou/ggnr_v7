@@ -1,75 +1,87 @@
-/* 도로망도 번호 라벨 (경산). 점 표시 없이 포인트 위치에 num 라벨 + 분류(layer)별 바탕 도형 */
-* {
+@mode 'Flat';
+/* 도로망도 노선번호 표지 (통합 도로망 점). 점 표시 없이 num 라벨 + 등급(layer)별 도로표지 바탕.
+   표지 크기는 전부 높이 20 고정(가로 약 33, 고속도로만 24). 바탕·테두리는 선·목록 뱃지와 같은 종류 색. 글씨는 고속도로·국도 흰색, 지방도 청색, 군도 군도색, 농도 검정.
+   축척 1:400,000 미만(지도 줌 11 이상, 축척 표시 7.68km 이하)에서만 표시 — 줌 10(15.36km)부터 숨김.
+   글꼴은 명조(Serif, 윈도우에서는 Times New Roman) 굵게 하나만 — 미개설 선 위 화면 표지도 같은 글꼴. 바꾸면 화면 표지도 같이 바꿀 것.
+   (지도 서버는 한글 글꼴을 한글 이름으로만 인식, 글꼴을 여러 개 나열해도 대체 동작이 안 됨)
+   규칙마다 범례 제목(@title), 규칙끼리 섞지 않음(Flat) */
+
+/* @title 고속도로 */
+[@sd < 400000][layer = '고속도로'] {
   label: [num];
   label-anchor: 0.5 0.5;
-  font-family: "Nanum Gothic", "Malgun Gothic", "SansSerif";
-  font-size: 11;
+  font-family: "Serif";
+  font-size: 12;
+  font-weight: bold;
+  font-fill: #FFFFFF;
+  label-conflict-resolution: false;
+  label-priority: 1000;
+  shield: url('road_shield_highway.svg');
+  shield-mime: 'image/svg+xml';
+  shield-size: 24;
+  shield-resize: none;
+}
+
+/* @title 국도 */
+[@sd < 400000][layer = '국도'] {
+  label: [num];
+  label-anchor: 0.5 0.5;
+  font-family: "Serif";
+  font-size: 12;
+  font-weight: bold;
+  font-fill: #FFFFFF;
+  label-conflict-resolution: false;
+  label-priority: 900;
+  shield: url('road_shield_national.svg');
+  shield-mime: 'image/svg+xml';
+  shield-size: 20;
+  shield-resize: none;
+}
+
+/* @title 지방도 */
+[@sd < 400000][layer IN ('국가지원지방도', '지방도')] {
+  label: [num];
+  label-anchor: 0.5 0.5;
+  font-family: "Serif";
+  font-size: 12;
+  font-weight: bold;
+  font-fill: #1E4FA8;
+  label-conflict-resolution: false;
+  label-priority: 800;
+  shield: url('road_shield_provincial.svg');
+  shield-mime: 'image/svg+xml';
+  shield-size: 20;
+  shield-resize: none;
+}
+
+/* @title 군도 */
+[@sd < 400000][layer IN ('시군구', '시군도')] {
+  label: [num];
+  label-anchor: 0.5 0.5;
+  font-family: "Serif";
+  font-size: 12;
+  font-weight: bold;
+  font-fill: #1F76AC;
+  label-conflict-resolution: false;
+  label-priority: 600;
+  shield: url('road_shield_county_blue.svg');
+  shield-mime: 'image/svg+xml';
+  shield-size: 20;
+  shield-resize: none;
+}
+
+/* @title 농도 */
+[@sd < 400000][layer LIKE '면리농도%' OR layer IN ('면도', '리도', '농도')] {
+  label: [num];
+  label-anchor: 0.5 0.5;
+  font-family: "Serif";
+  font-size: 12;
   font-weight: bold;
   font-fill: #212121;
   label-conflict-resolution: false;
   label-priority: 100;
-  shield: symbol(circle);
-  shield-resize: stretch;
-  shield-margin: 3;
-  :shield {
-    fill: #FFFFFF;
-    stroke: #424242;
-    stroke-width: 1;
-  }
-}
-
-[layer = '고속도로'] {
-  shield: symbol(square);
-  font-fill: #FFFFFF;
-  label-priority: 1000;
-  :shield {
-    fill: #2E7D32;
-    stroke: #FFFFFF;
-  }
-}
-
-[layer = '국도'] {
-  shield: symbol(circle);
-  font-fill: #FFFFFF;
-  label-priority: 900;
-  :shield {
-    fill: #D32F2F;
-    stroke: #FFFFFF;
-  }
-}
-
-[layer = '국가지원지방도'] {
-  shield: symbol(square);
-  font-fill: #FFFFFF;
-  label-priority: 800;
-  :shield {
-    fill: #EF6C00;
-    stroke: #FFFFFF;
-  }
-}
-
-[layer = '지방도'] {
-  shield: symbol(square);
-  font-fill: #212121;
-  label-priority: 700;
-  :shield {
-    fill: #F9A825;
-    stroke: #FFFFFF;
-  }
-}
-
-[layer = '시군구'] {
-  shield: symbol(circle);
-  font-fill: #FFFFFF;
-  label-priority: 600;
-  :shield {
-    fill: #1565C0;
-    stroke: #FFFFFF;
-  }
-}
-
-[layer LIKE '면리농도%'] {
-  shield: symbol(circle);
-  font-size: 10;
-  label-priority: 100;
+  shield: url('road_shield_local_883700.svg');
+  shield-mime: 'image/svg+xml';
+  shield-size: 20;
+  shield-resize: none;
 }
