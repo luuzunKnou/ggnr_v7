@@ -37,7 +37,7 @@
             </sld:Fill>
             <sld:Graphic>
               <sld:ExternalGraphic>
-                <sld:OnlineResource xmlns:xlink="http://www.w3.org/1999/xlink" xlink:type="simple" xlink:href="file:/C:/Users/PC/devstrcat/ggnr_v7/geoserver_modules/data_dir/styles/road_shield_highway.svg"/>
+                <sld:OnlineResource xmlns:xlink="http://www.w3.org/1999/xlink" xlink:type="simple" xlink:href="road_shield_highway_v2.svg"/>
                 <sld:Format>image/svg+xml</sld:Format>
               </sld:ExternalGraphic>
               <sld:Size>24</sld:Size>
@@ -78,7 +78,7 @@
             </sld:Fill>
             <sld:Graphic>
               <sld:ExternalGraphic>
-                <sld:OnlineResource xmlns:xlink="http://www.w3.org/1999/xlink" xlink:type="simple" xlink:href="file:/C:/Users/PC/devstrcat/ggnr_v7/geoserver_modules/data_dir/styles/road_shield_national.svg"/>
+                <sld:OnlineResource xmlns:xlink="http://www.w3.org/1999/xlink" xlink:type="simple" xlink:href="road_shield_national.svg"/>
                 <sld:Format>image/svg+xml</sld:Format>
               </sld:ExternalGraphic>
               <sld:Size>20</sld:Size>
@@ -125,7 +125,7 @@
             </sld:Fill>
             <sld:Graphic>
               <sld:ExternalGraphic>
-                <sld:OnlineResource xmlns:xlink="http://www.w3.org/1999/xlink" xlink:type="simple" xlink:href="file:/C:/Users/PC/devstrcat/ggnr_v7/geoserver_modules/data_dir/styles/road_shield_provincial.svg"/>
+                <sld:OnlineResource xmlns:xlink="http://www.w3.org/1999/xlink" xlink:type="simple" xlink:href="road_shield_provincial.svg"/>
                 <sld:Format>image/svg+xml</sld:Format>
               </sld:ExternalGraphic>
               <sld:Size>20</sld:Size>
@@ -172,7 +172,7 @@
             </sld:Fill>
             <sld:Graphic>
               <sld:ExternalGraphic>
-                <sld:OnlineResource xmlns:xlink="http://www.w3.org/1999/xlink" xlink:type="simple" xlink:href="file:/C:/Users/PC/devstrcat/ggnr_v7/geoserver_modules/data_dir/styles/road_shield_county_blue.svg"/>
+                <sld:OnlineResource xmlns:xlink="http://www.w3.org/1999/xlink" xlink:type="simple" xlink:href="road_shield_county_blue.svg"/>
                 <sld:Format>image/svg+xml</sld:Format>
               </sld:ExternalGraphic>
               <sld:Size>20</sld:Size>
@@ -227,7 +227,7 @@
             </sld:Fill>
             <sld:Graphic>
               <sld:ExternalGraphic>
-                <sld:OnlineResource xmlns:xlink="http://www.w3.org/1999/xlink" xlink:type="simple" xlink:href="file:/C:/Users/PC/devstrcat/ggnr_v7/geoserver_modules/data_dir/styles/road_shield_local_883700.svg"/>
+                <sld:OnlineResource xmlns:xlink="http://www.w3.org/1999/xlink" xlink:type="simple" xlink:href="road_shield_local_883700.svg"/>
                 <sld:Format>image/svg+xml</sld:Format>
               </sld:ExternalGraphic>
               <sld:Size>20</sld:Size>

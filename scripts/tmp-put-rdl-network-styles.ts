@@ -23,7 +23,8 @@ async function main() {
     if (!res.ok) throw new Error(`${tmp} create ${res.status} ${await res.text()}`);
     res = await geoserverFetch(`/rest/styles/${tmp}.sld`, { accept: 'application/vnd.ogc.sld+xml' });
     if (!res.ok) throw new Error(`${tmp} get sld ${res.status}`);
-    const sld = await res.text();
+    // 변환 시 표지 이미지가 이 PC 절대경로(file:/C:/...)로 박혀 다른 서버에서 못 찾음 → 스타일 폴더 기준 파일명만
+    const sld = (await res.text()).replace(/xlink:href="file:[^"]*\/styles\/([^"/]+)"/g, 'xlink:href="$1"');
     await geoserverFetch(`/rest/styles/${tmp}?purge=true`, { method: 'DELETE' });
 
     if (/\uFFFD|&#x[0-9A-F]+;/i.test(sld)) throw new Error(`${name} 변환 SLD 한글 깨짐 — 지도 서버 UTF-8 실행 여부 확인`);
