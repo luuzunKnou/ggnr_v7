@@ -213,7 +213,7 @@ function LayerGroupTransferPick({
         placeholder="검색"
         disabled={disabled}
       />
-      <ul className="min-h-[11rem] max-h-[14rem] flex-1 overflow-y-auto">
+      <ul className="h-36 overflow-y-auto">
         {items.length === 0 ? (
           <li className="px-2 py-3 text-[11px] text-muted-foreground">{emptyText}</li>
         ) : (
@@ -434,7 +434,7 @@ function ServiceTransferPick({
         placeholder="검색 (한글명·영문명)"
         disabled={disabled}
       />
-      <ul className="min-h-[11rem] max-h-[14rem] flex-1 overflow-y-auto">
+      <ul className="h-36 overflow-y-auto">
         {items.length === 0 ? (
           <li className="px-2 py-3 text-[11px] text-muted-foreground">{emptyText}</li>
         ) : (
@@ -1066,8 +1066,8 @@ export function SystemListManager() {
       </div>
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-lg overflow-visible rounded-none sm:max-w-3xl">
-          <DialogHeader>
+        <DialogContent className="flex max-h-[calc(100dvh-2rem)] max-w-lg flex-col overflow-hidden rounded-none sm:max-w-3xl">
+          <DialogHeader className="shrink-0">
             <DialogTitle>
               {editingIndex !== null
                 ? "시스템 상세정보"
@@ -1076,7 +1076,7 @@ export function SystemListManager() {
                   : "커스텀 시스템 추가"}
             </DialogTitle>
           </DialogHeader>
-          <div className="grid gap-3 overflow-visible py-2">
+          <div className="-mx-6 grid min-h-0 flex-1 gap-3 overflow-y-auto px-6 py-2">
             <div className="grid grid-cols-3 gap-2 items-center">
               <label className="text-sm font-medium">시스템 키</label>
               <Input
@@ -1184,7 +1184,7 @@ export function SystemListManager() {
               </>
             )}
           </div>
-          <DialogFooter className="flex-row justify-between sm:justify-between">
+          <DialogFooter className="shrink-0 flex-row justify-between sm:justify-between">
             <div>
               {editingIndex !== null && (
                 <Button

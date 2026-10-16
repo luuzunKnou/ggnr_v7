@@ -101,6 +101,12 @@ import { useSpatialDrawOnMap } from './hooks/useSpatialDrawOnMap';
 import { MapPrintModal } from '../_mapContents/mapPrint/MapPrintModal';
 import type { MapPrintSnapshot } from '../_mapContents/mapPrint/mapPrintTypes';
 import { MapSplitResetMeasurementsPanel } from '../_mapContents/mapSplit/MapSplitResetMeasurementsPanel';
+import { DetailWondoMapControl } from '../_mapContents/detailWondo/DetailWondoMapControl';
+import {
+  DETAIL_WONDO_CONTROL_ID,
+  useDetailWondoAvailable,
+  withDetailWondoControl,
+} from '../_mapContents/detailWondo/detailWondoControl';
 import { MAP_SPLIT_CONTROL_RIGHT_MENU_RESERVE_PX } from './mapSplit/mapSplitTypes';
 import {
   MAP_MEASUREMENTS_RESET_EVENT,
@@ -347,6 +353,7 @@ const MULTI_SELECT_IDS = [
   'street-view',
   'map-split',
   'official-land-price',
+  DETAIL_WONDO_CONTROL_ID,
 ];
 
 /** 서로 배타 — 지도 분할 보조 칸은 한 종류만 */
@@ -1628,9 +1635,12 @@ export default function OpenLayersMap({
 
   const router = useRouter();
   const systemKey = systemKeyFromUrl;
+  const detailWondoAvailable = useDetailWondoAvailable();
+  const [detailWondoCheckedCount, setDetailWondoCheckedCount] = useState(0);
   const mapControlGroups = useMemo(
-    (): MapControlGroup[] => mapControlGroupsForSystem(systemKey),
-    [systemKey]
+    (): MapControlGroup[] =>
+      withDetailWondoControl(mapControlGroupsForSystem(systemKey), detailWondoAvailable),
+    [systemKey, detailWondoAvailable]
   );
 
   const aerialViewPanelOpen = aerialPanelOpen || isAerialViewPanelExiting;
@@ -2825,6 +2835,14 @@ export default function OpenLayersMap({
 
     setOpenSubPanel(null);
 
+    // 체크한 원도가 있으면 패널이 닫혀도 버튼이 켜져 보이므로 실제 패널 열림으로 토글
+    if (id === DETAIL_WONDO_CONTROL_ID) {
+      setActiveControls((prev) =>
+        prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
+      );
+      return;
+    }
+
     if (MULTI_SELECT_IDS.includes(id)) {
       setActiveControls((prev) => {
         if (isActive) return prev.filter((item) => item !== id);
@@ -3008,6 +3026,7 @@ export default function OpenLayersMap({
         map={mapReady ? mapInstanceRef.current : null}
         mapReady={mapReady}
         jijukEnabled={jijukLayerEnabled}
+        officialLandPriceEnabled={activeControls.includes('official-land-price')}
       />
 
       {/* 오른쪽 맵 컨트롤 — body 포털(목록·상세 z-10 위에 표시). 분할 시에도 화면 오른쪽 고정.
@@ -3068,6 +3087,17 @@ export default function OpenLayersMap({
                     }}
                   />
                 </div>
+              )}
+
+              {detailWondoAvailable && (
+                <DetailWondoMapControl
+                  panelOpen={activeControls.includes(DETAIL_WONDO_CONTROL_ID)}
+                  onClose={() =>
+                    setActiveControls((prev) => prev.filter((x) => x !== DETAIL_WONDO_CONTROL_ID))
+                  }
+                  onCheckedCountChange={setDetailWondoCheckedCount}
+                  panelClassName={`${overlayListPointerClass} animate-in fade-in-0 slide-in-from-right-4 duration-[400ms]`}
+                />
               )}
 
               {openSubPanel === 'land-category' && (
@@ -3225,7 +3255,10 @@ export default function OpenLayersMap({
                         ? [...activeControls, openSubPanel]
                         : activeControls;
                     const withoutAerial = base.filter((id) => id !== 'aerial-view');
-                    return aerialButtonOn ? [...withoutAerial, 'aerial-view'] : withoutAerial;
+                    const withAerial = aerialButtonOn ? [...withoutAerial, 'aerial-view'] : withoutAerial;
+                    return detailWondoCheckedCount > 0 && !withAerial.includes(DETAIL_WONDO_CONTROL_ID)
+                      ? [...withAerial, DETAIL_WONDO_CONTROL_ID]
+                      : withAerial;
                   })()}
                   onItemClick={handleControlClick}
                   onItemRightClick={handleItemRightClick}

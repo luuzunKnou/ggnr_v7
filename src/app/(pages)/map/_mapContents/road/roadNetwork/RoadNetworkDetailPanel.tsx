@@ -595,7 +595,7 @@ export function RoadNetworkDetailPanel({
   }, [setSitePointKind, setEndpointMarkers, setFocusedSiteKey]);
 
   useEffect(() => {
-    if (row.roadType !== "군도" && row.roadType !== "농도") {
+    if (row.roadType !== "군도" && row.roadType !== "농어촌도로") {
       setEndpointMarkers?.(null);
       return;
     }

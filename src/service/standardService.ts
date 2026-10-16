@@ -1173,6 +1173,29 @@ export async function getParcelHighlightGeom(params: {
 /**
  * 현재 지도 bbox(기본 EPSG:3857)와 교차하는 public_layer.jijuk 필지 목록.
  */
+const jijukStoredSridCache = new Map<string, number | null>();
+/** 공시지가 지도 표시 — 시내 밀집지(가로 1.7km 화면 약 7천 필지) 기준 */
+const JIJUK_BBOX_PARCEL_MAX = 10000;
+/** 표시용 도형 단순화 허용 오차(m) */
+const JIJUK_BBOX_SIMPLIFY_M = 0.3;
+
+/** 지적 도형 값에 실제로 붙은 좌표계(0 = 없음). 조회 실패 시 null */
+async function probeJijukStoredSrid(schema: string, table: string, geomCol: string): Promise<number | null> {
+  const key = `${schema}.${table}.${geomCol}`;
+  if (jijukStoredSridCache.has(key)) return jijukStoredSridCache.get(key) ?? null;
+  let srid: number | null = null;
+  try {
+    const res = await pool.query<{ s: number }>(
+      `SELECT ST_SRID("${geomCol}")::int AS s FROM "${schema}"."${table}" WHERE "${geomCol}" IS NOT NULL LIMIT 1`
+    );
+    srid = res.rows[0] ? Number(res.rows[0].s) : null;
+  } catch {
+    srid = null;
+  }
+  jijukStoredSridCache.set(key, srid);
+  return srid;
+}
+
 export async function getJijukParcelsInBbox(params: {
   minX: number;
   minY: number;
@@ -1186,7 +1209,7 @@ export async function getJijukParcelsInBbox(params: {
     return { parcels: [] as Array<Record<string, unknown>> };
   }
   const srid = typeof params.srid === 'number' && Number.isFinite(params.srid) ? params.srid : 3857;
-  const limit = Math.min(Math.max(Math.floor(params.limit ?? 120), 1), 300);
+  const limit = Math.min(Math.max(Math.floor(params.limit ?? 120), 1), JIJUK_BBOX_PARCEL_MAX);
 
   const schema = 'public_layer';
   const tableName = 'jijuk';
@@ -1214,13 +1237,21 @@ export async function getJijukParcelsInBbox(params: {
     /* keep pnu */
   }
 
-  const envelope = `ST_MakeEnvelope(${minX}, ${minY}, ${maxX}, ${maxY}, ${srid})`;
-  const envelopeInTable = `ST_Transform(${envelope}, ${tableSrid})`;
   const safeGeomCol = geomCol.replace(/"/g, '""');
   const safeOrderCol = orderCol.replace(/"/g, '""');
+  const storedSrid = await probeJijukStoredSrid(schema, tableName, safeGeomCol);
+  const envelope = `ST_MakeEnvelope(${minX}, ${minY}, ${maxX}, ${maxY}, ${srid})`;
+  /** 도형 값에 좌표계가 없는(0) 적재본은 비교 범위도 0으로 맞춰야 공간 인덱스·비교가 된다 */
+  const envelopeInTable =
+    storedSrid === 0
+      ? `ST_SetSRID(ST_Transform(${envelope}, ${tableSrid}), 0)`
+      : `ST_Transform(${envelope}, ${storedSrid ?? tableSrid})`;
+  const geomWithSrid = `ST_SetSRID("${safeGeomCol}", COALESCE(NULLIF(ST_SRID("${safeGeomCol}"), 0), ${tableSrid}))`;
   const idSelect =
     orderCol === 'pnu' ? `"pnu"` : `"${safeOrderCol}" AS "gid", "pnu"`;
-  const queryStr = `SELECT ${idSelect}, "jibun", "bchk", ST_AsGeoJSON(ST_Transform("${safeGeomCol}", 4326))::json AS "${safeGeomCol}" FROM "${schema}"."${tableName}" WHERE "${safeGeomCol}" && ${envelopeInTable} AND ST_Intersects("${safeGeomCol}", ${envelopeInTable}) ORDER BY "${safeOrderCol}" LIMIT ${limit}`;
+  const simplified = `ST_SimplifyPreserveTopology(${geomWithSrid}, ${JIJUK_BBOX_SIMPLIFY_M})`;
+  /** 상한을 넘으면 화면 가운데에서 가까운 필지부터 — 고유번호 순이면 한쪽 동만 채워진다 */
+  const queryStr = `SELECT ${idSelect}, "jibun", "bchk", ST_AsGeoJSON(ST_Transform(${simplified}, 4326), 6)::json AS "${safeGeomCol}" FROM "${schema}"."${tableName}" WHERE "${safeGeomCol}" && ${envelopeInTable} AND ST_Intersects("${safeGeomCol}", ${envelopeInTable}) ORDER BY "${safeGeomCol}" <-> ST_Centroid(${envelopeInTable}), "${safeOrderCol}" LIMIT ${limit}`;
 
   try {
     const dataRes = await db.execute(sql.raw(queryStr));

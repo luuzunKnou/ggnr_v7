@@ -136,7 +136,7 @@ const SOURCES: SourceDef[] = [
   },
   {
     table: 'rdl_perch_opn_ls',
-    roadType: '농도',
+    roadType: '농어촌도로',
     openStatus: '개설',
     nameExpr: `COALESCE(NULLIF(trim(both from t.name::text), ''), '')`,
     noExpr: `COALESCE(NULLIF(trim(both from t.no::text), ''), NULLIF(trim(both from t.admin_no::text), ''), '')`,
@@ -147,7 +147,7 @@ const SOURCES: SourceDef[] = [
   },
   {
     table: 'rdl_perch_uopn_ls',
-    roadType: '농도',
+    roadType: '농어촌도로',
     openStatus: '미개설',
     nameExpr: `COALESCE(NULLIF(trim(both from t.name::text), ''), '')`,
     noExpr: `COALESCE(NULLIF(trim(both from t.no::text), ''), NULLIF(trim(both from t.admin_no::text), ''), '')`,
@@ -256,7 +256,7 @@ function buildSelect(src: SourceDef, safeTbl: string): string {
 }
 
 /**
- * 도로망도 통합 목록 (국도·지방도·군도·농도·일반도로·임도 등).
+ * 도로망도 통합 목록 (국도·지방도·군도·농어촌도로·일반도로·임도 등).
  * 유지보수·민원·첨부·이력은 빈 배열 — 화면 세션에서만 편집.
  */
 export async function getRoadNetworkList(params?: {
@@ -297,7 +297,7 @@ export async function getRoadNetworkList(params?: {
            WHEN '지방도' THEN 2
            WHEN '국지도' THEN 3
            WHEN '군도' THEN 4
-           WHEN '농도' THEN 5
+           WHEN '농어촌도로' THEN 5
            WHEN '일반도로' THEN 6
            WHEN '임도' THEN 7
            WHEN '입체교차로' THEN 8
@@ -439,6 +439,7 @@ function buildAttrSqlValues(
     sinuosity?: string;
     detailReason?: string;
     address?: string;
+    isNew?: boolean;
   }
 ): { ok: true; values: AttrSqlValue[] } | { ok: false; error: string } {
   const name = input.roadName.trim();
@@ -500,7 +501,8 @@ function buildAttrSqlValues(
       add('no', no);
       add('admin_no', no);
       add('admin', dept);
-      add('admin_clas', '농도');
+      // 면도·리도·농도 구분 — 수정 시 기존 값 유지
+      if (input.isNew) add('admin_clas', '농도');
       add('length', lengthAttr);
       add('defense', defense);
       add('sinuosity', sinuosity);
@@ -683,6 +685,10 @@ export async function saveRoadNetworkRow(
   const tableName = await resolveLayerTableName(target.table);
   if (!tableName) return { success: false, error: `테이블이 없습니다: ${target.table}` };
   const typeMap = await getColumnTypeMap(tableName);
+  const id = String(params.id ?? '').trim();
+  const parsed = parseStoredId(id);
+  const moveInsert = Boolean(parsed && parsed.table !== target.table);
+  const isNew = !parsed || moveInsert || isClientOnlyId(id);
   const built = buildAttrSqlValues(target.table, typeMap, {
     roadName,
     roadNo: String(params.roadNo ?? '').trim(),
@@ -693,12 +699,11 @@ export async function saveRoadNetworkRow(
     sinuosity: String(params.sinuosity ?? '').trim(),
     detailReason: String(params.detailReason ?? '').trim(),
     address: String(params.address ?? '').trim(),
+    isNew,
   });
   if (!built.ok) return { success: false, error: built.error };
 
   let geom = params.geom ?? null;
-  const id = String(params.id ?? '').trim();
-  const parsed = parseStoredId(id);
   const attrValues = attrSqlValuesToRecord(built.values);
 
   try {
@@ -722,9 +727,8 @@ export async function saveRoadNetworkRow(
 
     const geomWkt5181 = await geomToWkt5181(geom);
     const geomClear = params.geom === null;
-    const moveInsert = Boolean(parsed && parsed.table !== target.table);
 
-    if (!parsed || moveInsert || isClientOnlyId(id)) {
+    if (isNew) {
       if (Object.keys(attrValues).length === 0 && !geomWkt5181) {
         return { success: false, error: '저장할 도형 또는 속성이 없습니다.' };
       }

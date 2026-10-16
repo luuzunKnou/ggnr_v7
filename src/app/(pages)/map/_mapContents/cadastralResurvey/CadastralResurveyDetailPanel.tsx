@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { ChevronDown, ChevronRight, Download, Search } from 'lucide-react'
+import { ChevronDown, ChevronRight, Download, Loader2, Search, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import {
   DetailAttrRow,
@@ -11,10 +11,10 @@ import {
 import {
   fetchResurveyParcels,
   getResurveyDistrictById,
-  type ResurveyDistrict,
   type ResurveyParcel,
 } from './cadastralResurveyMock'
 import { useCadastralResurveyParcelLayer } from './useCadastralResurveyParcelLayer'
+import { exportResurveyParcelExcel, type ResurveyExcelProgress } from './exportResurveyParcelExcel'
 
 type Props = {
   districtId: string
@@ -25,28 +25,6 @@ const NOOP = () => undefined
 
 function parcelAddress(p: ResurveyParcel): string {
   return `${p.ri} ${p.jibun}`
-}
-
-function downloadParcelCsv(district: ResurveyDistrict, parcels: ResurveyParcel[]) {
-  const header = ['번호', '지번', '지목', '면적(㎡)', '소유구분', '확정여부']
-  const rows = parcels.map((p) => [
-    p.seq,
-    parcelAddress(p),
-    p.jimok,
-    p.area,
-    p.ownerType,
-    p.confirmed ? '확정' : '미확정',
-  ])
-  const csv = [header, ...rows]
-    .map((r) => r.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(','))
-    .join('\r\n')
-  const blob = new Blob(['\uFEFF', csv], { type: 'text/csv;charset=utf-8' })
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = `${district.name}_필지목록.csv`
-  a.click()
-  URL.revokeObjectURL(url)
 }
 
 function Section({
@@ -102,6 +80,12 @@ export function CadastralResurveyDetailPanel({ districtId, onClose }: Props) {
   const [keyword, setKeyword] = useState('')
   const [focusedId, setFocusedId] = useState<string | null>(null)
   const rowRefs = useRef(new Map<string, HTMLTableRowElement>())
+  const [exporting, setExporting] = useState<ResurveyExcelProgress | null>(null)
+  const exportAbortRef = useRef<AbortController | null>(null)
+
+  useEffect(() => {
+    return () => exportAbortRef.current?.abort()
+  }, [districtId])
 
   useEffect(() => {
     if (!district) return
@@ -149,6 +133,32 @@ export function CadastralResurveyDetailPanel({ districtId, onClose }: Props) {
   const handleRowClick = (p: ResurveyParcel) => {
     setFocusedId(p.id)
     fitToParcel(p)
+  }
+
+  const handleExport = async () => {
+    if (!district || exportAbortRef.current) return
+    const ctrl = new AbortController()
+    exportAbortRef.current = ctrl
+    setExporting({ done: 0, total: visibleParcels.length })
+    try {
+      await exportResurveyParcelExcel({
+        district,
+        parcels: visibleParcels,
+        signal: ctrl.signal,
+        onProgress: (p) => {
+          if (!ctrl.signal.aborted) setExporting(p)
+        },
+      })
+    } catch {
+      if (!ctrl.signal.aborted) window.alert('엑셀 파일을 만들지 못했습니다.')
+    } finally {
+      if (exportAbortRef.current === ctrl) exportAbortRef.current = null
+      setExporting(null)
+    }
+  }
+
+  const handleCancelExport = () => {
+    exportAbortRef.current?.abort()
   }
 
   const toggleSection = (id: string) => {
@@ -203,7 +213,7 @@ export function CadastralResurveyDetailPanel({ districtId, onClose }: Props) {
               ['진행단계', district.stageName],
               ['사업기간', district.periodStart ? `${district.periodStart} ~ ${district.periodEnd}` : ''],
               ['대행자', district.agent],
-              ['동의율(%)', district.ownAgreeRto == null ? '' : String(district.ownAgreeRto)],
+              ['소유자 동의율(%)', district.ownAgreeRto == null ? '' : String(district.ownAgreeRto)],
               ['지정상태', district.designateStatus],
             ]}
           />
@@ -218,16 +228,34 @@ export function CadastralResurveyDetailPanel({ districtId, onClose }: Props) {
               ({parcels.length.toLocaleString()})
             </span>
           </span>
-          <button
-            type="button"
-            className="standard-detail-action-btn inline-flex items-center gap-1"
-            onClick={() => downloadParcelCsv(district, visibleParcels)}
-            disabled={visibleParcels.length === 0}
-            title="현재 목록 내려받기"
-          >
-            <Download className="h-3 w-3" />
-            엑셀
-          </button>
+          {exporting ? (
+            <div className="flex items-center gap-1.5 text-muted-foreground">
+              <Loader2 className="h-3 w-3 animate-spin" />
+              <span className="tabular-nums">
+                필지정보 조회 {exporting.done.toLocaleString()} / {exporting.total.toLocaleString()}
+              </span>
+              <button
+                type="button"
+                className="standard-detail-action-btn inline-flex items-center gap-1"
+                onClick={handleCancelExport}
+                title="내려받기 취소"
+              >
+                <X className="h-3 w-3" />
+                취소
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              className="standard-detail-action-btn inline-flex items-center gap-1"
+              onClick={() => void handleExport()}
+              disabled={visibleParcels.length === 0}
+              title="현재 목록과 필지별 토지기본정보·소유내역·이용계획 내려받기"
+            >
+              <Download className="h-3 w-3" />
+              엑셀
+            </button>
+          )}
         </div>
         <div className="shrink-0 px-3 pb-2">
           <div className="standard-search-wrap">

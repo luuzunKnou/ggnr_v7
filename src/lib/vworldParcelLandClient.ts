@@ -228,6 +228,57 @@ export async function fetchVworldParcelTabData(args: {
   };
 }
 
+export type VworldOfficialLandPriceHistoryItem = {
+  year: string;
+  month: string;
+  price: number | null;
+  announceDate: string;
+  note: string;
+};
+
+/** 우클릭 필지정보 «공시지가 조회»와 같은 브이월드 개별공시지가 목록(필지 1건, 연도별) */
+export async function fetchVworldOfficialLandPriceHistory(args: {
+  pnu: string;
+  vworldKey: string;
+}): Promise<VworldOfficialLandPriceHistoryItem[]> {
+  const pnu = toStr(args.pnu);
+  const vworldKey = toStr(args.vworldKey);
+  if (!/^\d{19}$/.test(pnu) || !vworldKey) return [];
+
+  const priceRaw = await fetchVworldJsonp('https://api.vworld.kr/ned/data/getIndvdLandPriceAttr', {
+    key: vworldKey,
+    pnu,
+    format: 'json',
+    numOfRows: '1000',
+  });
+  const prices = sortPricesLatestFirst(
+    dedupeRows(parseRowsFromVworld(priceRaw, 'indvdLandPrices'), [
+      'pblntfDe',
+      'pblntfPclnd',
+      'registDt',
+      'stdrYear',
+      'stdrMt',
+    ])
+  );
+  const byYear = new Map<string, VworldOfficialLandPriceHistoryItem>();
+  for (const row of prices) {
+    const year = toStr(row.stdrYear);
+    if (!/^\d{4}$/.test(year)) continue;
+    const month = toStr(row.stdrMt).replace(/\D/g, '').padStart(2, '0').slice(-2);
+    const cur = byYear.get(year);
+    if (cur && cur.month >= month) continue;
+    const price = toNum(row.pblntfPclnd);
+    byYear.set(year, {
+      year,
+      month,
+      price: price > 0 ? price : null,
+      announceDate: toStr(row.pblntfDe),
+      note: toStr(row.registDt),
+    });
+  }
+  return [...byYear.values()].sort((a, b) => b.year.localeCompare(a.year));
+}
+
 /** 공시지가 지도 레이어 — 최신 1건 */
 export async function fetchVworldLatestOfficialLandPrice(args: {
   pnu: string;
@@ -239,36 +290,78 @@ export async function fetchVworldLatestOfficialLandPrice(args: {
     return { priceNum: null, priceLabel: '-', jibun: '' };
   }
 
-  const priceRaw = await fetchVworldJsonp('https://api.vworld.kr/ned/data/getIndvdLandPriceAttr', {
-    key: vworldKey,
-    pnu,
-    format: 'json',
-    numOfRows: '1000',
-  });
-  const prices = dedupeRows(parseRowsFromVworld(priceRaw, 'indvdLandPrices'), [
-    'pblntfDe',
-    'pblntfPclnd',
-    'registDt',
-  ]);
-  if (!prices.length) {
-    return { priceNum: null, priceLabel: '-', jibun: '', source: 'vworld' };
-  }
-  const latest = sortLatestPrice(prices);
+  const history = await fetchVworldOfficialLandPriceHistory({ pnu, vworldKey });
+  const latest = history[0];
   if (!latest) {
     return { priceNum: null, priceLabel: '-', jibun: '', source: 'vworld' };
   }
-  const priceNum = Number(latest.pblntfPclnd);
-  const priceLabel = Number.isFinite(priceNum)
-    ? `${priceNum.toLocaleString('ko-KR')}원/㎡`
-    : '-';
-  const jibun = toStr(latest.ldCodeNm) || toStr(latest.jibun);
+  const priceNum = latest.price;
+  const priceLabel =
+    priceNum != null && Number.isFinite(priceNum) ? `${priceNum.toLocaleString('ko-KR')}원/㎡` : '-';
 
   return {
-    priceNum: Number.isFinite(priceNum) ? priceNum : null,
+    priceNum: priceNum != null && Number.isFinite(priceNum) ? priceNum : null,
     priceLabel,
-    jibun,
+    jibun: '',
     source: 'vworld',
   };
+}
+
+const VWORLD_PRICE_PAGE_ROWS = 1000;
+const VWORLD_PRICE_MAX_PAGES = 10;
+const priceByPrefixCache = new Map<string, Promise<Map<string, number> | null>>();
+
+async function fetchVworldPricePagesForPrefix(
+  prefix: string,
+  vworldKey: string,
+  stdrYear: string
+): Promise<Map<string, number> | null> {
+  const out = new Map<string, number>();
+  for (let page = 1; page <= VWORLD_PRICE_MAX_PAGES; page++) {
+    const raw = await fetchVworldJsonp('https://api.vworld.kr/ned/data/getIndvdLandPriceAttr', {
+      key: vworldKey,
+      pnu: prefix,
+      stdrYear,
+      format: 'json',
+      numOfRows: String(VWORLD_PRICE_PAGE_ROWS),
+      pageNo: String(page),
+    });
+    const root = raw?.indvdLandPrices as JsonObject | undefined;
+    if (!root || (toStr(root.resultCode) && toStr(root.resultCode) !== 'OK')) return page === 1 ? null : out;
+    const rows = parseRowsFromVworld(raw, 'indvdLandPrices');
+    for (const row of sortPricesLatestFirst(rows)) {
+      const pnu = toStr(row.pnu);
+      const price = toNum(row.pblntfPclnd);
+      if (/^\d{19}$/.test(pnu) && price > 0 && !out.has(pnu)) out.set(pnu, price);
+    }
+    const total = toNum(root.totalCount);
+    if (rows.length < VWORLD_PRICE_PAGE_ROWS || (total > 0 && page * VWORLD_PRICE_PAGE_ROWS >= total)) break;
+  }
+  return out;
+}
+
+/**
+ * 공시지가 지도 레이어 — 법정동(필지번호 앞 10자리) 단위로 개별공시지가를 한 번에 받는다.
+ * 올해 자료가 아직 없으면 전년으로 다시 조회. 같은 법정동은 화면을 옮겨도 다시 부르지 않는다.
+ * 조회 자체가 실패(키 오류·동 단위 미지원 등)하면 null — 실패도 기억해 같은 동을 다시 부르지 않는다
+ */
+export function fetchVworldOfficialLandPricesByPrefix(
+  prefix: string,
+  vworldKey: string
+): Promise<Map<string, number> | null> {
+  const key = toStr(prefix);
+  if (!/^\d{10}$/.test(key) || !vworldKey) return Promise.resolve(null);
+  const cached = priceByPrefixCache.get(key);
+  if (cached) return cached;
+  const year = new Date().getFullYear();
+  const task = (async () => {
+    const thisYear = await fetchVworldPricePagesForPrefix(key, vworldKey, String(year));
+    if (thisYear && thisYear.size > 0) return thisYear;
+    const lastYear = await fetchVworldPricePagesForPrefix(key, vworldKey, String(year - 1));
+    return lastYear ?? thisYear;
+  })();
+  priceByPrefixCache.set(key, task);
+  return task;
 }
 
 async function fetchVworldParcelLandForPnu(pnu: string, vworldKey: string): Promise<NormalizedParcelLand | null> {

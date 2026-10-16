@@ -77,6 +77,8 @@ import * as roadWorkHandbookService from './roadWorkHandbookService';
 import * as qgisLayerControlService from './qgisLayerControlService';
 import * as userDataUploadService from './userDataUploadService';
 import * as systemControlService from './systemControlService';
+import * as detailWondoService from './detailWondoService';
+import * as individualLandPriceService from './individualLandPriceService';
 
 export {
   configService,
@@ -154,4 +156,6 @@ export {
   qgisLayerControlService,
   userDataUploadService,
   systemControlService,
+  detailWondoService,
+  individualLandPriceService,
 };

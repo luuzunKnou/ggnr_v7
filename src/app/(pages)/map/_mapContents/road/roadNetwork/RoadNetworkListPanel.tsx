@@ -610,14 +610,14 @@ export function RoadNetworkListPanel({ onClose }: Props) {
                     onClick={() => setTypeFilter(filter)}
                     title={filter}
                     className={cn(
-                      "min-w-0 flex-1 truncate rounded border px-0.5 py-1 text-center text-[10px] font-medium leading-tight transition-colors",
+                      "flex-auto whitespace-nowrap rounded border px-1 py-1 text-center text-[10px] font-medium leading-tight transition-colors",
                       active
                         ? "border-primary bg-primary/10 text-primary"
                         : "border-border bg-background text-muted-foreground hover:border-border hover:bg-muted/50"
                     )}
                     aria-pressed={active}
                   >
-                    <span className="block truncate">{filter}</span>
+                    {filter}
                   </button>
                 );
               })}

@@ -6,7 +6,7 @@ export const ROAD_NETWORK_TYPES = [
   "지방도",
   "국지도",
   "군도",
-  "농도",
+  "농어촌도로",
   "일반도로",
   "임도",
   "입체교차로",
@@ -19,7 +19,7 @@ export const ROAD_NETWORK_TYPE_FILTER_TABS = [
   "국도",
   "지방도",
   "군도",
-  "농도",
+  "농어촌도로",
   "일반도로",
   "임도",
 ] as const;
@@ -69,7 +69,7 @@ export const ROAD_NETWORK_TYPE_BADGE: Record<
   지방도: { bg: "bg-primary/10", text: "text-primary", border: "border-primary/30" },
   국지도: { bg: "bg-chart-1/15", text: "text-chart-1", border: "border-chart-1/40" },
   군도: { bg: "bg-chart-2/15", text: "text-chart-2", border: "border-chart-2/40" },
-  농도: { bg: "bg-chart-4/15", text: "text-chart-4", border: "border-chart-4/40" },
+  농어촌도로: { bg: "bg-chart-4/15", text: "text-chart-4", border: "border-chart-4/40" },
   일반도로: { bg: "bg-muted", text: "text-foreground/90", border: "border-border" },
   임도: { bg: "bg-chart-5/15", text: "text-chart-5", border: "border-chart-5/40" },
   입체교차로: { bg: "bg-secondary", text: "text-secondary-foreground", border: "border-border" },
@@ -151,7 +151,7 @@ export type RoadNetworkRow = {
   dept: string;
   /** 관리원 */
   manager: string;
-  /** 기점 주소(군도·농도 등) */
+  /** 기점 주소(군도·농어촌도로 등) */
   startPoint: string;
   /** 종점 주소 */
   endPoint: string;
@@ -446,7 +446,7 @@ export const MOCK_ROAD_NETWORK_ROWS = [
     id: "8",
     roadName: "농도 3호선",
     roadNo: "3",
-    roadType: "농도",
+    roadType: "농어촌도로",
     openStatus: "개설",
     lengthM: 1800,
     sect: "1",
@@ -467,7 +467,7 @@ export const MOCK_ROAD_NETWORK_ROWS = [
     id: "9",
     roadName: "농도 8호선",
     roadNo: "8",
-    roadType: "농도",
+    roadType: "농어촌도로",
     openStatus: "미개설",
     lengthM: 960,
     sect: "1",
@@ -843,7 +843,7 @@ export function describeAttrHistoryDetail(
     next.roadType === "지방도" ||
     next.roadType === "국지도" ||
     next.roadType === "군도" ||
-    next.roadType === "농도" ||
+    next.roadType === "농어촌도로" ||
     next.roadType === "일반도로" ||
     next.roadType === "임도"
   ) {
@@ -854,7 +854,7 @@ export function describeAttrHistoryDetail(
     next.roadType === "입체교차로" ||
     next.roadType === "국지도" ||
     next.roadType === "군도" ||
-    next.roadType === "농도" ||
+    next.roadType === "농어촌도로" ||
     next.roadType === "임도"
   ) {
     pushChange(changes, "굴곡도", prev.sinuosity || "", next.sinuosity || "");
