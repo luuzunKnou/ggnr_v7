@@ -33,6 +33,7 @@ import { cn } from '@/lib/utils';
 import { call } from '@/lib/api';
 import { getLayerGroupIconMap, defaultLayerGroupIcon } from '@/config/layerGroupIcon';
 import { allowProjectLayerTable } from '@/lib/projectLayerAllowlist';
+import { isWmsCompanionLayer } from '@/lib/wmsCompanionLayers';
 import { getLegendGraphicUrl } from './layerFactory/serviceLayerFactory';
 import type { LayerFilterRow } from './layerFactory/serviceLayerFactory';
 export type { LayerFilterRow };
@@ -136,6 +137,7 @@ export function MapLayergroupBar() {
           if (!name || !layerSchemaTableSet.has(name)) return false;
           if (!allowProjectLayerTable(name, sysKeys)) return false;
           if (parentTablesWithSplitDefs.has(name.toLowerCase())) return false;
+          if (isWmsCompanionLayer(name)) return false;
           return true;
         });
         const seen = new Set<string>();

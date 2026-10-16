@@ -86,6 +86,16 @@ export function riverBasicPlanHdDefineTable(tab: RiverBasicPlanTab): string {
   return tab === 'smallRiver' ? 'river_plan_s_hd_lm' : 'river_plan_hd_lm';
 }
 
+/** 탭별 제방(선) — 구조물도에 함께 표시 */
+export function riverBasicPlanJbDefineTable(tab: RiverBasicPlanTab): string {
+  return tab === 'smallRiver' ? 'river_plan_s_jb_lm' : 'river_d_plan_jb_lm';
+}
+
+/** 탭별 제방 목록 배지 */
+export function riverBasicPlanJbLabel(tab: RiverBasicPlanTab): string {
+  return tab === 'smallRiver' ? '소하천제방' : '하천제방';
+}
+
 /** 탭별 구조물(부모) */
 export function riverBasicPlanGdParentDefineTable(tab: RiverBasicPlanTab): string {
   return tab === 'smallRiver' ? 'river_plan_s_gd_ps' : 'river_plan_gd_ps';
@@ -109,6 +119,7 @@ export function riverBasicPlanRiverNameFilterableLayers(tab: RiverBasicPlanTab):
       'river_plan_s_as',
       'river_plan_s_jd_lm',
       'river_plan_s_hd_lm',
+      riverBasicPlanJbDefineTable('smallRiver'),
       ...RIVER_PLAN_S_GD_STRUCTURE_DEFINE_TABLES,
     ];
   }
@@ -117,6 +128,7 @@ export function riverBasicPlanRiverNameFilterableLayers(tab: RiverBasicPlanTab):
     'river_plan_as',
     'river_plan_jd_lm',
     'river_plan_hd_lm',
+    riverBasicPlanJbDefineTable('river'),
     ...RIVER_PLAN_GD_STRUCTURE_DEFINE_TABLES,
   ];
 }
@@ -190,7 +202,9 @@ export function riverBasicPlanIdentifyGeometryRank(defineTableName: string): num
     k === 'river_plan_jd_lm' ||
     k === 'river_plan_hd_lm' ||
     k === 'river_plan_s_jd_lm' ||
-    k === 'river_plan_s_hd_lm'
+    k === 'river_plan_s_hd_lm' ||
+    k === riverBasicPlanJbDefineTable('river') ||
+    k === riverBasicPlanJbDefineTable('smallRiver')
   ) {
     return 1;
   }

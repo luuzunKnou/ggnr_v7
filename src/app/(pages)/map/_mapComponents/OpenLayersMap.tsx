@@ -91,6 +91,7 @@ import {
   mergeDefineLayerShpTypesIntoGeometryMap,
   type LayerDbGeometryKind,
 } from '@/lib/mapLayerGeometryOrder';
+import { expandWmsCompanionLayers } from '@/lib/wmsCompanionLayers';
 import { useConsoleCapture, useMapViewInfo } from './hooks/useConsoleCapture';
 import { useMapVisualCenterPixel } from './hooks/useMapVisualCenterPixel';
 import { useMeasure, MeasureType } from './hooks/useMeasure';
@@ -623,6 +624,7 @@ export default function OpenLayersMap({
   const [layerGeometryTypes, setLayerGeometryTypes] = useState<
     Record<string, LayerDbGeometryKind>
   >({});
+  const [dbLayerTableNames, setDbLayerTableNames] = useState<ReadonlySet<string> | null>(null);
 
   // 자체항공영상(배경지도) 패널 높이 측정 → 지목/소유구분 maxHeight 기준으로 사용
   const backgroundPanelVisible =
@@ -1199,6 +1201,7 @@ export default function OpenLayersMap({
   );
   const spatialFilterWkt = mapContext?.spatialFilterWkt ?? null;
   const serviceWmsCqlByLayer = mapContext?.serviceWmsCqlByLayer ?? null;
+  const serviceWmsStyleByLayer = mapContext?.serviceWmsStyleByLayer ?? null;
 
   useEffect(() => {
     if (!mapReady) return;
@@ -1229,9 +1232,13 @@ export default function OpenLayersMap({
         const fromDb: Record<string, LayerDbGeometryKind> = { ...t0, ...t1 };
         const tables = Array.isArray(defineBody?.data) ? defineBody.data : [];
         setLayerGeometryTypes(mergeDefineLayerShpTypesIntoGeometryMap(fromDb, tables));
+        setDbLayerTableNames(new Set(Object.keys(fromDb).map((k) => k.toLowerCase())));
       })
       .catch(() => {
-        if (!cancelled) setLayerGeometryTypes({});
+        if (!cancelled) {
+          setLayerGeometryTypes({});
+          setDbLayerTableNames(null);
+        }
       });
     return () => {
       cancelled = true;
@@ -1244,17 +1251,23 @@ export default function OpenLayersMap({
     setMapGeometryStackTypes(map, layerGeometryTypes);
   }, [mapReady, layerGeometryTypes, mapInstanceRef]);
 
+  const serviceWmsLayerNames = useMemo(
+    () => expandWmsCompanionLayers(serviceVisibleLayerNames, dbLayerTableNames),
+    [serviceVisibleLayerNames, dbLayerTableNames]
+  );
+
   useServiceLayerSync(
     mapInstanceRef.current,
     mapReady,
-    serviceVisibleLayerNames,
+    serviceWmsLayerNames,
     undefined,
     spatialFilterWkt,
     layerGeometryTypes,
     undefined,
     serviceWmsCqlByLayer,
     false,
-    wmsForceBottomLayerNames
+    wmsForceBottomLayerNames,
+    serviceWmsStyleByLayer
   );
 
   // 검색 조건 도형을 지도에 표시 (WKT 5181 → 3857 변환 후 벡터 레이어)

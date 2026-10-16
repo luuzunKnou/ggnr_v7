@@ -100,7 +100,7 @@ export function satelliteGroupNameFromWorkUnit(params: {
   return `satellite_${year}_${crsPart}_${slug}`;
 }
 
-type TifWorkKind = 'ortho' | 'satellite';
+type TifWorkKind = 'ortho' | 'satellite' | 'basic';
 
 function formatSizeLabel(bytes: number | null | undefined): string {
   if (bytes == null || !Number.isFinite(bytes) || bytes < 0) return '—';
@@ -290,7 +290,9 @@ export async function convertOrthoWorkUnit(params: {
         .limit(1)
     )[0];
   }
-  if (!wu || wu.kind !== 'ortho') throwHttp(404, '드론영상 작업단위를 찾을 수 없습니다.');
+  if (!wu || (wu.kind !== 'ortho' && wu.kind !== 'basic')) {
+    throwHttp(404, '드론영상 작업단위를 찾을 수 없습니다.');
+  }
   wuKey = wu.wuKey;
 
   const rows = await db
@@ -365,7 +367,7 @@ export async function convertOrthoWorkUnit(params: {
     if (!shouldConvert) continue;
 
     const slug = sanitizeTifOutputSlug(row.fileName);
-    const tilesRel = `aerial/ortho/${wu.folderName}/xyz/${slug}`;
+    const tilesRel = `aerial/${wu.kind}/${wu.folderName}/xyz/${slug}`;
 
     await db
       .update(tifUnit)

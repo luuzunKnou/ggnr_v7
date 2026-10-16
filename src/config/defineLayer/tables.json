@@ -228,6 +228,18 @@
     "define_table_source": "shp"
   },
   {
+    "define_table_name": "cons_data_as_solo",
+    "define_table_kor_name": "cons_data_as_solo",
+    "define_table_shp_type": "POLYGON",
+    "define_table_read_share": "P",
+    "define_table_write_share": "P",
+    "define_table_group": "하천",
+    "define_table_idx": "0",
+    "define_table_etc": "",
+    "define_table_schema": "layer",
+    "define_table_source": "shp"
+  },
+  {
     "define_table_name": "d0023372_1",
     "define_table_kor_name": "d0023372_1",
     "define_table_shp_type": "POLYGON",
@@ -9651,6 +9663,18 @@
     "define_table_source": "shp"
   },
   {
+    "define_table_name": "river_d_plan_jb_lm",
+    "define_table_kor_name": "하천제방",
+    "define_table_shp_type": "POLYGON",
+    "define_table_read_share": "P",
+    "define_table_write_share": "P",
+    "define_table_group": "하천",
+    "define_table_idx": "0",
+    "define_table_etc": "",
+    "define_table_schema": "layer",
+    "define_table_source": "shp"
+  },
+  {
     "define_table_name": "river_plan_ot_as",
     "define_table_kor_name": "하천기본계획_기타",
     "define_table_shp_type": "POLYGON",
@@ -9681,18 +9705,6 @@
     "define_table_read_share": "P",
     "define_table_write_share": "P",
     "define_table_group": "하천",
-    "define_table_idx": "0",
-    "define_table_etc": "",
-    "define_table_schema": "layer",
-    "define_table_source": "shp"
-  },
-  {
-    "define_table_name": "river_d_plan_jb_lm",
-    "define_table_kor_name": "하천제방",
-    "define_table_shp_type": "POLYGON",
-    "define_table_read_share": "P",
-    "define_table_write_share": "P",
-    "define_table_group": "하천기본계획",
     "define_table_idx": "0",
     "define_table_etc": "",
     "define_table_schema": "layer",

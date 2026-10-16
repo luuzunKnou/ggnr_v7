@@ -1,6 +1,11 @@
 import { intervalSlotKey } from '@/integrations/integrationSchedule';
 import { isAerialWorkBusy } from '@/lib/aerialWorkGate';
-import { importDroppedDroneFolders, importDroppedOrthoFolders, importDroppedPanoramaFolders } from '@/service/aerialUploadService';
+import {
+  importDroppedBasicFolders,
+  importDroppedDroneFolders,
+  importDroppedOrthoFolders,
+  importDroppedPanoramaFolders,
+} from '@/service/aerialUploadService';
 import { isOrthoConvertBusy } from '@/service/orthophotoService';
 
 const LOG = '[aerial-drone-folder]';
@@ -9,7 +14,7 @@ const LOG = '[aerial-drone-folder]';
 const SCHEDULE = { mode: 'interval' as const, minutes: 1 };
 
 /**
- * 사진·동영상(aerial/drone), 항공뷰(aerial/panorama), 드론영상(aerial/ortho) 자료 폴더를 읽어 작업·파일을 등록한다.
+ * 사진·동영상(aerial/drone), 항공뷰(aerial/panorama), 드론영상(aerial/ortho), 기본 영상(aerial/basic) 자료 폴더를 읽어 작업·파일을 등록한다.
  * 기동 직후 실행 없음. DISABLE_AERIAL_DRONE_FOLDER_SCHEDULER=1
  * 또는 DISABLED_SCHEDULERS=aerialDroneFolder 로 끈다.
  */
@@ -58,10 +63,20 @@ export function startAerialDroneFolderScheduler(): void {
         return;
       }
       const ortho = await importDroppedOrthoFolders();
-      if (ortho.paused) lastSlot = null;
       if (ortho.unitsCreated > 0 || ortho.filesRegistered > 0) {
         console.info(
           `${LOG} ortho units=${ortho.unitsCreated} files=${ortho.filesRegistered} waiting=${ortho.filesWaiting}`
+        );
+      }
+      if (ortho.paused || isAerialWorkBusy() || isOrthoConvertBusy()) {
+        lastSlot = null;
+        return;
+      }
+      const basic = await importDroppedBasicFolders();
+      if (basic.paused) lastSlot = null;
+      if (basic.unitsCreated > 0 || basic.filesRegistered > 0) {
+        console.info(
+          `${LOG} basic units=${basic.unitsCreated} files=${basic.filesRegistered} waiting=${basic.filesWaiting}`
         );
       }
     })()
