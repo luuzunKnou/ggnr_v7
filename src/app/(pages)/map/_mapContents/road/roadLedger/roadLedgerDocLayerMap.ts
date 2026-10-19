@@ -52,7 +52,7 @@ export function isRoadLedgerDrawingGroup(key: string): boolean {
 
 /**
  * 클릭 시 켜지는 레이어 id 배열. 비어 있으면 공간 레이어 없음(안내용).
- * - 보고서: UI만 (도로대장총괄 a0020000 등과 연동 없음, 레이어 토글 없음)
+ * - 보고서: 레이어 토글 없음. 도로대장총괄(a0020000) 첨부 PDF (첨부 키 rdid)
  * - 매설물도·종평면도·용지도: 도면 구역 레이어(첨부 키 cons_code)
  * - 주요시설: R02~R07, R15 (교량·터널·육교·지하차도·고가도로·IC·지하보도)
  * - 기하구조: R08,R16~R19 (교차시설·도로중심선교점·오르막차로·종단경사·정차대)
@@ -63,7 +63,7 @@ export function isRoadLedgerDrawingGroup(key: string): boolean {
  */
 export const ROAD_LEDGER_DOC_LAYERS: Record<RoadLedgerDocButtonKey, string[]> = {
   보고서: [],
-  /** 공간 레이어 매핑 전 — UI만 */
+  /** 레이어 없음. 보고서와 같은 첨부 폴더의 360° mp4 */
   도로영상: [],
   매설물도: ["ks_rd_jm_lm"],
   종평면도: ["ks_rd_jp_lm"],

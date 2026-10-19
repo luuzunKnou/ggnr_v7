@@ -127,6 +127,8 @@ export function ServiceFilePdfPreview({ items, initialIndex, onClose, titleHint 
   const [attachBusy, setAttachBusy] = useState<'download' | 'print' | null>(null);
   const [downloadMenuOpen, setDownloadMenuOpen] = useState(false);
   const downloadMenuRef = useRef<HTMLDivElement>(null);
+  /** 미리보기 영역 실측 — 페이지 맞춤·화면 중앙 배치용 */
+  const [stageViewport, setStageViewport] = useState({ w: 0, h: 0 });
 
   const current = items[index];
 
@@ -165,6 +167,20 @@ export function ServiceFilePdfPreview({ items, initialIndex, onClose, titleHint 
   useEffect(() => {
     setMounted(true);
   }, []);
+
+  /** 사이드바·창 크기 변경 시 미리보기 영역 실측 */
+  useEffect(() => {
+    if (!mounted) return;
+    const el = wheelTargetRef.current;
+    if (!el) return;
+    const measure = () => {
+      setStageViewport({ w: el.clientWidth, h: el.clientHeight });
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [mounted, sidebarOpen]);
 
   useEffect(() => {
     setIndex(clamp(initialIndex, 0, Math.max(0, items.length - 1)));
@@ -595,6 +611,8 @@ export function ServiceFilePdfPreview({ items, initialIndex, onClose, titleHint 
   const isWidthFitActive = fitMode === 'width' && isAtBaseZoom;
 
   const cssZoomRatio = renderScale > 0 ? scale / renderScale : scale;
+  const fitMaxWidth = stageViewport.w > 0 ? stageViewport.w * 0.96 : undefined;
+  const fitMaxHeight = stageViewport.h > 0 ? stageViewport.h * 0.85 : undefined;
 
   return createPortal(
     <div
@@ -847,15 +865,15 @@ export function ServiceFilePdfPreview({ items, initialIndex, onClose, titleHint 
           onPointerCancel={viewMode === 'single' ? onPointerUp : undefined}
         >
           {viewMode === 'single' ? (
-          <div className="absolute inset-0 overflow-hidden">
+          <div className="absolute inset-0 flex items-center justify-center overflow-hidden">
             <div
-              className="absolute left-1/2 top-1/2 flex max-h-[85vh] max-w-[96vw] items-center justify-center"
+              className="flex max-h-full max-w-full items-center justify-center"
               onDoubleClick={(e) => {
                 e.stopPropagation();
                 resetView();
               }}
               style={{
-                transform: `translate(-50%, -50%) translate(${pan.x}px, ${pan.y}px) rotate(${rotation}deg) scale(${cssZoomRatio})`,
+                transform: `translate(${pan.x}px, ${pan.y}px) rotate(${rotation}deg) scale(${cssZoomRatio})`,
                 transformOrigin: 'center center',
               }}
             >
@@ -865,6 +883,8 @@ export function ServiceFilePdfPreview({ items, initialIndex, onClose, titleHint 
                 pageNumber={pdfPage}
                 fitMode={fitMode}
                 renderScale={renderScale}
+                fitMaxWidth={fitMaxWidth}
+                fitMaxHeight={fitMaxHeight}
                 onPagesReady={setPdfNumPagesStable}
                 onMainCanvasReady={handleMainCanvasReady}
               />
@@ -883,9 +903,17 @@ export function ServiceFilePdfPreview({ items, initialIndex, onClose, titleHint 
               onVisiblePageChange={onContinuousVisiblePageChange}
               onMainCanvasReady={handleMainCanvasReady}
               scrollContainerRef={continuousScrollRef}
+              fitMaxWidth={fitMaxWidth}
+              fitMaxHeight={fitMaxHeight}
             />
           )}
         </div>
+        {/* 좌측 사이드바와 동일 폭 — 문서가 화면 정중앙에 오도록 */}
+        <div
+          aria-hidden
+          className="pointer-events-none shrink-0 transition-[width] duration-200 ease-out"
+          style={{ width: sidebarOpen ? SIDEBAR_WIDTH : 0 }}
+        />
       </div>
 
       <div

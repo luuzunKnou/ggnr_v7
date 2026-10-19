@@ -302,8 +302,8 @@ export async function listAvailableBuildingRoadLayerNames() {
   }
 }
 
-/** 지적도 패널 후보 (jijuk·ri·emd) */
-const CADASTRAL_TABLE_CANDIDATES = ['jijuk', 'ri', 'emd'] as const;
+/** 지적도 패널 후보 (jijuk·sgg·emd·ri) — 목록 표시 순서 */
+const CADASTRAL_TABLE_CANDIDATES = ['jijuk', 'sgg', 'emd', 'ri'] as const;
 const CADASTRAL_SCHEMA_CANDIDATES = ['public_layer', 'layer'] as const;
 
 /**

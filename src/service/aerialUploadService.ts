@@ -1058,7 +1058,7 @@ export async function listWorkUnits(params: { kind?: string } = {}): Promise<{
   }
   const kind = params.kind;
 
-  if (kind === 'ortho' || kind === 'satellite') {
+  if (kind === 'ortho' || kind === 'satellite' || kind === 'basic') {
     const ortho = await listOrthoWorkUnits(kind);
     return {
       units: ortho.units.map((u) => ({
@@ -1190,7 +1190,9 @@ export async function deleteWorkUnit(params: {
     .where(eq(fileUnit.wuKey, wuKey));
 
   const tifCount =
-    wu.kind === 'ortho' || wu.kind === 'satellite' ? await deleteTifUnitsForWorkUnit(wuKey) : 0;
+    wu.kind === 'ortho' || wu.kind === 'satellite' || wu.kind === 'basic'
+      ? await deleteTifUnitsForWorkUnit(wuKey)
+      : 0;
   await db.delete(fileUnit).where(eq(fileUnit.wuKey, wuKey));
   await db.delete(workUnit).where(eq(workUnit.wuKey, wuKey));
 
@@ -1329,7 +1331,8 @@ function droneDropIsStable(relativePath: string, size: number, mtimeMs: number):
   return prev != null && prev.size === size && prev.mtimeMs === mtimeMs && size > 0;
 }
 
-type DropMediaKind = 'drone' | 'panorama' | 'ortho';
+type DropMediaKind = 'drone' | 'panorama' | 'ortho' | 'basic';
+type DropTifKind = 'ortho' | 'basic';
 
 async function ensureDroppedMediaWorkUnit(
   kind: DropMediaKind,
@@ -1694,18 +1697,28 @@ function kickDroppedOrthoConvert(wuKeys: number[]): void {
     });
 }
 
+/** aerial/ortho 바로 아래 폴더를 드론영상 작업단위로 본다. */
+export async function importDroppedOrthoFolders(): Promise<ImportDroppedDroneFoldersResult> {
+  return importDroppedTifFolders('ortho');
+}
+
+/** aerial/basic 바로 아래 폴더를 기본 영상 작업단위로 본다. 진행은 드론영상과 같다. */
+export async function importDroppedBasicFolders(): Promise<ImportDroppedDroneFoldersResult> {
+  return importDroppedTifFolders('basic');
+}
+
 /**
- * aerial/ortho 바로 아래 폴더를 드론영상 작업단위로 본다.
+ * aerial/{ortho|basic} 바로 아래 폴더를 작업단위로 본다.
  * TIF만 등록하고, 대기 중인 파일은 타일 변환으로 넘긴다. 하위 폴더의 파일은 읽지 않는다.
  */
-export async function importDroppedOrthoFolders(): Promise<ImportDroppedDroneFoldersResult> {
+async function importDroppedTifFolders(kind: DropTifKind): Promise<ImportDroppedDroneFoldersResult> {
   const result: ImportDroppedDroneFoldersResult = {
     unitsCreated: 0,
     filesRegistered: 0,
     filesWaiting: 0,
     paused: false,
   };
-  const root = resolveWithinBase('aerial/ortho');
+  const root = resolveWithinBase(`aerial/${kind}`);
   if (!root) return result;
 
   let entries: { name: string; isDirectory: () => boolean }[];
@@ -1723,7 +1736,7 @@ export async function importDroppedOrthoFolders(): Promise<ImportDroppedDroneFol
     if (!entry.isDirectory() || entry.name.startsWith('.')) continue;
     const folderName = sanitizeAerialFolderName(entry.name);
     if (!folderName || folderName !== entry.name) continue;
-    const relativeDir = aerialWorkUnitRelativeDir('ortho', folderName);
+    const relativeDir = aerialWorkUnitRelativeDir(kind, folderName);
     const resolved = relativeDir ? resolveWithinBase(relativeDir) : null;
     if (!resolved) continue;
 
@@ -1738,7 +1751,7 @@ export async function importDroppedOrthoFolders(): Promise<ImportDroppedDroneFol
       await db
         .select({ wuKey: workUnit.wuKey })
         .from(workUnit)
-        .where(and(eq(workUnit.kind, 'ortho'), eq(workUnit.folderName, folderName), eq(workUnit.wuIsDel, false)))
+        .where(and(eq(workUnit.kind, kind), eq(workUnit.folderName, folderName), eq(workUnit.wuIsDel, false)))
         .limit(1)
     )[0];
     const known = new Set<string>();
@@ -1787,7 +1800,7 @@ export async function importDroppedOrthoFolders(): Promise<ImportDroppedDroneFol
       }
       try {
         if (!wu) {
-          wu = await ensureDroppedMediaWorkUnit('ortho', folderName);
+          wu = await ensureDroppedMediaWorkUnit(kind, folderName);
           if (!wu) {
             folderFailed = true;
             break;
@@ -1819,7 +1832,7 @@ export async function importDroppedOrthoFolders(): Promise<ImportDroppedDroneFol
         if (!touchedWuKeys.includes(wu.wuKey)) touchedWuKeys.push(wu.wuKey);
       } catch (error) {
         console.warn(
-          '[aerial-ortho-folder] file skip:',
+          `[aerial-${kind}-folder] file skip:`,
           file.relativePath,
           error instanceof Error ? error.message : error
         );
@@ -1841,7 +1854,7 @@ export async function importDroppedOrthoFolders(): Promise<ImportDroppedDroneFol
       .innerJoin(workUnit, eq(workUnit.wuKey, tifUnit.wuKey))
       .where(
         and(
-          eq(workUnit.kind, 'ortho'),
+          eq(workUnit.kind, kind),
           eq(workUnit.wuIsDel, false),
           eq(tifUnit.tuIsDel, false),
           eq(tifUnit.convertStatus, 'pending')

@@ -29,6 +29,8 @@ export function ServiceFilePdfPreviewStage({
   onMainCanvasReady,
   fitMode = 'page',
   renderScale = 1,
+  fitMaxWidth,
+  fitMaxHeight,
 }: {
   url: string;
   pageNumber: number;
@@ -39,6 +41,10 @@ export function ServiceFilePdfPreviewStage({
   fitMode?: PdfPreviewFitMode;
   /** pdf.js viewport scale = fit × renderScale (LOD 확정 배율) */
   renderScale?: number;
+  /** 맞춤 기준 최대 너비(CSS px). 없으면 창 너비×0.96 */
+  fitMaxWidth?: number;
+  /** 맞춤 기준 최대 높이(CSS px). 없으면 창 높이×0.85 */
+  fitMaxHeight?: number;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const pdfRef = useRef<PDFDocumentProxy | null>(null);
@@ -130,8 +136,14 @@ export function ServiceFilePdfPreviewStage({
         if (!ctx) throw new Error('no ctx');
 
         const dpr = Math.min(typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1, STAGE_DPR_MAX);
-        const maxW = Math.min(window.innerWidth * 0.96, 1800);
-        const maxH = Math.min(window.innerHeight * 0.85, 1400);
+        const maxW = Math.min(
+          fitMaxWidth != null && fitMaxWidth > 0 ? fitMaxWidth : window.innerWidth * 0.96,
+          1800
+        );
+        const maxH = Math.min(
+          fitMaxHeight != null && fitMaxHeight > 0 ? fitMaxHeight : window.innerHeight * 0.85,
+          1400
+        );
         const vp1 = page.getViewport({ scale: 1 });
         const fitSc =
           fitMode === 'width'
@@ -190,7 +202,7 @@ export function ServiceFilePdfPreviewStage({
       renderTaskRef.current?.cancel();
       renderTaskRef.current = null;
     };
-  }, [url, pageNumber, fitMode, renderScale]);
+  }, [url, pageNumber, fitMode, renderScale, fitMaxWidth, fitMaxHeight]);
 
   useEffect(() => {
     return () => {
