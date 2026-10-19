@@ -8,6 +8,7 @@
 import fs from 'node:fs/promises';
 import fsSync from 'node:fs';
 import path from 'node:path';
+import iconv from 'iconv-lite';
 import * as XLSX from 'xlsx';
 import { sql } from 'drizzle-orm';
 import { db, pool } from '@/database/db';
@@ -2732,7 +2733,8 @@ export async function exportLayerTableToCsv(params: {
         ? XLSX.utils.json_to_sheet(sheetRows)
         : XLSX.utils.aoa_to_sheet([columns]);
     const csvBody = XLSX.utils.sheet_to_csv(ws);
-    const buffer = Buffer.from(`\uFEFF${csvBody}`, 'utf8');
+    /** 국내 엑셀·한셀은 CSV를 CP949로 연다. UTF-8 BOM은 무시되면 한글이 깨진다. */
+    const buffer = iconv.encode(csvBody, 'cp949');
     const safeFile = physical.replace(/[^a-zA-Z0-9_가-힣-]/g, '_');
     return { success: true, buffer, fileName: `${safeFile}.csv` };
   } catch (e: unknown) {
