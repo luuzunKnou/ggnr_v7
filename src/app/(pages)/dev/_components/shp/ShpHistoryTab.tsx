@@ -18,7 +18,11 @@ import {
   Loader2,
 } from 'lucide-react';
 import { SyncDetailModal } from './SyncDetailModal';
-import { registerShpHistoryRefresh } from '../layerManager/layerManagerUploadBridge';
+import {
+  isShpHistoryListHeld,
+  registerShpHistoryHoldChange,
+  registerShpHistoryRefresh,
+} from '../layerManager/layerManagerUploadBridge';
 
 type HistoryRow = {
   lhKey: number;
@@ -54,6 +58,7 @@ export function ShpHistoryTab({
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(false);
+  const [listHeld, setListHeld] = useState(isShpHistoryListHeld);
   const [error, setError] = useState<string | null>(null);
 
   const [expandedKey, setExpandedKey] = useState<number | null>(null);
@@ -90,10 +95,17 @@ export function ShpHistoryTab({
   }, [page]);
 
   // 탭이 보일 때·페이지 변경 시 목록 조회 (숨김 탭은 스킵 → 진입 시 새 행 반영)
+  // 완료 처리 중에는 읽지 않는다. 건수가 반영된 뒤 갱신 요청으로 한 번 읽는다.
   useEffect(() => {
-    if (!active) return;
+    if (!active || isShpHistoryListHeld()) return;
     void fetchList();
   }, [active, fetchList]);
+
+  useEffect(() => {
+    return registerShpHistoryHoldChange(() => {
+      setListHeld(isShpHistoryListHeld());
+    });
+  }, []);
 
   useEffect(() => {
     return registerShpHistoryRefresh(() => {
@@ -144,9 +156,15 @@ export function ShpHistoryTab({
 
   const showSyncBtn = (d: DetailRow) => {
     if (!d.dhName) return false;
+    const contents = (d.dhContents ?? '').trim();
+    // 테이블·레이어·스타일·정의 맞춤 이력은 행 변경 로그가 없다
+    if (contents === '모두 완료') return false;
+    if (contents.startsWith('DB 테이블 ') && contents.includes(' / Layer ') && contents.includes(' / Style ') && contents.includes(' / Define ')) {
+      return false;
+    }
     // 내용이 명시적으로 «변경 없음»이거나, 추가·변경·삭제가 모두 0으로 확정된 경우만 숨김
     // (null 건수 = 미기록 → 버튼 유지)
-    if ((d.dhContents ?? '').trim() === '변경 없음') return false;
+    if (contents === '변경 없음') return false;
     if (
       d.dhAppendCount === 0
       && d.dhConflictCount === 0
@@ -185,10 +203,13 @@ export function ShpHistoryTab({
             </tr>
           </thead>
           <tbody>
-            {loading ? (
+            {loading || listHeld ? (
               <tr>
                 <td colSpan={7} className="py-8 text-center text-muted-foreground">
-                  로딩 중…
+                  <span className="inline-flex items-center justify-center gap-2">
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    로딩 중…
+                  </span>
                 </td>
               </tr>
             ) : error ? (

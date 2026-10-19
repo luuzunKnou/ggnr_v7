@@ -2087,6 +2087,33 @@ export type ShpBatchResultItem = {
   define: { success: boolean; skipped?: boolean; error?: string };
 };
 
+function componentSetupHistoryContents(item: ShpBatchResultItem): string {
+  const part = (label: string, step: { success: boolean; skipped?: boolean; error?: string }) => {
+    if (step.success && step.skipped) return `${label} 기존`;
+    if (step.success) return `${label} 생성완료`;
+    return `${label} 실패`;
+  };
+  return [
+    part('DB 테이블', item.table),
+    part('Layer', item.layer),
+    part('Style', item.style),
+    part('Define', item.define),
+  ].join(' / ');
+}
+
+async function resolveHistoryOperator(): Promise<string | null> {
+  try {
+    const { auth } = await import('@/auth');
+    const session = await auth();
+    const id = String(session?.user?.id ?? '').trim();
+    const name = String(session?.user?.name ?? '').trim();
+    if (id && name) return `${id}(${name})`;
+    return id || name || null;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * 업로드 완료 후 일괄 후처리: 지정된 .shp 상대경로 목록에 대해 table → layer → style → define 순차 생성.
  * - shpPaths 가 있으면 해당 파일들만 처리 (업로드 직후 호출용)
@@ -2105,6 +2132,8 @@ async function processShpBatchImpl(params: {
   dbSchema?: 'layer' | 'public_layer';
   /** 폴더명·위저드에서 지정한 그룹명 (define·이력) */
   group?: string;
+  /** 작업자 — `아이디(이름)`. 없으면 로그인 세션 */
+  createUser?: string | null;
 }): Promise<{ success: boolean; results: ShpBatchResultItem[]; error?: string }> {
   let rows: ShpStatusRow[];
 
@@ -2290,19 +2319,17 @@ async function processShpBatchImpl(params: {
     const successCount = results.filter((r) => r.table.success && r.layer.success && r.style.success && r.define.success).length;
     const failCount = results.length - successCount;
     const contents = results.map((r) => path.basename(r.file, '.shp')).join(', ');
+    const passedUser = String(params.createUser ?? '').trim();
+    const createUser = passedUser || (await resolveHistoryOperator());
     const histRes = await createLayerHistory({
       contents: contents.length > 500 ? contents.slice(0, 497) + '…' : contents,
       successCount,
       failCount,
+      createUser,
     });
     if (histRes.success && histRes.lhKey) {
       const details = results.map((r) => {
         const allOk = r.table.success && r.layer.success && r.style.success && r.define.success;
-        const errors: string[] = [];
-        if (!r.table.success && !r.table.skipped) errors.push(`Table: ${r.table.error ?? '실패'}`);
-        if (!r.layer.success && !r.layer.skipped) errors.push(`Layer: ${r.layer.error ?? '실패'}`);
-        if (!r.style.success && !r.style.skipped) errors.push(`Style: ${r.style.error ?? '실패'}`);
-        if (!r.define.success && !r.define.skipped) errors.push(`Define: ${r.define.error ?? '실패'}`);
         const basename = path.basename(r.file, '.shp');
         const pathGroup = (() => {
           const parts = String(r.pathOrResult ?? '').replace(/\\/g, '/').split('/');
@@ -2317,7 +2344,7 @@ async function processShpBatchImpl(params: {
           name: basename,
           korName: basename,
           type: r.table.skipped ? '업데이트' : '신규',
-          contents: allOk ? '모두 완료' : errors.join(' / '),
+          contents: componentSetupHistoryContents(r),
           result: allOk ? '성공' : '실패',
           shpPath: r.pathOrResult ?? undefined,
           group: batchGroup || pathGroup,
@@ -7030,7 +7057,7 @@ export async function exportLayerTableToShp(params: {
   const dbCfg = getDbConfig();
   const pgConn = `PG:host=${dbCfg.host} port=${dbCfg.port} dbname=${dbCfg.database} user=${dbCfg.user} password=${dbCfg.password}`;
   const layerTable = `${schema}.${tableName}`;
-  /** 국내 SHP·엑셀은 CP949. UTF-8로 쓰면 한글이 깨져 보인다. */
+  /** 국내 SHP·엑셀은 CP949. DBF 헤더 언어 ID 77이 한글 코드페이지다. */
   const dbfEncoding = 'CP949';
   const ogrEnv = { SHAPE_ENCODING: dbfEncoding };
 
@@ -7039,7 +7066,9 @@ export async function exportLayerTableToShp(params: {
    * layer 스키마(엑셀 등 4326→5181 저장)는 DB 메타 SRID를 따름.
    */
   const ogrBase: string[] = [
+    '--config', 'SHAPE_ENCODING', dbfEncoding,
     '-f', 'ESRI Shapefile',
+    '-lco', 'ENCODING=LDID/77',
     outShp,
     pgConn,
     layerTable,
@@ -7047,7 +7076,7 @@ export async function exportLayerTableToShp(params: {
   if (schema === 'public_layer') {
     ogrBase.push('-s_srs', 'EPSG:5181');
   }
-  ogrBase.push('-t_srs', 'EPSG:5181', '-skipfailures', '-dim', '2', '-lco', `ENCODING=${dbfEncoding}`);
+  ogrBase.push('-t_srs', 'EPSG:5181', '-skipfailures', '-dim', '2');
   const result = await runOgr2ogr(ogrBase, ogrEnv);
 
   let shpSize = 0;
@@ -7060,11 +7089,18 @@ export async function exportLayerTableToShp(params: {
     await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {});
     await fs.mkdir(tempDir, { recursive: true }).catch(() => {});
     const sql = `SELECT * FROM ${schema}."${tableName}" WHERE geom IS NOT NULL AND ST_IsValid(geom)`;
-    const retryArgs: string[] = ['-f', 'ESRI Shapefile', outShp, pgConn, '-sql', sql];
+    const retryArgs: string[] = [
+      '--config', 'SHAPE_ENCODING', dbfEncoding,
+      '-f', 'ESRI Shapefile',
+      '-lco', 'ENCODING=LDID/77',
+      outShp,
+      pgConn,
+      '-sql', sql,
+    ];
     if (schema === 'public_layer') {
       retryArgs.push('-s_srs', 'EPSG:5181');
     }
-    retryArgs.push('-t_srs', 'EPSG:5181', '-skipfailures', '-dim', '2', '-lco', `ENCODING=${dbfEncoding}`);
+    retryArgs.push('-t_srs', 'EPSG:5181', '-skipfailures', '-dim', '2');
     const result2 = await runOgr2ogr(retryArgs, ogrEnv);
     try {
       shpSize = (await fs.stat(outShp)).size;

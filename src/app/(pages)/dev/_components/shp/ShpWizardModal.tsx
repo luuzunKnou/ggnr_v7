@@ -20,7 +20,7 @@ import { shpTableNameFromRelPath } from '@/lib/shpTableName';
 import { type FolderPickFile } from './pickShpFolderFiles';
 import { SyncDetailModal } from './SyncDetailModal';
 import { isShpSyncDetailModalTarget } from './shpModalLayers';
-import { requestShpHistoryRefresh } from '../layerManager/layerManagerUploadBridge';
+import { beginShpHistoryListHold, endShpHistoryListHold, requestShpHistoryRefresh } from '../layerManager/layerManagerUploadBridge';
 import { ShpCrsCandidateModal, type ShpCrsCandidate } from './ShpCrsCandidateModal';
 import {
   ShpSchemaResolveModal,
@@ -969,8 +969,8 @@ export function ShpWizardModal({
     const initial =
       initialCompareCountsRef.current[tableName]
       ?? initialCompareCountsRef.current[tableName.toLowerCase()];
-    setConsistencyRows((prev) =>
-      prev.map((r) => {
+    setConsistencyRows((prev) => {
+      const next = prev.map((r) => {
         if (r.tableName.toLowerCase() !== tableName.toLowerCase()) return r;
         return {
           ...r,
@@ -985,8 +985,11 @@ export function ShpWizardModal({
           pendingRemaining,
           error: undefined,
         };
-      })
-    );
+      });
+      const allOk = next.every((r) => !r.error && (r.isNew || !consistencyNeedsReview(r)));
+      setConsistencyDone(allOk);
+      return next;
+    });
   }, []);
 
   const copyRemark = useCallback((text: string, key: string) => {
@@ -1494,12 +1497,14 @@ export function ShpWizardModal({
               sourceSrsByPath,
               dbSchema: targetDbSchema,
               group: groupNameRef.current.trim() || undefined,
+              createUser: operatorLabel || undefined,
             }
           : {
               relativePath: readyPath,
               sourceSrsByPath,
               dbSchema: targetDbSchema,
               group: groupNameRef.current.trim() || undefined,
+              createUser: operatorLabel || undefined,
             },
       });
       const d = res?.data ?? res;
@@ -1599,7 +1604,7 @@ export function ShpWizardModal({
     } finally {
       setComponentSetupRunning(false);
     }
-  }, [readyPath, fetchStatusList, statusRows, layers, targetDbSchema]);
+  }, [readyPath, fetchStatusList, statusRows, layers, targetDbSchema, operatorLabel]);
 
   const loadServerFolder = useCallback(
     async (relPath: string, folderName: string) => {
@@ -2343,7 +2348,13 @@ export function ShpWizardModal({
         : hasDiff || syncKept > 0
           ? '정합성 검증'
           : '기존';
-      const newRowCount = r.rowCount ?? 0;
+      const oldRowCount = r.layerType === '신규' ? 0 : (r.oldRowCount ?? 0);
+      // 기존 테이블은 완료 시점에 반영되므로, 보고서의 현재 행 수는 반영 전 값이다.
+      const newRowCount = r.layerType === '신규'
+        ? (r.rowCount ?? 0)
+        : commitError
+          ? (r.rowCount ?? oldRowCount)
+          : Math.max(0, oldRowCount + syncAppend - syncRemoved);
       const countPatch = r.layerType === '신규'
         ? {
             appendCount: syncAppend > 0 ? syncAppend : newRowCount,
@@ -2381,7 +2392,7 @@ export function ShpWizardModal({
           action: 'updateDetailCounts',
           params: {
             dhKey,
-            oldData: r.layerType === '신규' ? 0 : (r.oldRowCount ?? 0),
+            oldData: oldRowCount,
             newData: newRowCount,
             ...countPatch,
           },
@@ -2401,7 +2412,6 @@ export function ShpWizardModal({
       } catch {
         /* ignore */
       }
-      requestShpHistoryRefresh();
     }
 
     try {
@@ -2420,17 +2430,25 @@ export function ShpWizardModal({
   const handleComplete = async () => {
     if (step !== 4 || !reportLoaded || reportLoading || completing) return;
     setCompleting(true);
-    let snap: Awaited<ReturnType<typeof prepareFinalizeHistory>>;
+    // 레이어 수·성공 건수가 기록되기 전에는 이력 목록을 그리지 않는다.
+    beginShpHistoryListHold();
+    let snap: Awaited<ReturnType<typeof prepareFinalizeHistory>> | null = null;
     try {
       snap = await prepareFinalizeHistory();
     } catch (e: unknown) {
+      endShpHistoryListHold();
       alert(e instanceof Error ? e.message : String(e));
       return;
     } finally {
       setCompleting(false);
     }
-    // 이력 반영은 모달을 닫은 뒤 백그라운드 진행 — 목록은 테이블별로 갱신
-    void finalizeHistory(snap)
+    if (!snap) {
+      endShpHistoryListHold();
+      return;
+    }
+    const ready = snap;
+    // 이력 반영은 모달을 닫은 뒤 진행. 목록은 건수 반영이 끝난 뒤에 한 번만 읽는다.
+    void finalizeHistory(ready)
       .catch((e: unknown) => {
         alert(`SHP 이력 기록 중 오류가 발생했습니다.\n${e instanceof Error ? e.message : String(e)}`);
       })
@@ -2438,11 +2456,10 @@ export function ShpWizardModal({
         void call('', 'POST', {
           service: 'shpUploadService',
           action: 'endShpFinalize',
-          params: { tableNames: snap.reportRows.map((r) => r.tableName).filter(Boolean) },
+          params: { tableNames: ready.reportRows.map((r) => r.tableName).filter(Boolean) },
         }).catch(() => {});
-        requestShpHistoryRefresh();
+        endShpHistoryListHold();
       });
-    requestShpHistoryRefresh();
     resetForm();
     onOpenChange(false);
     onSuccess?.();
