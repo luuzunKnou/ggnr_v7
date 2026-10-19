@@ -1,0 +1,41 @@
+<featureType>
+  <id>FeatureTypeInfoImpl--610c9460:1a10fc86a73:-7b10</id>
+  <name>job_agencies</name>
+  <nativeName>job_agencies</nativeName>
+  <namespace>
+    <id>NamespaceInfoImpl-4bf97568:19c4d6c3053:-7ffa</id>
+  </namespace>
+  <title>job_agencies</title>
+  <keywords>
+    <string>features</string>
+    <string>job_agencies</string>
+  </keywords>
+  <srs>EPSG:5181</srs>
+  <nativeBoundingBox>
+    <minx>418796.215067724</minx>
+    <maxx>420654.1440027162</maxx>
+    <miny>222799.7799774456</miny>
+    <maxy>229707.7536153639</maxy>
+    <crs class="projected">EPSG:5181</crs>
+  </nativeBoundingBox>
+  <latLonBoundingBox>
+    <minx>129.41063420439218</minx>
+    <maxx>129.43296472099416</maxx>
+    <miny>35.477597461933215</miny>
+    <maxy>35.54021476732964</maxy>
+    <crs>EPSG:4326</crs>
+  </latLonBoundingBox>
+  <projectionPolicy>FORCE_DECLARED</projectionPolicy>
+  <enabled>true</enabled>
+  <store class="dataStore">
+    <id>DataStoreInfoImpl-4bf97568:19c4d6c3053:-7ff9</id>
+  </store>
+  <serviceConfiguration>false</serviceConfiguration>
+  <maxFeatures>0</maxFeatures>
+  <numDecimals>0</numDecimals>
+  <padWithZeros>false</padWithZeros>
+  <forcedDecimal>false</forcedDecimal>
+  <overridingServiceSRS>false</overridingServiceSRS>
+  <skipNumberMatched>false</skipNumberMatched>
+  <circularArcPresent>false</circularArcPresent>
+</featureType>

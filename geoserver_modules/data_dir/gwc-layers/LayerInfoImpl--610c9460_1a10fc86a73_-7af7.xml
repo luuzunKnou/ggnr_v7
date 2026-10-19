@@ -1,8 +1,8 @@
 <GeoServerTileLayer>
-  <id>LayerInfoImpl--610c9460:1a10fc86a73:-7d76</id>
+  <id>LayerInfoImpl--610c9460:1a10fc86a73:-7af7</id>
   <enabled>true</enabled>
   <inMemoryCached>true</inMemoryCached>
-  <name>ggnr:sd_heat_wave_shelter</name>
+  <name>ggnr:elderly_day_night_care</name>
   <mimeFormats>
     <string>image/png</string>
     <string>image/jpeg</string>
@@ -10,9 +10,25 @@
   <gridSubsets>
     <gridSubset>
       <gridSetName>EPSG:4326</gridSetName>
+      <extent>
+        <coords>
+          <double>129.41582073751258</double>
+          <double>35.484257979634776</double>
+          <double>129.43394405668184</double>
+          <double>35.53787249746152</double>
+        </coords>
+      </extent>
     </gridSubset>
     <gridSubset>
       <gridSetName>EPSG:900913</gridSetName>
+      <extent>
+        <coords>
+          <double>1.4406503265093474E7</double>
+          <double>4229886.16093629</double>
+          <double>1.440852074375488E7</double>
+          <double>4237218.24529</double>
+        </coords>
+      </extent>
     </gridSubset>
   </gridSubsets>
   <metaWidthHeight>
@@ -26,7 +42,7 @@
       <key>STYLES</key>
       <defaultValue></defaultValue>
       <availableStyles class="sorted-set"/>
-      <defaultStyle>generic</defaultStyle>
+      <defaultStyle>elderly_day_night_care</defaultStyle>
     </styleParameterFilter>
   </parameterFilters>
   <gutter>0</gutter>

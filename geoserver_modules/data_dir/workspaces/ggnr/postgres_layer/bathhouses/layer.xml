@@ -1,0 +1,19 @@
+<layer>
+  <name>bathhouses</name>
+  <id>LayerInfoImpl--610c9460:1a10fc86a73:-7adc</id>
+  <type>VECTOR</type>
+  <defaultStyle>
+    <id>StyleInfoImpl--610c9460:1a10fc86a73:-7adb</id>
+  </defaultStyle>
+  <resource class="featureType">
+    <id>FeatureTypeInfoImpl--610c9460:1a10fc86a73:-7add</id>
+  </resource>
+  <queryable>true</queryable>
+  <opaque>false</opaque>
+  <attribution>
+    <logoWidth>0</logoWidth>
+    <logoHeight>0</logoHeight>
+  </attribution>
+  <dateCreated>2026-10-16 06:47:31.690 UTC</dateCreated>
+  <dateModified>2026-10-16 06:47:32.30 UTC</dateModified>
+</layer>

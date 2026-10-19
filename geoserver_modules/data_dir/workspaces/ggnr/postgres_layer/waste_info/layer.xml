@@ -1,0 +1,19 @@
+<layer>
+  <name>waste_info</name>
+  <id>LayerInfoImpl--610c9460:1a10fc86a73:-7b66</id>
+  <type>VECTOR</type>
+  <defaultStyle>
+    <id>StyleInfoImpl--610c9460:1a10fc86a73:-7b65</id>
+  </defaultStyle>
+  <resource class="featureType">
+    <id>FeatureTypeInfoImpl--610c9460:1a10fc86a73:-7b67</id>
+  </resource>
+  <queryable>true</queryable>
+  <opaque>false</opaque>
+  <attribution>
+    <logoWidth>0</logoWidth>
+    <logoHeight>0</logoHeight>
+  </attribution>
+  <dateCreated>2026-10-16 06:46:17.623 UTC</dateCreated>
+  <dateModified>2026-10-16 06:46:17.963 UTC</dateModified>
+</layer>

@@ -1,4 +1,4 @@
-/* ÁÜ 14~18: ¼±¸¸ Ç¥½Ã */
+/* ï¿½ï¿½ 14~18: ï¿½ï¿½ï¿½ï¿½ Ç¥ï¿½ï¿½ */
 [@sd > 2000] [@sd < 35000] {
   fill: #DB5E5E;
   fill-opacity: 0.0;
@@ -7,7 +7,7 @@
   stroke-opacity: 1.0;
 }
 
-/* ÁÜ 18+: ¼± + ¶óº§ */
+/* ï¿½ï¿½ 18+: ï¿½ï¿½ + ï¿½ï¿½ */
 [@sd < 2000] {
   fill: #DB5E5E;
   fill-opacity: 0.0;
@@ -17,7 +17,7 @@
 
   label: [jibun];
   label-anchor: 0.5 0.5;
-  label-geometry: [centroid(geom)];
+  label-geometry: [interiorPoint(geom)];
 
   font-family: "Nanum Gothic", "Malgun Gothic", "SansSerif";
   font-size: 14;
