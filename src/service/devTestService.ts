@@ -83,6 +83,27 @@ function resolveDbTableCaseInsensitive(
   return undefined;
 }
 
+/** public/symbol의 svg·png 파일명(확장자 제외, 소문자). svg가 png보다 우선. */
+export async function listPublicSymbolStems() {
+  const base = path.join(process.cwd(), 'public', 'symbol');
+  const stems: Record<string, 'svg' | 'png'> = {};
+  try {
+    if (!fs.existsSync(base)) return { success: true as const, stems };
+    for (const name of fs.readdirSync(base)) {
+      const matched = name.match(/^(.+)\.(svg|png)$/i);
+      if (!matched) continue;
+      const stem = matched[1].toLowerCase();
+      const ext = matched[2].toLowerCase() as 'svg' | 'png';
+      if (stems[stem] === 'svg') continue;
+      stems[stem] = ext;
+    }
+    return { success: true as const, stems };
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return { success: false as const, error: msg, stems };
+  }
+}
+
 /** public/symbol에 파일이 있으면 GeoServer www/symbol/water URL 반환. SVG 우선, 없으면 PNG. */
 function resolveSymbolUrlForLayer(layerName: string): string | null {
   if (!layerName?.trim()) return null;
