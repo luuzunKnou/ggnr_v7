@@ -200,6 +200,8 @@ export function useRoadNetworkOverlayLayer(mapReady: boolean) {
     const format = new GeoJSONFormat();
     const features = rows.flatMap((row: RoadNetworkRow) => {
       if (!row.geom) return [];
+      // 통합 도로망은 노선번호를 WMS 표지 점으로만 표시
+      if (row.roadGrade !== undefined) return [];
       const title = formatRoadNetworkListTitle(row).trim();
       if (!title) return [];
       const geojson = {

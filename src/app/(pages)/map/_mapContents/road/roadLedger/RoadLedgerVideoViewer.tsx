@@ -273,6 +273,7 @@ export function RoadLedgerVideoViewer({ items, initialIndex = 0, roadName, onClo
           workName={roadName?.trim() || current.fileName.replace(/\.[^.]+$/, "")}
           dateLabel="파일일자"
           shotDate={formatModifiedDate(current.modified)}
+          fullscreen={fullscreen}
         />
 
         {fullscreen ? (

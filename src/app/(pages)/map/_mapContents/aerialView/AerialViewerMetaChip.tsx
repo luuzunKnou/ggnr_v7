@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { cn } from '@/lib/utils';
 
 /**
  * 촬영 정보. 뷰어 안이면 왼쪽 위, 지도면 검색창 아래 왼쪽.
@@ -14,6 +15,7 @@ export function AerialViewerMetaChip({
   kindLabel,
   dateLabel = '촬영일',
   place = 'viewer',
+  fullscreen = false,
 }: {
   workName?: string;
   shotDate?: string;
@@ -21,6 +23,8 @@ export function AerialViewerMetaChip({
   kindLabel?: string;
   dateLabel?: string;
   place?: 'viewer' | 'map';
+  /** 뷰어 전체화면 — 검색창이 없으므로 위쪽(닫기 버튼 높이)에 붙인다 */
+  fullscreen?: boolean;
 }) {
   const name = workName?.trim() ?? '';
   const date = shotDate?.trim() ?? '';
@@ -48,7 +52,11 @@ export function AerialViewerMetaChip({
     );
   }
 
-  return <div className="pointer-events-none absolute left-4 top-16 z-30">{card}</div>;
+  return (
+    <div className={cn('pointer-events-none absolute left-4 z-30', fullscreen ? 'top-4' : 'top-16')}>
+      {card}
+    </div>
+  );
 }
 
 /** 검색창 아래, 왼쪽 목록 오른쪽. 오른쪽 메뉴와 겹치지 않는다. */

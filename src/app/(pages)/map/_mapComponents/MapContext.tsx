@@ -333,6 +333,9 @@ export type MapContextValue = {
   /** 도로망도 목록에서 선택한 도로 id — 상세·지도 강조 */
   roadNetworkSelectedId: string | null;
   setRoadNetworkSelectedId: Dispatch<SetStateAction<string | null>>;
+  /** 같은 노선번호 구간이 여럿일 때 구간 미선택(노선 전체) 상태 — 선택 id는 대표 구간 */
+  roadNetworkWholeRoad: boolean;
+  setRoadNetworkWholeRoad: Dispatch<SetStateAction<boolean>>;
   /** URL opened 도로망도 패널 열림 */
   roadNetworkPanelOpen: boolean;
   setRoadNetworkPanelOpen: Dispatch<SetStateAction<boolean>>;
@@ -727,6 +730,7 @@ export function MapContextProvider({ children }: { children: React.ReactNode }) 
   } | null>(null);
   const [roadNetworkRows, setRoadNetworkRows] = useState<RoadNetworkRow[]>([]);
   const [roadNetworkSelectedId, setRoadNetworkSelectedId] = useState<string | null>(null);
+  const [roadNetworkWholeRoad, setRoadNetworkWholeRoad] = useState(false);
   const [roadNetworkPanelOpen, setRoadNetworkPanelOpen] = useState(false);
   const applyRoadNetworkMapPickRef = useRef<
     | ((pick: {
@@ -985,6 +989,8 @@ export function MapContextProvider({ children }: { children: React.ReactNode }) 
         setRoadNetworkRows,
         roadNetworkSelectedId,
         setRoadNetworkSelectedId,
+        roadNetworkWholeRoad,
+        setRoadNetworkWholeRoad,
         roadNetworkPanelOpen,
         setRoadNetworkPanelOpen,
         applyRoadNetworkMapPickRef,
