@@ -18,6 +18,7 @@ import { downloadLayerCsvFromDb, downloadLayerExcel, downloadLayerShp } from "./
 import { LayerManagerRowHistoryDialog } from "./LayerManagerRowHistoryDialog"
 import { registerLayerManagerListRefresh, requestLayerManagerDefineRefresh } from "./layerManagerUploadBridge"
 import { StyleLegendThumb } from "./StylePreviewSwatch"
+import { SearchClearButton } from "./SearchClearButton"
 import { parseSimpleStyleFromCss, type GeometryType, type StyleProps } from "@/lib/geoserverStyleUtils"
 import { fetchDefineLayerTables, fetchLayerDbTableList } from "./layerManagerListCache"
 import { getGeoServerBase } from "@/lib/geoserverUrl"
@@ -328,7 +329,6 @@ export function LayerManagerListTab() {
           }
         }
         setStyleInfoMap(map)
-        setStyleVersion((v) => v + 1)
       }
     } catch {
       // 스타일 정보 실패해도 목록은 유지
@@ -655,12 +655,21 @@ export function LayerManagerListTab() {
   return (
     <div className="flex flex-col gap-3 p-2 min-h-0 h-full">
       <div className="flex items-center gap-3 flex-nowrap shrink-0 overflow-x-auto">
-        <Input
-          placeholder="그룹명·테이블명·한글명 검색"
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          className="h-8 w-56 rounded-md text-sm"
-        />
+        <div className="relative w-56 shrink-0">
+          <Input
+            placeholder="그룹명·테이블명·한글명 검색"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className={`h-8 w-full rounded-md text-sm${searchQuery ? " pr-8" : ""}`}
+          />
+          <SearchClearButton
+            value={searchQuery}
+            onClear={() => {
+              setSearchQuery("")
+              setDebouncedSearch("")
+            }}
+          />
+        </div>
         <div className="flex items-center gap-1 rounded-md border p-0.5">
               {FILTER_OPTIONS.map((opt) => (
             <button

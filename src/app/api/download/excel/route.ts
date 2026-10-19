@@ -86,7 +86,7 @@ export async function POST(req: NextRequest) {
     }
     return new NextResponse(new Uint8Array(result.buffer), {
       headers: {
-        'Content-Type': 'text/csv; charset=utf-8',
+        'Content-Type': 'text/csv; charset=windows-949',
         'Content-Disposition': `attachment; filename="${encodeURIComponent(fileName)}"`,
       },
     });
