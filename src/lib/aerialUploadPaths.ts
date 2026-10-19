@@ -5,7 +5,8 @@
 
 export const AERIAL_UPLOAD_ROOT = 'aerial';
 
-export const AERIAL_KINDS = ['ortho', 'drone', 'panorama', 'satellite'] as const;
+/** basic: 기본 영상 TIF (폴더 감시·변환만, 화면 표시는 별도) */
+export const AERIAL_KINDS = ['ortho', 'drone', 'panorama', 'satellite', 'basic'] as const;
 export type AerialUploadKind = (typeof AERIAL_KINDS)[number];
 
 export function isAerialUploadKind(v: unknown): v is AerialUploadKind {

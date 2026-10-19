@@ -37,6 +37,8 @@ type ContinuousPageProps = {
   renderScale: number;
   rotation: number;
   scrollRoot: HTMLElement | null;
+  fitMaxWidth?: number;
+  fitMaxHeight?: number;
   onHeightReady: (pageNumber: number, height: number) => void;
   onCanvasReady?: (pageNumber: number) => void;
 };
@@ -48,6 +50,8 @@ function ContinuousPage({
   renderScale,
   rotation,
   scrollRoot,
+  fitMaxWidth,
+  fitMaxHeight,
   onHeightReady,
   onCanvasReady,
 }: ContinuousPageProps) {
@@ -103,8 +107,14 @@ function ContinuousPage({
         if (!ctx) throw new Error('no ctx');
 
         const dpr = Math.min(typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1, STAGE_DPR_MAX);
-        const maxW = Math.min(window.innerWidth * 0.96, 1800);
-        const maxH = Math.min(window.innerHeight * 0.85, 1400);
+        const maxW = Math.min(
+          fitMaxWidth != null && fitMaxWidth > 0 ? fitMaxWidth : window.innerWidth * 0.96,
+          1800
+        );
+        const maxH = Math.min(
+          fitMaxHeight != null && fitMaxHeight > 0 ? fitMaxHeight : window.innerHeight * 0.85,
+          1400
+        );
         const vp1 = page.getViewport({ scale: 1, rotation });
         const fitSc =
           fitMode === 'width'
@@ -151,7 +161,7 @@ function ContinuousPage({
       renderTaskRef.current?.cancel();
       renderTaskRef.current = null;
     };
-  }, [inView, pdf, pageNumber, fitMode, renderScale, rotation]);
+  }, [inView, pdf, pageNumber, fitMode, renderScale, rotation, fitMaxWidth, fitMaxHeight]);
 
   return (
     <div
@@ -196,6 +206,8 @@ type Props = {
   onVisiblePageChange: (n: number) => void;
   onMainCanvasReady?: () => void;
   scrollContainerRef?: React.RefObject<HTMLDivElement | null>;
+  fitMaxWidth?: number;
+  fitMaxHeight?: number;
 };
 
 /** PDF 전 페이지 세로 연속 스크롤 */
@@ -211,6 +223,8 @@ export function ServiceFilePdfContinuousView({
   onVisiblePageChange,
   onMainCanvasReady,
   scrollContainerRef,
+  fitMaxWidth,
+  fitMaxHeight,
 }: Props) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [scrollRoot, setScrollRoot] = useState<HTMLElement | null>(null);
@@ -428,6 +442,8 @@ export function ServiceFilePdfContinuousView({
             renderScale={renderScale}
             rotation={rotation}
             scrollRoot={scrollRoot}
+            fitMaxWidth={fitMaxWidth}
+            fitMaxHeight={fitMaxHeight}
             onHeightReady={handleHeightReady}
             onCanvasReady={handleCanvasReady}
           />

@@ -15,8 +15,8 @@ function mediaUrl(relativePath: string): string {
   }).toString()}`;
 }
 
-/** 왼쪽 메뉴를 뺀 보이는 지도 칸. 항공뷰 화면과 같은 자리 */
-function useVisibleMapBox() {
+/** 왼쪽 메뉴를 뺀 보이는 지도 칸. 항공뷰 화면과 같은 자리 (도로대장 도로영상도 사용) */
+export function useVisibleMapBox() {
   const [box, setBox] = useState<{ top: number; left: number; width: string; height: number } | null>(
     null
   );

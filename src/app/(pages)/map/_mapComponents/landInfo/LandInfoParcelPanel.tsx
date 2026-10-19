@@ -116,8 +116,8 @@ function DataTable({
 
 /** 좁은 패널 — 항목명·값 2열 표 (사유지분석 분석 정보와 동일) */
 const NARROW_FIELD_GRID =
-  'grid grid-cols-[max-content_minmax(0,1fr)] overflow-hidden rounded border border-border bg-background text-[11px] [&>*:nth-last-child(-n+2)]:border-b-0';
-const NARROW_GRID_LABEL = 'border-b border-border bg-muted px-2.5 py-1.5 text-[11px] text-muted-foreground whitespace-nowrap';
+  'grid grid-cols-[5.5rem_minmax(0,1fr)] overflow-hidden rounded border border-border bg-background text-[11px] [&>*:nth-last-child(-n+2)]:border-b-0';
+const NARROW_GRID_LABEL = 'border-b border-border bg-muted px-2 py-1.5 text-[11px] text-muted-foreground break-keep';
 const NARROW_GRID_VALUE = 'min-w-0 border-b border-border px-2.5 py-1.5 text-[11px] text-foreground break-all';
 const NARROW_LIST_TH = 'font-normal text-muted-foreground';
 
