@@ -358,7 +358,7 @@ export function OrthoWorkUnitDetailPanel({
         onClose={onClose}
       />
       {overlapOptions && overlapOptions.length > 1 && onOverlapChange ? (
-        <div className="flex max-h-[42%] min-h-[140px] shrink-0 flex-col overflow-hidden border-b border-border">
+        <div className="flex max-h-[180px] min-h-[140px] shrink-0 flex-col overflow-hidden border-b border-border">
           <IdentifyHitListBlock
             results={orthoOverlapResults(overlapOptions)}
             headerLabel="지도에서 선택된 항목"
