@@ -53,11 +53,18 @@ export default auth((req) => {
   if (isStaticAssetPath(path)) return NextResponse.next();
 
   // GeoServer 동일출처 프록시 (WMS img 등) — 로그인 리다이렉트 금지
+  // 관리 화면(/web)만 앱 라우트로 넘겨, 내부 주소 리다이렉트와 세션 쿠키 경로를 고친다.
+  // next.config rewrite 가 /geoserver/* 를 먼저 가져가므로 여기서 갈라 둔다.
   if (
     path === '/geoserver' ||
     path.startsWith('/geoserver/') ||
     path.includes('/geoserver/')
   ) {
+    if (path === '/geoserver/web' || path.startsWith('/geoserver/web/')) {
+      const url = req.nextUrl.clone();
+      url.pathname = `/api/geoserver/web-proxy${path.slice('/geoserver/web'.length)}`;
+      return NextResponse.rewrite(url);
+    }
     return NextResponse.next();
   }
 

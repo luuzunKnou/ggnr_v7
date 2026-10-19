@@ -1,6 +1,8 @@
 "use client"
 
-import { useEffect, useLayoutEffect, useState } from "react"
+import { useEffect, useLayoutEffect, useRef, useState } from "react"
+import { Loader2 } from "lucide-react"
+import { call } from "@/lib/api"
 import type { GeometryType, StyleProps } from "@/lib/geoserverStyleUtils"
 import { toPublicSymbolPreviewUrl } from "@/lib/geoserverStyleUtils"
 import { isPointSymbolLayerName } from "@/lib/mapLayerGeometryOrder"
@@ -118,9 +120,69 @@ function shouldTryLocalSymbol(tableName: string, shpType?: string): boolean {
   return isPointSymbolLayerName(tableName)
 }
 
+type LocalSymbolExt = "svg" | "png"
+
+let publicSymbolIndexPromise: Promise<Record<string, LocalSymbolExt>> | null = null
+
+/** public/symbol 파일 목록을 한 번만 읽어, 없는 심볼은 요청하지 않는다. */
+function loadPublicSymbolIndex(): Promise<Record<string, LocalSymbolExt>> {
+  if (!publicSymbolIndexPromise) {
+    publicSymbolIndexPromise = call("", "POST", {
+      service: "devTestService",
+      action: "listPublicSymbolStems",
+      params: {},
+    })
+      .then((res) => {
+        const data = res?.data ?? res
+        const stems = data?.stems
+        if (!data?.success || !stems || typeof stems !== "object") return {}
+        return stems as Record<string, LocalSymbolExt>
+      })
+      .catch(() => ({}))
+  }
+  return publicSymbolIndexPromise
+}
+
+/** 목록 행 스타일 칸. 범례 유무와 관계없이 28px(테두리 포함)로 고정한다. */
+const LEGEND_SLOT_CLASS =
+  "relative inline-flex h-7 w-7 shrink-0 box-border items-center justify-center overflow-hidden rounded border border-border/60 bg-muted/40 p-0.5 text-xs text-muted-foreground dark:bg-muted/60"
+
+function LegendSpinner() {
+  return <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin pointer-events-none" aria-hidden />
+}
+
+/** 로드가 끝나기 전에는 스피너만 보여 깨진 아이콘이 노출되지 않게 한다. */
+function LegendPendingImage({ src, onError }: { src: string; onError: () => void }) {
+  const imgRef = useRef<HTMLImageElement>(null)
+  const [ready, setReady] = useState(false)
+
+  useLayoutEffect(() => {
+    const img = imgRef.current
+    setReady(Boolean(img?.complete && img.naturalWidth > 0))
+  }, [src])
+
+  return (
+    <>
+      {ready ? null : <LegendSpinner />}
+      <img
+        ref={imgRef}
+        src={src}
+        alt=""
+        className={
+          ready
+            ? "h-full w-full object-contain pointer-events-none"
+            : "pointer-events-none absolute h-px w-px opacity-0"
+        }
+        onLoad={() => setReady(true)}
+        onError={onError}
+      />
+    </>
+  )
+}
+
 /**
  * 행 스타일 칸 공통 미리보기.
- * 점형·심볼 레이어는 public/symbol 아이콘을 먼저 시도하고, 없으면 WMS 범례 → CSS 도형 미리보기 순이다.
+ * 점형·심볼 레이어 중 public/symbol에 파일이 있을 때만 아이콘을 쓰고, 없으면 바로 WMS 범례를 받는다.
  */
 export function StyleLegendThumb({
   tableName,
@@ -140,33 +202,39 @@ export function StyleLegendThumb({
   cacheBust?: number
 }) {
   const tryLocal = shouldTryLocalSymbol(tableName, shpType)
-  const [phase, setPhase] = useState<"svg" | "png" | "rest">(tryLocal ? "svg" : "rest")
+  const [localExt, setLocalExt] = useState<LocalSymbolExt | "none" | null>(tryLocal ? null : "none")
   const q = cacheBust ? `?t=${cacheBust}` : ""
 
   useEffect(() => {
-    setPhase(shouldTryLocalSymbol(tableName, shpType) ? "svg" : "rest")
-  }, [tableName, shpType, cacheBust])
+    if (!shouldTryLocalSymbol(tableName, shpType)) {
+      setLocalExt("none")
+      return
+    }
+    let cancelled = false
+    setLocalExt(null)
+    void loadPublicSymbolIndex().then((stems) => {
+      if (cancelled) return
+      const ext = stems[tableName.trim().toLowerCase()]
+      setLocalExt(ext === "svg" || ext === "png" ? ext : "none")
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [tableName, shpType])
 
-  if (phase === "svg") {
+  if (localExt === null) {
     return (
-      <span className="inline-flex items-center justify-center overflow-hidden rounded border border-border/60 bg-muted/40 p-0.5 dark:bg-muted/60">
-        <img
-          src={`/symbol/${tableName}.svg${q}`}
-          alt=""
-          className="h-6 w-6 object-contain pointer-events-none"
-          onError={() => setPhase("png")}
-        />
+      <span className={LEGEND_SLOT_CLASS}>
+        <LegendSpinner />
       </span>
     )
   }
-  if (phase === "png") {
+  if (localExt === "svg" || localExt === "png") {
     return (
-      <span className="inline-flex items-center justify-center overflow-hidden rounded border border-border/60 bg-muted/40 p-0.5 dark:bg-muted/60">
-        <img
-          src={`/symbol/${tableName}.png${q}`}
-          alt=""
-          className="h-6 w-6 object-contain pointer-events-none"
-          onError={() => setPhase("rest")}
+      <span className={LEGEND_SLOT_CLASS}>
+        <LegendPendingImage
+          src={`/symbol/${tableName}.${localExt}${q}`}
+          onError={() => setLocalExt("none")}
         />
       </span>
     )
@@ -176,35 +244,24 @@ export function StyleLegendThumb({
   const showSwatch = fallbackState && typeof fallbackState === "object"
   const showLoading = fallbackState === "loading"
   return (
-    <>
-      {showImg && (
-        <span className="inline-flex items-center justify-center overflow-hidden rounded border border-border/60 bg-muted/40 p-0.5 dark:bg-muted/60">
-          <img
-            src={legendUrl}
-            alt=""
-            className="h-6 w-6 object-contain pointer-events-none"
-            onError={onNeedCssFallback}
-          />
-        </span>
-      )}
+    <span className={`${LEGEND_SLOT_CLASS} [&>div]:!h-full [&>div]:!w-full`}>
+      {showImg && <LegendPendingImage src={legendUrl} onError={onNeedCssFallback} />}
       {showSwatch && (
-        <span className="inline-flex items-center justify-center overflow-hidden rounded border border-border/60 bg-muted/40 p-0.5 dark:bg-muted/60">
-          <StylePreviewSwatch
-            geometryType={fallbackState.geometryType}
-            fillColor={fallbackState.fillColor}
-            strokeColor={fallbackState.strokeColor}
-            opacity={fallbackState.opacity}
-            symbolUrl={fallbackState.symbolUrl}
-            showFrame={false}
-            size="sm"
-            cacheBust={cacheBust}
-          />
-        </span>
+        <StylePreviewSwatch
+          geometryType={fallbackState.geometryType}
+          fillColor={fallbackState.fillColor}
+          strokeColor={fallbackState.strokeColor}
+          opacity={fallbackState.opacity}
+          symbolUrl={fallbackState.symbolUrl}
+          showFrame={false}
+          size="sm"
+          cacheBust={cacheBust}
+        />
       )}
-      {showLoading && <span className="text-xs text-muted-foreground pointer-events-none">…</span>}
+      {showLoading && <LegendSpinner />}
       {!showImg && !showSwatch && !showLoading && (
-        <span className="text-xs text-muted-foreground pointer-events-none">—</span>
+        <span className="pointer-events-none">—</span>
       )}
-    </>
+    </span>
   )
 }

@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo, useCallback, useRef } from "react"
 import { Button } from "@/app/shadcnComponents/ui/button"
 import { Input } from "@/app/shadcnComponents/ui/input"
 import { Save, RotateCcw, Search } from "lucide-react"
+import { SearchClearButton } from "./layerManager/SearchClearButton"
 import { cn } from "@/lib/utils"
 import { call } from "@/lib/api"
 import type { LayerDefineEmbedProps } from "./layerManager/types"
@@ -592,7 +593,17 @@ export function LayerAttrManager({
               placeholder="레이어 검색 (그룹/테이블명/한글명)"
               value={layerListSearch}
               onChange={(e) => setLayerListSearch(e.target.value)}
-              className="h-9 pl-8 rounded-md text-sm bg-background"
+              className={cn(
+                "h-9 pl-8 rounded-md text-sm bg-background",
+                layerListSearch && "pr-8"
+              )}
+            />
+            <SearchClearButton
+              value={layerListSearch}
+              onClear={() => {
+                setLayerListSearch("")
+                setDebouncedLayerListSearch("")
+              }}
             />
           </div>
         </div>
@@ -646,12 +657,21 @@ export function LayerAttrManager({
             <div className="flex items-center gap-3 flex-wrap shrink-0">
               {keyFieldOnly ? (
                 <>
-                  <Input
-                    placeholder="필드명/한글명 검색"
-                    value={searchName}
-                    onChange={(e) => setSearchName(e.target.value)}
-                    className="h-8 w-48 rounded-md text-sm"
-                  />
+                  <div className="relative w-48 shrink-0">
+                    <Input
+                      placeholder="필드명/한글명 검색"
+                      value={searchName}
+                      onChange={(e) => setSearchName(e.target.value)}
+                      className={cn("h-8 w-full rounded-md text-sm", searchName && "pr-8")}
+                    />
+                    <SearchClearButton
+                      value={searchName}
+                      onClear={() => {
+                        setSearchName("")
+                        setDebouncedSearchName("")
+                      }}
+                    />
+                  </div>
                   <span className="text-sm text-muted-foreground">
                     {fields.length} / {total}
                   </span>
@@ -710,12 +730,21 @@ export function LayerAttrManager({
                   <span className="text-sm text-muted-foreground">
                     {fields.length} / {total}
                   </span>
-                  <Input
-                    placeholder="필드명/한글명 검색"
-                    value={searchName}
-                    onChange={(e) => setSearchName(e.target.value)}
-                    className="h-8 w-48 rounded-md text-sm"
-                  />
+                  <div className="relative w-48 shrink-0">
+                    <Input
+                      placeholder="필드명/한글명 검색"
+                      value={searchName}
+                      onChange={(e) => setSearchName(e.target.value)}
+                      className={cn("h-8 w-full rounded-md text-sm", searchName && "pr-8")}
+                    />
+                    <SearchClearButton
+                      value={searchName}
+                      onClear={() => {
+                        setSearchName("")
+                        setDebouncedSearchName("")
+                      }}
+                    />
+                  </div>
                 </>
               )}
             </div>

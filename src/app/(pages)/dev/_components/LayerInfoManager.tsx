@@ -15,8 +15,10 @@ import { cn } from "@/lib/utils"
 import { SchemaBadge, SourceBadge } from "./layerManager/defineBadges"
 import { requestLayerManagerListRefresh, registerLayerManagerDefineRefresh } from "./layerManager/layerManagerUploadBridge"
 import { StyleLegendThumb, StylePreviewSwatch } from "./layerManager/StylePreviewSwatch"
+import { SearchClearButton } from "./layerManager/SearchClearButton"
 import { call } from "@/lib/api"
 import { parseSimpleStyleFromCss, parseSymbolFolderFromUrl, symbolFileNameFromUrl, toPublicSymbolPreviewUrl, type GeometryType, type StyleProps } from "@/lib/geoserverStyleUtils"
+import { withBasePath } from "@/lib/basePath"
 import { getGeoServerBase } from "@/lib/geoserverUrl"
 import {
   fetchDefineLayerTables,
@@ -335,7 +337,6 @@ export function LayerInfoManager({
           }
         }
         setStyleInfoMap(map)
-        setStyleVersion((v) => v + 1)
       }
     } catch {
       // 스타일 정보 실패해도 정보 테이블은 유지
@@ -1054,6 +1055,7 @@ export function LayerInfoManager({
         setDeleteOpen(false)
         setDeleteTarget(null)
         setSuccessMsg(`"${deleteTarget}" 스타일이 삭제되었습니다.`)
+        setStyleVersion((v) => v + 1)
         loadStyleInfo()
       } else {
         setError(data?.error ?? "삭제 실패")
@@ -1077,6 +1079,7 @@ export function LayerInfoManager({
       const data = res?.data ?? res
       if (data?.success) {
         setSuccessMsg(`"${layerName}"에 자동 스타일이 적용되었습니다.`)
+        setStyleVersion((v) => v + 1)
         loadStyleInfo()
         requestLayerManagerListRefresh()
       } else {
@@ -1154,11 +1157,13 @@ export function LayerInfoManager({
       if (data?.success) {
         const n = (data.applied ?? []).length
         setSuccessMsg(`스타일 없음 레이어 ${n}개에 자동 스타일이 적용되었습니다.`)
+        setStyleVersion((v) => v + 1)
         loadStyleInfo()
       } else {
         const applied = (data.applied ?? []).length
         const failed = (data.failed ?? []).length
         setSuccessMsg(`적용: ${applied}개, 실패: ${failed}개. ${data.error ?? ""}`)
+        setStyleVersion((v) => v + 1)
         loadStyleInfo()
       }
     } catch (e: unknown) {
@@ -1518,12 +1523,21 @@ export function LayerInfoManager({
       <div className="flex items-center gap-3 flex-nowrap shrink-0 overflow-x-auto">
         {!embedded && (
           <>
-            <Input
-              placeholder="그룹명·테이블명·한글명 검색"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="h-8 w-56 rounded-md text-sm"
-            />
+            <div className="relative w-56 shrink-0">
+              <Input
+                placeholder="그룹명·테이블명·한글명 검색"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className={cn("h-8 w-full rounded-md text-sm", searchQuery && "pr-8")}
+              />
+              <SearchClearButton
+                value={searchQuery}
+                onClear={() => {
+                  setSearchQuery("")
+                  setDebouncedSearch("")
+                }}
+              />
+            </div>
             <div className="flex items-center gap-1 rounded-md border p-0.5 w-fit">
               {LAYER_FILTER_OPTIONS.map((opt) => (
                 <button
@@ -1867,7 +1881,7 @@ export function LayerInfoManager({
           </DialogHeader>
           {targetStyleName && (
             <a
-              href={`${GEOSERVER_DEFAULT_URL}/web/wicket/bookmarkable/org.geoserver.wms.web.data.StyleEditPage?name=${encodeURIComponent(targetStyleName)}`}
+              href={withBasePath(`/api/geoserver/style-editor?name=${encodeURIComponent(targetStyleName)}`)}
               target="_blank"
               rel="noopener noreferrer"
               className="text-sm text-primary underline underline-offset-4 hover:no-underline"
