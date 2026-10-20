@@ -1,0 +1,19 @@
+<layer>
+  <name>undesignated_heritage</name>
+  <id>LayerInfoImpl--610c9460:1a10fc86a73:-7b5d</id>
+  <type>VECTOR</type>
+  <defaultStyle>
+    <id>StyleInfoImpl--610c9460:1a10fc86a73:-7b5c</id>
+  </defaultStyle>
+  <resource class="featureType">
+    <id>FeatureTypeInfoImpl--610c9460:1a10fc86a73:-7b5e</id>
+  </resource>
+  <queryable>true</queryable>
+  <opaque>false</opaque>
+  <attribution>
+    <logoWidth>0</logoWidth>
+    <logoHeight>0</logoHeight>
+  </attribution>
+  <dateCreated>2026-10-16 06:46:22.723 UTC</dateCreated>
+  <dateModified>2026-10-16 06:46:23.67 UTC</dateModified>
+</layer>

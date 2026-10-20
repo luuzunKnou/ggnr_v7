@@ -333,6 +333,9 @@ export type MapContextValue = {
   /** 도로망도 목록에서 선택한 도로 id — 상세·지도 강조 */
   roadNetworkSelectedId: string | null;
   setRoadNetworkSelectedId: Dispatch<SetStateAction<string | null>>;
+  /** 같은 노선번호 구간이 여럿일 때 구간 미선택(노선 전체) 상태 — 선택 id는 대표 구간 */
+  roadNetworkWholeRoad: boolean;
+  setRoadNetworkWholeRoad: Dispatch<SetStateAction<boolean>>;
   /** URL opened 도로망도 패널 열림 */
   roadNetworkPanelOpen: boolean;
   setRoadNetworkPanelOpen: Dispatch<SetStateAction<boolean>>;
@@ -490,6 +493,9 @@ export type MapContextValue = {
   /** URL 기준 보상편입용지 패널 열림 — 일반 식별 비활성화용 */
   roadRewardPanelOpen: boolean;
   setRoadRewardPanelOpen: Dispatch<SetStateAction<boolean>>;
+  /** 도로대장 도로영상 창 열림 — 일반 식별 비활성화용 (노선 클릭은 영상 이동에 씀) */
+  roadLedgerVideoOpen: boolean;
+  setRoadLedgerVideoOpen: Dispatch<SetStateAction<boolean>>;
   /** 재난시설 상세 — 건물·도로 WMS (켜진 테이블 + CQL). null이면 미사용 */
   safetyFacBuildingRoadLayerState: {
     visibleTableNames: Set<string>;
@@ -727,6 +733,7 @@ export function MapContextProvider({ children }: { children: React.ReactNode }) 
   } | null>(null);
   const [roadNetworkRows, setRoadNetworkRows] = useState<RoadNetworkRow[]>([]);
   const [roadNetworkSelectedId, setRoadNetworkSelectedId] = useState<string | null>(null);
+  const [roadNetworkWholeRoad, setRoadNetworkWholeRoad] = useState(false);
   const [roadNetworkPanelOpen, setRoadNetworkPanelOpen] = useState(false);
   const applyRoadNetworkMapPickRef = useRef<
     | ((pick: {
@@ -820,6 +827,7 @@ export function MapContextProvider({ children }: { children: React.ReactNode }) 
   const [memoPanelOpen, setMemoPanelOpen] = useState(false);
   const [groundwaterPermitPanelOpen, setGroundwaterPermitPanelOpen] = useState(false);
   const [roadRewardPanelOpen, setRoadRewardPanelOpen] = useState(false);
+  const [roadLedgerVideoOpen, setRoadLedgerVideoOpen] = useState(false);
   const [safetyFacBuildingRoadLayerState, setSafetyFacBuildingRoadLayerState] = useState<{
     visibleTableNames: Set<string>;
     cqlByTable: Record<string, string>;
@@ -985,6 +993,8 @@ export function MapContextProvider({ children }: { children: React.ReactNode }) 
         setRoadNetworkRows,
         roadNetworkSelectedId,
         setRoadNetworkSelectedId,
+        roadNetworkWholeRoad,
+        setRoadNetworkWholeRoad,
         roadNetworkPanelOpen,
         setRoadNetworkPanelOpen,
         applyRoadNetworkMapPickRef,
@@ -1054,6 +1064,8 @@ export function MapContextProvider({ children }: { children: React.ReactNode }) 
         setGroundwaterPermitPanelOpen,
         roadRewardPanelOpen,
         setRoadRewardPanelOpen,
+        roadLedgerVideoOpen,
+        setRoadLedgerVideoOpen,
         safetyFacBuildingRoadLayerState,
         setSafetyFacBuildingRoadLayerState,
         roadCctvUnderlayMode,

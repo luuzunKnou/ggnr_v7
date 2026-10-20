@@ -16,6 +16,7 @@
  * - 공사대장: cons_data_as, cons_data_solo_as
  * - 마을순찰대: village_patrol
  * - 도로 업무편람: rd_work_target_review, rd_hbook_mat
+ * - 개별공시지가 필지 메모: land_price_memo
  */
 import { db, pool } from '@/database/db';
 import { sql } from 'drizzle-orm';
@@ -1089,6 +1090,24 @@ COMMENT ON COLUMN layer.rd_hbook_mat.xml_url IS '자료 xml';
 COMMENT ON COLUMN layer.rd_hbook_mat.orig_url IS '원문';
 `;
 
+const LAND_PRICE_MEMO_SQL = `
+CREATE TABLE IF NOT EXISTS layer.land_price_memo (
+  memo_key SERIAL PRIMARY KEY,
+  pnu text NOT NULL,
+  memo_contents text NOT NULL DEFAULT '',
+  memo_create_date timestamp NOT NULL DEFAULT now(),
+  memo_create_user text,
+  memo_is_del boolean NOT NULL DEFAULT false
+);
+CREATE INDEX IF NOT EXISTS land_price_memo_pnu_idx ON layer.land_price_memo (pnu);
+COMMENT ON TABLE layer.land_price_memo IS '개별공시지가 필지 메모';
+COMMENT ON COLUMN layer.land_price_memo.pnu IS '필지번호';
+COMMENT ON COLUMN layer.land_price_memo.memo_contents IS '내용';
+COMMENT ON COLUMN layer.land_price_memo.memo_create_date IS '작성일시';
+COMMENT ON COLUMN layer.land_price_memo.memo_create_user IS '작성자 아이디';
+COMMENT ON COLUMN layer.land_price_memo.memo_is_del IS '삭제여부';
+`;
+
 /** 기존 중복 정리 후 편성 유니크 인덱스 확보 */
 async function ensureVillagePatrolAssignmentUnique(result: EnsureResult): Promise<void> {
   const fq = 'layer.village_patrol';
@@ -2154,6 +2173,18 @@ export async function ensureRoadWorkHandbookTables(result?: EnsureResult): Promi
   return out;
 }
 
+/** 개별공시지가 필지 메모 */
+export async function ensureLandPriceMemoTable(result?: EnsureResult): Promise<EnsureResult> {
+  const out: EnsureResult = result ?? { created: [], moved: [], existed: [], errors: [] };
+  await ensureSchemaLayer();
+  await ensureBaseTable({
+    table: 'land_price_memo',
+    createSql: LAND_PRICE_MEMO_SQL,
+    result: out,
+  });
+  return out;
+}
+
 /** public.layer_extra_def — 추가속성 정의 (점용 본대 extra 컬럼과는 별개) */
 export async function ensureLayerExtraDefTable(result?: EnsureResult): Promise<EnsureResult> {
   const out: EnsureResult = result ?? { created: [], moved: [], existed: [], errors: [] };
@@ -2199,6 +2230,7 @@ export async function ensureLayerAppTables(): Promise<EnsureResult> {
     await ensureWaterPlaySignTable(result);
     await ensureVillagePatrolTable(result);
     await ensureRoadWorkHandbookTables(result);
+    await ensureLandPriceMemoTable(result);
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);
     result.errors.push(msg);

@@ -10,6 +10,7 @@ export const ROAD_NETWORK_TYPES = [
   "일반도로",
   "임도",
   "입체교차로",
+  "철도",
 ] as const;
 export type RoadNetworkType = (typeof ROAD_NETWORK_TYPES)[number];
 
@@ -22,6 +23,7 @@ export const ROAD_NETWORK_TYPE_FILTER_TABS = [
   "농도",
   "일반도로",
   "임도",
+  "철도",
 ] as const;
 export type RoadNetworkTypeFilter = (typeof ROAD_NETWORK_TYPE_FILTER_TABS)[number];
 
@@ -65,14 +67,15 @@ export const ROAD_NETWORK_TYPE_BADGE: Record<
   RoadNetworkType,
   { bg: string; text: string; border: string }
 > = {
-  국도: { bg: "bg-chart-3/15", text: "text-chart-3", border: "border-chart-3/40" },
-  지방도: { bg: "bg-primary/10", text: "text-primary", border: "border-primary/30" },
-  국지도: { bg: "bg-chart-1/15", text: "text-chart-1", border: "border-chart-1/40" },
-  군도: { bg: "bg-chart-2/15", text: "text-chart-2", border: "border-chart-2/40" },
-  농도: { bg: "bg-chart-4/15", text: "text-chart-4", border: "border-chart-4/40" },
+  국도: { bg: "bg-[#1E4FA8]/10", text: "text-[#1E4FA8]", border: "border-[#1E4FA8]/40" },
+  지방도: { bg: "bg-[#F5C400]/15", text: "text-[#8A6D00]", border: "border-[#F5C400]/60" },
+  국지도: { bg: "bg-[#F5C400]/15", text: "text-[#8A6D00]", border: "border-[#F5C400]/60" },
+  군도: { bg: "bg-[#1F76AC]/10", text: "text-[#1F76AC]", border: "border-[#1F76AC]/40" },
+  농도: { bg: "bg-[#883700]/10", text: "text-[#883700]", border: "border-[#883700]/40" },
   일반도로: { bg: "bg-muted", text: "text-foreground/90", border: "border-border" },
   임도: { bg: "bg-chart-5/15", text: "text-chart-5", border: "border-chart-5/40" },
   입체교차로: { bg: "bg-secondary", text: "text-secondary-foreground", border: "border-border" },
+  철도: { bg: "bg-foreground/10", text: "text-foreground", border: "border-foreground/30" },
 };
 
 export type RoadNetworkGeom =
@@ -143,6 +146,8 @@ export type RoadNetworkRow = {
   roadName: string;
   roadNo: string;
   roadType: RoadNetworkType;
+  /** 통합 도로망(rdl_network_ls) 원래 등급 — 있으면 통합 자료 행 */
+  roadGrade?: string;
   /** 개설/미개설 — 모든 도로종류 */
   openStatus: RoadNetworkOpenStatus;
   lengthM: number;
@@ -817,6 +822,7 @@ export function describeAttrHistoryDetail(
     roadName: string;
     roadNo: string;
     roadType: RoadNetworkType;
+    roadGrade?: string;
     openStatus: RoadNetworkOpenStatus;
     dept: string;
     manager: string;
@@ -834,6 +840,9 @@ export function describeAttrHistoryDetail(
   const changes: string[] = [];
   pushChange(changes, "도로명", prev.roadName, next.roadName);
   pushChange(changes, "도로종류", prev.roadType, next.roadType);
+  if (next.roadGrade !== undefined) {
+    pushChange(changes, "도로등급", prev.roadGrade || "", next.roadGrade || "");
+  }
   pushChange(changes, "도로번호", prev.roadNo || "", next.roadNo || "");
   pushChange(changes, "개설여부", prev.openStatus ?? "", next.openStatus ?? "");
   pushChange(changes, "관리기관", prev.dept || "", next.dept || "");

@@ -1,16 +1,19 @@
 <layer>
   <name>sd_heat_wave_shelter</name>
-  <id>LayerInfoImpl--5d712ee:1a0a3bf6800:-7f47</id>
+  <id>LayerInfoImpl--610c9460:1a10fc86a73:-79aa</id>
   <type>VECTOR</type>
   <defaultStyle>
-    <id>StyleInfoImpl--30e19f83:19cb3d4f76b:-7ffc</id>
+    <id>StyleInfoImpl--2053d3:19d606c4ff1:30f5</id>
   </defaultStyle>
   <resource class="featureType">
-    <id>FeatureTypeInfoImpl--5d712ee:1a0a3bf6800:-7f48</id>
+    <id>FeatureTypeInfoImpl--610c9460:1a10fc86a73:-79ab</id>
   </resource>
+  <queryable>true</queryable>
+  <opaque>false</opaque>
   <attribution>
     <logoWidth>0</logoWidth>
     <logoHeight>0</logoHeight>
   </attribution>
-  <dateCreated>2026-09-20 18:01:46.437 UTC</dateCreated>
+  <dateCreated>2026-10-18 18:02:15.653 UTC</dateCreated>
+  <dateModified>2026-10-18 18:02:15.868 UTC</dateModified>
 </layer>
