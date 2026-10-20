@@ -13,12 +13,16 @@ export type PrivateLandAnalysisLayer = {
   schema?: string;
   /** 기본 between */
   mode?: PrivateLandRangeMode;
+  /** 이 테이블이 DB에 없을 때만 대신 쓰는 레이어 (예: 하천구역이 없는 사업은 하천기본계획) */
+  fallbackFor?: string;
 };
 
 export const PRIVATE_LAND_ANALYSIS_LAYERS: Record<string, PrivateLandAnalysisLayer[]> = {
   river: [
     { table: 'river_d_as', label: '하천구역' },
     { table: 'river_s_as', label: '소하천구역' },
+    { table: 'river_plan_as', label: '하천기본계획', fallbackFor: 'river_d_as' },
+    { table: 'river_plan_s_as', label: '소하천기본계획', fallbackFor: 'river_s_as' },
   ],
   road: [{ table: 'tl_sprd_rw', label: '실폭도로', schema: 'public_layer', mode: 'closed' }],
 };

@@ -103,8 +103,9 @@ export type RunPipelineEnvSetupResult = { success: boolean; message: string; log
  */
 export async function runPipelineEnvSetup(): Promise<RunPipelineEnvSetupResult> {
   const projectRoot = path.resolve(process.cwd());
-  const pythonDir = path.join(projectRoot, 'python');
-  const envPath = path.join(pythonDir, 'env');
+  // 빌드 파일 추적이 python/env 를 통째로 훑지 않도록 리터럴 path.join 대신 런타임 결합
+  const pythonDir = [projectRoot, 'python'].join(path.sep);
+  const envPath = [pythonDir, 'env'].join(path.sep);
   const logLines: string[] = [];
 
   const condaResolved = resolveCondaExe();
