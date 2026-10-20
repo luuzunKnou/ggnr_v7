@@ -870,9 +870,23 @@ export async function listCompletedOrthoExtents(params?: {
   return { items };
 }
 
-/** 원본 TIF 절대경로 (WMS GetMap) */
+async function existingAbs(rel: string | null | undefined): Promise<string | null> {
+  const r = String(rel ?? '').replace(/\\/g, '/');
+  if (!r) return null;
+  const resolved = resolveWithinBase(r);
+  if (!resolved) return null;
+  try {
+    await fs.access(resolved.abs);
+    return resolved.abs;
+  } catch {
+    return null;
+  }
+}
+
+/** 원본 TIF·XYZ 타일 폴더 절대경로 (WMS GetMap). 둘 다 없으면 null */
 export async function resolveOrthoTifAbsPath(tuKey: number): Promise<{
-  absSource: string;
+  absSource: string | null;
+  tilesAbsDir: string | null;
   sourceCrs: string;
   fileName: string;
 } | null> {
@@ -884,16 +898,14 @@ export async function resolveOrthoTifAbsPath(tuKey: number): Promise<{
       .limit(1)
   )[0];
   if (!row || row.convertStatus !== 'done') return null;
-  const rel = String(row.relativePath ?? '').replace(/\\/g, '/');
-  const resolved = resolveWithinBase(rel);
-  if (!resolved) return null;
-  try {
-    await fs.access(resolved.abs);
-  } catch {
-    return null;
-  }
+  const [absSource, tilesAbsDir] = await Promise.all([
+    existingAbs(row.relativePath),
+    existingAbs(row.tilesRelativePath),
+  ]);
+  if (!absSource && !tilesAbsDir) return null;
   return {
-    absSource: resolved.abs,
+    absSource,
+    tilesAbsDir,
     sourceCrs: String(row.sourceCrs ?? 'EPSG:5181'),
     fileName: row.fileName,
   };

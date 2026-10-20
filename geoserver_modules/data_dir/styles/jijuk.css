@@ -17,7 +17,7 @@
 
   label: [jibun];
   label-anchor: 0.5 0.5;
-  label-geometry: [centroid(geom)];
+  label-geometry: [interiorPoint(geom)];
 
   font-family: "Nanum Gothic", "Malgun Gothic", "SansSerif";
   font-size: 14;

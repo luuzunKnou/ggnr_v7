@@ -209,6 +209,39 @@ import {
   USER_DATA_UPLOAD_PANEL_MAX_WIDTH,
   USER_DATA_UPLOAD_PANEL_MIN_WIDTH,
 } from "./_mapContents/userDataUpload/userDataUploadConfig"
+import { CadastralResurveyListPanel } from "./_mapContents/cadastralResurvey/CadastralResurveyListPanel"
+import { CadastralResurveyDetailPanel } from "./_mapContents/cadastralResurvey/CadastralResurveyDetailPanel"
+import {
+  CADASTRAL_RESURVEY_DETAIL_DEFAULT_WIDTH,
+  CADASTRAL_RESURVEY_DETAIL_MAX_WIDTH,
+  CADASTRAL_RESURVEY_DETAIL_MIN_WIDTH,
+  CADASTRAL_RESURVEY_OPENED_KEY,
+  CADASTRAL_RESURVEY_PANEL_DEFAULT_WIDTH,
+  CADASTRAL_RESURVEY_PANEL_MAX_WIDTH,
+  CADASTRAL_RESURVEY_PANEL_MIN_WIDTH,
+} from "./_mapContents/cadastralResurvey/cadastralResurveyConfig"
+import { IndividualLandPriceListPanel } from "./_mapContents/individualLandPrice/IndividualLandPriceListPanel"
+import { IndividualLandPriceDetailPanel } from "./_mapContents/individualLandPrice/IndividualLandPriceDetailPanel"
+import {
+  INDIVIDUAL_LAND_PRICE_DETAIL_DEFAULT_WIDTH,
+  INDIVIDUAL_LAND_PRICE_DETAIL_MAX_WIDTH,
+  INDIVIDUAL_LAND_PRICE_DETAIL_MIN_WIDTH,
+  INDIVIDUAL_LAND_PRICE_OPENED_KEY,
+  INDIVIDUAL_LAND_PRICE_PANEL_DEFAULT_WIDTH,
+  INDIVIDUAL_LAND_PRICE_PANEL_MAX_WIDTH,
+  INDIVIDUAL_LAND_PRICE_PANEL_MIN_WIDTH,
+} from "./_mapContents/individualLandPrice/individualLandPriceConfig"
+import { DevelopmentChargeListPanel } from "./_mapContents/developmentCharge/DevelopmentChargeListPanel"
+import { DevelopmentChargeDetailPanel } from "./_mapContents/developmentCharge/DevelopmentChargeDetailPanel"
+import {
+  DEVELOPMENT_CHARGE_DETAIL_DEFAULT_WIDTH,
+  DEVELOPMENT_CHARGE_DETAIL_MAX_WIDTH,
+  DEVELOPMENT_CHARGE_DETAIL_MIN_WIDTH,
+  DEVELOPMENT_CHARGE_OPENED_KEY,
+  DEVELOPMENT_CHARGE_PANEL_DEFAULT_WIDTH,
+  DEVELOPMENT_CHARGE_PANEL_MAX_WIDTH,
+  DEVELOPMENT_CHARGE_PANEL_MIN_WIDTH,
+} from "./_mapContents/developmentCharge/developmentChargeConfig"
 import { RiverIllegalOccupationListPanel } from "./_mapContents/river/riverIllegalOccupation/RiverIllegalOccupationListPanel"
 import { RiverIllegalOccupationDetailPanel } from "./_mapContents/river/riverIllegalOccupation/RiverIllegalOccupationDetailPanel"
 import {
@@ -715,11 +748,43 @@ function MapLayoutContent({
   )
   const userDataUploadOpen = openedWindows.includes(USER_DATA_UPLOAD_OPENED_KEY)
   const [userDataUploadPanelWidth, setUserDataUploadPanelWidth] = useState(USER_DATA_UPLOAD_PANEL_DEFAULT_WIDTH)
+  const cadastralResurveyOpen = openedWindows.includes(CADASTRAL_RESURVEY_OPENED_KEY)
+  const [cadastralResurveyDistrictId, setCadastralResurveyDistrictId] = useState<string | null>(null)
+  const cadastralResurveyDetailOpen = cadastralResurveyOpen && Boolean(cadastralResurveyDistrictId)
+  const [cadastralResurveyPanelWidth, setCadastralResurveyPanelWidth] = useState(
+    CADASTRAL_RESURVEY_PANEL_DEFAULT_WIDTH
+  )
+  const [cadastralResurveyDetailWidth, setCadastralResurveyDetailWidth] = useState(
+    CADASTRAL_RESURVEY_DETAIL_DEFAULT_WIDTH
+  )
+  const individualLandPriceOpen = openedWindows.includes(INDIVIDUAL_LAND_PRICE_OPENED_KEY)
+  const [individualLandPricePnu, setIndividualLandPricePnu] = useState<string | null>(null)
+  const individualLandPriceDetailOpen = individualLandPriceOpen && Boolean(individualLandPricePnu)
+  const [individualLandPricePanelWidth, setIndividualLandPricePanelWidth] = useState(
+    INDIVIDUAL_LAND_PRICE_PANEL_DEFAULT_WIDTH
+  )
+  const [individualLandPriceDetailWidth, setIndividualLandPriceDetailWidth] = useState(
+    INDIVIDUAL_LAND_PRICE_DETAIL_DEFAULT_WIDTH
+  )
+  const developmentChargeOpen = openedWindows.includes(DEVELOPMENT_CHARGE_OPENED_KEY)
+  const [developmentChargeAreaId, setDevelopmentChargeAreaId] = useState<string | null>(null)
+  const developmentChargeDetailOpen = developmentChargeOpen && Boolean(developmentChargeAreaId)
+  const [developmentChargePanelWidth, setDevelopmentChargePanelWidth] = useState(
+    DEVELOPMENT_CHARGE_PANEL_DEFAULT_WIDTH
+  )
+  const [developmentChargeDetailWidth, setDevelopmentChargeDetailWidth] = useState(
+    DEVELOPMENT_CHARGE_DETAIL_DEFAULT_WIDTH
+  )
   const riverIllegalOccupationOpen = openedWindows.includes(RIVER_ILLEGAL_OCCUPATION_OPENED_KEY)
-  const [riverIllegalOccupationPanelWidth, setRiverIllegalOccupationPanelWidth] = useState(RIVER_ILLEGAL_OCCUPATION_PANEL_DEFAULT_WIDTH)
-  const [riverIllegalOccupationDetailWidth, setRiverIllegalOccupationDetailWidth] = useState(RIVER_ILLEGAL_OCCUPATION_DETAIL_DEFAULT_WIDTH)
+  const [riverIllegalOccupationPanelWidth, setRiverIllegalOccupationPanelWidth] = useState(
+    RIVER_ILLEGAL_OCCUPATION_PANEL_DEFAULT_WIDTH
+  )
+  const [riverIllegalOccupationDetailWidth, setRiverIllegalOccupationDetailWidth] = useState(
+    RIVER_ILLEGAL_OCCUPATION_DETAIL_DEFAULT_WIDTH
+  )
   const [riverIllegalOccupationSelectedId, setRiverIllegalOccupationSelectedId] = useState<string | null>(null)
-  const riverIllegalOccupationDetailOpen = riverIllegalOccupationOpen && Boolean(riverIllegalOccupationSelectedId)
+  const riverIllegalOccupationDetailOpen =
+    riverIllegalOccupationOpen && Boolean(riverIllegalOccupationSelectedId)
   const [buildPublicLandSelectedId, setBuildPublicLandSelectedId] = useState<string | null>(null)
   const [buildPublicLandListRefreshKey, setBuildPublicLandListRefreshKey] = useState(0)
   const buildPublicLandDetailOpen = buildPublicLandOpen && Boolean(buildPublicLandSelectedId)
@@ -1029,6 +1094,12 @@ function MapLayoutContent({
     (privateLandAnalysisOpen ? privateLandAnalysisPanelWidth : 0) +
     (privateLandAnalysisDetailOpen ? privateLandAnalysisDetailWidth : 0) +
     (userDataUploadOpen ? userDataUploadPanelWidth : 0) +
+    (cadastralResurveyOpen ? cadastralResurveyPanelWidth : 0) +
+    (cadastralResurveyDetailOpen ? cadastralResurveyDetailWidth : 0) +
+    (individualLandPriceOpen ? individualLandPricePanelWidth : 0) +
+    (individualLandPriceDetailOpen ? individualLandPriceDetailWidth : 0) +
+    (developmentChargeOpen ? developmentChargePanelWidth : 0) +
+    (developmentChargeDetailOpen ? developmentChargeDetailWidth : 0) +
     (riverIllegalOccupationOpen ? riverIllegalOccupationPanelWidth : 0) +
     (riverIllegalOccupationDetailOpen ? riverIllegalOccupationDetailWidth : 0)
   const searchBarOffset = {
@@ -1180,10 +1251,25 @@ function MapLayoutContent({
     privateLandAnalysisPanelLeftPx + (privateLandAnalysisOpen ? privateLandAnalysisPanelWidth : 0)
   const userDataUploadPanelLeftPx =
     privateLandAnalysisDetailLeftPx + (privateLandAnalysisDetailOpen ? privateLandAnalysisDetailWidth : 0)
-  const riverIllegalOccupationPanelLeftPx =
+  const cadastralResurveyPanelLeftPx =
     userDataUploadPanelLeftPx + (userDataUploadOpen ? userDataUploadPanelWidth : 0)
+  const cadastralResurveyDetailLeftPx =
+    cadastralResurveyPanelLeftPx + (cadastralResurveyOpen ? cadastralResurveyPanelWidth : 0)
+  const individualLandPricePanelLeftPx =
+    cadastralResurveyDetailLeftPx + (cadastralResurveyDetailOpen ? cadastralResurveyDetailWidth : 0)
+  const individualLandPriceDetailLeftPx =
+    individualLandPricePanelLeftPx + (individualLandPriceOpen ? individualLandPricePanelWidth : 0)
+  const developmentChargePanelLeftPx =
+    individualLandPriceDetailLeftPx +
+    (individualLandPriceDetailOpen ? individualLandPriceDetailWidth : 0)
+  const developmentChargeDetailLeftPx =
+    developmentChargePanelLeftPx + (developmentChargeOpen ? developmentChargePanelWidth : 0)
+  const riverIllegalOccupationPanelLeftPx =
+    developmentChargeDetailLeftPx +
+    (developmentChargeDetailOpen ? developmentChargeDetailWidth : 0)
   const riverIllegalOccupationDetailLeftPx =
-    riverIllegalOccupationPanelLeftPx + (riverIllegalOccupationOpen ? riverIllegalOccupationPanelWidth : 0)
+    riverIllegalOccupationPanelLeftPx +
+    (riverIllegalOccupationOpen ? riverIllegalOccupationPanelWidth : 0)
   const mapPaddingLeft = SIDEBAR_WIDTH + totalListPanelWidth
   /** 패딩은 useLayoutEffect — 자식 useEffect(도로대장 fit 등)보다 먼저 적용되어야 함.
    * 거리뷰 ON일 때만 맵 중심(A)을 새 센터마크 위치에 맞춤.
@@ -1742,6 +1828,21 @@ function MapLayoutContent({
     setOpened(openedWindows.filter((w) => w !== USER_DATA_UPLOAD_OPENED_KEY))
   }
 
+  const handleCloseCadastralResurvey = () => {
+    setCadastralResurveyDistrictId(null)
+    setOpened(openedWindows.filter((w) => w !== CADASTRAL_RESURVEY_OPENED_KEY))
+  }
+
+  const handleCloseIndividualLandPrice = () => {
+    setIndividualLandPricePnu(null)
+    setOpened(openedWindows.filter((w) => w !== INDIVIDUAL_LAND_PRICE_OPENED_KEY))
+  }
+
+  const handleCloseDevelopmentCharge = () => {
+    setDevelopmentChargeAreaId(null)
+    setOpened(openedWindows.filter((w) => w !== DEVELOPMENT_CHARGE_OPENED_KEY))
+  }
+
   const handleCloseRiverIllegalOccupation = () => {
     setRiverIllegalOccupationSelectedId(null)
     setOpened(openedWindows.filter((w) => w !== RIVER_ILLEGAL_OCCUPATION_OPENED_KEY))
@@ -1879,6 +1980,26 @@ function MapLayoutContent({
   useEffect(() => {
     if (!groundwaterPermitOpen) setGroundwaterPermitDetailId(null)
   }, [groundwaterPermitOpen])
+
+  useEffect(() => {
+    if (!cadastralResurveyOpen) setCadastralResurveyDistrictId(null)
+  }, [cadastralResurveyOpen])
+
+  useEffect(() => {
+    if (!individualLandPriceOpen) {
+      setIndividualLandPricePnu(null)
+      return
+    }
+    setIndividualLandPricePanelWidth(INDIVIDUAL_LAND_PRICE_PANEL_DEFAULT_WIDTH)
+  }, [individualLandPriceOpen])
+
+  useEffect(() => {
+    if (!developmentChargeOpen) setDevelopmentChargeAreaId(null)
+  }, [developmentChargeOpen])
+
+  useEffect(() => {
+    if (!riverIllegalOccupationOpen) setRiverIllegalOccupationSelectedId(null)
+  }, [riverIllegalOccupationOpen])
 
   useEffect(() => {
     if (!radiationShelterOpen) setRadiationShelterDetailId(null)
@@ -3468,6 +3589,118 @@ function MapLayoutContent({
                 onWidthChange={setUserDataUploadPanelWidth}
               >
                 <UserDataUploadPanel onClose={handleCloseUserDataUpload} />
+              </MapSideListPanel>
+            </div>
+          )}
+          {cadastralResurveyOpen && (
+            <div className="pointer-events-auto shrink-0">
+              <MapSideListPanel
+                width={cadastralResurveyPanelWidth}
+                minWidth={CADASTRAL_RESURVEY_PANEL_MIN_WIDTH}
+                maxWidth={CADASTRAL_RESURVEY_PANEL_MAX_WIDTH}
+                leftOffsetPx={cadastralResurveyPanelLeftPx}
+                onWidthChange={setCadastralResurveyPanelWidth}
+                serEng={CADASTRAL_RESURVEY_OPENED_KEY}
+              >
+                <CadastralResurveyListPanel
+                  onClose={handleCloseCadastralResurvey}
+                  selectedId={cadastralResurveyDistrictId}
+                  onSelect={setCadastralResurveyDistrictId}
+                />
+              </MapSideListPanel>
+            </div>
+          )}
+          {cadastralResurveyDetailOpen && cadastralResurveyDistrictId && (
+            <div className="pointer-events-auto shrink-0">
+              <MapSideListPanel
+                width={cadastralResurveyDetailWidth}
+                minWidth={CADASTRAL_RESURVEY_DETAIL_MIN_WIDTH}
+                maxWidth={CADASTRAL_RESURVEY_DETAIL_MAX_WIDTH}
+                leftOffsetPx={cadastralResurveyDetailLeftPx}
+                onWidthChange={setCadastralResurveyDetailWidth}
+                contentClassName="overflow-hidden"
+                serEng={CADASTRAL_RESURVEY_OPENED_KEY}
+              >
+                <CadastralResurveyDetailPanel
+                  key={cadastralResurveyDistrictId}
+                  districtId={cadastralResurveyDistrictId}
+                  onClose={() => setCadastralResurveyDistrictId(null)}
+                />
+              </MapSideListPanel>
+            </div>
+          )}
+          {individualLandPriceOpen && (
+            <div className="pointer-events-auto shrink-0">
+              <MapSideListPanel
+                width={individualLandPricePanelWidth}
+                minWidth={INDIVIDUAL_LAND_PRICE_PANEL_MIN_WIDTH}
+                maxWidth={INDIVIDUAL_LAND_PRICE_PANEL_MAX_WIDTH}
+                leftOffsetPx={individualLandPricePanelLeftPx}
+                onWidthChange={setIndividualLandPricePanelWidth}
+                contentClassName="overflow-hidden"
+                serEng={INDIVIDUAL_LAND_PRICE_OPENED_KEY}
+              >
+                <IndividualLandPriceListPanel
+                  onClose={handleCloseIndividualLandPrice}
+                  selectedPnu={individualLandPricePnu}
+                  onSelect={setIndividualLandPricePnu}
+                />
+              </MapSideListPanel>
+            </div>
+          )}
+          {individualLandPriceDetailOpen && individualLandPricePnu && (
+            <div className="pointer-events-auto shrink-0">
+              <MapSideListPanel
+                width={individualLandPriceDetailWidth}
+                minWidth={INDIVIDUAL_LAND_PRICE_DETAIL_MIN_WIDTH}
+                maxWidth={INDIVIDUAL_LAND_PRICE_DETAIL_MAX_WIDTH}
+                leftOffsetPx={individualLandPriceDetailLeftPx}
+                onWidthChange={setIndividualLandPriceDetailWidth}
+                contentClassName="overflow-hidden"
+                serEng={INDIVIDUAL_LAND_PRICE_OPENED_KEY}
+              >
+                <IndividualLandPriceDetailPanel
+                  key={individualLandPricePnu}
+                  pnu={individualLandPricePnu}
+                  onClose={() => setIndividualLandPricePnu(null)}
+                />
+              </MapSideListPanel>
+            </div>
+          )}
+          {developmentChargeOpen && (
+            <div className="pointer-events-auto shrink-0">
+              <MapSideListPanel
+                width={developmentChargePanelWidth}
+                minWidth={DEVELOPMENT_CHARGE_PANEL_MIN_WIDTH}
+                maxWidth={DEVELOPMENT_CHARGE_PANEL_MAX_WIDTH}
+                leftOffsetPx={developmentChargePanelLeftPx}
+                onWidthChange={setDevelopmentChargePanelWidth}
+                serEng={DEVELOPMENT_CHARGE_OPENED_KEY}
+              >
+                <DevelopmentChargeListPanel
+                  onClose={handleCloseDevelopmentCharge}
+                  selectedId={developmentChargeAreaId}
+                  onSelect={setDevelopmentChargeAreaId}
+                />
+              </MapSideListPanel>
+            </div>
+          )}
+          {developmentChargeDetailOpen && developmentChargeAreaId && (
+            <div className="pointer-events-auto shrink-0">
+              <MapSideListPanel
+                width={developmentChargeDetailWidth}
+                minWidth={DEVELOPMENT_CHARGE_DETAIL_MIN_WIDTH}
+                maxWidth={DEVELOPMENT_CHARGE_DETAIL_MAX_WIDTH}
+                leftOffsetPx={developmentChargeDetailLeftPx}
+                onWidthChange={setDevelopmentChargeDetailWidth}
+                contentClassName="overflow-hidden"
+                serEng={DEVELOPMENT_CHARGE_OPENED_KEY}
+              >
+                <DevelopmentChargeDetailPanel
+                  key={developmentChargeAreaId}
+                  areaId={developmentChargeAreaId}
+                  onClose={() => setDevelopmentChargeAreaId(null)}
+                />
               </MapSideListPanel>
             </div>
           )}

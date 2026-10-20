@@ -33,6 +33,8 @@ export const GGNR_DATA_PATHS = {
   ocr: 'OCR',
   /** 정책지도 바로가기 (zip 전개 HTML) */
   policyMap: 'policy_map',
+  /** 지적 세부원도 (원도 JPG + .fitimage 네 모서리 좌표) */
+  detailWondo: 'detail_wondo',
 } as const;
 
 /** ensureBaseStructure 가 생성하는 루트 폴더 */

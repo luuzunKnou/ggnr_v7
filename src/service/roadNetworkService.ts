@@ -615,6 +615,7 @@ function buildAttrSqlValues(
     sinuosity?: string;
     detailReason?: string;
     address?: string;
+    isNew?: boolean;
   }
 ): { ok: true; values: AttrSqlValue[] } | { ok: false; error: string } {
   const name = input.roadName.trim();
@@ -676,7 +677,8 @@ function buildAttrSqlValues(
       add('no', no);
       add('admin_no', no);
       add('admin', dept);
-      add('admin_clas', '농도');
+      // 면도·리도·농도 구분 — 수정 시 기존 값 유지
+      if (input.isNew) add('admin_clas', '농도');
       add('length', lengthAttr);
       add('defense', defense);
       add('sinuosity', sinuosity);
@@ -949,6 +951,10 @@ export async function saveRoadNetworkRow(
   const tableName = await resolveLayerTableName(target.table);
   if (!tableName) return { success: false, error: `테이블이 없습니다: ${target.table}` };
   const typeMap = await getColumnTypeMap(tableName);
+  const id = String(params.id ?? '').trim();
+  const parsed = parseStoredId(id);
+  const moveInsert = Boolean(parsed && parsed.table !== target.table);
+  const isNew = !parsed || moveInsert || isClientOnlyId(id);
   const built = buildAttrSqlValues(target.table, typeMap, {
     roadName,
     roadNo: String(params.roadNo ?? '').trim(),
@@ -959,12 +965,11 @@ export async function saveRoadNetworkRow(
     sinuosity: String(params.sinuosity ?? '').trim(),
     detailReason: String(params.detailReason ?? '').trim(),
     address: String(params.address ?? '').trim(),
+    isNew,
   });
   if (!built.ok) return { success: false, error: built.error };
 
   let geom = params.geom ?? null;
-  const id = String(params.id ?? '').trim();
-  const parsed = parseStoredId(id);
   const attrValues = attrSqlValuesToRecord(built.values);
 
   try {
@@ -988,9 +993,8 @@ export async function saveRoadNetworkRow(
 
     const geomWkt5181 = await geomToWkt5181(geom);
     const geomClear = params.geom === null;
-    const moveInsert = Boolean(parsed && parsed.table !== target.table);
 
-    if (!parsed || moveInsert || isClientOnlyId(id)) {
+    if (isNew) {
       if (Object.keys(attrValues).length === 0 && !geomWkt5181) {
         return { success: false, error: '저장할 도형 또는 속성이 없습니다.' };
       }
