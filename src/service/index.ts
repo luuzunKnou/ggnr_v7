@@ -27,6 +27,12 @@ import * as loginLogService from './loginLogService';
 import * as riverBasicPlanService from './riverBasicPlanService';
 import * as roadLedgerService from './roadLedgerService';
 import * as roadNetworkService from './roadNetworkService';
+import * as wtlNetworkService from './wtlNetworkService';
+import * as wtlOutageService from './wtlOutageService';
+import * as wtlLeakService from './wtlLeakService';
+import * as wtlSupplyPathService from './wtlSupplyPathService';
+import * as wtlTopologyService from './wtlTopologyService';
+import * as wtlMeterLocationService from './wtlMeterLocationService';
 import * as roadUseLedgerService from './roadUseLedgerService';
 import * as roadFrontageBuildingService from './roadFrontageBuildingService';
 import * as roadFrontageMarkerService from './roadFrontageMarkerService';
@@ -105,6 +111,12 @@ export {
   riverBasicPlanService,
   roadLedgerService,
   roadNetworkService,
+  wtlNetworkService,
+  wtlOutageService,
+  wtlLeakService,
+  wtlSupplyPathService,
+  wtlTopologyService,
+  wtlMeterLocationService,
   roadUseLedgerService,
   roadFrontageBuildingService,
   roadFrontageMarkerService,
