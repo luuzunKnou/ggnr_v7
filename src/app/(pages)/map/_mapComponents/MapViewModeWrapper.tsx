@@ -83,8 +83,8 @@ export default function MapViewModeWrapper({
   const searchParams = useSearchParams();
   const systemKey = searchParams.get('system') ?? '';
   const mapControlGroups3d = useMemo(
-    (): MapControlGroup[] => mapControlGroupsForSystem(systemKey),
-    [systemKey]
+    (): MapControlGroup[] => mapControlGroupsForSystem(systemKey, projectName),
+    [systemKey, projectName]
   );
 
   useEffect(() => {

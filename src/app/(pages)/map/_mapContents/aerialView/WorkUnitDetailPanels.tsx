@@ -9,7 +9,7 @@ import type { AttrRow, WorkFileItem, WorkUnitItem } from './aerialMediaTypes';
 import { fileMissingGeom } from './aerialLocationParse';
 import { AttributeSection, MissingGeomMark, SectionTitle, StatusBadge } from './AerialMediaUi';
 import { updateWorkUnitAttrs } from './aerialMediaMockData';
-import { FlightLogbookForm } from './FlightLogbookForm';
+import { FlightLogbookList } from './FlightLogbookList';
 import { SHOOT_TYPE_LABEL, type ShootingRequestDraft } from '../shootingRequest/shootingRequestMockData';
 import { ServiceFileImagePreview } from '../../_mapComponents/standard/ServiceFileImagePreview';
 import type { MapHitOverlapOption } from '../../_mapComponents/MapHitOverlapSelect';
@@ -358,7 +358,7 @@ export function OrthoWorkUnitDetailPanel({
         onClose={onClose}
       />
       {overlapOptions && overlapOptions.length > 1 && onOverlapChange ? (
-        <div className="flex max-h-[42%] min-h-[140px] shrink-0 flex-col overflow-hidden border-b border-border">
+        <div className="flex max-h-[180px] min-h-[140px] shrink-0 flex-col overflow-hidden border-b border-border">
           <IdentifyHitListBlock
             results={orthoOverlapResults(overlapOptions)}
             headerLabel="지도에서 선택된 항목"
@@ -374,14 +374,13 @@ export function OrthoWorkUnitDetailPanel({
       ) : null}
       {!viewOnly && detailTab === 'flight' ? (
         <div className="min-h-0 flex-1 overflow-y-auto">
-          <FlightLogbookForm
+          <FlightLogbookList
             workUnitLabel={workLabel}
             srKey={
               linkedRequest?.id != null && Number.isFinite(Number(linkedRequest.id))
                 ? Number(linkedRequest.id)
                 : null
             }
-            embedded
           />
         </div>
       ) : (
@@ -502,14 +501,13 @@ export function DroneWorkUnitDetailPanel({
       />
       {!viewOnly && detailTab === 'flight' ? (
         <div className="min-h-0 flex-1 overflow-y-auto">
-          <FlightLogbookForm
+          <FlightLogbookList
             workUnitLabel={workLabel}
             srKey={
               linkedRequest?.id != null && Number.isFinite(Number(linkedRequest.id))
                 ? Number(linkedRequest.id)
                 : null
             }
-            embedded
           />
         </div>
       ) : (
@@ -791,14 +789,13 @@ export function PanoramaWorkUnitDetailPanel({
       />
       {!viewOnly && detailTab === 'flight' ? (
         <div className="min-h-0 flex-1 overflow-y-auto">
-          <FlightLogbookForm
+          <FlightLogbookList
             workUnitLabel={workLabel}
             srKey={
               linkedRequest?.id != null && Number.isFinite(Number(linkedRequest.id))
                 ? Number(linkedRequest.id)
                 : null
             }
-            embedded
           />
         </div>
       ) : (
@@ -904,7 +901,7 @@ export function SatelliteWorkUnitDetailPanel({
       />
       {!viewOnly && detailTab === 'flight' ? (
         <div className="min-h-0 flex-1 overflow-y-auto">
-          <FlightLogbookForm
+          <FlightLogbookList
             workUnitLabel={workLabel}
             title="촬영정보"
             infoSectionLabel="촬영 정보"
@@ -913,7 +910,6 @@ export function SatelliteWorkUnitDetailPanel({
                 ? Number(linkedRequest.id)
                 : null
             }
-            embedded
           />
         </div>
       ) : (

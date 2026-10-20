@@ -24,6 +24,10 @@ import {
 import type { LucideIcon } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useShootingRequestUiEnabled } from "@/app/(pages)/map/_mapContents/shootingRequest/useShootingRequestUiEnabled"
+import {
+  isUavFamilySystemKey,
+  isUavUlsanProject,
+} from "@/app/(pages)/map/_mapContents/shootingRequest/shootingRequestUiFlag"
 
 // 패널 아이템 타입 정의
 export interface MapControlItem {
@@ -239,17 +243,17 @@ export const defaultMapControlGroups: MapControlGroup[] = [
   },
 ]
 
-/** UAV 조회·관리에서만 노출하는 우측 컨트롤 */
+/** UAV 조회·관리에서만 노출하는 우측 컨트롤. 울산은 시스템과 무관하게 항상 노출 */
 const UAV_ONLY_CONTROL_IDS = new Set(["aerial-view", "shooting-request"])
 
-function isUavFamilySystemKey(systemKey: string): boolean {
-  const key = String(systemKey ?? "").trim().toLowerCase()
-  return key === "uav" || key === "uav_view"
-}
-
-/** 현재 시스템에 맞게 맵 컨트롤 그룹 필터 (드론영상·촬영요청 = UAV 전용) */
-export function mapControlGroupsForSystem(systemKey: string): MapControlGroup[] {
-  if (isUavFamilySystemKey(systemKey)) return defaultMapControlGroups
+/** 현재 시스템에 맞게 맵 컨트롤 그룹 필터 (드론영상·촬영요청 = UAV 전용, 울산은 항상) */
+export function mapControlGroupsForSystem(
+  systemKey: string,
+  projectName?: string
+): MapControlGroup[] {
+  if (isUavUlsanProject(projectName) || isUavFamilySystemKey(systemKey)) {
+    return defaultMapControlGroups
+  }
   return defaultMapControlGroups.map((g) => ({
     ...g,
     items: g.items.filter((item) => !UAV_ONLY_CONTROL_IDS.has(item.id)),
