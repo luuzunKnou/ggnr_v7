@@ -1,5 +1,5 @@
 <GeoServerTileLayer>
-  <id>LayerInfoImpl-4f1e7b9b:1a0f0cebe25:-7d65</id>
+  <id>LayerInfoImpl--3b8b617:1a1502c58d1:-7fff</id>
   <enabled>true</enabled>
   <inMemoryCached>true</inMemoryCached>
   <name>ggnr:sd_tsunami_emergency_evac_site</name>
@@ -10,9 +10,25 @@
   <gridSubsets>
     <gridSubset>
       <gridSetName>EPSG:4326</gridSetName>
+      <extent>
+        <coords>
+          <double>129.36737980669704</double>
+          <double>36.270876940438086</double>
+          <double>129.45520436251314</double>
+          <double>36.64433714050941</double>
+        </coords>
+      </extent>
     </gridSubset>
     <gridSubset>
       <gridSetName>EPSG:900913</gridSetName>
+      <extent>
+        <coords>
+          <double>1.4401110845341537E7</double>
+          <double>4337957.92040654</double>
+          <double>1.441088743017413E7</double>
+          <double>4389647.2419756865</double>
+        </coords>
+      </extent>
     </gridSubset>
   </gridSubsets>
   <metaWidthHeight>
@@ -26,7 +42,7 @@
       <key>STYLES</key>
       <defaultValue></defaultValue>
       <availableStyles class="sorted-set"/>
-      <defaultStyle>generic</defaultStyle>
+      <defaultStyle>sd_tsunami_emergency_evac_site</defaultStyle>
     </styleParameterFilter>
   </parameterFilters>
   <gutter>0</gutter>

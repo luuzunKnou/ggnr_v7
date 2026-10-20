@@ -68,8 +68,8 @@ import { RoadLedgerFacilityListSection } from "./RoadLedgerFacilityListSection";
 import dynamic from "next/dynamic";
 import type { RoadLedgerVideoItem } from "./RoadLedgerVideoViewer";
 
-const RoadLedgerVideoViewer = dynamic(
-  () => import("./RoadLedgerVideoViewer").then((m) => m.RoadLedgerVideoViewer),
+const RoadLedgerVideoSync = dynamic(
+  () => import("./RoadLedgerVideoSync").then((m) => m.RoadLedgerVideoSync),
   { ssr: false }
 );
 
@@ -720,9 +720,10 @@ export function RoadLedgerDetailPanel({ row, onClose }: Props) {
         onClose={() => setReportPdfPreview(null)}
       />
     )}
-    {videoViewerOpen && videoItems.length > 0 && (
-      <RoadLedgerVideoViewer
+    {videoViewerOpen && videoItems.length > 0 && reportFileKey != null && (
+      <RoadLedgerVideoSync
         items={videoItems}
+        roadKey={reportFileKey}
         roadName={[roadName, titleParen].filter(Boolean).join(" ")}
         onClose={() => setVideoViewerOpen(false)}
       />

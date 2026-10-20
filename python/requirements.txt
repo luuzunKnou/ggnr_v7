@@ -4,3 +4,5 @@
 py3dtiles[las]>=12.0.0
 numpy>=1.24
 pyproj>=3.0
+# 도로영상 위치 맞춤 (pipeline.road_video_track)
+opencv-python-headless>=4.8
