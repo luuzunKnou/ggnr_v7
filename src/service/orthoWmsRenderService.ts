@@ -1,12 +1,106 @@
 /**
- * QGIS WMS GetMap — 드론영상(원본 TIF) PNG 렌더
+ * QGIS WMS GetMap — 드론영상 PNG 렌더
+ * EPSG:3857 요청은 변환 산출 XYZ 타일을 합성하고, 최대 줌보다 확대된 경우·타 좌표계는 원본 TIF gdalwarp.
  */
+import { promises as fsPromises } from 'node:fs';
+import path from 'node:path';
 import proj4 from 'proj4';
 import {
   parseOrthoWmsTuKey,
   resolveOrthoTifAbsPath,
 } from '@/service/aerialOrthoService';
 import { warpExtentToPng } from '@/service/orthophotoService';
+
+const MERC_ORIGIN = 20037508.342789244;
+/** gdal2tiles --tilesize=512 (줌 선택 기준) */
+const XYZ_TILE_PX = 512;
+
+type XyzZoomInfo = { zooms: number[]; xsByZoom: Map<number, Set<number>> };
+const xyzZoomCache = new Map<string, { at: number; info: XyzZoomInfo }>();
+const XYZ_ZOOM_TTL_MS = 60_000;
+
+/** 타일 폴더의 줌·x 디렉터리 목록 (캐시) */
+async function readXyzZoomInfo(tilesAbsDir: string): Promise<XyzZoomInfo> {
+  const hit = xyzZoomCache.get(tilesAbsDir);
+  if (hit && Date.now() - hit.at < XYZ_ZOOM_TTL_MS) return hit.info;
+  const zooms: number[] = [];
+  const xsByZoom = new Map<number, Set<number>>();
+  const zDirs = await fsPromises.readdir(tilesAbsDir, { withFileTypes: true });
+  for (const d of zDirs) {
+    if (!d.isDirectory() || !/^\d+$/.test(d.name)) continue;
+    const z = Number(d.name);
+    const xDirs = await fsPromises.readdir(path.join(tilesAbsDir, d.name), { withFileTypes: true });
+    const xs = new Set<number>();
+    for (const x of xDirs) {
+      if (x.isDirectory() && /^\d+$/.test(x.name)) xs.add(Number(x.name));
+    }
+    zooms.push(z);
+    xsByZoom.set(z, xs);
+  }
+  zooms.sort((a, b) => a - b);
+  const info = { zooms, xsByZoom };
+  xyzZoomCache.set(tilesAbsDir, { at: Date.now(), info });
+  return info;
+}
+
+/** 요청 해상도(m/px)에 맞는 줌 — 타일 해상도가 요청 이하가 되는 최소 줌 */
+function neededXyzZoom(resX: number): number {
+  return Math.ceil(Math.log2((2 * MERC_ORIGIN) / (XYZ_TILE_PX * resX)));
+}
+
+/** XYZ 타일 합성 → PNG (te: EPSG:3857 minx,miny,maxx,maxy) */
+async function renderXyzTilesToPng(opts: {
+  tilesAbsDir: string;
+  info: XyzZoomInfo;
+  z: number;
+  te: [number, number, number, number];
+  width: number;
+  height: number;
+}): Promise<Buffer> {
+  const { createCanvas, loadImage } = await import('@napi-rs/canvas');
+  const [minx, miny, maxx, maxy] = opts.te;
+  const width = Math.max(1, Math.min(4096, Math.floor(opts.width)));
+  const height = Math.max(1, Math.min(4096, Math.floor(opts.height)));
+  const resX = (maxx - minx) / width;
+  const resY = (maxy - miny) / height;
+  const n = 2 ** opts.z;
+  const span = (2 * MERC_ORIGIN) / n;
+  const clampIdx = (v: number) => Math.max(0, Math.min(n - 1, v));
+  const x0 = clampIdx(Math.floor((minx + MERC_ORIGIN) / span));
+  const x1 = clampIdx(Math.floor((maxx + MERC_ORIGIN) / span));
+  const y0 = clampIdx(Math.floor((MERC_ORIGIN - maxy) / span));
+  const y1 = clampIdx(Math.floor((MERC_ORIGIN - miny) / span));
+  const xs = opts.info.xsByZoom.get(opts.z) ?? new Set<number>();
+
+  const canvas = createCanvas(width, height);
+  const ctx = canvas.getContext('2d');
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+
+  const jobs: Array<Promise<void>> = [];
+  for (let x = x0; x <= x1; x++) {
+    if (!xs.has(x)) continue;
+    for (let y = y0; y <= y1; y++) {
+      const file = path.join(opts.tilesAbsDir, String(opts.z), String(x), `${y}.png`);
+      jobs.push(
+        fsPromises
+          .readFile(file)
+          .then(async (buf) => {
+            const img = await loadImage(buf);
+            // 정수 픽셀 경계로 맞춰 타일 사이 틈(안티앨리어싱 선) 방지
+            const dx0 = Math.round((x * span - MERC_ORIGIN - minx) / resX);
+            const dx1 = Math.round(((x + 1) * span - MERC_ORIGIN - minx) / resX);
+            const dy0 = Math.round((maxy - (MERC_ORIGIN - y * span)) / resY);
+            const dy1 = Math.round((maxy - (MERC_ORIGIN - (y + 1) * span)) / resY);
+            ctx.drawImage(img, dx0, dy0, dx1 - dx0, dy1 - dy0);
+          })
+          .catch(() => undefined)
+      );
+    }
+  }
+  await Promise.all(jobs);
+  return canvas.toBuffer('image/png');
+}
 
 function escapeXml(s: string): string {
   return String(s ?? '')
@@ -140,11 +234,45 @@ export async function renderOrthoWmsGetMap(opts: {
   }
   const epsg = normalizeWmsEpsg(opts.crs);
   const te = parseWmsBbox(opts.bbox, epsg, opts.version);
-  if (!te) {
+  if (!te || !(te[2] > te[0] && te[3] > te[1])) {
     return {
       status: 200,
       contentType: 'application/xml; charset=utf-8',
       body: ogcError('BBOX가 올바르지 않습니다.', 'InvalidParameterValue'),
+    };
+  }
+
+  if (epsg === 'EPSG:3857' && src.tilesAbsDir) {
+    try {
+      const info = await readXyzZoomInfo(src.tilesAbsDir);
+      if (info.zooms.length > 0) {
+        const minZ = info.zooms[0]!;
+        const maxZ = info.zooms[info.zooms.length - 1]!;
+        const need = neededXyzZoom((te[2] - te[0]) / Math.max(1, opts.width));
+        // 최대 줌보다 확대 시 원본 해상도로 (좁은 범위라 원본 읽기도 빠름)
+        if (!(need > maxZ && src.absSource)) {
+          const z = info.zooms.find((zz) => zz >= Math.max(minZ, Math.min(maxZ, need))) ?? maxZ;
+          const buffer = await renderXyzTilesToPng({
+            tilesAbsDir: src.tilesAbsDir,
+            info,
+            z,
+            te,
+            width: opts.width,
+            height: opts.height,
+          });
+          return { status: 200, contentType: 'image/png', body: new Uint8Array(buffer) };
+        }
+      }
+    } catch {
+      /* 타일 실패 시 원본 렌더로 */
+    }
+  }
+
+  if (!src.absSource) {
+    return {
+      status: 200,
+      contentType: 'application/xml; charset=utf-8',
+      body: ogcError('드론영상 원본 파일을 찾을 수 없습니다.', 'LayerNotDefined'),
     };
   }
   const rendered = await warpExtentToPng({
@@ -196,13 +324,6 @@ export function buildWmsExtentXml(
   maxLon: number,
   maxLat: number
 ): string {
-  // WMS 1.3 EPSG:4326 = lat,lon 축순서
-  const box4326 = {
-    minx: minLat,
-    miny: minLon,
-    maxx: maxLat,
-    maxy: maxLon,
-  };
   const box84 = {
     minx: minLon,
     miny: minLat,
@@ -210,14 +331,10 @@ export function buildWmsExtentXml(
     maxy: maxLat,
   };
   const box3857 = wgs84ExtentToCrsBox(minLon, minLat, maxLon, maxLat, 'EPSG:3857');
-  const box5181 = wgs84ExtentToCrsBox(minLon, minLat, maxLon, maxLat, 'EPSG:5181');
-  const box5186 = wgs84ExtentToCrsBox(minLon, minLat, maxLon, maxLat, 'EPSG:5186');
 
+  // 타일이 EPSG:3857 — 타 좌표계 프로젝트는 QGIS가 재투영
   return (
-    `<CRS>EPSG:4326</CRS>` +
     `<CRS>EPSG:3857</CRS>` +
-    `<CRS>EPSG:5181</CRS>` +
-    `<CRS>EPSG:5186</CRS>` +
     `<EX_GeographicBoundingBox>` +
     `<westBoundLongitude>${minLon}</westBoundLongitude>` +
     `<eastBoundLongitude>${maxLon}</eastBoundLongitude>` +
@@ -225,10 +342,7 @@ export function buildWmsExtentXml(
     `<northBoundLatitude>${maxLat}</northBoundLatitude>` +
     `</EX_GeographicBoundingBox>` +
     bboxXml('CRS:84', box84) +
-    bboxXml('EPSG:4326', box4326) +
-    (box3857 ? bboxXml('EPSG:3857', box3857) : '') +
-    (box5181 ? bboxXml('EPSG:5181', box5181) : '') +
-    (box5186 ? bboxXml('EPSG:5186', box5186) : '')
+    (box3857 ? bboxXml('EPSG:3857', box3857) : '')
   );
 }
 

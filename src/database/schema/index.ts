@@ -22,6 +22,7 @@ export * from './fms_inspection';
 export * from './fms_query_table';
 export * from './gp_map';
 export * from './integration_job_log';
+export * from './land_price_memo';
 export * from './layer_control';
 export * from './layer_detail_history';
 export * from './layer_extra_def';

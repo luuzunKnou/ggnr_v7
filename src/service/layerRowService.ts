@@ -2345,6 +2345,8 @@ export async function listJijukParcelsByGeomWkt5181(params: {
   limit?: number;
   /** true면 반환 도형·intersectAreaSqm 은 검색 도형과 필지의 교집합 */
   clipToSearchGeom?: boolean;
+  /** 0~1. 설정 시 필지 면적 중 검색 도형과 겹친 비율이 이 값 이상인 필지만 포함(경계에 살짝 걸친 필지 제외) */
+  minInsideRatio?: number;
 }): Promise<{
   parcels: JijukParcelGeomDto[];
   error?: string;
@@ -2355,7 +2357,7 @@ export async function listJijukParcelsByGeomWkt5181(params: {
   const jijukRef = await resolveJijukTableRef();
   if (!jijukRef) return { parcels: [], error: 'jijuk 테이블을 찾을 수 없습니다.' };
 
-  const limit = Math.min(Math.max(Math.floor(params?.limit ?? 500), 1), 1000);
+  const limit = Math.min(Math.max(Math.floor(params?.limit ?? 500), 1), 5000);
   const searchGeom = `ST_SetSRID(ST_GeomFromText('${esc(wkt)}'), ${JIJUK_GEOM_SRID})`;
   const jijukGeom = jijukGeom5181Sql('j.geom');
   /** 그린 도형·지적 모두 고친 뒤 교집합 — 깨진 폴리곤에서 Intersection 예외로 조회 전체가 실패하지 않게 */
@@ -2363,13 +2365,21 @@ export async function listJijukParcelsByGeomWkt5181(params: {
   const jijukValid = `ST_MakeValid(ST_Force2D(${jijukGeom}))`;
   const clipPoly = `ST_CollectionExtract(ST_MakeValid(ST_Intersection(${jijukValid}, ${searchValid})), 3)`;
   const clipToSearch = params.clipToSearchGeom === true;
+  const insideRatio =
+    typeof params.minInsideRatio === 'number' && params.minInsideRatio > 0
+      ? Math.min(params.minInsideRatio, 1)
+      : null;
+  const insideRatioSql =
+    insideRatio != null
+      ? `\n      AND ST_Area(${clipPoly}) >= ${insideRatio} * ST_Area(${jijukValid})`
+      : '';
 
   const queryStr = `
     ${jijukParcelSelectSql('j.geom', jijukRef.qualified, clipToSearch ? clipPoly : undefined)}
       AND ${jijukGeom} && ${searchValid}
       AND ST_Intersects(${jijukValid}, ${searchValid})
       AND NOT ST_IsEmpty(${clipPoly})
-      AND ST_Area(${clipPoly}) > 0.01
+      AND ST_Area(${clipPoly}) > 0.01${insideRatioSql}
     ORDER BY j.${quoteIdent(jijukRef.orderCol)}
     LIMIT ${limit}`;
 
