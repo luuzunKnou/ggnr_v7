@@ -11,21 +11,13 @@ import Point from 'ol/geom/Point';
 import { Style, Stroke, Fill, Text } from 'ol/style';
 import { containsExtent, getCenter } from 'ol/extent';
 import { call } from '@/lib/api';
-import {
-  fetchLandInfoConfig,
-  fetchLatestOfficialLandPriceForPnu,
-} from '../landInfo/api';
-import { fetchVworldOfficialLandPricesByPrefix } from '@/lib/vworldParcelLandClient';
 import { isJijukJibunLabelVisible } from '../layerFactory/boundaryLayerFactory';
 
 const LAYER_Z_INDEX = 920;
 /** 서버 상한과 같게 — 넘치면 화면 가운데에서 가까운 필지부터 표시 */
 const FETCH_LIMIT = 10000;
-const PRICE_CONCURRENCY = 6;
-const VWORLD_PREFIX_CONCURRENCY = 3;
-/** 법정동 일괄 조회가 실패했을 때 필지별 조회로 대신하는 최대 건수 */
-const VWORLD_PER_PNU_FALLBACK_MAX = 60;
 const MOVEEND_DEBOUNCE_MS = 450;
+
 /** 지적 지번 라벨과 같은 축척(GeoServer 지적 스타일 1:2,000)에서만 표시 */
 function isOfficialLandPriceZoomOk(resolution: number): boolean {
   return isJijukJibunLabelVisible(resolution);
@@ -38,9 +30,6 @@ type JijukParcelRow = {
 };
 
 type DbPriceEntry = { priceNum: number | null; priceLabel: string };
-
-/** 브이월드 필지별 조회 결과(가격 없음 포함) — 지도를 옮길 때마다 다시 부르지 않는다 */
-const perPnuPriceCache = new globalThis.Map<string, string>();
 
 const PARCEL_STYLE = new Style({
   stroke: new Stroke({ color: 'rgba(234, 88, 12, 0.95)', width: 1.5 }),
@@ -82,24 +71,6 @@ function formatJibun(raw: unknown): string {
   return s || '-';
 }
 
-async function mapWithConcurrency<T, R>(
-  items: T[],
-  concurrency: number,
-  fn: (item: T) => Promise<R>
-): Promise<R[]> {
-  const out: R[] = new Array(items.length);
-  let idx = 0;
-  async function worker() {
-    while (idx < items.length) {
-      const cur = idx++;
-      out[cur] = await fn(items[cur]!);
-    }
-  }
-  const workers = Array.from({ length: Math.min(concurrency, items.length) }, () => worker());
-  await Promise.all(workers);
-  return out;
-}
-
 function hasUsableDbPrice(entry: DbPriceEntry | undefined): entry is DbPriceEntry {
   return (
     entry != null &&
@@ -110,33 +81,23 @@ function hasUsableDbPrice(entry: DbPriceEntry | undefined): entry is DbPriceEntr
 }
 
 /**
- * 공시지가 토글 시 bbox 내 jijuk 필지 + 공시지가(KOREPS 파일 테이블 우선, 없으면 VWorld)를
+ * 공시지가 토글 시 bbox 내 jijuk 필지 + KOREPS 공시지가(브이월드 미사용)를
  * OpenLayers 벡터·텍스트로 표시. 지도 이동(moveend)마다 재조회·재그림.
  */
 export function useOfficialLandPriceMapLayer(
   map: Map | null,
   mapReady: boolean,
   enabled: boolean
-) {
+): { unavailableMessage: string | null } {
   const sourceRef = useRef<VectorSource | null>(null);
   const layerRef = useRef<VectorImageLayer<VectorSource> | null>(null);
-  const [vworldKey, setVworldKey] = useState('');
   const requestSeqRef = useRef(0);
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   /** 마지막으로 받은 범위 — 상한에 안 걸렸으면 그 안에서 확대·이동할 때 다시 받지 않는다 */
   const loadedRef = useRef<{ extent: number[]; complete: boolean } | null>(null);
-
-  useEffect(() => {
-    if (!enabled) return;
-    let alive = true;
-    fetchLandInfoConfig().then((cfg) => {
-      if (!alive) return;
-      setVworldKey(cfg.vworldKey);
-    });
-    return () => {
-      alive = false;
-    };
-  }, [enabled]);
+  /** 테이블·자료 없음이 확인되면 토글 끄기 전까지 재조회하지 않는다 */
+  const korepsBlockedMessageRef = useRef<string | null>(null);
+  const [unavailableMessage, setUnavailableMessage] = useState<string | null>(null);
 
   useEffect(() => {
     if (!map || !mapReady) return;
@@ -159,9 +120,19 @@ export function useOfficialLandPriceMapLayer(
     const layer = layerRef.current;
     layer.setVisible(enabled);
     loadedRef.current = null;
+    if (!enabled) {
+      korepsBlockedMessageRef.current = null;
+      setUnavailableMessage(null);
+    }
 
     const refresh = async () => {
       if (!enabled || !sourceRef.current) return;
+
+      if (korepsBlockedMessageRef.current) {
+        sourceRef.current.clear();
+        setUnavailableMessage(korepsBlockedMessageRef.current);
+        return;
+      }
 
       const view = map.getView();
       const resolution = view.getResolution();
@@ -194,6 +165,7 @@ export function useOfficialLandPriceMapLayer(
         if (seq !== requestSeqRef.current) return;
         sourceRef.current.clear();
         loadedRef.current = null;
+        setUnavailableMessage(null);
         return;
       }
 
@@ -204,6 +176,9 @@ export function useOfficialLandPriceMapLayer(
       const pnus = withGeom.map((p) => String(p.pnu ?? '').trim()).filter(Boolean);
 
       let dbPrices: Record<string, DbPriceEntry> = {};
+      let korepsAvailable = true;
+      let korepsMessage: string | null = null;
+
       if (pnus.length) {
         try {
           const priceRes = await call('', 'POST', {
@@ -213,84 +188,44 @@ export function useOfficialLandPriceMapLayer(
           });
           const priceData = (priceRes?.data ?? priceRes) as {
             prices?: Record<string, DbPriceEntry>;
+            available?: boolean;
+            message?: string | null;
           };
           dbPrices =
             priceData?.prices && typeof priceData.prices === 'object' ? priceData.prices : {};
+          if (priceData?.available === false) {
+            korepsAvailable = false;
+            korepsMessage =
+              String(priceData.message ?? '').trim() ||
+              '공시지가 연계 자료를 조회할 수 없습니다.';
+          }
         } catch {
+          korepsAvailable = false;
+          korepsMessage = '공시지가 연계 자료를 조회할 수 없습니다.';
           dbPrices = {};
         }
       }
 
-      if (seq !== requestSeqRef.current) return;
+      if (seq !== requestSeqRef.current || !sourceRef.current) return;
 
-      /** 파일에 없는 필지 — 법정동 단위로 브이월드 일괄 조회, 실패한 동은 소수일 때만 필지별 조회 */
-      const vworldPrices = new globalThis.Map<string, number>();
-      const perPnuFallback: string[] = [];
-      if (vworldKey) {
-        const missingByPrefix = new globalThis.Map<string, string[]>();
-        for (const pnu of pnus) {
-          if (hasUsableDbPrice(dbPrices[pnu]) || !/^\d{19}$/.test(pnu)) continue;
-          const prefix = pnu.slice(0, 10);
-          missingByPrefix.set(prefix, [...(missingByPrefix.get(prefix) ?? []), pnu]);
-        }
-        const prefixes = [...missingByPrefix.keys()];
-        const byPrefix = await mapWithConcurrency(prefixes, VWORLD_PREFIX_CONCURRENCY, (prefix) =>
-          fetchVworldOfficialLandPricesByPrefix(prefix, vworldKey).catch(() => null)
-        );
-        prefixes.forEach((prefix, i) => {
-          const prices = byPrefix[i];
-          const missing = missingByPrefix.get(prefix) ?? [];
-          if (prices) {
-            for (const pnu of missing) {
-              const price = prices.get(pnu);
-              if (price != null) vworldPrices.set(pnu, price);
-            }
-          } else {
-            perPnuFallback.push(...missing);
-          }
-        });
+      if (!korepsAvailable) {
+        sourceRef.current.clear();
+        loadedRef.current = null;
+        korepsBlockedMessageRef.current = korepsMessage;
+        setUnavailableMessage(korepsMessage);
+        return;
       }
-      const fallbackSet = new Set(
-        perPnuFallback.filter((pnu) => !perPnuPriceCache.has(pnu)).slice(0, VWORLD_PER_PNU_FALLBACK_MAX)
-      );
 
-      if (seq !== requestSeqRef.current) return;
+      korepsBlockedMessageRef.current = null;
+      setUnavailableMessage(null);
 
-      const priced = await mapWithConcurrency(withGeom, PRICE_CONCURRENCY, async (row) => {
+      const features: Feature<Geometry>[] = [];
+      for (const row of withGeom) {
         const pnu = String(row.pnu ?? '').trim();
         const jibun = formatJibun(row.jibun);
         const fromDb = dbPrices[pnu];
-        if (hasUsableDbPrice(fromDb)) {
-          return { row, jibun, priceLabel: fromDb.priceLabel };
-        }
-        const fromVworld = vworldPrices.get(pnu);
-        if (fromVworld != null) {
-          return { row, jibun, priceLabel: `${fromVworld.toLocaleString('ko-KR')}원/㎡` };
-        }
-        const cachedLabel = perPnuPriceCache.get(pnu);
-        if (cachedLabel != null) return { row, jibun, priceLabel: cachedLabel };
-        if (!vworldKey || !fallbackSet.has(pnu)) {
-          return { row, jibun, priceLabel: '-' };
-        }
-        try {
-          const price = await fetchLatestOfficialLandPriceForPnu({ pnu, vworldKey });
-          perPnuPriceCache.set(pnu, price.priceLabel);
-          return {
-            row,
-            jibun: jibun !== '-' ? jibun : formatJibun(price.jibun) || jibun,
-            priceLabel: price.priceLabel,
-          };
-        } catch {
-          perPnuPriceCache.set(pnu, '-');
-          return { row, jibun, priceLabel: '-' };
-        }
-      });
-
-      if (seq !== requestSeqRef.current || !sourceRef.current) return;
-
-      const features: Feature<Geometry>[] = [];
-      for (const item of priced) {
-        const geom = item.row.geom;
+        const priceLabel = hasUsableDbPrice(fromDb) ? fromDb.priceLabel : '-';
+        const geom = row.geom;
         if (!geom) continue;
         try {
           const feature = geoJson.readFeature(
@@ -300,9 +235,9 @@ export function useOfficialLandPriceMapLayer(
               featureProjection: view.getProjection() ?? 'EPSG:3857',
             }
           ) as Feature<Geometry>;
-          feature.set('jibun', item.jibun);
-          feature.set('priceLabel', item.priceLabel);
-          feature.set('pnu', String(item.row.pnu ?? ''));
+          feature.set('jibun', jibun);
+          feature.set('priceLabel', priceLabel);
+          feature.set('pnu', pnu);
           features.push(feature);
         } catch {
           /* skip invalid geom */
@@ -336,7 +271,7 @@ export function useOfficialLandPriceMapLayer(
       }
       map.un('moveend', scheduleRefresh);
     };
-  }, [map, mapReady, enabled, vworldKey]);
+  }, [map, mapReady, enabled]);
 
   useEffect(() => {
     return () => {
@@ -347,4 +282,6 @@ export function useOfficialLandPriceMapLayer(
       }
     };
   }, [map]);
+
+  return { unavailableMessage };
 }

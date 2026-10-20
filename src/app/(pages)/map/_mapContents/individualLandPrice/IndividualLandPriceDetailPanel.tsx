@@ -156,13 +156,12 @@ export function IndividualLandPriceDetailPanel({ pnu, onClose }: Props) {
     }
   }, [detail])
 
-  useIndividualLandPriceHighlight(detail?.geometry ?? null, detail?.extent ?? null)
+  useIndividualLandPriceHighlight(pnu, detail?.geometry ?? null, detail?.extent ?? null)
 
   const history = useMemo(
     () => vworldHistory ?? detail?.history ?? [],
     [vworldHistory, detail?.history]
   )
-  const historySource = vworldHistory ? 'vworld' : (detail?.historySource ?? 'file')
   const latest = history[0] ?? null
   const prev = history[1] ?? null
   const chartRows = useMemo(() => [...history].reverse(), [history])
@@ -223,12 +222,6 @@ export function IndividualLandPriceDetailPanel({ pnu, onClose }: Props) {
             연도별 이력
             <span className="ml-1 font-normal text-muted-foreground">({history.length}개 연도)</span>
           </SectionTitle>
-          {historySource === 'file' ? (
-            <div className="mb-1.5 rounded border border-amber-200 bg-amber-50 px-2 py-1 text-[11px] text-amber-800">
-              행망·브이월드 이력을 쓰지 못해 연계 파일 자료로 표시합니다.
-              {detail.historyMessage ? ` (${detail.historyMessage})` : ''}
-            </div>
-          ) : null}
           {history.length === 0 ? (
             <div className="standard-detail-empty-dashed-compact">이 필지의 공시지가 이력이 없습니다.</div>
           ) : (

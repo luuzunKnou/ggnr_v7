@@ -15,6 +15,8 @@ type Props = {
   jijukEnabled: boolean;
   /** 지도 컨트롤 «공시지가»가 켜져 있을 때 — 지적 지번 라벨 축척부터 표시 */
   officialLandPriceEnabled?: boolean;
+  /** KOREPS 테이블·자료 없을 때 안내 (공시지가 ON일 때만 사용) */
+  officialLandPriceUnavailableMessage?: string | null;
 };
 
 /** 주소검색 입력(350) + 전체레이어끄기 아이콘·간격 */
@@ -38,10 +40,20 @@ type HintPlacement = {
  * - 기본: 보이는 지도 영역 상단 중앙 (좌측 패널에 따라 중심 이동)
  * - 주소검색·시스템선택과 겹치거나 공간 부족 시: 주소검색 아래·왼쪽 정렬
  */
-export function CadastralZoomHint({ map, mapReady, jijukEnabled, officialLandPriceEnabled = false }: Props) {
+export function CadastralZoomHint({
+  map,
+  mapReady,
+  jijukEnabled,
+  officialLandPriceEnabled = false,
+  officialLandPriceUnavailableMessage = null,
+}: Props) {
   const { leftPx, inputBottomPx } = useSearchBarOffset();
   const [hiddenLabels, setHiddenLabels] = useState<string[]>([]);
-  const show = hiddenLabels.length > 0;
+  const unavailableText =
+    officialLandPriceEnabled && officialLandPriceUnavailableMessage
+      ? String(officialLandPriceUnavailableMessage).trim()
+      : '';
+  const show = Boolean(unavailableText) || hiddenLabels.length > 0;
   const [placement, setPlacement] = useState<HintPlacement>({
     top: SEARCH_ROW_TOP_PX,
     left: 0,
@@ -50,7 +62,10 @@ export function CadastralZoomHint({ map, mapReady, jijukEnabled, officialLandPri
   const hintRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const view = mapReady && map && (jijukEnabled || officialLandPriceEnabled) ? map.getView() : null;
+    const view =
+      mapReady && map && (jijukEnabled || (officialLandPriceEnabled && !unavailableText))
+        ? map.getView()
+        : null;
     const update = () => {
       if (!view) {
         setHiddenLabels((prev) => (prev.length ? [] : prev));
@@ -60,7 +75,9 @@ export function CadastralZoomHint({ map, mapReady, jijukEnabled, officialLandPri
       const resolution = view.getResolution() ?? 0;
       const next: string[] = [];
       if (jijukEnabled && !isJijukVisibleAtView(z, resolution)) next.push('지적');
-      if (officialLandPriceEnabled && !isJijukJibunLabelVisible(resolution)) next.push('공시지가');
+      if (officialLandPriceEnabled && !unavailableText && !isJijukJibunLabelVisible(resolution)) {
+        next.push('공시지가');
+      }
       setHiddenLabels((prev) => (prev.join() === next.join() ? prev : next));
     };
     const timer = setTimeout(update, 0);
@@ -69,7 +86,7 @@ export function CadastralZoomHint({ map, mapReady, jijukEnabled, officialLandPri
       clearTimeout(timer);
       view?.un('change:resolution', update);
     };
-  }, [map, mapReady, jijukEnabled, officialLandPriceEnabled]);
+  }, [map, mapReady, jijukEnabled, officialLandPriceEnabled, unavailableText]);
 
   useLayoutEffect(() => {
     if (!show) return;
@@ -126,10 +143,13 @@ export function CadastralZoomHint({ map, mapReady, jijukEnabled, officialLandPri
     >
       <div
         ref={hintRef}
-        className="whitespace-nowrap rounded-[5px] border border-amber-200 bg-amber-50/95 px-3 py-1.5 text-[12px] font-medium text-amber-900 shadow-md"
+        className="max-w-[min(420px,calc(100vw-2rem))] rounded-[5px] border border-amber-200 bg-amber-50/95 px-3 py-1.5 text-[12px] font-medium text-amber-900 shadow-md whitespace-nowrap"
       >
-        {hiddenLabels.join('·')}
-        {hiddenLabels[hiddenLabels.length - 1] === '지적' ? '이' : '가'} 보이는 축척까지 지도를 확대해 주세요
+        {unavailableText
+          ? unavailableText
+          : `${hiddenLabels.join('·')}${
+              hiddenLabels[hiddenLabels.length - 1] === '지적' ? '이' : '가'
+            } 보이는 축척까지 지도를 확대해 주세요`}
       </div>
     </div>
   );

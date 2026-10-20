@@ -22,9 +22,24 @@ const PRICE_TABLE = `"${KRAS_LAYER_CATALOG_SCHEMA}"."${KOREPS_PRICE_FILE_TABLE}"
 const MEMO_TABLE = 'layer.land_price_memo';
 const JIJUK_DEFAULT_SRID = 5181;
 const LIST_PAGE_SIZE_MAX = 200;
+/** 공시지가 지도 레이어와 동일 — 화면 안 필지 상한 */
+const LIST_VIEW_PNU_MAX = 10000;
 const MEMO_MAX_LENGTH = 2000;
 const YEARS_CACHE_MS = 10 * 60 * 1000;
 const STANDARD_YN_VALUES = `('1', 'Y', 'y')`;
+
+type MapBbox = { minX: number; minY: number; maxX: number; maxY: number; srid: number };
+
+function parseMapBbox(params: Params): MapBbox | null {
+  const minX = num(params.minX);
+  const minY = num(params.minY);
+  const maxX = num(params.maxX);
+  const maxY = num(params.maxY);
+  if (minX == null || minY == null || maxX == null || maxY == null) return null;
+  if (!(minX < maxX && minY < maxY)) return null;
+  const srid = num(params.srid);
+  return { minX, minY, maxX, maxY, srid: srid && srid > 0 ? srid : 3857 };
+}
 
 export type LandPriceSortKey = 'pnu' | 'price';
 
@@ -265,8 +280,12 @@ async function locationPrefixesForKeyword(year: string, keyword: string): Promis
   return list.filter((p) => p.length === 10 || !list.some((o) => o.length === 10 && o.startsWith(p)));
 }
 
-async function buildListQuery(params: Params, year: string): Promise<ListQuery> {
-  const args: unknown[] = [[year]];
+/** 읍면동·소재지·지번 조건을 args에 이어 붙이고 WHERE 조각을 반환한다. args[0]은 연도 배열이어야 한다 */
+async function appendEmdKeywordWhere(
+  params: Params,
+  year: string,
+  args: unknown[]
+): Promise<string[]> {
   const priceWhere: string[] = [];
   const emd = emdParam(params.emd);
   if (emd) {
@@ -292,7 +311,65 @@ async function buildListQuery(params: Params, year: string): Promise<ListQuery> 
       }
     }
   }
+  return priceWhere;
+}
+
+function isMapScoped(params: Params): boolean {
+  /** 기본 true — 지도 화면 기준. false면 연도·읍면동·검색 등 조건만으로 전체 조회 */
+  if (params.mapScoped === false || params.mapScoped === 'false' || params.mapScoped === 0) {
+    return false;
+  }
+  return true;
+}
+
+async function buildListQuery(params: Params, year: string): Promise<ListQuery | null> {
   const standardWhere = params.standardOnly === true ? `AND p.pjji_yn IN ${STANDARD_YN_VALUES}` : '';
+  const mapScoped = isMapScoped(params);
+
+  if (!mapScoped) {
+    const args: unknown[] = [[year]];
+    const priceWhere = await appendEmdKeywordWhere(params, year, args);
+    return {
+      sql: `WITH p AS (${latestPerYearSql(priceWhere.join(' '))})
+        SELECT p.pnu, p.price::float8 AS price, p.pjji_yn, p.pann_ymd
+        FROM p
+        WHERE p.price > 0 ${standardWhere}`,
+      args,
+    };
+  }
+
+  const bbox = parseMapBbox(params);
+  if (!bbox) return null;
+
+  const ref = await resolveJijuk();
+  if (!ref) {
+    return {
+      sql: `SELECT NULL::text AS pnu, NULL::float8 AS price, NULL::text AS pjji_yn, NULL::text AS pann_ymd WHERE false`,
+      args: [],
+    };
+  }
+
+  const args: unknown[] = [[year], bbox.minX, bbox.minY, bbox.maxX, bbox.maxY];
+  const envelope = `ST_MakeEnvelope($2::float8, $3::float8, $4::float8, $5::float8, ${bbox.srid})`;
+  const envelopeInTable =
+    ref.srid > 0
+      ? `ST_Transform(${envelope}, ${ref.srid})`
+      : `ST_SetSRID(ST_Transform(${envelope}, ${JIJUK_DEFAULT_SRID}), 0)`;
+  const viewPnusSql = `
+    SELECT pnu FROM (
+      SELECT REGEXP_REPLACE(j.pnu::text, '[^0-9]', '', 'g') AS pnu
+      FROM ${ref.qualified} j
+      WHERE j.geom && ${envelopeInTable}
+        AND ST_Intersects(j.geom, ${envelopeInTable})
+      ORDER BY j.geom <-> ST_Centroid(${envelopeInTable})
+      LIMIT ${LIST_VIEW_PNU_MAX}
+    ) v
+    WHERE length(pnu) = 19`;
+
+  const priceWhere: string[] = [
+    `AND btrim(t.pnu) IN (${viewPnusSql})`,
+    ...(await appendEmdKeywordWhere(params, year, args)),
+  ];
   return {
     sql: `WITH p AS (${latestPerYearSql(priceWhere.join(' '))})
       SELECT p.pnu, p.price::float8 AS price, p.pjji_yn, p.pann_ymd
@@ -300,6 +377,76 @@ async function buildListQuery(params: Params, year: string): Promise<ListQuery> 
       WHERE p.price > 0 ${standardWhere}`,
     args,
   };
+}
+
+/**
+ * 읍면동·소재지·지번 검색에 맞는 필지들의 지도 범위(3857).
+ * 화면 bbox와 무관 — 검색 후 해당 위치로 지도 이동할 때 쓴다.
+ */
+export async function searchExtent(params: Params = {}): Promise<{
+  year: string;
+  extent: [number, number, number, number] | null;
+}> {
+  await requireUsr();
+  const year = await resolveYear(params);
+  const emd = emdParam(params.emd);
+  const keyword = str(params.keyword);
+  if (!emd && !keyword) return { year, extent: null };
+
+  const ref = await resolveJijuk();
+  if (!ref) return { year, extent: null };
+
+  const args: unknown[] = [[year]];
+  const priceWhere = await appendEmdKeywordWhere(params, year, args);
+  if (priceWhere.includes('AND false')) return { year, extent: null };
+
+  const geom3857 =
+    ref.srid > 0
+      ? `ST_Transform(j.geom, 3857)`
+      : `ST_Transform(ST_SetSRID(j.geom, ${JIJUK_DEFAULT_SRID}), 3857)`;
+
+  try {
+    const { rows } = await pool.query<{
+      minx: number | null;
+      miny: number | null;
+      maxx: number | null;
+      maxy: number | null;
+    }>(
+      `WITH p AS (${latestPerYearSql(priceWhere.join(' '))}),
+        matched AS (
+          SELECT p.pnu FROM p WHERE p.price > 0
+        )
+       SELECT
+         ST_XMin(e)::float8 AS minx,
+         ST_YMin(e)::float8 AS miny,
+         ST_XMax(e)::float8 AS maxx,
+         ST_YMax(e)::float8 AS maxy
+       FROM (
+         SELECT ST_Extent(${geom3857}) AS e
+         FROM ${ref.qualified} j
+         INNER JOIN matched m
+           ON REGEXP_REPLACE(j.pnu::text, '[^0-9]', '', 'g') = m.pnu
+       ) s
+       WHERE e IS NOT NULL`,
+      args
+    );
+    const r = rows[0];
+    if (
+      r?.minx == null ||
+      r.miny == null ||
+      r.maxx == null ||
+      r.maxy == null ||
+      ![r.minx, r.miny, r.maxx, r.maxy].every((n) => Number.isFinite(Number(n)))
+    ) {
+      return { year, extent: null };
+    }
+    return {
+      year,
+      extent: [Number(r.minx), Number(r.miny), Number(r.maxx), Number(r.maxy)],
+    };
+  } catch {
+    return { year, extent: null };
+  }
 }
 
 function orderBySql(params: Params): string {
@@ -318,19 +465,30 @@ function toRow(r: Record<string, unknown>): Omit<LandPriceRow, 'location' | 'lot
   };
 }
 
-/** 필지 목록(쪽 단위). sort: pnu | price, dir: asc | desc, standardOnly: 표준지만 */
+/**
+ * 필지 목록(쪽 단위).
+ * mapScoped=true(기본): 현재 지도 화면(bbox) 안 지적 필지 — minX·minY·maxX·maxY·srid 필요.
+ * mapScoped=false: 지도 범위 없이 연도·읍면동·검색·표준지 조건으로 전체 조회.
+ * sort: pnu | price, dir: asc | desc, standardOnly: 표준지만
+ */
 export async function list(params: Params = {}): Promise<{
   year: string;
   total: number;
   page: number;
   pageSize: number;
   rows: LandPriceRow[];
+  viewReady: boolean;
+  mapScoped: boolean;
 }> {
   await requireUsr();
   const year = await resolveYear(params);
   const pageSize = Math.min(Math.max(Math.floor(Number(params.pageSize) || 50), 10), LIST_PAGE_SIZE_MAX);
   const page = Math.max(Math.floor(Number(params.page) || 1), 1);
+  const mapScoped = isMapScoped(params);
   const q = await buildListQuery(params, year);
+  if (!q) {
+    return { year, total: 0, page, pageSize, rows: [], viewReady: false, mapScoped };
+  }
   const { rows } = await pool.query(
     `SELECT s.*, count(*) OVER()::int AS total_cnt
      FROM (${q.sql}) s
@@ -345,6 +503,8 @@ export async function list(params: Params = {}): Promise<{
     page,
     pageSize,
     rows: await withAddress(rows.map(toRow)),
+    viewReady: true,
+    mapScoped,
   };
 }
 

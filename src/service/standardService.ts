@@ -1278,7 +1278,7 @@ function parseOfficialLandPriceNum(raw: unknown): number | null {
 
 /**
  * KOREPS 공시지가 파일 테이블(land_linkage.koreps00039)에서 PNU별 최신 1건.
- * 테이블 없거나 조회 실패 시 빈 맵 — 호출측에서 브이월드 fallback.
+ * 브이월드 fallback 없음 — 테이블 없거나 자료가 비어 있으면 available=false.
  */
 export async function getLatestOfficialLandPricesByPnus(params: { pnus?: string[] }) {
   const pnus = [
@@ -1289,8 +1289,19 @@ export async function getLatestOfficialLandPricesByPnus(params: { pnus?: string[
     ),
   ];
   type PriceEntry = { priceNum: number | null; priceLabel: string };
-  const empty = { prices: {} as Record<string, PriceEntry> };
-  if (!pnus.length) return empty;
+  type Result = {
+    prices: Record<string, PriceEntry>;
+    available: boolean;
+    message: string | null;
+  };
+  const unavailable = (message: string): Result => ({
+    prices: {},
+    available: false,
+    message,
+  });
+  if (!pnus.length) {
+    return { prices: {} as Record<string, PriceEntry>, available: true, message: null };
+  }
 
   const schema = KRAS_LAYER_CATALOG_SCHEMA;
   const table = KOREPS_PRICE_FILE_TABLE;
@@ -1299,7 +1310,16 @@ export async function getLatestOfficialLandPricesByPnus(params: { pnus?: string[
       `select to_regclass($1) as c`,
       [`${schema}.${table}`]
     );
-    if (!existsRes.rows[0]?.c) return empty;
+    if (!existsRes.rows[0]?.c) {
+      return unavailable('공시지가 연계 테이블이 없습니다. 연계 작업을 확인하세요.');
+    }
+
+    const hasDataRes = await pool.query<{ e: boolean }>(
+      `SELECT EXISTS (SELECT 1 FROM ${schema}.${table} LIMIT 1) AS e`
+    );
+    if (!hasDataRes.rows[0]?.e) {
+      return unavailable('공시지가 연계 자료가 없습니다. 연계 작업을 확인하세요.');
+    }
 
     const { rows } = await pool.query<{ pnu: string; pnilp: string | null }>(
       `SELECT DISTINCT ON (btrim(pnu))
@@ -1324,9 +1344,9 @@ export async function getLatestOfficialLandPricesByPnus(params: { pnus?: string[
         priceLabel: formatOfficialLandPriceLabel(priceNum),
       };
     }
-    return { prices };
+    return { prices, available: true, message: null };
   } catch {
-    return empty;
+    return unavailable('공시지가 연계 자료를 조회할 수 없습니다.');
   }
 }
 

@@ -2630,7 +2630,7 @@ export default function OpenLayersMap({
     };
   }, [clearMapDrawInteractions, mapContext?.clearMapDrawInteractionsRef]);
 
-  useOfficialLandPriceMapLayer(
+  const { unavailableMessage: officialLandPriceUnavailableMessage } = useOfficialLandPriceMapLayer(
     mapInstanceRef.current,
     mapReady,
     activeControls.includes('official-land-price')
@@ -3040,6 +3040,7 @@ export default function OpenLayersMap({
         mapReady={mapReady}
         jijukEnabled={jijukLayerEnabled}
         officialLandPriceEnabled={activeControls.includes('official-land-price')}
+        officialLandPriceUnavailableMessage={officialLandPriceUnavailableMessage}
       />
 
       {/* 오른쪽 맵 컨트롤 — body 포털(목록·상세 z-10 위에 표시). 분할 시에도 화면 오른쪽 고정.
