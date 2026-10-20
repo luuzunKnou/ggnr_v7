@@ -1506,6 +1506,7 @@ export default function OpenLayersMap({
       (mapContext?.memoPanelOpen ?? false) ||
       (mapContext?.groundwaterPermitPanelOpen ?? false) ||
       (mapContext?.roadRewardPanelOpen ?? false) ||
+      (mapContext?.roadLedgerVideoOpen ?? false) ||
       !!layerRowGeomEdit ||
       !!spatialDrawRequest ||
       roadNetworkPointPickActive ||

@@ -6,6 +6,7 @@ import type {
 export type RoadNetworkFieldKey =
   | "roadName"
   | "roadType"
+  | "roadGrade"
   | "openStatus"
   | "roadNo"
   | "dept"
@@ -18,7 +19,7 @@ export type RoadNetworkFieldKey =
 export type RoadNetworkFieldDef = {
   key: RoadNetworkFieldKey;
   label: string;
-  input: "text" | "number" | "select-type" | "select-open";
+  input: "text" | "number" | "select-type" | "select-grade" | "select-open";
   maxLength?: number;
   required?: boolean;
 };
@@ -57,10 +58,29 @@ export function roadTypeHasSinuosity(type: RoadNetworkType): boolean {
   );
 }
 
-/** 도로종류별 속성정보 필드 (실제 공간자료 컬럼 기준) */
+/** 통합 도로망(rdl_network_ls) 속성 — layer·num·linetype·emd */
+const UNIFIED_FIELDS: RoadNetworkFieldDef[] = [
+  { key: "roadGrade", label: "도로등급", input: "select-grade", required: true },
+  { key: "roadNo", label: "도로번호", input: "number" },
+  { key: "openStatus", label: "개설여부", input: "select-open" },
+  { key: "address", label: "읍면동", input: "text", maxLength: 254 },
+];
+
+/** 통합 도로망 읍면동 사용 여부 — 원본 자료에서 읍면동은 면·리·농도에만 있다 */
+export function roadNetworkTypeHasAddress(type: RoadNetworkType): boolean {
+  return type === "농도";
+}
+
+/** 도로종류별 속성정보 필드 (실제 공간자료 컬럼 기준). roadGrade가 있으면 통합 도로망 행 */
 export function getRoadNetworkFieldsForType(
-  type: RoadNetworkType
+  type: RoadNetworkType,
+  roadGrade?: string
 ): RoadNetworkFieldDef[] {
+  if (roadGrade !== undefined) {
+    return roadNetworkTypeHasAddress(type)
+      ? UNIFIED_FIELDS
+      : UNIFIED_FIELDS.filter((f) => f.key !== "address");
+  }
   switch (type) {
     case "국도":
       return [

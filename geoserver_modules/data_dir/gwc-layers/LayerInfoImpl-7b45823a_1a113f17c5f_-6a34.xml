@@ -1,8 +1,8 @@
 <GeoServerTileLayer>
-  <id>LayerInfoImpl-4f1e7b9b:1a0f0cebe25:-7d65</id>
+  <id>LayerInfoImpl-7b45823a:1a113f17c5f:-6a34</id>
   <enabled>true</enabled>
   <inMemoryCached>true</inMemoryCached>
-  <name>ggnr:sd_tsunami_emergency_evac_site</name>
+  <name>ggnr:rdl_network_ps</name>
   <mimeFormats>
     <string>image/png</string>
     <string>image/jpeg</string>
@@ -10,9 +10,25 @@
   <gridSubsets>
     <gridSubset>
       <gridSetName>EPSG:4326</gridSetName>
+      <extent>
+        <coords>
+          <double>128.71383195909658</double>
+          <double>35.71079891469547</double>
+          <double>128.95560951751042</double>
+          <double>35.98253504997479</double>
+        </coords>
+      </extent>
     </gridSubset>
     <gridSubset>
       <gridSetName>EPSG:900913</gridSetName>
+      <extent>
+        <coords>
+          <double>1.4328358231737614E7</double>
+          <double>4260900.368812367</double>
+          <double>1.4355272786425484E7</double>
+          <double>4298218.48788527</double>
+        </coords>
+      </extent>
     </gridSubset>
   </gridSubsets>
   <metaWidthHeight>
@@ -26,7 +42,7 @@
       <key>STYLES</key>
       <defaultValue></defaultValue>
       <availableStyles class="sorted-set"/>
-      <defaultStyle>generic</defaultStyle>
+      <defaultStyle>rdl_network_ps</defaultStyle>
     </styleParameterFilter>
   </parameterFilters>
   <gutter>0</gutter>

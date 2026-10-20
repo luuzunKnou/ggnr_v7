@@ -2328,6 +2328,30 @@
     "define_table_source": "shp"
   },
   {
+    "define_table_name": "rdl_network_ls",
+    "define_table_kor_name": "rdl_network_ls",
+    "define_table_shp_type": "POLYGON",
+    "define_table_read_share": "P",
+    "define_table_write_share": "P",
+    "define_table_group": "도로",
+    "define_table_idx": "0",
+    "define_table_etc": "",
+    "define_table_schema": "layer",
+    "define_table_source": "shp"
+  },
+  {
+    "define_table_name": "rdl_network_ps",
+    "define_table_kor_name": "rdl_network_ps",
+    "define_table_shp_type": "POLYGON",
+    "define_table_read_share": "P",
+    "define_table_write_share": "P",
+    "define_table_group": "도로",
+    "define_table_idx": "0",
+    "define_table_etc": "",
+    "define_table_schema": "layer",
+    "define_table_source": "shp"
+  },
+  {
     "define_table_name": "rdl_nspv_as",
     "define_table_kor_name": "미끄럼방지시설",
     "define_table_shp_type": "POLYGON",
