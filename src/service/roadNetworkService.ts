@@ -473,7 +473,7 @@ export async function getRoadNetworkList(params?: {
            WHEN '지방도' THEN 2
            WHEN '국지도' THEN 3
            WHEN '군도' THEN 4
-           WHEN '농어촌도로' THEN 5
+           WHEN '농도' THEN 5
            WHEN '일반도로' THEN 6
            WHEN '임도' THEN 7
            WHEN '입체교차로' THEN 8

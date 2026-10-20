@@ -26,12 +26,12 @@ export type RoadNetworkFieldDef = {
 
 /** 개설/미개설이 서로 다른 공간자료 테이블로 나뉜 종류 */
 export function roadTypeHasOpenStatus(type: RoadNetworkType): boolean {
-  return type === "군도" || type === "농어촌도로";
+  return type === "군도" || type === "농도";
 }
 
 /** DB에 관리기관(admin) 컬럼이 있는 종류 */
 export function roadTypeHasDept(type: RoadNetworkType): boolean {
-  return type === "군도" || type === "농어촌도로";
+  return type === "군도" || type === "농도";
 }
 
 /** 길이·방위(·굴곡도) SHP 속성이 있는 종류 */
@@ -41,7 +41,7 @@ export function roadTypeHasGeomAttrs(type: RoadNetworkType): boolean {
     type === "지방도" ||
     type === "국지도" ||
     type === "군도" ||
-    type === "농어촌도로" ||
+    type === "농도" ||
     type === "일반도로" ||
     type === "임도"
   );
@@ -53,7 +53,7 @@ export function roadTypeHasSinuosity(type: RoadNetworkType): boolean {
     type === "입체교차로" ||
     type === "국지도" ||
     type === "군도" ||
-    type === "농어촌도로" ||
+    type === "농도" ||
     type === "임도"
   );
 }
@@ -126,7 +126,7 @@ export function getRoadNetworkFieldsForType(
         { key: "defense", label: "방위", input: "text" },
         { key: "sinuosity", label: "굴곡도", input: "number" },
       ];
-    case "농어촌도로":
+    case "농도":
       return [
         { key: "roadName", label: "명칭", input: "text", maxLength: 16, required: true },
         { key: "roadType", label: "도로종류", input: "select-type" },

@@ -20,7 +20,7 @@ export const ROAD_NETWORK_TYPE_FILTER_TABS = [
   "국도",
   "지방도",
   "군도",
-  "농어촌도로",
+  "농도",
   "일반도로",
   "임도",
   "철도",
@@ -156,7 +156,7 @@ export type RoadNetworkRow = {
   dept: string;
   /** 관리원 */
   manager: string;
-  /** 기점 주소(군도·농어촌도로 등) */
+  /** 기점 주소(군도·농도 등) */
   startPoint: string;
   /** 종점 주소 */
   endPoint: string;
@@ -451,7 +451,7 @@ export const MOCK_ROAD_NETWORK_ROWS = [
     id: "8",
     roadName: "농도 3호선",
     roadNo: "3",
-    roadType: "농어촌도로",
+    roadType: "농도",
     openStatus: "개설",
     lengthM: 1800,
     sect: "1",
@@ -472,7 +472,7 @@ export const MOCK_ROAD_NETWORK_ROWS = [
     id: "9",
     roadName: "농도 8호선",
     roadNo: "8",
-    roadType: "농어촌도로",
+    roadType: "농도",
     openStatus: "미개설",
     lengthM: 960,
     sect: "1",

@@ -24,8 +24,8 @@ export const ROAD_NETWORK_WMS_SOURCES: readonly RoadNetworkWmsSource[] = [
   { table: "rdl_prov_0610_ls", roadType: "지방도", openStatus: "개설" },
   { table: "rdl_county_opn_ls", roadType: "군도", openStatus: "개설" },
   { table: "rdl_county_uopn_ls", roadType: "군도", openStatus: "미개설" },
-  { table: "rdl_perch_opn_ls", roadType: "농어촌도로", openStatus: "개설" },
-  { table: "rdl_perch_uopn_ls", roadType: "농어촌도로", openStatus: "미개설" },
+  { table: "rdl_perch_opn_ls", roadType: "농도", openStatus: "개설" },
+  { table: "rdl_perch_uopn_ls", roadType: "농도", openStatus: "미개설" },
   { table: "rdl_sprd_0610_ls", roadType: "일반도로", openStatus: "개설" },
   { table: "rdl_frl_0610_ls", roadType: "임도", openStatus: "개설" },
 ] as const;
