@@ -122,7 +122,13 @@ export async function listPrivateLandAnalysisLayers(params?: {
       return `${row.s ?? ''}.${row.t ?? ''}`;
     })
   );
-  return { layers: candidates.filter((l) => found.has(`${l.schema ?? DEFAULT_LAYER_SCHEMA}.${l.table}`)) };
+  const exists = (l: PrivateLandAnalysisLayer) => found.has(`${l.schema ?? DEFAULT_LAYER_SCHEMA}.${l.table}`);
+  const existingTables = new Set(candidates.filter(exists).map((l) => l.table));
+  return {
+    layers: candidates.filter(
+      (l) => exists(l) && (!l.fallbackFor || !existingTables.has(l.fallbackFor))
+    ),
+  };
 }
 
 /** 화면 범위 레이어 도형 조회 상한 — 이보다 넓으면 커서 구분 생략(m) */
