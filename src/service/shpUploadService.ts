@@ -116,6 +116,18 @@ function syncRowTargetWhereSql(params: {
   return `"${params.keyCol}"::text = '${safeKv}'`;
 }
 
+/** 신규 INSERT용 키. 유일 키는 값 그대로, 공간 매칭 append는 `키#s번호`에서 키만. */
+function syncInsertKeyValue(keyField: string, keyValue: string): string | number {
+  const raw = String(keyValue ?? '').trim();
+  const spatial = raw.match(/^(.*)#s\d+$/);
+  const keyText = spatial ? spatial[1]! : raw;
+  if (keyField.toLowerCase() === 'ogc_fid') {
+    const n = Number(keyText);
+    return Number.isFinite(n) ? Math.trunc(n) : keyText;
+  }
+  return keyText;
+}
+
 function extractWktParam(content: string, name: string): number | null {
   const re = new RegExp(`PARAMETER\\s*\\[\\s*["']${name}["']\\s*,\\s*(-?\\d+(?:\\.\\d+)?)`, 'i');
   const m = content.match(re);
@@ -2075,6 +2087,33 @@ export type ShpBatchResultItem = {
   define: { success: boolean; skipped?: boolean; error?: string };
 };
 
+function componentSetupHistoryContents(item: ShpBatchResultItem): string {
+  const part = (label: string, step: { success: boolean; skipped?: boolean; error?: string }) => {
+    if (step.success && step.skipped) return `${label} 기존`;
+    if (step.success) return `${label} 생성완료`;
+    return `${label} 실패`;
+  };
+  return [
+    part('DB 테이블', item.table),
+    part('Layer', item.layer),
+    part('Style', item.style),
+    part('Define', item.define),
+  ].join(' / ');
+}
+
+async function resolveHistoryOperator(): Promise<string | null> {
+  try {
+    const { auth } = await import('@/auth');
+    const session = await auth();
+    const id = String(session?.user?.id ?? '').trim();
+    const name = String(session?.user?.name ?? '').trim();
+    if (id && name) return `${id}(${name})`;
+    return id || name || null;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * 업로드 완료 후 일괄 후처리: 지정된 .shp 상대경로 목록에 대해 table → layer → style → define 순차 생성.
  * - shpPaths 가 있으면 해당 파일들만 처리 (업로드 직후 호출용)
@@ -2093,6 +2132,8 @@ async function processShpBatchImpl(params: {
   dbSchema?: 'layer' | 'public_layer';
   /** 폴더명·위저드에서 지정한 그룹명 (define·이력) */
   group?: string;
+  /** 작업자 — `아이디(이름)`. 없으면 로그인 세션 */
+  createUser?: string | null;
 }): Promise<{ success: boolean; results: ShpBatchResultItem[]; error?: string }> {
   let rows: ShpStatusRow[];
 
@@ -2278,19 +2319,17 @@ async function processShpBatchImpl(params: {
     const successCount = results.filter((r) => r.table.success && r.layer.success && r.style.success && r.define.success).length;
     const failCount = results.length - successCount;
     const contents = results.map((r) => path.basename(r.file, '.shp')).join(', ');
+    const passedUser = String(params.createUser ?? '').trim();
+    const createUser = passedUser || (await resolveHistoryOperator());
     const histRes = await createLayerHistory({
       contents: contents.length > 500 ? contents.slice(0, 497) + '…' : contents,
       successCount,
       failCount,
+      createUser,
     });
     if (histRes.success && histRes.lhKey) {
       const details = results.map((r) => {
         const allOk = r.table.success && r.layer.success && r.style.success && r.define.success;
-        const errors: string[] = [];
-        if (!r.table.success && !r.table.skipped) errors.push(`Table: ${r.table.error ?? '실패'}`);
-        if (!r.layer.success && !r.layer.skipped) errors.push(`Layer: ${r.layer.error ?? '실패'}`);
-        if (!r.style.success && !r.style.skipped) errors.push(`Style: ${r.style.error ?? '실패'}`);
-        if (!r.define.success && !r.define.skipped) errors.push(`Define: ${r.define.error ?? '실패'}`);
         const basename = path.basename(r.file, '.shp');
         const pathGroup = (() => {
           const parts = String(r.pathOrResult ?? '').replace(/\\/g, '/').split('/');
@@ -2305,7 +2344,7 @@ async function processShpBatchImpl(params: {
           name: basename,
           korName: basename,
           type: r.table.skipped ? '업데이트' : '신규',
-          contents: allOk ? '모두 완료' : errors.join(' / '),
+          contents: componentSetupHistoryContents(r),
           result: allOk ? '성공' : '실패',
           shpPath: r.pathOrResult ?? undefined,
           group: batchGroup || pathGroup,
@@ -5320,18 +5359,12 @@ export async function applySyncEntries(params: {
       const newData = newPrepared.data;
 
       if (!oldData && newData) {
-        // ogc_fid는 INSERT에서 제외하는 것이 기본이나, key가 ogc_fid이면
-        // SHP 쪽 번호를 넣지 않으면 serial이 새로 발급되어 이력 key와 불일치한다.
-        const keyIsOgcFid = kf.toLowerCase() === 'ogc_fid';
-        const fidCol = colMap.get('ogc_fid') ?? 'ogc_fid';
+        // 비교 JSON에는 정합성 키가 없다. INSERT 때만 sl_key_value로 채운다.
         const insertData: Record<string, unknown> = { ...newData };
         let cols = filterColsToTable(Object.keys(newData), colMap);
-        if (keyIsOgcFid) {
-          const kvNum = Number(String(kv).trim());
-          insertData[fidCol] = Number.isFinite(kvNum) ? Math.trunc(kvNum) : String(kv).trim();
-          if (!cols.some((c) => c.toLowerCase() === 'ogc_fid')) {
-            cols = [...cols, fidCol];
-          }
+        insertData[keyCol] = syncInsertKeyValue(kf, kv);
+        if (!cols.some((c) => c.toLowerCase() === keyCol.toLowerCase())) {
+          cols = [...cols, keyCol];
         }
         if (cols.length === 0) {
           return {
@@ -6870,12 +6903,17 @@ export async function reapplySyncRows(params: {
       const newData = newPrepared.data;
 
       if (op === 'append' && newData) {
-        const cols = filterColsToTable(Object.keys(newData), colMap);
+        const insertData: Record<string, unknown> = { ...newData };
+        let cols = filterColsToTable(Object.keys(newData), colMap);
+        insertData[keyCol] = syncInsertKeyValue(kf, kv);
+        if (!cols.some((c) => c.toLowerCase() === keyCol.toLowerCase())) {
+          cols = [...cols, keyCol];
+        }
         if (cols.length === 0) {
           return { success: false, reappliedCount: 0, error: `다시 적용할 컬럼이 없습니다. (${tbl})` };
         }
         const colNames = cols.map((c) => `"${c}"`).join(', ');
-        const vals = cols.map((c) => sqlVal(c, pickSyncDataVal(newData, c))).join(', ');
+        const vals = cols.map((c) => sqlVal(c, pickSyncDataVal(insertData, c))).join(', ');
         await db.execute(sql.raw(`INSERT INTO ${fq} (${colNames}) VALUES (${vals})`));
       } else if (op === 'conflict' && newData) {
         const cols = filterColsToTable(Object.keys(newData), colMap, [kf]);
@@ -7019,7 +7057,7 @@ export async function exportLayerTableToShp(params: {
   const dbCfg = getDbConfig();
   const pgConn = `PG:host=${dbCfg.host} port=${dbCfg.port} dbname=${dbCfg.database} user=${dbCfg.user} password=${dbCfg.password}`;
   const layerTable = `${schema}.${tableName}`;
-  /** 국내 SHP·엑셀은 CP949. UTF-8로 쓰면 한글이 깨져 보인다. */
+  /** 국내 SHP·엑셀은 CP949. DBF 헤더 언어 ID 77이 한글 코드페이지다. */
   const dbfEncoding = 'CP949';
   const ogrEnv = { SHAPE_ENCODING: dbfEncoding };
 
@@ -7028,7 +7066,9 @@ export async function exportLayerTableToShp(params: {
    * layer 스키마(엑셀 등 4326→5181 저장)는 DB 메타 SRID를 따름.
    */
   const ogrBase: string[] = [
+    '--config', 'SHAPE_ENCODING', dbfEncoding,
     '-f', 'ESRI Shapefile',
+    '-lco', 'ENCODING=LDID/77',
     outShp,
     pgConn,
     layerTable,
@@ -7036,7 +7076,7 @@ export async function exportLayerTableToShp(params: {
   if (schema === 'public_layer') {
     ogrBase.push('-s_srs', 'EPSG:5181');
   }
-  ogrBase.push('-t_srs', 'EPSG:5181', '-skipfailures', '-dim', '2', '-lco', `ENCODING=${dbfEncoding}`);
+  ogrBase.push('-t_srs', 'EPSG:5181', '-skipfailures', '-dim', '2');
   const result = await runOgr2ogr(ogrBase, ogrEnv);
 
   let shpSize = 0;
@@ -7049,11 +7089,18 @@ export async function exportLayerTableToShp(params: {
     await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {});
     await fs.mkdir(tempDir, { recursive: true }).catch(() => {});
     const sql = `SELECT * FROM ${schema}."${tableName}" WHERE geom IS NOT NULL AND ST_IsValid(geom)`;
-    const retryArgs: string[] = ['-f', 'ESRI Shapefile', outShp, pgConn, '-sql', sql];
+    const retryArgs: string[] = [
+      '--config', 'SHAPE_ENCODING', dbfEncoding,
+      '-f', 'ESRI Shapefile',
+      '-lco', 'ENCODING=LDID/77',
+      outShp,
+      pgConn,
+      '-sql', sql,
+    ];
     if (schema === 'public_layer') {
       retryArgs.push('-s_srs', 'EPSG:5181');
     }
-    retryArgs.push('-t_srs', 'EPSG:5181', '-skipfailures', '-dim', '2', '-lco', `ENCODING=${dbfEncoding}`);
+    retryArgs.push('-t_srs', 'EPSG:5181', '-skipfailures', '-dim', '2');
     const result2 = await runOgr2ogr(retryArgs, ogrEnv);
     try {
       shpSize = (await fs.stat(outShp)).size;
