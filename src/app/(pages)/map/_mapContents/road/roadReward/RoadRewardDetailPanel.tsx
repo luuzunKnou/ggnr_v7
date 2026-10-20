@@ -6,17 +6,9 @@ import {
   useRef,
   useState,
   type Dispatch,
-  type ReactNode,
   type SetStateAction,
 } from "react";
 import { createPortal } from "react-dom";
-import {
-  ChevronDown,
-  ChevronRight,
-  Pencil,
-  Trash2,
-  X,
-} from "lucide-react";
 import Draw from "ol/interaction/Draw";
 import Modify from "ol/interaction/Modify";
 import VectorLayer from "ol/layer/Vector";
@@ -26,10 +18,12 @@ import Polygon from "ol/geom/Polygon";
 import GeoJSONFormat from "ol/format/GeoJSON";
 import { Style, Stroke, Fill, Circle as CircleStyle } from "ol/style";
 import { isEmpty as isEmptyExtent } from "ol/extent";
-import { cn } from "@/lib/utils";
 import { useMapContext } from "../../../_mapComponents/MapContext";
 import { canStartMapDrawInteraction } from "../../../_mapComponents/mapDrawInteraction";
 import { layerRowPanelButtonClass } from "../../../_mapComponents/layerRowEdit/layerRowPanelButtonStyles";
+import { ChevronDown, ChevronRight, Pencil, Trash2, X } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { useSerWriteAccess } from "@/hooks/useSerWriteAccess";
 import type { LayerRowParcelItem } from "../../../_mapComponents/layerRowEdit";
 import { useMapVisualCenterPixel } from "../../../_mapComponents/hooks/useMapVisualCenterPixel";
 import {
@@ -49,9 +43,9 @@ import { recordDataViewLog } from "@/lib/recordDataViewLog";
 import {
   ROAD_REWARD_CASE_FIELDS,
   createEmptyRoadRewardCase,
+  createEmptyRoadRewardParcel,
   getRoadRewardParcelFields,
   computeRoadRewardDerived,
-  sumRoadRewardCompensation,
   withRoadRewardCompensationTotal,
   parseParcelJibunAddress,
   mergeJijukIntoRoadRewardParcels,
@@ -70,7 +64,8 @@ import {
   mapRoadRewardDtoToCase,
 } from "./roadRewardApi";
 import { RoadRewardParcelModal } from "./RoadRewardParcelModal";
-import { MapSideDetailScroll } from "../../../_mapComponents/MapSideDetailScroll";
+import { RoadRewardParcelList, roadRewardParcelAddress } from "./RoadRewardParcelList";
+import { RoadRewardAttrTable } from "./RoadRewardAttrTable";
 
 type Props = {
   caseId: string;
@@ -91,133 +86,40 @@ type Props = {
   overlayWidthPx: number;
 };
 
-const inputClass = "standard-detail-input h-7 w-full min-w-0 text-foreground";
-const actionBtn =
-  "standard-detail-action-btn inline-flex h-7 items-center gap-1";
+/** 공사대장 속성정보와 같은 입력칸(행 h-7 안에 맞춤)·버튼 */
+const fieldClass =
+  "box-border h-[22px] w-full min-w-0 rounded border border-border bg-background px-1.5 text-[11px] leading-none outline-none focus:border-primary focus:ring-1 focus:ring-primary/25";
+const actionBtn = "standard-detail-action-btn inline-flex h-7 items-center gap-1";
 const actionBtnPrimary =
   "inline-flex h-7 items-center gap-1 rounded border border-primary bg-primary px-2 text-[11px] font-medium text-white hover:bg-primary/90 disabled:opacity-50";
-const actionBtnDanger =
-  "standard-detail-action-btn-danger inline-flex h-7 items-center gap-1";
+const actionBtnDanger = "standard-detail-action-btn-danger inline-flex h-7 items-center gap-1";
 
 type ParcelModalState = { mode: "new" | "edit" | "view"; draft: RoadRewardParcel };
 
-function ParcelListColGroup({ editing }: { editing: boolean }) {
-  return (
-    <colgroup>
-      <col />
-      <col className="w-[54px]" />
-      <col className="w-[5.75rem]" />
-      <col className="w-[90px]" />
-      {editing ? <col className="w-[3rem]" /> : null}
-    </colgroup>
-  );
-}
-
-const PARCEL_LIST_TABLE_CLASS = "w-full table-fixed border-collapse text-[11px]";
-
-/** 필지 목록 행 스크롤 — top은 sticky thead 아래 목록 최상단에 맞춤 */
-function scrollParcelListRow(row: HTMLTableRowElement, mode: "nearest" | "top") {
-  if (mode === "nearest") {
-    row.scrollIntoView({ block: "nearest", behavior: "smooth" });
-    return;
-  }
+/** 필지 표 행 스크롤 — top은 고정 머리줄 바로 아래로 맞춤 */
+function scrollParcelListItem(row: HTMLElement, mode: "nearest" | "top") {
   let node: HTMLElement | null = row.parentElement;
   while (node) {
     const { overflowY } = getComputedStyle(node);
-    if (
-      (overflowY === "auto" || overflowY === "scroll") &&
-      node.scrollHeight > node.clientHeight
-    ) {
-      const thead = node.querySelector("thead");
-      const theadH = thead?.getBoundingClientRect().height ?? 0;
-      const containerTop = node.getBoundingClientRect().top;
-      const targetTop = row.getBoundingClientRect().top;
-      const nextTop = Math.max(0, targetTop - containerTop + node.scrollTop - theadH);
-      node.scrollTo({ top: nextTop, behavior: "smooth" });
+    if ((overflowY === "auto" || overflowY === "scroll") && node.scrollHeight > node.clientHeight) {
+      const headH = node.querySelector("thead")?.getBoundingClientRect().height ?? 0;
+      const rowTop = row.getBoundingClientRect().top - node.getBoundingClientRect().top + node.scrollTop;
+      const rowBottom = rowTop + row.getBoundingClientRect().height;
+      if (mode === "top") {
+        node.scrollTo({ top: Math.max(0, rowTop - headH), behavior: "smooth" });
+      } else if (rowTop - headH < node.scrollTop) {
+        node.scrollTo({ top: Math.max(0, rowTop - headH), behavior: "smooth" });
+      } else if (rowBottom > node.scrollTop + node.clientHeight) {
+        node.scrollTo({ top: rowBottom - node.clientHeight, behavior: "smooth" });
+      }
       return;
     }
     node = node.parentElement;
   }
-  row.scrollIntoView({ block: "start", behavior: "smooth" });
-}
-
-const PARCEL_LIST_TH_BASE =
-  "min-w-0 border-b border-border bg-muted font-semibold text-foreground";
-
-const PARCEL_LIST_COL = {
-  addr: {
-    th: `${PARCEL_LIST_TH_BASE} pl-1.5 pr-1 text-left`,
-    td: "min-w-0 py-0 pl-1.5 pr-1 text-left text-foreground",
-  },
-  jimok: {
-    th: `${PARCEL_LIST_TH_BASE} px-1 text-center`,
-    td: "min-w-0 px-1 py-0 text-center text-foreground",
-  },
-  area: {
-    th: `${PARCEL_LIST_TH_BASE} px-1 text-center whitespace-nowrap`,
-    td: "min-w-0 px-1 py-0 text-center tabular-nums text-foreground",
-  },
-  amount: {
-    th: `${PARCEL_LIST_TH_BASE} pl-1 pr-1.5 text-right whitespace-nowrap`,
-    td: "min-w-0 py-0 pl-1 pr-1.5 text-right tabular-nums text-foreground",
-  },
-} as const;
-
-function ParcelListCell({
-  align,
-  title,
-  children,
-  className,
-}: {
-  align: "left" | "center" | "right";
-  title?: string;
-  children: ReactNode;
-  className?: string;
-}) {
-  const wrapClass =
-    align === "center"
-      ? "flex min-w-0 justify-center"
-      : align === "right"
-        ? "flex min-w-0 justify-end"
-        : "min-w-0";
-  return (
-    <td className={cn(className, "align-middle")} title={title}>
-      <div className={wrapClass}>
-        <span className="block min-w-0 max-w-full truncate">{children}</span>
-      </div>
-    </td>
-  );
-}
-
-function ParcelListHeaderRow({ editing }: { editing: boolean }) {
-  return (
-    <tr className="h-7">
-      <th scope="col" className={PARCEL_LIST_COL.addr.th}>
-        주소
-      </th>
-      <th scope="col" className={PARCEL_LIST_COL.jimok.th}>
-        지목
-      </th>
-      <th scope="col" className={PARCEL_LIST_COL.area.th}>
-        편입면적(㎡)
-      </th>
-      <th scope="col" className={PARCEL_LIST_COL.amount.th}>
-        합계(원)
-      </th>
-      {editing ? (
-        <th
-          scope="col"
-          className="border-b border-border bg-muted px-0 text-center font-semibold text-foreground"
-        >
-          <span className="sr-only">수정·삭제</span>
-        </th>
-      ) : null}
-    </tr>
-  );
 }
 
 function toParcelItem(p: RoadRewardParcel): LayerRowParcelItem {
-  const addr = `${p.eupmyeonDong} ${p.jibunIncluded || p.jibunOriginal}`.trim();
+  const addr = roadRewardParcelAddress(p);
   const hasMapGeom = Boolean(p.geometry3857) || Boolean(p.extent3857);
   return {
     address: addr || "필지",
@@ -228,95 +130,6 @@ function toParcelItem(p: RoadRewardParcel): LayerRowParcelItem {
         ? { x: p.mockLonLat.lon, y: p.mockLonLat.lat }
         : undefined,
   };
-}
-
-function formatCell(value: unknown, numeric?: boolean): string {
-  if (numeric) {
-    const n = Number(value);
-    return Number.isFinite(n) ? n.toLocaleString() : "0";
-  }
-  const s = String(value ?? "").trim();
-  return s || "—";
-}
-
-function AttrRow({
-  label,
-  value,
-}: {
-  label: string;
-  value: ReactNode;
-}) {
-  return (
-    <div className="flex items-start">
-      <div className="standard-detail-attr-label flex min-w-0 w-[64px] shrink-0 items-center self-stretch">
-        <span className="min-w-0 w-full whitespace-normal break-keep text-left leading-snug">
-          {label}
-        </span>
-      </div>
-      <div className="standard-detail-attr-value min-w-0 flex-1 text-foreground">
-        {typeof value === "string" ? (
-          <span className="break-all leading-snug">{value}</span>
-        ) : (
-          value
-        )}
-      </div>
-    </div>
-  );
-}
-
-function AttrTable({
-  entries,
-}: {
-  entries: { fieldKey: string; label: string; value: ReactNode; fullWidth?: boolean }[];
-}) {
-  if (entries.length === 0) {
-    return <p className="standard-detail-attr-empty">표시할 항목이 없습니다.</p>;
-  }
-
-  const pairs: { left: (typeof entries)[number]; right?: (typeof entries)[number] }[] = [];
-  for (let i = 0; i < entries.length; ) {
-    const left = entries[i]!;
-    if (left.fullWidth) {
-      pairs.push({ left });
-      i += 1;
-      continue;
-    }
-    const right = entries[i + 1];
-    if (right && !right.fullWidth) {
-      pairs.push({ left, right });
-      i += 2;
-    } else {
-      pairs.push({ left });
-      i += 1;
-    }
-  }
-
-  return (
-    <div className="overflow-hidden rounded-[5px] border border-border">
-      {pairs.map((pair, rowIdx) => {
-        const isLast = rowIdx === pairs.length - 1;
-        if (!pair.right) {
-          return (
-            <div key={pair.left.fieldKey} className={cn(!isLast && "border-b border-border")}>
-              <AttrRow label={pair.left.label} value={pair.left.value} />
-            </div>
-          );
-        }
-        return (
-          <div
-            key={`${pair.left.fieldKey}-${pair.right.fieldKey}`}
-            className={cn(
-              "grid grid-cols-2 divide-x divide-border",
-              !isLast && "border-b border-border"
-            )}
-          >
-            <AttrRow label={pair.left.label} value={pair.left.value} />
-            <AttrRow label={pair.right.label} value={pair.right.value} />
-          </div>
-        );
-      })}
-    </div>
-  );
 }
 
 export function RoadRewardDetailPanel({
@@ -357,6 +170,7 @@ export function RoadRewardDetailPanel({
 
   const [isEditing, setIsEditing] = useState(() => isNewRoadRewardCaseId(caseId));
   const [attrsOpen, setAttrsOpen] = useState(true);
+  const canWrite = useSerWriteAccess();
   const [caseDraft, setCaseDraft] = useState<Record<string, string>>({});
   const caseDraftRef = useRef(caseDraft);
   caseDraftRef.current = caseDraft;
@@ -371,8 +185,8 @@ export function RoadRewardDetailPanel({
   draftParcelsRef.current = draftParcels;
 
   const [selectedParcelId, setSelectedParcelId] = useState<string | null>(null);
-  const parcelRowEls = useRef(new Map<string, HTMLTableRowElement>());
-  /** 지도 필지 선택 시 목록을 최상단(sticky thead 아래)으로 스크롤 */
+  const parcelRowEls = useRef(new Map<string, HTMLElement>());
+  /** 지도 필지 선택 시 목록을 해당 카드가 위로 오게 스크롤 */
   const scrollParcelRowToTopRef = useRef(false);
   const [parcelModal, setParcelModal] = useState<ParcelModalState | null>(null);
   const parcelModalRef = useRef(parcelModal);
@@ -391,6 +205,7 @@ export function RoadRewardDetailPanel({
   const caseGeomEditSourceRef = useRef<VectorSource | null>(null);
   const [loadingParcels, setLoadingParcels] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   const { inputBottomPx } = useSearchBarOffset();
   const geomHintTopPx = inputBottomPx + GEOM_EDIT_HINT_BELOW_SEARCH_GAP;
@@ -539,7 +354,7 @@ export function RoadRewardDetailPanel({
     const scrollMode = scrollParcelRowToTopRef.current ? "top" : "nearest";
     scrollParcelRowToTopRef.current = false;
     const frame = window.requestAnimationFrame(() => {
-      scrollParcelListRow(row, scrollMode);
+      scrollParcelListItem(row, scrollMode);
     });
     return () => window.cancelAnimationFrame(frame);
   }, [selectedParcelId]);
@@ -838,12 +653,23 @@ export function RoadRewardDetailPanel({
 
   if (!caseItem) {
     return (
-      <div className="flex min-h-0 h-full flex-col bg-background">
-        <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border px-3 py-1.5">
-          <span className="text-sm font-semibold text-foreground">보상편입용지 상세</span>
+      <div className="standard-panel-root">
+        <div className="standard-panel-header">
+          <span className="standard-panel-title">보상편입용지 상세</span>
+          <button
+            type="button"
+            onClick={onClose}
+            className="standard-panel-close"
+            title="상세 닫기"
+            aria-label="상세 닫기"
+          >
+            <X className="h-4 w-4" />
+          </button>
         </div>
-        <div className="px-3 py-6 text-center text-xs text-muted-foreground">
-          삭제되었거나 존재하지 않는 건입니다.
+        <div className="standard-detail-scroll px-3 py-6">
+          <p className="text-center text-xs text-muted-foreground">
+            삭제되었거나 존재하지 않는 건입니다.
+          </p>
         </div>
       </div>
     );
@@ -1008,6 +834,7 @@ export function RoadRewardDetailPanel({
       onDeleted();
       return;
     }
+    setDeleting(true);
     try {
       const res = await call("", "POST", {
         service: "roadRewardService",
@@ -1023,6 +850,8 @@ export function RoadRewardDetailPanel({
       onDeleted();
     } catch (e: unknown) {
       window.alert(e instanceof Error ? e.message : "삭제에 실패했습니다.");
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -1052,6 +881,12 @@ export function RoadRewardDetailPanel({
     if (!isEditing) return;
     focusParcelOnMap(parcel);
     setParcelModal({ mode: "edit", draft: { ...parcel } });
+  };
+
+  /** 하천점용 필지목록 «추가» — 주소 검색으로 필지 직접 등록 (저장 시 반영) */
+  const handleOpenAddParcel = () => {
+    if (!isEditing) return;
+    setParcelModal({ mode: "new", draft: createEmptyRoadRewardParcel() });
   };
 
   const handleDeleteParcelFromList = (parcelId: string) => {
@@ -1129,62 +964,48 @@ export function RoadRewardDetailPanel({
     setParcelModal(null);
   };
 
-  const caseViewEntries = ROAD_REWARD_CASE_FIELDS.map(({ field, label, fullWidth }) => ({
+  const attrEntries = ROAD_REWARD_CASE_FIELDS.map(({ field, label, fullWidth }) => ({
     fieldKey: field,
     label,
     fullWidth,
-    value: String(caseItem[field] ?? "") || "—",
-  }));
-
-  const caseEditEntries = ROAD_REWARD_CASE_FIELDS.map(({ field, label, fullWidth }) => ({
-    fieldKey: field,
-    label,
-    fullWidth,
-    value: (
+    required: isEditing && field === "name",
+    value: isEditing ? (
       <input
-        className={inputClass}
+        type="text"
+        className={fieldClass}
         value={caseDraft[field] ?? ""}
         onChange={(e) => handleDraftChange(field, e.target.value)}
       />
+    ) : (
+      String(caseItem[field] ?? "").trim() || "—"
     ),
   }));
 
-  const headerName = isEditing
-    ? (caseDraft.name ?? "").trim() || (isCreateMode ? "(새 건)" : "(건명 없음)")
-    : caseItem.name.trim() || "(건명 없음)";
+  const headerTitle = isCreateMode ? "보상편입용지 등록" : "보상편입용지 상세";
 
   return (
-    <div className="standard-panel-root relative">
+    <div className="relative standard-panel-root">
       <div className="standard-panel-header">
-        <h2
-          className={cn(
-            "standard-panel-title truncate",
-            (isEditing ? (caseDraft.name ?? "").trim() : caseItem.name.trim())
-              ? "text-foreground"
-              : "text-muted-foreground"
-          )}
-          title={headerName}
-        >
-          {headerName}
-        </h2>
+        <h2 className="standard-panel-title min-w-0 truncate">{headerTitle}</h2>
         <button
           type="button"
           onClick={isCreateMode ? discardCreateDraft : onClose}
+          disabled={saving || deleting}
           className="standard-panel-close"
-          title="닫기"
-          aria-label="닫기"
+          title="상세 닫기"
+          aria-label="상세 닫기"
         >
           <X className="h-4 w-4" />
         </button>
       </div>
 
-      <section className="standard-detail-section">
-        <div className="standard-detail-section-header">
+      <section className={cn("shrink-0 border-b border-border px-3 pt-1.5", attrsOpen ? "pb-2.5" : "pb-1.5")}>
+        <div className="-mx-1 mb-1 flex min-h-8 items-center gap-1 py-0.5">
           <button
             type="button"
             onClick={() => setAttrsOpen((v) => !v)}
             className="standard-detail-section-toggle"
-            title="속성정보"
+            title={attrsOpen ? "속성정보 접기" : "속성정보 펼치기"}
           >
             {attrsOpen ? (
               <ChevronDown className="standard-detail-section-chevron" />
@@ -1193,11 +1014,11 @@ export function RoadRewardDetailPanel({
             )}
             <span className="standard-detail-section-toggle-label">속성정보</span>
           </button>
-          {attrsOpen ? (
+          {attrsOpen && canWrite ? (
             <div className="standard-detail-section-header-actions">
               {!isEditing ? (
                 <>
-                  <button type="button" className={actionBtn} onClick={beginEdit}>
+                  <button type="button" className={actionBtn} onClick={beginEdit} disabled={deleting}>
                     <Pencil className="h-3 w-3" />
                     수정
                   </button>
@@ -1206,27 +1027,23 @@ export function RoadRewardDetailPanel({
                       type="button"
                       className={actionBtnDanger}
                       onClick={() => void handleDelete()}
+                      disabled={deleting || saving}
                     >
                       <Trash2 className="h-3 w-3" />
-                      삭제
+                      {deleting ? "삭제 중…" : "삭제"}
                     </button>
                   ) : null}
                 </>
               ) : (
                 <>
-                  <button
-                    type="button"
-                    className={actionBtn}
-                    onClick={cancelEdit}
-                    disabled={saving}
-                  >
+                  <button type="button" className={actionBtn} onClick={cancelEdit} disabled={saving || deleting}>
                     취소
                   </button>
                   <button
                     type="button"
                     className={actionBtnPrimary}
                     onClick={() => void handleSave()}
-                    disabled={saving}
+                    disabled={saving || deleting}
                   >
                     {saving ? "저장 중…" : isCreateMode ? "등록" : "저장"}
                   </button>
@@ -1236,144 +1053,26 @@ export function RoadRewardDetailPanel({
           ) : null}
         </div>
         {attrsOpen ? (
-          <div className="standard-detail-section-body max-h-[42vh] overflow-y-auto scrollbar-thin">
-            <AttrTable entries={isEditing ? caseEditEntries : caseViewEntries} />
+          <div className="max-h-[42vh] overflow-y-auto scrollbar-thin">
+            <RoadRewardAttrTable entries={attrEntries} />
           </div>
         ) : null}
       </section>
 
-      <section className="standard-detail-section flex min-h-0 min-w-0 flex-1 flex-col !border-b-0">
-        <div className="standard-detail-section-header">
-          <span className="standard-detail-section-toggle-label">필지목록 ({displayParcels.length.toLocaleString()})</span>
-          {loadingParcels ? (
-            <span className="text-[10px] font-normal text-muted-foreground">조회 중…</span>
-          ) : null}
-        </div>
-
-        <div className="flex min-h-0 flex-1 flex-col px-3 pb-2">
-          <MapSideDetailScroll className="min-h-0 flex-1 overflow-y-auto rounded border border-border">
-            <table className={PARCEL_LIST_TABLE_CLASS}>
-              <ParcelListColGroup editing={isEditing} />
-              <thead className="standard-table-thead">
-                <ParcelListHeaderRow editing={isEditing} />
-              </thead>
-              <tbody>
-                {loadingParcels && displayParcels.length === 0 ? (
-                  <tr>
-                    <td
-                      colSpan={isEditing ? 5 : 4}
-                      className="standard-table-empty"
-                    >
-                      조회 중…
-                    </td>
-                  </tr>
-                ) : displayParcels.length === 0 ? (
-                  <tr>
-                    <td
-                      colSpan={isEditing ? 5 : 4}
-                      className="standard-table-empty"
-                    >
-                      {isEditing
-                        ? "도형을 그리거나 수정하면 필지목록이 자동으로 채워집니다."
-                        : "목록이 없습니다."}
-                    </td>
-                  </tr>
-                ) : (
-                  displayParcels.map((p) => {
-                      const isSelected = p.id === selectedParcelId;
-                      const addr = `${p.eupmyeonDong} ${p.jibunIncluded || p.jibunOriginal}`.trim();
-                      const areaLabel = `${formatCell(p.areaIncluded, true)}㎡`;
-                      const amountLabel = `${formatCell(sumRoadRewardCompensation(p), true)}원`;
-                      return (
-                        <tr
-                          key={p.id}
-                          ref={(el) => {
-                            if (el) parcelRowEls.current.set(p.id, el);
-                            else parcelRowEls.current.delete(p.id);
-                          }}
-                          role="button"
-                          tabIndex={0}
-                          onClick={() => handleParcelRowClick(p)}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter" || e.key === " ") {
-                              e.preventDefault();
-                              handleParcelRowClick(p);
-                            }
-                          }}
-                          title={
-                            isEditing
-                              ? "클릭하면 지도에서 위치를 확인합니다"
-                              : "클릭하면 필지 상세를 봅니다"
-                          }
-                          className={cn(
-                            "standard-list-row h-7",
-                            isSelected && "standard-list-row-selected"
-                          )}
-                        >
-                          <ParcelListCell
-                            align="left"
-                            className={PARCEL_LIST_COL.addr.td}
-                            title={addr || undefined}
-                          >
-                            {addr || "—"}
-                          </ParcelListCell>
-                          <ParcelListCell
-                            align="center"
-                            className={PARCEL_LIST_COL.jimok.td}
-                            title={p.jimok || undefined}
-                          >
-                            {formatCell(p.jimok)}
-                          </ParcelListCell>
-                          <ParcelListCell
-                            align="center"
-                            className={PARCEL_LIST_COL.area.td}
-                            title={areaLabel}
-                          >
-                            {areaLabel}
-                          </ParcelListCell>
-                          <ParcelListCell
-                            align="right"
-                            className={PARCEL_LIST_COL.amount.td}
-                            title={amountLabel}
-                          >
-                            {amountLabel}
-                          </ParcelListCell>
-                          {isEditing ? (
-                            <td className="px-0 py-0">
-                              <div
-                                className="flex w-full shrink-0 items-center justify-center gap-0"
-                                onClick={(e) => e.stopPropagation()}
-                              >
-                                <button
-                                  type="button"
-                                  onClick={() => handleOpenEditParcel(p)}
-                                  className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-primary/10 hover:text-primary"
-                                  aria-label="필지 수정"
-                                  title="수정"
-                                >
-                                  <Pencil className="h-3 w-3" />
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => handleDeleteParcelFromList(p.id)}
-                                  className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/40 dark:hover:text-red-400"
-                                  aria-label="필지 삭제"
-                                  title="삭제"
-                                >
-                                  <Trash2 className="h-3 w-3" />
-                                </button>
-                              </div>
-                            </td>
-                          ) : null}
-                        </tr>
-                      );
-                  })
-                )}
-              </tbody>
-            </table>
-          </MapSideDetailScroll>
-        </div>
-      </section>
+      <RoadRewardParcelList
+        isEditing={isEditing}
+        items={displayParcels}
+        selectedId={selectedParcelId}
+        loading={loadingParcels}
+        onAdd={handleOpenAddParcel}
+        onClick={handleParcelRowClick}
+        onEdit={handleOpenEditParcel}
+        onRemove={handleDeleteParcelFromList}
+        registerItemEl={(id, el) => {
+          if (el) parcelRowEls.current.set(id, el);
+          else parcelRowEls.current.delete(id);
+        }}
+      />
 
       {parcelModal ? (
         <RoadRewardParcelModal

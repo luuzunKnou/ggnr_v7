@@ -209,6 +209,17 @@ import {
   USER_DATA_UPLOAD_PANEL_MAX_WIDTH,
   USER_DATA_UPLOAD_PANEL_MIN_WIDTH,
 } from "./_mapContents/userDataUpload/userDataUploadConfig"
+import { RiverIllegalOccupationListPanel } from "./_mapContents/river/riverIllegalOccupation/RiverIllegalOccupationListPanel"
+import { RiverIllegalOccupationDetailPanel } from "./_mapContents/river/riverIllegalOccupation/RiverIllegalOccupationDetailPanel"
+import {
+  RIVER_ILLEGAL_OCCUPATION_DETAIL_DEFAULT_WIDTH,
+  RIVER_ILLEGAL_OCCUPATION_DETAIL_MAX_WIDTH,
+  RIVER_ILLEGAL_OCCUPATION_DETAIL_MIN_WIDTH,
+  RIVER_ILLEGAL_OCCUPATION_OPENED_KEY,
+  RIVER_ILLEGAL_OCCUPATION_PANEL_DEFAULT_WIDTH,
+  RIVER_ILLEGAL_OCCUPATION_PANEL_MAX_WIDTH,
+  RIVER_ILLEGAL_OCCUPATION_PANEL_MIN_WIDTH,
+} from "./_mapContents/river/riverIllegalOccupation/riverIllegalOccupationConfig"
 import { SerWriteAccessProvider } from "@/hooks/useSerWriteAccess"
 import { SearchBarOffsetContext } from "./searchBarOffsetContext"
 const SIDEBAR_WIDTH = 65
@@ -704,6 +715,11 @@ function MapLayoutContent({
   )
   const userDataUploadOpen = openedWindows.includes(USER_DATA_UPLOAD_OPENED_KEY)
   const [userDataUploadPanelWidth, setUserDataUploadPanelWidth] = useState(USER_DATA_UPLOAD_PANEL_DEFAULT_WIDTH)
+  const riverIllegalOccupationOpen = openedWindows.includes(RIVER_ILLEGAL_OCCUPATION_OPENED_KEY)
+  const [riverIllegalOccupationPanelWidth, setRiverIllegalOccupationPanelWidth] = useState(RIVER_ILLEGAL_OCCUPATION_PANEL_DEFAULT_WIDTH)
+  const [riverIllegalOccupationDetailWidth, setRiverIllegalOccupationDetailWidth] = useState(RIVER_ILLEGAL_OCCUPATION_DETAIL_DEFAULT_WIDTH)
+  const [riverIllegalOccupationSelectedId, setRiverIllegalOccupationSelectedId] = useState<string | null>(null)
+  const riverIllegalOccupationDetailOpen = riverIllegalOccupationOpen && Boolean(riverIllegalOccupationSelectedId)
   const [buildPublicLandSelectedId, setBuildPublicLandSelectedId] = useState<string | null>(null)
   const [buildPublicLandListRefreshKey, setBuildPublicLandListRefreshKey] = useState(0)
   const buildPublicLandDetailOpen = buildPublicLandOpen && Boolean(buildPublicLandSelectedId)
@@ -1012,7 +1028,9 @@ function MapLayoutContent({
     (fmsLinkageDetailOpen ? fmsLinkageDetailWidth : 0) +
     (privateLandAnalysisOpen ? privateLandAnalysisPanelWidth : 0) +
     (privateLandAnalysisDetailOpen ? privateLandAnalysisDetailWidth : 0) +
-    (userDataUploadOpen ? userDataUploadPanelWidth : 0)
+    (userDataUploadOpen ? userDataUploadPanelWidth : 0) +
+    (riverIllegalOccupationOpen ? riverIllegalOccupationPanelWidth : 0) +
+    (riverIllegalOccupationDetailOpen ? riverIllegalOccupationDetailWidth : 0)
   const searchBarOffset = {
     leftPx: SIDEBAR_WIDTH + totalListPanelWidth + SEARCH_BAR_MARGIN,
     topPx: 16,
@@ -1162,6 +1180,10 @@ function MapLayoutContent({
     privateLandAnalysisPanelLeftPx + (privateLandAnalysisOpen ? privateLandAnalysisPanelWidth : 0)
   const userDataUploadPanelLeftPx =
     privateLandAnalysisDetailLeftPx + (privateLandAnalysisDetailOpen ? privateLandAnalysisDetailWidth : 0)
+  const riverIllegalOccupationPanelLeftPx =
+    userDataUploadPanelLeftPx + (userDataUploadOpen ? userDataUploadPanelWidth : 0)
+  const riverIllegalOccupationDetailLeftPx =
+    riverIllegalOccupationPanelLeftPx + (riverIllegalOccupationOpen ? riverIllegalOccupationPanelWidth : 0)
   const mapPaddingLeft = SIDEBAR_WIDTH + totalListPanelWidth
   /** 패딩은 useLayoutEffect — 자식 useEffect(도로대장 fit 등)보다 먼저 적용되어야 함.
    * 거리뷰 ON일 때만 맵 중심(A)을 새 센터마크 위치에 맞춤.
@@ -1718,6 +1740,11 @@ function MapLayoutContent({
 
   const handleCloseUserDataUpload = () => {
     setOpened(openedWindows.filter((w) => w !== USER_DATA_UPLOAD_OPENED_KEY))
+  }
+
+  const handleCloseRiverIllegalOccupation = () => {
+    setRiverIllegalOccupationSelectedId(null)
+    setOpened(openedWindows.filter((w) => w !== RIVER_ILLEGAL_OCCUPATION_OPENED_KEY))
   }
 
   useEffect(() => {
@@ -3441,6 +3468,45 @@ function MapLayoutContent({
                 onWidthChange={setUserDataUploadPanelWidth}
               >
                 <UserDataUploadPanel onClose={handleCloseUserDataUpload} />
+              </MapSideListPanel>
+            </div>
+          )}
+          {riverIllegalOccupationOpen && (
+            <div className="pointer-events-auto shrink-0">
+              <MapSideListPanel
+                width={riverIllegalOccupationPanelWidth}
+                minWidth={RIVER_ILLEGAL_OCCUPATION_PANEL_MIN_WIDTH}
+                maxWidth={RIVER_ILLEGAL_OCCUPATION_PANEL_MAX_WIDTH}
+                leftOffsetPx={riverIllegalOccupationPanelLeftPx}
+                onWidthChange={setRiverIllegalOccupationPanelWidth}
+                serEng={RIVER_ILLEGAL_OCCUPATION_OPENED_KEY}
+              >
+                <RiverIllegalOccupationListPanel
+                  selectedId={riverIllegalOccupationSelectedId}
+                  onSelectId={setRiverIllegalOccupationSelectedId}
+                  onClose={handleCloseRiverIllegalOccupation}
+                />
+              </MapSideListPanel>
+            </div>
+          )}
+          {riverIllegalOccupationDetailOpen && riverIllegalOccupationSelectedId && (
+            <div className="pointer-events-auto shrink-0">
+              <MapSideListPanel
+                width={riverIllegalOccupationDetailWidth}
+                minWidth={RIVER_ILLEGAL_OCCUPATION_DETAIL_MIN_WIDTH}
+                maxWidth={RIVER_ILLEGAL_OCCUPATION_DETAIL_MAX_WIDTH}
+                leftOffsetPx={riverIllegalOccupationDetailLeftPx}
+                onWidthChange={setRiverIllegalOccupationDetailWidth}
+                contentClassName="overflow-hidden"
+                serEng={RIVER_ILLEGAL_OCCUPATION_OPENED_KEY}
+              >
+                <RiverIllegalOccupationDetailPanel
+                  key={riverIllegalOccupationSelectedId}
+                  cardId={riverIllegalOccupationSelectedId}
+                  onClose={() => setRiverIllegalOccupationSelectedId(null)}
+                  onSaved={setRiverIllegalOccupationSelectedId}
+                  onDeleted={() => setRiverIllegalOccupationSelectedId(null)}
+                />
               </MapSideListPanel>
             </div>
           )}

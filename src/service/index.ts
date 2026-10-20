@@ -27,6 +27,7 @@ import * as loginLogService from './loginLogService';
 import * as riverBasicPlanService from './riverBasicPlanService';
 import * as privateLandAnalysisService from './privateLandAnalysisService';
 import * as roadLedgerService from './roadLedgerService';
+import * as roadVideoTrackService from './roadVideoTrackService';
 import * as roadNetworkService from './roadNetworkService';
 import * as roadUseLedgerService from './roadUseLedgerService';
 import * as roadFrontageBuildingService from './roadFrontageBuildingService';
@@ -107,6 +108,7 @@ export {
   riverBasicPlanService,
   privateLandAnalysisService,
   roadLedgerService,
+  roadVideoTrackService,
   roadNetworkService,
   roadUseLedgerService,
   roadFrontageBuildingService,
