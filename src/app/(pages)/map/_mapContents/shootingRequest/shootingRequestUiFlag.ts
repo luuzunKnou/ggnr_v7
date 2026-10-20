@@ -14,6 +14,11 @@ export function isUavFamilySystemKey(key: string | null | undefined): boolean {
   return UAV_FAMILY_KEYS.has(normalizeUavSystemKey(key))
 }
 
+/** 울산 UAV 프로젝트 — 선택한 시스템과 무관하게 우측 드론영상·촬영요청을 유지 */
+export function isUavUlsanProject(projectName: string | null | undefined): boolean {
+  return String(projectName ?? '').trim().toLowerCase() === 'uav_ulsan'
+}
+
 /** 관리 시스템만 */
 export function isUavAdminSystemKey(key: string | null | undefined): boolean {
   return normalizeUavSystemKey(key) === UAV_ADMIN_SYSTEM_KEY

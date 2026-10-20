@@ -143,7 +143,7 @@ export function LandInfoPanelContent({
   loading,
   pnu: pnuFromContext,
 }: AddressInfoPanelProps & { pnu?: string | null }) {
-  const [selectedCrs, setSelectedCrs] = useState('EPSG:5181');
+  const [selectedCrs, setSelectedCrs] = useState('EPSG:4326');
   const [activeTab, setActiveTab] = useState<TabId>('parcel');
 
   const [resolvedPnu, setResolvedPnu] = useState<string | null>(pnuFromContext ?? null);

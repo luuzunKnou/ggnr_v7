@@ -169,7 +169,11 @@ import Feature from 'ol/Feature';
 import { Style, Stroke, Fill } from 'ol/style';
 import { isEmpty as isEmptyExtent } from 'ol/extent';
 import { AerialViewLayerPanel } from '../_mapContents/aerialView/AerialViewLayerPanel';
-import { fitDroneUnitFiles, useAerialViewCheckedMarkers } from '../_mapContents/aerialView/useAerialViewCheckedMarkers';
+import {
+  openAerialDroneFileOnMap,
+  openAerialPanoFileOnMap,
+  useAerialViewCheckedMarkers,
+} from '../_mapContents/aerialView/useAerialViewCheckedMarkers';
 import { AerialMediaPointPopup } from '../_mapContents/aerialView/AerialMediaPointPopup';
 import { AerialPanoPointViewer } from '../_mapContents/aerialView/AerialPanoPointViewer';
 import { useAerialOrthoCheckedTiles } from '../_mapContents/aerialView/useAerialOrthoCheckedTiles';
@@ -473,7 +477,7 @@ export default function OpenLayersMap({
   const [orthoOverlapMenu, setOrthoOverlapMenu] = useState<{
     x: number;
     y: number;
-    items: { wuKey: number; label: string }[];
+    items: { wuKey: number; label: string; date: string }[];
   } | null>(null);
   const [orthoOverlapHoverWu, setOrthoOverlapHoverWu] = useState<number | null>(null);
   const [openSubPanel, setOpenSubPanel] = useState<
@@ -1671,22 +1675,23 @@ export default function OpenLayersMap({
     });
   };
   const aerialMarkerPopups = useAerialViewCheckedMarkers({
-    enabled: aerialPanelOpen || aerialViewCheckedIds.size > 0,
+    enabled: aerialViewCheckedIds.size > 0,
     checkedUnitIds: aerialViewCheckedIds,
-    showAll: aerialPanelOpen,
+    showAll: false,
     fitView: false,
-    onActivate: (unitId, kind) => {
-      activateAerialUnit(unitId);
-      if (kind === 'drone' || kind === 'panorama') {
-        setAerialListReveal({ id: unitId, kind, n: Date.now() });
+    onActivate: (unitId, kind, fileId) => {
+      const id = fileId || unitId;
+      activateAerialUnit(id);
+      if ((kind === 'drone' || kind === 'panorama') && fileId) {
+        setAerialListReveal({ id: fileId, kind, n: Date.now() });
       }
       setOrthoMetaWuKey(null);
     },
-    onDeactivate: (unitId) => {
+    onDeactivate: (id) => {
       setAerialViewCheckedIds((prev) => {
-        if (!prev.has(unitId)) return prev;
+        if (!prev.has(id)) return prev;
         const next = new Set(prev);
-        next.delete(unitId);
+        next.delete(id);
         return next;
       });
     },
@@ -1708,43 +1713,65 @@ export default function OpenLayersMap({
     setAerialListReveal({ id: unitId, kind: 'ortho', n: Date.now() });
     setOrthoMetaWuKey(wuKey);
   };
-  const checkedOrthoWuKeys = useMemo(() => {
+  const checkedOrthoTuKeys = useMemo(() => {
     const next = new Set<number>();
     for (const id of aerialViewCheckedIds) {
-      if (!id.startsWith('wu-')) continue;
-      const wuKey = Number(id.slice(3));
+      if (!id.startsWith('tu-')) continue;
+      const tuKey = Number(id.slice(3));
+      if (Number.isFinite(tuKey)) next.add(tuKey);
+    }
+    for (const unit of mockUnitsForKind('ortho')) {
+      if (!aerialViewCheckedIds.has(unit.id)) continue;
+      for (const file of unit.files) {
+        if (file.status === 'done' && file.tuKey != null) next.add(file.tuKey);
+      }
+    }
+    return [...next];
+  }, [aerialViewCheckedIds]);
+  const checkedOrthoWuKeys = useMemo(() => {
+    const next = new Set<number>();
+    for (const unit of mockUnitsForKind('ortho')) {
+      const unitOn = aerialViewCheckedIds.has(unit.id);
+      const fileOn = unit.files.some((file) => file.tuKey != null && aerialViewCheckedIds.has(file.id));
+      if (!unitOn && !fileOn) continue;
+      const wuKey = Number(unit.id.slice(3));
       if (Number.isFinite(wuKey)) next.add(wuKey);
     }
     return next;
   }, [aerialViewCheckedIds]);
   useAerialOrthoPanelBbox({
-    enabled: (aerialPanelOpen || checkedOrthoWuKeys.size > 0) && !leftOrthoBboxOn,
-    wuKeys: aerialPanelOpen ? undefined : [...checkedOrthoWuKeys],
-    fitView: false,
+    enabled: checkedOrthoTuKeys.length > 0 && !leftOrthoBboxOn,
+    tuKeys: checkedOrthoTuKeys,
     checkedWuKeys: checkedOrthoWuKeys,
+    fitView: false,
     highlightWuKey: orthoOverlapMenu ? orthoOverlapHoverWu : null,
     onPick: (hit) => {
-      const grouped = new Map<number, string>();
-      if (hit.overlaps && hit.overlaps.length > 1) {
-        for (const opt of hit.overlaps) {
-          const wuKey = Number(opt.value.split(':')[0]);
-          if (!Number.isFinite(wuKey) || grouped.has(wuKey)) continue;
-          const unit = mockUnitsForKind('ortho').find((row) => row.id === `wu-${wuKey}`);
-          grouped.set(wuKey, unit?.workName?.trim() || opt.label);
-        }
+      const byUnit = new Map<number, { wuKey: number; label: string; date: string }>();
+      const raw = hit.overlaps && hit.overlaps.length > 1 ? hit.overlaps : [`${hit.wuKey}:${hit.tuKey}`];
+      for (const opt of raw) {
+        const value = typeof opt === 'string' ? opt : opt.value;
+        const wuKey = Number(value.split(':')[0]);
+        if (!Number.isFinite(wuKey) || byUnit.has(wuKey)) continue;
+        const unit = mockUnitsForKind('ortho').find((row) => row.id === `wu-${wuKey}`);
+        byUnit.set(wuKey, {
+          wuKey,
+          label: unit?.workName?.trim() || (typeof opt === 'string' ? '' : opt.label),
+          date: unit?.workDate?.trim() || '',
+        });
       }
-      if (grouped.size > 1 && hit.clientX != null && hit.clientY != null) {
-        const width = 220;
-        const height = 40 + grouped.size * 32;
+      const picks = [...byUnit.values()];
+      if (picks.length > 1 && hit.clientX != null && hit.clientY != null) {
+        const width = 320;
+        const height = 36 + picks.length * 52;
         setOrthoOverlapMenu({
           x: Math.max(8, Math.min(hit.clientX + 8, window.innerWidth - width - 8)),
           y: Math.max(8, Math.min(hit.clientY + 8, window.innerHeight - height - 8)),
-          items: [...grouped.entries()].map(([wuKey, label]) => ({ wuKey, label })),
+          items: picks,
         });
         return;
       }
       setOrthoOverlapMenu(null);
-      toggleOrthoUnit(hit.wuKey);
+      toggleOrthoUnit(picks[0]?.wuKey ?? hit.wuKey);
     },
   });
   const orthoDataQueryTuKeys = mapContext?.orthoDataQueryTuKeys ?? [];
@@ -1758,7 +1785,11 @@ export default function OpenLayersMap({
   useOrthoExtentBboxLayer(orthoDataQueryBboxOn);
   useEffect(() => {
     if (orthoMetaWuKey == null) return;
-    if (!aerialViewCheckedIds.has(`wu-${orthoMetaWuKey}`)) setOrthoMetaWuKey(null);
+    const unit = mockUnitsForKind('ortho').find((row) => row.id === `wu-${orthoMetaWuKey}`);
+    const stillOn =
+      aerialViewCheckedIds.has(`wu-${orthoMetaWuKey}`) ||
+      Boolean(unit?.files.some((file) => aerialViewCheckedIds.has(file.id)));
+    if (!stillOn) setOrthoMetaWuKey(null);
   }, [aerialViewCheckedIds, orthoMetaWuKey]);
   useEffect(() => {
     if (!aerialViewPanelOpen) setOrthoOverlapMenu(null);
@@ -1770,7 +1801,10 @@ export default function OpenLayersMap({
   useEffect(() => {
     if (photoId) setOrthoMetaWuKey(null);
   }, [photoId]);
-  const checkedOrthoUnits = mockUnitsForKind('ortho').filter((unit) => aerialViewCheckedIds.has(unit.id));
+  const checkedOrthoUnits = mockUnitsForKind('ortho').filter(
+    (unit) =>
+      aerialViewCheckedIds.has(unit.id) || unit.files.some((file) => aerialViewCheckedIds.has(file.id))
+  );
   const orthoMetaUnit =
     (orthoMetaWuKey != null
       ? checkedOrthoUnits.find((unit) => unit.id === `wu-${orthoMetaWuKey}`)
@@ -2957,10 +2991,10 @@ export default function OpenLayersMap({
                 onClick={() => setOrthoOverlapMenu(null)}
               />
               <div
-                className="fixed z-[80] w-52 overflow-hidden rounded-md border border-border bg-background py-1 shadow-md"
+                className="fixed z-[80] max-h-80 w-80 overflow-y-auto rounded-md border border-border bg-background py-1 shadow-md"
                 style={{ left: orthoOverlapMenu.x, top: orthoOverlapMenu.y }}
               >
-                <p className="px-2.5 py-1 text-[11px] text-muted-foreground">
+                <p className="px-3 py-1.5 text-[11px] text-muted-foreground">
                   이 위치 {orthoOverlapMenu.items.length}건
                 </p>
                 {orthoOverlapMenu.items.map((item) => {
@@ -2968,17 +3002,22 @@ export default function OpenLayersMap({
                   return (
                     <label
                       key={item.wuKey}
-                      className="flex w-full cursor-pointer items-center gap-2 px-2.5 py-1.5 text-left text-xs hover:bg-muted"
+                      className="flex w-full cursor-pointer items-start gap-2 px-3 py-2 text-left hover:bg-muted"
                       onMouseEnter={() => setOrthoOverlapHoverWu(item.wuKey)}
                       onMouseLeave={() => setOrthoOverlapHoverWu(null)}
                     >
                       <input
                         type="checkbox"
-                        className="h-3.5 w-3.5 shrink-0 rounded border-gray-300"
+                        className="mt-0.5 h-3.5 w-3.5 shrink-0 rounded border-gray-300"
                         checked={on}
                         onChange={() => toggleOrthoUnit(item.wuKey)}
                       />
-                      <span className="min-w-0 flex-1 truncate">{item.label}</span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block whitespace-normal break-words text-xs leading-snug">{item.label}</span>
+                        {item.date ? (
+                          <span className="mt-0.5 block text-[11px] text-muted-foreground">{item.date}</span>
+                        ) : null}
+                      </span>
                     </label>
                   );
                 })}
@@ -3089,12 +3128,19 @@ export default function OpenLayersMap({
                     onCheckedChange={(next) => {
                       const added = [...next].filter((id) => !aerialViewCheckedIds.has(id));
                       setAerialViewCheckedIds(next);
-                      const map = mapInstanceRef.current;
-                      if (!map) return;
-                      for (const id of added) {
-                        fitDroneUnitFiles(map, id);
-                        aerialMarkerPopups.showDroneUnitFiles(id);
+                      if (added.length !== 1 || !added[0]?.startsWith('fu-')) return;
+                      const fileId = added[0];
+                      const drone = mockUnitsForKind('drone').find((unit) =>
+                        unit.files.some((file) => file.id === fileId)
+                      );
+                      if (drone) {
+                        openAerialDroneFileOnMap(drone.id, fileId);
+                        return;
                       }
+                      const pano = mockUnitsForKind('panorama').find((unit) =>
+                        unit.files.some((file) => file.id === fileId)
+                      );
+                      if (pano) openAerialPanoFileOnMap(pano.id, fileId);
                     }}
                     onClose={() => {
                       setIsAerialViewPanelExiting(true);
