@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { X } from 'lucide-react'
 import { MapSideListPanel } from '../../_mapComponents/MapSideListPanel'
+import { WtlConstructionLedgerShell } from './constructionLedger/WtlConstructionLedgerShell'
 import { WtlEquipmentShell } from './equipment/WtlEquipmentShell'
 import { WtlFacilityShell } from './facility/WtlFacilityShell'
 import { WtlMeterLocationShell } from './meterLocation/WtlMeterLocationShell'
@@ -64,6 +65,15 @@ export function WtlAdminEmptyShell(props: Props) {
   if (props.serEng === 'wtlSpatialAnalysis') {
     return (
       <WtlSpatialAnalysisShell
+        leftOffsetPx={props.leftOffsetPx}
+        onTotalWidthChange={props.onTotalWidthChange}
+        onClose={props.onClose}
+      />
+    )
+  }
+  if (props.serEng === 'wtlConstructionLedger') {
+    return (
+      <WtlConstructionLedgerShell
         leftOffsetPx={props.leftOffsetPx}
         onTotalWidthChange={props.onTotalWidthChange}
         onClose={props.onClose}
