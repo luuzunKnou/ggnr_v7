@@ -4,10 +4,12 @@ import { MapViewLink } from "@/app/(pages)/(index)/map-view-link"
 import { SystemManagementSection, type SystemItem } from "@/app/(pages)/(index)/system-management-section"
 import { SiteIndexShell } from "@/app/(pages)/(index)/site-index-shell"
 import { NoticeLibraryPreview } from "@/app/(pages)/(index)/notice-library-preview"
+import { IndexDashboardStats } from "@/app/(pages)/(index)/index-dashboard-stats"
 import {
   getSystemList,
   getSystemListDebug,
   getIndexSliderImages,
+  getIndexChartKeys,
 } from "@/service/configService"
 
 function loadSystemList(): { systems: SystemItem[]; error?: string; debug?: string } {
@@ -55,6 +57,7 @@ function buildParcelSlides(): Array<{ title: string; description: string; image?
 
 export default function DashboardPage() {
   const { systems: systemList, error: systemListError, debug: systemListDebug } = loadSystemList()
+  const indexCharts = getIndexChartKeys()
 
   return (
     <SiteIndexShell>
@@ -70,6 +73,11 @@ export default function DashboardPage() {
       <section className="-mb-8 -mt-5">
         <SystemManagementSection systems={systemList} />
       </section>
+
+      <IndexDashboardStats
+        charts={indexCharts}
+        systemColors={Object.fromEntries(systemList.map((s) => [s.sys_key, s.sys_col]))}
+      />
 
       {systemListError && (
         <section className="mb-12 rounded-lg border border-red-200 bg-red-50/50 dark:border-red-800 dark:bg-red-950/20 p-4">

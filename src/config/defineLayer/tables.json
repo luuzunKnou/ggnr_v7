@@ -648,6 +648,42 @@
     "define_table_source": "excel"
   },
   {
+    "define_table_name": "wtl_pres_hj_ps",
+    "define_table_kor_name": "wtl_pres_hj_ps",
+    "define_table_shp_type": "POLYGON",
+    "define_table_read_share": "P",
+    "define_table_write_share": "P",
+    "define_table_group": "",
+    "define_table_idx": "0",
+    "define_table_etc": "",
+    "define_table_schema": "layer",
+    "define_table_source": "shp"
+  },
+  {
+    "define_table_name": "wtl_pres_pm_ps",
+    "define_table_kor_name": "wtl_pres_pm_ps",
+    "define_table_shp_type": "POLYGON",
+    "define_table_read_share": "P",
+    "define_table_write_share": "P",
+    "define_table_group": "",
+    "define_table_idx": "0",
+    "define_table_etc": "",
+    "define_table_schema": "layer",
+    "define_table_source": "shp"
+  },
+  {
+    "define_table_name": "wtl_puri_dt_ps",
+    "define_table_kor_name": "wtl_puri_dt_ps",
+    "define_table_shp_type": "POLYGON",
+    "define_table_read_share": "P",
+    "define_table_write_share": "P",
+    "define_table_group": "",
+    "define_table_idx": "0",
+    "define_table_etc": "",
+    "define_table_schema": "layer",
+    "define_table_source": "shp"
+  },
+  {
     "define_table_name": "ufl_gman_ps",
     "define_table_kor_name": "천연가스맨홀",
     "define_table_shp_type": "POINT",
@@ -674,7 +710,7 @@
   {
     "define_table_name": "wtl_photo_ps",
     "define_table_kor_name": "wtl_photo_ps",
-    "define_table_shp_type": "POINT",
+    "define_table_shp_type": "POLYGON",
     "define_table_read_share": "P",
     "define_table_write_share": "P",
     "define_table_group": "공공측량",
@@ -4851,7 +4887,7 @@
   {
     "define_table_name": "wtl_leak_ps",
     "define_table_kor_name": "누수지점 및 복구내역",
-    "define_table_shp_type": "POINT",
+    "define_table_shp_type": "POLYGON",
     "define_table_read_share": "P",
     "define_table_write_share": "P",
     "define_table_group": "상수",
@@ -4941,7 +4977,7 @@
   {
     "define_table_name": "wtl_pipe_ps",
     "define_table_kor_name": "상수관로 심도",
-    "define_table_shp_type": "POINT",
+    "define_table_shp_type": "POLYGON",
     "define_table_read_share": "P",
     "define_table_write_share": "P",
     "define_table_group": "상수",
@@ -4977,7 +5013,7 @@
   {
     "define_table_name": "wtl_prga_ps",
     "define_table_kor_name": "수압계",
-    "define_table_shp_type": "POINT",
+    "define_table_shp_type": "POLYGON",
     "define_table_read_share": "P",
     "define_table_write_share": "P",
     "define_table_group": "상수",

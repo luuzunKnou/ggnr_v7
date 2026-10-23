@@ -28,6 +28,12 @@ import * as riverBasicPlanService from './riverBasicPlanService';
 import * as privateLandAnalysisService from './privateLandAnalysisService';
 import * as roadLedgerService from './roadLedgerService';
 import * as roadNetworkService from './roadNetworkService';
+import * as wtlNetworkService from './wtlNetworkService';
+import * as wtlOutageService from './wtlOutageService';
+import * as wtlLeakService from './wtlLeakService';
+import * as wtlSupplyPathService from './wtlSupplyPathService';
+import * as wtlTopologyService from './wtlTopologyService';
+import * as wtlMeterLocationService from './wtlMeterLocationService';
 import * as roadUseLedgerService from './roadUseLedgerService';
 import * as roadFrontageBuildingService from './roadFrontageBuildingService';
 import * as roadFrontageMarkerService from './roadFrontageMarkerService';
@@ -78,6 +84,7 @@ import * as qgisLayerControlService from './qgisLayerControlService';
 import * as userDataUploadService from './userDataUploadService';
 import * as systemControlService from './systemControlService';
 import * as splitLayerService from './splitLayerService';
+import * as dashboardStatsService from './dashboardStatsService';
 
 export {
   configService,
@@ -109,6 +116,12 @@ export {
   privateLandAnalysisService,
   roadLedgerService,
   roadNetworkService,
+  wtlNetworkService,
+  wtlOutageService,
+  wtlLeakService,
+  wtlSupplyPathService,
+  wtlTopologyService,
+  wtlMeterLocationService,
   roadUseLedgerService,
   roadFrontageBuildingService,
   roadFrontageMarkerService,
@@ -156,4 +169,5 @@ export {
   userDataUploadService,
   systemControlService,
   splitLayerService,
+  dashboardStatsService,
 };

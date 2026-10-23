@@ -107,8 +107,8 @@ export type RoadRankCodeDef = {
   toneHex: string;
 };
 
-/** 영양·경산 등 기본 (기존) */
-const ROAD_RANK_CODE_KO_DEFAULT: Record<string, RoadRankCodeDef> = {
+/** 영양·경산 등 기본. 대시보드도 이 표를 쓴다 */
+export const ROAD_RANK_CODE_KO: Record<string, RoadRankCodeDef> = {
   "1501": { label: "고속국도", toneHex: "#F44336" },
   "1502": { label: "일반국도", toneHex: "#E91E63" },
   "1503": { label: "특별시도", toneHex: "#9C27B0" },
@@ -146,10 +146,10 @@ export function isUljinRoadLedgerRankProject(project?: string | null): boolean {
 function getRoadRankCodeTable(project?: string | null): Record<string, RoadRankCodeDef> {
   return isUljinRoadLedgerRankProject(project)
     ? ROAD_RANK_CODE_KO_ULJIN
-    : ROAD_RANK_CODE_KO_DEFAULT;
+    : ROAD_RANK_CODE_KO;
 }
 
-function normalizeRoadRankCodeKey(raw: unknown, project?: string | null): string {
+export function normalizeRoadRankCodeKey(raw: unknown, project?: string | null): string {
   const table = getRoadRankCodeTable(project);
   const s = String(raw ?? "").trim().replace(/\s/g, "");
   if (!s) return "";
