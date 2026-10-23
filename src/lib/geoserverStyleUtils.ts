@@ -30,7 +30,10 @@ export type StyleProps = {
   fillColor?: string;
   strokeColor?: string;
   strokeWidth?: number;
+  /** 면 투명도. CSS fill-opacity */
   opacity?: number;
+  /** 선 투명도. CSS stroke-opacity. 선은 색 있는 선(뒤 값) */
+  strokeOpacity?: number;
   labelField?: string;
   size?: number; // 라벨 글자크기 (font-size)
   /** 점·심볼 표시 크기. CSS mark-size 상한(줌인 시 최대 픽셀) */
@@ -44,6 +47,7 @@ const DEFAULT_PROPS: StyleProps = {
   strokeColor: '#000000',
   strokeWidth: 1,
   opacity: 0.3,
+  strokeOpacity: 1,
   labelField: '',
   size: 14,
   markSize: 18,
@@ -200,8 +204,11 @@ export function parseSimpleStyleFromCss(cssText: string): {
       target.strokeColor = parts.length > 1 ? parts[parts.length - 1] : v;
     }
     else if (key === 'stroke-width') target.strokeWidth = parseFloat(v) || 1;
-    // "투명도" 입력은 fill-opacity만 반영 (stroke-opacity는 폴리곤에서 항상 1.0으로 고정되는 별개 값)
     else if (key === 'fill-opacity') target.opacity = parseFloat(v);
+    else if (key === 'stroke-opacity') {
+      const parts = v.split(',').map((p) => parseFloat(p.trim())).filter((n) => !Number.isNaN(n));
+      if (parts.length) target.strokeOpacity = parts[parts.length - 1];
+    }
     else if (key === 'font-size') target.size = parseFloat(v) || LABEL_STYLE_DEFAULTS.fontSize;
     else if (key === 'mark-size') {
       const n = parseFloat(v);
@@ -268,6 +275,7 @@ export function buildCssFromSimpleStyle(
   const s = styleProps.strokeColor ?? DEFAULT_PROPS.strokeColor;
   const sw = styleProps.strokeWidth ?? DEFAULT_PROPS.strokeWidth;
   const op = styleProps.opacity ?? DEFAULT_PROPS.opacity;
+  const strokeOp = styleProps.strokeOpacity ?? DEFAULT_PROPS.strokeOpacity;
   const label = styleProps.labelField?.trim();
   const fontSize = styleProps.size ?? DEFAULT_PROPS.size ?? LABEL_STYLE_DEFAULTS.fontSize;
 
@@ -291,22 +299,21 @@ export function buildCssFromSimpleStyle(
       geomLines.push(`    fill: ${f};`);
       geomLines.push(`    stroke: ${s};`);
       geomLines.push(`    stroke-width: ${sw};`);
-      geomLines.push(`    stroke-opacity: 0.5;`);
-      geomLines.push(`    fill-opacity: 0.5;`);
+      geomLines.push(`    stroke-opacity: ${strokeOp};`);
+      geomLines.push(`    fill-opacity: ${op};`);
       geomLines.push(`  };`);
     }
   } else if (geometryType === 'LINE') {
     // Line: 테두리 흰색(3px) + 메인 색(2px)
     geomLines.push(`  stroke: #FFFFFF, ${s};`);
     geomLines.push(`  stroke-width: 3, 2;`);
-    geomLines.push(`  stroke-opacity: 0.4, 0.5;`);
+    geomLines.push(`  stroke-opacity: 0.4, ${strokeOp};`);
   } else {
-    // POLYGON — 테두리는 항상 불투명, 면만 fill-opacity로 조절
     geomLines.push(`  fill: ${f};`);
     geomLines.push(`  stroke: ${s};`);
     geomLines.push(`  stroke-width: ${sw};`);
     geomLines.push(`  fill-opacity: ${op};`);
-    geomLines.push(`  stroke-opacity: 1.0;`);
+    geomLines.push(`  stroke-opacity: ${strokeOp};`);
   }
 
   const geomBlock = `* {\n${geomLines.join('\n')}\n  z-index: 0;\n}`;
@@ -344,6 +351,7 @@ export function buildThematicMapPolygonCss(styleProps: StyleProps): string {
   const s = styleProps.strokeColor ?? DEFAULT_PROPS.strokeColor!;
   const sw = styleProps.strokeWidth ?? DEFAULT_PROPS.strokeWidth!;
   const op = styleProps.opacity ?? DEFAULT_PROPS.opacity!;
+  const strokeOp = styleProps.strokeOpacity ?? DEFAULT_PROPS.strokeOpacity!;
   const label = styleProps.labelField?.trim() || THEMATIC_MAP_LABEL_EXPRESSION;
   const fontSize = styleProps.size ?? THEMATIC_MAP_LABEL_FONT_SIZE;
 
@@ -352,7 +360,7 @@ export function buildThematicMapPolygonCss(styleProps: StyleProps): string {
   stroke: ${s};
   stroke-width: ${sw};
   fill-opacity: ${op};
-  stroke-opacity: 1.0;
+  stroke-opacity: ${strokeOp};
 
   label: [${label}];
   label-anchor: 0.5 0.5;
