@@ -1136,8 +1136,7 @@ function MapLayoutContent({
     (developmentChargeOpen ? developmentChargePanelWidth : 0) +
     (developmentChargeDetailOpen ? developmentChargeDetailWidth : 0) +
     (riverIllegalOccupationOpen ? riverIllegalOccupationPanelWidth : 0) +
-    (riverIllegalOccupationDetailOpen ? riverIllegalOccupationDetailWidth : 0) +
-    (wtlAdminEmptyOpen ? wtlAdminEmptyTotalWidth : 0)
+    (riverIllegalOccupationDetailOpen ? riverIllegalOccupationDetailWidth : 0)
   const searchBarOffset = {
     leftPx: SIDEBAR_WIDTH + totalListPanelWidth + SEARCH_BAR_MARGIN,
     topPx: 16,
@@ -1314,9 +1313,6 @@ function MapLayoutContent({
   const riverIllegalOccupationDetailLeftPx =
     riverIllegalOccupationPanelLeftPx +
     (riverIllegalOccupationOpen ? riverIllegalOccupationPanelWidth : 0)
-  const wtlAdminEmptyPanelLeftPx =
-    riverIllegalOccupationDetailLeftPx +
-    (riverIllegalOccupationDetailOpen ? riverIllegalOccupationDetailWidth : 0)
   const mapPaddingLeft = SIDEBAR_WIDTH + totalListPanelWidth
   /** 패딩은 useLayoutEffect — 자식 useEffect(도로대장 fit 등)보다 먼저 적용되어야 함.
    * 거리뷰 ON일 때만 맵 중심(A)을 새 센터마크 위치에 맞춤.
@@ -1917,12 +1913,6 @@ function MapLayoutContent({
   const handleCloseRiverIllegalOccupation = () => {
     setRiverIllegalOccupationSelectedId(null)
     setOpened(openedWindows.filter((w) => w !== RIVER_ILLEGAL_OCCUPATION_OPENED_KEY))
-  }
-
-  const handleCloseWtlAdminEmpty = () => {
-    setWtlAdminEmptyTotalWidth(0)
-    const next = openedWindows.filter((w) => !isWtlAdminEmptyOpenedToken(w))
-    setOpened(next)
   }
 
   useEffect(() => {
@@ -3869,14 +3859,6 @@ function MapLayoutContent({
                 />
               </MapSideListPanel>
             </div>
-          )}
-          {wtlAdminEmptyOpen && wtlAdminEmptySerEng && (
-            <WtlAdminEmptyShell
-              serEng={wtlAdminEmptySerEng}
-              leftOffsetPx={wtlAdminEmptyPanelLeftPx}
-              onTotalWidthChange={setWtlAdminEmptyTotalWidth}
-              onClose={handleCloseWtlAdminEmpty}
-            />
           )}
           <div className="flex-1 min-w-0 relative">
             <div className="pointer-events-auto">
