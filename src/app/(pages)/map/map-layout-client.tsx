@@ -171,6 +171,11 @@ import { UseFeeDetailPanel } from "./_mapContents/useFee/UseFeeDetailPanel"
 import { clearForeignUseFeeWmsLayers } from "./_mapContents/useFee/useFeeMapSync"
 import { GroundwaterPermitListPanel } from "./_mapContents/groundwaterPermit/GroundwaterPermitListPanel"
 import { GroundwaterPermitDetailPanel } from "./_mapContents/groundwaterPermit/GroundwaterPermitDetailPanel"
+import { WtlAdminEmptyShell } from "./_mapContents/wtlAdmin/WtlAdminEmpty.shell"
+import {
+  findOpenedWtlAdminEmptySerEng,
+  isWtlAdminEmptyOpenedToken,
+} from "./_mapContents/wtlAdmin/wtlAdminBinding"
 import { FmsLinkageListPanel } from "./_mapContents/fmsLinkage/FmsLinkageListPanel"
 import { FmsLinkageDetailPanel } from "./_mapContents/fmsLinkage/FmsLinkageDetailPanel"
 import { isFmsOpenedToken } from "@/lib/fmsLinkage/fmsBinding"
@@ -738,6 +743,9 @@ function MapLayoutContent({
   const useFeeSerEng = findOpenedUseFeeSerEng(openedWindows)
   const useFeeOpen = Boolean(useFeeSerEng)
   const groundwaterPermitOpen = openedWindows.includes(GROUNDWATER_PERMIT_OPENED_KEY)
+  const wtlAdminEmptySerEng = findOpenedWtlAdminEmptySerEng(openedWindows)
+  const wtlAdminEmptyOpen = Boolean(wtlAdminEmptySerEng)
+  const [wtlAdminEmptyTotalWidth, setWtlAdminEmptyTotalWidth] = useState(0)
   const fmsLinkageOpen = openedWindows.some((w) => isFmsOpenedToken(w))
   const fmsLinkageDetailOpen = fmsLinkageOpen && Boolean(fmsLinkageDetailId)
   const privateLandAnalysisOpen = openedWindows.includes(PRIVATE_LAND_ANALYSIS_OPENED_KEY)
@@ -1104,7 +1112,8 @@ function MapLayoutContent({
     (developmentChargeOpen ? developmentChargePanelWidth : 0) +
     (developmentChargeDetailOpen ? developmentChargeDetailWidth : 0) +
     (riverIllegalOccupationOpen ? riverIllegalOccupationPanelWidth : 0) +
-    (riverIllegalOccupationDetailOpen ? riverIllegalOccupationDetailWidth : 0)
+    (riverIllegalOccupationDetailOpen ? riverIllegalOccupationDetailWidth : 0) +
+    (wtlAdminEmptyOpen ? wtlAdminEmptyTotalWidth : 0)
   const searchBarOffset = {
     leftPx: SIDEBAR_WIDTH + totalListPanelWidth + SEARCH_BAR_MARGIN,
     topPx: 16,
@@ -1273,6 +1282,9 @@ function MapLayoutContent({
   const riverIllegalOccupationDetailLeftPx =
     riverIllegalOccupationPanelLeftPx +
     (riverIllegalOccupationOpen ? riverIllegalOccupationPanelWidth : 0)
+  const wtlAdminEmptyPanelLeftPx =
+    riverIllegalOccupationDetailLeftPx +
+    (riverIllegalOccupationDetailOpen ? riverIllegalOccupationDetailWidth : 0)
   const mapPaddingLeft = SIDEBAR_WIDTH + totalListPanelWidth
   /** 패딩은 useLayoutEffect — 자식 useEffect(도로대장 fit 등)보다 먼저 적용되어야 함.
    * 거리뷰 ON일 때만 맵 중심(A)을 새 센터마크 위치에 맞춤.
@@ -1851,6 +1863,12 @@ function MapLayoutContent({
     setOpened(openedWindows.filter((w) => w !== RIVER_ILLEGAL_OCCUPATION_OPENED_KEY))
   }
 
+  const handleCloseWtlAdminEmpty = () => {
+    setWtlAdminEmptyTotalWidth(0)
+    const next = openedWindows.filter((w) => !isWtlAdminEmptyOpenedToken(w))
+    setOpened(next)
+  }
+
   useEffect(() => {
     if (!roadUseLedgerOpen) setRoadUseLedgerDetailId(null)
   }, [roadUseLedgerOpen])
@@ -2003,6 +2021,10 @@ function MapLayoutContent({
   useEffect(() => {
     if (!riverIllegalOccupationOpen) setRiverIllegalOccupationSelectedId(null)
   }, [riverIllegalOccupationOpen])
+
+  useEffect(() => {
+    if (!wtlAdminEmptyOpen) setWtlAdminEmptyTotalWidth(0)
+  }, [wtlAdminEmptyOpen])
 
   useEffect(() => {
     if (!radiationShelterOpen) setRadiationShelterDetailId(null)
@@ -3745,6 +3767,14 @@ function MapLayoutContent({
                 />
               </MapSideListPanel>
             </div>
+          )}
+          {wtlAdminEmptyOpen && wtlAdminEmptySerEng && (
+            <WtlAdminEmptyShell
+              serEng={wtlAdminEmptySerEng}
+              leftOffsetPx={wtlAdminEmptyPanelLeftPx}
+              onTotalWidthChange={setWtlAdminEmptyTotalWidth}
+              onClose={handleCloseWtlAdminEmpty}
+            />
           )}
           <div className="flex-1 min-w-0 relative">
             <div className="pointer-events-auto">

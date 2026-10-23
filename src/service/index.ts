@@ -29,6 +29,12 @@ import * as privateLandAnalysisService from './privateLandAnalysisService';
 import * as roadLedgerService from './roadLedgerService';
 import * as roadVideoTrackService from './roadVideoTrackService';
 import * as roadNetworkService from './roadNetworkService';
+import * as wtlNetworkService from './wtlNetworkService';
+import * as wtlOutageService from './wtlOutageService';
+import * as wtlLeakService from './wtlLeakService';
+import * as wtlSupplyPathService from './wtlSupplyPathService';
+import * as wtlTopologyService from './wtlTopologyService';
+import * as wtlMeterLocationService from './wtlMeterLocationService';
 import * as roadUseLedgerService from './roadUseLedgerService';
 import * as roadFrontageBuildingService from './roadFrontageBuildingService';
 import * as roadFrontageMarkerService from './roadFrontageMarkerService';
@@ -78,6 +84,7 @@ import * as roadWorkHandbookService from './roadWorkHandbookService';
 import * as qgisLayerControlService from './qgisLayerControlService';
 import * as userDataUploadService from './userDataUploadService';
 import * as systemControlService from './systemControlService';
+import * as dashboardStatsService from './dashboardStatsService';
 import * as detailWondoService from './detailWondoService';
 import * as individualLandPriceService from './individualLandPriceService';
 
@@ -112,6 +119,12 @@ export {
   roadLedgerService,
   roadVideoTrackService,
   roadNetworkService,
+  wtlNetworkService,
+  wtlOutageService,
+  wtlLeakService,
+  wtlSupplyPathService,
+  wtlTopologyService,
+  wtlMeterLocationService,
   roadUseLedgerService,
   roadFrontageBuildingService,
   roadFrontageMarkerService,
@@ -160,4 +173,5 @@ export {
   systemControlService,
   detailWondoService,
   individualLandPriceService,
+  dashboardStatsService,
 };

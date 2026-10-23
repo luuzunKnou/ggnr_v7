@@ -143,13 +143,16 @@ export function isUljinRoadLedgerRankProject(project?: string | null): boolean {
   return resolveRoadLedgerProjectKey(project) === "build_uj";
 }
 
-function getRoadRankCodeTable(project?: string | null): Record<string, RoadRankCodeDef> {
+export function getRoadRankCodeTable(project?: string | null): Record<string, RoadRankCodeDef> {
   return isUljinRoadLedgerRankProject(project)
     ? ROAD_RANK_CODE_KO_ULJIN
     : ROAD_RANK_CODE_KO_DEFAULT;
 }
 
-function normalizeRoadRankCodeKey(raw: unknown, project?: string | null): string {
+/** 대시보드 등 — 기본(비울진) 코드표. 프로젝트별은 getRoadRankCodeTable 사용 */
+export const ROAD_RANK_CODE_KO = ROAD_RANK_CODE_KO_DEFAULT;
+
+export function normalizeRoadRankCodeKey(raw: unknown, project?: string | null): string {
   const table = getRoadRankCodeTable(project);
   const s = String(raw ?? "").trim().replace(/\s/g, "");
   if (!s) return "";

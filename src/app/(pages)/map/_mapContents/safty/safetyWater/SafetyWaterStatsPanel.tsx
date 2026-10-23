@@ -229,6 +229,10 @@ function useMergedSeries(blocks: StatsKindBlock[]) {
   }, [blocks]);
 }
 
+function estimateAxisLabelWidth(text: string, fontSize: number): number {
+  return Math.ceil(text.length * fontSize * 0.56);
+}
+
 function StatsChartSvg({
   width,
   height,
@@ -242,6 +246,10 @@ function StatsChartSvg({
   waterThresholds,
   timeType,
   padRight = 10,
+  padLeft = 40,
+  axisLabelOuterGap,
+  axisLabelPlotGap,
+  hideAxisYear = false,
 }: {
   width: number;
   height: number;
@@ -256,9 +264,41 @@ function StatsChartSvg({
   timeType: FloodTimeType;
   /** 우측 여백(기준수위 수치 라벨용). 좌측과 달리 플롯을 넓게 쓰기 위해 최소치만 둠 */
   padRight?: number;
+  /** 좌측 여백(강수량 축·눈금 라벨용) */
+  padLeft?: number;
+  /** 카드 테두리 ↔ 축 눈금 글자 여백 (대시보드 등) */
+  axisLabelOuterGap?: number;
+  /** 축 눈금 글자 ↔ 그래프 여백 (대시보드 등) */
+  axisLabelPlotGap?: number;
+  /** x축 날짜에서 연도·연도 구분선 숨김 */
+  hideAxisYear?: boolean;
 }) {
-  const padX = 40;
-  const padR = Math.max(8, padRight);
+  const compactAxis = axisLabelOuterGap != null && axisLabelPlotGap != null;
+  const outerGap = axisLabelOuterGap ?? 4;
+  const plotGap = axisLabelPlotGap ?? 3;
+  let padX = padLeft;
+  let padR = Math.max(8, padRight);
+  let rainLabelX = 4;
+  let waterLabelOffset = 3;
+
+  if (compactAxis) {
+    rainLabelX = outerGap;
+    waterLabelOffset = plotGap;
+    if (showRain) {
+      const rainLabelW = Math.max(
+        estimateAxisLabelWidth(rainRange.max.toFixed(1), 9),
+        estimateAxisLabelWidth(rainRange.min.toFixed(1), 9)
+      );
+      padX = outerGap + rainLabelW + plotGap;
+    }
+    if (showWater) {
+      const waterLabelW = Math.max(
+        estimateAxisLabelWidth(waterRange.max.toFixed(2), 8),
+        estimateAxisLabelWidth(waterRange.min.toFixed(2), 8)
+      );
+      padR = outerGap + waterLabelW + plotGap;
+    }
+  }
   const axisY = height - 28;
   const labelY = height - 8;
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);
@@ -319,7 +359,8 @@ function StatsChartSvg({
     for (let index = 0; index < dates.length; index++) {
       const date = dates[index];
       const year = yearFromStatBucket(date);
-      const includeYear = year != null && firstIndexOfYear.get(year) === index;
+      const includeYear =
+        !hideAxisYear && year != null && firstIndexOfYear.get(year) === index;
       const isEdge = index === 0 || index === dates.length - 1;
       const onStride = index % labelEvery === 0;
       if (!isEdge && !includeYear && !onStride) continue;
@@ -365,7 +406,7 @@ function StatsChartSvg({
       anchor:
         p.index === 0 ? ('start' as const) : p.index === dates.length - 1 ? ('end' as const) : ('middle' as const),
     }));
-  }, [dates, firstIndexOfYear, labelEvery, width, padX, padR, timeType]);
+  }, [dates, firstIndexOfYear, labelEvery, width, padX, padR, timeType, hideAxisYear]);
 
   const hoverDate = hoverIndex != null ? dates[hoverIndex] : null;
   const hoverRain = hoverDate && showRain ? rainByDate.get(hoverDate)?.value : null;
@@ -562,7 +603,7 @@ function StatsChartSvg({
         {rightSideLabelYs.map((lab) => (
           <text
             key={`lab-${lab.key}`}
-            x={plotRight + 3}
+            x={plotRight + waterLabelOffset}
             y={lab.y + 3}
             fontSize="8"
             textAnchor="start"
@@ -577,7 +618,8 @@ function StatsChartSvg({
         {showWater ? (
           <line x1={width - padR} y1="12" x2={width - padR} y2={axisY} stroke="#cbd5e1" />
         ) : null}
-        {yearBoundaryIndexes.map((idx) => {
+        {!hideAxisYear
+          ? yearBoundaryIndexes.map((idx) => {
           const x = pointX(dates, idx, width, padX, padR);
           return (
             <line
@@ -591,7 +633,8 @@ function StatsChartSvg({
               strokeDasharray="4 3"
             />
           );
-        })}
+        })
+          : null}
         {rainPoints ? (
           <AnimatedChartPolyline points={rainPoints} stroke={RAIN_COLOR} animKey={`rain:${lineAnimKey}`} />
         ) : null}
@@ -631,10 +674,10 @@ function StatsChartSvg({
         ))}
         {showRain ? (
           <>
-            <text x="4" y="18" fontSize="9" fill={RAIN_COLOR}>
+            <text x={rainLabelX} y="18" fontSize="9" fill={RAIN_COLOR}>
               {rainRange.max.toFixed(1)}
             </text>
-            <text x="4" y={axisY - 2} fontSize="9" fill={RAIN_COLOR}>
+            <text x={rainLabelX} y={axisY - 2} fontSize="9" fill={RAIN_COLOR}>
               {rainRange.min.toFixed(1)}
             </text>
           </>
@@ -882,15 +925,14 @@ function ChartExpandFloatingModal({
   );
 }
 
-function MergedChart({
-  blocks,
-  timeType,
-  waterThresholds,
-}: {
-  blocks: StatsKindBlock[];
-  timeType: FloodTimeType;
-  waterThresholds?: SafetyWaterLevelThresholds | null;
-}) {
+function useStatsChartLayout(
+  blocks: StatsKindBlock[],
+  timeType: FloodTimeType,
+  waterThresholds?: SafetyWaterLevelThresholds | null,
+  minChartWidth = 240
+) {
+  const sectionRef = useRef<HTMLDivElement>(null);
+  const [chartWidth, setChartWidth] = useState(320);
   const series = useMergedSeries(blocks);
   const {
     dates,
@@ -908,23 +950,17 @@ function MergedChart({
   const showThresholdUi = !!(showWater && waterThresholds);
   const rainRange = rainRangeRaw;
   const waterRange = expandWaterRange(waterRangeRaw, showThresholdUi ? waterThresholds : null);
-  const colSpan = 1 + (showRain ? 1 : 0) + (showWater ? 1 : 0);
-  const sectionRef = useRef<HTMLDivElement>(null);
-  const [chartWidth, setChartWidth] = useState(320);
-  const [expanded, setExpanded] = useState(false);
-  const chartHeight = 168;
-  // 우측 수위 최대·최소(+기준수위) 라벨 여유
   const chartPadRight = showWater ? 30 : 10;
 
   useEffect(() => {
     const el = sectionRef.current;
     if (!el) return;
-    const apply = () => setChartWidth(Math.max(240, Math.floor(el.clientWidth)));
+    const apply = () => setChartWidth(Math.max(minChartWidth, Math.floor(el.clientWidth)));
     apply();
     const ro = new ResizeObserver(apply);
     ro.observe(el);
     return () => ro.disconnect();
-  }, [showThresholdUi]);
+  }, [minChartWidth, showThresholdUi]);
 
   const chartProps = {
     dates,
@@ -936,8 +972,106 @@ function MergedChart({
     showWater,
     waterThresholds: showThresholdUi ? waterThresholds : null,
     timeType,
+    padLeft: 40,
     padRight: chartPadRight,
   };
+
+  return {
+    sectionRef,
+    chartWidth,
+    chartProps,
+    chartPadRight,
+    showRain,
+    showWater,
+    series,
+    dates,
+    rows,
+    loading,
+  };
+}
+
+/** 침수현황 기간별 차트 — 그래프·범례만 (대시보드 등 임베드용) */
+export function SafetyWaterStatsChartOnly({
+  blocks,
+  timeType,
+  waterThresholds = null,
+  chartHeight = 168,
+  padLeft,
+  padRight,
+  axisLabelOuterGap,
+  axisLabelPlotGap,
+  hideAxisYear,
+  legendTopGap = 0,
+}: {
+  blocks: StatsKindBlock[];
+  timeType: FloodTimeType;
+  waterThresholds?: SafetyWaterLevelThresholds | null;
+  chartHeight?: number;
+  padLeft?: number;
+  padRight?: number;
+  axisLabelOuterGap?: number;
+  axisLabelPlotGap?: number;
+  hideAxisYear?: boolean;
+  /** 범례(강수량·수위) 위 여백(px) — 대시보드 등 */
+  legendTopGap?: number;
+}) {
+  const { sectionRef, chartWidth, chartProps, showRain, showWater, dates, loading } = useStatsChartLayout(
+    blocks,
+    timeType,
+    waterThresholds,
+    120
+  );
+
+  if (dates.length === 0) {
+    return (
+      <p className="text-xs leading-snug text-muted-foreground">{loading ? '불러오는 중…' : '기간 현황이 없습니다.'}</p>
+    );
+  }
+
+  return (
+    <div ref={sectionRef} className="flex h-full min-h-0 w-full flex-col overflow-hidden">
+      <div className="mb-0 shrink-0" style={legendTopGap > 0 ? { marginTop: legendTopGap } : undefined}>
+        <ChartLegend showRain={showRain} showWater={showWater} />
+      </div>
+      <div className="min-h-0 w-full flex-1 overflow-hidden">
+        <StatsChartSvg
+          width={chartWidth}
+          height={chartHeight}
+          {...chartProps}
+          padLeft={padLeft ?? chartProps.padLeft}
+          padRight={padRight ?? chartProps.padRight}
+          axisLabelOuterGap={axisLabelOuterGap}
+          axisLabelPlotGap={axisLabelPlotGap}
+          hideAxisYear={hideAxisYear}
+        />
+      </div>
+    </div>
+  );
+}
+
+function MergedChart({
+  blocks,
+  timeType,
+  waterThresholds,
+}: {
+  blocks: StatsKindBlock[];
+  timeType: FloodTimeType;
+  waterThresholds?: SafetyWaterLevelThresholds | null;
+}) {
+  const {
+    sectionRef,
+    chartWidth,
+    chartProps,
+    chartPadRight,
+    showRain,
+    showWater,
+    rows,
+    loading,
+  } = useStatsChartLayout(blocks, timeType, waterThresholds);
+  const [expanded, setExpanded] = useState(false);
+  const chartHeight = 168;
+  const colSpan = 1 + (showRain ? 1 : 0) + (showWater ? 1 : 0);
+  const showThresholdUi = !!(showWater && waterThresholds);
 
   const avgRain = (() => {
     const vals = rows.map((r) => r.rain?.value).filter((v): v is number => v != null);
