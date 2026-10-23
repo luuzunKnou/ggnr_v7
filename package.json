@@ -73,6 +73,7 @@
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "tailwind-merge": "^3.4.0",
+    "three": "^0.186.1",
     "undici": "^7.28.0",
     "xlsx": "^0.18.5",
     "xlsx-js-style": "^1.2.0"
@@ -84,6 +85,7 @@
     "@types/pg": "^8.16.0",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@types/three": "^0.186.0",
     "copy-webpack-plugin": "^12.0.2",
     "drizzle-kit": "^0.31.8",
     "eslint": "^9",

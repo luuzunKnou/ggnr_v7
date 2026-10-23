@@ -11,6 +11,8 @@ export const WTL_ADMIN_EMPTY_SER_ENGS = [
 ] as const
 
 export type WtlAdminEmptySerEng = (typeof WTL_ADMIN_EMPTY_SER_ENGS)[number]
+/** Workspace 등에서 쓰는 별칭 */
+export type WtlAdminSerEng = WtlAdminEmptySerEng
 
 export type WtlAdminEmptyBinding = {
   serEng: WtlAdminEmptySerEng

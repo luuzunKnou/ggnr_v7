@@ -143,7 +143,7 @@ export function isUljinRoadLedgerRankProject(project?: string | null): boolean {
   return resolveRoadLedgerProjectKey(project) === "build_uj";
 }
 
-function getRoadRankCodeTable(project?: string | null): Record<string, RoadRankCodeDef> {
+export function getRoadRankCodeTable(project?: string | null): Record<string, RoadRankCodeDef> {
   return isUljinRoadLedgerRankProject(project)
     ? ROAD_RANK_CODE_KO_ULJIN
     : ROAD_RANK_CODE_KO;

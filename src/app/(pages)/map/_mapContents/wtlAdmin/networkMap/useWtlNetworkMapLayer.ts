@@ -116,23 +116,23 @@ export function useWtlNetworkMapLayer({
     publishExtent()
 
     const clickKey = map.on('singleclick', async (evt: MapBrowserEvent<PointerEvent>) => {
-      const keys = [...keysRef.current]
-      const sources = [...sourcesRef.current]
-      if (keys.length === 0 || sources.length === 0) return
-      try {
-        const res = await call('', 'POST', {
-          service: 'wtlNetworkService',
-          action: 'getWtlNetworkAtPoint',
-          params: {
-            x: evt.coordinate[0],
-            y: evt.coordinate[1],
-            layerKeys: keys,
-            mapSources: sources,
-            tolerance: 12,
-          },
-        })
-        const row = (res?.data ?? res)?.row as WtlNetworkRow | null | undefined
-        if (row) onSelectRef.current(row)
+        const keys = [...keysRef.current]
+        const sources = [...sourcesRef.current]
+        if (keys.length === 0 || sources.length === 0) return
+        try {
+          const res = await call('', 'POST', {
+            service: 'wtlNetworkService',
+            action: 'getWtlNetworkAtPoint',
+            params: {
+              x: evt.coordinate[0],
+              y: evt.coordinate[1],
+              layerKeys: keys,
+              mapSources: sources,
+              tolerance: 12,
+            },
+          })
+          const row = (res?.data ?? res)?.row as WtlNetworkRow | null | undefined
+          if (row) onSelectRef.current(row)
       } catch {
         /* ignore */
       }

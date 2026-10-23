@@ -1,5 +1,5 @@
 import type { ReactNode } from "react"
-import { Settings, Database, Wrench, GitBranch, BarChart3 } from "lucide-react"
+import { Settings, Database, Wrench, GitBranch, BarChart3, Box } from "lucide-react"
 import { DbManagerContent } from "./DbManagerContent"
 import { SystemListManager } from "./SystemListManager"
 import { ServiceListManager } from "./ServiceListManager"
@@ -27,6 +27,7 @@ import { SystemIntegrationManager } from "./SystemIntegrationManager"
 import { GeocodingTestPanel } from "./GeocodingTestPanel"
 import { SourceCodeUploaderContent } from "./SourceCodeUploaderContent"
 import { VersionManagerContent } from "./VersionManagerContent"
+import { ThreeJsContent } from "./ThreeJsContent"
 import type { AdminConsoleMenuGroup } from "@/app/(pages)/_components/AdminConsoleLayout"
 import { DEV_CONSOLE_MENUS, type DevConsoleMenuId } from "@/lib/consoleMenuAccess/menus/dev"
 
@@ -94,6 +95,12 @@ export const DEV_MENU_GROUPS: readonly AdminConsoleMenuGroup[] = [
     label: "버전관리",
     icon: GitBranch,
     menuIds: ["sourceCodeUploader", "versionManager"],
+  },
+  {
+    id: "featureTest",
+    label: "기능테스트",
+    icon: Box,
+    menuIds: ["threeJs"],
   },
 ]
 
@@ -183,6 +190,8 @@ export function getDevMenuDescription(menuId: string): string {
       return "WKT/비표준 좌표계 LAS를 EPSG:4326으로 변환"
     case "orthophotoManager":
       return "GeoTIFF 그룹 목록 기반 일괄 변환(VRT합본) 및 XYZ JPEG 타일(tiles_jpg)"
+    case "threeJs":
+      return "Three.js WebGL 렌더·기능 테스트"
     default:
       return `${devMenuLabel(menuId)} 설정 화면입니다. (구현 예정)`
   }
@@ -344,6 +353,12 @@ export function renderDevMenuContent(menuId: string): ReactNode {
       return (
         <div className="flex flex-col overflow-hidden min-h-0 h-[calc(100vh-14rem)]">
           <OrthophotoManagerContent />
+        </div>
+      )
+    case "threeJs":
+      return (
+        <div className="flex flex-col overflow-hidden min-h-0 h-[calc(100vh-14rem)]">
+          <ThreeJsContent />
         </div>
       )
     default:
