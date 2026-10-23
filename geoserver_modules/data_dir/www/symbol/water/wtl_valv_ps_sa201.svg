@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg id="_레이어_2" data-name="레이어 2" xmlns="http://www.w3.org/2000/svg" width="12.7968" height="12.0776" viewBox="0 0 12.7968 12.0776" data-ggnr-symbol-pad="1">
+  <rect x="0" y="0" width="12.7968" height="12.0776" fill="#ffffff" fill-opacity="0"/>
+  <defs>
+    <style>
+      .cls-1 {
+        fill: #fff;
+      }
+
+      .cls-2 {
+        fill: #e7211a;
+      }
+    </style>
+  </defs>
+  <g id="_레이어_1-2" data-name="레이어 1">
+    <g id="wtl_valv_ps_sa201">
+      <g id="_레이어_32" data-name="레이어 32">
+        <g>
+          <path class="cls-2" d="M 3.0484,6.7388H 1.4884v -1.42h 1.56V 1.5988l 6.45,3.72h 1.81v 1.42h -1.81l -6.45,3.73v -3.73ZM 4.4684,8.0188l 3.43,-1.98 -3.43,-1.98v 3.96Z"/>
+          <path class="cls-1" d="M 3.2984,2.0388l 6.13,3.54h 1.62v 0.92h -1.62l -6.13,3.54v -3.54H 1.7384v -0.92h 1.56V 2.0388h 0ZM 4.2184,8.4488l 4.18,-2.41L 4.2184,3.6188v 4.82h 0ZM 2.7984,1.1688v 3.91H 1.2384v 1.92h 1.56v 3.91l 0.75,-0.43 6.02,-3.48h 1.99v -1.92h -1.99L 3.5484,1.5988l -0.75,-0.43h 0ZM 4.7184,7.5788v -3.09l 2.68,1.55 -2.68,1.55h 0Z"/>
+        </g>
+      </g>
+    </g>
+  </g>
+</svg>
