@@ -1,12 +1,12 @@
 <layer>
   <name>swl_manh_ps_etc</name>
-  <id>LayerInfoImpl--78c241d:1a151a32358:-695c</id>
+  <id>LayerInfoImpl--4d2f0c14:1a1671e8ffa:-7eaf</id>
   <type>VECTOR</type>
   <defaultStyle>
     <id>StyleInfoImpl-7b45823a:1a113f17c5f:-7b58</id>
   </defaultStyle>
   <resource class="featureType">
-    <id>FeatureTypeInfoImpl--78c241d:1a151a32358:-695d</id>
+    <id>FeatureTypeInfoImpl--4d2f0c14:1a1671e8ffa:-7eb0</id>
   </resource>
   <queryable>true</queryable>
   <opaque>false</opaque>
@@ -14,6 +14,6 @@
     <logoWidth>0</logoWidth>
     <logoHeight>0</logoHeight>
   </attribution>
-  <dateCreated>2026-10-22 00:04:38.944 UTC</dateCreated>
-  <dateModified>2026-10-22 00:04:39.477 UTC</dateModified>
+  <dateCreated>2026-10-23 05:08:21.553 UTC</dateCreated>
+  <dateModified>2026-10-23 05:08:21.721 UTC</dateModified>
 </layer>

@@ -8,8 +8,8 @@
           <sld:PointSymbolizer>
             <sld:Graphic>
               <sld:ExternalGraphic>
-                <sld:OnlineResource xmlns:xlink="http://www.w3.org/1999/xlink" xlink:type="simple" xlink:href="http://127.0.0.1:8090/geoserver/www/symbol/water/swl_spew_ps.png"/>
-                <sld:Format>image/png</sld:Format>
+                <sld:OnlineResource xmlns:xlink="http://www.w3.org/1999/xlink" xlink:type="simple" xlink:href="http://127.0.0.1:8090/geoserver/www/symbol/sewer/swl_spew_ps.svg"/>
+                <sld:Format>image/svg+xml</sld:Format>
               </sld:ExternalGraphic>
               <sld:Size>
                 <ogc:Function name="min">
@@ -26,7 +26,7 @@
                           </ogc:Function>
                         </ogc:Div>
                       </ogc:Function>
-                      <ogc:Literal>4.0</ogc:Literal>
+                      <ogc:Literal>4</ogc:Literal>
                     </ogc:Mul>
                   </ogc:Add>
                 </ogc:Function>

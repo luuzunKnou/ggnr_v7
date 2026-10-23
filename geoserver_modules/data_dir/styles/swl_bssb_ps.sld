@@ -7,18 +7,10 @@
         <sld:Rule>
           <sld:PointSymbolizer>
             <sld:Graphic>
-              <sld:Mark>
-                <sld:WellKnownName>circle</sld:WellKnownName>
-                <sld:Fill>
-                  <sld:CssParameter name="fill">#2196F3</sld:CssParameter>
-                  <sld:CssParameter name="fill-opacity">0.5</sld:CssParameter>
-                </sld:Fill>
-                <sld:Stroke>
-                  <sld:CssParameter name="stroke">#FFFFFF</sld:CssParameter>
-                  <sld:CssParameter name="stroke-opacity">0.5</sld:CssParameter>
-                  <sld:CssParameter name="stroke-width">1.5</sld:CssParameter>
-                </sld:Stroke>
-              </sld:Mark>
+              <sld:ExternalGraphic>
+                <sld:OnlineResource xmlns:xlink="http://www.w3.org/1999/xlink" xlink:type="simple" xlink:href="http://127.0.0.1:8090/geoserver/www/symbol/sewer/swl_bssb_ps.svg"/>
+                <sld:Format>image/svg+xml</sld:Format>
+              </sld:ExternalGraphic>
               <sld:Size>
                 <ogc:Function name="min">
                   <ogc:Literal>18</ogc:Literal>
@@ -34,7 +26,7 @@
                           </ogc:Function>
                         </ogc:Div>
                       </ogc:Function>
-                      <ogc:Literal>1.5</ogc:Literal>
+                      <ogc:Literal>4</ogc:Literal>
                     </ogc:Mul>
                   </ogc:Add>
                 </ogc:Function>

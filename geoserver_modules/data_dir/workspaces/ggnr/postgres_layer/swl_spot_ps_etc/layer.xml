@@ -1,12 +1,12 @@
 <layer>
   <name>swl_spot_ps_etc</name>
-  <id>LayerInfoImpl--78c241d:1a151a32358:-6c73</id>
+  <id>LayerInfoImpl--4d2f0c14:1a1671e8ffa:-7ea5</id>
   <type>VECTOR</type>
   <defaultStyle>
     <id>StyleInfoImpl--78c241d:1a151a32358:-6c72</id>
   </defaultStyle>
   <resource class="featureType">
-    <id>FeatureTypeInfoImpl--78c241d:1a151a32358:-6c74</id>
+    <id>FeatureTypeInfoImpl--4d2f0c14:1a1671e8ffa:-7ea6</id>
   </resource>
   <queryable>true</queryable>
   <opaque>false</opaque>
@@ -14,6 +14,6 @@
     <logoWidth>0</logoWidth>
     <logoHeight>0</logoHeight>
   </attribution>
-  <dateCreated>2026-10-19 05:21:40.534 UTC</dateCreated>
-  <dateModified>2026-10-19 05:21:41.192 UTC</dateModified>
+  <dateCreated>2026-10-23 05:08:49.604 UTC</dateCreated>
+  <dateModified>2026-10-23 05:08:49.746 UTC</dateModified>
 </layer>

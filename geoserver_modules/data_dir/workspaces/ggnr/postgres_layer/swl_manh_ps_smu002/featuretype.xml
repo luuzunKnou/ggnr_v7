@@ -1,5 +1,5 @@
 <featureType>
-  <id>FeatureTypeInfoImpl--78c241d:1a151a32358:-6958</id>
+  <id>FeatureTypeInfoImpl--4d2f0c14:1a1671e8ffa:-7eac</id>
   <name>swl_manh_ps_smu002</name>
   <nativeName>swl_manh_ps</nativeName>
   <namespace>
@@ -12,17 +12,17 @@
   </keywords>
   <srs>EPSG:5181</srs>
   <nativeBoundingBox>
-    <minx>384094.5101117704</minx>
-    <maxx>397905.80177242757</maxx>
-    <miny>340467.04618250317</miny>
-    <maxy>365612.17324806406</maxy>
+    <minx>320522.3625628338</minx>
+    <maxx>363822.4071499882</maxx>
+    <miny>304629.281379229</miny>
+    <maxy>331249.4920173697</maxy>
     <crs class="projected">EPSG:5181</crs>
   </nativeBoundingBox>
   <latLonBoundingBox>
-    <minx>129.05588633921</minx>
-    <maxx>129.21650845642486</maxx>
-    <miny>36.542059932818056</miny>
-    <maxy>36.771262809180556</maxy>
+    <minx>128.34060799373228</minx>
+    <maxx>128.82765399239722</maxx>
+    <miny>36.22570929605808</miny>
+    <maxy>36.47190378711859</maxy>
     <crs>EPSG:4326</crs>
   </latLonBoundingBox>
   <projectionPolicy>FORCE_DECLARED</projectionPolicy>

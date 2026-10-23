@@ -1,5 +1,5 @@
 <featureType>
-  <id>FeatureTypeInfoImpl--78c241d:1a151a32358:-6c6e</id>
+  <id>FeatureTypeInfoImpl--4d2f0c14:1a1671e8ffa:-7ea2</id>
   <name>swl_spot_ps_sbd002</name>
   <nativeName>swl_spot_ps</nativeName>
   <namespace>
@@ -12,17 +12,17 @@
   </keywords>
   <srs>EPSG:5181</srs>
   <nativeBoundingBox>
-    <minx>384141.7480174147</minx>
-    <maxx>397910.5874943413</maxx>
-    <miny>340462.73894997104</miny>
-    <maxy>365567.18128920207</maxy>
+    <minx>320511.21088278835</minx>
+    <maxx>360029.2012445273</maxx>
+    <miny>305714.77482793364</miny>
+    <maxy>331372.48843311664</maxy>
     <crs class="projected">EPSG:5181</crs>
   </nativeBoundingBox>
   <latLonBoundingBox>
-    <minx>129.05641253604992</minx>
-    <maxx>129.21655035257118</maxx>
-    <miny>36.54202015683153</miny>
-    <maxy>36.77084847296965</maxy>
+    <minx>128.34065097722674</minx>
+    <maxx>128.78538000574588</maxx>
+    <miny>36.23612192144136</miny>
+    <maxy>36.473013280408274</maxy>
     <crs>EPSG:4326</crs>
   </latLonBoundingBox>
   <projectionPolicy>FORCE_DECLARED</projectionPolicy>

@@ -1,12 +1,12 @@
 <layer>
   <name>swl_spot_ps_sbd001</name>
-  <id>LayerInfoImpl--78c241d:1a151a32358:-6c70</id>
+  <id>LayerInfoImpl--4d2f0c14:1a1671e8ffa:-7ea3</id>
   <type>VECTOR</type>
   <defaultStyle>
     <id>StyleInfoImpl--78c241d:1a151a32358:-6c6f</id>
   </defaultStyle>
   <resource class="featureType">
-    <id>FeatureTypeInfoImpl--78c241d:1a151a32358:-6c71</id>
+    <id>FeatureTypeInfoImpl--4d2f0c14:1a1671e8ffa:-7ea4</id>
   </resource>
   <queryable>true</queryable>
   <opaque>false</opaque>
@@ -14,6 +14,6 @@
     <logoWidth>0</logoWidth>
     <logoHeight>0</logoHeight>
   </attribution>
-  <dateCreated>2026-10-19 05:21:41.802 UTC</dateCreated>
-  <dateModified>2026-10-19 05:21:42.155 UTC</dateModified>
+  <dateCreated>2026-10-23 05:08:50.405 UTC</dateCreated>
+  <dateModified>2026-10-23 05:08:50.543 UTC</dateModified>
 </layer>
