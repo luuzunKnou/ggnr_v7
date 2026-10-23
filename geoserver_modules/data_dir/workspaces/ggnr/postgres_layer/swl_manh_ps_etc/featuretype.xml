@@ -1,36 +1,39 @@
 <featureType>
-  <id>FeatureTypeInfoImpl-7b45823a:1a113f17c5f:-7b5a</id>
+  <id>FeatureTypeInfoImpl--78c241d:1a151a32358:-695d</id>
   <name>swl_manh_ps_etc</name>
-  <nativeName>swl_manh_ps_etc</nativeName>
+  <nativeName>swl_manh_ps</nativeName>
   <namespace>
     <id>NamespaceInfoImpl-4bf97568:19c4d6c3053:-7ffa</id>
   </namespace>
-  <title>swl_manh_ps_etc</title>
+  <title>swl_manh_ps</title>
   <keywords>
-    <string>swl_manh_ps_etc</string>
     <string>features</string>
+    <string>swl_manh_ps</string>
   </keywords>
   <srs>EPSG:5181</srs>
   <nativeBoundingBox>
-    <minx>411209.45903588925</minx>
-    <maxx>419467.95066127065</maxx>
-    <miny>311281.53985865554</miny>
-    <maxy>349197.99901533325</maxy>
+    <minx>388675.29249565746</minx>
+    <maxx>389491.0539752275</maxx>
+    <miny>352950.6657610446</miny>
+    <maxy>354969.50601353275</maxy>
     <crs class="projected">EPSG:5181</crs>
   </nativeBoundingBox>
   <latLonBoundingBox>
-    <minx>129.35054297212474</minx>
-    <maxx>129.453107492164</maxx>
-    <miny>36.274584662617066</miny>
-    <maxy>36.617826712813944</maxy>
+    <minx>129.1100721996366</minx>
+    <maxx>129.1196884199813</maxx>
+    <miny>36.65618233752857</miny>
+    <maxy>36.67452434361374</maxy>
     <crs>EPSG:4326</crs>
   </latLonBoundingBox>
   <projectionPolicy>FORCE_DECLARED</projectionPolicy>
   <enabled>true</enabled>
+  <advertised>true</advertised>
   <store class="dataStore">
     <id>DataStoreInfoImpl-4bf97568:19c4d6c3053:-7ff9</id>
   </store>
   <serviceConfiguration>false</serviceConfiguration>
+  <simpleConversionEnabled>false</simpleConversionEnabled>
+  <cqlFilter>smu_cde IS NULL OR smu_cde NOT IN (&apos;SMU001&apos;, &apos;SMU002&apos;)</cqlFilter>
   <maxFeatures>0</maxFeatures>
   <numDecimals>0</numDecimals>
   <padWithZeros>false</padWithZeros>
@@ -38,4 +41,5 @@
   <overridingServiceSRS>false</overridingServiceSRS>
   <skipNumberMatched>false</skipNumberMatched>
   <circularArcPresent>false</circularArcPresent>
+  <encodeMeasures>false</encodeMeasures>
 </featureType>

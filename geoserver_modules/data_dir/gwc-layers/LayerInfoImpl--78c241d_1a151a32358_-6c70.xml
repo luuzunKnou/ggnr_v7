@@ -1,8 +1,8 @@
 <GeoServerTileLayer>
-  <id>LayerInfoImpl-7b45823a:1a113f17c5f:-7b59</id>
+  <id>LayerInfoImpl--78c241d:1a151a32358:-6c70</id>
   <enabled>true</enabled>
   <inMemoryCached>true</inMemoryCached>
-  <name>ggnr:swl_manh_ps_etc</name>
+  <name>ggnr:swl_spot_ps_sbd001</name>
   <mimeFormats>
     <string>image/png</string>
     <string>image/jpeg</string>
@@ -12,10 +12,10 @@
       <gridSetName>EPSG:4326</gridSetName>
       <extent>
         <coords>
-          <double>129.35054297212474</double>
-          <double>36.274584662617066</double>
-          <double>129.453107492164</double>
-          <double>36.617826712813944</double>
+          <double>129.10603956088124</double>
+          <double>36.64673234803147</double>
+          <double>129.20304943317097</double>
+          <double>36.76895954662084</double>
         </coords>
       </extent>
     </gridSubset>
@@ -23,10 +23,10 @@
       <gridSetName>EPSG:900913</gridSetName>
       <extent>
         <coords>
-          <double>1.4399236577490376E7</double>
-          <double>4338469.873582054</double>
-          <double>1.4410654007634604E7</double>
-          <double>4385969.796815107</double>
+          <double>1.4372018582253532E7</double>
+          <double>4389979.560141856</double>
+          <double>1.4382817671838747E7</double>
+          <double>4406951.47007466</double>
         </coords>
       </extent>
     </gridSubset>
@@ -42,7 +42,7 @@
       <key>STYLES</key>
       <defaultValue></defaultValue>
       <availableStyles class="sorted-set"/>
-      <defaultStyle>swl_manh_ps_etc</defaultStyle>
+      <defaultStyle>swl_spot_ps_sbd001</defaultStyle>
     </styleParameterFilter>
   </parameterFilters>
   <gutter>0</gutter>

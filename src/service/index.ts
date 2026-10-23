@@ -77,6 +77,7 @@ import * as roadWorkHandbookService from './roadWorkHandbookService';
 import * as qgisLayerControlService from './qgisLayerControlService';
 import * as userDataUploadService from './userDataUploadService';
 import * as systemControlService from './systemControlService';
+import * as splitLayerService from './splitLayerService';
 
 export {
   configService,
@@ -154,4 +155,5 @@ export {
   qgisLayerControlService,
   userDataUploadService,
   systemControlService,
+  splitLayerService,
 };

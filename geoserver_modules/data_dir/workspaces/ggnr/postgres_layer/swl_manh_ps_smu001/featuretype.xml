@@ -1,0 +1,45 @@
+<featureType>
+  <id>FeatureTypeInfoImpl--78c241d:1a151a32358:-695b</id>
+  <name>swl_manh_ps_smu001</name>
+  <nativeName>swl_manh_ps</nativeName>
+  <namespace>
+    <id>NamespaceInfoImpl-4bf97568:19c4d6c3053:-7ffa</id>
+  </namespace>
+  <title>swl_manh_ps</title>
+  <keywords>
+    <string>features</string>
+    <string>swl_manh_ps</string>
+  </keywords>
+  <srs>EPSG:5181</srs>
+  <nativeBoundingBox>
+    <minx>385879.83488641423</minx>
+    <maxx>397563.8982899991</maxx>
+    <miny>341265.81097795867</miny>
+    <maxy>365532.05081499636</maxy>
+    <crs class="projected">EPSG:5181</crs>
+  </nativeBoundingBox>
+  <latLonBoundingBox>
+    <minx>129.07600471459455</minx>
+    <maxx>129.21266105402697</maxx>
+    <miny>36.54932334430585</miny>
+    <maxy>36.77019310988632</maxy>
+    <crs>EPSG:4326</crs>
+  </latLonBoundingBox>
+  <projectionPolicy>FORCE_DECLARED</projectionPolicy>
+  <enabled>true</enabled>
+  <advertised>true</advertised>
+  <store class="dataStore">
+    <id>DataStoreInfoImpl-4bf97568:19c4d6c3053:-7ff9</id>
+  </store>
+  <serviceConfiguration>false</serviceConfiguration>
+  <simpleConversionEnabled>false</simpleConversionEnabled>
+  <cqlFilter>smu_cde = &apos;SMU001&apos;</cqlFilter>
+  <maxFeatures>0</maxFeatures>
+  <numDecimals>0</numDecimals>
+  <padWithZeros>false</padWithZeros>
+  <forcedDecimal>false</forcedDecimal>
+  <overridingServiceSRS>false</overridingServiceSRS>
+  <skipNumberMatched>false</skipNumberMatched>
+  <circularArcPresent>false</circularArcPresent>
+  <encodeMeasures>false</encodeMeasures>
+</featureType>

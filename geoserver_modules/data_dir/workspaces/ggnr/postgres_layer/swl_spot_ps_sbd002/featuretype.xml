@@ -1,0 +1,45 @@
+<featureType>
+  <id>FeatureTypeInfoImpl--78c241d:1a151a32358:-6c6e</id>
+  <name>swl_spot_ps_sbd002</name>
+  <nativeName>swl_spot_ps</nativeName>
+  <namespace>
+    <id>NamespaceInfoImpl-4bf97568:19c4d6c3053:-7ffa</id>
+  </namespace>
+  <title>swl_spot_ps</title>
+  <keywords>
+    <string>features</string>
+    <string>swl_spot_ps</string>
+  </keywords>
+  <srs>EPSG:5181</srs>
+  <nativeBoundingBox>
+    <minx>384141.7480174147</minx>
+    <maxx>397910.5874943413</maxx>
+    <miny>340462.73894997104</miny>
+    <maxy>365567.18128920207</maxy>
+    <crs class="projected">EPSG:5181</crs>
+  </nativeBoundingBox>
+  <latLonBoundingBox>
+    <minx>129.05641253604992</minx>
+    <maxx>129.21655035257118</maxx>
+    <miny>36.54202015683153</miny>
+    <maxy>36.77084847296965</maxy>
+    <crs>EPSG:4326</crs>
+  </latLonBoundingBox>
+  <projectionPolicy>FORCE_DECLARED</projectionPolicy>
+  <enabled>true</enabled>
+  <advertised>true</advertised>
+  <store class="dataStore">
+    <id>DataStoreInfoImpl-4bf97568:19c4d6c3053:-7ff9</id>
+  </store>
+  <serviceConfiguration>false</serviceConfiguration>
+  <simpleConversionEnabled>false</simpleConversionEnabled>
+  <cqlFilter>sbd_cde = &apos;SBD002&apos;</cqlFilter>
+  <maxFeatures>0</maxFeatures>
+  <numDecimals>0</numDecimals>
+  <padWithZeros>false</padWithZeros>
+  <forcedDecimal>false</forcedDecimal>
+  <overridingServiceSRS>false</overridingServiceSRS>
+  <skipNumberMatched>false</skipNumberMatched>
+  <circularArcPresent>false</circularArcPresent>
+  <encodeMeasures>false</encodeMeasures>
+</featureType>

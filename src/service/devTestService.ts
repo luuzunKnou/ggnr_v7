@@ -1387,6 +1387,48 @@ export async function createOrUpdateGeoServerLayer(params: {
   }
 }
 
+/** 발행된 레이어·FeatureType만 제거. 스타일 파일은 남긴다. 없으면 성공. */
+export async function deletePublishedGeoServerLayer(params: {
+  layerName: string;
+  url?: string;
+  workspace?: string;
+}) {
+  const baseUrl = resolveGeoServerFetchBase(params?.url).replace(/\/$/, '');
+  const workspace = params?.workspace?.trim() || 'ggnr';
+  const layerName = params?.layerName?.trim().toLowerCase();
+  if (!layerName) return { success: false as const, error: 'layerName이 필요합니다.' };
+
+  try {
+    const delLayerRes = await geoserverFetch(
+      baseUrl,
+      `/rest/workspaces/${workspace}/layers/${encodeURIComponent(layerName)}`,
+      { method: 'DELETE' }
+    );
+    if (!delLayerRes.ok && delLayerRes.status !== 404) {
+      const text = await delLayerRes.text();
+      return { success: false as const, error: `레이어 삭제 실패: ${delLayerRes.status} ${text}` };
+    }
+    for (const ds of ['postgres_layer', 'postgres_public_layer'] as const) {
+      const delFtRes = await geoserverFetch(
+        baseUrl,
+        `/rest/workspaces/${workspace}/datastores/${ds}/featuretypes/${encodeURIComponent(layerName)}`,
+        { method: 'DELETE' }
+      );
+      if (!delFtRes.ok && delFtRes.status !== 404) {
+        const text = await delFtRes.text();
+        return {
+          success: false as const,
+          error: `FeatureType 삭제 실패(${ds}): ${delFtRes.status} ${text}`,
+        };
+      }
+    }
+    return { success: true as const, layerName };
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return { success: false as const, error: msg };
+  }
+}
+
 /**
  * tables.json 분할(div_query)을 기존 GeoServer FeatureType CQL에 일괄 반영.
  * 레이어 재생성 없이 CQL만 갱신. GeoServer에 없는 분할 레이어는 skipped.

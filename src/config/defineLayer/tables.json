@@ -228,18 +228,6 @@
     "define_table_source": "shp"
   },
   {
-    "define_table_name": "cons_data_as_solo",
-    "define_table_kor_name": "cons_data_as_solo",
-    "define_table_shp_type": "POLYGON",
-    "define_table_read_share": "P",
-    "define_table_write_share": "P",
-    "define_table_group": "하천",
-    "define_table_idx": "0",
-    "define_table_etc": "",
-    "define_table_schema": "layer",
-    "define_table_source": "shp"
-  },
-  {
     "define_table_name": "d0023372_1",
     "define_table_kor_name": "d0023372_1",
     "define_table_shp_type": "POLYGON",
@@ -4802,7 +4790,7 @@
   },
   {
     "define_table_name": "wtl_cons_solo_as",
-    "define_table_kor_name": "상수도 공사대장_개별",
+    "define_table_kor_name": "상수도 공사대장 개별",
     "define_table_shp_type": "POLYGON",
     "define_table_read_share": "P",
     "define_table_write_share": "P",
@@ -4907,6 +4895,48 @@
     "define_table_etc": "",
     "define_table_schema": "layer",
     "define_table_source": "shp"
+  },
+  {
+    "define_table_name": "wtl_pipe_lm_saa003",
+    "define_table_kor_name": "송수관",
+    "define_table_shp_type": "POLYGON",
+    "define_table_read_share": "P",
+    "define_table_write_share": "P",
+    "define_table_group": "상수",
+    "define_table_idx": "",
+    "define_table_etc": "",
+    "define_table_schema": "layer",
+    "define_table_source": "shp",
+    "define_table_div_query": "saa_cde = 'SAA003'",
+    "define_table_parents_layer": "wtl_pipe_lm"
+  },
+  {
+    "define_table_name": "wtl_pipe_lm_saa004",
+    "define_table_kor_name": "배수관",
+    "define_table_shp_type": "POLYGON",
+    "define_table_read_share": "P",
+    "define_table_write_share": "P",
+    "define_table_group": "상수",
+    "define_table_idx": "",
+    "define_table_etc": "",
+    "define_table_schema": "layer",
+    "define_table_source": "shp",
+    "define_table_div_query": "saa_cde = 'SAA004'",
+    "define_table_parents_layer": "wtl_pipe_lm"
+  },
+  {
+    "define_table_name": "wtl_pipe_lm_etc",
+    "define_table_kor_name": "상수관로(기타)",
+    "define_table_shp_type": "POLYGON",
+    "define_table_read_share": "P",
+    "define_table_write_share": "P",
+    "define_table_group": "상수",
+    "define_table_idx": "",
+    "define_table_etc": "",
+    "define_table_schema": "layer",
+    "define_table_source": "shp",
+    "define_table_div_query": "saa_cde IS NULL OR saa_cde NOT IN ('SAA003', 'SAA004')",
+    "define_table_parents_layer": "wtl_pipe_lm"
   },
   {
     "define_table_name": "wtl_pipe_ps",
@@ -9185,6 +9215,18 @@
     "define_table_source": "shp"
   },
   {
+    "define_table_name": "test_layer",
+    "define_table_kor_name": "test_layer",
+    "define_table_shp_type": "POLYGON",
+    "define_table_read_share": "P",
+    "define_table_write_share": "P",
+    "define_table_group": "테스트",
+    "define_table_idx": "0",
+    "define_table_etc": "",
+    "define_table_schema": "layer",
+    "define_table_source": "shp"
+  },
+  {
     "define_table_name": "land_use",
     "define_table_kor_name": "토지무상사용승낙서",
     "define_table_shp_type": "POINT",
@@ -9389,6 +9431,34 @@
     "define_table_source": "shp"
   },
   {
+    "define_table_name": "swl_manh_ps_smu001",
+    "define_table_kor_name": "우수맨홀",
+    "define_table_shp_type": "POLYGON",
+    "define_table_read_share": "P",
+    "define_table_write_share": "P",
+    "define_table_group": "하수",
+    "define_table_idx": "",
+    "define_table_etc": "",
+    "define_table_schema": "layer",
+    "define_table_source": "shp",
+    "define_table_div_query": "smu_cde = 'SMU001'",
+    "define_table_parents_layer": "swl_manh_ps"
+  },
+  {
+    "define_table_name": "swl_manh_ps_smu002",
+    "define_table_kor_name": "오수맨홀",
+    "define_table_shp_type": "POLYGON",
+    "define_table_read_share": "P",
+    "define_table_write_share": "P",
+    "define_table_group": "하수",
+    "define_table_idx": "",
+    "define_table_etc": "",
+    "define_table_schema": "layer",
+    "define_table_source": "shp",
+    "define_table_div_query": "smu_cde = 'SMU002'",
+    "define_table_parents_layer": "swl_manh_ps"
+  },
+  {
     "define_table_name": "swl_manh_ps_etc",
     "define_table_kor_name": "하수맨홀(기타)",
     "define_table_shp_type": "POLYGON",
@@ -9398,7 +9468,9 @@
     "define_table_idx": "0",
     "define_table_etc": "",
     "define_table_schema": "layer",
-    "define_table_source": "shp"
+    "define_table_source": "shp",
+    "define_table_div_query": "smu_cde IS NULL OR smu_cde NOT IN ('SMU001', 'SMU002')",
+    "define_table_parents_layer": "swl_manh_ps"
   },
   {
     "define_table_name": "swl_pipe_as",
@@ -9434,7 +9506,9 @@
     "define_table_idx": "0",
     "define_table_etc": "",
     "define_table_schema": "layer",
-    "define_table_source": "shp"
+    "define_table_source": "shp",
+    "define_table_div_query": "sba_cde IS NULL OR sba_cde NOT IN ('SBA003', 'SBA004')",
+    "define_table_parents_layer": "swl_pipe_lm"
   },
   {
     "define_table_name": "swl_pipe_lm_gsg",
@@ -9509,6 +9583,48 @@
     "define_table_source": "shp"
   },
   {
+    "define_table_name": "swl_spot_ps_sbd001",
+    "define_table_kor_name": "우수받이",
+    "define_table_shp_type": "POLYGON",
+    "define_table_read_share": "P",
+    "define_table_write_share": "P",
+    "define_table_group": "하수",
+    "define_table_idx": "",
+    "define_table_etc": "",
+    "define_table_schema": "layer",
+    "define_table_source": "shp",
+    "define_table_div_query": "sbd_cde = 'SBD001'",
+    "define_table_parents_layer": "swl_spot_ps"
+  },
+  {
+    "define_table_name": "swl_spot_ps_sbd002",
+    "define_table_kor_name": "오수받이",
+    "define_table_shp_type": "POLYGON",
+    "define_table_read_share": "P",
+    "define_table_write_share": "P",
+    "define_table_group": "하수",
+    "define_table_idx": "",
+    "define_table_etc": "",
+    "define_table_schema": "layer",
+    "define_table_source": "shp",
+    "define_table_div_query": "sbd_cde = 'SBD002'",
+    "define_table_parents_layer": "swl_spot_ps"
+  },
+  {
+    "define_table_name": "swl_spot_ps_etc",
+    "define_table_kor_name": "물받이(기타)",
+    "define_table_shp_type": "POLYGON",
+    "define_table_read_share": "P",
+    "define_table_write_share": "P",
+    "define_table_group": "하수",
+    "define_table_idx": "",
+    "define_table_etc": "",
+    "define_table_schema": "layer",
+    "define_table_source": "shp",
+    "define_table_div_query": "sbd_cde IS NULL OR sbd_cde NOT IN ('SBD001', 'SBD002')",
+    "define_table_parents_layer": "swl_spot_ps"
+  },
+  {
     "define_table_name": "swl_vent_ps",
     "define_table_kor_name": "환기구",
     "define_table_shp_type": "POINT",
@@ -9536,7 +9652,7 @@
   },
   {
     "define_table_name": "swl_manh_ps_rain",
-    "define_table_kor_name": "하수맨홀(우수)",
+    "define_table_kor_name": "우수맨홀",
     "define_table_shp_type": "POLYGON",
     "define_table_read_share": "P",
     "define_table_write_share": "P",
@@ -9550,7 +9666,7 @@
   },
   {
     "define_table_name": "swl_manh_ps_sewage",
-    "define_table_kor_name": "하수맨홀(오수)",
+    "define_table_kor_name": "오수맨홀",
     "define_table_shp_type": "POLYGON",
     "define_table_read_share": "P",
     "define_table_write_share": "P",
@@ -9563,8 +9679,8 @@
     "define_table_parents_layer": "swl_manh_ps"
   },
   {
-    "define_table_name": "swl_pipe_lm_rain",
-    "define_table_kor_name": "하수관거(우수관)",
+    "define_table_name": "swl_pipe_lm_sba003",
+    "define_table_kor_name": "우수관",
     "define_table_shp_type": "POLYGON",
     "define_table_read_share": "P",
     "define_table_write_share": "P",
@@ -9577,8 +9693,8 @@
     "define_table_parents_layer": "swl_pipe_lm"
   },
   {
-    "define_table_name": "swl_pipe_lm_sewage",
-    "define_table_kor_name": "하수관거(오수관)",
+    "define_table_name": "swl_pipe_lm_sba004",
+    "define_table_kor_name": "오수관",
     "define_table_shp_type": "POLYGON",
     "define_table_read_share": "P",
     "define_table_write_share": "P",
@@ -9616,7 +9732,7 @@
   },
   {
     "define_table_name": "swl_cons_solo_as",
-    "define_table_kor_name": "하수도 공사대장_개별",
+    "define_table_kor_name": "하수도 공사대장 개별",
     "define_table_shp_type": "POLYGON",
     "define_table_read_share": "P",
     "define_table_write_share": "P",
@@ -9639,8 +9755,20 @@
     "define_table_source": "shp"
   },
   {
+    "define_table_name": "cons_data_as_solo",
+    "define_table_kor_name": "cons_data_as_solo",
+    "define_table_shp_type": "POLYGON",
+    "define_table_read_share": "P",
+    "define_table_write_share": "P",
+    "define_table_group": "하천",
+    "define_table_idx": "0",
+    "define_table_etc": "",
+    "define_table_schema": "layer",
+    "define_table_source": "shp"
+  },
+  {
     "define_table_name": "cons_data_solo_as",
-    "define_table_kor_name": "공사대장_개별",
+    "define_table_kor_name": "공사대장 개별",
     "define_table_shp_type": "POLYGON",
     "define_table_read_share": "P",
     "define_table_write_share": "P",
