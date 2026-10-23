@@ -1,0 +1,19 @@
+<layer>
+  <name>urban_landscape_points</name>
+  <id>LayerInfoImpl--610c9460:1a10fc86a73:-7b60</id>
+  <type>VECTOR</type>
+  <defaultStyle>
+    <id>StyleInfoImpl--610c9460:1a10fc86a73:-7b5f</id>
+  </defaultStyle>
+  <resource class="featureType">
+    <id>FeatureTypeInfoImpl--610c9460:1a10fc86a73:-7b61</id>
+  </resource>
+  <queryable>true</queryable>
+  <opaque>false</opaque>
+  <attribution>
+    <logoWidth>0</logoWidth>
+    <logoHeight>0</logoHeight>
+  </attribution>
+  <dateCreated>2026-10-16 06:46:21.175 UTC</dateCreated>
+  <dateModified>2026-10-16 06:46:21.457 UTC</dateModified>
+</layer>

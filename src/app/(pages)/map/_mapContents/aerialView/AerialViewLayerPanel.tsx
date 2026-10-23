@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronDown, ChevronUp, Search } from 'lucide-react';
 import { Input } from '@/app/shadcnComponents/ui/input';
+import { Switch } from '@/app/shadcnComponents/ui/switch';
 import { cn } from '@/lib/utils';
 import { call } from '@/lib/api';
 import { MAP_LAYER_PANEL_SURFACE_CLASS } from '../../_mapComponents/mapControlPanel/mapLayerPanelLayout';
@@ -32,10 +33,44 @@ const GROUPS: { kind: AerialKind; title: string; accent: string }[] = [
   { kind: 'panorama', title: '항공뷰', accent: 'bg-orange-500 dark:bg-orange-400' },
 ];
 
-function matchesKeyword(unit: WorkUnitItem, keyword: string): boolean {
+type LayerRow = {
+  id: string;
+  label: string;
+  title: string;
+  workDate: string;
+  unitId: string;
+};
+
+function layerRows(kind: AerialKind, units: WorkUnitItem[], keyword: string): LayerRow[] {
   const q = keyword.trim().toLowerCase();
-  if (!q) return true;
-  return unit.workName.toLowerCase().includes(q);
+  const rows: LayerRow[] = [];
+  for (const unit of visibleUnits(kind, units)) {
+    if (kind === 'drone' || kind === 'ortho') {
+      const hay = `${unit.workName} ${unit.files.map((file) => file.name).join(' ')}`.toLowerCase();
+      if (q && !hay.includes(q)) continue;
+      rows.push({
+        id: unit.id,
+        label: unit.workName,
+        title: unit.workName,
+        workDate: unit.workDate,
+        unitId: unit.id,
+      });
+      continue;
+    }
+    for (const file of unit.files) {
+      if (kind === 'ortho' && !(file.status === 'done' && file.tuKey != null)) continue;
+      const hay = `${unit.workName} ${file.name}`.toLowerCase();
+      if (q && !hay.includes(q)) continue;
+      rows.push({
+        id: file.id,
+        label: file.name,
+        title: unit.workName === file.name ? file.name : `${unit.workName} · ${file.name}`,
+        workDate: unit.workDate,
+        unitId: unit.id,
+      });
+    }
+  }
+  return rows;
 }
 
 function visibleUnits(kind: AerialKind, units: WorkUnitItem[]): WorkUnitItem[] {
@@ -46,7 +81,7 @@ function visibleUnits(kind: AerialKind, units: WorkUnitItem[]): WorkUnitItem[] {
   });
 }
 
-/** 우측 컨트롤 «드론영상» — 종류별 작업목록을 켜고 끈다 */
+/** 우측 컨트롤 «드론영상» — 종류별 레이어(파일)를 하나씩 켜고 끈다 */
 export function AerialViewLayerPanel({
   checkedUnitIds,
   onCheckedChange,
@@ -99,9 +134,7 @@ export function AerialViewLayerPanel({
     void listTick;
     return GROUPS.map((group) => ({
       ...group,
-      units: visibleUnits(group.kind, mockUnitsForKind(group.kind)).filter((u) =>
-        matchesKeyword(u, keyword)
-      ),
+      rows: layerRows(group.kind, mockUnitsForKind(group.kind), keyword),
     }));
   }, [listTick, keyword]);
 
@@ -120,13 +153,21 @@ export function AerialViewLayerPanel({
         return next;
       }
       next.add(kind);
-      if (kind === 'ortho' || kind === 'drone') {
-        const units = visibleUnits(kind, mockUnitsForKind(kind)).filter((u) => matchesKeyword(u, keyword));
-        const checked = units.find((u) => checkedUnitIds.has(u.id));
-        scrollToUnitIdRef.current = checked ? { id: checked.id, kind } : null;
-      }
+      const rows = layerRows(kind, mockUnitsForKind(kind), keyword);
+      const checked = rows.find((row) => checkedUnitIds.has(row.id));
+      scrollToUnitIdRef.current = checked ? { id: checked.id, kind } : null;
       return next;
     });
+  };
+
+  const toggleKindAll = (kind: AerialKind, on: boolean) => {
+    const ids = layerRows(kind, mockUnitsForKind(kind), keyword).map((row) => row.id);
+    const next = new Set(checkedUnitIds);
+    for (const id of ids) {
+      if (on) next.add(id);
+      else next.delete(id);
+    }
+    onCheckedChange(next);
   };
 
   useEffect(() => {
@@ -225,40 +266,57 @@ export function AerialViewLayerPanel({
         ) : (
           grouped.map((group) => {
             const expanded = openKinds.has(group.kind) || keyword.trim().length > 0;
-            const checkedCount = group.units.filter((u) => checkedUnitIds.has(u.id)).length;
+            const checkedCount = group.rows.filter((row) => checkedUnitIds.has(row.id)).length;
+            const allOn = group.rows.length > 0 && checkedCount === group.rows.length;
+            const someOn = checkedCount > 0 && !allOn;
+            const bulkTitle = allOn ? '이 종류 전체 끄기' : '이 종류 전체 켜기';
             return (
               <div key={group.kind} className="border-b border-slate-100 last:border-b-0 dark:border-white/10">
-                <button
-                  type="button"
-                  onClick={() => toggleGroup(group.kind)}
+                <div
                   className={cn(
-                    'flex w-full cursor-pointer items-center justify-between bg-slate-100 px-3 py-2 text-[13px] font-medium text-foreground transition-colors hover:bg-slate-200',
-                    'dark:bg-white/10 dark:text-white/90 dark:hover:bg-white/15',
+                    'flex w-full items-center gap-2 bg-slate-100 px-3 py-2 text-[13px] font-medium text-foreground',
+                    'dark:bg-white/10 dark:text-white/90',
                     checkedCount > 0 && 'text-primary'
                   )}
                 >
-                  <span className="flex min-w-0 items-center gap-2">
-                    <span className={cn('h-4 w-1 shrink-0 rounded-full', group.accent)} />
-                    <span className="truncate">{group.title}</span>
-                  </span>
-                  <span className="flex items-center gap-1 text-slate-400 dark:text-white/50">
-                    {checkedCount > 0 ? (
-                      <span className="text-[10px] tabular-nums text-primary">{checkedCount}</span>
-                    ) : null}
-                    {expanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-                  </span>
-                </button>
+                  <button
+                    type="button"
+                    onClick={() => toggleGroup(group.kind)}
+                    className="flex min-w-0 flex-1 cursor-pointer items-center justify-between text-left hover:opacity-80"
+                  >
+                    <span className="flex min-w-0 items-center gap-2">
+                      <span className={cn('h-4 w-1 shrink-0 rounded-full', group.accent)} />
+                      <span className="truncate">{group.title}</span>
+                    </span>
+                    <span className="flex items-center gap-1 text-slate-400 dark:text-white/50">
+                      {checkedCount > 0 ? (
+                        <span className="text-[10px] tabular-nums text-primary">{checkedCount}</span>
+                      ) : null}
+                      {expanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                    </span>
+                  </button>
+                  <Switch
+                    checked={allOn}
+                    indeterminate={someOn}
+                    title={bulkTitle}
+                    aria-label={bulkTitle}
+                    onCheckedChange={(on) => {
+                      if (on || someOn) toggleKindAll(group.kind, true);
+                      else toggleKindAll(group.kind, false);
+                    }}
+                  />
+                </div>
                 {expanded ? (
-                  group.units.length === 0 ? (
+                  group.rows.length === 0 ? (
                     <p className="px-3 py-3 text-center text-[11px] text-muted-foreground">
-                      {loading ? '불러오는 중…' : '작업목록이 없습니다.'}
+                      {loading ? '불러오는 중…' : '레이어가 없습니다.'}
                     </p>
                   ) : (
                     <ul>
-                      {group.units.map((u) => {
-                        const checked = checkedUnitIds.has(u.id);
+                      {group.rows.map((row) => {
+                        const checked = checkedUnitIds.has(row.id);
                         return (
-                          <li key={u.id} data-aerial-unit={u.id} data-aerial-kind={group.kind}>
+                          <li key={row.id} data-aerial-unit={row.id} data-aerial-kind={group.kind}>
                             <label
                               className={cn(
                                 'flex cursor-pointer items-center gap-2 px-3 py-1 hover:bg-slate-50 dark:hover:bg-white/10',
@@ -269,7 +327,7 @@ export function AerialViewLayerPanel({
                                 type="checkbox"
                                 className="h-3.5 w-3.5 shrink-0 rounded border-gray-300 dark:border-white/30"
                                 checked={checked}
-                                onChange={(e) => toggle(u.id, e.target.checked)}
+                                onChange={(e) => toggle(row.id, e.target.checked)}
                               />
                               <span
                                 className={cn(
@@ -278,12 +336,12 @@ export function AerialViewLayerPanel({
                                     ? 'font-medium text-primary'
                                     : 'text-slate-700 dark:text-white/90'
                                 )}
-                                title={u.workName}
+                                title={row.title}
                               >
-                                {u.workName}
+                                {row.label}
                               </span>
-                              {u.workDate ? (
-                                <span className="shrink-0 text-[10px] text-muted-foreground">{u.workDate}</span>
+                              {row.workDate ? (
+                                <span className="shrink-0 text-[10px] text-muted-foreground">{row.workDate}</span>
                               ) : null}
                             </label>
                           </li>

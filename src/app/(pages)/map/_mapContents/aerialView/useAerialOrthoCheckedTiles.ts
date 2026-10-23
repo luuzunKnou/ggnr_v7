@@ -80,7 +80,7 @@ function orthoTileLoadFunction(tile: Tile, src: string) {
 /**
  * 드론영상 상세에서 체크한 변환완료 TIF를 지도 오버레이 XYZ로 on/off.
  * 자체항공영상(배경지도)과 별개. 체크 시 해당 타일 범위로 이동.
- * `checkedUnitIds`가 있으면 영상조회 패널 모드(작업단위 단위로 변환완료 TIF 전부).
+ * `checkedUnitIds`에 작업단위가 있으면 그 작업의 변환완료 TIF 전부, 파일 키면 그 TIF만.
  */
 export function useAerialOrthoCheckedTiles(params: {
   enabled: boolean;
@@ -110,9 +110,10 @@ export function useAerialOrthoCheckedTiles(params: {
     if (checkedUnitIds) {
       void listTick;
       for (const u of mockUnitsForKind('ortho')) {
-        if (!checkedUnitIds.has(u.id)) continue;
+        const unitOn = checkedUnitIds.has(u.id);
         for (const f of u.files) {
-          if (f.status === 'done' && f.tuKey != null) keys.push(f.tuKey);
+          const fileOn = unitOn || checkedUnitIds.has(f.id);
+          if (fileOn && f.status === 'done' && f.tuKey != null) keys.push(f.tuKey);
         }
       }
     } else if (unit && unit.kind === 'ortho' && checkedFileIds) {

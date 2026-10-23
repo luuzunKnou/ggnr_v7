@@ -3,33 +3,24 @@
 import { useEffect, useRef, useState } from 'react';
 import type { Map } from 'ol';
 import VectorSource from 'ol/source/Vector';
-import VectorLayer from 'ol/layer/Vector';
+import VectorImageLayer from 'ol/layer/VectorImage';
 import GeoJSON from 'ol/format/GeoJSON';
 import Feature from 'ol/Feature';
 import type { Geometry } from 'ol/geom';
 import Point from 'ol/geom/Point';
 import { Style, Stroke, Fill, Text } from 'ol/style';
-import { getCenter } from 'ol/extent';
+import { containsExtent, getCenter } from 'ol/extent';
 import { call } from '@/lib/api';
-import {
-  fetchLandInfoConfig,
-  fetchLatestOfficialLandPriceForPnu,
-} from '../landInfo/api';
-import { compareFeaturesByGeometryStackOrder } from '@/lib/mapLayerGeometryOrder';
 import { isJijukJibunLabelVisible } from '../layerFactory/boundaryLayerFactory';
 
 const LAYER_Z_INDEX = 920;
-const FETCH_LIMIT = 120;
-const PRICE_CONCURRENCY = 6;
+/** 서버 상한과 같게 — 넘치면 화면 가운데에서 가까운 필지부터 표시 */
+const FETCH_LIMIT = 10000;
 const MOVEEND_DEBOUNCE_MS = 450;
-/** 지번 라벨보다 한 단계 여유 — 지적도가 보이는 줌대에서도 공시지가 표시 */
-const OFFICIAL_PRICE_MAX_SCALE_DENOMINATOR = 10000;
 
+/** 지적 지번 라벨과 같은 축척(GeoServer 지적 스타일 1:2,000)에서만 표시 */
 function isOfficialLandPriceZoomOk(resolution: number): boolean {
-  if (!Number.isFinite(resolution) || resolution <= 0) return false;
-  // 지번 라벨 기준과 동일 공식, 분모만 완화
-  if (isJijukJibunLabelVisible(resolution)) return true;
-  return resolution / 0.00028 <= OFFICIAL_PRICE_MAX_SCALE_DENOMINATOR;
+  return isJijukJibunLabelVisible(resolution);
 }
 
 type JijukParcelRow = {
@@ -40,52 +31,44 @@ type JijukParcelRow = {
 
 type DbPriceEntry = { priceNum: number | null; priceLabel: string };
 
-function parcelFeatureStyles(feature: Feature<Geometry>): Style[] {
+const PARCEL_STYLE = new Style({
+  stroke: new Stroke({ color: 'rgba(234, 88, 12, 0.95)', width: 1.5 }),
+  fill: new Fill({ color: 'rgba(251, 146, 60, 0.18)' }),
+});
+const LABEL_FILL = new Fill({ color: '#1e293b' });
+const LABEL_STROKE = new Stroke({ color: 'rgba(255,255,255,0.95)', width: 3 });
+const LABEL_STYLE_PROP = '__officialPriceLabelStyle';
+
+/** 필지가 수천 건이라 매 프레임 스타일을 새로 만들지 않도록 라벨 스타일은 필지마다 한 번만 만든다 */
+function parcelLabelStyle(feature: Feature<Geometry>): Style | null {
+  const cached = feature.get(LABEL_STYLE_PROP) as Style | undefined;
+  if (cached) return cached;
   const geom = feature.getGeometry();
-  if (!geom) return [];
-  const jibun = String(feature.get('jibun') ?? '-');
-  const priceLabel = String(feature.get('priceLabel') ?? '-');
-  const center = getCenter(geom.getExtent());
-  return [
-    new Style({
-      stroke: new Stroke({ color: 'rgba(234, 88, 12, 0.95)', width: 1.5 }),
-      fill: new Fill({ color: 'rgba(251, 146, 60, 0.18)' }),
+  if (!geom) return null;
+  const style = new Style({
+    geometry: new Point(getCenter(geom.getExtent())),
+    text: new Text({
+      text: `${String(feature.get('jibun') ?? '-')}\n${String(feature.get('priceLabel') ?? '-')}`,
+      font: '600 11px "Malgun Gothic", sans-serif',
+      fill: LABEL_FILL,
+      stroke: LABEL_STROKE,
+      overflow: true,
+      textAlign: 'center',
     }),
-    new Style({
-      geometry: new Point(center),
-      text: new Text({
-        text: `${jibun}\n${priceLabel}`,
-        font: '600 11px "Malgun Gothic", sans-serif',
-        fill: new Fill({ color: '#1e293b' }),
-        stroke: new Stroke({ color: 'rgba(255,255,255,0.95)', width: 3 }),
-        overflow: true,
-        textAlign: 'center',
-      }),
-    }),
-  ];
+  });
+  feature.set(LABEL_STYLE_PROP, style, true);
+  return style;
+}
+
+function parcelFeatureStyles(feature: Feature<Geometry>, resolution: number): Style[] {
+  if (!isOfficialLandPriceZoomOk(resolution)) return [PARCEL_STYLE];
+  const label = parcelLabelStyle(feature);
+  return label ? [PARCEL_STYLE, label] : [PARCEL_STYLE];
 }
 
 function formatJibun(raw: unknown): string {
   const s = String(raw ?? '').trim();
   return s || '-';
-}
-
-async function mapWithConcurrency<T, R>(
-  items: T[],
-  concurrency: number,
-  fn: (item: T) => Promise<R>
-): Promise<R[]> {
-  const out: R[] = new Array(items.length);
-  let idx = 0;
-  async function worker() {
-    while (idx < items.length) {
-      const cur = idx++;
-      out[cur] = await fn(items[cur]!);
-    }
-  }
-  const workers = Array.from({ length: Math.min(concurrency, items.length) }, () => worker());
-  await Promise.all(workers);
-  return out;
 }
 
 function hasUsableDbPrice(entry: DbPriceEntry | undefined): entry is DbPriceEntry {
@@ -98,34 +81,23 @@ function hasUsableDbPrice(entry: DbPriceEntry | undefined): entry is DbPriceEntr
 }
 
 /**
- * 공시지가 토글 시 bbox 내 jijuk 필지 + 공시지가(KOREPS 파일 테이블 우선, 없으면 VWorld)를
+ * 공시지가 토글 시 bbox 내 jijuk 필지 + KOREPS 공시지가(브이월드 미사용)를
  * OpenLayers 벡터·텍스트로 표시. 지도 이동(moveend)마다 재조회·재그림.
  */
 export function useOfficialLandPriceMapLayer(
   map: Map | null,
   mapReady: boolean,
   enabled: boolean
-) {
+): { unavailableMessage: string | null } {
   const sourceRef = useRef<VectorSource | null>(null);
-  const layerRef = useRef<VectorLayer<VectorSource> | null>(null);
-  const [vworldKey, setVworldKey] = useState('');
+  const layerRef = useRef<VectorImageLayer<VectorSource> | null>(null);
   const requestSeqRef = useRef(0);
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  useEffect(() => {
-    if (!enabled) {
-      setVworldKey('');
-      return;
-    }
-    let alive = true;
-    fetchLandInfoConfig().then((cfg) => {
-      if (!alive) return;
-      setVworldKey(cfg.vworldKey);
-    });
-    return () => {
-      alive = false;
-    };
-  }, [enabled]);
+  /** 마지막으로 받은 범위 — 상한에 안 걸렸으면 그 안에서 확대·이동할 때 다시 받지 않는다 */
+  const loadedRef = useRef<{ extent: number[]; complete: boolean } | null>(null);
+  /** 테이블·자료 없음이 확인되면 토글 끄기 전까지 재조회하지 않는다 */
+  const korepsBlockedMessageRef = useRef<string | null>(null);
+  const [unavailableMessage, setUnavailableMessage] = useState<string | null>(null);
 
   useEffect(() => {
     if (!map || !mapReady) return;
@@ -134,30 +106,46 @@ export function useOfficialLandPriceMapLayer(
       sourceRef.current = new VectorSource();
     }
     if (!layerRef.current) {
-      layerRef.current = new VectorLayer({
+      /** 이미지 방식 — 끌기·확대 중에는 그려 둔 결과만 옮기고, 멈췄을 때 한 번 다시 그린다 */
+      layerRef.current = new VectorImageLayer({
         source: sourceRef.current,
         zIndex: LAYER_Z_INDEX,
-        renderOrder: compareFeaturesByGeometryStackOrder,
-        style: (feature) => parcelFeatureStyles(feature as Feature<Geometry>),
+        imageRatio: 1.5,
+        declutter: true,
+        style: (feature, resolution) => parcelFeatureStyles(feature as Feature<Geometry>, resolution),
       });
       map.addLayer(layerRef.current);
     }
 
     const layer = layerRef.current;
     layer.setVisible(enabled);
+    loadedRef.current = null;
+    if (!enabled) {
+      korepsBlockedMessageRef.current = null;
+      setUnavailableMessage(null);
+    }
 
     const refresh = async () => {
       if (!enabled || !sourceRef.current) return;
+
+      if (korepsBlockedMessageRef.current) {
+        sourceRef.current.clear();
+        setUnavailableMessage(korepsBlockedMessageRef.current);
+        return;
+      }
 
       const view = map.getView();
       const resolution = view.getResolution();
       if (resolution == null || !isOfficialLandPriceZoomOk(resolution)) {
         sourceRef.current.clear();
+        loadedRef.current = null;
         return;
       }
 
       const extent = view.calculateExtent(map.getSize());
       if (!extent || extent.length < 4) return;
+      const loaded = loadedRef.current;
+      if (loaded && loaded.complete && containsExtent(loaded.extent, extent)) return;
 
       const seq = ++requestSeqRef.current;
       const [minX, minY, maxX, maxY] = extent;
@@ -176,6 +164,8 @@ export function useOfficialLandPriceMapLayer(
       } catch {
         if (seq !== requestSeqRef.current) return;
         sourceRef.current.clear();
+        loadedRef.current = null;
+        setUnavailableMessage(null);
         return;
       }
 
@@ -186,6 +176,9 @@ export function useOfficialLandPriceMapLayer(
       const pnus = withGeom.map((p) => String(p.pnu ?? '').trim()).filter(Boolean);
 
       let dbPrices: Record<string, DbPriceEntry> = {};
+      let korepsAvailable = true;
+      let korepsMessage: string | null = null;
+
       if (pnus.length) {
         try {
           const priceRes = await call('', 'POST', {
@@ -195,43 +188,44 @@ export function useOfficialLandPriceMapLayer(
           });
           const priceData = (priceRes?.data ?? priceRes) as {
             prices?: Record<string, DbPriceEntry>;
+            available?: boolean;
+            message?: string | null;
           };
           dbPrices =
             priceData?.prices && typeof priceData.prices === 'object' ? priceData.prices : {};
+          if (priceData?.available === false) {
+            korepsAvailable = false;
+            korepsMessage =
+              String(priceData.message ?? '').trim() ||
+              '공시지가 연계 자료를 조회할 수 없습니다.';
+          }
         } catch {
+          korepsAvailable = false;
+          korepsMessage = '공시지가 연계 자료를 조회할 수 없습니다.';
           dbPrices = {};
         }
       }
 
-      if (seq !== requestSeqRef.current) return;
+      if (seq !== requestSeqRef.current || !sourceRef.current) return;
 
-      const priced = await mapWithConcurrency(withGeom, PRICE_CONCURRENCY, async (row) => {
+      if (!korepsAvailable) {
+        sourceRef.current.clear();
+        loadedRef.current = null;
+        korepsBlockedMessageRef.current = korepsMessage;
+        setUnavailableMessage(korepsMessage);
+        return;
+      }
+
+      korepsBlockedMessageRef.current = null;
+      setUnavailableMessage(null);
+
+      const features: Feature<Geometry>[] = [];
+      for (const row of withGeom) {
         const pnu = String(row.pnu ?? '').trim();
         const jibun = formatJibun(row.jibun);
         const fromDb = dbPrices[pnu];
-        if (hasUsableDbPrice(fromDb)) {
-          return { row, jibun, priceLabel: fromDb.priceLabel };
-        }
-        if (!vworldKey) {
-          return { row, jibun, priceLabel: '-' };
-        }
-        try {
-          const price = await fetchLatestOfficialLandPriceForPnu({ pnu, vworldKey });
-          return {
-            row,
-            jibun: jibun !== '-' ? jibun : formatJibun(price.jibun) || jibun,
-            priceLabel: price.priceLabel,
-          };
-        } catch {
-          return { row, jibun, priceLabel: '-' };
-        }
-      });
-
-      if (seq !== requestSeqRef.current || !sourceRef.current) return;
-
-      const features: Feature<Geometry>[] = [];
-      for (const item of priced) {
-        const geom = item.row.geom;
+        const priceLabel = hasUsableDbPrice(fromDb) ? fromDb.priceLabel : '-';
+        const geom = row.geom;
         if (!geom) continue;
         try {
           const feature = geoJson.readFeature(
@@ -241,9 +235,9 @@ export function useOfficialLandPriceMapLayer(
               featureProjection: view.getProjection() ?? 'EPSG:3857',
             }
           ) as Feature<Geometry>;
-          feature.set('jibun', item.jibun);
-          feature.set('priceLabel', item.priceLabel);
-          feature.set('pnu', String(item.row.pnu ?? ''));
+          feature.set('jibun', jibun);
+          feature.set('priceLabel', priceLabel);
+          feature.set('pnu', pnu);
           features.push(feature);
         } catch {
           /* skip invalid geom */
@@ -252,6 +246,7 @@ export function useOfficialLandPriceMapLayer(
 
       sourceRef.current.clear();
       if (features.length) sourceRef.current.addFeatures(features);
+      loadedRef.current = { extent, complete: parcels.length < FETCH_LIMIT };
     };
 
     const scheduleRefresh = () => {
@@ -276,7 +271,7 @@ export function useOfficialLandPriceMapLayer(
       }
       map.un('moveend', scheduleRefresh);
     };
-  }, [map, mapReady, enabled, vworldKey]);
+  }, [map, mapReady, enabled]);
 
   useEffect(() => {
     return () => {
@@ -287,4 +282,6 @@ export function useOfficialLandPriceMapLayer(
       }
     };
   }, [map]);
+
+  return { unavailableMessage };
 }

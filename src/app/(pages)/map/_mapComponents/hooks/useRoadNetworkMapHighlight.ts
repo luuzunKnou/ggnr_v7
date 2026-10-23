@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import '../config/projections';
 import VectorSource from 'ol/source/Vector';
 import VectorLayer from 'ol/layer/Vector';
@@ -12,6 +12,7 @@ import {
   DATA_QUERY_SELECTION_PULSE_STEP,
   insertLayerBelowServiceLayer,
 } from '@/lib/mapDataQueryMapHighlight';
+import { roadNetworkVisibleSiblingSegments } from '../../_mapContents/road/roadNetwork/roadNetworkGroup';
 
 /**
  * 도로망도 선택 행 geom — 데이터조회와 동일한 벡터 강조(펄스).
@@ -19,8 +20,17 @@ import {
  */
 export function useRoadNetworkMapHighlight(mapReady: boolean) {
   const mapContext = useMapContext();
-  const row =
-    mapContext?.roadNetworkRows?.find((r) => r.id === mapContext?.roadNetworkSelectedId) ?? null;
+  const allRows = mapContext?.roadNetworkRows;
+  const visibleRows = mapContext?.roadNetworkOverlayRows;
+  const wholeRoad = mapContext?.roadNetworkWholeRoad ?? false;
+  const row = allRows?.find((r) => r.id === mapContext?.roadNetworkSelectedId) ?? null;
+  /** 구간 미선택이면 같은 노선번호 구간 전체를 강조 */
+  const highlightGeoms = useMemo(() => {
+    if (!row) return [];
+    const targets =
+      wholeRoad && allRows ? roadNetworkVisibleSiblingSegments(allRows, visibleRows, row) : [row];
+    return targets.map((r) => r.geom).filter((g): g is NonNullable<typeof g> => g != null);
+  }, [row, wholeRoad, allRows, visibleRows]);
 
   const layerRef = useRef<VectorLayer<VectorSource> | null>(null);
   const sourceRef = useRef<VectorSource | null>(null);
@@ -69,18 +79,16 @@ export function useRoadNetworkMapHighlight(mapReady: boolean) {
 
     source.clear();
     setRadarActive(false);
-    if (!row?.geom) return;
+    if (highlightGeoms.length === 0) return;
 
     const viewProj = map.getView().getProjection()?.getCode() || 'EPSG:3857';
     const geojson = {
       type: 'FeatureCollection' as const,
-      features: [
-        {
-          type: 'Feature' as const,
-          geometry: row.geom,
-          properties: {},
-        },
-      ],
+      features: highlightGeoms.map((geometry) => ({
+        type: 'Feature' as const,
+        geometry,
+        properties: {},
+      })),
     };
     const format = new GeoJSONFormat();
     const features = format.readFeatures(geojson, {
@@ -91,11 +99,5 @@ export function useRoadNetworkMapHighlight(mapReady: boolean) {
 
     source.addFeatures(features);
     setRadarActive(true);
-  }, [
-    row,
-    mapReady,
-    mapContext?.mapInstanceRef,
-    mapContext?.roadNetworkSelectedId,
-    mapContext?.roadNetworkRows,
-  ]);
+  }, [highlightGeoms, mapReady, mapContext?.mapInstanceRef]);
 }

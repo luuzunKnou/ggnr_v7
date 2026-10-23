@@ -14,7 +14,7 @@ import {
 import { useSession } from 'next-auth/react';
 import { call } from '@/lib/api';
 import { isSuperUser } from '@/lib/auth/superUser';
-import { cn } from '@/lib/utils';
+import { cn, copyTextToClipboard } from '@/lib/utils';
 import { LayerRowPanelButton } from '@/app/(pages)/map/_mapComponents/layerRowEdit';
 import { QgisApiManual } from './QgisApiManual';
 import { Switch } from '@/app/shadcnComponents/ui/switch';
@@ -271,12 +271,8 @@ export function QgisLayerControlPanel({ onClose }: { onClose?: () => void }) {
     e?.stopPropagation();
     const k = String(key ?? '').trim();
     if (!k) return;
-    try {
-      await navigator.clipboard.writeText(k);
-      flashStatus('키 복사됨');
-    } catch {
-      window.alert('복사에 실패했습니다.');
-    }
+    if (await copyTextToClipboard(k)) flashStatus('키 복사됨');
+    else window.alert('복사에 실패했습니다.');
   };
 
   const handleCopyWfsUrl = async () => {
@@ -284,12 +280,8 @@ export function QgisLayerControlPanel({ onClose }: { onClose?: () => void }) {
       window.alert('먼저 키를 발급하세요.');
       return;
     }
-    try {
-      await navigator.clipboard.writeText(wfsUrl);
-      flashStatus('WFS 주소 복사됨');
-    } catch {
-      window.alert('복사에 실패했습니다.');
-    }
+    if (await copyTextToClipboard(wfsUrl)) flashStatus('WFS 주소 복사됨');
+    else window.alert('복사에 실패했습니다.');
   };
 
   const handleCopyWmsUrl = async () => {
@@ -297,12 +289,8 @@ export function QgisLayerControlPanel({ onClose }: { onClose?: () => void }) {
       window.alert('먼저 키를 발급하세요.');
       return;
     }
-    try {
-      await navigator.clipboard.writeText(wmsUrl);
-      flashStatus('WMS 주소 복사됨');
-    } catch {
-      window.alert('복사에 실패했습니다.');
-    }
+    if (await copyTextToClipboard(wmsUrl)) flashStatus('WMS 주소 복사됨');
+    else window.alert('복사에 실패했습니다.');
   };
 
   const handleRegenerate = async (usrId: string) => {

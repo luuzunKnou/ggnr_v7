@@ -57,6 +57,13 @@ function applyWindowsUncDataRoot(rawPath: string): string {
   return joinUncRoot(uncRoot, rest);
 }
 
+/** GGNR_DATA_DIR 외 데이터 경로 env 도 dev·demo 에서 같은 G: → UNC 치환을 적용 */
+export function resolveGgnrDataPath(rawPath: string): string {
+  const isProd = (process.env.GGNR_ENV ?? '').trim().toLowerCase() === 'prod';
+  const normalized = path.normalize(rawPath);
+  return turbopackOpaquePath(isProd ? normalized : applyWindowsUncDataRoot(normalized));
+}
+
 /** prod: <project>.env [prod] 의 GGNR_DATA_DIR (runtime.env 등 process.env 덮어쓰기 무시) */
 function readProdDataDirFromProjectEnv(key: string): string {
   const project = (process.env.GGNR_PROJECT ?? '').trim();

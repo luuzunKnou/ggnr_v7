@@ -16,6 +16,7 @@ import {
   isRoadNetworkWmsVisible,
   toggleRoadNetworkWmsLayers,
 } from '../roadNetwork/roadNetworkMapSync';
+import { useRoadNetworkSourceMode } from '../roadNetwork/useRoadNetworkSourceMode';
 import {
   ROAD_FRONTAGE_MARKER_NEW_ID,
   ROAD_FRONTAGE_MARKER_ROAD_TYPES,
@@ -227,6 +228,7 @@ export function RoadFrontageMarkerListPanel({
   }, [selectedId, filtered]);
 
   const roadNetworkLayerOn = isRoadNetworkWmsVisible(mapContext?.visibleLayerNames);
+  const roadNetworkSourceMode = useRoadNetworkSourceMode();
 
   return (
     <div className="standard-panel-root">
@@ -238,7 +240,12 @@ export function RoadFrontageMarkerListPanel({
             title={roadNetworkLayerOn ? '도로망도 레이어 끄기' : '도로망도 레이어 켜기'}
             aria-label={roadNetworkLayerOn ? '도로망도 레이어 끄기' : '도로망도 레이어 켜기'}
             aria-pressed={roadNetworkLayerOn}
-            onClick={() => toggleRoadNetworkWmsLayers(mapContext?.setVisibleLayerNames)}
+            onClick={() =>
+              toggleRoadNetworkWmsLayers(
+                mapContext?.setVisibleLayerNames,
+                roadNetworkSourceMode ?? 'legacy'
+              )
+            }
             className={cn(
               'standard-layer-toggle-chip',
               roadNetworkLayerOn

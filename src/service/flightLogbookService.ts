@@ -129,7 +129,7 @@ export type SaveParams = FlightLogbookValuesPayload & {
   workUnitLabel?: string;
 };
 
-/** 저장(신규 또는 수정). srKey가 있으면 해당 신청의 최신 건을 갱신 */
+/** 저장. flKey가 있으면 그 장만 수정하고, 없으면 새 장을 추가한다. */
 export async function save(params: SaveParams = {}) {
   const srKeyRaw = params.srKey != null ? Number(params.srKey) : null;
   const srKey = srKeyRaw != null && Number.isFinite(srKeyRaw) ? srKeyRaw : null;
@@ -139,20 +139,20 @@ export async function save(params: SaveParams = {}) {
   const now = nowIso();
 
   const flKeyRaw = params.flKey != null ? Number(params.flKey) : null;
-  let targetKey =
+  const targetKey =
     flKeyRaw != null && Number.isFinite(flKeyRaw) ? flKeyRaw : null;
 
-  if (targetKey == null && srKey != null) {
-    const [latest] = await db
-      .select({ flKey: flightLogbook.flKey })
-      .from(flightLogbook)
-      .where(and(eq(flightLogbook.srKey, srKey), eq(flightLogbook.flIsDel, false)))
-      .orderBy(desc(flightLogbook.flUpdateDate), desc(flightLogbook.flKey))
-      .limit(1);
-    if (latest) targetKey = latest.flKey;
-  }
-
   if (targetKey != null) {
+    const [existing] = await db
+      .select({ srKey: flightLogbook.srKey })
+      .from(flightLogbook)
+      .where(and(eq(flightLogbook.flKey, targetKey), eq(flightLogbook.flIsDel, false)))
+      .limit(1);
+    if (!existing) throwHttp(404, '비행기록부를 찾을 수 없습니다.');
+    if (srKey != null && existing.srKey != null && existing.srKey !== srKey) {
+      throwHttp(400, '다른 촬영요청의 비행기록부입니다.');
+    }
+
     const [row] = await db
       .update(flightLogbook)
       .set({
@@ -187,6 +187,32 @@ export async function save(params: SaveParams = {}) {
     .returning();
 
   return { item: toClient(row) };
+}
+
+/** 한 장 삭제. 촬영요청은 그대로 둔다. */
+export async function remove(params: { flKey?: number } = {}) {
+  const flKey = Number(params.flKey);
+  if (!Number.isFinite(flKey)) throwHttp(400, 'flKey가 필요합니다.');
+
+  const [existing] = await db
+    .select()
+    .from(flightLogbook)
+    .where(and(eq(flightLogbook.flKey, flKey), eq(flightLogbook.flIsDel, false)))
+    .limit(1);
+  if (!existing) throwHttp(404, '비행기록부를 찾을 수 없습니다.');
+
+  const operator = await requireWriter(existing.srKey, existing.workUnitLabel);
+  const [row] = await db
+    .update(flightLogbook)
+    .set({
+      flIsDel: true,
+      flUpdateDate: nowIso(),
+      flUpdateUser: operator,
+    })
+    .where(and(eq(flightLogbook.flKey, flKey), eq(flightLogbook.flIsDel, false)))
+    .returning({ flKey: flightLogbook.flKey });
+  if (!row) throwHttp(404, '비행기록부를 찾을 수 없습니다.');
+  return { ok: true, flKey: row.flKey };
 }
 
 /** 단건 조회 */

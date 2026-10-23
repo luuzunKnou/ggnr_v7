@@ -27,6 +27,7 @@ import * as loginLogService from './loginLogService';
 import * as riverBasicPlanService from './riverBasicPlanService';
 import * as privateLandAnalysisService from './privateLandAnalysisService';
 import * as roadLedgerService from './roadLedgerService';
+import * as roadVideoTrackService from './roadVideoTrackService';
 import * as roadNetworkService from './roadNetworkService';
 import * as wtlNetworkService from './wtlNetworkService';
 import * as wtlOutageService from './wtlOutageService';
@@ -85,6 +86,8 @@ import * as userDataUploadService from './userDataUploadService';
 import * as systemControlService from './systemControlService';
 import * as splitLayerService from './splitLayerService';
 import * as dashboardStatsService from './dashboardStatsService';
+import * as detailWondoService from './detailWondoService';
+import * as individualLandPriceService from './individualLandPriceService';
 
 export {
   configService,
@@ -115,6 +118,7 @@ export {
   riverBasicPlanService,
   privateLandAnalysisService,
   roadLedgerService,
+  roadVideoTrackService,
   roadNetworkService,
   wtlNetworkService,
   wtlOutageService,
@@ -170,4 +174,6 @@ export {
   systemControlService,
   splitLayerService,
   dashboardStatsService,
+  detailWondoService,
+  individualLandPriceService,
 };

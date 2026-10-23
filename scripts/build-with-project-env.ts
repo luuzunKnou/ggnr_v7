@@ -11,6 +11,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { getProjectEnvVars, loadProjectEnv } from './load-project-env';
 
+/** next build 힙 상한(MB). NODE_OPTIONS 에 이미 지정돼 있으면 그 값을 쓴다 */
+const BUILD_HEAP_MB = 4096;
+
 function normalizeBasePath(raw: string): string {
   let p = (raw ?? '').trim();
   if (!p) return '';
@@ -63,6 +66,13 @@ function main(): void {
     delete process.env.BASE_PATH;
     console.log('[build] BASE_PATH 없음 — 루트(/) 빌드 (로컬 IP 직결용)');
   }
+
+  // 기본 Node 힙(약 2GB)으로는 webpack 서버 번들·파일 추적 중 메모리 부족(종료 134)이 날 수 있다
+  const nodeOptions = process.env.NODE_OPTIONS ?? '';
+  if (!/--max-old-space-size=/.test(nodeOptions)) {
+    process.env.NODE_OPTIONS = `${nodeOptions} --max-old-space-size=${BUILD_HEAP_MB}`.trim();
+  }
+  console.log(`[build] NODE_OPTIONS=${process.env.NODE_OPTIONS}`);
 
   const r = spawnSync('npm', ['run', 'build'], {
     cwd: process.cwd(),

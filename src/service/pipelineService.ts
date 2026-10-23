@@ -8,45 +8,16 @@ import fs from 'node:fs';
 import { appendUploadConvertHistory } from './fileManagerService';
 import { GGNR_DATA_PATHS } from '@/lib/ggnrDataPaths';
 import { broadcastPipelineStep } from '@/lib/pipelineEvents';
+import { pipelinePythonSpawnEnv, resolvePipelinePythonBin } from '@/lib/pipelinePython';
 
 const GGNR_DATA_DIR = process.env.GGNR_DATA_DIR ?? 'd:\\ggnr_data_dir';
 
-/**
- * pdal/gdal Python 실행 파일.
- * Turbopack이 spawn('python')·cwd=python/ 을 프로젝트 전체로 추적하지 않도록
- * env 인터프리터 절대경로를 우선하고, 작업 디렉터리는 프로젝트 루트를 쓴다.
- */
-function getPythonBin(): string {
-  const raw = process.env.GGNR_PIPELINE_PYTHON?.trim();
-  if (raw && raw !== 'python') {
-    return path.isAbsolute(raw) ? raw : path.join(process.cwd(), raw);
-  }
-  const envPy =
-    process.platform === 'win32'
-      ? path.join(process.cwd(), 'python', 'env', 'python.exe')
-      : path.join(process.cwd(), 'python', 'env', 'bin', 'python');
-  if (fs.existsSync(envPy)) return envPy;
-  return process.platform === 'win32' ? 'python.exe' : 'python3';
-}
-
-/** -m pipeline.cli 용: cwd=프로젝트 루트, PYTHONPATH=python/ */
-function pythonSpawnEnv(): NodeJS.ProcessEnv {
-  const pythonPath = path.join(process.cwd(), 'python');
-  const prev = process.env.PYTHONPATH ?? '';
-  return {
-    ...process.env,
-    PYTHONIOENCODING: 'utf-8',
-    PYTHONUTF8: '1',
-    PYTHONPATH: prev ? `${pythonPath}${path.delimiter}${prev}` : pythonPath,
-  };
-}
-
 function spawnPipelinePython(args: string[]) {
-  return spawn(getPythonBin(), args, {
+  return spawn(resolvePipelinePythonBin(), args, {
     cwd: process.cwd(),
     stdio: ['ignore', 'pipe', 'pipe'],
     windowsHide: true,
-    env: pythonSpawnEnv(),
+    env: pipelinePythonSpawnEnv(),
   });
 }
 
@@ -127,13 +98,14 @@ function runCommand(
 export type RunPipelineEnvSetupResult = { success: boolean; message: string; log: string };
 
 /**
- * python/env Conda 환경 생성 및 pdal, gdal, libpq, py3dtiles[las] 설치.
+ * python/env Conda 환경 생성 및 pdal, gdal, libpq, py3dtiles[las], opencv-python-headless(도로영상 위치 맞춤) 설치.
  * libpq: GDAL PostgreSQL 드라이버(ogr2ogr SHP→PostGIS)용. File Manager에서 "환경 생성 및 설치" 실행 시 호출. conda가 PATH에 있어야 함.
  */
 export async function runPipelineEnvSetup(): Promise<RunPipelineEnvSetupResult> {
   const projectRoot = path.resolve(process.cwd());
-  const pythonDir = path.join(projectRoot, 'python');
-  const envPath = path.join(pythonDir, 'env');
+  // 빌드 파일 추적이 python/env 를 통째로 훑지 않도록 리터럴 path.join 대신 런타임 결합
+  const pythonDir = [projectRoot, 'python'].join(path.sep);
+  const envPath = [pythonDir, 'env'].join(path.sep);
   const logLines: string[] = [];
 
   const condaResolved = resolveCondaExe();
@@ -153,6 +125,11 @@ export async function runPipelineEnvSetup(): Promise<RunPipelineEnvSetupResult> 
     await run(CONDA_EXE, ['create', '--prefix', './env', 'python=3.11', '-y'], 'conda create');
     await run(CONDA_EXE, ['run', '--prefix', './env', 'conda', 'install', '-c', 'conda-forge', 'pdal', 'gdal', 'libpq', '-y'], 'conda install pdal gdal libpq');
     await run(CONDA_EXE, ['run', '--prefix', './env', 'pip', 'install', 'py3dtiles[las]'], 'pip install py3dtiles[las]');
+    await run(
+      CONDA_EXE,
+      ['run', '--prefix', './env', 'pip', 'install', 'opencv-python-headless'],
+      'pip install opencv-python-headless'
+    );
     const log = logLines.join('\n\n');
     return { success: true, message: `환경이 생성되었습니다: ${envPath}`, log };
   } catch (err: unknown) {
