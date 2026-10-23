@@ -21,7 +21,20 @@ type DefineTableRow = {
   define_table_schema?: string;
   define_table_parents_layer?: string;
   define_table_div_query?: string;
+  define_table_idx?: string | number;
 };
+
+function parseTableIdx(raw: unknown): number {
+  const n = parseInt(String(raw ?? '').trim(), 10);
+  return Number.isFinite(n) ? n : Number.POSITIVE_INFINITY;
+}
+
+function compareUndergroundLayers(a: ThematicMapLayerOption, b: ThematicMapLayerOption): number {
+  const da = a.tableIdx ?? Number.POSITIVE_INFINITY;
+  const db = b.tableIdx ?? Number.POSITIVE_INFINITY;
+  if (da !== db) return da - db;
+  return a.layerName.localeCompare(b.layerName, 'ko');
+}
 
 /** 지도 «지하시설물» — 레이어관리 그룹명과 동일 */
 export const UNDERGROUND_FACILITY_GROUP_ALLOW = new Set([
@@ -48,13 +61,30 @@ const UNDERGROUND_FACILITY_GROUP_ORDER = [
 
 const UNDERGROUND_FACILITY_SCHEMA = 'layer';
 
+/** 그룹명 접두 일치 (LIKE '허용그룹%') */
 export function isUndergroundFacilityGroup(group: string): boolean {
-  return UNDERGROUND_FACILITY_GROUP_ALLOW.has(group);
+  const g = String(group ?? '').trim();
+  if (!g) return false;
+  for (const allowed of UNDERGROUND_FACILITY_GROUP_ALLOW) {
+    if (g === allowed || g.startsWith(allowed)) return true;
+  }
+  return false;
 }
 
 function groupSortKey(title: string): number {
-  const i = UNDERGROUND_FACILITY_GROUP_ORDER.indexOf(title);
-  return i >= 0 ? i : UNDERGROUND_FACILITY_GROUP_ORDER.length;
+  const t = String(title ?? '').trim();
+  let best = UNDERGROUND_FACILITY_GROUP_ORDER.length;
+  let bestLen = -1;
+  for (let i = 0; i < UNDERGROUND_FACILITY_GROUP_ORDER.length; i++) {
+    const allowed = UNDERGROUND_FACILITY_GROUP_ORDER[i];
+    if (t === allowed || t.startsWith(allowed)) {
+      if (allowed.length > bestLen) {
+        bestLen = allowed.length;
+        best = i;
+      }
+    }
+  }
+  return best;
 }
 
 function hasLayerTable(existing: Set<string>, name: string): boolean {
@@ -97,6 +127,7 @@ export function buildUndergroundFacilityLayerGroups(
     const layerName = String(t.define_table_kor_name ?? tableName).trim();
     const parentTableName = String(t.define_table_parents_layer ?? '').trim() || undefined;
     const cqlFilter = String(t.define_table_div_query ?? '').trim() || undefined;
+    const tableIdx = parseTableIdx(t.define_table_idx);
 
     if (parentNames.has(tableName.toLowerCase())) continue;
     if (!parentTableName && layerName.startsWith('(연속주제)')) continue;
@@ -117,6 +148,7 @@ export function buildUndergroundFacilityLayerGroups(
       layerName,
       parentTableName,
       cqlFilter,
+      tableIdx,
       minZoom: 8,
       maxZoom: 30,
     });
@@ -132,7 +164,7 @@ export function buildUndergroundFacilityLayerGroups(
     .map(([title, layers]) => ({
       id: title,
       title,
-      layers: layers.sort((a, b) => a.layerName.localeCompare(b.layerName, 'ko')),
+      layers: layers.sort(compareUndergroundLayers),
     }));
 }
 

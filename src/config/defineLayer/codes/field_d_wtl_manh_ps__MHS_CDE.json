@@ -1,0 +1,32 @@
+[
+  {
+    "define_code_key": "65385",
+    "define_code_field_key": "4226",
+    "define_code_name": "MHS000",
+    "define_code_kor_name": "미분류"
+  },
+  {
+    "define_code_key": "65386",
+    "define_code_field_key": "4226",
+    "define_code_name": "MHS001",
+    "define_code_kor_name": "흄관원형"
+  },
+  {
+    "define_code_key": "65387",
+    "define_code_field_key": "4226",
+    "define_code_name": "MHS002",
+    "define_code_kor_name": "사각철판"
+  },
+  {
+    "define_code_key": "65388",
+    "define_code_field_key": "4226",
+    "define_code_name": "MHS003",
+    "define_code_kor_name": "박스형"
+  },
+  {
+    "define_code_key": "65389",
+    "define_code_field_key": "4226",
+    "define_code_name": "MHS004",
+    "define_code_kor_name": "토류형"
+  }
+]

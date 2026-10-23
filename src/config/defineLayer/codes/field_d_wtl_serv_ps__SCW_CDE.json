@@ -1,0 +1,26 @@
+[
+  {
+    "define_code_key": "65519",
+    "define_code_field_key": "4403",
+    "define_code_name": "SCW000",
+    "define_code_kor_name": "미분류"
+  },
+  {
+    "define_code_key": "65520",
+    "define_code_field_key": "4403",
+    "define_code_name": "SCW001",
+    "define_code_kor_name": "자동"
+  },
+  {
+    "define_code_key": "65521",
+    "define_code_field_key": "4403",
+    "define_code_name": "SCW002",
+    "define_code_kor_name": "수동"
+  },
+  {
+    "define_code_key": "65522",
+    "define_code_field_key": "4403",
+    "define_code_name": "SCW999",
+    "define_code_kor_name": "기타"
+  }
+]

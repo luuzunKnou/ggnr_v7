@@ -12,9 +12,10 @@ import {
   type WtlNetLayerDef,
 } from '@/app/(pages)/map/_mapContents/wtlAdmin/networkMap/wtlNetworkLayerCatalog';
 import {
-  getWtlNetMapSource,
-  parseWtlNetMapSourceIds,
+  buildWtlNetMapSourcesFromRows,
+  type WtlNetMapSourceDef,
   type WtlNetMapSourceId,
+  type WtlNetMapSourcePayload,
 } from '@/app/(pages)/map/_mapContents/wtlAdmin/networkMap/wtlNetworkMapSources';
 import type {
   WtlNetworkFilterMeta,
@@ -23,9 +24,74 @@ import type {
 
 export type { WtlNetworkFilterMeta, WtlNetworkRow };
 
+const TABLES_JSON_PATH = path.join(
+  process.cwd(),
+  'src',
+  'config',
+  'defineLayer',
+  'tables.json'
+);
+
+/** 요청마다 tables.json을 읽어 그룹 후보 생성 */
+function loadWtlNetMapSourcesFromTablesJson(): WtlNetMapSourceDef[] {
+  try {
+    const raw = fs.readFileSync(TABLES_JSON_PATH, 'utf8');
+    const rows = JSON.parse(raw) as Array<{
+      define_table_group?: string;
+      define_table_name?: string;
+    }>;
+    return buildWtlNetMapSourcesFromRows(rows);
+  } catch {
+    return [];
+  }
+}
+
+function resolveWtlNetMapSource(id: string): WtlNetMapSourceDef | undefined {
+  const key = String(id ?? '').trim();
+  if (!key) return undefined;
+  return loadWtlNetMapSourcesFromTablesJson().find((s) => s.id === key);
+}
+
+function parseMapSourceIds(raw: unknown): WtlNetMapSourceId[] {
+  const all = loadWtlNetMapSourcesFromTablesJson();
+  const byId = new Map(all.map((s) => [s.id, s]));
+  const fallback = byId.has('상수')
+    ? (['상수'] as WtlNetMapSourceId[])
+    : all[0]
+      ? [all[0].id]
+      : [];
+  if (!Array.isArray(raw)) return fallback;
+  const out: WtlNetMapSourceId[] = [];
+  for (const v of raw) {
+    const id = String(v ?? '').trim();
+    if (byId.has(id) && !out.includes(id)) out.push(id);
+  }
+  return out.length > 0 ? out : fallback;
+}
+
+/** tables.json에 나온 테이블명 중 layer 스키마에 실제 존재하는 것 */
+async function existingLayerTables(tableNames: readonly string[]): Promise<Set<string>> {
+  const names = [
+    ...new Set(
+      tableNames.map((t) => String(t ?? '').trim().toLowerCase()).filter(Boolean)
+    ),
+  ];
+  if (names.length === 0) return new Set();
+  const inList = names.map((n) => `'${esc(n)}'`).join(',');
+  const res = await db.execute(
+    sql.raw(
+      `SELECT lower(table_name) AS t
+       FROM information_schema.tables
+       WHERE table_schema = 'layer'
+         AND lower(table_name) IN (${inList})`
+    )
+  );
+  return new Set((res.rows ?? []).map((r) => String((r as { t?: string }).t ?? '')));
+}
+
 type ListParams = {
   layerKeys?: string[];
-  /** 상수관망도 출처(대진·서영·성과심사) */
+  /** 관망도 출처(define_table_group) */
   mapSources?: string[];
   /** EPSG:3857 [minX,minY,maxX,maxY] */
   bbox?: number[] | null;
@@ -372,7 +438,7 @@ function buildSelect(
 function mapRow(row: Record<string, unknown>, collapseMaterial = true): WtlNetworkRow {
   const layerKey = asStr(row.layerKey);
   const sourceId = asStr(row.sourceId);
-  const sourceLabel = sourceId ? getWtlNetMapSource(sourceId)?.label ?? sourceId : '';
+  const sourceLabel = sourceId ? resolveWtlNetMapSource(sourceId)?.label ?? sourceId : '';
   const def = getWtlNetLayerDef(layerKey);
   const matRaw = asStr(row.material);
   const materialFull = materialLabel(def?.materialCol, matRaw);
@@ -420,7 +486,7 @@ function parseNetworkRowId(id: string): {
   const raw = String(id ?? '').trim();
   if (!raw.includes(':')) return null;
   const parts = raw.split(':');
-  if (parts.length >= 3 && getWtlNetMapSource(parts[0]!)) {
+  if (parts.length >= 3 && resolveWtlNetMapSource(parts[0]!)) {
     const ogcFid = Number(parts[parts.length - 1]);
     if (!Number.isFinite(ogcFid)) return null;
     return {
@@ -444,9 +510,9 @@ export async function getWtlNetworkList(params: ListParams = {}): Promise<{
 }> {
   const keys = (params.layerKeys ?? []).map((k) => String(k).trim()).filter(Boolean);
   if (keys.length === 0) return { rows: [] };
-  const sources = parseWtlNetMapSourceIds(params.mapSources)
-    .map((id) => getWtlNetMapSource(id))
-    .filter((s): s is NonNullable<typeof s> => Boolean(s));
+  const sources = parseMapSourceIds(params.mapSources)
+    .map((id) => resolveWtlNetMapSource(id))
+    .filter((s): s is WtlNetMapSourceDef => Boolean(s));
   if (sources.length === 0) return { rows: [] };
 
   const slotCount = Math.max(keys.length * sources.length, 1);
@@ -523,7 +589,10 @@ export async function getWtlNetworkDetail(params: {
 
   const def = getWtlNetLayerDef(layerKey);
   if (!def?.table) return { row: null };
-  const source = getWtlNetMapSource(sourceId) ?? getWtlNetMapSource('review');
+  const source =
+    resolveWtlNetMapSource(sourceId) ??
+    resolveWtlNetMapSource('상수') ??
+    loadWtlNetMapSourcesFromTablesJson()[0];
   if (!source) return { row: null };
   const physicalTable = source.remapTable(def.table);
   if (!(await tableExists(physicalTable))) return { row: null };
@@ -576,9 +645,9 @@ export async function getWtlNetworkAtPoint(params: {
   tolerance?: number;
 }): Promise<{ row: WtlNetworkRow | null }> {
   const keys = (params.layerKeys ?? []).map((k) => String(k).trim()).filter(Boolean);
-  const sources = parseWtlNetMapSourceIds(params.mapSources)
-    .map((id) => getWtlNetMapSource(id))
-    .filter((s): s is NonNullable<typeof s> => Boolean(s));
+  const sources = parseMapSourceIds(params.mapSources)
+    .map((id) => resolveWtlNetMapSource(id))
+    .filter((s): s is WtlNetMapSourceDef => Boolean(s));
   const x = Number(params.x);
   const y = Number(params.y);
   if (!Number.isFinite(x) || !Number.isFinite(y) || keys.length === 0 || sources.length === 0) {
@@ -641,6 +710,29 @@ export async function getWtlNetworkAtPoint(params: {
     }
   }
   return { row: null };
+}
+
+/**
+ * tables.json 그룹 후보를 읽고, define_table_name이 layer에 실제로 있는 그룹만 반환
+ */
+export async function listWtlNetMapSources(): Promise<{
+  sources: WtlNetMapSourcePayload[];
+}> {
+  const candidates = loadWtlNetMapSourcesFromTablesJson();
+  const allNames = candidates.flatMap((s) => [...s.tables]);
+  const existing = await existingLayerTables(allNames);
+
+  const sources: WtlNetMapSourcePayload[] = [];
+  for (const source of candidates) {
+    const liveTables = source.tables.filter((t) => existing.has(t.toLowerCase()));
+    if (liveTables.length === 0) continue;
+    sources.push({
+      id: source.id,
+      label: source.label,
+      tables: liveTables,
+    });
+  }
+  return { sources };
 }
 
 /**

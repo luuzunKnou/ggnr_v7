@@ -1,7 +1,8 @@
-import { getWtlNetMapSource, WTL_NET_MAP_SOURCE_DEFAULT } from './wtlNetworkMapSources'
+import { getWtlNetMapSource, getWtlNetMapSources } from './wtlNetworkMapSources'
 
 /** 관망조회 표시명 ↔ layer 스키마 테이블·용도 조건 */
 
+/** key = tables.json define_table_kor_name */
 export const WTL_NET_LAYER_KEYS = [
   '상수관로(기타)',
   '배수관로',
@@ -24,7 +25,7 @@ export const WTL_NET_LAYER_KEYS = [
   '상수원 보호구역',
   '공장설립 제한지역',
   '상수관로 심도',
-  '누수지점_및_복구내역',
+  '누수지점 및 복구내역',
   '상수 업데이트 내역',
 ] as const
 
@@ -34,7 +35,10 @@ export type WtlNetGeomKind = 'line' | 'point' | 'area'
 
 export type WtlNetLayerDef = {
   key: WtlNetLayerKey
+  /** 물리 조회 테이블 (관로 분할은 wtl_pipe_lm + saa) */
   table: string | null
+  /** tables.json define_table_name (표시·정렬 메타) */
+  defineTable?: string | null
   geomKind: WtlNetGeomKind
   /** wtl_pipe_lm 용도 코드. null=전체, 'other'=배수·송수·급수 제외 */
   saa?: 'SAA003' | 'SAA004' | 'SAA005' | 'other' | null
@@ -55,6 +59,7 @@ export const WTL_NET_LAYER_DEFS: readonly WtlNetLayerDef[] = [
   {
     key: '상수관로(기타)',
     table: 'wtl_pipe_lm',
+    defineTable: 'wtl_pipe_lm_etc',
     geomKind: 'line',
     saa: 'other',
     nameExpr: `COALESCE(NULLIF(trim(pip_lbl),''), NULLIF(trim(ftr_idn),''), ogc_fid::text)`,
@@ -66,6 +71,7 @@ export const WTL_NET_LAYER_DEFS: readonly WtlNetLayerDef[] = [
   {
     key: '배수관로',
     table: 'wtl_pipe_lm',
+    defineTable: 'wtl_pipe_lm_saa004',
     geomKind: 'line',
     saa: 'SAA004',
     nameExpr: `COALESCE(NULLIF(trim(pip_lbl),''), NULLIF(trim(ftr_idn),''), ogc_fid::text)`,
@@ -77,6 +83,7 @@ export const WTL_NET_LAYER_DEFS: readonly WtlNetLayerDef[] = [
   {
     key: '송수관로',
     table: 'wtl_pipe_lm',
+    defineTable: 'wtl_pipe_lm_saa003',
     geomKind: 'line',
     saa: 'SAA003',
     nameExpr: `COALESCE(NULLIF(trim(pip_lbl),''), NULLIF(trim(ftr_idn),''), ogc_fid::text)`,
@@ -88,6 +95,7 @@ export const WTL_NET_LAYER_DEFS: readonly WtlNetLayerDef[] = [
   {
     key: '급수관로',
     table: 'wtl_sply_ls',
+    defineTable: 'wtl_sply_ls',
     geomKind: 'line',
     saa: null,
     nameExpr: `COALESCE(NULLIF(trim(pip_lbl),''), NULLIF(trim(ftr_idn),''), ogc_fid::text)`,
@@ -99,6 +107,7 @@ export const WTL_NET_LAYER_DEFS: readonly WtlNetLayerDef[] = [
   {
     key: '변류시설',
     table: 'wtl_valv_ps',
+    defineTable: 'wtl_valv_ps',
     geomKind: 'point',
     nameExpr: `COALESCE(NULLIF(trim(ftr_idn),''), ogc_fid::text)`,
     diameterCol: 'std_dip',
@@ -109,6 +118,7 @@ export const WTL_NET_LAYER_DEFS: readonly WtlNetLayerDef[] = [
   {
     key: '상수맨홀',
     table: 'wtl_manh_ps',
+    defineTable: 'wtl_manh_ps',
     geomKind: 'point',
     nameExpr: `COALESCE(NULLIF(trim(ftr_idn),''), ogc_fid::text)`,
     diameterCol: null,
@@ -119,6 +129,7 @@ export const WTL_NET_LAYER_DEFS: readonly WtlNetLayerDef[] = [
   {
     key: '취수장',
     table: 'wtl_gain_ps',
+    defineTable: 'wtl_gain_ps',
     geomKind: 'area',
     nameExpr: `COALESCE(NULLIF(trim(gai_nam),''), NULLIF(trim(ftr_idn),''), ogc_fid::text)`,
     diameterCol: null,
@@ -129,6 +140,7 @@ export const WTL_NET_LAYER_DEFS: readonly WtlNetLayerDef[] = [
   {
     key: '정수장',
     table: 'wtl_puri_as',
+    defineTable: 'wtl_puri_as',
     geomKind: 'area',
     nameExpr: `COALESCE(NULLIF(trim(pur_nam),''), NULLIF(trim(ftr_idn),''), ogc_fid::text)`,
     diameterCol: null,
@@ -139,6 +151,7 @@ export const WTL_NET_LAYER_DEFS: readonly WtlNetLayerDef[] = [
   {
     key: '배수지',
     table: 'wtl_serv_ps',
+    defineTable: 'wtl_serv_ps',
     geomKind: 'area',
     nameExpr: `COALESCE(NULLIF(trim(srv_nam),''), NULLIF(trim(ftr_idn),''), ogc_fid::text)`,
     diameterCol: null,
@@ -149,6 +162,7 @@ export const WTL_NET_LAYER_DEFS: readonly WtlNetLayerDef[] = [
   {
     key: '가압장',
     table: 'wtl_pres_ps',
+    defineTable: 'wtl_pres_ps',
     geomKind: 'area',
     nameExpr: `COALESCE(NULLIF(trim(prs_nam),''), NULLIF(trim(ftr_idn),''), ogc_fid::text)`,
     diameterCol: null,
@@ -156,10 +170,11 @@ export const WTL_NET_LAYER_DEFS: readonly WtlNetLayerDef[] = [
     lengthCol: null,
     yearCol: 'fns_ymd',
   },
-  { key: '저수조', table: null, geomKind: 'point' },
+  { key: '저수조', table: 'wtl_rsrv_ps', defineTable: 'wtl_rsrv_ps', geomKind: 'point' },
   {
     key: '소방시설',
     table: 'wtl_fire_ps',
+    defineTable: 'wtl_fire_ps',
     geomKind: 'point',
     nameExpr: `COALESCE(NULLIF(trim(ftr_idn),''), ogc_fid::text)`,
     diameterCol: 'std_dip',
@@ -170,6 +185,7 @@ export const WTL_NET_LAYER_DEFS: readonly WtlNetLayerDef[] = [
   {
     key: '유량계',
     table: 'wtl_flow_ps',
+    defineTable: 'wtl_flow_ps',
     geomKind: 'point',
     nameExpr: `COALESCE(NULLIF(trim(ftr_idn),''), ogc_fid::text)`,
     diameterCol: 'std_dip',
@@ -180,6 +196,7 @@ export const WTL_NET_LAYER_DEFS: readonly WtlNetLayerDef[] = [
   {
     key: '수압계',
     table: 'wtl_prga_ps',
+    defineTable: 'wtl_prga_ps',
     geomKind: 'point',
     nameExpr: `COALESCE(NULLIF(trim(ftr_idn),''), ogc_fid::text)`,
     diameterCol: 'std_dip',
@@ -193,6 +210,7 @@ export const WTL_NET_LAYER_DEFS: readonly WtlNetLayerDef[] = [
   {
     key: '급수전계량기',
     table: 'wtl_meta_ps',
+    defineTable: 'wtl_meta_ps',
     geomKind: 'point',
     nameExpr: `COALESCE(NULLIF(trim(met_num),''), NULLIF(trim(hom_num),''), NULLIF(trim(ftr_idn),''), ogc_fid::text)`,
     diameterCol: 'met_dip',
@@ -205,6 +223,7 @@ export const WTL_NET_LAYER_DEFS: readonly WtlNetLayerDef[] = [
   {
     key: '상수관로 심도',
     table: 'wtl_pipe_ps',
+    defineTable: 'wtl_pipe_ps',
     geomKind: 'point',
     nameExpr: `ogc_fid::text`,
     diameterCol: null,
@@ -214,8 +233,9 @@ export const WTL_NET_LAYER_DEFS: readonly WtlNetLayerDef[] = [
     hasHjd: false,
   },
   {
-    key: '누수지점_및_복구내역',
+    key: '누수지점 및 복구내역',
     table: 'wtl_leak_ps',
+    defineTable: 'wtl_leak_ps',
     geomKind: 'point',
     nameExpr: `COALESCE(NULLIF(trim(ftr_idn),''), ogc_fid::text)`,
     diameterCol: 'std_dip',
@@ -226,6 +246,7 @@ export const WTL_NET_LAYER_DEFS: readonly WtlNetLayerDef[] = [
   {
     key: '상수 업데이트 내역',
     table: 'wtl_task_as',
+    defineTable: 'wtl_task_as',
     geomKind: 'area',
     nameExpr: `COALESCE(NULLIF(trim(cons_name),''), NULLIF(trim(cons_code),''), ogc_fid::text)`,
     diameterCol: null,
@@ -250,15 +271,11 @@ export function resolveWtlNetWmsLayers(
   layers: string[]
   cql: string[]
 } {
-  const sources = [...(sourceIds ?? WTL_NET_MAP_SOURCE_DEFAULT)]
+  const fallbackIds = getWtlNetMapSources().map((s) => s.id)
+  const sources = [...(sourceIds ?? fallbackIds)]
     .map((id) => getWtlNetMapSource(id))
     .filter((s): s is NonNullable<typeof s> => Boolean(s))
-  const activeSources =
-    sources.length > 0
-      ? sources
-      : [...WTL_NET_MAP_SOURCE_DEFAULT]
-          .map((id) => getWtlNetMapSource(id))
-          .filter((s): s is NonNullable<typeof s> => Boolean(s))
+  const activeSources = sources.length > 0 ? sources : getWtlNetMapSources()
 
   const layers: string[] = []
   const cql: string[] = []

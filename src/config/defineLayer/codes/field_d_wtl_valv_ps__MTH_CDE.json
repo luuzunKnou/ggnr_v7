@@ -1,0 +1,146 @@
+[
+  {
+    "define_code_key": "66630",
+    "define_code_field_key": "4446",
+    "define_code_name": "MTH000",
+    "define_code_kor_name": "미분류"
+  },
+  {
+    "define_code_key": "66631",
+    "define_code_field_key": "4446",
+    "define_code_name": "MTH001",
+    "define_code_kor_name": "자동"
+  },
+  {
+    "define_code_key": "66632",
+    "define_code_field_key": "4446",
+    "define_code_name": "MTH002",
+    "define_code_kor_name": "수동"
+  },
+  {
+    "define_code_key": "66633",
+    "define_code_field_key": "4446",
+    "define_code_name": "MTH999",
+    "define_code_kor_name": "기타"
+  },
+  {
+    "define_code_key": "66634",
+    "define_code_field_key": "4446",
+    "define_code_name": "MTH900",
+    "define_code_kor_name": "매몰"
+  },
+  {
+    "define_code_key": "66635",
+    "define_code_field_key": "4446",
+    "define_code_name": "MTH901",
+    "define_code_kor_name": "반자동"
+  },
+  {
+    "define_code_key": "66636",
+    "define_code_field_key": "4446",
+    "define_code_name": "MTH902",
+    "define_code_kor_name": "비폐쇄"
+  },
+  {
+    "define_code_key": "66637",
+    "define_code_field_key": "4446",
+    "define_code_name": "MTH903",
+    "define_code_kor_name": "수몰"
+  },
+  {
+    "define_code_key": "66638",
+    "define_code_field_key": "4446",
+    "define_code_name": "MTH904",
+    "define_code_kor_name": "전동"
+  },
+  {
+    "define_code_key": "66639",
+    "define_code_field_key": "4446",
+    "define_code_name": "MTH905",
+    "define_code_kor_name": "토류형"
+  },
+  {
+    "define_code_key": "66640",
+    "define_code_field_key": "4446",
+    "define_code_name": "MTH906",
+    "define_code_kor_name": "토몰"
+  },
+  {
+    "define_code_key": "66641",
+    "define_code_field_key": "4446",
+    "define_code_name": "MTH907",
+    "define_code_kor_name": "폐쇄"
+  },
+  {
+    "define_code_key": "66642",
+    "define_code_field_key": "4446",
+    "define_code_name": "MTH908",
+    "define_code_kor_name": "BR(벨로즈식)"
+  },
+  {
+    "define_code_key": "66643",
+    "define_code_field_key": "4446",
+    "define_code_name": "MTH909",
+    "define_code_kor_name": "BV(Butter Fly식)"
+  },
+  {
+    "define_code_key": "66644",
+    "define_code_field_key": "4446",
+    "define_code_name": "MTH910",
+    "define_code_kor_name": "DR(다이어램프식)"
+  },
+  {
+    "define_code_key": "66645",
+    "define_code_field_key": "4446",
+    "define_code_name": "MTH911",
+    "define_code_kor_name": "GV(Gate식)"
+  },
+  {
+    "define_code_key": "66646",
+    "define_code_field_key": "4446",
+    "define_code_name": "MTH912",
+    "define_code_kor_name": "LS(지렛대식)"
+  },
+  {
+    "define_code_key": "66647",
+    "define_code_field_key": "4446",
+    "define_code_name": "MTH913",
+    "define_code_kor_name": "PC(완폐식)"
+  },
+  {
+    "define_code_key": "66648",
+    "define_code_field_key": "4446",
+    "define_code_name": "MTH914",
+    "define_code_kor_name": "PR(피스톤식)"
+  },
+  {
+    "define_code_key": "66649",
+    "define_code_field_key": "4446",
+    "define_code_name": "MTH915",
+    "define_code_kor_name": "SC(Saing 직폐식)"
+  },
+  {
+    "define_code_key": "66650",
+    "define_code_field_key": "4446",
+    "define_code_name": "MTH916",
+    "define_code_kor_name": "SG(Sliuice Gate식)"
+  },
+  {
+    "define_code_key": "66651",
+    "define_code_field_key": "4446",
+    "define_code_name": "MTH917",
+    "define_code_kor_name": "SS(스프링식)"
+  },
+  {
+    "define_code_key": "66652",
+    "define_code_field_key": "4446",
+    "define_code_name": "MTH918",
+    "define_code_kor_name": "SV(Sluice식)"
+  },
+  {
+    "define_code_key": "66653",
+    "define_code_field_key": "4446",
+    "define_code_name": "MTH919",
+    "define_code_kor_name": "WS(추식)"
+  }
+]

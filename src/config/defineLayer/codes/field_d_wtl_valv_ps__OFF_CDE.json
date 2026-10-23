@@ -1,0 +1,56 @@
+[
+  {
+    "define_code_key": "66683",
+    "define_code_field_key": "4452",
+    "define_code_name": "OFF000",
+    "define_code_kor_name": "미분류"
+  },
+  {
+    "define_code_key": "66684",
+    "define_code_field_key": "4452",
+    "define_code_name": "OFF001",
+    "define_code_kor_name": "개"
+  },
+  {
+    "define_code_key": "66685",
+    "define_code_field_key": "4452",
+    "define_code_name": "OFF002",
+    "define_code_kor_name": "폐"
+  },
+  {
+    "define_code_key": "66686",
+    "define_code_field_key": "4452",
+    "define_code_name": "OFF999",
+    "define_code_kor_name": "기타"
+  },
+  {
+    "define_code_key": "66687",
+    "define_code_field_key": "4452",
+    "define_code_name": "OFF900",
+    "define_code_kor_name": "일부열림"
+  },
+  {
+    "define_code_key": "66688",
+    "define_code_field_key": "4452",
+    "define_code_name": "OFF901",
+    "define_code_kor_name": "재질"
+  },
+  {
+    "define_code_key": "66689",
+    "define_code_field_key": "4452",
+    "define_code_name": "OFF902",
+    "define_code_kor_name": "정상"
+  },
+  {
+    "define_code_key": "66690",
+    "define_code_field_key": "4452",
+    "define_code_name": "OFF903",
+    "define_code_kor_name": "토류형"
+  },
+  {
+    "define_code_key": "66691",
+    "define_code_field_key": "4452",
+    "define_code_name": "OFF904",
+    "define_code_kor_name": "토몰"
+  }
+]

@@ -1,0 +1,19 @@
+<layer>
+  <name>d_wtl_fire_ps</name>
+  <id>LayerInfoImpl--51390c14:1a166f7a0a1:-7eeb</id>
+  <type>VECTOR</type>
+  <defaultStyle>
+    <id>StyleInfoImpl--51390c14:1a166f7a0a1:-7eea</id>
+  </defaultStyle>
+  <resource class="featureType">
+    <id>FeatureTypeInfoImpl--51390c14:1a166f7a0a1:-7eec</id>
+  </resource>
+  <queryable>true</queryable>
+  <opaque>false</opaque>
+  <attribution>
+    <logoWidth>0</logoWidth>
+    <logoHeight>0</logoHeight>
+  </attribution>
+  <dateCreated>2026-10-23 04:37:40.505 UTC</dateCreated>
+  <dateModified>2026-10-23 04:37:40.907 UTC</dateModified>
+</layer>

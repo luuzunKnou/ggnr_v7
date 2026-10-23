@@ -2,19 +2,23 @@
 
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { ChevronDown, X } from 'lucide-react'
+import { ChevronDown, Settings, X } from 'lucide-react'
 import { call } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { MapSideListPanel } from '../../../_mapComponents/MapSideListPanel'
 import { useWtlNetworkMapLayer } from './useWtlNetworkMapLayer'
 import { WtlNetworkMapStatus } from './WtlNetworkMapStatus'
 import { sectionPipeOf, WtlNetworkMapSectionModal } from './WtlNetworkMapSectionModal'
+import {
+  resolveVisibleWtlNetMapSources,
+  WtlNetMapSourceSettingsDialog,
+} from './WtlNetMapSourceSettingsDialog'
 import { getWtlNetLayerDef } from './wtlNetworkLayerCatalog'
 import {
   getWtlNetMapSource,
-  WTL_NET_MAP_SOURCE_DEFAULT,
-  WTL_NET_MAP_SOURCES,
+  setWtlNetMapSources,
   type WtlNetMapSourceId,
+  type WtlNetMapSourcePayload,
 } from './wtlNetworkMapSources'
 import type { WtlNetworkFilterMeta, WtlNetworkRow } from './wtlNetworkTypes'
 
@@ -26,7 +30,10 @@ const RESULT_MIN = 320
 const RESULT_MAX = 680
 const BOX_PREVIEW_ROWS = 5
 
-/** 상단 밑줄 탭 */
+/**
+ * 상단 밑줄 탭 — items = tables.json define_table_kor_name
+ * (상수관로(기타)/배수/송수 = wtl_pipe_lm_etc·saa004·saa003)
+ */
 const DISPLAY_GROUPS: { title: string; items: string[] }[] = [
   {
     title: '관로',
@@ -50,7 +57,7 @@ const DISPLAY_GROUPS: { title: string; items: string[] }[] = [
   },
   {
     title: '기타',
-    items: ['상수관로 심도', '누수지점_및_복구내역', '상수 업데이트 내역'],
+    items: ['상수관로 심도', '누수지점 및 복구내역', '상수 업데이트 내역'],
   },
 ]
 
@@ -285,9 +292,10 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
   const [listWidth, setListWidth] = useState(LIST_DEFAULT)
   const [resultWidth, setResultWidth] = useState(RESULT_DEFAULT)
   const [extraOn, setExtraOn] = useState<Set<string>>(() => new Set(EXTRA_ON))
-  const [mapSources, setMapSources] = useState<Set<WtlNetMapSourceId>>(
-    () => new Set(WTL_NET_MAP_SOURCE_DEFAULT)
-  )
+  const [mapSources, setMapSources] = useState<Set<WtlNetMapSourceId>>(() => new Set())
+  const [availableSourceIds, setAvailableSourceIds] = useState<string[]>([])
+  const [visibleSourceIds, setVisibleSourceIds] = useState<string[]>([])
+  const [sourceSettingsOpen, setSourceSettingsOpen] = useState(false)
   const [group, setGroup] = useState(DISPLAY_GROUPS[0]?.title ?? '관로')
   const [keyword, setKeyword] = useState('')
   const [meta, setMeta] = useState<WtlNetworkFilterMeta>(DEFAULT_META)
@@ -337,6 +345,48 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
         setDiameterTo(data.diameterMax)
       } catch {
         /* keep defaults */
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      try {
+        const res = await call('', 'POST', {
+          service: 'wtlNetworkService',
+          action: 'listWtlNetMapSources',
+          params: {},
+        })
+        const data = (res?.data ?? res) as { sources?: WtlNetMapSourcePayload[] } | undefined
+        if (cancelled) return
+        const payloads = (data?.sources ?? [])
+          .map((s) => ({
+            id: String(s.id ?? '').trim(),
+            label: String(s.label ?? s.id ?? '').trim(),
+            tables: Array.isArray(s.tables) ? s.tables.map(String) : [],
+          }))
+          .filter((s) => s.id)
+        setWtlNetMapSources(payloads)
+        const ids = payloads.map((s) => s.id)
+        setAvailableSourceIds(ids)
+        const visible = resolveVisibleWtlNetMapSources(ids)
+        setVisibleSourceIds(visible)
+        setMapSources(() => {
+          if (visible.includes('상수')) return new Set(['상수'])
+          if (visible[0]) return new Set([visible[0]])
+          return new Set()
+        })
+      } catch {
+        if (!cancelled) {
+          setWtlNetMapSources([])
+          setAvailableSourceIds([])
+          setVisibleSourceIds([])
+          setMapSources(new Set())
+        }
       }
     })()
     return () => {
@@ -414,6 +464,7 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
   useWtlNetworkMapLayer({
     enabledLayerKeys: extraOn,
     mapSources,
+    availableSourceIds,
     selected,
     onSelect: (row) => setSelected(row),
     onExtentChange: (next) => setBbox(next),
@@ -482,10 +533,29 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
     })
   }
 
+  const handleSourceSettingsSaved = (visibleIds: string[]) => {
+    setVisibleSourceIds(visibleIds)
+    setMapSources((prev) => {
+      const kept = [...prev].filter((id) => visibleIds.includes(id))
+      if (kept.length > 0) return new Set(kept)
+      if (visibleIds[0]) return new Set([visibleIds[0]])
+      return new Set()
+    })
+  }
+
   const currentGroup = DISPLAY_GROUPS.find((item) => item.title === group) ?? DISPLAY_GROUPS[0]
+  const sourceButtons = visibleSourceIds
+    .map((id) => getWtlNetMapSource(id))
+    .filter((s): s is NonNullable<typeof s> => Boolean(s))
 
   return (
     <>
+      <WtlNetMapSourceSettingsDialog
+        open={sourceSettingsOpen}
+        onOpenChange={setSourceSettingsOpen}
+        availableIds={availableSourceIds}
+        onSaved={handleSourceSettingsSaved}
+      />
       <div className="pointer-events-auto shrink-0">
         <MapSideListPanel
           width={listWidth}
@@ -504,24 +574,34 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
             <div className="flex min-h-0 flex-1 flex-col">
               <div className="max-h-[58%] min-h-0 shrink overflow-auto">
                 <div className="standard-filter-section border-b-0 !pb-[13px]">
-                  <div className="grid grid-cols-3 gap-1">
-                    {WTL_NET_MAP_SOURCES.map((src) => {
-                      const on = mapSources.has(src.id)
-                      return (
-                        <button
-                          key={src.id}
-                          type="button"
-                          className={cn(
-                            'h-7 min-w-0 truncate rounded border px-1 text-[11px] font-medium leading-none',
-                            on ? GROUP_BTN_ON : GROUP_BTN_OFF
-                          )}
-                          title={src.label}
-                          onClick={() => toggleMapSource(src.id)}
-                        >
-                          {src.label}
-                        </button>
-                      )
-                    })}
+                  <div className="flex items-start gap-1">
+                    <div className="grid min-w-0 flex-1 grid-cols-3 gap-1">
+                      {sourceButtons.map((src) => {
+                        const on = mapSources.has(src.id)
+                        return (
+                          <button
+                            key={src.id}
+                            type="button"
+                            className={cn(
+                              'h-7 min-w-0 cursor-pointer truncate rounded border px-1 text-[11px] font-medium leading-none',
+                              on ? GROUP_BTN_ON : GROUP_BTN_OFF
+                            )}
+                            title={src.label}
+                            onClick={() => toggleMapSource(src.id)}
+                          >
+                            {src.label}
+                          </button>
+                        )
+                      })}
+                    </div>
+                    <button
+                      type="button"
+                      className="inline-flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center rounded border border-border bg-muted/40 hover:bg-muted"
+                      title="관망도 그룹 설정"
+                      onClick={() => setSourceSettingsOpen(true)}
+                    >
+                      <Settings className="h-3.5 w-3.5" style={{ color: '#c8c8c8' }} aria-hidden />
+                    </button>
                   </div>
                   <div className="flex border-b border-border">
                     {DISPLAY_GROUPS.map(({ title }) => {

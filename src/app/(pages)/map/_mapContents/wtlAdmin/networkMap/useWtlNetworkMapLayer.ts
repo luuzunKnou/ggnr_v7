@@ -17,7 +17,7 @@ import '../../../_mapComponents/config/projections'
 import { useMapContext } from '../../../_mapComponents/MapContext'
 import { resolveWtlNetWmsLayers } from './wtlNetworkLayerCatalog'
 import {
-  WTL_NET_MAP_SOURCES,
+  getWtlNetMapSources,
   type WtlNetMapSourceId,
 } from './wtlNetworkMapSources'
 import type { WtlNetworkRow } from './wtlNetworkTypes'
@@ -40,6 +40,8 @@ function highlightStyle(): Style {
 type Props = {
   enabledLayerKeys: ReadonlySet<string>
   mapSources: ReadonlySet<WtlNetMapSourceId>
+  /** 서버 listWtlNetMapSources로 확정된 출처 id */
+  availableSourceIds: readonly string[]
   selected: WtlNetworkRow | null
   onSelect: (row: WtlNetworkRow) => void
   onExtentChange: (bbox3857: [number, number, number, number] | null) => void
@@ -48,6 +50,7 @@ type Props = {
 export function useWtlNetworkMapLayer({
   enabledLayerKeys,
   mapSources,
+  availableSourceIds,
   selected,
   onSelect,
   onExtentChange,
@@ -64,14 +67,23 @@ export function useWtlNetworkMapLayer({
   keysRef.current = enabledLayerKeys
   sourcesRef.current = mapSources
 
-  // WMS(출처별) + highlight
+  const availableKey = availableSourceIds.join('\u0001')
+
+  // WMS(출처별) + highlight — 서버가 내려준 가용 출처 기준으로 생성
   useEffect(() => {
     const map = mapContext?.mapInstanceRef?.current
     if (!map || !mapContext?.mapReady) return
+    if (availableSourceIds.length === 0) {
+      wmsBySourceRef.current = new Map()
+      return
+    }
 
+    const sourceDefs = getWtlNetMapSources().filter((s) =>
+      availableSourceIds.includes(s.id)
+    )
     const wmsUrl = `${getGeoServerBase()}/${WORKSPACE}/wms`
     const bySource = new Map<WtlNetMapSourceId, ImageLayer<ImageWMS>>()
-    for (const src of WTL_NET_MAP_SOURCES) {
+    for (const src of sourceDefs) {
       const wms = new ImageLayer({
         source: new ImageWMS({
           url: wmsUrl,
@@ -149,11 +161,14 @@ export function useWtlNetworkMapLayer({
       wmsBySourceRef.current = new Map()
       highlightRef.current = null
     }
-  }, [mapContext?.mapInstanceRef, mapContext?.mapReady])
+  }, [mapContext?.mapInstanceRef, mapContext?.mapReady, availableKey, availableSourceIds])
 
   // 출처·표시 토글에 맞춰 출처별 WMS 갱신
   useEffect(() => {
-    for (const src of WTL_NET_MAP_SOURCES) {
+    const sourceDefs = getWtlNetMapSources().filter((s) =>
+      availableSourceIds.includes(s.id)
+    )
+    for (const src of sourceDefs) {
       const layer = wmsBySourceRef.current.get(src.id)
       const source = layer?.getSource()
       if (!layer || !source) continue
@@ -180,7 +195,7 @@ export function useWtlNetworkMapLayer({
       }
       source.updateParams(params)
     }
-  }, [enabledLayerKeys, mapSources])
+  }, [enabledLayerKeys, mapSources, availableKey, availableSourceIds])
 
   // highlight selected geom (화면 이동 없음)
   useEffect(() => {

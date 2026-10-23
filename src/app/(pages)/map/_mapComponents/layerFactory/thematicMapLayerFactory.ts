@@ -24,6 +24,8 @@ export type ThematicMapLayerOption = {
   cqlFilter?: string;
   /** 목록 범례 고정 색 (CSS fill). 없으면 회색 */
   legendColor?: string;
+  /** define_table_idx — 목록 정렬용 (없으면 이름순 뒤로) */
+  tableIdx?: number;
   minZoom: number;
   maxZoom: number;
 };

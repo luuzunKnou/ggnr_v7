@@ -1,0 +1,74 @@
+[
+  {
+    "define_code_key": "66618",
+    "define_code_field_key": "4445",
+    "define_code_name": "SAE000",
+    "define_code_kor_name": "미분류"
+  },
+  {
+    "define_code_key": "66619",
+    "define_code_field_key": "4445",
+    "define_code_name": "SAE001",
+    "define_code_kor_name": "좌"
+  },
+  {
+    "define_code_key": "66620",
+    "define_code_field_key": "4445",
+    "define_code_name": "SAE002",
+    "define_code_kor_name": "우"
+  },
+  {
+    "define_code_key": "66621",
+    "define_code_field_key": "4445",
+    "define_code_name": "SAE999",
+    "define_code_kor_name": "기타"
+  },
+  {
+    "define_code_key": "66622",
+    "define_code_field_key": "4445",
+    "define_code_name": "SAE900",
+    "define_code_kor_name": "매몰"
+  },
+  {
+    "define_code_key": "66623",
+    "define_code_field_key": "4445",
+    "define_code_name": "SAE901",
+    "define_code_kor_name": "비폐쇄"
+  },
+  {
+    "define_code_key": "66624",
+    "define_code_field_key": "4445",
+    "define_code_name": "SAE902",
+    "define_code_kor_name": "수동"
+  },
+  {
+    "define_code_key": "66625",
+    "define_code_field_key": "4445",
+    "define_code_name": "SAE903",
+    "define_code_kor_name": "수몰"
+  },
+  {
+    "define_code_key": "66626",
+    "define_code_field_key": "4445",
+    "define_code_name": "SAE904",
+    "define_code_kor_name": "전동"
+  },
+  {
+    "define_code_key": "66627",
+    "define_code_field_key": "4445",
+    "define_code_name": "SAE905",
+    "define_code_kor_name": "정상"
+  },
+  {
+    "define_code_key": "66628",
+    "define_code_field_key": "4445",
+    "define_code_name": "SAE906",
+    "define_code_kor_name": "토몰"
+  },
+  {
+    "define_code_key": "66629",
+    "define_code_field_key": "4445",
+    "define_code_name": "SAE907",
+    "define_code_kor_name": "폐쇄"
+  }
+]
