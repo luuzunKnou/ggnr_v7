@@ -1,5 +1,40 @@
 * {
-  mark: url("http://127.0.0.1:8090/geoserver/www/symbol/water/wtl_valv_ps.png");
-  mark-mime: "image/png";
-  mark-size: [min(18, 5 + sqrt(100000 / env('wms_scale_denominator', 10000)) * 4.0)];
+  mark: url("http://127.0.0.1:8090/geoserver/www/symbol/water/wtl_valv_ps.svg");
+  mark-mime: "image/svg+xml";
+  mark-size: [if_then_else(greaterThan(Categorize(env('wms_scale_denominator'), 30, 500, 27, 800, 25, 1500, 22) + (env('wtl_valv_ps_size', 18) - 18), 1), Categorize(env('wms_scale_denominator'), 30, 500, 27, 800, 25, 1500, 22) + (env('wtl_valv_ps_size', 18) - 18), 1)];
+}
+
+[strToUpperCase(ftr_cde) = 'SA200'] {
+  mark: url("http://127.0.0.1:8090/geoserver/www/symbol/water/wtl_valv_ps_sa200.svg");
+}
+[strToUpperCase(ftr_cde) = 'SA201'] {
+  mark: url("http://127.0.0.1:8090/geoserver/www/symbol/water/wtl_valv_ps_sa201.svg");
+}
+[strToUpperCase(ftr_cde) = 'SA202'] {
+  mark: url("http://127.0.0.1:8090/geoserver/www/symbol/water/wtl_valv_ps_sa202.svg");
+}
+[strToUpperCase(ftr_cde) = 'SA203'] {
+  mark: url("http://127.0.0.1:8090/geoserver/www/symbol/water/wtl_valv_ps_sa203.svg");
+}
+[strToUpperCase(ftr_cde) = 'SA204'] {
+  mark: url("http://127.0.0.1:8090/geoserver/www/symbol/water/wtl_valv_ps_sa204.svg");
+}
+[strToUpperCase(ftr_cde) = 'SA205'] {
+  mark: url("http://127.0.0.1:8090/geoserver/www/symbol/water/wtl_valv_ps_sa205.svg");
+}
+[strToUpperCase(ftr_cde) = 'SA209'] {
+  mark: url("http://127.0.0.1:8090/geoserver/www/symbol/water/wtl_valv_ps_sa209.svg");
+}
+
+[strLength(env('wtl_valv_ps_label_property_name', '')) > 0] {
+  label: [property(env('wtl_valv_ps_label_property_name', ''))];
+  font-family: Gulim;
+  font-style: normal;
+  font-size: [env('wtl_valv_ps_label_size', 0)];
+  font-weight: [env('wtl_valv_ps_label_font_weight', 'normal')];
+  font-fill: [strConcat('#', env('wtl_valv_ps_label_color', 'FFFFFF'))];
+  halo-radius: [env('wtl_valv_ps_label_halo_radius', 2)];
+  halo-color: [strConcat('#', env('wtl_valv_ps_label_halo_color', '000000'))];
+  label-anchor: 0.5 1.0;
+  label-offset: 0 -10;
 }

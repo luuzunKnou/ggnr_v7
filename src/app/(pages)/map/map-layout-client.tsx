@@ -171,6 +171,19 @@ import { UseFeeDetailPanel } from "./_mapContents/useFee/UseFeeDetailPanel"
 import { clearForeignUseFeeWmsLayers } from "./_mapContents/useFee/useFeeMapSync"
 import { GroundwaterPermitListPanel } from "./_mapContents/groundwaterPermit/GroundwaterPermitListPanel"
 import { GroundwaterPermitDetailPanel } from "./_mapContents/groundwaterPermit/GroundwaterPermitDetailPanel"
+import { WorksInquiryShell } from "./_mapContents/worksInquiry/WorksInquiry.shell"
+import {
+  findOpenedWorksInquirySerEng,
+  isWorksInquiryOpenedToken,
+} from "./_mapContents/worksInquiry/worksInquiryBinding"
+import {
+  SMALL_PUBLIC_FAC_OPENED_KEY,
+  SmallPublicFacShell,
+} from "./_mapContents/rdc/smallPublicFac/SmallPublicFac.shell"
+import {
+  WORKS_REGISTER_OPENED_KEY,
+  WorksRegisterShell,
+} from "./_mapContents/worksRegister/WorksRegister.shell"
 import { WtlAdminEmptyShell } from "./_mapContents/wtlAdmin/WtlAdminEmpty.shell"
 import {
   findOpenedWtlAdminEmptySerEng,
@@ -743,9 +756,12 @@ function MapLayoutContent({
   const useFeeSerEng = findOpenedUseFeeSerEng(openedWindows)
   const useFeeOpen = Boolean(useFeeSerEng)
   const groundwaterPermitOpen = openedWindows.includes(GROUNDWATER_PERMIT_OPENED_KEY)
+  const worksInquirySerEng = findOpenedWorksInquirySerEng(openedWindows)
+  const worksInquiryOpen = Boolean(worksInquirySerEng)
+  const smallPublicFacOpen = openedWindows.includes(SMALL_PUBLIC_FAC_OPENED_KEY)
+  const worksRegisterOpen = openedWindows.includes(WORKS_REGISTER_OPENED_KEY)
   const wtlAdminEmptySerEng = findOpenedWtlAdminEmptySerEng(openedWindows)
   const wtlAdminEmptyOpen = Boolean(wtlAdminEmptySerEng)
-  const [wtlAdminEmptyTotalWidth, setWtlAdminEmptyTotalWidth] = useState(0)
   const fmsLinkageOpen = openedWindows.some((w) => isFmsOpenedToken(w))
   const fmsLinkageDetailOpen = fmsLinkageOpen && Boolean(fmsLinkageDetailId)
   const privateLandAnalysisOpen = openedWindows.includes(PRIVATE_LAND_ANALYSIS_OPENED_KEY)
@@ -844,6 +860,10 @@ function MapLayoutContent({
   const [groundwaterPermitDetailId, setGroundwaterPermitDetailId] = useState<string | null>(null)
   const groundwaterPermitDetailOpen =
     groundwaterPermitOpen && Boolean(groundwaterPermitDetailId)
+  const [worksInquiryTotalWidth, setWorksInquiryTotalWidth] = useState(0)
+  const [smallPublicFacTotalWidth, setSmallPublicFacTotalWidth] = useState(0)
+  const [worksRegisterTotalWidth, setWorksRegisterTotalWidth] = useState(0)
+  const [wtlAdminEmptyTotalWidth, setWtlAdminEmptyTotalWidth] = useState(0)
   const [protoUserAccountOpen, setProtoUserAccountOpen] = useState(false)
 
   const [memoDetailId, setMemoDetailId] = useState<string | null>(null)
@@ -1100,6 +1120,10 @@ function MapLayoutContent({
     (useFeeDetailOpen ? useFeeDetailWidth : 0) +
     (groundwaterPermitOpen ? groundwaterPermitPanelWidth : 0) +
     (groundwaterPermitDetailOpen ? groundwaterPermitDetailWidth : 0) +
+    (worksInquiryOpen ? worksInquiryTotalWidth : 0) +
+    (smallPublicFacOpen ? smallPublicFacTotalWidth : 0) +
+    (worksRegisterOpen ? worksRegisterTotalWidth : 0) +
+    (wtlAdminEmptyOpen ? wtlAdminEmptyTotalWidth : 0) +
     (fmsLinkageOpen ? fmsLinkagePanelWidth : 0) +
     (fmsLinkageDetailOpen ? fmsLinkageDetailWidth : 0) +
     (privateLandAnalysisOpen ? privateLandAnalysisPanelWidth : 0) +
@@ -1112,8 +1136,7 @@ function MapLayoutContent({
     (developmentChargeOpen ? developmentChargePanelWidth : 0) +
     (developmentChargeDetailOpen ? developmentChargeDetailWidth : 0) +
     (riverIllegalOccupationOpen ? riverIllegalOccupationPanelWidth : 0) +
-    (riverIllegalOccupationDetailOpen ? riverIllegalOccupationDetailWidth : 0) +
-    (wtlAdminEmptyOpen ? wtlAdminEmptyTotalWidth : 0)
+    (riverIllegalOccupationDetailOpen ? riverIllegalOccupationDetailWidth : 0)
   const searchBarOffset = {
     leftPx: SIDEBAR_WIDTH + totalListPanelWidth + SEARCH_BAR_MARGIN,
     topPx: 16,
@@ -1252,9 +1275,17 @@ function MapLayoutContent({
   const groundwaterPermitDetailLeftPx =
     groundwaterPermitPanelLeftPx +
     (groundwaterPermitOpen ? groundwaterPermitPanelWidth : 0)
-  const fmsLinkagePanelLeftPx =
+  const worksInquiryPanelLeftPx =
     groundwaterPermitDetailLeftPx +
     (groundwaterPermitDetailOpen ? groundwaterPermitDetailWidth : 0)
+  const smallPublicFacPanelLeftPx =
+    worksInquiryPanelLeftPx + (worksInquiryOpen ? worksInquiryTotalWidth : 0)
+  const worksRegisterPanelLeftPx =
+    smallPublicFacPanelLeftPx + (smallPublicFacOpen ? smallPublicFacTotalWidth : 0)
+  const wtlAdminEmptyPanelLeftPx =
+    worksRegisterPanelLeftPx + (worksRegisterOpen ? worksRegisterTotalWidth : 0)
+  const fmsLinkagePanelLeftPx =
+    wtlAdminEmptyPanelLeftPx + (wtlAdminEmptyOpen ? wtlAdminEmptyTotalWidth : 0)
   const fmsLinkageDetailLeftPx =
     fmsLinkagePanelLeftPx + (fmsLinkageOpen ? fmsLinkagePanelWidth : 0)
   const privateLandAnalysisPanelLeftPx =
@@ -1282,9 +1313,6 @@ function MapLayoutContent({
   const riverIllegalOccupationDetailLeftPx =
     riverIllegalOccupationPanelLeftPx +
     (riverIllegalOccupationOpen ? riverIllegalOccupationPanelWidth : 0)
-  const wtlAdminEmptyPanelLeftPx =
-    riverIllegalOccupationDetailLeftPx +
-    (riverIllegalOccupationDetailOpen ? riverIllegalOccupationDetailWidth : 0)
   const mapPaddingLeft = SIDEBAR_WIDTH + totalListPanelWidth
   /** 패딩은 useLayoutEffect — 자식 useEffect(도로대장 fit 등)보다 먼저 적용되어야 함.
    * 거리뷰 ON일 때만 맵 중심(A)을 새 센터마크 위치에 맞춤.
@@ -1827,6 +1855,30 @@ function MapLayoutContent({
     setOpened(next)
   }
 
+  const handleCloseWorksInquiry = () => {
+    setWorksInquiryTotalWidth(0)
+    const next = openedWindows.filter((w) => !isWorksInquiryOpenedToken(w))
+    setOpened(next)
+  }
+
+  const handleCloseSmallPublicFac = () => {
+    setSmallPublicFacTotalWidth(0)
+    const next = openedWindows.filter((w) => w !== SMALL_PUBLIC_FAC_OPENED_KEY)
+    setOpened(next)
+  }
+
+  const handleCloseWorksRegister = () => {
+    setWorksRegisterTotalWidth(0)
+    const next = openedWindows.filter((w) => w !== WORKS_REGISTER_OPENED_KEY)
+    setOpened(next)
+  }
+
+  const handleCloseWtlAdminEmpty = () => {
+    setWtlAdminEmptyTotalWidth(0)
+    const next = openedWindows.filter((w) => !isWtlAdminEmptyOpenedToken(w))
+    setOpened(next)
+  }
+
   const handleCloseFmsLinkage = () => {
     setFmsGeomToastMsg(null)
     setFmsLinkageSelectedId?.(null)
@@ -1861,12 +1913,6 @@ function MapLayoutContent({
   const handleCloseRiverIllegalOccupation = () => {
     setRiverIllegalOccupationSelectedId(null)
     setOpened(openedWindows.filter((w) => w !== RIVER_ILLEGAL_OCCUPATION_OPENED_KEY))
-  }
-
-  const handleCloseWtlAdminEmpty = () => {
-    setWtlAdminEmptyTotalWidth(0)
-    const next = openedWindows.filter((w) => !isWtlAdminEmptyOpenedToken(w))
-    setOpened(next)
   }
 
   useEffect(() => {
@@ -2001,6 +2047,22 @@ function MapLayoutContent({
   useEffect(() => {
     if (!groundwaterPermitOpen) setGroundwaterPermitDetailId(null)
   }, [groundwaterPermitOpen])
+
+  useEffect(() => {
+    if (!worksInquiryOpen) setWorksInquiryTotalWidth(0)
+  }, [worksInquiryOpen])
+
+  useEffect(() => {
+    if (!smallPublicFacOpen) setSmallPublicFacTotalWidth(0)
+  }, [smallPublicFacOpen])
+
+  useEffect(() => {
+    if (!worksRegisterOpen) setWorksRegisterTotalWidth(0)
+  }, [worksRegisterOpen])
+
+  useEffect(() => {
+    if (!wtlAdminEmptyOpen) setWtlAdminEmptyTotalWidth(0)
+  }, [wtlAdminEmptyOpen])
 
   useEffect(() => {
     if (!cadastralResurveyOpen) setCadastralResurveyDistrictId(null)
@@ -3532,6 +3594,36 @@ function MapLayoutContent({
               </MapSideListPanel>
             </div>
           )}
+          {worksInquiryOpen && worksInquirySerEng && (
+            <WorksInquiryShell
+              serEng={worksInquirySerEng}
+              leftOffsetPx={worksInquiryPanelLeftPx}
+              onTotalWidthChange={setWorksInquiryTotalWidth}
+              onClose={handleCloseWorksInquiry}
+            />
+          )}
+          {smallPublicFacOpen && (
+            <SmallPublicFacShell
+              leftOffsetPx={smallPublicFacPanelLeftPx}
+              onTotalWidthChange={setSmallPublicFacTotalWidth}
+              onClose={handleCloseSmallPublicFac}
+            />
+          )}
+          {worksRegisterOpen && (
+            <WorksRegisterShell
+              leftOffsetPx={worksRegisterPanelLeftPx}
+              onTotalWidthChange={setWorksRegisterTotalWidth}
+              onClose={handleCloseWorksRegister}
+            />
+          )}
+          {wtlAdminEmptyOpen && wtlAdminEmptySerEng && (
+            <WtlAdminEmptyShell
+              serEng={wtlAdminEmptySerEng}
+              leftOffsetPx={wtlAdminEmptyPanelLeftPx}
+              onTotalWidthChange={setWtlAdminEmptyTotalWidth}
+              onClose={handleCloseWtlAdminEmpty}
+            />
+          )}
           {fmsLinkageOpen && (
             <div className="pointer-events-auto shrink-0">
               <MapSideListPanel
@@ -3767,14 +3859,6 @@ function MapLayoutContent({
                 />
               </MapSideListPanel>
             </div>
-          )}
-          {wtlAdminEmptyOpen && wtlAdminEmptySerEng && (
-            <WtlAdminEmptyShell
-              serEng={wtlAdminEmptySerEng}
-              leftOffsetPx={wtlAdminEmptyPanelLeftPx}
-              onTotalWidthChange={setWtlAdminEmptyTotalWidth}
-              onClose={handleCloseWtlAdminEmpty}
-            />
           )}
           <div className="flex-1 min-w-0 relative">
             <div className="pointer-events-auto">

@@ -16,6 +16,8 @@ import { SchemaBadge, SourceBadge } from "./layerManager/defineBadges"
 import { requestLayerManagerListRefresh, registerLayerManagerDefineRefresh } from "./layerManager/layerManagerUploadBridge"
 import { StyleLegendThumb, StylePreviewSwatch } from "./layerManager/StylePreviewSwatch"
 import { SearchClearButton } from "./layerManager/SearchClearButton"
+import { SplitLayerDialog } from "./layerManager/SplitLayerDialog"
+import { isSplitLayerParent } from "@/lib/splitLayerTargets"
 import { call } from "@/lib/api"
 import { parseSimpleStyleFromCss, parseSymbolFolderFromUrl, symbolFileNameFromUrl, toPublicSymbolPreviewUrl, type GeometryType, type StyleProps } from "@/lib/geoserverStyleUtils"
 import { withBasePath } from "@/lib/basePath"
@@ -103,6 +105,7 @@ const defaultStyleProps: StyleProps = {
   strokeColor: "#000000",
   strokeWidth: 1,
   opacity: 1,
+  strokeOpacity: 1,
   labelField: "",
   size: 14,
   markSize: 18,
@@ -269,10 +272,13 @@ export function LayerInfoManager({
   const [symbolUploading, setSymbolUploading] = useState(false)
   const [symbolPreviewKey, setSymbolPreviewKey] = useState(0)
   const lastSymbolUrlRef = useRef("")
+  /** 사용자가 저장 폴더를 바꾼 뒤에는 목록 응답이 그 선택을 덮지 않는다 */
+  const symbolFolderTouchedRef = useRef(false)
   const [pickPreviewUrl, setPickPreviewUrl] = useState("")
   const [editEditable, setEditEditable] = useState(false)
   const [actionLoading, setActionLoading] = useState<string | null>(null)
   const [autoApplyLoading, setAutoApplyLoading] = useState(false)
+  const [splitParent, setSplitParent] = useState<string | null>(null)
 
   const loadFullList = useCallback(async () => {
     setLoading(true)
@@ -576,6 +582,7 @@ export function LayerInfoManager({
       setSymbolFolders(folders)
       const prefer = preferredFolder?.trim()
       setSymbolFolder((prev) => {
+        if (symbolFolderTouchedRef.current && prev && folders.includes(prev)) return prev
         if (prefer && folders.includes(prefer)) return prefer
         if (prev && folders.includes(prev)) return prev
         if (folders.includes("water")) return "water"
@@ -649,6 +656,7 @@ export function LayerInfoManager({
         return
       }
       setNewSymbolFolder("")
+      symbolFolderTouchedRef.current = true
       setSymbolFolder(data.folder ?? name)
       await loadSymbolFolders(data.folder ?? name)
     } catch (e: unknown) {
@@ -658,14 +666,14 @@ export function LayerInfoManager({
     }
   }, [newSymbolFolder, loadSymbolFolders])
 
-  const handleSaveSymbolFile = useCallback(async () => {
+  const handleSaveSymbolFile = useCallback(async (): Promise<string | null> => {
     if (!symbolFolder) {
       setFormError("저장할 폴더를 선택하세요.")
-      return
+      return null
     }
     if (!symbolPickFile) {
       setFormError("올릴 파일을 선택하세요.")
-      return
+      return null
     }
     setSymbolUploading(true)
     setFormError(null)
@@ -690,27 +698,35 @@ export function LayerInfoManager({
       const data = res?.data ?? res
       if (!data?.success || !data.symbolUrl) {
         setFormError(data?.error ?? "심볼 파일 저장 실패")
-        return
+        return null
       }
-      setFormProps((p) => ({ ...p, symbolUrl: data.symbolUrl }))
+      const symbolUrl = String(data.symbolUrl)
+      setFormProps((p) => ({ ...p, symbolUrl }))
+      lastSymbolUrlRef.current = symbolUrl
+      if (data.folder) {
+        symbolFolderTouchedRef.current = true
+        setSymbolFolder(String(data.folder))
+      }
       setSymbolPickFile(null)
       setSymbolPreviewKey((n) => n + 1)
       await loadSymbolFolderFiles(symbolFolder)
+      return symbolUrl
     } catch (e: unknown) {
       setFormError(e instanceof Error ? e.message : "심볼 파일 저장 실패")
+      return null
     } finally {
       setSymbolUploading(false)
     }
   }, [symbolFolder, symbolPickFile, targetLayerName, loadSymbolFolderFiles])
 
-  const handleLinkSymbolFile = useCallback(async () => {
+  const handleLinkSymbolFile = useCallback(async (): Promise<string | null> => {
     if (!symbolFolder) {
       setFormError("저장할 폴더를 선택하세요.")
-      return
+      return null
     }
     if (!symbolLinkFile) {
       setFormError("연결할 파일을 선택하세요.")
-      return
+      return null
     }
     setSymbolUploading(true)
     setFormError(null)
@@ -727,14 +743,21 @@ export function LayerInfoManager({
       const data = res?.data ?? res
       if (!data?.success || !data.symbolUrl) {
         setFormError(data?.error ?? "심볼 파일 연결 실패")
-        return
+        return null
       }
-      setFormProps((p) => ({ ...p, symbolUrl: data.symbolUrl }))
-      lastSymbolUrlRef.current = data.symbolUrl
+      const symbolUrl = String(data.symbolUrl)
+      setFormProps((p) => ({ ...p, symbolUrl }))
+      lastSymbolUrlRef.current = symbolUrl
+      if (data.folder) {
+        symbolFolderTouchedRef.current = true
+        setSymbolFolder(String(data.folder))
+      }
       setSymbolPreviewKey((n) => n + 1)
       setSymbolLinkFile("")
+      return symbolUrl
     } catch (e: unknown) {
       setFormError(e instanceof Error ? e.message : "심볼 파일 연결 실패")
+      return null
     } finally {
       setSymbolUploading(false)
     }
@@ -760,6 +783,7 @@ export function LayerInfoManager({
     setFormError(null)
     setEditOpen(true)
     setFormSaving(false)
+    symbolFolderTouchedRef.current = false
     void loadLabelFieldOptions(layerName)
     try {
       const res = await call("", "POST", {
@@ -993,13 +1017,40 @@ export function LayerInfoManager({
 
   const handleEditSubmit = useCallback(async () => {
     if (!targetStyleName || !editEditable) return
-    if (formGeometryType === "SYMBOL" && !formProps.symbolUrl?.trim()) {
+    if (
+      formGeometryType === "SYMBOL" &&
+      !formProps.symbolUrl?.trim() &&
+      !symbolPickFile &&
+      !symbolLinkFile
+    ) {
       setFormError("심볼 파일이 없습니다. POINT로 바꾸거나 심볼 파일을 확인하세요.")
       return
     }
     setFormSaving(true)
     setFormError(null)
     try {
+      let styleProps = formProps
+      if (formGeometryType === "SYMBOL") {
+        let symbolUrl = formProps.symbolUrl?.trim() ?? ""
+        if (symbolPickFile) {
+          const uploaded = await handleSaveSymbolFile()
+          if (!uploaded) return
+          symbolUrl = uploaded
+        } else if (symbolFolder && symbolLinkFile) {
+          const currentFolder = parseSymbolFolderFromUrl(symbolUrl) ?? ""
+          const currentFile = symbolFileNameFromUrl(symbolUrl)
+          if (symbolFolder !== currentFolder || symbolLinkFile !== currentFile) {
+            const linked = await handleLinkSymbolFile()
+            if (!linked) return
+            symbolUrl = linked
+          }
+        }
+        if (!symbolUrl) {
+          setFormError("심볼 파일이 없습니다. POINT로 바꾸거나 심볼 파일을 확인하세요.")
+          return
+        }
+        styleProps = { ...formProps, symbolUrl }
+      }
       const res = await call("", "POST", {
         service: "devTestService",
         action: "updateGeoServerStyle",
@@ -1007,7 +1058,7 @@ export function LayerInfoManager({
           url: GEOSERVER_DEFAULT_URL,
           name: targetStyleName,
           geometryType: toApiGeometryType(formGeometryType),
-          styleProps: toApiStyleProps(formGeometryType, formProps),
+          styleProps: toApiStyleProps(formGeometryType, styleProps),
           preserveExtraRules: true,
         },
       })
@@ -1018,7 +1069,7 @@ export function LayerInfoManager({
           setCssFallbackMap((prev) => ({
             ...prev,
             [fallbackKey]: {
-              ...toApiStyleProps(formGeometryType, formProps),
+              ...toApiStyleProps(formGeometryType, styleProps),
               geometryType: toApiGeometryType(formGeometryType),
             },
           }))
@@ -1038,7 +1089,7 @@ export function LayerInfoManager({
     } finally {
       setFormSaving(false)
     }
-  }, [targetStyleName, targetLayerName, editEditable, formGeometryType, formProps, loadStyleInfo])
+  }, [targetStyleName, targetLayerName, editEditable, formGeometryType, formProps, symbolFolder, symbolLinkFile, symbolPickFile, handleSaveSymbolFile, handleLinkSymbolFile, loadStyleInfo])
 
   const handleDeleteConfirm = useCallback(async () => {
     if (!deleteTarget) return
@@ -1174,18 +1225,22 @@ export function LayerInfoManager({
   }, [loadStyleInfo])
 
   const renderFormFields = useCallback((geometryType: StyleFormGeomType) => {
-    const opacityField = (
+    const opacityInput = (
+      label: string,
+      key: "opacity" | "strokeOpacity",
+    ) => (
       <div className="grid grid-cols-[100px_1fr] gap-2 items-center">
-        <label className="text-sm">투명도</label>
+        <label className="text-sm">{label}</label>
         <Input
           type="number"
           min={0}
           max={1}
           step={0.1}
-          value={formProps.opacity ?? 1}
-          onChange={(e) =>
-            setFormProps((p) => ({ ...p, opacity: parseFloat(e.target.value) ?? 1 }))
-          }
+          value={formProps[key] ?? 1}
+          onChange={(e) => {
+            const n = parseFloat(e.target.value)
+            setFormProps((p) => ({ ...p, [key]: Number.isFinite(n) ? n : 1 }))
+          }}
         />
       </div>
     )
@@ -1235,43 +1290,6 @@ export function LayerInfoManager({
             ))}
           </select>
         </div>
-    )
-    const renderStrokeAndLabelFields = (showLinePreview: boolean) => (
-      <>
-        <div className="grid grid-cols-[100px_1fr] gap-2 items-center">
-          <label className="text-sm">선색상</label>
-          {showLinePreview ? (
-            <div className="flex items-center gap-2">
-              <div className="flex-1 min-w-0">
-                <ColorField
-                  value={formProps.strokeColor ?? ""}
-                  onChange={(v) => setFormProps((p) => ({ ...p, strokeColor: v }))}
-                  placeholder="#000000"
-                />
-              </div>
-              <StylePreviewSwatch geometryType="LINE" strokeColor={formProps.strokeColor} />
-            </div>
-          ) : (
-            <ColorField
-              value={formProps.strokeColor ?? ""}
-              onChange={(v) => setFormProps((p) => ({ ...p, strokeColor: v }))}
-              placeholder="#000000"
-            />
-          )}
-        </div>
-        <div className="grid grid-cols-[100px_1fr] gap-2 items-center">
-          <label className="text-sm">선두께</label>
-          <Input
-            type="number"
-            min={0}
-            step={0.5}
-            value={formProps.strokeWidth ?? 1}
-            onChange={(e) =>
-              setFormProps((p) => ({ ...p, strokeWidth: parseFloat(e.target.value) || 1 }))
-            }
-          />
-        </div>
-      </>
     )
     if (geometryType === "SYMBOL") {
       return (
@@ -1323,6 +1341,7 @@ export function LayerInfoManager({
                   className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
                   value={symbolFolder}
                   onChange={(e) => {
+                    symbolFolderTouchedRef.current = true
                     setSymbolFolder(e.target.value)
                     setSymbolLinkFile("")
                     setSymbolPickFile(null)
@@ -1392,7 +1411,8 @@ export function LayerInfoManager({
                       symbolUploading ||
                       !symbolFolder ||
                       !symbolLinkFile ||
-                      symbolLinkFile === symbolFileNameFromUrl(formProps.symbolUrl ?? "")
+                      (symbolLinkFile === symbolFileNameFromUrl(formProps.symbolUrl ?? "") &&
+                        symbolFolder === (parseSymbolFolderFromUrl(formProps.symbolUrl ?? "") ?? ""))
                     }
                     onClick={() => void handleLinkSymbolFile()}
                   >
@@ -1445,7 +1465,7 @@ export function LayerInfoManager({
         <Fragment key="POINT">
           {markSizeField("점 크기")}
           <div className="grid grid-cols-[100px_1fr] gap-2 items-center">
-            <label className="text-sm">색상</label>
+            <label className="text-sm">채우기 색상</label>
             <div className="flex items-center gap-2">
               <div className="flex-1 min-w-0">
                 <ColorField
@@ -1459,11 +1479,32 @@ export function LayerInfoManager({
                 fillColor={formProps.fillColor}
                 strokeColor={formProps.strokeColor}
                 opacity={formProps.opacity}
+                strokeOpacity={formProps.strokeOpacity}
               />
             </div>
           </div>
-          {opacityField}
-          {renderStrokeAndLabelFields(false)}
+          {opacityInput("채우기 투명도", "opacity")}
+          <div className="grid grid-cols-[100px_1fr] gap-2 items-center">
+            <label className="text-sm">선 색상</label>
+            <ColorField
+              value={formProps.strokeColor ?? ""}
+              onChange={(v) => setFormProps((p) => ({ ...p, strokeColor: v }))}
+              placeholder="#000000"
+            />
+          </div>
+          <div className="grid grid-cols-[100px_1fr] gap-2 items-center">
+            <label className="text-sm">선 두께</label>
+            <Input
+              type="number"
+              min={0}
+              step={0.5}
+              value={formProps.strokeWidth ?? 1}
+              onChange={(e) =>
+                setFormProps((p) => ({ ...p, strokeWidth: parseFloat(e.target.value) || 1 }))
+              }
+            />
+          </div>
+          {opacityInput("선 투명도", "strokeOpacity")}
           {labelFieldBlock}
           {fontSizeField}
         </Fragment>
@@ -1472,8 +1513,36 @@ export function LayerInfoManager({
     if (geometryType === "LINE") {
       return (
         <Fragment key="LINE">
-          {renderStrokeAndLabelFields(true)}
-          {opacityField}
+          <div className="grid grid-cols-[100px_1fr] gap-2 items-center">
+            <label className="text-sm">선 색상</label>
+            <div className="flex items-center gap-2">
+              <div className="flex-1 min-w-0">
+                <ColorField
+                  value={formProps.strokeColor ?? ""}
+                  onChange={(v) => setFormProps((p) => ({ ...p, strokeColor: v }))}
+                  placeholder="#000000"
+                />
+              </div>
+              <StylePreviewSwatch
+                geometryType="LINE"
+                strokeColor={formProps.strokeColor}
+                strokeOpacity={formProps.strokeOpacity}
+              />
+            </div>
+          </div>
+          <div className="grid grid-cols-[100px_1fr] gap-2 items-center">
+            <label className="text-sm">선 두께</label>
+            <Input
+              type="number"
+              min={0}
+              step={0.5}
+              value={formProps.strokeWidth ?? 1}
+              onChange={(e) =>
+                setFormProps((p) => ({ ...p, strokeWidth: parseFloat(e.target.value) || 1 }))
+              }
+            />
+          </div>
+          {opacityInput("선 투명도", "strokeOpacity")}
           {labelFieldBlock}
           {fontSizeField}
         </Fragment>
@@ -1482,7 +1551,7 @@ export function LayerInfoManager({
     return (
       <Fragment key="POLYGON">
         <div className="grid grid-cols-[100px_1fr] gap-2 items-center">
-          <label className="text-sm">색상</label>
+          <label className="text-sm">채우기 색상</label>
           <div className="flex items-center gap-2">
             <div className="flex-1 min-w-0">
               <ColorField
@@ -1496,11 +1565,32 @@ export function LayerInfoManager({
               fillColor={formProps.fillColor}
               strokeColor={formProps.strokeColor}
               opacity={formProps.opacity}
+              strokeOpacity={formProps.strokeOpacity}
             />
           </div>
         </div>
-        {opacityField}
-        {renderStrokeAndLabelFields(false)}
+        {opacityInput("채우기 투명도", "opacity")}
+        <div className="grid grid-cols-[100px_1fr] gap-2 items-center">
+          <label className="text-sm">선 색상</label>
+          <ColorField
+            value={formProps.strokeColor ?? ""}
+            onChange={(v) => setFormProps((p) => ({ ...p, strokeColor: v }))}
+            placeholder="#000000"
+          />
+        </div>
+        <div className="grid grid-cols-[100px_1fr] gap-2 items-center">
+          <label className="text-sm">선 두께</label>
+          <Input
+            type="number"
+            min={0}
+            step={0.5}
+            value={formProps.strokeWidth ?? 1}
+            onChange={(e) =>
+              setFormProps((p) => ({ ...p, strokeWidth: parseFloat(e.target.value) || 1 }))
+            }
+          />
+        </div>
+        {opacityInput("선 투명도", "strokeOpacity")}
         {labelFieldBlock}
         {fontSizeField}
       </Fragment>
@@ -1732,9 +1822,24 @@ export function LayerInfoManager({
                       style={cellStyle}
                     >
                       {col.readonly ? (
-                        <span className="block min-w-0 w-full truncate text-sm font-mono py-1" title={val}>
-                          {val}
-                        </span>
+                        col.id === "define_table_name" && isSplitLayerParent(val) ? (
+                          <span className="flex min-w-0 w-full items-center">
+                            <span className="truncate text-sm font-mono py-1" style={{ paddingRight: 7 }} title={val}>
+                              {val}
+                            </span>
+                            <button
+                              type="button"
+                              className="h-6 shrink-0 text-xs font-medium text-teal-500 underline underline-offset-2 hover:text-teal-700 dark:text-teal-400 dark:hover:text-teal-200"
+                              onClick={() => setSplitParent(val.trim().toLowerCase())}
+                            >
+                              분할
+                            </button>
+                          </span>
+                        ) : (
+                          <span className="block min-w-0 w-full truncate text-sm font-mono py-1" title={val}>
+                            {val}
+                          </span>
+                        )
                       ) : col.badge === "schema" ? (
                         <button
                           type="button"
@@ -1807,6 +1912,20 @@ export function LayerInfoManager({
           </div>
         )}
       </div>
+
+      <SplitLayerDialog
+        parent={splitParent}
+        tables={(config?.tables ?? []) as Array<Record<string, unknown>>}
+        onOpenChange={(open) => {
+          if (!open) setSplitParent(null)
+        }}
+        onDone={(message) => {
+          setSuccessMsg(message)
+          invalidateLayerManagerListCache()
+          void loadFullList()
+          loadStyleInfo()
+        }}
+      />
 
       {/* 스타일 추가 */}
       <Dialog open={addOpen} onOpenChange={setAddOpen}>

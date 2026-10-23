@@ -127,9 +127,7 @@ export function useWtlNetworkMapLayer({
     const moveKey = map.on('moveend', publishExtent)
     publishExtent()
 
-    const clickKey = map.on(
-      'singleclick',
-      (async (evt: MapBrowserEvent<PointerEvent>) => {
+    const clickKey = map.on('singleclick', async (evt: MapBrowserEvent<PointerEvent>) => {
         const keys = [...keysRef.current]
         const sources = [...sourcesRef.current]
         if (keys.length === 0 || sources.length === 0) return
@@ -147,11 +145,10 @@ export function useWtlNetworkMapLayer({
           })
           const row = (res?.data ?? res)?.row as WtlNetworkRow | null | undefined
           if (row) onSelectRef.current(row)
-        } catch {
-          /* ignore */
-        }
-      }) as never
-    )
+      } catch {
+        /* ignore */
+      }
+    })
 
     return () => {
       unByKey(moveKey)

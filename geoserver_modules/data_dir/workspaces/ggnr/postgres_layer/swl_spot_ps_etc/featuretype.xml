@@ -1,0 +1,45 @@
+<featureType>
+  <id>FeatureTypeInfoImpl--4d2f0c14:1a1671e8ffa:-7ea6</id>
+  <name>swl_spot_ps_etc</name>
+  <nativeName>swl_spot_ps</nativeName>
+  <namespace>
+    <id>NamespaceInfoImpl-4bf97568:19c4d6c3053:-7ffa</id>
+  </namespace>
+  <title>swl_spot_ps</title>
+  <keywords>
+    <string>features</string>
+    <string>swl_spot_ps</string>
+  </keywords>
+  <srs>EPSG:5181</srs>
+  <nativeBoundingBox>
+    <minx>320746.1945826268</minx>
+    <maxx>322833.9253875656</maxx>
+    <miny>327109.6010906019</miny>
+    <maxy>328874.2579122519</maxy>
+    <crs class="projected">EPSG:5181</crs>
+  </nativeBoundingBox>
+  <latLonBoundingBox>
+    <minx>128.34657884253335</minx>
+    <maxx>128.37013508013885</maxx>
+    <miny>36.4343138450742</miny>
+    <maxy>36.450476796035026</maxy>
+    <crs>EPSG:4326</crs>
+  </latLonBoundingBox>
+  <projectionPolicy>FORCE_DECLARED</projectionPolicy>
+  <enabled>true</enabled>
+  <advertised>true</advertised>
+  <store class="dataStore">
+    <id>DataStoreInfoImpl-4bf97568:19c4d6c3053:-7ff9</id>
+  </store>
+  <serviceConfiguration>false</serviceConfiguration>
+  <simpleConversionEnabled>false</simpleConversionEnabled>
+  <cqlFilter>sbd_cde IS NULL OR sbd_cde NOT IN (&apos;SBD001&apos;, &apos;SBD002&apos;)</cqlFilter>
+  <maxFeatures>0</maxFeatures>
+  <numDecimals>0</numDecimals>
+  <padWithZeros>false</padWithZeros>
+  <forcedDecimal>false</forcedDecimal>
+  <overridingServiceSRS>false</overridingServiceSRS>
+  <skipNumberMatched>false</skipNumberMatched>
+  <circularArcPresent>false</circularArcPresent>
+  <encodeMeasures>false</encodeMeasures>
+</featureType>

@@ -6,7 +6,7 @@ import {
   WTL_PIPE_LENGTH_BY_DIAMETER,
   WTL_PIPE_LENGTH_BY_MATERIAL,
   WTL_PIPE_LENGTH_BY_YEAR,
-} from './wtlNetworkMapStatusSample'
+} from './wtlNetworkMapStatus'
 
 function useRise(duration = 1600) {
   const [progress, setProgress] = useState(0)

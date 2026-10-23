@@ -19,6 +19,7 @@ export function StylePreviewSwatch({
   fillColor,
   strokeColor,
   opacity,
+  strokeOpacity,
   symbolUrl,
   showFrame = true,
   size = "md",
@@ -28,6 +29,7 @@ export function StylePreviewSwatch({
   fillColor?: string
   strokeColor?: string
   opacity?: number
+  strokeOpacity?: number
   /** 외부 심볼 주소. 있으면 점/면 도형 대신 아이콘을 그린다 */
   symbolUrl?: string
   /** 체크보드 배경 + 테두리 표시 여부. WMS 범례 이미지와 나란히 섞여 보이는 곳(목록 등)에서는 false로 꺼서 톤을 맞춘다 */
@@ -38,6 +40,8 @@ export function StylePreviewSwatch({
 }) {
   const fill = fillColor || "#808080"
   const stroke = strokeColor || "#000000"
+  const fillAlpha = opacity ?? 1
+  const strokeAlpha = strokeOpacity ?? 1
   const previewSrc = symbolUrl?.trim() ? toPublicSymbolPreviewUrl(symbolUrl) ?? symbolUrl.trim() : null
   const origSrc = symbolUrl?.trim() || null
   const [symbolBroken, setSymbolBroken] = useState(false)
@@ -91,21 +95,20 @@ export function StylePreviewSwatch({
                 width: 10,
                 height: 10,
                 transform: "translate(-50%, -50%)",
-                backgroundColor: fill,
-                opacity: opacity ?? 1,
-                border: `1px solid ${stroke}`,
+                backgroundColor: withAlpha(fill, fillAlpha),
+                border: `1px solid ${withAlpha(stroke, strokeAlpha)}`,
               }}
             />
           )}
           {geometryType === "LINE" && (
             <svg className="absolute inset-0 h-full w-full" viewBox="0 0 32 32" preserveAspectRatio="none">
-              <line x1="6" y1="24" x2="24" y2="6" stroke={stroke} strokeWidth={2.5} strokeLinecap="round" />
+              <line x1="6" y1="24" x2="24" y2="6" stroke={withAlpha(stroke, strokeAlpha)} strokeWidth={2.5} strokeLinecap="round" />
             </svg>
           )}
           {geometryType === "POLYGON" && (
             <div
               className="absolute inset-1"
-              style={{ backgroundColor: fill, opacity: opacity ?? 1, border: `2px solid ${stroke}` }}
+              style={{ backgroundColor: withAlpha(fill, fillAlpha), border: `2px solid ${withAlpha(stroke, strokeAlpha)}` }}
             />
           )}
         </>
@@ -118,6 +121,15 @@ function shouldTryLocalSymbol(tableName: string, shpType?: string): boolean {
   const t = String(shpType ?? "").toUpperCase()
   if (t.includes("POINT")) return true
   return isPointSymbolLayerName(tableName)
+}
+
+function withAlpha(hex: string, alpha: number): string {
+  const m = hex.match(/^#?([0-9a-fA-F]{6})$/)
+  if (!m) return hex
+  const a = Math.round(Math.min(1, Math.max(0, alpha)) * 255)
+    .toString(16)
+    .padStart(2, "0")
+  return `#${m[1]}${a}`
 }
 
 type LocalSymbolExt = "svg" | "png"
@@ -252,6 +264,7 @@ export function StyleLegendThumb({
           fillColor={fallbackState.fillColor}
           strokeColor={fallbackState.strokeColor}
           opacity={fallbackState.opacity}
+          strokeOpacity={fallbackState.strokeOpacity}
           symbolUrl={fallbackState.symbolUrl}
           showFrame={false}
           size="sm"
