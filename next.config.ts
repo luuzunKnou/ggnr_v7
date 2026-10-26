@@ -14,6 +14,21 @@ import { resolveGeoServerInternalUrl } from "./scripts/resolve-geoserver-url";
  * 주의: basePath 는 next build / next dev 기동 시점에 반영됨. env만 바꾸고 재빌드 없이 start 하면 CSS/JS 경로가 어긋날 수 있음.
  * 게이트: BASE_PATH=/build_yy (끝 / 없음) → 공개 URL …/build_yy (trailingSlash 기본값 false)
  */
+/**
+ * 빌드 파일 추적에서 아예 들어가지 않을 대량 폴더(conda env·GeoServer·Java).
+ * outputFileTracingExcludes 는 추적이 끝난 뒤 결과에서만 빼므로, 서버 코드에 이 폴더 경로가 한 번만 잡혀도
+ * 수만 개 파일을 모두 읽어 빌드 메모리가 폴더 크기에 비례해 늘어난다(종료 134). webpack 추적기 무시 목록에도 넣는다.
+ */
+const HEAVY_TRACE_DIRS = [
+  "python/env/**",
+  "python/env.zip",
+  "python/env.z*",
+  "python/env_parts/**",
+  "python/**/__pycache__/**",
+  "geoserver_modules/geoserver/**",
+  "geoserver_modules/java/**",
+];
+
 function resolveBasePath(): string {
   let raw = (process.env.BASE_PATH ?? "").trim();
   if (!raw) {
@@ -62,16 +77,7 @@ const nextConfig: NextConfig = {
   turbopack: {},
   /** conda env 등 대량 파일이 Turbopack 파일 추적에 잡히지 않게 */
   outputFileTracingExcludes: {
-    '*': [
-      './python/env/**',
-      './python/env.zip',
-      './python/env.z*',
-      './python/env_parts/**',
-      './python/**/__pycache__/**',
-      './geoserver_modules/geoserver/**',
-      './geoserver_modules/java/**',
-      './.next/**',
-    ],
+    '*': [...HEAVY_TRACE_DIRS.map((g) => `./${g}`), './.next/**'],
   },
   serverExternalPackages: [
     '@napi-rs/canvas',
@@ -118,6 +124,16 @@ const nextConfig: NextConfig = {
     config.plugins.push(
       new webpack.IgnorePlugin({ resourceRegExp: /^pg-native$/ })
     );
+    if (isServer) {
+      // Next 가 traceIgnores: [] 로 고정해 넘기므로 플러그인 인스턴스에 직접 추가.
+      // .next/server 는 추적 시작점이라 넣지 않고, 개발 서버 산출물(.next/dev)·캐시(.next/cache)만 막는다
+      for (const plugin of config.plugins as unknown[]) {
+        const p = plugin as { constructor?: { name?: string }; traceIgnores?: string[] } | null;
+        if (p?.constructor?.name === "TraceEntryPointsPlugin" && Array.isArray(p.traceIgnores)) {
+          p.traceIgnores.push(...HEAVY_TRACE_DIRS.map((g) => `**/${g}`), "**/.next/dev/**", "**/.next/cache/**");
+        }
+      }
+    }
     if (!isServer) {
       config.plugins.push(
         new CopyPlugin({
