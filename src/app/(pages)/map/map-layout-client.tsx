@@ -210,6 +210,13 @@ import {
   USER_DATA_UPLOAD_PANEL_MAX_WIDTH,
   USER_DATA_UPLOAD_PANEL_MIN_WIDTH,
 } from "./_mapContents/userDataUpload/userDataUploadConfig"
+import { DrawingDisplayPanel } from "./_mapContents/drawingDisplay/DrawingDisplayPanel"
+import {
+  DRAWING_DISPLAY_OPENED_KEY,
+  DRAWING_DISPLAY_PANEL_DEFAULT_WIDTH,
+  DRAWING_DISPLAY_PANEL_MAX_WIDTH,
+  DRAWING_DISPLAY_PANEL_MIN_WIDTH,
+} from "./_mapContents/drawingDisplay/drawingDisplayConfig"
 import { CadastralResurveyListPanel } from "./_mapContents/cadastralResurvey/CadastralResurveyListPanel"
 import { CadastralResurveyDetailPanel } from "./_mapContents/cadastralResurvey/CadastralResurveyDetailPanel"
 import {
@@ -221,6 +228,17 @@ import {
   CADASTRAL_RESURVEY_PANEL_MAX_WIDTH,
   CADASTRAL_RESURVEY_PANEL_MIN_WIDTH,
 } from "./_mapContents/cadastralResurvey/cadastralResurveyConfig"
+import { CadastralRecordListPanel } from "./_mapContents/cadastralRecord/CadastralRecordListPanel"
+import { CadastralRecordDetailPanel } from "./_mapContents/cadastralRecord/CadastralRecordDetailPanel"
+import {
+  CADASTRAL_RECORD_DETAIL_DEFAULT_WIDTH,
+  CADASTRAL_RECORD_DETAIL_MAX_WIDTH,
+  CADASTRAL_RECORD_DETAIL_MIN_WIDTH,
+  CADASTRAL_RECORD_OPENED_KEY,
+  CADASTRAL_RECORD_PANEL_DEFAULT_WIDTH,
+  CADASTRAL_RECORD_PANEL_MAX_WIDTH,
+  CADASTRAL_RECORD_PANEL_MIN_WIDTH,
+} from "./_mapContents/cadastralRecord/cadastralRecordConfig"
 import { IndividualLandPriceListPanel } from "./_mapContents/individualLandPrice/IndividualLandPriceListPanel"
 import { IndividualLandPriceDetailPanel } from "./_mapContents/individualLandPrice/IndividualLandPriceDetailPanel"
 import {
@@ -619,6 +637,7 @@ function MapLayoutContent({
   const setVisibleLayerNames = mapContext?.setVisibleLayerNames
   const setIdentifyResultList = mapContext?.setIdentifyResultList
   const setIdentifySelectedRow = mapContext?.setIdentifySelectedRow
+  const setDataQueryMapPick = mapContext?.setDataQueryMapPick
   const setSafetyMapLayerVisibility = mapContext?.setSafetyMapLayerVisibility
   const setSpatialFilterWkt = mapContext?.setSpatialFilterWkt
   const setSpatialFilteredLayerNames = mapContext?.setSpatialFilteredLayerNames
@@ -751,6 +770,8 @@ function MapLayoutContent({
   )
   const userDataUploadOpen = openedWindows.includes(USER_DATA_UPLOAD_OPENED_KEY)
   const [userDataUploadPanelWidth, setUserDataUploadPanelWidth] = useState(USER_DATA_UPLOAD_PANEL_DEFAULT_WIDTH)
+  const drawingDisplayOpen = openedWindows.includes(DRAWING_DISPLAY_OPENED_KEY)
+  const [drawingDisplayPanelWidth, setDrawingDisplayPanelWidth] = useState(DRAWING_DISPLAY_PANEL_DEFAULT_WIDTH)
   const cadastralResurveyOpen = openedWindows.includes(CADASTRAL_RESURVEY_OPENED_KEY)
   const [cadastralResurveyDistrictId, setCadastralResurveyDistrictId] = useState<string | null>(null)
   const cadastralResurveyDetailOpen = cadastralResurveyOpen && Boolean(cadastralResurveyDistrictId)
@@ -759,6 +780,15 @@ function MapLayoutContent({
   )
   const [cadastralResurveyDetailWidth, setCadastralResurveyDetailWidth] = useState(
     CADASTRAL_RESURVEY_DETAIL_DEFAULT_WIDTH
+  )
+  const cadastralRecordOpen = openedWindows.includes(CADASTRAL_RECORD_OPENED_KEY)
+  const [cadastralRecordId, setCadastralRecordId] = useState<string | null>(null)
+  const cadastralRecordDetailOpen = cadastralRecordOpen && Boolean(cadastralRecordId)
+  const [cadastralRecordPanelWidth, setCadastralRecordPanelWidth] = useState(
+    CADASTRAL_RECORD_PANEL_DEFAULT_WIDTH
+  )
+  const [cadastralRecordDetailWidth, setCadastralRecordDetailWidth] = useState(
+    CADASTRAL_RECORD_DETAIL_DEFAULT_WIDTH
   )
   const individualLandPriceOpen = openedWindows.includes(INDIVIDUAL_LAND_PRICE_OPENED_KEY)
   const [individualLandPricePnu, setIndividualLandPricePnu] = useState<string | null>(null)
@@ -1097,8 +1127,11 @@ function MapLayoutContent({
     (privateLandAnalysisOpen ? privateLandAnalysisPanelWidth : 0) +
     (privateLandAnalysisDetailOpen ? privateLandAnalysisDetailWidth : 0) +
     (userDataUploadOpen ? userDataUploadPanelWidth : 0) +
+    (drawingDisplayOpen ? drawingDisplayPanelWidth : 0) +
     (cadastralResurveyOpen ? cadastralResurveyPanelWidth : 0) +
     (cadastralResurveyDetailOpen ? cadastralResurveyDetailWidth : 0) +
+    (cadastralRecordOpen ? cadastralRecordPanelWidth : 0) +
+    (cadastralRecordDetailOpen ? cadastralRecordDetailWidth : 0) +
     (individualLandPriceOpen ? individualLandPricePanelWidth : 0) +
     (individualLandPriceDetailOpen ? individualLandPriceDetailWidth : 0) +
     (developmentChargeOpen ? developmentChargePanelWidth : 0) +
@@ -1254,12 +1287,18 @@ function MapLayoutContent({
     privateLandAnalysisPanelLeftPx + (privateLandAnalysisOpen ? privateLandAnalysisPanelWidth : 0)
   const userDataUploadPanelLeftPx =
     privateLandAnalysisDetailLeftPx + (privateLandAnalysisDetailOpen ? privateLandAnalysisDetailWidth : 0)
-  const cadastralResurveyPanelLeftPx =
+  const drawingDisplayPanelLeftPx =
     userDataUploadPanelLeftPx + (userDataUploadOpen ? userDataUploadPanelWidth : 0)
+  const cadastralResurveyPanelLeftPx =
+    drawingDisplayPanelLeftPx + (drawingDisplayOpen ? drawingDisplayPanelWidth : 0)
   const cadastralResurveyDetailLeftPx =
     cadastralResurveyPanelLeftPx + (cadastralResurveyOpen ? cadastralResurveyPanelWidth : 0)
-  const individualLandPricePanelLeftPx =
+  const cadastralRecordPanelLeftPx =
     cadastralResurveyDetailLeftPx + (cadastralResurveyDetailOpen ? cadastralResurveyDetailWidth : 0)
+  const cadastralRecordDetailLeftPx =
+    cadastralRecordPanelLeftPx + (cadastralRecordOpen ? cadastralRecordPanelWidth : 0)
+  const individualLandPricePanelLeftPx =
+    cadastralRecordDetailLeftPx + (cadastralRecordDetailOpen ? cadastralRecordDetailWidth : 0)
   const individualLandPriceDetailLeftPx =
     individualLandPricePanelLeftPx + (individualLandPriceOpen ? individualLandPricePanelWidth : 0)
   const developmentChargePanelLeftPx =
@@ -1483,7 +1522,8 @@ function MapLayoutContent({
     if (!roadCctvOpen) return
     setIdentifyResultList?.(null)
     setIdentifySelectedRow?.(null)
-  }, [roadCctvOpen, setIdentifyResultList, setIdentifySelectedRow])
+    setDataQueryMapPick?.(null)
+  }, [roadCctvOpen, setIdentifyResultList, setIdentifySelectedRow, setDataQueryMapPick])
 
   /**
    * CCTV 패널: 통행 타일 vs 도로대장 총괄(a0020000) 배타.
@@ -1831,9 +1871,18 @@ function MapLayoutContent({
     setOpened(openedWindows.filter((w) => w !== USER_DATA_UPLOAD_OPENED_KEY))
   }
 
+  const handleCloseDrawingDisplay = () => {
+    setOpened(openedWindows.filter((w) => w !== DRAWING_DISPLAY_OPENED_KEY))
+  }
+
   const handleCloseCadastralResurvey = () => {
     setCadastralResurveyDistrictId(null)
     setOpened(openedWindows.filter((w) => w !== CADASTRAL_RESURVEY_OPENED_KEY))
+  }
+
+  const handleCloseCadastralRecord = () => {
+    setCadastralRecordId(null)
+    setOpened(openedWindows.filter((w) => w !== CADASTRAL_RECORD_OPENED_KEY))
   }
 
   const handleCloseIndividualLandPrice = () => {
@@ -1987,6 +2036,10 @@ function MapLayoutContent({
   useEffect(() => {
     if (!cadastralResurveyOpen) setCadastralResurveyDistrictId(null)
   }, [cadastralResurveyOpen])
+
+  useEffect(() => {
+    if (!cadastralRecordOpen) setCadastralRecordId(null)
+  }, [cadastralRecordOpen])
 
   useEffect(() => {
     if (!individualLandPriceOpen) {
@@ -2279,9 +2332,13 @@ function MapLayoutContent({
   }
 
   const handleCloseDataPanel = () => {
+    if (mapContext?.suppressMapIdentifyUntilRef) {
+      mapContext.suppressMapIdentifyUntilRef.current = Date.now() + 400
+    }
     const next = openedWindows.filter((w) => w !== LIST_VIEW_OPENED_KEY)
     updateMapUrl({ opened: next, dataTable: null, dataKey: null })
     mapContext?.setIdentifyResultList?.(null)
+    setDataQueryMapPick?.(null)
   }
 
   return (
@@ -3595,6 +3652,19 @@ function MapLayoutContent({
               </MapSideListPanel>
             </div>
           )}
+          {drawingDisplayOpen && (
+            <div className="pointer-events-auto shrink-0">
+              <MapSideListPanel
+                width={drawingDisplayPanelWidth}
+                minWidth={DRAWING_DISPLAY_PANEL_MIN_WIDTH}
+                maxWidth={DRAWING_DISPLAY_PANEL_MAX_WIDTH}
+                leftOffsetPx={drawingDisplayPanelLeftPx}
+                onWidthChange={setDrawingDisplayPanelWidth}
+              >
+                <DrawingDisplayPanel onClose={handleCloseDrawingDisplay} />
+              </MapSideListPanel>
+            </div>
+          )}
           {cadastralResurveyOpen && (
             <div className="pointer-events-auto shrink-0">
               <MapSideListPanel
@@ -3628,6 +3698,43 @@ function MapLayoutContent({
                   key={cadastralResurveyDistrictId}
                   districtId={cadastralResurveyDistrictId}
                   onClose={() => setCadastralResurveyDistrictId(null)}
+                />
+              </MapSideListPanel>
+            </div>
+          )}
+          {cadastralRecordOpen && (
+            <div className="pointer-events-auto shrink-0">
+              <MapSideListPanel
+                width={cadastralRecordPanelWidth}
+                minWidth={CADASTRAL_RECORD_PANEL_MIN_WIDTH}
+                maxWidth={CADASTRAL_RECORD_PANEL_MAX_WIDTH}
+                leftOffsetPx={cadastralRecordPanelLeftPx}
+                onWidthChange={setCadastralRecordPanelWidth}
+                serEng={CADASTRAL_RECORD_OPENED_KEY}
+              >
+                <CadastralRecordListPanel
+                  onClose={handleCloseCadastralRecord}
+                  selectedId={cadastralRecordId}
+                  onSelect={setCadastralRecordId}
+                />
+              </MapSideListPanel>
+            </div>
+          )}
+          {cadastralRecordDetailOpen && cadastralRecordId && (
+            <div className="pointer-events-auto shrink-0">
+              <MapSideListPanel
+                width={cadastralRecordDetailWidth}
+                minWidth={CADASTRAL_RECORD_DETAIL_MIN_WIDTH}
+                maxWidth={CADASTRAL_RECORD_DETAIL_MAX_WIDTH}
+                leftOffsetPx={cadastralRecordDetailLeftPx}
+                onWidthChange={setCadastralRecordDetailWidth}
+                contentClassName="overflow-hidden"
+                serEng={CADASTRAL_RECORD_OPENED_KEY}
+              >
+                <CadastralRecordDetailPanel
+                  key={cadastralRecordId}
+                  recordId={cadastralRecordId}
+                  onClose={() => setCadastralRecordId(null)}
                 />
               </MapSideListPanel>
             </div>

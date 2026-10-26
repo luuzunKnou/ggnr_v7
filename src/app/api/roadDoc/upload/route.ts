@@ -18,7 +18,7 @@ function safeBasename(raw: string): string | null {
 }
 
 /**
- * POST /api/roadDoc/upload — multipart `file` 필드로 `roadDoc/file`에 저장 (동일 이름 덮어쓰기)
+ * POST /api/roadDoc/upload — multipart `file` 필드로 `file_data/road_doc/file`에 저장 (동일 이름 덮어쓰기)
  */
 export async function POST(req: NextRequest) {
   let form: FormData;

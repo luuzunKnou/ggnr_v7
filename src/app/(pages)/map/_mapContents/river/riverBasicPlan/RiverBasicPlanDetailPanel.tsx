@@ -50,6 +50,11 @@ import {
 } from "../../../_mapComponents/standard/useServiceFileData";
 import { ServiceFilePdfThumb } from "../../../_mapComponents/standard/ServiceFilePdfThumb";
 import {
+  extent3857IsLandscape,
+  type IndexSheetGuide,
+  type IndexSheetMode,
+} from "../../../_mapComponents/standard/inferPdfPageUprightRotation";
+import {
   ServiceFileImagePreview,
   type ServiceFilePreviewItem,
 } from "../../../_mapComponents/standard/ServiceFileImagePreview";
@@ -73,11 +78,25 @@ function formatRiverBasicPlanAttrValue(key: string, raw: unknown): string {
   return formatDetailScalarValue(raw);
 }
 
+function parseXyPairs(raw: unknown): [number, number][] | null {
+  if (!Array.isArray(raw) || raw.length < 2) return null;
+  const pts: [number, number][] = [];
+  for (const p of raw) {
+    if (!Array.isArray(p) || p.length < 2) continue;
+    const x = Number(p[0]);
+    const y = Number(p[1]);
+    if (Number.isFinite(x) && Number.isFinite(y)) pts.push([x, y]);
+  }
+  return pts.length >= 2 ? pts : null;
+}
+
 type IndexBundle = {
   index: {
     row: Record<string, unknown>;
     extent3857: [number, number, number, number] | null;
     ogcFid: number;
+    ring3857: [number, number][] | null;
+    guide3857: [number, number][] | null;
   } | null;
   related: {
     kind: string;
@@ -99,8 +118,9 @@ type IndexListItem = {
   extent3857: [number, number, number, number] | null;
 };
 
-/** 색인도 썸네일 프레임 비율 (가로 3 : 세로 2) */
-const INDEX_THUMB_FRAME = "relative w-full aspect-[3/2] overflow-hidden bg-muted";
+/** 가로 도면은 칸 너비에 맞춤(3:2). 세로 도면은 그 너비만큼 높이로 맞춤 */
+const INDEX_THUMB_FRAME_LANDSCAPE = "relative w-full aspect-[3/2] overflow-hidden bg-muted";
+const INDEX_THUMB_FRAME_PORTRAIT = "relative w-full aspect-square overflow-hidden bg-white";
 
 type RiverType = "river" | "smallRiver";
 
@@ -718,6 +738,8 @@ export function RiverBasicPlanDetailPanel({ tab, riverName, onClose }: Props) {
                   ? ((idx as { extent3857: number[] }).extent3857 as [number, number, number, number])
                   : null,
                 ogcFid: idxOgc,
+                ring3857: parseXyPairs((idx as { ring3857?: unknown }).ring3857),
+                guide3857: parseXyPairs((idx as { guide3857?: unknown }).guide3857),
               }
             : null;
         const relatedParsed = rel.map((r: Record<string, unknown>) => {
@@ -867,6 +889,21 @@ export function RiverBasicPlanDetailPanel({ tab, riverName, onClose }: Props) {
     if (!row || !indexTableKeyFieldName) return null;
     return getRowKey(row, indexTableKeyFieldName);
   }, [indexBundle?.index?.row, indexTableKeyFieldName]);
+
+  const indexSheetMode: IndexSheetMode | undefined = indexBundle?.index
+    ? extent3857IsLandscape(indexBundle.index.extent3857)
+      ? "landscape"
+      : "portrait"
+    : undefined;
+
+  const indexSheetGuide: IndexSheetGuide | undefined = useMemo(() => {
+    const guide = indexBundle?.index?.guide3857;
+    if (guide == null || guide.length < 2) return undefined;
+    return {
+      ring3857: indexBundle?.index?.ring3857,
+      guide3857: guide,
+    };
+  }, [indexBundle?.index?.guide3857, indexBundle?.index?.ring3857]);
 
   const indexFileQuery = useServiceFileData({
     serEng: SER_FILE_ENG.riverBasicPlan,
@@ -1272,9 +1309,15 @@ export function RiverBasicPlanDetailPanel({ tab, riverName, onClose }: Props) {
             ) : (
               <div className="p-3 space-y-4">
                 {indexSectionHeader}
-                <div className="rounded-lg border border-border overflow-hidden bg-muted">
+                <div
+                  className={`rounded-lg border border-border overflow-hidden ${
+                    indexSheetMode === "portrait" ? "bg-white" : "bg-muted"
+                  }`}
+                >
                   <div
-                    className={INDEX_THUMB_FRAME}
+                    className={
+                      indexSheetMode === "portrait" ? INDEX_THUMB_FRAME_PORTRAIT : INDEX_THUMB_FRAME_LANDSCAPE
+                    }
                     title={
                       indexTableKeyFieldName == null
                         ? "색인도 키 필드 미설정"
@@ -1317,13 +1360,19 @@ export function RiverBasicPlanDetailPanel({ tab, riverName, onClose }: Props) {
                             indexFilePreview.file.name
                           )}
                           alt=""
-                          className="pointer-events-none absolute inset-0 h-full w-full object-cover"
+                          className={
+                            indexSheetMode === "portrait"
+                              ? "pointer-events-none absolute inset-0 h-full w-full object-contain"
+                              : "pointer-events-none absolute inset-0 h-full w-full object-cover"
+                          }
                         />
                       </button>
                     ) : indexFilePreview.kind === "pdf" ? (
                       <button
                         type="button"
-                        className="absolute inset-0 block cursor-zoom-in border-0 bg-foreground p-0"
+                        className={`absolute inset-0 block cursor-zoom-in border-0 p-0 ${
+                          indexSheetMode === "portrait" ? "bg-white" : "bg-muted"
+                        }`}
                         onClick={() => openIndexFullScreenPreview(indexFilePreview.file.name)}
                         aria-label="PDF 전체화면 보기"
                       >
@@ -1334,6 +1383,9 @@ export function RiverBasicPlanDetailPanel({ tab, riverName, onClose }: Props) {
                           fileName={indexFilePreview.file.name}
                           thumbMaxPx={960}
                           unboxed
+                          indexSheetMode={indexSheetMode}
+                          indexSheetGuide={indexSheetGuide}
+                          objectFit={indexSheetMode === "portrait" ? "contain" : "cover"}
                           className="pointer-events-none absolute inset-0 h-full w-full"
                         />
                       </button>
@@ -1550,6 +1602,8 @@ export function RiverBasicPlanDetailPanel({ tab, riverName, onClose }: Props) {
         items={indexAttachmentPreview.items}
         initialIndex={indexAttachmentPreview.initialIndex}
         onClose={() => setIndexAttachmentPreview(null)}
+        indexSheetMode={indexSheetMode}
+        indexSheetGuide={indexSheetGuide}
       />
     )}
     {relatedDrawingPreview != null && (

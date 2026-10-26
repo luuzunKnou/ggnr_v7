@@ -201,7 +201,7 @@ export function LandInfoPanelContent({
     const frame = eumFrameRef.current;
     if (!frame) return;
     const view = embedKind === 'plan' ? '&view=plan' : '';
-    frame.src = `/api/land-eum/page?pnu=${encodeURIComponent(eumPnu)}${view}`;
+    frame.src = withBasePath(`/api/land-eum/page?pnu=${encodeURIComponent(eumPnu)}${view}`);
   }, [embedKind, eumPnu]);
 
   const xy = useMemo(() => {

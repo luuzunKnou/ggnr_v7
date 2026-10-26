@@ -98,7 +98,8 @@ export function RiverBasicPlanListPanel({
   useEffect(() => {
     const ctx = mapContextRef.current;
     if (!ctx?.setVisibleLayerNames || loading) return;
-    const onLayers = defaultLayersForTab(tab);
+    if (existingMapLayers == null) return;
+    const onLayers = existingMapLayers;
     const enableCurrent = !error && items.length > 0;
     ctx.setVisibleLayerNames((prev) => {
       const next = new Set(prev);
@@ -111,13 +112,13 @@ export function RiverBasicPlanListPanel({
           }
         }
       } else {
-        for (const id of onLayers) {
+        for (const id of defaultLayersForTab(tab)) {
           if (next.delete(id)) changed = true;
         }
       }
       return changed ? next : prev;
     });
-  }, [tab, loading, error, items.length]);
+  }, [tab, loading, error, items.length, existingMapLayers]);
 
   /** 목록에서 하천 선택 시 해당 하천만 WMS 표시 */
   useEffect(() => {
