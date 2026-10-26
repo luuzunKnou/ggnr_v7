@@ -76,9 +76,7 @@ next-env.d.ts
 # 3D 샘플·타일 데이터 (대용량)
 /3d_data_dir/
 
-# 도로 문서 원본 (업로드/API로 관리, Git 제외)
-/src/app/(pages)/map/_mapContents/road/roadDoc/cad/
-/src/app/(pages)/map/_mapContents/road/roadDoc/file/
+# 업무자료 원본은 GGNR_DATA_DIR/file_data/road_doc (저장소 밖)
 
 # pg_map_modules (바이너리 파일 포함)
 /pg_map_modules/services/pg_tileserv/

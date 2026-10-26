@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useRef, useState, useCallback, type MutableRefObject } from 'react';
 import type { Map, MapBrowserEvent } from 'ol';
 import Overlay from 'ol/Overlay';
 import { unByKey } from 'ol/Observable';
@@ -61,6 +61,7 @@ export function useFeatureIdentify(
    * 화면에 안 보이는 도형이 식별되지 않도록 서버 identify에 함께 전달.
    */
   tableFilters: Record<string, string> | null = null,
+  externalIgnoreUntilRef: MutableRefObject<number> | null = null,
 ) {
   const visibleRef = useRef(visibleLayerNames);
   visibleRef.current = visibleLayerNames;
@@ -68,12 +69,20 @@ export function useFeatureIdentify(
   disabledRef.current = identifyDisabled;
   const tableFiltersRef = useRef(tableFilters);
   tableFiltersRef.current = tableFilters;
+  const externalIgnoreRef = useRef(externalIgnoreUntilRef);
+  externalIgnoreRef.current = externalIgnoreUntilRef;
 
   const [popupState, setPopupState] = useState<IdentifyPopupState | null>(null);
   const overlayRef = useRef<Overlay | null>(null);
   const popupElRef = useRef<HTMLDivElement | null>(null);
+  /** 지도 위 목록 닫기 클릭이 지도 식별로 새어 목록 창이 다시 열리는 것 방지 */
+  const ignoreClickUntilRef = useRef(0);
 
   const closePopup = useCallback(() => {
+    const until = Date.now() + 400;
+    ignoreClickUntilRef.current = until;
+    const ext = externalIgnoreRef.current;
+    if (ext) ext.current = until;
     setPopupState(null);
     overlayRef.current?.setPosition(undefined);
   }, []);
@@ -103,6 +112,9 @@ export function useFeatureIdentify(
   const handleClick = useCallback(
     async (evt: MapBrowserEvent<PointerEvent>) => {
       if (!evt.map) return;
+      if (Date.now() < ignoreClickUntilRef.current) return;
+      const extUntil = externalIgnoreRef.current?.current ?? 0;
+      if (Date.now() < extUntil) return;
       if (disabledRef.current) {
         closePopup();
         return;
