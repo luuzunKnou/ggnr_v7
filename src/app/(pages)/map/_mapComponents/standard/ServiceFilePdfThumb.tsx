@@ -5,6 +5,7 @@ import { FileText, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { serviceFileDataDownloadUrl, type ServiceFileDataSerEng } from './useServiceFileData';
 import { getPdfPageThumbDataUrl } from './renderPdfPageThumb';
+import type { IndexSheetGuide, IndexSheetMode } from './inferPdfPageUprightRotation';
 
 const box = { sm: 'h-8 w-8', md: 'h-9 w-9' } as const;
 const iconSz = { sm: 'h-3.5 w-3.5', md: 'h-4 w-4' } as const;
@@ -29,6 +30,10 @@ export function ServiceFilePdfThumb({
   thumbMaxPx = THUMB_MAX_DEFAULT,
   /** true면 고정 sm/md 박스 대신 부모 높이·너비를 가득 채움 */
   unboxed = false,
+  /** 색인도일 때만 지정. 가로 칸은 90·180·270, 세로 칸은 180만 */
+  indexSheetMode,
+  indexSheetGuide,
+  objectFit = 'cover',
 }: {
   serEng: ServiceFileDataSerEng;
   layerSegment: string;
@@ -39,6 +44,9 @@ export function ServiceFilePdfThumb({
   className?: string;
   thumbMaxPx?: number;
   unboxed?: boolean;
+  indexSheetMode?: IndexSheetMode;
+  indexSheetGuide?: IndexSheetGuide;
+  objectFit?: 'cover' | 'contain';
 }) {
   const [phase, setPhase] = useState<Phase>('loading');
   const [dataUrl, setDataUrl] = useState<string | null>(null);
@@ -51,7 +59,7 @@ export function ServiceFilePdfThumb({
     setDataUrl(null);
 
     const ac = new AbortController();
-    void getPdfPageThumbDataUrl(url, 1, thumbMaxPx, ac.signal)
+    void getPdfPageThumbDataUrl(url, 1, thumbMaxPx, ac.signal, { indexSheetMode, indexSheetGuide })
       .then((thumb) => {
         if (!alive.current) return;
         setDataUrl(thumb);
@@ -67,7 +75,7 @@ export function ServiceFilePdfThumb({
       alive.current = false;
       ac.abort();
     };
-  }, [url, thumbMaxPx]);
+  }, [url, thumbMaxPx, indexSheetMode, indexSheetGuide]);
 
   const frameClass = unboxed
     ? 'relative h-full w-full min-h-0 min-w-0 overflow-hidden'
@@ -92,7 +100,11 @@ export function ServiceFilePdfThumb({
     return (
       <div className={cn(frameClass, className)}>
         {/* eslint-disable-next-line @next/next/no-img-element -- data URL 썸네일 */}
-        <img src={dataUrl} alt="" className="h-full w-full object-cover" />
+        <img
+          src={dataUrl}
+          alt=""
+          className={cn('h-full w-full', objectFit === 'contain' ? 'object-contain' : 'object-cover')}
+        />
       </div>
     );
   }

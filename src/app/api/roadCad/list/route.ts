@@ -5,7 +5,7 @@ import type { RoadDocListItem } from "@/lib/roadDocTypes";
 export const dynamic = "force-dynamic";
 
 /**
- * GET /api/roadCad/list — `roadDoc/cad` 트리 전체 파일 (하위 폴더 포함, 이름은 `/` 구분 상대 경로)
+ * GET /api/roadCad/list — `file_data/road_doc/cad` 트리 전체 파일 (하위 폴더 포함, 이름은 `/` 구분 상대 경로)
  */
 export async function GET() {
   try {

@@ -1,37 +1,25 @@
 import path from "path";
+import { GGNR_DATA_PATHS } from "@/lib/ggnrDataPaths";
+import { resolveGgnrDataDir } from "@/lib/turbopackFsPath";
 
-/** 서버 전용: `roadDoc/file` 업로드 정적 파일 디렉터리 (업무메뉴얼) */
+/** `GGNR_DATA_DIR/file_data/road_doc` */
+export function getRoadDocRootDir(): string {
+  return path.join(resolveGgnrDataDir(), GGNR_DATA_PATHS.roadDoc);
+}
+
+/** 서버 전용: 업무메뉴얼 문서 — `file_data/road_doc/file` */
 export function getRoadDocFileDir(): string {
-  return path.join(
-    process.cwd(),
-    "src/app/(pages)/map/_mapContents/road/roadDoc/file"
-  );
+  return path.join(getRoadDocRootDir(), "file");
 }
 
-/** 서버 전용: 도면(CAD) 정적 파일 — `roadDoc/cad` */
+/** 서버 전용: 도면(CAD) — `file_data/road_doc/cad` */
 export function getRoadCadFileDir(): string {
-  return path.join(
-    process.cwd(),
-    "src/app/(pages)/map/_mapContents/road/roadDoc/cad"
-  );
+  return path.join(getRoadDocRootDir(), "cad");
 }
 
-/**
- * `roadDoc/file` → 8단계 상위 = 저장소 루트 (cwd와 무관하게 동일 트리 전제).
- * QCAD_modules 등 루트 고정 폴더에 사용.
- */
+/** 저장소 루트. QCAD_modules 등 루트 고정 폴더에 사용. */
 export function getProjectRoot(): string {
-  return path.resolve(
-    getRoadDocFileDir(),
-    "..",
-    "..",
-    "..",
-    "..",
-    "..",
-    "..",
-    "..",
-    ".."
-  );
+  return path.resolve(process.cwd());
 }
 
 /**
