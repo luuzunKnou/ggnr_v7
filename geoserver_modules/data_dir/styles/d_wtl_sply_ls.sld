@@ -10,7 +10,7 @@
         <sld:Name>name</sld:Name>
         <sld:Rule>
           <sld:Name>Name</sld:Name>
-          <sld:Title>Title</sld:Title>
+          <sld:Title>d_wtl_sply_ls</sld:Title>
           <sld:Abstract>Abstract</sld:Abstract>
           <sld:LineSymbolizer>
             <sld:Stroke>
@@ -38,7 +38,7 @@
               <sld:CssParameter name="stroke-width">
                 <ogc:Function name="env">
                   <ogc:Literal>d_wtl_sply_ls_stroke_width</ogc:Literal>
-                  <ogc:Literal>3</ogc:Literal>
+                  <ogc:Literal>1</ogc:Literal>
                 </ogc:Function>
               </sld:CssParameter>
             </sld:Stroke>
@@ -107,9 +107,11 @@
                     </ogc:Function>
                     <ogc:Literal>0</ogc:Literal>
                   </ogc:Function>
+
                   <ogc:Function name="env">
                     <ogc:Literal>d_wtl_sply_ls_size</ogc:Literal>
                   </ogc:Function>
+
                   <ogc:Function name="Categorize">
                     <ogc:Function name="env">
                       <ogc:Literal>wms_scale_denominator</ogc:Literal>
@@ -135,12 +137,28 @@
               </sld:Rotation>
             </sld:Graphic>
           </sld:PointSymbolizer>
+        </sld:Rule>
+        <sld:Rule>
+          <sld:Name>Name</sld:Name>
+          <sld:Title>d_wtl_sply_ls_label</sld:Title>
+          <sld:Abstract>Abstract</sld:Abstract>
+          <ogc:Filter>
+            <ogc:PropertyIsGreaterThan>
+              <ogc:Function name="strLength">
+                <ogc:Function name="env">
+                  <ogc:Literal>d_wtl_sply_ls_label_property_name</ogc:Literal>
+                  <ogc:Literal></ogc:Literal>
+                </ogc:Function>
+              </ogc:Function>
+              <ogc:Literal>0</ogc:Literal>
+            </ogc:PropertyIsGreaterThan>
+          </ogc:Filter>
           <sld:TextSymbolizer>
             <sld:Label>
               <ogc:Function name="property">
                 <ogc:Function name="env">
                   <ogc:Literal>d_wtl_sply_ls_label_property_name</ogc:Literal>
-                  <ogc:Literal>pip_lbl</ogc:Literal>
+                  <ogc:Literal/>
                 </ogc:Function>
               </ogc:Function>
             </sld:Label>
@@ -149,11 +167,16 @@
               <sld:CssParameter name="font-size">
                 <ogc:Function name="env">
                   <ogc:Literal>d_wtl_sply_ls_label_size</ogc:Literal>
-                  <ogc:Literal>15</ogc:Literal>
+                  <ogc:Literal>0</ogc:Literal>
                 </ogc:Function>
               </sld:CssParameter>
               <sld:CssParameter name="font-style">normal</sld:CssParameter>
-              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+              <sld:CssParameter name="font-weight">
+                <ogc:Function name="env">
+                  <ogc:Literal>d_wtl_sply_ls_label_font_weight</ogc:Literal>
+                  <ogc:Literal>normal</ogc:Literal>
+                </ogc:Function>
+              </sld:CssParameter>
             </sld:Font>
             <sld:LabelPlacement>
               <sld:LinePlacement>
@@ -161,9 +184,22 @@
               </sld:LinePlacement>
             </sld:LabelPlacement>
             <sld:Halo>
-              <sld:Radius>2</sld:Radius>
+              <sld:Radius>
+                <ogc:Function name="env">
+                  <ogc:Literal>d_wtl_sply_ls_label_halo_radius</ogc:Literal>
+                  <ogc:Literal>1</ogc:Literal>
+                </ogc:Function>
+              </sld:Radius>
               <sld:Fill>
-                <sld:CssParameter name="fill">#7b64ff</sld:CssParameter>
+                <sld:CssParameter name="fill">
+                  <ogc:Function name="strConcat">
+                    <ogc:Literal>#</ogc:Literal>
+                    <ogc:Function name="env">
+                      <ogc:Literal>d_wtl_sply_ls_label_halo_color</ogc:Literal>
+                      <ogc:Literal>FFFFFF</ogc:Literal>
+                    </ogc:Function>
+                  </ogc:Function>
+                </sld:CssParameter>
               </sld:Fill>
             </sld:Halo>
             <sld:Fill>
@@ -172,12 +208,11 @@
                   <ogc:Literal>#</ogc:Literal>
                   <ogc:Function name="env">
                     <ogc:Literal>d_wtl_sply_ls_label_color</ogc:Literal>
-                    <ogc:Literal>FFFFFF</ogc:Literal>
+                    <ogc:Literal>009CE0</ogc:Literal>
                   </ogc:Function>
                 </ogc:Function>
               </sld:CssParameter>
             </sld:Fill>
-            <sld:VendorOption name="followLine">true</sld:VendorOption>
           </sld:TextSymbolizer>
         </sld:Rule>
       </sld:FeatureTypeStyle>
