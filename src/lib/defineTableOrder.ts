@@ -7,13 +7,21 @@ type DefineIdxRow = {
 
 const IDX_BY_TABLE = new Map<string, number>();
 
-/** 비어 있거나 숫자가 아니면 맨 뒤로 보낸다. */
+/**
+ * 레이어 설정 «순서» 파싱.
+ * 비어 있거나 숫자가 아니면 맨 뒤(999999). 0은 유효 순번(맨 앞).
+ */
 export function parseDefineTableIdx(value: unknown): number {
   if (typeof value === 'number' && Number.isFinite(value)) return value;
   const text = String(value ?? '').trim();
   if (!text) return 999999;
   const n = parseInt(text, 10);
   return Number.isFinite(n) ? n : 999999;
+}
+
+/** 레이어 설정에 순번 문자열이 있는지 (빈값만 미설정. 0 포함) */
+export function hasDefineTableIdx(value: unknown): boolean {
+  return String(value ?? '').trim() !== '';
 }
 
 for (const row of tables as DefineIdxRow[]) {
@@ -40,14 +48,25 @@ export function compareDefineTableOrder(
   return aName.localeCompare(bName, 'ko');
 }
 
-export function sortLayersByDefineIdx<T extends { tableName: string; layerName: string }>(
+type LayerWithOptionalIdx = {
+  tableName: string;
+  layerName: string;
+  /** 런타임 정의(프로젝트 분할 merge 등)에서 온 순서. 있으면 정적 tables.json 보다 우선 */
+  tableIdx?: number;
+};
+
+/**
+ * 레이어 설정 순서로 정렬.
+ * `tableIdx`가 있으면 그걸 쓰고, 없으면 tables.json 정적 맵을 본다.
+ */
+export function sortLayersByDefineIdx<T extends LayerWithOptionalIdx>(
   layers: readonly T[],
 ): T[] {
   return [...layers].sort((a, b) =>
     compareDefineTableOrder(
-      defineTableIdx(a.tableName),
+      a.tableIdx ?? defineTableIdx(a.tableName),
       a.layerName,
-      defineTableIdx(b.tableName),
+      b.tableIdx ?? defineTableIdx(b.tableName),
       b.layerName,
     ),
   );

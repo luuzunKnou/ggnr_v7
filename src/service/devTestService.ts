@@ -5,7 +5,7 @@ import { db } from '@/database/db';
 import { usr } from '@/database/schema/usr';
 import { getSessionUsrId } from '@/lib/auth/guard';
 import { getGeoServerInternalBase, resolveGeoServerFetchBase } from '@/lib/geoserverUrl';
-import { geoserverWwwSymbolUrl } from '@/lib/geoserverSymbolPath';
+import { geoserverWwwSymbolUrl, rewriteGeoServerSymbolUrlsInStyleText } from '@/lib/geoserverSymbolPath';
 import { eq, sql } from 'drizzle-orm';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -23,9 +23,14 @@ import {
   parseSldEnvStyle,
   patchSldEnvDefaults,
   replaceDefaultRuleInCss,
+  stripSldRuleEvaluationVendorOption,
   type GeometryType,
   type StyleProps,
 } from '@/lib/geoserverStyleUtils';
+import {
+  buildSldFromEnvTemplate,
+  shouldUseSldEnvTemplate,
+} from '@/lib/geoserverStyles/buildSldFromEnvTemplate';
 import {
   buildElevationContourCss,
   ELEVATION_LAYER_NAME,
@@ -63,11 +68,6 @@ function ensureAutofixLogDirSync(): string {
   return dir;
 }
 
-/** GeoServer www 심볼 URL (start.ini·GEOSERVER_URL 포트) */
-function geoserverWaterSymbolUrl(name: string, ext: 'svg' | 'png'): string {
-  return geoserverWwwSymbolUrl('water', `${name}.${ext}`);
-}
-
 /**
  * PostGIS 테이블 목록 Map에서 논리 이름 대소문자 무관 조회 (레거시 혼합 대소문자 테이블 호환).
  */
@@ -86,19 +86,77 @@ function resolveDbTableCaseInsensitive(
   return undefined;
 }
 
-/** public/symbol의 svg·png 파일명(확장자 제외, 소문자). svg가 png보다 우선. */
-export async function listPublicSymbolStems() {
-  const base = path.join(process.cwd(), 'public', 'symbol');
-  const stems: Record<string, 'svg' | 'png'> = {};
+const SYMBOL_FOLDER_LIST_PRIORITY = [
+  'water',
+  'sewer',
+  'sewer_line50',
+  'sewer_noline',
+  'road',
+  'safety',
+];
+
+function preferSymbolStemEntry(
+  a: { folder: string; ext: 'svg' | 'png' },
+  b: { folder: string; ext: 'svg' | 'png' }
+): { folder: string; ext: 'svg' | 'png' } {
+  if (a.ext !== b.ext) return a.ext === 'svg' ? a : b;
+  const ia = SYMBOL_FOLDER_LIST_PRIORITY.indexOf(a.folder);
+  const ib = SYMBOL_FOLDER_LIST_PRIORITY.indexOf(b.folder);
+  const pa = ia < 0 ? 999 : ia;
+  const pb = ib < 0 ? 999 : ib;
+  if (pa !== pb) return pa < pb ? a : b;
+  return a.folder.localeCompare(b.folder) <= 0 ? a : b;
+}
+
+/**
+ * 스타일 모달의 SYMBOL 판정과 동일: ExternalGraphic 또는 mark:url(심볼)이 있으면 true.
+ * (목록 shp_type은 POINT만 두므로 파일 존재만으로는 보지 않음)
+ */
+function styleUsesExternalSymbol(styleName: string): boolean {
+  const name = String(styleName ?? '').trim();
+  if (!name) return false;
   try {
-    if (!fs.existsSync(base)) return { success: true as const, stems };
-    for (const name of fs.readdirSync(base)) {
-      const matched = name.match(/^(.+)\.(svg|png)$/i);
-      if (!matched) continue;
-      const stem = matched[1].toLowerCase();
-      const ext = matched[2].toLowerCase() as 'svg' | 'png';
-      if (stems[stem] === 'svg') continue;
-      stems[stem] = ext;
+    const sldPath = path.join(getStylesDir(), `${name}.sld`);
+    if (fs.existsSync(sldPath) && fs.statSync(sldPath).isFile()) {
+      const sld = fs.readFileSync(sldPath, 'utf-8');
+      if (/<(?:[\w]+:)?ExternalGraphic\b/i.test(sld)) return true;
+      if (/xlink:href\s*=\s*["'][^"']*www\/symbol\//i.test(sld)) return true;
+    }
+  } catch {
+    /* ignore */
+  }
+  try {
+    const css = readCssSourceFile(name);
+    if (css && /mark\s*:\s*url\s*\(/i.test(css)) return true;
+  } catch {
+    /* ignore */
+  }
+  return false;
+}
+
+/** www/symbol 파일 중, 스타일이 SYMBOL(심볼 URL)인 stem만. svg·우선 폴더 순. */
+export async function listPublicSymbolStems() {
+  const stems: Record<string, { folder: string; ext: 'svg' | 'png' }> = {};
+  try {
+    const root = getGeoServerSymbolRootDir();
+    if (!fs.existsSync(root)) return { success: true as const, stems };
+    for (const folderName of fs.readdirSync(root)) {
+      if (folderName.toLowerCase() === 'history') continue;
+      const dir = path.join(root, folderName);
+      if (!fs.statSync(dir).isDirectory()) continue;
+      for (const name of fs.readdirSync(dir)) {
+        const matched = name.match(/^(.+)\.(svg|png)$/i);
+        if (!matched) continue;
+        const stem = matched[1].toLowerCase();
+        // 모달 hasSymbol과 동일: 스타일에 심볼 URL이 있을 때만 목록 아이콘 후보
+        if (!styleUsesExternalSymbol(stem)) continue;
+        const next = {
+          folder: folderName,
+          ext: matched[2].toLowerCase() as 'svg' | 'png',
+        };
+        const cur = stems[stem];
+        stems[stem] = cur ? preferSymbolStemEntry(cur, next) : next;
+      }
     }
     return { success: true as const, stems };
   } catch (e: unknown) {
@@ -107,20 +165,27 @@ export async function listPublicSymbolStems() {
   }
 }
 
-/** public/symbol에 파일이 있으면 GeoServer www/symbol/water URL 반환. SVG 우선, 없으면 PNG. */
+/** GeoServer www/symbol에 파일이 있으면 상대 URL 반환. SVG 우선, water 폴더 우선. */
 function resolveSymbolUrlForLayer(layerName: string): string | null {
   if (!layerName?.trim()) return null;
   const name = layerName.trim();
-  const base = path.join(process.cwd(), 'public', 'symbol');
-  const svgPath = path.join(base, `${name}.svg`);
-  const pngPath = path.join(base, `${name}.png`);
-  if (fs.existsSync(svgPath)) {
-    return geoserverWaterSymbolUrl(name, 'svg');
+  const root = getGeoServerSymbolRootDir();
+  if (!fs.existsSync(root)) return null;
+
+  let best: { folder: string; ext: 'svg' | 'png' } | null = null;
+  for (const folderName of fs.readdirSync(root)) {
+    if (folderName.toLowerCase() === 'history') continue;
+    const dir = path.join(root, folderName);
+    if (!fs.statSync(dir).isDirectory()) continue;
+    for (const ext of ['svg', 'png'] as const) {
+      const filePath = path.join(dir, `${name}.${ext}`);
+      if (!fs.existsSync(filePath) || !fs.statSync(filePath).isFile()) continue;
+      const next = { folder: folderName, ext };
+      best = best ? preferSymbolStemEntry(best, next) : next;
+    }
   }
-  if (fs.existsSync(pngPath)) {
-    return geoserverWaterSymbolUrl(name, 'png');
-  }
-  return null;
+  if (!best) return null;
+  return geoserverWwwSymbolUrl(best.folder, `${name}.${best.ext}`);
 }
 
 const SYMBOL_FOLDER_NAME_RE = /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,31}$/;
@@ -188,9 +253,6 @@ function writeCurrentSymbolFile(
   const destPath = path.join(destDir, fileName);
   archiveSymbolFilesToHistory(destDir, stem, sourcePath);
   fs.writeFileSync(destPath, buf);
-  const publicDir = path.join(process.cwd(), 'public', 'symbol');
-  fs.mkdirSync(publicDir, { recursive: true });
-  fs.writeFileSync(path.join(publicDir, fileName), buf);
   return fileName;
 }
 
@@ -233,7 +295,7 @@ export async function createGeoServerSymbolFolder(params: { folder?: string } = 
 /**
  * 선택한 폴더에 심볼 파일 저장. 파일명은 레이어명 + 확장자.
  * 같은 이름 이전 파일은 폴더 안 history로 옮긴 뒤 덮어쓴다.
- * GeoServer www와 Next public/symbol에 같이 넣는다.
+ * GeoServer www/symbol/{folder}에만 저장한다.
  */
 export async function uploadGeoServerSymbolFile(params: {
   folder?: string;
@@ -1645,8 +1707,10 @@ export async function getGeoServerStyle(params: { url: string; name: string }) {
 }
 
 /**
- * GeoServer CSS 스타일 생성 (이름 + 도형타입 + styleProps → CSS 생성 후 등록)
- * POST 시 본문은 CSS, name은 쿼리 파라미터로 전달 (JSON 본문 시 500 style handler 오류 방지)
+ * GeoServer 스타일 생성.
+ * 기본: POINT/LINE/POLYGON/SYMBOL env SLD 템플릿.
+ * 주제도 등 복잡한 라벨식만 기존 CSS 경로.
+ * POST 시 name은 쿼리 파라미터 (JSON 본문 시 500 style handler 오류 방지)
  */
 export async function createGeoServerStyle(params: {
   url?: string;
@@ -1661,6 +1725,28 @@ export async function createGeoServerStyle(params: {
   const styleProps = params.styleProps ?? {};
 
   try {
+    const useSldTemplate = shouldUseSldEnvTemplate(styleProps);
+    if (useSldTemplate) {
+      const sldBody = rewriteGeoServerSymbolUrlsInStyleText(
+        buildSldFromEnvTemplate({ styleName: name, geometryType, styleProps })
+      );
+      const path = `/rest/styles?name=${encodeURIComponent(name)}`;
+      const postRes = await geoserverFetch(baseUrl, path, {
+        method: 'POST',
+        body: sldBody,
+        contentType: 'application/vnd.ogc.sld+xml',
+      });
+      if (postRes.ok || postRes.status === 201) {
+        persistStyleFiles(name, 'sld', '', sldBody);
+        return { success: true };
+      }
+      const text = await postRes.text();
+      if (postRes.status === 403 && /already exists/i.test(text)) {
+        return { success: true, alreadyExists: true as const };
+      }
+      return { success: false, error: `스타일 생성 실패: ${postRes.status} ${text}` };
+    }
+
     const cssBody = buildCssForLayerStyle(geometryType, styleProps);
     const path = `/rest/styles?name=${encodeURIComponent(name)}`;
     const postRes = await geoserverFetch(baseUrl, path, {
@@ -1841,7 +1927,10 @@ async function commitGeoServerStyle(args: {
   body: string;
   cssBody: string;
 }): Promise<{ success: true; format: 'css' | 'sld' } | { success: false; error: string }> {
-  const body = args.format === 'sld' ? formatSldXml(args.body) : args.body;
+  // GeoServer CSS→SLD 변환이 file:/D:/… 로컬 경로를 넣어도, 저장·배포는 /www/symbol/… 만 쓴다
+  const rawBody = args.format === 'sld' ? formatSldXml(args.body) : args.body;
+  const body = rewriteGeoServerSymbolUrlsInStyleText(rawBody);
+  const cssBody = rewriteGeoServerSymbolUrlsInStyleText(args.cssBody ?? '');
   const contentType = STYLE_FORMAT_CONTENT[args.format];
   const current = await readGeoServerStyleFormat(args.baseUrl, args.styleName);
   const disk = readDiskStyleFormat(args.styleName);
@@ -1882,7 +1971,7 @@ async function commitGeoServerStyle(args: {
   }
   const now = await readGeoServerStyleFormat(args.baseUrl, args.styleName);
   if (now !== args.format) return { success: false, error: '스타일 형식이 바뀌지 않았습니다.' };
-  persistStyleFiles(args.styleName, args.format, args.cssBody, body);
+  persistStyleFiles(args.styleName, args.format, cssBody, body);
   if (readDiskStyleFormat(args.styleName) !== args.format) {
     return { success: false, error: '스타일 설정 파일이 바뀌지 않았습니다.' };
   }
@@ -1962,7 +2051,11 @@ async function translateCssToSld(
     if (!res.ok || !/StyledLayerDescriptor/i.test(sld)) {
       return { success: false, error: 'CSS를 SLD로 바꾸지 못했습니다.' };
     }
-    return { success: true, sld: formatSldXml(sld) };
+    // GeoServer가 붙인 ruleEvaluation만 제거. 다른 VendorOption은 유지
+    return {
+      success: true,
+      sld: formatSldXml(stripSldRuleEvaluationVendorOption(sld)),
+    };
   } finally {
     await geoserverFetch(baseUrl, `/rest/styles/${encodeURIComponent(temp)}?purge=true`, { method: 'DELETE' });
     removeStyleDiskArtifacts(temp);
@@ -2065,6 +2158,25 @@ export async function setGeoServerStyleFormat(params: {
   try {
     const existingCss = await readStyleCssSource(baseUrl, styleName);
     const cssBody = composeStyleCss(existingCss, geometryType, styleProps, true);
+
+    // CSS → SLD: env 템플릿 사용 (GeoServer 변환의 file:·ruleEvaluation 회피)
+    if (format === 'sld' && shouldUseSldEnvTemplate(styleProps)) {
+      const sldBody = buildSldFromEnvTemplate({
+        styleName,
+        geometryType,
+        styleProps,
+      });
+      return commitGeoServerStyle({
+        baseUrl,
+        workspace,
+        layerName,
+        styleName,
+        format: 'sld',
+        body: sldBody,
+        cssBody: '',
+      });
+    }
+
     let body = cssBody;
     if (format === 'sld') {
       const translated = await translateCssToSld(baseUrl, styleName, cssBody);

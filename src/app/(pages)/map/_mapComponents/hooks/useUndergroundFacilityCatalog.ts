@@ -16,6 +16,7 @@ type DefineTableRow = {
   define_table_schema?: string;
   define_table_parents_layer?: string;
   define_table_div_query?: string;
+  define_table_idx?: string | number;
 };
 
 export type UndergroundFacilityCatalog = {
@@ -61,9 +62,12 @@ export function useUndergroundFacilityCatalog(): UndergroundFacilityCatalog {
           success?: boolean;
           tables?: DefineTableRow[];
         };
-        setDefineTables(
-          tablesData?.success && Array.isArray(tablesData.tables) ? tablesData.tables : []
-        );
+        const rows = Array.isArray(tablesData?.tables)
+          ? tablesData.tables
+          : Array.isArray(tablesData)
+            ? (tablesData as DefineTableRow[])
+            : [];
+        setDefineTables(rows);
       })
       .catch(() => {
         if (!cancelled) {

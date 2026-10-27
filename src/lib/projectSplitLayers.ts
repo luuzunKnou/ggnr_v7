@@ -49,6 +49,11 @@ export type ProjectSplitConfig = Record<string, ProjectSplitParentConfig>
 
 type TableRow = Record<string, unknown>
 
+/** 빈값만 미설정. 0 포함 숫자 문자열은 레이어 설정 순번으로 인정 */
+function meaningfulDefineIdx(value: unknown): string {
+  return String(value ?? '').trim()
+}
+
 function sanitizeProjectId(project: string): string {
   return String(project ?? '')
     .trim()
@@ -220,8 +225,9 @@ export function materializeParentSplitChildren(
       String(item.group ?? '').trim() ||
       String(existing?.define_table_group ?? '').trim() ||
       parentGroup
-    const idx =
-      String(item.idx ?? '').trim() || String(existing?.define_table_idx ?? '').trim() || ''
+    /** 레이어 설정 순번(1 이상)이 있으면 우선. 0·빈값은 미설정 → 분할 기본 idx */
+    const existingIdx = meaningfulDefineIdx(existing?.define_table_idx)
+    const idx = existingIdx || String(item.idx ?? '').trim() || ''
     rows.push(
       buildChildRow(
         parentRow,
@@ -246,10 +252,8 @@ export function materializeParentSplitChildren(
     String(config.etc?.group ?? '').trim() ||
     String(etcExisting?.define_table_group ?? '').trim() ||
     parentGroup
-  const etcIdx =
-    String(config.etc?.idx ?? '').trim() ||
-    String(etcExisting?.define_table_idx ?? '').trim() ||
-    ''
+  const etcExistingIdx = meaningfulDefineIdx(etcExisting?.define_table_idx)
+  const etcIdx = etcExistingIdx || String(config.etc?.idx ?? '').trim() || ''
   rows.push(
     buildChildRow(
       parentRow,
