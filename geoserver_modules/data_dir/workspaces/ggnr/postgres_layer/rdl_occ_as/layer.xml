@@ -1,0 +1,19 @@
+<layer>
+  <name>rdl_occ_as</name>
+  <id>LayerInfoImpl-4937af91:1a157c27de4:-7894</id>
+  <type>VECTOR</type>
+  <defaultStyle>
+    <id>StyleInfoImpl-4937af91:1a157c27de4:-7893</id>
+  </defaultStyle>
+  <resource class="featureType">
+    <id>FeatureTypeInfoImpl-4937af91:1a157c27de4:-7895</id>
+  </resource>
+  <queryable>true</queryable>
+  <opaque>false</opaque>
+  <attribution>
+    <logoWidth>0</logoWidth>
+    <logoHeight>0</logoHeight>
+  </attribution>
+  <dateCreated>2026-10-23 02:16:07.33 UTC</dateCreated>
+  <dateModified>2026-10-23 02:16:07.370 UTC</dateModified>
+</layer>

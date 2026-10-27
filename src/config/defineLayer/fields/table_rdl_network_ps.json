@@ -26,7 +26,7 @@
   },
   {
     "define_field_name": "layer",
-    "define_field_kor_name": "layer",
+    "define_field_kor_name": "구분",
     "define_field_type": "TEXT",
     "define_field_idx": 2,
     "define_field_is_required": false,
@@ -51,7 +51,7 @@
   },
   {
     "define_field_name": "num",
-    "define_field_kor_name": "num",
+    "define_field_kor_name": "번호",
     "define_field_type": "NUMBER",
     "define_field_idx": 3,
     "define_field_is_required": false,

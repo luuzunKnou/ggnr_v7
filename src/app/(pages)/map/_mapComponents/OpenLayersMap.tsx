@@ -307,6 +307,8 @@ function collectOccupationIdentifyHits(
 
   const keyField = binding.fields.keyField;
   const childParentField = binding.fields.childParentField;
+  const permitField = binding.fields.permitField;
+  const nameField = binding.fields.nameField;
   const mainId = binding.mainTable.toLowerCase();
   const parentRanked = ranked.filter((x) => {
     const tn = String(x.layer.tableName ?? '')
@@ -327,18 +329,19 @@ function collectOccupationIdentifyHits(
       .toLowerCase();
     const pickField = tn === mainId ? keyField : childParentField;
     for (const feat of layer.features) {
+      // 필지·물건지는 본표 고유키 칸, 예전 국공유지 필지는 허가번호(permit_no)로도
       const rowKey =
         pickIdentifyField(feat?.data, pickField) ||
         (tn !== mainId ? pickIdentifyField(feat?.data, 'permit_no') : '');
       if (!rowKey || seen.has(rowKey)) continue;
       seen.add(rowKey);
       const permit =
-        pickIdentifyField(feat?.data, 'permit_no') ||
-        pickIdentifyField(feat?.data, 'work_name') ||
+        pickIdentifyField(feat?.data, permitField) ||
+        pickIdentifyField(feat?.data, nameField) ||
         rowKey;
       hits.push({
         rowKey,
-        permitNo: pickIdentifyField(feat?.data, 'permit_no') || permit,
+        permitNo: pickIdentifyField(feat?.data, permitField) || permit,
         extent3857: pickIdentifyExtent3857(feat?.data),
       });
     }

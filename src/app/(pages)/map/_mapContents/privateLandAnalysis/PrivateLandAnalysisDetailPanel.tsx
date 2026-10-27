@@ -7,7 +7,13 @@ import { fetchLandInfoConfig } from '@/lib/vworldParcelLandClient';
 import { LandInfoParcelPanel } from '../../_mapComponents/landInfo/LandInfoParcelPanel';
 import { usePrivateLandAnalysis } from './PrivateLandAnalysisContext';
 import { PrivateLandBuildingLedgers } from './PrivateLandBuildingLedgers';
-import { BUILDING_KIND_LABEL, buildingBadgeStyle, formatSqm, ownGbnBadgeStyle } from './privateLandAnalysisFormat';
+import {
+  BUILDING_KIND_LABEL,
+  buildingBadgeStyle,
+  formatSqm,
+  jimokFullName,
+  ownGbnBadgeStyle,
+} from './privateLandAnalysisFormat';
 
 const LABEL = 'bg-muted px-2 py-1.5 text-[11px] text-muted-foreground break-keep';
 const VALUE = 'min-w-0 px-2.5 py-1.5 text-[11px] text-foreground break-all';
@@ -41,7 +47,7 @@ export function PrivateLandAnalysisDetailPanel() {
       ? [
           { label: '주소', value: p.address || '—' },
           { label: 'PNU', value: p.pnu || '—' },
-          { label: '지목', value: p.jimok || '—' },
+          { label: '지목', value: jimokFullName(p.jimok) || '—' },
           { label: '필지면적', value: formatSqm(p.areaSqm) },
           { label: '편입면적', value: formatSqm(p.intersectAreaSqm) },
           {
@@ -57,7 +63,7 @@ export function PrivateLandAnalysisDetailPanel() {
       : [
           { label: '주소', value: p.address || '—' },
           { label: 'PNU', value: p.pnu || '—' },
-          { label: '지목', value: p.jimok || '—' },
+          { label: '지목', value: jimokFullName(p.jimok) || '—' },
           {
             label: '구분',
             value: (

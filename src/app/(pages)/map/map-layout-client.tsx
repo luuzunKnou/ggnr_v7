@@ -521,8 +521,8 @@ const USAGE_DATA_AS_DETAIL_DEFAULT_WIDTH = 400
 const USAGE_DATA_AS_DETAIL_MIN_WIDTH = 320
 const USAGE_DATA_AS_DETAIL_MAX_WIDTH = 640
 
-const OCCUPATION_LEDGER_PANEL_DEFAULT_WIDTH = 619
-const OCCUPATION_LEDGER_PANEL_MIN_WIDTH = 619
+const OCCUPATION_LEDGER_PANEL_DEFAULT_WIDTH = 540
+const OCCUPATION_LEDGER_PANEL_MIN_WIDTH = 540
 const OCCUPATION_LEDGER_PANEL_MAX_WIDTH = 960
 const OCCUPATION_LEDGER_DETAIL_DEFAULT_WIDTH = 400
 const OCCUPATION_LEDGER_DETAIL_MIN_WIDTH = 320
@@ -2875,6 +2875,7 @@ function MapLayoutContent({
                 onWidthChange={setOccupationLedgerPanelWidth} serEng={occupationLedgerSerEng}>
                 <OccupationLedgerListPanel
                   serEng={occupationLedgerSerEng}
+                  projectName={projectName}
                   onClose={handleCloseOccupationLedger}
                   selectedDetailId={occupationLedgerDetailId}
                   onSelectDetailId={setOccupationLedgerDetailId}
@@ -2907,6 +2908,8 @@ function MapLayoutContent({
                     setOccupationLedgerDetailId(null)
                     setOccupationLedgerListRefreshKey((k) => k + 1)
                   }}
+                  overlayLeftPx={occupationLedgerPanelLeftPx}
+                  overlayWidthPx={occupationLedgerPanelWidth + occupationLedgerDetailWidth}
                 />
               </MapSideListPanel>
             </div>

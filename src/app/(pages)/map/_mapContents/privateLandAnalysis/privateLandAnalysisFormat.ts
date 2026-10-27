@@ -54,6 +54,50 @@ export function matchesOwnFilter(filter: string, ownGbn: string, isBuilding = fa
   return !isBuilding && ownGbn === filter;
 }
 
+/** 지목이 비어 있는 필지 필터 이름 */
+export const JIMOK_FILTER_NONE = '미상';
+
+/** 지목 필터 키 — 한 글자 부호(임·답 등)와 전체 이름을 같은 지목으로 묶는다 */
+export function jimokFilterKey(jimok: string | null | undefined): string {
+  return jimokFullName(jimok) || JIMOK_FILTER_NONE;
+}
+
+/** 지목 전체 이름 — 한 글자 부호(천·임 등)는 하천·임야처럼 풀어서. 상세 표시용 */
+export function jimokFullName(jimok: string | null | undefined): string {
+  const j = String(jimok ?? '').trim();
+  return JIMOK_SHORT[j] ?? j;
+}
+
+/** 분석 결과에 있는 지목만 필터로 — 필지 수 많은 순, 같으면 이름순. 건물은 지목이 없어 제외 */
+export function jimokFilterOptions(jimoks: Iterable<string>): { key: string; label: string }[] {
+  const freq = new Map<string, number>();
+  for (const j of jimoks) {
+    const k = jimokFilterKey(j);
+    freq.set(k, (freq.get(k) ?? 0) + 1);
+  }
+  const keys = [...freq.keys()].sort((a, b) => {
+    if (a === JIMOK_FILTER_NONE) return 1;
+    if (b === JIMOK_FILTER_NONE) return -1;
+    return (freq.get(b) ?? 0) - (freq.get(a) ?? 0) || a.localeCompare(b, 'ko');
+  });
+  return [{ key: OWN_FILTER_ALL, label: OWN_FILTER_ALL }, ...keys.map((k) => ({ key: k, label: k }))];
+}
+
+/** 필지는 지목, 건물·건물군은 지목이 없어 «전체»일 때만 보인다 */
+export function matchesJimokFilter(filter: string, jimok: string, isBuilding = false): boolean {
+  if (filter === OWN_FILTER_ALL) return true;
+  return !isBuilding && jimokFilterKey(jimok) === filter;
+}
+
+/** 검색어(소문자) — 주소·PNU·소유구분·지목·건물명 */
+export function matchesParcelKeyword(
+  p: { address: string; pnu: string; ownGbn: string; jimok: string; name?: string },
+  lowerKeyword: string
+): boolean {
+  if (!lowerKeyword) return true;
+  return `${p.address} ${p.pnu} ${p.ownGbn} ${p.jimok} ${p.name ?? ''}`.toLowerCase().includes(lowerKeyword);
+}
+
 /** 건물 행 배지 이름 */
 export const BUILDING_KIND_LABEL: Record<'building' | 'buildingGroup', string> = {
   building: '건물',

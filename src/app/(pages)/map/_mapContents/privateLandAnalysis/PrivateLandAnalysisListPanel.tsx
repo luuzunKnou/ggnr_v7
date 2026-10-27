@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { Loader2, MapPin, Pencil, RotateCcw, Search, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/app/shadcnComponents/ui/button';
@@ -12,10 +12,14 @@ import {
   buildingBadgeStyle,
   formatSqm,
   jimokBadgeStyle,
+  jimokFilterOptions,
+  jimokFullName,
+  OWN_FILTER_ALL,
   ownGbnBadgeStyle,
   ownFilterOptions,
   ownGbnShort,
 } from './privateLandAnalysisFormat';
+import { PrivateLandFilterGroup } from './PrivateLandFilterGroup';
 
 type Props = {
   onClose: () => void;
@@ -33,14 +37,6 @@ const CLOSED_RANGING_TEXT: Partial<Record<PrivateLandAnalysisPhase, string>> = {
   start: '지도에서 도로를 가로질러 경계선을 찍으세요.',
   ranged: '경계선으로 범위를 닫고 적용하세요.',
 };
-
-/** 소유구분 필터 한 줄 칸 수 — 넘치면 두 줄 */
-const OWN_FILTER_COLS = 6;
-
-const CHIP_BASE =
-  'min-w-0 truncate rounded border px-0.5 py-1 text-center text-[10px] font-medium leading-tight transition-colors';
-const CHIP_ON = 'border-primary bg-primary/10 text-primary';
-const CHIP_OFF = 'border-border bg-background text-muted-foreground hover:bg-muted/50';
 
 const BTN_CHANGE =
   'h-7 flex-1 gap-1 border-primary/40 bg-primary/5 px-2 text-[10px] font-medium text-primary hover:bg-primary/10 hover:text-primary';
@@ -84,6 +80,7 @@ export function PrivateLandAnalysisListPanel({ onClose }: Props) {
     parcels,
     truncated,
     ownFilter,
+    jimokFilter,
     keyword,
     filteredParcels,
     selectedKey,
@@ -95,6 +92,7 @@ export function PrivateLandAnalysisListPanel({ onClose }: Props) {
     changeArea,
     resetAll,
     setOwnFilter,
+    setJimokFilter,
     setKeyword,
     selectParcel,
   } = usePrivateLandAnalysis();
@@ -108,6 +106,22 @@ export function PrivateLandAnalysisListPanel({ onClose }: Props) {
     [parcels]
   );
 
+  const jimokFilters = useMemo(
+    () => jimokFilterOptions(parcels.filter((p) => p.kind === 'parcel').map((p) => p.jimok)),
+    [parcels]
+  );
+
+  const [filterTab, setFilterTab] = useState<'own' | 'jimok'>('own');
+  const hasJimokTab = jimokFilters.length > 1;
+  const currentTab = hasJimokTab ? filterTab : 'own';
+
+  /** 탭마다 따로 거르는 필터 — 탭을 바꾸면 두 필터 모두 «전체»로 */
+  const handleFilterTabChange = (tab: 'own' | 'jimok') => {
+    if (tab === currentTab) return;
+    setFilterTab(tab);
+    setOwnFilter(OWN_FILTER_ALL);
+    setJimokFilter(OWN_FILTER_ALL);
+  };
   const confirmed = phase === 'applied' || phase === 'analyzing' || phase === 'result';
   const closed = rangeMode === 'closed';
   const rangingText = closed ? (CLOSED_RANGING_TEXT[phase] ?? RANGING_TEXT[phase]) : RANGING_TEXT[phase];
@@ -207,27 +221,43 @@ export function PrivateLandAnalysisListPanel({ onClose }: Props) {
               className="h-8 w-full rounded border border-border pl-7 pr-2.5 text-xs outline-none focus:border-primary focus:ring-2 focus:ring-primary/25"
             />
           </div>
-          <div
-            className="grid w-full gap-0.5"
-            style={{ gridTemplateColumns: `repeat(${Math.min(ownFilters.length, OWN_FILTER_COLS)}, minmax(0, 1fr))` }}
-            role="group"
-            aria-label="소유구분 필터"
-          >
-            {ownFilters.map((f) => {
-              const active = ownFilter === f.key;
-              return (
-                <button
-                  key={f.key}
-                  type="button"
-                  onClick={() => setOwnFilter(f.key)}
-                  title={f.label}
-                  aria-pressed={active}
-                  className={cn(CHIP_BASE, active ? CHIP_ON : CHIP_OFF)}
-                >
-                  <span className="block truncate">{f.label}</span>
-                </button>
-              );
-            })}
+          <div className="overflow-hidden rounded border border-border">
+            {hasJimokTab ? (
+              <div className="flex border-b border-border" role="tablist" aria-label="필터 구분">
+                {(
+                  [
+                    { id: 'own', label: '소유구분' },
+                    { id: 'jimok', label: '지목' },
+                  ] as const
+                ).map((t) => {
+                  const selected = currentTab === t.id;
+                  return (
+                    <button
+                      key={t.id}
+                      type="button"
+                      role="tab"
+                      aria-selected={selected}
+                      onClick={() => handleFilterTabChange(t.id)}
+                      className={cn(
+                        'flex w-1/2 items-center justify-center gap-1 px-3 py-2 text-xs font-medium transition-colors',
+                        selected
+                          ? 'border-b-2 border-primary bg-primary/5 text-primary'
+                          : 'text-muted-foreground hover:bg-muted/40 hover:text-foreground'
+                      )}
+                    >
+                      {t.label}
+                    </button>
+                  );
+                })}
+              </div>
+            ) : null}
+            <div className="bg-muted/20 p-1.5">
+              {currentTab === 'jimok' ? (
+                <PrivateLandFilterGroup title="지목" options={jimokFilters} value={jimokFilter} onChange={setJimokFilter} />
+              ) : (
+                <PrivateLandFilterGroup title="소유구분" options={ownFilters} value={ownFilter} onChange={setOwnFilter} />
+              )}
+            </div>
           </div>
           <div className="flex items-center justify-between gap-2 text-[11px] text-muted-foreground">
             <span>목록 {filteredParcels.length}건</span>
@@ -288,7 +318,7 @@ export function PrivateLandAnalysisListPanel({ onClose }: Props) {
                           <span
                             className="inline-flex w-[2.5rem] shrink-0 items-center justify-center truncate whitespace-nowrap rounded border px-0.5 py-0.5 text-[10px] font-semibold leading-none"
                             style={jimokBadgeStyle(p.jimok)}
-                            title={p.jimok}
+                            title={jimokFullName(p.jimok)}
                           >
                             {p.jimok}
                           </span>

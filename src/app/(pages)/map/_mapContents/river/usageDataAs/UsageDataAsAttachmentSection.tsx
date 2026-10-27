@@ -21,8 +21,8 @@ import {
 } from "../../../_mapComponents/standard/useServiceFileData";
 
 const ATTACH_ROOT_FOLDER = "기타";
-const FILE_LAYER = "usage_data_as";
-const FILE_SER_ENG = SER_FILE_ENG.usageDataAs;
+const DEFAULT_FILE_LAYER = "usage_data_as";
+const DEFAULT_FILE_SER_ENG: string = SER_FILE_ENG.usageDataAs;
 
 const ATTACH_GRID_GAP_PX = 8;
 const ATTACH_GRID_LABEL_PX = 14;
@@ -248,12 +248,18 @@ type Props = {
   fileKey: string;
   zipLabel?: string;
   ready?: boolean;
+  /** 파일 권한 서비스 (기본: 울진 하천점용) */
+  serEng?: string;
+  /** file_data/{layer}/{fileKey} (기본: usage_data_as) */
+  layer?: string;
 };
 
 export function UsageDataAsAttachmentSection({
   fileKey,
   zipLabel,
   ready = true,
+  serEng: FILE_SER_ENG = DEFAULT_FILE_SER_ENG,
+  layer: FILE_LAYER = DEFAULT_FILE_LAYER,
 }: Props) {
   const attachInputRef = useRef<HTMLInputElement>(null);
   const attachScrollRef = useRef<HTMLDivElement>(null);
@@ -295,7 +301,7 @@ export function UsageDataAsAttachmentSection({
         previewUrl: kind === "image" || kind === "pdf" ? url : undefined,
       } satisfies AttachmentItem;
     });
-  }, [attachmentTab, folderFiles, key]);
+  }, [FILE_LAYER, FILE_SER_ENG, attachmentTab, folderFiles, key]);
 
   useEffect(() => {
     if (!attachmentsReady || !key) {
@@ -329,7 +335,7 @@ export function UsageDataAsAttachmentSection({
     return () => {
       cancelled = true;
     };
-  }, [attachmentsReady, key, foldersRefreshNonce]);
+  }, [FILE_LAYER, FILE_SER_ENG, attachmentsReady, key, foldersRefreshNonce]);
 
   const handleUploadFiles = async (files: FileList | null) => {
     if (!files?.length) return;

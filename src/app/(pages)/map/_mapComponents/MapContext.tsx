@@ -541,6 +541,9 @@ export type MapContextValue = {
           geometry3857?: Record<string, unknown> | null;
           pnu?: string;
           point4326?: { x: number; y: number };
+          jimok?: string;
+          areaSqm?: number;
+          intersectAreaSqm?: number;
         }[],
         options?: {
           replaceAuto?: boolean;

@@ -183,6 +183,8 @@ export type FetchKrasBytesOpts = {
   method?: 'GET' | 'POST';
   body?: string;
   allowSuccessXml?: boolean;
+  /** 0바이트 응답을 오류 대신 빈 버퍼로 — 시군구에 도형이 없는 주제도 */
+  allowEmpty?: boolean;
   timeoutMs?: number;
   hop?: number;
 };
@@ -226,7 +228,10 @@ export async function fetchKrasBytes(url: string, opts: FetchKrasBytesOpts = {})
       logKrasGatewayFault(url, `HTTP ${res.status}`, `${requestHint}${body}`);
       throw new Error(`HTTP ${res.status} (${shown})`);
     }
-    if (buf.length < 1) throw new Error('빈 파일');
+    if (buf.length < 1) {
+      if (opts.allowEmpty) return buf;
+      throw new Error('빈 파일');
+    }
     if (isHtmlWelcomeBody(buf, res.headers.get('content-type'))) {
       logKrasGatewayFault(url, HTML_ENDPOINT_MSG, `${requestHint}${decodeGatewayBody(buf)}`);
       throw new Error(`${HTML_ENDPOINT_MSG} (${shown})`);

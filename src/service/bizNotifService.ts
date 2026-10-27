@@ -5,7 +5,6 @@ import { and, eq, inArray, sql } from 'drizzle-orm';
 import { db } from '@/database/db';
 import { usrBizNotifState } from '@/database/schema/usr_biz_notif_state';
 import { getSessionUsrId } from '@/lib/auth/guard';
-import { getUsageDataAsExpiryNotifications, usageDataAsTableExists, type UsageDataAsExpiryNotifRow } from '@/service/usageDataAsService';
 import { getOccupationLedgerExpiryNotifications } from '@/service/occupationLedgerService';
 import { getUseFeeUnpaidDueNotifications } from '@/service/useFeeService';
 import { getUseFeeBinding } from '@/lib/useFeeBinding';
@@ -215,11 +214,7 @@ export async function listMyBizNotifications(params?: {
     .trim()
     .toLowerCase();
 
-  const useUljinLedger = await usageDataAsTableExists();
-  const [uljinExpiryRes, occupExpiryRes, feeRes] = await Promise.all([
-    useUljinLedger
-      ? getUsageDataAsExpiryNotifications({ withinDays })
-      : Promise.resolve({ items: [] as UsageDataAsExpiryNotifRow[], error: undefined }),
+  const [occupExpiryRes, feeRes] = await Promise.all([
     getOccupationLedgerExpiryNotifications({ withinDays }),
     getUseFeeUnpaidDueNotifications({ withinDays }),
   ]);
@@ -227,23 +222,6 @@ export async function listMyBizNotifications(params?: {
   const candidates: Omit<BizNotifItem, 'read'>[] = [];
   for (const row of await listMissingDroneGeomNotifications()) {
     candidates.push(row);
-  }
-
-  for (const row of uljinExpiryRes.items ?? []) {
-    const serEng = 'usageDataAs';
-    candidates.push({
-      id: `usage-expiry:${row.rowKey}`,
-      notifKey: `usage-expiry:${row.rowKey}`,
-      category: '만료임박',
-      title: '점용 종료 임박',
-      name: `울진하천점용 ${row.rowKey} ${row.name}`,
-      listKey: `${row.endDate} · ${formatDaysRemainingLabel(row.daysRemaining, 'expiry')}`,
-      important: true,
-      target: 'ledger',
-      targetId: row.rowKey,
-      serEng,
-      systemScope: resolveNotifSystemScope(serEng, 'river'),
-    });
   }
 
   for (const row of occupExpiryRes.items ?? []) {
@@ -311,7 +289,7 @@ export async function listMyBizNotifications(params?: {
     return a.listKey.localeCompare(b.listKey);
   });
 
-  const err = [uljinExpiryRes.error, occupExpiryRes.error, feeRes.error]
+  const err = [occupExpiryRes.error, feeRes.error]
     .filter((e): e is string => Boolean(e) && !isAbsentTableError(e))
     .join(' | ');
   return err ? { items, error: err } : { items };

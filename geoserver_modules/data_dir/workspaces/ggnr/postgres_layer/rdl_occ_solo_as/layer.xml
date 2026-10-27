@@ -1,0 +1,19 @@
+<layer>
+  <name>rdl_occ_solo_as</name>
+  <id>LayerInfoImpl-4937af91:1a157c27de4:-7897</id>
+  <type>VECTOR</type>
+  <defaultStyle>
+    <id>StyleInfoImpl-4937af91:1a157c27de4:-7896</id>
+  </defaultStyle>
+  <resource class="featureType">
+    <id>FeatureTypeInfoImpl-4937af91:1a157c27de4:-7898</id>
+  </resource>
+  <queryable>true</queryable>
+  <opaque>false</opaque>
+  <attribution>
+    <logoWidth>0</logoWidth>
+    <logoHeight>0</logoHeight>
+  </attribution>
+  <dateCreated>2026-10-23 02:16:04.883 UTC</dateCreated>
+  <dateModified>2026-10-23 02:16:05.221 UTC</dateModified>
+</layer>

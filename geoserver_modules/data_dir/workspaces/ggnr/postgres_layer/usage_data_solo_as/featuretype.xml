@@ -1,0 +1,41 @@
+<featureType>
+  <id>FeatureTypeInfoImpl-4937af91:1a157c27de4:-789b</id>
+  <name>usage_data_solo_as</name>
+  <nativeName>usage_data_solo_as</nativeName>
+  <namespace>
+    <id>NamespaceInfoImpl-4bf97568:19c4d6c3053:-7ffa</id>
+  </namespace>
+  <title>usage_data_solo_as</title>
+  <keywords>
+    <string>features</string>
+    <string>usage_data_solo_as</string>
+  </keywords>
+  <srs>EPSG:5181</srs>
+  <nativeBoundingBox>
+    <minx>385034.211201844</minx>
+    <maxx>421174.29470749</maxx>
+    <miny>353062.271488982</miny>
+    <maxy>407833.709807427</maxy>
+    <crs class="projected">EPSG:5181</crs>
+  </nativeBoundingBox>
+  <latLonBoundingBox>
+    <minx>129.0694029551849</minx>
+    <maxx>129.48924862166922</maxx>
+    <miny>36.65035832519037</miny>
+    <maxy>37.1512825095329</maxy>
+    <crs>EPSG:4326</crs>
+  </latLonBoundingBox>
+  <projectionPolicy>FORCE_DECLARED</projectionPolicy>
+  <enabled>true</enabled>
+  <store class="dataStore">
+    <id>DataStoreInfoImpl-4bf97568:19c4d6c3053:-7ff9</id>
+  </store>
+  <serviceConfiguration>false</serviceConfiguration>
+  <maxFeatures>0</maxFeatures>
+  <numDecimals>0</numDecimals>
+  <padWithZeros>false</padWithZeros>
+  <forcedDecimal>false</forcedDecimal>
+  <overridingServiceSRS>false</overridingServiceSRS>
+  <skipNumberMatched>false</skipNumberMatched>
+  <circularArcPresent>false</circularArcPresent>
+</featureType>

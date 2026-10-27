@@ -358,11 +358,19 @@ export function LayerRowGeomEditHandler({
                 ? (extRaw.map((v) => Number(v)) as [number, number, number, number])
                 : null;
             if (!address && !pnu) return null;
+            const jimok = String(x?.jimok ?? "").trim();
+            const areaSqm = Number(x?.areaSqm);
+            const intersectAreaSqm = Number(x?.intersectAreaSqm);
             return {
               address: address || pnu,
               pnu: pnu || undefined,
               extent3857,
               geometry3857,
+              ...(jimok ? { jimok } : {}),
+              ...(Number.isFinite(areaSqm) && areaSqm > 0 ? { areaSqm } : {}),
+              ...(Number.isFinite(intersectAreaSqm) && intersectAreaSqm > 0
+                ? { intersectAreaSqm }
+                : {}),
             };
           })
           .filter(

@@ -4,7 +4,7 @@
  */
 export const OCCUPATION_DEPT_WMS_STYLE = {
   parent: "usage_data_as",
-  jijuk: "usage_data_as_solo",
+  jijuk: "usage_data_solo_as",
   mgj: "usage_data_as_mgj",
 } as const;
 

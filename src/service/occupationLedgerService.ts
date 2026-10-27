@@ -5,7 +5,6 @@ import { db } from '@/database/db';
 import { sql } from 'drizzle-orm';
 import { formatAddressStripSidoSigungu } from '@/lib/formatAddressStripAdmin';
 import { tryFormatToYmd } from '@/lib/formatDateYmd';
-import { splitUsagePeriod } from '@/lib/usageDataAsFieldUtils';
 import { incrementSuffixCode } from '@/lib/incrementSuffixCode';
 import {
   formatOccupationPermitNo,
@@ -27,7 +26,9 @@ import {
 import { labelForOccupationLedgerField } from '@/app/(pages)/map/_mapContents/occupationLedger/occupationLedgerFieldLabels';
 import {
   deriveOccupationPeriodState,
+  isOpenEndedOccupationPeriod,
   OCCUPATION_PERIOD_STATE_ENDED,
+  parseOccupationPeriodYmd,
 } from '@/lib/occupationLedgerPeriodState';
 import { sortOccupationLedgerListRows } from '@/lib/occupationLedgerListSort';
 import { parseOccupPlacePartsForJijuk } from '@/lib/occupationLedgerOccupPlaceGeom';
@@ -49,6 +50,8 @@ export type OccupationLedgerListRow = {
   endDate: string;
   /** 점용 종료일 기준 진행중/종료 */
   status: string;
+  /** 목록 열 값 (칸 이름 → 글자) */
+  values?: Record<string, string>;
 };
 
 export type OccupationLedgerExpiryNotifRow = {
@@ -68,6 +71,8 @@ export type OccupationLedgerDetailAttr = {
   value: string;
   showDetail?: boolean;
   required?: boolean;
+  /** 공통 칸 여부 */
+  common?: boolean;
 };
 
 function esc(value: string): string {
@@ -159,8 +164,9 @@ async function canonicalOccupationLedgerKey(
   if (!meta) return null;
   const cols = await getTableColumns(meta.schema, meta.tableName);
   const keyCol = findColumn(cols, binding.fields.keyField);
-  const permitCol = findColumn(cols, 'permit_no');
-  const idCol = findColumn(cols, 'id');
+  const permitCol = findColumn(cols, binding.fields.permitField);
+  // 관리번호(ftr_idn)로 들어와도 찾음. 국공유지는 기존 id
+  const idCol = findColumn(cols, binding.fields.mgmtField ?? 'id');
   if (!keyCol) return null;
   const safe = meta.tableName.replace(/"/g, '""');
   const safeSchema = meta.schema.replace(/"/g, '""');
@@ -184,6 +190,12 @@ async function canonicalOccupationLedgerKey(
 
   const byKey = await lookup(keyCol);
   if (byKey) return byKey;
+  // 고유키(ogc_fid)로 들어와도 찾음 (데이터 조회 등)
+  const ogcCol = findColumn(cols, 'ogc_fid');
+  if (ogcCol && ogcCol.toLowerCase() !== keyCol.toLowerCase() && /^\d+$/.test(key)) {
+    const byOgc = await lookup(ogcCol);
+    if (byOgc) return byOgc;
+  }
   if (permitCol && permitCol.toLowerCase() !== keyCol.toLowerCase()) {
     const byPermit = await lookup(permitCol);
     if (byPermit) return byPermit;
@@ -207,19 +219,9 @@ export async function resolveOccupationLedgerRowKey(params?: {
   return { key };
 }
 
+/** 필지·물건지의 본표 고유키 연결 칸 — 설정한 칸만 (없으면 연결 없음) */
 function resolveChildParentCol(columns: string[], hint: string): string | null {
-  const ordered = [hint, 'permit_no', 'parent_id', 'cons_code', 'id']
-    .map((n) => String(n ?? '').trim())
-    .filter(Boolean);
-  const seen = new Set<string>();
-  for (const name of ordered) {
-    const lower = name.toLowerCase();
-    if (seen.has(lower)) continue;
-    seen.add(lower);
-    const found = findColumn(columns, name);
-    if (found) return found;
-  }
-  return null;
+  return findColumn(columns, String(hint ?? '').trim());
 }
 
 function resolveChildAddressCol(columns: string[], hint: string): string | null {
@@ -237,16 +239,79 @@ function resolveChildAddressCol(columns: string[], hint: string): string | null 
   return null;
 }
 
+/** 주소 칸이 없으면 읍면동·리·지번 같은 칸을 이어 붙인 식 */
+function childAddressSqlExpr(
+  cols: string[],
+  addressField: string,
+  partFields: string[] | undefined,
+  alias: string
+): string | null {
+  const addressCol = resolveChildAddressCol(cols, addressField);
+  if (addressCol) return `COALESCE(${alias}.${quoteIdent(addressCol)}::text, '')`;
+  const parts = (partFields ?? []).map((f) => findColumn(cols, f)).filter((c): c is string => Boolean(c));
+  if (parts.length === 0) return null;
+  return `BTRIM(concat_ws(' ', ${parts.map((c) => `NULLIF(BTRIM(${alias}.${quoteIdent(c)}::text), '')`).join(', ')}))`;
+}
+
+export type OccupationLedgerListColumnMeta = {
+  field: string;
+  label: string;
+  /** 점용 시작·종료 칸 — 날짜 순 정렬 */
+  edge?: 'start' | 'end';
+};
+
+/** 목록 열 — 필드 정의 «목록» 보기 칸(정의 순서), 실제 DB 칸만 */
+async function resolveDefineListColumns(
+  table: string,
+  columns: string[],
+  exclude: string[] = []
+): Promise<OccupationLedgerListColumnMeta[]> {
+  const defs = await getEditableFieldDefinitionsForTable({
+    table,
+    schema: DEFAULT_SCHEMA,
+    includeHiddenDetail: true,
+  });
+  const skip = new Set(['ogc_fid', 'geom', 'extra', ...exclude.map((x) => x.toLowerCase())]);
+  return [...defs.fields]
+    .filter((d) => d.showList === true)
+    .sort((a, b) => (a.idx !== b.idx ? a.idx - b.idx : a.field.localeCompare(b.field)))
+    .map((d) => ({ col: findColumn(columns, d.field), label: d.label }))
+    .filter((x): x is { col: string; label: string } => Boolean(x.col) && !skip.has(String(x.col).toLowerCase()))
+    .map((x) => ({ field: x.col, label: labelForOccupationLedgerField(x.col, x.label) }));
+}
+
+function listValuesSqlExpr(alias: string, fields: string[]): string {
+  if (fields.length === 0) return `'{}'::json`;
+  return `json_build_object(${fields
+    .map((f) => `'${esc(f)}', COALESCE(${alias}.${quoteIdent(f)}::text, '')`)
+    .join(', ')})`;
+}
+
+function rowListValues(raw: unknown): Record<string, string> {
+  if (!raw || typeof raw !== 'object') return {};
+  const out: Record<string, string> = {};
+  for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
+    out[k] = formatAddressStripSidoSigungu(String(v ?? '')) || String(v ?? '');
+  }
+  return out;
+}
+
 async function getChildAddressItems(params: {
   childTableName: string;
   parentKey: string;
   parentField: string;
   addressField: string;
+  addressPartFields?: string[];
+  /** 연결 칸이 비어 있고 허가번호로만 묶인 예전 행도 포함 */
+  legacyPermit?: string;
+  /** 목록 열 칸 (필드 정의 «목록») */
+  listFields?: string[];
 }): Promise<{
   items: {
     address: string;
     extent3857: [number, number, number, number] | null;
     wmsRowKey?: { keyField: string; keyValue: string };
+    listValues?: Record<string, string>;
   }[];
 }> {
   const meta = await resolveTableWithSchema(params.childTableName);
@@ -255,8 +320,8 @@ async function getChildAddressItems(params: {
   const { tableName, schema } = meta;
   const cols = await getTableColumns(schema, tableName);
   const parentCol = resolveChildParentCol(cols, params.parentField);
-  const addressCol = resolveChildAddressCol(cols, params.addressField);
-  if (!parentCol || !addressCol) return { items: [] };
+  const addressExpr = childAddressSqlExpr(cols, params.addressField, params.addressPartFields, 'r');
+  if (!parentCol || !addressExpr) return { items: [] };
 
   const hasGeom = findColumn(cols, 'geom');
   const hasOgcFid = findColumn(cols, 'ogc_fid');
@@ -277,14 +342,19 @@ async function getChildAddressItems(params: {
   const childOfParentSql = buildChildOfParentWhereSql({
     parentCol,
     parentId: params.parentKey,
+    permitCol: findColumn(cols, 'permit_no'),
+    permitValue: params.legacyPermit,
     alias: 'r',
   });
 
+  const listFields = (params.listFields ?? [])
+    .map((f) => findColumn(cols, f))
+    .filter((c): c is string => Boolean(c));
   const sqlText = `
-    SELECT COALESCE(r.${quoteIdent(addressCol)}::text, '') AS addr ${extentSelect}${ogcFidSelect}
+    SELECT ${addressExpr} AS addr ${extentSelect}${ogcFidSelect}, ${listValuesSqlExpr('r', listFields)} AS vals
     FROM "${safeSchema}"."${safe}" r
     WHERE ${childOfParentSql}
-      AND COALESCE(r.${quoteIdent(addressCol)}::text, '') <> ''
+      AND ${addressExpr} <> ''
     ORDER BY r.${orderExpr}`;
 
   try {
@@ -304,12 +374,18 @@ async function getChildAddressItems(params: {
         : null;
       const ogcFid = String(row.ogc_fid ?? '').trim();
       const wmsRowKey = ogcFid ? { keyField: 'ogc_fid', keyValue: ogcFid } : undefined;
-      return { address, extent3857, ...(wmsRowKey ? { wmsRowKey } : {}) };
+      return {
+        address,
+        extent3857,
+        ...(wmsRowKey ? { wmsRowKey } : {}),
+        listValues: rowListValues(row.vals),
+      };
     });
+    // 같은 주소라도 행(시설)이 다르면 각각 보여 준다 — 필지 상세가 행 단위
     const seen = new Set<string>();
     const unique = items.filter((x) => {
       if (!x.address) return false;
-      const key = x.address.toLowerCase().replace(/\s+/g, ' ');
+      const key = x.wmsRowKey?.keyValue ?? x.address.toLowerCase().replace(/\s+/g, ' ');
       if (seen.has(key)) return false;
       seen.add(key);
       return true;
@@ -349,7 +425,13 @@ export async function getOccupationLedgerList(params?: {
   keyword?: string;
   serEng?: string;
   system?: string;
-}): Promise<{ rows: OccupationLedgerListRow[]; error?: string; title?: string }> {
+}): Promise<{
+  rows: OccupationLedgerListRow[];
+  /** 목록 열 — 필드 정의 «목록» 칸 (상태는 따로 맨 앞). 정의가 없으면 점용명·점용장소·시작일·종료일 */
+  columns?: OccupationLedgerListColumnMeta[];
+  error?: string;
+  title?: string;
+}> {
   const resolved = resolveBinding(params);
   if (resolved.error || !resolved.binding) {
     return { rows: [], error: resolved.error };
@@ -365,7 +447,6 @@ export async function getOccupationLedgerList(params?: {
   const keyCol = findColumn(columns, f.keyField);
   const nameCol = findColumn(columns, f.nameField);
   const placeCol = findColumn(columns, f.placeField);
-  const periodCol = f.periodField ? findColumn(columns, f.periodField) : null;
   const startCol = f.startField ? findColumn(columns, f.startField) : null;
   const endCol = f.endField ? findColumn(columns, f.endField) : null;
   if (!keyCol) return { rows: [], error: `${f.keyField} 컬럼이 없습니다.`, title: binding.title };
@@ -376,9 +457,27 @@ export async function getOccupationLedgerList(params?: {
   const q = (name: string) => `${t}.${quoteIdent(name)}`;
   const nameExpr = nameCol ? `COALESCE(${q(nameCol)}::text, '')` : `''::text`;
   const placeExpr = placeCol ? `COALESCE(${q(placeCol)}::text, '')` : `''::text`;
-  const periodExpr = periodCol ? `COALESCE(${q(periodCol)}::text, '')` : `''::text`;
   const startExpr = startCol ? `COALESCE(${q(startCol)}::text, '')` : `''::text`;
   const endExpr = endCol ? `COALESCE(${q(endCol)}::text, '')` : `''::text`;
+
+  // 목록 열 — 필드 정의 «목록». 상태는 맨 앞 배지로 따로 보이므로 뺀다
+  const defineColumns = await resolveDefineListColumns(binding.mainTable, columns, [f.stateField]);
+  const fallbackColumns = [f.nameField, f.placeField, f.startField, f.endField]
+    .map((x) => (x ? findColumn(columns, x) : null))
+    .filter((c): c is string => Boolean(c))
+    .map((c) => ({ field: c, label: labelForOccupationLedgerField(c) }));
+  const listColumns: OccupationLedgerListColumnMeta[] = (
+    defineColumns.length > 0 ? defineColumns : fallbackColumns
+  ).map((c) => {
+    const lower = c.field.toLowerCase();
+    const edge =
+      startCol && lower === startCol.toLowerCase()
+        ? ('start' as const)
+        : endCol && lower === endCol.toLowerCase()
+          ? ('end' as const)
+          : undefined;
+    return edge ? { ...c, edge } : c;
+  });
 
   const searchCols = columns.filter((c) => !GEOM_COLUMN_NAMES.has(c.toLowerCase()));
   const kwClause = keyword
@@ -390,9 +489,9 @@ export async function getOccupationLedgerList(params?: {
       COALESCE(${q(keyCol)}::text, '') AS "rowKey",
       ${nameExpr} AS "name",
       ${placeExpr} AS "place",
-      ${periodExpr} AS "periodRaw",
       ${startExpr} AS "startRaw",
-      ${endExpr} AS "endRaw"
+      ${endExpr} AS "endRaw",
+      ${listValuesSqlExpr(t, listColumns.map((c) => c.field))} AS "vals"
     FROM "${safeSchema}"."${safe}" ${t}
     WHERE COALESCE(${q(keyCol)}::text, '') <> '' ${kwClause}
     LIMIT 5000`;
@@ -401,13 +500,9 @@ export async function getOccupationLedgerList(params?: {
     const res = await db.execute(sql.raw(sqlText));
     const rows = (res.rows ?? []).map((r) => {
       const row = r as Record<string, unknown>;
-      let startDate = tryFormatToYmd(String(row.startRaw ?? '')) ?? String(row.startRaw ?? '').trim();
-      let endDate = tryFormatToYmd(String(row.endRaw ?? '')) ?? String(row.endRaw ?? '').trim();
-      if (periodCol && String(row.periodRaw ?? '').trim()) {
-        const { start, end } = splitUsagePeriod(String(row.periodRaw ?? ''));
-        if (start) startDate = start;
-        if (end) endDate = end;
-      }
+      // 시작·종료는 글자 그대로 (날짜·영구·허가일로부터 ○개월 등)
+      const startDate = String(row.startRaw ?? '').trim();
+      const endDate = String(row.endRaw ?? '').trim();
       return {
         rowKey: String(row.rowKey ?? '').trim(),
         name: formatAddressStripSidoSigungu(String(row.name ?? '')),
@@ -415,9 +510,10 @@ export async function getOccupationLedgerList(params?: {
         startDate,
         endDate,
         status: deriveOccupationPeriodState(endDate),
+        values: rowListValues(row.vals),
       };
     });
-    return { rows: sortListRows(rows), title: binding.title };
+    return { rows: sortListRows(rows), columns: listColumns, title: binding.title };
   } catch (e: unknown) {
     return { rows: [], error: e instanceof Error ? e.message : String(e), title: binding.title };
   }
@@ -446,7 +542,8 @@ export async function getOccupationLedgerExpiryNotifications(params?: {
       continue;
     }
     for (const row of list.rows) {
-      const endYmd = tryFormatToYmd(String(row.endDate ?? '').trim());
+      if (isOpenEndedOccupationPeriod(row.endDate)) continue;
+      const endYmd = parseOccupationPeriodYmd(row.endDate, 'end');
       if (!endYmd) continue;
       const endMs = startOfLocalDayMs(endYmd);
       if (endMs == null) continue;
@@ -526,6 +623,101 @@ export async function getOccupationLedgerExtent3857ByKey(params: {
   }
 }
 
+export type OccupationLedgerFieldMeta = {
+  field: string;
+  label: string;
+  type: string;
+  readOnly: boolean;
+  required: boolean;
+  showDetail: boolean;
+  /** 공통 칸 여부 (하천·도로·국공유지가 같은 뜻으로 쓰는 칸) */
+  common: boolean;
+};
+
+/** 공통 칸 표시 순서 */
+function commonFieldOrder(binding: OccupationLedgerBinding): string[] {
+  const f = binding.fields;
+  return [
+    f.mgmtField,
+    f.permitField,
+    f.permitDateField,
+    f.nameField,
+    f.placeField,
+    f.purposeField,
+    f.startField,
+    f.endField,
+    f.areaField,
+    f.ownerNameField,
+    f.ownerAddrField,
+    f.stateField,
+    f.remarkField,
+  ].filter((x): x is string => Boolean(x));
+}
+
+/**
+ * 본표 칸 목록 — 공통 칸(설정 순서) + 필드 정의의 나머지 칸. 실제 DB 칸만.
+ * 필드 정의가 아직 옛 칸 이름이어도 공통 칸은 DB 칸 기준으로 보인다.
+ */
+async function resolveMainFieldList(
+  binding: OccupationLedgerBinding,
+  columns: string[]
+): Promise<{ fields: OccupationLedgerFieldMeta[]; error?: string }> {
+  const fieldDefs = await getEditableFieldDefinitionsForTable({
+    table: binding.mainTable,
+    schema: DEFAULT_SCHEMA,
+    excludeFields: ['ogc_fid', 'id', 'extra'],
+    includeHiddenDetail: true,
+  });
+  if (fieldDefs.error) return { fields: [], error: fieldDefs.error };
+  const defByField = new Map(fieldDefs.fields.map((d) => [d.field.toLowerCase(), d]));
+  const out: OccupationLedgerFieldMeta[] = [];
+  const used = new Set<string>();
+  for (const name of commonFieldOrder(binding)) {
+    const col = findColumn(columns, name);
+    if (!col || used.has(col.toLowerCase())) continue;
+    used.add(col.toLowerCase());
+    const def = defByField.get(col.toLowerCase());
+    out.push({
+      field: col,
+      label: labelForOccupationLedgerField(col, def?.label),
+      type: def?.type ?? 'text',
+      readOnly: def?.readOnly === true,
+      required: def?.required === true,
+      // 필드 정의에 있으면 상세 표시 여부를 따르고, 아직 정의에 없는 공통 칸은 보인다
+      showDetail: def ? def.showDetail !== false : true,
+      common: true,
+    });
+  }
+  for (const def of fieldDefs.fields) {
+    const col = findColumn(columns, def.field);
+    if (!col || used.has(col.toLowerCase())) continue;
+    used.add(col.toLowerCase());
+    out.push({
+      field: col,
+      label: labelForOccupationLedgerField(col, def.label),
+      type: def.type,
+      readOnly: def.readOnly,
+      required: def.required,
+      showDetail: def.showDetail,
+      common: false,
+    });
+  }
+  return { fields: out };
+}
+
+/** 등록 화면 칸 목록 (공통 칸 + 필드 정의) */
+export async function getOccupationLedgerFieldList(params?: {
+  serEng?: string;
+  system?: string;
+}): Promise<{ fields: OccupationLedgerFieldMeta[]; error?: string }> {
+  const resolved = resolveBinding(params);
+  if (resolved.error || !resolved.binding) return { fields: [], error: resolved.error };
+  const meta = await resolveTableWithSchema(resolved.binding.mainTable);
+  if (!meta) return { fields: [], error: `${resolved.binding.mainTable} 테이블이 없습니다.` };
+  const columns = await getTableColumns(meta.schema, meta.tableName);
+  return resolveMainFieldList(resolved.binding, columns);
+}
+
 export async function getOccupationLedgerDetailByKey(params: {
   key?: string;
   serEng?: string;
@@ -534,6 +726,11 @@ export async function getOccupationLedgerDetailByKey(params: {
   attributes: OccupationLedgerDetailAttr[];
   parcelItems: { address: string; extent3857: [number, number, number, number] | null }[];
   mgjItems: { address: string; extent3857: [number, number, number, number] | null }[];
+  /** 필지·물건지 목록 열 — 각 테이블 필드 정의 «목록» (없으면 주소만) */
+  parcelColumns?: OccupationLedgerListColumnMeta[];
+  mgjColumns?: OccupationLedgerListColumnMeta[];
+  /** 첨부파일 폴더 키 (본표 키 값) */
+  fileKey?: string;
   error?: string;
 }> {
   const resolved = resolveBinding(params);
@@ -558,16 +755,6 @@ export async function getOccupationLedgerDetailByKey(params: {
     };
   }
 
-  const fieldDefs = await getEditableFieldDefinitionsForTable({
-    table: binding.mainTable,
-    schema: DEFAULT_SCHEMA,
-    excludeFields: ['ogc_fid', 'id', 'extra'],
-    includeHiddenDetail: true,
-  });
-  if (fieldDefs.error) {
-    return { attributes: [], parcelItems: [], mgjItems: [], error: fieldDefs.error };
-  }
-
   const { tableName, schema } = meta;
   const columns = await getTableColumns(schema, tableName);
   const keyCol = findColumn(columns, binding.fields.keyField);
@@ -580,7 +767,16 @@ export async function getOccupationLedgerDetailByKey(params: {
     };
   }
 
-  const dataFields = fieldDefs.fields.map((f) => f.field).filter((f) => findColumn(columns, f));
+  const fieldList = await resolveMainFieldList(binding, columns);
+  if (fieldList.error) {
+    return { attributes: [], parcelItems: [], mgjItems: [], error: fieldList.error };
+  }
+  const dataFields = fieldList.fields.map((f) => f.field);
+  // 공통 칸 링크용 — 필지 연결(국공유지 예전 허가번호)
+  const permitSelect = findColumn(columns, binding.fields.permitField);
+  if (permitSelect && !dataFields.some((f) => f.toLowerCase() === permitSelect.toLowerCase())) {
+    dataFields.push(permitSelect);
+  }
   const safe = tableName.replace(/"/g, '""');
   const safeSchema = schema.replace(/"/g, '""');
   const selectList =
@@ -600,62 +796,86 @@ export async function getOccupationLedgerDetailByKey(params: {
       return { attributes: [], parcelItems: [], mgjItems: [], error: '해당 건을 찾을 수 없습니다.' };
     }
 
-    const metaByField = new Map(fieldDefs.fields.map((f) => [f.field.toLowerCase(), f]));
-    const endField = binding.fields.endField ?? 'perm_end_date';
-    const endKey =
-      Object.keys(row).find((k) => k.toLowerCase() === endField.toLowerCase()) ?? endField;
-    const endRaw = row[endKey];
-    const endYmd =
-      tryFormatToYmd(endRaw) ?? (endRaw == null ? '' : String(endRaw).trim());
-    const periodState = deriveOccupationPeriodState(endYmd);
-    const addressFields = new Set(['occup_place', 'applicant_addr', 'work_name']);
-    const attributes: OccupationLedgerDetailAttr[] = dataFields.map((field) => {
+    const f = binding.fields;
+    const metaByField = new Map(fieldList.fields.map((m) => [m.field.toLowerCase(), m]));
+    const endField = f.endField ?? '';
+    const endKey = Object.keys(row).find((k) => k.toLowerCase() === endField.toLowerCase());
+    const endRaw = endKey ? row[endKey] : null;
+    // 날짜 칸이던 시절 값(Date)도 글자로 맞춰 해석
+    const endText =
+      endRaw instanceof Date ? (tryFormatToYmd(endRaw) ?? '') : endRaw == null ? '' : String(endRaw).trim();
+    const periodState = deriveOccupationPeriodState(endText);
+    const addressFields = new Set(
+      [f.placeField, f.ownerAddrField, f.nameField].filter(Boolean).map((x) => String(x).toLowerCase())
+    );
+    const stateLower = f.stateField.toLowerCase();
+    const attributes: OccupationLedgerDetailAttr[] = fieldList.fields.map(({ field }) => {
       const def = metaByField.get(field.toLowerCase());
       const fl = field.toLowerCase();
-      const isState = fl === 'state';
+      const isState = fl === stateLower;
+      const cellRaw = row[field];
       let value = isState
         ? periodState
-        : row[field] == null
+        : cellRaw == null
           ? ''
-          : String(row[field]);
+          : cellRaw instanceof Date
+            ? (tryFormatToYmd(cellRaw) ?? '')
+            : String(cellRaw);
       if (!isState && addressFields.has(fl) && value) {
         value = formatAddressStripSidoSigungu(value) || value;
       }
       return {
         field,
-        label: labelForOccupationLedgerField(field),
+        label: def?.label ?? labelForOccupationLedgerField(field),
         value,
         showDetail: def?.showDetail !== false,
         required: def?.required === true,
+        common: def?.common === true,
       };
     });
 
-    const permitKey =
-      Object.keys(row).find((k) => k.toLowerCase() === 'permit_no') ?? 'permit_no';
-    const childParentKey = String(row[permitKey] ?? '').trim();
-    if (!childParentKey) {
-      return { attributes, parcelItems: [], mgjItems: [] };
-    }
+    // 필지·물건지는 본표 고유키로 연결. 허가번호로만 묶였던 예전 행(국공유지)은 허가번호로도 찾는다
+    const permitKey = Object.keys(row).find((k) => k.toLowerCase() === f.permitField.toLowerCase());
+    const legacyPermit = permitKey ? String(row[permitKey] ?? '').trim() : '';
+
+    const childListColumns = async (table: string) => {
+      const childMeta = await resolveTableWithSchema(table);
+      if (!childMeta) return [];
+      const childCols = await getTableColumns(childMeta.schema, childMeta.tableName);
+      return resolveDefineListColumns(table, childCols, [f.childParentField]);
+    };
+    const [parcelColumns, mgjColumns] = await Promise.all([
+      childListColumns(binding.jijukTable),
+      childListColumns(binding.mgjTable),
+    ]);
 
     const [parcels, mgj] = await Promise.all([
       getChildAddressItems({
         childTableName: binding.jijukTable,
-        parentKey: childParentKey,
-        parentField: binding.fields.childParentField,
-        addressField: binding.fields.childAddressField,
+        parentKey: keyRaw,
+        parentField: f.childParentField,
+        addressField: f.childAddressField,
+        addressPartFields: f.childAddressPartFields,
+        legacyPermit,
+        listFields: parcelColumns.map((c) => c.field),
       }),
       getChildAddressItems({
         childTableName: binding.mgjTable,
-        parentKey: childParentKey,
-        parentField: binding.fields.childParentField,
-        addressField: binding.fields.childAddressField,
+        parentKey: keyRaw,
+        parentField: f.childParentField,
+        addressField: f.childAddressField,
+        addressPartFields: f.childAddressPartFields,
+        legacyPermit,
+        listFields: mgjColumns.map((c) => c.field),
       }),
     ]);
-
     return {
       attributes,
       parcelItems: parcels.items,
       mgjItems: mgj.items,
+      parcelColumns,
+      mgjColumns,
+      fileKey: keyRaw,
     };
   } catch (e: unknown) {
     return {
@@ -664,6 +884,125 @@ export async function getOccupationLedgerDetailByKey(params: {
       mgjItems: [],
       error: e instanceof Error ? e.message : String(e),
     };
+  }
+}
+
+/**
+ * 필지·물건지 한 행 상세 — 필드 정의(상세 표시) 기준. 정의가 없으면 실제 칸 전부.
+ * 받은 원천자료 칸을 그대로 쓰고, 보일 칸은 필드 정의로 정한다. extra(jsonb)가 있으면 뒤에 붙인다.
+ */
+/** 필지·물건지 편집 모달 칸 — 필드 정의 «상세보기» (실제 DB 칸만) */
+export async function getOccupationLedgerChildFieldList(params?: {
+  serEng?: string;
+  system?: string;
+  role?: 'jijuk' | 'mgj';
+}): Promise<{ fields: OccupationLedgerFieldMeta[]; error?: string }> {
+  const resolved = resolveBinding(params);
+  if (resolved.error || !resolved.binding) return { fields: [], error: resolved.error };
+  const binding = resolved.binding;
+  const tableWanted = params?.role === 'mgj' ? binding.mgjTable : binding.jijukTable;
+  const meta = await resolveTableWithSchema(tableWanted);
+  if (!meta) return { fields: [], error: `${tableWanted} 테이블이 없습니다.` };
+  const columns = await getTableColumns(meta.schema, meta.tableName);
+  const hidden = new Set(['ogc_fid', 'geom', 'extra', binding.fields.childParentField.toLowerCase()]);
+  const defs = await getEditableFieldDefinitionsForTable({
+    table: tableWanted,
+    schema: DEFAULT_SCHEMA,
+    excludeFields: [...hidden],
+    includeHiddenDetail: true,
+  });
+  const fields: OccupationLedgerFieldMeta[] =
+    defs.fields.length > 0
+      ? defs.fields
+          .filter((d) => d.showDetail)
+          .map((d) => ({
+            field: d.field,
+            label: labelForOccupationLedgerField(d.field, d.label),
+            type: String(d.type ?? 'text'),
+            readOnly: d.readOnly === true,
+            required: d.required === true,
+            showDetail: true,
+            common: false,
+          }))
+      : columns
+          .filter((c) => !hidden.has(c.toLowerCase()) && !GEOM_COLUMN_NAMES.has(c.toLowerCase()))
+          .map((c) => ({
+            field: c,
+            label: labelForOccupationLedgerField(c, c),
+            type: 'text',
+            readOnly: false,
+            required: false,
+            showDetail: true,
+            common: false,
+          }));
+  return { fields };
+}
+
+export async function getOccupationLedgerChildDetail(params: {
+  serEng?: string;
+  system?: string;
+  role?: 'jijuk' | 'mgj';
+  ogcFid?: string | number;
+}): Promise<{ attributes: OccupationLedgerDetailAttr[]; error?: string }> {
+  const resolved = resolveBinding(params);
+  if (resolved.error || !resolved.binding) return { attributes: [], error: resolved.error };
+  const binding = resolved.binding;
+  const ogcFid = String(params?.ogcFid ?? '').trim();
+  if (!/^\d+$/.test(ogcFid)) return { attributes: [], error: '필지 키가 필요합니다.' };
+  const tableWanted = params?.role === 'mgj' ? binding.mgjTable : binding.jijukTable;
+  const meta = await resolveTableWithSchema(tableWanted);
+  if (!meta) return { attributes: [], error: `${tableWanted} 테이블이 없습니다.` };
+  const columns = await getTableColumns(meta.schema, meta.tableName);
+  const keyCol = findColumn(columns, 'ogc_fid');
+  if (!keyCol) return { attributes: [], error: 'ogc_fid 컬럼이 없습니다.' };
+
+  const hidden = new Set(['ogc_fid', 'geom', 'extra', binding.fields.childParentField.toLowerCase()]);
+  // 필드 정의 «상세보기» 칸만. 정의 자체가 없는 테이블만 실제 칸 전부
+  const defs = await getEditableFieldDefinitionsForTable({
+    table: tableWanted,
+    schema: DEFAULT_SCHEMA,
+    excludeFields: [...hidden],
+    includeHiddenDetail: true,
+  });
+  const fields: { field: string; label: string }[] =
+    defs.fields.length > 0
+      ? defs.fields
+          .filter((d) => d.showDetail)
+          .map((d) => ({ field: d.field, label: labelForOccupationLedgerField(d.field, d.label) }))
+      : columns
+          .filter((c) => !hidden.has(c.toLowerCase()) && !GEOM_COLUMN_NAMES.has(c.toLowerCase()))
+          .map((c) => ({ field: c, label: labelForOccupationLedgerField(c, c) }));
+  const extraCol = findColumn(columns, 'extra');
+  const selectCols = [...fields.map((x) => x.field), ...(extraCol ? [extraCol] : [])];
+  const safe = meta.tableName.replace(/"/g, '""');
+  const safeSchema = meta.schema.replace(/"/g, '""');
+  try {
+    const res = await db.execute(
+      sql.raw(
+        `SELECT ${selectCols.length > 0 ? selectCols.map((c) => quoteIdent(c)).join(', ') : quoteIdent(keyCol)}
+         FROM "${safeSchema}"."${safe}"
+         WHERE ${quoteIdent(keyCol)} = ${Number(ogcFid)}
+         LIMIT 1`
+      )
+    );
+    const row = res.rows?.[0] as Record<string, unknown> | undefined;
+    if (!row) return { attributes: [], error: '해당 필지를 찾을 수 없습니다.' };
+    const cellText = (v: unknown): string =>
+      v == null ? '' : v instanceof Date ? (tryFormatToYmd(v) ?? '') : String(v);
+    const attributes: OccupationLedgerDetailAttr[] = fields.map(({ field, label }) => ({
+      field,
+      label,
+      value: cellText(row[field]),
+    }));
+    const extra = extraCol ? row[extraCol] : null;
+    if (extra && typeof extra === 'object' && !Array.isArray(extra)) {
+      for (const [k, v] of Object.entries(extra as Record<string, unknown>)) {
+        attributes.push({ field: `extra.${k}`, label: k, value: cellText(v) });
+      }
+    }
+    return { attributes };
+  } catch (e: unknown) {
+    return { attributes: [], error: e instanceof Error ? e.message : String(e) };
   }
 }
 
@@ -696,9 +1035,12 @@ export async function getNextOccupationLedgerPermitNo(params?: {
   }
 
   const cols = await getTableColumns(meta.schema, meta.tableName);
-  const permitCol = findColumn(cols, 'permit_no');
+  const permitCol = findColumn(cols, binding.fields.permitField);
   if (!permitCol) {
-    return { permitNo: formatOccupationPermitNo(year, 1), error: 'permit_no 컬럼이 없습니다.' };
+    return {
+      permitNo: formatOccupationPermitNo(year, 1),
+      error: `${binding.fields.permitField} 컬럼이 없습니다.`,
+    };
   }
   const keyCol = findColumn(cols, binding.fields.keyField);
   const exclude = String(params?.excludeKey ?? '').trim();
@@ -737,6 +1079,40 @@ export async function getNextOccupationLedgerPermitNo(params?: {
 }
 
 /** 신규 미리보기용 — 이전 키(숫자)가 5면 6. ogc_fid·id 숫자 최대+1 */
+/** 새 건 자동 채번 코드 — 연결 설정의 자동 채번 칸 마지막 번호 +1 (예: JY_000519 → JY_000520) */
+export async function getNextOccupationLedgerAutoCode(params?: {
+  serEng?: string;
+  system?: string;
+}): Promise<{ code: string; field?: string; error?: string }> {
+  const resolved = resolveBinding(params);
+  if (resolved.error || !resolved.binding) return { code: '', error: resolved.error };
+  const field = resolved.binding.autoCodeField;
+  if (!field) return { code: '' };
+  const meta = await resolveTableWithSchema(resolved.binding.mainTable);
+  if (!meta) return { code: '', field, error: `${resolved.binding.mainTable} 테이블이 없습니다.` };
+  const col = findColumn(await getTableColumns(meta.schema, meta.tableName), field);
+  if (!col) return { code: '', field, error: `${field} 컬럼이 없습니다.` };
+  const safe = meta.tableName.replace(/"/g, '""');
+  const safeSchema = meta.schema.replace(/"/g, '""');
+  try {
+    const res = await db.execute(
+      sql.raw(
+        `SELECT ${quoteIdent(col)}::text AS code
+         FROM "${safeSchema}"."${safe}"
+         WHERE COALESCE(${quoteIdent(col)}::text, '') <> ''
+         ORDER BY
+           (regexp_match(${quoteIdent(col)}::text, '([0-9]+)$'))[1]::bigint DESC NULLS LAST,
+           ${quoteIdent(col)}::text DESC
+         LIMIT 1`
+      )
+    );
+    const last = String((res.rows?.[0] as { code?: string } | undefined)?.code ?? '').trim();
+    return { code: last ? incrementSuffixCode(last) : (resolved.binding.autoCodeDefault ?? '1'), field: col };
+  } catch (e: unknown) {
+    return { code: '', field, error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
 export async function getNextOccupationLedgerKey(params?: {
   serEng?: string;
   system?: string;
@@ -827,7 +1203,7 @@ export async function syncOccupationLedgerMgjByKey(params: {
   const parentMeta = await resolveTableWithSchema(binding.mainTable);
   if (parentMeta) {
     const cols = await getTableColumns(parentMeta.schema, parentMeta.tableName);
-    const permitCol = findColumn(cols, 'permit_no');
+    const permitCol = findColumn(cols, binding.fields.permitField);
     const keyCol = findColumn(cols, binding.fields.keyField);
     if (permitCol && keyCol) {
       try {
@@ -847,10 +1223,9 @@ export async function syncOccupationLedgerMgjByKey(params: {
     }
   }
 
-  const childParentId = extraValues.permit_no;
-  if (!childParentId) {
-    return { success: false, error: '허가번호가 없어 물건지를 저장할 수 없습니다.' };
-  }
+  // 물건지는 본표 고유키로 연결 (허가번호는 있으면 함께 적음 — 예전 행 찾기용)
+  const childParentId =
+    (await canonicalOccupationLedgerKey(binding, parentKey)) ?? parentKey;
   const items = (params.items ?? []).filter((it) => String(it?.address ?? '').trim());
   if (items.length === 0) {
     return syncChildParcelsByParentId({
@@ -858,6 +1233,7 @@ export async function syncOccupationLedgerMgjByKey(params: {
       childTableName: binding.mgjTable,
       childParentField: binding.fields.childParentField,
       childAddressField: binding.fields.childAddressField,
+      childAddressPartFields: binding.fields.childAddressPartFields,
       parentId: childParentId,
       parcels: [],
       extraValues,
@@ -888,6 +1264,7 @@ export async function syncOccupationLedgerMgjByKey(params: {
     childTableName: binding.mgjTable,
     childParentField: binding.fields.childParentField,
     childAddressField: binding.fields.childAddressField,
+    childAddressPartFields: binding.fields.childAddressPartFields,
     parentId: childParentId,
     parcels,
     extraValues,
@@ -1095,8 +1472,8 @@ async function fillMainTableStateFromEndDate(
   if (!meta) return empty;
   const cols = await getTableColumns(meta.schema, meta.tableName);
   const keyCol = findColumn(cols, binding.fields.keyField);
-  const endCol = findColumn(cols, binding.fields.endField ?? 'perm_end_date');
-  const stateCol = findColumn(cols, 'state');
+  const endCol = binding.fields.endField ? findColumn(cols, binding.fields.endField) : null;
+  const stateCol = findColumn(cols, binding.fields.stateField);
   if (!keyCol || !endCol || !stateCol) {
     return { error: `${binding.mainTable}에 키·종료일·상태 칸이 없습니다.` };
   }
@@ -1116,8 +1493,9 @@ async function fillMainTableStateFromEndDate(
   for (const row of rows) {
     const id = String(row.k ?? '').trim();
     if (!id) continue;
-    const endYmd = tryFormatToYmd(row.e) ?? String(row.e ?? '').trim().slice(0, 10);
-    const state = deriveOccupationPeriodState(endYmd);
+    const endText =
+      row.e instanceof Date ? (tryFormatToYmd(row.e) ?? '') : String(row.e ?? '').trim();
+    const state = deriveOccupationPeriodState(endText);
     if (state === OCCUPATION_PERIOD_STATE_ENDED) ended += 1;
     else inProgress += 1;
     await db.execute(

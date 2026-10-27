@@ -1,7 +1,7 @@
 'use client';
 
-import { useRef, useState } from 'react';
-import type { DragEvent, FormEvent } from 'react';
+import { useCallback, useRef, useState } from 'react';
+import type { FormEvent, PointerEvent as ReactPointerEvent } from 'react';
 import { Plus, Minus, GripVertical } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
@@ -39,13 +39,17 @@ type Props = {
   /** 정의에만 있고 화면에 없는 항목 — 수정 시 «정의에서 추가»용 */
   availableDefs?: LayerExtraDefOption[];
   className?: string;
+  /** true면 «추가 속성» 머리줄 숨김 — 부모 접기 섹션 제목만 쓸 때 */
+  hideHeader?: boolean;
 };
 
 const inputClass =
   'min-w-0 w-full rounded border border-border bg-background px-1.5 py-0.5 text-xs outline-none focus:border-primary focus:ring-1 focus:ring-primary/30';
 const iconBtn =
   'inline-flex h-6 w-6 shrink-0 items-center justify-center rounded border border-border bg-background text-muted-foreground hover:bg-muted disabled:opacity-40';
-const rowClass = 'flex items-center gap-x-2 px-2 py-1.5';
+const rowClass = 'relative flex items-center gap-x-1.5 px-2 py-1.5';
+const gripClass =
+  'relative inline-flex h-7 w-6 shrink-0 touch-none cursor-grab select-none items-center justify-center rounded border border-border/80 bg-muted/60 text-muted-foreground hover:border-border hover:bg-muted hover:text-foreground active:cursor-grabbing';
 /** 속성명 약 100px */
 const nameBoxClass = 'w-[100px] shrink-0';
 
@@ -62,6 +66,23 @@ function extraTypeKind(raw: string): ExtraDataType {
   return 'varchar';
 }
 
+function extraRowKey(row: LayerExtraEditorItem): string {
+  return row.fieldName.toLowerCase();
+}
+
+/** 포인터 Y → 삽입할 행 인덱스 (행 중앙 기준, 경계 흔들림 방지) */
+function hitTestInsertIndex(clientY: number, rowEls: (HTMLDivElement | null)[]): number | null {
+  if (rowEls.length === 0) return null;
+  for (let i = 0; i < rowEls.length; i++) {
+    const el = rowEls[i];
+    if (!el) continue;
+    const r = el.getBoundingClientRect();
+    const mid = (r.top + r.bottom) / 2;
+    if (clientY < mid) return i;
+  }
+  return rowEls.length - 1;
+}
+
 /** 추가속성 행 편집 (공용) — 업무 화면에서 끼워 씀 */
 export function LayerExtraFieldsEditor({
   items,
@@ -69,12 +90,21 @@ export function LayerExtraFieldsEditor({
   onChange,
   availableDefs = [],
   className,
+  hideHeader = false,
 }: Props) {
-  const dragIdx = useRef<number | null>(null);
+  const rowElsRef = useRef<(HTMLDivElement | null)[]>([]);
+  const itemsRef = useRef(items);
+  const dragFromRef = useRef<number | null>(null);
+  const dragFieldRef = useRef<string | null>(null);
+  const moveRafRef = useRef<number | null>(null);
+  const pendingOverRef = useRef<number | null>(null);
+  const [draggingField, setDraggingField] = useState<string | null>(null);
   const [addOpen, setAddOpen] = useState(false);
   const [addName, setAddName] = useState('');
   const [addType, setAddType] = useState<ExtraDataType>('varchar');
   const [addError, setAddError] = useState<string | null>(null);
+
+  itemsRef.current = items;
 
   const updateAt = (index: number, patch: Partial<LayerExtraEditorItem>) => {
     onChange(items.map((it, i) => (i === index ? { ...it, ...patch } : it)));
@@ -135,20 +165,78 @@ export function LayerExtraFieldsEditor({
     ]);
   };
 
-  const handleDragStart = (e: DragEvent<HTMLButtonElement>, idx: number) => {
-    e.dataTransfer.effectAllowed = 'move';
-    e.dataTransfer.setData('text/plain', String(idx));
-    dragIdx.current = idx;
+  const clearDragUi = useCallback(() => {
+    dragFromRef.current = null;
+    dragFieldRef.current = null;
+    pendingOverRef.current = null;
+    if (moveRafRef.current !== null) {
+      cancelAnimationFrame(moveRafRef.current);
+      moveRafRef.current = null;
+    }
+    setDraggingField(null);
+  }, []);
+
+  const moveRow = useCallback(
+    (from: number, to: number) => {
+      const current = itemsRef.current;
+      if (from === to || from < 0 || to < 0 || from >= current.length || to >= current.length) {
+        return;
+      }
+      const next = [...current];
+      const [moved] = next.splice(from, 1);
+      next.splice(to, 0, moved);
+      onChange(next.map((it, i) => ({ ...it, sortOrder: i + 1 })));
+      dragFromRef.current = to;
+    },
+    [onChange]
+  );
+
+  const flushPendingMove = useCallback(() => {
+    moveRafRef.current = null;
+    const from = dragFromRef.current;
+    const to = pendingOverRef.current;
+    if (from === null || to === null || from === to) return;
+    moveRow(from, to);
+  }, [moveRow]);
+
+  const scheduleMoveTo = useCallback(
+    (over: number) => {
+      const from = dragFromRef.current;
+      if (from === null || over === from) return;
+      pendingOverRef.current = over;
+      if (moveRafRef.current !== null) return;
+      moveRafRef.current = requestAnimationFrame(flushPendingMove);
+    },
+    [flushPendingMove]
+  );
+
+  const handleGripPointerDown = (e: ReactPointerEvent<HTMLButtonElement>, idx: number) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    e.currentTarget.setPointerCapture(e.pointerId);
+    const field = extraRowKey(itemsRef.current[idx]!);
+    dragFromRef.current = idx;
+    dragFieldRef.current = field;
+    setDraggingField(field);
   };
 
-  const handleDrop = (targetIdx: number) => {
-    const from = dragIdx.current;
-    if (from === null || from === targetIdx) return;
-    const next = [...items];
-    const [moved] = next.splice(from, 1);
-    next.splice(targetIdx, 0, moved);
-    onChange(next.map((it, i) => ({ ...it, sortOrder: i + 1 })));
-    dragIdx.current = null;
+  const handleGripPointerMove = (e: ReactPointerEvent<HTMLButtonElement>) => {
+    if (dragFromRef.current === null) return;
+    const over = hitTestInsertIndex(e.clientY, rowElsRef.current);
+    if (over !== null) scheduleMoveTo(over);
+  };
+
+  const handleGripPointerUp = (e: ReactPointerEvent<HTMLButtonElement>) => {
+    if (dragFromRef.current === null) return;
+    if (e.currentTarget.hasPointerCapture(e.pointerId)) {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    }
+    if (moveRafRef.current !== null) {
+      cancelAnimationFrame(moveRafRef.current);
+      moveRafRef.current = null;
+    }
+    flushPendingMove();
+    clearDragUi();
   };
 
   const unusedDefs = availableDefs.filter(
@@ -192,64 +280,78 @@ export function LayerExtraFieldsEditor({
 
   return (
     <div className={cn(className)}>
-      <div className="mb-2 flex items-baseline justify-between gap-2">
-        <div className="text-[11px] font-medium text-muted-foreground">추가 속성</div>
-        {isEditing ? (
-          <div className="text-right text-[10px] leading-snug text-muted-foreground">
-            * 드래그 시 순서가 변경됩니다.
-          </div>
-        ) : null}
-      </div>
+      {hideHeader ? null : (
+        <div className="mb-2 flex items-baseline justify-between gap-2">
+          <div className="text-[11px] font-medium text-muted-foreground">추가 속성</div>
+          {isEditing ? (
+            <div className="whitespace-nowrap text-right text-[10px] leading-none text-muted-foreground">
+              * 드래그 시 순서가 변경됩니다.
+            </div>
+          ) : null}
+        </div>
+      )}
       {isEditing ? (
-        <div className="divide-y divide-border overflow-hidden rounded border border-border">
-          {items.map((row, idx) => (
-            <div
-              key={`extra-${idx}`}
-              className={rowClass}
-              onDragOver={(e) => e.preventDefault()}
-              onDrop={() => handleDrop(idx)}
-            >
-              <button
-                type="button"
-                draggable
-                title="순서 변경"
-                aria-label="순서 변경"
-                className="inline-flex h-6 w-5 shrink-0 cursor-grab items-center justify-center text-muted-foreground hover:text-foreground active:cursor-grabbing"
-                onDragStart={(e) => handleDragStart(e, idx)}
-                onDragEnd={() => {
-                  dragIdx.current = null;
+        <div
+          className={cn(
+            'divide-y divide-border overflow-hidden rounded border border-border',
+            draggingField !== null && 'select-none ring-1 ring-primary/15'
+          )}
+        >
+          {items.map((row, idx) => {
+            const isDragging = draggingField === extraRowKey(row);
+            return (
+              <div
+                key={extraRowKey(row)}
+                ref={(el) => {
+                  rowElsRef.current[idx] = el;
                 }}
+                className={cn(
+                  rowClass,
+                  idx % 2 === 1 && draggingField === null && 'bg-muted/25',
+                  isDragging && 'z-10 bg-background shadow-sm ring-1 ring-primary/20'
+                )}
               >
-                <GripVertical className="h-3.5 w-3.5" />
-              </button>
-              <dt className="flex shrink-0 items-center">
-                <div className={cn(nameBoxClass, 'scrollbar-hide overflow-x-auto')}>
-                  <input
-                    title={row.fieldName}
-                    className={cn(inputClass, 'h-7 min-w-full w-max whitespace-nowrap')}
-                    style={{
-                      width: `${Math.max(6, [...String(row.fieldName ?? '')].length)}em`,
-                    }}
-                    value={row.fieldName}
-                    placeholder="속성명"
-                    onChange={(e) => updateAt(idx, { fieldName: e.target.value })}
-                  />
-                </div>
-              </dt>
-              <dd className="flex min-w-0 flex-1 items-center gap-1">
-                {renderValueInput(row, idx)}
                 <button
                   type="button"
-                  className={iconBtn}
-                  title="삭제"
-                  onClick={() => removeAt(idx)}
+                  title="순서 변경 (드래그)"
+                  aria-label={`${idx + 1}번째 속성 순서 변경`}
+                  className={cn(gripClass, isDragging && 'border-primary/40 bg-primary/10 text-primary')}
+                  onPointerDown={(e) => handleGripPointerDown(e, idx)}
+                  onPointerMove={handleGripPointerMove}
+                  onPointerUp={handleGripPointerUp}
+                  onPointerCancel={handleGripPointerUp}
                 >
-                  <Minus className="h-3.5 w-3.5" />
+                  <GripVertical className="h-3.5 w-3.5" aria-hidden />
                 </button>
-              </dd>
-            </div>
-          ))}
-          <div className="flex items-center justify-center gap-1.5 px-2 py-1.5">
+                <dt className="flex shrink-0 items-center">
+                  <div className={cn(nameBoxClass, 'scrollbar-hide overflow-x-auto')}>
+                    <input
+                      title={row.fieldName}
+                      className={cn(inputClass, 'h-7 min-w-full w-max whitespace-nowrap')}
+                      style={{
+                        width: `${Math.max(6, [...String(row.fieldName ?? '')].length)}em`,
+                      }}
+                      value={row.fieldName}
+                      placeholder="속성명"
+                      onChange={(e) => updateAt(idx, { fieldName: e.target.value })}
+                    />
+                  </div>
+                </dt>
+                <dd className="flex min-w-0 flex-1 items-center gap-1">
+                  {renderValueInput(row, idx)}
+                  <button
+                    type="button"
+                    className={iconBtn}
+                    title="삭제"
+                    onClick={() => removeAt(idx)}
+                  >
+                    <Minus className="h-3.5 w-3.5" />
+                  </button>
+                </dd>
+              </div>
+            );
+          })}
+          <div className="flex flex-nowrap items-center justify-center gap-1.5 px-2 py-1.5">
             <button
               type="button"
               onClick={openAddModal}

@@ -4,6 +4,7 @@ import {
   getUseFeeWmsLayerId,
 } from './useFeeLayerId'
 import { getForeignUseFeeWmsLayerIds, getUseFeeBinding } from '@/lib/useFeeBinding'
+import { getOccupationLedgerBinding } from '@/lib/occupationLedgerBinding'
 
 type SetVisible = (updater: (prev: Set<string>) => Set<string>) => void
 
@@ -14,10 +15,13 @@ type FeeLayerOpts = {
 
 /** 울진 하천점용 본표 */
 export const USE_FEE_ULJIN_OCCUPATION_WMS_LAYER_ID = USAGE_DATA_AS_WMS_LAYER_ID
-/** 공통 하천·도로·국공유지 점용 본표 */
-export const USE_FEE_WATER_OCCUPATION_WMS_LAYER_ID = 'water_occupationledger'
-export const USE_FEE_ROAD_OCCUPATION_WMS_LAYER_ID = 'road_occupationledger'
-export const USE_FEE_PUBLIC_OCCUPATION_WMS_LAYER_ID = 'public_occupationledger'
+/** 공통 하천·도로·국공유지 점용 본표 (공통 점용대장 연결 설정 기준) */
+export const USE_FEE_WATER_OCCUPATION_WMS_LAYER_ID =
+  getOccupationLedgerBinding({ serEng: 'waterOccupationLedger' })!.mainTable
+export const USE_FEE_ROAD_OCCUPATION_WMS_LAYER_ID =
+  getOccupationLedgerBinding({ serEng: 'roadOccupationLedger' })!.mainTable
+export const USE_FEE_PUBLIC_OCCUPATION_WMS_LAYER_ID =
+  getOccupationLedgerBinding({ serEng: 'publicOccupationLedger' })!.mainTable
 
 export type UseFeeOccupationLedgerTarget = {
   layerId: string

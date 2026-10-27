@@ -200,7 +200,7 @@ async function downloadPart(opts: {
   body: string;
   destFile: string;
 }): Promise<void> {
-  const buf = await fetchKrasBytes(krasRequestUrl(opts.conn.url, opts.body));
+  const buf = await fetchKrasBytes(krasRequestUrl(opts.conn.url, opts.body), { allowEmpty: true });
   await fs.writeFile(opts.destFile, buf);
 }
 
