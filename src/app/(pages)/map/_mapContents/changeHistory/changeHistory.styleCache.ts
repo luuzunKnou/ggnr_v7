@@ -10,11 +10,11 @@ import type { StyleLike } from 'ol/style/Style';
 import { call } from '@/lib/api';
 import {
   parseSimpleStyleFromCss,
-  toPublicSymbolPreviewUrl,
+  resolveSymbolPreviewUrl,
   type GeometryType,
   type StyleProps,
 } from '@/lib/geoserverStyleUtils';
-import { getGeoServerBase } from '@/lib/geoserverUrl';
+import { getGeoServerBase, getGeoServerPublicBase } from '@/lib/geoserverUrl';
 
 const GEOSERVER_DEFAULT_URL = getGeoServerBase();
 
@@ -105,8 +105,10 @@ async function fetchStyleInfo(tableName: string): Promise<CachedStyleInfo | null
         return DEFAULT_POINT_STYLE;
       }
       if (styleProps.symbolUrl?.trim()) {
-        const pub = toPublicSymbolPreviewUrl(styleProps.symbolUrl) ?? styleProps.symbolUrl.trim();
-        styleProps = { ...styleProps, symbolUrl: pub };
+        const resolved =
+          resolveSymbolPreviewUrl(styleProps.symbolUrl, getGeoServerPublicBase()) ??
+          styleProps.symbolUrl.trim();
+        styleProps = { ...styleProps, symbolUrl: resolved };
       }
       const info: CachedStyleInfo = { styleProps, geometryType };
       styleInfoCache.set(key, info);

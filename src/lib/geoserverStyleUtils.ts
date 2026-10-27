@@ -2,6 +2,8 @@
  * GeoServer CSS simple style parse/build for POINT, LINE, POLYGON.
  */
 
+import { normalizeGeoServerSymbolUrl } from '@/lib/geoserverSymbolPath';
+
 export type GeometryType = 'POINT' | 'LINE' | 'POLYGON';
 
 /** Material Tone palette (hex) for random default styles */
@@ -225,7 +227,7 @@ export function parseSimpleStyleFromCss(cssText: string): {
     }
     else if (key === 'mark') {
       const urlMatch = v.match(/url\s*\(\s*["']?([^"')]+)["']?\s*\)/i);
-      if (urlMatch) target.symbolUrl = urlMatch[1].trim();
+      if (urlMatch) target.symbolUrl = normalizeGeoServerSymbolUrl(urlMatch[1].trim());
     }
   };
 
@@ -282,9 +284,10 @@ export function buildCssFromSimpleStyle(
   const geomLines: string[] = [];
 
   if (geometryType === 'POINT') {
-    const symbolUrl = styleProps.symbolUrl?.trim();
+    const symbolUrlRaw = styleProps.symbolUrl?.trim();
+    const symbolUrl = symbolUrlRaw ? normalizeGeoServerSymbolUrl(symbolUrlRaw) : '';
     if (symbolUrl) {
-      // Point - 심볼이 있을 때
+      // Point - 심볼이 있을 때 (호스트 없는 /www/symbol/… 만 기록)
       const mime = symbolUrl.toLowerCase().endsWith('.svg') ? 'image/svg+xml' : 'image/png';
       geomLines.push(`  mark: url("${symbolUrl}");`);
       geomLines.push(`  mark-mime: "${mime}";`);
@@ -414,7 +417,8 @@ export function buildSldFromSimpleStyle(
 
   let symbolizer = '';
   if (geometryType === 'POINT') {
-    const symbolUrl = styleProps.symbolUrl?.trim();
+    const symbolUrlRaw = styleProps.symbolUrl?.trim();
+    const symbolUrl = symbolUrlRaw ? normalizeGeoServerSymbolUrl(symbolUrlRaw) : '';
     const graphic = symbolUrl
       ? `<ExternalGraphic><OnlineResource xlink:type="simple" xlink:href="${xmlText(symbolUrl)}"/><Format>${symbolUrl.toLowerCase().endsWith('.svg') ? 'image/svg+xml' : 'image/png'}</Format></ExternalGraphic>`
       : `<Mark><WellKnownName>circle</WellKnownName><Fill>${sldCssParam('fill', f)}${sldCssParam('fill-opacity', op)}</Fill><Stroke>${sldCssParam('stroke', s)}${sldCssParam('stroke-width', sw)}${sldCssParam('stroke-opacity', strokeOp)}</Stroke></Mark>`;
@@ -507,14 +511,49 @@ export function replaceDefaultRuleInCss(cssText: string, newStarBlock: string): 
   return (before + newStarBlock + (after ? '\n\n' + after : '')).trim();
 }
 
-/** GeoServer www 주소 또는 파일명 → Next public/symbol 미리보기 경로 */
+/** @deprecated 앱 전용 `/symbol/…` 아이콘용. 레이어 심볼은 resolveSymbolPreviewUrl 사용 */
 export function toPublicSymbolPreviewUrl(symbolUrlOrName: string): string | null {
   const raw = String(symbolUrlOrName ?? '').trim();
   if (!raw) return null;
+  if (/^\/?symbol\//i.test(raw) && !/www\/symbol/i.test(raw)) {
+    return raw.startsWith('/') ? raw : `/${raw}`;
+  }
   const file = raw.split(/[?#]/)[0].split(/[\\/]/).pop() ?? '';
   const m = file.match(/^(.+)\.(svg|png)$/i);
   if (m) return `/symbol/${m[1]}.${m[2].toLowerCase()}`;
   if (/^[a-zA-Z0-9._-]+$/.test(raw)) return `/symbol/${raw}.svg`;
+  return null;
+}
+
+/**
+ * 브라우저 img/다운로드용 심볼 URL.
+ * SLD의 `/www/symbol/…`는 GeoServer 공개 경로로 풀고,
+ * 앱 전용 `/symbol/…`는 Next static 그대로 둔다.
+ * 파일명만 있으면 water 폴더를 기본으로 둔다.
+ */
+export function resolveSymbolPreviewUrl(
+  symbolUrlOrName: string,
+  geoserverBase?: string | null
+): string | null {
+  const raw = String(symbolUrlOrName ?? '').trim();
+  if (!raw) return null;
+  if (/^(https?:|blob:|data:)/i.test(raw)) return raw;
+
+  // 안전시설·CCTV 등 Next public/symbol 전용
+  if (/^\/?symbol\//i.test(raw) && !/www\/symbol/i.test(raw)) {
+    return raw.startsWith('/') ? raw : `/${raw}`;
+  }
+
+  const base = String(geoserverBase ?? '').replace(/\/$/, '');
+  const withBase = (href: string) => (base ? `${base}${href.startsWith('/') ? href : `/${href}`}` : href);
+
+  const wwwMatch = raw.match(/(?:(?:\.\.\/)+)?\/?(www\/symbol\/[^\s?#]+)/i);
+  if (wwwMatch) return withBase(`/${wwwMatch[1]}`);
+
+  const file = raw.split(/[?#]/)[0].split(/[\\/]/).pop() ?? '';
+  const m = file.match(/^(.+)\.(svg|png)$/i);
+  if (m) return withBase(`/www/symbol/water/${m[1]}.${m[2].toLowerCase()}`);
+  if (/^[a-zA-Z0-9._-]+$/.test(raw)) return withBase(`/www/symbol/water/${raw}.svg`);
   return null;
 }
 
@@ -703,7 +742,8 @@ function sldPointMarkSize(
  * - symbolUrl 없음 + ExternalGraphic: circle Mark로 교체 (POINT)
  */
 function patchSldRuleGraphicSymbol(rule: string, symbolUrl: string | undefined): string {
-  const url = symbolUrl?.trim() ?? '';
+  const urlRaw = symbolUrl?.trim() ?? '';
+  const url = urlRaw ? normalizeGeoServerSymbolUrl(urlRaw) : '';
   const hasExternal = /<(?:[\w]+:)?ExternalGraphic\b/i.test(rule);
   const hasMark = /<(?:[\w]+:)?Mark\b/i.test(rule);
 
@@ -816,7 +856,7 @@ export function parseSldEnvStyle(
     if (Number.isFinite(n) && n > 0) styleProps.size = n;
   }
   if (markSize != null && markSize > 0) styleProps.markSize = markSize;
-  if (symbolUrl) styleProps.symbolUrl = symbolUrl;
+  if (symbolUrl) styleProps.symbolUrl = normalizeGeoServerSymbolUrl(symbolUrl);
 
   let geometryType: GeometryType = 'POLYGON';
   if (/<(?:[\w]+:)?LineSymbolizer\b/.test(rule)) geometryType = 'LINE';
@@ -928,6 +968,24 @@ export function patchSldEnvDefaults(sld: string, styleName: string, props: Style
     );
   });
   return formatSldXml(patched);
+}
+
+/**
+ * GeoServer CSS→SLD 변환이 붙이는 ruleEvaluation VendorOption만 제거.
+ * conflictResolution·followLine 등 다른 VendorOption은 그대로 둔다.
+ */
+export function stripSldRuleEvaluationVendorOption(sld: string): string {
+  const raw = String(sld ?? '');
+  if (!raw) return raw;
+  return raw
+    .replace(
+      /\s*<\s*(?:[\w]+:)?VendorOption\b[^>]*\bname\s*=\s*["']ruleEvaluation["'][^>]*>[\s\S]*?<\/(?:[\w]+:)?VendorOption\s*>/gi,
+      ''
+    )
+    .replace(
+      /\s*<\s*(?:[\w]+:)?VendorOption\b[^>]*\bname\s*=\s*["']ruleEvaluation["'][^>]*\/\s*>/gi,
+      ''
+    );
 }
 
 /** 한 줄 SLD를 기존 스타일 파일과 같이 두 칸 들여쓰기로 펼친다. 글자만 있는 태그는 한 줄로 둔다. */
