@@ -6,12 +6,37 @@ import { ChevronDown, X } from 'lucide-react'
 import { call } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { MapSideListPanel } from '../../../_mapComponents/MapSideListPanel'
+import { useMapContext } from '../../../_mapComponents/MapContext'
 import { useSwlNetworkMapLayer } from './useSwlNetworkMapLayer'
 import { SwlNetworkMapStatus } from './SwlNetworkMapStatus'
 import { lineFromGeometry, SwlNetworkMapSectionModal } from './SwlNetworkMapSectionModal'
-import { getSwlNetLayerDef } from './swlNetworkLayerCatalog'
+import {
+  getSwlNetLayerDef,
+  SWL_NET_LAYER_KEYS,
+} from './swlNetworkLayerCatalog'
 import { SwlLayerMark } from './SwlLayerMark'
 import type { SwlNetworkFilterMeta, SwlNetworkRow } from './swlNetworkTypes'
+
+/** 관망 레이어 키 → 지하시설물 패널 tableName */
+function resolveUndergroundTableNames(key: string): string[] {
+  const def = getSwlNetLayerDef(key)
+  if (!def) return []
+  return [
+    ...new Set(
+      [def.table, def.wms, key]
+        .map((v) => String(v ?? '').trim())
+        .filter(Boolean)
+    ),
+  ]
+}
+
+function collectManagedUndergroundNames(): Set<string> {
+  const managed = new Set<string>()
+  for (const key of SWL_NET_LAYER_KEYS) {
+    for (const n of resolveUndergroundTableNames(key)) managed.add(n)
+  }
+  return managed
+}
 
 const LIST_DEFAULT = 440
 const LIST_MIN = 360
@@ -235,6 +260,7 @@ const DEFAULT_META: SwlNetworkFilterMeta = {
 }
 
 export function SwlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }: Props) {
+  const mapContext = useMapContext()
   const [listWidth, setListWidth] = useState(LIST_DEFAULT)
   const [resultWidth, setResultWidth] = useState(RESULT_DEFAULT)
   const [extraOn, setExtraOn] = useState<Set<string>>(() => new Set(EXTRA_ON))
@@ -378,6 +404,33 @@ export function SwlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
     if (!selected) return
     if (!extraOn.has(String(selected.layerKey))) setSelected(null)
   }, [extraOn, selected])
+
+  /** 켜진 관망 레이어 → 지하시설물 패널 체크 동기화 (상수 관망과 동일) */
+  useEffect(() => {
+    const setVisible = mapContext?.setVisibleLayerNames
+    if (!setVisible) return
+    const managed = collectManagedUndergroundNames()
+    const wanted = new Set<string>()
+    for (const key of extraOn) {
+      for (const n of resolveUndergroundTableNames(key)) wanted.add(n)
+    }
+    setVisible((prev) => {
+      const next = new Set(prev)
+      for (const n of managed) next.delete(n)
+      for (const n of wanted) next.add(n)
+      if (next.size === prev.size) {
+        let same = true
+        for (const n of next) {
+          if (!prev.has(n)) {
+            same = false
+            break
+          }
+        }
+        if (same) return prev
+      }
+      return next
+    })
+  }, [mapContext?.setVisibleLayerNames, extraOn])
 
   const layerBoxes = useMemo(() => {
     const order = DISPLAY_GROUPS.flatMap((g) => g.items)
