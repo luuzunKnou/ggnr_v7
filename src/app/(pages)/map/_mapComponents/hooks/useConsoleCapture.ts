@@ -21,6 +21,8 @@ const NOISE_PATTERNS = [
   /^\[HMR\]/,
   /^Download the React DevTools/,
   /^%cDownload the React DevTools/,
+  /^Maximum update depth exceeded/,
+  /^Warning: Maximum update depth exceeded/,
 ];
 
 function isNoise(args: unknown[]): boolean {
@@ -29,9 +31,23 @@ function isNoise(args: unknown[]): boolean {
   return NOISE_PATTERNS.some((re) => re.test(first));
 }
 
+function formatArgs(args: unknown[]): string {
+  return args
+    .map((a) => {
+      if (typeof a === 'string') return a;
+      try {
+        return JSON.stringify(a, null, 0);
+      } catch {
+        return String(a);
+      }
+    })
+    .join(' ');
+}
+
 /**
  * 브라우저 console.log / warn / error를 가로채서 로그 라인 배열로 관리.
  * 마운트 시 원본 console 메서드를 래핑하고, 언마운트 시 복원.
+ * setState는 마이크로태스크로 미뤄 React 렌더/effect 중 동기 setState 루프를 막는다.
  */
 export function useConsoleCapture() {
   const [lines, setLines] = useState<ConsoleLine[]>([]);
@@ -40,17 +56,32 @@ export function useConsoleCapture() {
     warn: typeof console.warn;
     error: typeof console.error;
   } | null>(null);
+  const pendingRef = useRef<ConsoleLine[]>([]);
+  const flushScheduledRef = useRef(false);
+  const capturingRef = useRef(false);
 
-  const push = useCallback((level: ConsoleLine['level'], args: unknown[]) => {
-    const ts = new Date().toLocaleTimeString('ko-KR', { hour12: false });
-    const message = args
-      .map((a) => (typeof a === 'string' ? a : JSON.stringify(a, null, 0)))
-      .join(' ');
+  const flush = useCallback(() => {
+    flushScheduledRef.current = false;
+    const batch = pendingRef.current;
+    if (batch.length === 0) return;
+    pendingRef.current = [];
     setLines((prev) => {
-      const next = [...prev, { timestamp: ts, level, message }];
+      const next = [...prev, ...batch];
       return next.length > MAX_LINES ? next.slice(-MAX_LINES) : next;
     });
   }, []);
+
+  const push = useCallback(
+    (level: ConsoleLine['level'], args: unknown[]) => {
+      if (capturingRef.current) return;
+      const ts = new Date().toLocaleTimeString('ko-KR', { hour12: false });
+      pendingRef.current.push({ timestamp: ts, level, message: formatArgs(args) });
+      if (flushScheduledRef.current) return;
+      flushScheduledRef.current = true;
+      queueMicrotask(flush);
+    },
+    [flush]
+  );
 
   useEffect(() => {
     const origLog = console.log;
@@ -60,17 +91,40 @@ export function useConsoleCapture() {
 
     console.log = (...args: unknown[]) => {
       if (isNoise(args)) return;
-      origLog.apply(console, args);
+      capturingRef.current = true;
+      try {
+        origLog.apply(console, args);
+      } finally {
+        capturingRef.current = false;
+      }
       push('log', args);
     };
     console.warn = (...args: unknown[]) => {
       if (isNoise(args)) return;
-      origWarn.apply(console, args);
+      capturingRef.current = true;
+      try {
+        origWarn.apply(console, args);
+      } finally {
+        capturingRef.current = false;
+      }
       push('warn', args);
     };
     console.error = (...args: unknown[]) => {
-      if (isNoise(args)) return;
-      origError.apply(console, args);
+      if (isNoise(args)) {
+        capturingRef.current = true;
+        try {
+          origError.apply(console, args);
+        } finally {
+          capturingRef.current = false;
+        }
+        return;
+      }
+      capturingRef.current = true;
+      try {
+        origError.apply(console, args);
+      } finally {
+        capturingRef.current = false;
+      }
       push('error', args);
     };
 
@@ -79,10 +133,15 @@ export function useConsoleCapture() {
       console.warn = origWarn;
       console.error = origError;
       originalsRef.current = null;
+      pendingRef.current = [];
+      flushScheduledRef.current = false;
     };
   }, [push]);
 
-  const clear = useCallback(() => setLines([]), []);
+  const clear = useCallback(() => {
+    pendingRef.current = [];
+    setLines([]);
+  }, []);
 
   return { lines, clear };
 }
