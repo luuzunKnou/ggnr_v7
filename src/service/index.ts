@@ -30,6 +30,7 @@ import * as roadLedgerService from './roadLedgerService';
 import * as roadVideoTrackService from './roadVideoTrackService';
 import * as roadNetworkService from './roadNetworkService';
 import * as wtlNetworkService from './wtlNetworkService';
+import * as swlNetworkService from './swlNetworkService';
 import * as wtlOutageService from './wtlOutageService';
 import * as wtlLeakService from './wtlLeakService';
 import * as wtlSupplyPathService from './wtlSupplyPathService';
@@ -78,6 +79,7 @@ import * as aerialOrthoService from './aerialOrthoService';
 import * as useFeeService from './useFeeService';
 import * as fmsLinkageService from './fmsLinkageService';
 import * as groundwaterPermitService from './groundwaterPermitService';
+import * as waterAdminComplaintService from './waterAdminComplaintService';
 import * as bizNotifService from './bizNotifService';
 import * as thematicMapService from './thematicMapService';
 import * as roadWorkHandbookService from './roadWorkHandbookService';
@@ -121,6 +123,7 @@ export {
   roadVideoTrackService,
   roadNetworkService,
   wtlNetworkService,
+  swlNetworkService,
   wtlOutageService,
   wtlLeakService,
   wtlSupplyPathService,
@@ -167,6 +170,7 @@ export {
   useFeeService,
   fmsLinkageService,
   groundwaterPermitService,
+  waterAdminComplaintService,
   bizNotifService,
   roadWorkHandbookService,
   qgisLayerControlService,
