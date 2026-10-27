@@ -2,7 +2,10 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { call } from '@/lib/api';
-import { buildOwnershipLayerGroups } from '../layerFactory/ownershipLayerFactory';
+import {
+  buildOwnershipLayerGroups,
+  sortOwnershipPanelLayers,
+} from '../layerFactory/ownershipLayerFactory';
 import type {
   ThematicMapLayerGroup,
   ThematicMapLayerOption,
@@ -57,7 +60,10 @@ export function useOwnershipCatalog(): OwnershipCatalog {
 
   const groups = useMemo(() => {
     if (layersWithData == null) return [];
-    return buildOwnershipLayerGroups(null, layersWithData);
+    return buildOwnershipLayerGroups(null, layersWithData).map((group) => ({
+      ...group,
+      layers: sortOwnershipPanelLayers(group.layers),
+    }));
   }, [layersWithData]);
 
   const layers = useMemo(() => groups.flatMap((g) => g.layers), [groups]);

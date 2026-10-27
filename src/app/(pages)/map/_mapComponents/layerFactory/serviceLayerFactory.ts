@@ -19,6 +19,7 @@ const WMS_VIEWPORT_IMAGE_RATIO = 1.5;
 
 /**
  * 범례 이미지 — 테이블이 없어도 500이 나지 않도록 앱 프록시를 탄다.
+ * primary=1 이면 라벨·화살표가 있어도 대표 선·면·점만 받는다.
  */
 export function getLegendGraphicUrl(layerName: string, styleName?: string): string {
   const layer = String(layerName ?? '').trim();
@@ -27,6 +28,7 @@ export function getLegendGraphicUrl(layerName: string, styleName?: string): stri
     layer,
     width: '20',
     height: '20',
+    primary: '1',
   });
   const style = String(styleName ?? '').trim();
   if (style) params.set('style', style);

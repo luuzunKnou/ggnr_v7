@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useLayoutEffect, useMemo, useCallback, useRef } from 'react';
 import { call } from '@/lib/api';
+import { compareDefineTableOrder } from '@/lib/defineTableOrder';
 import {
   ChevronDown,
   ChevronRight,
@@ -469,7 +470,14 @@ export function AttributeQueryUI({ activeTableName, onOpenDataPanel, onClearData
           .map((gName) => ({
             id: gName,
             name: gName,
-            layers: groupMap.get(gName)!.sort((a, b) => a.name.localeCompare(b.name)),
+            layers: groupMap.get(gName)!.sort((a, b) =>
+              compareDefineTableOrder(
+                metaMap.get(a.tableName.toLowerCase())?.define_table_idx,
+                a.name,
+                metaMap.get(b.tableName.toLowerCase())?.define_table_idx,
+                b.name,
+              ),
+            ),
           }))
           .filter((g) => g.layers.length > 0);
 

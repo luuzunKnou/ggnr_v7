@@ -62,14 +62,15 @@ function hasLayerTable(existing: Set<string>, name: string): boolean {
 }
 
 /**
- * tables.json `layer` 스키마 중 지하시설물 대상 그룹을 묶어 패널·WMS 목록 생성.
+ * tables.json(또는 프로젝트 분할 merge 결과) `layer` 스키마 중 지하시설물 대상 그룹을 묶어 패널·WMS 목록 생성.
  * 주제도와 동일: 부모 제외, 선택적 DB·데이터 필터.
  */
 export function buildUndergroundFacilityLayerGroups(
   existingLayerTables?: Set<string> | null,
-  layersWithData?: Set<string> | null
+  layersWithData?: Set<string> | null,
+  defineTables?: DefineTableRow[] | null
 ): ThematicMapLayerGroup[] {
-  const rows = tables as DefineTableRow[];
+  const rows = (defineTables ?? (tables as DefineTableRow[])) as DefineTableRow[];
 
   const parentNames = new Set<string>();
   for (const t of rows) {

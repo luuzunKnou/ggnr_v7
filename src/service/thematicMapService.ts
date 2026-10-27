@@ -1,9 +1,11 @@
 /**
  * 주제도·소유구분: 정의(공통) + DB 부모 존재 + 분할 조건에 실제 행이 있는 자식만 노출
  */
+import fs from 'node:fs';
+import path from 'node:path';
 import { db } from '@/database/db';
 import { sql } from 'drizzle-orm';
-import tables from '@/config/defineLayer/tables.json';
+import { mergeProjectSplitIntoTables } from '@/lib/projectSplitLayers';
 import { getLayerTableList } from './devTestService';
 import { resolveLayerPhysicalRelName, sanitizeDefineLayerRowFilter } from './standardService';
 import { readGeoServerCssFillColors } from '@/lib/geoserverStyleFillColor';
@@ -16,6 +18,19 @@ type DefineTableRow = {
   define_table_parents_layer?: string;
   define_table_div_query?: string;
 };
+
+const TABLES_JSON_PATH = path.join(process.cwd(), 'src', 'config', 'defineLayer', 'tables.json');
+
+function loadDefineTables(): DefineTableRow[] {
+  try {
+    const raw = JSON.parse(fs.readFileSync(TABLES_JSON_PATH, 'utf-8')) as DefineTableRow[];
+    return mergeProjectSplitIntoTables(
+      (Array.isArray(raw) ? raw : []) as Record<string, unknown>[]
+    ) as DefineTableRow[];
+  } catch {
+    return [];
+  }
+}
 
 const THEMATIC_MAP_GROUP_ALLOW = new Set([
   '도시계획시설',
@@ -60,7 +75,7 @@ function collectCandidates(
   isGroup: (group: string) => boolean,
   schemaName: LayerSchemaName = 'public_layer'
 ): Candidate[] {
-  const rows = tables as DefineTableRow[];
+  const rows = loadDefineTables();
   const parentNames = new Set<string>();
   for (const t of rows) {
     const parent = String(t.define_table_parents_layer ?? '').trim();
@@ -246,7 +261,7 @@ const BUILDING_ROAD_TABLE_CANDIDATES = [
 export async function listAvailableBuildingRoadLayerNames() {
   try {
     const defineNames = new Set(
-      (tables as DefineTableRow[])
+      loadDefineTables()
         .map((t) => String(t.define_table_name ?? '').trim().toLowerCase())
         .filter(Boolean)
     );

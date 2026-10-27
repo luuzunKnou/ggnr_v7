@@ -15,6 +15,7 @@ import { isFmsFacilityLayerTable } from '@/lib/fmsLinkage/fmsBinding';
 import { fetchVworldCadastralGeomByPnu } from '@/lib/vworldCadastralGeom';
 import { readDefineLayerCodes } from '@/lib/defineLayerCodeFiles';
 import { isLayerExtraFieldName } from '@/lib/layerExtraField';
+import { mergeProjectSplitIntoTables } from '@/lib/projectSplitLayers';
 
 const DEFAULT_SCHEMA = 'layer';
 const ALLOWED_SCHEMAS = new Set(['layer', 'public_layer']);
@@ -511,9 +512,14 @@ let _tablesJsonCache: Record<string, unknown>[] | null = null;
 function getTablesJson(): Record<string, unknown>[] {
   if (_tablesJsonCache) return _tablesJsonCache;
   try {
-    _tablesJsonCache = JSON.parse(fs.readFileSync(TABLES_JSON_PATH, 'utf-8'));
+    const raw = JSON.parse(fs.readFileSync(TABLES_JSON_PATH, 'utf-8')) as Record<string, unknown>[];
+    _tablesJsonCache = mergeProjectSplitIntoTables(Array.isArray(raw) ? raw : []);
   } catch { _tablesJsonCache = []; }
   return _tablesJsonCache!;
+}
+
+export function invalidateTablesJsonCache(): void {
+  _tablesJsonCache = null;
 }
 
 function getTitleFieldName(tableName: string): string | null {
