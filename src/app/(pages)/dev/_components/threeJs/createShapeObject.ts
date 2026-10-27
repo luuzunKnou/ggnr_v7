@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { createCadDimensions, setCadDimensionsVisible } from './cadDimensions';
 import { createGroundContourOverlay } from './groundContours';
+import { createGroundElevMarkers } from './groundElevMarkers';
 import { createGroundRiverOverlay } from './groundRivers';
 import { createPipesOverlay } from './groundPipes';
 import { createInterpolatedGroundParts } from './groundInterpolatedMesh';
@@ -292,6 +293,8 @@ function buildGround(props: ShapeProps): THREE.Group {
 
   // 등고선·높이는 지형 표면 위
   group.add(createGroundContourOverlay(field));
+  // 지반고 (elevation 등고 보간값)
+  group.add(createGroundElevMarkers(field));
   // 지방하천·소하천 구역 (색·불투명도 분리)
   group.add(
     createGroundRiverOverlay(field, {
@@ -328,7 +331,7 @@ function buildPipe(props: ShapeProps): THREE.Group {
   // 범위 안내 판 — 지표 높이, depthWrite off
   const plate = new THREE.PlaneGeometry(halfU * 2, halfU * 2);
   plate.rotateX(-Math.PI / 2);
-  const plateMat = fillMaterial(props.color || '#38bdf8', 0.08, THREE.DoubleSide);
+  const plateMat = fillMaterial(props.color || '#F44336', 0.08, THREE.DoubleSide);
   plateMat.depthWrite = false;
   const plateMesh = new THREE.Mesh(plate, plateMat);
   plateMesh.position.y = plateY;
@@ -342,7 +345,7 @@ function buildPipe(props: ShapeProps): THREE.Group {
       new THREE.Vector3(halfU, plateY + 0.02, halfU),
       new THREE.Vector3(-halfU, plateY + 0.02, halfU),
     ]),
-    new THREE.LineBasicMaterial({ color: edgeColor(props.color || '#38bdf8') })
+    new THREE.LineBasicMaterial({ color: edgeColor(props.color || '#F44336') })
   );
   markEdgeOnly(rim);
   group.add(rim);
@@ -353,7 +356,7 @@ function buildPipe(props: ShapeProps): THREE.Group {
         centerX: cx,
         centerY: cy,
         pipes: props.pipeSegments,
-        color: props.color || '#38bdf8',
+        color: props.color || '#F44336',
         opacity: props.opacity ?? 0.92,
         surface: hasField ? 'field' : 'zero',
         field: hasField ? field : null,
@@ -365,7 +368,7 @@ function buildPipe(props: ShapeProps): THREE.Group {
 }
 
 export function applyShapeTransform(group: THREE.Group, props: ShapeProps): void {
-  if (props.kind === 'ground' || props.kind === 'pipe') {
+  if (props.kind === 'ground' || props.kind === 'wtl_pipe_lm') {
     group.rotation.set(0, 0, 0);
     // 지형·관로 씬 원점 고정
     group.position.set(0, 0, 0);
@@ -396,7 +399,7 @@ export function createShapeObject(id: string, props: ShapeProps): THREE.Group {
     case 'ground':
       group = buildGround(props);
       break;
-    case 'pipe':
+    case 'wtl_pipe_lm':
       group = buildPipe(props);
       break;
     default:

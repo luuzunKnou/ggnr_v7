@@ -19,9 +19,17 @@ import {
 
 const STORAGE_KEY = 'wtl-network-map-source-settings'
 
+export type WtlNetToolsPlacement = 'bottom' | 'aboveStatus'
+export type WtlNetListLayout = 'tables'
+
 export type WtlNetMapSourceUiSettings = {
   order: string[]
   visible: string[]
+  /** 토글만 사용 (호환용 필드) */
+  viewMode: 'toggle'
+  /** bottom: 패널 최하단. aboveStatus: 현황(연장·개수) 위 */
+  toolsPlacement: WtlNetToolsPlacement
+  listLayout: WtlNetListLayout
 }
 
 export function loadWtlNetMapSourceUiSettings(): WtlNetMapSourceUiSettings | null {
@@ -32,6 +40,9 @@ export function loadWtlNetMapSourceUiSettings(): WtlNetMapSourceUiSettings | nul
     return {
       order: Array.isArray(parsed.order) ? parsed.order.map(String) : [],
       visible: Array.isArray(parsed.visible) ? parsed.visible.map(String) : [],
+      viewMode: 'toggle',
+      toolsPlacement: parsed.toolsPlacement === 'aboveStatus' ? 'aboveStatus' : 'bottom',
+      listLayout: 'tables',
     }
   } catch {
     return null
@@ -75,7 +86,7 @@ type Props = {
   open: boolean
   onOpenChange: (open: boolean) => void
   availableIds: readonly string[]
-  onSaved: (visibleIds: string[]) => void
+  onSaved: (visibleIds: string[], toolsPlacement: WtlNetToolsPlacement) => void
 }
 
 export function WtlNetMapSourceSettingsDialog({
@@ -85,10 +96,13 @@ export function WtlNetMapSourceSettingsDialog({
   onSaved,
 }: Props) {
   const [draft, setDraft] = useState<DraftRow[]>([])
+  const [toolsPlacement, setToolsPlacement] = useState<WtlNetToolsPlacement>('bottom')
 
   useEffect(() => {
     if (!open) return
+    const saved = loadWtlNetMapSourceUiSettings()
     setDraft(buildDraft(availableIds))
+    setToolsPlacement(saved?.toolsPlacement ?? 'bottom')
   }, [open, availableIds])
 
   const move = (index: number, dir: -1 | 1) => {
@@ -118,15 +132,22 @@ export function WtlNetMapSourceSettingsDialog({
         visible: true,
       }))
     )
+    setToolsPlacement('bottom')
   }
 
   const handleSave = () => {
     const order = draft.map((r) => r.id)
     let visible = draft.filter((r) => r.visible).map((r) => r.id)
     if (visible.length === 0) visible = order.slice(0, 1)
-    const settings: WtlNetMapSourceUiSettings = { order, visible }
+    const settings: WtlNetMapSourceUiSettings = {
+      order,
+      visible,
+      viewMode: 'toggle',
+      toolsPlacement,
+      listLayout: 'tables',
+    }
     saveWtlNetMapSourceUiSettings(settings)
-    onSaved(applyWtlNetMapSourceUiSettings(availableIds, settings))
+    onSaved(applyWtlNetMapSourceUiSettings(availableIds, settings), toolsPlacement)
     onOpenChange(false)
   }
 
@@ -139,11 +160,37 @@ export function WtlNetMapSourceSettingsDialog({
             관망도 그룹 설정
           </DialogTitle>
           <p className="text-[11px] font-normal text-muted-foreground">
-            표시 여부와 순서를 지정합니다. 저장 값은 이 브라우저에 보관됩니다.
+            표시 여부와 순서, 도구줄 위치를 지정합니다. 저장 값은 이 브라우저에 보관됩니다.
           </p>
         </DialogHeader>
 
-        <ul className="max-h-[50vh] space-y-1 overflow-y-auto px-3 py-2">
+        <div className="border-b border-border px-4 py-2">
+          <p className="mb-1 text-[11px] text-muted-foreground">도구줄 위치</p>
+          <div className="flex items-center gap-3 text-[12px]">
+            <label className="inline-flex cursor-pointer items-center gap-1">
+              <input
+                type="radio"
+                name="wtl-net-tools-placement"
+                checked={toolsPlacement === 'bottom'}
+                onChange={() => setToolsPlacement('bottom')}
+                className="cursor-pointer"
+              />
+              최하단
+            </label>
+            <label className="inline-flex cursor-pointer items-center gap-1">
+              <input
+                type="radio"
+                name="wtl-net-tools-placement"
+                checked={toolsPlacement === 'aboveStatus'}
+                onChange={() => setToolsPlacement('aboveStatus')}
+                className="cursor-pointer"
+              />
+              현황 위
+            </label>
+          </div>
+        </div>
+
+        <ul className="scrollbar-thin max-h-[50vh] space-y-1 overflow-y-auto px-3 py-2">
           {draft.map((row, index) => (
             <li
               key={row.id}
@@ -163,7 +210,7 @@ export function WtlNetMapSourceSettingsDialog({
               <button
                 type="button"
                 className={cn(
-                  'inline-flex h-6 w-6 cursor-pointer items-center justify-center rounded border border-border text-muted-foreground hover:bg-muted',
+                  'standard-detail-extra-icon-btn cursor-pointer',
                   index === 0 && 'opacity-40'
                 )}
                 title="위로"
@@ -175,7 +222,7 @@ export function WtlNetMapSourceSettingsDialog({
               <button
                 type="button"
                 className={cn(
-                  'inline-flex h-6 w-6 cursor-pointer items-center justify-center rounded border border-border text-muted-foreground hover:bg-muted',
+                  'standard-detail-extra-icon-btn cursor-pointer',
                   index >= draft.length - 1 && 'opacity-40'
                 )}
                 title="아래로"
@@ -187,9 +234,7 @@ export function WtlNetMapSourceSettingsDialog({
             </li>
           ))}
           {draft.length === 0 ? (
-            <li className="px-1 py-3 text-center text-[11px] text-muted-foreground">
-              표시할 그룹이 없습니다.
-            </li>
+            <li className="standard-table-empty">표시할 그룹이 없습니다.</li>
           ) : null}
         </ul>
 
@@ -197,7 +242,7 @@ export function WtlNetMapSourceSettingsDialog({
           <button
             type="button"
             onClick={handleReset}
-            className="inline-flex cursor-pointer items-center gap-1 rounded-sm border border-border bg-background px-2 py-1 text-[11px] text-muted-foreground hover:bg-muted/60 hover:text-foreground"
+            className="standard-detail-action-btn inline-flex cursor-pointer items-center gap-1"
             title="초기화"
           >
             <RotateCcw className="h-3.5 w-3.5" aria-hidden />
@@ -216,7 +261,7 @@ export function WtlNetMapSourceSettingsDialog({
             <button
               type="button"
               onClick={() => onOpenChange(false)}
-              className="inline-flex cursor-pointer items-center gap-1 rounded-sm border border-border bg-background px-2 py-1 text-[11px] text-muted-foreground hover:bg-muted/60 hover:text-foreground"
+              className="standard-detail-action-btn inline-flex cursor-pointer items-center gap-1"
               title="취소"
             >
               <X className="h-3.5 w-3.5" aria-hidden />

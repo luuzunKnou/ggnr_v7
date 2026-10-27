@@ -1,71 +1,98 @@
 'use client'
 
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { MapBrowserEvent } from 'ol'
+import type { Map as OLMap } from 'ol'
 import GeoJSON from 'ol/format/GeoJSON'
 import { unByKey } from 'ol/Observable'
-import Feature from 'ol/Feature'
-import type { Geometry } from 'ol/geom'
 import ImageLayer from 'ol/layer/Image'
 import VectorLayer from 'ol/layer/Vector'
 import ImageWMS from 'ol/source/ImageWMS'
 import VectorSource from 'ol/source/Vector'
-import { Fill, Stroke, Style, Circle as CircleStyle } from 'ol/style'
 import { getGeoServerBase } from '@/lib/geoserverUrl'
+import { geoserverWmsImageLoadFunction } from '@/lib/geoserverWmsImageLoad'
 import { call } from '@/lib/api'
+import { compareFeaturesByGeometryStackOrder } from '@/lib/mapLayerGeometryOrder'
+import {
+  createDataQuerySelectionRowHighlightStyle,
+  DATA_QUERY_SELECTION_PULSE_STEP,
+  insertLayerBelowServiceLayer,
+} from '@/lib/mapDataQueryMapHighlight'
+import { MAP_AUTO_NAV_MAX_ZOOM } from '../../../_mapComponents/config/mapDefaults'
+import { scheduleFitMapToExtent3857 } from '../../../_mapComponents/config/mapAutoNavigation'
 import '../../../_mapComponents/config/projections'
+import { WORKSPACE } from '../../../_mapComponents/layerFactory/serviceLayerFactory'
 import { useMapContext } from '../../../_mapComponents/MapContext'
-import { resolveWtlNetWmsLayers } from './wtlNetworkLayerCatalog'
+import {
+  resolveWtlNetWmsLayers,
+  type WtlNetWmsSearchFilter,
+} from './wtlNetworkLayerCatalog'
 import {
   getWtlNetMapSources,
   type WtlNetMapSourceId,
 } from './wtlNetworkMapSources'
 import type { WtlNetworkRow } from './wtlNetworkTypes'
 
-const WORKSPACE = 'water_uiseong'
-const HIGHLIGHT = '#1e3a8a'
-
-function highlightStyle(): Style {
-  return new Style({
-    stroke: new Stroke({ color: HIGHLIGHT, width: 5 }),
-    fill: new Fill({ color: 'rgba(37,99,235,0.28)' }),
-    image: new CircleStyle({
-      radius: 8,
-      fill: new Fill({ color: HIGHLIGHT }),
-      stroke: new Stroke({ color: '#ffffff', width: 2 }),
-    }),
-  })
+function selectionFeatures(map: OLMap, geom: unknown) {
+  if (!geom || typeof geom !== 'object' || !('type' in geom) || !('coordinates' in geom)) return []
+  const viewProj = map.getView().getProjection()?.getCode() || 'EPSG:3857'
+  const features = new GeoJSON().readFeatures(
+    {
+      type: 'FeatureCollection',
+      features: [{ type: 'Feature', geometry: geom, properties: {} }],
+    },
+    { dataProjection: 'EPSG:4326', featureProjection: viewProj }
+  )
+  if (features.length === 0) return []
+  const geomType = features[0].getGeometry()?.getType()
+  if (geomType === 'Point' || geomType === 'MultiPoint') features[0].set('isRadarPoint', true)
+  return features
 }
 
 type Props = {
   enabledLayerKeys: ReadonlySet<string>
+  /** 함께 보기일 때 그룹마다 켜진 레이어. 없으면 선택한 그룹 모두 enabledLayerKeys 사용 */
+  layersBySource?: Readonly<Record<string, readonly string[]>>
   mapSources: ReadonlySet<WtlNetMapSourceId>
   /** 서버 listWtlNetMapSources로 확정된 출처 id */
   availableSourceIds: readonly string[]
   selected: WtlNetworkRow | null
   onSelect: (row: WtlNetworkRow) => void
   onExtentChange: (bbox3857: [number, number, number, number] | null) => void
+  /** 화면 내 조회 시 이동 중 진행 중 요청 취소용 */
+  onMapMoveStart?: () => void
+  /** 검색 조건 → WMS CQL */
+  searchFilter?: WtlNetWmsSearchFilter | null
 }
 
 export function useWtlNetworkMapLayer({
   enabledLayerKeys,
+  layersBySource,
   mapSources,
   availableSourceIds,
   selected,
   onSelect,
   onExtentChange,
+  onMapMoveStart,
+  searchFilter = null,
 }: Props) {
   const mapContext = useMapContext()
   const wmsBySourceRef = useRef<Map<WtlNetMapSourceId, ImageLayer<ImageWMS>>>(new Map())
-  const highlightRef = useRef<VectorLayer<VectorSource> | null>(null)
+  const highlightSourceRef = useRef<VectorSource | null>(null)
+  const pulsePhaseRef = useRef(0)
+  const [radarActive, setRadarActive] = useState(false)
   const onSelectRef = useRef(onSelect)
   const onExtentRef = useRef(onExtentChange)
+  const onMoveStartRef = useRef(onMapMoveStart)
   const keysRef = useRef(enabledLayerKeys)
   const sourcesRef = useRef(mapSources)
+  const paddingRef = useRef(mapContext?.applyMapViewPaddingRef)
   onSelectRef.current = onSelect
   onExtentRef.current = onExtentChange
+  onMoveStartRef.current = onMapMoveStart
   keysRef.current = enabledLayerKeys
   sourcesRef.current = mapSources
+  paddingRef.current = mapContext?.applyMapViewPaddingRef
 
   const availableKey = availableSourceIds.join('\u0001')
 
@@ -93,7 +120,8 @@ export function useWtlNetworkMapLayer({
             FORMAT: 'image/png',
           },
           serverType: 'geoserver',
-          ratio: 1.5,
+          ratio: 1,
+          imageLoadFunction: geoserverWmsImageLoadFunction,
         }),
         zIndex: 880,
         visible: false,
@@ -105,15 +133,6 @@ export function useWtlNetworkMapLayer({
     }
     wmsBySourceRef.current = bySource
 
-    const highlight = new VectorLayer({
-      source: new VectorSource(),
-      style: highlightStyle(),
-      zIndex: 900,
-    })
-    highlight.set('wtlNetworkHighlight', true)
-    map.addLayer(highlight)
-    highlightRef.current = highlight
-
     const publishExtent = () => {
       const size = map.getSize()
       const extent = size ? map.getView().calculateExtent(size) : null
@@ -124,6 +143,9 @@ export function useWtlNetworkMapLayer({
       onExtentRef.current([extent[0], extent[1], extent[2], extent[3]])
     }
 
+    const moveStartKey = map.on('movestart', () => {
+      onMoveStartRef.current?.()
+    })
     const moveKey = map.on('moveend', publishExtent)
     publishExtent()
 
@@ -151,14 +173,44 @@ export function useWtlNetworkMapLayer({
     })
 
     return () => {
+      unByKey(moveStartKey)
       unByKey(moveKey)
       unByKey(clickKey)
       for (const layer of bySource.values()) map.removeLayer(layer)
-      map.removeLayer(highlight)
       wmsBySourceRef.current = new Map()
-      highlightRef.current = null
     }
   }, [mapContext?.mapInstanceRef, mapContext?.mapReady, availableKey, availableSourceIds])
+
+  useEffect(() => {
+    const map = mapContext?.mapInstanceRef?.current
+    if (!map || !mapContext?.mapReady) return
+    const source = new VectorSource()
+    highlightSourceRef.current = source
+    const layer = new VectorLayer({
+      source,
+      renderOrder: compareFeaturesByGeometryStackOrder,
+      style: createDataQuerySelectionRowHighlightStyle(() => pulsePhaseRef.current),
+    })
+    layer.set('wtlNetworkHighlight', true)
+    insertLayerBelowServiceLayer(map, layer)
+    return () => {
+      map.removeLayer(layer)
+      highlightSourceRef.current = null
+      setRadarActive(false)
+    }
+  }, [mapContext?.mapInstanceRef, mapContext?.mapReady])
+
+  useEffect(() => {
+    if (!radarActive) return
+    let rafId = 0
+    const loop = () => {
+      pulsePhaseRef.current += DATA_QUERY_SELECTION_PULSE_STEP
+      highlightSourceRef.current?.changed()
+      rafId = requestAnimationFrame(loop)
+    }
+    rafId = requestAnimationFrame(loop)
+    return () => cancelAnimationFrame(rafId)
+  }, [radarActive])
 
   // 출처·표시 토글에 맞춰 출처별 WMS 갱신
   useEffect(() => {
@@ -169,12 +221,15 @@ export function useWtlNetworkMapLayer({
       const layer = wmsBySourceRef.current.get(src.id)
       const source = layer?.getSource()
       if (!layer || !source) continue
-      if (!mapSources.has(src.id) || enabledLayerKeys.size === 0) {
+      const keysForSource = layersBySource
+        ? new Set(layersBySource[src.id] ?? [])
+        : enabledLayerKeys
+      if (!mapSources.has(src.id) || keysForSource.size === 0) {
         layer.setVisible(false)
         source.updateParams({ LAYERS: '', CQL_FILTER: undefined })
         continue
       }
-      const { layers, cql } = resolveWtlNetWmsLayers(enabledLayerKeys, [src.id])
+      const { layers, cql } = resolveWtlNetWmsLayers(keysForSource, [src.id], searchFilter)
       if (layers.length === 0) {
         layer.setVisible(false)
         source.updateParams({ LAYERS: '', CQL_FILTER: undefined })
@@ -182,8 +237,8 @@ export function useWtlNetworkMapLayer({
       }
       layer.setVisible(true)
       const params: Record<string, string> = {
-        LAYERS: layers.join(','),
-        STYLES: layers.map(() => '').join(','),
+        LAYERS: layers.map((name) => `${WORKSPACE}:${name}`).join(','),
+        STYLES: layers.join(','),
       }
       if (cql.some((c) => c !== 'INCLUDE')) {
         params.CQL_FILTER = cql.join(';')
@@ -192,24 +247,34 @@ export function useWtlNetworkMapLayer({
       }
       source.updateParams(params)
     }
-  }, [enabledLayerKeys, mapSources, availableKey, availableSourceIds])
+  }, [
+    enabledLayerKeys,
+    layersBySource,
+    mapSources,
+    availableKey,
+    availableSourceIds,
+    mapContext?.mapReady,
+    searchFilter,
+  ])
 
-  // highlight selected geom (화면 이동 없음)
   useEffect(() => {
-    const layer = highlightRef.current
-    const source = layer?.getSource()
-    if (!source) return
+    const map = mapContext?.mapInstanceRef?.current
+    const source = highlightSourceRef.current
+    if (!map || !source) return
     source.clear()
-    const geom = selected?.geom
-    if (!geom) return
-    try {
-      const features = new GeoJSON().readFeatures(
-        { type: 'Feature', geometry: geom, properties: {} },
-        { dataProjection: 'EPSG:4326', featureProjection: 'EPSG:3857' }
-      ) as Feature<Geometry>[]
-      for (const f of features) source.addFeature(f)
-    } catch {
-      /* ignore */
+    const features = selectionFeatures(map, selected?.geom)
+    if (features.length === 0) {
+      setRadarActive(false)
+      return
     }
-  }, [selected])
+    source.addFeatures(features)
+    const ext = source.getExtent()
+    if (ext.every((v) => Number.isFinite(v))) {
+      scheduleFitMapToExtent3857(map, ext as [number, number, number, number], {
+        maxZoom: Math.min(16, MAP_AUTO_NAV_MAX_ZOOM),
+        applyMapViewPadding: () => paddingRef.current?.current?.(),
+      })
+    }
+    setRadarActive(true)
+  }, [selected, mapContext?.mapInstanceRef, mapContext?.mapReady])
 }

@@ -1,25 +1,49 @@
 [
   {
-    "define_code_key": "65519",
-    "define_code_field_key": "4403",
+    "define_code_key": "26897",
+    "define_code_field_key": "",
     "define_code_name": "SCW000",
     "define_code_kor_name": "미분류"
   },
   {
-    "define_code_key": "65520",
-    "define_code_field_key": "4403",
+    "define_code_key": "26898",
+    "define_code_field_key": "",
     "define_code_name": "SCW001",
     "define_code_kor_name": "자동"
   },
   {
-    "define_code_key": "65521",
-    "define_code_field_key": "4403",
+    "define_code_key": "26899",
+    "define_code_field_key": "",
     "define_code_name": "SCW002",
     "define_code_kor_name": "수동"
   },
   {
-    "define_code_key": "65522",
-    "define_code_field_key": "4403",
+    "define_code_key": "26901",
+    "define_code_field_key": "",
+    "define_code_name": "SCW900",
+    "define_code_kor_name": "반자동"
+  },
+  {
+    "define_code_key": "26902",
+    "define_code_field_key": "",
+    "define_code_name": "SCW901",
+    "define_code_kor_name": "압축송수식"
+  },
+  {
+    "define_code_key": "26903",
+    "define_code_field_key": "",
+    "define_code_name": "SCW902",
+    "define_code_kor_name": "자연유하식"
+  },
+  {
+    "define_code_key": "26904",
+    "define_code_field_key": "",
+    "define_code_name": "SCW903",
+    "define_code_kor_name": "전동구동형"
+  },
+  {
+    "define_code_key": "26900",
+    "define_code_field_key": "",
     "define_code_name": "SCW999",
     "define_code_kor_name": "기타"
   }

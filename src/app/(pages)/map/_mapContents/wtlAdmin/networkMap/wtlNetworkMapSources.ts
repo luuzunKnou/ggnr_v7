@@ -31,12 +31,13 @@ export function isWtlNetMapGroup(group: string): boolean {
   return group.startsWith('상수') || group === '광역상수'
 }
 
-/** 기본 정렬: 상수 → 상수(세부) 이름순 → 그 외(광역상수 등) 이름순 */
+/** 기본 정렬: 상수 → 상수(서용) → 기타 상수* → 광역상수 등 */
 export function compareWtlNetMapGroupNames(a: string, b: string): number {
   const rank = (g: string) => {
     if (g === '상수') return 0
-    if (g.startsWith('상수')) return 1
-    return 2
+    if (g === '상수(서용)') return 1
+    if (g.startsWith('상수')) return 2
+    return 3
   }
   const ra = rank(a)
   const rb = rank(b)
@@ -153,6 +154,20 @@ export function applyWtlNetMapSourceUiSettings(
 
   if (!settings || !Array.isArray(settings.visible)) return full
   const visibleSet = new Set(settings.visible.map(String))
-  const shown = full.filter((id) => visibleSet.has(id))
+  /** 저장 당시 order/visible에 없던 신규 그룹은 기본 표시 */
+  const known = new Set([...settings.visible, ...order].map(String))
+  const shown = full.filter((id) => visibleSet.has(id) || !known.has(id))
   return shown.length > 0 ? shown : full
+}
+
+/** 초기 선택 그룹 — 상수 → 상수(서용) → 정렬 첫 항목 */
+export function pickDefaultWtlNetMapSourceId(
+  visibleIds: readonly string[]
+): WtlNetMapSourceId | null {
+  const ids = visibleIds.map(String).filter(Boolean)
+  if (ids.length === 0) return null
+  for (const prefer of ['상수', '상수(서용)']) {
+    if (ids.includes(prefer)) return prefer
+  }
+  return ids[0] ?? null
 }

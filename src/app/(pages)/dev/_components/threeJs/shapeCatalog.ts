@@ -167,11 +167,12 @@ export const SHAPE_MODULES: readonly ShapeModule[] = [
     fields: [],
   },
   {
-    kind: 'pipe',
-    label: '관로',
+    kind: 'wtl_pipe_lm',
+    label: 'wtl_pipe_lm',
     defaults: {
-      kind: 'pipe',
-      color: '#38bdf8',
+      kind: 'wtl_pipe_lm',
+      /** 세그먼트별 GeoServer 스타일 색 사용 — 패널 색 편집 없음 */
+      color: '#F44336',
       opacity: 0.92,
       innerRatio: 0,
       width: 1,
@@ -185,7 +186,7 @@ export const SHAPE_MODULES: readonly ShapeModule[] = [
       pipeSegments: null,
       pipeHeightField: null,
     },
-    /** PIPE는 지도 클릭 모달 — 색·불투명도는 모달에서 편집 */
+    /** 지도 범위 모달 — 색은 GeoServer 스타일, 불투명도만 편집 */
     fields: [],
   },
 ] as const;
@@ -201,7 +202,7 @@ export function cloneDefaults(kind: ShapeKind): ShapeProps {
 }
 
 export function shapeHalfExtentY(props: ShapeProps): number {
-  if (props.kind === 'ground' || props.kind === 'pipe') return 0;
+  if (props.kind === 'ground' || props.kind === 'wtl_pipe_lm') return 0;
   if (props.kind === 'sphere') return Math.max(0.05, props.radius);
   return Math.max(0.05, props.height) / 2;
 }

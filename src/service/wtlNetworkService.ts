@@ -101,8 +101,71 @@ type ListParams = {
   diameterFrom?: number | null;
   diameterTo?: number | null;
   materials?: string[];
+  /** 읍면동 코드(hjd 접두) */
+  emdCode?: string | null;
+  /** 리 코드(hjd 접두, 우선) */
+  riCode?: string | null;
+  /** 급수블록(통합검색과 동일 ILIKE) */
+  supplyBlock?: string | null;
   limit?: number;
+  page?: number;
+  pageSize?: number;
 };
+
+const FIELDS_DIR = path.join(process.cwd(), 'src', 'config', 'defineLayer', 'fields');
+
+function loadDefineFieldRows(tableName: string): Record<string, unknown>[] {
+  const safe = String(tableName ?? '')
+    .replace(/[^a-zA-Z0-9_-]/g, '')
+    .toLowerCase();
+  if (!safe) return [];
+  const filePath = path.join(FIELDS_DIR, `table_${safe}.json`);
+  try {
+    if (!fs.existsSync(filePath)) return [];
+    const parsed = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+/** defineLayer 필드 JSON 조회 키 (물리 remap 전 기준 테이블) */
+function resolveFieldsTableKeys(
+  def: WtlNetLayerDef,
+  physicalTable: string
+): { fieldsTable: string; fieldsTableFallback: string | null } {
+  const base = String(def.table ?? '').trim();
+  const defineTable = String(def.defineTable ?? '').trim();
+  const physical = String(physicalTable ?? '').trim();
+  const primary =
+    (base && loadDefineFieldRows(base).length > 0 && base) ||
+    (defineTable && loadDefineFieldRows(defineTable).length > 0 && defineTable) ||
+    (physical && loadDefineFieldRows(physical).length > 0 && physical) ||
+    base ||
+    physical;
+  const fallbacks = [base, defineTable, physical].filter(
+    (t) => t && t.toLowerCase() !== primary.toLowerCase()
+  );
+  return { fieldsTable: primary, fieldsTableFallback: fallbacks[0] ?? null };
+}
+
+function parseJsonRecord(raw: unknown): Record<string, unknown> | null {
+  if (raw == null) return null;
+  if (typeof raw === 'object' && !Array.isArray(raw)) {
+    return raw as Record<string, unknown>;
+  }
+  if (typeof raw === 'string') {
+    try {
+      const parsed = JSON.parse(raw) as unknown;
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        return parsed as Record<string, unknown>;
+      }
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
 
 function esc(s: string): string {
   return s.replace(/'/g, "''");
@@ -341,16 +404,21 @@ function buildSelect(
     diameterTo?: number | null;
     materials?: string[];
     materialBundle?: MaterialTopBundle | null;
+    emdCode?: string | null;
+    riCode?: string | null;
+    supplyBlock?: string | null;
     withGeom: boolean;
-    limit: number;
+    /** null이면 내부 LIMIT 생략(바깥 페이지 처리) */
+    limit?: number | null;
   }
 ): string | null {
   const tbl = opts.physicalTable.replace(/"/g, '""');
-  const nameExpr = def.nameExpr ?? `COALESCE(NULLIF(trim(ftr_idn),''), ogc_fid::text)`;
+  const nameExpr = def.nameExpr ?? `COALESCE(NULLIF(trim(ftr_idn::text),''), ogc_fid::text)`;
   const dipCol = def.diameterCol;
   const mopCol = def.materialCol;
   const lenCol = def.lengthCol;
   const yearCol = def.yearCol;
+  const { fieldsTable, fieldsTableFallback } = resolveFieldsTableKeys(def, opts.physicalTable);
 
   const wheres: string[] = ['t.geom IS NOT NULL'];
   const saa = wtlNetSaaSql(def);
@@ -395,6 +463,23 @@ function buildSelect(
     if (mw) wheres.push(mw);
   }
 
+  if (def.hasHjd !== false) {
+    const hjdPrefix = String(opts.riCode ?? opts.emdCode ?? '')
+      .trim()
+      .replace(/[^0-9]/g, '');
+    if (hjdPrefix) {
+      wheres.push(`COALESCE(t.hjd_cde::text,'') LIKE '${esc(hjdPrefix)}%'`);
+    }
+  }
+
+  const block = String(opts.supplyBlock ?? '').trim();
+  if (block) {
+    const like = `%${esc(block)}%`;
+    wheres.push(
+      `(${nameExpr} ILIKE '${like}' OR COALESCE(t.ftr_idn::text,'') ILIKE '${like}')`
+    );
+  }
+
   const kw = String(opts.keyword ?? '').trim();
   if (kw) {
     const like = `%${esc(kw)}%`;
@@ -415,6 +500,15 @@ function buildSelect(
   const geomSel = opts.withGeom
     ? `ST_AsGeoJSON(ST_Transform(t.geom, 4326))::json`
     : `NULL`;
+  const recordSel = `(to_jsonb(t) - 'geom')`;
+  const fieldsTableSel = `'${esc(fieldsTable)}'`;
+  const fieldsFallbackSel = fieldsTableFallback
+    ? `'${esc(fieldsTableFallback)}'`
+    : `NULL`;
+  const limitSql =
+    opts.limit == null
+      ? ''
+      : `LIMIT ${Math.max(1, Math.min(Number(opts.limit) || 1, 3000))}`;
 
   return `
     SELECT
@@ -428,10 +522,13 @@ function buildSelect(
       ${lenSel} AS length,
       ${yearSel} AS year,
       ${hjdSel} AS hjd,
-      ${geomSel} AS geom
+      ${geomSel} AS geom,
+      ${recordSel} AS record,
+      ${fieldsTableSel} AS "fieldsTable",
+      ${fieldsFallbackSel} AS "fieldsTableFallback"
     FROM layer."${tbl}" t
     WHERE ${wheres.join(' AND ')}
-    LIMIT ${Math.max(1, Math.min(opts.limit, 3000))}
+    ${limitSql}
   `;
 }
 
@@ -462,6 +559,8 @@ function mapRow(row: Record<string, unknown>, collapseMaterial = true): WtlNetwo
     { label: '설치연도', value: year },
     { label: '행정동코드', value: asStr(row.hjd) || '—' }
   );
+  const fieldsTable = asStr(row.fieldsTable) || def?.table || null;
+  const fieldsTableFallback = asStr(row.fieldsTableFallback) || null;
   return {
     id,
     layerKey,
@@ -475,6 +574,9 @@ function mapRow(row: Record<string, unknown>, collapseMaterial = true): WtlNetwo
     hjd: asStr(row.hjd),
     attrs,
     geom: parseGeom(row.geom),
+    record: parseJsonRecord(row.record),
+    fieldsTable,
+    fieldsTableFallback: fieldsTableFallback || null,
   };
 }
 
@@ -507,16 +609,29 @@ function parseNetworkRowId(id: string): {
  */
 export async function getWtlNetworkList(params: ListParams = {}): Promise<{
   rows: WtlNetworkRow[];
+  total: number;
+  page: number;
+  pageSize: number;
 }> {
   const keys = (params.layerKeys ?? []).map((k) => String(k).trim()).filter(Boolean);
-  if (keys.length === 0) return { rows: [] };
+  const empty = { rows: [] as WtlNetworkRow[], total: 0, page: 1, pageSize: 7 };
+  if (keys.length === 0) return empty;
   const sources = parseMapSourceIds(params.mapSources)
     .map((id) => resolveWtlNetMapSource(id))
     .filter((s): s is WtlNetMapSourceDef => Boolean(s));
-  if (sources.length === 0) return { rows: [] };
+  if (sources.length === 0) return empty;
+
+  const usePaging = params.pageSize != null || params.page != null;
+  const pageSize = usePaging
+    ? Math.max(1, Math.min(Math.floor(params.pageSize ?? 7), 100))
+    : Math.max(1, Math.min(Math.floor(params.limit ?? 1500), 5000));
+  const page = usePaging ? Math.max(1, Math.floor(params.page ?? 1)) : 1;
+  const offset = usePaging ? (page - 1) * pageSize : 0;
 
   const slotCount = Math.max(keys.length * sources.length, 1);
-  const limitPer = Math.max(30, Math.floor((params.limit ?? 1500) / slotCount));
+  const limitPer = usePaging
+    ? null
+    : Math.max(30, Math.floor((params.limit ?? 1500) / slotCount));
   const materialBundle = await ensureMaterialTopBundle();
   const parts: string[] = [];
 
@@ -537,6 +652,9 @@ export async function getWtlNetworkList(params: ListParams = {}): Promise<{
         diameterTo: params.diameterTo,
         materials: params.materials,
         materialBundle,
+        emdCode: params.emdCode,
+        riCode: params.riCode,
+        supplyBlock: params.supplyBlock,
         withGeom: false,
         limit: limitPer,
       });
@@ -544,20 +662,27 @@ export async function getWtlNetworkList(params: ListParams = {}): Promise<{
     }
   }
 
-  if (parts.length === 0) return { rows: [] };
+  if (parts.length === 0) return { ...empty, page, pageSize };
 
-  // LIMIT이 있는 SELECT는 UNION 시 각각 괄호 필요
+  const unionBody = parts.map((p) => `(${p})`).join('\nUNION ALL\n');
+
+  const countRes = await db.execute(
+    sql.raw(`SELECT COUNT(*)::int AS cnt FROM (${unionBody}) c`)
+  );
+  const total = Number((countRes.rows?.[0] as { cnt?: number } | undefined)?.cnt ?? 0);
+
   const res = await db.execute(
     sql.raw(
-      `SELECT * FROM (
-         ${parts.map((p) => `(${p})`).join('\nUNION ALL\n')}
-       ) u
-       LIMIT ${Math.min(params.limit ?? 1500, 5000)}`
+      usePaging
+        ? `SELECT * FROM (${unionBody}) u
+           LIMIT ${pageSize} OFFSET ${offset}`
+        : `SELECT * FROM (${unionBody}) u
+           LIMIT ${pageSize}`
     )
   );
 
   const rows = (res.rows ?? []).map((r) => mapRow(r as Record<string, unknown>, true));
-  return { rows };
+  return { rows, total, page, pageSize };
 }
 
 function materialChoicesFromBundle(bundle: MaterialTopBundle): string[] {
@@ -598,7 +723,7 @@ export async function getWtlNetworkDetail(params: {
   if (!(await tableExists(physicalTable))) return { row: null };
 
   const tbl = physicalTable.replace(/"/g, '""');
-  const nameExpr = def.nameExpr ?? `COALESCE(NULLIF(trim(ftr_idn),''), ogc_fid::text)`;
+  const nameExpr = def.nameExpr ?? `COALESCE(NULLIF(trim(ftr_idn::text),''), ogc_fid::text)`;
   const dipCol = def.diameterCol;
   const mopCol = def.materialCol;
   const lenCol = def.lengthCol;
@@ -608,6 +733,10 @@ export async function getWtlNetworkDetail(params: {
   const lenSel = lenCol ? `t."${lenCol}"::text` : `NULL`;
   const yearSel = yearCol ? `t."${yearCol}"::text` : `NULL`;
   const hjdSel = def.hasHjd === false ? `''` : `COALESCE(t.hjd_cde::text,'')`;
+  const { fieldsTable, fieldsTableFallback } = resolveFieldsTableKeys(def, physicalTable);
+  const fieldsFallbackSel = fieldsTableFallback
+    ? `'${esc(fieldsTableFallback)}'`
+    : `NULL`;
 
   const res = await db.execute(
     sql.raw(
@@ -622,7 +751,10 @@ export async function getWtlNetworkDetail(params: {
         ${lenSel} AS length,
         ${yearSel} AS year,
         ${hjdSel} AS hjd,
-        ST_AsGeoJSON(ST_Transform(t.geom, 4326))::json AS geom
+        ST_AsGeoJSON(ST_Transform(t.geom, 4326))::json AS geom,
+        (to_jsonb(t) - 'geom') AS record,
+        '${esc(fieldsTable)}' AS "fieldsTable",
+        ${fieldsFallbackSel} AS "fieldsTableFallback"
       FROM layer."${tbl}" t
       WHERE t.ogc_fid = ${ogcFid}
       LIMIT 1`
@@ -664,7 +796,7 @@ export async function getWtlNetworkAtPoint(params: {
       const tbl = physicalTable.replace(/"/g, '""');
       const saa = wtlNetSaaSql(def);
       const saaClause = saa ? `AND ${saa}` : '';
-      const nameExpr = def.nameExpr ?? `COALESCE(NULLIF(trim(ftr_idn),''), ogc_fid::text)`;
+      const nameExpr = def.nameExpr ?? `COALESCE(NULLIF(trim(ftr_idn::text),''), ogc_fid::text)`;
       const dipCol = def.diameterCol;
       const mopCol = def.materialCol;
       const lenCol = def.lengthCol;
@@ -674,6 +806,10 @@ export async function getWtlNetworkAtPoint(params: {
       const lenSel = lenCol ? `t."${lenCol}"::text` : `NULL`;
       const yearSel = yearCol ? `t."${yearCol}"::text` : `NULL`;
       const hjdSel = def.hasHjd === false ? `''` : `COALESCE(t.hjd_cde::text,'')`;
+      const { fieldsTable, fieldsTableFallback } = resolveFieldsTableKeys(def, physicalTable);
+      const fieldsFallbackSel = fieldsTableFallback
+        ? `'${esc(fieldsTableFallback)}'`
+        : `NULL`;
 
       const res = await db.execute(
         sql.raw(
@@ -689,6 +825,9 @@ export async function getWtlNetworkAtPoint(params: {
             ${yearSel} AS year,
             ${hjdSel} AS hjd,
             ST_AsGeoJSON(ST_Transform(t.geom, 4326))::json AS geom,
+            (to_jsonb(t) - 'geom') AS record,
+            '${esc(fieldsTable)}' AS "fieldsTable",
+            ${fieldsFallbackSel} AS "fieldsTableFallback",
             ST_Distance(
               ST_Transform(t.geom, 3857),
               ST_SetSRID(ST_MakePoint(${x}, ${y}), 3857)

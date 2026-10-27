@@ -16,6 +16,8 @@ import {
   Loader2,
   Download,
   Printer,
+  Menu,
+  XCircle,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { zoomPreviewAtPointer } from './previewZoomAtCursor';
@@ -41,6 +43,9 @@ const MIN_SCALE = 0.25;
 const MAX_SCALE = 5;
 const ZOOM_STEP_WHEEL = 0.18;
 const ZOOM_STEP_BUTTON = 0.35;
+/** 관망·민원 등 플로팅 상세(z≈10050)보다 위 */
+const PREVIEW_Z_INDEX = 11000;
+const SIDEBAR_WIDTH = 240;
 
 function clamp(n: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, n));
@@ -315,6 +320,10 @@ export function ServiceFileImagePreview({ items, initialIndex, onClose }: Props)
   const [dragging, setDragging] = useState(false);
   const [pdfPage, setPdfPage] = useState(1);
   const [pdfNumPages, setPdfNumPages] = useState(1);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [fileListSectionOpen, setFileListSectionOpen] = useState(true);
+  const [fileListSearchDraft, setFileListSearchDraft] = useState('');
+  const [fileListSearch, setFileListSearch] = useState('');
 
   const draggingRef = useRef(false);
   const lastPointerRef = useRef({ x: 0, y: 0 });
@@ -327,6 +336,8 @@ export function ServiceFileImagePreview({ items, initialIndex, onClose }: Props)
   rotationRef.current = rotation;
   const attachActionBusyRef = useRef(false);
   const [attachBusy, setAttachBusy] = useState<'download' | 'print' | null>(null);
+  const [downloadMenuOpen, setDownloadMenuOpen] = useState(false);
+  const downloadMenuRef = useRef<HTMLDivElement>(null);
 
   const current = items[index];
 
@@ -382,30 +393,10 @@ export function ServiceFileImagePreview({ items, initialIndex, onClose }: Props)
       }
       const cur = items[index];
       const isPdf = cur?.kind === 'pdf';
-
       const pdfPageNav = isPdf && pdfNumPages > 1;
-      if (pdfPageNav) {
-        if (
-          e.key === 'PageDown' ||
-          e.key === 'ArrowDown' ||
-          e.key === 'ArrowRight'
-        ) {
-          e.preventDefault();
-          setPdfPage((p) => Math.min(pdfNumPages, p + 1));
-          return;
-        }
-        if (
-          e.key === 'PageUp' ||
-          e.key === 'ArrowUp' ||
-          e.key === 'ArrowLeft'
-        ) {
-          e.preventDefault();
-          setPdfPage((p) => Math.max(1, p - 1));
-          return;
-        }
-      }
 
-      if (items.length > 1 && !pdfPageNav) {
+      /** ← → 파일 전환 · ↑ ↓ / PageUp·Down PDF 페이지 */
+      if (items.length > 1) {
         if (e.key === 'ArrowLeft') {
           e.preventDefault();
           setIndex((i) => (i - 1 + items.length) % items.length);
@@ -414,6 +405,18 @@ export function ServiceFileImagePreview({ items, initialIndex, onClose }: Props)
         if (e.key === 'ArrowRight') {
           e.preventDefault();
           setIndex((i) => (i + 1) % items.length);
+          return;
+        }
+      }
+      if (pdfPageNav) {
+        if (e.key === 'PageDown' || e.key === 'ArrowDown') {
+          e.preventDefault();
+          setPdfPage((p) => Math.min(pdfNumPages, p + 1));
+          return;
+        }
+        if (e.key === 'PageUp' || e.key === 'ArrowUp') {
+          e.preventDefault();
+          setPdfPage((p) => Math.max(1, p - 1));
           return;
         }
       }
@@ -440,6 +443,26 @@ export function ServiceFileImagePreview({ items, initialIndex, onClose }: Props)
   const goNext = useCallback(() => {
     setIndex((i) => (i + 1) % items.length);
   }, [items.length]);
+
+  const selectFile = useCallback((fileIndex: number) => {
+    setIndex(clamp(fileIndex, 0, Math.max(0, items.length - 1)));
+  }, [items.length]);
+
+  const commitFileListSearch = useCallback(() => {
+    setFileListSearch(fileListSearchDraft.trim());
+  }, [fileListSearchDraft]);
+
+  const clearFileListSearch = useCallback(() => {
+    setFileListSearchDraft('');
+    setFileListSearch('');
+  }, []);
+
+  const filteredFileEntries = useMemo(() => {
+    const q = fileListSearch.trim().toLowerCase();
+    return items
+      .map((item, fileIndex) => ({ item, fileIndex }))
+      .filter(({ item }) => (q ? item.fileName.toLowerCase().includes(q) : true));
+  }, [items, fileListSearch]);
 
   const pdfPagePrev = useCallback(() => {
     setPdfPage((p) => Math.max(1, p - 1));
@@ -471,7 +494,7 @@ export function ServiceFileImagePreview({ items, initialIndex, onClose }: Props)
     setPan({ x: 0, y: 0 });
   }, []);
 
-  const handleDownload = useCallback(async () => {
+  const handleDownloadCurrent = useCallback(async () => {
     const cur = items[index];
     if (!cur || attachActionBusyRef.current) return;
     attachActionBusyRef.current = true;
@@ -485,6 +508,41 @@ export function ServiceFileImagePreview({ items, initialIndex, onClose }: Props)
       setAttachBusy(null);
     }
   }, [items, index]);
+
+  const handleDownloadAll = useCallback(async () => {
+    if (items.length === 0 || attachActionBusyRef.current) return;
+    attachActionBusyRef.current = true;
+    setAttachBusy('download');
+    try {
+      await downloadServiceFilePreviewItemsZip(
+        items,
+        buildServiceFilePreviewListZipName(items, index)
+      );
+    } catch {
+      window.alert('ZIP 다운로드에 실패했습니다.');
+    } finally {
+      attachActionBusyRef.current = false;
+      setAttachBusy(null);
+    }
+  }, [items, index]);
+
+  const onDownloadButtonClick = useCallback(() => {
+    if (items.length >= 2) {
+      setDownloadMenuOpen((o) => !o);
+      return;
+    }
+    void handleDownloadCurrent();
+  }, [items.length, handleDownloadCurrent]);
+
+  useEffect(() => {
+    if (!downloadMenuOpen) return;
+    const onDoc = (e: MouseEvent) => {
+      if (downloadMenuRef.current?.contains(e.target as Node)) return;
+      setDownloadMenuOpen(false);
+    };
+    document.addEventListener('mousedown', onDoc);
+    return () => document.removeEventListener('mousedown', onDoc);
+  }, [downloadMenuOpen]);
 
   const handlePrint = useCallback(async () => {
     const cur = items[index];
@@ -562,15 +620,29 @@ export function ServiceFileImagePreview({ items, initialIndex, onClose }: Props)
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[500] flex flex-col bg-black/92"
+      className="fixed inset-0 flex flex-col bg-black/92"
+      style={{ zIndex: PREVIEW_Z_INDEX }}
       role="dialog"
       aria-modal="true"
       aria-label="첨부 미리보기"
     >
       <div
-        className="flex shrink-0 items-center justify-between gap-2 border-b border-white/10 px-3 py-2 text-white sm:px-4"
+        className="flex shrink-0 items-center gap-2 border-b border-white/10 px-3 py-2 text-white sm:px-4"
         onClick={(e) => e.stopPropagation()}
       >
+        <button
+          type="button"
+          onClick={() => setSidebarOpen((o) => !o)}
+          className={cn(
+            'flex h-9 w-9 shrink-0 items-center justify-center rounded-md transition-colors hover:bg-background/10',
+            sidebarOpen ? 'bg-background/10 text-white' : 'text-white/80'
+          )}
+          title={sidebarOpen ? '목록 닫기' : '목록 열기'}
+          aria-label={sidebarOpen ? '목록 닫기' : '목록 열기'}
+          aria-expanded={sidebarOpen}
+        >
+          <Menu className="h-5 w-5" aria-hidden />
+        </button>
         <span className="min-w-0 flex-1 truncate text-xs font-medium sm:text-sm" title={current.fileName}>
           {current.fileName}
           {isPdf && pdfNumPages >= 1 ? (
@@ -584,14 +656,16 @@ export function ServiceFileImagePreview({ items, initialIndex, onClose }: Props)
             </span>
           ) : null}
         </span>
-        <div className="flex shrink-0 items-center gap-0.5 sm:gap-1">
+        <div className="relative flex shrink-0 items-center gap-0.5 sm:gap-1" ref={downloadMenuRef}>
           <button
             type="button"
-            onClick={() => void handleDownload()}
+            onClick={onDownloadButtonClick}
             disabled={attachBusy != null}
             className={toolbarBtnClass(attachBusy != null)}
             title="다운로드"
             aria-label="다운로드"
+            aria-expanded={items.length >= 2 ? downloadMenuOpen : undefined}
+            aria-haspopup={items.length >= 2 ? 'menu' : undefined}
           >
             {attachBusy === 'download' ? (
               <Loader2 className="h-5 w-5 animate-spin" aria-hidden />
@@ -599,6 +673,37 @@ export function ServiceFileImagePreview({ items, initialIndex, onClose }: Props)
               <Download className="h-5 w-5" aria-hidden />
             )}
           </button>
+          {downloadMenuOpen && items.length >= 2 ? (
+            <div
+              role="menu"
+              className="absolute right-0 top-full z-20 mt-1 min-w-[10.5rem] overflow-hidden rounded-md border border-white/15 bg-zinc-900 py-1 shadow-lg"
+            >
+              <button
+                type="button"
+                role="menuitem"
+                className="flex w-full cursor-pointer px-3 py-2 text-left text-[12px] text-white/90 transition-colors hover:bg-white/10"
+                title="묶음 내려받기"
+                onClick={() => {
+                  setDownloadMenuOpen(false);
+                  void handleDownloadAll();
+                }}
+              >
+                묶음 내려받기
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                className="flex w-full cursor-pointer px-3 py-2 text-left text-[12px] text-white/90 transition-colors hover:bg-white/10"
+                title="개별 다운로드"
+                onClick={() => {
+                  setDownloadMenuOpen(false);
+                  void handleDownloadCurrent();
+                }}
+              >
+                개별 다운로드
+              </button>
+            </div>
+          ) : null}
           <button
             type="button"
             onClick={() => void handlePrint()}
@@ -618,6 +723,7 @@ export function ServiceFileImagePreview({ items, initialIndex, onClose }: Props)
             type="button"
             onClick={onClose}
             className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-white/90 transition-colors hover:bg-background/10"
+            title="닫기"
             aria-label="닫기"
           >
             <X className="h-5 w-5" />
@@ -625,6 +731,99 @@ export function ServiceFileImagePreview({ items, initialIndex, onClose }: Props)
         </div>
       </div>
 
+      <div className="flex min-h-0 flex-1 overflow-hidden">
+        <div
+          className={cn(
+            'shrink-0 overflow-hidden border-r border-white/10 bg-black/40 transition-[width,opacity] duration-200 ease-out',
+            sidebarOpen ? 'opacity-100' : 'opacity-0'
+          )}
+          style={{ width: sidebarOpen ? SIDEBAR_WIDTH : 0 }}
+        >
+          <div className="flex h-full flex-col" style={{ width: SIDEBAR_WIDTH }}>
+            <div className="flex min-h-0 flex-1 flex-col p-1">
+              <button
+                type="button"
+                onClick={() => setFileListSectionOpen((o) => !o)}
+                className={cn(
+                  'flex w-full cursor-pointer items-baseline justify-between gap-2 rounded px-0.5 py-0.5 text-left transition-colors hover:bg-white/5',
+                  fileListSectionOpen ? 'mb-2' : 'mb-0'
+                )}
+                title={fileListSectionOpen ? '파일 목록 접기' : '파일 목록 펼치기'}
+                aria-expanded={fileListSectionOpen}
+                aria-label={fileListSectionOpen ? '파일 목록 접기' : '파일 목록 펼치기'}
+              >
+                <span className="flex min-w-0 items-center gap-1">
+                  <ChevronDown
+                    className={cn(
+                      'h-3.5 w-3.5 shrink-0 text-white/55 transition-transform duration-200',
+                      !fileListSectionOpen && '-rotate-90'
+                    )}
+                    aria-hidden
+                  />
+                  <span className="text-[12px] font-semibold text-white/80">파일 목록</span>
+                </span>
+                <span className="shrink-0 text-[11px] tabular-nums text-white/55">
+                  총 {items.length}건
+                </span>
+              </button>
+              {fileListSectionOpen ? (
+                <>
+                  <div className="relative mb-2 shrink-0">
+                    <input
+                      type="text"
+                      value={fileListSearchDraft}
+                      onChange={(e) => setFileListSearchDraft(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key !== 'Enter') return;
+                        e.preventDefault();
+                        commitFileListSearch();
+                      }}
+                      placeholder="파일명 검색 (Enter)"
+                      className="h-8 w-full rounded border border-white/15 bg-white/5 py-1 pl-2 pr-8 text-[11px] text-white outline-none placeholder:text-white/35 focus:border-primary/50 focus:ring-1 focus:ring-primary/30"
+                      aria-label="파일명 검색"
+                    />
+                    {fileListSearchDraft.trim() !== '' || fileListSearch.trim() !== '' ? (
+                      <button
+                        type="button"
+                        onClick={clearFileListSearch}
+                        className="absolute right-1 top-1/2 flex h-6 w-6 -translate-y-1/2 cursor-pointer items-center justify-center rounded text-white/55 transition-colors hover:bg-white/10 hover:text-white"
+                        title="검색 초기화"
+                        aria-label="검색 초기화"
+                      >
+                        <XCircle className="h-4 w-4" aria-hidden />
+                      </button>
+                    ) : null}
+                  </div>
+                  <ul className="min-h-0 flex-1 space-y-0.5 overflow-y-auto">
+                    {fileListSearch.trim() !== '' && filteredFileEntries.length === 0 ? (
+                      <li className="p-1 text-[11px] text-white/45">검색 결과가 없습니다.</li>
+                    ) : (
+                      filteredFileEntries.map(({ item, fileIndex }) => (
+                        <li key={`${item.fileName}-${fileIndex}`}>
+                          <button
+                            type="button"
+                            onClick={() => selectFile(fileIndex)}
+                            title={item.fileName}
+                            className={cn(
+                              'w-full cursor-pointer truncate rounded p-1 text-left text-[11px] transition-colors hover:bg-white/10',
+                              fileIndex === index
+                                ? 'border-l-[3px] border-l-primary bg-primary/15 text-white'
+                                : 'text-white/75'
+                            )}
+                          >
+                            {item.fileName}
+                          </button>
+                        </li>
+                      ))
+                    )}
+                  </ul>
+                </>
+              ) : null}
+            </div>
+          </div>
+        </div>
+
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
       <div
         ref={wheelTargetRef}
         className={cn(
@@ -743,9 +942,11 @@ export function ServiceFileImagePreview({ items, initialIndex, onClose }: Props)
       <p className="shrink-0 px-3 pb-2 text-center text-[10px] text-white/45">
         휠로 확대·축소
         {' · 확대 시 끌어서 이동 · 더블클릭 시 초기화'}
-        {canNav && !canPdfPage ? ' · ← → 이전·다음 파일' : ''}
-        {canPdfPage ? ' · 방향키로 이전·다음 페이지' : ''}
+        {canNav ? ' · ← → 이전·다음 파일' : ''}
+        {canPdfPage ? ' · ↑ ↓ 이전·다음 페이지' : ''}
       </p>
+        </div>
+      </div>
     </div>,
     document.body
   );
