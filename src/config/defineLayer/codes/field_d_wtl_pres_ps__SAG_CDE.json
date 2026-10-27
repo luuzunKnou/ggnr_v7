@@ -1,0 +1,26 @@
+[
+  {
+    "define_code_key": "65490",
+    "define_code_field_key": "4301",
+    "define_code_name": "SAG000",
+    "define_code_kor_name": "미분류"
+  },
+  {
+    "define_code_key": "65491",
+    "define_code_field_key": "4301",
+    "define_code_name": "SAG001",
+    "define_code_kor_name": "유인"
+  },
+  {
+    "define_code_key": "65492",
+    "define_code_field_key": "4301",
+    "define_code_name": "SAG002",
+    "define_code_kor_name": "무인"
+  },
+  {
+    "define_code_key": "65493",
+    "define_code_field_key": "4301",
+    "define_code_name": "SAG999",
+    "define_code_kor_name": "기타"
+  }
+]

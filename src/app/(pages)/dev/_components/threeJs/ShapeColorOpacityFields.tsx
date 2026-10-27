@@ -10,6 +10,8 @@ type Props = {
   opacity: number;
   onColor: (hex: string) => void;
   onOpacity: (n: number) => void;
+  /** false면 색상 입력 숨김 (GeoServer 스타일 색 등) */
+  showColor?: boolean;
 };
 
 function clamp01(n: number): number {
@@ -26,24 +28,27 @@ export function ShapeColorOpacityFields({
   opacity,
   onColor,
   onOpacity,
+  showColor = true,
 }: Props) {
   const pct = Math.round(clamp01(opacity) * 1000) / 10;
   return (
     <div className="flex flex-col gap-1.5 rounded border border-border/60 bg-muted/20 p-2">
       <p className="text-[11px] font-medium text-foreground">{label}</p>
-      <div className="grid grid-cols-[4.5rem_1fr] items-center gap-2">
-        <label htmlFor={colorId} className="text-[12px] text-foreground">
-          색상
-        </label>
-        <Input
-          id={colorId}
-          type="color"
-          className="h-9 cursor-pointer"
-          value={color}
-          title={`${label} 색상`}
-          onChange={(e) => onColor(e.target.value)}
-        />
-      </div>
+      {showColor ? (
+        <div className="grid grid-cols-[4.5rem_1fr] items-center gap-2">
+          <label htmlFor={colorId} className="text-[12px] text-foreground">
+            색상
+          </label>
+          <Input
+            id={colorId}
+            type="color"
+            className="h-9 cursor-pointer"
+            value={color}
+            title={`${label} 색상`}
+            onChange={(e) => onColor(e.target.value)}
+          />
+        </div>
+      ) : null}
       <div className="grid grid-cols-[4.5rem_1fr] items-center gap-2">
         <label htmlFor={opacityId} className="text-[12px] text-foreground">
           불투명도

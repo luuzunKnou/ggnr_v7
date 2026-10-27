@@ -5,6 +5,7 @@
       <sld:Name>Default Styler</sld:Name>
       <sld:FeatureTypeStyle>
         <sld:Rule>
+          <sld:MaxScaleDenominator>3000</sld:MaxScaleDenominator>
           <sld:PointSymbolizer>
             <sld:Graphic>
               <sld:Mark>
@@ -20,23 +21,30 @@
                 </sld:Stroke>
               </sld:Mark>
               <sld:Size>
-                <ogc:Function name="min">
-                  <ogc:Literal>18</ogc:Literal>
-                  <ogc:Add>
-                    <ogc:Literal>5</ogc:Literal>
-                    <ogc:Mul>
-                      <ogc:Function name="sqrt">
-                        <ogc:Div>
-                          <ogc:Literal>100000</ogc:Literal>
-                          <ogc:Function name="env">
-                            <ogc:Literal>wms_scale_denominator</ogc:Literal>
-                            <ogc:Literal>10000</ogc:Literal>
-                          </ogc:Function>
-                        </ogc:Div>
-                      </ogc:Function>
-                      <ogc:Literal>1.5</ogc:Literal>
-                    </ogc:Mul>
-                  </ogc:Add>
+                <ogc:Function name="if_then_else">
+                  <ogc:Function name="greaterThan">
+                    <ogc:Function name="env">
+                      <ogc:Literal>wtl_pipe_ps_gsg_size</ogc:Literal>
+                      <ogc:Literal>0</ogc:Literal>
+                    </ogc:Function>
+                    <ogc:Literal>0</ogc:Literal>
+                  </ogc:Function>
+                  <ogc:Function name="env">
+                    <ogc:Literal>wtl_pipe_ps_gsg_size</ogc:Literal>
+                    <ogc:Literal>16</ogc:Literal>
+                  </ogc:Function>
+                  <ogc:Function name="Categorize">
+                    <ogc:Function name="env">
+                      <ogc:Literal>wms_scale_denominator</ogc:Literal>
+                    </ogc:Function>
+                    <ogc:Literal>18</ogc:Literal>
+                    <ogc:Literal>500</ogc:Literal>
+                    <ogc:Literal>16</ogc:Literal>
+                    <ogc:Literal>800</ogc:Literal>
+                    <ogc:Literal>14</ogc:Literal>
+                    <ogc:Literal>1500</ogc:Literal>
+                    <ogc:Literal>10</ogc:Literal>
+                  </ogc:Function>
                 </ogc:Function>
               </sld:Size>
             </sld:Graphic>

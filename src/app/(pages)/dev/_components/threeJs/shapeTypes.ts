@@ -1,10 +1,14 @@
-export type ShapeKind = 'box' | 'sphere' | 'cylinder' | 'ground' | 'pipe';
+export type ShapeKind = 'box' | 'sphere' | 'cylinder' | 'ground' | 'wtl_pipe_lm';
 
 /** 상수관로 세그먼트 (wtl_pipe_lm) */
 export type PipeSegment = {
   id: string;
   /** 관라벨 (pip_lbl) */
   label?: string;
+  /** 상수관용도 (saa_cde) — GeoServer 스타일 색 매핑 */
+  saaCde?: string;
+  /** GeoServer CSS stroke 색 (#RRGGBB) */
+  color?: string;
   /** EPSG:3857 라인 좌표 (범위로 클립됨) */
   coords3857: [number, number][];
   /** 외경(m) — std_dip (호칭지름) */
@@ -85,7 +89,7 @@ export type ShapeProps = {
   /** GROUND — 하천 구역 색·불투명도 (땅 color/opacity 와 분리) */
   riverColor?: string;
   riverOpacity?: number;
-  /** PIPE 전용 — 지도 클릭 중심·관로 */
+  /** wtl_pipe_lm 전용 — 지도 클릭 중심·관로 */
   pipeCenterX?: number;
   pipeCenterY?: number;
   pipeRadiusM?: number;

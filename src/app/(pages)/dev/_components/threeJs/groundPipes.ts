@@ -61,49 +61,60 @@ function horizontalPerp(tangent: THREE.Vector3): THREE.Vector3 {
   return new THREE.Vector3(-t.z, 0, t.x).normalize();
 }
 
-/** 지형(지표) ↔ 관 중심 사이 세로 심도 치수 바 */
+/** 관로 지반고: 이미 표기한 고도와 이 이상 차이날 때만 추가 */
+const PIPE_JIBANGO_MIN_DELTA_M = 0.5;
+
+/**
+ * 지형(지표) ↔ 관 윗면 토피 치수 바.
+ * 지반고는 고도 차가 나는 관에만 (shownElevs에 기록).
+ * 토피 = 지표면 → 관 외경 상단 (심도−관반경). 심도 DB는 관 중심 기준.
+ */
 function createDepthBar(
   pipeCenter: THREE.Vector3,
   surfaceY: number,
   depthM: number,
   tangent: THREE.Vector3,
-  outerR: number
+  outerR: number,
+  shownElevs: number[]
 ): THREE.Group {
   const root = new THREE.Group();
   root.name = 'pipeDepthBar';
   root.userData[PIPE_MESH_KEY] = true;
   root.raycast = () => {};
 
+  const coverM = Math.max(0, depthM - outerR);
   const perp = horizontalPerp(tangent);
   const side = outerR + 0.35;
-  const topOnPipe = new THREE.Vector3(pipeCenter.x, surfaceY, pipeCenter.z);
-  const botOnPipe = pipeCenter.clone();
-  const top = topOnPipe.clone().addScaledVector(perp, side);
-  const bot = botOnPipe.clone().addScaledVector(perp, side);
+  // 지표 · 관 윗면(크라운)
+  const topOnSurf = new THREE.Vector3(pipeCenter.x, surfaceY, pipeCenter.z);
+  const botOnCrown = new THREE.Vector3(
+    pipeCenter.x,
+    pipeCenter.y + outerR,
+    pipeCenter.z
+  );
+  const top = topOnSurf.clone().addScaledVector(perp, side);
+  const bot = botOnCrown.clone().addScaledVector(perp, side);
 
   const tick = 0.08;
   const positions = [
-    // 보조선 (관·지표 → 치수선)
-    topOnPipe.x,
-    topOnPipe.y,
-    topOnPipe.z,
+    topOnSurf.x,
+    topOnSurf.y,
+    topOnSurf.z,
     top.x,
     top.y,
     top.z,
-    botOnPipe.x,
-    botOnPipe.y,
-    botOnPipe.z,
+    botOnCrown.x,
+    botOnCrown.y,
+    botOnCrown.z,
     bot.x,
     bot.y,
     bot.z,
-    // 세로 치수선
     top.x,
     top.y,
     top.z,
     bot.x,
     bot.y,
     bot.z,
-    // 상·하 틱
     top.x - perp.x * tick,
     top.y,
     top.z - perp.z * tick,
@@ -134,15 +145,29 @@ function createDepthBar(
   lines.raycast = () => {};
   root.add(lines);
 
-  // 수치 — 세로 바 옆에 고정(카메라 빌보드)
-  const text = `${fmtDepthM(Math.max(0, depthM))}m`;
-  const sprite = makeDepthValueSprite(text);
-  sprite.position.set(
+  const coverSprite = makeDepthValueSprite(`토피 ${fmtDepthM(coverM)}m`);
+  coverSprite.position.set(
     (top.x + bot.x) / 2 + perp.x * 0.18,
     (top.y + bot.y) / 2,
     (top.z + bot.z) / 2 + perp.z * 0.18
   );
-  root.add(sprite);
+  root.add(coverSprite);
+
+  // 지반고: 이미 비슷한 고도가 표기됐으면 생략
+  const groundElevM = Math.round(surfaceY * 10) / 10;
+  const isNewElev = shownElevs.every(
+    (e) => Math.abs(e - groundElevM) >= PIPE_JIBANGO_MIN_DELTA_M
+  );
+  if (isNewElev) {
+    shownElevs.push(groundElevM);
+    const jibanSprite = makeDepthValueSprite(`지반고 ${fmtDepthM(groundElevM)}m`);
+    jibanSprite.position.set(
+      top.x + perp.x * 0.18,
+      top.y + 0.22,
+      top.z + perp.z * 0.18
+    );
+    root.add(jibanSprite);
+  }
   return root;
 }
 
@@ -376,9 +401,10 @@ export function createPipesOverlay(opts: CreatePipesOverlayOpts): THREE.Group {
   const m2p = meterToProjAtY3857(opts.centerY);
   const surfaceMode = opts.surface ?? (opts.field ? 'field' : 'zero');
   const opacity = Math.max(0.05, Math.min(1, opts.opacity ?? 0.92));
-  const pipeColor = new THREE.Color(opts.color || '#38bdf8');
+  const fallbackColor = opts.color || '#F44336';
   const opaque = opacity >= 0.85;
-  const makeMat = (side: THREE.Side, inner = false) => {
+  const makeMat = (hex: string, side: THREE.Side, inner = false) => {
+    const pipeColor = new THREE.Color(hex || fallbackColor);
     const mat = new THREE.MeshStandardMaterial({
       color: pipeColor,
       emissive: pipeColor.clone().multiplyScalar(inner ? 0.12 : 0.28),
@@ -407,6 +433,8 @@ export function createPipesOverlay(opts: CreatePipesOverlayOpts): THREE.Group {
   };
   const dipEnds: DipEnd[] = [];
   const END_SNAP_M = 0.4;
+  /** 관로 지반고 — 고도 차가 나는 관만 */
+  const shownPipeElevs: number[] = [];
 
   for (const pipe of pipes) {
     if (!pipe.coords3857 || pipe.coords3857.length < 2) continue;
@@ -430,6 +458,7 @@ export function createPipesOverlay(opts: CreatePipesOverlayOpts): THREE.Group {
     const outerR = Math.max(0.04, pipe.diameterM / 2);
     const wallM = pipeWallThicknessM(pipe.diameterM);
     const innerR = Math.max(0.008, Math.min(outerR - wallM, outerR * 0.92));
+    const segColor = pipe.color || fallbackColor;
     try {
       const curve = new THREE.CatmullRomCurve3(cleaned, false, 'centripetal');
       const tubular = Math.max(8, Math.min(64, cleaned.length * 4));
@@ -437,7 +466,7 @@ export function createPipesOverlay(opts: CreatePipesOverlayOpts): THREE.Group {
 
       const outerGeo = new THREE.TubeGeometry(curve, tubular, outerR, radial, false);
       outerGeo.computeBoundingSphere();
-      const outerMesh = new THREE.Mesh(outerGeo, makeMat(THREE.DoubleSide));
+      const outerMesh = new THREE.Mesh(outerGeo, makeMat(segColor, THREE.DoubleSide));
       outerMesh.userData[PIPE_MESH_KEY] = true;
       outerMesh.userData.isFill = true;
       outerMesh.userData.pipeId = pipe.id;
@@ -448,7 +477,7 @@ export function createPipesOverlay(opts: CreatePipesOverlayOpts): THREE.Group {
 
       const innerGeo = new THREE.TubeGeometry(curve, tubular, innerR, radial, false);
       innerGeo.computeBoundingSphere();
-      const innerMesh = new THREE.Mesh(innerGeo, makeMat(THREE.BackSide, true));
+      const innerMesh = new THREE.Mesh(innerGeo, makeMat(segColor, THREE.BackSide, true));
       innerMesh.userData[PIPE_MESH_KEY] = true;
       innerMesh.userData.isInner = true;
       innerMesh.userData.pipeId = pipe.id;
@@ -475,7 +504,8 @@ export function createPipesOverlay(opts: CreatePipesOverlayOpts): THREE.Group {
         midSurf,
         pipe.depthM,
         midT,
-        outerR
+        outerR,
+        shownPipeElevs
       );
       depthBar.userData.pipeId = pipe.id;
       root.add(depthBar);

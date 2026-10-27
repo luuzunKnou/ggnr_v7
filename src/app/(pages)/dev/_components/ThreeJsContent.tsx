@@ -74,7 +74,7 @@ export function ThreeJsContent() {
     sphere: 0,
     cylinder: 0,
     ground: 0,
-    pipe: 0,
+    wtl_pipe_lm: 0,
   });
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -154,7 +154,7 @@ export function ThreeJsContent() {
       const props = getShapeProps(group);
       if (!props) return;
       let synced: ShapeProps;
-      if (props.kind === 'ground' || props.kind === 'pipe') {
+      if (props.kind === 'ground' || props.kind === 'wtl_pipe_lm') {
         group.position.set(0, 0, 0);
         synced = {
           ...props,
@@ -196,7 +196,7 @@ export function ThreeJsContent() {
         props.posX = 0;
         props.posZ = 0;
       }
-      if (kind === 'pipe') {
+      if (kind === 'wtl_pipe_lm') {
         props.pipeRadiusM = PIPE_DEFAULT_RADIUS_M;
         props.pipeSegments = null;
         props.posX = 0;
@@ -222,7 +222,7 @@ export function ThreeJsContent() {
     if (!group) return;
     rebuildShapeObject(group, next);
     setShapeSelected(group, true);
-    if (next.kind === 'ground' || next.kind === 'pipe') {
+    if (next.kind === 'ground' || next.kind === 'wtl_pipe_lm') {
       fitObjectInView(api.camera, api.orbit, group);
     }
     refreshOrthoViews();
@@ -238,7 +238,7 @@ export function ThreeJsContent() {
       rebuildShapeObject(group, next);
       setShapeSelected(group, true);
       setEditProps({ ...next });
-      if (next.kind === 'ground' || next.kind === 'pipe') {
+      if (next.kind === 'ground' || next.kind === 'wtl_pipe_lm') {
         fitObjectInView(api.camera, api.orbit, group);
       }
       syncDragTargets();
@@ -302,7 +302,7 @@ export function ThreeJsContent() {
       }
 
       const id = nextShapeId();
-      const props = cloneDefaults('pipe');
+      const props = cloneDefaults('wtl_pipe_lm');
       props.pipeCenterX = cx;
       props.pipeCenterY = cy;
       props.pipeRadiusM = radiusM;
@@ -315,12 +315,12 @@ export function ThreeJsContent() {
       props.posZ = 0;
       props.floorHeight = 0;
 
-      kindCountersRef.current.pipe += 1;
-      const name = `${getShapeModule('pipe').label}_${kindCountersRef.current.pipe}`;
+      kindCountersRef.current.wtl_pipe_lm += 1;
+      const name = `${getShapeModule('wtl_pipe_lm').label}_${kindCountersRef.current.wtl_pipe_lm}`;
       const group = createShapeObject(id, props);
       group.userData[SHAPE_NAME_KEY] = name;
       api.shapesRoot.add(group);
-      setRegistered((prev) => [...prev, { id, kind: 'pipe', name }]);
+      setRegistered((prev) => [...prev, { id, kind: 'wtl_pipe_lm', name }]);
       highlightShape(id);
       fitObjectInView(api.camera, api.orbit, group);
       refreshOrthoViews();
@@ -423,7 +423,7 @@ export function ThreeJsContent() {
       if (!(obj instanceof THREE.Group)) return;
       const props = getShapeProps(obj);
       if (!props) return;
-      if (props.kind === 'ground' || props.kind === 'pipe') {
+      if (props.kind === 'ground' || props.kind === 'wtl_pipe_lm') {
         obj.position.set(0, 0, 0);
         obj.userData[SHAPE_PROPS_KEY] = { ...props, posX: 0, posZ: 0 };
       } else {
@@ -562,13 +562,13 @@ export function ThreeJsContent() {
                         <button
                           type="button"
                           className="inline-flex cursor-pointer items-center rounded px-1.5 py-1 text-[11px] font-medium text-primary hover:bg-primary/10"
-                          title="동일 범위 관로 추가"
+                          title="동일 범위 wtl_pipe_lm 추가"
                           onClick={(e) => {
                             e.stopPropagation();
                             void addPipeFromGround(row.id);
                           }}
                         >
-                          관로
+                          wtl_pipe_lm
                         </button>
                       ) : null}
                       <button
@@ -660,7 +660,7 @@ export function ThreeJsContent() {
           onRollback={rollbackEdit}
           onDelete={deleteSelected}
         />
-      ) : editProps?.kind === 'pipe' ? (
+      ) : editProps?.kind === 'wtl_pipe_lm' ? (
         <ThreeJsPipeEditModal
           open={modalOpen}
           titleName={editName}

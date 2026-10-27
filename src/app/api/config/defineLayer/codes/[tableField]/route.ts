@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from "next/server"
 import {
+  extractDefineLayerCodeFieldName,
   readDefineLayerCodes,
   writeDefineLayerCodes,
 } from "@/lib/defineLayerCodeFiles"
+import { listHjdCdeCodes } from "@/lib/hjdCde"
 
 /** tableField = tableName__fieldName. 해당 필드의 코드 목록 조회 */
 export async function GET(
@@ -11,6 +13,11 @@ export async function GET(
 ) {
   try {
     const { tableField } = await params
+    /** hjd_cde는 레이어별 축소본 대신 hjd_cde_CODE.json(유틸) 사용 */
+    if (extractDefineLayerCodeFieldName(tableField).toLowerCase() === "hjd_cde") {
+      const data = listHjdCdeCodes()
+      return NextResponse.json({ success: true, data })
+    }
     const data = readDefineLayerCodes(tableField)
     return NextResponse.json({ success: true, data })
   } catch (e) {

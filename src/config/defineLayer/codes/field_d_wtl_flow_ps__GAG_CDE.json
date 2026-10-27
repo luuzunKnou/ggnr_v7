@@ -1,0 +1,38 @@
+[
+  {
+    "define_code_key": "61939",
+    "define_code_field_key": "4150",
+    "define_code_name": "GAG000",
+    "define_code_kor_name": "미분류"
+  },
+  {
+    "define_code_key": "61940",
+    "define_code_field_key": "4150",
+    "define_code_name": "GAG001",
+    "define_code_kor_name": "취수유량계"
+  },
+  {
+    "define_code_key": "61941",
+    "define_code_field_key": "4150",
+    "define_code_name": "GAG002",
+    "define_code_kor_name": "착수유량계"
+  },
+  {
+    "define_code_key": "61942",
+    "define_code_field_key": "4150",
+    "define_code_name": "GAG003",
+    "define_code_kor_name": "배수유량계"
+  },
+  {
+    "define_code_key": "61943",
+    "define_code_field_key": "4150",
+    "define_code_name": "GAG004",
+    "define_code_kor_name": "구역유량계"
+  },
+  {
+    "define_code_key": "61944",
+    "define_code_field_key": "4150",
+    "define_code_name": "GAG999",
+    "define_code_kor_name": "기타"
+  }
+]

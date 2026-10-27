@@ -3,6 +3,7 @@
  */
 import { db } from '@/database/db';
 import { sql } from 'drizzle-orm';
+import { readWtlPipeLmStrokeColor } from '@/lib/geoserverStyleFillColor';
 
 const ELEVATION_SCHEMA = 'public_layer';
 const ELEVATION_TABLE = 'elevation';
@@ -913,6 +914,10 @@ export type WtlPipeInExtent = {
   id: string;
   /** 관라벨 (pip_lbl) */
   label?: string;
+  /** 상수관용도 (saa_cde) */
+  saaCde?: string;
+  /** GeoServer CSS stroke 색 */
+  color?: string;
   coords3857: [number, number][];
   /** 관경 m (std_dip: mm면 /1000) */
   diameterM: number;
@@ -1038,6 +1043,7 @@ export async function getWtlPipesInExtent(params: {
         `WITH hits AS (
            SELECT
              pip_lbl,
+             saa_cde,
              std_dip,
              hgh_dep,
              low_dep,
@@ -1052,6 +1058,7 @@ export async function getWtlPipesInExtent(params: {
          )
          SELECT
            h.pip_lbl,
+           h.saa_cde,
            h.std_dip,
            h.hgh_dep,
            h.low_dep,
@@ -1067,6 +1074,7 @@ export async function getWtlPipesInExtent(params: {
     for (const raw of res.rows ?? []) {
       const row = raw as {
         pip_lbl?: unknown;
+        saa_cde?: unknown;
         std_dip?: unknown;
         hgh_dep?: unknown;
         low_dep?: unknown;
@@ -1087,11 +1095,15 @@ export async function getWtlPipesInExtent(params: {
       if (depthM == null) depthM = 1.2;
 
       const labelRaw = row.pip_lbl != null ? String(row.pip_lbl).trim() : '';
+      const saaCde =
+        row.saa_cde != null ? String(row.saa_cde).trim().toUpperCase() : '';
       const mid = coords[Math.floor(coords.length / 2)]!;
       midPoints.push(mid);
       pipes.push({
         id: `pipe-${pipes.length}`,
         label: labelRaw || undefined,
+        saaCde: saaCde || undefined,
+        color: readWtlPipeLmStrokeColor(saaCde || null),
         coords3857: coords,
         diameterM: parseStdDipToMeters(row.std_dip),
         depthM,

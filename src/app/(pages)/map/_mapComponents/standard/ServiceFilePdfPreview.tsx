@@ -61,6 +61,8 @@ const MAX_SCALE = 5;
 const ZOOM_STEP_WHEEL = 0.18;
 const ZOOM_STEP_BUTTON = 0.35;
 const SIDEBAR_WIDTH = 240;
+/** 관망·민원 등 플로팅 상세(z≈10050)보다 위 */
+const PREVIEW_Z_INDEX = 11000;
 /** 휠·버튼 줌 멈춘 뒤 LOD 재렌더 대기(ms) */
 const LOD_SETTLE_MS = 350;
 /** display·render 배율 차이가 이 값 미만이면 재렌더 생략 */
@@ -620,7 +622,8 @@ export function ServiceFilePdfPreview({ items, initialIndex, onClose, titleHint,
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[500] flex flex-col bg-black/92"
+      className="fixed inset-0 flex flex-col bg-black/92"
+      style={{ zIndex: PREVIEW_Z_INDEX }}
       role="dialog"
       aria-modal="true"
       aria-label="PDF 미리보기"
@@ -681,25 +684,25 @@ export function ServiceFilePdfPreview({ items, initialIndex, onClose, titleHint,
                 type="button"
                 role="menuitem"
                 className="flex w-full cursor-pointer px-3 py-2 text-left text-[12px] text-white/90 transition-colors hover:bg-white/10"
-                title="전체 다운로드"
+                title="묶음 내려받기"
                 onClick={() => {
                   setDownloadMenuOpen(false);
                   void handleDownloadAll();
                 }}
               >
-                전체 다운로드
+                묶음 내려받기
               </button>
               <button
                 type="button"
                 role="menuitem"
                 className="flex w-full cursor-pointer px-3 py-2 text-left text-[12px] text-white/90 transition-colors hover:bg-white/10"
-                title="현재 파일 다운로드"
+                title="개별 다운로드"
                 onClick={() => {
                   setDownloadMenuOpen(false);
                   void handleDownloadCurrent();
                 }}
               >
-                현재 파일 다운로드
+                개별 다운로드
               </button>
             </div>
           ) : null}
@@ -742,7 +745,7 @@ export function ServiceFilePdfPreview({ items, initialIndex, onClose, titleHint,
             className="flex h-full flex-col"
             style={{ width: SIDEBAR_WIDTH }}
           >
-            <div className="shrink-0 border-b border-white/10 px-2 py-2">
+            <div className="shrink-0 border-b border-white/10 p-1">
               <button
                 type="button"
                 onClick={() => setPdfListSectionOpen((o) => !o)}
@@ -797,7 +800,7 @@ export function ServiceFilePdfPreview({ items, initialIndex, onClose, titleHint,
               </div>
               <ul className="max-h-[28vh] space-y-0.5 overflow-y-auto">
                 {pdfListSearch.trim() !== '' && filteredFileEntries.length === 0 ? (
-                  <li className="px-2 py-2 text-[11px] text-white/45">검색 결과가 없습니다.</li>
+                  <li className="p-1 text-[11px] text-white/45">검색 결과가 없습니다.</li>
                 ) : (
                   filteredFileEntries.map(({ item, fileIndex }) => (
                     <li key={item.fileName}>
@@ -806,7 +809,7 @@ export function ServiceFilePdfPreview({ items, initialIndex, onClose, titleHint,
                         onClick={() => selectFile(fileIndex)}
                         title={item.fileName}
                         className={cn(
-                          'w-full truncate rounded px-2 py-1.5 text-left text-[11px] transition-colors hover:bg-white/10',
+                          'w-full truncate rounded p-1 text-left text-[11px] transition-colors hover:bg-white/10',
                           fileIndex === index
                             ? 'border-l-[3px] border-l-primary bg-primary/15 text-white'
                             : 'text-white/75'
@@ -821,7 +824,7 @@ export function ServiceFilePdfPreview({ items, initialIndex, onClose, titleHint,
                 </>
               ) : null}
             </div>
-            <div className="flex min-h-0 flex-1 flex-col px-2 py-2">
+            <div className="flex min-h-0 flex-1 flex-col p-1">
               <div className="mb-2 flex items-baseline justify-between gap-2">
                 <p className="text-[12px] font-semibold text-white/80">페이지</p>
                 <span className="shrink-0 text-[11px] tabular-nums text-white/55">

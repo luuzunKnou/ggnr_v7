@@ -221,8 +221,14 @@ const UNDERGROUND_FACILITY_GROUP_ALLOW = new Set([
   '통신',
 ]);
 
+/** 그룹명 접두 일치 (LIKE '허용그룹%') */
 function isUndergroundFacilityGroup(group: string): boolean {
-  return UNDERGROUND_FACILITY_GROUP_ALLOW.has(group);
+  const g = String(group ?? '').trim();
+  if (!g) return false;
+  for (const allowed of UNDERGROUND_FACILITY_GROUP_ALLOW) {
+    if (g === allowed || g.startsWith(allowed)) return true;
+  }
+  return false;
 }
 
 /**

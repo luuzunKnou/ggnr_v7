@@ -123,7 +123,7 @@ function specsForProps(props: ShapeProps): DimSpec[] {
   const gap = 0.28;
   /** 바닥 높이 0이면 아래쪽 치수가 밑면 외곽선·다른 수치와 겹침 → 전방(+Z)으로 뺌 */
   const floorClear = (props.floorHeight ?? 0) <= 0.001;
-  if (props.kind === 'ground' || props.kind === 'pipe') return [];
+  if (props.kind === 'ground' || props.kind === 'wtl_pipe_lm') return [];
   switch (props.kind) {
     case 'box': {
       const w = Math.max(0.05, props.width);
