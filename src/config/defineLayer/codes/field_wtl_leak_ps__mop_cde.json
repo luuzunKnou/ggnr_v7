@@ -1,0 +1,50 @@
+[
+  {
+    "define_code_key": "90000",
+    "define_code_field_key": "",
+    "define_code_name": "MOP000",
+    "define_code_kor_name": "MOP000"
+  },
+  {
+    "define_code_key": "90001",
+    "define_code_field_key": "",
+    "define_code_name": "MOP001",
+    "define_code_kor_name": "MOP001"
+  },
+  {
+    "define_code_key": "90002",
+    "define_code_field_key": "",
+    "define_code_name": "MOP004",
+    "define_code_kor_name": "MOP004"
+  },
+  {
+    "define_code_key": "90003",
+    "define_code_field_key": "",
+    "define_code_name": "MOP005",
+    "define_code_kor_name": "MOP005"
+  },
+  {
+    "define_code_key": "90004",
+    "define_code_field_key": "",
+    "define_code_name": "MOP010",
+    "define_code_kor_name": "MOP010"
+  },
+  {
+    "define_code_key": "90005",
+    "define_code_field_key": "",
+    "define_code_name": "MOP808",
+    "define_code_kor_name": "MOP808"
+  },
+  {
+    "define_code_key": "90006",
+    "define_code_field_key": "",
+    "define_code_name": "MOP816",
+    "define_code_kor_name": "MOP816"
+  },
+  {
+    "define_code_key": "90007",
+    "define_code_field_key": "",
+    "define_code_name": "MOP835",
+    "define_code_kor_name": "MOP835"
+  }
+]

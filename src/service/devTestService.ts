@@ -19,6 +19,9 @@ import {
   darkerHex,
   getMaterialToneColor,
   parseSimpleStyleFromCss,
+  formatSldXml,
+  parseSldEnvStyle,
+  patchSldEnvDefaults,
   replaceDefaultRuleInCss,
   type GeometryType,
   type StyleProps,
@@ -1572,14 +1575,47 @@ export async function getGeoServerStyle(params: { url: string; name: string }) {
       return { success: false, error: `스타일 조회 실패: ${metaRes.status} ${text}` };
     }
     const meta = await metaRes.json();
-    const format = (meta?.style?.format ?? meta?.format ?? 'sld').toLowerCase();
+    const formatRaw = String(meta?.style?.format ?? meta?.format ?? 'sld').toLowerCase();
+    const format: 'css' | 'sld' = formatRaw === 'css' ? 'css' : 'sld';
+
+    // GeoServer Web 수정이 진실. 로컬 CSS sidecar보다 REST 본문을 먼저 읽고 디스크에 pull.
+    if (format === 'sld') {
+      const sldRes = await geoserverFetch(baseUrl, `/rest/styles/${encodeURIComponent(name)}.sld`, {
+        accept: 'application/vnd.ogc.sld+xml',
+      });
+      const sld = sldRes.ok ? await sldRes.text() : '';
+      if (sld.trim()) {
+        persistStyleFiles(name, 'sld', '', sld);
+      }
+      const parsed = sld ? parseSldEnvStyle(sld, name) : null;
+      if (!parsed) {
+        return {
+          success: true,
+          name,
+          format,
+          body: sld,
+          styleProps: undefined,
+          geometryType: undefined,
+          editable: false,
+        };
+      }
+      return {
+        success: true,
+        name,
+        format,
+        body: sld,
+        styleProps: parsed.styleProps,
+        geometryType: parsed.geometryType,
+        editable: true,
+      };
+    }
 
     const cssRes = await geoserverFetch(baseUrl, `/rest/styles/${encodeURIComponent(name)}.css`, {
       accept: 'text/css',
     });
     const body = cssRes.ok ? await cssRes.text() : '';
 
-    if (format !== 'css' || !body) {
+    if (!body || !body.includes('{')) {
       return {
         success: true,
         name,
@@ -1591,6 +1627,7 @@ export async function getGeoServerStyle(params: { url: string; name: string }) {
       };
     }
 
+    persistStyleFiles(name, 'css', body, body);
     const { styleProps, geometryType } = parseSimpleStyleFromCss(body);
     return {
       success: true,
@@ -1652,9 +1689,11 @@ export async function createGeoServerStyle(params: {
 export async function updateGeoServerStyle(params: {
   url?: string;
   name: string;
+  layerName?: string;
   geometryType: GeometryType;
   styleProps: StyleProps;
   preserveExtraRules?: boolean;
+  format?: 'css' | 'sld';
 }) {
   const baseUrl = resolveGeoServerFetchBase(params?.url);
   const name = params?.name?.trim();
@@ -1665,34 +1704,382 @@ export async function updateGeoServerStyle(params: {
   const thematicLabel = (styleProps.labelField ?? '').includes('layer_korname');
 
   try {
-    const getRes = await geoserverFetch(baseUrl, `/rest/styles/${encodeURIComponent(name)}.css`, {
+    const serverFormat = await readGeoServerStyleFormat(baseUrl, name);
+    const format =
+      params.format === 'sld' ? 'sld' : params.format === 'css' ? 'css' : serverFormat === 'css' ? 'css' : 'sld';
+
+    // SLD: GeoServer 라이브 본문을 패치 (낡은 CSS sidecar → SLD 재변환으로 Web 수정을 덮지 않음)
+    if (format === 'sld') {
+      const sldRes = await geoserverFetch(baseUrl, `/rest/styles/${encodeURIComponent(name)}.sld`, {
+        accept: 'application/vnd.ogc.sld+xml',
+      });
+      if (!sldRes.ok) {
+        const text = (await sldRes.text()).replace(/\s+/g, ' ').trim().slice(0, 300);
+        return { success: false, error: text ? `스타일 조회 실패: ${sldRes.status} ${text}` : '스타일 조회 실패' };
+      }
+      const sld = await sldRes.text();
+      const patched = patchSldEnvDefaults(sld, name, styleProps);
+      if (patched == null) {
+        return { success: false, error: '이 SLD에서는 화면 값만 고쳐 넣을 환경변수를 찾지 못했습니다.' };
+      }
+      return commitGeoServerStyle({
+        baseUrl,
+        workspace: 'ggnr',
+        layerName: params.layerName?.trim() || name,
+        styleName: name,
+        format: 'sld',
+        body: patched,
+        cssBody: '',
+      });
+    }
+
+    const existingCss = await readStyleCssSource(baseUrl, name);
+    const cssBody = composeStyleCss(existingCss, geometryType, styleProps, preserveExtraRules && !thematicLabel);
+    return commitGeoServerStyle({
+      baseUrl,
+      workspace: 'ggnr',
+      layerName: params.layerName?.trim() || name,
+      styleName: name,
+      format: 'css',
+      body: cssBody,
+      cssBody,
+    });
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return { success: false, error: msg };
+  }
+}
+
+const STYLE_FORMAT_CONTENT = {
+  css: 'application/vnd.geoserver.geocss+css',
+  sld: 'application/vnd.ogc.sld+xml',
+} as const;
+
+async function readGeoServerStyleFormat(baseUrl: string, name: string): Promise<'css' | 'sld' | null> {
+  const res = await geoserverFetch(baseUrl, `/rest/styles/${encodeURIComponent(name)}.json`);
+  if (!res.ok) return null;
+  const meta = await res.json();
+  const format = String(meta?.style?.format ?? meta?.format ?? '').toLowerCase();
+  const filename = String(meta?.style?.filename ?? meta?.filename ?? '').toLowerCase();
+  if (format === 'css' || format === 'sld') return format;
+  if (filename.endsWith('.css')) return 'css';
+  if (filename.endsWith('.sld')) return 'sld';
+  return null;
+}
+
+function readDiskStyleFilename(name: string): string | null {
+  try {
+    const xml = fs.readFileSync(path.join(getStylesDir(), `${name}.xml`), 'utf-8');
+    const filename = xml.match(/<filename>\s*([^<]+)\s*<\/filename>/i)?.[1]?.trim();
+    return filename || null;
+  } catch {
+    return null;
+  }
+}
+
+function expectedStyleFilename(name: string, format: 'css' | 'sld'): string {
+  return `${name}.${format === 'css' ? 'css' : 'sld'}`;
+}
+
+async function readGeoServerStyleFilename(baseUrl: string, name: string): Promise<string | null> {
+  const res = await geoserverFetch(baseUrl, `/rest/styles/${encodeURIComponent(name)}.json`);
+  if (!res.ok) return null;
+  const meta = await res.json();
+  const filename = String(meta?.style?.filename ?? meta?.filename ?? '').trim();
+  return filename || null;
+}
+
+/** 형식만 SLD로 바뀌고 파일명이 .css로 남으면 편집기가 CSS 파일을 찾는다. */
+async function alignStyleCatalogFile(
+  baseUrl: string,
+  name: string,
+  format: 'css' | 'sld'
+): Promise<{ success: true } | { success: false; error: string }> {
+  const expected = expectedStyleFilename(name, format);
+  const current = await readGeoServerStyleFilename(baseUrl, name);
+  if (current !== expected) {
+    const put = await geoserverFetch(baseUrl, `/rest/styles/${encodeURIComponent(name)}`, {
+      method: 'PUT',
+      body: JSON.stringify({ style: { name, format, filename: expected } }),
+      contentType: 'application/json',
+    });
+    if (!put.ok) {
+      const text = (await put.text()).replace(/\s+/g, ' ').trim().slice(0, 300);
+      return { success: false, error: text || '스타일 파일명을 바꾸지 못했습니다.' };
+    }
+  }
+  const after = await readGeoServerStyleFilename(baseUrl, name);
+  if (after !== expected) return { success: false, error: '스타일 파일명이 바뀌지 않았습니다.' };
+  if (readDiskStyleFilename(name) !== expected) patchStyleCatalogFormat(name, format);
+  if (readDiskStyleFilename(name) !== expected) {
+    return { success: false, error: '스타일 설정 파일명이 바뀌지 않았습니다.' };
+  }
+  return { success: true };
+}
+
+function readDiskStyleFormat(name: string): 'css' | 'sld' | null {
+  try {
+    const xml = fs.readFileSync(path.join(getStylesDir(), `${name}.xml`), 'utf-8');
+    const tagged = xml.match(/<format>\s*(css|sld)\s*<\/format>/i)?.[1]?.toLowerCase();
+    if (tagged === 'css' || tagged === 'sld') return tagged;
+    const filename = xml.match(/<filename>\s*([^<]+)\s*<\/filename>/i)?.[1]?.toLowerCase() ?? '';
+    if (filename.endsWith('.css')) return 'css';
+    if (filename.endsWith('.sld')) return 'sld';
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/** 형식 변경 뒤에 CSS 본문이 스타일 폴더에 남으면 지오서버가 설정을 다시 CSS로 저장한다. */
+async function commitGeoServerStyle(args: {
+  baseUrl: string;
+  workspace: string;
+  layerName: string;
+  styleName: string;
+  format: 'css' | 'sld';
+  body: string;
+  cssBody: string;
+}): Promise<{ success: true; format: 'css' | 'sld' } | { success: false; error: string }> {
+  const body = args.format === 'sld' ? formatSldXml(args.body) : args.body;
+  const contentType = STYLE_FORMAT_CONTENT[args.format];
+  const current = await readGeoServerStyleFormat(args.baseUrl, args.styleName);
+  const disk = readDiskStyleFormat(args.styleName);
+  if (current !== args.format || disk !== args.format) {
+    const replaced = await recreateGeoServerStyle(
+      args.baseUrl,
+      args.workspace,
+      args.layerName,
+      args.styleName,
+      body,
+      contentType
+    );
+    if (!replaced.success) return replaced;
+  } else {
+    let put = await geoserverFetch(args.baseUrl, `/rest/styles/${encodeURIComponent(args.styleName)}?raw=true`, {
+      method: 'PUT',
+      body,
+      contentType,
+    });
+    if (!put.ok) {
+      put = await geoserverFetch(args.baseUrl, `/rest/styles/${encodeURIComponent(args.styleName)}`, {
+        method: 'PUT',
+        body,
+        contentType,
+      });
+    }
+    if (!put.ok) {
+      const replaced = await recreateGeoServerStyle(
+        args.baseUrl,
+        args.workspace,
+        args.layerName,
+        args.styleName,
+        body,
+        contentType
+      );
+      if (!replaced.success) return replaced;
+    }
+  }
+  const now = await readGeoServerStyleFormat(args.baseUrl, args.styleName);
+  if (now !== args.format) return { success: false, error: '스타일 형식이 바뀌지 않았습니다.' };
+  persistStyleFiles(args.styleName, args.format, args.cssBody, body);
+  if (readDiskStyleFormat(args.styleName) !== args.format) {
+    return { success: false, error: '스타일 설정 파일이 바뀌지 않았습니다.' };
+  }
+  const aligned = await alignStyleCatalogFile(args.baseUrl, args.styleName, args.format);
+  if (!aligned.success) return aligned;
+  return { success: true, format: args.format };
+}
+
+function composeStyleCss(
+  existingCss: string,
+  geometryType: GeometryType,
+  styleProps: StyleProps,
+  preserveExtraRules: boolean
+): string {
+  const newStarBlock = buildCssForLayerStyle(geometryType, styleProps);
+  return preserveExtraRules && existingCss.trim()
+    ? replaceDefaultRuleInCss(existingCss, newStarBlock)
+    : newStarBlock;
+}
+
+function readCssStyleFromDataDir(name: string): string {
+  try {
+    const cssPath = path.join(getStylesDir(), `${name}.css`);
+    if (!fs.existsSync(cssPath)) return '';
+    return fs.readFileSync(cssPath, 'utf-8');
+  } catch {
+    return '';
+  }
+}
+
+/**
+ * CSS 본문 조회. GeoServer REST → data_dir → (최후) sidecar.
+ * 서버 형식이 SLD이면 빈 문자열 — Web에서 고친 SLD를 옛 CSS로 덮지 않기 위함.
+ */
+async function readStyleCssSource(baseUrl: string, name: string): Promise<string> {
+  const format = await readGeoServerStyleFormat(baseUrl, name);
+  if (format === 'sld') return '';
+
+  if (format === 'css') {
+    const cssRes = await geoserverFetch(baseUrl, `/rest/styles/${encodeURIComponent(name)}.css`, {
       accept: 'text/css',
     });
-    const existingCss = getRes.ok ? await getRes.text() : '';
-
-    const newStarBlock = buildCssForLayerStyle(geometryType, styleProps);
-    // 주제도 emd형 단일 규칙은 이전 z-index 분리 라벨 블록을 남기지 않음
-    const cssBody =
-      preserveExtraRules && existingCss && !thematicLabel
-        ? replaceDefaultRuleInCss(existingCss, newStarBlock)
-        : newStarBlock;
-
-    const putRes = await geoserverFetch(baseUrl, `/rest/styles/${encodeURIComponent(name)}`, {
-      method: 'PUT',
-      body: cssBody,
-      contentType: 'application/vnd.geoserver.geocss+css',
-    });
-    if (!putRes.ok) {
-      const text = (await putRes.text()).replace(/\s+/g, ' ').trim().slice(0, 500);
-      return {
-        success: false,
-        error: text
-          ? `스타일 수정 실패: ${putRes.status} ${text}`
-          : `스타일 수정 실패: ${putRes.status}`,
-      };
+    if (cssRes.ok) {
+      const text = await cssRes.text();
+      if (text.includes('{')) return text;
     }
-    writeCssStyleToDataDir(name, cssBody);
-    return { success: true };
+  }
+  const fromDisk = readCssStyleFromDataDir(name);
+  if (fromDisk.trim()) return fromDisk;
+  const sidecar = readCssSourceFile(name);
+  if (sidecar.trim()) return sidecar;
+  return '';
+}
+
+/** CSS 본문을 임시 스타일로 올려 지오서버가 변환한 SLD를 받는다. */
+async function translateCssToSld(
+  baseUrl: string,
+  styleName: string,
+  cssBody: string
+): Promise<{ success: true; sld: string } | { success: false; error: string }> {
+  const temp = `${styleName}_css2sld`.replace(/[^A-Za-z0-9_.:-]/g, '').slice(0, 180);
+  await geoserverFetch(baseUrl, `/rest/styles/${encodeURIComponent(temp)}?purge=true`, { method: 'DELETE' });
+  const post = await geoserverFetch(baseUrl, `/rest/styles?name=${encodeURIComponent(temp)}`, {
+    method: 'POST',
+    body: cssBody,
+    contentType: 'application/vnd.geoserver.geocss+css',
+  });
+  if (!post.ok && post.status !== 201) {
+    const text = (await post.text()).replace(/\s+/g, ' ').trim().slice(0, 400);
+    return { success: false, error: text ? `CSS를 SLD로 바꾸지 못했습니다: ${post.status} ${text}` : 'CSS를 SLD로 바꾸지 못했습니다.' };
+  }
+  try {
+    const res = await geoserverFetch(baseUrl, `/rest/styles/${encodeURIComponent(temp)}.sld`, {
+      accept: 'application/vnd.ogc.sld+xml',
+    });
+    const sld = await res.text();
+    if (!res.ok || !/StyledLayerDescriptor/i.test(sld)) {
+      return { success: false, error: 'CSS를 SLD로 바꾸지 못했습니다.' };
+    }
+    return { success: true, sld: formatSldXml(sld) };
+  } finally {
+    await geoserverFetch(baseUrl, `/rest/styles/${encodeURIComponent(temp)}?purge=true`, { method: 'DELETE' });
+    removeStyleDiskArtifacts(temp);
+  }
+}
+
+async function assignBuiltinLayerStyle(baseUrl: string, workspace: string, layerName: string) {
+  const geomRes = await getLayerGeometryType({ url: baseUrl, workspace, layerName });
+  const geom = geomRes.geometryType ?? 'POLYGON';
+  const preferred = geom === 'POINT' ? 'point' : geom === 'LINE' ? 'line' : 'polygon';
+  let styleName = preferred;
+  for (const name of [preferred, 'polygon', 'line', 'point']) {
+    const ok = await geoserverFetch(baseUrl, `/rest/styles/${encodeURIComponent(name)}.json`).then((r) => r.ok);
+    if (ok) {
+      styleName = name;
+      break;
+    }
+  }
+  return setLayerDefaultStyle({ url: baseUrl, workspace, layerName, styleName });
+}
+
+/** 형식이 고정된 스타일은 잠시 레이어에서 떼고, 지운 뒤 새 형식으로 다시 만든다. */
+async function recreateGeoServerStyle(
+  baseUrl: string,
+  workspace: string,
+  layerName: string,
+  styleName: string,
+  body: string,
+  contentType: string
+) {
+  const detached = await assignBuiltinLayerStyle(baseUrl, workspace, layerName);
+  if (!detached.success) return { success: false as const, error: detached.error ?? '기본 스타일 전환 실패' };
+
+  let del = await geoserverFetch(baseUrl, `/rest/styles/${encodeURIComponent(styleName)}?purge=true`, {
+    method: 'DELETE',
+  });
+  if (!del.ok && del.status !== 404) {
+    del = await geoserverFetch(
+      baseUrl,
+      `/rest/styles/${encodeURIComponent(styleName)}?purge=true&recurse=true`,
+      { method: 'DELETE' }
+    );
+  }
+  if (!del.ok && del.status !== 404) {
+    await setLayerDefaultStyle({ url: baseUrl, workspace, layerName, styleName });
+    const text = (await del.text()).replace(/\s+/g, ' ').trim().slice(0, 300);
+    return { success: false as const, error: text || '기존 스타일을 지우지 못했습니다.' };
+  }
+  removeStyleDiskArtifacts(styleName);
+
+  let post = await geoserverFetch(baseUrl, `/rest/styles?name=${encodeURIComponent(styleName)}&raw=true`, {
+    method: 'POST',
+    body,
+    contentType,
+  });
+  if (!post.ok && post.status !== 201) {
+    post = await geoserverFetch(baseUrl, `/rest/styles?name=${encodeURIComponent(styleName)}`, {
+      method: 'POST',
+      body,
+      contentType,
+    });
+  }
+  if (!post.ok && post.status !== 201) {
+    const text = (await post.text()).replace(/\s+/g, ' ').trim().slice(0, 400);
+    return { success: false as const, error: text ? `스타일 생성 실패: ${post.status} ${text}` : `스타일 생성 실패: ${post.status}` };
+  }
+  const attached = await setLayerDefaultStyle({ url: baseUrl, workspace, layerName, styleName });
+  if (!attached.success) return { success: false as const, error: attached.error ?? '스타일 지정 실패' };
+  return { success: true as const };
+}
+
+/**
+ * 스타일 형식을 CSS 또는 SLD로 바꾼다.
+ * 본문을 REST로 저장해 지오서버가 설정 파일의 형식과 파일명을 고치게 한다.
+ */
+export async function setGeoServerStyleFormat(params: {
+  url?: string;
+  workspace?: string;
+  layerName: string;
+  styleName: string;
+  format: 'css' | 'sld';
+  geometryType?: GeometryType;
+  styleProps?: StyleProps;
+}) {
+  const baseUrl = resolveGeoServerFetchBase(params?.url);
+  const workspace = params?.workspace?.trim() || 'ggnr';
+  const layerName = params?.layerName?.trim();
+  const styleName = params?.styleName?.trim();
+  const format = params?.format === 'sld' ? 'sld' : params?.format === 'css' ? 'css' : null;
+  if (!layerName || !styleName || !format) {
+    return { success: false, error: '레이어, 스타일 이름, 형식이 필요합니다.' };
+  }
+  if (['point', 'line', 'polygon'].includes(styleName.toLowerCase())) {
+    return { success: false, error: '기본 스타일 형식은 바꿀 수 없습니다.' };
+  }
+
+  const geometryType = params.geometryType ?? 'POLYGON';
+  const styleProps = params.styleProps ?? {};
+
+  try {
+    const existingCss = await readStyleCssSource(baseUrl, styleName);
+    const cssBody = composeStyleCss(existingCss, geometryType, styleProps, true);
+    let body = cssBody;
+    if (format === 'sld') {
+      const translated = await translateCssToSld(baseUrl, styleName, cssBody);
+      if (!translated.success) return translated;
+      body = translated.sld;
+    }
+    return commitGeoServerStyle({
+      baseUrl,
+      workspace,
+      layerName,
+      styleName,
+      format,
+      body,
+      cssBody,
+    });
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);
     return { success: false, error: msg };
@@ -1875,6 +2262,71 @@ function getStylesDir(): string {
   return path.join(projectRoot, 'geoserver_modules', 'data_dir', 'styles');
 }
 
+function cssSourcePath(name: string): string {
+  return path.join(path.dirname(getStylesDir()), 'ggnr_style_src', `${name}.css`);
+}
+
+function readCssSourceFile(name: string): string {
+  try {
+    return fs.readFileSync(cssSourcePath(name), 'utf-8');
+  } catch {
+    return '';
+  }
+}
+
+function writeCssSourceFile(name: string, cssBody: string): void {
+  const file = cssSourcePath(name);
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, cssBody, 'utf-8');
+}
+
+function removeCssSourceFile(name: string): void {
+  try {
+    fs.unlinkSync(cssSourcePath(name));
+  } catch {
+    /* 원본이 없으면 둠 */
+  }
+}
+
+function removeStyleDiskArtifacts(name: string): void {
+  const dir = getStylesDir();
+  try {
+    if (!fs.existsSync(dir)) return;
+    for (const fileName of fs.readdirSync(dir)) {
+      const drop =
+        fileName === `${name}.css` ||
+        fileName === `${name}.sld` ||
+        fileName === `${name}.xml` ||
+        fileName.startsWith(`${name}.css.bak`) ||
+        fileName.startsWith(`${name}.sld.bak`) ||
+        fileName.startsWith(`${name}.xml.bak`) ||
+        (fileName.startsWith(`${name}.sld.`) && fileName.endsWith('.tmp'));
+      if (!drop) continue;
+      try {
+        fs.unlinkSync(path.join(dir, fileName));
+      } catch {
+        /* 사용 중이면 지오서버 삭제를 둔다 */
+      }
+    }
+  } catch {
+    /* ignore */
+  }
+}
+
+function persistStyleFiles(name: string, format: 'css' | 'sld', cssBody: string, publishedBody: string): void {
+  if (format === 'sld') {
+    // CSS 원본이 없으면 sidecar 제거 — 조회 시 낡은 CSS가 SLD보다 앞서지 않게
+    if (cssBody.trim()) writeCssSourceFile(name, cssBody);
+    else removeCssSourceFile(name);
+    writeStyleBodyToDataDir(name, 'sld', formatSldXml(publishedBody), true);
+  } else {
+    removeCssSourceFile(name);
+    writeCssStyleToDataDir(name, cssBody);
+    writeStyleBodyToDataDir(name, 'css', publishedBody, true);
+  }
+  if (readDiskStyleFormat(name) !== format) patchStyleCatalogFormat(name, format);
+}
+
 /** data_dir/styles 폴더에서 .css 파일이 있는 스타일 이름 Set (API 없이 사용) */
 function getCssStyleNamesFromDataDir(): Set<string> {
   const set = new Set<string>();
@@ -1898,6 +2350,38 @@ function writeCssStyleToDataDir(name: string, cssBody: string): void {
     fs.writeFileSync(path.join(stylesDir, `${name}.css`), cssBody, 'utf-8');
   } catch {
     // non-fatal — GeoServer REST 등록은 이미 됐을 수 있음
+  }
+}
+
+function writeStyleBodyToDataDir(name: string, format: 'css' | 'sld', body: string, removeOther = true): void {
+  try {
+    const stylesDir = getStylesDir();
+    fs.mkdirSync(stylesDir, { recursive: true });
+    const ext = format === 'css' ? 'css' : 'sld';
+    fs.writeFileSync(path.join(stylesDir, `${name}.${ext}`), body, 'utf-8');
+    if (!removeOther) return;
+    const other = format === 'css' ? 'sld' : 'css';
+    try {
+      fs.unlinkSync(path.join(stylesDir, `${name}.${other}`));
+    } catch {
+      /* 반대 형식 파일이 없으면 둠 */
+    }
+  } catch {
+    // non-fatal — GeoServer REST 등록은 이미 됐을 수 있음
+  }
+}
+
+function patchStyleCatalogFormat(name: string, format: 'css' | 'sld'): void {
+  try {
+    const xmlPath = path.join(getStylesDir(), `${name}.xml`);
+    if (!fs.existsSync(xmlPath)) return;
+    const ext = format === 'css' ? 'css' : 'sld';
+    let xml = fs.readFileSync(xmlPath, 'utf-8');
+    xml = xml.replace(/<format>[\s\S]*?<\/format>/i, `<format>${format}</format>`);
+    xml = xml.replace(/<filename>[\s\S]*?<\/filename>/i, `<filename>${name}.${ext}</filename>`);
+    fs.writeFileSync(xmlPath, xml, 'utf-8');
+  } catch {
+    /* 설정 파일이 없으면 지오서버 저장 결과를 둔다 */
   }
 }
 
@@ -2080,7 +2564,8 @@ function sortDefineLayerTables<T extends DefineLayerRow>(arr: T[]): T[] {
 }
 
 /**
- * 레이어 정보관리와 동일한 defineLayer config(tables.json)에서 테이블 목록 조회
+ * 레이어 정보관리와 동일한 defineLayer config(tables.json)에서 테이블 목록 조회.
+ * GGNR_PROJECT 분할 오버레이(split/{project}.json)가 있으면 코드 분할 자식을 교체한다.
  */
 export async function getDefineLayerTables(): Promise<{
   success: boolean;
@@ -2097,12 +2582,23 @@ export async function getDefineLayerTables(): Promise<{
       return { success: false, error: 'Invalid tables format', tables: [] };
     }
     normalizeDefineTableSource(tables as Record<string, unknown>[]);
-    const deduped = dedupeDefineLayerTablesByName(tables as Record<string, unknown>[]);
+    const { mergeProjectSplitIntoTables } = await import('@/lib/projectSplitLayers');
+    const merged = mergeProjectSplitIntoTables(tables as Record<string, unknown>[]);
+    const deduped = dedupeDefineLayerTablesByName(merged);
     return { success: true, tables: sortDefineLayerTables(deduped as DefineLayerRow[]) };
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);
     return { success: false, error: msg, tables: [] };
   }
+}
+
+/** tables.json·프로젝트 분할 반영 후 서비스 캐시 무효화 */
+export function invalidateDefineLayerTablesCache(): void {
+  void import('@/service/standardService')
+    .then((m) => {
+      m.invalidateTablesJsonCache?.();
+    })
+    .catch(() => {});
 }
 
 /** 레이어 설정(Layer) 화면 — tables.json 전체 저장 */
@@ -2119,6 +2615,7 @@ export async function saveDefineLayerTables(params: {
     const reordered = reorderDefineLayerTablesArray(deduped);
     fs.mkdirSync(path.dirname(DEFINE_LAYER_TABLES_PATH), { recursive: true });
     fs.writeFileSync(DEFINE_LAYER_TABLES_PATH, JSON.stringify(reordered, null, 2), 'utf-8');
+    invalidateDefineLayerTablesCache();
     return { success: true };
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);
