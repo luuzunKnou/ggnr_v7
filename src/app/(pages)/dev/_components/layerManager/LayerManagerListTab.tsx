@@ -19,7 +19,7 @@ import { LayerManagerRowHistoryDialog } from "./LayerManagerRowHistoryDialog"
 import { registerLayerManagerListRefresh, requestLayerManagerDefineRefresh } from "./layerManagerUploadBridge"
 import { StyleLegendThumb } from "./StylePreviewSwatch"
 import { SearchClearButton } from "./SearchClearButton"
-import { parseSimpleStyleFromCss, type GeometryType, type StyleProps } from "@/lib/geoserverStyleUtils"
+import { parseSimpleStyleFromCss, parseSldEnvStyle, type GeometryType, type StyleProps } from "@/lib/geoserverStyleUtils"
 import { fetchDefineLayerTables, fetchLayerDbTableList } from "./layerManagerListCache"
 import { getGeoServerBase } from "@/lib/geoserverUrl"
 import { withBasePath } from "@/lib/basePath"
@@ -331,7 +331,7 @@ export function LayerManagerListTab() {
     }
   }, [])
 
-  /** WMS 범례가 실패한 스타일의 CSS를 직접 조회해서 파싱 (DB 테이블 유무와 무관하게 스타일 미리보기 표시) */
+  /** WMS 범례 실패 시 CSS/SLD를 읽어 미리보기. 심볼 URL 있으면 모달 SYMBOL과 동일하게 아이콘 표시 */
   const loadCssFallback = useCallback((key: string, force = false) => {
     setCssFallbackMap((prev) => (prev[key] && !force ? prev : { ...prev, [key]: "loading" }))
     call("", "POST", {
@@ -341,12 +341,26 @@ export function LayerManagerListTab() {
     })
       .then((res) => {
         const data = res?.data ?? res
-        if (data?.success && data.format === "css" && data.body) {
+        if (!data?.success || !data.body) {
+          setCssFallbackMap((prev) => ({ ...prev, [key]: "error" }))
+          return
+        }
+        if (data.format === "css") {
           const { styleProps, geometryType } = parseSimpleStyleFromCss(data.body)
           setCssFallbackMap((prev) => ({ ...prev, [key]: { ...styleProps, geometryType } }))
-        } else {
-          setCssFallbackMap((prev) => ({ ...prev, [key]: "error" }))
+          return
         }
+        if (data.format === "sld") {
+          const parsed = parseSldEnvStyle(data.body, key)
+          if (parsed) {
+            setCssFallbackMap((prev) => ({
+              ...prev,
+              [key]: { ...parsed.styleProps, geometryType: parsed.geometryType },
+            }))
+            return
+          }
+        }
+        setCssFallbackMap((prev) => ({ ...prev, [key]: "error" }))
       })
       .catch(() => setCssFallbackMap((prev) => ({ ...prev, [key]: "error" })))
   }, [])
@@ -878,8 +892,7 @@ export function LayerManagerListTab() {
                             cacheBust={styleVersion}
                             onNeedCssFallback={() => {
                               if (!fallbackKey) return
-                              if (hasCssStyle) loadCssFallback(fallbackKey)
-                              else setCssFallbackMap((prev) => ({ ...prev, [fallbackKey]: "error" }))
+                              loadCssFallback(fallbackKey)
                             }}
                           />
                         </div>

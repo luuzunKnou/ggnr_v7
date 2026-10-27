@@ -4,13 +4,13 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react"
 import { Loader2 } from "lucide-react"
 import { call } from "@/lib/api"
 import type { GeometryType, StyleProps } from "@/lib/geoserverStyleUtils"
-import { toPublicSymbolPreviewUrl } from "@/lib/geoserverStyleUtils"
-import { isPointSymbolLayerName } from "@/lib/mapLayerGeometryOrder"
+import { resolveSymbolPreviewUrl } from "@/lib/geoserverStyleUtils"
+import { getGeoServerPublicBase } from "@/lib/geoserverUrl"
 
 /**
  * 체크보드 배경(외부 테두리) 위에 도형 타입별 심볼로 미리보기.
  * POINT: 중앙 점 / LINE: 대각선 / POLYGON: 내부 전체 면
- * 심볼 주소가 있으면 점·면 대신 아이콘 이미지를 보여 준다.
+ * SYMBOL일 때만 외부 심볼 이미지를 쓰고, POINT는 파일이 있어도 점으로 그린다.
  * GeoServer WMS 범례(GetLegendGraphic)와 달리 CSS 파싱 값만으로 그려서,
  * 실제 DB 테이블이 없어 WMS 요청이 실패하는 레이어에도 미리보기를 보여줄 수 있다.
  */
@@ -25,12 +25,13 @@ export function StylePreviewSwatch({
   size = "md",
   cacheBust,
 }: {
-  geometryType: GeometryType
+  /** SYMBOL: 모달과 동일 의미(심볼 URL 있음). POINT는 점만 */
+  geometryType: GeometryType | "SYMBOL"
   fillColor?: string
   strokeColor?: string
   opacity?: number
   strokeOpacity?: number
-  /** 외부 심볼 주소. 있으면 점/면 도형 대신 아이콘을 그린다 */
+  /** 스타일 심볼 URL. 있으면 모달 SYMBOL과 같이 아이콘으로 그린다 */
   symbolUrl?: string
   /** 체크보드 배경 + 테두리 표시 여부. WMS 범례 이미지와 나란히 섞여 보이는 곳(목록 등)에서는 false로 꺼서 톤을 맞춘다 */
   showFrame?: boolean
@@ -42,19 +43,25 @@ export function StylePreviewSwatch({
   const stroke = strokeColor || "#000000"
   const fillAlpha = opacity ?? 1
   const strokeAlpha = strokeOpacity ?? 1
-  const previewSrc = symbolUrl?.trim() ? toPublicSymbolPreviewUrl(symbolUrl) ?? symbolUrl.trim() : null
-  const origSrc = symbolUrl?.trim() || null
+  // 모달: hasSymbol = Boolean(symbolUrl) → SYMBOL. 동일 조건
+  const rawUrl = symbolUrl?.trim() || null
+  const useSymbolImage = Boolean(rawUrl)
+  /** GeoServer www 공개 경로. 실패 시 원본 URL 한 번만 재시도 */
+  const primarySrc = rawUrl
+    ? resolveSymbolPreviewUrl(rawUrl, getGeoServerPublicBase()) ?? rawUrl
+    : null
   const [symbolBroken, setSymbolBroken] = useState(false)
-  const [useOrig, setUseOrig] = useState(false)
-  const baseSrc = useOrig && origSrc ? origSrc : previewSrc
+  const [fallbackKind, setFallbackKind] = useState<"primary" | "raw">("primary")
+  const baseSrc =
+    fallbackKind === "raw" && rawUrl && rawUrl !== primarySrc ? rawUrl : primarySrc
   const imgSrc = baseSrc && cacheBust ? `${baseSrc}${baseSrc.includes("?") ? "&" : "?"}t=${cacheBust}` : baseSrc
   useLayoutEffect(() => {
     setSymbolBroken(false)
-    setUseOrig(false)
+    setFallbackKind("primary")
   }, [symbolUrl, cacheBust, geometryType])
 
-  const title = previewSrc && !symbolBroken
-    ? `SYMBOL · ${previewSrc}`
+  const title = useSymbolImage && baseSrc && !symbolBroken
+    ? `SYMBOL · ${baseSrc}`
     : geometryType === "LINE"
       ? `${geometryType} · 선색상 ${stroke}`
       : `${geometryType} · 색상 ${fill} · 투명도 ${opacity ?? 1}`
@@ -68,7 +75,7 @@ export function StylePreviewSwatch({
       }
       title={title}
     >
-      {imgSrc && !symbolBroken ? (
+      {useSymbolImage && imgSrc && !symbolBroken ? (
         <img
           key={imgSrc}
           src={imgSrc}
@@ -76,8 +83,8 @@ export function StylePreviewSwatch({
           className="absolute inset-0 h-full w-full object-contain p-0.5"
           onError={(e) => {
             if (e.currentTarget.getAttribute("src") !== imgSrc) return
-            if (!useOrig && origSrc && origSrc !== previewSrc) {
-              setUseOrig(true)
+            if (fallbackKind === "primary" && rawUrl && rawUrl !== primarySrc) {
+              setFallbackKind("raw")
               return
             }
             setSymbolBroken(true)
@@ -85,8 +92,9 @@ export function StylePreviewSwatch({
         />
       ) : (
         <>
-          {geometryType === "POINT" && (
+          {(geometryType === "POINT" || geometryType === "SYMBOL") && (
             // GeoServer가 심볼 없는 point에 실제로 그리는 지름(기본 스케일 기준 mark-size ≈ 9.7px / 32px 캔버스)과 맞춤
+            // SYMBOL인데 이미지 로드 실패 시에도 점으로 폴백
             <div
               className="absolute rounded-full"
               style={{
@@ -117,10 +125,13 @@ export function StylePreviewSwatch({
   )
 }
 
-function shouldTryLocalSymbol(tableName: string, shpType?: string): boolean {
+/**
+ * 목록 shp는 POINT/LINE/POLYGON만. 점형일 때 www 심볼 후보를 조회한다.
+ * 실제 아이콘은 listPublicSymbolStems가 «스타일에 심볼 URL 있음»(모달 SYMBOL)인 stem만 돌려줄 때만 쓴다.
+ */
+function shouldTryLocalSymbol(_tableName: string, shpType?: string): boolean {
   const t = String(shpType ?? "").toUpperCase()
-  if (t.includes("POINT")) return true
-  return isPointSymbolLayerName(tableName)
+  return t === "POINT" || t === "MULTIPOINT" || t === "SYMBOL"
 }
 
 function withAlpha(hex: string, alpha: number): string {
@@ -132,14 +143,14 @@ function withAlpha(hex: string, alpha: number): string {
   return `#${m[1]}${a}`
 }
 
-type LocalSymbolExt = "svg" | "png"
+type LocalSymbolInfo = { folder: string; ext: "svg" | "png" }
 
-let publicSymbolIndexPromise: Promise<Record<string, LocalSymbolExt>> | null = null
+let geoServerSymbolIndexPromise: Promise<Record<string, LocalSymbolInfo>> | null = null
 
-/** public/symbol 파일 목록을 한 번만 읽어, 없는 심볼은 요청하지 않는다. */
-function loadPublicSymbolIndex(): Promise<Record<string, LocalSymbolExt>> {
-  if (!publicSymbolIndexPromise) {
-    publicSymbolIndexPromise = call("", "POST", {
+/** GeoServer www/symbol 목록을 한 번만 읽어, 없는 심볼은 요청하지 않는다. */
+function loadGeoServerSymbolIndex(): Promise<Record<string, LocalSymbolInfo>> {
+  if (!geoServerSymbolIndexPromise) {
+    geoServerSymbolIndexPromise = call("", "POST", {
       service: "devTestService",
       action: "listPublicSymbolStems",
       params: {},
@@ -148,11 +159,19 @@ function loadPublicSymbolIndex(): Promise<Record<string, LocalSymbolExt>> {
         const data = res?.data ?? res
         const stems = data?.stems
         if (!data?.success || !stems || typeof stems !== "object") return {}
-        return stems as Record<string, LocalSymbolExt>
+        const out: Record<string, LocalSymbolInfo> = {}
+        for (const [stem, info] of Object.entries(stems as Record<string, unknown>)) {
+          if (!info || typeof info !== "object") continue
+          const folder = String((info as { folder?: string }).folder ?? "").trim()
+          const ext = String((info as { ext?: string }).ext ?? "").toLowerCase()
+          if (!folder || (ext !== "svg" && ext !== "png")) continue
+          out[stem] = { folder, ext: ext as "svg" | "png" }
+        }
+        return out
       })
       .catch(() => ({}))
   }
-  return publicSymbolIndexPromise
+  return geoServerSymbolIndexPromise
 }
 
 /** 목록 행 스타일 칸. 범례 유무와 관계없이 28px(테두리 포함)로 고정한다. */
@@ -194,7 +213,7 @@ function LegendPendingImage({ src, onError }: { src: string; onError: () => void
 
 /**
  * 행 스타일 칸 공통 미리보기.
- * 점형·심볼 레이어 중 public/symbol에 파일이 있을 때만 아이콘을 쓰고, 없으면 바로 WMS 범례를 받는다.
+ * 모달 SYMBOL과 동일: 스타일에 심볼 URL이 있고 www 파일이 있으면 아이콘, 아니면 WMS·스와치.
  */
 export function StyleLegendThumb({
   tableName,
@@ -214,39 +233,40 @@ export function StyleLegendThumb({
   cacheBust?: number
 }) {
   const tryLocal = shouldTryLocalSymbol(tableName, shpType)
-  const [localExt, setLocalExt] = useState<LocalSymbolExt | "none" | null>(tryLocal ? null : "none")
+  const [localInfo, setLocalInfo] = useState<LocalSymbolInfo | "none" | null>(tryLocal ? null : "none")
   const q = cacheBust ? `?t=${cacheBust}` : ""
 
   useEffect(() => {
     if (!shouldTryLocalSymbol(tableName, shpType)) {
-      setLocalExt("none")
+      setLocalInfo("none")
       return
     }
     let cancelled = false
-    setLocalExt(null)
-    void loadPublicSymbolIndex().then((stems) => {
+    setLocalInfo(null)
+    void loadGeoServerSymbolIndex().then((stems) => {
       if (cancelled) return
-      const ext = stems[tableName.trim().toLowerCase()]
-      setLocalExt(ext === "svg" || ext === "png" ? ext : "none")
+      const info = stems[tableName.trim().toLowerCase()]
+      setLocalInfo(info ?? "none")
     })
     return () => {
       cancelled = true
     }
   }, [tableName, shpType])
 
-  if (localExt === null) {
+  if (localInfo === null) {
     return (
       <span className={LEGEND_SLOT_CLASS}>
         <LegendSpinner />
       </span>
     )
   }
-  if (localExt === "svg" || localExt === "png") {
+  if (localInfo !== "none") {
+    const src = `${getGeoServerPublicBase()}/www/symbol/${encodeURIComponent(localInfo.folder)}/${encodeURIComponent(tableName)}.${localInfo.ext}${q}`
     return (
       <span className={LEGEND_SLOT_CLASS}>
         <LegendPendingImage
-          src={`/symbol/${tableName}.${localExt}${q}`}
-          onError={() => setLocalExt("none")}
+          src={src}
+          onError={() => setLocalInfo("none")}
         />
       </span>
     )
@@ -260,7 +280,9 @@ export function StyleLegendThumb({
       {showImg && <LegendPendingImage src={legendUrl} onError={onNeedCssFallback} />}
       {showSwatch && (
         <StylePreviewSwatch
-          geometryType={fallbackState.geometryType}
+          geometryType={
+            fallbackState.symbolUrl?.trim() ? "SYMBOL" : fallbackState.geometryType
+          }
           fillColor={fallbackState.fillColor}
           strokeColor={fallbackState.strokeColor}
           opacity={fallbackState.opacity}

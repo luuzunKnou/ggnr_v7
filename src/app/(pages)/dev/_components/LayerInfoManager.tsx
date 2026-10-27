@@ -19,9 +19,10 @@ import { SearchClearButton } from "./layerManager/SearchClearButton"
 import { SplitLayerDialog } from "./layerManager/SplitLayerDialog"
 import { isSplitLayerParent } from "@/lib/splitLayerTargets"
 import { call } from "@/lib/api"
-import { parseSimpleStyleFromCss, parseSymbolFolderFromUrl, symbolFileNameFromUrl, toPublicSymbolPreviewUrl, type GeometryType, type StyleProps } from "@/lib/geoserverStyleUtils"
+import { normalizeGeoServerSymbolUrl } from "@/lib/geoserverSymbolPath"
+import { parseSimpleStyleFromCss, parseSldEnvStyle, parseSymbolFolderFromUrl, resolveSymbolPreviewUrl, symbolFileNameFromUrl, type GeometryType, type StyleProps } from "@/lib/geoserverStyleUtils"
 import { withBasePath } from "@/lib/basePath"
-import { getGeoServerBase } from "@/lib/geoserverUrl"
+import { getGeoServerBase, getGeoServerPublicBase } from "@/lib/geoserverUrl"
 import {
   fetchDefineLayerTables,
   fetchLayerDbTableList,
@@ -51,10 +52,22 @@ function toApiGeometryType(kind: StyleFormGeomType): GeometryType {
   return kind === "SYMBOL" ? "POINT" : kind
 }
 
+/** 목록·스타일 폴백용. SYMBOL은 DB 기하가 아니므로 POINT로 본다. */
+function toListGeometryType(shpType?: string | null): GeometryType {
+  const t = String(shpType ?? "").trim().toUpperCase()
+  if (t === "POINT" || t === "SYMBOL" || t === "MULTIPOINT") return "POINT"
+  if (t === "LINE" || t === "LINESTRING" || t === "MULTILINESTRING") return "LINE"
+  if (t === "POLYGON" || t === "MULTIPOLYGON") return "POLYGON"
+  return "POLYGON"
+}
+
 function toApiStyleProps(kind: StyleFormGeomType, props: StyleProps): StyleProps {
   if (kind === "SYMBOL") {
     const symbolUrl = props.symbolUrl?.trim()
-    return { ...props, symbolUrl: symbolUrl || undefined }
+    return {
+      ...props,
+      symbolUrl: symbolUrl ? normalizeGeoServerSymbolUrl(symbolUrl) : undefined,
+    }
   }
   const { symbolUrl: _drop, ...rest } = props
   return rest
@@ -63,7 +76,7 @@ function toApiStyleProps(kind: StyleFormGeomType, props: StyleProps): StyleProps
 function guessSymbolUrl(layerName: string | null | undefined): string | undefined {
   const name = layerName?.trim()
   if (!name) return undefined
-  return `${GEOSERVER_DEFAULT_URL}/www/symbol/water/${name}.svg`
+  return `/www/symbol/water/${name}.svg`
 }
 
 const HEX_COLOR_RE = /^#([0-9a-fA-F]{6})$/
@@ -369,7 +382,7 @@ export function LayerInfoManager({
     return () => clearTimeout(timer)
   }, [searchQuery])
 
-  /** WMS 범례가 실패한 스타일의 CSS를 직접 조회해서 파싱 (DB 테이블 유무와 무관하게 스타일 미리보기 표시) */
+  /** WMS 범례 실패 시 CSS/SLD를 읽어 미리보기. 심볼 URL 있으면 모달 SYMBOL과 동일하게 아이콘 표시 */
   const loadCssFallback = useCallback((key: string, force = false) => {
     setCssFallbackMap((prev) => (prev[key] && !force ? prev : { ...prev, [key]: "loading" }))
     call("", "POST", {
@@ -379,12 +392,26 @@ export function LayerInfoManager({
     })
       .then((res) => {
         const data = res?.data ?? res
-        if (data?.success && data.format === "css" && data.body) {
+        if (!data?.success || !data.body) {
+          setCssFallbackMap((prev) => ({ ...prev, [key]: "error" }))
+          return
+        }
+        if (data.format === "css") {
           const { styleProps, geometryType } = parseSimpleStyleFromCss(data.body)
           setCssFallbackMap((prev) => ({ ...prev, [key]: { ...styleProps, geometryType } }))
-        } else {
-          setCssFallbackMap((prev) => ({ ...prev, [key]: "error" }))
+          return
         }
+        if (data.format === "sld") {
+          const parsed = parseSldEnvStyle(data.body, key)
+          if (parsed) {
+            setCssFallbackMap((prev) => ({
+              ...prev,
+              [key]: { ...parsed.styleProps, geometryType: parsed.geometryType },
+            }))
+            return
+          }
+        }
+        setCssFallbackMap((prev) => ({ ...prev, [key]: "error" }))
       })
       .catch(() => setCssFallbackMap((prev) => ({ ...prev, [key]: "error" })))
   }, [])
@@ -488,6 +515,27 @@ export function LayerInfoManager({
     },
     [config]
   )
+
+  /** 스타일이 점·심볼이면 목록 «도형»을 POINT로 맞춤 (SYMBOL은 목록에 두지 않음). */
+  const syncListShpTypeFromStyle = useCallback((layerName: string | null | undefined, styleKind: StyleFormGeomType) => {
+    const name = String(layerName ?? "").trim().toLowerCase()
+    if (!name) return
+    const listGeom = toApiGeometryType(styleKind)
+    if (listGeom !== "POINT") return
+    setConfig((prev) => {
+      if (!prev) return prev
+      let changed = false
+      const tables = prev.tables.map((t) => {
+        const row = t as Record<string, unknown>
+        if (String(row.define_table_name ?? "").trim().toLowerCase() !== name) return t
+        const cur = String(row.define_table_shp_type ?? "").trim().toUpperCase()
+        if (cur === "POINT") return t
+        changed = true
+        return { ...row, define_table_shp_type: "POINT" }
+      })
+      return changed ? { ...prev, tables } : prev
+    })
+  }, [])
 
   const saveConfig = useCallback(async () => {
     if (!config) return
@@ -759,10 +807,7 @@ export function LayerInfoManager({
   const openAdd = useCallback((layerName: string, shpType?: string) => {
     setTargetLayerName(layerName)
     setFormName(layerName)
-    const geom: GeometryType =
-      shpType === "POINT" || shpType === "LINE" || shpType === "POLYGON"
-        ? (shpType as GeometryType)
-        : "POLYGON"
+    const geom = toListGeometryType(shpType)
     setFormGeometryType(geom)
     setFormProps({ ...defaultStyleProps })
     setFormError(null)
@@ -778,8 +823,7 @@ export function LayerInfoManager({
     setEditOpen(true)
     setFormSaving(false)
     symbolFolderTouchedRef.current = false
-    const fallbackGeom: GeometryType =
-      shpType === "POINT" || shpType === "LINE" || shpType === "POLYGON" ? shpType : "POLYGON"
+    const fallbackGeom = toListGeometryType(shpType)
     void loadLabelFieldOptions(layerName)
     try {
       const res = await call("", "POST", {
@@ -801,9 +845,11 @@ export function LayerInfoManager({
         const symbolUrl = String(data.styleProps.symbolUrl ?? "").trim()
         lastSymbolUrlRef.current = symbolUrl
         const hasSymbol = Boolean(symbolUrl)
-        setFormGeometryType(
-          hasSymbol ? "SYMBOL" : ((data.geometryType as GeometryType) ?? "POLYGON")
-        )
+        const styleKind: StyleFormGeomType = hasSymbol
+          ? "SYMBOL"
+          : ((data.geometryType as GeometryType) ?? "POLYGON")
+        setFormGeometryType(styleKind)
+        syncListShpTypeFromStyle(layerName, styleKind)
         setSymbolPickFile(null)
         setPickPreviewUrl("")
         setSymbolLinkFile("")
@@ -818,7 +864,7 @@ export function LayerInfoManager({
       setEditEditable(false)
       setStyleFormat(null)
     }
-  }, [loadLabelFieldOptions, loadSymbolFolders])
+  }, [loadLabelFieldOptions, loadSymbolFolders, syncListShpTypeFromStyle])
 
   const openLayerDefineDelete = useCallback((tableName: string, schema: string) => {
     setLayerDefineDeleteTarget({ tableName, schema })
@@ -1001,6 +1047,7 @@ export function LayerInfoManager({
       })
       const setData = setRes?.data ?? setRes
       if (setData?.success) {
+        syncListShpTypeFromStyle(targetLayerName, formGeometryType)
         setAddOpen(false)
         setTargetLayerName(null)
         setSuccessMsg(`레이어 "${targetLayerName}"에 스타일이 적용되었습니다.`)
@@ -1015,7 +1062,7 @@ export function LayerInfoManager({
     } finally {
       setFormSaving(false)
     }
-  }, [formName, formGeometryType, formProps, targetLayerName, loadStyleInfo])
+  }, [formName, formGeometryType, formProps, targetLayerName, loadStyleInfo, syncListShpTypeFromStyle])
 
   const handleEditSubmit = useCallback(async () => {
     if (!targetStyleName || !editEditable) return
@@ -1078,6 +1125,7 @@ export function LayerInfoManager({
             },
           }))
         }
+        syncListShpTypeFromStyle(targetLayerName, formGeometryType)
         setEditOpen(false)
         setTargetStyleName(null)
         setTargetLayerName(null)
@@ -1093,7 +1141,7 @@ export function LayerInfoManager({
     } finally {
       setFormSaving(false)
     }
-  }, [targetStyleName, targetLayerName, editEditable, formGeometryType, formProps, styleFormat, symbolFolder, symbolLinkFile, symbolPickFile, handleSaveSymbolFile, handleLinkSymbolFile, loadStyleInfo])
+  }, [targetStyleName, targetLayerName, editEditable, formGeometryType, formProps, styleFormat, symbolFolder, symbolLinkFile, symbolPickFile, handleSaveSymbolFile, handleLinkSymbolFile, loadStyleInfo, syncListShpTypeFromStyle])
 
   const handleStyleFormatChange = useCallback(async (next: "css" | "sld") => {
     if (!targetStyleName || !targetLayerName || !styleFormat || next === styleFormat || formSaving) return
@@ -1350,13 +1398,13 @@ export function LayerInfoManager({
                 <p className="text-xs text-muted-foreground">현재 심볼</p>
                 <StylePreviewSwatch
                   key={formProps.symbolUrl?.trim() || "symbol-current"}
-                  geometryType="POINT"
+                  geometryType="SYMBOL"
                   symbolUrl={formProps.symbolUrl}
                   cacheBust={symbolPreviewKey}
                 />
                 {formProps.symbolUrl?.trim() ? (
                   <a
-                    href={`${toPublicSymbolPreviewUrl(formProps.symbolUrl) ?? formProps.symbolUrl}${symbolPreviewKey ? `?v=${symbolPreviewKey}` : ""}`}
+                    href={`${resolveSymbolPreviewUrl(formProps.symbolUrl, getGeoServerPublicBase()) ?? formProps.symbolUrl}${symbolPreviewKey ? `?v=${symbolPreviewKey}` : ""}`}
                     download={symbolFileNameFromUrl(formProps.symbolUrl)}
                     className="text-xs text-primary underline underline-offset-2 truncate max-w-full hover:cursor-pointer"
                     title="클릭하면 파일을 받습니다"
@@ -1372,7 +1420,7 @@ export function LayerInfoManager({
                 {applySymbolUrl ? (
                   <StylePreviewSwatch
                     key={applySymbolUrl}
-                    geometryType="POINT"
+                    geometryType="SYMBOL"
                     symbolUrl={applySymbolUrl}
                   />
                 ) : (
@@ -1837,8 +1885,7 @@ export function LayerInfoManager({
                           cacheBust={styleVersion}
                           onNeedCssFallback={() => {
                             if (!fallbackKey) return
-                            if (hasCssStyle) loadCssFallback(fallbackKey)
-                            else setCssFallbackMap((prev) => ({ ...prev, [fallbackKey]: "error" }))
+                            loadCssFallback(fallbackKey)
                           }}
                         />
                       </div>
