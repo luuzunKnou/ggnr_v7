@@ -52,6 +52,7 @@ import * as fileDataUploadService from './fileDataUploadService';
 import * as integrationService from './integrationService';
 import * as fileConverterService from './fileConverterService';
 import * as pdfToJpgService from './pdfToJpgService';
+import * as shpToDxfService from './shpToDxfService';
 import * as ocrMigrationService from './ocrMigrationService';
 import * as layerRowService from './layerRowService';
 import * as layerExtraService from './layerExtraService';
@@ -145,6 +146,7 @@ export {
   integrationService,
   fileConverterService,
   pdfToJpgService,
+  shpToDxfService,
   ocrMigrationService,
   layerRowService,
   layerExtraService,

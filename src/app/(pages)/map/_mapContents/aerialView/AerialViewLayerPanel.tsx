@@ -58,7 +58,6 @@ function layerRows(kind: AerialKind, units: WorkUnitItem[], keyword: string): La
       continue;
     }
     for (const file of unit.files) {
-      if (kind === 'ortho' && !(file.status === 'done' && file.tuKey != null)) continue;
       const hay = `${unit.workName} ${file.name}`.toLowerCase();
       if (q && !hay.includes(q)) continue;
       rows.push({

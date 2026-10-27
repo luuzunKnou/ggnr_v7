@@ -10,6 +10,7 @@ type ServiceMenuLayerClearTarget = Partial<
     | 'setSpatialFilteredLayerNames'
     | 'setIdentifyResultList'
     | 'setIdentifySelectedRow'
+    | 'setDataQueryMapPick'
     | 'setServiceWmsCqlByLayer'
   >
 >;
@@ -90,4 +91,5 @@ export function clearServiceMenuLayerState(
   ctx.setServiceWmsCqlByLayer?.((prev) => (prev == null ? prev : null));
   ctx.setIdentifyResultList?.((prev) => (prev == null ? prev : null));
   ctx.setIdentifySelectedRow?.((prev) => (prev == null ? prev : null));
+  ctx.setDataQueryMapPick?.((prev) => (prev == null ? prev : null));
 }

@@ -38,6 +38,7 @@ import {
   printServiceFilePreviewBlob,
 } from './ServiceFileImagePreview';
 import { setPdfViewerFocusUrl, getCachedPdfNumPages, prefetchPdfDocument } from './pdfDocumentCache';
+import type { IndexSheetGuide, IndexSheetMode } from './inferPdfPageUprightRotation';
 
 export type ServiceFilePdfPreviewItem = {
   url: string;
@@ -50,6 +51,9 @@ type Props = {
   onClose: () => void;
   /** 제목 옆 보조 표시 (예: 관리자용 폴더 경로) */
   titleHint?: string | null;
+  /** 색인도일 때만 지정. 가로 칸은 90·180·270, 세로 칸은 180만 */
+  indexSheetMode?: IndexSheetMode;
+  indexSheetGuide?: IndexSheetGuide;
 };
 
 const MIN_SCALE = 0.25;
@@ -79,7 +83,7 @@ function toolbarBtnClass(disabled?: boolean, active?: boolean): string {
 /**
  * PDF 전용 전체화면 뷰어 — 사이드바(PDF 목록·페이지 썸네일) + 확대·패닝·회전·인쇄.
  */
-export function ServiceFilePdfPreview({ items, initialIndex, onClose, titleHint }: Props) {
+export function ServiceFilePdfPreview({ items, initialIndex, onClose, titleHint, indexSheetMode, indexSheetGuide }: Props) {
   const [mounted, setMounted] = useState(false);
   const itemsKey = useMemo(() => items.map((i) => i.fileName).join('\n'), [items]);
 
@@ -843,6 +847,8 @@ export function ServiceFilePdfPreview({ items, initialIndex, onClose, titleHint 
                       loadEnabled={mainCanvasReady}
                       onClick={() => navigateToPdfPage(pn)}
                       thumbMaxPx={PDF_PAGE_THUMB_DISPLAY_PX}
+                      indexSheetMode={indexSheetMode}
+                      indexSheetGuide={indexSheetGuide}
                     />
                   </div>
                 ))}
@@ -887,6 +893,8 @@ export function ServiceFilePdfPreview({ items, initialIndex, onClose, titleHint 
                 fitMaxHeight={fitMaxHeight}
                 onPagesReady={setPdfNumPagesStable}
                 onMainCanvasReady={handleMainCanvasReady}
+                indexSheetMode={indexSheetMode}
+                indexSheetGuide={indexSheetGuide}
               />
             </div>
           </div>
@@ -905,6 +913,8 @@ export function ServiceFilePdfPreview({ items, initialIndex, onClose, titleHint 
               scrollContainerRef={continuousScrollRef}
               fitMaxWidth={fitMaxWidth}
               fitMaxHeight={fitMaxHeight}
+              indexSheetMode={indexSheetMode}
+              indexSheetGuide={indexSheetGuide}
             />
           )}
         </div>
