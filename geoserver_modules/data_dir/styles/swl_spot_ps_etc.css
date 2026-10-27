@@ -1,6 +1,0 @@
-* {
-  mark: url("http://127.0.0.1:8090/geoserver/www/symbol/sewer/swl_spot_ps_etc.svg");
-  mark-mime: "image/svg+xml";
-  mark-size: [min(18, 5 + sqrt(100000 / env('wms_scale_denominator', 10000)) * 4)];
-  z-index: 0;
-}

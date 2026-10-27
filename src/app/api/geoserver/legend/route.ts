@@ -2,14 +2,15 @@ import { NextRequest, NextResponse } from 'next/server';
 import fs from 'node:fs';
 import path from 'node:path';
 import { getGeoServerInternalBase } from '@/lib/geoserverUrl';
+import { buildPrimaryLegendSld } from '@/lib/primaryLegendSld';
 
 const WORKSPACE = 'ggnr';
 const LAYER_NAME_RE = /^[A-Za-z0-9_]+$/;
 const ORTHO_EXTENT = 'ortho_extent';
 
-/** 1×1 투명 PNG — 테이블·레이어가 없어도 img 요청이 500으로 떨어지지 않게 */
+/** 1×1 완전 투명 PNG. 실패 자리에 색이 깔리지 않게 한다. */
 const TRANSPARENT_PNG = Buffer.from(
-  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg==',
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGNgYGBgAAAABQABpfZFQAAAAABJRU5ErkJggg==',
   'base64'
 );
 
@@ -23,8 +24,55 @@ function emptyLegend(): NextResponse {
   });
 }
 
-function legendPng(buf: Buffer): NextResponse {
-  return new NextResponse(new Uint8Array(buf), {
+async function fitLegendIcon(buf: Buffer, size = 32): Promise<Buffer> {
+  if (buf.length < 80) return buf;
+  try {
+    const sharp = (await import('sharp')).default;
+    const { data, info } = await sharp(buf, { failOn: 'none' }).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+    const { width, height, channels } = info;
+    if (!width || !height || channels < 4) return buf;
+    let minX = width;
+    let minY = height;
+    let maxX = -1;
+    let maxY = -1;
+    for (let i = 0; i < width * height; i++) {
+      if (data[i * channels + 3] < 20) continue;
+      const x = i % width;
+      const y = (i / width) | 0;
+      if (x < minX) minX = x;
+      if (y < minY) minY = y;
+      if (x > maxX) maxX = x;
+      if (y > maxY) maxY = y;
+    }
+    if (maxX < 0) return buf;
+    const inkW = maxX - minX + 1;
+    const inkH = maxY - minY + 1;
+    const pad = 3;
+    const inner = size - pad * 2;
+    const scale = Math.min(inner / inkW, inner / inkH, 3);
+    const targetW = Math.max(1, Math.round(inkW * scale));
+    const targetH = Math.max(1, Math.round(inkH * scale));
+    const left = Math.round((size - targetW) / 2);
+    const top = Math.round((size - targetH) / 2);
+    const icon = await sharp(buf, { failOn: 'none' })
+      .extract({ left: minX, top: minY, width: inkW, height: inkH })
+      .resize(targetW, targetH, { fit: 'fill' })
+      .png()
+      .toBuffer();
+    return sharp({
+      create: { width: size, height: size, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } },
+    })
+      .composite([{ input: icon, left, top }])
+      .png()
+      .toBuffer();
+  } catch {
+    return buf;
+  }
+}
+
+async function legendPng(buf: Buffer): Promise<NextResponse> {
+  const fitted = await fitLegendIcon(buf);
+  return new NextResponse(new Uint8Array(fitted), {
     status: 200,
     headers: {
       'Content-Type': 'image/png',
@@ -107,6 +155,58 @@ async function fetchOrthoExtentLegend(width: number, height: number): Promise<Bu
   return null;
 }
 
+/** 레이어 스키마가 없어도 스타일 파일만으로 범례를 그린다. 지오서버 스타일 화면과 같은 그림이다. */
+const LEGEND_CARRIERS = ['d_wtl_gain_ps', 'd_wtl_pipe_lm', 'landown_jeon', 'landown_dea', 'permit'];
+
+function retargetNamedLayer(sld: string, layerName: string): string {
+  return sld.replace(/(<(?:sld:)?NamedLayer>\s*<(?:sld:)?Name>)[^<]*/i, `$1${layerName}`);
+}
+
+async function fetchStyleFileLegend(styleName: string, width: number, height: number): Promise<Buffer | null> {
+  const sldPath = path.join(process.cwd(), 'geoserver_modules', 'data_dir', 'styles', `${styleName}.sld`);
+  let raw = '';
+  try {
+    raw = fs.readFileSync(sldPath, 'utf8');
+  } catch {
+    return null;
+  }
+  if (!raw.includes('StyledLayerDescriptor')) return null;
+  const base = getGeoServerInternalBase();
+  for (const carrier of LEGEND_CARRIERS) {
+    const params = new URLSearchParams({
+      SERVICE: 'WMS',
+      REQUEST: 'GetLegendGraphic',
+      VERSION: '1.0.0',
+      FORMAT: 'image/png',
+      LAYER: `${WORKSPACE}:${carrier}`,
+      WIDTH: String(width),
+      HEIGHT: String(height),
+      TRANSPARENT: 'true',
+      EXCEPTIONS: 'application/vnd.ogc.se_xml',
+      LEGEND_OPTIONS: 'forceLabels:off',
+      SLD_BODY: retargetNamedLayer(raw, carrier),
+    });
+    try {
+      const res = await fetch(`${base}/wms`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: params.toString(),
+        cache: 'no-store',
+        signal: AbortSignal.timeout(8000),
+      });
+      if (!res.ok) continue;
+      const ct = (res.headers.get('content-type') ?? '').toLowerCase();
+      if (!ct.includes('image')) continue;
+      const buf = Buffer.from(await res.arrayBuffer());
+      if (buf.length < 120 || buf[0] !== 0x89 || buf[1] !== 0x50) continue;
+      return buf;
+    } catch {
+      continue;
+    }
+  }
+  return null;
+}
+
 /**
  * GeoServer GetLegendGraphic 프록시.
  * DB 테이블·레이어가 없으면 GeoServer가 500 XML을 주므로, 그때는 투명 PNG로 바꿔 범례·콘솔 오류를 막는다.
@@ -124,7 +224,7 @@ export async function GET(req: NextRequest) {
 
   if (layer === ORTHO_EXTENT) {
     const buf = await fetchOrthoExtentLegend(width, height);
-    return buf ? legendPng(buf) : emptyLegend();
+    return buf ? await legendPng(buf) : emptyLegend();
   }
 
   const params = new URLSearchParams({
@@ -138,8 +238,24 @@ export async function GET(req: NextRequest) {
     HEIGHT: String(height),
     TRANSPARENT: 'true',
     EXCEPTIONS: 'application/vnd.ogc.se_xml',
+    LEGEND_OPTIONS: 'forceLabels:off;hideEmptyRules:true',
   });
+
+  if (sp.get('primary') === '1') {
+    const simple = buildPrimaryLegendSld(style, layer, getGeoServerInternalBase());
+    if (simple) {
+      params.delete('STYLE');
+      params.set('SLD_BODY', simple);
+      const simplified = await fetchLegendPng(`${getGeoServerInternalBase()}/wms?${params.toString()}`);
+      if (simplified) return await legendPng(simplified);
+      params.delete('SLD_BODY');
+      params.set('STYLE', style);
+    }
+  }
+
   const upstream = `${getGeoServerInternalBase()}/wms?${params.toString()}`;
   const buf = await fetchLegendPng(upstream);
-  return buf ? legendPng(buf) : emptyLegend();
+  if (buf) return await legendPng(buf);
+  const fromFile = await fetchStyleFileLegend(style, width, height);
+  return fromFile ? await legendPng(fromFile) : emptyLegend();
 }

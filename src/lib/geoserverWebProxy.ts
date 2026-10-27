@@ -41,9 +41,10 @@ export function isSecurePublicRequest(req: HeaderSource): boolean {
  * 게이트(`/build_yy/geoserver`)에서는 Path=/geoserver 쿠키가 다시 전송되지 않는다.
  */
 export function rewriteGeoserverSetCookie(raw: string): string {
+  let next = raw.replace(/Path=\/geoserver\//g, 'Path=/geoserver');
   const base = getBasePath();
-  if (!base) return raw;
-  return raw.replace(/Path=\/geoserver\b/g, `Path=${base}/geoserver`);
+  if (base) next = next.replace(/Path=\/geoserver\b/g, `Path=${base}/geoserver`);
+  return next;
 }
 
 export function geoserverSessionCookie(sessionId: string, secure: boolean): string {
@@ -206,7 +207,50 @@ function alignGeoserverSourceHeaders(headers: Headers, req: HeaderSource, upstre
   }
 }
 
-export async function proxyGeoserverWeb(req: Request & HeaderSource, upstreamUrl: string): Promise<Response> {
+function requestCookieWithSession(cookieHeader: string | null, sessionId: string): string {
+  const kept = (cookieHeader ?? '')
+    .split(';')
+    .map((part) => part.trim())
+    .filter((part) => part && !/^JSESSIONID=/i.test(part));
+  kept.push(`JSESSIONID=${sessionId}`);
+  return kept.join('; ');
+}
+
+function jsessionFromSetCookie(raw: string): string | null {
+  const pair = raw.split(';')[0] ?? '';
+  const eq = pair.indexOf('=');
+  if (eq <= 0) return null;
+  if (pair.slice(0, eq).trim().toUpperCase() !== 'JSESSIONID') return null;
+  if (/Max-Age\s*=\s*0/i.test(raw)) return null;
+  const value = pair.slice(eq + 1).trim();
+  return value || null;
+}
+
+function expireSessionCookie(path: string, secure: boolean): string {
+  const parts = ['JSESSIONID=', `Path=${path}`, 'Max-Age=0', 'HttpOnly', 'SameSite=Lax'];
+  if (secure) parts.push('Secure');
+  return parts.join('; ');
+}
+
+/** 경로만 다른 JSESSIONID 가 같이 있으면 서버가 그중 하나를 집는다. */
+function straySessionCookies(secure: boolean): string[] {
+  const keep = geoserverPublicCookiePath();
+  const paths = new Set<string>(['/geoserver', '/geoserver/', `${keep}/`]);
+  paths.delete(keep);
+  return [...paths].map((path) => expireSessionCookie(path, secure));
+}
+
+function injectReplaceUrl(html: string, url: string): string {
+  const script = `<script>history.replaceState(null,"",${JSON.stringify(url).replace(/</g, '\\u003c')})</script>`;
+  if (/<head[^>]*>/i.test(html)) return html.replace(/<head[^>]*>/i, (head) => `${head}${script}`);
+  return script + html;
+}
+
+export async function proxyGeoserverWeb(
+  req: Request & HeaderSource,
+  upstreamUrl: string,
+  bridge?: { sessionId: string; cleanUrl: string },
+): Promise<Response> {
   const headers = new Headers();
   req.headers.forEach((value, key) => {
     if (HOP_BY_HOP.has(key.toLowerCase())) return;
@@ -220,6 +264,7 @@ export async function proxyGeoserverWeb(req: Request & HeaderSource, upstreamUrl
 
   const method = req.method.toUpperCase();
   const hasBody = method !== 'GET' && method !== 'HEAD';
+  if (bridge) headers.set('cookie', requestCookieWithSession(req.headers.get('cookie'), bridge.sessionId));
   const upstream = await fetch(upstreamUrl, {
     method,
     headers,
@@ -249,14 +294,33 @@ export async function proxyGeoserverWeb(req: Request & HeaderSource, upstreamUrl
 
   const contentType = upstream.headers.get('content-type') ?? '';
   const rewriteText = method !== 'HEAD' && shouldRewriteGeoserverBody(contentType);
-  const body = method === 'HEAD' ? null : rewriteText
-    ? rewriteGeoserverPublicUrls(await upstream.text(), req)
-    : upstream.body;
+  let text: string | null = null;
+  if (rewriteText) {
+    text = rewriteGeoserverPublicUrls(await upstream.text(), req);
+    if (bridge) text = injectReplaceUrl(text, bridge.cleanUrl);
+  }
+  const body = method === 'HEAD' ? null : text != null ? text : upstream.body;
   const res = new Response(body, { status: upstream.status, headers: out });
   const setCookies =
     typeof upstream.headers.getSetCookie === 'function' ? upstream.headers.getSetCookie() : [];
+  let rotated: string | null = null;
   for (const raw of setCookies) {
+    const next = jsessionFromSetCookie(raw);
+    if (bridge && (next || /^JSESSIONID=/i.test((raw.split(';')[0] ?? '').trim()))) {
+      if (next) rotated = next;
+      continue;
+    }
     res.headers.append('set-cookie', rewriteGeoserverSetCookie(raw));
+  }
+  if (bridge) {
+    const loggedIn = text != null && text.includes('j_spring_security_logout');
+    const finalId = loggedIn && rotated ? rotated : bridge.sessionId;
+    const secure = isSecurePublicRequest(req);
+    res.headers.append('set-cookie', geoserverSessionCookie(finalId, secure));
+    for (const extra of straySessionCookies(secure)) {
+      res.headers.append('set-cookie', extra);
+    }
+    res.headers.set('cache-control', 'no-store');
   }
   return res;
 }

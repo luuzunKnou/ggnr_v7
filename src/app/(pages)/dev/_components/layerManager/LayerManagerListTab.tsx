@@ -22,10 +22,9 @@ import { SearchClearButton } from "./SearchClearButton"
 import { parseSimpleStyleFromCss, type GeometryType, type StyleProps } from "@/lib/geoserverStyleUtils"
 import { fetchDefineLayerTables, fetchLayerDbTableList } from "./layerManagerListCache"
 import { getGeoServerBase } from "@/lib/geoserverUrl"
+import { withBasePath } from "@/lib/basePath"
 
 const GEOSERVER_DEFAULT_URL = getGeoServerBase()
-
-const GEOSERVER_WORKSPACE = "ggnr"
 
 const SHARE_OPTIONS = [
   { label: "전체", value: "P" },
@@ -118,21 +117,16 @@ function pickLatestDate(...values: Array<string | null | undefined>): string | n
 }
 
 function getLegendGraphicUrl(layerName: string, styleName?: string, version?: number): string {
-  // GeoServer 레이어·스타일은 항상 소문자로 생성되므로 원본 대소문자와 무관하게 소문자로 조회
   const layerKey = layerName.toLowerCase()
   const params = new URLSearchParams({
-    SERVICE: "WMS",
-    REQUEST: "GetLegendGraphic",
-    VERSION: "1.0.0",
-    LAYER: `${GEOSERVER_WORKSPACE}:${layerKey}`,
-    STYLE: styleName?.trim() || layerKey,
-    FORMAT: "image/png",
-    WIDTH: "32",
-    HEIGHT: "32",
-    TRANSPARENT: "true",
-    ...(version != null ? { _v: String(version) } : {}),
+    layer: layerKey,
+    style: styleName?.trim() || layerKey,
+    width: "32",
+    height: "32",
+    primary: "1",
   })
-  return `${GEOSERVER_DEFAULT_URL}/wms?${params.toString()}`
+  if (version != null) params.set("v", String(version))
+  return withBasePath(`/api/geoserver/legend?${params.toString()}`)
 }
 
 function shareLabel(value: string): string {

@@ -384,6 +384,79 @@ export function buildThematicMapPolygonCss(styleProps: StyleProps): string {
 `;
 }
 
+function xmlText(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+function sldCssParam(name: string, value: string | number): string {
+  return `<CssParameter name="${name}">${xmlText(String(value))}</CssParameter>`;
+}
+
+/** 화면의 색·선으로 만드는 기본 SLD. 화살표·벤더 옵션은 포함하지 않는다. */
+export function buildSldFromSimpleStyle(
+  geometryType: GeometryType,
+  styleProps: StyleProps,
+  styleName: string
+): string {
+  const f = styleProps.fillColor ?? DEFAULT_PROPS.fillColor ?? '#808080';
+  const s = styleProps.strokeColor ?? DEFAULT_PROPS.strokeColor ?? '#000000';
+  const sw = styleProps.strokeWidth ?? DEFAULT_PROPS.strokeWidth ?? 1;
+  const op = styleProps.opacity ?? DEFAULT_PROPS.opacity ?? 0.3;
+  const strokeOp = styleProps.strokeOpacity ?? DEFAULT_PROPS.strokeOpacity ?? 1;
+  const label = styleProps.labelField?.trim() ?? '';
+  const fontSize = styleProps.size ?? DEFAULT_PROPS.size ?? LABEL_STYLE_DEFAULTS.fontSize;
+  const markSize = styleProps.markSize ?? DEFAULT_PROPS.markSize ?? 18;
+  const safeLabel = /^[A-Za-z_][A-Za-z0-9_]*$/.test(label) ? label : '';
+
+  let symbolizer = '';
+  if (geometryType === 'POINT') {
+    const symbolUrl = styleProps.symbolUrl?.trim();
+    const graphic = symbolUrl
+      ? `<ExternalGraphic><OnlineResource xlink:type="simple" xlink:href="${xmlText(symbolUrl)}"/><Format>${symbolUrl.toLowerCase().endsWith('.svg') ? 'image/svg+xml' : 'image/png'}</Format></ExternalGraphic>`
+      : `<Mark><WellKnownName>circle</WellKnownName><Fill>${sldCssParam('fill', f)}${sldCssParam('fill-opacity', op)}</Fill><Stroke>${sldCssParam('stroke', s)}${sldCssParam('stroke-width', sw)}${sldCssParam('stroke-opacity', strokeOp)}</Stroke></Mark>`;
+    symbolizer = `<PointSymbolizer><Graphic>${graphic}<Size>${markSize}</Size></Graphic></PointSymbolizer>`;
+  } else if (geometryType === 'LINE') {
+    symbolizer = [
+      `<LineSymbolizer><Stroke>${sldCssParam('stroke', '#FFFFFF')}${sldCssParam('stroke-width', 3)}${sldCssParam('stroke-opacity', 0.4)}</Stroke></LineSymbolizer>`,
+      `<LineSymbolizer><Stroke>${sldCssParam('stroke', s)}${sldCssParam('stroke-width', 2)}${sldCssParam('stroke-opacity', strokeOp)}</Stroke></LineSymbolizer>`,
+    ].join('');
+  } else {
+    symbolizer = `<PolygonSymbolizer><Fill>${sldCssParam('fill', f)}${sldCssParam('fill-opacity', op)}</Fill><Stroke>${sldCssParam('stroke', s)}${sldCssParam('stroke-width', sw)}${sldCssParam('stroke-opacity', strokeOp)}</Stroke></PolygonSymbolizer>`;
+  }
+
+  let textSymbolizer = '';
+  if (safeLabel) {
+    const placement =
+      geometryType === 'LINE'
+        ? '<LabelPlacement><LinePlacement><PerpendicularOffset>5</PerpendicularOffset></LinePlacement></LabelPlacement>'
+        : `<LabelPlacement><PointPlacement><AnchorPoint><AnchorPointX>0.5</AnchorPointX><AnchorPointY>1.0</AnchorPointY></AnchorPoint><Displacement><DisplacementX>0</DisplacementX><DisplacementY>${geometryType === 'POINT' ? '-10' : '0'}</DisplacementY></Displacement></PointPlacement></LabelPlacement>`;
+    const geometry =
+      geometryType === 'POLYGON'
+        ? '<Geometry><ogc:Function name="centroid"><ogc:PropertyName>geom</ogc:PropertyName></ogc:Function></Geometry>'
+        : '';
+    textSymbolizer = `<TextSymbolizer>${geometry}<Label><ogc:PropertyName>${safeLabel}</ogc:PropertyName></Label><Font>${sldCssParam('font-family', 'Nanum Gothic')}${sldCssParam('font-size', fontSize)}${sldCssParam('font-weight', 'bold')}</Font>${placement}<Halo><Radius>2</Radius><Fill>${sldCssParam('fill', '#222222')}</Fill></Halo><Fill>${sldCssParam('fill', '#FFFFFF')}</Fill></TextSymbolizer>`;
+  }
+
+  const name = xmlText(styleName.trim() || 'style');
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<StyledLayerDescriptor version="1.0.0" xmlns="http://www.opengis.net/sld" xmlns:ogc="http://www.opengis.net/ogc" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <NamedLayer>
+    <Name>${name}</Name>
+    <UserStyle>
+      <Name>${name}</Name>
+      <FeatureTypeStyle>
+        <Rule>${symbolizer}${textSymbolizer}</Rule>
+      </FeatureTypeStyle>
+    </UserStyle>
+  </NamedLayer>
+</StyledLayerDescriptor>
+`;
+}
+
 /** layer_korname 라벨이면 주제도(emd형) CSS 빌더 사용 */
 export function buildCssForLayerStyle(
   geometryType: GeometryType,
@@ -463,4 +536,446 @@ export function symbolFileNameFromUrl(symbolUrl: string): string {
   const raw = String(symbolUrl ?? '').trim();
   if (!raw) return '';
   return raw.split(/[?#]/)[0].split(/[\\/]/).pop() ?? raw;
+}
+
+const SLD_ENV_PAIR_SOURCE =
+  '<(?:[\\w]+:)?Function\\s+name="env">\\s*<(?:[\\w]+:)?Literal>\\s*([^<]+?)\\s*</(?:[\\w]+:)?Literal>\\s*<(?:[\\w]+:)?Literal>\\s*([^<]*?)\\s*</(?:[\\w]+:)?Literal>';
+
+function sldEnvPairPattern(): RegExp {
+  return new RegExp(SLD_ENV_PAIR_SOURCE, 'g');
+}
+
+function sldRuleBlocks(sld: string): string[] {
+  return sld.match(/<(?:[\w]+:)?Rule\b[^>]*>[\s\S]*?<\/(?:[\w]+:)?Rule>/g) ?? [];
+}
+
+function sldRuleTitle(rule: string): string {
+  return rule.match(/<(?:[\w]+:)?Title>\s*([^<]+?)\s*<\/(?:[\w]+:)?Title>/)?.[1]?.trim() ?? '';
+}
+
+function sldEnvDefaults(block: string): Map<string, string> {
+  const found = new Map<string, string>();
+  for (const match of block.matchAll(sldEnvPairPattern())) {
+    const key = match[1]?.trim();
+    if (!key || found.has(key)) continue;
+    found.set(key, match[2]?.trim() ?? '');
+  }
+  return found;
+}
+
+function sldRuleName(rule: string): string {
+  return rule.match(/<(?:[\w]+:)?Name>\s*([^<]+?)\s*<\/(?:[\w]+:)?Name>/)?.[1]?.trim() ?? '';
+}
+
+function sldHasGeomSymbolizer(rule: string): boolean {
+  return /<(?:[\w]+:)?(?:Point|Line|Polygon)Symbolizer\b/i.test(rule);
+}
+
+/** 범례 전용·라벨·화살표 규칙은 대표 스타일에서 제외 */
+function sldIsSecondaryRule(rule: string): boolean {
+  const title = sldRuleTitle(rule).toLowerCase();
+  const name = sldRuleName(rule).toLowerCase();
+  if (/_label$|_arrow$|_halo$/.test(title) || /_label$|_arrow$|_halo$/.test(name)) return true;
+  if (name === 'legend_sample' || name.includes('legend') || title.includes('legend')) return true;
+  if (/<(?:[\w]+:)?TextSymbolizer\b/i.test(rule) && !sldHasGeomSymbolizer(rule)) return true;
+  const maxScale = rule.match(/<(?:[\w]+:)?MaxScaleDenominator>\s*([0-9.]+)/i)?.[1];
+  if (maxScale != null && Number(maxScale) <= 1) return true;
+  return false;
+}
+
+/**
+ * 편집 대상 규칙: 스타일명 Title 우선 → 없으면 첫 도형 심볼라이저 규칙
+ * (Title 없는 점 심볼·한글 Title 분류 규칙 등 보정)
+ */
+function findPrimaryStyleRule(sld: string, styleName: string): { title: string; rule: string } | null {
+  const name = styleName.trim();
+  const rules = sldRuleBlocks(sld);
+  if (!rules.length) return null;
+
+  const byTitle =
+    rules.find((block) => sldRuleTitle(block) === name) ??
+    rules.find((block) => sldRuleTitle(block).toLowerCase() === name.toLowerCase());
+  if (byTitle) return { title: sldRuleTitle(byTitle) || name, rule: byTitle };
+
+  const geomRules = rules.filter((r) => sldHasGeomSymbolizer(r) && !sldIsSecondaryRule(r));
+  const pick = geomRules[0] ?? rules.find((r) => sldHasGeomSymbolizer(r)) ?? null;
+  if (!pick) return null;
+  return { title: sldRuleTitle(pick) || name, rule: pick };
+}
+
+/** @deprecated findPrimaryStyleRule 사용. 호환용 별칭 */
+function ruleWithStyleTitle(sld: string, styleName: string): { title: string; rule: string } | null {
+  return findPrimaryStyleRule(sld, styleName);
+}
+
+/** CssParameter 본문에서 색·숫자 리터럴 추출 (고정값 또는 env 기본값) */
+function sldCssParamLiteral(rule: string, paramName: string): string | null {
+  const re = new RegExp(
+    `<(?:[\\w]+:)?CssParameter\\s+name=["']${paramName}["']\\s*>([\\s\\S]*?)</(?:[\\w]+:)?CssParameter>`,
+    'i'
+  );
+  const m = rule.match(re);
+  if (!m) return null;
+  const body = m[1];
+  const plain = body.replace(/<[^>]+>/g, '').trim();
+  if (/^#?[0-9a-fA-F]{6}$/.test(plain) || /^-?[0-9]+(?:\.[0-9]+)?$/.test(plain)) return plain;
+  const literals = [...body.matchAll(/<(?:[\w]+:)?Literal>\s*([^<]*?)\s*<\/(?:[\w]+:)?Literal>/gi)].map(
+    (x) => x[1].trim()
+  );
+  for (let i = literals.length - 1; i >= 0; i--) {
+    const v = literals[i];
+    if (/^#?[0-9a-fA-F]{6}$/.test(v)) return v;
+    if (/^-?[0-9]+(?:\.[0-9]+)?$/.test(v) && !/_/.test(v)) return v;
+  }
+  return null;
+}
+
+function sldGraphicSize(rule: string): number | undefined {
+  const sizeBlock = rule.match(/<(?:[\w]+:)?Size>([\s\S]*?)<\/(?:[\w]+:)?Size>/i)?.[1];
+  if (!sizeBlock) return undefined;
+  const plain = sizeBlock.replace(/<[^>]+>/g, '').trim();
+  if (/^[0-9.]+$/.test(plain)) {
+    const n = Number(plain);
+    if (Number.isFinite(n) && n > 0) return n;
+  }
+  const literals = [...sizeBlock.matchAll(/<(?:[\w]+:)?Literal>\s*([^<]*?)\s*<\/(?:[\w]+:)?Literal>/gi)]
+    .map((x) => x[1].trim())
+    .filter((v) => /^[0-9.]+$/.test(v))
+    .map(Number)
+    .filter((n) => Number.isFinite(n) && n > 0 && n <= 200);
+  return literals[0];
+}
+
+function hexFromEnv(value: string): string {
+  const raw = value.trim();
+  if (/^#[0-9a-fA-F]{6}$/.test(raw)) return raw;
+  if (/^[0-9a-fA-F]{6}$/.test(raw)) return `#${raw}`;
+  return raw;
+}
+
+function hexToEnv(value: string | undefined): string | null {
+  const raw = value?.trim() ?? '';
+  if (!raw) return null;
+  const hex = raw.startsWith('#') ? raw.slice(1) : raw;
+  return /^[0-9a-fA-F]{6}$/.test(hex) ? hex.toUpperCase() : null;
+}
+
+/** PointSymbolizer ExternalGraphic 주소. CSS mark:url(...) ↔ SLD 심볼 대응 */
+function sldExternalGraphicHref(block: string): string | null {
+  const m =
+    block.match(/<(?:[\w]+:)?OnlineResource\b[^>]*\bxlink:href\s*=\s*["']([^"']+)["']/i) ??
+    block.match(/<(?:[\w]+:)?OnlineResource\b[^>]*\bhref\s*=\s*["']([^"']+)["']/i);
+  const href = m?.[1]?.trim();
+  return href || null;
+}
+
+function sldMimeForSymbolUrl(url: string): string {
+  return url.toLowerCase().endsWith('.svg') ? 'image/svg+xml' : 'image/png';
+}
+
+/** 점 크기: 제목_size → 규칙 내 기타 *_size(라벨 제외) → 숫자 Size */
+function sldPointMarkSize(
+  rule: string,
+  env: Map<string, string>,
+  title: string
+): number | undefined {
+  const titled = env.get(`${title}_size`);
+  if (titled != null && titled !== '') {
+    const n = Number(titled);
+    if (Number.isFinite(n)) return n;
+  }
+  for (const [key, value] of env) {
+    if (/_label_size$/i.test(key) || !/_size$/i.test(key) || value === '') continue;
+    const n = Number(value);
+    if (Number.isFinite(n)) return n;
+  }
+  const plain = rule.match(/<(?:[\w]+:)?Size>\s*([0-9.]+)\s*<\/(?:[\w]+:)?Size>/i);
+  if (plain) {
+    const n = Number(plain[1]);
+    if (Number.isFinite(n)) return n;
+  }
+  return undefined;
+}
+
+/**
+ * 규칙 Graphic을 CSS와 같이 심볼(url) ↔ 원(Mark)으로 맞춘다.
+ * - symbolUrl 있음: ExternalGraphic href/Format 갱신, 없으면 Mark→ExternalGraphic
+ * - symbolUrl 없음 + ExternalGraphic: circle Mark로 교체 (POINT)
+ */
+function patchSldRuleGraphicSymbol(rule: string, symbolUrl: string | undefined): string {
+  const url = symbolUrl?.trim() ?? '';
+  const hasExternal = /<(?:[\w]+:)?ExternalGraphic\b/i.test(rule);
+  const hasMark = /<(?:[\w]+:)?Mark\b/i.test(rule);
+
+  if (url) {
+    const mime = sldMimeForSymbolUrl(url);
+    const hrefAttr = xmlText(url);
+    if (hasExternal) {
+      let next = rule.replace(
+        /<(?:[\w]+:)?OnlineResource\b[^>]*>/gi,
+        (tag) => {
+          if (/\bxlink:href\s*=/i.test(tag)) {
+            return tag.replace(/\bxlink:href\s*=\s*["'][^"']*["']/i, `xlink:href="${hrefAttr}"`);
+          }
+          if (/\bhref\s*=/i.test(tag)) {
+            return tag.replace(/\bhref\s*=\s*["'][^"']*["']/i, `href="${hrefAttr}"`);
+          }
+          return tag.replace(/\/?>$/, ` xlink:href="${hrefAttr}"$&`);
+        }
+      );
+      next = next.replace(
+        /(<(?:[\w]+:)?ExternalGraphic\b[\s\S]*?<(?:[\w]+:)?Format>)([^<]*)(<\/(?:[\w]+:)?Format>)/i,
+        `$1${mime}$3`
+      );
+      return next;
+    }
+    if (hasMark) {
+      const graphic = `<ExternalGraphic><OnlineResource xmlns:xlink="http://www.w3.org/1999/xlink" xlink:type="simple" xlink:href="${hrefAttr}"/><Format>${mime}</Format></ExternalGraphic>`;
+      return rule.replace(/<(?:[\w]+:)?Mark\b[^>]*>[\s\S]*?<\/(?:[\w]+:)?Mark>/i, graphic);
+    }
+    return rule;
+  }
+
+  if (hasExternal) {
+    return rule.replace(
+      /<(?:[\w]+:)?ExternalGraphic\b[^>]*>[\s\S]*?<\/(?:[\w]+:)?ExternalGraphic>/i,
+      '<Mark><WellKnownName>circle</WellKnownName></Mark>'
+    );
+  }
+  return rule;
+}
+
+function envValueBySuffixes(env: Map<string, string>, styleName: string, title: string, suffix: string): string | undefined {
+  for (const key of [`${styleName}${suffix}`, `${title}${suffix}`]) {
+    const v = env.get(key);
+    if (v != null) return v;
+  }
+  for (const [key, value] of env) {
+    if (key.endsWith(suffix) && (suffix !== '_size' || !/_label_size$/i.test(key))) return value;
+  }
+  return undefined;
+}
+
+/** 대표 규칙의 env·CssParameter·심볼을 화면 값으로 읽는다. Title 불일치·고정색 SLD도 보정. */
+export function parseSldEnvStyle(
+  sld: string,
+  styleName: string
+): { styleProps: StyleProps; geometryType: GeometryType } | null {
+  if (!styleName.trim() || !sld.trim()) return null;
+  const found = findPrimaryStyleRule(sld, styleName);
+  if (!found) return null;
+  const { title, rule } = found;
+  if (!sldHasGeomSymbolizer(rule)) return null;
+
+  const env = sldEnvDefaults(rule);
+  // 라벨 env는 *_label 규칙에 있을 수 있음
+  const labelRule =
+    sldRuleBlocks(sld).find((r) => {
+      const t = sldRuleTitle(r);
+      return t === `${styleName}_label` || t === `${title}_label`;
+    }) ?? null;
+  const labelEnv = labelRule ? sldEnvDefaults(labelRule) : env;
+
+  const styleProps: StyleProps = {};
+  const stroke = envValueBySuffixes(env, styleName, title, '_stroke') ?? sldCssParamLiteral(rule, 'stroke');
+  const strokeOpacity =
+    envValueBySuffixes(env, styleName, title, '_stroke_opacity') ?? sldCssParamLiteral(rule, 'stroke-opacity');
+  const strokeWidth =
+    envValueBySuffixes(env, styleName, title, '_stroke_width') ?? sldCssParamLiteral(rule, 'stroke-width');
+  const fill = envValueBySuffixes(env, styleName, title, '_fill') ?? sldCssParamLiteral(rule, 'fill');
+  const fillOpacity =
+    envValueBySuffixes(env, styleName, title, '_fill_opacity') ??
+    envValueBySuffixes(env, styleName, title, '_opacity') ??
+    sldCssParamLiteral(rule, 'fill-opacity');
+  const label =
+    envValueBySuffixes(labelEnv, styleName, title, '_label_property_name') ??
+    envValueBySuffixes(env, styleName, title, '_label_property_name');
+  const labelSize =
+    envValueBySuffixes(labelEnv, styleName, title, '_label_size') ??
+    envValueBySuffixes(env, styleName, title, '_label_size');
+  const markSize = sldPointMarkSize(rule, env, title) ?? sldGraphicSize(rule);
+  const symbolUrl = sldExternalGraphicHref(rule);
+
+  if (stroke != null && stroke !== '') styleProps.strokeColor = hexFromEnv(stroke);
+  if (strokeOpacity != null && strokeOpacity !== '') {
+    const n = Number(strokeOpacity);
+    if (Number.isFinite(n)) styleProps.strokeOpacity = n;
+  }
+  if (strokeWidth != null && strokeWidth !== '') {
+    const n = Number(strokeWidth);
+    if (Number.isFinite(n) && n > 0) styleProps.strokeWidth = n;
+  }
+  if (fill != null && fill !== '') styleProps.fillColor = hexFromEnv(fill);
+  if (fillOpacity != null && fillOpacity !== '') {
+    const n = Number(fillOpacity);
+    if (Number.isFinite(n)) styleProps.opacity = n;
+  }
+  if (label != null && String(label).trim() !== '') styleProps.labelField = label;
+  if (labelSize != null && labelSize !== '') {
+    const n = Number(labelSize);
+    if (Number.isFinite(n) && n > 0) styleProps.size = n;
+  }
+  if (markSize != null && markSize > 0) styleProps.markSize = markSize;
+  if (symbolUrl) styleProps.symbolUrl = symbolUrl;
+
+  let geometryType: GeometryType = 'POLYGON';
+  if (/<(?:[\w]+:)?LineSymbolizer\b/.test(rule)) geometryType = 'LINE';
+  else if (/<(?:[\w]+:)?PointSymbolizer\b/.test(rule) && !/<(?:[\w]+:)?PolygonSymbolizer\b/.test(rule)) {
+    geometryType = 'POINT';
+  }
+  return { styleProps, geometryType };
+}
+
+function envUpdatesForStyle(styleName: string, props: StyleProps, keys: Set<string>): Map<string, string> {
+  const updates = new Map<string, string>();
+  const put = (suffix: string, value: string | null) => {
+    if (value == null || value === '') return;
+    const preferred = `${styleName}${suffix}`;
+    if (keys.has(preferred)) {
+      updates.set(preferred, value);
+      return;
+    }
+    for (const key of keys) {
+      if (suffix === '_size' && /_label_size$/i.test(key)) continue;
+      if (!key.endsWith(suffix)) continue;
+      updates.set(key, value);
+    }
+  };
+  put('_stroke', hexToEnv(props.strokeColor));
+  put('_fill', hexToEnv(props.fillColor));
+  if (props.strokeOpacity != null && Number.isFinite(props.strokeOpacity)) {
+    put('_stroke_opacity', String(props.strokeOpacity));
+  }
+  if (props.opacity != null && Number.isFinite(props.opacity)) {
+    put('_fill_opacity', String(props.opacity));
+    put('_opacity', String(props.opacity));
+  }
+  if (props.strokeWidth != null && Number.isFinite(props.strokeWidth)) {
+    put('_stroke_width', String(props.strokeWidth));
+  }
+  if (props.size != null && Number.isFinite(props.size)) put('_label_size', String(props.size));
+  if (props.markSize != null && Number.isFinite(props.markSize)) put('_size', String(props.markSize));
+  const label = props.labelField?.trim() ?? '';
+  if (/^[A-Za-z_][A-Za-z0-9_]*$/.test(label)) put('_label_property_name', label);
+  return updates;
+}
+
+/** 중첩 Function 없는 CssParameter 고정값만 화면 값으로 교체 */
+function patchSldRuleCssParams(rule: string, props: StyleProps): string {
+  let next = rule;
+  const patchPlain = (paramName: string, value: string | undefined) => {
+    if (value == null || value === '') return;
+    const re = new RegExp(
+      `(<(?:[\\w]+:)?CssParameter\\s+name=["']${paramName}["']\\s*>)([^<]*)(</(?:[\\w]+:)?CssParameter>)`,
+      'i'
+    );
+    next = next.replace(re, (whole, open: string, body: string, close: string) => {
+      if (String(body).includes('<')) return whole;
+      return `${open}${value}${close}`;
+    });
+  };
+  if (props.strokeColor?.trim()) patchPlain('stroke', props.strokeColor.trim());
+  if (props.fillColor?.trim()) patchPlain('fill', props.fillColor.trim());
+  if (props.strokeWidth != null && Number.isFinite(props.strokeWidth)) {
+    patchPlain('stroke-width', String(props.strokeWidth));
+  }
+  if (props.strokeOpacity != null && Number.isFinite(props.strokeOpacity)) {
+    patchPlain('stroke-opacity', String(props.strokeOpacity));
+  }
+  if (props.opacity != null && Number.isFinite(props.opacity)) {
+    patchPlain('fill-opacity', String(props.opacity));
+  }
+  if (props.markSize != null && Number.isFinite(props.markSize)) {
+    next = next.replace(
+      /(<(?:[\w]+:)?Size>)\s*[0-9.]+\s*(<\/(?:[\w]+:)?Size>)/i,
+      `$1${props.markSize}$2`
+    );
+  }
+  return next;
+}
+
+/**
+ * 대표 규칙의 env·CssParameter·심볼을 화면 값으로 맞춘다.
+ * 선색 env는 문서 전체(화살표 규칙 포함)에서 같은 이름으로 바뀐다.
+ */
+export function patchSldEnvDefaults(sld: string, styleName: string, props: StyleProps): string | null {
+  const found = findPrimaryStyleRule(sld, styleName);
+  if (!found) return null;
+  // env 키는 문서 전체(화살표 공유) + 대표 규칙
+  const keys = new Set([...sldEnvDefaults(sld).keys(), ...sldEnvDefaults(found.rule).keys()]);
+  const updates = envUpdatesForStyle(styleName, props, keys);
+  let patchedRule = patchSldRuleGraphicSymbol(found.rule, props.symbolUrl);
+  patchedRule = patchSldRuleCssParams(patchedRule, props);
+  const ruleChanged = patchedRule !== found.rule;
+
+  let next = sld;
+  if (ruleChanged) {
+    const idx = sld.indexOf(found.rule);
+    if (idx < 0) return null;
+    next = sld.slice(0, idx) + patchedRule + sld.slice(idx + found.rule.length);
+  }
+
+  if (updates.size === 0) return formatSldXml(next);
+
+  const patched = next.replace(sldEnvPairPattern(), (whole, key: string, current: string) => {
+    const envNext = updates.get(String(key).trim());
+    const prev = String(current).trim();
+    if (envNext == null || envNext === prev) return whole;
+    const escaped = prev.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    return whole.replace(
+      new RegExp(`(<ogc:Literal>|<Literal>)\\s*${escaped}\\s*(</ogc:Literal>|</Literal>)`),
+      `$1${envNext}$2`
+    );
+  });
+  return formatSldXml(patched);
+}
+
+/** 한 줄 SLD를 기존 스타일 파일과 같이 두 칸 들여쓰기로 펼친다. 글자만 있는 태그는 한 줄로 둔다. */
+export function formatSldXml(xml: string): string {
+  const trimmed = xml.trim();
+  if (!trimmed) return '';
+  if (trimmed.includes('\n')) return trimmed.endsWith('\n') ? trimmed : `${trimmed}\n`;
+  return layoutSldXml(trimmed.replace(/>\s+</g, '><'));
+}
+
+function layoutSldXml(compact: string): string {
+  const parts = compact.match(/<\?[^?]*\?>|<!--[\s\S]*?-->|<!\[CDATA\[[\s\S]*?\]\]>|<[^>]+>|[^<]+/g) ?? [compact];
+  const lines: string[] = [];
+  let indent = 0;
+  for (const part of parts) {
+    if (!part.trim()) continue;
+    if (part.startsWith('<?') || part.startsWith('<!')) {
+      lines.push(part.trim());
+      continue;
+    }
+    if (part.startsWith('</')) {
+      indent = Math.max(0, indent - 1);
+      lines.push(`${'  '.repeat(indent)}${part.trim()}`);
+      continue;
+    }
+    if (part.startsWith('<')) {
+      const selfClosing = /\/>$/.test(part.trim());
+      lines.push(`${'  '.repeat(indent)}${part.trim()}`);
+      if (!selfClosing) indent += 1;
+      continue;
+    }
+    lines.push(`${'  '.repeat(indent)}${part.trim()}`);
+  }
+  const collapsed: string[] = [];
+  for (let i = 0; i < lines.length; i++) {
+    const prev = collapsed[collapsed.length - 1];
+    const cur = lines[i];
+    const next = lines[i + 1];
+    if (prev && next && !cur.trim().startsWith('<') && next.trim().startsWith('</')) {
+      const openName = prev.trim().match(/^<([A-Za-z0-9:._-]+)/)?.[1];
+      const closeName = next.trim().match(/^<\/([A-Za-z0-9:._-]+)/)?.[1];
+      if (openName && openName === closeName && !prev.trim().endsWith('/>')) {
+        collapsed[collapsed.length - 1] = `${prev.trimEnd()}${cur.trim()}${next.trim()}`;
+        i += 1;
+        continue;
+      }
+    }
+    collapsed.push(cur);
+  }
+  return `${collapsed.join('\n')}\n`;
 }

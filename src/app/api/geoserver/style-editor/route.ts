@@ -4,12 +4,9 @@ import { getSessionUsrId } from '@/lib/auth/guard';
 import { getConsoleMenuLevel } from '@/lib/consoleMenuAccess/client';
 import { loadConsoleMenuLevels } from '@/lib/consoleMenuAccess/server';
 import { getBasePath } from '@/lib/basePath';
+import { GEOSERVER_WEB_BRIDGE_PARAM, isSpeculativeRequest, putGeoserverWebBridge } from '@/lib/geoserverWebBridge';
 import { createGeoServerWebSession } from '@/lib/geoserverWebLogin';
-import {
-  geoserverSessionCookie,
-  isSecurePublicRequest,
-  publicOriginFromRequest,
-} from '@/lib/geoserverWebProxy';
+import { publicOriginFromRequest } from '@/lib/geoserverWebProxy';
 
 export const dynamic = 'force-dynamic';
 
@@ -44,6 +41,10 @@ export async function GET(req: NextRequest) {
     });
   }
 
+  if (isSpeculativeRequest(req.headers)) {
+    return new NextResponse(null, { status: 204, headers: { 'Cache-Control': 'no-store' } });
+  }
+
   try {
     const sessionId = await createGeoServerWebSession();
     const target = new URL(
@@ -51,12 +52,12 @@ export async function GET(req: NextRequest) {
       publicOriginFromRequest(req)
     );
     target.searchParams.set('name', name);
+    target.searchParams.set(GEOSERVER_WEB_BRIDGE_PARAM, putGeoserverWebBridge(sessionId));
     return new NextResponse(null, {
       status: 302,
       headers: {
         Location: target.toString(),
         'Cache-Control': 'no-store',
-        'Set-Cookie': geoserverSessionCookie(sessionId, isSecurePublicRequest(req)),
       },
     });
   } catch {
