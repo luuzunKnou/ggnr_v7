@@ -73,6 +73,8 @@ import {
 } from './layerFactory/safetydataMapLayerFactory';
 import { useMapInteractions } from './hooks/useMapInteractions';
 import { useFeatureIdentify } from './hooks/useFeatureIdentify';
+import { useFeatureIdentifyHoverHighlight } from './hooks/useFeatureIdentifyHoverHighlight';
+import { FeatureIdentifyPopup } from './FeatureIdentifyPopup';
 import { useMapContextMenu } from './hooks/useMapContextMenu';
 import { findRoadAddressByJibun, getAddressFromCoord } from './addressSearch/vworldAddressSearch';
 import { transformCoordinate } from './services/coordinateService';
@@ -423,6 +425,9 @@ export default function OpenLayersMap({
   const mapRef = useRef<HTMLDivElement>(null);
   const mapContext = useMapContext();
   const searchParams = useSearchParams();
+  const router = useRouter();
+  const searchParamsRef = useRef(searchParams);
+  searchParamsRef.current = searchParams;
   const systemKeyFromUrl = searchParams.get('system') ?? '';
   /** Provider value는 매 렌더 새 객체 — identify effect deps에 mapContext 넣지 않기 위해 ref 유지 */
   const mapContextRef = useRef(mapContext);
@@ -1517,7 +1522,12 @@ export default function OpenLayersMap({
       roadFrontageMarkerPointPickActive ||
       (mapContext?.mapDrawInputSuspended ?? false) ||
       activeControls.some((id) => MEASUREMENT_IDS.includes(id)),
-    serviceWmsCqlByLayer
+    serviceWmsCqlByLayer,
+    mapContext?.suppressMapIdentifyUntilRef ?? null,
+  );
+  const setIdentifyHoverFeature = useFeatureIdentifyHoverHighlight(
+    mapInstanceRef.current,
+    mapReady,
   );
 
   // 좌측 새 식별이 오면 우측 대기분 제거(좌측 우선)
@@ -1530,6 +1540,55 @@ export default function OpenLayersMap({
   // 우측 분할지도 식별 → 좌측과 동일 파이프라인
   const mapSplitIdentifyPopup = mapContext?.mapSplitIdentifyPopup ?? null;
   const identifyIntakePopup = mapSplitIdentifyPopup ?? popupState;
+
+  const rawOpenedForIdentify = searchParams.get('opened')?.split(',').filter(Boolean) || [];
+  const openedTokensForIdentify = rawOpenedForIdentify.map((w) =>
+    w === 'dataQuery' ? 'standardList' : w
+  );
+  const isDataQueryIdentifyMenu = openedTokensForIdentify.includes('standardList');
+  const popupFeatureCount =
+    popupState?.results?.reduce((s, r) => s + r.features.length, 0) ?? 0;
+  const showDataQueryIdentifyOverlay =
+    isDataQueryIdentifyMenu &&
+    mapContext?.dataQueryMapPickEnabled !== false &&
+    popupState != null &&
+    popupElRef.current != null &&
+    popupFeatureCount > 1;
+
+  useEffect(() => {
+    if (!showDataQueryIdentifyOverlay) {
+      setIdentifyHoverFeature(null);
+      return;
+    }
+    setIdentifyHoverFeature(null);
+    const map = mapInstanceRef.current;
+    if (!map) return;
+    for (const layer of map.getLayers().getArray()) {
+      if (layer.get('listHighlightLayer') === true || layer.get('listSelectionLayer') === true) {
+        const src = (layer as VectorLayer<VectorSource>).getSource();
+        src?.clear();
+      }
+    }
+  }, [showDataQueryIdentifyOverlay, setIdentifyHoverFeature]);
+
+  const openDataQueryListAtRow = useCallback(
+    (tableName: string, row: Record<string, unknown>) => {
+      const ctx = mapContextRef.current;
+      if (!ctx) return;
+      ctx.setIdentifyResultList?.(null);
+      ctx.setIdentifySelectedRow?.(null);
+      ctx.setDataQueryMapPick?.({ tableName, row });
+      const sp = searchParamsRef.current;
+      const rawOpened = sp.get('opened')?.split(',').filter(Boolean) || [];
+      const nextOpened = rawOpened.includes('listView') ? rawOpened : [...rawOpened, 'listView'];
+      const next = new URLSearchParams(Array.from(sp.entries()));
+      next.set('opened', nextOpened.join(','));
+      if (tableName) next.set('dataTable', tableName);
+      next.delete('dataKey');
+      router.push(`/map?${next.toString()}`);
+    },
+    [router]
+  );
 
   // 지도 우클릭 → 주소정보 패널. 같은 필지(하이라이트 도형) 안을 다시 우클릭하면 패널만 닫기.
   const handleContextMenu = useCallback(
@@ -1651,7 +1710,6 @@ export default function OpenLayersMap({
   );
   useMapContextMenu(mapInstanceRef.current, mapReady, handleContextMenu);
 
-  const router = useRouter();
   const systemKey = systemKeyFromUrl;
   const detailWondoAvailable = useDetailWondoAvailable();
   const [detailWondoCheckedCount, setDetailWondoCheckedCount] = useState(0);
@@ -1817,13 +1875,18 @@ export default function OpenLayersMap({
         : null;
 
   const totalIdentifyCount = identifyIntakePopup?.results?.reduce((s, r) => s + r.features.length, 0) ?? 0;
+  const processedIdentifyPopupRef = useRef<typeof identifyIntakePopup>(null);
 
   // 지도 클릭 시 목록창(팝업) 없이 바로 '지도에서 선택된 항목' 데이터 패널로 열기
   // (좌측 popupState · 우측 mapSplitIdentifyPopup 공통)
   // mapContext는 ref로만 읽음 — options/visibleLayer 갱신으로 effect가 재실행·cancel 되지 않게
   useEffect(() => {
-    if (totalIdentifyCount === 0 || !identifyIntakePopup?.results?.length) return;
+    if (totalIdentifyCount === 0 || !identifyIntakePopup?.results?.length) {
+      if (totalIdentifyCount === 0) processedIdentifyPopupRef.current = null;
+      return;
+    }
     if (!mapContextRef.current) return;
+    if (processedIdentifyPopupRef.current === identifyIntakePopup) return;
     let cancelled = false;
 
     const run = async () => {
@@ -1831,11 +1894,12 @@ export default function OpenLayersMap({
       if (withFeat.length === 0) return;
 
       const clearIdentifyIntake = () => {
+        processedIdentifyPopupRef.current = identifyIntakePopup;
         closePopup();
         mapContextRef.current?.setMapSplitIdentifyPopup?.(null);
       };
 
-      const rawOpened = searchParams.get('opened')?.split(',').filter(Boolean) || [];
+      const rawOpened = searchParamsRef.current.get('opened')?.split(',').filter(Boolean) || [];
       const openedTokens = rawOpened.map((w) => (w === 'dataQuery' ? 'standardList' : w));
 
       let openScanLayers = new Set<string>();
@@ -2264,7 +2328,7 @@ export default function OpenLayersMap({
         mapContext?.occupationLedgerPanelOpen &&
         mapContext.applyOccupationLedgerMapPickRef
       ) {
-        const openedRaw = searchParams.get('opened')?.split(',').filter(Boolean) || [];
+        const openedRaw = searchParamsRef.current.get('opened')?.split(',').filter(Boolean) || [];
         const serEng = findOpenedOccupationLedgerSerEng(openedRaw);
         const binding = getOccupationLedgerBinding({ serEng });
         if (binding) {
@@ -2299,8 +2363,8 @@ export default function OpenLayersMap({
 
       /** 점사용료: 본표 + 점용 오버레이(공통점용과 동일 겹침 목록) */
       if (mapContext?.useFeePanelOpen && mapContext.applyUseFeeMapPickRef) {
-        const openedRaw = searchParams.get('opened')?.split(',').filter(Boolean) || [];
-        const system = String(searchParams.get('system') ?? '').trim();
+        const openedRaw = searchParamsRef.current.get('opened')?.split(',').filter(Boolean) || [];
+        const system = String(searchParamsRef.current.get('system') ?? '').trim();
         const feeSerEng = findOpenedUseFeeSerEng(openedRaw);
         const feeBinding = getUseFeeBinding({
           serEng: feeSerEng,
@@ -2516,7 +2580,34 @@ export default function OpenLayersMap({
           clearIdentifyIntake();
           return;
         }
-      } else if (!isRoadInfraMenu) {
+        const layer = withFeat.find((r) => r.isSplitLayer) ?? withFeat[0];
+        if (!layer) return;
+        /** 여러 건: 지도 위 목록 유지. 좌측 클릭만(우측 분할은 기존 식별 목록). */
+        if (totalIdentifyCount > 1 && identifyIntakePopup === popupState) {
+          mapContext.setMapSplitIdentifyPopup?.(null);
+          processedIdentifyPopupRef.current = identifyIntakePopup;
+          return;
+        }
+        if (totalIdentifyCount > 1) {
+          mapContext.setIdentifyResultList(identifyIntakePopup);
+          mapContext.setIdentifySelectedRow(null);
+          const nextOpened = rawOpened.includes('listView') ? rawOpened : [...rawOpened, 'listView'];
+          const next = new URLSearchParams(Array.from(searchParamsRef.current.entries()));
+          next.set('opened', nextOpened.join(','));
+          next.set('dataTable', layer.tableName);
+          next.delete('dataKey');
+          router.push(`/map?${next.toString()}`);
+          clearIdentifyIntake();
+          return;
+        }
+        const feature = layer.features[0]?.data;
+        if (feature && typeof feature === 'object') {
+          openDataQueryListAtRow(layer.tableName, feature as Record<string, unknown>);
+        }
+        clearIdentifyIntake();
+        return;
+      }
+      if (!isRoadInfraMenu) {
         clearIdentifyIntake();
         return;
       }
@@ -2527,7 +2618,7 @@ export default function OpenLayersMap({
       mapContext.setIdentifyResultList(identifyIntakePopup);
       mapContext.setIdentifySelectedRow(feature);
       const nextOpened = rawOpened.includes('listView') ? rawOpened : [...rawOpened, 'listView'];
-      const next = new URLSearchParams(Array.from(searchParams.entries()));
+      const next = new URLSearchParams(Array.from(searchParamsRef.current.entries()));
       next.set('opened', nextOpened.join(','));
       next.set('dataTable', layer.tableName);
       next.delete('dataKey');
@@ -2539,7 +2630,14 @@ export default function OpenLayersMap({
     return () => {
       cancelled = true;
     };
-  }, [totalIdentifyCount, identifyIntakePopup, searchParams, router, closePopup]);
+  }, [
+    totalIdentifyCount,
+    identifyIntakePopup,
+    popupState,
+    router,
+    closePopup,
+    openDataQueryListAtRow,
+  ]);
 
   // 맵 뷰 정보 (줌, 좌표계, 중심 좌표) 실시간 추적
   const viewInfo = useMapViewInfo(mapInstanceRef.current, mapReady);
@@ -3400,7 +3498,22 @@ export default function OpenLayersMap({
           document.body
         )}
 
-      {/* 목록창(팝업) 제거: 클릭 시 바로 '지도에서 선택된 항목' 데이터 패널로 열림 */}
+      {showDataQueryIdentifyOverlay && popupState && popupElRef.current && (
+        <FeatureIdentifyPopup
+          state={popupState}
+          portalTarget={popupElRef.current}
+          onClose={() => {
+            setIdentifyHoverFeature(null);
+            closePopup();
+          }}
+          onHover={setIdentifyHoverFeature}
+          onSelect={(tableName, _featureIndex, feature) => {
+            setIdentifyHoverFeature(null);
+            closePopup();
+            openDataQueryListAtRow(tableName, feature);
+          }}
+        />
+      )}
 
       <MapPrintModal
         open={printOpen}

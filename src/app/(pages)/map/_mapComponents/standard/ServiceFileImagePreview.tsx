@@ -20,6 +20,7 @@ import {
 import { cn } from '@/lib/utils';
 import { zoomPreviewAtPointer } from './previewZoomAtCursor';
 import { ServiceFilePdfPreviewStage } from './ServiceFilePdfPreviewStage';
+import type { IndexSheetGuide, IndexSheetMode } from './inferPdfPageUprightRotation';
 
 export type ServiceFilePreviewItem = {
   url: string;
@@ -35,6 +36,9 @@ type Props = {
   items: ServiceFilePreviewItem[];
   initialIndex: number;
   onClose: () => void;
+  /** 색인도일 때만 지정. 가로 칸은 90·180·270, 세로 칸은 180만 */
+  indexSheetMode?: IndexSheetMode;
+  indexSheetGuide?: IndexSheetGuide;
 };
 
 const MIN_SCALE = 0.25;
@@ -303,7 +307,7 @@ function toolbarBtnClass(disabled?: boolean): string {
 /**
  * 첨부 이미지·PDF 전체화면 미리보기. 확대·축소·회전·파일 이전/다음, PDF는 페이지 이동.
  */
-export function ServiceFileImagePreview({ items, initialIndex, onClose }: Props) {
+export function ServiceFileImagePreview({ items, initialIndex, onClose, indexSheetMode, indexSheetGuide }: Props) {
   const [mounted, setMounted] = useState(false);
   const itemsKey = useMemo(() => items.map((i) => `${i.fileName}\0${i.kind}`).join('\n'), [items]);
 
@@ -664,6 +668,8 @@ export function ServiceFileImagePreview({ items, initialIndex, onClose }: Props)
                 url={current.url}
                 pageNumber={pdfPage}
                 onPagesReady={setPdfNumPagesStable}
+                indexSheetMode={indexSheetMode}
+                indexSheetGuide={indexSheetGuide}
               />
             )}
           </div>

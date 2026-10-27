@@ -13,7 +13,7 @@ export const runtime = "nodejs";
 type ItemResult = { name: string; status: "skipped" | "generated" | "failed"; reason?: string };
 
 /**
- * POST /api/roadCad/ensure-cad-previews — `roadDoc/cad` 전체의 DWG/DXF에 대해 `_${stem}.png`가 없으면 생성 (원본과 같은 폴더)
+ * POST /api/roadCad/ensure-cad-previews — `file_data/road_doc/cad` 전체의 DWG/DXF에 대해 `_${stem}.png`가 없으면 생성 (원본과 같은 폴더)
  */
 export async function POST() {
   const dir = getRoadCadFileDir();

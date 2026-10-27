@@ -590,6 +590,16 @@ export type MapContextValue = {
    */
   dataQueryMapPickEnabled: boolean;
   setDataQueryMapPickEnabled: Dispatch<SetStateAction<boolean>>;
+  /**
+   * 지도 식별에서 고른 1건 → 기존 데이터 목록의 해당 페이지로 이동.
+   * LayerDataPanel에서 소비 후 null.
+   */
+  dataQueryMapPick: { tableName: string; row: Record<string, unknown> } | null;
+  setDataQueryMapPick: Dispatch<
+    SetStateAction<{ tableName: string; row: Record<string, unknown> } | null>
+  >;
+  /** 목록 창·지도 위 목록 닫기 직후, 같은 클릭이 지도 식별로 새어 창이 다시 열리지 않게 */
+  suppressMapIdentifyUntilRef: MutableRefObject<number>;
   /** 데이터조회 «드론영상 범위» bbox 표시 */
   orthoDataQueryBboxOn: boolean;
   setOrthoDataQueryBboxOn: Dispatch<SetStateAction<boolean>>;
@@ -884,6 +894,11 @@ export function MapContextProvider({ children }: { children: React.ReactNode }) 
   >([]);
   const clearMapDrawInteractionsRef = useRef<((except?: MapDrawInteractionKind) => void) | null>(null);
   const [dataQueryMapPickEnabled, setDataQueryMapPickEnabled] = useState(true);
+  const [dataQueryMapPick, setDataQueryMapPick] = useState<{
+    tableName: string;
+    row: Record<string, unknown>;
+  } | null>(null);
+  const suppressMapIdentifyUntilRef = useRef(0);
   const [orthoDataQueryBboxOn, setOrthoDataQueryBboxOn] = useState(false);
   const [orthoDataQueryTuKeys, setOrthoDataQueryTuKeys] = useState<number[]>([]);
   const [orthoDataQueryHitOptions, setOrthoDataQueryHitOptions] = useState<
@@ -1086,6 +1101,9 @@ export function MapContextProvider({ children }: { children: React.ReactNode }) 
         clearMapDrawInteractionsRef,
         dataQueryMapPickEnabled,
         setDataQueryMapPickEnabled,
+        dataQueryMapPick,
+        setDataQueryMapPick,
+        suppressMapIdentifyUntilRef,
         orthoDataQueryBboxOn,
         setOrthoDataQueryBboxOn,
         orthoDataQueryTuKeys,
