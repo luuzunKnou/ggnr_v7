@@ -169,23 +169,23 @@ export function WtlNetworkMapSectionModal({
         className="flex max-h-[90vh] w-[min(760px,100%)] flex-col overflow-hidden rounded-md bg-background shadow-lg"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between border-b border-border px-3 py-2">
+        <div className="standard-panel-header">
           <div className="min-w-0">
-            <div className="truncate text-sm font-semibold text-foreground">{pipe?.name ?? '관로'} 단면도</div>
+            <div className="standard-panel-title truncate">{pipe?.name ?? '관로'} 단면도</div>
             <div className="text-[11px] text-muted-foreground">{place || '예시 관로'} · 예시 지형</div>
           </div>
-          <button type="button" className="rounded p-1 text-muted-foreground hover:bg-muted" aria-label="닫기" onClick={onClose}>
+          <button type="button" className="standard-panel-close" title="닫기" aria-label="닫기" onClick={onClose}>
             <X className="h-4 w-4" />
           </button>
         </div>
-        <div className="min-h-0 flex-1 overflow-auto p-3">
+        <div className="standard-detail-scroll">
           {!pipe?.line ? (
-            <p className="py-10 text-center text-sm text-muted-foreground">단면으로 볼 관로가 없습니다.</p>
+            <p className="standard-table-empty">단면으로 볼 관로가 없습니다.</p>
           ) : !points ? null : (
             <SectionFigure points={points} diameterMm={Number.isFinite(diameter) ? diameter : 150} />
           )}
         </div>
-        <div className="border-t border-border px-3 py-2 text-[11px] text-muted-foreground">
+        <div className="standard-list-footer">
           위 지표면은 예시 지형 높이를 따릅니다. 원은 관이고, 그 자리 지면에서 관 위까지가 토피 1.2m입니다.
         </div>
       </div>

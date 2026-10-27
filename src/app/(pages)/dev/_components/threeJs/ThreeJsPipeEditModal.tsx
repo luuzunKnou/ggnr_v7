@@ -42,7 +42,7 @@ export function ThreeJsPipeEditModal({
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    if (!open || !props || props.kind !== 'pipe') return;
+    if (!open || !props || props.kind !== 'wtl_pipe_lm') return;
     const snap = {
       ...props,
       pipeSegments: props.pipeSegments ?? null,
@@ -56,7 +56,7 @@ export function ThreeJsPipeEditModal({
     );
   }, [open, props]);
 
-  if (!draft || draft.kind !== 'pipe') return null;
+  if (!draft || draft.kind !== 'wtl_pipe_lm') return null;
 
   const center: [number, number] | null =
     draft.pipeCenterX != null && draft.pipeCenterY != null
@@ -136,7 +136,7 @@ export function ThreeJsPipeEditModal({
 
       const next: ShapeProps = {
         ...draft,
-        kind: 'pipe',
+        kind: 'wtl_pipe_lm',
         pipeCenterX: center[0],
         pipeCenterY: center[1],
         pipeRadiusM: radiusM,
@@ -176,7 +176,7 @@ export function ThreeJsPipeEditModal({
     onOpenChange(false);
   };
 
-  const title = titleName ? `${titleName} 편집` : '관로 편집';
+  const title = titleName ? `${titleName} 편집` : 'wtl_pipe_lm 편집';
 
   return (
     <DevFloatingPanel
@@ -192,15 +192,16 @@ export function ThreeJsPipeEditModal({
       <div className="flex min-h-0 flex-1 flex-col gap-3 p-3">
         <p className="text-[12px] text-muted-foreground">
           지도에서 드래그해 사각형 범위를 그립니다. 그린 범위를 덮는 정사각(한 변{' '}
-          {Math.round(radiusM * 2)} m) 안의 상수관로를 중공 파이프로 만듭니다. (관경·심도·지표는
-          횡단면도와 동일, 관두께 KS D 3565 간이)
+          {Math.round(radiusM * 2)} m) 안의 상수관로(wtl_pipe_lm)를 중공 파이프로 만듭니다.
+          색은 GeoServer 스타일(용도코드)을 따르며, 관경·심도·지표는 횡단면도와 동일합니다.
         </p>
         <ShapeColorOpacityFields
           colorId="pipe-color"
           opacityId="pipe-opacity"
-          label="관로"
-          color={draft.color || '#38bdf8'}
+          label="wtl_pipe_lm"
+          color={draft.color || '#F44336'}
           opacity={draft.opacity ?? 0.92}
+          showColor={false}
           onColor={(hex) => applyDraft({ ...draft, color: hex })}
           onOpacity={(n) => applyDraft({ ...draft, opacity: n })}
         />
