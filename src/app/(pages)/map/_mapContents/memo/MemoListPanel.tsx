@@ -93,8 +93,13 @@ export function MemoListPanel({
   const [navigatingId, setNavigatingId] = useState<string | null>(null);
   const [highlightGeom, setHighlightGeom] = useState<Record<string, unknown> | null>(null);
   const [filterCategory, setFilterCategory] = useState<MemoCategory>("전체");
-  const [uiTheme, setUiTheme] = useState<MemoUiTheme>(readMemoUiTheme);
+  // SSR·첫 클라이언트 렌더는 동일하게 current. sessionStorage는 mount 후 반영 (hydration 방지)
+  const [uiTheme, setUiTheme] = useState<MemoUiTheme>("current");
   const useCategoryUi = uiTheme === "category";
+
+  useEffect(() => {
+    setUiTheme(readMemoUiTheme());
+  }, []);
 
   const toggleUiTheme = useCallback(() => {
     setUiTheme((prev) => {

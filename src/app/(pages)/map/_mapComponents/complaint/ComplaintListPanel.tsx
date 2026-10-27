@@ -110,7 +110,12 @@ export default function ComplaintListPanel({
   const [searchQuery, setSearchQuery] = useState('');
   const [filterState, setFilterState] = useState<string | null>(null);
   const [filterCategory, setFilterCategory] = useState<ComplaintCategory>('전체');
-  const [uiTheme, setUiTheme] = useState<ComplaintUiTheme>(readComplaintUiTheme);
+  // SSR·첫 클라이언트 렌더는 동일하게 current. sessionStorage는 mount 후 반영 (hydration 방지)
+  const [uiTheme, setUiTheme] = useState<ComplaintUiTheme>('current');
+
+  useEffect(() => {
+    setUiTheme(readComplaintUiTheme());
+  }, []);
 
   const toggleUiTheme = useCallback(() => {
     setUiTheme((prev) => {
