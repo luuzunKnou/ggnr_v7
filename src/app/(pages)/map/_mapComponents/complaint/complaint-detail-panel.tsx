@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { useSearchParams } from 'next/navigation';
 import type { CompUI, CompdUI } from './types';
 import { ComplaintInfo, type ComplaintFormValues } from './complaint-info';
@@ -53,6 +53,11 @@ interface ComplaintDetailPanelProps {
   onClose?: () => void;
   saving?: boolean;
   deleting?: boolean;
+  /** 있으면 이력 목록 대신 이 내용을 이력 칸에 둔다 */
+  historySlot?: ReactNode;
+  historyTabLabel?: string;
+  fileSerEng?: string;
+  fileLayer?: string;
 }
 
 export function ComplaintDetailPanel({
@@ -67,6 +72,10 @@ export function ComplaintDetailPanel({
   onClose,
   saving,
   deleting,
+  historySlot,
+  historyTabLabel = '이력관리',
+  fileSerEng,
+  fileLayer,
 }: ComplaintDetailPanelProps) {
   const searchParams = useSearchParams();
   const systemKey = searchParams.get('system') ?? '';
@@ -100,7 +109,7 @@ export function ComplaintDetailPanel({
           <div className="flex border-b border-border shrink-0 overflow-x-auto">
             <button
               type="button"
-              title="이력관리"
+              title={historyTabLabel}
               onClick={() => setActiveTab('history')}
               className={cn(
                 'flex shrink-0 cursor-pointer items-center justify-center gap-1.5 py-2.5 px-3 text-xs font-medium transition-colors',
@@ -110,7 +119,7 @@ export function ComplaintDetailPanel({
               )}
             >
               <ClipboardList className="h-3.5 w-3.5 shrink-0" />
-              이력관리
+              {historyTabLabel}
             </button>
             <button
               type="button"
@@ -198,18 +207,20 @@ export function ComplaintDetailPanel({
             >
               {activeTab === 'history' && (
               <div className="flex-1 min-h-0 rounded-xl border border-border bg-card overflow-hidden flex flex-col">
-                <HistoryList
-                  histories={histories}
-                  compKey={complaint.compKey}
-                  onAddHistory={onAddHistory!}
-                  onEditHistory={onEditHistory}
-                  onDeleteHistory={onDeleteHistory}
-                />
+                {historySlot ?? (
+                  <HistoryList
+                    histories={histories}
+                    compKey={complaint.compKey}
+                    onAddHistory={onAddHistory!}
+                    onEditHistory={onEditHistory}
+                    onDeleteHistory={onDeleteHistory}
+                  />
+                )}
               </div>
             )}
             {activeTab === 'files' && (
               <div className="flex-1 min-h-0 rounded-xl border border-border bg-card overflow-hidden flex flex-col">
-                <FileList compKey={complaint.compKey} />
+                <FileList compKey={complaint.compKey} serEng={fileSerEng} layer={fileLayer} />
               </div>
             )}
             {activeTab === 'parcel' && <ComplaintParcelTab />}

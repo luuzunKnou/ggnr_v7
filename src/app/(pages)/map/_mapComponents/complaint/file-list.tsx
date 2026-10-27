@@ -18,8 +18,8 @@ import {
 } from '@/app/(pages)/map/_mapComponents/standard/ServiceFileImagePreview';
 import { Download, File, FileImage, FileText, Plus, Trash2 } from 'lucide-react';
 
-const SER_ENG = SER_FILE_ENG.complaint;
-const LAYER = 'comp';
+const DEFAULT_SER_ENG = SER_FILE_ENG.complaint;
+const DEFAULT_LAYER = 'comp';
 
 function formatFileSize(n: number): string {
   if (n < 1024) return `${n} B`;
@@ -41,9 +41,17 @@ interface FileListProps {
   /** 민원 접수번호 — 없으면 첨부 불가 */
   compKey: number | null | undefined;
   canEdit?: boolean;
+  /** 없으면 공통 민원 첨부 경로 */
+  serEng?: string;
+  layer?: string;
 }
 
-export function FileList({ compKey, canEdit = true }: FileListProps) {
+export function FileList({
+  compKey,
+  canEdit = true,
+  serEng = DEFAULT_SER_ENG,
+  layer = DEFAULT_LAYER,
+}: FileListProps) {
   const enabled =
     compKey != null && typeof compKey === 'number' && Number.isFinite(compKey) && compKey > 0;
   const [refreshNonce, setRefreshNonce] = useState(0);
@@ -54,9 +62,9 @@ export function FileList({ compKey, canEdit = true }: FileListProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const chunkUpload = useServiceFileChunkedUpload();
   const query = useServiceFileData({
-    serEng: SER_ENG,
+    serEng: serEng,
     enabled,
-    layerSegment: LAYER,
+    layerSegment: layer,
     keyValue: enabled ? compKey : null,
     refreshNonce,
   });
@@ -66,18 +74,18 @@ export function FileList({ compKey, canEdit = true }: FileListProps) {
     return query.files
       .filter((f) => isImageServiceFileName(f.name) || isPdfServiceFileName(f.name))
       .map((f) => ({
-        url: serviceFileDataDownloadUrl(SER_ENG, LAYER, compKey, f.name),
+        url: serviceFileDataDownloadUrl(serEng, layer, compKey, f.name),
         fileName: f.name,
         kind: isPdfServiceFileName(f.name) ? ('pdf' as const) : ('image' as const),
       }));
-  }, [compKey, enabled, query.files]);
+  }, [compKey, enabled, layer, query.files, serEng]);
 
   const onPickFile = async (file: File | undefined) => {
     if (!file || !enabled) return;
     const result = await chunkUpload.upload({
       file,
-      serEng: SER_ENG,
-      layerSegment: LAYER,
+      serEng: serEng,
+      layerSegment: layer,
       keyValue: compKey,
     });
     if (!result?.error) {
@@ -112,7 +120,7 @@ export function FileList({ compKey, canEdit = true }: FileListProps) {
               </div>
             ) : (
               query.files.map((f) => {
-                const url = serviceFileDataDownloadUrl(SER_ENG, LAYER, compKey, f.name);
+                const url = serviceFileDataDownloadUrl(serEng, layer, compKey, f.name);
                 const isImg = isImageServiceFileName(f.name);
                 const isPdf = isPdfServiceFileName(f.name);
                 const modified =
@@ -181,8 +189,8 @@ export function FileList({ compKey, canEdit = true }: FileListProps) {
                           e.stopPropagation();
                           if (!window.confirm(`「${f.name}」을(를) 삭제할까요?`)) return;
                           void requestServiceFileDataDelete({
-                            serEng: SER_ENG,
-                            layerSegment: LAYER,
+                            serEng: serEng,
+                            layerSegment: layer,
                             keyValue: compKey,
                             fileName: f.name,
                           }).then((r) => {
