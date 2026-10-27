@@ -5,6 +5,8 @@
 export const GGNR_DATA_PATHS = {
   meta: '.meta',
   fileData: 'file_data',
+  /** 업무자료 문서·도면 (file / cad 하위) */
+  roadDoc: 'file_data/road_doc',
   excelData: 'excel_data',
   /** 레이어관리 오류수정 자동 수정 로그 */
   autofixLog: 'autofix_log',
@@ -29,6 +31,8 @@ export const GGNR_DATA_PATHS = {
   dtilesTiff: '3dtiles_tiff',
   /** PDF → JPG 변환 (작업명/PDF 입력, 작업명/파일명/JPG 출력) */
   pdfToJpg: 'PDFToJPG',
+  /** SHP → DXF 변환 (작업명/SHP 입력, 작업명/DXF 출력) */
+  shpToDxf: 'SHPToDXF',
   /** OCR Data Migration (작업명 폴더에 이미지 입력) */
   ocr: 'OCR',
   /** 정책지도 바로가기 (zip 전개 HTML) */
@@ -52,6 +56,7 @@ export const GGNR_BASE_STRUCTURE = [
   GGNR_DATA_PATHS.dtilesObj,
   GGNR_DATA_PATHS.dtilesTiff,
   GGNR_DATA_PATHS.pdfToJpg,
+  GGNR_DATA_PATHS.shpToDxf,
   GGNR_DATA_PATHS.ocr,
   GGNR_DATA_PATHS.policyMap,
   GGNR_DATA_PATHS.meta,

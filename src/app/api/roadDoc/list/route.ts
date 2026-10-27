@@ -7,7 +7,7 @@ import type { RoadDocListItem } from "@/lib/roadDocTypes";
 export const dynamic = "force-dynamic";
 
 /**
- * GET /api/roadDoc/list — `roadDoc/file` 폴더의 파일 목록 (하위 디렉터리 제외)
+ * GET /api/roadDoc/list — `file_data/road_doc/file` 폴더의 파일 목록 (하위 디렉터리 제외)
  */
 export async function GET() {
   const dir = getRoadDocFileDir();

@@ -3,13 +3,23 @@
  * iframe에서 직접 열면 그 세션이 빠지므로, 서버가 받아 같은 주소로 넘긴다.
  */
 
+import { getBasePath } from '@/lib/basePath';
+
 const EUM_ORIGIN = 'https://www.eum.go.kr';
 const EUM_PAGE = `${EUM_ORIGIN}/web/ar/lu/luLandDet.jsp`;
 const EUM_PLAN_PAGE = `${EUM_ORIGIN}/web/cp/cv/cvUpisDet.jsp`;
 const EUM_IMAGE = `${EUM_ORIGIN}/web/ar/lu/images`;
-/** 브라우저가 직접 치면 우리 주소가 넘어가 소재지 조회가 빈다. 같은 출처로 받아 토지이음 주소를 붙인다. */
-const EUM_RELAY = '/api/land-eum/relay';
 const EUM_REFERER = EUM_PLAN_PAGE;
+
+/** 브라우저가 직접 치면 우리 주소가 넘어가 소재지 조회가 빈다. 같은 출처로 받아 토지이음 주소를 붙인다. */
+function eumRelayPath(): string {
+  return `${getBasePath()}/api/land-eum/relay`;
+}
+
+function eumImagePath(): string {
+  return `${getBasePath()}/api/land-eum/image?key=`;
+}
+
 const SESSION_TTL_MS = 10 * 60 * 1000;
 
 type EumSession = { cookie: string; at: number };
@@ -60,18 +70,19 @@ const EUM_TRIM_STYLE =
   '</style>';
 
 function rewriteLandHtml(html: string): string {
+  const relay = eumRelayPath();
   const next = html
-    .replace(/(["'])\.\.\/\.\.\//g, `$1${EUM_RELAY}/`)
-    .replace(/(["'(])\/web\//g, `$1${EUM_RELAY}/`)
-    .replace(/var context\s*=\s*["']\/web["']/g, `var context="${EUM_RELAY}"`)
-    .replace(/(["'])images\?key=/g, '$1/api/land-eum/image?key=');
+    .replace(/(["'])\.\.\/\.\.\//g, `$1${relay}/`)
+    .replace(/(["'(])\/web\//g, `$1${relay}/`)
+    .replace(/var context\s*=\s*["']\/web["']/g, `var context="${relay}"`)
+    .replace(/(["'])images\?key=/g, `$1${eumImagePath()}`);
   if (next.includes('</head>')) return next.replace('</head>', `${EUM_TRIM_STYLE}</head>`);
   return EUM_TRIM_STYLE + next;
 }
 
 /** 도시계획도 스크립트의 상대 조회가 우리 중계로 가게 한다. */
 function retargetPlanHtml(html: string): string {
-  return html.replace('<head>', `<head><base href="${EUM_RELAY}/cp/cv/">`);
+  return html.replace('<head>', `<head><base href="${eumRelayPath()}/cp/cv/">`);
 }
 
 export async function fetchEumRelay(args: {

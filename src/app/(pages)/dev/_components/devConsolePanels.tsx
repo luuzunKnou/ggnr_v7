@@ -177,7 +177,7 @@ export function getDevMenuDescription(menuId: string): string {
     case "fileManager":
       return "GGNR_DATA_DIR 현재 프로젝트 폴더 전체 탐색 및 업로드·다운로드·이동·이름변경·삭제"
     case "fileConverter":
-      return "TIF·PDF·OBJ·LAS 변환, OCR 마이그레이션"
+      return "TIF·PDF·OBJ·LAS·SHP 변환, OCR 마이그레이션"
     case "shpFileUploader":
       return "SHP 파일 업로드 및 GeoServer·스타일 확인·후처리"
     case "dataFileUploader":
