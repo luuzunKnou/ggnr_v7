@@ -17,11 +17,18 @@ import { SearchClearButton } from "./SearchClearButton"
 
 type CodeOption = { code: string; korName: string }
 
+type ProjectSplitItem = { code: string; korName?: string; group?: string }
+type ProjectSplitConfig = {
+  items: ProjectSplitItem[]
+  etc?: { korName?: string; group?: string }
+}
+
 type PreviewRow = {
   layerName: string
   code: string
   codeKor: string
   korName: string
+  group: string
   etc?: boolean
 }
 
@@ -46,9 +53,13 @@ function selectedFromTables(parent: string, tables: Array<Record<string, unknown
   return selected
 }
 
-function existingKor(tables: Array<Record<string, unknown>>, layerName: string): string {
+function existingField(
+  tables: Array<Record<string, unknown>>,
+  layerName: string,
+  key: "define_table_kor_name" | "define_table_group"
+): string {
   const row = tables.find((item) => String(item.define_table_name ?? "").trim().toLowerCase() === layerName)
-  return String(row?.define_table_kor_name ?? "").trim()
+  return String(row?.[key] ?? "").trim()
 }
 
 export function SplitLayerDialog({ parent, tables, onOpenChange, onDone }: Props) {
@@ -56,6 +67,7 @@ export function SplitLayerDialog({ parent, tables, onOpenChange, onDone }: Props
   const columnLabel = column ? splitLayerColumnLabel(column) : ""
   const tablesRef = useRef(tables)
   tablesRef.current = tables
+  const projectConfigRef = useRef<ProjectSplitConfig | null>(null)
   const [step, setStep] = useState<"pick" | "preview">("pick")
   const [codes, setCodes] = useState<CodeOption[]>([])
   const [selected, setSelected] = useState<Set<string>>(new Set())
@@ -64,6 +76,7 @@ export function SplitLayerDialog({ parent, tables, onOpenChange, onDone }: Props
   const [loading, setLoading] = useState(false)
   const [applying, setApplying] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [projectLabel, setProjectLabel] = useState<string | null>(null)
 
   useEffect(() => {
     if (!parent || !column) return
@@ -75,20 +88,47 @@ export function SplitLayerDialog({ parent, tables, onOpenChange, onDone }: Props
     setQuery("")
     setCodes([])
     setSelected(new Set())
-    void call("", "POST", {
-      service: "splitLayerService",
-      action: "listSplitLayerCodes",
-      params: { parent },
-    })
-      .then((res) => {
+    projectConfigRef.current = null
+    setProjectLabel(null)
+    void Promise.all([
+      call("", "POST", {
+        service: "splitLayerService",
+        action: "listSplitLayerCodes",
+        params: { parent },
+      }),
+      call("", "POST", {
+        service: "splitLayerService",
+        action: "getProjectSplitParentConfig",
+        params: { parent },
+      }),
+    ])
+      .then(([codesRes, configRes]) => {
         if (cancelled) return
-        const data = (res?.data ?? res) as { success?: boolean; error?: string; codes?: CodeOption[] }
-        if (!data?.success || !Array.isArray(data.codes)) {
-          setError(data?.error ?? "코드를 불러오지 못했습니다.")
+        const codesData = (codesRes?.data ?? codesRes) as {
+          success?: boolean
+          error?: string
+          codes?: CodeOption[]
+        }
+        if (!codesData?.success || !Array.isArray(codesData.codes)) {
+          setError(codesData?.error ?? "코드를 불러오지 못했습니다.")
           return
         }
-        setCodes(data.codes)
-        setSelected(selectedFromTables(parent, tablesRef.current, data.codes))
+        setCodes(codesData.codes)
+
+        const configData = (configRes?.data ?? configRes) as {
+          success?: boolean
+          project?: string | null
+          config?: ProjectSplitConfig | null
+        }
+        const projectConfig = configData?.success ? configData.config ?? null : null
+        projectConfigRef.current = projectConfig
+        if (configData?.project) setProjectLabel(configData.project)
+
+        if (projectConfig?.items?.length) {
+          setSelected(new Set(projectConfig.items.map((item) => item.code)))
+        } else {
+          setSelected(selectedFromTables(parent, tablesRef.current, codesData.codes))
+        }
       })
       .catch((e: unknown) => {
         if (!cancelled) setError(e instanceof Error ? e.message : "코드를 불러오지 못했습니다.")
@@ -124,17 +164,32 @@ export function SplitLayerDialog({ parent, tables, onOpenChange, onDone }: Props
       (row) => String(row.define_table_name ?? "").trim().toLowerCase() === parent.toLowerCase()
     )
     const parentKor = String(parentRow?.define_table_kor_name ?? parent).trim() || parent
-    const kept = new Map(preview.map((row) => [row.layerName, row.korName]))
+    const parentGroup = String(parentRow?.define_table_group ?? "").trim()
+    const projectConfig = projectConfigRef.current
+    const byCode = new Map(
+      (projectConfig?.items ?? []).map((item) => [item.code.toLowerCase(), item])
+    )
+    const kept = new Map(preview.map((row) => [row.layerName, row]))
     const rows: PreviewRow[] = codes
       .filter((item) => selected.has(item.code))
       .map((item) => {
         const layerName = splitChildLayerName(parent, item.code)
+        const fromProject = byCode.get(item.code.toLowerCase())
         const fallback = item.korName ? `${parentKor}(${item.korName})` : `${parentKor}(${item.code})`
         return {
           layerName,
           code: item.code,
           codeKor: item.korName,
-          korName: kept.get(layerName) || existingKor(tablesRef.current, layerName) || fallback,
+          korName:
+            kept.get(layerName)?.korName ||
+            fromProject?.korName ||
+            existingField(tablesRef.current, layerName, "define_table_kor_name") ||
+            fallback,
+          group:
+            kept.get(layerName)?.group ||
+            fromProject?.group ||
+            existingField(tablesRef.current, layerName, "define_table_group") ||
+            parentGroup,
         }
       })
     const etcName = splitEtcLayerName(parent)
@@ -142,7 +197,16 @@ export function SplitLayerDialog({ parent, tables, onOpenChange, onDone }: Props
       layerName: etcName,
       code: "",
       codeKor: "기타",
-      korName: kept.get(etcName) || existingKor(tablesRef.current, etcName) || `${parentKor}(기타)`,
+      korName:
+        kept.get(etcName)?.korName ||
+        projectConfig?.etc?.korName ||
+        existingField(tablesRef.current, etcName, "define_table_kor_name") ||
+        `${parentKor}(기타)`,
+      group:
+        kept.get(etcName)?.group ||
+        projectConfig?.etc?.group ||
+        existingField(tablesRef.current, etcName, "define_table_group") ||
+        parentGroup,
       etc: true,
     })
     setPreview(rows)
@@ -161,7 +225,11 @@ export function SplitLayerDialog({ parent, tables, onOpenChange, onDone }: Props
     setError(null)
     try {
       const korNames: Record<string, string> = {}
-      for (const row of preview) korNames[row.layerName] = row.korName.trim()
+      const groups: Record<string, string> = {}
+      for (const row of preview) {
+        korNames[row.layerName] = row.korName.trim()
+        groups[row.layerName] = row.group.trim()
+      }
       const res = await call("", "POST", {
         service: "splitLayerService",
         action: "applySplitLayers",
@@ -169,6 +237,7 @@ export function SplitLayerDialog({ parent, tables, onOpenChange, onDone }: Props
           parent,
           codes: preview.filter((row) => !row.etc).map((row) => row.code),
           korNames,
+          groups,
           url: getGeoServerBase(),
         },
       })
@@ -177,6 +246,7 @@ export function SplitLayerDialog({ parent, tables, onOpenChange, onDone }: Props
         error?: string
         published?: string[]
         removed?: string[]
+        project?: string
       }
       if (!data?.success) {
         setError(data?.error ?? "분할 발행 실패")
@@ -184,7 +254,8 @@ export function SplitLayerDialog({ parent, tables, onOpenChange, onDone }: Props
       }
       const published = data.published?.length ?? 0
       const removed = data.removed?.length ?? 0
-      onDone(`분할 발행 ${published}건${removed > 0 ? `, 제거 ${removed}건` : ""}`)
+      const projectNote = data.project ? ` (${data.project})` : ""
+      onDone(`분할 발행 ${published}건${removed > 0 ? `, 제거 ${removed}건` : ""}${projectNote}`)
       onOpenChange(false)
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "분할 발행 실패")
@@ -197,17 +268,21 @@ export function SplitLayerDialog({ parent, tables, onOpenChange, onDone }: Props
 
   return (
     <Dialog open={!!parent} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-xl">
+      <DialogContent className="max-w-2xl">
         <DialogHeader>
           <DialogTitle>
             {step === "pick" ? "분할 코드 선택" : "분할 미리보기"}: {parent}
           </DialogTitle>
         </DialogHeader>
         {columnTitle ? <p className="text-sm font-medium">{columnTitle}</p> : null}
+        {projectLabel ? (
+          <p className="text-xs text-muted-foreground">프로젝트 설정: {projectLabel}</p>
+        ) : null}
         {step === "pick" ? (
           <>
             <p className="text-sm text-muted-foreground">
-              분할로 쓸 코드를 고르세요. 고르지 않은 값과 빈 값은 기타로 묶입니다.
+              분할로 쓸 코드를 고르세요. 고르지 않은 값과 빈 값은 기타로 묶입니다. 설정은 현재
+              프로젝트(GGNR_PROJECT)에만 저장됩니다.
             </p>
             <div className="relative">
               <Input
@@ -265,18 +340,19 @@ export function SplitLayerDialog({ parent, tables, onOpenChange, onDone }: Props
         ) : (
           <>
             <p className="text-sm text-muted-foreground">
-              아래 형태로 레이어가 분할됩니다. 한글명 확인 후 발행해주세요.
+              아래 형태로 레이어가 분할됩니다. 한글명·그룹 확인 후 발행해주세요.
             </p>
             <div className="max-h-80 overflow-auto rounded border">
-              <div className="grid grid-cols-[1fr_9.5rem_1.2fr] gap-2 border-b bg-muted/50 px-2 py-1.5 text-xs font-medium">
+              <div className="grid grid-cols-[1fr_8rem_1fr_6rem] gap-2 border-b bg-muted/50 px-2 py-1.5 text-xs font-medium">
                 <span>레이어명</span>
                 <span>코드</span>
                 <span>한글명</span>
+                <span>그룹</span>
               </div>
               {preview.map((row) => (
                 <div
                   key={row.layerName}
-                  className="grid grid-cols-[1fr_9.5rem_1.2fr] items-center gap-2 border-b px-2 py-1.5 text-sm last:border-b-0"
+                  className="grid grid-cols-[1fr_8rem_1fr_6rem] items-center gap-2 border-b px-2 py-1.5 text-sm last:border-b-0"
                 >
                   <span className="truncate font-mono text-xs" title={row.layerName}>
                     {row.layerName}
@@ -295,6 +371,17 @@ export function SplitLayerDialog({ parent, tables, onOpenChange, onDone }: Props
                       const value = e.target.value
                       setPreview((prev) =>
                         prev.map((item) => (item.layerName === row.layerName ? { ...item, korName: value } : item))
+                      )
+                    }}
+                  />
+                  <Input
+                    value={row.group}
+                    disabled={applying}
+                    className="h-7 text-sm"
+                    onChange={(e) => {
+                      const value = e.target.value
+                      setPreview((prev) =>
+                        prev.map((item) => (item.layerName === row.layerName ? { ...item, group: value } : item))
                       )
                     }}
                   />
