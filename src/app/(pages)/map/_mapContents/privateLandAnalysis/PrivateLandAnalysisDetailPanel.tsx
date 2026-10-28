@@ -107,7 +107,7 @@ export function PrivateLandAnalysisDetailPanel() {
             <p className="text-[11px] text-muted-foreground">건물이 놓인 필지를 찾지 못해 대장을 조회할 수 없습니다.</p>
           ) : null
         ) : p.pnu && config ? (
-          <LandInfoParcelPanel key={p.pnu} pnu={p.pnu} vworldKey={config.vworldKey} narrow hideBasicFields={HIDE_BASIC_FIELDS} />
+          <LandInfoParcelPanel key={p.pnu} pnu={p.pnu} vworldKey={config.vworldKey} narrow hideBasicFields={HIDE_BASIC_FIELDS} hideKrasSkipReason />
         ) : null}
       </div>
     </div>

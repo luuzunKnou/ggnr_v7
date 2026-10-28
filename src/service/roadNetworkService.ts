@@ -65,18 +65,23 @@ type SourceDef = {
   sinuosityExpr?: string;
   detailReasonExpr?: string;
   addressExpr?: string;
-  /** 목록에서 뺄 조건. 군도 표에는 농도·리도·면도가 섞여 있어 군도만 남긴다 */
-  whereExpr?: string;
+  /** 행마다 도로종류가 다른 표 — 군도 표에는 면도·리도·농도가 구분값으로 섞여 있다 */
+  roadTypeExpr?: string;
 };
 
-const COUNTY_CLASS_WHERE = `trim(both from COALESCE(t.admin_clas::text, '')) = '군도'`;
+/** 군도 표 구분값(admin_clas) → 도로종류. 면도·리도·농도 외에는 군도 */
+const COUNTY_ROAD_TYPE_EXPR = `CASE trim(both from COALESCE(t.admin_clas::text, ''))
+      WHEN '면도' THEN '면도'
+      WHEN '리도' THEN '리도'
+      WHEN '농도' THEN '농도'
+      ELSE '군도'
+    END`;
+const COUNTY_TABLE_ROAD_TYPES: readonly RoadNetworkType[] = ['군도', '면도', '리도'];
 
 const LENGTH_ATTR_EXPR = `COALESCE(NULLIF(trim(both from t.length::text), ''), '')`;
 const DEFENSE_EXPR = `COALESCE(NULLIF(trim(both from t.defense::text), ''), '')`;
 const SINUOSITY_EXPR = `COALESCE(NULLIF(trim(both from t.sinuosity::text), ''), '')`;
 const DETAIL_REASON_EXPR = `COALESCE(NULLIF(trim(both from t.alwnc_resn::text), ''), '')`;
-const ADDRESS_RBP_EXPR = `COALESCE(NULLIF(trim(both from t.rbp_cn::text), ''), '')`;
-const ADDRESS_REP_EXPR = `COALESCE(NULLIF(trim(both from t.rep_cn::text), ''), '')`;
 
 const SOURCES: SourceDef[] = [
   {
@@ -137,7 +142,7 @@ const SOURCES: SourceDef[] = [
     lengthAttrExpr: LENGTH_ATTR_EXPR,
     defenseExpr: DEFENSE_EXPR,
     sinuosityExpr: SINUOSITY_EXPR,
-    whereExpr: COUNTY_CLASS_WHERE,
+    roadTypeExpr: COUNTY_ROAD_TYPE_EXPR,
   },
   {
     table: 'rdl_county_uopn_ls',
@@ -149,7 +154,7 @@ const SOURCES: SourceDef[] = [
     lengthAttrExpr: LENGTH_ATTR_EXPR,
     defenseExpr: DEFENSE_EXPR,
     sinuosityExpr: SINUOSITY_EXPR,
-    whereExpr: COUNTY_CLASS_WHERE,
+    roadTypeExpr: COUNTY_ROAD_TYPE_EXPR,
   },
   {
     table: 'rdl_perch_opn_ls',
@@ -172,31 +177,6 @@ const SOURCES: SourceDef[] = [
     lengthAttrExpr: LENGTH_ATTR_EXPR,
     defenseExpr: DEFENSE_EXPR,
     sinuosityExpr: SINUOSITY_EXPR,
-  },
-  {
-    table: 'rdl_sprd_0610_ls',
-    roadType: '일반도로',
-    openStatus: '개설',
-    nameExpr: `COALESCE(NULLIF(trim(both from t.rn::text), ''), NULLIF(trim(both from t.name::text), ''), '')`,
-    noExpr: `COALESCE(NULLIF(trim(both from t.rds_man_no::text), ''), '')`,
-    deptExpr: `''`,
-    lengthAttrExpr: LENGTH_ATTR_EXPR,
-    defenseExpr: DEFENSE_EXPR,
-    detailReasonExpr: DETAIL_REASON_EXPR,
-    addressExpr: ADDRESS_RBP_EXPR,
-  },
-  {
-    table: 'rdl_frl_0610_ls',
-    roadType: '임도',
-    openStatus: '개설',
-    nameExpr: `COALESCE(NULLIF(trim(both from t.rn::text), ''), '')`,
-    noExpr: `COALESCE(NULLIF(trim(both from t.rds_man_no::text), ''), '')`,
-    deptExpr: `''`,
-    lengthAttrExpr: LENGTH_ATTR_EXPR,
-    defenseExpr: DEFENSE_EXPR,
-    sinuosityExpr: SINUOSITY_EXPR,
-    detailReasonExpr: DETAIL_REASON_EXPR,
-    addressExpr: ADDRESS_REP_EXPR,
   },
 ];
 
@@ -259,7 +239,7 @@ function buildSelect(src: SourceDef, safeTbl: string): string {
     '${tableLit}' || ':' || t.ogc_fid::text AS id,
     ${src.nameExpr} AS "roadName",
     ${src.noExpr} AS "roadNo",
-    '${roadTypeLit}'::text AS "roadType",
+    ${src.roadTypeExpr ?? `'${roadTypeLit}'::text`} AS "roadType",
     '${openLit}'::text AS "openStatus",
     ROUND(ST_Length(ST_Transform(t.geom, 5186))::numeric, 1)::float8 AS "lengthM",
     ${src.deptExpr} AS dept,
@@ -269,7 +249,7 @@ function buildSelect(src: SourceDef, safeTbl: string): string {
     ${detailReasonExpr} AS "detailReason",
     ${addressExpr} AS address,
     ST_AsGeoJSON(ST_Transform(t.geom, 4326))::json AS geom
-  FROM layer."${safeTbl}" t${src.whereExpr ? ` WHERE ${src.whereExpr}` : ''}`;
+  FROM layer."${safeTbl}" t`;
 }
 
 /** 통합 도로망 선 테이블이 있으면 실제 테이블명 */
@@ -435,7 +415,7 @@ async function fetchUnifiedRowById(ogcFid: number): Promise<RoadNetworkRow | nul
 }
 
 /**
- * 도로망도 통합 목록 (국도·지방도·군도·농도·일반도로·임도 등).
+ * 도로망도 통합 목록 (국도·지방도·군도·면도·리도·농도 등).
  * 통합 도로망 테이블이 있으면 그것만 사용한다.
  * 유지보수·민원·첨부·이력은 빈 배열 — 화면 세션에서만 편집.
  */
@@ -479,9 +459,9 @@ export async function getRoadNetworkList(params?: {
            WHEN '지방도' THEN 2
            WHEN '국지도' THEN 3
            WHEN '군도' THEN 4
-           WHEN '농도' THEN 5
-           WHEN '일반도로' THEN 6
-           WHEN '임도' THEN 7
+           WHEN '면도' THEN 5
+           WHEN '리도' THEN 6
+           WHEN '농도' THEN 7
            WHEN '입체교차로' THEN 8
            ELSE 9
          END,
@@ -509,7 +489,7 @@ export async function getRoadNetworkList(params?: {
   const rows: RoadNetworkRow[] = (res.rows ?? []).map((r) => {
     const row = r as Record<string, unknown>;
     const geom = parseGeom(row.geom);
-    const roadType = String(row.roadType ?? '일반도로').trim() as RoadNetworkType;
+    const roadType = String(row.roadType ?? '군도').trim() as RoadNetworkType;
     const openStatus = (String(row.openStatus ?? '개설').trim() || '개설') as RoadNetworkOpenStatus;
     return {
       id: String(row.id ?? '').trim(),
@@ -544,13 +524,20 @@ export async function getRoadNetworkList(params?: {
 
 function resolveTargetSource(
   roadType: RoadNetworkType,
-  openStatus: RoadNetworkOpenStatus
+  openStatus: RoadNetworkOpenStatus,
+  currentTable?: string
 ): SourceDef | null {
   const open = openStatus === '미개설' ? '미개설' : '개설';
-  const hit = SOURCES.find((s) => s.roadType === roadType && s.openStatus === open);
+  const inCountyTable = SOURCES.some((s) => s.table === currentTable && s.roadTypeExpr);
+  // 면도·리도는 군도 표에 구분값으로 저장. 군도 표에 있던 농도 행은 그 표에 둔다
+  const tableType: RoadNetworkType =
+    COUNTY_TABLE_ROAD_TYPES.includes(roadType) || (inCountyTable && roadType === '농도')
+      ? '군도'
+      : roadType;
+  const hit = SOURCES.find((s) => s.roadType === tableType && s.openStatus === open);
   if (hit) return hit;
   // 개설/미개설 테이블이 없는 종류는 개설 테이블로
-  return SOURCES.find((s) => s.roadType === roadType) ?? null;
+  return SOURCES.find((s) => s.roadType === tableType) ?? null;
 }
 
 function parseStoredId(id: string): { table: string; ogcFid: number } | null {
@@ -631,7 +618,6 @@ function buildAttrSqlValues(
   const defense = String(input.defense ?? '').trim();
   const sinuosity = String(input.sinuosity ?? '').trim();
   const detailReason = String(input.detailReason ?? '').trim();
-  const address = String(input.address ?? '').trim();
   const planned: { col: string; val: string }[] = [];
   const add = (col: string, val: string) => {
     if (typeMap.has(col.toLowerCase())) planned.push({ col, val });
@@ -667,16 +653,21 @@ function buildAttrSqlValues(
       add('defense', defense);
       break;
     case 'rdl_county_opn_ls':
-    case 'rdl_county_uopn_ls':
+    case 'rdl_county_uopn_ls': {
+      const clas =
+        COUNTY_TABLE_ROAD_TYPES.includes(input.roadType) || input.roadType === '농도'
+          ? input.roadType
+          : '군도';
       add('name', name.slice(0, 16));
       add('no', no);
-      add('admin_no', no ? `군도${no}` : '');
+      add('admin_no', no ? `${clas}${no}` : '');
       add('admin', dept);
-      add('admin_clas', '군도');
+      add('admin_clas', clas);
       add('length', lengthAttr);
       add('defense', defense);
       add('sinuosity', sinuosity);
       break;
+    }
     case 'rdl_perch_opn_ls':
     case 'rdl_perch_uopn_ls':
       add('name', name.slice(0, 16));
@@ -685,23 +676,6 @@ function buildAttrSqlValues(
       add('admin', dept);
       // 면도·리도·농도 구분 — 수정 시 기존 값 유지
       if (input.isNew) add('admin_clas', '농도');
-      add('length', lengthAttr);
-      add('defense', defense);
-      add('sinuosity', sinuosity);
-      break;
-    case 'rdl_sprd_0610_ls':
-      add('rn', name.slice(0, 80));
-      add('rds_man_no', no);
-      add('rbp_cn', address);
-      add('alwnc_resn', detailReason);
-      add('length', lengthAttr);
-      add('defense', defense);
-      break;
-    case 'rdl_frl_0610_ls':
-      add('rn', name.slice(0, 80));
-      add('rds_man_no', no);
-      add('rep_cn', address);
-      add('alwnc_resn', detailReason);
       add('length', lengthAttr);
       add('defense', defense);
       add('sinuosity', sinuosity);
@@ -944,14 +918,18 @@ export async function saveRoadNetworkRow(
 ): Promise<{ success: boolean; row?: RoadNetworkRow; error?: string }> {
   const unifiedTable = await resolveUnifiedTableName();
   if (unifiedTable) return saveUnifiedRoadNetworkRow(unifiedTable, params);
-  const roadType = (String(params.roadType ?? '일반도로').trim() || '일반도로') as RoadNetworkType;
+  const roadType = (String(params.roadType ?? '군도').trim() || '군도') as RoadNetworkType;
   const openStatus = (String(params.openStatus ?? '개설').trim() || '개설') as RoadNetworkOpenStatus;
   const roadName = String(params.roadName ?? '').trim();
   if (roadType !== '입체교차로' && !roadName) {
     return { success: false, error: '도로명을 입력하세요.' };
   }
 
-  const target = resolveTargetSource(roadType, openStatus);
+  const target = resolveTargetSource(
+    roadType,
+    openStatus,
+    parseStoredId(String(params.id ?? ''))?.table
+  );
   if (!target) return { success: false, error: '저장할 도로종류 테이블을 찾지 못했습니다.' };
 
   const tableName = await resolveLayerTableName(target.table);

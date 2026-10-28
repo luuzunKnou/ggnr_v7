@@ -87,6 +87,7 @@ import {
   describeAttrHistoryDetail,
   describeComplaintHistoryDetail,
   describeMaintHistoryDetail,
+  isCountyTableRoadType,
   isNewRoadNetworkRowId,
   revokeAttachmentPreview,
   type RoadNetworkAttachment,
@@ -610,7 +611,7 @@ export function RoadNetworkDetailPanel({
   }, [setSitePointKind, setEndpointMarkers, setFocusedSiteKey]);
 
   useEffect(() => {
-    if (row.roadType !== "군도" && row.roadType !== "농도") {
+    if (!isCountyTableRoadType(row.roadType) && row.roadType !== "농도") {
       setEndpointMarkers?.(null);
       return;
     }
@@ -1248,14 +1249,9 @@ export function RoadNetworkDetailPanel({
       sinuosity: roadTypeHasSinuosity(nextType)
         ? formatRoadNetworkNumericAttr(attrDraft.sinuosity)
         : "",
-      detailReason:
-        nextType === "국지도" || nextType === "일반도로" || nextType === "임도"
-          ? attrDraft.detailReason.trim()
-          : "",
+      detailReason: nextType === "국지도" ? attrDraft.detailReason.trim() : "",
       address:
-        (isUnified && fields.some((f) => f.key === "address")) ||
-        nextType === "일반도로" ||
-        nextType === "임도"
+        isUnified && fields.some((f) => f.key === "address")
           ? attrDraft.address.trim()
           : "",
     };

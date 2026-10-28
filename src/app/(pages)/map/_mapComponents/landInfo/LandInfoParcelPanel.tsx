@@ -192,6 +192,8 @@ export type LandInfoParcelPanelProps = {
   narrow?: boolean;
   /** 토지기본정보에서 숨길 항목명 (상위 화면에 이미 있는 항목) */
   hideBasicFields?: string[];
+  /** «행망 미사용: …» 안내 숨김 (VWorld 대체 조회 시 안내가 필요 없는 화면) */
+  hideKrasSkipReason?: boolean;
 };
 
 export function LandInfoParcelPanel({
@@ -203,6 +205,7 @@ export function LandInfoParcelPanel({
   parcelError: parcelErrorProp,
   narrow = false,
   hideBasicFields,
+  hideKrasSkipReason = false,
 }: LandInfoParcelPanelProps) {
   const controlled = parcelDataProp !== undefined;
   const [internalData, setInternalData] = useState<ParcelTabData>({
@@ -347,7 +350,7 @@ export function LandInfoParcelPanel({
             <p className="text-[11px] text-muted-foreground">연계 데이터 없음</p>
           ) : null}
           {parcelData.source ? <ParcelLandLinkageSourceText source={parcelData.source} /> : null}
-          {parcelData.krasSkipReason ? (
+          {parcelData.krasSkipReason && !hideKrasSkipReason ? (
             <p className="text-[11px] leading-relaxed text-amber-800">
               행망 미사용: {parcelData.krasSkipReason}
             </p>
