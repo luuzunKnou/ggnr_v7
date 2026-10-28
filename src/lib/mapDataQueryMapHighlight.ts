@@ -131,3 +131,36 @@ export function createDataQuerySelectionRowHighlightStyle(
 
 /** LayerDataPanel selection 레이어 rAF — 매 프레임 증가분 */
 export const DATA_QUERY_SELECTION_PULSE_STEP = 0.08;
+
+/**
+ * 지도 위 데이터 목록 항목 hover — 선택과 같은 빨강, 펄스 없이 바로 구분.
+ */
+export function createDataQueryIdentifyHoverStyle(): StyleFunction {
+  return (feature: FeatureLike) => {
+    const type = feature.getGeometry()?.getType();
+    if (type === "Point" || type === "MultiPoint") {
+      return new Style({
+        image: new CircleStyle({
+          radius: 8,
+          fill: new Fill({ color: "rgba(220, 38, 38, 0.7)" }),
+          stroke: new Stroke({ color: "#ffffff", width: 2 }),
+        }),
+      });
+    }
+    if (type === "LineString" || type === "MultiLineString") {
+      return [
+        new Style({ stroke: new Stroke({ color: "#ffffff", width: 8 }) }),
+        new Style({ stroke: new Stroke({ color: "rgba(220, 38, 38, 0.9)", width: 5 }) }),
+      ];
+    }
+    return [
+      new Style({
+        stroke: new Stroke({ color: "#ffffff", width: 6 }),
+        fill: new Fill({ color: "rgba(220, 38, 38, 0.35)" }),
+      }),
+      new Style({
+        stroke: new Stroke({ color: "rgba(220, 38, 38, 0.95)", width: 3 }),
+      }),
+    ];
+  };
+}

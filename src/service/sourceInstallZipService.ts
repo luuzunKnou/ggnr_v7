@@ -13,7 +13,7 @@ import {
   type SourceUploadMode,
 } from '@/app/(pages)/dev/_components/sourceUpload/sourceUploadProfiles';
 import { archiverLevelForPath } from '@/service/sourceInstallZipCompression';
-import { createPythonEnvSplitParts } from '@/service/pythonEnvSplitZip';
+import { createPythonEnvSplitParts, pythonEnvSplitTempRoot } from '@/service/pythonEnvSplitZip';
 import {
   completeInstallZipProgress,
   failInstallZipProgress,
@@ -40,11 +40,11 @@ function legacyOsTmpLeaf(leaf: string): string {
   return `${os.tmpdir()}${path.sep}${leaf}`;
 }
 
-/** 이전 C: TEMP·워크스페이스 .tmp 잔여 설치 ZIP/분할본 삭제 */
+/** 이전 C: TEMP·워크스페이스 .tmp 잔여 설치 ZIP/분할 임시 삭제. 파이썬 env 분할 캐시는 유지 */
 async function purgeStaleInstallTemps(): Promise<void> {
   const dirs = [
     installZipDownloadRoot(),
-    [process.cwd(), '.tmp', ['ggnr', 'python', 'env', 'split'].join('_')].join(path.sep),
+    pythonEnvSplitTempRoot(),
     legacyOsTmpLeaf(['ggnr', 'source', 'install', 'download'].join('_')),
     legacyOsTmpLeaf(['ggnr', 'python', 'env', 'split'].join('_')),
   ];
@@ -292,9 +292,20 @@ export async function buildInstallZip(params: {
   try {
     if (includePythonEnvParts) {
       if (progressId) {
-        setInstallZipPhase(progressId, 'zip', '파이썬 환경 분할 압축 중...');
+        setInstallZipPhase(progressId, 'zip', '파이썬 환경 분할 압축 확인 중...');
       }
-      const split = await createPythonEnvSplitParts(process.cwd());
+      const split = await createPythonEnvSplitParts(process.cwd(), {
+        onStatus: (status) => {
+          if (!progressId) return;
+          setInstallZipPhase(
+            progressId,
+            'zip',
+            status === 'cache-hit'
+              ? '파이썬 환경 분할 압축 캐시 사용'
+              : '파이썬 환경 분할 압축 중...'
+          );
+        },
+      });
       if (split) {
         envPartsTmp = split.tmpDir;
         for (const part of split.parts) {

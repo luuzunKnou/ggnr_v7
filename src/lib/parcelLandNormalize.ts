@@ -334,19 +334,26 @@ export function mapKrasToParcelLandInfoTab(
   if (landRow) {
     const row: JsonRow = {};
     const jimok = toStr(landRow.JIMOK_NM) || toStr(landRow.JIMOK);
+    if (toStr(landRow.JIMOK)) row.lndcgrCode = landRow.JIMOK;
     if (jimok) row.lndcgrCodeNm = jimok;
     if (toStr(landRow.PAREA)) row.lndpclAr = landRow.PAREA;
+    if (toStr(landRow.GRD)) row.grd = landRow.GRD;
+    if (toStr(landRow.GRD_YMD)) row.grdYmd = landRow.GRD_YMD;
+    if (toStr(landRow.BIZ_ACT_NTC_GBN)) row.bizActNtcGbn = landRow.BIZ_ACT_NTC_GBN;
+    if (toStr(landRow.LEDG_CNTRST_CNF_GBN)) row.ledgCntrstCnfGbn = landRow.LEDG_CNTRST_CNF_GBN;
     if (zones[0]) row.prposArea1Nm = zones[0];
+    if (toStr(landRow.LAND_MOV_RSN_CD)) row.lndMoveRsnCd = landRow.LAND_MOV_RSN_CD;
     if (toStr(landRow.LAND_MOV_RSN_CD_NM)) row.lndMoveResnNm = landRow.LAND_MOV_RSN_CD_NM;
     if (toStr(landRow.LAND_MOV_YMD)) row.lndMoveDe = landRow.LAND_MOV_YMD;
     if (Object.keys(row).length) characteristics.push(row);
   }
 
   const possessions: JsonRow[] = [];
-  if (landRow && (toStr(landRow.OWNER_NM) || toStr(landRow.OWN_GBN_NM))) {
+  if (landRow && (toStr(landRow.OWNER_NM) || toStr(landRow.DREGNO) || toStr(landRow.OWN_GBN_NM))) {
     possessions.push({
       posesnSeCodeNm: toStr(landRow.OWN_GBN_NM) || undefined,
       ownerNm: toStr(landRow.OWNER_NM) || undefined,
+      dregno: toStr(landRow.DREGNO) || undefined,
       ownerAddr: toStr(landRow.OWNER_ADDR) || undefined,
       cnrsPsnCo: toStr(landRow.SHR_CNT) || undefined,
       ownshipChgDe: toStr(landRow.OWNDYMD) || undefined,
