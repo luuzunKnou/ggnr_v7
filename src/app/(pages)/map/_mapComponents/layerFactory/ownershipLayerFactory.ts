@@ -9,6 +9,7 @@ import type {
   ThematicMapLayerOption,
 } from './thematicMapLayerFactory';
 import { getGeoServerBase } from '@/lib/geoserverUrl';
+import { compareDefineTableOrder, defineTableIdx } from '@/lib/defineTableOrder';
 
 type DefineTableRow = {
   define_table_name?: string;
@@ -28,6 +29,23 @@ function isOwnershipGroup(group: string): boolean {
 
 function hasPublicTable(existing: Set<string>, name: string): boolean {
   return existing.has(name.trim().toLowerCase());
+}
+
+/** 기타(기타단체)는 목록 맨 아래. 나머지는 레이어 설정 순번, 같으면 한글 이름순. */
+export function sortOwnershipPanelLayers<T extends Pick<ThematicMapLayerOption, 'tableName' | 'layerName'>>(
+  layers: readonly T[],
+): T[] {
+  return [...layers].sort((a, b) => {
+    const aOther = isOwnershipOtherLayer(a);
+    const bOther = isOwnershipOtherLayer(b);
+    if (aOther !== bOther) return aOther ? 1 : -1;
+    return compareDefineTableOrder(
+      defineTableIdx(a.tableName),
+      a.layerName,
+      defineTableIdx(b.tableName),
+      b.layerName,
+    );
+  });
 }
 
 /** 기타(기타단체)는 목록 맨 아래 */

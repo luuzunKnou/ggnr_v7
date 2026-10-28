@@ -1,17 +1,16 @@
 /**
- * data_dir/styles 내 심볼 URL을 start.ini·GEOSERVER_URL 포트 기준 절대 URL로 통일.
+ * data_dir/styles 내 심볼 URL을 호스트 없는 `/www/symbol/…` 상대 경로로 통일.
+ * (IP·포트 절대 URL이 들어가면 다른 PC에서 깨짐)
  * start-geoserver.bat·npm run geoserver:sync-symbol-urls 에서 호출.
  */
 import fs from 'node:fs';
 import path from 'node:path';
 import { rewriteGeoServerSymbolUrlsInStyleText } from '../src/lib/geoserverSymbolPath';
-import { resolveGeoServerInternalUrl } from './resolve-geoserver-url';
 
 const STYLES_DIR = path.join(process.cwd(), 'geoserver_modules', 'data_dir', 'styles');
 
 function main(): void {
-  const geoserverBase = resolveGeoServerInternalUrl();
-  console.log(`[sync-symbol-urls] GeoServer base: ${geoserverBase}`);
+  console.log(`[sync-symbol-urls] normalize to /www/symbol/…`);
 
   if (!fs.existsSync(STYLES_DIR)) {
     console.warn(`[sync-symbol-urls] styles dir not found: ${STYLES_DIR}`);
@@ -28,7 +27,7 @@ function main(): void {
 
     const filePath = path.join(STYLES_DIR, ent.name);
     const before = fs.readFileSync(filePath, 'utf8');
-    const after = rewriteGeoServerSymbolUrlsInStyleText(before, geoserverBase);
+    const after = rewriteGeoServerSymbolUrlsInStyleText(before);
     if (after === before) continue;
 
     fs.writeFileSync(filePath, after, 'utf8');

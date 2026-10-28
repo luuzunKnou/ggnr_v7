@@ -3,10 +3,17 @@ import path from "node:path"
 
 import { DEFINE_LAYER_CODES_BASE_DIR, readDefineLayerCodes } from "@/lib/defineLayerCodeFiles"
 import {
+  applyProjectSplitParentsToTables,
+  getCurrentGgnrProject,
+  getProjectSplitConfigPath,
+  readProjectSplitConfig,
+  type ProjectSplitConfig,
+  type ProjectSplitParentConfig,
+  writeProjectSplitConfig,
+} from "@/lib/projectSplitLayers"
+import {
   isSplitLayerCode,
   splitChildLayerName,
-  splitCodeDivQuery,
-  splitEtcDivQuery,
   splitEtcLayerName,
   splitLayerColumn,
 } from "@/lib/splitLayerTargets"
@@ -14,6 +21,7 @@ import {
   applyDefaultStyleToLayer,
   createOrUpdateGeoServerLayer,
   deletePublishedGeoServerLayer,
+  invalidateDefineLayerTablesCache,
   saveDefineLayerTables,
 } from "@/service/devTestService"
 
@@ -26,7 +34,7 @@ export type SplitLayerCodeOption = {
   korName: string
 }
 
-function readTablesFile(): TableRow[] {
+function readTablesFileRaw(): TableRow[] {
   const raw = fs.readFileSync(TABLES_PATH, "utf-8")
   const parsed = JSON.parse(raw) as unknown
   if (!Array.isArray(parsed)) throw new Error("tables.json 형식이 올바르지 않습니다.")
@@ -65,40 +73,6 @@ function rowName(row: TableRow): string {
   return String(row.define_table_name ?? "").trim().toLowerCase()
 }
 
-function isManagedSplitRow(row: TableRow, parent: string, codeIds: Set<string>): boolean {
-  if (String(row.define_table_parents_layer ?? "").trim().toLowerCase() !== parent) return false
-  const name = rowName(row)
-  const prefix = `${parent}_`
-  if (!name.startsWith(prefix)) return false
-  const suffix = name.slice(prefix.length)
-  return suffix === "etc" || codeIds.has(suffix)
-}
-
-function childRow(
-  parentRow: TableRow,
-  parent: string,
-  name: string,
-  korName: string,
-  divQuery: string,
-  existing: TableRow | undefined
-): TableRow {
-  const base = existing ?? parentRow
-  return {
-    define_table_name: name,
-    define_table_kor_name: korName,
-    define_table_shp_type: String(base.define_table_shp_type ?? parentRow.define_table_shp_type ?? ""),
-    define_table_read_share: String(base.define_table_read_share ?? parentRow.define_table_read_share ?? "P"),
-    define_table_write_share: String(base.define_table_write_share ?? parentRow.define_table_write_share ?? "P"),
-    define_table_group: String(base.define_table_group ?? parentRow.define_table_group ?? ""),
-    define_table_idx: existing ? String(existing.define_table_idx ?? "") : "",
-    define_table_etc: existing ? String(existing.define_table_etc ?? "") : "",
-    define_table_schema: String(base.define_table_schema ?? parentRow.define_table_schema ?? "layer"),
-    define_table_source: String(base.define_table_source ?? parentRow.define_table_source ?? "shp"),
-    define_table_div_query: divQuery,
-    define_table_parents_layer: parent,
-  }
-}
-
 /** 구분 컬럼 코드·한글명 */
 export async function listSplitLayerCodes(params: { parent?: string } = {}) {
   const parent = String(params?.parent ?? "").trim().toLowerCase()
@@ -111,21 +85,48 @@ export async function listSplitLayerCodes(params: { parent?: string } = {}) {
   return { success: true as const, column, codes }
 }
 
+/** 현재 프로젝트의 부모 분할 설정 (없으면 tables 기반 추정은 UI에서 처리) */
+export async function getProjectSplitParentConfig(params: { parent?: string } = {}) {
+  const parent = String(params?.parent ?? "").trim().toLowerCase()
+  const column = splitLayerColumn(parent)
+  if (!column) return { success: false as const, error: "분할 대상 레이어가 아닙니다." }
+  const project = getCurrentGgnrProject()
+  const config = readProjectSplitConfig(project)
+  const entry = config[parent] ?? null
+  return {
+    success: true as const,
+    project,
+    configPath: getProjectSplitConfigPath(project),
+    column,
+    config: entry,
+  }
+}
+
 /**
- * 선택한 코드는 부모_코드 분할로, 나머지와 빈 값은 부모_etc 로 정의한 뒤 발행·기본 스타일을 붙인다.
- * 코드 이름 규칙의 기존 분할만 갱신·제거한다.
+ * 선택한 코드는 부모_코드 분할로, 나머지와 빈 값은 부모_etc 로 정의한 뒤
+ * 프로젝트 분할 설정 저장 → tables.json 반영 → 발행·기본 스타일.
  */
 export async function applySplitLayers(params: {
   parent?: string
   codes?: string[]
-  /** 레이어명 → 발행에 쓸 한글명. 비어 있으면 코드 한글명으로 채운다. */
+  /** 레이어명 → 발행에 쓸 한글명 */
   korNames?: Record<string, string>
+  /** 레이어명 → 그룹. 비우면 부모 그룹 */
+  groups?: Record<string, string>
   url?: string
   workspace?: string
 }) {
   const parent = String(params?.parent ?? "").trim().toLowerCase()
   const column = splitLayerColumn(parent)
   if (!column) return { success: false as const, error: "분할 대상 레이어가 아닙니다." }
+
+  const project = getCurrentGgnrProject()
+  if (!project) {
+    return {
+      success: false as const,
+      error: "GGNR_PROJECT가 없습니다. 프로젝트별 분할 설정을 저장하려면 프로젝트를 지정하세요.",
+    }
+  }
 
   const catalog = loadCodeOptions(parent, column)
   const byId = new Map(catalog.map((item) => [item.code.toLowerCase(), item]))
@@ -143,10 +144,9 @@ export async function applySplitLayers(params: {
     return { success: false as const, error: "분할할 코드를 하나 이상 선택하세요." }
   }
 
-  const codeIds = new Set(catalog.map((item) => item.code.toLowerCase()))
   let tables: TableRow[]
   try {
-    tables = readTablesFile()
+    tables = readTablesFileRaw()
   } catch (e: unknown) {
     return { success: false as const, error: e instanceof Error ? e.message : String(e) }
   }
@@ -154,69 +154,85 @@ export async function applySplitLayers(params: {
   const parentRow = tables.find((row) => rowName(row) === parent)
   if (!parentRow) return { success: false as const, error: "부모 레이어 정의가 없습니다." }
   const parentKor = String(parentRow.define_table_kor_name ?? parent).trim() || parent
+  const parentGroup = String(parentRow.define_table_group ?? "").trim()
 
-  const existingByName = new Map(tables.map((row) => [rowName(row), row]))
   const korNames = params?.korNames ?? {}
+  const groups = params?.groups ?? {}
   const resolveKor = (layerName: string, fallback: string) => {
     const custom = String(korNames[layerName] ?? "").trim()
     return custom || fallback
   }
-  const wanted = new Map<string, TableRow>()
-  for (const item of picked) {
-    const name = splitChildLayerName(parent, item.code)
-    const kor = item.korName ? `${parentKor}(${item.korName})` : `${parentKor}(${item.code})`
-    wanted.set(
-      name,
-      childRow(
-        parentRow,
-        parent,
-        name,
-        resolveKor(name, kor),
-        splitCodeDivQuery(column, item.code),
-        existingByName.get(name)
-      )
-    )
+  const resolveGroup = (layerName: string) => {
+    const custom = String(groups[layerName] ?? "").trim()
+    return custom || parentGroup
   }
-  const etcName = splitEtcLayerName(parent)
-  wanted.set(
-    etcName,
-    childRow(
-      parentRow,
-      parent,
-      etcName,
-      resolveKor(etcName, `${parentKor}(기타)`),
-      splitEtcDivQuery(column, picked.map((item) => item.code)),
-      existingByName.get(etcName)
-    )
+
+  const prevConfig = readProjectSplitConfig(project)
+  const prevEntry = prevConfig[parent]
+  const prevByCode = new Map(
+    (prevEntry?.items ?? []).map((item) => [item.code.toLowerCase(), item])
   )
 
-  const removed: string[] = []
-  const next: TableRow[] = []
-  for (const row of tables) {
-    const name = rowName(row)
-    if (isManagedSplitRow(row, parent, codeIds)) {
-      const replacement = wanted.get(name)
-      if (replacement) {
-        next.push(replacement)
-        wanted.delete(name)
-      } else {
-        removed.push(name)
+  const parentConfig: ProjectSplitParentConfig = {
+    items: picked.map((item) => {
+      const name = splitChildLayerName(parent, item.code)
+      const fallbackKor = item.korName ? `${parentKor}(${item.korName})` : `${parentKor}(${item.code})`
+      const korName = resolveKor(name, prevByCode.get(item.code.toLowerCase())?.korName || fallbackKor)
+      const group = resolveGroup(name) || prevByCode.get(item.code.toLowerCase())?.group || parentGroup
+      const prevIdx = prevByCode.get(item.code.toLowerCase())?.idx
+      return {
+        code: item.code,
+        korName,
+        ...(group ? { group } : {}),
+        ...(prevIdx ? { idx: prevIdx } : {}),
       }
-      continue
-    }
-    next.push(row)
-  }
-  if (wanted.size > 0) {
-    const insertAt = next.findIndex((row) => rowName(row) === parent)
-    const rows = Array.from(wanted.values())
-    if (insertAt >= 0) next.splice(insertAt + 1, 0, ...rows)
-    else next.push(...rows)
+    }),
+    etc: {
+      korName: resolveKor(
+        splitEtcLayerName(parent),
+        prevEntry?.etc?.korName || `${parentKor}(기타)`
+      ),
+      ...(resolveGroup(splitEtcLayerName(parent)) || prevEntry?.etc?.group
+        ? { group: resolveGroup(splitEtcLayerName(parent)) || prevEntry?.etc?.group }
+        : {}),
+      ...(prevEntry?.etc?.idx ? { idx: prevEntry.etc.idx } : {}),
+    },
   }
 
-  const saveRes = await saveDefineLayerTables({ tables: next })
+  const nextProjectConfig: ProjectSplitConfig = {
+    ...prevConfig,
+    [parent]: parentConfig,
+  }
+  const saveProject = writeProjectSplitConfig(nextProjectConfig, project)
+  if (!saveProject.success) {
+    return { success: false as const, error: saveProject.error }
+  }
+
+  const prevManagedNames = new Set<string>()
+  if (prevEntry) {
+    for (const item of prevEntry.items) prevManagedNames.add(splitChildLayerName(parent, item.code))
+    prevManagedNames.add(splitEtcLayerName(parent))
+  } else {
+    for (const row of tables) {
+      if (String(row.define_table_parents_layer ?? "").trim().toLowerCase() !== parent) continue
+      const name = rowName(row)
+      const suffix = name.startsWith(`${parent}_`) ? name.slice(parent.length + 1) : ""
+      if (suffix === "etc" || isSplitLayerCode(suffix)) prevManagedNames.add(name)
+    }
+  }
+
+  const nextTables = applyProjectSplitParentsToTables(tables, [parent], nextProjectConfig)
+  const nextManagedNames = new Set([
+    splitEtcLayerName(parent),
+    ...picked.map((item) => splitChildLayerName(parent, item.code)),
+  ])
+  const removed = [...prevManagedNames].filter((name) => !nextManagedNames.has(name))
+
+  const saveRes = await saveDefineLayerTables({ tables: nextTables })
   if (!saveRes.success) {
     return { success: false as const, error: saveRes.error ?? "레이어 정의 저장 실패" }
   }
+  invalidateDefineLayerTablesCache()
 
   const failed: Array<{ layer: string; error: string }> = []
   for (const layerName of removed) {
@@ -230,6 +246,7 @@ export async function applySplitLayers(params: {
 
   const published: string[] = []
   const styled: string[] = []
+  const etcName = splitEtcLayerName(parent)
   for (const layerName of [etcName, ...picked.map((item) => splitChildLayerName(parent, item.code))]) {
     const pubRes = await createOrUpdateGeoServerLayer({
       layerName,
@@ -257,6 +274,8 @@ export async function applySplitLayers(params: {
     return {
       success: false as const,
       error: failed.map((item) => `${item.layer}: ${item.error}`).join("\n"),
+      project,
+      configPath: saveProject.path,
       published,
       styled,
       removed,
@@ -266,6 +285,8 @@ export async function applySplitLayers(params: {
 
   return {
     success: true as const,
+    project,
+    configPath: saveProject.path,
     published,
     styled,
     removed,

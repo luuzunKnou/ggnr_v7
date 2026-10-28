@@ -13,6 +13,7 @@ import type {
   ThematicMapLayerOption,
 } from './thematicMapLayerFactory';
 import { getGeoServerBase } from '@/lib/geoserverUrl';
+import { compareDefineTableOrder, parseDefineTableIdx } from '@/lib/defineTableOrder';
 
 type DefineTableRow = {
   define_table_name?: string;
@@ -24,16 +25,8 @@ type DefineTableRow = {
   define_table_idx?: string | number;
 };
 
-function parseTableIdx(raw: unknown): number {
-  const n = parseInt(String(raw ?? '').trim(), 10);
-  return Number.isFinite(n) ? n : Number.POSITIVE_INFINITY;
-}
-
 function compareUndergroundLayers(a: ThematicMapLayerOption, b: ThematicMapLayerOption): number {
-  const da = a.tableIdx ?? Number.POSITIVE_INFINITY;
-  const db = b.tableIdx ?? Number.POSITIVE_INFINITY;
-  if (da !== db) return da - db;
-  return a.layerName.localeCompare(b.layerName, 'ko');
+  return compareDefineTableOrder(a.tableIdx, a.layerName, b.tableIdx, b.layerName);
 }
 
 /** 지도 «지하시설물» — 레이어관리 그룹명과 동일 */
@@ -92,14 +85,15 @@ function hasLayerTable(existing: Set<string>, name: string): boolean {
 }
 
 /**
- * tables.json `layer` 스키마 중 지하시설물 대상 그룹을 묶어 패널·WMS 목록 생성.
+ * tables.json(또는 프로젝트 분할 merge 결과) `layer` 스키마 중 지하시설물 대상 그룹을 묶어 패널·WMS 목록 생성.
  * 주제도와 동일: 부모 제외, 선택적 DB·데이터 필터.
  */
 export function buildUndergroundFacilityLayerGroups(
   existingLayerTables?: Set<string> | null,
-  layersWithData?: Set<string> | null
+  layersWithData?: Set<string> | null,
+  defineTables?: DefineTableRow[] | null
 ): ThematicMapLayerGroup[] {
-  const rows = tables as DefineTableRow[];
+  const rows = (defineTables ?? (tables as DefineTableRow[])) as DefineTableRow[];
 
   const parentNames = new Set<string>();
   for (const t of rows) {
@@ -127,7 +121,7 @@ export function buildUndergroundFacilityLayerGroups(
     const layerName = String(t.define_table_kor_name ?? tableName).trim();
     const parentTableName = String(t.define_table_parents_layer ?? '').trim() || undefined;
     const cqlFilter = String(t.define_table_div_query ?? '').trim() || undefined;
-    const tableIdx = parseTableIdx(t.define_table_idx);
+    const tableIdx = parseDefineTableIdx(t.define_table_idx);
 
     if (parentNames.has(tableName.toLowerCase())) continue;
     if (!parentTableName && layerName.startsWith('(연속주제)')) continue;

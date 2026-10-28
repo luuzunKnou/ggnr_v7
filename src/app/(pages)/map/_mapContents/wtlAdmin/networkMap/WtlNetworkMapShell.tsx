@@ -16,7 +16,6 @@ import {
   type DefineCodeRow,
 } from '@/lib/defineLayerCodeDisplay'
 import { cn } from '@/lib/utils'
-import { getLegendGraphicUrl } from '../../../_mapComponents/layerFactory/serviceLayerFactory'
 import { useMapContext } from '../../../_mapComponents/MapContext'
 import { MapSideListPanel } from '../../../_mapComponents/MapSideListPanel'
 import { WTL_CONS_SUPPLY_BLOCKS } from '../constructionLedger/wtlConsSample'
@@ -45,6 +44,7 @@ import {
   WtlNetMapSourceSettingsDialog,
   type WtlNetToolsPlacement,
 } from './WtlNetMapSourceSettingsDialog'
+import { WtlLayerMark } from './WtlLayerMark'
 import { getWtlNetLayerDef } from './wtlNetworkLayerCatalog'
 import {
   getWtlNetMapSource,
@@ -202,60 +202,6 @@ function collectManagedUndergroundNames(sourceIds: readonly string[]): Set<strin
 const GROUP_BTN = 'standard-layer-toggle-chip cursor-pointer'
 const GROUP_BTN_ON = 'standard-layer-toggle-chip-active'
 const GROUP_BTN_OFF = 'standard-layer-toggle-chip-inactive'
-
-function legendKind(name: string): 'line' | 'area' | 'point' {
-  const def = getWtlNetLayerDef(name)
-  if (def?.geomKind) return def.geomKind
-  if (name.includes('관로') || name.includes('심도')) return 'line'
-  if (name.includes('구역') || name.includes('분구') || name.includes('블록') || name.includes('제한')) return 'area'
-  return 'point'
-}
-
-function DefaultLayerMark({ name, on }: { name: string; on: boolean }) {
-  const kind = legendKind(name)
-  const color = on ? '#2563eb' : '#94a3b8'
-  if (kind === 'line') {
-    return (
-      <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden className="shrink-0">
-        <line x1="1" y1="7" x2="13" y2="7" stroke={color} strokeWidth="2.5" strokeLinecap="round" />
-      </svg>
-    )
-  }
-  if (kind === 'area') {
-    return (
-      <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden className="shrink-0">
-        <rect x="2" y="3" width="10" height="8" fill={on ? 'rgba(37,99,235,0.35)' : 'rgba(148,163,184,0.35)'} stroke={color} />
-      </svg>
-    )
-  }
-  return (
-    <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden className="shrink-0">
-      <circle cx="7" cy="7" r="3.2" fill={color} />
-    </svg>
-  )
-}
-
-/** 지하시설물과 동일: GetLegendGraphic(테이블명, 스타일명=테이블명). 실패·미등록이면 기본 도형 */
-function LayerMark({ name, on }: { name: string; on: boolean }) {
-  const [failed, setFailed] = useState(false)
-  const legendName = /^wtl_[a-z0-9_]+$/i.test(name) ? name.toLowerCase() : ''
-  const src = legendName ? getLegendGraphicUrl(legendName, legendName) : ''
-
-  if (!src || failed) return <DefaultLayerMark name={name} on={on} />
-
-  return (
-    <img
-      src={src}
-      alt=""
-      className="h-5 w-5 shrink-0 rounded border border-slate-200 object-contain dark:border-white/20"
-      onLoad={(e) => {
-        const img = e.currentTarget
-        if (img.naturalWidth <= 2 && img.naturalHeight <= 2) setFailed(true)
-      }}
-      onError={() => setFailed(true)}
-    />
-  )
-}
 
 type Props = {
   leftOffsetPx: number
@@ -1229,7 +1175,7 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
                             className={cn(GROUP_BTN, on ? GROUP_BTN_ON : GROUP_BTN_OFF)}
                             onClick={() => toggleLayer(item.define_table_name)}
                           >
-                            <LayerMark name={item.define_table_name} on={on} />
+                            <WtlLayerMark layerKey={item.define_table_name} />
                             <span className="min-w-0 truncate [word-break:keep-all]">{item.define_table_kor_name}</span>
                           </button>
                         )
@@ -1417,7 +1363,7 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
                           className="overflow-hidden rounded border border-border bg-background"
                         >
                           <div className="flex min-w-0 items-center gap-1.5 border-b border-border bg-muted/50 px-2 py-1.5">
-                            <LayerMark name={box.layerKey} on />
+                            <WtlLayerMark layerKey={box.layerKey} />
                             <span className="min-w-0 truncate text-[11px] font-medium text-foreground">
                               {box.label}
                             </span>

@@ -393,6 +393,9 @@ function syncPanelLayerActiveControls(
   return next;
 }
 
+/** visibleLayerNames fallback — 매 렌더 new Set() 금지(effect deps 무한 갱신) */
+const EMPTY_LAYER_NAME_SET: Set<string> = new Set();
+
 // 전체 레이어 끄기 버튼에서 제거할 컨트롤 ID (지적도, 건물도로, 기초구간)
 const LAYER_IDS_OFF_ON_ALL_OFF = [
   'cadastral',
@@ -442,11 +445,11 @@ export default function OpenLayersMap({
   const applyMapViewPaddingRef = mapContext?.applyMapViewPaddingRef;
 
   useEffect(() => {
-    mapContext?.setMapReady?.(mapReady);
+    mapContextRef.current?.setMapReady?.(mapReady);
     return () => {
-      mapContext?.setMapReady?.(false);
+      mapContextRef.current?.setMapReady?.(false);
     };
-  }, [mapReady, mapContext]);
+  }, [mapReady]);
 
   useEffect(() => {
     if (!mapReady) return;
@@ -861,6 +864,26 @@ export default function OpenLayersMap({
   }, [jimokCatalogLoading, jimokAvailableTableNames]);
 
   // 목록 체크가 비면 해당 버튼 선택 해제 (패널 열림 표시는 openSubPanel로 유지)
+  // Set 참조 churn·불필요 setState 루프 방지: 비움 여부 + 현재 버튼 ON 여부만 deps
+  const emptyPanelClearSignature = [
+    visibleJimokLayerNames != null && visibleJimokLayerNames.size === 0 ? '1' : '0',
+    visibleLandownLayerNames != null && visibleLandownLayerNames.size === 0 ? '1' : '0',
+    visibleCadastralLayerNames != null && visibleCadastralLayerNames.size === 0 ? '1' : '0',
+    visibleBuildingRoadLayerNames != null && visibleBuildingRoadLayerNames.size === 0
+      ? '1'
+      : '0',
+    visibleThematicLayerNames != null && visibleThematicLayerNames.size === 0 ? '1' : '0',
+    visibleUndergroundFacilityLayerNames != null &&
+    visibleUndergroundFacilityLayerNames.size === 0
+      ? '1'
+      : '0',
+    activeControls.includes('land-category') ? '1' : '0',
+    activeControls.includes('ownership') ? '1' : '0',
+    activeControls.includes('cadastral') ? '1' : '0',
+    activeControls.includes('building-road') ? '1' : '0',
+    activeControls.includes('thematic-map') ? '1' : '0',
+    activeControls.includes('underground-facility') ? '1' : '0',
+  ].join('');
   useEffect(() => {
     const emptyIds = new Set<PanelLayerId>();
     if (visibleJimokLayerNames != null && visibleJimokLayerNames.size === 0) {
@@ -886,17 +909,11 @@ export default function OpenLayersMap({
     }
     if (emptyIds.size === 0) return;
     setActiveControls((prev) => {
-      const next = prev.filter((id) => !emptyIds.has(id as PanelLayerId));
-      return next.length === prev.length ? prev : next;
+      if (!prev.some((id) => emptyIds.has(id as PanelLayerId))) return prev;
+      return prev.filter((id) => !emptyIds.has(id as PanelLayerId));
     });
-  }, [
-    visibleJimokLayerNames,
-    visibleLandownLayerNames,
-    visibleCadastralLayerNames,
-    visibleBuildingRoadLayerNames,
-    visibleThematicLayerNames,
-    visibleUndergroundFacilityLayerNames,
-  ]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- signature only
+  }, [emptyPanelClearSignature]);
 
   const fetchGeoserverLog = useCallback(async () => {
     try {
@@ -1073,7 +1090,7 @@ export default function OpenLayersMap({
   }, [projectName]);
 
   // 서비스 레이어 WMS 동기화 (visibleLayerNames → serviceLayer 파라미터)
-  const visibleLayerNames = mapContext?.visibleLayerNames ?? new Set<string>();
+  const visibleLayerNames = mapContext?.visibleLayerNames ?? EMPTY_LAYER_NAME_SET;
   const setVisibleLayerNames = mapContext?.setVisibleLayerNames;
 
   // 데이터 조회 → 지하시설물 선택 동기화
@@ -1086,8 +1103,7 @@ export default function OpenLayersMap({
       undergroundFacilityAvailableTableNames
     );
     setVisibleUndergroundFacilityLayerNames((prev) => {
-      const cur = prev ?? new Set<string>();
-      if (sameStringSet(cur, fromVisible)) return prev ?? fromVisible;
+      if (prev != null && sameStringSet(prev, fromVisible)) return prev;
       return fromVisible;
     });
     if (fromVisible.size === 0) return;
@@ -1105,11 +1121,12 @@ export default function OpenLayersMap({
   useEffect(() => {
     if (!restored || undergroundFacilityCatalogLoading || !setVisibleLayerNames) return;
     if (visibleUndergroundFacilityLayerNames == null) return;
+    const selected = visibleUndergroundFacilityLayerNames;
     setVisibleLayerNames((prev) =>
       mirrorUndergroundFacilityIntoVisible(
         prev,
         undergroundFacilityAvailableTableNames,
-        visibleUndergroundFacilityLayerNames
+        selected
       )
     );
   }, [
@@ -1477,10 +1494,11 @@ export default function OpenLayersMap({
 
   // 전체 레이어 끄기 버튼(검색창 옆)·시스템 전환용: 지적도·건물도로·기초구간 + defineLayer + 패널 체크 모두 끔
   useEffect(() => {
-    if (!mapContext?.allLayersOffRef) return;
-    mapContext.allLayersOffRef.current = () => {
+    const offRef = mapContextRef.current?.allLayersOffRef;
+    if (!offRef) return;
+    offRef.current = () => {
       setActiveControls((prev) => prev.filter((id) => !LAYER_IDS_OFF_ON_ALL_OFF.includes(id)));
-      mapContext?.setVisibleLayerNames?.(new Set());
+      mapContextRef.current?.setVisibleLayerNames?.(new Set());
       // 우측 컨트롤 패널 체크박스 상태 (null=전체표시, 빈 Set=전체숨김)
       setVisibleJimokLayerNames(new Set());
       setVisibleLandownLayerNames(new Set());
@@ -1493,9 +1511,9 @@ export default function OpenLayersMap({
       setIsAerialViewPanelExiting(false);
     };
     return () => {
-      if (mapContext?.allLayersOffRef) mapContext.allLayersOffRef.current = null;
+      if (offRef) offRef.current = null;
     };
-  }, [mapContext]);
+  }, []);
 
   /** 도로망·표주 점찍기 중에만 identify 비활성 — 배경은 GeoServer WMS 클릭 선택 */
   const roadNetworkPointPickActive =
@@ -1533,9 +1551,9 @@ export default function OpenLayersMap({
   // 좌측 새 식별이 오면 우측 대기분 제거(좌측 우선)
   useEffect(() => {
     if (popupState != null) {
-      mapContext?.setMapSplitIdentifyPopup?.(null);
+      mapContextRef.current?.setMapSplitIdentifyPopup?.(null);
     }
-  }, [popupState, mapContext]);
+  }, [popupState]);
 
   // 우측 분할지도 식별 → 좌측과 동일 파이프라인
   const mapSplitIdentifyPopup = mapContext?.mapSplitIdentifyPopup ?? null;
@@ -2797,6 +2815,7 @@ export default function OpenLayersMap({
           if (extra.length > 0) {
             const next = new Set(prev ?? []);
             for (const t of extra) next.add(t);
+            if (prev != null && sameStringSet(prev, next)) return prev;
             return next;
           }
           if (prev != null && prev.size > 0) return prev;

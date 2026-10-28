@@ -19,9 +19,10 @@ import { SearchClearButton } from "./layerManager/SearchClearButton"
 import { SplitLayerDialog } from "./layerManager/SplitLayerDialog"
 import { isSplitLayerParent } from "@/lib/splitLayerTargets"
 import { call } from "@/lib/api"
-import { parseSimpleStyleFromCss, parseSymbolFolderFromUrl, symbolFileNameFromUrl, toPublicSymbolPreviewUrl, type GeometryType, type StyleProps } from "@/lib/geoserverStyleUtils"
+import { normalizeGeoServerSymbolUrl } from "@/lib/geoserverSymbolPath"
+import { parseSimpleStyleFromCss, parseSldEnvStyle, parseSymbolFolderFromUrl, resolveSymbolPreviewUrl, symbolFileNameFromUrl, type GeometryType, type StyleProps } from "@/lib/geoserverStyleUtils"
 import { withBasePath } from "@/lib/basePath"
-import { getGeoServerBase } from "@/lib/geoserverUrl"
+import { getGeoServerBase, getGeoServerPublicBase } from "@/lib/geoserverUrl"
 import {
   fetchDefineLayerTables,
   fetchLayerDbTableList,
@@ -51,10 +52,22 @@ function toApiGeometryType(kind: StyleFormGeomType): GeometryType {
   return kind === "SYMBOL" ? "POINT" : kind
 }
 
+/** 목록·스타일 폴백용. SYMBOL은 DB 기하가 아니므로 POINT로 본다. */
+function toListGeometryType(shpType?: string | null): GeometryType {
+  const t = String(shpType ?? "").trim().toUpperCase()
+  if (t === "POINT" || t === "SYMBOL" || t === "MULTIPOINT") return "POINT"
+  if (t === "LINE" || t === "LINESTRING" || t === "MULTILINESTRING") return "LINE"
+  if (t === "POLYGON" || t === "MULTIPOLYGON") return "POLYGON"
+  return "POLYGON"
+}
+
 function toApiStyleProps(kind: StyleFormGeomType, props: StyleProps): StyleProps {
   if (kind === "SYMBOL") {
     const symbolUrl = props.symbolUrl?.trim()
-    return { ...props, symbolUrl: symbolUrl || undefined }
+    return {
+      ...props,
+      symbolUrl: symbolUrl ? normalizeGeoServerSymbolUrl(symbolUrl) : undefined,
+    }
   }
   const { symbolUrl: _drop, ...rest } = props
   return rest
@@ -63,7 +76,7 @@ function toApiStyleProps(kind: StyleFormGeomType, props: StyleProps): StyleProps
 function guessSymbolUrl(layerName: string | null | undefined): string | undefined {
   const name = layerName?.trim()
   if (!name) return undefined
-  return `${GEOSERVER_DEFAULT_URL}/www/symbol/water/${name}.svg`
+  return `/www/symbol/water/${name}.svg`
 }
 
 const HEX_COLOR_RE = /^#([0-9a-fA-F]{6})$/
@@ -138,26 +151,18 @@ type TableColumnDef =
   | { id: string; label: string; width: string; kind: "style_legend" }
   | { id: string; label: string; width: string; kind: "layer_delete" }
 
-const GEOSERVER_WORKSPACE = "ggnr"
-
 /** GeoServer WMS GetLegendGraphic URL (범례 이미지). version이 바뀌면 URL도 바뀌어 브라우저 캐시를 무시하고 새로 받아온다. */
 function getLegendGraphicUrl(layerName: string, styleName?: string, version?: number): string {
-  const base = GEOSERVER_DEFAULT_URL
-  // GeoServer 레이어·스타일은 항상 소문자로 생성되므로 원본 대소문자와 무관하게 소문자로 조회
   const layerKey = layerName.toLowerCase()
   const params = new URLSearchParams({
-    SERVICE: "WMS",
-    REQUEST: "GetLegendGraphic",
-    VERSION: "1.0.0",
-    LAYER: `${GEOSERVER_WORKSPACE}:${layerKey}`,
-    STYLE: styleName?.trim() || layerKey,
-    FORMAT: "image/png",
-    WIDTH: "32",
-    HEIGHT: "32",
-    TRANSPARENT: "true",
-    ...(version != null ? { _v: String(version) } : {}),
+    layer: layerKey,
+    style: styleName?.trim() || layerKey,
+    width: "32",
+    height: "32",
+    primary: "1",
   })
-  return `${base}/wms?${params.toString()}`
+  if (version != null) params.set("v", String(version))
+  return withBasePath(`/api/geoserver/legend?${params.toString()}`)
 }
 
 const TABLE_COLUMNS: TableColumnDef[] = [
@@ -276,6 +281,7 @@ export function LayerInfoManager({
   const symbolFolderTouchedRef = useRef(false)
   const [pickPreviewUrl, setPickPreviewUrl] = useState("")
   const [editEditable, setEditEditable] = useState(false)
+  const [styleFormat, setStyleFormat] = useState<"css" | "sld" | null>(null)
   const [actionLoading, setActionLoading] = useState<string | null>(null)
   const [autoApplyLoading, setAutoApplyLoading] = useState(false)
   const [splitParent, setSplitParent] = useState<string | null>(null)
@@ -376,7 +382,7 @@ export function LayerInfoManager({
     return () => clearTimeout(timer)
   }, [searchQuery])
 
-  /** WMS 범례가 실패한 스타일의 CSS를 직접 조회해서 파싱 (DB 테이블 유무와 무관하게 스타일 미리보기 표시) */
+  /** WMS 범례 실패 시 CSS/SLD를 읽어 미리보기. 심볼 URL 있으면 모달 SYMBOL과 동일하게 아이콘 표시 */
   const loadCssFallback = useCallback((key: string, force = false) => {
     setCssFallbackMap((prev) => (prev[key] && !force ? prev : { ...prev, [key]: "loading" }))
     call("", "POST", {
@@ -386,12 +392,26 @@ export function LayerInfoManager({
     })
       .then((res) => {
         const data = res?.data ?? res
-        if (data?.success && data.format === "css" && data.body) {
+        if (!data?.success || !data.body) {
+          setCssFallbackMap((prev) => ({ ...prev, [key]: "error" }))
+          return
+        }
+        if (data.format === "css") {
           const { styleProps, geometryType } = parseSimpleStyleFromCss(data.body)
           setCssFallbackMap((prev) => ({ ...prev, [key]: { ...styleProps, geometryType } }))
-        } else {
-          setCssFallbackMap((prev) => ({ ...prev, [key]: "error" }))
+          return
         }
+        if (data.format === "sld") {
+          const parsed = parseSldEnvStyle(data.body, key)
+          if (parsed) {
+            setCssFallbackMap((prev) => ({
+              ...prev,
+              [key]: { ...parsed.styleProps, geometryType: parsed.geometryType },
+            }))
+            return
+          }
+        }
+        setCssFallbackMap((prev) => ({ ...prev, [key]: "error" }))
       })
       .catch(() => setCssFallbackMap((prev) => ({ ...prev, [key]: "error" })))
   }, [])
@@ -495,6 +515,27 @@ export function LayerInfoManager({
     },
     [config]
   )
+
+  /** 스타일이 점·심볼이면 목록 «도형»을 POINT로 맞춤 (SYMBOL은 목록에 두지 않음). */
+  const syncListShpTypeFromStyle = useCallback((layerName: string | null | undefined, styleKind: StyleFormGeomType) => {
+    const name = String(layerName ?? "").trim().toLowerCase()
+    if (!name) return
+    const listGeom = toApiGeometryType(styleKind)
+    if (listGeom !== "POINT") return
+    setConfig((prev) => {
+      if (!prev) return prev
+      let changed = false
+      const tables = prev.tables.map((t) => {
+        const row = t as Record<string, unknown>
+        if (String(row.define_table_name ?? "").trim().toLowerCase() !== name) return t
+        const cur = String(row.define_table_shp_type ?? "").trim().toUpperCase()
+        if (cur === "POINT") return t
+        changed = true
+        return { ...row, define_table_shp_type: "POINT" }
+      })
+      return changed ? { ...prev, tables } : prev
+    })
+  }, [])
 
   const saveConfig = useCallback(async () => {
     if (!config) return
@@ -766,10 +807,7 @@ export function LayerInfoManager({
   const openAdd = useCallback((layerName: string, shpType?: string) => {
     setTargetLayerName(layerName)
     setFormName(layerName)
-    const geom: GeometryType =
-      shpType === "POINT" || shpType === "LINE" || shpType === "POLYGON"
-        ? (shpType as GeometryType)
-        : "POLYGON"
+    const geom = toListGeometryType(shpType)
     setFormGeometryType(geom)
     setFormProps({ ...defaultStyleProps })
     setFormError(null)
@@ -777,13 +815,15 @@ export function LayerInfoManager({
     void loadLabelFieldOptions(layerName)
   }, [loadLabelFieldOptions])
 
-  const openEdit = useCallback(async (layerName: string, styleName: string) => {
+  const openEdit = useCallback(async (layerName: string, styleName: string, shpType?: string) => {
     setTargetLayerName(layerName)
     setTargetStyleName(styleName)
     setFormError(null)
+    setStyleFormat(null)
     setEditOpen(true)
     setFormSaving(false)
     symbolFolderTouchedRef.current = false
+    const fallbackGeom = toListGeometryType(shpType)
     void loadLabelFieldOptions(layerName)
     try {
       const res = await call("", "POST", {
@@ -795,28 +835,36 @@ export function LayerInfoManager({
       if (!data?.success) {
         setFormError(data?.error ?? "스타일 조회 실패")
         setEditEditable(false)
+        setStyleFormat(null)
         return
       }
+      setStyleFormat(data.format === "sld" ? "sld" : "css")
       setEditEditable(!!data.editable)
       if (data.editable && data.styleProps) {
         setFormProps({ ...defaultStyleProps, ...data.styleProps })
         const symbolUrl = String(data.styleProps.symbolUrl ?? "").trim()
         lastSymbolUrlRef.current = symbolUrl
         const hasSymbol = Boolean(symbolUrl)
-        setFormGeometryType(
-          hasSymbol ? "SYMBOL" : ((data.geometryType as GeometryType) ?? "POLYGON")
-        )
+        const styleKind: StyleFormGeomType = hasSymbol
+          ? "SYMBOL"
+          : ((data.geometryType as GeometryType) ?? "POLYGON")
+        setFormGeometryType(styleKind)
+        syncListShpTypeFromStyle(layerName, styleKind)
         setSymbolPickFile(null)
         setPickPreviewUrl("")
         setSymbolLinkFile("")
         setSymbolPreviewKey((n) => n + 1)
         void loadSymbolFolders(parseSymbolFolderFromUrl(symbolUrl))
+      } else {
+        setFormGeometryType(fallbackGeom)
+        setFormProps({ ...defaultStyleProps })
       }
     } catch (e: unknown) {
       setFormError(e instanceof Error ? e.message : "조회 실패")
       setEditEditable(false)
+      setStyleFormat(null)
     }
-  }, [loadLabelFieldOptions, loadSymbolFolders])
+  }, [loadLabelFieldOptions, loadSymbolFolders, syncListShpTypeFromStyle])
 
   const openLayerDefineDelete = useCallback((tableName: string, schema: string) => {
     setLayerDefineDeleteTarget({ tableName, schema })
@@ -950,7 +998,7 @@ export function LayerInfoManager({
   const openStyleEditor = useCallback(
     (layerName: string, shpType: string, hasCssStyle: boolean, styleName?: string) => {
       if (hasCssStyle && styleName) {
-        void openEdit(layerName, styleName)
+        void openEdit(layerName, styleName, shpType)
       } else {
         openAdd(layerName, shpType || undefined)
       }
@@ -999,6 +1047,7 @@ export function LayerInfoManager({
       })
       const setData = setRes?.data ?? setRes
       if (setData?.success) {
+        syncListShpTypeFromStyle(targetLayerName, formGeometryType)
         setAddOpen(false)
         setTargetLayerName(null)
         setSuccessMsg(`레이어 "${targetLayerName}"에 스타일이 적용되었습니다.`)
@@ -1013,7 +1062,7 @@ export function LayerInfoManager({
     } finally {
       setFormSaving(false)
     }
-  }, [formName, formGeometryType, formProps, targetLayerName, loadStyleInfo])
+  }, [formName, formGeometryType, formProps, targetLayerName, loadStyleInfo, syncListShpTypeFromStyle])
 
   const handleEditSubmit = useCallback(async () => {
     if (!targetStyleName || !editEditable) return
@@ -1057,9 +1106,11 @@ export function LayerInfoManager({
         params: {
           url: GEOSERVER_DEFAULT_URL,
           name: targetStyleName,
+          layerName: targetLayerName,
           geometryType: toApiGeometryType(formGeometryType),
           styleProps: toApiStyleProps(formGeometryType, styleProps),
           preserveExtraRules: true,
+          format: styleFormat ?? undefined,
         },
       })
       const data = res?.data ?? res
@@ -1074,6 +1125,7 @@ export function LayerInfoManager({
             },
           }))
         }
+        syncListShpTypeFromStyle(targetLayerName, formGeometryType)
         setEditOpen(false)
         setTargetStyleName(null)
         setTargetLayerName(null)
@@ -1089,7 +1141,52 @@ export function LayerInfoManager({
     } finally {
       setFormSaving(false)
     }
-  }, [targetStyleName, targetLayerName, editEditable, formGeometryType, formProps, symbolFolder, symbolLinkFile, symbolPickFile, handleSaveSymbolFile, handleLinkSymbolFile, loadStyleInfo])
+  }, [targetStyleName, targetLayerName, editEditable, formGeometryType, formProps, styleFormat, symbolFolder, symbolLinkFile, symbolPickFile, handleSaveSymbolFile, handleLinkSymbolFile, loadStyleInfo, syncListShpTypeFromStyle])
+
+  const handleStyleFormatChange = useCallback(async (next: "css" | "sld") => {
+    if (!targetStyleName || !targetLayerName || !styleFormat || next === styleFormat || formSaving) return
+    const ok = window.confirm(
+      next === "sld"
+        ? "현재 화면의 색과 선으로 기본 SLD를 만듭니다. CSS에만 있던 추가 규칙은 빠집니다."
+        : "SLD의 화살표와 추가 규칙은 사라지고, 화면의 단순 스타일로 바뀝니다."
+    )
+    if (!ok) return
+    setFormSaving(true)
+    setFormError(null)
+    try {
+      const res = await call("", "POST", {
+        service: "devTestService",
+        action: "setGeoServerStyleFormat",
+        params: {
+          url: GEOSERVER_DEFAULT_URL,
+          layerName: targetLayerName,
+          styleName: targetStyleName,
+          format: next,
+          geometryType: toApiGeometryType(formGeometryType),
+          styleProps: toApiStyleProps(formGeometryType, formProps),
+        },
+      })
+      const data = res?.data ?? res
+      if (!data?.success) {
+        setFormError(data?.error ?? "스타일 형식 변경 실패")
+        return
+      }
+      setStyleFormat(next)
+      setEditEditable(true)
+      setSuccessMsg(
+        next === "sld"
+          ? `레이어 "${targetLayerName}" 스타일을 SLD로 바꿨습니다.`
+          : `레이어 "${targetLayerName}" 스타일을 CSS로 바꿨습니다.`
+      )
+      setStyleVersion(Date.now())
+      loadStyleInfo()
+      requestLayerManagerListRefresh()
+    } catch (e: unknown) {
+      setFormError(e instanceof Error ? e.message : "스타일 형식 변경 실패")
+    } finally {
+      setFormSaving(false)
+    }
+  }, [targetStyleName, targetLayerName, styleFormat, formSaving, formGeometryType, formProps, loadStyleInfo])
 
   const handleDeleteConfirm = useCallback(async () => {
     if (!deleteTarget) return
@@ -1301,13 +1398,13 @@ export function LayerInfoManager({
                 <p className="text-xs text-muted-foreground">현재 심볼</p>
                 <StylePreviewSwatch
                   key={formProps.symbolUrl?.trim() || "symbol-current"}
-                  geometryType="POINT"
+                  geometryType="SYMBOL"
                   symbolUrl={formProps.symbolUrl}
                   cacheBust={symbolPreviewKey}
                 />
                 {formProps.symbolUrl?.trim() ? (
                   <a
-                    href={`${toPublicSymbolPreviewUrl(formProps.symbolUrl) ?? formProps.symbolUrl}${symbolPreviewKey ? `?v=${symbolPreviewKey}` : ""}`}
+                    href={`${resolveSymbolPreviewUrl(formProps.symbolUrl, getGeoServerPublicBase()) ?? formProps.symbolUrl}${symbolPreviewKey ? `?v=${symbolPreviewKey}` : ""}`}
                     download={symbolFileNameFromUrl(formProps.symbolUrl)}
                     className="text-xs text-primary underline underline-offset-2 truncate max-w-full hover:cursor-pointer"
                     title="클릭하면 파일을 받습니다"
@@ -1323,7 +1420,7 @@ export function LayerInfoManager({
                 {applySymbolUrl ? (
                   <StylePreviewSwatch
                     key={applySymbolUrl}
-                    geometryType="POINT"
+                    geometryType="SYMBOL"
                     symbolUrl={applySymbolUrl}
                   />
                 ) : (
@@ -1788,8 +1885,7 @@ export function LayerInfoManager({
                           cacheBust={styleVersion}
                           onNeedCssFallback={() => {
                             if (!fallbackKey) return
-                            if (hasCssStyle) loadCssFallback(fallbackKey)
-                            else setCssFallbackMap((prev) => ({ ...prev, [fallbackKey]: "error" }))
+                            loadCssFallback(fallbackKey)
                           }}
                         />
                       </div>
@@ -1999,19 +2095,44 @@ export function LayerInfoManager({
             <DialogTitle>스타일 수정: {targetLayerName}</DialogTitle>
           </DialogHeader>
           {targetStyleName && (
-            <a
-              href={withBasePath(`/api/geoserver/style-editor?name=${encodeURIComponent(targetStyleName)}`)}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-sm text-primary underline underline-offset-4 hover:no-underline"
-            >
-              GeoServer 관리자 화면에서 스타일 직접 수정 →
-            </a>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <button
+                type="button"
+                className="text-left text-sm text-primary underline underline-offset-4 hover:no-underline"
+                onClick={() => {
+                  window.open(
+                    withBasePath(`/api/geoserver/style-editor?name=${encodeURIComponent(targetStyleName)}`),
+                    '_blank',
+                    'noopener,noreferrer',
+                  )
+                }}
+              >
+                GeoServer 관리자 화면에서 스타일 직접 수정 →
+              </button>
+              <div className="inline-flex shrink-0 overflow-hidden rounded-md border border-input text-xs">
+                {(["sld", "css"] as const).map((fmt) => (
+                  <button
+                    key={fmt}
+                    type="button"
+                    disabled={!styleFormat || formSaving}
+                    className={cn(
+                      "px-2.5 py-1 uppercase hover:cursor-pointer disabled:opacity-50",
+                      styleFormat === fmt ? "bg-primary text-primary-foreground" : "bg-background text-foreground"
+                    )}
+                    onClick={() => void handleStyleFormatChange(fmt)}
+                  >
+                    {fmt}
+                  </button>
+                ))}
+              </div>
+            </div>
           )}
           {!editEditable ? (
             <div className="space-y-3 py-2">
               <p className="text-sm text-muted-foreground">
-                CSS 스타일만 간단 수정 가능합니다. 현재 스타일이 CSS가 아니거나 비어 있습니다.
+                {styleFormat === "sld"
+                  ? "이 SLD는 단순 속성으로 읽지 못했습니다(복잡 필터·다중 규칙 등). 위 관리자 화면에서 수정하거나 CSS로 바꾸면 속성 편집이 가능합니다. CSS로 바꾸면 화살표 등 추가 규칙은 단순 스타일로 바뀝니다."
+                  : "CSS 스타일만 간단 수정 가능합니다. 현재 스타일이 CSS가 아니거나 비어 있습니다."}
               </p>
             </div>
           ) : (

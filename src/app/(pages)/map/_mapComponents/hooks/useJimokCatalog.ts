@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { call } from '@/lib/api';
+import { sortLayersByDefineIdx } from '@/lib/defineTableOrder';
 import { JIMOK_LAYERS } from '../layerFactory/jimokLayerFactory';
 
 export type JimokCatalog = {
@@ -58,7 +59,7 @@ export function useJimokCatalog(): JimokCatalog {
   }, [layersWithData]);
 
   const layers = useMemo(
-    () => JIMOK_LAYERS.filter((l) => availableLayerTableNames.has(l.tableName)),
+    () => sortLayersByDefineIdx(JIMOK_LAYERS.filter((l) => availableLayerTableNames.has(l.tableName))),
     [availableLayerTableNames]
   );
 
