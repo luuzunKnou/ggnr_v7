@@ -626,7 +626,7 @@
   },
   {
     "define_field_name": "uddi_2",
-    "define_field_kor_name": "uddi_2",
+    "define_field_kor_name": "상하단연결",
     "define_field_type": "TEXT",
     "define_field_idx": 26,
     "define_field_is_required": false,
