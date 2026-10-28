@@ -6,6 +6,11 @@ import { type PDFDocumentProxy } from 'pdfjs-dist';
 import { cn } from '@/lib/utils';
 import { configurePdfJsWorker } from '@/lib/pdfjsWorker';
 import { acquirePdfDocument, isPdfDocumentReady, releasePdfDocument } from './pdfDocumentCache';
+import {
+  inferPdfPageUprightRotation,
+  type IndexSheetGuide,
+  type IndexSheetMode,
+} from './inferPdfPageUprightRotation';
 
 function clamp(n: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, n));
@@ -13,13 +18,43 @@ function clamp(n: number, min: number, max: number): number {
 
 export const STAGE_MIN_ZOOM = 0.25;
 export const STAGE_MAX_ZOOM = 5;
-/** 메인 canvas DPR 상한 — 첫 렌더 비용 절감 */
-export const STAGE_DPR_MAX = 2;
+/** 화면 배율이 1이어도 도면 선이 살아 있게 최소 2배 */
+export const STAGE_OUTPUT_SCALE_MIN = 2;
+export const STAGE_OUTPUT_SCALE_MAX = 3;
 
 export type PdfPreviewFitMode = 'page' | 'width';
 
-/** 캔버스 긴 변 픽셀 상한 (DPR 적용 전 CSS px 기준) — 대형 도면 OOM 방지 */
-const MAX_CANVAS_LONG_EDGE = 8192;
+/** 맞춤 기준 긴 변 (CSS px) — 대형 도면 OOM 방지 */
+const MAX_CSS_LONG_EDGE = 8192;
+/** 실제 픽셀 긴 변 상한 */
+const MAX_BUFFER_LONG_EDGE = 16384;
+
+export function pdfStageFitLimits(
+  fitMaxWidth?: number,
+  fitMaxHeight?: number
+): { maxW: number; maxH: number } {
+  const maxW =
+    fitMaxWidth != null && fitMaxWidth > 0
+      ? fitMaxWidth
+      : typeof window !== 'undefined'
+        ? window.innerWidth * 0.96
+        : 1280;
+  const maxH =
+    fitMaxHeight != null && fitMaxHeight > 0
+      ? fitMaxHeight
+      : typeof window !== 'undefined'
+        ? window.innerHeight * 0.85
+        : 800;
+  return { maxW, maxH };
+}
+
+/** 표시 크기 대비 캔버스 픽셀 배율. 패널 썸네일과 무관. */
+export function pdfStageOutputScale(cssW: number, cssH: number): number {
+  const dpr = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1;
+  const desired = Math.min(STAGE_OUTPUT_SCALE_MAX, Math.max(dpr, STAGE_OUTPUT_SCALE_MIN));
+  const longEdge = Math.max(cssW, cssH, 1);
+  return Math.max(1, Math.min(desired, MAX_BUFFER_LONG_EDGE / longEdge));
+}
 
 /** pdf.js — 2단계 LOD: renderScale 배율로 1회 렌더, UI 줌은 부모 CSS scale */
 export function ServiceFilePdfPreviewStage({
@@ -31,6 +66,8 @@ export function ServiceFilePdfPreviewStage({
   renderScale = 1,
   fitMaxWidth,
   fitMaxHeight,
+  indexSheetMode,
+  indexSheetGuide,
 }: {
   url: string;
   pageNumber: number;
@@ -45,6 +82,9 @@ export function ServiceFilePdfPreviewStage({
   fitMaxWidth?: number;
   /** 맞춤 기준 최대 높이(CSS px). 없으면 창 높이×0.85 */
   fitMaxHeight?: number;
+  /** 색인도일 때만 지정. 가로 칸은 90·180·270, 세로 칸은 180만 */
+  indexSheetMode?: IndexSheetMode;
+  indexSheetGuide?: IndexSheetGuide;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const pdfRef = useRef<PDFDocumentProxy | null>(null);
@@ -127,6 +167,9 @@ export function ServiceFilePdfPreviewStage({
         const page = await pdf.getPage(pageIdx);
         if (cancelled || !alive.current) return;
 
+        const rotation = await inferPdfPageUprightRotation(page, { indexSheetMode, indexSheetGuide });
+        if (cancelled || !alive.current) return;
+
         const canvas = canvasRef.current;
         if (!canvas) {
           if (!cancelled && alive.current) setPhase('error');
@@ -135,39 +178,32 @@ export function ServiceFilePdfPreviewStage({
         const ctx = canvas.getContext('2d');
         if (!ctx) throw new Error('no ctx');
 
-        const dpr = Math.min(typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1, STAGE_DPR_MAX);
-        const maxW = Math.min(
-          fitMaxWidth != null && fitMaxWidth > 0 ? fitMaxWidth : window.innerWidth * 0.96,
-          1800
-        );
-        const maxH = Math.min(
-          fitMaxHeight != null && fitMaxHeight > 0 ? fitMaxHeight : window.innerHeight * 0.85,
-          1400
-        );
-        const vp1 = page.getViewport({ scale: 1 });
+        const { maxW, maxH } = pdfStageFitLimits(fitMaxWidth, fitMaxHeight);
+        const vp1 = page.getViewport({ scale: 1, rotation });
         const fitSc =
           fitMode === 'width'
             ? Math.min(maxW / vp1.width, STAGE_MAX_ZOOM)
             : Math.min(maxW / vp1.width, maxH / vp1.height, STAGE_MAX_ZOOM);
         const zoom = clamp(renderScale, STAGE_MIN_ZOOM, STAGE_MAX_ZOOM);
         let renderSc = fitSc * zoom;
-        let viewport = page.getViewport({ scale: renderSc });
+        let viewport = page.getViewport({ scale: renderSc, rotation });
 
         const longEdge = Math.max(viewport.width, viewport.height);
-        if (longEdge > MAX_CANVAS_LONG_EDGE) {
-          renderSc *= MAX_CANVAS_LONG_EDGE / longEdge;
-          viewport = page.getViewport({ scale: renderSc });
+        if (longEdge > MAX_CSS_LONG_EDGE) {
+          renderSc *= MAX_CSS_LONG_EDGE / longEdge;
+          viewport = page.getViewport({ scale: renderSc, rotation });
         }
 
         const pxW = Math.ceil(viewport.width);
         const pxH = Math.ceil(viewport.height);
-        canvas.width = Math.floor(pxW * dpr);
-        canvas.height = Math.floor(pxH * dpr);
+        const outputScale = pdfStageOutputScale(pxW, pxH);
+        canvas.width = Math.floor(pxW * outputScale);
+        canvas.height = Math.floor(pxH * outputScale);
         canvas.style.width = `${pxW}px`;
         canvas.style.height = `${pxH}px`;
 
         const transform: [number, number, number, number, number, number] | undefined =
-          dpr !== 1 ? [dpr, 0, 0, dpr, 0, 0] : undefined;
+          outputScale !== 1 ? [outputScale, 0, 0, outputScale, 0, 0] : undefined;
 
         const renderTask = page.render({
           canvasContext: ctx,
@@ -202,7 +238,7 @@ export function ServiceFilePdfPreviewStage({
       renderTaskRef.current?.cancel();
       renderTaskRef.current = null;
     };
-  }, [url, pageNumber, fitMode, renderScale, fitMaxWidth, fitMaxHeight]);
+  }, [url, pageNumber, fitMode, renderScale, fitMaxWidth, fitMaxHeight, indexSheetMode, indexSheetGuide]);
 
   useEffect(() => {
     return () => {

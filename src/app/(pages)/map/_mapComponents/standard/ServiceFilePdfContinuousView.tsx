@@ -7,17 +7,24 @@ import { cn } from '@/lib/utils';
 import { configurePdfJsWorker } from '@/lib/pdfjsWorker';
 import { acquirePdfDocument, releasePdfDocument } from './pdfDocumentCache';
 import {
-  STAGE_DPR_MAX,
   STAGE_MAX_ZOOM,
   STAGE_MIN_ZOOM,
+  pdfStageFitLimits,
+  pdfStageOutputScale,
   type PdfPreviewFitMode,
 } from './ServiceFilePdfPreviewStage';
+import {
+  combinePdfRotation,
+  inferPdfPageUprightRotation,
+  type IndexSheetGuide,
+  type IndexSheetMode,
+} from './inferPdfPageUprightRotation';
 
 function clamp(n: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, n));
 }
 
-const MAX_CANVAS_LONG_EDGE = 8192;
+const MAX_CSS_LONG_EDGE = 8192;
 const PAGE_GAP_PX = 12;
 /** canvas prefetch — 뷰포트 밖 여유 */
 const CANVAS_ROOT_MARGIN = '320px 0px';
@@ -41,6 +48,8 @@ type ContinuousPageProps = {
   fitMaxHeight?: number;
   onHeightReady: (pageNumber: number, height: number) => void;
   onCanvasReady?: (pageNumber: number) => void;
+  indexSheetMode?: IndexSheetMode;
+  indexSheetGuide?: IndexSheetGuide;
 };
 
 function ContinuousPage({
@@ -54,6 +63,8 @@ function ContinuousPage({
   fitMaxHeight,
   onHeightReady,
   onCanvasReady,
+  indexSheetMode,
+  indexSheetGuide,
 }: ContinuousPageProps) {
   const rootRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -101,46 +112,43 @@ function ContinuousPage({
         const page = await pdf.getPage(pageNumber);
         if (cancelled) return;
 
+        const upright = await inferPdfPageUprightRotation(page, { indexSheetMode, indexSheetGuide });
+        if (cancelled) return;
+        const pageRotation = combinePdfRotation(upright, rotation);
+
         const canvas = canvasRef.current;
         if (!canvas) return;
         const ctx = canvas.getContext('2d');
         if (!ctx) throw new Error('no ctx');
 
-        const dpr = Math.min(typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1, STAGE_DPR_MAX);
-        const maxW = Math.min(
-          fitMaxWidth != null && fitMaxWidth > 0 ? fitMaxWidth : window.innerWidth * 0.96,
-          1800
-        );
-        const maxH = Math.min(
-          fitMaxHeight != null && fitMaxHeight > 0 ? fitMaxHeight : window.innerHeight * 0.85,
-          1400
-        );
-        const vp1 = page.getViewport({ scale: 1, rotation });
+        const { maxW, maxH } = pdfStageFitLimits(fitMaxWidth, fitMaxHeight);
+        const vp1 = page.getViewport({ scale: 1, rotation: pageRotation });
         const fitSc =
           fitMode === 'width'
             ? Math.min(maxW / vp1.width, STAGE_MAX_ZOOM)
             : Math.min(maxW / vp1.width, maxH / vp1.height, STAGE_MAX_ZOOM);
         const zoom = clamp(renderScale, STAGE_MIN_ZOOM, STAGE_MAX_ZOOM);
         let renderSc = fitSc * zoom;
-        let viewport = page.getViewport({ scale: renderSc, rotation });
+        let viewport = page.getViewport({ scale: renderSc, rotation: pageRotation });
 
         const longEdge = Math.max(viewport.width, viewport.height);
-        if (longEdge > MAX_CANVAS_LONG_EDGE) {
-          renderSc *= MAX_CANVAS_LONG_EDGE / longEdge;
-          viewport = page.getViewport({ scale: renderSc, rotation });
+        if (longEdge > MAX_CSS_LONG_EDGE) {
+          renderSc *= MAX_CSS_LONG_EDGE / longEdge;
+          viewport = page.getViewport({ scale: renderSc, rotation: pageRotation });
         }
 
         const pxW = Math.ceil(viewport.width);
         const pxH = Math.ceil(viewport.height);
-        canvas.width = Math.floor(pxW * dpr);
-        canvas.height = Math.floor(pxH * dpr);
+        const outputScale = pdfStageOutputScale(pxW, pxH);
+        canvas.width = Math.floor(pxW * outputScale);
+        canvas.height = Math.floor(pxH * outputScale);
         canvas.style.width = `${pxW}px`;
         canvas.style.height = `${pxH}px`;
 
         onHeightReadyRef.current(pageNumber, pxH);
 
         const transform: [number, number, number, number, number, number] | undefined =
-          dpr !== 1 ? [dpr, 0, 0, dpr, 0, 0] : undefined;
+          outputScale !== 1 ? [outputScale, 0, 0, outputScale, 0, 0] : undefined;
 
         const renderTask = page.render({ canvasContext: ctx, viewport, transform });
         renderTaskRef.current = renderTask;
@@ -161,7 +169,7 @@ function ContinuousPage({
       renderTaskRef.current?.cancel();
       renderTaskRef.current = null;
     };
-  }, [inView, pdf, pageNumber, fitMode, renderScale, rotation, fitMaxWidth, fitMaxHeight]);
+  }, [inView, pdf, pageNumber, fitMode, renderScale, rotation, fitMaxWidth, fitMaxHeight, indexSheetMode, indexSheetGuide]);
 
   return (
     <div
@@ -208,6 +216,8 @@ type Props = {
   scrollContainerRef?: React.RefObject<HTMLDivElement | null>;
   fitMaxWidth?: number;
   fitMaxHeight?: number;
+  indexSheetMode?: IndexSheetMode;
+  indexSheetGuide?: IndexSheetGuide;
 };
 
 /** PDF 전 페이지 세로 연속 스크롤 */
@@ -225,6 +235,8 @@ export function ServiceFilePdfContinuousView({
   scrollContainerRef,
   fitMaxWidth,
   fitMaxHeight,
+  indexSheetMode,
+  indexSheetGuide,
 }: Props) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [scrollRoot, setScrollRoot] = useState<HTMLElement | null>(null);
@@ -446,6 +458,8 @@ export function ServiceFilePdfContinuousView({
             fitMaxHeight={fitMaxHeight}
             onHeightReady={handleHeightReady}
             onCanvasReady={handleCanvasReady}
+            indexSheetMode={indexSheetMode}
+            indexSheetGuide={indexSheetGuide}
           />
         ))}
       </div>

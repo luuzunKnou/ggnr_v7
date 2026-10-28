@@ -18,8 +18,9 @@ import { cn } from '@/lib/utils';
 import { LasFileUploaderContent } from './LasFileUploaderContent';
 import { OrthophotoManagerContent } from './OrthophotoManagerContent';
 import { OcrMigrationTab } from './fileConverter/OcrMigrationTab';
+import { ShpToDxfTab } from './fileConverter/ShpToDxfTab';
 
-type ConverterTabId = 'pdfToJpg' | 'tifToJpg' | 'objToB3dm' | 'lasToPnts' | 'ocr';
+type ConverterTabId = 'pdfToJpg' | 'tifToJpg' | 'objToB3dm' | 'lasToPnts' | 'ocr' | 'shpToDxf';
 
 /** pdfToJpgService.listPdfToJpgJobs 응답 행 (클라이언트용 복제 타입) */
 type PdfToJpgJobRow = {
@@ -80,6 +81,11 @@ const TAB_ITEMS: { id: ConverterTabId; label: string; description: string }[] = 
     label: 'OCR',
     description:
       'OCR/{작업명} 이미지를 PaddleOCR → GPT-4o Vision으로 분석해 DB·file_data에 적재합니다.',
+  },
+  {
+    id: 'shpToDxf',
+    label: 'SHP to DXF',
+    description: 'SHPToDXF/{작업명}/SHP → DXF/{파일명}.dxf 로 변환합니다.',
   },
 ];
 
@@ -580,7 +586,7 @@ export function FileConverterContent() {
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-3 overflow-hidden p-3">
-      <div className="grid gap-2 md:grid-cols-3 lg:grid-cols-5">
+      <div className="grid gap-2 md:grid-cols-3 lg:grid-cols-6">
         {TAB_ITEMS.map((item) => (
           <FileConverterTabButton
             key={item.id}
@@ -601,6 +607,8 @@ export function FileConverterContent() {
           <LasFileUploaderContent />
         ) : activeTab === 'ocr' ? (
           <OcrMigrationTab />
+        ) : activeTab === 'shpToDxf' ? (
+          <ShpToDxfTab />
         ) : (
           <PdfToJpgTab />
         )}

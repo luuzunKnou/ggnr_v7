@@ -76,37 +76,40 @@ export function sanitizeDefineLayerRowFilter(raw: string): string | null {
   return s;
 }
 
-/**
- * 테이블 이름과 스키마로 행 조회.
- * spatialWkt/spatialSrid가 있으면 도형 내 데이터만 조회 (ST_Intersects).
- */
-export async function getTableData(params: {
+type LayerListQueryParts = {
+  tableGuess: string;
+  safeSchema: string;
+  safeTable: string;
+  whereClause: string;
+  orderClause: string;
+  selectList: string;
+  columns: string[];
+};
+
+async function getLayerListQueryParts(params: {
   table: string;
   schema?: string;
-  limit?: number;
-  offset?: number;
   spatialWkt?: string;
   spatialSrid?: number;
-  /** define 분할 레이어 등: AND (조건) */
   rowFilter?: string;
-} = { table: '' }) {
+}): Promise<
+  | { ok: true; parts: LayerListQueryParts }
+  | { ok: false; empty?: true; error?: string }
+> {
   const tableGuess = String(params?.table ?? '').trim().toLowerCase();
-  if (!tableGuess) return { rows: [], total: 0 };
+  if (!tableGuess) return { ok: false, empty: true };
 
   const schema = resolveSchema(params?.schema).toLowerCase();
   const table = await resolveLayerPhysicalRelName(schema, tableGuess);
-  if (!table) return { rows: [], total: 0 };
+  if (!table) return { ok: false, empty: true };
 
-  let limit = typeof params?.limit === 'number' && params.limit > 0 ? params.limit : DEFAULT_LIMIT;
-  if (limit > MAX_LIMIT) limit = MAX_LIMIT;
-  const offset = typeof params?.offset === 'number' && params.offset >= 0 ? params.offset : 0;
   const spatialWkt = typeof params?.spatialWkt === 'string' ? params.spatialWkt.trim() : '';
   const spatialSrid = typeof params?.spatialSrid === 'number' ? params.spatialSrid : 5181;
   const rawRowFilter = String(params?.rowFilter ?? '').trim();
   let rowFilterSql: string | null = null;
   if (rawRowFilter) {
     rowFilterSql = sanitizeDefineLayerRowFilter(rawRowFilter);
-    if (!rowFilterSql) return { rows: [], total: 0, error: '유효하지 않은 행 필터입니다.' };
+    if (!rowFilterSql) return { ok: false, error: '유효하지 않은 행 필터입니다.' };
   }
 
   const safeSchema = schema.replace(/"/g, '""');
@@ -122,7 +125,7 @@ export async function getTableData(params: {
       )
     );
     const columns = (colRes.rows as { name: string }[]).map((r) => String(r?.name ?? '').trim()).filter(Boolean);
-    if (columns.length === 0) return { rows: [], total: 0 };
+    if (columns.length === 0) return { ok: false, empty: true };
 
     let geomCol: string | null = null;
     let tableSrid = 4326;
@@ -175,7 +178,6 @@ export async function getTableData(params: {
       const safeFacilNo = facilNoCol.replace(/"/g, '""');
       orderClause = ` ORDER BY (substring("${safeFacilNo}" from '[0-9]{4}'))::integer ASC NULLS LAST, regexp_replace("${safeFacilNo}", '^[A-Za-z]+', '') ASC NULLS LAST`;
     } else {
-      // 기본: 목록 첫 열(define 목록표시 1순위) 오름차순. 없으면 ogc_fid/gid/첫 속성열
       const orderCol = resolveDefaultListOrderColumn(tableGuess, table, columns);
       if (orderCol) {
         const safeOrder = orderCol.replace(/"/g, '""');
@@ -191,6 +193,50 @@ export async function getTableData(params: {
       }
     }
 
+    return {
+      ok: true,
+      parts: {
+        tableGuess,
+        safeSchema,
+        safeTable,
+        whereClause,
+        orderClause,
+        selectList,
+        columns,
+      },
+    };
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return { ok: false, error: msg };
+  }
+}
+
+/**
+ * 테이블 이름과 스키마로 행 조회.
+ * spatialWkt/spatialSrid가 있으면 도형 내 데이터만 조회 (ST_Intersects).
+ */
+export async function getTableData(params: {
+  table: string;
+  schema?: string;
+  limit?: number;
+  offset?: number;
+  spatialWkt?: string;
+  spatialSrid?: number;
+  /** define 분할 레이어 등: AND (조건) */
+  rowFilter?: string;
+} = { table: '' }) {
+  const built = await getLayerListQueryParts(params);
+  if (!built.ok) {
+    if (built.error) return { rows: [], total: 0, error: built.error };
+    return { rows: [], total: 0 };
+  }
+
+  let limit = typeof params?.limit === 'number' && params.limit > 0 ? params.limit : DEFAULT_LIMIT;
+  if (limit > MAX_LIMIT) limit = MAX_LIMIT;
+  const offset = typeof params?.offset === 'number' && params.offset >= 0 ? params.offset : 0;
+  const { safeSchema, safeTable, whereClause, orderClause, selectList } = built.parts;
+
+  try {
     const [countRes, dataRes] = await Promise.all([
       db.execute(
         sql.raw(`SELECT COUNT(*) AS total FROM "${safeSchema}"."${safeTable}"${whereClause}`)
@@ -210,6 +256,80 @@ export async function getTableData(params: {
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);
     return { rows: [], total: 0, error: msg };
+  }
+}
+
+/**
+ * 데이터조회 목록과 같은 정렬·필터에서 키 값의 0-based 위치.
+ * 지도에서 고른 항목으로 기존 목록 페이지를 맞출 때 사용.
+ */
+export async function getTableRowOffset(params: {
+  table: string;
+  schema?: string;
+  keyValue: string | number;
+  keyField?: string;
+  spatialWkt?: string;
+  spatialSrid?: number;
+  rowFilter?: string;
+}): Promise<{ offset: number; total: number; error?: string }> {
+  const keyValue = params?.keyValue;
+  if (keyValue == null || String(keyValue).trim() === '') {
+    return { offset: -1, total: 0 };
+  }
+
+  const built = await getLayerListQueryParts(params);
+  if (!built.ok) {
+    if (built.error) return { offset: -1, total: 0, error: built.error };
+    return { offset: -1, total: 0 };
+  }
+
+  const { tableGuess, safeSchema, safeTable, whereClause, orderClause, columns } = built.parts;
+  const requestedKey = String(params?.keyField ?? '').trim();
+  const definedKey = getDefineTableKeyFieldName(params?.table?.trim() || tableGuess);
+  const pickCol = (want: string | null | undefined): string | null => {
+    const w = String(want ?? '').trim().toLowerCase();
+    if (!w) return null;
+    return columns.find((c) => c.toLowerCase() === w) ?? null;
+  };
+  const keyCol =
+    pickCol(requestedKey) ??
+    pickCol(definedKey) ??
+    pickCol('ogc_fid') ??
+    pickCol('gid') ??
+    pickCol('id');
+  if (!keyCol) return { offset: -1, total: 0 };
+
+  const safeKey = keyCol.replace(/"/g, '""');
+  const escapedKey = String(keyValue).replace(/'/g, "''");
+  const overOrder = orderClause.trim() ? orderClause.trim() : 'ORDER BY 1';
+
+  try {
+    const [countRes, idxRes] = await Promise.all([
+      db.execute(
+        sql.raw(`SELECT COUNT(*) AS total FROM "${safeSchema}"."${safeTable}"${whereClause}`)
+      ),
+      db.execute(
+        sql.raw(
+          `SELECT idx FROM (
+             SELECT "${safeKey}" AS k,
+                    (ROW_NUMBER() OVER (${overOrder})) - 1 AS idx
+             FROM "${safeSchema}"."${safeTable}"${whereClause}
+           ) s
+           WHERE CAST(s.k AS text) = '${escapedKey}'
+           LIMIT 1`
+        )
+      ),
+    ]);
+    const totalRow = countRes.rows?.[0] as { total?: string | number } | undefined;
+    const total =
+      totalRow?.total != null ? Math.max(0, parseInt(String(totalRow.total), 10) || 0) : 0;
+    const idxRow = idxRes.rows?.[0] as { idx?: string | number } | undefined;
+    const offset =
+      idxRow?.idx != null && Number.isFinite(Number(idxRow.idx)) ? Math.max(0, Number(idxRow.idx)) : -1;
+    return { offset, total };
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return { offset: -1, total: 0, error: msg };
   }
 }
 

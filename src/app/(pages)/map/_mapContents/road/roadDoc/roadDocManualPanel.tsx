@@ -174,7 +174,7 @@ export function RoadDocManualPanel({
   const [listError, setListError] = useState<string | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  /** 도면 탭: `roadDoc/cad` 기준 상대 경로 (빈 문자열 = 루트) */
+  /** 도면 탭: `file_data/road_doc/cad` 기준 상대 경로 (빈 문자열 = 루트) */
   const [cadPath, setCadPath] = useState("");
   const isHandbookTab =
     handbookTabsVisible && (activeTab === "target" || activeTab === "ref");
@@ -418,7 +418,7 @@ export function RoadDocManualPanel({
       if (docDisplayFiles.length === 0) return "문서 파일이 없습니다.";
       return null;
     }
-    if (cadFiles.length === 0) return "roadDoc\\cad 폴더에 도면 파일이 없습니다.";
+    if (cadFiles.length === 0) return "도면 파일이 없습니다.";
     return null;
   }, [activeTab, docFiles.length, docDisplayFiles.length, cadFiles.length]);
 

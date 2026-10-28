@@ -55,6 +55,20 @@ function toNumText(value: unknown): string {
   return num.toLocaleString('ko-KR');
 }
 
+function codeDashName(code: string, name: string): string {
+  const c = !code || code === '-' ? '' : code;
+  const n = !name || name === '-' ? '' : name;
+  if (c && n) return `${c} - ${n}`;
+  return n || c || '-';
+}
+
+function formatYmd(raw: string): string {
+  if (!raw || raw === '-') return '-';
+  const digits = raw.replace(/\D/g, '');
+  if (digits.length >= 8) return `${digits.slice(0, 4)}-${digits.slice(4, 6)}-${digits.slice(6, 8)}`;
+  return raw;
+}
+
 function getField(row: Record<string, unknown> | undefined, keys: string[], fallback = '-'): string {
   if (!row) return fallback;
   for (const key of keys) {
@@ -126,16 +140,19 @@ function LinkageCell({
   v,
   source,
   narrow = false,
+  span = false,
 }: {
   k: string;
   v: string;
   source?: ParcelLandRowSource;
   narrow?: boolean;
+  /** 넓은 패널에서 값 칸이 오른쪽 끝까지 차지 (v6 주소 행) */
+  span?: boolean;
 }) {
   return (
     <>
       <div className={narrow ? NARROW_GRID_LABEL : LAND_INFO_GRID_LABEL}>{k}</div>
-      <div className={narrow ? NARROW_GRID_VALUE : LAND_INFO_GRID_VALUE}>
+      <div className={cn(narrow ? NARROW_GRID_VALUE : LAND_INFO_GRID_VALUE, span && !narrow && 'col-span-3')}>
         <ParcelLinkageValueText value={v} source={source} />
       </div>
     </>
@@ -362,7 +379,10 @@ export function LandInfoParcelPanel({
               {showBasic('지목') ? (
                 <LinkageCell
                   k="지목"
-                  v={getField(latestChar, ['lndcgrCodeNm', 'jimok'])}
+                  v={codeDashName(
+                    getField(latestChar, ['lndcgrCode'], ''),
+                    getField(latestChar, ['lndcgrCodeNm', 'jimok'], '')
+                  )}
                   source={parcelData.source}
                   narrow={narrow}
                 />
@@ -376,16 +396,38 @@ export function LandInfoParcelPanel({
                 />
               ) : null}
               <LinkageCell
-                k="용도지역"
-                v={getField(latestChar, ['prposArea1Nm', 'prposAreaDstrcCodeNm'])}
+                k="토지등급"
+                v={getField(latestChar, ['grd'])}
+                source={parcelData.source}
+                narrow={narrow}
+              />
+              <LinkageCell
+                k="등급변동일자"
+                v={formatYmd(getField(latestChar, ['grdYmd'], ''))}
+                source={parcelData.source}
+                narrow={narrow}
+              />
+              <LinkageCell
+                k="사업시행신고"
+                v={getField(latestChar, ['bizActNtcGbn'])}
+                source={parcelData.source}
+                narrow={narrow}
+              />
+              <LinkageCell
+                k="대장대조필"
+                v={getField(latestChar, ['ledgCntrstCnfGbn'])}
                 source={parcelData.source}
                 narrow={narrow}
               />
               <LinkageCell
                 k="이동사유"
-                v={getField(latestChar, ['lndMoveResnNm', 'landMoveReason'])}
+                v={codeDashName(
+                  getField(latestChar, ['lndMoveRsnCd'], ''),
+                  getField(latestChar, ['lndMoveResnNm', 'landMoveReason'], '')
+                )}
                 source={parcelData.source}
                 narrow={narrow}
+                span
               />
               {canOpenMove ? (
                 <LinkageCellButton
@@ -414,6 +456,18 @@ export function LandInfoParcelPanel({
             <p className="text-xs font-semibold text-foreground">토지소유내역</p>
             <div className={narrow ? NARROW_FIELD_GRID : LAND_INFO_FIELD_GRID}>
               <LinkageCell
+                k="소유자명"
+                v={formatPersonField(getField(latestPossession, ['ownerNm', 'ownerName']), personInfoMask)}
+                source={parcelData.source}
+                narrow={narrow}
+              />
+              <LinkageCell
+                k="등록번호"
+                v={getField(latestPossession, ['dregno', 'DREGNO'])}
+                source={parcelData.source}
+                narrow={narrow}
+              />
+              <LinkageCell
                 k="소유구분"
                 v={getField(latestPossession, ['posesnSeCodeNm'])}
                 source={parcelData.source}
@@ -432,16 +486,11 @@ export function LandInfoParcelPanel({
                 <LinkageCell k="공유인수" v={shareCntRaw || '-'} source={parcelData.source} narrow={narrow} />
               )}
               <LinkageCell
-                k="소유자명"
-                v={formatPersonField(getField(latestPossession, ['ownerNm', 'ownerName']), personInfoMask)}
-                source={parcelData.source}
-                narrow={narrow}
-              />
-              <LinkageCell
                 k="주소"
                 v={getField(latestPossession, ['ownerAddr', 'address'])}
                 source={parcelData.source}
                 narrow={narrow}
+                span
               />
               <LinkageCell
                 k="변동원인"

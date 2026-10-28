@@ -4,6 +4,7 @@ import { db } from '@/database/db';
 import { sql } from 'drizzle-orm';
 import { parseRiverOrthoGroup, type RiverOrthoGroup } from '@/lib/riverOrthoGroups';
 import { resolveGgnrDataDir } from '@/lib/turbopackFsPath';
+import { getGeoServerInternalBase } from '@/lib/geoserverUrl';
 import {
   isRiverBasicPlanIndexDefineTable,
   isRiverBasicPlanMapAttachmentDefineTable,
@@ -96,7 +97,31 @@ async function resolveLayerTableNameOrNull(wantedLower: string): Promise<string 
   return name || null;
 }
 
-/** 탭 기본 지도 레이어 중 layer 스키마에 실제 테이블이 있는 것만 */
+/** GeoServer에 실제로 올라간 레이어명. 조회 실패 시 null(DB 목록만 사용) */
+async function publishedGgnrLayerNames(): Promise<Set<string> | null> {
+  try {
+    const base = getGeoServerInternalBase();
+    const workspace = (process.env.GEOSERVER_WORKSPACE?.trim() || 'ggnr').replace(/\/$/, '');
+    const user = process.env.GEOSERVER_USER ?? 'admin';
+    const pass = process.env.GEOSERVER_PASSWORD ?? 'geoserver';
+    const res = await fetch(`${base}/rest/workspaces/${encodeURIComponent(workspace)}/layers.json`, {
+      headers: { Authorization: `Basic ${Buffer.from(`${user}:${pass}`).toString('base64')}` },
+    });
+    if (!res.ok) return null;
+    const data = (await res.json()) as {
+      layers?: { layer?: { name?: string } | { name?: string }[] };
+    };
+    const raw = data.layers?.layer;
+    const arr = Array.isArray(raw) ? raw : raw ? [raw] : [];
+    return new Set(
+      arr.map((row) => String(row.name ?? '').trim().toLowerCase()).filter(Boolean)
+    );
+  } catch {
+    return null;
+  }
+}
+
+/** 탭 기본 지도 레이어 중 DB 테이블이 있고 GeoServer에 올라간 것만 */
 export async function getRiverBasicPlanExistingMapLayers(params?: {
   tab?: RiverType;
 }): Promise<{ layers: string[] }> {
@@ -114,7 +139,12 @@ export async function getRiverBasicPlanExistingMapLayers(params?: {
   const have = new Set(
     (res.rows ?? []).map((r) => String((r as { table_name?: string }).table_name ?? '').toLowerCase()).filter(Boolean)
   );
-  return { layers: wanted.filter((n) => have.has(n.toLowerCase())) };
+  let layers = wanted.filter((n) => have.has(n.toLowerCase()));
+  const published = await publishedGgnrLayerNames();
+  if (published) {
+    layers = layers.filter((n) => published.has(n.toLowerCase()));
+  }
+  return { layers };
 }
 
 /** tiles_jpg 의 하천 드론영상 그룹 (bigriver_·smallriver_), 타일 폴더가 있는 것만 */
@@ -755,6 +785,115 @@ function parseExtent3857(row: {
   return [xmin, ymin, xmax, ymax];
 }
 
+function asCoordPair(v: unknown): [number, number] | null {
+  if (!Array.isArray(v) || v.length < 2) return null;
+  const x = Number(v[0]);
+  const y = Number(v[1]);
+  if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+  return [x, y];
+}
+
+function lineCoords(coords: unknown): [number, number][] {
+  if (!Array.isArray(coords)) return [];
+  return coords.flatMap((p) => {
+    const pair = asCoordPair(p);
+    return pair ? [pair] : [];
+  });
+}
+
+function polyLen(pts: [number, number][]): number {
+  let n = 0;
+  for (let i = 1; i < pts.length; i++) {
+    n += Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]);
+  }
+  return n;
+}
+
+/** GeoJSON 선·면 → 3857 좌표열. 다중선은 가장 긴 부분. */
+function parseGeoJson3857Points(raw: unknown): [number, number][] | null {
+  let gj: unknown = raw;
+  if (typeof raw === 'string') {
+    try {
+      gj = JSON.parse(raw) as unknown;
+    } catch {
+      return null;
+    }
+  }
+  if (gj == null || typeof gj !== 'object') return null;
+  const rec = gj as { type?: unknown; coordinates?: unknown };
+  const t = String(rec.type ?? '');
+  const c = rec.coordinates;
+  if (t === 'LineString') {
+    const pts = lineCoords(c);
+    return pts.length >= 2 ? pts : null;
+  }
+  if (t === 'MultiLineString' && Array.isArray(c)) {
+    let best: [number, number][] = [];
+    let bestLen = -1;
+    for (const part of c) {
+      const pts = lineCoords(part);
+      if (pts.length < 2) continue;
+      const len = polyLen(pts);
+      if (len > bestLen) {
+        bestLen = len;
+        best = pts;
+      }
+    }
+    return best.length >= 2 ? best : null;
+  }
+  if (t === 'Polygon' && Array.isArray(c)) {
+    const pts = lineCoords(c[0]);
+    return pts.length >= 3 ? pts : null;
+  }
+  if (t === 'MultiPolygon' && Array.isArray(c) && Array.isArray(c[0])) {
+    const pts = lineCoords((c[0] as unknown[])[0]);
+    return pts.length >= 3 ? pts : null;
+  }
+  return null;
+}
+
+async function loadIndexSheetRing(
+  idxTable: string,
+  idxOgcFid: number
+): Promise<[number, number][] | null> {
+  const safeIdx = idxTable.replace(/"/g, '""');
+  const q = `SELECT ST_AsGeoJSON(ST_Transform(geom, 3857)) AS gj
+    FROM layer."${safeIdx}" WHERE ogc_fid = ${idxOgcFid} LIMIT 1`;
+  try {
+    const res = await db.execute(sql.raw(q));
+    return parseGeoJson3857Points((res.rows?.[0] as { gj?: unknown } | undefined)?.gj);
+  } catch {
+    return null;
+  }
+}
+
+async function loadIndexSheetGuide(
+  idxTable: string,
+  lineLogical: string,
+  idxOgcFid: number
+): Promise<[number, number][] | null> {
+  const t = await resolveLayerTableName(lineLogical.toLowerCase());
+  const safeT = t.replace(/"/g, '""');
+  const safeIdx = idxTable.replace(/"/g, '""');
+  const q = `
+    SELECT ST_AsGeoJSON(ST_Transform(
+      ST_Simplify(
+        ST_LineMerge(ST_CollectionExtract(ST_Union(ST_Intersection(t.geom, i.geom)), 2)),
+        2
+      ), 3857)) AS gj
+    FROM layer."${safeT}" t
+    INNER JOIN layer."${safeIdx}" i ON i.ogc_fid = ${idxOgcFid}
+    WHERE t.geom IS NOT NULL AND i.geom IS NOT NULL AND ST_Intersects(t.geom, i.geom)
+  `;
+  try {
+    const res = await db.execute(sql.raw(q));
+    const pts = parseGeoJson3857Points((res.rows?.[0] as { gj?: unknown } | undefined)?.gj);
+    return pts != null && pts.length >= 2 ? pts : null;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * 선택한 기본계획 폴리곤과 교차하는 색인도 1건 + 중심이 색인도 안이고 river_code 가 같은 종단/횡단/구조물 목록
  */
@@ -771,6 +910,10 @@ export async function getRiverBasicPlanIndexView(params?: {
     row: Record<string, unknown>;
     extent3857: [number, number, number, number] | null;
     ogcFid: number;
+    /** 색인도 외곽 링(3857) — 도면 방향 맞춤 */
+    ring3857: [number, number][] | null;
+    /** 칸 안 종단(없으면 제방) 선(3857) */
+    guide3857: [number, number][] | null;
   } | null;
   related: {
     kind: string;
@@ -868,6 +1011,19 @@ export async function getRiverBasicPlanIndexView(params?: {
       : {};
 
   const indexExtent = parseExtent3857(idxRes);
+  const ring3857 = await loadIndexSheetRing(idxTable, idxOgcFid);
+  let guide3857 = await loadIndexSheetGuide(
+    idxTable,
+    riverBasicPlanJdDefineTable(tab),
+    idxOgcFid
+  );
+  if (guide3857 == null) {
+    guide3857 = await loadIndexSheetGuide(
+      idxTable,
+      riverBasicPlanJbDefineTable(tab),
+      idxOgcFid
+    );
+  }
 
   const related: {
     kind: string;
@@ -1025,6 +1181,8 @@ export async function getRiverBasicPlanIndexView(params?: {
       row: idxRow,
       extent3857: indexExtent,
       ogcFid: idxOgcFid,
+      ring3857,
+      guide3857,
     },
     related,
   };
