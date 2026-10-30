@@ -39,6 +39,15 @@ function normalizePlanLenParam(raw: unknown): string {
   return String(raw ?? '').trim().replace(/,/g, '');
 }
 
+/** 제방 연장 → «(L=1,077m)» */
+function formatJbLenSuffix(raw: unknown): string {
+  if (raw == null || raw === '') return '';
+  const n = Number(String(raw).replace(/,/g, '').trim());
+  if (!Number.isFinite(n) || n <= 0) return '';
+  const rounded = Math.round(n);
+  return ` (L=${rounded.toLocaleString('en-US')}m)`;
+}
+
 /**
  * 기본계획 1건 식별 조건 (목록 GROUP BY: 연도·계획명·연장과 동일).
  * planLen 이 undefined 이면 연장 조건 생략.
@@ -1038,22 +1047,31 @@ export async function getRiverBasicPlanIndexView(params?: {
 
   /**
    * 종단·횡단·제방(선): 제목 컬럼(종단·횡단 draw_name, 제방 jb_name) → 제목.
+   * 제방은 lengthColumn(jb_len)이 있으면 «이름 (L=1,077m)» 형식.
    * 배지는 badge(없으면 종류명).
    */
   const queryRelatedLm = async (
     logicalName: string,
     kindLabel: string,
-    opts?: { nameColumn?: string; badge?: string; matchIntersects?: boolean }
+    opts?: {
+      nameColumn?: string;
+      lengthColumn?: string;
+      badge?: string;
+      matchIntersects?: boolean;
+    }
   ) => {
     const t = await resolveLayerTableName(logicalName.toLowerCase());
     const safeT = t.replace(/"/g, '""');
     const keySql = attachmentKeySelectSql(logicalName);
     const nameCol = safeSqlColumnName(opts?.nameColumn ?? 'draw_name') ?? 'draw_name';
+    const lenCol = opts?.lengthColumn ? safeSqlColumnName(opts.lengthColumn) : null;
     const badge = opts?.badge ?? kindLabel;
+    const lenSelect = lenCol ? `t."${lenCol}" AS jb_len,` : '';
     const q = `
       SELECT
         t.ogc_fid AS fid,
         TRIM(COALESCE(t."${nameCol}"::text, '')) AS draw_name,
+        ${lenSelect}
         ${keySql},
         ST_XMin(ST_Transform(t.geom, 3857))::float8 AS xmin,
         ST_YMin(ST_Transform(t.geom, 3857))::float8 AS ymin,
@@ -1077,6 +1095,7 @@ export async function getRiverBasicPlanIndexView(params?: {
         const rr = row as {
           fid?: unknown;
           draw_name?: unknown;
+          jb_len?: unknown;
           attachment_key?: unknown;
           xmin?: unknown;
           ymin?: unknown;
@@ -1086,13 +1105,14 @@ export async function getRiverBasicPlanIndexView(params?: {
         const fid = Number(rr.fid);
         if (!Number.isFinite(fid)) continue;
         const dn = String(rr.draw_name ?? '').trim();
+        const lenSuffix = lenCol ? formatJbLenSuffix(rr.jb_len) : '';
         const rawKey = String(rr.attachment_key ?? '').trim();
         const fileKey = rawKey || String(fid);
         related.push({
           kind: kindLabel,
           table: t,
           ogcFid: fid,
-          label: dn || `${badge} #${fid}`,
+          label: (dn ? `${dn}${lenSuffix}` : '') || `${badge} #${fid}`,
           badge,
           fileLayer: t,
           fileKey,
@@ -1172,6 +1192,7 @@ export async function getRiverBasicPlanIndexView(params?: {
   await queryRelatedStructurePoints();
   await queryRelatedLm(riverBasicPlanJbDefineTable(tab), '제방', {
     nameColumn: 'jb_name',
+    lengthColumn: 'jb_len',
     badge: riverBasicPlanJbLabel(tab),
     matchIntersects: true,
   });
@@ -1186,5 +1207,100 @@ export async function getRiverBasicPlanIndexView(params?: {
     },
     related,
   };
+}
+
+/**
+ * 사업계획 — 하천명 기준 제방 목록 + 3857 GeoJSON (라벨·펄스용).
+ */
+export async function getRiverBasicPlanJbList(params?: {
+  tab?: RiverType;
+  riverName?: string;
+}) {
+  const tab = normalizeTab(params?.tab);
+  const riverName = String(params?.riverName ?? '').trim();
+  if (!riverName) return { items: [] as const, table: '' };
+
+  const logical = riverBasicPlanJbDefineTable(tab);
+  const t = await resolveLayerTableName(logical.toLowerCase());
+  const safeT = t.replace(/"/g, '""');
+  const badge = riverBasicPlanJbLabel(tab);
+  /** 라벨점은 가장 긴 선 길이의 50% 지점(서버). MultiLine이면 LineMerge 후 최장 파트로. */
+  const q = `
+    SELECT
+      t.ogc_fid AS fid,
+      TRIM(COALESCE(t.jb_name::text, '')) AS jb_name,
+      t.jb_len AS jb_len,
+      ST_AsGeoJSON(ST_Transform(t.geom, 3857))::text AS geojson,
+      ST_AsGeoJSON(
+        COALESCE(
+          ST_LineInterpolatePoint(
+            (
+              SELECT d.geom
+              FROM ST_Dump(ST_LineMerge(ST_Transform(t.geom, 3857))) AS d
+              ORDER BY ST_Length(d.geom) DESC
+              LIMIT 1
+            ),
+            0.5
+          ),
+          ST_ClosestPoint(
+            ST_Transform(t.geom, 3857),
+            ST_Centroid(ST_Transform(t.geom, 3857))
+          )
+        )
+      )::text AS label_geojson
+    FROM layer."${safeT}" t
+    WHERE t.geom IS NOT NULL
+      AND COALESCE(t.river_name, '') = '${esc(riverName)}'
+    ORDER BY t.ogc_fid ASC
+  `;
+  try {
+    const r = await db.execute(sql.raw(q));
+    const items: {
+      ogcFid: number;
+      table: string;
+      label: string;
+      badge: string;
+      geometry: Record<string, unknown> | null;
+      labelPoint: Record<string, unknown> | null;
+    }[] = [];
+    for (const row of r.rows ?? []) {
+      const rr = row as {
+        fid?: unknown;
+        jb_name?: unknown;
+        jb_len?: unknown;
+        geojson?: unknown;
+        label_geojson?: unknown;
+      };
+      const fid = Number(rr.fid);
+      if (!Number.isFinite(fid)) continue;
+      const dn = String(rr.jb_name ?? '').trim();
+      const lenSuffix = formatJbLenSuffix(rr.jb_len);
+      let geometry: Record<string, unknown> | null = null;
+      let labelPoint: Record<string, unknown> | null = null;
+      try {
+        const raw = String(rr.geojson ?? '').trim();
+        if (raw) geometry = JSON.parse(raw) as Record<string, unknown>;
+      } catch {
+        geometry = null;
+      }
+      try {
+        const raw = String(rr.label_geojson ?? '').trim();
+        if (raw) labelPoint = JSON.parse(raw) as Record<string, unknown>;
+      } catch {
+        labelPoint = null;
+      }
+      items.push({
+        ogcFid: fid,
+        table: t,
+        label: (dn ? `${dn}${lenSuffix}` : '') || `${badge} #${fid}`,
+        badge,
+        geometry,
+        labelPoint,
+      });
+    }
+    return { items, table: t };
+  } catch {
+    return { items: [], table: t };
+  }
 }
 

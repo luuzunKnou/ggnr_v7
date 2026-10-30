@@ -86,7 +86,7 @@ export function riverBasicPlanHdDefineTable(tab: RiverBasicPlanTab): string {
   return tab === 'smallRiver' ? 'river_plan_s_hd_lm' : 'river_plan_hd_lm';
 }
 
-/** 탭별 제방(선) — 구조물도에 함께 표시 */
+/** 탭별 제방(선) — 사업계획 모드에서만 WMS 표시 */
 export function riverBasicPlanJbDefineTable(tab: RiverBasicPlanTab): string {
   return tab === 'smallRiver' ? 'river_plan_s_jb_lm' : 'river_d_plan_jb_lm';
 }
