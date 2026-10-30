@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { ImageOff, Loader2, MapPin, Pencil, Plus, Printer, Trash2, X } from "lucide-react";
+import { FileDown, ImageOff, Loader2, MapPin, Pencil, Plus, Printer, Trash2, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useSerWriteAccess } from "@/hooks/useSerWriteAccess";
 import { MapSideDetailScroll } from "../../../_mapComponents/MapSideDetailScroll";
@@ -46,15 +46,23 @@ import {
   useRiverIllegalOccupationCards,
   type RiverIllegalOccupationCard,
 } from "./riverIllegalOccupationStore";
-import { formatRiverIllegalCardDate, splitRiverIllegalKindLabel } from "./riverIllegalOccupationFormat";
-import { printRiverIllegalOccupationCard } from "./riverIllegalOccupationPrint";
+import {
+  formatRiverIllegalCardDate,
+  parseRiverIllegalRedMarkup,
+  sanitizeRiverIllegalStatusInput,
+  splitRiverIllegalKindLabel,
+} from "./riverIllegalOccupationFormat";
+import {
+  downloadRiverIllegalOccupationCardPdf,
+  printRiverIllegalOccupationCard,
+} from "./riverIllegalOccupationPrint";
 
 /** 접도구역 건축물 관리대장 서식과 같은 테두리·머리칸 */
 const BORDER = "border-[1px] border-solid border-foreground/80";
-const FORM_TH_BG = "bg-[#E4E9F0] dark:bg-zinc-600";
+const FORM_TH_BG = "bg-[#F5F5F5] dark:bg-zinc-600";
 const FORM_LABEL_W = "6.5rem";
-/** 위치 줄의 재발여부 값 칸 — 원본 카드 비율(위치 약 4할, 재발여부 값 약 2할) */
-const FORM_RECURRENCE_VALUE_W = "22%";
+/** 위치 줄 오른쪽(재발)·완료일자 값 칸 — 날짜+완료여부 한 줄이 들어가게 */
+const FORM_RECURRENCE_VALUE_W = "38%";
 const formTableClass = "w-full table-fixed border-collapse leading-none";
 const thClass = `box-border ${BORDER} ${FORM_TH_BG} px-1 py-0.5 text-center align-middle text-[11px] font-semibold leading-tight text-foreground`;
 const tdClass = `box-border h-[30px] ${BORDER} bg-background px-1.5 py-1 align-middle text-[11px] leading-snug text-foreground`;
@@ -79,14 +87,7 @@ const BULLET_FIELDS = new Set<RiverIllegalOccupationFieldKey>([
   "manager",
 ]);
 
-/** 수정 시 한 줄 입력칸 — 나머지(조치내용·관리책임자)는 여러 줄 입력 */
-const SINGLE_LINE_EDIT_FIELDS = new Set<RiverIllegalOccupationFieldKey>([
-  "actor",
-  "violation",
-  "relatedLaw",
-  "actionPlan",
-]);
-
+/** 화면 줄바꿈 → DB «@» 구분으로 저장하는 항목 */
 const MULTILINE_ROWS: RiverIllegalOccupationFieldKey[] = [
   "violation",
   "relatedLaw",
@@ -128,7 +129,26 @@ function Td({ children, className, colSpan }: { children: ReactNode; className?:
   );
 }
 
-/** 조회 — «@» 줄마다 한 줄 (bullet 항목은 «▸») */
+/** `#빨간#` 구간을 빨간 글씨로 */
+function RedMarkupText({ value, className }: { value: string; className?: string }) {
+  const parts = parseRiverIllegalRedMarkup(value);
+  if (parts.length === 0) return null;
+  return (
+    <span className={className}>
+      {parts.map((p, i) =>
+        p.red ? (
+          <span key={i} className="text-red-600">
+            {p.text}
+          </span>
+        ) : (
+          <span key={i}>{p.text}</span>
+        )
+      )}
+    </span>
+  );
+}
+
+/** 조회 — «@» 줄마다 한 줄 (bullet 항목은 «▸»), #…# 은 빨강 */
 function LinesView({ value, bullet }: { value: string; bullet: boolean }) {
   const lines = splitRiverIllegalLines(value);
   if (lines.length === 0) return <span className="text-muted-foreground">—</span>;
@@ -137,7 +157,7 @@ function LinesView({ value, bullet }: { value: string; bullet: boolean }) {
       {lines.map((line, i) => (
         <li key={i} className="flex min-w-0 gap-1 break-all">
           {bullet ? <span className="shrink-0 text-muted-foreground">▸</span> : null}
-          <span className="min-w-0">{line}</span>
+          <RedMarkupText value={line} className="min-w-0" />
         </li>
       ))}
     </ul>
@@ -153,7 +173,7 @@ function LinesInput({ value, onChange }: { value: string; onChange: (next: strin
       className={textareaClass}
       rows={rows}
       value={text}
-      placeholder="줄을 바꿔 여러 줄로 입력"
+      placeholder="Enter로 줄 구분 (저장 시 @ 로 연결)"
       onChange={(e) => {
         setText(e.target.value);
         onChange(riverIllegalTextToLines(e.target.value));
@@ -277,6 +297,7 @@ export function RiverIllegalOccupationDetailPanel({ cardId, onClose, onSaved, on
   /** 수정 진입마다 여러 줄 입력칸을 새 값으로 다시 그림 */
   const [editSession, setEditSession] = useState(0);
   const [capturing, setCapturing] = useState(false);
+  const [pdfSaving, setPdfSaving] = useState(false);
   const [picking, setPicking] = useState(false);
   /** 지도에서 찍어 주소를 채우면 위치 검색칸을 새 주소로 다시 그림 */
   const [locationInputSession, setLocationInputSession] = useState(0);
@@ -402,7 +423,7 @@ export function RiverIllegalOccupationDetailPanel({ cardId, onClose, onSaved, on
     setDraft((prev) => ({ ...prev, [key]: value }));
 
   const setStatus = (kind: RiverIllegalStatusKindKey, row: RiverIllegalStatusRowKey, raw: string) => {
-    const value = raw.replace(/[^\d]/g, "");
+    const value = sanitizeRiverIllegalStatusInput(raw);
     setDraft((prev) => ({
       ...prev,
       status: { ...prev.status, [kind]: { ...prev.status[kind], [row]: value } },
@@ -528,11 +549,6 @@ export function RiverIllegalOccupationDetailPanel({ cardId, onClose, onSaved, on
 
   const linesCell = (key: RiverIllegalOccupationFieldKey) => {
     if (!isEditing) return <LinesView value={current[key]} bullet={BULLET_FIELDS.has(key)} />;
-    if (SINGLE_LINE_EDIT_FIELDS.has(key)) {
-      return (
-        <input type="text" className={fieldClass} value={draft[key]} onChange={(e) => setField(key, e.target.value)} />
-      );
-    }
     return <LinesInput key={`${editSession}:${key}`} value={draft[key]} onChange={(v) => setField(key, v)} />;
   };
 
@@ -547,6 +563,23 @@ export function RiverIllegalOccupationDetailPanel({ cardId, onClose, onSaved, on
             <button type="button" className={actionBtn} onClick={() => void printRiverIllegalOccupationCard(current)}>
               <Printer className="h-3 w-3" />
               인쇄
+            </button>
+          ) : null}
+          {!isEditing ? (
+            <button
+              type="button"
+              className={actionBtn}
+              disabled={pdfSaving}
+              title="인쇄 창에서 대상을 «PDF로 저장»으로 고르면 됩니다"
+              onClick={() => {
+                setPdfSaving(true);
+                void downloadRiverIllegalOccupationCardPdf(current)
+                  .catch(() => window.alert("인쇄 창을 열지 못했습니다."))
+                  .finally(() => setPdfSaving(false));
+              }}
+            >
+              {pdfSaving ? <Loader2 className="h-3 w-3 animate-spin" /> : <FileDown className="h-3 w-3" />}
+              PDF 저장
             </button>
           ) : null}
           {canWrite ? (
@@ -579,6 +612,11 @@ export function RiverIllegalOccupationDetailPanel({ cardId, onClose, onSaved, on
       </div>
 
       <MapSideDetailScroll className="standard-detail-scroll">
+        {isEditing ? (
+          <div className="border-b border-border bg-muted/60 py-1.5 text-[11px] text-muted-foreground">
+            * 글 작성 시 #내용#처럼 양쪽을 #로 감싸면 그 구간만 빨간색으로 표시됩니다. (예: #중요문구#)
+          </div>
+        ) : null}
         <div className="rounded-sm border border-border bg-background p-3 text-xs shadow-sm">
           <h2 className="mb-2 text-center text-[17px] font-bold leading-tight tracking-tight text-foreground underline decoration-1 underline-offset-4">
             하천·계곡 구역 내 불법 점용시설 관리카드
@@ -590,7 +628,7 @@ export function RiverIllegalOccupationDetailPanel({ cardId, onClose, onSaved, on
                 <col style={{ width: FORM_LABEL_W }} />
                 <col />
                 <col style={{ width: FORM_LABEL_W }} />
-                <col />
+                <col style={{ width: FORM_RECURRENCE_VALUE_W }} />
               </colgroup>
               <tbody>
                 <tr>
@@ -603,23 +641,39 @@ export function RiverIllegalOccupationDetailPanel({ cardId, onClose, onSaved, on
                   <Th>{COLS.firstCheckYmd.label}</Th>
                   <Td>{textCell("firstCheckYmd", { date: true })}</Td>
                   <Th>{COLS.completeYmd.label}</Th>
-                  <Td>{textCell("completeYmd", { date: true })}</Td>
+                  {/* 날짜 + 완료여부 한 줄 */}
+                  <Td className="p-0">
+                    <div className="flex h-full min-h-[30px] items-stretch">
+                      <div className="flex min-w-0 flex-1 items-center px-1.5 py-1">
+                        {textCell("completeYmd", { date: true })}
+                      </div>
+                      <div
+                        className={cn(
+                          "flex shrink-0 items-center justify-center border-l border-border px-1.5 text-[11px] font-medium",
+                          isEditing ? "gap-1" : "min-w-[2.75rem]"
+                        )}
+                      >
+                        {isEditing ? (
+                          <label className="inline-flex cursor-pointer items-center gap-1 whitespace-nowrap text-foreground">
+                            <input
+                              type="checkbox"
+                              className="h-3.5 w-3.5 shrink-0 accent-primary"
+                              checked={current.completeYn === "Y"}
+                              onChange={(e) => setField("completeYn", e.target.checked ? "Y" : "N")}
+                            />
+                            완료여부
+                          </label>
+                        ) : current.completeYn === "Y" ? (
+                          COLS.completeYn.label
+                        ) : null}
+                      </div>
+                    </div>
+                  </Td>
                 </tr>
-              </tbody>
-            </table>
-
-            {/* 원본 카드처럼 위치만 길게 — 재발여부는 오른쪽 좁은 칸 */}
-            <table className={formTableClass}>
-              <colgroup>
-                <col style={{ width: FORM_LABEL_W }} />
-                <col />
-                <col style={{ width: FORM_LABEL_W }} />
-                <col style={{ width: FORM_RECURRENCE_VALUE_W }} />
-              </colgroup>
-              <tbody>
                 <tr>
+                  {/* 위치 칸 오른쪽 끝 = «완료(예정)일자» 제목 칸 끝 */}
                   <Th>{COLS.location.label}</Th>
-                  <Td className={cn(isEditing && "relative z-20 overflow-visible")}>
+                  <Td colSpan={2} className={cn(isEditing && "relative z-20 overflow-visible")}>
                     {isEditing ? (
                       <div className="flex min-w-0 items-center gap-1">
                         <div className="min-w-0 flex-1">
@@ -652,8 +706,21 @@ export function RiverIllegalOccupationDetailPanel({ cardId, onClose, onSaved, on
                       </span>
                     )}
                   </Td>
-                  <Th>{COLS.recurrence.label}</Th>
-                  <Td>{textCell("recurrence", { options: RIVER_ILLEGAL_RECURRENCE_OPTIONS })}</Td>
+                  <Td className="p-0">
+                    <div className="flex h-full min-h-[30px] items-stretch">
+                      <div
+                        className={cn(
+                          thClass,
+                          "flex w-[4.25rem] shrink-0 items-center justify-center border-0 border-r border-border"
+                        )}
+                      >
+                        {COLS.recurrence.label}
+                      </div>
+                      <div className="flex min-w-0 flex-1 items-center px-1.5 py-1">
+                        {textCell("recurrence", { options: RIVER_ILLEGAL_RECURRENCE_OPTIONS })}
+                      </div>
+                    </div>
+                  </Td>
                 </tr>
                 <tr>
                   <Th>{COLS.actor.label}</Th>
@@ -777,24 +844,34 @@ function StatusTable({
         </tr>
         {RIVER_ILLEGAL_STATUS_ROWS.map((row) => {
           const total = riverIllegalStatusTotal(card.status, row.key);
+          /** 적발 합계만 검정, 조치·미조치 합계는 빨강 */
+          const totalRed = row.key !== "detected";
           return (
             <tr key={row.key}>
               <Th className="px-0.5 text-[10px] font-medium">{row.label}</Th>
-              <Td className="px-0.5 text-center font-medium tabular-nums">{total > 0 ? total : ""}</Td>
+              <Td
+                className={cn(
+                  "px-0.5 text-center font-medium tabular-nums",
+                  totalRed && "text-red-600"
+                )}
+              >
+                {total > 0 ? total : ""}
+              </Td>
               {RIVER_ILLEGAL_STATUS_KINDS.map((k) => {
                 const value = card.status[k.key]?.[row.key] ?? "";
                 return (
                   <Td key={k.key} className="px-0.5 text-center tabular-nums">
                     {editing ? (
                       <input
-                        inputMode="numeric"
+                        inputMode="text"
                         aria-label={`${k.label} ${row.label}`}
+                        title="숫자와 # 만 (#1# 이면 빨간 숫자)"
                         className="h-[22px] w-full min-w-0 border-0 bg-transparent p-0 text-center text-[11px] tabular-nums outline-none focus:bg-primary/10"
                         value={value}
                         onChange={(e) => onChange(k.key, row.key, e.target.value)}
                       />
                     ) : (
-                      value
+                      <RedMarkupText value={value} />
                     )}
                   </Td>
                 );

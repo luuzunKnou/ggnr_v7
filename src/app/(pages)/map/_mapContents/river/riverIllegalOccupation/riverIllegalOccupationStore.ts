@@ -37,11 +37,14 @@ export function emptyRiverIllegalStatus(): RiverIllegalStatus {
 export function createEmptyRiverIllegalOccupationCard(): RiverIllegalOccupationCard {
   return {
     id: RIVER_ILLEGAL_OCCUPATION_NEW_ID,
+    mgmtNo: "",
     serialNo: "",
     riverType: "",
     firstCheckYmd: "",
     completeYmd: "",
+    completeYn: "N",
     location: "",
+    pnu: "",
     lon: "",
     lat: "",
     recurrence: "",
@@ -82,14 +85,22 @@ export function riverIllegalTextToLines(text: string): string {
     .join(RIVER_ILLEGAL_LINE_SEPARATOR);
 }
 
+/** 조치현황 칸 값에서 숫자만 모아 합산 (#1# · 12 모두 지원) */
+function statusCellNumber(raw: string | null | undefined): number {
+  const digits = String(raw ?? "").replace(/[^0-9]/g, "");
+  if (!digits) return 0;
+  const n = Number(digits);
+  return Number.isFinite(n) ? n : 0;
+}
+
 export function riverIllegalStatusTotal(
   status: RiverIllegalStatus,
   row: RiverIllegalStatusRowKey
 ): number {
-  return RIVER_ILLEGAL_STATUS_KINDS.reduce((sum, kind) => {
-    const n = Number(status[kind.key]?.[row]);
-    return Number.isFinite(n) ? sum + n : sum;
-  }, 0);
+  return RIVER_ILLEGAL_STATUS_KINDS.reduce(
+    (sum, kind) => sum + statusCellNumber(status[kind.key]?.[row]),
+    0
+  );
 }
 
 function sampleStatus(): RiverIllegalStatus {
@@ -102,11 +113,14 @@ function sampleStatus(): RiverIllegalStatus {
 const SAMPLE_CARDS: RiverIllegalOccupationCard[] = [
   {
     id: "sample-1",
+    mgmtNo: "HCBJ_000001",
     serialNo: "울진군 재말천-1",
     riverType: "소하천",
     firstCheckYmd: "2026-03-13",
     completeYmd: "",
+    completeYn: "N",
     location: "경북 울진군 북면 사계리 41-1",
+    pnu: "4793031029100410001",
     lon: "",
     lat: "",
     recurrence: "",
