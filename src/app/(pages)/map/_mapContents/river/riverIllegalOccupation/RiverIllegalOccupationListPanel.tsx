@@ -1,10 +1,10 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { ArrowDown, ArrowUp, ArrowUpDown, Search, X } from "lucide-react";
+import { ArrowDown, ArrowUp, ArrowUpDown, FileDown, Search, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatAddressStripSidoSigungu } from "@/lib/formatAddressStripAdmin";
-import { LayerRowAddButton } from "../../../_mapComponents/layerRowEdit";
+import { LayerRowAddButton, LayerRowPanelButton } from "../../../_mapComponents/layerRowEdit";
 import {
   RIVER_ILLEGAL_OCCUPATION_NEW_ID,
   splitRiverIllegalLines,
@@ -12,6 +12,7 @@ import {
   type RiverIllegalOccupationCard,
 } from "./riverIllegalOccupationStore";
 import { formatRiverIllegalCardDate } from "./riverIllegalOccupationFormat";
+import { downloadRiverIllegalOccupationCardsPdf } from "./riverIllegalOccupationPrint";
 
 type SortKey = "serialNo" | "location" | "firstCheckYmd";
 type SortDir = "asc" | "desc";
@@ -48,6 +49,7 @@ export function RiverIllegalOccupationListPanel({ selectedId, onSelectId, onClos
   const cards = useRiverIllegalOccupationCards();
   const [keyword, setKeyword] = useState("");
   const [sorts, setSorts] = useState<SortSpec[]>([]);
+  const [pdfSaving, setPdfSaving] = useState(false);
 
   const items = useMemo(() => {
     const q = keyword.trim().toLowerCase();
@@ -80,6 +82,20 @@ export function RiverIllegalOccupationListPanel({ selectedId, onSelectId, onClos
       <div className="standard-panel-header">
         <span className="standard-panel-title truncate">불법점용 관리카드</span>
         <div className="flex items-center gap-1">
+          <LayerRowPanelButton
+            loading={pdfSaving}
+            disabled={items.length === 0}
+            title="인쇄 창에서 대상을 «PDF로 저장»으로 고르면 목록 전체가 한 PDF로 저장됩니다 (카드마다 한 쪽)"
+            onClick={() => {
+              setPdfSaving(true);
+              void downloadRiverIllegalOccupationCardsPdf(items)
+                .catch(() => window.alert("인쇄 창을 열지 못했습니다."))
+                .finally(() => setPdfSaving(false));
+            }}
+          >
+            {!pdfSaving ? <FileDown className="h-3 w-3" /> : null}
+            전체 PDF 저장
+          </LayerRowPanelButton>
           <LayerRowAddButton
             onClick={() => onSelectId(RIVER_ILLEGAL_OCCUPATION_NEW_ID)}
             disabled={selectedId === RIVER_ILLEGAL_OCCUPATION_NEW_ID}
