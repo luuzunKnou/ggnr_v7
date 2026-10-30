@@ -28,3 +28,116 @@ export type WtlNetworkFilterMeta = {
   diameterMax: number
   materials: string[]
 }
+
+export type WtlNetworkLengthStatRow = {
+  label: string
+  meters: number
+}
+
+export type WtlNetworkFacilityCountRow = {
+  label: string
+  count: number
+}
+
+export type WtlNetworkStatusStats = {
+  byDiameter: WtlNetworkLengthStatRow[]
+  byMaterial: WtlNetworkLengthStatRow[]
+  byYear: WtlNetworkLengthStatRow[]
+  /** 관용도(saa_cde)별 연장 */
+  bySaa: WtlNetworkLengthStatRow[]
+  facilityCounts: WtlNetworkFacilityCountRow[]
+}
+
+/** 확대 모달 교차축 — 관경(dip) / 연도(year) */
+export type WtlNetworkAxisMode = 'dip' | 'year'
+
+/** 관경·연도 확대 모달 — mop_cde × 축 교차 + 경년·비내식 */
+export type WtlNetworkDipMatrixCell = Record<string, number>
+
+export type WtlNetworkDipMatrixRow = {
+  mopCode: string
+  label: string
+  isTotal: boolean
+  total: number
+  lengths: WtlNetworkDipMatrixCell
+  agedLength: number
+  agedRatio: number
+  /** 총계 행만 값, 그 외 null */
+  nonCorrosionRatio: number | null
+  usefulLife: number | null
+  /** 연도축만 — 연장가중 평균연령(년). 관경축은 null */
+  avgAge: number | null
+}
+
+export type WtlNetworkDipMatrix = {
+  axis: WtlNetworkAxisMode
+  statYear: number
+  /** dip=std_dip / year=매설년도 (오름차순, 미상 맨 뒤) */
+  columns: string[]
+  /** 연도축만 — columns와 동일 순서의 사용연수(statYear 기준) */
+  serviceYears: (number | null)[]
+  rows: WtlNetworkDipMatrixRow[]
+}
+
+export type WtlNetworkDipFilterOption = {
+  value: string
+  label: string
+}
+
+export type WtlNetworkDipFilterOptions = {
+  /** 관로 종류 (부모 테이블명 → 한글명) */
+  pipeKinds: WtlNetworkDipFilterOption[]
+  /** 읍면동 */
+  emds: WtlNetworkDipFilterOption[]
+  /** 매설년도 (ist_ymd 앞 4자리) */
+  years: WtlNetworkDipFilterOption[]
+  /** 관용도 (saa_cde) */
+  saas: WtlNetworkDipFilterOption[]
+}
+
+/**
+ * 확대 모달 필터.
+ * - `null` / 생략 = 전체
+ * - `[]` = 미선택(결과 없음)
+ * - 값 있음 = 해당 항목만
+ * pipeTables: 논리 키(wtl_pipe_lm|wtl_sply_ls). 물리 테이블은 mapSources remap.
+ */
+export type WtlNetworkDipMatrixParams = {
+  /** 선택된 관망 레이어 그룹(define_table_group) */
+  mapSources?: string[]
+  pipeTables?: string[] | null
+  emdCodes?: string[] | null
+  years?: string[] | null
+  saaCodes?: string[] | null
+}
+
+/** 연도별 확대 모달 — years 필터는 무시(축이 연도). 그 외는 관경과 동일 */
+export type WtlNetworkYearMatrixParams = Omit<WtlNetworkDipMatrixParams, 'years'>
+
+/** 관용도별 확대 — mop_cde × saa_cde, 셀=연장 합 */
+export type WtlNetworkSaaMatrixRow = {
+  mopCode: string
+  label: string
+  isTotal: boolean
+  total: number
+  lengths: Record<string, number>
+}
+
+export type WtlNetworkSaaMatrix = {
+  columns: string[]
+  columnLabels: Record<string, string>
+  rows: WtlNetworkSaaMatrixRow[]
+}
+
+/**
+ * 관용도별 모달 필터.
+ * - diameterFrom/To: null=미적용, 숫자=관경(std_dip) 구간
+ */
+export type WtlNetworkSaaMatrixParams = {
+  mapSources?: string[]
+  pipeTables?: string[] | null
+  emdCodes?: string[] | null
+  years?: string[] | null
+  diameterFrom?: number | null
+  diameterTo?: number | null
+}

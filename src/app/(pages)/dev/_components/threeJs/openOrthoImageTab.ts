@@ -1,5 +1,5 @@
 /**
- * 3면도 PNG를 새 탭에서 크게 보기.
+ * 직교 도면 PNG를 새 탭에서 크게 보기.
  * - `window.open(..., 'noopener')` 는 탭이 열려도 반환값이 null 이라 오탐 alert가 난다.
  * - async fetch 전에 about:blank 를 동기 open 해야 팝업 차단을 피한다.
  */

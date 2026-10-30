@@ -27,6 +27,7 @@ export function createInterpolatedGroundParts(
   const fallback = field.baseElevM;
   const thick = Math.max(0, thicknessM);
 
+  const has = (i: number, j: number) => sampleHeight(field, i, j) != null;
   const elevAt = (i: number, j: number): number => {
     const h = sampleHeight(field, i, j);
     return h ?? fallback;
@@ -39,29 +40,32 @@ export function createInterpolatedGroundParts(
     z: -(j - mid) * stepU,
   });
 
+  // null(범위 밖) 칸은 제외 — 일부만 있으면 fallback 고도로 구멍·찢김이 생김
+  const cellOk = (i: number, j: number) =>
+    has(i, j) && has(i + 1, j) && has(i, j + 1) && has(i + 1, j + 1);
+
   const topPositions: number[] = [];
   const topIndices: number[] = [];
+  const vertKey = new Map<string, number>();
+  const ensureVert = (i: number, j: number): number => {
+    const key = `${i},${j}`;
+    const prev = vertKey.get(key);
+    if (prev != null) return prev;
+    const p = xz(i, j);
+    const idx = topPositions.length / 3;
+    topPositions.push(p.x, topY(i, j), p.z);
+    vertKey.set(key, idx);
+    return idx;
+  };
 
-  for (let j = 0; j < size; j++) {
-    for (let i = 0; i < size; i++) {
-      const p = xz(i, j);
-      topPositions.push(p.x, topY(i, j), p.z);
-    }
-  }
-
-  const topIdx = (i: number, j: number) => j * size + i;
   for (let j = 0; j < size - 1; j++) {
     for (let i = 0; i < size - 1; i++) {
-      const a = sampleHeight(field, i, j);
-      const b = sampleHeight(field, i + 1, j);
-      const c = sampleHeight(field, i, j + 1);
-      const d = sampleHeight(field, i + 1, j + 1);
-      if (a == null && b == null && c == null && d == null) continue;
-      const v00 = topIdx(i, j);
-      const v10 = topIdx(i + 1, j);
-      const v01 = topIdx(i, j + 1);
-      const v11 = topIdx(i + 1, j + 1);
-      // +Y(위에서) 볼 때 CCW → 법선 위쪽 (FrontSide 채움 보이도록)
+      if (!cellOk(i, j)) continue;
+      const v00 = ensureVert(i, j);
+      const v10 = ensureVert(i + 1, j);
+      const v01 = ensureVert(i, j + 1);
+      const v11 = ensureVert(i + 1, j + 1);
+      // +Y(위에서) 볼 때 CCW → 법선 위쪽
       topIndices.push(v00, v10, v01, v10, v11, v01);
     }
   }
@@ -85,54 +89,25 @@ export function createInterpolatedGroundParts(
     outlinePositions.push(x0, y0, z0, x1, y1, z1);
   };
 
-  const last = size - 1;
-
-  // 윗면 외곽 (지형 표면 따라)
-  for (let i = 0; i < last; i++) {
-    const a = xz(i, 0);
-    const b = xz(i + 1, 0);
-    pushSeg(a.x, topY(i, 0), a.z, b.x, topY(i + 1, 0), b.z);
-    const c = xz(i, last);
-    const d = xz(i + 1, last);
-    pushSeg(c.x, topY(i, last), c.z, d.x, topY(i + 1, last), d.z);
-  }
-  for (let j = 0; j < last; j++) {
-    const a = xz(0, j);
-    const b = xz(0, j + 1);
-    pushSeg(a.x, topY(0, j), a.z, b.x, topY(0, j + 1), b.z);
-    const c = xz(last, j);
-    const d = xz(last, j + 1);
-    pushSeg(c.x, topY(last, j), c.z, d.x, topY(last, j + 1), d.z);
-  }
-
-  if (thick > 1e-6) {
-    // 아랫면 외곽
-    for (let i = 0; i < last; i++) {
-      const a = xz(i, 0);
-      const b = xz(i + 1, 0);
-      pushSeg(a.x, botY(i, 0), a.z, b.x, botY(i + 1, 0), b.z);
-      const c = xz(i, last);
-      const d = xz(i + 1, last);
-      pushSeg(c.x, botY(i, last), c.z, d.x, botY(i + 1, last), d.z);
+  const pushEdge = (i0: number, j0: number, i1: number, j1: number) => {
+    if (!has(i0, j0) || !has(i1, j1)) return;
+    const a = xz(i0, j0);
+    const b = xz(i1, j1);
+    pushSeg(a.x, topY(i0, j0), a.z, b.x, topY(i1, j1), b.z);
+    if (thick > 1e-6) {
+      pushSeg(a.x, botY(i0, j0), a.z, b.x, botY(i1, j1), b.z);
+      pushSeg(a.x, topY(i0, j0), a.z, a.x, botY(i0, j0), a.z);
     }
-    for (let j = 0; j < last; j++) {
-      const a = xz(0, j);
-      const b = xz(0, j + 1);
-      pushSeg(a.x, botY(0, j), a.z, b.x, botY(0, j + 1), b.z);
-      const c = xz(last, j);
-      const d = xz(last, j + 1);
-      pushSeg(c.x, botY(last, j), c.z, d.x, botY(last, j + 1), d.z);
-    }
+  };
 
-    // 옆면 세로 — 네 모서리만
-    for (const [i, j] of [
-      [0, 0],
-      [last, 0],
-      [last, last],
-      [0, last],
-    ] as const) {
-      const p = xz(i, j);
-      pushSeg(p.x, topY(i, j), p.z, p.x, botY(i, j), p.z);
+  // 유효 셀 경계만 외곽 (이웃 셀 없거나 불완전하면 변 그림)
+  for (let j = 0; j < size - 1; j++) {
+    for (let i = 0; i < size - 1; i++) {
+      if (!cellOk(i, j)) continue;
+      if (i === 0 || !cellOk(i - 1, j)) pushEdge(i, j, i, j + 1);
+      if (i === size - 2 || !cellOk(i + 1, j)) pushEdge(i + 1, j, i + 1, j + 1);
+      if (j === 0 || !cellOk(i, j - 1)) pushEdge(i, j, i + 1, j);
+      if (j === size - 2 || !cellOk(i, j + 1)) pushEdge(i, j + 1, i + 1, j + 1);
     }
   }
 

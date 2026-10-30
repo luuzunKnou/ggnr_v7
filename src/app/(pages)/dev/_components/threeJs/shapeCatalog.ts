@@ -1,6 +1,11 @@
+import { WTL_LAYER_SHAPE_DEFS } from '@/lib/wtlLayerShapeDefs';
 import {
   GROUND_DEFAULT_RADIUS_M,
+  MANH_DEFAULT_RADIUS_M,
   PIPE_DEFAULT_RADIUS_M,
+  isLineLayerShape,
+  isMapAnchoredShape,
+  isPointLayerShape,
   type ShapeKind,
   type ShapeModule,
   type ShapeProps,
@@ -49,9 +54,8 @@ export function innerLengthHint(props: ShapeProps): string | null {
       const h = Math.max(0.05, props.height) * ratio;
       return `안쪽 ${fmt(w)} × ${fmt(d)} × ${fmt(h)}`;
     }
-    case 'ground':
-      return null;
     default:
+      if (isMapAnchoredShape(props.kind)) return null;
       return null;
   }
 }
@@ -75,7 +79,7 @@ const ROTATION_FIELDS = [
 
 const ZERO_POSE = { floorHeight: 0, posX: 0, posZ: 0, rotX: 0, rotY: 0, rotZ: 0 };
 
-export const SHAPE_MODULES: readonly ShapeModule[] = [
+const BASIC_MODULES: ShapeModule[] = [
   {
     kind: 'box',
     label: '사각형',
@@ -160,36 +164,70 @@ export const SHAPE_MODULES: readonly ShapeModule[] = [
       groundCenterY: undefined,
       groundRadiusM: GROUND_DEFAULT_RADIUS_M,
       groundHeightField: null,
+      groundDrawMode: 'extent',
+      groundSectionLine: null,
       riverColor: '#2563eb',
       riverOpacity: 0.4,
     },
     /** GROUND는 지도 클릭 모달 — 색·높이·불투명도는 모달에서 편집 */
     fields: [],
   },
-  {
-    kind: 'wtl_pipe_lm',
-    label: 'wtl_pipe_lm',
-    defaults: {
-      kind: 'wtl_pipe_lm',
-      /** 세그먼트별 GeoServer 스타일 색 사용 — 패널 색 편집 없음 */
-      color: '#F44336',
-      opacity: 0.92,
-      innerRatio: 0,
-      width: 1,
-      depth: 1,
-      height: 0.1,
-      radius: 0.5,
-      ...ZERO_POSE,
-      pipeCenterX: undefined,
-      pipeCenterY: undefined,
-      pipeRadiusM: PIPE_DEFAULT_RADIUS_M,
-      pipeSegments: null,
-      pipeHeightField: null,
-    },
-    /** 지도 범위 모달 — 색은 GeoServer 스타일, 불투명도만 편집 */
-    fields: [],
-  },
-] as const;
+];
+
+function buildWtlModules(): ShapeModule[] {
+  return WTL_LAYER_SHAPE_DEFS.map((def) => {
+    const kind = def.kind as ShapeKind;
+    if (def.geom === 'line') {
+      return {
+        kind,
+        label: def.label,
+        defaults: {
+          kind,
+          color: def.fallbackColor,
+          opacity: 0.92,
+          innerRatio: 0,
+          width: 1,
+          depth: 1,
+          height: 0.1,
+          radius: 0.5,
+          ...ZERO_POSE,
+          pipeCenterX: undefined,
+          pipeCenterY: undefined,
+          pipeRadiusM: PIPE_DEFAULT_RADIUS_M,
+          pipeSegments: null,
+          pipeHeightField: null,
+        },
+        fields: [],
+      };
+    }
+    return {
+      kind,
+      label: def.label,
+      defaults: {
+        kind,
+        color: def.fallbackColor,
+        opacity: 0.9,
+        innerRatio: 0,
+        width: 1,
+        depth: 1,
+        height: 0.1,
+        radius: 0.5,
+        ...ZERO_POSE,
+        manhCenterX: undefined,
+        manhCenterY: undefined,
+        manhRadiusM: MANH_DEFAULT_RADIUS_M,
+        manholeFeatures: null,
+        manhHeightField: null,
+      },
+      fields: [],
+    };
+  });
+}
+
+export const SHAPE_MODULES: readonly ShapeModule[] = [
+  ...BASIC_MODULES,
+  ...buildWtlModules(),
+];
 
 export function getShapeModule(kind: ShapeKind): ShapeModule {
   const mod = SHAPE_MODULES.find((m) => m.kind === kind);
@@ -202,7 +240,7 @@ export function cloneDefaults(kind: ShapeKind): ShapeProps {
 }
 
 export function shapeHalfExtentY(props: ShapeProps): number {
-  if (props.kind === 'ground' || props.kind === 'wtl_pipe_lm') return 0;
+  if (isMapAnchoredShape(props.kind)) return 0;
   if (props.kind === 'sphere') return Math.max(0.05, props.radius);
   return Math.max(0.05, props.height) / 2;
 }
@@ -216,10 +254,23 @@ export function shapePropsEqual(a: ShapeProps, b: ShapeProps): boolean {
     if (
       k === 'groundHeightField' ||
       k === 'pipeHeightField' ||
-      k === 'pipeSegments'
+      k === 'pipeSegments' ||
+      k === 'groundSectionLine' ||
+      k === 'manholeFeatures' ||
+      k === 'manhHeightField'
     ) {
       return JSON.stringify(a[k] ?? null) === JSON.stringify(b[k] ?? null);
     }
     return a[k] === b[k];
   });
 }
+
+export function emptyKindCounters(): Record<ShapeKind, number> {
+  const out = {} as Record<ShapeKind, number>;
+  for (const mod of SHAPE_MODULES) {
+    out[mod.kind] = 0;
+  }
+  return out;
+}
+
+export { isLineLayerShape, isPointLayerShape };

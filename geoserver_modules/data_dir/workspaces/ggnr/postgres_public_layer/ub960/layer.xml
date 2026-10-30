@@ -1,0 +1,19 @@
+<layer>
+  <name>ub960</name>
+  <id>LayerInfoImpl-6e125944:1a17ff3f0fb:-7b73</id>
+  <type>VECTOR</type>
+  <defaultStyle>
+    <id>StyleInfoImpl-6e125944:1a17ff3f0fb:-7b72</id>
+  </defaultStyle>
+  <resource class="featureType">
+    <id>FeatureTypeInfoImpl-6e125944:1a17ff3f0fb:-7b74</id>
+  </resource>
+  <queryable>true</queryable>
+  <opaque>false</opaque>
+  <attribution>
+    <logoWidth>0</logoWidth>
+    <logoHeight>0</logoHeight>
+  </attribution>
+  <dateCreated>2026-10-29 01:26:04.582 UTC</dateCreated>
+  <dateModified>2026-10-29 01:26:04.977 UTC</dateModified>
+</layer>

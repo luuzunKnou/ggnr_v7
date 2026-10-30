@@ -13,6 +13,7 @@ import type {
   ThematicMapLayerOption,
 } from './thematicMapLayerFactory';
 import { getGeoServerBase } from '@/lib/geoserverUrl';
+import { geoserverWmsImageLoadFunction } from '@/lib/geoserverWmsImageLoad';
 import { compareDefineTableOrder, parseDefineTableIdx } from '@/lib/defineTableOrder';
 
 type DefineTableRow = {
@@ -192,6 +193,8 @@ export function createUndergroundFacilityLayers(
         params,
         serverType: 'geoserver',
         ratio: 1.5,
+        // 읍면동·리 INTERSECTS 등 긴 CQL은 GET 414 → 이전(전체) 이미지가 남는 문제 방지
+        imageLoadFunction: geoserverWmsImageLoadFunction,
       }),
     });
     layer.set('name', layerName);

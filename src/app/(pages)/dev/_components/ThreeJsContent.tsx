@@ -6,9 +6,11 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { DragControls } from 'three/addons/controls/DragControls.js';
 import { Plus } from 'lucide-react';
 import { call } from '@/lib/api';
+import { getWtlLayerShapeDef, isWtlLayerShapeKind } from '@/lib/wtlLayerShapeDefs';
 import {
   SHAPE_MODULES,
   cloneDefaults,
+  emptyKindCounters,
   getShapeModule,
   shapeHalfExtentY,
 } from './threeJs/shapeCatalog';
@@ -23,9 +25,13 @@ import {
 import { ThreeJsShapeEditModal } from './threeJs/ThreeJsShapeEditModal';
 import { ThreeJsGroundEditModal } from './threeJs/ThreeJsGroundEditModal';
 import { ThreeJsPipeEditModal } from './threeJs/ThreeJsPipeEditModal';
+import { ThreeJsManholeEditModal } from './threeJs/ThreeJsManholeEditModal';
+import { LayerShapesFromGroundModal } from './threeJs/LayerShapesFromGroundModal';
 import { openOrthoImageInNewTab } from './threeJs/openOrthoImageTab';
 import { captureOrthoViews, type OrthoViewImages } from './threeJs/orthoViewCapture';
 import type {
+  GroundLayerShapeKind,
+  ManholeFeature,
   PipeSegment,
   RegisteredShapeRow,
   ShapeKind,
@@ -33,6 +39,10 @@ import type {
 } from './threeJs/shapeTypes';
 import {
   GROUND_DEFAULT_RADIUS_M,
+  isLineLayerShape,
+  isMapAnchoredShape,
+  isPointLayerShape,
+  MANH_DEFAULT_RADIUS_M,
   PIPE_DEFAULT_RADIUS_M,
   SHAPE_NAME_KEY,
   SHAPE_PROPS_KEY,
@@ -40,12 +50,20 @@ import {
 } from './threeJs/shapeTypes';
 import { createSceneCompass, SCENE_COMPASS_KEY } from './threeJs/sceneCompass';
 import { ViewportCompass } from './threeJs/ViewportCompass';
+import { ViewportCameraHud } from './threeJs/ViewportCameraHud';
 import { fitGroundCamera, fitObjectInView } from './threeJs/fitGroundCamera';
+import {
+  sectionCoverRadiusM,
+  sectionRectCenter3857,
+  sectionRectRing3857,
+} from './threeJs/groundSection';
 
 const EMPTY_ORTHO: OrthoViewImages = {
   front: '',
   top: '',
   side: '',
+  cross: '',
+  long: '',
 };
 
 type SceneApi = {
@@ -68,19 +86,16 @@ function nextShapeId(): string {
 export function ThreeJsContent() {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const apiRef = useRef<SceneApi | null>(null);
+  const getCamera = useCallback(() => apiRef.current?.camera ?? null, []);
+  const getOrbit = useCallback(() => apiRef.current?.orbit ?? null, []);
   const selectedIdRef = useRef<string | null>(null);
-  const kindCountersRef = useRef<Record<ShapeKind, number>>({
-    box: 0,
-    sphere: 0,
-    cylinder: 0,
-    ground: 0,
-    wtl_pipe_lm: 0,
-  });
+  const kindCountersRef = useRef<Record<ShapeKind, number>>(emptyKindCounters());
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [editProps, setEditProps] = useState<ShapeProps | null>(null);
   const [editName, setEditName] = useState<string>('');
   const [modalOpen, setModalOpen] = useState(false);
+  const [layerModalGroundId, setLayerModalGroundId] = useState<string | null>(null);
   const [registered, setRegistered] = useState<RegisteredShapeRow[]>([]);
   const [orthoViews, setOrthoViews] = useState<OrthoViewImages>(EMPTY_ORTHO);
   const orthoRefreshRef = useRef(0);
@@ -154,7 +169,7 @@ export function ThreeJsContent() {
       const props = getShapeProps(group);
       if (!props) return;
       let synced: ShapeProps;
-      if (props.kind === 'ground' || props.kind === 'wtl_pipe_lm') {
+      if (isMapAnchoredShape(props.kind)) {
         group.position.set(0, 0, 0);
         synced = {
           ...props,
@@ -184,6 +199,8 @@ export function ThreeJsContent() {
     (kind: ShapeKind) => {
       const api = apiRef.current;
       if (!api) return;
+      // 상수 레이어 도형: 지형 «레이어 도형 생성»만 허용
+      if (isWtlLayerShapeKind(kind)) return;
       const id = nextShapeId();
       const n = api.shapesRoot.children.length;
       const props = cloneDefaults(kind);
@@ -196,9 +213,15 @@ export function ThreeJsContent() {
         props.posX = 0;
         props.posZ = 0;
       }
-      if (kind === 'wtl_pipe_lm') {
+      if (isLineLayerShape(kind)) {
         props.pipeRadiusM = PIPE_DEFAULT_RADIUS_M;
         props.pipeSegments = null;
+        props.posX = 0;
+        props.posZ = 0;
+      }
+      if (isPointLayerShape(kind)) {
+        props.manhRadiusM = MANH_DEFAULT_RADIUS_M;
+        props.manholeFeatures = null;
         props.posX = 0;
         props.posZ = 0;
       }
@@ -222,7 +245,7 @@ export function ThreeJsContent() {
     if (!group) return;
     rebuildShapeObject(group, next);
     setShapeSelected(group, true);
-    if (next.kind === 'ground' || next.kind === 'wtl_pipe_lm') {
+    if (isMapAnchoredShape(next.kind)) {
       fitObjectInView(api.camera, api.orbit, group);
     }
     refreshOrthoViews();
@@ -238,7 +261,7 @@ export function ThreeJsContent() {
       rebuildShapeObject(group, next);
       setShapeSelected(group, true);
       setEditProps({ ...next });
-      if (next.kind === 'ground' || next.kind === 'wtl_pipe_lm') {
+      if (isMapAnchoredShape(next.kind)) {
         fitObjectInView(api.camera, api.orbit, group);
       }
       syncDragTargets();
@@ -257,77 +280,163 @@ export function ThreeJsContent() {
     fitObjectInView(api.camera, api.orbit, group);
   }, [highlightShape]);
 
-  /** 지형과 동일 범위로 관로 도형 추가·조회 */
-  const addPipeFromGround = useCallback(
-    async (groundId: string) => {
+  /** 지형과 동일 범위로 선택한 레이어 도형 추가 */
+  const addLayerShapesFromGround = useCallback(
+    async (groundId: string, kinds: GroundLayerShapeKind[]) => {
       const api = apiRef.current;
-      if (!api) return;
+      if (!api || !kinds.length) return;
       const groundGroup = findShapeGroup(api.shapesRoot, groundId);
       if (!groundGroup) return;
       const gProps = getShapeProps(groundGroup);
       if (!gProps || gProps.kind !== 'ground') return;
 
-      const cx = gProps.groundCenterX ?? gProps.groundHeightField?.centerX;
-      const cy = gProps.groundCenterY ?? gProps.groundHeightField?.centerY;
-      const radiusM =
+      const isSection =
+        gProps.groundDrawMode === 'section' && gProps.groundSectionLine != null;
+      const sectionLine = gProps.groundSectionLine ?? null;
+      const heightField = gProps.groundHeightField
+        ? (JSON.parse(JSON.stringify(gProps.groundHeightField)) as NonNullable<
+            ShapeProps['groundHeightField']
+          >)
+        : null;
+
+      // 지형 격자와 동일 원점 — 단면도에서도 field.center 사용 (덮는 정사각과 어긋나지 않게)
+      let cx = heightField?.centerX ?? gProps.groundCenterX;
+      let cy = heightField?.centerY ?? gProps.groundCenterY;
+      let radiusM =
+        heightField?.radiusM ??
         gProps.groundRadiusM ??
-        gProps.groundHeightField?.radiusM ??
         PIPE_DEFAULT_RADIUS_M;
+      let polygon3857: [number, number][] | undefined;
+
+      if (isSection && sectionLine) {
+        polygon3857 = sectionRectRing3857(sectionLine);
+        if (cx == null || cy == null) {
+          const center = sectionRectCenter3857(sectionLine);
+          cx = center[0];
+          cy = center[1];
+        }
+        if (!heightField?.radiusM) {
+          radiusM = sectionCoverRadiusM(sectionLine);
+        }
+      }
 
       if (cx == null || cy == null || !Number.isFinite(cx) || !Number.isFinite(cy)) {
-        window.alert('지형 범위를 먼저 생성한 뒤 관로를 추가하세요.');
+        window.alert('지형 범위를 먼저 생성한 뒤 레이어 도형을 추가하세요.');
         return;
       }
 
-      let pipes: PipeSegment[] = [];
-      try {
-        const pipeRes = await call('', 'POST', {
-          service: 'elevationService',
-          action: 'getWtlPipesInExtent',
-          params: { x: cx, y: cy, srid: 3857, radiusM },
-        });
-        const pipeData = (pipeRes?.data ?? pipeRes) as {
-          success?: boolean;
-          pipes?: PipeSegment[];
-          error?: string;
-        };
-        if (!pipeData?.success) {
-          window.alert(pipeData?.error ?? '관로 조회 실패');
-          return;
+      const extentParams = {
+        x: cx,
+        y: cy,
+        srid: 3857,
+        radiusM,
+        ...(polygon3857 ? { polygon3857 } : {}),
+      };
+
+      const notes: string[] = [];
+      let lastId: string | null = null;
+
+      for (const kind of kinds) {
+        const def = getWtlLayerShapeDef(kind);
+        if (!def) continue;
+        try {
+          if (isLineLayerShape(kind)) {
+            const pipeRes = await call('', 'POST', {
+              service: 'elevationService',
+              action: 'getWtlLineLayerInExtent',
+              params: { ...extentParams, table: kind },
+            });
+            const pipeData = (pipeRes?.data ?? pipeRes) as {
+              success?: boolean;
+              pipes?: PipeSegment[];
+              error?: string;
+            };
+            if (!pipeData?.success) {
+              notes.push(pipeData?.error ?? `${def.label} 조회 실패`);
+              continue;
+            }
+            const pipes = Array.isArray(pipeData.pipes) ? pipeData.pipes : [];
+            if (!pipes.length) {
+              notes.push(`${def.label} 없음`);
+              continue;
+            }
+            const id = nextShapeId();
+            const props = cloneDefaults(kind);
+            props.pipeCenterX = cx;
+            props.pipeCenterY = cy;
+            props.pipeRadiusM = radiusM;
+            props.pipeSegments = pipes;
+            props.pipeHeightField = heightField;
+            props.groundDrawMode = isSection ? 'section' : 'extent';
+            props.groundSectionLine = isSection ? sectionLine : null;
+            props.posX = 0;
+            props.posZ = 0;
+            props.floorHeight = 0;
+            kindCountersRef.current[kind] += 1;
+            const name = `${getShapeModule(kind).label}_${kindCountersRef.current[kind]}`;
+            const group = createShapeObject(id, props);
+            group.userData[SHAPE_NAME_KEY] = name;
+            api.shapesRoot.add(group);
+            setRegistered((prev) => [...prev, { id, kind, name }]);
+            lastId = id;
+            notes.push(`${def.label} ${pipes.length}건`);
+          } else if (isPointLayerShape(kind)) {
+            const manhRes = await call('', 'POST', {
+              service: 'elevationService',
+              action: 'getWtlPointLayerInExtent',
+              params: { ...extentParams, table: kind },
+            });
+            const manhData = (manhRes?.data ?? manhRes) as {
+              success?: boolean;
+              manholes?: ManholeFeature[];
+              error?: string;
+            };
+            if (!manhData?.success) {
+              notes.push(manhData?.error ?? `${def.label} 조회 실패`);
+              continue;
+            }
+            const manholes = Array.isArray(manhData.manholes)
+              ? manhData.manholes
+              : [];
+            if (!manholes.length) {
+              notes.push(`${def.label} 없음`);
+              continue;
+            }
+            const id = nextShapeId();
+            const props = cloneDefaults(kind);
+            props.manhCenterX = cx;
+            props.manhCenterY = cy;
+            props.manhRadiusM = radiusM;
+            props.manholeFeatures = manholes;
+            props.manhHeightField = heightField;
+            props.groundDrawMode = isSection ? 'section' : 'extent';
+            props.groundSectionLine = isSection ? sectionLine : null;
+            props.posX = 0;
+            props.posZ = 0;
+            props.floorHeight = 0;
+            kindCountersRef.current[kind] += 1;
+            const name = `${getShapeModule(kind).label}_${kindCountersRef.current[kind]}`;
+            const group = createShapeObject(id, props);
+            group.userData[SHAPE_NAME_KEY] = name;
+            api.shapesRoot.add(group);
+            setRegistered((prev) => [...prev, { id, kind, name }]);
+            lastId = id;
+            notes.push(`${def.label} ${manholes.length}건`);
+          }
+        } catch (e) {
+          notes.push(
+            e instanceof Error ? e.message : `${def.label} 조회 오류`
+          );
         }
-        pipes = Array.isArray(pipeData.pipes) ? pipeData.pipes : [];
-      } catch (e) {
-        window.alert(e instanceof Error ? e.message : '관로 조회 오류');
-        return;
       }
 
-      const id = nextShapeId();
-      const props = cloneDefaults('wtl_pipe_lm');
-      props.pipeCenterX = cx;
-      props.pipeCenterY = cy;
-      props.pipeRadiusM = radiusM;
-      props.pipeSegments = pipes;
-      // 지형과 동일 표고장 → 해발 지표 − 심도로 동시 표시
-      props.pipeHeightField = gProps.groundHeightField
-        ? (JSON.parse(JSON.stringify(gProps.groundHeightField)) as typeof gProps.groundHeightField)
-        : null;
-      props.posX = 0;
-      props.posZ = 0;
-      props.floorHeight = 0;
-
-      kindCountersRef.current.wtl_pipe_lm += 1;
-      const name = `${getShapeModule('wtl_pipe_lm').label}_${kindCountersRef.current.wtl_pipe_lm}`;
-      const group = createShapeObject(id, props);
-      group.userData[SHAPE_NAME_KEY] = name;
-      api.shapesRoot.add(group);
-      setRegistered((prev) => [...prev, { id, kind: 'wtl_pipe_lm', name }]);
-      highlightShape(id);
-      fitObjectInView(api.camera, api.orbit, group);
+      if (lastId) {
+        highlightShape(lastId);
+        const g = findShapeGroup(api.shapesRoot, lastId);
+        if (g) fitObjectInView(api.camera, api.orbit, g);
+      }
       refreshOrthoViews();
-
-      if (!pipes.length) {
-        window.alert('동일 범위 내 상수관로가 없습니다. 빈 관로 도형이 추가되었습니다.');
-      }
+      if (notes.length) window.alert(notes.join('\n'));
     },
     [highlightShape, refreshOrthoViews]
   );
@@ -364,7 +473,15 @@ export function ThreeJsContent() {
   const resetFrontView = useCallback(() => {
     const api = apiRef.current;
     if (!api) return;
-    // 정면도 = 정북(남→북). 해발 지형·관로는 bbox 기준으로 맞춤
+    // 선택 도형 우선(단면도=절단선 정면). 없으면 전체·정북.
+    const id = selectedIdRef.current;
+    if (id) {
+      const group = findShapeGroup(api.shapesRoot, id);
+      if (group) {
+        fitObjectInView(api.camera, api.orbit, group);
+        return;
+      }
+    }
     if (api.shapesRoot.children.length > 0) {
       fitObjectInView(api.camera, api.orbit, api.shapesRoot);
     } else {
@@ -423,7 +540,7 @@ export function ThreeJsContent() {
       if (!(obj instanceof THREE.Group)) return;
       const props = getShapeProps(obj);
       if (!props) return;
-      if (props.kind === 'ground' || props.kind === 'wtl_pipe_lm') {
+      if (isMapAnchoredShape(props.kind)) {
         obj.position.set(0, 0, 0);
         obj.userData[SHAPE_PROPS_KEY] = { ...props, posX: 0, posZ: 0 };
       } else {
@@ -498,6 +615,8 @@ export function ThreeJsContent() {
   const orthoFrontSrc = orthoViews.front || undefined;
   const orthoTopSrc = orthoViews.top || undefined;
   const orthoSideSrc = orthoViews.side || undefined;
+  const orthoCrossSrc = orthoViews.cross || undefined;
+  const orthoLongSrc = orthoViews.long || undefined;
 
   return (
     <div className="flex min-h-0 flex-1 gap-2 p-2">
@@ -506,7 +625,8 @@ export function ThreeJsContent() {
           <div className="flex min-h-0 flex-col gap-1">
             <p className="text-xs font-medium text-foreground">도형 목록</p>
             <ul className="flex flex-col gap-1">
-              {SHAPE_MODULES.map((mod) => (
+              {SHAPE_MODULES.filter((mod) => !isWtlLayerShapeKind(mod.kind)).map(
+                (mod) => (
                 <li
                   key={mod.kind}
                   className="flex items-center justify-between gap-1 rounded border border-border/60 bg-background px-2 py-1.5"
@@ -522,7 +642,8 @@ export function ThreeJsContent() {
                     추가
                   </button>
                 </li>
-              ))}
+              )
+              )}
             </ul>
           </div>
 
@@ -562,13 +683,13 @@ export function ThreeJsContent() {
                         <button
                           type="button"
                           className="inline-flex cursor-pointer items-center rounded px-1.5 py-1 text-[11px] font-medium text-primary hover:bg-primary/10"
-                          title="동일 범위 wtl_pipe_lm 추가"
+                          title="레이어 도형 생성"
                           onClick={(e) => {
                             e.stopPropagation();
-                            void addPipeFromGround(row.id);
+                            setLayerModalGroundId(row.id);
                           }}
                         >
-                          wtl_pipe_lm
+                          레이어 도형 생성
                         </button>
                       ) : null}
                       <button
@@ -600,18 +721,20 @@ export function ThreeJsContent() {
         </button>
 
         <p className="text-[11px] leading-snug text-muted-foreground">
-          등록 목록에서 선택·재선택(해제)하면 CAD 치수가 표시됩니다. 위 3면도는 등록 도형 전체
-          기준입니다.
+          등록 목록에서 선택·재선택(해제)하면 CAD 치수가 표시됩니다. 정면·평면·측면은 3D 직교.
+          횡단면=절단선 원단면, 종단면=관로 진행 프로필입니다.
         </p>
       </aside>
 
       <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-2">
-        <div className="grid shrink-0 grid-cols-3 gap-2">
+        <div className="grid shrink-0 grid-cols-5 gap-1.5">
           {(
             [
               { key: 'front', label: '정면도', src: orthoFrontSrc },
               { key: 'top', label: '평면도', src: orthoTopSrc },
               { key: 'side', label: '측면도', src: orthoSideSrc },
+              { key: 'cross', label: '횡단면도', src: orthoCrossSrc },
+              { key: 'long', label: '종단면도', src: orthoLongSrc },
             ] as const
           ).map((panel) => (
             <div
@@ -645,7 +768,8 @@ export function ThreeJsContent() {
         </div>
         <div className="relative min-h-[280px] min-w-0 flex-1 overflow-hidden rounded border border-border bg-muted/20">
           <div ref={hostRef} className="absolute inset-0" />
-          <ViewportCompass getCamera={() => apiRef.current?.camera ?? null} />
+          <ViewportCameraHud getCamera={getCamera} getOrbit={getOrbit} />
+          <ViewportCompass getCamera={getCamera} />
         </div>
       </div>
 
@@ -660,8 +784,19 @@ export function ThreeJsContent() {
           onRollback={rollbackEdit}
           onDelete={deleteSelected}
         />
-      ) : editProps?.kind === 'wtl_pipe_lm' ? (
+      ) : editProps && isLineLayerShape(editProps.kind) ? (
         <ThreeJsPipeEditModal
+          open={modalOpen}
+          titleName={editName}
+          props={editProps}
+          onOpenChange={setModalOpen}
+          onPreview={previewEdit}
+          onSave={saveEdit}
+          onRollback={rollbackEdit}
+          onDelete={deleteSelected}
+        />
+      ) : editProps && isPointLayerShape(editProps.kind) ? (
+        <ThreeJsManholeEditModal
           open={modalOpen}
           titleName={editName}
           props={editProps}
@@ -683,6 +818,22 @@ export function ThreeJsContent() {
           onDelete={deleteSelected}
         />
       )}
+
+      <LayerShapesFromGroundModal
+        open={layerModalGroundId != null}
+        groundName={
+          layerModalGroundId
+            ? registered.find((r) => r.id === layerModalGroundId)?.name
+            : undefined
+        }
+        onOpenChange={(o) => {
+          if (!o) setLayerModalGroundId(null);
+        }}
+        onCreate={async (kinds) => {
+          if (!layerModalGroundId) return;
+          await addLayerShapesFromGround(layerModalGroundId, kinds);
+        }}
+      />
     </div>
   );
 }

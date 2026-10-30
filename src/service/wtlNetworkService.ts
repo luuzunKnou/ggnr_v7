@@ -3,10 +3,14 @@
  */
 import fs from 'node:fs';
 import path from 'node:path';
+import { PassThrough } from 'node:stream';
+import { finished } from 'node:stream/promises';
+import archiver from 'archiver';
 import { sql } from 'drizzle-orm';
 import db from '@/database/db';
 import {
   getWtlNetLayerDef,
+  isWtlSupplyZoneOrSubzoneLayerDef,
   wtlNetSaaSql,
   type WtlNetGeomKind,
   type WtlNetLayerDef,
@@ -18,11 +22,48 @@ import {
   type WtlNetMapSourcePayload,
 } from '@/app/(pages)/map/_mapContents/wtlAdmin/networkMap/wtlNetworkMapSources';
 import type {
+  WtlNetworkAxisMode,
+  WtlNetworkDipFilterOptions,
+  WtlNetworkDipMatrix,
+  WtlNetworkDipMatrixParams,
+  WtlNetworkDipMatrixRow,
   WtlNetworkFilterMeta,
   WtlNetworkRow,
+  WtlNetworkSaaMatrix,
+  WtlNetworkSaaMatrixParams,
+  WtlNetworkSaaMatrixRow,
+  WtlNetworkStatusStats,
+  WtlNetworkYearMatrixParams,
 } from '@/app/(pages)/map/_mapContents/wtlAdmin/networkMap/wtlNetworkTypes';
+import { isWtlNetMapGroup } from '@/app/(pages)/map/_mapContents/wtlAdmin/networkMap/wtlNetworkMapSources';
+import { exportLayerTableToShp } from '@/service/shpUploadService';
 
-export type { WtlNetworkFilterMeta, WtlNetworkRow };
+export type {
+  WtlNetworkAxisMode,
+  WtlNetworkDipFilterOptions,
+  WtlNetworkDipMatrix,
+  WtlNetworkDipMatrixParams,
+  WtlNetworkDipMatrixRow,
+  WtlNetworkFilterMeta,
+  WtlNetworkRow,
+  WtlNetworkSaaMatrix,
+  WtlNetworkSaaMatrixParams,
+  WtlNetworkSaaMatrixRow,
+  WtlNetworkStatusStats,
+  WtlNetworkYearMatrixParams,
+};
+
+/** 현황 «상수시설» 개수 — Shell DISPLAY_GROUPS와 동일 */
+const STATUS_FACILITY_LAYERS: readonly { key: string; label: string }[] = [
+  { key: 'wtl_gain_ps', label: '취수장' },
+  { key: 'wtl_puri_as', label: '정수장' },
+  { key: 'wtl_serv_ps', label: '배수지' },
+  { key: 'wtl_pres_ps', label: '가압장' },
+  { key: 'wtl_rsrv_ps', label: '저수조' },
+  { key: 'wtl_fire_ps', label: '소방시설' },
+  { key: 'wtl_flow_ps', label: '유량계' },
+  { key: 'wtl_prga_ps', label: '수압계' },
+];
 
 const TABLES_JSON_PATH = path.join(
   process.cwd(),
@@ -101,12 +142,14 @@ type ListParams = {
   diameterFrom?: number | null;
   diameterTo?: number | null;
   materials?: string[];
-  /** 읍면동 코드(hjd 접두) */
+  /** 읍면동 코드(hjd 접두) — areaWkts5181 있으면 공간필터 우선 */
   emdCode?: string | null;
   /** 리 코드(hjd 접두, 우선) */
   riCode?: string | null;
-  /** 급수블록(통합검색과 동일 ILIKE) */
+  /** 급수블록 이름 — areaWkts5181 있으면 공간필터 우선 */
   supplyBlock?: string | null;
+  /** EPSG:5181 위치 도형(읍면동·리·급수블록). 있으면 ST_Intersects */
+  areaWkts5181?: string[] | null;
   limit?: number;
   page?: number;
   pageSize?: number;
@@ -190,6 +233,7 @@ function lengthLabel(v: unknown): string {
 
 let mopLabelCache: Map<string, string> | null = null;
 let mofLabelCache: Map<string, string> | null = null;
+let saaLabelCache: Map<string, string> | null = null;
 
 function loadCodeMap(fileName: string): Map<string, string> {
   const map = new Map<string, string>();
@@ -222,6 +266,12 @@ function mofLabel(code: string): string {
   }
   if (!code) return '—';
   return mofLabelCache.get(code) ?? code;
+}
+
+function saaLabel(code: string): string {
+  if (!saaLabelCache) saaLabelCache = loadCodeMap('field_wtl_pipe_lm__saa_cde.json');
+  if (!code) return '—';
+  return saaLabelCache.get(code) ?? code;
 }
 
 const MATERIAL_OTHER = '기타';
@@ -391,34 +441,27 @@ async function tableExists(table: string): Promise<boolean> {
   return ok;
 }
 
-function buildSelect(
-  def: WtlNetLayerDef,
-  opts: {
-    physicalTable: string;
-    sourceId: WtlNetMapSourceId;
-    bbox?: number[] | null;
-    keyword?: string;
-    yearFrom?: number | null;
-    yearTo?: number | null;
-    diameterFrom?: number | null;
-    diameterTo?: number | null;
-    materials?: string[];
-    materialBundle?: MaterialTopBundle | null;
-    emdCode?: string | null;
-    riCode?: string | null;
-    supplyBlock?: string | null;
-    withGeom: boolean;
-    /** null이면 내부 LIMIT 생략(바깥 페이지 처리) */
-    limit?: number | null;
-  }
-): string | null {
-  const tbl = opts.physicalTable.replace(/"/g, '""');
+type ListFilterOpts = {
+  bbox?: number[] | null;
+  keyword?: string;
+  yearFrom?: number | null;
+  yearTo?: number | null;
+  diameterFrom?: number | null;
+  diameterTo?: number | null;
+  materials?: string[];
+  materialBundle?: MaterialTopBundle | null;
+  emdCode?: string | null;
+  riCode?: string | null;
+  supplyBlock?: string | null;
+  areaWkts5181?: string[] | null;
+};
+
+/** 목록·SHP 내보내기 공통 WHERE (alias t) */
+function collectListWheres(def: WtlNetLayerDef, opts: ListFilterOpts): string[] {
   const nameExpr = def.nameExpr ?? `COALESCE(NULLIF(trim(ftr_idn::text),''), ogc_fid::text)`;
   const dipCol = def.diameterCol;
   const mopCol = def.materialCol;
-  const lenCol = def.lengthCol;
   const yearCol = def.yearCol;
-  const { fieldsTable, fieldsTableFallback } = resolveFieldsTableKeys(def, opts.physicalTable);
 
   const wheres: string[] = ['t.geom IS NOT NULL'];
   const saa = wtlNetSaaSql(def);
@@ -463,21 +506,63 @@ function buildSelect(
     if (mw) wheres.push(mw);
   }
 
-  if (def.hasHjd !== false) {
-    const hjdPrefix = String(opts.riCode ?? opts.emdCode ?? '')
+  const areaWkts = (opts.areaWkts5181 ?? [])
+    .map((w) => String(w ?? '').trim())
+    .filter(Boolean);
+  const supplyBlockName = String(opts.supplyBlock ?? '').trim();
+  const isSupplyBlockTable =
+    String(def.table ?? '')
       .trim()
-      .replace(/[^0-9]/g, '');
-    if (hjdPrefix) {
-      wheres.push(`COALESCE(t.hjd_cde::text,'') LIKE '${esc(hjdPrefix)}%'`);
+      .toLowerCase() === 'wtl_wtsba_as' ||
+    String(def.defineTable ?? '')
+      .trim()
+      .toLowerCase() === 'wtl_wtsba_as' ||
+    String(def.key ?? '')
+      .trim()
+      .toLowerCase() === 'wtl_wtsba_as';
+  if (supplyBlockName && isSupplyBlockTable) {
+    // 급수블록 레이어: wbb_nam 속성필터 (경계 접침 ST_Intersects 오탐·공간연산 부하 회피)
+    wheres.push(`NULLIF(trim(t.wbb_nam::text),'') = '${esc(supplyBlockName)}'`);
+  } else if (areaWkts.length > 0 && isWtlSupplyZoneOrSubzoneLayerDef(def)) {
+    // 급수구역·분구: 블록보다 큼 → ST_Within(구역, 블록) 불가.
+    // Shell 적재 순서 [행정?][블록?] — 블록 선택 시 마지막 WKT가 블록.
+    const geomOf = (wkt: string) =>
+      `ST_Transform(ST_GeomFromText('${esc(wkt)}', 5181), ST_SRID(t.geom))`;
+    if (supplyBlockName) {
+      for (const wkt of areaWkts.slice(0, -1)) {
+        wheres.push(`ST_Intersects(t.geom, ${geomOf(wkt)})`);
+      }
+      const blockWkt = areaWkts[areaWkts.length - 1]!;
+      wheres.push(`ST_Contains(t.geom, ${geomOf(blockWkt)})`);
+    } else {
+      for (const wkt of areaWkts) {
+        wheres.push(`ST_Intersects(t.geom, ${geomOf(wkt)})`);
+      }
     }
-  }
+  } else if (areaWkts.length > 0) {
+    for (const wkt of areaWkts) {
+      // ST_Within: 경계만 맞닿은 도형 제외
+      wheres.push(
+        `ST_Within(t.geom, ST_Transform(ST_GeomFromText('${esc(wkt)}', 5181), ST_SRID(t.geom)))`
+      );
+    }
+  } else {
+    if (def.hasHjd !== false) {
+      const hjdPrefix = String(opts.riCode ?? opts.emdCode ?? '')
+        .trim()
+        .replace(/[^0-9]/g, '');
+      if (hjdPrefix) {
+        wheres.push(`COALESCE(t.hjd_cde::text,'') LIKE '${esc(hjdPrefix)}%'`);
+      }
+    }
 
-  const block = String(opts.supplyBlock ?? '').trim();
-  if (block) {
-    const like = `%${esc(block)}%`;
-    wheres.push(
-      `(${nameExpr} ILIKE '${like}' OR COALESCE(t.ftr_idn::text,'') ILIKE '${like}')`
-    );
+    const block = String(opts.supplyBlock ?? '').trim();
+    if (block) {
+      const like = `%${esc(block)}%`;
+      wheres.push(
+        `(${nameExpr} ILIKE '${like}' OR COALESCE(t.ftr_idn::text,'') ILIKE '${like}')`
+      );
+    }
   }
 
   const kw = String(opts.keyword ?? '').trim();
@@ -491,6 +576,40 @@ function buildSelect(
     if (mopCol) parts.push(`COALESCE(t."${mopCol}"::text,'') ILIKE '${like}'`);
     wheres.push(`(${parts.join(' OR ')})`);
   }
+
+  return wheres;
+}
+
+function buildSelect(
+  def: WtlNetLayerDef,
+  opts: {
+    physicalTable: string;
+    sourceId: WtlNetMapSourceId;
+    bbox?: number[] | null;
+    keyword?: string;
+    yearFrom?: number | null;
+    yearTo?: number | null;
+    diameterFrom?: number | null;
+    diameterTo?: number | null;
+    materials?: string[];
+    materialBundle?: MaterialTopBundle | null;
+    emdCode?: string | null;
+    riCode?: string | null;
+    supplyBlock?: string | null;
+    areaWkts5181?: string[] | null;
+    withGeom: boolean;
+    /** null이면 내부 LIMIT 생략(바깥 페이지 처리) */
+    limit?: number | null;
+  }
+): string | null {
+  const tbl = opts.physicalTable.replace(/"/g, '""');
+  const nameExpr = def.nameExpr ?? `COALESCE(NULLIF(trim(ftr_idn::text),''), ogc_fid::text)`;
+  const dipCol = def.diameterCol;
+  const mopCol = def.materialCol;
+  const lenCol = def.lengthCol;
+  const yearCol = def.yearCol;
+  const { fieldsTable, fieldsTableFallback } = resolveFieldsTableKeys(def, opts.physicalTable);
+  const wheres = collectListWheres(def, opts);
 
   const diamSel = dipCol ? `t."${dipCol}"::text` : `NULL`;
   const matSel = mopCol ? `t."${mopCol}"::text` : `NULL`;
@@ -530,6 +649,13 @@ function buildSelect(
     WHERE ${wheres.join(' AND ')}
     ${limitSql}
   `;
+}
+
+/** SHP용 — 동일 필터로 원본 행 SELECT */
+function buildShpExportSql(def: WtlNetLayerDef, physicalTable: string, opts: ListFilterOpts): string {
+  const tbl = physicalTable.replace(/"/g, '""');
+  const wheres = collectListWheres(def, opts);
+  return `SELECT t.* FROM layer."${tbl}" t WHERE ${wheres.join(' AND ')}`;
 }
 
 function mapRow(row: Record<string, unknown>, collapseMaterial = true): WtlNetworkRow {
@@ -655,6 +781,7 @@ export async function getWtlNetworkList(params: ListParams = {}): Promise<{
         emdCode: params.emdCode,
         riCode: params.riCode,
         supplyBlock: params.supplyBlock,
+        areaWkts5181: params.areaWkts5181,
         withGeom: false,
         limit: limitPer,
       });
@@ -768,6 +895,15 @@ export async function getWtlNetworkDetail(params: {
 /**
  * 지도 클릭(3857) 근처 1건
  */
+/** 클릭 우선순위 — 점(ps) > 선 > 면. 작을수록 우선 */
+function atPointGeomRank(kind: WtlNetGeomKind | string | undefined): number {
+  const k = String(kind ?? '').trim().toLowerCase();
+  if (k === 'point') return 0;
+  if (k === 'line') return 1;
+  if (k === 'area' || k === 'polygon') return 2;
+  return 1;
+}
+
 export async function getWtlNetworkAtPoint(params: {
   x: number;
   y: number;
@@ -786,6 +922,9 @@ export async function getWtlNetworkAtPoint(params: {
     return { row: null };
   }
   const tol = Math.max(1, Number(params.tolerance) || 8);
+
+  type Hit = { row: WtlNetworkRow; rank: number; dist: number };
+  const hits: Hit[] = [];
 
   for (const source of sources) {
     for (const key of keys) {
@@ -845,10 +984,119 @@ export async function getWtlNetworkAtPoint(params: {
         )
       );
       const raw = res.rows?.[0] as Record<string, unknown> | undefined;
-      if (raw) return { row: mapRow(raw, true) };
+      if (!raw) continue;
+      const dist = Number(raw.dist);
+      hits.push({
+        row: mapRow(raw, true),
+        rank: atPointGeomRank(def.geomKind),
+        dist: Number.isFinite(dist) ? dist : Number.POSITIVE_INFINITY,
+      });
     }
   }
-  return { row: null };
+
+  if (hits.length === 0) return { row: null };
+  hits.sort((a, b) => a.rank - b.rank || a.dist - b.dist);
+  return { row: hits[0]!.row };
+}
+
+/** layer 스키마에서 wtl_wtsba_as 계열 테이블명 */
+async function discoverWtlWtsbaTables(): Promise<string[]> {
+  const disco = await db.execute(
+    sql.raw(
+      `SELECT lower(table_name) AS t
+       FROM information_schema.tables
+       WHERE table_schema = 'layer'
+         AND lower(table_name) LIKE '%wtl_wtsba_as'`
+    )
+  );
+  return [
+    ...new Set(
+      (disco.rows ?? [])
+        .map((r) => String((r as { t?: string }).t ?? '').trim())
+        .filter(Boolean)
+    ),
+  ];
+}
+
+/**
+ * 급수블록 도형 WKT(EPSG:5181) — 동일 이름/부호 면 합침
+ */
+export async function getWtlSupplyBlockGeometry(params: {
+  block?: string;
+} = {}): Promise<{ wkt: string | null; error?: string }> {
+  const block = String(params.block ?? '').trim();
+  if (!block) return { wkt: null, error: 'block required' };
+  const tables = await discoverWtlWtsbaTables();
+  if (tables.length === 0) return { wkt: null, error: 'wtl_wtsba_as not found' };
+
+  const safeBlock = esc(block);
+  for (const tbl of tables) {
+    const hasNam = await tableHasColumn(tbl, 'wbb_nam');
+    const hasCde = await tableHasColumn(tbl, 'wbb_cde');
+    if (!hasNam && !hasCde) continue;
+    const whereParts: string[] = [];
+    if (hasNam) whereParts.push(`NULLIF(trim(wbb_nam::text),'') = '${safeBlock}'`);
+    if (hasCde) whereParts.push(`NULLIF(trim(wbb_cde::text),'') = '${safeBlock}'`);
+    const safe = tbl.replace(/"/g, '""');
+    try {
+      const res = await db.execute(
+        sql.raw(
+          `SELECT ST_AsText(ST_Transform(ST_UnaryUnion(ST_Collect(geom)), 5181)) AS wkt
+           FROM layer."${safe}"
+           WHERE geom IS NOT NULL AND (${whereParts.join(' OR ')})`
+        )
+      );
+      const wkt = asStr((res.rows?.[0] as { wkt?: unknown } | undefined)?.wkt);
+      if (wkt) return { wkt };
+    } catch {
+      /* try next table */
+    }
+  }
+  return { wkt: null, error: 'supply block geometry not found' };
+}
+
+/**
+ * 급수블록 검색 옵션 — layer.wtl_wtsba_as(및 *_wtl_wtsba_as) 블록명 목록
+ */
+export async function listWtlSupplyBlockOptions(): Promise<{
+  options: { value: string; label: string }[];
+}> {
+  const tables = await discoverWtlWtsbaTables();
+  if (tables.length === 0) return { options: [] };
+
+  const unions: string[] = [];
+  for (const tbl of tables) {
+    const hasNam = await tableHasColumn(tbl, 'wbb_nam');
+    const hasCde = await tableHasColumn(tbl, 'wbb_cde');
+    if (!hasNam && !hasCde) continue;
+    const labelExpr = hasNam
+      ? hasCde
+        ? `COALESCE(NULLIF(trim(wbb_nam::text),''), NULLIF(trim(wbb_cde::text),''))`
+        : `NULLIF(trim(wbb_nam::text),'')`
+      : `NULLIF(trim(wbb_cde::text),'')`;
+    const safe = tbl.replace(/"/g, '""');
+    unions.push(
+      `SELECT ${labelExpr} AS label FROM layer."${safe}" WHERE ${labelExpr} IS NOT NULL`
+    );
+  }
+  if (unions.length === 0) return { options: [] };
+
+  const res = await db.execute(
+    sql.raw(
+      `SELECT DISTINCT label FROM (${unions.join(' UNION ALL ')}) u
+       WHERE label IS NOT NULL AND trim(label) <> ''
+       ORDER BY label`
+    )
+  );
+  const options: { value: string; label: string }[] = [];
+  const seen = new Set<string>();
+  for (const row of res.rows ?? []) {
+    const label = asStr((row as { label?: unknown }).label);
+    if (!label || seen.has(label)) continue;
+    seen.add(label);
+    options.push({ value: label, label });
+  }
+  return { options };
 }
 
 /**
@@ -872,6 +1120,1378 @@ export async function listWtlNetMapSources(): Promise<{
     });
   }
   return { sources };
+}
+
+type TablesJsonMetaRow = {
+  define_table_name?: string;
+  define_table_schema?: string;
+  define_table_parents_layer?: string;
+};
+
+function loadTablesJsonMetaByName(): Map<
+  string,
+  { schema: 'layer' | 'public_layer'; parentsLayer: string | null }
+> {
+  const map = new Map<
+    string,
+    { schema: 'layer' | 'public_layer'; parentsLayer: string | null }
+  >();
+  try {
+    const raw = fs.readFileSync(TABLES_JSON_PATH, 'utf8');
+    const rows = JSON.parse(raw) as TablesJsonMetaRow[];
+    for (const row of rows) {
+      const name = String(row.define_table_name ?? '')
+        .trim()
+        .toLowerCase();
+      if (!name) continue;
+      const schema =
+        String(row.define_table_schema ?? '')
+          .trim()
+          .toLowerCase() === 'public_layer'
+          ? ('public_layer' as const)
+          : ('layer' as const);
+      const parents = String(row.define_table_parents_layer ?? '')
+        .trim()
+        .toLowerCase();
+      map.set(name, { schema, parentsLayer: parents || null });
+    }
+  } catch {
+    /* empty */
+  }
+  return map;
+}
+
+/** layer·public_layer 실테이블 존재 여부 (소문자 테이블명 Set) */
+async function existingTablesInSchema(
+  schema: 'layer' | 'public_layer',
+  tableNames: readonly string[]
+): Promise<Set<string>> {
+  const names = [
+    ...new Set(
+      tableNames.map((t) => String(t ?? '').trim().toLowerCase()).filter(Boolean)
+    ),
+  ];
+  if (names.length === 0) return new Set();
+  const inList = names.map((n) => `'${esc(n)}'`).join(',');
+  const res = await db.execute(
+    sql.raw(
+      `SELECT lower(table_name) AS t
+       FROM information_schema.tables
+       WHERE table_schema = '${schema}'
+         AND lower(table_name) IN (${inList})`
+    )
+  );
+  return new Set((res.rows ?? []).map((r) => String((r as { t?: string }).t ?? '')));
+}
+
+/**
+ * 관망조회 탭 레이어 — 선택 출처 기준 DB에 실제 있는 키만.
+ * (saa 분할 키는 부모 물리 테이블 존재 시 가능)
+ */
+export async function listWtlNetworkAvailableLayerKeys(params: {
+  mapSources?: string[];
+  layerKeys?: string[];
+} = {}): Promise<{ availableKeys: string[] }> {
+  const keys = (params.layerKeys ?? [])
+    .map((k) => String(k ?? '').trim())
+    .filter(Boolean);
+  if (keys.length === 0) return { availableKeys: [] };
+
+  const sourceIds = parseMapSourceIds(params.mapSources);
+  const sources = sourceIds
+    .map((id) => resolveWtlNetMapSource(id))
+    .filter((s): s is WtlNetMapSourceDef => Boolean(s));
+  const metaByName = loadTablesJsonMetaByName();
+
+  const layerCandidates = new Set<string>();
+  const publicCandidates = new Set<string>();
+
+  type KeyPlan = {
+    key: string;
+    layerNames: string[];
+    publicNames: string[];
+  };
+  const plans: KeyPlan[] = [];
+
+  for (const key of keys) {
+    const def = getWtlNetLayerDef(key);
+    const meta = metaByName.get(key.toLowerCase());
+    const layerNames = new Set<string>();
+    const publicNames = new Set<string>();
+
+    const add = (name: string | null | undefined, schemaHint?: 'layer' | 'public_layer') => {
+      const n = String(name ?? '')
+        .trim()
+        .toLowerCase();
+      if (!n) return;
+      const schema = schemaHint ?? metaByName.get(n)?.schema ?? 'layer';
+      if (schema === 'public_layer') publicNames.add(n);
+      else layerNames.add(n);
+    };
+
+    if (def?.table && sources.length > 0) {
+      for (const source of sources) {
+        add(source.remapTable(def.table), 'layer');
+        if (def.defineTable) add(source.remapTable(def.defineTable), 'layer');
+        add(source.remapTable(key), 'layer');
+      }
+    }
+
+    add(def?.table);
+    add(def?.defineTable);
+    add(key);
+    if (meta?.parentsLayer) add(meta.parentsLayer, meta.schema);
+    if (meta) add(key, meta.schema);
+
+    for (const n of layerNames) layerCandidates.add(n);
+    for (const n of publicNames) publicCandidates.add(n);
+    plans.push({ key, layerNames: [...layerNames], publicNames: [...publicNames] });
+  }
+
+  const [layerExist, publicExist] = await Promise.all([
+    existingTablesInSchema('layer', [...layerCandidates]),
+    existingTablesInSchema('public_layer', [...publicCandidates]),
+  ]);
+
+  const availableKeys: string[] = [];
+  for (const plan of plans) {
+    const ok =
+      plan.layerNames.some((n) => layerExist.has(n)) ||
+      plan.publicNames.some((n) => publicExist.has(n));
+    if (ok) availableKeys.push(plan.key);
+  }
+  return { availableKeys };
+}
+
+/** 가압장·정수장 상세 하단 연관 탭 후보 */
+export type WtlNetworkRelatedChildTab = {
+  /** WMS·조회용 물리 테이블명 */
+  table: string;
+  /** defineLayer 필드용 논리 테이블명 */
+  defineTable: string;
+  label: string;
+};
+
+const RELATED_CHILD_BY_PARENT: Record<
+  string,
+  Array<{ defineTable: string; label: string }>
+> = {
+  wtl_pres_ps: [
+    { defineTable: 'wtl_pres_pm_ps', label: '펌프현황' },
+    { defineTable: 'wtl_pres_hj_ps', label: '흡수정 현황' },
+  ],
+  wtl_puri_as: [{ defineTable: 'wtl_puri_dt_ps', label: '펌프 현황' }],
+};
+
+/** layer 스키마 — 본명 또는 `*_본명` 접두 테이블 */
+async function resolveRelatedChildPhysicalTable(
+  baseTable: string
+): Promise<string | null> {
+  const key = String(baseTable ?? '')
+    .trim()
+    .toLowerCase();
+  if (!key) return null;
+  if (await tableExists(key)) return key;
+  const res = await db.execute(
+    sql.raw(
+      `SELECT lower(table_name) AS t
+       FROM information_schema.tables
+       WHERE table_schema = 'layer'
+         AND (
+           lower(table_name) = '${esc(key)}'
+           OR right(lower(table_name), ${key.length + 1}) = '_${esc(key)}'
+         )
+       ORDER BY length(table_name) ASC
+       LIMIT 1`
+    )
+  );
+  const t = String((res.rows?.[0] as { t?: string } | undefined)?.t ?? '').trim();
+  return t || null;
+}
+
+async function resolveRelatedFtrIdnColumn(
+  physicalTable: string
+): Promise<string | null> {
+  const res = await db.execute(
+    sql.raw(
+      `SELECT column_name AS c
+       FROM information_schema.columns
+       WHERE table_schema = 'layer'
+         AND lower(table_name) = '${esc(physicalTable.toLowerCase())}'
+         AND lower(column_name) = 'ftr_idn'
+       LIMIT 1`
+    )
+  );
+  const c = String((res.rows?.[0] as { c?: string } | undefined)?.c ?? '').trim();
+  return c || null;
+}
+
+/**
+ * 부모 시설 상세 — DB에 실제 있는 자식 테이블만 탭으로.
+ * table 은 WMS·조회용 물리 테이블명.
+ */
+export async function listWtlNetworkRelatedChildTables(params: {
+  parentLayerKey?: string;
+} = {}): Promise<{ tabs: WtlNetworkRelatedChildTab[] }> {
+  const key = String(params.parentLayerKey ?? '')
+    .trim()
+    .toLowerCase();
+  const candidates = RELATED_CHILD_BY_PARENT[key] ?? [];
+  if (candidates.length === 0) return { tabs: [] };
+  const tabs: WtlNetworkRelatedChildTab[] = [];
+  for (const c of candidates) {
+    const physical = await resolveRelatedChildPhysicalTable(c.defineTable);
+    if (physical) {
+      tabs.push({
+        table: physical,
+        defineTable: c.defineTable,
+        label: c.label,
+      });
+    }
+  }
+  return { tabs };
+}
+
+export type WtlNetworkRelatedChildRow = {
+  ogcFid: number | null;
+  record: Record<string, unknown>;
+  /** EPSG:4326 GeoJSON geometry (목록 클릭·지도 이동용) */
+  geom: unknown | null;
+};
+
+/**
+ * 부모 ftr_idn 과 같은 값의 자식 현황 행 목록.
+ */
+export async function listWtlNetworkRelatedChildRows(params: {
+  table?: string;
+  defineTable?: string;
+  ftrIdn?: string;
+  limit?: number;
+} = {}): Promise<{
+  rows: WtlNetworkRelatedChildRow[];
+  total: number;
+  table: string;
+  defineTable: string;
+}> {
+  const physical = String(params.table ?? '')
+    .trim()
+    .toLowerCase();
+  const defineTable =
+    String(params.defineTable ?? '').trim().toLowerCase() || physical;
+  const ftrIdn = String(params.ftrIdn ?? '').trim();
+  const limit = Math.max(1, Math.min(Number(params.limit) || 200, 500));
+  if (!physical || !ftrIdn) {
+    return { rows: [], total: 0, table: physical, defineTable };
+  }
+  const resolved =
+    (await resolveRelatedChildPhysicalTable(physical)) ??
+    (await resolveRelatedChildPhysicalTable(defineTable));
+  if (!resolved) {
+    return { rows: [], total: 0, table: physical, defineTable };
+  }
+  const ftrCol = await resolveRelatedFtrIdnColumn(resolved);
+  if (!ftrCol) {
+    return { rows: [], total: 0, table: resolved, defineTable };
+  }
+  const tbl = resolved.replace(/"/g, '""');
+  const col = ftrCol.replace(/"/g, '""');
+  const hasOgc = await tableHasColumn(resolved, 'ogc_fid');
+  const hasGeom = await tableHasColumn(resolved, 'geom');
+  const countRes = await db.execute(
+    sql.raw(
+      `SELECT count(*)::int AS c
+       FROM layer."${tbl}" t
+       WHERE lower(trim(t."${col}"::text)) = lower(trim('${esc(ftrIdn)}'))`
+    )
+  );
+  const total = Number((countRes.rows?.[0] as { c?: number } | undefined)?.c ?? 0);
+  const ogcSel = hasOgc ? `t.ogc_fid` : `NULL`;
+  const geomSel = hasGeom
+    ? `ST_AsGeoJSON(ST_Transform(t.geom, 4326))::json`
+    : `NULL`;
+  const res = await db.execute(
+    sql.raw(
+      `SELECT
+         ${ogcSel} AS "ogcFid",
+         (to_jsonb(t) - 'geom') AS record,
+         ${geomSel} AS geom
+       FROM layer."${tbl}" t
+       WHERE lower(trim(t."${col}"::text)) = lower(trim('${esc(ftrIdn)}'))
+       ORDER BY ${hasOgc ? 't.ogc_fid' : '1'}
+       LIMIT ${limit}`
+    )
+  );
+  const rows: WtlNetworkRelatedChildRow[] = (res.rows ?? []).map((raw) => {
+    const r = raw as Record<string, unknown>;
+    const ogc = Number(r.ogcFid);
+    return {
+      ogcFid: Number.isFinite(ogc) ? ogc : null,
+      record: parseJsonRecord(r.record) ?? {},
+      geom: parseGeom(r.geom),
+    };
+  });
+  return { rows, total, table: resolved, defineTable };
+}
+
+function diameterStatLabel(raw: unknown): string {
+  const s = asStr(raw);
+  if (!s) return '미상';
+  const n = Number(String(s).replace(/[^\d.]/g, ''));
+  if (Number.isFinite(n) && n > 0) return `${n}㎜`;
+  return s;
+}
+
+const MATERIAL_SORT_LAST = 1e9;
+
+/** mop_cde 숫자 순 (MOP000·미분류·기타는 뒤) */
+function mopCdeSortKey(code: string, label: string): number {
+  if (!code || label === '기타' || label === '미상' || code === 'MOP999') {
+    return MATERIAL_SORT_LAST;
+  }
+  if (label === '미분류' || code === 'MOP000') return MATERIAL_SORT_LAST - 1;
+  const n = Number(code.replace(/\D/g, ''));
+  return Number.isFinite(n) && n > 0 ? n : MATERIAL_SORT_LAST - 1;
+}
+
+async function tableHasColumn(table: string, column: string): Promise<boolean> {
+  const t = table.toLowerCase().replace(/"/g, '""');
+  const c = column.toLowerCase().replace(/"/g, '""');
+  const res = await db.execute(
+    sql.raw(
+      `SELECT 1 FROM information_schema.columns
+       WHERE table_schema = 'layer'
+         AND lower(table_name) = '${esc(t)}'
+         AND lower(column_name) = '${esc(c)}'
+       LIMIT 1`
+    )
+  );
+  return (res.rows?.length ?? 0) > 0;
+}
+
+/** MapStatisticsController — byc_len 없으면 pip_len */
+async function resolvePipeLengthCol(table: string): Promise<string> {
+  if (await tableHasColumn(table, 'byc_len')) return 'byc_len';
+  if (await tableHasColumn(table, 'pip_len')) return 'pip_len';
+  return 'byc_len';
+}
+
+async function resolvePipeDiameterCol(table: string): Promise<string> {
+  if (await tableHasColumn(table, 'std_dip')) return 'std_dip';
+  if (await tableHasColumn(table, 'pip_dip')) return 'pip_dip';
+  return 'std_dip';
+}
+
+/**
+ * 현황 집계 — 선택 레이어 그룹(mapSources)의 remap 물리 테이블만 UNION.
+ * 논리 키 wtl_pipe_lm·wtl_sply_ls → 그룹별 실테이블(예: d_wtl_*).
+ */
+export async function getWtlNetworkStatusStats(params: {
+  mapSources?: string[];
+} = {}): Promise<WtlNetworkStatusStats> {
+  const selectedSourceIds = parseMapSourceIds(params.mapSources);
+  const selectedSources = selectedSourceIds
+    .map((id) => resolveWtlNetMapSource(id))
+    .filter((s): s is WtlNetMapSourceDef => Boolean(s));
+
+  /** 선택 그룹에 remap된 관로 물리 테이블(중복 제거) */
+  const baseTables = await resolvePipePhysicalTables(params.mapSources, null);
+  const dipMap = new Map<string, number>();
+  const mopMap = new Map<string, { label: string; meters: number }>();
+  const yearMap = new Map<string, number>();
+  const saaMap = new Map<string, { label: string; meters: number }>();
+
+  for (const base of baseTables) {
+    const lenCol = (await resolvePipeLengthCol(base)).replace(/"/g, '""');
+    const dipCol = (await resolvePipeDiameterCol(base)).replace(/"/g, '""');
+    const tbl = base.replace(/"/g, '""');
+    const sumExpr = `SUM(COALESCE(NULLIF(TRIM("${lenCol}"::text), '')::numeric, 0))`;
+    const hasSaa = await tableHasColumn(base, 'saa_cde');
+
+    try {
+      const dipRes = await db.execute(
+        sql.raw(
+          `SELECT ${sumExpr} AS byc_len, "${dipCol}" AS code
+           FROM layer."${tbl}"
+           WHERE "${dipCol}" IS NOT NULL
+           GROUP BY "${dipCol}"`
+        )
+      );
+      for (const row of dipRes.rows ?? []) {
+        const r = row as { code?: unknown; byc_len?: number };
+        const meters = Number(r.byc_len) || 0;
+        const label = diameterStatLabel(r.code);
+        dipMap.set(label, (dipMap.get(label) ?? 0) + meters);
+      }
+    } catch (e) {
+      console.error('[getWtlNetworkStatusStats] diameter', base, e);
+    }
+
+    try {
+      const mopRes = await db.execute(
+        sql.raw(
+          `SELECT ${sumExpr} AS byc_len, mop_cde AS code
+           FROM layer."${tbl}"
+           WHERE mop_cde IS NOT NULL
+           GROUP BY mop_cde
+           ORDER BY mop_cde`
+        )
+      );
+      for (const row of mopRes.rows ?? []) {
+        const r = row as { code?: unknown; byc_len?: number };
+        const meters = Number(r.byc_len) || 0;
+        const code = asStr(r.code);
+        if (!code) continue;
+        const label = mopLabel(code);
+        const display = label === '—' ? code : label;
+        const prev = mopMap.get(code);
+        mopMap.set(code, {
+          label: display,
+          meters: (prev?.meters ?? 0) + meters,
+        });
+      }
+    } catch (e) {
+      console.error('[getWtlNetworkStatusStats] material', base, e);
+    }
+
+    try {
+      // MapStatisticsController: SUBSTRING(ist_ymd,0,5)::INTEGER
+      const yearRes = await db.execute(
+        sql.raw(
+          `SELECT ${sumExpr} AS byc_len,
+                  NULLIF(SUBSTRING(TRIM(ist_ymd::text), 1, 4), '') AS code
+           FROM layer."${tbl}"
+           WHERE ist_ymd IS NOT NULL AND TRIM(ist_ymd::text) <> ''
+           GROUP BY 2`
+        )
+      );
+      for (const row of yearRes.rows ?? []) {
+        const r = row as { code?: unknown; byc_len?: number };
+        const meters = Number(r.byc_len) || 0;
+        const y = asStr(r.code);
+        if (!y || !/^\d{4}$/.test(y)) continue;
+        yearMap.set(y, (yearMap.get(y) ?? 0) + meters);
+      }
+    } catch (e) {
+      console.error('[getWtlNetworkStatusStats] year', base, e);
+    }
+
+    if (hasSaa) {
+      try {
+        const saaRes = await db.execute(
+          sql.raw(
+            `SELECT ${sumExpr} AS byc_len,
+                    CASE WHEN saa_cde IS NULL OR TRIM(saa_cde::text) = '' THEN '미분류'
+                         ELSE TRIM(saa_cde::text) END AS code
+             FROM layer."${tbl}"
+             GROUP BY 2`
+          )
+        );
+        for (const row of saaRes.rows ?? []) {
+          const r = row as { code?: unknown; byc_len?: number };
+          const meters = Number(r.byc_len) || 0;
+          const code = asStr(r.code) || '미분류';
+          const kor = code === '미분류' ? '미분류' : saaLabel(code);
+          const display = kor === '—' ? code : kor;
+          const prev = saaMap.get(code);
+          saaMap.set(code, {
+            label: display,
+            meters: (prev?.meters ?? 0) + meters,
+          });
+        }
+      } catch (e) {
+        console.error('[getWtlNetworkStatusStats] saa', base, e);
+      }
+    }
+  }
+
+  const byDiameter = [...dipMap.entries()].map(([label, meters]) => {
+    const n = Number(String(label).replace(/[^\d.]/g, ''));
+    return {
+      label,
+      meters,
+      sort: Number.isFinite(n) ? n : MATERIAL_SORT_LAST,
+    };
+  });
+  const byMaterial = [...mopMap.entries()].map(([code, row]) => ({
+    label: row.label,
+    meters: row.meters,
+    sort: mopCdeSortKey(code, row.label),
+  }));
+  const byYear = [...yearMap.entries()].map(([label, meters]) => ({
+    label,
+    meters,
+    sort: Number(label) || 0,
+  }));
+  const bySaa = [...saaMap.entries()].map(([code, row]) => ({
+    label: row.label,
+    meters: row.meters,
+    code,
+  }));
+
+  const facilityCounts: WtlNetworkStatusStats['facilityCounts'] = [];
+  for (const fac of STATUS_FACILITY_LAYERS) {
+    const def = getWtlNetLayerDef(fac.key);
+    let count = 0;
+    if (def?.table) {
+      const seen = new Set<string>();
+      for (const source of selectedSources) {
+        const physicalTable = source.remapTable(def.table).toLowerCase();
+        if (seen.has(physicalTable)) continue;
+        seen.add(physicalTable);
+        if (!(await tableExists(physicalTable))) continue;
+        const tbl = physicalTable.replace(/"/g, '""');
+        try {
+          const res = await db.execute(
+            sql.raw(`SELECT COUNT(*)::int AS n FROM layer."${tbl}"`)
+          );
+          count += Number((res.rows?.[0] as { n?: number } | undefined)?.n) || 0;
+        } catch {
+          /* ignore */
+        }
+      }
+    }
+    facilityCounts.push({ label: fac.label, count });
+  }
+
+  const roundMeters = (m: number) => Math.round(m * 1000) / 1000;
+
+  return {
+    byDiameter: byDiameter
+      .map((r) => ({ label: r.label, meters: roundMeters(r.meters) }))
+      .sort((a, b) => {
+        const na = Number(a.label.replace(/[^\d.]/g, ''));
+        const nb = Number(b.label.replace(/[^\d.]/g, ''));
+        if (Number.isFinite(na) && Number.isFinite(nb) && na !== nb) return na - nb;
+        return a.label.localeCompare(b.label, 'ko');
+      }),
+    byMaterial: byMaterial
+      .map((r) => ({
+        label: r.label,
+        meters: roundMeters(r.meters),
+        sort: r.sort,
+      }))
+      .sort((a, b) => a.sort - b.sort || a.label.localeCompare(b.label, 'ko'))
+      .map(({ label, meters }) => ({ label, meters })),
+    byYear: byYear
+      .map((r) => ({ label: r.label, meters: roundMeters(r.meters), sort: r.sort }))
+      .sort((a, b) => a.sort - b.sort)
+      .map(({ label, meters }) => ({ label, meters })),
+    bySaa: bySaa
+      .map((r) => ({
+        label: r.label,
+        meters: roundMeters(r.meters),
+        code: r.code,
+      }))
+      .sort((a, b) => compareSaaCde(a.code, b.code))
+      .map(({ label, meters }) => ({ label, meters })),
+    facilityCounts,
+  };
+}
+
+/** 관재질 그룹 → 내용년수 (경년관 판정) */
+const MOP_USEFUL_LIFE: Record<string, number> = {
+  '에나멜코팅 도복장강관': 30,
+  '액상에폭시 도복장강관': 30,
+  주철관: 30,
+  덕타일주철관: 30,
+  PVC관: 20,
+  내충격수도관: 20,
+  PE관: 20,
+  흄관: 30,
+  기타: 30,
+};
+
+const CAST_IRON_MOPS = new Set(['MOP010', 'MOP015', 'MOP027', 'MOP100', 'MOP898']);
+
+function categoryOfMop(mopKey: string): string {
+  if (!mopKey || mopKey === '미분류') return '기타';
+  const m = mopKey.trim().toUpperCase();
+  const inMops = (...codes: string[]) => codes.some((c) => c === m);
+  if (inMops('MOP031', 'MOP831')) return '액상에폭시 도복장강관';
+  if (
+    inMops(
+      'MOP002',
+      'MOP014',
+      'MOP019',
+      'MOP030',
+      'MOP039',
+      'MOP042',
+      'MOP802',
+      'MOP803',
+      'MOP804',
+      'MOP805',
+      'MOP806',
+      'MOP815',
+      'MOP839',
+      'MOP844',
+      'MOP868',
+      'MOP869',
+      'MOP879',
+      'MOP893',
+      'MOP896',
+      'MOP897'
+    )
+  ) {
+    return '에나멜코팅 도복장강관';
+  }
+  if (inMops('MOP010', 'MOP015', 'MOP027', 'MOP100', 'MOP898')) return '주철관';
+  if (inMops('MOP001')) return '덕타일주철관';
+  if (
+    inMops(
+      'MOP004',
+      'MOP016',
+      'MOP049',
+      'MOP809',
+      'MOP810',
+      'MOP829',
+      'MOP830',
+      'MOP928',
+      'MOP929',
+      'MOP930',
+      'MOP968'
+    )
+  ) {
+    return 'PVC관';
+  }
+  if (
+    inMops(
+      'MOP032',
+      'MOP046',
+      'MOP808',
+      'MOP816',
+      'MOP817',
+      'MOP818',
+      'MOP819',
+      'MOP909',
+      'MOP910',
+      'MOP940'
+    )
+  ) {
+    return '내충격수도관';
+  }
+  if (
+    inMops(
+      'MOP005',
+      'MOP026',
+      'MOP028',
+      'MOP800',
+      'MOP801',
+      'MOP811',
+      'MOP812',
+      'MOP880',
+      'MOP881',
+      'MOP882',
+      'MOP883',
+      'MOP884',
+      'MOP885',
+      'MOP919',
+      'MOP920',
+      'MOP938'
+    )
+  ) {
+    return 'PE관';
+  }
+  if (inMops('MOP012', 'MOP020', 'MOP040', 'MOP849', 'MOP952', 'MOP953')) return '흄관';
+  return '기타';
+}
+
+function usefulLifeForMop(mopKey: string): number {
+  return MOP_USEFUL_LIFE[categoryOfMop(mopKey)] ?? 30;
+}
+
+function round2(n: number): number {
+  return Math.round(n * 100) / 100;
+}
+
+function serviceYearOf(col: string, statYear: number): number | null {
+  if (!col || col === '연도미상') return null;
+  const y = Number(col);
+  if (!Number.isFinite(y)) return null;
+  return Math.max(0, statYear - y + 1);
+}
+
+function calcAgedLength(
+  byYear: Map<string, number>,
+  usefulLife: number | null,
+  statYear: number
+): number {
+  if (usefulLife == null) return 0;
+  let aged = 0;
+  for (const [col, len] of byYear) {
+    const age = serviceYearOf(col, statYear);
+    if (age != null && age > usefulLife) aged += len;
+  }
+  return aged;
+}
+
+/** 연장가중 평균연령 = Σ(연장×사용연수) / Σ(연장). 연도미상 제외 */
+function calcAvgAge(byYear: Map<string, number>, statYear: number): number {
+  let weighted = 0;
+  let total = 0;
+  for (const [col, len] of byYear) {
+    const age = serviceYearOf(col, statYear);
+    if (age == null || len <= 0) continue;
+    weighted += len * age;
+    total += len;
+  }
+  return total > 0 ? round2(weighted / total) : 0;
+}
+
+function sortYearColumns(years: string[]): string[] {
+  const known: string[] = [];
+  const unknown: string[] = [];
+  for (const y of years) {
+    if (/^\d{4}$/.test(y)) known.push(y);
+    else unknown.push(y);
+  }
+  known.sort((a, b) => Number(a) - Number(b));
+  unknown.sort((a, b) => String(a).localeCompare(String(b), 'ko'));
+  return [...known, ...unknown];
+}
+
+function sortDipColumns(dips: string[]): string[] {
+  const numeric: string[] = [];
+  const other: string[] = [];
+  for (const d of dips) {
+    if (d == null) continue;
+    if (Number.isFinite(Number(String(d).trim()))) {
+      if (!numeric.includes(d)) numeric.push(d);
+    } else if (!other.includes(d)) {
+      other.push(d);
+    }
+  }
+  numeric.sort((a, b) => Number(a.trim()) - Number(b.trim()));
+  other.sort((a, b) => a.localeCompare(b, 'ko'));
+  return [...numeric, ...other];
+}
+
+function sortMopKeys(keys: string[]): string[] {
+  return [...keys].sort((a, b) => {
+    const aMop = /^MOP\d+$/i.test(a);
+    const bMop = /^MOP\d+$/i.test(b);
+    if (aMop && bMop) return a.localeCompare(b, undefined, { sensitivity: 'base' });
+    if (aMop) return -1;
+    if (bMop) return 1;
+    return String(a).localeCompare(String(b), 'ko');
+  });
+}
+
+/** saa_cde 코드순 (SAA000·미분류는 뒤) */
+function compareSaaCde(a: string, b: string): number {
+  const aLast = a === '미분류' || /^SAA000$/i.test(a);
+  const bLast = b === '미분류' || /^SAA000$/i.test(b);
+  if (aLast !== bLast) return aLast ? 1 : -1;
+  const aSaa = /^SAA\d+$/i.test(a);
+  const bSaa = /^SAA\d+$/i.test(b);
+  if (aSaa && bSaa) {
+    const na = Number(a.replace(/\D/g, ''));
+    const nb = Number(b.replace(/\D/g, ''));
+    if (Number.isFinite(na) && Number.isFinite(nb) && na !== nb) return na - nb;
+    return a.localeCompare(b, undefined, { sensitivity: 'base' });
+  }
+  if (aSaa) return -1;
+  if (bSaa) return 1;
+  return String(a).localeCompare(String(b), 'ko');
+}
+
+function sortSaaKeys(keys: string[]): string[] {
+  return [...keys].sort(compareSaaCde);
+}
+
+const DIP_KEY_SQL = `CASE
+  WHEN std_dip IS NULL THEN '관경미상'
+  WHEN NULLIF(TRIM(BOTH FROM std_dip::text), '') IS NULL THEN '관경미상'
+  WHEN LOWER(TRIM(BOTH FROM std_dip::text)) IN ('null','none','nan','-') THEN '관경미상'
+  ELSE TRIM(BOTH FROM std_dip::text)
+END`;
+
+const YEAR_KEY_SQL = `CASE
+  WHEN ist_ymd IS NULL OR TRIM(ist_ymd::text) = ''
+    OR LENGTH(TRIM(ist_ymd::text)) < 4
+    OR SUBSTRING(TRIM(ist_ymd::text), 1, 4) !~ '^[0-9]{4}$'
+  THEN '연도미상'
+  ELSE SUBSTRING(TRIM(ist_ymd::text), 1, 4)
+END`;
+
+const MOP_KEY_SQL = `CASE
+  WHEN mop_cde IS NULL OR TRIM(mop_cde::text) = '' THEN '미분류'
+  ELSE mop_cde::text
+END`;
+
+const SAA_KEY_SQL = `CASE
+  WHEN saa_cde IS NULL OR TRIM(saa_cde::text) = '' THEN '미분류'
+  ELSE TRIM(saa_cde::text)
+END`;
+
+/** 관로 종류 논리 키 — UI·필터용. 물리 테이블은 mapSources remap */
+const PIPE_KIND_LOGICAL = [
+  { value: 'wtl_pipe_lm', label: '상수관로' },
+  { value: 'wtl_sply_ls', label: '급수관로' },
+] as const;
+
+function listPipeKindOptionsFromTablesJson(): Array<{ value: string; label: string }> {
+  try {
+    const raw = JSON.parse(fs.readFileSync(TABLES_JSON_PATH, 'utf8')) as Array<{
+      define_table_name?: string;
+      define_table_kor_name?: string;
+      define_table_group?: string;
+    }>;
+    const byExact = new Map<string, string>();
+    for (const row of raw) {
+      const name = String(row.define_table_name ?? '').trim().toLowerCase();
+      const kor = String(row.define_table_kor_name ?? '').trim();
+      const group = String(row.define_table_group ?? '').trim();
+      if (!name || !kor) continue;
+      if (group && !isWtlNetMapGroup(group)) continue;
+      if (name === 'wtl_pipe_lm' || name === 'wtl_sply_ls') {
+        byExact.set(name, kor);
+      }
+    }
+    return PIPE_KIND_LOGICAL.map((d) => ({
+      value: d.value,
+      label: byExact.get(d.value) || d.label,
+    }));
+  } catch {
+    return PIPE_KIND_LOGICAL.map((d) => ({ value: d.value, label: d.label }));
+  }
+}
+
+/**
+ * 선택 레이어 그룹(mapSources) × 관로 종류(논리 키) → 물리 테이블.
+ * 예: 상수(대진) + wtl_pipe_lm → d_wtl_pipe_lm
+ */
+async function resolvePipePhysicalTables(
+  mapSources: string[] | undefined,
+  logicalKinds: string[] | null | undefined
+): Promise<string[]> {
+  if (logicalKinds !== null && logicalKinds !== undefined && logicalKinds.length === 0) {
+    return [];
+  }
+  const kinds = listPipeKindOptionsFromTablesJson();
+  const allowed = new Set(kinds.map((k) => k.value.toLowerCase()));
+  const requested = (logicalKinds ?? kinds.map((k) => k.value))
+    .map((t) => String(t).trim().toLowerCase())
+    .filter((t) => t && allowed.has(t));
+  if (requested.length === 0) return [];
+
+  const sourceIds = parseMapSourceIds(mapSources);
+  const sourceDefs = sourceIds
+    .map((id) => resolveWtlNetMapSource(id))
+    .filter((s): s is WtlNetMapSourceDef => Boolean(s));
+  if (sourceDefs.length === 0) return [];
+
+  const physical = new Set<string>();
+  for (const src of sourceDefs) {
+    for (const logical of requested) {
+      const phys = String(src.remapTable(logical) ?? logical)
+        .trim()
+        .toLowerCase();
+      if (!phys) continue;
+      if (await tableExists(phys)) physical.add(phys);
+    }
+  }
+  return [...physical];
+}
+
+/** null/undefined 논리종류 = 전체, [] = 미선택. 물리 테이블은 mapSources remap */
+async function buildPipeUnionSql(
+  tableNames?: string[] | null,
+  mapSources?: string[]
+): Promise<string | null> {
+  const bases = await resolvePipePhysicalTables(mapSources, tableNames);
+  if (bases.length === 0) return null;
+
+  const parts: string[] = [];
+  for (const base of bases) {
+    const lenCol = (await resolvePipeLengthCol(base)).replace(/"/g, '""');
+    const dipCol = (await resolvePipeDiameterCol(base)).replace(/"/g, '""');
+    const tbl = base.replace(/"/g, '""');
+    const hasMop = await tableHasColumn(base, 'mop_cde');
+    const hasIst = await tableHasColumn(base, 'ist_ymd');
+    const hasHjd = await tableHasColumn(base, 'hjd_cde');
+    const hasSaa = await tableHasColumn(base, 'saa_cde');
+    // 테이블마다 numeric/varchar 혼재 → UNION 시 전부 text로 맞춤
+    const mopSel = hasMop ? 'mop_cde::text AS mop_cde' : 'NULL::text AS mop_cde';
+    const istSel = hasIst ? 'ist_ymd::text AS ist_ymd' : 'NULL::text AS ist_ymd';
+    const hjdSel = hasHjd ? 'hjd_cde::text AS hjd_cde' : 'NULL::text AS hjd_cde';
+    const saaSel = hasSaa ? 'saa_cde::text AS saa_cde' : 'NULL::text AS saa_cde';
+    parts.push(
+      `SELECT ${mopSel}, ${istSel}, ${hjdSel}, ${saaSel}, "${dipCol}"::text AS std_dip, "${lenCol}"::text AS byc_len FROM layer."${tbl}"`
+    );
+  }
+  if (parts.length === 0) return null;
+  return parts.join(' UNION ALL ');
+}
+
+/** null/omit = 전체, [] = 결과 없음(1=0), 값 = IN 필터 */
+function buildDipFilterSql(params: WtlNetworkDipMatrixParams): string {
+  const parts: string[] = [];
+
+  const applyList = (
+    raw: string[] | null | undefined,
+    build: (values: string[]) => string
+  ) => {
+    if (raw === null || raw === undefined) return;
+    if (raw.length === 0) {
+      parts.push(' AND 1=0');
+      return;
+    }
+    parts.push(build(raw));
+  };
+
+  applyList(params.emdCodes, (emds) => {
+    const codes = emds.map((c) => String(c).trim()).filter((c) => /^[0-9]+$/.test(c));
+    if (codes.length === 0) return ' AND 1=0';
+    const ors = codes.map((c) => `COALESCE(hjd_cde::text,'') LIKE '${esc(c)}%'`);
+    return ` AND (${ors.join(' OR ')})`;
+  });
+
+  applyList(params.years, (years) => {
+    const list = years
+      .map((y) => String(y).trim())
+      .filter((y) => /^\d{4}$/.test(y) || y === '연도미상');
+    if (list.length === 0) return ' AND 1=0';
+    return ` AND (${YEAR_KEY_SQL}) IN (${list.map((y) => `'${esc(y)}'`).join(',')})`;
+  });
+
+  applyList(params.saaCodes, (saas) => {
+    const list = saas.map((s) => String(s).trim()).filter(Boolean);
+    if (list.length === 0) return ' AND 1=0';
+    return ` AND (${SAA_KEY_SQL}) IN (${list.map((s) => `'${esc(s)}'`).join(',')})`;
+  });
+
+  return parts.join('');
+}
+
+/** 관용도 모달 — 읍면동·연도·관경 구간 */
+function buildSaaMatrixFilterSql(params: WtlNetworkSaaMatrixParams): string {
+  const base = buildDipFilterSql({
+    emdCodes: params.emdCodes,
+    years: params.years,
+    saaCodes: null,
+  });
+  const parts: string[] = [base];
+  const from =
+    params.diameterFrom != null && Number.isFinite(Number(params.diameterFrom))
+      ? Number(params.diameterFrom)
+      : null;
+  const to =
+    params.diameterTo != null && Number.isFinite(Number(params.diameterTo))
+      ? Number(params.diameterTo)
+      : null;
+  if (from != null && to != null) {
+    const lo = Math.min(from, to);
+    const hi = Math.max(from, to);
+    parts.push(
+      ` AND (
+        NULLIF(regexp_replace(COALESCE(std_dip::text,''), '[^0-9.]', '', 'g'),'') IS NULL
+        OR (
+          NULLIF(regexp_replace(COALESCE(std_dip::text,''), '[^0-9.]', '', 'g'),'') ~ '^[0-9]+(\\.[0-9]+)?$'
+          AND NULLIF(regexp_replace(COALESCE(std_dip::text,''), '[^0-9.]', '', 'g'),'')::numeric
+            BETWEEN ${lo} AND ${hi}
+        )
+      )`
+    );
+  } else if (from != null || to != null) {
+    const v = from != null ? from : to!;
+    parts.push(
+      ` AND (
+        NULLIF(regexp_replace(COALESCE(std_dip::text,''), '[^0-9.]', '', 'g'),'') ~ '^[0-9]+(\\.[0-9]+)?$'
+        AND NULLIF(regexp_replace(COALESCE(std_dip::text,''), '[^0-9.]', '', 'g'),'')::numeric = ${v}
+      )`
+    );
+  }
+  return parts.join('');
+}
+
+/**
+ * 관경별 확대 모달 — 검색 옵션 (관로종류·읍면동·매설년도·관용도)
+ */
+export async function getWtlNetworkStatusDipFilterOptions(params: {
+  mapSources?: string[];
+} = {}): Promise<WtlNetworkDipFilterOptions> {
+  const pipeKinds = listPipeKindOptionsFromTablesJson();
+  /** 읍면동은 클라이언트에서 getEmdRiOptions와 동일 소스 사용 */
+  const emds: WtlNetworkDipFilterOptions['emds'] = [];
+  const years: WtlNetworkDipFilterOptions['years'] = [];
+  const saas: WtlNetworkDipFilterOptions['saas'] = [];
+  const union = await buildPipeUnionSql(null, params.mapSources);
+  if (union) {
+    try {
+      const yearRes = await db.execute(
+        sql.raw(
+          `SELECT DISTINCT (${YEAR_KEY_SQL}) AS y
+           FROM (${union}) src
+           ORDER BY 1`
+        )
+      );
+      for (const row of yearRes.rows ?? []) {
+        const y = asStr((row as { y?: unknown }).y);
+        if (!y) continue;
+        years.push({ value: y, label: y });
+      }
+    } catch (e) {
+      console.error('[getWtlNetworkStatusDipFilterOptions] years', e);
+    }
+    try {
+      const saaRes = await db.execute(
+        sql.raw(
+          `SELECT DISTINCT
+             CASE WHEN saa_cde IS NULL OR TRIM(saa_cde::text) = '' THEN '미분류'
+                  ELSE TRIM(saa_cde::text) END AS code
+           FROM (${union}) src
+           ORDER BY 1`
+        )
+      );
+      for (const row of saaRes.rows ?? []) {
+        const code = asStr((row as { code?: unknown }).code);
+        if (!code) continue;
+        const kor = code === '미분류' ? '미분류' : saaLabel(code);
+        saas.push({ value: code, label: kor === '—' ? code : kor });
+      }
+      saas.sort((a, b) => compareSaaCde(a.value, b.value));
+    } catch (e) {
+      console.error('[getWtlNetworkStatusDipFilterOptions] saas', e);
+    }
+  }
+
+  return { pipeKinds, emds, years, saas };
+}
+
+function emptyAxisMatrix(axis: WtlNetworkAxisMode, statYear: number): WtlNetworkDipMatrix {
+  return {
+    axis,
+    statYear,
+    columns: [],
+    serviceYears: [],
+    rows: [
+      {
+        mopCode: '',
+        label: '총계',
+        isTotal: true,
+        total: 0,
+        lengths: {},
+        agedLength: 0,
+        agedRatio: 0,
+        nonCorrosionRatio: 0,
+        usefulLife: null,
+        avgAge: axis === 'year' ? 0 : null,
+      },
+    ],
+  };
+}
+
+/**
+ * mop × (관경|연도) 교차표 + 경년관·비내식·(연도축)연장가중 평균연령
+ * (ggnr WtlPipeStatisticsController axisMode=dip|year 와 동일 규칙)
+ */
+async function buildWtlNetworkStatusAxisMatrix(
+  axis: WtlNetworkAxisMode,
+  params: WtlNetworkDipMatrixParams = {}
+): Promise<WtlNetworkDipMatrix> {
+  const statYear = new Date().getFullYear();
+  const empty = emptyAxisMatrix(axis, statYear);
+  const logTag =
+    axis === 'year' ? 'getWtlNetworkStatusYearMatrix' : 'getWtlNetworkStatusDipMatrix';
+
+  /** 연도축에서는 매설년도 필터를 쓰지 않음(열이 연도) */
+  const filterParams: WtlNetworkDipMatrixParams =
+    axis === 'year' ? { ...params, years: null } : params;
+
+  const union = await buildPipeUnionSql(filterParams.pipeTables, filterParams.mapSources);
+  if (!union) return empty;
+  const filterSql = buildDipFilterSql(filterParams);
+
+  const lenExpr = `SUM(COALESCE(NULLIF(TRIM(byc_len::text), '')::numeric, 0))`;
+  const axisKeySql = axis === 'year' ? YEAR_KEY_SQL : DIP_KEY_SQL;
+
+  let axisRaw: Array<{ mop_key?: unknown; col_key?: unknown; byc_len?: number }> = [];
+  let yearRaw: Array<{ mop_key?: unknown; col_key?: unknown; byc_len?: number }> = [];
+  try {
+    const axisRes = await db.execute(
+      sql.raw(
+        `SELECT mop_key, col_key, ${lenExpr} AS byc_len
+         FROM (
+           SELECT ${MOP_KEY_SQL} AS mop_key, ${axisKeySql} AS col_key, byc_len, hjd_cde, saa_cde, ist_ymd
+           FROM (${union}) src
+         ) t
+         WHERE 1=1 ${filterSql}
+         GROUP BY mop_key, col_key`
+      )
+    );
+    axisRaw = (axisRes.rows ?? []) as typeof axisRaw;
+  } catch (e) {
+    console.error(`[${logTag}] mop×${axis}`, e);
+    return empty;
+  }
+
+  if (axis === 'dip') {
+    try {
+      const yearRes = await db.execute(
+        sql.raw(
+          `SELECT mop_key, col_key, ${lenExpr} AS byc_len
+           FROM (
+             SELECT ${MOP_KEY_SQL} AS mop_key, ${YEAR_KEY_SQL} AS col_key, byc_len, hjd_cde, saa_cde, ist_ymd
+             FROM (${union}) src
+           ) t
+           WHERE 1=1 ${filterSql}
+           GROUP BY mop_key, col_key`
+        )
+      );
+      yearRaw = (yearRes.rows ?? []) as typeof yearRaw;
+    } catch (e) {
+      console.error(`[${logTag}] mop×year(경년)`, e);
+    }
+  } else {
+    yearRaw = axisRaw;
+  }
+
+  const axisCols =
+    axis === 'year'
+      ? sortYearColumns([...new Set(axisRaw.map((r) => asStr(r.col_key)).filter(Boolean))])
+      : sortDipColumns([...new Set(axisRaw.map((r) => asStr(r.col_key)).filter(Boolean))]);
+
+  const axisMatrix = new Map<string, Map<string, number>>();
+  for (const row of axisRaw) {
+    const mop = asStr(row.mop_key) || '미분류';
+    const col = asStr(row.col_key);
+    if (!col || !axisCols.includes(col)) continue;
+    const len = Number(row.byc_len) || 0;
+    if (!axisMatrix.has(mop)) axisMatrix.set(mop, new Map());
+    const m = axisMatrix.get(mop)!;
+    m.set(col, (m.get(col) ?? 0) + len);
+  }
+
+  const yearMatrix = new Map<string, Map<string, number>>();
+  for (const row of yearRaw) {
+    const mop = asStr(row.mop_key) || '미분류';
+    const col = asStr(row.col_key);
+    if (!col) continue;
+    const len = Number(row.byc_len) || 0;
+    if (!yearMatrix.has(mop)) yearMatrix.set(mop, new Map());
+    const m = yearMatrix.get(mop)!;
+    m.set(col, (m.get(col) ?? 0) + len);
+  }
+
+  const mopOrder = sortMopKeys([...axisMatrix.keys()]).filter((mop) => {
+    let sum = 0;
+    for (const v of axisMatrix.get(mop)?.values() ?? []) sum += v;
+    return sum > 0;
+  });
+
+  const totalByCol = new Map<string, number>();
+  for (const col of axisCols) totalByCol.set(col, 0);
+  for (const mop of mopOrder) {
+    const cols = axisMatrix.get(mop)!;
+    for (const col of axisCols) {
+      totalByCol.set(col, (totalByCol.get(col) ?? 0) + (cols.get(col) ?? 0));
+    }
+  }
+
+  const buildLengths = (src: Map<string, number> | undefined): Record<string, number> => {
+    const out: Record<string, number> = {};
+    for (const col of axisCols) out[col] = round2(src?.get(col) ?? 0);
+    return out;
+  };
+
+  const sumMap = (src: Map<string, number> | undefined) => {
+    let s = 0;
+    if (!src) return 0;
+    for (const v of src.values()) s += v;
+    return s;
+  };
+
+  const bodyRows: WtlNetworkDipMatrixRow[] = mopOrder.map((mop) => {
+    const lengthsMap = axisMatrix.get(mop);
+    const total = sumMap(lengthsMap);
+    const life = usefulLifeForMop(mop);
+    const byYear = yearMatrix.get(mop) ?? new Map();
+    const aged = calcAgedLength(byYear, life, statYear);
+    const kor = mop === '미분류' ? '미분류' : mopLabel(mop);
+    return {
+      mopCode: mop,
+      label: kor === '—' ? mop : kor,
+      isTotal: false,
+      total: round2(total),
+      lengths: buildLengths(lengthsMap),
+      agedLength: round2(aged),
+      agedRatio: total > 0 ? round2((aged / total) * 100) : 0,
+      nonCorrosionRatio: null,
+      usefulLife: life,
+      avgAge: axis === 'year' ? calcAvgAge(byYear, statYear) : null,
+    };
+  });
+
+  let castIron = 0;
+  let agedSum = 0;
+  const totalYearMap = new Map<string, number>();
+  for (const mop of mopOrder) {
+    const rowTotal = sumMap(axisMatrix.get(mop));
+    if (CAST_IRON_MOPS.has(mop.trim().toUpperCase()) || categoryOfMop(mop) === '주철관') {
+      castIron += rowTotal;
+    }
+    for (const [y, len] of yearMatrix.get(mop) ?? []) {
+      totalYearMap.set(y, (totalYearMap.get(y) ?? 0) + len);
+    }
+  }
+  for (const row of bodyRows) agedSum += row.agedLength;
+
+  const grand = sumMap(totalByCol);
+  const totalRow: WtlNetworkDipMatrixRow = {
+    mopCode: '',
+    label: '총계',
+    isTotal: true,
+    total: round2(grand),
+    lengths: buildLengths(totalByCol),
+    agedLength: round2(agedSum),
+    agedRatio: grand > 0 ? round2((agedSum / grand) * 100) : 0,
+    nonCorrosionRatio: grand > 0 ? round2((castIron / grand) * 100) : 0,
+    usefulLife: null,
+    avgAge: axis === 'year' ? calcAvgAge(totalYearMap, statYear) : null,
+  };
+
+  const serviceYears =
+    axis === 'year' ? axisCols.map((col) => serviceYearOf(col, statYear)) : [];
+
+  return {
+    axis,
+    statYear,
+    columns: axisCols,
+    serviceYears,
+    rows: [totalRow, ...bodyRows],
+  };
+}
+
+/** 관경별 확대 모달 — mop × std_dip */
+export async function getWtlNetworkStatusDipMatrix(
+  params: WtlNetworkDipMatrixParams = {}
+): Promise<WtlNetworkDipMatrix> {
+  return buildWtlNetworkStatusAxisMatrix('dip', params);
+}
+
+/** 연도별 확대 모달 — mop × 매설년도 (+사용연수·연장가중 평균연령) */
+export async function getWtlNetworkStatusYearMatrix(
+  params: WtlNetworkYearMatrixParams = {}
+): Promise<WtlNetworkDipMatrix> {
+  return buildWtlNetworkStatusAxisMatrix('year', params);
+}
+
+function emptySaaMatrix(): WtlNetworkSaaMatrix {
+  return {
+    columns: [],
+    columnLabels: {},
+    rows: [
+      {
+        mopCode: '',
+        label: '총계',
+        isTotal: true,
+        total: 0,
+        lengths: {},
+      },
+    ],
+  };
+}
+
+/** 관용도별 확대 — mop_cde × saa_cde, 셀=연장 합 */
+export async function getWtlNetworkStatusSaaMatrix(
+  params: WtlNetworkSaaMatrixParams = {}
+): Promise<WtlNetworkSaaMatrix> {
+  const empty = emptySaaMatrix();
+  const union = await buildPipeUnionSql(params.pipeTables, params.mapSources);
+  if (!union) return empty;
+  const filterSql = buildSaaMatrixFilterSql(params);
+  const lenExpr = `SUM(COALESCE(NULLIF(TRIM(byc_len::text), '')::numeric, 0))`;
+
+  let raw: Array<{ mop_key?: unknown; saa_key?: unknown; byc_len?: number }> = [];
+  try {
+    const res = await db.execute(
+      sql.raw(
+        `SELECT mop_key, saa_key, ${lenExpr} AS byc_len
+         FROM (
+           SELECT ${MOP_KEY_SQL} AS mop_key, ${SAA_KEY_SQL} AS saa_key, byc_len, hjd_cde, ist_ymd, std_dip
+           FROM (${union}) src
+         ) t
+         WHERE 1=1 ${filterSql}
+         GROUP BY mop_key, saa_key`
+      )
+    );
+    raw = (res.rows ?? []) as typeof raw;
+  } catch (e) {
+    console.error('[getWtlNetworkStatusSaaMatrix]', e);
+    return empty;
+  }
+
+  const matrix = new Map<string, Map<string, number>>();
+  const saaCodes = new Set<string>();
+  for (const row of raw) {
+    const mop = asStr(row.mop_key) || '미분류';
+    const saa = asStr(row.saa_key) || '미분류';
+    const len = Number(row.byc_len) || 0;
+    saaCodes.add(saa);
+    if (!matrix.has(mop)) matrix.set(mop, new Map());
+    const m = matrix.get(mop)!;
+    m.set(saa, (m.get(saa) ?? 0) + len);
+  }
+
+  const columns = sortSaaKeys([...saaCodes]);
+  const columnLabels: Record<string, string> = {};
+  for (const c of columns) {
+    if (c === '미분류') columnLabels[c] = '미분류';
+    else {
+      const kor = saaLabel(c);
+      columnLabels[c] = kor === '—' ? c : kor;
+    }
+  }
+
+  const mopOrder = sortMopKeys([...matrix.keys()]).filter((mop) => {
+    let sum = 0;
+    for (const v of matrix.get(mop)?.values() ?? []) sum += v;
+    return sum > 0;
+  });
+
+  const buildLengths = (src: Map<string, number> | undefined): Record<string, number> => {
+    const out: Record<string, number> = {};
+    for (const col of columns) out[col] = round2(src?.get(col) ?? 0);
+    return out;
+  };
+  const sumMap = (src: Map<string, number> | undefined) => {
+    let s = 0;
+    if (!src) return 0;
+    for (const v of src.values()) s += v;
+    return s;
+  };
+
+  const bodyRows: WtlNetworkSaaMatrixRow[] = mopOrder.map((mop) => {
+    const lengthsMap = matrix.get(mop);
+    const total = sumMap(lengthsMap);
+    const kor = mop === '미분류' ? '미분류' : mopLabel(mop);
+    return {
+      mopCode: mop,
+      label: kor === '—' ? mop : kor,
+      isTotal: false,
+      total: round2(total),
+      lengths: buildLengths(lengthsMap),
+    };
+  });
+
+  const totalByCol = new Map<string, number>();
+  for (const col of columns) totalByCol.set(col, 0);
+  for (const mop of mopOrder) {
+    const cols = matrix.get(mop)!;
+    for (const col of columns) {
+      totalByCol.set(col, (totalByCol.get(col) ?? 0) + (cols.get(col) ?? 0));
+    }
+  }
+  const grand = sumMap(totalByCol);
+  const totalRow: WtlNetworkSaaMatrixRow = {
+    mopCode: '',
+    label: '총계',
+    isTotal: true,
+    total: round2(grand),
+    lengths: buildLengths(totalByCol),
+  };
+
+  return { columns, columnLabels, rows: [totalRow, ...bodyRows] };
 }
 
 /**
@@ -955,5 +2575,149 @@ export async function getWtlNetworkFilterMeta(params: {
     diameterMin: Math.min(dMin, dMax),
     diameterMax: Math.max(dMin, dMax),
     materials: materialChoicesFromBundle(bundle),
+  };
+}
+
+export type WtlNetworkExportScope = 'all' | 'filtered';
+
+export type ExportWtlNetworkShpParams = {
+  /** all=선택 레이어 전체(saa만), filtered=목록과 동일 검색조건 */
+  scope?: WtlNetworkExportScope | string | null;
+  layerKeys?: string[];
+  mapSources?: string[];
+  bbox?: number[] | null;
+  keyword?: string;
+  yearFrom?: number | null;
+  yearTo?: number | null;
+  diameterFrom?: number | null;
+  diameterTo?: number | null;
+  materials?: string[];
+  emdCode?: string | null;
+  riCode?: string | null;
+  supplyBlock?: string | null;
+  areaWkts5181?: string[] | null;
+};
+
+function safeShpEntryName(raw: string): string {
+  return (
+    String(raw ?? '')
+      .replace(/[\\/:*?"<>|]+/g, '_')
+      .replace(/\s+/g, '_')
+      .replace(/_+/g, '_')
+      .replace(/^_|_$/g, '')
+      .slice(0, 80) || 'layer'
+  );
+}
+
+/**
+ * 관망조회 SHP — 레이어관리 `/api/download/shp`와 동일 ogr 경로.
+ * 레이어가 여러 개면 zip 안에 레이어별 zip을 담아 반환.
+ */
+export async function exportWtlNetworkShpZip(
+  params: ExportWtlNetworkShpParams = {}
+): Promise<{ success: boolean; zipBuffer?: Buffer; fileName?: string; error?: string }> {
+  const scope: WtlNetworkExportScope =
+    String(params.scope ?? 'filtered').trim() === 'all' ? 'all' : 'filtered';
+  const keys = (params.layerKeys ?? []).map((k) => String(k).trim()).filter(Boolean);
+  if (keys.length === 0) return { success: false, error: '내보낼 레이어가 없습니다.' };
+
+  const sources = parseMapSourceIds(params.mapSources)
+    .map((id) => resolveWtlNetMapSource(id))
+    .filter((s): s is WtlNetMapSourceDef => Boolean(s));
+  if (sources.length === 0) return { success: false, error: '레이어 그룹이 없습니다.' };
+
+  const materialBundle =
+    scope === 'filtered' && (params.materials?.length ?? 0) > 0
+      ? await ensureMaterialTopBundle()
+      : null;
+
+  const filterOpts: ListFilterOpts =
+    scope === 'all'
+      ? {}
+      : {
+          bbox: params.bbox,
+          keyword: params.keyword,
+          yearFrom: params.yearFrom,
+          yearTo: params.yearTo,
+          diameterFrom: params.diameterFrom,
+          diameterTo: params.diameterTo,
+          materials: params.materials,
+          materialBundle,
+          emdCode: params.emdCode,
+          riCode: params.riCode,
+          supplyBlock: params.supplyBlock,
+          areaWkts5181: params.areaWkts5181,
+        };
+
+  const parts: Array<{ entryName: string; zipBuffer: Buffer }> = [];
+  const errors: string[] = [];
+
+  for (const source of sources) {
+    for (const key of keys) {
+      const def = getWtlNetLayerDef(key);
+      if (!def?.table) continue;
+      const physicalTable = source.remapTable(def.table);
+      if (!(await tableExists(physicalTable))) continue;
+      const sqlText = buildShpExportSql(def, physicalTable, filterOpts);
+      const layerName = safeShpEntryName(
+        `${source.id}_${def.defineTable || def.key || physicalTable}`
+      );
+      const result = await exportLayerTableToShp({
+        tableName: physicalTable,
+        schema: 'layer',
+        sql: sqlText,
+        layerName,
+      });
+      if (!result.success || !result.zipBuffer) {
+        errors.push(`${layerName}: ${result.error ?? '실패'}`);
+        continue;
+      }
+      parts.push({ entryName: `${layerName}.zip`, zipBuffer: result.zipBuffer });
+    }
+  }
+
+  if (parts.length === 0) {
+    return {
+      success: false,
+      error: errors[0] ?? '내보낼 SHP가 없습니다.',
+    };
+  }
+
+  const stamp = (() => {
+    const d = new Date();
+    const p = (n: number) => String(n).padStart(2, '0');
+    return (
+      `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}` +
+      `${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`
+    );
+  })();
+  const scopeTag = scope === 'all' ? '전체' : '조건';
+
+  if (parts.length === 1) {
+    return {
+      success: true,
+      zipBuffer: parts[0]!.zipBuffer,
+      fileName: `관망조회_${scopeTag}_${parts[0]!.entryName.replace(/\.zip$/i, '')}_${stamp}.zip`,
+    };
+  }
+
+  const chunks: Buffer[] = [];
+  const archive = archiver('zip', { zlib: { level: 9 } });
+  const out = new PassThrough();
+  out.on('data', (c: Buffer) => chunks.push(c));
+  archive.on('error', (err: unknown) => {
+    console.error('[exportWtlNetworkShpZip] archiver', err);
+  });
+  archive.pipe(out);
+  for (const part of parts) {
+    archive.append(part.zipBuffer, { name: part.entryName });
+  }
+  await archive.finalize();
+  await finished(out);
+
+  return {
+    success: true,
+    zipBuffer: Buffer.concat(chunks),
+    fileName: `관망조회_${scopeTag}_SHP_${stamp}.zip`,
   };
 }

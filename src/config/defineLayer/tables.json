@@ -672,6 +672,30 @@
     "define_table_source": "excel"
   },
   {
+    "define_table_name": "ue101",
+    "define_table_kor_name": "ue101",
+    "define_table_shp_type": "POLYGON",
+    "define_table_read_share": "P",
+    "define_table_write_share": "P",
+    "define_table_group": "",
+    "define_table_idx": "0",
+    "define_table_etc": "",
+    "define_table_schema": "public_layer",
+    "define_table_source": "shp"
+  },
+  {
+    "define_table_name": "ue301",
+    "define_table_kor_name": "ue301",
+    "define_table_shp_type": "POLYGON",
+    "define_table_read_share": "P",
+    "define_table_write_share": "P",
+    "define_table_group": "",
+    "define_table_idx": "0",
+    "define_table_etc": "",
+    "define_table_schema": "public_layer",
+    "define_table_source": "shp"
+  },
+  {
     "define_table_name": "uiseong_complaint_wtl",
     "define_table_kor_name": "uiseong_complaint_wtl",
     "define_table_shp_type": "POLYGON",
@@ -681,6 +705,90 @@
     "define_table_idx": "0",
     "define_table_etc": "",
     "define_table_schema": "layer",
+    "define_table_source": "shp"
+  },
+  {
+    "define_table_name": "um711",
+    "define_table_kor_name": "um711",
+    "define_table_shp_type": "POLYGON",
+    "define_table_read_share": "P",
+    "define_table_write_share": "P",
+    "define_table_group": "",
+    "define_table_idx": "0",
+    "define_table_etc": "",
+    "define_table_schema": "public_layer",
+    "define_table_source": "shp"
+  },
+  {
+    "define_table_name": "um712",
+    "define_table_kor_name": "um712",
+    "define_table_shp_type": "POLYGON",
+    "define_table_read_share": "P",
+    "define_table_write_share": "P",
+    "define_table_group": "",
+    "define_table_idx": "0",
+    "define_table_etc": "",
+    "define_table_schema": "public_layer",
+    "define_table_source": "shp"
+  },
+  {
+    "define_table_name": "un601",
+    "define_table_kor_name": "un601",
+    "define_table_shp_type": "POLYGON",
+    "define_table_read_share": "P",
+    "define_table_write_share": "P",
+    "define_table_group": "",
+    "define_table_idx": "0",
+    "define_table_etc": "",
+    "define_table_schema": "public_layer",
+    "define_table_source": "shp"
+  },
+  {
+    "define_table_name": "uq101",
+    "define_table_kor_name": "uq101",
+    "define_table_shp_type": "POLYGON",
+    "define_table_read_share": "P",
+    "define_table_write_share": "P",
+    "define_table_group": "",
+    "define_table_idx": "0",
+    "define_table_etc": "",
+    "define_table_schema": "public_layer",
+    "define_table_source": "shp"
+  },
+  {
+    "define_table_name": "uq111",
+    "define_table_kor_name": "uq111",
+    "define_table_shp_type": "POLYGON",
+    "define_table_read_share": "P",
+    "define_table_write_share": "P",
+    "define_table_group": "",
+    "define_table_idx": "0",
+    "define_table_etc": "",
+    "define_table_schema": "public_layer",
+    "define_table_source": "shp"
+  },
+  {
+    "define_table_name": "uq112",
+    "define_table_kor_name": "uq112",
+    "define_table_shp_type": "POLYGON",
+    "define_table_read_share": "P",
+    "define_table_write_share": "P",
+    "define_table_group": "",
+    "define_table_idx": "0",
+    "define_table_etc": "",
+    "define_table_schema": "public_layer",
+    "define_table_source": "shp"
+  },
+  {
+    "define_table_name": "uq171",
+    "define_table_kor_name": "uq171",
+    "define_table_shp_type": "POLYGON",
+    "define_table_read_share": "P",
+    "define_table_write_share": "P",
+    "define_table_group": "",
+    "define_table_idx": "0",
+    "define_table_etc": "",
+    "define_table_schema": "public_layer",
     "define_table_source": "shp"
   },
   {
@@ -1315,6 +1423,42 @@
     "define_table_write_share": "P",
     "define_table_group": "군도",
     "define_table_idx": "0",
+    "define_table_etc": "",
+    "define_table_schema": "layer",
+    "define_table_source": "shp"
+  },
+  {
+    "define_table_name": "wtl_wtsa_as",
+    "define_table_kor_name": "급수구역도",
+    "define_table_shp_type": "POLYGON",
+    "define_table_read_share": "P",
+    "define_table_write_share": "P",
+    "define_table_group": "급수구역",
+    "define_table_idx": "5700",
+    "define_table_etc": "",
+    "define_table_schema": "layer",
+    "define_table_source": "shp"
+  },
+  {
+    "define_table_name": "wtl_wtssa_as",
+    "define_table_kor_name": "급수분구",
+    "define_table_shp_type": "POLYGON",
+    "define_table_read_share": "P",
+    "define_table_write_share": "P",
+    "define_table_group": "급수구역",
+    "define_table_idx": "5710",
+    "define_table_etc": "",
+    "define_table_schema": "layer",
+    "define_table_source": "shp"
+  },
+  {
+    "define_table_name": "wtl_wtsba_as",
+    "define_table_kor_name": "급수블록",
+    "define_table_shp_type": "POLYGON",
+    "define_table_read_share": "P",
+    "define_table_write_share": "P",
+    "define_table_group": "급수구역",
+    "define_table_idx": "5720",
     "define_table_etc": "",
     "define_table_schema": "layer",
     "define_table_source": "shp"
@@ -11318,6 +11462,18 @@
     "define_table_idx": "0",
     "define_table_etc": "",
     "define_table_schema": "layer",
+    "define_table_source": "shp"
+  },
+  {
+    "define_table_name": "ub960",
+    "define_table_kor_name": "ub960",
+    "define_table_shp_type": "POLYGON",
+    "define_table_read_share": "P",
+    "define_table_write_share": "P",
+    "define_table_group": "",
+    "define_table_idx": "0",
+    "define_table_etc": "",
+    "define_table_schema": "public_layer",
     "define_table_source": "shp"
   }
 ]

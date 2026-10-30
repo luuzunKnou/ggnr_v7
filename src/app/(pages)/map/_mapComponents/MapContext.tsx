@@ -111,6 +111,15 @@ export type MapContextValue = {
   addressParcelSeedGeom4326Ref: MutableRefObject<Record<string, unknown> | null>;
   /** 전체 레이어 끄기(지적도·건물도로·기초구간 + defineLayer 레이어) 콜백. OpenLayersMap에서 등록 */
   allLayersOffRef: MutableRefObject<(() => void) | null>;
+  /** 관망조회 표시 레이어 선택 초기화. WtlNetworkMapShell에서 등록, allLayersOff 시 호출 */
+  wtlNetworkLayersOffRef: MutableRefObject<(() => void) | null>;
+  /**
+   * 관망조회 보호구역 → 주제도 선택 동기화.
+   * OpenLayersMap에서 등록, WtlNetworkMapShell에서 호출.
+   */
+  wtlNetworkThematicSyncRef: MutableRefObject<{
+    applyManaged: (wanted: ReadonlySet<string>, managed: ReadonlySet<string>) => void;
+  } | null>;
   /** 도형 내 데이터만 표시할 때 사용. WKT(5181). null이면 공간 필터 없음 */
   spatialFilterWkt: string | null;
   setSpatialFilterWkt: Dispatch<SetStateAction<string | null>>;
@@ -131,11 +140,11 @@ export type MapContextValue = {
   setServiceWmsStyleByLayer: Dispatch<SetStateAction<Record<string, string> | null>>;
   /** 레이어 목록에서 도형 그리기 요청. OpenLayersMap에서 구독 후 Draw 추가, 완료 시 onComplete 호출 후 null로 초기화 */
   spatialDrawRequest: {
-    type: 'rectangle' | 'polygon' | 'circle';
+    type: 'rectangle' | 'polygon' | 'circle' | 'line';
     onComplete: (wkt5181: string) => void;
   } | null;
   setSpatialDrawRequest: Dispatch<SetStateAction<{
-    type: 'rectangle' | 'polygon' | 'circle';
+    type: 'rectangle' | 'polygon' | 'circle' | 'line';
     onComplete: (wkt5181: string) => void;
   } | null>>;
   /** 거리/면적 등 측정 도구가 켜져 있는지. OpenLayersMap에서 동기화. 레이어 목록 도형 그리기와 배타 */
@@ -637,6 +646,10 @@ const MapContext = createContext<MapContextValue | null>(null);
 export function MapContextProvider({ children }: { children: React.ReactNode }) {
   const mapInstanceRef = useRef<Map | null>(null);
   const allLayersOffRef = useRef<(() => void) | null>(null);
+  const wtlNetworkLayersOffRef = useRef<(() => void) | null>(null);
+  const wtlNetworkThematicSyncRef = useRef<{
+    applyManaged: (wanted: ReadonlySet<string>, managed: ReadonlySet<string>) => void;
+  } | null>(null);
   const [showDebugUi, setShowDebugUi] = useState(false);
   const [visibleLayerNames, setVisibleLayerNames] = useState<Set<string>>(() => new Set());
   const [selectedDetail, setSelectedDetail] = useState<SelectedDetail>(null);
@@ -651,7 +664,7 @@ export function MapContextProvider({ children }: { children: React.ReactNode }) 
   const [serviceWmsCqlByLayer, setServiceWmsCqlByLayer] = useState<Record<string, string> | null>(null);
   const [serviceWmsStyleByLayer, setServiceWmsStyleByLayer] = useState<Record<string, string> | null>(null);
   const [spatialDrawRequest, setSpatialDrawRequest] = useState<{
-    type: 'rectangle' | 'polygon' | 'circle';
+    type: 'rectangle' | 'polygon' | 'circle' | 'line';
     onComplete: (wkt5181: string) => void;
   } | null>(null);
   const [measurementActive, setMeasurementActive] = useState(false);
@@ -930,6 +943,8 @@ export function MapContextProvider({ children }: { children: React.ReactNode }) 
         addressParcelGeometryRef,
         addressParcelSeedGeom4326Ref,
         allLayersOffRef,
+        wtlNetworkLayersOffRef,
+        wtlNetworkThematicSyncRef,
         spatialFilterWkt,
         setSpatialFilterWkt,
         spatialFilteredLayerNames,

@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { ListChevronsUpDown, UnfoldHorizontal } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { useTheme } from '@/app/(pages)/(index)/theme-provider';
+import { useResolvedThemeSafe } from '@/app/(pages)/(index)/theme-provider';
 import {
   MAP_SPLIT_ANIM_MS,
   MAP_SPLIT_CONTROL_BTN_GAP_PX,
@@ -226,8 +226,7 @@ export function MapSplitterGutter({
   mapPaddingLeft = 0,
   mapPaddingRight = MAP_SPLIT_CONTROL_RIGHT_MENU_RESERVE_PX,
 }: MapSplitterGutterProps) {
-  const { resolvedTheme } = useTheme();
-  const isDark = resolvedTheme === 'dark';
+  const isDark = useResolvedThemeSafe() === 'dark';
   const isHorizontal = orientation === 'horizontal';
   /** 좌우 분할 → 세로 거터 → 버튼 세로 나열 / 상하 분할 → 가로 나열 */
   const stackAlongGutter = isHorizontal;

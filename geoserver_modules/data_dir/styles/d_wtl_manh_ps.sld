@@ -1,5 +1,4 @@
-<?xml version='1.0' encoding='UTF-8'?>
-<sld:StyledLayerDescriptor xmlns="http://www.opengis.net/sld" xmlns:sld="http://www.opengis.net/sld" xmlns:gml="http://www.opengis.net/gml" xmlns:ogc="http://www.opengis.net/ogc" version="1.0.0">
+<?xml version="1.0" encoding="UTF-8"?><sld:StyledLayerDescriptor xmlns="http://www.opengis.net/sld" xmlns:sld="http://www.opengis.net/sld" xmlns:gml="http://www.opengis.net/gml" xmlns:ogc="http://www.opengis.net/ogc" version="1.0.0">
   <sld:NamedLayer>
     <sld:Name>Default Styler</sld:Name>
     <sld:UserStyle>
@@ -12,11 +11,12 @@
           <sld:Name>Name</sld:Name>
           <sld:Title>d_wtl_manh_ps</sld:Title>
           <sld:Abstract>Abstract</sld:Abstract>
+          <sld:MaxScaleDenominator>3000.0</sld:MaxScaleDenominator>
           <sld:PointSymbolizer>
             <sld:Graphic>
               <sld:ExternalGraphic>
-                <sld:OnlineResource xmlns:xlink="http://www.w3.org/1999/xlink" xlink:type="simple" xlink:href="/www/symbol/water/wtl_manh_ps.png"/>
-                <sld:Format>image/png</sld:Format>
+                <sld:OnlineResource xmlns:xlink="http://www.w3.org/1999/xlink" xlink:type="simple" xlink:href="/www/symbol/water/wtl_manh_ps.svg"/>
+                <sld:Format>image/svg+xml</sld:Format>
               </sld:ExternalGraphic>
               <sld:Size>
                 <ogc:Function name="if_then_else">
@@ -35,17 +35,13 @@
                     <ogc:Function name="env">
                       <ogc:Literal>wms_scale_denominator</ogc:Literal>
                     </ogc:Function>
-                    <ogc:Literal>18</ogc:Literal>
+                    <ogc:Literal>24</ogc:Literal>
+                    <ogc:Literal>500</ogc:Literal>
+                    <ogc:Literal>22</ogc:Literal>
+                    <ogc:Literal>800</ogc:Literal>
+                    <ogc:Literal>20</ogc:Literal>
                     <ogc:Literal>1500</ogc:Literal>
-                    <ogc:Literal>13</ogc:Literal>
-                    <ogc:Literal>3000</ogc:Literal>
-                    <ogc:Literal>10</ogc:Literal>
-                    <ogc:Literal>5000</ogc:Literal>
-                    <ogc:Literal>7</ogc:Literal>
-                    <ogc:Literal>10000</ogc:Literal>
-                    <ogc:Literal>6</ogc:Literal>
-                    <ogc:Literal>30000</ogc:Literal>
-                    <ogc:Literal>4</ogc:Literal>
+                    <ogc:Literal>18</ogc:Literal>
                   </ogc:Function>
                 </ogc:Function>
               </sld:Size>
@@ -67,6 +63,7 @@
               <ogc:Literal>0</ogc:Literal>
             </ogc:PropertyIsGreaterThan>
           </ogc:Filter>
+          <sld:MaxScaleDenominator>3000.0</sld:MaxScaleDenominator>
           <sld:TextSymbolizer>
             <sld:Label>
               <ogc:Function name="property">
@@ -88,7 +85,7 @@
               <sld:CssParameter name="font-weight">
                 <ogc:Function name="env">
                   <ogc:Literal>d_wtl_manh_ps_label_font_weight</ogc:Literal>
-                  <ogc:Literal>normal</ogc:Literal>
+                  <ogc:Literal>bold</ogc:Literal>
                 </ogc:Function>
               </sld:CssParameter>
             </sld:Font>
@@ -108,7 +105,7 @@
               <sld:Radius>
                 <ogc:Function name="env">
                   <ogc:Literal>d_wtl_manh_ps_label_halo_radius</ogc:Literal>
-                  <ogc:Literal>1</ogc:Literal>
+                  <ogc:Literal>2</ogc:Literal>
                 </ogc:Function>
               </sld:Radius>
               <sld:Fill>
@@ -134,9 +131,12 @@
                 </ogc:Function>
               </sld:CssParameter>
             </sld:Fill>
+            <sld:VendorOption name="goodnessOfFit">0</sld:VendorOption>
+            <sld:VendorOption name="priority">20</sld:VendorOption>
           </sld:TextSymbolizer>
         </sld:Rule>
       </sld:FeatureTypeStyle>
     </sld:UserStyle>
   </sld:NamedLayer>
 </sld:StyledLayerDescriptor>
+

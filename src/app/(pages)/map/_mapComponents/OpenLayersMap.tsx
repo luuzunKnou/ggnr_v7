@@ -1096,14 +1096,32 @@ export default function OpenLayersMap({
   // 데이터 조회 → 지하시설물 선택 동기화
   useEffect(() => {
     if (!restored || undergroundFacilityCatalogLoading) return;
-    // 부서업무 전환으로 서비스 레이어만 비운 경우에는 우측 지하시설물을 끄지 않음
-    if (visibleLayerNames.size === 0) return;
+    // visible 전무 → 지하시설물도 끔 (전체 끄기·관망 동기화)
+    if (visibleLayerNames.size === 0) {
+      setVisibleUndergroundFacilityLayerNames((prev) =>
+        prev != null && prev.size === 0 ? prev : new Set()
+      );
+      return;
+    }
     const fromVisible = pickUndergroundFacilityFromVisible(
       visibleLayerNames,
       undergroundFacilityAvailableTableNames
     );
     setVisibleUndergroundFacilityLayerNames((prev) => {
       if (prev != null && sameStringSet(prev, fromVisible)) return prev;
+      // 카탈로그에 없는 이름(급수구역 등)만 visible에 남은 경우
+      // 빈 집합으로 덮으면 기존 관로·시설 레이어까지 꺼짐 → 기존 선택 유지.
+      // 단, visible에서 이전 UF 선택이 이미 빠진 경우(출처 전환 등)는 유지하지 않음.
+      if (fromVisible.size === 0 && prev != null && prev.size > 0) {
+        let prevStillInVisible = false;
+        for (const n of prev) {
+          if (visibleLayerNames.has(n)) {
+            prevStillInVisible = true;
+            break;
+          }
+        }
+        if (prevStillInVisible) return prev;
+      }
       return fromVisible;
     });
     if (fromVisible.size === 0) return;
@@ -1509,9 +1527,44 @@ export default function OpenLayersMap({
       setAerialViewCheckedIds(new Set());
       setAerialPanelOpen(false);
       setIsAerialViewPanelExiting(false);
+      mapContextRef.current?.wtlNetworkLayersOffRef?.current?.();
     };
     return () => {
       if (offRef) offRef.current = null;
+    };
+  }, []);
+
+  /** 관망조회 보호구역 → 주제도 패널 선택 동기화 */
+  useEffect(() => {
+    const syncRef = mapContextRef.current?.wtlNetworkThematicSyncRef;
+    if (!syncRef) return;
+    syncRef.current = {
+      applyManaged: (wanted, managed) => {
+        setVisibleThematicLayerNames((prev) => {
+          const next = new Set(prev ?? []);
+          for (const n of managed) next.delete(n);
+          for (const n of wanted) next.add(n);
+          if (next.size === (prev?.size ?? 0)) {
+            let same = true;
+            for (const n of next) {
+              if (!prev?.has(n)) {
+                same = false;
+                break;
+              }
+            }
+            if (same) return prev;
+          }
+          return next;
+        });
+        if (wanted.size > 0) {
+          setActiveControls((prev) =>
+            prev.includes('thematic-map') ? prev : [...prev, 'thematic-map']
+          );
+        }
+      },
+    };
+    return () => {
+      syncRef.current = null;
     };
   }, []);
 

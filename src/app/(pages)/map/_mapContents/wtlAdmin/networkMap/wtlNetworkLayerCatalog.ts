@@ -18,9 +18,9 @@ export const WTL_NET_LAYER_KEYS = [
   'wtl_fire_ps',
   'wtl_flow_ps',
   'wtl_prga_ps',
-  'ê¸ìêµ¬ì­',
-  'ê¸ìë¶êµ¬',
-  'ê¸ìë¸ë¡',
+  'wtl_wtsa_as',
+  'wtl_wtssa_as',
+  'wtl_wtsba_as',
   'wtl_meta_ps',
   'ììì ë³´í¸êµ¬ì­',
   'ê³µì¥ì¤ë¦½ ì íì§ì­',
@@ -204,9 +204,42 @@ export const WTL_NET_LAYER_DEFS: readonly WtlNetLayerDef[] = [
     lengthCol: null,
     yearCol: 'ist_ymd',
   },
-  { key: 'ê¸ìêµ¬ì­', table: null, geomKind: 'area' },
-  { key: 'ê¸ìë¶êµ¬', table: null, geomKind: 'area' },
-  { key: 'ê¸ìë¸ë¡', table: null, geomKind: 'area' },
+  {
+    key: 'wtl_wtsa_as',
+    table: 'wtl_wtsa_as',
+    defineTable: 'wtl_wtsa_as',
+    geomKind: 'area',
+    nameExpr: `COALESCE(NULLIF(trim(wsg_nam),''), NULLIF(trim(ftr_idn::text),''), ogc_fid::text)`,
+    diameterCol: null,
+    materialCol: null,
+    lengthCol: null,
+    yearCol: null,
+    hasHjd: false,
+  },
+  {
+    key: 'wtl_wtssa_as',
+    table: 'wtl_wtssa_as',
+    defineTable: 'wtl_wtssa_as',
+    geomKind: 'area',
+    nameExpr: `COALESCE(NULLIF(trim(wsb_nam),''), NULLIF(trim(ftr_idn::text),''), ogc_fid::text)`,
+    diameterCol: null,
+    materialCol: null,
+    lengthCol: null,
+    yearCol: null,
+    hasHjd: false,
+  },
+  {
+    key: 'wtl_wtsba_as',
+    table: 'wtl_wtsba_as',
+    defineTable: 'wtl_wtsba_as',
+    geomKind: 'area',
+    nameExpr: `COALESCE(NULLIF(trim(wbb_nam),''), NULLIF(trim(ftr_idn::text),''), ogc_fid::text)`,
+    diameterCol: null,
+    materialCol: null,
+    lengthCol: null,
+    yearCol: null,
+    hasHjd: false,
+  },
   {
     key: 'wtl_meta_ps',
     table: 'wtl_meta_ps',
@@ -270,10 +303,73 @@ export type WtlNetWmsSearchFilter = {
   diameterTo?: number | null
   materials?: readonly string[]
   keyword?: string
+  /** 급수블록명 — 급수블록 레이어는 wbb_nam 속성필터(경계 접침 INTERSECTS 오탐 방지·저부하) */
+  supplyBlock?: string | null
+  /** EPSG:5181 WKT — 읍면동·리·급수블록 등. 여러 개면 AND */
+  areaWkts5181?: readonly string[] | null
+}
+
+function isWtlSupplyBlockLayerDef(def: WtlNetLayerDef): boolean {
+  const names = [def.key, def.table, def.defineTable]
+    .map((v) => String(v ?? '').trim().toLowerCase())
+    .filter(Boolean)
+  return names.some((n) => n === 'wtl_wtsba_as' || n.endsWith('_wtl_wtsba_as'))
+}
+
+/** 급수구역·급수분구 — 블록/행정경계보다 커 WITHIN(구역⊂필터)이면 탈락 → INTERSECTS·포함 관계 사용 */
+export function isWtlSupplyZoneOrSubzoneLayerDef(def: WtlNetLayerDef): boolean {
+  const names = [def.key, def.table, def.defineTable]
+    .map((v) => String(v ?? '').trim().toLowerCase())
+    .filter(Boolean)
+  return names.some(
+    (n) =>
+      n === 'wtl_wtsa_as' ||
+      n.endsWith('_wtl_wtsa_as') ||
+      n === 'wtl_wtssa_as' ||
+      n.endsWith('_wtl_wtssa_as')
+  )
 }
 
 function escCql(s: string): string {
   return String(s).replace(/'/g, "''")
+}
+
+/** 급수구역 — 출처(상수/대진)와 무관, 관망조회 전용 WMS로 표시 */
+export const WTL_NET_ZONE_LAYER_KEYS = [
+  'wtl_wtsa_as',
+  'wtl_wtssa_as',
+  'wtl_wtsba_as',
+] as const
+
+export function isWtlNetZoneLayerKey(key: string): boolean {
+  const k = String(key ?? '').trim().toLowerCase()
+  return (WTL_NET_ZONE_LAYER_KEYS as readonly string[]).some((z) => z === k)
+}
+
+/** 지하 레이어 tableName ↔ 켜진 관망 키 매칭 (remap·saa 분할 포함) */
+export function matchWtlNetLayerDefForTable(
+  tableName: string,
+  activeKeys: ReadonlySet<string>
+): WtlNetLayerDef | undefined {
+  const t = String(tableName ?? '')
+    .trim()
+    .toLowerCase()
+  if (!t) return undefined
+  for (const key of activeKeys) {
+    const def = getWtlNetLayerDef(key)
+    if (!def) continue
+    if (key.toLowerCase() === t) return def
+    const defineTable = String(def.defineTable ?? '')
+      .trim()
+      .toLowerCase()
+    if (defineTable && defineTable === t) return def
+    const base = String(def.table ?? '')
+      .trim()
+      .toLowerCase()
+    if (!base) continue
+    if (base === t || t.endsWith(`_${base}`) || t.endsWith(base)) return def
+  }
+  return undefined
 }
 
 /** 검색 조건 → 레이어별 ECQL 조각 (saa 조건과 AND) */
@@ -286,6 +382,35 @@ export function buildWtlNetSearchCql(
   const dipCol = def.diameterCol
   const mopCol = def.materialCol
   const yearCol = def.yearCol
+
+  const supplyBlock = String(filter.supplyBlock ?? '').trim()
+  if (supplyBlock && isWtlSupplyBlockLayerDef(def)) {
+    // 속성 일치 — 인접 블록이 경계만 맞닿아 INTERSECTS로 남는 문제·WKT 부하 회피
+    parts.push(`wbb_nam='${escCql(supplyBlock)}'`)
+  } else {
+    const areaWkts = (filter.areaWkts5181 ?? [])
+      .map((raw) => String(raw ?? '').trim())
+      .filter(Boolean)
+    if (isWtlSupplyZoneOrSubzoneLayerDef(def) && areaWkts.length > 0) {
+      // 구역·분구는 블록보다 큼 → WITHIN(구역⊂블록) 불가.
+      // Shell 적재 순서: [행정경계?] + [급수블록?] — 블록 선택 시 마지막 WKT가 블록.
+      if (supplyBlock) {
+        for (const wkt of areaWkts.slice(0, -1)) {
+          parts.push(`INTERSECTS(geom, ${wkt})`)
+        }
+        parts.push(`CONTAINS(geom, ${areaWkts[areaWkts.length - 1]})`)
+      } else {
+        for (const wkt of areaWkts) {
+          parts.push(`INTERSECTS(geom, ${wkt})`)
+        }
+      }
+    } else {
+      for (const wkt of areaWkts) {
+        // WITHIN: 경계만 접한 도형 제외 (관로·시설)
+        parts.push(`WITHIN(geom, ${wkt})`)
+      }
+    }
+  }
 
   if (
     dipCol &&

@@ -10,7 +10,9 @@ import VectorLayer from 'ol/layer/Vector';
 import ImageWMS from 'ol/source/ImageWMS';
 import VectorSource from 'ol/source/Vector';
 import { Fill, Stroke, Style } from 'ol/style';
+import LineString from 'ol/geom/LineString';
 import Polygon from 'ol/geom/Polygon';
+import type { Coordinate } from 'ol/coordinate';
 import type { Extent } from 'ol/extent';
 import { toLonLat } from 'ol/proj';
 import Draw, { createBox } from 'ol/interaction/Draw';
@@ -21,6 +23,15 @@ import { WORKSPACE } from '@/app/(pages)/map/_mapComponents/layerFactory/service
 import { getGeoServerBase } from '@/lib/geoserverUrl';
 import { geoserverWmsImageLoadFunction } from '@/lib/geoserverWmsImageLoad';
 import { call } from '@/lib/api';
+import { WTL_LAYER_SHAPE_DEFS } from '@/lib/wtlLayerShapeDefs';
+import type { GroundDrawMode, GroundSectionLine } from './shapeTypes';
+import {
+  SECTION_DEFAULT_HALF_WIDTH_M,
+  normalizeSectionLineLTR,
+  sectionCoverRadiusM,
+  sectionRectCenter3857,
+  suggestSectionHalfWidthM,
+} from './groundSection';
 import 'ol/ol.css';
 
 /** 지표 m → EPSG:3857 오프셋 (위도 보정) */
@@ -53,6 +64,50 @@ function squareAround(center3857: [number, number], halfM: number): Polygon {
   ]);
 }
 
+/**
+ * 절단선=밑변인 사각형.
+ * 좌→우 정규화 후 A–B 밑변, 진행 왼쪽(수직)으로 depthM 만큼 뻗음.
+ */
+function rectFromBaseLine(
+  start: Coordinate,
+  end: Coordinate,
+  depthM: number
+): Polygon {
+  const normalized = normalizeSectionLineLTR({
+    start3857: [start[0]!, start[1]!],
+    end3857: [end[0]!, end[1]!],
+    halfWidthM: depthM,
+  });
+  const ax = normalized.start3857[0];
+  const ay = normalized.start3857[1];
+  const bx = normalized.end3857[0];
+  const by = normalized.end3857[1];
+  const mx = (ax + bx) / 2;
+  const my = (ay + by) / 2;
+  const center: [number, number] = [mx, my];
+  let dx = bx - ax;
+  let dy = by - ay;
+  const len = Math.hypot(dx, dy);
+  if (len < 1e-6) {
+    return squareAround(center, Math.max(1, depthM));
+  }
+  dx /= len;
+  dy /= len;
+  const depth = metersToMercator(center, depthM);
+  // 좌→우 진행 왼쪽
+  const ox = -dy * depth;
+  const oy = dx * depth;
+  return new Polygon([
+    [
+      [ax, ay],
+      [bx, by],
+      [bx + ox, by + oy],
+      [ax + ox, ay + oy],
+      [ax, ay],
+    ],
+  ]);
+}
+
 /** 그린 사각형 extent → 중심 + 덮는 정사각 반경(m) */
 function extentToCenterRadius(extent: Extent): {
   center: [number, number];
@@ -67,20 +122,31 @@ function extentToCenterRadius(extent: Extent): {
   const center: [number, number] = [cx, cy];
   const halfXM = mercatorToMeters(center, (maxx - minx) / 2);
   const halfYM = mercatorToMeters(center, (maxy - miny) / 2);
-  // 최소 반경 1m(한 변 2m) — 그리기 범위를 그대로 반영
   const radiusM = Math.max(1, Math.min(2000, Math.max(halfXM, halfYM)));
   return { center, radiusM };
 }
 
+function lineLengthM(start: Coordinate, end: Coordinate): number {
+  const center: [number, number] = [
+    (start[0]! + end[0]!) / 2,
+    (start[1]! + end[1]!) / 2,
+  ];
+  return mercatorToMeters(center, Math.hypot(end[0]! - start[0]!, end[1]! - start[1]!));
+}
+
 export type GroundPickResult = {
+  mode: GroundDrawMode;
   center: [number, number];
   radiusM: number;
+  sectionLine?: GroundSectionLine;
 };
 
 type Props = {
+  drawMode: GroundDrawMode;
   /** EPSG:3857 — 선택 후 중심 */
   center: [number, number] | null;
   radiusM: number;
+  sectionLine?: GroundSectionLine | null;
   onPick: (result: GroundPickResult) => void;
 };
 
@@ -89,6 +155,10 @@ const DEFAULT_CENTER: [number, number] = [14135027, 4517000];
 const DRAW_STYLE = new Style({
   stroke: new Stroke({ color: 'rgba(59,130,246,0.9)', width: 2 }),
   fill: new Fill({ color: 'rgba(59,130,246,0.12)' }),
+});
+
+const LINE_STYLE = new Style({
+  stroke: new Stroke({ color: 'rgba(234,179,8,0.95)', width: 3 }),
 });
 
 /** 메인 지도와 동일 — GeoServer 테이블명 = 스타일명 */
@@ -125,8 +195,14 @@ function createNamedWmsLayer(opts: {
   return layer;
 }
 
-/** 지형·관로 범위 — 지도에서 사각형 드래그 (createBox) */
-export function GroundPickMap({ center, radiusM, onPick }: Props) {
+/** 지형 범위 — 사각형 드래그 또는 라인(단면도) */
+export function GroundPickMap({
+  drawMode,
+  center,
+  radiusM,
+  sectionLine,
+  onPick,
+}: Props) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<Map | null>(null);
   const markerSrcRef = useRef<VectorSource | null>(null);
@@ -143,7 +219,11 @@ export function GroundPickMap({ center, radiusM, onPick }: Props) {
     markerSrcRef.current = markerSrc;
     const markerLayer = new VectorLayer({
       source: markerSrc,
-      style: DRAW_STYLE,
+      style: (feat) => {
+        const kind = feat.get('kind');
+        if (kind === 'line') return LINE_STYLE;
+        return DRAW_STYLE;
+      },
       zIndex: 20,
     });
 
@@ -166,14 +246,6 @@ export function GroundPickMap({ center, radiusM, onPick }: Props) {
       zIndex: 6,
     });
 
-    const pipeLayer = createNamedWmsLayer({
-      tableName: 'wtl_pipe_lm',
-      layerName: '상수관로',
-      minZoom: 12,
-      maxZoom: 22,
-      zIndex: 8,
-    });
-
     const riverLocalLayer = createNamedWmsLayer({
       tableName: 'river_plan_as',
       layerName: '지방하천',
@@ -190,6 +262,17 @@ export function GroundPickMap({ center, radiusM, onPick }: Props) {
       zIndex: 7,
     });
 
+    // Three.js 상수 도형 레이어 전부 (분할·심도점 제외)
+    const wtlShapeLayers = WTL_LAYER_SHAPE_DEFS.map((def, i) =>
+      createNamedWmsLayer({
+        tableName: def.table,
+        layerName: def.label,
+        minZoom: 12,
+        maxZoom: 22,
+        zIndex: 8 + i,
+      })
+    );
+
     const map = new Map({
       target: host,
       layers: [
@@ -198,7 +281,7 @@ export function GroundPickMap({ center, radiusM, onPick }: Props) {
         emdLayer,
         riverLocalLayer,
         riverSmallLayer,
-        pipeLayer,
+        ...wtlShapeLayers,
         markerLayer,
       ],
       view: new View({
@@ -212,32 +295,85 @@ export function GroundPickMap({ center, radiusM, onPick }: Props) {
     });
     mapRef.current = map;
 
-    // 기존 공간검색·촬영범위와 동일 — Circle + createBox = 사각형 드래그
-    const draw = new Draw({
-      source: markerSrc,
-      type: 'Circle',
-      geometryFunction: createBox(),
-      style: DRAW_STYLE,
-      stopClick: true,
-    });
+    const draw =
+      drawMode === 'section'
+        ? new Draw({
+            source: markerSrc,
+            type: 'LineString',
+            maxPoints: 2,
+            style: LINE_STYLE,
+            stopClick: true,
+          })
+        : new Draw({
+            source: markerSrc,
+            type: 'Circle',
+            geometryFunction: createBox(),
+            style: DRAW_STYLE,
+            stopClick: true,
+          });
+
     draw.on('drawstart', () => {
       markerSrc.clear();
     });
     draw.on('drawend', (ev) => {
       const geom = ev.feature.getGeometry();
       if (!geom) return;
-      const extent = geom.getExtent();
-      const result = extentToCenterRadius(extent);
-      // 그린 도형 대신 생성에 쓰는 정사각으로 맞춤
       skipFitRef.current = true;
       markerSrc.clear();
+
+      if (drawMode === 'section' && geom instanceof LineString) {
+        const coords = geom.getCoordinates();
+        if (coords.length < 2) return;
+        const start = coords[0]!;
+        const end = coords[coords.length - 1]!;
+        const lenM = lineLengthM(start, end);
+        if (lenM < 1) return;
+        const halfWidthM = suggestSectionHalfWidthM(lenM);
+        const section = normalizeSectionLineLTR({
+          start3857: [start[0]!, start[1]!],
+          end3857: [end[0]!, end[1]!],
+          halfWidthM,
+        });
+        const center = sectionRectCenter3857(section);
+        const coverR = sectionCoverRadiusM(section);
+        markerSrc.addFeature(
+          new Feature({
+            geometry: rectFromBaseLine(
+              section.start3857,
+              section.end3857,
+              halfWidthM
+            ),
+            kind: 'extent',
+          })
+        );
+        markerSrc.addFeature(
+          new Feature({
+            geometry: new LineString([section.start3857, section.end3857]),
+            kind: 'line',
+          })
+        );
+        onPickRef.current({
+          mode: 'section',
+          center,
+          radiusM: coverR,
+          sectionLine: section,
+        });
+        return;
+      }
+
+      const extent = geom.getExtent();
+      const result = extentToCenterRadius(extent);
       markerSrc.addFeature(
         new Feature({
           geometry: squareAround(result.center, result.radiusM),
           kind: 'extent',
         })
       );
-      onPickRef.current(result);
+      onPickRef.current({
+        mode: 'extent',
+        center: result.center,
+        radiusM: result.radiusM,
+      });
     });
     map.addInteraction(draw);
 
@@ -284,8 +420,9 @@ export function GroundPickMap({ center, radiusM, onPick }: Props) {
       markerSrcRef.current = null;
       initialFittedRef.current = false;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount once
-  }, []);
+    // drawMode 변경 시 맵·드로우 재생성
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- remount on drawMode
+  }, [drawMode]);
 
   useEffect(() => {
     const src = markerSrcRef.current;
@@ -296,8 +433,37 @@ export function GroundPickMap({ center, radiusM, onPick }: Props) {
       return;
     }
 
-    const square = squareAround(center, radiusM);
     src.clear();
+    if (drawMode === 'section' && sectionLine) {
+      const start = sectionLine.start3857;
+      const end = sectionLine.end3857;
+      const depth = sectionLine.halfWidthM || SECTION_DEFAULT_HALF_WIDTH_M;
+      const rect = rectFromBaseLine(start, end, depth);
+      src.addFeature(
+        new Feature({
+          geometry: rect,
+          kind: 'extent',
+        })
+      );
+      src.addFeature(
+        new Feature({
+          geometry: new LineString([start, end]),
+          kind: 'line',
+        })
+      );
+      if (skipFitRef.current) {
+        skipFitRef.current = false;
+        return;
+      }
+      map?.getView().fit(rect.getExtent(), {
+        padding: [36, 36, 36, 36],
+        maxZoom: 21,
+        duration: 250,
+      });
+      return;
+    }
+
+    const square = squareAround(center, radiusM);
     src.addFeature(
       new Feature({
         geometry: square,
@@ -313,13 +479,18 @@ export function GroundPickMap({ center, radiusM, onPick }: Props) {
       maxZoom: 21,
       duration: 250,
     });
-  }, [center, radiusM]);
+  }, [center, radiusM, drawMode, sectionLine]);
+
+  const title =
+    drawMode === 'section'
+      ? '지도에서 두 점을 찍어 절단 라인을 그리세요'
+      : '지도에서 드래그해 사각형 범위를 그리세요';
 
   return (
     <div
       ref={hostRef}
       className="h-[220px] w-full overflow-hidden rounded border border-border bg-muted/30"
-      title="지도에서 드래그해 사각형 범위를 그리세요"
+      title={title}
     />
   );
 }
