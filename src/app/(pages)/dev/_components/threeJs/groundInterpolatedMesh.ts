@@ -1,7 +1,12 @@
 import * as THREE from 'three';
-import type { GroundHeightField } from './shapeTypes';
+import type { GroundHeightField, GroundSectionLine } from './shapeTypes';
 import { elevToSceneY, GROUND_SCENE_M_PER_UNIT } from './shapeTypes';
-import { sampleHeight } from './groundSteppedMesh';
+import {
+  SECTION_STEP_M,
+  sectionAxesFromField,
+  sectionRectCornersLocal,
+} from './groundSection';
+import { sampleHeight, sampleSurfaceY } from './groundSteppedMesh';
 
 export type InterpolatedGroundParts = {
   /** 윗면만 — 색상 채움용 */
@@ -9,6 +14,103 @@ export type InterpolatedGroundParts = {
   /** 아랫면·옆면 외곽선 (LineSegments용 xyz 쌍) */
   outlinePositions: number[];
 };
+
+/**
+ * 절단선(밑변) + 깊이(halfWidth) 기준 **축정렬이 아닌 사각형** 지형 메시.
+ * 월드 격자를 잘라 쓰는 방식은 톱니 경계가 되므로, 라인 축(u)·수직(v) 격자로 재샘플.
+ */
+export function createSectionRectGroundParts(
+  field: GroundHeightField,
+  line: GroundSectionLine,
+  thicknessM = 0
+): InterpolatedGroundParts | null {
+  const axes = sectionAxesFromField(field, line);
+  if (!axes || field.size < 2 || !field.heights?.length) return null;
+
+  const scale = GROUND_SCENE_M_PER_UNIT;
+  const stepM = Math.max(0.5, field.stepM || SECTION_STEP_M);
+  const stepU = stepM / scale;
+  const halfL = Math.max(1e-6, axes.halfLenM);
+  const depth = Math.max(1e-6, axes.halfWidthM);
+  const nu = Math.max(2, Math.ceil((halfL * 2) / stepU) + 1);
+  const nv = Math.max(2, Math.ceil(depth / stepU) + 1);
+  const thick = Math.max(0, thicknessM);
+
+  const xzAt = (iu: number, iv: number) => {
+    const u = -halfL + (iu / (nu - 1)) * (halfL * 2);
+    const v = (iv / (nv - 1)) * depth;
+    return {
+      x: axes.midX + axes.alongX * u + axes.perpX * v,
+      z: axes.midZ + axes.alongZ * u + axes.perpZ * v,
+    };
+  };
+
+  const topPositions: number[] = [];
+  const topIndices: number[] = [];
+  const vertIndex = (iu: number, iv: number) => iv * nu + iu;
+
+  for (let iv = 0; iv < nv; iv++) {
+    for (let iu = 0; iu < nu; iu++) {
+      const p = xzAt(iu, iv);
+      const y = sampleSurfaceY(field, p.x, p.z);
+      topPositions.push(p.x, y, p.z);
+    }
+  }
+
+  for (let iv = 0; iv < nv - 1; iv++) {
+    for (let iu = 0; iu < nu - 1; iu++) {
+      const v00 = vertIndex(iu, iv);
+      const v10 = vertIndex(iu + 1, iv);
+      const v01 = vertIndex(iu, iv + 1);
+      const v11 = vertIndex(iu + 1, iv + 1);
+      topIndices.push(v00, v10, v01, v10, v11, v01);
+    }
+  }
+
+  if (!topIndices.length) return null;
+
+  const topGeo = new THREE.BufferGeometry();
+  topGeo.setAttribute('position', new THREE.Float32BufferAttribute(topPositions, 3));
+  topGeo.setIndex(topIndices);
+  topGeo.computeVertexNormals();
+
+  const outlinePositions: number[] = [];
+  const pushSeg = (
+    x0: number,
+    y0: number,
+    z0: number,
+    x1: number,
+    y1: number,
+    z1: number
+  ) => {
+    outlinePositions.push(x0, y0, z0, x1, y1, z1);
+  };
+
+  // 사각형 네 변 외곽 (표면 높이 따라감)
+  const corners = sectionRectCornersLocal(axes);
+  for (let i = 0; i < 4; i++) {
+    const a = corners[i]!;
+    const b = corners[(i + 1) % 4]!;
+    const segs = Math.max(2, Math.ceil(Math.hypot(b.x - a.x, b.z - a.z) / stepU));
+    for (let s = 0; s < segs; s++) {
+      const t0 = s / segs;
+      const t1 = (s + 1) / segs;
+      const x0 = a.x + (b.x - a.x) * t0;
+      const z0 = a.z + (b.z - a.z) * t0;
+      const x1 = a.x + (b.x - a.x) * t1;
+      const z1 = a.z + (b.z - a.z) * t1;
+      const y0 = sampleSurfaceY(field, x0, z0);
+      const y1 = sampleSurfaceY(field, x1, z1);
+      pushSeg(x0, y0, z0, x1, y1, z1);
+      if (thick > 1e-6) {
+        pushSeg(x0, y0 - thick, z0, x1, y1 - thick, z1);
+        pushSeg(x0, y0, z0, x0, y0 - thick, z0);
+      }
+    }
+  }
+
+  return { topGeo, outlinePositions };
+}
 
 /**
  * 격자 샘플 기울기 보간 지형.

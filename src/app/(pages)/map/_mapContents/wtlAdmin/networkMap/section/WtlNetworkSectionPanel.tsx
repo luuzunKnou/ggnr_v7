@@ -64,6 +64,8 @@ export function WtlNetworkSectionPanel({
       width="min(760px, calc(100vw - 2rem))"
       maxHeight="88vh"
       defaultPosition={{ top: 72, right: 24 }}
+      /** 시설목록 상세보기(z=10050)보다 위 */
+      style={{ zIndex: 10100 }}
       header={
         <div className="flex min-w-0 flex-1 items-center gap-2">
           <div className="min-w-0 flex-1">

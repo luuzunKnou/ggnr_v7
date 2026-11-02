@@ -1,12 +1,23 @@
 import * as THREE from 'three';
 import { createDiameterDimAtEnd } from './cadDimensions';
-import type { GroundHeightField, GroundSectionLine, PipeSegment } from './shapeTypes';
-import { elevToSceneY } from './shapeTypes';
-import {
-  clipPolylineXZToSectionRect,
-  sectionAxesFromField,
-} from './groundSection';
+import type { GroundHeightField, PipeSegment } from './shapeTypes';
+import { elevToSceneY, GROUND_SCENE_M_PER_UNIT } from './shapeTypes';
 import { sampleSurfaceY } from './groundSteppedMesh';
+
+/**
+ * 제어점을 벗어나지 않는 폴리라인 곡선.
+ * CatmullRom 끝점 오버슈트 방지(범위·단면 공통).
+ */
+function makePolylineCurve(pts: THREE.Vector3[]): THREE.Curve<THREE.Vector3> {
+  if (pts.length === 2) {
+    return new THREE.LineCurve3(pts[0]!, pts[1]!);
+  }
+  const path = new THREE.CurvePath<THREE.Vector3>();
+  for (let i = 0; i < pts.length - 1; i++) {
+    path.add(new THREE.LineCurve3(pts[i]!, pts[i + 1]!));
+  }
+  return path;
+}
 
 /** 지표 Y: 고도장 보간 > 관별 surfaceElevM > 0 */
 function resolvePipeSurfaceY(
@@ -308,7 +319,7 @@ function createSideLabelPlane(
  * geom 순서 기준 옆면 외곽선 + 라벨(우측 10px에 → 흐름 표기).
  */
 function createSideFlowOutline(
-  curve: THREE.CatmullRomCurve3,
+  curve: THREE.Curve<THREE.Vector3>,
   outerR: number,
   labelText: string
 ): THREE.Group {
@@ -364,9 +375,10 @@ function mercatorToLocal(
   centerY: number,
   meterToProj: number
 ): { x: number; z: number } {
+  const scale = GROUND_SCENE_M_PER_UNIT;
   return {
-    x: (x3857 - centerX) / meterToProj,
-    z: -(y3857 - centerY) / meterToProj,
+    x: (x3857 - centerX) / meterToProj / scale,
+    z: -(y3857 - centerY) / meterToProj / scale,
   };
 }
 
@@ -389,8 +401,6 @@ export type CreatePipesOverlayOpts = {
    */
   surface?: 'zero' | 'field';
   field?: GroundHeightField | null;
-  /** 단면도 — 절단 사각형 밖 관 제외 */
-  sectionLine?: GroundSectionLine | null;
 };
 
 /**
@@ -408,10 +418,6 @@ export function createPipesOverlay(opts: CreatePipesOverlayOpts): THREE.Group {
   const surfaceMode = opts.surface ?? (opts.field ? 'field' : 'zero');
   const opacity = Math.max(0.05, Math.min(1, opts.opacity ?? 0.92));
   const fallbackColor = opts.color || '#F44336';
-  const sectionAxes =
-    opts.sectionLine && opts.field
-      ? sectionAxesFromField(opts.field, opts.sectionLine)
-      : null;
   const opaque = opacity >= 0.85;
   const makeMat = (hex: string, side: THREE.Side, inner = false) => {
     const pipeColor = new THREE.Color(hex || fallbackColor);
@@ -470,12 +476,8 @@ export function createPipesOverlay(opts: CreatePipesOverlayOpts): THREE.Group {
     }
     if (cleaned.length < 2) continue;
 
-    // 단면도 — 절단 사각형 밖 구간 제거 (중점만 보면 관이 지형 밖으로 남음)
-    const pathRuns = sectionAxes
-      ? clipPolylineXZToSectionRect(cleaned, sectionAxes, 0, (a, b, t) =>
-          new THREE.Vector3().lerpVectors(a, b, t)
-        )
-      : [cleaned];
+    // 범위(사각형)과 동일 — API(ST_Intersection) 좌표 그대로 (클라이언트 재클립 없음)
+    const pathRuns = [cleaned];
 
     const outerR = Math.max(0.04, pipe.diameterM / 2);
     const wallM = pipeWallThicknessM(pipe.diameterM);
@@ -487,7 +489,7 @@ export function createPipesOverlay(opts: CreatePipesOverlayOpts): THREE.Group {
       const run = pathRuns[runIdx]!;
       if (run.length < 2) continue;
       try {
-      const curve = new THREE.CatmullRomCurve3(run, false, 'centripetal');
+      const curve = makePolylineCurve(run);
       const tubular = Math.max(8, Math.min(64, run.length * 4));
       const radial = 16;
       const runId = pathRuns.length > 1 ? `${pipe.id}#${runIdx}` : pipe.id;

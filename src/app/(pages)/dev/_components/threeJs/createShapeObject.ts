@@ -5,7 +5,10 @@ import { createGroundElevMarkers } from './groundElevMarkers';
 import { createGroundRiverOverlay } from './groundRivers';
 import { createPipesOverlay } from './groundPipes';
 import { createManholesOverlay } from './groundManholes';
-import { createInterpolatedGroundParts } from './groundInterpolatedMesh';
+import {
+  createInterpolatedGroundParts,
+  createSectionRectGroundParts,
+} from './groundInterpolatedMesh';
 import { getWtlLayerShapeDef } from '@/lib/wtlLayerShapeDefs';
 import { shapeHalfExtentY } from './shapeCatalog';
 import type { ShapeProps } from './shapeTypes';
@@ -262,8 +265,14 @@ function buildGround(props: ShapeProps): THREE.Group {
   }
 
   // 윗면만 색상 채움 + 아랫면·옆면 외곽선
+  // 범위: AA 정사각 고도장 메시 / 단면: LINE→사각형 발자국 메시(관로 조회 polygon과 동일)
+  // ※ 단면 고도장을 null clip 하면 지형이 폴리곤보다 안쪽으로 줄어 관로가 «지형 밖»처럼 보임
   const thicknessM = Math.max(0, props.height ?? 0);
-  const parts = createInterpolatedGroundParts(field, thicknessM);
+  const sectionLine =
+    props.groundDrawMode === 'section' ? props.groundSectionLine ?? null : null;
+  const parts = sectionLine
+    ? createSectionRectGroundParts(field, sectionLine, thicknessM)
+    : createInterpolatedGroundParts(field, thicknessM);
   if (!parts) {
     return group;
   }
@@ -302,12 +311,10 @@ function buildGround(props: ShapeProps): THREE.Group {
     group.add(outline);
   }
 
-  // 등고선·높이는 지형 표면 위
-  group.add(createGroundContourOverlay(field));
-  // 지반고 (elevation 등고 보간값)
-  group.add(createGroundElevMarkers(field));
-  // 지방하천·소하천 — 범위(사각형) 모드만
-  if (props.groundDrawMode !== 'section') {
+  // 등고·지반고·하천 — 범위(정사각) 발자국일 때만 (단면 사각형 메시와 격자 등고는 경계 불일치)
+  if (!sectionLine) {
+    group.add(createGroundContourOverlay(field));
+    group.add(createGroundElevMarkers(field));
     group.add(
       createGroundRiverOverlay(field, {
         color: props.riverColor || '#2563eb',
@@ -327,8 +334,6 @@ function buildPipe(props: ShapeProps): THREE.Group {
   // 지형과 동일 원점 강제 (파생 도형 어긋남 방지)
   const cx = hasField ? field!.centerX : props.pipeCenterX;
   const cy = hasField ? field!.centerY : props.pipeCenterY;
-  const sectionLine =
-    props.groundDrawMode === 'section' ? props.groundSectionLine ?? null : null;
 
   // 단독 편집 시에만 범위 안내 판 (지형 파생·고도장 있으면 생략)
   if (!hasField) {
@@ -365,6 +370,7 @@ function buildPipe(props: ShapeProps): THREE.Group {
   }
 
   if (props.pipeSegments?.length && cx != null && cy != null) {
+    // 범위·단면 동일 — API 범위 클립만 사용 (클라이언트 단면 재클립 없음)
     group.add(
       createPipesOverlay({
         centerX: cx,
@@ -374,7 +380,6 @@ function buildPipe(props: ShapeProps): THREE.Group {
         opacity: props.opacity ?? 0.92,
         surface: hasField ? 'field' : 'zero',
         field: hasField ? field : null,
-        sectionLine,
       })
     );
   }
@@ -389,8 +394,6 @@ function buildManhole(props: ShapeProps): THREE.Group {
   const hasField = !!(field && field.heights?.length && field.size >= 2);
   const cx = hasField ? field!.centerX : props.manhCenterX;
   const cy = hasField ? field!.centerY : props.manhCenterY;
-  const sectionLine =
-    props.groundDrawMode === 'section' ? props.groundSectionLine ?? null : null;
   const def = getWtlLayerShapeDef(props.kind);
   const colorHex = props.color || def?.fallbackColor || '#a42b96';
 
@@ -436,7 +439,6 @@ function buildManhole(props: ShapeProps): THREE.Group {
         color: colorHex,
         opacity: props.opacity ?? 0.9,
         field: hasField ? field : null,
-        sectionLine,
         symbolStyleName: def?.styleName ?? props.kind,
       })
     );

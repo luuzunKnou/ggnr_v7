@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { call } from '@/lib/api'
 import { WTL_LAYER_SHAPE_DEFS } from '@/lib/wtlLayerShapeDefs'
 import { getWtlNetLayerDef, type WtlNetLayerKey } from '../wtlNetworkLayerCatalog'
@@ -13,60 +13,7 @@ type Props = {
   enabledKeys: string[]
 }
 
-type TabImages = {
-  /** 좌측 메인 — 절단선 정면 지형 3D */
-  terrain: string
-  cross: string
-  long: string
-}
-
-/** 단면도 지형 — 절단선이 가로가 되도록 렌더 */
-async function captureTerrainMainPng(
-  THREE: typeof import('three'),
-  shapesRoot: InstanceType<typeof import('three').Group>,
-  groundGroup: InstanceType<typeof import('three').Group>,
-  groundProps: import('@/app/(pages)/dev/_components/threeJs/shapeTypes').ShapeProps
-): Promise<string> {
-  const { fitSectionLineView } = await import(
-    '@/app/(pages)/dev/_components/threeJs/fitGroundCamera'
-  )
-  const W = 1280
-  const H = 960
-  const scene = new THREE.Scene()
-  scene.background = new THREE.Color(0x1a1a1e)
-  scene.add(new THREE.AmbientLight(0xffffff, 0.7))
-  const key = new THREE.DirectionalLight(0xffffff, 0.9)
-  key.position.set(50, 90, 40)
-  scene.add(key)
-  const fill = new THREE.DirectionalLight(0xaabbff, 0.35)
-  fill.position.set(-40, 40, -30)
-  scene.add(fill)
-  scene.add(shapesRoot)
-
-  const camera = new THREE.PerspectiveCamera(42, W / H, 0.1, 4000)
-  const orbitStub = {
-    target: new THREE.Vector3(0, 0, 0),
-    update() {},
-  }
-  fitSectionLineView(
-    camera,
-    orbitStub as unknown as import('three/addons/controls/OrbitControls.js').OrbitControls,
-    groundGroup,
-    groundProps
-  )
-
-  const renderer = new THREE.WebGLRenderer({
-    antialias: true,
-    preserveDrawingBuffer: true,
-    alpha: false,
-  })
-  renderer.setPixelRatio(1)
-  renderer.setSize(W, H)
-  renderer.render(scene, camera)
-  const url = renderer.domElement.toDataURL('image/png')
-  renderer.dispose()
-  return url
-}
+type CadImages = { cross: string; long: string }
 
 /**
  * 켜진 레이어 키 → Three.js «지형에서 파생» 가능한 도형 kind.
@@ -89,10 +36,12 @@ function resolveGroundLayerKinds(enabledKeys: string[]): string[] {
 }
 
 export function WtlNetworkSectionThreeJsTab({ line3857, enabledKeys }: Props) {
+  const hostRef = useRef<HTMLDivElement>(null)
   const [busy, setBusy] = useState(false)
   const [status, setStatus] = useState('')
-  const [images, setImages] = useState<TabImages | null>(null)
+  const [cad, setCad] = useState<CadImages | null>(null)
   const [error, setError] = useState('')
+  const [viewReady, setViewReady] = useState(false)
 
   const kinds = useMemo(() => resolveGroundLayerKinds(enabledKeys), [enabledKeys])
   const kindsSig = kinds.slice().sort().join('\u0001')
@@ -101,30 +50,51 @@ export function WtlNetworkSectionThreeJsTab({ line3857, enabledKeys }: Props) {
   useEffect(() => {
     if (line3857.length < 2) {
       setError('절단선이 없습니다.')
-      setImages(null)
+      setCad(null)
+      setViewReady(false)
       return
     }
+
     let cancelled = false
+    let raf = 0
+    let renderer: import('three').WebGLRenderer | null = null
+    let orbit: import('three/addons/controls/OrbitControls.js').OrbitControls | null = null
+    let resizeObs: ResizeObserver | null = null
+    let shapesRoot: import('three').Object3D | null = null
+
+    const disposeSceneGraph = (root: import('three').Object3D) => {
+      root.traverse((obj) => {
+        const mesh = obj as import('three').Mesh
+        mesh.geometry?.dispose?.()
+        const mat = mesh.material
+        if (Array.isArray(mat)) mat.forEach((m) => m.dispose?.())
+        else mat?.dispose?.()
+      })
+    }
+
     ;(async () => {
       setBusy(true)
       setError('')
       setStatus('ThreeJs 지형·단면도 생성 중…')
-      setImages(null)
+      setCad(null)
+      setViewReady(false)
+
       try {
         const [
           THREE,
+          { OrbitControls },
           { createShapeObject },
           { cloneDefaults },
           {
             SECTION_DEFAULT_HALF_WIDTH_M,
             SECTION_STEP_M,
-            clipHeightFieldToSectionRect,
             sectionCoverRadiusM,
             sectionLineLengthM,
             sectionRectCenter3857,
             sectionRectRing3857,
           },
           { captureSectionCadViews },
+          { fitSectionLineView },
           {
             SHAPE_NAME_KEY,
             isLineLayerShape,
@@ -132,10 +102,12 @@ export function WtlNetworkSectionThreeJsTab({ line3857, enabledKeys }: Props) {
           },
         ] = await Promise.all([
           import('three'),
+          import('three/addons/controls/OrbitControls.js'),
           import('@/app/(pages)/dev/_components/threeJs/createShapeObject'),
           import('@/app/(pages)/dev/_components/threeJs/shapeCatalog'),
           import('@/app/(pages)/dev/_components/threeJs/groundSection'),
           import('@/app/(pages)/dev/_components/threeJs/sectionCadDraw'),
+          import('@/app/(pages)/dev/_components/threeJs/fitGroundCamera'),
           import('@/app/(pages)/dev/_components/threeJs/shapeTypes'),
         ])
         type ShapeKind = import('@/app/(pages)/dev/_components/threeJs/shapeTypes').ShapeKind
@@ -144,6 +116,7 @@ export function WtlNetworkSectionThreeJsTab({ line3857, enabledKeys }: Props) {
         type PipeSegment = import('@/app/(pages)/dev/_components/threeJs/shapeTypes').PipeSegment
         type ManholeFeature =
           import('@/app/(pages)/dev/_components/threeJs/shapeTypes').ManholeFeature
+        type ShapeProps = import('@/app/(pages)/dev/_components/threeJs/shapeTypes').ShapeProps
 
         const start = line3857[0]!
         const end = line3857[line3857.length - 1]!
@@ -187,7 +160,9 @@ export function WtlNetworkSectionThreeJsTab({ line3857, enabledKeys }: Props) {
           throw new Error(elevData?.error ?? '지형 격자 조회 실패')
         }
 
-        let field: GroundHeightField = {
+        // 고도장은 덮개 정사각(샘플용). 지형 메시 발자국=LINE→사각형(관로 polygon3857과 동일)
+        // 고도 null clip 금지 — clip 시 지형이 폴리곤보다 안쪽으로 줄어 관로가 지형 밖으로 보임
+        const field: GroundHeightField = {
           size: elevData.size,
           stepM: elevData.stepM ?? SECTION_STEP_M,
           radiusM: elevData.radiusM ?? radiusM,
@@ -199,13 +174,13 @@ export function WtlNetworkSectionThreeJsTab({ line3857, enabledKeys }: Props) {
           contours: elevData.contours ?? [],
           rivers: elevData.rivers ?? [],
         }
-        field = clipHeightFieldToSectionRect(field, sectionLine)
         if (!field.heights.some((h) => h != null)) {
           throw new Error('절단 범위 내 고도 샘플이 없습니다')
         }
 
         const root = new THREE.Group()
-        const groundProps = cloneDefaults('ground')
+        shapesRoot = root
+        const groundProps = cloneDefaults('ground') as ShapeProps
         groundProps.kind = 'ground'
         groundProps.groundDrawMode = 'section'
         groundProps.groundSectionLine = sectionLine
@@ -259,8 +234,9 @@ export function WtlNetworkSectionThreeJsTab({ line3857, enabledKeys }: Props) {
             props.pipeRadiusM = field.radiusM
             props.pipeSegments = pipes
             props.pipeHeightField = field
-            props.groundDrawMode = 'section'
-            props.groundSectionLine = sectionLine
+            // 범위(사각형) 파생 관로와 동일 생성 경로
+            props.groundDrawMode = 'extent'
+            props.groundSectionLine = null
             props.posX = 0
             props.posZ = 0
             props.floorHeight = 0
@@ -295,8 +271,8 @@ export function WtlNetworkSectionThreeJsTab({ line3857, enabledKeys }: Props) {
             props.manhRadiusM = field.radiusM
             props.manholeFeatures = manholes
             props.manhHeightField = field
-            props.groundDrawMode = 'section'
-            props.groundSectionLine = sectionLine
+            props.groundDrawMode = 'extent'
+            props.groundSectionLine = null
             props.posX = 0
             props.posZ = 0
             props.floorHeight = 0
@@ -308,67 +284,121 @@ export function WtlNetworkSectionThreeJsTab({ line3857, enabledKeys }: Props) {
         }
 
         if (cancelled) return
-        setStatus('지형·CAD 단면도 렌더 중…')
-        const cad = captureSectionCadViews(root)
-        const terrain = await captureTerrainMainPng(THREE, root, groundGroup, groundProps)
-        root.traverse((obj) => {
-          const mesh = obj as InstanceType<typeof THREE.Mesh>
-          if (mesh.geometry) mesh.geometry.dispose?.()
-          const mat = mesh.material
-          if (Array.isArray(mat)) mat.forEach((m) => m.dispose?.())
-          else if (mat) mat.dispose?.()
-        })
-
+        setStatus('CAD 단면도 렌더 중…')
+        const cadImages = captureSectionCadViews(root)
         if (cancelled) return
-        setImages({ terrain, cross: cad.cross, long: cad.long })
+        setCad(cadImages)
+
+        const host = hostRef.current
+        if (!host) throw new Error('3D 뷰 영역을 찾지 못했습니다')
+
+        const scene = new THREE.Scene()
+        scene.background = new THREE.Color(0x1a1a1e)
+        scene.add(new THREE.AmbientLight(0xffffff, 0.7))
+        const keyLight = new THREE.DirectionalLight(0xffffff, 0.9)
+        keyLight.position.set(50, 90, 40)
+        scene.add(keyLight)
+        const fill = new THREE.DirectionalLight(0xaabbff, 0.35)
+        fill.position.set(-40, 40, -30)
+        scene.add(fill)
+        scene.add(root)
+
+        const camera = new THREE.PerspectiveCamera(42, 1, 0.1, 4000)
+        renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false })
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2))
+        renderer.domElement.className = 'block h-full w-full'
+        renderer.domElement.style.touchAction = 'none'
+        // host는 React 자식을 두지 않는 전용 노드 — replaceChildren/React reconcile 충돌 방지
+        host.replaceChildren(renderer.domElement)
+
+        orbit = new OrbitControls(camera, renderer.domElement)
+        orbit.enableDamping = true
+        orbit.dampingFactor = 0.08
+        fitSectionLineView(camera, orbit, groundGroup, groundProps)
+
+        const resize = () => {
+          if (!renderer || cancelled) return
+          const w = Math.max(1, host.clientWidth)
+          const h = Math.max(1, host.clientHeight)
+          camera.aspect = w / h
+          camera.updateProjectionMatrix()
+          renderer.setSize(w, h, false)
+        }
+        resize()
+        resizeObs = new ResizeObserver(resize)
+        resizeObs.observe(host)
+
+        const tick = () => {
+          if (cancelled || !renderer) return
+          orbit?.update()
+          renderer.render(scene, camera)
+          raf = requestAnimationFrame(tick)
+        }
+        raf = requestAnimationFrame(tick)
+
         const lenM = Math.round(sectionLineLengthM(sectionLine))
         setStatus(
           `절단 ${lenM} m · 깊이 ${SECTION_DEFAULT_HALF_WIDTH_M} m` +
             (kinds.length ? ` · 레이어 ${kinds.length}` : ' · 켜진 레이어 없음') +
             (notes.length ? ` · ${notes.join(', ')}` : '')
         )
+        setViewReady(true)
+        setBusy(false)
       } catch (e) {
         if (!cancelled) {
           setError(e instanceof Error ? e.message : 'ThreeJs 단면도 생성 오류')
-          setImages(null)
+          setCad(null)
+          setViewReady(false)
+          setBusy(false)
         }
-      } finally {
-        if (!cancelled) setBusy(false)
       }
     })()
+
     return () => {
       cancelled = true
+      cancelAnimationFrame(raf)
+      resizeObs?.disconnect()
+      resizeObs = null
+      orbit?.dispose()
+      orbit = null
+      if (renderer) {
+        const canvas = renderer.domElement
+        renderer.dispose()
+        const parent = canvas.parentNode
+        if (parent) parent.removeChild(canvas)
+        renderer = null
+      }
+      if (shapesRoot) {
+        disposeSceneGraph(shapesRoot)
+        shapesRoot = null
+      }
     }
-  }, [lineSig, kindsSig, line3857, kinds])
-
-  if (error) {
-    return <p className="py-10 text-center text-[12px] text-destructive">{error}</p>
-  }
-  if (busy || !images) {
-    return (
-      <p className="py-10 text-center text-[12px] text-muted-foreground">
-        {status || 'ThreeJs 단면도 준비 중…'}
-      </p>
-    )
-  }
+    // lineSig·kindsSig로 내용 동일성 보장 (배열 참조 deps면 불필요 재마운트)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- line3857/kinds는 sig와 동기
+  }, [lineSig, kindsSig])
 
   return (
     <div className="flex min-h-0 flex-col gap-2">
-      <p className="shrink-0 text-[11px] text-muted-foreground">{status}</p>
-      {/* 메인(지형) | 횡단 / 종단 */}
-      <div className="flex min-h-[440px] gap-2">
+      {error ? (
+        <p className="py-10 text-center text-[12px] text-destructive">{error}</p>
+      ) : (
+        <p className="shrink-0 text-[11px] text-muted-foreground">
+          {busy ? status || 'ThreeJs 단면도 준비 중…' : status}
+        </p>
+      )}
+      {/* 메인(3D) | 횡단 / 종단 — hostRef는 Three.js 전용(React 자식 금지) */}
+      <div className={error ? 'hidden' : 'flex min-h-[440px] gap-2'}>
         <section className="flex min-w-0 flex-1 flex-col overflow-hidden rounded border border-border bg-[#1a1a1e]">
           <header className="shrink-0 border-b border-border/60 px-2 py-1 text-[11px] font-semibold text-slate-200">
-            지형
+            3D
           </header>
-          <div className="min-h-0 flex-1 overflow-auto">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={images.terrain}
-              alt="ThreeJs 지형 단면도"
-              className="block h-full w-full object-contain"
-              title="지형"
-            />
+          <div className="relative min-h-0 flex-1 bg-[#1a1a1e]">
+            <div ref={hostRef} className="absolute inset-0" />
+            {busy || !viewReady ? (
+              <p className="pointer-events-none absolute inset-0 z-[1] flex items-center justify-center text-[11px] text-slate-400">
+                {status || '3D 뷰 준비 중…'}
+              </p>
+            ) : null}
           </div>
         </section>
         <div className="flex w-[min(42%,320px)] shrink-0 flex-col gap-2">
@@ -377,13 +407,17 @@ export function WtlNetworkSectionThreeJsTab({ line3857, enabledKeys }: Props) {
               횡단면도
             </header>
             <div className="min-h-0 flex-1 overflow-auto">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={images.cross}
-                alt="ThreeJs 횡단면도"
-                className="block h-full w-full object-contain"
-                title="횡단면도"
-              />
+              {cad?.cross ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={cad.cross}
+                  alt="ThreeJs 횡단면도"
+                  className="block h-full w-full object-contain"
+                  title="횡단면도"
+                />
+              ) : (
+                <p className="p-2 text-[11px] text-slate-400">준비 중…</p>
+              )}
             </div>
           </section>
           <section className="flex min-h-0 flex-1 flex-col overflow-hidden rounded border border-border bg-[#1a1a1e]">
@@ -391,13 +425,17 @@ export function WtlNetworkSectionThreeJsTab({ line3857, enabledKeys }: Props) {
               종단면도
             </header>
             <div className="min-h-0 flex-1 overflow-auto">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={images.long}
-                alt="ThreeJs 종단면도"
-                className="block h-full w-full object-contain"
-                title="종단면도"
-              />
+              {cad?.long ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={cad.long}
+                  alt="ThreeJs 종단면도"
+                  className="block h-full w-full object-contain"
+                  title="종단면도"
+                />
+              ) : (
+                <p className="p-2 text-[11px] text-slate-400">준비 중…</p>
+              )}
             </div>
           </section>
         </div>

@@ -657,22 +657,33 @@ export default function OpenLayersMap({
 
   /** 우측 메뉴(버튼 열) 폭만 — 상하 분할 거터·방향 전환용.
    * 배경지도·레이어 선택 등 우측에서 뜨는 패널은 전부 오버레이 모달로 보고
-   * 지도 가용폭·좌우/상하 전환에 넣지 않음. */
+   * 지도 가용폭·좌우/상하 전환에 넣지 않음.
+   * 메뉴 폭+right-4로 측정(뷰포트 innerWidth-left 방식은 스크롤바·패딩 피드백으로
+   * ResizeObserver↔setState 루프가 날 수 있음). activeControls는 RO가 크기 변화를 잡음. */
   useEffect(() => {
     const setPaddingRight = mapContext?.setMapPaddingRight;
+    if (!setPaddingRight || !mapControlPortalReady) return;
     const fixed = mapControlFixedRef.current;
-    if (!setPaddingRight || !fixed) return;
+    if (!fixed) return;
+
+    /** tailwind `right-4` */
+    const RIGHT_INSET_PX = 16;
+    let rafId = 0;
 
     const syncPaddingRight = () => {
-      const menu = fixed.querySelector('[data-map-control-menu]');
-      const leftEdge = menu
-        ? menu.getBoundingClientRect().left
-        : window.innerWidth - MAP_SPLIT_CONTROL_RIGHT_MENU_RESERVE_PX;
-      const next = Math.max(
-        MAP_SPLIT_CONTROL_RIGHT_MENU_RESERVE_PX,
-        Math.ceil(window.innerWidth - leftEdge)
-      );
-      setPaddingRight((prev) => (prev === next ? prev : next));
+      if (rafId) cancelAnimationFrame(rafId);
+      rafId = requestAnimationFrame(() => {
+        rafId = 0;
+        const menu = fixed.querySelector('[data-map-control-menu]');
+        const menuWidth = menu
+          ? menu.getBoundingClientRect().width
+          : MAP_SPLIT_CONTROL_RIGHT_MENU_RESERVE_PX - RIGHT_INSET_PX;
+        const next = Math.max(
+          MAP_SPLIT_CONTROL_RIGHT_MENU_RESERVE_PX,
+          Math.ceil(menuWidth + RIGHT_INSET_PX)
+        );
+        setPaddingRight((prev) => (prev === next ? prev : next));
+      });
     };
 
     syncPaddingRight();
@@ -682,10 +693,11 @@ export default function OpenLayersMap({
     else ro.observe(fixed);
     window.addEventListener('resize', syncPaddingRight);
     return () => {
+      if (rafId) cancelAnimationFrame(rafId);
       ro.disconnect();
       window.removeEventListener('resize', syncPaddingRight);
     };
-  }, [mapContext?.setMapPaddingRight, activeControls, extraControls, mapControlPortalReady]);
+  }, [mapContext?.setMapPaddingRight, mapControlPortalReady]);
 
   // 마운트 시 저장된 맵 상태 복원 (버튼 활성화 + 배경지도 + 레이어 목록 + 상세 패널 체크박스)
   // 홈에서 다른 시스템으로 들어오면 이전 시스템 레이어는 복원하지 않음 (지도 내 시스템 전환과 동일)
@@ -2749,7 +2761,11 @@ export default function OpenLayersMap({
 
   useEffect(() => {
     if (mapContext?.mapSplitSecondaryKind === 'map') return;
-    setActiveControls((prev) => prev.filter((item) => item !== 'reset-measurements'));
+    setActiveControls((prev) =>
+      prev.includes('reset-measurements')
+        ? prev.filter((item) => item !== 'reset-measurements')
+        : prev
+    );
     setIsResetPanelExiting(false);
   }, [mapContext?.mapSplitSecondaryKind]);
 

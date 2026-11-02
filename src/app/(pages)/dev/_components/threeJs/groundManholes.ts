@@ -1,9 +1,8 @@
 import * as THREE from 'three';
 import { getGeoServerPublicBase } from '@/lib/geoserverUrl';
 import { resolveSymbolPreviewUrl } from '@/lib/geoserverStyleUtils';
-import type { GroundHeightField, GroundSectionLine, ManholeFeature } from './shapeTypes';
+import type { GroundHeightField, ManholeFeature } from './shapeTypes';
 import { elevToSceneY, GROUND_SCENE_M_PER_UNIT } from './shapeTypes';
-import { isInsideSectionRect, sectionAxesFromField } from './groundSection';
 import { sampleSurfaceY } from './groundSteppedMesh';
 
 export const MANHOLE_MESH_KEY = 'ggnrManholeMesh';
@@ -176,8 +175,6 @@ export function createManholesOverlay(opts: {
   color?: string;
   opacity?: number;
   field?: GroundHeightField | null;
-  /** 단면도 — 절단 사각형 밖 제외 */
-  sectionLine?: GroundSectionLine | null;
   /** SLD 스타일명 → `/www/symbol/water/{name}.svg` */
   symbolStyleName?: string;
 }): THREE.Group {
@@ -188,10 +185,6 @@ export function createManholesOverlay(opts: {
   const m2p = meterToProjAtY3857(opts.centerY);
   const fallbackColor = opts.color || '#a42b96';
   const opacity = Math.max(0.05, Math.min(1, opts.opacity ?? 0.9));
-  const sectionAxes =
-    opts.sectionLine && opts.field
-      ? sectionAxesFromField(opts.field, opts.sectionLine)
-      : null;
 
   for (const m of opts.manholes) {
     const featureColor = m.color || fallbackColor;
@@ -202,9 +195,6 @@ export function createManholesOverlay(opts: {
       opts.centerY,
       m2p
     );
-    if (sectionAxes && !isInsideSectionRect(lx, lz, sectionAxes, 0)) {
-      continue;
-    }
     const surfY = resolveSurfaceY(m, lx, lz, opts.field);
     const r = Math.max(0.08, (m.diameterM || 0.6) / 2);
     const h = Math.max(0.2, m.depthM || 0.4);

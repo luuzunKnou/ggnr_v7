@@ -153,7 +153,7 @@ export function useWtlNetworkMapLayer({
   const onMoveStartRef = useRef(onMapMoveStart)
   const keysRef = useRef(enabledLayerKeys)
   const sourcesRef = useRef(mapSources)
-  /** 구역·단면 LINE 그리기 중에는 레이어 클릭 선택 금지 */
+  /** 측정·공간그리기·도형편집 등 지도 입력 중에는 레이어 클릭 선택 금지 */
   const drawBlocksClickRef = useRef(false)
   onSelectRef.current = onSelect
   onExtentRef.current = onExtentChange
@@ -161,7 +161,10 @@ export function useWtlNetworkMapLayer({
   keysRef.current = enabledLayerKeys
   sourcesRef.current = mapSources
   drawBlocksClickRef.current = Boolean(
-    mapContext?.spatialDrawRequest || mapContext?.mapDrawInputSuspended
+    mapContext?.spatialDrawRequest ||
+      mapContext?.mapMeasureTool ||
+      mapContext?.mapDrawInputSuspended ||
+      mapContext?.layerRowGeomEdit
   )
 
   const availableKey = availableSourceIds.join('\u0001')

@@ -1,7 +1,15 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import Feature from 'ol/Feature'
+import LineString from 'ol/geom/LineString'
+import Point from 'ol/geom/Point'
+import Polygon from 'ol/geom/Polygon'
+import VectorLayer from 'ol/layer/Vector'
+import VectorSource from 'ol/source/Vector'
+import { Circle as CircleStyle, Fill, Stroke, Style } from 'ol/style'
 import { transform } from 'ol/proj'
+import type { FeatureLike } from 'ol/Feature'
 import { call } from '@/lib/api'
 import { useMapContext } from '../../../../_mapComponents/MapContext'
 import { canStartMapDrawInteraction } from '../../../../_mapComponents/mapDrawInteraction'
@@ -20,6 +28,7 @@ import {
   pipeCutIntersect3857,
   pipeSpanAlongLineM,
   projectDistAlongLineM,
+  sectionCutRectRing3857,
   type Pt3857,
 } from './wtlNetworkSectionGeom'
 import type {
@@ -29,6 +38,40 @@ import type {
 } from './wtlNetworkSectionSvg'
 
 export type SectionTab = 'cross' | 'long' | 'prev' | 'threejs'
+
+/** 단면도 절단선 — 우측 «거리 측정»(#3388ff)과 동일 */
+const SECTION_CUT_LINE_STROKE = new Style({
+  stroke: new Stroke({ color: '#3388ff', width: 2 }),
+})
+const SECTION_CUT_VERTEX = new CircleStyle({
+  radius: 5,
+  fill: new Fill({ color: '#3388ff' }),
+  stroke: new Stroke({ color: '#fff', width: 2 }),
+})
+
+function sectionCutLineStyle(feature: FeatureLike): Style[] {
+  const geom = feature.getGeometry()
+  const styles: Style[] = [SECTION_CUT_LINE_STROKE]
+  if (geom instanceof LineString) {
+    for (const c of geom.getCoordinates()) {
+      styles.push(
+        new Style({
+          geometry: new Point(c),
+          image: SECTION_CUT_VERTEX,
+        })
+      )
+    }
+  }
+  return styles
+}
+
+/** ThreeJs 단면도 지형 깊이(m) — groundSection SECTION_DEFAULT_HALF_WIDTH_M 과 동일 */
+const SECTION_RECT_HALF_WIDTH_M = 5
+/** 절단선 밑변 × 깊이 사각형 — ThreeJs 지형 격자와 동일 범위 */
+const SECTION_RECT_STROKE = new Style({
+  stroke: new Stroke({ color: '#22c55e', width: 2 }),
+  fill: new Fill({ color: 'rgba(34, 197, 94, 0.08)' }),
+})
 
 type PipeRow = {
   id: string
@@ -305,6 +348,8 @@ export function useWtlNetworkSection(enabledLayerKeys: string[]) {
   keysRef.current = enabledLayerKeys
   const tabRef = useRef(tab)
   tabRef.current = tab
+  const cutLineSourceRef = useRef<VectorSource | null>(null)
+  const sectionRectSourceRef = useRef<VectorSource | null>(null)
 
   const supplyAreaLines = useMemo(
     () => buildSupplyAreaLines(supplyAreasRaw, enabledLayerKeys),
@@ -312,6 +357,55 @@ export function useWtlNetworkSection(enabledLayerKeys: string[]) {
   )
 
   const setSpatialDrawRequest = mapContext?.setSpatialDrawRequest
+
+  /** 그린 절단선 + 지형 사각형(초록 테두리)을 지도에 유지 */
+  useEffect(() => {
+    const map = mapContext?.mapInstanceRef?.current
+    if (!map || !mapContext?.mapReady) return
+    const cutSource = new VectorSource()
+    const cutLayer = new VectorLayer({
+      source: cutSource,
+      style: sectionCutLineStyle,
+      zIndex: 930,
+    })
+    cutLayer.set('wtlNetworkSectionCutLine', true)
+    cutLayer.set('mapSplitNoMirror', true)
+    map.addLayer(cutLayer)
+    cutLineSourceRef.current = cutSource
+
+    const rectSource = new VectorSource()
+    const rectLayer = new VectorLayer({
+      source: rectSource,
+      style: SECTION_RECT_STROKE,
+      zIndex: 925,
+    })
+    rectLayer.set('wtlNetworkSectionRect', true)
+    rectLayer.set('mapSplitNoMirror', true)
+    map.addLayer(rectLayer)
+    sectionRectSourceRef.current = rectSource
+
+    return () => {
+      map.removeLayer(cutLayer)
+      map.removeLayer(rectLayer)
+      cutLineSourceRef.current = null
+      sectionRectSourceRef.current = null
+    }
+  }, [mapContext?.mapInstanceRef, mapContext?.mapReady])
+
+  useEffect(() => {
+    const cutSource = cutLineSourceRef.current
+    const rectSource = sectionRectSourceRef.current
+    if (!cutSource || !rectSource) return
+    cutSource.clear()
+    rectSource.clear()
+    if (!line3857 || line3857.length < 2) return
+    cutSource.addFeature(new Feature({ geometry: new LineString(line3857) }))
+
+    const start = line3857[0]!
+    const end = line3857[line3857.length - 1]!
+    const ring = sectionCutRectRing3857(start, end, SECTION_RECT_HALF_WIDTH_M)
+    rectSource.addFeature(new Feature({ geometry: new Polygon([ring]) }))
+  }, [line3857, mapContext?.mapReady])
 
   const cancelDraw = useCallback(() => {
     setDrawing(false)

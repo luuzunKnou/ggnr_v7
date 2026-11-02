@@ -146,6 +146,53 @@ function segmentIntersect(
   return [a0[0] + ax * t, a0[1] + ay * t]
 }
 
+/**
+ * 절단선 밑변 + 좌측 깊이(halfWidthM) 사각형 링 (EPSG:3857, 닫힘).
+ * ThreeJs `sectionRectRing3857` 과 동일 규칙.
+ */
+export function sectionCutRectRing3857(
+  start3857: Pt3857,
+  end3857: Pt3857,
+  halfWidthM: number
+): Pt3857[] {
+  let ax = start3857[0]
+  let ay = start3857[1]
+  let bx = end3857[0]
+  let by = end3857[1]
+  // 좌→우(서→동) 정규화
+  if (bx < ax || (bx === ax && by < ay)) {
+    ;[ax, ay, bx, by] = [bx, by, ax, ay]
+  }
+  const my = (ay + by) / 2
+  let dx = bx - ax
+  let dy = by - ay
+  const len = Math.hypot(dx, dy)
+  if (len < 1e-6) {
+    const m2p = meterToProjAtY3857(my)
+    const h = Math.max(1, halfWidthM) * m2p
+    return [
+      [ax - h, ay - h],
+      [ax + h, ay - h],
+      [ax + h, ay + h],
+      [ax - h, ay + h],
+      [ax - h, ay - h],
+    ]
+  }
+  dx /= len
+  dy /= len
+  const m2p = meterToProjAtY3857(my)
+  const depthProj = Math.max(1, halfWidthM) * m2p
+  const ox = -dy * depthProj
+  const oy = dx * depthProj
+  return [
+    [ax, ay],
+    [bx, by],
+    [bx + ox, by + oy],
+    [ax + ox, ay + oy],
+    [ax, ay],
+  ]
+}
+
 /** WKT LineString(EPSG:5181) → 좌표 5181 */
 export function parseLineWkt5181(wkt: string): Pt3857[] {
   const m = String(wkt ?? '').match(/LINESTRING\s*\(([^)]+)\)/i)

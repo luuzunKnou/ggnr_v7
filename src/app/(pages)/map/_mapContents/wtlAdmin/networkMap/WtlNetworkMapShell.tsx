@@ -10,7 +10,7 @@ import {
 } from 'react'
 import { createPortal } from 'react-dom'
 import { useSession } from 'next-auth/react'
-import { ChevronLeft, ChevronRight, RefreshCw, X } from 'lucide-react'
+import { ChevronDown, ChevronLeft, ChevronRight, RefreshCw, X } from 'lucide-react'
 import { call } from '@/lib/api'
 import { useConsoleMenuAccess } from '@/hooks/useConsoleMenuAccess'
 import { hasAnyDevConsoleAccess } from '@/lib/consoleMenuAccess/client'
@@ -74,8 +74,8 @@ const RESULT_MIN = 320
 const RESULT_MAX = 680
 /** 테이블 나열 페이지 건수 */
 const LIST_PAGE_SIZE = 7
-/** 목록 표 최소 높이(헤더+행 LIST_PAGE_SIZE) — 건수·열 수와 무관하게 유지 */
-const LIST_TABLE_MIN_HEIGHT_PX = 32 + LIST_PAGE_SIZE * 28
+/** 목록 표 — 행 7개 이상일 때만 적용 (미만은 내용 높이) */
+const LIST_TABLE_MIN_HEIGHT_PX = 206
 /** 시설 상세 모달 */
 const DETAIL_MODAL_WIDTH = 'min(600px, calc(100% - 2rem))'
 const DETAIL_MODAL_MAX_HEIGHT = '92vh'
@@ -704,6 +704,8 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
     return list
   }, [areaWkts5181, zoneWkt5181])
   const [resultOpen, setResultOpen] = useState(true)
+  /** 시설목록 레이어 박스 접힘 (key = box.key) */
+  const [collapsedBoxKeys, setCollapsedBoxKeys] = useState<Set<string>>(() => new Set())
   const [excelExporting, setExcelExporting] = useState(false)
   const [shpExporting, setShpExporting] = useState(false)
   const [boxData, setBoxData] = useState<Record<string, LayerBoxData>>({})
@@ -2079,7 +2081,9 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
                   <span className="standard-detail-section-toggle-label">시설목록</span>
                 </button>
                 <span className="text-[11px] text-muted-foreground">
-                  {listLoading ? '조회 중…' : `총 ${listCount.toLocaleString()}건`}
+                  {listLoading
+                    ? '조회 중…'
+                    : `레이어 ${layerBoxes.length} · 총 ${listCount.toLocaleString()}건`}
                 </span>
               </div>
               <label className="flex shrink-0 cursor-pointer items-center gap-1 border-b border-border px-3 py-2 text-[11px] text-foreground">
@@ -2111,12 +2115,18 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
                       const from = box.total === 0 ? 0 : (page - 1) * listPageSize + 1
                       const to = (page - 1) * listPageSize + box.items.length
                       const hasNext = page * listPageSize < box.total
+                      const boxCollapsed = collapsedBoxKeys.has(box.key)
                       return (
                         <div
                           key={box.key}
                           className="overflow-hidden rounded border border-border bg-background"
                         >
-                          <div className="flex min-w-0 items-center gap-1.5 border-b border-border bg-muted/50 px-2 py-1.5">
+                          <div
+                            className={cn(
+                              'flex min-w-0 items-center gap-1.5 bg-muted/50 px-2 py-1.5',
+                              !boxCollapsed && 'border-b border-border'
+                            )}
+                          >
                             <WtlLayerMark layerKey={box.layerKey} />
                             <span
                               className="min-w-0 truncate text-[11px] font-medium text-foreground"
@@ -2134,87 +2144,122 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
                             <span className="standard-detail-hint shrink-0">
                               · {box.total.toLocaleString()}건
                             </span>
+                            <button
+                              type="button"
+                              className="ml-auto inline-flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground"
+                              title={boxCollapsed ? '펼치기' : '접기'}
+                              aria-label={boxCollapsed ? '펼치기' : '접기'}
+                              aria-expanded={!boxCollapsed}
+                              onClick={() => {
+                                setCollapsedBoxKeys((prev) => {
+                                  const next = new Set(prev)
+                                  if (next.has(box.key)) next.delete(box.key)
+                                  else next.add(box.key)
+                                  return next
+                                })
+                              }}
+                            >
+                              <ChevronDown
+                                className={cn(
+                                  'h-3.5 w-3.5 transition-transform',
+                                  boxCollapsed && '-rotate-90'
+                                )}
+                                aria-hidden
+                              />
+                            </button>
                           </div>
-                          <div
-                            className="overflow-x-auto"
-                            style={{ minHeight: LIST_TABLE_MIN_HEIGHT_PX }}
-                          >
-                            <table className="standard-list-table">
-                              <thead className="standard-table-thead">
-                                <tr>
-                                  {columns.map((col) => (
-                                    <th
-                                      key={col.key}
-                                      className="standard-table-th standard-table-th-left"
-                                      title={listHeaderTitle(col, showFieldKeys)}
-                                    >
-                                      {col.label}
-                                    </th>
-                                  ))}
-                                </tr>
-                              </thead>
-                              <tbody>
-                                {box.items.map((item) => (
-                                  <tr
-                                    key={item.id}
-                                    className={cn(
-                                      'standard-list-row',
-                                      selected?.id === item.id && 'standard-list-row-selected'
-                                    )}
-                                    onClick={() => void pickRow(item, { fly: true })}
-                                  >
-                                    {columns.map((col) => {
-                                      const cell = listCellParts(
-                                        item,
-                                        col,
-                                        codesByField,
-                                        showFieldKeys
-                                      )
-                                      return (
-                                        <td
+                          {!boxCollapsed ? (
+                            <>
+                              <div
+                                className="overflow-x-auto"
+                                style={
+                                  box.items.length >= LIST_PAGE_SIZE
+                                    ? { minHeight: LIST_TABLE_MIN_HEIGHT_PX }
+                                    : undefined
+                                }
+                              >
+                                <table className="standard-list-table">
+                                  <thead className="standard-table-thead">
+                                    <tr>
+                                      {columns.map((col) => (
+                                        <th
                                           key={col.key}
-                                          className="standard-table-td-compact"
-                                          title={cell.title}
+                                          className="standard-table-th standard-table-th-left"
+                                          title={listHeaderTitle(col, showFieldKeys)}
                                         >
-                                          {cell.text}
-                                        </td>
-                                      )
-                                    })}
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
-                          </div>
-                          <div className="flex items-center justify-between gap-2 border-t border-border bg-muted/30 px-2 py-1.5">
-                            <span className="text-[11px] text-muted-foreground">
-                              {box.total === 0
-                                ? '0건'
-                                : `${from}–${to} / ${box.total.toLocaleString()}건`}
-                            </span>
-                            <div className="flex items-center gap-1">
-                              <button
-                                type="button"
-                                title="이전"
-                                disabled={page <= 1 || listLoading}
-                                className="cursor-pointer rounded border border-border bg-background px-2 py-0.5 text-[11px] text-muted-foreground hover:bg-muted/50 disabled:cursor-not-allowed disabled:opacity-50"
-                                onClick={() => void goBoxPage(box, page - 1)}
-                              >
-                                이전
-                              </button>
-                              <span className="px-1.5 text-[11px] text-muted-foreground">
-                                {page}페이지
-                              </span>
-                              <button
-                                type="button"
-                                title="다음"
-                                disabled={!hasNext || listLoading}
-                                className="cursor-pointer rounded border border-border bg-background px-2 py-0.5 text-[11px] text-muted-foreground hover:bg-muted/50 disabled:cursor-not-allowed disabled:opacity-50"
-                                onClick={() => void goBoxPage(box, page + 1)}
-                              >
-                                다음
-                              </button>
-                            </div>
-                          </div>
+                                          {col.label}
+                                        </th>
+                                      ))}
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {box.items.map((item, rowIdx) => (
+                                      <tr
+                                        key={item.id}
+                                        className={cn(
+                                          'standard-list-row',
+                                          selected?.id === item.id &&
+                                            'standard-list-row-selected',
+                                          box.items.length >= LIST_PAGE_SIZE &&
+                                            rowIdx === box.items.length - 1 &&
+                                            'border-b-0'
+                                        )}
+                                        onClick={() => void pickRow(item, { fly: true })}
+                                      >
+                                        {columns.map((col) => {
+                                          const cell = listCellParts(
+                                            item,
+                                            col,
+                                            codesByField,
+                                            showFieldKeys
+                                          )
+                                          return (
+                                            <td
+                                              key={col.key}
+                                              className="standard-table-td-compact"
+                                              title={cell.title}
+                                            >
+                                              {cell.text}
+                                            </td>
+                                          )
+                                        })}
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
+                              <div className="flex items-center justify-between gap-2 border-t border-border bg-muted/30 px-2 py-1.5">
+                                <span className="text-[11px] text-muted-foreground">
+                                  {box.total === 0
+                                    ? '0건'
+                                    : `${from}–${to} / ${box.total.toLocaleString()}건`}
+                                </span>
+                                <div className="flex items-center gap-1">
+                                  <button
+                                    type="button"
+                                    title="이전"
+                                    disabled={page <= 1 || listLoading}
+                                    className="cursor-pointer rounded border border-border bg-background px-2 py-0.5 text-[11px] text-muted-foreground hover:bg-muted/50 disabled:cursor-not-allowed disabled:opacity-50"
+                                    onClick={() => void goBoxPage(box, page - 1)}
+                                  >
+                                    이전
+                                  </button>
+                                  <span className="px-1.5 text-[11px] text-muted-foreground">
+                                    {page}페이지
+                                  </span>
+                                  <button
+                                    type="button"
+                                    title="다음"
+                                    disabled={!hasNext || listLoading}
+                                    className="cursor-pointer rounded border border-border bg-background px-2 py-0.5 text-[11px] text-muted-foreground hover:bg-muted/50 disabled:cursor-not-allowed disabled:opacity-50"
+                                    onClick={() => void goBoxPage(box, page + 1)}
+                                  >
+                                    다음
+                                  </button>
+                                </div>
+                              </div>
+                            </>
+                          ) : null}
                         </div>
                       )
                     })
