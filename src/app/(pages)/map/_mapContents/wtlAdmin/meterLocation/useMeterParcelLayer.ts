@@ -1,13 +1,24 @@
 'use client'
 
 import { useEffect, useRef } from 'react'
+import type Map from 'ol/Map'
 import GeoJSON from 'ol/format/GeoJSON'
 import VectorLayer from 'ol/layer/Vector'
 import VectorSource from 'ol/source/Vector'
 import { Circle, Fill, Stroke, Style, Text } from 'ol/style'
-import { scheduleFitMapToExtent3857 } from '../../../_mapComponents/config/mapAutoNavigation'
+import { createEmpty, extend as extendExtent, isEmpty } from 'ol/extent'
+import {
+  prepareMapForPanelAwareNavigation,
+  scheduleFitMapToExtent3857,
+} from '../../../_mapComponents/config/mapAutoNavigation'
+import { SCALE_BAR_PX } from '../../../_mapComponents/hooks/mapScale'
 import { useMapContext } from '../../../_mapComponents/MapContext'
 import type { MeterLocateResult } from './locateMeterAddresses'
+
+/** 구역 이동 시 목표 축척막대(m) — 80~100 중간 */
+const ZONE_TARGET_SCALE_M = 90
+const ZONE_MIN_SCALE_M = 80
+const ZONE_MAX_SCALE_M = 100
 
 function labelText(label: string, offsetY: number): Text {
   return new Text({
@@ -39,7 +50,57 @@ function pointStyle(label: string): Style {
   })
 }
 
-export function useMeterParcelLayer(rows: MeterLocateResult[], focusId: string | null) {
+/**
+ * 구역 extent로 이동한 뒤 축척막대를 80~100m 밴드로 맞춘다.
+ * extent가 크면 fit 우선(축소 허용), 작으면 목표 90m로 확대.
+ */
+function fitZoneExtentWithScaleBand(
+  map: Map,
+  extent: number[],
+  applyMapViewPadding?: (() => void) | null
+): void {
+  prepareMapForPanelAwareNavigation(map, applyMapViewPadding)
+  const view = map.getView()
+  const size = map.getSize()
+  if (!size || size[0] <= 0 || size[1] <= 0) return
+
+  const fitPadding: [number, number, number, number] = [80, 80, 80, 80]
+  const availW = Math.max(1, size[0] - fitPadding[1] - fitPadding[3])
+  const availH = Math.max(1, size[1] - fitPadding[0] - fitPadding[2])
+  let resolution = view.getResolutionForExtent(extent as [number, number, number, number], [
+    availW,
+    availH,
+  ])
+  if (!Number.isFinite(resolution) || resolution <= 0) return
+
+  const scaleAtFit = resolution * SCALE_BAR_PX
+  const maxRes = ZONE_MAX_SCALE_M / SCALE_BAR_PX
+  const minRes = ZONE_MIN_SCALE_M / SCALE_BAR_PX
+  const targetRes = ZONE_TARGET_SCALE_M / SCALE_BAR_PX
+
+  if (scaleAtFit > ZONE_MAX_SCALE_M) {
+    // 구역이 커서 100m보다 더 축소해야 함 — fit 유지
+  } else if (scaleAtFit < ZONE_MIN_SCALE_M) {
+    resolution = targetRes
+  } else {
+    resolution = Math.min(maxRes, Math.max(minRes, resolution))
+  }
+
+  const cx = (extent[0]! + extent[2]!) / 2
+  const cy = (extent[1]! + extent[3]!) / 2
+  view.animate({
+    center: [cx, cy],
+    resolution,
+    duration: 500,
+  })
+}
+
+export function useMeterParcelLayer(
+  rows: MeterLocateResult[],
+  focusId: string | null,
+  zoneFocusKey: string | null,
+  zoneRowIds: string[] | null
+) {
   const mapContext = useMapContext()
   const sourceRef = useRef<VectorSource | null>(null)
 
@@ -113,4 +174,33 @@ export function useMeterParcelLayer(rows: MeterLocateResult[], focusId: string |
       applyMapViewPadding: mapContext?.applyMapViewPaddingRef?.current,
     })
   }, [focusId, mapContext?.applyMapViewPaddingRef, mapContext?.mapInstanceRef])
+
+  useEffect(() => {
+    if (!zoneFocusKey || !zoneRowIds || zoneRowIds.length === 0) return
+    const map = mapContext?.mapInstanceRef?.current
+    const source = sourceRef.current
+    if (!map || !source) return
+
+    const extent = createEmpty()
+    for (const id of zoneRowIds) {
+      const geom = source.getFeatureById(id)?.getGeometry()
+      if (!geom) continue
+      extendExtent(extent, geom.getExtent())
+    }
+    if (isEmpty(extent) || !extent.every((v) => Number.isFinite(v))) return
+
+    const run = () => {
+      fitZoneExtentWithScaleBand(map, extent, mapContext?.applyMapViewPaddingRef?.current)
+    }
+    queueMicrotask(() => {
+      requestAnimationFrame(() => {
+        requestAnimationFrame(run)
+      })
+    })
+  }, [
+    zoneFocusKey,
+    zoneRowIds,
+    mapContext?.applyMapViewPaddingRef,
+    mapContext?.mapInstanceRef,
+  ])
 }

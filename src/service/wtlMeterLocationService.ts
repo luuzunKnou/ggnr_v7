@@ -116,3 +116,42 @@ export async function locateMetersByNumbers(params: {
     }),
   };
 }
+
+export type WtlMeterSuggestDto = {
+  meterNo: string;
+  address: string;
+};
+
+/**
+ * 계량기번호(met_num) 자동완성 — prefix ILIKE.
+ */
+export async function suggestMeterNumbers(params: {
+  keyword?: string | null;
+  limit?: number | null;
+}): Promise<{ rows: WtlMeterSuggestDto[] }> {
+  const keyword = String(params.keyword ?? '').trim();
+  if (!keyword) return { rows: [] };
+  if (!(await tableExists('layer', 'wtl_meta_ps'))) return { rows: [] };
+
+  const lim = Math.min(50, Math.max(1, Number(params.limit) || 30));
+  const res = await db.execute(
+    sql.raw(
+      `SELECT DISTINCT trim(t.met_num) AS "meterNo",
+         COALESCE(NULLIF(trim(t.hom_adr),''), '') AS address
+       FROM layer.wtl_meta_ps t
+       WHERE NULLIF(trim(t.met_num),'') IS NOT NULL
+         AND trim(t.met_num) ILIKE '${esc(keyword)}%'
+       ORDER BY 1
+       LIMIT ${lim}`
+    )
+  );
+
+  const rows: WtlMeterSuggestDto[] = [];
+  for (const row of res.rows ?? []) {
+    const r = row as Record<string, unknown>;
+    const meterNo = asStr(r.meterNo);
+    if (!meterNo) continue;
+    rows.push({ meterNo, address: asStr(r.address) });
+  }
+  return { rows };
+}

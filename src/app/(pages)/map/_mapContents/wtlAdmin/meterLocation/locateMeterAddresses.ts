@@ -33,6 +33,11 @@ export function parseMeterAddressLines(text: string): string[] {
   return out
 }
 
+/** 단건 누적 추가 시에도 겹치지 않는 행 id */
+function nextMeterRowId(input: string): string {
+  return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}-${input}`
+}
+
 function compact(value: string): string {
   return value.replace(/\s+/g, '')
 }
@@ -132,11 +137,11 @@ async function parcelAtPoint(
 
 async function locateOne(
   input: string,
-  index: number,
+  _index: number,
   apiKey: string,
   region: PreferRegion | undefined
 ): Promise<MeterLocateResult> {
-  const id = `${index}-${input}`
+  const id = nextMeterRowId(input)
   const road = await searchAddress(input, { apiKey, maxResults: 8, category: 'road' })
   let hit = pickAddress(input, road)
   if (!hit) {
@@ -227,10 +232,10 @@ type MeterByNumberRow = {
 
 async function locateOneByNumber(
   row: MeterByNumberRow,
-  index: number,
+  _index: number,
   apiKey: string
 ): Promise<MeterLocateResult> {
-  const id = `${index}-${row.input}`
+  const id = nextMeterRowId(row.input)
   if (!row.found || !row.point) {
     return {
       id,
@@ -308,7 +313,7 @@ export async function locateMeterInputs(args: {
           results[index] = await locateOne(line, index, apiKey, region)
         } else {
           results[index] = {
-            id: `${index}-${line}`,
+            id: nextMeterRowId(line),
             input: line,
             status: 'miss',
             detail: '위치를 찾지 못했습니다',
@@ -318,7 +323,7 @@ export async function locateMeterInputs(args: {
         }
       } catch {
         results[index] = {
-          id: `${index}-${line}`,
+          id: nextMeterRowId(line),
           input: line,
           status: 'miss',
           detail: '조회에 실패했습니다',
