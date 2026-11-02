@@ -16,8 +16,8 @@ export type InterpolatedGroundParts = {
 };
 
 /**
- * 절단선(밑변) + 깊이(halfWidth) 기준 **축정렬이 아닌 사각형** 지형 메시.
- * 월드 격자를 잘라 쓰는 방식은 톱니 경계가 되므로, 라인 축(u)·수직(v) 격자로 재샘플.
+ * 절단선 중심 ±halfWidth **축정렬이 아닌 사각형** 지형 메시.
+ * 관로 조회 폴리곤(LINE 띠)과 같은 발자국.
  */
 export function createSectionRectGroundParts(
   field: GroundHeightField,
@@ -31,14 +31,14 @@ export function createSectionRectGroundParts(
   const stepM = Math.max(0.5, field.stepM || SECTION_STEP_M);
   const stepU = stepM / scale;
   const halfL = Math.max(1e-6, axes.halfLenM);
-  const depth = Math.max(1e-6, axes.halfWidthM);
+  const halfW = Math.max(1e-6, axes.halfWidthM);
   const nu = Math.max(2, Math.ceil((halfL * 2) / stepU) + 1);
-  const nv = Math.max(2, Math.ceil(depth / stepU) + 1);
+  const nv = Math.max(2, Math.ceil((halfW * 2) / stepU) + 1);
   const thick = Math.max(0, thicknessM);
 
   const xzAt = (iu: number, iv: number) => {
     const u = -halfL + (iu / (nu - 1)) * (halfL * 2);
-    const v = (iv / (nv - 1)) * depth;
+    const v = -halfW + (iv / (nv - 1)) * (halfW * 2);
     return {
       x: axes.midX + axes.alongX * u + axes.perpX * v,
       z: axes.midZ + axes.alongZ * u + axes.perpZ * v,

@@ -265,8 +265,7 @@ function buildGround(props: ShapeProps): THREE.Group {
   }
 
   // 윗면만 색상 채움 + 아랫면·옆면 외곽선
-  // 범위: AA 정사각 고도장 메시 / 단면: LINE→사각형 발자국 메시(관로 조회 polygon과 동일)
-  // ※ 단면 고도장을 null clip 하면 지형이 폴리곤보다 안쪽으로 줄어 관로가 «지형 밖»처럼 보임
+  // 범위: AA 정사각 / 단면: 절단선 중심 ±halfWidth 띠 (관로 조회 polygon과 동일)
   const thicknessM = Math.max(0, props.height ?? 0);
   const sectionLine =
     props.groundDrawMode === 'section' ? props.groundSectionLine ?? null : null;

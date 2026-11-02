@@ -105,7 +105,7 @@ export function distToLineM(coords: Pt3857[], px: number, py: number): number {
 }
 
 /**
- * 종단 — 관로 버텍스를 절단선에 투영한 거리 구간.
+ * 종단(구) — 관로 버텍스를 절단선에 투영한 거리 구간.
  */
 export function pipeSpanAlongLineM(
   cut: Pt3857[],
@@ -124,6 +124,109 @@ export function pipeSpanAlongLineM(
     // 점이면 짧은 구간으로 보이게
     const mid = (minD + maxD) / 2
     return { fromM: mid - 0.4, toM: mid + 0.4, midM: mid }
+  }
+  return { fromM: minD, toM: maxD, midM: (minD + maxD) / 2 }
+}
+
+/**
+ * 절단선(좌→우 정규화) 기준 깊이축 단위벡터·반폭.
+ * ThreeJs/지도 사각형과 동일 — 중심 ±halfWidthM (옆면 길이 = 2×halfWidth).
+ */
+export function sectionDepthAxes3857(
+  cut: Pt3857[],
+  halfWidthM: number
+): {
+  mid: Pt3857
+  alongX: number
+  alongY: number
+  perpX: number
+  perpY: number
+  halfLenM: number
+  halfWidthM: number
+  m2p: number
+} | null {
+  if (cut.length < 2) return null
+  let ax = cut[0]![0]
+  let ay = cut[0]![1]
+  let bx = cut[cut.length - 1]![0]
+  let by = cut[cut.length - 1]![1]
+  if (bx < ax || (bx === ax && by < ay)) {
+    ;[ax, ay, bx, by] = [bx, by, ax, ay]
+  }
+  const my = (ay + by) / 2
+  const m2p = meterToProjAtY3857(my)
+  let dx = bx - ax
+  let dy = by - ay
+  const lenProj = Math.hypot(dx, dy)
+  if (lenProj < 1e-6) return null
+  dx /= lenProj
+  dy /= lenProj
+  const halfLenM = lenProj / m2p / 2
+  const hw = Math.max(1, halfWidthM)
+  return {
+    mid: [(ax + bx) / 2, (ay + by) / 2],
+    alongX: dx,
+    alongY: dy,
+    perpX: -dy,
+    perpY: dx,
+    halfLenM,
+    halfWidthM: hw,
+    m2p,
+  }
+}
+
+/**
+ * 점 → 깊이축 거리(m). 옆면 기준 0…2×halfWidth (절단선=halfWidth).
+ * 사각형 밖이면 null.
+ */
+export function projectDistAlongDepthM(
+  cut: Pt3857[],
+  px: number,
+  py: number,
+  halfWidthM: number,
+  padM = 0.5
+): number | null {
+  const axes = sectionDepthAxes3857(cut, halfWidthM)
+  if (!axes) return null
+  const rx = px - axes.mid[0]
+  const ry = py - axes.mid[1]
+  const uM = (rx * axes.alongX + ry * axes.alongY) / axes.m2p
+  const vM = (rx * axes.perpX + ry * axes.perpY) / axes.m2p
+  const pad = Math.max(0, padM)
+  if (Math.abs(uM) > axes.halfLenM + pad) return null
+  if (Math.abs(vM) > axes.halfWidthM + pad) return null
+  return vM + axes.halfWidthM
+}
+
+/**
+ * 종단 — 사각형 안 관 버텍스를 깊이축(옆면)에 투영한 구간.
+ * from/to/mid 단위: 0…2×halfWidthM (절단선 중심 = halfWidthM).
+ */
+export function pipeSpanAlongDepthM(
+  cut: Pt3857[],
+  pipe: Pt3857[],
+  halfWidthM: number
+): { fromM: number; toM: number; midM: number } | null {
+  if (cut.length < 2 || pipe.length < 2) return null
+  const depthSpan = Math.max(2, halfWidthM) * 2
+  let minD = Infinity
+  let maxD = -Infinity
+  let any = false
+  for (const p of pipe) {
+    const d = projectDistAlongDepthM(cut, p[0], p[1], halfWidthM)
+    if (d == null) continue
+    any = true
+    if (d < minD) minD = d
+    if (d > maxD) maxD = d
+  }
+  if (!any || !Number.isFinite(minD) || !Number.isFinite(maxD)) return null
+  if (maxD - minD < 0.05) {
+    const mid = (minD + maxD) / 2
+    return {
+      fromM: Math.max(0, mid - 0.4),
+      toM: Math.min(depthSpan, mid + 0.4),
+      midM: mid,
+    }
   }
   return { fromM: minD, toM: maxD, midM: (minD + maxD) / 2 }
 }
@@ -147,8 +250,8 @@ function segmentIntersect(
 }
 
 /**
- * 절단선 밑변 + 좌측 깊이(halfWidthM) 사각형 링 (EPSG:3857, 닫힘).
- * ThreeJs `sectionRectRing3857` 과 동일 규칙.
+ * 절단선 중심 ±halfWidthM 띠 링 (EPSG:3857, 닫힘).
+ * ThreeJs `sectionRectRing3857` · 2D 단면도 관로 조회와 동일.
  */
 export function sectionCutRectRing3857(
   start3857: Pt3857,
@@ -159,7 +262,6 @@ export function sectionCutRectRing3857(
   let ay = start3857[1]
   let bx = end3857[0]
   let by = end3857[1]
-  // 좌→우(서→동) 정규화
   if (bx < ax || (bx === ax && by < ay)) {
     ;[ax, ay, bx, by] = [bx, by, ax, ay]
   }
@@ -181,15 +283,15 @@ export function sectionCutRectRing3857(
   dx /= len
   dy /= len
   const m2p = meterToProjAtY3857(my)
-  const depthProj = Math.max(1, halfWidthM) * m2p
-  const ox = -dy * depthProj
-  const oy = dx * depthProj
+  const halfProj = Math.max(1, halfWidthM) * m2p
+  const ox = -dy * halfProj
+  const oy = dx * halfProj
   return [
-    [ax, ay],
-    [bx, by],
-    [bx + ox, by + oy],
     [ax + ox, ay + oy],
-    [ax, ay],
+    [bx + ox, by + oy],
+    [bx - ox, by - oy],
+    [ax - ox, ay - oy],
+    [ax + ox, ay + oy],
   ]
 }
 

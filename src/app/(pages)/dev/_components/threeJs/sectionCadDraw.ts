@@ -370,16 +370,16 @@ function intersectPipeCutPlane(
 ): { station: number; elev: number; surf: number; r: number; label?: string; color: string } | null {
   const pts = pipeLocalPts(pipe, field);
   if (pts.length < 2) return null;
-  const depth = axes.halfWidthM;
+  const halfW = axes.halfWidthM;
   for (let i = 0; i < pts.length - 1; i++) {
     const a = pts[i]!;
     const b = pts[i + 1]!;
     const ua = uvOf(a.x, a.z, axes);
     const ub = uvOf(b.x, b.z, axes);
-    // 절단 평면 v=0 교차. 띠 근처(깊이)를 지나가는 관만
+    // 절단 평면 v=0 교차. 띠(|v|≤halfWidth)를 지나가는 관만
     const nearStrip =
-      (ua.v >= -padU && ua.v <= depth + padU) ||
-      (ub.v >= -padU && ub.v <= depth + padU) ||
+      Math.abs(ua.v) <= halfW + padU ||
+      Math.abs(ub.v) <= halfW + padU ||
       ua.v * ub.v <= 0;
     if (!nearStrip) continue;
     if (ua.v * ub.v > 0 && Math.abs(ua.v) > 1e-4 && Math.abs(ub.v) > 1e-4) continue;
@@ -1055,7 +1055,7 @@ function drawCrossSection(cad: CadCtx): string {
         const loc = toLocal(m.x3857, m.y3857, field);
         const { u, v } = uvOf(loc.x, loc.z, axes);
         if (Math.abs(u) > axes.halfLenM + 0.8) continue;
-        if (v < -0.8 || v > axes.halfWidthM + 0.8) continue;
+        if (Math.abs(v) > axes.halfWidthM + 0.8) continue;
         if (Math.abs(v) > Math.max(1.2, axes.halfWidthM * 0.35) && Math.abs(v) > 1.5) {
           continue;
         }
@@ -1369,7 +1369,7 @@ function drawLongSection(cad: CadCtx): string {
       if (isSection) {
         const { u, v } = uvOf(loc.x, loc.z, axes);
         if (Math.abs(u) > axes.halfLenM + 0.8) continue;
-        if (v < -0.8 || v > axes.halfWidthM + 0.8) continue;
+        if (Math.abs(v) > axes.halfWidthM + 0.8) continue;
       }
       const s = (loc.x - axes.midX) * dirX + (loc.z - axes.midZ) * dirZ;
       const surf =

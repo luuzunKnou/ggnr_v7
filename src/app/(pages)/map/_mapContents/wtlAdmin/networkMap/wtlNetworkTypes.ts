@@ -26,7 +26,12 @@ export type WtlNetworkFilterMeta = {
   yearMax: number
   diameterMin: number
   diameterMax: number
+  /** UI 칩 라벨(한글 재질명 + «기타») */
   materials: string[]
+  /** 한글 재질명 → mop_cde 목록 (목록 SQL·WMS CQL 공통) */
+  materialLabelToCodes: Record<string, string[]>
+  /** 상위 재질 코드 — «기타» = 이 목록에 없는 값 */
+  materialTopCodes: string[]
 }
 
 export type WtlNetworkLengthStatRow = {
@@ -46,6 +51,28 @@ export type WtlNetworkStatusStats = {
   /** 관용도(saa_cde)별 연장 */
   bySaa: WtlNetworkLengthStatRow[]
   facilityCounts: WtlNetworkFacilityCountRow[]
+}
+
+/**
+ * 현황·교차표 공통 — 리스트 패널 검색 + «화면에 보이는 시설만» + 켜진 레이어.
+ * 목록 getWtlNetworkList 와 동일 필드.
+ */
+export type WtlNetworkStatusListFilter = {
+  /** 사이드바에서 켜진 레이어 키(상수관로 기타·배수 등). 비면 관로 집계 없음 */
+  layerKeys?: string[] | null
+  /** true 인데 bbox 없으면 집계 보류(빈 결과) — 목록 «화면에 보이는 시설만»과 동일 */
+  onlyInView?: boolean
+  bbox?: number[] | null
+  keyword?: string
+  yearFrom?: number | null
+  yearTo?: number | null
+  diameterFrom?: number | null
+  diameterTo?: number | null
+  materials?: string[]
+  emdCode?: string | null
+  riCode?: string | null
+  supplyBlock?: string | null
+  areaWkts5181?: string[] | null
 }
 
 /** 확대 모달 교차축 — 관경(dip) / 연도(year) */
@@ -109,6 +136,8 @@ export type WtlNetworkDipMatrixParams = {
   emdCodes?: string[] | null
   years?: string[] | null
   saaCodes?: string[] | null
+  /** 리스트 패널 검색·화면 범위 */
+  listFilter?: WtlNetworkStatusListFilter | null
 }
 
 /** 연도별 확대 모달 — years 필터는 무시(축이 연도). 그 외는 관경과 동일 */
@@ -140,4 +169,6 @@ export type WtlNetworkSaaMatrixParams = {
   years?: string[] | null
   diameterFrom?: number | null
   diameterTo?: number | null
+  /** 리스트 패널 검색·화면 범위 */
+  listFilter?: WtlNetworkStatusListFilter | null
 }

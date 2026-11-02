@@ -26,7 +26,8 @@ import {
   lineLengthM,
   parseLineWkt5181,
   pipeCutIntersect3857,
-  pipeSpanAlongLineM,
+  pipeSpanAlongDepthM,
+  projectDistAlongDepthM,
   projectDistAlongLineM,
   sectionCutRectRing3857,
   type Pt3857,
@@ -37,7 +38,7 @@ import type {
   SectionSupplyAreaLine,
 } from './wtlNetworkSectionSvg'
 
-export type SectionTab = 'cross' | 'long' | 'prev' | 'threejs'
+export type SectionTab = 'cross' | 'long' | 'crossChart' | 'longChart' | 'prev' | 'threejs'
 
 /** 단면도 절단선 — 우측 «거리 측정»(#3388ff)과 동일 */
 const SECTION_CUT_LINE_STROKE = new Style({
@@ -65,8 +66,8 @@ function sectionCutLineStyle(feature: FeatureLike): Style[] {
   return styles
 }
 
-/** ThreeJs 단면도 지형 깊이(m) — groundSection SECTION_DEFAULT_HALF_WIDTH_M 과 동일 */
-const SECTION_RECT_HALF_WIDTH_M = 5
+/** ThreeJs 단면도 지형: 절단선 수직 ±2.5m — groundSection 과 동일 */
+const SECTION_RECT_HALF_WIDTH_M = 2.5
 /** 절단선 밑변 × 깊이 사각형 — ThreeJs 지형 격자와 동일 범위 */
 const SECTION_RECT_STROKE = new Style({
   stroke: new Stroke({ color: '#22c55e', width: 2 }),
@@ -101,14 +102,42 @@ export type SectionSupplyAreas = {
   blockName: string | null
 }
 
+export type SectionSupplyBandSegment = {
+  role: 'zone' | 'subzone' | 'block'
+  name: string
+  fromM: number
+  toM: number
+  color: string
+}
+
 type SectionApi = {
   success?: boolean
   ground?: { distM: number; elevM: number; x3857: number; y3857: number }[]
+  groundMin?: { distM: number; elevM: number; x3857: number; y3857: number }[]
+  groundMax?: { distM: number; elevM: number; x3857: number; y3857: number }[]
   totalLengthM?: number
   pipes?: PipeRow[]
   points?: PointRow[]
   supplyAreas?: SectionSupplyAreas
+  supplyAreaBands?: SectionSupplyBandSegment[]
   error?: string
+}
+
+/** 종단 깊이축 halfWidth — ThreeJs 사각형과 동일 */
+const LONG_HALF_WIDTH_M = SECTION_RECT_HALF_WIDTH_M
+/** 횡단·기존 시설 버퍼 */
+const CROSS_HALF_WIDTH_M = 3
+
+function isLongProfileTab(tab: SectionTab): boolean {
+  return tab === 'long' || tab === 'longChart'
+}
+
+function halfWidthForTab(tab: SectionTab): number {
+  return isLongProfileTab(tab) ? LONG_HALF_WIDTH_M : CROSS_HALF_WIDTH_M
+}
+
+function profileAxisForTab(tab: SectionTab): 'along' | 'depth' {
+  return isLongProfileTab(tab) ? 'depth' : 'along'
 }
 
 const EMPTY_SUPPLY_AREAS: SectionSupplyAreas = {
@@ -261,12 +290,14 @@ function buildFeatures(
     const label = String(pipe.label ?? '').trim() || `${Math.round(pipe.diameterM * 1000)}mm`
     const depthM = Number.isFinite(pipe.depthM) ? pipe.depthM : 0
 
-    if (mode === 'cross' || mode === 'prev') {
-      // 횡단·기존: 절단선 교차 관만
+    const crossLike = mode === 'cross' || mode === 'crossChart' || mode === 'prev'
+    if (crossLike) {
+      // 횡단·차트횡단·기존: 절단선 교차 관만
       const cut = pipeCutIntersect3857(line3857, pipe.coords3857)
       if (!cut) continue
-      let surface = pipe.surfaceElevM
-      if (surface == null) surface = groundAtDist(ground, cut.distM) ?? undefined
+      // 관 중점 IDW(surfaceElevM) 금지 — 절단선 등고만 사용(점시설·CAD와 동일).
+      // 중점 지표가 교차점 등고보다 높으면 심도를 빼도 지형선 위에 뜸.
+      const surface = groundAtDist(ground, cut.distM) ?? undefined
       out.push({
         id: `pipe:${pipe.id}:${cut.distM.toFixed(2)}`,
         distM: cut.distM,
@@ -281,11 +312,11 @@ function buildFeatures(
       continue
     }
 
-    // 종단: 버퍼 안 관 → 거리 구간(측면)
-    const span = pipeSpanAlongLineM(line3857, pipe.coords3857)
+    // 종단·차트종단: 사각형 안 관 → 깊이축(옆면) 구간
+    const span = pipeSpanAlongDepthM(line3857, pipe.coords3857, LONG_HALF_WIDTH_M)
     if (!span) continue
-    let surface = pipe.surfaceElevM
-    if (surface == null) surface = groundAtDist(ground, span.midM) ?? undefined
+    // 종단 도면도 깊이축 등고 기준(중점 IDW 미사용)
+    const surface = groundAtDist(ground, span.midM) ?? undefined
     out.push({
       id: `pipe:${pipe.id}:${span.midM.toFixed(2)}`,
       distM: span.midM,
@@ -307,11 +338,19 @@ function buildFeatures(
     if (!enabledKeys.has(table) && ![...enabledKeys].some((k) => getWtlNetLayerDef(k as WtlNetLayerKey)?.table === table)) {
       continue
     }
-    if ((mode === 'cross' || mode === 'prev') && distToLineM(line3857, pt.x3857, pt.y3857) > 2) {
+    const crossLike = mode === 'cross' || mode === 'crossChart' || mode === 'prev'
+    if (crossLike && distToLineM(line3857, pt.x3857, pt.y3857) > 2) {
       continue
     }
 
-    const distM = projectDistAlongLineM(line3857, pt.x3857, pt.y3857)
+    let distM: number
+    if (isLongProfileTab(mode)) {
+      const d = projectDistAlongDepthM(line3857, pt.x3857, pt.y3857, LONG_HALF_WIDTH_M)
+      if (d == null) continue
+      distM = d
+    } else {
+      distM = projectDistAlongLineM(line3857, pt.x3857, pt.y3857)
+    }
     // 관로가 아닌 점형(변류·맨홀 등)은 단면 지표에 둔다.
     // API surfaceElevM(IDW)이 등고와 어긋나면 심도처럼 깊게 보이므로 절단선 등고만 사용.
     const surface = groundAtDist(ground, distM) ?? undefined
@@ -338,8 +377,11 @@ export function useWtlNetworkSection(enabledLayerKeys: string[]) {
   const [tab, setTab] = useState<SectionTab>('cross')
   const [line3857, setLine3857] = useState<Pt3857[] | null>(null)
   const [ground, setGround] = useState<SectionGroundPt[]>([])
+  const [groundMin, setGroundMin] = useState<SectionGroundPt[]>([])
+  const [groundMax, setGroundMax] = useState<SectionGroundPt[]>([])
   const [features, setFeatures] = useState<SectionFeatureMark[]>([])
   const [supplyAreasRaw, setSupplyAreasRaw] = useState<SectionSupplyAreas>(EMPTY_SUPPLY_AREAS)
+  const [supplyAreaBands, setSupplyAreaBands] = useState<SectionSupplyBandSegment[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [totalLengthM, setTotalLengthM] = useState(0)
@@ -355,6 +397,20 @@ export function useWtlNetworkSection(enabledLayerKeys: string[]) {
     () => buildSupplyAreaLines(supplyAreasRaw, enabledLayerKeys),
     [supplyAreasRaw, enabledLayerKeys]
   )
+
+  /** 켜진 급수구역·분구·블록만 하단 밴드에 표시 */
+  const supplyAreaBandsFiltered = useMemo(() => {
+    const keys = new Set(
+      enabledLayerKeys.map((k) => String(k).trim().toLowerCase()).filter(Boolean)
+    )
+    const has = (base: string) =>
+      keys.has(base) || [...keys].some((k) => k === base || k.endsWith(`_${base}`))
+    return supplyAreaBands.filter((s) => {
+      if (s.role === 'zone') return has('wtl_wtsa_as')
+      if (s.role === 'subzone') return has('wtl_wtssa_as')
+      return has('wtl_wtsba_as')
+    })
+  }, [supplyAreaBands, enabledLayerKeys])
 
   const setSpatialDrawRequest = mapContext?.setSpatialDrawRequest
 
@@ -416,27 +472,33 @@ export function useWtlNetworkSection(enabledLayerKeys: string[]) {
     setPanelOpen(false)
     setLine3857(null)
     setGround([])
+    setGroundMin([])
+    setGroundMax([])
     setFeatures([])
     setSupplyAreasRaw(EMPTY_SUPPLY_AREAS)
+    setSupplyAreaBands([])
     setError('')
     setDrawing(false)
     setSpatialDrawRequest?.(null)
   }, [setSpatialDrawRequest])
 
   const loadSection = useCallback(
-    async (coords: Pt3857[], halfWidthM: number) => {
+    async (coords: Pt3857[], tab: SectionTab) => {
       setLoading(true)
       setError('')
       try {
         const { lineTables, pointTables, supplyAreaTables } = resolveTables(
           keysRef.current
         )
+        const halfWidthM = halfWidthForTab(tab)
+        const profileAxis = profileAxisForTab(tab)
         const res = await call('', 'POST', {
           service: 'elevationService',
           action: 'getWtlNetworkSectionData',
           params: {
             coords3857: coords,
             halfWidthM,
+            profileAxis,
             sampleCount: 28,
             lineTables,
             pointTables,
@@ -447,28 +509,42 @@ export function useWtlNetworkSection(enabledLayerKeys: string[]) {
         if (!data?.success) {
           setError(data?.error ?? '단면도 조회 실패')
           setGround([])
+          setGroundMin([])
+          setGroundMax([])
           setFeatures([])
           setSupplyAreasRaw(EMPTY_SUPPLY_AREAS)
+          setSupplyAreaBands([])
           return
         }
-        const g: SectionGroundPt[] = (data.ground ?? [])
-          .filter((p) => Number.isFinite(p.elevM))
-          .map((p) => ({ distM: p.distM, elevM: p.elevM }))
+        const mapPts = (
+          rows: { distM: number; elevM: number }[] | undefined
+        ): SectionGroundPt[] =>
+          (rows ?? [])
+            .filter((p) => Number.isFinite(p.elevM))
+            .map((p) => ({ distM: p.distM, elevM: p.elevM }))
+        const g = mapPts(data.ground)
+        const gMin = mapPts(data.groundMin)
+        const gMax = mapPts(data.groundMax)
         rawRef.current = {
           pipes: data.pipes ?? [],
           points: data.points ?? [],
         }
         setSupplyAreasRaw(data.supplyAreas ?? EMPTY_SUPPLY_AREAS)
+        setSupplyAreaBands(
+          Array.isArray(data.supplyAreaBands) ? data.supplyAreaBands : []
+        )
         setGround(g)
+        setGroundMin(gMin)
+        setGroundMax(gMax)
         setTotalLengthM(
           Number(data.totalLengthM) ||
             g[g.length - 1]?.distM ||
-            lineLengthM(coords) ||
+            (isLongProfileTab(tab) ? LONG_HALF_WIDTH_M * 2 : lineLengthM(coords)) ||
             0
         )
         setFeatures(
           buildFeatures(
-            tabRef.current,
+            tab,
             coords,
             g,
             rawRef.current.pipes,
@@ -517,7 +593,10 @@ export function useWtlNetworkSection(enabledLayerKeys: string[]) {
 
     setError('')
     setGround([])
+    setGroundMin([])
+    setGroundMax([])
     setFeatures([])
+    setSupplyAreaBands([])
     setLine3857(null)
     setPanelOpen(false)
     setDrawing(true)
@@ -541,8 +620,7 @@ export function useWtlNetworkSection(enabledLayerKeys: string[]) {
         })
         setLine3857(coords3857)
         setPanelOpen(true)
-        const half = tabRef.current === 'long' ? 8 : 3
-        void loadSection(coords3857, half)
+        void loadSection(coords3857, tabRef.current)
       },
     })
   }, [mapContext, setSpatialDrawRequest, loadSection])
@@ -559,8 +637,11 @@ export function useWtlNetworkSection(enabledLayerKeys: string[]) {
       setPanelOpen(false)
       setLine3857(null)
       setGround([])
+      setGroundMin([])
+      setGroundMax([])
       setFeatures([])
       setSupplyAreasRaw(EMPTY_SUPPLY_AREAS)
+      setSupplyAreaBands([])
       setError('')
     }
     beginLineDraw()
@@ -571,8 +652,11 @@ export function useWtlNetworkSection(enabledLayerKeys: string[]) {
     setPanelOpen(false)
     setLine3857(null)
     setGround([])
+    setGroundMin([])
+    setGroundMax([])
     setFeatures([])
     setSupplyAreasRaw(EMPTY_SUPPLY_AREAS)
+    setSupplyAreaBands([])
     setError('')
     setDrawing(false)
     setSpatialDrawRequest?.(null)
@@ -589,7 +673,7 @@ export function useWtlNetworkSection(enabledLayerKeys: string[]) {
     if (supplyAreaKeysSigRef.current === supplyAreaKeysSig) return
     supplyAreaKeysSigRef.current = supplyAreaKeysSig
     if (!line3857 || line3857.length < 2) return
-    void loadSection(line3857, tab === 'long' ? 8 : 3)
+    void loadSection(line3857, tab)
   }, [supplyAreaKeysSig, line3857, tab, loadSection])
 
   const setTabAndReload = useCallback(
@@ -601,7 +685,7 @@ export function useWtlNetworkSection(enabledLayerKeys: string[]) {
         rebuildFeatures('cross', line3857, ground)
         return
       }
-      void loadSection(line3857, next === 'long' ? 8 : 3)
+      void loadSection(line3857, next)
     },
     [line3857, loadSection, rebuildFeatures, ground]
   )
@@ -620,8 +704,11 @@ export function useWtlNetworkSection(enabledLayerKeys: string[]) {
     tab,
     setTab: setTabAndReload,
     ground,
+    groundMin,
+    groundMax,
     features,
     supplyAreaLines,
+    supplyAreaBands: supplyAreaBandsFiltered,
     loading,
     error,
     totalLengthM,

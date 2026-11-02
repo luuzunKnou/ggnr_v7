@@ -2,11 +2,8 @@ import type { GroundHeightField, GroundSectionLine } from './shapeTypes';
 import { GROUND_SCENE_M_PER_UNIT } from './shapeTypes';
 import { sampleHeight } from './groundSteppedMesh';
 
-/**
- * 단면도 사각형 깊이(밑변→맞은편, m).
- * 등고 확인 가능한 최소 폭. 격자 step(SECTION_STEP_M)의 2칸 이상이어야 상단 채움 셀이 생김.
- */
-export const SECTION_DEFAULT_HALF_WIDTH_M = 5;
+/** 단면도 사각형: 절단선 수직 한쪽(m). 띠 전체 = ± 이 값 */
+export const SECTION_DEFAULT_HALF_WIDTH_M = 2.5;
 /** 단면도 전용 격자 간격(m) — 얇은 띠에서도 삼각형이 생기도록 */
 export const SECTION_STEP_M = 2;
 
@@ -45,35 +42,31 @@ export function sectionLineLengthM(line: GroundSectionLine): number {
 
 /**
  * 절단선 → 덮는 정사각 반경(m).
- * 밑변=라인, 깊이=halfWidthM 인 사각형을 감쌈.
+ * 라인 중심, 좌우 halfWidthM 띠의 코너까지.
  */
 export function sectionCoverRadiusM(line: GroundSectionLine): number {
   const halfL = sectionLineLengthM(line) / 2;
-  const depth = Math.max(1, line.halfWidthM);
-  // 격자 중심은 사각형 중심(라인에서 깊이/2) 기준이므로 반경은 코너까지
-  return Math.max(1, Math.min(2000, Math.hypot(halfL, depth / 2) * 1.08));
+  const halfW = Math.max(1, line.halfWidthM);
+  return Math.max(1, Math.min(2000, Math.hypot(halfL, halfW) * 1.08));
 }
 
-/**
- * 단면도 사각형 깊이(m) — 고도·등고 확인 최소값.
- * (라인 길이와 무관, step×2 이상)
- */
+/** 단면도 사각형 깊이(m) — 절단선 수직 한쪽 */
 export function suggestSectionHalfWidthM(_lengthM?: number): number {
-  return Math.max(SECTION_DEFAULT_HALF_WIDTH_M, SECTION_STEP_M * 2);
+  return SECTION_DEFAULT_HALF_WIDTH_M;
 }
 
 export type SectionAxesLocal = {
-  /** 밑변(절단선) 중점 로컬 */
+  /** 절단선 중점 로컬 */
   midX: number;
   midZ: number;
   /** 라인 방향 단위 (씬 XZ, −Z=북) */
   alongX: number;
   alongZ: number;
-  /** 밑변에서 사각형이 뻗는 쪽(수평 수직) */
+  /** 라인 수직(수평). 좌→우 진행 왼쪽 */
   perpX: number;
   perpZ: number;
   halfLenM: number;
-  /** 밑변 → 맞은편 깊이(m, 씬 단위) */
+  /** 라인에서 수직 한쪽 반폭(m, 씬 단위). 띠 전체 폭 = 2× */
   halfWidthM: number;
 };
 
@@ -114,7 +107,7 @@ export function sectionAxesFromField(
 
 /**
  * 로컬점 → 단면도 사각형 내부.
- * 밑변=절단선(v=0), 깊이 방향 v∈[0, depth], 길이 |u|≤halfL
+ * 절단선(v=0) 중심, |v|≤halfWidth, |u|≤halfL
  * padM: 격자 경계 샘플을 넣기 위한 여유(채움 구멍 방지)
  */
 export function isInsideSectionRect(
@@ -129,8 +122,8 @@ export function isInsideSectionRect(
   const v = rx * axes.perpX + rz * axes.perpZ;
   const pad = Math.max(0, padM);
   const hl = Math.max(1e-6, axes.halfLenM) + pad;
-  const depth = Math.max(1e-6, axes.halfWidthM);
-  return Math.abs(u) <= hl && v >= -pad && v <= depth + pad;
+  const halfW = Math.max(1e-6, axes.halfWidthM) + pad;
+  return Math.abs(u) <= hl && Math.abs(v) <= halfW;
 }
 
 /** @deprecated 이름 호환 — 사각형 판정 */
@@ -211,7 +204,7 @@ export function clipHeightFieldToSectionRect(
 /** @deprecated 이름 호환 */
 export const clipHeightFieldToSectionRhombus = clipHeightFieldToSectionRect;
 
-/** 사각형 네 꼭짓점 로컬 XZ — 밑변 A-B, 맞은편 */
+/** 사각형 네 꼭짓점 로컬 XZ — 절단선 중심, 수직 ±halfWidth */
 export function sectionRectCornersLocal(axes: SectionAxesLocal): {
   x: number;
   z: number;
@@ -226,8 +219,8 @@ export function sectionRectCornersLocal(axes: SectionAxesLocal): {
     z: midZ + alongZ * halfLenM,
   };
   return [
-    a,
-    b,
+    { x: a.x - perpX * halfWidthM, z: a.z - perpZ * halfWidthM },
+    { x: b.x - perpX * halfWidthM, z: b.z - perpZ * halfWidthM },
     { x: b.x + perpX * halfWidthM, z: b.z + perpZ * halfWidthM },
     { x: a.x + perpX * halfWidthM, z: a.z + perpZ * halfWidthM },
   ];
@@ -261,7 +254,7 @@ export function sectionSurfaceElevM(
 
 /**
  * 단면도 사각형 링 (EPSG:3857, 닫힘).
- * 밑변 A–B + 좌→우 진행 왼쪽 깊이.
+ * 절단선 중심, 수직 ±halfWidth — 2D 단면도 띠·관로 조회와 동일.
  */
 export function sectionRectRing3857(
   line: GroundSectionLine
@@ -269,7 +262,6 @@ export function sectionRectRing3857(
   const n = normalizeSectionLineLTR(line);
   const [ax, ay] = n.start3857;
   const [bx, by] = n.end3857;
-  const mx = (ax + bx) / 2;
   const my = (ay + by) / 2;
   let dx = bx - ax;
   let dy = by - ay;
@@ -288,20 +280,20 @@ export function sectionRectRing3857(
   dx /= len;
   dy /= len;
   const m2p = meterToProjAtY3857(my);
-  const depthProj = Math.max(1, n.halfWidthM) * m2p;
-  const ox = -dy * depthProj;
-  const oy = dx * depthProj;
+  const halfProj = Math.max(1, n.halfWidthM) * m2p;
+  const ox = -dy * halfProj;
+  const oy = dx * halfProj;
   return [
-    [ax, ay],
-    [bx, by],
-    [bx + ox, by + oy],
     [ax + ox, ay + oy],
-    [ax, ay],
+    [bx + ox, by + oy],
+    [bx - ox, by - oy],
+    [ax - ox, ay - oy],
+    [ax + ox, ay + oy],
   ];
 }
 
 /**
- * 격자 조회용 중심 — 사각형 중심(밑변 중점 + 깊이/2 방향).
+ * 격자 조회용 중심 — 절단선 중점(띠 중심).
  * 3857.
  */
 export function sectionRectCenter3857(line: GroundSectionLine): [number, number] {

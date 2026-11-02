@@ -82,7 +82,7 @@ export function fitSectionLineView(
       )
     : box.getCenter(new THREE.Vector3());
   const size = box.isEmpty()
-    ? new THREE.Vector3(axes.halfLenM * 2, 20, axes.halfWidthM)
+    ? new THREE.Vector3(axes.halfLenM * 2, 20, axes.halfWidthM * 2)
     : box.getSize(new THREE.Vector3());
 
   // 화면에 라인(along)이 가로로 → 카메라 시선 = 수평 perp

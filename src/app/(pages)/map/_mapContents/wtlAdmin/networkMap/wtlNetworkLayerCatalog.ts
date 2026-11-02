@@ -301,7 +301,10 @@ export type WtlNetWmsSearchFilter = {
   yearTo?: number | null
   diameterFrom?: number | null
   diameterTo?: number | null
+  /** UI에서 고른 재질 라벨(한글·«기타»). 코드 매핑은 materialLabelToCodes */
   materials?: readonly string[]
+  materialLabelToCodes?: Readonly<Record<string, readonly string[]>>
+  materialTopCodes?: readonly string[]
   keyword?: string
   /** 급수블록명 — 급수블록 레이어는 wbb_nam 속성필터(경계 접침 INTERSECTS 오탐 방지·저부하) */
   supplyBlock?: string | null
@@ -442,8 +445,39 @@ export function buildWtlNetSearchCql(
 
   const mats = (filter.materials ?? []).map((m) => String(m).trim()).filter(Boolean)
   if (mopCol && mats.length > 0) {
-    const list = mats.map((m) => `'${escCql(m)}'`).join(',')
-    parts.push(`${mopCol} IN (${list})`)
+    // 목록 SQL(buildMaterialWhere)과 동일 — 한글 라벨 → mop_cde, «기타»=상위 제외
+    const labelMap = filter.materialLabelToCodes ?? {}
+    const topCodes = (filter.materialTopCodes ?? [])
+      .map((c) => String(c).trim())
+      .filter(Boolean)
+    const codes = new Set<string>()
+    let wantOther = false
+    for (const raw of mats) {
+      if (raw === '기타') {
+        wantOther = true
+        continue
+      }
+      const mapped = labelMap[raw]
+      if (mapped && mapped.length > 0) {
+        for (const c of mapped) {
+          const code = String(c).trim()
+          if (code) codes.add(code)
+        }
+      } else {
+        codes.add(raw)
+      }
+    }
+    const orParts: string[] = []
+    if (codes.size > 0) {
+      const list = [...codes].map((c) => `'${escCql(c)}'`).join(',')
+      orParts.push(`${mopCol} IN (${list})`)
+    }
+    if (wantOther && topCodes.length > 0) {
+      const topList = topCodes.map((c) => `'${escCql(c)}'`).join(',')
+      orParts.push(`(${mopCol} IS NULL OR ${mopCol} NOT IN (${topList}))`)
+    }
+    if (orParts.length === 1) parts.push(orParts[0]!)
+    else if (orParts.length > 1) parts.push(`(${orParts.join(' OR ')})`)
   }
 
   const kw = String(filter.keyword ?? '').trim()

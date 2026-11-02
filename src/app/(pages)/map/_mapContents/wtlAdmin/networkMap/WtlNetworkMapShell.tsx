@@ -64,7 +64,11 @@ import {
   type WtlNetMapSourceId,
   type WtlNetMapSourcePayload,
 } from './wtlNetworkMapSources'
-import type { WtlNetworkFilterMeta, WtlNetworkRow } from './wtlNetworkTypes'
+import type {
+  WtlNetworkFilterMeta,
+  WtlNetworkRow,
+  WtlNetworkStatusListFilter,
+} from './wtlNetworkTypes'
 
 const LIST_DEFAULT = 440
 const LIST_MIN = 360
@@ -638,6 +642,8 @@ const DEFAULT_META: WtlNetworkFilterMeta = {
   diameterMin: 0,
   diameterMax: 2000,
   materials: [],
+  materialLabelToCodes: {},
+  materialTopCodes: [],
 }
 
 export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }: Props) {
@@ -692,6 +698,8 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
     useState<WtlNetworkDetailRelatedLayer>(null)
   const [onlyInView, setOnlyInView] = useState(true)
   const bboxRef = useRef<[number, number, number, number] | null>(null)
+  /** 현황 통계용 화면 범위 — onlyInView 일 때만 */
+  const [statsBbox, setStatsBbox] = useState<[number, number, number, number] | null>(null)
   const listAbortRef = useRef<AbortController | null>(null)
   const moveFetchTimerRef = useRef<number | null>(null)
   const onlyInViewRef = useRef(onlyInView)
@@ -751,7 +759,13 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
         })
         const data = (res?.data ?? res) as WtlNetworkFilterMeta | undefined
         if (cancelled || !data) return
-        setMeta(data)
+        setMeta({
+          ...DEFAULT_META,
+          ...data,
+          materialLabelToCodes: data.materialLabelToCodes ?? {},
+          materialTopCodes: data.materialTopCodes ?? [],
+          materials: Array.isArray(data.materials) ? data.materials : [],
+        })
         setYearFrom(data.yearMin)
         setYearTo(data.yearMax)
         setDiameterFrom(data.diameterMin)
@@ -1259,6 +1273,8 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
       diameterFrom,
       diameterTo,
       materials: [...materials],
+      materialLabelToCodes: meta.materialLabelToCodes,
+      materialTopCodes: meta.materialTopCodes,
       keyword,
       supplyBlock,
       areaWkts5181: effectiveAreaWkts5181,
@@ -1269,11 +1285,55 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
       diameterFrom,
       diameterTo,
       materials,
+      meta.materialLabelToCodes,
+      meta.materialTopCodes,
       keyword,
       supplyBlock,
       effectiveAreaWkts5181,
     ]
   )
+
+  /** 현황·교차표 — 켜진 레이어 + 리스트 검색 + 화면에 보이는 시설만 */
+  const statusListFilter = useMemo((): WtlNetworkStatusListFilter => {
+    return {
+      layerKeys: enabledKeys,
+      onlyInView,
+      bbox: onlyInView ? statsBbox : null,
+      keyword,
+      yearFrom,
+      yearTo,
+      diameterFrom,
+      diameterTo,
+      materials: [...materials],
+      emdCode: emdSelected || null,
+      riCode: riSelected || null,
+      supplyBlock: supplyBlock || null,
+      areaWkts5181:
+        effectiveAreaWkts5181.length > 0 ? effectiveAreaWkts5181 : null,
+    }
+  }, [
+    enabledKeys,
+    onlyInView,
+    statsBbox,
+    keyword,
+    yearFrom,
+    yearTo,
+    diameterFrom,
+    diameterTo,
+    materials,
+    emdSelected,
+    riSelected,
+    supplyBlock,
+    effectiveAreaWkts5181,
+  ])
+
+  useEffect(() => {
+    if (!onlyInView) {
+      setStatsBbox(null)
+      return
+    }
+    setStatsBbox(bboxRef.current)
+  }, [onlyInView])
 
   useWtlNetworkMapLayer({
     enabledLayerKeys: enabledKeySet,
@@ -1292,7 +1352,12 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
     },
     onExtentChange: (next) => {
       bboxRef.current = next
-      if (!onlyInViewRef.current) return
+      if (!onlyInViewRef.current) {
+        setStatsBbox(null)
+        return
+      }
+      // 통계는 목록과 같은 bbox를 바로 반영(디바운스는 목록 재조회만)
+      setStatsBbox(next)
       cancelListFetch()
       setListLoading(false)
       moveFetchTimerRef.current = window.setTimeout(() => {
@@ -2052,7 +2117,11 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
                 </div>
               </div>
               <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-                <WtlNetworkMapStatus mapSources={statusMapSources} />
+                <WtlNetworkMapStatus
+                  mapSources={statusMapSources}
+                  listFilter={statusListFilter}
+                  filterMeta={meta}
+                />
               </div>
             </div>
             {searchToolsBar}
@@ -2285,12 +2354,15 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
         loading={section.loading}
         error={section.error}
         ground={section.ground}
+        groundMin={section.groundMin}
+        groundMax={section.groundMax}
         features={section.features}
         totalLengthM={section.totalLengthM}
         lineLonLat={section.lineLonLat}
         line3857={section.line3857}
         enabledKeys={section.enabledKeys}
         supplyAreaLines={section.supplyAreaLines}
+        supplyAreaBands={section.supplyAreaBands}
         onClose={section.closePanel}
         onRedraw={section.redrawSection}
       />

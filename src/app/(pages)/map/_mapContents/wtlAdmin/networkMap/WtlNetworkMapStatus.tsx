@@ -10,7 +10,9 @@ import type {
   WtlNetworkDipFilterOption,
   WtlNetworkDipFilterOptions,
   WtlNetworkDipMatrix,
+  WtlNetworkFilterMeta,
   WtlNetworkSaaMatrix,
+  WtlNetworkStatusListFilter,
   WtlNetworkStatusStats,
 } from './wtlNetworkTypes'
 
@@ -110,34 +112,34 @@ function LengthTableBody({
   textClassName?: string
 }) {
   return (
-    <div className="overflow-x-auto">
+      <div className="overflow-x-auto">
       <table className={`w-max min-w-full border-collapse text-center ${textClassName}`}>
-        <thead>
+          <thead>
           <tr className="border-b border-border bg-muted/30">
-            {rows.map((row) => (
-              <th
-                key={row.label}
+              {rows.map((row) => (
+                <th
+                  key={row.label}
                 className="whitespace-nowrap border-l border-border px-2 py-1 font-medium text-foreground first:border-l-0"
-              >
-                {row.label}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            {rows.map((row) => (
-              <td
-                key={row.label}
-                className="whitespace-nowrap border-l border-border px-2 py-1 tabular-nums text-foreground first:border-l-0"
-              >
-                {formatLength(risen(row.meters, progress))}
-              </td>
-            ))}
-          </tr>
-        </tbody>
-      </table>
-    </div>
+                >
+                  {row.label}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              {rows.map((row) => (
+                <td
+                  key={row.label}
+                  className="whitespace-nowrap border-l border-border px-2 py-1 tabular-nums text-foreground first:border-l-0"
+                >
+                  {formatLength(risen(row.meters, progress))}
+                </td>
+              ))}
+            </tr>
+          </tbody>
+        </table>
+      </div>
   )
 }
 
@@ -152,11 +154,14 @@ function LengthTable({
   progress: number
   onExpand?: () => void
 }) {
-  if (rows.length === 0) return null
   return (
     <section className="shrink-0 overflow-hidden rounded border border-border bg-background">
       <SectionTitle onExpand={onExpand}>{title}</SectionTitle>
-      <LengthTableBody rows={rows} progress={progress} />
+      {rows.length === 0 ? (
+        <p className="px-2 py-2 text-[11px] text-muted-foreground">해당 자료가 없습니다.</p>
+      ) : (
+        <LengthTableBody rows={rows} progress={progress} />
+      )}
     </section>
   )
 }
@@ -1002,11 +1007,87 @@ const EMPTY_DIP_FILTER_OPTIONS: WtlNetworkDipFilterOptions = {
   saas: [],
 }
 
-/** 현황·확대 통계 — 선택 레이어 그룹(mapSources) remap 물리 테이블만 집계 */
+const EMPTY_LIST_FILTER: WtlNetworkStatusListFilter = {}
+
+/** 리스트 읍면동·리 → 모달 읍면동 초기값 */
+function listEmdCodesForModal(listFilter: WtlNetworkStatusListFilter): string[] | null {
+  const ri = String(listFilter.riCode ?? '').trim()
+  const emd = String(listFilter.emdCode ?? '').trim()
+  const code = ri || emd
+  return code ? [code] : null
+}
+
+/** 리스트 연도 구간 → 모달 매설년도 다중선택 초기값 */
+function listYearsForModal(
+  listFilter: WtlNetworkStatusListFilter,
+  yearOptions: WtlNetworkDipFilterOption[],
+  meta: WtlNetworkFilterMeta | null
+): string[] | null {
+  const from =
+    listFilter.yearFrom != null && Number.isFinite(Number(listFilter.yearFrom))
+      ? Number(listFilter.yearFrom)
+      : null
+  const to =
+    listFilter.yearTo != null && Number.isFinite(Number(listFilter.yearTo))
+      ? Number(listFilter.yearTo)
+      : null
+  if (from == null || to == null) return null
+  if (
+    meta &&
+    from <= meta.yearMin &&
+    to >= meta.yearMax
+  ) {
+    return null
+  }
+  const lo = Math.min(from, to)
+  const hi = Math.max(from, to)
+  const picked = yearOptions
+    .map((o) => o.value)
+    .filter((y) => {
+      if (y === '연도미상') return true
+      const n = Number(y)
+      return Number.isFinite(n) && n >= lo && n <= hi
+    })
+  if (picked.length === 0) return []
+  if (yearOptions.length > 0 && picked.length === yearOptions.length) return null
+  return picked
+}
+
+/** 리스트 관경 구간 → 관용도 모달 관경 초기값 */
+function listDiameterForModal(
+  listFilter: WtlNetworkStatusListFilter,
+  meta: WtlNetworkFilterMeta | null
+): { from: number | null; to: number | null } {
+  const from =
+    listFilter.diameterFrom != null && Number.isFinite(Number(listFilter.diameterFrom))
+      ? Number(listFilter.diameterFrom)
+      : null
+  const to =
+    listFilter.diameterTo != null && Number.isFinite(Number(listFilter.diameterTo))
+      ? Number(listFilter.diameterTo)
+      : null
+  if (from == null && to == null) return { from: null, to: null }
+  if (
+    meta &&
+    from != null &&
+    to != null &&
+    from <= meta.diameterMin &&
+    to >= meta.diameterMax
+  ) {
+    return { from: null, to: null }
+  }
+  return { from, to }
+}
+
+/** 현황·확대 통계 — 선택 레이어 그룹 + 리스트 검색·화면 범위 */
 export function WtlNetworkMapStatus({
   mapSources = EMPTY_MAP_SOURCES,
+  listFilter = EMPTY_LIST_FILTER,
+  filterMeta = null,
 }: {
   mapSources?: string[]
+  listFilter?: WtlNetworkStatusListFilter
+  filterMeta?: WtlNetworkFilterMeta | null
 }) {
   const [stats, setStats] = useState<WtlNetworkStatusStats>(EMPTY_STATS)
   const [loading, setLoading] = useState(false)
@@ -1031,6 +1112,12 @@ export function WtlNetworkMapStatus({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- 서명으로 안정화
     [mapSourcesSig]
   )
+  const listFilterSig = JSON.stringify(listFilter ?? {})
+  const listFilterParam = useMemo(
+    () => listFilter ?? EMPTY_LIST_FILTER,
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 서명으로 안정화
+    [listFilterSig]
+  )
 
   useEffect(() => {
     let cancelled = false
@@ -1040,7 +1127,7 @@ export function WtlNetworkMapStatus({
         const res = await call('', 'POST', {
           service: 'wtlNetworkService',
           action: 'getWtlNetworkStatusStats',
-          params: { mapSources: mapSourcesParam },
+          params: { mapSources: mapSourcesParam, listFilter: listFilterParam },
         })
         if (cancelled) return
         const data = (res?.data ?? res) as Partial<WtlNetworkStatusStats> | undefined
@@ -1060,7 +1147,7 @@ export function WtlNetworkMapStatus({
     return () => {
       cancelled = true
     }
-  }, [mapSourcesParam])
+  }, [mapSourcesParam, listFilterParam])
 
   const isAxisExpand = expandKind === 'byDiameter' || expandKind === 'byYear'
   const isSaaExpand = expandKind === 'bySaa'
@@ -1077,7 +1164,7 @@ export function WtlNetworkMapStatus({
           call('', 'POST', {
             service: 'wtlNetworkService',
             action: 'getWtlNetworkStatusDipFilterOptions',
-            params: { mapSources: mapSourcesParam },
+            params: { mapSources: mapSourcesParam, listFilter: listFilterParam },
           }),
           call('', 'POST', {
             service: 'devTestService',
@@ -1094,11 +1181,22 @@ export function WtlNetworkMapStatus({
               label: String(o.name ?? o.code ?? ''),
             })).filter((o: WtlNetworkDipFilterOption) => o.value && o.label)
           : []
+        const years = Array.isArray(opt?.years) ? opt!.years : []
+        const saas = Array.isArray(opt?.saas) ? opt!.saas : []
         setDipFilterOptions({
           pipeKinds: Array.isArray(opt?.pipeKinds) ? opt!.pipeKinds : [],
           emds,
-          years: Array.isArray(opt?.years) ? opt!.years : [],
-          saas: Array.isArray(opt?.saas) ? opt!.saas : [],
+          years,
+          saas,
+        })
+        setDipFilters({
+          pipeTables: null,
+          emdCodes: listEmdCodesForModal(listFilterParam),
+          years:
+            axisMode === 'dip'
+              ? listYearsForModal(listFilterParam, years, filterMeta)
+              : null,
+          saaCodes: null,
         })
       } catch {
         if (!cancelled) setDipFilterOptions(EMPTY_DIP_FILTER_OPTIONS)
@@ -1107,7 +1205,7 @@ export function WtlNetworkMapStatus({
     return () => {
       cancelled = true
     }
-  }, [expandKind, isAxisExpand, mapSourcesParam])
+  }, [expandKind, isAxisExpand, axisMode, mapSourcesParam, listFilterParam, filterMeta])
 
   useEffect(() => {
     if (!isAxisExpand) return
@@ -1123,6 +1221,7 @@ export function WtlNetworkMapStatus({
               : 'getWtlNetworkStatusDipMatrix',
           params: {
             mapSources: mapSourcesParam,
+            listFilter: listFilterParam,
             pipeTables: dipFilters.pipeTables,
             emdCodes: dipFilters.emdCodes,
             ...(axisMode === 'dip' ? { years: dipFilters.years } : {}),
@@ -1143,7 +1242,7 @@ export function WtlNetworkMapStatus({
     return () => {
       cancelled = true
     }
-  }, [expandKind, isAxisExpand, axisMode, dipFilters, mapSourcesParam])
+  }, [expandKind, isAxisExpand, axisMode, dipFilters, mapSourcesParam, listFilterParam])
 
   useEffect(() => {
     if (!isSaaExpand) return
@@ -1156,7 +1255,7 @@ export function WtlNetworkMapStatus({
           call('', 'POST', {
             service: 'wtlNetworkService',
             action: 'getWtlNetworkStatusDipFilterOptions',
-            params: { mapSources: mapSourcesParam },
+            params: { mapSources: mapSourcesParam, listFilter: listFilterParam },
           }),
           call('', 'POST', {
             service: 'devTestService',
@@ -1175,10 +1274,19 @@ export function WtlNetworkMapStatus({
               }))
               .filter((o: WtlNetworkDipFilterOption) => o.value && o.label)
           : []
+        const years = Array.isArray(opt?.years) ? opt!.years : []
         setSaaFilterOptions({
           pipeKinds: Array.isArray(opt?.pipeKinds) ? opt!.pipeKinds : [],
           emds,
-          years: Array.isArray(opt?.years) ? opt!.years : [],
+          years,
+        })
+        const dip = listDiameterForModal(listFilterParam, filterMeta)
+        setSaaFilters({
+          pipeTables: null,
+          emdCodes: listEmdCodesForModal(listFilterParam),
+          years: listYearsForModal(listFilterParam, years, filterMeta),
+          diameterFrom: dip.from,
+          diameterTo: dip.to,
         })
       } catch {
         if (!cancelled) {
@@ -1189,7 +1297,7 @@ export function WtlNetworkMapStatus({
     return () => {
       cancelled = true
     }
-  }, [expandKind, isSaaExpand, mapSourcesParam])
+  }, [expandKind, isSaaExpand, mapSourcesParam, listFilterParam, filterMeta])
 
   useEffect(() => {
     if (!isSaaExpand) return
@@ -1202,6 +1310,7 @@ export function WtlNetworkMapStatus({
           action: 'getWtlNetworkStatusSaaMatrix',
           params: {
             mapSources: mapSourcesParam,
+            listFilter: listFilterParam,
             pipeTables: saaFilters.pipeTables,
             emdCodes: saaFilters.emdCodes,
             years: saaFilters.years,
@@ -1223,129 +1332,120 @@ export function WtlNetworkMapStatus({
     return () => {
       cancelled = true
     }
-  }, [expandKind, isSaaExpand, saaFilters, mapSourcesParam])
-
-  const empty =
-    !loading &&
-    stats.byDiameter.length === 0 &&
-    stats.byMaterial.length === 0 &&
-    stats.byYear.length === 0 &&
-    stats.bySaa.length === 0 &&
-    stats.facilityCounts.length === 0
+  }, [expandKind, isSaaExpand, saaFilters, mapSourcesParam, listFilterParam])
 
   const expandMeta = expandKind ? EXPAND_META[expandKind] : null
   const expandRows = expandMeta ? stats[expandMeta.rowsKey] : []
-  const modalOpen =
-    isAxisExpand || isSaaExpand
-      ? expandKind != null
-      : expandKind != null && expandRows.length > 0
+  const modalOpen = expandKind != null
+  const waitingViewBbox = Boolean(listFilterParam.onlyInView && !listFilterParam.bbox)
 
   return (
     <div
       ref={rootRef}
       className="min-h-0 flex-1 space-y-[13px] overflow-auto border-t border-border px-3 pb-2 pt-[13px]"
     >
-      {loading ? (
+      {loading || waitingViewBbox ? (
         <p className="text-[11px] text-muted-foreground">현황 집계 중…</p>
-      ) : empty ? (
-        <p className="text-[11px] text-muted-foreground">현황을 집계할 자료가 없습니다.</p>
-      ) : (
-        <>
-          <LengthTable
-            title="관경별 관로 연장"
-            rows={stats.byDiameter}
-            progress={progress}
-            onExpand={() => setExpandKind('byDiameter')}
-          />
-          <LengthTable
-            title="관재질별 관로 연장"
-            rows={stats.byMaterial}
-            progress={progress}
-            onExpand={() => setExpandKind('byMaterial')}
-          />
-          <LengthTable
-            title="연도별 관로 연장"
-            rows={stats.byYear}
-            progress={progress}
-            onExpand={() => setExpandKind('byYear')}
-          />
-          <LengthTable
-            title="관용도별 관로 연장"
-            rows={stats.bySaa}
-            progress={progress}
-            onExpand={() => setExpandKind('bySaa')}
-          />
-          {stats.facilityCounts.length > 0 && (
-            <section className="shrink-0 overflow-hidden rounded border border-border bg-background">
-              <SectionTitle>시설 개수</SectionTitle>
-              <div className="grid grid-cols-3 gap-1 p-1.5">
-                {stats.facilityCounts.map((item) => (
-                  <div
-                    key={item.label}
-                    className="flex min-w-0 items-center justify-between gap-1 rounded border border-border px-1.5 py-1"
-                  >
-                    <span className="min-w-0 truncate text-xs text-muted-foreground">{item.label}</span>
-                    <span className="shrink-0 text-xs font-semibold tabular-nums text-foreground">
-                      {risen(item.count, progress).toLocaleString()}
-                    </span>
-                  </div>
-                ))}
+      ) : null}
+      <LengthTable
+        title="관경별 관로 연장"
+        rows={stats.byDiameter}
+        progress={progress}
+        onExpand={() => setExpandKind('byDiameter')}
+      />
+      <LengthTable
+        title="관재질별 관로 연장"
+        rows={stats.byMaterial}
+        progress={progress}
+        onExpand={() => setExpandKind('byMaterial')}
+      />
+      <LengthTable
+        title="연도별 관로 연장"
+        rows={stats.byYear}
+        progress={progress}
+        onExpand={() => setExpandKind('byYear')}
+      />
+      <LengthTable
+        title="관용도별 관로 연장"
+        rows={stats.bySaa}
+        progress={progress}
+        onExpand={() => setExpandKind('bySaa')}
+      />
+      <section className="shrink-0 overflow-hidden rounded border border-border bg-background">
+        <SectionTitle>시설 개수</SectionTitle>
+        {stats.facilityCounts.length === 0 ? (
+          <p className="px-2 py-2 text-[11px] text-muted-foreground">해당 자료가 없습니다.</p>
+        ) : (
+          <div className="grid grid-cols-3 gap-1 p-1.5">
+            {stats.facilityCounts.map((item) => (
+              <div
+                key={item.label}
+                className="flex min-w-0 items-center justify-between gap-1 rounded border border-border px-1.5 py-1"
+              >
+                <span className="min-w-0 truncate text-xs text-muted-foreground">{item.label}</span>
+                <span className="shrink-0 text-xs font-semibold tabular-nums text-foreground">
+                  {risen(item.count, progress).toLocaleString()}
+                </span>
               </div>
-            </section>
-          )}
-          <StatsExpandFloatingModal
-            open={modalOpen}
-            onClose={() => setExpandKind(null)}
-            title={expandMeta?.title ?? ''}
-            defaultSize={
-              isAxisExpand || isSaaExpand
-                ? { width: 1000, height: 640 }
-                : { width: 720, height: 320 }
-            }
-          >
-            {isAxisExpand ? (
-              <div className="flex min-h-0 flex-1 flex-col">
-                {dipLoading && !dipMatrix ? (
-                  <p className="text-[11px] text-muted-foreground">
-                    {axisMode === 'year' ? '연도별' : '관경별'} 교차표 집계 중…
-                  </p>
-                ) : (
-                  <AxisMatrixTable
-                    axis={axisMode}
-                    matrix={dipMatrix}
-                    filters={dipFilters}
-                    filterOptions={dipFilterOptions}
-                    onFiltersChange={setDipFilters}
-                  />
-                )}
-                {dipLoading && dipMatrix ? (
-                  <p className="mt-1 shrink-0 text-[10px] text-muted-foreground">필터 적용 중…</p>
-                ) : null}
-              </div>
-            ) : isSaaExpand ? (
-              <div className="flex min-h-0 flex-1 flex-col">
-                {saaLoading && !saaMatrix ? (
-                  <p className="text-[11px] text-muted-foreground">관용도별 교차표 집계 중…</p>
-                ) : (
-                  <SaaMatrixTable
-                    matrix={saaMatrix}
-                    filters={saaFilters}
-                    filterOptions={saaFilterOptions}
-                    onFiltersChange={setSaaFilters}
-                  />
-                )}
-                {saaLoading && saaMatrix ? (
-                  <p className="mt-1 shrink-0 text-[10px] text-muted-foreground">필터 적용 중…</p>
-                ) : null}
-              </div>
+            ))}
+          </div>
+        )}
+      </section>
+      <StatsExpandFloatingModal
+        open={modalOpen}
+        onClose={() => setExpandKind(null)}
+        title={expandMeta?.title ?? ''}
+        defaultSize={
+          isAxisExpand || isSaaExpand
+            ? { width: 1000, height: 640 }
+            : { width: 720, height: 320 }
+        }
+      >
+        {isAxisExpand ? (
+          <div className="flex min-h-0 flex-1 flex-col">
+            {dipLoading && !dipMatrix ? (
+              <p className="text-[11px] text-muted-foreground">
+                {axisMode === 'year' ? '연도별' : '관경별'} 교차표 집계 중…
+              </p>
             ) : (
-              <div className="min-h-0 flex-1 overflow-auto">
-                <LengthTableBody rows={expandRows} progress={1} textClassName="text-sm" />
-              </div>
+              <AxisMatrixTable
+                axis={axisMode}
+                matrix={dipMatrix}
+                filters={dipFilters}
+                filterOptions={dipFilterOptions}
+                onFiltersChange={setDipFilters}
+              />
             )}
-          </StatsExpandFloatingModal>
-        </>
-      )}
+            {dipLoading && dipMatrix ? (
+              <p className="mt-1 shrink-0 text-[10px] text-muted-foreground">필터 적용 중…</p>
+            ) : null}
+          </div>
+        ) : isSaaExpand ? (
+          <div className="flex min-h-0 flex-1 flex-col">
+            {saaLoading && !saaMatrix ? (
+              <p className="text-[11px] text-muted-foreground">관용도별 교차표 집계 중…</p>
+            ) : (
+              <SaaMatrixTable
+                matrix={saaMatrix}
+                filters={saaFilters}
+                filterOptions={saaFilterOptions}
+                onFiltersChange={setSaaFilters}
+              />
+            )}
+            {saaLoading && saaMatrix ? (
+              <p className="mt-1 shrink-0 text-[10px] text-muted-foreground">필터 적용 중…</p>
+            ) : null}
+          </div>
+        ) : (
+          <div className="min-h-0 flex-1 overflow-auto">
+            {expandRows.length === 0 ? (
+              <p className="p-2 text-[11px] text-muted-foreground">해당 자료가 없습니다.</p>
+            ) : (
+              <LengthTableBody rows={expandRows} progress={1} textClassName="text-sm" />
+            )}
+          </div>
+        )}
+      </StatsExpandFloatingModal>
     </div>
   )
 }

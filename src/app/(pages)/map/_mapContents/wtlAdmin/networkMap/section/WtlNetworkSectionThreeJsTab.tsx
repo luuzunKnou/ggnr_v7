@@ -160,8 +160,7 @@ export function WtlNetworkSectionThreeJsTab({ line3857, enabledKeys }: Props) {
           throw new Error(elevData?.error ?? '지형 격자 조회 실패')
         }
 
-        // 고도장은 덮개 정사각(샘플용). 지형 메시 발자국=LINE→사각형(관로 polygon3857과 동일)
-        // 고도 null clip 금지 — clip 시 지형이 폴리곤보다 안쪽으로 줄어 관로가 지형 밖으로 보임
+        // 고도장=덮개 정사각(샘플). 지형·관로 발자국=절단선 중심 띠(polygon3857)
         const field: GroundHeightField = {
           size: elevData.size,
           stepM: elevData.stepM ?? SECTION_STEP_M,
@@ -338,7 +337,7 @@ export function WtlNetworkSectionThreeJsTab({ line3857, enabledKeys }: Props) {
 
         const lenM = Math.round(sectionLineLengthM(sectionLine))
         setStatus(
-          `절단 ${lenM} m · 깊이 ${SECTION_DEFAULT_HALF_WIDTH_M} m` +
+          `절단 ${lenM} m · 깊이 ±${SECTION_DEFAULT_HALF_WIDTH_M} m` +
             (kinds.length ? ` · 레이어 ${kinds.length}` : ' · 켜진 레이어 없음') +
             (notes.length ? ` · ${notes.join(', ')}` : '')
         )

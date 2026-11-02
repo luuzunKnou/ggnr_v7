@@ -9,8 +9,17 @@ import {
 
 export type SectionGroundPt = { distM: number; elevM: number }
 
-/** 횡단 좌측 — 켜진 급수구역·분구·블록 한 줄 */
+/** 횡단 좌측 — 켜진 급수구역·분구·블록 한 줄(레거시 텍스트) */
 export type SectionSupplyAreaLine = { label: string; name: string }
+
+/** X축 하단 밴드 — 구역·분구·블록 구간 */
+export type SectionSupplyBandSegment = {
+  role: 'zone' | 'subzone' | 'block'
+  name: string
+  fromM: number
+  toM: number
+  color: string
+}
 
 export type SectionFeatureMark = {
   id: string
@@ -102,13 +111,209 @@ function groundElevAt(ground: SectionGroundPt[], distM: number): number | null {
 }
 
 /**
- * 관경 반경(px) — 등고 세로스케일 실비율(과장 없음) + 상한 축소.
+ * 관경 반경(px).
+ * 이전: (관경m/2)×등고px/m 를 [1.2, 5]로 잘라 대부분 5px로 뭉개짐.
+ * 지금: 같은 크기대(약 1.5~6px) 안에서 관경 로그 비율로 차이만 둠.
+ * 기준 관경 100→1.5, 300→3.2, 800→5.0, 1500→6.0 (대략).
  */
-function radiusPx(stdDipMm: number, elevPxPerM: number) {
-  const dip = Number(stdDipMm)
-  if (!dip || Number.isNaN(dip) || dip <= 0) return 1.5
-  const byElev = (dip / 1000 / 2) * elevPxPerM
-  return Math.min(5, Math.max(1.2, byElev))
+function radiusPx(stdDipMm: number, _elevPxPerM: number) {
+  const dipMm = Number(stdDipMm)
+  if (!dipMm || Number.isNaN(dipMm) || dipMm <= 0) return 1.5
+  const minR = 1.5
+  const maxR = 6
+  const minDip = 80
+  const maxDip = 1500
+  const t =
+    (Math.log(Math.min(maxDip, Math.max(minDip, dipMm))) - Math.log(minDip)) /
+    (Math.log(maxDip) - Math.log(minDip))
+  return minR + (maxR - minR) * t
+}
+
+/** 축 눈금 — nice step (1/2/5×10^n) */
+function niceAxisTicks(minV: number, maxV: number, targetCount: number): number[] {
+  const lo = Math.min(minV, maxV)
+  const hi = Math.max(minV, maxV)
+  const span = Math.max(hi - lo, 1e-6)
+  const raw = span / Math.max(2, targetCount)
+  const pow = Math.pow(10, Math.floor(Math.log10(raw)))
+  const n = raw / pow
+  const step = (n <= 1.5 ? 1 : n <= 3 ? 2 : n <= 7 ? 5 : 10) * pow
+  const start = Math.ceil(lo / step - 1e-9) * step
+  const ticks: number[] = []
+  for (let v = start; v <= hi + step * 1e-6; v += step) {
+    const r = Math.round(v / step) * step
+    if (r < lo - step * 1e-6 || r > hi + step * 1e-6) continue
+    ticks.push(Number(r.toPrecision(10)))
+  }
+  if (!ticks.length) {
+    ticks.push(lo, hi)
+  }
+  return ticks
+}
+
+function formatAxisTick(v: number): string {
+  const a = Math.abs(v)
+  if (a >= 100) return v.toFixed(0)
+  if (a >= 10) return v.toFixed(1)
+  return v.toFixed(2)
+}
+
+/** 표시 문자열이 같은 눈금은 하나만 남김 */
+function uniqueAxisTicksByLabel<T extends { label: string }>(ticks: T[]): T[] {
+  const seen = new Set<string>()
+  const out: T[] = []
+  for (const t of ticks) {
+    if (seen.has(t.label)) continue
+    seen.add(t.label)
+    out.push(t)
+  }
+  return out
+}
+
+/**
+ * nice 눈금 + 도형 실측 최댓값(필요 시 최솟값)을 Y축에 포함.
+ * 거의 같은 값(표시 문자열 동일)이면 nice 쪽을 실측으로 교체.
+ */
+function yAxisTicksWithDataMax(
+  scaleMin: number,
+  scaleMax: number,
+  dataMax: number,
+  yOf: (e: number) => number,
+  targetCount = 6
+): { v: number; y: number; label: string }[] {
+  const base = niceAxisTicks(scaleMin, scaleMax, targetCount).map((v) => ({
+    v,
+    y: yOf(v),
+    label: formatAxisTick(v),
+  }))
+  if (!Number.isFinite(dataMax)) return uniqueAxisTicksByLabel(base)
+  const maxLabel = formatAxisTick(dataMax)
+  const withoutDup = base.filter((t) => t.label !== maxLabel)
+  withoutDup.push({ v: dataMax, y: yOf(dataMax), label: maxLabel })
+  withoutDup.sort((a, b) => a.v - b.v)
+  return uniqueAxisTicksByLabel(withoutDup)
+}
+
+const SUPPLY_GANTT_ROW_H = 22
+const SUPPLY_GANTT_BAR_H = 14
+const SUPPLY_BAND_ROLE_ORDER: Array<{
+  role: SectionSupplyBandSegment['role']
+  label: string
+}> = [
+  { role: 'zone', label: '구역' },
+  { role: 'subzone', label: '분구' },
+  { role: 'block', label: '블록' },
+]
+
+function supplyGanttRoles(bands: SectionSupplyBandSegment[]) {
+  return SUPPLY_BAND_ROLE_ORDER.filter((r) => bands.some((b) => b.role === r.role))
+}
+
+function supplyGanttHeight(bands: SectionSupplyBandSegment[]) {
+  const n = supplyGanttRoles(bands).length
+  if (!n) return 0
+  return 10 + n * SUPPLY_GANTT_ROW_H + 6
+}
+
+/**
+ * 단면도 SVG 내부 — 급수구역·분구·블록 간트 막대
+ */
+function SupplyAreaGanttGroup({
+  bands,
+  xOf,
+  bandTop,
+  padL,
+  width,
+  padR,
+}: {
+  bands: SectionSupplyBandSegment[]
+  xOf: (d: number) => number
+  bandTop: number
+  padL: number
+  width: number
+  padR: number
+}) {
+  const roles = supplyGanttRoles(bands)
+  if (!roles.length) return null
+
+  return (
+    <g aria-label="급수구역·분구·블록">
+      <rect
+        x={padL}
+        y={bandTop}
+        width={width - padL - padR}
+        height={roles.length * SUPPLY_GANTT_ROW_H}
+        fill="#f8fafc"
+        stroke="#e2e8f0"
+        strokeWidth={1}
+      />
+      {roles.map((row, ri) => {
+        const rowY = bandTop + ri * SUPPLY_GANTT_ROW_H
+        const barY = rowY + (SUPPLY_GANTT_ROW_H - SUPPLY_GANTT_BAR_H) / 2
+        const segs = bands.filter((b) => b.role === row.role)
+        return (
+          <g key={row.role}>
+            <line
+              x1={padL}
+              y1={rowY + SUPPLY_GANTT_ROW_H}
+              x2={width - padR}
+              y2={rowY + SUPPLY_GANTT_ROW_H}
+              stroke="#e2e8f0"
+              strokeWidth={1}
+            />
+            <text
+              x={padL - 6}
+              y={rowY + SUPPLY_GANTT_ROW_H / 2 + 3}
+              textAnchor="end"
+              fill="#3d5560"
+              fontSize={10}
+              fontWeight={600}
+            >
+              {row.label}
+            </text>
+            {segs.map((seg, si) => {
+              const x1 = xOf(seg.fromM)
+              const x2 = xOf(seg.toM)
+              const w = Math.max(2, x2 - x1)
+              const color = normalizeStroke(seg.color) || '#888888'
+              const midX = x1 + w / 2
+              const showLabel = w >= 28
+              return (
+                <g key={`${row.role}-${si}-${seg.name}`}>
+                  <rect
+                    x={x1}
+                    y={barY}
+                    width={w}
+                    height={SUPPLY_GANTT_BAR_H}
+                    rx={2}
+                    ry={2}
+                    fill={color}
+                    fillOpacity={0.35}
+                    stroke={color}
+                    strokeWidth={1.5}
+                  />
+                  {showLabel ? (
+                    <text
+                      x={midX}
+                      y={barY + SUPPLY_GANTT_BAR_H / 2 + 3}
+                      textAnchor="middle"
+                      fill="#1e293b"
+                      fontSize={9}
+                      fontWeight={600}
+                    >
+                      {seg.name}
+                    </text>
+                  ) : (
+                    <title>{seg.name}</title>
+                  )}
+                </g>
+              )
+            })}
+          </g>
+        )
+      })}
+    </g>
+  )
 }
 
 /**
@@ -118,12 +323,12 @@ function CrossSectionLegacySvg({
   ground,
   features,
   totalLengthM,
-  supplyAreaLines = [],
+  supplyAreaBands = [],
 }: {
   ground: SectionGroundPt[]
   features: SectionFeatureMark[]
   totalLengthM: number
-  supplyAreaLines?: SectionSupplyAreaLine[]
+  supplyAreaBands?: SectionSupplyBandSegment[]
 }) {
   const width = 640
   const padL = 64
@@ -132,8 +337,8 @@ function CrossSectionLegacySvg({
   const padT = 56
   /** 단면도(지형) 구역 높이 — 라벨 위까지 최대한 사용 */
   const plotH = 240
-  /** 좌하단 급수구역·분구·블록 표기 줄 수 */
-  const supplyFooterH = supplyAreaLines.length > 0 ? 8 + supplyAreaLines.length * 14 : 0
+  const AXIS = '#64748b'
+  const AXIS_LABEL = '#3d5560'
 
   const layout = useMemo(() => {
     if (!ground.length) return null
@@ -152,15 +357,17 @@ function CrossSectionLegacySvg({
       pipeBottoms.push(surf - (Number(p.depthM) || 0) - (Number(p.diameterM) || 0) / 2)
     }
     // 지형 상·하한이 단면도 구역을 거의 꽉 채우도록 여유 최소화
-    const elevMax = Math.max(...groundElevs)
+    const dataElevMax = Math.max(...groundElevs)
     const elevMin = Math.min(
       ...groundElevs,
       ...(pipeBottoms.length ? pipeBottoms : groundElevs)
     )
+    const elevMax = dataElevMax
     const elevSpan = Math.max(elevMax - elevMin, 0.2)
     const elevPxPerM = plotH / elevSpan
     const xOf = (d: number) => padL + (d / geometryLength) * (width - padL - padR)
     const yOf = (e: number) => padT + plotH - ((e - elevMin) / elevSpan) * plotH
+    const plotTop = padT
     const plotBottom = padT + plotH
 
     // 절단 전구간(0~길이)에 지형선 맞춤
@@ -178,9 +385,6 @@ function CrossSectionLegacySvg({
       groundPath +
       ` L${xOf(geometryLength).toFixed(1)},${plotBottom}` +
       ` L${xOf(0).toFixed(1)},${plotBottom} Z`
-
-    const midElev = ground[Math.floor(ground.length / 2)]?.elevM
-    const leftGroundY = yOf(g0)
 
     type Mark = {
       item: SectionFeatureMark
@@ -232,10 +436,10 @@ function CrossSectionLegacySvg({
     const maxLabelRows = Math.max(leftRowCount, rightRowCount, marks.length > 0 ? 1 : 0)
     const lastElbowY =
       marks.length > 0 ? firstElbowY + LABEL_ROW * Math.max(maxLabelRows - 1, 0) : firstElbowY
-    const svgHeight = Math.min(
-      520,
-      Math.max(280, lastElbowY + 28 + supplyFooterH)
-    )
+    const contentBottom = Math.max(280, lastElbowY + 28)
+    const ganttH = supplyGanttHeight(supplyAreaBands)
+    const ganttTop = contentBottom
+    const svgHeight = contentBottom + ganttH
 
     const uniqueDistances = marks
       .map((m) => Number(m.item.distM))
@@ -243,23 +447,27 @@ function CrossSectionLegacySvg({
       .sort((a, b) => a - b)
       .filter((d, i, arr) => i === 0 || Math.abs(d - arr[i - 1]!) > 0.001)
 
+    const yTicks = yAxisTicksWithDataMax(elevMin, elevMax, dataElevMax, yOf, 6)
+
     return {
       geometryLength,
       groundPath,
       soilPath,
-      midElev,
-      leftGroundY,
       firstElbowY,
       placementByIdx,
       svgHeight,
+      ganttTop,
       uniqueDistances,
       marks,
       xOf,
       yOf,
       elevPxPerM,
       plotH,
+      plotTop,
+      plotBottom,
+      yTicks,
     }
-  }, [ground, features, totalLengthM, padT, supplyFooterH])
+  }, [ground, features, totalLengthM, padT, supplyAreaBands])
 
   if (!layout) {
     return (
@@ -273,21 +481,21 @@ function CrossSectionLegacySvg({
     geometryLength,
     groundPath,
     soilPath,
-    midElev,
-    leftGroundY,
     firstElbowY,
     placementByIdx,
     svgHeight,
+    ganttTop,
     uniqueDistances,
     marks,
     xOf,
+    plotTop,
+    plotBottom,
+    yTicks,
   } = layout
   const DIM_Y = padT - 10
   const DIM_TICK = 5
   /** 제목·끝캡·미터 라벨이 겹치지 않도록 절단선 Y */
   const axisY = 22
-  const supplyFooterBaseY = svgHeight - 10
-
   return (
     <div className="overflow-auto rounded border-2 border-[#787878] bg-white">
       <svg
@@ -344,26 +552,59 @@ function CrossSectionLegacySvg({
           {geometryLength.toFixed(2)}m
         </text>
 
+        {/* Y축(표고) — 종단면도와 동일 눈금 */}
+        <line
+          x1={padL}
+          y1={plotTop}
+          x2={padL}
+          y2={plotBottom}
+          stroke={AXIS}
+          strokeWidth={1.2}
+        />
+        <line
+          x1={padL}
+          y1={plotBottom}
+          x2={width - padR}
+          y2={plotBottom}
+          stroke={AXIS}
+          strokeWidth={1.2}
+        />
+        {yTicks.map((t, i) => (
+          <g key={`cross-y-${i}-${t.v}`}>
+            <line
+              x1={padL}
+              y1={t.y}
+              x2={width - padR}
+              y2={t.y}
+              stroke="#e2e8f0"
+              strokeWidth={1}
+            />
+            <line
+              x1={padL - 4}
+              y1={t.y}
+              x2={padL}
+              y2={t.y}
+              stroke={AXIS}
+              strokeWidth={1}
+            />
+            <text
+              x={padL - 6}
+              y={t.y + 3}
+              textAnchor="end"
+              fill={AXIS_LABEL}
+              fontSize={10}
+            >
+              {t.label}
+            </text>
+          </g>
+        ))}
+        <text x={8} y={plotTop + 4} fill={AXIS_LABEL} fontSize={11}>
+          표고 (m)
+        </text>
+
         {/* 등고 지반고 — 단면도 구역 전체 채움 */}
         <path d={soilPath} fill="#efe6d6" stroke="none" />
         <path d={groundPath} fill="none" stroke="#111" strokeWidth={1.6} />
-        <text x={8} y={leftGroundY + 4} fill="#3d5560" fontSize={12} fontWeight={600}>
-          지반고 {midElev != null ? `${midElev.toFixed(1)}m` : ''}
-        </text>
-        {supplyAreaLines.length > 0
-          ? supplyAreaLines.map((line, i) => (
-              <text
-                key={line.label}
-                x={8}
-                y={supplyFooterBaseY - (supplyAreaLines.length - 1 - i) * 14}
-                fill="#3d5560"
-                fontSize={11}
-                fontWeight={600}
-              >
-                {line.label} {line.name}
-              </text>
-            ))
-          : null}
 
         {uniqueDistances.length >= 2
           ? uniqueDistances.slice(0, -1).map((d1, i) => {
@@ -411,8 +652,8 @@ function CrossSectionLegacySvg({
           const place = placementByIdx.get(m.origIdx) || { labelOnLeft: true, row: 0 }
           const labelOnLeft = place.labelOnLeft
           const labelLen = Math.max(
-            item.label ? item.label.length * 6.5 : 50,
-            (korName?.length || 4) * 8
+            item.label ? item.label.length * 5.5 : 44,
+            (korName?.length || 4) * 6
           )
           const polylineX = labelOnLeft
             ? Math.min(Math.max(8, m.startX - labelLen), m.startX - 8)
@@ -420,7 +661,7 @@ function CrossSectionLegacySvg({
           const polylineY = firstElbowY + LABEL_ROW * place.row
           const textAnchor = labelOnLeft ? 'start' : 'end'
           const dipGap = Math.max(m.r, 2) + 6
-          const depthLabelX = labelOnLeft ? m.startX - 54 : m.startX + 8
+          const depthLabelX = labelOnLeft ? m.startX - 48 : m.startX + 8
           const dipLabelX = labelOnLeft ? m.startX - dipGap : m.startX + dipGap
           const dipAnchor = labelOnLeft ? 'end' : 'start'
           const stdDipMm = Math.round(item.diameterM * 1000)
@@ -444,9 +685,9 @@ function CrossSectionLegacySvg({
                   <text
                     x={depthLabelX}
                     y={(m.surfY + m.centerY) / 2}
-                    dy={5}
+                    dy={4}
                     fill="#7A7A7A"
-                    fontSize={12}
+                    fontSize={10}
                   >
                     {Math.round(dep * 1000)}mm
                   </text>
@@ -464,10 +705,10 @@ function CrossSectionLegacySvg({
                 <text
                   x={dipLabelX}
                   y={m.centerY}
-                  dy={4}
+                  dy={3}
                   textAnchor={dipAnchor}
                   fill={color}
-                  fontSize={12}
+                  fontSize={10}
                 >
                   {stdDipMm}mm
                 </text>
@@ -485,58 +726,80 @@ function CrossSectionLegacySvg({
               {korName ? (
                 <text
                   x={polylineX}
-                  y={polylineY - 6}
+                  y={polylineY - 5}
                   textAnchor={textAnchor}
                   fill={color}
-                  fontSize={14}
+                  fontSize={10}
                 >
                   {korName}
                 </text>
               ) : null}
               <text
                 x={polylineX}
-                y={polylineY + 14}
+                y={polylineY + 12}
                 textAnchor={textAnchor}
                 fill={color}
-                fontSize={12}
+                fontSize={10}
               >
                 {item.label}
               </text>
             </g>
           )
         })}
+
+        <SupplyAreaGanttGroup
+          bands={supplyAreaBands}
+          xOf={xOf}
+          bandTop={ganttTop}
+          padL={padL}
+          width={width}
+          padR={padR}
+        />
       </svg>
     </div>
   )
 }
 
 /**
- * 종단면도 — 등고 지형 + 관별 심도 LINE 그래프(지표−심도)
+ * 종단면도 — X=옆면(깊이축), Y=사각형 격자 표고 + 관 심도 라인
  */
 function LongSectionSvg({
   ground,
+  groundMin = [],
+  groundMax = [],
   features,
   totalLengthM,
+  supplyAreaBands = [],
 }: {
   ground: SectionGroundPt[]
+  groundMin?: SectionGroundPt[]
+  groundMax?: SectionGroundPt[]
   features: SectionFeatureMark[]
   totalLengthM: number
+  supplyAreaBands?: SectionSupplyBandSegment[]
 }) {
   const width = 640
-  const padL = 56
+  const padL = 64
   const padR = 28
-  const padT = 52
-  const padB = 36
-  const cutY = 22
+  /** 상단 «절단선» 라벨 여유 */
+  const padT = 28
+  const padB = 52
   const LONG_LABEL_STEP = 14
   const LONG_LABEL_NEAR = 52
+  const AXIS = '#64748b'
+  const AXIS_LABEL = '#3d5560'
 
   const layout = useMemo(() => {
     if (!ground.length) return null
     const len = Math.max(totalLengthM, ground[ground.length - 1]?.distM ?? 0, 0.01)
     const pipes = features.filter((f) => f.kind === 'pipe')
+    const mins = groundMin.length ? groundMin : ground
+    const maxs = groundMax.length ? groundMax : ground
 
-    const elevs = ground.map((g) => g.elevM)
+    const elevs: number[] = []
+    for (const g of ground) elevs.push(g.elevM)
+    for (const g of mins) elevs.push(g.elevM)
+    for (const g of maxs) elevs.push(g.elevM)
     for (const p of pipes) {
       const from = p.spanFromM ?? p.distM
       const to = p.spanToM ?? p.distM
@@ -547,8 +810,10 @@ function LongSectionSvg({
       const midSurf = p.surfaceElevM ?? groundElevAt(ground, p.distM)
       if (midSurf != null) elevs.push(midSurf - (Number(p.depthM) || 0))
     }
-    const elevMin = Math.min(...elevs) - 0.3
-    const elevMax = Math.max(...elevs) + 0.3
+    const dataElevMax = Math.max(...elevs)
+    const dataElevMin = Math.min(...elevs)
+    const elevMin = dataElevMin - 0.3
+    const elevMax = dataElevMax + 0.3
     const elevSpan = Math.max(elevMax - elevMin, 0.5)
     const basePlotH = 268
     const plotW = width - padL - padR
@@ -601,17 +866,34 @@ function LongSectionSvg({
     const maxLabelRow = withRows.reduce((m, d) => Math.max(m, d.labelRow), 0)
     const labelHeadroom = maxLabelRow * LONG_LABEL_STEP
     const plotH = basePlotH
-    const height = padT + plotH + padB + labelHeadroom
     const yOf = (e: number) =>
       padT + labelHeadroom + plotH - ((e - elevMin) / elevSpan) * plotH
+    const plotTop = padT + labelHeadroom
+    const plotBottom = padT + labelHeadroom + plotH
+    const ganttH = supplyGanttHeight(supplyAreaBands)
+    const ganttTop = plotBottom + padB
+    const height = ganttTop + ganttH
 
     const groundPath = ground
       .map((g, i) => `${i === 0 ? 'M' : 'L'}${xOf(g.distM).toFixed(1)},${yOf(g.elevM).toFixed(1)}`)
       .join(' ')
+    const maxPath = maxs
+      .map((g, i) => `${i === 0 ? 'M' : 'L'}${xOf(g.distM).toFixed(1)},${yOf(g.elevM).toFixed(1)}`)
+      .join(' ')
+    // min→max envelope (하천 종단 형태)
+    const envelopePath =
+      maxs
+        .map((g, i) => `${i === 0 ? 'M' : 'L'}${xOf(g.distM).toFixed(1)},${yOf(g.elevM).toFixed(1)}`)
+        .join(' ') +
+      [...mins]
+        .reverse()
+        .map((g) => `L${xOf(g.distM).toFixed(1)},${yOf(g.elevM).toFixed(1)}`)
+        .join('') +
+      ' Z'
     const soilPath =
       groundPath +
-      ` L${xOf(ground[ground.length - 1]!.distM).toFixed(1)},${padT + labelHeadroom + plotH}` +
-      ` L${xOf(ground[0]!.distM).toFixed(1)},${padT + labelHeadroom + plotH} Z`
+      ` L${xOf(ground[ground.length - 1]!.distM).toFixed(1)},${plotBottom}` +
+      ` L${xOf(ground[0]!.distM).toFixed(1)},${plotBottom} Z`
 
     const depthLines = withRows.map((dl) => {
       const pts = dl.elevPts.map((q) => ({ x: xOf(q.distM), y: yOf(q.elevM) }))
@@ -628,8 +910,37 @@ function LongSectionSvg({
       }
     })
 
-    return { len, height, groundPath, soilPath, depthLines, labelHeadroom }
-  }, [ground, features, totalLengthM])
+    const cutCenterX = xOf(len / 2)
+    const xTicks = uniqueAxisTicksByLabel(
+      niceAxisTicks(0, len, 5).map((v) => ({
+        v,
+        x: xOf(v),
+        label: formatAxisTick(v),
+      }))
+    )
+    // 스케일 여유(±0.3)와 별도로, 도형 실측 최댓값은 Y축에 반드시 표기
+    const yTicks = yAxisTicksWithDataMax(elevMin, elevMax, dataElevMax, yOf, 6)
+
+    return {
+      len,
+      height,
+      groundPath,
+      maxPath,
+      envelopePath,
+      soilPath,
+      depthLines,
+      labelHeadroom,
+      cutCenterX,
+      elevMin,
+      elevMax,
+      plotTop,
+      plotBottom,
+      ganttTop,
+      xOf,
+      xTicks,
+      yTicks,
+    }
+  }, [ground, groundMin, groundMax, features, totalLengthM, supplyAreaBands])
 
   if (!layout) {
     return (
@@ -651,30 +962,136 @@ function LongSectionSvg({
         aria-label="종단면도"
       >
         <rect width={width} height={layout.height} fill="#ffffff" />
-        <SectionCutLine x1={padL} x2={width - padR} y={cutY} />
+
+        {/* 축·격자 */}
+        <line
+          x1={padL}
+          y1={layout.plotTop}
+          x2={padL}
+          y2={layout.plotBottom}
+          stroke={AXIS}
+          strokeWidth={1.2}
+        />
+        <line
+          x1={padL}
+          y1={layout.plotBottom}
+          x2={width - padR}
+          y2={layout.plotBottom}
+          stroke={AXIS}
+          strokeWidth={1.2}
+        />
+        {layout.yTicks.map((t, i) => (
+          <g key={`y-${i}-${t.v}`}>
+            <line
+              x1={padL}
+              y1={t.y}
+              x2={width - padR}
+              y2={t.y}
+              stroke="#e2e8f0"
+              strokeWidth={1}
+            />
+            <line
+              x1={padL - 4}
+              y1={t.y}
+              x2={padL}
+              y2={t.y}
+              stroke={AXIS}
+              strokeWidth={1}
+            />
+            <text
+              x={padL - 6}
+              y={t.y + 3}
+              textAnchor="end"
+              fill={AXIS_LABEL}
+              fontSize={10}
+            >
+              {t.label}
+            </text>
+          </g>
+        ))}
+        {layout.xTicks.map((t, i) => (
+          <g key={`x-${i}-${t.v}`}>
+            <line
+              x1={t.x}
+              y1={layout.plotTop}
+              x2={t.x}
+              y2={layout.plotBottom}
+              stroke="#e2e8f0"
+              strokeWidth={1}
+            />
+            <line
+              x1={t.x}
+              y1={layout.plotBottom}
+              x2={t.x}
+              y2={layout.plotBottom + 4}
+              stroke={AXIS}
+              strokeWidth={1}
+            />
+            <text
+              x={t.x}
+              y={layout.plotBottom + 16}
+              textAnchor="middle"
+              fill={AXIS_LABEL}
+              fontSize={10}
+            >
+              {t.label}
+            </text>
+          </g>
+        ))}
+
+        <path d={layout.envelopePath} fill="#efe6d6" stroke="none" opacity={0.85} />
+        <path d={layout.soilPath} fill="#efe6d6" stroke="none" opacity={0.35} />
+        {layout.maxPath ? (
+          <path
+            d={layout.maxPath}
+            fill="none"
+            stroke="#8a7a5a"
+            strokeWidth={1}
+            strokeDasharray="4 3"
+          />
+        ) : null}
+        <path d={layout.groundPath} fill="none" stroke="#111" strokeWidth={1.8} />
+
+        {/* 절단선 = 깊이축 한 지점(띠 중심) */}
+        <line
+          x1={layout.cutCenterX}
+          y1={layout.plotTop}
+          x2={layout.cutCenterX}
+          y2={layout.plotBottom}
+          stroke={SECTION_LINE_COLOR}
+          strokeWidth={1.8}
+          strokeDasharray="5 4"
+        />
+        <line
+          x1={layout.cutCenterX}
+          y1={layout.plotBottom}
+          x2={layout.cutCenterX}
+          y2={layout.plotBottom + 6}
+          stroke={SECTION_LINE_COLOR}
+          strokeWidth={2}
+        />
         <text
-          x={padL}
-          y={cutY + SECTION_LINE_END_TICK + 12}
-          textAnchor="start"
+          x={layout.cutCenterX}
+          y={Math.max(12, layout.plotTop - 6)}
+          textAnchor="middle"
           fill={SECTION_LINE_COLOR}
-          fontSize={14}
+          fontSize={11}
+          fontWeight={600}
         >
-          0m
-        </text>
-        <text
-          x={width - padR}
-          y={cutY + SECTION_LINE_END_TICK + 12}
-          textAnchor="end"
-          fill={SECTION_LINE_COLOR}
-          fontSize={14}
-        >
-          {layout.len.toFixed(2)}m
+          절단선
         </text>
 
-        <path d={layout.soilPath} fill="#efe6d6" stroke="none" />
-        <path d={layout.groundPath} fill="none" stroke="#111" strokeWidth={1.8} />
-        <text x={8} y={padT + layout.labelHeadroom + 4} fill="#3d5560" fontSize={11}>
-          지형(등고)
+        <text x={8} y={padT + layout.labelHeadroom + 4} fill={AXIS_LABEL} fontSize={11}>
+          표고 (m)
+        </text>
+        <text
+          x={(padL + width - padR) / 2}
+          y={layout.height - 8}
+          textAnchor="middle"
+          fill={AXIS_LABEL}
+          fontSize={11}
+        >
+          깊이 (m) · 옆면
         </text>
 
         {layout.depthLines.map((dl) => (
@@ -693,6 +1110,15 @@ function LongSectionSvg({
             </text>
           </g>
         ))}
+
+        <SupplyAreaGanttGroup
+          bands={supplyAreaBands}
+          xOf={layout.xOf}
+          bandTop={layout.ganttTop}
+          padL={padL}
+          width={width}
+          padR={padR}
+        />
       </svg>
     </div>
   )
@@ -742,19 +1168,25 @@ function PrevOriginalSectionSvg({
 export function WtlNetworkSectionSvg({
   mode,
   ground = [],
+  groundMin = [],
+  groundMax = [],
   features,
   totalLengthM,
   lineLonLat = null,
-  supplyAreaLines = [],
+  supplyAreaBands = [],
 }: {
   mode: 'cross' | 'long' | 'prev' | 'threejs'
   ground?: SectionGroundPt[]
+  /** 종단 — 깊이 스테이션별 격자 최소 표고 */
+  groundMin?: SectionGroundPt[]
+  /** 종단 — 깊이 스테이션별 격자 최대 표고 */
+  groundMax?: SectionGroundPt[]
   features: SectionFeatureMark[]
   totalLengthM: number
   /** «기존» 탭용 — 절단선 lon/lat */
   lineLonLat?: [number, number][] | null
-  /** 횡단 좌측 지반고 위 — 켜진 급수구역·분구·블록 */
-  supplyAreaLines?: SectionSupplyAreaLine[]
+  /** X축 하단 — 급수구역·분구·블록 밴드 */
+  supplyAreaBands?: SectionSupplyBandSegment[]
 }) {
   if (mode === 'cross') {
     return (
@@ -762,7 +1194,7 @@ export function WtlNetworkSectionSvg({
         ground={ground}
         features={features}
         totalLengthM={totalLengthM}
-        supplyAreaLines={supplyAreaLines}
+        supplyAreaBands={supplyAreaBands}
       />
     )
   }
@@ -772,6 +1204,13 @@ export function WtlNetworkSectionSvg({
     return <PrevOriginalSectionSvg lineLonLat={lineLonLat} diameterMm={dipMm} />
   }
   return (
-    <LongSectionSvg ground={ground} features={features} totalLengthM={totalLengthM} />
+    <LongSectionSvg
+      ground={ground}
+      groundMin={groundMin}
+      groundMax={groundMax}
+      features={features}
+      totalLengthM={totalLengthM}
+      supplyAreaBands={supplyAreaBands}
+    />
   )
 }

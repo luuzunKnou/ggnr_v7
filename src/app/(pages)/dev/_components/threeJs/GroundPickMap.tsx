@@ -30,6 +30,7 @@ import {
   normalizeSectionLineLTR,
   sectionCoverRadiusM,
   sectionRectCenter3857,
+  sectionRectRing3857,
   suggestSectionHalfWidthM,
 } from './groundSection';
 import 'ol/ol.css';
@@ -64,48 +65,18 @@ function squareAround(center3857: [number, number], halfM: number): Polygon {
   ]);
 }
 
-/**
- * 절단선=밑변인 사각형.
- * 좌→우 정규화 후 A–B 밑변, 진행 왼쪽(수직)으로 depthM 만큼 뻗음.
- */
+/** 절단선 중심 ±depthM 띠 — 지형·관로 조회와 동일 */
 function rectFromBaseLine(
   start: Coordinate,
   end: Coordinate,
   depthM: number
 ): Polygon {
-  const normalized = normalizeSectionLineLTR({
+  const ring = sectionRectRing3857({
     start3857: [start[0]!, start[1]!],
     end3857: [end[0]!, end[1]!],
     halfWidthM: depthM,
   });
-  const ax = normalized.start3857[0];
-  const ay = normalized.start3857[1];
-  const bx = normalized.end3857[0];
-  const by = normalized.end3857[1];
-  const mx = (ax + bx) / 2;
-  const my = (ay + by) / 2;
-  const center: [number, number] = [mx, my];
-  let dx = bx - ax;
-  let dy = by - ay;
-  const len = Math.hypot(dx, dy);
-  if (len < 1e-6) {
-    return squareAround(center, Math.max(1, depthM));
-  }
-  dx /= len;
-  dy /= len;
-  const depth = metersToMercator(center, depthM);
-  // 좌→우 진행 왼쪽
-  const ox = -dy * depth;
-  const oy = dx * depth;
-  return new Polygon([
-    [
-      [ax, ay],
-      [bx, by],
-      [bx + ox, by + oy],
-      [ax + ox, ay + oy],
-      [ax, ay],
-    ],
-  ]);
+  return new Polygon([ring]);
 }
 
 /** 그린 사각형 extent → 중심 + 덮는 정사각 반경(m) */

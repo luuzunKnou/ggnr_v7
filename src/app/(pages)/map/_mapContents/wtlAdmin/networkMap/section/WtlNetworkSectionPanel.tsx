@@ -9,8 +9,10 @@ import {
   type SectionFeatureMark,
   type SectionGroundPt,
   type SectionSupplyAreaLine,
+  type SectionSupplyBandSegment,
 } from './wtlNetworkSectionSvg'
 import { WtlNetworkSectionThreeJsTab } from './WtlNetworkSectionThreeJsTab'
+import { WtlNetworkSectionChart } from './wtlNetworkSectionChart'
 
 type Props = {
   open: boolean
@@ -20,12 +22,15 @@ type Props = {
   loading: boolean
   error: string
   ground: SectionGroundPt[]
+  groundMin?: SectionGroundPt[]
+  groundMax?: SectionGroundPt[]
   features: SectionFeatureMark[]
   totalLengthM: number
   lineLonLat: [number, number][] | null
   line3857?: [number, number][] | null
   enabledKeys?: string[]
   supplyAreaLines?: SectionSupplyAreaLine[]
+  supplyAreaBands?: SectionSupplyBandSegment[]
   onClose: () => void
   onRedraw: () => void
 }
@@ -38,12 +43,15 @@ export function WtlNetworkSectionPanel({
   loading,
   error,
   ground,
+  groundMin = [],
+  groundMax = [],
   features,
   totalLengthM,
   lineLonLat,
   line3857 = null,
   enabledKeys = [],
-  supplyAreaLines = [],
+  supplyAreaLines: _supplyAreaLines = [],
+  supplyAreaBands = [],
   onClose,
   onRedraw,
 }: Props) {
@@ -53,10 +61,14 @@ export function WtlNetworkSectionPanel({
     tab === 'cross'
       ? '횡단: 레거시 횡단면도와 동일(개략 지표면·심도·관경 원). 켜진 레이어만.'
       : tab === 'long'
-        ? '종단: 절단선 주변 띠의 관을 거리축 측면으로 표시. 켜진 레이어만.'
-        : tab === 'threejs'
-          ? 'ThreeJs: 지형(단면도) + 켜진 레이어 도형으로 CAD 종·횡단 생성.'
-          : '기존: 작업 전 예시 지형 SVG(원본 모달과 동일).'
+        ? '종단: 밑변=절단선, X=옆면(깊이), 사각형 안 표고·관. 켜진 레이어만.'
+        : tab === 'crossChart'
+          ? '횡단(차트): Chart.js 지형 선·관/시설 점·하단 간트. 켜진 레이어만.'
+          : tab === 'longChart'
+            ? '종단(차트): 지형·관 + 표고별 구역/분구/블록 구성 비율 차트 비교. 켜진 레이어만.'
+            : tab === 'threejs'
+              ? 'ThreeJs: 지형(단면도) + 켜진 레이어 도형으로 CAD 종·횡단 생성.'
+              : '기존: 작업 전 예시 지형 SVG(원본 모달과 동일).'
 
   return (
     <MapFloatingPanel
@@ -102,6 +114,8 @@ export function WtlNetworkSectionPanel({
             [
               { id: 'cross' as const, label: '횡단면도' },
               { id: 'long' as const, label: '종단면도' },
+              { id: 'crossChart' as const, label: '횡단면도(차트형태)' },
+              { id: 'longChart' as const, label: '종단면도(차트형태)' },
               { id: 'threejs' as const, label: 'ThreeJs' },
               { id: 'prev' as const, label: '기존' },
             ] as const
@@ -141,14 +155,26 @@ export function WtlNetworkSectionPanel({
             <p className="py-10 text-center text-[12px] text-destructive">{error}</p>
           ) : !lineReady ? (
             <p className="py-10 text-center text-[12px] text-muted-foreground">절단선 데이터가 없습니다.</p>
+          ) : tab === 'crossChart' || tab === 'longChart' ? (
+            <WtlNetworkSectionChart
+              mode={tab}
+              ground={ground}
+              groundMin={groundMin}
+              groundMax={groundMax}
+              features={features}
+              totalLengthM={totalLengthM}
+              supplyAreaBands={supplyAreaBands}
+            />
           ) : (
             <WtlNetworkSectionSvg
               mode={tab}
               ground={ground}
+              groundMin={groundMin}
+              groundMax={groundMax}
               features={features}
               totalLengthM={totalLengthM}
               lineLonLat={lineLonLat}
-              supplyAreaLines={supplyAreaLines}
+              supplyAreaBands={supplyAreaBands}
             />
           )}
         </div>
