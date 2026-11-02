@@ -30,6 +30,7 @@ import * as roadLedgerService from './roadLedgerService';
 import * as roadVideoTrackService from './roadVideoTrackService';
 import * as roadNetworkService from './roadNetworkService';
 import * as wtlNetworkService from './wtlNetworkService';
+import * as wtlFacilityService from './wtlFacilityService';
 import * as swlNetworkService from './swlNetworkService';
 import * as wtlOutageService from './wtlOutageService';
 import * as wtlLeakService from './wtlLeakService';
@@ -124,6 +125,7 @@ export {
   roadVideoTrackService,
   roadNetworkService,
   wtlNetworkService,
+  wtlFacilityService,
   swlNetworkService,
   wtlOutageService,
   wtlLeakService,
