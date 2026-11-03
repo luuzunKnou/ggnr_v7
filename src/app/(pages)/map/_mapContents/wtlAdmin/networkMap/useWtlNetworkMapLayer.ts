@@ -29,8 +29,6 @@ import { WORKSPACE } from '../../../_mapComponents/layerFactory/serviceLayerFact
 import { useMapContext } from '../../../_mapComponents/MapContext'
 import {
   buildWtlNetSearchCql,
-  getWtlNetLayerDef,
-  isWtlNetZoneLayerKey,
   matchWtlNetLayerDefForTable,
   type WtlNetWmsSearchFilter,
 } from './wtlNetworkLayerCatalog'
@@ -114,7 +112,7 @@ type Props = {
   onMapMoveStart?: () => void
   /** 검색 조건 → WMS CQL */
   searchFilter?: WtlNetWmsSearchFilter | null
-  /** 시설 상세 연관 탭 — 전용 WMS (지하시설물·급수구역과 분리) */
+  /** 시설 상세 연관 탭 — 전용 WMS (지하시설물과 분리) */
   detailRelatedLayer?: WtlNetworkDetailRelatedLayer
 }
 
@@ -141,8 +139,6 @@ export function useWtlNetworkMapLayer({
 }: Props) {
   const mapContext = useMapContext()
   const wmsBySourceRef = useRef<Map<WtlNetMapSourceId, ImageLayer<ImageWMS>>>(new Map())
-  /** 급수구역 전용 WMS (지하시설물 목록 밖) */
-  const zoneWmsByTableRef = useRef<Map<string, ImageLayer<ImageWMS>>>(new Map())
   /** 상세 연관(펌프·흡수정 등) 전용 WMS */
   const detailRelatedWmsRef = useRef<ImageLayer<ImageWMS> | null>(null)
   const highlightSourceRef = useRef<VectorSource | null>(null)
@@ -222,29 +218,32 @@ export function useWtlNetworkMapLayer({
     const moveKey = map.on('moveend', publishExtent)
     publishExtent()
 
-    const clickKey = map.on('singleclick', async (evt: MapBrowserEvent<PointerEvent>) => {
+    const onClick = (evt: MapBrowserEvent<PointerEvent>) => {
       if (drawBlocksClickRef.current) return
       const keys = [...keysRef.current]
       const sources = [...sourcesRef.current]
       if (keys.length === 0 || sources.length === 0) return
-      try {
-        const res = await call('', 'POST', {
-          service: 'wtlNetworkService',
-          action: 'getWtlNetworkAtPoint',
-          params: {
-            x: evt.coordinate[0],
-            y: evt.coordinate[1],
-            layerKeys: keys,
-            mapSources: sources,
-            tolerance: 12,
-          },
-        })
-        const row = (res?.data ?? res)?.row as WtlNetworkRow | null | undefined
-        if (row) onSelectRef.current(row)
-      } catch {
-        /* ignore */
-      }
-    })
+      void (async () => {
+        try {
+          const res = await call('', 'POST', {
+            service: 'wtlNetworkService',
+            action: 'getWtlNetworkAtPoint',
+            params: {
+              x: evt.coordinate[0],
+              y: evt.coordinate[1],
+              layerKeys: keys,
+              mapSources: sources,
+              tolerance: 12,
+            },
+          })
+          const row = (res?.data ?? res)?.row as WtlNetworkRow | null | undefined
+          if (row) onSelectRef.current(row)
+        } catch {
+          /* ignore */
+        }
+      })()
+    }
+    const clickKey = map.on('singleclick', onClick as never)
 
     return () => {
       unByKey(moveStartKey)
@@ -299,78 +298,6 @@ export function useWtlNetworkMapLayer({
   const mapSourcesSig = [...mapSources].sort().join('\u0001')
   const searchFilterSig = JSON.stringify(searchFilter ?? null)
   const layersBySourceSig = layersBySource ? JSON.stringify(layersBySource) : ''
-
-  /** 급수구역 — 관망조회 전용 WMS (지하시설물 목록에 넣지 않음) */
-  useEffect(() => {
-    const map = mapContext?.mapInstanceRef?.current
-    if (!map || !mapContext?.mapReady) return
-
-    const wmsUrl = `${getGeoServerBase()}/${WORKSPACE}/wms`
-    const wantedTables = new Set<string>()
-    for (const key of enabledLayerKeys) {
-      if (!isWtlNetZoneLayerKey(key)) continue
-      const table = String(getWtlNetLayerDef(key)?.table ?? '').trim().toLowerCase()
-      if (table) wantedTables.add(table)
-    }
-
-    const byTable = zoneWmsByTableRef.current
-    for (const table of wantedTables) {
-      if (byTable.has(table)) continue
-      const wms = new ImageLayer({
-        source: new ImageWMS({
-          url: wmsUrl,
-          params: {
-            LAYERS: `${WORKSPACE}:${table}`,
-            STYLES: table,
-            TRANSPARENT: true,
-            FORMAT: 'image/png',
-          },
-          serverType: 'geoserver',
-          ratio: 1.5,
-          imageLoadFunction: geoserverWmsImageLoadFunction,
-        }),
-        visible: true,
-      })
-      wms.set('wtlNetworkZoneWms', true)
-      wms.set('layerTableName', table)
-      markLayerGeomStack(wms, stackKindFromDefineShpType(table))
-      map.addLayer(wms)
-      byTable.set(table, wms)
-    }
-
-    for (const [table, layer] of [...byTable.entries()]) {
-      if (wantedTables.has(table)) {
-        if (!map.getLayers().getArray().includes(layer)) {
-          map.addLayer(layer)
-        }
-        layer.setVisible(true)
-        const def = matchWtlNetLayerDefForTable(table, enabledLayerKeys)
-        const search = def ? buildWtlNetSearchCql(def, searchFilter) : 'INCLUDE'
-        applyCqlToImageWms(layer, search === 'INCLUDE' ? undefined : search)
-        layer.getSource()?.changed()
-      } else {
-        map.removeLayer(layer)
-        byTable.delete(table)
-      }
-    }
-
-    return () => {
-      /* 키 변경 시 위에서 정리. 언마운트는 mapReady effect 정리에서 처리 */
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- 서명 문자열로 안정화
-  }, [enabledKeysSig, searchFilterSig, mapContext?.mapReady])
-
-  // 관망조회 언마운트 시 급수구역 WMS 제거
-  useEffect(() => {
-    const map = mapContext?.mapInstanceRef?.current
-    return () => {
-      if (!map) return
-      for (const layer of zoneWmsByTableRef.current.values()) {
-        map.removeLayer(layer)
-      }
-      zoneWmsByTableRef.current = new Map()
-    }
-  }, [mapContext?.mapInstanceRef, mapContext?.mapReady])
 
   const detailRelatedTable = String(detailRelatedLayer?.table ?? '')
     .trim()

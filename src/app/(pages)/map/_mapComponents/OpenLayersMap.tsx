@@ -1121,7 +1121,7 @@ export default function OpenLayersMap({
     );
     setVisibleUndergroundFacilityLayerNames((prev) => {
       if (prev != null && sameStringSet(prev, fromVisible)) return prev;
-      // 카탈로그에 없는 이름(급수구역 등)만 visible에 남은 경우
+      // 카탈로그에 없는 이름만 visible에 남은 경우
       // 빈 집합으로 덮으면 기존 관로·시설 레이어까지 꺼짐 → 기존 선택 유지.
       // 단, visible에서 이전 UF 선택이 이미 빠진 경우(출처 전환 등)는 유지하지 않음.
       if (fromVisible.size === 0 && prev != null && prev.size > 0) {

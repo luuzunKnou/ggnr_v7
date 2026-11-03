@@ -2606,6 +2606,8 @@ export function LayerDataPanel({
                   <div className="space-y-1.5">
                     {attachmentQuery.files.map((file) => {
                       const canPreview = isServiceFilePreviewableName(file.name);
+                      const isImg = isImageServiceFileName(file.name);
+                      const isPdf = isPdfServiceFileName(file.name);
                       const dateStr =
                         file.modified != null
                           ? (() => {

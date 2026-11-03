@@ -134,22 +134,25 @@ export function useSwlNetworkMapLayer({
     const moveKey = map.on('moveend', publishExtent)
     publishExtent()
 
-    const clickKey = map.on('singleclick', async (evt: MapBrowserEvent<PointerEvent>) => {
+    const onClick = (evt: MapBrowserEvent<PointerEvent>) => {
       if (zoneDrawRef.current || inputBlocksClickRef.current) return
       const keys = [...keysRef.current]
       if (keys.length === 0) return
-      try {
-        const res = await call('', 'POST', {
-          service: 'swlNetworkService',
-          action: 'getSwlNetworkAtPoint',
-          params: { x: evt.coordinate[0], y: evt.coordinate[1], layerKeys: keys, tolerance: 12 },
-        })
-        const row = (res?.data ?? res)?.row as SwlNetworkRow | null | undefined
-        if (row) onSelectRef.current(row)
-      } catch {
-        /* ignore */
-      }
-    })
+      void (async () => {
+        try {
+          const res = await call('', 'POST', {
+            service: 'swlNetworkService',
+            action: 'getSwlNetworkAtPoint',
+            params: { x: evt.coordinate[0], y: evt.coordinate[1], layerKeys: keys, tolerance: 12 },
+          })
+          const row = (res?.data ?? res)?.row as SwlNetworkRow | null | undefined
+          if (row) onSelectRef.current(row)
+        } catch {
+          /* ignore */
+        }
+      })()
+    }
+    const clickKey = map.on('singleclick', onClick as never)
 
     return () => {
       unByKey(moveKey)

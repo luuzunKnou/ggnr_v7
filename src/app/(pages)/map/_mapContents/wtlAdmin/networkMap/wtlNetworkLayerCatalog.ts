@@ -337,7 +337,7 @@ function escCql(s: string): string {
   return String(s).replace(/'/g, "''")
 }
 
-/** 급수구역 — 출처(상수/대진)와 무관, 관망조회 전용 WMS로 표시 */
+/** 급수구역·분구·블록 — 출처 그룹 밖, 지하시설물 동기화·슬롯 단일화용 */
 export const WTL_NET_ZONE_LAYER_KEYS = [
   'wtl_wtsa_as',
   'wtl_wtssa_as',

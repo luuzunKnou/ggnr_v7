@@ -112,9 +112,8 @@ type DisplayItem = {
  * define_table_kor_name = 버튼 한글명
  *
  * 지도 표시 경로
- * - 지하시설물 동기화: 관로·상수시설·계량기·기타
+ * - 지하시설물 동기화: 관로·상수시설·급수구역·계량기·기타
  * - 주제도 동기화: 보호구역
- * - 자체 WMS: 급수구역
  */
 const DISPLAY_GROUPS: { title: string; items: DisplayItem[] }[] = [
   {
@@ -176,15 +175,15 @@ const DISPLAY_GROUPS: { title: string; items: DisplayItem[] }[] = [
   },
 ]
 
-type WtlNetLayerShowMode = 'underground' | 'thematic' | 'zoneWms'
+type WtlNetLayerShowMode = 'underground' | 'thematic'
 
 const LAYER_SHOW_MODE_BY_GROUP: Record<string, WtlNetLayerShowMode> = {
   관로: 'underground',
   상수시설: 'underground',
+  급수구역: 'underground',
   계량기: 'underground',
   기타: 'underground',
   보호구역: 'thematic',
-  급수구역: 'zoneWms',
 }
 
 function getLayerShowMode(key: string): WtlNetLayerShowMode {
@@ -227,6 +226,10 @@ function resolveUndergroundTableNames(key: string, sourceId: string): string[] {
   const keyName = String(key ?? '').trim()
   const defineName = String(def.defineTable ?? '').trim()
   const baseTable = String(def.table ?? '').trim()
+  // 급수구역·분구·블록 — 출처(상수/대진) 그룹 밖. 물리명으로 지하시설물 동기화
+  if (isWtlNetZoneLayerKey(key)) {
+    return [...new Set([baseTable, defineName, keyName].filter(Boolean))]
+  }
   const src = getWtlNetMapSource(sourceId)
   const out: string[] = []
 
@@ -282,14 +285,10 @@ function resolveThematicTableNames(key: string): string[] {
   return name ? [name] : []
 }
 
-/** 개발자 title용 — 선택 출처 remap·주제도·급수구역 물리명 */
+/** 개발자 title용 — 선택 출처 remap·주제도·지하시설물 물리명 */
 function resolveLayerEngName(key: string, sourceId: string): string {
   const mode = getLayerShowMode(key)
   if (mode === 'thematic') return resolveThematicTableNames(key)[0] ?? key
-  if (mode === 'zoneWms' || isWtlNetZoneLayerKey(key)) {
-    const def = getWtlNetLayerDef(key)
-    return String(def?.defineTable ?? def?.table ?? key).trim() || key
-  }
   const resolved = resolveUndergroundTableNames(key, sourceId)
   if (resolved[0]) return resolved[0]
   const def = getWtlNetLayerDef(key)
@@ -857,11 +856,10 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
         const next = new Set<string>(keys)
         setAvailableLayerKeys(next)
         setExtraOn((prev) => {
-          // 급수구역·보호구역은 DB 가용키와 별도 표시 경로 — 가용 목록에 없어도 유지
+          // 보호구역은 주제도 경로 — DB 가용키와 무관하게 유지
           const pruned = new Set(
             [...prev].filter((k) => {
-              const mode = getLayerShowMode(k)
-              if (mode === 'zoneWms' || mode === 'thematic') return true
+              if (getLayerShowMode(k) === 'thematic') return true
               return next.has(k)
             })
           )
@@ -875,7 +873,7 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
             }
             if (same) return prev
           }
-          // 지하 가용키가 비어도 구역·보호는 남을 수 있음
+          // 지하 가용키가 비어도 보호구역은 남을 수 있음
           if (pruned.size > 0) return pruned
           return next
         })
@@ -899,18 +897,21 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
       const key = item.define_table_name
       const mode = getLayerShowMode(key)
       if (mode === 'thematic') continue
-      if (mode === 'zoneWms' || isWtlNetZoneLayerKey(key)) {
-        if (!getWtlNetLayerDef(key)?.table) continue
+      if (!getWtlNetLayerDef(key)?.table) continue
+      // 급수구역 — 출처와 무관, 슬롯 1개 (지하시설물 동기화)
+      if (isWtlNetZoneLayerKey(key)) {
+        const sid = primarySource || availableSourceIds[0]
+        if (!sid) continue
+        if (resolveUndergroundTableNames(key, sid).length === 0) continue
         slots.push({
           key: `zone:${key}`,
           layerKey: key,
           label: item.define_table_kor_name,
           geomKind: getWtlNetLayerDef(key)?.geomKind ?? 'area',
-          mapSources: primarySource ? [primarySource] : availableSourceIds.slice(0, 1),
+          mapSources: [sid],
         })
         continue
       }
-      if (!getWtlNetLayerDef(key)?.table) continue
       for (const id of sourceIds) {
         if (resolveUndergroundTableNames(key, id).length === 0) continue
         slots.push({
@@ -1603,10 +1604,10 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
   const networkUfForwardReadyRef = useRef(false)
 
   /**
-   * 관로·상수시설·계량기·기타 ↔ 지하시설물 양방향 동기화
+   * 관로·상수시설·급수구역·계량기·기타 ↔ 지하시설물 양방향 동기화
    * (1) 관망 탭 → visibleLayerNames → 지하시설물 패널
    * (2) 지하시설물 패널 → visibleLayerNames → 관망 탭(extraOn)
-   * 급수구역·보호구역은 제외
+   * 보호구역은 주제도 경로로 별도 처리
    */
   useEffect(() => {
     const setVisible = mapContext?.setVisibleLayerNames
@@ -1654,7 +1655,7 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
     extraOn,
   ])
 
-  /** 지하시설물 → 관망 탭 (visibleLayerNames 기준, 급수·보호 제외) */
+  /** 지하시설물 → 관망 탭 (visibleLayerNames 기준, 보호구역 제외) */
   useEffect(() => {
     if (!networkUfForwardReadyRef.current) return
     if (skipUfToNetworkSyncRef.current) return

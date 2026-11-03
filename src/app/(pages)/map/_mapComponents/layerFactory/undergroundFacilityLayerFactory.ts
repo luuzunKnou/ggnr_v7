@@ -33,6 +33,7 @@ function compareUndergroundLayers(a: ThematicMapLayerOption, b: ThematicMapLayer
 /** 지도 «지하시설물» — 레이어관리 그룹명과 동일 */
 export const UNDERGROUND_FACILITY_GROUP_ALLOW = new Set([
   '상수',
+  '급수구역',
   '하수',
   '광역상수',
   '가스',
@@ -44,6 +45,7 @@ export const UNDERGROUND_FACILITY_GROUP_ALLOW = new Set([
 
 const UNDERGROUND_FACILITY_GROUP_ORDER = [
   '상수',
+  '급수구역',
   '하수',
   '광역상수',
   '가스',

@@ -32,7 +32,7 @@ function sampleTerrain(line: [number, number][]) {
   const total = segLens.reduce((sum, n) => sum + n, 0)
   const count = 16
   return Array.from({ length: count }, (_, i) => {
-    const t = count === 1 ? 0 : i / (count - 1)
+    const t = i / Math.max(count - 1, 1)
     const elev = 214 + Math.sin(t * Math.PI) * 11 + Math.sin(t * Math.PI * 3) * 2.4
     return { dist: total * t, elev }
   })
