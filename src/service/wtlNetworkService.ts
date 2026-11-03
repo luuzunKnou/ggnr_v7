@@ -2998,7 +2998,7 @@ export async function exportWtlNetworkShpZip(
       if (!def?.table) continue;
       const physicalTable = source.remapTable(def.table);
       if (!(await tableExists(physicalTable))) continue;
-      const sqlText = buildShpExportSql(def, physicalTable, filterOpts);
+      const sqlText = await buildShpExportSql(def, physicalTable, filterOpts);
       const layerName = safeShpEntryName(
         `${source.id}_${def.defineTable || def.key || physicalTable}`
       );
@@ -3058,4 +3058,6 @@ export async function exportWtlNetworkShpZip(
   return {
     success: true,
     zipBuffer: Buffer.concat(chunks),
-    fileName: `관망조회_${scopeTag}_SHP_${stamp}
+    fileName: `관망조회_${scopeTag}_SHP_${stamp}.zip`,
+  };
+}
