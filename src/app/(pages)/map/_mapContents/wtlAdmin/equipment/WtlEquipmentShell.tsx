@@ -1,6 +1,16 @@
 'use client'
 
-import { WtlFacilityShell } from '../facility/WtlFacilityShell'
+import { useMemo } from 'react'
+import {
+  WtlFacilityShell,
+  type WtlFacilityShellCatalog,
+} from '../facility/WtlFacilityShell'
+import {
+  EQUIPMENT_TABS,
+  isEquipmentTabEnabled,
+  listAllEquipmentUndergroundTableNames,
+  listEquipmentGroupOptions,
+} from './wtlEquipmentCatalog'
 
 type Props = {
   leftOffsetPx: number
@@ -8,7 +18,18 @@ type Props = {
   onClose: () => void
 }
 
-/** 설비관리 — 시설관리와 동일 UX(DB·탭·상세·연관탭), 제목만 다름 */
+const EQUIPMENT_CATALOG: WtlFacilityShellCatalog = {
+  tabs: EQUIPMENT_TABS,
+  isTabEnabled: isEquipmentTabEnabled,
+  listGroupOptions: listEquipmentGroupOptions,
+  listUndergroundTableNames: listAllEquipmentUndergroundTableNames,
+  emptyNoTab: '활성화된 설비 레이어가 없습니다.',
+  emptyNoLayer: '선택한 설비에 등록된 레이어가 없습니다.',
+  emptyNoQuery: '설비를 조회할 수 없습니다.',
+}
+
+/** 설비관리 — 기존 설비 종류 탭 + DB 목록·상세 (시설 셸 재사용) */
 export function WtlEquipmentShell(props: Props) {
-  return <WtlFacilityShell {...props} title="설비관리" />
+  const catalog = useMemo(() => EQUIPMENT_CATALOG, [])
+  return <WtlFacilityShell {...props} title="설비관리" catalog={catalog} />
 }

@@ -147,7 +147,7 @@
     "define_field_sel_key_field": "",
     "define_field_sel_label_field": "",
     "define_field_default_value": "",
-    "define_field_show_title": false
+    "define_field_show_title": true
   },
   {
     "define_field_name": "mfg_ymd",

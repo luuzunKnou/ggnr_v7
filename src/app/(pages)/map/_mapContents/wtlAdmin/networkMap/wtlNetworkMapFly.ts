@@ -5,15 +5,30 @@ import GeoJSON from 'ol/format/GeoJSON'
 import { MAP_AUTO_NAV_MAX_ZOOM } from '../../../_mapComponents/config/mapDefaults'
 import { scheduleFitMapToExtent3857 } from '../../../_mapComponents/config/mapAutoNavigation'
 
+function normalizeFlyGeom(geom: unknown): object | null {
+  if (!geom) return null
+  if (typeof geom === 'object') return geom as object
+  if (typeof geom === 'string') {
+    try {
+      const parsed = JSON.parse(geom) as unknown
+      return parsed && typeof parsed === 'object' ? (parsed as object) : null
+    } catch {
+      return null
+    }
+  }
+  return null
+}
+
 /** GeoJSON(EPSG:4326) → 지도 이동 (시설목록 행 선택용) */
 export function flyToWtlNetworkGeom(
   map: OLMap | null | undefined,
   geom: unknown,
   applyMapViewPadding?: (() => void) | null
 ): boolean {
-  if (!map || !geom || typeof geom !== 'object') return false
+  const geo = normalizeFlyGeom(geom)
+  if (!map || !geo) return false
   try {
-    const olGeom = new GeoJSON().readGeometry(geom, {
+    const olGeom = new GeoJSON().readGeometry(geo, {
       dataProjection: 'EPSG:4326',
       featureProjection: 'EPSG:3857',
     })

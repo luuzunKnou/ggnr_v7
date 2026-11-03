@@ -101,6 +101,17 @@
   box-shadow: inset 0 -2px 0 0 var(--border);
 }
 
+/** 확장패널 내 목록 테이블 헤더 — 기본정보 라벨 톤 */
+@utility standard-detail-table-thead {
+  @apply sticky top-0 z-[1] bg-slate-100 dark:bg-muted;
+  box-shadow: 0 1px 0 0 var(--border);
+}
+
+@utility standard-detail-table-th {
+  @apply h-8 max-w-0 truncate align-middle border-b-0 px-1.5 py-0 font-medium leading-none text-slate-500 dark:text-muted-foreground;
+  box-shadow: inset 0 -2px 0 0 var(--border);
+}
+
 @utility standard-table-th-left {
   @apply text-left;
 }
@@ -318,7 +329,17 @@
 }
 
 @utility standard-detail-attr-table {
-  @apply grid grid-cols-[max-content_minmax(0,1fr)] overflow-hidden rounded border border-border;
+  /* 라벨 열 ~120px — roadInfra 기본정보와 유사 */
+  @apply grid grid-cols-[7.5rem_minmax(0,1fr)] overflow-hidden rounded border border-border;
+
+  /* 마지막 행 border-b는 바깥 테두리와 겹치므로 제거 (.contents 래퍼 / 직접 자식 둘 다) */
+  & > .contents:last-child > .standard-detail-attr-cell-border {
+    @apply border-b-0;
+  }
+
+  & > .standard-detail-attr-cell-border:nth-last-child(-n + 2) {
+    @apply border-b-0;
+  }
 }
 
 @utility standard-detail-attr-empty {
@@ -326,11 +347,11 @@
 }
 
 @utility standard-detail-attr-label {
-  @apply whitespace-nowrap bg-muted px-2.5 py-1.5 text-[11px] text-muted-foreground;
+  @apply whitespace-nowrap bg-slate-100 px-2 py-1.5 text-[11px] font-medium text-slate-500 dark:bg-muted dark:text-muted-foreground;
 }
 
 @utility standard-detail-attr-value {
-  @apply min-w-0 break-all bg-background px-2.5 py-1.5 text-[11px] text-muted-foreground;
+  @apply min-w-0 break-all bg-background px-2 py-1.5 text-[11px] text-slate-900 dark:text-foreground;
 }
 
 @utility standard-detail-attr-cell-border {

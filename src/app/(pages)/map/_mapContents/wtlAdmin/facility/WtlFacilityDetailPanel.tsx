@@ -5,7 +5,6 @@ import { FileText, Paperclip, X } from 'lucide-react'
 import { call } from '@/lib/api'
 import { formatDefineFieldDisplayValue } from '@/lib/defineLayerCodeDisplay'
 import { cn } from '@/lib/utils'
-import { InfoSection } from '../../../_mapComponents/standard/DetailInfoSection'
 import {
   getDefineFieldDisplayLabel,
   getRowKey,
@@ -23,6 +22,7 @@ import {
 } from '../networkMap/wtlNetworkDefineDisplayCache'
 import type { WtlNetworkRow } from '../networkMap/wtlNetworkTypes'
 import type { WtlFacilityListRow } from './WtlFacilityListView'
+import { WtlFacilityRelatedDetailFloating } from './WtlFacilityRelatedDetailFloating'
 
 type Props = {
   row: WtlFacilityListRow
@@ -41,7 +41,7 @@ type RelatedRow = {
   geom: unknown | null
 }
 
-type ActiveTab = 'basic' | 'attach' | string
+type ActiveTab = 'attach' | string
 
 function toNetworkItem(row: WtlFacilityListRow): WtlNetworkRow {
   return {
@@ -96,13 +96,14 @@ function resolveParentFtrIdn(
 
 export function WtlFacilityDetailPanel({ row, onClose }: Props) {
   const [bundle, setBundle] = useState<WtlDefineDisplayBundle | null>(null)
-  const [activeTab, setActiveTab] = useState<ActiveTab>('basic')
+  const [activeTab, setActiveTab] = useState<ActiveTab>('attach')
   const [relatedTabs, setRelatedTabs] = useState<RelatedTabDef[]>([])
   const [relatedRows, setRelatedRows] = useState<RelatedRow[]>([])
   const [relatedTotal, setRelatedTotal] = useState(0)
   const [relatedBundle, setRelatedBundle] = useState<WtlDefineDisplayBundle | null>(null)
   const [relatedLoading, setRelatedLoading] = useState(false)
   const [relatedError, setRelatedError] = useState<string | null>(null)
+  const [relatedDetail, setRelatedDetail] = useState<RelatedRow | null>(null)
 
   const networkItem = useMemo(() => toNetworkItem(row), [row])
   const parentKey = String(row.relatedParentKey || row.layerKey || '')
@@ -130,12 +131,13 @@ export function WtlFacilityDetailPanel({ row, onClose }: Props) {
   }, [row.fieldsTable, row.fieldsTableFallback, row.id])
 
   useEffect(() => {
-    setActiveTab('basic')
     setRelatedTabs([])
     setRelatedRows([])
     setRelatedTotal(0)
     setRelatedBundle(null)
     setRelatedError(null)
+    setRelatedDetail(null)
+    setActiveTab('attach')
 
     if (parentKey !== 'wtl_pres_ps' && parentKey !== 'wtl_puri_as') {
       return
@@ -151,27 +153,29 @@ export function WtlFacilityDetailPanel({ row, onClose }: Props) {
         if (cancelled) return
         const data = (res?.data ?? res) as { tabs?: RelatedTabDef[] } | undefined
         const raw = Array.isArray(data?.tabs) ? data.tabs : []
-        setRelatedTabs(
-          raw
-            .map((t) => {
-              const table = String(t.table ?? '')
+        const next = raw
+          .map((t) => {
+            const table = String(t.table ?? '')
+              .trim()
+              .toLowerCase()
+            const defineTable =
+              String(t.defineTable ?? '')
                 .trim()
-                .toLowerCase()
-              const defineTable =
-                String(t.defineTable ?? '')
-                  .trim()
-                  .toLowerCase() || table
-              return {
-                table,
-                defineTable,
-                label: String(t.label ?? '').trim() || table,
-              }
-            })
-            .filter((t) => t.table)
-        )
+                .toLowerCase() || table
+            return {
+              table,
+              defineTable,
+              label: String(t.label ?? '').trim() || table,
+            }
+          })
+          .filter((t) => t.table)
+        setRelatedTabs(next)
+        setActiveTab(next[0]?.table ?? 'attach')
       })
       .catch(() => {
-        if (!cancelled) setRelatedTabs([])
+        if (cancelled) return
+        setRelatedTabs([])
+        setActiveTab('attach')
       })
 
     return () => {
@@ -232,24 +236,7 @@ export function WtlFacilityDetailPanel({ row, onClose }: Props) {
     return fallbackDetailFields(row.record)
   }, [allFields, row.record])
 
-  const basicInfoFields = useMemo(() => {
-    const codesByField = bundle?.codesByField ?? {}
-    return detailFields.map((f) => {
-      const key = String(f.define_field_name ?? '').trim()
-      const raw = getRowValueByField(row.record, key)
-      return {
-        label: getDefineFieldDisplayLabel(key, f.define_field_kor_name),
-        value: formatDefineFieldDisplayValue(
-          raw,
-          f.define_field_type,
-          codesByField[key.toLowerCase()],
-          '—'
-        ),
-        highlight:
-          titleFieldName != null && key.toLowerCase() === titleFieldName.toLowerCase(),
-      }
-    })
-  }, [bundle?.codesByField, detailFields, row.record, titleFieldName])
+  const codesByField = bundle?.codesByField ?? {}
 
   const activeRelated = useMemo(
     () => relatedTabs.find((t) => t.table === activeTab) ?? null,
@@ -263,6 +250,7 @@ export function WtlFacilityDetailPanel({ row, onClose }: Props) {
       setRelatedBundle(null)
       setRelatedError(null)
       setRelatedLoading(false)
+      setRelatedDetail(null)
       return
     }
 
@@ -271,6 +259,7 @@ export function WtlFacilityDetailPanel({ row, onClose }: Props) {
     setRelatedError(null)
     setRelatedRows([])
     setRelatedTotal(0)
+    setRelatedDetail(null)
 
     const defineTable = activeRelated.defineTable || activeRelated.table
     const peeked = peekWtlDefineDisplayBundle(defineTable, null)
@@ -341,15 +330,21 @@ export function WtlFacilityDetailPanel({ row, onClose }: Props) {
   const relatedCodes = relatedBundle?.codesByField ?? {}
 
   const tabs = useMemo(() => {
-    const out: { id: ActiveTab; label: string; icon: ElementType }[] = [
-      { id: 'basic', label: '기본정보', icon: FileText },
-    ]
+    const out: { id: ActiveTab; label: string; icon: ElementType }[] = []
     for (const t of relatedTabs) {
       out.push({ id: t.table, label: t.label, icon: FileText })
     }
     out.push({ id: 'attach', label: '첨부파일', icon: Paperclip })
     return out
   }, [relatedTabs])
+
+  useEffect(() => {
+    const first = tabs[0]?.id
+    if (!first) return
+    if (!tabs.some((t) => t.id === activeTab)) {
+      setActiveTab(first)
+    }
+  }, [tabs, activeTab])
 
   return (
     <div className="standard-panel-root">
@@ -368,113 +363,176 @@ export function WtlFacilityDetailPanel({ row, onClose }: Props) {
         </button>
       </div>
 
-      <div className="flex shrink-0 border-b border-border">
-        {tabs.map(({ id, label, icon: TabIcon }) => (
-          <button
-            key={id}
-            type="button"
-            title={label}
-            onClick={() => setActiveTab(id)}
-            className={cn(
-              'flex flex-1 cursor-pointer items-center justify-center gap-1 py-2 text-[11px] font-medium transition-colors',
-              activeTab === id
-                ? 'border-b-2 border-primary bg-primary/5 text-primary'
-                : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'
-            )}
-          >
-            <TabIcon className="h-3 w-3 shrink-0" aria-hidden />
-            {label}
-          </button>
-        ))}
-      </div>
-
-      <div className="min-h-0 flex-1 overflow-hidden">
-        {activeTab === 'basic' ? (
-          <div className="scrollbar-thin h-full min-h-0 overflow-y-auto">
-            {basicInfoFields.length === 0 ? (
-              <p className="standard-table-empty">표시할 상세 필드가 없습니다.</p>
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+        <section className="standard-detail-section flex min-h-0 flex-1 flex-col overflow-hidden">
+          <div className="standard-detail-section-header">
+            <span className="standard-detail-section-title">기본정보</span>
+          </div>
+          <div className="standard-detail-section-body min-h-0 flex-1 overflow-auto scrollbar-thin">
+            {detailFields.length === 0 ? (
+              <p className="standard-detail-attr-empty">표시할 상세 필드가 없습니다.</p>
             ) : (
-              <InfoSection title="기본정보" fields={basicInfoFields} defaultOpen />
+              <div className="standard-detail-attr-table">
+                {detailFields.map((f, i) => {
+                  const key = String(f.define_field_name ?? '').trim()
+                  const label = getDefineFieldDisplayLabel(key, f.define_field_kor_name)
+                  const raw = getRowValueByField(row.record, key)
+                  const value = formatDefineFieldDisplayValue(
+                    raw,
+                    f.define_field_type,
+                    codesByField[key.toLowerCase()],
+                    '—'
+                  )
+                  return (
+                    <div key={key || `d-${i}`} className="contents">
+                      <div className="standard-detail-attr-label standard-detail-attr-cell-border">
+                        {label}
+                      </div>
+                      <div
+                        className={cn(
+                          'standard-detail-attr-value standard-detail-attr-cell-border text-foreground',
+                          titleFieldName != null &&
+                            key.toLowerCase() === titleFieldName.toLowerCase() &&
+                            'font-medium text-primary'
+                        )}
+                        title={value}
+                      >
+                        {value}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
             )}
           </div>
-        ) : activeTab === 'attach' ? (
-          <div className="flex h-full min-h-0 flex-col overflow-hidden px-3 py-2">
-            <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-xl border border-border bg-card">
-              <WtlNetworkMapAttachmentSection
-                item={networkItem}
-                fields={allFields.length > 0 ? allFields : detailFields}
-              />
-            </div>
+        </section>
+
+        <div className="flex min-h-0 shrink-0 flex-col border-t border-border">
+          <div className="flex shrink-0 overflow-x-auto border-b border-border">
+            {tabs.map(({ id, label, icon: TabIcon }) => (
+              <button
+                key={id}
+                type="button"
+                title={label}
+                onClick={() => {
+                  setActiveTab(id)
+                  setRelatedDetail(null)
+                }}
+                className={cn(
+                  'inline-flex h-9 w-[5.5rem] shrink-0 cursor-pointer items-center justify-center gap-1 px-2 text-[11px] font-medium transition-colors',
+                  activeTab === id
+                    ? 'border-b-2 border-primary bg-primary/5 text-primary'
+                    : 'border-b-2 border-transparent text-muted-foreground hover:bg-muted/50 hover:text-foreground'
+                )}
+              >
+                <TabIcon className="h-3 w-3 shrink-0" aria-hidden />
+                <span className="truncate">{label}</span>
+              </button>
+            ))}
           </div>
-        ) : (
-          <div className="flex h-full min-h-0 flex-col overflow-hidden">
-            <div className="flex shrink-0 items-center justify-end px-3 py-1">
-              <span className="text-[11px] text-muted-foreground">
-                {relatedLoading ? '조회 중…' : `${relatedTotal}건`}
-              </span>
-            </div>
-            <div className="standard-list-scroll">
-              {relatedLoading ? (
-                <p className="standard-detail-loading px-3 py-3">목록 불러오는 중…</p>
-              ) : relatedError ? (
-                <p className="px-3 py-3 text-xs text-destructive">{relatedError}</p>
-              ) : !ftrIdn ? (
-                <p className="standard-table-empty">
-                  관리번호를 찾을 수 없어 목록을 표시하지 않습니다.
-                </p>
-              ) : relatedRows.length === 0 ? (
-                <p className="standard-table-empty">해당 현황 데이터가 없습니다.</p>
-              ) : relatedListFields.length === 0 ? (
-                <p className="standard-table-empty">표시할 필드가 없습니다.</p>
-              ) : (
-                <table className="standard-list-table">
-                  <thead className="standard-table-thead">
-                    <tr>
-                      {relatedListFields.map((f, i) => {
-                        const key = String(f.define_field_name ?? '').trim()
-                        return (
-                          <th
-                            key={key || `h-${i}`}
-                            className="standard-table-th standard-table-th-left"
-                            title={getDefineFieldDisplayLabel(key, f.define_field_kor_name)}
-                          >
-                            {getDefineFieldDisplayLabel(key, f.define_field_kor_name)}
-                          </th>
-                        )
-                      })}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {relatedRows.map((r, ri) => (
-                      <tr key={r.ogcFid ?? `r-${ri}`} className="standard-list-row">
-                        {relatedListFields.map((f, fi) => {
-                          const key = String(f.define_field_name ?? '').trim()
-                          const raw = getRowValueByField(r.record, key)
-                          const value = formatDefineFieldDisplayValue(
-                            raw,
-                            f.define_field_type,
-                            relatedCodes[key.toLowerCase()],
-                            '—'
-                          )
+
+          <div className="h-[250px] shrink-0 overflow-hidden">
+            {activeTab === 'attach' ? (
+              <div className="flex h-full min-h-0 flex-col overflow-hidden px-3 py-2">
+                <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-xl border border-border bg-card">
+                  <WtlNetworkMapAttachmentSection
+                    item={networkItem}
+                    fields={allFields.length > 0 ? allFields : detailFields}
+                  />
+                </div>
+              </div>
+            ) : (
+              <div className="flex h-full min-h-0 flex-col overflow-hidden">
+                <div className="standard-list-scroll">
+                  {relatedLoading ? (
+                    <p className="standard-detail-loading px-3 py-3">목록 불러오는 중…</p>
+                  ) : relatedError ? (
+                    <p className="px-3 py-3 text-xs text-destructive">{relatedError}</p>
+                  ) : !ftrIdn ? (
+                    <p className="standard-table-empty">
+                      관리번호를 찾을 수 없어 목록을 표시하지 않습니다.
+                    </p>
+                  ) : relatedRows.length === 0 ? (
+                    <p className="standard-table-empty">해당 현황 데이터가 없습니다.</p>
+                  ) : relatedListFields.length === 0 ? (
+                    <p className="standard-table-empty">표시할 필드가 없습니다.</p>
+                  ) : (
+                    <table className="standard-list-table">
+                      <thead className="standard-detail-table-thead">
+                        <tr>
+                          {relatedListFields.map((f, i) => {
+                            const key = String(f.define_field_name ?? '').trim()
+                            return (
+                              <th
+                                key={key || `h-${i}`}
+                                className="standard-detail-table-th standard-table-th-left"
+                                title={getDefineFieldDisplayLabel(key, f.define_field_kor_name)}
+                              >
+                                {getDefineFieldDisplayLabel(key, f.define_field_kor_name)}
+                              </th>
+                            )
+                          })}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {relatedRows.map((r, ri) => {
+                          const selected =
+                            relatedDetail != null &&
+                            ((r.ogcFid != null && relatedDetail.ogcFid === r.ogcFid) ||
+                              (r.ogcFid == null && relatedDetail === r))
                           return (
-                            <td
-                              key={`${r.ogcFid ?? ri}-${key || fi}`}
-                              className="standard-table-td-compact"
-                              title={value}
+                            <tr
+                              key={r.ogcFid ?? `r-${ri}`}
+                              className={cn(
+                                'standard-list-row cursor-pointer',
+                                selected && 'standard-list-row-selected'
+                              )}
+                              title="상세보기"
+                              onClick={() => setRelatedDetail(r)}
                             >
-                              {value}
-                            </td>
+                              {relatedListFields.map((f, fi) => {
+                                const key = String(f.define_field_name ?? '').trim()
+                                const raw = getRowValueByField(r.record, key)
+                                const value = formatDefineFieldDisplayValue(
+                                  raw,
+                                  f.define_field_type,
+                                  relatedCodes[key.toLowerCase()],
+                                  '—'
+                                )
+                                return (
+                                  <td
+                                    key={`${r.ogcFid ?? ri}-${key || fi}`}
+                                    className="standard-table-td-compact"
+                                    title={value}
+                                  >
+                                    {value}
+                                  </td>
+                                )
+                              })}
+                            </tr>
                           )
                         })}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
-            </div>
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+                <div className="standard-list-footer">
+                  {relatedLoading ? '조회 중…' : `총 ${relatedTotal}건`}
+                </div>
+              </div>
+            )}
           </div>
-        )}
+        </div>
       </div>
+
+      {relatedDetail && activeRelated ? (
+        <WtlFacilityRelatedDetailFloating
+          title={activeRelated.label || '현황'}
+          row={relatedDetail}
+          bundle={relatedBundle}
+          onClose={() => setRelatedDetail(null)}
+        />
+      ) : null}
     </div>
   )
 }

@@ -45,6 +45,27 @@ const FIELDS_DIR = path.join(process.cwd(), 'src', 'config', 'defineLayer', 'fie
 
 const GEOM_COLS = new Set(['geom', 'geometry', 'the_geom', 'wkb_geometry', 'shape']);
 
+/** pg json/text → GeoJSON geometry (목록 클릭·지도 이동용) */
+function parseGeom(raw: unknown): GeoJSON.Geometry | null {
+  if (!raw) return null;
+  if (typeof raw === 'object') return raw as GeoJSON.Geometry;
+  if (typeof raw === 'string') {
+    try {
+      return JSON.parse(raw) as GeoJSON.Geometry;
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
+function resolveGeomColumn(physicalCols: string[]): string | null {
+  for (const c of physicalCols) {
+    if (GEOM_COLS.has(c.toLowerCase())) return c;
+  }
+  return null;
+}
+
 function esc(s: string): string {
   return s.replace(/'/g, "''");
 }
@@ -245,7 +266,7 @@ export async function listFacilityRows(params: {
   const titleCol = titleField ? resolveColumnCase(physicalCols, titleField) : null;
   const ftrCol = resolveColumnCase(physicalCols, 'ftr_idn');
   const ogcCol = resolveColumnCase(physicalCols, 'ogc_fid');
-  const hasGeom = physicalCols.some((c) => GEOM_COLS.has(c.toLowerCase()));
+  const geomCol = resolveGeomColumn(physicalCols);
 
   const nameExpr = titleCol
     ? `COALESCE(NULLIF(trim(t."${titleCol.replace(/"/g, '""')}"::text),''), ${
@@ -286,10 +307,13 @@ export async function listFacilityRows(params: {
   const whereSql = wheres.join(' AND ');
   const safeSchema = schema.replace(/"/g, '""');
   const safeTable = table.replace(/"/g, '""');
-  const geomSel = hasGeom
-    ? `ST_AsGeoJSON(ST_Transform(t.geom, 4326))::json`
+  const geomQuoted = geomCol ? geomCol.replace(/"/g, '""') : '';
+  const geomSel = geomCol
+    ? `ST_AsGeoJSON(ST_Transform(t."${geomQuoted}", 4326))::json`
     : `NULL`;
-  const recordSel = hasGeom ? `(to_jsonb(t) - 'geom')` : `to_jsonb(t)`;
+  const recordSel = geomCol
+    ? `(to_jsonb(t) - '${esc(geomCol)}')`
+    : `to_jsonb(t)`;
   const relatedParentKey = normalizeFacilityRelatedParentKey(table);
 
   const countRes = await db.execute(
@@ -337,7 +361,7 @@ export async function listFacilityRows(params: {
       ogcFid,
       name,
       record,
-      geom: r.geom ?? null,
+      geom: parseGeom(r.geom),
       tableName: table,
       fieldsTable,
       fieldsTableFallback,
@@ -347,4 +371,120 @@ export async function listFacilityRows(params: {
   }
 
   return { rows, total, table, fieldsTable, fieldsTableFallback };
+}
+
+/**
+ * 지도 클릭(EPSG:3857) — 선택 테이블에서 최근접 시설 1건.
+ * 측정·그리기 중에는 클라이언트가 호출하지 않음.
+ */
+export async function getFacilityAtPoint(params: {
+  x?: number;
+  y?: number;
+  table?: string;
+  schema?: string;
+  /** 미터 단위 대략 버퍼 (3857) */
+  tolerance?: number;
+} = {}): Promise<{ row: WtlFacilityRow | null }> {
+  const table = String(params.table ?? '')
+    .trim()
+    .toLowerCase();
+  const schema =
+    String(params.schema ?? 'layer')
+      .trim()
+      .toLowerCase() || 'layer';
+  const x = Number(params.x);
+  const y = Number(params.y);
+  if (!table || !Number.isFinite(x) || !Number.isFinite(y)) {
+    return { row: null };
+  }
+  if (!(await tableExists(schema, table))) return { row: null };
+
+  const physicalCols = await listPhysicalColumns(schema, table);
+  if (physicalCols.length === 0) return { row: null };
+  const geomCol = resolveGeomColumn(physicalCols);
+  if (!geomCol) return { row: null };
+
+  const { fieldsTable, fieldsTableFallback } = resolveFieldsTable(table);
+  const defineFields = loadDefineFieldRows(fieldsTable);
+  const titleField = pickTitleField(defineFields);
+  const titleCol = titleField ? resolveColumnCase(physicalCols, titleField) : null;
+  const ftrCol = resolveColumnCase(physicalCols, 'ftr_idn');
+  const ogcCol = resolveColumnCase(physicalCols, 'ogc_fid');
+  const tol = Math.max(1, Number(params.tolerance) || 12);
+
+  const nameExpr = titleCol
+    ? `COALESCE(NULLIF(trim(t."${titleCol.replace(/"/g, '""')}"::text),''), ${
+        ftrCol
+          ? `NULLIF(trim(t."${ftrCol.replace(/"/g, '""')}"::text),'')`
+          : 'NULL'
+      }, ${ogcCol ? `t."${ogcCol.replace(/"/g, '""')}"::text` : `''`})`
+    : ftrCol
+      ? `COALESCE(NULLIF(trim(t."${ftrCol.replace(/"/g, '""')}"::text),''), ${
+          ogcCol ? `t."${ogcCol.replace(/"/g, '""')}"::text` : `''`
+        })`
+      : ogcCol
+        ? `t."${ogcCol.replace(/"/g, '""')}"::text`
+        : `''`;
+
+  const safeSchema = schema.replace(/"/g, '""');
+  const safeTable = table.replace(/"/g, '""');
+  const geomQuoted = geomCol.replace(/"/g, '""');
+  const relatedParentKey = normalizeFacilityRelatedParentKey(table);
+
+  const dataRes = await db.execute(
+    sql.raw(
+      `SELECT
+         ${ogcCol ? `t."${ogcCol.replace(/"/g, '""')}"` : 'NULL'} AS "ogcFid",
+         (${nameExpr}) AS name,
+         ST_AsGeoJSON(ST_Transform(t."${geomQuoted}", 4326))::json AS geom,
+         (to_jsonb(t) - '${esc(geomCol)}') AS record,
+         ST_Distance(
+           ST_Transform(t."${geomQuoted}", 3857),
+           ST_SetSRID(ST_MakePoint(${x}, ${y}), 3857)
+         ) AS dist
+       FROM "${safeSchema}"."${safeTable}" t
+       WHERE t."${geomQuoted}" IS NOT NULL
+         AND ST_DWithin(
+           ST_Transform(t."${geomQuoted}", 3857),
+           ST_SetSRID(ST_MakePoint(${x}, ${y}), 3857),
+           ${tol}
+         )
+       ORDER BY dist
+       LIMIT 1`
+    )
+  );
+
+  const r = dataRes.rows?.[0] as Record<string, unknown> | undefined;
+  if (!r) return { row: null };
+
+  const ogcFid =
+    r.ogcFid != null && Number.isFinite(Number(r.ogcFid)) ? Number(r.ogcFid) : null;
+  let record: Record<string, unknown> = {};
+  if (r.record && typeof r.record === 'object' && !Array.isArray(r.record)) {
+    record = r.record as Record<string, unknown>;
+  } else if (typeof r.record === 'string') {
+    try {
+      const parsed = JSON.parse(r.record);
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        record = parsed as Record<string, unknown>;
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+  const name = asStr(r.name) || (ogcFid != null ? String(ogcFid) : '');
+  return {
+    row: {
+      id: `${table}:${ogcFid ?? name}`,
+      ogcFid,
+      name,
+      record,
+      geom: parseGeom(r.geom),
+      tableName: table,
+      fieldsTable,
+      fieldsTableFallback,
+      relatedParentKey,
+      layerKey: relatedParentKey || table,
+    },
+  };
 }

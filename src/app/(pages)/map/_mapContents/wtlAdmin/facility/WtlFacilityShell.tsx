@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { RefreshCw, X } from 'lucide-react'
 import { call } from '@/lib/api'
 import { cn } from '@/lib/utils'
+import { useMapContext } from '../../../_mapComponents/MapContext'
 import { MapSideListPanel } from '../../../_mapComponents/MapSideListPanel'
 import { WtlFacilityDetailPanel } from './WtlFacilityDetailPanel'
 import {
@@ -13,11 +14,13 @@ import {
 import {
   FACILITY_TABS,
   isFacilityTabEnabled,
-  listEnabledFacilityTabs,
+  listAllFacilityUndergroundTableNames,
   listFacilityGroupOptions,
-  type FacilityTab,
   type WtlFacilityGroupOption,
 } from './wtlFacilityCatalog'
+import { flyToWtlNetworkGeom } from '../networkMap/wtlNetworkMapFly'
+import { useWtlFacilityMapClick } from './useWtlFacilityMapClick'
+import { useWtlFacilityMapHighlight } from './useWtlFacilityMapHighlight'
 
 const LIST_DEFAULT = 480
 const LIST_MIN = 400
@@ -26,17 +29,38 @@ const DETAIL_DEFAULT = 420
 const DETAIL_MIN = 320
 const DETAIL_MAX = 640
 
+export type WtlFacilityShellCatalog = {
+  tabs: readonly string[]
+  isTabEnabled: (tab: string) => boolean
+  listGroupOptions: (tab: string) => WtlFacilityGroupOption[]
+  listUndergroundTableNames: () => string[]
+  emptyNoTab?: string
+  emptyNoLayer?: string
+  emptyNoQuery?: string
+}
+
 type Props = {
   leftOffsetPx: number
   onTotalWidthChange: (width: number) => void
   onClose: () => void
   /** 패널 헤더 제목 (설비관리 등에서 재사용) */
   title?: string
+  /** 미지정 시 시설관리 탭·그룹 카탈로그 */
+  catalog?: WtlFacilityShellCatalog
 }
 
-function firstEnabledTab(): FacilityTab | null {
-  const enabled = listEnabledFacilityTabs()
-  return enabled[0] ?? null
+const DEFAULT_CATALOG: WtlFacilityShellCatalog = {
+  tabs: FACILITY_TABS,
+  isTabEnabled: isFacilityTabEnabled,
+  listGroupOptions: listFacilityGroupOptions,
+  listUndergroundTableNames: listAllFacilityUndergroundTableNames,
+  emptyNoTab: '활성화된 시설 레이어가 없습니다.',
+  emptyNoLayer: '선택한 탭에 등록된 레이어가 없습니다.',
+  emptyNoQuery: '시설을 조회할 수 없습니다.',
+}
+
+function firstEnabledTab(catalog: WtlFacilityShellCatalog): string | null {
+  return catalog.tabs.find((t) => catalog.isTabEnabled(t)) ?? null
 }
 
 export function WtlFacilityShell({
@@ -44,13 +68,16 @@ export function WtlFacilityShell({
   onTotalWidthChange,
   onClose,
   title = '시설관리',
+  catalog: catalogProp,
 }: Props) {
+  const catalog = catalogProp ?? DEFAULT_CATALOG
+  const mapContext = useMapContext()
   const [listWidth, setListWidth] = useState(LIST_DEFAULT)
   const [detailWidth, setDetailWidth] = useState(DETAIL_DEFAULT)
-  const [tab, setTab] = useState<FacilityTab | null>(() => firstEnabledTab())
+  const [tab, setTab] = useState<string | null>(() => firstEnabledTab(catalog))
   const groupOptions = useMemo(
-    () => (tab ? listFacilityGroupOptions(tab) : []),
-    [tab]
+    () => (tab ? catalog.listGroupOptions(tab) : []),
+    [catalog, tab]
   )
   const [group, setGroup] = useState<string>(() => groupOptions[0]?.group ?? '')
   const [keywordDraft, setKeywordDraft] = useState('')
@@ -75,6 +102,40 @@ export function WtlFacilityShell({
   const detailOpen = selected != null
   const totalWidth = listWidth + (detailOpen ? detailWidth : 0)
 
+  useWtlFacilityMapHighlight(selected)
+
+  const selectFacilityRow = useCallback(
+    (row: WtlFacilityListRow | null, opts?: { fly?: boolean }) => {
+      if (!row) {
+        setSelectedId(null)
+        return
+      }
+      setRows((prev) => (prev.some((r) => r.id === row.id) ? prev : [row, ...prev]))
+      setSelectedId(row.id)
+      if (opts?.fly) {
+        const map = mapContext?.mapInstanceRef?.current
+        flyToWtlNetworkGeom(
+          map,
+          row.geom,
+          () => mapContext?.applyMapViewPaddingRef?.current?.()
+        )
+      }
+    },
+    [mapContext?.applyMapViewPaddingRef, mapContext?.mapInstanceRef]
+  )
+
+  useWtlFacilityMapClick({
+    source: selectedSource
+      ? { tableName: selectedSource.tableName, schema: selectedSource.schema }
+      : null,
+    onSelect: (row) => selectFacilityRow(row),
+  })
+
+  const managedUndergroundTables = useMemo(
+    () => catalog.listUndergroundTableNames(),
+    [catalog]
+  )
+
   useEffect(() => {
     onTotalWidthChange(totalWidth)
   }, [totalWidth, onTotalWidthChange])
@@ -83,8 +144,51 @@ export function WtlFacilityShell({
     return () => onTotalWidthChange(0)
   }, [onTotalWidthChange])
 
+  /**
+   * 선택 레이어 그룹의 시설 테이블 ↔ 지하시설물(visibleLayerNames) 동기화.
+   * 시설관리가 다루는 테이블만 교체하고 그 외 UF 선택은 유지.
+   */
   useEffect(() => {
-    const opts = tab ? listFacilityGroupOptions(tab) : []
+    const setVisible = mapContext?.setVisibleLayerNames
+    if (!setVisible) return
+    const wanted = String(selectedSource?.tableName ?? '')
+      .trim()
+      .toLowerCase()
+    setVisible((prev) => {
+      const next = new Set(prev)
+      for (const t of managedUndergroundTables) next.delete(t)
+      if (wanted) next.add(wanted)
+      if (next.size === prev.size) {
+        let same = true
+        for (const n of next) {
+          if (!prev.has(n)) {
+            same = false
+            break
+          }
+        }
+        if (same) return prev
+      }
+      return next
+    })
+  }, [mapContext?.setVisibleLayerNames, managedUndergroundTables, selectedSource?.tableName])
+
+  useEffect(() => {
+    const setVisible = mapContext?.setVisibleLayerNames
+    if (!setVisible) return
+    return () => {
+      setVisible((prev) => {
+        let changed = false
+        const next = new Set(prev)
+        for (const t of managedUndergroundTables) {
+          if (next.delete(t)) changed = true
+        }
+        return changed ? next : prev
+      })
+    }
+  }, [mapContext?.setVisibleLayerNames, managedUndergroundTables])
+
+  useEffect(() => {
+    const opts = tab ? catalog.listGroupOptions(tab) : []
     setGroup(opts[0]?.group ?? '')
     setKeywordDraft('')
     setKeyword('')
@@ -92,7 +196,7 @@ export function WtlFacilityShell({
     setRows([])
     setTotal(0)
     setError(null)
-  }, [tab])
+  }, [catalog, tab])
 
   const loadRows = useCallback(async () => {
     if (!selectedSource) {
@@ -162,8 +266,8 @@ export function WtlFacilityShell({
     setSelectedId(null)
   }
 
-  const handleTabClick = (name: FacilityTab) => {
-    if (!isFacilityTabEnabled(name)) return
+  const handleTabClick = (name: string) => {
+    if (!catalog.isTabEnabled(name)) return
     setTab(name)
   }
 
@@ -193,8 +297,8 @@ export function WtlFacilityShell({
             <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
               <div className="standard-filter-section shrink-0 border-b-0 !pb-[13px]">
                 <div className="flex border-b border-border">
-                  {FACILITY_TABS.map((name) => {
-                    const enabled = isFacilityTabEnabled(name)
+                  {catalog.tabs.map((name) => {
+                    const enabled = catalog.isTabEnabled(name)
                     const on = tab === name
                     return (
                       <button
@@ -269,8 +373,8 @@ export function WtlFacilityShell({
                 ) : (
                   <p className="mt-2 px-0.5 text-[11px] text-muted-foreground">
                     {tab
-                      ? '선택한 탭에 등록된 레이어가 없습니다.'
-                      : '활성화된 시설 레이어가 없습니다.'}
+                      ? (catalog.emptyNoLayer ?? DEFAULT_CATALOG.emptyNoLayer)
+                      : (catalog.emptyNoTab ?? DEFAULT_CATALOG.emptyNoTab)}
                   </p>
                 )}
               </div>
@@ -283,11 +387,13 @@ export function WtlFacilityShell({
                   fieldsTable={fieldsTable}
                   fieldsTableFallback={fieldsTableFallback}
                   selectedId={selectedId}
-                  onSelect={(row) => setSelectedId(row?.id ?? null)}
+                  onSelect={(row) => selectFacilityRow(row, { fly: true })}
                 />
               ) : (
                 <div className="flex min-h-0 flex-1 items-center justify-center px-3">
-                  <p className="text-xs text-muted-foreground">시설을 조회할 수 없습니다.</p>
+                  <p className="text-xs text-muted-foreground">
+                    {catalog.emptyNoQuery ?? DEFAULT_CATALOG.emptyNoQuery}
+                  </p>
                 </div>
               )}
             </div>

@@ -8,9 +8,11 @@ export const FACILITY_TABS = [
   '정수장',
   '배수지',
   '가압장',
-  '감압변',
-  '유량계',
+  '저수조',
   '소방시설',
+  '유량계',
+  '수압계',
+  '감압변',
   'CCTV',
 ] as const
 
@@ -66,4 +68,15 @@ export function listFacilityGroupOptions(korName: string): WtlFacilityGroupOptio
     })
   }
   return out
+}
+
+/** 시설관리가 지하시설물 visible에서 관리하는 테이블명(전 탭·그룹) */
+export function listAllFacilityUndergroundTableNames(): string[] {
+  const out = new Set<string>()
+  for (const tab of FACILITY_TABS) {
+    for (const opt of listFacilityGroupOptions(tab)) {
+      if (opt.tableName) out.add(opt.tableName)
+    }
+  }
+  return [...out]
 }
