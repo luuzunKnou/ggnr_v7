@@ -149,6 +149,10 @@ import {
   ROAD_FRONTAGE_MARKER_ITEM_WMS_LAYER_ID,
 } from '../_mapContents/road/roadFrontage/roadFrontageLayerId';
 import {
+  RIVER_ILLEGAL_OCCUPATION_WMS_LAYER_ID,
+  isRiverIllegalOccupationWmsLayerId,
+} from '../_mapContents/river/riverIllegalOccupation/riverIllegalOccupationLayerId';
+import {
   findOpenedOccupationLedgerSerEng,
   getOccupationLedgerBinding,
   getOccupationLedgerWmsLayerIds,
@@ -708,7 +712,9 @@ export default function OpenLayersMap({
         mapContext?.setVisibleLayerNames?.(new Set());
       } else {
         const restoredVisible = new Set(
-          (state.visibleLayerNames ?? []).filter((n) => !isUsageDataAsWmsLayerId(n))
+          (state.visibleLayerNames ?? []).filter(
+            (n) => !isUsageDataAsWmsLayerId(n) && !isRiverIllegalOccupationWmsLayerId(n)
+          )
         );
         const jimokValid = (state.visibleJimokLayerNames ?? []).filter((t) =>
           JIMOK_LAYERS.some((l) => l.tableName === t)
@@ -2199,6 +2205,73 @@ export default function OpenLayersMap({
           mapContext.applyRoadNetworkMapPickRef.current?.({
             rowId: buildRoadNetworkRowId(tableName, ogc),
             extent3857: pickIdentifyExtent3857(roadHit.features[0]?.data),
+          });
+          clearIdentifyIntake();
+          return;
+        }
+      }
+
+      /** 불법점용 관리카드: illegal_usage_as → 목록·상세 선택 */
+      if (
+        mapContext?.riverIllegalOccupationPanelOpen &&
+        mapContext.applyRiverIllegalOccupationMapPickRef
+      ) {
+        const illegalLid = RIVER_ILLEGAL_OCCUPATION_WMS_LAYER_ID.toLowerCase();
+        const illegalHit = withFeat.find((r) => {
+          const tn = String(r.tableName ?? '')
+            .trim()
+            .toLowerCase();
+          return tn === illegalLid && r.features.length > 0;
+        });
+        if (illegalHit) {
+          const overlapOptions: { value: string; label: string }[] = [];
+          const seen = new Set<string>();
+          let firstMgmtNo = '';
+          for (const feat of illegalHit.features) {
+            const ogcFid =
+              pickIdentifyField(feat?.data, 'ogc_fid') ||
+              pickIdentifyField(feat?.data, 'id') ||
+              pickIdentifyField(feat?.data, 'gid');
+            if (!ogcFid || seen.has(ogcFid)) continue;
+            seen.add(ogcFid);
+            const mgmtNo =
+              pickIdentifyField(feat?.data, 'mgmt_no') ||
+              pickIdentifyField(feat?.data, 'MGMT_NO') ||
+              '';
+            if (!firstMgmtNo && mgmtNo) firstMgmtNo = mgmtNo;
+            const label =
+              pickIdentifyField(feat?.data, 'seq_no') ||
+              pickIdentifyField(feat?.data, 'SEQ_NO') ||
+              pickIdentifyField(feat?.data, 'location') ||
+              pickIdentifyField(feat?.data, 'LOCATION') ||
+              mgmtNo ||
+              ogcFid;
+            overlapOptions.push({ value: ogcFid, label });
+          }
+          const first = overlapOptions[0];
+          if (!first) {
+            // ogc_fid 없으면 관리번호로 목록 매칭
+            const mgmtOnly =
+              pickIdentifyField(illegalHit.features[0]?.data, 'mgmt_no') ||
+              pickIdentifyField(illegalHit.features[0]?.data, 'MGMT_NO');
+            if (!mgmtOnly) {
+              if (!cancelled) {
+                window.alert('클릭한 관리카드의 식별값을 읽을 수 없습니다.');
+              }
+              clearIdentifyIntake();
+              return;
+            }
+            mapContext.applyRiverIllegalOccupationMapPickRef.current?.({
+              ogcFid: '',
+              mgmtNo: mgmtOnly,
+            });
+            clearIdentifyIntake();
+            return;
+          }
+          mapContext.applyRiverIllegalOccupationMapPickRef.current?.({
+            ogcFid: first.value,
+            mgmtNo: firstMgmtNo || undefined,
+            overlapOptions,
           });
           clearIdentifyIntake();
           return;

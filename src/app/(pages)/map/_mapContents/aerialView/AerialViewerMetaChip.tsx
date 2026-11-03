@@ -16,6 +16,8 @@ export function AerialViewerMetaChip({
   dateLabel = '촬영일',
   place = 'viewer',
   fullscreen = false,
+  /** 도로영상 창처럼 제목줄이 밖에 있으면 영상 영역 바로 위에 붙인다 */
+  tightTop = false,
 }: {
   workName?: string;
   shotDate?: string;
@@ -25,6 +27,7 @@ export function AerialViewerMetaChip({
   place?: 'viewer' | 'map';
   /** 뷰어 전체화면 — 검색창이 없으므로 위쪽(닫기 버튼 높이)에 붙인다 */
   fullscreen?: boolean;
+  tightTop?: boolean;
 }) {
   const name = workName?.trim() ?? '';
   const date = shotDate?.trim() ?? '';
@@ -52,8 +55,11 @@ export function AerialViewerMetaChip({
     );
   }
 
+  // tightTop·전체화면: 영상 바로 위 / 기본: 상단 내비·검색과 겹치지 않게
+  const topClass = fullscreen || tightTop ? 'top-2' : 'top-16';
+
   return (
-    <div className={cn('pointer-events-none absolute left-4 z-30', fullscreen ? 'top-4' : 'top-16')}>
+    <div className={cn('pointer-events-none absolute left-3 z-30', topClass)}>
       {card}
     </div>
   );

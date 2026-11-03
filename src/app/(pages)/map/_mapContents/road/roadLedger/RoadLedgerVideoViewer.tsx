@@ -73,13 +73,13 @@ function formatTime(sec: number): string {
   return h > 0 ? `${h}:${String(m).padStart(2, "0")}:${ss}` : `${m}:${ss}`;
 }
 
-/** 왼쪽 메뉴에서 조금 띄운 자리, 세로 가운데 */
+/** 왼쪽 메뉴 바로 옆, 세로 가운데 (목록·상세와 겹쳐도 왼쪽 우선) */
 function initialRect(): WindowRect {
   const vw = window.innerWidth;
   const vh = window.innerHeight;
   const aside = document.querySelector("aside");
   const left = aside ? Math.round(aside.getBoundingClientRect().right) : 0;
-  const gap = Math.round(vw * 0.06);
+  const gap = 50;
   const w = Math.max(MIN_W, Math.min(Math.round(vw * 0.39), vw - left - gap - 16));
   const h = Math.max(MIN_H, Math.min(Math.round(w * 0.56) + TITLE_H + 40, vh - 32));
   return { x: left + gap, y: Math.max(8, Math.round((vh - h) / 2)), w, h };
@@ -435,6 +435,7 @@ export function RoadLedgerVideoViewer({
           dateLabel="파일일자"
           shotDate={formatModifiedDate(current.modified)}
           fullscreen={fullscreen}
+          tightTop
         />
 
         {fullscreen ? (

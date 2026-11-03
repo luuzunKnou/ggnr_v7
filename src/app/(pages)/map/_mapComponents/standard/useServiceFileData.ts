@@ -9,13 +9,7 @@ export type ServiceFileDataSerEng = string;
 
 export type ServiceFileDataRow = { name: string; size: number; modified?: string };
 
-export function isImageServiceFileName(name: string): boolean {
-  return /\.(jpe?g|png|gif|webp|bmp|svg)$/i.test(name);
-}
-
-export function isPdfServiceFileName(name: string): boolean {
-  return /\.pdf$/i.test(name);
-}
+export { isImageServiceFileName, isPdfServiceFileName } from '@/lib/serviceFileName';
 
 export function serviceFileDataDownloadUrl(
   serEng: ServiceFileDataSerEng,
