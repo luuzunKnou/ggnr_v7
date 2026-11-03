@@ -8,8 +8,10 @@ import { useMapContext } from '../../../_mapComponents/MapContext'
 import { MapSideListPanel } from '../../../_mapComponents/MapSideListPanel'
 import { WtlFacilityDetailPanel } from './WtlFacilityDetailPanel'
 import {
+  initialFacilityListSortDir,
   WtlFacilityListView,
   type WtlFacilityListRow,
+  type WtlFacilityListSortSpec,
 } from './WtlFacilityListView'
 import {
   facilityTabLabel,
@@ -28,6 +30,8 @@ const LIST_MAX = 720
 const DETAIL_DEFAULT = 420
 const DETAIL_MIN = 320
 const DETAIL_MAX = 640
+const LIST_PAGE_SIZE = 500
+const LIST_SCROLL_LOAD_THRESHOLD_PX = 240
 
 export type WtlFacilityShellCatalog = {
   /** 탭 키 = define_table_name(영문) */
@@ -127,11 +131,20 @@ export function WtlFacilityShell({
   >([])
   const [rows, setRows] = useState<WtlFacilityListRow[]>([])
   const [total, setTotal] = useState(0)
+  /** 점용허가 목록과 동일 — thead 다중 정렬 */
+  const [sorts, setSorts] = useState<WtlFacilityListSortSpec[]>([])
   const [fieldsTable, setFieldsTable] = useState<string | null>(null)
   const [fieldsTableFallback, setFieldsTableFallback] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+  const [loadingMore, setLoadingMore] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [selectedId, setSelectedId] = useState<string | null>(null)
+  /** 목록에 없어도 상세·하이라이트 유지 (지도 선택 시 rows 앞에 끼워 넣지 않음) */
+  const [selectedRow, setSelectedRow] = useState<WtlFacilityListRow | null>(null)
+  const rowsLenRef = useRef(0)
+  const totalRef = useRef(0)
+  const loadingMoreRef = useRef(false)
+  const loadSourceKeyRef = useRef('')
   const tabScrollRef = useRef<HTMLDivElement>(null)
   const [canScrollTabLeft, setCanScrollTabLeft] = useState(false)
   const [canScrollTabRight, setCanScrollTabRight] = useState(false)
@@ -166,10 +179,8 @@ export function WtlFacilityShell({
 
   const showLocationFilter = isSangsuLayerGroup(selectedSource)
 
-  const selected = useMemo(
-    () => rows.find((r) => r.id === selectedId) ?? null,
-    [rows, selectedId]
-  )
+  const selected =
+    selectedRow && selectedId && selectedRow.id === selectedId ? selectedRow : null
 
   const clearLocationFilters = useCallback(() => {
     setEmdSelected('')
@@ -187,10 +198,11 @@ export function WtlFacilityShell({
     (row: WtlFacilityListRow | null, opts?: { fly?: boolean }) => {
       if (!row) {
         setSelectedId(null)
+        setSelectedRow(null)
         return
       }
-      setRows((prev) => (prev.some((r) => r.id === row.id) ? prev : [row, ...prev]))
       setSelectedId(row.id)
+      setSelectedRow(row)
       if (opts?.fly) {
         const map = mapContext?.mapInstanceRef?.current
         flyToWtlNetworkGeom(
@@ -348,6 +360,7 @@ export function WtlFacilityShell({
     setKeywordDraft('')
     setKeyword('')
     setSelectedId(null)
+    setSelectedRow(null)
     setRows([])
     setTotal(0)
     setError(null)
@@ -559,18 +572,37 @@ export function WtlFacilityShell({
     }
   }, [mapContext?.setSpatialFilterWkt])
 
+  rowsLenRef.current = rows.length
+  totalRef.current = total
+
   const loadRows = useCallback(async () => {
     if (!selectedSource) {
+      loadSourceKeyRef.current = ''
       setRows([])
       setTotal(0)
       setFieldsTable(null)
       setFieldsTableFallback(null)
       setSelectedId(null)
+      setSelectedRow(null)
       setLoading(false)
+      setLoadingMore(false)
+      loadingMoreRef.current = false
       setError(null)
       return
     }
+    const sourceKey = `${selectedSource.schema}.${selectedSource.tableName}`
+    const sourceChanged = sourceKey !== loadSourceKeyRef.current
+    loadSourceKeyRef.current = sourceKey
+    if (sourceChanged) {
+      setRows([])
+      setSelectedId(null)
+      setSelectedRow(null)
+      if (sorts.length > 0) setSorts([])
+    }
+    const requestSorts = sourceChanged ? [] : sorts
     setLoading(true)
+    setLoadingMore(false)
+    loadingMoreRef.current = false
     setError(null)
     try {
       const res = await call('', 'POST', {
@@ -582,7 +614,8 @@ export function WtlFacilityShell({
           keyword,
           areaWkts5181:
             showLocationFilter && areaWkts5181.length > 0 ? areaWkts5181 : null,
-          limit: 500,
+          sorts: requestSorts,
+          limit: LIST_PAGE_SIZE,
           offset: 0,
         },
       })
@@ -607,26 +640,106 @@ export function WtlFacilityShell({
         if (prev && nextRows.some((r) => r.id === prev)) return prev
         return null
       })
+      setSelectedRow((prev) => {
+        if (!prev) return null
+        return nextRows.find((r) => r.id === prev.id) ?? null
+      })
     } catch {
       setRows([])
       setTotal(0)
       setSelectedId(null)
+      setSelectedRow(null)
       setError('목록을 불러오지 못했습니다.')
     } finally {
       setLoading(false)
     }
-  }, [areaWkts5181, keyword, selectedSource, showLocationFilter])
+  }, [areaWkts5181, keyword, selectedSource, showLocationFilter, sorts])
+
+  const loadMoreRows = useCallback(() => {
+    if (!selectedSource) return
+    if (loading || loadingMoreRef.current) return
+    const offset = rowsLenRef.current
+    if (offset >= totalRef.current) return
+    loadingMoreRef.current = true
+    setLoadingMore(true)
+    void call('', 'POST', {
+      service: 'wtlFacilityService',
+      action: 'listFacilityRows',
+      params: {
+        table: selectedSource.tableName,
+        schema: selectedSource.schema,
+        keyword,
+        areaWkts5181:
+          showLocationFilter && areaWkts5181.length > 0 ? areaWkts5181 : null,
+        sorts,
+        limit: LIST_PAGE_SIZE,
+        offset,
+      },
+    })
+      .then((res) => {
+        const data = (res?.data ?? res) as
+          | {
+              rows?: WtlFacilityListRow[]
+              total?: number
+            }
+          | undefined
+        const next = Array.isArray(data?.rows) ? data.rows : []
+        if (next.length === 0) {
+          // 더 이상 없음 — 선택 행 추적 loadMore 루프 방지
+          setTotal((t) => Math.min(t, rowsLenRef.current))
+          return
+        }
+        let appendedCount = 0
+        setRows((prev) => {
+          const seen = new Set(prev.map((r) => r.id))
+          const appended = next.filter((r) => !seen.has(r.id))
+          appendedCount = appended.length
+          return appended.length ? [...prev, ...appended] : prev
+        })
+        if (appendedCount === 0) {
+          setTotal((t) => Math.min(t, rowsLenRef.current))
+        } else if (typeof data?.total === 'number') {
+          setTotal(Number(data.total) || 0)
+        }
+      })
+      .catch(() => {
+        /* keep existing rows */
+      })
+      .finally(() => {
+        loadingMoreRef.current = false
+        setLoadingMore(false)
+      })
+  }, [areaWkts5181, keyword, loading, selectedSource, showLocationFilter, sorts])
 
   useEffect(() => {
     void loadRows()
   }, [loadRows])
+
+  const toggleListSort = useCallback((field: string) => {
+    const key = String(field ?? '').trim()
+    if (!key) return
+    const initial = initialFacilityListSortDir(key)
+    setSorts((prev) => {
+      const idx = prev.findIndex((s) => s.field.toLowerCase() === key.toLowerCase())
+      if (idx < 0) return [...prev, { field: key, dir: initial }]
+      const cur = prev[idx]!
+      if (cur.dir === initial) {
+        const next = [...prev]
+        next[idx] = { field: key, dir: initial === 'asc' ? 'desc' : 'asc' }
+        return next
+      }
+      return prev.filter((_, i) => i !== idx)
+    })
+  }, [])
 
   const resetFilters = () => {
     const first = groupOptions[0]?.group ?? ''
     setGroup(first)
     setKeywordDraft('')
     setKeyword('')
+    setSorts([])
     setSelectedId(null)
+    setSelectedRow(null)
     clearLocationFilters()
   }
 
@@ -644,6 +757,7 @@ export function WtlFacilityShell({
           maxWidth={LIST_MAX}
           leftOffsetPx={leftOffsetPx}
           onWidthChange={setListWidth}
+          contentClassName="overflow-hidden pr-2.5"
         >
           <div className="standard-panel-root">
             <div className="standard-panel-header">
@@ -736,6 +850,7 @@ export function WtlFacilityShell({
                           onChange={(e) => {
                             setGroup(e.target.value)
                             setSelectedId(null)
+                            setSelectedRow(null)
                           }}
                         >
                           {groupOptions.map((opt) => (
@@ -834,11 +949,16 @@ export function WtlFacilityShell({
                   rows={rows}
                   total={total}
                   loading={loading}
+                  loadingMore={loadingMore}
                   error={error}
                   fieldsTable={fieldsTable}
                   fieldsTableFallback={fieldsTableFallback}
                   selectedId={selectedId}
                   onSelect={(row) => selectFacilityRow(row, { fly: true })}
+                  onScrollNearEnd={loadMoreRows}
+                  scrollLoadThresholdPx={LIST_SCROLL_LOAD_THRESHOLD_PX}
+                  sorts={sorts}
+                  onToggleSort={toggleListSort}
                 />
               ) : (
                 <div className="flex min-h-0 flex-1 items-center justify-center px-3">
@@ -865,14 +985,19 @@ export function WtlFacilityShell({
             <WtlFacilityDetailPanel
               row={selected}
               schema={selectedSource?.schema}
-              onClose={() => setSelectedId(null)}
+              onClose={() => {
+                setSelectedId(null)
+                setSelectedRow(null)
+              }}
               onUpdated={(next) => {
                 setRows((prev) => prev.map((r) => (r.id === next.id ? next : r)))
+                setSelectedRow((prev) => (prev?.id === next.id ? next : prev))
               }}
               onDeleted={(id) => {
                 setRows((prev) => prev.filter((r) => r.id !== id))
                 setTotal((t) => Math.max(0, t - 1))
                 setSelectedId(null)
+                setSelectedRow(null)
               }}
               onHistoryReverted={() => {
                 void loadRows()

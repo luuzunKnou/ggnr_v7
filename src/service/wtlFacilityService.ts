@@ -446,12 +446,19 @@ export async function listFacilityLayerGroups(params: {
  * 선택 테이블 행 목록.
  * keyword: define_field 전 컬럼 ILIKE + CODE 필드는 한글명 매칭 코드 IN.
  */
+export type WtlFacilityListSortSpec = {
+  field: string;
+  dir: 'asc' | 'desc';
+};
+
 export async function listFacilityRows(params: {
   table?: string;
   schema?: string;
   keyword?: string;
   /** EPSG:5181 위치 도형(읍면동·리·급수블록). 있으면 ST_Within */
   areaWkts5181?: string[] | null;
+  /** thead 다중 정렬 — 물리 컬럼만 허용 */
+  sorts?: WtlFacilityListSortSpec[] | null;
   limit?: number;
   offset?: number;
 } = {}): Promise<{
@@ -474,6 +481,7 @@ export async function listFacilityRows(params: {
     .filter(Boolean);
   const limit = Math.max(1, Math.min(Number(params.limit) || 500, 2000));
   const offset = Math.max(0, Number(params.offset) || 0);
+  const rawSorts = Array.isArray(params.sorts) ? params.sorts : [];
 
   const empty = {
     rows: [] as WtlFacilityRow[],
@@ -575,6 +583,23 @@ export async function listFacilityRows(params: {
   );
   const total = Number((countRes.rows?.[0] as { c?: number } | undefined)?.c ?? 0) || 0;
 
+  const orderParts: string[] = [];
+  const seenSortCols = new Set<string>();
+  for (const s of rawSorts) {
+    const field = String(s?.field ?? '').trim();
+    if (!field || GEOM_COLS.has(field.toLowerCase())) continue;
+    const col = resolveColumnCase(physicalCols, field);
+    if (!col || seenSortCols.has(col.toLowerCase())) continue;
+    seenSortCols.add(col.toLowerCase());
+    const dir = String(s?.dir ?? '').trim().toLowerCase() === 'desc' ? 'DESC' : 'ASC';
+    orderParts.push(`t."${col.replace(/"/g, '""')}" ${dir} NULLS LAST`);
+    if (orderParts.length >= 5) break;
+  }
+  if (ogcCol && !seenSortCols.has(ogcCol.toLowerCase())) {
+    orderParts.push(`t."${ogcCol.replace(/"/g, '""')}" ASC`);
+  }
+  const orderSql = orderParts.length > 0 ? orderParts.join(', ') : '1';
+
   const dataRes = await db.execute(
     sql.raw(
       `SELECT
@@ -584,7 +609,7 @@ export async function listFacilityRows(params: {
          ${recordSel} AS record
        FROM "${safeSchema}"."${safeTable}" t
        WHERE ${whereSql}
-       ORDER BY ${ogcCol ? `t."${ogcCol.replace(/"/g, '""')}"` : '1'}
+       ORDER BY ${orderSql}
        LIMIT ${limit} OFFSET ${offset}`
     )
   );

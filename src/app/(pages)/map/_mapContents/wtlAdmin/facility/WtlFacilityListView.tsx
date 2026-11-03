@@ -1,6 +1,7 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type UIEvent } from 'react'
+import { ArrowDown, ArrowUp, ArrowUpDown } from 'lucide-react'
 import { formatDefineFieldDisplayValue } from '@/lib/defineLayerCodeDisplay'
 import { cn } from '@/lib/utils'
 import {
@@ -29,15 +30,28 @@ export type WtlFacilityListRow = {
   layerKey: string
 }
 
+export type WtlFacilityListSortDir = 'asc' | 'desc'
+
+export type WtlFacilityListSortSpec = {
+  field: string
+  dir: WtlFacilityListSortDir
+}
+
 type Props = {
   rows: WtlFacilityListRow[]
   total: number
   loading: boolean
+  loadingMore?: boolean
   error: string | null
   fieldsTable: string | null
   fieldsTableFallback: string | null
   selectedId: string | null
   onSelect: (row: WtlFacilityListRow | null) => void
+  onScrollNearEnd?: () => void
+  scrollLoadThresholdPx?: number
+  /** 점용허가 목록과 동일 — thead 다중 정렬 */
+  sorts?: WtlFacilityListSortSpec[]
+  onToggleSort?: (field: string) => void
 }
 
 function fallbackListFields(record: Record<string, unknown> | null): DefineFieldLike[] {
@@ -58,17 +72,73 @@ function fallbackListFields(record: Record<string, unknown> | null): DefineField
     }))
 }
 
+export function initialFacilityListSortDir(_field: string): WtlFacilityListSortDir {
+  return 'asc'
+}
+
 export function WtlFacilityListView({
   rows,
   total,
   loading,
+  loadingMore = false,
   error,
   fieldsTable,
   fieldsTableFallback,
   selectedId,
   onSelect,
+  onScrollNearEnd,
+  scrollLoadThresholdPx = 240,
+  sorts = [],
+  onToggleSort,
 }: Props) {
   const [bundle, setBundle] = useState<WtlDefineDisplayBundle | null>(null)
+  const listScrollRef = useRef<HTMLDivElement>(null)
+  /** 지도 선택 후 페이징으로 아직 안 온 행 — 이어서 받다가 스크롤 */
+  const scrollTargetIdRef = useRef<string | null>(null)
+
+  const onListScroll = useCallback(
+    (e: UIEvent<HTMLDivElement>) => {
+      if (!onScrollNearEnd) return
+      const el = e.currentTarget
+      const remain = el.scrollHeight - el.scrollTop - el.clientHeight
+      if (remain < scrollLoadThresholdPx) onScrollNearEnd()
+    },
+    [onScrollNearEnd, scrollLoadThresholdPx]
+  )
+
+  useEffect(() => {
+    if (!selectedId) {
+      scrollTargetIdRef.current = null
+      return
+    }
+    scrollTargetIdRef.current = selectedId
+
+    const scrollToSelected = () => {
+      if (scrollTargetIdRef.current !== selectedId) return
+      const scroller = listScrollRef.current
+      if (!scroller) return
+      const el = Array.from(
+        scroller.querySelectorAll<HTMLElement>('[data-facility-row]')
+      ).find((node) => node.getAttribute('data-facility-row') === selectedId)
+      if (!el) return
+      const scrollerRect = scroller.getBoundingClientRect()
+      const elRect = el.getBoundingClientRect()
+      const delta =
+        elRect.top + elRect.height / 2 - (scrollerRect.top + scrollerRect.height / 2)
+      if (Math.abs(delta) < 4) return
+      scroller.scrollBy({ top: delta, behavior: 'smooth' })
+    }
+
+    if (rows.some((r) => r.id === selectedId)) {
+      scrollToSelected()
+      const raf = requestAnimationFrame(() => {
+        requestAnimationFrame(scrollToSelected)
+      })
+      return () => cancelAnimationFrame(raf)
+    }
+    if (loading || loadingMore) return
+    if (rows.length < total) onScrollNearEnd?.()
+  }, [selectedId, rows, total, loading, loadingMore, onScrollNearEnd])
 
   useEffect(() => {
     const table = String(fieldsTable ?? '').trim()
@@ -109,11 +179,24 @@ export function WtlFacilityListView({
 
   const codesByField = bundle?.codesByField ?? {}
   const colCount = Math.max(1, listFields.length)
-  const showTable = loading || error != null || listFields.length > 0 || rows.length > 0
+  const showInitialLoading = loading && rows.length === 0
+  const showTable =
+    showInitialLoading || error != null || listFields.length > 0 || rows.length > 0
+  const sortEnabled = typeof onToggleSort === 'function'
+
+  const footerText = showInitialLoading
+    ? '조회 중…'
+    : loading && rows.length > 0
+      ? `${rows.length} / ${total}건 · 조회 중…`
+      : loadingMore
+        ? `${rows.length} / ${total}건 · 추가 조회 중…`
+        : rows.length < total
+          ? `${rows.length} / ${total}건`
+          : `${total}건`
 
   return (
     <div className="standard-list-body">
-      <div className="standard-list-scroll">
+      <div ref={listScrollRef} className="standard-list-scroll" onScroll={onListScroll}>
         {!showTable ? (
           <p className="standard-table-empty">표시할 필드가 없습니다.</p>
         ) : (
@@ -123,13 +206,46 @@ export function WtlFacilityListView({
                 {listFields.length > 0 ? (
                   listFields.map((f, i) => {
                     const key = String(f.define_field_name ?? '').trim()
+                    const label = getDefineFieldDisplayLabel(key, f.define_field_kor_name)
+                    const sortIdx = key
+                      ? sorts.findIndex((s) => s.field.toLowerCase() === key.toLowerCase())
+                      : -1
+                    const active = sortIdx >= 0
+                    const sortDir = active ? sorts[sortIdx]!.dir : null
+                    const Icon = !active
+                      ? ArrowUpDown
+                      : sortDir === 'asc'
+                        ? ArrowUp
+                        : ArrowDown
+                    const initial = initialFacilityListSortDir(key)
                     return (
                       <th
                         key={key || `h-${i}`}
-                        className="standard-table-th standard-table-th-left"
-                        title={getDefineFieldDisplayLabel(key, f.define_field_kor_name)}
+                        className="standard-table-th standard-table-th-left max-w-none"
+                        title={label}
                       >
-                        {getDefineFieldDisplayLabel(key, f.define_field_kor_name)}
+                        {sortEnabled && key ? (
+                          <button
+                            type="button"
+                            onClick={() => onToggleSort(key)}
+                            className={cn(
+                              'standard-sort-button standard-sort-button-left max-w-none whitespace-nowrap',
+                              active && 'standard-sort-button-active'
+                            )}
+                            title={
+                              !active
+                                ? `${label} 정렬 추가`
+                                : sortDir === initial
+                                  ? `${label} 방향 바꾸기`
+                                  : `${label} 정렬 해제`
+                            }
+                          >
+                            <span className="truncate">{label}</span>
+                            <Icon className="h-3 w-3 shrink-0 opacity-70" aria-hidden />
+                          </button>
+                        ) : (
+                          label
+                        )}
                       </th>
                     )
                   })
@@ -139,7 +255,7 @@ export function WtlFacilityListView({
               </tr>
             </thead>
             <tbody>
-              {loading ? (
+              {showInitialLoading ? (
                 <WtlFacilityTableLoadingRow colSpan={colCount} />
               ) : error ? (
                 <tr>
@@ -163,6 +279,7 @@ export function WtlFacilityListView({
                 rows.map((row) => (
                   <tr
                     key={row.id}
+                    data-facility-row={row.id}
                     className={cn(
                       'standard-list-row cursor-pointer',
                       selectedId === row.id && 'standard-list-row-selected'
@@ -195,9 +312,7 @@ export function WtlFacilityListView({
           </table>
         )}
       </div>
-      <div className="standard-list-footer">
-        {loading ? '조회 중…' : `${total}건`}
-      </div>
+      <div className="standard-list-footer">{footerText}</div>
     </div>
   )
 }
