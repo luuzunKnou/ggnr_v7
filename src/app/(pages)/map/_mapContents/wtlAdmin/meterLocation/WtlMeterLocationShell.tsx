@@ -45,12 +45,6 @@ type Props = {
   onClose: () => void
 }
 
-function statusLabel(status: MeterLocateResult['status']): string {
-  if (status === 'shown') return '표시됨'
-  if (status === 'point') return '위치만'
-  return '못 찾음'
-}
-
 function inputKey(value: string): string {
   return value.replace(/\u00a0/g, ' ').trim().replace(/\s+/g, '')
 }
@@ -485,29 +479,17 @@ export function WtlMeterLocationShell({ leftOffsetPx, onTotalWidthChange, onClos
                                 title={row.input}
                                 onClick={() => handleMeterClick(row)}
                                 className={cn(
-                                  'flex w-full items-start justify-between gap-2 px-2 py-1.5 text-left',
+                                  'flex w-full flex-col items-start px-2 py-1.5 text-left',
                                   row.status !== 'miss' &&
                                     'cursor-pointer hover:bg-slate-50',
                                   row.status === 'miss' && 'cursor-default'
                                 )}
                               >
-                                <span className="min-w-0">
-                                  <span className="block truncate text-xs text-slate-800">
-                                    {row.input}
-                                  </span>
-                                  <span className="block truncate text-[11px] text-slate-500">
-                                    {row.detail}
-                                  </span>
+                                <span className="block w-full truncate text-xs text-slate-800">
+                                  {row.input}
                                 </span>
-                                <span
-                                  className={cn(
-                                    'shrink-0 text-[11px]',
-                                    row.status === 'miss'
-                                      ? 'text-slate-400'
-                                      : 'text-blue-700'
-                                  )}
-                                >
-                                  {statusLabel(row.status)}
+                                <span className="block w-full truncate text-[11px] text-slate-500">
+                                  {row.detail}
                                 </span>
                               </button>
                             </td>
