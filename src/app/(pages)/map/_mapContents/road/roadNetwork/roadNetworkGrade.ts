@@ -2,9 +2,13 @@ import type {
   RoadNetworkOpenStatus,
   RoadNetworkOpenStatusFilter,
   RoadNetworkType,
-  RoadNetworkTypeFilter,
+  RoadNetworkTypeSelection,
 } from "./roadNetworkMock";
-import { matchesRoadNetworkTypeFilter } from "./roadNetworkMock";
+import {
+  isAllRoadNetworkTypes,
+  isLocalRoadType,
+  matchesRoadNetworkTypeSelection,
+} from "./roadNetworkMock";
 
 /** 통합 도로망 — 선(등급·번호·선종류)과 노선번호 표지 점 */
 export const ROAD_NETWORK_UNIFIED_LS = "rdl_network_ls";
@@ -30,8 +34,8 @@ const GRADE_TO_TYPE: Record<RoadNetworkGrade, RoadNetworkType> = {
   국가지원지방도: "지방도",
   지방도: "지방도",
   시군도: "군도",
-  면도: "농도",
-  리도: "농도",
+  면도: "면도",
+  리도: "리도",
   농도: "농도",
   철도: "철도",
 };
@@ -48,7 +52,7 @@ export function baseRoadNetworkGrade(layerValue: unknown): string {
 }
 
 export function roadNetworkTypeFromGrade(grade: string): RoadNetworkType {
-  return GRADE_TO_TYPE[grade as RoadNetworkGrade] ?? "일반도로";
+  return GRADE_TO_TYPE[grade as RoadNetworkGrade] ?? "군도";
 }
 
 export function roadNetworkOpenStatusFromLine(
@@ -97,7 +101,7 @@ export type RoadNetworkSignIndexItem = {
  * 피처 ID 목록 CQL. 한글 리터럴 CQL은 GeoServer 요청 인코딩에 따라 깨질 수 있어 ID로 거른다.
  * 빈 목록이면 EXCLUDE.
  */
-function featureIdInCql(table: string, ogcFids: number[]): string {
+export function featureIdInCql(table: string, ogcFids: number[]): string {
   if (ogcFids.length === 0) return "EXCLUDE";
   return `IN (${ogcFids.map((n) => `'${table}.${n}'`).join(",")})`;
 }
@@ -111,16 +115,16 @@ function ogcFidFromRowId(id: string): number | null {
 export function buildRoadNetworkUnifiedLineCql(
   rows: readonly { id: string; roadType: RoadNetworkType; openStatus: RoadNetworkOpenStatus }[],
   opts: {
-    typeFilter: RoadNetworkTypeFilter;
+    typeFilter: RoadNetworkTypeSelection;
     openStatusFilter: RoadNetworkOpenStatusFilter;
   }
 ): string | null {
-  if (opts.typeFilter === "전체" && opts.openStatusFilter === "전체") return null;
+  if (isAllRoadNetworkTypes(opts.typeFilter) && opts.openStatusFilter === "전체") return null;
   const fids: number[] = [];
   for (const r of rows) {
     const fid = ogcFidFromRowId(r.id);
     if (fid == null) continue;
-    if (!matchesRoadNetworkTypeFilter(r.roadType, opts.typeFilter)) continue;
+    if (!matchesRoadNetworkTypeSelection(r.roadType, opts.typeFilter)) continue;
     if (opts.openStatusFilter !== "전체" && r.openStatus !== opts.openStatusFilter) continue;
     fids.push(fid);
   }
@@ -143,21 +147,21 @@ export function buildRoadNetworkUnifiedSignCql(
     address?: string;
   }[],
   opts: {
-    typeFilter: RoadNetworkTypeFilter;
+    typeFilter: RoadNetworkTypeSelection;
     openStatusFilter: RoadNetworkOpenStatusFilter;
   }
 ): string | null {
-  if (opts.typeFilter === "전체" && opts.openStatusFilter === "전체") return null;
+  if (isAllRoadNetworkTypes(opts.typeFilter) && opts.openStatusFilter === "전체") return null;
   /** 면·리·농도 번호는 읍면마다 따로 매겨져 읍면까지 같아야 같은 노선 */
   const routeKey = (r: (typeof rows)[number]) =>
-    `${r.roadGrade ?? ""}|${r.roadNo.trim()}|${r.roadType === "농도" ? (r.address ?? "").trim() : ""}`;
+    `${r.roadGrade ?? ""}|${r.roadNo.trim()}|${isLocalRoadType(r.roadType) ? (r.address ?? "").trim() : ""}`;
   const rowByFid = new Map<number, (typeof rows)[number]>();
   const passedRoutes = new Set<string>();
   for (const r of rows) {
     const fid = ogcFidFromRowId(r.id);
     if (fid != null) rowByFid.set(fid, r);
     if (
-      matchesRoadNetworkTypeFilter(r.roadType, opts.typeFilter) &&
+      matchesRoadNetworkTypeSelection(r.roadType, opts.typeFilter) &&
       (opts.openStatusFilter === "전체" || r.openStatus === opts.openStatusFilter)
     ) {
       passedRoutes.add(routeKey(r));
@@ -167,11 +171,12 @@ export function buildRoadNetworkUnifiedSignCql(
     .filter((s) => {
       const line = s.lineFid != null ? rowByFid.get(s.lineFid) : undefined;
       if (!line) {
-        return (
-          opts.openStatusFilter === "전체" &&
-          s.roadType != null &&
-          matchesRoadNetworkTypeFilter(s.roadType, opts.typeFilter)
-        );
+        if (opts.openStatusFilter !== "전체" || s.roadType == null) return false;
+        // 면리농도 표지는 면도·리도·농도 구분이 없어 셋 중 어느 필터에도 보인다
+        if (s.roadType === "농도" && !isAllRoadNetworkTypes(opts.typeFilter)) {
+          return opts.typeFilter.some((f) => isLocalRoadType(f as RoadNetworkType));
+        }
+        return matchesRoadNetworkTypeSelection(s.roadType, opts.typeFilter);
       }
       return passedRoutes.has(routeKey(line));
     })
