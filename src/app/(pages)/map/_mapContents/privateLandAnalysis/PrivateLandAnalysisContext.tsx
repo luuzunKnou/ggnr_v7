@@ -54,6 +54,7 @@ import {
 import {
   BUILDING_COLOR,
   hexToRgba,
+  matchesJimokFilter,
   matchesOwnFilter,
   OWN_FILTER_ALL,
   ownGbnColor,
@@ -126,6 +127,8 @@ type Ctx = {
   parcels: PrivateLandParcel[];
   truncated: boolean;
   ownFilter: string;
+  /** 지목 필터 — 소유구분 필터와 함께(둘 다 맞는 행만) 적용 */
+  jimokFilter: string;
   keyword: string;
   filteredParcels: PrivateLandParcel[];
   selectedKey: string | null;
@@ -178,6 +181,7 @@ type Ctx = {
   changeArea: () => void;
   resetAll: () => void;
   setOwnFilter: (v: string) => void;
+  setJimokFilter: (v: string) => void;
   setKeyword: (v: string) => void;
   selectParcel: (key: string | null) => void;
 };
@@ -367,6 +371,7 @@ export function PrivateLandAnalysisRoot({ system, onDetailOpenChange, children }
   usePrivateLandOwnGbnFallback(parcels, setParcels);
   const [truncated, setTruncated] = useState(false);
   const [ownFilter, setOwnFilter] = useState(OWN_FILTER_ALL);
+  const [jimokFilter, setJimokFilter] = useState(OWN_FILTER_ALL);
   const [keyword, setKeyword] = useState('');
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [riverKnown, setRiverKnown] = useState(false);
@@ -546,6 +551,7 @@ export function PrivateLandAnalysisRoot({ system, onDetailOpenChange, children }
     setParcels([]);
     setTruncated(false);
     setOwnFilter(OWN_FILTER_ALL);
+    setJimokFilter(OWN_FILTER_ALL);
     setKeyword('');
     setSelectedKey(null);
     setMessage('');
@@ -1635,6 +1641,7 @@ export function PrivateLandAnalysisRoot({ system, onDetailOpenChange, children }
         setParcels([...parcelRows, ...buildingRows]);
         setTruncated(data?.truncated === true || bldData?.truncated === true);
         setOwnFilter(OWN_FILTER_ALL);
+        setJimokFilter(OWN_FILTER_ALL);
         setKeyword('');
         setSelectedKey(null);
         setPhase('result');
@@ -1667,11 +1674,13 @@ export function PrivateLandAnalysisRoot({ system, onDetailOpenChange, children }
   const filteredParcels = useMemo(() => {
     const q = keyword.trim().toLowerCase();
     return parcels.filter((p) => {
-      if (!matchesOwnFilter(ownFilter, p.ownGbn, p.kind !== 'parcel')) return false;
+      const isBuilding = p.kind !== 'parcel';
+      if (!matchesOwnFilter(ownFilter, p.ownGbn, isBuilding)) return false;
+      if (!matchesJimokFilter(jimokFilter, p.jimok, isBuilding)) return false;
       if (!q) return true;
       return `${p.address} ${p.pnu} ${p.ownGbn} ${p.jimok} ${p.name ?? ''}`.toLowerCase().includes(q);
     });
-  }, [keyword, ownFilter, parcels]);
+  }, [jimokFilter, keyword, ownFilter, parcels]);
 
   const selectedParcel = useMemo(
     () => (selectedKey ? parcels.find((p) => p.key === selectedKey) ?? null : null),
@@ -1767,6 +1776,7 @@ export function PrivateLandAnalysisRoot({ system, onDetailOpenChange, children }
       parcels,
       truncated,
       ownFilter,
+      jimokFilter,
       keyword,
       filteredParcels,
       selectedKey,
@@ -1801,6 +1811,7 @@ export function PrivateLandAnalysisRoot({ system, onDetailOpenChange, children }
       changeArea,
       resetAll,
       setOwnFilter,
+      setJimokFilter,
       setKeyword,
       selectParcel,
     }),
@@ -1837,6 +1848,7 @@ export function PrivateLandAnalysisRoot({ system, onDetailOpenChange, children }
       layersLoading,
       message,
       ownFilter,
+      jimokFilter,
       parcels,
       phase,
       resetAll,

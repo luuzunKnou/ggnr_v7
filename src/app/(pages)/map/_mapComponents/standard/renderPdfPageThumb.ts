@@ -22,6 +22,7 @@ let activeRenders = 0;
 const renderQueue: Array<() => void> = [];
 
 function guideCacheToken(guide?: IndexSheetGuide): string {
+  if (guide?.fixedRotation != null) return `f${guide.fixedRotation}`;
   const g = guide?.guide3857;
   if (g == null || g.length < 2) return '0';
   const a = g[0];
@@ -36,7 +37,7 @@ function thumbCacheKey(
   indexSheetMode?: IndexSheetMode,
   indexSheetGuide?: IndexSheetGuide
 ): string {
-  return `${url}\0${pageNumber}\0${thumbMaxPx}\0${indexSheetMode ?? '0'}\0${guideCacheToken(indexSheetGuide)}\0u11`;
+  return `${url}\0${pageNumber}\0${thumbMaxPx}\0${indexSheetMode ?? '0'}\0${guideCacheToken(indexSheetGuide)}\0u12`;
 }
 
 function trimThumbCache(): void {

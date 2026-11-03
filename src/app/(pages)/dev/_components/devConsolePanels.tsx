@@ -14,6 +14,7 @@ import { FileManagerContent } from "./FileManagerContent"
 import { FileConverterContent } from "./FileConverterContent"
 import { LasFixerContent } from "./LasFixerContent"
 import { OrthophotoManagerContent } from "./OrthophotoManagerContent"
+import { IndexOrientationContent } from "./IndexOrientationContent"
 import { PermissionFeatureManager } from "./PermissionFeatureManager"
 import { AccessRequestQueue } from "./AccessRequestQueue"
 import { UserManager } from "./UserManager"
@@ -57,6 +58,7 @@ export const DEV_MENU_GROUPS: readonly AdminConsoleMenuGroup[] = [
       "layerManager",
       "dataHistoryManager",
       "orthophotoManager",
+      "indexOrientation",
       "dataFileUploader",
       "systemIntegration",
       "fileManager",
@@ -183,6 +185,8 @@ export function getDevMenuDescription(menuId: string): string {
       return "WKT/비표준 좌표계 LAS를 EPSG:4326으로 변환"
     case "orthophotoManager":
       return "GeoTIFF 그룹 목록 기반 일괄 변환(VRT합본) 및 XYZ JPEG 타일(tiles_jpg)"
+    case "indexOrientation":
+      return "하천기본계획 색인도 도면 방향을 지도 하천 모양과 비교해 판정·검토·확정합니다."
     default:
       return `${devMenuLabel(menuId)} 설정 화면입니다. (구현 예정)`
   }
@@ -344,6 +348,12 @@ export function renderDevMenuContent(menuId: string): ReactNode {
       return (
         <div className="flex flex-col overflow-hidden min-h-0 h-[calc(100vh-14rem)]">
           <OrthophotoManagerContent />
+        </div>
+      )
+    case "indexOrientation":
+      return (
+        <div className="flex flex-col overflow-hidden min-h-0 h-[calc(100vh-14rem)]">
+          <IndexOrientationContent />
         </div>
       )
     default:
