@@ -162,7 +162,11 @@ export async function getRiverBasicPlanExistingMapLayers(params?: {
   const tab = normalizeTab(params?.tab);
   const wanted = [...riverBasicPlanRiverNameFilterableLayers(tab)];
   if (wanted.length === 0) return { layers: [] };
-  const inList = wanted.map((n) => `'${esc(n.toLowerCase())}'`).join(',');
+  /** 구조물 분할 레이어처럼 부모 테이블을 나눠 보여 주는 레이어는 부모 테이블 존재로 판단 */
+  const physicalOf = new Map(
+    wanted.map((n) => [n, resolveDefineTablePhysicalBaseName(n, 'layer').toLowerCase() || n.toLowerCase()])
+  );
+  const inList = [...new Set(physicalOf.values())].map((n) => `'${esc(n)}'`).join(',');
   const res = await db.execute(
     sql.raw(
       `SELECT table_name
@@ -173,7 +177,7 @@ export async function getRiverBasicPlanExistingMapLayers(params?: {
   const have = new Set(
     (res.rows ?? []).map((r) => String((r as { table_name?: string }).table_name ?? '').toLowerCase()).filter(Boolean)
   );
-  let layers = wanted.filter((n) => have.has(n.toLowerCase()));
+  let layers = wanted.filter((n) => have.has(physicalOf.get(n)!));
   const published = await publishedGgnrLayerNames();
   if (published) {
     layers = layers.filter((n) => published.has(n.toLowerCase()));
