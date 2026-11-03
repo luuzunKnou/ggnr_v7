@@ -5,9 +5,15 @@ export function formatRiverIllegalCardDate(iso: string | null | undefined): stri
   return `${m[1]!.slice(2)}.${Number(m[2])}.${Number(m[3])}.`;
 }
 
-/** 조치현황 시설 종류 머리칸 — 좁은 칸에서 «비닐/하우스»처럼 두 줄로 (띄어쓰기 있으면 그 자리) */
+/** 조치현황 시설 종류 머리칸 — «비닐하우스»«형질변경»«(가설)건축물» 두 줄, «평상등»«데크등»은 한 줄 */
 export function splitRiverIllegalKindLabel(label: string): string[] {
   const s = label.trim();
+  // «평상 등» «데크 등» — 띄어쓰기 유지·줄바꿈 없이
+  if (/\s등$/.test(s)) return [s];
+  if (s.endsWith("등") && s.length <= 4) return [s];
+  // «(가설)건축물» → (가설) / 건축물
+  const paren = /^(\([^)]+\))(.+)$/.exec(s);
+  if (paren?.[1] && paren[2]) return [paren[1], paren[2]];
   if (s.includes(" ")) return s.split(/\s+/);
   if (s.length >= 4) return [s.slice(0, 2), s.slice(2)];
   return [s];
@@ -59,7 +65,12 @@ export function riverIllegalRedMarkupToHtml(raw: string | null | undefined): str
     .join("");
 }
 
-/** 조치현황 입력 — 숫자와 # 만 */
+/** 조치현황 적발 — 숫자만 */
+export function sanitizeRiverIllegalStatusDigits(raw: string): string {
+  return String(raw ?? "").replace(/[^0-9]/g, "");
+}
+
+/** 조치현황 조치·미조치 — 숫자와 # (`#1#` 빨간 표시·DB 저장) */
 export function sanitizeRiverIllegalStatusInput(raw: string): string {
   return String(raw ?? "").replace(/[^0-9#]/g, "");
 }

@@ -1,7 +1,7 @@
 'use client';
 
-import { useMemo } from 'react';
-import { Loader2, MapPin, Pencil, RotateCcw, Search, X } from 'lucide-react';
+import { useMemo, useState } from 'react';
+import { Inbox, Loader2, MapPin, Pencil, RotateCcw, Search, SearchX, X, type LucideIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/app/shadcnComponents/ui/button';
 import { usePrivateLandAnalysis, type PrivateLandAnalysisPhase } from './PrivateLandAnalysisContext';
@@ -12,8 +12,13 @@ import {
   buildingBadgeStyle,
   formatSqm,
   jimokBadgeStyle,
+  jimokFilterOptions,
+  jimokFullName,
+  matchesJimokFilter,
+  matchesOwnFilter,
+  OWN_FILTER_ALL,
+  OWN_FILTER_OPTIONS,
   ownGbnBadgeStyle,
-  ownFilterOptions,
   ownGbnShort,
 } from './privateLandAnalysisFormat';
 
@@ -34,13 +39,93 @@ const CLOSED_RANGING_TEXT: Partial<Record<PrivateLandAnalysisPhase, string>> = {
   ranged: '경계선으로 범위를 닫고 적용하세요.',
 };
 
-/** 소유구분 필터 한 줄 칸 수 — 넘치면 두 줄 */
-const OWN_FILTER_COLS = 6;
-
 const CHIP_BASE =
   'min-w-0 truncate rounded border px-0.5 py-1 text-center text-[10px] font-medium leading-tight transition-colors';
 const CHIP_ON = 'border-primary bg-primary/10 text-primary';
 const CHIP_OFF = 'border-border bg-background text-muted-foreground hover:bg-muted/50';
+/** 지목 필터 한 줄 칸 수 — 넘치면 다음 줄 */
+const JIMOK_FILTER_COLS = 6;
+
+type FilterTab = 'own' | 'jimok';
+type FilterOption = { key: string; label: string };
+
+/** 목록이 비었을 때 — 아이콘·제목·설명, 필요하면 되돌리기 버튼 */
+function ListEmptyState({
+  icon: Icon,
+  title,
+  description,
+  actionLabel,
+  onAction,
+}: {
+  icon: LucideIcon;
+  title: string;
+  description: string;
+  actionLabel?: string;
+  onAction?: () => void;
+}) {
+  return (
+    <div className="flex flex-col items-center px-4 py-8 text-center">
+      <span className="flex size-10 items-center justify-center rounded-full bg-muted text-muted-foreground">
+        <Icon className="size-5" aria-hidden />
+      </span>
+      <p className="mt-2.5 text-sm font-medium text-foreground">{title}</p>
+      <p className="mt-1 text-[11px] leading-snug text-muted-foreground">{description}</p>
+      {actionLabel && onAction ? (
+        <button
+          type="button"
+          onClick={onAction}
+          className="mt-3 rounded border border-border bg-background px-3 py-1 text-[11px] font-medium text-foreground transition-colors hover:bg-muted/50"
+        >
+          {actionLabel}
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
+/** 필터 버튼 묶음 — 0건은 흐리게(누르면 목록에 «없습니다» 안내), 마우스를 올리면 건수 */
+function FilterChips({
+  title,
+  options,
+  counts,
+  value,
+  cols,
+  onChange,
+}: {
+  title: string;
+  options: FilterOption[];
+  counts: Map<string, number>;
+  value: string;
+  cols: number;
+  onChange: (key: string) => void;
+}) {
+  return (
+    <div
+      className="grid w-full gap-0.5"
+      style={{ gridTemplateColumns: `repeat(${Math.min(options.length, cols)}, minmax(0, 1fr))` }}
+      role="group"
+      aria-label={`${title} 필터`}
+    >
+      {options.map((f) => {
+        const active = value === f.key;
+        const count = counts.get(f.key) ?? 0;
+        const empty = count === 0 && !active;
+        return (
+          <button
+            key={f.key}
+            type="button"
+            onClick={() => onChange(f.key)}
+            title={empty ? `${f.label} 없음` : `${f.label} ${count}건`}
+            aria-pressed={active}
+            className={cn(CHIP_BASE, active ? CHIP_ON : CHIP_OFF, empty && 'opacity-40')}
+          >
+            <span className="block truncate">{f.label}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
 
 const BTN_CHANGE =
   'h-7 flex-1 gap-1 border-primary/40 bg-primary/5 px-2 text-[10px] font-medium text-primary hover:bg-primary/10 hover:text-primary';
@@ -84,6 +169,7 @@ export function PrivateLandAnalysisListPanel({ onClose }: Props) {
     parcels,
     truncated,
     ownFilter,
+    jimokFilter,
     keyword,
     filteredParcels,
     selectedKey,
@@ -95,18 +181,56 @@ export function PrivateLandAnalysisListPanel({ onClose }: Props) {
     changeArea,
     resetAll,
     setOwnFilter,
+    setJimokFilter,
     setKeyword,
     selectParcel,
   } = usePrivateLandAnalysis();
 
-  const ownFilters = useMemo(
-    () =>
-      ownFilterOptions(
-        parcels.filter((p) => p.kind === 'parcel').map((p) => p.ownGbn),
-        parcels.some((p) => p.kind !== 'parcel')
-      ),
+  const [filterTab, setFilterTab] = useState<FilterTab>('own');
+
+  /** 지목 필터 — 분석 결과에 있는 지목만 */
+  const jimokOptions = useMemo(
+    () => jimokFilterOptions(parcels.filter((p) => p.kind === 'parcel').map((p) => p.jimok)),
     [parcels]
   );
+
+  /** 필터별 건수 — 0건 필터는 흐리게·선택 불가 */
+  const ownFilterCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const f of OWN_FILTER_OPTIONS) {
+      counts.set(f.key, parcels.filter((p) => matchesOwnFilter(f.key, p.ownGbn, p.kind !== 'parcel')).length);
+    }
+    return counts;
+  }, [parcels]);
+  const jimokFilterCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const f of jimokOptions) {
+      counts.set(f.key, parcels.filter((p) => matchesJimokFilter(f.key, p.jimok, p.kind !== 'parcel')).length);
+    }
+    return counts;
+  }, [jimokOptions, parcels]);
+
+  /** 고른 필터가 결과에 없으면 목록에 «건축물이 없습니다»처럼 안내 */
+  const emptyFilterLabel =
+    filterTab === 'own'
+      ? ownFilter !== OWN_FILTER_ALL && (ownFilterCounts.get(ownFilter) ?? 0) === 0
+        ? (OWN_FILTER_OPTIONS.find((f) => f.key === ownFilter)?.label ?? ownFilter)
+        : null
+      : jimokFilter !== OWN_FILTER_ALL && (jimokFilterCounts.get(jimokFilter) ?? 0) === 0
+        ? jimokFilter
+        : null;
+
+  /** 한 번에 한 기준만 — 탭을 바꾸면 두 필터 모두 «전체» */
+  const handleFilterTabChange = (tab: FilterTab) => {
+    if (tab === filterTab) return;
+    setFilterTab(tab);
+    setOwnFilter(OWN_FILTER_ALL);
+    setJimokFilter(OWN_FILTER_ALL);
+  };
+  const filterTabs: { id: FilterTab; label: string }[] = [
+    { id: 'own', label: '소유구분' },
+    { id: 'jimok', label: '지목' },
+  ];
 
   const confirmed = phase === 'applied' || phase === 'analyzing' || phase === 'result';
   const closed = rangeMode === 'closed';
@@ -207,27 +331,50 @@ export function PrivateLandAnalysisListPanel({ onClose }: Props) {
               className="h-8 w-full rounded border border-border pl-7 pr-2.5 text-xs outline-none focus:border-primary focus:ring-2 focus:ring-primary/25"
             />
           </div>
-          <div
-            className="grid w-full gap-0.5"
-            style={{ gridTemplateColumns: `repeat(${Math.min(ownFilters.length, OWN_FILTER_COLS)}, minmax(0, 1fr))` }}
-            role="group"
-            aria-label="소유구분 필터"
-          >
-            {ownFilters.map((f) => {
-              const active = ownFilter === f.key;
-              return (
-                <button
-                  key={f.key}
-                  type="button"
-                  onClick={() => setOwnFilter(f.key)}
-                  title={f.label}
-                  aria-pressed={active}
-                  className={cn(CHIP_BASE, active ? CHIP_ON : CHIP_OFF)}
-                >
-                  <span className="block truncate">{f.label}</span>
-                </button>
-              );
-            })}
+          <div className="overflow-hidden rounded border border-border">
+            <div className="flex border-b border-border" role="tablist" aria-label="필터 구분">
+              {filterTabs.map((t) => {
+                const selected = filterTab === t.id;
+                return (
+                  <button
+                    key={t.id}
+                    type="button"
+                    role="tab"
+                    aria-selected={selected}
+                    onClick={() => handleFilterTabChange(t.id)}
+                    className={cn(
+                      'flex w-1/2 items-center justify-center px-2 py-1.5 text-xs font-medium transition-colors',
+                      selected
+                        ? 'border-b-2 border-primary bg-primary/5 text-primary'
+                        : 'text-muted-foreground hover:bg-muted/40 hover:text-foreground'
+                    )}
+                  >
+                    {t.label}
+                  </button>
+                );
+              })}
+            </div>
+            <div className="bg-muted/20 p-1.5">
+              {filterTab === 'jimok' ? (
+                <FilterChips
+                  title="지목"
+                  options={jimokOptions}
+                  counts={jimokFilterCounts}
+                  value={jimokFilter}
+                  cols={JIMOK_FILTER_COLS}
+                  onChange={setJimokFilter}
+                />
+              ) : (
+                <FilterChips
+                  title="소유구분"
+                  options={OWN_FILTER_OPTIONS}
+                  counts={ownFilterCounts}
+                  value={ownFilter}
+                  cols={OWN_FILTER_OPTIONS.length}
+                  onChange={setOwnFilter}
+                />
+              )}
+            </div>
           </div>
           <div className="flex items-center justify-between gap-2 text-[11px] text-muted-foreground">
             <span>목록 {filteredParcels.length}건</span>
@@ -242,9 +389,32 @@ export function PrivateLandAnalysisListPanel({ onClose }: Props) {
             {phase === 'analyzing' ? '필지·건물을 분석하는 중…' : '구간을 적용하면 필지·건물 목록이 표시됩니다.'}
           </p>
         ) : filteredParcels.length === 0 ? (
-          <p className="px-3 py-2.5 text-xs text-muted-foreground">
-            {parcels.length === 0 ? '구간과 겹치는 필지·건물이 없습니다.' : '검색 결과가 없습니다.'}
-          </p>
+          parcels.length === 0 ? (
+            <ListEmptyState
+              icon={Inbox}
+              title="필지·건물 없음"
+              description="분석 구간과 겹치는 필지·건물이 없습니다."
+            />
+          ) : emptyFilterLabel ? (
+            <ListEmptyState
+              icon={Inbox}
+              title={`${emptyFilterLabel} 없음`}
+              description={`이 분석 구간에는 «${emptyFilterLabel}»에 해당하는 항목이 없습니다.`}
+              actionLabel="전체 보기"
+              onAction={() => {
+                setOwnFilter(OWN_FILTER_ALL);
+                setJimokFilter(OWN_FILTER_ALL);
+              }}
+            />
+          ) : (
+            <ListEmptyState
+              icon={SearchX}
+              title="검색 결과 없음"
+              description={`«${keyword.trim()}»와 일치하는 필지·건물이 없습니다.`}
+              actionLabel="검색어 지우기"
+              onAction={() => setKeyword('')}
+            />
+          )
         ) : (
           <table className="w-full table-fixed border-collapse text-xs">
             <colgroup>
@@ -288,7 +458,7 @@ export function PrivateLandAnalysisListPanel({ onClose }: Props) {
                           <span
                             className="inline-flex w-[2.5rem] shrink-0 items-center justify-center truncate whitespace-nowrap rounded border px-0.5 py-0.5 text-[10px] font-semibold leading-none"
                             style={jimokBadgeStyle(p.jimok)}
-                            title={p.jimok}
+                            title={jimokFullName(p.jimok)}
                           >
                             {p.jimok}
                           </span>

@@ -1,5 +1,5 @@
 <GeoServerTileLayer>
-  <id>LayerInfoImpl--610c9460:1a10fc86a73:-79aa</id>
+  <id>LayerInfoImpl-79b90470:1a186cf97dd:-7eb4</id>
   <enabled>true</enabled>
   <inMemoryCached>true</inMemoryCached>
   <name>ggnr:sd_heat_wave_shelter</name>
@@ -12,10 +12,10 @@
       <gridSetName>EPSG:4326</gridSetName>
       <extent>
         <coords>
-          <double>128.44305654092713</double>
-          <double>36.30490021553824</double>
-          <double>128.9945876186661</double>
-          <double>36.80533182859723</double>
+          <double>129.09359891025693</double>
+          <double>36.64383006882657</double>
+          <double>129.4891798951753</double>
+          <double>37.13568456455722</double>
         </coords>
       </extent>
     </gridSubset>
@@ -23,10 +23,10 @@
       <gridSetName>EPSG:900913</gridSetName>
       <extent>
         <coords>
-          <double>1.4298215650067655E7</double>
-          <double>4342656.683223644</double>
-          <double>1.435961180879822E7</double>
-          <double>4412007.178967376</double>
+          <double>1.4370633695360897E7</double>
+          <double>4389576.890678176</double>
+          <double>1.4414669569169512E7</double>
+          <double>4458036.378621501</double>
         </coords>
       </extent>
     </gridSubset>

@@ -1260,6 +1260,54 @@
     "define_table_source": "shp"
   },
   {
+    "define_table_name": "lifelong_education",
+    "define_table_kor_name": "대표홈페이지 평생교육기관 현황",
+    "define_table_shp_type": "POLYGON",
+    "define_table_read_share": "P",
+    "define_table_write_share": "P",
+    "define_table_group": "교육",
+    "define_table_idx": "0",
+    "define_table_etc": "",
+    "define_table_schema": "layer",
+    "define_table_source": "shp"
+  },
+  {
+    "define_table_name": "schools",
+    "define_table_kor_name": "학교현황",
+    "define_table_shp_type": "POLYGON",
+    "define_table_read_share": "P",
+    "define_table_write_share": "P",
+    "define_table_group": "교육",
+    "define_table_idx": "0",
+    "define_table_etc": "",
+    "define_table_schema": "layer",
+    "define_table_source": "shp"
+  },
+  {
+    "define_table_name": "freight_transport_companies",
+    "define_table_kor_name": "일반화물자동차 운송사업자 업체 현황",
+    "define_table_shp_type": "POLYGON",
+    "define_table_read_share": "P",
+    "define_table_write_share": "P",
+    "define_table_group": "교통물류",
+    "define_table_idx": "0",
+    "define_table_etc": "",
+    "define_table_schema": "layer",
+    "define_table_source": "shp"
+  },
+  {
+    "define_table_name": "parking_enforcement_cameras",
+    "define_table_kor_name": "주정차 단속 무인카메라 설치현황",
+    "define_table_shp_type": "POLYGON",
+    "define_table_read_share": "P",
+    "define_table_write_share": "P",
+    "define_table_group": "교통물류",
+    "define_table_idx": "0",
+    "define_table_etc": "",
+    "define_table_schema": "layer",
+    "define_table_source": "shp"
+  },
+  {
     "define_table_name": "public_land",
     "define_table_kor_name": "20260425 국공유재산 사용허가대장",
     "define_table_shp_type": "POLYGON",
@@ -5263,6 +5311,18 @@
     "define_table_read_share": "P",
     "define_table_write_share": "P",
     "define_table_group": "보상편입용지",
+    "define_table_idx": "0",
+    "define_table_etc": "",
+    "define_table_schema": "layer",
+    "define_table_source": "shp"
+  },
+  {
+    "define_table_name": "illegal_usage_as",
+    "define_table_kor_name": "불법점용관리카드",
+    "define_table_shp_type": "POLYGON",
+    "define_table_read_share": "P",
+    "define_table_write_share": "P",
+    "define_table_group": "불법점용",
     "define_table_idx": "0",
     "define_table_etc": "",
     "define_table_schema": "layer",

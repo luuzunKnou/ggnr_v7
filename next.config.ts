@@ -92,6 +92,7 @@ const nextConfig: NextConfig = {
     'pg',
     'pg-native',
     'exifr',
+    'puppeteer-core',
   ],
   async rewrites() {
     // GeoServer: 브라우저·게이트는 동일 출처 `{basePath}/geoserver` → start.ini·GEOSERVER_URL

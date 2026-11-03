@@ -8,6 +8,34 @@
 /** serviceList `ser_eng` */
 export const RIVER_ILLEGAL_OCCUPATION_OPENED_KEY = "riverIllegalOccupation";
 
+/** 불법점용 레이어 (SHP → layer.illegal_usage_as) */
+export const RIVER_ILLEGAL_OCCUPATION_TABLE = "illegal_usage_as";
+export const RIVER_ILLEGAL_OCCUPATION_SCHEMA = "layer";
+
+/** 첨부: file_data/illegal_usage_as/{MGMT_NO}/ */
+export const RIVER_ILLEGAL_OCCUPATION_FILE_LAYER = RIVER_ILLEGAL_OCCUPATION_TABLE;
+/** service-files 권한용 ser_eng */
+export const RIVER_ILLEGAL_OCCUPATION_FILE_SER_ENG = RIVER_ILLEGAL_OCCUPATION_OPENED_KEY;
+
+/** 관리번호 자동채번 — HCBJ_000001 형태 (접두사와 숫자 사이 _) */
+export const RIVER_ILLEGAL_MGMT_NO_PREFIX = "HCBJ";
+export const RIVER_ILLEGAL_MGMT_NO_DIGITS = 6;
+export const RIVER_ILLEGAL_MGMT_NO_DEFAULT = "HCBJ_000001";
+
+/**
+ * 카드 사진 칸 ↔ 첨부 파일 stem 접미사
+ * 폴더: file_data/illegal_usage_as/HCBJ_000002/
+ * 파일: HCBJ_000002_현황사진1.jpg
+ */
+export const RIVER_ILLEGAL_PHOTO_SLOTS = {
+  locationMapUrl: { label: "위치도", fileSuffix: "위치도" },
+  photo1Url: { label: "현황사진1", fileSuffix: "현황사진1" },
+  photo2Url: { label: "현황사진2", fileSuffix: "현황사진2" },
+  completePhotoUrl: { label: "완료사진", fileSuffix: "완료사진" },
+} as const;
+
+export type RiverIllegalPhotoField = keyof typeof RIVER_ILLEGAL_PHOTO_SLOTS;
+
 export const RIVER_ILLEGAL_OCCUPATION_PANEL_DEFAULT_WIDTH = 400;
 export const RIVER_ILLEGAL_OCCUPATION_PANEL_MIN_WIDTH = 300;
 export const RIVER_ILLEGAL_OCCUPATION_PANEL_MAX_WIDTH = 560;
@@ -45,10 +73,10 @@ export const RIVER_ILLEGAL_OCCUPATION_COLUMNS = {
   actionContent: { label: "조치내용", column: "ACT_DESC" },
   actionPlan: { label: "조치계획", column: "ACT_PLAN" },
   manager: { label: "관리책임자", column: "MANAGER" },
-  locationMapUrl: { label: "위치도", column: "MAP_IMG" },
-  photo1Url: { label: "현황사진", column: "PHOTO1" },
-  photo2Url: { label: "현황사진", column: "PHOTO2" },
-  completePhotoUrl: { label: "완료사진", column: "PHOTO_END" },
+  locationMapUrl: { label: RIVER_ILLEGAL_PHOTO_SLOTS.locationMapUrl.label, column: "MAP_IMG" },
+  photo1Url: { label: RIVER_ILLEGAL_PHOTO_SLOTS.photo1Url.label, column: "PHOTO1" },
+  photo2Url: { label: RIVER_ILLEGAL_PHOTO_SLOTS.photo2Url.label, column: "PHOTO2" },
+  completePhotoUrl: { label: RIVER_ILLEGAL_PHOTO_SLOTS.completePhotoUrl.label, column: "PHOTO_END" },
 } as const;
 
 export type RiverIllegalOccupationFieldKey = keyof typeof RIVER_ILLEGAL_OCCUPATION_COLUMNS;
@@ -88,7 +116,7 @@ export const RIVER_ILLEGAL_STATUS_KINDS = [
   { key: "bench", label: "평상 등", column: "BED" },
   { key: "shade", label: "그늘막", column: "SHD" },
   { key: "bungalow", label: "방갈로", column: "BNG" },
-  { key: "building", label: "건축물", column: "BLD" },
+  { key: "building", label: "(가설)건축물", column: "BLD" },
   { key: "farming", label: "불법경작", column: "FRM" },
   { key: "deck", label: "데크 등", column: "DCK" },
   { key: "landChange", label: "형질변경", column: "ALT" },

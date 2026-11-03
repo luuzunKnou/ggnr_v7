@@ -111,7 +111,11 @@ export function riverBasicPlanGdWmsDefineTables(tab: RiverBasicPlanTab): readonl
   return RIVER_PLAN_GD_STRUCTURE_DEFINE_TABLES.filter((n) => n !== parent);
 }
 
-/** 목록에서 하천 선택 시 WMS에 river_name 조건을 걸 수 있는 define_table_name */
+/**
+ * 목록·탭에서 기본으로 켤 WMS 레이어 (river_name CQL 가능).
+ * 구조물은 상세 «구조물도»와 동일 — 지방은 색상 분할 자식만(부모 river_plan_gd_ps 제외).
+ * 부모를 켜면 흰 점(…) 스타일이 나와 처음부터 색상 구조물로 보이게 자식만 켠다.
+ */
 export function riverBasicPlanRiverNameFilterableLayers(tab: RiverBasicPlanTab): readonly string[] {
   if (tab === 'smallRiver') {
     return [
@@ -120,7 +124,7 @@ export function riverBasicPlanRiverNameFilterableLayers(tab: RiverBasicPlanTab):
       'river_plan_s_jd_lm',
       'river_plan_s_hd_lm',
       riverBasicPlanJbDefineTable('smallRiver'),
-      ...RIVER_PLAN_S_GD_STRUCTURE_DEFINE_TABLES,
+      ...riverBasicPlanGdWmsDefineTables('smallRiver'),
     ];
   }
   return [
@@ -129,7 +133,7 @@ export function riverBasicPlanRiverNameFilterableLayers(tab: RiverBasicPlanTab):
     'river_plan_jd_lm',
     'river_plan_hd_lm',
     riverBasicPlanJbDefineTable('river'),
-    ...RIVER_PLAN_GD_STRUCTURE_DEFINE_TABLES,
+    ...riverBasicPlanGdWmsDefineTables('river'),
   ];
 }
 
