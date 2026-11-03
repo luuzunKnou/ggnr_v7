@@ -1,7 +1,7 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
-import { RefreshCw, X } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { ChevronLeft, ChevronRight, RefreshCw, X } from 'lucide-react'
 import { call } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { useMapContext } from '../../../_mapComponents/MapContext'
@@ -12,8 +12,8 @@ import {
   type WtlFacilityListRow,
 } from './WtlFacilityListView'
 import {
-  FACILITY_TABS,
-  isFacilityTabEnabled,
+  facilityTabLabel,
+  isSangsuLayerGroup,
   listAllFacilityUndergroundTableNames,
   listFacilityGroupOptions,
   type WtlFacilityGroupOption,
@@ -30,10 +30,13 @@ const DETAIL_MIN = 320
 const DETAIL_MAX = 640
 
 export type WtlFacilityShellCatalog = {
+  /** 탭 키 = define_table_name(영문) */
   tabs: readonly string[]
   isTabEnabled: (tab: string) => boolean
   listGroupOptions: (tab: string) => WtlFacilityGroupOption[]
   listUndergroundTableNames: () => string[]
+  /** 탭 버튼 문구 — tables.json 한글명 */
+  tabLabel: (tab: string) => string
   emptyNoTab?: string
   emptyNoLayer?: string
   emptyNoQuery?: string
@@ -45,22 +48,25 @@ type Props = {
   onClose: () => void
   /** 패널 헤더 제목 (설비관리 등에서 재사용) */
   title?: string
-  /** 미지정 시 시설관리 탭·그룹 카탈로그 */
+  /** 미지정 시 시설관리 탭·그룹 카탈로그 (탭 목록은 adminTabs.json) */
   catalog?: WtlFacilityShellCatalog
+  /** 레이어 그룹 옵션 — facility·equipment 모두 define_table_group 모음 */
+  layerGroupsMode?: 'facility' | 'equipment'
 }
 
-const DEFAULT_CATALOG: WtlFacilityShellCatalog = {
-  tabs: FACILITY_TABS,
-  isTabEnabled: isFacilityTabEnabled,
+const DEFAULT_CATALOG_BASE = {
   listGroupOptions: listFacilityGroupOptions,
-  listUndergroundTableNames: listAllFacilityUndergroundTableNames,
+  tabLabel: facilityTabLabel,
   emptyNoTab: '활성화된 시설 레이어가 없습니다.',
   emptyNoLayer: '선택한 탭에 등록된 레이어가 없습니다.',
   emptyNoQuery: '시설을 조회할 수 없습니다.',
-}
+} as const
 
-function firstEnabledTab(catalog: WtlFacilityShellCatalog): string | null {
-  return catalog.tabs.find((t) => catalog.isTabEnabled(t)) ?? null
+function firstEnabledTab(
+  tabs: readonly string[],
+  isEnabled: (tab: string) => boolean
+): string | null {
+  return tabs.find((t) => isEnabled(t)) ?? null
 }
 
 export function WtlFacilityShell({
@@ -69,19 +75,56 @@ export function WtlFacilityShell({
   onClose,
   title = '시설관리',
   catalog: catalogProp,
+  layerGroupsMode = 'facility',
 }: Props) {
-  const catalog = catalogProp ?? DEFAULT_CATALOG
   const mapContext = useMapContext()
   const [listWidth, setListWidth] = useState(LIST_DEFAULT)
   const [detailWidth, setDetailWidth] = useState(DETAIL_DEFAULT)
-  const [tab, setTab] = useState<string | null>(() => firstEnabledTab(catalog))
-  const groupOptions = useMemo(
-    () => (tab ? catalog.listGroupOptions(tab) : []),
-    [catalog, tab]
+  /** catalog 미지정(시설관리)일 때 JSON 탭 — 서버 fs 런타임 */
+  const [facilityTabs, setFacilityTabs] = useState<string[]>([])
+  /** tables.json 등록 + DB 존재 탭 (서버) */
+  const [enabledTabs, setEnabledTabs] = useState<string[]>([])
+  const [tabsLoading, setTabsLoading] = useState(() => !catalogProp)
+  const [groupsLoading, setGroupsLoading] = useState(false)
+
+  const usesExternalCatalog = catalogProp != null
+  const enabledTabSet = useMemo(() => new Set(enabledTabs), [enabledTabs])
+
+  const catalog = useMemo<WtlFacilityShellCatalog>(() => {
+    if (catalogProp) return catalogProp
+    return {
+      ...DEFAULT_CATALOG_BASE,
+      tabs: facilityTabs,
+      isTabEnabled: (name: string) => enabledTabSet.has(String(name ?? '').trim()),
+      listUndergroundTableNames: () => listAllFacilityUndergroundTableNames(facilityTabs),
+    }
+  }, [catalogProp, enabledTabSet, facilityTabs])
+
+  const isTabEnabled = useCallback(
+    (name: string) => catalog.isTabEnabled(name),
+    [catalog]
   )
-  const [group, setGroup] = useState<string>(() => groupOptions[0]?.group ?? '')
+
+  const tabsKey = catalog.tabs.join('\0')
+  const enabledTabsKey = enabledTabs.join('\0')
+  const catalogRef = useRef(catalog)
+  catalogRef.current = catalog
+
+  const [tab, setTab] = useState<string | null>(null)
+  /** DB 존재 확인된 레이어 그룹 (서버) */
+  const [groupOptions, setGroupOptions] = useState<WtlFacilityGroupOption[]>([])
+  const [group, setGroup] = useState<string>('')
   const [keywordDraft, setKeywordDraft] = useState('')
   const [keyword, setKeyword] = useState('')
+  const [emdSelected, setEmdSelected] = useState('')
+  const [riSelected, setRiSelected] = useState('')
+  const [supplyBlock, setSupplyBlock] = useState('')
+  const [areaWkts5181, setAreaWkts5181] = useState<string[]>([])
+  const [emdOptions, setEmdOptions] = useState<{ code: string; name: string }[]>([])
+  const [riOptions, setRiOptions] = useState<{ code: string; name: string }[]>([])
+  const [supplyBlockOptions, setSupplyBlockOptions] = useState<
+    { value: string; label: string }[]
+  >([])
   const [rows, setRows] = useState<WtlFacilityListRow[]>([])
   const [total, setTotal] = useState(0)
   const [fieldsTable, setFieldsTable] = useState<string | null>(null)
@@ -89,16 +132,52 @@ export function WtlFacilityShell({
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [selectedId, setSelectedId] = useState<string | null>(null)
+  const tabScrollRef = useRef<HTMLDivElement>(null)
+  const [canScrollTabLeft, setCanScrollTabLeft] = useState(false)
+  const [canScrollTabRight, setCanScrollTabRight] = useState(false)
+
+  const updateTabScrollState = useCallback(() => {
+    const el = tabScrollRef.current
+    if (!el) {
+      setCanScrollTabLeft(false)
+      setCanScrollTabRight(false)
+      return
+    }
+    const { scrollLeft, scrollWidth, clientWidth } = el
+    setCanScrollTabLeft(scrollLeft > 1)
+    setCanScrollTabRight(scrollLeft + clientWidth < scrollWidth - 1)
+  }, [])
+
+  const scrollTabs = useCallback((dir: -1 | 1) => {
+    const el = tabScrollRef.current
+    if (!el) return
+    el.scrollBy({
+      left: dir * Math.max(120, Math.floor(el.clientWidth * 0.6)),
+      behavior: 'smooth',
+    })
+  }, [])
+
+  const showTabSlide = canScrollTabLeft || canScrollTabRight
 
   const selectedSource: WtlFacilityGroupOption | null = useMemo(() => {
     if (!groupOptions.length) return null
     return groupOptions.find((g) => g.group === group) ?? groupOptions[0] ?? null
   }, [group, groupOptions])
 
+  const showLocationFilter = isSangsuLayerGroup(selectedSource)
+
   const selected = useMemo(
     () => rows.find((r) => r.id === selectedId) ?? null,
     [rows, selectedId]
   )
+
+  const clearLocationFilters = useCallback(() => {
+    setEmdSelected('')
+    setRiSelected('')
+    setSupplyBlock('')
+    setAreaWkts5181([])
+    mapContext?.setSpatialFilterWkt?.(null)
+  }, [mapContext?.setSpatialFilterWkt])
   const detailOpen = selected != null
   const totalWidth = listWidth + (detailOpen ? detailWidth : 0)
 
@@ -133,16 +212,93 @@ export function WtlFacilityShell({
 
   const managedUndergroundTables = useMemo(
     () => catalog.listUndergroundTableNames(),
-    [catalog]
+    // tabsKey: catalog 객체 참조 대신 탭 목록 내용만 추적
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- tabsKey mirrors catalog.tabs
+    [tabsKey]
   )
 
+  const onTotalWidthChangeRef = useRef(onTotalWidthChange)
+  onTotalWidthChangeRef.current = onTotalWidthChange
+
+  /** 콜백 참조만 ref — deps에 넣으면 부모 리렌더 루프. Strict Mode 정리(0) 후에도 totalWidth로 재통지 */
   useEffect(() => {
-    onTotalWidthChange(totalWidth)
-  }, [totalWidth, onTotalWidthChange])
+    onTotalWidthChangeRef.current(totalWidth)
+  }, [totalWidth])
 
   useEffect(() => {
-    return () => onTotalWidthChange(0)
-  }, [onTotalWidthChange])
+    return () => onTotalWidthChangeRef.current(0)
+  }, [])
+
+  useEffect(() => {
+    updateTabScrollState()
+    const el = tabScrollRef.current
+    if (!el) return
+    const ro = new ResizeObserver(() => updateTabScrollState())
+    ro.observe(el)
+    el.addEventListener('scroll', updateTabScrollState, { passive: true })
+    return () => {
+      ro.disconnect()
+      el.removeEventListener('scroll', updateTabScrollState)
+    }
+  }, [listWidth, tabsKey, updateTabScrollState])
+
+  useEffect(() => {
+    const el = tabScrollRef.current
+    if (!el || !tab) return
+    const active = el.querySelector<HTMLElement>(
+      `[data-facility-tab="${CSS.escape(tab)}"]`
+    )
+    active?.scrollIntoView({ inline: 'nearest', block: 'nearest', behavior: 'smooth' })
+    requestAnimationFrame(updateTabScrollState)
+  }, [tab, updateTabScrollState])
+
+  /** 시설관리 기본 카탈로그 — adminTabs.json wtlFacility + DB 활성 탭 */
+  useEffect(() => {
+    if (usesExternalCatalog) return
+    let cancelled = false
+    setTabsLoading(true)
+    void call('', 'POST', {
+      service: 'wtlFacilityService',
+      action: 'listFacilityTabs',
+      params: {},
+    })
+      .then((res) => {
+        if (cancelled) return
+        const data = res?.data ?? res
+        const tabs = Array.isArray(data?.tabs)
+          ? data.tabs.map((t: unknown) => String(t ?? '').trim()).filter(Boolean)
+          : []
+        const enabled = Array.isArray(data?.enabledTabs)
+          ? data.enabledTabs.map((t: unknown) => String(t ?? '').trim()).filter(Boolean)
+          : []
+        setFacilityTabs((prev) => (prev.join('\0') === tabs.join('\0') ? prev : tabs))
+        setEnabledTabs((prev) =>
+          prev.join('\0') === enabled.join('\0') ? prev : enabled
+        )
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setFacilityTabs((prev) => (prev.length === 0 ? prev : []))
+          setEnabledTabs((prev) => (prev.length === 0 ? prev : []))
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setTabsLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [usesExternalCatalog])
+
+  /** 탭·활성 목록 로드 후 선택 (비활성 탭은 선택하지 않음) */
+  useEffect(() => {
+    if (tabsLoading) return
+    const cat = catalogRef.current
+    setTab((prev) => {
+      if (prev && cat.tabs.includes(prev) && isTabEnabled(prev)) return prev
+      return firstEnabledTab(cat.tabs, isTabEnabled)
+    })
+  }, [tabsKey, enabledTabsKey, tabsLoading, isTabEnabled])
 
   /**
    * 선택 레이어 그룹의 시설 테이블 ↔ 지하시설물(visibleLayerNames) 동기화.
@@ -187,16 +343,221 @@ export function WtlFacilityShell({
     }
   }, [mapContext?.setVisibleLayerNames, managedUndergroundTables])
 
+  /** 탭 변경 시 목록·필터 초기화 + DB에 있는 레이어 그룹만 조회 */
   useEffect(() => {
-    const opts = tab ? catalog.listGroupOptions(tab) : []
-    setGroup(opts[0]?.group ?? '')
     setKeywordDraft('')
     setKeyword('')
     setSelectedId(null)
     setRows([])
     setTotal(0)
     setError(null)
-  }, [catalog, tab])
+    clearLocationFilters()
+    if (!tab || !isTabEnabled(tab)) {
+      setGroupOptions([])
+      setGroup('')
+      setGroupsLoading(false)
+      return
+    }
+    let cancelled = false
+    setGroupOptions([])
+    setGroup('')
+    setGroupsLoading(true)
+    void call('', 'POST', {
+      service: 'wtlFacilityService',
+      action: 'listFacilityLayerGroups',
+      params: { tableName: tab, mode: layerGroupsMode },
+    })
+      .then((res) => {
+        if (cancelled) return
+        const data = res?.data ?? res
+        const raw = Array.isArray(data?.options) ? data.options : []
+        const opts: WtlFacilityGroupOption[] = raw
+          .map((o: Record<string, unknown>) => ({
+            group: String(o?.group ?? '').trim(),
+            tableName: String(o?.tableName ?? '')
+              .trim()
+              .toLowerCase(),
+            schema:
+              String(o?.schema ?? 'layer')
+                .trim()
+                .toLowerCase() || 'layer',
+            defineTableGroup: String(
+              o?.defineTableGroup ?? o?.group ?? ''
+            ).trim(),
+          }))
+          .filter((o: WtlFacilityGroupOption) => o.group && o.tableName)
+        setGroupOptions(opts)
+        setGroup(opts[0]?.group ?? '')
+      })
+      .catch(() => {
+        if (cancelled) return
+        setGroupOptions([])
+        setGroup('')
+      })
+      .finally(() => {
+        if (!cancelled) setGroupsLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+    // clearLocationFilters는 mapContext 불안정 시 루프 유발 → tab·mode만 의존
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab, layerGroupsMode, isTabEnabled])
+
+  useEffect(() => {
+    if (!showLocationFilter) {
+      clearLocationFilters()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showLocationFilter])
+
+  useEffect(() => {
+    let cancelled = false
+    void call('', 'POST', {
+      service: 'devTestService',
+      action: 'getEmdRiOptions',
+      params: {},
+    })
+      .then((res) => {
+        if (cancelled) return
+        const data = res?.data ?? res
+        setEmdOptions(Array.isArray(data?.emd) ? data.emd : [])
+      })
+      .catch(() => {
+        if (!cancelled) setEmdOptions([])
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  useEffect(() => {
+    let cancelled = false
+    void call('', 'POST', {
+      service: 'wtlNetworkService',
+      action: 'listWtlSupplyBlockOptions',
+      params: {},
+    })
+      .then((res) => {
+        if (cancelled) return
+        const data = res?.data ?? res
+        setSupplyBlockOptions(Array.isArray(data?.options) ? data.options : [])
+      })
+      .catch(() => {
+        if (!cancelled) setSupplyBlockOptions([])
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!emdSelected) {
+      setRiOptions([])
+      setRiSelected('')
+      return
+    }
+    let cancelled = false
+    void call('', 'POST', {
+      service: 'devTestService',
+      action: 'getRiOptionsByEmd',
+      params: { emdCode: emdSelected },
+    })
+      .then((res) => {
+        if (cancelled) return
+        const data = res?.data ?? res
+        setRiOptions(Array.isArray(data?.ri) ? data.ri : [])
+        setRiSelected('')
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setRiOptions([])
+          setRiSelected('')
+        }
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [emdSelected])
+
+  /** 읍면동·리·급수블록 → 5181 WKT */
+  useEffect(() => {
+    if (!showLocationFilter) return
+    let cancelled = false
+    const emd = emdSelected.trim()
+    const ri = riSelected.trim()
+    const block = supplyBlock.trim()
+    if (!emd && !ri && !block) {
+      setAreaWkts5181([])
+      mapContext?.setSpatialFilterWkt?.(null)
+      return
+    }
+    ;(async () => {
+      const wkts: string[] = []
+      try {
+        if (ri) {
+          const res = await call('', 'POST', {
+            service: 'devTestService',
+            action: 'getRiGeometry',
+            params: { riCode: ri },
+          })
+          const w = String((res?.data ?? res)?.wkt ?? '').trim()
+          if (w) wkts.push(w)
+        } else if (emd) {
+          const res = await call('', 'POST', {
+            service: 'devTestService',
+            action: 'getEmdGeometry',
+            params: { emdCode: emd },
+          })
+          const w = String((res?.data ?? res)?.wkt ?? '').trim()
+          if (w) wkts.push(w)
+        }
+        if (block) {
+          const res = await call('', 'POST', {
+            service: 'wtlNetworkService',
+            action: 'getWtlSupplyBlockGeometry',
+            params: { block },
+          })
+          const w = String((res?.data ?? res)?.wkt ?? '').trim()
+          if (w) wkts.push(w)
+        }
+      } catch {
+        /* keep partial */
+      }
+      if (cancelled) return
+      setAreaWkts5181(wkts)
+      let filterWkt: string | null = wkts[0] ?? null
+      if (wkts.length > 1) {
+        try {
+          const ures = await call('', 'POST', {
+            service: 'devTestService',
+            action: 'unionWkts5181',
+            params: { wkts },
+          })
+          const uw = String((ures?.data ?? ures)?.wkt ?? '').trim()
+          if (uw) filterWkt = uw
+        } catch {
+          /* keep first */
+        }
+      }
+      if (!cancelled) mapContext?.setSpatialFilterWkt?.(filterWkt)
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [
+    emdSelected,
+    mapContext?.setSpatialFilterWkt,
+    riSelected,
+    showLocationFilter,
+    supplyBlock,
+  ])
+
+  useEffect(() => {
+    return () => {
+      mapContext?.setSpatialFilterWkt?.(null)
+    }
+  }, [mapContext?.setSpatialFilterWkt])
 
   const loadRows = useCallback(async () => {
     if (!selectedSource) {
@@ -219,6 +580,8 @@ export function WtlFacilityShell({
           table: selectedSource.tableName,
           schema: selectedSource.schema,
           keyword,
+          areaWkts5181:
+            showLocationFilter && areaWkts5181.length > 0 ? areaWkts5181 : null,
           limit: 500,
           offset: 0,
         },
@@ -252,7 +615,7 @@ export function WtlFacilityShell({
     } finally {
       setLoading(false)
     }
-  }, [keyword, selectedSource])
+  }, [areaWkts5181, keyword, selectedSource, showLocationFilter])
 
   useEffect(() => {
     void loadRows()
@@ -264,10 +627,11 @@ export function WtlFacilityShell({
     setKeywordDraft('')
     setKeyword('')
     setSelectedId(null)
+    clearLocationFilters()
   }
 
   const handleTabClick = (name: string) => {
-    if (!catalog.isTabEnabled(name)) return
+    if (!isTabEnabled(name)) return
     setTab(name)
   }
 
@@ -296,53 +660,142 @@ export function WtlFacilityShell({
             </div>
             <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
               <div className="standard-filter-section shrink-0 border-b-0 !pb-[13px]">
-                <div className="flex border-b border-border">
-                  {catalog.tabs.map((name) => {
-                    const enabled = catalog.isTabEnabled(name)
-                    const on = tab === name
-                    return (
-                      <button
-                        key={name}
-                        type="button"
-                        title={enabled ? name : `${name} (레이어 없음)`}
-                        disabled={!enabled}
-                        className={cn(
-                          'h-7 min-w-0 flex-1 truncate border-b-2 -mb-px px-0.5 text-center text-[11px]',
-                          !enabled && 'cursor-not-allowed opacity-40',
-                          enabled && on
-                            ? 'border-primary font-semibold text-primary'
-                            : enabled
-                              ? 'cursor-pointer border-transparent text-muted-foreground hover:text-foreground'
-                              : 'border-transparent text-muted-foreground'
-                        )}
-                        onClick={() => handleTabClick(name)}
-                      >
-                        {name}
-                      </button>
-                    )
-                  })}
+                <div className="flex items-stretch border-b border-border">
+                  {showTabSlide ? (
+                    <button
+                      type="button"
+                      title="이전 탭"
+                      aria-label="이전 탭"
+                      disabled={!canScrollTabLeft}
+                      onClick={() => scrollTabs(-1)}
+                      className={cn(
+                        'inline-flex h-7 w-6 shrink-0 cursor-pointer items-center justify-center border-b-2 border-transparent text-muted-foreground hover:text-foreground',
+                        !canScrollTabLeft && 'cursor-not-allowed opacity-30 hover:text-muted-foreground'
+                      )}
+                    >
+                      <ChevronLeft className="h-3.5 w-3.5" aria-hidden />
+                    </button>
+                  ) : null}
+                  <div
+                    ref={tabScrollRef}
+                    className="flex min-w-0 flex-1 overflow-x-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
+                  >
+                    {catalog.tabs.map((name) => {
+                      const enabled = isTabEnabled(name)
+                      const on = tab === name
+                      const label = catalog.tabLabel(name) || name
+                      return (
+                        <button
+                          key={name}
+                          type="button"
+                          data-facility-tab={name}
+                          title={enabled ? label : '데이터가 없습니다'}
+                          disabled={!enabled}
+                          className={cn(
+                            'h-7 shrink-0 whitespace-nowrap border-b-2 -mb-px px-2 text-center text-[11px]',
+                            !enabled && 'cursor-not-allowed opacity-40',
+                            enabled && on
+                              ? 'border-primary font-semibold text-primary'
+                              : enabled
+                                ? 'cursor-pointer border-transparent text-muted-foreground hover:text-foreground'
+                                : 'border-transparent text-muted-foreground'
+                          )}
+                          onClick={() => handleTabClick(name)}
+                        >
+                          {label}
+                        </button>
+                      )
+                    })}
+                  </div>
+                  {showTabSlide ? (
+                    <button
+                      type="button"
+                      title="다음 탭"
+                      aria-label="다음 탭"
+                      disabled={!canScrollTabRight}
+                      onClick={() => scrollTabs(1)}
+                      className={cn(
+                        'inline-flex h-7 w-6 shrink-0 cursor-pointer items-center justify-center border-b-2 border-transparent text-muted-foreground hover:text-foreground',
+                        !canScrollTabRight && 'cursor-not-allowed opacity-30 hover:text-muted-foreground'
+                      )}
+                    >
+                      <ChevronRight className="h-3.5 w-3.5" aria-hidden />
+                    </button>
+                  ) : null}
                 </div>
-                {tab && groupOptions.length > 0 ? (
+                {tab && isTabEnabled(tab) && groupOptions.length > 0 ? (
                   <div className="mt-2 space-y-1.5">
-                    <div className="flex items-center gap-1">
-                      <span className="standard-detail-hit-label w-16 !text-foreground">레이어 그룹</span>
-                      <select
-                        className="standard-detail-hit-select"
-                        value={group || groupOptions[0]?.group || ''}
-                        title="레이어 그룹"
-                        aria-label="레이어 그룹"
-                        onChange={(e) => {
-                          setGroup(e.target.value)
-                          setSelectedId(null)
-                        }}
-                      >
-                        {groupOptions.map((opt) => (
-                          <option key={opt.group} value={opt.group}>
-                            {opt.group}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
+                    {groupOptions.length >= 2 ? (
+                      <div className="flex items-center gap-1">
+                        <span className="standard-detail-hit-label w-16 !text-foreground">레이어 그룹</span>
+                        <select
+                          className="standard-detail-hit-select"
+                          value={group || groupOptions[0]?.group || ''}
+                          title="레이어 그룹"
+                          aria-label="레이어 그룹"
+                          onChange={(e) => {
+                            setGroup(e.target.value)
+                            setSelectedId(null)
+                          }}
+                        >
+                          {groupOptions.map((opt) => (
+                            <option key={opt.group} value={opt.group}>
+                              {opt.group}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    ) : null}
+                    {showLocationFilter ? (
+                      <div className="flex items-center gap-1">
+                        <span className="standard-detail-hit-label w-16 !text-foreground">위치</span>
+                        <div className="grid min-w-0 flex-1 grid-cols-3 gap-1">
+                          <select
+                            value={emdSelected}
+                            onChange={(e) => setEmdSelected(e.target.value)}
+                            className="standard-detail-input h-7 min-w-0 cursor-pointer px-1 text-[11px]"
+                            title="읍면동"
+                            aria-label="읍면동"
+                          >
+                            <option value="">읍면동</option>
+                            {emdOptions.map((opt) => (
+                              <option key={opt.code} value={opt.code}>
+                                {opt.name}
+                              </option>
+                            ))}
+                          </select>
+                          <select
+                            value={riSelected}
+                            onChange={(e) => setRiSelected(e.target.value)}
+                            disabled={!emdSelected}
+                            className="standard-detail-input h-7 min-w-0 cursor-pointer px-1 text-[11px] disabled:cursor-not-allowed disabled:opacity-60"
+                            title={emdSelected ? '리' : '읍면동을 먼저 선택하세요'}
+                            aria-label="리"
+                          >
+                            <option value="">리</option>
+                            {riOptions.map((opt) => (
+                              <option key={opt.code} value={opt.code}>
+                                {opt.name}
+                              </option>
+                            ))}
+                          </select>
+                          <select
+                            value={supplyBlock}
+                            onChange={(e) => setSupplyBlock(e.target.value)}
+                            className="standard-detail-input h-7 min-w-0 cursor-pointer px-1 text-[11px]"
+                            title="급수블록"
+                            aria-label="급수블록"
+                          >
+                            <option value="">급수블록</option>
+                            {supplyBlockOptions.map((opt) => (
+                              <option key={opt.value} value={opt.value}>
+                                {opt.label}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+                    ) : null}
                     <div className="flex items-center gap-1">
                       <span className="standard-detail-hit-label w-16 !text-foreground">통합검색</span>
                       <input
@@ -370,15 +823,13 @@ export function WtlFacilityShell({
                       </button>
                     </div>
                   </div>
-                ) : (
+                ) : groupsLoading || tabsLoading ? null : (
                   <p className="mt-2 px-0.5 text-[11px] text-muted-foreground">
-                    {tab
-                      ? (catalog.emptyNoLayer ?? DEFAULT_CATALOG.emptyNoLayer)
-                      : (catalog.emptyNoTab ?? DEFAULT_CATALOG.emptyNoTab)}
+                    {catalog.emptyNoTab ?? DEFAULT_CATALOG_BASE.emptyNoTab}
                   </p>
                 )}
               </div>
-              {tab && selectedSource ? (
+              {tab && isTabEnabled(tab) && selectedSource ? (
                 <WtlFacilityListView
                   rows={rows}
                   total={total}
@@ -392,7 +843,7 @@ export function WtlFacilityShell({
               ) : (
                 <div className="flex min-h-0 flex-1 items-center justify-center px-3">
                   <p className="text-xs text-muted-foreground">
-                    {catalog.emptyNoQuery ?? DEFAULT_CATALOG.emptyNoQuery}
+                    {catalog.emptyNoQuery ?? DEFAULT_CATALOG_BASE.emptyNoQuery}
                   </p>
                 </div>
               )}

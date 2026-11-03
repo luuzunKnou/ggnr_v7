@@ -44,6 +44,93 @@ const TABLES_JSON_PATH = path.join(
   'tables.json'
 );
 const FIELDS_DIR = path.join(process.cwd(), 'src', 'config', 'defineLayer', 'fields');
+const ADMIN_TABS_JSON_PATH = path.join(
+  process.cwd(),
+  'src',
+  'config',
+  'wtlAdmin',
+  'adminTabs.json'
+);
+
+type AdminTabsJson = {
+  wtlFacility?: unknown;
+  wtlEquipment?: unknown;
+};
+
+/** 탭 라벨 배열 정규화 */
+function normalizeTabLabels(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const item of raw) {
+    const label = String(item ?? '').trim();
+    if (!label || seen.has(label)) continue;
+    seen.add(label);
+    out.push(label);
+  }
+  return out;
+}
+
+/** adminTabs.json — 빌드 후 파일만 고쳐도 반영 (fs 런타임 읽기) */
+function readAdminTabsJson(): AdminTabsJson {
+  try {
+    const raw = fs.readFileSync(ADMIN_TABS_JSON_PATH, 'utf8');
+    const parsed = JSON.parse(raw) as unknown;
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
+    return parsed as AdminTabsJson;
+  } catch {
+    return {};
+  }
+}
+
+/**
+ * 탭별 tables.json 후보 중 DB에 실제 테이블이 하나라도 있으면 활성.
+ * (1) 레이어 등록(tables.json) (2) DB 존재 — 둘 다 충족
+ */
+async function resolveEnabledTabs(
+  tabs: string[],
+  mode: 'facility' | 'equipment'
+): Promise<string[]> {
+  const labels = normalizeTabLabels(tabs);
+  if (labels.length === 0) return [];
+  const tagged: Array<{ tab: string; schema: string; tableName: string }> = [];
+  for (const tab of labels) {
+    const candidates =
+      mode === 'equipment'
+        ? buildEquipmentLayerGroupCandidates(tab)
+        : buildFacilityLayerGroupCandidates(tab);
+    for (const c of candidates) {
+      tagged.push({ tab, schema: c.schema, tableName: c.tableName });
+    }
+  }
+  if (tagged.length === 0) return [];
+  const existing = await existingSchemaTableKeys(tagged);
+  const enabled = new Set<string>();
+  for (const row of tagged) {
+    if (existing.has(`${row.schema}.${row.tableName}`)) enabled.add(row.tab);
+  }
+  return labels.filter((t) => enabled.has(t));
+}
+
+/** 시설관리 탭 종류 (adminTabs.json wtlFacility) + DB·레이어 활성 목록 */
+export async function listFacilityTabs(): Promise<{
+  tabs: string[];
+  enabledTabs: string[];
+}> {
+  const tabs = normalizeTabLabels(readAdminTabsJson().wtlFacility);
+  const enabledTabs = await resolveEnabledTabs(tabs, 'facility');
+  return { tabs, enabledTabs };
+}
+
+/** 설비관리 탭 종류 (adminTabs.json wtlEquipment) + DB·레이어 활성 목록 */
+export async function listEquipmentTabs(): Promise<{
+  tabs: string[];
+  enabledTabs: string[];
+}> {
+  const tabs = normalizeTabLabels(readAdminTabsJson().wtlEquipment);
+  const enabledTabs = await resolveEnabledTabs(tabs, 'equipment');
+  return { tabs, enabledTabs };
+}
 
 const GEOM_COLS = new Set(['geom', 'geometry', 'the_geom', 'wkb_geometry', 'shape']);
 
@@ -222,6 +309,139 @@ export async function listFacilitySources(params: {
   return { sources };
 }
 
+export type WtlFacilityLayerGroupOption = {
+  group: string;
+  tableName: string;
+  schema: string;
+  defineTableGroup: string;
+};
+
+function korNameForDefineTable(tableName: string): string | null {
+  const want = String(tableName ?? '')
+    .trim()
+    .toLowerCase();
+  if (!want) return null;
+  for (const row of loadTablesJson()) {
+    if (
+      String(row.define_table_name ?? '')
+        .trim()
+        .toLowerCase() !== want
+    ) {
+      continue;
+    }
+    const kor = String(row.define_table_kor_name ?? '').trim();
+    if (kor) return kor;
+  }
+  return null;
+}
+
+/** tables.json 후보 (시설: 그룹=define_table_group) */
+function buildFacilityLayerGroupCandidates(
+  tableName: string
+): WtlFacilityLayerGroupOption[] {
+  const kor = korNameForDefineTable(tableName);
+  if (!kor) return [];
+  const seen = new Set<string>();
+  const out: WtlFacilityLayerGroupOption[] = [];
+  for (const row of loadTablesJson()) {
+    if (String(row.define_table_kor_name ?? '').trim() !== kor) continue;
+    const group = String(row.define_table_group ?? '').trim() || '(미분류)';
+    const name = String(row.define_table_name ?? '')
+      .trim()
+      .toLowerCase();
+    if (!name || seen.has(group)) continue;
+    seen.add(group);
+    out.push({
+      group,
+      tableName: name,
+      schema:
+        String(row.define_table_schema ?? '')
+          .trim()
+          .toLowerCase() || 'layer',
+      defineTableGroup: group,
+    });
+  }
+  return out;
+}
+
+/**
+ * tables.json 후보 (설비: 탭 한글명과 동일한 레이어들의 define_table_group 모음).
+ * 시설과 동일 — 그룹 키=define_table_group, 그룹 중복 시 첫 테이블.
+ */
+function buildEquipmentLayerGroupCandidates(
+  tableName: string
+): WtlFacilityLayerGroupOption[] {
+  return buildFacilityLayerGroupCandidates(tableName);
+}
+
+/** information_schema — schema.table 키 집합 */
+async function existingSchemaTableKeys(
+  candidates: Array<{ schema: string; tableName: string }>
+): Promise<Set<string>> {
+  const uniq = new Map<string, { schema: string; tableName: string }>();
+  for (const c of candidates) {
+    const schema =
+      String(c.schema ?? 'layer')
+        .trim()
+        .toLowerCase() || 'layer';
+    const tableName = String(c.tableName ?? '')
+      .trim()
+      .toLowerCase();
+    if (!tableName) continue;
+    uniq.set(`${schema}.${tableName}`, { schema, tableName });
+  }
+  if (uniq.size === 0) return new Set();
+  const orSql = [...uniq.values()]
+    .map(
+      (c) =>
+        `(table_schema = '${esc(c.schema)}' AND lower(table_name) = '${esc(c.tableName)}')`
+    )
+    .join(' OR ');
+  const res = await db.execute(
+    sql.raw(
+      `SELECT table_schema AS s, lower(table_name) AS t
+       FROM information_schema.tables
+       WHERE ${orSql}`
+    )
+  );
+  const out = new Set<string>();
+  for (const row of res.rows ?? []) {
+    const s = String((row as { s?: string }).s ?? '')
+      .trim()
+      .toLowerCase();
+    const t = String((row as { t?: string }).t ?? '')
+      .trim()
+      .toLowerCase();
+    if (s && t) out.add(`${s}.${t}`);
+  }
+  return out;
+}
+
+/**
+ * 레이어 그룹 select 옵션 — tables.json 후보 중 DB에 실제 존재하는 테이블만.
+ * mode: facility | equipment — 모두 그룹=define_table_group (탭 한글명 동일 레이어 모음)
+ */
+export async function listFacilityLayerGroups(params: {
+  tableName?: string;
+  mode?: 'facility' | 'equipment';
+} = {}): Promise<{ options: WtlFacilityLayerGroupOption[] }> {
+  const tableName = String(params.tableName ?? '')
+    .trim()
+    .toLowerCase();
+  if (!tableName) return { options: [] };
+  const mode = params.mode === 'equipment' ? 'equipment' : 'facility';
+  const candidates =
+    mode === 'equipment'
+      ? buildEquipmentLayerGroupCandidates(tableName)
+      : buildFacilityLayerGroupCandidates(tableName);
+  if (candidates.length === 0) return { options: [] };
+  const existing = await existingSchemaTableKeys(candidates);
+  const options = candidates.filter((c) =>
+    existing.has(`${c.schema}.${c.tableName}`)
+  );
+  return { options };
+}
+
 /**
  * 선택 테이블 행 목록.
  * keyword: define_field 전 컬럼 ILIKE + CODE 필드는 한글명 매칭 코드 IN.
@@ -230,6 +450,8 @@ export async function listFacilityRows(params: {
   table?: string;
   schema?: string;
   keyword?: string;
+  /** EPSG:5181 위치 도형(읍면동·리·급수블록). 있으면 ST_Within */
+  areaWkts5181?: string[] | null;
   limit?: number;
   offset?: number;
 } = {}): Promise<{
@@ -247,6 +469,9 @@ export async function listFacilityRows(params: {
       .trim()
       .toLowerCase() || 'layer';
   const keyword = String(params.keyword ?? '').trim();
+  const areaWkts = (params.areaWkts5181 ?? [])
+    .map((w) => String(w ?? '').trim())
+    .filter(Boolean);
   const limit = Math.max(1, Math.min(Number(params.limit) || 500, 2000));
   const offset = Math.max(0, Number(params.offset) || 0);
 
@@ -315,6 +540,20 @@ export async function listFacilityRows(params: {
       ),
     ];
     if (parts.length > 0) wheres.push(`(${parts.join(' OR ')})`);
+  }
+
+  if (areaWkts.length > 0) {
+    if (!geomCol) {
+      wheres.push('FALSE');
+    } else {
+      const gq = geomCol.replace(/"/g, '""');
+      for (const wkt of areaWkts) {
+        // 관망조회와 동일: ST_Within — 경계만 맞닿은 도형 제외
+        wheres.push(
+          `ST_Within(t."${gq}", ST_Transform(ST_GeomFromText('${esc(wkt)}', 5181), ST_SRID(t."${gq}")))`
+        );
+      }
+    }
   }
 
   const whereSql = wheres.join(' AND ');

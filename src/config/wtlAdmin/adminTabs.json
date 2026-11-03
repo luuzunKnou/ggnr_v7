@@ -1,0 +1,23 @@
+{
+  "_comment": "상수 시설관리·설비관리 상단 탭. 키=serEng(wtlFacility·wtlEquipment), 값은 define_table_name(영문). 화면 탭 문구는 tables.json 한글명. 서버 런타임 조회로 재빌드 없이 수정 반영.",
+  "wtlFacility": [
+    "wtl_gain_ps",
+    "wtl_puri_as",
+    "wtl_serv_ps",
+    "wtl_pres_ps",
+    "wtl_rsrv_ps",
+    "wtl_fire_ps",
+    "wtl_flow_ps",
+    "wtl_prga_ps",
+    "cus_cctv_ps"
+  ],
+  "wtlEquipment": [
+    "wtl_pres_pm_ps",
+    "wtl_puri_dt_ps",
+    "wtl_valv_ps",
+    "ufl_btrs_ps",
+    "wtl_infeed_ps",
+    "wtl_meter_ps",
+    "wtl_pres_hj_ps"
+  ]
+}

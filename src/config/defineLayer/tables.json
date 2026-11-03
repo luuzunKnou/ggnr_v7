@@ -672,6 +672,18 @@
     "define_table_source": "excel"
   },
   {
+    "define_table_name": "ub960",
+    "define_table_kor_name": "ub960",
+    "define_table_shp_type": "POLYGON",
+    "define_table_read_share": "P",
+    "define_table_write_share": "P",
+    "define_table_group": "",
+    "define_table_idx": "0",
+    "define_table_etc": "",
+    "define_table_schema": "public_layer",
+    "define_table_source": "shp"
+  },
+  {
     "define_table_name": "ue101",
     "define_table_kor_name": "ue101",
     "define_table_shp_type": "POLYGON",
@@ -5558,7 +5570,7 @@
   },
   {
     "define_table_name": "wtl_pres_hj_ps",
-    "define_table_kor_name": "가압장 흡수정현황",
+    "define_table_kor_name": "가압장 흡수정",
     "define_table_shp_type": "POINT",
     "define_table_read_share": "P",
     "define_table_write_share": "P",
@@ -5570,7 +5582,7 @@
   },
   {
     "define_table_name": "wtl_pres_pm_ps",
-    "define_table_kor_name": "가압장 펌프현황",
+    "define_table_kor_name": "가압장 펌프",
     "define_table_shp_type": "POINT",
     "define_table_read_share": "P",
     "define_table_write_share": "P",
@@ -5582,7 +5594,7 @@
   },
   {
     "define_table_name": "wtl_puri_dt_ps",
-    "define_table_kor_name": "정수장 펌프현황",
+    "define_table_kor_name": "정수장 펌프",
     "define_table_shp_type": "POINT",
     "define_table_read_share": "P",
     "define_table_write_share": "P",
@@ -5743,6 +5755,30 @@
     "define_table_source": "shp"
   },
   {
+    "define_table_name": "wtl_infeed_ps",
+    "define_table_kor_name": "염소투입설비",
+    "define_table_shp_type": "POLYGON",
+    "define_table_read_share": "P",
+    "define_table_write_share": "P",
+    "define_table_group": "상수",
+    "define_table_idx": "900",
+    "define_table_etc": "",
+    "define_table_schema": "layer",
+    "define_table_source": "shp"
+  },
+  {
+    "define_table_name": "wtl_meter_ps",
+    "define_table_kor_name": "수질계측기",
+    "define_table_shp_type": "POLYGON",
+    "define_table_read_share": "P",
+    "define_table_write_share": "P",
+    "define_table_group": "상수",
+    "define_table_idx": "1000",
+    "define_table_etc": "",
+    "define_table_schema": "layer",
+    "define_table_source": "shp"
+  },
+  {
     "define_table_name": "wtl_task_as",
     "define_table_kor_name": "상수 업데이트 내역",
     "define_table_shp_type": "POLYGON",
@@ -5774,30 +5810,6 @@
     "define_table_write_share": "P",
     "define_table_group": "상수",
     "define_table_idx": "5200",
-    "define_table_etc": "",
-    "define_table_schema": "layer",
-    "define_table_source": "shp"
-  },
-  {
-    "define_table_name": "wtl_infeed_ps",
-    "define_table_kor_name": "염소투입설비",
-    "define_table_shp_type": "POINT",
-    "define_table_read_share": "P",
-    "define_table_write_share": "P",
-    "define_table_group": "상수",
-    "define_table_idx": "900",
-    "define_table_etc": "",
-    "define_table_schema": "layer",
-    "define_table_source": "shp"
-  },
-  {
-    "define_table_name": "wtl_meter_ps",
-    "define_table_kor_name": "수질계측기",
-    "define_table_shp_type": "POINT",
-    "define_table_read_share": "P",
-    "define_table_write_share": "P",
-    "define_table_group": "상수",
-    "define_table_idx": "1000",
     "define_table_etc": "",
     "define_table_schema": "layer",
     "define_table_source": "shp"
@@ -11486,18 +11498,6 @@
     "define_table_idx": "0",
     "define_table_etc": "",
     "define_table_schema": "layer",
-    "define_table_source": "shp"
-  },
-  {
-    "define_table_name": "ub960",
-    "define_table_kor_name": "ub960",
-    "define_table_shp_type": "POLYGON",
-    "define_table_read_share": "P",
-    "define_table_write_share": "P",
-    "define_table_group": "",
-    "define_table_idx": "0",
-    "define_table_etc": "",
-    "define_table_schema": "public_layer",
     "define_table_source": "shp"
   }
 ]

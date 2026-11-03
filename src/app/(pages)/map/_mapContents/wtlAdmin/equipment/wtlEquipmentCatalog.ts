@@ -1,24 +1,8 @@
 /**
- * 설비관리 탭 — 기존 설비 종류 기준.
- * tables.json define_table_kor_name 정확 일치 또는「{종류}현황」포함 시 활성.
+ * 설비관리 그룹·활성 판별 — 탭 키는 adminTabs.json wtlEquipment(영문 테이블명)
  */
 import tablesJson from '@/config/defineLayer/tables.json'
 import type { WtlFacilityGroupOption } from '../facility/wtlFacilityCatalog'
-
-/** 기존 설비관리 목업 종류 순서 */
-export const EQUIPMENT_TABS = [
-  '펌프',
-  '모터',
-  '밸브',
-  '변압기',
-  '염소투입설비',
-  '수질계측기',
-  '계측기',
-  '여과장치',
-  '흡수정',
-] as const
-
-export type EquipmentTab = (typeof EQUIPMENT_TABS)[number]
 
 type TablesJsonRow = {
   define_table_name?: string
@@ -29,62 +13,78 @@ type TablesJsonRow = {
 
 const ROWS = (Array.isArray(tablesJson) ? tablesJson : []) as TablesJsonRow[]
 
-/** 한글명이 종류와 같거나「종류+현황」을 포함하면 매칭 (펌프장 등 시설명 제외) */
-export function tableMatchesEquipmentKind(korName: string, kind: string): boolean {
-  const kor = String(korName ?? '').trim()
-  const k = String(kind ?? '').trim()
-  if (!kor || !k) return false
-  if (kor === k) return true
-  if (kor.includes(`${k}현황`)) return true
-  return false
+function normalizeTableName(raw: string): string {
+  return String(raw ?? '')
+    .trim()
+    .toLowerCase()
 }
 
+/** define_table_name → 한글명 (없으면 영문명 그대로) */
+export function equipmentTabLabel(tableName: string): string {
+  const want = normalizeTableName(tableName)
+  if (!want) return ''
+  for (const row of ROWS) {
+    if (normalizeTableName(String(row.define_table_name ?? '')) !== want) continue
+    const kor = String(row.define_table_kor_name ?? '').trim()
+    if (kor) return kor
+  }
+  return String(tableName ?? '').trim()
+}
+
+function korNameForTable(tableName: string): string | null {
+  const want = normalizeTableName(tableName)
+  if (!want) return null
+  for (const row of ROWS) {
+    if (normalizeTableName(String(row.define_table_name ?? '')) !== want) continue
+    const kor = String(row.define_table_kor_name ?? '').trim()
+    if (kor) return kor
+  }
+  return null
+}
+
+/** 영문 테이블명이 tables.json에 있으면 활성 */
 export function isEquipmentTabEnabled(tab: string): boolean {
-  const kind = String(tab ?? '').trim()
-  if (!kind) return false
-  return ROWS.some((r) =>
-    tableMatchesEquipmentKind(String(r.define_table_kor_name ?? ''), kind)
-  )
+  const want = normalizeTableName(tab)
+  if (!want) return false
+  return ROWS.some((r) => normalizeTableName(String(r.define_table_name ?? '')) === want)
 }
 
-export function listEnabledEquipmentTabs(): EquipmentTab[] {
-  return EQUIPMENT_TABS.filter((t) => isEquipmentTabEnabled(t))
+export function listEnabledEquipmentTabs(tabs: readonly string[]): string[] {
+  return tabs.filter((t) => isEquipmentTabEnabled(t))
 }
 
 /**
- * 종류에 매칭되는 레이어 옵션.
- * select 라벨은 한글명(가압장 펌프현황 등). 동일 한글명·그룹 중복 시 첫 테이블만.
+ * 탭(영문 테이블명) 한글명과 동일한 레이어들의 define_table_group 모음.
+ * 동일 그룹 중복 시 첫 테이블만 (시설관리와 동일).
  */
-export function listEquipmentGroupOptions(kind: string): WtlFacilityGroupOption[] {
-  const k = String(kind ?? '').trim()
-  if (!k) return []
+export function listEquipmentGroupOptions(tableName: string): WtlFacilityGroupOption[] {
+  const kor = korNameForTable(tableName)
+  if (!kor) return []
   const seen = new Set<string>()
   const out: WtlFacilityGroupOption[] = []
   for (const row of ROWS) {
-    const kor = String(row.define_table_kor_name ?? '').trim()
-    if (!tableMatchesEquipmentKind(kor, k)) continue
-    const tableName = String(row.define_table_name ?? '')
-      .trim()
-      .toLowerCase()
-    if (!tableName) continue
-    const label = kor || tableName
-    if (seen.has(label)) continue
-    seen.add(label)
+    if (String(row.define_table_kor_name ?? '').trim() !== kor) continue
+    const name = normalizeTableName(String(row.define_table_name ?? ''))
+    if (!name) continue
+    const defineTableGroup = String(row.define_table_group ?? '').trim() || '(미분류)'
+    if (seen.has(defineTableGroup)) continue
+    seen.add(defineTableGroup)
     out.push({
-      group: label,
-      tableName,
+      group: defineTableGroup,
+      tableName: name,
       schema:
         String(row.define_table_schema ?? '')
           .trim()
           .toLowerCase() || 'layer',
+      defineTableGroup,
     })
   }
   return out
 }
 
-export function listAllEquipmentUndergroundTableNames(): string[] {
+export function listAllEquipmentUndergroundTableNames(tabs: readonly string[]): string[] {
   const out = new Set<string>()
-  for (const tab of EQUIPMENT_TABS) {
+  for (const tab of tabs) {
     for (const opt of listEquipmentGroupOptions(tab)) {
       if (opt.tableName) out.add(opt.tableName)
     }

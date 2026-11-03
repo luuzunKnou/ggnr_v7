@@ -332,102 +332,117 @@ export function WtlMeterLocationShell({ leftOffsetPx, onTotalWidthChange, onClos
         leftOffsetPx={leftOffsetPx}
         onWidthChange={setWidth}
       >
-        <div className="flex h-full min-h-0 flex-col bg-white">
-          <div className="flex shrink-0 items-center justify-between border-b border-slate-200 px-3 py-2.5">
-            <h2 className="text-sm font-semibold text-slate-800">계량기위치</h2>
-            <button
-              type="button"
-              className="cursor-pointer rounded p-1 text-slate-500 hover:bg-slate-100 hover:text-slate-800"
-              aria-label="닫기"
-              title="닫기"
-              onClick={onClose}
-            >
-              <X className="h-4 w-4" aria-hidden />
-            </button>
+        <div className="standard-panel-root">
+          <div className="standard-panel-header">
+            <span className="standard-panel-title min-w-0 truncate">계량기위치</span>
+            <div className="flex shrink-0 items-center gap-1.5">
+              <button
+                type="button"
+                title={
+                  printing
+                    ? '캡처 중…'
+                    : running
+                      ? '조회 중에는 인쇄할 수 없습니다'
+                      : zones.filter((z) => z.navigable).length === 0
+                        ? '인쇄할 목록이 없습니다'
+                        : '보고서 인쇄'
+                }
+                disabled={
+                  running ||
+                  printing ||
+                  zones.filter((z) => z.navigable).length === 0
+                }
+                onClick={() => void handlePrintReport()}
+                className="standard-detail-hdr-btn"
+              >
+                <Printer className="h-3 w-3" aria-hidden />
+                {printing ? '캡처 중…' : '보고서 인쇄'}
+              </button>
+              <button
+                type="button"
+                className="standard-panel-close cursor-pointer"
+                aria-label="닫기"
+                title="닫기"
+                onClick={onClose}
+              >
+                <X className="h-4 w-4" aria-hidden />
+              </button>
+            </div>
           </div>
-          <div className="flex min-h-0 flex-1 flex-col gap-2 p-3">
-            <p className="text-xs text-slate-500">
-              목록에 추가할 계량기 번호를 입력해주세요
-            </p>
+
+          <div className="standard-filter-section">
+            <div className="flex items-center justify-between gap-2">
+              <p className="standard-detail-hint min-w-0 flex-1 !text-[11px]">
+                목록에 추가할 계량기 번호 또는 주소를 입력해주세요
+              </p>
+              <button
+                type="button"
+                disabled={running}
+                title="일괄 입력"
+                onClick={() => setBulkOpen(true)}
+                className="standard-detail-hdr-btn shrink-0"
+              >
+                일괄 입력
+              </button>
+            </div>
             <div className="flex items-center gap-1.5">
               <MeterNumberSuggestInput
                 value={input}
                 onChange={setInput}
                 onSubmit={() => void handleAdd()}
                 disabled={running}
-                className="h-8 min-w-0 flex-1 rounded-md border border-slate-200 px-2 text-xs text-slate-800 outline-none focus:border-slate-400 disabled:opacity-50"
+                className="standard-detail-input h-7 min-w-0 flex-1 disabled:opacity-50"
                 placeholder="계량기 번호 또는 주소"
               />
               <button
                 type="button"
                 disabled={running}
-                title="추가"
+                title={running ? '조회 중' : '추가'}
                 onClick={() => void handleAdd()}
-                className="inline-flex h-8 shrink-0 cursor-pointer items-center rounded border border-primary bg-primary px-2.5 text-xs font-medium text-white hover:bg-primary/90 disabled:opacity-50"
+                className="standard-detail-hdr-btn-save shrink-0"
               >
                 {running ? '조회 중' : '추가'}
               </button>
               <button
                 type="button"
-                disabled={running}
-                title="일괄 입력"
-                onClick={() => setBulkOpen(true)}
-                className="inline-flex h-8 shrink-0 cursor-pointer items-center rounded border border-slate-200 bg-white px-2.5 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
-              >
-                일괄 입력
-              </button>
-              <button
-                type="button"
                 title="지우기"
                 onClick={handleClear}
-                className="inline-flex h-8 shrink-0 cursor-pointer items-center rounded border border-slate-200 bg-white px-2.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
+                className="standard-detail-hdr-btn shrink-0"
               >
                 지우기
               </button>
             </div>
-            {notice && <p className="text-xs text-slate-600">{notice}</p>}
-            {rows.length > 0 && (
-              <p className="shrink-0 text-xs text-slate-600">
-                필지 {counts.parcels}
-                {counts.point > 0 ? ` · 위치만 ${counts.point}` : ''}
-                {counts.miss > 0 ? ` · 못 찾음 ${counts.miss}` : ''}
-                {zones.filter((z) => z.navigable).length > 0
-                  ? ` · 구역 ${zones.filter((z) => z.navigable).length}`
-                  : ''}
-              </p>
-            )}
-            <div className="min-h-0 flex-1 overflow-auto rounded-md border border-slate-200">
-              <table className="w-full border-collapse text-xs">
-                <thead className="sticky top-0 z-10 bg-slate-50">
-                  <tr className="border-b border-slate-200 text-left text-slate-600">
-                    <th className="w-16 px-2 py-1.5 font-medium">구역</th>
-                    <th className="px-2 py-1.5 font-medium">
-                      <div className="flex items-center justify-between gap-2">
-                        <span>계량기 목록</span>
-                        <button
-                          type="button"
-                          title="보고서 인쇄"
-                          disabled={
-                            running ||
-                            printing ||
-                            zones.filter((z) => z.navigable).length === 0
-                          }
-                          onClick={() => void handlePrintReport()}
-                          className="inline-flex h-7 shrink-0 cursor-pointer items-center rounded border border-slate-200 bg-white px-2 text-[11px] font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
-                        >
-                          {printing ? '캡처 중…' : '보고서 인쇄'}
-                        </button>
-                      </div>
+            {notice ? <p className="standard-detail-hint !text-[11px]">{notice}</p> : null}
+          </div>
+
+          {rows.length > 0 ? (
+            <div className="standard-list-footer border-b border-t-0">
+              필지 {counts.parcels}
+              {counts.point > 0 ? ` · 위치만 ${counts.point}` : ''}
+              {counts.miss > 0 ? ` · 못 찾음 ${counts.miss}` : ''}
+              {zones.filter((z) => z.navigable).length > 0
+                ? ` · 구역 ${zones.filter((z) => z.navigable).length}`
+                : ''}
+            </div>
+          ) : null}
+
+          <div className="standard-list-body">
+            <div className="standard-list-scroll">
+              <table className="standard-list-table">
+                <thead className="standard-table-thead">
+                  <tr>
+                    <th className="standard-table-th standard-table-th-left w-20 !max-w-none whitespace-nowrap">
+                      구역
+                    </th>
+                    <th className="standard-table-th standard-table-th-left">
+                      계량기 목록
                     </th>
                   </tr>
                 </thead>
                 <tbody>
                   {rows.length === 0 ? (
                     <tr>
-                      <td
-                        colSpan={2}
-                        className="px-2 py-6 text-center text-slate-400"
-                      >
+                      <td colSpan={2} className="standard-table-empty">
                         표시 결과가 없습니다.
                       </td>
                     </tr>
@@ -441,18 +456,24 @@ export function WtlMeterLocationShell({ leftOffsetPx, onTotalWidthChange, onClos
                           <tr
                             key={`${zone.zoneId}-${row.id}`}
                             className={cn(
-                              'border-b border-slate-100 last:border-b-0',
-                              selectedMeter && 'bg-slate-100'
+                              'standard-list-row',
+                              selectedMeter && 'standard-list-row-selected',
+                              row.status === 'miss' && 'cursor-default opacity-70'
                             )}
                           >
                             {idx === 0 ? (
                               <td
                                 rowSpan={zone.rowIds.length}
-                                title={zone.navigable ? `${zone.label}로 이동` : zone.label}
+                                title={
+                                  zone.navigable
+                                    ? `${zone.label}로 이동`
+                                    : zone.label
+                                }
                                 className={cn(
-                                  'align-top border-r border-slate-100 px-2 py-1.5 font-medium text-slate-700',
-                                  zone.navigable &&
-                                    'cursor-pointer hover:bg-slate-50 hover:text-primary'
+                                  'standard-table-td-text align-top font-medium',
+                                  zone.navigable
+                                    ? 'cursor-pointer hover:text-primary'
+                                    : 'text-muted-foreground'
                                 )}
                                 onClick={() =>
                                   handleZoneClick(
@@ -462,17 +483,10 @@ export function WtlMeterLocationShell({ leftOffsetPx, onTotalWidthChange, onClos
                                   )
                                 }
                               >
-                                <span
-                                  className={cn(
-                                    'text-xs font-medium',
-                                    zone.navigable ? 'text-inherit' : 'text-slate-400'
-                                  )}
-                                >
-                                  {zone.label}
-                                </span>
+                                {zone.label}
                               </td>
                             ) : null}
-                            <td className="px-0 py-0">
+                            <td className="p-0">
                               <button
                                 type="button"
                                 disabled={row.status === 'miss'}
@@ -480,15 +494,14 @@ export function WtlMeterLocationShell({ leftOffsetPx, onTotalWidthChange, onClos
                                 onClick={() => handleMeterClick(row)}
                                 className={cn(
                                   'flex w-full flex-col items-start px-2 py-1.5 text-left',
-                                  row.status !== 'miss' &&
-                                    'cursor-pointer hover:bg-slate-50',
+                                  row.status !== 'miss' && 'cursor-pointer',
                                   row.status === 'miss' && 'cursor-default'
                                 )}
                               >
-                                <span className="block w-full truncate text-xs text-slate-800">
+                                <span className="block w-full truncate text-xs text-foreground">
                                   {row.input}
                                 </span>
-                                <span className="block w-full truncate text-[11px] text-slate-500">
+                                <span className="block w-full truncate text-[11px] text-muted-foreground">
                                   {row.detail}
                                 </span>
                               </button>
