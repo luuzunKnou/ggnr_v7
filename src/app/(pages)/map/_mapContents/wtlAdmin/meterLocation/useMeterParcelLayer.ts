@@ -1,12 +1,16 @@
 'use client'
 
-import { useEffect, useRef } from 'react'
+import { useEffect, useMemo, useRef } from 'react'
 import type Map from 'ol/Map'
 import GeoJSON from 'ol/format/GeoJSON'
+import ImageLayer from 'ol/layer/Image'
 import VectorLayer from 'ol/layer/Vector'
+import ImageWMS from 'ol/source/ImageWMS'
 import VectorSource from 'ol/source/Vector'
 import { Circle, Fill, Stroke, Style, Text } from 'ol/style'
-import { createEmpty, extend as extendExtent, isEmpty } from 'ol/extent'
+import { geoserverWmsImageLoadFunction } from '@/lib/geoserverWmsImageLoad'
+import { getGeoServerBase } from '@/lib/geoserverUrl'
+import { WORKSPACE } from '../../../_mapComponents/layerFactory/serviceLayerFactory'
 import {
   prepareMapForPanelAwareNavigation,
   scheduleFitMapToExtent3857,
@@ -31,14 +35,6 @@ function labelText(label: string, offsetY: number): Text {
   })
 }
 
-function parcelStyle(label: string): Style {
-  return new Style({
-    fill: new Fill({ color: 'rgba(50, 118, 195, 0.35)' }),
-    stroke: new Stroke({ color: '#1d4ed8', width: 2 }),
-    text: labelText(label, 0),
-  })
-}
-
 function pointStyle(label: string): Style {
   return new Style({
     image: new Circle({
@@ -50,15 +46,29 @@ function pointStyle(label: string): Style {
   })
 }
 
-/**
- * 구역 extent로 이동한 뒤 축척막대를 80~100m 밴드로 맞춘다.
- * extent가 크면 fit 우선(축소 허용), 작으면 목표 90m로 확대.
- */
+function normalizeZoneExtent(extent: number[]): [number, number, number, number] | null {
+  if (extent.length !== 4 || !extent.every((v) => Number.isFinite(v))) return null
+  let [xmin, ymin, xmax, ymax] = extent as [number, number, number, number]
+  if (xmax < xmin) [xmin, xmax] = [xmax, xmin]
+  if (ymax < ymin) [ymin, ymax] = [ymax, ymin]
+  const w = xmax - xmin
+  const h = ymax - ymin
+  if (w < 2 && h < 2) {
+    const cx = (xmin + xmax) / 2
+    const cy = (ymin + ymax) / 2
+    const pad = 40
+    return [cx - pad, cy - pad, cx + pad, cy + pad]
+  }
+  return [xmin, ymin, xmax, ymax]
+}
+
 function fitZoneExtentWithScaleBand(
   map: Map,
-  extent: number[],
+  extentRaw: number[],
   applyMapViewPadding?: (() => void) | null
 ): void {
+  const extent = normalizeZoneExtent(extentRaw)
+  if (!extent) return
   prepareMapForPanelAwareNavigation(map, applyMapViewPadding)
   const view = map.getView()
   const size = map.getSize()
@@ -67,11 +77,10 @@ function fitZoneExtentWithScaleBand(
   const fitPadding: [number, number, number, number] = [80, 80, 80, 80]
   const availW = Math.max(1, size[0] - fitPadding[1] - fitPadding[3])
   const availH = Math.max(1, size[1] - fitPadding[0] - fitPadding[2])
-  let resolution = view.getResolutionForExtent(extent as [number, number, number, number], [
-    availW,
-    availH,
-  ])
-  if (!Number.isFinite(resolution) || resolution <= 0) return
+  let resolution = view.getResolutionForExtent(extent, [availW, availH])
+  if (!Number.isFinite(resolution) || resolution <= 0) {
+    resolution = ZONE_TARGET_SCALE_M / SCALE_BAR_PX
+  }
 
   const scaleAtFit = resolution * SCALE_BAR_PX
   const maxRes = ZONE_MAX_SCALE_M / SCALE_BAR_PX
@@ -79,15 +88,15 @@ function fitZoneExtentWithScaleBand(
   const targetRes = ZONE_TARGET_SCALE_M / SCALE_BAR_PX
 
   if (scaleAtFit > ZONE_MAX_SCALE_M) {
-    // 구역이 커서 100m보다 더 축소해야 함 — fit 유지
+    // fit 유지
   } else if (scaleAtFit < ZONE_MIN_SCALE_M) {
     resolution = targetRes
   } else {
     resolution = Math.min(maxRes, Math.max(minRes, resolution))
   }
 
-  const cx = (extent[0]! + extent[2]!) / 2
-  const cy = (extent[1]! + extent[3]!) / 2
+  const cx = (extent[0] + extent[2]) / 2
+  const cy = (extent[1] + extent[3]) / 2
   view.animate({
     center: [cx, cy],
     resolution,
@@ -95,14 +104,35 @@ function fitZoneExtentWithScaleBand(
   })
 }
 
+function buildJijukPnuCql(pnus: string[]): string | undefined {
+  const unique = [...new Set(pnus.map((p) => p.replace(/\D/g, '').slice(0, 19)).filter(Boolean))]
+  if (unique.length === 0) return undefined
+  // GeoServer CQL — 기존 jijuk 스타일 유지, PNU만 필터
+  const list = unique.map((p) => `'${p.replace(/'/g, "''")}'`).join(',')
+  return `pnu IN (${list})`
+}
+
+/**
+ * 계량기 점(벡터) + 필지는 기존 jijuk WMS 스타일 + PNU CQL.
+ */
 export function useMeterParcelLayer(
   rows: MeterLocateResult[],
   focusId: string | null,
   zoneFocusKey: string | null,
-  zoneRowIds: string[] | null
+  zoneExtent3857: [number, number, number, number] | null
 ) {
   const mapContext = useMapContext()
   const sourceRef = useRef<VectorSource | null>(null)
+  const jijukLayerRef = useRef<ImageLayer<ImageWMS> | null>(null)
+
+  const pnuList = useMemo(() => {
+    const set = new Set<string>()
+    for (const row of rows) {
+      const pnu = String(row.pnu ?? '').replace(/\D/g, '').slice(0, 19)
+      if (pnu) set.add(pnu)
+    }
+    return [...set]
+  }, [rows])
 
   useEffect(() => {
     const map = mapContext?.mapInstanceRef?.current
@@ -110,15 +140,34 @@ export function useMeterParcelLayer(
 
     const source = new VectorSource()
     sourceRef.current = source
-    const layer = new VectorLayer({ source, declutter: true, zIndex: 860 })
-    layer.set('wtlMeterParcels', true)
-    map.addLayer(layer)
+    const pointLayer = new VectorLayer({ source, declutter: true, zIndex: 870 })
+    pointLayer.set('wtlMeterParcels', true)
+    map.addLayer(pointLayer)
 
-    const drawn = rows.filter(
-      (row) =>
-        (row.status === 'shown' && row.geometry4326) ||
-        (row.status === 'point' && row.point4326)
-    )
+    const geoServerBase = getGeoServerBase()
+    const jijukLayer = new ImageLayer({
+      minZoom: 16,
+      source: new ImageWMS({
+        url: `${geoServerBase}/${WORKSPACE}/wms`,
+        params: {
+          LAYERS: `${WORKSPACE}:jijuk`,
+          STYLES: 'jijuk',
+          TRANSPARENT: true,
+          FORMAT: 'image/png',
+        },
+        serverType: 'geoserver',
+        ratio: 1.5,
+        imageLoadFunction: geoserverWmsImageLoadFunction,
+      }),
+      zIndex: 860,
+      visible: false,
+    })
+    jijukLayer.set('wtlMeterJijuk', true)
+    jijukLayer.set('layerTableName', 'jijuk')
+    jijukLayerRef.current = jijukLayer
+    map.addLayer(jijukLayer)
+
+    const drawn = rows.filter((row) => row.status !== 'miss' && row.point4326)
     if (drawn.length > 0) {
       try {
         const features = new GeoJSON().readFeatures(
@@ -126,12 +175,8 @@ export function useMeterParcelLayer(
             type: 'FeatureCollection',
             features: drawn.map((row) => ({
               type: 'Feature',
-              geometry:
-                row.geometry4326 ??
-                (row.point4326
-                  ? { type: 'Point', coordinates: row.point4326 }
-                  : null),
-              properties: { label: row.input, rowId: row.id, kind: row.status },
+              geometry: { type: 'Point', coordinates: row.point4326 },
+              properties: { label: row.input, rowId: row.id },
             })),
           },
           { dataProjection: 'EPSG:4326', featureProjection: 'EPSG:3857' }
@@ -140,18 +185,9 @@ export function useMeterParcelLayer(
           const rowId = String(feature.get('rowId') ?? '')
           const label = String(feature.get('label') ?? '')
           feature.setId(rowId)
-          feature.setStyle(
-            feature.get('kind') === 'point' ? pointStyle(label) : parcelStyle(label)
-          )
+          feature.setStyle(pointStyle(label))
         }
         source.addFeatures(features)
-        const extent = source.getExtent()
-        if (extent.every((value) => Number.isFinite(value))) {
-          scheduleFitMapToExtent3857(map, extent, {
-            maxZoom: 18,
-            applyMapViewPadding: mapContext?.applyMapViewPaddingRef?.current,
-          })
-        }
       } catch {
         source.clear()
       }
@@ -159,9 +195,32 @@ export function useMeterParcelLayer(
 
     return () => {
       sourceRef.current = null
-      map.removeLayer(layer)
+      jijukLayerRef.current = null
+      map.removeLayer(pointLayer)
+      map.removeLayer(jijukLayer)
     }
-  }, [mapContext?.applyMapViewPaddingRef, mapContext?.mapInstanceRef, mapContext?.mapReady, rows])
+  }, [mapContext?.mapInstanceRef, mapContext?.mapReady, rows])
+
+  useEffect(() => {
+    const layer = jijukLayerRef.current
+    const source = layer?.getSource()
+    if (!layer || !source) return
+    const cql = buildJijukPnuCql(pnuList)
+    if (!cql) {
+      layer.setVisible(false)
+      source.updateParams({ CQL_FILTER: 'INCLUDE' })
+      return
+    }
+    layer.setVisible(true)
+    source.setImageLoadFunction(geoserverWmsImageLoadFunction)
+    source.updateParams({
+      LAYERS: `${WORKSPACE}:jijuk`,
+      STYLES: 'jijuk',
+      CQL_FILTER: cql,
+      // 캐시 무력화
+      _ts: Date.now(),
+    })
+  }, [pnuList])
 
   useEffect(() => {
     const map = mapContext?.mapInstanceRef?.current
@@ -176,18 +235,10 @@ export function useMeterParcelLayer(
   }, [focusId, mapContext?.applyMapViewPaddingRef, mapContext?.mapInstanceRef])
 
   useEffect(() => {
-    if (!zoneFocusKey || !zoneRowIds || zoneRowIds.length === 0) return
+    if (!zoneFocusKey || !zoneExtent3857) return
     const map = mapContext?.mapInstanceRef?.current
-    const source = sourceRef.current
-    if (!map || !source) return
-
-    const extent = createEmpty()
-    for (const id of zoneRowIds) {
-      const geom = source.getFeatureById(id)?.getGeometry()
-      if (!geom) continue
-      extendExtent(extent, geom.getExtent())
-    }
-    if (isEmpty(extent) || !extent.every((v) => Number.isFinite(v))) return
+    if (!map) return
+    const extent = [...zoneExtent3857]
 
     const run = () => {
       fitZoneExtentWithScaleBand(map, extent, mapContext?.applyMapViewPaddingRef?.current)
@@ -199,7 +250,7 @@ export function useMeterParcelLayer(
     })
   }, [
     zoneFocusKey,
-    zoneRowIds,
+    zoneExtent3857,
     mapContext?.applyMapViewPaddingRef,
     mapContext?.mapInstanceRef,
   ])

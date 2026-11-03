@@ -17,6 +17,8 @@ export type MeterLocateResult = {
   detail: string
   geometry4326: Record<string, unknown> | null
   point4326: [number, number] | null
+  /** public_layer.jijuk PNU — 필지 건수(고유) 집계용 */
+  pnu: string | null
 }
 
 export function parseMeterAddressLines(text: string): string[] {
@@ -91,20 +93,34 @@ function pickAddress(
   return ranked[0]?.item ?? null
 }
 
+type ParcelHit = {
+  geometry4326: Record<string, unknown>
+  pnu: string | null
+}
+
 async function fetchParcelGeometry(params: {
   x?: number
   y?: number
   pnu?: string
-}): Promise<Record<string, unknown> | null> {
-  const res = await call('', 'POST', {
-    service: 'standardService',
-    action: 'getParcelHighlightGeom',
-    params,
-  })
-  const body = (res?.data ?? res) as { geometry4326?: Record<string, unknown> | null }
-  const geometry = body?.geometry4326
-  if (!geometry || typeof geometry !== 'object' || !('type' in geometry)) return null
-  return geometry
+}): Promise<ParcelHit | null> {
+  try {
+    const res = await call('', 'POST', {
+      service: 'standardService',
+      action: 'getParcelHighlightGeom',
+      params,
+    })
+    const body = (res?.data ?? res) as {
+      geometry4326?: Record<string, unknown> | null
+      pnu?: string | null
+      data?: { geometry4326?: Record<string, unknown> | null; pnu?: string | null }
+    }
+    const geometry = body?.geometry4326 ?? body?.data?.geometry4326 ?? null
+    if (!geometry || typeof geometry !== 'object' || !('type' in geometry)) return null
+    const pnu = pnuDigits(String(body?.pnu ?? body?.data?.pnu ?? params.pnu ?? ''))
+    return { geometry4326: geometry, pnu: pnu || null }
+  } catch {
+    return null
+  }
 }
 
 function pnuDigits(value: string | undefined): string {
@@ -117,22 +133,27 @@ async function parcelAtPoint(
   lat: number,
   apiKey: string,
   pnu: string
-): Promise<Record<string, unknown> | null> {
-  const coord = transformCoordinate([lon, lat], 'EPSG:4326', 'EPSG:3857')
-  if (coord) {
-    const atPoint = await fetchParcelGeometry({
-      x: coord[0],
-      y: coord[1],
-      ...(pnu ? { pnu } : {}),
-    })
-    if (atPoint) return atPoint
+): Promise<ParcelHit | null> {
+  try {
+    const coord = transformCoordinate([lon, lat], 'EPSG:4326', 'EPSG:3857')
+    if (coord) {
+      const atPoint = await fetchParcelGeometry({
+        x: coord[0],
+        y: coord[1],
+        ...(pnu ? { pnu } : {}),
+      })
+      if (atPoint) return atPoint
+    }
+    const fromSearch = pnu ? await fetchParcelGeometry({ pnu }) : null
+    if (fromSearch) return fromSearch
+    if (!apiKey.trim()) return null
+    const addr = await getAddressFromCoord(lon, lat, { apiKey })
+    const fromCoord = pnuDigits(addr?.pnu)
+    if (!fromCoord || fromCoord === pnu) return null
+    return fetchParcelGeometry({ pnu: fromCoord })
+  } catch {
+    return null
   }
-  const fromSearch = pnu ? await fetchParcelGeometry({ pnu }) : null
-  if (fromSearch) return fromSearch
-  const addr = await getAddressFromCoord(lon, lat, { apiKey })
-  const fromCoord = pnuDigits(addr?.pnu)
-  if (!fromCoord || fromCoord === pnu) return null
-  return fetchParcelGeometry({ pnu: fromCoord })
 }
 
 async function locateOne(
@@ -165,12 +186,13 @@ async function locateOne(
       detail: '주소를 찾지 못했습니다',
       geometry4326: null,
       point4326: null,
+      pnu: null,
     }
   }
   const point4326: [number, number] = [hit.point.x, hit.point.y]
   const detail = (hit.jibunAddress || hit.roadAddress || hit.address || input).trim()
-  const geometry4326 = await parcelAtPoint(hit.point.x, hit.point.y, apiKey, pnuDigits(hit.id))
-  if (!geometry4326) {
+  const hitParcel = await parcelAtPoint(hit.point.x, hit.point.y, apiKey, pnuDigits(hit.id))
+  if (!hitParcel) {
     return {
       id,
       input,
@@ -178,9 +200,18 @@ async function locateOne(
       detail: '필지 경계 없음',
       geometry4326: null,
       point4326,
+      pnu: null,
     }
   }
-  return { id, input, status: 'shown', detail, geometry4326, point4326 }
+  return {
+    id,
+    input,
+    status: 'shown',
+    detail,
+    geometry4326: hitParcel.geometry4326,
+    point4326,
+    pnu: hitParcel.pnu,
+  }
 }
 
 export async function locateMeterAddresses(args: {
@@ -211,6 +242,7 @@ export async function locateMeterAddresses(args: {
           detail: '조회에 실패했습니다',
           geometry4326: null,
           point4326: null,
+          pnu: null,
         }
       }
       done += 1
@@ -244,22 +276,174 @@ async function locateOneByNumber(
       detail: '계량기를 찾지 못했습니다',
       geometry4326: null,
       point4326: null,
+      pnu: null,
     }
   }
   const point4326 = row.point
   const detail = (row.address || row.meterNo || row.input).trim()
-  const geometry4326 = await parcelAtPoint(point4326[0], point4326[1], apiKey, '')
-  if (!geometry4326) {
+  const hitParcel = await parcelAtPoint(point4326[0], point4326[1], apiKey, '')
+  if (!hitParcel) {
     return {
       id,
       input: row.input,
       status: 'point',
-      detail: detail || '필지 경계 없음',
+      detail: detail ? `${detail} · 필지 경계 없음` : '필지 경계 없음',
       geometry4326: null,
       point4326,
+      pnu: null,
     }
   }
-  return { id, input: row.input, status: 'shown', detail, geometry4326, point4326 }
+  return {
+    id,
+    input: row.input,
+    status: 'shown',
+    detail,
+    geometry4326: hitParcel.geometry4326,
+    point4326,
+    pnu: hitParcel.pnu,
+  }
+}
+
+const JIJUK_BATCH = 120
+const JIJUK_PARALLEL = 4
+
+type JijukResolveRow = {
+  index: number
+  pnu: string | null
+  geometry4326: Record<string, unknown> | null
+}
+
+async function resolveJijukBatch(
+  points: Array<{ lon: number; lat: number } | null>
+): Promise<JijukResolveRow[]> {
+  const chunks: Array<{ offset: number; pts: Array<{ lon: number; lat: number } | null> }> = []
+  for (let i = 0; i < points.length; i += JIJUK_BATCH) {
+    chunks.push({ offset: i, pts: points.slice(i, i + JIJUK_BATCH) })
+  }
+  const out: JijukResolveRow[] = points.map((_, index) => ({
+    index,
+    pnu: null,
+    geometry4326: null,
+  }))
+  let cursor = 0
+  const worker = async () => {
+    while (cursor < chunks.length) {
+      const ci = cursor
+      cursor += 1
+      const chunk = chunks[ci]
+      if (!chunk) continue
+      try {
+        const res = await call('', 'POST', {
+          service: 'wtlMeterLocationService',
+          action: 'resolveJijukParcelsByLonLat',
+          params: { points: chunk.pts },
+        })
+        const body = (res?.data ?? res) as { rows?: JijukResolveRow[] }
+        const rows = Array.isArray(body?.rows) ? body.rows : []
+        for (const row of rows) {
+          const localIdx = Number(row.index)
+          if (!Number.isFinite(localIdx)) continue
+          const globalIdx = chunk.offset + localIdx
+          if (globalIdx < 0 || globalIdx >= out.length) continue
+          const pnu = pnuDigits(String(row.pnu ?? ''))
+          const geom = row.geometry4326
+          out[globalIdx] = {
+            index: globalIdx,
+            pnu: pnu || null,
+            geometry4326:
+              geom && typeof geom === 'object' && 'type' in geom ? geom : null,
+          }
+        }
+      } catch {
+        /* chunk 실패 시 해당 구간은 null 유지 */
+      }
+    }
+  }
+  await Promise.all(
+    Array.from({ length: Math.min(JIJUK_PARALLEL, Math.max(1, chunks.length)) }, () =>
+      worker()
+    )
+  )
+  return out
+}
+
+/**
+ * 이미 좌표를 아는 계량기 목록 — jijuk 일괄(병렬 청크)로 필지 보강.
+ */
+export async function locateMetersFromKnown(args: {
+  meters: Array<{
+    meterNo: string
+    address?: string
+    point?: [number, number] | null
+  }>
+  apiKey: string
+  onProgress?: (done: number, total: number) => void
+}): Promise<MeterLocateResult[]> {
+  const { meters, onProgress } = args
+  if (meters.length === 0) return []
+
+  const points: Array<{ lon: number; lat: number } | null> = meters.map((m) => {
+    const point = m.point
+    if (
+      Array.isArray(point) &&
+      point.length >= 2 &&
+      Number.isFinite(point[0]) &&
+      Number.isFinite(point[1])
+    ) {
+      return { lon: point[0]!, lat: point[1]! }
+    }
+    return null
+  })
+
+  onProgress?.(0, meters.length)
+  const resolved = await resolveJijukBatch(points)
+  onProgress?.(meters.length, meters.length)
+
+  return meters.map((m, index) => {
+    const meterNo = String(m.meterNo ?? '').trim() || `row-${index}`
+    const id = nextMeterRowId(meterNo)
+    const point = m.point
+    const hasPoint =
+      Array.isArray(point) &&
+      point.length >= 2 &&
+      Number.isFinite(point[0]) &&
+      Number.isFinite(point[1])
+    const detail = (String(m.address ?? '').trim() || meterNo).trim()
+    if (!hasPoint) {
+      return {
+        id,
+        input: meterNo,
+        status: 'miss' as const,
+        detail: '계량기를 찾지 못했습니다',
+        geometry4326: null,
+        point4326: null,
+        pnu: null,
+      }
+    }
+    const hit = resolved[index]
+    const geometry4326 = hit?.geometry4326 ?? null
+    const pnu = hit?.pnu ?? null
+    if (geometry4326) {
+      return {
+        id,
+        input: meterNo,
+        status: 'shown' as const,
+        detail,
+        geometry4326,
+        point4326: [point![0], point![1]],
+        pnu,
+      }
+    }
+    return {
+      id,
+      input: meterNo,
+      status: 'point' as const,
+      detail: `${detail} · 필지 경계 없음`,
+      geometry4326: null,
+      point4326: [point![0], point![1]],
+      pnu: null,
+    }
+  })
 }
 
 async function fetchMetersByNumbers(
@@ -275,7 +459,12 @@ async function fetchMetersByNumbers(
   if (signal?.aborted) return new Map()
   const body = (res?.data ?? res) as { rows?: MeterByNumberRow[] }
   const fetched = Array.isArray(body?.rows) ? body.rows : []
-  return new Map(fetched.map((row) => [row.input, row]))
+  const map = new Map<string, MeterByNumberRow>()
+  for (const row of fetched) {
+    if (row.input) map.set(row.input, row)
+    if (row.meterNo) map.set(row.meterNo, row)
+  }
+  return map
 }
 
 /**
@@ -319,6 +508,7 @@ export async function locateMeterInputs(args: {
             detail: '위치를 찾지 못했습니다',
             geometry4326: null,
             point4326: null,
+            pnu: null,
           }
         }
       } catch {
@@ -329,6 +519,7 @@ export async function locateMeterInputs(args: {
           detail: '조회에 실패했습니다',
           geometry4326: null,
           point4326: null,
+          pnu: null,
         }
       }
       done += 1
