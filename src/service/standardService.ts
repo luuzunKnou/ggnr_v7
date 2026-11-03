@@ -1279,7 +1279,8 @@ export async function getParcelHighlightGeom(params: {
       const rowPnu = String(row.pnu ?? '').replace(/\D/g, '').slice(0, 19);
       if (rowPnu) resolvedPnu = rowPnu;
       const geom = parseGeoJsonGeomField(row.geom);
-      if (geom && resolvedPnu) return { pnu: resolvedPnu, geometry4326: geom };
+      // 점 조회 도형이 있으면 PNU 유무와 관계없이 반환 (필지 하이라이트·건수)
+      if (geom) return { pnu: resolvedPnu, geometry4326: geom };
     }
   }
 

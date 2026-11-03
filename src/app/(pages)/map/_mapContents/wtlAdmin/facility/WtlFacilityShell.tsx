@@ -413,7 +413,19 @@ export function WtlFacilityShell({
           >
             <WtlFacilityDetailPanel
               row={selected}
+              schema={selectedSource?.schema}
               onClose={() => setSelectedId(null)}
+              onUpdated={(next) => {
+                setRows((prev) => prev.map((r) => (r.id === next.id ? next : r)))
+              }}
+              onDeleted={(id) => {
+                setRows((prev) => prev.filter((r) => r.id !== id))
+                setTotal((t) => Math.max(0, t - 1))
+                setSelectedId(null)
+              }}
+              onHistoryReverted={() => {
+                void loadRows()
+              }}
             />
           </MapSideListPanel>
         </div>

@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Paperclip } from 'lucide-react'
+import { History, Paperclip } from 'lucide-react'
 import GeoJSON from 'ol/format/GeoJSON'
 import VectorLayer from 'ol/layer/Vector'
 import VectorSource from 'ol/source/Vector'
@@ -16,7 +16,11 @@ import {
   selectDefineLayerListFields,
   type DefineFieldLike,
 } from '../../../_mapComponents/standard/defineLayerRowUtils'
-import { WtlNetworkMapAttachmentSection } from './WtlNetworkMapAttachmentSection'
+import { WtlFacilityDataHistoryTab } from '../facility/WtlFacilityDataHistoryTab'
+import {
+  resolveWtlNetworkRowKeyTarget,
+  WtlNetworkMapAttachmentSection,
+} from './WtlNetworkMapAttachmentSection'
 import {
   loadWtlDefineDisplayBundle,
   peekWtlDefineDisplayBundle,
@@ -46,9 +50,23 @@ type Props = {
   item: WtlNetworkRow
   fields: DefineFieldLike[]
   onRelatedMapLayer: (next: WtlNetworkDetailRelatedOverlay) => void
+  /** 데이터 이력 되돌리기 후 상세·목록 갱신 */
+  onHistoryReverted?: () => void
 }
 
-type ActiveTab = 'attach' | string
+type ActiveTab = 'attach' | 'dataHistory' | string
+
+function resolveOgcFid(item: WtlNetworkRow): number | null {
+  const record = item.record
+  if (record) {
+    const fromRecord = getRowValueByField(record, 'ogc_fid')
+    const n = Number(fromRecord)
+    if (Number.isFinite(n)) return n
+  }
+  const raw = String(item.id ?? '').trim()
+  const tail = raw.includes(':') ? Number(raw.slice(raw.lastIndexOf(':') + 1)) : Number.NaN
+  return Number.isFinite(tail) ? tail : null
+}
 
 const RELATED_ROW_HIGHLIGHT = new Style({
   image: new CircleStyle({
@@ -76,6 +94,7 @@ export function WtlNetworkDetailRelatedTabs({
   item,
   fields,
   onRelatedMapLayer,
+  onHistoryReverted,
 }: Props) {
   const mapContext = useMapContext()
   const parentKey = useMemo(() => {
@@ -92,6 +111,17 @@ export function WtlNetworkDetailRelatedTabs({
 
   const itemId = String(item.id ?? '')
   const ftrIdn = resolveParentFtrIdn(item)
+
+  const historySourceRow = useMemo(() => {
+    const keyTarget = resolveWtlNetworkRowKeyTarget(item, fields)
+    return {
+      id: itemId,
+      record: item.record ?? {},
+      tableName: keyTarget?.table ?? item.fieldsTable ?? null,
+      fieldsTable: item.fieldsTable ?? null,
+      ogcFid: resolveOgcFid(item),
+    }
+  }, [item, itemId, fields])
 
   const onRelatedMapLayerRef = useRef(onRelatedMapLayer)
   onRelatedMapLayerRef.current = onRelatedMapLayer
@@ -243,7 +273,7 @@ export function WtlNetworkDetailRelatedTabs({
   }, [parentKey, itemId, clearRowHighlight])
 
   useEffect(() => {
-    if (active === 'attach' || !activeTable || !ftrIdn) {
+    if (active === 'attach' || active === 'dataHistory' || !activeTable || !ftrIdn) {
       onRelatedMapLayerRef.current(null)
       return
     }
@@ -252,7 +282,7 @@ export function WtlNetworkDetailRelatedTabs({
 
   useEffect(() => {
     clearRowHighlight()
-    if (active === 'attach' || !activeTable || !ftrIdn) {
+    if (active === 'attach' || active === 'dataHistory' || !activeTable || !ftrIdn) {
       setListRows((prev) => (prev.length === 0 ? prev : []))
       setListTotal((prev) => (prev === 0 ? prev : 0))
       setListBundle((prev) => (prev == null ? prev : null))
@@ -344,15 +374,15 @@ export function WtlNetworkDetailRelatedTabs({
           type="button"
           title="첨부파일"
           className={cn(
-            'flex shrink-0 cursor-pointer items-center justify-center gap-1.5 border-b-2 px-3 py-2.5 text-xs font-medium pointer-events-auto',
+            'inline-flex h-9 w-[5.5rem] shrink-0 cursor-pointer items-center justify-center gap-1 border-b-2 px-2 text-[11px] font-medium pointer-events-auto',
             active === 'attach'
               ? 'border-primary bg-primary/5 text-primary'
-              : 'border-transparent text-muted-foreground hover:text-foreground'
+              : 'border-transparent text-muted-foreground hover:bg-muted/50 hover:text-foreground'
           )}
           onClick={() => setActive('attach')}
         >
-          <Paperclip className="h-3.5 w-3.5 shrink-0" aria-hidden />
-          첨부파일
+          <Paperclip className="h-3 w-3 shrink-0" aria-hidden />
+          <span className="truncate">첨부파일</span>
         </button>
         {relatedTabs.map((tab) => (
           <button
@@ -360,21 +390,44 @@ export function WtlNetworkDetailRelatedTabs({
             type="button"
             title={tab.label}
             className={cn(
-              'flex shrink-0 cursor-pointer items-center justify-center gap-1.5 border-b-2 px-3 py-2.5 text-xs font-medium pointer-events-auto',
+              'inline-flex h-9 w-[5.5rem] shrink-0 cursor-pointer items-center justify-center gap-1 border-b-2 px-2 text-[11px] font-medium pointer-events-auto',
               active === tab.table
                 ? 'border-primary bg-primary/5 text-primary'
-                : 'border-transparent text-muted-foreground hover:text-foreground'
+                : 'border-transparent text-muted-foreground hover:bg-muted/50 hover:text-foreground'
             )}
             onClick={() => setActive(tab.table)}
           >
-            {tab.label}
+            <span className="truncate">{tab.label}</span>
           </button>
         ))}
+        <button
+          type="button"
+          title="데이터 이력관리"
+          className={cn(
+            'inline-flex h-9 min-w-[7.5rem] shrink-0 cursor-pointer items-center justify-center gap-1 border-b-2 px-2 text-[11px] font-medium pointer-events-auto',
+            active === 'dataHistory'
+              ? 'border-primary bg-primary/5 text-primary'
+              : 'border-transparent text-muted-foreground hover:bg-muted/50 hover:text-foreground'
+          )}
+          onClick={() => setActive('dataHistory')}
+        >
+          <History className="h-3 w-3 shrink-0" aria-hidden />
+          <span className="truncate">데이터 이력관리</span>
+        </button>
       </div>
       <div className="h-[250px] shrink-0 overflow-hidden px-3 pb-2 pt-1">
         {active === 'attach' ? (
           <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-xl border border-border bg-card">
             <WtlNetworkMapAttachmentSection item={item} fields={fields} />
+          </div>
+        ) : active === 'dataHistory' ? (
+          <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-xl border border-border bg-card">
+            <WtlFacilityDataHistoryTab
+              row={historySourceRow}
+              fields={fields}
+              serEng="wtlNetworkMap"
+              onReverted={onHistoryReverted}
+            />
           </div>
         ) : (
           <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-xl border border-border bg-card">

@@ -1,15 +1,20 @@
 'use client'
 
-import { useEffect, useMemo, useState, type ElementType } from 'react'
-import { FileText, Paperclip, X } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useState, type ElementType } from 'react'
+import { FileText, History, Loader2, Paperclip, Pencil, Trash2, X } from 'lucide-react'
 import { call } from '@/lib/api'
-import { formatDefineFieldDisplayValue } from '@/lib/defineLayerCodeDisplay'
+import {
+  formatDefineFieldDisplayValue,
+  isDefineFieldCodeType,
+} from '@/lib/defineLayerCodeDisplay'
 import { cn } from '@/lib/utils'
+import { useSerWriteAccess } from '@/hooks/useSerWriteAccess'
 import {
   getDefineFieldDisplayLabel,
   getRowKey,
   getRowValueByField,
   isDefineFieldFlagTrue,
+  isGeomLikeDefineFieldName,
   selectDefineLayerDetailFields,
   selectDefineLayerListFields,
   type DefineFieldLike,
@@ -21,12 +26,30 @@ import {
   type WtlDefineDisplayBundle,
 } from '../networkMap/wtlNetworkDefineDisplayCache'
 import type { WtlNetworkRow } from '../networkMap/wtlNetworkTypes'
+import { WtlFacilityDataHistoryTab } from './WtlFacilityDataHistoryTab'
 import type { WtlFacilityListRow } from './WtlFacilityListView'
 import { WtlFacilityRelatedDetailFloating } from './WtlFacilityRelatedDetailFloating'
+import { WtlFacilityTableLoadingRow } from './WtlFacilityTableLoadingRow'
+
+const SER_ENG = 'wtlFacility'
+
+const editInputClass =
+  'h-6 w-full min-w-0 rounded border border-border bg-background px-1.5 text-[11px] outline-none focus:border-primary focus:ring-1 focus:ring-primary/25'
 
 type Props = {
   row: WtlFacilityListRow
   onClose: () => void
+  /** layer / public_layer 등 — 없으면 layer */
+  schema?: string
+  onUpdated?: (row: WtlFacilityListRow) => void
+  onDeleted?: (id: string) => void
+  /** 이력 되돌리기 후 목록·상세 재조회 */
+  onHistoryReverted?: () => void
+}
+
+type FieldEditMeta = DefineFieldLike & {
+  define_field_is_key?: unknown
+  define_field_read_only?: unknown
 }
 
 type RelatedTabDef = {
@@ -41,7 +64,7 @@ type RelatedRow = {
   geom: unknown | null
 }
 
-type ActiveTab = 'attach' | string
+type ActiveTab = 'attach' | 'dataHistory' | string
 
 function toNetworkItem(row: WtlFacilityListRow): WtlNetworkRow {
   return {
@@ -94,7 +117,16 @@ function resolveParentFtrIdn(
   return String(row.name ?? '').trim()
 }
 
-export function WtlFacilityDetailPanel({ row, onClose }: Props) {
+export function WtlFacilityDetailPanel({
+  row: rowProp,
+  onClose,
+  schema: schemaProp,
+  onUpdated,
+  onDeleted,
+  onHistoryReverted,
+}: Props) {
+  const canWrite = useSerWriteAccess(SER_ENG)
+  const [localRow, setLocalRow] = useState(rowProp)
   const [bundle, setBundle] = useState<WtlDefineDisplayBundle | null>(null)
   const [activeTab, setActiveTab] = useState<ActiveTab>('attach')
   const [relatedTabs, setRelatedTabs] = useState<RelatedTabDef[]>([])
@@ -104,6 +136,26 @@ export function WtlFacilityDetailPanel({ row, onClose }: Props) {
   const [relatedLoading, setRelatedLoading] = useState(false)
   const [relatedError, setRelatedError] = useState<string | null>(null)
   const [relatedDetail, setRelatedDetail] = useState<RelatedRow | null>(null)
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState<Record<string, string>>({})
+  const [saving, setSaving] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+  const [editError, setEditError] = useState<string | null>(null)
+
+  const row = localRow
+  const schema =
+    String(schemaProp ?? '')
+      .trim()
+      .toLowerCase() || 'layer'
+
+  useEffect(() => {
+    setLocalRow(rowProp)
+    setEditing(false)
+    setDraft({})
+    setEditError(null)
+    setSaving(false)
+    setDeleting(false)
+  }, [rowProp])
 
   const networkItem = useMemo(() => toNetworkItem(row), [row])
   const parentKey = String(row.relatedParentKey || row.layerKey || '')
@@ -237,6 +289,166 @@ export function WtlFacilityDetailPanel({ row, onClose }: Props) {
   }, [allFields, row.record])
 
   const codesByField = bundle?.codesByField ?? {}
+  const fieldsLoading = Boolean(String(row.fieldsTable ?? '').trim()) && bundle == null
+
+  const editTarget = useMemo(() => {
+    const table = String(row.tableName || row.fieldsTable || '')
+      .trim()
+      .replace(/^.*\./, '')
+      .toLowerCase()
+    if (!table || !row.record) return null
+
+    let keyField = keyFieldName
+    let keyValue: string | null = null
+    if (keyField) {
+      const fromKey = getRowKey(row.record, keyField)
+      if (fromKey != null && String(fromKey).trim()) keyValue = String(fromKey).trim()
+    }
+    if (keyValue == null) {
+      for (const f of ['ogc_fid', 'gid', 'id'] as const) {
+        const v = getRowValueByField(row.record, f)
+        if (v != null && String(v).trim()) {
+          keyField = f
+          keyValue = String(v).trim()
+          break
+        }
+      }
+    }
+    if (keyValue == null && row.ogcFid != null && Number.isFinite(row.ogcFid)) {
+      keyField = keyField || 'ogc_fid'
+      keyValue = String(row.ogcFid)
+    }
+    if (!keyField || !keyValue) return null
+    return { table, schema, keyField, keyValue }
+  }, [row.tableName, row.fieldsTable, row.record, row.ogcFid, keyFieldName, schema])
+
+  const isFieldEditable = useCallback(
+    (f: FieldEditMeta) => {
+      const key = String(f.define_field_name ?? '').trim()
+      if (!key || isGeomLikeDefineFieldName(key)) return false
+      if (
+        keyFieldName &&
+        key.toLowerCase() === keyFieldName.toLowerCase()
+      ) {
+        return false
+      }
+      if (isDefineFieldFlagTrue(f.define_field_read_only)) return false
+      return true
+    },
+    [keyFieldName]
+  )
+
+  const beginEdit = useCallback(() => {
+    if (!canWrite || !editTarget || !row.record) return
+    const next: Record<string, string> = {}
+    for (const f of detailFields as FieldEditMeta[]) {
+      if (!isFieldEditable(f)) continue
+      const key = String(f.define_field_name ?? '').trim()
+      if (!key) continue
+      const raw = getRowValueByField(row.record, key)
+      next[key] = raw == null ? '' : String(raw)
+    }
+    setDraft(next)
+    setEditError(null)
+    setEditing(true)
+  }, [canWrite, editTarget, row.record, detailFields, isFieldEditable])
+
+  const cancelEdit = useCallback(() => {
+    setEditing(false)
+    setDraft({})
+    setEditError(null)
+  }, [])
+
+  const handleSave = useCallback(async () => {
+    if (!canWrite || !editTarget || !row.record) return
+    setSaving(true)
+    setEditError(null)
+    try {
+      const res = await call('', 'POST', {
+        service: 'layerRowService',
+        action: 'updateTableRowByKey',
+        params: {
+          table: editTarget.table,
+          schema: editTarget.schema,
+          keyValue: editTarget.keyValue,
+          keyField: editTarget.keyField,
+          changes: draft,
+          includeHiddenDetail: false,
+        },
+      })
+      const data = res?.data ?? res
+      if (data?.error || data?.success === false) {
+        setEditError(String(data?.error ?? '수정에 실패했습니다.'))
+        return
+      }
+      const updatedRecord: Record<string, unknown> = { ...row.record, ...draft }
+      const next: WtlFacilityListRow = {
+        ...row,
+        record: updatedRecord,
+        name: (() => {
+          if (titleFieldName) {
+            const raw = getRowValueByField(updatedRecord, titleFieldName)
+            const formatted = formatDefineFieldDisplayValue(
+              raw,
+              titleField?.define_field_type,
+              codesByField[titleFieldName.toLowerCase()],
+              ''
+            )
+            if (formatted.trim()) return formatted
+          }
+          return row.name
+        })(),
+      }
+      setLocalRow(next)
+      onUpdated?.(next)
+      setEditing(false)
+      setDraft({})
+    } catch (e: unknown) {
+      setEditError(e instanceof Error ? e.message : '수정에 실패했습니다.')
+    } finally {
+      setSaving(false)
+    }
+  }, [
+    canWrite,
+    editTarget,
+    row,
+    draft,
+    titleFieldName,
+    titleField?.define_field_type,
+    codesByField,
+    onUpdated,
+  ])
+
+  const handleDelete = useCallback(async () => {
+    if (!canWrite || !editTarget) return
+    const label = String(row.name || editTarget.keyValue).trim() || '이 시설'
+    if (!window.confirm(`「${label}」을(를) 삭제할까요?`)) return
+    setDeleting(true)
+    setEditError(null)
+    try {
+      const res = await call('', 'POST', {
+        service: 'layerRowService',
+        action: 'deleteTableRowByKey',
+        params: {
+          table: editTarget.table,
+          schema: editTarget.schema,
+          keyValue: editTarget.keyValue,
+          keyField: editTarget.keyField,
+        },
+      })
+      const data = res?.data ?? res
+      if (data?.error || data?.success === false) {
+        setEditError(String(data?.error ?? '삭제에 실패했습니다.'))
+        return
+      }
+      onDeleted?.(row.id)
+      onClose()
+    } catch (e: unknown) {
+      setEditError(e instanceof Error ? e.message : '삭제에 실패했습니다.')
+    } finally {
+      setDeleting(false)
+    }
+  }, [canWrite, editTarget, row.name, row.id, onDeleted, onClose])
 
   const activeRelated = useMemo(
     () => relatedTabs.find((t) => t.table === activeTab) ?? null,
@@ -335,6 +547,7 @@ export function WtlFacilityDetailPanel({ row, onClose }: Props) {
       out.push({ id: t.table, label: t.label, icon: FileText })
     }
     out.push({ id: 'attach', label: '첨부파일', icon: Paperclip })
+    out.push({ id: 'dataHistory', label: '데이터 이력관리', icon: History })
     return out
   }, [relatedTabs])
 
@@ -366,14 +579,68 @@ export function WtlFacilityDetailPanel({ row, onClose }: Props) {
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
         <section className="standard-detail-section flex min-h-0 flex-1 flex-col overflow-hidden">
           <div className="standard-detail-section-header">
-            <span className="standard-detail-section-title">기본정보</span>
+            <span className="standard-detail-section-title min-w-0 flex-1">기본정보</span>
+            {canWrite ? (
+              <div className="standard-detail-section-header-actions">
+                {!editing ? (
+                  <>
+                    <button
+                      type="button"
+                      className="standard-detail-hdr-btn"
+                      title="수정"
+                      disabled={!editTarget || deleting}
+                      onClick={beginEdit}
+                    >
+                      <Pencil className="h-3 w-3" aria-hidden />
+                      수정
+                    </button>
+                    <button
+                      type="button"
+                      className="standard-detail-hdr-btn-delete"
+                      title="삭제"
+                      disabled={!editTarget || deleting}
+                      onClick={() => void handleDelete()}
+                    >
+                      <Trash2 className="h-3 w-3" aria-hidden />
+                      {deleting ? '삭제 중…' : '삭제'}
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <button
+                      type="button"
+                      className="standard-detail-hdr-btn"
+                      title="취소"
+                      disabled={saving}
+                      onClick={cancelEdit}
+                    >
+                      취소
+                    </button>
+                    <button
+                      type="button"
+                      className="standard-detail-hdr-btn-save"
+                      title={saving ? '저장 중…' : '저장'}
+                      disabled={saving}
+                      onClick={() => void handleSave()}
+                    >
+                      {saving ? '저장 중…' : '저장'}
+                    </button>
+                  </>
+                )}
+              </div>
+            ) : null}
           </div>
           <div className="standard-detail-section-body min-h-0 flex-1 overflow-auto scrollbar-thin">
-            {detailFields.length === 0 ? (
+            {fieldsLoading ? (
+              <p className="standard-detail-loading justify-center px-3">
+                <Loader2 className="h-4 w-4 shrink-0 animate-spin" aria-hidden />
+                불러오는 중…
+              </p>
+            ) : detailFields.length === 0 ? (
               <p className="standard-detail-attr-empty">표시할 상세 필드가 없습니다.</p>
             ) : (
               <div className="standard-detail-attr-table">
-                {detailFields.map((f, i) => {
+                {(detailFields as FieldEditMeta[]).map((f, i) => {
                   const key = String(f.define_field_name ?? '').trim()
                   const label = getDefineFieldDisplayLabel(key, f.define_field_kor_name)
                   const raw = getRowValueByField(row.record, key)
@@ -383,6 +650,8 @@ export function WtlFacilityDetailPanel({ row, onClose }: Props) {
                     codesByField[key.toLowerCase()],
                     '—'
                   )
+                  const editable = editing && isFieldEditable(f)
+                  const codes = codesByField[key.toLowerCase()] ?? []
                   return (
                     <div key={key || `d-${i}`} className="contents">
                       <div className="standard-detail-attr-label standard-detail-attr-cell-border">
@@ -391,19 +660,61 @@ export function WtlFacilityDetailPanel({ row, onClose }: Props) {
                       <div
                         className={cn(
                           'standard-detail-attr-value standard-detail-attr-cell-border text-foreground',
-                          titleFieldName != null &&
+                          !editable &&
+                            titleFieldName != null &&
                             key.toLowerCase() === titleFieldName.toLowerCase() &&
                             'font-medium text-primary'
                         )}
-                        title={value}
+                        title={editable ? label : value}
                       >
-                        {value}
+                        {editable ? (
+                          isDefineFieldCodeType(f.define_field_type) && codes.length > 0 ? (
+                            <select
+                              className={editInputClass}
+                              title={label}
+                              disabled={saving}
+                              value={draft[key] ?? ''}
+                              onChange={(e) =>
+                                setDraft((prev) => ({ ...prev, [key]: e.target.value }))
+                              }
+                            >
+                              <option value="">—</option>
+                              {codes.map((c) => {
+                                const code = String(c.define_code_name ?? '').trim()
+                                if (!code) return null
+                                const kor = String(c.define_code_kor_name ?? '').trim()
+                                return (
+                                  <option key={code} value={code}>
+                                    {kor ? `${kor} (${code})` : code}
+                                  </option>
+                                )
+                              })}
+                            </select>
+                          ) : (
+                            <input
+                              className={editInputClass}
+                              title={label}
+                              disabled={saving}
+                              value={draft[key] ?? ''}
+                              onChange={(e) =>
+                                setDraft((prev) => ({ ...prev, [key]: e.target.value }))
+                              }
+                            />
+                          )
+                        ) : (
+                          value
+                        )}
                       </div>
                     </div>
                   )
                 })}
               </div>
             )}
+            {editError ? (
+              <p className="mt-2 text-[11px] text-destructive" role="alert">
+                {editError}
+              </p>
+            ) : null}
           </div>
         </section>
 
@@ -419,7 +730,8 @@ export function WtlFacilityDetailPanel({ row, onClose }: Props) {
                   setRelatedDetail(null)
                 }}
                 className={cn(
-                  'inline-flex h-9 w-[5.5rem] shrink-0 cursor-pointer items-center justify-center gap-1 px-2 text-[11px] font-medium transition-colors',
+                  'inline-flex h-9 shrink-0 cursor-pointer items-center justify-center gap-1 px-2 text-[11px] font-medium transition-colors',
+                  id === 'dataHistory' ? 'min-w-[7.5rem]' : 'w-[5.5rem]',
                   activeTab === id
                     ? 'border-b-2 border-primary bg-primary/5 text-primary'
                     : 'border-b-2 border-transparent text-muted-foreground hover:bg-muted/50 hover:text-foreground'
@@ -441,26 +753,20 @@ export function WtlFacilityDetailPanel({ row, onClose }: Props) {
                   />
                 </div>
               </div>
+            ) : activeTab === 'dataHistory' ? (
+              <WtlFacilityDataHistoryTab
+                row={row}
+                fields={allFields.length > 0 ? allFields : detailFields}
+                onReverted={onHistoryReverted}
+              />
             ) : (
               <div className="flex h-full min-h-0 flex-col overflow-hidden">
                 <div className="standard-list-scroll">
-                  {relatedLoading ? (
-                    <p className="standard-detail-loading px-3 py-3">목록 불러오는 중…</p>
-                  ) : relatedError ? (
-                    <p className="px-3 py-3 text-xs text-destructive">{relatedError}</p>
-                  ) : !ftrIdn ? (
-                    <p className="standard-table-empty">
-                      관리번호를 찾을 수 없어 목록을 표시하지 않습니다.
-                    </p>
-                  ) : relatedRows.length === 0 ? (
-                    <p className="standard-table-empty">해당 현황 데이터가 없습니다.</p>
-                  ) : relatedListFields.length === 0 ? (
-                    <p className="standard-table-empty">표시할 필드가 없습니다.</p>
-                  ) : (
-                    <table className="standard-list-table">
-                      <thead className="standard-detail-table-thead">
-                        <tr>
-                          {relatedListFields.map((f, i) => {
+                  <table className="standard-detail-tab-table">
+                    <thead className="standard-detail-table-thead">
+                      <tr>
+                        {relatedListFields.length > 0 ? (
+                          relatedListFields.map((f, i) => {
                             const key = String(f.define_field_name ?? '').trim()
                             return (
                               <th
@@ -471,11 +777,52 @@ export function WtlFacilityDetailPanel({ row, onClose }: Props) {
                                 {getDefineFieldDisplayLabel(key, f.define_field_kor_name)}
                               </th>
                             )
-                          })}
+                          })
+                        ) : (
+                          <th className="standard-detail-table-th standard-table-th-left">—</th>
+                        )}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {relatedLoading ? (
+                        <WtlFacilityTableLoadingRow
+                          colSpan={Math.max(1, relatedListFields.length)}
+                        />
+                      ) : relatedError ? (
+                        <tr>
+                          <td
+                            colSpan={Math.max(1, relatedListFields.length)}
+                            className="standard-table-empty text-destructive"
+                          >
+                            {relatedError}
+                          </td>
                         </tr>
-                      </thead>
-                      <tbody>
-                        {relatedRows.map((r, ri) => {
+                      ) : !ftrIdn ? (
+                        <tr>
+                          <td
+                            colSpan={Math.max(1, relatedListFields.length)}
+                            className="standard-table-empty"
+                          >
+                            관리번호를 찾을 수 없어 목록을 표시하지 않습니다.
+                          </td>
+                        </tr>
+                      ) : relatedRows.length === 0 ? (
+                        <tr>
+                          <td
+                            colSpan={Math.max(1, relatedListFields.length)}
+                            className="standard-table-empty"
+                          >
+                            해당 현황 데이터가 없습니다.
+                          </td>
+                        </tr>
+                      ) : relatedListFields.length === 0 ? (
+                        <tr>
+                          <td colSpan={1} className="standard-table-empty">
+                            표시할 필드가 없습니다.
+                          </td>
+                        </tr>
+                      ) : (
+                        relatedRows.map((r, ri) => {
                           const selected =
                             relatedDetail != null &&
                             ((r.ogcFid != null && relatedDetail.ogcFid === r.ogcFid) ||
@@ -502,7 +849,7 @@ export function WtlFacilityDetailPanel({ row, onClose }: Props) {
                                 return (
                                   <td
                                     key={`${r.ogcFid ?? ri}-${key || fi}`}
-                                    className="standard-table-td-compact"
+                                    className="standard-detail-tab-td"
                                     title={value}
                                   >
                                     {value}
@@ -511,10 +858,10 @@ export function WtlFacilityDetailPanel({ row, onClose }: Props) {
                               })}
                             </tr>
                           )
-                        })}
-                      </tbody>
-                    </table>
-                  )}
+                        })
+                      )}
+                    </tbody>
+                  </table>
                 </div>
                 <div className="standard-list-footer">
                   {relatedLoading ? '조회 중…' : `총 ${relatedTotal}건`}

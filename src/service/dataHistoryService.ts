@@ -424,59 +424,128 @@ async function resolveOperatorLabel(): Promise<string | null> {
   }
 }
 
-async function resolveTargetTableFq(tableName: string): Promise<string | null> {
+/** lower(column_name) → 실제 column_name (따옴표 식별자 대소문자 맞춤) */
+type ColNameMap = Map<string, string>;
+
+type ResolvedTargetTable = {
+  fq: string;
+  schema: string;
+  table: string;
+  colMap: ColNameMap;
+};
+
+async function loadTableColumnMap(schema: string, table: string): Promise<ColNameMap> {
+  const res = await db.execute(
+    sql.raw(
+      `SELECT column_name::text AS column_name
+       FROM information_schema.columns
+       WHERE table_schema = '${escapeSqlLiteral(schema)}'
+         AND table_name = '${escapeSqlLiteral(table)}'`
+    )
+  );
+  const map: ColNameMap = new Map();
+  for (const r of res.rows as Array<{ column_name?: string }>) {
+    const name = String(r.column_name ?? '').trim();
+    if (name) map.set(name.toLowerCase(), name);
+  }
+  return map;
+}
+
+/** 이력·정의 컬럼명 → 물리 컬럼명 (대소문자 무시). 없으면 null */
+function pickPhysicalCol(want: string, colMap: ColNameMap): string | null {
+  const w = String(want ?? '').trim();
+  if (!w || !isSafeSqlIdent(w)) return null;
+  return colMap.get(w.toLowerCase()) ?? null;
+}
+
+async function resolveTargetTable(tableName: string): Promise<ResolvedTargetTable | null> {
   const bare = tableName.includes('.')
     ? tableName.split('.').pop()!.trim()
     : tableName.trim();
   if (!bare || !isSafeSqlIdent(bare)) return null;
 
+  let schema = '';
+  let table = '';
+
   if (tableName.includes('.')) {
-    const [schema, name] = tableName.split('.', 2).map((s) => s.trim());
-    if (schema && name && isSafeSqlIdent(schema) && isSafeSqlIdent(name)) {
-      return `${quoteIdent(schema)}.${quoteIdent(name)}`;
+    const [s, n] = tableName.split('.', 2).map((x) => x.trim());
+    if (s && n && isSafeSqlIdent(s) && isSafeSqlIdent(n)) {
+      schema = s;
+      table = n;
     }
   }
 
-  const schemasIn = LAYER_SEARCH_SCHEMAS.map((s) => `'${s}'`).join(',');
-  try {
-    const res = await db.execute(
-      sql.raw(
-        `SELECT table_schema, table_name
-         FROM information_schema.tables
-         WHERE table_schema IN (${schemasIn})
-           AND lower(table_name) = lower('${escapeSqlLiteral(bare)}')
-         ORDER BY CASE table_schema
-           WHEN 'layer' THEN 1
-           WHEN 'public_layer' THEN 2
-           ELSE 3
-         END
-         LIMIT 1`
-      )
-    );
-    const row = (res.rows as Array<{ table_schema?: string; table_name?: string }>)[0];
-    if (row?.table_schema && row?.table_name) {
-      return `${quoteIdent(row.table_schema)}.${quoteIdent(row.table_name)}`;
+  if (!schema || !table) {
+    const schemasIn = LAYER_SEARCH_SCHEMAS.map((s) => `'${s}'`).join(',');
+    try {
+      const res = await db.execute(
+        sql.raw(
+          `SELECT table_schema, table_name
+           FROM information_schema.tables
+           WHERE table_schema IN (${schemasIn})
+             AND lower(table_name) = lower('${escapeSqlLiteral(bare)}')
+           ORDER BY CASE table_schema
+             WHEN 'layer' THEN 1
+             WHEN 'public_layer' THEN 2
+             ELSE 3
+           END
+           LIMIT 1`
+        )
+      );
+      const row = (res.rows as Array<{ table_schema?: string; table_name?: string }>)[0];
+      if (row?.table_schema && row?.table_name) {
+        schema = String(row.table_schema);
+        table = String(row.table_name);
+      }
+    } catch {
+      /* fall through */
     }
-  } catch {
-    /* fall through */
   }
-  return quoteIdent(bare);
+
+  if (!schema || !table) {
+    // 스키마 미확정이면 되돌리기 SQL을 안전하게 만들지 못함
+    return null;
+  }
+
+  try {
+    const colMap = await loadTableColumnMap(schema, table);
+    if (colMap.size === 0) return null;
+    return {
+      fq: `${quoteIdent(schema)}.${quoteIdent(table)}`,
+      schema,
+      table,
+      colMap,
+    };
+  } catch {
+    return null;
+  }
 }
 
-function buildKeyWhereClause(keyField: string, keyValue: string): string | null {
+function buildKeyWhereClause(
+  keyField: string,
+  keyValue: string,
+  colMap: ColNameMap,
+): string | null {
   const fields = keyField.split(',').map((s) => s.trim()).filter(Boolean);
   if (fields.length === 0) return null;
   if (!fields.every(isSafeSqlIdent)) return null;
 
-  if (fields.length === 1) {
-    // 숫자·문자 키 모두 매칭 (ogc_fid integer 등)
-    return `${quoteIdent(fields[0])}::text = '${escapeSqlLiteral(keyValue)}'`;
+  const resolved: string[] = [];
+  for (const f of fields) {
+    const phys = pickPhysicalCol(f, colMap);
+    if (!phys) return null;
+    resolved.push(phys);
   }
-  const values = keyValue.split(',', fields.length);
+
+  if (resolved.length === 1) {
+    // 숫자·문자 키 모두 매칭 (ogc_fid integer 등)
+    return `${quoteIdent(resolved[0])}::text = '${escapeSqlLiteral(keyValue)}'`;
+  }
+  const values = keyValue.split(',', resolved.length);
   const parts: string[] = [];
-  for (let i = 0; i < fields.length; i++) {
+  for (let i = 0; i < resolved.length; i++) {
     const val = (i < values.length ? values[i] : '').trim();
-    parts.push(`${quoteIdent(fields[i])}::text = '${escapeSqlLiteral(val)}'`);
+    parts.push(`${quoteIdent(resolved[i])}::text = '${escapeSqlLiteral(val)}'`);
   }
   return parts.join(' AND ');
 }
@@ -488,17 +557,20 @@ function buildAddedRowAttrWhereClause(
     dd_after: string | null;
     dd_col_name: string | null;
   }>,
+  colMap: ColNameMap,
 ): string | null {
   const parts: string[] = [];
   const seen = new Set<string>();
   for (const r of details) {
     const colName = resolveColName(r.dd_col_name, r.dd_item);
     if (!colName || !isSafeSqlIdent(colName)) continue;
-    const lower = colName.toLowerCase();
+    const phys = pickPhysicalCol(colName, colMap);
+    if (!phys) continue;
+    const lower = phys.toLowerCase();
     if (
       seen.has(lower)
       || NON_TABLE_REVERT_COLS.has(lower)
-      || isGeomColName(colName)
+      || isGeomColName(phys)
       || lower === 'ogc_fid'
     ) {
       continue;
@@ -506,7 +578,7 @@ function buildAddedRowAttrWhereClause(
     const after = r.dd_after;
     if (after == null || String(after).trim() === '') continue;
     seen.add(lower);
-    parts.push(`${quoteIdent(colName)}::text = '${escapeSqlLiteral(String(after))}'`);
+    parts.push(`${quoteIdent(phys)}::text = '${escapeSqlLiteral(String(after))}'`);
   }
   if (parts.length === 0) return null;
   return parts.join(' AND ');
@@ -536,18 +608,19 @@ async function deleteAddedHistoryRow(params: {
   fq: string;
   keyField: string;
   keyValue: string;
+  colMap: ColNameMap;
   details: Array<{
     dd_item: string | null;
     dd_after: string | null;
     dd_col_name: string | null;
   }>;
 }): Promise<number> {
-  const whereKey = buildKeyWhereClause(params.keyField, params.keyValue);
+  const whereKey = buildKeyWhereClause(params.keyField, params.keyValue, params.colMap);
   if (whereKey) {
     const n = await deleteRowsReturningCount(params.fq, whereKey);
     if (n > 0) return n;
   }
-  const whereAttr = buildAddedRowAttrWhereClause(params.details);
+  const whereAttr = buildAddedRowAttrWhereClause(params.details, params.colMap);
   if (!whereAttr) return 0;
   return deleteOneRowByAttrWhere(params.fq, whereAttr);
 }
@@ -778,6 +851,12 @@ export async function getDataHistoryList(params?: {
   /** source 와 동일 (구분 필터) */
   category?: string;
   keyword?: string;
+  /** 행 단위 조회 — 테이블명(스키마 유무 모두 매칭) */
+  tableName?: string;
+  /** 행 키 값 — 단건 또는 여러 후보(ogc_fid·ftr_idn 등) */
+  keyValue?: string | string[];
+  /** 선택: 키 필드명(대소문자 무시). 없으면 keyValue만으로 매칭 */
+  keyField?: string;
   page?: number;
   limit?: number;
 }): Promise<{
@@ -795,6 +874,22 @@ export async function getDataHistoryList(params?: {
   const wtFilter = workTypeSqlFilter(params?.workType);
   const catFilter = categorySqlFilter(params?.category ?? params?.source);
 
+  const bareTable = String(params?.tableName ?? '')
+    .trim()
+    .replace(/^.*\./, '')
+    .toLowerCase();
+  const keyValues = (
+    Array.isArray(params?.keyValue)
+      ? params!.keyValue
+      : params?.keyValue != null
+        ? [params.keyValue]
+        : []
+  )
+    .map((v) => String(v ?? '').trim())
+    .filter(Boolean);
+  const uniqueKeyValues = [...new Set(keyValues)];
+  const keyFieldFilter = String(params?.keyField ?? '').trim();
+
   try {
     const filters = sql`
       WHERE 1 = 1
@@ -802,6 +897,32 @@ export async function getDataHistoryList(params?: {
       ${endBound ? sql`AND dl.dl_date <= ${endBound}::timestamp` : sql``}
       ${wtFilter ?? sql``}
       ${catFilter ?? sql``}
+      ${
+        bareTable
+          ? sql`AND (
+              lower(COALESCE(dl.dl_table_name, '')) = ${bareTable}
+              OR lower(COALESCE(dl.dl_table_name, '')) LIKE ${'%.' + bareTable}
+              OR lower(
+                regexp_replace(COALESCE(dl.dl_table_name, ''), '^.*\\.', '')
+              ) = ${bareTable}
+            )`
+          : sql``
+      }
+      ${
+        uniqueKeyValues.length === 1
+          ? sql`AND dl.dl_key_value = ${uniqueKeyValues[0]}`
+          : uniqueKeyValues.length > 1
+            ? sql`AND dl.dl_key_value IN (${sql.join(
+                uniqueKeyValues.map((v) => sql`${v}`),
+                sql`, `
+              )})`
+            : sql``
+      }
+      ${
+        keyFieldFilter
+          ? sql`AND lower(COALESCE(dl.dl_key_field, '')) = ${keyFieldFilter.toLowerCase()}`
+          : sql``
+      }
       ${
         keyword
           ? sql`AND (
@@ -1145,16 +1266,26 @@ export async function revertDataHistoryField(params: {
       };
     }
 
-    const fq = await resolveTargetTableFq(tableName);
-    if (!fq) {
+    const target = await resolveTargetTable(tableName);
+    if (!target) {
       return {
         success: false,
         code: 'not_revertable',
         error: '대상 테이블을 확인할 수 없습니다.',
       };
     }
+    const { fq, colMap } = target;
 
-    const whereClause = buildKeyWhereClause(keyField, keyValue);
+    const physCol = pickPhysicalCol(colName, colMap);
+    if (!physCol) {
+      return {
+        success: false,
+        code: 'not_revertable',
+        error: '대상 테이블에 해당 컬럼이 없습니다.',
+      };
+    }
+
+    const whereClause = buildKeyWhereClause(keyField, keyValue, colMap);
     if (!whereClause) {
       return {
         success: false,
@@ -1191,6 +1322,7 @@ export async function revertDataHistoryField(params: {
         fq,
         keyField,
         keyValue,
+        colMap,
         details: allDetails.length > 0 ? allDetails : [{
           dd_item: row.dd_item,
           dd_after: row.dd_after,
@@ -1240,7 +1372,7 @@ export async function revertDataHistoryField(params: {
 
     // 메타 도형 → 이력 테이블(old) GeoJSON으로 SET (batch·테이블+키 폴백 동일 경로)
     let setExpr: string | { error: string };
-    if (isGeomColName(colName) && isGeomMetaOnlyStored(row.dd_before)) {
+    if (isGeomColName(physCol) && isGeomMetaOnlyStored(row.dd_before)) {
       const gj = await fetchHistoryGeomJson({
         batchKey: row.dl_batch_key,
         keyValue,
@@ -1255,10 +1387,10 @@ export async function revertDataHistoryField(params: {
           error: '이력 도형(old)을 sync_log_geom / excel_sync_log_geom에서 찾을 수 없습니다.',
         };
       }
-      const qCol = quoteIdent(colName);
+      const qCol = quoteIdent(physCol);
       setExpr = `${qCol} = ST_SetSRID(ST_GeomFromGeoJSON('${escapeSqlLiteral(gj)}'), 5181)`;
     } else {
-      setExpr = buildSetExpression(colName, row.dd_before, {
+      setExpr = buildSetExpression(physCol, row.dd_before, {
         batchKey: row.dl_batch_key,
         keyValue,
         tableName,
@@ -1412,14 +1544,15 @@ export async function revertDataHistoryRow(params: {
       };
     }
 
-    const fq = await resolveTargetTableFq(tableName);
-    if (!fq) {
+    const target = await resolveTargetTable(tableName);
+    if (!target) {
       return {
         success: false,
         code: 'not_revertable',
         error: '대상 테이블을 확인할 수 없습니다.',
       };
     }
+    const { fq, colMap } = target;
 
     const operator = await resolveOperatorLabel();
     const { source } = mapSource(head.dl_source);
@@ -1441,6 +1574,7 @@ export async function revertDataHistoryRow(params: {
         fq,
         keyField,
         keyValue,
+        colMap,
         details: rawDetails,
       });
       if (affected === 0) {
@@ -1509,7 +1643,9 @@ export async function revertDataHistoryRow(params: {
     for (const r of rawDetails) {
       const colName = resolveColName(r.dd_col_name, r.dd_item);
       if (!colName || NON_TABLE_REVERT_COLS.has(colName.toLowerCase())) continue;
-      const colKey = colName.toLowerCase();
+      const physCol = pickPhysicalCol(colName, colMap);
+      if (!physCol) continue;
+      const colKey = physCol.toLowerCase();
       if (seenCols.has(colKey)) continue;
 
       const keyValue =
@@ -1529,7 +1665,7 @@ export async function revertDataHistoryRow(params: {
       }
 
       let setExpr: string | { error: string };
-      if (isGeomColName(colName) && isGeomMetaOnlyStored(r.dd_before)) {
+      if (isGeomColName(physCol) && isGeomMetaOnlyStored(r.dd_before)) {
         const gj = await fetchHistoryGeomJson({
           batchKey,
           keyValue,
@@ -1538,9 +1674,9 @@ export async function revertDataHistoryRow(params: {
           sourceHint,
         });
         if (!gj) continue;
-        setExpr = `${quoteIdent(colName)} = ST_SetSRID(ST_GeomFromGeoJSON('${escapeSqlLiteral(gj)}'), 5181)`;
+        setExpr = `${quoteIdent(physCol)} = ST_SetSRID(ST_GeomFromGeoJSON('${escapeSqlLiteral(gj)}'), 5181)`;
       } else {
-        setExpr = buildSetExpression(colName, r.dd_before, {
+        setExpr = buildSetExpression(physCol, r.dd_before, {
           batchKey,
           keyValue,
           tableName,
@@ -1577,7 +1713,7 @@ export async function revertDataHistoryRow(params: {
     }
 
     for (const [keyValue, cols] of byKey) {
-      const whereClause = buildKeyWhereClause(keyField, keyValue);
+      const whereClause = buildKeyWhereClause(keyField, keyValue, colMap);
       if (!whereClause) {
         return {
           success: false,

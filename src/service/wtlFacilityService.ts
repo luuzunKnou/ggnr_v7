@@ -1,10 +1,12 @@
 /**
  * 시설관리 — tables.json 그룹·layer 테이블 목록·전 필드 키워드 검색
+ * CODE 필드는 한글명(define_code_kor_name) 매칭 → 코드 IN (V6 통합검색과 동일)
  */
 import fs from 'node:fs';
 import path from 'node:path';
 import { sql } from 'drizzle-orm';
 import db from '@/database/db';
+import { buildCodeKeywordInClauses } from '@/lib/defineLayerCodeKeyword';
 
 export type WtlFacilitySource = {
   group: string;
@@ -221,7 +223,8 @@ export async function listFacilitySources(params: {
 }
 
 /**
- * 선택 테이블 행 목록. keyword가 있으면 define_field 전 컬럼(또는 물리 텍스트 컬럼) ILIKE.
+ * 선택 테이블 행 목록.
+ * keyword: define_field 전 컬럼 ILIKE + CODE 필드는 한글명 매칭 코드 IN.
  */
 export async function listFacilityRows(params: {
   table?: string;
@@ -298,9 +301,19 @@ export async function listFacilityRows(params: {
         searchCols.add(c);
       }
     }
-    const parts = [...searchCols].map(
-      (c) => `COALESCE(t."${c.replace(/"/g, '""')}"::text,'') ILIKE '${like}'`
-    );
+    const parts: string[] = [
+      ...buildCodeKeywordInClauses({
+        fieldsTable,
+        defineFields,
+        keyword,
+        esc,
+        resolveCol: (fn) => resolveColumnCase(physicalCols, fn),
+        skipField: (fnLc) => GEOM_COLS.has(fnLc),
+      }),
+      ...[...searchCols].map(
+        (c) => `COALESCE(t."${c.replace(/"/g, '""')}"::text,'') ILIKE '${like}'`
+      ),
+    ];
     if (parts.length > 0) wheres.push(`(${parts.join(' OR ')})`);
   }
 

@@ -34,6 +34,7 @@ import {
   selectDefineLayerListFields,
   type DefineFieldLike,
 } from '../../../_mapComponents/standard/defineLayerRowUtils'
+import { resolveWtlNetworkRowEditTarget } from './WtlNetworkMapAttachmentSection'
 import {
   useWtlNetworkMapLayer,
   type WtlNetworkDetailRelatedLayer,
@@ -2345,6 +2346,29 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
         overlayWidthPx={total}
         onClose={() => setSelected(null)}
         onRelatedMapLayer={handleDetailRelatedLayer}
+        onItemUpdated={(next) => {
+          setSelected(next)
+          setBoxData((prev) => {
+            let changed = false
+            const out: Record<string, LayerBoxData> = {}
+            for (const [key, data] of Object.entries(prev)) {
+              const idx = data.rows.findIndex((r) => r.id === next.id)
+              if (idx < 0) {
+                out[key] = data
+                continue
+              }
+              changed = true
+              const rows = data.rows.slice()
+              rows[idx] = {
+                ...rows[idx],
+                ...next,
+                geom: next.geom ?? rows[idx]?.geom,
+              }
+              out[key] = { ...data, rows }
+            }
+            return changed ? out : prev
+          })
+        }}
       />
       <WtlNetworkSectionPanel
         open={section.panelOpen}
@@ -2376,12 +2400,14 @@ function NetworkDetailModal({
   overlayWidthPx,
   onClose,
   onRelatedMapLayer,
+  onItemUpdated,
 }: {
   item: WtlNetworkRow | null
   overlayLeftPx: number
   overlayWidthPx: number
   onClose: () => void
   onRelatedMapLayer: (next: WtlNetworkDetailRelatedLayer) => void
+  onItemUpdated: (next: WtlNetworkRow) => void
 }) {
   const open = item != null
   const fieldsTable = String(item?.fieldsTable ?? '').trim()
@@ -2401,14 +2427,34 @@ function NetworkDetailModal({
   const codesByField = fieldsReady ? bundle.codesByField : {}
   const fieldsLoading = open && Boolean(fieldsTable) && !fieldsReady
 
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState<Record<string, string>>({})
+  const [saving, setSaving] = useState(false)
+  const [editError, setEditError] = useState<string | null>(null)
+
+  const cancelEdit = useCallback(() => {
+    setEditing(false)
+    setDraft({})
+    setEditError(null)
+  }, [])
+
+  useEffect(() => {
+    cancelEdit()
+  }, [item?.id, cancelEdit])
+
   useEffect(() => {
     if (!open) return
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose()
+      if (e.key !== 'Escape') return
+      if (editing) {
+        cancelEdit()
+        return
+      }
+      onClose()
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [open, onClose])
+  }, [open, onClose, editing, cancelEdit])
 
   useEffect(() => {
     if (!open || !fieldsTable) {
@@ -2430,12 +2476,39 @@ function NetworkDetailModal({
 
   const detailFields = useMemo(() => selectDefineLayerDetailFields(fields), [fields])
 
+  type FieldEditMeta = DefineFieldLike & {
+    define_field_is_key?: unknown
+    define_field_read_only?: unknown
+  }
+
+  const keyFieldName = useMemo(() => {
+    const hit = (fields as FieldEditMeta[]).find((f) =>
+      isDefineFieldFlagTrue(f.define_field_is_key)
+    )
+    return String(hit?.define_field_name ?? '').trim() || null
+  }, [fields])
+
+  const editTarget = useMemo(() => {
+    if (!item || !fieldsReady) return null
+    return resolveWtlNetworkRowEditTarget(item, fields)
+  }, [item, fields, fieldsReady])
+
+  const canEdit = Boolean(item?.record && editTarget && detailFields.length > 0)
+
+  type AttrRow = {
+    key: string
+    label: string
+    value: string
+    readOnly: boolean
+    editable: boolean
+  }
+
   const attrRows = useMemo(() => {
-    if (!item) return [] as Array<{ key: string; label: string; value: string }>
+    if (!item) return [] as AttrRow[]
     if (fieldsLoading) return []
     const record = item.record ?? null
     if (record && detailFields.length > 0) {
-      return detailFields.map((f, i) => {
+      return (detailFields as FieldEditMeta[]).map((f, i) => {
         const key = String(f.define_field_name ?? '').trim()
         const label = getDefineFieldDisplayLabel(key, f.define_field_kor_name)
         const raw = getRowValueByField(record, key)
@@ -2445,7 +2518,20 @@ function NetworkDetailModal({
           codesByField[key.toLowerCase()],
           '—'
         )
-        return { key: key || `f-${i}`, label, value }
+        const isKey = Boolean(
+          key && keyFieldName && key.toLowerCase() === keyFieldName.toLowerCase()
+        )
+        const readOnly =
+          isKey ||
+          isDefineFieldFlagTrue(f.define_field_read_only) ||
+          isGeomLikeDefineFieldName(key)
+        return {
+          key: key || `f-${i}`,
+          label,
+          value,
+          readOnly,
+          editable: Boolean(key) && !readOnly,
+        }
       })
     }
     if (record) {
@@ -2455,6 +2541,8 @@ function NetworkDetailModal({
           key: k || `auto-${i}`,
           label: getDefineFieldDisplayLabel(k),
           value: formatDefineFieldDisplayValue(v, undefined, undefined, '—'),
+          readOnly: true,
+          editable: false,
         }))
     }
     if (item.attrs?.length) {
@@ -2462,16 +2550,94 @@ function NetworkDetailModal({
         key: `${a.label}-${i}`,
         label: a.label,
         value: a.value,
+        readOnly: true,
+        editable: false,
       }))
     }
     return [
-      { key: 'name', label: '관리번호', value: item.name },
-      { key: 'diameter', label: '구경', value: item.diameter },
-      { key: 'material', label: '재질', value: item.material },
-      { key: 'length', label: '연장', value: item.length },
-      { key: 'year', label: '설치연도', value: item.year },
+      { key: 'name', label: '관리번호', value: item.name, readOnly: true, editable: false },
+      { key: 'diameter', label: '구경', value: item.diameter, readOnly: true, editable: false },
+      { key: 'material', label: '재질', value: item.material, readOnly: true, editable: false },
+      { key: 'length', label: '연장', value: item.length, readOnly: true, editable: false },
+      { key: 'year', label: '설치연도', value: item.year, readOnly: true, editable: false },
     ]
-  }, [item, detailFields, codesByField, fieldsLoading])
+  }, [item, detailFields, codesByField, fieldsLoading, keyFieldName])
+
+  const beginEdit = useCallback(() => {
+    if (!canEdit || !item?.record) return
+    const next: Record<string, string> = {}
+    for (const row of attrRows) {
+      if (!row.editable) continue
+      const raw = getRowValueByField(item.record, row.key)
+      next[row.key] = raw == null ? '' : String(raw)
+    }
+    setDraft(next)
+    setEditError(null)
+    setEditing(true)
+  }, [canEdit, item, attrRows])
+
+  const refreshSelectedItem = useCallback(async () => {
+    if (!item) return
+    try {
+      const detailRes = await call('', 'POST', {
+        service: 'wtlNetworkService',
+        action: 'getWtlNetworkDetail',
+        params: { id: item.id },
+      })
+      const refreshed =
+        ((detailRes?.data ?? detailRes)?.row as WtlNetworkRow | null | undefined) ?? null
+      if (refreshed) onItemUpdated(refreshed)
+    } catch {
+      /* 목록·상세는 기존 값 유지 */
+    }
+  }, [item, onItemUpdated])
+
+  const handleSave = useCallback(async () => {
+    if (!item || !editTarget || !item.record) return
+    setSaving(true)
+    setEditError(null)
+    try {
+      const res = await call('', 'POST', {
+        service: 'layerRowService',
+        action: 'updateTableRowByKey',
+        params: {
+          table: editTarget.table,
+          schema: editTarget.schema,
+          keyValue: editTarget.keyValue,
+          keyField: editTarget.keyField,
+          changes: draft,
+          includeHiddenDetail: false,
+        },
+      })
+      const data = res?.data ?? res
+      if (data?.error || data?.success === false) {
+        setEditError(String(data?.error ?? '수정에 실패했습니다.'))
+        return
+      }
+      const updatedRecord: Record<string, unknown> = { ...item.record, ...draft }
+      let refreshed: WtlNetworkRow | null = null
+      try {
+        const detailRes = await call('', 'POST', {
+          service: 'wtlNetworkService',
+          action: 'getWtlNetworkDetail',
+          params: { id: item.id },
+        })
+        refreshed = ((detailRes?.data ?? detailRes)?.row as WtlNetworkRow | null | undefined) ?? null
+      } catch {
+        refreshed = null
+      }
+      const next: WtlNetworkRow = refreshed
+        ? { ...refreshed, record: refreshed.record ?? updatedRecord }
+        : { ...item, record: updatedRecord }
+      onItemUpdated(next)
+      setEditing(false)
+      setDraft({})
+    } catch (e: unknown) {
+      setEditError(e instanceof Error ? e.message : '수정에 실패했습니다.')
+    } finally {
+      setSaving(false)
+    }
+  }, [item, editTarget, draft, onItemUpdated])
 
   const titleField = useMemo(() => {
     if (!fieldsReady || !item) return item?.name ?? ''
@@ -2503,6 +2669,29 @@ function NetworkDetailModal({
 
   const subtitle = titleField || item.name
 
+  const renderCellValue = (row: AttrRow) => {
+    if (editing && row.editable) {
+      return (
+        <input
+          className="h-6 w-full min-w-0 rounded border border-border bg-background px-1.5 text-[11px] outline-none focus:border-primary focus:ring-1 focus:ring-primary/25"
+          value={draft[row.key] ?? ''}
+          disabled={saving}
+          title={row.label}
+          onChange={(e) =>
+            setDraft((prev) => ({
+              ...prev,
+              [row.key]: e.target.value,
+            }))
+          }
+        />
+      )
+    }
+    if (row.label === '상태') {
+      return <span className={statusClass(row.value)}>{row.value}</span>
+    }
+    return row.value
+  }
+
   return createPortal(
     <div
       className="pointer-events-auto fixed box-border flex min-h-0 items-center justify-center overflow-y-auto bg-black/50 p-6"
@@ -2516,7 +2705,10 @@ function NetworkDetailModal({
       }}
       role="dialog"
       aria-modal="true"
-      onClick={onClose}
+      onClick={() => {
+        if (editing) return
+        onClose()
+      }}
     >
       <div
         className="relative flex w-full flex-col overflow-hidden rounded-lg border border-border bg-background shadow-2xl"
@@ -2537,7 +2729,10 @@ function NetworkDetailModal({
           <button
             type="button"
             title="닫기"
-            onClick={onClose}
+            onClick={() => {
+              if (editing) cancelEdit()
+              onClose()
+            }}
             className="standard-panel-close"
             aria-label="닫기"
           >
@@ -2563,12 +2758,6 @@ function NetworkDetailModal({
                     {Array.from({ length: Math.ceil(attrRows.length / 2) }, (_, i) => {
                       const left = attrRows[i * 2]
                       const right = attrRows[i * 2 + 1]
-                      const renderValue = (row: (typeof attrRows)[number]) =>
-                        row.label === '상태' ? (
-                          <span className={statusClass(row.value)}>{row.value}</span>
-                        ) : (
-                          row.value
-                        )
                       return (
                         <tr key={`${left.key}-${right?.key ?? i}`}>
                           <th
@@ -2578,7 +2767,7 @@ function NetworkDetailModal({
                             {left.label}
                           </th>
                           <td className="standard-detail-attr-value border border-border align-top text-foreground">
-                            {renderValue(left)}
+                            {renderCellValue(left)}
                           </td>
                           <th
                             scope="row"
@@ -2587,7 +2776,7 @@ function NetworkDetailModal({
                             {right ? right.label : '\u00a0'}
                           </th>
                           <td className="standard-detail-attr-value border border-border align-top text-foreground">
-                            {right ? renderValue(right) : '\u00a0'}
+                            {right ? renderCellValue(right) : '\u00a0'}
                           </td>
                         </tr>
                       )
@@ -2596,12 +2785,69 @@ function NetworkDetailModal({
                 </table>
               </div>
             )}
+            {editError ? (
+              <p className="mt-2 text-[11px] text-red-600" role="alert">
+                {editError}
+              </p>
+            ) : null}
           </div>
-          <WtlNetworkDetailRelatedTabs
-            item={item}
-            fields={fields}
-            onRelatedMapLayer={onRelatedMapLayer}
-          />
+          {!editing ? (
+            <WtlNetworkDetailRelatedTabs
+              item={item}
+              fields={fields}
+              onRelatedMapLayer={onRelatedMapLayer}
+              onHistoryReverted={() => void refreshSelectedItem()}
+            />
+          ) : null}
+          <div className="shrink-0 border-t border-border bg-muted/30 px-3 py-2">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-[10px] text-muted-foreground">기본정보</span>
+              <div className="flex gap-1.5">
+                {editing ? (
+                  <>
+                    <button
+                      type="button"
+                      title="취소"
+                      disabled={saving}
+                      onClick={cancelEdit}
+                      className="cursor-pointer rounded border border-border bg-background px-2.5 py-1 text-[11px] text-muted-foreground transition-colors hover:bg-muted/50 disabled:pointer-events-none disabled:opacity-50"
+                    >
+                      취소
+                    </button>
+                    <button
+                      type="button"
+                      title={saving ? '저장 중…' : '저장'}
+                      disabled={saving}
+                      onClick={() => void handleSave()}
+                      className="cursor-pointer rounded border border-primary bg-primary px-2.5 py-1 text-[11px] text-white transition-colors hover:bg-primary/90 disabled:pointer-events-none disabled:opacity-50"
+                    >
+                      {saving ? '저장 중…' : '저장'}
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <button
+                      type="button"
+                      title="수정"
+                      disabled={!canEdit}
+                      onClick={beginEdit}
+                      className="cursor-pointer rounded border border-border bg-background px-2.5 py-1 text-[11px] text-muted-foreground transition-colors hover:bg-muted/50 disabled:pointer-events-none disabled:opacity-50"
+                    >
+                      수정
+                    </button>
+                    <button
+                      type="button"
+                      title="닫기"
+                      onClick={onClose}
+                      className="cursor-pointer rounded border border-border bg-background px-2.5 py-1 text-[11px] text-muted-foreground transition-colors hover:bg-muted/50"
+                    >
+                      닫기
+                    </button>
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>,

@@ -38,6 +38,7 @@ import type {
 } from '@/app/(pages)/map/_mapContents/wtlAdmin/networkMap/wtlNetworkTypes';
 import { isWtlNetMapGroup } from '@/app/(pages)/map/_mapContents/wtlAdmin/networkMap/wtlNetworkMapSources';
 import { exportLayerTableToShp } from '@/service/shpUploadService';
+import { buildCodeKeywordInClauses } from '@/lib/defineLayerCodeKeyword';
 
 export type {
   WtlNetworkAxisMode,
@@ -458,8 +459,56 @@ type ListFilterOpts = {
   areaWkts5181?: string[] | null;
 };
 
+const GEOM_LIKE_COLS = new Set([
+  'geom',
+  'geometry',
+  'the_geom',
+  'wkb_geometry',
+  'shape',
+  'geojson',
+]);
+
+const physicalColsCache = new Map<string, string[]>();
+
+async function listLayerPhysicalColumns(table: string): Promise<string[]> {
+  const key = String(table ?? '')
+    .trim()
+    .toLowerCase();
+  if (!key) return [];
+  const hit = physicalColsCache.get(key);
+  if (hit) return hit;
+  const res = await db.execute(
+    sql.raw(
+      `SELECT column_name AS name
+       FROM information_schema.columns
+       WHERE table_schema = 'layer' AND lower(table_name) = '${esc(key)}'
+       ORDER BY ordinal_position`
+    )
+  );
+  const cols = (res.rows ?? [])
+    .map((r) => String((r as { name?: string }).name ?? '').trim())
+    .filter(Boolean);
+  physicalColsCache.set(key, cols);
+  return cols;
+}
+
+function resolvePhysicalColumn(
+  physicalCols: string[],
+  fieldName: string
+): string | null {
+  const want = String(fieldName ?? '')
+    .trim()
+    .toLowerCase();
+  if (!want || GEOM_LIKE_COLS.has(want)) return null;
+  return physicalCols.find((c) => c.toLowerCase() === want) ?? null;
+}
+
 /** 목록·SHP 내보내기 공통 WHERE (alias t) */
-function collectListWheres(def: WtlNetLayerDef, opts: ListFilterOpts): string[] {
+async function collectListWheres(
+  def: WtlNetLayerDef,
+  opts: ListFilterOpts,
+  physicalTable?: string
+): Promise<string[]> {
   const nameExpr = def.nameExpr ?? `COALESCE(NULLIF(trim(ftr_idn::text),''), ogc_fid::text)`;
   const dipCol = def.diameterCol;
   const mopCol = def.materialCol;
@@ -564,28 +613,47 @@ function collectListWheres(def: WtlNetLayerDef, opts: ListFilterOpts): string[] 
     const block = String(opts.supplyBlock ?? '').trim();
     if (block) {
       const like = `%${esc(block)}%`;
-      wheres.push(
-        `(${nameExpr} ILIKE '${like}' OR COALESCE(t.ftr_idn::text,'') ILIKE '${like}')`
-      );
+      // nameExpr 에 ftr_idn 포함 레이어는 그것으로 충분. 없는 테이블(wtl_pipe_ps 등)은 컬럼 참조 금지
+      wheres.push(`(${nameExpr}) ILIKE '${like}'`);
     }
   }
 
   const kw = String(opts.keyword ?? '').trim();
   if (kw) {
     const like = `%${esc(kw)}%`;
-    const parts = [
-      `${nameExpr} ILIKE '${like}'`,
-      `COALESCE(t.ftr_idn::text,'') ILIKE '${like}'`,
-    ];
+    // 표시식·구경·재질 텍스트 + define CODE 전체(물리 컬럼 있는 것만) 한글명 매칭
+    const parts = [`(${nameExpr}) ILIKE '${like}'`];
     if (dipCol) parts.push(`COALESCE(t."${dipCol}"::text,'') ILIKE '${like}'`);
     if (mopCol) parts.push(`COALESCE(t."${mopCol}"::text,'') ILIKE '${like}'`);
+
+    const phys =
+      String(physicalTable ?? def.table ?? '')
+        .trim() || '';
+    const physicalCols = phys ? await listLayerPhysicalColumns(phys) : [];
+    const fieldsTable = resolveFieldsTableKeys(
+      def,
+      phys || String(def.table ?? def.defineTable ?? '')
+    ).fieldsTable;
+    const defineFields = loadDefineFieldRows(fieldsTable);
+    const codeParts = buildCodeKeywordInClauses({
+      fieldsTable,
+      defineFields,
+      keyword: kw,
+      esc,
+      resolveCol: (fn) => {
+        if (def.hasHjd === false && fn.toLowerCase() === 'hjd_cde') return null;
+        return resolvePhysicalColumn(physicalCols, fn);
+      },
+      skipField: (fnLc) => GEOM_LIKE_COLS.has(fnLc),
+    });
+    parts.push(...codeParts);
     wheres.push(`(${parts.join(' OR ')})`);
   }
 
   return wheres;
 }
 
-function buildSelect(
+async function buildSelect(
   def: WtlNetLayerDef,
   opts: {
     physicalTable: string;
@@ -606,7 +674,7 @@ function buildSelect(
     /** null이면 내부 LIMIT 생략(바깥 페이지 처리) */
     limit?: number | null;
   }
-): string | null {
+): Promise<string | null> {
   const tbl = opts.physicalTable.replace(/"/g, '""');
   const nameExpr = def.nameExpr ?? `COALESCE(NULLIF(trim(ftr_idn::text),''), ogc_fid::text)`;
   const dipCol = def.diameterCol;
@@ -614,7 +682,7 @@ function buildSelect(
   const lenCol = def.lengthCol;
   const yearCol = def.yearCol;
   const { fieldsTable, fieldsTableFallback } = resolveFieldsTableKeys(def, opts.physicalTable);
-  const wheres = collectListWheres(def, opts);
+  const wheres = await collectListWheres(def, opts, opts.physicalTable);
 
   const diamSel = dipCol ? `t."${dipCol}"::text` : `NULL`;
   const matSel = mopCol ? `t."${mopCol}"::text` : `NULL`;
@@ -657,9 +725,13 @@ function buildSelect(
 }
 
 /** SHP용 — 동일 필터로 원본 행 SELECT */
-function buildShpExportSql(def: WtlNetLayerDef, physicalTable: string, opts: ListFilterOpts): string {
+async function buildShpExportSql(
+  def: WtlNetLayerDef,
+  physicalTable: string,
+  opts: ListFilterOpts
+): Promise<string> {
   const tbl = physicalTable.replace(/"/g, '""');
-  const wheres = collectListWheres(def, opts);
+  const wheres = await collectListWheres(def, opts, physicalTable);
   return `SELECT t.* FROM layer."${tbl}" t WHERE ${wheres.join(' AND ')}`;
 }
 
@@ -772,7 +844,7 @@ export async function getWtlNetworkList(params: ListParams = {}): Promise<{
       if (!def?.table) continue;
       const physicalTable = source.remapTable(def.table);
       if (!(await tableExists(physicalTable))) continue;
-      const sel = buildSelect(def, {
+      const sel = await buildSelect(def, {
         physicalTable,
         sourceId: source.id,
         bbox: params.bbox,
@@ -1692,7 +1764,7 @@ export async function getWtlNetworkStatusStats(params: {
     const tbl = base.replace(/"/g, '""');
     const sumExpr = `SUM(COALESCE(NULLIF(TRIM(t."${lenCol}"::text), '')::numeric, 0))`;
     const hasSaa = await tableHasColumn(base, 'saa_cde');
-    const whereSql = collectListWheres(def, listOpts).join(' AND ');
+    const whereSql = (await collectListWheres(def, listOpts, base)).join(' AND ');
 
     try {
       const dipRes = await db.execute(
@@ -1831,7 +1903,9 @@ export async function getWtlNetworkStatusStats(params: {
         seen.add(physicalTable);
         if (!(await tableExists(physicalTable))) continue;
         const tbl = physicalTable.replace(/"/g, '""');
-        const whereSql = collectListWheres(def, listOpts).join(' AND ');
+        const whereSql = (await collectListWheres(def, listOpts, physicalTable)).join(
+          ' AND '
+        );
         try {
           const res = await db.execute(
             sql.raw(
@@ -2261,7 +2335,7 @@ async function buildPipeUnionSql(
     const istSel = hasIst ? 't.ist_ymd::text AS ist_ymd' : 'NULL::text AS ist_ymd';
     const hjdSel = hasHjd ? 't.hjd_cde::text AS hjd_cde' : 'NULL::text AS hjd_cde';
     const saaSel = hasSaa ? 't.saa_cde::text AS saa_cde' : 'NULL::text AS saa_cde';
-    const whereSql = collectListWheres(def, listOpts).join(' AND ');
+    const whereSql = (await collectListWheres(def, listOpts, base)).join(' AND ');
     parts.push(
       `SELECT ${mopSel}, ${istSel}, ${hjdSel}, ${saaSel}, t."${dipCol}"::text AS std_dip, t."${lenCol}"::text AS byc_len FROM layer."${tbl}" t WHERE ${whereSql}`
     );
@@ -2984,6 +3058,4 @@ export async function exportWtlNetworkShpZip(
   return {
     success: true,
     zipBuffer: Buffer.concat(chunks),
-    fileName: `관망조회_${scopeTag}_SHP_${stamp}.zip`,
-  };
-}
+    fileName: `관망조회_${scopeTag}_SHP_${stamp}

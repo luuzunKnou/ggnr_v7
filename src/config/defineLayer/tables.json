@@ -5779,6 +5779,30 @@
     "define_table_source": "shp"
   },
   {
+    "define_table_name": "wtl_infeed_ps",
+    "define_table_kor_name": "염소투입설비",
+    "define_table_shp_type": "POINT",
+    "define_table_read_share": "P",
+    "define_table_write_share": "P",
+    "define_table_group": "상수",
+    "define_table_idx": "900",
+    "define_table_etc": "",
+    "define_table_schema": "layer",
+    "define_table_source": "shp"
+  },
+  {
+    "define_table_name": "wtl_meter_ps",
+    "define_table_kor_name": "수질계측기",
+    "define_table_shp_type": "POINT",
+    "define_table_read_share": "P",
+    "define_table_write_share": "P",
+    "define_table_group": "상수",
+    "define_table_idx": "1000",
+    "define_table_etc": "",
+    "define_table_schema": "layer",
+    "define_table_source": "shp"
+  },
+  {
     "define_table_name": "wtl_pres_ps",
     "define_table_kor_name": "가압장",
     "define_table_shp_type": "POINT",

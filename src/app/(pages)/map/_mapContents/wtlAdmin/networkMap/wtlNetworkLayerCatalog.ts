@@ -483,10 +483,15 @@ export function buildWtlNetSearchCql(
   const kw = String(filter.keyword ?? '').trim()
   if (kw) {
     const like = `'%${escCql(kw)}%'`
-    const ors = [`strToLowerCase(ftr_idn) LIKE strToLowerCase(${like})`]
+    const ors: string[] = []
+    // nameExpr 기본·ftr_idn 포함 레이어만 — wtl_pipe_ps 등 컬럼 없는 테이블 제외
+    const nameExpr = def.nameExpr
+    if (nameExpr == null || /\bftr_idn\b/i.test(nameExpr)) {
+      ors.push(`strToLowerCase(ftr_idn) LIKE strToLowerCase(${like})`)
+    }
     if (dipCol) ors.push(`strToLowerCase(${dipCol}) LIKE strToLowerCase(${like})`)
     if (mopCol) ors.push(`strToLowerCase(${mopCol}) LIKE strToLowerCase(${like})`)
-    parts.push(`(${ors.join(' OR ')})`)
+    if (ors.length > 0) parts.push(`(${ors.join(' OR ')})`)
   }
 
   if (parts.length === 0) return 'INCLUDE'

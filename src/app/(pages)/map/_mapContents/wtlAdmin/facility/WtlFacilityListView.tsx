@@ -14,6 +14,7 @@ import {
   peekWtlDefineDisplayBundle,
   type WtlDefineDisplayBundle,
 } from '../networkMap/wtlNetworkDefineDisplayCache'
+import { WtlFacilityTableLoadingRow } from './WtlFacilityTableLoadingRow'
 
 export type WtlFacilityListRow = {
   id: string
@@ -107,67 +108,89 @@ export function WtlFacilityListView({
   }, [bundle, rows])
 
   const codesByField = bundle?.codesByField ?? {}
+  const colCount = Math.max(1, listFields.length)
+  const showTable = loading || error != null || listFields.length > 0 || rows.length > 0
 
   return (
     <div className="standard-list-body">
       <div className="standard-list-scroll">
-        {loading ? (
-          <p className="standard-detail-loading px-3 py-4">목록 불러오는 중…</p>
-        ) : error ? (
-          <p className="px-3 py-4 text-xs text-destructive">{error}</p>
-        ) : rows.length === 0 ? (
-          <p className="standard-table-empty">조회된 시설이 없습니다.</p>
-        ) : listFields.length === 0 ? (
+        {!showTable ? (
           <p className="standard-table-empty">표시할 필드가 없습니다.</p>
         ) : (
           <table className="standard-list-table">
             <thead className="standard-table-thead">
               <tr>
-                {listFields.map((f, i) => {
-                  const key = String(f.define_field_name ?? '').trim()
-                  return (
-                    <th
-                      key={key || `h-${i}`}
-                      className="standard-table-th standard-table-th-left"
-                      title={getDefineFieldDisplayLabel(key, f.define_field_kor_name)}
-                    >
-                      {getDefineFieldDisplayLabel(key, f.define_field_kor_name)}
-                    </th>
-                  )
-                })}
+                {listFields.length > 0 ? (
+                  listFields.map((f, i) => {
+                    const key = String(f.define_field_name ?? '').trim()
+                    return (
+                      <th
+                        key={key || `h-${i}`}
+                        className="standard-table-th standard-table-th-left"
+                        title={getDefineFieldDisplayLabel(key, f.define_field_kor_name)}
+                      >
+                        {getDefineFieldDisplayLabel(key, f.define_field_kor_name)}
+                      </th>
+                    )
+                  })
+                ) : (
+                  <th className="standard-table-th standard-table-th-left">—</th>
+                )}
               </tr>
             </thead>
             <tbody>
-              {rows.map((row) => (
-                <tr
-                  key={row.id}
-                  className={cn(
-                    'standard-list-row cursor-pointer',
-                    selectedId === row.id && 'standard-list-row-selected'
-                  )}
-                  onClick={() => onSelect(row)}
-                >
-                  {listFields.map((f, fi) => {
-                    const key = String(f.define_field_name ?? '').trim()
-                    const raw = getRowValueByField(row.record, key)
-                    const value = formatDefineFieldDisplayValue(
-                      raw,
-                      f.define_field_type,
-                      codesByField[key.toLowerCase()],
-                      '—'
-                    )
-                    return (
-                      <td
-                        key={`${row.id}-${key || fi}`}
-                        className="standard-table-td-compact"
-                        title={value}
-                      >
-                        {value}
-                      </td>
-                    )
-                  })}
+              {loading ? (
+                <WtlFacilityTableLoadingRow colSpan={colCount} />
+              ) : error ? (
+                <tr>
+                  <td colSpan={colCount} className="standard-table-empty text-destructive">
+                    {error}
+                  </td>
                 </tr>
-              ))}
+              ) : rows.length === 0 ? (
+                <tr>
+                  <td colSpan={colCount} className="standard-table-empty">
+                    조회된 시설이 없습니다.
+                  </td>
+                </tr>
+              ) : listFields.length === 0 ? (
+                <tr>
+                  <td colSpan={colCount} className="standard-table-empty">
+                    표시할 필드가 없습니다.
+                  </td>
+                </tr>
+              ) : (
+                rows.map((row) => (
+                  <tr
+                    key={row.id}
+                    className={cn(
+                      'standard-list-row cursor-pointer',
+                      selectedId === row.id && 'standard-list-row-selected'
+                    )}
+                    onClick={() => onSelect(row)}
+                  >
+                    {listFields.map((f, fi) => {
+                      const key = String(f.define_field_name ?? '').trim()
+                      const raw = getRowValueByField(row.record, key)
+                      const value = formatDefineFieldDisplayValue(
+                        raw,
+                        f.define_field_type,
+                        codesByField[key.toLowerCase()],
+                        '—'
+                      )
+                      return (
+                        <td
+                          key={`${row.id}-${key || fi}`}
+                          className="standard-table-td-compact"
+                          title={value}
+                        >
+                          {value}
+                        </td>
+                      )
+                    })}
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         )}
