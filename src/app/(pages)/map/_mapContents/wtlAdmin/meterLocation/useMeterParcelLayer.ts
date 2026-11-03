@@ -17,6 +17,7 @@ import {
 } from '../../../_mapComponents/config/mapAutoNavigation'
 import { SCALE_BAR_PX } from '../../../_mapComponents/hooks/mapScale'
 import { useMapContext } from '../../../_mapComponents/MapContext'
+import type { MeterZone } from './clusterMeterZones'
 import type { MeterLocateResult } from './locateMeterAddresses'
 
 /** 구역 이동 시 목표 축척막대(m) — 한 구역 = 35m 화면 */
@@ -35,14 +36,28 @@ function labelText(label: string, offsetY: number): Text {
   })
 }
 
-function pointStyle(label: string): Style {
+function pointStyle(label: string, dimmed = false): Style {
   return new Style({
     image: new Circle({
-      radius: 7,
-      fill: new Fill({ color: 'rgba(50, 118, 195, 0.9)' }),
-      stroke: new Stroke({ color: '#ffffff', width: 2 }),
+      radius: dimmed ? 5 : 7,
+      fill: new Fill({
+        color: dimmed ? 'rgba(50, 118, 195, 0.22)' : 'rgba(50, 118, 195, 0.9)',
+      }),
+      stroke: new Stroke({
+        color: dimmed ? 'rgba(255,255,255,0.45)' : '#ffffff',
+        width: dimmed ? 1 : 2,
+      }),
     }),
-    text: labelText(label, -16),
+    text: dimmed
+      ? new Text({
+          text: label,
+          font: '11px sans-serif',
+          fill: new Fill({ color: 'rgba(15, 23, 42, 0.35)' }),
+          stroke: new Stroke({ color: 'rgba(255,255,255,0.5)', width: 2 }),
+          overflow: true,
+          offsetY: -14,
+        })
+      : labelText(label, -16),
   })
 }
 
@@ -113,26 +128,35 @@ function buildJijukPnuCql(pnus: string[]): string | undefined {
 }
 
 /**
- * 계량기 점(벡터) + 필지는 기존 jijuk WMS 스타일 + PNU CQL.
+ * 계량기 점(벡터) + 필지(jijuk) — 목록만, 구역 선택 시 구역 외는 숨김.
  */
 export function useMeterParcelLayer(
   rows: MeterLocateResult[],
   focusId: string | null,
   zoneFocusKey: string | null,
-  zoneExtent3857: [number, number, number, number] | null
+  zoneExtent3857: [number, number, number, number] | null,
+  selectedZoneId: string | null,
+  zones: MeterZone[]
 ) {
   const mapContext = useMapContext()
   const sourceRef = useRef<VectorSource | null>(null)
   const jijukLayerRef = useRef<ImageLayer<ImageWMS> | null>(null)
 
+  const zoneRowIds = useMemo(() => {
+    if (!selectedZoneId) return null
+    const zone = zones.find((z) => z.zoneId === selectedZoneId)
+    return new Set(zone?.rowIds ?? [])
+  }, [selectedZoneId, zones])
+
   const pnuList = useMemo(() => {
     const set = new Set<string>()
     for (const row of rows) {
+      if (zoneRowIds && !zoneRowIds.has(row.id)) continue
       const pnu = String(row.pnu ?? '').replace(/\D/g, '').slice(0, 19)
       if (pnu) set.add(pnu)
     }
     return [...set]
-  }, [rows])
+  }, [rows, zoneRowIds])
 
   useEffect(() => {
     const map = mapContext?.mapInstanceRef?.current
@@ -167,39 +191,48 @@ export function useMeterParcelLayer(
     jijukLayerRef.current = jijukLayer
     map.addLayer(jijukLayer)
 
-    const drawn = rows.filter((row) => row.status !== 'miss' && row.point4326)
-    if (drawn.length > 0) {
-      try {
-        const features = new GeoJSON().readFeatures(
-          {
-            type: 'FeatureCollection',
-            features: drawn.map((row) => ({
-              type: 'Feature',
-              geometry: { type: 'Point', coordinates: row.point4326 },
-              properties: { label: row.input, rowId: row.id },
-            })),
-          },
-          { dataProjection: 'EPSG:4326', featureProjection: 'EPSG:3857' }
-        )
-        for (const feature of features) {
-          const rowId = String(feature.get('rowId') ?? '')
-          const label = String(feature.get('label') ?? '')
-          feature.setId(rowId)
-          feature.setStyle(pointStyle(label))
-        }
-        source.addFeatures(features)
-      } catch {
-        source.clear()
-      }
-    }
-
     return () => {
       sourceRef.current = null
       jijukLayerRef.current = null
       map.removeLayer(pointLayer)
       map.removeLayer(jijukLayer)
     }
-  }, [mapContext?.mapInstanceRef, mapContext?.mapReady, rows])
+  }, [mapContext?.mapInstanceRef, mapContext?.mapReady])
+
+  // 목록 점 — 구역 선택 시 구역 외 숨김
+  useEffect(() => {
+    const source = sourceRef.current
+    if (!source) return
+    source.clear()
+    const drawn = rows.filter((row) => {
+      if (row.status === 'miss' || !row.point4326) return false
+      if (zoneRowIds && !zoneRowIds.has(row.id)) return false
+      return true
+    })
+    if (drawn.length === 0) return
+    try {
+      const features = new GeoJSON().readFeatures(
+        {
+          type: 'FeatureCollection',
+          features: drawn.map((row) => ({
+            type: 'Feature',
+            geometry: { type: 'Point', coordinates: row.point4326 },
+            properties: { label: row.input, rowId: row.id },
+          })),
+        },
+        { dataProjection: 'EPSG:4326', featureProjection: 'EPSG:3857' }
+      )
+      for (const feature of features) {
+        const rowId = String(feature.get('rowId') ?? '')
+        const label = String(feature.get('label') ?? '')
+        feature.setId(rowId)
+        feature.setStyle(pointStyle(label, false))
+      }
+      source.addFeatures(features)
+    } catch {
+      source.clear()
+    }
+  }, [rows, zoneRowIds])
 
   useEffect(() => {
     const layer = jijukLayerRef.current
@@ -217,7 +250,6 @@ export function useMeterParcelLayer(
       LAYERS: `${WORKSPACE}:jijuk`,
       STYLES: 'jijuk',
       CQL_FILTER: cql,
-      // 캐시 무력화
       _ts: Date.now(),
     })
   }, [pnuList])

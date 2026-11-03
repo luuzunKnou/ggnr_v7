@@ -446,12 +446,12 @@ export function MeterBulkAddModal({ open, onClose, onAdd, existingKeys }: Props)
           />
           <button
             type="button"
-            title="목록에 추가"
+            title="검색"
             disabled={loading || searching}
             onClick={() => void handleSearchAdd()}
             className="inline-flex h-8 shrink-0 cursor-pointer items-center rounded border border-primary bg-primary px-2.5 text-[11px] font-medium text-white hover:bg-primary/90 disabled:opacity-50"
           >
-            {searching ? '검색 중' : '목록에 추가'}
+            {searching ? '검색 중' : '검색'}
           </button>
         </div>
 

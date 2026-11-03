@@ -186,6 +186,13 @@ function buildJijukPnuCql(pnus: string[]): string | undefined {
   return `pnu IN (${list})`
 }
 
+function buildMetNumCql(labels: string[]): string | undefined {
+  const unique = [...new Set(labels.map((n) => String(n ?? '').trim()).filter(Boolean))]
+  if (unique.length === 0) return undefined
+  const list = unique.map((n) => `'${n.replace(/'/g, "''")}'`).join(',')
+  return `met_num IN (${list})`
+}
+
 function pointStyle(label: string): Style {
   return new Style({
     image: new Circle({
@@ -356,6 +363,26 @@ export function createMeterZoneCaptureSession(
     visible: false,
   })
 
+  // 구역 선택과 동일 — 해당 구역 급수전만 WMS
+  const meterSource = new ImageWMS({
+    url: `${geoServerBase}/${WORKSPACE}/wms`,
+    params: {
+      LAYERS: `${WORKSPACE}:wtl_meta_ps`,
+      STYLES: 'wtl_meta_ps',
+      TRANSPARENT: true,
+      FORMAT: 'image/png',
+    },
+    serverType: 'geoserver',
+    ratio: 1,
+    imageLoadFunction: geoserverWmsImageLoadFunction,
+    crossOrigin: 'anonymous',
+  })
+  const meterLayer = new ImageLayer({
+    source: meterSource,
+    zIndex: 15,
+    visible: false,
+  })
+
   const vectorSource = new VectorSource()
   const pointLayer = new VectorLayer({
     source: vectorSource,
@@ -372,7 +399,7 @@ export function createMeterZoneCaptureSession(
 
   const map = new Map({
     target: host,
-    layers: [bg, jijukLayer, pointLayer],
+    layers: [bg, jijukLayer, meterLayer, pointLayer],
     view,
     controls: defaultControls({ attribution: false, zoom: false }),
     interactions: [],
@@ -389,25 +416,41 @@ export function createMeterZoneCaptureSession(
         return { dataUrl: null, status: 'failed', reason: '캡처 취소됨' }
       }
       try {
+        // 화면은 35m 기준으로 칸 전체 채움 — 레이어만 해당 구역
         applyViewToExtent(view, extent3857)
         setPointFeatures(vectorSource, points)
 
         const pnus = points
           .map((p) => String(p.pnu ?? '').replace(/\D/g, '').slice(0, 19))
           .filter(Boolean)
-        const cql = buildJijukPnuCql(pnus)
-        if (cql) {
+        const jijukCql = buildJijukPnuCql(pnus)
+        if (jijukCql) {
           jijukLayer.setVisible(true)
           jijukSource.setImageLoadFunction(geoserverWmsImageLoadFunction)
           jijukSource.updateParams({
             LAYERS: `${WORKSPACE}:jijuk`,
             STYLES: 'jijuk',
-            CQL_FILTER: cql,
+            CQL_FILTER: jijukCql,
             _ts: Date.now(),
           })
         } else {
           jijukLayer.setVisible(false)
-          jijukSource.updateParams({ CQL_FILTER: 'INCLUDE' })
+          jijukSource.updateParams({ CQL_FILTER: undefined })
+        }
+
+        const meterCql = buildMetNumCql(points.map((p) => p.label))
+        if (meterCql) {
+          meterLayer.setVisible(true)
+          meterSource.setImageLoadFunction(geoserverWmsImageLoadFunction)
+          meterSource.updateParams({
+            LAYERS: `${WORKSPACE}:wtl_meta_ps`,
+            STYLES: 'wtl_meta_ps',
+            CQL_FILTER: meterCql,
+            _ts: Date.now(),
+          })
+        } else {
+          meterLayer.setVisible(false)
+          meterSource.updateParams({ CQL_FILTER: undefined })
         }
 
         map.renderSync()
@@ -418,9 +461,12 @@ export function createMeterZoneCaptureSession(
           await raceUntil(waitTilesLoaded(tileSource, tileWait), signal)
         }
         throwIfAborted(signal)
-        if (cql) {
-          const imgWait = captureCount === 0 ? 1800 : 1200
+        const imgWait = captureCount === 0 ? 1800 : 1200
+        if (jijukCql) {
           await raceUntil(waitImageWms(jijukSource, imgWait), signal)
+        }
+        if (meterCql) {
+          await raceUntil(waitImageWms(meterSource, imgWait), signal)
         }
         throwIfAborted(signal)
         await raceUntil(waitRenderComplete(map, 1200), signal)

@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Printer, X } from 'lucide-react'
+import { Loader2, Printer, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { call } from '@/lib/api'
 import {
@@ -67,6 +67,7 @@ export function WtlMeterLocationShell({ leftOffsetPx, onTotalWidthChange, onClos
   const LIST_HOVER_BG = 'color-mix(in oklab, var(--muted) 55%, transparent)'
   const LIST_SELECTED_BG = 'color-mix(in oklab, var(--primary) 12%, transparent)'
   const [running, setRunning] = useState(false)
+  const [bulkLoading, setBulkLoading] = useState(false)
   const [printing, setPrinting] = useState(false)
   const [reportOpen, setReportOpen] = useState(false)
   const [reportHtml, setReportHtml] = useState('')
@@ -106,9 +107,6 @@ export function WtlMeterLocationShell({ leftOffsetPx, onTotalWidthChange, onClos
     setReportProgress(null)
     setPrinting(false)
   }
-
-  useMeterParcelLayer(rows, focusId, zoneFocusKey, zoneExtent3857)
-  useWtlMeterWmsLayer()
 
   useEffect(() => {
     onTotalWidthChange(width)
@@ -151,6 +149,16 @@ export function WtlMeterLocationShell({ leftOffsetPx, onTotalWidthChange, onClos
   }, [])
 
   const zones = useMemo(() => clusterMeterZones(rows), [rows])
+
+  useMeterParcelLayer(
+    rows,
+    focusId,
+    zoneFocusKey,
+    zoneExtent3857,
+    selectedZoneId,
+    zones
+  )
+  useWtlMeterWmsLayer(rows, selectedZoneId, zones)
 
   const rowById = useMemo(() => {
     const map = new Map<string, MeterLocateResult>()
@@ -227,6 +235,7 @@ export function WtlMeterLocationShell({ leftOffsetPx, onTotalWidthChange, onClos
     setZoneExtent3857(null)
     setNotice('')
     setRunning(false)
+    setBulkLoading(false)
   }
 
   const handleBulkAdd = async (meters: MeterBulkCandidate[]) => {
@@ -244,37 +253,23 @@ export function WtlMeterLocationShell({ leftOffsetPx, onTotalWidthChange, onClos
     const apiKey = mapContext?.vworldApiKey?.trim() ?? ''
     const runId = runRef.current + 1
     runRef.current = runId
-    setRunning(true)
-    setNotice(`일괄 추가 중… (0 / ${selected.length})`)
+    setBulkLoading(true)
+    setNotice('')
     await yieldToUi()
     try {
       // 일괄 목록에 이미 좌표가 있으므로 번호 IN 재조회 없이 필지만 보강
       const next = await locateMetersFromKnown({
         meters: selected,
         apiKey,
-        onProgress: async (done, total) => {
+        onProgress: async () => {
           if (runRef.current !== runId) return
-          setNotice(`일괄 추가 중… (${done} / ${total})`)
           await yieldToUi()
         },
       })
       if (runRef.current !== runId) return
       setRows((prev) => [...prev, ...next])
-      // 추가 후 지도 자동 이동 없음
-      const pnuSet = new Set<string>()
-      for (const row of next) {
-        const pnu = String(row.pnu ?? '').replace(/\D/g, '').slice(0, 19)
-        if (pnu) pnuSet.add(pnu)
-      }
-      const point = next.filter((row) => row.status === 'point').length
-      const miss = next.filter((row) => row.status === 'miss').length
-      setNotice(
-        `일괄 추가 ${next.length}건 · 필지 ${pnuSet.size}` +
-          (point > 0 ? ` · 위치만 ${point}` : '') +
-          (miss > 0 ? ` · 못 찾음 ${miss}` : '')
-      )
     } finally {
-      if (runRef.current === runId) setRunning(false)
+      if (runRef.current === runId) setBulkLoading(false)
     }
   }
 
@@ -354,10 +349,15 @@ export function WtlMeterLocationShell({ leftOffsetPx, onTotalWidthChange, onClos
         return d.replace(/\s*·\s*필지 경계 없음\s*$/, '').trim()
       }
 
-      // 숨김 지도 1개 재사용 — 구역마다 Map 생성/폐기하지 않음
+      // 구역 선택과 동일하게 해당 구역만 보이게 한 뒤 캡처 (마스크 대신 레이어 필터)
       for (let i = 0; i < totalZones; i++) {
         if (abort.signal.aborted) return
         const zone = navigableZones[i]!
+        setSelectedZoneId(zone.zoneId)
+        setFocusId(null)
+        await yieldToUi()
+        if (abort.signal.aborted) return
+
         const zoneRows = zone.rowIds
           .map((id) => rowById.get(id))
           .filter((r): r is MeterLocateResult => Boolean(r))
@@ -394,6 +394,7 @@ export function WtlMeterLocationShell({ leftOffsetPx, onTotalWidthChange, onClos
 
       if (abort.signal.aborted) return
 
+      setSelectedZoneId(null)
       const html = buildMeterLocationReportHtml({
         zones: reportZones.filter(Boolean),
         parcelCount: counts.parcels,
@@ -412,6 +413,7 @@ export function WtlMeterLocationShell({ leftOffsetPx, onTotalWidthChange, onClos
       setReportProgress(null)
       setNotice('보고서 인쇄에 실패했습니다.')
     } finally {
+      setSelectedZoneId(null)
       if (printSessionRef.current === session) {
         session.dispose()
         printSessionRef.current = null
@@ -457,6 +459,7 @@ export function WtlMeterLocationShell({ leftOffsetPx, onTotalWidthChange, onClos
                 }
                 disabled={
                   running ||
+                  bulkLoading ||
                   printing ||
                   zones.filter((z) => z.navigable).length === 0
                 }
@@ -485,7 +488,7 @@ export function WtlMeterLocationShell({ leftOffsetPx, onTotalWidthChange, onClos
               </p>
               <button
                 type="button"
-                disabled={running}
+                disabled={running || bulkLoading}
                 title="일괄 입력"
                 onClick={() => setBulkOpen(true)}
                 className="standard-detail-hdr-btn shrink-0"
@@ -498,13 +501,13 @@ export function WtlMeterLocationShell({ leftOffsetPx, onTotalWidthChange, onClos
                 value={input}
                 onChange={setInput}
                 onSubmit={() => void handleAdd()}
-                disabled={running}
+                disabled={running || bulkLoading}
                 className="standard-detail-input h-7 min-w-0 flex-1 disabled:opacity-50"
                 placeholder="계량기 번호 또는 주소"
               />
               <button
                 type="button"
-                disabled={running}
+                disabled={running || bulkLoading}
                 title={running ? '조회 중' : '추가'}
                 onClick={() => void handleAdd()}
                 className="standard-detail-hdr-btn-save shrink-0"
@@ -552,7 +555,19 @@ export function WtlMeterLocationShell({ leftOffsetPx, onTotalWidthChange, onClos
                   </tr>
                 </thead>
                 <tbody>
-                  {rows.length === 0 ? (
+                  {bulkLoading ? (
+                    <tr>
+                      <td colSpan={2} className="standard-table-empty">
+                        <span className="inline-flex items-center justify-center gap-2">
+                          <Loader2
+                            className="h-4 w-4 shrink-0 animate-spin text-primary"
+                            aria-hidden
+                          />
+                          일괄 추가 중…
+                        </span>
+                      </td>
+                    </tr>
+                  ) : rows.length === 0 ? (
                     <tr>
                       <td colSpan={2} className="standard-table-empty">
                         표시 결과가 없습니다.
@@ -596,7 +611,7 @@ export function WtlMeterLocationShell({ leftOffsetPx, onTotalWidthChange, onClos
                                     : zone.label
                                 }
                                 className={cn(
-                                  'standard-table-td-text align-top font-medium transition-colors',
+                                  'standard-table-td-text align-top font-medium transition-colors border-r border-border',
                                   zone.navigable
                                     ? 'cursor-pointer'
                                     : 'cursor-default text-muted-foreground'
@@ -710,11 +725,6 @@ export function WtlMeterLocationShell({ leftOffsetPx, onTotalWidthChange, onClos
                     ? `지도 캡처 중… (${reportProgress.done} / ${reportProgress.total})`
                     : '보고서 준비 중…'}
                 </p>
-                {reportProgress && reportProgress.total > 0 ? (
-                  <p className="text-xs tabular-nums text-muted-foreground">
-                    구역 {reportProgress.done} / {reportProgress.total}
-                  </p>
-                ) : null}
                 {printing ? (
                   <p className="text-xs text-muted-foreground">
                     닫기를 누르면 캡처가 취소됩니다.
