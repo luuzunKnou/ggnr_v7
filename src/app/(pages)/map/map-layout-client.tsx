@@ -15,7 +15,14 @@ import ComplaintAdd from "./_mapComponents/complaint/ComplaintAdd"
 import { MAP_FLOATING_DETAIL_CLOSE_EVENT } from "./_mapComponents/mapFloatingDetailEvent"
 import AddressInfoDetail from "./_mapComponents/AddressInfoDetail"
 import { RiverBasicPlanListPanel } from "./_mapContents/river/riverBasicPlan/RiverBasicPlanListPanel"
-import { RiverBasicPlanDetailPanel } from "./_mapContents/river/riverBasicPlan/RiverBasicPlanDetailPanel"
+import {
+  RiverBasicPlanDetailPanel,
+  type RiverBasicPlanPreferredPlan,
+} from "./_mapContents/river/riverBasicPlan/RiverBasicPlanDetailPanel"
+import {
+  RiverBasicPlanScopeModal,
+  type RiverBasicPlanListAxis,
+} from "./_mapContents/river/riverBasicPlan/RiverBasicPlanScopeModal"
 import { RiverBasicPlanMapDrawingFromMapHandler } from "./_mapContents/river/riverBasicPlan/RiverBasicPlanMapDrawingFromMapHandler"
 import { RoadLedgerListPanel } from "./_mapContents/road/roadLedger/RoadLedgerListPanel"
 import { RoadLedgerDetailPanel } from "./_mapContents/road/roadLedger/RoadLedgerDetailPanel"
@@ -302,7 +309,7 @@ const RIVER_BASIC_PLAN_LIST_DEFAULT_WIDTH = 320
 const RIVER_BASIC_PLAN_LIST_MIN_WIDTH = 280
 const RIVER_BASIC_PLAN_LIST_MAX_WIDTH = 680
 
-const RIVER_BASIC_PLAN_DETAIL_DEFAULT_WIDTH = 460
+const RIVER_BASIC_PLAN_DETAIL_DEFAULT_WIDTH = 515
 const RIVER_BASIC_PLAN_DETAIL_MIN_WIDTH = 360
 const RIVER_BASIC_PLAN_DETAIL_MAX_WIDTH = 900
 
@@ -611,6 +618,7 @@ function MapLayoutContent({
   const setRoadNetworkFocusedSitePointKey = mapContext?.setRoadNetworkFocusedSitePointKey
   const setRoadFrontageMarkerPanelOpen = mapContext?.setRoadFrontageMarkerPanelOpen
   const setRoadFrontageBuildingPanelOpen = mapContext?.setRoadFrontageBuildingPanelOpen
+  const setRiverIllegalOccupationPanelOpen = mapContext?.setRiverIllegalOccupationPanelOpen
   const setRoadFrontageMarkerPointPickActive = mapContext?.setRoadFrontageMarkerPointPickActive
   const setRoadFrontageMarkerDraftPoint = mapContext?.setRoadFrontageMarkerDraftPoint
   const setRiverConstructionLedgerSelectedId = mapContext?.setRiverConstructionLedgerSelectedId
@@ -646,6 +654,9 @@ function MapLayoutContent({
   if (mapContext?.applyRiverBasicPlanMapPickRef) {
     mapContext.applyRiverBasicPlanMapPickRef.current = (pick) => {
       setRiverPlanTab(pick.tab)
+      if (riverBasicPlanListAxis == null) setRiverBasicPlanListAxis("byRiver")
+      setRiverBasicPlanScopeModalOpen(false)
+      setRiverBasicPlanPreferredPlan(null)
       setSelectedRiverName(pick.riverName)
     }
   }
@@ -919,7 +930,12 @@ function MapLayoutContent({
   ])
 
   const [riverPlanTab, setRiverPlanTab] = useState<"river" | "smallRiver">("river")
+  const [riverBasicPlanListAxis, setRiverBasicPlanListAxis] =
+    useState<RiverBasicPlanListAxis | null>(null)
+  const [riverBasicPlanScopeModalOpen, setRiverBasicPlanScopeModalOpen] = useState(false)
   const [selectedRiverName, setSelectedRiverName] = useState("")
+  const [riverBasicPlanPreferredPlan, setRiverBasicPlanPreferredPlan] =
+    useState<RiverBasicPlanPreferredPlan | null>(null)
   const [standardListPanelWidth, setStandardListPanelWidth] = useState(STANDARD_LIST_DEFAULT_WIDTH)
   const [complaintPanelWidth, setComplaintPanelWidth] = useState(COMPLAINT_PANEL_DEFAULT_WIDTH)
   const [map3dDataPanelWidth, setMap3dDataPanelWidth] = useState(MAP_3D_DATA_PANEL_DEFAULT_WIDTH)
@@ -1351,6 +1367,19 @@ function MapLayoutContent({
     setRiverBasicPlanSelectedRiver?.(selectedRiverName)
   }, [setRiverBasicPlanPanelOpen, setRiverBasicPlanSelectedRiver, riverBasicPlanOpen, selectedRiverName])
 
+  /** 기본계획 열릴 때 보기(보고서별·하천별) 미선택이면 모달. 닫히면 초기화 */
+  useEffect(() => {
+    if (riverBasicPlanOpen) {
+      if (riverBasicPlanListAxis == null) setRiverBasicPlanScopeModalOpen(true)
+    } else {
+      setRiverBasicPlanScopeModalOpen(false)
+      setRiverBasicPlanListAxis(null)
+      setRiverPlanTab("river")
+      setRiverBasicPlanPreferredPlan(null)
+      setSelectedRiverName("")
+    }
+  }, [riverBasicPlanOpen])
+
   useEffect(() => {
     setUsageDataAsPanelOpen?.(usageDataAsOpen)
     // 패널 닫힘·시스템(메인) 이탈 후 재진입 시 점용 레이어만 켜져 클릭 무반응 되는 것 방지
@@ -1711,7 +1740,22 @@ function MapLayoutContent({
   const handleHideRiverBasicPlan = () => {
     const next = openedWindows.filter((w) => w !== RIVER_BASIC_PLAN_OPENED_KEY)
     setOpened(next)
+    setRiverBasicPlanScopeModalOpen(false)
+    setRiverBasicPlanListAxis(null)
+    setRiverPlanTab("river")
+    setRiverBasicPlanPreferredPlan(null)
     setSelectedRiverName("")
+  }
+
+  const handleRiverBasicPlanChangeAxis = () => {
+    setRiverBasicPlanScopeModalOpen(true)
+  }
+
+  const handleRiverBasicPlanSelectAxis = (axis: RiverBasicPlanListAxis) => {
+    setRiverBasicPlanListAxis(axis)
+    setRiverBasicPlanPreferredPlan(null)
+    setSelectedRiverName("")
+    setRiverBasicPlanScopeModalOpen(false)
   }
 
   const handleHideRoadLedger = () => {
@@ -2056,6 +2100,10 @@ function MapLayoutContent({
   useEffect(() => {
     if (!riverIllegalOccupationOpen) setRiverIllegalOccupationSelectedId(null)
   }, [riverIllegalOccupationOpen])
+
+  useEffect(() => {
+    setRiverIllegalOccupationPanelOpen?.(riverIllegalOccupationOpen)
+  }, [riverIllegalOccupationOpen, setRiverIllegalOccupationPanelOpen])
 
   useEffect(() => {
     if (!radiationShelterOpen) setRadiationShelterDetailId(null)
@@ -2481,10 +2529,17 @@ function MapLayoutContent({
                   tab={riverPlanTab}
                   onTabChange={(nextTab) => {
                     setRiverPlanTab(nextTab)
+                    setRiverBasicPlanPreferredPlan(null)
                     setSelectedRiverName("")
                   }}
+                  listAxis={riverBasicPlanListAxis}
                   selectedRiver={selectedRiverName}
-                  onSelectRiver={setSelectedRiverName}
+                  preferredPlan={riverBasicPlanPreferredPlan}
+                  onSelectRiver={(riverName, preferredPlan) => {
+                    setRiverBasicPlanPreferredPlan(preferredPlan ?? null)
+                    setSelectedRiverName(riverName)
+                  }}
+                  onChangeAxis={handleRiverBasicPlanChangeAxis}
                   onClose={handleHideRiverBasicPlan}
                 />
               </MapSideListPanel>
@@ -2502,11 +2557,29 @@ function MapLayoutContent({
                 <RiverBasicPlanDetailPanel
                   tab={riverPlanTab}
                   riverName={selectedRiverName}
-                  onClose={() => setSelectedRiverName("")}
+                  preferredPlan={riverBasicPlanPreferredPlan}
+                  onSelectedPlanChange={(plan) => {
+                    setRiverBasicPlanPreferredPlan(plan)
+                  }}
+                  onClose={() => {
+                    setRiverBasicPlanPreferredPlan(null)
+                    setSelectedRiverName("")
+                  }}
+                  hidePlanTable={riverBasicPlanListAxis === "byPlan"}
                 />
               </MapSideListPanel>
             </div>
           )}
+          <RiverBasicPlanScopeModal
+            open={riverBasicPlanOpen && riverBasicPlanScopeModalOpen}
+            selectedAxis={riverBasicPlanListAxis}
+            onSelect={handleRiverBasicPlanSelectAxis}
+            onClose={() => {
+              setRiverBasicPlanScopeModalOpen(false)
+              /** 보기를 한 번도 고르지 않은 채 닫으면 패널도 닫음 */
+              if (riverBasicPlanListAxis == null) handleHideRiverBasicPlan()
+            }}
+          />
           {roadLedgerOpen && (
             <div className="pointer-events-auto shrink-0">
               <MapSideListPanel
@@ -3815,13 +3888,14 @@ function MapLayoutContent({
             </div>
           )}
           {riverIllegalOccupationOpen && (
-            <div className="pointer-events-auto shrink-0">
+            <div className="pointer-events-auto flex h-full shrink-0 flex-col">
               <MapSideListPanel
                 width={riverIllegalOccupationPanelWidth}
                 minWidth={RIVER_ILLEGAL_OCCUPATION_PANEL_MIN_WIDTH}
                 maxWidth={RIVER_ILLEGAL_OCCUPATION_PANEL_MAX_WIDTH}
                 leftOffsetPx={riverIllegalOccupationPanelLeftPx}
                 onWidthChange={setRiverIllegalOccupationPanelWidth}
+                contentClassName="overflow-hidden"
                 serEng={RIVER_ILLEGAL_OCCUPATION_OPENED_KEY}
               >
                 <RiverIllegalOccupationListPanel
@@ -3833,7 +3907,7 @@ function MapLayoutContent({
             </div>
           )}
           {riverIllegalOccupationDetailOpen && riverIllegalOccupationSelectedId && (
-            <div className="pointer-events-auto shrink-0">
+            <div className="pointer-events-auto flex h-full shrink-0 flex-col">
               <MapSideListPanel
                 width={riverIllegalOccupationDetailWidth}
                 minWidth={RIVER_ILLEGAL_OCCUPATION_DETAIL_MIN_WIDTH}

@@ -1,5 +1,5 @@
 <featureType>
-  <id>FeatureTypeInfoImpl--610c9460:1a10fc86a73:-79ab</id>
+  <id>FeatureTypeInfoImpl-79b90470:1a186cf97dd:-7eb5</id>
   <name>sd_heat_wave_shelter</name>
   <nativeName>sd_heat_wave_shelter</nativeName>
   <namespace>
@@ -12,17 +12,17 @@
   </keywords>
   <srs>EPSG:5181</srs>
   <nativeBoundingBox>
-    <minx>329599.96480668295</minx>
-    <maxx>378021.601969837</maxx>
-    <miny>313700.4027354105</miny>
-    <maxy>368393.60533932433</maxy>
+    <minx>387214.78106911376</minx>
+    <maxx>421212.38013334805</maxx>
+    <miny>352338.12861186115</miny>
+    <maxy>406149.6446049081</maxy>
     <crs class="projected">EPSG:5181</crs>
   </nativeBoundingBox>
   <latLonBoundingBox>
-    <minx>128.44305654092713</minx>
-    <maxx>128.9945876186661</maxx>
-    <miny>36.30490021553824</miny>
-    <maxy>36.80533182859723</maxy>
+    <minx>129.09359891025693</minx>
+    <maxx>129.4891798951753</maxx>
+    <miny>36.64383006882657</miny>
+    <maxy>37.13568456455722</maxy>
     <crs>EPSG:4326</crs>
   </latLonBoundingBox>
   <projectionPolicy>FORCE_DECLARED</projectionPolicy>

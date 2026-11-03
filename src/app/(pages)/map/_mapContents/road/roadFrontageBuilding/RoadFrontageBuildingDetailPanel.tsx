@@ -1594,7 +1594,7 @@ export function RoadFrontageBuildingDetailPanel({
 
       <MapSideDetailScroll className="standard-detail-scroll">
         <div className="rfb-form-print-root text-xs">
-        <div className="rfb-print-page">
+        <div className="rfb-print-page rounded-sm border border-border bg-background p-3 shadow-sm">
         <div className="mb-0 flex items-start justify-between gap-2 text-[10px] leading-none text-muted-foreground">
           <span>■ 도로법 시행규칙 [별지 제17호서식]</span>
           <span className="shrink-0">(2쪽 중 제1쪽)</span>
@@ -1991,7 +1991,7 @@ export function RoadFrontageBuildingDetailPanel({
         </div>
         </div>
 
-        <section className="rfb-print-page rfb-print-page-drawings mt-3 pb-1">
+        <section className="rfb-print-page rfb-print-page-drawings mt-3 rounded-sm border border-border bg-background p-3 shadow-sm">
           <div className="mb-0.5 flex items-center justify-end text-[10px] leading-none text-muted-foreground">
             <span>(2쪽 중 제2쪽)</span>
           </div>
