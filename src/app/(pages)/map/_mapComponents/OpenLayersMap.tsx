@@ -3239,6 +3239,7 @@ export default function OpenLayersMap({
         map={mapReady ? mapInstanceRef.current : null}
         mapReady={mapReady}
         editable
+        mapPaddingLeft={mapPaddingLeft}
       />
 
       <LayerRowGeomEditHandler centerPixel={centerPixel} />
