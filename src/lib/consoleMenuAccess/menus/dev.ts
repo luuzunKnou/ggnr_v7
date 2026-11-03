@@ -28,6 +28,7 @@ export const DEV_CONSOLE_MENUS = [
   { id: 'fileConverter', label: 'File Converter' },
   { id: 'lasFixer', label: 'LAS Fixer' },
   { id: 'orthophotoManager', label: '정사영상관리' },
+  { id: 'indexOrientation', label: '색인도 방향' },
   { id: 'featureUsageStats', label: '기능별 사용현황' },
   { id: 'userAccessStats', label: '사용자 접속현황' },
   { id: 'userMgmtHistory', label: '사용자 관리 이력' },

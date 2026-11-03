@@ -434,6 +434,21 @@ export type MapContextValue = {
   setRoadFrontageMarkerDraftPoint: Dispatch<
     SetStateAction<{ lon: number; lat: number } | null>
   >;
+  /** 불법점용 관리카드 패널 열림 — 지도 식별 시 목록·상세 선택 */
+  riverIllegalOccupationPanelOpen: boolean;
+  setRiverIllegalOccupationPanelOpen: Dispatch<SetStateAction<boolean>>;
+  /**
+   * 지도에서 illegal_usage_as 식별 직후 목록이 키 선택하도록 호출
+   * (RiverIllegalOccupationListPanel이 등록)
+   */
+  applyRiverIllegalOccupationMapPickRef: MutableRefObject<
+    | ((pick: {
+        ogcFid: string;
+        mgmtNo?: string;
+        overlapOptions?: MapHitOverlapOption[];
+      }) => void)
+    | null
+  >;
   /** 하천 공사대장 임시 목록(CRUD 반영) */
   riverConstructionLedgerRows: RiverConstructionLedgerRow[];
   setRiverConstructionLedgerRows: Dispatch<SetStateAction<RiverConstructionLedgerRow[]>>;
@@ -808,6 +823,15 @@ export function MapContextProvider({ children }: { children: React.ReactNode }) 
     ledgerId: string;
     markerItemId: string;
   } | null>(null);
+  const [riverIllegalOccupationPanelOpen, setRiverIllegalOccupationPanelOpen] = useState(false);
+  const applyRiverIllegalOccupationMapPickRef = useRef<
+    | ((pick: {
+        ogcFid: string;
+        mgmtNo?: string;
+        overlapOptions?: MapHitOverlapOption[];
+      }) => void)
+    | null
+  >(null);
   const [riverConstructionLedgerRows, setRiverConstructionLedgerRows] = useState<
     RiverConstructionLedgerRow[]
   >([]);
@@ -1045,6 +1069,9 @@ export function MapContextProvider({ children }: { children: React.ReactNode }) 
         setRoadFrontageMarkerPointPickActive,
         roadFrontageMarkerDraftPoint,
         setRoadFrontageMarkerDraftPoint,
+        riverIllegalOccupationPanelOpen,
+        setRiverIllegalOccupationPanelOpen,
+        applyRiverIllegalOccupationMapPickRef,
         riverConstructionLedgerRows,
         setRiverConstructionLedgerRows,
         riverConstructionLedgerSelectedId,
