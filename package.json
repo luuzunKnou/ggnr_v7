@@ -38,7 +38,8 @@
     "python:install-libpq": "conda run --prefix python/env conda install -c conda-forge libpq -y",
     "ortho:batch": "tsx scripts/ortho-batch.ts",
     "map:river-report": "tsx scripts/mapRiverPlanReportFolders.ts",
-    "postinstall": "patch-package"
+    "postinstall": "patch-package && tsx scripts/sync-public-static-libs.ts",
+    "sync:public-libs": "tsx scripts/sync-public-static-libs.ts"
   },
   "dependencies": {
     "@napi-rs/canvas": "^1.0.0",
