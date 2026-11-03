@@ -76,37 +76,40 @@ export function sanitizeDefineLayerRowFilter(raw: string): string | null {
   return s;
 }
 
-/**
- * 테이블 이름과 스키마로 행 조회.
- * spatialWkt/spatialSrid가 있으면 도형 내 데이터만 조회 (ST_Intersects).
- */
-export async function getTableData(params: {
+type LayerListQueryParts = {
+  tableGuess: string;
+  safeSchema: string;
+  safeTable: string;
+  whereClause: string;
+  orderClause: string;
+  selectList: string;
+  columns: string[];
+};
+
+async function getLayerListQueryParts(params: {
   table: string;
   schema?: string;
-  limit?: number;
-  offset?: number;
   spatialWkt?: string;
   spatialSrid?: number;
-  /** define 분할 레이어 등: AND (조건) */
   rowFilter?: string;
-} = { table: '' }) {
+}): Promise<
+  | { ok: true; parts: LayerListQueryParts }
+  | { ok: false; empty?: true; error?: string }
+> {
   const tableGuess = String(params?.table ?? '').trim().toLowerCase();
-  if (!tableGuess) return { rows: [], total: 0 };
+  if (!tableGuess) return { ok: false, empty: true };
 
   const schema = resolveSchema(params?.schema).toLowerCase();
   const table = await resolveLayerPhysicalRelName(schema, tableGuess);
-  if (!table) return { rows: [], total: 0 };
+  if (!table) return { ok: false, empty: true };
 
-  let limit = typeof params?.limit === 'number' && params.limit > 0 ? params.limit : DEFAULT_LIMIT;
-  if (limit > MAX_LIMIT) limit = MAX_LIMIT;
-  const offset = typeof params?.offset === 'number' && params.offset >= 0 ? params.offset : 0;
   const spatialWkt = typeof params?.spatialWkt === 'string' ? params.spatialWkt.trim() : '';
   const spatialSrid = typeof params?.spatialSrid === 'number' ? params.spatialSrid : 5181;
   const rawRowFilter = String(params?.rowFilter ?? '').trim();
   let rowFilterSql: string | null = null;
   if (rawRowFilter) {
     rowFilterSql = sanitizeDefineLayerRowFilter(rawRowFilter);
-    if (!rowFilterSql) return { rows: [], total: 0, error: '유효하지 않은 행 필터입니다.' };
+    if (!rowFilterSql) return { ok: false, error: '유효하지 않은 행 필터입니다.' };
   }
 
   const safeSchema = schema.replace(/"/g, '""');
@@ -122,7 +125,7 @@ export async function getTableData(params: {
       )
     );
     const columns = (colRes.rows as { name: string }[]).map((r) => String(r?.name ?? '').trim()).filter(Boolean);
-    if (columns.length === 0) return { rows: [], total: 0 };
+    if (columns.length === 0) return { ok: false, empty: true };
 
     let geomCol: string | null = null;
     let tableSrid = 4326;
@@ -175,7 +178,6 @@ export async function getTableData(params: {
       const safeFacilNo = facilNoCol.replace(/"/g, '""');
       orderClause = ` ORDER BY (substring("${safeFacilNo}" from '[0-9]{4}'))::integer ASC NULLS LAST, regexp_replace("${safeFacilNo}", '^[A-Za-z]+', '') ASC NULLS LAST`;
     } else {
-      // 기본: 목록 첫 열(define 목록표시 1순위) 오름차순. 없으면 ogc_fid/gid/첫 속성열
       const orderCol = resolveDefaultListOrderColumn(tableGuess, table, columns);
       if (orderCol) {
         const safeOrder = orderCol.replace(/"/g, '""');
@@ -191,6 +193,50 @@ export async function getTableData(params: {
       }
     }
 
+    return {
+      ok: true,
+      parts: {
+        tableGuess,
+        safeSchema,
+        safeTable,
+        whereClause,
+        orderClause,
+        selectList,
+        columns,
+      },
+    };
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return { ok: false, error: msg };
+  }
+}
+
+/**
+ * 테이블 이름과 스키마로 행 조회.
+ * spatialWkt/spatialSrid가 있으면 도형 내 데이터만 조회 (ST_Intersects).
+ */
+export async function getTableData(params: {
+  table: string;
+  schema?: string;
+  limit?: number;
+  offset?: number;
+  spatialWkt?: string;
+  spatialSrid?: number;
+  /** define 분할 레이어 등: AND (조건) */
+  rowFilter?: string;
+} = { table: '' }) {
+  const built = await getLayerListQueryParts(params);
+  if (!built.ok) {
+    if (built.error) return { rows: [], total: 0, error: built.error };
+    return { rows: [], total: 0 };
+  }
+
+  let limit = typeof params?.limit === 'number' && params.limit > 0 ? params.limit : DEFAULT_LIMIT;
+  if (limit > MAX_LIMIT) limit = MAX_LIMIT;
+  const offset = typeof params?.offset === 'number' && params.offset >= 0 ? params.offset : 0;
+  const { safeSchema, safeTable, whereClause, orderClause, selectList } = built.parts;
+
+  try {
     const [countRes, dataRes] = await Promise.all([
       db.execute(
         sql.raw(`SELECT COUNT(*) AS total FROM "${safeSchema}"."${safeTable}"${whereClause}`)
@@ -210,6 +256,80 @@ export async function getTableData(params: {
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);
     return { rows: [], total: 0, error: msg };
+  }
+}
+
+/**
+ * 데이터조회 목록과 같은 정렬·필터에서 키 값의 0-based 위치.
+ * 지도에서 고른 항목으로 기존 목록 페이지를 맞출 때 사용.
+ */
+export async function getTableRowOffset(params: {
+  table: string;
+  schema?: string;
+  keyValue: string | number;
+  keyField?: string;
+  spatialWkt?: string;
+  spatialSrid?: number;
+  rowFilter?: string;
+}): Promise<{ offset: number; total: number; error?: string }> {
+  const keyValue = params?.keyValue;
+  if (keyValue == null || String(keyValue).trim() === '') {
+    return { offset: -1, total: 0 };
+  }
+
+  const built = await getLayerListQueryParts(params);
+  if (!built.ok) {
+    if (built.error) return { offset: -1, total: 0, error: built.error };
+    return { offset: -1, total: 0 };
+  }
+
+  const { tableGuess, safeSchema, safeTable, whereClause, orderClause, columns } = built.parts;
+  const requestedKey = String(params?.keyField ?? '').trim();
+  const definedKey = getDefineTableKeyFieldName(params?.table?.trim() || tableGuess);
+  const pickCol = (want: string | null | undefined): string | null => {
+    const w = String(want ?? '').trim().toLowerCase();
+    if (!w) return null;
+    return columns.find((c) => c.toLowerCase() === w) ?? null;
+  };
+  const keyCol =
+    pickCol(requestedKey) ??
+    pickCol(definedKey) ??
+    pickCol('ogc_fid') ??
+    pickCol('gid') ??
+    pickCol('id');
+  if (!keyCol) return { offset: -1, total: 0 };
+
+  const safeKey = keyCol.replace(/"/g, '""');
+  const escapedKey = String(keyValue).replace(/'/g, "''");
+  const overOrder = orderClause.trim() ? orderClause.trim() : 'ORDER BY 1';
+
+  try {
+    const [countRes, idxRes] = await Promise.all([
+      db.execute(
+        sql.raw(`SELECT COUNT(*) AS total FROM "${safeSchema}"."${safeTable}"${whereClause}`)
+      ),
+      db.execute(
+        sql.raw(
+          `SELECT idx FROM (
+             SELECT "${safeKey}" AS k,
+                    (ROW_NUMBER() OVER (${overOrder})) - 1 AS idx
+             FROM "${safeSchema}"."${safeTable}"${whereClause}
+           ) s
+           WHERE CAST(s.k AS text) = '${escapedKey}'
+           LIMIT 1`
+        )
+      ),
+    ]);
+    const totalRow = countRes.rows?.[0] as { total?: string | number } | undefined;
+    const total =
+      totalRow?.total != null ? Math.max(0, parseInt(String(totalRow.total), 10) || 0) : 0;
+    const idxRow = idxRes.rows?.[0] as { idx?: string | number } | undefined;
+    const offset =
+      idxRow?.idx != null && Number.isFinite(Number(idxRow.idx)) ? Math.max(0, Number(idxRow.idx)) : -1;
+    return { offset, total };
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return { offset: -1, total: 0, error: msg };
   }
 }
 
@@ -1173,6 +1293,29 @@ export async function getParcelHighlightGeom(params: {
 /**
  * 현재 지도 bbox(기본 EPSG:3857)와 교차하는 public_layer.jijuk 필지 목록.
  */
+const jijukStoredSridCache = new Map<string, number | null>();
+/** 공시지가 지도 표시 — 시내 밀집지(가로 1.7km 화면 약 7천 필지) 기준 */
+const JIJUK_BBOX_PARCEL_MAX = 10000;
+/** 표시용 도형 단순화 허용 오차(m) */
+const JIJUK_BBOX_SIMPLIFY_M = 0.3;
+
+/** 지적 도형 값에 실제로 붙은 좌표계(0 = 없음). 조회 실패 시 null */
+async function probeJijukStoredSrid(schema: string, table: string, geomCol: string): Promise<number | null> {
+  const key = `${schema}.${table}.${geomCol}`;
+  if (jijukStoredSridCache.has(key)) return jijukStoredSridCache.get(key) ?? null;
+  let srid: number | null = null;
+  try {
+    const res = await pool.query<{ s: number }>(
+      `SELECT ST_SRID("${geomCol}")::int AS s FROM "${schema}"."${table}" WHERE "${geomCol}" IS NOT NULL LIMIT 1`
+    );
+    srid = res.rows[0] ? Number(res.rows[0].s) : null;
+  } catch {
+    srid = null;
+  }
+  jijukStoredSridCache.set(key, srid);
+  return srid;
+}
+
 export async function getJijukParcelsInBbox(params: {
   minX: number;
   minY: number;
@@ -1186,7 +1329,7 @@ export async function getJijukParcelsInBbox(params: {
     return { parcels: [] as Array<Record<string, unknown>> };
   }
   const srid = typeof params.srid === 'number' && Number.isFinite(params.srid) ? params.srid : 3857;
-  const limit = Math.min(Math.max(Math.floor(params.limit ?? 120), 1), 300);
+  const limit = Math.min(Math.max(Math.floor(params.limit ?? 120), 1), JIJUK_BBOX_PARCEL_MAX);
 
   const schema = 'public_layer';
   const tableName = 'jijuk';
@@ -1214,13 +1357,21 @@ export async function getJijukParcelsInBbox(params: {
     /* keep pnu */
   }
 
-  const envelope = `ST_MakeEnvelope(${minX}, ${minY}, ${maxX}, ${maxY}, ${srid})`;
-  const envelopeInTable = `ST_Transform(${envelope}, ${tableSrid})`;
   const safeGeomCol = geomCol.replace(/"/g, '""');
   const safeOrderCol = orderCol.replace(/"/g, '""');
+  const storedSrid = await probeJijukStoredSrid(schema, tableName, safeGeomCol);
+  const envelope = `ST_MakeEnvelope(${minX}, ${minY}, ${maxX}, ${maxY}, ${srid})`;
+  /** 도형 값에 좌표계가 없는(0) 적재본은 비교 범위도 0으로 맞춰야 공간 인덱스·비교가 된다 */
+  const envelopeInTable =
+    storedSrid === 0
+      ? `ST_SetSRID(ST_Transform(${envelope}, ${tableSrid}), 0)`
+      : `ST_Transform(${envelope}, ${storedSrid ?? tableSrid})`;
+  const geomWithSrid = `ST_SetSRID("${safeGeomCol}", COALESCE(NULLIF(ST_SRID("${safeGeomCol}"), 0), ${tableSrid}))`;
   const idSelect =
     orderCol === 'pnu' ? `"pnu"` : `"${safeOrderCol}" AS "gid", "pnu"`;
-  const queryStr = `SELECT ${idSelect}, "jibun", "bchk", ST_AsGeoJSON(ST_Transform("${safeGeomCol}", 4326))::json AS "${safeGeomCol}" FROM "${schema}"."${tableName}" WHERE "${safeGeomCol}" && ${envelopeInTable} AND ST_Intersects("${safeGeomCol}", ${envelopeInTable}) ORDER BY "${safeOrderCol}" LIMIT ${limit}`;
+  const simplified = `ST_SimplifyPreserveTopology(${geomWithSrid}, ${JIJUK_BBOX_SIMPLIFY_M})`;
+  /** 상한을 넘으면 화면 가운데에서 가까운 필지부터 — 고유번호 순이면 한쪽 동만 채워진다 */
+  const queryStr = `SELECT ${idSelect}, "jibun", "bchk", ST_AsGeoJSON(ST_Transform(${simplified}, 4326), 6)::json AS "${safeGeomCol}" FROM "${schema}"."${tableName}" WHERE "${safeGeomCol}" && ${envelopeInTable} AND ST_Intersects("${safeGeomCol}", ${envelopeInTable}) ORDER BY "${safeGeomCol}" <-> ST_Centroid(${envelopeInTable}), "${safeOrderCol}" LIMIT ${limit}`;
 
   try {
     const dataRes = await db.execute(sql.raw(queryStr));
@@ -1247,7 +1398,7 @@ function parseOfficialLandPriceNum(raw: unknown): number | null {
 
 /**
  * KOREPS 공시지가 파일 테이블(land_linkage.koreps00039)에서 PNU별 최신 1건.
- * 테이블 없거나 조회 실패 시 빈 맵 — 호출측에서 브이월드 fallback.
+ * 브이월드 fallback 없음 — 테이블 없거나 자료가 비어 있으면 available=false.
  */
 export async function getLatestOfficialLandPricesByPnus(params: { pnus?: string[] }) {
   const pnus = [
@@ -1258,8 +1409,19 @@ export async function getLatestOfficialLandPricesByPnus(params: { pnus?: string[
     ),
   ];
   type PriceEntry = { priceNum: number | null; priceLabel: string };
-  const empty = { prices: {} as Record<string, PriceEntry> };
-  if (!pnus.length) return empty;
+  type Result = {
+    prices: Record<string, PriceEntry>;
+    available: boolean;
+    message: string | null;
+  };
+  const unavailable = (message: string): Result => ({
+    prices: {},
+    available: false,
+    message,
+  });
+  if (!pnus.length) {
+    return { prices: {} as Record<string, PriceEntry>, available: true, message: null };
+  }
 
   const schema = KRAS_LAYER_CATALOG_SCHEMA;
   const table = KOREPS_PRICE_FILE_TABLE;
@@ -1268,7 +1430,16 @@ export async function getLatestOfficialLandPricesByPnus(params: { pnus?: string[
       `select to_regclass($1) as c`,
       [`${schema}.${table}`]
     );
-    if (!existsRes.rows[0]?.c) return empty;
+    if (!existsRes.rows[0]?.c) {
+      return unavailable('공시지가 연계 테이블이 없습니다. 연계 작업을 확인하세요.');
+    }
+
+    const hasDataRes = await pool.query<{ e: boolean }>(
+      `SELECT EXISTS (SELECT 1 FROM ${schema}.${table} LIMIT 1) AS e`
+    );
+    if (!hasDataRes.rows[0]?.e) {
+      return unavailable('공시지가 연계 자료가 없습니다. 연계 작업을 확인하세요.');
+    }
 
     const { rows } = await pool.query<{ pnu: string; pnilp: string | null }>(
       `SELECT DISTINCT ON (btrim(pnu))
@@ -1293,9 +1464,9 @@ export async function getLatestOfficialLandPricesByPnus(params: { pnus?: string[
         priceLabel: formatOfficialLandPriceLabel(priceNum),
       };
     }
-    return { prices };
+    return { prices, available: true, message: null };
   } catch {
-    return empty;
+    return unavailable('공시지가 연계 자료를 조회할 수 없습니다.');
   }
 }
 

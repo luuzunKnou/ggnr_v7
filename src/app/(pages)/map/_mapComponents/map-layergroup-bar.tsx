@@ -32,7 +32,6 @@ import { LayerManagementPanel } from './LayerManagementPanel';
 import { cn } from '@/lib/utils';
 import { call } from '@/lib/api';
 import { getLayerGroupIconMap, defaultLayerGroupIcon } from '@/config/layerGroupIcon';
-import { allowProjectLayerTable } from '@/lib/projectLayerAllowlist';
 import { isWmsCompanionLayer } from '@/lib/wmsCompanionLayers';
 import { getLegendGraphicUrl } from './layerFactory/serviceLayerFactory';
 import type { LayerFilterRow } from './layerFactory/serviceLayerFactory';
@@ -100,15 +99,6 @@ export function MapLayergroupBar() {
         data?: DefineLayerRow[];
       }>,
       call('', 'POST', {
-        service: 'configService',
-        action: 'getSystemList',
-        params: {},
-      }).then((res: { data?: { systems?: Array<{ sys_key?: string }> }; systems?: Array<{ sys_key?: string }> }) => {
-        const data = res?.data ?? res;
-        const systems = Array.isArray(data?.systems) ? data.systems : [];
-        return systems.map((s) => String(s.sys_key ?? ''));
-      }),
-      call('', 'POST', {
         service: 'devTestService',
         action: 'getLayerTableList',
         params: {},
@@ -122,7 +112,7 @@ export function MapLayergroupBar() {
         );
       }),
     ])
-      .then(([defineBody, sysKeys, layerSchemaTableSet]) => {
+      .then(([defineBody, layerSchemaTableSet]) => {
         if (cancelled) return;
         const list = defineBody?.data ?? [];
         const parentTablesWithSplitDefs = new Set<string>();
@@ -135,7 +125,6 @@ export function MapLayergroupBar() {
         const filtered = list.filter((row) => {
           const name = String(row.define_table_name ?? '').trim();
           if (!name || !layerSchemaTableSet.has(name)) return false;
-          if (!allowProjectLayerTable(name, sysKeys)) return false;
           if (parentTablesWithSplitDefs.has(name.toLowerCase())) return false;
           if (isWmsCompanionLayer(name)) return false;
           return true;

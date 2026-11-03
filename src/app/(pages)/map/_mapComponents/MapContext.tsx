@@ -333,6 +333,9 @@ export type MapContextValue = {
   /** 도로망도 목록에서 선택한 도로 id — 상세·지도 강조 */
   roadNetworkSelectedId: string | null;
   setRoadNetworkSelectedId: Dispatch<SetStateAction<string | null>>;
+  /** 같은 노선번호 구간이 여럿일 때 구간 미선택(노선 전체) 상태 — 선택 id는 대표 구간 */
+  roadNetworkWholeRoad: boolean;
+  setRoadNetworkWholeRoad: Dispatch<SetStateAction<boolean>>;
   /** URL opened 도로망도 패널 열림 */
   roadNetworkPanelOpen: boolean;
   setRoadNetworkPanelOpen: Dispatch<SetStateAction<boolean>>;
@@ -490,6 +493,9 @@ export type MapContextValue = {
   /** URL 기준 보상편입용지 패널 열림 — 일반 식별 비활성화용 */
   roadRewardPanelOpen: boolean;
   setRoadRewardPanelOpen: Dispatch<SetStateAction<boolean>>;
+  /** 도로대장 도로영상 창 열림 — 일반 식별 비활성화용 (노선 클릭은 영상 이동에 씀) */
+  roadLedgerVideoOpen: boolean;
+  setRoadLedgerVideoOpen: Dispatch<SetStateAction<boolean>>;
   /** 재난시설 상세 — 건물·도로 WMS (켜진 테이블 + CQL). null이면 미사용 */
   safetyFacBuildingRoadLayerState: {
     visibleTableNames: Set<string>;
@@ -584,6 +590,16 @@ export type MapContextValue = {
    */
   dataQueryMapPickEnabled: boolean;
   setDataQueryMapPickEnabled: Dispatch<SetStateAction<boolean>>;
+  /**
+   * 지도 식별에서 고른 1건 → 기존 데이터 목록의 해당 페이지로 이동.
+   * LayerDataPanel에서 소비 후 null.
+   */
+  dataQueryMapPick: { tableName: string; row: Record<string, unknown> } | null;
+  setDataQueryMapPick: Dispatch<
+    SetStateAction<{ tableName: string; row: Record<string, unknown> } | null>
+  >;
+  /** 목록 창·지도 위 목록 닫기 직후, 같은 클릭이 지도 식별로 새어 창이 다시 열리지 않게 */
+  suppressMapIdentifyUntilRef: MutableRefObject<number>;
   /** 데이터조회 «드론영상 범위» bbox 표시 */
   orthoDataQueryBboxOn: boolean;
   setOrthoDataQueryBboxOn: Dispatch<SetStateAction<boolean>>;
@@ -727,6 +743,7 @@ export function MapContextProvider({ children }: { children: React.ReactNode }) 
   } | null>(null);
   const [roadNetworkRows, setRoadNetworkRows] = useState<RoadNetworkRow[]>([]);
   const [roadNetworkSelectedId, setRoadNetworkSelectedId] = useState<string | null>(null);
+  const [roadNetworkWholeRoad, setRoadNetworkWholeRoad] = useState(false);
   const [roadNetworkPanelOpen, setRoadNetworkPanelOpen] = useState(false);
   const applyRoadNetworkMapPickRef = useRef<
     | ((pick: {
@@ -820,6 +837,7 @@ export function MapContextProvider({ children }: { children: React.ReactNode }) 
   const [memoPanelOpen, setMemoPanelOpen] = useState(false);
   const [groundwaterPermitPanelOpen, setGroundwaterPermitPanelOpen] = useState(false);
   const [roadRewardPanelOpen, setRoadRewardPanelOpen] = useState(false);
+  const [roadLedgerVideoOpen, setRoadLedgerVideoOpen] = useState(false);
   const [safetyFacBuildingRoadLayerState, setSafetyFacBuildingRoadLayerState] = useState<{
     visibleTableNames: Set<string>;
     cqlByTable: Record<string, string>;
@@ -876,6 +894,11 @@ export function MapContextProvider({ children }: { children: React.ReactNode }) 
   >([]);
   const clearMapDrawInteractionsRef = useRef<((except?: MapDrawInteractionKind) => void) | null>(null);
   const [dataQueryMapPickEnabled, setDataQueryMapPickEnabled] = useState(true);
+  const [dataQueryMapPick, setDataQueryMapPick] = useState<{
+    tableName: string;
+    row: Record<string, unknown>;
+  } | null>(null);
+  const suppressMapIdentifyUntilRef = useRef(0);
   const [orthoDataQueryBboxOn, setOrthoDataQueryBboxOn] = useState(false);
   const [orthoDataQueryTuKeys, setOrthoDataQueryTuKeys] = useState<number[]>([]);
   const [orthoDataQueryHitOptions, setOrthoDataQueryHitOptions] = useState<
@@ -985,6 +1008,8 @@ export function MapContextProvider({ children }: { children: React.ReactNode }) 
         setRoadNetworkRows,
         roadNetworkSelectedId,
         setRoadNetworkSelectedId,
+        roadNetworkWholeRoad,
+        setRoadNetworkWholeRoad,
         roadNetworkPanelOpen,
         setRoadNetworkPanelOpen,
         applyRoadNetworkMapPickRef,
@@ -1054,6 +1079,8 @@ export function MapContextProvider({ children }: { children: React.ReactNode }) 
         setGroundwaterPermitPanelOpen,
         roadRewardPanelOpen,
         setRoadRewardPanelOpen,
+        roadLedgerVideoOpen,
+        setRoadLedgerVideoOpen,
         safetyFacBuildingRoadLayerState,
         setSafetyFacBuildingRoadLayerState,
         roadCctvUnderlayMode,
@@ -1074,6 +1101,9 @@ export function MapContextProvider({ children }: { children: React.ReactNode }) 
         clearMapDrawInteractionsRef,
         dataQueryMapPickEnabled,
         setDataQueryMapPickEnabled,
+        dataQueryMapPick,
+        setDataQueryMapPick,
+        suppressMapIdentifyUntilRef,
         orthoDataQueryBboxOn,
         setOrthoDataQueryBboxOn,
         orthoDataQueryTuKeys,

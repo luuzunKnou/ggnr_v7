@@ -27,6 +27,8 @@ export function cleanRoadNetworkDisplayText(raw: unknown): string {
 export type RoadNetworkListTitleInput = {
   roadName: string;
   roadType: RoadNetworkType;
+  /** 통합 도로망 원래 등급 — 있으면 종류 대신 표시 */
+  roadGrade?: string;
   roadNo: string;
   /** SHP 원본 길이 속성 — 있으면 단위 임의 부여 없이 그대로 표시 */
   lengthAttr?: string | null;
@@ -42,16 +44,17 @@ export function formatRoadNetworkListTitle(row: RoadNetworkListTitleInput): stri
   const name = cleanRoadNetworkDisplayText(row.roadName);
   if (name) return name;
 
+  const kind = row.roadGrade?.trim() || row.roadType;
   const no = cleanRoadNetworkDisplayText(row.roadNo);
-  if (no) return `${row.roadType} ${no}`;
+  if (no) return `${kind} ${no}`;
 
   const attrLen = cleanRoadNetworkDisplayText(row.lengthAttr);
-  if (attrLen) return `${row.roadType} · ${attrLen}`;
+  if (attrLen) return `${kind} · ${attrLen}`;
 
   const km = formatRoadNetworkLengthKm(Number(row.lengthM));
-  if (km !== "—") return `${row.roadType} · ${km}`;
+  if (km !== "—") return `${kind} · ${km}`;
 
-  return row.roadType;
+  return kind;
 }
 
 /**

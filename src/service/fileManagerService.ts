@@ -1,7 +1,7 @@
 /**
  * File Manager Service
  * 디렉터리 목록 조회. 베이스 = GGNR_DATA_DIR (사업명 폴더 없음).
- * 폴더 구조 없으면 생성: 3dtiles_*, tiles_*, file_data, shp_data, excel_data, PDFToJPG, .meta
+ * 폴더 구조 없으면 생성: 3dtiles_*, tiles_*, file_data, shp_data, excel_data, PDFToJPG, SHPToDXF, .meta
  */
 import nodeFs from 'node:fs/promises';
 import path from 'node:path';
@@ -840,6 +840,7 @@ export type UploadConvertHistoryEntry = {
     | 'convert_ecef'
     | 'convert_orthophoto_xyz'
     | 'convert_pdf_to_jpg'
+    | 'convert_shp_to_dxf'
     | 'ocr_migration';
   sourceFile: string;
   pathOrResult: string;

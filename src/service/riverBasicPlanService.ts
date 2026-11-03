@@ -4,6 +4,7 @@ import { db } from '@/database/db';
 import { sql } from 'drizzle-orm';
 import { parseRiverOrthoGroup, type RiverOrthoGroup } from '@/lib/riverOrthoGroups';
 import { resolveGgnrDataDir } from '@/lib/turbopackFsPath';
+import { getGeoServerInternalBase } from '@/lib/geoserverUrl';
 import {
   isRiverBasicPlanIndexDefineTable,
   isRiverBasicPlanMapAttachmentDefineTable,
@@ -36,6 +37,15 @@ function normalizeTab(tab?: RiverType | string | null): RiverType {
 /** 표시용 천단위 콤마 제거 후 연장 매칭용 문자열 */
 function normalizePlanLenParam(raw: unknown): string {
   return String(raw ?? '').trim().replace(/,/g, '');
+}
+
+/** 제방 연장 → «(L=1,077m)» */
+function formatJbLenSuffix(raw: unknown): string {
+  if (raw == null || raw === '') return '';
+  const n = Number(String(raw).replace(/,/g, '').trim());
+  if (!Number.isFinite(n) || n <= 0) return '';
+  const rounded = Math.round(n);
+  return ` (L=${rounded.toLocaleString('en-US')}m)`;
 }
 
 /**
@@ -96,7 +106,31 @@ async function resolveLayerTableNameOrNull(wantedLower: string): Promise<string 
   return name || null;
 }
 
-/** 탭 기본 지도 레이어 중 layer 스키마에 실제 테이블이 있는 것만 */
+/** GeoServer에 실제로 올라간 레이어명. 조회 실패 시 null(DB 목록만 사용) */
+async function publishedGgnrLayerNames(): Promise<Set<string> | null> {
+  try {
+    const base = getGeoServerInternalBase();
+    const workspace = (process.env.GEOSERVER_WORKSPACE?.trim() || 'ggnr').replace(/\/$/, '');
+    const user = process.env.GEOSERVER_USER ?? 'admin';
+    const pass = process.env.GEOSERVER_PASSWORD ?? 'geoserver';
+    const res = await fetch(`${base}/rest/workspaces/${encodeURIComponent(workspace)}/layers.json`, {
+      headers: { Authorization: `Basic ${Buffer.from(`${user}:${pass}`).toString('base64')}` },
+    });
+    if (!res.ok) return null;
+    const data = (await res.json()) as {
+      layers?: { layer?: { name?: string } | { name?: string }[] };
+    };
+    const raw = data.layers?.layer;
+    const arr = Array.isArray(raw) ? raw : raw ? [raw] : [];
+    return new Set(
+      arr.map((row) => String(row.name ?? '').trim().toLowerCase()).filter(Boolean)
+    );
+  } catch {
+    return null;
+  }
+}
+
+/** 탭 기본 지도 레이어 중 DB 테이블이 있고 GeoServer에 올라간 것만 */
 export async function getRiverBasicPlanExistingMapLayers(params?: {
   tab?: RiverType;
 }): Promise<{ layers: string[] }> {
@@ -114,7 +148,12 @@ export async function getRiverBasicPlanExistingMapLayers(params?: {
   const have = new Set(
     (res.rows ?? []).map((r) => String((r as { table_name?: string }).table_name ?? '').toLowerCase()).filter(Boolean)
   );
-  return { layers: wanted.filter((n) => have.has(n.toLowerCase())) };
+  let layers = wanted.filter((n) => have.has(n.toLowerCase()));
+  const published = await publishedGgnrLayerNames();
+  if (published) {
+    layers = layers.filter((n) => published.has(n.toLowerCase()));
+  }
+  return { layers };
 }
 
 /** tiles_jpg 의 하천 드론영상 그룹 (bigriver_·smallriver_), 타일 폴더가 있는 것만 */
@@ -755,6 +794,115 @@ function parseExtent3857(row: {
   return [xmin, ymin, xmax, ymax];
 }
 
+function asCoordPair(v: unknown): [number, number] | null {
+  if (!Array.isArray(v) || v.length < 2) return null;
+  const x = Number(v[0]);
+  const y = Number(v[1]);
+  if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+  return [x, y];
+}
+
+function lineCoords(coords: unknown): [number, number][] {
+  if (!Array.isArray(coords)) return [];
+  return coords.flatMap((p) => {
+    const pair = asCoordPair(p);
+    return pair ? [pair] : [];
+  });
+}
+
+function polyLen(pts: [number, number][]): number {
+  let n = 0;
+  for (let i = 1; i < pts.length; i++) {
+    n += Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]);
+  }
+  return n;
+}
+
+/** GeoJSON 선·면 → 3857 좌표열. 다중선은 가장 긴 부분. */
+function parseGeoJson3857Points(raw: unknown): [number, number][] | null {
+  let gj: unknown = raw;
+  if (typeof raw === 'string') {
+    try {
+      gj = JSON.parse(raw) as unknown;
+    } catch {
+      return null;
+    }
+  }
+  if (gj == null || typeof gj !== 'object') return null;
+  const rec = gj as { type?: unknown; coordinates?: unknown };
+  const t = String(rec.type ?? '');
+  const c = rec.coordinates;
+  if (t === 'LineString') {
+    const pts = lineCoords(c);
+    return pts.length >= 2 ? pts : null;
+  }
+  if (t === 'MultiLineString' && Array.isArray(c)) {
+    let best: [number, number][] = [];
+    let bestLen = -1;
+    for (const part of c) {
+      const pts = lineCoords(part);
+      if (pts.length < 2) continue;
+      const len = polyLen(pts);
+      if (len > bestLen) {
+        bestLen = len;
+        best = pts;
+      }
+    }
+    return best.length >= 2 ? best : null;
+  }
+  if (t === 'Polygon' && Array.isArray(c)) {
+    const pts = lineCoords(c[0]);
+    return pts.length >= 3 ? pts : null;
+  }
+  if (t === 'MultiPolygon' && Array.isArray(c) && Array.isArray(c[0])) {
+    const pts = lineCoords((c[0] as unknown[])[0]);
+    return pts.length >= 3 ? pts : null;
+  }
+  return null;
+}
+
+async function loadIndexSheetRing(
+  idxTable: string,
+  idxOgcFid: number
+): Promise<[number, number][] | null> {
+  const safeIdx = idxTable.replace(/"/g, '""');
+  const q = `SELECT ST_AsGeoJSON(ST_Transform(geom, 3857)) AS gj
+    FROM layer."${safeIdx}" WHERE ogc_fid = ${idxOgcFid} LIMIT 1`;
+  try {
+    const res = await db.execute(sql.raw(q));
+    return parseGeoJson3857Points((res.rows?.[0] as { gj?: unknown } | undefined)?.gj);
+  } catch {
+    return null;
+  }
+}
+
+async function loadIndexSheetGuide(
+  idxTable: string,
+  lineLogical: string,
+  idxOgcFid: number
+): Promise<[number, number][] | null> {
+  const t = await resolveLayerTableName(lineLogical.toLowerCase());
+  const safeT = t.replace(/"/g, '""');
+  const safeIdx = idxTable.replace(/"/g, '""');
+  const q = `
+    SELECT ST_AsGeoJSON(ST_Transform(
+      ST_Simplify(
+        ST_LineMerge(ST_CollectionExtract(ST_Union(ST_Intersection(t.geom, i.geom)), 2)),
+        2
+      ), 3857)) AS gj
+    FROM layer."${safeT}" t
+    INNER JOIN layer."${safeIdx}" i ON i.ogc_fid = ${idxOgcFid}
+    WHERE t.geom IS NOT NULL AND i.geom IS NOT NULL AND ST_Intersects(t.geom, i.geom)
+  `;
+  try {
+    const res = await db.execute(sql.raw(q));
+    const pts = parseGeoJson3857Points((res.rows?.[0] as { gj?: unknown } | undefined)?.gj);
+    return pts != null && pts.length >= 2 ? pts : null;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * 선택한 기본계획 폴리곤과 교차하는 색인도 1건 + 중심이 색인도 안이고 river_code 가 같은 종단/횡단/구조물 목록
  */
@@ -771,6 +919,10 @@ export async function getRiverBasicPlanIndexView(params?: {
     row: Record<string, unknown>;
     extent3857: [number, number, number, number] | null;
     ogcFid: number;
+    /** 색인도 외곽 링(3857) — 도면 방향 맞춤 */
+    ring3857: [number, number][] | null;
+    /** 칸 안 종단(없으면 제방) 선(3857) */
+    guide3857: [number, number][] | null;
   } | null;
   related: {
     kind: string;
@@ -868,6 +1020,19 @@ export async function getRiverBasicPlanIndexView(params?: {
       : {};
 
   const indexExtent = parseExtent3857(idxRes);
+  const ring3857 = await loadIndexSheetRing(idxTable, idxOgcFid);
+  let guide3857 = await loadIndexSheetGuide(
+    idxTable,
+    riverBasicPlanJdDefineTable(tab),
+    idxOgcFid
+  );
+  if (guide3857 == null) {
+    guide3857 = await loadIndexSheetGuide(
+      idxTable,
+      riverBasicPlanJbDefineTable(tab),
+      idxOgcFid
+    );
+  }
 
   const related: {
     kind: string;
@@ -882,22 +1047,31 @@ export async function getRiverBasicPlanIndexView(params?: {
 
   /**
    * 종단·횡단·제방(선): 제목 컬럼(종단·횡단 draw_name, 제방 jb_name) → 제목.
+   * 제방은 lengthColumn(jb_len)이 있으면 «이름 (L=1,077m)» 형식.
    * 배지는 badge(없으면 종류명).
    */
   const queryRelatedLm = async (
     logicalName: string,
     kindLabel: string,
-    opts?: { nameColumn?: string; badge?: string; matchIntersects?: boolean }
+    opts?: {
+      nameColumn?: string;
+      lengthColumn?: string;
+      badge?: string;
+      matchIntersects?: boolean;
+    }
   ) => {
     const t = await resolveLayerTableName(logicalName.toLowerCase());
     const safeT = t.replace(/"/g, '""');
     const keySql = attachmentKeySelectSql(logicalName);
     const nameCol = safeSqlColumnName(opts?.nameColumn ?? 'draw_name') ?? 'draw_name';
+    const lenCol = opts?.lengthColumn ? safeSqlColumnName(opts.lengthColumn) : null;
     const badge = opts?.badge ?? kindLabel;
+    const lenSelect = lenCol ? `t."${lenCol}" AS jb_len,` : '';
     const q = `
       SELECT
         t.ogc_fid AS fid,
         TRIM(COALESCE(t."${nameCol}"::text, '')) AS draw_name,
+        ${lenSelect}
         ${keySql},
         ST_XMin(ST_Transform(t.geom, 3857))::float8 AS xmin,
         ST_YMin(ST_Transform(t.geom, 3857))::float8 AS ymin,
@@ -921,6 +1095,7 @@ export async function getRiverBasicPlanIndexView(params?: {
         const rr = row as {
           fid?: unknown;
           draw_name?: unknown;
+          jb_len?: unknown;
           attachment_key?: unknown;
           xmin?: unknown;
           ymin?: unknown;
@@ -930,13 +1105,14 @@ export async function getRiverBasicPlanIndexView(params?: {
         const fid = Number(rr.fid);
         if (!Number.isFinite(fid)) continue;
         const dn = String(rr.draw_name ?? '').trim();
+        const lenSuffix = lenCol ? formatJbLenSuffix(rr.jb_len) : '';
         const rawKey = String(rr.attachment_key ?? '').trim();
         const fileKey = rawKey || String(fid);
         related.push({
           kind: kindLabel,
           table: t,
           ogcFid: fid,
-          label: dn || `${badge} #${fid}`,
+          label: (dn ? `${dn}${lenSuffix}` : '') || `${badge} #${fid}`,
           badge,
           fileLayer: t,
           fileKey,
@@ -1016,6 +1192,7 @@ export async function getRiverBasicPlanIndexView(params?: {
   await queryRelatedStructurePoints();
   await queryRelatedLm(riverBasicPlanJbDefineTable(tab), '제방', {
     nameColumn: 'jb_name',
+    lengthColumn: 'jb_len',
     badge: riverBasicPlanJbLabel(tab),
     matchIntersects: true,
   });
@@ -1025,8 +1202,105 @@ export async function getRiverBasicPlanIndexView(params?: {
       row: idxRow,
       extent3857: indexExtent,
       ogcFid: idxOgcFid,
+      ring3857,
+      guide3857,
     },
     related,
   };
+}
+
+/**
+ * 사업계획 — 하천명 기준 제방 목록 + 3857 GeoJSON (라벨·펄스용).
+ */
+export async function getRiverBasicPlanJbList(params?: {
+  tab?: RiverType;
+  riverName?: string;
+}) {
+  const tab = normalizeTab(params?.tab);
+  const riverName = String(params?.riverName ?? '').trim();
+  if (!riverName) return { items: [] as const, table: '' };
+
+  const logical = riverBasicPlanJbDefineTable(tab);
+  const t = await resolveLayerTableName(logical.toLowerCase());
+  const safeT = t.replace(/"/g, '""');
+  const badge = riverBasicPlanJbLabel(tab);
+  /** 라벨점은 가장 긴 선 길이의 50% 지점(서버). MultiLine이면 LineMerge 후 최장 파트로. */
+  const q = `
+    SELECT
+      t.ogc_fid AS fid,
+      TRIM(COALESCE(t.jb_name::text, '')) AS jb_name,
+      t.jb_len AS jb_len,
+      ST_AsGeoJSON(ST_Transform(t.geom, 3857))::text AS geojson,
+      ST_AsGeoJSON(
+        COALESCE(
+          ST_LineInterpolatePoint(
+            (
+              SELECT d.geom
+              FROM ST_Dump(ST_LineMerge(ST_Transform(t.geom, 3857))) AS d
+              ORDER BY ST_Length(d.geom) DESC
+              LIMIT 1
+            ),
+            0.5
+          ),
+          ST_ClosestPoint(
+            ST_Transform(t.geom, 3857),
+            ST_Centroid(ST_Transform(t.geom, 3857))
+          )
+        )
+      )::text AS label_geojson
+    FROM layer."${safeT}" t
+    WHERE t.geom IS NOT NULL
+      AND COALESCE(t.river_name, '') = '${esc(riverName)}'
+    ORDER BY t.ogc_fid ASC
+  `;
+  try {
+    const r = await db.execute(sql.raw(q));
+    const items: {
+      ogcFid: number;
+      table: string;
+      label: string;
+      badge: string;
+      geometry: Record<string, unknown> | null;
+      labelPoint: Record<string, unknown> | null;
+    }[] = [];
+    for (const row of r.rows ?? []) {
+      const rr = row as {
+        fid?: unknown;
+        jb_name?: unknown;
+        jb_len?: unknown;
+        geojson?: unknown;
+        label_geojson?: unknown;
+      };
+      const fid = Number(rr.fid);
+      if (!Number.isFinite(fid)) continue;
+      const dn = String(rr.jb_name ?? '').trim();
+      const lenSuffix = formatJbLenSuffix(rr.jb_len);
+      let geometry: Record<string, unknown> | null = null;
+      let labelPoint: Record<string, unknown> | null = null;
+      try {
+        const raw = String(rr.geojson ?? '').trim();
+        if (raw) geometry = JSON.parse(raw) as Record<string, unknown>;
+      } catch {
+        geometry = null;
+      }
+      try {
+        const raw = String(rr.label_geojson ?? '').trim();
+        if (raw) labelPoint = JSON.parse(raw) as Record<string, unknown>;
+      } catch {
+        labelPoint = null;
+      }
+      items.push({
+        ogcFid: fid,
+        table: t,
+        label: (dn ? `${dn}${lenSuffix}` : '') || `${badge} #${fid}`,
+        badge,
+        geometry,
+        labelPoint,
+      });
+    }
+    return { items, table: t };
+  } catch {
+    return { items: [], table: t };
+  }
 }
 

@@ -12,6 +12,13 @@ export type MapAutoNavOptions = {
   /** extent 폭·높이가 이보다 작으면 중심+zoom 이동 */
   pointThreshold?: number;
   pointZoom?: number;
+  /** 이보다 축소되지 않음(공시지가 라벨 축척 유지 등) */
+  maxResolution?: number;
+  /**
+   * true면 현재보다 축소하지 않음(필지 선택 등).
+   * 화면 밖·축소 상태면 확대·이동만 하고, 이미 확대돼 있으면 중심만 맞춤.
+   */
+  noZoomOut?: boolean;
   applyMapViewPadding?: (() => void) | null;
 };
 
@@ -55,6 +62,9 @@ export function prepareMapForPanelAwareNavigation(
 /**
  * extent(3857)로 fit/이동.
  * OpenLayers View.fit는 view.padding(좌측 패널)을 이미 반영 — fitPadding은 도형 주변 여백만.
+ *
+ * 참고: OL10 FitOptions에는 maxResolution이 없다(무시됨).
+ * maxResolution이 있으면 직접 resolution을 계산·클램프한 뒤 animate 한다.
  */
 export function fitMapToExtent3857(
   map: Map,
@@ -73,13 +83,59 @@ export function fitMapToExtent3857(
   const duration = options?.duration ?? 500;
   const fitPadding = options?.fitPadding ?? [80, 80, 80, 80];
   const pointZoom = options?.pointZoom ?? Math.min(20, maxZoom);
+  const center: [number, number] = [(xmin + xmax) / 2, (ymin + ymax) / 2];
 
   if (w < pointThreshold && h < pointThreshold) {
     // 이미 더 가까이 보고 있으면 줌 아웃하지 않음 — 포인트 클릭 시 현재 줌 유지
     const currentZoom = view.getZoom() ?? 0;
     view.animate({
-      center: [(xmin + xmax) / 2, (ymin + ymax) / 2],
+      center,
       zoom: Math.max(currentZoom, pointZoom),
+      duration,
+    });
+    return true;
+  }
+
+  const maxResolution =
+    typeof options?.maxResolution === 'number' &&
+    Number.isFinite(options.maxResolution) &&
+    options.maxResolution > 0
+      ? options.maxResolution
+      : null;
+  const noZoomOut = options?.noZoomOut === true;
+
+  /** OL10 fit는 maxResolution 미지원. noZoomOut·maxResolution은 resolution을 직접 잡아 animate */
+  if (maxResolution != null || noZoomOut) {
+    const size = map.getSize();
+    if (!size || size[0] <= 0 || size[1] <= 0) return false;
+    const pad = fitPadding;
+    const availW = Math.max(1, size[0] - pad[1] - pad[3]);
+    const availH = Math.max(1, size[1] - pad[0] - pad[2]);
+    let resolution = view.getResolutionForExtent(ext, [availW, availH]);
+    if (!Number.isFinite(resolution) || resolution <= 0) return false;
+    if (maxResolution != null) {
+      /** 전체 범위가 더 축소되어야 해도 지정 축척보다 밖으로 나가지 않음 */
+      resolution = Math.min(resolution, maxResolution);
+    }
+    if (noZoomOut) {
+      const currentRes = view.getResolution();
+      if (currentRes != null && Number.isFinite(currentRes) && currentRes > 0) {
+        /** 해상도가 작을수록 확대 — 현재보다 큰 해상도(축소)로 가지 않음 */
+        resolution = Math.min(resolution, currentRes);
+      }
+    }
+    /** maxZoom보다 더 확대하지 않음 */
+    const minResForMaxZoom = view.getResolutionForZoom(maxZoom);
+    if (Number.isFinite(minResForMaxZoom)) {
+      resolution = Math.max(resolution, minResForMaxZoom);
+    }
+    const constrained =
+      typeof view.getConstrainedResolution === 'function'
+        ? view.getConstrainedResolution(resolution)
+        : resolution;
+    view.animate({
+      center,
+      resolution: constrained && constrained > 0 ? constrained : resolution,
       duration,
     });
     return true;

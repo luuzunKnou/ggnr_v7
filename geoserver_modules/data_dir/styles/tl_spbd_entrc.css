@@ -1,4 +1,4 @@
-/* ¡‹ 18+: º± + ∂Û∫ß */
+/* Ï§å 18+: ÏÑ† + ÎùºÎ≤® */
 * {
   mark: symbol(circle);
   mark-size: [min(18, 5 + sqrt(100000 / env('wms_scale_denominator', 10000)) * 0.5)];

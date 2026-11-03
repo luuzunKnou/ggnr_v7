@@ -1,0 +1,41 @@
+<featureType>
+  <id>FeatureTypeInfoImpl--610c9460:1a10fc86a73:-7ae3</id>
+  <name>caregiver_training</name>
+  <nativeName>caregiver_training</nativeName>
+  <namespace>
+    <id>NamespaceInfoImpl-4bf97568:19c4d6c3053:-7ffa</id>
+  </namespace>
+  <title>caregiver_training</title>
+  <keywords>
+    <string>features</string>
+    <string>caregiver_training</string>
+  </keywords>
+  <srs>EPSG:5181</srs>
+  <nativeBoundingBox>
+    <minx>392628.2401627174</minx>
+    <maxx>420434.1511264475</maxx>
+    <miny>214699.66556238622</miny>
+    <maxy>239657.58548203978</maxy>
+    <crs class="projected">EPSG:5181</crs>
+  </nativeBoundingBox>
+  <latLonBoundingBox>
+    <minx>129.1205961394419</minx>
+    <maxx>129.4332516250668</maxx>
+    <miny>35.404704205195586</miny>
+    <maxy>35.63525677931234</maxy>
+    <crs>EPSG:4326</crs>
+  </latLonBoundingBox>
+  <projectionPolicy>FORCE_DECLARED</projectionPolicy>
+  <enabled>true</enabled>
+  <store class="dataStore">
+    <id>DataStoreInfoImpl-4bf97568:19c4d6c3053:-7ff9</id>
+  </store>
+  <serviceConfiguration>false</serviceConfiguration>
+  <maxFeatures>0</maxFeatures>
+  <numDecimals>0</numDecimals>
+  <padWithZeros>false</padWithZeros>
+  <forcedDecimal>false</forcedDecimal>
+  <overridingServiceSRS>false</overridingServiceSRS>
+  <skipNumberMatched>false</skipNumberMatched>
+  <circularArcPresent>false</circularArcPresent>
+</featureType>

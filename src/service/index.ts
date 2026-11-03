@@ -27,6 +27,7 @@ import * as loginLogService from './loginLogService';
 import * as riverBasicPlanService from './riverBasicPlanService';
 import * as privateLandAnalysisService from './privateLandAnalysisService';
 import * as roadLedgerService from './roadLedgerService';
+import * as roadVideoTrackService from './roadVideoTrackService';
 import * as roadNetworkService from './roadNetworkService';
 import * as roadUseLedgerService from './roadUseLedgerService';
 import * as roadFrontageBuildingService from './roadFrontageBuildingService';
@@ -44,6 +45,7 @@ import * as fileDataUploadService from './fileDataUploadService';
 import * as integrationService from './integrationService';
 import * as fileConverterService from './fileConverterService';
 import * as pdfToJpgService from './pdfToJpgService';
+import * as shpToDxfService from './shpToDxfService';
 import * as ocrMigrationService from './ocrMigrationService';
 import * as layerRowService from './layerRowService';
 import * as layerExtraService from './layerExtraService';
@@ -77,6 +79,8 @@ import * as roadWorkHandbookService from './roadWorkHandbookService';
 import * as qgisLayerControlService from './qgisLayerControlService';
 import * as userDataUploadService from './userDataUploadService';
 import * as systemControlService from './systemControlService';
+import * as detailWondoService from './detailWondoService';
+import * as individualLandPriceService from './individualLandPriceService';
 
 export {
   configService,
@@ -107,6 +111,7 @@ export {
   riverBasicPlanService,
   privateLandAnalysisService,
   roadLedgerService,
+  roadVideoTrackService,
   roadNetworkService,
   roadUseLedgerService,
   roadFrontageBuildingService,
@@ -124,6 +129,7 @@ export {
   integrationService,
   fileConverterService,
   pdfToJpgService,
+  shpToDxfService,
   ocrMigrationService,
   layerRowService,
   layerExtraService,
@@ -154,4 +160,6 @@ export {
   qgisLayerControlService,
   userDataUploadService,
   systemControlService,
+  detailWondoService,
+  individualLandPriceService,
 };

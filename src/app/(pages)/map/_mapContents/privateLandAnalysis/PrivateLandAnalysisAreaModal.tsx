@@ -16,6 +16,8 @@ import { usePrivateLandAnalysis } from './PrivateLandAnalysisContext';
 const LAYER_HINT: Record<string, string> = {
   river_d_as: '국가·지방하천 구역',
   river_s_as: '소하천 구역',
+  river_plan_as: '국가·지방하천 기본계획',
+  river_plan_s_as: '소하천 기본계획',
 };
 
 const CARD_TONES = [

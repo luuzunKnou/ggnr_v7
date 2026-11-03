@@ -551,7 +551,7 @@
   },
   {
     "define_field_name": "sern",
-    "define_field_kor_name": "sern",
+    "define_field_kor_name": "시스템관리ID",
     "define_field_type": "TEXT",
     "define_field_idx": 23,
     "define_field_is_required": false,

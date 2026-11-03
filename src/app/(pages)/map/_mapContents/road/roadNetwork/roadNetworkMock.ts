@@ -6,12 +6,23 @@ export const ROAD_NETWORK_TYPES = [
   "지방도",
   "국지도",
   "군도",
+  "면도",
+  "리도",
   "농도",
-  "일반도로",
-  "임도",
   "입체교차로",
+  "철도",
 ] as const;
 export type RoadNetworkType = (typeof ROAD_NETWORK_TYPES)[number];
+
+/** 군도 표에 함께 들어 있는 구분(면도·리도) — 같은 표·같은 속성 */
+export function isCountyTableRoadType(type: RoadNetworkType): boolean {
+  return type === "군도" || type === "면도" || type === "리도";
+}
+
+/** 면·리·농도 — 번호가 읍면마다 따로 매겨짐 */
+export function isLocalRoadType(type: RoadNetworkType): boolean {
+  return type === "면도" || type === "리도" || type === "농도";
+}
 
 /** 목록 필터 탭 — 국지도(국가지원지방도)는 지방도 탭, 입체교차로는 국도 탭에 묶음 */
 export const ROAD_NETWORK_TYPE_FILTER_TABS = [
@@ -19,9 +30,10 @@ export const ROAD_NETWORK_TYPE_FILTER_TABS = [
   "국도",
   "지방도",
   "군도",
+  "면도",
+  "리도",
   "농도",
-  "일반도로",
-  "임도",
+  "철도",
 ] as const;
 export type RoadNetworkTypeFilter = (typeof ROAD_NETWORK_TYPE_FILTER_TABS)[number];
 
@@ -36,6 +48,21 @@ export function matchesRoadNetworkTypeFilter(
   if (filter === "국도") return roadType === "국도" || roadType === "입체교차로";
   if (filter === "지방도") return roadType === "지방도" || roadType === "국지도";
   return roadType === filter;
+}
+
+/** 종류 필터 중복 선택 — 빈 배열이면 전체 */
+export type RoadNetworkTypeSelection = readonly Exclude<RoadNetworkTypeFilter, "전체">[];
+
+export function isAllRoadNetworkTypes(selection: RoadNetworkTypeSelection): boolean {
+  return selection.length === 0;
+}
+
+/** 선택한 종류 중 하나라도 해당하면 true (선택 없음 = 전체) */
+export function matchesRoadNetworkTypeSelection(
+  roadType: RoadNetworkType,
+  selection: RoadNetworkTypeSelection
+): boolean {
+  return selection.length === 0 || selection.some((f) => matchesRoadNetworkTypeFilter(roadType, f));
 }
 
 /** 모든 도로종류 개설/미개설 */
@@ -65,14 +92,15 @@ export const ROAD_NETWORK_TYPE_BADGE: Record<
   RoadNetworkType,
   { bg: string; text: string; border: string }
 > = {
-  국도: { bg: "bg-chart-3/15", text: "text-chart-3", border: "border-chart-3/40" },
-  지방도: { bg: "bg-primary/10", text: "text-primary", border: "border-primary/30" },
-  국지도: { bg: "bg-chart-1/15", text: "text-chart-1", border: "border-chart-1/40" },
-  군도: { bg: "bg-chart-2/15", text: "text-chart-2", border: "border-chart-2/40" },
-  농도: { bg: "bg-chart-4/15", text: "text-chart-4", border: "border-chart-4/40" },
-  일반도로: { bg: "bg-muted", text: "text-foreground/90", border: "border-border" },
-  임도: { bg: "bg-chart-5/15", text: "text-chart-5", border: "border-chart-5/40" },
+  국도: { bg: "bg-[#1E4FA8]/10", text: "text-[#1E4FA8]", border: "border-[#1E4FA8]/40" },
+  지방도: { bg: "bg-[#F5C400]/15", text: "text-[#8A6D00]", border: "border-[#F5C400]/60" },
+  국지도: { bg: "bg-[#F5C400]/15", text: "text-[#8A6D00]", border: "border-[#F5C400]/60" },
+  군도: { bg: "bg-[#1F76AC]/10", text: "text-[#1F76AC]", border: "border-[#1F76AC]/40" },
+  면도: { bg: "bg-[#883700]/10", text: "text-[#883700]", border: "border-[#883700]/40" },
+  리도: { bg: "bg-[#883700]/10", text: "text-[#883700]", border: "border-[#883700]/40" },
+  농도: { bg: "bg-[#883700]/10", text: "text-[#883700]", border: "border-[#883700]/40" },
   입체교차로: { bg: "bg-secondary", text: "text-secondary-foreground", border: "border-border" },
+  철도: { bg: "bg-foreground/10", text: "text-foreground", border: "border-foreground/30" },
 };
 
 export type RoadNetworkGeom =
@@ -143,6 +171,8 @@ export type RoadNetworkRow = {
   roadName: string;
   roadNo: string;
   roadType: RoadNetworkType;
+  /** 통합 도로망(rdl_network_ls) 원래 등급 — 있으면 통합 자료 행 */
+  roadGrade?: string;
   /** 개설/미개설 — 모든 도로종류 */
   openStatus: RoadNetworkOpenStatus;
   lengthM: number;
@@ -817,6 +847,7 @@ export function describeAttrHistoryDetail(
     roadName: string;
     roadNo: string;
     roadType: RoadNetworkType;
+    roadGrade?: string;
     openStatus: RoadNetworkOpenStatus;
     dept: string;
     manager: string;
@@ -834,6 +865,9 @@ export function describeAttrHistoryDetail(
   const changes: string[] = [];
   pushChange(changes, "도로명", prev.roadName, next.roadName);
   pushChange(changes, "도로종류", prev.roadType, next.roadType);
+  if (next.roadGrade !== undefined) {
+    pushChange(changes, "도로등급", prev.roadGrade || "", next.roadGrade || "");
+  }
   pushChange(changes, "도로번호", prev.roadNo || "", next.roadNo || "");
   pushChange(changes, "개설여부", prev.openStatus ?? "", next.openStatus ?? "");
   pushChange(changes, "관리기관", prev.dept || "", next.dept || "");
@@ -842,10 +876,8 @@ export function describeAttrHistoryDetail(
     next.roadType === "입체교차로" ||
     next.roadType === "지방도" ||
     next.roadType === "국지도" ||
-    next.roadType === "군도" ||
-    next.roadType === "농도" ||
-    next.roadType === "일반도로" ||
-    next.roadType === "임도"
+    isCountyTableRoadType(next.roadType) ||
+    next.roadType === "농도"
   ) {
     pushChange(changes, "길이", prev.lengthAttr || "", next.lengthAttr || "");
     pushChange(changes, "방위", prev.defense || "", next.defense || "");
@@ -853,22 +885,14 @@ export function describeAttrHistoryDetail(
   if (
     next.roadType === "입체교차로" ||
     next.roadType === "국지도" ||
-    next.roadType === "군도" ||
-    next.roadType === "농도" ||
-    next.roadType === "임도"
+    isCountyTableRoadType(next.roadType) ||
+    next.roadType === "농도"
   ) {
     pushChange(changes, "굴곡도", prev.sinuosity || "", next.sinuosity || "");
   }
-  if (next.roadType === "국지도" || next.roadType === "일반도로") {
+  if (next.roadType === "국지도") {
     pushChange(changes, "상세사유", prev.detailReason || "", next.detailReason || "");
-  }
-  if (next.roadType === "임도") {
-    pushChange(changes, "상세설명", prev.detailReason || "", next.detailReason || "");
-  }
-  if (next.roadType === "일반도로" || next.roadType === "임도") {
-    pushChange(changes, "주소", prev.address || "", next.address || "");
-  }
-  if (changes.length === 0) return "변경 사항 없음";
+  }  if (changes.length === 0) return "변경 사항 없음";
   return changes.join("\n");
 }
 
@@ -1030,7 +1054,7 @@ export function createEmptyRoadNetworkRow(
     id,
     roadName: "",
     roadNo: "",
-    roadType: "일반도로",
+    roadType: "군도",
     openStatus: "개설",
     lengthM: 0,
     sect: "",

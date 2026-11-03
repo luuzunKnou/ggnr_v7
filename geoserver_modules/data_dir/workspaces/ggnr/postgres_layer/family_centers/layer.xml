@@ -1,0 +1,19 @@
+<layer>
+  <name>family_centers</name>
+  <id>LayerInfoImpl--610c9460:1a10fc86a73:-7afd</id>
+  <type>VECTOR</type>
+  <defaultStyle>
+    <id>StyleInfoImpl--610c9460:1a10fc86a73:-7afc</id>
+  </defaultStyle>
+  <resource class="featureType">
+    <id>FeatureTypeInfoImpl--610c9460:1a10fc86a73:-7afe</id>
+  </resource>
+  <queryable>true</queryable>
+  <opaque>false</opaque>
+  <attribution>
+    <logoWidth>0</logoWidth>
+    <logoHeight>0</logoHeight>
+  </attribution>
+  <dateCreated>2026-10-16 06:47:15.110 UTC</dateCreated>
+  <dateModified>2026-10-16 06:47:15.376 UTC</dateModified>
+</layer>

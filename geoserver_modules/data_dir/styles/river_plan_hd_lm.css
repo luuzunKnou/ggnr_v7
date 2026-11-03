@@ -1,7 +1,7 @@
 /* 횡단면 라인(항상) + draw_name 라벨(줌 16+). 생략 최소화: 충돌 해제·낮은 적합도·변위 허용 */
 * {
   stroke-geometry: [geom];
-  stroke: #ffffff, #e91e63;
+  stroke: #ffffff, #142DAD;
   stroke-width: 3, 2;
   stroke-opacity: 0, 1;
   stroke-linecap: butt, butt;

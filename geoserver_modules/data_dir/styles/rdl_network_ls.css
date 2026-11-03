@@ -1,73 +1,77 @@
-/* 도로망도 선 (경산). 분류(layer)별 색·굵기, 선종류(linetype) 점선·파선. 번호 라벨은 rdl_network_ps */
-* {
-  stroke: #9E9E9E;
-  stroke-width: 1.5;
+@mode 'Flat';
+/* 도로망도 선 (경산). 도로망도 목록 종류(국도·지방도·군도·농도·철도)별 색 — 목록 뱃지·표지와 같은 색.
+   미개설(선종류 점선·파선)은 같은 색 끊은 선. 규칙마다 범례 제목(@title), 규칙끼리 섞지 않음(Flat).
+   층 구분(z-index)을 두면 범례가 층마다 따로·역순으로 나와 쓰지 않음 */
+
+/* @title 국도 */
+[layer IN ('고속도로', '국도')][linetype NOT IN ('점선', '파선')] {
+  stroke: #1E4FA8;
+  stroke-width: [if_then_else(equalTo(layer, '고속도로'), 4, 3.5)];
   stroke-linecap: round;
   stroke-linejoin: round;
 }
 
-[layer = '고속도로'] {
-  stroke: #2E7D32;
-  stroke-width: 4;
-  z-index: 9;
-}
-
-[layer = '국도'] {
-  stroke: #D32F2F;
+/* @title 국도 (미개설) */
+[layer IN ('고속도로', '국도')][linetype IN ('점선', '파선')] {
+  stroke: #1E4FA8;
   stroke-width: 3.5;
-  z-index: 8;
+  stroke-dasharray: 10 6;
+  stroke-linejoin: round;
 }
 
-[layer = '국가지원지방도'] {
-  stroke: #EF6C00;
+/* @title 지방도 */
+[layer IN ('국가지원지방도', '지방도')][linetype NOT IN ('점선', '파선')] {
+  stroke: #F5C400;
   stroke-width: 3;
-  z-index: 7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
-[layer = '지방도'] {
-  stroke: #F9A825;
+/* @title 지방도 (미개설) */
+[layer IN ('국가지원지방도', '지방도')][linetype IN ('점선', '파선')] {
+  stroke: #F5C400;
   stroke-width: 3;
-  z-index: 6;
+  stroke-dasharray: 10 6;
+  stroke-linejoin: round;
 }
 
-[layer = '시군도'] {
-  stroke: #1565C0;
+/* @title 군도 */
+[layer = '시군도'][linetype NOT IN ('점선', '파선')] {
+  stroke: #1F76AC;
   stroke-width: 2.5;
-  z-index: 5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
-[layer LIKE '면도%'] {
-  stroke: #6A1B9A;
-  stroke-width: 2;
-  z-index: 4;
-}
-
-[layer LIKE '리도%'] {
-  stroke: #00897B;
-  stroke-width: 2;
-  z-index: 3;
-}
-
-[layer LIKE '농도%'] {
-  stroke: #8D6E63;
-  stroke-width: 1.8;
-  z-index: 2;
-}
-
-[layer = '철도'] {
-  stroke: #212121;
+/* @title 군도 (미개설) */
+[layer = '시군도'][linetype IN ('점선', '파선')] {
+  stroke: #1F76AC;
   stroke-width: 2.5;
-  z-index: 1;
-}
-
-[linetype = '점선'] {
   stroke-dasharray: 2 4;
+  stroke-linejoin: round;
 }
 
-[linetype = '파선'] {
-  stroke-dasharray: 10 6;
+/* @title 농도 */
+[layer IN ('면도', '리도', '농도')][linetype NOT IN ('점선', '파선')] {
+  stroke: #883700;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
-[layer LIKE '%(파선)'] {
+/* @title 농도 (미개설) */
+[layer IN ('면도(파선)', '리도(파선)', '농도(파선)')],
+[layer IN ('면도', '리도', '농도')][linetype IN ('점선', '파선')] {
+  stroke: #883700;
+  stroke-width: 2;
   stroke-dasharray: 10 6;
+  stroke-linejoin: round;
+}
+
+/* @title 철도 */
+[layer = '철도'] {
+  stroke: #212121, #FFFFFF;
+  stroke-width: 4, 2;
+  stroke-linecap: butt, butt;
+  stroke-dasharray: 1 0, 8 8;
 }

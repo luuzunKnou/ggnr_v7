@@ -1,0 +1,41 @@
+<featureType>
+  <id>FeatureTypeInfoImpl--610c9460:1a10fc86a73:-7add</id>
+  <name>bathhouses</name>
+  <nativeName>bathhouses</nativeName>
+  <namespace>
+    <id>NamespaceInfoImpl-4bf97568:19c4d6c3053:-7ffa</id>
+  </namespace>
+  <title>bathhouses</title>
+  <keywords>
+    <string>bathhouses</string>
+    <string>features</string>
+  </keywords>
+  <srs>EPSG:5181</srs>
+  <nativeBoundingBox>
+    <minx>419380.20524532505</minx>
+    <maxx>420580.17902431503</maxx>
+    <miny>223180.77738349262</miny>
+    <maxy>230247.74108855007</maxy>
+    <crs class="projected">EPSG:5181</crs>
+  </nativeBoundingBox>
+  <latLonBoundingBox>
+    <minx>129.41716610000134</minx>
+    <maxx>129.4322967278304</maxx>
+    <miny>35.48104474857553</miny>
+    <maxy>35.54494837904562</maxy>
+    <crs>EPSG:4326</crs>
+  </latLonBoundingBox>
+  <projectionPolicy>FORCE_DECLARED</projectionPolicy>
+  <enabled>true</enabled>
+  <store class="dataStore">
+    <id>DataStoreInfoImpl-4bf97568:19c4d6c3053:-7ff9</id>
+  </store>
+  <serviceConfiguration>false</serviceConfiguration>
+  <maxFeatures>0</maxFeatures>
+  <numDecimals>0</numDecimals>
+  <padWithZeros>false</padWithZeros>
+  <forcedDecimal>false</forcedDecimal>
+  <overridingServiceSRS>false</overridingServiceSRS>
+  <skipNumberMatched>false</skipNumberMatched>
+  <circularArcPresent>false</circularArcPresent>
+</featureType>

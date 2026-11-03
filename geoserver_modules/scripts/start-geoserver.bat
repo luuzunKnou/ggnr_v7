@@ -42,6 +42,8 @@ REM 5. Run startup.bat — no unlimited ggnr_log append
 cd /d "%BIN_DIR%"
 set "GEOSERVER_HOME=%GEOSERVER_DIR%"
 set "GEOSERVER_DATA_DIR=%DATA_DIR%"
+REM Korean Windows default is MS949 - styles/REST bodies with Korean break unless UTF-8
+set "JAVA_OPTS=-Dfile.encoding=UTF-8 %JAVA_OPTS%"
 
 REM symbol style URLs: sync www/symbol to start.ini port (GEOSERVER_URL)
 set "PROJECT_ROOT=%MODULE_ROOT%\.."

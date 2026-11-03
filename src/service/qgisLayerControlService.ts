@@ -13,7 +13,6 @@ import { getSessionUsrId } from '@/lib/auth/guard';
 import { isSuperUser } from '@/lib/auth/superUser';
 import { getBasePath } from '@/lib/basePath';
 import { getGeoServerInternalBase } from '@/lib/geoserverUrl';
-import { allowProjectLayerTable } from '@/lib/projectLayerAllowlist';
 
 const WORKSPACE = (process.env.GEOSERVER_WORKSPACE?.trim() || 'ggnr').replace(/\/$/, '');
 
@@ -1307,16 +1306,6 @@ async function listGeoserverLayersWithTitle(): Promise<
     }
   } catch {
     /* DB 조회 실패 시 드론영상만 */
-  }
-
-  try {
-    const { getSystemList } = await import('@/service/configService');
-    const sysKeys = getSystemList().systems.map((s) => s.sys_key);
-    for (const key of [...byName.keys()]) {
-      if (!allowProjectLayerTable(key, sysKeys)) byName.delete(key);
-    }
-  } catch {
-    /* 시스템 목록을 못 읽으면 표 목록 유지 */
   }
 
   // 변환완료 드론영상 (QGIS WMS 전용. 테이블이 아닌 현재 작업 영상)

@@ -28,7 +28,6 @@ import {
   isOrthoDataQueryLayerId,
 } from '../../_mapContents/aerialView/orthoDataQueryLayerId';
 import { MapHitOverlapSelect } from '../MapHitOverlapSelect';
-import { allowProjectLayerTable } from '@/lib/projectLayerAllowlist';
 import { useSearchParams } from 'next/navigation';
 
 /** layer 스키마 테이블 목록 (DB 기준) */
@@ -352,7 +351,6 @@ export function AttributeQueryUI({ activeTableName, onOpenDataPanel, onClearData
           tables
             .filter((t) => (t.schema || 'layer').toLowerCase() === 'layer')
             .map((t) => t.table.toLowerCase())
-            .filter((name) => allowProjectLayerTable(name, enabledSysKeys))
         );
         const hideRoadOccGroups = enabledSysKeys.size > 0 && !enabledSysKeys.has('road');
 

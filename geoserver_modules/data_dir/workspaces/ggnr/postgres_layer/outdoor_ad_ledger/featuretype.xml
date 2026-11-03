@@ -1,0 +1,41 @@
+<featureType>
+  <id>FeatureTypeInfoImpl--610c9460:1a10fc86a73:-7b31</id>
+  <name>outdoor_ad_ledger</name>
+  <nativeName>outdoor_ad_ledger</nativeName>
+  <namespace>
+    <id>NamespaceInfoImpl-4bf97568:19c4d6c3053:-7ffa</id>
+  </namespace>
+  <title>outdoor_ad_ledger</title>
+  <keywords>
+    <string>features</string>
+    <string>outdoor_ad_ledger</string>
+  </keywords>
+  <srs>EPSG:5181</srs>
+  <nativeBoundingBox>
+    <minx>198281.1979976619</minx>
+    <maxx>422866.0647426419</maxx>
+    <miny>222718.77594190312</miny>
+    <maxy>452340.17745704774</maxy>
+    <crs class="projected">EPSG:5181</crs>
+  </nativeBoundingBox>
+  <latLonBoundingBox>
+    <minx>126.9805438</minx>
+    <maxx>129.52164168204112</maxx>
+    <miny>35.47637477564851</miny>
+    <maxy>37.57060133685964</maxy>
+    <crs>EPSG:4326</crs>
+  </latLonBoundingBox>
+  <projectionPolicy>FORCE_DECLARED</projectionPolicy>
+  <enabled>true</enabled>
+  <store class="dataStore">
+    <id>DataStoreInfoImpl-4bf97568:19c4d6c3053:-7ff9</id>
+  </store>
+  <serviceConfiguration>false</serviceConfiguration>
+  <maxFeatures>0</maxFeatures>
+  <numDecimals>0</numDecimals>
+  <padWithZeros>false</padWithZeros>
+  <forcedDecimal>false</forcedDecimal>
+  <overridingServiceSRS>false</overridingServiceSRS>
+  <skipNumberMatched>false</skipNumberMatched>
+  <circularArcPresent>false</circularArcPresent>
+</featureType>
