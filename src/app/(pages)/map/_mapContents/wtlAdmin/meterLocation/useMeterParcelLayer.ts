@@ -19,10 +19,10 @@ import { SCALE_BAR_PX } from '../../../_mapComponents/hooks/mapScale'
 import { useMapContext } from '../../../_mapComponents/MapContext'
 import type { MeterLocateResult } from './locateMeterAddresses'
 
-/** 구역 이동 시 목표 축척막대(m) — 80~100 중간 */
-const ZONE_TARGET_SCALE_M = 90
-const ZONE_MIN_SCALE_M = 80
-const ZONE_MAX_SCALE_M = 100
+/** 구역 이동 시 목표 축척막대(m) — 한 구역 = 35m 화면 */
+const ZONE_TARGET_SCALE_M = 35
+const ZONE_MIN_SCALE_M = 30
+const ZONE_MAX_SCALE_M = 40
 
 function labelText(label: string, offsetY: number): Text {
   return new Text({

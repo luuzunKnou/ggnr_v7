@@ -19,9 +19,12 @@ import { SCALE_BAR_PX } from '../../../_mapComponents/hooks/mapScale'
 import { WORKSPACE } from '../../../_mapComponents/layerFactory/serviceLayerFactory'
 import { createPrintCaptureBackgroundLayer } from '../../mapPrint/mapPrintCapture'
 
-const CAPTURE_W = 720
-const CAPTURE_H = 420
-const ZONE_TARGET_SCALE_M = 90
+const CAPTURE_W = 560
+const CAPTURE_H = 320
+/** 구역 캡처 목표 축척막대(m) — 클러스터·화면 이동과 동일 */
+const ZONE_TARGET_SCALE_M = 35
+const ZONE_MIN_SCALE_M = 30
+const ZONE_MAX_SCALE_M = 40
 
 export type MeterZoneCapturePoint = {
   label: string
@@ -35,8 +38,59 @@ export type MeterZoneCaptureResult = {
   reason: string
 }
 
-function waitMs(ms: number): Promise<void> {
-  return new Promise((resolve) => window.setTimeout(resolve, ms))
+export type MeterZoneCaptureSession = {
+  captureZone: (
+    extent3857: [number, number, number, number],
+    points: MeterZoneCapturePoint[],
+    signal?: AbortSignal
+  ) => Promise<MeterZoneCaptureResult>
+  dispose: () => void
+}
+
+function abortError(): Error {
+  return Object.assign(new Error('capture-aborted'), { name: 'AbortError' })
+}
+
+function throwIfAborted(signal?: AbortSignal): void {
+  if (signal?.aborted) throw abortError()
+}
+
+/** abort 시에만 reject — Promise.race 상대용 */
+function whenAborted(signal?: AbortSignal): Promise<never> {
+  return new Promise((_, reject) => {
+    if (signal?.aborted) {
+      reject(abortError())
+      return
+    }
+    signal?.addEventListener('abort', () => reject(abortError()), { once: true })
+  })
+}
+
+function waitAbortable(ms: number, signal?: AbortSignal): Promise<void> {
+  if (signal?.aborted) return Promise.reject(abortError())
+  return new Promise((resolve, reject) => {
+    const onAbort = () => {
+      window.clearTimeout(timer)
+      signal?.removeEventListener('abort', onAbort)
+      reject(abortError())
+    }
+    const timer = window.setTimeout(() => {
+      signal?.removeEventListener('abort', onAbort)
+      resolve()
+    }, ms)
+    signal?.addEventListener('abort', onAbort, { once: true })
+  })
+}
+
+async function raceUntil(
+  work: Promise<void>,
+  signal?: AbortSignal
+): Promise<void> {
+  if (!signal) {
+    await work
+    return
+  }
+  await Promise.race([work, whenAborted(signal)])
 }
 
 function waitRenderComplete(map: MapType, timeoutMs: number): Promise<void> {
@@ -53,28 +107,55 @@ function waitRenderComplete(map: MapType, timeoutMs: number): Promise<void> {
   })
 }
 
+/** 타일 대기 — pending이 잠깐 0이면 바로 통과 (캐시 hit 시 빠름) */
 function waitTilesLoaded(source: XYZ, timeoutMs: number): Promise<void> {
   return new Promise((resolve) => {
     let pending = 0
     let settled = false
+    let idleTimer: number | null = null
     const finish = () => {
       if (settled) return
       settled = true
+      if (idleTimer != null) window.clearTimeout(idleTimer)
       source.un('tileloadstart', onStart)
       source.un('tileloadend', onEnd)
       source.un('tileloaderror', onEnd)
       resolve()
+    }
+    const scheduleIdle = () => {
+      if (idleTimer != null) window.clearTimeout(idleTimer)
+      idleTimer = window.setTimeout(() => {
+        if (pending === 0) finish()
+      }, 40)
     }
     const onStart = () => {
       pending += 1
     }
     const onEnd = () => {
       pending = Math.max(0, pending - 1)
-      if (pending === 0) window.setTimeout(finish, 80)
+      if (pending === 0) scheduleIdle()
     }
     source.on('tileloadstart', onStart)
     source.on('tileloadend', onEnd)
     source.on('tileloaderror', onEnd)
+    // 이미 캐시만 쓰는 경우 이벤트가 안 올 수 있음
+    scheduleIdle()
+    window.setTimeout(finish, timeoutMs)
+  })
+}
+
+function waitImageWms(source: ImageWMS, timeoutMs: number): Promise<void> {
+  return new Promise((resolve) => {
+    let settled = false
+    const finish = () => {
+      if (settled) return
+      settled = true
+      source.un('imageloadend', finish)
+      source.un('imageloaderror', finish)
+      resolve()
+    }
+    source.once('imageloadend', finish)
+    source.once('imageloaderror', finish)
     window.setTimeout(finish, timeoutMs)
   })
 }
@@ -108,22 +189,21 @@ function buildJijukPnuCql(pnus: string[]): string | undefined {
 function pointStyle(label: string): Style {
   return new Style({
     image: new Circle({
-      radius: 6,
+      radius: 5,
       fill: new Fill({ color: 'rgba(50, 118, 195, 0.95)' }),
       stroke: new Stroke({ color: '#ffffff', width: 2 }),
     }),
     text: new Text({
       text: label,
-      font: '11px sans-serif',
+      font: '10px sans-serif',
       fill: new Fill({ color: '#0f172a' }),
       stroke: new Stroke({ color: '#ffffff', width: 3 }),
       overflow: true,
-      offsetY: -14,
+      offsetY: -12,
     }),
   })
 }
 
-/** 숨김 지도 레이어만 합성 — CORS 오염 레이어 없음 */
 function compositeOffscreenToCanvas(map: MapType, target: HTMLCanvasElement): boolean {
   const size = map.getSize()
   if (!size) return false
@@ -173,17 +253,71 @@ function compositeOffscreenToCanvas(map: MapType, target: HTMLCanvasElement): bo
   return drew
 }
 
+function applyViewToExtent(
+  view: View,
+  extentRaw: [number, number, number, number]
+): [number, number, number, number] {
+  const extent = normalizeExtent(extentRaw)
+  const fitPadding: [number, number, number, number] = [28, 28, 28, 28]
+  const availW = Math.max(1, CAPTURE_W - fitPadding[1] - fitPadding[3])
+  const availH = Math.max(1, CAPTURE_H - fitPadding[0] - fitPadding[2])
+  let resolution = view.getResolutionForExtent(extent, [availW, availH])
+  if (!Number.isFinite(resolution) || resolution <= 0) {
+    resolution = ZONE_TARGET_SCALE_M / SCALE_BAR_PX
+  }
+
+  // 작은 구역도 35m 근처로 — fit만 쓰면 과도 확대됨
+  const scaleAtFit = resolution * SCALE_BAR_PX
+  const targetRes = ZONE_TARGET_SCALE_M / SCALE_BAR_PX
+  const maxRes = ZONE_MAX_SCALE_M / SCALE_BAR_PX
+  const minRes = ZONE_MIN_SCALE_M / SCALE_BAR_PX
+  if (scaleAtFit > ZONE_MAX_SCALE_M) {
+    // 구역이 크면 fit 유지(전체 보이게)
+  } else if (scaleAtFit < ZONE_MIN_SCALE_M) {
+    resolution = targetRes
+  } else {
+    resolution = Math.min(maxRes, Math.max(minRes, resolution))
+  }
+
+  view.setCenter([(extent[0] + extent[2]) / 2, (extent[1] + extent[3]) / 2])
+  view.setResolution(resolution)
+  return extent
+}
+
+function setPointFeatures(
+  vectorSource: VectorSource,
+  points: MeterZoneCapturePoint[]
+): void {
+  vectorSource.clear(true)
+  if (points.length === 0) return
+  try {
+    const features = new GeoJSON().readFeatures(
+      {
+        type: 'FeatureCollection',
+        features: points.map((p) => ({
+          type: 'Feature',
+          geometry: { type: 'Point', coordinates: p.point4326 },
+          properties: { label: p.label },
+        })),
+      },
+      { dataProjection: 'EPSG:4326', featureProjection: 'EPSG:3857' }
+    )
+    for (const feature of features) {
+      feature.setStyle(pointStyle(String(feature.get('label') ?? '')))
+    }
+    vectorSource.addFeatures(features)
+  } catch {
+    /* ignore */
+  }
+}
+
 /**
- * 메인 지도를 움직이지 않고 화면 밖 숨김 OL 지도로 구역 캡처.
- * 배경 타일·지적·점은 클라이언트에서 로드 (폐쇄망: 자체정사·내부 GeoServer).
+ * 보고서용 숨김 지도 세션 — 구역마다 Map을 새로 만들지 않고 재사용.
  */
-export async function captureZoneMapDataUrl(
-  extent3857: [number, number, number, number],
-  points: MeterZoneCapturePoint[],
+export function createMeterZoneCaptureSession(
   backgroundId = 'aerial-vworld'
-): Promise<MeterZoneCaptureResult> {
+): MeterZoneCaptureSession {
   const host = document.createElement('div')
-  // opacity:0 은 타일 미렌더 원인이 되므로 화면 밖으로만 이동
   host.style.cssText = [
     'position:fixed',
     'left:-9999px',
@@ -197,127 +331,154 @@ export async function captureZoneMapDataUrl(
   ].join(';')
   document.body.appendChild(host)
 
-  let map: Map | null = null
-  try {
-    const extent = normalizeExtent(extent3857)
-    const bg = createPrintCaptureBackgroundLayer(backgroundId?.trim() || 'aerial-vworld')
-    bg.set('name', 'background')
-    const tileSource = bg.getSource()
+  const bg = createPrintCaptureBackgroundLayer(backgroundId?.trim() || 'aerial-vworld')
+  bg.set('name', 'background')
+  const tileSource = bg.getSource()
 
-    const pnus = points
-      .map((p) => String(p.pnu ?? '').replace(/\D/g, '').slice(0, 19))
-      .filter(Boolean)
-    const cql = buildJijukPnuCql(pnus)
-    const geoServerBase = getGeoServerBase()
-    const jijukLayer = new ImageLayer({
-      source: new ImageWMS({
-        url: `${geoServerBase}/${WORKSPACE}/wms`,
-        params: {
-          LAYERS: `${WORKSPACE}:jijuk`,
-          STYLES: 'jijuk',
-          TRANSPARENT: true,
-          FORMAT: 'image/png',
-          ...(cql ? { CQL_FILTER: cql } : {}),
-        },
-        serverType: 'geoserver',
-        ratio: 1,
-        imageLoadFunction: geoserverWmsImageLoadFunction,
-        crossOrigin: 'anonymous',
-      }),
-      zIndex: 10,
-      visible: Boolean(cql),
-    })
+  const geoServerBase = getGeoServerBase()
+  const jijukSource = new ImageWMS({
+    url: `${geoServerBase}/${WORKSPACE}/wms`,
+    params: {
+      LAYERS: `${WORKSPACE}:jijuk`,
+      STYLES: 'jijuk',
+      TRANSPARENT: true,
+      FORMAT: 'image/png',
+      CQL_FILTER: 'INCLUDE',
+    },
+    serverType: 'geoserver',
+    ratio: 1,
+    imageLoadFunction: geoserverWmsImageLoadFunction,
+    crossOrigin: 'anonymous',
+  })
+  const jijukLayer = new ImageLayer({
+    source: jijukSource,
+    zIndex: 10,
+    visible: false,
+  })
 
-    const vectorSource = new VectorSource()
-    if (points.length > 0) {
-      try {
-        const features = new GeoJSON().readFeatures(
-          {
-            type: 'FeatureCollection',
-            features: points.map((p) => ({
-              type: 'Feature',
-              geometry: { type: 'Point', coordinates: p.point4326 },
-              properties: { label: p.label },
-            })),
-          },
-          { dataProjection: 'EPSG:4326', featureProjection: 'EPSG:3857' }
-        )
-        for (const feature of features) {
-          feature.setStyle(pointStyle(String(feature.get('label') ?? '')))
-        }
-        vectorSource.addFeatures(features)
-      } catch {
-        /* ignore */
+  const vectorSource = new VectorSource()
+  const pointLayer = new VectorLayer({
+    source: vectorSource,
+    declutter: true,
+    zIndex: 20,
+  })
+
+  const view = new View({
+    resolutions: RESOLUTIONS_3857,
+    minZoom: 0,
+    maxZoom: RESOLUTIONS_3857.length - 1,
+    constrainResolution: true,
+  })
+
+  const map = new Map({
+    target: host,
+    layers: [bg, jijukLayer, pointLayer],
+    view,
+    controls: defaultControls({ attribution: false, zoom: false }),
+    interactions: [],
+  })
+  map.setSize([CAPTURE_W, CAPTURE_H])
+  map.updateSize()
+
+  let disposed = false
+  let captureCount = 0
+
+  return {
+    async captureZone(extent3857, points, signal) {
+      if (disposed || signal?.aborted) {
+        return { dataUrl: null, status: 'failed', reason: '캡처 취소됨' }
       }
-    }
-    const pointLayer = new VectorLayer({
-      source: vectorSource,
-      declutter: true,
-      zIndex: 20,
-    })
+      try {
+        applyViewToExtent(view, extent3857)
+        setPointFeatures(vectorSource, points)
 
-    const view = new View({
-      resolutions: RESOLUTIONS_3857,
-      minZoom: 0,
-      maxZoom: RESOLUTIONS_3857.length - 1,
-      constrainResolution: true,
-    })
-    const fitPadding: [number, number, number, number] = [36, 36, 36, 36]
-    const availW = Math.max(1, CAPTURE_W - fitPadding[1] - fitPadding[3])
-    const availH = Math.max(1, CAPTURE_H - fitPadding[0] - fitPadding[2])
-    let resolution = view.getResolutionForExtent(extent, [availW, availH])
-    if (!Number.isFinite(resolution) || resolution <= 0) {
-      resolution = ZONE_TARGET_SCALE_M / SCALE_BAR_PX
-    }
-    view.setCenter([(extent[0] + extent[2]) / 2, (extent[1] + extent[3]) / 2])
-    view.setResolution(resolution)
+        const pnus = points
+          .map((p) => String(p.pnu ?? '').replace(/\D/g, '').slice(0, 19))
+          .filter(Boolean)
+        const cql = buildJijukPnuCql(pnus)
+        if (cql) {
+          jijukLayer.setVisible(true)
+          jijukSource.setImageLoadFunction(geoserverWmsImageLoadFunction)
+          jijukSource.updateParams({
+            LAYERS: `${WORKSPACE}:jijuk`,
+            STYLES: 'jijuk',
+            CQL_FILTER: cql,
+            _ts: Date.now(),
+          })
+        } else {
+          jijukLayer.setVisible(false)
+          jijukSource.updateParams({ CQL_FILTER: 'INCLUDE' })
+        }
 
-    map = new Map({
-      target: host,
-      layers: [bg, jijukLayer, pointLayer],
-      view,
-      controls: defaultControls({ attribution: false, zoom: false }),
-      interactions: [],
-    })
-    map.setSize([CAPTURE_W, CAPTURE_H])
-    map.updateSize()
-    map.renderSync()
-    await waitMs(50)
+        map.renderSync()
+        throwIfAborted(signal)
+        // 첫 구역은 타일 워밍, 이후는 캐시 위주라 짧게
+        const tileWait = captureCount === 0 ? 2800 : 1200
+        if (tileSource) {
+          await raceUntil(waitTilesLoaded(tileSource, tileWait), signal)
+        }
+        throwIfAborted(signal)
+        if (cql) {
+          const imgWait = captureCount === 0 ? 1800 : 1200
+          await raceUntil(waitImageWms(jijukSource, imgWait), signal)
+        }
+        throwIfAborted(signal)
+        await raceUntil(waitRenderComplete(map, 1200), signal)
+        await waitAbortable(captureCount === 0 ? 120 : 40, signal)
 
-    if (tileSource) await waitTilesLoaded(tileSource, 8000)
-    await waitRenderComplete(map, 4000)
-    await waitMs(500)
-    await waitRenderComplete(map, 3000)
-    await waitMs(150)
+        const canvas = document.createElement('canvas')
+        if (!compositeOffscreenToCanvas(map, canvas) || canvas.width < 2) {
+          const reason = '숨김 지도 레이어 합성 실패(타일 미로드·WebGL)'
+          console.warn('[meterLocation capture]', reason)
+          return { dataUrl: null, status: 'failed', reason }
+        }
+        let dataUrl = ''
+        try {
+          dataUrl = canvas.toDataURL('image/png')
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err)
+          const reason = /taint|security|cross-origin/i.test(msg)
+            ? `PNG 변환 실패(캔버스 오염) — ${msg}`
+            : `PNG 변환 실패 — ${msg}`
+          return { dataUrl: null, status: 'failed', reason }
+        }
+        if (!dataUrl || dataUrl.length < 64) {
+          return { dataUrl: null, status: 'failed', reason: '빈 PNG' }
+        }
+        captureCount += 1
+        return { dataUrl, status: 'ok', reason: '' }
+      } catch (err) {
+        if (
+          signal?.aborted ||
+          disposed ||
+          (err instanceof Error && err.name === 'AbortError')
+        ) {
+          return { dataUrl: null, status: 'failed', reason: '캡처 취소됨' }
+        }
+        const reason = err instanceof Error ? err.message : '캡처 예외'
+        console.warn('[meterLocation capture]', reason, err)
+        return { dataUrl: null, status: 'failed', reason }
+      }
+    },
+    dispose() {
+      if (disposed) return
+      disposed = true
+      map.setTarget(undefined)
+      host.remove()
+    },
+  }
+}
 
-    const canvas = document.createElement('canvas')
-    if (!compositeOffscreenToCanvas(map, canvas) || canvas.width < 2) {
-      const reason = '숨김 지도 레이어 합성 실패(타일 미로드·WebGL)'
-      console.warn('[meterLocation capture]', reason, { extent, backgroundId })
-      return { dataUrl: null, status: 'failed', reason }
-    }
-
-    let dataUrl = ''
-    try {
-      dataUrl = canvas.toDataURL('image/png')
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err)
-      const reason = /taint|security|cross-origin/i.test(msg)
-        ? `PNG 변환 실패(캔버스 오염) — ${msg}`
-        : `PNG 변환 실패 — ${msg}`
-      console.warn('[meterLocation capture]', reason)
-      return { dataUrl: null, status: 'failed', reason }
-    }
-    if (!dataUrl || dataUrl.length < 64) {
-      return { dataUrl: null, status: 'failed', reason: '빈 PNG' }
-    }
-    return { dataUrl, status: 'ok', reason: '' }
-  } catch (err) {
-    const reason = err instanceof Error ? err.message : '캡처 예외'
-    console.warn('[meterLocation capture]', reason, err)
-    return { dataUrl: null, status: 'failed', reason }
+/** 단건 캡처 — 세션 생성·폐기 래퍼 */
+export async function captureZoneMapDataUrl(
+  extent3857: [number, number, number, number],
+  points: MeterZoneCapturePoint[],
+  backgroundId = 'aerial-vworld'
+): Promise<MeterZoneCaptureResult> {
+  const session = createMeterZoneCaptureSession(backgroundId)
+  try {
+    return await session.captureZone(extent3857, points)
   } finally {
-    map?.setTarget(undefined)
-    host.remove()
+    session.dispose()
   }
 }

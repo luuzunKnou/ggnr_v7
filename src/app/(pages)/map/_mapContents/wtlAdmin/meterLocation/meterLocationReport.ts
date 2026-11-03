@@ -1,6 +1,11 @@
+export type MeterReportMeterLine = {
+  meterNo: string
+  address: string
+}
+
 export type MeterReportZoneRow = {
   zoneLabel: string
-  meters: string[]
+  meters: MeterReportMeterLine[]
   mapDataUrl: string | null
   /** 캡처 성공/실패 구분 — 실패 시 보고서에 이유 표시 */
   mapCaptureStatus?: 'ok' | 'failed'
@@ -40,7 +45,13 @@ export function buildMeterLocationReportHtml(args: {
         z.meters.length === 0
           ? '—'
           : `<ul class="meter-list">${z.meters
-              .map((m) => `<li>${esc(m)}</li>`)
+              .map((m) => {
+                const no = esc(m.meterNo)
+                const addr = String(m.address ?? '').trim()
+                return addr
+                  ? `<li><span class="meter-no">${no}</span><span class="meter-addr">${esc(addr)}</span></li>`
+                  : `<li><span class="meter-no">${no}</span></li>`
+              })
               .join('')}</ul>`
       const captureFailed = z.mapCaptureStatus === 'failed' || !z.mapDataUrl
       const failReason = (z.mapCaptureReason ?? '').trim()
@@ -79,7 +90,9 @@ export function buildMeterLocationReportHtml(args: {
   .zone-cell{width:12%;font-weight:600;white-space:nowrap}
   .map-cell{width:42%}
   .meter-list{margin:0;padding-left:16px}
-  .meter-list li{margin:1px 0}
+  .meter-list li{display:flex;flex-wrap:wrap;align-items:baseline;gap:6px 10px;margin:3px 0}
+  .meter-no{font-weight:600;color:#0f172a;white-space:nowrap}
+  .meter-addr{color:#64748b;font-size:10px;line-height:1.35;min-width:0}
   .zone-map{display:block;width:100%;max-height:220px;object-fit:cover;border:1px solid #cbd5e1;background:#e2e8f0}
   .zone-map-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;height:120px;background:#fef2f2;color:#b91c1c;border:1px solid #fecaca;text-align:center;padding:8px;font-weight:600}
   .fail-reason{display:block;margin-top:4px;font-size:10px;font-weight:400;color:#64748b}

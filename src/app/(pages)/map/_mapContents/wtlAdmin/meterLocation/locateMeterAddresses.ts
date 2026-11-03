@@ -249,7 +249,7 @@ export async function locateMeterAddresses(args: {
       onProgress?.(done, lines.length)
     }
   }
-  const workers = Array.from({ length: Math.min(3, lines.length) }, () => worker())
+  const workers = Array.from({ length: Math.min(6, lines.length) }, () => worker())
   await Promise.all(workers)
   return results.filter((row): row is MeterLocateResult => Boolean(row))
 }
@@ -304,8 +304,8 @@ async function locateOneByNumber(
   }
 }
 
-const JIJUK_BATCH = 120
-const JIJUK_PARALLEL = 4
+/** 청크 단위 순차 조회 — 진행 문구가 25건씩 올라감 (병렬이면 한 번에 끝나 점프) */
+const JIJUK_BATCH = 25
 
 type JijukResolveRow = {
   index: number
@@ -314,7 +314,8 @@ type JijukResolveRow = {
 }
 
 async function resolveJijukBatch(
-  points: Array<{ lon: number; lat: number } | null>
+  points: Array<{ lon: number; lat: number } | null>,
+  onProgress?: (done: number, total: number) => void | Promise<void>
 ): Promise<JijukResolveRow[]> {
   const chunks: Array<{ offset: number; pts: Array<{ lon: number; lat: number } | null> }> = []
   for (let i = 0; i < points.length; i += JIJUK_BATCH) {
@@ -325,45 +326,38 @@ async function resolveJijukBatch(
     pnu: null,
     geometry4326: null,
   }))
-  let cursor = 0
-  const worker = async () => {
-    while (cursor < chunks.length) {
-      const ci = cursor
-      cursor += 1
-      const chunk = chunks[ci]
-      if (!chunk) continue
-      try {
-        const res = await call('', 'POST', {
-          service: 'wtlMeterLocationService',
-          action: 'resolveJijukParcelsByLonLat',
-          params: { points: chunk.pts },
-        })
-        const body = (res?.data ?? res) as { rows?: JijukResolveRow[] }
-        const rows = Array.isArray(body?.rows) ? body.rows : []
-        for (const row of rows) {
-          const localIdx = Number(row.index)
-          if (!Number.isFinite(localIdx)) continue
-          const globalIdx = chunk.offset + localIdx
-          if (globalIdx < 0 || globalIdx >= out.length) continue
-          const pnu = pnuDigits(String(row.pnu ?? ''))
-          const geom = row.geometry4326
-          out[globalIdx] = {
-            index: globalIdx,
-            pnu: pnu || null,
-            geometry4326:
-              geom && typeof geom === 'object' && 'type' in geom ? geom : null,
-          }
+  const total = points.length
+  let donePoints = 0
+  await onProgress?.(0, total)
+  for (const chunk of chunks) {
+    try {
+      const res = await call('', 'POST', {
+        service: 'wtlMeterLocationService',
+        action: 'resolveJijukParcelsByLonLat',
+        params: { points: chunk.pts },
+      })
+      const body = (res?.data ?? res) as { rows?: JijukResolveRow[] }
+      const rows = Array.isArray(body?.rows) ? body.rows : []
+      for (const row of rows) {
+        const localIdx = Number(row.index)
+        if (!Number.isFinite(localIdx)) continue
+        const globalIdx = chunk.offset + localIdx
+        if (globalIdx < 0 || globalIdx >= out.length) continue
+        const pnu = pnuDigits(String(row.pnu ?? ''))
+        const geom = row.geometry4326
+        out[globalIdx] = {
+          index: globalIdx,
+          pnu: pnu || null,
+          geometry4326:
+            geom && typeof geom === 'object' && 'type' in geom ? geom : null,
         }
-      } catch {
-        /* chunk 실패 시 해당 구간은 null 유지 */
       }
+    } catch {
+      /* chunk 실패 시 해당 구간은 null 유지 */
     }
+    donePoints += chunk.pts.length
+    await onProgress?.(Math.min(donePoints, total), total)
   }
-  await Promise.all(
-    Array.from({ length: Math.min(JIJUK_PARALLEL, Math.max(1, chunks.length)) }, () =>
-      worker()
-    )
-  )
   return out
 }
 
@@ -377,7 +371,7 @@ export async function locateMetersFromKnown(args: {
     point?: [number, number] | null
   }>
   apiKey: string
-  onProgress?: (done: number, total: number) => void
+  onProgress?: (done: number, total: number) => void | Promise<void>
 }): Promise<MeterLocateResult[]> {
   const { meters, onProgress } = args
   if (meters.length === 0) return []
@@ -395,9 +389,7 @@ export async function locateMetersFromKnown(args: {
     return null
   })
 
-  onProgress?.(0, meters.length)
-  const resolved = await resolveJijukBatch(points)
-  onProgress?.(meters.length, meters.length)
+  const resolved = await resolveJijukBatch(points, onProgress)
 
   return meters.map((m, index) => {
     const meterNo = String(m.meterNo ?? '').trim() || `row-${index}`
@@ -526,7 +518,7 @@ export async function locateMeterInputs(args: {
       onProgress?.(done, lines.length)
     }
   }
-  const workers = Array.from({ length: Math.min(3, lines.length) }, () => worker())
+  const workers = Array.from({ length: Math.min(6, lines.length) }, () => worker())
   await Promise.all(workers)
   return results.filter((row): row is MeterLocateResult => Boolean(row))
 }

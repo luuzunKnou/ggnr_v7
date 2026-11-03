@@ -26,7 +26,7 @@ import {
 } from './MeterBulkAddModal'
 import { MeterNumberSuggestInput } from './MeterNumberSuggestInput'
 import { buildMeterLocationReportHtml } from './meterLocationReport'
-import { captureZoneMapDataUrl } from './meterLocationZoneCapture'
+import { createMeterZoneCaptureSession } from './meterLocationZoneCapture'
 import { useMeterParcelLayer } from './useMeterParcelLayer'
 import { useWtlMeterWmsLayer } from './useWtlMeterWmsLayer'
 
@@ -55,19 +55,57 @@ export function WtlMeterLocationShell({ leftOffsetPx, onTotalWidthChange, onClos
   const [input, setInput] = useState('')
   const [rows, setRows] = useState<MeterLocateResult[]>([])
   const [focusId, setFocusId] = useState<string | null>(null)
+  const [selectedZoneId, setSelectedZoneId] = useState<string | null>(null)
+  const [hoverZoneId, setHoverZoneId] = useState<string | null>(null)
+  const [hoverMeterId, setHoverMeterId] = useState<string | null>(null)
   const [zoneFocusKey, setZoneFocusKey] = useState<string | null>(null)
   const [zoneExtent3857, setZoneExtent3857] = useState<
     [number, number, number, number] | null
   >(null)
+
+  /** rowspan 구역 병합용 — standard-list-row 대신 셀 단위 하이라이트 */
+  const LIST_HOVER_BG = 'color-mix(in oklab, var(--muted) 55%, transparent)'
+  const LIST_SELECTED_BG = 'color-mix(in oklab, var(--primary) 12%, transparent)'
   const [running, setRunning] = useState(false)
   const [printing, setPrinting] = useState(false)
   const [reportOpen, setReportOpen] = useState(false)
   const [reportHtml, setReportHtml] = useState('')
+  const [reportProgress, setReportProgress] = useState<{
+    done: number
+    total: number
+  } | null>(null)
   const [notice, setNotice] = useState('')
   const [bulkOpen, setBulkOpen] = useState(false)
   const regionRef = useRef<PreferRegion | undefined>(undefined)
   const runRef = useRef(0)
   const reportIframeRef = useRef<HTMLIFrameElement>(null)
+  const printAbortRef = useRef<AbortController | null>(null)
+  const printSessionRef = useRef<ReturnType<
+    typeof createMeterZoneCaptureSession
+  > | null>(null)
+
+  /** setState 후 브라우저가 진행률을 그리도록 한 프레임 양보 */
+  const yieldToUi = () =>
+    new Promise<void>((resolve) => {
+      requestAnimationFrame(() => {
+        window.setTimeout(resolve, 0)
+      })
+    })
+
+  const cancelPrintCapture = () => {
+    printAbortRef.current?.abort()
+    printAbortRef.current = null
+    printSessionRef.current?.dispose()
+    printSessionRef.current = null
+  }
+
+  const closeReportModal = () => {
+    cancelPrintCapture()
+    setReportOpen(false)
+    setReportHtml('')
+    setReportProgress(null)
+    setPrinting(false)
+  }
 
   useMeterParcelLayer(rows, focusId, zoneFocusKey, zoneExtent3857)
   useWtlMeterWmsLayer()
@@ -77,7 +115,11 @@ export function WtlMeterLocationShell({ leftOffsetPx, onTotalWidthChange, onClos
   }, [onTotalWidthChange, width])
 
   useEffect(() => {
-    return () => onTotalWidthChange(0)
+    return () => {
+      cancelPrintCapture()
+      onTotalWidthChange(0)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- unmount cleanup only
   }, [onTotalWidthChange])
 
   useEffect(() => {
@@ -178,6 +220,9 @@ export function WtlMeterLocationShell({ leftOffsetPx, onTotalWidthChange, onClos
     setInput('')
     setRows([])
     setFocusId(null)
+    setSelectedZoneId(null)
+    setHoverZoneId(null)
+    setHoverMeterId(null)
     setZoneFocusKey(null)
     setZoneExtent3857(null)
     setNotice('')
@@ -200,15 +245,17 @@ export function WtlMeterLocationShell({ leftOffsetPx, onTotalWidthChange, onClos
     const runId = runRef.current + 1
     runRef.current = runId
     setRunning(true)
-    setNotice(`일괄 추가 중… (${selected.length}건)`)
+    setNotice(`일괄 추가 중… (0 / ${selected.length})`)
+    await yieldToUi()
     try {
       // 일괄 목록에 이미 좌표가 있으므로 번호 IN 재조회 없이 필지만 보강
       const next = await locateMetersFromKnown({
         meters: selected,
         apiKey,
-        onProgress: (done, total) => {
+        onProgress: async (done, total) => {
           if (runRef.current !== runId) return
           setNotice(`일괄 추가 중… (${done} / ${total})`)
+          await yieldToUi()
         },
       })
       if (runRef.current !== runId) return
@@ -238,15 +285,28 @@ export function WtlMeterLocationShell({ leftOffsetPx, onTotalWidthChange, onClos
   ) => {
     if (!navigable || !extent3857) return
     setFocusId(null)
+    setSelectedZoneId(zoneId)
     setZoneExtent3857([...extent3857] as [number, number, number, number])
     setZoneFocusKey(`${zoneId}-${Date.now()}`)
   }
 
   const handleMeterClick = (row: MeterLocateResult) => {
     if (row.status === 'miss') return
+    setSelectedZoneId(null)
     setZoneFocusKey(null)
     setZoneExtent3857(null)
     setFocusId(row.id)
+  }
+
+  const listCellBg = (opts: {
+    zoneSelected: boolean
+    zoneHovered: boolean
+    meterSelected: boolean
+    meterHovered: boolean
+  }): string | undefined => {
+    if (opts.meterSelected || opts.zoneSelected) return LIST_SELECTED_BG
+    if (opts.meterHovered || opts.zoneHovered) return LIST_HOVER_BG
+    return undefined
   }
 
   const handlePrintReport = async () => {
@@ -255,22 +315,56 @@ export function WtlMeterLocationShell({ leftOffsetPx, onTotalWidthChange, onClos
       setNotice('인쇄할 구역이 없습니다.')
       return
     }
+    cancelPrintCapture()
+    const abort = new AbortController()
+    printAbortRef.current = abort
+    const totalZones = navigableZones.length
     setPrinting(true)
-    setNotice('보고서 지도 캡처 중…')
+    setReportHtml('')
+    setReportProgress({ done: 0, total: totalZones })
+    setReportOpen(true)
+    await yieldToUi()
+    if (abort.signal.aborted) return
+
     const backgroundId =
       mapContext?.mapBackgroundMapIdRef?.current?.trim() || 'aerial-vworld'
+    const session = createMeterZoneCaptureSession(backgroundId)
+    printSessionRef.current = session
     try {
-      const reportZones = []
+      const reportZones: Array<{
+        zoneLabel: string
+        meters: Array<{ meterNo: string; address: string }>
+        mapDataUrl: string | null
+        mapCaptureStatus: 'ok' | 'failed'
+        mapCaptureReason: string
+      }> = new Array(totalZones)
       let failCount = 0
-      for (let i = 0; i < navigableZones.length; i++) {
+
+      const addressOf = (row: MeterLocateResult): string => {
+        const d = String(row.detail ?? '').trim()
+        if (
+          !d ||
+          d === '계량기를 찾지 못했습니다' ||
+          d === '위치를 찾지 못했습니다' ||
+          d === '조회에 실패했습니다' ||
+          d === '필지 경계 없음'
+        ) {
+          return ''
+        }
+        return d.replace(/\s*·\s*필지 경계 없음\s*$/, '').trim()
+      }
+
+      // 숨김 지도 1개 재사용 — 구역마다 Map 생성/폐기하지 않음
+      for (let i = 0; i < totalZones; i++) {
+        if (abort.signal.aborted) return
         const zone = navigableZones[i]!
-        setNotice(
-          `보고서 지도 캡처 중… (${i + 1} / ${navigableZones.length})`
-        )
         const zoneRows = zone.rowIds
           .map((id) => rowById.get(id))
           .filter((r): r is MeterLocateResult => Boolean(r))
-        const meters = zoneRows.map((r) => r.input)
+        const meters = zoneRows.map((r) => ({
+          meterNo: r.input,
+          address: addressOf(r),
+        }))
         const points = zoneRows
           .filter((r) => r.point4326)
           .map((r) => ({
@@ -279,46 +373,60 @@ export function WtlMeterLocationShell({ leftOffsetPx, onTotalWidthChange, onClos
             pnu: r.pnu,
           }))
         const captured = zone.extent3857
-          ? await captureZoneMapDataUrl(zone.extent3857, points, backgroundId)
+          ? await session.captureZone(zone.extent3857, points, abort.signal)
           : {
               dataUrl: null as string | null,
               status: 'failed' as const,
               reason: '구역 범위 없음',
             }
+        if (abort.signal.aborted) return
         if (captured.status !== 'ok') failCount += 1
-        reportZones.push({
+        reportZones[i] = {
           zoneLabel: zone.label,
           meters,
           mapDataUrl: captured.dataUrl,
           mapCaptureStatus: captured.status,
           mapCaptureReason: captured.reason,
-        })
+        }
+        setReportProgress({ done: i + 1, total: totalZones })
+        await yieldToUi()
       }
+
+      if (abort.signal.aborted) return
+
       const html = buildMeterLocationReportHtml({
-        zones: reportZones,
+        zones: reportZones.filter(Boolean),
         parcelCount: counts.parcels,
         meterCount: rows.filter((r) => r.status !== 'miss').length,
       })
       setReportHtml(html)
-      setReportOpen(true)
-      setNotice(
-        failCount > 0
-          ? `보고서 준비됨 · 지도 캡처 실패 ${failCount}건 (콘솔·보고서 확인)`
-          : ''
-      )
+      setReportProgress(null)
+      if (failCount > 0) {
+        setNotice(
+          `보고서 준비됨 · 지도 캡처 실패 ${failCount}건 (콘솔·보고서 확인)`
+        )
+      }
     } catch {
+      if (abort.signal.aborted) return
+      setReportOpen(false)
+      setReportProgress(null)
       setNotice('보고서 인쇄에 실패했습니다.')
     } finally {
-      setPrinting(false)
+      if (printSessionRef.current === session) {
+        session.dispose()
+        printSessionRef.current = null
+      }
+      if (printAbortRef.current === abort) {
+        printAbortRef.current = null
+        setPrinting(false)
+      }
     }
   }
 
   const printReportFromModal = () => {
+    if (printing || !reportHtml) return
     const win = reportIframeRef.current?.contentWindow
-    if (!win) {
-      setNotice('보고서 미리보기를 불러오는 중입니다. 잠시 후 다시 시도하세요.')
-      return
-    }
+    if (!win) return
     win.focus()
     win.print()
   }
@@ -412,7 +520,11 @@ export function WtlMeterLocationShell({ leftOffsetPx, onTotalWidthChange, onClos
                 지우기
               </button>
             </div>
-            {notice ? <p className="standard-detail-hint !text-[11px]">{notice}</p> : null}
+            {notice ? (
+              <p className="standard-detail-hint !text-[11px]" aria-live="polite">
+                {notice}
+              </p>
+            ) : null}
           </div>
 
           {rows.length > 0 ? (
@@ -451,14 +563,28 @@ export function WtlMeterLocationShell({ leftOffsetPx, onTotalWidthChange, onClos
                       zone.rowIds.map((rowId, idx) => {
                         const row = rowById.get(rowId)
                         if (!row) return null
-                        const selectedMeter = focusId === row.id
+                        const zoneSelected = selectedZoneId === zone.zoneId
+                        const zoneHovered = hoverZoneId === zone.zoneId
+                        const meterSelected = focusId === row.id
+                        const meterHovered = hoverMeterId === row.id
+                        const zoneCellBg = listCellBg({
+                          zoneSelected,
+                          zoneHovered,
+                          meterSelected: false,
+                          meterHovered: false,
+                        })
+                        const meterCellBg = listCellBg({
+                          zoneSelected,
+                          zoneHovered,
+                          meterSelected,
+                          meterHovered,
+                        })
                         return (
                           <tr
                             key={`${zone.zoneId}-${row.id}`}
                             className={cn(
-                              'standard-list-row',
-                              selectedMeter && 'standard-list-row-selected',
-                              row.status === 'miss' && 'cursor-default opacity-70'
+                              'border-b border-border',
+                              row.status === 'miss' && 'opacity-70'
                             )}
                           >
                             {idx === 0 ? (
@@ -470,11 +596,20 @@ export function WtlMeterLocationShell({ leftOffsetPx, onTotalWidthChange, onClos
                                     : zone.label
                                 }
                                 className={cn(
-                                  'standard-table-td-text align-top font-medium',
+                                  'standard-table-td-text align-top font-medium transition-colors',
                                   zone.navigable
-                                    ? 'cursor-pointer hover:text-primary'
-                                    : 'text-muted-foreground'
+                                    ? 'cursor-pointer'
+                                    : 'cursor-default text-muted-foreground'
                                 )}
+                                style={
+                                  zoneCellBg
+                                    ? { backgroundColor: zoneCellBg }
+                                    : undefined
+                                }
+                                onMouseEnter={() => {
+                                  if (zone.navigable) setHoverZoneId(zone.zoneId)
+                                }}
+                                onMouseLeave={() => setHoverZoneId(null)}
                                 onClick={() =>
                                   handleZoneClick(
                                     zone.zoneId,
@@ -486,24 +621,41 @@ export function WtlMeterLocationShell({ leftOffsetPx, onTotalWidthChange, onClos
                                 {zone.label}
                               </td>
                             ) : null}
-                            <td className="p-0">
+                            <td
+                              className="p-0 transition-colors"
+                              style={
+                                meterCellBg
+                                  ? { backgroundColor: meterCellBg }
+                                  : undefined
+                              }
+                              onMouseEnter={() => {
+                                if (row.status !== 'miss') setHoverMeterId(row.id)
+                              }}
+                              onMouseLeave={() => setHoverMeterId(null)}
+                            >
                               <button
                                 type="button"
                                 disabled={row.status === 'miss'}
-                                title={row.input}
+                                title={
+                                  row.detail
+                                    ? `${row.input} ${row.detail}`
+                                    : row.input
+                                }
                                 onClick={() => handleMeterClick(row)}
                                 className={cn(
-                                  'flex w-full flex-col items-start px-2 py-1.5 text-left',
+                                  'flex w-full min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5 px-2 py-1.5 text-left',
                                   row.status !== 'miss' && 'cursor-pointer',
                                   row.status === 'miss' && 'cursor-default'
                                 )}
                               >
-                                <span className="block w-full truncate text-xs text-foreground">
+                                <span className="shrink-0 truncate text-xs font-medium text-foreground">
                                   {row.input}
                                 </span>
-                                <span className="block w-full truncate text-[11px] text-muted-foreground">
-                                  {row.detail}
-                                </span>
+                                {row.detail ? (
+                                  <span className="min-w-0 truncate text-[11px] text-muted-foreground">
+                                    {row.detail}
+                                  </span>
+                                ) : null}
                               </button>
                             </td>
                           </tr>
@@ -527,8 +679,11 @@ export function WtlMeterLocationShell({ leftOffsetPx, onTotalWidthChange, onClos
       <Dialog
         open={reportOpen}
         onOpenChange={(open) => {
-          setReportOpen(open)
-          if (!open) setReportHtml('')
+          if (!open) {
+            closeReportModal()
+            return
+          }
+          setReportOpen(true)
         }}
       >
         <DialogContent className="flex max-h-[min(90vh,900px)] w-[min(56rem,calc(100vw-1.5rem))] max-w-none flex-col gap-0 overflow-hidden p-0 sm:max-w-none sm:rounded-lg">
@@ -545,25 +700,51 @@ export function WtlMeterLocationShell({ leftOffsetPx, onTotalWidthChange, onClos
                 className="h-[min(70vh,720px)] w-full border-0 bg-background"
                 srcDoc={reportHtml}
               />
-            ) : null}
+            ) : (
+              <div
+                className="flex h-[min(70vh,720px)] flex-col items-center justify-center gap-3 px-6"
+                aria-live="polite"
+              >
+                <p className="text-sm font-medium text-foreground">
+                  {reportProgress
+                    ? `지도 캡처 중… (${reportProgress.done} / ${reportProgress.total})`
+                    : '보고서 준비 중…'}
+                </p>
+                {reportProgress && reportProgress.total > 0 ? (
+                  <p className="text-xs tabular-nums text-muted-foreground">
+                    구역 {reportProgress.done} / {reportProgress.total}
+                  </p>
+                ) : null}
+                {printing ? (
+                  <p className="text-xs text-muted-foreground">
+                    닫기를 누르면 캡처가 취소됩니다.
+                  </p>
+                ) : null}
+              </div>
+            )}
           </div>
           <DialogFooter className="gap-1 border-t border-border px-4 py-2.5 sm:space-x-0">
             <button
               type="button"
-              title="닫기"
+              title={printing ? '캡처 취소 후 닫기' : '닫기'}
               className={cn(btnGhost, 'cursor-pointer')}
-              onClick={() => setReportOpen(false)}
+              onClick={closeReportModal}
             >
               닫기
             </button>
             <button
               type="button"
-              title="인쇄 / PDF 저장"
-              className={cn(btnPrimary, 'cursor-pointer')}
+              title={
+                printing || !reportHtml
+                  ? '캡처가 끝난 뒤 인쇄할 수 있습니다'
+                  : '인쇄 / PDF 저장'
+              }
+              disabled={printing || !reportHtml}
+              className={cn(btnPrimary, 'cursor-pointer disabled:opacity-50')}
               onClick={printReportFromModal}
             >
               <Printer className="h-3 w-3" aria-hidden />
-              인쇄 / PDF 저장
+              {printing ? '캡처 중…' : '인쇄 / PDF 저장'}
             </button>
           </DialogFooter>
         </DialogContent>
