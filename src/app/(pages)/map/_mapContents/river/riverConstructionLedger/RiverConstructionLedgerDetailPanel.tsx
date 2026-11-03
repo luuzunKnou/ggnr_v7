@@ -706,7 +706,13 @@ function AttachmentThumb({
               <FileText className="h-5 w-5" />
             )}
             <span className="text-[10px] font-semibold">
-              {isImage ? "이미지" : isPdf ? "PDF" : "파일"}
+              {isImage
+                ? "이미지"
+                : isPdf
+                  ? "PDF"
+                  : att.previewKind === "excel"
+                    ? "엑셀"
+                    : "파일"}
             </span>
           </div>
         )}
@@ -1020,7 +1026,12 @@ export function RiverConstructionLedgerDetailPanel({ kind = "river", row, onClos
       });
       return {
         ...base,
-        previewUrl: base.previewKind === "image" || base.previewKind === "pdf" ? url : undefined,
+        previewUrl:
+          base.previewKind === "image" ||
+          base.previewKind === "pdf" ||
+          base.previewKind === "excel"
+            ? url
+            : undefined,
       };
     });
   }, [attachmentTab, fileKey, fileLayer, fileSerEng, folderFiles]);
@@ -1735,11 +1746,22 @@ export function RiverConstructionLedgerDetailPanel({ kind = "river", row, onClos
   const openPreview = (att: RiverConstructionLedgerAttachment) => {
     const scoped = attachments.filter((a) => a.category === att.category);
     const items: ServiceFilePreviewItem[] = scoped
-      .filter((a) => a.previewUrl && (a.previewKind === "image" || a.previewKind === "pdf"))
+      .filter(
+        (a) =>
+          a.previewUrl &&
+          (a.previewKind === "image" ||
+            a.previewKind === "pdf" ||
+            a.previewKind === "excel")
+      )
       .map((a) => ({
         url: a.previewUrl!,
         fileName: a.name,
-        kind: a.previewKind === "pdf" ? ("pdf" as const) : ("image" as const),
+        kind:
+          a.previewKind === "pdf"
+            ? ("pdf" as const)
+            : a.previewKind === "excel"
+              ? ("excel" as const)
+              : ("image" as const),
       }));
     const idx = items.findIndex((i) => i.fileName === att.name);
     if (idx < 0) {

@@ -11,6 +11,7 @@ import {
   serviceFileDataDownloadUrl,
   useServiceFileData,
 } from "../../../_mapComponents/standard/useServiceFileData";
+import { buildServiceFilePreviewGalleryItems } from "../../../_mapComponents/standard/serviceFilePreviewItems";
 import { ServiceFilePdfThumb } from "../../../_mapComponents/standard/ServiceFilePdfThumb";
 import {
   ServiceFileImagePreview,
@@ -264,13 +265,9 @@ function RoadLedgerDrawingDetail({
 
   const galleryItems = useMemo((): ServiceFilePreviewItem[] => {
     if (keyValue == null) return [];
-    return files
-      .filter((f) => isImageServiceFileName(f.name) || isPdfServiceFileName(f.name))
-      .map((f) => ({
-        url: serviceFileDataDownloadUrl(serEng, layer, keyValue, f.name),
-        fileName: f.name,
-        kind: isPdfServiceFileName(f.name) ? ("pdf" as const) : ("image" as const),
-      }));
+    return buildServiceFilePreviewGalleryItems(files, (fileName) =>
+      serviceFileDataDownloadUrl(serEng, layer, keyValue, fileName)
+    );
   }, [files, keyValue, layer, serEng]);
 
   const thumb = useMemo(() => {

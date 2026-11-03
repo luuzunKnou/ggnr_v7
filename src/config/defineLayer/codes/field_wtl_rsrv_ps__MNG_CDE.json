@@ -1,79 +1,361 @@
 [
   {
-    "define_code_key": "60955",
-    "define_code_field_key": "4364",
+    "define_code_key": "30265",
+    "define_code_field_key": "",
+    "define_code_name": "5150089",
+    "define_code_kor_name": "5150089"
+  },
+  {
+    "define_code_key": "15246",
+    "define_code_field_key": "",
+    "define_code_name": "A000100",
+    "define_code_kor_name": "한국수자원공사"
+  },
+  {
+    "define_code_key": "15247",
+    "define_code_field_key": "",
+    "define_code_name": "A010100",
+    "define_code_kor_name": "한국가스공사"
+  },
+  {
+    "define_code_key": "15248",
+    "define_code_field_key": "",
+    "define_code_name": "A010200",
+    "define_code_kor_name": "강남도시가스"
+  },
+  {
+    "define_code_key": "15249",
+    "define_code_field_key": "",
+    "define_code_name": "A010300",
+    "define_code_kor_name": "강원도시가스"
+  },
+  {
+    "define_code_key": "15250",
+    "define_code_field_key": "",
+    "define_code_name": "A010400",
+    "define_code_kor_name": "경남도시가스"
+  },
+  {
+    "define_code_key": "15251",
+    "define_code_field_key": "",
+    "define_code_name": "A010500",
+    "define_code_kor_name": "경동도시가스"
+  },
+  {
+    "define_code_key": "15252",
+    "define_code_field_key": "",
+    "define_code_name": "A010600",
+    "define_code_kor_name": "경북도시가스"
+  },
+  {
+    "define_code_key": "15253",
+    "define_code_field_key": "",
+    "define_code_name": "A010700",
+    "define_code_kor_name": "군산도시가스"
+  },
+  {
+    "define_code_key": "15254",
+    "define_code_field_key": "",
+    "define_code_name": "A010800",
+    "define_code_kor_name": "대구도시가스"
+  },
+  {
+    "define_code_key": "15255",
+    "define_code_field_key": "",
+    "define_code_name": "A010900",
+    "define_code_kor_name": "대한도시가스"
+  },
+  {
+    "define_code_key": "15256",
+    "define_code_field_key": "",
+    "define_code_name": "A011000",
+    "define_code_kor_name": "대화도시가스"
+  },
+  {
+    "define_code_key": "15257",
+    "define_code_field_key": "",
+    "define_code_name": "A011100",
+    "define_code_kor_name": "목포도시가스"
+  },
+  {
+    "define_code_key": "15258",
+    "define_code_field_key": "",
+    "define_code_name": "A011200",
+    "define_code_kor_name": "부산도시가스"
+  },
+  {
+    "define_code_key": "15259",
+    "define_code_field_key": "",
+    "define_code_name": "A011300",
+    "define_code_kor_name": "삼천리도시가스"
+  },
+  {
+    "define_code_key": "15260",
+    "define_code_field_key": "",
+    "define_code_name": "A011400",
+    "define_code_kor_name": "서라벌도시가스"
+  },
+  {
+    "define_code_key": "15261",
+    "define_code_field_key": "",
+    "define_code_name": "A011500",
+    "define_code_kor_name": "서울도시가스"
+  },
+  {
+    "define_code_key": "15262",
+    "define_code_field_key": "",
+    "define_code_name": "A011600",
+    "define_code_kor_name": "서해도시가스"
+  },
+  {
+    "define_code_key": "15263",
+    "define_code_field_key": "",
+    "define_code_name": "A011700",
+    "define_code_kor_name": "에스코도시가스"
+  },
+  {
+    "define_code_key": "15264",
+    "define_code_field_key": "",
+    "define_code_name": "A011800",
+    "define_code_kor_name": "영남ES도시가스"
+  },
+  {
+    "define_code_key": "15265",
+    "define_code_field_key": "",
+    "define_code_name": "A011900",
+    "define_code_kor_name": "인천도시가스"
+  },
+  {
+    "define_code_key": "15266",
+    "define_code_field_key": "",
+    "define_code_name": "A012000",
+    "define_code_kor_name": "전남도시가스"
+  },
+  {
+    "define_code_key": "15267",
+    "define_code_field_key": "",
+    "define_code_name": "A012100",
+    "define_code_kor_name": "전북도시가스"
+  },
+  {
+    "define_code_key": "15268",
+    "define_code_field_key": "",
+    "define_code_name": "A012200",
+    "define_code_kor_name": "전북ES도시가스"
+  },
+  {
+    "define_code_key": "15269",
+    "define_code_field_key": "",
+    "define_code_name": "A012300",
+    "define_code_kor_name": "제주도시가스"
+  },
+  {
+    "define_code_key": "15270",
+    "define_code_field_key": "",
+    "define_code_name": "A012400",
+    "define_code_kor_name": "중부도시가스"
+  },
+  {
+    "define_code_key": "15271",
+    "define_code_field_key": "",
+    "define_code_name": "A012500",
+    "define_code_kor_name": "지에스이도시가스"
+  },
+  {
+    "define_code_key": "15272",
+    "define_code_field_key": "",
+    "define_code_name": "A012600",
+    "define_code_kor_name": "참빛속초도시가스"
+  },
+  {
+    "define_code_key": "15273",
+    "define_code_field_key": "",
+    "define_code_name": "A012700",
+    "define_code_kor_name": "참빛영동도시가스"
+  },
+  {
+    "define_code_key": "15274",
+    "define_code_field_key": "",
+    "define_code_name": "A012800",
+    "define_code_kor_name": "참빛원주도시가스"
+  },
+  {
+    "define_code_key": "15275",
+    "define_code_field_key": "",
+    "define_code_name": "A012900",
+    "define_code_kor_name": "참빛충북도시가스"
+  },
+  {
+    "define_code_key": "15276",
+    "define_code_field_key": "",
+    "define_code_name": "A013000",
+    "define_code_kor_name": "충남도시가스"
+  },
+  {
+    "define_code_key": "15277",
+    "define_code_field_key": "",
+    "define_code_name": "A013100",
+    "define_code_kor_name": "충청ES도시가스"
+  },
+  {
+    "define_code_key": "15278",
+    "define_code_field_key": "",
+    "define_code_name": "A013200",
+    "define_code_kor_name": "포항도시가스"
+  },
+  {
+    "define_code_key": "15279",
+    "define_code_field_key": "",
+    "define_code_name": "A013300",
+    "define_code_kor_name": "한진도시가스"
+  },
+  {
+    "define_code_key": "15280",
+    "define_code_field_key": "",
+    "define_code_name": "A013400",
+    "define_code_kor_name": "해양도시가스"
+  },
+  {
+    "define_code_key": "15281",
+    "define_code_field_key": "",
+    "define_code_name": "A020100",
+    "define_code_kor_name": "한국전력공사"
+  },
+  {
+    "define_code_key": "15282",
+    "define_code_field_key": "",
+    "define_code_name": "A030100",
+    "define_code_kor_name": "KT"
+  },
+  {
+    "define_code_key": "15283",
+    "define_code_field_key": "",
+    "define_code_name": "A030200",
+    "define_code_kor_name": "SK브로드밴드"
+  },
+  {
+    "define_code_key": "15284",
+    "define_code_field_key": "",
+    "define_code_name": "A030300",
+    "define_code_kor_name": "LG유플러스"
+  },
+  {
+    "define_code_key": "15285",
+    "define_code_field_key": "",
+    "define_code_name": "A030400",
+    "define_code_kor_name": "SK텔레콤"
+  },
+  {
+    "define_code_key": "15286",
+    "define_code_field_key": "",
+    "define_code_name": "A030500",
+    "define_code_kor_name": "SK네크웍스"
+  },
+  {
+    "define_code_key": "15287",
+    "define_code_field_key": "",
+    "define_code_name": "A030600",
+    "define_code_kor_name": "드림라인"
+  },
+  {
+    "define_code_key": "15288",
+    "define_code_field_key": "",
+    "define_code_name": "A030700",
+    "define_code_kor_name": "세종텔레콤"
+  },
+  {
+    "define_code_key": "15289",
+    "define_code_field_key": "",
+    "define_code_name": "A040100",
+    "define_code_kor_name": "대한송유관공사"
+  },
+  {
+    "define_code_key": "15290",
+    "define_code_field_key": "",
+    "define_code_name": "A050100",
+    "define_code_kor_name": "한국지역난방공사"
+  },
+  {
+    "define_code_key": "1335",
+    "define_code_field_key": "",
     "define_code_name": "MNG000",
     "define_code_kor_name": "미분류"
   },
   {
-    "define_code_key": "60956",
-    "define_code_field_key": "4364",
+    "define_code_key": "1336",
+    "define_code_field_key": "",
     "define_code_name": "MNG001",
     "define_code_kor_name": "안동시"
   },
   {
-    "define_code_key": "60957",
-    "define_code_field_key": "4364",
+    "define_code_key": "29714",
+    "define_code_field_key": "",
+    "define_code_name": "MNG100",
+    "define_code_kor_name": "경상북도 의성군"
+  },
+  {
+    "define_code_key": "1337",
+    "define_code_field_key": "",
     "define_code_name": "MNG101",
     "define_code_kor_name": "정보통신과"
   },
   {
-    "define_code_key": "60958",
-    "define_code_field_key": "4364",
+    "define_code_key": "1338",
+    "define_code_field_key": "",
     "define_code_name": "MNG102",
     "define_code_kor_name": "건설과"
   },
   {
-    "define_code_key": "60959",
-    "define_code_field_key": "4364",
+    "define_code_key": "1339",
+    "define_code_field_key": "",
     "define_code_name": "MNG103",
     "define_code_kor_name": "도시과"
   },
   {
-    "define_code_key": "60960",
-    "define_code_field_key": "4364",
+    "define_code_key": "1340",
+    "define_code_field_key": "",
     "define_code_name": "MNG104",
     "define_code_kor_name": "재난관리과"
   },
   {
-    "define_code_key": "60961",
-    "define_code_field_key": "4364",
+    "define_code_key": "1341",
+    "define_code_field_key": "",
     "define_code_name": "MNG105",
     "define_code_kor_name": "상하수도과"
   },
   {
-    "define_code_key": "60962",
-    "define_code_field_key": "4364",
+    "define_code_key": "1342",
+    "define_code_field_key": "",
     "define_code_name": "MNG106",
     "define_code_kor_name": "교통행정과"
   },
   {
-    "define_code_key": "60963",
-    "define_code_field_key": "4364",
+    "define_code_key": "1343",
+    "define_code_field_key": "",
     "define_code_name": "MNG107",
     "define_code_kor_name": "산림녹지과"
   },
   {
-    "define_code_key": "60964",
-    "define_code_field_key": "4364",
+    "define_code_key": "1344",
+    "define_code_field_key": "",
     "define_code_name": "MNG200",
     "define_code_kor_name": "수자원공사"
   },
   {
-    "define_code_key": "60965",
-    "define_code_field_key": "4364",
+    "define_code_key": "1345",
+    "define_code_field_key": "",
     "define_code_name": "MNG300",
     "define_code_kor_name": "경찰서"
   },
   {
-    "define_code_key": "60966",
-    "define_code_field_key": "4364",
+    "define_code_key": "1346",
+    "define_code_field_key": "",
     "define_code_name": "MNG400",
     "define_code_kor_name": "소방서"
   },
   {
-    "define_code_key": "60967",
-    "define_code_field_key": "4364",
+    "define_code_key": "1347",
+    "define_code_field_key": "",
     "define_code_name": "MNG999",
     "define_code_kor_name": "기타"
   }

@@ -1,0 +1,65 @@
+{
+  "swl_pipe_lm": {
+    "items": [
+      {
+        "code": "SBA003",
+        "korName": "우수관",
+        "group": "하수",
+        "idx": "20"
+      },
+      {
+        "code": "SBA004",
+        "korName": "오수관",
+        "group": "하수",
+        "idx": "30"
+      }
+    ],
+    "etc": {
+      "korName": "하수관거(기타)",
+      "group": "하수",
+      "idx": "10"
+    }
+  },
+  "swl_manh_ps": {
+    "items": [
+      {
+        "code": "SMU001",
+        "korName": "우수맨홀",
+        "group": "하수",
+        "idx": "420"
+      },
+      {
+        "code": "SMU002",
+        "korName": "오수맨홀",
+        "group": "하수",
+        "idx": "430"
+      }
+    ],
+    "etc": {
+      "korName": "하수맨홀(기타)",
+      "group": "하수",
+      "idx": "410"
+    }
+  },
+  "swl_spot_ps": {
+    "items": [
+      {
+        "code": "SBD001",
+        "korName": "우수받이",
+        "group": "하수",
+        "idx": "520"
+      },
+      {
+        "code": "SBD002",
+        "korName": "오수받이",
+        "group": "하수",
+        "idx": "530"
+      }
+    ],
+    "etc": {
+      "korName": "물받이(기타)",
+      "group": "하수",
+      "idx": "510"
+    }
+  }
+}

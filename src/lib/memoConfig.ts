@@ -5,10 +5,16 @@ export const MEMO_TABLES = [
   { tableName: "memo_farm", label: "농업 메모" },
   { tableName: "memo_river", label: "하천 메모" },
   { tableName: "memo_road", label: "도로 메모" },
-  { tableName: "memo_swl", label: "하수 메모" },
+  { tableName: "memo_swl", label: "하수메모" },
   { tableName: "memo_tour", label: "관광 메모" },
-  { tableName: "memo_wtl", label: "상수 메모" },
+  { tableName: "memo_wtl", label: "상수메모" },
   { tableName: "memo_permit", label: "인허가 메모" },
+] as const;
+
+/** 상·하수도 업무 메뉴에서만 연다. 공통 메모 목록에는 넣지 않는다. */
+export const WATER_SCOPED_MEMO_TABLES = [
+  { tableName: "memo_dre", label: "준설메모" },
+  { tableName: "memo_sply", label: "급수메모" },
 ] as const;
 
 export type MemoTableName = (typeof MEMO_TABLES)[number]["tableName"];

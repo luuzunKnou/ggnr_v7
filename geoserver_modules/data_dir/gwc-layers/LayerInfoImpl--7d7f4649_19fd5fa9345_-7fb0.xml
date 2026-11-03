@@ -10,9 +10,25 @@
   <gridSubsets>
     <gridSubset>
       <gridSetName>EPSG:4326</gridSetName>
+      <extent>
+        <coords>
+          <double>129.32794753754334</double>
+          <double>36.66969366787779</double>
+          <double>129.489258113162</double>
+          <double>37.11528826527109</double>
+        </coords>
+      </extent>
     </gridSubset>
     <gridSubset>
       <gridSetName>EPSG:900913</gridSetName>
+      <extent>
+        <coords>
+          <double>1.4396721265218522E7</double>
+          <double>4393165.806081067</double>
+          <double>1.4414678276355961E7</double>
+          <double>4455188.690860031</double>
+        </coords>
+      </extent>
     </gridSubset>
   </gridSubsets>
   <metaWidthHeight>
@@ -26,7 +42,7 @@
       <key>STYLES</key>
       <defaultValue></defaultValue>
       <availableStyles class="sorted-set"/>
-      <defaultStyle>generic</defaultStyle>
+      <defaultStyle>lsmd_cont_uq101</defaultStyle>
     </styleParameterFilter>
   </parameterFilters>
   <gutter>0</gutter>

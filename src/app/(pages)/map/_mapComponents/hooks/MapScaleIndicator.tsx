@@ -1,9 +1,13 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import type Map from 'ol/Map';
 import { applyScaleMeters, formatScaleFromMap, parseScaleInput } from './mapScale';
 import './mapScaleLine.css';
+
+/** 사이드바·목록 패널 오른쪽 여백(px) — 기존 left:81 = 65+16 과 동일 */
+const SCALE_GAP_AFTER_PANEL_PX = 16;
 
 type Props = {
   map: Map | null;
@@ -13,6 +17,11 @@ type Props = {
   /** overlay: 지도 위 막대 / toolbar: 도구줄 입력 */
   variant?: 'overlay' | 'toolbar';
   className?: string;
+  /**
+   * 사이드바+목록 패널 폭. 있으면 body 포털·fixed로 목록(z-10) 위·지도 좌하단에 표시.
+   * 인쇄 푸터 등 인라인 배치에서는 생략.
+   */
+  mapPaddingLeft?: number;
 };
 
 /**
@@ -24,10 +33,16 @@ export function MapScaleIndicator({
   editable = false,
   variant = 'overlay',
   className,
+  mapPaddingLeft,
 }: Props) {
   const [text, setText] = useState<string | null>(null);
   const [draft, setDraft] = useState('');
+  const [portalReady, setPortalReady] = useState(false);
   const editingRef = useRef(false);
+
+  useEffect(() => {
+    setPortalReady(true);
+  }, []);
 
   useEffect(() => {
     if (!mapReady || !map) {
@@ -92,11 +107,24 @@ export function MapScaleIndicator({
     text
   );
 
-  return (
+  const dockToMap =
+    variant === 'overlay' && mapPaddingLeft != null && portalReady;
+
+  const bar = (
     <div
-      className={`ggnr-scale-bar ggnr-scale-bar-${variant}${editable ? ' is-editable' : ''}${className ? ` ${className}` : ''}`}
+      className={`ggnr-scale-bar ggnr-scale-bar-${variant}${dockToMap ? ' ggnr-scale-bar-fixed' : ''}${editable ? ' is-editable' : ''}${className ? ` ${className}` : ''}`}
+      style={
+        dockToMap
+          ? { left: Math.max(0, mapPaddingLeft) + SCALE_GAP_AFTER_PANEL_PX }
+          : undefined
+      }
     >
       <div className="ggnr-scale-bar-inner">{inner}</div>
     </div>
   );
+
+  if (dockToMap) {
+    return createPortal(bar, document.body);
+  }
+  return bar;
 }

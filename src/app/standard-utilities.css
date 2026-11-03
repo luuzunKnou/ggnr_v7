@@ -101,6 +101,26 @@
   box-shadow: inset 0 -2px 0 0 var(--border);
 }
 
+/** 확장패널 탭(현황·이력 등) 목록 표 — 기본정보(attr)와 동일 11px */
+@utility standard-detail-tab-table {
+  @apply w-full min-w-0 table-fixed border-collapse text-left text-[11px];
+}
+
+/** 확장패널 내 목록 테이블 헤더 — 기본정보 라벨 톤 */
+@utility standard-detail-table-thead {
+  @apply sticky top-0 z-[1] bg-slate-100 dark:bg-muted;
+  box-shadow: 0 1px 0 0 var(--border);
+}
+
+@utility standard-detail-table-th {
+  @apply h-8 max-w-0 truncate align-middle border-b-0 bg-slate-100 px-2 py-0 text-[11px] font-medium leading-none text-slate-500 dark:bg-muted dark:text-muted-foreground;
+  box-shadow: inset 0 -2px 0 0 var(--border);
+}
+
+@utility standard-detail-tab-td {
+  @apply max-w-0 truncate align-middle px-2 py-1.5 text-[11px] leading-none text-foreground;
+}
+
 @utility standard-table-th-left {
   @apply text-left;
 }
@@ -127,6 +147,11 @@
 
 @utility standard-table-empty {
   @apply px-3 py-6 text-center text-xs text-muted-foreground;
+}
+
+/** 테이블 thead 유지 · tbody 로딩 행 셀 */
+@utility standard-table-loading-cell {
+  @apply px-3 py-6 text-center text-[11px] text-muted-foreground;
 }
 
 @utility standard-list-row {
@@ -317,8 +342,32 @@
   @apply h-6 px-2 text-[10px];
 }
 
+/* 상세 섹션 헤더 액션 — roadNetwork 수정/삭제/저장 버튼과 동일
+   (-primary/-ghost/-danger 접미는 테마·variant와 충돌해 @utility 생성이 누락될 수 있음) */
+@utility standard-detail-hdr-btn-save {
+  @apply inline-flex h-7 cursor-pointer items-center gap-1 rounded border border-primary bg-primary px-2 text-[11px] font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50;
+}
+
+@utility standard-detail-hdr-btn {
+  @apply inline-flex h-7 cursor-pointer items-center gap-1 rounded border border-border bg-background px-2 text-[11px] font-medium text-muted-foreground hover:bg-muted/50 disabled:opacity-50;
+}
+
+@utility standard-detail-hdr-btn-delete {
+  @apply inline-flex h-7 cursor-pointer items-center gap-1 rounded border border-destructive/30 bg-background px-2 text-[11px] font-medium text-destructive hover:bg-destructive/10 disabled:opacity-50;
+}
+
 @utility standard-detail-attr-table {
-  @apply grid grid-cols-[max-content_minmax(0,1fr)] overflow-hidden rounded border border-border;
+  /* 라벨 열 ~120px — roadInfra 기본정보와 유사 */
+  @apply grid grid-cols-[7.5rem_minmax(0,1fr)] overflow-hidden rounded border border-border;
+
+  /* 마지막 행 border-b는 바깥 테두리와 겹치므로 제거 (.contents 래퍼 / 직접 자식 둘 다) */
+  & > .contents:last-child > .standard-detail-attr-cell-border {
+    @apply border-b-0;
+  }
+
+  & > .standard-detail-attr-cell-border:nth-last-child(-n + 2) {
+    @apply border-b-0;
+  }
 }
 
 @utility standard-detail-attr-empty {
@@ -326,11 +375,11 @@
 }
 
 @utility standard-detail-attr-label {
-  @apply whitespace-nowrap bg-muted px-2.5 py-1.5 text-[11px] text-muted-foreground;
+  @apply whitespace-nowrap bg-slate-100 px-2 py-1.5 text-[11px] font-medium text-slate-500 dark:bg-muted dark:text-muted-foreground;
 }
 
 @utility standard-detail-attr-value {
-  @apply min-w-0 break-all bg-background px-2.5 py-1.5 text-[11px] text-muted-foreground;
+  @apply min-w-0 break-all bg-background px-2 py-1.5 text-[11px] text-slate-900 dark:text-foreground;
 }
 
 @utility standard-detail-attr-cell-border {

@@ -1,0 +1,41 @@
+<featureType>
+  <id>FeatureTypeInfoImpl-6e125944:1a17ff3f0fb:-7b8f</id>
+  <name>uq171</name>
+  <nativeName>uq171</nativeName>
+  <namespace>
+    <id>NamespaceInfoImpl-4bf97568:19c4d6c3053:-7ffa</id>
+  </namespace>
+  <title>uq171</title>
+  <keywords>
+    <string>features</string>
+    <string>uq171</string>
+  </keywords>
+  <srs>EPSG:5181</srs>
+  <nativeBoundingBox>
+    <minx>334357.81630201</minx>
+    <maxx>340396.53939505</maxx>
+    <miny>311728.81751852</miny>
+    <maxy>315456.36739068</maxy>
+    <crs class="projected">EPSG:5181</crs>
+  </nativeBoundingBox>
+  <latLonBoundingBox>
+    <minx>128.49567851501635</minx>
+    <maxx>128.56355030410347</maxx>
+    <miny>36.293349662935285</miny>
+    <maxy>36.32779005999759</maxy>
+    <crs>EPSG:4326</crs>
+  </latLonBoundingBox>
+  <projectionPolicy>FORCE_DECLARED</projectionPolicy>
+  <enabled>true</enabled>
+  <store class="dataStore">
+    <id>DataStoreInfoImpl-4bf97568:19c4d6c3053:-7ff8</id>
+  </store>
+  <serviceConfiguration>false</serviceConfiguration>
+  <maxFeatures>0</maxFeatures>
+  <numDecimals>0</numDecimals>
+  <padWithZeros>false</padWithZeros>
+  <forcedDecimal>false</forcedDecimal>
+  <overridingServiceSRS>false</overridingServiceSRS>
+  <skipNumberMatched>false</skipNumberMatched>
+  <circularArcPresent>false</circularArcPresent>
+</featureType>

@@ -1,0 +1,140 @@
+[
+  {
+    "define_code_key": "17670",
+    "define_code_field_key": "4367",
+    "define_code_name": "BLS000",
+    "define_code_kor_name": "미분류"
+  },
+  {
+    "define_code_key": "17671",
+    "define_code_field_key": "4367",
+    "define_code_name": "BLS001",
+    "define_code_kor_name": "공동주택"
+  },
+  {
+    "define_code_key": "17672",
+    "define_code_field_key": "4367",
+    "define_code_name": "BLS002",
+    "define_code_kor_name": "일반건축물"
+  },
+  {
+    "define_code_key": "17673",
+    "define_code_field_key": "4367",
+    "define_code_name": "BLS003",
+    "define_code_kor_name": "사무용건축물"
+  },
+  {
+    "define_code_key": "17674",
+    "define_code_field_key": "4367",
+    "define_code_name": "BLS004",
+    "define_code_kor_name": "복합건축물"
+  },
+  {
+    "define_code_key": "17675",
+    "define_code_field_key": "4367",
+    "define_code_name": "BLS005",
+    "define_code_kor_name": "공연장"
+  },
+  {
+    "define_code_key": "17676",
+    "define_code_field_key": "4367",
+    "define_code_name": "BLS006",
+    "define_code_kor_name": "학원,결혼예식장"
+  },
+  {
+    "define_code_key": "17677",
+    "define_code_field_key": "4367",
+    "define_code_name": "BLS007",
+    "define_code_kor_name": "실내체육시설"
+  },
+  {
+    "define_code_key": "17678",
+    "define_code_field_key": "4367",
+    "define_code_name": "BLS008",
+    "define_code_kor_name": "지하상가,시장 등"
+  },
+  {
+    "define_code_key": "17679",
+    "define_code_field_key": "4367",
+    "define_code_name": "BLS999",
+    "define_code_kor_name": "기타"
+  },
+  {
+    "define_code_key": "66395",
+    "define_code_field_key": "4367",
+    "define_code_name": "BLS000",
+    "define_code_kor_name": "미분류"
+  },
+  {
+    "define_code_key": "66396",
+    "define_code_field_key": "4367",
+    "define_code_name": "BLS001",
+    "define_code_kor_name": "공동주택"
+  },
+  {
+    "define_code_key": "66397",
+    "define_code_field_key": "4367",
+    "define_code_name": "BLS002",
+    "define_code_kor_name": "일반건축물"
+  },
+  {
+    "define_code_key": "66398",
+    "define_code_field_key": "4367",
+    "define_code_name": "BLS003",
+    "define_code_kor_name": "사무용건축물"
+  },
+  {
+    "define_code_key": "66399",
+    "define_code_field_key": "4367",
+    "define_code_name": "BLS004",
+    "define_code_kor_name": "복합건축물"
+  },
+  {
+    "define_code_key": "66400",
+    "define_code_field_key": "4367",
+    "define_code_name": "BLS005",
+    "define_code_kor_name": "공연장"
+  },
+  {
+    "define_code_key": "66401",
+    "define_code_field_key": "4367",
+    "define_code_name": "BLS006",
+    "define_code_kor_name": "학원,결혼예식장"
+  },
+  {
+    "define_code_key": "66402",
+    "define_code_field_key": "4367",
+    "define_code_name": "BLS007",
+    "define_code_kor_name": "실내체육시설"
+  },
+  {
+    "define_code_key": "66403",
+    "define_code_field_key": "4367",
+    "define_code_name": "BLS008",
+    "define_code_kor_name": "지하상가,시장 등"
+  },
+  {
+    "define_code_key": "66404",
+    "define_code_field_key": "4367",
+    "define_code_name": "BLS999",
+    "define_code_kor_name": "기타"
+  },
+  {
+    "define_code_key": "66405",
+    "define_code_field_key": "4367",
+    "define_code_name": "BLS900",
+    "define_code_kor_name": "병원"
+  },
+  {
+    "define_code_key": "66406",
+    "define_code_field_key": "4367",
+    "define_code_name": "BLS901",
+    "define_code_kor_name": "상가"
+  },
+  {
+    "define_code_key": "66407",
+    "define_code_field_key": "4367",
+    "define_code_name": "BLS902",
+    "define_code_kor_name": "학교"
+  }
+]

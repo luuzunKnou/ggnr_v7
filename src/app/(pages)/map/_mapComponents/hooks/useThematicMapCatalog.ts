@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { call } from '@/lib/api';
+import { sortLayersByDefineIdx } from '@/lib/defineTableOrder';
 import {
   buildThematicMapLayerGroups,
   type ThematicMapLayerGroup,
@@ -73,7 +74,10 @@ export function useThematicMapCatalog(): ThematicMapCatalog {
 
   const groups = useMemo(() => {
     if (layersWithData == null) return [];
-    return buildThematicMapLayerGroups(null, layersWithData, legendColors);
+    return buildThematicMapLayerGroups(null, layersWithData, legendColors).map((group) => ({
+      ...group,
+      layers: sortLayersByDefineIdx(group.layers),
+    }));
   }, [layersWithData, legendColors]);
 
   const layers = useMemo(() => groups.flatMap((g) => g.layers), [groups]);
