@@ -33,6 +33,10 @@ import { InfoSection } from './DetailInfoSection';
 import { ServiceFileAttachmentThumb } from './ServiceFileAttachmentThumb';
 import { ServiceFilePdfThumb } from './ServiceFilePdfThumb';
 import { ServiceFileImagePreview, type ServiceFilePreviewItem } from './ServiceFileImagePreview';
+import {
+  buildServiceFilePreviewGalleryItems,
+  isServiceFilePreviewableName,
+} from './serviceFilePreviewItems';
 import { useDefineLayerCodes } from './useDefineLayerCodes';
 import { SerWriteOnly } from '@/hooks/useSerWriteAccess';
 
@@ -151,18 +155,14 @@ export default function StandardDetail() {
   });
   const attachmentPreviewGalleryItems = useMemo((): ServiceFilePreviewItem[] => {
     if (layerSegmentForFiles == null || rowKeyForAttachments == null) return [];
-    return attachmentQuery.files
-      .filter((f) => isImageServiceFileName(f.name) || isPdfServiceFileName(f.name))
-      .map((f) => ({
-        url: serviceFileDataDownloadUrl(
-          SER_FILE_ENG.dataQuery,
-          layerSegmentForFiles,
-          rowKeyForAttachments,
-          f.name
-        ),
-        fileName: f.name,
-        kind: isPdfServiceFileName(f.name) ? ('pdf' as const) : ('image' as const),
-      }));
+    return buildServiceFilePreviewGalleryItems(attachmentQuery.files, (fileName) =>
+      serviceFileDataDownloadUrl(
+        SER_FILE_ENG.dataQuery,
+        layerSegmentForFiles,
+        rowKeyForAttachments,
+        fileName
+      )
+    );
   }, [attachmentQuery.files, layerSegmentForFiles, rowKeyForAttachments]);
   const attachChunkUpload = useServiceFileChunkedUpload();
 
@@ -401,8 +401,7 @@ export default function StandardDetail() {
                 ) : (
               <div className="space-y-2">
                 {attachmentQuery.files.map((file) => {
-                  const isImg = isImageServiceFileName(file.name);
-                  const isPdf = isPdfServiceFileName(file.name);
+                  const canPreview = isServiceFilePreviewableName(file.name);
                   const dateStr =
                     file.modified != null
                       ? (() => {
@@ -417,7 +416,7 @@ export default function StandardDetail() {
                     file.name
                   );
                   const activateRow = () => {
-                    if (isImg || isPdf) {
+                    if (canPreview) {
                       const idx = attachmentPreviewGalleryItems.findIndex((i) => i.fileName === file.name);
                       setAttachmentImagePreview({
                         items: attachmentPreviewGalleryItems,
@@ -433,7 +432,7 @@ export default function StandardDetail() {
                       tabIndex={0}
                       role="group"
                       aria-label={
-                        isImg || isPdf ? `${file.name} 크게 보기` : `${file.name} 다운로드`
+                        canPreview ? `${file.name} 크게 보기` : `${file.name} 다운로드`
                       }
                       className="flex cursor-pointer items-center gap-3 rounded border border-border bg-background p-3 transition-colors hover:bg-muted/50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
                       onClick={activateRow}

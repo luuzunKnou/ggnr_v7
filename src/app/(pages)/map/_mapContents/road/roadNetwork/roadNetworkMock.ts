@@ -88,7 +88,7 @@ export type RoadNetworkGeom =
       coordinates: [number, number][][];
     };
 
-export type RoadNetworkPreviewKind = "image" | "pdf" | "other";
+export type RoadNetworkPreviewKind = "image" | "pdf" | "excel" | "other";
 
 export type RoadNetworkAttachment = {
   id: string;
@@ -717,6 +717,7 @@ export function guessAttachmentPreviewKind(
   const n = fileName.toLowerCase();
   if (m.startsWith("image/") || /\.(png|jpe?g|gif|webp|bmp)$/i.test(n)) return "image";
   if (m === "application/pdf" || n.endsWith(".pdf")) return "pdf";
+  if (/\.xlsx?$/i.test(n)) return "excel";
   return "other";
 }
 
@@ -760,7 +761,9 @@ export function createEmptyAttachment(
 export function createAttachmentFromFile(file: File): RoadNetworkAttachment {
   const kind = guessAttachmentPreviewKind(file.name, file.type);
   const previewUrl =
-    kind === "image" || kind === "pdf" ? URL.createObjectURL(file) : undefined;
+    kind === "image" || kind === "pdf" || kind === "excel"
+      ? URL.createObjectURL(file)
+      : undefined;
   return createEmptyAttachment(file.name, file.size, { previewUrl, previewKind: kind });
 }
 

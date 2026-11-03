@@ -33,7 +33,7 @@ const btnPrimary =
 const btnSecondary =
   "inline-flex h-7 items-center gap-1 rounded border border-border bg-background px-2 text-[11px] font-medium text-foreground/90 hover:bg-muted/50 disabled:opacity-50";
 
-type PreviewKind = "image" | "pdf" | "other";
+type PreviewKind = "image" | "pdf" | "excel" | "other";
 
 type AttachmentItem = {
   id: string;
@@ -47,6 +47,7 @@ function guessPreviewKind(name: string): PreviewKind {
   const lower = name.toLowerCase();
   if (/\.(png|jpe?g|gif|webp|bmp)$/i.test(lower)) return "image";
   if (lower.endsWith(".pdf")) return "pdf";
+  if (/\.xlsx?$/i.test(lower)) return "excel";
   return "other";
 }
 
@@ -93,7 +94,13 @@ function AttachmentThumb({
               <FileText className="h-5 w-5" />
             )}
             <span className="text-[10px] font-semibold">
-              {isImage ? "이미지" : isPdf ? "PDF" : "파일"}
+              {isImage
+                ? "이미지"
+                : isPdf
+                  ? "PDF"
+                  : att.previewKind === "excel"
+                    ? "엑셀"
+                    : "파일"}
             </span>
           </div>
         )}
@@ -292,7 +299,8 @@ export function UsageDataAsAttachmentSection({
         name: f.name,
         category: attachmentTab,
         previewKind: kind,
-        previewUrl: kind === "image" || kind === "pdf" ? url : undefined,
+        previewUrl:
+          kind === "image" || kind === "pdf" || kind === "excel" ? url : undefined,
       } satisfies AttachmentItem;
     });
   }, [attachmentTab, folderFiles, key]);
@@ -403,11 +411,22 @@ export function UsageDataAsAttachmentSection({
   const openPreview = (att: AttachmentItem) => {
     const scoped = attachments.filter((a) => a.category === att.category);
     const items: ServiceFilePreviewItem[] = scoped
-      .filter((a) => a.previewUrl && (a.previewKind === "image" || a.previewKind === "pdf"))
+      .filter(
+        (a) =>
+          a.previewUrl &&
+          (a.previewKind === "image" ||
+            a.previewKind === "pdf" ||
+            a.previewKind === "excel")
+      )
       .map((a) => ({
         url: a.previewUrl!,
         fileName: a.name,
-        kind: a.previewKind === "pdf" ? ("pdf" as const) : ("image" as const),
+        kind:
+          a.previewKind === "pdf"
+            ? ("pdf" as const)
+            : a.previewKind === "excel"
+              ? ("excel" as const)
+              : ("image" as const),
       }));
     const idx = items.findIndex((i) => i.fileName === att.name);
     if (idx < 0) {

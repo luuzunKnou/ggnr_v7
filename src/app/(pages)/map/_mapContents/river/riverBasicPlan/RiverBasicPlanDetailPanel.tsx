@@ -58,6 +58,7 @@ import {
   ServiceFileImagePreview,
   type ServiceFilePreviewItem,
 } from "../../../_mapComponents/standard/ServiceFileImagePreview";
+import { buildServiceFilePreviewGalleryItems } from "../../../_mapComponents/standard/serviceFilePreviewItems";
 import {
   ServiceFilePdfPreview,
   type ServiceFilePdfPreviewItem,
@@ -924,21 +925,17 @@ export function RiverBasicPlanDetailPanel({ tab, riverName, onClose }: Props) {
     return { kind: "other" as const, file: files[0] };
   }, [indexFileQuery.files]);
 
-  /** 데이터 조회 첨부 탭과 동일: 이미지·PDF만 전체화면 갤러리에 포함 */
+  /** 데이터 조회 첨부 탭과 동일: 이미지·PDF·엑셀 전체화면 갤러리 */
   const indexAttachmentGalleryItems = useMemo((): ServiceFilePreviewItem[] => {
     if (indexRowKeyForFiles == null) return [];
-    return indexFileQuery.files
-      .filter((f) => isImageServiceFileName(f.name) || isPdfServiceFileName(f.name))
-      .map((f) => ({
-        url: serviceFileDataDownloadUrl(
-          SER_FILE_ENG.riverBasicPlan,
-          indexLayer,
-          indexRowKeyForFiles,
-          f.name
-        ),
-        fileName: f.name,
-        kind: isPdfServiceFileName(f.name) ? ("pdf" as const) : ("image" as const),
-      }));
+    return buildServiceFilePreviewGalleryItems(indexFileQuery.files, (fileName) =>
+      serviceFileDataDownloadUrl(
+        SER_FILE_ENG.riverBasicPlan,
+        indexLayer,
+        indexRowKeyForFiles,
+        fileName
+      )
+    );
   }, [indexFileQuery.files, indexRowKeyForFiles, indexLayer]);
 
   const openIndexFullScreenPreview = useCallback(
@@ -979,15 +976,12 @@ export function RiverBasicPlanDetailPanel({ tab, riverName, onClose }: Props) {
       }
       const data = (await res.json()) as { files?: { name: string }[] };
       const files = Array.isArray(data.files) ? data.files : [];
-      const items: ServiceFilePreviewItem[] = files
-        .filter((f) => isImageServiceFileName(f.name) || isPdfServiceFileName(f.name))
-        .map((f) => ({
-          url: serviceFileDataDownloadUrl(SER_FILE_ENG.riverBasicPlan, layer, key, f.name),
-          fileName: f.name,
-          kind: isPdfServiceFileName(f.name) ? ("pdf" as const) : ("image" as const),
-        }));
+      const items: ServiceFilePreviewItem[] = buildServiceFilePreviewGalleryItems(
+        files,
+        (fileName) => serviceFileDataDownloadUrl(SER_FILE_ENG.riverBasicPlan, layer, key, fileName)
+      );
       if (items.length === 0) {
-        window.alert("도면으로 볼 수 있는 첨부파일(이미지·PDF)이 없습니다.");
+        window.alert("도면으로 볼 수 있는 첨부파일(이미지·PDF·엑셀)이 없습니다.");
         return;
       }
       setRelatedDrawingPreview({ items, initialIndex: 0 });

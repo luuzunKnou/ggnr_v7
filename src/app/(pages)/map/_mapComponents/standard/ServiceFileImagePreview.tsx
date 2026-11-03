@@ -21,14 +21,15 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { zoomPreviewAtPointer } from './previewZoomAtCursor';
+import { ServiceFileExcelPreviewStage } from './ServiceFileExcelPreviewStage';
 import { ServiceFilePdfPreviewStage } from './ServiceFilePdfPreviewStage';
 import type { IndexSheetGuide, IndexSheetMode } from './inferPdfPageUprightRotation';
 
 export type ServiceFilePreviewItem = {
   url: string;
   fileName: string;
-  /** 이미지: 기존 img 뷰 · PDF: pdf.js 1페이지 기준 캔버스 + 페이지 이동 */
-  kind: 'image' | 'pdf';
+  /** 이미지 · PDF · 엑셀(.xlsx/.xls) */
+  kind: 'image' | 'pdf' | 'excel';
 };
 
 /** @deprecated ServiceFilePreviewItem 사용 */
@@ -151,8 +152,11 @@ function clampPreviewIndex(index: number, len: number): number {
 export async function printServiceFilePreviewBlob(
   url: string,
   fileName: string,
-  kind: 'image' | 'pdf'
+  kind: 'image' | 'pdf' | 'excel'
 ): Promise<void> {
+  if (kind === 'excel') {
+    throw new Error('excel print not supported');
+  }
   const res = await fetch(url, { credentials: 'include' });
   if (!res.ok) throw new Error('print fetch failed');
   const blob = await res.blob();
@@ -310,7 +314,7 @@ function toolbarBtnClass(disabled?: boolean): string {
 }
 
 /**
- * 첨부 이미지·PDF 전체화면 미리보기. 확대·축소·회전·파일 이전/다음, PDF는 페이지 이동.
+ * 첨부 이미지·PDF·엑셀 전체화면 미리보기. 확대·축소·회전·파일 이전/다음, PDF 페이지·엑셀 시트 이동.
  */
 export function ServiceFileImagePreview({ items, initialIndex, onClose, indexSheetMode, indexSheetGuide }: Props) {
   const [mounted, setMounted] = useState(false);
@@ -324,6 +328,8 @@ export function ServiceFileImagePreview({ items, initialIndex, onClose, indexShe
   const [dragging, setDragging] = useState(false);
   const [pdfPage, setPdfPage] = useState(1);
   const [pdfNumPages, setPdfNumPages] = useState(1);
+  const [excelSheetNames, setExcelSheetNames] = useState<string[]>([]);
+  const [excelSheetIndex, setExcelSheetIndex] = useState(0);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [fileListSectionOpen, setFileListSectionOpen] = useState(true);
   const [fileListSearchDraft, setFileListSearchDraft] = useState('');
@@ -385,6 +391,8 @@ export function ServiceFileImagePreview({ items, initialIndex, onClose, indexShe
     setPan({ x: 0, y: 0 });
     setPdfPage(1);
     setPdfNumPages(1);
+    setExcelSheetNames([]);
+    setExcelSheetIndex(0);
   }, [index]);
 
   useEffect(() => {
@@ -397,9 +405,11 @@ export function ServiceFileImagePreview({ items, initialIndex, onClose, indexShe
       }
       const cur = items[index];
       const isPdf = cur?.kind === 'pdf';
+      const isExcel = cur?.kind === 'excel';
       const pdfPageNav = isPdf && pdfNumPages > 1;
+      const excelSheetNav = isExcel && excelSheetNames.length > 1;
 
-      /** ← → 파일 전환 · ↑ ↓ / PageUp·Down PDF 페이지 */
+      /** ← → 파일 전환 · ↑ ↓ / PageUp·Down PDF 페이지·엑셀 시트 */
       if (items.length > 1) {
         if (e.key === 'ArrowLeft') {
           e.preventDefault();
@@ -424,6 +434,19 @@ export function ServiceFileImagePreview({ items, initialIndex, onClose, indexShe
           return;
         }
       }
+      if (excelSheetNav) {
+        if (e.key === 'PageDown' || e.key === 'ArrowDown') {
+          e.preventDefault();
+          setExcelSheetIndex((i) => Math.min(excelSheetNames.length - 1, i + 1));
+          return;
+        }
+        if (e.key === 'PageUp' || e.key === 'ArrowUp') {
+          e.preventDefault();
+          setExcelSheetIndex((i) => Math.max(0, i - 1));
+          return;
+        }
+      }
+      if (isExcel) return;
       if (e.key === '+' || e.key === '=') {
         e.preventDefault();
         applyZoomStepRef.current(ZOOM_STEP_BUTTON, null);
@@ -438,7 +461,7 @@ export function ServiceFileImagePreview({ items, initialIndex, onClose, indexShe
       document.body.style.overflow = prevOverflow;
       window.removeEventListener('keydown', onKey);
     };
-  }, [onClose, items.length, items, index, pdfNumPages]);
+  }, [onClose, items.length, items, index, pdfNumPages, excelSheetNames.length]);
 
   const goPrev = useCallback(() => {
     setIndex((i) => (i - 1 + items.length) % items.length);
@@ -551,6 +574,10 @@ export function ServiceFileImagePreview({ items, initialIndex, onClose, indexShe
   const handlePrint = useCallback(async () => {
     const cur = items[index];
     if (!cur || attachActionBusyRef.current) return;
+    if (cur.kind === 'excel') {
+      window.alert('엑셀 파일은 인쇄 미리보기를 지원하지 않습니다. 다운로드 후 사용해 주세요.');
+      return;
+    }
     attachActionBusyRef.current = true;
     setAttachBusy('print');
     try {
@@ -568,10 +595,27 @@ export function ServiceFileImagePreview({ items, initialIndex, onClose, indexShe
     }
   }, [items, index]);
 
+  const onExcelSheetNamesReady = useCallback((names: string[]) => {
+    setExcelSheetNames(names);
+  }, []);
+
+  const onExcelSheetIndexChange = useCallback((i: number) => {
+    setExcelSheetIndex(i);
+  }, []);
+
+  const excelSheetPrev = useCallback(() => {
+    setExcelSheetIndex((i) => Math.max(0, i - 1));
+  }, []);
+
+  const excelSheetNext = useCallback(() => {
+    setExcelSheetIndex((i) => Math.min(Math.max(0, excelSheetNames.length - 1), i + 1));
+  }, [excelSheetNames.length]);
+
   useEffect(() => {
     if (!mounted) return;
     const el = wheelTargetRef.current;
     if (!el) return;
+    if (items[index]?.kind === 'excel') return;
     const onWheelNative = (e: WheelEvent) => {
       e.preventDefault();
       const rect = el.getBoundingClientRect();
@@ -583,7 +627,7 @@ export function ServiceFileImagePreview({ items, initialIndex, onClose, indexShe
     };
     el.addEventListener('wheel', onWheelNative, { passive: false });
     return () => el.removeEventListener('wheel', onWheelNative);
-  }, [mounted]);
+  }, [mounted, items, index]);
 
   const onPointerDown = useCallback((e: React.PointerEvent) => {
     if (e.button !== 0) return;
@@ -620,7 +664,14 @@ export function ServiceFileImagePreview({ items, initialIndex, onClose, indexShe
   const canNav = items.length > 1;
   const scalePct = Math.round(scale * 100);
   const isPdf = current.kind === 'pdf';
+  const isExcel = current.kind === 'excel';
   const canPdfPage = isPdf && pdfNumPages > 1;
+  const canExcelSheet = isExcel && excelSheetNames.length > 1;
+  const excelSheetLabel =
+    isExcel && excelSheetNames.length > 0
+      ? excelSheetNames[Math.min(excelSheetIndex, excelSheetNames.length - 1)] ?? ''
+      : '';
+  const canViewTransform = !isExcel;
 
   return createPortal(
     <div
@@ -652,6 +703,15 @@ export function ServiceFileImagePreview({ items, initialIndex, onClose, indexShe
           {isPdf && pdfNumPages >= 1 ? (
             <span className="ml-2 font-normal text-white/55">
               (페이지 {pdfPage} / {pdfNumPages})
+            </span>
+          ) : null}
+          {isExcel && excelSheetLabel ? (
+            <span className="ml-2 font-normal text-white/55">
+              ({excelSheetLabel}
+              {excelSheetNames.length > 1
+                ? ` · 시트 ${excelSheetIndex + 1} / ${excelSheetNames.length}`
+                : ''}
+              )
             </span>
           ) : null}
           {canNav ? (
@@ -711,9 +771,9 @@ export function ServiceFileImagePreview({ items, initialIndex, onClose, indexShe
           <button
             type="button"
             onClick={() => void handlePrint()}
-            disabled={attachBusy != null}
-            className={toolbarBtnClass(attachBusy != null)}
-            title="인쇄"
+            disabled={attachBusy != null || isExcel}
+            className={toolbarBtnClass(attachBusy != null || isExcel)}
+            title={isExcel ? '엑셀은 인쇄를 지원하지 않습니다' : '인쇄'}
             aria-label="인쇄"
           >
             {attachBusy === 'print' ? (
@@ -828,6 +888,20 @@ export function ServiceFileImagePreview({ items, initialIndex, onClose, indexShe
         </div>
 
         <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+      {isExcel ? (
+        <div className="relative min-h-0 flex-1 overflow-hidden px-2 pb-1 pt-2 sm:px-3">
+          <div className="h-full min-h-0 overflow-hidden rounded-md border border-zinc-300 bg-white shadow-2xl">
+            <ServiceFileExcelPreviewStage
+              key={current.url}
+              url={current.url}
+              fileName={current.fileName}
+              sheetIndex={excelSheetIndex}
+              onSheetIndexChange={onExcelSheetIndexChange}
+              onSheetNamesReady={onExcelSheetNamesReady}
+            />
+          </div>
+        </div>
+      ) : (
       <div
         ref={wheelTargetRef}
         className={cn(
@@ -874,6 +948,7 @@ export function ServiceFileImagePreview({ items, initialIndex, onClose, indexShe
           </div>
         </div>
       </div>
+      )}
 
       <div
         className="flex shrink-0 flex-wrap items-center justify-center gap-1 border-t border-white/10 px-2 py-2 text-white"
@@ -902,43 +977,82 @@ export function ServiceFileImagePreview({ items, initialIndex, onClose, indexShe
         <span className="mx-1 hidden h-5 w-px bg-background/20 sm:block" aria-hidden />
         <button
           type="button"
-          className={toolbarBtnClass(!canPdfPage)}
-          onClick={pdfPagePrev}
-          disabled={!canPdfPage}
-          title="PDF 이전 페이지 (↑ / Page Up)"
-          aria-label="PDF 이전 페이지"
+          className={toolbarBtnClass(!(canPdfPage || canExcelSheet))}
+          onClick={isExcel ? excelSheetPrev : pdfPagePrev}
+          disabled={!(canPdfPage || canExcelSheet)}
+          title={
+            isExcel
+              ? '이전 시트 (↑ / Page Up)'
+              : 'PDF 이전 페이지 (↑ / Page Up)'
+          }
+          aria-label={isExcel ? '이전 시트' : 'PDF 이전 페이지'}
         >
           <ChevronUp className="h-5 w-5" />
         </button>
         <button
           type="button"
-          className={toolbarBtnClass(!canPdfPage)}
-          onClick={pdfPageNext}
-          disabled={!canPdfPage}
-          title="PDF 다음 페이지 (↓ / Page Down)"
-          aria-label="PDF 다음 페이지"
+          className={toolbarBtnClass(!(canPdfPage || canExcelSheet))}
+          onClick={isExcel ? excelSheetNext : pdfPageNext}
+          disabled={!(canPdfPage || canExcelSheet)}
+          title={
+            isExcel
+              ? '다음 시트 (↓ / Page Down)'
+              : 'PDF 다음 페이지 (↓ / Page Down)'
+          }
+          aria-label={isExcel ? '다음 시트' : 'PDF 다음 페이지'}
         >
           <ChevronDown className="h-5 w-5" />
         </button>
         <span className="mx-1 hidden h-5 w-px bg-background/20 sm:block" aria-hidden />
-        <button type="button" className={toolbarBtnClass()} onClick={zoomOut} title="축소 (-)" aria-label="축소">
+        <button
+          type="button"
+          className={toolbarBtnClass(!canViewTransform)}
+          onClick={zoomOut}
+          disabled={!canViewTransform}
+          title="축소 (-)"
+          aria-label="축소"
+        >
           <ZoomOut className="h-5 w-5" />
         </button>
-        <span className="min-w-[3rem] text-center text-[11px] tabular-nums text-white/80">{scalePct}%</span>
-        <button type="button" className={toolbarBtnClass()} onClick={zoomIn} title="확대 (+)" aria-label="확대">
+        <span className="min-w-[3rem] text-center text-[11px] tabular-nums text-white/80">
+          {canViewTransform ? `${scalePct}%` : '—'}
+        </span>
+        <button
+          type="button"
+          className={toolbarBtnClass(!canViewTransform)}
+          onClick={zoomIn}
+          disabled={!canViewTransform}
+          title="확대 (+)"
+          aria-label="확대"
+        >
           <ZoomIn className="h-5 w-5" />
         </button>
         <span className="mx-1 hidden h-5 w-px bg-background/20 sm:block" aria-hidden />
-        <button type="button" className={toolbarBtnClass()} onClick={rotateCcw} title="반시계 회전" aria-label="반시계 방향 회전">
+        <button
+          type="button"
+          className={toolbarBtnClass(!canViewTransform)}
+          onClick={rotateCcw}
+          disabled={!canViewTransform}
+          title="반시계 회전"
+          aria-label="반시계 방향 회전"
+        >
           <RotateCcw className="h-5 w-5" />
         </button>
-        <button type="button" className={toolbarBtnClass()} onClick={rotateCw} title="시계 회전" aria-label="시계 방향 회전">
+        <button
+          type="button"
+          className={toolbarBtnClass(!canViewTransform)}
+          onClick={rotateCw}
+          disabled={!canViewTransform}
+          title="시계 회전"
+          aria-label="시계 방향 회전"
+        >
           <RotateCw className="h-5 w-5" />
         </button>
         <button
           type="button"
-          className={toolbarBtnClass()}
+          className={toolbarBtnClass(!canViewTransform)}
           onClick={resetView}
+          disabled={!canViewTransform}
           title="보기 초기화 (더블클릭과 동일)"
           aria-label="확대·이동·회전 초기화"
         >
@@ -946,10 +1060,12 @@ export function ServiceFileImagePreview({ items, initialIndex, onClose, indexShe
         </button>
       </div>
       <p className="shrink-0 px-3 pb-2 text-center text-[10px] text-white/45">
-        휠로 확대·축소
-        {' · 확대 시 끌어서 이동 · 더블클릭 시 초기화'}
+        {isExcel
+          ? '시트 탭으로 이동'
+          : '휠로 확대·축소 · 확대 시 끌어서 이동 · 더블클릭 시 초기화'}
         {canNav ? ' · ← → 이전·다음 파일' : ''}
         {canPdfPage ? ' · ↑ ↓ 이전·다음 페이지' : ''}
+        {canExcelSheet ? ' · ↑ ↓ 이전·다음 시트' : ''}
       </p>
         </div>
       </div>
