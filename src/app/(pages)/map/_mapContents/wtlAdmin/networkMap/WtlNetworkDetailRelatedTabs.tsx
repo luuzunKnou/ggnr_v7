@@ -369,7 +369,7 @@ export function WtlNetworkDetailRelatedTabs({
 
   return (
     <div className="flex shrink-0 flex-col border-t border-border">
-      <div className="flex shrink-0 overflow-x-auto px-2">
+      <div className="flex shrink-0 overflow-x-auto border-b border-border px-2">
         <button
           type="button"
           title="첨부파일"

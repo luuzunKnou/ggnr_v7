@@ -757,7 +757,7 @@ export function WtlFacilityShell({
           maxWidth={LIST_MAX}
           leftOffsetPx={leftOffsetPx}
           onWidthChange={setListWidth}
-          contentClassName="overflow-hidden pr-2.5"
+          contentClassName="overflow-hidden"
         >
           <div className="standard-panel-root">
             <div className="standard-panel-header">
