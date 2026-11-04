@@ -98,12 +98,12 @@ export const DEV_MENU_GROUPS: readonly AdminConsoleMenuGroup[] = [
     icon: GitBranch,
     menuIds: ["sourceCodeUploader", "versionManager"],
   },
-  {
-    id: "featureTest",
-    label: "기능테스트",
-    icon: Box,
-    menuIds: ["threeJs"],
-  },
+  // {
+  //   id: "featureTest",
+  //   label: "기능테스트",
+  //   icon: Box,
+  //   menuIds: ["threeJs"],
+  // },
 ]
 
 const SU_ONLY_MENU_IDS = new Set<string>(

@@ -1353,12 +1353,12 @@ export function WtlNetworkMapStatus({
         progress={progress}
         onExpand={() => setExpandKind('byDiameter')}
       />
-      <LengthTable
+      {/* <LengthTable
         title="관재질별 관로 연장"
         rows={stats.byMaterial}
         progress={progress}
         onExpand={() => setExpandKind('byMaterial')}
-      />
+      /> */}
       <LengthTable
         title="연도별 관로 연장"
         rows={stats.byYear}

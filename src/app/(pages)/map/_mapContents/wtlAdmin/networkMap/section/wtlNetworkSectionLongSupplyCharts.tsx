@@ -223,71 +223,8 @@ function CombinedStackedBarChart({ rows }: { rows: ElevRoleRow[] }) {
   )
   const h = Math.max(200, rows.length * 20 + 90)
   return (
-    <div>
-      <div className="mb-1 text-[11px] font-semibold text-foreground">
-        100% 누적 가로막대 — 구역·분구·블록 통합
-      </div>
-      <div style={{ height: h }}>
-        <Bar data={data} options={options} />
-      </div>
-    </div>
-  )
-}
-
-/** 이미지와 같은 표 — 표고마다 구역/분구/블록 행을 한 표에 합침 */
-function CombinedCompositionStripTable({ rows }: { rows: ElevRoleRow[] }) {
-  return (
-    <div>
-      <div className="mb-1 text-[11px] font-semibold text-foreground">
-        표·스트립형 — 구역·분구·블록 통합
-      </div>
-      <div className="overflow-auto rounded border border-[#e2e8f0]">
-        <table className="w-full border-collapse text-[10px]">
-          <thead>
-            <tr className="bg-[#f8fafc] text-[#334155]">
-              <th className="border border-[#e2e8f0] px-2 py-1 text-left font-semibold">표고</th>
-              <th className="border border-[#e2e8f0] px-2 py-1 text-left font-semibold">레이어</th>
-              <th className="border border-[#e2e8f0] px-2 py-1 text-left font-semibold">구성</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((r) => (
-              <tr key={`${r.elevM}-${r.role}`}>
-                <td className="border border-[#e2e8f0] px-2 py-1 whitespace-nowrap text-[#334155]">
-                  {formatElev(r.elevM)}m
-                </td>
-                <td className="border border-[#e2e8f0] px-2 py-1 whitespace-nowrap text-[#334155]">
-                  {r.roleLabel}
-                </td>
-                <td className="border border-[#e2e8f0] px-1 py-1">
-                  <div className="flex h-5 w-full overflow-hidden rounded-sm ring-1 ring-[#e2e8f0]">
-                    {r.segs.length === 0 ? (
-                      <div className="flex w-full items-center justify-center bg-[#f1f5f9] text-[#94a3b8]">
-                        —
-                      </div>
-                    ) : (
-                      r.segs.map((s) => (
-                        <div
-                          key={`${r.elevM}-${r.role}-${s.name}`}
-                          className="flex h-full items-center justify-center overflow-hidden px-0.5 text-[9px] font-semibold text-[#1e293b]"
-                          style={{
-                            width: `${Math.max(0.5, s.pct)}%`,
-                            backgroundColor: `${s.color}66`,
-                            borderRight: `1px solid ${s.color}`,
-                          }}
-                          title={`${s.name} ${s.pct.toFixed(1)}%`}
-                        >
-                          {s.pct >= 12 ? s.name : ''}
-                        </div>
-                      ))
-                    )}
-                  </div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+    <div style={{ height: h }}>
+      <Bar data={data} options={options} />
     </div>
   )
 }
@@ -335,18 +272,9 @@ export function WtlNetworkLongSupplyElevCharts({
   if (!combinedRows.length) return null
 
   return (
-    <div className="mt-3 space-y-3 border-t border-[#e2e8f0] pt-3">
-      <div>
-        <div className="text-[12px] font-semibold text-foreground">
-          구역·분구·블록 — 표고별 누적 구성 (통합)
-        </div>
-        <p className="mt-0.5 text-[10px] text-muted-foreground">
-          표고마다 구역·분구·블록을 한 그래프에 모아, 지반이 남는 깊이 구간을 100%로 둔 구성
-          비율입니다.
-        </p>
-      </div>
-      <div className="space-y-3 rounded border border-[#e2e8f0] bg-white p-2">
-        <CombinedCompositionStripTable rows={combinedRows} />
+    <div className="mt-3 space-y-2 border-t border-[#e2e8f0] pt-3">
+      <div className="text-[12px] font-semibold text-foreground">구역·분구·블록</div>
+      <div className="rounded border border-[#e2e8f0] bg-white p-2">
         <CombinedStackedBarChart rows={combinedRows} />
       </div>
     </div>

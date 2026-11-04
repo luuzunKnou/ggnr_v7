@@ -17,24 +17,20 @@ export type MapViewInfo = {
 const MAX_LINES = 300;
 
 const NOISE_PATTERNS = [
-  /^\[Fast Refresh\]/,
-  /^\[HMR\]/,
-  /^Download the React DevTools/,
-  /^%cDownload the React DevTools/,
-  /^Maximum update depth exceeded/,
-  /^Warning: Maximum update depth exceeded/,
+  /\[Fast Refresh\]/i,
+  /\[HMR\]/i,
+  /Download the React DevTools/i,
+  /Maximum update depth exceeded/i,
+  /You are calling ReactDOMClient\.createRoot/i,
+  /Cannot update a component \(/i,
+  /Warning: Cannot update a component/i,
 ];
 
-function isNoise(args: unknown[]): boolean {
-  const first = args[0];
-  if (typeof first !== 'string') return false;
-  return NOISE_PATTERNS.some((re) => re.test(first));
-}
-
-function formatArgs(args: unknown[]): string {
+function argsToText(args: unknown[]): string {
   return args
     .map((a) => {
       if (typeof a === 'string') return a;
+      if (a instanceof Error) return a.message || String(a);
       try {
         return JSON.stringify(a, null, 0);
       } catch {
@@ -44,10 +40,19 @@ function formatArgs(args: unknown[]): string {
     .join(' ');
 }
 
+function isNoise(args: unknown[]): boolean {
+  if (args.length === 0) return false;
+  return NOISE_PATTERNS.some((re) => re.test(argsToText(args)));
+}
+
+function formatArgs(args: unknown[]): string {
+  return argsToText(args);
+}
+
 /**
  * 브라우저 console.log / warn / error를 가로채서 로그 라인 배열로 관리.
  * 마운트 시 원본 console 메서드를 래핑하고, 언마운트 시 복원.
- * setState는 마이크로태스크로 미뤄 React 렌더/effect 중 동기 setState 루프를 막는다.
+ * setState는 macrotask(setTimeout)로 미뤄 React 연쇄 업데이트·console.error 재진입 루프를 막는다.
  */
 export function useConsoleCapture() {
   const [lines, setLines] = useState<ConsoleLine[]>([]);
@@ -57,11 +62,16 @@ export function useConsoleCapture() {
     error: typeof console.error;
   } | null>(null);
   const pendingRef = useRef<ConsoleLine[]>([]);
-  const flushScheduledRef = useRef(false);
+  const flushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const capturingRef = useRef(false);
+  const mountedRef = useRef(false);
 
   const flush = useCallback(() => {
-    flushScheduledRef.current = false;
+    flushTimerRef.current = null;
+    if (!mountedRef.current) {
+      pendingRef.current = [];
+      return;
+    }
     const batch = pendingRef.current;
     if (batch.length === 0) return;
     pendingRef.current = [];
@@ -71,75 +81,67 @@ export function useConsoleCapture() {
     });
   }, []);
 
+  const scheduleFlush = useCallback(() => {
+    if (flushTimerRef.current != null) return;
+    // queueMicrotask는 React effect/commit 연쇄에 묶일 수 있음 → macrotask로 분리
+    flushTimerRef.current = setTimeout(flush, 0);
+  }, [flush]);
+
   const push = useCallback(
     (level: ConsoleLine['level'], args: unknown[]) => {
-      if (capturingRef.current) return;
+      if (capturingRef.current || !mountedRef.current) return;
+      if (isNoise(args)) return;
       const ts = new Date().toLocaleTimeString('ko-KR', { hour12: false });
       pendingRef.current.push({ timestamp: ts, level, message: formatArgs(args) });
-      if (flushScheduledRef.current) return;
-      flushScheduledRef.current = true;
-      queueMicrotask(flush);
+      scheduleFlush();
     },
-    [flush]
+    [scheduleFlush]
   );
 
   useEffect(() => {
+    mountedRef.current = true;
     const origLog = console.log;
     const origWarn = console.warn;
     const origError = console.error;
     originalsRef.current = { log: origLog, warn: origWarn, error: origError };
 
-    console.log = (...args: unknown[]) => {
-      if (isNoise(args)) return;
-      capturingRef.current = true;
-      try {
-        origLog.apply(console, args);
-      } finally {
-        capturingRef.current = false;
-      }
-      push('log', args);
-    };
-    console.warn = (...args: unknown[]) => {
-      if (isNoise(args)) return;
-      capturingRef.current = true;
-      try {
-        origWarn.apply(console, args);
-      } finally {
-        capturingRef.current = false;
-      }
-      push('warn', args);
-    };
-    console.error = (...args: unknown[]) => {
-      if (isNoise(args)) {
+    const wrap =
+      (level: ConsoleLine['level'], orig: (...args: unknown[]) => void) =>
+      (...args: unknown[]) => {
+        const noise = isNoise(args);
         capturingRef.current = true;
         try {
-          origError.apply(console, args);
+          orig.apply(console, args);
         } finally {
           capturingRef.current = false;
         }
-        return;
-      }
-      capturingRef.current = true;
-      try {
-        origError.apply(console, args);
-      } finally {
-        capturingRef.current = false;
-      }
-      push('error', args);
-    };
+        if (!noise) push(level, args);
+      };
+
+    console.log = wrap('log', origLog);
+    console.warn = wrap('warn', origWarn);
+    console.error = wrap('error', origError);
 
     return () => {
+      mountedRef.current = false;
       console.log = origLog;
       console.warn = origWarn;
       console.error = origError;
       originalsRef.current = null;
       pendingRef.current = [];
-      flushScheduledRef.current = false;
+      if (flushTimerRef.current != null) {
+        clearTimeout(flushTimerRef.current);
+        flushTimerRef.current = null;
+      }
     };
   }, [push]);
 
   const clear = useCallback(() => {
     pendingRef.current = [];
+    if (flushTimerRef.current != null) {
+      clearTimeout(flushTimerRef.current);
+      flushTimerRef.current = null;
+    }
     setLines([]);
   }, []);
 
@@ -164,12 +166,20 @@ export function useMapViewInfo(map: Map | null, mapReady: boolean): MapViewInfo 
     const update = () => {
       const z = view.getZoom();
       const center = view.getCenter();
-      setInfo({
+      const next: MapViewInfo = {
         zoomLevel: z !== undefined ? z : null,
         projectionCode: proj ? proj.getCode() : null,
         centerX: center ? center[0] : null,
         centerY: center ? center[1] : null,
-      });
+      };
+      setInfo((prev) =>
+        prev.zoomLevel === next.zoomLevel &&
+        prev.projectionCode === next.projectionCode &&
+        prev.centerX === next.centerX &&
+        prev.centerY === next.centerY
+          ? prev
+          : next
+      );
     };
     update();
     view.on('change', update);
