@@ -1,31 +1,8 @@
 'use client'
 
 import { useMemo } from 'react'
-import {
-  Chart as ChartJS,
-  CategoryScale,
-  LinearScale,
-  BarElement,
-  BarController,
-  Tooltip,
-  Legend,
-  type ChartData,
-  type ChartOptions,
-} from 'chart.js'
-import { Bar } from 'react-chartjs-2'
-import ChartDataLabels from 'chartjs-plugin-datalabels'
 import type { SectionGroundPt, SectionSupplyBandSegment } from './wtlNetworkSectionSvg'
 import type { SectionSupplyElevRow } from './useWtlNetworkSection'
-
-ChartJS.register(
-  CategoryScale,
-  LinearScale,
-  BarElement,
-  BarController,
-  Tooltip,
-  Legend,
-  ChartDataLabels
-)
 
 const ROLE_ORDER: Array<{ role: SectionSupplyBandSegment['role']; label: string }> = [
   { role: 'zone', label: '구역' },
@@ -33,12 +10,24 @@ const ROLE_ORDER: Array<{ role: SectionSupplyBandSegment['role']; label: string 
   { role: 'block', label: '블록' },
 ]
 
+/** 비율 → colspan 합산 단위 (셀 병합 그래프) */
+const COLSPAN_UNITS = 20
+
 type ElevSeg = { name: string; color: string; pct: number }
 type ElevRoleRow = {
   elevM: number
   role: SectionSupplyBandSegment['role']
   roleLabel: string
   segs: ElevSeg[]
+}
+
+type ElevGroup = {
+  elevM: number
+  roles: Array<{
+    role: SectionSupplyBandSegment['role']
+    roleLabel: string
+    segs: ElevSeg[]
+  }>
 }
 
 function normalizeStroke(stroke?: string | null): string {
@@ -66,7 +55,6 @@ function groundElevAt(ground: SectionGroundPt[], distM: number): number | null {
   return last.elevM
 }
 
-/** 표고 e 이상인 깊이 구간 (지반고가 e 이상인 x) — 서버 집계 없을 때 fallback */
 function activeDepthIntervals(
   ground: SectionGroundPt[],
   elevM: number,
@@ -151,117 +139,141 @@ function formatElev(e: number): string {
   return Number.isInteger(e) ? String(e) : e.toFixed(1)
 }
 
-function uniqueNamesFromRoleRows(rows: ElevRoleRow[]): string[] {
-  const set = new Set<string>()
-  for (const r of rows) for (const s of r.segs) set.add(s.name)
-  return [...set]
-}
-
-function colorOfNameRole(rows: ElevRoleRow[], name: string): string {
-  for (const r of rows) {
-    const hit = r.segs.find((s) => s.name === name)
-    if (hit) return hit.color
-  }
-  return '#888888'
-}
-
-/** 동일 레이어 색이어도 이름별로 구분되게 살짝 변조 */
-function distinctColor(base: string, name: string, index: number): string {
-  const hex = normalizeStroke(base)
-  const n = [...name].reduce((s, ch) => s + (ch.codePointAt(0) ?? 0), 0) + index * 37
-  const shift = ((n % 5) - 2) * 18
-  const clamp = (v: number) => Math.max(30, Math.min(220, v))
-  const r = clamp(parseInt(hex.slice(1, 3), 16) + shift)
-  const g = clamp(parseInt(hex.slice(3, 5), 16) - shift)
-  const b = clamp(parseInt(hex.slice(5, 7), 16) + Math.floor(shift / 2))
-  return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`.toUpperCase()
-}
-
-function combinedStackedBarData(rows: ElevRoleRow[]): ChartData<'bar'> {
-  const names = uniqueNamesFromRoleRows(rows)
-  const labels = rows.map((r) => `${formatElev(r.elevM)}m · ${r.roleLabel}`)
-  return {
-    labels,
-    datasets: names.map((name, i) => {
-      const base = colorOfNameRole(rows, name)
-      const color = distinctColor(base, name, i)
-      return {
-        label: name,
-        data: rows.map((r) => r.segs.find((s) => s.name === name)?.pct ?? 0),
-        backgroundColor: `${color}99`,
-        borderColor: color,
-        borderWidth: 1,
-        barThickness: 12,
-      }
-    }),
-  }
-}
-
-function CombinedStackedBarChart({ rows }: { rows: ElevRoleRow[] }) {
-  const data = useMemo(() => combinedStackedBarData(rows), [rows])
-  const options = useMemo(
-    (): ChartOptions<'bar'> => ({
-      indexAxis: 'y',
-      responsive: true,
-      maintainAspectRatio: false,
-      animation: false,
-      layout: { padding: { top: 2, bottom: 2, left: 0, right: 4 } },
-      plugins: {
-        legend: { display: false },
-        datalabels: {
-          color: '#1e293b',
-          font: { size: 9, weight: 600 },
-          clamp: true,
-          formatter: (v, ctx) => {
-            if (!(Number(v) >= 8)) return ''
-            return String(ctx.dataset.label || '')
-          },
-        },
-        tooltip: { enabled: false },
-      },
-      scales: {
-        x: {
-          stacked: true,
-          min: 0,
-          max: 100,
-          display: false,
-          grid: { display: false },
-          border: { display: false },
-        },
-        y: {
-          stacked: true,
-          grid: { display: false },
-          border: { display: false },
-          ticks: {
-            font: { size: 10, weight: 'bold' },
-            color: '#3d5560',
-            padding: 4,
-          },
-        },
-      },
-    }),
-    []
-  )
-  const h = Math.max(44, rows.length * 20 + 8)
-  return (
-    <div
-      className="mt-0.5 overflow-hidden bg-transparent"
-      style={{ height: h }}
-      role="img"
-      aria-label="표고별 구역·분구·블록 구성 비율"
-    >
-      <Bar data={data} options={options} />
-    </div>
-  )
-}
-
 function roleLabelOf(role: SectionSupplyBandSegment['role']): string {
   return ROLE_ORDER.find((r) => r.role === role)?.label ?? role
 }
 
+/** pct → colspan, 합이 COLSPAN_UNITS 가 되도록 보정 */
+function segsToColspans(segs: ElevSeg[]): Array<ElevSeg & { span: number }> {
+  const sorted = segs
+    .slice()
+    .filter((s) => s.pct > 0.5)
+    .sort((a, b) => b.pct - a.pct || a.name.localeCompare(b.name, 'ko'))
+  if (!sorted.length) {
+    return [{ name: '—', color: '#e2e8f0', pct: 100, span: COLSPAN_UNITS }]
+  }
+  const raw = sorted.map((s) => ({
+    ...s,
+    span: Math.max(1, Math.round((s.pct / 100) * COLSPAN_UNITS)),
+  }))
+  let sum = raw.reduce((s, x) => s + x.span, 0)
+  while (sum > COLSPAN_UNITS) {
+    const hit = raw.reduce((a, b) => (a.span >= b.span ? a : b))
+    if (hit.span <= 1) break
+    hit.span -= 1
+    sum -= 1
+  }
+  while (sum < COLSPAN_UNITS) {
+    const hit = raw.reduce((a, b) => (a.pct >= b.pct ? a : b))
+    hit.span += 1
+    sum += 1
+  }
+  return raw
+}
+
+function toElevGroups(rows: ElevRoleRow[]): ElevGroup[] {
+  const elevs: number[] = []
+  for (const r of rows) {
+    if (!elevs.some((e) => Math.abs(e - r.elevM) < 1e-6)) elevs.push(r.elevM)
+  }
+  elevs.sort((a, b) => a - b)
+  return elevs.map((elevM) => {
+    const at = rows.filter((r) => Math.abs(r.elevM - elevM) < 1e-6)
+    const roles = ROLE_ORDER.map((role) => {
+      const hit = at.find((r) => r.role === role.role)
+      return {
+        role: role.role,
+        roleLabel: role.label,
+        segs: hit?.segs ?? [],
+      }
+    }).filter((r) => r.segs.length > 0)
+    return { elevM, roles }
+  }).filter((g) => g.roles.length > 0)
+}
+
+/** 표고 rowspan + 비율 colspan 으로 누적 그래프를 테이블에 그림 */
+function ElevCompositionMergeTable({ rows }: { rows: ElevRoleRow[] }) {
+  const groups = useMemo(() => toElevGroups(rows), [rows])
+
+  if (!groups.length) return null
+
+  return (
+    <div
+      className="mt-0.5 max-h-[320px] overflow-auto rounded border border-[#cbd5e1] bg-white"
+      role="region"
+      aria-label="표고별 구역·분구·블록 구성"
+    >
+      <table className="w-full border-collapse text-[11px]">
+        <thead className="sticky top-0 z-[1] bg-[#f1f5f9]">
+          <tr>
+            <th className="w-14 border-b border-[#cbd5e1] px-1.5 py-1.5 text-left font-semibold text-[#475569]">
+              표고
+            </th>
+            <th className="w-10 border-b border-[#cbd5e1] px-1.5 py-1.5 text-left font-semibold text-[#475569]">
+              구분
+            </th>
+            <th
+              className="border-b border-[#cbd5e1] px-1.5 py-1.5 text-left font-semibold text-[#475569]"
+              colSpan={COLSPAN_UNITS}
+            >
+              구성 비율
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          {groups.map((g) =>
+            g.roles.map((role, ri) => {
+              const spans = segsToColspans(role.segs)
+              return (
+                <tr key={`${g.elevM}-${role.role}`} className="border-b border-[#e2e8f0]">
+                  {ri === 0 ? (
+                    <td
+                      rowSpan={g.roles.length}
+                      className="border-r border-[#e2e8f0] px-1.5 py-0.5 text-center align-middle font-normal tabular-nums text-[#0f172a]"
+                    >
+                      {formatElev(g.elevM)}m
+                    </td>
+                  ) : null}
+                  <td className="border-r border-[#e2e8f0] px-1.5 py-0.5 whitespace-nowrap font-normal text-[#334155]">
+                    {role.roleLabel}
+                  </td>
+                  {spans.map((s, si) => {
+                    const title =
+                      s.name === '—'
+                        ? '—'
+                        : `${s.name} ${Math.round(s.pct)}%`
+                    return (
+                      <td
+                        key={`${s.name}-${si}`}
+                        colSpan={s.span}
+                        title={title}
+                        className="overflow-hidden border-r border-[#cbd5e1] bg-transparent px-0.5 py-0.5 text-center align-middle font-normal leading-tight text-[#0f172a] last:border-r-0"
+                      >
+                        <span className="block truncate px-0.5">
+                          {s.name === '—'
+                            ? '—'
+                            : s.span >= 3
+                              ? `${s.name} ${Math.round(s.pct)}%`
+                              : s.span >= 2
+                                ? s.name
+                                : ''}
+                        </span>
+                      </td>
+                    )
+                  })}
+                </tr>
+              )
+            })
+          )}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
 /**
- * 옆면 최저~최고 지반고 사이 표고마다 구역·분구·블록 누적 가로막대.
- * 서버 2D 띠 격자 집계(supplyElevComposition) 우선 — 절단선 방향 복수 블록 반영.
+ * 옆면 최저~최고 지반고 사이 표고마다 구역·분구·블록 구성.
+ * 표고 셀 병합(rowspan) + 비율 셀 병합(colspan)으로 그래프 표시.
  */
 export function WtlNetworkLongSupplyElevCharts({
   ground,
@@ -324,7 +336,6 @@ export function WtlNetworkLongSupplyElevCharts({
       return out
     }
 
-    // fallback: 1D 밴드 ∩ 표고 (서버 집계 없을 때)
     const out: ElevRoleRow[] = []
     for (const elevM of steps) {
       for (const role of ROLE_ORDER) {
@@ -350,5 +361,5 @@ export function WtlNetworkLongSupplyElevCharts({
 
   if (!combinedRows.length) return null
 
-  return <CombinedStackedBarChart rows={combinedRows} />
+  return <ElevCompositionMergeTable rows={combinedRows} />
 }

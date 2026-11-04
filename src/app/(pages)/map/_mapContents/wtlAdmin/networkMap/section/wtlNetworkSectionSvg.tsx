@@ -6,6 +6,10 @@ import {
   sectionPipeOf,
   WtlNetworkMapSectionFigure,
 } from '../WtlNetworkMapSectionModal'
+import {
+  SectionFeatureLegendPanel,
+  useSectionFeatureLegend,
+} from './wtlNetworkSectionLegend'
 
 export type SectionGroundPt = { distM: number; elevM: number }
 
@@ -501,13 +505,13 @@ function CrossSectionLegacySvg({
   /** 제목·끝캡·미터 라벨이 겹치지 않도록 절단선 Y */
   const axisY = 22
   return (
-    <div className="overflow-auto rounded border-2 border-[#787878] bg-white">
+    <div className="flex min-h-0 flex-1 items-center justify-center overflow-hidden rounded border-2 border-[#b0bcc8] bg-white">
       <svg
         viewBox={`0 0 ${width} ${svgHeight}`}
         width="100%"
-        height="auto"
+        height="100%"
         preserveAspectRatio="xMidYMid meet"
-        className="block w-full"
+        className="max-h-full max-w-full"
         role="img"
         aria-label="횡단면도"
       >
@@ -955,13 +959,13 @@ function LongSectionSvg({
   }
 
   return (
-    <div className="overflow-auto rounded border-2 border-[#787878] bg-white">
+    <div className="flex min-h-0 flex-1 items-center justify-center overflow-hidden rounded border-2 border-[#b0bcc8] bg-white">
       <svg
         viewBox={`0 0 ${width} ${layout.height}`}
         width="100%"
-        height="auto"
+        height="100%"
         preserveAspectRatio="xMidYMid meet"
-        className="block w-full"
+        className="max-h-full max-w-full"
         role="img"
         aria-label="종단면도"
       >
@@ -1169,6 +1173,64 @@ function PrevOriginalSectionSvg({
   )
 }
 
+function SectionSvgWithLegend({
+  mode,
+  ground,
+  groundMin,
+  groundMax,
+  features,
+  totalLengthM,
+  supplyAreaBands,
+}: {
+  mode: 'cross' | 'long'
+  ground: SectionGroundPt[]
+  groundMin: SectionGroundPt[]
+  groundMax: SectionGroundPt[]
+  features: SectionFeatureMark[]
+  totalLengthM: number
+  supplyAreaBands: SectionSupplyBandSegment[]
+}) {
+  const {
+    stylesByKey,
+    hiddenKeys,
+    featureLegendGroups,
+    visibleFeatures,
+    toggleLegendItem,
+    toggleLegendLayer,
+  } = useSectionFeatureLegend(features)
+
+  return (
+    <div className="flex min-h-0 flex-1 items-stretch gap-2 overflow-hidden">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+        {mode === 'cross' ? (
+          <CrossSectionLegacySvg
+            ground={ground}
+            features={visibleFeatures}
+            totalLengthM={totalLengthM}
+            supplyAreaBands={supplyAreaBands}
+          />
+        ) : (
+          <LongSectionSvg
+            ground={ground}
+            groundMin={groundMin}
+            groundMax={groundMax}
+            features={visibleFeatures}
+            totalLengthM={totalLengthM}
+            supplyAreaBands={supplyAreaBands}
+          />
+        )}
+      </div>
+      <SectionFeatureLegendPanel
+        groups={featureLegendGroups}
+        stylesByKey={stylesByKey}
+        hiddenKeys={hiddenKeys}
+        onToggleItem={toggleLegendItem}
+        onToggleLayer={toggleLegendLayer}
+      />
+    </div>
+  )
+}
+
 export function WtlNetworkSectionSvg({
   mode,
   ground = [],
@@ -1192,10 +1254,13 @@ export function WtlNetworkSectionSvg({
   /** X축 하단 — 급수구역·분구·블록 밴드 */
   supplyAreaBands?: SectionSupplyBandSegment[]
 }) {
-  if (mode === 'cross') {
+  if (mode === 'cross' || mode === 'long') {
     return (
-      <CrossSectionLegacySvg
+      <SectionSvgWithLegend
+        mode={mode}
         ground={ground}
+        groundMin={groundMin}
+        groundMax={groundMax}
         features={features}
         totalLengthM={totalLengthM}
         supplyAreaBands={supplyAreaBands}
@@ -1207,14 +1272,5 @@ export function WtlNetworkSectionSvg({
     const dipMm = pipeFeat ? Math.round(pipeFeat.diameterM * 1000) : undefined
     return <PrevOriginalSectionSvg lineLonLat={lineLonLat} diameterMm={dipMm} />
   }
-  return (
-    <LongSectionSvg
-      ground={ground}
-      groundMin={groundMin}
-      groundMax={groundMax}
-      features={features}
-      totalLengthM={totalLengthM}
-      supplyAreaBands={supplyAreaBands}
-    />
-  )
+  return null
 }

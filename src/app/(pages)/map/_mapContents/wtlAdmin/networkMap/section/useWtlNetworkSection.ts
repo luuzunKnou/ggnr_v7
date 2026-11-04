@@ -403,22 +403,26 @@ export function useWtlNetworkSection(enabledLayerKeys: string[]) {
   const [error, setError] = useState('')
   const [totalLengthM, setTotalLengthM] = useState(0)
   const rawRef = useRef<{ pipes: PipeRow[]; points: PointRow[] }>({ pipes: [], points: [] })
-  const keysRef = useRef(enabledLayerKeys)
-  keysRef.current = enabledLayerKeys
+  /** 지도에서 현재 켜진 키 — 조회 시작 시에만 스냅샷으로 복사 */
+  const liveKeysRef = useRef(enabledLayerKeys)
+  liveKeysRef.current = enabledLayerKeys
+  /** 모달 내용 고정용 — loadSection 시점 레이어 키 */
+  const frozenKeysRef = useRef<string[]>([])
+  const [frozenKeys, setFrozenKeys] = useState<string[]>([])
   const tabRef = useRef(tab)
   tabRef.current = tab
   const cutLineSourceRef = useRef<VectorSource | null>(null)
   const sectionRectSourceRef = useRef<VectorSource | null>(null)
 
   const supplyAreaLines = useMemo(
-    () => buildSupplyAreaLines(supplyAreasRaw, enabledLayerKeys),
-    [supplyAreasRaw, enabledLayerKeys]
+    () => buildSupplyAreaLines(supplyAreasRaw, frozenKeys),
+    [supplyAreasRaw, frozenKeys]
   )
 
-  /** 켜진 급수구역·분구·블록만 하단 밴드에 표시 */
+  /** 조회 당시 켜진 급수구역·분구·블록만 하단 밴드에 표시 */
   const supplyAreaBandsFiltered = useMemo(() => {
     const keys = new Set(
-      enabledLayerKeys.map((k) => String(k).trim().toLowerCase()).filter(Boolean)
+      frozenKeys.map((k) => String(k).trim().toLowerCase()).filter(Boolean)
     )
     const has = (base: string) =>
       keys.has(base) || [...keys].some((k) => k === base || k.endsWith(`_${base}`))
@@ -427,11 +431,11 @@ export function useWtlNetworkSection(enabledLayerKeys: string[]) {
       if (s.role === 'subzone') return has('wtl_wtssa_as')
       return has('wtl_wtsba_as')
     })
-  }, [supplyAreaBands, enabledLayerKeys])
+  }, [supplyAreaBands, frozenKeys])
 
   const supplyElevCompositionFiltered = useMemo(() => {
     const keys = new Set(
-      enabledLayerKeys.map((k) => String(k).trim().toLowerCase()).filter(Boolean)
+      frozenKeys.map((k) => String(k).trim().toLowerCase()).filter(Boolean)
     )
     const has = (base: string) =>
       keys.has(base) || [...keys].some((k) => k === base || k.endsWith(`_${base}`))
@@ -440,7 +444,7 @@ export function useWtlNetworkSection(enabledLayerKeys: string[]) {
       if (s.role === 'subzone') return has('wtl_wtssa_as')
       return has('wtl_wtsba_as')
     })
-  }, [supplyElevComposition, enabledLayerKeys])
+  }, [supplyElevComposition, frozenKeys])
 
   const setSpatialDrawRequest = mapContext?.setSpatialDrawRequest
 
@@ -498,8 +502,7 @@ export function useWtlNetworkSection(enabledLayerKeys: string[]) {
     setSpatialDrawRequest?.(null)
   }, [setSpatialDrawRequest])
 
-  const closePanel = useCallback(() => {
-    setPanelOpen(false)
+  const clearSectionData = useCallback(() => {
     setLine3857(null)
     setGround([])
     setGroundMin([])
@@ -508,18 +511,35 @@ export function useWtlNetworkSection(enabledLayerKeys: string[]) {
     setSupplyAreasRaw(EMPTY_SUPPLY_AREAS)
     setSupplyAreaBands([])
     setSupplyElevComposition([])
+    frozenKeysRef.current = []
+    setFrozenKeys([])
     setError('')
+  }, [])
+
+  const closePanel = useCallback(() => {
+    setPanelOpen(false)
+    clearSectionData()
     setDrawing(false)
     setSpatialDrawRequest?.(null)
-  }, [setSpatialDrawRequest])
+  }, [clearSectionData, setSpatialDrawRequest])
 
   const loadSection = useCallback(
-    async (coords: Pt3857[], tab: SectionTab) => {
+    async (
+      coords: Pt3857[],
+      tab: SectionTab,
+      /** 있으면 지도 현재 키 대신 이 키로 조회(탭 전환 시 스냅샷 유지) */
+      keysOverride?: string[]
+    ) => {
       setLoading(true)
       setError('')
+      const keysAtLoad = [
+        ...(keysOverride?.length ? keysOverride : liveKeysRef.current),
+      ]
+      frozenKeysRef.current = keysAtLoad
+      setFrozenKeys(keysAtLoad)
       try {
         const { lineTables, pointTables, supplyAreaTables } = resolveTables(
-          keysRef.current
+          keysAtLoad
         )
         const halfWidthM = halfWidthForTab(tab)
         const profileAxis = profileAxisForTab(tab)
@@ -586,7 +606,7 @@ export function useWtlNetworkSection(enabledLayerKeys: string[]) {
             g,
             rawRef.current.pipes,
             rawRef.current.points,
-            new Set(keysRef.current)
+            new Set(keysAtLoad)
           )
         )
       } catch (e) {
@@ -607,18 +627,12 @@ export function useWtlNetworkSection(enabledLayerKeys: string[]) {
           g,
           rawRef.current.pipes,
           rawRef.current.points,
-          new Set(keysRef.current)
+          new Set(frozenKeysRef.current)
         )
       )
     },
     []
   )
-
-  // 켜진 레이어만 바뀌면 표시 재필터 (버퍼 재조회는 탭/다시그리기)
-  useEffect(() => {
-    if (!line3857 || !ground.length) return
-    rebuildFeatures(tab, line3857, ground)
-  }, [enabledLayerKeys, line3857, ground, tab, rebuildFeatures])
 
   /**
    * 구역설정(polygon)과 동일 — spatialDrawRequest → useSpatialDrawOnMap.
@@ -628,14 +642,7 @@ export function useWtlNetworkSection(enabledLayerKeys: string[]) {
     if (!setSpatialDrawRequest) return
     if (!canStartMapDrawInteraction(mapContext, 'spatialSearch')) return
 
-    setError('')
-    setGround([])
-    setGroundMin([])
-    setGroundMax([])
-    setFeatures([])
-    setSupplyAreaBands([])
-    setSupplyElevComposition([])
-    setLine3857(null)
+    clearSectionData()
     setPanelOpen(false)
     setDrawing(true)
 
@@ -661,7 +668,7 @@ export function useWtlNetworkSection(enabledLayerKeys: string[]) {
         void loadSection(coords3857, tabRef.current)
       },
     })
-  }, [mapContext, setSpatialDrawRequest, loadSection])
+  }, [mapContext, setSpatialDrawRequest, loadSection, clearSectionData])
 
   /** 도구 버튼 — 그리는 중이면 취소, 아니면 라인 그리기 시작(모달은 완료 후) */
   const startSection = useCallback(() => {
@@ -673,59 +680,35 @@ export function useWtlNetworkSection(enabledLayerKeys: string[]) {
     // 패널이 열린 채로 다시 누르면 패널 닫고 재그리기
     if (panelOpen) {
       setPanelOpen(false)
-      setLine3857(null)
-      setGround([])
-      setGroundMin([])
-      setGroundMax([])
-      setFeatures([])
-      setSupplyAreasRaw(EMPTY_SUPPLY_AREAS)
-      setSupplyAreaBands([])
-      setSupplyElevComposition([])
-      setError('')
+      clearSectionData()
     }
     beginLineDraw()
-  }, [drawing, panelOpen, setSpatialDrawRequest, beginLineDraw])
+  }, [drawing, panelOpen, setSpatialDrawRequest, beginLineDraw, clearSectionData])
 
   /** 패널 «다시 그리기» — 모달 닫고 라인부터 다시 */
   const redrawSection = useCallback(() => {
     setPanelOpen(false)
-    setLine3857(null)
-    setGround([])
-    setGroundMin([])
-    setGroundMax([])
-    setFeatures([])
-    setSupplyAreasRaw(EMPTY_SUPPLY_AREAS)
-    setSupplyAreaBands([])
-    setSupplyElevComposition([])
-    setError('')
+    clearSectionData()
     setDrawing(false)
     setSpatialDrawRequest?.(null)
     beginLineDraw()
-  }, [setSpatialDrawRequest, beginLineDraw])
-
-  /** 급수구역·분구·블록 레이어 ON/OFF 시 위치 명칭 재조회 */
-  const supplyAreaKeysSig = useMemo(
-    () => resolveTables(enabledLayerKeys).supplyAreaTables.slice().sort().join('\u0001'),
-    [enabledLayerKeys]
-  )
-  const supplyAreaKeysSigRef = useRef(supplyAreaKeysSig)
-  useEffect(() => {
-    if (supplyAreaKeysSigRef.current === supplyAreaKeysSig) return
-    supplyAreaKeysSigRef.current = supplyAreaKeysSig
-    if (!line3857 || line3857.length < 2) return
-    void loadSection(line3857, tab)
-  }, [supplyAreaKeysSig, line3857, tab, loadSection])
+  }, [setSpatialDrawRequest, beginLineDraw, clearSectionData])
 
   const setTabAndReload = useCallback(
     (next: SectionTab) => {
       setTab(next)
       if (!line3857) return
       // ThreeJs 탭은 자체 지형·레이어 조회 — 기존 단면 재조회 생략
+      // 탭 전환도 조회 당시 frozenKeys 유지 (지도 레이어 변경 무시)
       if (next === 'threejs') {
         rebuildFeatures('cross', line3857, ground)
         return
       }
-      void loadSection(line3857, next)
+      void loadSection(
+        line3857,
+        next,
+        frozenKeysRef.current.length ? frozenKeysRef.current : undefined
+      )
     },
     [line3857, loadSection, rebuildFeatures, ground]
   )
@@ -755,7 +738,7 @@ export function useWtlNetworkSection(enabledLayerKeys: string[]) {
     totalLengthM,
     lineLonLat,
     line3857,
-    enabledKeys: enabledLayerKeys,
+    enabledKeys: frozenKeys,
     lineReady: line3857 != null && line3857.length >= 2,
     startSection,
     redrawSection,

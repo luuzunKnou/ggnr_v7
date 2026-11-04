@@ -31,8 +31,12 @@ import {
   pointRadiusFromMarkSize,
   strokeFillAlpha,
   styleForFeature,
-  useWtlSectionLayerStyles,
 } from './useWtlSectionLayerStyles'
+import {
+  legendLabelByFeatureId,
+  SectionFeatureLegendPanel,
+  useSectionFeatureLegend,
+} from './wtlNetworkSectionLegend'
 import { WtlNetworkLongSupplyElevCharts } from './wtlNetworkSectionLongSupplyCharts'
 
 ChartJS.register(
@@ -516,216 +520,6 @@ function createCrossAxisFooterPlugin(
   }
 }
 
-type LongPipeLegendItem = {
-  key: string
-  label: string
-  color: string
-  kind?: 'pipe' | 'point'
-  layerKey?: string
-  styleCode?: string
-}
-type LongPipeLegendGroup = { layerName: string; items: LongPipeLegendItem[] }
-
-/** 횡·종단 우측 데이터 범례 — 관로·점시설 등 켜진 레이어 전부 */
-function buildLongFeatureLegendGroups(
-  features: SectionFeatureMark[]
-): LongPipeLegendGroup[] {
-  const used = new Map<string, number>()
-  const byLayer = new Map<string, LongPipeLegendItem[]>()
-  for (const f of features) {
-    const layerName = layerLegendName(f)
-    const baseName = (f.label || layerName).trim() || layerName
-    const n = (used.get(baseName) ?? 0) + 1
-    used.set(baseName, n)
-    const label = n === 1 ? baseName : `${baseName} (${n})`
-    const arr = byLayer.get(layerName)
-    const item: LongPipeLegendItem = {
-      key: f.id || `${layerName}-${label}`,
-      label,
-      color: normalizeStroke(f.color),
-      kind: f.kind,
-      layerKey: f.layerKey,
-      styleCode: f.styleCode,
-    }
-    if (arr) arr.push(item)
-    else byLayer.set(layerName, [item])
-  }
-  return [...byLayer.entries()].map(([layerName, items]) => ({ layerName, items }))
-}
-
-function legendLabelByFeatureId(
-  groups: LongPipeLegendGroup[]
-): Map<string, string> {
-  const map = new Map<string, string>()
-  for (const g of groups) {
-    for (const it of g.items) map.set(it.key, it.label)
-  }
-  return map
-}
-
-/** 횡·종단 공통 — 레이어/하위 항목 체크박스로 표시 토글 */
-function SectionFeatureLegendPanel({
-  groups,
-  stylesByKey,
-  hiddenKeys,
-  onToggleItem,
-  onToggleLayer,
-}: {
-  groups: LongPipeLegendGroup[]
-  stylesByKey: Record<
-    string,
-    {
-      strokeColor: string
-      fillColor: string
-      strokeWidth: number
-      legendSrc: string
-      symbolByCode?: Record<
-        string,
-        { symbolImg: HTMLImageElement | null; legendSrc: string }
-      >
-    }
-  >
-  hiddenKeys: Set<string>
-  onToggleItem: (key: string) => void
-  onToggleLayer: (group: LongPipeLegendGroup) => void
-}) {
-  if (!groups.length) return null
-
-  return (
-    <div
-      className="flex w-[180px] shrink-0 flex-col self-stretch overflow-hidden rounded border border-[#cbd5e1] bg-[#f8fafc]"
-      title="데이터 범례"
-    >
-      <div className="shrink-0 border-b border-[#e2e8f0] px-1.5 py-1 text-[10px] font-semibold text-[#64748b]">
-        데이터 범례
-      </div>
-      <div className="min-h-0 flex-1 space-y-2 overflow-y-auto p-1.5">
-        {groups.map((g) => {
-          const allHidden =
-            g.items.length > 0 && g.items.every((it) => hiddenKeys.has(it.key))
-          const someVisible = g.items.some((it) => !hiddenKeys.has(it.key))
-          const someHidden = g.items.some((it) => hiddenKeys.has(it.key))
-          return (
-            <div key={g.layerName}>
-              <div className="flex items-center gap-1 py-0.5">
-                <span
-                  className="min-w-0 flex-1 truncate text-[10px] font-semibold text-[#334155]"
-                  title={g.layerName}
-                >
-                  {g.layerName}
-                </span>
-                <input
-                  type="checkbox"
-                  className="h-3.5 w-3.5 shrink-0 cursor-pointer accent-primary"
-                  checked={someVisible}
-                  ref={(el) => {
-                    if (el) el.indeterminate = someHidden && someVisible
-                  }}
-                  title={
-                    allHidden
-                      ? `${g.layerName} 표시`
-                      : `${g.layerName} 숨기기`
-                  }
-                  onChange={() => onToggleLayer(g)}
-                />
-              </div>
-              <ul className="mt-0.5 space-y-0.5">
-                {g.items.map((it) => {
-                  const hidden = hiddenKeys.has(it.key)
-                  const isPoint = it.kind === 'point'
-                  const baseSt = it.layerKey
-                    ? stylesByKey[String(it.layerKey).toLowerCase()]
-                    : undefined
-                  const code = String(it.styleCode ?? '').trim().toUpperCase()
-                  const codeSym =
-                    code && baseSt?.symbolByCode?.[code]
-                      ? baseSt.symbolByCode[code]
-                      : undefined
-                  const stroke = baseSt?.strokeColor ?? it.color
-                  const fill = baseSt?.fillColor ?? stroke
-                  const legendSrc = codeSym?.legendSrc || baseSt?.legendSrc || ''
-                  return (
-                    <li
-                      key={it.key}
-                      className="flex items-center gap-1 rounded py-0.5 hover:bg-[#e2e8f0]"
-                    >
-                      <div
-                        className="flex min-w-0 flex-1 items-center gap-1"
-                        style={{
-                          color: hidden ? '#94a3b8' : '#334155',
-                          opacity: hidden ? 0.55 : 1,
-                        }}
-                      >
-                        {isPoint && legendSrc ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img
-                            src={legendSrc}
-                            alt=""
-                            width={14}
-                            height={14}
-                            className="h-3.5 w-3.5 shrink-0 object-contain"
-                            style={{ opacity: hidden ? 0.3 : 1 }}
-                            aria-hidden
-                          />
-                        ) : isPoint ? (
-                          <span
-                            className="inline-block h-3 w-3 shrink-0 rounded-full"
-                            style={{
-                              backgroundColor: fill,
-                              border: `${Math.max(1, baseSt?.strokeWidth ?? 1.5)}px solid ${stroke}`,
-                              opacity: hidden ? 0.3 : 1,
-                            }}
-                            aria-hidden
-                          />
-                        ) : (
-                          <svg
-                            width="14"
-                            height="14"
-                            viewBox="0 0 14 14"
-                            className="shrink-0"
-                            aria-hidden
-                            style={{ opacity: hidden ? 0.3 : 1 }}
-                          >
-                            <line
-                              x1="1"
-                              y1="7"
-                              x2="13"
-                              y2="7"
-                              stroke={stroke}
-                              strokeWidth={2}
-                              strokeLinecap="round"
-                            />
-                          </svg>
-                        )}
-                        <span
-                          className="truncate text-[10px]"
-                          style={{
-                            textDecoration: hidden ? 'line-through' : 'none',
-                          }}
-                          title={it.label}
-                        >
-                          {it.label}
-                        </span>
-                      </div>
-                      <input
-                        type="checkbox"
-                        className="h-3.5 w-3.5 shrink-0 cursor-pointer accent-primary"
-                        checked={!hidden}
-                        title={hidden ? `${it.label} 표시` : `${it.label} 숨기기`}
-                        onChange={() => onToggleItem(it.key)}
-                      />
-                    </li>
-                  )
-                })}
-              </ul>
-            </div>
-          )
-        })}
-      </div>
-    </div>
-  )
-}
-
 type PlotInset = { left: number; right: number }
 
 const DEFAULT_PLOT_INSET: PlotInset = { left: 48, right: 10 }
@@ -937,27 +731,15 @@ function CrossSectionChart({
   supplyAreaBands: SectionSupplyBandSegment[]
 }) {
   const { plotInset, insetSyncPlugin } = usePlotInsetSync()
-  const { stylesByKey, revision: styleRevision } = useWtlSectionLayerStyles(features)
-  const [hiddenKeys, setHiddenKeys] = useState<Set<string>>(() => new Set())
-  const featureLegendGroups = useMemo(
-    () => buildLongFeatureLegendGroups(features),
-    [features]
-  )
-  const featureLegendKey = useMemo(
-    () =>
-      featureLegendGroups
-        .flatMap((g) => g.items.map((it) => it.key))
-        .join('|'),
-    [featureLegendGroups]
-  )
-  useEffect(() => {
-    setHiddenKeys(new Set())
-  }, [featureLegendKey])
-
-  const visibleFeatures = useMemo(
-    () => features.filter((f) => !hiddenKeys.has(f.id)),
-    [features, hiddenKeys]
-  )
+  const {
+    stylesByKey,
+    styleRevision,
+    hiddenKeys,
+    featureLegendGroups,
+    visibleFeatures,
+    toggleLegendItem,
+    toggleLegendLayer,
+  } = useSectionFeatureLegend(features)
   const pipes = visibleFeatures.filter((f) => f.kind === 'pipe')
   const points = visibleFeatures.filter((f) => f.kind === 'point')
   /** 높이 고정용 — 전체 feature 기준 (체크 토글과 무관) */
@@ -1003,28 +785,6 @@ function CrossSectionChart({
     () => new Set([...groupFeaturesByLayer(features).keys()]),
     [features]
   )
-
-  const toggleLegendItem = useCallback((key: string) => {
-    setHiddenKeys((prev) => {
-      const next = new Set(prev)
-      if (next.has(key)) next.delete(key)
-      else next.add(key)
-      return next
-    })
-  }, [])
-
-  const toggleLegendLayer = useCallback((group: LongPipeLegendGroup) => {
-    setHiddenKeys((prev) => {
-      const next = new Set(prev)
-      const allHidden =
-        group.items.length > 0 && group.items.every((it) => next.has(it.key))
-      for (const it of group.items) {
-        if (allHidden) next.delete(it.key)
-        else next.add(it.key)
-      }
-      return next
-    })
-  }, [])
 
   const elevBounds = useMemo(() => {
     // 표고·하단 패딩은 전체 데이터 기준 → 체크 토글 시 박스 높이/축 흔들림 방지
@@ -1293,7 +1053,7 @@ function CrossSectionChart({
   }
 
   return (
-    <div className="overflow-hidden rounded border-2 border-[#787878] bg-white p-2">
+    <div className="overflow-hidden rounded border-2 border-[#b0bcc8] bg-white p-2">
       <div className="flex items-stretch gap-2">
         <div className="min-w-0 flex-1">
           <div
@@ -1347,12 +1107,15 @@ function LongSectionChart({
   supplyAreaBands: SectionSupplyBandSegment[]
   supplyElevComposition?: import('./useWtlNetworkSection').SectionSupplyElevRow[]
 }) {
-  const { stylesByKey, revision: styleRevision } = useWtlSectionLayerStyles(features)
-  const [hiddenKeys, setHiddenKeys] = useState<Set<string>>(() => new Set())
-  const featureLegendGroups = useMemo(
-    () => buildLongFeatureLegendGroups(features),
-    [features]
-  )
+  const {
+    stylesByKey,
+    styleRevision,
+    hiddenKeys,
+    featureLegendGroups,
+    visibleFeatures,
+    toggleLegendItem,
+    toggleLegendLayer,
+  } = useSectionFeatureLegend(features)
   const labelById = useMemo(
     () => legendLabelByFeatureId(featureLegendGroups),
     [featureLegendGroups]
@@ -1364,21 +1127,6 @@ function LongSectionChart({
     }
     return set
   }, [featureLegendGroups])
-  const featureLegendKey = useMemo(
-    () =>
-      featureLegendGroups
-        .flatMap((g) => g.items.map((it) => it.key))
-        .join('|'),
-    [featureLegendGroups]
-  )
-  useEffect(() => {
-    setHiddenKeys(new Set())
-  }, [featureLegendKey])
-
-  const visibleFeatures = useMemo(
-    () => features.filter((f) => !hiddenKeys.has(f.id)),
-    [features, hiddenKeys]
-  )
   const pipes = useMemo(
     () => visibleFeatures.filter((f) => f.kind === 'pipe'),
     [visibleFeatures]
@@ -1388,28 +1136,6 @@ function LongSectionChart({
     [visibleFeatures]
   )
   const len = Math.max(totalLengthM, ground[ground.length - 1]?.distM ?? 0, 0.01)
-
-  const toggleLegendItem = useCallback((key: string) => {
-    setHiddenKeys((prev) => {
-      const next = new Set(prev)
-      if (next.has(key)) next.delete(key)
-      else next.add(key)
-      return next
-    })
-  }, [])
-
-  const toggleLegendLayer = useCallback((group: LongPipeLegendGroup) => {
-    setHiddenKeys((prev) => {
-      const next = new Set(prev)
-      const allHidden =
-        group.items.length > 0 && group.items.every((it) => next.has(it.key))
-      for (const it of group.items) {
-        if (allHidden) next.delete(it.key)
-        else next.add(it.key)
-      }
-      return next
-    })
-  }, [])
 
   const elevRange = useMemo(() => {
     const elevs = ground.map((g) => g.elevM)
@@ -1741,7 +1467,7 @@ function LongSectionChart({
   }
 
   return (
-    <div className="overflow-hidden rounded border-2 border-[#787878] bg-white p-2">
+    <div className="overflow-hidden rounded border-2 border-[#b0bcc8] bg-white p-2">
       <div className="flex items-stretch gap-2">
         <div className="min-w-0 flex-1">
           <div

@@ -140,7 +140,14 @@ export function WtlNetworkSectionPanel({
           ))}
         </div>
 
-        <div className="min-h-0 flex-1 overflow-auto p-3">
+        <div
+          className={cn(
+            'min-h-0 flex-1 p-3',
+            tab === 'cross' || tab === 'long'
+              ? 'flex flex-col overflow-hidden'
+              : 'overflow-auto'
+          )}
+        >
           {tab === 'threejs' ? (
             !lineReady || !line3857 || line3857.length < 2 ? (
               <p className="py-10 text-center text-[12px] text-muted-foreground">
@@ -174,16 +181,18 @@ export function WtlNetworkSectionPanel({
               supplyElevComposition={supplyElevComposition}
             />
           ) : (
-            <WtlNetworkSectionSvg
-              mode={tab}
-              ground={ground}
-              groundMin={groundMin}
-              groundMax={groundMax}
-              features={features}
-              totalLengthM={totalLengthM}
-              lineLonLat={lineLonLat}
-              supplyAreaBands={supplyAreaBands}
-            />
+            <div className="flex h-[min(72vh,640px)] min-h-0 w-full flex-col overflow-hidden">
+              <WtlNetworkSectionSvg
+                mode={tab}
+                ground={ground}
+                groundMin={groundMin}
+                groundMax={groundMax}
+                features={features}
+                totalLengthM={totalLengthM}
+                lineLonLat={lineLonLat}
+                supplyAreaBands={supplyAreaBands}
+              />
+            </div>
           )}
         </div>
 
