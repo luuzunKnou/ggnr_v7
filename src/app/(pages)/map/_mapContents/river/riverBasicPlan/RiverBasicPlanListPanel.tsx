@@ -1,36 +1,36 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Pencil, Search, X } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ComponentType } from "react";
+import { Files, Search, Waves, X } from "lucide-react";
 import { call } from "@/lib/api";
 import { cn } from "@/lib/utils";
-import { SER_FILE_ENG } from "@/lib/serviceFileDataSerEng";
 import {
   riverBasicPlanAsDefineTable,
   riverBasicPlanRiverNameFilterableLayers,
   buildRiverBasicPlanRiverNameCqlByLayer,
+  buildRiverBasicPlanReportRiversCqlByLayer,
   type RiverBasicPlanTab,
 } from "@/lib/riverBasicPlanMapAttachmentLayers";
 import { useMapContext } from "../../../_mapComponents/MapContext";
-import { MAP_AUTO_NAV_MAX_ZOOM } from "../../../_mapComponents/config/mapDefaults";
-import { scheduleFitMapToExtent3857 } from "../../../_mapComponents/config/mapAutoNavigation";
-import { LayerRowPanelButton } from "../../../_mapComponents/layerRowEdit/LayerRowPanelButton";
-import { serviceFileDataDownloadUrl } from "../../../_mapComponents/standard/useServiceFileData";
 import {
   ServiceFilePdfPreview,
   type ServiceFilePdfPreviewItem,
 } from "../../../_mapComponents/standard/ServiceFilePdfPreview";
 import { useRiverBasicPlanExistingMapLayers } from "./useRiverBasicPlanExistingMapLayers";
+import { useRiverBasicPlanFocusRiver, useRiverBasicPlanFocusRivers } from "./useRiverBasicPlanFocusRiver";
+import { useRiverBasicPlanReportFolders } from "./useRiverBasicPlanReportFolders";
 import { RiverOrthoControl } from "./riverOrtho/RiverOrthoControl";
 import type { RiverBasicPlanPreferredPlan } from "./RiverBasicPlanDetailPanel";
 import type { RiverBasicPlanListAxis } from "./RiverBasicPlanScopeModal";
+import { RiverBasicPlanReportCardList } from "./RiverBasicPlanReportCardList";
 import {
-  RiverBasicPlanReportTree,
-  riverBasicPlanTreeKey,
+  riverBasicPlanPlanKey,
+  riverBasicPlanReportPdfItems,
+  riverBasicPlanShownRivers,
   riverBasicPlanYearLabel,
-  type RiverBasicPlanTreePlan,
-  type RiverBasicPlanReportFolderSummary,
-} from "./RiverBasicPlanReportTree";
+  type RiverBasicPlanReportPlan,
+  type RiverBasicPlanReportRiver,
+} from "./riverBasicPlanReportPlans";
 type RiverType = RiverBasicPlanTab;
 
 type RiverItem = {
@@ -39,7 +39,7 @@ type RiverItem = {
   count: number;
 };
 
-type PlanListItem = RiverBasicPlanTreePlan;
+type PlanListItem = RiverBasicPlanReportPlan;
 
 type Props = {
   tab: RiverType;
@@ -47,12 +47,23 @@ type Props = {
   /** null이면 보기 미선택 — 모달 유도 */
   listAxis: RiverBasicPlanListAxis | null;
   selectedRiver: string;
-  /** 상세·목록에서 고른 계획 — 보고서별 목록 하이라이트·펼침 동기 */
+  /** 상세·목록에서 고른 계획 — 보고서별 카드 선택 표시 */
   preferredPlan?: RiverBasicPlanPreferredPlan | null;
   onSelectRiver: (riverName: string, preferredPlan?: RiverBasicPlanPreferredPlan | null) => void;
-  onChangeAxis: () => void;
+  /** 보고서 기준 보기 ⇄ 하천 기준 보기 바로 전환 */
+  onChangeAxis: (axis: RiverBasicPlanListAxis) => void;
   onClose: () => void;
 };
+
+const AXIS_OPTIONS: {
+  axis: RiverBasicPlanListAxis;
+  label: string;
+  desc: string;
+  icon: ComponentType<{ className?: string }>;
+}[] = [
+  { axis: "byPlan", label: "보고서 기준", desc: "보고서 묶음별", icon: Files },
+  { axis: "byRiver", label: "하천 기준", desc: "하천 이름별", icon: Waves },
+];
 
 function defaultLayersForTab(tab: RiverType): readonly string[] {
   return riverBasicPlanRiverNameFilterableLayers(tab);
@@ -68,6 +79,8 @@ export function RiverBasicPlanListPanel({
   onChangeAxis,
   onClose,
 }: Props) {
+  /** 보고서별 — 하천 목록이 펼쳐진 카드(하천 2곳 이상) */
+  const [openedPlanKey, setOpenedPlanKey] = useState<string | null>(null);
   const mapContext = useMapContext();
   const mapContextRef = useRef(mapContext);
   mapContextRef.current = mapContext;
@@ -78,18 +91,14 @@ export function RiverBasicPlanListPanel({
   const [error, setError] = useState<string | null>(null);
   const [riverItems, setRiverItems] = useState<RiverItem[]>([]);
   const [planItems, setPlanItems] = useState<PlanListItem[]>([]);
-  /** 보고서 폴더 구성(바로 있는 PDF·하천 폴더) — 현재 탭 것이 아니면 확인 중(null) */
-  const [folderSummaryState, setFolderSummaryState] = useState<{
-    tab: RiverType;
-    folders: RiverBasicPlanReportFolderSummary;
-  } | null>(null);
-  const folderSummary = folderSummaryState?.tab === tab ? folderSummaryState.folders : null;
+  /** 보고서 폴더 구성(바로 있는 PDF·하천 폴더) — null 이면 확인 중 */
+  const folderSummary = useRiverBasicPlanReportFolders(tab, listAxis === "byPlan");
   const [reportPreview, setReportPreview] = useState<{
     items: ServiceFilePdfPreviewItem[];
     initialIndex: number;
   } | null>(null);
   /** 카드 선택 표시 — 목록·상세에서 고른 계획과 같음 */
-  const selectedPlanKey = preferredPlan ? riverBasicPlanTreeKey(preferredPlan) : null;
+  const selectedPlanKey = preferredPlan ? riverBasicPlanPlanKey(preferredPlan) : null;
   const existingMapLayers = useRiverBasicPlanExistingMapLayers(tab);
   const axisReady = listAxis != null;
 
@@ -161,46 +170,35 @@ export function RiverBasicPlanListPanel({
     });
   }, [tab, loading, error, listHasRows, existingMapLayers, axisReady]);
 
+  /** 하천 목록이 열린 보고서 — 하천을 아직 고르지 않았으면 그 보고서 하천 전체를 지도에 */
+  const openedPlan = useMemo(
+    () => (openedPlanKey ? (planItems.find((p) => riverBasicPlanPlanKey(p) === openedPlanKey) ?? null) : null),
+    [openedPlanKey, planItems]
+  );
+
   useEffect(() => {
     const setCql = mapContextRef.current?.setServiceWmsCqlByLayer;
     if (!setCql) return;
+    if (!selectedRiver && openedPlan) {
+      setCql(
+        buildRiverBasicPlanReportRiversCqlByLayer(
+          tab,
+          riverBasicPlanShownRivers(openedPlan).map((r) => r.riverName),
+          openedPlan
+        )
+      );
+      return;
+    }
     setCql(buildRiverBasicPlanRiverNameCqlByLayer(tab, selectedRiver));
-  }, [tab, selectedRiver]);
+  }, [tab, selectedRiver, openedPlan]);
 
   const [resetKey, setResetKey] = useState(`${tab}|${listAxis}`);
   if (resetKey !== `${tab}|${listAxis}`) {
     setResetKey(`${tab}|${listAxis}`);
     setKeyword("");
     setPlanYear("");
+    setOpenedPlanKey(null);
   }
-
-  /** 보고서별 — 탭마다 보고서 폴더 구성을 한 번 조회 */
-  useEffect(() => {
-    if (listAxis !== "byPlan") return;
-    let cancelled = false;
-    void call("", "POST", {
-      service: "riverBasicPlanService",
-      action: "getRiverBasicPlanReportFolderSummary",
-      params: { tab },
-    })
-      .then((res) => {
-        if (cancelled) return;
-        const data = res?.data ?? res;
-        setFolderSummaryState({
-          tab,
-          folders:
-            data?.folders && typeof data.folders === "object"
-              ? (data.folders as RiverBasicPlanReportFolderSummary)
-              : {},
-        });
-      })
-      .catch(() => {
-        if (!cancelled) setFolderSummaryState({ tab, folders: {} });
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [tab, listAxis]);
 
   useEffect(() => {
     if (!listAxis) {
@@ -244,83 +242,71 @@ export function RiverBasicPlanListPanel({
     return () => clearTimeout(t);
   }, [tab, keyword, listAxis]);
 
-  const fitRiverExtent = useCallback(
-    async (riverName: string) => {
-      try {
-        let res = await call("", "POST", {
-          service: "riverBasicPlanService",
-          action: "getRiverBasicPlanIndexExtent",
-          params: { tab, riverName },
-        });
-        let data = res?.data ?? res;
-        let ext = Array.isArray(data?.extent3857) ? data.extent3857 : null;
-        if (!ext || ext.length !== 4) {
-          res = await call("", "POST", {
-            service: "riverBasicPlanService",
-            action: "getRiverBasicPlanExtent",
-            params: { tab, riverName },
-          });
-          data = res?.data ?? res;
-          ext = Array.isArray(data?.extent3857) ? data.extent3857 : null;
-        }
-        const map = mapContext?.mapInstanceRef?.current;
-        if (!map || !ext || ext.length !== 4) return;
-        scheduleFitMapToExtent3857(map, ext as number[], {
-          maxZoom: MAP_AUTO_NAV_MAX_ZOOM,
-          pointThreshold: 1,
-          applyMapViewPadding: () => mapContext?.applyMapViewPaddingRef?.current?.(),
-        });
-      } catch {
-        // ignore
-      }
-    },
-    [tab, mapContext]
-  );
+  const focusRiver = useRiverBasicPlanFocusRiver(tab);
+  const focusRivers = useRiverBasicPlanFocusRivers(tab);
 
   const selectRiver = useCallback(
     async (riverName: string, preferredPlan?: RiverBasicPlanPreferredPlan | null) => {
       onSelectRiver(riverName, preferredPlan ?? null);
-      mapContext?.riverBasicPlanExitIndexViewToDetailRef?.current?.();
-      await fitRiverExtent(riverName);
+      await focusRiver(riverName);
     },
-    [onSelectRiver, mapContext, fitRiverExtent]
+    [onSelectRiver, focusRiver]
   );
 
   const planAsLayer = riverBasicPlanAsDefineTable(tab);
 
-  /** 트리의 하천 행 — 그 보고서 기준으로 하천 상세 */
-  const handleSelectCardRiver = useCallback(
-    (plan: PlanListItem, river: { riverName: string; planLen: string }) => {
+  /** 보고서 하천 → 그 보고서 기준 상세 */
+  const handleSelectPlanRiver = useCallback(
+    (plan: PlanListItem, river: RiverBasicPlanReportRiver) => {
       void selectRiver(river.riverName, {
         planYear: plan.planYear,
         planName: plan.planName,
         rivpSuffix: plan.rivpSuffix,
         planLen: river.planLen,
+        riverType: river.riverType,
+        riverCode: river.riverCode,
       });
     },
     [selectRiver]
   );
 
-  /** 트리 보고서 행의 «보고서» — 계획 폴더에 바로 있는 PDF(모든 하천 공통)를 하천 선택 없이 열기 */
-  const handleOpenSharedReport = useCallback(
-    (_plan: PlanListItem, folderKey: string, pdfNames: string[]) => {
-      setReportPreview({
-        items: pdfNames.map((name) => ({
-          url: serviceFileDataDownloadUrl(SER_FILE_ENG.riverBasicPlan, planAsLayer, folderKey, name),
-          fileName: name,
-        })),
-        initialIndex: 0,
-      });
+  /**
+   * 카드 — 하천이 한 곳이면 그 하천 상세를 바로 연다.
+   * 여러 곳이면 카드 아래로 하천 목록을 펼치고(다시 누르면 접음), 하천을 고르지 않은 채 보고서 하천 전체가 지도에 보이게 한다.
+   */
+  const handleOpenPlan = useCallback(
+    (plan: PlanListItem) => {
+      const rivers = riverBasicPlanShownRivers(plan);
+      if (rivers.length <= 1) {
+        setOpenedPlanKey(null);
+        if (rivers[0]) handleSelectPlanRiver(plan, rivers[0]);
+        return;
+      }
+      const key = riverBasicPlanPlanKey(plan);
+      if (openedPlanKey === key) {
+        setOpenedPlanKey(null);
+        return;
+      }
+      setOpenedPlanKey(key);
+      onSelectRiver("", null);
+      void focusRivers(rivers.map((r) => r.riverName));
     },
-    [planAsLayer]
+    [openedPlanKey, handleSelectPlanRiver, onSelectRiver, focusRivers]
+  );
+
+  /** 카드 «보고서» — 계획 폴더 바로 아래 PDF와 하천별 폴더 PDF를 함께 열기 */
+  const handleOpenReport = useCallback(
+    (plan: PlanListItem) => {
+      const items = riverBasicPlanReportPdfItems(plan, folderSummary, planAsLayer);
+      if (items.length > 0) setReportPreview({ items, initialIndex: 0 });
+    },
+    [folderSummary, planAsLayer]
   );
 
   const title = useMemo(
     () => (tab === "smallRiver" ? "소하천 기본계획" : "지방하천 기본계획"),
     [tab]
   );
-
-  const axisLabel = listAxis === "byRiver" ? "하천별" : listAxis === "byPlan" ? "보고서별" : "";
 
   const searchPlaceholder =
     listAxis === "byRiver" ? "하천명 통합검색" : "보고서·하천명 검색";
@@ -331,38 +317,68 @@ export function RiverBasicPlanListPanel({
     [planItems]
   );
   const activePlanYear = planYear && yearOptions.includes(planYear) ? planYear : "";
+  const shownPlans = useMemo(
+    () => (activePlanYear ? planItems.filter((p) => p.planYear === activePlanYear) : planItems),
+    [planItems, activePlanYear]
+  );
 
   return (
     <div className="flex flex-col min-h-0 h-full bg-background">
-      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border px-3 py-2">
-        <div className="min-w-0 flex-1">
-          <p className="text-sm font-semibold text-foreground truncate">{title}</p>
-          {axisReady ? (
-            <p className="mt-0.5 text-[11px] text-muted-foreground truncate">{axisLabel} 목록</p>
-          ) : (
-            <p className="mt-0.5 text-[11px] text-amber-700 dark:text-amber-300">목록 보기를 선택하세요</p>
-          )}
-        </div>
-        <div className="flex shrink-0 items-center gap-1">
-          <LayerRowPanelButton
-            type="button"
-            title={axisReady ? `보기 변경 (현재 ${axisLabel})` : "목록 보기 선택"}
-            onClick={onChangeAxis}
-            className="border-primary/40 bg-primary/5 text-primary hover:bg-primary/10 hover:text-primary"
-          >
-            <Pencil className="h-3 w-3 shrink-0" aria-hidden />
-            {axisReady ? "보기 변경" : "보기 선택"}
-          </LayerRowPanelButton>
-          <button
-            type="button"
-            onClick={onClose}
-            className="shrink-0 rounded p-1 text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-            title="닫기"
-            aria-label="닫기"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        </div>
+      <div className="flex shrink-0 items-center justify-between gap-2 px-3 pt-2 pb-1.5">
+        <p className="min-w-0 flex-1 text-sm font-semibold text-foreground truncate">{title}</p>
+        <button
+          type="button"
+          onClick={onClose}
+          className="shrink-0 rounded p-1 text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+          title="닫기"
+          aria-label="닫기"
+        >
+          <X className="h-4 w-4" />
+        </button>
+      </div>
+
+      <div className="grid shrink-0 grid-cols-2 gap-1.5 border-b border-border px-3 pb-2.5" role="tablist" aria-label="목록 기준">
+        {AXIS_OPTIONS.map(({ axis, label, desc, icon: Icon }) => {
+          const active = listAxis === axis;
+          return (
+            <button
+              key={axis}
+              type="button"
+              role="tab"
+              aria-selected={active}
+              onClick={() => {
+                if (!active) onChangeAxis(axis);
+              }}
+              className={cn(
+                "flex min-w-0 items-center gap-2 rounded-md border px-2 py-1.5 text-left transition-colors",
+                active
+                  ? "border-primary bg-primary/[0.06] ring-1 ring-inset ring-primary/40"
+                  : "border-border bg-background hover:border-primary/40 hover:bg-muted/40"
+              )}
+            >
+              <span
+                className={cn(
+                  "inline-flex size-7 shrink-0 items-center justify-center rounded-md transition-colors",
+                  active ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
+                )}
+                aria-hidden
+              >
+                <Icon className="size-3.5" />
+              </span>
+              <span className="min-w-0">
+                <span
+                  className={cn(
+                    "block truncate text-xs font-semibold leading-4",
+                    active ? "text-primary" : "text-foreground"
+                  )}
+                >
+                  {label}
+                </span>
+                <span className="block truncate text-[10px] leading-4 text-muted-foreground">{desc}</span>
+              </span>
+            </button>
+          );
+        })}
       </div>
 
       <div className="shrink-0 border-b border-border bg-background">
@@ -397,7 +413,7 @@ export function RiverBasicPlanListPanel({
       {!axisReady ? (
         <div className="flex flex-1 flex-col items-center justify-center gap-2 px-4 py-8">
           <p className="text-sm text-muted-foreground text-center">
-            위 «보기 선택»에서 목록 기준을 고르세요.
+            위에서 «보고서 기준» 또는 «하천 기준»을 고르세요.
           </p>
         </div>
       ) : (
@@ -476,18 +492,24 @@ export function RiverBasicPlanListPanel({
             ) : planItems.length === 0 ? (
               <p className="text-sm text-muted-foreground px-4 py-4">검색 결과가 없습니다.</p>
             ) : (
-              <RiverBasicPlanReportTree
+              <RiverBasicPlanReportCardList
                 plans={planItems}
                 folderSummary={folderSummary}
-                keyword={keyword}
+                year={activePlanYear || null}
+                openedPlanKey={openedPlanKey}
                 selectedPlanKey={selectedPlanKey}
                 selectedRiver={selectedRiver}
-                onSelectRiver={handleSelectCardRiver}
-                onOpenReport={handleOpenSharedReport}
-                year={activePlanYear || null}
+                onOpenPlan={handleOpenPlan}
+                onSelectRiver={handleSelectPlanRiver}
+                onOpenReport={handleOpenReport}
               />
             )}
           </div>
+          {listAxis === "byPlan" && shownPlans.length > 0 ? (
+            <div className="standard-list-footer">
+              보고서 {shownPlans.length}건 · 하천 {shownPlans.reduce((n, p) => n + p.riverCount, 0)}곳
+            </div>
+          ) : null}
         </>
       )}
       {reportPreview != null ? (

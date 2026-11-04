@@ -43,6 +43,7 @@ import { getRowKey, getRowValueByField } from "../../../_mapComponents/standard/
 import { useRiverBasicPlanExistingMapLayers } from "./useRiverBasicPlanExistingMapLayers";
 import { useRiverBasicPlanIndexHighlight } from "./useRiverBasicPlanIndexHighlight";
 import { useRiverBasicPlanJbLabels } from "./useRiverBasicPlanJbLabels";
+import { useRiverBasicPlanReportFolders } from "./useRiverBasicPlanReportFolders";
 import {
   isImageServiceFileName,
   isPdfServiceFileName,
@@ -68,6 +69,7 @@ import {
 import { getRiverBasicPlanDetailFields } from "./riverBasicPlanDetailFields";
 import {
   buildRiverBasicPlanReportPlanFolderKey,
+  buildRiverBasicPlanReportPlanFolderKeyFromParts,
   buildRiverBasicPlanReportRiverSubfolderKey,
   extractRiverBasicPlanRivpFolderSuffix,
   riverBasicPlanReportRelativeDir,
@@ -163,6 +165,9 @@ export type RiverBasicPlanPreferredPlan = {
   /** rivp_name 의 `_1차`/`_2차` 접미사만 (없으면 "") */
   rivpSuffix: string;
   planLen?: string;
+  /** 보고서별 하천 목록에서 고를 때 — 하천 보고서 폴더({하천구분}_{하천코드}_…)를 바로 찾는 데 씀 */
+  riverType?: string;
+  riverCode?: string;
 };
 
 /** 연장 숫자 문자열 정규화 (20860.0000000000 → 20860) */
@@ -226,6 +231,11 @@ type Props = {
   onClose?: () => void;
   /** 보고서별 보기 — 보고서를 목록에서 이미 골랐으므로 연도·기본계획 표를 숨김 */
   hidePlanTable?: boolean;
+  /**
+   * 보고서별 보기 — 보고서 전체는 목록 카드에서 열므로, 상세 «보고서»는 이 하천 전용 폴더에 PDF 가 있을 때만 보임.
+   * (하천별로 나뉘지 않은 보고서는 숨김)
+   */
+  reportButtonRiverFolderOnly?: boolean;
 };
 
 export function RiverBasicPlanDetailPanel({
@@ -235,6 +245,7 @@ export function RiverBasicPlanDetailPanel({
   onSelectedPlanChange,
   onClose,
   hidePlanTable = false,
+  reportButtonRiverFolderOnly = false,
 }: Props) {
   const { data: session } = useSession();
   const showReportFolderHint = session?.user?.id === "su";
@@ -367,6 +378,8 @@ export function RiverBasicPlanDetailPanel({
     planName: string;
     planLen: string;
   } | null>(null);
+  /** 지도에서 누른 색인도 — 색인도 정보가 오면 목록에서 누를 때처럼 그 색인도로 확대 */
+  const fitIndexFromMapRef = useRef<number | null>(null);
   /** 연도 목록 로드 시 초기 선택만 — deps에 넣지 않아 객체 참조 변경으로 재조회되지 않게 함 */
   const preferredPlanRef = useRef(preferredPlan);
   preferredPlanRef.current = preferredPlan;
@@ -610,9 +623,32 @@ export function RiverBasicPlanDetailPanel({
     [planAsLayer, reportPlanFolderKey, reportRiverSubfolder]
   );
 
+  /**
+   * 보고서별 — 목록이 이미 받아 둔 보고서 폴더 구성으로 이 하천 보고서를 바로 찾음(상세·폴더 조회를 기다리지 않음).
+   * null 이면 아직 판단할 수 없어 아래 폴더 조회로 확인한다.
+   */
+  const reportFolders = useRiverBasicPlanReportFolders(tab, reportButtonRiverFolderOnly);
+  const fastRiverReportItems = useMemo((): ServiceFilePdfPreviewItem[] | null => {
+    if (!reportButtonRiverFolderOnly || !reportFolders || !preferredPlan) return null;
+    const planKey = buildRiverBasicPlanReportPlanFolderKeyFromParts(preferredPlan);
+    if (!planKey) return null;
+    const riverPdfs = reportFolders[planKey]?.riverPdfs ?? {};
+    const riverType = preferredPlan.riverType || String(detail?.river_type ?? "").trim();
+    const riverCode = preferredPlan.riverCode || String(detail?.river_code ?? "").trim();
+    if (!riverType || !riverCode) return null;
+    const sub = Object.keys(riverPdfs).find((n) => n.startsWith(`${riverType}_${riverCode}_`));
+    if (!sub) return [];
+    return (riverPdfs[sub] ?? []).map((name) => ({
+      url: serviceFileDataDownloadUrl(SER_FILE_ENG.riverBasicPlan, planAsLayer, planKey, name, { subfolder: sub }),
+      fileName: name,
+    }));
+  }, [reportButtonRiverFolderOnly, reportFolders, preferredPlan, detail, planAsLayer]);
+
   const reportFileQuery = useServiceFileData({
     serEng: SER_FILE_ENG.riverBasicPlan,
     enabled:
+      fastRiverReportItems == null &&
+      (!reportButtonRiverFolderOnly || reportRiverSubfolder != null) &&
       selected != null &&
       reportPlanFolderKey != null &&
       !loadingDetail &&
@@ -624,6 +660,7 @@ export function RiverBasicPlanDetailPanel({
   });
 
   const reportPdfItems = useMemo((): ServiceFilePdfPreviewItem[] => {
+    if (fastRiverReportItems != null) return fastRiverReportItems;
     if (reportPlanFolderKey == null) return [];
     return reportFileQuery.files
       .filter((f) => isPdfServiceFileName(f.name))
@@ -638,6 +675,7 @@ export function RiverBasicPlanDetailPanel({
         fileName: f.name,
       }));
   }, [
+    fastRiverReportItems,
     reportFileQuery.files,
     planAsLayer,
     reportPlanFolderKey,
@@ -645,14 +683,25 @@ export function RiverBasicPlanDetailPanel({
   ]);
 
   const hasReportPdf = reportPdfItems.length > 0;
+  /** 보고서 파일 확인 중 — 미리 받아 둔 폴더 구성으로 판단했으면 기다리지 않음 */
+  const reportChecking =
+    fastRiverReportItems == null && (reportFileQuery.loading || reportSubfolderResolving);
+  /** 보고서별 — 하천 전용 폴더 PDF 가 확인된 뒤에만 버튼 표시(확인 중·없음이면 숨김) */
+  const showReportButton = !reportButtonRiverFolderOnly
+    ? true
+    : fastRiverReportItems != null
+      ? hasReportPdf
+      : reportRiverSubfolder != null && !reportChecking && hasReportPdf;
   const reportButtonDisabled =
-    !selected ||
-    loadingDetail ||
-    reportPlanFolderKey == null ||
-    reportSubfolderResolving ||
-    reportFileQuery.loading ||
-    !hasReportPdf ||
-    reportPdfLoading;
+    fastRiverReportItems != null
+      ? !hasReportPdf || reportPdfLoading
+      : !selected ||
+        loadingDetail ||
+        reportPlanFolderKey == null ||
+        reportSubfolderResolving ||
+        reportFileQuery.loading ||
+        !hasReportPdf ||
+        reportPdfLoading;
 
   // 데이터 이력관리에 조회 저장을 위해 추가
   useEffect(() => {
@@ -915,6 +964,7 @@ export function RiverBasicPlanDetailPanel({
 
     const fid = Math.floor(req.indexOgcFid);
     if (fid > 0) {
+      fitIndexFromMapRef.current = fid;
       setIndexViewMode(true);
       setMapRequestedIndexOgcFid(fid);
     } else {
@@ -1107,6 +1157,14 @@ export function RiverBasicPlanDetailPanel({
     [mapContext?.applyMapViewPaddingRef, mapInstanceRef]
   );
 
+  useEffect(() => {
+    const fid = fitIndexFromMapRef.current;
+    const idx = indexBundle?.index;
+    if (fid == null || !idx || idx.ogcFid !== fid) return;
+    fitIndexFromMapRef.current = null;
+    fitMapToExtent3857(idx.extent3857);
+  }, [indexBundle, fitMapToExtent3857]);
+
   /**
    * WMS LAYERS 반영(setState) 이후에 fit 하도록 색인도 그리드와 동일한 체감을 맞춤.
    * 구조물 분할 자식은 defineLayer 도착 전 pending만 켜질 수 있어 한 번 더 지연 fit.
@@ -1266,7 +1324,8 @@ export function RiverBasicPlanDetailPanel({
 
   const openReportPdfViewer = useCallback(async () => {
     if (reportPdfBusyRef.current || reportButtonDisabled) return;
-    if (!selected || reportPlanFolderKey == null || reportPdfItems.length === 0) return;
+    if (reportPdfItems.length === 0) return;
+    if (fastRiverReportItems == null && (!selected || reportPlanFolderKey == null)) return;
     reportPdfBusyRef.current = true;
     setReportPdfLoading(true);
     try {
@@ -1277,7 +1336,7 @@ export function RiverBasicPlanDetailPanel({
       reportPdfBusyRef.current = false;
       setReportPdfLoading(false);
     }
-  }, [selected, reportPlanFolderKey, reportPdfItems, reportButtonDisabled]);
+  }, [selected, reportPlanFolderKey, reportPdfItems, reportButtonDisabled, fastRiverReportItems]);
 
   const detailEntries = useMemo(() => {
     const row = detail ?? {};
@@ -1289,6 +1348,7 @@ export function RiverBasicPlanDetailPanel({
   }, [detail, planDetailFields]);
 
   const actionButtons: { label: string; icon: React.ComponentType<{ className?: string }> }[] = [
+    { label: "보고서", icon: FileText },
     { label: "하천구역", icon: Waves },
     { label: "색인도", icon: Map },
     { label: "구조물도", icon: Construction },
@@ -1434,32 +1494,6 @@ export function RiverBasicPlanDetailPanel({
           )}
         </div>
         <div className="flex shrink-0 items-center gap-1">
-          <button
-            type="button"
-            title={
-              reportFileQuery.loading || reportSubfolderResolving
-                ? "보고서 확인 중"
-                : hasReportPdf
-                  ? "선택 기본계획 보고서 PDF 보기"
-                  : "보고서 PDF 없음"
-            }
-            disabled={reportButtonDisabled}
-            onClick={() => void openReportPdfViewer()}
-            className={cn(
-              "inline-flex h-7 items-center gap-1 rounded border px-2 text-[11px] font-medium transition-colors",
-              "border-amber-300/80 bg-amber-50 text-amber-900 hover:bg-amber-100 hover:text-amber-950",
-              "dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-200 dark:hover:bg-amber-950/60 dark:hover:text-amber-100",
-              reportButtonDisabled && "opacity-50 cursor-not-allowed",
-              reportPdfPreview != null && "ring-1 ring-inset ring-amber-400/50"
-            )}
-          >
-            {reportFileQuery.loading || reportPdfLoading || reportSubfolderResolving ? (
-              <Loader2 className="h-3 w-3 shrink-0 animate-spin" aria-hidden />
-            ) : (
-              <FileText className="h-3 w-3 shrink-0" aria-hidden />
-            )}
-            보고서
-          </button>
           {onClose && (
             <button
               type="button"
@@ -1540,8 +1574,44 @@ export function RiverBasicPlanDetailPanel({
       )}
 
       <div className="shrink-0 border-b border-border px-3 py-2 bg-background">
-        <div className="grid grid-cols-6 gap-1">
+        <div className="grid grid-cols-12 gap-1 [&>*:nth-child(-n+4)]:col-span-3 [&>*:nth-child(n+5)]:col-span-4">
           {actionButtons.map(({ label, icon: Icon }) => {
+            if (label === "보고서") {
+              const disabled = !showReportButton || reportButtonDisabled;
+              return (
+                <button
+                  key={label}
+                  type="button"
+                  title={
+                    reportChecking
+                      ? "보고서 확인 중"
+                      : !disabled
+                        ? reportButtonRiverFolderOnly
+                          ? `${riverName} 보고서 PDF 보기`
+                          : "선택 기본계획 보고서 PDF 보기"
+                        : reportButtonRiverFolderOnly
+                          ? "이 하천만의 보고서 없음 — 목록 카드의 보고서로 전체 보기"
+                          : "보고서 PDF 없음"
+                  }
+                  disabled={disabled}
+                  onClick={() => void openReportPdfViewer()}
+                  className={cn(
+                    "h-7 w-full text-[11px] rounded border min-w-0 overflow-hidden px-0.5 whitespace-nowrap inline-flex items-center justify-center gap-0.5 transition-colors",
+                    disabled
+                      ? "border-border bg-muted/50 text-muted-foreground opacity-50 cursor-not-allowed"
+                      : "border-primary/45 bg-primary/10 text-foreground hover:bg-primary/15",
+                    reportPdfPreview != null && "ring-1 ring-inset ring-primary/40"
+                  )}
+                >
+                  {reportChecking || reportPdfLoading ? (
+                    <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" aria-hidden />
+                  ) : (
+                    <Icon className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                  )}
+                  {label}
+                </button>
+              );
+            }
             if (label === "하천구역") {
               return <RiverPlanAreaModeButton key={label} mode={areaMode} onChange={applyAreaMode} />;
             }

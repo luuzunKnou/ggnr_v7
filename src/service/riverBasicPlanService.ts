@@ -480,9 +480,18 @@ function dedupePlanRivers(raw: unknown): RiverBasicPlanPlanRiver[] {
  * - riverFolders: PDF가 들어 있는 하천 하위 폴더명 ({river_type}_{river_code}_{plan_year}_{plan_len})
  * 목록 카드에서 «보고서» 버튼·하천별 보고서 유무를 한 번에 판단할 때 사용.
  */
+export type RiverBasicPlanReportFolderInfo = {
+  /** 계획 폴더 바로 아래 PDF(모든 하천 공통) */
+  rootPdfs: string[];
+  /** PDF 가 있는 하천 하위 폴더 */
+  riverFolders: string[];
+  /** 하천 하위 폴더별 PDF */
+  riverPdfs: Record<string, string[]>;
+};
+
 export async function getRiverBasicPlanReportFolderSummary(params?: {
   tab?: RiverType;
-}): Promise<{ folders: Record<string, { rootPdfs: string[]; riverFolders: string[] }> }> {
+}): Promise<{ folders: Record<string, RiverBasicPlanReportFolderInfo> }> {
   const tab = normalizeTab(params?.tab);
   const root = path.join(resolveGgnrDataDir(), 'file_data', riverBasicPlanAsDefineTable(tab));
   const isPdf = (name: string) =>
@@ -499,7 +508,7 @@ export async function getRiverBasicPlanReportFolderSummary(params?: {
     return { folders: {} };
   }
 
-  const folders: Record<string, { rootPdfs: string[]; riverFolders: string[] }> = {};
+  const folders: Record<string, RiverBasicPlanReportFolderInfo> = {};
   const readPlanDir = async (planDir: string) => {
     const planPath = path.join(root, planDir);
     const entries = await fs.readdir(planPath, { withFileTypes: true }).catch(() => null);
@@ -509,13 +518,16 @@ export async function getRiverBasicPlanReportFolderSummary(params?: {
       .map((e) => e.name)
       .sort((a, b) => a.localeCompare(b, 'ko'));
     const subDirs = entries.filter((e) => e.isDirectory()).map((e) => e.name);
-    const withPdf = await Promise.all(
+    const riverPdfs: Record<string, string[]> = {};
+    await Promise.all(
       subDirs.map(async (name) => {
         const inner = await fs.readdir(path.join(planPath, name)).catch(() => [] as string[]);
-        return inner.some(isPdf) ? name : null;
+        const pdfs = inner.filter(isPdf).sort((a, b) => a.localeCompare(b, 'ko'));
+        if (pdfs.length > 0) riverPdfs[name] = pdfs;
       })
     );
-    folders[planDir] = { rootPdfs, riverFolders: withPdf.filter((n): n is string => n != null) };
+    const riverFolders = Object.keys(riverPdfs).sort((a, b) => a.localeCompare(b, 'ko'));
+    folders[planDir] = { rootPdfs, riverFolders, riverPdfs };
   };
   /** 네트워크 공유 폴더라 한 번에 몇 개씩 나눠 병렬로 읽음 */
   const PLAN_DIR_CONCURRENCY = 6;

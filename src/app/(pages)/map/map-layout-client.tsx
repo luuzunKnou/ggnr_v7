@@ -1813,10 +1813,6 @@ function MapLayoutContent({
     setSelectedRiverName("")
   }
 
-  const handleRiverBasicPlanChangeAxis = () => {
-    setRiverBasicPlanScopeModalOpen(true)
-  }
-
   const handleRiverBasicPlanSelectAxis = (axis: RiverBasicPlanListAxis) => {
     setRiverBasicPlanListAxis(axis)
     setRiverBasicPlanPreferredPlan(null)
@@ -2665,7 +2661,7 @@ function MapLayoutContent({
                   onTabChange={(nextTab) => {
                     setRiverPlanTab(nextTab)
                     setRiverBasicPlanPreferredPlan(null)
-                    setSelectedRiverName("")
+                                  setSelectedRiverName("")
                   }}
                   listAxis={riverBasicPlanListAxis}
                   selectedRiver={selectedRiverName}
@@ -2674,7 +2670,7 @@ function MapLayoutContent({
                     setRiverBasicPlanPreferredPlan(preferredPlan ?? null)
                     setSelectedRiverName(riverName)
                   }}
-                  onChangeAxis={handleRiverBasicPlanChangeAxis}
+                  onChangeAxis={handleRiverBasicPlanSelectAxis}
                   onClose={handleHideRiverBasicPlan}
                 />
               </MapSideListPanel>
@@ -2701,6 +2697,7 @@ function MapLayoutContent({
                     setSelectedRiverName("")
                   }}
                   hidePlanTable={riverBasicPlanListAxis === "byPlan"}
+                  reportButtonRiverFolderOnly={riverBasicPlanListAxis === "byPlan"}
                 />
               </MapSideListPanel>
             </div>
