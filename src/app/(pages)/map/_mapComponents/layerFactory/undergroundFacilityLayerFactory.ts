@@ -13,6 +13,7 @@ import type {
   ThematicMapLayerOption,
 } from './thematicMapLayerFactory';
 import { getGeoServerBase } from '@/lib/geoserverUrl';
+import { geoserverWmsImageLoadFunction } from '@/lib/geoserverWmsImageLoad';
 import { compareDefineTableOrder, parseDefineTableIdx } from '@/lib/defineTableOrder';
 
 type DefineTableRow = {
@@ -32,6 +33,7 @@ function compareUndergroundLayers(a: ThematicMapLayerOption, b: ThematicMapLayer
 /** 지도 «지하시설물» — 레이어관리 그룹명과 동일 */
 export const UNDERGROUND_FACILITY_GROUP_ALLOW = new Set([
   '상수',
+  '급수구역',
   '하수',
   '광역상수',
   '가스',
@@ -43,6 +45,7 @@ export const UNDERGROUND_FACILITY_GROUP_ALLOW = new Set([
 
 const UNDERGROUND_FACILITY_GROUP_ORDER = [
   '상수',
+  '급수구역',
   '하수',
   '광역상수',
   '가스',
@@ -192,6 +195,8 @@ export function createUndergroundFacilityLayers(
         params,
         serverType: 'geoserver',
         ratio: 1.5,
+        // 읍면동·리 INTERSECTS 등 긴 CQL은 GET 414 → 이전(전체) 이미지가 남는 문제 방지
+        imageLoadFunction: geoserverWmsImageLoadFunction,
       }),
     });
     layer.set('name', layerName);

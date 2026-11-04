@@ -1,8 +1,23 @@
 import * as THREE from 'three';
 import { createDiameterDimAtEnd } from './cadDimensions';
 import type { GroundHeightField, PipeSegment } from './shapeTypes';
-import { elevToSceneY } from './shapeTypes';
+import { elevToSceneY, GROUND_SCENE_M_PER_UNIT } from './shapeTypes';
 import { sampleSurfaceY } from './groundSteppedMesh';
+
+/**
+ * 제어점을 벗어나지 않는 폴리라인 곡선.
+ * CatmullRom 끝점 오버슈트 방지(범위·단면 공통).
+ */
+function makePolylineCurve(pts: THREE.Vector3[]): THREE.Curve<THREE.Vector3> {
+  if (pts.length === 2) {
+    return new THREE.LineCurve3(pts[0]!, pts[1]!);
+  }
+  const path = new THREE.CurvePath<THREE.Vector3>();
+  for (let i = 0; i < pts.length - 1; i++) {
+    path.add(new THREE.LineCurve3(pts[i]!, pts[i + 1]!));
+  }
+  return path;
+}
 
 /** 지표 Y: 고도장 보간 > 관별 surfaceElevM > 0 */
 function resolvePipeSurfaceY(
@@ -304,7 +319,7 @@ function createSideLabelPlane(
  * geom 순서 기준 옆면 외곽선 + 라벨(우측 10px에 → 흐름 표기).
  */
 function createSideFlowOutline(
-  curve: THREE.CatmullRomCurve3,
+  curve: THREE.Curve<THREE.Vector3>,
   outerR: number,
   labelText: string
 ): THREE.Group {
@@ -360,9 +375,10 @@ function mercatorToLocal(
   centerY: number,
   meterToProj: number
 ): { x: number; z: number } {
+  const scale = GROUND_SCENE_M_PER_UNIT;
   return {
-    x: (x3857 - centerX) / meterToProj,
-    z: -(y3857 - centerY) / meterToProj,
+    x: (x3857 - centerX) / meterToProj / scale,
+    z: -(y3857 - centerY) / meterToProj / scale,
   };
 }
 
@@ -439,9 +455,14 @@ export function createPipesOverlay(opts: CreatePipesOverlayOpts): THREE.Group {
   for (const pipe of pipes) {
     if (!pipe.coords3857 || pipe.coords3857.length < 2) continue;
     const pts: THREE.Vector3[] = [];
-    for (const [x, y] of pipe.coords3857) {
+    for (let vi = 0; vi < pipe.coords3857.length; vi++) {
+      const [x, y] = pipe.coords3857[vi]!;
       const { x: lx, z: lz } = mercatorToLocal(x, y, opts.centerX, opts.centerY, m2p);
-      const depth = Math.max(0.05, pipe.depthM);
+      const depthRaw =
+        pipe.depthsM && pipe.depthsM.length === pipe.coords3857.length
+          ? pipe.depthsM[vi]
+          : pipe.depthM;
+      const depth = Math.max(0.05, depthRaw ?? pipe.depthM);
       const surfY = resolvePipeSurfaceY(pipe, lx, lz, surfaceMode, opts.field);
       pts.push(new THREE.Vector3(lx, surfY - depth, lz));
     }
@@ -449,27 +470,36 @@ export function createPipesOverlay(opts: CreatePipesOverlayOpts): THREE.Group {
 
     const cleaned: THREE.Vector3[] = [pts[0]];
     for (let i = 1; i < pts.length; i++) {
-      if (cleaned[cleaned.length - 1].distanceToSquared(pts[i]) > 1e-8) {
-        cleaned.push(pts[i]);
+      if (cleaned[cleaned.length - 1]!.distanceToSquared(pts[i]!) > 1e-8) {
+        cleaned.push(pts[i]!);
       }
     }
     if (cleaned.length < 2) continue;
+
+    // 범위(사각형)과 동일 — API(ST_Intersection) 좌표 그대로 (클라이언트 재클립 없음)
+    const pathRuns = [cleaned];
 
     const outerR = Math.max(0.04, pipe.diameterM / 2);
     const wallM = pipeWallThicknessM(pipe.diameterM);
     const innerR = Math.max(0.008, Math.min(outerR - wallM, outerR * 0.92));
     const segColor = pipe.color || fallbackColor;
-    try {
-      const curve = new THREE.CatmullRomCurve3(cleaned, false, 'centripetal');
-      const tubular = Math.max(8, Math.min(64, cleaned.length * 4));
+    let dipAdded = false;
+
+    for (let runIdx = 0; runIdx < pathRuns.length; runIdx++) {
+      const run = pathRuns[runIdx]!;
+      if (run.length < 2) continue;
+      try {
+      const curve = makePolylineCurve(run);
+      const tubular = Math.max(8, Math.min(64, run.length * 4));
       const radial = 16;
+      const runId = pathRuns.length > 1 ? `${pipe.id}#${runIdx}` : pipe.id;
 
       const outerGeo = new THREE.TubeGeometry(curve, tubular, outerR, radial, false);
       outerGeo.computeBoundingSphere();
       const outerMesh = new THREE.Mesh(outerGeo, makeMat(segColor, THREE.DoubleSide));
       outerMesh.userData[PIPE_MESH_KEY] = true;
       outerMesh.userData.isFill = true;
-      outerMesh.userData.pipeId = pipe.id;
+      outerMesh.userData.pipeId = runId;
       outerMesh.userData.pipeWallM = wallM;
       outerMesh.userData.pipeInnerR = innerR;
       outerMesh.renderOrder = 2;
@@ -480,7 +510,7 @@ export function createPipesOverlay(opts: CreatePipesOverlayOpts): THREE.Group {
       const innerMesh = new THREE.Mesh(innerGeo, makeMat(segColor, THREE.BackSide, true));
       innerMesh.userData[PIPE_MESH_KEY] = true;
       innerMesh.userData.isInner = true;
-      innerMesh.userData.pipeId = pipe.id;
+      innerMesh.userData.pipeId = runId;
       innerMesh.renderOrder = 2;
       root.add(innerMesh);
 
@@ -490,7 +520,7 @@ export function createPipesOverlay(opts: CreatePipesOverlayOpts): THREE.Group {
         outerR,
         (pipe.label && pipe.label.trim()) || '관로'
       );
-      side.userData.pipeId = pipe.id;
+      side.userData.pipeId = runId;
       root.add(side);
 
       // 심도: 지형↔관 세로 바
@@ -507,26 +537,29 @@ export function createPipesOverlay(opts: CreatePipesOverlayOpts): THREE.Group {
         outerR,
         shownPipeElevs
       );
-      depthBar.userData.pipeId = pipe.id;
+      depthBar.userData.pipeId = runId;
       root.add(depthBar);
 
+      if (dipAdded) continue;
+      dipAdded = true;
       const dipLabel = `⌀${fmtDipMm(pipe.diameterM)}mm`;
       dipEnds.push({
-        pipeId: pipe.id,
+        pipeId: runId,
         pos: curve.getPoint(0),
         tangent: curve.getTangent(0),
         radius: outerR,
         label: dipLabel,
       });
       dipEnds.push({
-        pipeId: pipe.id,
+        pipeId: runId,
         pos: curve.getPoint(1),
         tangent: curve.getTangent(1),
         radius: outerR,
         label: dipLabel,
       });
-    } catch {
-      /* skip */
+      } catch {
+        /* skip */
+      }
     }
   }
 

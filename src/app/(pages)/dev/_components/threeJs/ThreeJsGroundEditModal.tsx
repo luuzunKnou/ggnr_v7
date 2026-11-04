@@ -9,8 +9,14 @@ import { shapePropsEqual } from './shapeCatalog';
 import { GroundPickMap } from './GroundPickMap';
 import { ShapeColorOpacityFields } from './ShapeColorOpacityFields';
 import {
+  clipHeightFieldToSectionRect,
+  SECTION_STEP_M,
+  sectionLineLengthM,
+} from './groundSection';
+import {
   GROUND_DEFAULT_RADIUS_M,
   GROUND_DEFAULT_STEP_M,
+  type GroundDrawMode,
   type GroundHeightField,
   type ShapeProps,
 } from './shapeTypes';
@@ -61,13 +67,23 @@ export function ThreeJsGroundEditModal({
 
   useEffect(() => {
     if (open && props) {
-      const snap = { ...props, groundHeightField: props.groundHeightField ?? null };
+      const snap = {
+        ...props,
+        groundHeightField: props.groundHeightField ?? null,
+        groundDrawMode: props.groundDrawMode ?? 'extent',
+        groundSectionLine: props.groundSectionLine ?? null,
+      };
       snapshotRef.current = JSON.parse(JSON.stringify(snap)) as ShapeProps;
       setDraft(snap);
+      const mode = snap.groundDrawMode ?? 'extent';
       setStatus(
         props.groundHeightField
-          ? `지형 준비됨 (샘플 ${props.groundHeightField.size}×${props.groundHeightField.size})`
-          : '지도에서 사각형을 그린 뒤 «지형 생성»을 누르세요'
+          ? mode === 'section'
+            ? `단면도 준비됨 (샘플 ${props.groundHeightField.size}×${props.groundHeightField.size})`
+            : `지형 준비됨 (샘플 ${props.groundHeightField.size}×${props.groundHeightField.size})`
+          : mode === 'section'
+            ? '지도에서 절단 라인을 그린 뒤 «지형 생성»을 누르세요'
+            : '지도에서 사각형을 그린 뒤 «지형 생성»을 누르세요'
       );
     }
     if (!open) {
@@ -91,25 +107,56 @@ export function ThreeJsGroundEditModal({
   if (!open || !props || !draft) return null;
 
   const title = titleName ? `${titleName} 편집` : '지형(GROUND) 편집';
+  const drawMode: GroundDrawMode = draft.groundDrawMode ?? 'extent';
   const center: [number, number] | null =
     draft.groundCenterX != null && draft.groundCenterY != null
       ? [draft.groundCenterX, draft.groundCenterY]
       : null;
   const radiusM = draft.groundRadiusM ?? GROUND_DEFAULT_RADIUS_M;
+  const sectionLine = draft.groundSectionLine ?? null;
+  const canBuild =
+    drawMode === 'section' ? center != null && sectionLine != null : center != null;
 
   const applyDraft = (next: ShapeProps) => {
     setDraft(next);
     onPreview(next);
   };
 
+  const setDrawMode = (mode: GroundDrawMode) => {
+    applyDraft({
+      ...draft,
+      groundDrawMode: mode,
+      groundCenterX: undefined,
+      groundCenterY: undefined,
+      groundRadiusM: GROUND_DEFAULT_RADIUS_M,
+      groundSectionLine: null,
+      groundHeightField: null,
+    });
+    setStatus(
+      mode === 'section'
+        ? '지도에서 절단 라인을 그린 뒤 «지형 생성»을 누르세요'
+        : '지도에서 사각형을 그린 뒤 «지형 생성»을 누르세요'
+    );
+  };
+
   const buildTerrain = async () => {
     if (center == null) {
-      setStatus('지도에서 사각형 범위를 먼저 그리세요');
+      setStatus(
+        drawMode === 'section'
+          ? '지도에서 절단 라인을 먼저 그리세요'
+          : '지도에서 사각형 범위를 먼저 그리세요'
+      );
+      return;
+    }
+    if (drawMode === 'section' && !sectionLine) {
+      setStatus('지도에서 절단 라인을 먼저 그리세요');
       return;
     }
     setBusy(true);
     setStatus('등고 격자 조회 중…');
     try {
+      const stepM =
+        drawMode === 'section' ? SECTION_STEP_M : GROUND_DEFAULT_STEP_M;
       const res = await call('', 'POST', {
         service: 'elevationService',
         action: 'getElevationGrid',
@@ -118,7 +165,7 @@ export function ThreeJsGroundEditModal({
           y: center[1],
           srid: 3857,
           radiusM,
-          stepM: GROUND_DEFAULT_STEP_M,
+          stepM,
         },
       });
       const data = (res?.data ?? res) as GridApi;
@@ -126,9 +173,9 @@ export function ThreeJsGroundEditModal({
         setStatus(data?.error ?? '지형 생성 실패');
         return;
       }
-      const field: GroundHeightField = {
+      let field: GroundHeightField = {
         size: data.size,
-        stepM: data.stepM ?? GROUND_DEFAULT_STEP_M,
+        stepM: data.stepM ?? stepM,
         radiusM: data.radiusM ?? radiusM,
         centerX: data.centerX ?? center[0],
         centerY: data.centerY ?? center[1],
@@ -139,12 +186,23 @@ export function ThreeJsGroundEditModal({
         rivers: data.rivers ?? [],
       };
 
+      if (drawMode === 'section' && sectionLine) {
+        field = clipHeightFieldToSectionRect(field, sectionLine);
+        const valid = field.heights.filter((h) => h != null);
+        if (!valid.length) {
+          setStatus('사각형 범위 내 고도 샘플이 없습니다');
+          return;
+        }
+      }
+
       const next: ShapeProps = {
         ...draft,
         kind: 'ground',
+        groundDrawMode: drawMode,
         groundCenterX: field.centerX,
         groundCenterY: field.centerY,
         groundRadiusM: field.radiusM,
+        groundSectionLine: drawMode === 'section' ? sectionLine : null,
         groundHeightField: field,
         floorHeight: 0,
         posX: 0,
@@ -153,11 +211,19 @@ export function ThreeJsGroundEditModal({
       applyDraft(next);
       const nCont = field.contours?.length ?? 0;
       const nRiver = field.rivers?.length ?? 0;
-      setStatus(
-        `생성 완료 · 최저표고 ${field.baseElevM.toFixed(1)} m(해발) · ${field.size}×${field.size}` +
-          (nCont ? ` · 등고 ${nCont}선` : '') +
-          (nRiver ? ` · 하천 ${nRiver}` : '')
-      );
+      if (drawMode === 'section' && sectionLine) {
+        setStatus(
+          `단면도 생성 · 밑변 ${Math.round(sectionLineLengthM(sectionLine))} m · 깊이 ${Math.round(sectionLine.halfWidthM)} m` +
+            ` · 최저표고 ${field.baseElevM.toFixed(1)} m` +
+            (nCont ? ` · 등고 ${nCont}선` : '')
+        );
+      } else {
+        setStatus(
+          `생성 완료 · 최저표고 ${field.baseElevM.toFixed(1)} m(해발) · ${field.size}×${field.size}` +
+            (nCont ? ` · 등고 ${nCont}선` : '') +
+            (nRiver ? ` · 하천 ${nRiver}` : '')
+        );
+      }
     } catch (e) {
       setStatus(e instanceof Error ? e.message : '지형 생성 오류');
     } finally {
@@ -177,10 +243,36 @@ export function ThreeJsGroundEditModal({
       dimBackdrop={false}
     >
       <div className="flex min-h-0 flex-1 flex-col gap-3 p-3">
+        <div className="flex flex-wrap gap-1.5">
+          <button
+            type="button"
+            className={`inline-flex cursor-pointer items-center rounded border px-2 py-1 text-[11px] font-medium ${
+              drawMode === 'extent'
+                ? 'border-primary bg-primary text-white'
+                : 'border-border bg-muted/30 text-foreground hover:bg-muted/50'
+            }`}
+            title="범위(사각형)"
+            onClick={() => setDrawMode('extent')}
+          >
+            범위(사각형)
+          </button>
+          <button
+            type="button"
+            className={`inline-flex cursor-pointer items-center rounded border px-2 py-1 text-[11px] font-medium ${
+              drawMode === 'section'
+                ? 'border-primary bg-primary text-white'
+                : 'border-border bg-muted/30 text-foreground hover:bg-muted/50'
+            }`}
+            title="단면도(라인)"
+            onClick={() => setDrawMode('section')}
+          >
+            단면도(라인)
+          </button>
+        </div>
         <p className="text-[12px] text-muted-foreground">
-          지도에서 드래그해 사각형 범위를 그립니다. 그린 범위를 덮는 정사각(한 변{' '}
-          {Math.round(radiusM * 2)} m)으로 기울기 보간 지형을 만들고, 등고선·지방하천·소하천을
-          표면 위에 그립니다. (관로는 «관로» 도형에서 별도 생성)
+          {drawMode === 'section'
+            ? '지도에서 두 점을 찍어 절단 라인을 그립니다. 라인이 사각형의 밑변이 되고, 진행 왼쪽으로 최소 깊이(약 5m)만큼 사각형 지형을 만듭니다. 화면은 그 밑변(라인)을 정면으로 맞춥니다.'
+            : `지도에서 드래그해 사각형 범위를 그립니다. 그린 범위를 덮는 정사각(한 변 ${Math.round(radiusM * 2)} m)으로 기울기 보간 지형을 만들고, 등고선·지방하천·소하천을 표면 위에 그립니다.`}
         </p>
         <ShapeColorOpacityFields
           colorId="ground-terrain-color"
@@ -216,41 +308,56 @@ export function ThreeJsGroundEditModal({
             <span className="text-[12px] text-muted-foreground">m (표면 아래 두께)</span>
           </div>
         </div>
-        <ShapeColorOpacityFields
-          colorId="ground-river-color"
-          opacityId="ground-river-opacity"
-          label="하천"
-          color={draft.riverColor || '#2563eb'}
-          opacity={draft.riverOpacity ?? 0.4}
-          onColor={(hex) => applyDraft({ ...draft, riverColor: hex })}
-          onOpacity={(n) => applyDraft({ ...draft, riverOpacity: n })}
-        />
+        {drawMode === 'extent' ? (
+          <ShapeColorOpacityFields
+            colorId="ground-river-color"
+            opacityId="ground-river-opacity"
+            label="하천"
+            color={draft.riverColor || '#2563eb'}
+            opacity={draft.riverOpacity ?? 0.4}
+            onColor={(hex) => applyDraft({ ...draft, riverColor: hex })}
+            onOpacity={(n) => applyDraft({ ...draft, riverOpacity: n })}
+          />
+        ) : null}
         <GroundPickMap
+          key={drawMode}
+          drawMode={drawMode}
           center={center}
           radiusM={radiusM}
+          sectionLine={sectionLine}
           onPick={(r) => {
             applyDraft({
               ...draft,
+              groundDrawMode: r.mode,
               groundCenterX: r.center[0],
               groundCenterY: r.center[1],
               groundRadiusM: r.radiusM,
+              groundSectionLine: r.sectionLine ?? null,
+              groundHeightField: null,
             });
-            setStatus(
-              `범위 한 변 ${Math.round(r.radiusM * 2)} m — «지형 생성»을 누르세요`
-            );
+            if (r.mode === 'section' && r.sectionLine) {
+              setStatus(
+                `밑변 ${Math.round(sectionLineLengthM(r.sectionLine))} m · 깊이 ${Math.round(r.sectionLine.halfWidthM)} m — «지형 생성»을 누르세요`
+              );
+            } else {
+              setStatus(
+                `범위 한 변 ${Math.round(r.radiusM * 2)} m — «지형 생성»을 누르세요`
+              );
+            }
           }}
         />
         {center ? (
           <p className="text-[11px] tabular-nums text-foreground">
-            중심 X {center[0].toFixed(2)} / Y {center[1].toFixed(2)} · 한 변{' '}
-            {Math.round(radiusM * 2)} m
+            {drawMode === 'section' && sectionLine
+              ? `중심 X ${center[0].toFixed(2)} / Y ${center[1].toFixed(2)} · 밑변 ${Math.round(sectionLineLengthM(sectionLine))} m · 깊이 ${Math.round(sectionLine.halfWidthM)} m`
+              : `중심 X ${center[0].toFixed(2)} / Y ${center[1].toFixed(2)} · 한 변 ${Math.round(radiusM * 2)} m`}
           </p>
         ) : null}
         <button
           type="button"
           className="inline-flex h-9 cursor-pointer items-center justify-center rounded border border-primary bg-primary px-2 text-[12px] font-medium text-white hover:bg-primary/90 disabled:opacity-50"
           title="지형 생성"
-          disabled={busy || center == null}
+          disabled={busy || !canBuild}
           onClick={() => void buildTerrain()}
         >
           {busy ? '생성 중…' : '지형 생성'}

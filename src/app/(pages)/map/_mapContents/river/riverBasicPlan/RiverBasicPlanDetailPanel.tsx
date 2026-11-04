@@ -19,6 +19,7 @@ import {
   ChevronLeft,
   ChevronDown,
   ChevronRight,
+  ClipboardList,
   Waves,
 } from "lucide-react";
 import { RiverPlanAreaModeButton, type RiverPlanAreaMode } from "./RiverPlanAreaModeButton";
@@ -41,6 +42,7 @@ import { scheduleFitMapToExtent3857 } from "../../../_mapComponents/config/mapAu
 import { getRowKey, getRowValueByField } from "../../../_mapComponents/standard/defineLayerRowUtils";
 import { useRiverBasicPlanExistingMapLayers } from "./useRiverBasicPlanExistingMapLayers";
 import { useRiverBasicPlanIndexHighlight } from "./useRiverBasicPlanIndexHighlight";
+import { useRiverBasicPlanJbLabels } from "./useRiverBasicPlanJbLabels";
 import {
   isImageServiceFileName,
   isPdfServiceFileName,
@@ -58,13 +60,16 @@ import {
   ServiceFileImagePreview,
   type ServiceFilePreviewItem,
 } from "../../../_mapComponents/standard/ServiceFileImagePreview";
+import { buildServiceFilePreviewGalleryItems } from "../../../_mapComponents/standard/serviceFilePreviewItems";
 import {
   ServiceFilePdfPreview,
   type ServiceFilePdfPreviewItem,
 } from "../../../_mapComponents/standard/ServiceFilePdfPreview";
 import { getRiverBasicPlanDetailFields } from "./riverBasicPlanDetailFields";
 import {
-  buildRiverBasicPlanReportFolderKey,
+  buildRiverBasicPlanReportPlanFolderKey,
+  buildRiverBasicPlanReportRiverSubfolderKey,
+  extractRiverBasicPlanRivpFolderSuffix,
   riverBasicPlanReportRelativeDir,
 } from "./riverBasicPlanReportFolder";
 
@@ -148,6 +153,16 @@ type PlanItem = {
   planYear: string;
   planName: string;
   planLen: string;
+  rivpName: string;
+  rivpSuffix: string;
+};
+
+export type RiverBasicPlanPreferredPlan = {
+  planYear: string;
+  planName: string;
+  /** rivp_name 의 `_1차`/`_2차` 접미사만 (없으면 "") */
+  rivpSuffix: string;
+  planLen?: string;
 };
 
 /** 연장 숫자 문자열 정규화 (20860.0000000000 → 20860) */
@@ -158,15 +173,33 @@ function planLenMatchKey(raw: string | undefined | null): string {
   return Number.isFinite(n) ? String(n) : t;
 }
 
-/** 지도 색인도 pick → 연도 목록에서 기본계획 1건 (연장 우선) */
+/** 지도·목록 pick → 연도 목록에서 기본계획 1건 (연장·rivp 접미사 우선) */
 function findPlanItemFromMapPick(
   list: PlanItem[],
   planYear: string,
   planName: string,
   planLen: string,
+  rivpSuffix?: string,
 ): PlanItem | undefined {
-  if (list.length === 0 || !(planYear || planName || planLen)) return undefined;
+  if (list.length === 0 || !(planYear || planName || planLen || rivpSuffix)) return undefined;
   const lenKey = planLenMatchKey(planLen);
+  const suffix = String(rivpSuffix ?? "").trim();
+  if (suffix && lenKey) {
+    const withBoth = list.find(
+      (p) =>
+        p.planYear === planYear &&
+        p.planName === planName &&
+        p.rivpSuffix === suffix &&
+        planLenMatchKey(p.planLen) === lenKey,
+    );
+    if (withBoth) return withBoth;
+  }
+  if (rivpSuffix !== undefined) {
+    const withSuffix = list.find(
+      (p) => p.planYear === planYear && p.planName === planName && p.rivpSuffix === suffix,
+    );
+    if (withSuffix) return withSuffix;
+  }
   if (lenKey) {
     const withLen = list.find(
       (p) =>
@@ -185,11 +218,24 @@ function findPlanItemFromMapPick(
 type Props = {
   tab: RiverType;
   riverName: string;
+  /** 보고서별 목록에서 고른 계획 — 상세 연도 목록 초기 선택 */
+  preferredPlan?: RiverBasicPlanPreferredPlan | null;
+  /** 상세에서 연도표 계획 변경 시 목록 동기화 */
+  onSelectedPlanChange?: (plan: RiverBasicPlanPreferredPlan) => void;
   /** 상세 패널만 닫기 (목록 패널은 유지) */
   onClose?: () => void;
+  /** 보고서별 보기 — 보고서를 목록에서 이미 골랐으므로 연도·기본계획 표를 숨김 */
+  hidePlanTable?: boolean;
 };
 
-export function RiverBasicPlanDetailPanel({ tab, riverName, onClose }: Props) {
+export function RiverBasicPlanDetailPanel({
+  tab,
+  riverName,
+  preferredPlan = null,
+  onSelectedPlanChange,
+  onClose,
+  hidePlanTable = false,
+}: Props) {
   const { data: session } = useSession();
   const showReportFolderHint = session?.user?.id === "su";
   const mapContext = useMapContext();
@@ -213,8 +259,10 @@ export function RiverBasicPlanDetailPanel({ tab, riverName, onClose }: Props) {
   );
   /** 구조물도 켜기 대기 — 자식 목록 도착 후 분할 레이어 ON */
   const pendingEnableStructureChildrenRef = useRef(false);
+  /** define_table_parents_layer === 구조물 부모 인 자식 define_table_name (하천 선택 effect보다 먼저) */
+  const [structureChildLayerNames, setStructureChildLayerNames] = useState<string[]>([]);
 
-  /** 하천 선택 시 확장패널 토글칩 레이어(색인도·기본계획·종단·횡단·구조물 WMS) — 있는 테이블만 */
+  /** 하천 선택 시 확장패널 칩 레이어 ON(보고서 제외). 구조물은 정적 WMS 목록으로 즉시 ON */
   useEffect(() => {
     if (!riverName.trim() || !setVisibleLayerNames || existingMapLayers == null) return;
     const otherTab: RiverType = tab === "smallRiver" ? "river" : "smallRiver";
@@ -237,16 +285,26 @@ export function RiverBasicPlanDetailPanel({ tab, riverName, onClose }: Props) {
       if (allow(hdLayer)) next.add(hdLayer);
       else next.delete(hdLayer);
       next.delete(structureParent);
+      /** 구조물: 정적 WMS 목록 ON. 하나도 없으면 부모라도 켜 칩이 꺼진 채로 보이지 않게 */
+      let structureOn = false;
       for (const id of riverBasicPlanGdWmsDefineTables(tab)) {
-        if (allow(id)) next.add(id);
-        else next.delete(id);
+        if (allow(id)) {
+          next.add(id);
+          structureOn = true;
+        } else {
+          next.delete(id);
+        }
+      }
+      if (!structureOn && allow(structureParent)) {
+        next.add(structureParent);
+        structureOn = true;
       }
       if (allow(jbLayer)) next.add(jbLayer);
       else next.delete(jbLayer);
       return next;
     });
-    // 지방하천: defineLayer 자식 목록이 늦게 오면 그 목록으로 재적용
-    if (tab === "river") pendingEnableStructureChildrenRef.current = true;
+    /** defineLayer 자식이 나중에 오면 그 목록으로도 ON 보강 */
+    pendingEnableStructureChildrenRef.current = tab === "river";
   }, [
     riverName,
     setVisibleLayerNames,
@@ -309,7 +367,38 @@ export function RiverBasicPlanDetailPanel({ tab, riverName, onClose }: Props) {
     planName: string;
     planLen: string;
   } | null>(null);
+  /** 연도 목록 로드 시 초기 선택만 — deps에 넣지 않아 객체 참조 변경으로 재조회되지 않게 함 */
+  const preferredPlanRef = useRef(preferredPlan);
+  preferredPlanRef.current = preferredPlan;
   const [selected, setSelected] = useState<PlanItem | null>(null);
+  /**
+   * 같은 하천이 여러 보고서에 속할 때 목록에서 다른 보고서를 고르면 하천은 그대로라 연도 목록을 다시 안 불러옴
+   * → 이미 불러온 연도 목록에서 고른 보고서로 바로 맞춤
+   */
+  const preferredPlanKey = preferredPlan
+    ? `${preferredPlan.planYear}\0${preferredPlan.planName}\0${preferredPlan.rivpSuffix}\0${preferredPlan.planLen ?? ""}`
+    : "";
+  const [appliedPreferredKey, setAppliedPreferredKey] = useState(preferredPlanKey);
+  if (appliedPreferredKey !== preferredPlanKey) {
+    setAppliedPreferredKey(preferredPlanKey);
+    if (preferredPlan && plans.length > 0) {
+      const hit = findPlanItemFromMapPick(
+        plans,
+        preferredPlan.planYear,
+        preferredPlan.planName,
+        preferredPlan.planLen ?? "",
+        preferredPlan.rivpSuffix,
+      );
+      const same =
+        hit &&
+        selected &&
+        hit.planYear === selected.planYear &&
+        hit.planName === selected.planName &&
+        hit.planLen === selected.planLen &&
+        hit.rivpName === selected.rivpName;
+      if (hit && !same) setSelected(hit);
+    }
+  }
   const [detail, setDetail] = useState<Record<string, unknown> | null>(null);
   const [loadingPlan, setLoadingPlan] = useState(false);
   const [loadingDetail, setLoadingDetail] = useState(false);
@@ -382,19 +471,54 @@ export function RiverBasicPlanDetailPanel({ tab, riverName, onClose }: Props) {
     table: string;
     ogcFid: number;
   } | null>(null);
+
+  const relatedItems = indexBundle?.related ?? [];
+  const jbLayerOn = visibleLayerNames.has(jbLayer);
+
+  /** 제방 레이어 ON + 색인도 상세 — 선택 시 해당만, 미선택 시 교차 제방 전체 펄스 */
+  const jbPulseOgcFids = useMemo(() => {
+    if (!jbLayerOn || !indexViewMode) return [];
+    const jbItems = relatedItems.filter((r) => r.kind === "제방");
+    if (relatedHighlight) {
+      const hit = jbItems.find(
+        (r) =>
+          r.ogcFid === relatedHighlight.ogcFid && r.table === relatedHighlight.table
+      );
+      const fid = Number(hit?.ogcFid);
+      return Number.isFinite(fid) && fid > 0 ? [Math.floor(fid)] : [];
+    }
+    return jbItems.map((r) => r.ogcFid).filter((n) => Number.isFinite(n) && n > 0);
+  }, [jbLayerOn, indexViewMode, relatedHighlight, relatedItems]);
+
+  const relatedHighlightIsJb =
+    relatedHighlight != null &&
+    relatedItems.some(
+      (r) =>
+        r.kind === "제방" &&
+        r.ogcFid === relatedHighlight.ogcFid &&
+        r.table === relatedHighlight.table
+    );
+
   useRiverBasicPlanIndexHighlight(
     relatedHighlight?.table ?? "",
     relatedHighlight?.ogcFid ?? null,
-    Boolean(mapContext?.mapReady) && relatedHighlight != null,
+    Boolean(mapContext?.mapReady) &&
+      relatedHighlight != null &&
+      !(jbLayerOn && relatedHighlightIsJb),
     "riverBasicPlanRelatedHighlight"
   );
+
+  useRiverBasicPlanJbLabels({
+    tab,
+    riverName,
+    active: Boolean(mapContext?.mapReady) && jbLayerOn && Boolean(riverName.trim()),
+    pulseOgcFids: jbPulseOgcFids,
+  });
 
   /** 기본계획(AS) 상세보기 필드 — 하드코딩 */
   const planDetailFields = useMemo(() => getRiverBasicPlanDetailFields(tab), [tab]);
   /** define_field_is_key — 데이터 조회 첨부와 동일 (file_data/river_d_index/{키}/) */
   const [indexTableKeyFieldName, setIndexTableKeyFieldName] = useState<string | null>(null);
-  /** define_table_parents_layer === river_plan_gd_ps 인 자식 define_table_name */
-  const [structureChildLayerNames, setStructureChildLayerNames] = useState<string[]>([]);
   const [indexAttachmentPreview, setIndexAttachmentPreview] = useState<{
     items: ServiceFilePreviewItem[];
     initialIndex: number;
@@ -411,47 +535,121 @@ export function RiverBasicPlanDetailPanel({ tab, riverName, onClose }: Props) {
   const [reportPdfLoading, setReportPdfLoading] = useState(false);
   const reportPdfBusyRef = useRef(false);
 
-  /** 보고서: file_data/{AS}/{river_type}_{river_code}_{plan_year}_{plan_len}/ — pk(ogc_fid) 미사용 */
-  const reportFolderKey = useMemo(
-    () => buildRiverBasicPlanReportFolderKey(detail),
+  /**
+   * 보고서: file_data/{AS}/{plan_year}_{plan_name}_{rivp_name}/
+   * 지방(+소하천 분리 시): …/{river_type}_{river_code}_{river_name}/
+   */
+  const reportPlanFolderKey = useMemo(
+    () => buildRiverBasicPlanReportPlanFolderKey(detail),
     [detail]
   );
+  const reportRiverSubCandidate = useMemo(
+    () => buildRiverBasicPlanReportRiverSubfolderKey(detail),
+    [detail]
+  );
+  /** 소하천: 하천 하위 폴더가 있을 때만 사용. 지방: 후보 그대로 */
+  const [reportRiverSubfolder, setReportRiverSubfolder] = useState<string | null>(null);
+  const [reportSubfolderResolving, setReportSubfolderResolving] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    const planKey = reportPlanFolderKey;
+    const riverSub = reportRiverSubCandidate;
+    if (!planKey) {
+      setReportRiverSubfolder(null);
+      setReportSubfolderResolving(false);
+      return;
+    }
+    if (tab === "river") {
+      setReportRiverSubfolder(riverSub);
+      setReportSubfolderResolving(false);
+      return;
+    }
+    if (!riverSub) {
+      setReportRiverSubfolder(null);
+      setReportSubfolderResolving(false);
+      return;
+    }
+    setReportSubfolderResolving(true);
+    const qs = new URLSearchParams({
+      serEng: SER_FILE_ENG.riverBasicPlan,
+      layer: planAsLayer,
+      key: planKey,
+      folders: "1",
+    });
+    appFetch(`/api/service-files?${qs.toString()}`, { credentials: "include" })
+      .then(async (r) => {
+        if (!r.ok) return [] as string[];
+        const data = (await r.json()) as { folders?: string[] };
+        return Array.isArray(data.folders) ? data.folders : [];
+      })
+      .then((folders) => {
+        if (cancelled) return;
+        setReportRiverSubfolder(folders.includes(riverSub) ? riverSub : null);
+      })
+      .catch(() => {
+        if (!cancelled) setReportRiverSubfolder(null);
+      })
+      .finally(() => {
+        if (!cancelled) setReportSubfolderResolving(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [tab, reportPlanFolderKey, reportRiverSubCandidate, planAsLayer]);
+
   const reportFolderRel = useMemo(
     () =>
-      reportFolderKey != null
-        ? riverBasicPlanReportRelativeDir(planAsLayer, reportFolderKey)
+      reportPlanFolderKey != null
+        ? riverBasicPlanReportRelativeDir(
+            planAsLayer,
+            reportPlanFolderKey,
+            reportRiverSubfolder
+          )
         : null,
-    [planAsLayer, reportFolderKey]
+    [planAsLayer, reportPlanFolderKey, reportRiverSubfolder]
   );
 
   const reportFileQuery = useServiceFileData({
     serEng: SER_FILE_ENG.riverBasicPlan,
-    enabled: selected != null && reportFolderKey != null && !loadingDetail,
+    enabled:
+      selected != null &&
+      reportPlanFolderKey != null &&
+      !loadingDetail &&
+      !reportSubfolderResolving,
     layerSegment: planAsLayer,
-    keyValue: reportFolderKey,
+    keyValue: reportPlanFolderKey,
+    subfolder: reportRiverSubfolder,
     includeMeta: false,
   });
 
   const reportPdfItems = useMemo((): ServiceFilePdfPreviewItem[] => {
-    if (reportFolderKey == null) return [];
+    if (reportPlanFolderKey == null) return [];
     return reportFileQuery.files
       .filter((f) => isPdfServiceFileName(f.name))
       .map((f) => ({
         url: serviceFileDataDownloadUrl(
           SER_FILE_ENG.riverBasicPlan,
           planAsLayer,
-          reportFolderKey,
-          f.name
+          reportPlanFolderKey,
+          f.name,
+          { subfolder: reportRiverSubfolder }
         ),
         fileName: f.name,
       }));
-  }, [reportFileQuery.files, planAsLayer, reportFolderKey]);
+  }, [
+    reportFileQuery.files,
+    planAsLayer,
+    reportPlanFolderKey,
+    reportRiverSubfolder,
+  ]);
 
   const hasReportPdf = reportPdfItems.length > 0;
   const reportButtonDisabled =
     !selected ||
     loadingDetail ||
-    reportFolderKey == null ||
+    reportPlanFolderKey == null ||
+    reportSubfolderResolving ||
     reportFileQuery.loading ||
     !hasReportPdf ||
     reportPdfLoading;
@@ -534,18 +732,30 @@ export function RiverBasicPlanDetailPanel({ tab, riverName, onClose }: Props) {
     });
   }, [structureChildLayerNames, setVisibleLayerNames, structureParent]);
 
-  /** 자식 목록이 늦게 도착했을 때, 켜기 대기 중이면 분할 자식만 추가·부모 제거 */
+  /**
+   * 구조물 분할 자식 ON — 하천 선택 후 자식 목록이 오면 반드시 켠다.
+   * 부모만 켜져 있던 과도 상태도 자식으로 교체해 칩·WMS를 맞춤.
+   */
   useEffect(() => {
-    if (structureChildLayerNames.length === 0 || !setVisibleLayerNames) return;
-    if (!pendingEnableStructureChildrenRef.current) return;
+    if (!riverName.trim() || structureChildLayerNames.length === 0 || !setVisibleLayerNames) return;
     setVisibleLayerNames((prev) => {
+      let changed = false;
       const next = new Set(prev);
-      next.delete(structureParent);
-      for (const c of structureChildLayerNames) next.add(c);
+      if (next.has(structureParent)) {
+        next.delete(structureParent);
+        changed = true;
+      }
+      for (const c of structureChildLayerNames) {
+        const hit = [...next].some((n) => n.toLowerCase() === c.toLowerCase());
+        if (!hit) {
+          next.add(c);
+          changed = true;
+        }
+      }
       pendingEnableStructureChildrenRef.current = false;
-      return next;
+      return changed ? next : prev;
     });
-  }, [structureChildLayerNames, setVisibleLayerNames, structureParent]);
+  }, [riverName, structureChildLayerNames, setVisibleLayerNames, structureParent]);
 
   useEffect(() => {
     let alive = true;
@@ -565,7 +775,28 @@ export function RiverBasicPlanDetailPanel({ tab, riverName, onClose }: Props) {
           params: { tab, riverName },
         });
         const data = res?.data ?? res;
-        const nextPlans: PlanItem[] = Array.isArray(data?.plans) ? data.plans : [];
+        const nextPlans: PlanItem[] = (Array.isArray(data?.plans) ? data.plans : []).map(
+          (raw: {
+            planYear?: string;
+            planName?: string;
+            planLen?: string;
+            rivpName?: string;
+            rivpSuffix?: string;
+          }) => {
+            const rivpName = String(raw.rivpName ?? "").trim();
+            const rivpSuffix =
+              raw.rivpSuffix !== undefined
+                ? String(raw.rivpSuffix ?? "").trim()
+                : extractRiverBasicPlanRivpFolderSuffix(rivpName);
+            return {
+              planYear: String(raw.planYear ?? "").trim(),
+              planName: String(raw.planName ?? "").trim(),
+              planLen: String(raw.planLen ?? "").trim(),
+              rivpName,
+              rivpSuffix,
+            };
+          },
+        );
         if (!alive) return;
         setPlans(nextPlans);
         let sel = nextPlans[0] ?? null;
@@ -579,6 +810,18 @@ export function RiverBasicPlanDetailPanel({ tab, riverName, onClose }: Props) {
           );
           if (hit) sel = hit;
           pendingPlanFromMapRef.current = null;
+        } else {
+          const pref = preferredPlanRef.current;
+          if (pref && (pref.planYear || pref.planName || pref.rivpSuffix)) {
+            const hit = findPlanItemFromMapPick(
+              nextPlans,
+              pref.planYear,
+              pref.planName,
+              pref.planLen ?? "",
+              pref.rivpSuffix,
+            );
+            if (hit) sel = hit;
+          }
         }
         setSelected(sel);
       } catch (e: unknown) {
@@ -616,6 +859,8 @@ export function RiverBasicPlanDetailPanel({ tab, riverName, onClose }: Props) {
             planYear: selected.planYear,
             planName: selected.planName,
             planLen: selected.planLen,
+            rivpName: selected.rivpName,
+            rivpSuffix: selected.rivpSuffix,
           },
         });
         if (!alive) return;
@@ -896,14 +1141,42 @@ export function RiverBasicPlanDetailPanel({ tab, riverName, onClose }: Props) {
       : "portrait"
     : undefined;
 
+  /** 서버에서 판정·저장한 색인도 방향 — { 색인도 첨부 키: 방향 } */
+  const [indexRotationsState, setIndexRotationsState] = useState<{
+    tab: RiverType;
+    map: Record<string, number>;
+  } | null>(null);
+  const indexRotations = indexRotationsState?.tab === tab ? indexRotationsState.map : null;
+  useEffect(() => {
+    if (!indexViewMode) return;
+    let cancelled = false;
+    void call("", "POST", {
+      service: "riverIndexOrientationService",
+      action: "getRiverIndexOrientationRotations",
+      params: { tab },
+    })
+      .then((res) => {
+        if (cancelled) return;
+        const data = res?.data ?? res;
+        setIndexRotationsState({ tab, map: (data?.rotations as Record<string, number>) ?? {} });
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [tab, indexViewMode]);
+  const indexFixedRotation =
+    indexRowKeyForFiles != null ? (indexRotations?.[String(indexRowKeyForFiles)] ?? null) : null;
+
   const indexSheetGuide: IndexSheetGuide | undefined = useMemo(() => {
+    if (indexFixedRotation != null) return { fixedRotation: indexFixedRotation };
     const guide = indexBundle?.index?.guide3857;
     if (guide == null || guide.length < 2) return undefined;
     return {
       ring3857: indexBundle?.index?.ring3857,
       guide3857: guide,
     };
-  }, [indexBundle?.index?.guide3857, indexBundle?.index?.ring3857]);
+  }, [indexBundle?.index?.guide3857, indexBundle?.index?.ring3857, indexFixedRotation]);
 
   const indexFileQuery = useServiceFileData({
     serEng: SER_FILE_ENG.riverBasicPlan,
@@ -924,21 +1197,17 @@ export function RiverBasicPlanDetailPanel({ tab, riverName, onClose }: Props) {
     return { kind: "other" as const, file: files[0] };
   }, [indexFileQuery.files]);
 
-  /** 데이터 조회 첨부 탭과 동일: 이미지·PDF만 전체화면 갤러리에 포함 */
+  /** 데이터 조회 첨부 탭과 동일: 이미지·PDF·엑셀 전체화면 갤러리 */
   const indexAttachmentGalleryItems = useMemo((): ServiceFilePreviewItem[] => {
     if (indexRowKeyForFiles == null) return [];
-    return indexFileQuery.files
-      .filter((f) => isImageServiceFileName(f.name) || isPdfServiceFileName(f.name))
-      .map((f) => ({
-        url: serviceFileDataDownloadUrl(
-          SER_FILE_ENG.riverBasicPlan,
-          indexLayer,
-          indexRowKeyForFiles,
-          f.name
-        ),
-        fileName: f.name,
-        kind: isPdfServiceFileName(f.name) ? ("pdf" as const) : ("image" as const),
-      }));
+    return buildServiceFilePreviewGalleryItems(indexFileQuery.files, (fileName) =>
+      serviceFileDataDownloadUrl(
+        SER_FILE_ENG.riverBasicPlan,
+        indexLayer,
+        indexRowKeyForFiles,
+        fileName
+      )
+    );
   }, [indexFileQuery.files, indexRowKeyForFiles, indexLayer]);
 
   const openIndexFullScreenPreview = useCallback(
@@ -979,15 +1248,12 @@ export function RiverBasicPlanDetailPanel({ tab, riverName, onClose }: Props) {
       }
       const data = (await res.json()) as { files?: { name: string }[] };
       const files = Array.isArray(data.files) ? data.files : [];
-      const items: ServiceFilePreviewItem[] = files
-        .filter((f) => isImageServiceFileName(f.name) || isPdfServiceFileName(f.name))
-        .map((f) => ({
-          url: serviceFileDataDownloadUrl(SER_FILE_ENG.riverBasicPlan, layer, key, f.name),
-          fileName: f.name,
-          kind: isPdfServiceFileName(f.name) ? ("pdf" as const) : ("image" as const),
-        }));
+      const items: ServiceFilePreviewItem[] = buildServiceFilePreviewGalleryItems(
+        files,
+        (fileName) => serviceFileDataDownloadUrl(SER_FILE_ENG.riverBasicPlan, layer, key, fileName)
+      );
       if (items.length === 0) {
-        window.alert("도면으로 볼 수 있는 첨부파일(이미지·PDF)이 없습니다.");
+        window.alert("도면으로 볼 수 있는 첨부파일(이미지·PDF·엑셀)이 없습니다.");
         return;
       }
       setRelatedDrawingPreview({ items, initialIndex: 0 });
@@ -1000,7 +1266,7 @@ export function RiverBasicPlanDetailPanel({ tab, riverName, onClose }: Props) {
 
   const openReportPdfViewer = useCallback(async () => {
     if (reportPdfBusyRef.current || reportButtonDisabled) return;
-    if (!selected || reportFolderKey == null || reportPdfItems.length === 0) return;
+    if (!selected || reportPlanFolderKey == null || reportPdfItems.length === 0) return;
     reportPdfBusyRef.current = true;
     setReportPdfLoading(true);
     try {
@@ -1011,7 +1277,7 @@ export function RiverBasicPlanDetailPanel({ tab, riverName, onClose }: Props) {
       reportPdfBusyRef.current = false;
       setReportPdfLoading(false);
     }
-  }, [selected, reportFolderKey, reportPdfItems, reportButtonDisabled]);
+  }, [selected, reportPlanFolderKey, reportPdfItems, reportButtonDisabled]);
 
   const detailEntries = useMemo(() => {
     const row = detail ?? {};
@@ -1023,13 +1289,25 @@ export function RiverBasicPlanDetailPanel({ tab, riverName, onClose }: Props) {
   }, [detail, planDetailFields]);
 
   const actionButtons: { label: string; icon: React.ComponentType<{ className?: string }> }[] = [
-    { label: "보고서", icon: FileText },
     { label: "하천구역", icon: Waves },
     { label: "색인도", icon: Map },
     { label: "구조물도", icon: Construction },
     { label: "종단면도", icon: FlipHorizontal },
     { label: "횡단면도", icon: FlipVertical },
+    { label: "사업계획", icon: ClipboardList },
   ];
+
+  /** 사업계획 — 포함 레이어(현재 제방)만 토글. 구조물도와 동일 패턴, 다른 레이어는 건드리지 않음 */
+  const toggleBizPlanLayerGroup = useCallback(() => {
+    if (!setVisibleLayerNames) return;
+    if (!existingMapLayerSet.has(jbLayer.toLowerCase())) return;
+    setVisibleLayerNames((prev) => {
+      const next = new Set(prev);
+      if (next.has(jbLayer)) next.delete(jbLayer);
+      else next.add(jbLayer);
+      return next;
+    });
+  }, [setVisibleLayerNames, existingMapLayerSet, jbLayer]);
 
   const indexSectionHeader = (
     <div className="flex items-center justify-between gap-2 mb-2">
@@ -1060,33 +1338,26 @@ export function RiverBasicPlanDetailPanel({ tab, riverName, onClose }: Props) {
     if (!setVisibleLayerNames) return;
     setVisibleLayerNames((prev) => {
       const next = new Set(prev);
-      const showJb = (on: boolean) => {
-        if (on && existingMapLayerSet.has(jbLayer.toLowerCase())) next.add(jbLayer);
-        else next.delete(jbLayer);
-      };
       if (structureChildLayerNames.length === 0) {
-        const on = !(next.has(structureParent) || next.has(jbLayer));
+        const on = !next.has(structureParent);
         if (on) next.add(structureParent);
         else next.delete(structureParent);
-        showJb(on);
         pendingEnableStructureChildrenRef.current = false;
         return next;
       }
-      const anyOn = structureChildLayerNames.some((n) => next.has(n)) || next.has(jbLayer);
+      const anyOn = structureChildLayerNames.some((n) => next.has(n));
       if (anyOn) {
         pendingEnableStructureChildrenRef.current = false;
         for (const n of structureChildLayerNames) next.delete(n);
         next.delete(structureParent);
-        showJb(false);
         return next;
       }
       next.delete(structureParent);
       pendingEnableStructureChildrenRef.current = false;
       for (const n of structureChildLayerNames) next.add(n);
-      showJb(true);
       return next;
     });
-  }, [setVisibleLayerNames, structureChildLayerNames, structureParent, jbLayer, existingMapLayerSet]);
+  }, [setVisibleLayerNames, structureChildLayerNames, structureParent]);
 
   /** 서버가 준 물리 테이블명·kind로 WMS define_table_name(종단/횡단/구조물 분할) 켜기 — 색인도 상세목록과 동일 목적 */
   const ensureRelatedItemLayerVisible = useCallback(
@@ -1146,24 +1417,64 @@ export function RiverBasicPlanDetailPanel({ tab, riverName, onClose }: Props) {
   return (
     <>
     <div className="flex flex-col min-h-0 h-full bg-background border-l border-border">
-      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border px-4 py-2.5 bg-background">
+      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border px-3 py-2 bg-background">
         <div className="min-w-0 flex-1">
-          <p className="text-sm font-semibold text-foreground">{riverName || "기본계획 상세"}</p>
-          <p className="text-xs text-muted-foreground mt-0.5">연도별 기본계획 및 속성정보</p>
+          <p className="text-sm font-semibold text-foreground truncate">
+            {riverName || "기본계획 상세"}
+          </p>
+          {hidePlanTable && selected ? (
+            <p
+              className="mt-0.5 truncate text-[11px] text-muted-foreground"
+              title={`${selected.planYear} ${selected.rivpSuffix ? `${selected.planName}_${selected.rivpSuffix}` : selected.planName}`}
+            >
+              {selected.planYear} {selected.rivpSuffix ? `${selected.planName}_${selected.rivpSuffix}` : selected.planName}
+            </p>
+          ) : (
+            <p className="text-[11px] text-muted-foreground mt-0.5">연도별 기본계획 및 속성정보</p>
+          )}
         </div>
-        {onClose && (
+        <div className="flex shrink-0 items-center gap-1">
           <button
             type="button"
-            onClick={onClose}
-            className="shrink-0 rounded p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-            title="닫기"
-            aria-label="닫기"
+            title={
+              reportFileQuery.loading || reportSubfolderResolving
+                ? "보고서 확인 중"
+                : hasReportPdf
+                  ? "선택 기본계획 보고서 PDF 보기"
+                  : "보고서 PDF 없음"
+            }
+            disabled={reportButtonDisabled}
+            onClick={() => void openReportPdfViewer()}
+            className={cn(
+              "inline-flex h-7 items-center gap-1 rounded border px-2 text-[11px] font-medium transition-colors",
+              "border-amber-300/80 bg-amber-50 text-amber-900 hover:bg-amber-100 hover:text-amber-950",
+              "dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-200 dark:hover:bg-amber-950/60 dark:hover:text-amber-100",
+              reportButtonDisabled && "opacity-50 cursor-not-allowed",
+              reportPdfPreview != null && "ring-1 ring-inset ring-amber-400/50"
+            )}
           >
-            <X className="h-4 w-4" />
+            {reportFileQuery.loading || reportPdfLoading || reportSubfolderResolving ? (
+              <Loader2 className="h-3 w-3 shrink-0 animate-spin" aria-hidden />
+            ) : (
+              <FileText className="h-3 w-3 shrink-0" aria-hidden />
+            )}
+            보고서
           </button>
-        )}
+          {onClose && (
+            <button
+              type="button"
+              onClick={onClose}
+              className="shrink-0 rounded p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+              title="닫기"
+              aria-label="닫기"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          )}
+        </div>
       </div>
 
+      {hidePlanTable ? null : (
       <div className="shrink-0 border-b border-border px-3 py-2 bg-muted/50">
         {loadingPlan ? (
           <p className="text-xs text-muted-foreground">연도 목록 불러오는 중...</p>
@@ -1171,46 +1482,62 @@ export function RiverBasicPlanDetailPanel({ tab, riverName, onClose }: Props) {
           <p className="text-xs text-muted-foreground">연도별 기본계획이 없습니다.</p>
         ) : (
           <div className="overflow-hidden rounded border border-border bg-background">
-            <table className="w-full text-xs">
-              <thead className="bg-muted text-muted-foreground">
-                <tr>
-                  <th className="px-2.5 py-1.5 text-left font-medium w-[90px]">연도</th>
-                  <th className="px-2.5 py-1.5 text-left font-medium">기본계획</th>
-                  <th className="px-2.5 py-1.5 text-left font-medium w-[110px]">연장</th>
-                </tr>
-              </thead>
-              <tbody>
-                {plans.map((p, idx) => {
-                  const active =
-                    selected?.planYear === p.planYear &&
-                    selected?.planName === p.planName &&
-                    selected?.planLen === p.planLen;
-                  return (
-                    <tr
-                      key={`${p.planYear}|${p.planName}|${p.planLen}|${idx}`}
-                      onClick={() => {
-                        exitIndexAttributeView();
-                        setSelected(p);
-                      }}
-                      className={
-                        active
-                          ? "bg-primary/10 text-primary cursor-pointer"
-                          : "hover:bg-muted/50 text-foreground/90 cursor-pointer"
-                      }
-                    >
-                      <td className="px-2.5 py-1.5 border-t border-border">{p.planYear || "-"}</td>
-                      <td className="px-2.5 py-1.5 border-t border-border">{p.planName || "-"}</td>
-                      <td className="px-2.5 py-1.5 border-t border-border">
-                        {p.planLen ? `${formatDetailScalarValue(p.planLen)} km` : "-"}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+            {/* 헤더 1행 + 본문 최대 3행. 초과 시 표 안 스크롤 */}
+            <div className="max-h-[calc(1.75rem*4)] overflow-y-auto">
+              <table className="w-full text-xs table-fixed">
+                <thead className="sticky top-0 z-[1] bg-muted text-muted-foreground">
+                  <tr>
+                    <th className="h-7 px-2 py-1.5 text-left font-medium w-[64px]">연도</th>
+                    <th className="h-7 px-2 py-1.5 text-left font-medium">기본계획</th>
+                    <th className="h-7 px-2 py-1.5 text-left font-medium w-[72px]">연장</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {plans.map((p, idx) => {
+                    const active =
+                      selected?.planYear === p.planYear &&
+                      selected?.planName === p.planName &&
+                      selected?.planLen === p.planLen &&
+                      selected?.rivpName === p.rivpName;
+                    const planLabel = p.rivpSuffix
+                      ? `${p.planName || "-"}_${p.rivpSuffix}`
+                      : p.planName || "-";
+                    return (
+                      <tr
+                        key={`${p.planYear}|${p.planName}|${p.planLen}|${p.rivpName}|${idx}`}
+                        onClick={() => {
+                          exitIndexAttributeView();
+                          setSelected(p);
+                          onSelectedPlanChange?.({
+                            planYear: p.planYear,
+                            planName: p.planName,
+                            rivpSuffix: p.rivpSuffix,
+                            planLen: p.planLen,
+                          });
+                        }}
+                        className={
+                          active
+                            ? "bg-primary/10 text-primary cursor-pointer"
+                            : "hover:bg-muted/50 text-foreground/90 cursor-pointer"
+                        }
+                      >
+                        <td className="px-2 py-1.5 border-t border-border h-7">{p.planYear || "-"}</td>
+                        <td className="px-2 py-1.5 border-t border-border h-7 truncate" title={planLabel}>
+                          {planLabel}
+                        </td>
+                        <td className="px-2 py-1.5 border-t border-border h-7 whitespace-nowrap">
+                          {p.planLen ? `${formatDetailScalarValue(p.planLen)} km` : "-"}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
       </div>
+      )}
 
       <div className="shrink-0 border-b border-border px-3 py-2 bg-background">
         <div className="grid grid-cols-6 gap-1">
@@ -1218,67 +1545,65 @@ export function RiverBasicPlanDetailPanel({ tab, riverName, onClose }: Props) {
             if (label === "하천구역") {
               return <RiverPlanAreaModeButton key={label} mode={areaMode} onChange={applyAreaMode} />;
             }
-            const isReport = label === "보고서";
+            if (label === "사업계획") {
+              return (
+                <button
+                  key={label}
+                  type="button"
+                  title="사업계획 — 제방 레이어 켜기/끄기(다른 레이어는 유지)"
+                  onClick={toggleBizPlanLayerGroup}
+                  disabled={!existingMapLayerSet.has(jbLayer.toLowerCase())}
+                  className={cn(
+                    "h-7 w-full text-[11px] rounded border min-w-0 overflow-hidden px-0.5 whitespace-nowrap inline-flex items-center justify-center gap-0.5",
+                    !existingMapLayerSet.has(jbLayer.toLowerCase())
+                      ? "border-border bg-muted/50 text-muted-foreground opacity-50 cursor-not-allowed"
+                      : jbLayerOn
+                        ? "border-primary/45 bg-primary/10 text-foreground hover:bg-primary/15"
+                        : "border-border bg-muted/50 text-foreground/90 hover:bg-muted"
+                  )}
+                >
+                  <Icon className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                  {label}
+                </button>
+              );
+            }
             const layerName = layerByLabel[label];
             const isStructureGroup = label === "구조물도";
+            const structureVisible =
+              structureWmsLayerNames.some((n) => visibleLayerNames.has(n)) ||
+              riverBasicPlanGdWmsDefineTables(tab).some((n) => visibleLayerNames.has(n)) ||
+              Boolean(layerName && visibleLayerNames.has(layerName));
             const layerOn = isStructureGroup
-              ? visibleLayerNames.has(jbLayer) ||
-                (structureWmsLayerNames.length > 0
-                  ? structureWmsLayerNames.some((n) => visibleLayerNames.has(n))
-                  : Boolean(layerName && visibleLayerNames.has(layerName)))
+              ? structureVisible
               : layerName
                 ? visibleLayerNames.has(layerName)
                 : false;
-            const reportActive = isReport && reportPdfPreview != null;
-            const reportBusy = isReport && (reportFileQuery.loading || reportPdfLoading);
             return (
               <button
                 key={label}
                 type="button"
                 title={
-                  isReport
-                    ? reportFileQuery.loading
-                      ? "보고서 확인 중"
-                      : !selected || loadingDetail || reportFolderKey == null
-                        ? "기본계획을 선택하세요"
-                        : hasReportPdf
-                          ? "보고서 PDF 보기"
-                          : "보고서 PDF 없음"
-                    : layerName
-                      ? isStructureGroup
-                        ? "구조물도 분할 레이어만 한꺼번에 켜기/끄기(부모 WMS 제외)"
-                        : "데이터 조회 레이어와 동일하게 켜기/끄기"
-                      : undefined
+                  layerName
+                    ? isStructureGroup
+                      ? "구조물도 분할 레이어만 한꺼번에 켜기/끄기(부모 WMS 제외)"
+                      : "데이터 조회 레이어와 동일하게 켜기/끄기"
+                    : undefined
                 }
                 onClick={() => {
-                  if (isReport) {
-                    void openReportPdfViewer();
-                    return;
-                  }
                   if (isStructureGroup) toggleStructureLayerGroup();
                   else if (layerName) toggleServiceLayer(layerName);
                 }}
-                disabled={isReport ? reportButtonDisabled : !layerName}
+                disabled={!layerName}
                 className={cn(
                   "h-7 w-full text-[11px] rounded border min-w-0 overflow-hidden px-0.5 whitespace-nowrap inline-flex items-center justify-center gap-0.5",
-                  isReport
-                    ? reportButtonDisabled
-                      ? "border-border bg-muted/50 text-muted-foreground opacity-50 cursor-not-allowed"
-                      : reportActive
-                        ? "border-primary/45 bg-primary/10 text-foreground hover:bg-primary/15"
-                        : "border-border bg-muted/50 text-foreground/90 hover:bg-muted"
-                    : layerName
-                      ? layerOn
-                        ? "border-primary/45 bg-primary/10 text-foreground hover:bg-primary/15"
-                        : "border-border bg-muted/50 text-foreground/90 hover:bg-muted"
-                      : "border-border bg-muted/50 text-foreground/90 hover:bg-muted opacity-80",
+                  layerName
+                    ? layerOn
+                      ? "border-primary/45 bg-primary/10 text-foreground hover:bg-primary/15"
+                      : "border-border bg-muted/50 text-foreground/90 hover:bg-muted"
+                    : "border-border bg-muted/50 text-foreground/90 hover:bg-muted opacity-80",
                 )}
               >
-                {reportBusy ? (
-                  <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" aria-hidden />
-                ) : (
-                  <Icon className="h-3.5 w-3.5 shrink-0" />
-                )}
+                <Icon className="h-3.5 w-3.5 shrink-0" />
                 {label}
               </button>
             );
@@ -1411,14 +1736,15 @@ export function RiverBasicPlanDetailPanel({ tab, riverName, onClose }: Props) {
                     )}
                   </div>
                 </div>
-
                 <div>
                   <p className="text-[11px] font-medium text-muted-foreground mb-2">상세목록</p>
-                  {indexBundle.related.length === 0 ? (
-                    <p className="text-xs text-muted-foreground py-2">연결된 구조물·제방·종단·횡단 항목이 없습니다.</p>
+                  {relatedItems.length === 0 ? (
+                    <p className="text-xs text-muted-foreground py-2">
+                      연결된 구조물·제방·종단·횡단 항목이 없습니다.
+                    </p>
                   ) : (
                     <ul className="rounded border border-border divide-y divide-border bg-background">
-                      {indexBundle.related.map((r) => {
+                      {relatedItems.map((r) => {
                         const rowKey = `${r.fileLayer}\0${r.fileKey}`;
                         const drawingBusy = relatedDrawingLoadingKey === rowKey;
                         const relatedSelected =
@@ -1439,9 +1765,20 @@ export function RiverBasicPlanDetailPanel({ tab, riverName, onClose }: Props) {
                                 title={r.label}
                                 onClick={() => {
                                   closeRiverBasicPlanDrawingOverlays();
-                                  ensureRelatedItemLayerVisible(r);
                                   const table = String(r.table ?? "").trim();
                                   const fid = Number(r.ogcFid);
+                                  const sameSelected =
+                                    relatedHighlight != null &&
+                                    Number.isFinite(fid) &&
+                                    fid > 0 &&
+                                    relatedHighlight.ogcFid === Math.floor(fid) &&
+                                    relatedHighlight.table === table;
+                                  /** 같은 행 재클릭 시 선택·펄스 해제 */
+                                  if (sameSelected) {
+                                    setRelatedHighlight(null);
+                                    return;
+                                  }
+                                  ensureRelatedItemLayerVisible(r);
                                   if (table && Number.isFinite(fid) && fid > 0) {
                                     setRelatedHighlight({ table, ogcFid: Math.floor(fid) });
                                   } else {

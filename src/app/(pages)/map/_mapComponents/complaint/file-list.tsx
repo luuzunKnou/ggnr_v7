@@ -4,6 +4,7 @@ import { useMemo, useRef, useState } from 'react';
 import { Button } from '@/app/shadcnComponents/ui/button';
 import { SER_FILE_ENG } from '@/lib/serviceFileDataSerEng';
 import {
+  isExcelServiceFileName,
   isImageServiceFileName,
   isPdfServiceFileName,
   requestServiceFileDataDelete,
@@ -16,7 +17,11 @@ import {
   ServiceFileImagePreview,
   type ServiceFilePreviewItem,
 } from '@/app/(pages)/map/_mapComponents/standard/ServiceFileImagePreview';
-import { Download, File, FileImage, FileText, Plus, Trash2 } from 'lucide-react';
+import {
+  buildServiceFilePreviewGalleryItems,
+  isServiceFilePreviewableName,
+} from '@/app/(pages)/map/_mapComponents/standard/serviceFilePreviewItems';
+import { Download, File, FileImage, FileSpreadsheet, FileText, Plus, Trash2 } from 'lucide-react';
 
 const DEFAULT_SER_ENG = SER_FILE_ENG.complaint;
 const DEFAULT_LAYER = 'comp';
@@ -33,6 +38,9 @@ function getFileIcon(name: string) {
   }
   if (isPdfServiceFileName(name)) {
     return <FileText className="h-5 w-5 text-red-500/80" />;
+  }
+  if (isExcelServiceFileName(name)) {
+    return <FileSpreadsheet className="h-5 w-5 text-emerald-500/80" />;
   }
   return <File className="h-5 w-5 text-muted-foreground/80" />;
 }
@@ -71,13 +79,9 @@ export function FileList({
 
   const previewGalleryItems = useMemo((): ServiceFilePreviewItem[] => {
     if (!enabled) return [];
-    return query.files
-      .filter((f) => isImageServiceFileName(f.name) || isPdfServiceFileName(f.name))
-      .map((f) => ({
-        url: serviceFileDataDownloadUrl(serEng, layer, compKey, f.name),
-        fileName: f.name,
-        kind: isPdfServiceFileName(f.name) ? ('pdf' as const) : ('image' as const),
-      }));
+    return buildServiceFilePreviewGalleryItems(query.files, (fileName) =>
+      serviceFileDataDownloadUrl(serEng, layer, compKey, fileName)
+    );
   }, [compKey, enabled, layer, query.files, serEng]);
 
   const onPickFile = async (file: File | undefined) => {
@@ -121,14 +125,13 @@ export function FileList({
             ) : (
               query.files.map((f) => {
                 const url = serviceFileDataDownloadUrl(serEng, layer, compKey, f.name);
-                const isImg = isImageServiceFileName(f.name);
-                const isPdf = isPdfServiceFileName(f.name);
+                const canPreview = isServiceFilePreviewableName(f.name);
                 const modified =
                   f.modified != null && String(f.modified).trim()
                     ? String(f.modified).slice(0, 19).replace('T', ' ')
                     : '-';
                 const activateRow = () => {
-                  if (isImg || isPdf) {
+                  if (canPreview) {
                     const idx = previewGalleryItems.findIndex((i) => i.fileName === f.name);
                     setAttachmentImagePreview({
                       items: previewGalleryItems,
@@ -144,7 +147,7 @@ export function FileList({
                     tabIndex={0}
                     role="group"
                     aria-label={
-                      isImg || isPdf ? `${f.name} 크게 보기` : `${f.name} 다운로드`
+                      canPreview ? `${f.name} 크게 보기` : `${f.name} 다운로드`
                     }
                     className="flex cursor-pointer items-center gap-3 rounded-lg border border-border/80 bg-card p-3 hover:bg-muted/30 transition-colors group focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
                     onClick={activateRow}

@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="UTF-8"?><sld:StyledLayerDescriptor xmlns="http://www.opengis.net/sld" xmlns:sld="http://www.opengis.net/sld" xmlns:gml="http://www.opengis.net/gml" xmlns:ogc="http://www.opengis.net/ogc" version="1.0.0">
+<?xml version="1.0" encoding="UTF-8"?><sld:StyledLayerDescriptor xmlns:sld="http://www.opengis.net/sld" xmlns="http://www.opengis.net/sld" xmlns:gml="http://www.opengis.net/gml" xmlns:ogc="http://www.opengis.net/ogc" version="1.0.0">
   <sld:NamedLayer>
     <sld:Name>Default Styler</sld:Name>
     <sld:UserStyle>
@@ -37,6 +37,12 @@
                     <ogc:Literal>wtl_wtssa_as_stroke</ogc:Literal>
                     <ogc:Literal>fcc400</ogc:Literal>
                   </ogc:Function>
+                </ogc:Function>
+              </sld:CssParameter>
+              <sld:CssParameter name="stroke-opacity">
+                <ogc:Function name="env">
+                  <ogc:Literal>wtl_wtssa_as_stroke_opacity</ogc:Literal>
+                  <ogc:Literal>1</ogc:Literal>
                 </ogc:Function>
               </sld:CssParameter>
               <sld:CssParameter name="stroke-width">
@@ -126,6 +132,10 @@
                 </ogc:Function>
               </sld:CssParameter>
             </sld:Fill>
+            <sld:VendorOption name="maxDisplacement">0</sld:VendorOption>
+            <sld:VendorOption name="autoWrap">500</sld:VendorOption>
+            <sld:VendorOption name="spaceAround">2</sld:VendorOption>
+            <sld:VendorOption name="group">yes</sld:VendorOption>
           </sld:TextSymbolizer>
         </sld:Rule>
       </sld:FeatureTypeStyle>

@@ -25,11 +25,14 @@ import * as usrService from './usrService';
 import * as userLogService from './userLogService';
 import * as loginLogService from './loginLogService';
 import * as riverBasicPlanService from './riverBasicPlanService';
+import * as riverIndexOrientationService from './riverIndexOrientationService';
+import * as riverIllegalOccupationService from './riverIllegalOccupationService';
 import * as privateLandAnalysisService from './privateLandAnalysisService';
 import * as roadLedgerService from './roadLedgerService';
 import * as roadVideoTrackService from './roadVideoTrackService';
 import * as roadNetworkService from './roadNetworkService';
 import * as wtlNetworkService from './wtlNetworkService';
+import * as wtlFacilityService from './wtlFacilityService';
 import * as swlNetworkService from './swlNetworkService';
 import * as wtlOutageService from './wtlOutageService';
 import * as wtlLeakService from './wtlLeakService';
@@ -119,11 +122,14 @@ export {
   userLogService,
   loginLogService,
   riverBasicPlanService,
+  riverIndexOrientationService,
+  riverIllegalOccupationService,
   privateLandAnalysisService,
   roadLedgerService,
   roadVideoTrackService,
   roadNetworkService,
   wtlNetworkService,
+  wtlFacilityService,
   swlNetworkService,
   wtlOutageService,
   wtlLeakService,

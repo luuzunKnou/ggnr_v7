@@ -12,7 +12,24 @@
           <sld:Name>Name</sld:Name>
           <sld:Title>Title</sld:Title>
           <sld:Abstract>Abstract</sld:Abstract>
-          <sld:MaxScaleDenominator>3000</sld:MaxScaleDenominator>
+          <ogc:Filter>
+            <ogc:Or>
+              <ogc:PropertyIsEqualTo>
+                <ogc:Function name="env">
+                  <ogc:Literal>ignore_scale</ogc:Literal>
+                  <ogc:Literal>0</ogc:Literal>
+                </ogc:Function>
+                <ogc:Literal>1</ogc:Literal>
+              </ogc:PropertyIsEqualTo>
+              <ogc:PropertyIsLessThan>
+                <ogc:Function name="env">
+                  <ogc:Literal>wms_scale_denominator</ogc:Literal>
+                  <ogc:Literal>999999999</ogc:Literal>
+                </ogc:Function>
+                <ogc:Literal>3000</ogc:Literal>
+              </ogc:PropertyIsLessThan>
+            </ogc:Or>
+          </ogc:Filter>
           <sld:PointSymbolizer>
             <sld:Graphic>
               <sld:Mark>

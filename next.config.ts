@@ -1,6 +1,5 @@
 import type { NextConfig } from "next";
 import path from "path";
-import CopyPlugin from "copy-webpack-plugin";
 import webpack from "webpack";
 import { getProjectEnvVars } from "./scripts/load-project-env";
 import { resolveGeoServerInternalUrl } from "./scripts/resolve-geoserver-url";
@@ -27,6 +26,15 @@ const HEAVY_TRACE_DIRS = [
   "python/**/__pycache__/**",
   "geoserver_modules/geoserver/**",
   "geoserver_modules/java/**",
+  "geoserver_modules/data_dir/**",
+  "QCAD_modules/**",
+  "modules_blender/**",
+  "runtime/**",
+  "nssm/**",
+  ".cad-preview-work/**",
+  "download/**",
+  "docs/**",
+  "public/cesiumStatic/**",
 ];
 
 function resolveBasePath(): string {
@@ -61,9 +69,7 @@ function resolveBasePath(): string {
 const basePath = resolveBasePath();
 const cesiumBaseUrl = `${basePath}/cesiumStatic`;
 
-const cesiumSource = path.join(__dirname, "node_modules/cesium/Build/Cesium");
-const cesiumStatic = path.join(__dirname, "public/cesiumStatic");
-
+/** Cesium Workers/Assets 등은 public/cesiumStatic 에 두고 빌드 시 CopyPlugin 복사하지 않음(속도 비교 테스트). */
 const nextConfig: NextConfig = {
   ...(basePath ? { basePath } : {}),
   env: {
@@ -86,6 +92,7 @@ const nextConfig: NextConfig = {
     'pg',
     'pg-native',
     'exifr',
+    'puppeteer-core',
   ],
   async rewrites() {
     // GeoServer: 브라우저·게이트는 동일 출처 `{basePath}/geoserver` → start.ini·GEOSERVER_URL
@@ -135,16 +142,6 @@ const nextConfig: NextConfig = {
       }
     }
     if (!isServer) {
-      config.plugins.push(
-        new CopyPlugin({
-          patterns: [
-            { from: path.join(cesiumSource, "Workers"), to: path.join(cesiumStatic, "Workers") },
-            { from: path.join(cesiumSource, "ThirdParty"), to: path.join(cesiumStatic, "ThirdParty") },
-            { from: path.join(cesiumSource, "Assets"), to: path.join(cesiumStatic, "Assets") },
-            { from: path.join(cesiumSource, "Widgets"), to: path.join(cesiumStatic, "Widgets") },
-          ],
-        })
-      );
       config.resolve.alias = config.resolve.alias || {};
       (config.resolve.alias as Record<string, string>)["cesium"] = path.join(__dirname, "node_modules/cesium");
       config.plugins.push(

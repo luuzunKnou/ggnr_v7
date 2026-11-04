@@ -43,7 +43,8 @@ function samplesAlong(line: [number, number][]) {
   return out
 }
 
-function sampleTerrain(line: [number, number][]) {
+/** 예시 지형 샘플 (원본 모달과 동일) — lon/lat 라인 */
+export function sampleTerrainStations(line: [number, number][]): Station[] {
   const samples = samplesAlong(line)
   return samples.map((sample, i) => {
     const t = samples.length === 1 ? 0 : i / (samples.length - 1)
@@ -52,7 +53,18 @@ function sampleTerrain(line: [number, number][]) {
   })
 }
 
-function SectionFigure({ points, diameterMm }: { points: Station[]; diameterMm: number }) {
+function sampleTerrain(line: [number, number][]) {
+  return sampleTerrainStations(line)
+}
+
+/** git HEAD 원본 단면도 SVG — «기존» 탭에서 재사용 */
+export function WtlNetworkMapSectionFigure({
+  points,
+  diameterMm,
+}: {
+  points: Station[]
+  diameterMm: number
+}) {
   const width = 680
   const height = 400
   const dx = 46
@@ -182,7 +194,10 @@ export function WtlNetworkMapSectionModal({
           {!pipe?.line ? (
             <p className="standard-table-empty">단면으로 볼 관로가 없습니다.</p>
           ) : !points ? null : (
-            <SectionFigure points={points} diameterMm={Number.isFinite(diameter) ? diameter : 150} />
+            <WtlNetworkMapSectionFigure
+              points={points}
+              diameterMm={Number.isFinite(diameter) ? diameter : 150}
+            />
           )}
         </div>
         <div className="standard-list-footer">

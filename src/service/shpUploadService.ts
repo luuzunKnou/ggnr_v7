@@ -7034,19 +7034,28 @@ export async function readShpValues(params: {
 
 /**
  * layer 스키마 테이블을 EPSG:5181 Shapefile로 내보낸 뒤 zip 버퍼로 반환.
- * Excel 데이터 상태 탭 등에서 SHP 다운로드용.
+ * Excel 데이터 상태 탭·레이어 관리·관망조회 등에서 SHP 다운로드용.
+ * `sql`이 있으면 해당 SELECT로 필터 내보내기(서버에서만 조립).
  */
 export async function exportLayerTableToShp(params: {
   tableName: string;
   schema?: 'layer' | 'public_layer';
+  /** ogr2ogr -sql — 미지정 시 테이블 전체 */
+  sql?: string | null;
+  /** 출력 SHP 레이어명(-nln). 기본 tableName */
+  layerName?: string | null;
 }): Promise<{ success: boolean; zipBuffer?: Buffer; error?: string }> {
   const tableName = (params?.tableName ?? '').trim().replace(/[^a-zA-Z0-9_]/g, '_') || undefined;
   if (!tableName) return { success: false, error: 'tableName이 필요합니다.' };
   const schema = params?.schema === 'public_layer' ? 'public_layer' : 'layer';
+  const sqlOpt = String(params?.sql ?? '').trim();
+  const nln = String(params?.layerName ?? tableName)
+    .trim()
+    .replace(/[^a-zA-Z0-9_]/g, '_') || tableName;
 
   const tmpBase = path.join(getGgnrDataDir(), 'tmp');
-  const tempDir = path.join(tmpBase, `shp_export_${schema}_${tableName}_${Date.now()}`);
-  const outShp = path.join(tempDir, `${tableName}.shp`);
+  const tempDir = path.join(tmpBase, `shp_export_${schema}_${nln}_${Date.now()}`);
+  const outShp = path.join(tempDir, `${nln}.shp`);
 
   try {
     await fs.mkdir(tempDir, { recursive: true });
@@ -7069,10 +7078,15 @@ export async function exportLayerTableToShp(params: {
     '--config', 'SHAPE_ENCODING', dbfEncoding,
     '-f', 'ESRI Shapefile',
     '-lco', 'ENCODING=LDID/77',
+    '-nln', nln,
     outShp,
     pgConn,
-    layerTable,
   ];
+  if (sqlOpt) {
+    ogrBase.push('-sql', sqlOpt);
+  } else {
+    ogrBase.push(layerTable);
+  }
   if (schema === 'public_layer') {
     ogrBase.push('-s_srs', 'EPSG:5181');
   }
@@ -7088,11 +7102,14 @@ export async function exportLayerTableToShp(params: {
   if (shpSize < 100) {
     await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {});
     await fs.mkdir(tempDir, { recursive: true }).catch(() => {});
-    const sql = `SELECT * FROM ${schema}."${tableName}" WHERE geom IS NOT NULL AND ST_IsValid(geom)`;
+    const sql =
+      sqlOpt ||
+      `SELECT * FROM ${schema}."${tableName}" WHERE geom IS NOT NULL AND ST_IsValid(geom)`;
     const retryArgs: string[] = [
       '--config', 'SHAPE_ENCODING', dbfEncoding,
       '-f', 'ESRI Shapefile',
       '-lco', 'ENCODING=LDID/77',
+      '-nln', nln,
       outShp,
       pgConn,
       '-sql', sql,
@@ -7116,13 +7133,13 @@ export async function exportLayerTableToShp(params: {
       };
     }
     if (result2.code !== 0) {
-      console.warn(`[exportLayerTableToShp] ${schema}.${tableName} 2차(SQL) ogr2ogr exit ${result2.code} (일부 행 생략)`);
+      console.warn(`[exportLayerTableToShp] ${schema}.${nln} 2차(SQL) ogr2ogr exit ${result2.code} (일부 행 생략)`);
     }
   } else if (result.code !== 0) {
-    console.warn(`[exportLayerTableToShp] ${schema}.${tableName} ogr2ogr exit ${result.code} (일부 행 생략, shp ${shpSize}b)`);
+    console.warn(`[exportLayerTableToShp] ${schema}.${nln} ogr2ogr exit ${result.code} (일부 행 생략, shp ${shpSize}b)`);
   }
 
-  await fs.writeFile(path.join(tempDir, `${tableName}.cpg`), `${dbfEncoding}\n`, 'utf8');
+  await fs.writeFile(path.join(tempDir, `${nln}.cpg`), `${dbfEncoding}\n`, 'utf8');
 
   const chunks: Buffer[] = [];
   const archive = archiver('zip', { zlib: { level: 9 } });

@@ -7,20 +7,6 @@ export function formatSqm(v: number | null | undefined): string {
 
 export const OWN_FILTER_ALL = '전체';
 
-/** 소유구분 순서 — 지도 소유자정보 범례와 동일 */
-const OWN_GBN_ORDER = [
-  '개인',
-  '국유지',
-  '군유지',
-  '법인',
-  '시, 도유지',
-  '외국인, 외국공공기관',
-  '일본인, 창씨명등',
-  '종교단체',
-  '종중',
-  '기타단체',
-];
-
 const OWN_GBN_SHORT: Record<string, string> = {
   '시, 도유지': '시도유지',
   '외국인, 외국공공기관': '외국인',
@@ -33,25 +19,64 @@ export function ownGbnShort(ownGbn: string): string {
 }
 
 /** 필터 — 구간과 겹치는 건물·건물군만 */
-export const OWN_FILTER_BUILDING = '건물';
+export const OWN_FILTER_BUILDING = '건축물';
 
-/** 분석 결과에 있는 소유구분만 필터로 — 범례 순서, 범례에 없는 값(미상 등)은 뒤에. 건물이 있으면 맨 끝에 «건물» */
-export function ownFilterOptions(ownGbns: Iterable<string>, hasBuildings = false): { key: string; label: string }[] {
-  const present = new Set(ownGbns);
-  const known = OWN_GBN_ORDER.filter((k) => present.has(k));
-  const extra = [...present].filter((k) => k && !OWN_GBN_ORDER.includes(k)).sort();
-  return [
-    { key: OWN_FILTER_ALL, label: OWN_FILTER_ALL },
-    ...[...known, ...extra].map((k) => ({ key: k, label: ownGbnShort(k) })),
-    ...(hasBuildings ? [{ key: OWN_FILTER_BUILDING, label: OWN_FILTER_BUILDING }] : []),
-  ];
-}
+/** 필터 — 개인·국유지·군유지·시도유지 외 모든 소유구분(법인·종중·미상 등) */
+export const OWN_FILTER_ETC = '기타';
 
-/** 필지는 소유구분, 건물·건물군은 «건물» 필터로만 걸린다 */
+/** 기타로 묶지 않고 개별 필터로 두는 소유구분 */
+const OWN_FILTER_FIXED_GBNS = ['개인', '국유지', '군유지', '시, 도유지'];
+
+/** 소유구분 필터 — 분석 결과와 무관하게 항상 같은 순서로 고정 */
+export const OWN_FILTER_OPTIONS: { key: string; label: string }[] = [
+  { key: OWN_FILTER_ALL, label: OWN_FILTER_ALL },
+  ...OWN_FILTER_FIXED_GBNS.map((k) => ({ key: k, label: ownGbnShort(k) })),
+  { key: OWN_FILTER_ETC, label: OWN_FILTER_ETC },
+  { key: OWN_FILTER_BUILDING, label: OWN_FILTER_BUILDING },
+];
+
+/** 필지는 소유구분(고정 4종 외는 «기타»), 건물·건물군은 «건축물» 필터로만 걸린다 */
 export function matchesOwnFilter(filter: string, ownGbn: string, isBuilding = false): boolean {
   if (filter === OWN_FILTER_ALL) return true;
   if (filter === OWN_FILTER_BUILDING) return isBuilding;
-  return !isBuilding && ownGbn === filter;
+  if (isBuilding) return false;
+  if (filter === OWN_FILTER_ETC) return !OWN_FILTER_FIXED_GBNS.includes(ownGbn);
+  return ownGbn === filter;
+}
+
+/** 지목이 비어 있는 필지 필터 이름 */
+export const JIMOK_FILTER_NONE = '미상';
+
+/** 지목 전체 이름 — 한 글자 부호(천·임 등)는 하천·임야처럼 풀어서 */
+export function jimokFullName(jimok: string | null | undefined): string {
+  const j = String(jimok ?? '').trim();
+  return JIMOK_SHORT[j] ?? j;
+}
+
+/** 지목 필터 키 — 한 글자 부호와 전체 이름을 같은 지목으로 묶음 */
+export function jimokFilterKey(jimok: string | null | undefined): string {
+  return jimokFullName(jimok) || JIMOK_FILTER_NONE;
+}
+
+/** 분석 결과에 있는 지목만 필터로 — 필지 수 많은 순, 같으면 이름순, 미상은 맨 뒤. 건물은 지목이 없어 제외 */
+export function jimokFilterOptions(jimoks: Iterable<string>): { key: string; label: string }[] {
+  const freq = new Map<string, number>();
+  for (const j of jimoks) {
+    const k = jimokFilterKey(j);
+    freq.set(k, (freq.get(k) ?? 0) + 1);
+  }
+  const keys = [...freq.keys()].sort((a, b) => {
+    if (a === JIMOK_FILTER_NONE) return 1;
+    if (b === JIMOK_FILTER_NONE) return -1;
+    return (freq.get(b) ?? 0) - (freq.get(a) ?? 0) || a.localeCompare(b, 'ko');
+  });
+  return [{ key: OWN_FILTER_ALL, label: OWN_FILTER_ALL }, ...keys.map((k) => ({ key: k, label: k }))];
+}
+
+/** 필지는 지목, 건물·건물군은 지목이 없어 «전체»일 때만 통과 */
+export function matchesJimokFilter(filter: string, jimok: string, isBuilding = false): boolean {
+  if (filter === OWN_FILTER_ALL) return true;
+  return !isBuilding && jimokFilterKey(jimok) === filter;
 }
 
 /** 건물 행 배지 이름 */

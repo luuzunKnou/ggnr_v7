@@ -72,6 +72,8 @@ export function useSwlNetworkMapLayer({
   const onZoneEndRef = useRef(onZoneDrawEnd)
   const keysRef = useRef(enabledLayerKeys)
   const zoneDrawRef = useRef(zoneDraw)
+  /** 측정·공간그리기·도형편집 등 지도 입력 중에는 레이어 클릭 선택 금지 */
+  const inputBlocksClickRef = useRef(false)
   useEffect(() => {
     onSelectRef.current = onSelect
     onExtentRef.current = onExtentChange
@@ -79,6 +81,12 @@ export function useSwlNetworkMapLayer({
     onZoneEndRef.current = onZoneDrawEnd
     keysRef.current = enabledLayerKeys
     zoneDrawRef.current = zoneDraw
+    inputBlocksClickRef.current = Boolean(
+      mapContext?.spatialDrawRequest ||
+        mapContext?.mapMeasureTool ||
+        mapContext?.mapDrawInputSuspended ||
+        mapContext?.layerRowGeomEdit
+    )
   })
 
   useEffect(() => {
@@ -126,22 +134,25 @@ export function useSwlNetworkMapLayer({
     const moveKey = map.on('moveend', publishExtent)
     publishExtent()
 
-    const clickKey = map.on('singleclick', async (evt: MapBrowserEvent<PointerEvent>) => {
-      if (zoneDrawRef.current) return
+    const onClick = (evt: MapBrowserEvent<PointerEvent>) => {
+      if (zoneDrawRef.current || inputBlocksClickRef.current) return
       const keys = [...keysRef.current]
       if (keys.length === 0) return
-      try {
-        const res = await call('', 'POST', {
-          service: 'swlNetworkService',
-          action: 'getSwlNetworkAtPoint',
-          params: { x: evt.coordinate[0], y: evt.coordinate[1], layerKeys: keys, tolerance: 12 },
-        })
-        const row = (res?.data ?? res)?.row as SwlNetworkRow | null | undefined
-        if (row) onSelectRef.current(row)
-      } catch {
-        /* ignore */
-      }
-    })
+      void (async () => {
+        try {
+          const res = await call('', 'POST', {
+            service: 'swlNetworkService',
+            action: 'getSwlNetworkAtPoint',
+            params: { x: evt.coordinate[0], y: evt.coordinate[1], layerKeys: keys, tolerance: 12 },
+          })
+          const row = (res?.data ?? res)?.row as SwlNetworkRow | null | undefined
+          if (row) onSelectRef.current(row)
+        } catch {
+          /* ignore */
+        }
+      })()
+    }
+    const clickKey = map.on('singleclick', onClick as never)
 
     return () => {
       unByKey(moveKey)

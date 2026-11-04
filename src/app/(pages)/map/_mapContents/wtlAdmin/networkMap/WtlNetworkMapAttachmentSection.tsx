@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from 'react'
-import { ChevronDown, Download, File, FileImage, FileText, Plus, Trash2 } from 'lucide-react'
+import { ChevronDown, Download, File, FileImage, FileSpreadsheet, FileText, Plus, Trash2 } from 'lucide-react'
 import { Button } from '@/app/shadcnComponents/ui/button'
 import { SER_FILE_ENG } from '@/lib/serviceFileDataSerEng'
 import { cn } from '@/lib/utils'
@@ -16,6 +16,11 @@ import {
   type ServiceFilePreviewItem,
 } from '../../../_mapComponents/standard/ServiceFileImagePreview'
 import {
+  buildServiceFilePreviewGalleryItems,
+  isServiceFilePreviewableName,
+} from '../../../_mapComponents/standard/serviceFilePreviewItems'
+import {
+  isExcelServiceFileName,
   isImageServiceFileName,
   isPdfServiceFileName,
   requestServiceFileDataDelete,
@@ -44,6 +49,9 @@ function getFileIcon(name: string) {
   if (isPdfServiceFileName(name)) {
     return <FileText className="h-5 w-5 text-red-500/80" />
   }
+  if (isExcelServiceFileName(name)) {
+    return <FileSpreadsheet className="h-5 w-5 text-emerald-500/80" />
+  }
   return <File className="h-5 w-5 text-muted-foreground/80" />
 }
 
@@ -68,47 +76,74 @@ function parseRowId(id: string): { sourceId?: string; layerKey: string; ogcFid: 
   return { layerKey, ogcFid }
 }
 
-/** 데이터조회와 동일 — file_data/{물리테이블}/{키}/ */
-export function resolveWtlNetworkAttachmentTarget(
+/** 상세 수정·첨부 공통 — 물리 테이블 + 키 필드/값 */
+export function resolveWtlNetworkRowKeyTarget(
   item: WtlNetworkRow,
   fields: readonly DefineFieldLike[]
-): { layerSegment: string; keyValue: string; layerDisplayName: string } | null {
+): { table: string; keyField: string; keyValue: string } | null {
   const parsed = parseRowId(item.id)
   const def = getWtlNetLayerDef(item.layerKey || parsed?.layerKey || '')
   const source = parsed?.sourceId ? getWtlNetMapSource(parsed.sourceId) : undefined
   const baseTable = String(def?.table ?? item.fieldsTable ?? '').trim()
   if (!baseTable) return null
-  const layerSegment = String(source?.remapTable(baseTable) ?? baseTable).trim()
-  if (!layerSegment) return null
+  const table = String(source?.remapTable(baseTable) ?? baseTable).trim()
+  if (!table) return null
 
-  const keyField = fields.find((f) =>
+  const keyFieldDef = fields.find((f) =>
     isDefineFieldFlagTrue((f as { define_field_is_key?: unknown }).define_field_is_key)
   )
-  const keyFieldName = String(keyField?.define_field_name ?? '').trim() || null
+  let keyField = String(keyFieldDef?.define_field_name ?? '').trim()
   const record = item.record ?? null
   let keyValue: string | null = null
-  if (record && keyFieldName) {
-    const fromKey = getRowKey(record, keyFieldName)
+  if (record && keyField) {
+    const fromKey = getRowKey(record, keyField)
     if (fromKey != null && String(fromKey).trim() !== '') keyValue = String(fromKey).trim()
   }
   if (keyValue == null && record) {
     for (const f of ['ogc_fid', 'gid', 'id'] as const) {
       const v = getRowValueByField(record, f)
       if (v != null && String(v).trim() !== '') {
+        keyField = f
         keyValue = String(v).trim()
         break
       }
     }
   }
   if (keyValue == null && parsed && Number.isFinite(parsed.ogcFid)) {
+    if (!keyField) keyField = 'ogc_fid'
     keyValue = String(parsed.ogcFid)
   }
-  if (!keyValue) return null
+  if (!keyField || !keyValue) return null
 
+  return { table, keyField, keyValue }
+}
+
+/** 데이터조회와 동일 — file_data/{물리테이블}/{키}/ */
+export function resolveWtlNetworkAttachmentTarget(
+  item: WtlNetworkRow,
+  fields: readonly DefineFieldLike[]
+): { layerSegment: string; keyValue: string; layerDisplayName: string } | null {
+  const target = resolveWtlNetworkRowKeyTarget(item, fields)
+  if (!target) return null
   return {
-    layerSegment,
-    keyValue,
-    layerDisplayName: layerSegment,
+    layerSegment: target.table,
+    keyValue: target.keyValue,
+    layerDisplayName: target.table,
+  }
+}
+
+/** 상세 속성 수정 — layerRowService.updateTableRowByKey 용 */
+export function resolveWtlNetworkRowEditTarget(
+  item: WtlNetworkRow,
+  fields: readonly DefineFieldLike[]
+): { table: string; schema: string; keyField: string; keyValue: string } | null {
+  const target = resolveWtlNetworkRowKeyTarget(item, fields)
+  if (!target) return null
+  return {
+    table: target.table,
+    schema: 'layer',
+    keyField: target.keyField,
+    keyValue: target.keyValue,
   }
 }
 
@@ -164,13 +199,9 @@ export function WtlNetworkMapAttachmentSection({ item, fields, canEdit = true }:
 
   const previewGalleryItems = useMemo((): ServiceFilePreviewItem[] => {
     if (!target) return []
-    return query.files
-      .filter((f) => isImageServiceFileName(f.name) || isPdfServiceFileName(f.name))
-      .map((f) => ({
-        url: serviceFileDataDownloadUrl(SER_ENG, target.layerSegment, target.keyValue, f.name),
-        fileName: f.name,
-        kind: isPdfServiceFileName(f.name) ? ('pdf' as const) : ('image' as const),
-      }))
+    return buildServiceFilePreviewGalleryItems(query.files, (fileName) =>
+      serviceFileDataDownloadUrl(SER_ENG, target.layerSegment, target.keyValue, fileName)
+    )
   }, [query.files, target])
 
   const uploadFiles = useCallback(
@@ -295,14 +326,13 @@ export function WtlNetworkMapAttachmentSection({ item, fields, canEdit = true }:
                   target.keyValue,
                   f.name
                 )
-                const isImg = isImageServiceFileName(f.name)
-                const isPdf = isPdfServiceFileName(f.name)
+                const canPreview = isServiceFilePreviewableName(f.name)
                 const modified =
                   f.modified != null && String(f.modified).trim()
                     ? String(f.modified).slice(0, 19).replace('T', ' ')
                     : '-'
                 const activateRow = () => {
-                  if (isImg || isPdf) {
+                  if (canPreview) {
                     const idx = previewGalleryItems.findIndex((i) => i.fileName === f.name)
                     setAttachmentImagePreview({
                       items: previewGalleryItems,
@@ -318,7 +348,7 @@ export function WtlNetworkMapAttachmentSection({ item, fields, canEdit = true }:
                     tabIndex={0}
                     role="group"
                     aria-label={
-                      isImg || isPdf ? `${f.name} 크게 보기` : `${f.name} 다운로드`
+                      canPreview ? `${f.name} 크게 보기` : `${f.name} 다운로드`
                     }
                     className="group flex cursor-pointer items-center gap-2 rounded-lg border border-border/80 bg-card p-1 transition-colors hover:bg-muted/30 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
                     onClick={activateRow}

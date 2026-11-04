@@ -105,8 +105,10 @@ export function MapSideListPanel({
       <div
         className={cn(
           'flex min-h-0 flex-1 flex-col',
-          // 목록 스크롤(scrollbar-thin)만 고정 여유. 상세는 MapSideDetailScroll(넘칠 때만)
-          '[&.scrollbar-thin]:mr-[10px] [&_.scrollbar-thin]:mr-[10px]',
+          // 목록 스크롤 ↔ 패널 너비 조절 구분: 목록만 오른쪽 10px 고정.
+          // 상세 본문(MapSideDetailScroll)은 제외 — 넘칠 때만 자체 여유.
+          '[&_.standard-list-scroll]:mr-[10px]',
+          '[&_.scrollbar-thin:not(.map-side-detail-scroll)]:mr-[10px]',
           contentClassName ?? 'overflow-hidden',
         )}
       >

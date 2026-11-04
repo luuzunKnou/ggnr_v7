@@ -149,6 +149,10 @@ import {
   ROAD_FRONTAGE_MARKER_ITEM_WMS_LAYER_ID,
 } from '../_mapContents/road/roadFrontage/roadFrontageLayerId';
 import {
+  RIVER_ILLEGAL_OCCUPATION_WMS_LAYER_ID,
+  isRiverIllegalOccupationWmsLayerId,
+} from '../_mapContents/river/riverIllegalOccupation/riverIllegalOccupationLayerId';
+import {
   findOpenedOccupationLedgerSerEng,
   getOccupationLedgerBinding,
   getOccupationLedgerWmsLayerIds,
@@ -657,22 +661,33 @@ export default function OpenLayersMap({
 
   /** 우측 메뉴(버튼 열) 폭만 — 상하 분할 거터·방향 전환용.
    * 배경지도·레이어 선택 등 우측에서 뜨는 패널은 전부 오버레이 모달로 보고
-   * 지도 가용폭·좌우/상하 전환에 넣지 않음. */
+   * 지도 가용폭·좌우/상하 전환에 넣지 않음.
+   * 메뉴 폭+right-4로 측정(뷰포트 innerWidth-left 방식은 스크롤바·패딩 피드백으로
+   * ResizeObserver↔setState 루프가 날 수 있음). activeControls는 RO가 크기 변화를 잡음. */
   useEffect(() => {
     const setPaddingRight = mapContext?.setMapPaddingRight;
+    if (!setPaddingRight || !mapControlPortalReady) return;
     const fixed = mapControlFixedRef.current;
-    if (!setPaddingRight || !fixed) return;
+    if (!fixed) return;
+
+    /** tailwind `right-4` */
+    const RIGHT_INSET_PX = 16;
+    let rafId = 0;
 
     const syncPaddingRight = () => {
-      const menu = fixed.querySelector('[data-map-control-menu]');
-      const leftEdge = menu
-        ? menu.getBoundingClientRect().left
-        : window.innerWidth - MAP_SPLIT_CONTROL_RIGHT_MENU_RESERVE_PX;
-      const next = Math.max(
-        MAP_SPLIT_CONTROL_RIGHT_MENU_RESERVE_PX,
-        Math.ceil(window.innerWidth - leftEdge)
-      );
-      setPaddingRight((prev) => (prev === next ? prev : next));
+      if (rafId) cancelAnimationFrame(rafId);
+      rafId = requestAnimationFrame(() => {
+        rafId = 0;
+        const menu = fixed.querySelector('[data-map-control-menu]');
+        const menuWidth = menu
+          ? menu.getBoundingClientRect().width
+          : MAP_SPLIT_CONTROL_RIGHT_MENU_RESERVE_PX - RIGHT_INSET_PX;
+        const next = Math.max(
+          MAP_SPLIT_CONTROL_RIGHT_MENU_RESERVE_PX,
+          Math.ceil(menuWidth + RIGHT_INSET_PX)
+        );
+        setPaddingRight((prev) => (prev === next ? prev : next));
+      });
     };
 
     syncPaddingRight();
@@ -682,10 +697,11 @@ export default function OpenLayersMap({
     else ro.observe(fixed);
     window.addEventListener('resize', syncPaddingRight);
     return () => {
+      if (rafId) cancelAnimationFrame(rafId);
       ro.disconnect();
       window.removeEventListener('resize', syncPaddingRight);
     };
-  }, [mapContext?.setMapPaddingRight, activeControls, extraControls, mapControlPortalReady]);
+  }, [mapContext?.setMapPaddingRight, mapControlPortalReady]);
 
   // 마운트 시 저장된 맵 상태 복원 (버튼 활성화 + 배경지도 + 레이어 목록 + 상세 패널 체크박스)
   // 홈에서 다른 시스템으로 들어오면 이전 시스템 레이어는 복원하지 않음 (지도 내 시스템 전환과 동일)
@@ -711,7 +727,9 @@ export default function OpenLayersMap({
         mapContext?.setVisibleLayerNames?.(new Set());
       } else {
         const restoredVisible = new Set(
-          (state.visibleLayerNames ?? []).filter((n) => !isUsageDataAsWmsLayerId(n))
+          (state.visibleLayerNames ?? []).filter(
+            (n) => !isUsageDataAsWmsLayerId(n) && !isRiverIllegalOccupationWmsLayerId(n)
+          )
         );
         const jimokValid = (state.visibleJimokLayerNames ?? []).filter((t) =>
           JIMOK_LAYERS.some((l) => l.tableName === t)
@@ -1096,14 +1114,32 @@ export default function OpenLayersMap({
   // 데이터 조회 → 지하시설물 선택 동기화
   useEffect(() => {
     if (!restored || undergroundFacilityCatalogLoading) return;
-    // 부서업무 전환으로 서비스 레이어만 비운 경우에는 우측 지하시설물을 끄지 않음
-    if (visibleLayerNames.size === 0) return;
+    // visible 전무 → 지하시설물도 끔 (전체 끄기·관망 동기화)
+    if (visibleLayerNames.size === 0) {
+      setVisibleUndergroundFacilityLayerNames((prev) =>
+        prev != null && prev.size === 0 ? prev : new Set()
+      );
+      return;
+    }
     const fromVisible = pickUndergroundFacilityFromVisible(
       visibleLayerNames,
       undergroundFacilityAvailableTableNames
     );
     setVisibleUndergroundFacilityLayerNames((prev) => {
       if (prev != null && sameStringSet(prev, fromVisible)) return prev;
+      // 카탈로그에 없는 이름만 visible에 남은 경우
+      // 빈 집합으로 덮으면 기존 관로·시설 레이어까지 꺼짐 → 기존 선택 유지.
+      // 단, visible에서 이전 UF 선택이 이미 빠진 경우(출처 전환 등)는 유지하지 않음.
+      if (fromVisible.size === 0 && prev != null && prev.size > 0) {
+        let prevStillInVisible = false;
+        for (const n of prev) {
+          if (visibleLayerNames.has(n)) {
+            prevStillInVisible = true;
+            break;
+          }
+        }
+        if (prevStillInVisible) return prev;
+      }
       return fromVisible;
     });
     if (fromVisible.size === 0) return;
@@ -1509,9 +1545,44 @@ export default function OpenLayersMap({
       setAerialViewCheckedIds(new Set());
       setAerialPanelOpen(false);
       setIsAerialViewPanelExiting(false);
+      mapContextRef.current?.wtlNetworkLayersOffRef?.current?.();
     };
     return () => {
       if (offRef) offRef.current = null;
+    };
+  }, []);
+
+  /** 관망조회 보호구역 → 주제도 패널 선택 동기화 */
+  useEffect(() => {
+    const syncRef = mapContextRef.current?.wtlNetworkThematicSyncRef;
+    if (!syncRef) return;
+    syncRef.current = {
+      applyManaged: (wanted, managed) => {
+        setVisibleThematicLayerNames((prev) => {
+          const next = new Set(prev ?? []);
+          for (const n of managed) next.delete(n);
+          for (const n of wanted) next.add(n);
+          if (next.size === (prev?.size ?? 0)) {
+            let same = true;
+            for (const n of next) {
+              if (!prev?.has(n)) {
+                same = false;
+                break;
+              }
+            }
+            if (same) return prev;
+          }
+          return next;
+        });
+        if (wanted.size > 0) {
+          setActiveControls((prev) =>
+            prev.includes('thematic-map') ? prev : [...prev, 'thematic-map']
+          );
+        }
+      },
+    };
+    return () => {
+      syncRef.current = null;
     };
   }, []);
 
@@ -2223,6 +2294,73 @@ export default function OpenLayersMap({
         }
       }
 
+      /** 불법점용 관리카드: illegal_usage_as → 목록·상세 선택 */
+      if (
+        mapContext?.riverIllegalOccupationPanelOpen &&
+        mapContext.applyRiverIllegalOccupationMapPickRef
+      ) {
+        const illegalLid = RIVER_ILLEGAL_OCCUPATION_WMS_LAYER_ID.toLowerCase();
+        const illegalHit = withFeat.find((r) => {
+          const tn = String(r.tableName ?? '')
+            .trim()
+            .toLowerCase();
+          return tn === illegalLid && r.features.length > 0;
+        });
+        if (illegalHit) {
+          const overlapOptions: { value: string; label: string }[] = [];
+          const seen = new Set<string>();
+          let firstMgmtNo = '';
+          for (const feat of illegalHit.features) {
+            const ogcFid =
+              pickIdentifyField(feat?.data, 'ogc_fid') ||
+              pickIdentifyField(feat?.data, 'id') ||
+              pickIdentifyField(feat?.data, 'gid');
+            if (!ogcFid || seen.has(ogcFid)) continue;
+            seen.add(ogcFid);
+            const mgmtNo =
+              pickIdentifyField(feat?.data, 'mgmt_no') ||
+              pickIdentifyField(feat?.data, 'MGMT_NO') ||
+              '';
+            if (!firstMgmtNo && mgmtNo) firstMgmtNo = mgmtNo;
+            const label =
+              pickIdentifyField(feat?.data, 'seq_no') ||
+              pickIdentifyField(feat?.data, 'SEQ_NO') ||
+              pickIdentifyField(feat?.data, 'location') ||
+              pickIdentifyField(feat?.data, 'LOCATION') ||
+              mgmtNo ||
+              ogcFid;
+            overlapOptions.push({ value: ogcFid, label });
+          }
+          const first = overlapOptions[0];
+          if (!first) {
+            // ogc_fid 없으면 관리번호로 목록 매칭
+            const mgmtOnly =
+              pickIdentifyField(illegalHit.features[0]?.data, 'mgmt_no') ||
+              pickIdentifyField(illegalHit.features[0]?.data, 'MGMT_NO');
+            if (!mgmtOnly) {
+              if (!cancelled) {
+                window.alert('클릭한 관리카드의 식별값을 읽을 수 없습니다.');
+              }
+              clearIdentifyIntake();
+              return;
+            }
+            mapContext.applyRiverIllegalOccupationMapPickRef.current?.({
+              ogcFid: '',
+              mgmtNo: mgmtOnly,
+            });
+            clearIdentifyIntake();
+            return;
+          }
+          mapContext.applyRiverIllegalOccupationMapPickRef.current?.({
+            ogcFid: first.value,
+            mgmtNo: firstMgmtNo || undefined,
+            overlapOptions,
+          });
+          clearIdentifyIntake();
+          return;
+        }
+      }
+
       /** 접도구역 건축물: road_frontage_building → 목록·상세 선택 */
       if (
         mapContext?.roadFrontageBuildingPanelOpen &&
@@ -2696,7 +2834,11 @@ export default function OpenLayersMap({
 
   useEffect(() => {
     if (mapContext?.mapSplitSecondaryKind === 'map') return;
-    setActiveControls((prev) => prev.filter((item) => item !== 'reset-measurements'));
+    setActiveControls((prev) =>
+      prev.includes('reset-measurements')
+        ? prev.filter((item) => item !== 'reset-measurements')
+        : prev
+    );
     setIsResetPanelExiting(false);
   }, [mapContext?.mapSplitSecondaryKind]);
 
@@ -3170,6 +3312,7 @@ export default function OpenLayersMap({
         map={mapReady ? mapInstanceRef.current : null}
         mapReady={mapReady}
         editable
+        mapPaddingLeft={mapPaddingLeft}
       />
 
       <LayerRowGeomEditHandler centerPixel={centerPixel} />

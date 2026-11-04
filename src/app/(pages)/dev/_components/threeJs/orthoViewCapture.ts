@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { SCENE_COMPASS_KEY } from './sceneCompass';
+import { captureSectionCadViews } from './sectionCadDraw';
 
 /** 화면 썸네일과 별도 — 새 탭에서 크게 보기용 고해상도 */
 export const ORTHO_SNAP_W = 1600;
@@ -39,15 +40,12 @@ function fitOrthoCamera(
   let viewW = maxDim;
   let viewH = maxDim;
   if (view === 'front') {
-    // 정북: 가로=동서(X), 세로=높이(Y)
     viewW = size.x;
     viewH = size.y;
   } else if (view === 'top') {
-    // 북이 위: 가로=동서(X), 세로=남북(Z)
     viewW = size.x;
     viewH = size.z;
   } else {
-    // 동→서: 가로=남북(Z), 세로=높이(Y)
     viewW = size.z;
     viewH = size.y;
   }
@@ -94,6 +92,10 @@ export type OrthoViewImages = {
   front: string;
   top: string;
   side: string;
+  /** CAD 횡단면도 (절단선 거리×표고, 관 원단면) */
+  cross: string;
+  /** CAD 종단면도 (관로 진행×표고, 관 외경 프로필) */
+  long: string;
 };
 
 let snapRenderer: THREE.WebGLRenderer | null = null;
@@ -111,14 +113,23 @@ function getSnapRenderer(): THREE.WebGLRenderer {
   return snapRenderer;
 }
 
-/** 씬을 정면도·평면도·측면도 시점으로 렌더해 PNG data URL 반환 */
+/** 정면·평면·측면(3D 직교) + 횡·종단(CAD 2D 도면) PNG */
 export function captureOrthoViews(scene: THREE.Scene, shapesRoot: THREE.Object3D): OrthoViewImages {
   const box = new THREE.Box3();
   for (const child of shapesRoot.children) {
     box.expandByObject(child);
   }
+
+  const sectionCad = captureSectionCadViews(shapesRoot);
+
   if (box.isEmpty()) {
-    return { front: EMPTY_PNG, top: EMPTY_PNG, side: EMPTY_PNG };
+    return {
+      front: EMPTY_PNG,
+      top: EMPTY_PNG,
+      side: EMPTY_PNG,
+      cross: sectionCad.cross,
+      long: sectionCad.long,
+    };
   }
 
   const renderer = getSnapRenderer();
@@ -133,7 +144,6 @@ export function captureOrthoViews(scene: THREE.Scene, shapesRoot: THREE.Object3D
   const compassVisible = compass?.visible ?? true;
   if (compass) compass.visible = false;
 
-  // 치수는 위치만 조정해 캡처에 포함(정면도 등에서 외곽선과 겹치지 않도록 cadDimensions에서 배치)
   const front = renderOne(renderer, scene, 'front', box);
   const top = renderOne(renderer, scene, 'top', box);
   const side = renderOne(renderer, scene, 'side', box);
@@ -142,5 +152,11 @@ export function captureOrthoViews(scene: THREE.Scene, shapesRoot: THREE.Object3D
   if (compass) compass.visible = compassVisible;
   scene.background = prevBg;
 
-  return { front, top, side };
+  return {
+    front,
+    top,
+    side,
+    cross: sectionCad.cross,
+    long: sectionCad.long,
+  };
 }

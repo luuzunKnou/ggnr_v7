@@ -212,6 +212,7 @@ export async function listAvailableOwnershipLayerNames() {
 /** 지하시설물 — 레이어관리 그룹명과 동일 (schema: layer) */
 const UNDERGROUND_FACILITY_GROUP_ALLOW = new Set([
   '상수',
+  '급수구역',
   '하수',
   '광역상수',
   '가스',

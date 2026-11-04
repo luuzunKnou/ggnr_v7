@@ -1,4 +1,4 @@
-/* 지도 축척 — 좌측 하단. 사이드바(65px) 오른쪽. 글자 + 100px 밑선 */
+/* 지도 축척 — 좌측 하단. 글자 + 100px 밑선 */
 .ggnr-scale-bar {
   position: absolute;
   left: 81px;
@@ -9,6 +9,12 @@
   border: none;
   padding: 0;
   pointer-events: none;
+}
+
+/* body 포털: 목록 패널(z-10) 위·우측맵컨트롤(z-40) 아래. left는 inline(mapPaddingLeft+16) */
+.ggnr-scale-bar-fixed {
+  position: fixed;
+  z-index: 30;
 }
 
 .ggnr-scale-bar.is-editable {

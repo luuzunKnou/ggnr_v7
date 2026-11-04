@@ -5599,6 +5599,19 @@ export async function dropLayerDbTable(params: {
     const dropSql = `DROP TABLE IF EXISTS ${schema}.${quoteIdent(match.table)} CASCADE`;
     await db.execute(sql.raw(dropSql));
 
+    // 급수전 삭제 시 격자 메타(셀 뷰는 CASCADE로 이미 제거) 정리
+    if (schema === 'layer' && match.table.toLowerCase() === 'wtl_meta_ps') {
+      try {
+        const { dropWtlMeterGridArtifacts } = await import('./wtlMeterLocationService');
+        await dropWtlMeterGridArtifacts();
+      } catch (gridErr) {
+        console.warn(
+          '[dropLayerDbTable] meter grid',
+          gridErr instanceof Error ? gridErr.message : gridErr
+        );
+      }
+    }
+
     const operator = await resolveAutofixOperatorLabel();
     try {
       const { recordDataLog } = await import('./dataLogService');

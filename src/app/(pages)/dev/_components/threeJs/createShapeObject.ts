@@ -4,13 +4,22 @@ import { createGroundContourOverlay } from './groundContours';
 import { createGroundElevMarkers } from './groundElevMarkers';
 import { createGroundRiverOverlay } from './groundRivers';
 import { createPipesOverlay } from './groundPipes';
-import { createInterpolatedGroundParts } from './groundInterpolatedMesh';
+import { createManholesOverlay } from './groundManholes';
+import {
+  createInterpolatedGroundParts,
+  createSectionRectGroundParts,
+} from './groundInterpolatedMesh';
+import { getWtlLayerShapeDef } from '@/lib/wtlLayerShapeDefs';
 import { shapeHalfExtentY } from './shapeCatalog';
 import type { ShapeProps } from './shapeTypes';
 import {
   elevToSceneY,
   GROUND_DEFAULT_RADIUS_M,
   GROUND_SCENE_M_PER_UNIT,
+  isLineLayerShape,
+  isMapAnchoredShape,
+  isPointLayerShape,
+  MANH_DEFAULT_RADIUS_M,
   PIPE_DEFAULT_RADIUS_M,
   SHAPE_NAME_KEY,
   SHAPE_PROPS_KEY,
@@ -256,8 +265,13 @@ function buildGround(props: ShapeProps): THREE.Group {
   }
 
   // 윗면만 색상 채움 + 아랫면·옆면 외곽선
+  // 범위: AA 정사각 / 단면: 절단선 중심 ±halfWidth 띠 (관로 조회 polygon과 동일)
   const thicknessM = Math.max(0, props.height ?? 0);
-  const parts = createInterpolatedGroundParts(field, thicknessM);
+  const sectionLine =
+    props.groundDrawMode === 'section' ? props.groundSectionLine ?? null : null;
+  const parts = sectionLine
+    ? createSectionRectGroundParts(field, sectionLine, thicknessM)
+    : createInterpolatedGroundParts(field, thicknessM);
   if (!parts) {
     return group;
   }
@@ -270,8 +284,13 @@ function buildGround(props: ShapeProps): THREE.Group {
     THREE.DoubleSide
   );
   topMat.wireframe = false;
+  // 반투명 지형: 깊이쓰기 끄면 상단 채움이 구멍처럼 비는 현상 완화
+  if (groundOpacity < 0.99) {
+    topMat.depthWrite = false;
+  }
   const topMesh = new THREE.Mesh(parts.topGeo, topMat);
   topMesh.userData.isFill = true;
+  topMesh.renderOrder = 1;
   group.add(topMesh);
 
   if (parts.outlinePositions.length >= 6) {
@@ -291,66 +310,66 @@ function buildGround(props: ShapeProps): THREE.Group {
     group.add(outline);
   }
 
-  // 등고선·높이는 지형 표면 위
-  group.add(createGroundContourOverlay(field));
-  // 지반고 (elevation 등고 보간값)
-  group.add(createGroundElevMarkers(field));
-  // 지방하천·소하천 구역 (색·불투명도 분리)
-  group.add(
-    createGroundRiverOverlay(field, {
-      color: props.riverColor || '#2563eb',
-      opacity: props.riverOpacity ?? 0.4,
-    })
-  );
+  // 등고·지반고·하천 — 범위(정사각) 발자국일 때만 (단면 사각형 메시와 격자 등고는 경계 불일치)
+  if (!sectionLine) {
+    group.add(createGroundContourOverlay(field));
+    group.add(createGroundElevMarkers(field));
+    group.add(
+      createGroundRiverOverlay(field, {
+        color: props.riverColor || '#2563eb',
+        opacity: props.riverOpacity ?? 0.4,
+      })
+    );
+  }
 
   return group;
 }
 
-/** 관로 — 고도장이 있으면 해발 지표−심도, 없으면 Y=0 기준 */
+/** 관로 — 고도장이 있으면 해발 지표−심도. 지형 파생 시 범위 판 생략 */
 function buildPipe(props: ShapeProps): THREE.Group {
   const group = new THREE.Group();
-  const radiusM = props.pipeRadiusM ?? PIPE_DEFAULT_RADIUS_M;
-  const halfU = radiusM / GROUND_SCENE_M_PER_UNIT;
-  const cx = props.pipeCenterX;
-  const cy = props.pipeCenterY;
   const field = props.pipeHeightField;
   const hasField = !!(field && field.heights?.length && field.size >= 2);
-  // 범위 안내 판: 고도장 최저 · 없으면 관 지표 평균
-  let plateY = 0;
-  if (hasField) {
-    plateY = elevToSceneY(field!.baseElevM);
-  } else if (props.pipeSegments?.length) {
-    const elevs = props.pipeSegments
-      .map((p) => p.surfaceElevM)
-      .filter((v): v is number => v != null && Number.isFinite(v));
-    if (elevs.length) {
-      plateY = elevToSceneY(elevs.reduce((a, b) => a + b, 0) / elevs.length);
+  // 지형과 동일 원점 강제 (파생 도형 어긋남 방지)
+  const cx = hasField ? field!.centerX : props.pipeCenterX;
+  const cy = hasField ? field!.centerY : props.pipeCenterY;
+
+  // 단독 편집 시에만 범위 안내 판 (지형 파생·고도장 있으면 생략)
+  if (!hasField) {
+    const radiusM = props.pipeRadiusM ?? PIPE_DEFAULT_RADIUS_M;
+    const halfU = radiusM / GROUND_SCENE_M_PER_UNIT;
+    let plateY = 0;
+    if (props.pipeSegments?.length) {
+      const elevs = props.pipeSegments
+        .map((p) => p.surfaceElevM)
+        .filter((v): v is number => v != null && Number.isFinite(v));
+      if (elevs.length) {
+        plateY = elevToSceneY(elevs.reduce((a, b) => a + b, 0) / elevs.length);
+      }
     }
+    const plate = new THREE.PlaneGeometry(halfU * 2, halfU * 2);
+    plate.rotateX(-Math.PI / 2);
+    const plateMat = fillMaterial(props.color || '#F44336', 0.08, THREE.DoubleSide);
+    plateMat.depthWrite = false;
+    const plateMesh = new THREE.Mesh(plate, plateMat);
+    plateMesh.position.y = plateY;
+    plateMesh.userData.isFill = true;
+    group.add(plateMesh);
+    const rim = new THREE.LineLoop(
+      new THREE.BufferGeometry().setFromPoints([
+        new THREE.Vector3(-halfU, plateY + 0.02, -halfU),
+        new THREE.Vector3(halfU, plateY + 0.02, -halfU),
+        new THREE.Vector3(halfU, plateY + 0.02, halfU),
+        new THREE.Vector3(-halfU, plateY + 0.02, halfU),
+      ]),
+      new THREE.LineBasicMaterial({ color: edgeColor(props.color || '#F44336') })
+    );
+    markEdgeOnly(rim);
+    group.add(rim);
   }
 
-  // 범위 안내 판 — 지표 높이, depthWrite off
-  const plate = new THREE.PlaneGeometry(halfU * 2, halfU * 2);
-  plate.rotateX(-Math.PI / 2);
-  const plateMat = fillMaterial(props.color || '#F44336', 0.08, THREE.DoubleSide);
-  plateMat.depthWrite = false;
-  const plateMesh = new THREE.Mesh(plate, plateMat);
-  plateMesh.position.y = plateY;
-  plateMesh.userData.isFill = true;
-  group.add(plateMesh);
-
-  const rim = new THREE.LineLoop(
-    new THREE.BufferGeometry().setFromPoints([
-      new THREE.Vector3(-halfU, plateY + 0.02, -halfU),
-      new THREE.Vector3(halfU, plateY + 0.02, -halfU),
-      new THREE.Vector3(halfU, plateY + 0.02, halfU),
-      new THREE.Vector3(-halfU, plateY + 0.02, halfU),
-    ]),
-    new THREE.LineBasicMaterial({ color: edgeColor(props.color || '#F44336') })
-  );
-  markEdgeOnly(rim);
-  group.add(rim);
-
   if (props.pipeSegments?.length && cx != null && cy != null) {
+    // 범위·단면 동일 — API 범위 클립만 사용 (클라이언트 단면 재클립 없음)
     group.add(
       createPipesOverlay({
         centerX: cx,
@@ -367,10 +386,69 @@ function buildPipe(props: ShapeProps): THREE.Group {
   return group;
 }
 
+/** POINT(ps) 시설 — 지표→지상 원통. 윗면 SLD SVG 심볼 */
+function buildManhole(props: ShapeProps): THREE.Group {
+  const group = new THREE.Group();
+  const field = props.manhHeightField;
+  const hasField = !!(field && field.heights?.length && field.size >= 2);
+  const cx = hasField ? field!.centerX : props.manhCenterX;
+  const cy = hasField ? field!.centerY : props.manhCenterY;
+  const def = getWtlLayerShapeDef(props.kind);
+  const colorHex = props.color || def?.fallbackColor || '#a42b96';
+
+  if (!hasField) {
+    const radiusM = props.manhRadiusM ?? MANH_DEFAULT_RADIUS_M;
+    const halfU = radiusM / GROUND_SCENE_M_PER_UNIT;
+    let plateY = 0;
+    if (props.manholeFeatures?.length) {
+      const elevs = props.manholeFeatures
+        .map((m) => m.surfaceElevM)
+        .filter((v): v is number => v != null && Number.isFinite(v));
+      if (elevs.length) {
+        plateY = elevToSceneY(elevs.reduce((a, b) => a + b, 0) / elevs.length);
+      }
+    }
+    const plate = new THREE.PlaneGeometry(halfU * 2, halfU * 2);
+    plate.rotateX(-Math.PI / 2);
+    const plateMat = fillMaterial(colorHex, 0.08, THREE.DoubleSide);
+    plateMat.depthWrite = false;
+    const plateMesh = new THREE.Mesh(plate, plateMat);
+    plateMesh.position.y = plateY;
+    plateMesh.userData.isFill = true;
+    group.add(plateMesh);
+    const rim = new THREE.LineLoop(
+      new THREE.BufferGeometry().setFromPoints([
+        new THREE.Vector3(-halfU, plateY + 0.02, -halfU),
+        new THREE.Vector3(halfU, plateY + 0.02, -halfU),
+        new THREE.Vector3(halfU, plateY + 0.02, halfU),
+        new THREE.Vector3(-halfU, plateY + 0.02, halfU),
+      ]),
+      new THREE.LineBasicMaterial({ color: edgeColor(colorHex) })
+    );
+    markEdgeOnly(rim);
+    group.add(rim);
+  }
+
+  if (props.manholeFeatures?.length && cx != null && cy != null) {
+    group.add(
+      createManholesOverlay({
+        centerX: cx,
+        centerY: cy,
+        manholes: props.manholeFeatures,
+        color: colorHex,
+        opacity: props.opacity ?? 0.9,
+        field: hasField ? field : null,
+        symbolStyleName: def?.styleName ?? props.kind,
+      })
+    );
+  }
+
+  return group;
+}
+
 export function applyShapeTransform(group: THREE.Group, props: ShapeProps): void {
-  if (props.kind === 'ground' || props.kind === 'wtl_pipe_lm') {
+  if (isMapAnchoredShape(props.kind)) {
     group.rotation.set(0, 0, 0);
-    // 지형·관로 씬 원점 고정
     group.position.set(0, 0, 0);
     return;
   }
@@ -399,11 +477,16 @@ export function createShapeObject(id: string, props: ShapeProps): THREE.Group {
     case 'ground':
       group = buildGround(props);
       break;
-    case 'wtl_pipe_lm':
-      group = buildPipe(props);
+    default: {
+      if (isLineLayerShape(props.kind)) {
+        group = buildPipe(props);
+      } else if (isPointLayerShape(props.kind)) {
+        group = buildManhole(props);
+      } else {
+        group = buildBox(props);
+      }
       break;
-    default:
-      group = buildBox(props);
+    }
   }
 
   group.name = `shape:${props.kind}`;

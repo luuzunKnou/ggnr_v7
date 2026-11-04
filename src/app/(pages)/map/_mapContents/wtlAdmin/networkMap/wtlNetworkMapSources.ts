@@ -31,18 +31,37 @@ export function isWtlNetMapGroup(group: string): boolean {
   return group.startsWith('상수') || group === '광역상수'
 }
 
-/** 기본 정렬: 상수 → 상수(서용) → 기타 상수* → 광역상수 등 */
-export function compareWtlNetMapGroupNames(a: string, b: string): number {
-  const rank = (g: string) => {
-    if (g === '상수') return 0
-    if (g === '상수(서용)') return 1
-    if (g.startsWith('상수')) return 2
-    return 3
+/**
+ * 테이블명 접두어 순위.
+ * wtl_* → 0 / {a-z}_wtl_* → 1..26 / 그 외 → 100+
+ */
+export function wtlNetMapTablePrefixRank(tableName: string): number {
+  const t = String(tableName ?? '').trim().toLowerCase()
+  if (!t) return 999
+  if (t.startsWith('wtl_')) return 0
+  const m = /^([a-z])_wtl_/.exec(t)
+  if (m?.[1]) return 1 + (m[1].charCodeAt(0) - 97)
+  return 100
+}
+
+/** 그룹 소속 테이블에서 최저(가장 앞) 접두어 순위 */
+export function wtlNetMapGroupPrefixRank(tables: readonly string[]): number {
+  let best = 999
+  for (const name of tables) {
+    const r = wtlNetMapTablePrefixRank(name)
+    if (r < best) best = r
   }
-  const ra = rank(a)
-  const rb = rank(b)
+  return best
+}
+
+export function compareWtlNetMapSources(
+  a: Pick<WtlNetMapSourceDef, 'id' | 'tables'>,
+  b: Pick<WtlNetMapSourceDef, 'id' | 'tables'>
+): number {
+  const ra = wtlNetMapGroupPrefixRank(a.tables)
+  const rb = wtlNetMapGroupPrefixRank(b.tables)
   if (ra !== rb) return ra - rb
-  return a.localeCompare(b, 'ko')
+  return a.id.localeCompare(b.id, 'ko')
 }
 
 export function makeWtlNetMapRemap(
@@ -90,7 +109,7 @@ export function buildWtlNetMapSourcesFromRows(
   for (const [group, names] of byGroup) {
     sources.push(toWtlNetMapSourceDef({ id: group, label: group, tables: names }))
   }
-  sources.sort((a, b) => compareWtlNetMapGroupNames(a.id, b.id))
+  sources.sort(compareWtlNetMapSources)
   return sources
 }
 
@@ -103,7 +122,7 @@ function rebuildIndex() {
 }
 
 export function setWtlNetMapSources(payloads: readonly WtlNetMapSourcePayload[]) {
-  runtimeSources = payloads.map(toWtlNetMapSourceDef)
+  runtimeSources = payloads.map(toWtlNetMapSourceDef).sort(compareWtlNetMapSources)
   rebuildIndex()
 }
 
@@ -113,6 +132,17 @@ export function getWtlNetMapSources(): readonly WtlNetMapSourceDef[] {
 
 export function getWtlNetMapSource(id: string): WtlNetMapSourceDef | undefined {
   return byId.get(id)
+}
+
+/**
+ * 기본 정렬: wtl_* 그룹 → {a-z}_wtl_* 알파벳 → 그 외(그룹명).
+ * id만 넘기면 runtime 출처의 tables로 접두어를 본다.
+ */
+export function compareWtlNetMapGroupNames(a: string, b: string): number {
+  const ra = wtlNetMapGroupPrefixRank(byId.get(a)?.tables ?? [])
+  const rb = wtlNetMapGroupPrefixRank(byId.get(b)?.tables ?? [])
+  if (ra !== rb) return ra - rb
+  return a.localeCompare(b, 'ko')
 }
 
 /** @deprecated 서버 응답 등록 전엔 비어 있음 — getWtlNetMapSources() 사용 */
@@ -134,40 +164,12 @@ export function parseWtlNetMapSourceIds(raw: unknown): WtlNetMapSourceId[] {
   return out.length > 0 ? out : fallback
 }
 
-/** localStorage 설정 적용 후 상단 버튼에 보일 출처 */
-export function applyWtlNetMapSourceUiSettings(
-  availableIds: readonly string[],
-  settings: { order?: string[]; visible?: string[] } | null
-): WtlNetMapSourceId[] {
-  const available = [...availableIds].map(String).filter(Boolean)
-  if (available.length === 0) return []
-
-  const order = Array.isArray(settings?.order) ? settings!.order.map(String) : []
-  const ordered: string[] = []
-  for (const id of order) {
-    if (available.includes(id) && !ordered.includes(id)) ordered.push(id)
-  }
-  const rest = available
-    .filter((id) => !ordered.includes(id))
-    .sort(compareWtlNetMapGroupNames)
-  const full = [...ordered, ...rest]
-
-  if (!settings || !Array.isArray(settings.visible)) return full
-  const visibleSet = new Set(settings.visible.map(String))
-  /** 저장 당시 order/visible에 없던 신규 그룹은 기본 표시 */
-  const known = new Set([...settings.visible, ...order].map(String))
-  const shown = full.filter((id) => visibleSet.has(id) || !known.has(id))
-  return shown.length > 0 ? shown : full
-}
-
-/** 초기 선택 그룹 — 상수 → 상수(서용) → 정렬 첫 항목 */
+/** 초기 선택 그룹 — 접두어 정렬 첫 항목(보통 wtl_* = 상수) */
 export function pickDefaultWtlNetMapSourceId(
   visibleIds: readonly string[]
 ): WtlNetMapSourceId | null {
   const ids = visibleIds.map(String).filter(Boolean)
   if (ids.length === 0) return null
-  for (const prefer of ['상수', '상수(서용)']) {
-    if (ids.includes(prefer)) return prefer
-  }
-  return ids[0] ?? null
+  const sorted = [...ids].sort(compareWtlNetMapGroupNames)
+  return sorted[0] ?? null
 }

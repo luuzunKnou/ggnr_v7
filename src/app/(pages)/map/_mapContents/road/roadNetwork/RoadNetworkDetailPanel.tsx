@@ -87,6 +87,7 @@ import {
   describeAttrHistoryDetail,
   describeComplaintHistoryDetail,
   describeMaintHistoryDetail,
+  isCountyTableRoadType,
   isNewRoadNetworkRowId,
   revokeAttachmentPreview,
   type RoadNetworkAttachment,
@@ -259,6 +260,7 @@ function AttachmentThumb({
 }) {
   const isImage = att.previewKind === "image" && !!att.previewUrl;
   const isPdf = att.previewKind === "pdf";
+  const isExcel = att.previewKind === "excel";
   return (
     <div className="group relative">
       <button
@@ -277,7 +279,9 @@ function AttachmentThumb({
         ) : (
           <div className="flex h-full w-full flex-col items-center justify-center gap-1 text-muted-foreground">
             <FileText className="h-5 w-5" />
-            <span className="text-[10px] font-semibold">{isPdf ? "PDF" : "파일"}</span>
+            <span className="text-[10px] font-semibold">
+              {isPdf ? "PDF" : isExcel ? "엑셀" : "파일"}
+            </span>
           </div>
         )}
       </button>
@@ -610,7 +614,7 @@ export function RoadNetworkDetailPanel({
   }, [setSitePointKind, setEndpointMarkers, setFocusedSiteKey]);
 
   useEffect(() => {
-    if (row.roadType !== "군도" && row.roadType !== "농도") {
+    if (!isCountyTableRoadType(row.roadType) && row.roadType !== "농도") {
       setEndpointMarkers?.(null);
       return;
     }
@@ -1248,14 +1252,9 @@ export function RoadNetworkDetailPanel({
       sinuosity: roadTypeHasSinuosity(nextType)
         ? formatRoadNetworkNumericAttr(attrDraft.sinuosity)
         : "",
-      detailReason:
-        nextType === "국지도" || nextType === "일반도로" || nextType === "임도"
-          ? attrDraft.detailReason.trim()
-          : "",
+      detailReason: nextType === "국지도" ? attrDraft.detailReason.trim() : "",
       address:
-        (isUnified && fields.some((f) => f.key === "address")) ||
-        nextType === "일반도로" ||
-        nextType === "임도"
+        isUnified && fields.some((f) => f.key === "address")
           ? attrDraft.address.trim()
           : "",
     };
@@ -1535,7 +1534,9 @@ export function RoadNetworkDetailPanel({
     const previewable = list.filter(
       (a) =>
         a.previewUrl &&
-        (a.previewKind === "image" || a.previewKind === "pdf")
+        (a.previewKind === "image" ||
+          a.previewKind === "pdf" ||
+          a.previewKind === "excel")
     );
     if (previewable.length === 0) {
       const focus = focusId ? list.find((a) => a.id === focusId) : list[0];
@@ -1546,7 +1547,12 @@ export function RoadNetworkDetailPanel({
     const items: ServiceFilePreviewItem[] = previewable.map((a) => ({
       url: a.previewUrl!,
       fileName: a.name,
-      kind: a.previewKind === "pdf" ? "pdf" : "image",
+      kind:
+        a.previewKind === "pdf"
+          ? "pdf"
+          : a.previewKind === "excel"
+            ? "excel"
+            : "image",
     }));
     let index = 0;
     if (focusId) {

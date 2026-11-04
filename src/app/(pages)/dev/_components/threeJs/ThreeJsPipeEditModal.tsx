@@ -2,14 +2,16 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { Button } from '@/app/shadcnComponents/ui/button';
-import { DevFloatingPanel } from '../DevFloatingPanel';
+import { getWtlLayerShapeDef } from '@/lib/wtlLayerShapeDefs';
 import { call } from '@/lib/api';
+import { DevFloatingPanel } from '../DevFloatingPanel';
 import { shapePropsEqual } from './shapeCatalog';
 import { GroundPickMap } from './GroundPickMap';
 import { ShapeColorOpacityFields } from './ShapeColorOpacityFields';
 import {
   GROUND_DEFAULT_STEP_M,
   PIPE_DEFAULT_RADIUS_M,
+  isLineLayerShape,
   type GroundHeightField,
   type PipeSegment,
   type ShapeProps,
@@ -42,21 +44,26 @@ export function ThreeJsPipeEditModal({
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    if (!open || !props || props.kind !== 'wtl_pipe_lm') return;
+    if (!open || !props || !isLineLayerShape(props.kind)) return;
     const snap = {
       ...props,
       pipeSegments: props.pipeSegments ?? null,
     };
     snapshotRef.current = snap;
     setDraft(snap);
+    const def = getWtlLayerShapeDef(props.kind);
     setStatus(
       props.pipeSegments?.length
-        ? `관로 ${props.pipeSegments.length}건 준비됨`
+        ? `${def?.label ?? '관로'} ${props.pipeSegments.length}건 준비됨`
         : '지도에서 사각형을 그린 뒤 «관로 생성»을 누르세요'
     );
   }, [open, props]);
 
-  if (!draft || draft.kind !== 'wtl_pipe_lm') return null;
+  if (!draft || !isLineLayerShape(draft.kind)) return null;
+
+  const def = getWtlLayerShapeDef(draft.kind);
+  const layerLabel = def?.label ?? draft.kind;
+  const showColorPicker = draft.kind !== 'wtl_pipe_lm';
 
   const center: [number, number] | null =
     draft.pipeCenterX != null && draft.pipeCenterY != null
@@ -75,13 +82,14 @@ export function ThreeJsPipeEditModal({
       return;
     }
     setBusy(true);
-    setStatus('상수관로·표고 조회 중…');
+    setStatus(`${layerLabel}·표고 조회 중…`);
     try {
       const [pipeRes, elevRes] = await Promise.all([
         call('', 'POST', {
           service: 'elevationService',
-          action: 'getWtlPipesInExtent',
+          action: 'getWtlLineLayerInExtent',
           params: {
+            table: draft.kind,
             x: center[0],
             y: center[1],
             srid: 3857,
@@ -136,7 +144,7 @@ export function ThreeJsPipeEditModal({
 
       const next: ShapeProps = {
         ...draft,
-        kind: 'wtl_pipe_lm',
+        kind: draft.kind,
         pipeCenterX: center[0],
         pipeCenterY: center[1],
         pipeRadiusM: radiusM,
@@ -150,12 +158,12 @@ export function ThreeJsPipeEditModal({
       if (!pipes.length) {
         setStatus(
           pipeHeightField
-            ? '범위 내 상수관로 없음 · 표고는 반영됨'
-            : '범위 내 상수관로가 없습니다'
+            ? `범위 내 ${layerLabel} 없음 · 표고는 반영됨`
+            : `범위 내 ${layerLabel}가 없습니다`
         );
       } else {
         setStatus(
-          `생성 완료 · 관로 ${pipes.length}건` +
+          `생성 완료 · ${layerLabel} ${pipes.length}건` +
             (pipeHeightField
               ? ` · 표고 반영(해발−심도)`
               : ' · 표고 없음(Y=0 기준)')
@@ -176,7 +184,7 @@ export function ThreeJsPipeEditModal({
     onOpenChange(false);
   };
 
-  const title = titleName ? `${titleName} 편집` : 'wtl_pipe_lm 편집';
+  const title = titleName ? `${titleName} 편집` : `${layerLabel} 편집`;
 
   return (
     <DevFloatingPanel
@@ -191,21 +199,22 @@ export function ThreeJsPipeEditModal({
     >
       <div className="flex min-h-0 flex-1 flex-col gap-3 p-3">
         <p className="text-[12px] text-muted-foreground">
-          지도에서 드래그해 사각형 범위를 그립니다. 그린 범위를 덮는 정사각(한 변{' '}
-          {Math.round(radiusM * 2)} m) 안의 상수관로(wtl_pipe_lm)를 중공 파이프로 만듭니다.
-          색은 GeoServer 스타일(용도코드)을 따르며, 관경·심도·지표는 횡단면도와 동일합니다.
+          지도에서 드래그해 사각형 범위를 그립니다. 정사각(한 변{' '}
+          {Math.round(radiusM * 2)} m) 안의 {layerLabel}({draft.kind})를 중공 파이프로
+          만듭니다. 색은 GeoServer 스타일을 따릅니다.
         </p>
         <ShapeColorOpacityFields
-          colorId="pipe-color"
-          opacityId="pipe-opacity"
-          label="wtl_pipe_lm"
-          color={draft.color || '#F44336'}
+          colorId={`pipe-color-${draft.kind}`}
+          opacityId={`pipe-opacity-${draft.kind}`}
+          label={layerLabel}
+          color={draft.color || def?.fallbackColor || '#F44336'}
           opacity={draft.opacity ?? 0.92}
-          showColor={false}
+          showColor={showColorPicker}
           onColor={(hex) => applyDraft({ ...draft, color: hex })}
           onOpacity={(n) => applyDraft({ ...draft, opacity: n })}
         />
         <GroundPickMap
+          drawMode="extent"
           center={center}
           radiusM={radiusM}
           onPick={(r) => {

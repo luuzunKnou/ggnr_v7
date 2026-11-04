@@ -45,12 +45,20 @@ export function focusFromIdentifyGeom(geom: unknown): Omit<WaterPlaceFocus, 'det
   if (!geometry || typeof geometry !== 'object') return null
   try {
     const format = new GeoJSON()
-    const feature = format.readFeature(
+    const read = format.readFeature(
       { type: 'Feature', geometry, properties: {} },
       { dataProjection: 'EPSG:4326', featureProjection: 'EPSG:3857' }
     )
+    const feature = Array.isArray(read) ? read[0] : read
+    if (!feature) return null
     const extent = feature.getGeometry()?.getExtent()
-    if (!extent || extent.length !== 4 || extent.some((n) => !Number.isFinite(n))) return null
+    if (
+      !extent ||
+      extent.length !== 4 ||
+      extent.some((n: number) => !Number.isFinite(n))
+    ) {
+      return null
+    }
     return {
       extent3857: [extent[0]!, extent[1]!, extent[2]!, extent[3]!],
       geomGeoJson4326: geometry as Record<string, unknown>,

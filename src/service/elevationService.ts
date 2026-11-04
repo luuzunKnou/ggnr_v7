@@ -3,7 +3,16 @@
  */
 import { db } from '@/database/db';
 import { sql } from 'drizzle-orm';
-import { readWtlPipeLmStrokeColor } from '@/lib/geoserverStyleFillColor';
+import {
+  readWtlLayerLineColor,
+  readWtlLayerPointColor,
+  readWtlManhPsSymbolColor,
+  readWtlPipeLmStrokeColor,
+} from '@/lib/geoserverStyleFillColor';
+import {
+  getWtlLayerShapeDef,
+  type WtlLayerShapeDef,
+} from '@/lib/wtlLayerShapeDefs';
 
 const ELEVATION_SCHEMA = 'public_layer';
 const ELEVATION_TABLE = 'elevation';
@@ -922,13 +931,20 @@ export type WtlPipeInExtent = {
   /** 관경 m (std_dip: mm면 /1000) */
   diameterM: number;
   /**
-   * 심도 m — 횡단면도(CrossSection)와 동일:
-   * 관 라인 최근접 wtl_pipe_ps.pip_dep → (low_dep+hgh_dep)/2 → hgh_dep|low_dep
+   * 심도 m — CrossSectionController 와 동일 우선순위:
+   * 최근접 pip_dep → (low+hgh)/2 → (beg+end)/2 → std_dep → dep_avg → lay_dep → 기본
    */
   depthM: number;
+  /**
+   * 꼭짓점별 심도(m). 근처 wtl_pipe_ps.pip_dep(10m) 최근접, 없으면 depthM.
+   * coords3857 과 동일 길이.
+   */
+  depthsM?: number[];
   /** 지표 해발(m) — 관 중점 등고 상·하 보간(고도 측정과 동일) */
   surfaceElevM?: number;
 };
+
+type PipeDepthSample = { x: number; y: number; depthM: number };
 
 function parseStdDipToMeters(raw: unknown): number {
   const n = Number(raw);
@@ -942,6 +958,117 @@ function parseDepthMeters(raw: unknown): number | null {
   const n = Number(raw);
   if (!Number.isFinite(n) || n < 0) return null;
   return n;
+}
+
+/**
+ * 레거시 CrossSectionController 심도 폴백.
+ * low_dep 있으면 (low+hgh)/2, beg_dep 있으면 (beg+end)/2.
+ */
+function resolveLegacyPipeDepthM(
+  row: {
+    nearest_pip_dep?: unknown;
+    low_dep?: unknown;
+    hgh_dep?: unknown;
+    beg_dep?: unknown;
+    end_dep?: unknown;
+    std_dep?: unknown;
+    dep_avg?: unknown;
+    lay_dep?: unknown;
+  },
+  fallbackDefault: number
+): number {
+  const nearest = parseDepthMeters(row.nearest_pip_dep);
+  if (nearest != null) return nearest;
+
+  const low = parseDepthMeters(row.low_dep);
+  const high = parseDepthMeters(row.hgh_dep);
+  if (low != null) {
+    return high != null ? (low + high) / 2 : low;
+  }
+
+  const beg = parseDepthMeters(row.beg_dep);
+  const end = parseDepthMeters(row.end_dep);
+  if (beg != null) {
+    return end != null ? (beg + end) / 2 : beg;
+  }
+
+  const std = parseDepthMeters(row.std_dep);
+  if (std != null) return std;
+  const avg = parseDepthMeters(row.dep_avg);
+  if (avg != null) return avg;
+  const lay = parseDepthMeters(row.lay_dep);
+  if (lay != null) return lay;
+  return fallbackDefault;
+}
+
+/** 범위(+여유) 안 심도점 — 꼭짓점별 최근접 pip_dep 용 */
+async function fetchPipeDepthSamplesInEnv(
+  env3857Sql: string,
+  padProj: number
+): Promise<PipeDepthSample[]> {
+  const psExists = await tableExists(PIPE_PS_SCHEMA, PIPE_PS_TABLE);
+  const psMeta = psExists ? await getGeomMeta(PIPE_PS_SCHEMA, PIPE_PS_TABLE) : null;
+  if (!psMeta) return [];
+
+  const psGeomCol = `"${psMeta.geomCol.replace(/"/g, '""')}"`;
+  const psGeom = geomStamped(psGeomCol, psMeta.srid);
+  const psFrom = `"${PIPE_PS_SCHEMA.replace(/"/g, '""')}"."${PIPE_PS_TABLE.replace(/"/g, '""')}"`;
+  const psIn3857 = `ST_Transform(${psGeom}, 3857)`;
+  const buf = `ST_Buffer(${env3857Sql}, ${padProj})`;
+
+  try {
+    const res = await db.execute(
+      sql.raw(
+        `SELECT
+           ST_X(${psIn3857}) AS x,
+           ST_Y(${psIn3857}) AS y,
+           d.pip_dep::double precision AS pip_dep
+         FROM ${psFrom} d
+         WHERE ${psGeomCol} IS NOT NULL
+           AND d.pip_dep IS NOT NULL
+           AND ST_Intersects(${psIn3857}, ${buf})
+         LIMIT 4000`
+      )
+    );
+    const out: PipeDepthSample[] = [];
+    for (const raw of res.rows ?? []) {
+      const row = raw as { x?: unknown; y?: unknown; pip_dep?: unknown };
+      const x = Number(row.x);
+      const y = Number(row.y);
+      const depthM = parseDepthMeters(row.pip_dep);
+      if (!Number.isFinite(x) || !Number.isFinite(y) || depthM == null) continue;
+      out.push({ x, y, depthM });
+    }
+    return out;
+  } catch {
+    return [];
+  }
+}
+
+/** 꼭짓점마다 10m(투영) 안 최근접 심도점. 없으면 fallback */
+function depthsAlongCoords(
+  coords: [number, number][],
+  samples: PipeDepthSample[],
+  searchProj: number,
+  fallback: number
+): number[] {
+  if (!coords.length) return [];
+  if (!samples.length) return coords.map(() => fallback);
+  const r2 = searchProj * searchProj;
+  return coords.map(([x, y]) => {
+    let bestD = Infinity;
+    let bestDep = fallback;
+    for (const s of samples) {
+      const dx = s.x - x;
+      const dy = s.y - y;
+      const d2 = dx * dx + dy * dy;
+      if (d2 <= r2 && d2 < bestD) {
+        bestD = d2;
+        bestDep = s.depthM;
+      }
+    }
+    return bestDep;
+  });
 }
 
 function parseLineCoords3857(geojson: string): [number, number][] {
@@ -972,21 +1099,38 @@ function parseLineCoords3857(geojson: string): [number, number][] {
 
 /**
  * 정사각 범위(중심·절반 m, EPSG:3857)와 교차하는 상수관로(wtl_pipe_lm).
- * 심도: 횡단면도(CrossSectionController)와 동일 —
- *   관마다 최근접 wtl_pipe_ps.pip_dep → (low_dep+hgh_dep)/2 → 단독 심도필드 → 기본 1.2m
+ * 심도: CrossSectionController 폴백 + 꼭짓점별 최근접 pip_dep(10m).
  */
 export async function getWtlPipesInExtent(params: {
   x?: number;
   y?: number;
   srid?: number;
   radiusM?: number;
+  /**
+   * 단면도 등 — 정사각 envelope 대신 폴리곤으로 클립.
+   * EPSG:3857 링(닫힘 권장). 유효하면 radius 정사각 대신 사용.
+   */
+  polygon3857?: [number, number][] | number[][];
 }): Promise<{ success: boolean; pipes: WtlPipeInExtent[]; error?: string }> {
   const x = Number(params?.x);
   const y = Number(params?.y);
   const inputSrid = Number(params?.srid) > 0 ? Number(params.srid) : 3857;
   const radiusM = Math.max(1, Math.min(2000, Number(params?.radiusM) || 10));
 
-  if (!Number.isFinite(x) || !Number.isFinite(y)) {
+  const polyRaw = Array.isArray(params?.polygon3857) ? params.polygon3857 : null;
+  const polyPts: [number, number][] = [];
+  if (polyRaw) {
+    for (const p of polyRaw) {
+      if (!Array.isArray(p) || p.length < 2) continue;
+      const px = Number(p[0]);
+      const py = Number(p[1]);
+      if (!Number.isFinite(px) || !Number.isFinite(py)) continue;
+      polyPts.push([px, py]);
+    }
+  }
+  const usePolygon = polyPts.length >= 3;
+
+  if (!usePolygon && (!Number.isFinite(x) || !Number.isFinite(y))) {
     return { success: false, pipes: [], error: '중심 좌표가 올바르지 않습니다' };
   }
 
@@ -996,24 +1140,46 @@ export async function getWtlPipesInExtent(params: {
     return { success: false, pipes: [], error: '상수관로(wtl_pipe_lm) 데이터가 없습니다' };
   }
 
+  const cyForLat = usePolygon
+    ? polyPts.reduce((s, p) => s + p[1], 0) / polyPts.length
+    : y;
   let meterToProj = 1;
   if (inputSrid === 3857) {
-    const latRad = 2 * Math.atan(Math.exp(y / 6378137)) - Math.PI / 2;
+    const latRad = 2 * Math.atan(Math.exp(cyForLat / 6378137)) - Math.PI / 2;
     const cosLat = Math.cos(latRad);
     if (Number.isFinite(cosLat) && cosLat >= 0.2) meterToProj = 1 / cosLat;
   }
-  const half = radiusM * meterToProj;
-  const minx = x - half;
-  const maxx = x + half;
-  const miny = y - half;
-  const maxy = y + half;
   /** 횡단면도 DWithin 10m 와 동일 (3857 보정) */
   const depSearchProj = 10 * meterToProj;
 
   const lmGeomCol = `"${lmMeta.geomCol.replace(/"/g, '""')}"`;
   const lmGeom = geomStamped(lmGeomCol, lmMeta.srid);
   const lmFrom = `"${PIPE_LM_SCHEMA.replace(/"/g, '""')}"."${PIPE_LM_TABLE.replace(/"/g, '""')}"`;
-  const env3857 = `ST_MakeEnvelope(${minx}, ${miny}, ${maxx}, ${maxy}, 3857)`;
+
+  const begCol = await resolveLayerColumnName(PIPE_LM_TABLE, ['beg_dep', 'BEG_DEP']);
+  const endCol = await resolveLayerColumnName(PIPE_LM_TABLE, ['end_dep', 'END_DEP']);
+  const stdDepCol = await resolveLayerColumnName(PIPE_LM_TABLE, ['std_dep', 'STD_DEP']);
+  const depAvgCol = await resolveLayerColumnName(PIPE_LM_TABLE, ['dep_avg', 'DEP_AVG']);
+  const layCol = await resolveLayerColumnName(PIPE_LM_TABLE, ['lay_dep', 'LAY_DEP']);
+
+  let env3857: string;
+  if (usePolygon) {
+    const ring = [...polyPts];
+    const first = ring[0]!;
+    const last = ring[ring.length - 1]!;
+    if (first[0] !== last[0] || first[1] !== last[1]) {
+      ring.push([first[0], first[1]]);
+    }
+    const wkt = `POLYGON((${ring.map(([px, py]) => `${px} ${py}`).join(',')}))`;
+    env3857 = `ST_MakeValid(ST_GeomFromText('${wkt}', 3857))`;
+  } else {
+    const half = radiusM * meterToProj;
+    const minx = x - half;
+    const maxx = x + half;
+    const miny = y - half;
+    const maxy = y + half;
+    env3857 = `ST_MakeEnvelope(${minx}, ${miny}, ${maxx}, ${maxy}, 3857)`;
+  }
   const lmIn3857 = `ST_Transform(${lmGeom}, 3857)`;
 
   const psExists = await tableExists(PIPE_PS_SCHEMA, PIPE_PS_TABLE);
@@ -1037,6 +1203,14 @@ export async function getWtlPipesInExtent(params: {
        ) AS nearest_pip_dep`;
   }
 
+  const hitExtra = [
+    begCol ? `${quoteIdent(begCol)} AS beg_dep` : `NULL::double precision AS beg_dep`,
+    endCol ? `${quoteIdent(endCol)} AS end_dep` : `NULL::double precision AS end_dep`,
+    stdDepCol ? `${quoteIdent(stdDepCol)} AS std_dep` : `NULL::double precision AS std_dep`,
+    depAvgCol ? `${quoteIdent(depAvgCol)} AS dep_avg` : `NULL::double precision AS dep_avg`,
+    layCol ? `${quoteIdent(layCol)} AS lay_dep` : `NULL::double precision AS lay_dep`,
+  ];
+
   try {
     const res = await db.execute(
       sql.raw(
@@ -1047,6 +1221,7 @@ export async function getWtlPipesInExtent(params: {
              std_dip,
              hgh_dep,
              low_dep,
+             ${hitExtra.join(',\n             ')},
              ST_CollectionExtract(
                ST_MakeValid(ST_Intersection(${lmIn3857}, ${env3857})),
                2
@@ -1062,12 +1237,19 @@ export async function getWtlPipesInExtent(params: {
            h.std_dip,
            h.hgh_dep,
            h.low_dep,
+           h.beg_dep,
+           h.end_dep,
+           h.std_dep,
+           h.dep_avg,
+           h.lay_dep,
            ST_AsGeoJSON(h.clip) AS geojson,
            ${nearestPipDepSql}
          FROM hits h
          WHERE h.clip IS NOT NULL AND NOT ST_IsEmpty(h.clip)`
       )
     );
+
+    const depthSamples = await fetchPipeDepthSamplesInEnv(env3857, depSearchProj);
 
     const pipes: WtlPipeInExtent[] = [];
     const midPoints: [number, number][] = [];
@@ -1078,21 +1260,19 @@ export async function getWtlPipesInExtent(params: {
         std_dip?: unknown;
         hgh_dep?: unknown;
         low_dep?: unknown;
+        beg_dep?: unknown;
+        end_dep?: unknown;
+        std_dep?: unknown;
+        dep_avg?: unknown;
+        lay_dep?: unknown;
         nearest_pip_dep?: unknown;
         geojson?: string;
       };
       const coords = parseLineCoords3857(String(row.geojson ?? ''));
       if (coords.length < 2) continue;
 
-      // 1) 최근접 심도점 pip_dep  2) (low+hgh)/2  3) 단독 필드  4) 기본 1.2m
-      let depthM = parseDepthMeters(row.nearest_pip_dep);
-      if (depthM == null) {
-        const low = parseDepthMeters(row.low_dep);
-        const high = parseDepthMeters(row.hgh_dep);
-        if (low != null && high != null) depthM = (low + high) / 2;
-        else depthM = high ?? low;
-      }
-      if (depthM == null) depthM = 1.2;
+      const depthM = resolveLegacyPipeDepthM(row, 1.2);
+      const depthsM = depthsAlongCoords(coords, depthSamples, depSearchProj, depthM);
 
       const labelRaw = row.pip_lbl != null ? String(row.pip_lbl).trim() : '';
       const saaCde =
@@ -1107,6 +1287,7 @@ export async function getWtlPipesInExtent(params: {
         coords3857: coords,
         diameterM: parseStdDipToMeters(row.std_dip),
         depthM,
+        depthsM,
       });
     }
 
@@ -1127,6 +1308,228 @@ export async function getWtlPipesInExtent(params: {
       success: false,
       pipes: [],
       error: e instanceof Error ? e.message : '상수관로 조회 오류',
+    };
+  }
+}
+
+const MANH_SCHEMA = 'layer';
+const MANH_TABLE = 'wtl_manh_ps';
+
+export type WtlManholeInExtent = {
+  id: string;
+  label?: string;
+  color?: string;
+  x3857: number;
+  y3857: number;
+  /** 외경 m (MAN_STD 규격) */
+  diameterM: number;
+  /**
+   * 표시용 원통 높이(m).
+   * 상수맨홀 테이블에 심도 필드 없음 — 고정 표고.
+   */
+  depthM: number;
+  surfaceElevM?: number;
+};
+
+/** 상수맨홀 3D 표시용 기본 높이(심도 컬럼 없음) */
+const MANHOLE_DISPLAY_DEPTH_M = 0.4;
+
+function parseManStdToMeters(raw: unknown): number {
+  if (typeof raw === 'string') {
+    const m = raw.replace(/,/g, '').match(/(\d+(?:\.\d+)?)/);
+    if (m) return parseStdDipToMeters(m[1]);
+  }
+  return parseStdDipToMeters(raw);
+}
+
+/** layer 스키마 실제 컬럼명(대소문자 유지). 없으면 null */
+async function resolveLayerColumnName(
+  table: string,
+  candidates: string[]
+): Promise<string | null> {
+  const t = table.toLowerCase().replace(/"/g, '""');
+  for (const cand of candidates) {
+    const c = cand.toLowerCase().replace(/"/g, '""');
+    const res = await db.execute(
+      sql.raw(
+        `SELECT column_name
+         FROM information_schema.columns
+         WHERE table_schema = 'layer'
+           AND lower(table_name) = '${esc(t)}'
+           AND lower(column_name) = '${esc(c)}'
+         LIMIT 1`
+      )
+    );
+    const name = (res.rows?.[0] as { column_name?: unknown } | undefined)?.column_name;
+    if (typeof name === 'string' && name.length) return name;
+  }
+  return null;
+}
+
+function quoteIdent(name: string): string {
+  return `"${name.replace(/"/g, '""')}"`;
+}
+
+function parsePointCoords3857(geojson: string): [number, number] | null {
+  try {
+    const g = JSON.parse(geojson) as {
+      type?: string;
+      coordinates?: unknown;
+    };
+    if (g.type === 'Point' && Array.isArray(g.coordinates) && g.coordinates.length >= 2) {
+      const x = Number(g.coordinates[0]);
+      const y = Number(g.coordinates[1]);
+      if (Number.isFinite(x) && Number.isFinite(y)) return [x, y];
+    }
+    if (
+      g.type === 'MultiPoint' &&
+      Array.isArray(g.coordinates) &&
+      Array.isArray(g.coordinates[0]) &&
+      (g.coordinates[0] as unknown[]).length >= 2
+    ) {
+      const c = g.coordinates[0] as number[];
+      const x = Number(c[0]);
+      const y = Number(c[1]);
+      if (Number.isFinite(x) && Number.isFinite(y)) return [x, y];
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * 정사각 또는 폴리곤 범위의 상수맨홀(wtl_manh_ps).
+ * 필드: FTR_IDN(관리번호), MAN_STD(규격) — 심도 컬럼 없음.
+ */
+export async function getWtlManholesInExtent(params: {
+  x?: number;
+  y?: number;
+  srid?: number;
+  radiusM?: number;
+  polygon3857?: [number, number][] | number[][];
+}): Promise<{ success: boolean; manholes: WtlManholeInExtent[]; error?: string }> {
+  const x = Number(params?.x);
+  const y = Number(params?.y);
+  const inputSrid = Number(params?.srid) > 0 ? Number(params.srid) : 3857;
+  const radiusM = Math.max(1, Math.min(2000, Number(params?.radiusM) || 10));
+
+  const polyRaw = Array.isArray(params?.polygon3857) ? params.polygon3857 : null;
+  const polyPts: [number, number][] = [];
+  if (polyRaw) {
+    for (const p of polyRaw) {
+      if (!Array.isArray(p) || p.length < 2) continue;
+      const px = Number(p[0]);
+      const py = Number(p[1]);
+      if (!Number.isFinite(px) || !Number.isFinite(py)) continue;
+      polyPts.push([px, py]);
+    }
+  }
+  const usePolygon = polyPts.length >= 3;
+
+  if (!usePolygon && (!Number.isFinite(x) || !Number.isFinite(y))) {
+    return { success: false, manholes: [], error: '중심 좌표가 올바르지 않습니다' };
+  }
+
+  const exists = await tableExists(MANH_SCHEMA, MANH_TABLE);
+  const meta = exists ? await getGeomMeta(MANH_SCHEMA, MANH_TABLE) : null;
+  if (!meta) {
+    return { success: false, manholes: [], error: '상수맨홀(wtl_manh_ps) 데이터가 없습니다' };
+  }
+
+  const idCol = await resolveLayerColumnName(MANH_TABLE, ['FTR_IDN', 'ftr_idn']);
+  const stdCol = await resolveLayerColumnName(MANH_TABLE, ['MAN_STD', 'man_std']);
+  if (!idCol && !stdCol) {
+    // 최소한 geom만으로도 점은 조회
+  }
+
+  const cyForLat = usePolygon
+    ? polyPts.reduce((s, p) => s + p[1], 0) / polyPts.length
+    : y;
+  let meterToProj = 1;
+  if (inputSrid === 3857) {
+    const latRad = 2 * Math.atan(Math.exp(cyForLat / 6378137)) - Math.PI / 2;
+    const cosLat = Math.cos(latRad);
+    if (Number.isFinite(cosLat) && cosLat >= 0.2) meterToProj = 1 / cosLat;
+  }
+
+  const geomCol = `"${meta.geomCol.replace(/"/g, '""')}"`;
+  const geom = geomStamped(geomCol, meta.srid);
+  const from = `"${MANH_SCHEMA.replace(/"/g, '""')}"."${MANH_TABLE.replace(/"/g, '""')}"`;
+  const in3857 = `ST_Transform(${geom}, 3857)`;
+
+  let env3857: string;
+  if (usePolygon) {
+    const ring = [...polyPts];
+    const first = ring[0]!;
+    const last = ring[ring.length - 1]!;
+    if (first[0] !== last[0] || first[1] !== last[1]) {
+      ring.push([first[0], first[1]]);
+    }
+    const wkt = `POLYGON((${ring.map(([px, py]) => `${px} ${py}`).join(',')}))`;
+    env3857 = `ST_MakeValid(ST_GeomFromText('${wkt}', 3857))`;
+  } else {
+    const half = radiusM * meterToProj;
+    env3857 = `ST_MakeEnvelope(${x - half}, ${y - half}, ${x + half}, ${y + half}, 3857)`;
+  }
+
+  const selectParts = [
+    idCol ? `${quoteIdent(idCol)} AS ftr_idn` : `NULL::text AS ftr_idn`,
+    stdCol ? `${quoteIdent(stdCol)} AS man_std` : `NULL::text AS man_std`,
+    `ST_AsGeoJSON(${in3857}) AS geojson`,
+  ];
+
+  try {
+    const res = await db.execute(
+      sql.raw(
+        `SELECT
+           ${selectParts.join(',\n           ')}
+         FROM ${from}
+         WHERE ${geomCol} IS NOT NULL
+           AND ST_Intersects(${in3857}, ${env3857})
+         LIMIT 500`
+      )
+    );
+
+    const manholes: WtlManholeInExtent[] = [];
+    const pts: [number, number][] = [];
+    for (const raw of res.rows ?? []) {
+      const row = raw as {
+        ftr_idn?: unknown;
+        man_std?: unknown;
+        geojson?: string;
+      };
+      const xy = parsePointCoords3857(String(row.geojson ?? ''));
+      if (!xy) continue;
+      const labelRaw = row.ftr_idn != null ? String(row.ftr_idn).trim() : '';
+      pts.push(xy);
+      manholes.push({
+        id: `manh-${manholes.length}`,
+        label: labelRaw || undefined,
+        color: readWtlManhPsSymbolColor(),
+        x3857: xy[0],
+        y3857: xy[1],
+        diameterM: Math.max(0.2, parseManStdToMeters(row.man_std)),
+        depthM: MANHOLE_DISPLAY_DEPTH_M,
+      });
+    }
+
+    try {
+      const surfaces = await fetchSurfaceElevIdwAtPoints3857(pts);
+      for (let i = 0; i < manholes.length; i++) {
+        const elev = surfaces[i];
+        if (elev != null) manholes[i].surfaceElevM = elev;
+      }
+    } catch {
+      /* ignore */
+    }
+
+    return { success: true, manholes };
+  } catch (e) {
+    return {
+      success: false,
+      manholes: [],
+      error: e instanceof Error ? e.message : '상수맨홀 조회 오류',
     };
   }
 }
@@ -1230,4 +1633,1096 @@ async function fetchSurfaceElevIdwAtPoints3857(
     out[idx] = Math.round(elevation * 10) / 10;
   }
   return out;
+}
+
+type ExtentParams = {
+  x?: number;
+  y?: number;
+  srid?: number;
+  radiusM?: number;
+  polygon3857?: [number, number][] | number[][];
+};
+
+function resolveLayerColor(def: WtlLayerShapeDef, saaCde?: string | null): string {
+  if (def.colorMode === 'pipe_saa') {
+    return readWtlPipeLmStrokeColor(saaCde, def.fallbackColor);
+  }
+  if (def.geom === 'line') {
+    return readWtlLayerLineColor(def.styleName, def.fallbackColor);
+  }
+  // POINT: SVG 심볼 → CSS fill/stroke → SLD stroke → fallback
+  return (
+    readWtlLayerPointColor(def.styleName, '') ||
+    readWtlLayerLineColor(def.styleName, def.fallbackColor)
+  );
+}
+
+function buildExtentEnv3857(params: ExtentParams): {
+  ok: true;
+  env3857: string;
+  x: number;
+  y: number;
+  radiusM: number;
+} | { ok: false; error: string } {
+  const x = Number(params?.x);
+  const y = Number(params?.y);
+  const inputSrid = Number(params?.srid) > 0 ? Number(params.srid) : 3857;
+  const radiusM = Math.max(1, Math.min(2000, Number(params?.radiusM) || 10));
+
+  const polyRaw = Array.isArray(params?.polygon3857) ? params.polygon3857 : null;
+  const polyPts: [number, number][] = [];
+  if (polyRaw) {
+    for (const p of polyRaw) {
+      if (!Array.isArray(p) || p.length < 2) continue;
+      const px = Number(p[0]);
+      const py = Number(p[1]);
+      if (!Number.isFinite(px) || !Number.isFinite(py)) continue;
+      polyPts.push([px, py]);
+    }
+  }
+  const usePolygon = polyPts.length >= 3;
+  if (!usePolygon && (!Number.isFinite(x) || !Number.isFinite(y))) {
+    return { ok: false, error: '중심 좌표가 올바르지 않습니다' };
+  }
+
+  const cyForLat = usePolygon
+    ? polyPts.reduce((s, p) => s + p[1], 0) / polyPts.length
+    : y;
+  let meterToProj = 1;
+  if (inputSrid === 3857) {
+    const latRad = 2 * Math.atan(Math.exp(cyForLat / 6378137)) - Math.PI / 2;
+    const cosLat = Math.cos(latRad);
+    if (Number.isFinite(cosLat) && cosLat >= 0.2) meterToProj = 1 / cosLat;
+  }
+
+  let env3857: string;
+  if (usePolygon) {
+    const ring = [...polyPts];
+    const first = ring[0]!;
+    const last = ring[ring.length - 1]!;
+    if (first[0] !== last[0] || first[1] !== last[1]) {
+      ring.push([first[0], first[1]]);
+    }
+    const wkt = `POLYGON((${ring.map(([px, py]) => `${px} ${py}`).join(',')}))`;
+    env3857 = `ST_MakeValid(ST_GeomFromText('${wkt}', 3857))`;
+  } else {
+    const half = radiusM * meterToProj;
+    env3857 = `ST_MakeEnvelope(${x - half}, ${y - half}, ${x + half}, ${y + half}, 3857)`;
+  }
+  return {
+    ok: true,
+    env3857,
+    x: usePolygon ? polyPts.reduce((s, p) => s + p[0], 0) / polyPts.length : x,
+    y: cyForLat,
+    radiusM,
+  };
+}
+
+/**
+ * LINE 레이어(wtl_pipe_lm 제외 폐관·급수 등) 범위 조회.
+ * wtl_pipe_lm 은 getWtlPipesInExtent 위임.
+ * 심도: CrossSectionController 폴백 + 꼭짓점별 최근접 pip_dep.
+ */
+export async function getWtlLineLayerInExtent(
+  params: ExtentParams & { table?: string }
+): Promise<{ success: boolean; pipes: WtlPipeInExtent[]; error?: string }> {
+  const table = String(params?.table ?? '').trim().toLowerCase();
+  if (!table) {
+    return { success: false, pipes: [], error: '레이어 테이블이 없습니다' };
+  }
+  if (table === 'wtl_pipe_lm') {
+    return getWtlPipesInExtent(params);
+  }
+
+  const def = getWtlLayerShapeDef(table);
+  if (!def || def.geom !== 'line') {
+    return { success: false, pipes: [], error: `지원하지 않는 관로 레이어: ${table}` };
+  }
+
+  const extent = buildExtentEnv3857(params);
+  if (!extent.ok) return { success: false, pipes: [], error: extent.error };
+
+  const exists = await tableExists('layer', def.table);
+  const meta = exists ? await getGeomMeta('layer', def.table) : null;
+  if (!meta) {
+    return { success: false, pipes: [], error: `${def.label}(${def.table}) 데이터가 없습니다` };
+  }
+
+  const labelCol = await resolveLayerColumnName(def.table, def.labelCols);
+  const dipCol = await resolveLayerColumnName(def.table, def.diameterCols);
+  const highCol = await resolveLayerColumnName(def.table, def.depthHighCols);
+  const lowCol = await resolveLayerColumnName(def.table, def.depthLowCols);
+  const depthCol = await resolveLayerColumnName(def.table, def.depthCols);
+  const begCol = await resolveLayerColumnName(def.table, ['beg_dep', 'BEG_DEP']);
+  const endCol = await resolveLayerColumnName(def.table, ['end_dep', 'END_DEP']);
+  const stdDepCol = await resolveLayerColumnName(def.table, ['std_dep', 'STD_DEP']);
+  const depAvgCol = await resolveLayerColumnName(def.table, ['dep_avg', 'DEP_AVG']);
+
+  const geomCol = `"${meta.geomCol.replace(/"/g, '""')}"`;
+  const geom = geomStamped(geomCol, meta.srid);
+  const from = `"layer"."${def.table.replace(/"/g, '""')}"`;
+  const in3857 = `ST_Transform(${geom}, 3857)`;
+
+  // wtl_pipe_lm 과 동일 — 최근접 wtl_pipe_ps.pip_dep (횡단면도 10m)
+  let meterToProj = 1;
+  {
+    const latRad = 2 * Math.atan(Math.exp(extent.y / 6378137)) - Math.PI / 2;
+    const cosLat = Math.cos(latRad);
+    if (Number.isFinite(cosLat) && cosLat >= 0.2) meterToProj = 1 / cosLat;
+  }
+  const depSearchProj = 10 * meterToProj;
+
+  const psExists = await tableExists(PIPE_PS_SCHEMA, PIPE_PS_TABLE);
+  const psMeta = psExists ? await getGeomMeta(PIPE_PS_SCHEMA, PIPE_PS_TABLE) : null;
+  let nearestPipDepSql = 'NULL::double precision AS nearest_pip_dep';
+  // 레거시: wtl_pipe_lm→wtl_pipe_ps. 급수·폐관도 동일 심도점이 범위에 있으면 사용
+  if (psMeta) {
+    const psGeomCol = `"${psMeta.geomCol.replace(/"/g, '""')}"`;
+    const psGeom = geomStamped(psGeomCol, psMeta.srid);
+    const psFrom = `"${PIPE_PS_SCHEMA.replace(/"/g, '""')}"."${PIPE_PS_TABLE.replace(/"/g, '""')}"`;
+    const psIn3857 = `ST_Transform(${psGeom}, 3857)`;
+    nearestPipDepSql = `(
+         SELECT d.pip_dep::double precision
+         FROM ${psFrom} d
+         WHERE ${psGeomCol} IS NOT NULL
+           AND d.pip_dep IS NOT NULL
+           AND ST_DWithin(${psIn3857}, h.clip, ${depSearchProj})
+         ORDER BY ${psIn3857} <-> h.clip
+         LIMIT 1
+       ) AS nearest_pip_dep`;
+  }
+
+  const hitSelect = [
+    labelCol ? `${quoteIdent(labelCol)} AS pip_lbl` : `NULL::text AS pip_lbl`,
+    dipCol ? `${quoteIdent(dipCol)} AS std_dip` : `NULL::double precision AS std_dip`,
+    highCol ? `${quoteIdent(highCol)} AS hgh_dep` : `NULL::double precision AS hgh_dep`,
+    lowCol ? `${quoteIdent(lowCol)} AS low_dep` : `NULL::double precision AS low_dep`,
+    begCol ? `${quoteIdent(begCol)} AS beg_dep` : `NULL::double precision AS beg_dep`,
+    endCol ? `${quoteIdent(endCol)} AS end_dep` : `NULL::double precision AS end_dep`,
+    stdDepCol ? `${quoteIdent(stdDepCol)} AS std_dep` : `NULL::double precision AS std_dep`,
+    depAvgCol ? `${quoteIdent(depAvgCol)} AS dep_avg` : `NULL::double precision AS dep_avg`,
+    depthCol ? `${quoteIdent(depthCol)} AS lay_dep` : `NULL::double precision AS lay_dep`,
+    `ST_CollectionExtract(
+       ST_MakeValid(ST_Intersection(${in3857}, ${extent.env3857})),
+       2
+     ) AS clip`,
+  ];
+
+  try {
+    const res = await db.execute(
+      sql.raw(
+        `WITH hits AS (
+           SELECT
+             ${hitSelect.join(',\n             ')}
+           FROM ${from}
+           WHERE ${geomCol} IS NOT NULL
+             AND ST_Intersects(${in3857}, ${extent.env3857})
+           LIMIT 300
+         )
+         SELECT
+           h.pip_lbl,
+           h.std_dip,
+           h.hgh_dep,
+           h.low_dep,
+           h.beg_dep,
+           h.end_dep,
+           h.std_dep,
+           h.dep_avg,
+           h.lay_dep,
+           ST_AsGeoJSON(h.clip) AS geojson,
+           ${nearestPipDepSql}
+         FROM hits h
+         WHERE h.clip IS NOT NULL AND NOT ST_IsEmpty(h.clip)`
+      )
+    );
+
+    const depthSamples = await fetchPipeDepthSamplesInEnv(
+      extent.env3857,
+      depSearchProj
+    );
+
+    const pipes: WtlPipeInExtent[] = [];
+    const midPoints: [number, number][] = [];
+    const layerColor = resolveLayerColor(def);
+    for (const raw of res.rows ?? []) {
+      const row = raw as {
+        pip_lbl?: unknown;
+        std_dip?: unknown;
+        hgh_dep?: unknown;
+        low_dep?: unknown;
+        beg_dep?: unknown;
+        end_dep?: unknown;
+        std_dep?: unknown;
+        dep_avg?: unknown;
+        lay_dep?: unknown;
+        nearest_pip_dep?: unknown;
+        geojson?: string;
+      };
+      const coords = parseLineCoords3857(String(row.geojson ?? ''));
+      if (coords.length < 2) continue;
+
+      const depthM = resolveLegacyPipeDepthM(row, def.defaultDisplayDepthM);
+      const depthsM = depthsAlongCoords(coords, depthSamples, depSearchProj, depthM);
+
+      const labelRaw = row.pip_lbl != null ? String(row.pip_lbl).trim() : '';
+      const mid = coords[Math.floor(coords.length / 2)]!;
+      midPoints.push(mid);
+      pipes.push({
+        id: `${def.table}-${pipes.length}`,
+        label: labelRaw || undefined,
+        color: layerColor,
+        coords3857: coords,
+        diameterM: Math.max(0.02, parseStdDipToMeters(row.std_dip)),
+        depthM,
+        depthsM,
+      });
+    }
+
+    try {
+      const surfaces = await fetchSurfaceElevIdwAtPoints3857(midPoints);
+      for (let i = 0; i < pipes.length; i++) {
+        const elev = surfaces[i];
+        if (elev != null) pipes[i].surfaceElevM = elev;
+      }
+    } catch {
+      /* ignore */
+    }
+
+    return { success: true, pipes };
+  } catch (e) {
+    return {
+      success: false,
+      pipes: [],
+      error: e instanceof Error ? e.message : `${def.label} 조회 오류`,
+    };
+  }
+}
+
+/**
+ * POINT 레이어(맨홀·밸브·심도점 등) 범위 조회.
+ */
+export async function getWtlPointLayerInExtent(
+  params: ExtentParams & { table?: string }
+): Promise<{ success: boolean; manholes: WtlManholeInExtent[]; error?: string }> {
+  const table = String(params?.table ?? '').trim().toLowerCase();
+  if (!table) {
+    return { success: false, manholes: [], error: '레이어 테이블이 없습니다' };
+  }
+
+  const def = getWtlLayerShapeDef(table);
+  if (!def || def.geom !== 'point_std') {
+    return { success: false, manholes: [], error: `지원하지 않는 점 레이어: ${table}` };
+  }
+
+  if (table === 'wtl_manh_ps') {
+    return getWtlManholesInExtent(params);
+  }
+
+  const extent = buildExtentEnv3857(params);
+  if (!extent.ok) return { success: false, manholes: [], error: extent.error };
+
+  const exists = await tableExists('layer', def.table);
+  const meta = exists ? await getGeomMeta('layer', def.table) : null;
+  if (!meta) {
+    return {
+      success: false,
+      manholes: [],
+      error: `${def.label}(${def.table}) 데이터가 없습니다`,
+    };
+  }
+
+  const labelCol = await resolveLayerColumnName(def.table, def.labelCols);
+  const dipCol = await resolveLayerColumnName(def.table, def.diameterCols);
+  const depthCol = await resolveLayerColumnName(def.table, def.depthCols);
+
+  const geomCol = `"${meta.geomCol.replace(/"/g, '""')}"`;
+  const geom = geomStamped(geomCol, meta.srid);
+  const from = `"layer"."${def.table.replace(/"/g, '""')}"`;
+  const in3857 = `ST_Transform(${geom}, 3857)`;
+
+  const selectParts = [
+    labelCol ? `${quoteIdent(labelCol)} AS ftr_idn` : `NULL::text AS ftr_idn`,
+    dipCol ? `${quoteIdent(dipCol)} AS man_std` : `NULL::text AS man_std`,
+    depthCol
+      ? `${quoteIdent(depthCol)} AS pip_dep`
+      : `NULL::double precision AS pip_dep`,
+    `ST_AsGeoJSON(${in3857}) AS geojson`,
+  ];
+
+  try {
+    const res = await db.execute(
+      sql.raw(
+        `SELECT ${selectParts.join(',\n           ')}
+         FROM ${from}
+         WHERE ${geomCol} IS NOT NULL
+           AND ST_Intersects(${in3857}, ${extent.env3857})
+         LIMIT 500`
+      )
+    );
+
+    const manholes: WtlManholeInExtent[] = [];
+    const pts: [number, number][] = [];
+    const layerColor = resolveLayerColor(def);
+    for (const raw of res.rows ?? []) {
+      const row = raw as {
+        ftr_idn?: unknown;
+        man_std?: unknown;
+        pip_dep?: unknown;
+        geojson?: string;
+      };
+      const xy = parsePointCoords3857(String(row.geojson ?? ''));
+      if (!xy) continue;
+
+      const diameterM = dipCol
+        ? Math.max(0.08, parseManStdToMeters(row.man_std))
+        : def.defaultDiameterM;
+
+      // 점형 시설(변류·소방 등)은 단면도에서 지표 표기 — 심도 컬럼·기본심도 미사용
+      let depthM = 0;
+      if (!def.fromGround) {
+        depthM = def.defaultDisplayDepthM;
+        const d = parseDepthMeters(row.pip_dep);
+        if (d != null) depthM = Math.max(0, d);
+      }
+
+      const labelRaw = row.ftr_idn != null ? String(row.ftr_idn).trim() : '';
+
+      pts.push(xy);
+      manholes.push({
+        id: `${def.table}-${manholes.length}`,
+        label: labelRaw || undefined,
+        color: layerColor,
+        x3857: xy[0],
+        y3857: xy[1],
+        diameterM,
+        depthM,
+      });
+    }
+
+    try {
+      const surfaces = await fetchSurfaceElevIdwAtPoints3857(pts);
+      for (let i = 0; i < manholes.length; i++) {
+        const elev = surfaces[i];
+        if (elev != null) manholes[i].surfaceElevM = elev;
+      }
+    } catch {
+      /* ignore */
+    }
+
+    return { success: true, manholes };
+  } catch (e) {
+    return {
+      success: false,
+      manholes: [],
+      error: e instanceof Error ? e.message : `${def.label} 조회 오류`,
+    };
+  }
+}
+
+export type ElevationAlongPoint = {
+  distM: number;
+  elevM: number;
+  x3857: number;
+  y3857: number;
+};
+
+/** 라인 좌표를 거리 비율로 샘플링 (EPSG:3857, 지표 m 근사) */
+function sampleCoordsAlongLine3857(
+  coords: [number, number][],
+  sampleCount: number
+): ElevationAlongPoint[] {
+  if (coords.length < 2) return [];
+  const n = Math.max(2, Math.min(80, Math.floor(sampleCount) || 24));
+  const midY = coords.reduce((s, c) => s + c[1], 0) / coords.length;
+  let meterToProj = 1;
+  {
+    const latRad = 2 * Math.atan(Math.exp(midY / 6378137)) - Math.PI / 2;
+    const cosLat = Math.cos(latRad);
+    if (Number.isFinite(cosLat) && cosLat >= 0.2) meterToProj = 1 / cosLat;
+  }
+  const segLens: number[] = [];
+  let total = 0;
+  for (let i = 1; i < coords.length; i++) {
+    const dx = coords[i]![0] - coords[i - 1]![0];
+    const dy = coords[i]![1] - coords[i - 1]![1];
+    const len = Math.hypot(dx, dy) / meterToProj;
+    segLens.push(len);
+    total += len;
+  }
+  const out: ElevationAlongPoint[] = [];
+  for (let i = 0; i < n; i++) {
+    const target = total * (i / (n - 1));
+    let walked = 0;
+    let x = coords[0]![0];
+    let y = coords[0]![1];
+    for (let s = 0; s < segLens.length; s++) {
+      const len = segLens[s]!;
+      if (walked + len >= target || s === segLens.length - 1) {
+        const t = len > 0 ? Math.min(1, (target - walked) / len) : 0;
+        x = coords[s]![0] + (coords[s + 1]![0] - coords[s]![0]) * t;
+        y = coords[s]![1] + (coords[s + 1]![1] - coords[s]![1]) * t;
+        break;
+      }
+      walked += len;
+    }
+    out.push({ distM: target, elevM: NaN, x3857: x, y3857: y });
+  }
+  return out;
+}
+
+/**
+ * 절단선(EPSG:3857)을 따라 등고 보간 고도 샘플.
+ * 관망조회 횡·종단면도 지반고용.
+ */
+export async function getElevationAlongLine(params: {
+  coords3857?: [number, number][] | number[][];
+  sampleCount?: number;
+}): Promise<{
+  success: boolean;
+  points: ElevationAlongPoint[];
+  totalLengthM: number;
+  error?: string;
+}> {
+  const raw = Array.isArray(params?.coords3857) ? params.coords3857 : [];
+  const coords: [number, number][] = [];
+  for (const p of raw) {
+    if (!Array.isArray(p) || p.length < 2) continue;
+    const x = Number(p[0]);
+    const y = Number(p[1]);
+    if (Number.isFinite(x) && Number.isFinite(y)) coords.push([x, y]);
+  }
+  if (coords.length < 2) {
+    return { success: false, points: [], totalLengthM: 0, error: '라인이 올바르지 않습니다' };
+  }
+
+  const elevExists = await tableExists(ELEVATION_SCHEMA, ELEVATION_TABLE);
+  if (!elevExists) {
+    return { success: false, points: [], totalLengthM: 0, error: '고도 관련 데이터가 없습니다' };
+  }
+
+  const samples = sampleCoordsAlongLine3857(coords, Number(params?.sampleCount) || 24);
+  if (!samples.length) {
+    return { success: false, points: [], totalLengthM: 0, error: '샘플을 만들지 못했습니다' };
+  }
+
+  try {
+    const elevs = await fetchSurfaceElevIdwAtPoints3857(
+      samples.map((s) => [s.x3857, s.y3857] as [number, number])
+    );
+    const points: ElevationAlongPoint[] = [];
+    for (let i = 0; i < samples.length; i++) {
+      const elev = elevs[i];
+      if (elev == null || !Number.isFinite(elev)) continue;
+      points.push({ ...samples[i]!, elevM: elev });
+    }
+    if (!points.length) {
+      return { success: false, points: [], totalLengthM: 0, error: '라인 위 고도를 읽지 못했습니다' };
+    }
+    return {
+      success: true,
+      points,
+      totalLengthM: samples[samples.length - 1]?.distM ?? 0,
+    };
+  } catch (e) {
+    return {
+      success: false,
+      points: [],
+      totalLengthM: 0,
+      error: e instanceof Error ? e.message : '라인 고도 조회 오류',
+    };
+  }
+}
+
+/**
+ * 관망조회 단면도 — 절단선 버퍼 내 관로·점시설 + 라인 등고.
+ */
+/** 단면도 — 절단선 위치의 급수구역·분구·블록 명칭 */
+export type WtlSectionSupplyAreas = {
+  zoneName: string | null;
+  subzoneName: string | null;
+  blockName: string | null;
+};
+
+type SupplyAreaRole = 'zone' | 'subzone' | 'block';
+
+function supplyAreaRoleOfTable(table: string): SupplyAreaRole | null {
+  const t = String(table ?? '')
+    .trim()
+    .toLowerCase();
+  if (!t) return null;
+  if (t === 'wtl_wtsba_as' || t.endsWith('_wtl_wtsba_as')) return 'block';
+  if (t === 'wtl_wtssa_as' || t.endsWith('_wtl_wtssa_as')) return 'subzone';
+  if (t === 'wtl_wtsa_as' || t.endsWith('_wtl_wtsa_as')) return 'zone';
+  return null;
+}
+
+function supplyAreaNameColumn(role: SupplyAreaRole): string {
+  if (role === 'zone') return 'wsg_nam';
+  if (role === 'subzone') return 'wsb_nam';
+  return 'wbb_nam';
+}
+
+/** 단면도 X축 하단 — 급수구역·분구·블록 구간 밴드 */
+export type WtlSectionSupplyBandSegment = {
+  role: SupplyAreaRole;
+  /** 표시명 (구역/분구/블록명) */
+  name: string;
+  fromM: number;
+  toM: number;
+  /** 레이어 stroke 색 */
+  color: string;
+};
+
+/**
+ * 샘플 점열을 따라 급수구역·분구·블록 연속 구간 조회.
+ * 동일 명칭이 이어지면 하나의 세그먼트로 병합.
+ */
+async function lookupSupplyAreaBandsAlongSamples(
+  samples: { distM: number; x3857: number; y3857: number }[],
+  supplyAreaTables: string[]
+): Promise<WtlSectionSupplyBandSegment[]> {
+  const out: WtlSectionSupplyBandSegment[] = [];
+  if (samples.length < 1 || supplyAreaTables.length === 0) return out;
+
+  const pts = samples.filter(
+    (s) =>
+      Number.isFinite(s.distM) &&
+      Number.isFinite(s.x3857) &&
+      Number.isFinite(s.y3857)
+  );
+  if (!pts.length) return out;
+
+  const valuesSql = pts
+    .map(
+      (p, idx) =>
+        `(${idx}::integer, ${p.distM}::double precision, ${p.x3857}::double precision, ${p.y3857}::double precision)`
+    )
+    .join(',\n');
+
+  const seenRole = new Set<SupplyAreaRole>();
+  for (const rawTable of supplyAreaTables) {
+    const table = String(rawTable ?? '')
+      .trim()
+      .toLowerCase();
+    const role = supplyAreaRoleOfTable(table);
+    if (!role || seenRole.has(role)) continue;
+    seenRole.add(role);
+    if (!(await tableExists('layer', table))) continue;
+    const meta = await getGeomMeta('layer', table);
+    if (!meta) continue;
+    const nameCol = supplyAreaNameColumn(role);
+    const safeTable = table.replace(/"/g, '""');
+    const safeGeom = meta.geomCol.replace(/"/g, '""');
+    const safeName = nameCol.replace(/"/g, '""');
+    const srid = meta.srid;
+    const color = readWtlLayerLineColor(table, '#888888');
+
+    try {
+      const res = await db.execute(
+        sql.raw(
+          `WITH pts AS (
+             SELECT * FROM (VALUES ${valuesSql}) AS t(idx, dist_m, x, y)
+           )
+           SELECT p.idx, p.dist_m,
+                  NULLIF(trim(hit.nam::text), '') AS nam
+           FROM pts p
+           LEFT JOIN LATERAL (
+             SELECT t."${safeName}" AS nam
+             FROM layer."${safeTable}" t
+             WHERE t."${safeGeom}" IS NOT NULL
+               AND ST_Intersects(
+                 ${geomStamped(`t."${safeGeom}"`, srid)},
+                 ST_Transform(ST_SetSRID(ST_MakePoint(p.x, p.y), 3857), ${srid})
+               )
+             ORDER BY ST_Distance(
+               ${geomStamped(`t."${safeGeom}"`, srid)},
+               ST_Transform(ST_SetSRID(ST_MakePoint(p.x, p.y), 3857), ${srid})
+             )
+             LIMIT 1
+           ) hit ON true
+           ORDER BY p.idx`
+        )
+      );
+
+      type Row = { idx?: number; dist_m?: number; nam?: string | null };
+      const rows = (res.rows ?? []) as Row[];
+      let cur: { name: string; fromM: number; toM: number } | null = null;
+      const flush = () => {
+        if (!cur || !cur.name) return;
+        out.push({
+          role,
+          name: cur.name,
+          fromM: cur.fromM,
+          toM: Math.max(cur.fromM, cur.toM),
+          color,
+        });
+        cur = null;
+      };
+      for (const row of rows) {
+        const dist = Number(row.dist_m);
+        const nam = String(row.nam ?? '').trim();
+        if (!Number.isFinite(dist)) continue;
+        if (!nam) {
+          flush();
+          continue;
+        }
+        if (!cur) {
+          cur = { name: nam, fromM: dist, toM: dist };
+        } else if (cur.name === nam) {
+          cur.toM = dist;
+        } else {
+          flush();
+          cur = { name: nam, fromM: dist, toM: dist };
+        }
+      }
+      flush();
+    } catch {
+      /* skip table */
+    }
+  }
+
+  // 점 샘플이면 최소 폭 부여 (절단선 스타일 보이게)
+  for (const seg of out) {
+    if (seg.toM - seg.fromM < 0.05) {
+      const mid = (seg.fromM + seg.toM) / 2;
+      seg.fromM = mid - 0.25;
+      seg.toM = mid + 0.25;
+    }
+  }
+  return out;
+}
+
+/**
+ * 절단선 중점에서 켜진 급수구역·분구·블록 명칭 조회.
+ */
+async function lookupSupplyAreasAtLineMid(
+  coords: [number, number][],
+  supplyAreaTables: string[]
+): Promise<WtlSectionSupplyAreas> {
+  const out: WtlSectionSupplyAreas = {
+    zoneName: null,
+    subzoneName: null,
+    blockName: null,
+  };
+  if (coords.length < 2 || supplyAreaTables.length === 0) return out;
+
+  const midIdx = Math.floor((coords.length - 1) / 2);
+  const a = coords[midIdx]!;
+  const b = coords[Math.min(midIdx + 1, coords.length - 1)]!;
+  const mx = (a[0] + b[0]) / 2;
+  const my = (a[1] + b[1]) / 2;
+  if (!Number.isFinite(mx) || !Number.isFinite(my)) return out;
+
+  const seenRole = new Set<SupplyAreaRole>();
+  for (const rawTable of supplyAreaTables) {
+    const table = String(rawTable ?? '')
+      .trim()
+      .toLowerCase();
+    const role = supplyAreaRoleOfTable(table);
+    if (!role || seenRole.has(role)) continue;
+    seenRole.add(role);
+    if (!(await tableExists('layer', table))) continue;
+    const meta = await getGeomMeta('layer', table);
+    if (!meta) continue;
+    const nameCol = supplyAreaNameColumn(role);
+    const safeTable = table.replace(/"/g, '""');
+    const safeGeom = meta.geomCol.replace(/"/g, '""');
+    const safeName = nameCol.replace(/"/g, '""');
+    const srid = meta.srid;
+    try {
+      const res = await db.execute(
+        sql.raw(
+          `SELECT NULLIF(trim(t."${safeName}"::text), '') AS nam
+           FROM layer."${safeTable}" t
+           WHERE t."${safeGeom}" IS NOT NULL
+             AND ST_Intersects(
+               ${geomStamped(`t."${safeGeom}"`, srid)},
+               ST_Transform(ST_SetSRID(ST_MakePoint(${mx}, ${my}), 3857), ${srid})
+             )
+           ORDER BY ST_Distance(
+             ${geomStamped(`t."${safeGeom}"`, srid)},
+             ST_Transform(ST_SetSRID(ST_MakePoint(${mx}, ${my}), 3857), ${srid})
+           )
+           LIMIT 1`
+        )
+      );
+      const nam = String(
+        (res.rows?.[0] as { nam?: unknown } | undefined)?.nam ?? ''
+      ).trim();
+      if (!nam) continue;
+      if (role === 'zone') out.zoneName = nam;
+      else if (role === 'subzone') out.subzoneName = nam;
+      else out.blockName = nam;
+    } catch {
+      /* skip table */
+    }
+  }
+  return out;
+}
+
+/**
+ * 종단(깊이축) — 절단선 중심 ±halfWidth 띠의 옆면 방향으로 표고 샘플.
+ * distM: 0…2×halfWidth (절단선=halfWidth). groundMin/Max는 각 깊이에서 LINE 방향 격자 표고.
+ */
+async function sampleElevationAlongDepthAxis(params: {
+  coords: [number, number][];
+  halfWidthM: number;
+  sampleCount?: number;
+}): Promise<{
+  success: boolean;
+  ground: ElevationAlongPoint[];
+  groundMin: ElevationAlongPoint[];
+  groundMax: ElevationAlongPoint[];
+  totalLengthM: number;
+  error?: string;
+}> {
+  const coords = params.coords;
+  let ax = coords[0]![0];
+  let ay = coords[0]![1];
+  let bx = coords[coords.length - 1]![0];
+  let by = coords[coords.length - 1]![1];
+  if (bx < ax || (bx === ax && by < ay)) {
+    ;[ax, ay, bx, by] = [bx, by, ax, ay];
+  }
+  const midY = (ay + by) / 2;
+  let meterToProj = 1;
+  {
+    const latRad = 2 * Math.atan(Math.exp(midY / 6378137)) - Math.PI / 2;
+    const cosLat = Math.cos(latRad);
+    if (Number.isFinite(cosLat) && cosLat >= 0.2) meterToProj = 1 / cosLat;
+  }
+  let dx = bx - ax;
+  let dy = by - ay;
+  const lenProj = Math.hypot(dx, dy);
+  if (lenProj < 1e-6) {
+    return {
+      success: false,
+      ground: [],
+      groundMin: [],
+      groundMax: [],
+      totalLengthM: 0,
+      error: '라인이 올바르지 않습니다',
+    };
+  }
+  dx /= lenProj;
+  dy /= lenProj;
+  const perpX = -dy;
+  const perpY = dx;
+  const halfLenM = lenProj / meterToProj / 2;
+  const halfWidthM = Math.max(1, params.halfWidthM);
+  const depthSpanM = halfWidthM * 2;
+  const midX = (ax + bx) / 2;
+  const midY2 = (ay + by) / 2;
+
+  const depthN = Math.max(3, Math.min(40, Math.floor(Number(params.sampleCount) || 24)));
+  const alongN = Math.max(3, Math.min(16, Math.floor(halfLenM / 2) + 3));
+
+  const queryPts: [number, number][] = [];
+  /** depthIdx → along 샘플 시작 인덱스 */
+  const rowStarts: number[] = [];
+  for (let di = 0; di < depthN; di++) {
+    rowStarts.push(queryPts.length);
+    const vM = -halfWidthM + (depthSpanM * di) / (depthN - 1);
+    for (let ai = 0; ai < alongN; ai++) {
+      const uM = -halfLenM + ((2 * halfLenM) * ai) / (alongN - 1);
+      const x = midX + dx * uM * meterToProj + perpX * vM * meterToProj;
+      const y = midY2 + dy * uM * meterToProj + perpY * vM * meterToProj;
+      queryPts.push([x, y]);
+    }
+  }
+
+  const elevExists = await tableExists(ELEVATION_SCHEMA, ELEVATION_TABLE);
+  if (!elevExists) {
+    return {
+      success: false,
+      ground: [],
+      groundMin: [],
+      groundMax: [],
+      totalLengthM: depthSpanM,
+      error: '고도 관련 데이터가 없습니다',
+    };
+  }
+
+  try {
+    const elevs = await fetchSurfaceElevIdwAtPoints3857(queryPts);
+    const ground: ElevationAlongPoint[] = [];
+    const groundMin: ElevationAlongPoint[] = [];
+    const groundMax: ElevationAlongPoint[] = [];
+    const midAlong = Math.floor((alongN - 1) / 2);
+
+    for (let di = 0; di < depthN; di++) {
+      const distM = (depthSpanM * di) / (depthN - 1);
+      const row0 = rowStarts[di]!;
+      let minE = Infinity;
+      let maxE = -Infinity;
+      let midElev = NaN;
+      let midX3857 = queryPts[row0 + midAlong]![0];
+      let midY3857 = queryPts[row0 + midAlong]![1];
+
+      for (let ai = 0; ai < alongN; ai++) {
+        const elev = elevs[row0 + ai];
+        if (elev == null || !Number.isFinite(elev)) continue;
+        if (elev < minE) minE = elev;
+        if (elev > maxE) maxE = elev;
+        if (ai === midAlong) {
+          midElev = elev;
+          midX3857 = queryPts[row0 + ai]![0];
+          midY3857 = queryPts[row0 + ai]![1];
+        }
+      }
+      if (!Number.isFinite(minE) || !Number.isFinite(maxE)) continue;
+      if (!Number.isFinite(midElev)) midElev = (minE + maxE) / 2;
+
+      ground.push({ distM, elevM: midElev, x3857: midX3857, y3857: midY3857 });
+      groundMin.push({
+        distM,
+        elevM: minE,
+        x3857: midX3857,
+        y3857: midY3857,
+      });
+      groundMax.push({
+        distM,
+        elevM: maxE,
+        x3857: midX3857,
+        y3857: midY3857,
+      });
+    }
+
+    if (!ground.length) {
+      return {
+        success: false,
+        ground: [],
+        groundMin: [],
+        groundMax: [],
+        totalLengthM: depthSpanM,
+        error: '깊이축 고도를 읽지 못했습니다',
+      };
+    }
+    return {
+      success: true,
+      ground,
+      groundMin,
+      groundMax,
+      totalLengthM: depthSpanM,
+    };
+  } catch (e) {
+    return {
+      success: false,
+      ground: [],
+      groundMin: [],
+      groundMax: [],
+      totalLengthM: depthSpanM,
+      error: e instanceof Error ? e.message : '깊이축 고도 조회 오류',
+    };
+  }
+}
+
+export async function getWtlNetworkSectionData(params: {
+  coords3857?: [number, number][] | number[][];
+  /** 종단·시설 조회용 사각형 깊이(m). 횡단 시설도 동일 버퍼 사용 */
+  halfWidthM?: number;
+  /**
+   * along: 절단선 진행 거리 등고(횡단·기존).
+   * depth: 옆면(깊이축) 등고 + min/max 격자(종단).
+   */
+  profileAxis?: 'along' | 'depth';
+  sampleCount?: number;
+  lineTables?: string[];
+  pointTables?: string[];
+  /** 켜진 급수구역·분구·블록 테이블(정의명) — 단면도 좌측 위치 표기용 */
+  supplyAreaTables?: string[];
+}): Promise<{
+  success: boolean;
+  ground: ElevationAlongPoint[];
+  /** 종단(depth) — 깊이 스테이션별 격자 최소 표고 */
+  groundMin?: ElevationAlongPoint[];
+  /** 종단(depth) — 깊이 스테이션별 격자 최대 표고 */
+  groundMax?: ElevationAlongPoint[];
+  totalLengthM: number;
+  pipes: WtlPipeInExtent[];
+  points: WtlManholeInExtent[];
+  polygon3857: [number, number][];
+  supplyAreas: WtlSectionSupplyAreas;
+  /** X축 하단 밴드 — 구역·분구·블록 구간(켜진 테이블만) */
+  supplyAreaBands?: WtlSectionSupplyBandSegment[];
+  error?: string;
+}> {
+  const raw = Array.isArray(params?.coords3857) ? params.coords3857 : [];
+  const coords: [number, number][] = [];
+  for (const p of raw) {
+    if (!Array.isArray(p) || p.length < 2) continue;
+    const x = Number(p[0]);
+    const y = Number(p[1]);
+    if (Number.isFinite(x) && Number.isFinite(y)) coords.push([x, y]);
+  }
+  const emptySupply: WtlSectionSupplyAreas = {
+    zoneName: null,
+    subzoneName: null,
+    blockName: null,
+  };
+  if (coords.length < 2) {
+    return {
+      success: false,
+      ground: [],
+      totalLengthM: 0,
+      pipes: [],
+      points: [],
+      polygon3857: [],
+      supplyAreas: emptySupply,
+      error: '라인이 올바르지 않습니다',
+    };
+  }
+
+  const halfWidthM = Math.max(1, Math.min(50, Number(params?.halfWidthM) || 5));
+  const profileAxis = params?.profileAxis === 'depth' ? 'depth' : 'along';
+  const start = coords[0]!;
+  const end = coords[coords.length - 1]!;
+  const midY = (start[1] + end[1]) / 2;
+  let meterToProj = 1;
+  {
+    const latRad = 2 * Math.atan(Math.exp(midY / 6378137)) - Math.PI / 2;
+    const cosLat = Math.cos(latRad);
+    if (Number.isFinite(cosLat) && cosLat >= 0.2) meterToProj = 1 / cosLat;
+  }
+  let dx = end[0] - start[0];
+  let dy = end[1] - start[1];
+  const len = Math.hypot(dx, dy);
+  const polygon3857: [number, number][] = [];
+  if (len < 1e-6) {
+    const h = halfWidthM * meterToProj;
+    polygon3857.push(
+      [start[0] - h, start[1] - h],
+      [start[0] + h, start[1] - h],
+      [start[0] + h, start[1] + h],
+      [start[0] - h, start[1] + h],
+      [start[0] - h, start[1] - h]
+    );
+  } else {
+    dx /= len;
+    dy /= len;
+    const depthProj = halfWidthM * meterToProj;
+    const ox = -dy * depthProj;
+    const oy = dx * depthProj;
+    // ThreeJs·지도 사각형과 동일 — 절단선 중심 ±halfWidth 띠
+    const left: [number, number][] = [];
+    const right: [number, number][] = [];
+    for (const c of coords) {
+      left.push([c[0] + ox, c[1] + oy]);
+      right.push([c[0] - ox, c[1] - oy]);
+    }
+    polygon3857.push(...left, ...right.reverse(), left[0]!);
+  }
+
+  const elevRes =
+    profileAxis === 'depth'
+      ? await sampleElevationAlongDepthAxis({
+          coords,
+          halfWidthM,
+          sampleCount: params?.sampleCount,
+        })
+      : await getElevationAlongLine({
+          coords3857: coords,
+          sampleCount: params?.sampleCount,
+        }).then((r) => ({
+          success: r.success,
+          ground: r.points,
+          groundMin: [] as ElevationAlongPoint[],
+          groundMax: [] as ElevationAlongPoint[],
+          totalLengthM: r.totalLengthM,
+          error: r.error,
+        }));
+
+  const lineTables = [
+    ...new Set(
+      (Array.isArray(params?.lineTables) ? params.lineTables : [])
+        .map((t) => String(t ?? '').trim().toLowerCase())
+        .filter(Boolean)
+    ),
+  ];
+  const pointTables = [
+    ...new Set(
+      (Array.isArray(params?.pointTables) ? params.pointTables : [])
+        .map((t) => String(t ?? '').trim().toLowerCase())
+        .filter(Boolean)
+    ),
+  ];
+
+  const pipes: WtlPipeInExtent[] = [];
+  const points: WtlManholeInExtent[] = [];
+
+  for (const table of lineTables) {
+    const res = await getWtlLineLayerInExtent({
+      polygon3857,
+      table,
+      srid: 3857,
+    });
+    if (res.success && res.pipes.length) pipes.push(...res.pipes);
+  }
+  for (const table of pointTables) {
+    const res = await getWtlPointLayerInExtent({
+      polygon3857,
+      table,
+      srid: 3857,
+    });
+    if (res.success && res.manholes.length) points.push(...res.manholes);
+  }
+
+  const supplyAreaTables = [
+    ...new Set(
+      (Array.isArray(params?.supplyAreaTables) ? params.supplyAreaTables : [])
+        .map((t) => String(t ?? '').trim().toLowerCase())
+        .filter(Boolean)
+    ),
+  ];
+  const supplyAreas =
+    supplyAreaTables.length > 0
+      ? await lookupSupplyAreasAtLineMid(coords, supplyAreaTables)
+      : emptySupply;
+
+  const bandSamples = (elevRes.ground ?? [])
+    .filter(
+      (p) =>
+        Number.isFinite(p.distM) &&
+        Number.isFinite(p.x3857) &&
+        Number.isFinite(p.y3857)
+    )
+    .map((p) => ({
+      distM: p.distM,
+      x3857: p.x3857,
+      y3857: p.y3857,
+    }));
+  const supplyAreaBands =
+    supplyAreaTables.length > 0 && bandSamples.length > 0
+      ? await lookupSupplyAreaBandsAlongSamples(bandSamples, supplyAreaTables)
+      : [];
+
+  if (!elevRes.success && !pipes.length && !points.length) {
+    return {
+      success: false,
+      ground: [],
+      groundMin: elevRes.groundMin,
+      groundMax: elevRes.groundMax,
+      totalLengthM: elevRes.totalLengthM || 0,
+      pipes: [],
+      points: [],
+      polygon3857,
+      supplyAreas,
+      supplyAreaBands,
+      error: elevRes.error ?? '단면도 데이터를 만들지 못했습니다',
+    };
+  }
+
+  return {
+    success: true,
+    ground: elevRes.ground,
+    groundMin: profileAxis === 'depth' ? elevRes.groundMin : undefined,
+    groundMax: profileAxis === 'depth' ? elevRes.groundMax : undefined,
+    totalLengthM: elevRes.totalLengthM,
+    pipes,
+    points,
+    polygon3857,
+    supplyAreas,
+    supplyAreaBands,
+    error: elevRes.success ? undefined : elevRes.error,
+  };
 }

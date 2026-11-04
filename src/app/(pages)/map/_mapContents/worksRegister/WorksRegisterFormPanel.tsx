@@ -119,40 +119,43 @@ function StageStatusIcon({
   const label = STATUS_LABEL[status]
   if (status === 'done') {
     return (
-      <CheckCircle2
-        className={cn(
-          'h-3 w-3 shrink-0',
-          activeTab ? 'text-emerald-300' : 'text-emerald-600',
-          className
-        )}
-        aria-label={label}
-        title={label}
-      />
+      <span title={label}>
+        <CheckCircle2
+          className={cn(
+            'h-3 w-3 shrink-0',
+            activeTab ? 'text-emerald-300' : 'text-emerald-600',
+            className
+          )}
+          aria-label={label}
+        />
+      </span>
     )
   }
   if (status === 'active') {
     return (
-      <LoaderCircle
-        className={cn(
-          'h-3 w-3 shrink-0',
-          activeTab ? 'text-amber-200' : 'text-amber-500',
-          className
-        )}
-        aria-label={label}
-        title={label}
-      />
+      <span title={label}>
+        <LoaderCircle
+          className={cn(
+            'h-3 w-3 shrink-0',
+            activeTab ? 'text-amber-200' : 'text-amber-500',
+            className
+          )}
+          aria-label={label}
+        />
+      </span>
     )
   }
   return (
-    <Circle
-      className={cn(
-        'h-3 w-3 shrink-0',
-        activeTab ? 'text-slate-400' : 'text-slate-300',
-        className
-      )}
-      aria-label={label}
-      title={label}
-    />
+    <span title={label}>
+      <Circle
+        className={cn(
+          'h-3 w-3 shrink-0',
+          activeTab ? 'text-slate-400' : 'text-slate-300',
+          className
+        )}
+        aria-label={label}
+      />
+    </span>
   )
 }
 
@@ -406,18 +409,20 @@ export function WorksRegisterFormPanel({
     setDraft((prev) => ({
       ...prev,
       detailDesign: {
-        designType: '실시설계',
-        designNo: '',
-        designAmount: '',
-        startDate: '',
-        endDate: '',
-        designer: '',
-        representative: '',
-        approver: '',
-        approveDate: '',
-        summary: '',
-        remark: '',
-        documents: [],
+        ...{
+          designType: '실시설계' as const,
+          designNo: '',
+          designAmount: '',
+          startDate: '',
+          endDate: '',
+          designer: '',
+          representative: '',
+          approver: '',
+          approveDate: '',
+          summary: '',
+          remark: '',
+          documents: [] as WorksRegisterDesignDocument[],
+        },
         ...prev.detailDesign,
         [key]: value,
       },
@@ -731,17 +736,20 @@ export function WorksRegisterFormPanel({
                       return {
                         ...prev,
                         detailDesign: {
-                          designType: '실시설계',
-                          designNo: '',
-                          designAmount: '',
-                          startDate: '',
-                          endDate: '',
-                          designer: '',
-                          representative: '',
-                          approver: '',
-                          approveDate: '',
-                          summary: '',
-                          remark: '',
+                          ...{
+                            designType: '실시설계' as const,
+                            designNo: '',
+                            designAmount: '',
+                            startDate: '',
+                            endDate: '',
+                            designer: '',
+                            representative: '',
+                            approver: '',
+                            approveDate: '',
+                            summary: '',
+                            remark: '',
+                            documents: [] as WorksRegisterDesignDocument[],
+                          },
                           ...prev.detailDesign,
                           documents: [...docs, next],
                         },
