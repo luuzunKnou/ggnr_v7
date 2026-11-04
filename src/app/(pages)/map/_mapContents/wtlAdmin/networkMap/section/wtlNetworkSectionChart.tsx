@@ -1,14 +1,17 @@
 'use client'
 
-import { useCallback, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Chart as ChartJS,
   LinearScale,
+  CategoryScale,
   PointElement,
   LineElement,
   LineController,
   ScatterController,
   BubbleController,
+  BarElement,
+  BarController,
   Tooltip,
   Legend,
   Filler,
@@ -16,7 +19,7 @@ import {
   type ChartOptions,
   type Plugin,
 } from 'chart.js'
-import { Chart, Line } from 'react-chartjs-2'
+import { Bar, Chart } from 'react-chartjs-2'
 import annotationPlugin from 'chartjs-plugin-annotation'
 import ChartDataLabels from 'chartjs-plugin-datalabels'
 import type {
@@ -24,14 +27,24 @@ import type {
   SectionGroundPt,
   SectionSupplyBandSegment,
 } from './wtlNetworkSectionSvg'
+import {
+  pointRadiusFromMarkSize,
+  strokeFillAlpha,
+  styleForFeature,
+  useWtlSectionLayerStyles,
+} from './useWtlSectionLayerStyles'
+import { WtlNetworkLongSupplyElevCharts } from './wtlNetworkSectionLongSupplyCharts'
 
 ChartJS.register(
   LinearScale,
+  CategoryScale,
   PointElement,
   LineElement,
   LineController,
   ScatterController,
   BubbleController,
+  BarElement,
+  BarController,
   Tooltip,
   Legend,
   Filler,
@@ -52,6 +65,7 @@ const ROLE_ORDER: Array<{ role: SectionSupplyBandSegment['role']; label: string 
  */
 const CHART_Z = {
   cut: 1,
+  gap: 5,
   point: 10,
   line: 20,
   ground: 30,
@@ -60,6 +74,171 @@ const CHART_Z = {
 
 /** SVG SectionCutLine 과 동일 */
 const SECTION_CUT_COLOR = '#FF9100'
+/** 거리(시설 간) — 절단면과 동일 점선·끝캡 (밝은 회색) */
+const FACILITY_GAP_COLOR = '#6b7280'
+const GAP_LEGEND_LABEL = '거리'
+
+function isGapDatasetLabel(label: string): boolean {
+  return label === GAP_LEGEND_LABEL
+}
+
+type SectionTipRaw = {
+  label?: string
+  layerName?: string
+  fill?: string
+  stroke?: string
+  legendSrc?: string
+}
+
+function escapeHtmlTip(s: string): string {
+  return s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+}
+
+/** Canvas 툴팁은 SVG Image pointStyle·투명색을 못 그림 → HTML 외부 툴팁 */
+function sectionChartExternalTooltip(context: {
+  chart: ChartJS
+  tooltip: {
+    opacity: number
+    caretX: number
+    caretY: number
+    body?: { lines: string[] }[]
+    dataPoints?: { raw?: unknown; dataset: { borderColor?: unknown; backgroundColor?: unknown } }[]
+  }
+}) {
+  const { chart, tooltip } = context
+  const parent = chart.canvas.parentNode as HTMLElement | null
+  if (!parent) return
+  if (getComputedStyle(parent).position === 'static') {
+    parent.style.position = 'relative'
+  }
+
+  let el = parent.querySelector(':scope > .wtl-sec-tip') as HTMLDivElement | null
+  if (!el) {
+    el = document.createElement('div')
+    el.className = 'wtl-sec-tip'
+    el.setAttribute('role', 'tooltip')
+    el.style.cssText = [
+      'position:absolute',
+      'pointer-events:none',
+      'z-index:30',
+      'opacity:0',
+      'transition:opacity .08s ease',
+      'background:rgba(15,23,42,0.92)',
+      'color:#f8fafc',
+      'border-radius:4px',
+      'padding:6px 8px',
+      'font:11px/1.35 sans-serif',
+      'max-width:260px',
+      'box-shadow:0 4px 12px rgba(0,0,0,0.18)',
+      'white-space:nowrap',
+    ].join(';')
+    parent.appendChild(el)
+  }
+
+  if (tooltip.opacity === 0 || !tooltip.body?.length) {
+    el.style.opacity = '0'
+    return
+  }
+
+  const dp = tooltip.dataPoints?.[0]
+  const raw = (dp?.raw ?? {}) as SectionTipRaw
+  const bodyText = (tooltip.body ?? [])
+    .flatMap((b) => b.lines)
+    .map(escapeHtmlTip)
+    .join('<br/>')
+
+  let swatch = ''
+  const src = String(raw.legendSrc ?? '').trim()
+  if (src) {
+    swatch = `<img src="${escapeHtmlTip(src)}" alt="" width="16" height="16" style="display:block;width:16px;height:16px;object-fit:contain;background:#fff;border-radius:2px;flex-shrink:0" />`
+  } else {
+    const fromDs = (v: unknown): string =>
+      typeof v === 'string' && v && !v.startsWith('rgba(0,0,0,0)') ? v : ''
+    const c =
+      String(raw.stroke || raw.fill || '').trim() ||
+      fromDs(dp?.dataset.borderColor) ||
+      fromDs(dp?.dataset.backgroundColor) ||
+      '#94a3b8'
+    swatch = `<span style="display:block;width:10px;height:10px;margin:3px 0;border-radius:9999px;background:${escapeHtmlTip(c)};flex-shrink:0"></span>`
+  }
+
+  el.innerHTML = `<div style="display:flex;align-items:flex-start;gap:6px">${swatch}<div>${bodyText}</div></div>`
+  el.style.opacity = '1'
+  el.style.left = `${tooltip.caretX}px`
+  el.style.top = `${tooltip.caretY}px`
+  el.style.transform = 'translate(-50%, calc(-100% - 10px))'
+}
+
+/**
+ * 거리 가로선은 단일 line dataset.
+ * 끝캡(|)·구간 라벨은 플러그인으로 그려 애니메이션이 갈라지지 않게 함.
+ */
+function createGapDecorPlugin(
+  pts: { distM: number }[],
+  gapY: number,
+  tickHData: number
+): Plugin {
+  return {
+    id: 'wtlGapDecor',
+    afterDatasetsDraw(chart) {
+      const gapIdx = chart.data.datasets.findIndex(
+        (d) => String(d.label || '') === GAP_LEGEND_LABEL
+      )
+      if (gapIdx < 0 || !chart.isDatasetVisible(gapIdx)) return
+      if (pts.length < 2) return
+      const xScale = chart.scales.x
+      const yScale = chart.scales.y
+      if (!xScale || !yScale) return
+
+      const ctx = chart.ctx
+      const y = yScale.getPixelForValue(gapY)
+      const tickPx = Math.max(
+        3,
+        Math.abs(yScale.getPixelForValue(gapY + tickHData) - y)
+      )
+
+      ctx.save()
+      ctx.strokeStyle = FACILITY_GAP_COLOR
+      ctx.lineWidth = 1.5
+      ctx.lineCap = 'square'
+      ctx.setLineDash([])
+      for (const p of pts) {
+        const x = xScale.getPixelForValue(p.distM)
+        if (!Number.isFinite(x)) continue
+        ctx.beginPath()
+        ctx.moveTo(x, y - tickPx)
+        ctx.lineTo(x, y + tickPx)
+        ctx.stroke()
+      }
+
+      ctx.font = '600 9px sans-serif'
+      ctx.textAlign = 'center'
+      ctx.textBaseline = 'bottom'
+      for (let i = 1; i < pts.length; i++) {
+        const a = pts[i - 1]!
+        const b = pts[i]!
+        const gap = b.distM - a.distM
+        if (!(gap > 0.01)) continue
+        const mx = xScale.getPixelForValue((a.distM + b.distM) / 2)
+        if (!Number.isFinite(mx)) continue
+        const text = `${formatLenLabelM(gap)} m`
+        const tw = ctx.measureText(text).width
+        const padX = 3
+        const boxH = 12
+        const ty = y - 4
+        ctx.fillStyle = 'rgba(255,255,255,0.92)'
+        ctx.fillRect(mx - tw / 2 - padX, ty - boxH + 2, tw + padX * 2, boxH)
+        ctx.fillStyle = FACILITY_GAP_COLOR
+        ctx.fillText(text, mx, ty)
+      }
+      ctx.restore()
+    },
+  }
+}
 
 function formatLenLabelM(m: number): string {
   if (!Number.isFinite(m) || m < 0) return '0'
@@ -91,7 +270,22 @@ type PlacedAxisStack = AxisLabelStack & { baseRow: number }
 const AXIS_LABEL_LINE_H = 12
 const AXIS_LABEL_TOP = 4
 /** 정규화 X(0~1) 기준 — 이보다 가까우면 세로로 밀어 겹침 회피 */
-const AXIS_LABEL_NEAR_FRAC = 0.07
+const AXIS_LABEL_NEAR_FRAC = 0.12
+
+/** 한글·전각을 넓게 잡아 X축 라벨 충돌 폭 추정 */
+function axisLabelDisplayUnits(text: string): number {
+  let w = 0
+  for (const ch of text) {
+    const c = ch.codePointAt(0) ?? 0
+    w +=
+      (c >= 0xac00 && c <= 0xd7a3) ||
+      (c >= 0x2e80 && c <= 0xa4cf) ||
+      (c >= 0xff00 && c <= 0xffef)
+        ? 2
+        : 1
+  }
+  return w
+}
 
 /** 횡단 X축 — 같은 거리면 관로→시설 순으로 세로 나열 */
 function buildAxisLabelStacks(features: SectionFeatureMark[]): AxisLabelStack[] {
@@ -140,8 +334,12 @@ function layoutAxisStacksAvoidOverlap(
 
   for (const stack of stacks) {
     const nx = stack.distM / span
-    const charExtra = Math.max(0, Math.max(...stack.lines.map((l) => l.text.length), 1) - 4) * 0.004
-    const half = halfNear + charExtra
+    const maxUnits = Math.max(
+      ...stack.lines.map((l) => axisLabelDisplayUnits(l.text)),
+      2
+    )
+    // 표시 폭 단위당 ~0.9% — 한글 라벨이 이웃과 겹치지 않게
+    const half = Math.max(halfNear, maxUnits * 0.009)
     const n1 = nx - half
     const n2 = nx + half
 
@@ -171,8 +369,8 @@ function layoutAxisStacksAvoidOverlap(
 }
 
 function crossFooterBottomPad(maxLines: number): number {
-  // 라벨 스택 + 간격 + 절단면 선·끝캡·라벨
-  return AXIS_LABEL_TOP + Math.max(1, maxLines) * AXIS_LABEL_LINE_H + 8 + 5 + 14
+  // 라벨 스택 + 간격 + 절단면 선·끝캡·라벨 (잘림 방지 여유)
+  return AXIS_LABEL_TOP + Math.max(1, maxLines) * AXIS_LABEL_LINE_H + 8 + 5 + 22
 }
 
 function normalizeStroke(stroke?: string | null): string {
@@ -236,6 +434,7 @@ function buildSectionLegendLabels(
       if (
         t === '지반고' ||
         t === '절단면' ||
+        t === GAP_LEGEND_LABEL ||
         t.startsWith('옆면') ||
         t.startsWith('격자')
       ) {
@@ -245,19 +444,27 @@ function buildSectionLegendLabels(
     })
 }
 
+type CrossAxisFooterState = {
+  /** 표시 중인 피처만 — 범례 숨김 반영 */
+  placed: PlacedAxisStack[]
+  /** 높이 고정용 (전체 기준 행 수) */
+  maxRows: number
+  cutLen: string
+}
+
 /**
  * 횡단 X축 바깥 하단:
  * 1) 위치별 라벨(겹치면 세로 이동, 스택 내 관로→시설)
  * 2) 그 아래 절단면 점선
+ * stateRef로 최신 placed를 읽어, 플러그인 재등록 없이도 범례 숨김이 반영됨.
  */
 function createCrossAxisFooterPlugin(
-  placed: PlacedAxisStack[],
-  maxRows: number,
-  cutLen: string
+  stateRef: { current: CrossAxisFooterState }
 ): Plugin {
   return {
     id: 'wtlCrossAxisFooter',
     afterDraw(chart) {
+      const { placed, maxRows, cutLen } = stateRef.current
       const xScale = chart.scales.x
       if (!xScale) return
       const { ctx, chartArea } = chart
@@ -268,14 +475,13 @@ function createCrossAxisFooterPlugin(
       ctx.save()
       ctx.textAlign = 'center'
       ctx.textBaseline = 'top'
+      ctx.fillStyle = '#1e293b'
+      ctx.font = '600 10px sans-serif'
       for (const stack of placed) {
         const x = xScale.getPixelForValue(stack.distM)
         if (!Number.isFinite(x)) continue
         stack.lines.forEach((line, i) => {
           const row = stack.baseRow + i
-          ctx.fillStyle = line.kind === 'pipe' ? '#1e293b' : '#64748b'
-          ctx.font =
-            line.kind === 'pipe' ? '600 10px sans-serif' : '400 10px sans-serif'
           ctx.fillText(
             line.text,
             x,
@@ -284,7 +490,8 @@ function createCrossAxisFooterPlugin(
         })
       }
 
-      const cutY = chartArea.bottom + AXIS_LABEL_TOP + maxRows * AXIS_LABEL_LINE_H + 8
+      const cutY =
+        chartArea.bottom + AXIS_LABEL_TOP + maxRows * AXIS_LABEL_LINE_H + 8
       const tick = 5
       ctx.strokeStyle = SECTION_CUT_COLOR
       ctx.fillStyle = '#c2410c'
@@ -309,24 +516,214 @@ function createCrossAxisFooterPlugin(
   }
 }
 
-type LongPipeLegendItem = { key: string; label: string; color: string }
+type LongPipeLegendItem = {
+  key: string
+  label: string
+  color: string
+  kind?: 'pipe' | 'point'
+  layerKey?: string
+  styleCode?: string
+}
 type LongPipeLegendGroup = { layerName: string; items: LongPipeLegendItem[] }
 
-function buildLongPipeLegendGroups(pipes: SectionFeatureMark[]): LongPipeLegendGroup[] {
+/** 횡·종단 우측 데이터 범례 — 관로·점시설 등 켜진 레이어 전부 */
+function buildLongFeatureLegendGroups(
+  features: SectionFeatureMark[]
+): LongPipeLegendGroup[] {
   const used = new Map<string, number>()
   const byLayer = new Map<string, LongPipeLegendItem[]>()
-  for (const p of pipes) {
-    const layerName = layerLegendName(p)
-    const baseName = (p.label || layerName).trim() || layerName
+  for (const f of features) {
+    const layerName = layerLegendName(f)
+    const baseName = (f.label || layerName).trim() || layerName
     const n = (used.get(baseName) ?? 0) + 1
     used.set(baseName, n)
     const label = n === 1 ? baseName : `${baseName} (${n})`
     const arr = byLayer.get(layerName)
-    const item = { key: p.id || `${layerName}-${label}`, label, color: normalizeStroke(p.color) }
+    const item: LongPipeLegendItem = {
+      key: f.id || `${layerName}-${label}`,
+      label,
+      color: normalizeStroke(f.color),
+      kind: f.kind,
+      layerKey: f.layerKey,
+      styleCode: f.styleCode,
+    }
     if (arr) arr.push(item)
     else byLayer.set(layerName, [item])
   }
   return [...byLayer.entries()].map(([layerName, items]) => ({ layerName, items }))
+}
+
+function legendLabelByFeatureId(
+  groups: LongPipeLegendGroup[]
+): Map<string, string> {
+  const map = new Map<string, string>()
+  for (const g of groups) {
+    for (const it of g.items) map.set(it.key, it.label)
+  }
+  return map
+}
+
+/** 횡·종단 공통 — 레이어/하위 항목 체크박스로 표시 토글 */
+function SectionFeatureLegendPanel({
+  groups,
+  stylesByKey,
+  hiddenKeys,
+  onToggleItem,
+  onToggleLayer,
+}: {
+  groups: LongPipeLegendGroup[]
+  stylesByKey: Record<
+    string,
+    {
+      strokeColor: string
+      fillColor: string
+      strokeWidth: number
+      legendSrc: string
+      symbolByCode?: Record<
+        string,
+        { symbolImg: HTMLImageElement | null; legendSrc: string }
+      >
+    }
+  >
+  hiddenKeys: Set<string>
+  onToggleItem: (key: string) => void
+  onToggleLayer: (group: LongPipeLegendGroup) => void
+}) {
+  if (!groups.length) return null
+
+  return (
+    <div
+      className="flex w-[180px] shrink-0 flex-col self-stretch overflow-hidden rounded border border-[#cbd5e1] bg-[#f8fafc]"
+      title="데이터 범례"
+    >
+      <div className="shrink-0 border-b border-[#e2e8f0] px-1.5 py-1 text-[10px] font-semibold text-[#64748b]">
+        데이터 범례
+      </div>
+      <div className="min-h-0 flex-1 space-y-2 overflow-y-auto p-1.5">
+        {groups.map((g) => {
+          const allHidden =
+            g.items.length > 0 && g.items.every((it) => hiddenKeys.has(it.key))
+          const someVisible = g.items.some((it) => !hiddenKeys.has(it.key))
+          const someHidden = g.items.some((it) => hiddenKeys.has(it.key))
+          return (
+            <div key={g.layerName}>
+              <div className="flex items-center gap-1 py-0.5">
+                <span
+                  className="min-w-0 flex-1 truncate text-[10px] font-semibold text-[#334155]"
+                  title={g.layerName}
+                >
+                  {g.layerName}
+                </span>
+                <input
+                  type="checkbox"
+                  className="h-3.5 w-3.5 shrink-0 cursor-pointer accent-primary"
+                  checked={someVisible}
+                  ref={(el) => {
+                    if (el) el.indeterminate = someHidden && someVisible
+                  }}
+                  title={
+                    allHidden
+                      ? `${g.layerName} 표시`
+                      : `${g.layerName} 숨기기`
+                  }
+                  onChange={() => onToggleLayer(g)}
+                />
+              </div>
+              <ul className="mt-0.5 space-y-0.5">
+                {g.items.map((it) => {
+                  const hidden = hiddenKeys.has(it.key)
+                  const isPoint = it.kind === 'point'
+                  const baseSt = it.layerKey
+                    ? stylesByKey[String(it.layerKey).toLowerCase()]
+                    : undefined
+                  const code = String(it.styleCode ?? '').trim().toUpperCase()
+                  const codeSym =
+                    code && baseSt?.symbolByCode?.[code]
+                      ? baseSt.symbolByCode[code]
+                      : undefined
+                  const stroke = baseSt?.strokeColor ?? it.color
+                  const fill = baseSt?.fillColor ?? stroke
+                  const legendSrc = codeSym?.legendSrc || baseSt?.legendSrc || ''
+                  return (
+                    <li
+                      key={it.key}
+                      className="flex items-center gap-1 rounded py-0.5 hover:bg-[#e2e8f0]"
+                    >
+                      <div
+                        className="flex min-w-0 flex-1 items-center gap-1"
+                        style={{
+                          color: hidden ? '#94a3b8' : '#334155',
+                          opacity: hidden ? 0.55 : 1,
+                        }}
+                      >
+                        {isPoint && legendSrc ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={legendSrc}
+                            alt=""
+                            width={14}
+                            height={14}
+                            className="h-3.5 w-3.5 shrink-0 object-contain"
+                            style={{ opacity: hidden ? 0.3 : 1 }}
+                            aria-hidden
+                          />
+                        ) : isPoint ? (
+                          <span
+                            className="inline-block h-3 w-3 shrink-0 rounded-full"
+                            style={{
+                              backgroundColor: fill,
+                              border: `${Math.max(1, baseSt?.strokeWidth ?? 1.5)}px solid ${stroke}`,
+                              opacity: hidden ? 0.3 : 1,
+                            }}
+                            aria-hidden
+                          />
+                        ) : (
+                          <svg
+                            width="14"
+                            height="14"
+                            viewBox="0 0 14 14"
+                            className="shrink-0"
+                            aria-hidden
+                            style={{ opacity: hidden ? 0.3 : 1 }}
+                          >
+                            <line
+                              x1="1"
+                              y1="7"
+                              x2="13"
+                              y2="7"
+                              stroke={stroke}
+                              strokeWidth={2}
+                              strokeLinecap="round"
+                            />
+                          </svg>
+                        )}
+                        <span
+                          className="truncate text-[10px]"
+                          style={{
+                            textDecoration: hidden ? 'line-through' : 'none',
+                          }}
+                          title={it.label}
+                        >
+                          {it.label}
+                        </span>
+                      </div>
+                      <input
+                        type="checkbox"
+                        className="h-3.5 w-3.5 shrink-0 cursor-pointer accent-primary"
+                        checked={!hidden}
+                        title={hidden ? `${it.label} 표시` : `${it.label} 숨기기`}
+                        onChange={() => onToggleItem(it.key)}
+                      />
+                    </li>
+                  )
+                })}
+              </ul>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
 }
 
 type PlotInset = { left: number; right: number }
@@ -353,8 +750,9 @@ function createPlotInsetSyncPlugin(
 }
 
 /**
- * 급수구역·분구·블록 간트 (종단 SVG·차트형태 공통 느낌).
- * plotInset = 상단 단면도 chartArea와 동일 X 길이.
+ * 급수구역·분구·블록 — Chart.js 가로 누적 막대.
+ * 행별 구성 비율(합=100%)로 쌓아 끝 공백·중간 갭 없이 표시.
+ * plotInset으로 상단 단면도 plot 영역과 막대 시작을 맞춤.
  */
 function SupplyAreaGanttChart({
   bands,
@@ -369,76 +767,137 @@ function SupplyAreaGanttChart({
     () => ROLE_ORDER.filter((r) => bands.some((b) => b.role === r.role)),
     [bands]
   )
-  if (!roles.length) return null
 
   const len = Math.max(totalLengthM, 0.01)
-  const pct = (m: number) => `${(Math.min(len, Math.max(0, m)) / len) * 100}%`
-  const labelW = Math.max(36, plotInset.left)
+
+  const { data } = useMemo((): {
+    data: ChartData<'bar'>
+  } => {
+    if (!roles.length) {
+      return { data: { labels: [], datasets: [] } }
+    }
+    const labels = roles.map((r) => r.label)
+    type StackSeg = {
+      name: string
+      color: string
+      role: SectionSupplyBandSegment['role']
+      lengthM: number
+    }
+    const stackSegs: StackSeg[] = []
+    const roleSum = new Map<SectionSupplyBandSegment['role'], number>()
+    for (const row of roles) {
+      const segs = bands
+        .filter((b) => b.role === row.role)
+        .slice()
+        .sort((a, b) => a.fromM - b.fromM || a.toM - b.toM)
+      let sum = 0
+      segs.forEach((seg) => {
+        const lengthM = Math.max(
+          0,
+          Math.min(len, Math.max(seg.fromM, seg.toM)) -
+            Math.max(0, Math.min(seg.fromM, seg.toM))
+        )
+        if (!(lengthM > 0.01)) return
+        sum += lengthM
+        stackSegs.push({
+          name: seg.name,
+          color: normalizeStroke(seg.color),
+          role: row.role,
+          lengthM,
+        })
+      })
+      roleSum.set(row.role, sum)
+    }
+    return {
+      data: {
+        labels,
+        datasets: stackSegs.map((seg) => {
+          const sum = roleSum.get(seg.role) || 0
+          const pct = sum > 0 ? (seg.lengthM / sum) * 100 : 0
+          return {
+            label: seg.name,
+            data: roles.map((r) => (r.role === seg.role ? pct : 0)),
+            backgroundColor: `${seg.color}8c`,
+            borderColor: seg.color,
+            borderWidth: 1,
+            barThickness: 14,
+            stack: 'supply',
+          }
+        }),
+      },
+    }
+  }, [bands, roles, len])
+
+  const options = useMemo((): ChartOptions<'bar'> => {
+    const yLabelW = 36
+    return {
+      indexAxis: 'y',
+      responsive: true,
+      maintainAspectRatio: false,
+      animation: false,
+      layout: {
+        padding: {
+          left: Math.max(0, plotInset.left - yLabelW),
+          right: 0,
+          top: 2,
+          bottom: 2,
+        },
+      },
+      datasets: {
+        bar: {
+          categoryPercentage: 1,
+          barPercentage: 0.92,
+        },
+      },
+      plugins: {
+        legend: { display: false },
+        datalabels: {
+          color: '#1e293b',
+          font: { size: 9, weight: 600 },
+          clamp: true,
+          formatter: (v, ctx) => {
+            const n = Number(v)
+            if (!(n >= 4)) return ''
+            return String(ctx.dataset.label || '')
+          },
+        },
+        tooltip: { enabled: false },
+      },
+      scales: {
+        x: {
+          stacked: true,
+          min: 0,
+          max: 100,
+          display: false,
+          grid: { display: false },
+          border: { display: false },
+        },
+        y: {
+          stacked: true,
+          grid: { display: false },
+          border: { display: false },
+          ticks: {
+            font: { size: 10, weight: 'bold' },
+            color: '#3d5560',
+            padding: 4,
+          },
+        },
+      },
+    }
+  }, [plotInset.left])
+
+  if (!roles.length) return null
+
+  const height = Math.max(44, roles.length * 22 + 8)
 
   return (
-    <div className="mt-1 flex pt-1" role="img" aria-label="급수구역·분구·블록">
-      <div className="shrink-0" style={{ width: labelW }}>
-        {roles.map((row) => (
-          <div
-            key={row.role}
-            className="flex h-[22px] items-center justify-end pr-1.5 text-[10px] font-semibold text-[#3d5560]"
-          >
-            {row.label}
-          </div>
-        ))}
-      </div>
-      <div
-        className="min-w-0 flex-1 overflow-hidden rounded border border-[#e2e8f0] bg-[#f8fafc]"
-        style={{ marginRight: plotInset.right }}
-      >
-        {roles.map((row, ri) => {
-          const segs = bands
-            .filter((b) => b.role === row.role)
-            .slice()
-            .sort((a, b) => a.fromM - b.fromM || a.toM - b.toM)
-          return (
-            <div
-              key={row.role}
-              className={
-                ri < roles.length - 1
-                  ? 'relative h-[22px] border-b border-[#e2e8f0]'
-                  : 'relative h-[22px]'
-              }
-            >
-              {segs.map((seg, si) => {
-                const color = normalizeStroke(seg.color)
-                const left = pct(Math.min(seg.fromM, seg.toM))
-                const widthPct =
-                  ((Math.min(len, Math.max(seg.fromM, seg.toM)) -
-                    Math.max(0, Math.min(seg.fromM, seg.toM))) /
-                    len) *
-                  100
-                const width = `${Math.max(0.4, widthPct)}%`
-                const showName = widthPct >= 4
-                return (
-                  <div
-                    key={`${row.role}-${si}-${seg.name}`}
-                    className="absolute top-[3px] flex h-[16px] items-center justify-center overflow-hidden rounded-sm border px-0.5"
-                    style={{
-                      left,
-                      width,
-                      backgroundColor: `${color}59`,
-                      borderColor: color,
-                    }}
-                    title={`${seg.name} (${seg.fromM.toFixed(1)}~${seg.toM.toFixed(1)}m)`}
-                  >
-                    {showName ? (
-                      <span className="truncate text-[9px] font-semibold text-[#1e293b]">
-                        {seg.name}
-                      </span>
-                    ) : null}
-                  </div>
-                )
-              })}
-            </div>
-          )
-        })}
-      </div>
+    <div
+      className="mt-0.5 overflow-hidden bg-transparent"
+      style={{ height, marginRight: plotInset.right }}
+      role="img"
+      aria-label="급수구역·분구·블록"
+    >
+      <Bar data={data} options={options} />
     </div>
   )
 }
@@ -477,18 +936,59 @@ function CrossSectionChart({
   totalLengthM: number
   supplyAreaBands: SectionSupplyBandSegment[]
 }) {
-  const pipes = features.filter((f) => f.kind === 'pipe')
-  const points = features.filter((f) => f.kind === 'point')
   const { plotInset, insetSyncPlugin } = usePlotInsetSync()
-  const axisStacks = useMemo(() => buildAxisLabelStacks(features), [features])
+  const { stylesByKey, revision: styleRevision } = useWtlSectionLayerStyles(features)
+  const [hiddenKeys, setHiddenKeys] = useState<Set<string>>(() => new Set())
+  const featureLegendGroups = useMemo(
+    () => buildLongFeatureLegendGroups(features),
+    [features]
+  )
+  const featureLegendKey = useMemo(
+    () =>
+      featureLegendGroups
+        .flatMap((g) => g.items.map((it) => it.key))
+        .join('|'),
+    [featureLegendGroups]
+  )
+  useEffect(() => {
+    setHiddenKeys(new Set())
+  }, [featureLegendKey])
+
+  const visibleFeatures = useMemo(
+    () => features.filter((f) => !hiddenKeys.has(f.id)),
+    [features, hiddenKeys]
+  )
+  const pipes = visibleFeatures.filter((f) => f.kind === 'pipe')
+  const points = visibleFeatures.filter((f) => f.kind === 'point')
+  /** 높이 고정용 — 전체 feature 기준 (체크 토글과 무관) */
+  const allPipes = useMemo(
+    () => features.filter((f) => f.kind === 'pipe'),
+    [features]
+  )
+  const allPoints = useMemo(
+    () => features.filter((f) => f.kind === 'point'),
+    [features]
+  )
   const xmaxForLayout = Math.max(
     totalLengthM,
     ground[ground.length - 1]?.distM ?? 0,
     0.01
   )
+  const fullAxisLayout = useMemo(
+    () =>
+      layoutAxisStacksAvoidOverlap(
+        buildAxisLabelStacks(features),
+        xmaxForLayout
+      ),
+    [features, xmaxForLayout]
+  )
   const axisLayout = useMemo(
-    () => layoutAxisStacksAvoidOverlap(axisStacks, xmaxForLayout),
-    [axisStacks, xmaxForLayout]
+    () =>
+      layoutAxisStacksAvoidOverlap(
+        buildAxisLabelStacks(visibleFeatures),
+        xmaxForLayout
+      ),
+    [visibleFeatures, xmaxForLayout]
   )
   const axisMarks = useMemo(
     (): AxisMark[] =>
@@ -499,49 +999,103 @@ function CrossSectionChart({
     [axisLayout]
   )
 
-  const pipeLabels = useMemo(
-    () => new Set([...groupFeaturesByLayer(pipes).keys()]),
-    [pipes]
+  const featureLayerNames = useMemo(
+    () => new Set([...groupFeaturesByLayer(features).keys()]),
+    [features]
   )
 
+  const toggleLegendItem = useCallback((key: string) => {
+    setHiddenKeys((prev) => {
+      const next = new Set(prev)
+      if (next.has(key)) next.delete(key)
+      else next.add(key)
+      return next
+    })
+  }, [])
+
+  const toggleLegendLayer = useCallback((group: LongPipeLegendGroup) => {
+    setHiddenKeys((prev) => {
+      const next = new Set(prev)
+      const allHidden =
+        group.items.length > 0 && group.items.every((it) => next.has(it.key))
+      for (const it of group.items) {
+        if (allHidden) next.delete(it.key)
+        else next.add(it.key)
+      }
+      return next
+    })
+  }, [])
+
   const elevBounds = useMemo(() => {
+    // 표고·하단 패딩은 전체 데이터 기준 → 체크 토글 시 박스 높이/축 흔들림 방지
     const elevs = ground.map((g) => g.elevM)
-    for (const p of pipes) {
+    for (const p of allPipes) {
       const surf = p.surfaceElevM ?? groundElevAt(ground, p.distM)
       if (surf != null) elevs.push(surf - (Number(p.depthM) || 0), surf)
     }
-    for (const p of points) {
+    for (const p of allPoints) {
       const surf = p.surfaceElevM ?? groundElevAt(ground, p.distM)
       if (surf != null) elevs.push(surf)
     }
     const dataMin = elevs.length ? Math.min(...elevs) : 0
     const dataMax = elevs.length ? Math.max(...elevs) : 10
     const span = Math.max(0.5, dataMax - dataMin)
+    // 상단: 거리 라인(지반고 위) 여유 / 하단은 관 심도만
+    const gapPad = Math.max(0.55, span * 0.12)
     const ymin = dataMin - 0.5
-    const ymax = dataMax + 0.5
+    const ymax = dataMax + gapPad
     const xmax = xmaxForLayout
+    const gapY = dataMax + gapPad * 0.45
     return {
       ymin,
       ymax,
       xmax,
-      span,
-      tickH: Math.max(0.08, span * 0.03),
+      span: ymax - ymin,
+      gapY,
+      tickH: Math.max(0.08, (ymax - ymin) * 0.025),
       cutLen: formatLenLabelM(xmax),
-      bottomPad: crossFooterBottomPad(axisLayout.maxRows),
+      bottomPad: crossFooterBottomPad(fullAxisLayout.maxRows),
+      footerRows: fullAxisLayout.maxRows,
     }
-  }, [ground, pipes, points, xmaxForLayout, axisLayout.maxRows])
+  }, [ground, allPipes, allPoints, xmaxForLayout, fullAxisLayout.maxRows])
 
+  const axisFooterStateRef = useRef<CrossAxisFooterState>({
+    placed: [],
+    maxRows: 1,
+    cutLen: '',
+  })
+  axisFooterStateRef.current = {
+    placed: axisLayout.placed,
+    maxRows: elevBounds.footerRows,
+    cutLen: elevBounds.cutLen,
+  }
   const axisFooterPlugin = useMemo(
-    () =>
-      createCrossAxisFooterPlugin(
-        axisLayout.placed,
-        axisLayout.maxRows,
-        elevBounds.cutLen
-      ),
-    [axisLayout, elevBounds.cutLen]
+    () => createCrossAxisFooterPlugin(axisFooterStateRef),
+    []
+  )
+
+  /** 그래프상 point(관·시설) 전부 — 거리순 (동일 거리 병합) */
+  const facilityGapPts = useMemo(() => {
+    const sorted = [...pipes, ...points]
+      .filter((p) => Number.isFinite(p.distM))
+      .sort((a, b) => a.distM - b.distM)
+    const out: { distM: number }[] = []
+    for (const p of sorted) {
+      const last = out[out.length - 1]
+      if (last && Math.abs(last.distM - p.distM) < 0.05) continue
+      out.push({ distM: p.distM })
+    }
+    return out
+  }, [pipes, points])
+
+  const gapTickH = Math.max(0.03, elevBounds.span * 0.01)
+  const gapDecorPlugin = useMemo(
+    () => createGapDecorPlugin(facilityGapPts, elevBounds.gapY, gapTickH),
+    [facilityGapPts, elevBounds.gapY, gapTickH]
   )
 
   const chartData = useMemo((): ChartData => {
+    const { gapY } = elevBounds
     const groundPts = ground.map((g) => ({ x: g.distM, y: g.elevM }))
     const datasets: ChartData['datasets'] = [
       {
@@ -552,30 +1106,36 @@ function CrossSectionChart({
         backgroundColor: 'rgba(180, 180, 180, 0.2)',
         fill: false,
         pointRadius: 0,
+        pointHoverRadius: 4,
+        pointHitRadius: 12,
         tension: 0.15,
         borderWidth: 1.5,
         order: CHART_Z.ground,
       },
     ]
 
-    // LINE(관) — 범례 = 레이어명 (order 작을수록 위)
+    // LINE(관) — SLD는 색만, 크기(관경)·두께는 기존
     for (const [layerName, group] of groupFeaturesByLayer(pipes)) {
       const pipePts = group.map((p) => {
         const surf = p.surfaceElevM ?? groundElevAt(ground, p.distM) ?? 0
         const elev = surf - (Number(p.depthM) || 0)
+        const st = styleForFeature(stylesByKey, p)
+        const color = st?.strokeColor ?? normalizeStroke(p.color)
         return {
           x: p.distM,
           y: elev,
           r: bubbleRadiusPx(p.diameterM),
-          label: p.label || layerName,
-          color: normalizeStroke(p.color),
+          label: (p.label || '').trim(),
+          color,
+          fill: color,
+          stroke: color,
         }
       })
       datasets.push({
         type: 'bubble' as const,
         label: layerName,
         data: pipePts,
-        backgroundColor: pipePts.map((p) => `${p.color}99`),
+        backgroundColor: pipePts.map((p) => strokeFillAlpha(p.color)),
         borderColor: pipePts.map((p) => p.color),
         borderWidth: 1.5,
         pointStyle: 'circle',
@@ -583,106 +1143,85 @@ function CrossSectionChart({
       })
     }
 
-    // POINT(시설) — 범례 = 레이어명 (최상단)
+    // POINT(시설) — 피처별 styleCode 조건 SVG / 없으면 Mark 채움·테두리
     for (const [layerName, group] of groupFeaturesByLayer(points)) {
       const pointPts = group.map((p) => {
         const surf = p.surfaceElevM ?? groundElevAt(ground, p.distM) ?? 0
+        const st = styleForFeature(stylesByKey, p)
         return {
           x: p.distM,
           y: surf,
-          label: p.label || layerName,
-          color: normalizeStroke(p.color),
+          label: (p.label || '').trim(),
+          fill: st?.fillColor ?? normalizeStroke(p.color),
+          stroke: st?.strokeColor ?? normalizeStroke(p.color),
+          legendSrc: st?.legendSrc || '',
+          symbolImg: st?.symbolImg ?? null,
+          markSize: st?.markSize,
+          strokeWidth: st?.strokeWidth ?? 1.5,
         }
       })
       datasets.push({
         type: 'scatter' as const,
         label: layerName,
         data: pointPts,
-        backgroundColor: pointPts.map((p) => p.color),
-        borderColor: '#ffffff',
-        borderWidth: 1,
-        pointRadius: 5,
-        pointStyle: 'rectRot' as const,
+        backgroundColor: pointPts.map((p) =>
+          p.symbolImg ? 'rgba(0,0,0,0)' : p.fill
+        ),
+        borderColor: pointPts.map((p) =>
+          p.symbolImg ? 'rgba(0,0,0,0)' : p.stroke
+        ),
+        borderWidth: pointPts.map((p) => (p.symbolImg ? 0 : p.strokeWidth)),
+        pointRadius: pointPts.map((p) =>
+          p.symbolImg ? pointRadiusFromMarkSize(p.markSize) : 5
+        ),
+        pointHoverRadius: pointPts.map((p) =>
+          p.symbolImg ? pointRadiusFromMarkSize(p.markSize) + 1 : 6
+        ),
+        pointHitRadius: 12,
+        pointStyle: pointPts.map((p) => p.symbolImg ?? ('circle' as const)),
         order: CHART_Z.point,
       })
     }
 
+    // 거리 — 단일 line (끝캡·구간라벨은 gapDecorPlugin)
+    if (facilityGapPts.length >= 2) {
+      datasets.push({
+        type: 'line' as const,
+        label: GAP_LEGEND_LABEL,
+        data: facilityGapPts.map((p) => ({ x: p.distM, y: gapY })),
+        borderColor: FACILITY_GAP_COLOR,
+        backgroundColor: FACILITY_GAP_COLOR,
+        borderDash: [6, 4],
+        borderWidth: 1.5,
+        pointRadius: 0,
+        pointHoverRadius: 0,
+        pointHitRadius: 8,
+        fill: false,
+        tension: 0,
+        order: CHART_Z.gap,
+      })
+    }
+
     return { datasets }
-  }, [ground, pipes, points])
+  }, [ground, pipes, points, elevBounds, facilityGapPts, stylesByKey, styleRevision])
 
   const options = useMemo((): ChartOptions => {
-    const { ymin, ymax, xmax, span, tickH, bottomPad } = elevBounds
+    const { ymin, ymax, xmax, bottomPad } = elevBounds
 
     type MarkPt = { label?: string; color?: string; x?: number; y?: number }
-    const markAt = (ctx: { dataset: { type?: string; data: unknown[] }; dataIndex: number }) =>
-      ctx.dataset.data[ctx.dataIndex] as MarkPt | undefined
-
-    // 시설간 거리 — 그래프 내부(하단)
-    const gapY = ymin + Math.max(0.1, span * 0.05)
-    const annotations: Record<string, object> = {}
-    for (let i = 1; i < axisMarks.length; i++) {
-      const a = axisMarks[i - 1]!
-      const b = axisMarks[i]!
-      const gap = b.distM - a.distM
-      if (!(gap > 0.01)) continue
-      const mid = (a.distM + b.distM) / 2
-      const gapTxt = formatLenLabelM(gap)
-      annotations[`gapLine${i}`] = {
-        type: 'line',
-        xMin: a.distM,
-        xMax: b.distM,
-        yMin: gapY,
-        yMax: gapY,
-        borderColor: '#64748b',
-        borderWidth: 1.2,
-        drawTime: 'afterDatasets',
-        clip: false,
-      }
-      annotations[`gapTickL${i}`] = {
-        type: 'line',
-        xMin: a.distM,
-        xMax: a.distM,
-        yMin: gapY - tickH,
-        yMax: gapY + tickH,
-        borderColor: '#64748b',
-        borderWidth: 1.5,
-        drawTime: 'afterDatasets',
-        clip: false,
-      }
-      annotations[`gapTickR${i}`] = {
-        type: 'line',
-        xMin: b.distM,
-        xMax: b.distM,
-        yMin: gapY - tickH,
-        yMax: gapY + tickH,
-        borderColor: '#64748b',
-        borderWidth: 1.5,
-        drawTime: 'afterDatasets',
-        clip: false,
-      }
-      annotations[`gapLbl${i}`] = {
-        type: 'label',
-        xValue: mid,
-        yValue: gapY,
-        content: `|--- ${gapTxt} m ---|`,
-        color: '#475569',
-        font: { size: 9, weight: '600' },
-        backgroundColor: 'rgba(255,255,255,0.95)',
-        padding: { top: 1, bottom: 1, left: 2, right: 2 },
-        borderRadius: 2,
-        position: { x: 'center', y: 'center' },
-        yAdjust: -12,
-        drawTime: 'afterDatasets',
-        clip: false,
-      }
-    }
 
     return {
       responsive: true,
       maintainAspectRatio: false,
-      // 하단 여백: X축 바깥 라벨 스택 + 절단면
+      // 체크박스 토글 시 거리 선·끝캡이 따로 출렁이지 않도록
+      animation: false,
       layout: {
         padding: { top: 8, bottom: bottomPad },
+      },
+      interaction: {
+        mode: 'nearest',
+        intersect: false,
+        axis: 'xy',
       },
       plugins: {
         legend: {
@@ -692,28 +1231,31 @@ function CrossSectionChart({
             boxWidth: 12,
             usePointStyle: true,
             generateLabels: (chart) =>
-              buildSectionLegendLabels(chart, { pipeLabels }),
+              buildSectionLegendLabels(chart, {
+                pipeLabels: featureLayerNames,
+                hide: (t) => featureLayerNames.has(t),
+              }),
           },
         },
         datalabels: {
           display: false,
-          formatter: (_v, ctx) => {
-            if (ctx.dataset.type === 'line') return ''
-            return markAt(ctx)?.label || ''
-          },
         },
         tooltip: {
+          enabled: false,
+          external: sectionChartExternalTooltip,
+          mode: 'nearest',
+          intersect: false,
+          filter: (item) => !isGapDatasetLabel(String(item.dataset.label || '')),
           callbacks: {
+            title: () => '',
             label: (ctx) => {
               const raw = ctx.raw as MarkPt | undefined
-              const name = raw?.label || ctx.dataset.label
-              return `${name}: ${Number(raw?.x ?? ctx.parsed.x).toFixed(1)}m / EL ${Number(raw?.y ?? ctx.parsed.y).toFixed(2)}`
+              const legend = String(ctx.dataset.label || '')
+              if (legend === '지반고') return ['범례: 지반고']
+              const featureLabel = String(raw?.label ?? '').trim() || '—'
+              return [`범례: ${legend}`, `라벨: ${featureLabel}`]
             },
           },
-        },
-        annotation: {
-          clip: false,
-          annotations,
         },
       },
       scales: {
@@ -726,7 +1268,6 @@ function CrossSectionChart({
             axis.ticks = axisMarks.map((m) => ({ value: m.distM }))
           },
           ticks: {
-            // 라벨은 footer 플러그인이 관로→시설 세로 스택으로 그림
             display: false,
           },
           grid: { color: '#e2e8f0' },
@@ -741,7 +1282,7 @@ function CrossSectionChart({
         },
       },
     }
-  }, [elevBounds, axisMarks, pipeLabels])
+  }, [elevBounds, axisMarks, featureLayerNames])
 
   if (!ground.length) {
     return (
@@ -753,19 +1294,36 @@ function CrossSectionChart({
 
   return (
     <div className="overflow-hidden rounded border-2 border-[#787878] bg-white p-2">
-      <div className="relative z-[2]" style={{ height: 320 + elevBounds.bottomPad }}>
-        <Chart
-          type="scatter"
-          data={chartData}
-          options={options}
-          plugins={[axisFooterPlugin, insetSyncPlugin]}
-        />
-      </div>
-      <div className="relative z-[1]">
-        <SupplyAreaGanttChart
-          bands={supplyAreaBands}
-          totalLengthM={xmaxForLayout}
-          plotInset={plotInset}
+      <div className="flex items-stretch gap-2">
+        <div className="min-w-0 flex-1">
+          <div
+            className="relative z-[2]"
+            style={{
+              height: 420 + elevBounds.bottomPad,
+              minHeight: 420 + elevBounds.bottomPad,
+            }}
+          >
+            <Chart
+              type="scatter"
+              data={chartData}
+              options={options}
+              plugins={[axisFooterPlugin, gapDecorPlugin, insetSyncPlugin]}
+            />
+          </div>
+          <div className="relative z-[1]">
+            <SupplyAreaGanttChart
+              bands={supplyAreaBands}
+              totalLengthM={xmaxForLayout}
+              plotInset={plotInset}
+            />
+          </div>
+        </div>
+        <SectionFeatureLegendPanel
+          groups={featureLegendGroups}
+          stylesByKey={stylesByKey}
+          hiddenKeys={hiddenKeys}
+          onToggleItem={toggleLegendItem}
+          onToggleLayer={toggleLegendLayer}
         />
       </div>
     </div>
@@ -779,6 +1337,7 @@ function LongSectionChart({
   features,
   totalLengthM,
   supplyAreaBands,
+  supplyElevComposition = [],
 }: {
   ground: SectionGroundPt[]
   groundMin: SectionGroundPt[]
@@ -786,14 +1345,71 @@ function LongSectionChart({
   features: SectionFeatureMark[]
   totalLengthM: number
   supplyAreaBands: SectionSupplyBandSegment[]
+  supplyElevComposition?: import('./useWtlNetworkSection').SectionSupplyElevRow[]
 }) {
-  const pipes = features.filter((f) => f.kind === 'pipe')
-  const len = Math.max(totalLengthM, ground[ground.length - 1]?.distM ?? 0, 0.01)
-  const { plotInset, insetSyncPlugin } = usePlotInsetSync()
-  const rolesPresent = useMemo(
-    () => ROLE_ORDER.filter((r) => supplyAreaBands.some((b) => b.role === r.role)),
-    [supplyAreaBands]
+  const { stylesByKey, revision: styleRevision } = useWtlSectionLayerStyles(features)
+  const [hiddenKeys, setHiddenKeys] = useState<Set<string>>(() => new Set())
+  const featureLegendGroups = useMemo(
+    () => buildLongFeatureLegendGroups(features),
+    [features]
   )
+  const labelById = useMemo(
+    () => legendLabelByFeatureId(featureLegendGroups),
+    [featureLegendGroups]
+  )
+  const featureLegendLabels = useMemo(() => {
+    const set = new Set<string>()
+    for (const g of featureLegendGroups) {
+      for (const it of g.items) set.add(it.label)
+    }
+    return set
+  }, [featureLegendGroups])
+  const featureLegendKey = useMemo(
+    () =>
+      featureLegendGroups
+        .flatMap((g) => g.items.map((it) => it.key))
+        .join('|'),
+    [featureLegendGroups]
+  )
+  useEffect(() => {
+    setHiddenKeys(new Set())
+  }, [featureLegendKey])
+
+  const visibleFeatures = useMemo(
+    () => features.filter((f) => !hiddenKeys.has(f.id)),
+    [features, hiddenKeys]
+  )
+  const pipes = useMemo(
+    () => visibleFeatures.filter((f) => f.kind === 'pipe'),
+    [visibleFeatures]
+  )
+  const points = useMemo(
+    () => visibleFeatures.filter((f) => f.kind === 'point'),
+    [visibleFeatures]
+  )
+  const len = Math.max(totalLengthM, ground[ground.length - 1]?.distM ?? 0, 0.01)
+
+  const toggleLegendItem = useCallback((key: string) => {
+    setHiddenKeys((prev) => {
+      const next = new Set(prev)
+      if (next.has(key)) next.delete(key)
+      else next.add(key)
+      return next
+    })
+  }, [])
+
+  const toggleLegendLayer = useCallback((group: LongPipeLegendGroup) => {
+    setHiddenKeys((prev) => {
+      const next = new Set(prev)
+      const allHidden =
+        group.items.length > 0 && group.items.every((it) => next.has(it.key))
+      for (const it of group.items) {
+        if (allHidden) next.delete(it.key)
+        else next.add(it.key)
+      }
+      return next
+    })
+  }, [])
 
   const elevRange = useMemo(() => {
     const elevs = ground.map((g) => g.elevM)
@@ -808,6 +1424,10 @@ function LongSectionChart({
         elevs.push(g.elevM - dep)
       }
     }
+    for (const p of points) {
+      const surf = p.surfaceElevM ?? groundElevAt(ground, p.distM)
+      if (surf != null) elevs.push(surf)
+    }
     const dataMin = elevs.length ? Math.min(...elevs) : 0
     const dataMax = elevs.length ? Math.max(...elevs) : 10
     return {
@@ -815,25 +1435,29 @@ function LongSectionChart({
       ymax: dataMax + 0.35,
       dataMin,
     }
-  }, [ground, groundMin, groundMax, pipes])
+  }, [ground, groundMin, groundMax, pipes, points])
 
-  const chartData = useMemo((): ChartData<'line'> => {
+  const chartData = useMemo((): ChartData => {
     const { ymin, ymax } = elevRange
     const cutX = len / 2
-    const datasets: ChartData<'line'>['datasets'] = [
+    const datasets: ChartData['datasets'] = [
       {
+        type: 'line' as const,
         label: '지반고',
         data: ground.map((g) => ({ x: g.distM, y: g.elevM })),
         borderColor: '#787878',
         backgroundColor: 'rgba(180, 180, 180, 0.12)',
         fill: false,
         pointRadius: 0,
+        pointHoverRadius: 4,
+        pointHitRadius: 12,
         tension: 0.12,
         borderWidth: 1.8,
         order: CHART_Z.ground,
       },
       // 절단면 = 깊이축 중심 수직선 (SVG long 과 동일)
       {
+        type: 'line' as const,
         label: '절단면',
         data: [
           { x: cutX, y: ymin },
@@ -843,6 +1467,7 @@ function LongSectionChart({
         borderDash: [6, 4],
         borderWidth: 1.8,
         pointRadius: 0,
+        pointHitRadius: 0,
         fill: false,
         tension: 0,
         order: CHART_Z.cut,
@@ -850,11 +1475,14 @@ function LongSectionChart({
     ]
     if (groundMax.length) {
       datasets.push({
+        type: 'line' as const,
         label: '옆면 최고 지반고',
         data: groundMax.map((g) => ({ x: g.distM, y: g.elevM })),
         borderColor: '#94a3b8',
         borderDash: [4, 3],
         pointRadius: 0,
+        pointHoverRadius: 3,
+        pointHitRadius: 10,
         fill: false,
         borderWidth: 1,
         order: CHART_Z.polygon,
@@ -862,69 +1490,155 @@ function LongSectionChart({
     }
     if (groundMin.length) {
       datasets.push({
+        type: 'line' as const,
         label: '옆면 최저 지반고',
         data: groundMin.map((g) => ({ x: g.distM, y: g.elevM })),
         borderColor: '#cbd5e1',
         borderDash: [4, 3],
         pointRadius: 0,
+        pointHoverRadius: 3,
+        pointHitRadius: 10,
         fill: false,
         borderWidth: 1,
         order: CHART_Z.polygon,
       })
     }
-    // 관로 — 차트선은 유지, 범례는 우측 HTML 섹션
-    const usedLegendNames = new Map<string, number>()
+    // 관로·점시설 — 켜진 레이어 전부 (범례는 우측 HTML)
     for (const p of pipes) {
+      const legendName = labelById.get(p.id) || layerLegendName(p)
       const layerName = layerLegendName(p)
-      const baseName = (p.label || layerName).trim() || layerName
-      const n = (usedLegendNames.get(baseName) ?? 0) + 1
-      usedLegendNames.set(baseName, n)
-      const legendName = n === 1 ? baseName : `${baseName} (${n})`
+      const featureLabel = (p.label || '').trim() || legendName
+      const st = styleForFeature(stylesByKey, p)
+      const color = st?.strokeColor ?? normalizeStroke(p.color)
       const from = Math.max(0, p.spanFromM ?? p.distM - 0.5)
       const to = Math.min(len, p.spanToM ?? p.distM + 0.5)
       const dep = Number(p.depthM) || 0
-      const pts: { x: number; y: number }[] = []
+      type LongMarkPt = {
+        x: number
+        y: number
+        label?: string
+        layerName?: string
+        fill?: string
+        stroke?: string
+      }
+      const pts: LongMarkPt[] = []
       for (const g of ground) {
         if (g.distM < from - 0.01 || g.distM > to + 0.01) continue
-        pts.push({ x: g.distM, y: g.elevM - dep })
+        pts.push({
+          x: g.distM,
+          y: g.elevM - dep,
+          label: featureLabel,
+          layerName,
+          fill: color,
+          stroke: color,
+        })
       }
       if (pts.length < 2) {
         const s0 = groundElevAt(ground, from) ?? 0
         const s1 = groundElevAt(ground, to) ?? 0
-        pts.push({ x: from, y: s0 - dep }, { x: to, y: s1 - dep })
+        pts.push(
+          {
+            x: from,
+            y: s0 - dep,
+            label: featureLabel,
+            layerName,
+            fill: color,
+            stroke: color,
+          },
+          {
+            x: to,
+            y: s1 - dep,
+            label: featureLabel,
+            layerName,
+            fill: color,
+            stroke: color,
+          }
+        )
       }
       datasets.push({
+        type: 'line' as const,
         label: legendName,
         data: pts,
-        borderColor: normalizeStroke(p.color),
-        backgroundColor: normalizeStroke(p.color),
+        borderColor: color,
+        backgroundColor: color,
         pointRadius: 0,
-        pointStyle: 'circle',
+        pointHoverRadius: 4,
+        pointHitRadius: 12,
         borderWidth: 2.2,
         fill: false,
         order: CHART_Z.line,
       })
     }
-    return { datasets }
-  }, [ground, groundMin, groundMax, pipes, len, elevRange])
-
-  const pipeLegendGroups = useMemo(() => buildLongPipeLegendGroups(pipes), [pipes])
-  const pipeLegendLabels = useMemo(() => {
-    const set = new Set<string>()
-    for (const g of pipeLegendGroups) {
-      for (const it of g.items) set.add(it.label)
+    for (const p of points) {
+      const legendName = labelById.get(p.id) || layerLegendName(p)
+      const layerName = layerLegendName(p)
+      const st = styleForFeature(stylesByKey, p)
+      const symbolImg = st?.symbolImg ?? null
+      const fill = st?.fillColor ?? normalizeStroke(p.color)
+      const stroke = st?.strokeColor ?? normalizeStroke(p.color)
+      const surf = p.surfaceElevM ?? groundElevAt(ground, p.distM) ?? 0
+      datasets.push({
+        type: 'scatter' as const,
+        label: legendName,
+        data: [
+          {
+            x: p.distM,
+            y: surf,
+            label: (p.label || '').trim(),
+            layerName,
+            fill,
+            stroke,
+            legendSrc: st?.legendSrc || '',
+          } as {
+            x: number
+            y: number
+            label?: string
+            layerName?: string
+            fill?: string
+            stroke?: string
+            legendSrc?: string
+          },
+        ],
+        backgroundColor: symbolImg ? 'rgba(0,0,0,0)' : fill,
+        borderColor: symbolImg ? 'rgba(0,0,0,0)' : stroke,
+        borderWidth: symbolImg ? 0 : st?.strokeWidth ?? 1.5,
+        pointRadius: symbolImg ? pointRadiusFromMarkSize(st?.markSize) : 5,
+        pointHoverRadius: symbolImg
+          ? pointRadiusFromMarkSize(st?.markSize) + 1
+          : 6,
+        pointHitRadius: 12,
+        pointStyle: symbolImg ?? ('circle' as const),
+        order: CHART_Z.point,
+      })
     }
-    return set
-  }, [pipeLegendGroups])
+    return { datasets }
+  }, [
+    ground,
+    groundMin,
+    groundMax,
+    pipes,
+    points,
+    len,
+    elevRange,
+    stylesByKey,
+    styleRevision,
+    labelById,
+  ])
 
-  const options = useMemo((): ChartOptions<'line'> => {
+  const options = useMemo((): ChartOptions => {
     const { ymin, ymax } = elevRange
     const cutLen = formatLenLabelM(len)
     const cutX = len / 2
     return {
       responsive: true,
       maintainAspectRatio: false,
+      animation: false,
       layout: { padding: { left: 8, top: 22 } },
+      interaction: {
+        mode: 'nearest',
+        intersect: false,
+        axis: 'x',
+      },
       plugins: {
         legend: {
           position: 'top',
@@ -934,8 +1648,8 @@ function LongSectionChart({
             usePointStyle: true,
             generateLabels: (chart) => {
               const items = buildSectionLegendLabels(chart, {
-                pipeLabels: pipeLegendLabels,
-                hide: (t) => pipeLegendLabels.has(t),
+                pipeLabels: featureLegendLabels,
+                hide: (t) => featureLegendLabels.has(t),
               })
               const seenMeta = new Set<string>()
               return items.filter((item) => {
@@ -952,10 +1666,28 @@ function LongSectionChart({
         },
         datalabels: { display: false },
         tooltip: {
+          enabled: false,
+          external: sectionChartExternalTooltip,
+          mode: 'nearest',
+          intersect: false,
           filter: (item) => String(item.dataset.label || '') !== '절단면',
           callbacks: {
-            label: (ctx) =>
-              `${ctx.dataset.label}: ${Number(ctx.parsed.x).toFixed(2)}m / EL ${Number(ctx.parsed.y).toFixed(2)}`,
+            title: () => '',
+            label: (ctx) => {
+              const name = String(ctx.dataset.label || '')
+              const y = Number(ctx.parsed.y)
+              if (name === '지반고') return ['범례: 지반고']
+              if (name.startsWith('옆면')) return [`범례: ${name}`]
+              if (featureLegendLabels.has(name)) {
+                const raw = ctx.raw as
+                  | { label?: string; layerName?: string }
+                  | undefined
+                const layerName = String(raw?.layerName ?? '').trim() || name
+                const featureLabel = String(raw?.label ?? '').trim() || name
+                return [`범례: ${layerName}`, `라벨: ${featureLabel}`]
+              }
+              return `${name}  EL ${y.toFixed(2)} m`
+            },
           },
         },
         annotation: {
@@ -998,7 +1730,7 @@ function LongSectionChart({
         },
       },
     }
-  }, [elevRange, len, pipeLegendLabels])
+  }, [elevRange, len, featureLegendLabels])
 
   if (!ground.length) {
     return (
@@ -1010,59 +1742,30 @@ function LongSectionChart({
 
   return (
     <div className="overflow-hidden rounded border-2 border-[#787878] bg-white p-2">
-      <div className="flex gap-2">
+      <div className="flex items-stretch gap-2">
         <div className="min-w-0 flex-1">
-          <div style={{ height: 300 }}>
-            <Line
-              data={chartData}
-              options={options}
-              plugins={[insetSyncPlugin]}
-            />
-          </div>
-          {rolesPresent.length > 0 ? (
-            <SupplyAreaGanttChart
-              bands={supplyAreaBands}
-              totalLengthM={len}
-              plotInset={plotInset}
-            />
-          ) : null}
-        </div>
-        {pipeLegendGroups.length > 0 ? (
           <div
-            className="w-[148px] shrink-0 overflow-y-auto rounded border border-[#cbd5e1] bg-[#f8fafc] p-1.5"
-            style={{ maxHeight: 300 }}
-            title="관로 범례"
+            className="relative z-[2]"
+            style={{ height: 420, minHeight: 420 }}
           >
-            <div className="space-y-2">
-              {pipeLegendGroups.map((g) => (
-                <div key={g.layerName}>
-                  <div
-                    className="truncate text-[10px] font-semibold text-[#334155]"
-                    title={g.layerName}
-                  >
-                    {g.layerName}
-                  </div>
-                  <ul className="mt-0.5 space-y-0.5">
-                    {g.items.map((it) => (
-                      <li
-                        key={it.key}
-                        className="flex min-w-0 items-center gap-1 text-[10px] text-[#334155]"
-                        title={it.label}
-                      >
-                        <span
-                          className="inline-block h-2 w-2 shrink-0 rounded-full border border-white"
-                          style={{ backgroundColor: it.color }}
-                          aria-hidden
-                        />
-                        <span className="truncate">{it.label}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              ))}
-            </div>
+            <Chart type="scatter" data={chartData} options={options} />
           </div>
-        ) : null}
+          <WtlNetworkLongSupplyElevCharts
+            ground={ground}
+            groundMin={groundMin}
+            groundMax={groundMax}
+            supplyAreaBands={supplyAreaBands}
+            supplyElevComposition={supplyElevComposition}
+            totalLengthM={len}
+          />
+        </div>
+        <SectionFeatureLegendPanel
+          groups={featureLegendGroups}
+          stylesByKey={stylesByKey}
+          hiddenKeys={hiddenKeys}
+          onToggleItem={toggleLegendItem}
+          onToggleLayer={toggleLegendLayer}
+        />
       </div>
     </div>
   )
@@ -1076,6 +1779,7 @@ export function WtlNetworkSectionChart({
   features,
   totalLengthM,
   supplyAreaBands = [],
+  supplyElevComposition = [],
 }: {
   mode: 'crossChart' | 'longChart'
   ground?: SectionGroundPt[]
@@ -1084,6 +1788,7 @@ export function WtlNetworkSectionChart({
   features: SectionFeatureMark[]
   totalLengthM: number
   supplyAreaBands?: SectionSupplyBandSegment[]
+  supplyElevComposition?: import('./useWtlNetworkSection').SectionSupplyElevRow[]
 }) {
   if (mode === 'crossChart') {
     return (
@@ -1103,6 +1808,7 @@ export function WtlNetworkSectionChart({
       features={features}
       totalLengthM={totalLengthM}
       supplyAreaBands={supplyAreaBands}
+      supplyElevComposition={supplyElevComposition}
     />
   )
 }

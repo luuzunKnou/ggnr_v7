@@ -15,6 +15,7 @@ import {
 import { Bar } from 'react-chartjs-2'
 import ChartDataLabels from 'chartjs-plugin-datalabels'
 import type { SectionGroundPt, SectionSupplyBandSegment } from './wtlNetworkSectionSvg'
+import type { SectionSupplyElevRow } from './useWtlNetworkSection'
 
 ChartJS.register(
   CategoryScale,
@@ -33,10 +34,11 @@ const ROLE_ORDER: Array<{ role: SectionSupplyBandSegment['role']; label: string 
 ]
 
 type ElevSeg = { name: string; color: string; pct: number }
-type ElevRow = { elevM: number; segs: ElevSeg[] }
-type ElevRoleRow = ElevRow & {
+type ElevRoleRow = {
+  elevM: number
   role: SectionSupplyBandSegment['role']
   roleLabel: string
+  segs: ElevSeg[]
 }
 
 function normalizeStroke(stroke?: string | null): string {
@@ -64,7 +66,7 @@ function groundElevAt(ground: SectionGroundPt[], distM: number): number | null {
   return last.elevM
 }
 
-/** 표고 e 이상인 깊이 구간 (지반고가 e 이상인 x) */
+/** 표고 e 이상인 깊이 구간 (지반고가 e 이상인 x) — 서버 집계 없을 때 fallback */
 function activeDepthIntervals(
   ground: SectionGroundPt[],
   elevM: number,
@@ -96,17 +98,13 @@ function intersectLen(a0: number, a1: number, b0: number, b1: number): number {
   return Math.max(0, hi - lo)
 }
 
-/**
- * 표고별 구성 비율 — 해당 표고에서 지반이 남는 깊이 구간 ∩ 급수 밴드
- * (표고가 올라갈수록 남는 폭·비율이 달라짐)
- */
 function buildElevComposition(
   ground: SectionGroundPt[],
   bands: SectionSupplyBandSegment[],
   role: SectionSupplyBandSegment['role'],
   elevSteps: number[],
   len: number
-): ElevRow[] {
+): { elevM: number; segs: ElevSeg[] }[] {
   const roleBands = bands.filter((b) => b.role === role)
   return elevSteps.map((elevM) => {
     const active = activeDepthIntervals(ground, elevM, len)
@@ -167,20 +165,35 @@ function colorOfNameRole(rows: ElevRoleRow[], name: string): string {
   return '#888888'
 }
 
-/** 구역·분구·블록을 표고별로 한 누적 가로막대에 합침 */
+/** 동일 레이어 색이어도 이름별로 구분되게 살짝 변조 */
+function distinctColor(base: string, name: string, index: number): string {
+  const hex = normalizeStroke(base)
+  const n = [...name].reduce((s, ch) => s + (ch.codePointAt(0) ?? 0), 0) + index * 37
+  const shift = ((n % 5) - 2) * 18
+  const clamp = (v: number) => Math.max(30, Math.min(220, v))
+  const r = clamp(parseInt(hex.slice(1, 3), 16) + shift)
+  const g = clamp(parseInt(hex.slice(3, 5), 16) - shift)
+  const b = clamp(parseInt(hex.slice(5, 7), 16) + Math.floor(shift / 2))
+  return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`.toUpperCase()
+}
+
 function combinedStackedBarData(rows: ElevRoleRow[]): ChartData<'bar'> {
   const names = uniqueNamesFromRoleRows(rows)
   const labels = rows.map((r) => `${formatElev(r.elevM)}m · ${r.roleLabel}`)
   return {
     labels,
-    datasets: names.map((name) => ({
-      label: name,
-      data: rows.map((r) => r.segs.find((s) => s.name === name)?.pct ?? 0),
-      backgroundColor: `${colorOfNameRole(rows, name)}99`,
-      borderColor: colorOfNameRole(rows, name),
-      borderWidth: 1,
-      barThickness: 12,
-    })),
+    datasets: names.map((name, i) => {
+      const base = colorOfNameRole(rows, name)
+      const color = distinctColor(base, name, i)
+      return {
+        label: name,
+        data: rows.map((r) => r.segs.find((s) => s.name === name)?.pct ?? 0),
+        backgroundColor: `${color}99`,
+        borderColor: color,
+        borderWidth: 1,
+        barThickness: 12,
+      }
+    }),
   }
 }
 
@@ -191,65 +204,131 @@ function CombinedStackedBarChart({ rows }: { rows: ElevRoleRow[] }) {
       indexAxis: 'y',
       responsive: true,
       maintainAspectRatio: false,
+      animation: false,
+      layout: { padding: { top: 2, bottom: 2, left: 0, right: 4 } },
       plugins: {
-        legend: { position: 'bottom', labels: { font: { size: 10 }, boxWidth: 10 } },
+        legend: { display: false },
         datalabels: {
           color: '#1e293b',
           font: { size: 9, weight: 600 },
-          formatter: (v) => (Number(v) >= 10 ? `${Math.round(Number(v))}` : ''),
-        },
-        tooltip: {
-          callbacks: {
-            label: (ctx) => `${ctx.dataset.label}: ${Number(ctx.raw).toFixed(1)}%`,
+          clamp: true,
+          formatter: (v, ctx) => {
+            if (!(Number(v) >= 8)) return ''
+            return String(ctx.dataset.label || '')
           },
         },
+        tooltip: { enabled: false },
       },
       scales: {
         x: {
           stacked: true,
           min: 0,
           max: 100,
-          title: { display: true, text: '구성 비율 (%)', font: { size: 10 } },
-          ticks: { font: { size: 9 } },
+          display: false,
+          grid: { display: false },
+          border: { display: false },
         },
         y: {
           stacked: true,
-          title: { display: true, text: '표고 · 레이어', font: { size: 10 } },
-          ticks: { font: { size: 9 } },
+          grid: { display: false },
+          border: { display: false },
+          ticks: {
+            font: { size: 10, weight: 'bold' },
+            color: '#3d5560',
+            padding: 4,
+          },
         },
       },
     }),
     []
   )
-  const h = Math.max(200, rows.length * 20 + 90)
+  const h = Math.max(44, rows.length * 20 + 8)
   return (
-    <div style={{ height: h }}>
+    <div
+      className="mt-0.5 overflow-hidden bg-transparent"
+      style={{ height: h }}
+      role="img"
+      aria-label="표고별 구역·분구·블록 구성 비율"
+    >
       <Bar data={data} options={options} />
     </div>
   )
 }
 
+function roleLabelOf(role: SectionSupplyBandSegment['role']): string {
+  return ROLE_ORDER.find((r) => r.role === role)?.label ?? role
+}
+
+/**
+ * 옆면 최저~최고 지반고 사이 표고마다 구역·분구·블록 누적 가로막대.
+ * 서버 2D 띠 격자 집계(supplyElevComposition) 우선 — 절단선 방향 복수 블록 반영.
+ */
 export function WtlNetworkLongSupplyElevCharts({
   ground,
+  groundMin = [],
+  groundMax = [],
   supplyAreaBands,
+  supplyElevComposition = [],
   totalLengthM,
-  elevMin,
-  elevMax,
 }: {
   ground: SectionGroundPt[]
+  groundMin?: SectionGroundPt[]
+  groundMax?: SectionGroundPt[]
   supplyAreaBands: SectionSupplyBandSegment[]
+  supplyElevComposition?: SectionSupplyElevRow[]
   totalLengthM: number
-  elevMin: number
-  elevMax: number
 }) {
   const len = Math.max(totalLengthM, ground[ground.length - 1]?.distM ?? 0, 0.01)
+
+  const { elevMin, elevMax } = useMemo(() => {
+    const mins = (groundMin.length ? groundMin : ground).map((g) => g.elevM)
+    const maxs = (groundMax.length ? groundMax : ground).map((g) => g.elevM)
+    const elevMin = mins.length ? Math.min(...mins) : 0
+    const elevMax = maxs.length ? Math.max(...maxs) : elevMin + 1
+    return {
+      elevMin: Math.min(elevMin, elevMax),
+      elevMax: Math.max(elevMin, elevMax),
+    }
+  }, [ground, groundMin, groundMax])
+
   const steps = useMemo(() => elevStepsOf(elevMin, elevMax), [elevMin, elevMax])
 
-  /** 표고 오름차순 → 각 표고에서 구역·분구·블록 순으로 합침 */
   const combinedRows = useMemo((): ElevRoleRow[] => {
+    if (supplyElevComposition.length > 0) {
+      const out: ElevRoleRow[] = []
+      const byElev = new Map<number, SectionSupplyElevRow[]>()
+      for (const row of supplyElevComposition) {
+        if (!row.segs?.length) continue
+        const list = byElev.get(row.elevM) ?? []
+        list.push(row)
+        byElev.set(row.elevM, list)
+      }
+      const elevs = [...byElev.keys()].sort((a, b) => a - b)
+      for (const elevM of elevs) {
+        const rows = byElev.get(elevM) ?? []
+        for (const role of ROLE_ORDER) {
+          const hit = rows.find((r) => r.role === role.role)
+          if (!hit?.segs.length) continue
+          out.push({
+            elevM,
+            role: role.role,
+            roleLabel: role.label,
+            segs: hit.segs.map((s) => ({
+              name: s.name,
+              color: normalizeStroke(s.color),
+              pct: s.pct,
+            })),
+          })
+        }
+      }
+      return out
+    }
+
+    // fallback: 1D 밴드 ∩ 표고 (서버 집계 없을 때)
     const out: ElevRoleRow[] = []
     for (const elevM of steps) {
       for (const role of ROLE_ORDER) {
+        if (!supplyAreaBands.some((b) => b.role === role.role)) continue
         const [row] = buildElevComposition(
           ground,
           supplyAreaBands,
@@ -261,22 +340,15 @@ export function WtlNetworkLongSupplyElevCharts({
         out.push({
           elevM,
           role: role.role,
-          roleLabel: role.label,
+          roleLabel: roleLabelOf(role.role),
           segs: row.segs,
         })
       }
     }
     return out
-  }, [ground, supplyAreaBands, steps, len])
+  }, [supplyElevComposition, ground, supplyAreaBands, steps, len])
 
   if (!combinedRows.length) return null
 
-  return (
-    <div className="mt-3 space-y-2 border-t border-[#e2e8f0] pt-3">
-      <div className="text-[12px] font-semibold text-foreground">구역·분구·블록</div>
-      <div className="rounded border border-[#e2e8f0] bg-white p-2">
-        <CombinedStackedBarChart rows={combinedRows} />
-      </div>
-    </div>
-  )
+  return <CombinedStackedBarChart rows={combinedRows} />
 }

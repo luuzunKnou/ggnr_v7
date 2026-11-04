@@ -2388,6 +2388,7 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
         enabledKeys={section.enabledKeys}
         supplyAreaLines={section.supplyAreaLines}
         supplyAreaBands={section.supplyAreaBands}
+        supplyElevComposition={section.supplyElevComposition}
         onClose={section.closePanel}
         onRedraw={section.redrawSection}
       />

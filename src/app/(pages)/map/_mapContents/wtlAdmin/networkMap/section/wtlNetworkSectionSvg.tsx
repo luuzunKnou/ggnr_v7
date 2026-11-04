@@ -33,6 +33,10 @@ export type SectionFeatureMark = {
   label: string
   /** 레이어 한글명(관종) */
   layerKorName?: string
+  /** GeoServer 스타일·범례용 define_table 키 (예: wtl_pipe_lm) */
+  layerKey?: string
+  /** SLD 조건 심볼 키 (ftr_cde 등, 대문자) */
+  styleCode?: string
   color: string
   kind: 'pipe' | 'point'
   /** 종단: 거리축 구간 */

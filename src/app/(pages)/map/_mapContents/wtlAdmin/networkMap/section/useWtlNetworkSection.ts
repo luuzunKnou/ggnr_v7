@@ -94,6 +94,7 @@ type PointRow = {
   diameterM: number
   depthM: number
   surfaceElevM?: number
+  styleCode?: string
 }
 
 export type SectionSupplyAreas = {
@@ -110,6 +111,12 @@ export type SectionSupplyBandSegment = {
   color: string
 }
 
+export type SectionSupplyElevRow = {
+  elevM: number
+  role: 'zone' | 'subzone' | 'block'
+  segs: { name: string; color: string; pct: number }[]
+}
+
 type SectionApi = {
   success?: boolean
   ground?: { distM: number; elevM: number; x3857: number; y3857: number }[]
@@ -120,6 +127,7 @@ type SectionApi = {
   points?: PointRow[]
   supplyAreas?: SectionSupplyAreas
   supplyAreaBands?: SectionSupplyBandSegment[]
+  supplyElevComposition?: SectionSupplyElevRow[]
   error?: string
 }
 
@@ -308,6 +316,7 @@ function buildFeatures(
         color: pipe.color || '#7A7A7A',
         kind: 'pipe',
         surfaceElevM: surface,
+        layerKey: table,
       })
       continue
     }
@@ -329,6 +338,7 @@ function buildFeatures(
       color: pipe.color || '#7A7A7A',
       kind: 'pipe',
       surfaceElevM: surface,
+      layerKey: table,
     })
   }
 
@@ -364,6 +374,10 @@ function buildFeatures(
       color: pt.color || '#7A7A7A',
       kind: 'point',
       surfaceElevM: surface,
+      styleCode: pt.styleCode
+        ? String(pt.styleCode).trim().toUpperCase()
+        : undefined,
+      layerKey: table,
     })
   }
 
@@ -382,6 +396,9 @@ export function useWtlNetworkSection(enabledLayerKeys: string[]) {
   const [features, setFeatures] = useState<SectionFeatureMark[]>([])
   const [supplyAreasRaw, setSupplyAreasRaw] = useState<SectionSupplyAreas>(EMPTY_SUPPLY_AREAS)
   const [supplyAreaBands, setSupplyAreaBands] = useState<SectionSupplyBandSegment[]>([])
+  const [supplyElevComposition, setSupplyElevComposition] = useState<
+    SectionSupplyElevRow[]
+  >([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [totalLengthM, setTotalLengthM] = useState(0)
@@ -411,6 +428,19 @@ export function useWtlNetworkSection(enabledLayerKeys: string[]) {
       return has('wtl_wtsba_as')
     })
   }, [supplyAreaBands, enabledLayerKeys])
+
+  const supplyElevCompositionFiltered = useMemo(() => {
+    const keys = new Set(
+      enabledLayerKeys.map((k) => String(k).trim().toLowerCase()).filter(Boolean)
+    )
+    const has = (base: string) =>
+      keys.has(base) || [...keys].some((k) => k === base || k.endsWith(`_${base}`))
+    return supplyElevComposition.filter((s) => {
+      if (s.role === 'zone') return has('wtl_wtsa_as')
+      if (s.role === 'subzone') return has('wtl_wtssa_as')
+      return has('wtl_wtsba_as')
+    })
+  }, [supplyElevComposition, enabledLayerKeys])
 
   const setSpatialDrawRequest = mapContext?.setSpatialDrawRequest
 
@@ -477,6 +507,7 @@ export function useWtlNetworkSection(enabledLayerKeys: string[]) {
     setFeatures([])
     setSupplyAreasRaw(EMPTY_SUPPLY_AREAS)
     setSupplyAreaBands([])
+    setSupplyElevComposition([])
     setError('')
     setDrawing(false)
     setSpatialDrawRequest?.(null)
@@ -514,6 +545,7 @@ export function useWtlNetworkSection(enabledLayerKeys: string[]) {
           setFeatures([])
           setSupplyAreasRaw(EMPTY_SUPPLY_AREAS)
           setSupplyAreaBands([])
+          setSupplyElevComposition([])
           return
         }
         const mapPts = (
@@ -532,6 +564,11 @@ export function useWtlNetworkSection(enabledLayerKeys: string[]) {
         setSupplyAreasRaw(data.supplyAreas ?? EMPTY_SUPPLY_AREAS)
         setSupplyAreaBands(
           Array.isArray(data.supplyAreaBands) ? data.supplyAreaBands : []
+        )
+        setSupplyElevComposition(
+          Array.isArray(data.supplyElevComposition)
+            ? data.supplyElevComposition
+            : []
         )
         setGround(g)
         setGroundMin(gMin)
@@ -597,6 +634,7 @@ export function useWtlNetworkSection(enabledLayerKeys: string[]) {
     setGroundMax([])
     setFeatures([])
     setSupplyAreaBands([])
+    setSupplyElevComposition([])
     setLine3857(null)
     setPanelOpen(false)
     setDrawing(true)
@@ -642,6 +680,7 @@ export function useWtlNetworkSection(enabledLayerKeys: string[]) {
       setFeatures([])
       setSupplyAreasRaw(EMPTY_SUPPLY_AREAS)
       setSupplyAreaBands([])
+      setSupplyElevComposition([])
       setError('')
     }
     beginLineDraw()
@@ -657,6 +696,7 @@ export function useWtlNetworkSection(enabledLayerKeys: string[]) {
     setFeatures([])
     setSupplyAreasRaw(EMPTY_SUPPLY_AREAS)
     setSupplyAreaBands([])
+    setSupplyElevComposition([])
     setError('')
     setDrawing(false)
     setSpatialDrawRequest?.(null)
@@ -709,6 +749,7 @@ export function useWtlNetworkSection(enabledLayerKeys: string[]) {
     features,
     supplyAreaLines,
     supplyAreaBands: supplyAreaBandsFiltered,
+    supplyElevComposition: supplyElevCompositionFiltered,
     loading,
     error,
     totalLengthM,

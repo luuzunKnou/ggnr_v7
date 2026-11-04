@@ -11,6 +11,7 @@ import {
   type SectionSupplyAreaLine,
   type SectionSupplyBandSegment,
 } from './wtlNetworkSectionSvg'
+import type { SectionSupplyElevRow } from './useWtlNetworkSection'
 import { WtlNetworkSectionThreeJsTab } from './WtlNetworkSectionThreeJsTab'
 import { WtlNetworkSectionChart } from './wtlNetworkSectionChart'
 
@@ -31,6 +32,7 @@ type Props = {
   enabledKeys?: string[]
   supplyAreaLines?: SectionSupplyAreaLine[]
   supplyAreaBands?: SectionSupplyBandSegment[]
+  supplyElevComposition?: SectionSupplyElevRow[]
   onClose: () => void
   onRedraw: () => void
 }
@@ -52,6 +54,7 @@ export function WtlNetworkSectionPanel({
   enabledKeys = [],
   supplyAreaLines: _supplyAreaLines = [],
   supplyAreaBands = [],
+  supplyElevComposition = [],
   onClose,
   onRedraw,
 }: Props) {
@@ -73,8 +76,8 @@ export function WtlNetworkSectionPanel({
   return (
     <MapFloatingPanel
       viewport
-      width="min(760px, calc(100vw - 2rem))"
-      maxHeight="88vh"
+      width="min(1100px, calc(100vw - 2rem))"
+      maxHeight="94vh"
       defaultPosition={{ top: 72, right: 24 }}
       /** 시설목록 상세보기(z=10050)보다 위 */
       style={{ zIndex: 10100 }}
@@ -150,7 +153,11 @@ export function WtlNetworkSectionPanel({
               />
             )
           ) : loading ? (
-            <p className="py-10 text-center text-[12px] text-muted-foreground">등고·시설 조회 중…</p>
+            <div className="flex min-h-[560px] items-center justify-center">
+              <p className="text-center text-[12px] text-muted-foreground">
+                등고·시설 조회 중…
+              </p>
+            </div>
           ) : error ? (
             <p className="py-10 text-center text-[12px] text-destructive">{error}</p>
           ) : !lineReady ? (
@@ -164,6 +171,7 @@ export function WtlNetworkSectionPanel({
               features={features}
               totalLengthM={totalLengthM}
               supplyAreaBands={supplyAreaBands}
+              supplyElevComposition={supplyElevComposition}
             />
           ) : (
             <WtlNetworkSectionSvg
