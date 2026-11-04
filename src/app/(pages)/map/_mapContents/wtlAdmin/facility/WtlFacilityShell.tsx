@@ -773,7 +773,7 @@ export function WtlFacilityShell({
               </button>
             </div>
             <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-              <div className="standard-filter-section shrink-0 border-b-0 !pb-[13px]">
+              <div className="standard-filter-section shrink-0 border-b-1 !pb-[13px]">
                 <div className="flex items-stretch border-b border-border">
                   {showTabSlide ? (
                     <button
