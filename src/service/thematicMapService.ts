@@ -1,9 +1,11 @@
 /**
  * 주제도·소유구분: 정의(공통) + DB 부모 존재 + 분할 조건에 실제 행이 있는 자식만 노출
  */
+import fs from 'node:fs';
+import path from 'node:path';
 import { db } from '@/database/db';
 import { sql } from 'drizzle-orm';
-import tables from '@/config/defineLayer/tables.json';
+import { mergeProjectSplitIntoTables } from '@/lib/projectSplitLayers';
 import { getLayerTableList } from './devTestService';
 import { resolveLayerPhysicalRelName, sanitizeDefineLayerRowFilter } from './standardService';
 import { readGeoServerCssFillColors } from '@/lib/geoserverStyleFillColor';
@@ -16,6 +18,19 @@ type DefineTableRow = {
   define_table_parents_layer?: string;
   define_table_div_query?: string;
 };
+
+const TABLES_JSON_PATH = path.join(process.cwd(), 'src', 'config', 'defineLayer', 'tables.json');
+
+function loadDefineTables(): DefineTableRow[] {
+  try {
+    const raw = JSON.parse(fs.readFileSync(TABLES_JSON_PATH, 'utf-8')) as DefineTableRow[];
+    return mergeProjectSplitIntoTables(
+      (Array.isArray(raw) ? raw : []) as Record<string, unknown>[]
+    ) as DefineTableRow[];
+  } catch {
+    return [];
+  }
+}
 
 const THEMATIC_MAP_GROUP_ALLOW = new Set([
   '도시계획시설',
@@ -60,7 +75,7 @@ function collectCandidates(
   isGroup: (group: string) => boolean,
   schemaName: LayerSchemaName = 'public_layer'
 ): Candidate[] {
-  const rows = tables as DefineTableRow[];
+  const rows = loadDefineTables();
   const parentNames = new Set<string>();
   for (const t of rows) {
     const parent = String(t.define_table_parents_layer ?? '').trim();
@@ -197,6 +212,7 @@ export async function listAvailableOwnershipLayerNames() {
 /** 지하시설물 — 레이어관리 그룹명과 동일 (schema: layer) */
 const UNDERGROUND_FACILITY_GROUP_ALLOW = new Set([
   '상수',
+  '급수구역',
   '하수',
   '광역상수',
   '가스',
@@ -206,8 +222,14 @@ const UNDERGROUND_FACILITY_GROUP_ALLOW = new Set([
   '통신',
 ]);
 
+/** 그룹명 접두 일치 (LIKE '허용그룹%') */
 function isUndergroundFacilityGroup(group: string): boolean {
-  return UNDERGROUND_FACILITY_GROUP_ALLOW.has(group);
+  const g = String(group ?? '').trim();
+  if (!g) return false;
+  for (const allowed of UNDERGROUND_FACILITY_GROUP_ALLOW) {
+    if (g === allowed || g.startsWith(allowed)) return true;
+  }
+  return false;
 }
 
 /**
@@ -246,7 +268,7 @@ const BUILDING_ROAD_TABLE_CANDIDATES = [
 export async function listAvailableBuildingRoadLayerNames() {
   try {
     const defineNames = new Set(
-      (tables as DefineTableRow[])
+      loadDefineTables()
         .map((t) => String(t.define_table_name ?? '').trim().toLowerCase())
         .filter(Boolean)
     );

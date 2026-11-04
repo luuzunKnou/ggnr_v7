@@ -37,6 +37,10 @@ import { getDefineFieldDisplayLabel, getRowKey, getRowValueByField, isDefineFiel
 import { ServiceFileAttachmentThumb } from './ServiceFileAttachmentThumb';
 import { ServiceFilePdfThumb } from './ServiceFilePdfThumb';
 import { ServiceFileImagePreview, type ServiceFilePreviewItem } from './ServiceFileImagePreview';
+import {
+  buildServiceFilePreviewGalleryItems,
+  isServiceFilePreviewableName,
+} from './serviceFilePreviewItems';
 import type { IdentifyLayerResult, IdentifyFeatureItem, IdentifyPopupState } from '../hooks/useFeatureIdentify';
 import { isOrthoDataQueryLayerId } from '../../_mapContents/aerialView/orthoDataQueryLayerId';
 import { IdentifyHitListBlock } from './IdentifyHitListBlock';
@@ -676,18 +680,14 @@ export function LayerDataPanel({
   });
   const attachmentPreviewGalleryItems = useMemo((): ServiceFilePreviewItem[] => {
     if (activeLayer == null || rowKeyForAttachments == null) return [];
-    return attachmentQuery.files
-      .filter((f) => isImageServiceFileName(f.name) || isPdfServiceFileName(f.name))
-      .map((f) => ({
-        url: serviceFileDataDownloadUrl(
-          SER_FILE_ENG.dataQuery,
-          activeLayer.physicalTableName,
-          rowKeyForAttachments,
-          f.name
-        ),
-        fileName: f.name,
-        kind: isPdfServiceFileName(f.name) ? ('pdf' as const) : ('image' as const),
-      }));
+    return buildServiceFilePreviewGalleryItems(attachmentQuery.files, (fileName) =>
+      serviceFileDataDownloadUrl(
+        SER_FILE_ENG.dataQuery,
+        activeLayer.physicalTableName,
+        rowKeyForAttachments,
+        fileName
+      )
+    );
   }, [attachmentQuery.files, activeLayer, rowKeyForAttachments]);
   const attachChunkUpload = useServiceFileChunkedUpload();
 
@@ -2605,6 +2605,7 @@ export function LayerDataPanel({
                     ) : (
                   <div className="space-y-1.5">
                     {attachmentQuery.files.map((file) => {
+                      const canPreview = isServiceFilePreviewableName(file.name);
                       const isImg = isImageServiceFileName(file.name);
                       const isPdf = isPdfServiceFileName(file.name);
                       const dateStr =
@@ -2621,7 +2622,7 @@ export function LayerDataPanel({
                         file.name
                       );
                       const activateRow = () => {
-                        if (isImg || isPdf) {
+                        if (canPreview) {
                           const idx = attachmentPreviewGalleryItems.findIndex((i) => i.fileName === file.name);
                           setAttachmentImagePreview({
                             items: attachmentPreviewGalleryItems,
@@ -2637,7 +2638,7 @@ export function LayerDataPanel({
                           tabIndex={0}
                           role="group"
                           aria-label={
-                            isImg || isPdf ? `${file.name} 크게 보기` : `${file.name} 다운로드`
+                            canPreview ? `${file.name} 크게 보기` : `${file.name} 다운로드`
                           }
                           className="flex cursor-pointer items-center gap-2.5 rounded border border-border bg-background p-2.5 pr-1 transition-colors hover:bg-muted/50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
                           onClick={activateRow}

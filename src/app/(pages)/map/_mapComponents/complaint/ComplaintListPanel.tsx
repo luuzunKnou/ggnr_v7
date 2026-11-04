@@ -269,7 +269,8 @@ export default function ComplaintListPanel({
               <div>
                 <h1 className="text-sm font-semibold text-foreground/90">민원관리</h1>
                 <p className="text-[11px] text-muted-foreground">
-                  전체 <span className="font-medium text-foreground/80">{complaints.length}</span>건
+                  전체{' '}
+                  <span className="font-medium text-foreground/80">{complaints.length}</span>건
                 </p>
               </div>
             </div>
@@ -313,10 +314,13 @@ export default function ComplaintListPanel({
           <div className="px-3 pb-2">
             <div className="flex gap-1.5 flex-wrap">
               <button
+                type="button"
                 onClick={() => setFilterState(null)}
                 className={cn(
-                  'inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium transition-colors',
-                  filterState === null ? 'bg-foreground text-background' : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                  'inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-normal transition-colors',
+                  filterState === null
+                    ? 'border-transparent bg-foreground text-background'
+                    : 'border-transparent bg-muted text-muted-foreground hover:bg-muted/80'
                 )}
               >
                 전체
@@ -327,10 +331,13 @@ export default function ComplaintListPanel({
                 return (
                   <button
                     key={state}
+                    type="button"
                     onClick={() => setFilterState(isActive ? null : state)}
                     className={cn(
-                      'inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium border transition-colors',
-                      isActive ? `${style.bg} ${style.text} ${style.border}` : 'bg-muted text-muted-foreground border-transparent hover:bg-muted/80'
+                      'inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-normal transition-colors',
+                      isActive
+                        ? `${style.bg} ${style.text} ${style.border}`
+                        : 'border-transparent bg-muted text-muted-foreground hover:bg-muted/80'
                     )}
                   >
                     {state}
@@ -358,6 +365,7 @@ export default function ComplaintListPanel({
               return (
                 <button
                   key={comp.compKey}
+                  type="button"
                   onClick={() => handleSelect(comp)}
                   className={cn(
                     'w-full text-left rounded-lg border px-3 py-2 transition-colors',

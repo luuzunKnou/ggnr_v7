@@ -61,3 +61,9 @@ export function useTheme() {
   return context
 }
 
+/** Provider 밖·SSR/HMR 경계에서도 안전. 없으면 light */
+export function useResolvedThemeSafe(): "dark" | "light" {
+  const context = useContext(ThemeContext)
+  return context?.resolvedTheme ?? "light"
+}
+

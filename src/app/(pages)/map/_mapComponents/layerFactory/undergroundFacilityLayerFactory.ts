@@ -13,6 +13,8 @@ import type {
   ThematicMapLayerOption,
 } from './thematicMapLayerFactory';
 import { getGeoServerBase } from '@/lib/geoserverUrl';
+import { geoserverWmsImageLoadFunction } from '@/lib/geoserverWmsImageLoad';
+import { compareDefineTableOrder, parseDefineTableIdx } from '@/lib/defineTableOrder';
 
 type DefineTableRow = {
   define_table_name?: string;
@@ -21,11 +23,17 @@ type DefineTableRow = {
   define_table_schema?: string;
   define_table_parents_layer?: string;
   define_table_div_query?: string;
+  define_table_idx?: string | number;
 };
+
+function compareUndergroundLayers(a: ThematicMapLayerOption, b: ThematicMapLayerOption): number {
+  return compareDefineTableOrder(a.tableIdx, a.layerName, b.tableIdx, b.layerName);
+}
 
 /** 지도 «지하시설물» — 레이어관리 그룹명과 동일 */
 export const UNDERGROUND_FACILITY_GROUP_ALLOW = new Set([
   '상수',
+  '급수구역',
   '하수',
   '광역상수',
   '가스',
@@ -37,6 +45,7 @@ export const UNDERGROUND_FACILITY_GROUP_ALLOW = new Set([
 
 const UNDERGROUND_FACILITY_GROUP_ORDER = [
   '상수',
+  '급수구역',
   '하수',
   '광역상수',
   '가스',
@@ -48,13 +57,30 @@ const UNDERGROUND_FACILITY_GROUP_ORDER = [
 
 const UNDERGROUND_FACILITY_SCHEMA = 'layer';
 
+/** 그룹명 접두 일치 (LIKE '허용그룹%') */
 export function isUndergroundFacilityGroup(group: string): boolean {
-  return UNDERGROUND_FACILITY_GROUP_ALLOW.has(group);
+  const g = String(group ?? '').trim();
+  if (!g) return false;
+  for (const allowed of UNDERGROUND_FACILITY_GROUP_ALLOW) {
+    if (g === allowed || g.startsWith(allowed)) return true;
+  }
+  return false;
 }
 
 function groupSortKey(title: string): number {
-  const i = UNDERGROUND_FACILITY_GROUP_ORDER.indexOf(title);
-  return i >= 0 ? i : UNDERGROUND_FACILITY_GROUP_ORDER.length;
+  const t = String(title ?? '').trim();
+  let best = UNDERGROUND_FACILITY_GROUP_ORDER.length;
+  let bestLen = -1;
+  for (let i = 0; i < UNDERGROUND_FACILITY_GROUP_ORDER.length; i++) {
+    const allowed = UNDERGROUND_FACILITY_GROUP_ORDER[i];
+    if (t === allowed || t.startsWith(allowed)) {
+      if (allowed.length > bestLen) {
+        bestLen = allowed.length;
+        best = i;
+      }
+    }
+  }
+  return best;
 }
 
 function hasLayerTable(existing: Set<string>, name: string): boolean {
@@ -62,14 +88,15 @@ function hasLayerTable(existing: Set<string>, name: string): boolean {
 }
 
 /**
- * tables.json `layer` 스키마 중 지하시설물 대상 그룹을 묶어 패널·WMS 목록 생성.
+ * tables.json(또는 프로젝트 분할 merge 결과) `layer` 스키마 중 지하시설물 대상 그룹을 묶어 패널·WMS 목록 생성.
  * 주제도와 동일: 부모 제외, 선택적 DB·데이터 필터.
  */
 export function buildUndergroundFacilityLayerGroups(
   existingLayerTables?: Set<string> | null,
-  layersWithData?: Set<string> | null
+  layersWithData?: Set<string> | null,
+  defineTables?: DefineTableRow[] | null
 ): ThematicMapLayerGroup[] {
-  const rows = tables as DefineTableRow[];
+  const rows = (defineTables ?? (tables as DefineTableRow[])) as DefineTableRow[];
 
   const parentNames = new Set<string>();
   for (const t of rows) {
@@ -97,6 +124,7 @@ export function buildUndergroundFacilityLayerGroups(
     const layerName = String(t.define_table_kor_name ?? tableName).trim();
     const parentTableName = String(t.define_table_parents_layer ?? '').trim() || undefined;
     const cqlFilter = String(t.define_table_div_query ?? '').trim() || undefined;
+    const tableIdx = parseDefineTableIdx(t.define_table_idx);
 
     if (parentNames.has(tableName.toLowerCase())) continue;
     if (!parentTableName && layerName.startsWith('(연속주제)')) continue;
@@ -117,6 +145,7 @@ export function buildUndergroundFacilityLayerGroups(
       layerName,
       parentTableName,
       cqlFilter,
+      tableIdx,
       minZoom: 8,
       maxZoom: 30,
     });
@@ -132,7 +161,7 @@ export function buildUndergroundFacilityLayerGroups(
     .map(([title, layers]) => ({
       id: title,
       title,
-      layers: layers.sort((a, b) => a.layerName.localeCompare(b.layerName, 'ko')),
+      layers: layers.sort(compareUndergroundLayers),
     }));
 }
 
@@ -166,6 +195,8 @@ export function createUndergroundFacilityLayers(
         params,
         serverType: 'geoserver',
         ratio: 1.5,
+        // 읍면동·리 INTERSECTS 등 긴 CQL은 GET 414 → 이전(전체) 이미지가 남는 문제 방지
+        imageLoadFunction: geoserverWmsImageLoadFunction,
       }),
     });
     layer.set('name', layerName);
