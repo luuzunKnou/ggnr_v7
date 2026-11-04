@@ -375,7 +375,7 @@
 }
 
 @utility standard-detail-attr-label {
-  @apply whitespace-nowrap bg-slate-100 px-2 py-1.5 text-[11px] font-medium text-slate-500 dark:bg-muted dark:text-muted-foreground;
+  @apply whitespace-nowrap border-r border-border bg-slate-100 px-2 py-1.5 text-[11px] font-medium text-slate-500 dark:bg-muted dark:text-muted-foreground;
 }
 
 @utility standard-detail-attr-value {
