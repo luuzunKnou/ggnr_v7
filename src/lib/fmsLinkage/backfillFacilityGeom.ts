@@ -6,12 +6,7 @@
 import { pool } from '@/database/db';
 import { fetchCoordFromAddress, fetchParcelJibunFromCoord } from '@/lib/vworldAddressServer';
 import { getMapConfig } from '@/service/configService';
-import {
-  FMS_FACILITY_TABLE_NAMES,
-  FMS_PREFIXES,
-  getFmsLayerTableName,
-  type FmsPrefix,
-} from '@/lib/fmsLinkage/fmsBinding';
+import { FMS_FACILITY_TABLE } from '@/lib/fmsLinkage/fmsBinding';
 
 const LOG = '[fms-facility-geom]';
 const VWORLD_SEARCH = 'https://api.vworld.kr/req/search';
@@ -24,14 +19,6 @@ export type FmsFacilityGeomBackfillResult = {
   skippedNotFound: number;
   error?: string;
 };
-
-function assertFacilityTable(name: string): string {
-  const n = String(name ?? '').trim().toLowerCase();
-  if (!(FMS_FACILITY_TABLE_NAMES as readonly string[]).includes(n)) {
-    throw new Error(`invalid fms facility table: ${name}`);
-  }
-  return n;
-}
 
 function buildAddrFull(row: {
   addr_full?: string | null;
@@ -163,15 +150,13 @@ function approxDistM(
 }
 
 async function ensureFacilityGeomColumns(): Promise<void> {
-  for (const prefix of FMS_PREFIXES) {
-    const t = assertFacilityTable(getFmsLayerTableName(prefix, 'facility'));
-    await pool.query(`
-      ALTER TABLE layer.${t}
-        ADD COLUMN IF NOT EXISTS geom geometry(MultiPolygon, 5181);
-      CREATE INDEX IF NOT EXISTS ${t}_geom_gix
-        ON layer.${t} USING GIST (geom);
-    `);
-  }
+  const t = FMS_FACILITY_TABLE;
+  await pool.query(`
+    ALTER TABLE layer.${t}
+      ADD COLUMN IF NOT EXISTS geom geometry(MultiPolygon, 5181);
+    CREATE INDEX IF NOT EXISTS ${t}_geom_gix
+      ON layer.${t} USING GIST (geom);
+  `);
 }
 
 async function bridgeLayerTableExists(): Promise<boolean> {
@@ -485,13 +470,9 @@ async function geometryFromPoint(
 export async function backfillFmsFacilityGeom(params?: {
   force?: boolean;
   limit?: number;
-  prefix?: FmsPrefix;
 }): Promise<FmsFacilityGeomBackfillResult> {
   const force = params?.force === true;
   const limit = Math.min(Math.max(Number(params?.limit) || 2000, 1), 10000);
-  const prefixes: FmsPrefix[] = params?.prefix
-    ? [params.prefix]
-    : [...FMS_PREFIXES];
 
   try {
     await ensureFacilityGeomColumns();
@@ -555,171 +536,166 @@ export async function backfillFmsFacilityGeom(params?: {
   let updated = 0;
   let skippedNoLocation = 0;
   let skippedNotFound = 0;
-  let remaining = limit;
 
-  for (const prefix of prefixes) {
-    if (remaining <= 0) break;
-    const tableName = assertFacilityTable(getFmsLayerTableName(prefix, 'facility'));
-    const whereGeom = force ? 'TRUE' : 'geom IS NULL';
-    const r = await pool.query<{
-      id: number;
-      facil_no: string | null;
-      facil_nm: string | null;
-      facil_kind: string | null;
-      addr_full: string | null;
-      addr_sido: string | null;
-      addr_gugun: string | null;
-      addr_dong: string | null;
-      addr_detail: string | null;
-    }>(
-      `SELECT id, facil_no, facil_nm, facil_kind, addr_full, addr_sido, addr_gugun, addr_dong, addr_detail
-       FROM layer.${tableName}
-       WHERE ${whereGeom}
-       ORDER BY id DESC
-       LIMIT $1`,
-      [remaining]
-    );
+  const tableName = FMS_FACILITY_TABLE;
+  const whereGeom = force ? 'TRUE' : 'geom IS NULL';
+  const r = await pool.query<{
+    id: number;
+    facil_no: string | null;
+    facil_nm: string | null;
+    facil_kind: string | null;
+    addr_full: string | null;
+    addr_sido: string | null;
+    addr_gugun: string | null;
+    addr_dong: string | null;
+    addr_detail: string | null;
+  }>(
+    `SELECT id, facil_no, facil_nm, facil_kind, addr_full, addr_sido, addr_gugun, addr_dong, addr_detail
+     FROM layer.${tableName}
+     WHERE ${whereGeom}
+     ORDER BY id DESC
+     LIMIT $1`,
+    [limit]
+  );
 
-    for (const row of r.rows) {
-      scanned += 1;
-      remaining -= 1;
-      const addr = buildAddrFull(row);
-      const facilNm = String(row.facil_nm ?? '').trim();
-      const bridge = isBridgeFacility(row.facil_no);
-      const sewage = !bridge && isSewageFacility(row);
-      const tokens = regionTokens(row);
+  for (const row of r.rows) {
+    scanned += 1;
+    const addr = buildAddrFull(row);
+    const facilNm = String(row.facil_nm ?? '').trim();
+    const bridge = isBridgeFacility(row.facil_no);
+    const sewage = !bridge && isSewageFacility(row);
+    const tokens = regionTokens(row);
 
-      let geometry3857: Record<string, unknown> | null = null;
+    let geometry3857: Record<string, unknown> | null = null;
 
-      if (bridge) {
-        const hint = addr ? await fetchCoordFromAddress(addr) : null;
-        geometry3857 = await resolveGeometryFromBridgeLayer({
+    if (bridge) {
+      const hint = addr ? await fetchCoordFromAddress(addr) : null;
+      geometry3857 = await resolveGeometryFromBridgeLayer({
+        facilNm,
+        hint,
+      });
+
+      if (!geometry3857 && facilNm && apiKey) {
+        const point = await searchBridgePlacePoint(facilNm, tokens, apiKey);
+        if (point) {
+          geometry3857 = await geometryFromPoint(
+            resolveJijukParcelGeomsByAddresses,
+            addr || facilNm,
+            point
+          );
+        }
+      }
+
+      // 명칭검색 실패 시 — 주소 지오코딩점→필지, 그다음 주소 문자열 매칭 (기존 일반 시설과 동일)
+      const addrCandidates = [addr];
+      if (addr.includes(',')) {
+        const head = addr.split(',')[0]?.trim();
+        if (head && head !== addr) addrCandidates.push(head);
+      }
+      const regionBase = [row.addr_sido, row.addr_gugun, row.addr_dong]
+        .map((v) => String(v ?? '').trim())
+        .filter(Boolean)
+        .join(' ');
+      if (regionBase && !addrCandidates.includes(regionBase)) {
+        addrCandidates.push(regionBase);
+      }
+      // 기포새마을교 → …청기면 기포리 처럼 시설명에서 리 추정
+      const nameStem = facilNm.match(/^(.+?)(?:새마을)?교$/)?.[1]?.trim();
+      if (regionBase && nameStem && nameStem.length >= 2) {
+        const riGuess = `${regionBase} ${nameStem}리`;
+        if (!addrCandidates.includes(riGuess)) addrCandidates.push(riGuess);
+      }
+      for (const candidate of addrCandidates) {
+        if (geometry3857) break;
+        const candidateHint =
+          candidate === addr ? hint : await fetchCoordFromAddress(candidate);
+        if (candidateHint) {
+          geometry3857 = await geometryFromPoint(
+            resolveJijukParcelGeomsByAddresses,
+            candidate || facilNm,
+            candidateHint
+          );
+        }
+        if (!geometry3857 && candidate) {
+          geometry3857 = await resolveGeometryFromAddress(candidate);
+        }
+      }
+    } else if (sewage) {
+      // 하수처리: 인접 지번 오적재 방지 — 명칭검색을 주소 필지보다 우선
+      if (facilNm && apiKey) {
+        const point = await searchSewagePlacePoint({
           facilNm,
-          hint,
+          addr,
+          regionTokens: tokens,
+          apiKey,
         });
-
-        if (!geometry3857 && facilNm && apiKey) {
-          const point = await searchBridgePlacePoint(facilNm, tokens, apiKey);
-          if (point) {
-            geometry3857 = await geometryFromPoint(
-              resolveJijukParcelGeomsByAddresses,
-              addr || facilNm,
-              point
-            );
-          }
-        }
-
-        // 명칭검색 실패 시 — 주소 지오코딩점→필지, 그다음 주소 문자열 매칭 (기존 일반 시설과 동일)
-        const addrCandidates = [addr];
-        if (addr.includes(',')) {
-          const head = addr.split(',')[0]?.trim();
-          if (head && head !== addr) addrCandidates.push(head);
-        }
-        const regionBase = [row.addr_sido, row.addr_gugun, row.addr_dong]
-          .map((v) => String(v ?? '').trim())
-          .filter(Boolean)
-          .join(' ');
-        if (regionBase && !addrCandidates.includes(regionBase)) {
-          addrCandidates.push(regionBase);
-        }
-        // 기포새마을교 → …청기면 기포리 처럼 시설명에서 리 추정
-        const nameStem = facilNm.match(/^(.+?)(?:새마을)?교$/)?.[1]?.trim();
-        if (regionBase && nameStem && nameStem.length >= 2) {
-          const riGuess = `${regionBase} ${nameStem}리`;
-          if (!addrCandidates.includes(riGuess)) addrCandidates.push(riGuess);
-        }
-        for (const candidate of addrCandidates) {
-          if (geometry3857) break;
-          const candidateHint =
-            candidate === addr ? hint : await fetchCoordFromAddress(candidate);
-          if (candidateHint) {
-            geometry3857 = await geometryFromPoint(
-              resolveJijukParcelGeomsByAddresses,
-              candidate || facilNm,
-              candidateHint
-            );
-          }
-          if (!geometry3857 && candidate) {
-            geometry3857 = await resolveGeometryFromAddress(candidate);
-          }
-        }
-      } else if (sewage) {
-        // 하수처리: 인접 지번 오적재 방지 — 명칭검색을 주소 필지보다 우선
-        if (facilNm && apiKey) {
-          const point = await searchSewagePlacePoint({
-            facilNm,
-            addr,
-            regionTokens: tokens,
-            apiKey,
-          });
-          if (point) {
-            geometry3857 = await geometryFromPoint(
-              resolveJijukParcelGeomsByAddresses,
-              addr || facilNm,
-              point
-            );
-          }
-        }
-
-        if (!geometry3857 && addr) {
-          geometry3857 = await resolveGeometryFromAddress(addr);
-        }
-
-        if (!geometry3857 && facilNm && apiKey) {
-          const point = await searchPlacePoint(facilNm, apiKey, {
-            regionTokens: tokens,
-          });
-          if (point) {
-            geometry3857 = await geometryFromPoint(
-              resolveJijukParcelGeomsByAddresses,
-              addr || facilNm,
-              point
-            );
-          }
-        }
-      } else {
-        if (addr) {
-          geometry3857 = await resolveGeometryFromAddress(addr);
-        }
-
-        if (!geometry3857 && facilNm && apiKey) {
-          const point = await searchPlacePoint(facilNm, apiKey, {
-            regionTokens: tokens,
-          });
-          if (point) {
-            geometry3857 = await geometryFromPoint(
-              resolveJijukParcelGeomsByAddresses,
-              addr || facilNm,
-              point
-            );
-          }
+        if (point) {
+          geometry3857 = await geometryFromPoint(
+            resolveJijukParcelGeomsByAddresses,
+            addr || facilNm,
+            point
+          );
         }
       }
 
-      if (!addr && !facilNm) {
-        skippedNoLocation += 1;
-        continue;
-      }
-      if (!geometry3857) {
-        // 강제 재적재 시 교량 오적재 잔존 방지
-        if (force && bridge) {
-          try {
-            await pool.query(
-              `UPDATE layer.${tableName} SET geom = NULL, updated_at = now() WHERE id = $1`,
-              [Number(row.id)]
-            );
-          } catch {
-            /* ignore */
-          }
-        }
-        skippedNotFound += 1;
-        continue;
+      if (!geometry3857 && addr) {
+        geometry3857 = await resolveGeometryFromAddress(addr);
       }
 
-      const ok = await updateFacilityGeom(tableName, Number(row.id), geometry3857);
-      if (ok) updated += 1;
-      else skippedNotFound += 1;
+      if (!geometry3857 && facilNm && apiKey) {
+        const point = await searchPlacePoint(facilNm, apiKey, {
+          regionTokens: tokens,
+        });
+        if (point) {
+          geometry3857 = await geometryFromPoint(
+            resolveJijukParcelGeomsByAddresses,
+            addr || facilNm,
+            point
+          );
+        }
+      }
+    } else {
+      if (addr) {
+        geometry3857 = await resolveGeometryFromAddress(addr);
+      }
+
+      if (!geometry3857 && facilNm && apiKey) {
+        const point = await searchPlacePoint(facilNm, apiKey, {
+          regionTokens: tokens,
+        });
+        if (point) {
+          geometry3857 = await geometryFromPoint(
+            resolveJijukParcelGeomsByAddresses,
+            addr || facilNm,
+            point
+          );
+        }
+      }
     }
+
+    if (!addr && !facilNm) {
+      skippedNoLocation += 1;
+      continue;
+    }
+    if (!geometry3857) {
+      // 강제 재적재 시 교량 오적재 잔존 방지
+      if (force && bridge) {
+        try {
+          await pool.query(
+            `UPDATE layer.${tableName} SET geom = NULL, updated_at = now() WHERE id = $1`,
+            [Number(row.id)]
+          );
+        } catch {
+          /* ignore */
+        }
+      }
+      skippedNotFound += 1;
+      continue;
+    }
+
+    const ok = await updateFacilityGeom(tableName, Number(row.id), geometry3857);
+    if (ok) updated += 1;
+    else skippedNotFound += 1;
   }
 
   console.info(
