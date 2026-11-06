@@ -4,7 +4,7 @@ import React, { useMemo, useState, useEffect, useRef, useCallback } from 'react'
 import { createPortal } from 'react-dom';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useSession } from 'next-auth/react';
-import { Search, X, ChevronDown, LayoutGrid, Check, Loader2, History, EyeOff } from 'lucide-react';
+import { Search, X, ChevronDown, LayoutGrid, Check, Loader2, History, EyeOff, Scaling } from 'lucide-react';
 import { Input } from '@/app/shadcnComponents/ui/input';
 import {
   Dialog,
@@ -57,6 +57,11 @@ const mapSearchBarIconBtnActive = cn(
   'bg-slate-100 text-primary',
   'dark:bg-white/20 dark:text-primary'
 );
+
+/** 슈퍼유저 버튼 title. 보이기 조건과 지금 크기 상태만 적는다. */
+function pointScaleSizeButtonTitle(ignoreScale: boolean): string {
+  return ignoreScale ? 'super user 계정 전용.\n변경 X' : 'super user 계정 전용.\n축적따라 변경';
+}
 
 /** 검색바 공통 표면 — 시스템 선택 등 넓은 컨트롤 */
 const mapSearchBarSurface = cn(
@@ -293,6 +298,8 @@ export function MapSearchBar({
   const { levels: consoleMenuLevels, loading: consoleAccessLoading } = useConsoleMenuAccess();
 
   const showDebugUi = mapContext?.showDebugUi ?? false;
+  const showPointScaleSizeToggle = isSuperUser(session?.user?.id);
+  const pointScaleSizeOn = mapContext?.iconScaleSizeOn ?? false;
   const canToggleGeoserverLog = useMemo(() => {
     if (isSuperUser(session?.user?.id)) return true;
     if (consoleAccessLoading) return false;
@@ -980,6 +987,15 @@ export function MapSearchBar({
               logOn={showDebugUi}
               onToggleLog={() => mapContext?.setShowDebugUi(!showDebugUi)}
             />
+          )}
+          {showPointScaleSizeToggle && (
+            <MapSearchBarIconButton
+              title={pointScaleSizeButtonTitle(pointScaleSizeOn)}
+              active={pointScaleSizeOn}
+              onClick={() => mapContext?.setIconScaleSizeOn((on) => !on)}
+            >
+              <Scaling className="w-5 h-5" strokeWidth={2} />
+            </MapSearchBarIconButton>
           )}
           <div className={mapSearchBarIconShell}>
             <ThemeToggle variant="mapIcon" iconBtnClassName={mapSearchBarIconBtnInner} />

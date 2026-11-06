@@ -58,6 +58,7 @@ import {
   writeLastMapSystemKey,
 } from './hooks/useMapStatePersist';
 import { useServiceLayerSync } from './layerFactory/serviceLayerFactory';
+import { applyIconScaleWmsEnv } from './layerFactory/iconScaleWmsEnv';
 import {
   useCadastralLayerSync,
   useBuildingRoadLayerSync,
@@ -464,6 +465,19 @@ export default function OpenLayersMap({
   useForwardOverlayPointerMoveToMap(mapReady ? mapInstanceRef.current : null, mapReady);
 
   const showDebugUi = mapContext?.showDebugUi ?? false;
+  const iconScaleSizeOn = mapContext?.iconScaleSizeOn ?? false;
+
+  useEffect(() => {
+    const map = mapInstanceRef.current;
+    if (!mapReady || !map) return;
+    const apply = () => applyIconScaleWmsEnv(map, iconScaleSizeOn);
+    apply();
+    const layers = map.getLayers();
+    layers.on('add', apply);
+    return () => {
+      layers.un('add', apply);
+    };
+  }, [mapReady, iconScaleSizeOn, mapInstanceRef]);
   const [activeControls, setActiveControls] = useState<string[]>([]);
   const [isResetPanelExiting, setIsResetPanelExiting] = useState(false);
   /** 초기화 패널이 실제로 열려 입력·측정을 막는 상태 (퇴장 애니메이션 제외) */
@@ -1262,6 +1276,7 @@ export default function OpenLayersMap({
     systemKeyFromUrl
   );
   const spatialFilterWkt = mapContext?.spatialFilterWkt ?? null;
+  const spatialFilterAutoFit = mapContext?.spatialFilterAutoFit !== false;
   const serviceWmsCqlByLayer = mapContext?.serviceWmsCqlByLayer ?? null;
   const serviceWmsStyleByLayer = mapContext?.serviceWmsStyleByLayer ?? null;
 
@@ -1329,7 +1344,8 @@ export default function OpenLayersMap({
     serviceWmsCqlByLayer,
     false,
     wmsForceBottomLayerNames,
-    serviceWmsStyleByLayer
+    serviceWmsStyleByLayer,
+    iconScaleSizeOn
   );
 
   // 검색 조건 도형을 지도에 표시 (WKT 5181 → 3857 변환 후 벡터 레이어)
@@ -1368,7 +1384,7 @@ export default function OpenLayersMap({
       spatialFilterLayerRef.current = layer;
 
       const extent = geom.getExtent();
-      if (!isEmptyExtent(extent)) {
+      if (spatialFilterAutoFit && !isEmptyExtent(extent)) {
         map.getView().fit(extent, {
           padding: [48, 48, 48, 48],
           maxZoom: 17,
@@ -1385,7 +1401,7 @@ export default function OpenLayersMap({
         spatialFilterLayerRef.current = null;
       }
     };
-  }, [mapReady, spatialFilterWkt]);
+  }, [mapReady, spatialFilterWkt, spatialFilterAutoFit]);
 
   // 측정(거리/면적 등) 켜짐 여부를 MapContext에 동기화 (레이어 목록 도형 그리기와 배타 처리용)
   useEffect(() => {

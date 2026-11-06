@@ -40,7 +40,47 @@
                 <sld:OnlineResource xmlns:xlink="http://www.w3.org/1999/xlink" xlink:type="simple" xlink:href="road_shield_highway_v2.svg"/>
                 <sld:Format>image/svg+xml</sld:Format>
               </sld:ExternalGraphic>
-              <sld:Size>24</sld:Size>
+              <sld:Size><ogc:Function name="if_then_else"><ogc:Function name="greaterThan"><ogc:Function name="env"><ogc:Literal>ignore_scale</ogc:Literal><ogc:Literal>0</ogc:Literal></ogc:Function><ogc:Literal>0</ogc:Literal></ogc:Function><ogc:Literal>18</ogc:Literal><ogc:Literal>24</ogc:Literal></ogc:Function></sld:Size>
+            </sld:Graphic>
+            <sld:Priority>1000</sld:Priority>
+            <sld:VendorOption name="conflictResolution">false</sld:VendorOption>
+          </sld:TextSymbolizer>
+        </sld:Rule><sld:Rule>
+          <sld:Title>고속도로</sld:Title>
+          <ogc:Filter><ogc:And>
+            <ogc:PropertyIsEqualTo>
+              <ogc:PropertyName>layer</ogc:PropertyName>
+              <ogc:Literal>고속도로</ogc:Literal>
+            </ogc:PropertyIsEqualTo>
+          <ogc:PropertyIsEqualTo><ogc:Function name="env"><ogc:Literal>ignore_scale</ogc:Literal><ogc:Literal>0</ogc:Literal></ogc:Function><ogc:Literal>1</ogc:Literal></ogc:PropertyIsEqualTo></ogc:And></ogc:Filter>
+          <sld:MinScaleDenominator>400000.0</sld:MinScaleDenominator>
+          <sld:TextSymbolizer>
+            <sld:Label>
+              <ogc:PropertyName>num</ogc:PropertyName>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">Serif</sld:CssParameter>
+              <sld:CssParameter name="font-size">12</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:PointPlacement>
+                <sld:AnchorPoint>
+                  <sld:AnchorPointX>0.5</sld:AnchorPointX>
+                  <sld:AnchorPointY>0.5</sld:AnchorPointY>
+                </sld:AnchorPoint>
+              </sld:PointPlacement>
+            </sld:LabelPlacement>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+            </sld:Fill>
+            <sld:Graphic>
+              <sld:ExternalGraphic>
+                <sld:OnlineResource xmlns:xlink="http://www.w3.org/1999/xlink" xlink:type="simple" xlink:href="road_shield_highway_v2.svg"/>
+                <sld:Format>image/svg+xml</sld:Format>
+              </sld:ExternalGraphic>
+              <sld:Size><ogc:Function name="if_then_else"><ogc:Function name="greaterThan"><ogc:Function name="env"><ogc:Literal>ignore_scale</ogc:Literal><ogc:Literal>0</ogc:Literal></ogc:Function><ogc:Literal>0</ogc:Literal></ogc:Function><ogc:Literal>18</ogc:Literal><ogc:Literal>24</ogc:Literal></ogc:Function></sld:Size>
             </sld:Graphic>
             <sld:Priority>1000</sld:Priority>
             <sld:VendorOption name="conflictResolution">false</sld:VendorOption>
@@ -81,7 +121,47 @@
                 <sld:OnlineResource xmlns:xlink="http://www.w3.org/1999/xlink" xlink:type="simple" xlink:href="road_shield_national.svg"/>
                 <sld:Format>image/svg+xml</sld:Format>
               </sld:ExternalGraphic>
-              <sld:Size>20</sld:Size>
+              <sld:Size><ogc:Function name="if_then_else"><ogc:Function name="greaterThan"><ogc:Function name="env"><ogc:Literal>ignore_scale</ogc:Literal><ogc:Literal>0</ogc:Literal></ogc:Function><ogc:Literal>0</ogc:Literal></ogc:Function><ogc:Literal>18</ogc:Literal><ogc:Literal>20</ogc:Literal></ogc:Function></sld:Size>
+            </sld:Graphic>
+            <sld:Priority>900</sld:Priority>
+            <sld:VendorOption name="conflictResolution">false</sld:VendorOption>
+          </sld:TextSymbolizer>
+        </sld:Rule><sld:Rule>
+          <sld:Title>국도</sld:Title>
+          <ogc:Filter><ogc:And>
+            <ogc:PropertyIsEqualTo>
+              <ogc:PropertyName>layer</ogc:PropertyName>
+              <ogc:Literal>국도</ogc:Literal>
+            </ogc:PropertyIsEqualTo>
+          <ogc:PropertyIsEqualTo><ogc:Function name="env"><ogc:Literal>ignore_scale</ogc:Literal><ogc:Literal>0</ogc:Literal></ogc:Function><ogc:Literal>1</ogc:Literal></ogc:PropertyIsEqualTo></ogc:And></ogc:Filter>
+          <sld:MinScaleDenominator>400000.0</sld:MinScaleDenominator>
+          <sld:TextSymbolizer>
+            <sld:Label>
+              <ogc:PropertyName>num</ogc:PropertyName>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">Serif</sld:CssParameter>
+              <sld:CssParameter name="font-size">12</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:PointPlacement>
+                <sld:AnchorPoint>
+                  <sld:AnchorPointX>0.5</sld:AnchorPointX>
+                  <sld:AnchorPointY>0.5</sld:AnchorPointY>
+                </sld:AnchorPoint>
+              </sld:PointPlacement>
+            </sld:LabelPlacement>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+            </sld:Fill>
+            <sld:Graphic>
+              <sld:ExternalGraphic>
+                <sld:OnlineResource xmlns:xlink="http://www.w3.org/1999/xlink" xlink:type="simple" xlink:href="road_shield_national.svg"/>
+                <sld:Format>image/svg+xml</sld:Format>
+              </sld:ExternalGraphic>
+              <sld:Size><ogc:Function name="if_then_else"><ogc:Function name="greaterThan"><ogc:Function name="env"><ogc:Literal>ignore_scale</ogc:Literal><ogc:Literal>0</ogc:Literal></ogc:Function><ogc:Literal>0</ogc:Literal></ogc:Function><ogc:Literal>18</ogc:Literal><ogc:Literal>20</ogc:Literal></ogc:Function></sld:Size>
             </sld:Graphic>
             <sld:Priority>900</sld:Priority>
             <sld:VendorOption name="conflictResolution">false</sld:VendorOption>
@@ -128,7 +208,53 @@
                 <sld:OnlineResource xmlns:xlink="http://www.w3.org/1999/xlink" xlink:type="simple" xlink:href="road_shield_provincial.svg"/>
                 <sld:Format>image/svg+xml</sld:Format>
               </sld:ExternalGraphic>
-              <sld:Size>20</sld:Size>
+              <sld:Size><ogc:Function name="if_then_else"><ogc:Function name="greaterThan"><ogc:Function name="env"><ogc:Literal>ignore_scale</ogc:Literal><ogc:Literal>0</ogc:Literal></ogc:Function><ogc:Literal>0</ogc:Literal></ogc:Function><ogc:Literal>18</ogc:Literal><ogc:Literal>20</ogc:Literal></ogc:Function></sld:Size>
+            </sld:Graphic>
+            <sld:Priority>800</sld:Priority>
+            <sld:VendorOption name="conflictResolution">false</sld:VendorOption>
+          </sld:TextSymbolizer>
+        </sld:Rule><sld:Rule>
+          <sld:Title>지방도</sld:Title>
+          <ogc:Filter><ogc:And>
+            <ogc:Or>
+              <ogc:PropertyIsEqualTo>
+                <ogc:PropertyName>layer</ogc:PropertyName>
+                <ogc:Literal>국가지원지방도</ogc:Literal>
+              </ogc:PropertyIsEqualTo>
+              <ogc:PropertyIsEqualTo>
+                <ogc:PropertyName>layer</ogc:PropertyName>
+                <ogc:Literal>지방도</ogc:Literal>
+              </ogc:PropertyIsEqualTo>
+            </ogc:Or>
+          <ogc:PropertyIsEqualTo><ogc:Function name="env"><ogc:Literal>ignore_scale</ogc:Literal><ogc:Literal>0</ogc:Literal></ogc:Function><ogc:Literal>1</ogc:Literal></ogc:PropertyIsEqualTo></ogc:And></ogc:Filter>
+          <sld:MinScaleDenominator>400000.0</sld:MinScaleDenominator>
+          <sld:TextSymbolizer>
+            <sld:Label>
+              <ogc:PropertyName>num</ogc:PropertyName>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">Serif</sld:CssParameter>
+              <sld:CssParameter name="font-size">12</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:PointPlacement>
+                <sld:AnchorPoint>
+                  <sld:AnchorPointX>0.5</sld:AnchorPointX>
+                  <sld:AnchorPointY>0.5</sld:AnchorPointY>
+                </sld:AnchorPoint>
+              </sld:PointPlacement>
+            </sld:LabelPlacement>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#1E4FA8</sld:CssParameter>
+            </sld:Fill>
+            <sld:Graphic>
+              <sld:ExternalGraphic>
+                <sld:OnlineResource xmlns:xlink="http://www.w3.org/1999/xlink" xlink:type="simple" xlink:href="road_shield_provincial.svg"/>
+                <sld:Format>image/svg+xml</sld:Format>
+              </sld:ExternalGraphic>
+              <sld:Size><ogc:Function name="if_then_else"><ogc:Function name="greaterThan"><ogc:Function name="env"><ogc:Literal>ignore_scale</ogc:Literal><ogc:Literal>0</ogc:Literal></ogc:Function><ogc:Literal>0</ogc:Literal></ogc:Function><ogc:Literal>18</ogc:Literal><ogc:Literal>20</ogc:Literal></ogc:Function></sld:Size>
             </sld:Graphic>
             <sld:Priority>800</sld:Priority>
             <sld:VendorOption name="conflictResolution">false</sld:VendorOption>
@@ -175,7 +301,53 @@
                 <sld:OnlineResource xmlns:xlink="http://www.w3.org/1999/xlink" xlink:type="simple" xlink:href="road_shield_county_blue.svg"/>
                 <sld:Format>image/svg+xml</sld:Format>
               </sld:ExternalGraphic>
-              <sld:Size>20</sld:Size>
+              <sld:Size><ogc:Function name="if_then_else"><ogc:Function name="greaterThan"><ogc:Function name="env"><ogc:Literal>ignore_scale</ogc:Literal><ogc:Literal>0</ogc:Literal></ogc:Function><ogc:Literal>0</ogc:Literal></ogc:Function><ogc:Literal>18</ogc:Literal><ogc:Literal>20</ogc:Literal></ogc:Function></sld:Size>
+            </sld:Graphic>
+            <sld:Priority>600</sld:Priority>
+            <sld:VendorOption name="conflictResolution">false</sld:VendorOption>
+          </sld:TextSymbolizer>
+        </sld:Rule><sld:Rule>
+          <sld:Title>군도</sld:Title>
+          <ogc:Filter><ogc:And>
+            <ogc:Or>
+              <ogc:PropertyIsEqualTo>
+                <ogc:PropertyName>layer</ogc:PropertyName>
+                <ogc:Literal>시군구</ogc:Literal>
+              </ogc:PropertyIsEqualTo>
+              <ogc:PropertyIsEqualTo>
+                <ogc:PropertyName>layer</ogc:PropertyName>
+                <ogc:Literal>시군도</ogc:Literal>
+              </ogc:PropertyIsEqualTo>
+            </ogc:Or>
+          <ogc:PropertyIsEqualTo><ogc:Function name="env"><ogc:Literal>ignore_scale</ogc:Literal><ogc:Literal>0</ogc:Literal></ogc:Function><ogc:Literal>1</ogc:Literal></ogc:PropertyIsEqualTo></ogc:And></ogc:Filter>
+          <sld:MinScaleDenominator>400000.0</sld:MinScaleDenominator>
+          <sld:TextSymbolizer>
+            <sld:Label>
+              <ogc:PropertyName>num</ogc:PropertyName>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">Serif</sld:CssParameter>
+              <sld:CssParameter name="font-size">12</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:PointPlacement>
+                <sld:AnchorPoint>
+                  <sld:AnchorPointX>0.5</sld:AnchorPointX>
+                  <sld:AnchorPointY>0.5</sld:AnchorPointY>
+                </sld:AnchorPoint>
+              </sld:PointPlacement>
+            </sld:LabelPlacement>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#1F76AC</sld:CssParameter>
+            </sld:Fill>
+            <sld:Graphic>
+              <sld:ExternalGraphic>
+                <sld:OnlineResource xmlns:xlink="http://www.w3.org/1999/xlink" xlink:type="simple" xlink:href="road_shield_county_blue.svg"/>
+                <sld:Format>image/svg+xml</sld:Format>
+              </sld:ExternalGraphic>
+              <sld:Size><ogc:Function name="if_then_else"><ogc:Function name="greaterThan"><ogc:Function name="env"><ogc:Literal>ignore_scale</ogc:Literal><ogc:Literal>0</ogc:Literal></ogc:Function><ogc:Literal>0</ogc:Literal></ogc:Function><ogc:Literal>18</ogc:Literal><ogc:Literal>20</ogc:Literal></ogc:Function></sld:Size>
             </sld:Graphic>
             <sld:Priority>600</sld:Priority>
             <sld:VendorOption name="conflictResolution">false</sld:VendorOption>
@@ -230,7 +402,61 @@
                 <sld:OnlineResource xmlns:xlink="http://www.w3.org/1999/xlink" xlink:type="simple" xlink:href="road_shield_local_883700.svg"/>
                 <sld:Format>image/svg+xml</sld:Format>
               </sld:ExternalGraphic>
-              <sld:Size>20</sld:Size>
+              <sld:Size><ogc:Function name="if_then_else"><ogc:Function name="greaterThan"><ogc:Function name="env"><ogc:Literal>ignore_scale</ogc:Literal><ogc:Literal>0</ogc:Literal></ogc:Function><ogc:Literal>0</ogc:Literal></ogc:Function><ogc:Literal>18</ogc:Literal><ogc:Literal>20</ogc:Literal></ogc:Function></sld:Size>
+            </sld:Graphic>
+            <sld:Priority>100</sld:Priority>
+            <sld:VendorOption name="conflictResolution">false</sld:VendorOption>
+          </sld:TextSymbolizer>
+        </sld:Rule><sld:Rule>
+          <sld:Title>농도</sld:Title>
+          <ogc:Filter><ogc:And>
+            <ogc:Or>
+              <ogc:PropertyIsLike wildCard="%" singleChar="_" escape="\">
+                <ogc:PropertyName>layer</ogc:PropertyName>
+                <ogc:Literal>면리농도%</ogc:Literal>
+              </ogc:PropertyIsLike>
+              <ogc:PropertyIsEqualTo>
+                <ogc:PropertyName>layer</ogc:PropertyName>
+                <ogc:Literal>농도</ogc:Literal>
+              </ogc:PropertyIsEqualTo>
+              <ogc:PropertyIsEqualTo>
+                <ogc:PropertyName>layer</ogc:PropertyName>
+                <ogc:Literal>리도</ogc:Literal>
+              </ogc:PropertyIsEqualTo>
+              <ogc:PropertyIsEqualTo>
+                <ogc:PropertyName>layer</ogc:PropertyName>
+                <ogc:Literal>면도</ogc:Literal>
+              </ogc:PropertyIsEqualTo>
+            </ogc:Or>
+          <ogc:PropertyIsEqualTo><ogc:Function name="env"><ogc:Literal>ignore_scale</ogc:Literal><ogc:Literal>0</ogc:Literal></ogc:Function><ogc:Literal>1</ogc:Literal></ogc:PropertyIsEqualTo></ogc:And></ogc:Filter>
+          <sld:MinScaleDenominator>400000.0</sld:MinScaleDenominator>
+          <sld:TextSymbolizer>
+            <sld:Label>
+              <ogc:PropertyName>num</ogc:PropertyName>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">Serif</sld:CssParameter>
+              <sld:CssParameter name="font-size">12</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:PointPlacement>
+                <sld:AnchorPoint>
+                  <sld:AnchorPointX>0.5</sld:AnchorPointX>
+                  <sld:AnchorPointY>0.5</sld:AnchorPointY>
+                </sld:AnchorPoint>
+              </sld:PointPlacement>
+            </sld:LabelPlacement>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#212121</sld:CssParameter>
+            </sld:Fill>
+            <sld:Graphic>
+              <sld:ExternalGraphic>
+                <sld:OnlineResource xmlns:xlink="http://www.w3.org/1999/xlink" xlink:type="simple" xlink:href="road_shield_local_883700.svg"/>
+                <sld:Format>image/svg+xml</sld:Format>
+              </sld:ExternalGraphic>
+              <sld:Size><ogc:Function name="if_then_else"><ogc:Function name="greaterThan"><ogc:Function name="env"><ogc:Literal>ignore_scale</ogc:Literal><ogc:Literal>0</ogc:Literal></ogc:Function><ogc:Literal>0</ogc:Literal></ogc:Function><ogc:Literal>18</ogc:Literal><ogc:Literal>20</ogc:Literal></ogc:Function></sld:Size>
             </sld:Graphic>
             <sld:Priority>100</sld:Priority>
             <sld:VendorOption name="conflictResolution">false</sld:VendorOption>

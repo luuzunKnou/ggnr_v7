@@ -92,6 +92,9 @@ export type MapContextValue = {
   mapInstanceRef: RefObject<Map | null>;
   showDebugUi: boolean;
   setShowDebugUi: Dispatch<SetStateAction<boolean>>;
+  /** 꺼짐(기본)은 축척 따라 변경. 켜면 점·심볼 크기를 18로 고정 */
+  iconScaleSizeOn: boolean;
+  setIconScaleSizeOn: Dispatch<SetStateAction<boolean>>;
   visibleLayerNames: Set<string>;
   setVisibleLayerNames: Dispatch<SetStateAction<Set<string>>>;
   selectedDetail: SelectedDetail;
@@ -123,6 +126,9 @@ export type MapContextValue = {
   /** 도형 내 데이터만 표시할 때 사용. WKT(5181). null이면 공간 필터 없음 */
   spatialFilterWkt: string | null;
   setSpatialFilterWkt: Dispatch<SetStateAction<string | null>>;
+  /** false면 공간필터 도형은 그리되 지도 fit(줌·이동)은 하지 않음 */
+  spatialFilterAutoFit: boolean;
+  setSpatialFilterAutoFit: Dispatch<SetStateAction<boolean>>;
   /** 공간 필터 적용 시 레이어 목록에 표시할 테이블 이름 집합. null이면 전체 표시 */
   spatialFilteredLayerNames: Set<string> | null;
   setSpatialFilteredLayerNames: Dispatch<SetStateAction<Set<string> | null>>;
@@ -666,6 +672,7 @@ export function MapContextProvider({ children }: { children: React.ReactNode }) 
     applyManaged: (wanted: ReadonlySet<string>, managed: ReadonlySet<string>) => void;
   } | null>(null);
   const [showDebugUi, setShowDebugUi] = useState(false);
+  const [iconScaleSizeOn, setIconScaleSizeOn] = useState(false);
   const [visibleLayerNames, setVisibleLayerNames] = useState<Set<string>>(() => new Set());
   const [selectedDetail, setSelectedDetail] = useState<SelectedDetail>(null);
   const [identifyResultList, setIdentifyResultList] = useState<IdentifyPopupState | null>(null);
@@ -675,6 +682,7 @@ export function MapContextProvider({ children }: { children: React.ReactNode }) 
   const addressParcelGeometryRef = useRef<import('ol/geom').Geometry | null>(null);
   const addressParcelSeedGeom4326Ref = useRef<Record<string, unknown> | null>(null);
   const [spatialFilterWkt, setSpatialFilterWkt] = useState<string | null>(null);
+  const [spatialFilterAutoFit, setSpatialFilterAutoFit] = useState(true);
   const [spatialFilteredLayerNames, setSpatialFilteredLayerNames] = useState<Set<string> | null>(null);
   const [serviceWmsCqlByLayer, setServiceWmsCqlByLayer] = useState<Record<string, string> | null>(null);
   const [serviceWmsStyleByLayer, setServiceWmsStyleByLayer] = useState<Record<string, string> | null>(null);
@@ -952,6 +960,8 @@ export function MapContextProvider({ children }: { children: React.ReactNode }) 
         mapInstanceRef,
         showDebugUi,
         setShowDebugUi,
+        iconScaleSizeOn,
+        setIconScaleSizeOn,
         visibleLayerNames,
         setVisibleLayerNames,
         selectedDetail,
@@ -971,6 +981,8 @@ export function MapContextProvider({ children }: { children: React.ReactNode }) 
         wtlNetworkThematicSyncRef,
         spatialFilterWkt,
         setSpatialFilterWkt,
+        spatialFilterAutoFit,
+        setSpatialFilterAutoFit,
         spatialFilteredLayerNames,
         setSpatialFilteredLayerNames,
         serviceWmsCqlByLayer,
