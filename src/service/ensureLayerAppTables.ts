@@ -1,6 +1,7 @@
 /**
  * 서버 기동 시 앱 필수 테이블 확보 (없으면 생성, public에만 있으면 layer로 이동).
  * - 추가속성 정의: public.layer_extra_def
+ * - 추가속성 SHP 원본 이력: public.layer_extra_source
  * - 도로점용: road_use_ledger, road_use_ledger_jijuk
  * - 접도구역 건축물: road_frontage_building(+_detail|_confirm)
  * - 접도구역 표주: road_frontage_marker(+_item)
@@ -2205,6 +2206,27 @@ export async function ensureLayerExtraDefTable(result?: EnsureResult): Promise<E
   return out;
 }
 
+/** public.layer_extra_source — SHP 추가속성 원본 필드 이력 */
+export async function ensureLayerExtraSourceTable(result?: EnsureResult): Promise<EnsureResult> {
+  const out: EnsureResult = result ?? { created: [], moved: [], existed: [], errors: [] };
+  const fq = 'public.layer_extra_source';
+  try {
+    const { ensureLayerExtraSourceTable: ensureSrc } = await import('@/service/layerExtraService');
+    const r = await ensureSrc();
+    if (!r.ok) {
+      out.errors.push(`${fq}: ${r.error ?? 'failed'}`);
+      return out;
+    }
+    const exists = await tableExists('public', 'layer_extra_source');
+    if (exists === 'BASE TABLE') out.existed.push(fq);
+    else out.created.push(fq);
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    out.errors.push(`${fq}: ${msg}`);
+  }
+  return out;
+}
+
 /** instrumentation / 수동 호출용 */
 export async function ensureLayerAppTables(): Promise<EnsureResult> {
   const result: EnsureResult = { created: [], moved: [], existed: [], errors: [] };
@@ -2212,6 +2234,7 @@ export async function ensureLayerAppTables(): Promise<EnsureResult> {
     await ensureSchemaLayer();
     await ensureSchemaLandLinkage();
     await ensureLayerExtraDefTable(result);
+    await ensureLayerExtraSourceTable(result);
     await ensureRoadUseLedgerTables(result);
     await ensureRoadFrontageBuildingTables(result);
     await ensureRoadFrontageMarkerTables(result);
