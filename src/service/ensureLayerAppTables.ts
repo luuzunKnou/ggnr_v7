@@ -5,7 +5,7 @@
  * - 도로점용: road_use_ledger, road_use_ledger_jijuk
  * - 접도구역 건축물: road_frontage_building(+_detail|_confirm)
  * - 접도구역 표주: road_frontage_marker(+_item)
- * - 공통점용: water|road|public_occupationledger(+_jijuk|_mgj) — 9개
+ * - 공통점용: 하천 usage_data_as·도로 rdl_occ_as(공통 칸, +필지·물건지) + 국공유지 public_occupationledger(+_jijuk|_mgj) — 9개
  * - 점사용료: water|road|public_ngl_fee_list — 3개
  * - FMS: road_fms_facility + road_fms_inspection — 2개 (상하수도·건축물도 시설물구분으로 함께)
  * - 차세대 연계: next_gen_linkage.ngl_error_log, ngl_query_table
@@ -30,6 +30,7 @@ import {
   ROAD_FRONTAGE_BUILDING_LAYER_COLUMNS,
   type RoadFrontageBuildingLayerColumnDef,
 } from '@/database/schema/road_frontage_building';
+import { getOccupationLedgerBinding, type OccupationLedgerBinding } from '@/lib/occupationLedgerBinding';
 
 type EnsureResult = {
   created: string[];
@@ -1161,6 +1162,69 @@ COMMENT ON TABLE layer."${t}" IS '메모';
 `;
 }
 
+function quoteSqlIdent(name: string): string {
+  return `"${String(name).replace(/"/g, '""')}"`;
+}
+
+/** 하천·도로 공통 점용 본표 — 연결 설정의 공통 칸(글자) + 추가속성(extra) */
+function occupationCommonMainSql(binding: OccupationLedgerBinding): string {
+  const t = binding.mainTable;
+  const f = binding.fields;
+  const cols = [
+    f.mgmtField,
+    f.permitField,
+    f.permitDateField,
+    f.nameField,
+    f.placeField,
+    f.purposeField,
+    f.startField,
+    f.endField,
+    f.areaField,
+    f.ownerNameField,
+    f.ownerAddrField,
+    f.stateField,
+    f.remarkField,
+  ].filter((c): c is string => Boolean(c) && c !== 'ogc_fid');
+  return `
+CREATE TABLE IF NOT EXISTS layer.${quoteSqlIdent(t)} (
+  ogc_fid serial PRIMARY KEY,
+${[...new Set(cols)].map((c) => `  ${quoteSqlIdent(c)} text,`).join('\n')}
+  extra jsonb,
+  geom geometry(MultiPolygon, 5181)
+);
+CREATE INDEX IF NOT EXISTS ${quoteSqlIdent(`${t}_geom_gix`)} ON layer.${quoteSqlIdent(t)} USING GIST (geom);
+CREATE INDEX IF NOT EXISTS ${quoteSqlIdent(`${t}_${f.keyField}_idx`)} ON layer.${quoteSqlIdent(t)} (${quoteSqlIdent(f.keyField)});
+CREATE INDEX IF NOT EXISTS ${quoteSqlIdent(`${t}_${f.permitField}_idx`)} ON layer.${quoteSqlIdent(t)} (${quoteSqlIdent(f.permitField)});
+COMMENT ON TABLE layer.${quoteSqlIdent(t)} IS '공통 점용대장 (${binding.title})';
+`;
+}
+
+/** 하천·도로 공통 점용 필지·물건지 — 본표 키(관리번호) 연결 칸 + 주소(또는 읍면동·리·지번) + 추가속성 */
+function occupationCommonChildSql(
+  binding: OccupationLedgerBinding,
+  tableName: string,
+  comment: string
+): string {
+  const f = binding.fields;
+  const addressCols =
+    f.childAddressPartFields && f.childAddressPartFields.length > 0
+      ? f.childAddressPartFields
+      : [f.childAddressField];
+  return `
+CREATE TABLE IF NOT EXISTS layer.${quoteSqlIdent(tableName)} (
+  ogc_fid serial PRIMARY KEY,
+  ${quoteSqlIdent(f.childParentField)} text,
+${addressCols.map((c) => `  ${quoteSqlIdent(c)} text,`).join('\n')}
+  extra jsonb,
+  geom geometry(MultiPolygon, 5181)
+);
+CREATE INDEX IF NOT EXISTS ${quoteSqlIdent(`${tableName}_${f.childParentField}_idx`)} ON layer.${quoteSqlIdent(tableName)} (${quoteSqlIdent(f.childParentField)});
+CREATE INDEX IF NOT EXISTS ${quoteSqlIdent(`${tableName}_geom_gix`)} ON layer.${quoteSqlIdent(tableName)} USING GIST (geom);
+COMMENT ON TABLE layer.${quoteSqlIdent(tableName)} IS '${comment.replace(/'/g, "''")}';
+`;
+}
+
+
 function occupationLedgerMainSql(prefix: string): string {
   const t = `${prefix}_occupationledger`;
   return `
@@ -1625,10 +1689,14 @@ export async function ensureRoadFrontageMarkerTables(result?: EnsureResult): Pro
   return out;
 }
 
-/** 공통 점용대장 본대·필지·물건지 × water|road|public (9개) */
-/** 기존 필지·물건지 테이블에 허가번호 컬럼 보강 (CREATE IF NOT EXISTS 로는 안 붙음) */
+/** 국공유지(예전 칸 이름 그대로 쓰는 점용대장) 접두 */
+const LEGACY_OCCUPATION_PREFIXES = ['public'] as const;
+/** 받은 원천자료 기준 공통 칸 점용대장 */
+const COMMON_OCCUPATION_SER_ENGS = ['waterOccupationLedger', 'roadOccupationLedger'] as const;
+
+/** 기존 필지·물건지 테이블에 허가번호 컬럼 보강 (CREATE IF NOT EXISTS 로는 안 붙음) — 국공유지만 */
 async function ensureOccupationLedgerChildPermitNo(result: EnsureResult): Promise<void> {
-  for (const prefix of OCCUPATION_PREFIXES) {
+  for (const prefix of LEGACY_OCCUPATION_PREFIXES) {
     const base = `${prefix}_occupationledger`;
     for (const suffix of ['_jijuk', '_mgj'] as const) {
       const table = `${base}${suffix}`;
@@ -1647,8 +1715,13 @@ async function ensureOccupationLedgerChildPermitNo(result: EnsureResult): Promis
           )
         );
         await db.execute(
-          sql.raw(`COMMENT ON COLUMN layer.${table}.permit_no IS '본표 허가번호'`)
+          sql.raw(`COMMENT ON COLUMN layer.${table}.permit_no IS '본표 허가번호(예전 연결, 참고용)'`)
         );
+        // 필지·물건지 연결 = 본표 ogc_fid 값을 담는 id
+        await db.execute(
+          sql.raw(`CREATE INDEX IF NOT EXISTS ${table}_id_idx ON layer.${table} (id)`)
+        );
+        await db.execute(sql.raw(`COMMENT ON COLUMN layer.${table}.id IS '본표 고유키(ogc_fid)'`));
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : String(e);
         result.errors.push(`${fq}.permit_no: ${msg}`);
@@ -1657,10 +1730,61 @@ async function ensureOccupationLedgerChildPermitNo(result: EnsureResult): Promis
   }
 }
 
+/**
+ * 점용 시작·종료 — 날짜 칸이던 기존 본표를 글자 칸으로 (영구·허가일로부터 ○개월 등).
+ * 기존 날짜는 YYYY-MM-DD 글자로 남는다.
+ */
+async function ensureOccupationLedgerPeriodText(result: EnsureResult): Promise<void> {
+  for (const prefix of LEGACY_OCCUPATION_PREFIXES) {
+    const table = `${prefix}_occupationledger`;
+    try {
+      if ((await tableExists('layer', table)) !== 'BASE TABLE') continue;
+      const res = await pool.query<{ column_name: string }>(
+        `SELECT column_name FROM information_schema.columns
+          WHERE table_schema = 'layer' AND table_name = $1
+            AND column_name IN ('perm_start_date', 'perm_end_date') AND data_type = 'date'`,
+        [table]
+      );
+      for (const { column_name: col } of res.rows) {
+        await pool.query(
+          `ALTER TABLE layer.${table} ALTER COLUMN ${col} TYPE text USING to_char(${col}, 'YYYY-MM-DD')`
+        );
+        result.created.push(`layer.${table}.${col}(text)`);
+      }
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      result.errors.push(`layer.${table}.period_text: ${msg}`);
+    }
+  }
+}
+
+/**
+ * 공통 점용대장 본표·필지·물건지 — 없을 때만 만든다(있으면 칸을 바꾸지 않음).
+ * 하천 usage_data_as·도로 rdl_occ_as 계열은 공통 칸으로, 국공유지는 예전 칸 이름 그대로.
+ */
 export async function ensureOccupationLedgerTables(result?: EnsureResult): Promise<EnsureResult> {
   const out: EnsureResult = result ?? { created: [], moved: [], existed: [], errors: [] };
   await ensureSchemaLayer();
-  for (const prefix of OCCUPATION_PREFIXES) {
+  for (const serEng of COMMON_OCCUPATION_SER_ENGS) {
+    const binding = getOccupationLedgerBinding({ serEng });
+    if (!binding) continue;
+    await ensureBaseTable({
+      table: binding.mainTable,
+      createSql: occupationCommonMainSql(binding),
+      result: out,
+    });
+    await ensureBaseTable({
+      table: binding.jijukTable,
+      createSql: occupationCommonChildSql(binding, binding.jijukTable, `${binding.title} 필지`),
+      result: out,
+    });
+    await ensureBaseTable({
+      table: binding.mgjTable,
+      createSql: occupationCommonChildSql(binding, binding.mgjTable, `${binding.title} 물건지`),
+      result: out,
+    });
+  }
+  for (const prefix of LEGACY_OCCUPATION_PREFIXES) {
     const base = `${prefix}_occupationledger`;
     await ensureBaseTable({
       table: base,
@@ -1679,10 +1803,11 @@ export async function ensureOccupationLedgerTables(result?: EnsureResult): Promi
     });
   }
   await ensureOccupationLedgerChildPermitNo(out);
+  await ensureOccupationLedgerPeriodText(out);
   return out;
 }
 
-/** FMS 시설물·점검진단실적 — 도로 테이블 한 쌍(2개) */
+/** FMS water|road|public × facility·inspection (6개) */
 export async function ensureFmsTables(result?: EnsureResult): Promise<EnsureResult> {
   const out: EnsureResult = result ?? { created: [], moved: [], existed: [], errors: [] };
   await ensureSchemaLayer();

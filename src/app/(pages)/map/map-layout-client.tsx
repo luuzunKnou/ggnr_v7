@@ -3172,6 +3172,8 @@ function MapLayoutContent({
                     setOccupationLedgerDetailId(null)
                     setOccupationLedgerListRefreshKey((k) => k + 1)
                   }}
+                  overlayLeftPx={occupationLedgerPanelLeftPx}
+                  overlayWidthPx={occupationLedgerPanelWidth + occupationLedgerDetailWidth}
                 />
               </MapSideListPanel>
             </div>
