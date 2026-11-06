@@ -705,7 +705,7 @@ export function WtlFacilityDetailPanel({
                           !editable &&
                             titleFieldName != null &&
                             key.toLowerCase() === titleFieldName.toLowerCase() &&
-                            'font-medium text-primary'
+                            'standard-detail-attr-value-title'
                         )}
                         title={editable ? label : value}
                       >

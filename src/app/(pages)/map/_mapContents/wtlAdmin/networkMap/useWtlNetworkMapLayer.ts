@@ -13,6 +13,9 @@ import tablesJson from '@/config/defineLayer/tables.json'
 import { getGeoServerBase } from '@/lib/geoserverUrl'
 import { geoserverWmsImageLoadFunction } from '@/lib/geoserverWmsImageLoad'
 import { call } from '@/lib/api'
+import { Stroke, Style } from 'ol/style'
+import type { StyleFunction } from 'ol/style/Style'
+import type { FeatureLike } from 'ol/Feature'
 import {
   compareFeaturesByGeometryStackOrder,
   isPointSymbolLayerName,
@@ -37,6 +40,28 @@ import {
   type WtlNetMapSourceId,
 } from './wtlNetworkMapSources'
 import type { WtlNetworkRow } from './wtlNetworkTypes'
+
+/** 하천기본계획 색인도 선택과 동일 — 폴리곤은 윤곽만, 그 외는 데이터조회 펄스 */
+function createWtlNetworkSelectionStyle(getPulsePhase: () => number): StyleFunction {
+  const base = createDataQuerySelectionRowHighlightStyle(getPulsePhase)
+  return (feature: FeatureLike, resolution: number) => {
+    const geomType = feature.getGeometry()?.getType()
+    if (geomType === 'Polygon' || geomType === 'MultiPolygon') {
+      const t = Math.sin(getPulsePhase())
+      const whiteOp = 0.6 + 0.35 * t
+      const redOp = 0.5 + 0.3 * t
+      return [
+        new Style({
+          stroke: new Stroke({ color: `rgba(255, 255, 255, ${whiteOp})`, width: 7 + t }),
+        }),
+        new Style({
+          stroke: new Stroke({ color: `rgba(220, 38, 38, ${redOp})`, width: 4 + 0.8 * t }),
+        }),
+      ]
+    }
+    return base(feature, resolution)
+  }
+}
 
 /** tables.json define_table_shp_type → 기하 쌓기 종류 (면→선→점→심볼) */
 function stackKindFromDefineShpType(tableName: string): LayerStackKind {
@@ -262,7 +287,7 @@ export function useWtlNetworkMapLayer({
     const layer = new VectorLayer({
       source,
       renderOrder: compareFeaturesByGeometryStackOrder,
-      style: createDataQuerySelectionRowHighlightStyle(() => pulsePhaseRef.current),
+      style: createWtlNetworkSelectionStyle(() => pulsePhaseRef.current),
     })
     layer.set('wtlNetworkHighlight', true)
     insertLayerBelowServiceLayer(map, layer)

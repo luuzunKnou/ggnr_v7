@@ -382,6 +382,17 @@
   @apply min-w-0 break-all bg-background px-2 py-1.5 text-[11px] text-slate-900 dark:text-foreground;
 }
 
+/** 상세 값 — 제목 필드 강조. 값 칸 글자색보다 라이트·다크 모두 우선 */
+@utility standard-detail-attr-value-title {
+  @apply font-medium text-primary;
+}
+
+.standard-detail-attr-value.standard-detail-attr-value-title,
+.dark .standard-detail-attr-value.standard-detail-attr-value-title {
+  font-weight: 500;
+  color: var(--primary);
+}
+
 @utility standard-detail-attr-cell-border {
   @apply border-b border-border;
 }

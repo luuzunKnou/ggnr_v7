@@ -1,7 +1,7 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
-import { X } from 'lucide-react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { ChevronUp, X } from 'lucide-react'
 import { call } from '@/lib/api'
 import { formatDefineFieldDisplayValue } from '@/lib/defineLayerCodeDisplay'
 import { cn } from '@/lib/utils'
@@ -45,6 +45,79 @@ export type WtlMappedFacilityTarget = {
   title: string
   fieldsTable?: string | null
   ftrIdn: string
+}
+
+function FloatingChrome({
+  title,
+  subtitle,
+  onClose,
+  stackOffset,
+  left,
+  zIndex,
+  children,
+}: {
+  title: string
+  subtitle?: string
+  onClose: () => void
+  stackOffset: number
+  left: number
+  zIndex: number
+  children: ReactNode
+}) {
+  const [collapsed, setCollapsed] = useState(false)
+  return (
+    <MapFloatingPanel
+      viewport
+      width="420px"
+      maxHeight="70vh"
+      className="bg-background backdrop-blur-none"
+      style={{ zIndex }}
+      defaultPosition={{
+        top: COMPLAINT_DETAIL_PANEL_DEFAULT_TOP + stackOffset,
+        left,
+      }}
+      header={
+        <>
+          <div className="min-w-0 flex-1 pr-2">
+            <span className="block truncate text-xs font-medium text-foreground" title={title}>
+              {title}
+            </span>
+            {subtitle ? (
+              <span
+                className="mt-0.5 block truncate text-[11px] text-muted-foreground"
+                title={subtitle}
+              >
+                {subtitle}
+              </span>
+            ) : null}
+          </div>
+          <button
+            type="button"
+            title="닫기"
+            onClick={onClose}
+            className="standard-panel-close cursor-pointer"
+            aria-label="닫기"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </>
+      }
+    >
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-background">
+        {children}
+        <div className="standard-detail-edit-footer">
+          <button
+            type="button"
+            title="닫기"
+            onClick={onClose}
+            className="standard-detail-hdr-btn"
+          >
+            닫기
+          </button>
+        </div>
+      </div>
+    </MapFloatingPanel>
+  )
 }
 
 function fallbackDetailFields(record: Record<string, unknown>): DefineFieldLike[] {
@@ -146,36 +219,21 @@ export function WtlMappedFacilityFloating({
   }
 
   return (
-    <MapFloatingPanel
-      viewport
-      width="420px"
-      maxHeight="70vh"
-      style={{ zIndex: COMPLAINT_DETAIL_PANEL_Z_INDEX + 2 }}
-      defaultPosition={{
-        top: COMPLAINT_DETAIL_PANEL_DEFAULT_TOP + 36,
-        left: floatingLeftPx,
-      }}
-      header={
-        <>
-          <span className="min-w-0 truncate text-xs font-medium text-muted-foreground">
-            {target.title}
-          </span>
-          <button
-            type="button"
-            title="닫기"
-            onClick={onClose}
-            className="flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center rounded text-muted-foreground hover:bg-muted/50 hover:text-foreground"
-            aria-label="닫기"
-          >
-            <X className="h-3.5 w-3.5" />
-          </button>
-        </>
-      }
+    <FloatingChrome
+      title={target.title}
+      onClose={onClose}
+      stackOffset={36}
+      left={floatingLeftPx}
+      zIndex={COMPLAINT_DETAIL_PANEL_Z_INDEX + 2}
     >
-      <p className="px-3 py-4 text-[11px] text-muted-foreground">
-        {loading ? '조회 중…' : error}
-      </p>
-    </MapFloatingPanel>
+      <div className="standard-detail-scroll">
+        {loading ? (
+          <p className="standard-detail-loading">조회 중…</p>
+        ) : (
+          <p className="standard-detail-error">{error}</p>
+        )}
+      </div>
+    </FloatingChrome>
   )
 }
 
@@ -207,7 +265,7 @@ export function WtlFacilityRelatedDetailFloating({
 
   const codesByField = bundle?.codesByField ?? {}
 
-  const headerTitle = useMemo(() => {
+  const subtitle = useMemo(() => {
     const titleField = (bundle?.fields ?? []).find((f) =>
       isDefineFieldFlagTrue(f.define_field_show_title)
     )
@@ -220,43 +278,22 @@ export function WtlFacilityRelatedDetailFloating({
         codesByField[name.toLowerCase()],
         ''
       )
-      if (formatted.trim()) return `${title} · ${formatted}`
+      if (formatted.trim()) return formatted
     }
-    if (row.ogcFid != null) return `${title} · #${row.ogcFid}`
-    return title
-  }, [bundle?.fields, codesByField, row.ogcFid, row.record, title])
+    if (row.ogcFid != null) return `#${row.ogcFid}`
+    return ''
+  }, [bundle?.fields, codesByField, row.ogcFid, row.record])
 
   return (
-    <MapFloatingPanel
-      viewport
-      width="420px"
-      maxHeight="70vh"
-      style={{ zIndex: COMPLAINT_DETAIL_PANEL_Z_INDEX + (stackOffset > 0 ? 2 : 0) }}
-      defaultPosition={{
-        top: COMPLAINT_DETAIL_PANEL_DEFAULT_TOP + stackOffset,
-        left: floatingLeftPx,
-      }}
-      header={
-        <>
-          <span
-            className="min-w-0 truncate text-xs font-medium text-muted-foreground"
-            title={headerTitle}
-          >
-            {headerTitle}
-          </span>
-          <button
-            type="button"
-            title="닫기"
-            onClick={onClose}
-            className="flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center rounded text-muted-foreground hover:bg-muted/50 hover:text-foreground"
-            aria-label="닫기"
-          >
-            <X className="h-3.5 w-3.5" />
-          </button>
-        </>
-      }
+    <FloatingChrome
+      title={title}
+      subtitle={subtitle}
+      onClose={onClose}
+      stackOffset={stackOffset}
+      left={floatingLeftPx}
+      zIndex={COMPLAINT_DETAIL_PANEL_Z_INDEX + (stackOffset > 0 ? 2 : 0)}
     >
-      <div className="standard-detail-scroll min-h-0 flex-1">
+      <div className="standard-detail-scroll">
         {detailFields.length === 0 ? (
           <p className="standard-detail-attr-empty">표시할 상세 필드가 없습니다.</p>
         ) : (
@@ -280,7 +317,7 @@ export function WtlFacilityRelatedDetailFloating({
                     className={cn(
                       'standard-detail-attr-value standard-detail-attr-cell-border text-foreground',
                       isDefineFieldFlagTrue(f.define_field_show_title) &&
-                        'font-medium text-primary'
+                        'standard-detail-attr-value-title'
                     )}
                     title={value}
                   >
@@ -292,6 +329,6 @@ export function WtlFacilityRelatedDetailFloating({
           </div>
         )}
       </div>
-    </MapFloatingPanel>
+    </FloatingChrome>
   )
 }

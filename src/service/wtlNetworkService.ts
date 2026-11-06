@@ -77,17 +77,20 @@ const TABLES_JSON_PATH = path.join(
 );
 
 /** 요청마다 tables.json을 읽어 그룹 후보 생성 */
+let mapSourcesCache: WtlNetMapSourceDef[] | null = null;
 function loadWtlNetMapSourcesFromTablesJson(): WtlNetMapSourceDef[] {
+  if (mapSourcesCache) return mapSourcesCache;
   try {
     const raw = fs.readFileSync(TABLES_JSON_PATH, 'utf8');
     const rows = JSON.parse(raw) as Array<{
       define_table_group?: string;
       define_table_name?: string;
     }>;
-    return buildWtlNetMapSourcesFromRows(rows);
+    mapSourcesCache = buildWtlNetMapSourcesFromRows(rows);
   } catch {
-    return [];
+    mapSourcesCache = [];
   }
+  return mapSourcesCache;
 }
 
 function resolveWtlNetMapSource(id: string): WtlNetMapSourceDef | undefined {
@@ -160,19 +163,27 @@ type ListParams = {
 
 const FIELDS_DIR = path.join(process.cwd(), 'src', 'config', 'defineLayer', 'fields');
 
+const fieldRowsCache = new Map<string, Record<string, unknown>[]>();
+
 function loadDefineFieldRows(tableName: string): Record<string, unknown>[] {
   const safe = String(tableName ?? '')
     .replace(/[^a-zA-Z0-9_-]/g, '')
     .toLowerCase();
   if (!safe) return [];
+  const hit = fieldRowsCache.get(safe);
+  if (hit) return hit;
   const filePath = path.join(FIELDS_DIR, `table_${safe}.json`);
+  let rows: Record<string, unknown>[] = [];
   try {
-    if (!fs.existsSync(filePath)) return [];
-    const parsed = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
-    return Array.isArray(parsed) ? parsed : [];
+    if (fs.existsSync(filePath)) {
+      const parsed = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+      rows = Array.isArray(parsed) ? parsed : [];
+    }
   } catch {
-    return [];
+    rows = [];
   }
+  fieldRowsCache.set(safe, rows);
+  return rows;
 }
 
 /** defineLayer 필드 JSON 조회 키 (물리 remap 전 기준 테이블) */
@@ -429,6 +440,7 @@ function parseGeom(raw: unknown): GeoJSON.Geometry | null {
 }
 
 const tableExistsCache = new Map<string, boolean>();
+const columnExistsCache = new Map<string, boolean>();
 
 async function tableExists(table: string): Promise<boolean> {
   const key = table.toLowerCase();
@@ -523,9 +535,12 @@ async function collectListWheres(
 
   if (opts.bbox && opts.bbox.length === 4) {
     const [minX, minY, maxX, maxY] = opts.bbox;
-    wheres.push(
-      `ST_Intersects(t.geom, ST_Transform(ST_MakeEnvelope(${minX},${minY},${maxX},${maxY},3857), ST_SRID(t.geom)))`
-    );
+    const tbl = String(physicalTable ?? def.table ?? '').replace(/"/g, '""');
+    // ST_SRID(t.geom) 은 행마다 계산되어 공간 색인을 못 탄다. 테이블 SRID 를 한 번만 읽어 상수 범위로 비교.
+    const env = tbl
+      ? `ST_Transform(ST_MakeEnvelope(${minX},${minY},${maxX},${maxY},3857), (SELECT ST_SRID(geom) FROM layer."${tbl}" WHERE geom IS NOT NULL LIMIT 1))`
+      : `ST_Transform(ST_MakeEnvelope(${minX},${minY},${maxX},${maxY},3857), 5181)`;
+    wheres.push(`(t.geom && ${env} AND ST_Intersects(t.geom, ${env}))`);
   }
 
   if (dipCol && opts.diameterFrom != null && opts.diameterTo != null) {
@@ -673,8 +688,17 @@ async function buildSelect(
     withGeom: boolean;
     /** null이면 내부 LIMIT 생략(바깥 페이지 처리) */
     limit?: number | null;
+    offset?: number;
+    ogcFids?: number[];
   }
-): Promise<string | null> {
+): Promise<{
+  dataSql: string;
+  countSql: string;
+  tbl: string;
+  whereSql: string;
+  sourceId: string;
+  layerKey: string;
+} | null> {
   const tbl = opts.physicalTable.replace(/"/g, '""');
   const nameExpr = def.nameExpr ?? `COALESCE(NULLIF(trim(ftr_idn::text),''), ogc_fid::text)`;
   const dipCol = def.diameterCol;
@@ -683,6 +707,10 @@ async function buildSelect(
   const yearCol = def.yearCol;
   const { fieldsTable, fieldsTableFallback } = resolveFieldsTableKeys(def, opts.physicalTable);
   const wheres = await collectListWheres(def, opts, opts.physicalTable);
+  const fidList = (opts.ogcFids ?? []).filter((n) => Number.isFinite(n));
+  if (fidList.length > 0) {
+    wheres.push(`t.ogc_fid IN (${fidList.map((n) => Math.trunc(n)).join(',')})`);
+  }
 
   const diamSel = dipCol ? `t."${dipCol}"::text` : `NULL`;
   const matSel = mopCol ? `t."${mopCol}"::text` : `NULL`;
@@ -697,13 +725,8 @@ async function buildSelect(
   const fieldsFallbackSel = fieldsTableFallback
     ? `'${esc(fieldsTableFallback)}'`
     : `NULL`;
-  const limitSql =
-    opts.limit == null
-      ? ''
-      : `LIMIT ${Math.max(1, Math.min(Number(opts.limit) || 1, 3000))}`;
-
-  return `
-    SELECT
+  const whereSql = wheres.length > 0 ? wheres.join(' AND ') : 'TRUE';
+  const selectList = `
       '${esc(opts.sourceId)}' AS "sourceId",
       '${esc(def.key)}' AS "layerKey",
       '${esc(def.geomKind)}' AS "geomKind",
@@ -717,11 +740,39 @@ async function buildSelect(
       ${geomSel} AS geom,
       ${recordSel} AS record,
       ${fieldsTableSel} AS "fieldsTable",
-      ${fieldsFallbackSel} AS "fieldsTableFallback"
-    FROM layer."${tbl}" t
-    WHERE ${wheres.join(' AND ')}
-    ${limitSql}
-  `;
+      ${fieldsFallbackSel} AS "fieldsTableFallback"`;
+  // ORDER BY 를 본 SELECT 에 두면 화면 안 전체 행의 to_jsonb 를 만든 뒤 LIMIT 한다.
+  // 번호만 먼저 고르고, 그 행만 JSON 으로 만든다.
+  const lim =
+    opts.limit == null
+      ? null
+      : Math.max(1, Math.min(Number(opts.limit) || 1, 3000));
+  const off = opts.offset != null && opts.offset > 0 ? Math.floor(opts.offset) : 0;
+  const dataSql =
+    lim == null
+      ? `SELECT ${selectList}
+         FROM layer."${tbl}" t
+         WHERE ${whereSql}`
+      : `WITH page AS (
+           SELECT t.ogc_fid AS fid
+           FROM layer."${tbl}" t
+           WHERE ${whereSql}
+           ORDER BY t.ogc_fid
+           LIMIT ${lim}${off ? ` OFFSET ${off}` : ''}
+         )
+         SELECT ${selectList}
+         FROM layer."${tbl}" t
+         JOIN page p ON p.fid = t.ogc_fid
+         ORDER BY t.ogc_fid`;
+  const countSql = `SELECT COUNT(*)::int AS cnt FROM layer."${tbl}" t WHERE ${whereSql}`;
+  return {
+    dataSql,
+    countSql,
+    tbl,
+    whereSql,
+    sourceId: opts.sourceId,
+    layerKey: def.key,
+  };
 }
 
 /** SHP용 — 동일 필터로 원본 행 SELECT */
@@ -836,7 +887,7 @@ export async function getWtlNetworkList(params: ListParams = {}): Promise<{
     ? null
     : Math.max(30, Math.floor((params.limit ?? 1500) / slotCount));
   const materialBundle = await ensureMaterialTopBundle();
-  const parts: string[] = [];
+  const parts: NonNullable<Awaited<ReturnType<typeof buildSelect>>>[] = [];
 
   for (const source of sources) {
     for (const key of keys) {
@@ -860,7 +911,8 @@ export async function getWtlNetworkList(params: ListParams = {}): Promise<{
         supplyBlock: params.supplyBlock,
         areaWkts5181: params.areaWkts5181,
         withGeom: false,
-        limit: limitPer,
+        limit: usePaging && slotCount === 1 ? pageSize : limitPer,
+        offset: usePaging && slotCount === 1 ? offset : undefined,
       });
       if (sel) parts.push(sel);
     }
@@ -868,24 +920,97 @@ export async function getWtlNetworkList(params: ListParams = {}): Promise<{
 
   if (parts.length === 0) return { ...empty, page, pageSize };
 
-  const unionBody = parts.map((p) => `(${p})`).join('\nUNION ALL\n');
+  if (usePaging && parts.length === 1) {
+    const only = parts[0]!;
+    const [countRes, dataRes] = await Promise.all([
+      db.execute(sql.raw(only.countSql)),
+      db.execute(sql.raw(only.dataSql)),
+    ]);
+    const total = Number((countRes.rows?.[0] as { cnt?: number } | undefined)?.cnt ?? 0);
+    const rows = (dataRes.rows ?? []).map((r) => mapRow(r as Record<string, unknown>, true));
+    return { rows, total, page, pageSize };
+  }
 
-  const countRes = await db.execute(
-    sql.raw(`SELECT COUNT(*)::int AS cnt FROM (${unionBody}) c`)
+  const countRows = await Promise.all(
+    parts.map((p) => db.execute(sql.raw(p.countSql)))
   );
-  const total = Number((countRes.rows?.[0] as { cnt?: number } | undefined)?.cnt ?? 0);
+  const total = countRows.reduce((sum, res) => {
+    return sum + Number((res.rows?.[0] as { cnt?: number } | undefined)?.cnt ?? 0);
+  }, 0);
 
-  const res = await db.execute(
+  if (!usePaging) {
+    const unionBody = parts.map((p) => `(${p.dataSql})`).join('\nUNION ALL\n');
+    const res = await db.execute(
+      sql.raw(`SELECT * FROM (${unionBody}) u LIMIT ${pageSize}`)
+    );
+    const rows = (res.rows ?? []).map((r) => mapRow(r as Record<string, unknown>, true));
+    return { rows, total, page, pageSize };
+  }
+
+  const idUnion = parts
+    .map(
+      (p) =>
+        `(SELECT '${esc(p.sourceId)}' AS sid, '${esc(p.layerKey)}' AS lk, t.ogc_fid AS fid FROM layer."${p.tbl}" t WHERE ${p.whereSql})`
+    )
+    .join('\nUNION ALL\n');
+  const idRes = await db.execute(
     sql.raw(
-      usePaging
-        ? `SELECT * FROM (${unionBody}) u
-           LIMIT ${pageSize} OFFSET ${offset}`
-        : `SELECT * FROM (${unionBody}) u
-           LIMIT ${pageSize}`
+      `SELECT sid, lk, fid FROM (${idUnion}) u ORDER BY fid LIMIT ${pageSize} OFFSET ${offset}`
     )
   );
-
-  const rows = (res.rows ?? []).map((r) => mapRow(r as Record<string, unknown>, true));
+  const fidGroups = new Map<string, number[]>();
+  for (const row of idRes.rows ?? []) {
+    const r = row as { sid?: unknown; lk?: unknown; fid?: unknown };
+    const sid = String(r.sid ?? '');
+    const lk = String(r.lk ?? '');
+    const fid = Number(r.fid);
+    if (!sid || !lk || !Number.isFinite(fid)) continue;
+    const gkey = `${sid}\0${lk}`;
+    const list = fidGroups.get(gkey) ?? [];
+    list.push(fid);
+    fidGroups.set(gkey, list);
+  }
+  const pageParts = await Promise.all(
+    parts.map(async (p) => {
+      const fids = fidGroups.get(`${p.sourceId}\0${p.layerKey}`);
+      if (!fids || fids.length === 0) return [] as WtlNetworkRow[];
+      const def = getWtlNetLayerDef(p.layerKey);
+      if (!def) return [] as WtlNetworkRow[];
+      const picked = await buildSelect(def, {
+        physicalTable: p.tbl,
+        sourceId: p.sourceId as WtlNetMapSourceId,
+        bbox: params.bbox,
+        keyword: params.keyword,
+        yearFrom: params.yearFrom,
+        yearTo: params.yearTo,
+        diameterFrom: params.diameterFrom,
+        diameterTo: params.diameterTo,
+        materials: params.materials,
+        materialBundle,
+        emdCode: params.emdCode,
+        riCode: params.riCode,
+        supplyBlock: params.supplyBlock,
+        areaWkts5181: params.areaWkts5181,
+        withGeom: false,
+        ogcFids: fids,
+      });
+      if (!picked) return [] as WtlNetworkRow[];
+      const res = await db.execute(sql.raw(picked.dataSql));
+      return (res.rows ?? []).map((r) => mapRow(r as Record<string, unknown>, true));
+    })
+  );
+  const order = new Map<string, number>();
+  (idRes.rows ?? []).forEach((row, i) => {
+    const r = row as { sid?: unknown; lk?: unknown; fid?: unknown };
+    order.set(`${String(r.sid ?? '')}\0${String(r.lk ?? '')}\0${Number(r.fid)}`, i);
+  });
+  const rows = pageParts.flat().sort((a, b) => {
+    const pa = parseNetworkRowId(a.id);
+    const pb = parseNetworkRowId(b.id);
+    const ka = `${pa?.sourceId ?? ''}\0${a.layerKey}\0${pa?.ogcFid ?? 0}`;
+    const kb = `${pb?.sourceId ?? ''}\0${b.layerKey}\0${pb?.ogcFid ?? 0}`;
+    return (order.get(ka) ?? 0) - (order.get(kb) ?? 0);
+  });
   return { rows, total, page, pageSize };
 }
 
@@ -1533,6 +1658,9 @@ function mopCdeSortKey(code: string, label: string): number {
 async function tableHasColumn(table: string, column: string): Promise<boolean> {
   const t = table.toLowerCase().replace(/"/g, '""');
   const c = column.toLowerCase().replace(/"/g, '""');
+  const cacheKey = `${t}\0${c}`;
+  const cached = columnExistsCache.get(cacheKey);
+  if (cached != null) return cached;
   const res = await db.execute(
     sql.raw(
       `SELECT 1 FROM information_schema.columns
@@ -1542,7 +1670,9 @@ async function tableHasColumn(table: string, column: string): Promise<boolean> {
        LIMIT 1`
     )
   );
-  return (res.rows?.length ?? 0) > 0;
+  const ok = (res.rows?.length ?? 0) > 0;
+  columnExistsCache.set(cacheKey, ok);
+  return ok;
 }
 
 /** MapStatisticsController — byc_len 없으면 pip_len */
@@ -1753,116 +1883,86 @@ export async function getWtlNetworkStatusStats(params: {
   const yearMap = new Map<string, number>();
   const saaMap = new Map<string, { label: string; meters: number }>();
 
-  for (const { physicalTable: base, def } of pipeSources) {
-    const lenCol = String(def.lengthCol ?? (await resolvePipeLengthCol(base))).replace(
-      /"/g,
-      '""'
-    );
-    const dipCol = String(
-      def.diameterCol ?? (await resolvePipeDiameterCol(base))
-    ).replace(/"/g, '""');
-    const tbl = base.replace(/"/g, '""');
-    const sumExpr = `SUM(COALESCE(NULLIF(TRIM(t."${lenCol}"::text), '')::numeric, 0))`;
-    const hasSaa = await tableHasColumn(base, 'saa_cde');
-    const whereSql = (await collectListWheres(def, listOpts, base)).join(' AND ');
-
-    try {
-      const dipRes = await db.execute(
-        sql.raw(
-          `SELECT ${sumExpr} AS byc_len, t."${dipCol}" AS code
-           FROM layer."${tbl}" t
-           WHERE ${whereSql} AND t."${dipCol}" IS NOT NULL
-           GROUP BY t."${dipCol}"`
-        )
+  await Promise.all(
+    pipeSources.map(async ({ physicalTable: base, def }) => {
+      const lenCol = String(def.lengthCol ?? (await resolvePipeLengthCol(base))).replace(
+        /"/g,
+        '""'
       );
-      for (const row of dipRes.rows ?? []) {
-        const r = row as { code?: unknown; byc_len?: number };
-        const meters = Number(r.byc_len) || 0;
-        const label = diameterStatLabel(r.code);
-        dipMap.set(label, (dipMap.get(label) ?? 0) + meters);
-      }
-    } catch (e) {
-      console.error('[getWtlNetworkStatusStats] diameter', def.key, base, e);
-    }
-
-    try {
-      const mopRes = await db.execute(
-        sql.raw(
-          `SELECT ${sumExpr} AS byc_len, t.mop_cde AS code
-           FROM layer."${tbl}" t
-           WHERE ${whereSql} AND t.mop_cde IS NOT NULL
-           GROUP BY t.mop_cde
-           ORDER BY t.mop_cde`
-        )
-      );
-      for (const row of mopRes.rows ?? []) {
-        const r = row as { code?: unknown; byc_len?: number };
-        const meters = Number(r.byc_len) || 0;
-        const code = asStr(r.code);
-        if (!code) continue;
-        const label = mopLabel(code);
-        const display = label === '—' ? code : label;
-        const prev = mopMap.get(code);
-        mopMap.set(code, {
-          label: display,
-          meters: (prev?.meters ?? 0) + meters,
-        });
-      }
-    } catch (e) {
-      console.error('[getWtlNetworkStatusStats] material', def.key, base, e);
-    }
-
-    try {
-      // MapStatisticsController: SUBSTRING(ist_ymd,0,5)::INTEGER
-      const yearRes = await db.execute(
-        sql.raw(
-          `SELECT ${sumExpr} AS byc_len,
-                  NULLIF(SUBSTRING(TRIM(t.ist_ymd::text), 1, 4), '') AS code
-           FROM layer."${tbl}" t
-           WHERE ${whereSql} AND t.ist_ymd IS NOT NULL AND TRIM(t.ist_ymd::text) <> ''
-           GROUP BY 2`
-        )
-      );
-      for (const row of yearRes.rows ?? []) {
-        const r = row as { code?: unknown; byc_len?: number };
-        const meters = Number(r.byc_len) || 0;
-        const y = asStr(r.code);
-        if (!y || !/^\d{4}$/.test(y)) continue;
-        yearMap.set(y, (yearMap.get(y) ?? 0) + meters);
-      }
-    } catch (e) {
-      console.error('[getWtlNetworkStatusStats] year', def.key, base, e);
-    }
-
-    if (hasSaa) {
+      const dipCol = String(
+        def.diameterCol ?? (await resolvePipeDiameterCol(base))
+      ).replace(/"/g, '""');
+      const tbl = base.replace(/"/g, '""');
+      const whereParts = await collectListWheres(def, listOpts, base);
+      const whereSql = whereParts.length > 0 ? whereParts.join(' AND ') : 'TRUE';
+      const [hasDip, hasMop, hasYear, hasSaa] = await Promise.all([
+        dipCol ? tableHasColumn(base, dipCol) : Promise.resolve(false),
+        tableHasColumn(base, 'mop_cde'),
+        tableHasColumn(base, 'ist_ymd'),
+        tableHasColumn(base, 'saa_cde'),
+      ]);
+      const dipExpr = hasDip ? `t."${dipCol}"::text` : `NULL::text`;
+      const mopExpr = hasMop ? `t.mop_cde::text` : `NULL::text`;
+      const yearExpr = hasYear
+        ? `NULLIF(SUBSTRING(TRIM(t.ist_ymd::text), 1, 4), '')`
+        : `NULL::text`;
+      const saaExpr = hasSaa
+        ? `CASE WHEN t.saa_cde IS NULL OR TRIM(t.saa_cde::text) = '' THEN '미분류' ELSE TRIM(t.saa_cde::text) END`
+        : `NULL::text`;
       try {
-        const saaRes = await db.execute(
+        const res = await db.execute(
           sql.raw(
-            `SELECT ${sumExpr} AS byc_len,
-                    CASE WHEN t.saa_cde IS NULL OR TRIM(t.saa_cde::text) = '' THEN '미분류'
-                         ELSE TRIM(t.saa_cde::text) END AS code
-             FROM layer."${tbl}" t
-             WHERE ${whereSql}
-             GROUP BY 2`
+            `SELECT
+               CASE
+                 WHEN GROUPING(dip_code) = 0 AND GROUPING(mop_code) = 1 AND GROUPING(yr) = 1 AND GROUPING(saa) = 1 THEN 'dip'
+                 WHEN GROUPING(mop_code) = 0 AND GROUPING(dip_code) = 1 AND GROUPING(yr) = 1 AND GROUPING(saa) = 1 THEN 'mop'
+                 WHEN GROUPING(yr) = 0 AND GROUPING(dip_code) = 1 AND GROUPING(mop_code) = 1 AND GROUPING(saa) = 1 THEN 'year'
+                 WHEN GROUPING(saa) = 0 AND GROUPING(dip_code) = 1 AND GROUPING(mop_code) = 1 AND GROUPING(yr) = 1 THEN 'saa'
+               END AS kind,
+               COALESCE(dip_code, mop_code, yr, saa) AS code,
+               SUM(len) AS byc_len
+             FROM (
+               SELECT
+                 ${dipExpr} AS dip_code,
+                 ${mopExpr} AS mop_code,
+                 ${yearExpr} AS yr,
+                 ${saaExpr} AS saa,
+                 COALESCE(NULLIF(TRIM(t."${lenCol}"::text), '')::numeric, 0) AS len
+               FROM layer."${tbl}" t
+               WHERE ${whereSql}
+             ) s
+             GROUP BY GROUPING SETS ((dip_code), (mop_code), (yr), (saa))`
           )
         );
-        for (const row of saaRes.rows ?? []) {
-          const r = row as { code?: unknown; byc_len?: number };
+        for (const row of res.rows ?? []) {
+          const r = row as { kind?: unknown; code?: unknown; byc_len?: number };
+          const kind = asStr(r.kind);
           const meters = Number(r.byc_len) || 0;
-          const code = asStr(r.code) || '미분류';
-          const kor = code === '미분류' ? '미분류' : saaLabel(code);
-          const display = kor === '—' ? code : kor;
-          const prev = saaMap.get(code);
-          saaMap.set(code, {
-            label: display,
-            meters: (prev?.meters ?? 0) + meters,
-          });
+          const code = asStr(r.code);
+          if (!kind || !code) continue;
+          if (kind === 'dip') {
+            const label = diameterStatLabel(code);
+            dipMap.set(label, (dipMap.get(label) ?? 0) + meters);
+          } else if (kind === 'mop') {
+            const label = mopLabel(code);
+            const display = label === '—' ? code : label;
+            const prev = mopMap.get(code);
+            mopMap.set(code, { label: display, meters: (prev?.meters ?? 0) + meters });
+          } else if (kind === 'year') {
+            if (!/^\d{4}$/.test(code)) continue;
+            yearMap.set(code, (yearMap.get(code) ?? 0) + meters);
+          } else if (kind === 'saa') {
+            const kor = code === '미분류' ? '미분류' : saaLabel(code);
+            const display = kor === '—' ? code : kor;
+            const prev = saaMap.get(code);
+            saaMap.set(code, { label: display, meters: (prev?.meters ?? 0) + meters });
+          }
         }
       } catch (e) {
-        console.error('[getWtlNetworkStatusStats] saa', def.key, base, e);
+        console.error('[getWtlNetworkStatusStats]', def.key, base, e);
       }
-    }
-  }
+    })
+  );
 
   const byDiameter = [...dipMap.entries()].map(([label, meters]) => {
     const n = Number(String(label).replace(/[^\d.]/g, ''));
@@ -1890,36 +1990,44 @@ export async function getWtlNetworkStatusStats(params: {
 
   const enabledKeySet =
     listOpts.layerKeys == null ? null : new Set(listOpts.layerKeys.map((k) => k.toLowerCase()));
-  const facilityCounts: WtlNetworkStatusStats['facilityCounts'] = [];
-  for (const fac of STATUS_FACILITY_LAYERS) {
-    if (enabledKeySet && !enabledKeySet.has(fac.key.toLowerCase())) continue;
-    const def = getWtlNetLayerDef(fac.key);
-    let count = 0;
-    if (def?.table) {
-      const seen = new Set<string>();
-      for (const source of selectedSources) {
-        const physicalTable = source.remapTable(def.table).toLowerCase();
-        if (seen.has(physicalTable)) continue;
-        seen.add(physicalTable);
-        if (!(await tableExists(physicalTable))) continue;
-        const tbl = physicalTable.replace(/"/g, '""');
-        const whereSql = (await collectListWheres(def, listOpts, physicalTable)).join(
-          ' AND '
-        );
-        try {
-          const res = await db.execute(
-            sql.raw(
-              `SELECT COUNT(*)::int AS n FROM layer."${tbl}" t WHERE ${whereSql}`
-            )
+  const facilityCounts = await Promise.all(
+    STATUS_FACILITY_LAYERS.filter(
+      (fac) => !enabledKeySet || enabledKeySet.has(fac.key.toLowerCase())
+    ).map(async (fac) => {
+      const def = getWtlNetLayerDef(fac.key);
+      let count = 0;
+      if (def?.table) {
+        const seen = new Set<string>();
+        const jobs: Promise<number>[] = [];
+        for (const source of selectedSources) {
+          const physicalTable = source.remapTable(def.table).toLowerCase();
+          if (seen.has(physicalTable)) continue;
+          seen.add(physicalTable);
+          jobs.push(
+            (async () => {
+              if (!(await tableExists(physicalTable))) return 0;
+              const tbl = physicalTable.replace(/"/g, '""');
+              const whereParts = await collectListWheres(def, listOpts, physicalTable);
+              const whereSql = whereParts.length > 0 ? whereParts.join(' AND ') : 'TRUE';
+              try {
+                const res = await db.execute(
+                  sql.raw(
+                    `SELECT COUNT(*)::int AS n FROM layer."${tbl}" t WHERE ${whereSql}`
+                  )
+                );
+                return Number((res.rows?.[0] as { n?: number } | undefined)?.n) || 0;
+              } catch {
+                return 0;
+              }
+            })()
           );
-          count += Number((res.rows?.[0] as { n?: number } | undefined)?.n) || 0;
-        } catch {
-          /* ignore */
         }
+        const parts = await Promise.all(jobs);
+        count = parts.reduce((sum, n) => sum + n, 0);
       }
-    }
-    facilityCounts.push({ label: fac.label, count });
-  }
+      return { label: fac.label, count };
+    })
+  );
 
   const roundMeters = (m: number) => Math.round(m * 1000) / 1000;
 
