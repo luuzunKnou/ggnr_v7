@@ -461,15 +461,22 @@ export function MeterBulkAddModal({ open, onClose, onAdd, existingKeys }: Props)
         </div>
 
         <div className="flex items-start gap-1.5">
-          <textarea
-            value={searchText}
-            onChange={(e) => setSearchText(e.target.value)}
-            disabled={loading || searching}
-            rows={4}
-            title="계량기 번호 또는 주소 검색"
-            placeholder="계량기 번호 또는 주소 검색"
-            className="standard-detail-input min-h-16 min-w-0 flex-1 resize-y px-2 py-1.5 disabled:opacity-50"
-          />
+          <div className="relative min-w-0 flex-1">
+            <textarea
+              value={searchText}
+              onChange={(e) => setSearchText(e.target.value)}
+              disabled={loading || searching}
+              rows={4}
+              title="계량기 번호 또는 주소 검색"
+              className="standard-detail-input min-h-16 w-full resize-y px-2 py-1.5 disabled:opacity-50"
+            />
+            {searchText.length === 0 ? (
+              <div className="pointer-events-none absolute inset-0 px-2 py-1.5 text-xs leading-snug text-muted-foreground">
+                <div>계량기 번호 또는 주소 검색</div>
+                <div>줄내림으로 입력해주세요</div>
+              </div>
+            ) : null}
+          </div>
           <button
             type="button"
             title="검색"

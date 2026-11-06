@@ -94,32 +94,25 @@
           <sld:Title>wtl_meta_ps_label</sld:Title>
           <sld:Abstract>Abstract</sld:Abstract>
           <ogc:Filter>
-            <ogc:PropertyIsGreaterThan>
-              <ogc:Function name="strLength">
-                <ogc:Function name="env">
-                  <ogc:Literal>wtl_meta_ps_label_property_name</ogc:Literal>
-                  <ogc:Literal></ogc:Literal>
-                </ogc:Function>
+            <ogc:PropertyIsEqualTo>
+              <ogc:Function name="env">
+                <ogc:Literal>wtl_meta_ps_show_label</ogc:Literal>
+                <ogc:Literal>0</ogc:Literal>
               </ogc:Function>
-              <ogc:Literal>0</ogc:Literal>
-            </ogc:PropertyIsGreaterThan>
+              <ogc:Literal>1</ogc:Literal>
+            </ogc:PropertyIsEqualTo>
           </ogc:Filter>
           <sld:MaxScaleDenominator>3000.0</sld:MaxScaleDenominator>
           <sld:TextSymbolizer>
             <sld:Label>
-              <ogc:Function name="property">
-                <ogc:Function name="env">
-                  <ogc:Literal>wtl_meta_ps_label_property_name</ogc:Literal>
-                  <ogc:Literal></ogc:Literal>
-                </ogc:Function>
-              </ogc:Function>
+              <ogc:PropertyName>met_num</ogc:PropertyName>
             </sld:Label>
             <sld:Font>
               <sld:CssParameter name="font-family">Gulim</sld:CssParameter>
               <sld:CssParameter name="font-size">
                 <ogc:Function name="env">
                   <ogc:Literal>wtl_meta_ps_label_size</ogc:Literal>
-                  <ogc:Literal>0</ogc:Literal>
+                  <ogc:Literal>12</ogc:Literal>
                 </ogc:Function>
               </sld:CssParameter>
               <sld:CssParameter name="font-style">normal</sld:CssParameter>
@@ -167,7 +160,7 @@
                   <ogc:Literal>#</ogc:Literal>
                   <ogc:Function name="env">
                     <ogc:Literal>wtl_meta_ps_label_color</ogc:Literal>
-                    <ogc:Literal>ffffff</ogc:Literal>
+                    <ogc:Literal>1a1a1a</ogc:Literal>
                   </ogc:Function>
                 </ogc:Function>
               </sld:CssParameter>

@@ -1,13 +1,9 @@
 'use client'
 
 import { Map, View } from 'ol'
-import GeoJSON from 'ol/format/GeoJSON'
 import ImageLayer from 'ol/layer/Image'
-import VectorLayer from 'ol/layer/Vector'
 import ImageWMS from 'ol/source/ImageWMS'
-import VectorSource from 'ol/source/Vector'
 import type XYZ from 'ol/source/XYZ'
-import { Circle, Fill, Stroke, Style, Text } from 'ol/style'
 import { defaults as defaultControls } from 'ol/control'
 import { fromString } from 'ol/transform'
 import type MapType from 'ol/Map'
@@ -25,6 +21,7 @@ const CAPTURE_H = 320
 const ZONE_TARGET_SCALE_M = 35
 const ZONE_MIN_SCALE_M = 30
 const ZONE_MAX_SCALE_M = 40
+const METER_LABEL_ENV = 'wtl_meta_ps_show_label:1'
 
 export type MeterZoneCapturePoint = {
   label: string
@@ -228,24 +225,6 @@ function buildMetNumCql(labels: string[]): string | undefined {
   return `met_num IN (${list})`
 }
 
-function pointStyle(label: string): Style {
-  return new Style({
-    image: new Circle({
-      radius: 5,
-      fill: new Fill({ color: 'rgba(50, 118, 195, 0.95)' }),
-      stroke: new Stroke({ color: '#ffffff', width: 2 }),
-    }),
-    text: new Text({
-      text: label,
-      font: '10px sans-serif',
-      fill: new Fill({ color: '#0f172a' }),
-      stroke: new Stroke({ color: '#ffffff', width: 3 }),
-      overflow: true,
-      offsetY: -12,
-    }),
-  })
-}
-
 function compositeOffscreenToCanvas(map: MapType, target: HTMLCanvasElement): boolean {
   const size = map.getSize()
   if (!size) return false
@@ -326,33 +305,6 @@ function applyViewToExtent(
   return extent
 }
 
-function setPointFeatures(
-  vectorSource: VectorSource,
-  points: MeterZoneCapturePoint[]
-): void {
-  vectorSource.clear(true)
-  if (points.length === 0) return
-  try {
-    const features = new GeoJSON().readFeatures(
-      {
-        type: 'FeatureCollection',
-        features: points.map((p) => ({
-          type: 'Feature',
-          geometry: { type: 'Point', coordinates: p.point4326 },
-          properties: { label: p.label },
-        })),
-      },
-      { dataProjection: 'EPSG:4326', featureProjection: 'EPSG:3857' }
-    )
-    for (const feature of features) {
-      feature.setStyle(pointStyle(String(feature.get('label') ?? '')))
-    }
-    vectorSource.addFeatures(features)
-  } catch {
-    /* ignore */
-  }
-}
-
 /**
  * 보고서용 숨김 지도 세션 — 구역마다 Map을 새로 만들지 않고 재사용.
  */
@@ -406,6 +358,7 @@ export function createMeterZoneCaptureSession(
       STYLES: 'wtl_meta_ps',
       TRANSPARENT: true,
       FORMAT: 'image/png',
+      ENV: METER_LABEL_ENV,
     },
     serverType: 'geoserver',
     ratio: 1,
@@ -418,13 +371,6 @@ export function createMeterZoneCaptureSession(
     visible: false,
   })
 
-  const vectorSource = new VectorSource()
-  const pointLayer = new VectorLayer({
-    source: vectorSource,
-    declutter: true,
-    zIndex: 20,
-  })
-
   const view = new View({
     resolutions: RESOLUTIONS_3857,
     minZoom: 0,
@@ -434,7 +380,7 @@ export function createMeterZoneCaptureSession(
 
   const map = new Map({
     target: host,
-    layers: [bg, jijukLayer, meterLayer, pointLayer],
+    layers: [bg, jijukLayer, meterLayer],
     view,
     controls: defaultControls({ attribution: false, zoom: false }),
     interactions: [],
@@ -453,7 +399,6 @@ export function createMeterZoneCaptureSession(
       try {
         // 화면은 35m 기준으로 칸 전체 채움 — 레이어만 해당 구역
         applyViewToExtent(view, extent3857)
-        setPointFeatures(vectorSource, points)
 
         const pnus = points
           .map((p) => String(p.pnu ?? '').replace(/\D/g, '').slice(0, 19))
@@ -484,6 +429,7 @@ export function createMeterZoneCaptureSession(
           meterSource.updateParams({
             LAYERS: `${WORKSPACE}:wtl_meta_ps`,
             STYLES: 'wtl_meta_ps',
+            ENV: METER_LABEL_ENV,
             CQL_FILTER: meterCql,
           })
         } else {

@@ -12,6 +12,8 @@ import type { MeterLocateResult } from './locateMeterAddresses'
 
 const WMS_LAYER = `${WORKSPACE}:wtl_meta_ps`
 const WMS_STYLE = 'wtl_meta_ps'
+/** 1일 때만 계량기번호 라벨. 기본 스타일은 0이라 다른 화면에는 안 나온다. */
+const METER_LABEL_ENV = 'wtl_meta_ps_show_label:1'
 
 function buildMetNumCql(meterNos: string[]): string | undefined {
   const unique = [
@@ -56,6 +58,7 @@ export function useWtlMeterWmsLayer(
           STYLES: WMS_STYLE,
           TRANSPARENT: true,
           FORMAT: 'image/png',
+          ENV: METER_LABEL_ENV,
         },
         serverType: 'geoserver',
         ratio: 1.5,
@@ -90,6 +93,7 @@ export function useWtlMeterWmsLayer(
     source.updateParams({
       LAYERS: WMS_LAYER,
       STYLES: WMS_STYLE,
+      ENV: METER_LABEL_ENV,
       CQL_FILTER: cql,
       _ts: Date.now(),
     })
