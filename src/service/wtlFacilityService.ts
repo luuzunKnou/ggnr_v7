@@ -459,6 +459,8 @@ export async function listFacilityRows(params: {
   areaWkts5181?: string[] | null;
   /** thead 다중 정렬 — 물리 컬럼만 허용 */
   sorts?: WtlFacilityListSortSpec[] | null;
+  /** 관리번호 완전 일치. 펌프·흡수정에서 가압장·정수장 1건 조회 */
+  ftrIdn?: string | null;
   limit?: number;
   offset?: number;
 } = {}): Promise<{
@@ -476,6 +478,7 @@ export async function listFacilityRows(params: {
       .trim()
       .toLowerCase() || 'layer';
   const keyword = String(params.keyword ?? '').trim();
+  const ftrIdn = String(params.ftrIdn ?? '').trim();
   const areaWkts = (params.areaWkts5181 ?? [])
     .map((w) => String(w ?? '').trim())
     .filter(Boolean);
@@ -519,6 +522,16 @@ export async function listFacilityRows(params: {
         : `''`;
 
   const wheres: string[] = ['TRUE'];
+  if (ftrIdn) {
+    if (!ftrCol) {
+      wheres.push('FALSE');
+    } else {
+      const fq = ftrCol.replace(/"/g, '""');
+      wheres.push(
+        `lower(trim(t."${fq}"::text)) = lower(trim('${esc(ftrIdn)}'))`
+      );
+    }
+  }
   if (keyword) {
     const like = `%${esc(keyword)}%`;
     const searchCols = new Set<string>();

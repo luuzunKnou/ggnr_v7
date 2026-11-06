@@ -1,8 +1,10 @@
 'use client'
 
-import { useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { X } from 'lucide-react'
+import { call } from '@/lib/api'
 import { formatDefineFieldDisplayValue } from '@/lib/defineLayerCodeDisplay'
+import { cn } from '@/lib/utils'
 import { MapFloatingPanel } from '../../../_mapComponents/MapFloatingPanel'
 import { useMapContext } from '../../../_mapComponents/MapContext'
 import {
@@ -16,7 +18,11 @@ import {
   selectDefineLayerDetailFields,
   type DefineFieldLike,
 } from '../../../_mapComponents/standard/defineLayerRowUtils'
-import type { WtlDefineDisplayBundle } from '../networkMap/wtlNetworkDefineDisplayCache'
+import {
+  loadWtlDefineDisplayBundle,
+  peekWtlDefineDisplayBundle,
+  type WtlDefineDisplayBundle,
+} from '../networkMap/wtlNetworkDefineDisplayCache'
 
 export type WtlFacilityRelatedDetailRow = {
   ogcFid: number | null
@@ -29,6 +35,16 @@ type Props = {
   row: WtlFacilityRelatedDetailRow
   bundle: WtlDefineDisplayBundle | null
   onClose: () => void
+  /** 겹침 방지용 위치·순서 오프셋(px) */
+  stackOffset?: number
+}
+
+export type WtlMappedFacilityTarget = {
+  table: string
+  schema: string
+  title: string
+  fieldsTable?: string | null
+  ftrIdn: string
 }
 
 function fallbackDetailFields(record: Record<string, unknown>): DefineFieldLike[] {
@@ -46,15 +62,133 @@ function fallbackDetailFields(record: Record<string, unknown>): DefineFieldLike[
     }))
 }
 
+export function WtlMappedFacilityFloating({
+  target,
+  onClose,
+}: {
+  target: WtlMappedFacilityTarget
+  onClose: () => void
+}) {
+  const [row, setRow] = useState<WtlFacilityRelatedDetailRow | null>(null)
+  const [bundle, setBundle] = useState<WtlDefineDisplayBundle | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const mapContext = useMapContext()
+  const floatingLeftPx = (mapContext?.mapPaddingLeft ?? 0) + 56
+
+  useEffect(() => {
+    if (!target.ftrIdn) {
+      setRow(null)
+      setBundle(null)
+      setError('관리번호를 찾을 수 없습니다.')
+      setLoading(false)
+      return
+    }
+    let cancelled = false
+    setLoading(true)
+    setError(null)
+    setRow(null)
+    const fieldsTable = String(target.fieldsTable ?? target.table).trim() || target.table
+    const peeked = peekWtlDefineDisplayBundle(fieldsTable, null)
+    if (peeked) setBundle(peeked)
+    else {
+      void loadWtlDefineDisplayBundle(fieldsTable, null).then((b) => {
+        if (!cancelled) setBundle(b)
+      })
+    }
+    void call('', 'POST', {
+      service: 'wtlFacilityService',
+      action: 'listFacilityRows',
+      params: {
+        table: target.table,
+        schema: target.schema || 'layer',
+        ftrIdn: target.ftrIdn,
+        limit: 1,
+        offset: 0,
+      },
+    })
+      .then((res) => {
+        if (cancelled) return
+        const data = (res?.data ?? res) as
+          | { rows?: WtlFacilityRelatedDetailRow[] }
+          | undefined
+        const found = Array.isArray(data?.rows) ? data.rows[0] : undefined
+        if (!found) {
+          setRow(null)
+          setError(`${target.title}을 찾을 수 없습니다.`)
+          return
+        }
+        setRow(found)
+      })
+      .catch(() => {
+        if (cancelled) return
+        setRow(null)
+        setError(`${target.title}을 불러오지 못했습니다.`)
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [target.ftrIdn, target.schema, target.table, target.title])
+
+  if (!loading && row) {
+    return (
+      <WtlFacilityRelatedDetailFloating
+        title={target.title}
+        row={row}
+        bundle={bundle}
+        onClose={onClose}
+        stackOffset={36}
+      />
+    )
+  }
+
+  return (
+    <MapFloatingPanel
+      viewport
+      width="420px"
+      maxHeight="70vh"
+      style={{ zIndex: COMPLAINT_DETAIL_PANEL_Z_INDEX + 2 }}
+      defaultPosition={{
+        top: COMPLAINT_DETAIL_PANEL_DEFAULT_TOP + 36,
+        left: floatingLeftPx,
+      }}
+      header={
+        <>
+          <span className="min-w-0 truncate text-xs font-medium text-muted-foreground">
+            {target.title}
+          </span>
+          <button
+            type="button"
+            title="닫기"
+            onClick={onClose}
+            className="flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center rounded text-muted-foreground hover:bg-muted/50 hover:text-foreground"
+            aria-label="닫기"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        </>
+      }
+    >
+      <p className="px-3 py-4 text-[11px] text-muted-foreground">
+        {loading ? '조회 중…' : error}
+      </p>
+    </MapFloatingPanel>
+  )
+}
+
 /** 현황 행 상세 — 플로팅 모달 */
 export function WtlFacilityRelatedDetailFloating({
   title,
   row,
   bundle,
   onClose,
+  stackOffset = 0,
 }: Props) {
   const mapContext = useMapContext()
-  const floatingLeftPx = (mapContext?.mapPaddingLeft ?? 0) + 20
+  const floatingLeftPx = (mapContext?.mapPaddingLeft ?? 0) + 20 + stackOffset
 
   const detailFields = useMemo(() => {
     const all = bundle?.fields ?? []
@@ -97,8 +231,11 @@ export function WtlFacilityRelatedDetailFloating({
       viewport
       width="420px"
       maxHeight="70vh"
-      style={{ zIndex: COMPLAINT_DETAIL_PANEL_Z_INDEX }}
-      defaultPosition={{ top: COMPLAINT_DETAIL_PANEL_DEFAULT_TOP, left: floatingLeftPx }}
+      style={{ zIndex: COMPLAINT_DETAIL_PANEL_Z_INDEX + (stackOffset > 0 ? 2 : 0) }}
+      defaultPosition={{
+        top: COMPLAINT_DETAIL_PANEL_DEFAULT_TOP + stackOffset,
+        left: floatingLeftPx,
+      }}
       header={
         <>
           <span
@@ -140,7 +277,11 @@ export function WtlFacilityRelatedDetailFloating({
                     {label}
                   </div>
                   <div
-                    className="standard-detail-attr-value standard-detail-attr-cell-border text-foreground"
+                    className={cn(
+                      'standard-detail-attr-value standard-detail-attr-cell-border text-foreground',
+                      isDefineFieldFlagTrue(f.define_field_show_title) &&
+                        'font-medium text-primary'
+                    )}
                     title={value}
                   >
                     {value}

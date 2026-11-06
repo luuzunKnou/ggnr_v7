@@ -12,12 +12,12 @@
     "cus_cctv_ps"
   ],
   "wtlEquipment": [
+    "wtl_pres_hj_ps",
     "wtl_pres_pm_ps",
     "wtl_puri_dt_ps",
     "wtl_valv_ps",
     "ufl_btrs_ps",
     "wtl_infeed_ps",
-    "wtl_meter_ps",
-    "wtl_pres_hj_ps"
+    "wtl_meter_ps"
   ]
 }

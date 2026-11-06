@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState, type ElementType } from 'react'
-import { FileText, History, Loader2, Paperclip, Pencil, Trash2, X } from 'lucide-react'
+import { FileText, History, Loader2, Paperclip, Pencil, Search, Trash2, X } from 'lucide-react'
 import { call } from '@/lib/api'
 import {
   formatDefineFieldDisplayValue,
@@ -28,7 +28,11 @@ import {
 import type { WtlNetworkRow } from '../networkMap/wtlNetworkTypes'
 import { WtlFacilityDataHistoryTab } from './WtlFacilityDataHistoryTab'
 import type { WtlFacilityListRow } from './WtlFacilityListView'
-import { WtlFacilityRelatedDetailFloating } from './WtlFacilityRelatedDetailFloating'
+import {
+  WtlFacilityRelatedDetailFloating,
+  WtlMappedFacilityFloating,
+  type WtlMappedFacilityTarget,
+} from './WtlFacilityRelatedDetailFloating'
 import { WtlFacilityTableLoadingRow } from './WtlFacilityTableLoadingRow'
 
 const SER_ENG = 'wtlFacility'
@@ -45,6 +49,8 @@ type Props = {
   onDeleted?: (id: string) => void
   /** 이력 되돌리기 후 목록·상세 재조회 */
   onHistoryReverted?: () => void
+  /** 설비관리 기본정보 — 가압장명·정수장명 값 칸에 시설 정보 보기 */
+  showFacilityInfoLink?: boolean
 }
 
 type FieldEditMeta = DefineFieldLike & {
@@ -117,6 +123,35 @@ function resolveParentFtrIdn(
   return String(row.name ?? '').trim()
 }
 
+function facilityInfoTarget(
+  fieldName: string,
+  korName: unknown,
+  ftrIdn: string,
+  schema: string
+): WtlMappedFacilityTarget | null {
+  const name = fieldName.trim().toLowerCase()
+  const kor = String(korName ?? '').trim()
+  if (name === 'prs_nam' || kor === '가압장명') {
+    return {
+      table: 'wtl_pres_ps',
+      schema,
+      title: '가압장',
+      fieldsTable: 'wtl_pres_ps',
+      ftrIdn,
+    }
+  }
+  if (name === 'pur_nam' || kor === '정수장명') {
+    return {
+      table: 'wtl_puri_as',
+      schema,
+      title: '정수장',
+      fieldsTable: 'wtl_puri_as',
+      ftrIdn,
+    }
+  }
+  return null
+}
+
 export function WtlFacilityDetailPanel({
   row: rowProp,
   onClose,
@@ -124,6 +159,7 @@ export function WtlFacilityDetailPanel({
   onUpdated,
   onDeleted,
   onHistoryReverted,
+  showFacilityInfoLink = false,
 }: Props) {
   const canWrite = useSerWriteAccess(SER_ENG)
   const [localRow, setLocalRow] = useState(rowProp)
@@ -136,6 +172,7 @@ export function WtlFacilityDetailPanel({
   const [relatedLoading, setRelatedLoading] = useState(false)
   const [relatedError, setRelatedError] = useState<string | null>(null)
   const [relatedDetail, setRelatedDetail] = useState<RelatedRow | null>(null)
+  const [facilityInfo, setFacilityInfo] = useState<WtlMappedFacilityTarget | null>(null)
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState<Record<string, string>>({})
   const [saving, setSaving] = useState(false)
@@ -189,6 +226,7 @@ export function WtlFacilityDetailPanel({
     setRelatedBundle(null)
     setRelatedError(null)
     setRelatedDetail(null)
+    setFacilityInfo(null)
     setActiveTab('attach')
 
     if (parentKey !== 'wtl_pres_ps' && parentKey !== 'wtl_puri_as') {
@@ -652,6 +690,9 @@ export function WtlFacilityDetailPanel({
                   )
                   const editable = editing && isFieldEditable(f)
                   const codes = codesByField[key.toLowerCase()] ?? []
+                  const facilityLink = showFacilityInfoLink
+                    ? facilityInfoTarget(key, f.define_field_kor_name, ftrIdn, schema)
+                    : null
                   return (
                     <div key={key || `d-${i}`} className="contents">
                       <div className="standard-detail-attr-label standard-detail-attr-cell-border">
@@ -660,6 +701,7 @@ export function WtlFacilityDetailPanel({
                       <div
                         className={cn(
                           'standard-detail-attr-value standard-detail-attr-cell-border text-foreground',
+                          facilityLink && 'flex items-center gap-1',
                           !editable &&
                             titleFieldName != null &&
                             key.toLowerCase() === titleFieldName.toLowerCase() &&
@@ -668,7 +710,8 @@ export function WtlFacilityDetailPanel({
                         title={editable ? label : value}
                       >
                         {editable ? (
-                          isDefineFieldCodeType(f.define_field_type) && codes.length > 0 ? (
+                          <div className="min-w-0 flex-1">
+                          {isDefineFieldCodeType(f.define_field_type) && codes.length > 0 ? (
                             <select
                               className={editInputClass}
                               title={label}
@@ -700,10 +743,22 @@ export function WtlFacilityDetailPanel({
                                 setDraft((prev) => ({ ...prev, [key]: e.target.value }))
                               }
                             />
-                          )
+                          )}
+                          </div>
                         ) : (
-                          value
+                          <span className="min-w-0 flex-1 break-all">{value}</span>
                         )}
+                        {facilityLink ? (
+                          <button
+                            type="button"
+                            title="시설 정보 보기"
+                            aria-label="시설 정보 보기"
+                            className="ml-auto inline-flex h-5 w-5 shrink-0 cursor-pointer items-center justify-center rounded text-primary hover:bg-primary/10"
+                            onClick={() => setFacilityInfo(facilityLink)}
+                          >
+                            <Search className="h-3.5 w-3.5" aria-hidden />
+                          </button>
+                        ) : null}
                       </div>
                     </div>
                   )
@@ -878,6 +933,12 @@ export function WtlFacilityDetailPanel({
           row={relatedDetail}
           bundle={relatedBundle}
           onClose={() => setRelatedDetail(null)}
+        />
+      ) : null}
+      {facilityInfo ? (
+        <WtlMappedFacilityFloating
+          target={facilityInfo}
+          onClose={() => setFacilityInfo(null)}
         />
       ) : null}
     </div>
