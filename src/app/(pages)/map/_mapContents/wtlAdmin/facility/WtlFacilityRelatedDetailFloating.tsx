@@ -37,6 +37,9 @@ type Props = {
   onClose: () => void
   /** 겹침 방지용 위치·순서 오프셋(px) */
   stackOffset?: number
+  /** 다른 상세를 새로 열어도 접힘 유지 */
+  collapsed: boolean
+  onToggleCollapsed: () => void
 }
 
 export type WtlMappedFacilityTarget = {
@@ -54,6 +57,8 @@ function FloatingChrome({
   stackOffset,
   left,
   zIndex,
+  collapsed,
+  onToggleCollapsed,
   children,
 }: {
   title: string
@@ -62,9 +67,10 @@ function FloatingChrome({
   stackOffset: number
   left: number
   zIndex: number
+  collapsed: boolean
+  onToggleCollapsed: () => void
   children: ReactNode
 }) {
-  const [collapsed, setCollapsed] = useState(false)
   return (
     <MapFloatingPanel
       viewport
@@ -78,6 +84,19 @@ function FloatingChrome({
       }}
       header={
         <>
+          <button
+            type="button"
+            title={collapsed ? '펼치기' : '접기'}
+            aria-label={collapsed ? '펼치기' : '접기'}
+            aria-expanded={!collapsed}
+            onClick={onToggleCollapsed}
+            className="standard-panel-close mr-2 cursor-pointer"
+          >
+            <ChevronUp
+              className={cn('h-4 w-4', collapsed && 'rotate-180')}
+              aria-hidden
+            />
+          </button>
           <div className="min-w-0 flex-1 pr-2">
             <span className="block truncate text-xs font-medium text-foreground" title={title}>
               {title}
@@ -103,7 +122,12 @@ function FloatingChrome({
         </>
       }
     >
-      <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-background">
+      <div
+        className={cn(
+          'flex min-h-0 flex-1 flex-col overflow-hidden bg-background',
+          collapsed && 'hidden'
+        )}
+      >
         {children}
         <div className="standard-detail-edit-footer">
           <button
@@ -138,9 +162,13 @@ function fallbackDetailFields(record: Record<string, unknown>): DefineFieldLike[
 export function WtlMappedFacilityFloating({
   target,
   onClose,
+  collapsed,
+  onToggleCollapsed,
 }: {
   target: WtlMappedFacilityTarget
   onClose: () => void
+  collapsed: boolean
+  onToggleCollapsed: () => void
 }) {
   const [row, setRow] = useState<WtlFacilityRelatedDetailRow | null>(null)
   const [bundle, setBundle] = useState<WtlDefineDisplayBundle | null>(null)
@@ -214,6 +242,8 @@ export function WtlMappedFacilityFloating({
         bundle={bundle}
         onClose={onClose}
         stackOffset={36}
+        collapsed={collapsed}
+        onToggleCollapsed={onToggleCollapsed}
       />
     )
   }
@@ -225,6 +255,8 @@ export function WtlMappedFacilityFloating({
       stackOffset={36}
       left={floatingLeftPx}
       zIndex={COMPLAINT_DETAIL_PANEL_Z_INDEX + 2}
+      collapsed={collapsed}
+      onToggleCollapsed={onToggleCollapsed}
     >
       <div className="standard-detail-scroll">
         {loading ? (
@@ -244,6 +276,8 @@ export function WtlFacilityRelatedDetailFloating({
   bundle,
   onClose,
   stackOffset = 0,
+  collapsed,
+  onToggleCollapsed,
 }: Props) {
   const mapContext = useMapContext()
   const floatingLeftPx = (mapContext?.mapPaddingLeft ?? 0) + 20 + stackOffset
@@ -292,6 +326,8 @@ export function WtlFacilityRelatedDetailFloating({
       stackOffset={stackOffset}
       left={floatingLeftPx}
       zIndex={COMPLAINT_DETAIL_PANEL_Z_INDEX + (stackOffset > 0 ? 2 : 0)}
+      collapsed={collapsed}
+      onToggleCollapsed={onToggleCollapsed}
     >
       <div className="standard-detail-scroll">
         {detailFields.length === 0 ? (

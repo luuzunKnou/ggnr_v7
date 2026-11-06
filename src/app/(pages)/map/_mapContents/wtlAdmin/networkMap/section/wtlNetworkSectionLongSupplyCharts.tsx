@@ -199,21 +199,21 @@ function ElevCompositionMergeTable({ rows }: { rows: ElevRoleRow[] }) {
 
   return (
     <div
-      className="mt-0.5 max-h-[320px] overflow-auto rounded border border-[#cbd5e1] bg-white"
+      className="mt-0.5 max-h-[320px] overflow-auto rounded border border-border bg-background"
       role="region"
       aria-label="표고별 구역·분구·블록 구성"
     >
       <table className="w-full border-collapse text-[11px]">
-        <thead className="sticky top-0 z-[1] bg-[#f1f5f9]">
+        <thead className="sticky top-0 z-[1] bg-muted">
           <tr>
-            <th className="w-14 border-b border-[#cbd5e1] px-1.5 py-1.5 text-left font-semibold text-[#475569]">
+            <th className="w-14 border-b border-border px-1.5 py-1.5 text-left font-semibold text-muted-foreground">
               표고
             </th>
-            <th className="w-10 border-b border-[#cbd5e1] px-1.5 py-1.5 text-left font-semibold text-[#475569]">
+            <th className="w-10 border-b border-border px-1.5 py-1.5 text-left font-semibold text-muted-foreground">
               구분
             </th>
             <th
-              className="border-b border-[#cbd5e1] px-1.5 py-1.5 text-left font-semibold text-[#475569]"
+              className="border-b border-border px-1.5 py-1.5 text-left font-semibold text-muted-foreground"
               colSpan={COLSPAN_UNITS}
             >
               구성 비율
@@ -225,16 +225,16 @@ function ElevCompositionMergeTable({ rows }: { rows: ElevRoleRow[] }) {
             g.roles.map((role, ri) => {
               const spans = segsToColspans(role.segs)
               return (
-                <tr key={`${g.elevM}-${role.role}`} className="border-b border-[#e2e8f0]">
+                <tr key={`${g.elevM}-${role.role}`} className="border-b border-border">
                   {ri === 0 ? (
                     <td
                       rowSpan={g.roles.length}
-                      className="border-r border-[#e2e8f0] px-1.5 py-0.5 text-center align-middle font-normal tabular-nums text-[#0f172a]"
+                      className="border-r border-border px-1.5 py-0.5 text-center align-middle font-normal tabular-nums text-foreground"
                     >
                       {formatElev(g.elevM)}m
                     </td>
                   ) : null}
-                  <td className="border-r border-[#e2e8f0] px-1.5 py-0.5 whitespace-nowrap font-normal text-[#334155]">
+                  <td className="border-r border-border px-1.5 py-0.5 whitespace-nowrap font-normal text-foreground">
                     {role.roleLabel}
                   </td>
                   {spans.map((s, si) => {
@@ -247,7 +247,7 @@ function ElevCompositionMergeTable({ rows }: { rows: ElevRoleRow[] }) {
                         key={`${s.name}-${si}`}
                         colSpan={s.span}
                         title={title}
-                        className="overflow-hidden border-r border-[#cbd5e1] bg-transparent px-0.5 py-0.5 text-center align-middle font-normal leading-tight text-[#0f172a] last:border-r-0"
+                        className="overflow-hidden border-r border-border bg-transparent px-0.5 py-0.5 text-center align-middle font-normal leading-tight text-foreground last:border-r-0"
                       >
                         <span className="block truncate px-0.5">
                           {s.name === '—'

@@ -9,7 +9,7 @@ import {
   type FocusEvent,
 } from 'react'
 import { useSession } from 'next-auth/react'
-import { ChevronDown, ChevronLeft, ChevronRight, Loader2, RefreshCw, X } from 'lucide-react'
+import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Loader2, RefreshCw, X } from 'lucide-react'
 import { call } from '@/lib/api'
 import { useConsoleMenuAccess } from '@/hooks/useConsoleMenuAccess'
 import { hasAnyDevConsoleAccess } from '@/lib/consoleMenuAccess/client'
@@ -2465,7 +2465,9 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
                                             rowIdx === box.items.length - 1 &&
                                             'border-b-0'
                                         )}
-                                        onClick={() => void pickRow(item, { fly: true })}
+                                        onClick={() =>
+                                          void pickRow(item, { fly: !onlyInView })
+                                        }
                                       >
                                         {columns.map((col) => {
                                           const cell = listCellParts(
@@ -2626,6 +2628,7 @@ function NetworkDetailModal({
   const [draft, setDraft] = useState<Record<string, string>>({})
   const [saving, setSaving] = useState(false)
   const [editError, setEditError] = useState<string | null>(null)
+  const [collapsed, setCollapsed] = useState(false)
 
   const cancelEdit = useCallback(() => {
     setEditing(false)
@@ -2901,13 +2904,32 @@ function NetworkDetailModal({
       style={{ zIndex: DETAIL_MODAL_Z_INDEX }}
       header={
         <>
+          <button
+            type="button"
+            title={collapsed ? '펼치기' : '접기'}
+            aria-label={collapsed ? '펼치기' : '접기'}
+            aria-expanded={!collapsed}
+            onClick={() => setCollapsed((v) => !v)}
+            className="standard-panel-close mr-2 cursor-pointer"
+          >
+            <ChevronUp
+              className={cn('h-4 w-4', collapsed && 'rotate-180')}
+              aria-hidden
+            />
+          </button>
           <div className="min-w-0 flex-1 pr-2">
-            <span className="block truncate text-xs font-medium text-foreground">
-              {layerKorName || '시설 상세'}
+            <span
+              className="block truncate text-xs font-medium text-foreground"
+              title={subtitle || layerKorName || '시설 상세'}
+            >
+              {subtitle || layerKorName || '시설 상세'}
             </span>
-            {subtitle ? (
-              <span className="mt-0.5 block truncate text-[11px] text-muted-foreground">
-                {subtitle}
+            {layerKorName && subtitle ? (
+              <span
+                className="mt-0.5 block truncate text-[11px] text-muted-foreground"
+                title={layerKorName}
+              >
+                {layerKorName}
               </span>
             ) : null}
           </div>
@@ -2918,7 +2940,7 @@ function NetworkDetailModal({
               if (editing) cancelEdit()
               onClose()
             }}
-            className="standard-panel-close"
+            className="standard-panel-close cursor-pointer"
             aria-label="닫기"
           >
             <X className="h-4 w-4" />
@@ -2926,7 +2948,12 @@ function NetworkDetailModal({
         </>
       }
     >
-      <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-background">
+      <div
+        className={cn(
+          'flex min-h-0 flex-1 flex-col overflow-hidden bg-background',
+          collapsed && 'hidden'
+        )}
+      >
           <div className="standard-detail-scroll">
             {fieldsLoading ? (
               <p className="standard-detail-loading">필드 설정 불러오는 중…</p>
@@ -2941,8 +2968,10 @@ function NetworkDetailModal({
                     </div>
                     <div
                       className={cn(
-                        'standard-detail-attr-value standard-detail-attr-cell-border text-foreground',
-                        row.title && !editing && 'standard-detail-attr-value-title'
+                        'standard-detail-attr-value standard-detail-attr-cell-border',
+                        row.title && !editing
+                          ? 'standard-detail-attr-value-title'
+                          : 'text-foreground'
                       )}
                       title={editing && row.editable ? row.label : row.value}
                     >

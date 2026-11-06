@@ -63,6 +63,32 @@ function createWtlNetworkSelectionStyle(getPulsePhase: () => number): StyleFunct
   }
 }
 
+/**
+ * 좌·우 패널(view.padding)에 가려진 픽셀을 뺀 지도 범위.
+ * calculateExtent(map size)는 캔버스 전체라 패널 뒤·화면 밖 시설까지 포함한다.
+ */
+function extentOfVisibleMap(map: OLMap): [number, number, number, number] | null {
+  const size = map.getSize()
+  if (!size || size.length < 2) return null
+  const padding = map.getView().padding ?? [0, 0, 0, 0]
+  const top = Math.max(0, padding[0] ?? 0)
+  const right = Math.max(0, padding[1] ?? 0)
+  const bottom = Math.max(0, padding[2] ?? 0)
+  const left = Math.max(0, padding[3] ?? 0)
+  const x2 = size[0] - right
+  const y2 = size[1] - bottom
+  if (x2 - left < 8 || y2 - top < 8) return null
+  const sw = map.getCoordinateFromPixel([left, y2])
+  const ne = map.getCoordinateFromPixel([x2, top])
+  if (!sw || !ne) return null
+  const minX = Math.min(sw[0], ne[0])
+  const minY = Math.min(sw[1], ne[1])
+  const maxX = Math.max(sw[0], ne[0])
+  const maxY = Math.max(sw[1], ne[1])
+  if (![minX, minY, maxX, maxY].every((n) => Number.isFinite(n))) return null
+  return [minX, minY, maxX, maxY]
+}
+
 /** tables.json define_table_shp_type → 기하 쌓기 종류 (면→선→점→심볼) */
 function stackKindFromDefineShpType(tableName: string): LayerStackKind {
   const table = String(tableName ?? '').trim().toLowerCase()
@@ -228,13 +254,7 @@ export function useWtlNetworkMapLayer({
     wmsBySourceRef.current = bySource
 
     const publishExtent = () => {
-      const size = map.getSize()
-      const extent = size ? map.getView().calculateExtent(size) : null
-      if (!extent || extent.length < 4) {
-        onExtentRef.current(null)
-        return
-      }
-      onExtentRef.current([extent[0], extent[1], extent[2], extent[3]])
+      onExtentRef.current(extentOfVisibleMap(map))
     }
 
     const moveStartKey = map.on('movestart', () => {
@@ -278,6 +298,21 @@ export function useWtlNetworkMapLayer({
       wmsBySourceRef.current = new Map()
     }
   }, [mapContext?.mapInstanceRef, mapContext?.mapReady, availableKey, availableSourceIds])
+
+  /** 패널 너비가 바뀌면 moveend 없이 보이는 범위가 달라진다 */
+  const mapPaddingLeft = mapContext?.mapPaddingLeft ?? 0
+  useEffect(() => {
+    const map = mapContext?.mapInstanceRef?.current
+    if (!map || !mapContext?.mapReady) return
+    const publish = () => {
+      onExtentRef.current(extentOfVisibleMap(map))
+    }
+    publish()
+    const key = map.once('postrender', publish)
+    return () => {
+      unByKey(key)
+    }
+  }, [mapPaddingLeft, mapContext?.mapInstanceRef, mapContext?.mapReady])
 
   useEffect(() => {
     const map = mapContext?.mapInstanceRef?.current

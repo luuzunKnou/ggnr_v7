@@ -117,13 +117,13 @@ export function SectionFeatureLegendPanel({
 
   return (
     <div
-      className="flex w-[180px] shrink-0 flex-col self-stretch overflow-hidden rounded border border-[#cbd5e1] bg-[#fff]"
+      className="flex w-[180px] shrink-0 flex-col self-stretch overflow-hidden rounded border border-border bg-background"
       title="데이터 범례"
     >
-      <div className="shrink-0 border-b-2 border-[#e2e8f0] bg-[#f8fafc] px-1.5 py-1 text-[10px] font-semibold text-[#64748b]">
+      <div className="shrink-0 border-b-2 border-border bg-muted px-1.5 py-1 text-[10px] font-semibold text-muted-foreground">
         데이터 범례
       </div>
-      <div className="min-h-0 max-h-[490px] flex-1 overflow-y-auto bg-[#fff]">
+      <div className="min-h-0 max-h-[490px] flex-1 overflow-y-auto bg-background">
         {groups.map((g, gi) => {
           const allHidden =
             g.items.length > 0 && g.items.every((it) => hiddenKeys.has(it.key))
@@ -136,13 +136,13 @@ export function SectionFeatureLegendPanel({
               <div
                 className={
                   isLast
-                    ? 'flex items-center gap-1 border-t border-b border-[#e2e8f0] bg-[#f8fafc] px-1.5 py-0.5'
-                    : 'flex items-center gap-1 border-t border-[#e2e8f0] bg-[#f8fafc] px-1.5 py-0.5'
+                    ? 'flex items-center gap-1 border-t border-b border-border bg-muted px-1.5 py-0.5'
+                    : 'flex items-center gap-1 border-t border-border bg-muted px-1.5 py-0.5'
                 }
               >
                 <button
                   type="button"
-                  className="inline-flex h-5 w-5 shrink-0 cursor-pointer items-center justify-center rounded text-[#64748b] hover:bg-[#e2e8f0]"
+                  className="inline-flex h-5 w-5 shrink-0 cursor-pointer items-center justify-center rounded text-muted-foreground hover:bg-accent"
                   title={
                     collapsed ? `${g.layerName} 펼치기` : `${g.layerName} 접기`
                   }
@@ -159,7 +159,7 @@ export function SectionFeatureLegendPanel({
                   )}
                 </button>
                 <span
-                  className="min-w-0 flex-1 truncate text-[10px] font-semibold text-[#334155]"
+                  className="min-w-0 flex-1 truncate text-[10px] font-semibold text-foreground"
                   title={g.layerName}
                 >
                   {g.layerName}
@@ -180,7 +180,7 @@ export function SectionFeatureLegendPanel({
                 />
               </div>
               {!collapsed ? (
-                <ul className="space-y-0.5 bg-[#fff] px-1.5 py-0.5">
+                <ul className="space-y-0.5 bg-background px-1.5 py-0.5">
                   {g.items.map((it) => {
                     const hidden = hiddenKeys.has(it.key)
                     const isPoint = it.kind === 'point'
@@ -199,14 +199,10 @@ export function SectionFeatureLegendPanel({
                     return (
                       <li
                         key={it.key}
-                        className="flex items-center gap-1 rounded py-0.5 hover:bg-[#e2e8f0]"
+                        className="flex items-center gap-1 rounded py-0.5 hover:bg-muted"
                       >
                         <div
-                          className="flex min-w-0 flex-1 items-center gap-1"
-                          style={{
-                            color: hidden ? '#94a3b8' : '#334155',
-                            opacity: hidden ? 0.55 : 1,
-                          }}
+                          className={`flex min-w-0 flex-1 items-center gap-1 ${hidden ? 'text-muted-foreground opacity-55' : 'text-foreground'}`}
                         >
                           {isPoint && legendSrc ? (
                             // eslint-disable-next-line @next/next/no-img-element

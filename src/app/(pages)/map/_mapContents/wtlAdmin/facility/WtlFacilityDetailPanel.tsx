@@ -173,6 +173,8 @@ export function WtlFacilityDetailPanel({
   const [relatedError, setRelatedError] = useState<string | null>(null)
   const [relatedDetail, setRelatedDetail] = useState<RelatedRow | null>(null)
   const [facilityInfo, setFacilityInfo] = useState<WtlMappedFacilityTarget | null>(null)
+  /** 상세 모달 접힘 — 다른 행을 열어도 유지 */
+  const [detailCollapsed, setDetailCollapsed] = useState(false)
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState<Record<string, string>>({})
   const [saving, setSaving] = useState(false)
@@ -933,12 +935,16 @@ export function WtlFacilityDetailPanel({
           row={relatedDetail}
           bundle={relatedBundle}
           onClose={() => setRelatedDetail(null)}
+          collapsed={detailCollapsed}
+          onToggleCollapsed={() => setDetailCollapsed((v) => !v)}
         />
       ) : null}
       {facilityInfo ? (
         <WtlMappedFacilityFloating
           target={facilityInfo}
           onClose={() => setFacilityInfo(null)}
+          collapsed={detailCollapsed}
+          onToggleCollapsed={() => setDetailCollapsed((v) => !v)}
         />
       ) : null}
     </div>

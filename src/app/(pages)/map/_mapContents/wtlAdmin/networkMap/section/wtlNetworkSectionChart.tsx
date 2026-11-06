@@ -22,6 +22,21 @@ import {
 import { Bar, Chart } from 'react-chartjs-2'
 import annotationPlugin from 'chartjs-plugin-annotation'
 import ChartDataLabels from 'chartjs-plugin-datalabels'
+import { useResolvedThemeSafe } from '@/app/(pages)/(index)/theme-provider'
+
+function sectionChartInk(isDark: boolean) {
+  return {
+    grid: isDark ? 'rgba(255,255,255,0.14)' : '#e2e8f0',
+    tick: isDark ? '#d4d4d4' : '#3d5560',
+    ink: isDark ? '#e5e5e5' : '#1e293b',
+    ground: isDark ? '#d4d4d4' : '#787878',
+    groundFill: isDark ? 'rgba(212,212,212,0.16)' : 'rgba(180, 180, 180, 0.2)',
+    groundFillSoft: isDark ? 'rgba(212,212,212,0.1)' : 'rgba(180, 180, 180, 0.12)',
+    sideHi: isDark ? '#a3a3a3' : '#94a3b8',
+    sideLo: isDark ? 'rgba(255,255,255,0.28)' : '#cbd5e1',
+    labelBg: isDark ? 'rgba(26,26,26,0.92)' : 'rgba(255,255,255,0.92)',
+  }
+}
 import type {
   SectionFeatureMark,
   SectionGroundPt,
@@ -479,7 +494,11 @@ function createCrossAxisFooterPlugin(
       ctx.save()
       ctx.textAlign = 'center'
       ctx.textBaseline = 'top'
-      ctx.fillStyle = '#1e293b'
+      ctx.fillStyle =
+        typeof document !== 'undefined' &&
+        document.documentElement.classList.contains('dark')
+          ? '#e5e5e5'
+          : '#1e293b'
       ctx.font = '600 10px sans-serif'
       for (const stack of placed) {
         const x = xScale.getPixelForValue(stack.distM)
@@ -557,6 +576,7 @@ function SupplyAreaGanttChart({
   totalLengthM: number
   plotInset?: PlotInset
 }) {
+  const ink = sectionChartInk(useResolvedThemeSafe() === 'dark')
   const roles = useMemo(
     () => ROLE_ORDER.filter((r) => bands.some((b) => b.role === r.role)),
     [bands]
@@ -646,7 +666,7 @@ function SupplyAreaGanttChart({
       plugins: {
         legend: { display: false },
         datalabels: {
-          color: '#1e293b',
+          color: ink.ink,
           font: { size: 9, weight: 600 },
           clamp: true,
           formatter: (v, ctx) => {
@@ -672,13 +692,13 @@ function SupplyAreaGanttChart({
           border: { display: false },
           ticks: {
             font: { size: 10, weight: 'bold' },
-            color: '#3d5560',
+            color: ink.tick,
             padding: 4,
           },
         },
       },
     }
-  }, [plotInset.left])
+  }, [plotInset.left, ink.ink, ink.tick])
 
   if (!roles.length) return null
 
@@ -730,6 +750,7 @@ function CrossSectionChart({
   totalLengthM: number
   supplyAreaBands: SectionSupplyBandSegment[]
 }) {
+  const ink = sectionChartInk(useResolvedThemeSafe() === 'dark')
   const { plotInset, insetSyncPlugin } = usePlotInsetSync()
   const {
     stylesByKey,
@@ -862,8 +883,8 @@ function CrossSectionChart({
         type: 'line' as const,
         label: '지반고',
         data: groundPts,
-        borderColor: '#787878',
-        backgroundColor: 'rgba(180, 180, 180, 0.2)',
+        borderColor: ink.ground,
+        backgroundColor: ink.groundFill,
         fill: false,
         pointRadius: 0,
         pointHoverRadius: 4,
@@ -963,7 +984,7 @@ function CrossSectionChart({
     }
 
     return { datasets }
-  }, [ground, pipes, points, elevBounds, facilityGapPts, stylesByKey, styleRevision])
+  }, [ground, pipes, points, elevBounds, facilityGapPts, stylesByKey, styleRevision, ink.ground, ink.groundFill])
 
   const options = useMemo((): ChartOptions => {
     const { ymin, ymax, xmax, bottomPad } = elevBounds
@@ -987,6 +1008,7 @@ function CrossSectionChart({
         legend: {
           position: 'top',
           labels: {
+            color: ink.ink,
             font: { size: 11 },
             boxWidth: 12,
             usePointStyle: true,
@@ -1030,19 +1052,19 @@ function CrossSectionChart({
           ticks: {
             display: false,
           },
-          grid: { color: '#e2e8f0' },
+          grid: { color: ink.grid },
         },
         y: {
           type: 'linear',
           min: ymin,
           max: ymax,
-          title: { display: true, text: '표고 (m)', font: { size: 11 } },
-          ticks: { font: { size: 10 } },
-          grid: { color: '#e2e8f0' },
+          title: { display: true, text: '표고 (m)', color: ink.ink, font: { size: 11 } },
+          ticks: { font: { size: 10 }, color: ink.tick },
+          grid: { color: ink.grid },
         },
       },
     }
-  }, [elevBounds, axisMarks, featureLayerNames])
+  }, [elevBounds, axisMarks, featureLayerNames, ink.grid, ink.ink, ink.tick])
 
   if (!ground.length) {
     return (
@@ -1053,7 +1075,7 @@ function CrossSectionChart({
   }
 
   return (
-    <div className="overflow-hidden rounded border-2 border-[#b0bcc8] bg-white p-2">
+    <div className="overflow-hidden rounded border-2 border-border bg-background p-2">
       <div className="flex items-stretch gap-2">
         <div className="min-w-0 flex-1">
           <div
@@ -1107,6 +1129,7 @@ function LongSectionChart({
   supplyAreaBands: SectionSupplyBandSegment[]
   supplyElevComposition?: import('./useWtlNetworkSection').SectionSupplyElevRow[]
 }) {
+  const ink = sectionChartInk(useResolvedThemeSafe() === 'dark')
   const {
     stylesByKey,
     styleRevision,
@@ -1171,8 +1194,8 @@ function LongSectionChart({
         type: 'line' as const,
         label: '지반고',
         data: ground.map((g) => ({ x: g.distM, y: g.elevM })),
-        borderColor: '#787878',
-        backgroundColor: 'rgba(180, 180, 180, 0.12)',
+        borderColor: ink.ground,
+        backgroundColor: ink.groundFillSoft,
         fill: false,
         pointRadius: 0,
         pointHoverRadius: 4,
@@ -1204,7 +1227,7 @@ function LongSectionChart({
         type: 'line' as const,
         label: '옆면 최고 지반고',
         data: groundMax.map((g) => ({ x: g.distM, y: g.elevM })),
-        borderColor: '#94a3b8',
+        borderColor: ink.sideHi,
         borderDash: [4, 3],
         pointRadius: 0,
         pointHoverRadius: 3,
@@ -1219,7 +1242,7 @@ function LongSectionChart({
         type: 'line' as const,
         label: '옆면 최저 지반고',
         data: groundMin.map((g) => ({ x: g.distM, y: g.elevM })),
-        borderColor: '#cbd5e1',
+        borderColor: ink.sideLo,
         borderDash: [4, 3],
         pointRadius: 0,
         pointHoverRadius: 3,
@@ -1349,6 +1372,10 @@ function LongSectionChart({
     stylesByKey,
     styleRevision,
     labelById,
+    ink.ground,
+    ink.groundFillSoft,
+    ink.sideHi,
+    ink.sideLo,
   ])
 
   const options = useMemo((): ChartOptions => {
@@ -1370,6 +1397,7 @@ function LongSectionChart({
           position: 'top',
           labels: {
             font: { size: 10 },
+            color: ink.ink,
             boxWidth: 10,
             usePointStyle: true,
             generateLabels: (chart) => {
@@ -1426,7 +1454,7 @@ function LongSectionChart({
               content: `절단면(${cutLen}m)`,
               color: '#c2410c',
               font: { size: 10, weight: '600' },
-              backgroundColor: 'rgba(255,255,255,0.92)',
+              backgroundColor: ink.labelBg,
               padding: { top: 2, bottom: 2, left: 4, right: 4 },
               borderRadius: 2,
               position: { x: 'center', y: 'start' },
@@ -1442,21 +1470,21 @@ function LongSectionChart({
           type: 'linear',
           min: 0,
           max: len,
-          title: { display: true, text: '깊이축 (m)', font: { size: 11 } },
-          ticks: { font: { size: 10 } },
-          grid: { color: '#e2e8f0' },
+          title: { display: true, text: '깊이축 (m)', color: ink.ink, font: { size: 11 } },
+          ticks: { font: { size: 10 }, color: ink.tick },
+          grid: { color: ink.grid },
         },
         y: {
           type: 'linear',
           min: ymin,
           max: ymax,
-          title: { display: true, text: '표고 (m)', font: { size: 11 } },
-          ticks: { font: { size: 10 } },
-          grid: { color: '#e2e8f0' },
+          title: { display: true, text: '표고 (m)', color: ink.ink, font: { size: 11 } },
+          ticks: { font: { size: 10 }, color: ink.tick },
+          grid: { color: ink.grid },
         },
       },
     }
-  }, [elevRange, len, featureLegendLabels])
+  }, [elevRange, len, featureLegendLabels, ink.grid, ink.ink, ink.tick, ink.labelBg])
 
   if (!ground.length) {
     return (
@@ -1467,7 +1495,7 @@ function LongSectionChart({
   }
 
   return (
-    <div className="overflow-hidden rounded border-2 border-[#b0bcc8] bg-white p-2">
+    <div className="overflow-hidden rounded border-2 border-border bg-background p-2">
       <div className="flex items-stretch gap-2">
         <div className="min-w-0 flex-1">
           <div

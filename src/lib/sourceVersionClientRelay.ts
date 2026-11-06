@@ -3,7 +3,7 @@ import { includeNodeModulesFromProfile } from '@/app/(pages)/dev/_components/sou
 import { resolveClientMachineIp } from '@/lib/clientMachineIp';
 import { resolveGnmsApiUrl } from '@/lib/gnmsSourceUrl';
 import { recordVersionHistoryClient } from '@/lib/recordVersionHistoryClient';
-import { applyLatestHistoryOptions } from '@/lib/versionHistoryMessage';
+import { applyLatestHistoryOptions, type SourceApplyLayout } from '@/lib/versionHistoryMessage';
 export type RestartMode = 'none' | 'exit' | 'launcher';
 
 export type VersionRelayPhase =
@@ -67,6 +67,8 @@ export type VersionRelayResult = {
   skippedSamples?: string[];
   pendingSchemaConfirm?: boolean;
   pendingId?: string;
+  applyLayout?: SourceApplyLayout;
+  installDir?: string;
 };
 
 type GnmsConfigResponse = {
@@ -956,6 +958,10 @@ export async function relayLatestSourceFromGnms(options: {
   restart: boolean;
   restartMode: RestartMode;
   packageProfile?: SourcePackageProfile;
+  /** overwrite=현재 폴더, sibling=상위 폴더에 새 설치 */
+  applyLayout?: SourceApplyLayout;
+  /** 따로 생성 폴더 접미사. 화면에서 고른 버전 폴더 이름 */
+  installFolderKey?: string;
   /** 선택 버전 폴더 ID (목록 folder) */
   folder: string;
   /** 이력·UI용 — select option 본문 (`날짜 | 변경메모`) */
@@ -970,6 +976,8 @@ export async function relayLatestSourceFromGnms(options: {
     restart,
     restartMode,
     packageProfile = 'closed',
+    applyLayout = 'overwrite',
+    installFolderKey,
     folder,
     versionLabel,
     isLatest,
@@ -978,6 +986,7 @@ export async function relayLatestSourceFromGnms(options: {
     onLog,
   } = options;
   const includeNodeModules = includeNodeModulesFromProfile(packageProfile);
+  let siblingHandoff = false;
   const log = (line: string) => onLog?.(line);
   let cfg: GnmsConfigResponse | undefined;
   /** init 이후 세션 — 성공 complete(서버가 삭제) 제외하고 취소·실패 시 정리 */
@@ -1083,6 +1092,8 @@ export async function relayLatestSourceFromGnms(options: {
         restart,
         restartMode,
         includeNodeModules,
+        applyLayout,
+        installFolderKey: (installFolderKey ?? folder).trim(),
         clientIp: await resolveClientMachineIp(),
       }),
       signal,
@@ -1184,7 +1195,11 @@ export async function relayLatestSourceFromGnms(options: {
     }
 
     throwIfAborted(signal);
-    onProgress?.({ phase: 'geoserver-stop', message: '적용 준비 중...' });
+    onProgress?.({
+      phase: applyLayout === 'sibling' ? 'merge-apply' : 'geoserver-stop',
+      message: applyLayout === 'sibling' ? '따로 생성 준비 중...' : '적용 준비 중...',
+      mergeStep: applyLayout === 'sibling' ? 'extract' : undefined,
+    });
     log('relay complete 요청...');
     const completeRes = await fetchWithTimeout(
       '/api/source/version/relay/complete',
@@ -1206,6 +1221,7 @@ export async function relayLatestSourceFromGnms(options: {
     }
 
     const completeJson = await readRelayCompleteNdjson(completeRes, (event) => {
+      if (applyLayout === 'sibling' && event.phase === 'app-stop') siblingHandoff = true;
       if (event.logLine) log(event.logLine);
       onProgress?.(event);
     });
@@ -1258,7 +1274,8 @@ export async function relayLatestSourceFromGnms(options: {
     const skipFailHistory =
       relayCompleted ||
       serverHistoryRecorded ||
-      (restart && isRestartDisconnectError(e));
+      (restart && isRestartDisconnectError(e)) ||
+      (applyLayout === 'sibling' && siblingHandoff && isRestartDisconnectError(e));
     if (!isUserAbortError(e) && !skipFailHistory) {
       const msg = e instanceof Error ? e.message : String(e);
       const failVer =
@@ -1267,7 +1284,7 @@ export async function relayLatestSourceFromGnms(options: {
         historyType: 'apply_latest',
         status: 'fail',
         message: msg,
-        option: applyLatestHistoryOptions(includeNodeModules, restartMode),
+        option: applyLatestHistoryOptions(includeNodeModules, restartMode, applyLayout),
         version: failVer || undefined,
       }).catch(() => {});
     }
