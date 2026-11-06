@@ -2,7 +2,9 @@
 
 import { useEffect, useMemo, useRef } from 'react'
 import type Map from 'ol/Map'
+import Feature from 'ol/Feature'
 import GeoJSON from 'ol/format/GeoJSON'
+import Polygon from 'ol/geom/Polygon'
 import ImageLayer from 'ol/layer/Image'
 import VectorLayer from 'ol/layer/Vector'
 import ImageWMS from 'ol/source/ImageWMS'
@@ -35,6 +37,11 @@ function labelText(label: string, offsetY: number): Text {
     offsetY,
   })
 }
+
+const zonePolygonStyle = new Style({
+  stroke: new Stroke({ color: 'rgba(37, 99, 235, 0.95)', width: 2 }),
+  fill: new Fill({ color: 'rgba(37, 99, 235, 0)' }),
+})
 
 function pointStyle(label: string, dimmed = false): Style {
   return new Style({
@@ -140,6 +147,7 @@ export function useMeterParcelLayer(
 ) {
   const mapContext = useMapContext()
   const sourceRef = useRef<VectorSource | null>(null)
+  const zoneSourceRef = useRef<VectorSource | null>(null)
   const jijukLayerRef = useRef<ImageLayer<ImageWMS> | null>(null)
 
   const zoneRowIds = useMemo(() => {
@@ -168,6 +176,16 @@ export function useMeterParcelLayer(
     pointLayer.set('wtlMeterParcels', true)
     map.addLayer(pointLayer)
 
+    const zoneSource = new VectorSource()
+    zoneSourceRef.current = zoneSource
+    const zoneLayer = new VectorLayer({
+      source: zoneSource,
+      style: zonePolygonStyle,
+      zIndex: 865,
+    })
+    zoneLayer.set('wtlMeterZones', true)
+    map.addLayer(zoneLayer)
+
     const geoServerBase = getGeoServerBase()
     const jijukLayer = new ImageLayer({
       minZoom: 16,
@@ -193,11 +211,37 @@ export function useMeterParcelLayer(
 
     return () => {
       sourceRef.current = null
+      zoneSourceRef.current = null
       jijukLayerRef.current = null
       map.removeLayer(pointLayer)
+      map.removeLayer(zoneLayer)
       map.removeLayer(jijukLayer)
     }
   }, [mapContext?.mapInstanceRef, mapContext?.mapReady])
+
+  useEffect(() => {
+    const source = zoneSourceRef.current
+    if (!source) return
+    source.clear()
+    for (const zone of zones) {
+      const extent = zone.extent3857
+      if (!zone.navigable || !extent) continue
+      const [xmin, ymin, xmax, ymax] = extent
+      const feature = new Feature({
+        geometry: new Polygon([
+          [
+            [xmin, ymin],
+            [xmax, ymin],
+            [xmax, ymax],
+            [xmin, ymax],
+            [xmin, ymin],
+          ],
+        ]),
+      })
+      feature.setId(zone.zoneId)
+      source.addFeature(feature)
+    }
+  }, [zones, mapContext?.mapReady])
 
   // 목록 점 — 구역 선택 시 구역 외 숨김
   useEffect(() => {

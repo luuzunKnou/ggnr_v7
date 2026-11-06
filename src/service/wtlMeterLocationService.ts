@@ -24,14 +24,25 @@ function asStr(v: unknown): string {
 }
 
 function parseLonLat(raw: unknown): [number, number] | null {
-  if (!raw || typeof raw !== 'object') return null;
-  const g = raw as { type?: string; coordinates?: unknown };
-  if (g.type === 'Point' && Array.isArray(g.coordinates) && g.coordinates.length >= 2) {
-    const lon = Number(g.coordinates[0]);
-    const lat = Number(g.coordinates[1]);
+  let value = raw;
+  if (typeof value === 'string') {
+    try {
+      value = JSON.parse(value) as unknown;
+    } catch {
+      return null;
+    }
+  }
+  if (!value || typeof value !== 'object') return null;
+  const g = value as { type?: string; coordinates?: unknown };
+  const pair = (coords: unknown): [number, number] | null => {
+    if (!Array.isArray(coords) || coords.length < 2) return null;
+    const lon = Number(coords[0]);
+    const lat = Number(coords[1]);
     if (!Number.isFinite(lon) || !Number.isFinite(lat)) return null;
     return [lon, lat];
-  }
+  };
+  if (g.type === 'Point') return pair(g.coordinates);
+  if (g.type === 'MultiPoint' && Array.isArray(g.coordinates)) return pair(g.coordinates[0]);
   return null;
 }
 
@@ -205,23 +216,37 @@ export async function listMetersByArea(params: {
   if (wkts.length === 0) return { rows: [] };
 
   const lim = Math.min(5000, Math.max(1, Number(params.limit) || 3000));
-  const spatial = wkts
-    .map(
-      (w) =>
-        `ST_Intersects(ST_Transform(t.geom, 5181), ST_GeomFromText('${esc(w)}', 5181))`
+  const sridRes = await db.execute(
+    sql.raw(
+      `SELECT COALESCE(ST_SRID(geom), 0)::int AS srid
+       FROM layer.wtl_meta_ps
+       WHERE geom IS NOT NULL
+       LIMIT 1`
     )
-    .join(' AND ');
+  );
+  const storedSrid = Number((sridRes.rows?.[0] as { srid?: number } | undefined)?.srid) || 0;
+  const meterSrid = storedSrid > 0 ? storedSrid : 5181;
+  const meterGeom = storedSrid > 0 ? 't.geom' : `ST_SetSRID(t.geom, ${meterSrid})`;
+  let filterExpr = `ST_Transform(ST_GeomFromText('${esc(wkts[0] ?? '')}', 5181), ${meterSrid})`;
+  for (let i = 1; i < wkts.length; i++) {
+    filterExpr = `ST_Intersection(${filterExpr}, ST_Transform(ST_GeomFromText('${esc(wkts[i] ?? '')}', 5181), ${meterSrid}))`;
+  }
 
   const res = await db.execute(
     sql.raw(
-      `SELECT DISTINCT ON (trim(t.met_num))
+      `WITH flt AS (
+         SELECT ${filterExpr} AS g
+       )
+       SELECT DISTINCT ON (trim(t.met_num))
          trim(t.met_num) AS "meterNo",
          COALESCE(NULLIF(trim(t.hom_adr),''), '') AS address,
-         ST_AsGeoJSON(ST_Transform(ST_Centroid(t.geom), 4326))::json AS geom
+         ST_AsGeoJSON(ST_Transform(ST_Centroid(${meterGeom}), 4326))::json AS geom
        FROM layer.wtl_meta_ps t
+       CROSS JOIN flt
        WHERE t.geom IS NOT NULL
          AND NULLIF(trim(t.met_num),'') IS NOT NULL
-         AND (${spatial})
+         AND ${meterGeom} && flt.g
+         AND ST_Intersects(${meterGeom}, flt.g)
        ORDER BY trim(t.met_num), t.ogc_fid
        LIMIT ${lim}`
     )
@@ -248,8 +273,8 @@ export type WtlJijukParcelResolveDto = {
 };
 
 /**
- * 계량기 좌표(4326) 목록 → public_layer.jijuk 교차 필지(고유 PNU·도형) 일괄 조회.
- * 클라이언트 N회 getParcelHighlightGeom 대신 청크 단위 1쿼리.
+ * 계량기 좌표(4326) 목록 → public_layer.jijuk 교차 필지의 PNU만 일괄 조회.
+ * 도형은 내려받지 않고, 좌표 변환은 점 쪽에만 해서 지적 인덱스 조회를 쓴다.
  */
 export async function resolveJijukParcelsByLonLat(params: {
   points?: Array<{ lon?: number; lat?: number } | null> | null;
@@ -278,31 +303,39 @@ export async function resolveJijukParcelsByLonLat(params: {
     };
   }
 
+  const sridRes = await db.execute(
+    sql.raw(
+      `SELECT COALESCE(ST_SRID(geom), 0)::int AS srid
+       FROM public_layer.jijuk
+       WHERE geom IS NOT NULL
+       LIMIT 1`
+    )
+  );
+  const storedSrid = Number((sridRes.rows?.[0] as { srid?: number } | undefined)?.srid) || 0;
+  const jijukSrid = storedSrid > 0 ? storedSrid : 5181;
+  const jijukGeom = storedSrid > 0 ? 'j.geom' : 'ST_SetSRID(j.geom, 5181)';
+
   const valuesSql = pts
     .map((p) => `(${p.index}::int, ${p.lon}::float8, ${p.lat}::float8)`)
     .join(',');
-  const jijukGeom5181 = `ST_SetSRID(j.geom, COALESCE(NULLIF(ST_SRID(j.geom), 0), 5181))`;
 
   try {
     const res = await db.execute(
       sql.raw(
-        `WITH pts(idx, lon, lat) AS (VALUES ${valuesSql})
-         SELECT pts.idx AS "index",
-           NULLIF(trim(j.pnu::text), '') AS pnu,
-           CASE WHEN j.geom IS NULL THEN NULL
-             ELSE ST_AsGeoJSON(ST_Transform(${jijukGeom5181}, 4326))::json
-           END AS geom
-         FROM pts
-         LEFT JOIN LATERAL (
-           SELECT j.pnu, j.geom
-           FROM public_layer.jijuk j
-           WHERE j.geom IS NOT NULL
-             AND ST_Intersects(
-               ${jijukGeom5181},
-               ST_Transform(ST_SetSRID(ST_MakePoint(pts.lon, pts.lat), 4326), 5181)
-             )
-           LIMIT 1
-         ) j ON true`
+        `WITH pts(idx, lon, lat) AS (VALUES ${valuesSql}),
+         projected AS (
+           SELECT idx, ST_Transform(ST_SetSRID(ST_MakePoint(lon, lat), 4326), ${jijukSrid}) AS g
+           FROM pts
+         )
+         SELECT DISTINCT ON (p.idx)
+           p.idx AS "index",
+           NULLIF(trim(j.pnu::text), '') AS pnu
+         FROM projected p
+         JOIN public_layer.jijuk j
+           ON ${jijukGeom} && p.g
+          AND ST_Intersects(${jijukGeom}, p.g)
+         WHERE j.geom IS NOT NULL
+         ORDER BY p.idx, j.pnu`
       )
     );
 
@@ -312,15 +345,10 @@ export async function resolveJijukParcelsByLonLat(params: {
       const index = Number(r.index);
       if (!Number.isFinite(index)) continue;
       const pnuRaw = asStr(r.pnu).replace(/\D/g, '').slice(0, 19);
-      const geom = r.geom;
-      const geometry4326 =
-        geom && typeof geom === 'object' && 'type' in (geom as object)
-          ? (geom as Record<string, unknown>)
-          : null;
       byIndex.set(index, {
         index,
         pnu: pnuRaw || null,
-        geometry4326,
+        geometry4326: null,
       });
     }
 

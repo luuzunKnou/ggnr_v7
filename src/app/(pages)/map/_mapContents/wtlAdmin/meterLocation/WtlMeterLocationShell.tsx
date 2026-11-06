@@ -11,6 +11,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/app/shadcnComponents/ui/dialog'
+import { useResolvedThemeSafe } from '@/app/(pages)/(index)/theme-provider'
 import { MapSideListPanel } from '../../../_mapComponents/MapSideListPanel'
 import { useMapContext } from '../../../_mapComponents/MapContext'
 import type { PreferRegion } from '../../../_mapComponents/addressSearch/vworldAddressSearch'
@@ -51,6 +52,7 @@ function inputKey(value: string): string {
 
 export function WtlMeterLocationShell({ leftOffsetPx, onTotalWidthChange, onClose }: Props) {
   const mapContext = useMapContext()
+  const theme = useResolvedThemeSafe()
   const [width, setWidth] = useState(DEFAULT_WIDTH)
   const [input, setInput] = useState('')
   const [rows, setRows] = useState<MeterLocateResult[]>([])
@@ -84,6 +86,9 @@ export function WtlMeterLocationShell({ leftOffsetPx, onTotalWidthChange, onClos
   const printSessionRef = useRef<ReturnType<
     typeof createMeterZoneCaptureSession
   > | null>(null)
+  const knownReportZonesRef = useRef<Set<string>>(new Set())
+  const reportAllRef = useRef<HTMLInputElement>(null)
+  const [reportZoneIds, setReportZoneIds] = useState<Set<string>>(new Set())
 
   /** setState 후 브라우저가 진행률을 그리도록 한 프레임 양보 */
   const yieldToUi = () =>
@@ -149,6 +154,37 @@ export function WtlMeterLocationShell({ leftOffsetPx, onTotalWidthChange, onClos
   }, [])
 
   const zones = useMemo(() => clusterMeterZones(rows), [rows])
+
+  useEffect(() => {
+    const ids = zones.filter((z) => z.navigable).map((z) => z.zoneId)
+    const known = knownReportZonesRef.current
+    const next = new Set<string>()
+    for (const id of ids) {
+      if (!known.has(id) || reportZoneIds.has(id)) next.add(id)
+    }
+    knownReportZonesRef.current = new Set(ids)
+    setReportZoneIds((prev) => {
+      if (prev.size === next.size && [...next].every((id) => prev.has(id))) return prev
+      return next
+    })
+  }, [zones, reportZoneIds])
+
+  const reportableZoneIds = useMemo(
+    () => zones.filter((z) => z.navigable).map((z) => z.zoneId),
+    [zones]
+  )
+  const reportCheckedCount = reportableZoneIds.filter((id) =>
+    reportZoneIds.has(id)
+  ).length
+  const reportAllChecked =
+    reportableZoneIds.length > 0 && reportCheckedCount === reportableZoneIds.length
+  const reportSomeChecked = reportCheckedCount > 0 && !reportAllChecked
+
+  useEffect(() => {
+    if (reportAllRef.current) {
+      reportAllRef.current.indeterminate = reportSomeChecked
+    }
+  }, [reportSomeChecked])
 
   useMeterParcelLayer(
     rows,
@@ -305,7 +341,9 @@ export function WtlMeterLocationShell({ leftOffsetPx, onTotalWidthChange, onClos
   }
 
   const handlePrintReport = async () => {
-    const navigableZones = zones.filter((z) => z.navigable && z.extent3857)
+    const navigableZones = zones.filter(
+      (z) => z.navigable && z.extent3857 && reportZoneIds.has(z.zoneId)
+    )
     if (navigableZones.length === 0) {
       setNotice('인쇄할 구역이 없습니다.')
       return
@@ -349,13 +387,10 @@ export function WtlMeterLocationShell({ leftOffsetPx, onTotalWidthChange, onClos
         return d.replace(/\s*·\s*필지 경계 없음\s*$/, '').trim()
       }
 
-      // 구역 선택과 동일하게 해당 구역만 보이게 한 뒤 캡처 (마스크 대신 레이어 필터)
+      // 캡처는 숨김 지도에서 해당 구역만 그린다. 목록 선택은 바꾸지 않음.
       for (let i = 0; i < totalZones; i++) {
         if (abort.signal.aborted) return
         const zone = navigableZones[i]!
-        setSelectedZoneId(zone.zoneId)
-        setFocusId(null)
-        await yieldToUi()
         if (abort.signal.aborted) return
 
         const zoneRows = zone.rowIds
@@ -394,11 +429,20 @@ export function WtlMeterLocationShell({ leftOffsetPx, onTotalWidthChange, onClos
 
       if (abort.signal.aborted) return
 
-      setSelectedZoneId(null)
+      const reportRows = navigableZones.flatMap((zone) =>
+        zone.rowIds
+          .map((id) => rowById.get(id))
+          .filter((r): r is MeterLocateResult => Boolean(r))
+      )
+      const parcelSet = new Set<string>()
+      for (const row of reportRows) {
+        const pnu = String(row.pnu ?? '').replace(/\D/g, '').slice(0, 19)
+        if (pnu) parcelSet.add(pnu)
+      }
       const html = buildMeterLocationReportHtml({
         zones: reportZones.filter(Boolean),
-        parcelCount: counts.parcels,
-        meterCount: rows.filter((r) => r.status !== 'miss').length,
+        parcelCount: parcelSet.size,
+        meterCount: reportRows.filter((r) => r.status !== 'miss').length,
       })
       setReportHtml(html)
       setReportProgress(null)
@@ -413,7 +457,6 @@ export function WtlMeterLocationShell({ leftOffsetPx, onTotalWidthChange, onClos
       setReportProgress(null)
       setNotice('보고서 인쇄에 실패했습니다.')
     } finally {
-      setSelectedZoneId(null)
       if (printSessionRef.current === session) {
         session.dispose()
         printSessionRef.current = null
@@ -424,6 +467,12 @@ export function WtlMeterLocationShell({ leftOffsetPx, onTotalWidthChange, onClos
       }
     }
   }
+
+  useEffect(() => {
+    const doc = reportIframeRef.current?.contentDocument
+    if (!doc?.documentElement) return
+    doc.documentElement.classList.toggle('dark', theme === 'dark')
+  }, [theme, reportHtml, reportOpen])
 
   const printReportFromModal = () => {
     if (printing || !reportHtml) return
@@ -453,7 +502,7 @@ export function WtlMeterLocationShell({ leftOffsetPx, onTotalWidthChange, onClos
                     ? '캡처 중…'
                     : running
                       ? '조회 중에는 인쇄할 수 없습니다'
-                      : zones.filter((z) => z.navigable).length === 0
+                      : reportCheckedCount === 0
                         ? '인쇄할 목록이 없습니다'
                         : '보고서 인쇄'
                 }
@@ -461,7 +510,7 @@ export function WtlMeterLocationShell({ leftOffsetPx, onTotalWidthChange, onClos
                   running ||
                   bulkLoading ||
                   printing ||
-                  zones.filter((z) => z.navigable).length === 0
+                  reportCheckedCount === 0
                 }
                 onClick={() => void handlePrintReport()}
                 className="standard-detail-hdr-btn"
@@ -544,8 +593,32 @@ export function WtlMeterLocationShell({ leftOffsetPx, onTotalWidthChange, onClos
           <div className="standard-list-body">
             <div className="standard-list-scroll">
               <table className="standard-list-table">
+                <colgroup>
+                  <col className="w-[3rem]" />
+                  <col className="w-20" />
+                  <col />
+                </colgroup>
                 <thead className="standard-table-thead">
                   <tr>
+                    <th className="standard-table-th w-[6.5rem] min-w-[6.5rem] !max-w-none !overflow-visible whitespace-nowrap text-center">
+                      <span className="inline-flex shrink-0 items-center justify-center gap-1 whitespace-nowrap">
+                        <input
+                          ref={reportAllRef}
+                          type="checkbox"
+                          title="보고서 전체 선택"
+                          checked={reportAllChecked}
+                          disabled={reportableZoneIds.length === 0}
+                          onChange={(e) => {
+                            const on = e.target.checked
+                            setReportZoneIds(
+                              on ? new Set(reportableZoneIds) : new Set()
+                            )
+                          }}
+                          className="cursor-pointer disabled:cursor-default"
+                        />
+                        보고서
+                      </span>
+                    </th>
                     <th className="standard-table-th standard-table-th-left w-20 !max-w-none whitespace-nowrap">
                       구역
                     </th>
@@ -557,7 +630,7 @@ export function WtlMeterLocationShell({ leftOffsetPx, onTotalWidthChange, onClos
                 <tbody>
                   {bulkLoading ? (
                     <tr>
-                      <td colSpan={2} className="standard-table-empty">
+                      <td colSpan={3} className="standard-table-empty">
                         <span className="inline-flex items-center justify-center gap-2">
                           <Loader2
                             className="h-4 w-4 shrink-0 animate-spin text-primary"
@@ -569,7 +642,7 @@ export function WtlMeterLocationShell({ leftOffsetPx, onTotalWidthChange, onClos
                     </tr>
                   ) : rows.length === 0 ? (
                     <tr>
-                      <td colSpan={2} className="standard-table-empty">
+                      <td colSpan={3} className="standard-table-empty">
                         표시 결과가 없습니다.
                       </td>
                     </tr>
@@ -603,38 +676,63 @@ export function WtlMeterLocationShell({ leftOffsetPx, onTotalWidthChange, onClos
                             )}
                           >
                             {idx === 0 ? (
-                              <td
-                                rowSpan={zone.rowIds.length}
-                                title={
-                                  zone.navigable
-                                    ? `${zone.label}로 이동`
-                                    : zone.label
-                                }
-                                className={cn(
-                                  'standard-table-td-text align-top font-medium transition-colors border-r border-border',
-                                  zone.navigable
-                                    ? 'cursor-pointer'
-                                    : 'cursor-default text-muted-foreground'
-                                )}
-                                style={
-                                  zoneCellBg
-                                    ? { backgroundColor: zoneCellBg }
-                                    : undefined
-                                }
-                                onMouseEnter={() => {
-                                  if (zone.navigable) setHoverZoneId(zone.zoneId)
-                                }}
-                                onMouseLeave={() => setHoverZoneId(null)}
-                                onClick={() =>
-                                  handleZoneClick(
-                                    zone.zoneId,
-                                    zone.navigable,
-                                    zone.extent3857
-                                  )
-                                }
-                              >
-                                {zone.label}
-                              </td>
+                              <>
+                                <td
+                                  rowSpan={zone.rowIds.length}
+                                  className="standard-table-td-text w-[6.5rem] min-w-[6.5rem] !max-w-none !overflow-visible whitespace-nowrap border-r border-border text-center align-top"
+                                >
+                                  <input
+                                    type="checkbox"
+                                    title={`${zone.label} 보고서에 포함`}
+                                    checked={
+                                      zone.navigable && reportZoneIds.has(zone.zoneId)
+                                    }
+                                    disabled={!zone.navigable}
+                                    onChange={(e) => {
+                                      const on = e.target.checked
+                                      setReportZoneIds((prev) => {
+                                        const next = new Set(prev)
+                                        if (on) next.add(zone.zoneId)
+                                        else next.delete(zone.zoneId)
+                                        return next
+                                      })
+                                    }}
+                                    className="cursor-pointer disabled:cursor-default"
+                                  />
+                                </td>
+                                <td
+                                  rowSpan={zone.rowIds.length}
+                                  title={
+                                    zone.navigable
+                                      ? `${zone.label}로 이동`
+                                      : zone.label
+                                  }
+                                  className={cn(
+                                    'standard-table-td-text align-top font-medium transition-colors border-r border-border',
+                                    zone.navigable
+                                      ? 'cursor-pointer'
+                                      : 'cursor-default text-muted-foreground'
+                                  )}
+                                  style={
+                                    zoneCellBg
+                                      ? { backgroundColor: zoneCellBg }
+                                      : undefined
+                                  }
+                                  onMouseEnter={() => {
+                                    if (zone.navigable) setHoverZoneId(zone.zoneId)
+                                  }}
+                                  onMouseLeave={() => setHoverZoneId(null)}
+                                  onClick={() =>
+                                    handleZoneClick(
+                                      zone.zoneId,
+                                      zone.navigable,
+                                      zone.extent3857
+                                    )
+                                  }
+                                >
+                                  {zone.label}
+                                </td>
+                              </>
                             ) : null}
                             <td
                               className="p-0 transition-colors"
@@ -701,18 +799,26 @@ export function WtlMeterLocationShell({ leftOffsetPx, onTotalWidthChange, onClos
           setReportOpen(true)
         }}
       >
-        <DialogContent className="flex max-h-[min(90vh,900px)] w-[min(56rem,calc(100vw-1.5rem))] max-w-none flex-col gap-0 overflow-hidden p-0 sm:max-w-none sm:rounded-lg">
+        <DialogContent className="flex max-h-[min(90vh,900px)] w-[min(56rem,calc(100vw-1.5rem))] max-w-none flex-col gap-0 overflow-hidden bg-background p-0 text-foreground scheme-light dark:scheme-dark sm:max-w-none sm:rounded-lg">
           <DialogHeader className="shrink-0 border-b border-border px-4 py-3 text-left">
             <DialogTitle className="text-base font-semibold text-foreground">
               계량기위치 보고서
             </DialogTitle>
           </DialogHeader>
-          <div className="min-h-0 flex-1 bg-muted">
+          <div className="min-h-0 flex-1 bg-background">
             {reportHtml ? (
               <iframe
                 ref={reportIframeRef}
                 title="계량기위치 보고서 미리보기"
                 className="h-[min(70vh,720px)] w-full border-0 bg-background"
+                onLoad={(e) => {
+                  const doc = e.currentTarget.contentDocument
+                  if (!doc?.documentElement) return
+                  doc.documentElement.classList.toggle(
+                    'dark',
+                    document.documentElement.classList.contains('dark')
+                  )
+                }}
                 srcDoc={reportHtml}
               />
             ) : (

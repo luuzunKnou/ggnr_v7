@@ -304,8 +304,8 @@ async function locateOneByNumber(
   }
 }
 
-/** 청크 단위 순차 조회 — 진행 문구가 25건씩 올라감 (병렬이면 한 번에 끝나 점프) */
-const JIJUK_BATCH = 25
+/** 한 번에 조회 — 필지 도형은 내려받지 않고 PNU만 */
+const JIJUK_BATCH = 500
 
 type JijukResolveRow = {
   index: number
@@ -413,15 +413,14 @@ export async function locateMetersFromKnown(args: {
       }
     }
     const hit = resolved[index]
-    const geometry4326 = hit?.geometry4326 ?? null
     const pnu = hit?.pnu ?? null
-    if (geometry4326) {
+    if (pnu) {
       return {
         id,
         input: meterNo,
         status: 'shown' as const,
         detail,
-        geometry4326,
+        geometry4326: null,
         point4326: [point![0], point![1]],
         pnu,
       }
