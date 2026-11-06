@@ -1831,6 +1831,20 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
     [availableLayerKeys]
   )
 
+  /** DB에 레이어가 하나라도 있는 카테고리만 탭 표시. 출처 변경 시 availableLayerKeys가 갱신되면 다시 계산 */
+  const visibleDisplayGroups = useMemo(() => {
+    if (availableLayerKeys == null) return DISPLAY_GROUPS
+    return DISPLAY_GROUPS.filter((g) =>
+      g.items.some((item) => availableLayerKeys.has(item.define_table_name))
+    )
+  }, [availableLayerKeys])
+
+  useEffect(() => {
+    if (visibleDisplayGroups.length === 0) return
+    if (visibleDisplayGroups.some((g) => g.title === group)) return
+    setGroup(visibleDisplayGroups[0]!.title)
+  }, [visibleDisplayGroups, group])
+
   const toggleLayer = (name: string) => {
     if (!isLayerSelectable(name)) return
     setExtraOn((prev) => {
@@ -1849,7 +1863,9 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
     })
   }
 
-  const currentGroup = DISPLAY_GROUPS.find((item) => item.title === group) ?? DISPLAY_GROUPS[0]
+  const currentGroup =
+    visibleDisplayGroups.find((item) => item.title === group) ??
+    visibleDisplayGroups[0]
   const sourceButtons = availableSourceIds
     .map((id) => getWtlNetMapSource(id))
     .filter((s): s is NonNullable<typeof s> => Boolean(s))
@@ -1975,26 +1991,28 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
                       )
                     })}
                   </div>
-                  <div className="flex border-b border-border">
-                    {DISPLAY_GROUPS.map(({ title }) => {
-                      const on = group === title
-                      return (
-                        <button
-                          key={title}
-                          type="button"
-                          className={cn(
-                            'h-7 min-w-0 flex-1 truncate px-0.5 text-center text-[11px] border-b-2 -mb-px',
-                            on
-                              ? 'border-primary font-semibold text-primary'
-                              : 'border-transparent text-muted-foreground hover:text-foreground'
-                          )}
-                          onClick={() => setGroup(title)}
-                        >
-                          {title}
-                        </button>
-                      )
-                    })}
-                  </div>
+                  {visibleDisplayGroups.length > 0 ? (
+                    <div className="flex border-b border-border">
+                      {visibleDisplayGroups.map(({ title }) => {
+                        const on = group === title
+                        return (
+                          <button
+                            key={title}
+                            type="button"
+                            className={cn(
+                              'h-7 min-w-0 flex-1 truncate px-0.5 text-center text-[11px] border-b-2 -mb-px',
+                              on
+                                ? 'border-primary font-semibold text-primary'
+                                : 'border-transparent text-muted-foreground hover:text-foreground'
+                            )}
+                            onClick={() => setGroup(title)}
+                          >
+                            {title}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  ) : null}
                   {currentGroup && (
                     <div className="grid grid-cols-3 gap-1.5">
                       {currentGroup.items.map((item) => {
