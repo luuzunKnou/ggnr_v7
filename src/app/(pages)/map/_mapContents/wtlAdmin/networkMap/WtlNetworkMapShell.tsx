@@ -50,6 +50,7 @@ import { WtlNetworkMapStatus } from './WtlNetworkMapStatus'
 import { exportWtlNetworkMapExcel } from './exportWtlNetworkMapExcel'
 import {
   WtlNetworkExportMenu,
+  type WtlNetworkExportLayerOption,
   type WtlNetworkExportScope,
 } from './WtlNetworkExportMenu'
 import { flyToWtlNetworkGeom } from './wtlNetworkMapFly'
@@ -205,6 +206,16 @@ function allKeysOfDisplayGroup(title: string): string[] {
 function allKeysOfAllDisplayGroups(): string[] {
   return DISPLAY_GROUPS.flatMap((g) => g.items.map((i) => i.define_table_name))
 }
+
+/** 다운로드/Excel 모달 — 전체 레이어 목록 */
+const EXPORT_LAYER_OPTIONS: WtlNetworkExportLayerOption[] = DISPLAY_GROUPS.flatMap(
+  (g) =>
+    g.items.map((item) => ({
+      key: item.define_table_name,
+      label: item.define_table_kor_name,
+      group: g.title,
+    }))
+)
 
 const INITIAL_GROUP = DISPLAY_GROUPS[0]?.title ?? '관로'
 /** 전체 탭 레이어 기본 ON */
@@ -886,45 +897,57 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
     }
   }, [availableSourceIds, mapSources])
 
+  /** 선택 키×출처별 목록/내보내기 슬롯 */
+  const buildSlotsForKeys = useCallback(
+    (selected: Iterable<string>): LayerBoxSlot[] => {
+      const on = new Set(
+        [...selected].map((k) => String(k).trim().toLowerCase()).filter(Boolean)
+      )
+      const order = DISPLAY_GROUPS.flatMap((g) => g.items)
+      const slots: LayerBoxSlot[] = []
+      const sourceIds = availableSourceIds.filter((id) => mapSources.has(id))
+      const primarySource = sourceIds[0] ?? ''
+      for (const item of order) {
+        if (!on.has(item.define_table_name.toLowerCase())) continue
+        const key = item.define_table_name
+        const mode = getLayerShowMode(key)
+        if (mode === 'thematic') continue
+        if (!getWtlNetLayerDef(key)?.table) continue
+        // 급수구역 — 출처와 무관, 슬롯 1개 (지하시설물 동기화)
+        if (isWtlNetZoneLayerKey(key)) {
+          const sid = primarySource || availableSourceIds[0]
+          if (!sid) continue
+          if (resolveUndergroundTableNames(key, sid).length === 0) continue
+          slots.push({
+            key: `zone:${key}`,
+            layerKey: key,
+            label: item.define_table_kor_name,
+            geomKind: getWtlNetLayerDef(key)?.geomKind ?? 'area',
+            mapSources: [sid],
+          })
+          continue
+        }
+        for (const id of sourceIds) {
+          if (resolveUndergroundTableNames(key, id).length === 0) continue
+          slots.push({
+            key: `${id}:${key}`,
+            layerKey: key,
+            label: item.define_table_kor_name,
+            geomKind: getWtlNetLayerDef(key)?.geomKind ?? 'point',
+            mapSources: [id],
+          })
+        }
+      }
+      return slots
+    },
+    [availableSourceIds, mapSources]
+  )
+
   /** 켜진 출처×레이어별 박스 (같은 카테고리도 테이블 분리) */
-  const listSlots = useMemo((): LayerBoxSlot[] => {
-    const order = DISPLAY_GROUPS.flatMap((g) => g.items)
-    const slots: LayerBoxSlot[] = []
-    const sourceIds = availableSourceIds.filter((id) => mapSources.has(id))
-    const primarySource = sourceIds[0] ?? ''
-    for (const item of order) {
-      if (!extraOn.has(item.define_table_name)) continue
-      const key = item.define_table_name
-      const mode = getLayerShowMode(key)
-      if (mode === 'thematic') continue
-      if (!getWtlNetLayerDef(key)?.table) continue
-      // 급수구역 — 출처와 무관, 슬롯 1개 (지하시설물 동기화)
-      if (isWtlNetZoneLayerKey(key)) {
-        const sid = primarySource || availableSourceIds[0]
-        if (!sid) continue
-        if (resolveUndergroundTableNames(key, sid).length === 0) continue
-        slots.push({
-          key: `zone:${key}`,
-          layerKey: key,
-          label: item.define_table_kor_name,
-          geomKind: getWtlNetLayerDef(key)?.geomKind ?? 'area',
-          mapSources: [sid],
-        })
-        continue
-      }
-      for (const id of sourceIds) {
-        if (resolveUndergroundTableNames(key, id).length === 0) continue
-        slots.push({
-          key: `${id}:${key}`,
-          layerKey: key,
-          label: item.define_table_kor_name,
-          geomKind: getWtlNetLayerDef(key)?.geomKind ?? 'point',
-          mapSources: [id],
-        })
-      }
-    }
-    return slots
-  }, [availableSourceIds, extraOn, mapSources])
+  const listSlots = useMemo(
+    () => buildSlotsForKeys(extraOn),
+    [buildSlotsForKeys, extraOn]
+  )
 
   const cancelListFetch = useCallback(() => {
     listAbortRef.current?.abort()
@@ -994,11 +1017,11 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
   )
 
   const buildExportFilterBody = useCallback(
-    (scope: WtlNetworkExportScope) => {
+    (scope: WtlNetworkExportScope, exportSlots: LayerBoxSlot[]) => {
       const all = scope === 'all'
-      const layerKeys = [...new Set(listSlots.map((s) => s.layerKey))]
+      const layerKeys = [...new Set(exportSlots.map((s) => s.layerKey))]
       const mapSourceIds = [
-        ...new Set(listSlots.flatMap((s) => s.mapSources).filter(Boolean)),
+        ...new Set(exportSlots.flatMap((s) => s.mapSources).filter(Boolean)),
       ]
       return {
         scope,
@@ -1019,7 +1042,6 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
       }
     },
     [
-      listSlots,
       keyword,
       yearFrom,
       yearTo,
@@ -1034,9 +1056,10 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
   )
 
   const handleExcelExport = useCallback(
-    async (scope: WtlNetworkExportScope) => {
+    async (scope: WtlNetworkExportScope, layerKeys: string[]) => {
       if (excelExporting) return
-      if (listSlots.length === 0) {
+      const exportSlots = buildSlotsForKeys(layerKeys)
+      if (exportSlots.length === 0) {
         window.alert('내보낼 시설목록이 없습니다.')
         return
       }
@@ -1052,7 +1075,7 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
           codesByField: Record<string, DefineCodeRow[]>
         }> = []
 
-        for (const slot of listSlots) {
+        for (const slot of exportSlots) {
           const allRows: WtlNetworkRow[] = []
           let page = 1
           let total = Number.POSITIVE_INFINITY
@@ -1099,13 +1122,14 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
         setExcelExporting(false)
       }
     },
-    [excelExporting, listSlots, fetchBoxPage]
+    [excelExporting, buildSlotsForKeys, fetchBoxPage]
   )
 
   const handleShpExport = useCallback(
-    async (scope: WtlNetworkExportScope) => {
+    async (scope: WtlNetworkExportScope, layerKeys: string[]) => {
       if (shpExporting) return
-      if (listSlots.length === 0) {
+      const exportSlots = buildSlotsForKeys(layerKeys)
+      if (exportSlots.length === 0) {
         window.alert('내보낼 시설목록이 없습니다.')
         return
       }
@@ -1114,7 +1138,7 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
         const res = await fetch('/api/download/wtl-network-shp', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(buildExportFilterBody(scope)),
+          body: JSON.stringify(buildExportFilterBody(scope, exportSlots)),
         })
         if (!res.ok) {
           const data = await res.json().catch(() => ({}))
@@ -1141,7 +1165,7 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
         setShpExporting(false)
       }
     },
-    [shpExporting, listSlots, buildExportFilterBody]
+    [shpExporting, buildSlotsForKeys, buildExportFilterBody]
   )
 
   const fetchList = useCallback(
@@ -1849,7 +1873,10 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
               title="SHP 다운로드"
               busy={shpExporting}
               busyLabel="SHP…"
-              onPick={(scope) => void handleShpExport(scope)}
+              layers={EXPORT_LAYER_OPTIONS}
+              selectedKeys={enabledKeys}
+              availableKeys={availableLayerKeys}
+              onConfirm={(scope, keys) => void handleShpExport(scope, keys)}
             />
           )
         }
@@ -1861,7 +1888,10 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
               title="Excel 다운로드"
               busy={excelExporting}
               busyLabel="Excel…"
-              onPick={(scope) => void handleExcelExport(scope)}
+              layers={EXPORT_LAYER_OPTIONS}
+              selectedKeys={enabledKeys}
+              availableKeys={availableLayerKeys}
+              onConfirm={(scope, keys) => void handleExcelExport(scope, keys)}
             />
           )
         }
