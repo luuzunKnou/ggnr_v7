@@ -1,16 +1,13 @@
 /**
- * 안전점검 — layer 시설물 마스터 + 점검진단실적 (facil_no)
+ * 안전점검 — layer 시설물 마스터 + 점검진단실적 (facil_no). 도로 테이블 한 쌍, 시스템 구분은 시설물구분
  */
 import { asc, eq, sql } from 'drizzle-orm';
 import { db } from '@/database/db';
 import { fmsIdentifierHeader } from '@/database/schema/fms_identifier_header';
 import {
-  FMS_FACILITY_TABLE_NAMES,
-  FMS_INSPECTION_TABLE_NAMES,
-  FMS_PREFIXES,
+  FMS_FACILITY_TABLE,
+  FMS_INSPECTION_TABLE,
   getFmsFacilGbnFilterForSystem,
-  getFmsLayerTableName,
-  type FmsDataKind,
 } from '@/lib/fmsLinkage/fmsBinding';
 import { defaultHeaderLabels } from '@/lib/fmsLinkage/fmsHeaderSeed';
 import { formatAddressStripSidoSigungu } from '@/lib/formatAddressStripAdmin';
@@ -59,59 +56,27 @@ function text(v: unknown): string {
   return String(v).trim();
 }
 
-function assertLayerTable(name: string, allowed: readonly string[]): string {
-  const n = String(name ?? '').trim().toLowerCase();
-  if (!allowed.includes(n)) {
-    throw new Error(`invalid fms table: ${name}`);
+async function layerTableExists(table: string): Promise<boolean> {
+  try {
+    const res = await db.execute(
+      sql.raw(
+        `SELECT 1 FROM information_schema.tables
+         WHERE table_schema = 'layer' AND table_name = '${table}'
+         LIMIT 1`
+      )
+    );
+    return (res.rows?.length ?? 0) > 0;
+  } catch {
+    return false;
   }
-  return n;
-}
-
-function assertFacilityTable(name: string): string {
-  return assertLayerTable(name, FMS_FACILITY_TABLE_NAMES);
-}
-
-function assertInspectionTable(name: string): string {
-  return assertLayerTable(name, FMS_INSPECTION_TABLE_NAMES);
-}
-
-async function existingTables(kind: FmsDataKind): Promise<string[]> {
-  const allowed = kind === 'facility' ? FMS_FACILITY_TABLE_NAMES : FMS_INSPECTION_TABLE_NAMES;
-  const out: string[] = [];
-  for (const prefix of FMS_PREFIXES) {
-    const table = getFmsLayerTableName(prefix, kind);
-    try {
-      const res = await db.execute(
-        sql.raw(
-          `SELECT 1 FROM information_schema.tables
-           WHERE table_schema = 'layer' AND table_name = '${assertLayerTable(table, allowed)}'
-           LIMIT 1`
-        )
-      );
-      if ((res.rows?.length ?? 0) > 0) out.push(table);
-    } catch {
-      /* skip */
-    }
-  }
-  return out;
-}
-
-async function existingFacilityTables(): Promise<string[]> {
-  return existingTables('facility');
 }
 
 export async function getFmsFacilityList(params?: { keyword?: string; system?: string }) {
-  const tables = await existingFacilityTables();
-  if (tables.length === 0) {
+  if (!(await layerTableExists(FMS_FACILITY_TABLE))) {
     return { rows: [] as FmsLinkageListRow[], total: 0 };
   }
 
-  const unionSql = tables
-    .map((t) => {
-      const name = assertFacilityTable(t);
-      return `SELECT facil_no, facil_nm, facil_kind, facil_gbn, facil_owner, addr_full FROM layer.${name}`;
-    })
-    .join(' UNION ALL ');
+  const sourceSql = `SELECT facil_no, facil_nm, facil_kind, facil_gbn, facil_owner, addr_full FROM layer.${FMS_FACILITY_TABLE}`;
 
   const keyword = text(params?.keyword);
   const like = keyword ? `%${keyword}%` : null;
@@ -128,7 +93,7 @@ export async function getFmsFacilityList(params?: { keyword?: string; system?: s
       ? await db.execute(sql`
           SELECT facil_no, facil_nm, facil_kind, facil_owner, addr_full FROM (
             SELECT DISTINCT ON (facil_no) facil_no, facil_nm, facil_kind, facil_gbn, facil_owner, addr_full
-            FROM (${sql.raw(unionSql)}) u
+            FROM (${sql.raw(sourceSql)}) u
             WHERE coalesce(facil_no, '') <> ''
             ${sql.raw(gbnSql)}
             ORDER BY facil_no
@@ -144,7 +109,7 @@ export async function getFmsFacilityList(params?: { keyword?: string; system?: s
       : await db.execute(sql`
           SELECT facil_no, facil_nm, facil_kind, facil_owner, addr_full FROM (
             SELECT DISTINCT ON (facil_no) facil_no, facil_nm, facil_kind, facil_gbn, facil_owner, addr_full
-            FROM (${sql.raw(unionSql)}) u
+            FROM (${sql.raw(sourceSql)}) u
             WHERE coalesce(facil_no, '') <> ''
             ${sql.raw(gbnSql)}
             ORDER BY facil_no
@@ -179,17 +144,11 @@ export async function getFmsFacilityGeomOverlayList(params?: {
   keyword?: string;
   system?: string;
 }): Promise<{ rows: FmsFacilityOverlayRow[]; error?: string }> {
-  const tables = await existingFacilityTables();
-  if (tables.length === 0) return { rows: [] };
+  if (!(await layerTableExists(FMS_FACILITY_TABLE))) return { rows: [] };
 
-  const unionSql = tables
-    .map((t) => {
-      const name = assertFacilityTable(t);
-      return `SELECT facil_no, facil_nm, facil_kind, facil_gbn, facil_owner, addr_full, geom
-              FROM layer.${name}
+  const sourceSql = `SELECT facil_no, facil_nm, facil_kind, facil_gbn, facil_owner, addr_full, geom
+              FROM layer.${FMS_FACILITY_TABLE}
               WHERE geom IS NOT NULL`;
-    })
-    .join(' UNION ALL ');
 
   const keyword = text(params?.keyword);
   const like = keyword ? `%${keyword}%` : null;
@@ -206,7 +165,7 @@ export async function getFmsFacilityGeomOverlayList(params?: {
             SELECT DISTINCT ON (facil_no)
               facil_no, facil_nm, facil_kind, facil_gbn, facil_owner, addr_full,
               ST_AsGeoJSON(ST_Transform(geom, 3857))::json AS geom
-            FROM (${sql.raw(unionSql)}) u
+            FROM (${sql.raw(sourceSql)}) u
             WHERE coalesce(facil_no, '') <> ''
             ${sql.raw(gbnSql)}
             ORDER BY facil_no
@@ -223,7 +182,7 @@ export async function getFmsFacilityGeomOverlayList(params?: {
             SELECT DISTINCT ON (facil_no)
               facil_no, facil_nm, facil_kind, facil_gbn, facil_owner, addr_full,
               ST_AsGeoJSON(ST_Transform(geom, 3857))::json AS geom
-            FROM (${sql.raw(unionSql)}) u
+            FROM (${sql.raw(sourceSql)}) u
             WHERE coalesce(facil_no, '') <> ''
             ${sql.raw(gbnSql)}
             ORDER BY facil_no
@@ -251,33 +210,29 @@ export async function getFmsFacilityExtent3857ByFacilNo(params: {
   const facilNo = text(params?.facilNo);
   if (!facilNo) return { extent3857: null };
 
-  const tables = await existingFacilityTables();
-  if (!tables.length) return { extent3857: null };
+  if (!(await layerTableExists(FMS_FACILITY_TABLE))) return { extent3857: null };
 
   const escaped = facilNo.replace(/'/g, "''");
 
   try {
-    for (const table of tables) {
-      const name = assertFacilityTable(table);
-      const res = await db.execute(sql.raw(`
-        SELECT
-          ST_XMin(ST_Envelope(ST_Transform(geom, 3857)))::float8 AS xmin,
-          ST_YMin(ST_Envelope(ST_Transform(geom, 3857)))::float8 AS ymin,
-          ST_XMax(ST_Envelope(ST_Transform(geom, 3857)))::float8 AS xmax,
-          ST_YMax(ST_Envelope(ST_Transform(geom, 3857)))::float8 AS ymax
-        FROM layer.${name}
-        WHERE facil_no = '${escaped}'
-          AND geom IS NOT NULL
-        LIMIT 1
-      `));
-      const row = res.rows?.[0] as
-        | { xmin?: number; ymin?: number; xmax?: number; ymax?: number }
-        | undefined;
-      if (!row) continue;
-      const coords = [row.xmin, row.ymin, row.xmax, row.ymax].map(Number);
-      if (coords.length === 4 && coords.every((v) => Number.isFinite(v))) {
-        return { extent3857: coords as [number, number, number, number] };
-      }
+    const res = await db.execute(sql.raw(`
+      SELECT
+        ST_XMin(ST_Envelope(ST_Transform(geom, 3857)))::float8 AS xmin,
+        ST_YMin(ST_Envelope(ST_Transform(geom, 3857)))::float8 AS ymin,
+        ST_XMax(ST_Envelope(ST_Transform(geom, 3857)))::float8 AS xmax,
+        ST_YMax(ST_Envelope(ST_Transform(geom, 3857)))::float8 AS ymax
+      FROM layer.${FMS_FACILITY_TABLE}
+      WHERE facil_no = '${escaped}'
+        AND geom IS NOT NULL
+      LIMIT 1
+    `));
+    const row = res.rows?.[0] as
+      | { xmin?: number; ymin?: number; xmax?: number; ymax?: number }
+      | undefined;
+    if (!row) return { extent3857: null };
+    const coords = [row.xmin, row.ymin, row.xmax, row.ymax].map(Number);
+    if (coords.length === 4 && coords.every((v) => Number.isFinite(v))) {
+      return { extent3857: coords as [number, number, number, number] };
     }
     return { extent3857: null };
   } catch (e) {
@@ -339,22 +294,16 @@ function formatYmd(raw: string): string {
 }
 
 async function loadInspectionsByFacilNo(facilNo: string): Promise<FmsLinkageInspectionRow[]> {
-  const tables = await existingTables('inspection');
-  if (tables.length === 0) return [];
+  if (!(await layerTableExists(FMS_INSPECTION_TABLE))) return [];
 
   const escaped = facilNo.replace(/'/g, "''");
-  const unionSql = tables
-    .map((t) => {
-      const name = assertInspectionTable(t);
-      return `SELECT * FROM layer.${name} WHERE facil_no = '${escaped}'`;
-    })
-    .join(' UNION ALL ');
+  const sourceSql = `SELECT * FROM layer.${FMS_INSPECTION_TABLE} WHERE facil_no = '${escaped}'`;
 
   try {
     const res = await db.execute(sql`
       SELECT * FROM (
         SELECT DISTINCT ON (facil_no, dign_seq) *
-        FROM (${sql.raw(unionSql)}) u
+        FROM (${sql.raw(sourceSql)}) u
         ORDER BY facil_no, dign_seq
       ) d
       ORDER BY end_ymd DESC NULLS LAST, dign_seq DESC NULLS LAST
@@ -389,38 +338,21 @@ export async function getFmsFacilityDetail(params?: { id?: string }) {
     };
   }
 
-  const tables = await existingFacilityTables();
-  if (tables.length === 0) {
-    return {
-      error: '항목을 찾을 수 없습니다.',
-      row: null as null,
-      attributes: [] as FmsLinkageDetailAttr[],
-      inspections: [] as FmsLinkageInspectionRow[],
-    };
-  }
-
   let found: Record<string, unknown> | null = null;
-  let foundTable: string | null = null;
-  for (const table of tables) {
-    const name = assertFacilityTable(table);
+  if (await layerTableExists(FMS_FACILITY_TABLE)) {
     try {
       const res = await db.execute(
         sql.raw(
-          `SELECT * FROM layer.${name} WHERE facil_no = '${facilNo.replace(/'/g, "''")}' LIMIT 1`
+          `SELECT * FROM layer.${FMS_FACILITY_TABLE} WHERE facil_no = '${facilNo.replace(/'/g, "''")}' LIMIT 1`
         )
       );
-      const row = (res.rows as Record<string, unknown>[])[0];
-      if (row) {
-        found = row;
-        foundTable = name;
-        break;
-      }
+      found = (res.rows as Record<string, unknown>[])[0] ?? null;
     } catch {
-      /* next table */
+      found = null;
     }
   }
 
-  if (!found || !foundTable) {
+  if (!found) {
     return {
       error: '항목을 찾을 수 없습니다.',
       row: null as null,
@@ -446,7 +378,7 @@ export async function getFmsFacilityDetail(params?: { id?: string }) {
   void import('./dataLogService')
     .then(({ recordViewLog }) =>
       recordViewLog({
-        tableName: foundTable,
+        tableName: FMS_FACILITY_TABLE,
         keyField: 'facil_no',
         keyValue: facilNo,
         serviceName: '안전점검',
@@ -458,11 +390,7 @@ export async function getFmsFacilityDetail(params?: { id?: string }) {
 }
 
 /** 시설 geom 미적재 행 — 주소/시설명 → 지적 필지 폴리곤 적재 */
-export async function backfillFmsFacilityGeomAction(params?: {
-  force?: boolean;
-  limit?: number;
-  prefix?: 'water' | 'road' | 'public';
-}) {
+export async function backfillFmsFacilityGeomAction(params?: { force?: boolean; limit?: number }) {
   const { backfillFmsFacilityGeom } = await import('@/lib/fmsLinkage/backfillFacilityGeom');
   return backfillFmsFacilityGeom(params);
 }

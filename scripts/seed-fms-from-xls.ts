@@ -10,9 +10,9 @@ import path from 'node:path';
 import * as XLSX from 'xlsx';
 import { loadProjectEnv } from './load-project-env';
 import {
-  FMS_FACILITY_TABLE_NAMES,
-  FMS_INSPECTION_TABLE_NAMES,
-  getFmsPrefixesForEnabledSystems,
+  FMS_FACILITY_TABLE,
+  FMS_INSPECTION_TABLE,
+  getFmsGroupsForEnabledSystems,
 } from '../src/lib/fmsLinkage/fmsBinding';
 import { defaultHeaderColumnOrder } from '../src/lib/fmsLinkage/fmsHeaderSeed';
 import { parseFmsDelimitedData } from '../src/lib/fmsLinkage/parseDelimited';
@@ -126,15 +126,15 @@ async function main(): Promise<void> {
   process.env.GGNR_ENV = type;
 
   const enabledSystems = readEnabledSystems();
-  const prefixes = getFmsPrefixesForEnabledSystems(enabledSystems);
+  const groups = getFmsGroupsForEnabledSystems(enabledSystems);
 
   console.info(`${LOG} project=${project} env=${type}`);
   console.info(`${LOG} dir=${dir}`);
-  console.info(`${LOG} enabledSystems=${enabledSystems?.join(',') ?? '(all)'} prefixes=${prefixes.join(',')}`);
+  console.info(`${LOG} enabledSystems=${enabledSystems?.join(',') ?? '(all)'} 시설물구분=${groups.join(',')}`);
 
   const { pool } = await import('../src/database/db');
   const { ensureFmsTables } = await import('../src/service/ensureLayerAppTables');
-  const { buildFacilPrefixMap, upsertFmsRowsToLayer } = await import(
+  const { buildFacilGroupMap, upsertFmsRowsToLayer } = await import(
     '../src/lib/fmsLinkage/upsertRows'
   );
   const { updateFmsCodeToKor } = await import('../src/lib/fmsLinkage/updateCodeToKor');
@@ -145,7 +145,7 @@ async function main(): Promise<void> {
 
   await ensureFmsTables();
 
-  const tables = [...FMS_FACILITY_TABLE_NAMES, ...FMS_INSPECTION_TABLE_NAMES];
+  const tables = [FMS_FACILITY_TABLE, FMS_INSPECTION_TABLE];
   for (const table of tables) {
     const before = await pool.query<{ c: string }>(
       `SELECT count(*)::text AS c FROM layer.${table}`
@@ -166,7 +166,7 @@ async function main(): Promise<void> {
     return [...defaultHeaderColumnOrder(identifier)];
   }
 
-  let facilPrefixMap = await buildFacilPrefixMap();
+  let facilGroupMap = await buildFacilGroupMap();
 
   for (const identifier of IDENTIFIERS) {
     const filePath = resolveXlsPath(dir, identifier);
@@ -180,14 +180,14 @@ async function main(): Promise<void> {
       identifier,
       parsed,
       enabledSystems,
-      facilPrefixMap
+      facilGroupMap
     );
     console.info(
       `${LOG} ${identifier} upsert ins=${stats.inserted} upd=${stats.updated} skip=${stats.skipped}`
     );
 
     await updateFmsCodeToKor(identifier);
-    facilPrefixMap = await buildFacilPrefixMap();
+    facilGroupMap = await buildFacilGroupMap();
   }
 
   for (const table of tables) {

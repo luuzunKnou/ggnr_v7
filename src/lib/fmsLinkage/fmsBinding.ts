@@ -1,49 +1,20 @@
 /**
- * FMS 안전점검 — system · 접두(water|road|public) → layer 테이블
- * (점사용료 useFeeBinding 과 동일 접두 규칙)
+ * FMS 안전점검 — 시설물·점검진단실적은 도로 테이블 한 쌍(road_fms_facility / road_fms_inspection)에 모두 담고,
+ * 상하수도·도로·건축물 구분은 시설물구분(facil_gbn)으로 한다.
  */
-import { facilGbnTokensForPrefix } from '@/lib/fmsLinkage/prefixRouting';
+import {
+  facilGbnTokensForGroup,
+  type FmsFacilGroup,
+} from '@/lib/fmsLinkage/prefixRouting';
 
-export const FMS_PREFIXES = ['water', 'road', 'public'] as const;
-export type FmsPrefix = (typeof FMS_PREFIXES)[number];
+export type { FmsFacilGroup } from '@/lib/fmsLinkage/prefixRouting';
 
-export type FmsBinding = {
-  schema: 'layer';
-  facilityTable: string;
-  inspectionTable: string;
-  prefix: FmsPrefix;
-  systemKey: 'river' | 'road' | 'build';
-  title: string;
-};
+export const FMS_FACILITY_TABLE = 'road_fms_facility';
+export const FMS_INSPECTION_TABLE = 'road_fms_inspection';
 
-const BINDINGS_BY_PREFIX: Record<FmsPrefix, FmsBinding> = {
-  water: {
-    schema: 'layer',
-    facilityTable: 'water_fms_facility',
-    inspectionTable: 'water_fms_inspection',
-    prefix: 'water',
-    systemKey: 'river',
-    title: '하천 안전점검',
-  },
-  road: {
-    schema: 'layer',
-    facilityTable: 'road_fms_facility',
-    inspectionTable: 'road_fms_inspection',
-    prefix: 'road',
-    systemKey: 'road',
-    title: '도로 안전점검',
-  },
-  public: {
-    schema: 'layer',
-    facilityTable: 'public_fms_facility',
-    inspectionTable: 'public_fms_inspection',
-    prefix: 'public',
-    systemKey: 'build',
-    title: '국공유지 안전점검',
-  },
-};
+export const FMS_FACIL_GROUPS: readonly FmsFacilGroup[] = ['water', 'road', 'public'];
 
-const SYSTEM_KEY_TO_PREFIX: Record<string, FmsPrefix> = {
+const SYSTEM_KEY_TO_GROUP: Record<string, FmsFacilGroup> = {
   river: 'water',
   road: 'road',
   build: 'public',
@@ -53,43 +24,28 @@ const SYSTEM_KEY_TO_PREFIX: Record<string, FmsPrefix> = {
 export function getFmsFacilGbnFilterForSystem(systemKey: string | null | undefined): readonly string[] | null {
   const key = String(systemKey ?? '').trim().toLowerCase();
   if (!key || key === 'safety') return null;
-  const prefix = SYSTEM_KEY_TO_PREFIX[key];
-  if (!prefix) return null;
-  return facilGbnTokensForPrefix(prefix);
+  const group = SYSTEM_KEY_TO_GROUP[key];
+  if (!group) return null;
+  return facilGbnTokensForGroup(group);
 }
 
-export function isFmsPrefix(v: string): v is FmsPrefix {
-  return (FMS_PREFIXES as readonly string[]).includes(v);
+function systemKeyToFmsGroup(systemKey: string): FmsFacilGroup | null {
+  return SYSTEM_KEY_TO_GROUP[String(systemKey ?? '').trim().toLowerCase()] ?? null;
 }
 
-export function getFmsBindingByPrefix(prefix: FmsPrefix): FmsBinding {
-  return BINDINGS_BY_PREFIX[prefix];
-}
-
-export function fmsPrefixToSystemKey(prefix: FmsPrefix): 'river' | 'road' | 'build' {
-  return BINDINGS_BY_PREFIX[prefix].systemKey;
-}
-
-export function systemKeyToFmsPrefix(systemKey: string): FmsPrefix | null {
-  return SYSTEM_KEY_TO_PREFIX[String(systemKey ?? '').trim().toLowerCase()] ?? null;
-}
-
-/** ENABLED_SYSTEMS=null 이면 water·road·public 전부 */
-export function getFmsPrefixesForEnabledSystems(enabledSystems: string[] | null): FmsPrefix[] {
-  if (!enabledSystems?.length) return [...FMS_PREFIXES];
-  const out: FmsPrefix[] = [];
+/** ENABLED_SYSTEMS=null 이면 상하수도·도로·건축물 전부 */
+export function getFmsGroupsForEnabledSystems(enabledSystems: string[] | null): FmsFacilGroup[] {
+  if (!enabledSystems?.length) return [...FMS_FACIL_GROUPS];
+  const out: FmsFacilGroup[] = [];
   for (const key of enabledSystems) {
-    const prefix = systemKeyToFmsPrefix(key);
-    if (prefix && !out.includes(prefix)) out.push(prefix);
+    const group = systemKeyToFmsGroup(key);
+    if (group && !out.includes(group)) out.push(group);
   }
   return out;
 }
 
-export function isFmsPrefixAllowedBySystems(
-  prefix: FmsPrefix,
-  enabledSystems: string[] | null
-): boolean {
-  return getFmsPrefixesForEnabledSystems(enabledSystems).includes(prefix);
+export function isFmsGroupAllowedBySystems(group: FmsFacilGroup, enabledSystems: string[] | null): boolean {
+  return getFmsGroupsForEnabledSystems(enabledSystems).includes(group);
 }
 
 /** v6 identifier → layer 테이블 종류 */
@@ -105,24 +61,13 @@ export function getFmsDataKindForIdentifier(identifier: string | null | undefine
   return IDENTIFIER_TO_KIND[key] ?? null;
 }
 
-export function getFmsLayerTableName(prefix: FmsPrefix, kind: FmsDataKind): string {
-  const binding = BINDINGS_BY_PREFIX[prefix];
-  return kind === 'facility' ? binding.facilityTable : binding.inspectionTable;
+export function getFmsLayerTableName(kind: FmsDataKind): string {
+  return kind === 'facility' ? FMS_FACILITY_TABLE : FMS_INSPECTION_TABLE;
 }
 
-export const FMS_FACILITY_TABLE_NAMES = FMS_PREFIXES.map((p) =>
-  getFmsLayerTableName(p, 'facility')
-);
-
-export const FMS_INSPECTION_TABLE_NAMES = FMS_PREFIXES.map((p) =>
-  getFmsLayerTableName(p, 'inspection')
-);
-
-/** 데이터조회 — 안전점검 시설물 3테이블은 조회만 (수정·추가·삭제 불가) */
+/** 데이터조회 — 안전점검 시설물 테이블은 조회만 (수정·추가·삭제 불가) */
 export function isFmsFacilityLayerTable(table: string | null | undefined): boolean {
-  const t = String(table ?? '').trim().toLowerCase();
-  if (!t) return false;
-  return FMS_FACILITY_TABLE_NAMES.some((n) => n.toLowerCase() === t);
+  return String(table ?? '').trim().toLowerCase() === FMS_FACILITY_TABLE;
 }
 
 /** opened / ser_eng — 기존 도로 키와 공통 키를 같은 화면으로 */

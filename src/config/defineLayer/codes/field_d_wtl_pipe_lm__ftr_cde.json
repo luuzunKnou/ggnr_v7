@@ -1,0 +1,20 @@
+[
+  {
+    "define_code_key": "1422",
+    "define_code_field_key": "4260",
+    "define_code_name": "SA001",
+    "define_code_kor_name": "상수관로"
+  },
+  {
+    "define_code_key": "1423",
+    "define_code_field_key": "4260",
+    "define_code_name": "SA002",
+    "define_code_kor_name": "급수관로"
+  },
+  {
+    "define_code_key": "1428",
+    "define_code_field_key": "4260",
+    "define_code_name": "SA100",
+    "define_code_kor_name": "상수맨홀"
+  }
+]

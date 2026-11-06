@@ -1,0 +1,74 @@
+[
+  {
+    "define_code_key": "64044",
+    "define_code_field_key": "4180",
+    "define_code_name": "WGW000",
+    "define_code_kor_name": "미분류"
+  },
+  {
+    "define_code_key": "64045",
+    "define_code_field_key": "4180",
+    "define_code_name": "WGW001",
+    "define_code_kor_name": "취수틀"
+  },
+  {
+    "define_code_key": "64046",
+    "define_code_field_key": "4180",
+    "define_code_name": "WGW002",
+    "define_code_kor_name": "유공관"
+  },
+  {
+    "define_code_key": "64047",
+    "define_code_field_key": "4180",
+    "define_code_name": "WGW003",
+    "define_code_kor_name": "취수탑"
+  },
+  {
+    "define_code_key": "64048",
+    "define_code_field_key": "4180",
+    "define_code_name": "WGW004",
+    "define_code_kor_name": "자연유하식"
+  },
+  {
+    "define_code_key": "64049",
+    "define_code_field_key": "4180",
+    "define_code_name": "WGW999",
+    "define_code_kor_name": "기타"
+  },
+  {
+    "define_code_key": "66025",
+    "define_code_field_key": "4180",
+    "define_code_name": "WGW000",
+    "define_code_kor_name": "미분류"
+  },
+  {
+    "define_code_key": "66026",
+    "define_code_field_key": "4180",
+    "define_code_name": "WGW001",
+    "define_code_kor_name": "취수틀"
+  },
+  {
+    "define_code_key": "66027",
+    "define_code_field_key": "4180",
+    "define_code_name": "WGW002",
+    "define_code_kor_name": "유공관"
+  },
+  {
+    "define_code_key": "66028",
+    "define_code_field_key": "4180",
+    "define_code_name": "WGW003",
+    "define_code_kor_name": "취수탑"
+  },
+  {
+    "define_code_key": "66029",
+    "define_code_field_key": "4180",
+    "define_code_name": "WGW004",
+    "define_code_kor_name": "자연유하식"
+  },
+  {
+    "define_code_key": "66030",
+    "define_code_field_key": "4180",
+    "define_code_name": "WGW999",
+    "define_code_kor_name": "기타"
+  }
+]

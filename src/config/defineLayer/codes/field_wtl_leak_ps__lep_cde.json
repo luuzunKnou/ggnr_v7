@@ -1,151 +1,229 @@
 [
   {
-    "define_code_key": "64079",
-    "define_code_field_key": "4211",
+    "define_code_key": "26813",
+    "define_code_field_key": "",
     "define_code_name": "LEP000",
     "define_code_kor_name": "미분류"
   },
   {
-    "define_code_key": "64080",
-    "define_code_field_key": "4211",
+    "define_code_key": "26814",
+    "define_code_field_key": "",
     "define_code_name": "LEP101",
     "define_code_kor_name": "관체(직관)"
   },
   {
-    "define_code_key": "64081",
-    "define_code_field_key": "4211",
+    "define_code_key": "26815",
+    "define_code_field_key": "",
     "define_code_name": "LEP102",
     "define_code_kor_name": "관체(이형관/곡관)"
   },
   {
-    "define_code_key": "64082",
-    "define_code_field_key": "4211",
+    "define_code_key": "26816",
+    "define_code_field_key": "",
     "define_code_name": "LEP103",
     "define_code_kor_name": "관체(이형관/정자관)"
   },
   {
-    "define_code_key": "64083",
-    "define_code_field_key": "4211",
+    "define_code_key": "26817",
+    "define_code_field_key": "",
     "define_code_name": "LEP104",
     "define_code_kor_name": "관체(이형관/분기T)"
   },
   {
-    "define_code_key": "64084",
-    "define_code_field_key": "4211",
+    "define_code_key": "26818",
+    "define_code_field_key": "",
     "define_code_name": "LEP105",
     "define_code_kor_name": "관체(이형관/새들)"
   },
   {
-    "define_code_key": "64085",
-    "define_code_field_key": "4211",
+    "define_code_key": "26819",
+    "define_code_field_key": "",
     "define_code_name": "LEP106",
     "define_code_kor_name": "관체(이형관/신축관)"
   },
   {
-    "define_code_key": "64086",
-    "define_code_field_key": "4211",
+    "define_code_key": "26820",
+    "define_code_field_key": "",
     "define_code_name": "LEP107",
     "define_code_kor_name": "관체(이형관/기타)"
   },
   {
-    "define_code_key": "64087",
-    "define_code_field_key": "4211",
+    "define_code_key": "26821",
+    "define_code_field_key": "",
     "define_code_name": "LEP201",
     "define_code_kor_name": "접합부(본체)"
   },
   {
-    "define_code_key": "64088",
-    "define_code_field_key": "4211",
+    "define_code_key": "26822",
+    "define_code_field_key": "",
     "define_code_name": "LEP202",
     "define_code_kor_name": "접합부(볼트)"
   },
   {
-    "define_code_key": "64089",
-    "define_code_field_key": "4211",
+    "define_code_key": "26823",
+    "define_code_field_key": "",
     "define_code_name": "LEP203",
     "define_code_kor_name": "접합부(고무박킹)"
   },
   {
-    "define_code_key": "64090",
-    "define_code_field_key": "4211",
+    "define_code_key": "26824",
+    "define_code_field_key": "",
     "define_code_name": "LEP301",
     "define_code_kor_name": "밸브류(제수변)"
   },
   {
-    "define_code_key": "64091",
-    "define_code_field_key": "4211",
+    "define_code_key": "26825",
+    "define_code_field_key": "",
     "define_code_name": "LEP302",
     "define_code_kor_name": "밸브류(배기변)"
   },
   {
-    "define_code_key": "64092",
-    "define_code_field_key": "4211",
+    "define_code_key": "26826",
+    "define_code_field_key": "",
     "define_code_name": "LEP303",
     "define_code_kor_name": "밸브류(이토변)"
   },
   {
-    "define_code_key": "64093",
-    "define_code_field_key": "4211",
+    "define_code_key": "26827",
+    "define_code_field_key": "",
     "define_code_name": "LEP304",
     "define_code_kor_name": "밸브류(역지변)"
   },
   {
-    "define_code_key": "64094",
-    "define_code_field_key": "4211",
+    "define_code_key": "26828",
+    "define_code_field_key": "",
     "define_code_name": "LEP305",
     "define_code_kor_name": "밸브류(감압변)"
   },
   {
-    "define_code_key": "64095",
-    "define_code_field_key": "4211",
+    "define_code_key": "26829",
+    "define_code_field_key": "",
     "define_code_name": "LEP306",
     "define_code_kor_name": "밸브류(스리스밸브)"
   },
   {
-    "define_code_key": "64096",
-    "define_code_field_key": "4211",
+    "define_code_key": "26830",
+    "define_code_field_key": "",
     "define_code_name": "LEP307",
     "define_code_kor_name": "밸브류(소화전)"
   },
   {
-    "define_code_key": "64097",
-    "define_code_field_key": "4211",
+    "define_code_key": "26831",
+    "define_code_field_key": "",
     "define_code_name": "LEP308",
     "define_code_kor_name": "밸브류(지수전)"
   },
   {
-    "define_code_key": "64098",
-    "define_code_field_key": "4211",
+    "define_code_key": "26832",
+    "define_code_field_key": "",
     "define_code_name": "LEP401",
     "define_code_kor_name": "통내(관체)"
   },
   {
-    "define_code_key": "64099",
-    "define_code_field_key": "4211",
+    "define_code_key": "26833",
+    "define_code_field_key": "",
     "define_code_name": "LEP402",
     "define_code_kor_name": "통내(계량기)"
   },
   {
-    "define_code_key": "64100",
-    "define_code_field_key": "4211",
+    "define_code_key": "26834",
+    "define_code_field_key": "",
     "define_code_name": "LEP403",
     "define_code_kor_name": "통내(앵글밸브)"
   },
   {
-    "define_code_key": "64101",
-    "define_code_field_key": "4211",
+    "define_code_key": "26835",
+    "define_code_field_key": "",
     "define_code_name": "LEP404",
     "define_code_kor_name": "통내(에어밸브)"
   },
   {
-    "define_code_key": "64102",
-    "define_code_field_key": "4211",
+    "define_code_key": "26836",
+    "define_code_field_key": "",
     "define_code_name": "LEP405",
     "define_code_kor_name": "통내(이음부)"
   },
   {
-    "define_code_key": "64103",
-    "define_code_field_key": "4211",
+    "define_code_key": "26838",
+    "define_code_field_key": "",
+    "define_code_name": "LEP900",
+    "define_code_kor_name": "분수전"
+  },
+  {
+    "define_code_key": "26839",
+    "define_code_field_key": "",
+    "define_code_name": "LEP901",
+    "define_code_kor_name": "새들"
+  },
+  {
+    "define_code_key": "26840",
+    "define_code_field_key": "",
+    "define_code_name": "LEP902",
+    "define_code_kor_name": "소켓"
+  },
+  {
+    "define_code_key": "26841",
+    "define_code_field_key": "",
+    "define_code_name": "LEP903",
+    "define_code_kor_name": "엔드플러그"
+  },
+  {
+    "define_code_key": "26842",
+    "define_code_field_key": "",
+    "define_code_name": "LEP904",
+    "define_code_kor_name": "접합부(나사)"
+  },
+  {
+    "define_code_key": "26843",
+    "define_code_field_key": "",
+    "define_code_name": "LEP905",
+    "define_code_kor_name": "접합부(밸브소켓)"
+  },
+  {
+    "define_code_key": "26844",
+    "define_code_field_key": "",
+    "define_code_name": "LEP906",
+    "define_code_kor_name": "접합부(소켓)"
+  },
+  {
+    "define_code_key": "26845",
+    "define_code_field_key": "",
+    "define_code_name": "LEP907",
+    "define_code_kor_name": "접합부(엘보)"
+  },
+  {
+    "define_code_key": "26846",
+    "define_code_field_key": "",
+    "define_code_name": "LEP908",
+    "define_code_kor_name": "접합부(홈조인트)"
+  },
+  {
+    "define_code_key": "26847",
+    "define_code_field_key": "",
+    "define_code_name": "LEP909",
+    "define_code_kor_name": "접합부(D/R조인트)"
+  },
+  {
+    "define_code_key": "26848",
+    "define_code_field_key": "",
+    "define_code_name": "LEP910",
+    "define_code_kor_name": "접합부(KP)"
+  },
+  {
+    "define_code_key": "26849",
+    "define_code_field_key": "",
+    "define_code_name": "LEP911",
+    "define_code_kor_name": "직관"
+  },
+  {
+    "define_code_key": "26850",
+    "define_code_field_key": "",
+    "define_code_name": "LEP912",
+    "define_code_kor_name": "프렌치소켓"
+  },
+  {
+    "define_code_key": "26837",
+    "define_code_field_key": "",
     "define_code_name": "LEP999",
     "define_code_kor_name": "기타"
   }

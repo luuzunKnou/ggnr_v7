@@ -7,7 +7,7 @@
  * - 접도구역 표주: road_frontage_marker(+_item)
  * - 공통점용: water|road|public_occupationledger(+_jijuk|_mgj) — 9개
  * - 점사용료: water|road|public_ngl_fee_list — 3개
- * - FMS: water|road|public_fms_facility + _fms_inspection — 6개
+ * - FMS: road_fms_facility + road_fms_inspection — 2개 (상하수도·건축물도 시설물구분으로 함께)
  * - 차세대 연계: next_gen_linkage.ngl_error_log, ngl_query_table
  * - 토지행정망 파일: land_linkage (목록·토지기본·공시지가)
  * - 메모: memo 및 memo_* 계열
@@ -23,6 +23,7 @@ import { db, pool } from '@/database/db';
 import { sql } from 'drizzle-orm';
 import { MEMO_TABLES } from '@/lib/memoConfig';
 import { KRAS_LAYER_CATALOG_SCHEMA } from '@/integrations/krasLayerSync.config';
+import { FMS_FACILITY_TABLE, FMS_INSPECTION_TABLE } from '@/lib/fmsLinkage/fmsBinding';
 import {
   ROAD_FRONTAGE_BUILDING_CONFIRM_LAYER_COLUMNS,
   ROAD_FRONTAGE_BUILDING_DETAIL_LAYER_COLUMNS,
@@ -1681,40 +1682,38 @@ export async function ensureOccupationLedgerTables(result?: EnsureResult): Promi
   return out;
 }
 
-/** FMS water|road|public × facility·inspection (6개) */
+/** FMS 시설물·점검진단실적 — 도로 테이블 한 쌍(2개) */
 export async function ensureFmsTables(result?: EnsureResult): Promise<EnsureResult> {
   const out: EnsureResult = result ?? { created: [], moved: [], existed: [], errors: [] };
   await ensureSchemaLayer();
-  for (const prefix of OCCUPATION_PREFIXES) {
-    const facility = `${prefix}_fms_facility`;
-    const inspection = `${prefix}_fms_inspection`;
-    await ensureBaseTable({
-      table: facility,
-      createSql: fmsFacilitySql(facility),
-      result: out,
-    });
-    try {
-      if (!(await columnExists('layer', facility, 'geom'))) {
-        await db.execute(
-          sql.raw(`
-            ALTER TABLE layer.${facility}
-              ADD COLUMN IF NOT EXISTS geom geometry(MultiPolygon, 5181);
-            CREATE INDEX IF NOT EXISTS ${facility}_geom_gix
-              ON layer.${facility} USING GIST (geom);
-          `)
-        );
-      }
-    } catch (e) {
-      out.errors.push(
-        `layer.${facility}.geom: ${e instanceof Error ? e.message : String(e)}`
+  const facility = FMS_FACILITY_TABLE;
+  const inspection = FMS_INSPECTION_TABLE;
+  await ensureBaseTable({
+    table: facility,
+    createSql: fmsFacilitySql(facility),
+    result: out,
+  });
+  try {
+    if (!(await columnExists('layer', facility, 'geom'))) {
+      await db.execute(
+        sql.raw(`
+          ALTER TABLE layer.${facility}
+            ADD COLUMN IF NOT EXISTS geom geometry(MultiPolygon, 5181);
+          CREATE INDEX IF NOT EXISTS ${facility}_geom_gix
+            ON layer.${facility} USING GIST (geom);
+        `)
       );
     }
-    await ensureBaseTable({
-      table: inspection,
-      createSql: fmsInspectionSql(inspection),
-      result: out,
-    });
+  } catch (e) {
+    out.errors.push(
+      `layer.${facility}.geom: ${e instanceof Error ? e.message : String(e)}`
+    );
   }
+  await ensureBaseTable({
+    table: inspection,
+    createSql: fmsInspectionSql(inspection),
+    result: out,
+  });
   return out;
 }
 

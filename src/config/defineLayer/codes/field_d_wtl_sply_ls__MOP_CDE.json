@@ -1,0 +1,176 @@
+[
+  {
+    "define_code_key": "65527",
+    "define_code_field_key": "4419",
+    "define_code_name": "MOP000",
+    "define_code_kor_name": "미분류"
+  },
+  {
+    "define_code_key": "65528",
+    "define_code_field_key": "4419",
+    "define_code_name": "MOP001",
+    "define_code_kor_name": "닥타일주철관"
+  },
+  {
+    "define_code_key": "65529",
+    "define_code_field_key": "4419",
+    "define_code_name": "MOP002",
+    "define_code_kor_name": "강관"
+  },
+  {
+    "define_code_key": "65530",
+    "define_code_field_key": "4419",
+    "define_code_name": "MOP003",
+    "define_code_kor_name": "아연도강관"
+  },
+  {
+    "define_code_key": "65531",
+    "define_code_field_key": "4419",
+    "define_code_name": "MOP004",
+    "define_code_kor_name": "경화염화비닐관"
+  },
+  {
+    "define_code_key": "65532",
+    "define_code_field_key": "4419",
+    "define_code_name": "MOP005",
+    "define_code_kor_name": "폴리에틸렌관"
+  },
+  {
+    "define_code_key": "65533",
+    "define_code_field_key": "4419",
+    "define_code_name": "MOP006",
+    "define_code_kor_name": "스테인레스관"
+  },
+  {
+    "define_code_key": "65534",
+    "define_code_field_key": "4419",
+    "define_code_name": "MOP007",
+    "define_code_kor_name": "동관"
+  },
+  {
+    "define_code_key": "65535",
+    "define_code_field_key": "4419",
+    "define_code_name": "MOP010",
+    "define_code_kor_name": "회주철관"
+  },
+  {
+    "define_code_key": "65536",
+    "define_code_field_key": "4419",
+    "define_code_name": "MOP011",
+    "define_code_kor_name": "연관"
+  },
+  {
+    "define_code_key": "65537",
+    "define_code_field_key": "4419",
+    "define_code_name": "MOP012",
+    "define_code_kor_name": "흄관"
+  },
+  {
+    "define_code_key": "65538",
+    "define_code_field_key": "4419",
+    "define_code_name": "MOP013",
+    "define_code_kor_name": "철근콘크리트관"
+  },
+  {
+    "define_code_key": "65539",
+    "define_code_field_key": "4419",
+    "define_code_name": "MOP014",
+    "define_code_kor_name": "강관"
+  },
+  {
+    "define_code_key": "65540",
+    "define_code_field_key": "4419",
+    "define_code_name": "MOP015",
+    "define_code_kor_name": "주철관"
+  },
+  {
+    "define_code_key": "65541",
+    "define_code_field_key": "4419",
+    "define_code_name": "MOP017",
+    "define_code_kor_name": "도관"
+  },
+  {
+    "define_code_key": "65542",
+    "define_code_field_key": "4419",
+    "define_code_name": "MOP018",
+    "define_code_kor_name": "석축"
+  },
+  {
+    "define_code_key": "65543",
+    "define_code_field_key": "4419",
+    "define_code_name": "MOP019",
+    "define_code_kor_name": "도복장강관"
+  },
+  {
+    "define_code_key": "65544",
+    "define_code_field_key": "4419",
+    "define_code_name": "MOP020",
+    "define_code_kor_name": "토관"
+  },
+  {
+    "define_code_key": "65545",
+    "define_code_field_key": "4419",
+    "define_code_name": "MOP028",
+    "define_code_kor_name": "폴리에틸렌분체라이닝강관"
+  },
+  {
+    "define_code_key": "65546",
+    "define_code_field_key": "4419",
+    "define_code_name": "MOP032",
+    "define_code_kor_name": "후렉스불전선함"
+  },
+  {
+    "define_code_key": "65547",
+    "define_code_field_key": "4419",
+    "define_code_name": "MOP033",
+    "define_code_kor_name": "철근콘크리트박스"
+  },
+  {
+    "define_code_key": "65548",
+    "define_code_field_key": "4419",
+    "define_code_name": "MOP036",
+    "define_code_kor_name": "폴리에틸렌피복강관"
+  },
+  {
+    "define_code_key": "65549",
+    "define_code_field_key": "4419",
+    "define_code_name": "MOP040",
+    "define_code_kor_name": "원심력철근콘크리트"
+  },
+  {
+    "define_code_key": "65550",
+    "define_code_field_key": "4419",
+    "define_code_name": "MOP041",
+    "define_code_kor_name": "FRP"
+  },
+  {
+    "define_code_key": "65551",
+    "define_code_field_key": "4419",
+    "define_code_name": "MOP042",
+    "define_code_kor_name": "강재"
+  },
+  {
+    "define_code_key": "65552",
+    "define_code_field_key": "4419",
+    "define_code_name": "MOP043",
+    "define_code_kor_name": "CMCIP"
+  },
+  {
+    "define_code_key": "65553",
+    "define_code_field_key": "4419",
+    "define_code_name": "MOP044",
+    "define_code_kor_name": "콘크리트"
+  },
+  {
+    "define_code_key": "65554",
+    "define_code_field_key": "4419",
+    "define_code_name": "MOP045",
+    "define_code_kor_name": "EDCIP"
+  },
+  {
+    "define_code_key": "65555",
+    "define_code_field_key": "4419",
+    "define_code_name": "MOP999",
+    "define_code_kor_name": "기타"
+  }
+]

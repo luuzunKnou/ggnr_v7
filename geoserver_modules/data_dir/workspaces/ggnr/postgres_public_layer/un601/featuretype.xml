@@ -1,0 +1,41 @@
+<featureType>
+  <id>FeatureTypeInfoImpl-6e125944:1a17ff3f0fb:-7b83</id>
+  <name>un601</name>
+  <nativeName>un601</nativeName>
+  <namespace>
+    <id>NamespaceInfoImpl-4bf97568:19c4d6c3053:-7ffa</id>
+  </namespace>
+  <title>un601</title>
+  <keywords>
+    <string>features</string>
+    <string>un601</string>
+  </keywords>
+  <srs>EPSG:5181</srs>
+  <nativeBoundingBox>
+    <minx>319505.23373528</minx>
+    <maxx>320131.06491706</maxx>
+    <miny>323064.78790494</miny>
+    <maxy>325103.82660979</maxy>
+    <crs class="projected">EPSG:5181</crs>
+  </nativeBoundingBox>
+  <latLonBoundingBox>
+    <minx>128.33212030847898</minx>
+    <maxx>128.33941005077574</maxx>
+    <miny>36.39821517354461</miny>
+    <maxy>36.41666344966952</maxy>
+    <crs>EPSG:4326</crs>
+  </latLonBoundingBox>
+  <projectionPolicy>FORCE_DECLARED</projectionPolicy>
+  <enabled>true</enabled>
+  <store class="dataStore">
+    <id>DataStoreInfoImpl-4bf97568:19c4d6c3053:-7ff8</id>
+  </store>
+  <serviceConfiguration>false</serviceConfiguration>
+  <maxFeatures>0</maxFeatures>
+  <numDecimals>0</numDecimals>
+  <padWithZeros>false</padWithZeros>
+  <forcedDecimal>false</forcedDecimal>
+  <overridingServiceSRS>false</overridingServiceSRS>
+  <skipNumberMatched>false</skipNumberMatched>
+  <circularArcPresent>false</circularArcPresent>
+</featureType>

@@ -9,12 +9,11 @@ export type ServiceFileDataSerEng = string;
 
 export type ServiceFileDataRow = { name: string; size: number; modified?: string };
 
-export function isImageServiceFileName(name: string): boolean {
-  return /\.(jpe?g|png|gif|webp|bmp|svg)$/i.test(name);
-}
+export { isImageServiceFileName, isPdfServiceFileName } from '@/lib/serviceFileName';
 
-export function isPdfServiceFileName(name: string): boolean {
-  return /\.pdf$/i.test(name);
+/** 첨부 엑셀 미리보기 (.xlsx / .xls — csv 제외) */
+export function isExcelServiceFileName(name: string): boolean {
+  return /\.xlsx?$/i.test(name);
 }
 
 export function serviceFileDataDownloadUrl(

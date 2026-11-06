@@ -7,6 +7,8 @@ export type IndexSheetMode = 'landscape' | 'portrait';
 export type IndexSheetGuide = {
   ring3857?: [number, number][] | null;
   guide3857?: [number, number][] | null;
+  /** 서버에서 하천 모양 비교로 판정·저장한 방향(또는 사람 확정). 있으면 화면 추정 없이 그대로 쓴다 */
+  fixedRotation?: number | null;
 };
 
 /** 원본 박스 기준 세로로 볼 최소 비율 (가로는 손대지 않음) */
@@ -341,10 +343,10 @@ async function inferFromCompassN(page: PDFPageProxy): Promise<PdfCardinalRotatio
 function cacheKey(opts?: InferPdfUprightOpts): string {
   const mode = opts?.indexSheetMode ?? '0';
   const g = opts?.indexSheetGuide?.guide3857;
-  if (g == null || g.length < 2) return `${mode}|v5`;
+  if (g == null || g.length < 2) return `${mode}|v6`;
   const a = g[0];
   const b = g[g.length - 1];
-  return `v5|${mode}|${g.length}|${a[0].toFixed(0)}|${b[0].toFixed(0)}|${b[1].toFixed(0)}`;
+  return `v6|${mode}|${g.length}|${a[0].toFixed(0)}|${b[0].toFixed(0)}|${b[1].toFixed(0)}`;
 }
 
 /**
@@ -355,6 +357,8 @@ export function inferPdfPageUprightRotation(
   page: PDFPageProxy,
   opts?: InferPdfUprightOpts
 ): Promise<PdfCardinalRotation> {
+  const fixed = opts?.indexSheetGuide?.fixedRotation;
+  if (fixed != null && Number.isFinite(fixed)) return Promise.resolve(normalizePdfRotation(fixed));
   const mode = opts?.indexSheetMode;
   if (mode !== 'landscape' && mode !== 'portrait') {
     return Promise.resolve(normalizePdfRotation(page.rotate));
@@ -393,6 +397,11 @@ async function inferUncached(
 
   const raw = page.getViewport({ scale: 1, rotation: 0 });
   const rots = candidateRotations(frame.width, frame.height, raw.width, raw.height);
+  /**
+   * PDF에 회전 값이 직접 들어 있고 그 방향이 칸 가로·세로와 맞으면 만든 쪽 의도를 믿는다.
+   * (예: 세로 원본 + 270 — 뷰어에서는 바로 보이는데 선 맞추기가 90을 골라 뒤집히던 문제)
+   */
+  if (fallback !== 0 && rots.includes(fallback)) return fallback;
   let best: PdfCardinalRotation = fallback;
   let bestScore = -1;
   let second = -1;

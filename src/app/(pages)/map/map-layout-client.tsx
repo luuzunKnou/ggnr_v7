@@ -15,7 +15,14 @@ import ComplaintAdd from "./_mapComponents/complaint/ComplaintAdd"
 import { MAP_FLOATING_DETAIL_CLOSE_EVENT } from "./_mapComponents/mapFloatingDetailEvent"
 import AddressInfoDetail from "./_mapComponents/AddressInfoDetail"
 import { RiverBasicPlanListPanel } from "./_mapContents/river/riverBasicPlan/RiverBasicPlanListPanel"
-import { RiverBasicPlanDetailPanel } from "./_mapContents/river/riverBasicPlan/RiverBasicPlanDetailPanel"
+import {
+  RiverBasicPlanDetailPanel,
+  type RiverBasicPlanPreferredPlan,
+} from "./_mapContents/river/riverBasicPlan/RiverBasicPlanDetailPanel"
+import {
+  RiverBasicPlanScopeModal,
+  type RiverBasicPlanListAxis,
+} from "./_mapContents/river/riverBasicPlan/RiverBasicPlanScopeModal"
 import { RiverBasicPlanMapDrawingFromMapHandler } from "./_mapContents/river/riverBasicPlan/RiverBasicPlanMapDrawingFromMapHandler"
 import { RoadLedgerListPanel } from "./_mapContents/road/roadLedger/RoadLedgerListPanel"
 import { RoadLedgerDetailPanel } from "./_mapContents/road/roadLedger/RoadLedgerDetailPanel"
@@ -142,6 +149,10 @@ import { BuildPublicLandListPanel } from "./_mapContents/buildPublicLand/BuildPu
 import { BuildPublicLandDetailPanel } from "./_mapContents/buildPublicLand/BuildPublicLandDetailPanel"
 import { MemoListPanel } from "./_mapContents/memo/MemoListPanel"
 import { MemoDetailPanel } from "./_mapContents/memo/MemoDetailPanel"
+import { WaterAdminShell } from "./_mapContents/waterAdminMemoComplaint/WaterAdminShell"
+import { WaterComplaintFloat } from "./_mapContents/waterAdminMemoComplaint/WaterComplaintFloat"
+import type { WaterPlaceFocus } from "./_mapContents/waterAdminMemoComplaint/waterComplaintMapFly"
+import { findOpenedWaterAdminMenu } from "./_mapContents/waterAdminMemoComplaint/waterAdminMemoComplaint"
 import { PolicyMapListPanel } from "./_mapContents/policyMap/PolicyMapListPanel"
 import { GcpListPanel } from "./_mapContents/gcp/GcpListPanel"
 import { GcpDetailPanel } from "./_mapContents/gcp/GcpDetailPanel"
@@ -171,6 +182,29 @@ import { UseFeeDetailPanel } from "./_mapContents/useFee/UseFeeDetailPanel"
 import { clearForeignUseFeeWmsLayers } from "./_mapContents/useFee/useFeeMapSync"
 import { GroundwaterPermitListPanel } from "./_mapContents/groundwaterPermit/GroundwaterPermitListPanel"
 import { GroundwaterPermitDetailPanel } from "./_mapContents/groundwaterPermit/GroundwaterPermitDetailPanel"
+import { WorksInquiryShell } from "./_mapContents/worksInquiry/WorksInquiry.shell"
+import {
+  findOpenedWorksInquirySerEng,
+  isWorksInquiryOpenedToken,
+} from "./_mapContents/worksInquiry/worksInquiryBinding"
+import {
+  SMALL_PUBLIC_FAC_OPENED_KEY,
+  SmallPublicFacShell,
+} from "./_mapContents/rdc/smallPublicFac/SmallPublicFac.shell"
+import {
+  WORKS_REGISTER_OPENED_KEY,
+  WorksRegisterShell,
+} from "./_mapContents/worksRegister/WorksRegister.shell"
+import { WtlAdminEmptyShell } from "./_mapContents/wtlAdmin/WtlAdminEmpty.shell"
+import {
+  findOpenedWtlAdminEmptySerEng,
+  isWtlAdminEmptyOpenedToken,
+} from "./_mapContents/wtlAdmin/wtlAdminBinding"
+import { SwlAdminEmptyShell } from "./_mapContents/swlAdmin/SwlAdminEmpty.shell"
+import {
+  findOpenedSwlAdminEmptySerEng,
+  isSwlAdminEmptyOpenedToken,
+} from "./_mapContents/swlAdmin/swlAdminBinding"
 import { FmsLinkageListPanel } from "./_mapContents/fmsLinkage/FmsLinkageListPanel"
 import { FmsLinkageDetailPanel } from "./_mapContents/fmsLinkage/FmsLinkageDetailPanel"
 import { isFmsOpenedToken } from "@/lib/fmsLinkage/fmsBinding"
@@ -302,7 +336,7 @@ const RIVER_BASIC_PLAN_LIST_DEFAULT_WIDTH = 320
 const RIVER_BASIC_PLAN_LIST_MIN_WIDTH = 280
 const RIVER_BASIC_PLAN_LIST_MAX_WIDTH = 680
 
-const RIVER_BASIC_PLAN_DETAIL_DEFAULT_WIDTH = 460
+const RIVER_BASIC_PLAN_DETAIL_DEFAULT_WIDTH = 515
 const RIVER_BASIC_PLAN_DETAIL_MIN_WIDTH = 360
 const RIVER_BASIC_PLAN_DETAIL_MAX_WIDTH = 900
 
@@ -611,6 +645,7 @@ function MapLayoutContent({
   const setRoadNetworkFocusedSitePointKey = mapContext?.setRoadNetworkFocusedSitePointKey
   const setRoadFrontageMarkerPanelOpen = mapContext?.setRoadFrontageMarkerPanelOpen
   const setRoadFrontageBuildingPanelOpen = mapContext?.setRoadFrontageBuildingPanelOpen
+  const setRiverIllegalOccupationPanelOpen = mapContext?.setRiverIllegalOccupationPanelOpen
   const setRoadFrontageMarkerPointPickActive = mapContext?.setRoadFrontageMarkerPointPickActive
   const setRoadFrontageMarkerDraftPoint = mapContext?.setRoadFrontageMarkerDraftPoint
   const setRiverConstructionLedgerSelectedId = mapContext?.setRiverConstructionLedgerSelectedId
@@ -646,6 +681,9 @@ function MapLayoutContent({
   if (mapContext?.applyRiverBasicPlanMapPickRef) {
     mapContext.applyRiverBasicPlanMapPickRef.current = (pick) => {
       setRiverPlanTab(pick.tab)
+      if (riverBasicPlanListAxis == null) setRiverBasicPlanListAxis("byRiver")
+      setRiverBasicPlanScopeModalOpen(false)
+      setRiverBasicPlanPreferredPlan(null)
       setSelectedRiverName(pick.riverName)
     }
   }
@@ -667,6 +705,8 @@ function MapLayoutContent({
 
   const complaintManagementOpen = openedWindows.includes(COMPLAINT_OPENED_KEY)
   const memoManagementOpen = openedWindows.includes(MEMO_OPENED_KEY)
+  const waterAdminMenu = findOpenedWaterAdminMenu(openedWindows)
+  const waterAdminOpen = waterAdminMenu != null
   const policyMapOpen = openedWindows.includes(POLICY_MAP_OPENED_KEY)
   const gcpOpen = openedWindows.includes(GCP_OPENED_KEY)
   const qgisLayerControlOpen = openedWindows.includes(QGIS_LAYER_CONTROL_OPENED_KEY)
@@ -757,6 +797,14 @@ function MapLayoutContent({
   const useFeeSerEng = findOpenedUseFeeSerEng(openedWindows)
   const useFeeOpen = Boolean(useFeeSerEng)
   const groundwaterPermitOpen = openedWindows.includes(GROUNDWATER_PERMIT_OPENED_KEY)
+  const worksInquirySerEng = findOpenedWorksInquirySerEng(openedWindows)
+  const worksInquiryOpen = Boolean(worksInquirySerEng)
+  const smallPublicFacOpen = openedWindows.includes(SMALL_PUBLIC_FAC_OPENED_KEY)
+  const worksRegisterOpen = openedWindows.includes(WORKS_REGISTER_OPENED_KEY)
+  const wtlAdminEmptySerEng = findOpenedWtlAdminEmptySerEng(openedWindows)
+  const wtlAdminEmptyOpen = Boolean(wtlAdminEmptySerEng)
+  const swlAdminEmptySerEng = findOpenedSwlAdminEmptySerEng(openedWindows)
+  const swlAdminEmptyOpen = Boolean(swlAdminEmptySerEng)
   const fmsLinkageOpen = openedWindows.some((w) => isFmsOpenedToken(w))
   const fmsLinkageDetailOpen = fmsLinkageOpen && Boolean(fmsLinkageDetailId)
   const privateLandAnalysisOpen = openedWindows.includes(PRIVATE_LAND_ANALYSIS_OPENED_KEY)
@@ -866,6 +914,11 @@ function MapLayoutContent({
   const [groundwaterPermitDetailId, setGroundwaterPermitDetailId] = useState<string | null>(null)
   const groundwaterPermitDetailOpen =
     groundwaterPermitOpen && Boolean(groundwaterPermitDetailId)
+  const [worksInquiryTotalWidth, setWorksInquiryTotalWidth] = useState(0)
+  const [smallPublicFacTotalWidth, setSmallPublicFacTotalWidth] = useState(0)
+  const [worksRegisterTotalWidth, setWorksRegisterTotalWidth] = useState(0)
+  const [wtlAdminEmptyTotalWidth, setWtlAdminEmptyTotalWidth] = useState(0)
+  const [swlAdminEmptyTotalWidth, setSwlAdminEmptyTotalWidth] = useState(0)
   const [protoUserAccountOpen, setProtoUserAccountOpen] = useState(false)
 
   const [memoDetailId, setMemoDetailId] = useState<string | null>(null)
@@ -919,7 +972,12 @@ function MapLayoutContent({
   ])
 
   const [riverPlanTab, setRiverPlanTab] = useState<"river" | "smallRiver">("river")
+  const [riverBasicPlanListAxis, setRiverBasicPlanListAxis] =
+    useState<RiverBasicPlanListAxis | null>(null)
+  const [riverBasicPlanScopeModalOpen, setRiverBasicPlanScopeModalOpen] = useState(false)
   const [selectedRiverName, setSelectedRiverName] = useState("")
+  const [riverBasicPlanPreferredPlan, setRiverBasicPlanPreferredPlan] =
+    useState<RiverBasicPlanPreferredPlan | null>(null)
   const [standardListPanelWidth, setStandardListPanelWidth] = useState(STANDARD_LIST_DEFAULT_WIDTH)
   const [complaintPanelWidth, setComplaintPanelWidth] = useState(COMPLAINT_PANEL_DEFAULT_WIDTH)
   const [map3dDataPanelWidth, setMap3dDataPanelWidth] = useState(MAP_3D_DATA_PANEL_DEFAULT_WIDTH)
@@ -1043,6 +1101,12 @@ function MapLayoutContent({
   const [fmsLinkageDetailWidth, setFmsLinkageDetailWidth] = useState(FMS_DETAIL_DEFAULT_WIDTH)
   const [fmsGeomToastMsg, setFmsGeomToastMsg] = useState<string | null>(null)
   const [memoPanelWidth, setMemoPanelWidth] = useState(MEMO_PANEL_DEFAULT_WIDTH)
+  const [waterAdminPanelWidth, setWaterAdminPanelWidth] = useState(0)
+  const [waterComplaintKey, setWaterComplaintKey] = useState<number | null>(null)
+  const [waterComplaintFly, setWaterComplaintFly] = useState(false)
+  const [waterComplaintAdd, setWaterComplaintAdd] = useState(false)
+  const [waterComplaintRefreshKey, setWaterComplaintRefreshKey] = useState(0)
+  const [waterDetailFocus, setWaterDetailFocus] = useState<WaterPlaceFocus | null>(null)
   const [policyMapPanelWidth, setPolicyMapPanelWidth] = useState(POLICY_MAP_PANEL_DEFAULT_WIDTH)
   const [gcpPanelWidth, setGcpPanelWidth] = useState(GCP_PANEL_DEFAULT_WIDTH)
   const [gcpDetailWidth, setGcpDetailWidth] = useState(GCP_DETAIL_DEFAULT_WIDTH)
@@ -1098,6 +1162,7 @@ function MapLayoutContent({
     (policyMapOpen ? policyMapPanelWidth : 0) +
     (memoManagementOpen ? memoPanelWidth : 0) +
     (complaintManagementOpen ? complaintPanelWidth : 0) +
+    (waterAdminOpen ? waterAdminPanelWidth : 0) +
     (map3dDataOpen ? map3dDataPanelWidth : 0) +
     (safetyMapOpen ? safetyMapPanelWidth : 0) +
     (safetyInfoOpen ? safetyInfoPanelWidth : 0) +
@@ -1122,6 +1187,11 @@ function MapLayoutContent({
     (useFeeDetailOpen ? useFeeDetailWidth : 0) +
     (groundwaterPermitOpen ? groundwaterPermitPanelWidth : 0) +
     (groundwaterPermitDetailOpen ? groundwaterPermitDetailWidth : 0) +
+    (worksInquiryOpen ? worksInquiryTotalWidth : 0) +
+    (smallPublicFacOpen ? smallPublicFacTotalWidth : 0) +
+    (worksRegisterOpen ? worksRegisterTotalWidth : 0) +
+    (wtlAdminEmptyOpen ? wtlAdminEmptyTotalWidth : 0) +
+    (swlAdminEmptyOpen ? swlAdminEmptyTotalWidth : 0) +
     (fmsLinkageOpen ? fmsLinkagePanelWidth : 0) +
     (fmsLinkageDetailOpen ? fmsLinkageDetailWidth : 0) +
     (privateLandAnalysisOpen ? privateLandAnalysisPanelWidth : 0) +
@@ -1228,7 +1298,9 @@ function MapLayoutContent({
   const memoDetailLeftPx = memoPanelLeftPx + (memoManagementOpen ? memoPanelWidth : 0)
   const complaintPanelLeftPx =
     memoPanelLeftPx + (memoManagementOpen ? memoPanelWidth : 0)
-  const map3dPanelLeftPx = complaintPanelLeftPx + (complaintManagementOpen ? complaintPanelWidth : 0)
+  const waterAdminPanelLeftPx =
+    complaintPanelLeftPx + (complaintManagementOpen ? complaintPanelWidth : 0)
+  const map3dPanelLeftPx = waterAdminPanelLeftPx + (waterAdminOpen ? waterAdminPanelWidth : 0)
   const safetyMapPanelLeftPx = map3dPanelLeftPx + (map3dDataOpen ? map3dDataPanelWidth : 0)
   const safetyInfoPanelLeftPx = safetyMapPanelLeftPx + (safetyMapOpen ? safetyMapPanelWidth : 0)
   const safetyWaterPanelLeftPx = safetyInfoPanelLeftPx + (safetyInfoOpen ? safetyInfoPanelWidth : 0)
@@ -1276,9 +1348,19 @@ function MapLayoutContent({
   const groundwaterPermitDetailLeftPx =
     groundwaterPermitPanelLeftPx +
     (groundwaterPermitOpen ? groundwaterPermitPanelWidth : 0)
-  const fmsLinkagePanelLeftPx =
+  const worksInquiryPanelLeftPx =
     groundwaterPermitDetailLeftPx +
     (groundwaterPermitDetailOpen ? groundwaterPermitDetailWidth : 0)
+  const smallPublicFacPanelLeftPx =
+    worksInquiryPanelLeftPx + (worksInquiryOpen ? worksInquiryTotalWidth : 0)
+  const worksRegisterPanelLeftPx =
+    smallPublicFacPanelLeftPx + (smallPublicFacOpen ? smallPublicFacTotalWidth : 0)
+  const wtlAdminEmptyPanelLeftPx =
+    worksRegisterPanelLeftPx + (worksRegisterOpen ? worksRegisterTotalWidth : 0)
+  const swlAdminEmptyPanelLeftPx =
+    wtlAdminEmptyPanelLeftPx + (wtlAdminEmptyOpen ? wtlAdminEmptyTotalWidth : 0)
+  const fmsLinkagePanelLeftPx =
+    swlAdminEmptyPanelLeftPx + (swlAdminEmptyOpen ? swlAdminEmptyTotalWidth : 0)
   const fmsLinkageDetailLeftPx =
     fmsLinkagePanelLeftPx + (fmsLinkageOpen ? fmsLinkagePanelWidth : 0)
   const privateLandAnalysisPanelLeftPx =
@@ -1350,6 +1432,19 @@ function MapLayoutContent({
     setRiverBasicPlanPanelOpen?.(riverBasicPlanOpen)
     setRiverBasicPlanSelectedRiver?.(selectedRiverName)
   }, [setRiverBasicPlanPanelOpen, setRiverBasicPlanSelectedRiver, riverBasicPlanOpen, selectedRiverName])
+
+  /** 기본계획 열릴 때 보기(보고서별·하천별) 미선택이면 모달. 닫히면 초기화 */
+  useEffect(() => {
+    if (riverBasicPlanOpen) {
+      if (riverBasicPlanListAxis == null) setRiverBasicPlanScopeModalOpen(true)
+    } else {
+      setRiverBasicPlanScopeModalOpen(false)
+      setRiverBasicPlanListAxis(null)
+      setRiverPlanTab("river")
+      setRiverBasicPlanPreferredPlan(null)
+      setSelectedRiverName("")
+    }
+  }, [riverBasicPlanOpen])
 
   useEffect(() => {
     setUsageDataAsPanelOpen?.(usageDataAsOpen)
@@ -1711,7 +1806,22 @@ function MapLayoutContent({
   const handleHideRiverBasicPlan = () => {
     const next = openedWindows.filter((w) => w !== RIVER_BASIC_PLAN_OPENED_KEY)
     setOpened(next)
+    setRiverBasicPlanScopeModalOpen(false)
+    setRiverBasicPlanListAxis(null)
+    setRiverPlanTab("river")
+    setRiverBasicPlanPreferredPlan(null)
     setSelectedRiverName("")
+  }
+
+  const handleRiverBasicPlanChangeAxis = () => {
+    setRiverBasicPlanScopeModalOpen(true)
+  }
+
+  const handleRiverBasicPlanSelectAxis = (axis: RiverBasicPlanListAxis) => {
+    setRiverBasicPlanListAxis(axis)
+    setRiverBasicPlanPreferredPlan(null)
+    setSelectedRiverName("")
+    setRiverBasicPlanScopeModalOpen(false)
   }
 
   const handleHideRoadLedger = () => {
@@ -1823,6 +1933,17 @@ function MapLayoutContent({
     setOpened(next)
   }
 
+  const handleCloseWaterAdmin = () => {
+    if (!waterAdminMenu) return
+    setMemoDetailId(null)
+    setMemoAddTable(null)
+    setWaterComplaintKey(null)
+    setWaterComplaintAdd(false)
+    setWaterDetailFocus(null)
+    const next = openedWindows.filter((w) => w !== waterAdminMenu.serEng)
+    setOpened(next)
+  }
+
   const handleClosePolicyMap = () => {
     const next = openedWindows.filter((w) => w !== POLICY_MAP_OPENED_KEY)
     setOpened(next)
@@ -1852,6 +1973,36 @@ function MapLayoutContent({
   const handleCloseGroundwaterPermit = () => {
     setGroundwaterPermitDetailId(null)
     const next = openedWindows.filter((w) => w !== GROUNDWATER_PERMIT_OPENED_KEY)
+    setOpened(next)
+  }
+
+  const handleCloseWorksInquiry = () => {
+    setWorksInquiryTotalWidth(0)
+    const next = openedWindows.filter((w) => !isWorksInquiryOpenedToken(w))
+    setOpened(next)
+  }
+
+  const handleCloseSmallPublicFac = () => {
+    setSmallPublicFacTotalWidth(0)
+    const next = openedWindows.filter((w) => w !== SMALL_PUBLIC_FAC_OPENED_KEY)
+    setOpened(next)
+  }
+
+  const handleCloseWorksRegister = () => {
+    setWorksRegisterTotalWidth(0)
+    const next = openedWindows.filter((w) => w !== WORKS_REGISTER_OPENED_KEY)
+    setOpened(next)
+  }
+
+  const handleCloseWtlAdminEmpty = () => {
+    setWtlAdminEmptyTotalWidth(0)
+    const next = openedWindows.filter((w) => !isWtlAdminEmptyOpenedToken(w))
+    setOpened(next)
+  }
+
+  const handleCloseSwlAdminEmpty = () => {
+    setSwlAdminEmptyTotalWidth(0)
+    const next = openedWindows.filter((w) => !isSwlAdminEmptyOpenedToken(w))
     setOpened(next)
   }
 
@@ -2034,6 +2185,26 @@ function MapLayoutContent({
   }, [groundwaterPermitOpen])
 
   useEffect(() => {
+    if (!worksInquiryOpen) setWorksInquiryTotalWidth(0)
+  }, [worksInquiryOpen])
+
+  useEffect(() => {
+    if (!smallPublicFacOpen) setSmallPublicFacTotalWidth(0)
+  }, [smallPublicFacOpen])
+
+  useEffect(() => {
+    if (!worksRegisterOpen) setWorksRegisterTotalWidth(0)
+  }, [worksRegisterOpen])
+
+  useEffect(() => {
+    if (!wtlAdminEmptyOpen) setWtlAdminEmptyTotalWidth(0)
+  }, [wtlAdminEmptyOpen])
+
+  useEffect(() => {
+    if (!swlAdminEmptyOpen) setSwlAdminEmptyTotalWidth(0)
+  }, [swlAdminEmptyOpen])
+
+  useEffect(() => {
     if (!cadastralResurveyOpen) setCadastralResurveyDistrictId(null)
   }, [cadastralResurveyOpen])
 
@@ -2056,6 +2227,10 @@ function MapLayoutContent({
   useEffect(() => {
     if (!riverIllegalOccupationOpen) setRiverIllegalOccupationSelectedId(null)
   }, [riverIllegalOccupationOpen])
+
+  useEffect(() => {
+    setRiverIllegalOccupationPanelOpen?.(riverIllegalOccupationOpen)
+  }, [riverIllegalOccupationOpen, setRiverIllegalOccupationPanelOpen])
 
   useEffect(() => {
     if (!radiationShelterOpen) setRadiationShelterDetailId(null)
@@ -2124,6 +2299,14 @@ function MapLayoutContent({
     setMemoDetailId(null)
     setMemoAddTable(null)
   }, [complaintManagementOpen])
+
+  useEffect(() => {
+    setMemoDetailId(null)
+    setMemoAddTable(null)
+    setWaterComplaintKey(null)
+    setWaterComplaintAdd(false)
+    setWaterDetailFocus(null)
+  }, [waterAdminMenu?.serEng])
 
   useEffect(() => {
     if (mapContext?.complaintDetail) setComplaintAddOpen(false)
@@ -2481,10 +2664,17 @@ function MapLayoutContent({
                   tab={riverPlanTab}
                   onTabChange={(nextTab) => {
                     setRiverPlanTab(nextTab)
+                    setRiverBasicPlanPreferredPlan(null)
                     setSelectedRiverName("")
                   }}
+                  listAxis={riverBasicPlanListAxis}
                   selectedRiver={selectedRiverName}
-                  onSelectRiver={setSelectedRiverName}
+                  preferredPlan={riverBasicPlanPreferredPlan}
+                  onSelectRiver={(riverName, preferredPlan) => {
+                    setRiverBasicPlanPreferredPlan(preferredPlan ?? null)
+                    setSelectedRiverName(riverName)
+                  }}
+                  onChangeAxis={handleRiverBasicPlanChangeAxis}
                   onClose={handleHideRiverBasicPlan}
                 />
               </MapSideListPanel>
@@ -2502,11 +2692,29 @@ function MapLayoutContent({
                 <RiverBasicPlanDetailPanel
                   tab={riverPlanTab}
                   riverName={selectedRiverName}
-                  onClose={() => setSelectedRiverName("")}
+                  preferredPlan={riverBasicPlanPreferredPlan}
+                  onSelectedPlanChange={(plan) => {
+                    setRiverBasicPlanPreferredPlan(plan)
+                  }}
+                  onClose={() => {
+                    setRiverBasicPlanPreferredPlan(null)
+                    setSelectedRiverName("")
+                  }}
+                  hidePlanTable={riverBasicPlanListAxis === "byPlan"}
                 />
               </MapSideListPanel>
             </div>
           )}
+          <RiverBasicPlanScopeModal
+            open={riverBasicPlanOpen && riverBasicPlanScopeModalOpen}
+            selectedAxis={riverBasicPlanListAxis}
+            onSelect={handleRiverBasicPlanSelectAxis}
+            onClose={() => {
+              setRiverBasicPlanScopeModalOpen(false)
+              /** 보기를 한 번도 고르지 않은 채 닫으면 패널도 닫음 */
+              if (riverBasicPlanListAxis == null) handleHideRiverBasicPlan()
+            }}
+          />
           {roadLedgerOpen && (
             <div className="pointer-events-auto shrink-0">
               <MapSideListPanel
@@ -3196,6 +3404,52 @@ function MapLayoutContent({
               </MapSideListPanel>
             </div>
           )}
+          {waterAdminMenu && (
+            <WaterAdminShell
+              menu={waterAdminMenu}
+              leftOffsetPx={waterAdminPanelLeftPx}
+              onTotalWidthChange={setWaterAdminPanelWidth}
+              onClose={handleCloseWaterAdmin}
+              memoDetailId={memoDetailId}
+              onSelectMemoDetailId={(id) => {
+                setMemoAddTable(null)
+                setMemoDetailId(id)
+                setComplaintAddOpen(false)
+                setComplaintDetail?.(null)
+              }}
+              memoRefreshKey={memoListRefreshKey}
+              onAddMemo={(table) => {
+                setMemoDetailId(null)
+                setMemoAddTable(table)
+                setComplaintAddOpen(false)
+                setComplaintDetail?.(null)
+                setWaterComplaintKey(null)
+                setWaterComplaintAdd(false)
+              }}
+              complaintRefreshKey={waterComplaintRefreshKey}
+              complaintSelectedKey={waterComplaintKey}
+              onSelectComplaintKey={(key, fly, focus) => {
+                setMemoDetailId(null)
+                setMemoAddTable(null)
+                setComplaintAddOpen(false)
+                setComplaintDetail?.(null)
+                setWaterComplaintAdd(false)
+                setWaterComplaintFly(fly)
+                setWaterComplaintKey(key)
+                setWaterDetailFocus(focus ?? null)
+              }}
+              onAddComplaint={() => {
+                setMemoDetailId(null)
+                setMemoAddTable(null)
+                setComplaintAddOpen(false)
+                setComplaintDetail?.(null)
+                setWaterComplaintKey(null)
+                setWaterComplaintFly(false)
+                setWaterDetailFocus(null)
+                setWaterComplaintAdd(true)
+              }}
+            />
+          )}
           {complaintManagementOpen && (
             <div className="pointer-events-auto shrink-0">
               <MapSideListPanel
@@ -3567,6 +3821,44 @@ function MapLayoutContent({
               </MapSideListPanel>
             </div>
           )}
+          {worksInquiryOpen && worksInquirySerEng && (
+            <WorksInquiryShell
+              serEng={worksInquirySerEng}
+              leftOffsetPx={worksInquiryPanelLeftPx}
+              onTotalWidthChange={setWorksInquiryTotalWidth}
+              onClose={handleCloseWorksInquiry}
+            />
+          )}
+          {smallPublicFacOpen && (
+            <SmallPublicFacShell
+              leftOffsetPx={smallPublicFacPanelLeftPx}
+              onTotalWidthChange={setSmallPublicFacTotalWidth}
+              onClose={handleCloseSmallPublicFac}
+            />
+          )}
+          {worksRegisterOpen && (
+            <WorksRegisterShell
+              leftOffsetPx={worksRegisterPanelLeftPx}
+              onTotalWidthChange={setWorksRegisterTotalWidth}
+              onClose={handleCloseWorksRegister}
+            />
+          )}
+          {wtlAdminEmptyOpen && wtlAdminEmptySerEng && (
+            <WtlAdminEmptyShell
+              serEng={wtlAdminEmptySerEng}
+              leftOffsetPx={wtlAdminEmptyPanelLeftPx}
+              onTotalWidthChange={setWtlAdminEmptyTotalWidth}
+              onClose={handleCloseWtlAdminEmpty}
+            />
+          )}
+          {swlAdminEmptyOpen && swlAdminEmptySerEng && (
+            <SwlAdminEmptyShell
+              serEng={swlAdminEmptySerEng}
+              leftOffsetPx={swlAdminEmptyPanelLeftPx}
+              onTotalWidthChange={setSwlAdminEmptyTotalWidth}
+              onClose={handleCloseSwlAdminEmpty}
+            />
+          )}
           {fmsLinkageOpen && (
             <div className="pointer-events-auto shrink-0">
               <MapSideListPanel
@@ -3815,13 +4107,14 @@ function MapLayoutContent({
             </div>
           )}
           {riverIllegalOccupationOpen && (
-            <div className="pointer-events-auto shrink-0">
+            <div className="pointer-events-auto flex h-full shrink-0 flex-col">
               <MapSideListPanel
                 width={riverIllegalOccupationPanelWidth}
                 minWidth={RIVER_ILLEGAL_OCCUPATION_PANEL_MIN_WIDTH}
                 maxWidth={RIVER_ILLEGAL_OCCUPATION_PANEL_MAX_WIDTH}
                 leftOffsetPx={riverIllegalOccupationPanelLeftPx}
                 onWidthChange={setRiverIllegalOccupationPanelWidth}
+                contentClassName="overflow-hidden"
                 serEng={RIVER_ILLEGAL_OCCUPATION_OPENED_KEY}
               >
                 <RiverIllegalOccupationListPanel
@@ -3833,7 +4126,7 @@ function MapLayoutContent({
             </div>
           )}
           {riverIllegalOccupationDetailOpen && riverIllegalOccupationSelectedId && (
-            <div className="pointer-events-auto shrink-0">
+            <div className="pointer-events-auto flex h-full shrink-0 flex-col">
               <MapSideListPanel
                 width={riverIllegalOccupationDetailWidth}
                 minWidth={RIVER_ILLEGAL_OCCUPATION_DETAIL_MIN_WIDTH}
@@ -3873,7 +4166,7 @@ function MapLayoutContent({
                 <StandardDetail />
               </SerWriteAccessProvider>
               {memoAddTable && (
-                <SerWriteAccessProvider serEng="memo">
+                <SerWriteAccessProvider serEng={waterAdminMenu?.kind === "memo" ? waterAdminMenu.serEng : "memo"}>
                   <MemoDetailPanel
                     mode="add"
                     addTableName={memoAddTable}
@@ -3887,7 +4180,7 @@ function MapLayoutContent({
                 </SerWriteAccessProvider>
               )}
               {memoDetailId && (
-                <SerWriteAccessProvider serEng="memo">
+                <SerWriteAccessProvider serEng={waterAdminMenu?.kind === "memo" ? waterAdminMenu.serEng : "memo"}>
                   <MemoDetailPanel
                     mode="edit"
                     detailId={memoDetailId}
@@ -3897,6 +4190,40 @@ function MapLayoutContent({
                       setMemoDetailId(null)
                       setMemoListRefreshKey((k) => k + 1)
                     }}
+                  />
+                </SerWriteAccessProvider>
+              )}
+              {waterAdminMenu?.kind === "complaint" && waterComplaintAdd && (
+                <SerWriteAccessProvider serEng={waterAdminMenu.serEng}>
+                  <WaterComplaintFloat
+                    mode="add"
+                    tableName={waterAdminMenu.tables[0]?.tableName ?? ""}
+                    menuLabel={waterAdminMenu.label}
+                    serEng={waterAdminMenu.serEng}
+                    onClose={() => setWaterComplaintAdd(false)}
+                    onListRefresh={() => setWaterComplaintRefreshKey((k) => k + 1)}
+                    onCreated={(key) => {
+                      setWaterComplaintAdd(false)
+                      setWaterComplaintFly(true)
+                      setWaterComplaintKey(key)
+                      setWaterComplaintRefreshKey((k) => k + 1)
+                    }}
+                  />
+                </SerWriteAccessProvider>
+              )}
+              {waterAdminMenu?.kind === "complaint" && waterComplaintKey != null && (
+                <SerWriteAccessProvider serEng={waterAdminMenu.serEng}>
+                  <WaterComplaintFloat
+                    key={waterComplaintKey}
+                    mode="edit"
+                    tableName={waterAdminMenu.tables[0]?.tableName ?? ""}
+                    menuLabel={waterAdminMenu.label}
+                    serEng={waterAdminMenu.serEng}
+                    compKey={waterComplaintKey}
+                    fly={waterComplaintFly}
+                    detailFocus={waterDetailFocus}
+                    onClose={() => setWaterComplaintKey(null)}
+                    onListRefresh={() => setWaterComplaintRefreshKey((k) => k + 1)}
                   />
                 </SerWriteAccessProvider>
               )}

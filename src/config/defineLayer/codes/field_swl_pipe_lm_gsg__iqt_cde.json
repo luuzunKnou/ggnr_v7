@@ -1,0 +1,26 @@
+[
+  {
+    "define_code_key": "90000",
+    "define_code_field_key": "",
+    "define_code_name": "IQT001",
+    "define_code_kor_name": "IQT001"
+  },
+  {
+    "define_code_key": "90001",
+    "define_code_field_key": "",
+    "define_code_name": "IQT002",
+    "define_code_kor_name": "IQT002"
+  },
+  {
+    "define_code_key": "90002",
+    "define_code_field_key": "",
+    "define_code_name": "IQT900",
+    "define_code_kor_name": "IQT900"
+  },
+  {
+    "define_code_key": "90003",
+    "define_code_field_key": "",
+    "define_code_name": "IQT904",
+    "define_code_kor_name": "IQT904"
+  }
+]

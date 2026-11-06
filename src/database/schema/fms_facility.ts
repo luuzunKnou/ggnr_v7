@@ -1,6 +1,6 @@
 import { bigserial, customType, pgSchema, text, timestamp, unique } from 'drizzle-orm/pg-core';
 
-/** FMS 시설물관리대장 — layer, 접두 water|road|public */
+/** FMS 시설물관리대장 — layer.road_fms_facility 한 테이블(상하수도·도로·건축물은 facil_gbn 으로 구분) */
 const layer = pgSchema('layer');
 
 const geomPolygon5181 = customType<{ data: string | null; driverData: string | null }>({
@@ -9,8 +9,9 @@ const geomPolygon5181 = customType<{ data: string | null; driverData: string | n
   },
 });
 
-function buildFmsFacilityColumns() {
-  return {
+export const roadFmsFacility = layer.table(
+  'road_fms_facility',
+  {
     id: bigserial('id', { mode: 'number' }).primaryKey(),
     facilNo: text('facil_no'),
     facilNm: text('facil_nm'),
@@ -60,34 +61,9 @@ function buildFmsFacilityColumns() {
     syncedAt: timestamp('synced_at', { withTimezone: true, mode: 'string' }),
     createdAt: timestamp('created_at', { withTimezone: true, mode: 'string' }),
     updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'string' }),
-  };
-}
-
-function defineFmsFacilityTable(tableName: string, uniqueConstraintName: string) {
-  return layer.table(tableName, buildFmsFacilityColumns(), (t) => [
-    unique(uniqueConstraintName).on(t.facilNo),
-  ]);
-}
-
-export const waterFmsFacility = defineFmsFacilityTable(
-  'water_fms_facility',
-  'water_fms_facility_facil_no_key'
+  },
+  (t) => [unique('road_fms_facility_facil_no_key').on(t.facilNo)]
 );
 
-export const roadFmsFacility = defineFmsFacilityTable(
-  'road_fms_facility',
-  'road_fms_facility_facil_no_key'
-);
-
-export const publicFmsFacility = defineFmsFacilityTable(
-  'public_fms_facility',
-  'public_fms_facility_facil_no_key'
-);
-
-export type FmsFacilityTable =
-  | typeof waterFmsFacility
-  | typeof roadFmsFacility
-  | typeof publicFmsFacility;
-
-export type FmsFacility = typeof waterFmsFacility.$inferSelect;
-export type NewFmsFacility = typeof waterFmsFacility.$inferInsert;
+export type FmsFacility = typeof roadFmsFacility.$inferSelect;
+export type NewFmsFacility = typeof roadFmsFacility.$inferInsert;

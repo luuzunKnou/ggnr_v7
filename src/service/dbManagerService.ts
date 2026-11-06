@@ -1701,6 +1701,17 @@ export async function applySchemaSyncForField(
       const dropSql = `DROP TABLE IF EXISTS ${fq(schema, table)} CASCADE`;
       executedSql.push(dropSql);
       await client.query(dropSql);
+      if (schema === 'layer' && String(table).toLowerCase() === 'wtl_meta_ps') {
+        try {
+          const { dropWtlMeterGridArtifacts } = await import('./wtlMeterLocationService');
+          await dropWtlMeterGridArtifacts();
+        } catch (gridErr) {
+          console.warn(
+            '[dbManager dropTable] meter grid',
+            gridErr instanceof Error ? gridErr.message : gridErr
+          );
+        }
+      }
       results.push({ schema, table, action: 'table_dropped', detail: '스키마에 없어 삭제' });
       return;
     }
@@ -2052,6 +2063,17 @@ export async function applySchemaSyncFull(
         const dropSql = `DROP TABLE IF EXISTS ${fq(t.schema, t.table)} CASCADE`;
         executedSql.push(dropSql);
         await client.query(dropSql);
+        if (t.schema === 'layer' && String(t.table).toLowerCase() === 'wtl_meta_ps') {
+          try {
+            const { dropWtlMeterGridArtifacts } = await import('./wtlMeterLocationService');
+            await dropWtlMeterGridArtifacts();
+          } catch (gridErr) {
+            console.warn(
+              '[dbManager sync drop] meter grid',
+              gridErr instanceof Error ? gridErr.message : gridErr
+            );
+          }
+        }
         results.push({ schema: t.schema, table: t.table, action: 'table_dropped', detail: '스키마에 없어 삭제' });
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : String(e);

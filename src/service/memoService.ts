@@ -6,7 +6,7 @@ import { and, eq, isNull, or, sql } from 'drizzle-orm';
 import { auth } from '@/auth';
 import { usr } from '@/database/schema/usr';
 import { formatToYmdOrText } from '@/lib/formatDateYmd';
-import { MEMO_KEY_FIELD, MEMO_SCHEMA, MEMO_TABLES } from '@/lib/memoConfig';
+import { MEMO_KEY_FIELD, MEMO_SCHEMA, MEMO_TABLES, WATER_SCOPED_MEMO_TABLES } from '@/lib/memoConfig';
 import {
   deleteTableRowByKey,
   insertTableRow,
@@ -165,7 +165,12 @@ export async function getMemoList(params?: {
   const keyword = String(params?.keyword ?? '').trim();
   const tableFilter = String(params?.table ?? '').trim().toLowerCase();
 
-  const targets = MEMO_TABLES.filter((t) => !tableFilter || t.tableName === tableFilter);
+  const targets = [
+    ...MEMO_TABLES.filter((t) => !tableFilter || t.tableName === tableFilter),
+    ...(tableFilter
+      ? WATER_SCOPED_MEMO_TABLES.filter((t) => t.tableName === tableFilter)
+      : []),
+  ];
   const rows: MemoListRow[] = [];
 
   for (const meta of targets) {
