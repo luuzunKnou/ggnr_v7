@@ -6,6 +6,7 @@ import { createPortal } from "react-dom"
 import { useRouter, useSearchParams } from "next/navigation"
 import { X } from "lucide-react"
 import Map3DDataPanel from "./_mapComponents/Map3DDataPanel"
+import { HangulSearchIme } from "./_mapComponents/hangulIme/HangulSearchIme"
 import StandardList from "./_mapComponents/standard/StandardList"
 import { LayerDataPanel } from "./_mapComponents/standard/LayerDataPanel"
 import StandardDetail from "./_mapComponents/standard/StandardDetail"
@@ -2559,6 +2560,7 @@ function MapLayoutContent({
   return (
     <SearchBarOffsetContext.Provider value={searchBarOffset}>
       <div className="relative w-full h-screen overflow-hidden bg-slate-100">
+        <HangulSearchIme />
         {mapContext?.layerRowGeomEdit && (
           <div
             className="pointer-events-none fixed inset-0 z-[100] box-border border-2 border-primary/40"
@@ -3205,6 +3207,8 @@ function MapLayoutContent({
                     setOccupationLedgerDetailId(null)
                     setOccupationLedgerListRefreshKey((k) => k + 1)
                   }}
+                  overlayLeftPx={occupationLedgerPanelLeftPx}
+                  overlayWidthPx={occupationLedgerPanelWidth + occupationLedgerDetailWidth}
                 />
               </MapSideListPanel>
             </div>

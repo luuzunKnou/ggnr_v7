@@ -197,6 +197,8 @@ export function mergeDefineLayerShpTypesIntoGeometryMap(
 const WMS_STACK_ALWAYS_BOTTOM = new Set([
   'usage_data_sisul_as',
   'usage_data_as_solo',
+  'usage_data_solo_as',
+  'rdl_occ_solo_as',
   'water_occupationledger_jijuk',
   'road_occupationledger_jijuk',
   'public_occupationledger_jijuk',
