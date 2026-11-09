@@ -1,13 +1,15 @@
 'use client';
 
-import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { ChevronUp, Loader2, X } from 'lucide-react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useSession } from 'next-auth/react';
+import { Check, ChevronUp, Copy, Download, Loader2, X } from 'lucide-react';
 import Feature from 'ol/Feature';
 import GeoJSON from 'ol/format/GeoJSON';
 import VectorLayer from 'ol/layer/Vector';
 import VectorSource from 'ol/source/Vector';
 import { Circle as CircleStyle, Fill, Stroke, Style } from 'ol/style';
-import { cn } from '@/lib/utils';
+import { isSuperUser } from '@/lib/auth/superUser';
+import { cn, copyTextToClipboard } from '@/lib/utils';
 import { useMapContext } from '../MapContext';
 import { MapFloatingPanel } from '../MapFloatingPanel';
 import {
@@ -22,7 +24,13 @@ import {
   LAND_INFO_TABLE_TEXT,
   LAND_INFO_TABLE_WRAP,
 } from './landInfoTableStyles';
-import { downloadWimsExcel, loadWimsList, loadWimsParcel, loadWimsStat } from './wimsClient';
+import {
+  downloadWimsExcel,
+  loadWimsList,
+  loadWimsParcel,
+  loadWimsStat,
+  WimsClientError,
+} from './wimsClient';
 import {
   WIMS_GOJIKIND,
   WIMS_JOCODE,
@@ -56,12 +64,17 @@ const LIST_COLUMNS: { key: keyof WimsHistoryRow; label: string; kind: 'code' | '
   { key: 'delYn', label: '상태', kind: 'text' },
 ];
 
-const DETAIL_COLUMNS: { key: keyof WimsHistoryRow; label: string; kind: 'code' | 'date' | 'number' | 'text' }[] = [
+const DETAIL_COLUMNS: {
+  key: keyof WimsHistoryRow;
+  label: string;
+  kind: 'code' | 'date' | 'number' | 'text';
+  title?: boolean;
+}[] = [
   { key: 'gojikind', label: '종류', kind: 'code' },
-  { key: 'meterDay', label: '검침일', kind: 'date' },
+  { key: 'meterDay', label: '검침일', kind: 'date', title: true },
   { key: 'nabgiDate', label: '납기마감일', kind: 'date' },
   { key: 'customerNo', label: '수용가번호', kind: 'text' },
-  { key: 'meterNo', label: '계량기번호', kind: 'text' },
+  { key: 'meterNo', label: '계량기번호', kind: 'text', title: true },
   { key: 'suname', label: '성명', kind: 'text' },
   { key: 'areaCd', label: '구역', kind: 'text' },
   { key: 'admDong', label: '행정동', kind: 'text' },
@@ -73,6 +86,18 @@ const DETAIL_COLUMNS: { key: keyof WimsHistoryRow; label: string; kind: 'code' |
   { key: 'diam', label: '구경', kind: 'number' },
   { key: 'delYn', label: '상태', kind: 'text' },
 ];
+
+/** AddressInfoDetail 패널 max-w-[520px]과 동일 — 플로팅 상세를 그 왼쪽에 붙임 */
+const LAND_INFO_PANEL_MAX_WIDTH_PX = 520;
+const WIMS_DETAIL_FLOAT_GAP_PX = 8;
+const WIMS_DETAIL_FLOAT_WIDTH = '420px';
+const WIMS_DETAIL_FLOAT_MAX_HEIGHT = '70vh';
+
+/** 마운트 시 하단 근처 — MapFloatingPanel이 실측 높이로 clamp */
+function wimsDetailMountTop(): number {
+  if (typeof window === 'undefined') return COMPLAINT_DETAIL_PANEL_DEFAULT_TOP;
+  return window.innerHeight;
+}
 
 const fieldClass =
   'h-7 min-w-0 rounded border border-border bg-background px-1.5 text-[11px] text-foreground';
@@ -142,15 +167,69 @@ function pairsOf(meters: WimsMeter[]): WimsPair[] {
   return pairs;
 }
 
-export function WimsInfoPanel({ pnu }: { pnu: string }) {
+function canCopyValue(value: string): boolean {
+  const text = value.trim();
+  return Boolean(text) && text !== '-';
+}
+
+function ValueCopyButton({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+    };
+  }, []);
+
+  const handleCopy = useCallback(async () => {
+    if (!canCopyValue(text)) return;
+    const ok = await copyTextToClipboard(text.trim());
+    if (!ok) return;
+    setCopied(true);
+    if (timerRef.current) clearTimeout(timerRef.current);
+    timerRef.current = setTimeout(() => setCopied(false), 1500);
+  }, [text]);
+
+  const disabled = !canCopyValue(text);
+  const label = copied ? '복사됨' : '복사';
+
+  return (
+    <button
+      type="button"
+      onClick={(e) => {
+        e.stopPropagation();
+        void handleCopy();
+      }}
+      disabled={disabled}
+      title={label}
+      aria-label={label}
+      className="inline-flex h-5 w-5 shrink-0 cursor-pointer items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+    >
+      {copied ? <Check className="h-3 w-3 text-primary" aria-hidden /> : <Copy className="h-3 w-3" aria-hidden />}
+    </button>
+  );
+}
+
+export function WimsInfoPanel({
+  pnu,
+  connected = true,
+}: {
+  pnu: string;
+  /** status 조회 결과. false 이면 Oracle 접속 불가 */
+  connected?: boolean | null;
+}) {
+  const { data: session } = useSession();
   const mapContext = useMapContext();
   const layerRef = useRef<VectorLayer<VectorSource> | null>(null);
   const listReq = useRef(0);
+  const showDbHint = isSuperUser(session?.user?.id);
 
   const [loading, setLoading] = useState(true);
   const [listLoading, setListLoading] = useState(false);
   const [statLoading, setStatLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [unreachable, setUnreachable] = useState(connected === false);
   const [meters, setMeters] = useState<WimsMeter[]>([]);
   const [statList, setStatList] = useState<WimsStatRow[]>([]);
   const [rows, setRows] = useState<WimsHistoryRow[]>([]);
@@ -169,7 +248,6 @@ export function WimsInfoPanel({ pnu }: { pnu: string }) {
   const [detailCollapsed, setDetailCollapsed] = useState(false);
   const [highlightGeom, setHighlightGeom] = useState<string | null>(null);
   const [excelBusy, setExcelBusy] = useState(false);
-  const floatingLeftPx = (mapContext?.mapPaddingLeft ?? 0) + 56;
 
   const customerOptions = useMemo(() => {
     const set = new Set<string>();
@@ -227,7 +305,10 @@ export function WimsInfoPanel({ pnu }: { pnu: string }) {
   }, [highlightGeom, mapContext?.mapInstanceRef]);
 
   useEffect(() => {
-    console.log('[WimsInfoPanel] mount/load', { pnu });
+    setUnreachable(connected === false);
+  }, [connected]);
+
+  useEffect(() => {
     let alive = true;
     setLoading(true);
     setError(null);
@@ -243,9 +324,23 @@ export function WimsInfoPanel({ pnu }: { pnu: string }) {
     setJocode('');
     setStatStart('');
     setStatEnd('');
+
+    if (connected === false) {
+      setUnreachable(true);
+      setMeters([]);
+      setStatList([]);
+      setRows([]);
+      setTotal(0);
+      setLoading(false);
+      return () => {
+        alive = false;
+      };
+    }
+
     loadWimsParcel(pnu)
       .then((data) => {
         if (!alive) return;
+        setUnreachable(false);
         setMeters(data.meters);
         setStatList(data.statList);
         setRows(data.dataList);
@@ -258,7 +353,13 @@ export function WimsInfoPanel({ pnu }: { pnu: string }) {
         setStatList([]);
         setRows([]);
         setTotal(0);
-        setError(err instanceof Error ? err.message : '수용가 정보를 조회하지 못했습니다.');
+        if (err instanceof WimsClientError && err.code === 'db_unreachable') {
+          setUnreachable(true);
+          setError(null);
+        } else {
+          setUnreachable(false);
+          setError(err instanceof Error ? err.message : '수용가 정보를 조회하지 못했습니다.');
+        }
       })
       .finally(() => {
         if (alive) setLoading(false);
@@ -266,7 +367,7 @@ export function WimsInfoPanel({ pnu }: { pnu: string }) {
     return () => {
       alive = false;
     };
-  }, [pnu]);
+  }, [pnu, connected]);
 
   const applyList = async (nextPage: number, query: WimsListQuery) => {
     const id = ++listReq.current;
@@ -281,7 +382,12 @@ export function WimsInfoPanel({ pnu }: { pnu: string }) {
       setSelectedRow(null);
     } catch (err: unknown) {
       if (id !== listReq.current) return;
-      setError(err instanceof Error ? err.message : '수용가 정보를 조회하지 못했습니다.');
+      if (err instanceof WimsClientError && err.code === 'db_unreachable') {
+        setUnreachable(true);
+        setError(null);
+      } else {
+        setError(err instanceof Error ? err.message : '수용가 정보를 조회하지 못했습니다.');
+      }
     } finally {
       if (id === listReq.current) setListLoading(false);
     }
@@ -392,7 +498,12 @@ export function WimsInfoPanel({ pnu }: { pnu: string }) {
       setStatList(list);
       setSelectedStat(null);
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : '수용가 정보를 조회하지 못했습니다.');
+      if (err instanceof WimsClientError && err.code === 'db_unreachable') {
+        setUnreachable(true);
+        setError(null);
+      } else {
+        setError(err instanceof Error ? err.message : '수용가 정보를 조회하지 못했습니다.');
+      }
     } finally {
       setStatLoading(false);
     }
@@ -434,311 +545,346 @@ export function WimsInfoPanel({ pnu }: { pnu: string }) {
     );
   }
 
+  if (unreachable) {
+    return (
+      <div
+        className={`flex min-h-0 flex-1 flex-col items-center justify-center gap-2 bg-background p-4 text-center ${LAND_INFO_TABLE_TEXT}`}
+      >
+        <p className="text-[12px] font-medium text-destructive">서비스 제공에 문제가 있습니다.</p>
+        {showDbHint ? (
+          <p className="text-[11px] text-muted-foreground">DB 접속이 되지 않습니다.</p>
+        ) : null}
+      </div>
+    );
+  }
+
   return (
     <div className={`relative flex min-h-0 flex-1 flex-col bg-background ${LAND_INFO_TABLE_TEXT}`}>
-      <div className="min-h-0 flex-1 overflow-auto p-2">
-      {error ? <p className="mb-2 text-[11px] text-destructive">{error}</p> : null}
+      <div className="flex min-h-0 flex-1 flex-col gap-4 p-2">
+        {error ? <p className="shrink-0 text-[11px] text-destructive">{error}</p> : null}
 
-      <section className="mb-3">
-        <div className="mb-1 flex flex-wrap items-center justify-between gap-1">
-          <p className="font-medium text-foreground">필지 내 기간별 통계</p>
-          <div className="flex flex-wrap items-center gap-1">
-            <label className="flex items-center gap-1 text-muted-foreground">
-              기간
+        <section className="flex min-h-0 flex-1 flex-col overflow-hidden">
+          <div className="mb-1 flex shrink-0 flex-wrap items-center justify-between gap-1">
+            <p className="font-medium text-foreground">필지 내 기간별 통계</p>
+            <div className="flex flex-wrap items-center gap-1">
+              <label className="flex items-center gap-1 text-muted-foreground">
+                기간
+                <input
+                  type="date"
+                  value={statStart}
+                  onChange={(e) => setStatStart(e.target.value)}
+                  title="시작일"
+                  className={fieldClass}
+                />
+                <span>~</span>
+                <input
+                  type="date"
+                  value={statEnd}
+                  onChange={(e) => setStatEnd(e.target.value)}
+                  title="종료일"
+                  className={fieldClass}
+                />
+              </label>
+              <button type="button" title="조회" className={`${LAND_INFO_TABLE_BTN} cursor-pointer`} onClick={() => void onSearchStat()}>
+                조회
+              </button>
+            </div>
+          </div>
+          <div className={cn(LAND_INFO_TABLE_WRAP, 'min-h-0 flex-1 overflow-auto')}>
+            <table className="min-w-[640px] w-full border-collapse">
+              <thead className={LAND_INFO_LIST_THEAD}>
+                <tr>
+                  {['수용가 번호', '계량기 번호', '성명', '주소', '평균 사용량', '평균 사용료', '상태'].map((label) => (
+                    <th key={label} className={LAND_INFO_LIST_TH} title={label}>
+                      {label}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {statLoading ? (
+                  <tr>
+                    <td colSpan={7} className={`${LAND_INFO_LIST_TD} text-center text-muted-foreground`}>
+                      조회 중...
+                    </td>
+                  </tr>
+                ) : statList.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className={`${LAND_INFO_LIST_TD} text-center text-muted-foreground`}>
+                      조회된 통계가 없습니다.
+                    </td>
+                  </tr>
+                ) : (
+                  statList.map((row, index) => {
+                    const name = dash(resolveStatName(row));
+                    const address = dash(resolveStatAddress(row));
+                    const customer = dash(row.customerNo);
+                    const meter = dash(row.meterNo);
+                    const use = formatAvg(row.avgUseQty);
+                    const fee = formatAvg(row.avgFreeQty);
+                    const state = dash(row.delYn);
+                    return (
+                      <tr
+                        key={`${row.customerNo}_${row.meterNo}_${index}`}
+                        className={`cursor-pointer ${selectedStat === index ? 'bg-primary/10' : ''}`}
+                        onClick={() => onStatRow(row, index)}
+                      >
+                        {[customer, meter, name, address, use, fee, state].map((cell, cellIndex) => (
+                          <td key={cellIndex} className={LAND_INFO_LIST_TD} title={cell}>
+                            {cell}
+                          </td>
+                        ))}
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section className="flex min-h-0 flex-[2] flex-col overflow-hidden">
+          <p className="mb-1 shrink-0 font-medium text-foreground">WIMS 검침이력</p>
+          <div className="mb-1 flex w-full shrink-0 items-center gap-1">
+            <label className="flex min-w-0 items-center gap-1 text-muted-foreground">
+              <span className="shrink-0">수용가 번호</span>
+              <select
+                value={customerNo}
+                onChange={(e) => onCustomer(e.target.value)}
+                title="수용가 번호"
+                className={`${fieldClass} w-[4.5rem]`}
+              >
+                <option value="">선택</option>
+                {customerOptions.map((hom) => (
+                  <option key={hom} value={hom}>
+                    {hom}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="flex min-w-0 items-center gap-1 text-muted-foreground">
+              <span className="shrink-0">계량기 번호</span>
+              <select
+                value={meterNo}
+                onChange={(e) => onMeter(e.target.value)}
+                title="계량기 번호"
+                className={`${fieldClass} w-[4.5rem]`}
+              >
+                <option value="">선택</option>
+                {meterOptions.map((met) => (
+                  <option key={met} value={met}>
+                    {met}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="flex min-w-0 items-center gap-1 text-muted-foreground">
+              <span className="shrink-0">종류</span>
+              <select
+                value={gojikind}
+                title="종류"
+                className={`${fieldClass} w-[4rem]`}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  setGojikind(value);
+                  void applyList(1, listQuery({ gojikind: value }));
+                }}
+              >
+                <option value="">선택</option>
+                {Object.entries(WIMS_GOJIKIND).map(([code, label]) => (
+                  <option key={code} value={code}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="flex min-w-0 items-center gap-1 text-muted-foreground">
+              <span className="shrink-0">상태</span>
+              <select
+                value={jocode}
+                title="상태"
+                className={`${fieldClass} w-[4rem]`}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  setJocode(value);
+                  void applyList(1, listQuery({ jocode: value }));
+                }}
+              >
+                <option value="">선택</option>
+                {Object.entries(WIMS_JOCODE).map(([code, label]) => (
+                  <option key={code} value={code}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+          <div className="mb-1 flex w-full shrink-0 items-center gap-1">
+            <label className="flex min-w-0 flex-1 items-center gap-1 text-muted-foreground">
+              <span className="shrink-0">통합검색</span>
               <input
-                type="date"
-                value={statStart}
-                onChange={(e) => setStatStart(e.target.value)}
-                title="시작일"
-                className={fieldClass}
-              />
-              <span>~</span>
-              <input
-                type="date"
-                value={statEnd}
-                onChange={(e) => setStatEnd(e.target.value)}
-                title="종료일"
-                className={fieldClass}
+                type="search"
+                value={searchInput}
+                onChange={(e) => setSearchInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key !== 'Enter') return;
+                  const next = normalizeKeyword(searchInput);
+                  setKeyword(next);
+                  void applyList(1, listQuery({ keyword: next }));
+                }}
+                title="통합검색"
+                className={`${fieldClass} min-w-0 flex-1`}
               />
             </label>
-            <button type="button" title="조회" className={`${LAND_INFO_TABLE_BTN} cursor-pointer`} onClick={() => void onSearchStat()}>
-              조회
-            </button>
-          </div>
-        </div>
-        <div className={LAND_INFO_TABLE_WRAP}>
-          <table className="min-w-[640px] w-full border-collapse">
-            <thead className={LAND_INFO_LIST_THEAD}>
-              <tr>
-                {['수용가 번호', '계량기 번호', '성명', '주소', '평균 사용량', '평균 사용료', '상태'].map((label) => (
-                  <th key={label} className={LAND_INFO_LIST_TH} title={label}>
-                    {label}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {statLoading ? (
-                <tr>
-                  <td colSpan={7} className={`${LAND_INFO_LIST_TD} text-center text-muted-foreground`}>
-                    조회 중...
-                  </td>
-                </tr>
-              ) : statList.length === 0 ? (
-                <tr>
-                  <td colSpan={7} className={`${LAND_INFO_LIST_TD} text-center text-muted-foreground`}>
-                    조회된 통계가 없습니다.
-                  </td>
-                </tr>
-              ) : (
-                statList.map((row, index) => {
-                  const name = dash(resolveStatName(row));
-                  const address = dash(resolveStatAddress(row));
-                  const customer = dash(row.customerNo);
-                  const meter = dash(row.meterNo);
-                  const use = formatAvg(row.avgUseQty);
-                  const fee = formatAvg(row.avgFreeQty);
-                  const state = dash(row.delYn);
-                  return (
-                    <tr
-                      key={`${row.customerNo}_${row.meterNo}_${index}`}
-                      className={`cursor-pointer ${selectedStat === index ? 'bg-primary/10' : ''}`}
-                      onClick={() => onStatRow(row, index)}
-                    >
-                      {[customer, meter, name, address, use, fee, state].map((cell, cellIndex) => (
-                        <td key={cellIndex} className={LAND_INFO_LIST_TD} title={cell}>
-                          {cell}
-                        </td>
-                      ))}
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
-      </section>
-
-      <section>
-        <p className="mb-1 font-medium text-foreground">WIMS 검침이력</p>
-        <div className="mb-1 flex flex-wrap items-center gap-1">
-          <label className="flex items-center gap-1 text-muted-foreground">
-            통합검색
-            <input
-              type="search"
-              value={searchInput}
-              onChange={(e) => setSearchInput(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key !== 'Enter') return;
+            <button
+              type="button"
+              title="검색"
+              className={`${LAND_INFO_TABLE_BTN} shrink-0 cursor-pointer`}
+              onClick={() => {
                 const next = normalizeKeyword(searchInput);
                 setKeyword(next);
                 void applyList(1, listQuery({ keyword: next }));
               }}
-              title="통합검색"
-              className={`${fieldClass} w-36`}
-            />
-          </label>
-          <button
-            type="button"
-            title="검색"
-            className={`${LAND_INFO_TABLE_BTN} cursor-pointer`}
-            onClick={() => {
-              const next = normalizeKeyword(searchInput);
-              setKeyword(next);
-              void applyList(1, listQuery({ keyword: next }));
-            }}
-          >
-            검색
-          </button>
-          <button
-            type="button"
-            title="초기화"
-            className={`${LAND_INFO_TABLE_BTN} cursor-pointer`}
-            onClick={() => {
-              setSearchInput('');
-              setKeyword('');
-              setGojikind('');
-              setJocode('');
-              setCustomerNo('');
-              setMeterNo('');
-              setSelectedStat(null);
-              setHighlightGeom(null);
-              void applyList(1, listQuery({ keyword: '', gojikind: '', jocode: '', customerNo: '', meterNo: '' }));
-            }}
-          >
-            초기화
-          </button>
-          <button
-            type="button"
-            title="엑셀 다운로드"
-            className={`${LAND_INFO_TABLE_BTN} cursor-pointer disabled:opacity-50`}
-            disabled={excelBusy}
-            onClick={() => void onExcel()}
-          >
-            엑셀
-          </button>
-          <span className="text-muted-foreground">총 {total}건</span>
-        </div>
-        <div className="mb-1 flex flex-wrap items-center gap-1">
-          <label className="flex items-center gap-1 text-muted-foreground">
-            수용가 번호
-            <select
-              value={customerNo}
-              onChange={(e) => onCustomer(e.target.value)}
-              title="수용가 번호"
-              className={fieldClass}
             >
-              <option value="">수용가 번호 선택</option>
-              {customerOptions.map((hom) => (
-                <option key={hom} value={hom}>
-                  {hom}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="flex items-center gap-1 text-muted-foreground">
-            계량기 번호
-            <select value={meterNo} onChange={(e) => onMeter(e.target.value)} title="계량기 번호" className={fieldClass}>
-              <option value="">계량기 번호 선택</option>
-              {meterOptions.map((met) => (
-                <option key={met} value={met}>
-                  {met}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="flex items-center gap-1 text-muted-foreground">
-            종류
-            <select
-              value={gojikind}
-              title="종류"
-              className={fieldClass}
-              onChange={(e) => {
-                const value = e.target.value;
-                setGojikind(value);
-                void applyList(1, listQuery({ gojikind: value }));
+              검색
+            </button>
+            <button
+              type="button"
+              title="초기화"
+              className={`${LAND_INFO_TABLE_BTN} shrink-0 cursor-pointer`}
+              onClick={() => {
+                setSearchInput('');
+                setKeyword('');
+                setGojikind('');
+                setJocode('');
+                setCustomerNo('');
+                setMeterNo('');
+                setSelectedStat(null);
+                setHighlightGeom(null);
+                void applyList(1, listQuery({ keyword: '', gojikind: '', jocode: '', customerNo: '', meterNo: '' }));
               }}
             >
-              <option value="">종류 선택</option>
-              {Object.entries(WIMS_GOJIKIND).map(([code, label]) => (
-                <option key={code} value={code}>
-                  {label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="flex items-center gap-1 text-muted-foreground">
-            상태
-            <select
-              value={jocode}
-              title="상태"
-              className={fieldClass}
-              onChange={(e) => {
-                const value = e.target.value;
-                setJocode(value);
-                void applyList(1, listQuery({ jocode: value }));
-              }}
+              초기화
+            </button>
+            <button
+              type="button"
+              title="엑셀 다운로드"
+              className={`${LAND_INFO_TABLE_BTN} inline-flex shrink-0 cursor-pointer items-center gap-1 disabled:opacity-50`}
+              disabled={excelBusy}
+              onClick={() => void onExcel()}
             >
-              <option value="">상태 선택</option>
-              {Object.entries(WIMS_JOCODE).map(([code, label]) => (
-                <option key={code} value={code}>
-                  {label}
-                </option>
-              ))}
-            </select>
-          </label>
-        </div>
-        <div className={LAND_INFO_TABLE_WRAP}>
-          <table className="min-w-[720px] w-full border-collapse">
-            <thead className={LAND_INFO_LIST_THEAD}>
-              <tr>
-                {LIST_COLUMNS.map((col) => (
-                  <th key={col.key} className={LAND_INFO_LIST_TH} title={col.label}>
-                    {col.label}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {listLoading ? (
-                <tr>
-                  <td colSpan={LIST_COLUMNS.length} className={`${LAND_INFO_LIST_TD} text-center text-muted-foreground`}>
-                    조회 중...
-                  </td>
-                </tr>
-              ) : rows.length === 0 ? (
-                <tr>
-                  <td colSpan={LIST_COLUMNS.length} className={`${LAND_INFO_LIST_TD} text-center text-muted-foreground`}>
-                    데이터가 없습니다
-                  </td>
-                </tr>
-              ) : (
-                rows.map((row, index) => {
-                  const selected =
-                    selectedRow != null &&
-                    selectedRow.meterNo === row.meterNo &&
-                    selectedRow.meterDay === row.meterDay &&
-                    selectedRow.customerNo === row.customerNo &&
-                    selectedRow.gojikind === row.gojikind &&
-                    selectedRow.useQty === row.useQty &&
-                    selectedRow.freeQty === row.freeQty;
-                  return (
-                    <tr
-                      key={`${row.meterNo}_${row.meterDay}_${index}`}
-                      className={cn('cursor-pointer', selected && 'bg-primary/10')}
-                      onClick={() => setSelectedRow(row)}
-                    >
-                      {LIST_COLUMNS.map((col) => {
-                        const text = dash(formatCell(col.kind, row[col.key]));
-                        return (
-                          <td key={col.key} className={LAND_INFO_LIST_TD} title={text}>
-                            {text}
-                          </td>
-                        );
-                      })}
+              <Download className="h-3 w-3 shrink-0" aria-hidden />
+              엑셀 다운로드
+            </button>
+          </div>
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded border border-border">
+            <div className="min-h-0 flex-1 overflow-auto">
+              <table className="standard-list-table min-w-[720px]">
+                <thead className="standard-table-thead">
+                  <tr>
+                    {LIST_COLUMNS.map((col) => (
+                      <th
+                        key={col.key}
+                        className="standard-table-th standard-table-th-left"
+                        title={col.label}
+                      >
+                        {col.label}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {listLoading ? (
+                    <tr>
+                      <td colSpan={LIST_COLUMNS.length} className="standard-table-loading-cell">
+                        <span className="inline-flex items-center justify-center gap-2">
+                          <Loader2 className="h-4 w-4 shrink-0 animate-spin" aria-hidden />
+                          조회 중...
+                        </span>
+                      </td>
                     </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
-        <div className="mt-1 flex items-center justify-center gap-2">
-          <button
-            type="button"
-            title="이전"
-            className={`${LAND_INFO_TABLE_BTN} cursor-pointer`}
-            disabled={page <= 1 || listLoading}
-            onClick={() => void applyList(page - 1, listQuery({}))}
-          >
-            이전
-          </button>
-          <span className="text-muted-foreground">
-            {page} / {totalPages}
-          </span>
-          <button
-            type="button"
-            title="다음"
-            className={`${LAND_INFO_TABLE_BTN} cursor-pointer`}
-            disabled={page >= totalPages || listLoading}
-            onClick={() => void applyList(page + 1, listQuery({}))}
-          >
-            다음
-          </button>
-        </div>
-      </section>
+                  ) : rows.length === 0 ? (
+                    <tr>
+                      <td colSpan={LIST_COLUMNS.length} className="standard-table-empty">
+                        데이터가 없습니다
+                      </td>
+                    </tr>
+                  ) : (
+                    rows.map((row, index) => {
+                      const selected =
+                        selectedRow != null &&
+                        selectedRow.meterNo === row.meterNo &&
+                        selectedRow.meterDay === row.meterDay &&
+                        selectedRow.customerNo === row.customerNo &&
+                        selectedRow.gojikind === row.gojikind &&
+                        selectedRow.useQty === row.useQty &&
+                        selectedRow.freeQty === row.freeQty;
+                      return (
+                        <tr
+                          key={`${row.meterNo}_${row.meterDay}_${index}`}
+                          className={cn(
+                            'standard-list-row',
+                            selected && 'standard-list-row-selected'
+                          )}
+                          onClick={() => setSelectedRow(row)}
+                        >
+                          {LIST_COLUMNS.map((col) => {
+                            const text = dash(formatCell(col.kind, row[col.key]));
+                            return (
+                              <td key={col.key} className="standard-table-td-compact" title={text}>
+                                {text}
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+            <div className="flex shrink-0 items-center justify-between gap-2 border-t border-border bg-muted/30 px-2 py-1.5">
+              <span className="text-[11px] text-muted-foreground">
+                {total === 0
+                  ? '0건'
+                  : `${(page - 1) * WIMS_PAGE_SIZE + 1}–${Math.min(page * WIMS_PAGE_SIZE, total)} / ${total.toLocaleString()}건`}
+              </span>
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  title="이전"
+                  disabled={page <= 1 || listLoading}
+                  className="cursor-pointer rounded border border-border bg-background px-2 py-0.5 text-[11px] text-muted-foreground hover:bg-muted/50 disabled:cursor-not-allowed disabled:opacity-50"
+                  onClick={() => void applyList(page - 1, listQuery({}))}
+                >
+                  이전
+                </button>
+                <span className="px-1.5 text-[11px] text-muted-foreground">{page}페이지</span>
+                <button
+                  type="button"
+                  title="다음"
+                  disabled={page >= totalPages || listLoading}
+                  className="cursor-pointer rounded border border-border bg-background px-2 py-0.5 text-[11px] text-muted-foreground hover:bg-muted/50 disabled:cursor-not-allowed disabled:opacity-50"
+                  onClick={() => void applyList(page + 1, listQuery({}))}
+                >
+                  다음
+                </button>
+              </div>
+            </div>
+          </div>
+        </section>
       </div>
 
       {selectedRow ? (
         <MapFloatingPanel
           viewport
-          width="420px"
-          maxHeight="70vh"
+          width={WIMS_DETAIL_FLOAT_WIDTH}
+          maxHeight={WIMS_DETAIL_FLOAT_MAX_HEIGHT}
           className="bg-background backdrop-blur-none"
           style={{ zIndex: COMPLAINT_DETAIL_PANEL_Z_INDEX + 2 }}
           defaultPosition={{
-            top: COMPLAINT_DETAIL_PANEL_DEFAULT_TOP,
-            left: floatingLeftPx,
+            top: wimsDetailMountTop(),
+            right: LAND_INFO_PANEL_MAX_WIDTH_PX + WIMS_DETAIL_FLOAT_GAP_PX,
           }}
           header={
             <>
@@ -762,12 +908,12 @@ export function WimsInfoPanel({ pnu }: { pnu: string }) {
                 >
                   WIMS 검침이력 상세
                 </span>
-                {trimId(selectedRow.meterNo) || trimId(selectedRow.customerNo) ? (
+                {trimId(selectedRow.meterDay) || trimId(selectedRow.meterNo) ? (
                   <span
                     className="mt-0.5 block truncate text-[11px] text-muted-foreground"
-                    title={`${dash(selectedRow.customerNo)} / ${dash(selectedRow.meterNo)}`}
+                    title={`${dash(formatYmd(selectedRow.meterDay))} / ${dash(selectedRow.meterNo)}`}
                   >
-                    {dash(selectedRow.customerNo)} / {dash(selectedRow.meterNo)}
+                    {dash(formatYmd(selectedRow.meterDay))} / {dash(selectedRow.meterNo)}
                   </span>
                 ) : null}
               </div>
@@ -799,10 +945,16 @@ export function WimsInfoPanel({ pnu }: { pnu: string }) {
                         {col.label}
                       </div>
                       <div
-                        className="standard-detail-attr-value standard-detail-attr-cell-border text-foreground"
+                        className={cn(
+                          'standard-detail-attr-value standard-detail-attr-cell-border',
+                          col.title
+                            ? 'standard-detail-attr-value-title flex items-center justify-between gap-2'
+                            : 'text-foreground'
+                        )}
                         title={text}
                       >
-                        {text}
+                        <span className="min-w-0 break-all">{text}</span>
+                        {col.title ? <ValueCopyButton text={text} /> : null}
                       </div>
                     </div>
                   );

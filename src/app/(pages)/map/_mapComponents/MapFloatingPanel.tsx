@@ -8,7 +8,9 @@ const DEFAULT_POSITION = { top: 80, right: 80 };
 /** 화면 기준 패널 — 목록·업무 패널·사이드바 위. 전체화면 미리보기(z-500)·이력(z-1200)보다는 아래 */
 const VIEWPORT_Z_INDEX = 120;
 /** 화면 밖으로만 못 나가게 하고 여백은 두지 않는다 (끝까지 붙임) */
+/** 화면 밖으로만 못 나가게 하고, 하단 배치 시 살짝 띄움 */
 const VIEWPORT_EDGE_GAP = 0;
+const VIEWPORT_BOTTOM_GAP = 12;
 
 export type MapFloatingPanelPosition =
   | { top: number; right: number; left?: never }
@@ -78,7 +80,7 @@ export function MapFloatingPanel({
     );
     const maxTop = Math.max(
       VIEWPORT_EDGE_GAP,
-      window.innerHeight - panelHeight - VIEWPORT_EDGE_GAP
+      window.innerHeight - panelHeight - VIEWPORT_BOTTOM_GAP
     );
     return {
       top: Math.min(Math.max(VIEWPORT_EDGE_GAP, next.top), maxTop),
@@ -117,11 +119,17 @@ export function MapFloatingPanel({
       return;
     }
     if (movedRef.current) return;
-    const panelWidth = rootRef.current?.offsetWidth ?? 0;
-    const rawLeft = useLeft
-      ? anchorH
-      : Math.max(0, window.innerWidth - anchorH - panelWidth);
-    setPosition(clampToViewport({ top: anchorTop, left: rawLeft }));
+    const place = () => {
+      const panelWidth = rootRef.current?.offsetWidth ?? 0;
+      const rawLeft = useLeft
+        ? anchorH
+        : Math.max(0, window.innerWidth - anchorH - panelWidth);
+      setPosition(clampToViewport({ top: anchorTop, left: rawLeft }));
+    };
+    place();
+    // 첫 페인트 후 실측 높이로 하단 배치 등을 한 번 더 맞춤
+    const raf = requestAnimationFrame(place);
+    return () => cancelAnimationFrame(raf);
   }, [anchorTop, anchorH, useLeft, viewport, clampToViewport]);
 
   useEffect(() => {

@@ -17,6 +17,10 @@ import {
 } from '@/app/(pages)/map/_mapContents/wtlAdmin/networkMap/wtlNetworkLayerCatalog';
 import {
   buildWtlNetMapSourcesFromRows,
+  isWtlNetMapGroup,
+  listWtlNetSameKorTables,
+  listWtlNetSameKorTablesInGroup,
+  wtlNetKorNameForTable,
   type WtlNetMapSourceDef,
   type WtlNetMapSourceId,
   type WtlNetMapSourcePayload,
@@ -36,7 +40,7 @@ import type {
   WtlNetworkStatusStats,
   WtlNetworkYearMatrixParams,
 } from '@/app/(pages)/map/_mapContents/wtlAdmin/networkMap/wtlNetworkTypes';
-import { isWtlNetMapGroup } from '@/app/(pages)/map/_mapContents/wtlAdmin/networkMap/wtlNetworkMapSources';
+import adminTabsJson from '@/config/wtlAdmin/adminTabs.json';
 import { exportLayerTableToShp } from '@/service/shpUploadService';
 import { buildCodeKeywordInClauses } from '@/lib/defineLayerCodeKeyword';
 
@@ -56,17 +60,15 @@ export type {
   WtlNetworkYearMatrixParams,
 };
 
-/** 현황 «상수시설» 개수 — Shell DISPLAY_GROUPS와 동일 */
-const STATUS_FACILITY_LAYERS: readonly { key: string; label: string }[] = [
-  { key: 'wtl_gain_ps', label: '취수장' },
-  { key: 'wtl_puri_as', label: '정수장' },
-  { key: 'wtl_serv_ps', label: '배수지' },
-  { key: 'wtl_pres_ps', label: '가압장' },
-  { key: 'wtl_rsrv_ps', label: '저수조' },
-  { key: 'wtl_fire_ps', label: '소방시설' },
-  { key: 'wtl_flow_ps', label: '유량계' },
-  { key: 'wtl_prga_ps', label: '수압계' },
-];
+/** 현황 «상수시설» 개수 — 시설관리 adminTabs.wtlFacility + tables.json 한글명 */
+const STATUS_FACILITY_LAYERS: readonly { key: string; label: string }[] = (
+  Array.isArray(adminTabsJson.wtlFacility) ? adminTabsJson.wtlFacility : []
+).map((raw) => {
+  const key = String(raw ?? '')
+    .trim()
+    .toLowerCase();
+  return { key, label: wtlNetKorNameForTable(key) || key };
+});
 
 const TABLES_JSON_PATH = path.join(
   process.cwd(),
@@ -116,6 +118,44 @@ function parseMapSourceIds(raw: unknown): WtlNetMapSourceId[] {
   return out.length > 0 ? out : fallback;
 }
 
+/**
+ * 한글명(tables.json) → 후보 define_table_name 묶음 →
+ * DB에 geom 데이터가 있는 테이블 우선, 없으면 테이블만 있는 것.
+ * (저수조: wtl_tank_ps / wtl_rsrv_ps)
+ */
+async function resolvePhysicalTableInSource(
+  source: WtlNetMapSourceDef,
+  baseTable: string
+): Promise<string | null> {
+  const base = String(baseTable ?? '')
+    .trim()
+    .toLowerCase();
+  if (!base) return null;
+  const remapped = String(source.remapTable(base) ?? '')
+    .trim()
+    .toLowerCase();
+  const sameKorInGroup = listWtlNetSameKorTablesInGroup(source.tables, base);
+  const sameKorAll = listWtlNetSameKorTables(base);
+  const ordered = [
+    ...new Set(
+      [...sameKorInGroup, remapped, ...sameKorAll, base]
+        .map((n) => String(n ?? '').trim().toLowerCase())
+        .filter(Boolean)
+    ),
+  ];
+  if (ordered.length === 0) return null;
+  const existing = await existingLayerTables(ordered);
+  if (existing.size === 0) return null;
+  const withData = await layerTablesWithGeomRows([...existing]);
+  for (const name of ordered) {
+    if (withData.has(name)) return name;
+  }
+  for (const name of ordered) {
+    if (existing.has(name)) return name;
+  }
+  return null;
+}
+
 /** tables.json에 나온 테이블명 중 layer 스키마에 실제 존재하는 것 */
 async function existingLayerTables(tableNames: readonly string[]): Promise<Set<string>> {
   const names = [
@@ -134,6 +174,35 @@ async function existingLayerTables(tableNames: readonly string[]): Promise<Set<s
     )
   );
   return new Set((res.rows ?? []).map((r) => String((r as { t?: string }).t ?? '')));
+}
+
+/** layer 스키마 — geom 행이 1건 이상인 테이블 */
+async function layerTablesWithGeomRows(
+  tableNames: readonly string[]
+): Promise<Set<string>> {
+  const names = [
+    ...new Set(
+      tableNames.map((t) => String(t ?? '').trim().toLowerCase()).filter(Boolean)
+    ),
+  ];
+  if (names.length === 0) return new Set();
+  const out = new Set<string>();
+  await Promise.all(
+    names.map(async (name) => {
+      const tbl = name.replace(/"/g, '""');
+      try {
+        const res = await db.execute(
+          sql.raw(
+            `SELECT 1 AS ok FROM layer."${tbl}" WHERE geom IS NOT NULL LIMIT 1`
+          )
+        );
+        if ((res.rows?.length ?? 0) > 0) out.add(name);
+      } catch {
+        /* 컬럼/권한 등 — 스킵 */
+      }
+    })
+  );
+  return out;
 }
 
 type ListParams = {
@@ -194,13 +263,14 @@ function resolveFieldsTableKeys(
   const base = String(def.table ?? '').trim();
   const defineTable = String(def.defineTable ?? '').trim();
   const physical = String(physicalTable ?? '').trim();
+  // 물리 테이블 필드 우선(한글명 remap: 저수조 tank 등). 없으면 논리·define 폴백
   const primary =
+    (physical && loadDefineFieldRows(physical).length > 0 && physical) ||
     (base && loadDefineFieldRows(base).length > 0 && base) ||
     (defineTable && loadDefineFieldRows(defineTable).length > 0 && defineTable) ||
-    (physical && loadDefineFieldRows(physical).length > 0 && physical) ||
     base ||
     physical;
-  const fallbacks = [base, defineTable, physical].filter(
+  const fallbacks = [physical, base, defineTable].filter(
     (t) => t && t.toLowerCase() !== primary.toLowerCase()
   );
   return { fieldsTable: primary, fieldsTableFallback: fallbacks[0] ?? null };
@@ -590,8 +660,24 @@ async function collectListWheres(
       .trim()
       .toLowerCase() === 'wtl_wtsba_as';
   if (supplyBlockName && isSupplyBlockTable) {
-    // 급수블록 레이어: wbb_nam 속성필터 (경계 접침 ST_Intersects 오탐·공간연산 부하 회피)
-    wheres.push(`NULLIF(trim(t.wbb_nam::text),'') = '${esc(supplyBlockName)}'`);
+    // 급수블록 레이어: 이름·부호 속성필터 (옵션 목록·도형조회와 동일)
+    const physCols = physicalTable
+      ? await listLayerPhysicalColumns(physicalTable)
+      : [];
+    const namCol = resolvePhysicalColumn(physCols, 'wbb_nam');
+    const cdeCol = resolvePhysicalColumn(physCols, 'wbb_cde');
+    const nameParts: string[] = [];
+    if (namCol) {
+      nameParts.push(`NULLIF(trim(t."${namCol}"::text),'') = '${esc(supplyBlockName)}'`);
+    }
+    if (cdeCol) {
+      nameParts.push(`NULLIF(trim(t."${cdeCol}"::text),'') = '${esc(supplyBlockName)}'`);
+    }
+    if (nameParts.length > 0) {
+      wheres.push(`(${nameParts.join(' OR ')})`);
+    } else {
+      wheres.push(`NULLIF(trim(t.wbb_nam::text),'') = '${esc(supplyBlockName)}'`);
+    }
   } else if (areaWkts.length > 0 && isWtlSupplyZoneOrSubzoneLayerDef(def)) {
     // 급수구역·분구: 블록보다 큼 → ST_Within(구역, 블록) 불가.
     // Shell 적재 순서 [행정?][블록?] — 블록 선택 시 마지막 WKT가 블록.
@@ -607,6 +693,16 @@ async function collectListWheres(
       for (const wkt of areaWkts) {
         wheres.push(`ST_Intersects(t.geom, ${geomOf(wkt)})`);
       }
+    }
+  } else if (areaWkts.length > 0 && isSupplyBlockTable) {
+    // 급수블록 + 읍면동/리:
+    // - ST_Within(블록, 행정) → 경계 미세차로 본인 블록도 탈락
+    // - ST_Intersects / NOT TOUCHES → 인접 블록 미세 중첩까지 남음
+    // → 블록 대표점(PointOnSurface)이 행정경계 안이면 소속
+    const geomOf = (wkt: string) =>
+      `ST_Transform(ST_GeomFromText('${esc(wkt)}', 5181), ST_SRID(t.geom))`;
+    for (const wkt of areaWkts) {
+      wheres.push(`ST_Within(ST_PointOnSurface(t.geom), ${geomOf(wkt)})`);
     }
   } else if (areaWkts.length > 0) {
     for (const wkt of areaWkts) {
@@ -893,8 +989,8 @@ export async function getWtlNetworkList(params: ListParams = {}): Promise<{
     for (const key of keys) {
       const def = getWtlNetLayerDef(key);
       if (!def?.table) continue;
-      const physicalTable = source.remapTable(def.table);
-      if (!(await tableExists(physicalTable))) continue;
+      const physicalTable = await resolvePhysicalTableInSource(source, def.table);
+      if (!physicalTable) continue;
       const sel = await buildSelect(def, {
         physicalTable,
         sourceId: source.id,
@@ -1048,8 +1144,8 @@ export async function getWtlNetworkDetail(params: {
     resolveWtlNetMapSource('상수') ??
     loadWtlNetMapSourcesFromTablesJson()[0];
   if (!source) return { row: null };
-  const physicalTable = source.remapTable(def.table);
-  if (!(await tableExists(physicalTable))) return { row: null };
+  const physicalTable = await resolvePhysicalTableInSource(source, def.table);
+  if (!physicalTable) return { row: null };
 
   const tbl = physicalTable.replace(/"/g, '""');
   const nameExpr = def.nameExpr ?? `COALESCE(NULLIF(trim(ftr_idn::text),''), ogc_fid::text)`;
@@ -1097,13 +1193,49 @@ export async function getWtlNetworkDetail(params: {
 /**
  * 지도 클릭(3857) 근처 1건
  */
-/** 클릭 우선순위 — 점(ps) > 선 > 면. 작을수록 우선 */
-function atPointGeomRank(kind: WtlNetGeomKind | string | undefined): number {
-  const k = String(kind ?? '').trim().toLowerCase();
-  if (k === 'point') return 0;
-  if (k === 'line') return 1;
-  if (k === 'area' || k === 'polygon') return 2;
+/**
+ * 클릭 우선순위 — tables.json define_table_shp_type 기준.
+ * POINT(1) > LINE(2) > POLYGON(3). 작을수록 우선.
+ */
+function atPointGeomRank(shpOrKind: string | undefined): number {
+  const k = String(shpOrKind ?? '')
+    .trim()
+    .toUpperCase();
+  if (k === 'POINT' || k === 'MULTIPOINT') return 0;
+  if (k === 'LINE' || k === 'LINESTRING' || k === 'MULTILINESTRING') return 1;
+  if (
+    k === 'POLYGON' ||
+    k === 'MULTIPOLYGON' ||
+    k === 'AREA' ||
+    k === 'SURFACE'
+  ) {
+    return 2;
+  }
+  const low = k.toLowerCase();
+  if (low === 'point') return 0;
+  if (low === 'line') return 1;
+  if (low === 'area' || low === 'polygon') return 2;
   return 1;
+}
+
+/** 물리 테이블 → define_table_shp_type (없으면 null) */
+function shpTypeForTable(tableName: string): string | null {
+  const want = String(tableName ?? '')
+    .trim()
+    .toLowerCase();
+  if (!want) return null;
+  return loadTablesJsonShpByName().get(want) ?? null;
+}
+
+function geomKindFromShp(
+  shpOrKind: string | undefined,
+  fallback: WtlNetGeomKind
+): WtlNetGeomKind {
+  const rank = atPointGeomRank(shpOrKind);
+  if (rank === 0) return 'point';
+  if (rank === 1) return 'line';
+  if (rank === 2) return 'area';
+  return fallback;
 }
 
 export async function getWtlNetworkAtPoint(params: {
@@ -1132,8 +1264,8 @@ export async function getWtlNetworkAtPoint(params: {
     for (const key of keys) {
       const def = getWtlNetLayerDef(key);
       if (!def?.table) continue;
-      const physicalTable = source.remapTable(def.table);
-      if (!(await tableExists(physicalTable))) continue;
+      const physicalTable = await resolvePhysicalTableInSource(source, def.table);
+      if (!physicalTable) continue;
       const tbl = physicalTable.replace(/"/g, '""');
       const saa = wtlNetSaaSql(def);
       const saaClause = saa ? `AND ${saa}` : '';
@@ -1151,13 +1283,19 @@ export async function getWtlNetworkAtPoint(params: {
       const fieldsFallbackSel = fieldsTableFallback
         ? `'${esc(fieldsTableFallback)}'`
         : `NULL`;
+      // 물리 테이블 shp_type 우선 (POINT > LINE > POLYGON)
+      const shp =
+        shpTypeForTable(physicalTable) ||
+        shpTypeForTable(def.table) ||
+        def.geomKind;
+      const geomKindOut = geomKindFromShp(shp, def.geomKind);
 
       const res = await db.execute(
         sql.raw(
           `SELECT
             '${esc(source.id)}' AS "sourceId",
             '${esc(def.key)}' AS "layerKey",
-            '${esc(def.geomKind)}' AS "geomKind",
+            '${esc(geomKindOut)}' AS "geomKind",
             t.ogc_fid AS "ogcFid",
             (${nameExpr}) AS name,
             ${diamSel} AS diameter,
@@ -1190,7 +1328,7 @@ export async function getWtlNetworkAtPoint(params: {
       const dist = Number(raw.dist);
       hits.push({
         row: mapRow(raw, true),
-        rank: atPointGeomRank(def.geomKind),
+        rank: atPointGeomRank(shp),
         dist: Number.isFinite(dist) ? dist : Number.POSITIVE_INFINITY,
       });
     }
@@ -1328,6 +1466,7 @@ type TablesJsonMetaRow = {
   define_table_name?: string;
   define_table_schema?: string;
   define_table_parents_layer?: string;
+  define_table_shp_type?: string;
 };
 
 function loadTablesJsonMetaByName(): Map<
@@ -1363,6 +1502,31 @@ function loadTablesJsonMetaByName(): Map<
   return map;
 }
 
+/** define_table_name → define_table_shp_type (UPPER) */
+let tablesJsonShpCache: Map<string, string> | null = null;
+function loadTablesJsonShpByName(): Map<string, string> {
+  if (tablesJsonShpCache) return tablesJsonShpCache;
+  const map = new Map<string, string>();
+  try {
+    const raw = fs.readFileSync(TABLES_JSON_PATH, 'utf8');
+    const rows = JSON.parse(raw) as TablesJsonMetaRow[];
+    for (const row of rows) {
+      const name = String(row.define_table_name ?? '')
+        .trim()
+        .toLowerCase();
+      const shp = String(row.define_table_shp_type ?? '')
+        .trim()
+        .toUpperCase();
+      if (!name || !shp || map.has(name)) continue;
+      map.set(name, shp);
+    }
+  } catch {
+    /* empty */
+  }
+  tablesJsonShpCache = map;
+  return map;
+}
+
 /** layer·public_layer 실테이블 존재 여부 (소문자 테이블명 Set) */
 async function existingTablesInSchema(
   schema: 'layer' | 'public_layer',
@@ -1393,11 +1557,15 @@ async function existingTablesInSchema(
 export async function listWtlNetworkAvailableLayerKeys(params: {
   mapSources?: string[];
   layerKeys?: string[];
-} = {}): Promise<{ availableKeys: string[] }> {
+} = {}): Promise<{
+  availableKeys: string[];
+  /** 출처별 논리키 → 한글명·데이터 실존 기준 물리 테이블 (범례·WMS·조회) */
+  physicalBySource: Record<string, Record<string, string>>;
+}> {
   const keys = (params.layerKeys ?? [])
     .map((k) => String(k ?? '').trim())
     .filter(Boolean);
-  if (keys.length === 0) return { availableKeys: [] };
+  if (keys.length === 0) return { availableKeys: [], physicalBySource: {} };
 
   const sourceIds = parseMapSourceIds(params.mapSources);
   const sources = sourceIds
@@ -1436,12 +1604,28 @@ export async function listWtlNetworkAvailableLayerKeys(params: {
         add(source.remapTable(def.table), 'layer');
         if (def.defineTable) add(source.remapTable(def.defineTable), 'layer');
         add(source.remapTable(key), 'layer');
+        // 시설관리와 동일 — 한글명 일치 후보(저수조: tank/rsrv 등)
+        for (const n of listWtlNetSameKorTablesInGroup(source.tables, def.table)) {
+          add(n, 'layer');
+        }
+        if (def.defineTable) {
+          for (const n of listWtlNetSameKorTablesInGroup(source.tables, def.defineTable)) {
+            add(n, 'layer');
+          }
+        }
+        for (const n of listWtlNetSameKorTablesInGroup(source.tables, key)) {
+          add(n, 'layer');
+        }
       }
     }
 
     add(def?.table);
     add(def?.defineTable);
     add(key);
+    // 출처 그룹 밖(시설관리 CCTV 등) — 한글명 동일 물리 후보
+    for (const base of [def?.table, def?.defineTable, key]) {
+      for (const n of listWtlNetSameKorTables(String(base ?? ''))) add(n);
+    }
     if (meta?.parentsLayer) add(meta.parentsLayer, meta.schema);
     if (meta) add(key, meta.schema);
 
@@ -1462,7 +1646,28 @@ export async function listWtlNetworkAvailableLayerKeys(params: {
       plan.publicNames.some((n) => publicExist.has(n));
     if (ok) availableKeys.push(plan.key);
   }
-  return { availableKeys };
+
+  /** 한글명 후보 중 데이터 있는 물리 테이블 — 출처×키 */
+  const physicalBySource: Record<string, Record<string, string>> = {};
+  await Promise.all(
+    sources.map(async (source) => {
+      const byKey: Record<string, string> = {};
+      await Promise.all(
+        availableKeys.map(async (key) => {
+          const def = getWtlNetLayerDef(key);
+          const base = String(def?.table ?? key)
+            .trim()
+            .toLowerCase();
+          if (!base) return;
+          const phys = await resolvePhysicalTableInSource(source, base);
+          if (phys) byKey[key] = phys;
+        })
+      );
+      if (Object.keys(byKey).length > 0) physicalBySource[source.id] = byKey;
+    })
+  );
+
+  return { availableKeys, physicalBySource };
 }
 
 /** 가압장·정수장 상세 하단 연관 탭 후보 */
@@ -2000,12 +2205,11 @@ export async function getWtlNetworkStatusStats(params: {
         const seen = new Set<string>();
         const jobs: Promise<number>[] = [];
         for (const source of selectedSources) {
-          const physicalTable = source.remapTable(def.table).toLowerCase();
-          if (seen.has(physicalTable)) continue;
+          const physicalTable = await resolvePhysicalTableInSource(source, def.table);
+          if (!physicalTable || seen.has(physicalTable)) continue;
           seen.add(physicalTable);
           jobs.push(
             (async () => {
-              if (!(await tableExists(physicalTable))) return 0;
               const tbl = physicalTable.replace(/"/g, '""');
               const whereParts = await collectListWheres(def, listOpts, physicalTable);
               const whereSql = whereParts.length > 0 ? whereParts.join(' AND ') : 'TRUE';
@@ -3104,8 +3308,8 @@ export async function exportWtlNetworkShpZip(
     for (const key of keys) {
       const def = getWtlNetLayerDef(key);
       if (!def?.table) continue;
-      const physicalTable = source.remapTable(def.table);
-      if (!(await tableExists(physicalTable))) continue;
+      const physicalTable = await resolvePhysicalTableInSource(source, def.table);
+      if (!physicalTable) continue;
       const sqlText = await buildShpExportSql(def, physicalTable, filterOpts);
       const layerName = safeShpEntryName(
         `${source.id}_${def.defineTable || def.key || physicalTable}`

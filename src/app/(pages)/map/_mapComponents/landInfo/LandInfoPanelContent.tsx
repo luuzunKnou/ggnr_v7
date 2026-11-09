@@ -19,7 +19,7 @@ import {
 import { BuildingPermitPanel, BuildingRegisterPanel } from './LandInfoBuildingPanels';
 import { LandInfoParcelPanel } from './LandInfoParcelPanel';
 import { WimsInfoPanel } from './WimsInfoPanel';
-import { loadWimsEnabled } from './wimsClient';
+import { loadWimsStatus } from './wimsClient';
 import { withBasePath } from '@/lib/basePath';
 import { formatAddressStripSidoSigungu } from '@/lib/formatAddressStripAdmin';
 import { copyTextToClipboard } from '@/lib/utils';
@@ -194,54 +194,29 @@ export function LandInfoPanelContent({
   const eumPnu = /^\d{19}$/.test(effectivePnuRaw) ? effectivePnuRaw : '';
   const [embedKind, setEmbedKind] = useState<'eum' | 'plan' | 'wims' | null>(null);
   const [wimsEnabled, setWimsEnabled] = useState(false);
+  const [wimsConnected, setWimsConnected] = useState<boolean | null>(null);
   const eumFrameRef = useRef<HTMLIFrameElement>(null);
   const prevEumPnuRef = useRef(eumPnu);
-
-  useEffect(() => {
-    console.log('[LandInfoPanel] pnu state', {
-      pnuFromContext,
-      resolvedPnu,
-      effectivePnu,
-      effectivePnuRaw,
-      eumPnu,
-      eumPnuLen: eumPnu.length,
-      digit19: /^\d{19}$/.test(effectivePnuRaw),
-      wimsEnabled,
-      embedKind,
-    });
-  }, [pnuFromContext, resolvedPnu, effectivePnu, effectivePnuRaw, eumPnu, wimsEnabled, embedKind]);
 
   useEffect(() => {
     const prev = prevEumPnuRef.current;
     prevEumPnuRef.current = eumPnu;
     // 같은 필지의 번호가 늦게 채워지는 경우는 유지. 다른 필지로 바뀌면 탭을 필지정보로 돌린다.
-    if (!prev || prev === eumPnu) {
-      console.log('[LandInfoPanel] eumPnu keep embedKind', { prev, eumPnu, embedKind });
-      return;
-    }
-    console.log('[LandInfoPanel] eumPnu changed → reset embedKind', { prev, eumPnu });
+    if (!prev || prev === eumPnu) return;
     setEmbedKind(null);
   }, [eumPnu]);
 
   useEffect(() => {
     let alive = true;
-    console.log('[LandInfoPanel] loadWimsEnabled start');
-    void loadWimsEnabled().then((enabled) => {
-      console.log('[LandInfoPanel] loadWimsEnabled done', { enabled, alive });
-      if (alive) setWimsEnabled(enabled);
+    void loadWimsStatus().then((status) => {
+      if (!alive) return;
+      setWimsEnabled(status.enabled);
+      setWimsConnected(status.connected);
     });
     return () => {
       alive = false;
     };
   }, []);
-
-  useEffect(() => {
-    if (!wimsEnabled) {
-      console.warn('[LandInfoPanel] 수용가 정보 버튼 숨김 — wimsEnabled=false (status/WIMS_INFO 확인)');
-    } else {
-      console.log('[LandInfoPanel] 수용가 정보 버튼 표시', { eumPnu, disabled: !eumPnu });
-    }
-  }, [wimsEnabled, eumPnu]);
 
   useEffect(() => {
     if (!eumPnu || (embedKind !== 'eum' && embedKind !== 'plan')) return;
@@ -684,16 +659,7 @@ export function LandInfoPanelContent({
             <button
               type="button"
               onClick={() => {
-                console.log('[LandInfoPanel] 수용가 정보 click', {
-                  eumPnu,
-                  effectivePnuRaw,
-                  disabled: !eumPnu,
-                  embedKind,
-                });
-                if (!eumPnu) {
-                  console.warn('[LandInfoPanel] 수용가 정보 click blocked: no eumPnu');
-                  return;
-                }
+                if (!eumPnu) return;
                 setEmbedKind('wims');
               }}
               disabled={!eumPnu}
@@ -709,7 +675,7 @@ export function LandInfoPanelContent({
           ) : null}
         </div>
         {embedKind === 'wims' && eumPnu ? (
-          <WimsInfoPanel pnu={eumPnu} />
+          <WimsInfoPanel pnu={eumPnu} connected={wimsConnected} />
         ) : embedKind && eumPnu ? (
           <iframe
             ref={eumFrameRef}

@@ -61,11 +61,16 @@ import { getWtlNetLayerDef, isWtlNetZoneLayerKey } from './wtlNetworkLayerCatalo
 import {
   getWtlNetMapSource,
   getWtlNetMapSources,
+  getWtlNetPhysicalTable,
   pickDefaultWtlNetMapSourceId,
   setWtlNetMapSources,
+  setWtlNetPhysicalBySource,
+  wtlNetKorNameForTable,
   type WtlNetMapSourceId,
   type WtlNetMapSourcePayload,
 } from './wtlNetworkMapSources'
+import { facilityTabLabel } from '../facility/wtlFacilityCatalog'
+import adminTabsJson from '@/config/wtlAdmin/adminTabs.json'
 import type {
   WtlNetworkFilterMeta,
   WtlNetworkRow,
@@ -130,16 +135,19 @@ const DISPLAY_GROUPS: { title: string; items: DisplayItem[] }[] = [
   },
   {
     title: '상수시설',
-    items: [
-      { define_table_name: 'wtl_gain_ps', define_table_kor_name: '취수장' },
-      { define_table_name: 'wtl_puri_as', define_table_kor_name: '정수장' },
-      { define_table_name: 'wtl_serv_ps', define_table_kor_name: '배수지' },
-      { define_table_name: 'wtl_pres_ps', define_table_kor_name: '가압장' },
-      { define_table_name: 'wtl_rsrv_ps', define_table_kor_name: '저수조' },
-      { define_table_name: 'wtl_fire_ps', define_table_kor_name: '소방시설' },
-      { define_table_name: 'wtl_flow_ps', define_table_kor_name: '유량계' },
-      { define_table_name: 'wtl_prga_ps', define_table_kor_name: '수압계' },
-    ],
+    /** 시설관리 adminTabs.wtlFacility — 한글명은 tables.json */
+    items: (Array.isArray(adminTabsJson.wtlFacility) ? adminTabsJson.wtlFacility : []).map(
+      (raw) => {
+        const name = String(raw ?? '')
+          .trim()
+          .toLowerCase()
+        return {
+          define_table_name: name,
+          define_table_kor_name:
+            facilityTabLabel(name) || wtlNetKorNameForTable(name) || name,
+        }
+      }
+    ),
   },
   {
     title: '급수구역',
@@ -240,13 +248,20 @@ function resolveUndergroundTableNames(key: string, sourceId: string): string[] {
   if (isWtlNetZoneLayerKey(key)) {
     return [...new Set([baseTable, defineName, keyName].filter(Boolean))]
   }
-  const src = getWtlNetMapSource(sourceId)
-  const out: string[] = []
 
   const isVirtualSplit =
     !!baseTable &&
     ((!!keyName && keyName.toLowerCase() !== baseTable.toLowerCase()) ||
       (!!defineName && defineName.toLowerCase() !== baseTable.toLowerCase()))
+
+  // 한글명·DB 데이터 실존 기준 물리 테이블 (저수조 tank/rsrv 등)
+  if (!isVirtualSplit) {
+    const phys = getWtlNetPhysicalTable(key, sourceId)
+    if (phys) return [phys]
+  }
+
+  const src = getWtlNetMapSource(sourceId)
+  const out: string[] = []
 
   if (isVirtualSplit) {
     if (keyName) out.push(keyName)
@@ -280,6 +295,10 @@ function resolveUndergroundTableNames(key: string, sourceId: string): string[] {
       src.tables.find((t) => t.toLowerCase() === remapped.toLowerCase()) ??
       src.tables.find((t) => t.toLowerCase() === baseTable.toLowerCase())
     if (hit) out.push(hit)
+    else if (baseTable) {
+      // 출처 그룹 밖(시설관리 CCTV 등) — 물리명 그대로 지하시설물 동기화
+      out.push(baseTable)
+    }
   } else if (baseTable) {
     out.push(baseTable)
   } else if (keyName) {
@@ -698,7 +717,13 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
   const [availableSourceIds, setAvailableSourceIds] = useState<string[]>([])
   /** null=미확인(잠깐 전체 허용), Set=선택 출처 기준 실테이블 있는 키만 */
   const [availableLayerKeys, setAvailableLayerKeys] = useState<Set<string> | null>(null)
-  
+  /** 출처×논리키 → 물리 테이블 (범례·지하시설물). 서버 한글명·데이터 실존 resolve */
+  const [physicalBySource, setPhysicalBySource] = useState<
+    Record<string, Record<string, string>>
+  >({})
+  /** 지도 레이어 클릭 시 상세 강제 펼침 (목록 행 선택은 접힘 유지) */
+  const [detailExpandToken, setDetailExpandToken] = useState(0)
+
   const listPageSize = LIST_PAGE_SIZE
   const [group, setGroup] = useState(INITIAL_GROUP)
   const [keyword, setKeyword] = useState('')
@@ -869,6 +894,8 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
     const sourceIds = availableSourceIds.filter((id) => mapSources.has(id))
     if (availableSourceIds.length === 0) {
       setAvailableLayerKeys(new Set())
+      setPhysicalBySource({})
+      setWtlNetPhysicalBySource({})
       return
     }
     if (sourceIds.length === 0) return
@@ -886,6 +913,12 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
           ? data.availableKeys.map((k: unknown) => String(k).trim()).filter(Boolean)
           : []
         const next = new Set<string>(keys)
+        const physRaw =
+          data?.physicalBySource && typeof data.physicalBySource === 'object'
+            ? (data.physicalBySource as Record<string, Record<string, string>>)
+            : {}
+        setPhysicalBySource(physRaw)
+        setWtlNetPhysicalBySource(physRaw)
         setAvailableLayerKeys(next)
         setExtraOn((prev) => {
           // 보호구역은 주제도 경로 — DB 가용키와 무관하게 유지
@@ -911,7 +944,11 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
         })
       })
       .catch(() => {
-        if (!cancelled) setAvailableLayerKeys(new Set())
+        if (!cancelled) {
+          setAvailableLayerKeys(new Set())
+          setPhysicalBySource({})
+          setWtlNetPhysicalBySource({})
+        }
       })
     return () => {
       cancelled = true
@@ -1494,6 +1531,7 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
     searchFilter,
     detailRelatedLayer,
     onSelect: (row) => {
+      setDetailExpandToken((n) => n + 1)
       void pickRow(row)
     },
     onMapMoveStart: () => {
@@ -1803,6 +1841,7 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
     mapSources,
     extraOn,
     availableLayerKeys,
+    physicalBySource,
   ])
 
   /** 지하시설물 → 관망 탭 (visibleLayerNames 기준, 보호구역 제외) */
@@ -2177,7 +2216,15 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
                             )}
                             onClick={() => toggleLayer(item.define_table_name)}
                           >
-                            <WtlLayerMark layerKey={item.define_table_name} />
+                            <WtlLayerMark
+                              layerKey={item.define_table_name}
+                              sourceId={activeSourceId}
+                              physicalTable={
+                                physicalBySource[activeSourceId]?.[
+                                  item.define_table_name
+                                ] ?? null
+                              }
+                            />
                             <span className="min-w-0 truncate [word-break:keep-all]">
                               {item.define_table_kor_name}
                             </span>
@@ -2380,7 +2427,15 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
                               !boxCollapsed && 'border-b border-border'
                             )}
                           >
-                            <WtlLayerMark layerKey={box.layerKey} />
+                            <WtlLayerMark
+                              layerKey={box.layerKey}
+                              sourceId={box.mapSources[0] ?? activeSourceId}
+                              physicalTable={
+                                physicalBySource[
+                                  box.mapSources[0] ?? activeSourceId
+                                ]?.[box.layerKey] ?? null
+                              }
+                            />
                             <span
                               className="min-w-0 truncate text-[11px] font-medium text-foreground"
                               title={dualTitle(
@@ -2540,6 +2595,7 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
       )}
       <NetworkDetailModal
         item={selected}
+        expandToken={detailExpandToken}
         anchorLeftPx={leftOffsetPx + listWidth + (resultOpen ? resultWidth : 0) + 8}
         onClose={() => setSelected(null)}
         onRelatedMapLayer={handleDetailRelatedLayer}
@@ -2594,12 +2650,15 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
 
 function NetworkDetailModal({
   item,
+  expandToken = 0,
   anchorLeftPx,
   onClose,
   onRelatedMapLayer,
   onItemUpdated,
 }: {
   item: WtlNetworkRow | null
+  /** 지도 클릭마다 증가 — 접힌 상세를 펼침. 목록 선택은 올리지 않음 */
+  expandToken?: number
   /** 시설목록 패널 오른쪽 끝 */
   anchorLeftPx: number
   onClose: () => void
@@ -2639,6 +2698,10 @@ function NetworkDetailModal({
   useEffect(() => {
     cancelEdit()
   }, [item?.id, cancelEdit])
+
+  useEffect(() => {
+    if (expandToken > 0) setCollapsed(false)
+  }, [expandToken])
 
   useEffect(() => {
     if (!open) return

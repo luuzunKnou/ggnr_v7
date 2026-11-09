@@ -1,13 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/auth';
 import { buildWimsExcel } from '@/service/wimsExcel';
-import { readListQuery, requireUser, wimsError } from '../_lib';
+import { readListQuery, requireUser, requireWimsConfigured, wimsError } from '../_lib';
 
 export const dynamic = 'force-dynamic';
 
 export async function POST(req: NextRequest) {
   const denied = await requireUser();
   if (denied) return denied;
+  const notConfigured = requireWimsConfigured();
+  if (notConfigured) return notConfigured;
   try {
     const session = await auth();
     const body = (await req.json()) as Record<string, unknown>;

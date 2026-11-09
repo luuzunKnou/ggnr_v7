@@ -1,33 +1,27 @@
 import { NextResponse } from 'next/server';
 import { getSessionUsrId } from '@/lib/auth/guard';
-import { isWimsConfigured, parseWimsInfo } from '@/lib/wimsOracle';
+import { checkWimsStatus } from '@/lib/wimsOracle';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET() {
   const usrId = await getSessionUsrId();
-  console.log('[wims/status] start', { usrId: usrId ? `${usrId.slice(0, 4)}…` : null });
   if (!usrId) {
-    console.log('[wims/status] 401 unauthorized');
     return NextResponse.json({ error: '로그인이 필요합니다.' }, { status: 401 });
   }
-  const raw = process.env.WIMS_INFO;
-  const parsed = parseWimsInfo(raw);
-  const enabled = isWimsConfigured();
-  console.log('[wims/status] result', {
-    enabled,
-    hasRaw: Boolean(raw),
-    rawPreview: raw ? `${String(raw).split('/').slice(0, 3).join('/')}/…` : null,
-    parts: raw ? String(raw).split('/').length : 0,
-    schema: parsed?.schema ?? null,
-  });
-  return NextResponse.json({
-    enabled,
-    debug: {
-      hasRaw: Boolean(raw),
-      parts: raw ? String(raw).split('/').length : 0,
-      schema: parsed?.schema ?? null,
-      connectType: parsed?.connectType ?? null,
-    },
-  });
+  try {
+    const status = await checkWimsStatus();
+    return NextResponse.json({
+      /** WIMS_INFO 설정 여부 — 없으면 Oracle 시도 없음 */
+      enabled: status.configured,
+      connected: status.connected,
+    });
+  } catch (err) {
+    // 상태 확인 실패도 서버를 죽이지 않고 연결 불가로 응답
+    console.error('[wims/status]', err instanceof Error ? err.message : err);
+    return NextResponse.json({
+      enabled: true,
+      connected: false,
+    });
+  }
 }

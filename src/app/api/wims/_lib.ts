@@ -1,5 +1,11 @@
 import { NextResponse } from 'next/server';
 import { getSessionUsrId } from '@/lib/auth/guard';
+import {
+  isWimsConfigured,
+  isWimsConnectionFailure,
+  WimsNotConfiguredError,
+  WimsUnreachableError,
+} from '@/lib/wimsOracle';
 import type { WimsListQuery, WimsPair, WimsStatQuery } from '@/lib/wimsTypes';
 
 export async function requireUser(): Promise<NextResponse | null> {
@@ -9,13 +15,41 @@ export async function requireUser(): Promise<NextResponse | null> {
   return null;
 }
 
+/** WIMS_INFO 없으면 Oracle 시도 전에 막는다. */
+export function requireWimsConfigured(): NextResponse | null {
+  if (isWimsConfigured()) return null;
+  return NextResponse.json(
+    {
+      error: '수용가 정보 연결 정보가 없습니다.',
+      code: 'not_configured',
+    },
+    { status: 503 }
+  );
+}
+
 export function wimsError(err: unknown): NextResponse {
   const message = err instanceof Error ? err.message : '';
   console.error('[wims]', message || err);
-  if (message.includes('WIMS 연결 정보')) {
-    return NextResponse.json({ error: '수용가 정보 연결 정보가 없습니다.' }, { status: 503 });
+
+  if (err instanceof WimsNotConfiguredError || message.includes('WIMS 연결 정보')) {
+    return NextResponse.json(
+      { error: '수용가 정보 연결 정보가 없습니다.', code: 'not_configured' },
+      { status: 503 }
+    );
   }
-  return NextResponse.json({ error: '수용가 정보를 조회하지 못했습니다.' }, { status: 502 });
+  if (err instanceof WimsUnreachableError || isWimsConnectionFailure(err)) {
+    return NextResponse.json(
+      {
+        error: '서비스 제공에 문제가 있습니다.',
+        code: 'db_unreachable',
+      },
+      { status: 502 }
+    );
+  }
+  return NextResponse.json(
+    { error: '수용가 정보를 조회하지 못했습니다.', code: 'query_failed' },
+    { status: 502 }
+  );
 }
 
 function asPairs(value: unknown): WimsPair[] | undefined {

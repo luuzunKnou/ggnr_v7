@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { History, Paperclip } from 'lucide-react'
+import { Gauge, History, Paperclip } from 'lucide-react'
 import GeoJSON from 'ol/format/GeoJSON'
 import VectorLayer from 'ol/layer/Vector'
 import VectorSource from 'ol/source/Vector'
@@ -27,6 +27,10 @@ import {
   type WtlDefineDisplayBundle,
 } from './wtlNetworkDefineDisplayCache'
 import { flyToWtlNetworkGeom } from './wtlNetworkMapFly'
+import {
+  isWtlMetaPsLayer,
+  WtlNetworkWimsHistoryTab,
+} from './WtlNetworkWimsHistoryTab'
 import type { WtlNetworkRow } from './wtlNetworkTypes'
 
 export type WtlNetworkDetailRelatedOverlay = {
@@ -54,7 +58,7 @@ type Props = {
   onHistoryReverted?: () => void
 }
 
-type ActiveTab = 'attach' | 'dataHistory' | string
+type ActiveTab = 'attach' | 'dataHistory' | 'wimsHistory' | string
 
 function resolveOgcFid(item: WtlNetworkRow): number | null {
   const record = item.record
@@ -111,6 +115,7 @@ export function WtlNetworkDetailRelatedTabs({
 
   const itemId = String(item.id ?? '')
   const ftrIdn = resolveParentFtrIdn(item)
+  const showWimsTab = isWtlMetaPsLayer(item)
 
   const historySourceRow = useMemo(() => {
     const keyTarget = resolveWtlNetworkRowKeyTarget(item, fields)
@@ -273,7 +278,13 @@ export function WtlNetworkDetailRelatedTabs({
   }, [parentKey, itemId, clearRowHighlight])
 
   useEffect(() => {
-    if (active === 'attach' || active === 'dataHistory' || !activeTable || !ftrIdn) {
+    if (
+      active === 'attach' ||
+      active === 'dataHistory' ||
+      active === 'wimsHistory' ||
+      !activeTable ||
+      !ftrIdn
+    ) {
       onRelatedMapLayerRef.current(null)
       return
     }
@@ -281,8 +292,18 @@ export function WtlNetworkDetailRelatedTabs({
   }, [active, activeTable, ftrIdn])
 
   useEffect(() => {
+    if (!showWimsTab && active === 'wimsHistory') setActive('attach')
+  }, [showWimsTab, active])
+
+  useEffect(() => {
     clearRowHighlight()
-    if (active === 'attach' || active === 'dataHistory' || !activeTable || !ftrIdn) {
+    if (
+      active === 'attach' ||
+      active === 'dataHistory' ||
+      active === 'wimsHistory' ||
+      !activeTable ||
+      !ftrIdn
+    ) {
       setListRows((prev) => (prev.length === 0 ? prev : []))
       setListTotal((prev) => (prev === 0 ? prev : 0))
       setListBundle((prev) => (prev == null ? prev : null))
@@ -400,6 +421,22 @@ export function WtlNetworkDetailRelatedTabs({
             <span className="truncate">{tab.label}</span>
           </button>
         ))}
+        {showWimsTab ? (
+          <button
+            type="button"
+            title="WIMS 검침 이력"
+            className={cn(
+              'inline-flex h-9 min-w-[7.5rem] shrink-0 cursor-pointer items-center justify-center gap-1 border-b-2 px-2 text-[11px] font-medium pointer-events-auto',
+              active === 'wimsHistory'
+                ? 'border-primary bg-primary/5 text-primary'
+                : 'border-transparent text-muted-foreground hover:bg-muted/50 hover:text-foreground'
+            )}
+            onClick={() => setActive('wimsHistory')}
+          >
+            <Gauge className="h-3 w-3 shrink-0" aria-hidden />
+            <span className="truncate">WIMS 검침 이력</span>
+          </button>
+        ) : null}
         <button
           type="button"
           title="데이터 이력관리"
@@ -419,6 +456,10 @@ export function WtlNetworkDetailRelatedTabs({
         {active === 'attach' ? (
           <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-xl border border-border bg-card">
             <WtlNetworkMapAttachmentSection item={item} fields={fields} />
+          </div>
+        ) : active === 'wimsHistory' ? (
+          <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-xl border border-border bg-card">
+            <WtlNetworkWimsHistoryTab item={item} />
           </div>
         ) : active === 'dataHistory' ? (
           <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-xl border border-border bg-card">
