@@ -55,6 +55,7 @@ const ADMIN_TABS_JSON_PATH = path.join(
 type AdminTabsJson = {
   wtlFacility?: unknown;
   wtlEquipment?: unknown;
+  wtlHistory?: unknown;
 };
 
 /** 탭 라벨 배열 정규화 */
@@ -128,6 +129,16 @@ export async function listEquipmentTabs(): Promise<{
   enabledTabs: string[];
 }> {
   const tabs = normalizeTabLabels(readAdminTabsJson().wtlEquipment);
+  const enabledTabs = await resolveEnabledTabs(tabs, 'equipment');
+  return { tabs, enabledTabs };
+}
+
+/** 이력관리 탭 종류 (adminTabs.json wtlHistory) — 설비와 동일 레이어 그룹 해석 */
+export async function listHistoryTabs(): Promise<{
+  tabs: string[];
+  enabledTabs: string[];
+}> {
+  const tabs = normalizeTabLabels(readAdminTabsJson().wtlHistory);
   const enabledTabs = await resolveEnabledTabs(tabs, 'equipment');
   return { tabs, enabledTabs };
 }

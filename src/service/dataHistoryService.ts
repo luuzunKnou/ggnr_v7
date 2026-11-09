@@ -782,6 +782,23 @@ function workTypeSqlFilter(workType?: string): ReturnType<typeof sql> | null {
   return sql`AND dl.dl_type = ${workType}`;
 }
 
+/** 작업분류 제외 (시설·설비 상세 이력 탭 등) */
+function excludeWorkTypesSqlFilter(
+  excludeWorkTypes?: string[] | null
+): ReturnType<typeof sql> | null {
+  const allowed = new Set(['추가', '수정', '삭제', '되돌리기', '조회', '저장']);
+  const list = (Array.isArray(excludeWorkTypes) ? excludeWorkTypes : [])
+    .map((t) => String(t ?? '').trim())
+    .filter((t) => allowed.has(t));
+  const unique = [...new Set(list)];
+  if (unique.length === 0) return null;
+  if (unique.length === 1) return sql`AND dl.dl_type <> ${unique[0]}`;
+  return sql`AND dl.dl_type NOT IN (${sql.join(
+    unique.map((t) => sql`${t}`),
+    sql`, `
+  )})`;
+}
+
 /** 구분 필터 — 전체 | SHP 업로드 | Excel 업로드 | (서비스명 정확 일치) */
 function categorySqlFilter(category?: string): ReturnType<typeof sql> | null {
   const s = String(category ?? '').trim();
@@ -846,6 +863,8 @@ export async function getDataHistoryList(params?: {
   startDate?: string;
   endDate?: string;
   workType?: string;
+  /** 제외할 작업분류(예: 조회) — workType과 함께 쓰면 workType 우선 */
+  excludeWorkTypes?: string[] | null;
   /** 전체 | SHP 업로드 | Excel 업로드 | 서비스명 */
   source?: string;
   /** source 와 동일 (구분 필터) */
@@ -872,6 +891,9 @@ export async function getDataHistoryList(params?: {
   const startBound = params?.startDate ? ymdToDateBound(params.startDate, false) : null;
   const endBound = params?.endDate ? ymdToDateBound(params.endDate, true) : null;
   const wtFilter = workTypeSqlFilter(params?.workType);
+  const excludeWtFilter = wtFilter
+    ? null
+    : excludeWorkTypesSqlFilter(params?.excludeWorkTypes);
   const catFilter = categorySqlFilter(params?.category ?? params?.source);
 
   const bareTable = String(params?.tableName ?? '')
@@ -896,6 +918,7 @@ export async function getDataHistoryList(params?: {
       ${startBound ? sql`AND dl.dl_date >= ${startBound}::timestamp` : sql``}
       ${endBound ? sql`AND dl.dl_date <= ${endBound}::timestamp` : sql``}
       ${wtFilter ?? sql``}
+      ${excludeWtFilter ?? sql``}
       ${catFilter ?? sql``}
       ${
         bareTable

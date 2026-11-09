@@ -17,6 +17,7 @@
  * - 마을순찰대: village_patrol
  * - 도로 업무편람: rd_work_target_review, rd_hbook_mat
  * - 개별공시지가 필지 메모: land_price_memo
+ * - 시설 이력: public.data_history (구 safedata_history rename)
  */
 import { db, pool } from '@/database/db';
 import { sql } from 'drizzle-orm';
@@ -2185,6 +2186,200 @@ export async function ensureLandPriceMemoTable(result?: EnsureResult): Promise<E
   return out;
 }
 
+const DATA_HISTORY_CREATE_SQL = `
+CREATE TABLE IF NOT EXISTS public.data_history (
+  history_key serial PRIMARY KEY NOT NULL,
+  his_gubun varchar NOT NULL,
+  ftr_idn varchar NOT NULL,
+  his_contents text NOT NULL,
+  agency varchar,
+  his_extra jsonb,
+  created_at timestamp DEFAULT now() NOT NULL,
+  created_by varchar NOT NULL
+);
+CREATE INDEX IF NOT EXISTS data_history_gubun_ftr_idx
+  ON public.data_history (his_gubun, ftr_idn);
+COMMENT ON TABLE public.data_history IS '시설 이력';
+COMMENT ON COLUMN public.data_history.agency IS '업체';
+COMMENT ON COLUMN public.data_history.his_extra IS '확장 속성(JSONB)';
+`;
+
+/** data_history.agency 컬럼 확보 (구 safedata_history rename 후 포함) */
+async function ensureDataHistoryAgencyColumn(result: EnsureResult): Promise<void> {
+  const fq = 'public.data_history.agency';
+  try {
+    if (await columnExists('public', 'data_history', 'agency')) return;
+    await db.execute(sql.raw(`ALTER TABLE public.data_history ADD COLUMN agency varchar`));
+    await db.execute(sql.raw(`COMMENT ON COLUMN public.data_history.agency IS '업체'`));
+    result.created.push(fq);
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    result.errors.push(`${fq}: ${msg}`);
+  }
+}
+
+/** data_history.his_extra 컬럼 확보 (테이블·컬럼 IF EXISTS / IF NOT EXISTS) */
+async function ensureDataHistoryExtraColumn(result: EnsureResult): Promise<void> {
+  const fq = 'public.data_history.his_extra';
+  try {
+    const existed = await columnExists('public', 'data_history', 'his_extra');
+    await db.execute(sql.raw(`
+      DO $his_extra$
+      BEGIN
+        IF EXISTS (
+          SELECT 1
+          FROM information_schema.tables
+          WHERE table_schema = 'public'
+            AND table_name = 'data_history'
+            AND table_type = 'BASE TABLE'
+        ) AND NOT EXISTS (
+          SELECT 1
+          FROM information_schema.columns
+          WHERE table_schema = 'public'
+            AND table_name = 'data_history'
+            AND column_name = 'his_extra'
+        ) THEN
+          ALTER TABLE public.data_history ADD COLUMN his_extra jsonb;
+          COMMENT ON COLUMN public.data_history.his_extra IS '확장 속성(JSONB)';
+        END IF;
+      END
+      $his_extra$;
+    `));
+    if (!existed && (await columnExists('public', 'data_history', 'his_extra'))) {
+      result.created.push(fq);
+    }
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    result.errors.push(`${fq}: ${msg}`);
+  }
+}
+
+/**
+ * public.data_history 확보.
+ * safedata_history 가 있고 data_history 가 없으면 rename, 없으면 생성.
+ * agency 는 data_history 에만 추가(구 테이블 이관 시 값 이관 없음).
+ */
+export async function ensureDataHistoryTable(result?: EnsureResult): Promise<EnsureResult> {
+  const out: EnsureResult = result ?? { created: [], moved: [], existed: [], errors: [] };
+  const fq = 'public.data_history';
+  const legacyFq = 'public.safedata_history';
+  try {
+    const hasNew = await tableExists('public', 'data_history');
+    const hasLegacy = await tableExists('public', 'safedata_history');
+
+    if (hasNew === 'BASE TABLE') {
+      out.existed.push(fq);
+      // 구 인덱스명이 남아 있으면 정리
+      try {
+        await db.execute(sql.raw(`
+          DO $$
+          BEGIN
+            IF EXISTS (
+              SELECT 1 FROM pg_class c
+              JOIN pg_namespace n ON n.oid = c.relnamespace
+              WHERE n.nspname = 'public' AND c.relkind = 'i'
+                AND c.relname = 'safedata_history_gubun_ftr_idx'
+            ) AND NOT EXISTS (
+              SELECT 1 FROM pg_class c
+              JOIN pg_namespace n ON n.oid = c.relnamespace
+              WHERE n.nspname = 'public' AND c.relkind = 'i'
+                AND c.relname = 'data_history_gubun_ftr_idx'
+            ) THEN
+              ALTER INDEX public.safedata_history_gubun_ftr_idx RENAME TO data_history_gubun_ftr_idx;
+            END IF;
+            IF EXISTS (
+              SELECT 1 FROM pg_class c
+              JOIN pg_namespace n ON n.oid = c.relnamespace
+              WHERE n.nspname = 'public' AND c.relkind = 'i'
+                AND c.relname = 'safedata_history_pkey'
+            ) AND NOT EXISTS (
+              SELECT 1 FROM pg_class c
+              JOIN pg_namespace n ON n.oid = c.relnamespace
+              WHERE n.nspname = 'public' AND c.relkind = 'i'
+                AND c.relname = 'data_history_pkey'
+            ) THEN
+              ALTER INDEX public.safedata_history_pkey RENAME TO data_history_pkey;
+            END IF;
+            IF EXISTS (
+              SELECT 1 FROM pg_class c
+              JOIN pg_namespace n ON n.oid = c.relnamespace
+              WHERE n.nspname = 'public' AND c.relkind = 'S'
+                AND c.relname = 'safedata_history_history_key_seq'
+            ) AND NOT EXISTS (
+              SELECT 1 FROM pg_class c
+              JOIN pg_namespace n ON n.oid = c.relnamespace
+              WHERE n.nspname = 'public' AND c.relkind = 'S'
+                AND c.relname = 'data_history_history_key_seq'
+            ) THEN
+              ALTER SEQUENCE public.safedata_history_history_key_seq RENAME TO data_history_history_key_seq;
+            END IF;
+          END $$;
+        `));
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : String(e);
+        out.errors.push(`${fq} index/seq rename: ${msg}`);
+      }
+      await ensureDataHistoryAgencyColumn(out);
+      await ensureDataHistoryExtraColumn(out);
+      return out;
+    }
+
+    if (hasLegacy === 'BASE TABLE') {
+      await db.execute(sql.raw(`ALTER TABLE public.safedata_history RENAME TO data_history`));
+      try {
+        await db.execute(sql.raw(`
+          DO $$
+          BEGIN
+            IF EXISTS (
+              SELECT 1 FROM pg_class c
+              JOIN pg_namespace n ON n.oid = c.relnamespace
+              WHERE n.nspname = 'public' AND c.relkind = 'i'
+                AND c.relname = 'safedata_history_gubun_ftr_idx'
+            ) THEN
+              ALTER INDEX public.safedata_history_gubun_ftr_idx RENAME TO data_history_gubun_ftr_idx;
+            END IF;
+            IF EXISTS (
+              SELECT 1 FROM pg_class c
+              JOIN pg_namespace n ON n.oid = c.relnamespace
+              WHERE n.nspname = 'public' AND c.relkind = 'i'
+                AND c.relname = 'safedata_history_pkey'
+            ) THEN
+              ALTER INDEX public.safedata_history_pkey RENAME TO data_history_pkey;
+            END IF;
+            IF EXISTS (
+              SELECT 1 FROM pg_class c
+              JOIN pg_namespace n ON n.oid = c.relnamespace
+              WHERE n.nspname = 'public' AND c.relkind = 'S'
+                AND c.relname = 'safedata_history_history_key_seq'
+            ) THEN
+              ALTER SEQUENCE public.safedata_history_history_key_seq RENAME TO data_history_history_key_seq;
+            END IF;
+          END $$;
+        `));
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : String(e);
+        out.errors.push(`${fq} index/seq rename: ${msg}`);
+      }
+      try {
+        await db.execute(sql.raw(`COMMENT ON TABLE public.data_history IS '시설 이력'`));
+      } catch {
+        /* ignore */
+      }
+      out.moved.push(`${legacyFq}→${fq}`);
+      await ensureDataHistoryAgencyColumn(out);
+      await ensureDataHistoryExtraColumn(out);
+      return out;
+    }
+
+    await execSqlStatements(DATA_HISTORY_CREATE_SQL);
+    out.created.push(fq);
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    out.errors.push(`${fq}: ${msg}`);
+  }
+  return out;
+}
+
 /** public.layer_extra_def — 추가속성 정의 (점용 본대 extra 컬럼과는 별개) */
 export async function ensureLayerExtraDefTable(result?: EnsureResult): Promise<EnsureResult> {
   const out: EnsureResult = result ?? { created: [], moved: [], existed: [], errors: [] };
@@ -2213,6 +2408,7 @@ export async function ensureLayerAppTables(): Promise<EnsureResult> {
     await ensureSchemaLayer();
     await ensureSchemaLandLinkage();
     await ensureLayerExtraDefTable(result);
+    await ensureDataHistoryTable(result);
     await ensureRoadUseLedgerTables(result);
     await ensureRoadFrontageBuildingTables(result);
     await ensureRoadFrontageMarkerTables(result);

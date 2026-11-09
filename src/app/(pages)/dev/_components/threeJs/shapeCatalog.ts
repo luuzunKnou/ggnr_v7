@@ -164,6 +164,7 @@ const BASIC_MODULES: ShapeModule[] = [
       groundCenterY: undefined,
       groundRadiusM: GROUND_DEFAULT_RADIUS_M,
       groundHeightField: null,
+      groundMapTextureUrl: null,
       groundDrawMode: 'extent',
       groundSectionLine: null,
       riverColor: '#2563eb',

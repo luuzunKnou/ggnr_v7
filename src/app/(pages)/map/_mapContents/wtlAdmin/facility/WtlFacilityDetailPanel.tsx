@@ -1,7 +1,17 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState, type ElementType } from 'react'
-import { FileText, History, Loader2, Paperclip, Pencil, Search, Trash2, X } from 'lucide-react'
+import {
+  ClipboardList,
+  FileText,
+  History,
+  Loader2,
+  Paperclip,
+  Pencil,
+  Search,
+  Trash2,
+  X,
+} from 'lucide-react'
 import { call } from '@/lib/api'
 import {
   formatDefineFieldDisplayValue,
@@ -34,6 +44,8 @@ import {
   type WtlMappedFacilityTarget,
 } from './WtlFacilityRelatedDetailFloating'
 import { WtlFacilityTableLoadingRow } from './WtlFacilityTableLoadingRow'
+import { DataHistoryCardSection } from '../../../_mapComponents/dataHistoryCard/DataHistoryCardSection'
+import { isTankHistoryGubun } from '../../../_mapComponents/dataHistoryCard/dataHistoryCardExtra'
 
 const SER_ENG = 'wtlFacility'
 
@@ -51,6 +63,8 @@ type Props = {
   onHistoryReverted?: () => void
   /** 설비관리 기본정보 — 가압장명·정수장명 값 칸에 시설 정보 보기 */
   showFacilityInfoLink?: boolean
+  /** 설비관리 — data_history 이력 카드 탭 (추가·수정·삭제, agency 공개) */
+  showHistoryCard?: boolean
 }
 
 type FieldEditMeta = DefineFieldLike & {
@@ -70,7 +84,7 @@ type RelatedRow = {
   geom: unknown | null
 }
 
-type ActiveTab = 'attach' | 'dataHistory' | string
+type ActiveTab = 'attach' | 'dataHistory' | 'historyCard' | string
 
 function toNetworkItem(row: WtlFacilityListRow): WtlNetworkRow {
   return {
@@ -160,11 +174,12 @@ export function WtlFacilityDetailPanel({
   onDeleted,
   onHistoryReverted,
   showFacilityInfoLink = false,
+  showHistoryCard = false,
 }: Props) {
   const canWrite = useSerWriteAccess(SER_ENG)
   const [localRow, setLocalRow] = useState(rowProp)
   const [bundle, setBundle] = useState<WtlDefineDisplayBundle | null>(null)
-  const [activeTab, setActiveTab] = useState<ActiveTab>('attach')
+  const [activeTab, setActiveTab] = useState<ActiveTab>('')
   const [relatedTabs, setRelatedTabs] = useState<RelatedTabDef[]>([])
   const [relatedRows, setRelatedRows] = useState<RelatedRow[]>([])
   const [relatedTotal, setRelatedTotal] = useState(0)
@@ -180,6 +195,8 @@ export function WtlFacilityDetailPanel({
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [editError, setEditError] = useState<string | null>(null)
+  /** 행 전환 시 탭을 배열 첫 항목으로 되돌리기 위한 세대 */
+  const [tabSelectEpoch, setTabSelectEpoch] = useState(0)
 
   const row = localRow
   const schema =
@@ -229,7 +246,8 @@ export function WtlFacilityDetailPanel({
     setRelatedError(null)
     setRelatedDetail(null)
     setFacilityInfo(null)
-    setActiveTab('attach')
+    setActiveTab('')
+    setTabSelectEpoch((n) => n + 1)
 
     if (parentKey !== 'wtl_pres_ps' && parentKey !== 'wtl_puri_as') {
       return
@@ -262,12 +280,12 @@ export function WtlFacilityDetailPanel({
           })
           .filter((t) => t.table)
         setRelatedTabs(next)
-        setActiveTab(next[0]?.table ?? 'attach')
+        setTabSelectEpoch((n) => n + 1)
       })
       .catch(() => {
         if (cancelled) return
         setRelatedTabs([])
-        setActiveTab('attach')
+        setTabSelectEpoch((n) => n + 1)
       })
 
     return () => {
@@ -581,15 +599,29 @@ export function WtlFacilityDetailPanel({
 
   const relatedCodes = relatedBundle?.codesByField ?? {}
 
+  const historyCardEnabled =
+    showHistoryCard || isTankHistoryGubun(String(row.tableName ?? ''))
+
   const tabs = useMemo(() => {
     const out: { id: ActiveTab; label: string; icon: ElementType }[] = []
     for (const t of relatedTabs) {
       out.push({ id: t.table, label: t.label, icon: FileText })
     }
+    if (historyCardEnabled) {
+      out.push({ id: 'historyCard', label: '이력 카드', icon: ClipboardList })
+    }
     out.push({ id: 'attach', label: '첨부파일', icon: Paperclip })
     out.push({ id: 'dataHistory', label: '데이터 이력관리', icon: History })
     return out
-  }, [relatedTabs])
+  }, [relatedTabs, historyCardEnabled])
+
+  useEffect(() => {
+    const first = tabs[0]?.id
+    if (!first) return
+    setActiveTab(first)
+    // 행·연관탭 전환(epoch) 시에만 첫 탭으로 맞춤
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- tabSelectEpoch
+  }, [tabSelectEpoch])
 
   useEffect(() => {
     const first = tabs[0]?.id
@@ -788,7 +820,9 @@ export function WtlFacilityDetailPanel({
                 }}
                 className={cn(
                   'inline-flex h-9 shrink-0 cursor-pointer items-center justify-center gap-1 px-2 text-[11px] font-medium transition-colors',
-                  id === 'dataHistory' ? 'min-w-[7.5rem]' : 'w-[5.5rem]',
+                  id === 'dataHistory' || id === 'historyCard'
+                    ? 'min-w-[7.5rem]'
+                    : 'w-[5.5rem]',
                   activeTab === id
                     ? 'border-b-2 border-primary bg-primary/5 text-primary'
                     : 'border-b-2 border-transparent text-muted-foreground hover:bg-muted/50 hover:text-foreground'
@@ -810,6 +844,13 @@ export function WtlFacilityDetailPanel({
                   />
                 </div>
               </div>
+            ) : activeTab === 'historyCard' ? (
+              <DataHistoryCardSection
+                hisGubun={String(row.tableName ?? '').trim()}
+                ftrIdn={ftrIdn}
+                showAgency
+                variant="panel"
+              />
             ) : activeTab === 'dataHistory' ? (
               <WtlFacilityDataHistoryTab
                 row={row}

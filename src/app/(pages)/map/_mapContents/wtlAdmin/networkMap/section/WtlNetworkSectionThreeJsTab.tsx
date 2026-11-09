@@ -100,6 +100,7 @@ export function WtlNetworkSectionThreeJsTab({ line3857, enabledKeys }: Props) {
             isLineLayerShape,
             isPointLayerShape,
           },
+          { captureExtentTileImage, extent3857FromCenterRadius },
         ] = await Promise.all([
           import('three'),
           import('three/addons/controls/OrbitControls.js'),
@@ -109,6 +110,7 @@ export function WtlNetworkSectionThreeJsTab({ line3857, enabledKeys }: Props) {
           import('@/app/(pages)/dev/_components/threeJs/sectionCadDraw'),
           import('@/app/(pages)/dev/_components/threeJs/fitGroundCamera'),
           import('@/app/(pages)/dev/_components/threeJs/shapeTypes'),
+          import('@/app/(pages)/dev/_components/threeJs/captureExtentTileImage'),
         ])
         type ShapeKind = import('@/app/(pages)/dev/_components/threeJs/shapeTypes').ShapeKind
         type GroundHeightField =
@@ -177,6 +179,18 @@ export function WtlNetworkSectionThreeJsTab({ line3857, enabledKeys }: Props) {
           throw new Error('절단 범위 내 고도 샘플이 없습니다')
         }
 
+        setStatus('지도 항공 타일 불러오는 중…')
+        let mapTex: string | null = null
+        try {
+          mapTex = await captureExtentTileImage(
+            extent3857FromCenterRadius(field.centerX, field.centerY, field.radiusM),
+            { targetPx: 1280 }
+          )
+        } catch {
+          mapTex = null
+        }
+        if (cancelled) return
+
         const root = new THREE.Group()
         shapesRoot = root
         const groundProps = cloneDefaults('ground') as ShapeProps
@@ -184,6 +198,11 @@ export function WtlNetworkSectionThreeJsTab({ line3857, enabledKeys }: Props) {
         groundProps.groundDrawMode = 'section'
         groundProps.groundSectionLine = sectionLine
         groundProps.groundHeightField = field
+        groundProps.groundMapTextureUrl = mapTex
+        if (mapTex) {
+          groundProps.color = '#ffffff'
+          groundProps.opacity = 1
+        }
         groundProps.groundCenterX = field.centerX
         groundProps.groundCenterY = field.centerY
         groundProps.groundRadiusM = field.radiusM

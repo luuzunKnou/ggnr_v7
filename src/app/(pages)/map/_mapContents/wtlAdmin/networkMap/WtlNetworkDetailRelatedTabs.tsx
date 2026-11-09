@@ -9,6 +9,7 @@ import { Circle as CircleStyle, Fill, Stroke, Style } from 'ol/style'
 import { call } from '@/lib/api'
 import { formatDefineFieldDisplayValue } from '@/lib/defineLayerCodeDisplay'
 import { cn } from '@/lib/utils'
+import { loadWimsStatus } from '@/app/(pages)/map/_mapComponents/landInfo/wimsClient'
 import { useMapContext } from '../../../_mapComponents/MapContext'
 import {
   getDefineFieldDisplayLabel,
@@ -115,7 +116,19 @@ export function WtlNetworkDetailRelatedTabs({
 
   const itemId = String(item.id ?? '')
   const ftrIdn = resolveParentFtrIdn(item)
-  const showWimsTab = isWtlMetaPsLayer(item)
+  const [wimsEnabled, setWimsEnabled] = useState(false)
+  const showWimsTab = isWtlMetaPsLayer(item) && wimsEnabled
+
+  useEffect(() => {
+    let alive = true
+    void loadWimsStatus().then((status) => {
+      if (!alive) return
+      setWimsEnabled(status.enabled)
+    })
+    return () => {
+      alive = false
+    }
+  }, [])
 
   const historySourceRow = useMemo(() => {
     const keyTarget = resolveWtlNetworkRowKeyTarget(item, fields)
@@ -132,7 +145,8 @@ export function WtlNetworkDetailRelatedTabs({
   onRelatedMapLayerRef.current = onRelatedMapLayer
 
   const [relatedTabs, setRelatedTabs] = useState<RelatedTabDef[]>([])
-  const [active, setActive] = useState<ActiveTab>('attach')
+  const [active, setActive] = useState<ActiveTab>('')
+  const [tabSelectEpoch, setTabSelectEpoch] = useState(0)
   const [listLoading, setListLoading] = useState(false)
   const [listError, setListError] = useState<string | null>(null)
   const [listRows, setListRows] = useState<RelatedRow[]>([])
@@ -225,7 +239,8 @@ export function WtlNetworkDetailRelatedTabs({
   useEffect(() => {
     let cancelled = false
     setRelatedTabs([])
-    setActive('attach')
+    setActive('')
+    setTabSelectEpoch((n) => n + 1)
     setListRows([])
     setListTotal(0)
     setListBundle(null)
@@ -266,9 +281,13 @@ export function WtlNetworkDetailRelatedTabs({
           })
           .filter((t) => t.table)
         setRelatedTabs(tabs)
+        setTabSelectEpoch((n) => n + 1)
       })
       .catch(() => {
-        if (!cancelled) setRelatedTabs([])
+        if (!cancelled) {
+          setRelatedTabs([])
+          setTabSelectEpoch((n) => n + 1)
+        }
       })
 
     return () => {
@@ -276,6 +295,36 @@ export function WtlNetworkDetailRelatedTabs({
       onRelatedMapLayerRef.current(null)
     }
   }, [parentKey, itemId, clearRowHighlight])
+
+  const tabItems = useMemo(() => {
+    const out: { id: ActiveTab; label: string }[] = [
+      { id: 'attach', label: '첨부파일' },
+    ]
+    for (const tab of relatedTabs) {
+      out.push({ id: tab.table, label: tab.label })
+    }
+    if (showWimsTab) {
+      out.push({ id: 'wimsHistory', label: 'WIMS 검침 이력' })
+    }
+    out.push({ id: 'dataHistory', label: '데이터 이력관리' })
+    return out
+  }, [relatedTabs, showWimsTab])
+
+  useEffect(() => {
+    const first = tabItems[0]?.id
+    if (!first) return
+    setActive(first)
+    // 행·연관탭 전환(epoch) 시에만 첫 탭으로 맞춤
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- tabSelectEpoch
+  }, [tabSelectEpoch])
+
+  useEffect(() => {
+    const first = tabItems[0]?.id
+    if (!first) return
+    if (!tabItems.some((t) => t.id === active)) {
+      setActive(first)
+    }
+  }, [tabItems, active])
 
   useEffect(() => {
     if (
@@ -290,10 +339,6 @@ export function WtlNetworkDetailRelatedTabs({
     }
     onRelatedMapLayerRef.current({ table: activeTable, ftrIdn })
   }, [active, activeTable, ftrIdn])
-
-  useEffect(() => {
-    if (!showWimsTab && active === 'wimsHistory') setActive('attach')
-  }, [showWimsTab, active])
 
   useEffect(() => {
     clearRowHighlight()

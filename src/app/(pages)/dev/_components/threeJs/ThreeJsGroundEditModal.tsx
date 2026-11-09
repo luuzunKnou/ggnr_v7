@@ -14,6 +14,10 @@ import {
   sectionLineLengthM,
 } from './groundSection';
 import {
+  captureExtentTileImage,
+  extent3857FromCenterRadius,
+} from './captureExtentTileImage';
+import {
   GROUND_DEFAULT_RADIUS_M,
   GROUND_DEFAULT_STEP_M,
   type GroundDrawMode,
@@ -195,6 +199,18 @@ export function ThreeJsGroundEditModal({
         }
       }
 
+      let mapTex: string | null = null;
+      try {
+        const extent = extent3857FromCenterRadius(
+          field.centerX,
+          field.centerY,
+          field.radiusM
+        );
+        mapTex = await captureExtentTileImage(extent, { targetPx: 1280 });
+      } catch {
+        mapTex = null;
+      }
+
       const next: ShapeProps = {
         ...draft,
         kind: 'ground',
@@ -204,6 +220,8 @@ export function ThreeJsGroundEditModal({
         groundRadiusM: field.radiusM,
         groundSectionLine: drawMode === 'section' ? sectionLine : null,
         groundHeightField: field,
+        groundMapTextureUrl: mapTex,
+        ...(mapTex ? { color: '#ffffff', opacity: 1 } : {}),
         floorHeight: 0,
         posX: 0,
         posZ: 0,
@@ -334,6 +352,7 @@ export function ThreeJsGroundEditModal({
               groundRadiusM: r.radiusM,
               groundSectionLine: r.sectionLine ?? null,
               groundHeightField: null,
+              groundMapTextureUrl: null,
             });
             if (r.mode === 'section' && r.sectionLine) {
               setStatus(

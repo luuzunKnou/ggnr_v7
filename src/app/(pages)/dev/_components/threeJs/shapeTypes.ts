@@ -147,6 +147,8 @@ export type ShapeProps = {
   groundCenterY?: number;
   groundRadiusM?: number;
   groundHeightField?: GroundHeightField | null;
+  /** GROUND — 범위에 맞춘 지도 항공 타일(data URL). 윗면 텍스처 */
+  groundMapTextureUrl?: string | null;
   /** GROUND — 범위(사각형) / 단면도(라인) */
   groundDrawMode?: GroundDrawMode;
   /** GROUND 단면도 — 절단선(밑변)·사각형 깊이 */

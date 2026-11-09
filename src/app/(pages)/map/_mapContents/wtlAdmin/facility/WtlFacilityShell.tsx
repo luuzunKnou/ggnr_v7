@@ -991,7 +991,8 @@ export function WtlFacilityShell({
             <WtlFacilityDetailPanel
               row={selected}
               schema={selectedSource?.schema}
-              showFacilityInfoLink={title === '설비관리'}
+              showFacilityInfoLink={title === '설비관리' || title === '이력관리'}
+              showHistoryCard={title === '설비관리' || title === '이력관리'}
               onClose={() => {
                 setSelectedId(null)
                 setSelectedRow(null)

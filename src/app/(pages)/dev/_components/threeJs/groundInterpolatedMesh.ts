@@ -45,7 +45,14 @@ export function createSectionRectGroundParts(
     };
   };
 
+  const halfField = Math.max(1e-6, (field.radiusM || 1) / GROUND_SCENE_M_PER_UNIT);
+  const uvAt = (x: number, z: number): [number, number] => [
+    (x + halfField) / (2 * halfField),
+    // +Z=남, −Z=북 → 이미지 위(북)가 v=1
+    (halfField - z) / (2 * halfField),
+  ];
   const topPositions: number[] = [];
+  const topUvs: number[] = [];
   const topIndices: number[] = [];
   const vertIndex = (iu: number, iv: number) => iv * nu + iu;
 
@@ -54,6 +61,8 @@ export function createSectionRectGroundParts(
       const p = xzAt(iu, iv);
       const y = sampleSurfaceY(field, p.x, p.z);
       topPositions.push(p.x, y, p.z);
+      const [uu, vv] = uvAt(p.x, p.z);
+      topUvs.push(uu, vv);
     }
   }
 
@@ -71,6 +80,7 @@ export function createSectionRectGroundParts(
 
   const topGeo = new THREE.BufferGeometry();
   topGeo.setAttribute('position', new THREE.Float32BufferAttribute(topPositions, 3));
+  topGeo.setAttribute('uv', new THREE.Float32BufferAttribute(topUvs, 2));
   topGeo.setIndex(topIndices);
   topGeo.computeVertexNormals();
 
@@ -146,7 +156,13 @@ export function createInterpolatedGroundParts(
   const cellOk = (i: number, j: number) =>
     has(i, j) && has(i + 1, j) && has(i, j + 1) && has(i + 1, j + 1);
 
+  const halfField = Math.max(1e-6, (size - 1) * stepU * 0.5);
+  const uvAt = (x: number, z: number): [number, number] => [
+    (x + halfField) / (2 * halfField),
+    (halfField - z) / (2 * halfField),
+  ];
   const topPositions: number[] = [];
+  const topUvs: number[] = [];
   const topIndices: number[] = [];
   const vertKey = new Map<string, number>();
   const ensureVert = (i: number, j: number): number => {
@@ -156,6 +172,8 @@ export function createInterpolatedGroundParts(
     const p = xz(i, j);
     const idx = topPositions.length / 3;
     topPositions.push(p.x, topY(i, j), p.z);
+    const [uu, vv] = uvAt(p.x, p.z);
+    topUvs.push(uu, vv);
     vertKey.set(key, idx);
     return idx;
   };
@@ -176,6 +194,7 @@ export function createInterpolatedGroundParts(
 
   const topGeo = new THREE.BufferGeometry();
   topGeo.setAttribute('position', new THREE.Float32BufferAttribute(topPositions, 3));
+  topGeo.setAttribute('uv', new THREE.Float32BufferAttribute(topUvs, 2));
   topGeo.setIndex(topIndices);
   topGeo.computeVertexNormals();
 
