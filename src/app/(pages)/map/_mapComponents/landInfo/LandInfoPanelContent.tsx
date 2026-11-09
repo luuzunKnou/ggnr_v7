@@ -18,6 +18,8 @@ import {
 } from './api';
 import { BuildingPermitPanel, BuildingRegisterPanel } from './LandInfoBuildingPanels';
 import { LandInfoParcelPanel } from './LandInfoParcelPanel';
+import { WimsInfoPanel } from './WimsInfoPanel';
+import { loadWimsEnabled } from './wimsClient';
 import { withBasePath } from '@/lib/basePath';
 import { formatAddressStripSidoSigungu } from '@/lib/formatAddressStripAdmin';
 import { copyTextToClipboard } from '@/lib/utils';
@@ -188,13 +190,58 @@ export function LandInfoPanelContent({
   const [permitNotice, setPermitNotice] = useState<string | null>(null);
   const [permitFetching, setPermitFetching] = useState(false);
   const effectivePnu = pnuFromContext ?? resolvedPnu;
-  const eumPnu = /^\d{19}$/.test(String(effectivePnu ?? '').trim()) ? String(effectivePnu).trim() : '';
-  const [embedKind, setEmbedKind] = useState<'eum' | 'plan' | null>(null);
+  const effectivePnuRaw = String(effectivePnu ?? '').trim();
+  const eumPnu = /^\d{19}$/.test(effectivePnuRaw) ? effectivePnuRaw : '';
+  const [embedKind, setEmbedKind] = useState<'eum' | 'plan' | 'wims' | null>(null);
+  const [wimsEnabled, setWimsEnabled] = useState(false);
   const eumFrameRef = useRef<HTMLIFrameElement>(null);
+  const prevEumPnuRef = useRef(eumPnu);
 
   useEffect(() => {
+    console.log('[LandInfoPanel] pnu state', {
+      pnuFromContext,
+      resolvedPnu,
+      effectivePnu,
+      effectivePnuRaw,
+      eumPnu,
+      eumPnuLen: eumPnu.length,
+      digit19: /^\d{19}$/.test(effectivePnuRaw),
+      wimsEnabled,
+      embedKind,
+    });
+  }, [pnuFromContext, resolvedPnu, effectivePnu, effectivePnuRaw, eumPnu, wimsEnabled, embedKind]);
+
+  useEffect(() => {
+    const prev = prevEumPnuRef.current;
+    prevEumPnuRef.current = eumPnu;
+    // 같은 필지의 번호가 늦게 채워지는 경우는 유지. 다른 필지로 바뀌면 탭을 필지정보로 돌린다.
+    if (!prev || prev === eumPnu) {
+      console.log('[LandInfoPanel] eumPnu keep embedKind', { prev, eumPnu, embedKind });
+      return;
+    }
+    console.log('[LandInfoPanel] eumPnu changed → reset embedKind', { prev, eumPnu });
     setEmbedKind(null);
   }, [eumPnu]);
+
+  useEffect(() => {
+    let alive = true;
+    console.log('[LandInfoPanel] loadWimsEnabled start');
+    void loadWimsEnabled().then((enabled) => {
+      console.log('[LandInfoPanel] loadWimsEnabled done', { enabled, alive });
+      if (alive) setWimsEnabled(enabled);
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!wimsEnabled) {
+      console.warn('[LandInfoPanel] 수용가 정보 버튼 숨김 — wimsEnabled=false (status/WIMS_INFO 확인)');
+    } else {
+      console.log('[LandInfoPanel] 수용가 정보 버튼 표시', { eumPnu, disabled: !eumPnu });
+    }
+  }, [wimsEnabled, eumPnu]);
 
   useEffect(() => {
     if (!eumPnu || (embedKind !== 'eum' && embedKind !== 'plan')) return;
@@ -633,8 +680,37 @@ export function LandInfoPanelContent({
           >
             도시계획도
           </button>
+          {wimsEnabled ? (
+            <button
+              type="button"
+              onClick={() => {
+                console.log('[LandInfoPanel] 수용가 정보 click', {
+                  eumPnu,
+                  effectivePnuRaw,
+                  disabled: !eumPnu,
+                  embedKind,
+                });
+                if (!eumPnu) {
+                  console.warn('[LandInfoPanel] 수용가 정보 click blocked: no eumPnu');
+                  return;
+                }
+                setEmbedKind('wims');
+              }}
+              disabled={!eumPnu}
+              title="수용가 정보"
+              className={`flex-1 min-w-0 cursor-pointer whitespace-nowrap px-1 py-2 text-[11px] border-b-2 -mb-px disabled:opacity-50 ${
+                embedKind === 'wims'
+                  ? 'border-primary text-primary'
+                  : 'border-transparent text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              수용가 정보
+            </button>
+          ) : null}
         </div>
-        {embedKind && eumPnu ? (
+        {embedKind === 'wims' && eumPnu ? (
+          <WimsInfoPanel pnu={eumPnu} />
+        ) : embedKind && eumPnu ? (
           <iframe
             ref={eumFrameRef}
             title={embedKind === 'plan' ? '도시계획도' : '토지이음'}

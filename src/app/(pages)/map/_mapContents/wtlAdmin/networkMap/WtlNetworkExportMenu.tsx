@@ -153,8 +153,8 @@ export function WtlNetworkExportMenu({
           className={cn(
             'flex h-7 w-full cursor-pointer items-center justify-center whitespace-nowrap rounded-[5px] px-0.5 text-[11px] font-semibold leading-none disabled:cursor-not-allowed disabled:opacity-60',
             active || open
-              ? 'bg-[#14607a] text-white hover:bg-[#0f4d62]'
-              : 'bg-[#d7ebf1] text-[#14607a] hover:bg-[#c5e3eb]'
+              ? 'bg-[#14607a] text-white hover:bg-[#0f4d62] dark:bg-[#d7ebf1] dark:text-[#14607a] dark:hover:bg-[#c5e3eb]'
+              : 'bg-[#d7ebf1] text-[#14607a] hover:bg-[#c5e3eb] dark:bg-[#14607a] dark:text-[#d7ebf1] dark:hover:bg-[#0f4d62]'
           )}
           onClick={() => {
             if (busy || disabled) return

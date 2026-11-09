@@ -18,7 +18,9 @@ import type { StyleFunction } from 'ol/style/Style'
 import type { FeatureLike } from 'ol/Feature'
 import {
   compareFeaturesByGeometryStackOrder,
+  GEOM_STACK_UI_ZINDEX_MIN,
   isPointSymbolLayerName,
+  LAYER_GEOM_STACK_SKIP_KEY,
   markLayerGeomStack,
   type LayerStackKind,
 } from '@/lib/mapLayerGeometryOrder'
@@ -278,7 +280,7 @@ export function useWtlNetworkMapLayer({
               y: evt.coordinate[1],
               layerKeys: keys,
               mapSources: sources,
-              tolerance: 12,
+              tolerance: 2,
             },
           })
           const row = (res?.data ?? res)?.row as WtlNetworkRow | null | undefined
@@ -321,9 +323,11 @@ export function useWtlNetworkMapLayer({
     highlightSourceRef.current = source
     const layer = new VectorLayer({
       source,
+      zIndex: GEOM_STACK_UI_ZINDEX_MIN,
       renderOrder: compareFeaturesByGeometryStackOrder,
       style: createWtlNetworkSelectionStyle(() => pulsePhaseRef.current),
     })
+    layer.set(LAYER_GEOM_STACK_SKIP_KEY, true)
     layer.set('wtlNetworkHighlight', true)
     insertLayerBelowServiceLayer(map, layer)
     return () => {

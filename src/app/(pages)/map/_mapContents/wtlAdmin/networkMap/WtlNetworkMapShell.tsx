@@ -2054,8 +2054,8 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
             className={cn(
               'flex h-7 min-w-0 flex-1 cursor-pointer items-center justify-center whitespace-nowrap rounded-[5px] px-0.5 text-[11px] font-semibold leading-none',
               (isZone && (zoneDrawing || zoneWkt5181)) || (isSection && (section.drawing || section.panelOpen))
-                ? 'bg-[#14607a] text-white hover:bg-[#0f4d62]'
-                : 'bg-[#d7ebf1] text-[#14607a] hover:bg-[#c5e3eb]'
+                ? 'bg-[#14607a] text-white hover:bg-[#0f4d62] dark:bg-[#d7ebf1] dark:text-[#14607a] dark:hover:bg-[#c5e3eb]'
+                : 'bg-[#d7ebf1] text-[#14607a] hover:bg-[#c5e3eb] dark:bg-[#14607a] dark:text-[#d7ebf1] dark:hover:bg-[#0f4d62]'
             )}
             onClick={() => {
               if (isZone) handleZoneTool()
@@ -2068,7 +2068,7 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
       })}
       <button
         type="button"
-        className="flex h-7 min-w-0 flex-1 cursor-pointer items-center justify-center gap-0.5 whitespace-nowrap rounded-[5px] bg-[#d7ebf1] px-0.5 text-[11px] font-semibold leading-none text-[#14607a] hover:bg-[#c5e3eb]"
+        className="flex h-7 min-w-0 flex-1 cursor-pointer items-center justify-center gap-0.5 whitespace-nowrap rounded-[5px] bg-[#d7ebf1] px-0.5 text-[11px] font-semibold leading-none text-[#14607a] hover:bg-[#c5e3eb] dark:bg-[#14607a] dark:text-[#d7ebf1] dark:hover:bg-[#0f4d62]"
         title={resultOpen ? '시설목록 접기' : '시설목록 펼치기'}
         onClick={() => setResultOpen((open) => !open)}
       >

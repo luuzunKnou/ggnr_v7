@@ -1725,67 +1725,71 @@ export default function OpenLayersMap({
       if (mapContext?.addressParcelSeedGeom4326Ref) {
         mapContext.addressParcelSeedGeom4326Ref.current = null;
       }
-      setAddressInfoDetail({
-        coordinate,
-        viewProjection,
-        loading: true,
-        pnu: null,
-        jibun: null,
-        road: null,
-      });
-      const coord3857 = transformCoordinate(coordinate, viewProjection, 'EPSG:3857');
-      if (coord3857) {
-        const [x, y] = coord3857;
-        call('', 'POST', {
-          service: 'standardService',
-          action: 'getJijukParcelAtPoint',
-          params: { x, y },
-        })
-          .then((res) => {
+
+      // 지적(jijuk) PNU를 먼저 조회한 뒤 주소정보 패널을 연다.
+      void (async () => {
+        let pnu: string | null = null;
+        let jibun: string | null = null;
+        let geomSeedAt: number | undefined;
+        const coord3857 = transformCoordinate(coordinate, viewProjection, 'EPSG:3857');
+        if (coord3857) {
+          const [x, y] = coord3857;
+          try {
+            const res = await call('', 'POST', {
+              service: 'standardService',
+              action: 'getJijukParcelAtPoint',
+              params: { x, y },
+            });
             const payload = (res?.data ?? res) as {
               results?: { tableName?: string; features?: { data?: Record<string, unknown> }[] }[];
             };
             const results = Array.isArray(payload?.results) ? payload.results : [];
             const jijukResult = results.find((r) => String(r?.tableName ?? '').trim() === 'jijuk');
             const row = jijukResult?.features?.[0]?.data;
-            const pnu = row?.pnu != null ? String(row.pnu).trim() : '';
+            const rowPnu = row?.pnu != null ? String(row.pnu).trim() : '';
+            if (rowPnu) pnu = rowPnu;
             const seedGeom = parseParcelGeomField(row?.geom);
             if (seedGeom && mapContext?.addressParcelSeedGeom4326Ref) {
               mapContext.addressParcelSeedGeom4326Ref.current = seedGeom;
+              geomSeedAt = Date.now();
             }
             const parcelJibun = row?.jibun != null ? String(row.jibun).trim() : '';
-            // 지적 jibun은 「1-3」「1-3잡」처럼 짧은 경우가 많음 — 전체 주소는 브이월드 역지오코딩 결과를 우선
+            // 짧은 지번(예: 1-3잡)은 쓰지 않고, 행정구역이 포함된 경우만 채운다.
             const parcelJibunLooksFull =
               parcelJibun.length >= 8 &&
               /(도|특별|광역|자치)/u.test(parcelJibun) &&
               /(읍|면|동|리)/u.test(parcelJibun);
-            setAddressInfoDetail((prev) =>
-              prev
-                ? {
-                    ...prev,
-                    pnu: prev.pnu ?? (pnu || null),
-                    geomSeedAt: seedGeom ? Date.now() : prev.geomSeedAt,
-                    jibun: prev.jibun ?? (parcelJibunLooksFull ? parcelJibun : null),
-                  }
-                : null
-            );
-          })
-          .catch(() => undefined);
-      }
-      const [lon, lat] = wgs84;
-      const apiKey = mapContext?.vworldApiKey?.trim();
-      if (!apiKey) {
-        setAddressInfoDetail((prev) => (prev ? { ...prev, loading: false, jibun: prev.jibun ?? null, road: null } : null));
-        return;
-      }
-      getAddressFromCoord(lon, lat, { apiKey })
-        .then(async (result) => {
+            if (parcelJibunLooksFull) jibun = parcelJibun;
+          } catch {
+            // 지적 조회 실패 시 브이월드 주소 조회로 이어감
+          }
+        }
+
+        setAddressInfoDetail({
+          coordinate,
+          viewProjection,
+          loading: true,
+          pnu,
+          jibun,
+          road: null,
+          ...(geomSeedAt != null ? { geomSeedAt } : {}),
+        });
+
+        const [lon, lat] = wgs84;
+        const apiKey = mapContext?.vworldApiKey?.trim();
+        if (!apiKey) {
+          setAddressInfoDetail((prev) =>
+            prev ? { ...prev, loading: false, jibun: prev.jibun ?? null, road: null } : null
+          );
+          return;
+        }
+        try {
+          const result = await getAddressFromCoord(lon, lat, { apiKey });
           let roadText = result?.road?.trim() || '';
           if (!roadText) {
             const roadOnly = await getAddressFromCoord(lon, lat, { apiKey, type: 'ROAD' });
             roadText = roadOnly?.road?.trim() || '';
           }
-          // 역지오코딩 ROAD=NOT_FOUND 인 경우 — 지번으로 검색 API에서 road 보강
           if (!roadText) {
             const jibunHint = result?.jibun?.trim() || '';
             if (jibunHint) {
@@ -1798,18 +1802,18 @@ export default function OpenLayersMap({
               ? {
                   ...prev,
                   loading: false,
+                  // 지적 PNU 우선, 없을 때만 브이월드 값 사용
                   pnu: prev.pnu ?? (result?.pnu?.trim() || null),
-                  // 브이월드 법정동 전체 주소를 지적 짧은 지번보다 우선
                   jibun: result?.jibun?.trim() || prev.jibun || null,
                   road: roadText || prev.road || null,
                   buildingName: result?.buildingName?.trim() || prev.buildingName || null,
                 }
               : null
           );
-        })
-        .catch(() => {
+        } catch {
           setAddressInfoDetail((prev) => (prev ? { ...prev, loading: false } : null));
-        });
+        }
+      })();
     },
     [mapContext?.setAddressInfoDetail, mapContext?.vworldApiKey, addressInfoDetail]
   );
