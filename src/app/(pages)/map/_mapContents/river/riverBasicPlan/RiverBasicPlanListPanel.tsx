@@ -36,6 +36,9 @@ type RiverType = RiverBasicPlanTab;
 type RiverItem = {
   riverName: string;
   riverType: string | null;
+  riverCode: string;
+  /** 같은 하천명이 하천코드로 나뉠 때만 — rivp_name 의 `_` 뒤 값 */
+  rivpLabel: string;
   count: number;
 };
 
@@ -459,12 +462,28 @@ export function RiverBasicPlanListPanel({
               ) : (
                 <ul className="divide-y divide-border">
                   {riverItems.map((item) => {
-                    const active = selectedRiver === item.riverName;
+                    /** 같은 하천명이 하천코드로 나뉜 항목은 하천코드까지 같아야 선택 표시 */
+                    const active =
+                      selectedRiver === item.riverName &&
+                      (!item.rivpLabel || preferredPlan?.riverCode === item.riverCode);
                     return (
-                      <li key={`${item.riverName}-${item.riverType ?? ""}`}>
+                      <li key={`${item.riverName}-${item.riverCode}`}>
                         <button
                           type="button"
-                          onClick={() => void selectRiver(item.riverName, null)}
+                          onClick={() =>
+                            void selectRiver(
+                              item.riverName,
+                              item.rivpLabel
+                                ? {
+                                    planYear: "",
+                                    planName: "",
+                                    rivpSuffix: "",
+                                    riverType: item.riverType ?? undefined,
+                                    riverCode: item.riverCode,
+                                  }
+                                : null
+                            )
+                          }
                           className={cn(
                             "w-full text-left px-4 py-2.5 hover:bg-muted/50 transition-colors",
                             active && "bg-primary/10"
@@ -476,8 +495,14 @@ export function RiverBasicPlanListPanel({
                                 "text-sm font-medium truncate min-w-0",
                                 active ? "text-primary" : "text-foreground"
                               )}
+                              title={item.rivpLabel ? `${item.riverName} ${item.rivpLabel}` : item.riverName}
                             >
                               {item.riverName}
+                              {item.rivpLabel ? (
+                                <span className="ml-1.5 text-xs font-normal text-muted-foreground">
+                                  {item.rivpLabel}
+                                </span>
+                              ) : null}
                             </p>
                             <span className="text-xs text-muted-foreground shrink-0">
                               기본계획 {item.count}건

@@ -53,16 +53,12 @@ function formatJbLenSuffix(raw: unknown): string {
 }
 
 /**
- * rivp_name → 폴더·그룹용 접미사 SQL.
- * `_1차` `_2차` 형태일 때만 `1차`/`2차`, 아니면 빈 문자열. `_` 앞은 무시.
+ * rivp_name → 폴더·그룹용 접미사 SQL — 마지막 `_` 뒤 값(`부구천_2차` → `2차`, `남대천_울진읍` → `울진읍`).
+ * `_` 가 없으면 빈 문자열. 화면 쪽 extractRiverBasicPlanRivpFolderSuffix 와 같은 규칙.
  */
 function rivpFolderSuffixSql(alias = ''): string {
   const col = alias ? `${alias}.rivp_name` : 'rivp_name';
-  return `CASE
-    WHEN COALESCE(${col}, '') ~ '_[0-9]+차$'
-    THEN substring(COALESCE(${col}, '') from '_([0-9]+차)$')
-    ELSE ''
-  END`;
+  return `COALESCE(substring(TRIM(COALESCE(${col}, '')) from '_([^_]+)$'), '')`;
 }
 
 /**
@@ -206,11 +202,21 @@ export async function listRiverOrthoGroups(): Promise<{ groups: RiverOrthoGroup[
   return { groups };
 }
 
+/**
+ * 하천별 목록 — 하천명·하천코드로 나눈다. 같은 하천명이 하천코드로 여러 개면
+ * rivpLabel(rivp_name 의 마지막 `_` 뒤 값)을 붙여 목록에서 구분한다(한 개면 빈 값).
+ */
 export async function getRiverBasicPlanRiverList(params?: {
   tab?: RiverType;
   keyword?: string;
 }): Promise<{
-  rivers: { riverName: string; riverType: string | null; count: number }[];
+  rivers: {
+    riverName: string;
+    riverType: string | null;
+    riverCode: string;
+    rivpLabel: string;
+    count: number;
+  }[];
 }> {
   const tab = normalizeTab(params?.tab);
   const keyword = String(params?.keyword ?? '').trim();
@@ -227,25 +233,46 @@ export async function getRiverBasicPlanRiverList(params?: {
       sql.raw(
         `SELECT
            river_name AS "riverName",
+           COALESCE(river_code::text, '') AS "riverCode",
            MAX(river_type) AS "riverType",
+           MIN(NULLIF(TRIM(COALESCE(rivp_name, '')), '')) AS "rivpName",
            COUNT(*)::int AS "count"
          FROM layer."${tableName.replace(/"/g, '""')}"
          WHERE COALESCE(river_name, '') <> ''
            ${keywordWhere}
-         GROUP BY river_name
-         ORDER BY river_name`
+         GROUP BY river_name, COALESCE(river_code::text, '')
+         ORDER BY river_name, COALESCE(river_code::text, '')`
       )
     );
 
-    return {
-      rivers: (res.rows ?? []).map((r) => {
-        const row = r as { riverName?: string; riverType?: string | null; count?: number | string };
+    const rows = (res.rows ?? [])
+      .map((r) => {
+        const row = r as {
+          riverName?: string;
+          riverCode?: string | null;
+          riverType?: string | null;
+          rivpName?: string | null;
+          count?: number | string;
+        };
         return {
           riverName: String(row.riverName ?? '').trim(),
           riverType: row.riverType == null ? null : String(row.riverType),
+          riverCode: String(row.riverCode ?? '').trim(),
+          rivpName: String(row.rivpName ?? '').trim(),
           count: Number(row.count ?? 0) || 0,
         };
-      }).filter((r) => r.riverName),
+      })
+      .filter((r) => r.riverName);
+    const codesByName = new Map<string, number>();
+    for (const r of rows) codesByName.set(r.riverName, (codesByName.get(r.riverName) ?? 0) + 1);
+
+    return {
+      rivers: rows.map(({ rivpName, ...r }) => {
+        const duplicated = (codesByName.get(r.riverName) ?? 0) > 1;
+        const cut = rivpName.lastIndexOf('_');
+        const label = cut >= 0 ? rivpName.slice(cut + 1).trim() : rivpName;
+        return { ...r, rivpLabel: duplicated ? label || r.riverCode : '' };
+      }),
     };
   } catch {
     return { rivers: [] };
@@ -382,6 +409,8 @@ export async function getRiverBasicPlanPickFromIndex(params?: {
 export async function getRiverBasicPlanYearList(params?: {
   tab?: RiverType;
   riverName?: string;
+  /** 같은 하천명이 하천코드로 나뉠 때 — 그 하천코드의 기본계획만 */
+  riverCode?: string;
 }): Promise<{
   plans: {
     planYear: string;
@@ -397,6 +426,8 @@ export async function getRiverBasicPlanYearList(params?: {
   const tableName = await resolveLayerTableNameOrNull(riverBasicPlanAsDefineTable(tab));
   if (!tableName) return { plans: [] };
   const suffixExpr = rivpFolderSuffixSql();
+  const riverCode = String(params?.riverCode ?? '').trim();
+  const riverCodeWhere = riverCode ? ` AND COALESCE(river_code::text, '') = '${esc(riverCode)}'` : '';
 
   try {
     const res = await db.execute(
@@ -408,7 +439,7 @@ export async function getRiverBasicPlanYearList(params?: {
            COALESCE(rivp_name, '') AS "rivpName",
            (${suffixExpr}) AS "rivpSuffix"
          FROM layer."${tableName.replace(/"/g, '""')}"
-         WHERE river_name = '${esc(riverName)}'
+         WHERE river_name = '${esc(riverName)}'${riverCodeWhere}
          GROUP BY
            COALESCE(plan_year, ''),
            COALESCE(plan_name, ''),
@@ -538,7 +569,7 @@ export async function getRiverBasicPlanReportFolderSummary(params?: {
 }
 
 /**
- * 보고서별 목록 — plan_year + plan_name + rivp 접미사(1차|2차|빈값) 그룹.
+ * 보고서별 목록 — plan_year + plan_name + rivp 접미사(rivp_name 마지막 `_` 뒤 값, 없으면 빈값) 그룹.
  * 여러 하천이 같은 계획(접미사 없음)이면 한 행으로 묶인다.
  * 검색어가 하천명에 걸리면 matchedRivers 로 해당 하천만 돌려준다. riverCount 는 검색과 무관한 전체 하천 수.
  */
@@ -666,7 +697,7 @@ export async function getRiverBasicPlanPlanList(params?: {
 }
 
 /**
- * 기본계획 1건에 속한 하천 목록 (1:N) — 연도·계획명·rivp 접미사(1차|2차|빈값).
+ * 기본계획 1건에 속한 하천 목록 (1:N) — 연도·계획명·rivp 접미사(rivp_name 마지막 `_` 뒤 값, 없으면 빈값).
  */
 export async function getRiverBasicPlanRiversUnderPlan(params?: {
   tab?: RiverType;

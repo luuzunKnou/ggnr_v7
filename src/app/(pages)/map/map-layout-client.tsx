@@ -192,6 +192,12 @@ import {
   SmallPublicFacShell,
 } from "./_mapContents/rdc/smallPublicFac/SmallPublicFac.shell"
 import {
+  SMALL_PUBLIC_CANDIDATE_OPENED_KEY,
+  SMALL_PUBLIC_INSPECTION_OPENED_KEY,
+} from "./_mapContents/smallPublic/smallPublicConfig"
+import { SmallPublicCandidateShell } from "./_mapContents/smallPublic/candidate/SmallPublicCandidate.shell"
+import { SmallPublicInspectionShell } from "./_mapContents/smallPublic/inspection/SmallPublicInspection.shell"
+import {
   WORKS_REGISTER_OPENED_KEY,
   WorksRegisterShell,
 } from "./_mapContents/worksRegister/WorksRegister.shell"
@@ -800,6 +806,8 @@ function MapLayoutContent({
   const worksInquirySerEng = findOpenedWorksInquirySerEng(openedWindows)
   const worksInquiryOpen = Boolean(worksInquirySerEng)
   const smallPublicFacOpen = openedWindows.includes(SMALL_PUBLIC_FAC_OPENED_KEY)
+  const smallPublicCandidateOpen = openedWindows.includes(SMALL_PUBLIC_CANDIDATE_OPENED_KEY)
+  const smallPublicInspectionOpen = openedWindows.includes(SMALL_PUBLIC_INSPECTION_OPENED_KEY)
   const worksRegisterOpen = openedWindows.includes(WORKS_REGISTER_OPENED_KEY)
   const wtlAdminEmptySerEng = findOpenedWtlAdminEmptySerEng(openedWindows)
   const wtlAdminEmptyOpen = Boolean(wtlAdminEmptySerEng)
@@ -916,6 +924,8 @@ function MapLayoutContent({
     groundwaterPermitOpen && Boolean(groundwaterPermitDetailId)
   const [worksInquiryTotalWidth, setWorksInquiryTotalWidth] = useState(0)
   const [smallPublicFacTotalWidth, setSmallPublicFacTotalWidth] = useState(0)
+  const [smallPublicCandidateTotalWidth, setSmallPublicCandidateTotalWidth] = useState(0)
+  const [smallPublicInspectionTotalWidth, setSmallPublicInspectionTotalWidth] = useState(0)
   const [worksRegisterTotalWidth, setWorksRegisterTotalWidth] = useState(0)
   const [wtlAdminEmptyTotalWidth, setWtlAdminEmptyTotalWidth] = useState(0)
   const [swlAdminEmptyTotalWidth, setSwlAdminEmptyTotalWidth] = useState(0)
@@ -1189,6 +1199,8 @@ function MapLayoutContent({
     (groundwaterPermitDetailOpen ? groundwaterPermitDetailWidth : 0) +
     (worksInquiryOpen ? worksInquiryTotalWidth : 0) +
     (smallPublicFacOpen ? smallPublicFacTotalWidth : 0) +
+    (smallPublicCandidateOpen ? smallPublicCandidateTotalWidth : 0) +
+    (smallPublicInspectionOpen ? smallPublicInspectionTotalWidth : 0) +
     (worksRegisterOpen ? worksRegisterTotalWidth : 0) +
     (wtlAdminEmptyOpen ? wtlAdminEmptyTotalWidth : 0) +
     (swlAdminEmptyOpen ? swlAdminEmptyTotalWidth : 0) +
@@ -1353,8 +1365,14 @@ function MapLayoutContent({
     (groundwaterPermitDetailOpen ? groundwaterPermitDetailWidth : 0)
   const smallPublicFacPanelLeftPx =
     worksInquiryPanelLeftPx + (worksInquiryOpen ? worksInquiryTotalWidth : 0)
-  const worksRegisterPanelLeftPx =
+  const smallPublicCandidatePanelLeftPx =
     smallPublicFacPanelLeftPx + (smallPublicFacOpen ? smallPublicFacTotalWidth : 0)
+  const smallPublicInspectionPanelLeftPx =
+    smallPublicCandidatePanelLeftPx +
+    (smallPublicCandidateOpen ? smallPublicCandidateTotalWidth : 0)
+  const worksRegisterPanelLeftPx =
+    smallPublicInspectionPanelLeftPx +
+    (smallPublicInspectionOpen ? smallPublicInspectionTotalWidth : 0)
   const wtlAdminEmptyPanelLeftPx =
     worksRegisterPanelLeftPx + (worksRegisterOpen ? worksRegisterTotalWidth : 0)
   const swlAdminEmptyPanelLeftPx =
@@ -1984,6 +2002,16 @@ function MapLayoutContent({
     setOpened(next)
   }
 
+  const handleCloseSmallPublicCandidate = () => {
+    setSmallPublicCandidateTotalWidth(0)
+    setOpened(openedWindows.filter((w) => w !== SMALL_PUBLIC_CANDIDATE_OPENED_KEY))
+  }
+
+  const handleCloseSmallPublicInspection = () => {
+    setSmallPublicInspectionTotalWidth(0)
+    setOpened(openedWindows.filter((w) => w !== SMALL_PUBLIC_INSPECTION_OPENED_KEY))
+  }
+
   const handleCloseWorksRegister = () => {
     setWorksRegisterTotalWidth(0)
     const next = openedWindows.filter((w) => w !== WORKS_REGISTER_OPENED_KEY)
@@ -2187,6 +2215,14 @@ function MapLayoutContent({
   useEffect(() => {
     if (!smallPublicFacOpen) setSmallPublicFacTotalWidth(0)
   }, [smallPublicFacOpen])
+
+  useEffect(() => {
+    if (!smallPublicCandidateOpen) setSmallPublicCandidateTotalWidth(0)
+  }, [smallPublicCandidateOpen])
+
+  useEffect(() => {
+    if (!smallPublicInspectionOpen) setSmallPublicInspectionTotalWidth(0)
+  }, [smallPublicInspectionOpen])
 
   useEffect(() => {
     if (!worksRegisterOpen) setWorksRegisterTotalWidth(0)
@@ -3831,6 +3867,20 @@ function MapLayoutContent({
               leftOffsetPx={smallPublicFacPanelLeftPx}
               onTotalWidthChange={setSmallPublicFacTotalWidth}
               onClose={handleCloseSmallPublicFac}
+            />
+          )}
+          {smallPublicCandidateOpen && (
+            <SmallPublicCandidateShell
+              leftOffsetPx={smallPublicCandidatePanelLeftPx}
+              onTotalWidthChange={setSmallPublicCandidateTotalWidth}
+              onClose={handleCloseSmallPublicCandidate}
+            />
+          )}
+          {smallPublicInspectionOpen && (
+            <SmallPublicInspectionShell
+              leftOffsetPx={smallPublicInspectionPanelLeftPx}
+              onTotalWidthChange={setSmallPublicInspectionTotalWidth}
+              onClose={handleCloseSmallPublicInspection}
             />
           )}
           {worksRegisterOpen && (

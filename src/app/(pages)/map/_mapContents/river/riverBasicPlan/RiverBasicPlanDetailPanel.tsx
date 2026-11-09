@@ -162,7 +162,7 @@ type PlanItem = {
 export type RiverBasicPlanPreferredPlan = {
   planYear: string;
   planName: string;
-  /** rivp_name 의 `_1차`/`_2차` 접미사만 (없으면 "") */
+  /** rivp_name 의 마지막 `_` 뒤 값 (예: 2차, 울진읍. 없으면 "") */
   rivpSuffix: string;
   planLen?: string;
   /** 보고서별 하천 목록에서 고를 때 — 하천 보고서 폴더({하천구분}_{하천코드}_…)를 바로 찾는 데 씀 */
@@ -383,6 +383,8 @@ export function RiverBasicPlanDetailPanel({
   /** 연도 목록 로드 시 초기 선택만 — deps에 넣지 않아 객체 참조 변경으로 재조회되지 않게 함 */
   const preferredPlanRef = useRef(preferredPlan);
   preferredPlanRef.current = preferredPlan;
+  /** 같은 하천명이 하천코드로 나뉜 하천 — 연도 목록을 그 하천코드로만 */
+  const riverCodeFilter = preferredPlan?.riverCode ?? "";
   const [selected, setSelected] = useState<PlanItem | null>(null);
   /**
    * 같은 하천이 여러 보고서에 속할 때 목록에서 다른 보고서를 고르면 하천은 그대로라 연도 목록을 다시 안 불러옴
@@ -821,7 +823,7 @@ export function RiverBasicPlanDetailPanel({
         const res = await call("", "POST", {
           service: "riverBasicPlanService",
           action: "getRiverBasicPlanYearList",
-          params: { tab, riverName },
+          params: { tab, riverName, riverCode: riverCodeFilter || undefined },
         });
         const data = res?.data ?? res;
         const nextPlans: PlanItem[] = (Array.isArray(data?.plans) ? data.plans : []).map(
@@ -887,7 +889,7 @@ export function RiverBasicPlanDetailPanel({
     return () => {
       alive = false;
     };
-  }, [tab, riverName]);
+  }, [tab, riverName, riverCodeFilter]);
 
   useEffect(() => {
     let alive = true;
@@ -1547,6 +1549,8 @@ export function RiverBasicPlanDetailPanel({
                             planName: p.planName,
                             rivpSuffix: p.rivpSuffix,
                             planLen: p.planLen,
+                            riverType: preferredPlan?.riverType,
+                            riverCode: preferredPlan?.riverCode,
                           });
                         }}
                         className={
