@@ -4,12 +4,15 @@ import { asc, eq } from 'drizzle-orm';
 import { db, pool } from '@/database/db';
 import { fmsIdentifierHeader } from '@/database/schema/fms_identifier_header';
 import { fmsQueryTable } from '@/database/schema/fms_query_table';
-import type { FmsPrefix } from '@/lib/fmsLinkage/fmsBinding';
 import { getFmsLinkageConfig } from '@/lib/fmsLinkage/config';
 import { downloadFmsPayload } from '@/lib/fmsLinkage/downloadPayload';
 import { parseFmsResponseLine, receiveFmsFirstLine } from '@/lib/fmsLinkage/fmsClient';
 import { parseFmsDelimitedData } from '@/lib/fmsLinkage/parseDelimited';
-import { buildFacilPrefixMap, upsertFmsRowsToLayer } from '@/lib/fmsLinkage/upsertRows';
+import {
+  buildFacilGroupMap,
+  upsertFmsRowsToLayer,
+  type FmsFacilGroupMap,
+} from '@/lib/fmsLinkage/upsertRows';
 import { updateFmsCodeToKor } from '@/lib/fmsLinkage/updateCodeToKor';
 import { backfillFmsFacilityGeom } from '@/lib/fmsLinkage/backfillFacilityGeom';
 import { getEnabledSystemKeysFromRuntime } from '@/lib/runtimeEnvFile';
@@ -117,7 +120,7 @@ async function syncOneIdentifier(
   identifier: string,
   label: string,
   enabledSystems: string[] | null,
-  facilPrefixMap: Map<string, FmsPrefix>
+  facilGroupMap: FmsFacilGroupMap
 ): Promise<FmsIdentifierOutcome> {
   const base = { identifier, label };
   const config = getFmsLinkageConfig();
@@ -168,7 +171,7 @@ async function syncOneIdentifier(
     };
   }
 
-  const stats = await upsertFmsRowsToLayer(identifier, parsed, enabledSystems, facilPrefixMap);
+  const stats = await upsertFmsRowsToLayer(identifier, parsed, enabledSystems, facilGroupMap);
   console.info(
     `${LOG} ${identifier} upsert ins=${stats.inserted} upd=${stats.updated} skip=${stats.skipped}`
   );
@@ -256,7 +259,7 @@ export async function runFmsSync(): Promise<FmsSyncResult> {
     }
 
     const enabledSystems = getEnabledSystemKeysFromRuntime();
-    const facilPrefixMap = await buildFacilPrefixMap();
+    const facilGroupMap = await buildFacilGroupMap();
     const outcomes: FmsIdentifierOutcome[] = [];
 
     console.info(
@@ -268,7 +271,7 @@ export async function runFmsSync(): Promise<FmsSyncResult> {
       if (!identifier) continue;
       const label = outcomeLabel(identifier, q.interfaceName);
       try {
-        const outcome = await syncOneIdentifier(identifier, label, enabledSystems, facilPrefixMap);
+        const outcome = await syncOneIdentifier(identifier, label, enabledSystems, facilGroupMap);
         outcomes.push(outcome);
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);

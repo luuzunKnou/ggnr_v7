@@ -1,13 +1,13 @@
 import { pool } from '@/database/db';
 import {
-  FMS_PREFIXES,
+  FMS_FACILITY_TABLE,
   getFmsLayerTableName,
   getFmsDataKindForIdentifier,
-  isFmsPrefixAllowedBySystems,
+  isFmsGroupAllowedBySystems,
   type FmsDataKind,
-  type FmsPrefix,
+  type FmsFacilGroup,
 } from '@/lib/fmsLinkage/fmsBinding';
-import { prefixForFacilGbn } from '@/lib/fmsLinkage/prefixRouting';
+import { facilGroupForFacilGbn } from '@/lib/fmsLinkage/prefixRouting';
 import {
   FMS_FACILITY_COLUMNS,
   FMS_INSPECTION_COLUMNS,
@@ -163,97 +163,73 @@ async function upsertBatchToTable(
   return { inserted: insertRows.length, updated: updateRows.length };
 }
 
-export async function buildFacilPrefixMap(): Promise<Map<string, FmsPrefix>> {
-  const map = new Map<string, FmsPrefix>();
-  for (const prefix of FMS_PREFIXES) {
-    const table = getFmsLayerTableName(prefix, 'facility');
-    const r = await pool.query<{ facil_no: string }>(
-      `SELECT facil_no FROM layer.${table} WHERE facil_no IS NOT NULL AND facil_no <> ''`
-    );
-    for (const row of r.rows) {
-      const no = String(row.facil_no).trim();
-      if (no) map.set(no, prefix);
-    }
+/** 적재된 시설물 → 시설물구분 묶음(모르는 구분은 null). 점검진단실적을 시스템별로 거를 때 씀 */
+export type FmsFacilGroupMap = Map<string, FmsFacilGroup | null>;
+
+export async function buildFacilGroupMap(): Promise<FmsFacilGroupMap> {
+  const map: FmsFacilGroupMap = new Map();
+  const r = await pool.query<{ facil_no: string; facil_gbn: string | null }>(
+    `SELECT facil_no, facil_gbn FROM layer.${FMS_FACILITY_TABLE} WHERE facil_no IS NOT NULL AND facil_no <> ''`
+  );
+  for (const row of r.rows) {
+    const no = String(row.facil_no).trim();
+    if (no) map.set(no, facilGroupForFacilGbn(row.facil_gbn));
   }
   return map;
 }
 
-function resolvePrefixForRow(
-  kind: FmsDataKind,
-  row: FmsParsedRow,
-  facilPrefixMap: Map<string, FmsPrefix>
-): FmsPrefix | null {
-  if (kind === 'facility') {
-    return prefixForFacilGbn(row.facil_gbn);
-  }
-  const facilNo = (row.facil_no ?? '').trim();
-  if (!facilNo) return null;
-  const fromMap = facilPrefixMap.get(facilNo);
-  if (fromMap) return fromMap;
-  return null;
+/** 시스템이 다 켜져 있으면 시설물구분을 모르는 행도 받고, 일부만 켜져 있으면 켜진 시스템 묶음만 받음 */
+function isGroupAccepted(group: FmsFacilGroup | null, enabledSystems: string[] | null): boolean {
+  if (group == null) return !enabledSystems?.length;
+  return isFmsGroupAllowedBySystems(group, enabledSystems);
 }
 
 /**
- * identifier 종류별 layer 테이블 UPSERT.
- * enabledSystems=null 이면 water·road·public 전부.
+ * identifier 종류별 layer 테이블 UPSERT — 시설물·점검진단실적 모두 도로 테이블 한 쌍.
+ * 점검진단실적은 먼저 적재된 시설물(facil_no)에 딸린 것만 받는다.
  */
 export async function upsertFmsRowsToLayer(
   identifier: string,
   rows: FmsParsedRow[],
   enabledSystems: string[] | null,
-  facilPrefixMap: Map<string, FmsPrefix>
+  facilGroupMap: FmsFacilGroupMap
 ): Promise<FmsUpsertStats> {
   const kind = getFmsDataKindForIdentifier(identifier);
   if (!kind || !rows.length) {
     return { inserted: 0, updated: 0, skipped: rows.length };
   }
 
-  const byTable = new Map<string, FmsParsedRow[]>();
-
+  const accepted: FmsParsedRow[] = [];
   for (const row of rows) {
-    const prefix = resolvePrefixForRow(kind, row, facilPrefixMap);
-    if (!prefix) {
-      continue;
-    }
-    if (!isFmsPrefixAllowedBySystems(prefix, enabledSystems)) {
-      continue;
-    }
-    const table = getFmsLayerTableName(prefix, kind);
-    const list = byTable.get(table) ?? [];
-    list.push(row);
-    byTable.set(table, list);
-
+    const facilNo = (row.facil_no ?? '').trim();
+    let group: FmsFacilGroup | null;
     if (kind === 'facility') {
-      const facilNo = (row.facil_no ?? '').trim();
-      if (facilNo) facilPrefixMap.set(facilNo, prefix);
+      group = facilGroupForFacilGbn(row.facil_gbn);
+    } else {
+      if (!facilNo || !facilGroupMap.has(facilNo)) continue;
+      group = facilGroupMap.get(facilNo) ?? null;
     }
+    if (!isGroupAccepted(group, enabledSystems)) continue;
+    accepted.push(row);
+    if (kind === 'facility' && facilNo) facilGroupMap.set(facilNo, group);
   }
 
+  const tableName = getFmsLayerTableName(kind);
   let inserted = 0;
   let updated = 0;
-  let skipped = 0;
-
-  const routedCount = [...byTable.values()].reduce((n, arr) => n + arr.length, 0);
-  skipped = rows.length - routedCount;
-
-  for (const [tableName, tableRows] of byTable) {
-    let tableIns = 0;
-    let tableUpd = 0;
-    for (let i = 0; i < tableRows.length; i += BATCH_SIZE) {
-      const batch = tableRows.slice(i, i + BATCH_SIZE);
-      const r = await upsertBatchToTable(tableName, kind, batch);
-      tableIns += r.inserted;
-      tableUpd += r.updated;
-    }
-    inserted += tableIns;
-    updated += tableUpd;
+  for (let i = 0; i < accepted.length; i += BATCH_SIZE) {
+    const r = await upsertBatchToTable(tableName, kind, accepted.slice(i, i + BATCH_SIZE));
+    inserted += r.inserted;
+    updated += r.updated;
+  }
+  const skipped = rows.length - accepted.length;
+  if (accepted.length) {
     console.info(
-      `${LOG} ${identifier} → layer.${tableName} rows=${tableRows.length} ins=${tableIns} upd=${tableUpd}`
+      `${LOG} ${identifier} → layer.${tableName} rows=${accepted.length} ins=${inserted} upd=${updated}`
     );
   }
-
   if (skipped > 0) {
-    console.info(`${LOG} ${identifier} skipped=${skipped} (접두·facil_gbn 미매칭)`);
+    console.info(`${LOG} ${identifier} skipped=${skipped} (꺼진 시스템 시설물·미적재 시설물의 실적)`);
   }
 
   return { inserted, updated, skipped };

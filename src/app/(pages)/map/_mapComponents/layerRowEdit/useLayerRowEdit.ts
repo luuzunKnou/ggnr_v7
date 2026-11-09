@@ -20,6 +20,10 @@ import {
   validateOccupationPeriodAndGeom,
 } from "./validateOccupationPeriodAndGeom";
 import type { LayerRowDetailAttr, LayerRowEditPreset, LayerRowParcelItem } from "./types";
+import {
+  getOccupationLedgerBindingByTable,
+  isOccupationLedgerMainTableName,
+} from "@/lib/occupationLedgerBinding";
 
 function toDateInputValue(raw: string): string {
   const ymd = tryFormatToYmd(raw);
@@ -51,7 +55,7 @@ function draftValueEqual(a: string, b: string): boolean {
 }
 
 const GEOM_ATTR_FIELDS = new Set(["geom", "geometry", "the_geom", "shape"]);
-const PERMIT_ATTR_FIELDS = new Set(["permit_no", "perm_num"]);
+const PERMIT_ATTR_FIELDS = new Set(["permit_no", "perm_num", "prmt_no"]);
 
 function parcelHasSubtractGeom(item: LayerRowParcelItem): boolean {
   if (item.geometry3857 != null && typeof item.geometry3857 === "object") return true;
@@ -101,12 +105,12 @@ function looksLikeGeomWkt(raw: string | null | undefined): boolean {
 }
 
 function isOccupationLedgerTable(tableName: string): boolean {
-  const tbl = String(tableName ?? "").toLowerCase();
-  return (
-    tbl === "water_occupationledger" ||
-    tbl === "road_occupationledger" ||
-    tbl === "public_occupationledger"
-  );
+  return isOccupationLedgerMainTableName(tableName);
+}
+
+/** 공통 점용대장 허가번호 칸 (하천·도로 prmt_no, 국공유지 permit_no) */
+function occupationPermitField(tableName: string): string {
+  return getOccupationLedgerBindingByTable(tableName)?.binding.fields.permitField ?? "permit_no";
 }
 
 function parentWktFromEditRef(raw: string | null | undefined): string {
@@ -134,6 +138,17 @@ type UseLayerRowEditArgs = {
     keyValue: string;
     isCreate: boolean;
   }) => Promise<{ ok: boolean; error?: string } | void>;
+  /**
+   * 도형 교차 필지 반영 시 목록 병합 (점용대장 — 주소·지적 자동 채움·사용자 입력 유지).
+   * 없으면 주소만 추가하는 기본 병합.
+   */
+  mergeAutoParcels?: (
+    prev: LayerRowParcelItem[],
+    autoItems: LayerRowParcelItem[],
+    options?: { replaceKept?: boolean }
+  ) => LayerRowParcelItem[];
+  /** 주소 검색 등으로 필지 추가 직전 가공 */
+  enrichManualParcel?: (item: LayerRowParcelItem) => LayerRowParcelItem;
 };
 
 export function useLayerRowEdit({
@@ -149,6 +164,8 @@ export function useLayerRowEdit({
   wmsLayerId,
   afterPersist,
   drawChildGeomOnMap = true,
+  mergeAutoParcels,
+  enrichManualParcel,
 }: UseLayerRowEditArgs) {
   const { data: session } = useSession();
   const logUser = useMemo(() => {
@@ -306,6 +323,9 @@ export function useLayerRowEdit({
           keepOnReplace: false as const,
           manualAdd: false as const,
         }));
+        if (options?.replaceAuto && mergeAutoParcels) {
+          return mergeAutoParcels(prev, autoItems, { replaceKept: options?.replaceKept });
+        }
         if (options?.replaceAuto) {
           const manual = prev.filter((p) =>
             options?.replaceKept
@@ -336,7 +356,7 @@ export function useLayerRowEdit({
     return () => {
       layerRowParcelApplyRef.current = null;
     };
-  }, [isEditing, layerRowParcelApplyRef]);
+  }, [isEditing, layerRowParcelApplyRef, mergeAutoParcels]);
 
   useEffect(() => {
     if (isCreateMode) {
@@ -461,12 +481,19 @@ export function useLayerRowEdit({
         return false;
       }
 
-      const nextItem: LayerRowParcelItem = {
-        ...item,
-        showMapGeom: drawChildGeomOnMap,
-        keepOnReplace: true,
-        manualAdd: true,
-      };
+      const nextItem: LayerRowParcelItem = enrichManualParcel
+        ? enrichManualParcel({
+            ...item,
+            showMapGeom: drawChildGeomOnMap,
+            keepOnReplace: true,
+            manualAdd: true,
+          })
+        : {
+            ...item,
+            showMapGeom: drawChildGeomOnMap,
+            keepOnReplace: true,
+            manualAdd: true,
+          };
 
       if (parentWkt) {
         const [resolved] = await resolveParcelGeoms([nextItem]);
@@ -541,10 +568,15 @@ export function useLayerRowEdit({
       mapContext?.applyMapViewPaddingRef,
       mapContext?.mapInstanceRef,
       mapContext?.setVisibleLayerNames,
+      enrichManualParcel,
       preset.tableName,
       wmsLayerId,
     ]
   );
+
+  const updateDraftParcel = useCallback((index: number, item: LayerRowParcelItem) => {
+    setDraftParcels((prev) => prev.map((p, i) => (i === index ? item : p)));
+  }, []);
 
   const removeDraftParcel = useCallback(
     (index: number) => {
@@ -587,16 +619,16 @@ export function useLayerRowEdit({
         lon: p.point4326?.x,
         lat: p.point4326?.y,
         geometry3857: p.geometry3857 ?? null,
+        listValues: p.listValues,
       }));
+      // 공통 점용대장도 본표 고유키로 연결. 허가번호는 있으면 함께 적어 예전 행 찾기에 씀
       const extraValues: Record<string, string> = {};
-      const permitKey = Object.keys(draft).find((k) => k.toLowerCase() === "permit_no");
+      const permitField = occupationPermitField(preset.tableName);
+      const permitKey = Object.keys(draft).find((k) => k.toLowerCase() === permitField.toLowerCase());
       const permitVal = permitKey ? String(draft[permitKey] ?? "").trim() : "";
+      // 국공유지 예전 필지(허가번호로만 묶임) 찾기용 — 필지 쪽 칸 이름은 permit_no
       if (permitVal) extraValues.permit_no = permitVal;
-      const isOccLedger = isOccupationLedgerTable(preset.tableName);
-      if (isOccLedger && !permitVal) {
-        return { ok: false as const, error: "허가번호가 없어 필지를 저장할 수 없습니다." };
-      }
-      const childParentId = isOccLedger ? permitVal : parentId;
+      const childParentId = parentId;
       const res = await call("", "POST", {
         service: "layerRowService",
         action: "syncChildParcelsByParentId",
@@ -605,6 +637,7 @@ export function useLayerRowEdit({
           childTableName,
           childParentField: preset.childParentField,
           childAddressField: preset.childAddressField,
+          childAddressPartFields: preset.childAddressPartFields,
           parentId: childParentId,
           parcels,
           addresses,
@@ -626,6 +659,7 @@ export function useLayerRowEdit({
       layerRowGeomEditDirtyRef,
       layerRowGeomEditWktRef,
       preset.childAddressField,
+      preset.childAddressPartFields,
       preset.childParentField,
       preset.childTableName,
       preset.schema,
@@ -641,7 +675,9 @@ export function useLayerRowEdit({
       if (isCreateMode) {
         if (isOccupationLedgerTable(preset.tableName)) {
           const permitKey =
-            Object.keys(draft).find((k) => k.toLowerCase() === "permit_no") ?? "permit_no";
+            Object.keys(draft).find(
+              (k) => k.toLowerCase() === occupationPermitField(preset.tableName).toLowerCase()
+            ) ?? occupationPermitField(preset.tableName);
           const permitVal = String(draft[permitKey] ?? "").trim();
           if (permitVal) changes[permitKey] = permitVal;
         }
@@ -675,6 +711,7 @@ export function useLayerRowEdit({
             values: changes,
             excludeFields: preset.excludeFields,
             includeHiddenDetail: preset.includeHiddenDetail,
+            allowPhysicalColumns: preset.allowPhysicalColumns,
             geomWkt5181,
             logUser,
           },
@@ -743,6 +780,7 @@ export function useLayerRowEdit({
           changes,
           excludeFields: preset.excludeFields,
           includeHiddenDetail: preset.includeHiddenDetail,
+          allowPhysicalColumns: preset.allowPhysicalColumns,
           geomWkt5181,
           geomClear,
           logUser,
@@ -856,6 +894,7 @@ export function useLayerRowEdit({
     handleDraftChange,
     draftParcels,
     addDraftParcel,
+    updateDraftParcel,
     removeDraftParcel,
   };
 }
