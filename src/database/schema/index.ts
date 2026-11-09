@@ -26,6 +26,7 @@ export * from './land_price_memo';
 export * from './layer_control';
 export * from './layer_detail_history';
 export * from './layer_extra_def';
+export * from './layer_extra_source';
 export * from './layer_history';
 export * from './log_kais';
 export * from './log_safetydata';
