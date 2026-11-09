@@ -674,16 +674,6 @@ export function InstallZipDownloadPanel() {
     <div className="flex min-h-0 flex-1 flex-col rounded border p-3 gap-2">
       {typeCheckModal}
       <div className="shrink-0 space-y-2">
-        <Button
-          type="button"
-          variant="outline"
-          onClick={openInstallManualPopup}
-          className="gap-1 cursor-pointer"
-          title="설치 매뉴얼"
-        >
-          <BookOpenText className="h-4 w-4" />
-          설치 매뉴얼
-        </Button>
         <SourceModeRadios mode={sourceMode} setMode={setSourceMode} disabled={uiBusy} />
         <ModeDescription mode={sourceMode} />
         {sourceMode === 'local' ? (

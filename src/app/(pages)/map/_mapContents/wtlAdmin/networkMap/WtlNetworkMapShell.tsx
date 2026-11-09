@@ -3026,7 +3026,7 @@ function NetworkDetailModal({
               <div className="standard-detail-attr-table">
                 {attrRows.map((row) => (
                   <div key={row.key} className="contents">
-                    <div className="standard-detail-attr-label standard-detail-attr-cell-border">
+                    <div title={ true ? `${row.label} (${row.key})`: row.label} className="standard-detail-attr-label standard-detail-attr-cell-border">
                       {row.label}
                     </div>
                     <div

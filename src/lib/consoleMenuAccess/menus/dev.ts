@@ -35,6 +35,7 @@ export const DEV_CONSOLE_MENUS = [
   { id: 'userPermHistory', label: '사용자 권한 관리 이력' },
   { id: 'threeJs', label: 'ThreeJs' },
   { id: 'cesium', label: 'Cesium' },
+  { id: 'installManual', label: 'V7 설치 매뉴얼' },
 ] as const satisfies readonly ConsoleMenuDef[];
 
 export type DevConsoleMenuId = (typeof DEV_CONSOLE_MENUS)[number]['id'];

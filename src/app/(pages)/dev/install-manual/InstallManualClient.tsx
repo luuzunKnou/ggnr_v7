@@ -8,6 +8,10 @@ import { ManualImage } from './ManualImage';
 
 const SECTIONS = [
   { id: 'setting_file_list', label: '세팅용 파일' },
+  { id: 'git_setting', label: 'Git 설정' },
+  { id: 'git_credential', label: '- 자격증명 등록' },
+  { id: 'git_clone', label: '- 프로젝트 클론' },
+  { id: 'git_ignore_file', label: '- gitignore 파일' },
   { id: 'nodejs', label: 'Node.js 및 npm 설치' },
   { id: 'install_postgresql', label: 'PostgreSQL 설치' },
   { id: 'install_db_pg18', label: '- PostgreSQL 18 버전 설치' },
@@ -105,9 +109,9 @@ export function InstallManualClient() {
   };
 
   return (
-    <div className="flex h-screen min-h-0 bg-background text-foreground">
-      <aside className="flex w-64 shrink-0 flex-col border-r bg-muted/20">
-        <div className={`${HEADER_BAR} px-3 text-base font-semibold`}>설치 매뉴얼</div>
+    <div className="flex h-screen min-h-0 bg-background text-foreground border">
+      <aside className="flex w-64 shrink-0 flex-col border-r bg-muted/80">
+        {/* <div className={`${HEADER_BAR} px-3 text-base font-semibold`}>설치 매뉴얼</div> */}
         <nav
           className="min-h-0 flex-1 overflow-y-auto px-2 py-2"
           aria-label="목차"
@@ -135,7 +139,7 @@ export function InstallManualClient() {
       </aside>
 
       <main className="flex min-h-0 flex-1 flex-col overflow-hidden">
-        <section
+        {/* <section
           id="sub_text"
           className={`${HEADER_BAR} sticky top-0 z-10 justify-center border-[#e5e5e5] bg-background px-6 text-center text-xs leading-none dark:border-neutral-600`}
         >
@@ -144,12 +148,13 @@ export function InstallManualClient() {
             <InlineCode>InstallManualClient.tsx</InlineCode> 파일을
             수정하세요.
           </p>
-        </section>
+        </section> */}
         <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">
         <article
-          className="mx-auto max-w-3xl text-xs leading-relaxed"
+          className="px-12 w-full text-xs leading-relaxed"
           style={{ display: 'flex', flexDirection: 'column', gap: 64 }}
         >
+          
 
           <section id="setting_file_list" className="scroll-mt-4 space-y-3">
             <h1 className="text-xl font-semibold">세팅용 파일</h1>
@@ -163,6 +168,50 @@ export function InstallManualClient() {
             <div className="mt-1">
               <CodeBlock>{`\\\\192.168.127.11\\사업수행_개발\\020 공간누리 v7\\20260819_세팅용 파일`}</CodeBlock>
             </div>
+          </section>
+
+          <section id="git_setting" className="scroll-mt-4 space-y-3">
+            <h1 className="text-xl font-semibold">Git 설정</h1>
+            <ul className={SUB_LIST}>
+              <li className="space-y-3">
+                <h2 id="git_credential" className={SUB_HEADING}>
+                  자격증명 등록
+                </h2>
+                <ul className={STEP_LIST}>
+                  <li>
+                    <p>프로젝트 폴더 (빈 폴더 생성)</p>
+                  </li>
+                  <li>
+                    <p>아래 내용 맞춰서 입력</p>
+                    <CodeBlock>{`git config --global user.name "[git 사용자명]"
+git config --global user.email "[git 이메일]"`}</CodeBlock>
+                  </li>
+                </ul>
+              </li>
+              <li className="space-y-3">
+                <h2 id="git_clone" className={SUB_HEADING}>
+                  프로젝트 클론
+                </h2>
+                <ul className={STEP_LIST}>
+                  <li>화면 내에 'Code' 버튼 클릭</li>
+                  <li>https://github.com으로 시작하는 주소 복사</li>
+                  <li>
+                    <p>아래 채워넣고 터미널에 입력</p>
+                    <p>(온점까지 포함시킬 것. 해당 폴더에 하위 폴더로 만들기 X).</p>
+                    <CodeBlock>{`git clone [복사한 주소] .`}</CodeBlock>
+                  </li>
+                </ul>
+              </li>
+              <li className="space-y-3">
+                <h2 id="git_ignore_file" className={SUB_HEADING}>
+                  gitignore 파일
+                </h2>
+                <ul className={STEP_LIST}>
+                  <li>geoserver_modules 내 java, geoserver</li>
+                  <li>python</li>
+                </ul>
+              </li>
+            </ul>
           </section>
 
           <section id="nodejs" className="scroll-mt-4 space-y-3">
@@ -333,7 +382,7 @@ npm -v`}</CodeBlock>
                   시연 게이트 서버 등록했을 때, [프로젝트명].env에 <InlineCode>BASE_PATH</InlineCode>{' '}
                   설정
                 </p>
-                <p className="text-red-500">&apos;/프로젝트명&apos;으로 넣어주세요.</p>
+                <p ><span className="text-red-500">&apos;/프로젝트명&apos;</span>으로 넣어주세요.(예: BASE_PATH=/build_yy)</p>
               </li>
               <li className="space-y-3">
                 <h2 id="base_path_gate" className={SUB_HEADING}>
@@ -360,7 +409,7 @@ npm -v`}</CodeBlock>
                   geoserver PORT 변경
                 </h2>
                 <ul className={STEP_LIST}>
-                  <li>geoserver-modules/geoserver/start.ini 파일 수정: jetty.http.port 수정</li>
+                  <li>geoserver-modules/geoserver/start.ini 파일 수정: <InlineCode>jetty.http.port</InlineCode> 수정</li>
                   <li>
                     구동 시 변경된 PORT 확인하기 때문에, geoserver 포트는 프로젝트 구동 전 수정이
                     필요합니다.
