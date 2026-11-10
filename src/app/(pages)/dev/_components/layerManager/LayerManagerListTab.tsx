@@ -15,6 +15,7 @@ import { Check, X, Download, FileSpreadsheet, History, Loader2 } from "lucide-re
 import type { LayerManagerRow } from "./types"
 import { SchemaBadge, SourceBadge } from "./defineBadges"
 import { downloadLayerCsvFromDb, downloadLayerExcel, downloadLayerShp } from "./layerListDownload"
+import { LayerManagerCadDownloadModal } from "./LayerManagerCadDownloadModal"
 import { LayerManagerRowHistoryDialog } from "./LayerManagerRowHistoryDialog"
 import { registerLayerManagerListRefresh, requestLayerManagerDefineRefresh } from "./layerManagerUploadBridge"
 import { StyleLegendThumb } from "./StylePreviewSwatch"
@@ -211,6 +212,7 @@ export function LayerManagerListTab() {
   const [metaLoading, setMetaLoading] = useState(false)
   const [downloadingShp, setDownloadingShp] = useState<string | null>(null)
   const [downloadingExcel, setDownloadingExcel] = useState<string | null>(null)
+  const [cadModalOpen, setCadModalOpen] = useState(false)
   const [historyTarget, setHistoryTarget] = useState<{ tableName: string; korName: string } | null>(
     null
   )
@@ -693,6 +695,17 @@ export function LayerManagerListTab() {
             <span className="text-xs text-muted-foreground ml-1">(표시: {displayedRows.length})</span>
           )}
         </span>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="h-8 ml-auto shrink-0 gap-1.5"
+          onClick={() => setCadModalOpen(true)}
+          title="선택한 레이어를 CAD(DXF/DWG)로 다운로드"
+        >
+          <Download className="w-3.5 h-3.5" />
+          CAD 다운로드
+        </Button>
       </div>
 
       {error && <span className="text-sm text-destructive">{error}</span>}
@@ -991,6 +1004,12 @@ export function LayerManagerListTab() {
           )}
         </div>
       )}
+
+      <LayerManagerCadDownloadModal
+        open={cadModalOpen}
+        onClose={() => setCadModalOpen(false)}
+        rows={rows}
+      />
 
       <LayerManagerRowHistoryDialog
         open={!!historyTarget}

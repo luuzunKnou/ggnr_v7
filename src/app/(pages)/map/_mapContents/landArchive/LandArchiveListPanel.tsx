@@ -1,34 +1,36 @@
-'use client'
+﻿'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { ArrowDown, ArrowUp, ArrowUpDown, Search, X } from 'lucide-react'
+import { call } from '@/lib/api'
 import { cn } from '@/lib/utils'
-import { useMapContext } from '../../_mapComponents/MapContext'
-import { scheduleAnimateMapToCenter3857 } from '../../_mapComponents/config/mapAutoNavigation'
-import { MAP_LOCAL_VIEW_MIN_ZOOM } from '../../_mapComponents/config/mapDefaults'
 import {
-  formatParcelDocSummary,
-  formatRecordAddress,
-  getCadastralParcels,
-  type CadastralRecordParcel,
-} from './cadastralRecordMock'
+  formatRelatedParcels,
+  getLandArchiveDocType,
+  type LandArchiveFile,
+} from './landArchiveConfig'
 
-type SortKey = 'address' | 'docs'
+type SortKey = 'kind' | 'file' | 'parcels'
 type SortSpec = { key: SortKey; dir: 'asc' | 'desc' }
+type EmdOption = { code: string; name: string }
 
 const ALL = ''
+const SEARCH_DEBOUNCE_MS = 400
 
 const COLUMNS: { key: SortKey; label: string; className: string }[] = [
-  { key: 'address', label: '소재지', className: 'w-[58%]' },
-  { key: 'docs', label: '문서', className: 'w-[42%]' },
+  { key: 'kind', label: '종류', className: 'w-[28%]' },
+  { key: 'file', label: '파일', className: 'w-[36%]' },
+  { key: 'parcels', label: '지번', className: 'w-[36%]' },
 ]
 
-function compareRow(a: CadastralRecordParcel, b: CadastralRecordParcel, key: SortKey): number {
+function compareRow(a: LandArchiveFile, b: LandArchiveFile, key: SortKey): number {
   switch (key) {
-    case 'address':
-      return formatRecordAddress(a).localeCompare(formatRecordAddress(b), 'ko')
-    case 'docs':
-      return a.docs.length - b.docs.length
+    case 'kind':
+      return a.docTypeLabel.localeCompare(b.docTypeLabel, 'ko')
+    case 'file':
+      return a.fileName.localeCompare(b.fileName, 'ko', { numeric: true })
+    case 'parcels':
+      return a.parcelCount - b.parcelCount
   }
 }
 
@@ -38,63 +40,78 @@ type Props = {
   onSelect: (id: string | null) => void
 }
 
-export function CadastralRecordListPanel({ onClose, selectedId, onSelect }: Props) {
-  const all = useMemo(() => getCadastralParcels(), [])
-  const mapContext = useMapContext()
+export function LandArchiveListPanel({ onClose, selectedId, onSelect }: Props) {
+  const [all, setAll] = useState<LandArchiveFile[]>([])
+  const [loading, setLoading] = useState(false)
+  const [emdOptions, setEmdOptions] = useState<EmdOption[]>([])
   const [emd, setEmd] = useState(ALL)
   const [keyword, setKeyword] = useState('')
-  const [sort, setSort] = useState<SortSpec>({ key: 'address', dir: 'asc' })
+  const [debouncedKw, setDebouncedKw] = useState('')
+  const [sort, setSort] = useState<SortSpec>({ key: 'kind', dir: 'asc' })
 
-  const emdOptions = useMemo(
-    () => [...new Set(all.map((d) => d.emd))].sort((a, b) => a.localeCompare(b, 'ko')),
-    [all]
-  )
+  useEffect(() => {
+    const t = window.setTimeout(() => setDebouncedKw(keyword.trim()), SEARCH_DEBOUNCE_MS)
+    return () => window.clearTimeout(t)
+  }, [keyword])
+
+  useEffect(() => {
+    let cancelled = false
+    void call('', 'POST', { service: 'landArchiveService', action: 'listEmd', params: {} })
+      .then((res) => {
+        if (cancelled) return
+        const items = Array.isArray(res?.data?.emd) ? (res.data.emd as EmdOption[]) : []
+        setEmdOptions(items)
+      })
+      .catch(() => {
+        if (!cancelled) setEmdOptions([])
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  useEffect(() => {
+    const emdName = emd
+    const kw = debouncedKw
+    let cancelled = false
+    setLoading(true)
+    void call('', 'POST', {
+      service: 'landArchiveService',
+      action: 'list',
+      params: { emd: emdName, keyword: kw },
+    })
+      .then((res) => {
+        if (cancelled) return
+        const items = Array.isArray(res?.data?.items) ? (res.data.items as LandArchiveFile[]) : []
+        setAll(items)
+      })
+      .catch(() => {
+        if (!cancelled) setAll([])
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [emd, debouncedKw])
 
   const filtered = useMemo(() => {
-    const kw = keyword.trim()
-    const rows = all.filter((d) => {
-      if (emd && d.emd !== emd) return false
-      if (kw && !d.jibun.replace(/\s+/g, '').includes(kw.replace(/\s+/g, ''))) return false
-      return true
-    })
     const sign = sort.dir === 'asc' ? 1 : -1
-    return [...rows].sort((a, b) => sign * compareRow(a, b, sort.key))
-  }, [all, emd, keyword, sort])
+    return [...all].sort((a, b) => sign * compareRow(a, b, sort.key))
+  }, [all, sort])
 
   useEffect(() => {
     if (selectedId && !filtered.some((d) => d.id === selectedId)) onSelect(null)
   }, [filtered, selectedId, onSelect])
-
-  const flyToParcel = useCallback(
-    (id: string) => {
-      const parcel = all.find((p) => p.id === id)
-      const map = mapContext?.mapInstanceRef?.current
-      if (!parcel || !map) return
-      const current = map.getView().getZoom()
-      const zoom = Math.max(
-        Number.isFinite(current) ? (current as number) : 0,
-        MAP_LOCAL_VIEW_MIN_ZOOM
-      )
-      scheduleAnimateMapToCenter3857(map, parcel.center3857, zoom, {
-        applyMapViewPadding: () => mapContext?.applyMapViewPaddingRef?.current?.(),
-      })
-    },
-    [all, mapContext?.applyMapViewPaddingRef, mapContext?.mapInstanceRef]
-  )
-
-  const handleRowSelect = useCallback(
-    (id: string) => {
-      onSelect(id)
-      flyToParcel(id)
-    },
-    [onSelect, flyToParcel]
-  )
 
   const toggleSort = (key: SortKey) => {
     setSort((prev) =>
       prev.key === key ? { key, dir: prev.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: 'asc' }
     )
   }
+
+  const emptyHint = loading ? '기록물을 불러오는 중…' : '자료 폴더에 파일이 있는 기록물이 없습니다.'
 
   return (
     <div className="standard-panel-root">
@@ -121,8 +138,8 @@ export function CadastralRecordListPanel({ onClose, selectedId, onSelect }: Prop
           >
             <option value={ALL}>전체 읍면동</option>
             {emdOptions.map((n) => (
-              <option key={n} value={n}>
-                {n}
+              <option key={n.code} value={n.name}>
+                {n.name}
               </option>
             ))}
           </select>
@@ -132,7 +149,7 @@ export function CadastralRecordListPanel({ onClose, selectedId, onSelect }: Prop
               type="search"
               value={keyword}
               onChange={(e) => setKeyword(e.target.value)}
-              placeholder="지번"
+              placeholder="지번·권"
               className="standard-search-input"
             />
           </div>
@@ -173,33 +190,46 @@ export function CadastralRecordListPanel({ onClose, selectedId, onSelect }: Prop
               {filtered.length === 0 ? (
                 <tr>
                   <td colSpan={COLUMNS.length} className="standard-table-empty">
-                    조회된 필지가 없습니다.
+                    {emptyHint}
                   </td>
                 </tr>
               ) : (
                 filtered.map((d) => {
                   const isSelected = selectedId === d.id
-                  const address = formatRecordAddress(d)
-                  const docLabel = formatParcelDocSummary(d.docs)
+                  const kind = getLandArchiveDocType(d.docType)
+                  let parcelLabel = formatRelatedParcels(d.firstParcel, d.parcelCount)
+                  if (parcelLabel === '—' && d.volumeNo) parcelLabel = `권 ${d.volumeNo}`
                   return (
                     <tr
                       key={d.id}
                       role="button"
                       tabIndex={0}
-                      onClick={() => handleRowSelect(d.id)}
+                      onClick={() => onSelect(d.id)}
                       onKeyDown={(e) => {
                         if (e.key === 'Enter' || e.key === ' ') {
                           e.preventDefault()
-                          handleRowSelect(d.id)
+                          onSelect(d.id)
                         }
                       }}
                       className={cn('standard-list-row', isSelected && 'standard-list-row-selected')}
                     >
-                      <td className="standard-table-td-text font-medium" title={address}>
-                        {address}
+                      <td className="standard-table-td-compact" title={d.docTypeLabel}>
+                        <span
+                          className="standard-status-badge max-w-full truncate"
+                          style={{
+                            backgroundColor: `${kind.color}33`,
+                            color: kind.color,
+                            boxShadow: `inset 0 0 0 1px ${kind.color}80`,
+                          }}
+                        >
+                          {d.docTypeLabel}
+                        </span>
                       </td>
-                      <td className="standard-table-td-text-muted" title={docLabel}>
-                        {docLabel}
+                      <td className="standard-table-td-text-muted" title={d.fileName}>
+                        {d.fileName}
+                      </td>
+                      <td className="standard-table-td-text" title={parcelLabel}>
+                        {parcelLabel}
                       </td>
                     </tr>
                   )

@@ -15,8 +15,8 @@ export function isUavFamilySystemKey(key: string | null | undefined): boolean {
 }
 
 /** 울산 UAV 프로젝트 — 선택한 시스템과 무관하게 우측 드론영상·촬영요청을 유지 */
-export function isUavUlsanProject(projectName: string | null | undefined): boolean {
-  return String(projectName ?? '').trim().toLowerCase() === 'uav_ulsan'
+export function isUavUsProject(projectName: string | null | undefined): boolean {
+  return String(projectName ?? '').trim().toLowerCase() === 'uav_us'
 }
 
 /** 관리 시스템만 */

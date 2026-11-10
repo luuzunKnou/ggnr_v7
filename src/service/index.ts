@@ -46,6 +46,7 @@ import * as integrationService from './integrationService';
 import * as fileConverterService from './fileConverterService';
 import * as pdfToJpgService from './pdfToJpgService';
 import * as shpToDxfService from './shpToDxfService';
+import * as layerCadExportService from './layerCadExportService';
 import * as ocrMigrationService from './ocrMigrationService';
 import * as layerRowService from './layerRowService';
 import * as layerExtraService from './layerExtraService';
@@ -80,6 +81,9 @@ import * as qgisLayerControlService from './qgisLayerControlService';
 import * as userDataUploadService from './userDataUploadService';
 import * as systemControlService from './systemControlService';
 import * as detailWondoService from './detailWondoService';
+import * as digitalMapService from './digitalMapService';
+import * as drawingDisplayService from './drawingDisplayService';
+import * as landArchiveService from './landArchiveService';
 import * as individualLandPriceService from './individualLandPriceService';
 
 export {
@@ -130,6 +134,7 @@ export {
   fileConverterService,
   pdfToJpgService,
   shpToDxfService,
+  layerCadExportService,
   ocrMigrationService,
   layerRowService,
   layerExtraService,
@@ -161,5 +166,8 @@ export {
   userDataUploadService,
   systemControlService,
   detailWondoService,
+  digitalMapService,
+  drawingDisplayService,
+  landArchiveService,
   individualLandPriceService,
 };

@@ -77,7 +77,7 @@
   {
     "define_field_name": "mco",
     "define_field_kor_name": "관리기관",
-    "define_field_type": "TEXT",
+    "define_field_type": "CODE",
     "define_field_idx": 4,
     "define_field_is_required": false,
     "define_field_show_search": false,
@@ -102,7 +102,7 @@
   {
     "define_field_name": "road_rank",
     "define_field_kor_name": "도로의종류",
-    "define_field_type": "TEXT",
+    "define_field_type": "CODE",
     "define_field_idx": 5,
     "define_field_is_required": false,
     "define_field_show_search": false,
@@ -227,7 +227,7 @@
   {
     "define_field_name": "direction",
     "define_field_kor_name": "방향",
-    "define_field_type": "TEXT",
+    "define_field_type": "CODE",
     "define_field_idx": 10,
     "define_field_is_required": false,
     "define_field_show_search": false,
@@ -327,7 +327,7 @@
   {
     "define_field_name": "kind",
     "define_field_kor_name": "과속방지턱 종류",
-    "define_field_type": "TEXT",
+    "define_field_type": "CODE",
     "define_field_idx": 14,
     "define_field_is_required": false,
     "define_field_show_search": false,
@@ -352,7 +352,7 @@
   {
     "define_field_name": "material",
     "define_field_kor_name": "과속방지턱 재료",
-    "define_field_type": "TEXT",
+    "define_field_type": "CODE",
     "define_field_idx": 15,
     "define_field_is_required": false,
     "define_field_show_search": false,

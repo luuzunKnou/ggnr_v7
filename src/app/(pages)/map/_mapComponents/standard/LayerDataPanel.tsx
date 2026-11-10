@@ -6,6 +6,7 @@ import {
   FileText,
   History,
   Paperclip,
+  ShieldCheck,
   Wrench,
   AlertTriangle,
   CheckCircle2,
@@ -57,7 +58,13 @@ import { getAllRoadLedgerFacilityLayerIds } from '../../_mapContents/road/roadLe
 import {
   formatRoadLedgerFacilityCellValue,
   getRoadLedgerFacilityColumnKeys,
+  resolveRoadLedgerFacilityDisplayName,
 } from '../../_mapContents/road/roadLedger/roadLedgerTableDisplayFields';
+import {
+  FmsInspectionRecordsSection,
+  type FmsInspectionRecordRow,
+} from '../../_mapContents/fmsLinkage/FmsInspectionRecordsSection';
+import { FMS_EMPTY_INSPECTION_MESSAGE } from '../../_mapContents/fmsLinkage/fmsLinkageBinding';
 import type { DataQueryHistoryType } from '@/lib/dataQueryHistoryTypes';
 import {
   DataQueryHistoryAddDialog,
@@ -76,7 +83,7 @@ type DefineFieldRow = {
   [key: string]: unknown;
 };
 
-type DetailTab = 'basic' | 'history' | 'attach';
+type DetailTab = 'basic' | 'history' | 'attach' | 'safety';
 
 type TimelineEvent = {
   id: number;
@@ -408,6 +415,9 @@ export function LayerDataPanel({
   const [highlightedRow, setHighlightedRow] = useState<number | null>(null);
   const [selectedRowData, setSelectedRowData] = useState<Record<string, unknown> | null>(null);
   const [activeTab, setActiveTab] = useState<DetailTab>('basic');
+  const [safetyInspections, setSafetyInspections] = useState<FmsInspectionRecordRow[]>([]);
+  const [safetyLoading, setSafetyLoading] = useState(false);
+  const [safetyError, setSafetyError] = useState<string | null>(null);
   /**
    * 목록 그리드 칸 수 — 선택 여부와 분리.
    * 상세 닫기 직후 selectedRow=null 인데 rows는 아직 7건인 레이스에서
@@ -727,6 +737,63 @@ export function LayerDataPanel({
     setBasicDraft({});
     setBasicError(null);
   }, [selectedRowData, activeTab, dataQueryReadOnly]);
+
+  const safetyFacilityName = useMemo(() => {
+    if (!useRoadLedgerFacilityListColumns || !selectedRowData || !activeLayer) return '';
+    const tn = String(activeLayer.tableName || activeLayer.physicalTableName || '')
+      .trim()
+      .toLowerCase();
+    return resolveRoadLedgerFacilityDisplayName(tn, selectedRowData);
+  }, [useRoadLedgerFacilityListColumns, selectedRowData, activeLayer]);
+
+  useEffect(() => {
+    if (!useRoadLedgerFacilityListColumns && activeTab === 'safety') {
+      setActiveTab('basic');
+    }
+  }, [useRoadLedgerFacilityListColumns, activeTab]);
+
+  useEffect(() => {
+    if (!useRoadLedgerFacilityListColumns || activeTab !== 'safety') return;
+    let cancelled = false;
+    const facilNm = safetyFacilityName.trim();
+    setSafetyLoading(true);
+    setSafetyError(null);
+    setSafetyInspections([]);
+    if (!facilNm) {
+      setSafetyLoading(false);
+      setSafetyError('시설명이 없습니다.');
+      return;
+    }
+    void call('', 'POST', {
+      service: 'fmsLinkageService',
+      action: 'getFmsInspectionsByFacilNm',
+      params: { facilNm },
+    })
+      .then((res) => {
+        if (cancelled) return;
+        const data = (res?.data ?? res) as {
+          inspections?: FmsInspectionRecordRow[];
+          error?: string;
+        };
+        if (data?.error) {
+          setSafetyError(data.error);
+          setSafetyInspections([]);
+          return;
+        }
+        setSafetyInspections(Array.isArray(data?.inspections) ? data.inspections : []);
+      })
+      .catch((e: unknown) => {
+        if (cancelled) return;
+        setSafetyError(e instanceof Error ? e.message : String(e));
+        setSafetyInspections([]);
+      })
+      .finally(() => {
+        if (!cancelled) setSafetyLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [useRoadLedgerFacilityListColumns, activeTab, safetyFacilityName]);
 
   useEffect(() => {
     if (activeTab !== 'history') return;
@@ -2145,6 +2212,9 @@ export function LayerDataPanel({
     { id: 'basic', label: '기본정보', icon: FileText },
     { id: 'history', label: '이력관리', icon: History },
     { id: 'attach', label: '첨부파일', icon: Paperclip },
+    ...(useRoadLedgerFacilityListColumns
+      ? [{ id: 'safety' as const, label: '안전점검', icon: ShieldCheck }]
+      : []),
   ];
 
   /** 현재 페이지 끝이 전체 건수 미만일 때만 다음 페이지 가능 (7건·30건 꽉 찬 마지막 페이지 제외) */
@@ -2241,7 +2311,7 @@ export function LayerDataPanel({
                       <th
                         key={fieldName}
                         className={cn(
-                          'whitespace-nowrap border-b border-border px-2 py-1.5 first:pl-4 last:pr-4 align-middle text-[12px] font-medium text-slate-500 dark:text-muted-foreground',
+                          'overflow-hidden truncate whitespace-nowrap border-b border-border px-2 py-1.5 first:pl-4 last:pr-4 align-middle text-[12px] font-medium text-slate-500 dark:text-muted-foreground',
                           isNumberCol ? 'text-center' : 'text-left'
                         )}
                         style={
@@ -2249,6 +2319,7 @@ export function LayerDataPanel({
                             ? { width: colPx, maxWidth: colPx }
                             : { minWidth: colPx }
                         }
+                        title={headerLabel}
                       >
                         {headerLabel}
                       </th>
@@ -2328,11 +2399,12 @@ export function LayerDataPanel({
                                   codesByField[fieldName.trim().toLowerCase()]
                                 );
                               })();
+                          const cellText = String(display ?? '');
                           return (
                             <td
                               key={fieldName}
                               className={cn(
-                                'whitespace-nowrap px-2 first:pl-4 last:pr-4 text-slate-900 dark:text-foreground',
+                                'overflow-hidden truncate whitespace-nowrap px-2 first:pl-4 last:pr-4 text-slate-900 dark:text-foreground',
                                 isNumberCol && 'text-center'
                               )}
                               style={
@@ -2340,6 +2412,7 @@ export function LayerDataPanel({
                                   ? { width: colPx, maxWidth: colPx }
                                   : { minWidth: colPx }
                               }
+                              title={cellText}
                             >
                               {display}
                             </td>
@@ -2727,6 +2800,19 @@ export function LayerDataPanel({
                 )}
               </div>
             )}
+
+            {activeTab === 'safety' && useRoadLedgerFacilityListColumns && (
+              <div className="px-3 py-2">
+                <FmsInspectionRecordsSection
+                  inspections={safetyInspections}
+                  loading={safetyLoading}
+                  error={safetyError}
+                  emptyMessage={FMS_EMPTY_INSPECTION_MESSAGE}
+                  selfScroll={false}
+                  pageSize={13}
+                />
+              </div>
+            )}
           </div>
 
           {/* Detail footer */}
@@ -2798,6 +2884,25 @@ export function LayerDataPanel({
                   )}
                   <button type="button" onClick={handleClose} className="rounded border border-border bg-background px-2.5 py-1 text-[11px] text-muted-foreground transition-colors hover:bg-muted/50">닫기</button>
                 </div>
+              </div>
+            )}
+            {activeTab === 'safety' && useRoadLedgerFacilityListColumns && (
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-[10px] text-muted-foreground">
+                  점검진단실적{' '}
+                  {safetyLoading
+                    ? '…'
+                    : safetyFacilityName
+                      ? `${safetyInspections.length}건`
+                      : '—'}
+                </span>
+                <button
+                  type="button"
+                  onClick={handleClose}
+                  className="rounded border border-border bg-background px-2.5 py-1 text-[11px] text-muted-foreground transition-colors hover:bg-muted/50"
+                >
+                  닫기
+                </button>
               </div>
             )}
             {activeTab === 'attach' && (

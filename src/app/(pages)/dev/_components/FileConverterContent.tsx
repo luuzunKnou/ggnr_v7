@@ -85,7 +85,7 @@ const TAB_ITEMS: { id: ConverterTabId; label: string; description: string }[] = 
   {
     id: 'shpToDxf',
     label: 'SHP to DXF',
-    description: 'SHPToDXF/{작업명}/SHP → DXF/{파일명}.dxf 로 변환합니다.',
+    description: 'SHPToDXF/{작업명}/SHP → DXF 또는 DWG 로 변환합니다.',
   },
 ];
 
