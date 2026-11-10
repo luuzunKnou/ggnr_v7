@@ -1,0 +1,19 @@
+<layer>
+  <name>road_sign_maintenance</name>
+  <id>LayerInfoImpl-5c01895a:1a1bf451190:-7e97</id>
+  <type>VECTOR</type>
+  <defaultStyle>
+    <id>StyleInfoImpl-5c01895a:1a1bf451190:-7e96</id>
+  </defaultStyle>
+  <resource class="featureType">
+    <id>FeatureTypeInfoImpl-5c01895a:1a1bf451190:-7e98</id>
+  </resource>
+  <queryable>true</queryable>
+  <opaque>false</opaque>
+  <attribution>
+    <logoWidth>0</logoWidth>
+    <logoHeight>0</logoHeight>
+  </attribution>
+  <dateCreated>2026-11-09 10:24:33.84 UTC</dateCreated>
+  <dateModified>2026-11-09 10:24:34.532 UTC</dateModified>
+</layer>

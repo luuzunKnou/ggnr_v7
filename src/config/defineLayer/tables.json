@@ -1224,36 +1224,12 @@
     "define_table_source": "shp"
   },
   {
-    "define_table_name": "schools",
-    "define_table_kor_name": "학교현황",
+    "define_table_name": "lifelong_education",
+    "define_table_kor_name": "대표홈페이지 평생교육기관 현황",
     "define_table_shp_type": "POLYGON",
     "define_table_read_share": "P",
     "define_table_write_share": "P",
     "define_table_group": "교육",
-    "define_table_idx": "0",
-    "define_table_etc": "",
-    "define_table_schema": "layer",
-    "define_table_source": "shp"
-  },
-  {
-    "define_table_name": "freight_transport_companies",
-    "define_table_kor_name": "일반화물자동차 운송사업자 업체 현황",
-    "define_table_shp_type": "POLYGON",
-    "define_table_read_share": "P",
-    "define_table_write_share": "P",
-    "define_table_group": "교통물류",
-    "define_table_idx": "0",
-    "define_table_etc": "",
-    "define_table_schema": "layer",
-    "define_table_source": "shp"
-  },
-  {
-    "define_table_name": "parking_enforcement_cameras",
-    "define_table_kor_name": "주정차 단속 무인카메라 설치현황",
-    "define_table_shp_type": "POLYGON",
-    "define_table_read_share": "P",
-    "define_table_write_share": "P",
-    "define_table_group": "교통물류",
     "define_table_idx": "0",
     "define_table_etc": "",
     "define_table_schema": "layer",
@@ -1284,32 +1260,8 @@
     "define_table_source": "shp"
   },
   {
-    "define_table_name": "freight_transport_companies",
-    "define_table_kor_name": "일반화물자동차 운송사업자 업체 현황",
-    "define_table_shp_type": "POLYGON",
-    "define_table_read_share": "P",
-    "define_table_write_share": "P",
-    "define_table_group": "교통물류",
-    "define_table_idx": "0",
-    "define_table_etc": "",
-    "define_table_schema": "layer",
-    "define_table_source": "shp"
-  },
-  {
-    "define_table_name": "parking_enforcement_cameras",
-    "define_table_kor_name": "주정차 단속 무인카메라 설치현황",
-    "define_table_shp_type": "POLYGON",
-    "define_table_read_share": "P",
-    "define_table_write_share": "P",
-    "define_table_group": "교통물류",
-    "define_table_idx": "0",
-    "define_table_etc": "",
-    "define_table_schema": "layer",
-    "define_table_source": "shp"
-  },
-  {
-    "define_table_name": "lifelong_education",
-    "define_table_kor_name": "대표홈페이지 평생교육기관 현황",
+    "define_table_name": "schools",
+    "define_table_kor_name": "학교현황",
     "define_table_shp_type": "POLYGON",
     "define_table_read_share": "P",
     "define_table_write_share": "P",
@@ -1334,6 +1286,54 @@
   {
     "define_table_name": "freight_transport_companies",
     "define_table_kor_name": "일반화물자동차 운송사업자 업체 현황",
+    "define_table_shp_type": "POLYGON",
+    "define_table_read_share": "P",
+    "define_table_write_share": "P",
+    "define_table_group": "교통물류",
+    "define_table_idx": "0",
+    "define_table_etc": "",
+    "define_table_schema": "layer",
+    "define_table_source": "shp"
+  },
+  {
+    "define_table_name": "freight_transport_companies",
+    "define_table_kor_name": "일반화물자동차 운송사업자 업체 현황",
+    "define_table_shp_type": "POLYGON",
+    "define_table_read_share": "P",
+    "define_table_write_share": "P",
+    "define_table_group": "교통물류",
+    "define_table_idx": "0",
+    "define_table_etc": "",
+    "define_table_schema": "layer",
+    "define_table_source": "shp"
+  },
+  {
+    "define_table_name": "freight_transport_companies",
+    "define_table_kor_name": "일반화물자동차 운송사업자 업체 현황",
+    "define_table_shp_type": "POLYGON",
+    "define_table_read_share": "P",
+    "define_table_write_share": "P",
+    "define_table_group": "교통물류",
+    "define_table_idx": "0",
+    "define_table_etc": "",
+    "define_table_schema": "layer",
+    "define_table_source": "shp"
+  },
+  {
+    "define_table_name": "parking_enforcement_cameras",
+    "define_table_kor_name": "주정차 단속 무인카메라 설치현황",
+    "define_table_shp_type": "POLYGON",
+    "define_table_read_share": "P",
+    "define_table_write_share": "P",
+    "define_table_group": "교통물류",
+    "define_table_idx": "0",
+    "define_table_etc": "",
+    "define_table_schema": "layer",
+    "define_table_source": "shp"
+  },
+  {
+    "define_table_name": "parking_enforcement_cameras",
+    "define_table_kor_name": "주정차 단속 무인카메라 설치현황",
     "define_table_shp_type": "POLYGON",
     "define_table_read_share": "P",
     "define_table_write_share": "P",
@@ -7795,6 +7795,54 @@
     "define_table_source": "shp"
   },
   {
+    "define_table_name": "rdl_occ_as",
+    "define_table_kor_name": "도로점용대장",
+    "define_table_shp_type": "POLYGON",
+    "define_table_read_share": "P",
+    "define_table_write_share": "P",
+    "define_table_group": "점용대장",
+    "define_table_idx": "0",
+    "define_table_etc": "",
+    "define_table_schema": "layer",
+    "define_table_source": "shp"
+  },
+  {
+    "define_table_name": "rdl_occ_solo_as",
+    "define_table_kor_name": "도로점용필지",
+    "define_table_shp_type": "POLYGON",
+    "define_table_read_share": "P",
+    "define_table_write_share": "P",
+    "define_table_group": "점용대장",
+    "define_table_idx": "0",
+    "define_table_etc": "",
+    "define_table_schema": "layer",
+    "define_table_source": "shp"
+  },
+  {
+    "define_table_name": "usage_data_as",
+    "define_table_kor_name": "하천점용대장",
+    "define_table_shp_type": "POLYGON",
+    "define_table_read_share": "P",
+    "define_table_write_share": "P",
+    "define_table_group": "점용대장",
+    "define_table_idx": "0",
+    "define_table_etc": "",
+    "define_table_schema": "layer",
+    "define_table_source": "shp"
+  },
+  {
+    "define_table_name": "usage_data_solo_as",
+    "define_table_kor_name": "하천점용필지",
+    "define_table_shp_type": "POLYGON",
+    "define_table_read_share": "P",
+    "define_table_write_share": "P",
+    "define_table_group": "점용대장",
+    "define_table_idx": "0",
+    "define_table_etc": "",
+    "define_table_schema": "layer",
+    "define_table_source": "shp"
+  },
+  {
     "define_table_name": "road_frontage_building",
     "define_table_kor_name": "접도구역 건축물",
     "define_table_shp_type": "POINT",
@@ -10259,6 +10307,18 @@
     "define_table_source": "shp"
   },
   {
+    "define_table_name": "bike",
+    "define_table_kor_name": "bike",
+    "define_table_shp_type": "POLYGON",
+    "define_table_read_share": "P",
+    "define_table_write_share": "P",
+    "define_table_group": "테스트",
+    "define_table_idx": "0",
+    "define_table_etc": "",
+    "define_table_schema": "layer",
+    "define_table_source": "shp"
+  },
+  {
     "define_table_name": "land_use",
     "define_table_kor_name": "토지무상사용승낙서",
     "define_table_shp_type": "POINT",
@@ -10788,7 +10848,7 @@
   },
   {
     "define_table_name": "river_plan_ot_as",
-    "define_table_kor_name": "하천기본계획_기타",
+    "define_table_kor_name": "하천기본계획기타",
     "define_table_shp_type": "POLYGON",
     "define_table_read_share": "P",
     "define_table_write_share": "P",
@@ -11072,18 +11132,6 @@
     "define_table_write_share": "P",
     "define_table_group": "하천기본계획",
     "define_table_idx": "4",
-    "define_table_etc": "",
-    "define_table_schema": "layer",
-    "define_table_source": "shp"
-  },
-  {
-    "define_table_name": "usage_data_as",
-    "define_table_kor_name": "하천점용대장",
-    "define_table_shp_type": "POLYGON",
-    "define_table_read_share": "P",
-    "define_table_write_share": "P",
-    "define_table_group": "점용대장",
-    "define_table_idx": "0",
     "define_table_etc": "",
     "define_table_schema": "layer",
     "define_table_source": "shp"
@@ -11489,51 +11537,27 @@
     "define_table_source": "shp"
   },
   {
-    "define_table_name": "bike",
-    "define_table_kor_name": "bike",
-    "define_table_shp_type": "POLYGON",
+    "define_table_name": "building_number_plate",
+    "define_table_kor_name": "건물번호판",
+    "define_table_shp_type": "POINT",
     "define_table_read_share": "P",
     "define_table_write_share": "P",
-    "define_table_group": "테스트",
+    "define_table_group": "도로",
     "define_table_idx": "0",
     "define_table_etc": "",
     "define_table_schema": "layer",
-    "define_table_source": "shp"
+    "define_table_source": "excel"
   },
   {
-    "define_table_name": "rdl_occ_as",
-    "define_table_kor_name": "도로점용대장",
-    "define_table_shp_type": "POLYGON",
+    "define_table_name": "road_sign_maintenance",
+    "define_table_kor_name": "유지보수내역",
+    "define_table_shp_type": "POINT",
     "define_table_read_share": "P",
     "define_table_write_share": "P",
-    "define_table_group": "점용대장",
+    "define_table_group": "도로",
     "define_table_idx": "0",
     "define_table_etc": "",
     "define_table_schema": "layer",
-    "define_table_source": "shp"
-  },
-  {
-    "define_table_name": "rdl_occ_solo_as",
-    "define_table_kor_name": "도로점용필지",
-    "define_table_shp_type": "POLYGON",
-    "define_table_read_share": "P",
-    "define_table_write_share": "P",
-    "define_table_group": "점용대장",
-    "define_table_idx": "0",
-    "define_table_etc": "",
-    "define_table_schema": "layer",
-    "define_table_source": "shp"
-  },
-  {
-    "define_table_name": "usage_data_solo_as",
-    "define_table_kor_name": "하천점용필지",
-    "define_table_shp_type": "POLYGON",
-    "define_table_read_share": "P",
-    "define_table_write_share": "P",
-    "define_table_group": "점용대장",
-    "define_table_idx": "0",
-    "define_table_etc": "",
-    "define_table_schema": "layer",
-    "define_table_source": "shp"
+    "define_table_source": "excel"
   }
 ]

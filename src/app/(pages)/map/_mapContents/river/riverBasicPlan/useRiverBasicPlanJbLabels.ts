@@ -53,10 +53,11 @@ type JbRow = {
 export function useRiverBasicPlanJbLabels(opts: {
   tab: string;
   riverName: string;
+  riverCode?: string;
   active: boolean;
   pulseOgcFids?: number[];
 }) {
-  const { tab, riverName, active, pulseOgcFids = [] } = opts;
+  const { tab, riverName, riverCode = "", active, pulseOgcFids = [] } = opts;
   const mapContext = useMapContext();
   const sourceRef = useRef<VectorSource | null>(null);
   const pulsePhaseRef = useRef(0);
@@ -113,7 +114,13 @@ export function useRiverBasicPlanJbLabels(opts: {
         const res = await call("", "POST", {
           service: "riverBasicPlanService",
           action: "getRiverBasicPlanJbList",
-          params: { tab, riverName: riverName.trim() },
+          params: {
+            tab,
+            riverName: riverName.trim(),
+            ...(String(riverCode).trim()
+              ? { riverCode: String(riverCode).trim() }
+              : {}),
+          },
         });
         if (cancelled) return;
         const data = res?.data ?? res;
@@ -139,7 +146,7 @@ export function useRiverBasicPlanJbLabels(opts: {
     return () => {
       cancelled = true;
     };
-  }, [active, tab, riverName]);
+  }, [active, tab, riverName, riverCode]);
 
   useEffect(() => {
     const source = sourceRef.current;

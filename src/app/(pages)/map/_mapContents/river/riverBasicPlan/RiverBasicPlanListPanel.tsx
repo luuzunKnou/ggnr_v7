@@ -82,8 +82,11 @@ export function RiverBasicPlanListPanel({
   onChangeAxis,
   onClose,
 }: Props) {
-  /** 보고서별 — 하천 목록이 펼쳐진 카드(하천 2곳 이상) */
+  /** 보고서별 — 하천 목록이 펼쳐진 카드(하천이 한 곳이어도 펼침) */
   const [openedPlanKey, setOpenedPlanKey] = useState<string | null>(null);
+  /** 목록 본문 높이 — 펼친 하천 목록이 패널을 채워 스크롤하게 */
+  const listBodyRef = useRef<HTMLDivElement>(null);
+  const [listBodyHeight, setListBodyHeight] = useState(0);
   const mapContext = useMapContext();
   const mapContextRef = useRef(mapContext);
   mapContextRef.current = mapContext;
@@ -186,14 +189,23 @@ export function RiverBasicPlanListPanel({
       setCql(
         buildRiverBasicPlanReportRiversCqlByLayer(
           tab,
-          riverBasicPlanShownRivers(openedPlan).map((r) => r.riverName),
+          riverBasicPlanShownRivers(openedPlan).map((r) => ({
+            riverName: r.riverName,
+            riverCode: r.riverCode,
+          })),
           openedPlan
         )
       );
       return;
     }
-    setCql(buildRiverBasicPlanRiverNameCqlByLayer(tab, selectedRiver));
-  }, [tab, selectedRiver, openedPlan]);
+    setCql(
+      buildRiverBasicPlanRiverNameCqlByLayer(
+        tab,
+        selectedRiver,
+        preferredPlan?.riverCode
+      )
+    );
+  }, [tab, selectedRiver, openedPlan, preferredPlan?.riverCode]);
 
   const [resetKey, setResetKey] = useState(`${tab}|${listAxis}`);
   if (resetKey !== `${tab}|${listAxis}`) {
@@ -251,7 +263,7 @@ export function RiverBasicPlanListPanel({
   const selectRiver = useCallback(
     async (riverName: string, preferredPlan?: RiverBasicPlanPreferredPlan | null) => {
       onSelectRiver(riverName, preferredPlan ?? null);
-      await focusRiver(riverName);
+      await focusRiver(riverName, preferredPlan?.riverCode);
     },
     [onSelectRiver, focusRiver]
   );
@@ -274,28 +286,39 @@ export function RiverBasicPlanListPanel({
   );
 
   /**
-   * 카드 — 하천이 한 곳이면 그 하천 상세를 바로 연다.
-   * 여러 곳이면 카드 아래로 하천 목록을 펼치고(다시 누르면 접음), 하천을 고르지 않은 채 보고서 하천 전체가 지도에 보이게 한다.
+   * 카드 — 하천이 한 곳이든 여러 곳이든 카드 아래로 하천 목록을 펼친다(다시 누르면 접음).
+   * 펼칠 때는 하천을 고르지 않은 채 보고서 하천 전체가 지도에 보이게 한다.
    */
   const handleOpenPlan = useCallback(
     (plan: PlanListItem) => {
-      const rivers = riverBasicPlanShownRivers(plan);
-      if (rivers.length <= 1) {
-        setOpenedPlanKey(null);
-        if (rivers[0]) handleSelectPlanRiver(plan, rivers[0]);
-        return;
-      }
       const key = riverBasicPlanPlanKey(plan);
       if (openedPlanKey === key) {
         setOpenedPlanKey(null);
         return;
       }
+      const rivers = riverBasicPlanShownRivers(plan);
       setOpenedPlanKey(key);
       onSelectRiver("", null);
-      void focusRivers(rivers.map((r) => r.riverName));
+      if (rivers.length === 0) return;
+      void focusRivers(
+        rivers.map((r) => ({ riverName: r.riverName, riverCode: r.riverCode }))
+      );
     },
-    [openedPlanKey, handleSelectPlanRiver, onSelectRiver, focusRivers]
+    [openedPlanKey, onSelectRiver, focusRivers]
   );
+
+  useEffect(() => {
+    const el = listBodyRef.current;
+    if (!el || !axisReady) return;
+    const measure = () => setListBodyHeight(el.clientHeight);
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [axisReady, listAxis, tab]);
+
+  /** 펼친 하천 목록은 목록 영역 높이까지 늘어나고, 그 이상이면 목록 안에서 스크롤 */
+  const riverListMaxPx = listBodyHeight > 96 ? listBodyHeight - 72 : 0;
 
   /** 카드 «보고서» — 계획 폴더 바로 아래 PDF와 하천별 폴더 PDF를 함께 열기 */
   const handleOpenReport = useCallback(
@@ -451,7 +474,7 @@ export function RiverBasicPlanListPanel({
             <RiverOrthoControl tab={tab} />
           </div>
 
-          <div className="flex-1 min-h-0 overflow-auto">
+          <div ref={listBodyRef} className="flex-1 min-h-0 overflow-auto">
             {loading && !listHasRows ? (
               <p className="text-sm text-muted-foreground px-4 py-4">불러오는 중...</p>
             ) : error ? (
@@ -522,6 +545,7 @@ export function RiverBasicPlanListPanel({
                 folderSummary={folderSummary}
                 year={activePlanYear || null}
                 openedPlanKey={openedPlanKey}
+                riverListMaxPx={riverListMaxPx}
                 selectedPlanKey={selectedPlanKey}
                 selectedRiver={selectedRiver}
                 onOpenPlan={handleOpenPlan}

@@ -1,0 +1,41 @@
+<featureType>
+  <id>FeatureTypeInfoImpl-5c01895a:1a1bf451190:-7e9a</id>
+  <name>building_number_plate</name>
+  <nativeName>building_number_plate</nativeName>
+  <namespace>
+    <id>NamespaceInfoImpl-4bf97568:19c4d6c3053:-7ffa</id>
+  </namespace>
+  <title>건물번호판</title>
+  <keywords>
+    <string>features</string>
+    <string>building_number_plate</string>
+  </keywords>
+  <srs>EPSG:5181</srs>
+  <nativeBoundingBox>
+    <minx>330059.53125</minx>
+    <maxx>378540.5</maxx>
+    <miny>320358.9375</miny>
+    <maxy>366731.78125</maxy>
+    <crs class="projected">EPSG:5181</crs>
+  </nativeBoundingBox>
+  <latLonBoundingBox>
+    <minx>128.44928348764168</minx>
+    <maxx>129.0000090559648</maxx>
+    <miny>36.36477368492101</miny>
+    <maxy>36.79029878080799</maxy>
+    <crs>EPSG:4326</crs>
+  </latLonBoundingBox>
+  <projectionPolicy>FORCE_DECLARED</projectionPolicy>
+  <enabled>true</enabled>
+  <store class="dataStore">
+    <id>DataStoreInfoImpl-5c01895a:1a1bf451190:-7eb6</id>
+  </store>
+  <serviceConfiguration>false</serviceConfiguration>
+  <maxFeatures>0</maxFeatures>
+  <numDecimals>0</numDecimals>
+  <padWithZeros>false</padWithZeros>
+  <forcedDecimal>false</forcedDecimal>
+  <overridingServiceSRS>false</overridingServiceSRS>
+  <skipNumberMatched>false</skipNumberMatched>
+  <circularArcPresent>false</circularArcPresent>
+</featureType>

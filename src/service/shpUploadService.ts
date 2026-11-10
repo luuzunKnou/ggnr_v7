@@ -16,10 +16,7 @@ import { getLayerTableList, getDefineLayerTables, getLayerTableGeometryTypes, ge
 import { reorderDefineLayerTableRow, reorderDefineLayerTablesArray } from '@/lib/defineLayerTableRowOrder';
 import { matchEpsgFromLooseText } from '@/lib/matchCoordinateSystemText';
 import { safeTableName, shpTableNameFromRelPath } from '@/lib/shpTableName';
-import {
-  isLayerExtraFieldName,
-  layerExtraDefineViewOff,
-} from '@/lib/layerExtraField';
+import { isLayerExtraFieldName } from '@/lib/layerExtraField';
 import {
   fetchSyncLogGeomAsGeoJson,
   fillPendingSyncLogGeoms,
@@ -947,8 +944,7 @@ function prunePackedColumnsFromDefineFields(tableName: string, droppedDbCols: st
     if (dropSet.size === 0) return;
     const next = (parsed as Record<string, unknown>[]).filter((f) => {
       const name = String(f?.define_field_name ?? '').trim().toLowerCase();
-      if (!name) return false;
-      if (isLayerExtraFieldName(name)) return true;
+      if (!name || isLayerExtraFieldName(name)) return false;
       return !dropSet.has(name);
     });
     fsSync.writeFileSync(fieldsPath, `${JSON.stringify(next, null, 2)}\n`, 'utf-8');
@@ -2423,16 +2419,15 @@ function mapDataTypeToDefineFieldType(dataType: string): string {
 
 function buildDefaultField(col: { name: string; dataType: string }, idx: number): Record<string, unknown> {
   const fn = String(col.name ?? '').toLowerCase();
-  const extraOff = isLayerExtraFieldName(fn);
   return {
     define_field_name: fn,
-    define_field_kor_name: extraOff ? '추가속성' : fn,
-    define_field_type: extraOff ? 'TEXT' : mapDataTypeToDefineFieldType(col.dataType),
+    define_field_kor_name: fn,
+    define_field_type: mapDataTypeToDefineFieldType(col.dataType),
     define_field_idx: idx,
     define_field_is_required: false,
     define_field_show_search: false,
-    define_field_show_list: extraOff ? false : true,
-    define_field_show_detail: extraOff ? false : true,
+    define_field_show_list: true,
+    define_field_show_detail: true,
     define_field_read_only: false,
     define_field_is_key: false,
     define_field_show_search_detail: false,
@@ -2448,7 +2443,6 @@ function buildDefaultField(col: { name: string; dataType: string }, idx: number)
     define_field_sel_label_field: '',
     define_field_default_value: '',
     define_field_show_title: false,
-    ...(extraOff ? layerExtraDefineViewOff() : {}),
   };
 }
 
@@ -2522,14 +2516,13 @@ async function createDefineTableAndFieldsCore(params: {
       // file doesn't exist
     }
 
-    // DB에 없는 본문 필드는 제거 (extra로 뺀 컬럼이 define에 남지 않게)
+    // DB에 없는 본문 필드와 extra jsonb 컬럼은 항목 설정에서 뺀다
     const dbColNames = new Set(
       colRes.columns.map((c) => String(c.name ?? '').trim().toLowerCase()).filter(Boolean)
     );
     const prunedExisting = existing.filter((f) => {
       const name = String(f.define_field_name ?? '').trim().toLowerCase();
-      if (!name) return false;
-      if (isLayerExtraFieldName(name)) return true;
+      if (!name || isLayerExtraFieldName(name)) return false;
       return dbColNames.has(name);
     });
 
@@ -2544,6 +2537,7 @@ async function createDefineTableAndFieldsCore(params: {
 
     const newFields: Record<string, unknown>[] = [];
     for (const col of colRes.columns) {
+      if (isLayerExtraFieldName(col.name)) continue;
       if (!existingNames.has(col.name.toLowerCase())) {
         newFields.push(buildDefaultField(col, nextIdx++));
       }

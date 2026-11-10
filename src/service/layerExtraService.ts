@@ -7,11 +7,7 @@
 import { db } from '@/database/db';
 import { sql } from 'drizzle-orm';
 import { getSessionUsrId } from '@/lib/auth/guard';
-import {
-  buildLayerExtraDefineField,
-  isLayerExtraFieldName,
-  layerExtraDefineViewOff,
-} from '@/lib/layerExtraField';
+import { isLayerExtraFieldName } from '@/lib/layerExtraField';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -62,30 +58,19 @@ function defineFieldsFilePath(tableName: string): string {
   return path.join(DEFINE_FIELDS_DIR, `table_${safe}.json`);
 }
 
-/** extra 컬럼 항목 설정 — 보기 분류 체크 전부 해제. 없으면 추가 */
-function upsertLayerExtraDefineField(tableName: string): { ok: boolean; error?: string } {
+/** extra jsonb 컬럼은 항목 설정에 두지 않는다. 이미 있으면 뺀다. */
+function stripLayerExtraDefineField(tableName: string): { ok: boolean; error?: string } {
   const filePath = defineFieldsFilePath(tableName);
   if (!String(tableName ?? '').trim()) return { ok: false, error: 'tableName이 필요합니다.' };
   try {
-    let fields: Record<string, unknown>[] = [];
-    if (fs.existsSync(filePath)) {
-      const parsed = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
-      if (Array.isArray(parsed)) fields = parsed as Record<string, unknown>[];
-    }
-    const idx = fields.findIndex((f) =>
-      isLayerExtraFieldName(String(f.define_field_name ?? ''))
+    if (!fs.existsSync(filePath)) return { ok: true };
+    const parsed = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+    if (!Array.isArray(parsed)) return { ok: true };
+    const next = (parsed as Record<string, unknown>[]).filter(
+      (f) => !isLayerExtraFieldName(String(f?.define_field_name ?? ''))
     );
-    if (idx >= 0) {
-      fields[idx] = { ...fields[idx], ...layerExtraDefineViewOff() };
-    } else {
-      const maxIdx = fields.reduce((m, f) => {
-        const n = parseInt(String(f.define_field_idx ?? '0'), 10);
-        return Number.isFinite(n) ? Math.max(m, n) : m;
-      }, 0);
-      fields.push(buildLayerExtraDefineField(maxIdx + 1));
-    }
-    fs.mkdirSync(path.dirname(filePath), { recursive: true });
-    fs.writeFileSync(filePath, `${JSON.stringify(fields, null, 2)}\n`, 'utf-8');
+    if (next.length === parsed.length) return { ok: true };
+    fs.writeFileSync(filePath, `${JSON.stringify(next, null, 2)}\n`, 'utf-8');
     return { ok: true };
   } catch (e: unknown) {
     return { ok: false, error: e instanceof Error ? e.message : String(e) };
@@ -158,7 +143,7 @@ export async function addLayerExtraColumn(params?: {
     return { success: false, error: '테이블을 찾을 수 없습니다.' };
   }
   if (await columnExists(tableSchema, tableName, 'extra')) {
-    const defRes = upsertLayerExtraDefineField(tableName);
+    const defRes = stripLayerExtraDefineField(tableName);
     if (!defRes.ok) return { success: false, error: defRes.error };
     return { success: true };
   }
@@ -170,11 +155,11 @@ export async function addLayerExtraColumn(params?: {
          COMMENT ON COLUMN ${quoteIdent(tableSchema)}.${quoteIdent(tableName)}.extra IS '추가속성';`
       )
     );
-    const defRes = upsertLayerExtraDefineField(tableName);
+    const defRes = stripLayerExtraDefineField(tableName);
     if (!defRes.ok) {
       return {
         success: false,
-        error: defRes.error ?? '컬럼은 추가됐으나 항목 설정 반영에 실패했습니다.',
+        error: defRes.error ?? '컬럼은 추가됐으나 항목 설정에서 extra를 빼지 못했습니다.',
       };
     }
     return { success: true };

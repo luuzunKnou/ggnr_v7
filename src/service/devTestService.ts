@@ -4258,7 +4258,7 @@ function readDefineCodesFile(tableName: string, fieldName: string): unknown[] {
   const safe = `${tableName}__${fieldName}`.replace(/[^a-zA-Z0-9_-]/g, '');
   return readDefineLayerCodes(safe);
 }
-const LAYER_SETUP_SKIP_COLUMNS = new Set(['ogc_fid', 'geom']);
+const LAYER_SETUP_SKIP_COLUMNS = new Set(['ogc_fid', 'geom', 'extra']);
 
 export type LayerSetupIssueType =
   | 'geoserver_layer'

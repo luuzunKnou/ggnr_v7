@@ -8,11 +8,35 @@ import { scheduleFitMapToExtent3857 } from "../../../_mapComponents/config/mapAu
 
 type Extent = [number, number, number, number];
 
+type RiverFocusTarget = {
+  riverName: string;
+  riverCode?: string | null;
+};
+
+function asFocusTarget(
+  river: string | RiverFocusTarget
+): RiverFocusTarget {
+  return typeof river === "string" ? { riverName: river } : river;
+}
+
 /** 하천 범위 — 색인도 범위, 없으면 기본계획 범위 */
-async function fetchRiverExtent(tab: RiverBasicPlanTab, riverName: string): Promise<Extent | null> {
+async function fetchRiverExtent(
+  tab: RiverBasicPlanTab,
+  riverName: string,
+  riverCode?: string | null
+): Promise<Extent | null> {
+  const code = String(riverCode ?? "").trim();
   for (const action of ["getRiverBasicPlanIndexExtent", "getRiverBasicPlanExtent"]) {
     try {
-      const res = await call("", "POST", { service: "riverBasicPlanService", action, params: { tab, riverName } });
+      const res = await call("", "POST", {
+        service: "riverBasicPlanService",
+        action,
+        params: {
+          tab,
+          riverName,
+          ...(code ? { riverCode: code } : {}),
+        },
+      });
       const ext = (res?.data ?? res)?.extent3857;
       if (Array.isArray(ext) && ext.length === 4 && ext.every((v: unknown) => Number.isFinite(Number(v)))) {
         return ext.map(Number) as Extent;
@@ -27,11 +51,12 @@ async function fetchRiverExtent(tab: RiverBasicPlanTab, riverName: string): Prom
 /** 하천 선택 후 지도 이동 공통 — 색인도 보기에서 나와 하천(들) 범위로 맞춤 */
 function useFitRiverExtents(tab: RiverBasicPlanTab) {
   const mapContext = useMapContext();
-  return async (riverNames: readonly string[]) => {
+  return async (rivers: readonly (string | RiverFocusTarget)[]) => {
     mapContext?.riverBasicPlanExitIndexViewToDetailRef?.current?.();
-    const exts = (await Promise.all(riverNames.map((n) => fetchRiverExtent(tab, n)))).filter(
-      (e): e is Extent => e != null
-    );
+    const targets = rivers.map(asFocusTarget).filter((t) => t.riverName.trim());
+    const exts = (
+      await Promise.all(targets.map((t) => fetchRiverExtent(tab, t.riverName, t.riverCode)))
+    ).filter((e): e is Extent => e != null);
     const map = mapContext?.mapInstanceRef?.current;
     if (!map || exts.length === 0) return;
     const union: Extent = [
@@ -51,7 +76,8 @@ function useFitRiverExtents(tab: RiverBasicPlanTab) {
 /** 하천 한 곳으로 지도 이동. 목록·보고서 하천 목록 공용 */
 export function useRiverBasicPlanFocusRiver(tab: RiverBasicPlanTab) {
   const fit = useFitRiverExtents(tab);
-  return (riverName: string) => fit([riverName]);
+  return (riverName: string, riverCode?: string | null) =>
+    fit([{ riverName, riverCode }]);
 }
 
 /** 보고서에 속한 하천 전체가 한 화면에 보이도록 지도 이동 */
