@@ -2,7 +2,7 @@
   {
     "define_field_name": "DIP_KIND",
     "define_field_kor_name": "매설물 종류",
-    "define_field_type": "TEXT",
+    "define_field_type": "CODE",
     "define_field_idx": 999999,
     "define_field_is_required": false,
     "define_field_show_search": false,
@@ -27,7 +27,7 @@
   {
     "define_field_name": "DIP_MET",
     "define_field_kor_name": "매설물 재질",
-    "define_field_type": "TEXT",
+    "define_field_type": "CODE",
     "define_field_idx": 999999,
     "define_field_is_required": false,
     "define_field_show_search": false,
@@ -52,7 +52,7 @@
   {
     "define_field_name": "DIRECTION",
     "define_field_kor_name": "방향",
-    "define_field_type": "TEXT",
+    "define_field_type": "CODE",
     "define_field_idx": 999999,
     "define_field_is_required": false,
     "define_field_show_search": false,
@@ -77,7 +77,7 @@
   {
     "define_field_name": "MCO",
     "define_field_kor_name": "관리기관",
-    "define_field_type": "TEXT",
+    "define_field_type": "CODE",
     "define_field_idx": 999999,
     "define_field_is_required": false,
     "define_field_show_search": false,
@@ -102,7 +102,7 @@
   {
     "define_field_name": "ROAD_RANK",
     "define_field_kor_name": "도로의종류",
-    "define_field_type": "TEXT",
+    "define_field_type": "CODE",
     "define_field_idx": 999999,
     "define_field_is_required": false,
     "define_field_show_search": false,

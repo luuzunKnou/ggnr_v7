@@ -1,21 +1,21 @@
-/**
+﻿/**
  * 지적기록물 — UI 확인용 임시 자료 (안동시 일원, 실제 공부와 무관).
  * 목록은 필지, 상세는 그 필지에 묶인 문서(스캔 1장씩).
  */
 import { fromLonLat } from 'ol/proj'
 import {
-  CADASTRAL_DOC_TYPES,
-  getCadastralDocType,
-  getCadastralLedgerType,
-  type CadastralDocType,
-  type CadastralLedgerType,
-} from './cadastralRecordConfig'
+  LAND_ARCHIVE_DOC_TYPES,
+  getLandArchiveDocType,
+  getLandArchiveLedgerType,
+  type LandArchiveDocType,
+  type LandArchiveLedgerType,
+} from './landArchiveConfig'
 
-export type CadastralRecordDoc = {
+export type LandArchiveDoc = {
   id: string
-  docType: CadastralDocType
+  docType: LandArchiveDocType
   docTypeLabel: string
-  ledgerType: CadastralLedgerType
+  ledgerType: LandArchiveLedgerType
   ledgerTypeLabel: string
   volumeNo: string
   pageNo: string
@@ -23,14 +23,14 @@ export type CadastralRecordDoc = {
   previewUrl: string
 }
 
-export type CadastralRecordParcel = {
+export type LandArchiveParcel = {
   id: string
   emd: string
   ri: string
   jibun: string
-  /** EPSG:3857 */
-  center3857: [number, number]
-  docs: CadastralRecordDoc[]
+  /** EPSG:3857 — 좌표를 알 수 없으면 없음 */
+  center3857?: [number, number] | null
+  docs: LandArchiveDoc[]
 }
 
 function escapeXml(s: string): string {
@@ -70,8 +70,8 @@ function createDemoPreviewUrl(title: string, subtitle: string, accent: string): 
 
 type SeedDoc = {
   id: string
-  docType: CadastralDocType
-  ledgerType: CadastralLedgerType
+  docType: LandArchiveDocType
+  ledgerType: LandArchiveLedgerType
   volumeNo: string
   pageNo: string
   fileName: string
@@ -392,11 +392,11 @@ const PARCEL_LONLAT: Record<string, [number, number]> = {
   'p-geumgok-44-2': [128.94, 36.41],
 }
 
-const DOC_ORDER = new Map(CADASTRAL_DOC_TYPES.map((t, i) => [t.code, i]))
+const DOC_ORDER = new Map(LAND_ARCHIVE_DOC_TYPES.map((t, i) => [t.code, i]))
 
-function hydrateDoc(doc: SeedDoc, loc: string, jibun: string): CadastralRecordDoc {
-  const type = getCadastralDocType(doc.docType)
-  const ledger = getCadastralLedgerType(doc.ledgerType)
+function hydrateDoc(doc: SeedDoc, loc: string, jibun: string): LandArchiveDoc {
+  const type = getLandArchiveDocType(doc.docType)
+  const ledger = getLandArchiveLedgerType(doc.ledgerType)
   return {
     ...doc,
     docTypeLabel: type.label,
@@ -409,7 +409,7 @@ function hydrateDoc(doc: SeedDoc, loc: string, jibun: string): CadastralRecordDo
   }
 }
 
-export function getCadastralParcels(): CadastralRecordParcel[] {
+export function getLandArchiveParcels(): LandArchiveParcel[] {
   return SEED.map((row) => {
     const loc = formatRecordLocation(row)
     const docs = row.docs
@@ -424,8 +424,8 @@ export function getCadastralParcels(): CadastralRecordParcel[] {
   })
 }
 
-export function getCadastralParcelById(id: string): CadastralRecordParcel | undefined {
-  return getCadastralParcels().find((p) => p.id === id)
+export function getLandArchiveParcelById(id: string): LandArchiveParcel | undefined {
+  return getLandArchiveParcels().find((p) => p.id === id)
 }
 
 export function formatRecordLocation(row: { emd: string; ri: string }): string {
@@ -436,31 +436,22 @@ export function formatRecordAddress(row: { emd: string; ri: string; jibun: strin
   return [formatRecordLocation(row), row.jibun].filter(Boolean).join(' ')
 }
 
-/** 목록에 쓰는 문서 이름 — 토지대장, 지적도, 면적측정부 등 */
-export function formatCadastralDocTitle(doc: {
-  docType: CadastralDocType
-  ledgerType: CadastralLedgerType
+/** 목록에 쓰는 문서 이름 — 구대장, 지적도, 측량결과도 등 */
+export function formatLandArchiveDocTitle(doc: {
+  docType: LandArchiveDocType
+  ledgerType: LandArchiveLedgerType
   docTypeLabel: string
 }): string {
-  switch (doc.docType) {
-    case 'ledger':
-      return doc.ledgerType === 'forest' ? '임야대장' : '토지대장'
-    case 'map':
-      return doc.ledgerType === 'forest' ? '임야도' : '지적도'
-    case 'survey':
-      return '면적측정부'
-    default:
-      return doc.docTypeLabel
-  }
+  return doc.docTypeLabel
 }
 
 /** 목록 문서 칸 — «면적측정부 외 1» */
 export function formatParcelDocSummary(
-  docs: { docType: CadastralDocType; ledgerType: CadastralLedgerType; docTypeLabel: string }[]
+  docs: { docType: LandArchiveDocType; ledgerType: LandArchiveLedgerType; docTypeLabel: string }[]
 ): string {
   const first = docs[0]
   if (!first) return '—'
-  const name = formatCadastralDocTitle(first)
+  const name = formatLandArchiveDocTitle(first)
   const extra = docs.length - 1
   if (extra <= 0) return name
   return `${name} 외 ${extra}`

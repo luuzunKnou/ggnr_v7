@@ -1,4 +1,4 @@
-// src/app/(pages)/map/map-layout-client.tsx
+﻿// src/app/(pages)/map/map-layout-client.tsx
 "use client"
 
 import React, { useState, useEffect, useLayoutEffect, useCallback, useRef, useMemo, Suspense } from "react"
@@ -100,7 +100,7 @@ import { useShootingRequestUiEnabled } from "./_mapContents/shootingRequest/useS
 import {
   isUavAdminSystemKey,
   isUavFamilySystemKey,
-  isUavUlsanProject,
+  isUavUsProject,
 } from "./_mapContents/shootingRequest/shootingRequestUiFlag"
 import {
   aerialKindToOpenedKey,
@@ -251,12 +251,10 @@ import {
   USER_DATA_UPLOAD_PANEL_MAX_WIDTH,
   USER_DATA_UPLOAD_PANEL_MIN_WIDTH,
 } from "./_mapContents/userDataUpload/userDataUploadConfig"
-import { DrawingDisplayPanel } from "./_mapContents/drawingDisplay/DrawingDisplayPanel"
+import { DrawingDisplayControl } from "./_mapContents/drawingDisplay/DrawingDisplayControl"
 import {
   DRAWING_DISPLAY_OPENED_KEY,
   DRAWING_DISPLAY_PANEL_DEFAULT_WIDTH,
-  DRAWING_DISPLAY_PANEL_MAX_WIDTH,
-  DRAWING_DISPLAY_PANEL_MIN_WIDTH,
 } from "./_mapContents/drawingDisplay/drawingDisplayConfig"
 import { CadastralResurveyListPanel } from "./_mapContents/cadastralResurvey/CadastralResurveyListPanel"
 import { CadastralResurveyDetailPanel } from "./_mapContents/cadastralResurvey/CadastralResurveyDetailPanel"
@@ -269,17 +267,17 @@ import {
   CADASTRAL_RESURVEY_PANEL_MAX_WIDTH,
   CADASTRAL_RESURVEY_PANEL_MIN_WIDTH,
 } from "./_mapContents/cadastralResurvey/cadastralResurveyConfig"
-import { CadastralRecordListPanel } from "./_mapContents/cadastralRecord/CadastralRecordListPanel"
-import { CadastralRecordDetailPanel } from "./_mapContents/cadastralRecord/CadastralRecordDetailPanel"
+import { LandArchiveListPanel } from "./_mapContents/landArchive/LandArchiveListPanel"
+import { LandArchiveDetailPanel } from "./_mapContents/landArchive/LandArchiveDetailPanel"
 import {
-  CADASTRAL_RECORD_DETAIL_DEFAULT_WIDTH,
-  CADASTRAL_RECORD_DETAIL_MAX_WIDTH,
-  CADASTRAL_RECORD_DETAIL_MIN_WIDTH,
-  CADASTRAL_RECORD_OPENED_KEY,
-  CADASTRAL_RECORD_PANEL_DEFAULT_WIDTH,
-  CADASTRAL_RECORD_PANEL_MAX_WIDTH,
-  CADASTRAL_RECORD_PANEL_MIN_WIDTH,
-} from "./_mapContents/cadastralRecord/cadastralRecordConfig"
+  LAND_ARCHIVE_DETAIL_DEFAULT_WIDTH,
+  LAND_ARCHIVE_DETAIL_MAX_WIDTH,
+  LAND_ARCHIVE_DETAIL_MIN_WIDTH,
+  LAND_ARCHIVE_OPENED_KEY,
+  LAND_ARCHIVE_PANEL_DEFAULT_WIDTH,
+  LAND_ARCHIVE_PANEL_MAX_WIDTH,
+  LAND_ARCHIVE_PANEL_MIN_WIDTH,
+} from "./_mapContents/landArchive/landArchiveConfig"
 import { IndividualLandPriceListPanel } from "./_mapContents/individualLandPrice/IndividualLandPriceListPanel"
 import { IndividualLandPriceDetailPanel } from "./_mapContents/individualLandPrice/IndividualLandPriceDetailPanel"
 import {
@@ -838,14 +836,14 @@ function MapLayoutContent({
   const [cadastralResurveyDetailWidth, setCadastralResurveyDetailWidth] = useState(
     CADASTRAL_RESURVEY_DETAIL_DEFAULT_WIDTH
   )
-  const cadastralRecordOpen = openedWindows.includes(CADASTRAL_RECORD_OPENED_KEY)
-  const [cadastralRecordId, setCadastralRecordId] = useState<string | null>(null)
-  const cadastralRecordDetailOpen = cadastralRecordOpen && Boolean(cadastralRecordId)
-  const [cadastralRecordPanelWidth, setCadastralRecordPanelWidth] = useState(
-    CADASTRAL_RECORD_PANEL_DEFAULT_WIDTH
+  const landArchiveOpen = openedWindows.includes(LAND_ARCHIVE_OPENED_KEY)
+  const [landArchiveId, setLandArchiveId] = useState<string | null>(null)
+  const landArchiveDetailOpen = landArchiveOpen && Boolean(landArchiveId)
+  const [landArchivePanelWidth, setLandArchivePanelWidth] = useState(
+    LAND_ARCHIVE_PANEL_DEFAULT_WIDTH
   )
-  const [cadastralRecordDetailWidth, setCadastralRecordDetailWidth] = useState(
-    CADASTRAL_RECORD_DETAIL_DEFAULT_WIDTH
+  const [landArchiveDetailWidth, setLandArchiveDetailWidth] = useState(
+    LAND_ARCHIVE_DETAIL_DEFAULT_WIDTH
   )
   const individualLandPriceOpen = openedWindows.includes(INDIVIDUAL_LAND_PRICE_OPENED_KEY)
   const [individualLandPricePnu, setIndividualLandPricePnu] = useState<string | null>(null)
@@ -1213,8 +1211,8 @@ function MapLayoutContent({
     (drawingDisplayOpen ? drawingDisplayPanelWidth : 0) +
     (cadastralResurveyOpen ? cadastralResurveyPanelWidth : 0) +
     (cadastralResurveyDetailOpen ? cadastralResurveyDetailWidth : 0) +
-    (cadastralRecordOpen ? cadastralRecordPanelWidth : 0) +
-    (cadastralRecordDetailOpen ? cadastralRecordDetailWidth : 0) +
+    (landArchiveOpen ? landArchivePanelWidth : 0) +
+    (landArchiveDetailOpen ? landArchiveDetailWidth : 0) +
     (individualLandPriceOpen ? individualLandPricePanelWidth : 0) +
     (individualLandPriceDetailOpen ? individualLandPriceDetailWidth : 0) +
     (developmentChargeOpen ? developmentChargePanelWidth : 0) +
@@ -1394,12 +1392,12 @@ function MapLayoutContent({
     drawingDisplayPanelLeftPx + (drawingDisplayOpen ? drawingDisplayPanelWidth : 0)
   const cadastralResurveyDetailLeftPx =
     cadastralResurveyPanelLeftPx + (cadastralResurveyOpen ? cadastralResurveyPanelWidth : 0)
-  const cadastralRecordPanelLeftPx =
+  const landArchivePanelLeftPx =
     cadastralResurveyDetailLeftPx + (cadastralResurveyDetailOpen ? cadastralResurveyDetailWidth : 0)
-  const cadastralRecordDetailLeftPx =
-    cadastralRecordPanelLeftPx + (cadastralRecordOpen ? cadastralRecordPanelWidth : 0)
+  const landArchiveDetailLeftPx =
+    landArchivePanelLeftPx + (landArchiveOpen ? landArchivePanelWidth : 0)
   const individualLandPricePanelLeftPx =
-    cadastralRecordDetailLeftPx + (cadastralRecordDetailOpen ? cadastralRecordDetailWidth : 0)
+    landArchiveDetailLeftPx + (landArchiveDetailOpen ? landArchiveDetailWidth : 0)
   const individualLandPriceDetailLeftPx =
     individualLandPricePanelLeftPx + (individualLandPriceOpen ? individualLandPricePanelWidth : 0)
   const developmentChargePanelLeftPx =
@@ -2056,9 +2054,9 @@ function MapLayoutContent({
     setOpened(openedWindows.filter((w) => w !== CADASTRAL_RESURVEY_OPENED_KEY))
   }
 
-  const handleCloseCadastralRecord = () => {
-    setCadastralRecordId(null)
-    setOpened(openedWindows.filter((w) => w !== CADASTRAL_RECORD_OPENED_KEY))
+  const handleCloseLandArchive = () => {
+    setLandArchiveId(null)
+    setOpened(openedWindows.filter((w) => w !== LAND_ARCHIVE_OPENED_KEY))
   }
 
   const handleCloseIndividualLandPrice = () => {
@@ -2242,8 +2240,8 @@ function MapLayoutContent({
   }, [cadastralResurveyOpen])
 
   useEffect(() => {
-    if (!cadastralRecordOpen) setCadastralRecordId(null)
-  }, [cadastralRecordOpen])
+    if (!landArchiveOpen) setLandArchiveId(null)
+  }, [landArchiveOpen])
 
   useEffect(() => {
     if (!individualLandPriceOpen) {
@@ -2388,7 +2386,7 @@ function MapLayoutContent({
   }, [shootingPanelOpen, shootingApprovalOpen, shootingRequestOpen])
 
   useEffect(() => {
-    if (!isUavFamilySystemKey(systemKeyFromUrl) && !isUavUlsanProject(projectName)) return
+    if (!isUavFamilySystemKey(systemKeyFromUrl) && !isUavUsProject(projectName)) return
     if (searchParams.get('shotForm') !== 'new') return
     const current = new URLSearchParams(Array.from(searchParams.entries()))
     current.delete('shotForm')
@@ -3996,17 +3994,12 @@ function MapLayoutContent({
             </div>
           )}
           {drawingDisplayOpen && (
-            <div className="pointer-events-auto shrink-0">
-              <MapSideListPanel
-                width={drawingDisplayPanelWidth}
-                minWidth={DRAWING_DISPLAY_PANEL_MIN_WIDTH}
-                maxWidth={DRAWING_DISPLAY_PANEL_MAX_WIDTH}
-                leftOffsetPx={drawingDisplayPanelLeftPx}
-                onWidthChange={setDrawingDisplayPanelWidth}
-              >
-                <DrawingDisplayPanel onClose={handleCloseDrawingDisplay} />
-              </MapSideListPanel>
-            </div>
+            <DrawingDisplayControl
+              width={drawingDisplayPanelWidth}
+              leftOffsetPx={drawingDisplayPanelLeftPx}
+              onWidthChange={setDrawingDisplayPanelWidth}
+              onClose={handleCloseDrawingDisplay}
+            />
           )}
           {cadastralResurveyOpen && (
             <div className="pointer-events-auto shrink-0">
@@ -4045,39 +4038,39 @@ function MapLayoutContent({
               </MapSideListPanel>
             </div>
           )}
-          {cadastralRecordOpen && (
+          {landArchiveOpen && (
             <div className="pointer-events-auto shrink-0">
               <MapSideListPanel
-                width={cadastralRecordPanelWidth}
-                minWidth={CADASTRAL_RECORD_PANEL_MIN_WIDTH}
-                maxWidth={CADASTRAL_RECORD_PANEL_MAX_WIDTH}
-                leftOffsetPx={cadastralRecordPanelLeftPx}
-                onWidthChange={setCadastralRecordPanelWidth}
-                serEng={CADASTRAL_RECORD_OPENED_KEY}
+                width={landArchivePanelWidth}
+                minWidth={LAND_ARCHIVE_PANEL_MIN_WIDTH}
+                maxWidth={LAND_ARCHIVE_PANEL_MAX_WIDTH}
+                leftOffsetPx={landArchivePanelLeftPx}
+                onWidthChange={setLandArchivePanelWidth}
+                serEng={LAND_ARCHIVE_OPENED_KEY}
               >
-                <CadastralRecordListPanel
-                  onClose={handleCloseCadastralRecord}
-                  selectedId={cadastralRecordId}
-                  onSelect={setCadastralRecordId}
+                <LandArchiveListPanel
+                  onClose={handleCloseLandArchive}
+                  selectedId={landArchiveId}
+                  onSelect={setLandArchiveId}
                 />
               </MapSideListPanel>
             </div>
           )}
-          {cadastralRecordDetailOpen && cadastralRecordId && (
+          {landArchiveDetailOpen && landArchiveId && (
             <div className="pointer-events-auto shrink-0">
               <MapSideListPanel
-                width={cadastralRecordDetailWidth}
-                minWidth={CADASTRAL_RECORD_DETAIL_MIN_WIDTH}
-                maxWidth={CADASTRAL_RECORD_DETAIL_MAX_WIDTH}
-                leftOffsetPx={cadastralRecordDetailLeftPx}
-                onWidthChange={setCadastralRecordDetailWidth}
+                width={landArchiveDetailWidth}
+                minWidth={LAND_ARCHIVE_DETAIL_MIN_WIDTH}
+                maxWidth={LAND_ARCHIVE_DETAIL_MAX_WIDTH}
+                leftOffsetPx={landArchiveDetailLeftPx}
+                onWidthChange={setLandArchiveDetailWidth}
                 contentClassName="overflow-hidden"
-                serEng={CADASTRAL_RECORD_OPENED_KEY}
+                serEng={LAND_ARCHIVE_OPENED_KEY}
               >
-                <CadastralRecordDetailPanel
-                  key={cadastralRecordId}
-                  recordId={cadastralRecordId}
-                  onClose={() => setCadastralRecordId(null)}
+                <LandArchiveDetailPanel
+                  key={landArchiveId}
+                  recordId={landArchiveId}
+                  onClose={() => setLandArchiveId(null)}
                 />
               </MapSideListPanel>
             </div>

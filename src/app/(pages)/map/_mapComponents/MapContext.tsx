@@ -541,6 +541,9 @@ export type MapContextValue = {
   mapBackgroundMapIdRef: MutableRefObject<string>;
   /** 항공영상 목록 등에서 배경지도 «자체항공영상»을 켠다 */
   setMapBackgroundMapIdRef: MutableRefObject<((id: string) => void) | null>;
+  /** 배경지도 «명칭보기»(다음 하이브리드 타일). 항공영상일 때 켜지고, 아니면 꺼짐 */
+  mapBackgroundLabelVisible: boolean;
+  setMapBackgroundLabelVisible: Dispatch<SetStateAction<boolean>>;
   /** 레이어 행 등록/수정 — 지도 도형 그리기·수정 모드 */
   layerRowGeomEdit: LayerRowGeomEditState;
   setLayerRowGeomEdit: Dispatch<SetStateAction<LayerRowGeomEditState>>;
@@ -883,6 +886,7 @@ export function MapContextProvider({ children }: { children: React.ReactNode }) 
   const [roadCctvExtentWgs84, setRoadCctvExtentWgs84] = useState<RoadCctvExtentWgs84 | null>(null);
   const mapBackgroundMapIdRef = useRef<string>('aerial-2022');
   const setMapBackgroundMapIdRef = useRef<((id: string) => void) | null>(null);
+  const [mapBackgroundLabelVisible, setMapBackgroundLabelVisible] = useState(true);
   const [layerRowGeomEdit, setLayerRowGeomEdit] = useState<LayerRowGeomEditState>(null);
   const layerRowGeomEditWktRef = useRef<string | null>(null);
   const layerRowGeomEditDirtyRef = useRef(false);
@@ -1131,6 +1135,8 @@ export function MapContextProvider({ children }: { children: React.ReactNode }) 
         setRoadCctvExtentWgs84,
         mapBackgroundMapIdRef,
         setMapBackgroundMapIdRef,
+        mapBackgroundLabelVisible,
+        setMapBackgroundLabelVisible,
         layerRowGeomEdit,
         setLayerRowGeomEdit,
         layerRowGeomEditWktRef,

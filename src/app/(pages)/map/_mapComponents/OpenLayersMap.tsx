@@ -50,6 +50,8 @@ import { useMapInstance } from './hooks/useMapInstance';
 import { MapScaleIndicator } from './hooks/MapScaleIndicator';
 import { useMapContext } from './MapContext';
 import { useBackgroundLayer } from './hooks/useBackgroundLayer';
+import { useBackgroundLabelLayer } from './hooks/useBackgroundLabelLayer';
+import { isAerialBackgroundId } from './layerFactory/backgroundLayerFactory';
 import {
   useMapStatePersist,
   loadPersistedMapState,
@@ -110,6 +112,12 @@ import {
   useDetailWondoAvailable,
   withDetailWondoControl,
 } from '../_mapContents/detailWondo/detailWondoControl';
+import { DigitalMapMapControl } from '../_mapContents/digitalMap/DigitalMapMapControl';
+import {
+  DIGITAL_MAP_CONTROL_ID,
+  useDigitalMapAvailable,
+  withDigitalMapControl,
+} from '../_mapContents/digitalMap/digitalMapControl';
 import { MAP_SPLIT_CONTROL_RIGHT_MENU_RESERVE_PX } from './mapSplit/mapSplitTypes';
 import {
   MAP_MEASUREMENTS_RESET_EVENT,
@@ -368,6 +376,7 @@ const MULTI_SELECT_IDS = [
   'map-split',
   'official-land-price',
   DETAIL_WONDO_CONTROL_ID,
+  DIGITAL_MAP_CONTROL_ID,
 ];
 
 /** 서로 배타 — 지도 분할 보조 칸은 한 종류만 */
@@ -711,7 +720,10 @@ export default function OpenLayersMap({
   useEffect(() => {
     const state = loadPersistedMapState(projectName);
     if (state) {
-      if (state.backgroundMap) setSelectedBackgroundMap(state.backgroundMap);
+      if (state.backgroundMap) {
+        setSelectedBackgroundMap(state.backgroundMap);
+        mapContext?.setMapBackgroundLabelVisible?.(isAerialBackgroundId(state.backgroundMap));
+      }
       const skipLayers = shouldSkipPersistedLayerRestore(
         state.systemKey,
         systemKeyFromUrl,
@@ -970,6 +982,15 @@ export default function OpenLayersMap({
 
   // 배경지도 관리
   useBackgroundLayer(mapInstanceRef.current, selectedBackgroundMap);
+  const backgroundLabelVisible = mapContext?.mapBackgroundLabelVisible ?? true;
+  useBackgroundLabelLayer(mapInstanceRef.current, backgroundLabelVisible);
+
+  const syncLabelsToBackground = useCallback(
+    (id: string) => {
+      mapContext?.setMapBackgroundLabelVisible?.(isAerialBackgroundId(id));
+    },
+    [mapContext]
+  );
 
   useEffect(() => {
     const r = mapContext?.mapBackgroundMapIdRef;
@@ -982,6 +1003,7 @@ export default function OpenLayersMap({
     ref.current = (id: string) => {
       setSelectedBackgroundMap(id);
       const ctx = mapContextRef.current;
+      ctx?.setMapBackgroundLabelVisible?.(isAerialBackgroundId(id));
       if (ctx?.mapSplitSecondaryKind === 'map') {
         ctx.setMapSplitSecondaryBackgroundId?.(id);
       }
@@ -1009,6 +1031,7 @@ export default function OpenLayersMap({
 
   const handleBackgroundMapChange = (id: string) => {
     setSelectedBackgroundMap(id);
+    syncLabelsToBackground(id);
     if (mapContext?.mapSplitSecondaryKind === 'map') {
       mapContext?.setMapSplitSecondaryBackgroundId?.(id);
     }
@@ -1016,9 +1039,11 @@ export default function OpenLayersMap({
 
   const handleBackgroundMapLeftChange = (id: string) => {
     setSelectedBackgroundMap(id);
+    syncLabelsToBackground(id);
   };
 
   const handleBackgroundMapRightChange = (id: string) => {
+    syncLabelsToBackground(id);
     mapContext?.setMapSplitSecondaryBackgroundId?.(id);
   };
 
@@ -1805,11 +1830,12 @@ export default function OpenLayersMap({
   const systemKey = systemKeyFromUrl;
   const detailWondoAvailable = useDetailWondoAvailable();
   const [detailWondoCheckedCount, setDetailWondoCheckedCount] = useState(0);
-  const mapControlGroups = useMemo(
-    (): MapControlGroup[] =>
-      withDetailWondoControl(mapControlGroupsForSystem(systemKey), detailWondoAvailable),
-    [systemKey, detailWondoAvailable]
-  );
+  const digitalMapAvailable = useDigitalMapAvailable();
+  const [digitalMapCheckedCount, setDigitalMapCheckedCount] = useState(0);
+  const mapControlGroups = useMemo((): MapControlGroup[] => {
+    const base = mapControlGroupsForSystem(systemKey);
+    return withDigitalMapControl(withDetailWondoControl(base, detailWondoAvailable), digitalMapAvailable);
+  }, [systemKey, detailWondoAvailable, digitalMapAvailable]);
 
   const aerialViewPanelOpen = aerialPanelOpen || isAerialViewPanelExiting;
   const aerialButtonOn = aerialPanelOpen || aerialViewCheckedIds.size > 0;
@@ -3114,6 +3140,7 @@ export default function OpenLayersMap({
           center: [center[0], center[1]],
           zoom,
           backgroundMapId: selectedBackgroundMap,
+          backgroundLabelVisible,
           visibleLayerNames: Array.from(visibleLayerNames),
           activeLayerControls: activeControls.filter((c) => layerControls.includes(c)),
           visibleCadastralLayerNames: visibleCadastralLayerNames
@@ -3145,8 +3172,8 @@ export default function OpenLayersMap({
 
     setOpenSubPanel(null);
 
-    // 체크한 원도가 있으면 패널이 닫혀도 버튼이 켜져 보이므로 실제 패널 열림으로 토글
-    if (id === DETAIL_WONDO_CONTROL_ID) {
+    // 체크한 원도·수치지형도가 있으면 패널이 닫혀도 버튼이 켜져 보이므로 실제 패널 열림으로 토글
+    if (id === DETAIL_WONDO_CONTROL_ID || id === DIGITAL_MAP_CONTROL_ID) {
       setActiveControls((prev) =>
         prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
       );
@@ -3372,6 +3399,8 @@ export default function OpenLayersMap({
                     value={selectedBackgroundMap}
                     onValueChange={handleBackgroundMapChange}
                     splitSelect={backgroundSplitSelect}
+                    labelVisible={backgroundLabelVisible}
+                    onLabelVisibleChange={mapContext?.setMapBackgroundLabelVisible}
                   />
                 </div>
               )}
@@ -3420,6 +3449,17 @@ export default function OpenLayersMap({
                     setActiveControls((prev) => prev.filter((x) => x !== DETAIL_WONDO_CONTROL_ID))
                   }
                   onCheckedCountChange={setDetailWondoCheckedCount}
+                  panelClassName={`${overlayListPointerClass} animate-in fade-in-0 slide-in-from-right-4 duration-[400ms]`}
+                />
+              )}
+
+              {digitalMapAvailable && (
+                <DigitalMapMapControl
+                  panelOpen={activeControls.includes(DIGITAL_MAP_CONTROL_ID)}
+                  onClose={() =>
+                    setActiveControls((prev) => prev.filter((x) => x !== DIGITAL_MAP_CONTROL_ID))
+                  }
+                  onCheckedCountChange={setDigitalMapCheckedCount}
                   panelClassName={`${overlayListPointerClass} animate-in fade-in-0 slide-in-from-right-4 duration-[400ms]`}
                 />
               )}
@@ -3580,9 +3620,14 @@ export default function OpenLayersMap({
                         : activeControls;
                     const withoutAerial = base.filter((id) => id !== 'aerial-view');
                     const withAerial = aerialButtonOn ? [...withoutAerial, 'aerial-view'] : withoutAerial;
-                    return detailWondoCheckedCount > 0 && !withAerial.includes(DETAIL_WONDO_CONTROL_ID)
-                      ? [...withAerial, DETAIL_WONDO_CONTROL_ID]
-                      : withAerial;
+                    let next = withAerial;
+                    if (detailWondoCheckedCount > 0 && !next.includes(DETAIL_WONDO_CONTROL_ID)) {
+                      next = [...next, DETAIL_WONDO_CONTROL_ID];
+                    }
+                    if (digitalMapCheckedCount > 0 && !next.includes(DIGITAL_MAP_CONTROL_ID)) {
+                      next = [...next, DIGITAL_MAP_CONTROL_ID];
+                    }
+                    return next;
                   })()}
                   onItemClick={handleControlClick}
                   onItemRightClick={handleItemRightClick}
