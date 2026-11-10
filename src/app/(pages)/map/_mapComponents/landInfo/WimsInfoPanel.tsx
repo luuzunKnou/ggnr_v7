@@ -12,10 +12,7 @@ import { isSuperUser } from '@/lib/auth/superUser';
 import { cn, copyTextToClipboard } from '@/lib/utils';
 import { useMapContext } from '../MapContext';
 import { MapFloatingPanel } from '../MapFloatingPanel';
-import {
-  COMPLAINT_DETAIL_PANEL_DEFAULT_TOP,
-  COMPLAINT_DETAIL_PANEL_Z_INDEX,
-} from '../complaint/complaintPanelLayout';
+import { COMPLAINT_DETAIL_PANEL_DEFAULT_TOP } from '../complaint/complaintPanelLayout';
 import {
   LAND_INFO_LIST_TD,
   LAND_INFO_LIST_TH,
@@ -878,10 +875,10 @@ export function WimsInfoPanel({
       {selectedRow ? (
         <MapFloatingPanel
           viewport
+          zLayer="detailRelated"
           width={WIMS_DETAIL_FLOAT_WIDTH}
           maxHeight={WIMS_DETAIL_FLOAT_MAX_HEIGHT}
           className="bg-background backdrop-blur-none"
-          style={{ zIndex: COMPLAINT_DETAIL_PANEL_Z_INDEX + 2 }}
           defaultPosition={{
             top: wimsDetailMountTop(),
             right: LAND_INFO_PANEL_MAX_WIDTH_PX + WIMS_DETAIL_FLOAT_GAP_PX,

@@ -3,11 +3,14 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { cn } from '@/lib/utils';
+import {
+  clearMapUiZPanelSelection,
+  MAP_UI_Z_CLASS,
+  selectMapUiZPanel,
+  type MapUiZLayer,
+} from '@/lib/mapUiZIndex';
 
 const DEFAULT_POSITION = { top: 80, right: 80 };
-/** 화면 기준 패널 — 목록·업무 패널·사이드바 위. 전체화면 미리보기(z-500)·이력(z-1200)보다는 아래 */
-const VIEWPORT_Z_INDEX = 120;
-/** 화면 밖으로만 못 나가게 하고 여백은 두지 않는다 (끝까지 붙임) */
 /** 화면 밖으로만 못 나가게 하고, 하단 배치 시 살짝 띄움 */
 const VIEWPORT_EDGE_GAP = 0;
 const VIEWPORT_BOTTOM_GAP = 12;
@@ -31,6 +34,11 @@ export interface MapFloatingPanelProps {
    * 목록·업무 패널 위로 옮길 수 있고, 화면 밖으로는 나가지 않는다.
    */
   viewport?: boolean;
+  /**
+   * standard-utilities.css `.map-ui-z-*` 티어.
+   * 미지정 + viewport면 viewportFloating. 클릭 시 selected(+1).
+   */
+  zLayer?: MapUiZLayer;
 }
 
 export function MapFloatingPanel({
@@ -43,6 +51,7 @@ export function MapFloatingPanel({
   maxHeight = '80vh',
   panelRef,
   viewport = false,
+  zLayer,
 }: MapFloatingPanelProps) {
   const useLeft = defaultPosition.left != null;
   const [position, setPosition] = useState(defaultPosition);
@@ -58,8 +67,20 @@ export function MapFloatingPanel({
     startLeft: 0,
   });
 
+  const resolvedLayer: MapUiZLayer | undefined =
+    zLayer ?? (viewport ? 'viewportFloating' : undefined);
+  const zClass = resolvedLayer ? MAP_UI_Z_CLASS[resolvedLayer] : undefined;
+
+  const bringToFront = useCallback(() => {
+    if (!zClass || !rootRef.current) return;
+    selectMapUiZPanel(rootRef.current);
+  }, [zClass]);
+
   const setRootRef = useCallback(
     (node: HTMLDivElement | null) => {
+      if (rootRef.current && rootRef.current !== node) {
+        clearMapUiZPanelSelection(rootRef.current);
+      }
       rootRef.current = node;
       if (typeof panelRef === 'function') {
         panelRef(node);
@@ -69,6 +90,16 @@ export function MapFloatingPanel({
     },
     [panelRef]
   );
+
+  /** 열릴 때(마운트) selected — 이미 열린 다른 동티어 패널보다 앞으로 */
+  useEffect(() => {
+    if (!zClass) return;
+    const el = rootRef.current;
+    if (el) selectMapUiZPanel(el);
+    return () => {
+      clearMapUiZPanelSelection(rootRef.current);
+    };
+  }, [zClass]);
 
   const clampToViewport = useCallback((next: { top: number; left: number }) => {
     const el = rootRef.current;
@@ -182,11 +213,15 @@ export function MapFloatingPanel({
     return () => window.removeEventListener('resize', onResize);
   }, [viewport, clampToViewport]);
 
+  const { zIndex: _ignoredZ, ...restStyle } = style ?? {};
+
   const panel = (
     <div
       ref={setRootRef}
+      onPointerDownCapture={bringToFront}
       className={cn(
         'flex flex-col rounded-xl border border-border bg-card/95 shadow-2xl backdrop-blur-md overflow-hidden pointer-events-auto',
+        zClass,
         className
       )}
       style={{
@@ -196,8 +231,9 @@ export function MapFloatingPanel({
         width,
         maxWidth: viewport ? '100vw' : '95vw',
         maxHeight,
-        ...(viewport ? { zIndex: VIEWPORT_Z_INDEX } : null),
-        ...style,
+        ...restStyle,
+        // zLayer 미사용·절대 배치만 zIndex 인라인 허용
+        ...(!zClass && _ignoredZ != null ? { zIndex: _ignoredZ } : null),
       }}
     >
       <div

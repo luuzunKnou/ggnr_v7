@@ -14,6 +14,7 @@ import {
 } from '@/app/shadcnComponents/ui/dialog';
 import { call } from '@/lib/api';
 import { cn } from '@/lib/utils';
+import { MAP_UI_Z } from '@/lib/mapUiZIndex';
 import { MapLayergroupBar } from './map-layergroup-bar';
 import {
   getAddressFromCoord,
@@ -101,8 +102,6 @@ const ADDRESS_SEARCH_WIDTH_MAX_PX = 350;
 const ADDRESS_SEARCH_WIDTH_MIN_PX = 200;
 /** 확장 시 예상 너비가 이 값 미만이면 주소·시스템 선택 아이콘만 표시 */
 const ADDRESS_SEARCH_COMPACT_BELOW_PX = 200;
-/** 필지정보(10100)·레이어 그룹(9999)보다 위 — 시스템 선택은 항상 최상단 */
-const SYSTEM_SELECT_DIALOG_Z = 20100;
 /** 우측 시스템선택(텍스트)·아이콘·여백 */
 const SEARCH_BAR_RIGHT_RESERVE_FULL_PX = 380;
 /** 컴팩트 시 우측 아이콘만 예약 */
@@ -1047,7 +1046,7 @@ export function MapSearchBar({
               <Dialog open={systemModalOpen} onOpenChange={handleSystemModalOpenChange}>
                 <DialogContent
                   className="sm:max-w-[380px] p-0 gap-0 overflow-hidden rounded-[10px] border-slate-200/80 shadow-xl dark:border-white/10 dark:bg-black/90"
-                  layerZIndex={SYSTEM_SELECT_DIALOG_Z}
+                  layerZIndex={MAP_UI_Z.systemSelect}
                   showCloseButton={false}
                   onPointerDownOutside={(e) => {
                     if (mustPickSystem) e.preventDefault();

@@ -20,6 +20,7 @@ import {
   XCircle,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { MAP_UI_Z_CLASS } from '@/lib/mapUiZIndex';
 import { zoomPreviewAtPointer } from './previewZoomAtCursor';
 import { ServiceFileExcelPreviewStage } from './ServiceFileExcelPreviewStage';
 import { ServiceFilePdfPreviewStage } from './ServiceFilePdfPreviewStage';
@@ -48,8 +49,6 @@ const MIN_SCALE = 0.25;
 const MAX_SCALE = 5;
 const ZOOM_STEP_WHEEL = 0.18;
 const ZOOM_STEP_BUTTON = 0.35;
-/** 관망·민원 등 플로팅 상세(z≈10050)보다 위 */
-const PREVIEW_Z_INDEX = 11000;
 const SIDEBAR_WIDTH = 240;
 
 function clamp(n: number, min: number, max: number): number {
@@ -675,8 +674,7 @@ export function ServiceFileImagePreview({ items, initialIndex, onClose, indexShe
 
   return createPortal(
     <div
-      className="fixed inset-0 flex flex-col bg-black/92"
-      style={{ zIndex: PREVIEW_Z_INDEX }}
+      className={cn(MAP_UI_Z_CLASS.filePreview, 'fixed inset-0 flex flex-col bg-black/92')}
       role="dialog"
       aria-modal="true"
       aria-label="첨부 미리보기"

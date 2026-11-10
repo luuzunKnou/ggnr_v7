@@ -7,10 +7,8 @@ import { formatDefineFieldDisplayValue } from '@/lib/defineLayerCodeDisplay'
 import { cn } from '@/lib/utils'
 import { MapFloatingPanel } from '../../../_mapComponents/MapFloatingPanel'
 import { useMapContext } from '../../../_mapComponents/MapContext'
-import {
-  COMPLAINT_DETAIL_PANEL_DEFAULT_TOP,
-  COMPLAINT_DETAIL_PANEL_Z_INDEX,
-} from '../../../_mapComponents/complaint/complaintPanelLayout'
+import { COMPLAINT_DETAIL_PANEL_DEFAULT_TOP } from '../../../_mapComponents/complaint/complaintPanelLayout'
+import type { MapUiZLayer } from '@/lib/mapUiZIndex'
 import {
   getDefineFieldDisplayLabel,
   getRowValueByField,
@@ -56,7 +54,7 @@ function FloatingChrome({
   onClose,
   stackOffset,
   left,
-  zIndex,
+  zLayer,
   collapsed,
   onToggleCollapsed,
   children,
@@ -66,7 +64,7 @@ function FloatingChrome({
   onClose: () => void
   stackOffset: number
   left: number
-  zIndex: number
+  zLayer: MapUiZLayer
   collapsed: boolean
   onToggleCollapsed: () => void
   children: ReactNode
@@ -74,10 +72,10 @@ function FloatingChrome({
   return (
     <MapFloatingPanel
       viewport
+      zLayer={zLayer}
       width="420px"
       maxHeight="70vh"
       className="bg-background backdrop-blur-none"
-      style={{ zIndex }}
       defaultPosition={{
         top: COMPLAINT_DETAIL_PANEL_DEFAULT_TOP + stackOffset,
         left,
@@ -254,7 +252,7 @@ export function WtlMappedFacilityFloating({
       onClose={onClose}
       stackOffset={36}
       left={floatingLeftPx}
-      zIndex={COMPLAINT_DETAIL_PANEL_Z_INDEX + 2}
+      zLayer="detailRelated"
       collapsed={collapsed}
       onToggleCollapsed={onToggleCollapsed}
     >
@@ -325,7 +323,7 @@ export function WtlFacilityRelatedDetailFloating({
       onClose={onClose}
       stackOffset={stackOffset}
       left={floatingLeftPx}
-      zIndex={COMPLAINT_DETAIL_PANEL_Z_INDEX + (stackOffset > 0 ? 2 : 0)}
+      zLayer={stackOffset > 0 ? 'detailRelated' : 'detailFloating'}
       collapsed={collapsed}
       onToggleCollapsed={onToggleCollapsed}
     >

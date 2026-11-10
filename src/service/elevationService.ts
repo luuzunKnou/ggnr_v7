@@ -942,6 +942,10 @@ export type WtlPipeInExtent = {
   depthsM?: number[];
   /** 지표 해발(m) — 관 중점 등고 상·하 보간(고도 측정과 동일) */
   surfaceElevM?: number;
+  /** define 목록 표시용 원본 속성(geom 제외) */
+  props?: Record<string, unknown>;
+  /** define_field 테이블명 */
+  fieldsTable?: string;
 };
 
 type PipeDepthSample = { x: number; y: number; depthM: number };
@@ -1210,23 +1214,25 @@ export async function getWtlPipesInExtent(params: {
     depAvgCol ? `${quoteIdent(depAvgCol)} AS dep_avg` : `NULL::double precision AS dep_avg`,
     layCol ? `${quoteIdent(layCol)} AS lay_dep` : `NULL::double precision AS lay_dep`,
   ];
+  const lmGeomName = lmMeta.geomCol.replace(/"/g, '');
 
   try {
     const res = await db.execute(
       sql.raw(
         `WITH hits AS (
            SELECT
-             pip_lbl,
-             saa_cde,
-             std_dip,
-             hgh_dep,
-             low_dep,
+             t.pip_lbl,
+             t.saa_cde,
+             t.std_dip,
+             t.hgh_dep,
+             t.low_dep,
              ${hitExtra.join(',\n             ')},
+             ${propsJsonSql('t', lmGeomName)},
              ST_CollectionExtract(
                ST_MakeValid(ST_Intersection(${lmIn3857}, ${env3857})),
                2
              ) AS clip
-           FROM ${lmFrom}
+           FROM ${lmFrom} t
            WHERE ${lmGeomCol} IS NOT NULL
              AND ST_Intersects(${lmIn3857}, ${env3857})
            LIMIT 300
@@ -1242,6 +1248,7 @@ export async function getWtlPipesInExtent(params: {
            h.std_dep,
            h.dep_avg,
            h.lay_dep,
+           h.props,
            ST_AsGeoJSON(h.clip) AS geojson,
            ${nearestPipDepSql}
          FROM hits h
@@ -1266,6 +1273,7 @@ export async function getWtlPipesInExtent(params: {
         dep_avg?: unknown;
         lay_dep?: unknown;
         nearest_pip_dep?: unknown;
+        props?: unknown;
         geojson?: string;
       };
       const coords = parseLineCoords3857(String(row.geojson ?? ''));
@@ -1288,6 +1296,8 @@ export async function getWtlPipesInExtent(params: {
         diameterM: parseStdDipToMeters(row.std_dip),
         depthM,
         depthsM,
+        props: parseRowProps(row.props),
+        fieldsTable: PIPE_LM_TABLE,
       });
     }
 
@@ -1331,7 +1341,46 @@ export type WtlManholeInExtent = {
   surfaceElevM?: number;
   /** SLD 조건 심볼용 (ftr_cde 등) */
   styleCode?: string;
+  /** define 목록 표시용 원본 속성(geom 제외) */
+  props?: Record<string, unknown>;
+  /** define_field 테이블명 */
+  fieldsTable?: string;
 };
+
+const GEOM_PROP_KEYS = new Set([
+  'geom',
+  'geometry',
+  'the_geom',
+  'wkb_geometry',
+  'shape',
+  'geojson',
+  'clip',
+]);
+
+/** SQL: 행 JSON에서 geom 컬럼 제거 */
+function propsJsonSql(alias: string, geomColRaw: string): string {
+  const g = String(geomColRaw ?? 'geom').replace(/"/g, '').replace(/'/g, "''");
+  return `(to_jsonb(${alias}) - '${g}') AS props`;
+}
+
+function parseRowProps(raw: unknown): Record<string, unknown> | undefined {
+  let obj: unknown = raw;
+  if (typeof raw === 'string') {
+    try {
+      obj = JSON.parse(raw);
+    } catch {
+      return undefined;
+    }
+  }
+  if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return undefined;
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(obj as Record<string, unknown>)) {
+    if (GEOM_PROP_KEYS.has(k.toLowerCase())) continue;
+    if (v != null && typeof v === 'object') continue;
+    out[k] = v;
+  }
+  return Object.keys(out).length ? out : undefined;
+}
 
 /** 상수맨홀 3D 표시용 기본 높이(심도 컬럼 없음) */
 const MANHOLE_DISPLAY_DEPTH_M = 0.4;
@@ -1475,9 +1524,11 @@ export async function getWtlManholesInExtent(params: {
     env3857 = `ST_MakeEnvelope(${x - half}, ${y - half}, ${x + half}, ${y + half}, 3857)`;
   }
 
+  const manhGeomName = meta.geomCol.replace(/"/g, '');
   const selectParts = [
     idCol ? `${quoteIdent(idCol)} AS ftr_idn` : `NULL::text AS ftr_idn`,
     stdCol ? `${quoteIdent(stdCol)} AS man_std` : `NULL::text AS man_std`,
+    propsJsonSql('t', manhGeomName),
     `ST_AsGeoJSON(${in3857}) AS geojson`,
   ];
 
@@ -1486,7 +1537,7 @@ export async function getWtlManholesInExtent(params: {
       sql.raw(
         `SELECT
            ${selectParts.join(',\n           ')}
-         FROM ${from}
+         FROM ${from} t
          WHERE ${geomCol} IS NOT NULL
            AND ST_Intersects(${in3857}, ${env3857})
          LIMIT 500`
@@ -1499,6 +1550,7 @@ export async function getWtlManholesInExtent(params: {
       const row = raw as {
         ftr_idn?: unknown;
         man_std?: unknown;
+        props?: unknown;
         geojson?: string;
       };
       const xy = parsePointCoords3857(String(row.geojson ?? ''));
@@ -1506,13 +1558,15 @@ export async function getWtlManholesInExtent(params: {
       const labelRaw = row.ftr_idn != null ? String(row.ftr_idn).trim() : '';
       pts.push(xy);
       manholes.push({
-        id: `manh-${manholes.length}`,
+        id: `${MANH_TABLE}-${manholes.length}`,
         label: labelRaw || undefined,
         color: readWtlManhPsSymbolColor(),
         x3857: xy[0],
         y3857: xy[1],
         diameterM: Math.max(0.2, parseManStdToMeters(row.man_std)),
         depthM: MANHOLE_DISPLAY_DEPTH_M,
+        props: parseRowProps(row.props),
+        fieldsTable: MANH_TABLE,
       });
     }
 
@@ -1794,6 +1848,7 @@ export async function getWtlLineLayerInExtent(
        ) AS nearest_pip_dep`;
   }
 
+  const lineGeomName = meta.geomCol.replace(/"/g, '');
   const hitSelect = [
     labelCol ? `${quoteIdent(labelCol)} AS pip_lbl` : `NULL::text AS pip_lbl`,
     dipCol ? `${quoteIdent(dipCol)} AS std_dip` : `NULL::double precision AS std_dip`,
@@ -1804,6 +1859,7 @@ export async function getWtlLineLayerInExtent(
     stdDepCol ? `${quoteIdent(stdDepCol)} AS std_dep` : `NULL::double precision AS std_dep`,
     depAvgCol ? `${quoteIdent(depAvgCol)} AS dep_avg` : `NULL::double precision AS dep_avg`,
     depthCol ? `${quoteIdent(depthCol)} AS lay_dep` : `NULL::double precision AS lay_dep`,
+    propsJsonSql('t', lineGeomName),
     `ST_CollectionExtract(
        ST_MakeValid(ST_Intersection(${in3857}, ${extent.env3857})),
        2
@@ -1816,7 +1872,7 @@ export async function getWtlLineLayerInExtent(
         `WITH hits AS (
            SELECT
              ${hitSelect.join(',\n             ')}
-           FROM ${from}
+           FROM ${from} t
            WHERE ${geomCol} IS NOT NULL
              AND ST_Intersects(${in3857}, ${extent.env3857})
            LIMIT 300
@@ -1831,6 +1887,7 @@ export async function getWtlLineLayerInExtent(
            h.std_dep,
            h.dep_avg,
            h.lay_dep,
+           h.props,
            ST_AsGeoJSON(h.clip) AS geojson,
            ${nearestPipDepSql}
          FROM hits h
@@ -1858,6 +1915,7 @@ export async function getWtlLineLayerInExtent(
         dep_avg?: unknown;
         lay_dep?: unknown;
         nearest_pip_dep?: unknown;
+        props?: unknown;
         geojson?: string;
       };
       const coords = parseLineCoords3857(String(row.geojson ?? ''));
@@ -1877,6 +1935,8 @@ export async function getWtlLineLayerInExtent(
         diameterM: Math.max(0.02, parseStdDipToMeters(row.std_dip)),
         depthM,
         depthsM,
+        props: parseRowProps(row.props),
+        fieldsTable: def.table,
       });
     }
 
@@ -1948,6 +2008,7 @@ export async function getWtlPointLayerInExtent(
   const from = `"layer"."${def.table.replace(/"/g, '""')}"`;
   const in3857 = `ST_Transform(${geom}, 3857)`;
 
+  const pointGeomName = meta.geomCol.replace(/"/g, '');
   const selectParts = [
     labelCol ? `${quoteIdent(labelCol)} AS ftr_idn` : `NULL::text AS ftr_idn`,
     dipCol ? `${quoteIdent(dipCol)} AS man_std` : `NULL::text AS man_std`,
@@ -1957,6 +2018,7 @@ export async function getWtlPointLayerInExtent(
     styleCodeCol
       ? `${quoteIdent(styleCodeCol)} AS style_code`
       : `NULL::text AS style_code`,
+    propsJsonSql('t', pointGeomName),
     `ST_AsGeoJSON(${in3857}) AS geojson`,
   ];
 
@@ -1964,7 +2026,7 @@ export async function getWtlPointLayerInExtent(
     const res = await db.execute(
       sql.raw(
         `SELECT ${selectParts.join(',\n           ')}
-         FROM ${from}
+         FROM ${from} t
          WHERE ${geomCol} IS NOT NULL
            AND ST_Intersects(${in3857}, ${extent.env3857})
          LIMIT 500`
@@ -1980,6 +2042,7 @@ export async function getWtlPointLayerInExtent(
         man_std?: unknown;
         pip_dep?: unknown;
         style_code?: unknown;
+        props?: unknown;
         geojson?: string;
       };
       const xy = parsePointCoords3857(String(row.geojson ?? ''));
@@ -2011,6 +2074,8 @@ export async function getWtlPointLayerInExtent(
         diameterM,
         depthM,
         styleCode: styleCode || undefined,
+        props: parseRowProps(row.props),
+        fieldsTable: def.table,
       });
     }
 

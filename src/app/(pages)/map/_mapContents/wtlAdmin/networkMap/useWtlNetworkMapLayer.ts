@@ -204,6 +204,8 @@ export function useWtlNetworkMapLayer({
   const sourcesRef = useRef(mapSources)
   /** 측정·공간그리기·도형편집 등 지도 입력 중에는 레이어 클릭 선택 금지 */
   const drawBlocksClickRef = useRef(false)
+  const suppressIdentifyUntilRef = useRef(mapContext?.suppressMapIdentifyUntilRef)
+  suppressIdentifyUntilRef.current = mapContext?.suppressMapIdentifyUntilRef
   onSelectRef.current = onSelect
   onExtentRef.current = onExtentChange
   onMoveStartRef.current = onMapMoveStart
@@ -267,6 +269,8 @@ export function useWtlNetworkMapLayer({
 
     const onClick = (evt: MapBrowserEvent<PointerEvent>) => {
       if (drawBlocksClickRef.current) return
+      const suppressUntil = suppressIdentifyUntilRef.current?.current ?? 0
+      if (suppressUntil > Date.now()) return
       const keys = [...keysRef.current]
       const sources = [...sourcesRef.current]
       if (keys.length === 0 || sources.length === 0) return

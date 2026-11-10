@@ -145,14 +145,10 @@ export type MapContextValue = {
   serviceWmsStyleByLayer: Record<string, string> | null;
   setServiceWmsStyleByLayer: Dispatch<SetStateAction<Record<string, string> | null>>;
   /** 레이어 목록에서 도형 그리기 요청. OpenLayersMap에서 구독 후 Draw 추가, 완료 시 onComplete 호출 후 null로 초기화 */
-  spatialDrawRequest: {
-    type: 'rectangle' | 'polygon' | 'circle' | 'line';
-    onComplete: (wkt5181: string) => void;
-  } | null;
-  setSpatialDrawRequest: Dispatch<SetStateAction<{
-    type: 'rectangle' | 'polygon' | 'circle' | 'line';
-    onComplete: (wkt5181: string) => void;
-  } | null>>;
+  spatialDrawRequest: import('./hooks/useSpatialDrawOnMap').SpatialDrawRequest;
+  setSpatialDrawRequest: Dispatch<
+    SetStateAction<import('./hooks/useSpatialDrawOnMap').SpatialDrawRequest>
+  >;
   /** 거리/면적 등 측정 도구가 켜져 있는지. OpenLayersMap에서 동기화. 레이어 목록 도형 그리기와 배타 */
   measurementActive: boolean;
   setMeasurementActive: Dispatch<SetStateAction<boolean>>;
@@ -686,10 +682,9 @@ export function MapContextProvider({ children }: { children: React.ReactNode }) 
   const [spatialFilteredLayerNames, setSpatialFilteredLayerNames] = useState<Set<string> | null>(null);
   const [serviceWmsCqlByLayer, setServiceWmsCqlByLayer] = useState<Record<string, string> | null>(null);
   const [serviceWmsStyleByLayer, setServiceWmsStyleByLayer] = useState<Record<string, string> | null>(null);
-  const [spatialDrawRequest, setSpatialDrawRequest] = useState<{
-    type: 'rectangle' | 'polygon' | 'circle' | 'line';
-    onComplete: (wkt5181: string) => void;
-  } | null>(null);
+  const [spatialDrawRequest, setSpatialDrawRequest] = useState<
+    import('./hooks/useSpatialDrawOnMap').SpatialDrawRequest
+  >(null);
   const [measurementActive, setMeasurementActive] = useState(false);
   const [mapMeasureTool, setMapMeasureTool] = useState<
     'distance' | 'area' | 'altitude' | 'slope' | null

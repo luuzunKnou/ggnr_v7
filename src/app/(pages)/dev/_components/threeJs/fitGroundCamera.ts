@@ -13,6 +13,27 @@ import {
 } from './groundSection';
 
 /**
+ * 현재 타깃·거리·높이를 유지한 채 정북(−Z)을 바라보게 회전.
+ * 씬 규약: +X=동, −Z=북 — 카메라는 +Z(남) 쪽에 둠.
+ */
+export function faceNorthView(
+  camera: PerspectiveCamera,
+  orbit: OrbitControls
+): void {
+  const target = orbit.target.clone();
+  const offset = camera.position.clone().sub(target);
+  const horiz = Math.hypot(offset.x, offset.z);
+  const dist = Math.max(horiz, 1);
+  const y = camera.position.y;
+  camera.up.set(0, 1, 0);
+  camera.position.set(target.x, y, target.z + dist);
+  camera.updateProjectionMatrix();
+  orbit.target.copy(target);
+  orbit.update();
+  camera.lookAt(orbit.target);
+}
+
+/**
  * 정면도(정북) — 카메라가 +Z(남)에 있어 −Z(북)를 바라봄.
  * 씬 규약: +X=동, −Z=북.
  */

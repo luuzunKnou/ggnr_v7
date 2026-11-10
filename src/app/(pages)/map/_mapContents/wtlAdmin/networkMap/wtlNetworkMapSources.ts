@@ -259,7 +259,7 @@ export function setWtlNetPhysicalBySource(
   runtimePhysicalBySource = next
 }
 
-/** 논리 레이어 키 → 실제 조회·범례용 물리 테이블 */
+/** 논리 레이어 키 → 실제 조회용 물리 테이블 (범례 SLD는 define_table_name 사용) */
 export function getWtlNetPhysicalTable(
   layerKey: string,
   sourceId?: string | null

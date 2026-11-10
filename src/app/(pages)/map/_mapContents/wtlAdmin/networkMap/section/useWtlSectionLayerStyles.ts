@@ -10,6 +10,9 @@ import {
 } from '@/lib/geoserverStyleUtils'
 import type { SectionFeatureMark } from './wtlNetworkSectionSvg'
 
+/** Chart.js Image pointStyle — canvas 포함(고유 크기 정규화) */
+export type WtlSectionSymbolImg = HTMLImageElement | HTMLCanvasElement
+
 export type WtlSectionLayerStyle = {
   layerKey: string
   strokeColor: string
@@ -18,13 +21,13 @@ export type WtlSectionLayerStyle = {
   fillColor: string
   markSize: number
   /** Chart.js pointStyle용 (로드 성공 시) — 레이어 기본 */
-  symbolImg: HTMLImageElement | null
+  symbolImg: WtlSectionSymbolImg | null
   /** HTML 범례 img src — 레이어 기본 */
   legendSrc: string
   /** ftr_cde 등 코드 → 심볼 (SLD 조건 Rule) */
   symbolByCode: Record<
     string,
-    { symbolImg: HTMLImageElement | null; legendSrc: string }
+    { symbolImg: WtlSectionSymbolImg | null; legendSrc: string }
   >
 }
 
@@ -155,16 +158,43 @@ export function pointRadiusFromMarkSize(markSize: number | undefined): number {
   return Math.min(12, Math.max(6, Math.round(n * 0.45)))
 }
 
-async function resolveSymbolPair(symbolRaw: string): Promise<{
-  symbolImg: HTMLImageElement | null
+/**
+ * Chart.js는 Image/Canvas pointStyle 시 pointRadius를 무시하고
+ * style.width·height(고유 크기)로 drawImage 한다.
+ * width/height 없는 SVG는 브라우저 기본(보통 300px)이라 소방 등이 비정상적으로 커진다.
+ */
+function toChartPointSymbol(
+  img: HTMLImageElement,
+  markSize?: number
+): WtlSectionSymbolImg {
+  const px = Math.max(12, pointRadiusFromMarkSize(markSize) * 2)
+  const w = img.naturalWidth || img.width
+  const h = img.naturalHeight || img.height
+  if (w > 0 && h > 0 && w <= px * 1.25 && h <= px * 1.25) return img
+  if (typeof document === 'undefined') return img
+  const canvas = document.createElement('canvas')
+  canvas.width = px
+  canvas.height = px
+  const ctx = canvas.getContext('2d')
+  if (!ctx) return img
+  ctx.drawImage(img, 0, 0, px, px)
+  return canvas
+}
+
+async function resolveSymbolPair(
+  symbolRaw: string,
+  markSize?: number
+): Promise<{
+  symbolImg: WtlSectionSymbolImg | null
   legendSrc: string
 }> {
   const href = resolveSymbolPreviewUrl(symbolRaw, getGeoServerPublicBase())
   if (!href) return { symbolImg: null, legendSrc: '' }
-  const symbolImg = await loadImage(href)
+  const raw = await loadImage(href)
+  if (!raw) return { symbolImg: null, legendSrc: '' }
   return {
-    symbolImg,
-    legendSrc: symbolImg ? href : '',
+    symbolImg: toChartPointSymbol(raw, markSize),
+    legendSrc: href,
   }
 }
 
@@ -225,7 +255,7 @@ export function useWtlSectionLayerStyles(
             const cases = parseSldConditionalSymbols(body)
             await Promise.all(
               cases.map(async (c) => {
-                const pair = await resolveSymbolPair(c.symbolUrl)
+                const pair = await resolveSymbolPair(c.symbolUrl, markSize)
                 if (!pair.legendSrc && !pair.symbolImg) return
                 symbolByCode[c.value] = pair
               })
@@ -233,11 +263,11 @@ export function useWtlSectionLayerStyles(
           }
 
           // 레이어 기본 심볼 (단일 ExternalGraphic / styleProps.symbolUrl)
-          let symbolImg: HTMLImageElement | null = null
+          let symbolImg: WtlSectionSymbolImg | null = null
           let legendSrc = ''
           const symbolRaw = String(props.symbolUrl ?? '').trim()
           if (symbolRaw) {
-            const pair = await resolveSymbolPair(symbolRaw)
+            const pair = await resolveSymbolPair(symbolRaw, markSize)
             symbolImg = pair.symbolImg
             legendSrc = pair.legendSrc
           } else {

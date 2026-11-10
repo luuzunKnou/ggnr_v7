@@ -165,8 +165,7 @@ function sectionChartExternalTooltip(context: {
 
   const dp = tooltip.dataPoints?.[0]
   const raw = (dp?.raw ?? {}) as SectionTipRaw
-  const bodyText = (tooltip.body ?? [])
-    .flatMap((b) => b.lines)
+  const bodyText = (tooltip.body?.[0]?.lines ?? [])
     .map(escapeHtmlTip)
     .join('<br/>')
 
@@ -1075,39 +1074,31 @@ function CrossSectionChart({
   }
 
   return (
-    <div className="overflow-hidden rounded border-2 border-border bg-background p-2">
-      <div className="flex items-stretch gap-2">
-        <div className="min-w-0 flex-1">
-          <div
-            className="relative z-[2]"
-            style={{
-              height: 420 + elevBounds.bottomPad,
-              minHeight: 420 + elevBounds.bottomPad,
-            }}
-          >
-            <Chart
-              type="scatter"
-              data={chartData}
-              options={options}
-              plugins={[axisFooterPlugin, gapDecorPlugin, insetSyncPlugin]}
-            />
-          </div>
-          <div className="relative z-[1]">
-            <SupplyAreaGanttChart
-              bands={supplyAreaBands}
-              totalLengthM={xmaxForLayout}
-              plotInset={plotInset}
-            />
-          </div>
+    <div className="flex h-full min-h-0 gap-2 overflow-hidden rounded border-2 border-border bg-background p-2">
+      <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col">
+        <div className="relative z-[2] min-h-0 flex-1">
+          <Chart
+            type="scatter"
+            data={chartData}
+            options={options}
+            plugins={[axisFooterPlugin, gapDecorPlugin, insetSyncPlugin]}
+          />
         </div>
-        <SectionFeatureLegendPanel
-          groups={featureLegendGroups}
-          stylesByKey={stylesByKey}
-          hiddenKeys={hiddenKeys}
-          onToggleItem={toggleLegendItem}
-          onToggleLayer={toggleLegendLayer}
-        />
+        <div className="relative z-[1] max-h-[28%] shrink-0 overflow-y-auto">
+          <SupplyAreaGanttChart
+            bands={supplyAreaBands}
+            totalLengthM={xmaxForLayout}
+            plotInset={plotInset}
+          />
+        </div>
       </div>
+      <SectionFeatureLegendPanel
+        groups={featureLegendGroups}
+        stylesByKey={stylesByKey}
+        hiddenKeys={hiddenKeys}
+        onToggleItem={toggleLegendItem}
+        onToggleLayer={toggleLegendLayer}
+      />
     </div>
   )
 }
@@ -1390,7 +1381,7 @@ function LongSectionChart({
       interaction: {
         mode: 'nearest',
         intersect: false,
-        axis: 'x',
+        axis: 'xy',
       },
       plugins: {
         legend: {
@@ -1424,6 +1415,7 @@ function LongSectionChart({
           external: sectionChartExternalTooltip,
           mode: 'nearest',
           intersect: false,
+          axis: 'xy',
           filter: (item) => String(item.dataset.label || '') !== '절단면',
           callbacks: {
             title: () => '',
@@ -1495,15 +1487,12 @@ function LongSectionChart({
   }
 
   return (
-    <div className="overflow-hidden rounded border-2 border-border bg-background p-2">
-      <div className="flex items-stretch gap-2">
-        <div className="min-w-0 flex-1">
-          <div
-            className="relative z-[2]"
-            style={{ height: 420, minHeight: 420 }}
-          >
-            <Chart type="scatter" data={chartData} options={options} />
-          </div>
+    <div className="flex h-full min-h-0 gap-2 overflow-hidden rounded border-2 border-border bg-background p-2">
+      <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col">
+        <div className="relative z-[2] min-h-0 flex-1">
+          <Chart type="scatter" data={chartData} options={options} />
+        </div>
+        <div className="relative z-[1] max-h-[40%] shrink-0 overflow-y-auto">
           <WtlNetworkLongSupplyElevCharts
             ground={ground}
             groundMin={groundMin}
@@ -1513,14 +1502,14 @@ function LongSectionChart({
             totalLengthM={len}
           />
         </div>
-        <SectionFeatureLegendPanel
-          groups={featureLegendGroups}
-          stylesByKey={stylesByKey}
-          hiddenKeys={hiddenKeys}
-          onToggleItem={toggleLegendItem}
-          onToggleLayer={toggleLegendLayer}
-        />
       </div>
+      <SectionFeatureLegendPanel
+        groups={featureLegendGroups}
+        stylesByKey={stylesByKey}
+        hiddenKeys={hiddenKeys}
+        onToggleItem={toggleLegendItem}
+        onToggleLayer={toggleLegendLayer}
+      />
     </div>
   )
 }
@@ -1546,23 +1535,27 @@ export function WtlNetworkSectionChart({
 }) {
   if (mode === 'crossChart') {
     return (
-      <CrossSectionChart
-        ground={ground}
-        features={features}
-        totalLengthM={totalLengthM}
-        supplyAreaBands={supplyAreaBands}
-      />
+      <div className="h-full min-h-0">
+        <CrossSectionChart
+          ground={ground}
+          features={features}
+          totalLengthM={totalLengthM}
+          supplyAreaBands={supplyAreaBands}
+        />
+      </div>
     )
   }
   return (
-    <LongSectionChart
-      ground={ground}
-      groundMin={groundMin}
-      groundMax={groundMax}
-      features={features}
-      totalLengthM={totalLengthM}
-      supplyAreaBands={supplyAreaBands}
-      supplyElevComposition={supplyElevComposition}
-    />
+    <div className="h-full min-h-0">
+      <LongSectionChart
+        ground={ground}
+        groundMin={groundMin}
+        groundMax={groundMax}
+        features={features}
+        totalLengthM={totalLengthM}
+        supplyAreaBands={supplyAreaBands}
+        supplyElevComposition={supplyElevComposition}
+      />
+    </div>
   )
 }

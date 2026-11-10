@@ -1,19 +1,21 @@
 'use client'
 
-import { X } from 'lucide-react'
+import { useState } from 'react'
+import { ChevronUp, X } from 'lucide-react'
 import { MapFloatingPanel } from '../../../../_mapComponents/MapFloatingPanel'
 import { cn } from '@/lib/utils'
 import type { SectionTab } from './useWtlNetworkSection'
-import {
-  WtlNetworkSectionSvg,
-  type SectionFeatureMark,
-  type SectionGroundPt,
-  type SectionSupplyAreaLine,
-  type SectionSupplyBandSegment,
+import type {
+  SectionFeatureMark,
+  SectionGroundPt,
+  SectionSupplyAreaLine,
+  SectionSupplyBandSegment,
 } from './wtlNetworkSectionSvg'
 import type { SectionSupplyElevRow } from './useWtlNetworkSection'
 import { WtlNetworkSectionThreeJsTab } from './WtlNetworkSectionThreeJsTab'
 import { WtlNetworkSectionChart } from './wtlNetworkSectionChart'
+import { SectionFeatureLegendSkeleton } from './wtlNetworkSectionLegend'
+import { SECTION_PANEL_BODY_CLASS } from './wtlNetworkSectionLayout'
 
 type Props = {
   open: boolean
@@ -49,7 +51,7 @@ export function WtlNetworkSectionPanel({
   groundMax = [],
   features,
   totalLengthM,
-  lineLonLat,
+  lineLonLat: _lineLonLat,
   line3857 = null,
   enabledKeys = [],
   supplyAreaLines: _supplyAreaLines = [],
@@ -58,33 +60,41 @@ export function WtlNetworkSectionPanel({
   onClose,
   onRedraw,
 }: Props) {
+  const [collapsed, setCollapsed] = useState(false)
+
   if (!open) return null
 
   const footer =
-    tab === 'cross'
-      ? '횡단: 레거시 횡단면도와 동일(개략 지표면·심도·관경 원). 켜진 레이어만.'
-      : tab === 'long'
-        ? '종단: 밑변=절단선, X=옆면(깊이), 사각형 안 표고·관. 켜진 레이어만.'
-        : tab === 'crossChart'
-          ? '횡단(차트): Chart.js 지형 선·관/시설 점·하단 간트. 켜진 레이어만.'
-          : tab === 'longChart'
-            ? '종단(차트): 지형·관 + 표고별 구역/분구/블록 구성 비율 차트 비교. 켜진 레이어만.'
-            : tab === 'threejs'
-              ? 'ThreeJs: 지형(단면도) + 켜진 레이어 도형으로 CAD 종·횡단 생성.'
-              : '기존: 작업 전 예시 지형 SVG(원본 모달과 동일).'
+    tab === 'crossChart'
+      ? '절단선 방향의 지반고·관로·시설과 급수구역 구성을 봅니다.'
+      : tab === 'longChart'
+        ? '절단 깊이축의 지반고·관로·시설과 표고별 구역·분구·블록 구성을 봅니다.'
+        : '절단 구간 지형과 관로·시설을 3D로 확인합니다.'
 
   return (
     <MapFloatingPanel
       viewport
+      zLayer="detailFloating"
       width="min(1100px, calc(100vw - 2rem))"
       maxHeight="94vh"
       defaultPosition={{ top: 72, right: 24 }}
-      /** 시설목록 상세보기(z=10050)보다 위 */
-      style={{ zIndex: 10100 }}
       className="bg-background backdrop-blur-none"
       header={
-        <div className="flex min-w-0 flex-1 items-center gap-2">
-          <div className="min-w-0 flex-1">
+        <>
+          <button
+            type="button"
+            title={collapsed ? '펼치기' : '접기'}
+            aria-label={collapsed ? '펼치기' : '접기'}
+            aria-expanded={!collapsed}
+            onClick={() => setCollapsed((v) => !v)}
+            className="standard-panel-close mr-2 cursor-pointer"
+          >
+            <ChevronUp
+              className={cn('h-4 w-4', collapsed && 'rotate-180')}
+              aria-hidden
+            />
+          </button>
+          <div className="min-w-0 flex-1 pr-2">
             <div className="truncate text-sm font-semibold text-foreground">단면도</div>
             <div className="truncate text-[11px] text-muted-foreground">
               {lineReady
@@ -102,26 +112,28 @@ export function WtlNetworkSectionPanel({
           </button>
           <button
             type="button"
-            className="inline-flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center rounded text-muted-foreground hover:bg-muted"
+            className="standard-panel-close ml-1 cursor-pointer"
             title="닫기"
             aria-label="닫기"
             onClick={onClose}
           >
             <X className="h-4 w-4" />
           </button>
-        </div>
+        </>
       }
     >
-      <div className="flex min-h-0 flex-1 flex-col">
+      <div
+        className={cn(
+          'flex min-h-0 flex-1 flex-col',
+          collapsed && 'hidden'
+        )}
+      >
         <div className="flex shrink-0 gap-1 border-b border-border px-3 pt-2">
           {(
             [
-              { id: 'cross' as const, label: '횡단면도' },
-              { id: 'long' as const, label: '종단면도' },
-              { id: 'crossChart' as const, label: '횡단면도(차트형태)' },
-              { id: 'longChart' as const, label: '종단면도(차트형태)' },
+              { id: 'crossChart' as const, label: '횡단면도' },
+              { id: 'longChart' as const, label: '종단면도' },
               { id: 'threejs' as const, label: 'ThreeJs' },
-              { id: 'prev' as const, label: '기존' },
             ] as const
           ).map((t) => (
             <button
@@ -141,14 +153,7 @@ export function WtlNetworkSectionPanel({
           ))}
         </div>
 
-        <div
-          className={cn(
-            'min-h-0 flex-1 p-3',
-            tab === 'cross' || tab === 'long'
-              ? 'flex flex-col overflow-hidden'
-              : 'overflow-auto'
-          )}
-        >
+        <div className={cn('overflow-hidden p-3', SECTION_PANEL_BODY_CLASS)}>
           {tab === 'threejs' ? (
             !lineReady || !line3857 || line3857.length < 2 ? (
               <p className="py-10 text-center text-[12px] text-muted-foreground">
@@ -161,18 +166,23 @@ export function WtlNetworkSectionPanel({
               />
             )
           ) : loading ? (
-            <div className="flex min-h-[560px] items-center justify-center">
-              <p className="text-center text-[12px] text-muted-foreground">
-                등고·시설 조회 중…
-              </p>
+            <div className="flex h-full min-h-0 gap-2 overflow-hidden rounded border-2 border-border bg-background p-2">
+              <div className="flex min-h-0 min-w-0 flex-1 items-center justify-center">
+                <p className="text-center text-[12px] text-muted-foreground">
+                  등고·시설 조회 중…
+                </p>
+              </div>
+              <SectionFeatureLegendSkeleton />
             </div>
           ) : error ? (
             <p className="py-10 text-center text-[12px] text-destructive">{error}</p>
           ) : !lineReady ? (
-            <p className="py-10 text-center text-[12px] text-muted-foreground">절단선 데이터가 없습니다.</p>
-          ) : tab === 'crossChart' || tab === 'longChart' ? (
+            <p className="py-10 text-center text-[12px] text-muted-foreground">
+              절단선 데이터가 없습니다.
+            </p>
+          ) : (
             <WtlNetworkSectionChart
-              mode={tab}
+              mode={tab === 'longChart' ? 'longChart' : 'crossChart'}
               ground={ground}
               groundMin={groundMin}
               groundMax={groundMax}
@@ -181,19 +191,6 @@ export function WtlNetworkSectionPanel({
               supplyAreaBands={supplyAreaBands}
               supplyElevComposition={supplyElevComposition}
             />
-          ) : (
-            <div className="flex h-[min(72vh,640px)] min-h-0 w-full flex-col overflow-hidden">
-              <WtlNetworkSectionSvg
-                mode={tab}
-                ground={ground}
-                groundMin={groundMin}
-                groundMax={groundMax}
-                features={features}
-                totalLengthM={totalLengthM}
-                lineLonLat={lineLonLat}
-                supplyAreaBands={supplyAreaBands}
-              />
-            </div>
           )}
         </div>
 

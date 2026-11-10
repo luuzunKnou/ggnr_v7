@@ -290,28 +290,36 @@ function createSideLabelPlane(
   const mat = new THREE.MeshBasicMaterial({
     map: tex,
     transparent: true,
-    depthTest: true,
+    depthTest: false,
     depthWrite: false,
     side: THREE.DoubleSide,
   });
   const mesh = new THREE.Mesh(geo, mat);
-  mesh.position.copy(origin).addScaledVector(outward, outerR + 0.03);
+  // 곡선 관에서 튜브와 교차·끊김 방지 — 바깥으로 띄우고 depthTest off
+  mesh.position.copy(origin).addScaledVector(outward, outerR + 0.08);
   // 관 진행=로컬 X, 바깥=로컬 Z, 위=Y — 옆면에 붙인 글씨
   const xAxis = tangent.clone();
-  xAxis.y = 0;
   if (xAxis.lengthSq() < 1e-10) xAxis.set(1, 0, 0);
   else xAxis.normalize();
-  const zAxis = outward.clone().normalize();
-  const yAxis = new THREE.Vector3().crossVectors(zAxis, xAxis).normalize();
+  // 수평 투영으로 글자가 뒤집히지 않게
+  const xFlat = xAxis.clone();
+  xFlat.y = 0;
+  if (xFlat.lengthSq() > 1e-8) xFlat.normalize();
+  else xFlat.set(1, 0, 0);
+  const zAxis = outward.clone();
+  zAxis.y = 0;
+  if (zAxis.lengthSq() < 1e-10) zAxis.copy(horizontalPerp(xFlat));
+  else zAxis.normalize();
+  const yAxis = new THREE.Vector3().crossVectors(zAxis, xFlat).normalize();
   if (yAxis.lengthSq() < 1e-8) yAxis.set(0, 1, 0);
-  xAxis.crossVectors(yAxis, zAxis).normalize();
-  const basis = new THREE.Matrix4().makeBasis(xAxis, yAxis, zAxis);
+  xFlat.crossVectors(yAxis, zAxis).normalize();
+  const basis = new THREE.Matrix4().makeBasis(xFlat, yAxis, zAxis);
   mesh.setRotationFromMatrix(basis);
   mesh.userData[PIPE_LABEL_KEY] = true;
   mesh.userData[PIPE_MESH_KEY] = true;
   mesh.userData.isEdge = true;
   mesh.raycast = () => {};
-  mesh.renderOrder = 3;
+  mesh.renderOrder = 4;
   return mesh;
 }
 
@@ -359,10 +367,27 @@ function createSideFlowOutline(
     root.add(line);
   }
 
-  // 옆면 라벨 + → (geom 진행 방향)
-  const mid = samples[Math.floor(samples.length / 2)] ?? samples[0];
-  if (mid) {
-    root.add(createSideLabelPlane(labelText, mid.p, mid.t, mid.out, outerR));
+  // 곡선: 가장 긴 구간 중점에서 라벨(꺾임 지점 회피)
+  let best = samples[Math.floor(samples.length / 2)] ?? samples[0];
+  let bestLen = -1;
+  for (let i = 1; i < samples.length; i++) {
+    const a = samples[i - 1]!;
+    const b = samples[i]!;
+    const segLen = a.p.distanceTo(b.p);
+    if (segLen > bestLen) {
+      bestLen = segLen;
+      const t = b.t.clone().add(a.t);
+      if (t.lengthSq() < 1e-10) t.copy(b.t);
+      else t.normalize();
+      best = {
+        p: a.p.clone().lerp(b.p, 0.5),
+        t,
+        out: horizontalPerp(t),
+      };
+    }
+  }
+  if (best) {
+    root.add(createSideLabelPlane(labelText, best.p, best.t, best.out, outerR));
   }
 
   return root;
@@ -401,6 +426,8 @@ export type CreatePipesOverlayOpts = {
    */
   surface?: 'zero' | 'field';
   field?: GroundHeightField | null;
+  /** 호버 툴팁용 레이어 한글명 */
+  layerKorName?: string;
 };
 
 /**
@@ -417,6 +444,7 @@ export function createPipesOverlay(opts: CreatePipesOverlayOpts): THREE.Group {
   const m2p = meterToProjAtY3857(opts.centerY);
   const surfaceMode = opts.surface ?? (opts.field ? 'field' : 'zero');
   const opacity = Math.max(0.05, Math.min(1, opts.opacity ?? 0.92));
+  const layerKor = String(opts.layerKorName ?? '').trim();
   const fallbackColor = opts.color || '#F44336';
   const opaque = opacity >= 0.85;
   const makeMat = (hex: string, side: THREE.Side, inner = false) => {
@@ -500,8 +528,16 @@ export function createPipesOverlay(opts: CreatePipesOverlayOpts): THREE.Group {
       outerMesh.userData[PIPE_MESH_KEY] = true;
       outerMesh.userData.isFill = true;
       outerMesh.userData.pipeId = runId;
+      outerMesh.userData.featureId = pipe.id;
       outerMesh.userData.pipeWallM = wallM;
       outerMesh.userData.pipeInnerR = innerR;
+      outerMesh.userData.tooltipLayer =
+        String(pipe.layerKorName ?? '').trim() || layerKor || '관로';
+      outerMesh.userData.tooltipLabel =
+        (pipe.label && pipe.label.trim()) || pipe.id;
+      outerMesh.userData.tooltipProps = pipe.props ?? null;
+      outerMesh.userData.tooltipFieldsTable =
+        pipe.fieldsTable || null;
       outerMesh.renderOrder = 2;
       root.add(outerMesh);
 
@@ -511,6 +547,7 @@ export function createPipesOverlay(opts: CreatePipesOverlayOpts): THREE.Group {
       innerMesh.userData[PIPE_MESH_KEY] = true;
       innerMesh.userData.isInner = true;
       innerMesh.userData.pipeId = runId;
+      innerMesh.userData.featureId = pipe.id;
       innerMesh.renderOrder = 2;
       root.add(innerMesh);
 
@@ -521,6 +558,13 @@ export function createPipesOverlay(opts: CreatePipesOverlayOpts): THREE.Group {
         (pipe.label && pipe.label.trim()) || '관로'
       );
       side.userData.pipeId = runId;
+      side.userData.featureId = pipe.id;
+      side.userData.isEdge = true;
+      side.traverse((c) => {
+        c.userData.pipeId = runId;
+        c.userData.featureId = pipe.id;
+        c.userData.isEdge = true;
+      })
       root.add(side);
 
       // 심도: 지형↔관 세로 바

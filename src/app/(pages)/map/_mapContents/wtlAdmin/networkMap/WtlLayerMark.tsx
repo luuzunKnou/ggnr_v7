@@ -57,26 +57,27 @@ function wtlLegendStyleName(name: string): string {
 
 type Props = {
   layerKey: string
-  /** 선택 출처 id — 한글명·DB 실데이터 기준 물리 테이블 범례 */
+  /** 선택 출처 id — title용 물리 테이블 조회 */
   sourceId?: string | null
-  /** 서버 resolve 물리 테이블 (있으면 우선) */
+  /** 서버 resolve 물리 테이블 (title 보조, 범례 SLD에는 미사용) */
   physicalTable?: string | null
 }
 
 /** 상수 관망조회 분류 버튼 범례 — 공용 NetworkLayerMark */
 export function WtlLayerMark({ layerKey, sourceId, physicalTable }: Props) {
-  const resolved =
+  // 범례 SLD는 define_table_name(layerKey) 기준.
+  // 물리 remap(parents_layer)을 쓰면 분할 레이어가 부모 SLD로 표시됨.
+  const styleName = wtlLegendStyleName(layerKey)
+  const geomKind = wtlLegendGeomKind(layerKey)
+  const phys =
     String(physicalTable ?? '').trim().toLowerCase() ||
     getWtlNetPhysicalTable(layerKey, sourceId) ||
-    layerKey
-  const styleName = wtlLegendStyleName(resolved)
-  const geomKind = wtlLegendGeomKind(resolved)
-  // 디버그 title — 한글명·물리 테이블
-  const kor = wtlNetKorNameForTable(resolved) || wtlNetKorNameForTable(layerKey)
+    ''
+  const kor = wtlNetKorNameForTable(layerKey) || wtlNetKorNameForTable(phys)
   const title =
-    kor && resolved !== layerKey
-      ? `${kor} (${resolved})`
-      : kor || resolved
+    kor && phys && phys !== layerKey.toLowerCase()
+      ? `${kor} (${layerKey})`
+      : kor || layerKey
 
   return (
     <span title={title} className="inline-flex shrink-0">

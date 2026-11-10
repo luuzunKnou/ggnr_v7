@@ -1,5 +1,5 @@
 import type { ReactNode } from "react"
-import { Settings, Database, Wrench, GitBranch, BarChart3, Box, Book } from "lucide-react"
+import { Settings, Database, Wrench, GitBranch, BarChart3, Box } from "lucide-react"
 import { DbManagerContent } from "./DbManagerContent"
 import { SystemListManager } from "./SystemListManager"
 import { ServiceListManager } from "./ServiceListManager"
@@ -32,7 +32,6 @@ import { ThreeJsContent } from "./ThreeJsContent"
 import { CesiumSplitContent } from "./cesiumSplit/CesiumSplitContent"
 import type { AdminConsoleMenuGroup } from "@/app/(pages)/_components/AdminConsoleLayout"
 import { DEV_CONSOLE_MENUS, type DevConsoleMenuId } from "@/lib/consoleMenuAccess/menus/dev"
-import { InstallManualClient } from "../install-manual/InstallManualClient"
 
 export const DEV_SUBMENUS = DEV_CONSOLE_MENUS
 
@@ -106,12 +105,6 @@ export const DEV_MENU_GROUPS: readonly AdminConsoleMenuGroup[] = [
     icon: Box,
     menuIds: ["threeJs", "cesium"],
   },
-  {
-    id: "manualList",
-    label: "메뉴얼 목록",
-    icon: Book,
-    menuIds: ["installManual"],
-  }
 ]
 
 const SU_ONLY_MENU_IDS = new Set<string>(
@@ -206,8 +199,6 @@ export function getDevMenuDescription(menuId: string): string {
       return "Three.js WebGL 렌더·기능 테스트"
     case "cesium":
       return "왼쪽 Cesium 3D, 오른쪽 2D. Three.js와 같은 레이어 도형을 현재 범위에 표시"
-    case "installManual":
-      return "매뉴얼 수정시 InstallManualClient.tsx 파일을 수정하세요."
     default:
       return `${devMenuLabel(menuId)} 설정 화면입니다. (구현 예정)`
   }
@@ -387,12 +378,6 @@ export function renderDevMenuContent(menuId: string): ReactNode {
       return (
         <div className="flex flex-col overflow-hidden min-h-0 h-[calc(100vh-14rem)]">
           <CesiumSplitContent />
-        </div>
-      )
-    case "installManual":
-      return (
-        <div className="flex flex-col overflow-hidden min-h-0 h-[calc(100vh-14rem)]">
-          <InstallManualClient />
         </div>
       )
     default:

@@ -207,6 +207,7 @@ git config --global user.email "[git 이메일]"`}</CodeBlock>
                   gitignore 파일
                 </h2>
                 <ul className={STEP_LIST}>
+                  <li>git에 아래 파일들이 포함되어 있지 않기 때문에 로컬 또는 원격에서 해당 폴더 가져오는게 필요함.</li>
                   <li>geoserver_modules 내 java, geoserver</li>
                   <li>python</li>
                 </ul>

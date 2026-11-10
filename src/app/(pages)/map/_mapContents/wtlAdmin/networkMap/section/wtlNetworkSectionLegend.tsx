@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { ChevronDown, ChevronRight } from 'lucide-react'
 import type { SectionFeatureMark } from './wtlNetworkSectionSvg'
 import { useWtlSectionLayerStyles } from './useWtlSectionLayerStyles'
+import { SECTION_FEATURE_LEGEND_WIDTH_PX } from './wtlNetworkSectionLayout'
 
 export type LongPipeLegendItem = {
   key: string
@@ -74,6 +75,42 @@ export function legendLabelByFeatureId(
   return map
 }
 
+/** 로딩 중 데이터 범례 자리 — 본문 로딩과 분리 */
+export function SectionFeatureLegendSkeleton({
+  rows = 5,
+}: {
+  rows?: number
+}) {
+  return (
+    <div
+      className="flex h-full min-h-0 shrink-0 flex-col self-stretch overflow-hidden rounded border border-border bg-background"
+      style={{ width: SECTION_FEATURE_LEGEND_WIDTH_PX }}
+      title="데이터 범례"
+      aria-busy
+      aria-label="데이터 범례 불러오는 중"
+    >
+      <div className="shrink-0 border-b-2 border-border bg-muted px-1.5 py-1 text-[10px] font-semibold text-muted-foreground">
+        데이터 범례
+      </div>
+      <div className="min-h-0 flex-1 space-y-2 overflow-hidden bg-background p-2">
+        {Array.from({ length: Math.max(1, rows) }, (_, i) => (
+          <div key={i} className="space-y-1.5">
+            <div className="flex items-center gap-1.5">
+              <div className="h-3.5 w-3.5 shrink-0 animate-pulse rounded bg-muted" />
+              <div className="h-3 flex-1 animate-pulse rounded bg-muted" />
+              <div className="h-3.5 w-3.5 shrink-0 animate-pulse rounded bg-muted" />
+            </div>
+            <div className="ml-5 space-y-1">
+              <div className="h-2.5 w-[88%] animate-pulse rounded bg-muted/80" />
+              <div className="h-2.5 w-[72%] animate-pulse rounded bg-muted/80" />
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 /** 횡·종단 공통 — 레이어/하위 항목 체크박스로 표시 토글 */
 export function SectionFeatureLegendPanel({
   groups,
@@ -81,6 +118,7 @@ export function SectionFeatureLegendPanel({
   hiddenKeys,
   onToggleItem,
   onToggleLayer,
+  onItemClick,
 }: {
   groups: LongPipeLegendGroup[]
   stylesByKey: Record<
@@ -92,13 +130,15 @@ export function SectionFeatureLegendPanel({
       legendSrc: string
       symbolByCode?: Record<
         string,
-        { symbolImg: HTMLImageElement | null; legendSrc: string }
+        { symbolImg: HTMLImageElement | HTMLCanvasElement | null; legendSrc: string }
       >
     }
   >
   hiddenKeys: Set<string>
   onToggleItem: (key: string) => void
   onToggleLayer: (group: LongPipeLegendGroup) => void
+  /** 항목 라벨 클릭(체크와 별도) — ThreeJs 도형 강조 등 */
+  onItemClick?: (key: string) => void
 }) {
   const [collapsedLayers, setCollapsedLayers] = useState<Set<string>>(
     () => new Set()
@@ -117,13 +157,14 @@ export function SectionFeatureLegendPanel({
 
   return (
     <div
-      className="flex w-[180px] shrink-0 flex-col self-stretch overflow-hidden rounded border border-border bg-background"
+      className="flex h-full min-h-0 shrink-0 flex-col self-stretch overflow-hidden rounded border border-border bg-background"
+      style={{ width: SECTION_FEATURE_LEGEND_WIDTH_PX }}
       title="데이터 범례"
     >
       <div className="shrink-0 border-b-2 border-border bg-muted px-1.5 py-1 text-[10px] font-semibold text-muted-foreground">
         데이터 범례
       </div>
-      <div className="min-h-0 max-h-[490px] flex-1 overflow-y-auto bg-background">
+      <div className="min-h-0 flex-1 overflow-y-auto bg-background">
         {groups.map((g, gi) => {
           const allHidden =
             g.items.length > 0 && g.items.every((it) => hiddenKeys.has(it.key))
@@ -245,15 +286,29 @@ export function SectionFeatureLegendPanel({
                               />
                             </svg>
                           )}
-                          <span
-                            className="truncate text-[10px]"
-                            style={{
-                              textDecoration: hidden ? 'line-through' : 'none',
-                            }}
-                            title={it.label}
-                          >
-                            {it.label}
-                          </span>
+                          {onItemClick ? (
+                            <button
+                              type="button"
+                              className="min-w-0 flex-1 cursor-pointer truncate text-left text-[10px] hover:underline"
+                              style={{
+                                textDecoration: hidden ? 'line-through' : undefined,
+                              }}
+                              title={`${it.label} 위치 표시`}
+                              onClick={() => onItemClick(it.key)}
+                            >
+                              {it.label}
+                            </button>
+                          ) : (
+                            <span
+                              className="truncate text-[10px]"
+                              style={{
+                                textDecoration: hidden ? 'line-through' : 'none',
+                              }}
+                              title={it.label}
+                            >
+                              {it.label}
+                            </span>
+                          )}
                         </div>
                         <input
                           type="checkbox"

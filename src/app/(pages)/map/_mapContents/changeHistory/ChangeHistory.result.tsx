@@ -10,6 +10,7 @@ import {
 } from 'react';
 import { CalendarDays } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { MAP_UI_Z_CLASS } from '@/lib/mapUiZIndex';
 import { Button } from '@/app/shadcnComponents/ui/button';
 import {
   Dialog,
@@ -46,7 +47,6 @@ import type { OrthophotoTileOutputsPayload } from '@/app/(pages)/map/_mapCompone
 const RESULT_MODAL_WIDTH = 'min(1100px, calc(100vw - 2rem))';
 /** 필지분석 결과 모달과 동일 — 고정 높이 */
 const RESULT_MODAL_HEIGHT = 'min(720px, 85vh)';
-const RESULT_MODAL_Z = 'z-[1300]';
 const OUTSIDE_CLICK_MOVE_THRESHOLD_PX = 6;
 /** 시점·당일 diff 조회 상한 — hung API 시 스피너 무한 방지 */
 const CHANGE_HISTORY_ASOF_TIMEOUT_MS = 90_000;
@@ -757,7 +757,7 @@ function ChangeHistoryResultBody() {
       <>
         <ChangeHistoryPreparingModal open={preparing} onCancel={closeResult} />
         {!preparing && !event ? (
-          <div className={cn('pointer-events-none fixed inset-0', RESULT_MODAL_Z)}>
+          <div className={cn('pointer-events-none fixed inset-0', MAP_UI_Z_CLASS.resultModal)}>
             <div
               className="pointer-events-auto absolute inset-0 bg-black/50"
               aria-hidden
@@ -811,7 +811,7 @@ function ChangeHistoryResultBody() {
     'h-7 w-full rounded border border-border bg-background px-1.5 text-[11px] text-foreground';
 
   return (
-    <div className={cn('pointer-events-none fixed inset-0', RESULT_MODAL_Z)}>
+    <div className={cn('pointer-events-none fixed inset-0', MAP_UI_Z_CLASS.resultModal)}>
       <div
         className="pointer-events-auto absolute inset-0 bg-black/50"
         aria-hidden

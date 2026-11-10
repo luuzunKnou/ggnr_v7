@@ -55,6 +55,7 @@ import {
 } from './WtlNetworkExportMenu'
 import { flyToWtlNetworkGeom } from './wtlNetworkMapFly'
 import { WtlNetworkSectionPanel } from './section/WtlNetworkSectionPanel'
+import { WtlNetworkSectionDrawGuide } from './section/WtlNetworkSectionDrawGuide'
 import { useWtlNetworkSection } from './section/useWtlNetworkSection'
 import { WtlLayerMark } from './WtlLayerMark'
 import { getWtlNetLayerDef, isWtlNetZoneLayerKey } from './wtlNetworkLayerCatalog'
@@ -87,10 +88,9 @@ const RESULT_MAX = 680
 const LIST_PAGE_SIZE = 7
 /** 목록 표 — 행 7개 이상일 때만 적용 (미만은 내용 높이) */
 const LIST_TABLE_MIN_HEIGHT_PX = 206
-/** 시설 상세 플로팅 모달. 단면도(10100)보다 아래 */
+/** 시설 상세 플로팅 모달 — 민원형 상세와 동일 티어(클릭 시 앞으로) */
 const DETAIL_MODAL_WIDTH = 'min(600px, calc(100vw - 2rem))'
 const DETAIL_MODAL_MAX_HEIGHT = '92vh'
-const DETAIL_MODAL_Z_INDEX = 10050
 
 type LayerBoxSlot = {
   key: string
@@ -2084,7 +2084,13 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
         }
         const isZone = label === '구역설정'
         const isSection = label === '단면도'
-        const title = isZone ? zoneToolLabel : isSection && section.drawing ? '단면취소' : label
+        const sectionActive =
+          section.modePickerOpen || section.drawing || section.panelOpen
+        const title = isZone
+          ? zoneToolLabel
+          : isSection && section.drawing
+            ? '단면취소'
+            : label
         return (
           <button
             key={label}
@@ -2092,7 +2098,7 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
             title={title}
             className={cn(
               'flex h-7 min-w-0 flex-1 cursor-pointer items-center justify-center whitespace-nowrap rounded-[5px] px-0.5 text-[11px] font-semibold leading-none',
-              (isZone && (zoneDrawing || zoneWkt5181)) || (isSection && (section.drawing || section.panelOpen))
+              (isZone && (zoneDrawing || zoneWkt5181)) || (isSection && sectionActive)
                 ? 'bg-[#14607a] text-white hover:bg-[#0f4d62] dark:bg-[#d7ebf1] dark:text-[#14607a] dark:hover:bg-[#c5e3eb]'
                 : 'bg-[#d7ebf1] text-[#14607a] hover:bg-[#c5e3eb] dark:bg-[#14607a] dark:text-[#d7ebf1] dark:hover:bg-[#0f4d62]'
             )}
@@ -2596,6 +2602,7 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
       <NetworkDetailModal
         item={selected}
         expandToken={detailExpandToken}
+        showFieldKeys={showFieldKeys}
         anchorLeftPx={leftOffsetPx + listWidth + (resultOpen ? resultWidth : 0) + 8}
         onClose={() => setSelected(null)}
         onRelatedMapLayer={handleDetailRelatedLayer}
@@ -2622,6 +2629,19 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
             return changed ? out : prev
           })
         }}
+      />
+      <WtlNetworkSectionDrawGuide
+        open={section.modePickerOpen || section.drawing}
+        drawMode={section.drawMode}
+        drawing={section.drawing}
+        pendingReady={section.pendingReady}
+        canUndoLast={section.canUndoLast}
+        message={section.guideMessage}
+        onChoose={section.chooseDrawMode}
+        onUndoLast={section.undoLastVertex}
+        onApply={section.applyPendingLine}
+        onRespecify={section.respecifyCutLine}
+        onCancel={section.cancelDraw}
       />
       <WtlNetworkSectionPanel
         open={section.panelOpen}
@@ -2651,6 +2671,7 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
 function NetworkDetailModal({
   item,
   expandToken = 0,
+  showFieldKeys = false,
   anchorLeftPx,
   onClose,
   onRelatedMapLayer,
@@ -2659,6 +2680,8 @@ function NetworkDetailModal({
   item: WtlNetworkRow | null
   /** 지도 클릭마다 증가 — 접힌 상세를 펼침. 목록 선택은 올리지 않음 */
   expandToken?: number
+  /** 슈퍼유저·개발자 콘솔 — 시설목록과 동일: HTML title에만 영문 필드·코드 원문 괄호 */
+  showFieldKeys?: boolean
   /** 시설목록 패널 오른쪽 끝 */
   anchorLeftPx: number
   onClose: () => void
@@ -2759,7 +2782,11 @@ function NetworkDetailModal({
   type AttrRow = {
     key: string
     label: string
+    /** HTML title — 슈퍼유저일 때 영문 필드명 괄호 */
+    labelTitle: string
     value: string
+    /** HTML title — 슈퍼유저·코드형일 때 원문 괄호 */
+    valueTitle: string
     readOnly: boolean
     editable: boolean
     title: boolean
@@ -2772,7 +2799,9 @@ function NetworkDetailModal({
     if (record && detailFields.length > 0) {
       return (detailFields as FieldEditMeta[]).map((f, i) => {
         const key = String(f.define_field_name ?? '').trim()
+        const kor = String(f.define_field_kor_name ?? '').trim()
         const label = getDefineFieldDisplayLabel(key, f.define_field_kor_name)
+        const labelTitle = dualTitle(kor || label, key, showFieldKeys)
         const raw = getRowValueByField(record, key)
         const value = formatDefineFieldDisplayValue(
           raw,
@@ -2780,6 +2809,13 @@ function NetworkDetailModal({
           codesByField[key.toLowerCase()],
           '—'
         )
+        let valueTitle = value
+        if (showFieldKeys && isDefineFieldCodeType(f.define_field_type)) {
+          const rawText = formatDetailScalarValue(raw, { empty: '—', asLiteral: true })
+          if (rawText !== '—' && value !== '—' && rawText !== value) {
+            valueTitle = value + ' (' + rawText + ')'
+          }
+        }
         const isKey = Boolean(
           key && keyFieldName && key.toLowerCase() === keyFieldName.toLowerCase()
         )
@@ -2790,7 +2826,9 @@ function NetworkDetailModal({
         return {
           key: key || `f-${i}`,
           label,
+          labelTitle,
           value,
+          valueTitle,
           readOnly,
           editable: Boolean(key) && !readOnly,
           title: isDefineFieldFlagTrue(f.define_field_show_title),
@@ -2800,33 +2838,41 @@ function NetworkDetailModal({
     if (record) {
       return Object.entries(record)
         .filter(([k]) => !isGeomLikeDefineFieldName(k) && k.toLowerCase() !== 'gid')
-        .map(([k, v], i) => ({
-          key: k || `auto-${i}`,
-          label: getDefineFieldDisplayLabel(k),
-          value: formatDefineFieldDisplayValue(v, undefined, undefined, '—'),
-          readOnly: true,
-          editable: false,
-          title: false,
-        }))
+        .map(([k, v], i) => {
+          const label = getDefineFieldDisplayLabel(k)
+          const value = formatDefineFieldDisplayValue(v, undefined, undefined, '—')
+          return {
+            key: k || `auto-${i}`,
+            label,
+            labelTitle: dualTitle(label, k, showFieldKeys),
+            value,
+            valueTitle: value,
+            readOnly: true,
+            editable: false,
+            title: false,
+          }
+        })
     }
     if (item.attrs?.length) {
       return item.attrs.map((a, i) => ({
         key: `${a.label}-${i}`,
         label: a.label,
+        labelTitle: a.label,
         value: a.value,
+        valueTitle: a.value,
         readOnly: true,
         editable: false,
         title: false,
       }))
     }
     return [
-      { key: 'name', label: '관리번호', value: item.name, readOnly: true, editable: false, title: false },
-      { key: 'diameter', label: '구경', value: item.diameter, readOnly: true, editable: false, title: false },
-      { key: 'material', label: '재질', value: item.material, readOnly: true, editable: false, title: false },
-      { key: 'length', label: '연장', value: item.length, readOnly: true, editable: false, title: false },
-      { key: 'year', label: '설치연도', value: item.year, readOnly: true, editable: false, title: false },
+      { key: 'name', label: '관리번호', labelTitle: '관리번호', value: item.name, valueTitle: item.name, readOnly: true, editable: false, title: false },
+      { key: 'diameter', label: '구경', labelTitle: '구경', value: item.diameter, valueTitle: item.diameter, readOnly: true, editable: false, title: false },
+      { key: 'material', label: '재질', labelTitle: '재질', value: item.material, valueTitle: item.material, readOnly: true, editable: false, title: false },
+      { key: 'length', label: '연장', labelTitle: '연장', value: item.length, valueTitle: item.length, readOnly: true, editable: false, title: false },
+      { key: 'year', label: '설치연도', labelTitle: '설치연도', value: item.year, valueTitle: item.year, readOnly: true, editable: false, title: false },
     ]
-  }, [item, detailFields, codesByField, fieldsLoading, keyFieldName])
+  }, [item, detailFields, codesByField, fieldsLoading, keyFieldName, showFieldKeys])
 
   const beginEdit = useCallback(() => {
     if (!canEdit || !item?.record) return
@@ -2941,7 +2987,7 @@ function NetworkDetailModal({
           className="standard-detail-input h-6 w-full min-w-0"
           value={draft[row.key] ?? ''}
           disabled={saving}
-          title={row.label}
+          title={row.labelTitle}
           onChange={(e) =>
             setDraft((prev) => ({
               ...prev,
@@ -2960,11 +3006,11 @@ function NetworkDetailModal({
   return (
     <MapFloatingPanel
       viewport
+      zLayer="detailFloating"
       width={DETAIL_MODAL_WIDTH}
       maxHeight={DETAIL_MODAL_MAX_HEIGHT}
       defaultPosition={{ top: 72, left: anchorLeftPx }}
       className="bg-background backdrop-blur-none"
-      style={{ zIndex: DETAIL_MODAL_Z_INDEX }}
       header={
         <>
           <button
@@ -3023,26 +3069,32 @@ function NetworkDetailModal({
             ) : attrRows.length === 0 ? (
               <p className="standard-detail-attr-empty">표시할 속성이 없습니다.</p>
             ) : (
-              <div className="standard-detail-attr-table">
-                {attrRows.map((row) => (
-                  <div key={row.key} className="contents">
-                    <div title={ true ? `${row.label} (${row.key})`: row.label} className="standard-detail-attr-label standard-detail-attr-cell-border">
-                      {row.label}
-                    </div>
-                    <div
-                      className={cn(
-                        'standard-detail-attr-value standard-detail-attr-cell-border',
-                        row.title && !editing
-                          ? 'standard-detail-attr-value-title'
-                          : 'text-foreground'
-                      )}
-                      title={editing && row.editable ? row.label : row.value}
-                    >
-                      {renderCellValue(row)}
-                    </div>
-                  </div>
-                ))}
-              </div>
+              <table className="standard-detail-attr-table">
+                <tbody>
+                  {attrRows.map((row) => (
+                    <tr key={row.key}>
+                      <th
+                        scope="row"
+                        className="standard-detail-attr-label standard-detail-attr-cell-border"
+                        title={row.labelTitle}
+                      >
+                        {row.label}
+                      </th>
+                      <td
+                        className={cn(
+                          'standard-detail-attr-value standard-detail-attr-cell-border',
+                          row.title && !editing
+                            ? 'standard-detail-attr-value-title'
+                            : 'text-foreground'
+                        )}
+                        title={editing && row.editable ? row.labelTitle : row.valueTitle}
+                      >
+                        {renderCellValue(row)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             )}
             {editError ? (
               <p className="standard-detail-error mt-2" role="alert">
