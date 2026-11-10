@@ -83,7 +83,7 @@ const actionBtnDanger =
   'standard-detail-action-btn-danger inline-flex h-7 items-center gap-1';
 const BORDER = 'border-[1px] border-solid border-foreground/80';
 /** 표 헤더 — muted(#f5f5f5)와 구분되는 연한 청회색 */
-const FORM_TH_BG = 'bg-[#E4E9F0] dark:bg-zinc-600';
+const FORM_TH_BG = 'bg-[#F5F5F5] dark:bg-zinc-600';
 const PAPER_SIZE_LABEL = '364mm × 257mm [백상지 200g/m²]';
 /** 원본 서식 건축물 내용 칸 수 */
 const FORM_DETAIL_MIN_ROWS = 5;
@@ -1594,7 +1594,7 @@ export function RoadFrontageBuildingDetailPanel({
 
       <MapSideDetailScroll className="standard-detail-scroll">
         <div className="rfb-form-print-root text-xs">
-        <div className="rfb-print-page">
+        <div className="rfb-print-page rounded-sm border border-border bg-background p-3 shadow-sm">
         <div className="mb-0 flex items-start justify-between gap-2 text-[10px] leading-none text-muted-foreground">
           <span>■ 도로법 시행규칙 [별지 제17호서식]</span>
           <span className="shrink-0">(2쪽 중 제1쪽)</span>
@@ -1991,7 +1991,7 @@ export function RoadFrontageBuildingDetailPanel({
         </div>
         </div>
 
-        <section className="rfb-print-page rfb-print-page-drawings mt-3 pb-1">
+        <section className="rfb-print-page rfb-print-page-drawings mt-3 rounded-sm border border-border bg-background p-3 shadow-sm">
           <div className="mb-0.5 flex items-center justify-end text-[10px] leading-none text-muted-foreground">
             <span>(2쪽 중 제2쪽)</span>
           </div>

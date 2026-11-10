@@ -10,7 +10,7 @@ import WKT from 'ol/format/WKT';
 import { compareFeaturesByGeometryStackOrder } from '@/lib/mapLayerGeometryOrder';
 
 export type SpatialDrawRequest = {
-  type: 'rectangle' | 'polygon' | 'circle';
+  type: 'rectangle' | 'polygon' | 'circle' | 'line';
   onComplete: (wkt5181: string) => void;
 } | null;
 
@@ -39,12 +39,20 @@ export function useSpatialDrawOnMap(
     layer.set('mapSplitNoMirror', true);
 
     const { type, onComplete } = spatialDrawRequest;
+    // line: 두 점 직선(시작·끝). 다각형·다점 폴리라인 아님.
     const draw =
       type === 'rectangle'
         ? new Draw({ source, type: 'Circle', geometryFunction: createBox(), stopClick: true })
         : type === 'polygon'
           ? new Draw({ source, type: 'Polygon', stopClick: true })
-          : new Draw({ source, type: 'Circle', stopClick: true });
+          : type === 'line'
+            ? new Draw({
+                source,
+                type: 'LineString',
+                maxPoints: 2,
+                stopClick: true,
+              })
+            : new Draw({ source, type: 'Circle', stopClick: true });
 
     const onDrawEnd = (e: unknown) => {
       const evt = e as { feature: { getGeometry(): import('ol/geom').Geometry } };

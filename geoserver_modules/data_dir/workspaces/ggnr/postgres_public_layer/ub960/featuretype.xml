@@ -1,0 +1,41 @@
+<featureType>
+  <id>FeatureTypeInfoImpl-6e125944:1a17ff3f0fb:-7b74</id>
+  <name>ub960</name>
+  <nativeName>ub960</nativeName>
+  <namespace>
+    <id>NamespaceInfoImpl-4bf97568:19c4d6c3053:-7ffa</id>
+  </namespace>
+  <title>ub960</title>
+  <keywords>
+    <string>features</string>
+    <string>ub960</string>
+  </keywords>
+  <srs>EPSG:5181</srs>
+  <nativeBoundingBox>
+    <minx>352337.84797504</minx>
+    <maxx>352798.85380698</maxx>
+    <miny>317583.07778772</miny>
+    <maxy>318195.642063</maxy>
+    <crs class="projected">EPSG:5181</crs>
+  </nativeBoundingBox>
+  <latLonBoundingBox>
+    <minx>128.69690175557963</minx>
+    <maxx>128.70215501798467</maxx>
+    <miny>36.344200102164116</miny>
+    <maxy>36.34979100839468</maxy>
+    <crs>EPSG:4326</crs>
+  </latLonBoundingBox>
+  <projectionPolicy>FORCE_DECLARED</projectionPolicy>
+  <enabled>true</enabled>
+  <store class="dataStore">
+    <id>DataStoreInfoImpl-4bf97568:19c4d6c3053:-7ff8</id>
+  </store>
+  <serviceConfiguration>false</serviceConfiguration>
+  <maxFeatures>0</maxFeatures>
+  <numDecimals>0</numDecimals>
+  <padWithZeros>false</padWithZeros>
+  <forcedDecimal>false</forcedDecimal>
+  <overridingServiceSRS>false</overridingServiceSRS>
+  <skipNumberMatched>false</skipNumberMatched>
+  <circularArcPresent>false</circularArcPresent>
+</featureType>

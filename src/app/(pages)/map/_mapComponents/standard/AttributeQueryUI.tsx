@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useLayoutEffect, useMemo, useCallback, useRef } from 'react';
 import { call } from '@/lib/api';
+import { compareDefineTableOrder } from '@/lib/defineTableOrder';
 import {
   ChevronDown,
   ChevronRight,
@@ -318,7 +319,12 @@ export function AttributeQueryUI({ activeTableName, onOpenDataPanel, onClearData
   useEffect(() => {
     let cancelled = false;
     const dbPromise = call('', 'POST', { service: 'devTestService', action: 'getLayerTableList', params: {} });
-    const metaPromise = fetch('/api/config/defineLayer').then((r) => r.json());
+    /** 레이어 설정 순서·프로젝트 분할 idx — 지하시설물과 동일 소스 */
+    const metaPromise = call('', 'POST', {
+      service: 'devTestService',
+      action: 'getDefineLayerTables',
+      params: {},
+    });
     const sysAllPromise = call('', 'POST', {
       service: 'configService',
       action: 'getSystemListAll',
@@ -391,7 +397,15 @@ export function AttributeQueryUI({ activeTableName, onOpenDataPanel, onClearData
           define_table_parents_layer?: string;
           define_table_div_query?: string;
         };
-        const metaArr: TableMeta[] = Array.isArray(metaRes?.data) ? metaRes.data : [];
+        const metaPayload = (metaRes?.data ?? metaRes) as {
+          success?: boolean;
+          tables?: TableMeta[];
+        };
+        const metaArr: TableMeta[] = Array.isArray(metaPayload?.tables)
+          ? metaPayload.tables
+          : Array.isArray(metaPayload)
+            ? (metaPayload as TableMeta[])
+            : [];
 
         const metaMap = new Map<string, TableMeta>();
         for (const m of metaArr) {
@@ -469,7 +483,14 @@ export function AttributeQueryUI({ activeTableName, onOpenDataPanel, onClearData
           .map((gName) => ({
             id: gName,
             name: gName,
-            layers: groupMap.get(gName)!.sort((a, b) => a.name.localeCompare(b.name)),
+            layers: groupMap.get(gName)!.sort((a, b) =>
+              compareDefineTableOrder(
+                metaMap.get(a.tableName.toLowerCase())?.define_table_idx,
+                a.name,
+                metaMap.get(b.tableName.toLowerCase())?.define_table_idx,
+                b.name,
+              ),
+            ),
           }))
           .filter((g) => g.layers.length > 0);
 

@@ -3,7 +3,7 @@ import type Map from "ol/Map";
 import { refreshServiceWmsLayer } from "../../../_mapComponents/layerFactory/serviceLayerFactory";
 import type {
   RoadNetworkOpenStatusFilter,
-  RoadNetworkTypeFilter,
+  RoadNetworkTypeSelection,
 } from "./roadNetworkMock";
 import { ROAD_NETWORK_UNIFIED_LS, ROAD_NETWORK_UNIFIED_PS } from "./roadNetworkGrade";
 import {
@@ -23,7 +23,7 @@ type SetCqlByLayer = Dispatch<SetStateAction<Record<string, string> | null>>;
 export function ensureRoadNetworkWmsLayers(
   setVisibleLayerNames: SetVisible | null | undefined,
   opts: {
-    typeFilter: RoadNetworkTypeFilter;
+    typeFilter: RoadNetworkTypeSelection;
     openStatusFilter: RoadNetworkOpenStatusFilter;
     /** 통합 모드 노선번호 표지 표시 (기본 표시) */
     showSigns?: boolean;
@@ -86,6 +86,25 @@ export function syncRoadNetworkUnifiedCql(
 export function clearRoadNetworkUnifiedCql(setCql: SetCqlByLayer | null | undefined): void {
   if (!setCql) return;
   patchUnifiedCql(setCql, null, null);
+}
+
+/** 레이어별 CQL 반영 (null이면 해당 레이어 조건 해제) */
+export function syncRoadNetworkLayerCql(
+  setCql: SetCqlByLayer | null | undefined,
+  cqlByLayer: Record<string, string | null>
+): void {
+  if (!setCql) return;
+  setCql((prev) => {
+    const cur = prev ?? {};
+    const entries = Object.entries(cqlByLayer);
+    if (entries.every(([id, cql]) => (cur[id] ?? null) === cql)) return prev;
+    const next = { ...cur };
+    for (const [id, cql] of entries) {
+      if (cql) next[id] = cql;
+      else delete next[id];
+    }
+    return Object.keys(next).length === 0 ? null : next;
+  });
 }
 
 /** 도로망도 패널 종료 시 WMS 끄기 */

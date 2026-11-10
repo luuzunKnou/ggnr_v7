@@ -39,7 +39,7 @@ export function MemoDetailPanel({
   onDeleted,
 }: Props) {
   const mapContext = useMapContext();
-  const canWrite = useSerWriteAccess("memo");
+  const canWrite = useSerWriteAccess();
   const { data: session } = useSession();
   const isCreateMode = mode === "add";
   const parsed = isCreateMode ? null : parseMemoRowKey(detailId);

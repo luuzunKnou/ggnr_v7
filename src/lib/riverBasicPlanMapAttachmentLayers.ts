@@ -86,7 +86,7 @@ export function riverBasicPlanHdDefineTable(tab: RiverBasicPlanTab): string {
   return tab === 'smallRiver' ? 'river_plan_s_hd_lm' : 'river_plan_hd_lm';
 }
 
-/** 탭별 제방(선) — 구조물도에 함께 표시 */
+/** 탭별 제방(선) — 사업계획 모드에서만 WMS 표시 */
 export function riverBasicPlanJbDefineTable(tab: RiverBasicPlanTab): string {
   return tab === 'smallRiver' ? 'river_plan_s_jb_lm' : 'river_d_plan_jb_lm';
 }
@@ -111,7 +111,11 @@ export function riverBasicPlanGdWmsDefineTables(tab: RiverBasicPlanTab): readonl
   return RIVER_PLAN_GD_STRUCTURE_DEFINE_TABLES.filter((n) => n !== parent);
 }
 
-/** 목록에서 하천 선택 시 WMS에 river_name 조건을 걸 수 있는 define_table_name */
+/**
+ * 목록·탭에서 기본으로 켤 WMS 레이어 (river_name CQL 가능).
+ * 구조물은 상세 «구조물도»와 동일 — 지방은 색상 분할 자식만(부모 river_plan_gd_ps 제외).
+ * 부모를 켜면 흰 점(…) 스타일이 나와 처음부터 색상 구조물로 보이게 자식만 켠다.
+ */
 export function riverBasicPlanRiverNameFilterableLayers(tab: RiverBasicPlanTab): readonly string[] {
   if (tab === 'smallRiver') {
     return [
@@ -120,7 +124,7 @@ export function riverBasicPlanRiverNameFilterableLayers(tab: RiverBasicPlanTab):
       'river_plan_s_jd_lm',
       'river_plan_s_hd_lm',
       riverBasicPlanJbDefineTable('smallRiver'),
-      ...RIVER_PLAN_S_GD_STRUCTURE_DEFINE_TABLES,
+      ...riverBasicPlanGdWmsDefineTables('smallRiver'),
     ];
   }
   return [
@@ -129,7 +133,7 @@ export function riverBasicPlanRiverNameFilterableLayers(tab: RiverBasicPlanTab):
     'river_plan_jd_lm',
     'river_plan_hd_lm',
     riverBasicPlanJbDefineTable('river'),
-    ...RIVER_PLAN_GD_STRUCTURE_DEFINE_TABLES,
+    ...riverBasicPlanGdWmsDefineTables('river'),
   ];
 }
 
@@ -178,6 +182,31 @@ export function buildRiverBasicPlanMapCqlByLayer(
       asParts.push(`plan_len=${cqlQuote(planLen)}`);
     }
   }
+  out[riverBasicPlanAsDefineTable(tab)] = asParts.join(' AND ');
+  return out;
+}
+
+/**
+ * 보고서 하나에 속한 여러 하천을 함께 보여 줄 레이어별 CQL.
+ * 기본계획(AS)은 그 보고서(연도·계획명)만 남겨, 같은 하천의 다른 보고서 구역은 보이지 않게 함.
+ */
+export function buildRiverBasicPlanReportRiversCqlByLayer(
+  tab: RiverBasicPlanTab,
+  riverNames: readonly string[],
+  plan: { planYear?: string; planName?: string }
+): Record<string, string> | null {
+  const names = [...new Set(riverNames.map((n) => String(n ?? '').trim()).filter(Boolean))];
+  if (names.length === 0) return null;
+  const riverCql = `river_name IN (${names.map(cqlQuote).join(',')})`;
+  const out: Record<string, string> = {};
+  for (const layer of riverBasicPlanRiverNameFilterableLayers(tab)) {
+    out[layer] = riverCql;
+  }
+  const asParts = [riverCql];
+  const year = String(plan.planYear ?? '').trim();
+  const planName = String(plan.planName ?? '').trim();
+  if (year) asParts.push(`plan_year=${cqlQuote(year)}`);
+  if (planName) asParts.push(`plan_name=${cqlQuote(planName)}`);
   out[riverBasicPlanAsDefineTable(tab)] = asParts.join(' AND ');
   return out;
 }

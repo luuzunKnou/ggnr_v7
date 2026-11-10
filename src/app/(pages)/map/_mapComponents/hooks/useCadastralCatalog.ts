@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { call } from '@/lib/api';
+import { sortLayersByDefineIdx } from '@/lib/defineTableOrder';
 import { CADASTRAL_LAYERS } from '../layerFactory/boundaryLayerFactory';
 
 export type CadastralCatalog = {
@@ -57,7 +58,7 @@ export function useCadastralCatalog(): CadastralCatalog {
   }, [layersWithData]);
 
   const layers = useMemo(
-    () => CADASTRAL_LAYERS.filter((l) => availableLayerTableNames.has(l.tableName)),
+    () => sortLayersByDefineIdx(CADASTRAL_LAYERS.filter((l) => availableLayerTableNames.has(l.tableName))),
     [availableLayerTableNames]
   );
 

@@ -1,55 +1,175 @@
 [
   {
-    "define_code_key": "65556",
-    "define_code_field_key": "4418",
+    "define_code_key": "1230",
+    "define_code_field_key": "",
     "define_code_name": "SAA000",
     "define_code_kor_name": "미분류"
   },
   {
-    "define_code_key": "65557",
-    "define_code_field_key": "4418",
+    "define_code_key": "1231",
+    "define_code_field_key": "",
     "define_code_name": "SAA001",
     "define_code_kor_name": "취수관"
   },
   {
-    "define_code_key": "65558",
-    "define_code_field_key": "4418",
+    "define_code_key": "1232",
+    "define_code_field_key": "",
     "define_code_name": "SAA002",
     "define_code_kor_name": "도수관"
   },
   {
-    "define_code_key": "65559",
-    "define_code_field_key": "4418",
+    "define_code_key": "1233",
+    "define_code_field_key": "",
     "define_code_name": "SAA003",
     "define_code_kor_name": "송수관"
   },
   {
-    "define_code_key": "65560",
-    "define_code_field_key": "4418",
+    "define_code_key": "1234",
+    "define_code_field_key": "",
     "define_code_name": "SAA004",
     "define_code_kor_name": "배수관"
   },
   {
-    "define_code_key": "65561",
-    "define_code_field_key": "4418",
+    "define_code_key": "1235",
+    "define_code_field_key": "",
     "define_code_name": "SAA005",
     "define_code_kor_name": "급수관"
   },
   {
-    "define_code_key": "65562",
-    "define_code_field_key": "4418",
+    "define_code_key": "1236",
+    "define_code_field_key": "",
     "define_code_name": "SAA010",
     "define_code_kor_name": "공업용수관"
   },
   {
-    "define_code_key": "65563",
-    "define_code_field_key": "4418",
+    "define_code_key": "1237",
+    "define_code_field_key": "",
     "define_code_name": "SAA020",
     "define_code_kor_name": "소방관"
   },
   {
-    "define_code_key": "65564",
-    "define_code_field_key": "4418",
+    "define_code_key": "30269",
+    "define_code_field_key": "",
+    "define_code_name": "SAA055",
+    "define_code_kor_name": "SAA055"
+  },
+  {
+    "define_code_key": "1238",
+    "define_code_field_key": "",
+    "define_code_name": "SAA900",
+    "define_code_kor_name": "가정인입관"
+  },
+  {
+    "define_code_key": "1239",
+    "define_code_field_key": "",
+    "define_code_name": "SAA901",
+    "define_code_kor_name": "공사흔적관"
+  },
+  {
+    "define_code_key": "1240",
+    "define_code_field_key": "",
+    "define_code_name": "SAA902",
+    "define_code_kor_name": "광역상수관"
+  },
+  {
+    "define_code_key": "1241",
+    "define_code_field_key": "",
+    "define_code_name": "SAA903",
+    "define_code_kor_name": "굴착관"
+  },
+  {
+    "define_code_key": "1242",
+    "define_code_field_key": "",
+    "define_code_name": "SAA904",
+    "define_code_kor_name": "급수모관"
+  },
+  {
+    "define_code_key": "1243",
+    "define_code_field_key": "",
+    "define_code_name": "SAA905",
+    "define_code_kor_name": "급수불탐관"
+  },
+  {
+    "define_code_key": "1244",
+    "define_code_field_key": "",
+    "define_code_name": "SAA906",
+    "define_code_kor_name": "도수관1"
+  },
+  {
+    "define_code_key": "1245",
+    "define_code_field_key": "",
+    "define_code_name": "SAA907",
+    "define_code_kor_name": "도수관2"
+  },
+  {
+    "define_code_key": "1246",
+    "define_code_field_key": "",
+    "define_code_name": "SAA908",
+    "define_code_kor_name": "배수불탐관"
+  },
+  {
+    "define_code_key": "1247",
+    "define_code_field_key": "",
+    "define_code_name": "SAA909",
+    "define_code_kor_name": "부배수관"
+  },
+  {
+    "define_code_key": "1248",
+    "define_code_field_key": "",
+    "define_code_name": "SAA910",
+    "define_code_kor_name": "불용관"
+  },
+  {
+    "define_code_key": "1249",
+    "define_code_field_key": "",
+    "define_code_name": "SAA911",
+    "define_code_kor_name": "상수관로"
+  },
+  {
+    "define_code_key": "1250",
+    "define_code_field_key": "",
+    "define_code_name": "SAA912",
+    "define_code_kor_name": "수관교"
+  },
+  {
+    "define_code_key": "1251",
+    "define_code_field_key": "",
+    "define_code_name": "SAA913",
+    "define_code_kor_name": "이토관"
+  },
+  {
+    "define_code_key": "1252",
+    "define_code_field_key": "",
+    "define_code_name": "SAA914",
+    "define_code_kor_name": "인입관"
+  },
+  {
+    "define_code_key": "1253",
+    "define_code_field_key": "",
+    "define_code_name": "SAA915",
+    "define_code_kor_name": "주배수관"
+  },
+  {
+    "define_code_key": "1254",
+    "define_code_field_key": "",
+    "define_code_name": "SAA916",
+    "define_code_kor_name": "중수도관"
+  },
+  {
+    "define_code_key": "1255",
+    "define_code_field_key": "",
+    "define_code_name": "SAA917",
+    "define_code_kor_name": "폐관"
+  },
+  {
+    "define_code_key": "1256",
+    "define_code_field_key": "",
+    "define_code_name": "SAA918",
+    "define_code_kor_name": "해수관"
+  },
+  {
+    "define_code_key": "1257",
+    "define_code_field_key": "",
     "define_code_name": "SAA999",
     "define_code_kor_name": "기타"
   }

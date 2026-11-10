@@ -8,7 +8,7 @@ export type RiverConstructionLedgerGeom = {
   coordinates: [number, number][][][];
 };
 
-export type RiverConstructionLedgerPreviewKind = "image" | "pdf" | "other";
+export type RiverConstructionLedgerPreviewKind = "image" | "pdf" | "excel" | "other";
 
 /** 첨부 폴더명(=탭). 루트 파일은 «기타» */
 export type RiverConstructionLedgerAttachmentCategory = string;
@@ -200,6 +200,7 @@ export function guessPreviewKind(name: string, mime?: string): RiverConstruction
   const lower = name.toLowerCase();
   if (mime?.startsWith("image/") || /\.(png|jpe?g|gif|webp|bmp)$/i.test(lower)) return "image";
   if (mime === "application/pdf" || lower.endsWith(".pdf")) return "pdf";
+  if (/\.xlsx?$/i.test(lower)) return "excel";
   return "other";
 }
 

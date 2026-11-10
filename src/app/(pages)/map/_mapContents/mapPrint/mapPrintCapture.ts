@@ -81,9 +81,9 @@ function localOrthoGroupName(backgroundId: string): string {
 
 /**
  * 캡처용 Canvas Tile 배경 (WebGL 대신).
- * 접도구역 위치도 캡처와 같이 crossOrigin 타일로 다시 그린다.
+ * 접도구역 위치도·계량기 보고서 숨김 지도 캡처와 같이 crossOrigin 타일로 다시 그린다.
  */
-function createPrintCaptureBackgroundLayer(backgroundId: string): TileLayer<XYZ> {
+export function createPrintCaptureBackgroundLayer(backgroundId: string): TileLayer<XYZ> {
   if (isLocalOrthoBackgroundId(backgroundId)) {
     return createLocalOrthoTileLayer(backgroundId, localOrthoGroupName(backgroundId));
   }
@@ -448,6 +448,126 @@ async function triggerPngDownload(canvas: HTMLCanvasElement, fileName: string): 
   a.download = fileName;
   a.rel = 'noopener';
   a.click();
+}
+
+export type LiveMapCaptureDetail = {
+  dataUrl: string | null;
+  /** ok | composite | todataurl | exception */
+  stage: 'ok' | 'composite' | 'todataurl' | 'exception';
+  detail: string;
+};
+
+/**
+ * 현재 지도 뷰포트 PNG — 우측 «인쇄»와 같이 WebGL 배경을 Canvas 타일로 잠시 바꿔 합성.
+ * 실패 단계(합성/PNG 변환)를 구분해 반환한다.
+ */
+export async function captureLiveMapViewportDetailed(
+  map: OlMap,
+  backgroundId = 'aerial-vworld',
+  options?: { cropViewPadding?: boolean }
+): Promise<LiveMapCaptureDetail> {
+  let dataUrl: string | null = null;
+  let stage: LiveMapCaptureDetail['stage'] = 'composite';
+  let detail = '';
+
+  const run = async () => {
+    await waitForMapRender(map, 3000);
+    await waitMs(200);
+    await waitForMapRender(map, 2000);
+    const composed = document.createElement('canvas');
+    let ok = false;
+    try {
+      ok = safeCompositeOpenLayersMapToCanvas(map, composed);
+    } catch (err) {
+      stage = 'composite';
+      detail = err instanceof Error ? err.message : '레이어 합성 예외';
+      return;
+    }
+    if (!ok || composed.width < 2 || composed.height < 2) {
+      stage = 'composite';
+      detail = !ok
+        ? '그리기 가능한 Canvas 레이어 없음(WebGL·오염 레이어만 있거나 타일 미로드)'
+        : `합성 캔버스 크기 이상(${composed.width}x${composed.height})`;
+      return;
+    }
+
+    const exportPng = (src: HTMLCanvasElement) => {
+      try {
+        const url = src.toDataURL('image/png');
+        if (!url || url.length < 64) {
+          stage = 'todataurl';
+          detail = '빈 PNG';
+          return;
+        }
+        dataUrl = url;
+        stage = 'ok';
+        detail = '';
+      } catch (err) {
+        stage = 'todataurl';
+        const msg = err instanceof Error ? err.message : String(err);
+        detail = /taint|security|cross-origin/i.test(msg)
+          ? `캔버스 오염(CORS) — crossOrigin 없는 WMS·타일이 합성에 섞임 (${msg})`
+          : `PNG 변환 실패 (${msg})`;
+      }
+    };
+
+    if (options?.cropViewPadding) {
+      const padding = map.getView().padding ?? [0, 0, 0, 0];
+      const top = Math.max(0, Math.round(Number(padding[0] ?? 0)));
+      const right = Math.max(0, Math.round(Number(padding[1] ?? 0)));
+      const bottom = Math.max(0, Math.round(Number(padding[2] ?? 0)));
+      const left = Math.max(0, Math.round(Number(padding[3] ?? 0)));
+      const cropW = composed.width - left - right;
+      const cropH = composed.height - top - bottom;
+      if (cropW >= 80 && cropH >= 80) {
+        const out = document.createElement('canvas');
+        out.width = cropW;
+        out.height = cropH;
+        const ctx = out.getContext('2d');
+        if (!ctx) {
+          stage = 'todataurl';
+          detail = '크롭 캔버스 컨텍스트 없음';
+          return;
+        }
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, cropW, cropH);
+        try {
+          ctx.drawImage(composed, left, top, cropW, cropH, 0, 0, cropW, cropH);
+        } catch (err) {
+          stage = 'todataurl';
+          detail = err instanceof Error ? err.message : '크롭 drawImage 실패';
+          return;
+        }
+        exportPng(out);
+        return;
+      }
+    }
+    exportPng(composed);
+  };
+
+  try {
+    await withCanvasBackgroundForCapture(map, backgroundId?.trim() || 'aerial-vworld', run);
+  } catch (err) {
+    return {
+      dataUrl: null,
+      stage: 'exception',
+      detail: err instanceof Error ? err.message : '배경 교체·캡처 예외',
+    };
+  }
+  return { dataUrl, stage, detail };
+}
+
+/**
+ * 현재 지도 뷰포트 PNG data URL.
+ * 우측 «인쇄»와 같이 WebGL 배경을 Canvas 타일로 잠시 바꿔 합성한다.
+ */
+export async function captureLiveMapViewportDataUrl(
+  map: OlMap,
+  backgroundId = 'aerial-vworld',
+  options?: { cropViewPadding?: boolean }
+): Promise<string | null> {
+  const result = await captureLiveMapViewportDetailed(map, backgroundId, options);
+  return result.dataUrl;
 }
 
 /**

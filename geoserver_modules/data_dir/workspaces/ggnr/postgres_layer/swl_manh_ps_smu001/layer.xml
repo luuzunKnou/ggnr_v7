@@ -1,0 +1,19 @@
+<layer>
+  <name>swl_manh_ps_smu001</name>
+  <id>LayerInfoImpl--4d2f0c14:1a1671e8ffa:-7ead</id>
+  <type>VECTOR</type>
+  <defaultStyle>
+    <id>StyleInfoImpl--78c241d:1a151a32358:-6959</id>
+  </defaultStyle>
+  <resource class="featureType">
+    <id>FeatureTypeInfoImpl--4d2f0c14:1a1671e8ffa:-7eae</id>
+  </resource>
+  <queryable>true</queryable>
+  <opaque>false</opaque>
+  <attribution>
+    <logoWidth>0</logoWidth>
+    <logoHeight>0</logoHeight>
+  </attribution>
+  <dateCreated>2026-10-23 05:08:22.406 UTC</dateCreated>
+  <dateModified>2026-10-23 05:08:22.567 UTC</dateModified>
+</layer>

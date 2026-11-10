@@ -40,8 +40,10 @@ import {
   clearRoadNetworkUnifiedCql,
   clearRoadNetworkWmsLayers,
   ensureRoadNetworkWmsLayers,
+  syncRoadNetworkLayerCql,
   syncRoadNetworkUnifiedCql,
 } from "./roadNetworkMapSync";
+import { buildRoadNetworkSharedTableCql } from "./roadNetworkLayerId";
 import { useRoadNetworkSourceMode } from "./useRoadNetworkSourceMode";
 import { useRoadNetworkUnopenedSignLayer } from "./useRoadNetworkUnopenedSignLayer";
 import {
@@ -57,9 +59,10 @@ import {
   createEmptyRoadNetworkRow,
   isNewRoadNetworkRowId,
   matchesRoadNetworkTypeFilter,
+  matchesRoadNetworkTypeSelection,
   type RoadNetworkOpenStatusFilter,
   type RoadNetworkRow,
-  type RoadNetworkTypeFilter,
+  type RoadNetworkTypeSelection,
 } from "./roadNetworkMock";
 
 const EMPTY_ROWS: RoadNetworkRow[] = [];
@@ -101,7 +104,8 @@ export function RoadNetworkListPanel({ onClose }: Props) {
   const setRoadNetworkSelectedId = mapContext?.setRoadNetworkSelectedId;
   const setRoadNetworkWholeRoad = mapContext?.setRoadNetworkWholeRoad;
   const [keyword, setKeyword] = useState("");
-  const [typeFilter, setTypeFilter] = useState<RoadNetworkTypeFilter>("전체");
+  /** 종류 중복 선택 — 빈 배열이면 전체 */
+  const [typeFilter, setTypeFilter] = useState<RoadNetworkTypeSelection>([]);
   const [openStatusFilter, setOpenStatusFilter] =
     useState<RoadNetworkOpenStatusFilter>("전체");
   const [spatialWkt, setSpatialWkt] = useState<string | null>(null);
@@ -134,9 +138,19 @@ export function RoadNetworkListPanel({ onClose }: Props) {
       (f) => f === "전체" || saved.some((r) => matchesRoadNetworkTypeFilter(r.roadType, f))
     );
   }, [rows]);
-  const activeTypeFilter: RoadNetworkTypeFilter = visibleTypeFilters.includes(typeFilter)
-    ? typeFilter
-    : "전체";
+  const activeTypeFilter = useMemo<RoadNetworkTypeSelection>(
+    () => typeFilter.filter((f) => visibleTypeFilters.includes(f)),
+    [typeFilter, visibleTypeFilters]
+  );
+  const toggleTypeFilter = useCallback((filter: (typeof visibleTypeFilters)[number]) => {
+    if (filter === "전체") {
+      setTypeFilter([]);
+      return;
+    }
+    setTypeFilter((prev) =>
+      prev.includes(filter) ? prev.filter((f) => f !== filter) : [...prev, filter]
+    );
+  }, []);
 
   const reloadList = useCallback(async () => {
     const seq = ++listLoadSeqRef.current;
@@ -202,6 +216,16 @@ export function RoadNetworkListPanel({ onClose }: Props) {
     };
   }, [sourceMode, rows, signIndex, activeTypeFilter, openStatusFilter]);
 
+  /** 군도 표에 섞인 면도·리도 — 종류 필터 시 해당 피처만 그림 */
+  const sharedTableCql = useMemo(
+    () =>
+      buildRoadNetworkSharedTableCql(
+        sourceMode === "legacy" ? rows : EMPTY_ROWS,
+        sourceMode === "legacy" ? activeTypeFilter : []
+      ),
+    [sourceMode, rows, activeTypeFilter]
+  );
+
   const [showSigns, setShowSigns] = useState(true);
   /** 표지 점은 개설 구간 기준으로 찍혀 있어 미개설 필터 때는 미개설 선 위에 표지를 직접 그린다 */
   const signsOnUnopenedLines =
@@ -220,6 +244,7 @@ export function RoadNetworkListPanel({ onClose }: Props) {
       sourceMode
     );
     syncRoadNetworkUnifiedCql(setServiceWmsCqlByLayer, unifiedCql.line, unifiedCql.sign);
+    syncRoadNetworkLayerCql(setServiceWmsCqlByLayer, sharedTableCql);
   }, [
     activeTypeFilter,
     openStatusFilter,
@@ -227,6 +252,7 @@ export function RoadNetworkListPanel({ onClose }: Props) {
     signsOnUnopenedLines,
     sourceMode,
     unifiedCql,
+    sharedTableCql,
     setVisibleLayerNames,
     setServiceWmsCqlByLayer,
   ]);
@@ -235,6 +261,10 @@ export function RoadNetworkListPanel({ onClose }: Props) {
     return () => {
       clearRoadNetworkWmsLayers(setVisibleLayerNames);
       clearRoadNetworkUnifiedCql(setServiceWmsCqlByLayer);
+      syncRoadNetworkLayerCql(
+        setServiceWmsCqlByLayer,
+        buildRoadNetworkSharedTableCql(EMPTY_ROWS, [])
+      );
     };
   }, [setVisibleLayerNames, setServiceWmsCqlByLayer]);
 
@@ -475,11 +505,7 @@ export function RoadNetworkListPanel({ onClose }: Props) {
       .filter((row) => {
         // 미저장 신규는 목록에 표시하지 않음
         if (isNewRoadNetworkRowId(row.id)) return false;
-        if (
-          activeTypeFilter !== "전체" &&
-          !matchesRoadNetworkTypeFilter(row.roadType, activeTypeFilter)
-        )
-          return false;
+        if (!matchesRoadNetworkTypeSelection(row.roadType, activeTypeFilter)) return false;
         if (openStatusFilter !== "전체" && row.openStatus !== openStatusFilter) {
           return false;
         }
@@ -703,12 +729,15 @@ export function RoadNetworkListPanel({ onClose }: Props) {
               aria-label="도로 종류 필터"
             >
               {visibleTypeFilters.map((filter) => {
-                const active = activeTypeFilter === filter;
+                const active =
+                  filter === "전체"
+                    ? activeTypeFilter.length === 0
+                    : activeTypeFilter.includes(filter);
                 return (
                   <button
                     key={filter}
                     type="button"
-                    onClick={() => setTypeFilter(filter)}
+                    onClick={() => toggleTypeFilter(filter)}
                     title={filter}
                     className={cn(
                       "flex-auto whitespace-nowrap rounded border px-1 py-1 text-center text-[10px] font-medium leading-tight transition-colors",

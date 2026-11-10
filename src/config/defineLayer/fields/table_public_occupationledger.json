@@ -106,7 +106,7 @@
   {
     "define_field_name": "perm_start_date",
     "define_field_kor_name": "점용 시작일",
-    "define_field_type": "DATE",
+    "define_field_type": "TEXT",
     "define_field_idx": 8,
     "define_field_is_required": "true",
     "define_field_show_search": true,
@@ -119,7 +119,7 @@
   {
     "define_field_name": "perm_end_date",
     "define_field_kor_name": "점용 종료일",
-    "define_field_type": "DATE",
+    "define_field_type": "TEXT",
     "define_field_idx": 9,
     "define_field_is_required": "true",
     "define_field_show_search": true,

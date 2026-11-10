@@ -800,6 +800,480 @@ export async function getShpRawGeojson(params: { pathOrResult: string; maxFeatur
   }
 }
 
+/** 신규 업로드 시 extra로 뺄 SHP 속성 매핑 */
+export type ShpExtraFieldMapping = {
+  sourceField: string;
+  labelKo?: string;
+  dataType?: string;
+};
+
+const SHP_EXTRA_SKIP_ATTR_NAMES = new Set([
+  'ogc_fid',
+  'fid',
+  'geom',
+  'wkb_geometry',
+  'shape',
+  'the_geom',
+  'extra',
+]);
+
+function mapOgrFieldTypeToExtra(raw: string): string {
+  const t = String(raw ?? '').toLowerCase();
+  if (/int|integer|long|short/.test(t)) return 'number';
+  if (/real|float|double|numeric/.test(t)) return 'number';
+  if (/date|time/.test(t)) return 'text';
+  return 'text';
+}
+
+/**
+ * ogrinfo -al -so 로 SHP 속성 필드 목록 (도형·FID 제외).
+ * 테이블 생성 전 2단계 선택용.
+ */
+export async function listShpAttributeFields(params: { pathOrResult: string }): Promise<{
+  success: boolean;
+  fields: Array<{ name: string; dataType: string }>;
+  error?: string;
+}> {
+  try {
+    const pathOrResult = params?.pathOrResult?.trim();
+    if (!pathOrResult) return { success: false, fields: [], error: 'pathOrResult가 필요합니다.' };
+    const absolutePath = path.join(getGgnrDataDir(), pathOrResult.replace(/\//g, path.sep));
+    if (!fsSync.existsSync(absolutePath)) {
+      return { success: false, fields: [], error: '파일을 찾을 수 없습니다.' };
+    }
+    const dir = path.dirname(absolutePath);
+    const basename = path.basename(absolutePath, '.shp');
+    if (isShpBundleEmptyOrUnreadable(dir, basename)) {
+      return { success: true, fields: [] };
+    }
+
+    const { cmd: ogrinfoCmd, args: prefix, env: gdalEnv } = resolveOgrInfoRun();
+    const args = [...prefix, '-al', '-so', absolutePath];
+    const stdout = await new Promise<string>((resolve) => {
+      const child = spawnGdalProcess(ogrinfoCmd, args, gdalEnv);
+      const chunks: Buffer[] = [];
+      child.stdout?.on('data', (d) => chunks.push(Buffer.isBuffer(d) ? d : Buffer.from(d, 'utf8')));
+      child.on('close', (code) => {
+        resolve(code === 0 ? Buffer.concat(chunks).toString('utf8') : '');
+      });
+      child.on('error', () => resolve(''));
+    });
+
+    const fields: Array<{ name: string; dataType: string }> = [];
+    const seen = new Set<string>();
+    for (const line of stdout.split(/\r?\n/)) {
+      const m = line.match(
+        /^\s*([A-Za-z_][\w]*)\s*:\s*(String|WideString|Integer64|Integer|Real|DateTime|Date|Time|Binary)\b/i
+      );
+      if (!m) continue;
+      const name = m[1];
+      const key = name.toLowerCase();
+      if (SHP_EXTRA_SKIP_ATTR_NAMES.has(key)) continue;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      fields.push({ name, dataType: mapOgrFieldTypeToExtra(m[2]) });
+    }
+    return { success: true, fields };
+  } catch (e: unknown) {
+    return { success: false, fields: [], error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+/**
+ * 선택한 속성이 extra jsonb로 어떻게 들어가는지 샘플 1건 미리보기.
+ */
+export async function previewShpExtraJson(params: {
+  pathOrResult: string;
+  fields?: ShpExtraFieldMapping[];
+}): Promise<{
+  success: boolean;
+  /** 저장 형식과 동일: [{"컬럼명":"값", ...}] */
+  preview?: Array<Record<string, string>>;
+  error?: string;
+}> {
+  try {
+    const pathOrResult = params?.pathOrResult?.trim();
+    if (!pathOrResult) return { success: false, error: 'pathOrResult가 필요합니다.' };
+    const mappings = (Array.isArray(params?.fields) ? params.fields : [])
+      .map((f) => ({
+        sourceField: String(f?.sourceField ?? '').trim(),
+        labelKo: String(f?.labelKo ?? '').trim(),
+        dataType: String(f?.dataType ?? 'text').trim() || 'text',
+      }))
+      .filter((f) => f.sourceField);
+    if (mappings.length === 0) {
+      return { success: true, preview: [] };
+    }
+
+    const geo = await getShpRawGeojson({ pathOrResult, maxFeatures: 1 });
+    if (!geo.success) {
+      return { success: false, error: geo.error ?? '샘플을 읽지 못했습니다.' };
+    }
+    const features = Array.isArray((geo.geojson as { features?: unknown[] })?.features)
+      ? ((geo.geojson as { features: Array<{ properties?: Record<string, unknown> }> }).features)
+      : [];
+    const props = (features[0]?.properties ?? {}) as Record<string, unknown>;
+    const propKeyByLower = new Map(
+      Object.keys(props).map((k) => [k.toLowerCase(), k] as const)
+    );
+
+    const row: Record<string, string> = {};
+    for (const m of mappings) {
+      const srcKey = propKeyByLower.get(m.sourceField.toLowerCase()) ?? m.sourceField;
+      const raw = props[srcKey];
+      const key = m.labelKo || m.sourceField;
+      row[key] = raw == null ? '' : String(raw);
+    }
+    return { success: true, preview: [row] };
+  } catch (e: unknown) {
+    return { success: false, error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+/**
+ * 신규 테이블 생성 직후: 고른 일반 컬럼 값을 extra jsonb로 옮기고 해당 컬럼을 제거한다.
+ * 매핑이 없으면 아무 것도 하지 않는다.
+ */
+/** define fields JSON에서 본문 컬럼으로 남은 선택 속성을 제거 (extra 전용으로만 남김) */
+function prunePackedColumnsFromDefineFields(tableName: string, droppedDbCols: string[]): void {
+  const fieldsPath = getDefineFieldsFilePath(tableName);
+  if (!fsSync.existsSync(fieldsPath)) return;
+  try {
+    const parsed = JSON.parse(fsSync.readFileSync(fieldsPath, 'utf-8'));
+    if (!Array.isArray(parsed)) return;
+    const dropSet = new Set(
+      droppedDbCols.map((c) => String(c ?? '').trim().toLowerCase()).filter(Boolean)
+    );
+    if (dropSet.size === 0) return;
+    const next = (parsed as Record<string, unknown>[]).filter((f) => {
+      const name = String(f?.define_field_name ?? '').trim().toLowerCase();
+      if (!name) return false;
+      if (isLayerExtraFieldName(name)) return true;
+      return !dropSet.has(name);
+    });
+    fsSync.writeFileSync(fieldsPath, `${JSON.stringify(next, null, 2)}\n`, 'utf-8');
+  } catch {
+    // define 정리 실패해도 DB DROP이 우선 — 이후 createDefine이 DB 기준으로 맞춤
+  }
+}
+
+export async function packShpExtraColumnsAfterCreate(params: {
+  pathOrResult: string;
+  fields?: ShpExtraFieldMapping[];
+  dbSchema?: 'layer' | 'public_layer';
+}): Promise<{ success: boolean; packed?: number; error?: string }> {
+  const mappings = (Array.isArray(params?.fields) ? params.fields : [])
+    .map((f) => ({
+      sourceField: String(f?.sourceField ?? '').trim(),
+      labelKo: String(f?.labelKo ?? '').trim(),
+      dataType: String(f?.dataType ?? 'text').trim() || 'text',
+    }))
+    .filter((f) => f.sourceField && !SHP_EXTRA_SKIP_ATTR_NAMES.has(f.sourceField.toLowerCase()));
+  if (mappings.length === 0) return { success: true, packed: 0 };
+
+  const pathOrResult = String(params?.pathOrResult ?? '').trim();
+  if (!pathOrResult) return { success: false, error: 'pathOrResult가 필요합니다.' };
+  const tableName = shpTableNameFromRelPath(pathOrResult);
+  const dbSchema =
+    params.dbSchema === 'public_layer' || params.dbSchema === 'layer'
+      ? params.dbSchema
+      : await resolveDefineTableSchema(tableName);
+
+  try {
+    const { db } = await import('@/database/db');
+    const { sql } = await import('drizzle-orm');
+    const esc = (v: string) => v.replace(/'/g, "''");
+    const qIdent = (v: string) => `"${String(v).replace(/"/g, '""')}"`;
+    const fq = `${qIdent(dbSchema)}.${qIdent(tableName)}`;
+
+    // 1) 매핑→실컬럼 먼저 확정 (extra 컬럼 추가 전에 실패하면 본문만 유지)
+    const colRes = await db.execute(
+      sql.raw(
+        `SELECT column_name
+         FROM information_schema.columns
+         WHERE table_schema = '${esc(dbSchema)}'
+           AND table_name = '${esc(tableName)}'`
+      )
+    );
+    const dbCols = (colRes.rows as Array<{ column_name?: string }>).map((r) =>
+      String(r.column_name ?? '').trim()
+    ).filter(Boolean);
+    const colByLower = new Map(dbCols.map((c) => [c.toLowerCase(), c] as const));
+
+    const resolved: Array<{
+      dbCol: string;
+      fieldName: string;
+      dataType: string;
+      sortOrder: number;
+    }> = [];
+    const seenDb = new Set<string>();
+    const missingSources: string[] = [];
+    mappings.forEach((m, idx) => {
+      const dbCol = colByLower.get(m.sourceField.toLowerCase());
+      if (!dbCol) {
+        missingSources.push(m.sourceField);
+        return;
+      }
+      if (SHP_EXTRA_SKIP_ATTR_NAMES.has(dbCol.toLowerCase())) return;
+      if (seenDb.has(dbCol.toLowerCase())) return;
+      seenDb.add(dbCol.toLowerCase());
+      resolved.push({
+        dbCol,
+        fieldName: m.labelKo || m.sourceField,
+        dataType: m.dataType || 'text',
+        sortOrder: idx + 1,
+      });
+    });
+    if (resolved.length === 0) {
+      return {
+        success: false,
+        error:
+          missingSources.length > 0
+            ? `선택한 속성에 해당하는 테이블 컬럼을 찾지 못했습니다: ${missingSources.join(', ')}`
+            : '선택한 속성에 해당하는 테이블 컬럼을 찾지 못했습니다.',
+      };
+    }
+    if (missingSources.length > 0) {
+      return {
+        success: false,
+        error: `일부 선택 속성을 테이블 컬럼에서 찾지 못했습니다: ${missingSources.join(', ')}`,
+      };
+    }
+
+    const { addLayerExtraColumn, saveLayerExtraDefs } = await import('@/service/layerExtraService');
+    const addRes = await addLayerExtraColumn({ tableName, tableSchema: dbSchema });
+    if (!addRes.success) {
+      return { success: false, error: addRes.error ?? 'extra 컬럼 추가에 실패했습니다.' };
+    }
+
+    // 2) 본문 컬럼 값 → extra jsonb  [{"컬럼명":"값", ...}]
+    const kvPairs = resolved
+      .map((r) => `'${esc(r.fieldName)}', COALESCE(${qIdent(r.dbCol)}::text, '')`)
+      .join(',\n            ');
+
+    await db.execute(
+      sql.raw(
+        `UPDATE ${fq} SET extra = jsonb_build_array(jsonb_build_object(${kvPairs}))`
+      )
+    );
+
+    // 3) 본문 컬럼 제거 — extra에만 남긴다
+    for (const r of resolved) {
+      await db.execute(
+        sql.raw(`ALTER TABLE ${fq} DROP COLUMN IF EXISTS ${qIdent(r.dbCol)}`)
+      );
+    }
+
+    // 4) DROP 검증 — 남아 있으면 실패 처리
+    const verifyRes = await db.execute(
+      sql.raw(
+        `SELECT column_name
+         FROM information_schema.columns
+         WHERE table_schema = '${esc(dbSchema)}'
+           AND table_name = '${esc(tableName)}'
+           AND lower(column_name) IN (${resolved.map((r) => `'${esc(r.dbCol.toLowerCase())}'`).join(',')})`
+      )
+    );
+    const stillThere = (verifyRes.rows as Array<{ column_name?: string }>)
+      .map((r) => String(r.column_name ?? '').trim())
+      .filter(Boolean);
+    if (stillThere.length > 0) {
+      return {
+        success: false,
+        error: `추가속성으로 옮긴 뒤에도 본문 컬럼이 남아 있습니다: ${stillThere.join(', ')}`,
+      };
+    }
+
+    prunePackedColumnsFromDefineFields(
+      tableName,
+      resolved.map((r) => r.dbCol)
+    );
+
+    const defRes = await saveLayerExtraDefs({
+      tableName,
+      tableSchema: dbSchema,
+      items: resolved.map((r) => ({
+        fieldName: r.fieldName,
+        dataType: r.dataType,
+        sortOrder: r.sortOrder,
+      })),
+    });
+    if (!defRes.success) {
+      return {
+        success: false,
+        error: defRes.error ?? '추가속성 정의 저장에 실패했습니다.',
+      };
+    }
+
+    await writeShpExtraSourceMap(
+      tableName,
+      resolved.map((r) => ({
+        sourceField: r.dbCol,
+        fieldName: r.fieldName,
+        dataType: r.dataType,
+        sortOrder: r.sortOrder,
+      }))
+    );
+
+    return { success: true, packed: resolved.length };
+  } catch (e: unknown) {
+    return { success: false, error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+/**
+ * 기존 레이어 재업로드 — 추가속성 유지 또는 다시 지정.
+ * 원본 컬럼 매핑은 defineLayer/extraMap JSON에만 저장 (DB ALTER 없음).
+ */
+export async function prepareExistingShpExtra(params: {
+  pathOrResult: string;
+  mode: 'keep' | 'respecify';
+  fields?: ShpExtraFieldMapping[];
+  dbSchema?: 'layer' | 'public_layer';
+}): Promise<{ success: boolean; mode?: 'keep' | 'respecify'; packed?: number; error?: string }> {
+  const pathOrResult = String(params?.pathOrResult ?? '').trim();
+  if (!pathOrResult) return { success: false, error: 'pathOrResult가 필요합니다.' };
+  const mode = params.mode === 'respecify' ? 'respecify' : 'keep';
+  const tableName = shpTableNameFromRelPath(pathOrResult);
+  const dbSchema =
+    params.dbSchema === 'public_layer' || params.dbSchema === 'layer'
+      ? params.dbSchema
+      : await resolveDefineTableSchema(tableName);
+
+  if (mode === 'respecify') {
+    const fields = Array.isArray(params.fields) ? params.fields : [];
+    if (fields.length === 0) {
+      return { success: false, error: '다시 지정할 추가속성을 선택하세요.' };
+    }
+    // 본문 컬럼이 아직 있으면 pack(옮기기+DROP). 이미 빠진 재업로드는 정의·매핑만 갱신(값은 정합성 반영 시).
+    try {
+      const { db } = await import('@/database/db');
+      const { sql } = await import('drizzle-orm');
+      const esc = (v: string) => v.replace(/'/g, "''");
+      const colRes = await db.execute(
+        sql.raw(
+          `SELECT column_name
+           FROM information_schema.columns
+           WHERE table_schema = '${esc(dbSchema)}'
+             AND table_name = '${esc(tableName)}'`
+        )
+      );
+      const colByLower = new Map(
+        (colRes.rows as Array<{ column_name?: string }>)
+          .map((r) => String(r.column_name ?? '').trim())
+          .filter(Boolean)
+          .map((c) => [c.toLowerCase(), c] as const)
+      );
+      const sources = fields
+        .map((f) => String(f?.sourceField ?? '').trim())
+        .filter((s) => s && !SHP_EXTRA_SKIP_ATTR_NAMES.has(s.toLowerCase()));
+      const allBodyExist =
+        sources.length > 0 && sources.every((s) => colByLower.has(s.toLowerCase()));
+
+      if (allBodyExist) {
+        const pack = await packShpExtraColumnsAfterCreate({
+          pathOrResult,
+          fields,
+          dbSchema,
+        });
+        if (!pack.success) {
+          return { success: false, error: pack.error ?? '추가속성 다시 지정에 실패했습니다.' };
+        }
+        return { success: true, mode, packed: pack.packed ?? 0 };
+      }
+
+      const listed = await listShpAttributeFields({ pathOrResult });
+      const shpByLower = new Map(
+        (listed.fields ?? []).map((f) => [f.name.toLowerCase(), f.name] as const)
+      );
+      const missingInShp: string[] = [];
+      const resolved: ShpExtraSourceMapItem[] = [];
+      fields.forEach((f, idx) => {
+        const src = String(f?.sourceField ?? '').trim();
+        if (!src || SHP_EXTRA_SKIP_ATTR_NAMES.has(src.toLowerCase())) return;
+        const shpName = shpByLower.get(src.toLowerCase());
+        if (!shpName) {
+          missingInShp.push(src);
+          return;
+        }
+        resolved.push({
+          sourceField: shpName,
+          fieldName: String(f?.labelKo ?? '').trim() || shpName,
+          dataType: String(f?.dataType ?? 'text').trim() || 'text',
+          sortOrder: idx + 1,
+        });
+      });
+      if (missingInShp.length > 0) {
+        return {
+          success: false,
+          error: `SHP에 없는 속성입니다: ${missingInShp.join(', ')}`,
+        };
+      }
+      if (resolved.length === 0) {
+        return { success: false, error: '다시 지정할 추가속성을 선택하세요.' };
+      }
+
+      const { addLayerExtraColumn, saveLayerExtraDefs } = await import('@/service/layerExtraService');
+      const addRes = await addLayerExtraColumn({ tableName, tableSchema: dbSchema });
+      if (!addRes.success) {
+        return { success: false, error: addRes.error ?? 'extra 컬럼 확인에 실패했습니다.' };
+      }
+      const defRes = await saveLayerExtraDefs({
+        tableName,
+        tableSchema: dbSchema,
+        items: resolved.map((r) => ({
+          fieldName: r.fieldName,
+          dataType: r.dataType,
+          sortOrder: r.sortOrder,
+        })),
+      });
+      if (!defRes.success) {
+        return { success: false, error: defRes.error ?? '추가속성 정의 저장에 실패했습니다.' };
+      }
+      await writeShpExtraSourceMap(tableName, resolved);
+      return { success: true, mode, packed: resolved.length };
+    } catch (e: unknown) {
+      return { success: false, error: e instanceof Error ? e.message : String(e) };
+    }
+  }
+
+  // keep — 매핑 없으면 SHP 속성명↔정의 fieldName으로 보강 시도
+  try {
+    let map = await readShpExtraSourceMap(tableName);
+    if (map.length === 0) {
+      const { getLayerExtraDefs, addLayerExtraColumn } = await import('@/service/layerExtraService');
+      const defsRes = await getLayerExtraDefs({ tableName, tableSchema: dbSchema });
+      const items = defsRes.items ?? [];
+      if (items.length > 0) {
+        const listed = await listShpAttributeFields({ pathOrResult });
+        const shpByLower = new Map(
+          (listed.fields ?? []).map((f) => [f.name.toLowerCase(), f.name] as const)
+        );
+        map = items
+          .map((it, idx) => {
+            const byName = shpByLower.get(it.fieldName.toLowerCase());
+            if (!byName) return null;
+            return {
+              sourceField: byName,
+              fieldName: it.fieldName,
+              dataType: it.dataType || 'text',
+              sortOrder: it.sortOrder || idx + 1,
+            };
+          })
+          .filter((x): x is ShpExtraSourceMapItem => x != null);
+        if (map.length > 0) await writeShpExtraSourceMap(tableName, map);
+        const addRes = await addLayerExtraColumn({ tableName, tableSchema: dbSchema });
+        if (!addRes.success) {
+          return { success: false, error: addRes.error ?? 'extra 컬럼 확인에 실패했습니다.' };
+        }
+      }
+    }
+    return { success: true, mode, packed: map.length };
+  } catch (e: unknown) {
+    return { success: false, error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
 export type ShpStatusRow = {
   sourceFile: string;
   pathOrResult: string;
@@ -815,10 +1289,209 @@ export type ShpStatusRow = {
 };
 
 const DEFINE_LAYER_FIELDS_DIR = path.join(process.cwd(), 'src', 'config', 'defineLayer', 'fields');
+/** 레거시 json → DB 이전용 (신규 쓰기는 public.layer_extra_source) */
+const DEFINE_LAYER_EXTRA_MAP_DIR = path.join(process.cwd(), 'src', 'config', 'defineLayer', 'extraMap');
 
 function getDefineFieldsFilePath(tableKey: string): string {
   const safe = safeTableName(tableKey);
   return path.join(DEFINE_LAYER_FIELDS_DIR, `table_${safe}.json`);
+}
+
+/** SHP→extra 원본 컬럼 매핑 (재업로드 구조검증·값 반영용). DB layer_extra_source. */
+export type ShpExtraSourceMapItem = {
+  sourceField: string;
+  fieldName: string;
+  dataType: string;
+  sortOrder: number;
+};
+
+function getShpExtraMapFilePath(tableKey: string): string {
+  const safe = safeTableName(tableKey);
+  return path.join(DEFINE_LAYER_EXTRA_MAP_DIR, `table_${safe}.json`);
+}
+
+function normalizeExtraMapItem(raw: unknown, idx: number): ShpExtraSourceMapItem | null {
+  const r = raw as Record<string, unknown>;
+  const sourceField = String(r?.sourceField ?? '').trim();
+  const fieldName = String(r?.fieldName ?? sourceField).trim();
+  if (!sourceField || !fieldName) return null;
+  return {
+    sourceField,
+    fieldName,
+    dataType: String(r?.dataType ?? 'text').trim() || 'text',
+    sortOrder: Number.isFinite(Number(r?.sortOrder)) ? Number(r.sortOrder) : idx + 1,
+  };
+}
+
+/** 레거시 extraMap json 읽기 (DB 비어 있을 때 1회 이전용) */
+function readLegacyShpExtraMapFile(tableKey: string): {
+  knownSources: string[];
+  active: ShpExtraSourceMapItem[];
+} {
+  const filePath = getShpExtraMapFilePath(tableKey);
+  try {
+    if (!fsSync.existsSync(filePath)) return { knownSources: [], active: [] };
+    const parsed = JSON.parse(fsSync.readFileSync(filePath, 'utf-8'));
+    if (Array.isArray(parsed)) {
+      const active = parsed
+        .map((raw, idx) => normalizeExtraMapItem(raw, idx))
+        .filter((x): x is ShpExtraSourceMapItem => x != null);
+      return { knownSources: [...new Set(active.map((a) => a.sourceField))], active };
+    }
+    if (parsed && typeof parsed === 'object') {
+      const obj = parsed as Record<string, unknown>;
+      const active = (Array.isArray(obj.active) ? obj.active : [])
+        .map((raw, idx) => normalizeExtraMapItem(raw, idx))
+        .filter((x): x is ShpExtraSourceMapItem => x != null);
+      const knownFromFile = Array.isArray(obj.knownSources)
+        ? obj.knownSources.map((s) => String(s ?? '').trim()).filter(Boolean)
+        : [];
+      return {
+        knownSources: [...new Set([...knownFromFile, ...active.map((a) => a.sourceField)])],
+        active,
+      };
+    }
+    return { knownSources: [], active: [] };
+  } catch {
+    return { knownSources: [], active: [] };
+  }
+}
+
+async function migrateLegacyExtraMapToDbIfNeeded(
+  tableKey: string,
+  dbSchema: 'layer' | 'public_layer'
+): Promise<void> {
+  const {
+    listLayerExtraSources,
+    saveLayerExtraSourcesActive,
+  } = await import('@/service/layerExtraService');
+  const existing = await listLayerExtraSources({ tableName: tableKey, tableSchema: dbSchema });
+  if ((existing.items ?? []).length > 0) return;
+
+  const legacy = readLegacyShpExtraMapFile(tableKey);
+  if (legacy.knownSources.length === 0 && legacy.active.length === 0) return;
+
+  const activeByLower = new Map(
+    legacy.active.map((a) => [a.sourceField.toLowerCase(), a] as const)
+  );
+  const items = legacy.knownSources.map((src, idx) => {
+    const hit = activeByLower.get(src.toLowerCase());
+    return {
+      sourceField: hit?.sourceField ?? src,
+      fieldName: hit?.fieldName ?? src,
+      dataType: hit?.dataType ?? 'text',
+      sortOrder: hit?.sortOrder ?? idx + 1,
+    };
+  });
+  // known만 있고 active에 없는 것도 이력을 넣되, active 표시는 legacy.active만
+  await saveLayerExtraSourcesActive({
+    tableName: tableKey,
+    tableSchema: dbSchema,
+    items: legacy.active.length > 0 ? legacy.active : items,
+  });
+  // knownSources 중 active에 없던 이름만 추가로 UPSERT( is_active=false 유지하려면
+  // save가 active만 true로 두고 나머지를 false로 바꾸므로, known 전체를 한 번에 넣되
+  // active 집합만 true가 되게 이미 처리됨. known만 더 있으면 비active로 INSERT )
+  if (legacy.knownSources.length > legacy.active.length) {
+    const { db } = await import('@/database/db');
+    const { sql } = await import('drizzle-orm');
+    const esc = (v: string) => v.replace(/'/g, "''");
+    for (const src of legacy.knownSources) {
+      if (activeByLower.has(src.toLowerCase())) continue;
+      await db.execute(
+        sql.raw(
+          `INSERT INTO public.layer_extra_source
+             (table_schema, table_name, source_field, field_name, data_type, is_active, sort_order)
+           VALUES
+             ('${esc(dbSchema)}', '${esc(tableKey)}', '${esc(src)}', '${esc(src)}', 'text', false, 0)
+           ON CONFLICT (table_schema, table_name, source_field) DO NOTHING`
+        )
+      );
+    }
+  }
+}
+
+async function resolveExtraMapSchema(tableKey: string): Promise<'layer' | 'public_layer'> {
+  return resolveDefineTableSchema(tableKey);
+}
+
+/** 현재 extra 값 반영용 active 매핑 (DB) */
+async function readShpExtraSourceMap(tableKey: string): Promise<ShpExtraSourceMapItem[]> {
+  const dbSchema = await resolveExtraMapSchema(tableKey);
+  await migrateLegacyExtraMapToDbIfNeeded(tableKey, dbSchema);
+  const { listLayerExtraSources } = await import('@/service/layerExtraService');
+  const res = await listLayerExtraSources({
+    tableName: tableKey,
+    tableSchema: dbSchema,
+    activeOnly: true,
+  });
+  return (res.items ?? []).map((it) => ({
+    sourceField: it.sourceField,
+    fieldName: it.fieldName || it.sourceField,
+    dataType: it.dataType || 'text',
+    sortOrder: it.sortOrder || 0,
+  }));
+}
+
+/** 구조검증용 — 예전에 본문에서 뺀 SHP 원본 필드명(소문자) */
+async function readShpExtraKnownSourceSet(tableKey: string): Promise<Set<string>> {
+  const dbSchema = await resolveExtraMapSchema(tableKey);
+  await migrateLegacyExtraMapToDbIfNeeded(tableKey, dbSchema);
+  const { listLayerExtraSources } = await import('@/service/layerExtraService');
+  const res = await listLayerExtraSources({
+    tableName: tableKey,
+    tableSchema: dbSchema,
+    activeOnly: false,
+  });
+  return new Set(
+    (res.items ?? [])
+      .map((it) => normalizeFieldName(it.sourceField))
+      .filter(Boolean)
+  );
+}
+
+/**
+ * active 교체 + knownSources 누적(행 삭제 없음). public.layer_extra_source.
+ */
+async function writeShpExtraSourceMap(
+  tableKey: string,
+  items: ShpExtraSourceMapItem[]
+): Promise<void> {
+  const dbSchema = await resolveExtraMapSchema(tableKey);
+  await migrateLegacyExtraMapToDbIfNeeded(tableKey, dbSchema);
+  const { saveLayerExtraSourcesActive } = await import('@/service/layerExtraService');
+  const cleaned = items
+    .map((it, idx) => ({
+      sourceField: String(it.sourceField ?? '').trim(),
+      fieldName: String(it.fieldName ?? '').trim() || String(it.sourceField ?? '').trim(),
+      dataType: String(it.dataType ?? 'text').trim() || 'text',
+      sortOrder: Number.isFinite(Number(it.sortOrder)) ? Number(it.sortOrder) : idx + 1,
+    }))
+    .filter((it) => it.sourceField && it.fieldName);
+  const saved = await saveLayerExtraSourcesActive({
+    tableName: tableKey,
+    tableSchema: dbSchema,
+    items: cleaned,
+  });
+  if (!saved.success) {
+    throw new Error(saved.error ?? 'layer_extra_source 저장에 실패했습니다.');
+  }
+}
+
+/** 재업로드 UI·구조검증용 — 저장된 extra 원본 매핑 조회 (active) */
+export async function getShpExtraSourceMap(params: {
+  pathOrResult?: string;
+  tableName?: string;
+}): Promise<{ success: boolean; items: ShpExtraSourceMapItem[]; error?: string }> {
+  try {
+    const pathOrResult = String(params?.pathOrResult ?? '').trim();
+    const tableName = String(params?.tableName ?? '').trim()
+      || (pathOrResult ? shpTableNameFromRelPath(pathOrResult) : '');
+    if (!tableName) return { success: false, items: [], error: 'tableName이 필요합니다.' };
+    return { success: true, items: await readShpExtraSourceMap(tableName) };
+  } catch (e: unknown) {
+    return { success: false, items: [], error: e instanceof Error ? e.message : String(e) };
+  }
 }
 
 function equalsTableName(a: string, b: string): boolean {
@@ -1849,8 +2522,24 @@ async function createDefineTableAndFieldsCore(params: {
       // file doesn't exist
     }
 
-    const existingNames = new Set(existing.map((f) => String(f.define_field_name ?? '').trim().toLowerCase()));
-    const maxIdx = existing.reduce((m, f) => Math.max(m, Number(f.define_field_idx ?? 0) || 0), 0);
+    // DB에 없는 본문 필드는 제거 (extra로 뺀 컬럼이 define에 남지 않게)
+    const dbColNames = new Set(
+      colRes.columns.map((c) => String(c.name ?? '').trim().toLowerCase()).filter(Boolean)
+    );
+    const prunedExisting = existing.filter((f) => {
+      const name = String(f.define_field_name ?? '').trim().toLowerCase();
+      if (!name) return false;
+      if (isLayerExtraFieldName(name)) return true;
+      return dbColNames.has(name);
+    });
+
+    const existingNames = new Set(
+      prunedExisting.map((f) => String(f.define_field_name ?? '').trim().toLowerCase())
+    );
+    const maxIdx = prunedExisting.reduce(
+      (m, f) => Math.max(m, Number(f.define_field_idx ?? 0) || 0),
+      0
+    );
     let nextIdx = maxIdx + 1;
 
     const newFields: Record<string, unknown>[] = [];
@@ -1860,7 +2549,7 @@ async function createDefineTableAndFieldsCore(params: {
       }
     }
 
-    const merged = [...existing, ...newFields];
+    const merged = [...prunedExisting, ...newFields];
     await fs.writeFile(fieldsPath, JSON.stringify(merged, null, 2), 'utf-8');
 
     return { success: true };
@@ -2128,6 +2817,11 @@ async function processShpBatchImpl(params: {
   shpPaths?: string[];
   /** pathOrResult 별 프런트에서 확정한 EPSG override (예: {'shp_data/.../a.shp': 'EPSG:5186'}) */
   sourceSrsByPath?: Record<string, string>;
+  /**
+   * 신규 테이블만 — pathOrResult 별 extra로 옮길 속성.
+   * 없으면 기존과 동일(모든 속성 일반 컬럼).
+   */
+  extraFieldsByPath?: Record<string, ShpExtraFieldMapping[]>;
   /** 업로드 모달에서 선택한 DB 스키마 (테이블 생성·define 반영) */
   dbSchema?: 'layer' | 'public_layer';
   /** 폴더명·위저드에서 지정한 그룹명 (define·이력) */
@@ -2191,7 +2885,8 @@ async function processShpBatchImpl(params: {
     if (row.table) {
       item.table = { success: true, skipped: true };
     } else {
-      const sourceSrsOverride = params.sourceSrsByPath?.[row.pathOrResult.replace(/\\/g, '/')];
+      const pathKey = row.pathOrResult.replace(/\\/g, '/');
+      const sourceSrsOverride = params.sourceSrsByPath?.[pathKey];
       const res = await createTableFromShp({
         pathOrResult: row.pathOrResult,
         sourceSrsOverride,
@@ -2201,6 +2896,22 @@ async function processShpBatchImpl(params: {
       if (!res.success) {
         results.push(item);
         continue;
+      }
+      const extraMaps = params.extraFieldsByPath?.[pathKey];
+      if (Array.isArray(extraMaps) && extraMaps.length > 0) {
+        const pack = await packShpExtraColumnsAfterCreate({
+          pathOrResult: row.pathOrResult,
+          fields: extraMaps,
+          ...(batchSchema ? { dbSchema: batchSchema } : {}),
+        });
+        if (!pack.success) {
+          item.table = {
+            success: false,
+            error: pack.error ?? '추가속성 반영에 실패했습니다.',
+          };
+          results.push(item);
+          continue;
+        }
       }
     }
 
@@ -2757,7 +3468,7 @@ export type ShpSchemaCompareResult = {
   error?: string;
 };
 
-const DB_SCHEMA_SKIP_COLUMNS = new Set(['ogc_fid', 'geom', 'wkb_geometry', 'shape']);
+const DB_SCHEMA_SKIP_COLUMNS = new Set(['ogc_fid', 'geom', 'wkb_geometry', 'shape', 'extra']);
 
 async function runOgrinfoStdout(absoluteShpPath: string, extraArgs: string[]): Promise<string> {
   const normalized = path.normalize(absoluteShpPath).replace(/\\/g, path.sep);
@@ -2962,12 +3673,16 @@ export async function compareShpSchemaWithTable(params: {
   const shpMap = new Map(shpFields.map((f) => [normalizeFieldName(f.name), f]));
   const dbMap = new Map(dbFields.map((f) => [normalizeFieldName(f.name), f]));
 
+  // 예전에 extra로 뺀 SHP 원본만 구조 면제. knownSources에 없는 SHP 전용 필드는 신규로 missingInDb.
+  const extraSourceSet = await readShpExtraKnownSourceSet(tableName);
+
   const missingInDb: string[] = [];
   const missingInShp: string[] = [];
   const typeMismatches: Array<{ name: string; shpType: string; dbType: string }> = [];
 
   for (const sf of shpFields) {
     const key = normalizeFieldName(sf.name);
+    if (extraSourceSet.has(key)) continue;
     const dbCol = dbMap.get(key);
     if (!dbCol) {
       missingInDb.push(sf.name);
@@ -4715,6 +5430,23 @@ async function compareShpWithTableImpl(params: {
 
     const joinOnKey = `t."${resolvedKeySync}" = e."${resolvedKeyDb}"`;
 
+    // 추가속성 매핑이 있으면 키(또는 공간매칭) 일치 전 행 extra를 SHP 기준으로 일괄 갱신
+    await bulkRefreshExtraFromSyncTemp({
+      tableName,
+      dbSchema,
+      liveTable: tableName,
+      syncTable: syncTableName,
+      keyDb: resolvedKeyDb,
+      keySync: resolvedKeySync,
+      syncColumns,
+      liveHasExtra: dbColumns.some((c) => c.toLowerCase() === 'extra'),
+      useSpatialMatch,
+      matchFq,
+      fidDb,
+      fidSync,
+    });
+    timing.mark('extraBulkRefresh');
+
     // 공간 매칭: pair 테이블 기준 1:1. 유일 key: 기존 key 조인.
     const conflictFrom = useSpatialMatch
       ? `FROM ${matchFq} p
@@ -5217,6 +5949,146 @@ function formatSyncDbError(e: unknown): string {
  * - old=존재, new=존재 → conflict (UPDATE to SHP value)
  * - old=존재, new=NULL → remove (DELETE)
  */
+/**
+ * 정합성 비교 중: SHP 임시표 → live.extra 전행 일괄 갱신.
+ * 키(또는 공간 매칭)로 짝이 맞는 행만 대상. 매핑·extra 컬럼 없으면 no-op.
+ */
+async function bulkRefreshExtraFromSyncTemp(params: {
+  tableName: string;
+  dbSchema: string;
+  liveTable: string;
+  syncTable: string;
+  keyDb: string;
+  keySync: string;
+  syncColumns: string[];
+  liveHasExtra: boolean;
+  useSpatialMatch: boolean;
+  matchFq?: string;
+  fidDb?: string | null;
+  fidSync?: string | null;
+}): Promise<void> {
+  if (!params.liveHasExtra) return;
+  const map = await readShpExtraSourceMap(params.tableName);
+  if (map.length === 0) return;
+
+  const esc = (v: string) => v.replace(/'/g, "''");
+  const qIdent = (v: string) => `"${String(v).replace(/"/g, '""')}"`;
+  const colByLower = new Map(
+    params.syncColumns.map((c) => [c.toLowerCase(), c] as const)
+  );
+  const pairs: string[] = [];
+  for (const m of map) {
+    const srcCol = colByLower.get(m.sourceField.toLowerCase());
+    if (!srcCol) continue;
+    pairs.push(`'${esc(m.fieldName)}', COALESCE(t.${qIdent(srcCol)}::text, '')`);
+  }
+  if (pairs.length === 0) return;
+
+  const { db } = await import('@/database/db');
+  const { sql } = await import('drizzle-orm');
+  const liveFq = `${qIdent(params.dbSchema)}.${qIdent(params.liveTable)}`;
+  const syncFq = `${qIdent(params.dbSchema)}.${qIdent(params.syncTable)}`;
+  const extraExpr = `jsonb_build_array(jsonb_build_object(${pairs.join(', ')}))`;
+
+  if (
+    params.useSpatialMatch
+    && params.matchFq
+    && params.fidDb
+    && params.fidSync
+  ) {
+    await db.execute(
+      sql.raw(
+        `UPDATE ${liveFq} AS e
+         SET ${qIdent('extra')} = s.extra_val
+         FROM (
+           SELECT p.db_fid, ${extraExpr} AS extra_val
+           FROM ${params.matchFq} p
+           JOIN ${syncFq} AS t ON t.${qIdent(params.fidSync)} = p.sync_fid
+         ) s
+         WHERE e.${qIdent(params.fidDb)} = s.db_fid`
+      )
+    );
+    return;
+  }
+
+  await db.execute(
+    sql.raw(
+      `UPDATE ${liveFq} AS e
+       SET ${qIdent('extra')} = s.extra_val
+       FROM (
+         SELECT t.${qIdent(params.keySync)} AS k, ${extraExpr} AS extra_val
+         FROM ${syncFq} AS t
+       ) s
+       WHERE e.${qIdent(params.keyDb)} IS NOT DISTINCT FROM s.k`
+    )
+  );
+}
+
+/** 정합성 반영 시 SHP 임시행 → live.extra jsonb [{"라벨":"값"}] */
+async function setRowExtraFromSyncTempByKey(params: {
+  tableName: string;
+  fq: string;
+  colMap: SyncColNameMap;
+  whereSql: string;
+  syncTemp: SyncHydrateTemp;
+  keyValue: string;
+}): Promise<void> {
+  const map = await readShpExtraSourceMap(params.tableName);
+  if (map.length === 0) return;
+  const extraCol = params.colMap.get('extra');
+  if (!extraCol) return;
+
+  const { db } = await import('@/database/db');
+  const { sql } = await import('drizzle-orm');
+  const esc = (v: string) => v.replace(/'/g, "''");
+  const qIdent = (v: string) => `"${String(v).replace(/"/g, '""')}"`;
+  const temp = params.syncTemp;
+  const tempFq = `${qIdent(temp.dbSchema)}.${qIdent(temp.syncTableName)}`;
+
+  const colRes = await db.execute(
+    sql.raw(
+      `SELECT column_name
+       FROM information_schema.columns
+       WHERE table_schema = '${esc(temp.dbSchema)}'
+         AND table_name = '${esc(temp.syncTableName)}'`
+    )
+  );
+  const colByLower = new Map(
+    (colRes.rows as Array<{ column_name?: string }>)
+      .map((r) => String(r.column_name ?? '').trim())
+      .filter(Boolean)
+      .map((c) => [c.toLowerCase(), c] as const)
+  );
+
+  const pairs: string[] = [];
+  for (const m of map) {
+    const srcCol = colByLower.get(m.sourceField.toLowerCase());
+    if (!srcCol) continue;
+    pairs.push(`'${esc(m.fieldName)}', COALESCE(${qIdent(srcCol)}::text, '')`);
+  }
+  if (pairs.length === 0) return;
+
+  const kvEsc = esc(String(params.keyValue));
+  const sel = await db.execute(
+    sql.raw(
+      `SELECT jsonb_build_array(jsonb_build_object(${pairs.join(', ')}))::text AS extra
+       FROM ${tempFq}
+       WHERE ${qIdent(temp.keyCol)}::text = '${kvEsc}'
+       LIMIT 1`
+    )
+  );
+  const extraText = String((sel.rows as Array<{ extra?: string }>)[0]?.extra ?? '').trim();
+  if (!extraText) return;
+
+  await db.execute(
+    sql.raw(
+      `UPDATE ${params.fq}
+       SET ${qIdent(extraCol)} = '${extraText.replace(/'/g, "''")}'::jsonb
+       WHERE ${params.whereSql}`
+    )
+  );
+}
+
 export async function applySyncEntries(params: {
   slKeys: number[];
   dhKey?: number;
@@ -5276,31 +6148,39 @@ export async function applySyncEntries(params: {
       return { success: true, appendedCount, updatedCount, removedCount };
     }
 
-    // 테이블별 SHP 임시 import (new geom 메타 하이드레이트)
+    // 테이블별 SHP 임시 import (geom 메타 하이드레이트 + extra 원본 컬럼 반영)
     for (const log of logs) {
-      const nd = log.sl_new_data;
-      if (!nd || !isSyncGeomMeta(nd.geom)) continue;
       const tbl = log.sl_table_name;
       if (syncTemps.has(tbl.toLowerCase())) continue;
+      const nd = log.sl_new_data;
+      const needsGeom = !!(nd && isSyncGeomMeta(nd.geom));
+      const needsExtra = (await readShpExtraSourceMap(tbl)).length > 0 && !!nd;
+      if (!needsGeom && !needsExtra) continue;
       const shpPath = await resolveShpPathForSync({
         dhKey: params.dhKey,
         tableName: tbl,
         shpPathHint: params.shpPath,
       });
       if (!shpPath) {
-        return {
-          success: false, appendedCount: 0, updatedCount: 0, removedCount: 0,
-          error: `SHP 경로를 찾을 수 없습니다. geom 반영에 필요합니다. (${tbl})`,
-        };
+        if (needsGeom) {
+          return {
+            success: false, appendedCount: 0, updatedCount: 0, removedCount: 0,
+            error: `SHP 경로를 찾을 수 없습니다. geom 반영에 필요합니다. (${tbl})`,
+          };
+        }
+        continue;
       }
       const imported = await importShpToSyncTempForHydrate({
         pathOrResult: shpPath,
         tableName: tbl,
         keyField: log.sl_key_field,
-        sourceSrsOverride: params.sourceSrsOverride || syncGeomMetaSrs(nd.geom),
+        sourceSrsOverride: params.sourceSrsOverride || (needsGeom ? syncGeomMetaSrs(nd!.geom) : undefined),
       });
       if (!imported.success) {
-        return { success: false, appendedCount: 0, updatedCount: 0, removedCount: 0, error: imported.error };
+        if (needsGeom) {
+          return { success: false, appendedCount: 0, updatedCount: 0, removedCount: 0, error: imported.error };
+        }
+        continue;
       }
       syncTemps.set(tbl.toLowerCase(), imported.temp);
     }
@@ -5378,21 +6258,42 @@ export async function applySyncEntries(params: {
         const colNames = cols.map((c) => `"${c}"`).join(', ');
         const vals = cols.map((c) => sqlVal(c, pickSyncDataVal(insertData, c))).join(', ');
         await db.execute(sql.raw(`INSERT INTO ${fq} (${colNames}) VALUES (${vals})`));
+        if (syncTemp && (await readShpExtraSourceMap(tbl)).length > 0 && colMap.get('extra')) {
+          const whereSql = `"${keyCol}"::text = '${String(kv).replace(/'/g, "''")}'`;
+          await setRowExtraFromSyncTempByKey({
+            tableName: tbl,
+            fq,
+            colMap,
+            whereSql,
+            syncTemp,
+            keyValue: kv,
+          });
+        }
         await db.execute(sql.raw(
           `UPDATE sync_log SET sl_operation = 'append', sl_applied_at = NOW(), sl_dh_key = ${dhKeyVal} WHERE sl_key = ${log.sl_key}`
         ));
         appendedCount++;
       } else if (oldData && newData) {
         const cols = filterColsToTable(Object.keys(newData), colMap, [kf]);
+        const whereSql = syncRowTargetWhereSql({
+          keyCol, keyValue: kv, oldData: log.sl_old_data, newData: log.sl_new_data,
+          ogcFidCol: colMap.get('ogc_fid') ?? 'ogc_fid',
+        });
         if (cols.length > 0) {
           const setClauses = cols.map((c) => `"${c}" = ${sqlVal(c, pickSyncDataVal(newData, c))}`).join(', ');
-          const whereSql = syncRowTargetWhereSql({
-            keyCol, keyValue: kv, oldData: log.sl_old_data, newData: log.sl_new_data,
-            ogcFidCol: colMap.get('ogc_fid') ?? 'ogc_fid',
-          });
           await db.execute(sql.raw(
             `UPDATE ${fq} SET ${setClauses} WHERE ${whereSql}`
           ));
+        }
+        if (syncTemp && (await readShpExtraSourceMap(tbl)).length > 0 && colMap.get('extra')) {
+          await setRowExtraFromSyncTempByKey({
+            tableName: tbl,
+            fq,
+            colMap,
+            whereSql,
+            syncTemp,
+            keyValue: kv,
+          });
         }
         await db.execute(sql.raw(
           `UPDATE sync_log SET sl_operation = 'conflict', sl_applied_at = NOW(), sl_dh_key = ${dhKeyVal} WHERE sl_key = ${log.sl_key}`
@@ -7034,19 +7935,28 @@ export async function readShpValues(params: {
 
 /**
  * layer 스키마 테이블을 EPSG:5181 Shapefile로 내보낸 뒤 zip 버퍼로 반환.
- * Excel 데이터 상태 탭 등에서 SHP 다운로드용.
+ * Excel 데이터 상태 탭·레이어 관리·관망조회 등에서 SHP 다운로드용.
+ * `sql`이 있으면 해당 SELECT로 필터 내보내기(서버에서만 조립).
  */
 export async function exportLayerTableToShp(params: {
   tableName: string;
   schema?: 'layer' | 'public_layer';
+  /** ogr2ogr -sql — 미지정 시 테이블 전체 */
+  sql?: string | null;
+  /** 출력 SHP 레이어명(-nln). 기본 tableName */
+  layerName?: string | null;
 }): Promise<{ success: boolean; zipBuffer?: Buffer; error?: string }> {
   const tableName = (params?.tableName ?? '').trim().replace(/[^a-zA-Z0-9_]/g, '_') || undefined;
   if (!tableName) return { success: false, error: 'tableName이 필요합니다.' };
   const schema = params?.schema === 'public_layer' ? 'public_layer' : 'layer';
+  const sqlOpt = String(params?.sql ?? '').trim();
+  const nln = String(params?.layerName ?? tableName)
+    .trim()
+    .replace(/[^a-zA-Z0-9_]/g, '_') || tableName;
 
   const tmpBase = path.join(getGgnrDataDir(), 'tmp');
-  const tempDir = path.join(tmpBase, `shp_export_${schema}_${tableName}_${Date.now()}`);
-  const outShp = path.join(tempDir, `${tableName}.shp`);
+  const tempDir = path.join(tmpBase, `shp_export_${schema}_${nln}_${Date.now()}`);
+  const outShp = path.join(tempDir, `${nln}.shp`);
 
   try {
     await fs.mkdir(tempDir, { recursive: true });
@@ -7069,10 +7979,15 @@ export async function exportLayerTableToShp(params: {
     '--config', 'SHAPE_ENCODING', dbfEncoding,
     '-f', 'ESRI Shapefile',
     '-lco', 'ENCODING=LDID/77',
+    '-nln', nln,
     outShp,
     pgConn,
-    layerTable,
   ];
+  if (sqlOpt) {
+    ogrBase.push('-sql', sqlOpt);
+  } else {
+    ogrBase.push(layerTable);
+  }
   if (schema === 'public_layer') {
     ogrBase.push('-s_srs', 'EPSG:5181');
   }
@@ -7088,11 +8003,14 @@ export async function exportLayerTableToShp(params: {
   if (shpSize < 100) {
     await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {});
     await fs.mkdir(tempDir, { recursive: true }).catch(() => {});
-    const sql = `SELECT * FROM ${schema}."${tableName}" WHERE geom IS NOT NULL AND ST_IsValid(geom)`;
+    const sql =
+      sqlOpt ||
+      `SELECT * FROM ${schema}."${tableName}" WHERE geom IS NOT NULL AND ST_IsValid(geom)`;
     const retryArgs: string[] = [
       '--config', 'SHAPE_ENCODING', dbfEncoding,
       '-f', 'ESRI Shapefile',
       '-lco', 'ENCODING=LDID/77',
+      '-nln', nln,
       outShp,
       pgConn,
       '-sql', sql,
@@ -7116,13 +8034,13 @@ export async function exportLayerTableToShp(params: {
       };
     }
     if (result2.code !== 0) {
-      console.warn(`[exportLayerTableToShp] ${schema}.${tableName} 2차(SQL) ogr2ogr exit ${result2.code} (일부 행 생략)`);
+      console.warn(`[exportLayerTableToShp] ${schema}.${nln} 2차(SQL) ogr2ogr exit ${result2.code} (일부 행 생략)`);
     }
   } else if (result.code !== 0) {
-    console.warn(`[exportLayerTableToShp] ${schema}.${tableName} ogr2ogr exit ${result.code} (일부 행 생략, shp ${shpSize}b)`);
+    console.warn(`[exportLayerTableToShp] ${schema}.${nln} ogr2ogr exit ${result.code} (일부 행 생략, shp ${shpSize}b)`);
   }
 
-  await fs.writeFile(path.join(tempDir, `${tableName}.cpg`), `${dbfEncoding}\n`, 'utf8');
+  await fs.writeFile(path.join(tempDir, `${nln}.cpg`), `${dbfEncoding}\n`, 'utf8');
 
   const chunks: Buffer[] = [];
   const archive = archiver('zip', { zlib: { level: 9 } });

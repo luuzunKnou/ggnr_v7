@@ -1,36 +1,39 @@
 <featureType>
-  <id>FeatureTypeInfoImpl-7b45823a:1a113f17c5f:-7b5a</id>
+  <id>FeatureTypeInfoImpl--4d2f0c14:1a1671e8ffa:-7eb0</id>
   <name>swl_manh_ps_etc</name>
-  <nativeName>swl_manh_ps_etc</nativeName>
+  <nativeName>swl_manh_ps</nativeName>
   <namespace>
     <id>NamespaceInfoImpl-4bf97568:19c4d6c3053:-7ffa</id>
   </namespace>
-  <title>swl_manh_ps_etc</title>
+  <title>swl_manh_ps</title>
   <keywords>
-    <string>swl_manh_ps_etc</string>
     <string>features</string>
+    <string>swl_manh_ps</string>
   </keywords>
   <srs>EPSG:5181</srs>
   <nativeBoundingBox>
-    <minx>411209.45903588925</minx>
-    <maxx>419467.95066127065</maxx>
-    <miny>311281.53985865554</miny>
-    <maxy>349197.99901533325</maxy>
+    <minx>320530.1050916597</minx>
+    <maxx>353416.1898585714</maxx>
+    <miny>307456.79268423235</miny>
+    <maxy>331034.9452104012</maxy>
     <crs class="projected">EPSG:5181</crs>
   </nativeBoundingBox>
   <latLonBoundingBox>
-    <minx>129.35054297212474</minx>
-    <maxx>129.453107492164</maxx>
-    <miny>36.274584662617066</miny>
-    <maxy>36.617826712813944</maxy>
+    <minx>128.3411293268087</minx>
+    <maxx>128.7115649043344</maxx>
+    <miny>36.252885689419166</miny>
+    <maxy>36.46996993201124</maxy>
     <crs>EPSG:4326</crs>
   </latLonBoundingBox>
   <projectionPolicy>FORCE_DECLARED</projectionPolicy>
   <enabled>true</enabled>
+  <advertised>true</advertised>
   <store class="dataStore">
     <id>DataStoreInfoImpl-4bf97568:19c4d6c3053:-7ff9</id>
   </store>
   <serviceConfiguration>false</serviceConfiguration>
+  <simpleConversionEnabled>false</simpleConversionEnabled>
+  <cqlFilter>smu_cde IS NULL OR smu_cde NOT IN (&apos;SMU001&apos;, &apos;SMU002&apos;)</cqlFilter>
   <maxFeatures>0</maxFeatures>
   <numDecimals>0</numDecimals>
   <padWithZeros>false</padWithZeros>
@@ -38,4 +41,5 @@
   <overridingServiceSRS>false</overridingServiceSRS>
   <skipNumberMatched>false</skipNumberMatched>
   <circularArcPresent>false</circularArcPresent>
+  <encodeMeasures>false</encodeMeasures>
 </featureType>

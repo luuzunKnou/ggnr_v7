@@ -2,27 +2,33 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { ImageOff, Loader2, MapPin, Pencil, Plus, Printer, Trash2, X } from "lucide-react";
+import { FileDown, ImageOff, Loader2, MapPin, Pencil, Plus, Printer, Trash2, X } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { call } from "@/lib/api";
 import { useSerWriteAccess } from "@/hooks/useSerWriteAccess";
 import { MapSideDetailScroll } from "../../../_mapComponents/MapSideDetailScroll";
 import { useMapContext } from "../../../_mapComponents/MapContext";
 import { AddressSearchPanel } from "../../../_mapComponents/addressSearch/AddressSearchPanel";
 import {
   getAddressFromCoord,
-  getCoordFromAddress,
   type VWorldAddressItem,
 } from "../../../_mapComponents/addressSearch/vworldAddressSearch";
 import {
   ServiceFileImagePreview,
   type ServiceFilePreviewItem,
 } from "../../../_mapComponents/standard/ServiceFileImagePreview";
+import {
+  isImageServiceFileName,
+  requestServiceFileDataDelete,
+  useServiceFileChunkedUpload,
+  useServiceFileData,
+} from "../../../_mapComponents/standard/useServiceFileData";
 import { layerRowPanelButtonClass } from "../../../_mapComponents/layerRowEdit/layerRowPanelButtonStyles";
 import { useMapVisualCenterPixel } from "../../../_mapComponents/hooks/useMapVisualCenterPixel";
 import { GEOM_EDIT_HINT_BELOW_SEARCH_GAP, useSearchBarOffset } from "../../../searchBarOffsetContext";
-import { captureLocationMapWithPoint } from "../../road/roadFrontageBuilding/roadFrontageBuildingLocationCapture";
 import { useRiverIllegalOccupationMapLocation } from "./useRiverIllegalOccupationMapLocation";
 import { useRiverIllegalOccupationPointPick } from "./useRiverIllegalOccupationPointPick";
+import { refreshRiverIllegalOccupationMap } from "./riverIllegalOccupationMapSync";
 import {
   RIVER_ILLEGAL_OCCUPATION_COLUMNS as COLS,
   RIVER_ILLEGAL_RECURRENCE_OPTIONS,
@@ -30,31 +36,64 @@ import {
   RIVER_ILLEGAL_STATUS_KINDS,
   RIVER_ILLEGAL_STATUS_ROWS,
   type RiverIllegalOccupationFieldKey,
+  type RiverIllegalPhotoField,
   type RiverIllegalStatusKindKey,
   type RiverIllegalStatusRowKey,
 } from "./riverIllegalOccupationConfig";
 import {
+  RIVER_ILLEGAL_OCCUPATION_FILE_LAYER,
+  RIVER_ILLEGAL_OCCUPATION_FILE_SER_ENG,
+  RIVER_ILLEGAL_PHOTO_SLOTS,
+  resolveRiverIllegalPhoto,
+  riverIllegalFileKey,
+  riverIllegalFileKeyLegacy,
+  riverIllegalNamedPhotoFile,
+} from "./riverIllegalOccupationFiles";
+import { captureLocationMapWithPoint } from "../../road/roadFrontageBuilding/roadFrontageBuildingLocationCapture";
+import {
   createEmptyRiverIllegalOccupationCard,
   deleteRiverIllegalOccupationCard,
   isNewRiverIllegalOccupationId,
-  patchRiverIllegalOccupationCard,
   riverIllegalLinesToText,
-  riverIllegalStatusTotal,
+  riverIllegalStatusTotalMarked,
   riverIllegalTextToLines,
   saveRiverIllegalOccupationCard,
   splitRiverIllegalLines,
   useRiverIllegalOccupationCards,
   type RiverIllegalOccupationCard,
 } from "./riverIllegalOccupationStore";
-import { formatRiverIllegalCardDate, splitRiverIllegalKindLabel } from "./riverIllegalOccupationFormat";
-import { printRiverIllegalOccupationCard } from "./riverIllegalOccupationPrint";
+import {
+  formatRiverIllegalCardDate,
+  parseRiverIllegalRedMarkup,
+  sanitizeRiverIllegalStatusDigits,
+  splitRiverIllegalKindLabel,
+} from "./riverIllegalOccupationFormat";
+import {
+  downloadRiverIllegalOccupationCardPdf,
+  printRiverIllegalOccupationCard,
+} from "./riverIllegalOccupationPrint";
+import {
+  riverIllegalColumnLabel,
+  useRiverIllegalOccupationFieldLabels,
+} from "./useRiverIllegalOccupationFieldLabels";
+
+/** 사진·위치도 변경 후 단건 PDF 캐시 백그라운드 갱신 */
+function scheduleCardPdfCacheRefresh(id: string | null | undefined) {
+  const key = String(id ?? "").trim();
+  if (!key || isNewRiverIllegalOccupationId(key)) return;
+  void call("", "POST", {
+    service: "riverIllegalOccupationService",
+    action: "refreshPdfCache",
+    params: { id: key },
+  }).catch(() => undefined);
+}
 
 /** 접도구역 건축물 관리대장 서식과 같은 테두리·머리칸 */
 const BORDER = "border-[1px] border-solid border-foreground/80";
-const FORM_TH_BG = "bg-[#E4E9F0] dark:bg-zinc-600";
+const FORM_TH_BG = "bg-[#F5F5F5] dark:bg-zinc-600";
 const FORM_LABEL_W = "6.5rem";
-/** 위치 줄의 재발여부 값 칸 — 원본 카드 비율(위치 약 4할, 재발여부 값 약 2할) */
-const FORM_RECURRENCE_VALUE_W = "22%";
+/** 위치 줄 오른쪽(재발)·완료일자 값 칸 — 날짜+완료여부 한 줄이 들어가게 */
+const FORM_RECURRENCE_VALUE_W = "38%";
 const formTableClass = "w-full table-fixed border-collapse leading-none";
 const thClass = `box-border ${BORDER} ${FORM_TH_BG} px-1 py-0.5 text-center align-middle text-[11px] font-semibold leading-tight text-foreground`;
 const tdClass = `box-border h-[30px] ${BORDER} bg-background px-1.5 py-1 align-middle text-[11px] leading-snug text-foreground`;
@@ -70,6 +109,9 @@ const locationPickBtn =
   "inline-flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-sm border border-border bg-background text-muted-foreground hover:bg-muted hover:text-foreground";
 const locationPickBtnActive = "border-red-300 bg-red-50 text-red-700 dark:border-red-800 dark:bg-red-950/40 dark:text-red-300";
 
+/** 사진 불러오기 실패 시 다시 시도 간격(ms) — 다 쓰면 «불러올 수 없습니다» */
+const PHOTO_RETRY_DELAYS_MS = [1500, 4000, 10000];
+
 /** 원본 카드에서 줄 앞에 «▸»를 붙이는 항목 */
 const BULLET_FIELDS = new Set<RiverIllegalOccupationFieldKey>([
   "violation",
@@ -79,14 +121,7 @@ const BULLET_FIELDS = new Set<RiverIllegalOccupationFieldKey>([
   "manager",
 ]);
 
-/** 수정 시 한 줄 입력칸 — 나머지(조치내용·관리책임자)는 여러 줄 입력 */
-const SINGLE_LINE_EDIT_FIELDS = new Set<RiverIllegalOccupationFieldKey>([
-  "actor",
-  "violation",
-  "relatedLaw",
-  "actionPlan",
-]);
-
+/** 화면 줄바꿈 → DB «@» 구분으로 저장하는 항목 */
 const MULTILINE_ROWS: RiverIllegalOccupationFieldKey[] = [
   "violation",
   "relatedLaw",
@@ -95,7 +130,7 @@ const MULTILINE_ROWS: RiverIllegalOccupationFieldKey[] = [
   "manager",
 ];
 
-type PhotoField = "locationMapUrl" | "photo1Url" | "photo2Url" | "completePhotoUrl";
+type PhotoField = RiverIllegalPhotoField;
 
 const PHOTO_FIELDS: PhotoField[] = ["locationMapUrl", "photo1Url", "photo2Url", "completePhotoUrl"];
 
@@ -128,18 +163,42 @@ function Td({ children, className, colSpan }: { children: ReactNode; className?:
   );
 }
 
-/** 조회 — «@» 줄마다 한 줄 (bullet 항목은 «▸») */
+/** `#빨간#` 구간을 빨간 글씨로 */
+function RedMarkupText({ value, className }: { value: string; className?: string }) {
+  const parts = parseRiverIllegalRedMarkup(value);
+  if (parts.length === 0) return null;
+  return (
+    <span className={className}>
+      {parts.map((p, i) =>
+        p.red ? (
+          <span key={i} className="text-red-600">
+            {p.text}
+          </span>
+        ) : (
+          <span key={i}>{p.text}</span>
+        )
+      )}
+    </span>
+  );
+}
+
+/** 조회 — «@» 줄마다 한 줄 (bullet 항목은 «▸»), #…# 은 빨강(▸도 같이) */
 function LinesView({ value, bullet }: { value: string; bullet: boolean }) {
   const lines = splitRiverIllegalLines(value);
   if (lines.length === 0) return <span className="text-muted-foreground">—</span>;
   return (
     <ul className="space-y-0.5">
-      {lines.map((line, i) => (
-        <li key={i} className="flex min-w-0 gap-1 break-all">
-          {bullet ? <span className="shrink-0 text-muted-foreground">▸</span> : null}
-          <span className="min-w-0">{line}</span>
-        </li>
-      ))}
+      {lines.map((line, i) => {
+        const hasRed = parseRiverIllegalRedMarkup(line).some((p) => p.red);
+        return (
+          <li key={i} className="flex min-w-0 gap-1 break-all">
+            {bullet ? (
+              <span className={cn("shrink-0", hasRed ? "text-red-600" : "text-muted-foreground")}>▸</span>
+            ) : null}
+            <RedMarkupText value={line} className="min-w-0" />
+          </li>
+        );
+      })}
     </ul>
   );
 }
@@ -153,7 +212,6 @@ function LinesInput({ value, onChange }: { value: string; onChange: (next: strin
       className={textareaClass}
       rows={rows}
       value={text}
-      placeholder="줄을 바꿔 여러 줄로 입력"
       onChange={(e) => {
         setText(e.target.value);
         onChange(riverIllegalTextToLines(e.target.value));
@@ -162,24 +220,13 @@ function LinesInput({ value, onChange }: { value: string; onChange: (next: strin
   );
 }
 
-function readFileAsDataUrl(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(typeof reader.result === "string" ? reader.result : "");
-    reader.onerror = () => reject(reader.error);
-    reader.readAsDataURL(file);
-  });
-}
-
 /**
- * 사진 한 칸 — 그림을 누르면 전체화면. 수정 중 업로드 칸은 오른쪽 위 «등록»·«삭제»
- * (위치도는 업로드하지 않고 위치 주소·도형으로만 만든다)
+ * 사진 한 칸 — file_data 첨부. 수정 중 «등록»·«바꾸기»·«삭제»
  */
 function PhotoSlot({
   url,
   editing,
-  uploadable,
-  capturing,
+  uploading,
   emptyHint,
   onAdd,
   onRemove,
@@ -187,38 +234,57 @@ function PhotoSlot({
 }: {
   url: string;
   editing: boolean;
-  uploadable: boolean;
-  capturing?: boolean;
+  uploading?: boolean;
   emptyHint?: string;
   onAdd: () => void;
   onRemove: () => void;
   onPreview: () => void;
 }) {
-  const [failed, setFailed] = useState(false);
-  const src = url.trim();
-  const showImg = Boolean(src) && !failed && !capturing;
-  const canPick = editing && uploadable && !src && !capturing;
+  const baseSrc = url.trim();
+  /** 서버가 PDF 준비 등으로 바쁠 때 실패할 수 있어 잠시 뒤 다시 불러옴 */
+  const [loadState, setLoadState] = useState({ src: baseSrc, attempt: 0, failed: false, waiting: false });
+  if (loadState.src !== baseSrc) setLoadState({ src: baseSrc, attempt: 0, failed: false, waiting: false });
+  const same = loadState.src === baseSrc;
+  const failed = same && loadState.failed;
+  const waiting = same && loadState.waiting;
+  const attempt = same ? loadState.attempt : 0;
+  const src =
+    baseSrc && attempt > 0 ? `${baseSrc}${baseSrc.includes("?") ? "&" : "?"}retry=${attempt}` : baseSrc;
+  const handleImgError = () => {
+    if (attempt >= PHOTO_RETRY_DELAYS_MS.length) {
+      setLoadState({ src: baseSrc, attempt, failed: true, waiting: false });
+      return;
+    }
+    setLoadState({ src: baseSrc, attempt, failed: false, waiting: true });
+    window.setTimeout(() => {
+      setLoadState((prev) =>
+        prev.src === baseSrc ? { ...prev, attempt: prev.attempt + 1, waiting: false } : prev
+      );
+    }, PHOTO_RETRY_DELAYS_MS[attempt]!);
+  };
+  const showImg = Boolean(src) && !failed && !waiting && !uploading;
+  const canPick = editing && !src && !uploading;
   return (
     <div
       className={cn("relative h-full w-full overflow-hidden bg-background", (showImg || canPick) && "cursor-pointer")}
       title={showImg ? "크게 보기" : undefined}
       onClick={showImg ? onPreview : canPick ? onAdd : undefined}
     >
-      {capturing ? (
+      {uploading || waiting ? (
         <div className="flex h-full items-center justify-center gap-1 text-[10px] text-muted-foreground">
           <Loader2 className="h-3.5 w-3.5 animate-spin" />
-          지도를 담는 중…
+          {uploading ? "올리는 중…" : "사진 불러오는 중…"}
         </div>
       ) : showImg ? (
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={src} alt="" className="absolute inset-1.5 h-[calc(100%-0.75rem)] w-[calc(100%-0.75rem)] object-cover" onError={() => setFailed(true)} />
+        <img src={src} alt="" className="absolute inset-1.5 h-[calc(100%-0.75rem)] w-[calc(100%-0.75rem)] object-cover" onError={handleImgError} />
       ) : (
         <div className="flex h-full flex-col items-center justify-center gap-1 px-2 text-center text-[10px] text-muted-foreground">
           <ImageOff className="h-4 w-4 opacity-60" aria-hidden />
           {src ? "사진을 불러올 수 없습니다" : editing ? emptyHint || "눌러서 사진 등록" : "사진 없음"}
         </div>
       )}
-      {editing && uploadable && !capturing ? (
+      {editing && !uploading ? (
         <div className="absolute right-1 top-1 flex gap-1">
           <button
             type="button"
@@ -266,9 +332,11 @@ export function RiverIllegalOccupationDetailPanel({ cardId, onClose, onSaved, on
   const mapContext = useMapContext();
   const vworldApiKey = mapContext?.vworldApiKey ?? "";
   const cards = useRiverIllegalOccupationCards();
+  const fieldLabels = useRiverIllegalOccupationFieldLabels();
   const canWrite = useSerWriteAccess();
   const isCreateMode = isNewRiverIllegalOccupationId(cardId);
   const saved = isCreateMode ? null : (cards.find((c) => c.id === cardId) ?? null);
+  const L = (key: RiverIllegalOccupationFieldKey) => riverIllegalColumnLabel(fieldLabels, key);
 
   const [isEditing, setIsEditing] = useState(isCreateMode);
   const [draft, setDraft] = useState<RiverIllegalOccupationCard>(
@@ -276,17 +344,31 @@ export function RiverIllegalOccupationDetailPanel({ cardId, onClose, onSaved, on
   );
   /** 수정 진입마다 여러 줄 입력칸을 새 값으로 다시 그림 */
   const [editSession, setEditSession] = useState(0);
-  const [capturing, setCapturing] = useState(false);
+  const [pdfSaving, setPdfSaving] = useState(false);
   const [picking, setPicking] = useState(false);
+  const [uploadingField, setUploadingField] = useState<PhotoField | null>(null);
+  const [attachRefreshNonce, setAttachRefreshNonce] = useState(0);
   /** 지도에서 찍어 주소를 채우면 위치 검색칸을 새 주소로 다시 그림 */
   const [locationInputSession, setLocationInputSession] = useState(0);
   const [preview, setPreview] = useState<{ items: ServiceFilePreviewItem[]; index: number } | null>(null);
-  const captureSeqRef = useRef(0);
-  const autoMapTriedRef = useRef<string | null>(null);
   const photoInputRef = useRef<HTMLInputElement | null>(null);
   const photoSlotRef = useRef<PhotoField | null>(null);
+  const locationCaptureSeqRef = useRef(0);
+  const mgmtKeyRef = useRef("");
+  const isCreateModeRef = useRef(isCreateMode);
+  /** 추가 화면에서 올린 위치도 — 취소·닫기 시 삭제, 등록 성공 시 유지 */
+  const createSessionLocationMapRef = useRef<{ key: string; fileName: string } | null>(null);
+  const photoResolvedRef = useRef<Record<PhotoField, ReturnType<typeof resolveRiverIllegalPhoto>> | null>(
+    null
+  );
+  const { upload: uploadChunked } = useServiceFileChunkedUpload();
+
+  isCreateModeRef.current = isCreateMode;
 
   const current = isEditing ? draft : (saved ?? draft);
+  const mgmtKey = riverIllegalFileKey(current.mgmtNo);
+  const mgmtKeyLegacy = riverIllegalFileKeyLegacy(current.mgmtNo);
+  const useLegacyFolder = Boolean(mgmtKey && mgmtKeyLegacy && mgmtKey !== mgmtKeyLegacy);
   const map = mapContext?.mapInstanceRef?.current ?? null;
   const mapPaddingLeft = mapContext?.mapPaddingLeft ?? 0;
   const { inputBottomPx } = useSearchBarOffset();
@@ -294,80 +376,212 @@ export function RiverIllegalOccupationDetailPanel({ cardId, onClose, onSaved, on
 
   useRiverIllegalOccupationMapLocation({ key: cardId, lon: current.lon, lat: current.lat }, !picking);
 
-  /** 좌표 지도에 점을 찍어 위치도 그림(data URL)으로 — 접도구역 건축물 위치도와 같은 방식 */
-  const captureMapAt = useCallback(
-    async (lon: number, lat: number): Promise<string | null> => {
-      if (!map) return null;
-      const file = await captureLocationMapWithPoint(map, { lon, lat }, mapContext?.mapBackgroundMapIdRef?.current);
-      return file ? readFileAsDataUrl(file) : null;
-    },
-    [map, mapContext?.mapBackgroundMapIdRef]
+  mgmtKeyRef.current = mgmtKey;
+
+  /** 신규 — 관리번호 자동채번 (필수·읽기전용) */
+  useEffect(() => {
+    if (!isCreateMode) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await call("", "POST", {
+          service: "riverIllegalOccupationService",
+          action: "nextMgmtNo",
+          params: {},
+        });
+        const data = res?.data ?? res;
+        const mgmtNo = String(data?.mgmtNo ?? "").trim();
+        if (!mgmtNo || cancelled) return;
+        setDraft((prev) => (prev.mgmtNo.trim() ? prev : { ...prev, mgmtNo }));
+      } catch {
+        /* 저장 시 서버에서 다시 채번 */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [isCreateMode]);
+
+  /** 신규 폴더(HCBJ_…) + 구형(HCBJ…) 둘 다 조회 — 폴더 rename 전후 호환 */
+  const attachPrimary = useServiceFileData({
+    serEng: RIVER_ILLEGAL_OCCUPATION_FILE_SER_ENG,
+    enabled: Boolean(mgmtKey),
+    layerSegment: RIVER_ILLEGAL_OCCUPATION_FILE_LAYER,
+    keyValue: mgmtKey || null,
+    refreshNonce: attachRefreshNonce,
+    includeMeta: false,
+  });
+  const attachLegacy = useServiceFileData({
+    serEng: RIVER_ILLEGAL_OCCUPATION_FILE_SER_ENG,
+    enabled: useLegacyFolder,
+    layerSegment: RIVER_ILLEGAL_OCCUPATION_FILE_LAYER,
+    keyValue: useLegacyFolder ? mgmtKeyLegacy : null,
+    refreshNonce: attachRefreshNonce,
+    includeMeta: false,
+  });
+
+  const photoResolved = useMemo(() => {
+    const out = {} as Record<PhotoField, ReturnType<typeof resolveRiverIllegalPhoto>>;
+    for (const f of PHOTO_FIELDS) {
+      out[f] = resolveRiverIllegalPhoto(
+        mgmtKey,
+        attachPrimary.files,
+        useLegacyFolder ? mgmtKeyLegacy : null,
+        attachLegacy.files,
+        f
+      );
+    }
+    return out;
+  }, [attachPrimary.files, attachLegacy.files, mgmtKey, mgmtKeyLegacy, useLegacyFolder]);
+
+  const photoUrls = useMemo(() => {
+    const out = {} as Record<PhotoField, string>;
+    for (const f of PHOTO_FIELDS) {
+      const base = photoResolved[f]?.url ?? "";
+      if (!base) {
+        out[f] = "";
+        continue;
+      }
+      // 같은 파일명으로 위치도 교체 시 브라우저 캐시 방지
+      const mod = photoResolved[f]?.file.modified;
+      const v = mod != null && String(mod) ? String(mod) : String(attachRefreshNonce);
+      out[f] = `${base}${base.includes("?") ? "&" : "?"}v=${encodeURIComponent(v)}`;
+    }
+    return out;
+  }, [photoResolved, attachRefreshNonce]);
+
+  photoResolvedRef.current = photoResolved;
+
+  const displayCard = useMemo(
+    () => ({
+      ...current,
+      locationMapUrl: photoUrls.locationMapUrl,
+      photo1Url: photoUrls.photo1Url,
+      photo2Url: photoUrls.photo2Url,
+      completePhotoUrl: photoUrls.completePhotoUrl,
+    }),
+    [current, photoUrls]
   );
 
-  /** 수정 중 위치가 정해지면(주소·점 찍기) 위치도를 새로 담는다. 연속 선택 시 마지막만 반영 */
-  const refreshLocationMap = useCallback(
+  /** 위치 좌표 → 지도 화면을 위치도 첨부 파일로 저장(이미 있으면 교체) */
+  const captureAndUploadLocationMap = useCallback(
     async (lon: number, lat: number) => {
-      const seq = (captureSeqRef.current += 1);
-      setCapturing(true);
+      const mapInst = mapContext?.mapInstanceRef?.current ?? null;
+      if (!mapInst) return;
+      // 신규 채번 직후 키 반영 대기
+      let key = mgmtKeyRef.current;
+      if (!key) {
+        for (let i = 0; i < 20 && !key; i++) {
+          await new Promise((r) => window.setTimeout(r, 100));
+          key = mgmtKeyRef.current;
+        }
+      }
+      if (!key) {
+        window.alert("관리번호가 아직 없습니다. 잠시 후 위치를 다시 지정해 주세요.");
+        return;
+      }
+      const seq = (locationCaptureSeqRef.current += 1);
+      setUploadingField("locationMapUrl");
       try {
-        const dataUrl = await captureMapAt(lon, lat);
-        if (seq !== captureSeqRef.current) return;
-        if (!dataUrl) {
-          window.alert("위치도 지도를 담지 못했습니다. 위치를 다시 정해 주세요.");
+        const backgroundId = mapContext?.mapBackgroundMapIdRef?.current;
+        const raw = await captureLocationMapWithPoint(mapInst, { lon, lat }, backgroundId);
+        if (seq !== locationCaptureSeqRef.current) return;
+        if (!raw) {
+          window.alert("위치도를 담지 못했습니다. 위치를 다시 지정해 주세요.");
           return;
         }
-        setDraft((prev) => ({ ...prev, locationMapUrl: dataUrl }));
-      } catch {
-        if (seq === captureSeqRef.current) window.alert("위치도 지도를 담지 못했습니다.");
+        const named = riverIllegalNamedPhotoFile(raw, key, "locationMapUrl");
+        // 이전 위치도 제거(목록 반영 전·세션 추적분 포함)
+        const existing = photoResolvedRef.current?.locationMapUrl;
+        const sessionPrev = createSessionLocationMapRef.current;
+        const toDelete: { key: string; fileName: string }[] = [];
+        if (existing) toDelete.push({ key: existing.key, fileName: existing.file.name });
+        if (
+          sessionPrev &&
+          !toDelete.some((d) => d.key === sessionPrev.key && d.fileName === sessionPrev.fileName)
+        ) {
+          toDelete.push(sessionPrev);
+        }
+        for (const d of toDelete) {
+          await requestServiceFileDataDelete({
+            serEng: RIVER_ILLEGAL_OCCUPATION_FILE_SER_ENG,
+            layerSegment: RIVER_ILLEGAL_OCCUPATION_FILE_LAYER,
+            keyValue: d.key,
+            fileName: d.fileName,
+          });
+        }
+        if (seq !== locationCaptureSeqRef.current) return;
+        const result = await uploadChunked({
+          file: named,
+          serEng: RIVER_ILLEGAL_OCCUPATION_FILE_SER_ENG,
+          layerSegment: RIVER_ILLEGAL_OCCUPATION_FILE_LAYER,
+          keyValue: key,
+        });
+        if (seq !== locationCaptureSeqRef.current) return;
+        if (result?.error) {
+          window.alert(result.error);
+          return;
+        }
+        if (isCreateModeRef.current) {
+          createSessionLocationMapRef.current = { key, fileName: named.name };
+        } else {
+          scheduleCardPdfCacheRefresh(cardId);
+        }
+        setAttachRefreshNonce((n) => n + 1);
+      } catch (e: unknown) {
+        if (seq === locationCaptureSeqRef.current) {
+          window.alert(e instanceof Error ? e.message : "위치도 저장에 실패했습니다.");
+        }
       } finally {
-        if (seq === captureSeqRef.current) setCapturing(false);
+        if (seq === locationCaptureSeqRef.current) setUploadingField(null);
       }
     },
-    [captureMapAt]
+    [mapContext, uploadChunked, cardId]
   );
 
-  /** 조회 중 위치도가 없는 카드(예시 등) — 주소로 좌표를 찾아 위치도를 한 번 만들어 둔다 */
-  useEffect(() => {
-    if (isEditing || !saved || !map || !vworldApiKey) return;
-    if (saved.locationMapUrl.trim() || !saved.location.trim()) return;
-    if (autoMapTriedRef.current === saved.id) return;
-    autoMapTriedRef.current = saved.id;
-    const target = saved;
-    void (async () => {
-      let lon = Number(target.lon);
-      let lat = Number(target.lat);
-      if (!target.lon.trim() || !target.lat.trim() || !Number.isFinite(lon) || !Number.isFinite(lat)) {
-        let hit = await getCoordFromAddress(target.location, { apiKey: vworldApiKey, type: "PARCEL" });
-        if (!hit.ok) hit = await getCoordFromAddress(target.location, { apiKey: vworldApiKey, type: "ROAD" });
-        if (!hit.ok) return;
-        lon = hit.lon;
-        lat = hit.lat;
-        patchRiverIllegalOccupationCard(target.id, { lon: String(lon), lat: String(lat) });
-      }
-      const dataUrl = await captureMapAt(lon, lat);
-      if (dataUrl) patchRiverIllegalOccupationCard(target.id, { locationMapUrl: dataUrl });
-    })();
-  }, [isEditing, saved, map, vworldApiKey, captureMapAt]);
+  const discardCreateSessionLocationMap = useCallback(async () => {
+    const hit = createSessionLocationMapRef.current;
+    createSessionLocationMapRef.current = null;
+    if (!hit) return;
+    locationCaptureSeqRef.current += 1;
+    await requestServiceFileDataDelete({
+      serEng: RIVER_ILLEGAL_OCCUPATION_FILE_SER_ENG,
+      layerSegment: RIVER_ILLEGAL_OCCUPATION_FILE_LAYER,
+      keyValue: hit.key,
+      fileName: hit.fileName,
+    }).catch(() => undefined);
+  }, []);
 
-  /** 지도에 점을 찍으면 좌표 → 지번 주소 → 위치도 */
+  const closeCreateOrDetail = useCallback(() => {
+    if (isCreateMode) {
+      void discardCreateSessionLocationMap().finally(() => onClose());
+      return;
+    }
+    onClose();
+  }, [isCreateMode, discardCreateSessionLocationMap, onClose]);
+
+  /** 지도에 점을 찍으면 좌표 → 지번 주소 + 위치도 캡처 */
   const handlePointPicked = useCallback(
     (lon: number, lat: number) => {
       setPicking(false);
       setDraft((prev) => ({ ...prev, lon: String(lon), lat: String(lat) }));
       void (async () => {
         try {
-          const addr = vworldApiKey ? await getAddressFromCoord(lon, lat, { apiKey: vworldApiKey, type: "PARCEL" }) : null;
+          const addr = vworldApiKey
+            ? await getAddressFromCoord(lon, lat, { apiKey: vworldApiKey, type: "PARCEL" })
+            : null;
           const text = String(addr?.jibun ?? "").trim() || String(addr?.road ?? "").trim();
-          if (!text) return;
-          setDraft((prev) => ({ ...prev, location: text }));
-          setLocationInputSession((n) => n + 1);
+          if (text) {
+            setDraft((prev) => ({ ...prev, location: text }));
+            setLocationInputSession((n) => n + 1);
+          }
         } catch {
-          /* 주소를 못 찾아도 위치도는 담는다 */
+          /* 주소 실패해도 좌표·위치도는 유지 */
         }
+        await captureAndUploadLocationMap(lon, lat);
       })();
-      void refreshLocationMap(lon, lat);
     },
-    [refreshLocationMap, vworldApiKey]
+    [vworldApiKey, captureAndUploadLocationMap]
   );
 
   const handlePickBlocked = useCallback(() => setPicking(false), []);
@@ -375,11 +589,15 @@ export function RiverIllegalOccupationDetailPanel({ cardId, onClose, onSaved, on
 
   const previewItems = useMemo(
     () =>
-      PHOTO_FIELDS.filter((f) => current[f].trim()).map((f) => ({
+      PHOTO_FIELDS.filter((f) => photoUrls[f].trim()).map((f) => ({
         field: f,
-        item: { url: current[f], fileName: COLS[f].label, kind: "image" } as ServiceFilePreviewItem,
+        item: {
+          url: photoUrls[f],
+          fileName: RIVER_ILLEGAL_PHOTO_SLOTS[f].label,
+          kind: "image",
+        } as ServiceFilePreviewItem,
       })),
-    [current]
+    [photoUrls]
   );
 
   if (!isCreateMode && !saved) {
@@ -402,7 +620,10 @@ export function RiverIllegalOccupationDetailPanel({ cardId, onClose, onSaved, on
     setDraft((prev) => ({ ...prev, [key]: value }));
 
   const setStatus = (kind: RiverIllegalStatusKindKey, row: RiverIllegalStatusRowKey, raw: string) => {
-    const value = raw.replace(/[^\d]/g, "");
+    // 화면에는 숫자만. 조치·미조치는 저장값 `#N#`(빨간 표시용)
+    const digits = sanitizeRiverIllegalStatusDigits(raw);
+    const value =
+      row === "acted" || row === "notActed" ? (digits ? `#${digits}#` : "") : digits;
     setDraft((prev) => ({
       ...prev,
       status: { ...prev.status, [kind]: { ...prev.status[kind], [row]: value } },
@@ -417,35 +638,54 @@ export function RiverIllegalOccupationDetailPanel({ cardId, onClose, onSaved, on
   };
 
   const cancelEdit = () => {
-    captureSeqRef.current += 1;
-    setCapturing(false);
+    setUploadingField(null);
     setPicking(false);
     if (isCreateMode) {
-      onClose();
+      void discardCreateSessionLocationMap().finally(() => onClose());
       return;
     }
     setIsEditing(false);
   };
 
   const handleSave = () => {
+    if (!draft.mgmtNo.trim()) {
+      window.alert("관리번호가 없습니다. 잠시 후 다시 시도하세요.");
+      return;
+    }
     if (!draft.serialNo.trim()) {
       window.alert("연번을 입력하세요.");
       return;
     }
-    const id = saveRiverIllegalOccupationCard(draft);
-    setPicking(false);
-    setIsEditing(false);
-    onSaved(id);
+    void (async () => {
+      try {
+        const id = await saveRiverIllegalOccupationCard(draft);
+        // 등록 성공 — 위치도 유지
+        createSessionLocationMapRef.current = null;
+        setPicking(false);
+        setIsEditing(false);
+        refreshRiverIllegalOccupationMap(mapContext?.mapInstanceRef?.current);
+        onSaved(id);
+      } catch (e: unknown) {
+        window.alert(e instanceof Error ? e.message : "저장에 실패했습니다.");
+      }
+    })();
   };
 
   const handleDelete = () => {
     if (!saved) return;
     if (!window.confirm("이 관리카드를 삭제하시겠습니까?")) return;
-    deleteRiverIllegalOccupationCard(saved.id);
-    onDeleted();
+    void (async () => {
+      try {
+        await deleteRiverIllegalOccupationCard(saved.id);
+        refreshRiverIllegalOccupationMap(mapContext?.mapInstanceRef?.current);
+        onDeleted();
+      } catch (e: unknown) {
+        window.alert(e instanceof Error ? e.message : "삭제에 실패했습니다.");
+      }
+    })();
   };
 
-  /** 위치 주소 선택 → 주소·좌표 반영 후 그 위치 지도를 담아 위치도로 넣는다 */
+  /** 위치 주소 선택 → 주소·좌표 + 위치도 캡처 */
   const applyLocationFromSearch = (item: VWorldAddressItem) => {
     const address =
       (item.jibunAddress ?? "").trim() || (item.roadAddress ?? "").trim() || (item.address ?? "").trim();
@@ -458,7 +698,7 @@ export function RiverIllegalOccupationDetailPanel({ cardId, onClose, onSaved, on
       lon: hasPoint ? String(lon) : prev.lon,
       lat: hasPoint ? String(lat) : prev.lat,
     }));
-    if (hasPoint) void refreshLocationMap(lon, lat);
+    if (hasPoint) void captureAndUploadLocationMap(lon, lat);
   };
 
   const openPreview = (field: PhotoField) => {
@@ -468,6 +708,10 @@ export function RiverIllegalOccupationDetailPanel({ cardId, onClose, onSaved, on
   };
 
   const openPhotoPicker = (field: PhotoField) => {
+    if (!mgmtKey) {
+      window.alert("관리번호가 아직 없습니다. 잠시 후 다시 시도하세요.");
+      return;
+    }
     photoSlotRef.current = field;
     photoInputRef.current?.click();
   };
@@ -477,20 +721,64 @@ export function RiverIllegalOccupationDetailPanel({ cardId, onClose, onSaved, on
     const field = photoSlotRef.current;
     photoSlotRef.current = null;
     if (!file || !field) return;
-    if (!file.type.startsWith("image/")) {
+    if (!isImageServiceFileName(file.name) && !file.type.startsWith("image/")) {
       window.alert("그림 파일만 등록할 수 있습니다.");
       return;
     }
+    if (!mgmtKey) {
+      window.alert("관리번호가 없습니다.");
+      return;
+    }
+    const named = riverIllegalNamedPhotoFile(file, mgmtKey, field);
+    setUploadingField(field);
     try {
-      setField(field, await readFileAsDataUrl(file));
-    } catch {
-      window.alert("사진을 읽지 못했습니다.");
+      const existing = photoResolved[field];
+      if (existing) {
+        await requestServiceFileDataDelete({
+          serEng: RIVER_ILLEGAL_OCCUPATION_FILE_SER_ENG,
+          layerSegment: RIVER_ILLEGAL_OCCUPATION_FILE_LAYER,
+          keyValue: existing.key,
+          fileName: existing.file.name,
+        });
+      }
+      const result = await uploadChunked({
+        file: named,
+        serEng: RIVER_ILLEGAL_OCCUPATION_FILE_SER_ENG,
+        layerSegment: RIVER_ILLEGAL_OCCUPATION_FILE_LAYER,
+        keyValue: mgmtKey,
+      });
+      if (result?.error) {
+        window.alert(result.error);
+        return;
+      }
+      setAttachRefreshNonce((n) => n + 1);
+      if (!isCreateMode) scheduleCardPdfCacheRefresh(cardId);
+    } catch (e: unknown) {
+      window.alert(e instanceof Error ? e.message : "사진 업로드에 실패했습니다.");
+    } finally {
+      setUploadingField(null);
     }
   };
 
   const removePhoto = (field: PhotoField) => {
-    if (!window.confirm(`${COLS[field].label} 사진을 삭제할까요?`)) return;
-    setField(field, "");
+    if (!mgmtKey) return;
+    const hit = photoResolved[field];
+    if (!hit) return;
+    if (!window.confirm(`${RIVER_ILLEGAL_PHOTO_SLOTS[field].label} 사진을 삭제할까요?`)) return;
+    void (async () => {
+      const res = await requestServiceFileDataDelete({
+        serEng: RIVER_ILLEGAL_OCCUPATION_FILE_SER_ENG,
+        layerSegment: RIVER_ILLEGAL_OCCUPATION_FILE_LAYER,
+        keyValue: hit.key,
+        fileName: hit.file.name,
+      });
+      if (!res.ok) {
+        window.alert(res.error);
+        return;
+      }
+      setAttachRefreshNonce((n) => n + 1);
+      if (!isCreateMode) scheduleCardPdfCacheRefresh(cardId);
+    })();
   };
 
   const textCell = (key: RiverIllegalOccupationFieldKey, opts?: { options?: readonly string[]; date?: boolean }) => {
@@ -528,11 +816,6 @@ export function RiverIllegalOccupationDetailPanel({ cardId, onClose, onSaved, on
 
   const linesCell = (key: RiverIllegalOccupationFieldKey) => {
     if (!isEditing) return <LinesView value={current[key]} bullet={BULLET_FIELDS.has(key)} />;
-    if (SINGLE_LINE_EDIT_FIELDS.has(key)) {
-      return (
-        <input type="text" className={fieldClass} value={draft[key]} onChange={(e) => setField(key, e.target.value)} />
-      );
-    }
     return <LinesInput key={`${editSession}:${key}`} value={draft[key]} onChange={(v) => setField(key, v)} />;
   };
 
@@ -544,9 +827,29 @@ export function RiverIllegalOccupationDetailPanel({ cardId, onClose, onSaved, on
         </span>
         <div className="standard-detail-section-header-actions">
           {!isEditing ? (
-            <button type="button" className={actionBtn} onClick={() => void printRiverIllegalOccupationCard(current)}>
+            <button type="button" className={actionBtn} onClick={() => void printRiverIllegalOccupationCard(displayCard)}>
               <Printer className="h-3 w-3" />
               인쇄
+            </button>
+          ) : null}
+          {!isEditing ? (
+            <button
+              type="button"
+              className={actionBtn}
+              disabled={pdfSaving}
+              title="인쇄와 같은 서식으로 PDF 파일이 바로 저장됩니다"
+              onClick={() => {
+                if (pdfSaving) return;
+                setPdfSaving(true);
+                void downloadRiverIllegalOccupationCardPdf(displayCard)
+                  .catch((e: unknown) =>
+                    window.alert(e instanceof Error ? e.message : "PDF 저장에 실패했습니다.")
+                  )
+                  .finally(() => setPdfSaving(false));
+              }}
+            >
+              {pdfSaving ? <Loader2 className="h-3 w-3 animate-spin" /> : <FileDown className="h-3 w-3" />}
+              {pdfSaving ? "PDF 준비 중…" : "PDF 저장"}
             </button>
           ) : null}
           {canWrite ? (
@@ -566,19 +869,35 @@ export function RiverIllegalOccupationDetailPanel({ cardId, onClose, onSaved, on
                 <button type="button" className={actionBtn} onClick={cancelEdit}>
                   취소
                 </button>
-                <button type="button" className={actionBtnPrimary} onClick={handleSave} disabled={capturing}>
+                <button
+                  type="button"
+                  className={actionBtnPrimary}
+                  onClick={handleSave}
+                  disabled={Boolean(uploadingField) || !draft.mgmtNo.trim()}
+                >
                   {isCreateMode ? "등록" : "저장"}
                 </button>
               </>
             )
           ) : null}
-          <button type="button" onClick={onClose} className="standard-panel-close" title="상세 닫기" aria-label="상세 닫기">
+          <button
+            type="button"
+            onClick={closeCreateOrDetail}
+            className="standard-panel-close"
+            title="상세 닫기"
+            aria-label="상세 닫기"
+          >
             <X className="h-4 w-4" />
           </button>
         </div>
       </div>
 
       <MapSideDetailScroll className="standard-detail-scroll">
+        {isEditing ? (
+          <div className="border-b border-red-200 bg-red-50 px-3 py-1.5 text-[11px] font-medium text-red-600 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-400">
+            * 글 작성 시 #내용#처럼 양쪽을 #로 감싸면 그 구간만 빨간색으로 표시됩니다. (예: #중요문구#)
+          </div>
+        ) : null}
         <div className="rounded-sm border border-border bg-background p-3 text-xs shadow-sm">
           <h2 className="mb-2 text-center text-[17px] font-bold leading-tight tracking-tight text-foreground underline decoration-1 underline-offset-4">
             하천·계곡 구역 내 불법 점용시설 관리카드
@@ -590,36 +909,72 @@ export function RiverIllegalOccupationDetailPanel({ cardId, onClose, onSaved, on
                 <col style={{ width: FORM_LABEL_W }} />
                 <col />
                 <col style={{ width: FORM_LABEL_W }} />
-                <col />
-              </colgroup>
-              <tbody>
-                <tr>
-                  <Th>{COLS.serialNo.label}</Th>
-                  <Td>{textCell("serialNo")}</Td>
-                  <Th>{COLS.riverType.label}</Th>
-                  <Td>{textCell("riverType", { options: RIVER_ILLEGAL_RIVER_TYPES })}</Td>
-                </tr>
-                <tr>
-                  <Th>{COLS.firstCheckYmd.label}</Th>
-                  <Td>{textCell("firstCheckYmd", { date: true })}</Td>
-                  <Th>{COLS.completeYmd.label}</Th>
-                  <Td>{textCell("completeYmd", { date: true })}</Td>
-                </tr>
-              </tbody>
-            </table>
-
-            {/* 원본 카드처럼 위치만 길게 — 재발여부는 오른쪽 좁은 칸 */}
-            <table className={formTableClass}>
-              <colgroup>
-                <col style={{ width: FORM_LABEL_W }} />
-                <col />
-                <col style={{ width: FORM_LABEL_W }} />
                 <col style={{ width: FORM_RECURRENCE_VALUE_W }} />
               </colgroup>
               <tbody>
                 <tr>
-                  <Th>{COLS.location.label}</Th>
-                  <Td className={cn(isEditing && "relative z-20 overflow-visible")}>
+                  <Th>{L("mgmtNo")}</Th>
+                  <Td>
+                    {isEditing ? (
+                      <input
+                        type="text"
+                        readOnly
+                        required
+                        className={cn(fieldClass, "bg-muted/50 text-muted-foreground")}
+                        value={current.mgmtNo}
+                        title="자동 생성 · 읽기 전용"
+                        aria-label={`${L("mgmtNo")} (자동 생성)`}
+                      />
+                    ) : (
+                      <span className="block truncate text-center" title={current.mgmtNo || undefined}>
+                        {current.mgmtNo || "-"}
+                      </span>
+                    )}
+                  </Td>
+                  <Th>{L("riverType")}</Th>
+                  <Td>{textCell("riverType", { options: RIVER_ILLEGAL_RIVER_TYPES })}</Td>
+                </tr>
+                <tr>
+                  <Th>{L("serialNo")}</Th>
+                  <Td colSpan={3}>{textCell("serialNo")}</Td>
+                </tr>
+                <tr>
+                  <Th>{L("firstCheckYmd")}</Th>
+                  <Td>{textCell("firstCheckYmd", { date: true })}</Td>
+                  <Th>{L("completeYmd")}</Th>
+                  {/* 날짜 + 완료여부 한 줄 */}
+                  <Td className="p-0">
+                    <div className="flex h-full min-h-[30px] items-stretch">
+                      <div className="flex min-w-0 flex-1 items-center px-1.5 py-1">
+                        {textCell("completeYmd", { date: true })}
+                      </div>
+                      <div
+                        className={cn(
+                          "flex shrink-0 items-center justify-center border-l border-border px-1.5 text-[11px] font-medium",
+                          isEditing ? "gap-1" : "min-w-[2.75rem]"
+                        )}
+                      >
+                        {isEditing ? (
+                          <label className="inline-flex cursor-pointer items-center gap-1 whitespace-nowrap text-foreground">
+                            <input
+                              type="checkbox"
+                              className="h-3.5 w-3.5 shrink-0 accent-primary"
+                              checked={current.completeYn === "Y"}
+                              onChange={(e) => setField("completeYn", e.target.checked ? "Y" : "N")}
+                            />
+                            완료여부
+                          </label>
+                        ) : current.completeYn === "Y" ? (
+                          L("completeYn")
+                        ) : null}
+                      </div>
+                    </div>
+                  </Td>
+                </tr>
+                <tr>
+                  {/* 위치 칸 오른쪽 끝 = «완료(예정)일자» 제목 칸 끝 */}
+                  <Th>{L("location")}</Th>
+                  <Td colSpan={2} className={cn(isEditing && "relative z-20 overflow-visible")}>
                     {isEditing ? (
                       <div className="flex min-w-0 items-center gap-1">
                         <div className="min-w-0 flex-1">
@@ -652,11 +1007,24 @@ export function RiverIllegalOccupationDetailPanel({ cardId, onClose, onSaved, on
                       </span>
                     )}
                   </Td>
-                  <Th>{COLS.recurrence.label}</Th>
-                  <Td>{textCell("recurrence", { options: RIVER_ILLEGAL_RECURRENCE_OPTIONS })}</Td>
+                  <Td className="p-0">
+                    <div className="flex h-full min-h-[30px] items-stretch">
+                      <div
+                        className={cn(
+                          thClass,
+                          "flex w-[4.25rem] shrink-0 items-center justify-center border-0 border-r border-border"
+                        )}
+                      >
+                        {L("recurrence")}
+                      </div>
+                      <div className="flex min-w-0 flex-1 items-center px-1.5 py-1">
+                        {textCell("recurrence", { options: RIVER_ILLEGAL_RECURRENCE_OPTIONS })}
+                      </div>
+                    </div>
+                  </Td>
                 </tr>
                 <tr>
-                  <Th>{COLS.actor.label}</Th>
+                  <Th>{L("actor")}</Th>
                   <Td colSpan={3}>{linesCell("actor")}</Td>
                 </tr>
               </tbody>
@@ -672,7 +1040,7 @@ export function RiverIllegalOccupationDetailPanel({ cardId, onClose, onSaved, on
               <tbody>
                 {MULTILINE_ROWS.map((key) => (
                   <tr key={key}>
-                    <Th>{COLS[key].label}</Th>
+                    <Th>{L(key)}</Th>
                     <Td>{linesCell(key)}</Td>
                   </tr>
                 ))}
@@ -689,9 +1057,9 @@ export function RiverIllegalOccupationDetailPanel({ cardId, onClose, onSaved, on
                   <PhotoRow
                     key={fields.join("-")}
                     fields={fields}
-                    card={current}
+                    urls={photoUrls}
                     editing={isEditing}
-                    capturing={capturing}
+                    uploadingField={uploadingField}
                     onAdd={openPhotoPicker}
                     onRemove={removePhoto}
                     onPreview={openPreview}
@@ -740,7 +1108,7 @@ export function RiverIllegalOccupationDetailPanel({ cardId, onClose, onSaved, on
   );
 }
 
-/** 조치현황 — 접도구역 건축물 «건축물(공작물) 내용»처럼 본 표에 이어 붙인 칸 (구분 × 시설 종류) */
+/** 조치현황 — 구분 × 시설 종류 + 합계(항목 합산). 제목은 config 고정 */
 function StatusTable({
   card,
   editing,
@@ -750,6 +1118,8 @@ function StatusTable({
   editing: boolean;
   onChange: (kind: RiverIllegalStatusKindKey, row: RiverIllegalStatusRowKey, value: string) => void;
 }) {
+  const totHeader = "합계";
+
   return (
     <table className={formTableClass}>
       <colgroup>
@@ -764,7 +1134,7 @@ function StatusTable({
         <tr>
           <Th rowSpan={1 + RIVER_ILLEGAL_STATUS_ROWS.length}>조치현황</Th>
           <Th className="px-0.5 text-[10px]">구분</Th>
-          <Th className="px-0.5 text-[10px]">합계</Th>
+          <Th className="px-0.5 text-[10px]">{totHeader}</Th>
           {RIVER_ILLEGAL_STATUS_KINDS.map((k) => (
             <Th key={k.key} className="px-0.5 text-[10px]">
               {splitRiverIllegalKindLabel(k.label).map((part, i) => (
@@ -776,25 +1146,31 @@ function StatusTable({
           ))}
         </tr>
         {RIVER_ILLEGAL_STATUS_ROWS.map((row) => {
-          const total = riverIllegalStatusTotal(card.status, row.key);
+          const rLabel = row.label;
+          const totalValue = riverIllegalStatusTotalMarked(card.status, row.key);
           return (
             <tr key={row.key}>
-              <Th className="px-0.5 text-[10px] font-medium">{row.label}</Th>
-              <Td className="px-0.5 text-center font-medium tabular-nums">{total > 0 ? total : ""}</Td>
+              <Th className="px-0.5 text-[10px] font-medium">{rLabel}</Th>
+              <Td className="px-0.5 text-center font-medium tabular-nums">
+                {totalValue ? <RedMarkupText value={totalValue} /> : null}
+              </Td>
               {RIVER_ILLEGAL_STATUS_KINDS.map((k) => {
                 const value = card.status[k.key]?.[row.key] ?? "";
+                // 입력·표시 모두 # 없이 숫자만 (#는 DB·빨간 표시용)
+                const inputDigits = value.replace(/[^0-9]/g, "");
                 return (
                   <Td key={k.key} className="px-0.5 text-center tabular-nums">
                     {editing ? (
                       <input
                         inputMode="numeric"
-                        aria-label={`${k.label} ${row.label}`}
+                        aria-label={`${k.label} ${rLabel}`}
+                        title="숫자만"
                         className="h-[22px] w-full min-w-0 border-0 bg-transparent p-0 text-center text-[11px] tabular-nums outline-none focus:bg-primary/10"
-                        value={value}
+                        value={inputDigits}
                         onChange={(e) => onChange(k.key, row.key, e.target.value)}
                       />
                     ) : (
-                      value
+                      <RedMarkupText value={value} />
                     )}
                   </Td>
                 );
@@ -810,17 +1186,17 @@ function StatusTable({
 /** 사진 두 칸 + 아래 «<위치도>» 같은 이름 칸 */
 function PhotoRow({
   fields,
-  card,
+  urls,
   editing,
-  capturing,
+  uploadingField,
   onAdd,
   onRemove,
   onPreview,
 }: {
   fields: [PhotoField, PhotoField];
-  card: RiverIllegalOccupationCard;
+  urls: Record<PhotoField, string>;
   editing: boolean;
-  capturing: boolean;
+  uploadingField: PhotoField | null;
   onAdd: (field: PhotoField) => void;
   onRemove: (field: PhotoField) => void;
   onPreview: (field: PhotoField) => void;
@@ -831,12 +1207,11 @@ function PhotoRow({
         {fields.map((key) => (
           <td key={key} className={cn(tdClass, "h-[11rem] p-0")}>
             <PhotoSlot
-              key={card[key]}
-              url={card[key]}
+              key={urls[key] || key}
+              url={urls[key]}
               editing={editing}
-              uploadable={key !== "locationMapUrl"}
-              capturing={key === "locationMapUrl" && capturing}
-              emptyHint={key === "locationMapUrl" ? "위치를 주소로 고르거나 지도에 찍으면 들어갑니다" : undefined}
+              uploading={uploadingField === key}
+              emptyHint={`눌러서 ${RIVER_ILLEGAL_PHOTO_SLOTS[key].label} 등록`}
               onAdd={() => onAdd(key)}
               onRemove={() => onRemove(key)}
               onPreview={() => onPreview(key)}
@@ -847,7 +1222,7 @@ function PhotoRow({
       <tr>
         {fields.map((key) => (
           <Th key={key} className="h-[26px]">
-            &lt;{COLS[key].label}&gt;
+            &lt;{RIVER_ILLEGAL_PHOTO_SLOTS[key].label}&gt;
           </Th>
         ))}
       </tr>

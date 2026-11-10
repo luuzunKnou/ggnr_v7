@@ -1,0 +1,19 @@
+<layer>
+  <name>um711</name>
+  <id>LayerInfoImpl-6e125944:1a17ff3f0fb:-7b7c</id>
+  <type>VECTOR</type>
+  <defaultStyle>
+    <id>StyleInfoImpl-6e125944:1a17ff3f0fb:-7b7b</id>
+  </defaultStyle>
+  <resource class="featureType">
+    <id>FeatureTypeInfoImpl-6e125944:1a17ff3f0fb:-7b7d</id>
+  </resource>
+  <queryable>true</queryable>
+  <opaque>false</opaque>
+  <attribution>
+    <logoWidth>0</logoWidth>
+    <logoHeight>0</logoHeight>
+  </attribution>
+  <dateCreated>2026-10-29 01:25:59.206 UTC</dateCreated>
+  <dateModified>2026-10-29 01:25:59.550 UTC</dateModified>
+</layer>

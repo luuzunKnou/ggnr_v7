@@ -1,0 +1,19 @@
+<layer>
+  <name>ue101</name>
+  <id>LayerInfoImpl-6e125944:1a17ff3f0fb:-7b76</id>
+  <type>VECTOR</type>
+  <defaultStyle>
+    <id>StyleInfoImpl-6e125944:1a17ff3f0fb:-7b75</id>
+  </defaultStyle>
+  <resource class="featureType">
+    <id>FeatureTypeInfoImpl-6e125944:1a17ff3f0fb:-7b77</id>
+  </resource>
+  <queryable>true</queryable>
+  <opaque>false</opaque>
+  <attribution>
+    <logoWidth>0</logoWidth>
+    <logoHeight>0</logoHeight>
+  </attribution>
+  <dateCreated>2026-10-29 01:26:02.991 UTC</dateCreated>
+  <dateModified>2026-10-29 01:26:03.323 UTC</dateModified>
+</layer>

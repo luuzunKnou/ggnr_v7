@@ -1,6 +1,7 @@
 /**
  * 레이어 추가속성(Extra) — 정의 테이블 + 행 jsonb(extra) 조회·저장
- * - 정의: public.layer_extra_def (신규 화면 템플릿)
+ * - 정의: public.layer_extra_def (신규 화면 템플릿·현재 항목)
+ * - 원본 이력: public.layer_extra_source (SHP에서 뺀 필드 누적, 재업로드 구조검증)
  * - 행: 대상 테이블 extra jsonb 컬럼 (배열로 건별 순서 저장, 객체는 이전 형식)
  */
 import { db } from '@/database/db';
@@ -18,6 +19,16 @@ export type LayerExtraDefItem = {
   id?: number;
   fieldName: string;
   dataType: string;
+  sortOrder: number;
+};
+
+/** SHP→extra 원본 필드 이력 (누적 + 현재 active) */
+export type LayerExtraSourceItem = {
+  id?: number;
+  sourceField: string;
+  fieldName: string;
+  dataType: string;
+  isActive: boolean;
   sortOrder: number;
 };
 
@@ -194,6 +205,169 @@ COMMENT ON TABLE public.layer_extra_def IS '레이어 추가속성 정의';
   }
 }
 
+/** SHP 원본 필드 이력 테이블 없으면 생성 (public) */
+export async function ensureLayerExtraSourceTable(): Promise<{ ok: boolean; error?: string }> {
+  try {
+    await db.execute(sql.raw(`
+CREATE TABLE IF NOT EXISTS public.layer_extra_source (
+  id serial PRIMARY KEY,
+  table_schema varchar(64) NOT NULL DEFAULT 'layer',
+  table_name varchar(128) NOT NULL,
+  source_field varchar(128) NOT NULL,
+  field_name varchar(128) NOT NULL,
+  data_type varchar(64) NOT NULL DEFAULT 'text',
+  is_active boolean NOT NULL DEFAULT false,
+  sort_order integer NOT NULL DEFAULT 0,
+  CONSTRAINT layer_extra_source_schema_table_src_uidx
+    UNIQUE (table_schema, table_name, source_field)
+);
+COMMENT ON TABLE public.layer_extra_source IS 'SHP 추가속성 원본 필드 이력(구조검증·재업로드용)';
+COMMENT ON COLUMN public.layer_extra_source.source_field IS 'SHP 원본 속성명';
+COMMENT ON COLUMN public.layer_extra_source.is_active IS '현재 extra 값 반영 여부';
+`));
+    return { ok: true };
+  } catch (e: unknown) {
+    return { ok: false, error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+export async function listLayerExtraSources(params?: {
+  tableName?: string;
+  tableSchema?: string;
+  activeOnly?: boolean;
+}): Promise<{ items: LayerExtraSourceItem[]; error?: string }> {
+  const tableName = normTable(params?.tableName);
+  const tableSchema = normSchema(params?.tableSchema);
+  if (!tableName) return { items: [], error: 'tableName이 필요합니다.' };
+
+  const ensured = await ensureLayerExtraSourceTable();
+  if (!ensured.ok) return { items: [], error: ensured.error };
+
+  try {
+    const activeOnly = params?.activeOnly === true;
+    const res = await db.execute(
+      sql.raw(
+        `SELECT id, source_field, field_name, data_type, is_active, sort_order
+         FROM public.layer_extra_source
+         WHERE table_schema = '${esc(tableSchema)}'
+           AND lower(table_name) = lower('${esc(tableName)}')
+           ${activeOnly ? 'AND is_active = true' : ''}
+         ORDER BY sort_order ASC, id ASC`
+      )
+    );
+    const items: LayerExtraSourceItem[] = (res.rows ?? []).map((r) => {
+      const row = r as {
+        id?: number;
+        source_field?: string;
+        field_name?: string;
+        data_type?: string;
+        is_active?: boolean | string;
+        sort_order?: number;
+      };
+      const active = row.is_active === true || row.is_active === 't' || row.is_active === 'true';
+      return {
+        id: Number(row.id) || undefined,
+        sourceField: String(row.source_field ?? '').trim(),
+        fieldName: String(row.field_name ?? '').trim(),
+        dataType: String(row.data_type ?? 'text').trim() || 'text',
+        isActive: active,
+        sortOrder: Number(row.sort_order) || 0,
+      };
+    }).filter((x) => x.sourceField);
+    return { items };
+  } catch (e: unknown) {
+    return { items: [], error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+/**
+ * active 항목을 인자로 교체(UPSERT + 나머지 is_active=false).
+ * 행은 삭제하지 않아 knownSources(이력)가 유지된다.
+ */
+export async function saveLayerExtraSourcesActive(params?: {
+  tableName?: string;
+  tableSchema?: string;
+  items?: Array<{
+    sourceField: string;
+    fieldName: string;
+    dataType?: string;
+    sortOrder?: number;
+  }>;
+}): Promise<{ success: boolean; saved?: number; error?: string }> {
+  const tableName = normTable(params?.tableName);
+  const tableSchema = normSchema(params?.tableSchema);
+  if (!tableName) return { success: false, error: 'tableName이 필요합니다.' };
+
+  const ensured = await ensureLayerExtraSourceTable();
+  if (!ensured.ok) return { success: false, error: ensured.error };
+
+  const rawItems = Array.isArray(params?.items) ? params!.items! : [];
+  const cleaned: Array<{
+    sourceField: string;
+    fieldName: string;
+    dataType: string;
+    sortOrder: number;
+  }> = [];
+  const seen = new Set<string>();
+  rawItems.forEach((it, idx) => {
+    const sourceField = String(it?.sourceField ?? '').trim();
+    if (!sourceField) return;
+    const key = sourceField.toLowerCase();
+    if (seen.has(key)) return;
+    seen.add(key);
+    cleaned.push({
+      sourceField,
+      fieldName: String(it?.fieldName ?? '').trim() || sourceField,
+      dataType: String(it?.dataType ?? 'text').trim() || 'text',
+      sortOrder: Number.isFinite(Number(it?.sortOrder)) ? Number(it.sortOrder) : idx + 1,
+    });
+  });
+
+  try {
+    for (const it of cleaned) {
+      await db.execute(
+        sql.raw(
+          `INSERT INTO public.layer_extra_source
+             (table_schema, table_name, source_field, field_name, data_type, is_active, sort_order)
+           VALUES
+             ('${esc(tableSchema)}', '${esc(tableName)}', '${esc(it.sourceField)}',
+              '${esc(it.fieldName)}', '${esc(it.dataType)}', true, ${Number(it.sortOrder) || 0})
+           ON CONFLICT (table_schema, table_name, source_field)
+           DO UPDATE SET
+             field_name = EXCLUDED.field_name,
+             data_type = EXCLUDED.data_type,
+             is_active = true,
+             sort_order = EXCLUDED.sort_order`
+        )
+      );
+    }
+    if (cleaned.length === 0) {
+      await db.execute(
+        sql.raw(
+          `UPDATE public.layer_extra_source
+           SET is_active = false
+           WHERE table_schema = '${esc(tableSchema)}'
+             AND lower(table_name) = lower('${esc(tableName)}')`
+        )
+      );
+    } else {
+      const inList = cleaned.map((c) => `'${esc(c.sourceField.toLowerCase())}'`).join(', ');
+      await db.execute(
+        sql.raw(
+          `UPDATE public.layer_extra_source
+           SET is_active = false
+           WHERE table_schema = '${esc(tableSchema)}'
+             AND lower(table_name) = lower('${esc(tableName)}')
+             AND lower(source_field) NOT IN (${inList})`
+        )
+      );
+    }
+    return { success: true, saved: cleaned.length };
+  } catch (e: unknown) {
+    return { success: false, error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
 export async function getLayerExtraDefs(params?: {
   tableName?: string;
   tableSchema?: string;
@@ -340,21 +514,45 @@ function parseExtraFields(
   if (Array.isArray(data)) {
     const seen = new Set<string>();
     const fields: LayerExtraFieldValue[] = [];
+    const legacyMeta = new Set(['fieldname', 'datatype', 'value', 'sortorder', 'n', 't', 'v', 'name']);
     data.forEach((item, idx) => {
       if (item == null || typeof item !== 'object' || Array.isArray(item)) return;
       const rec = item as Record<string, unknown>;
-      const fieldName = String(rec.fieldName ?? rec.n ?? rec.name ?? '').trim();
-      if (!fieldName) return;
-      const key = fieldName.toLowerCase();
-      if (seen.has(key)) return;
-      seen.add(key);
-      fields.push({
-        fieldName,
-        value: extraValueToString(rec.value ?? rec.v),
-        dataType:
-          String(rec.dataType ?? rec.t ?? typeByName.get(key) ?? 'text').trim() || 'text',
-        sortOrder: idx + 1,
-      });
+      const legacyName = String(rec.fieldName ?? rec.n ?? rec.name ?? '').trim();
+      const isLegacy =
+        !!legacyName &&
+        (Object.prototype.hasOwnProperty.call(rec, 'value') ||
+          Object.prototype.hasOwnProperty.call(rec, 'v') ||
+          Object.prototype.hasOwnProperty.call(rec, 'dataType') ||
+          Object.prototype.hasOwnProperty.call(rec, 'sortOrder'));
+      if (isLegacy) {
+        const key = legacyName.toLowerCase();
+        if (seen.has(key)) return;
+        seen.add(key);
+        fields.push({
+          fieldName: legacyName,
+          value: extraValueToString(rec.value ?? rec.v),
+          dataType:
+            String(rec.dataType ?? rec.t ?? typeByName.get(key) ?? 'text').trim() || 'text',
+          sortOrder: idx + 1,
+        });
+        return;
+      }
+      // [{"컬럼명":"값", ...}] — 키=속성명, 값=속성값
+      for (const [rawName, rawVal] of Object.entries(rec)) {
+        const fieldName = String(rawName ?? '').trim();
+        if (!fieldName) continue;
+        if (legacyMeta.has(fieldName.toLowerCase())) continue;
+        const key = fieldName.toLowerCase();
+        if (seen.has(key)) continue;
+        seen.add(key);
+        fields.push({
+          fieldName,
+          value: extraValueToString(rawVal),
+          dataType: typeByName.get(key) ?? 'text',
+          sortOrder: fields.length + 1,
+        });
+      }
     });
     return fields;
   }
@@ -519,7 +717,12 @@ export async function saveLayerRowExtra(params?: {
     return { success: true };
   }
 
-  const jsonLiteral = JSON.stringify(extraArr).replace(/'/g, "''");
+  // 저장 형식: [{"컬럼명":"값", ...}] (레거시 fieldName/value 배열은 조회만 호환)
+  const rowObj: Record<string, string> = {};
+  for (const f of extraArr) {
+    rowObj[f.fieldName] = f.value;
+  }
+  const jsonLiteral = JSON.stringify(extraArr.length > 0 ? [rowObj] : []).replace(/'/g, "''");
 
   try {
     await db.execute(
