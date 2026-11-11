@@ -53,6 +53,8 @@ export type PipeSegment = {
   props?: Record<string, unknown>;
   /** define_field 테이블명 */
   fieldsTable?: string;
+  /** 레이어 한글명 (단면도·범례 표기) */
+  layerKorName?: string;
 };
 
 /** @deprecated PipeSegment 사용 */

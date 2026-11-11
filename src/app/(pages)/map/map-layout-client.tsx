@@ -208,11 +208,6 @@ import {
   WORKS_REGISTER_OPENED_KEY,
   WorksRegisterShell,
 } from "./_mapContents/worksRegister/WorksRegister.shell"
-import { WtlAdminEmptyShell } from "./_mapContents/wtlAdmin/WtlAdminEmpty.shell"
-import {
-  findOpenedWtlAdminEmptySerEng,
-  isWtlAdminEmptyOpenedToken,
-} from "./_mapContents/wtlAdmin/wtlAdminBinding"
 import { SwlAdminEmptyShell } from "./_mapContents/swlAdmin/SwlAdminEmpty.shell"
 import {
   findOpenedSwlAdminEmptySerEng,
@@ -886,9 +881,6 @@ function MapLayoutContent({
   const [riverIllegalOccupationSelectedId, setRiverIllegalOccupationSelectedId] = useState<string | null>(null)
   const riverIllegalOccupationDetailOpen =
     riverIllegalOccupationOpen && Boolean(riverIllegalOccupationSelectedId)
-  const wtlAdminEmptySerEng = findOpenedWtlAdminEmptySerEng(openedWindows)
-  const wtlAdminEmptyOpen = Boolean(wtlAdminEmptySerEng)
-  const [wtlAdminEmptyTotalWidth, setWtlAdminEmptyTotalWidth] = useState(0)
   const [buildPublicLandSelectedId, setBuildPublicLandSelectedId] = useState<string | null>(null)
   const [buildPublicLandListRefreshKey, setBuildPublicLandListRefreshKey] = useState(0)
   const buildPublicLandDetailOpen = buildPublicLandOpen && Boolean(buildPublicLandSelectedId)
@@ -1431,9 +1423,6 @@ function MapLayoutContent({
   const riverIllegalOccupationDetailLeftPx =
     riverIllegalOccupationPanelLeftPx +
     (riverIllegalOccupationOpen ? riverIllegalOccupationPanelWidth : 0)
-  const wtlAdminPanelLeftPx =
-    riverIllegalOccupationDetailLeftPx +
-    (riverIllegalOccupationDetailOpen ? riverIllegalOccupationDetailWidth : 0)
   const mapPaddingLeft = SIDEBAR_WIDTH + totalListPanelWidth
   /** 패딩은 useLayoutEffect — 자식 useEffect(도로대장 fit 등)보다 먼저 적용되어야 함.
    * 거리뷰 ON일 때만 맵 중심(A)을 새 센터마크 위치에 맞춤.
@@ -2045,12 +2034,6 @@ function MapLayoutContent({
   const handleCloseWorksRegister = () => {
     setWorksRegisterTotalWidth(0)
     const next = openedWindows.filter((w) => w !== WORKS_REGISTER_OPENED_KEY)
-    setOpened(next)
-  }
-
-  const handleCloseWtlAdminEmpty = () => {
-    setWtlAdminEmptyTotalWidth(0)
-    const next = openedWindows.filter((w) => !isWtlAdminEmptyOpenedToken(w))
     setOpened(next)
   }
 
@@ -4233,14 +4216,6 @@ function MapLayoutContent({
                 />
               </MapSideListPanel>
             </div>
-          )}
-          {wtlAdminEmptyOpen && wtlAdminEmptySerEng && (
-            <WtlAdminEmptyShell
-              serEng={wtlAdminEmptySerEng}
-              leftOffsetPx={wtlAdminPanelLeftPx}
-              onTotalWidthChange={setWtlAdminEmptyTotalWidth}
-              onClose={handleCloseWtlAdminEmpty}
-            />
           )}
           <div className="flex-1 min-w-0 relative">
             <div className="pointer-events-auto">
