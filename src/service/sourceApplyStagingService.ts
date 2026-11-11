@@ -7,9 +7,64 @@ function normalizeSlashes(value: string): string {
   return value.replace(/\\/g, '/');
 }
 
+/**
+ * Windows `\\?\C:\...` / `//?/C:/...` 와 일반 `C:\...` 를 같은 형태로 맞춤.
+ * 배포(htdocs) fs.cp filter에서 relative가 깨져 제외가 무시되던 문제 대응.
+ */
+function normalizeFsPathForCompare(value: string): string {
+  let s = normalizeSlashes(value.trim());
+  // `\\?\UNC\server\share` → `//?/UNC/server/share` → `//server/share`
+  s = s.replace(/^\/\/\?\/unc\//i, '//');
+  // `\\?\C:\...` → `//?/C:/...` → `C:/...`
+  s = s.replace(/^\/\/\?\//i, '');
+  if (process.platform === 'win32') {
+    s = s.toLowerCase();
+  }
+  if (s.length > 3 && s.endsWith('/')) s = s.slice(0, -1);
+  return s;
+}
+
+/**
+ * workspaceRoot 기준 상대경로. 실패·워크스페이스 밖이면 null.
+ */
+function relativePathUnderRoot(workspaceRoot: string, absPath: string): string | null {
+  const root = normalizeFsPathForCompare(workspaceRoot);
+  const abs = normalizeFsPathForCompare(absPath);
+  if (!root || !abs) return null;
+  if (abs === root) return '';
+  const prefix = root.endsWith('/') ? root : `${root}/`;
+  if (!abs.startsWith(prefix)) {
+    // path.relative 폴백 (정규화 후에도 접두 불일치 시)
+    const relRaw = normalizeSlashes(path.relative(workspaceRoot, absPath));
+    const rel = process.platform === 'win32' ? relRaw.toLowerCase() : relRaw;
+    if (!rel || rel === '.') return '';
+    if (path.isAbsolute(relRaw) || rel.startsWith('..') || /^[a-z]:\//i.test(rel)) {
+      return null;
+    }
+    return rel.replace(/^\/+/, '');
+  }
+  return abs.slice(prefix.length);
+}
+
 function shouldSkipStagingCopyRel(relPath: string, excludePrefixes: string[]): boolean {
-  const posixRel = normalizeSlashes(relPath);
-  return excludePrefixes.some(
+  let posixRel = normalizeSlashes(relPath).replace(/^\/+/, '');
+  if (process.platform === 'win32') posixRel = posixRel.toLowerCase();
+  // 절대경로·확장경로가 상대처럼 들어온 경우 → 제외(복사하지 않음)
+  if (
+    !posixRel ||
+    posixRel.startsWith('..') ||
+    path.isAbsolute(relPath) ||
+    /^[a-z]:\//i.test(posixRel) ||
+    posixRel.startsWith('//?/') ||
+    posixRel.includes('://')
+  ) {
+    return true;
+  }
+  const prefixes =
+    process.platform === 'win32'
+      ? excludePrefixes.map((p) => p.toLowerCase())
+      : excludePrefixes;
+  return prefixes.some(
     (prefix) => posixRel === prefix.slice(0, -1) || posixRel.startsWith(prefix)
   );
 }
@@ -194,15 +249,16 @@ export async function buildTypeCheckStagingRoot(params: {
     recursive: true,
     force: true,
     filter: (src) => {
-      const rel = normalizeSlashes(path.relative(workspaceRoot, src));
+      const rel = relativePathUnderRoot(workspaceRoot, src);
+      if (rel == null) {
+        progress.filterTick('(workspace-out)', false);
+        return false;
+      }
       if (!rel || rel === '.') {
         progress.filterTick('.', true);
         return true;
       }
-      const skip = shouldSkipStagingCopyRel(
-        rel.endsWith(path.sep) ? `${rel}/` : rel,
-        stagingExcludes
-      );
+      const skip = shouldSkipStagingCopyRel(rel, stagingExcludes);
       const included = !skip;
       progress.filterTick(rel, included);
       return included;

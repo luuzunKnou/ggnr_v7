@@ -157,10 +157,10 @@ export async function completeVersionRelay(params: {
   }
 
   const applyLayout = normalizeSourceApplyLayout(meta.applyLayout);
-  /** ZIP 조립은 적용 직전 준비. 따로 생성은 현재 서버를 중지하지 않는다. */
+  /** ZIP 조립은 적용 직전 준비. 새 폴더 생성은 현재 서버를 중지하지 않는다. */
   await onProgress?.({
     phase: applyLayout === 'sibling' ? 'merge-apply' : 'geoserver-stop',
-    message: applyLayout === 'sibling' ? '따로 생성 준비 중 (ZIP 조립)...' : '적용 준비 중 (ZIP 조립)...',
+    message: applyLayout === 'sibling' ? '새 폴더 생성 준비 중 (ZIP 조립)...' : '적용 준비 중 (ZIP 조립)...',
     mergeStep: applyLayout === 'sibling' ? 'extract' : undefined,
   });
 
