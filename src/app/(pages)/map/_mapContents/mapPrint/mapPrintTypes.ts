@@ -20,6 +20,7 @@ export type MapPrintSnapshot = {
   center: [number, number];
   zoom: number;
   backgroundMapId: string;
+  backgroundLabelVisible?: boolean;
   visibleLayerNames: string[];
   activeLayerControls: string[];
   visibleCadastralLayerNames: string[] | null;

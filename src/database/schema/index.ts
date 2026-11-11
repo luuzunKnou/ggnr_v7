@@ -10,6 +10,7 @@ export * from './data_batch_snapshot_row';
 export * from './data_detail_log';
 export * from './data_log';
 export * from './data_query_history';
+export * from './drawing_display';
 export * from './excel_sync_log';
 export * from './excel_sync_log_geom';
 export * from './excel_upload_history';

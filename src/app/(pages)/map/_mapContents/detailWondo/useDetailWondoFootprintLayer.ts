@@ -37,6 +37,22 @@ export function detailWondoCorners3857(item: DetailWondoItem): [number, number][
   return [item.topLeft, item.topRight, item.bottomRight, item.bottomLeft].map(to3857)
 }
 
+/** 월드파일 + 실제 이미지 크기 → 화면 좌표. 겹쳐 그릴 때 목록의 대략 도곽보다 정확하다 */
+export function detailWondoWorldCorners3857(
+  world: [number, number, number, number, number, number],
+  width: number,
+  height: number
+): [number, number][] {
+  const [A, D, B, E, C, F] = world
+  const at = (col: number, row: number): DetailWondoCoord => [A * col + B * row + C, D * col + E * row + F]
+  return [
+    at(-0.5, -0.5),
+    at(width - 0.5, -0.5),
+    at(width - 0.5, height - 0.5),
+    at(-0.5, height - 0.5),
+  ].map(to3857)
+}
+
 function createStyle(getPicked: () => Set<string>, getShown: () => Set<string>) {
   return (feature: FeatureLike, resolution: number) => {
     if (feature.get('pickPoint')) {

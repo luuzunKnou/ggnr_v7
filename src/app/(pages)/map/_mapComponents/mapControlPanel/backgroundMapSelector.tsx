@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { ChevronDown, ChevronUp } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { Switch } from '@/app/shadcnComponents/ui/switch';
 import { MAP_LAYER_PANEL_SURFACE_CLASS } from './mapLayerPanelLayout';
 
 // 배경지도 옵션 타입
@@ -270,6 +271,9 @@ export interface BackgroundMapSelectorProps {
   onValueChange?: (value: string) => void;
   /** 지도분할·배경 싱크 OFF 시 좌·우 라디오 */
   splitSelect?: BackgroundMapSplitSelect;
+  /** 항공영상 위 지명·도로명 타일 */
+  labelVisible?: boolean;
+  onLabelVisibleChange?: (visible: boolean) => void;
   className?: string;
 }
 
@@ -278,6 +282,8 @@ export function BackgroundMapSelector({
   value,
   onValueChange,
   splitSelect,
+  labelVisible,
+  onLabelVisibleChange,
   className,
 }: BackgroundMapSelectorProps) {
   const [internalValue, setInternalValue] = useState(FALLBACK_BACKGROUND_MAP_ID);
@@ -297,6 +303,42 @@ export function BackgroundMapSelector({
         className
       )}
     >
+      <div
+        role="presentation"
+        className={cn(
+          'flex shrink-0 cursor-pointer items-center gap-2 border-b px-3 py-2.5 transition-colors',
+          labelVisible
+            ? 'border-blue-200 bg-blue-50 dark:border-blue-400/40 dark:bg-blue-500/25'
+            : 'border-slate-200 bg-slate-100 hover:bg-slate-200 dark:border-white/15 dark:bg-white/10 dark:hover:bg-white/15'
+        )}
+        onClick={() => onLabelVisibleChange?.(!(labelVisible ?? false))}
+      >
+        <div
+          className={cn(
+            'h-4 w-1 shrink-0 rounded-full',
+            labelVisible ? 'bg-blue-500 dark:bg-blue-400' : 'bg-slate-300 dark:bg-white/30'
+          )}
+        />
+        <span
+          className={cn(
+            'min-w-0 flex-1 text-[13px] font-semibold',
+            labelVisible ? 'text-primary' : 'text-slate-700 dark:text-white/90'
+          )}
+        >
+          명칭보기
+        </span>
+        <span
+          onClick={(e) => e.stopPropagation()}
+          onKeyDown={(e) => e.stopPropagation()}
+        >
+          <Switch
+            checked={labelVisible ?? false}
+            onCheckedChange={(on) => onLabelVisibleChange?.(on)}
+            aria-label="명칭보기"
+            title="명칭보기"
+          />
+        </span>
+      </div>
       {/* 스크롤 영역 */}
       <div className="min-h-0 flex-1 overflow-y-auto">
         {groups.map((group) => (

@@ -19,6 +19,7 @@ import { createServiceLayer } from '../../_mapComponents/layerFactory/serviceLay
 import { bindMapGeometryStackOrder, mergeDefineLayerShpTypesIntoGeometryMap } from '@/lib/mapLayerGeometryOrder';
 import tables from '@/config/defineLayer/tables.json';
 import { useBackgroundLayer } from '../../_mapComponents/hooks/useBackgroundLayer';
+import { useBackgroundLabelLayer } from '../../_mapComponents/hooks/useBackgroundLabelLayer';
 import { FALLBACK_BACKGROUND_MAP_ID } from '../../_mapComponents/mapControlPanel/backgroundMapSelector';
 import { syncSecondaryLayersFromPrimary } from './syncSecondaryLayersFromPrimary';
 import {
@@ -128,6 +129,10 @@ export function MapSplitSecondaryHost({ active }: MapSplitSecondaryHostProps) {
   useBackgroundLayer(
     secondaryReady ? secondaryMap : null,
     secondaryBackgroundId
+  );
+  useBackgroundLabelLayer(
+    secondaryReady ? secondaryMap : null,
+    mapContext?.mapBackgroundLabelVisible ?? true
   );
 
   // 레이어 visible/params + 동적(API) 레이어 미러
