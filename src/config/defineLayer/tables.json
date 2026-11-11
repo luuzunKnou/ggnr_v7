@@ -1114,6 +1114,30 @@
     "define_table_source": "shp"
   },
   {
+    "define_table_name": "swl_cons_as_solo",
+    "define_table_kor_name": "하수도 공사대장_개별",
+    "define_table_shp_type": "POLYGON",
+    "define_table_read_share": "P",
+    "define_table_write_share": "P",
+    "define_table_group": "",
+    "define_table_idx": "0",
+    "define_table_etc": "",
+    "define_table_schema": "layer",
+    "define_table_source": "shp"
+  },
+  {
+    "define_table_name": "wtl_cons_as_solo",
+    "define_table_kor_name": "상수도 공사대장_개별",
+    "define_table_shp_type": "POLYGON",
+    "define_table_read_share": "P",
+    "define_table_write_share": "P",
+    "define_table_group": "상수",
+    "define_table_idx": "0",
+    "define_table_etc": "",
+    "define_table_schema": "layer",
+    "define_table_source": "shp"
+  },
+  {
     "define_table_name": "wtl_cons_solo_as",
     "define_table_kor_name": "상수도 공사대장 개별",
     "define_table_shp_type": "POLYGON",

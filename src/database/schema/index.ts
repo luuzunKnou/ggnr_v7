@@ -4,6 +4,7 @@
 export * from './board';
 export * from './comp';
 export * from './compd';
+export * from './cons_alert_setting';
 export * from './data_batch_snapshot';
 export * from './data_batch_snapshot_row';
 export * from './data_detail_log';

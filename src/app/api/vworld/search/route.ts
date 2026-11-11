@@ -14,6 +14,11 @@ export async function GET(req: NextRequest) {
         { status: 503 }
       );
     }
+    
+    const query = req.nextUrl.searchParams.get('query') ?? '';
+    if (/(--|\/\*|;|\bunion\b|\bselect\b|\bdrop\b|<|>|')/i.test(query)) {
+      return NextResponse.json({ error: 'query' }, { status: 400 });
+    }
 
     const upstream = new URL(UPSTREAM);
     req.nextUrl.searchParams.forEach((value, key) => {
