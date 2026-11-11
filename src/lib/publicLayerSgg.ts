@@ -7,15 +7,55 @@ export type PublicLayerAddressPrefixes = {
   sggName: string;
 };
 
-/** public_layer.sgg 시군구명 목록 */
-export async function fetchPublicLayerSggNames(): Promise<string[]> {
+async function listSggColumns(): Promise<Set<string>> {
   try {
     const res = await db.execute(
       sql.raw(
-        `SELECT DISTINCT trim(sgg_nm::text) AS sgg_nm
+        `SELECT column_name
+         FROM information_schema.columns
+         WHERE table_schema = 'public_layer' AND table_name = 'sgg'`
+      )
+    );
+    const set = new Set<string>();
+    for (const row of res.rows ?? []) {
+      const name = String((row as { column_name?: unknown }).column_name ?? '')
+        .trim()
+        .toLowerCase();
+      if (name) set.add(name);
+    }
+    return set;
+  } catch {
+    return new Set();
+  }
+}
+
+function quoteIdent(ident: string): string {
+  return `"${ident.replace(/"/g, '""')}"`;
+}
+
+async function resolveSggNameCodeCols(): Promise<{
+  nameCol: string | null;
+  codeCol: string | null;
+}> {
+  const cols = await listSggColumns();
+  const pick = (...candidates: string[]) => candidates.find((c) => cols.has(c)) ?? null;
+  return {
+    nameCol: pick('sgg_nm', 'name', 'sig_kor_nm', 'kor_nm'),
+    codeCol: pick('adm_sect_c', 'adm_sect_cd', 'bjcd', 'sgg_cd', 'sig_cd'),
+  };
+}
+
+/** public_layer.sgg 시군구명 목록 */
+export async function fetchPublicLayerSggNames(): Promise<string[]> {
+  try {
+    const { nameCol } = await resolveSggNameCodeCols();
+    if (!nameCol) return [];
+    const res = await db.execute(
+      sql.raw(
+        `SELECT DISTINCT trim(${quoteIdent(nameCol)}::text) AS sgg_nm
          FROM public_layer.sgg
-         WHERE sgg_nm IS NOT NULL
-           AND trim(sgg_nm::text) <> ''
+         WHERE ${quoteIdent(nameCol)} IS NOT NULL
+           AND trim(${quoteIdent(nameCol)}::text) <> ''
          ORDER BY 1
          LIMIT 50`
       )
@@ -31,16 +71,21 @@ export async function fetchPublicLayerSggNames(): Promise<string[]> {
   }
 }
 
-/** 목록·상세 주소 접두 제거용 — sgg 1행 + adm_sect_c→시도명 */
+/** 목록·상세 주소 접두 제거용 — sgg 1행 + 코드→시도명 */
 export async function fetchPublicLayerAddressPrefixes(): Promise<PublicLayerAddressPrefixes> {
   try {
+    const { nameCol, codeCol } = await resolveSggNameCodeCols();
+    if (!nameCol) return { sidoName: '', sggName: '' };
+    const codeSelect = codeCol
+      ? `trim(${quoteIdent(codeCol)}::text) AS adm_sect_c`
+      : `''::text AS adm_sect_c`;
     const res = await db.execute(
       sql.raw(
-        `SELECT trim(sgg_nm::text) AS sgg_nm,
-                trim(adm_sect_c::text) AS adm_sect_c
+        `SELECT trim(${quoteIdent(nameCol)}::text) AS sgg_nm,
+                ${codeSelect}
          FROM public_layer.sgg
-         WHERE sgg_nm IS NOT NULL
-           AND trim(sgg_nm::text) <> ''
+         WHERE ${quoteIdent(nameCol)} IS NOT NULL
+           AND trim(${quoteIdent(nameCol)}::text) <> ''
          LIMIT 1`
       )
     );

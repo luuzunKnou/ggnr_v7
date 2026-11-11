@@ -670,6 +670,56 @@ export function getIndexSliderImages(projectName: string): string[] {
   return out
 }
 
+export type IndexSliderSlideText = { title: string; content: string }
+
+function resolveIndexSliderSlidesPath(): string {
+  const cwd = typeof process !== "undefined" ? process.cwd() : ""
+  const fromPackage = getProjectRoot()
+  const roots = [cwd, fromPackage].filter(Boolean)
+  const seen = new Set<string>()
+  for (const root of roots) {
+    const n = root?.replace(/\\/g, "/")
+    if (!n || seen.has(n)) continue
+    seen.add(n)
+    const p = join(root, "src", "config", "indexSliderSlides.json")
+    if (existsSync(p)) return p
+  }
+  return join(fromPackage || cwd, "src", "config", "indexSliderSlides.json")
+}
+
+function normalizeIndexSliderSlides(raw: unknown): IndexSliderSlideText[] {
+  if (!Array.isArray(raw)) return []
+  return raw
+    .map((item) => {
+      if (!item || typeof item !== "object") return null
+      const o = item as Record<string, unknown>
+      const title = typeof o.title === "string" ? o.title.trim() : ""
+      const content = typeof o.content === "string" ? o.content.trim() : ""
+      if (!title && !content) return null
+      return { title, content }
+    })
+    .filter((x): x is IndexSliderSlideText => x != null)
+}
+
+/**
+ * INDEX ParcelSlider 제목·설명.
+ * src/config/indexSliderSlides.json — 프로젝트 키 일치 시 해당 배열, 없으면 default.
+ */
+export function getIndexSliderSlides(projectName?: string): IndexSliderSlideText[] {
+  noStore()
+  const name = (projectName ?? process.env.GGNR_PROJECT ?? "").trim()
+  const path = resolveIndexSliderSlidesPath()
+  if (!existsSync(path)) return []
+  try {
+    const parsed = JSON.parse(readFileSync(path, "utf-8")) as Record<string, unknown>
+    const projectSlides = name ? normalizeIndexSliderSlides(parsed[name]) : []
+    if (projectSlides.length > 0) return projectSlides
+    return normalizeIndexSliderSlides(parsed.default)
+  } catch {
+    return []
+  }
+}
+
 /**
  * 인덱스·지도 헤더/사이드 로고 URL.
  * 1) {project}_index_logo.svg → 2) {project}_index_logo.png → 3) default_index_logo.svg (공간누리)

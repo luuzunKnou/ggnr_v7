@@ -9,6 +9,7 @@ import {
   getSystemList,
   getSystemListDebug,
   getIndexSliderImages,
+  getIndexSliderSlides,
   // getIndexChartKeys,
 } from "@/service/configService"
 
@@ -23,35 +24,23 @@ function loadSystemList(): { systems: SystemItem[]; error?: string; debug?: stri
   }
 }
 
-const parcelSlideContents = [
-  {
-    title: "기본도 조회",
-    description: "행정경계, 지목, 소유자 구분, 주제도, 연속지적도 등 행정데이터를 지도에서 확인합니다.",
-    gradient: "linear-gradient(to bottom right, #1e293b, #0f172a)",
-  },
-  {
-    title: "필지정보 조회",
-    description: "필지에 대한 기본정보, 소유자정보, 토지 이용계획에 대한 정보를 조회합니다.",
-    gradient: "linear-gradient(to bottom right, #1e3a8a, #1e40af)",
-  },
-  {
-    title: "건축물 대장",
-    description: "필지내 건물에 대한 총괄표제부, 표제부, 건축인허가 정보를 조회합니다.",
-    gradient: "linear-gradient(to bottom right, #065f46, #047857)",
-  },
-  {
-    title: "시계열 정사영상",
-    description: "국토지리정보원의 연도별 정사영상 및 고화질 드론영상을 제공합니다.",
-    gradient: "linear-gradient(to bottom right, #7c2d12, #9a3412)",
-  },
+/** 이미지 없을 때 슬라이드별 배경 (JSON 미관리) */
+const PARCEL_SLIDE_GRADIENTS = [
+  "linear-gradient(to bottom right, #1e293b, #0f172a)",
+  "linear-gradient(to bottom right, #1e3a8a, #1e40af)",
+  "linear-gradient(to bottom right, #065f46, #047857)",
+  "linear-gradient(to bottom right, #7c2d12, #9a3412)",
 ]
 
 function buildParcelSlides(): Array<{ title: string; description: string; image?: string; gradient?: string }> {
   const projectName = typeof process !== "undefined" ? (process.env.GGNR_PROJECT ?? "build_yy") : "build_yy"
+  const texts = getIndexSliderSlides(projectName)
   const images = getIndexSliderImages(projectName)
-  return parcelSlideContents.map((slide, i) => ({
-    ...slide,
+  return texts.map((slide, i) => ({
+    title: slide.title,
+    description: slide.content,
     image: images[i] || undefined,
+    gradient: PARCEL_SLIDE_GRADIENTS[i % PARCEL_SLIDE_GRADIENTS.length],
   }))
 }
 

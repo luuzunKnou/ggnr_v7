@@ -184,8 +184,10 @@ export function SystemIntegrationManager() {
   const [gnmsDate, setGnmsDate] = useState("")
   const [gnmsBoot, setGnmsBoot] = useState<{ project: string; type: string } | null>(null)
   const [gnmsServerStatus, setGnmsServerStatus] = useState<"checking" | "ok" | "failed">("checking")
-  type GnmsTab = "log" | "sgg" | "emd" | "ri"
+  type GnmsTab = "log" | "sgg" | "emd" | "ri" | "elevation" | "kais_gb"
   const [gnmsTab, setGnmsTab] = useState<GnmsTab>("log")
+  /** elevation만 sgg geom 첨부. kais_gb는 geom 미전송 */
+  const gnmsGeomTab = gnmsTab === "elevation"
   const [gnmsAdmSectC, setGnmsAdmSectC] = useState("")
   const [gnmsBjdCde, setGnmsBjdCde] = useState("")
   const [gnmsSggNm, setGnmsSggNm] = useState("")
@@ -450,12 +452,17 @@ export function SystemIntegrationManager() {
               outFolder === "emd" || outFolder === "ri"
                 ? admSectC || bjd_cde.replace(/0+$/, "") || bjd_cde
                 : ""
+            const geom =
+              outFolder === "kais_gb"
+                ? ""
+                : String((data as { geom?: string }).geom ?? "").trim()
             await downloadGnmsBaseDataZipFromBrowser({
               body: {
                 folder: outFolder,
                 bjd_cde,
                 keyword: sggKeyword,
                 ...(colAdmSe ? { col_adm_se: colAdmSe } : {}),
+                ...(geom ? { geom } : {}),
               },
               onLog: (line) => {
                 console.info(`[GNMS GIS] ${line}`)
@@ -615,6 +622,8 @@ export function SystemIntegrationManager() {
                 { id: "sgg", label: "시군구" },
                 { id: "emd", label: "읍면동" },
                 { id: "ri", label: "리" },
+                { id: "elevation", label: "등고선" },
+                { id: "kais_gb", label: "KAIS 기초(경북)" },
               ] as const
             ).map((opt) => (
               <label key={opt.id} className="inline-flex items-center gap-1.5 cursor-pointer">
@@ -708,7 +717,17 @@ export function SystemIntegrationManager() {
                 {(gnmsTab === "emd" || gnmsTab === "ri") && gnmsAdmSectC
                   ? ` · col_adm_se=${gnmsAdmSectC}`
                   : ""}
+                {gnmsGeomTab
+                  ? gnmsSggExists === false
+                    ? " · 시군구(sgg) 필요"
+                    : " · 시군구 경계(geom)로 요청"
+                  : ""}
               </p>
+              {gnmsGeomTab && gnmsSggExists === false ? (
+                <p className="text-xs text-amber-700 dark:text-amber-400">
+                  시군구(sgg) 테이블이 없어 등고선을 받을 수 없습니다. 행정경계를 먼저 준비하세요.
+                </p>
+              ) : null}
               {gnmsTab === "sgg" && gnmsSggExists === false ? (
                 <label className="text-sm text-muted-foreground flex flex-wrap items-center gap-2">
                   <span>키워드</span>
