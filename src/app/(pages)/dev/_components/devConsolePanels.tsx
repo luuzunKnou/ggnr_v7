@@ -33,6 +33,7 @@ import { CesiumSplitContent } from "./cesiumSplit/CesiumSplitContent"
 import type { AdminConsoleMenuGroup } from "@/app/(pages)/_components/AdminConsoleLayout"
 import { DEV_CONSOLE_MENUS, type DevConsoleMenuId } from "@/lib/consoleMenuAccess/menus/dev"
 import { InstallManualClient } from "../install-manual/InstallManualClient"
+import { BaseDataManualClient } from "../base-data-manual/BaseDataManualClient"
 
 export const DEV_SUBMENUS = DEV_CONSOLE_MENUS
 
@@ -110,7 +111,7 @@ export const DEV_MENU_GROUPS: readonly AdminConsoleMenuGroup[] = [
     id: "manualList",
     label: "메뉴얼 목록",
     icon: Book,
-    menuIds: ["installManual"],
+    menuIds: ["installManual", "baseDataManual"],
   },
 ]
 
@@ -208,6 +209,8 @@ export function getDevMenuDescription(menuId: string): string {
       return "왼쪽 Cesium 3D, 오른쪽 2D. Three.js와 같은 레이어 도형을 현재 범위에 표시"
     case "installManual":
       return "매뉴얼 수정시 InstallManualClient.tsx 파일을 수정하세요."
+    case "baseDataManual":
+      return "매뉴얼 수정시 BaseDataManualClient.tsx 파일을 수정하세요."
     default:
       return `${devMenuLabel(menuId)} 설정 화면입니다. (구현 예정)`
   }
@@ -393,6 +396,12 @@ export function renderDevMenuContent(menuId: string): ReactNode {
       return (
         <div className="flex flex-col overflow-hidden min-h-0 h-[calc(100vh-14rem)]">
           <InstallManualClient />
+        </div>
+      )
+    case "baseDataManual":
+      return (
+        <div className="flex flex-col overflow-hidden min-h-0 h-[calc(100vh-14rem)]">
+          <BaseDataManualClient />
         </div>
       )
     default:

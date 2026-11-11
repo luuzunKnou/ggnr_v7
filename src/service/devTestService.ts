@@ -33,7 +33,10 @@ import {
 } from '@/lib/geoserverStyles/buildSldFromEnvTemplate';
 import {
   buildElevationContourCss,
+  buildElevationSplitCssByLayerName,
   ELEVATION_LAYER_NAME,
+  ELEVATION_SPLIT_LAYER_NAMES,
+  elevationSplitKindFromLayerName,
 } from '@/lib/geoserverStyles/elevationContourStyle';
 import { normalizeDefineTableSource, dedupeDefineLayerTablesByName } from '@/lib/defineLayerTablesNormalize';
 import {
@@ -2285,42 +2288,89 @@ export type StyleApplyResult =
   | { success: true; layerName?: string; styleName?: string; created?: boolean }
   | { success: false; error: string; uploaded?: true };
 
+async function uploadElevationCssStyle(params: {
+  url: string;
+  workspace: string;
+  layerName: string;
+  cssBody: string;
+  /** 레이어가 아직 없으면 스타일만 올리고 링크는 생략 */
+  linkIfLayerExists?: boolean;
+}): Promise<StyleApplyResult> {
+  const { url: baseUrl, workspace, layerName, cssBody } = params;
+  const linkIfLayerExists = params.linkIfLayerExists !== false;
+
+  let created = false;
+  if (!dataDirCssMatches(layerName, cssBody)) {
+    const putRes = await putGeoServerCssStyle({ url: baseUrl, name: layerName, cssBody });
+    if (!putRes.success) {
+      return { success: false, error: putRes.error ?? '등고선 스타일 업로드 실패' };
+    }
+    created = putRes.created === true;
+  }
+
+  if (linkIfLayerExists) {
+    const layerRes = await geoserverFetch(
+      baseUrl,
+      `/rest/workspaces/${workspace}/layers/${encodeURIComponent(layerName)}.json`
+    );
+    if (layerRes.ok) {
+      const setRes = await setLayerDefaultStyle({
+        url: baseUrl,
+        workspace,
+        layerName,
+        styleName: layerName,
+      });
+      if (!setRes.success) {
+        return {
+          success: false,
+          error: setRes.error ?? '레이어 기본 스타일 지정 실패',
+          uploaded: true as const,
+        };
+      }
+    }
+  }
+
+  return {
+    success: true,
+    layerName,
+    styleName: layerName,
+    created,
+  };
+}
+
 export async function applyElevationContourStyle(
   params: { url?: string; workspace?: string } = {}
 ): Promise<StyleApplyResult> {
   const baseUrl = resolveGeoServerFetchBase(params?.url);
   const workspace = params?.workspace?.trim() || 'ggnr';
-  const layerName = ELEVATION_LAYER_NAME;
-  const cssBody = buildElevationContourCss();
 
   try {
-    let created = false;
-    if (!dataDirCssMatches(layerName, cssBody)) {
-      const putRes = await putGeoServerCssStyle({ url: baseUrl, name: layerName, cssBody });
-      if (!putRes.success) {
-        return { success: false, error: putRes.error ?? '등고선 스타일 업로드 실패' };
-      }
-      created = putRes.created === true;
-    }
-
-    const setRes = await setLayerDefaultStyle({
+    const parentRes = await uploadElevationCssStyle({
       url: baseUrl,
       workspace,
-      layerName,
-      styleName: layerName,
+      layerName: ELEVATION_LAYER_NAME,
+      cssBody: buildElevationContourCss(),
     });
-    if (!setRes.success) {
-      return {
-        success: false,
-        error: setRes.error ?? '레이어 기본 스타일 지정 실패',
-        uploaded: true as const,
-      };
+    if (!parentRes.success) return parentRes;
+
+    let created = parentRes.created === true;
+    for (const splitName of ELEVATION_SPLIT_LAYER_NAMES) {
+      const cssBody = buildElevationSplitCssByLayerName(splitName);
+      if (!cssBody) continue;
+      const splitRes = await uploadElevationCssStyle({
+        url: baseUrl,
+        workspace,
+        layerName: splitName,
+        cssBody,
+      });
+      if (!splitRes.success) return splitRes;
+      if (splitRes.created) created = true;
     }
 
     return {
       success: true,
-      layerName,
-      styleName: layerName,
+      layerName: ELEVATION_LAYER_NAME,
+      styleName: ELEVATION_LAYER_NAME,
       created,
     };
   } catch (e: unknown) {
@@ -3178,6 +3228,33 @@ export async function applyDefaultStyleToLayer(params: {
       return { success: true as const, layerName, styleName: layerName, created };
     };
 
+    // elevation·분할 자식은 기존 스타일이 있어도 도면 관례 CSS로 강제 동기화
+    if (layerName === ELEVATION_LAYER_NAME || elevationSplitKindFromLayerName(layerName)) {
+      const cssBody =
+        layerName === ELEVATION_LAYER_NAME
+          ? buildElevationContourCss()
+          : buildElevationSplitCssByLayerName(layerName);
+      if (!cssBody) {
+        return { success: false, error: '등고선 분할 스타일 본문을 만들 수 없습니다.' };
+      }
+      const elevRes = await uploadElevationCssStyle({
+        url: baseUrl,
+        workspace,
+        layerName,
+        cssBody,
+        linkIfLayerExists: true,
+      });
+      if (!elevRes.success) return elevRes;
+      const renderRes = await verifyLayerStyleRender(
+        baseUrl,
+        workspace,
+        layerName,
+        ftInfo.latLonBoundingBox
+      );
+      if (!renderRes.ok) return { success: false, error: renderRes.error, uploaded: true };
+      return elevRes;
+    }
+
     if (await geoServerStyleExists(baseUrl, layerName)) {
       return linkStyle(false);
     }
@@ -3187,11 +3264,6 @@ export async function applyDefaultStyleToLayer(params: {
         return { success: false, error: regRes.error ?? '기존 스타일 파일 등록 실패' };
       }
       return linkStyle(false);
-    }
-
-    // elevation은 Material Tone 단색 대신 등고선 분류·축척 CSS 고정
-    if (layerName === ELEVATION_LAYER_NAME) {
-      return applyElevationContourStyle({ url: baseUrl, workspace });
     }
 
     const attrNames = new Set(

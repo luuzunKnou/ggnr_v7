@@ -758,6 +758,10 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
   onlyInViewRef.current = onlyInView
   const availableLayerKeysRef = useRef(availableLayerKeys)
   availableLayerKeysRef.current = availableLayerKeys
+  /** 출처별 가용 레이어·물리테이블 — 패널 생애 동안 출처당 1회만 조회 */
+  const layerAvailCacheRef = useRef(
+    new Map<string, { keys: string[]; physical: Record<string, string> }>()
+  )
   /** 같은 화면 범위·같은 검색 조건으로 목록을 두 번 돌리지 않음 */
   const listRequestKeyRef = useRef('')
   const extentKeyRef = useRef('')
@@ -889,7 +893,7 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
     }
   }, [])
 
-  /** 선택 출처 기준 — DB에 없는 탭 레이어는 비활성 */
+  /** 선택 출처 기준 — DB에 없는 탭 레이어는 비활성. 출처당 1회 조회 후 캐시 */
   useEffect(() => {
     const sourceIds = availableSourceIds.filter((id) => mapSources.has(id))
     if (availableSourceIds.length === 0) {
@@ -899,7 +903,53 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
       return
     }
     if (sourceIds.length === 0) return
+
+    const pruneExtraOn = (next: Set<string>) => {
+      setExtraOn((prev) => {
+        // 보호구역은 주제도 경로 — DB 가용키와 무관하게 유지
+        const pruned = new Set(
+          [...prev].filter((k) => {
+            if (getLayerShowMode(k) === 'thematic') return true
+            return next.has(k)
+          })
+        )
+        if (pruned.size === prev.size) {
+          let same = true
+          for (const k of prev) {
+            if (!pruned.has(k)) {
+              same = false
+              break
+            }
+          }
+          if (same) return prev
+        }
+        // 지하 가용키가 비어도 보호구역은 남을 수 있음
+        if (pruned.size > 0) return pruned
+        return next
+      })
+    }
+
+    const applyFromCache = (ids: string[]) => {
+      const keys = new Set<string>()
+      const phys: Record<string, Record<string, string>> = {}
+      for (const id of ids) {
+        const hit = layerAvailCacheRef.current.get(id)
+        if (!hit) return false
+        for (const k of hit.keys) keys.add(k)
+        if (Object.keys(hit.physical).length > 0) phys[id] = hit.physical
+      }
+      setAvailableLayerKeys(keys)
+      setPhysicalBySource(phys)
+      setWtlNetPhysicalBySource(phys)
+      pruneExtraOn(keys)
+      return true
+    }
+
+    if (applyFromCache(sourceIds)) return
+
     let cancelled = false
+    /** 미캐시 출처만 스켈레톤 */
+    setAvailableLayerKeys(null)
     const layerKeys = allKeysOfAllDisplayGroups()
     void call('', 'POST', {
       service: 'wtlNetworkService',
@@ -917,31 +967,16 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
           data?.physicalBySource && typeof data.physicalBySource === 'object'
             ? (data.physicalBySource as Record<string, Record<string, string>>)
             : {}
+        for (const id of sourceIds) {
+          layerAvailCacheRef.current.set(id, {
+            keys,
+            physical: physRaw[id] ?? {},
+          })
+        }
         setPhysicalBySource(physRaw)
         setWtlNetPhysicalBySource(physRaw)
         setAvailableLayerKeys(next)
-        setExtraOn((prev) => {
-          // 보호구역은 주제도 경로 — DB 가용키와 무관하게 유지
-          const pruned = new Set(
-            [...prev].filter((k) => {
-              if (getLayerShowMode(k) === 'thematic') return true
-              return next.has(k)
-            })
-          )
-          if (pruned.size === prev.size) {
-            let same = true
-            for (const k of prev) {
-              if (!pruned.has(k)) {
-                same = false
-                break
-              }
-            }
-            if (same) return prev
-          }
-          // 지하 가용키가 비어도 보호구역은 남을 수 있음
-          if (pruned.size > 0) return pruned
-          return next
-        })
+        pruneExtraOn(next)
       })
       .catch(() => {
         if (!cancelled) {
@@ -2037,6 +2072,8 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
   const currentGroup =
     visibleDisplayGroups.find((item) => item.title === group) ??
     visibleDisplayGroups[0]
+  /** 가용 레이어 키 조회 전 — 탭 내 레이어 버튼 스켈레톤 */
+  const layerButtonsLoading = availableLayerKeys == null
   const sourceButtons = availableSourceIds
     .map((id) => getWtlNetMapSource(id))
     .filter((s): s is NonNullable<typeof s> => Boolean(s))
@@ -2191,52 +2228,71 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
                     </div>
                   ) : null}
                   {currentGroup && (
-                    <div className="grid grid-cols-3 gap-1.5">
-                      {currentGroup.items.map((item) => {
-                        const selectable = isLayerSelectable(item.define_table_name)
-                        const on = selectable && extraOn.has(item.define_table_name)
-                        const eng = resolveLayerEngName(
-                          item.define_table_name,
-                          activeSourceId
-                        )
-                        const titleBase = dualTitle(
-                          item.define_table_kor_name,
-                          eng,
-                          showFieldKeys
-                        )
-                        return (
-                          <button
-                            key={item.define_table_name}
-                            type="button"
-                            disabled={!selectable}
-                            title={
-                              selectable
-                                ? titleBase
-                                : `${item.define_table_kor_name} (데이터 없음)`
-                            }
-                            className={cn(
-                              GROUP_BTN,
-                              on ? GROUP_BTN_ON : GROUP_BTN_OFF,
-                              !selectable &&
-                                'cursor-not-allowed opacity-40 hover:bg-transparent'
-                            )}
-                            onClick={() => toggleLayer(item.define_table_name)}
-                          >
-                            <WtlLayerMark
-                              layerKey={item.define_table_name}
-                              sourceId={activeSourceId}
-                              physicalTable={
-                                physicalBySource[activeSourceId]?.[
-                                  item.define_table_name
-                                ] ?? null
-                              }
+                    <div
+                      className="grid grid-cols-3 gap-1.5"
+                      aria-busy={layerButtonsLoading || undefined}
+                      aria-label={
+                        layerButtonsLoading ? '레이어 목록 불러오는 중' : undefined
+                      }
+                    >
+                      {layerButtonsLoading
+                        ? currentGroup.items.map((item) => (
+                            <div
+                              key={item.define_table_name}
+                              className="standard-layer-toggle-chip pointer-events-none border-transparent bg-muted/70 animate-pulse"
+                              aria-hidden
                             />
-                            <span className="min-w-0 truncate [word-break:keep-all]">
-                              {item.define_table_kor_name}
-                            </span>
-                          </button>
-                        )
-                      })}
+                          ))
+                        : currentGroup.items.map((item) => {
+                            const selectable = isLayerSelectable(
+                              item.define_table_name
+                            )
+                            const on =
+                              selectable && extraOn.has(item.define_table_name)
+                            const eng = resolveLayerEngName(
+                              item.define_table_name,
+                              activeSourceId
+                            )
+                            const titleBase = dualTitle(
+                              item.define_table_kor_name,
+                              eng,
+                              showFieldKeys
+                            )
+                            return (
+                              <button
+                                key={item.define_table_name}
+                                type="button"
+                                disabled={!selectable}
+                                title={
+                                  selectable
+                                    ? titleBase
+                                    : `${item.define_table_kor_name} (데이터 없음)`
+                                }
+                                className={cn(
+                                  GROUP_BTN,
+                                  on ? GROUP_BTN_ON : GROUP_BTN_OFF,
+                                  !selectable &&
+                                    'cursor-not-allowed opacity-40 hover:bg-transparent'
+                                )}
+                                onClick={() =>
+                                  toggleLayer(item.define_table_name)
+                                }
+                              >
+                                <WtlLayerMark
+                                  layerKey={item.define_table_name}
+                                  sourceId={activeSourceId}
+                                  physicalTable={
+                                    physicalBySource[activeSourceId]?.[
+                                      item.define_table_name
+                                    ] ?? null
+                                  }
+                                />
+                                <span className="min-w-0 truncate [word-break:keep-all]">
+                                  {item.define_table_kor_name}
+                                </span>
+                              </button>
+                            )
+                          })}
                     </div>
                   )}
                   <div className="space-y-2 !mt-[13px] border-t border-border pt-[13px]">

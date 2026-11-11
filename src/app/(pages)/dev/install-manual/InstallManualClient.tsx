@@ -34,8 +34,6 @@ const SECTIONS = [
   { id: 'remove', label: 'Window 서비스 등록 삭제' },
   { id: 'remove_bat', label: '- bat 실행' },
   { id: 'remove_manual', label: '- 수동 제거' },
-  { id: 'contour', label: '기초데이터: 고도(등고선)' },
-  { id: 'kais', label: '기초데이터: 건설•도로' },
 ] as const;
 
 const SUB_LIST =
@@ -580,67 +578,6 @@ taskkill /f /pid [작업 중지 번호]`}</CodeBlock>
               </li>
             </ul>
           </section>
-
-          <section id="contour" className="scroll-mt-4 space-y-3">
-            <h1 className="text-xl font-semibold">기초데이터: 고도(등고선)</h1>
-            <ul className={STEP_LIST}>
-              <li>브이월드 &gt; 공간정보 다운로드 &gt; 등고선(지도-고도) 다운로드</li>
-              <li>필요 지역 대해 다운로드</li>
-              <li>
-                Qgis 열어서{' '}
-                <strong>레이어를 합치기(용량 문제로 브이월드가 레이어를 쪼개서 제공함)</strong>
-                <ul className="mt-1 list-[lower-alpha] pl-5">
-                  <li>벡터 &gt; 데이터 관리 도구 &gt;벡터 레이어 병합</li>
-                  <li>공간처리&gt; 툴박스 &gt; 중복 도형 삭제</li>
-                </ul>
-              </li>
-              <li>
-                Qgis에 현재 프로젝트 행정경계 레이어 추가
-                <ul className="mt-1 list-[lower-alpha] space-y-2 pl-5">
-                  <li>
-                    행정경계 없으면 아래에서 찾아서 레이어 추가
-                    <div className="mt-1">
-                      <CodeBlock>{`\\\\192.168.120.15\\ftp_농관원\\2026년 수급자료\\01 행정경계\\20260424 행정경계 통합 12차 (GTMM50, ~20260325까지 보완)`}</CodeBlock>
-                    </div>
-                  </li>
-                  <li>전국 단위라서 필터(BJCD 입력해서 레이어 필터링)</li>
-                </ul>
-              </li>
-              <li>
-                Qgis &gt; 벡터 &gt; 지리정보처리도구 &gt; 잘라내기
-                <ul className="mt-1 list-[lower-alpha] pl-5">
-                  <li>잘라내기 안하고 도 단위로 자르면 용량 문제로 내보내기가 안됨</li>
-                </ul>
-              </li>
-              <li>
-                layer, path 필드 삭제: 레이어 우클릭 &gt; 속성 테이블 &gt; 상단 연필(편집 모드) &gt;
-                필드 속성 삭제 &gt; 저장
-              </li>
-            </ul>
-          </section>
-
-          <section id="kais" className="scroll-mt-4 space-y-3">
-            <h1 className="text-xl font-semibold">기초데이터: 건설•도로</h1>
-            <ul className={STEP_LIST}>
-              <li>
-                폴더 위치
-                <div className="mt-1">
-                  <CodeBlock>{`\\\\192.168.127.11\\사업수행_개발\\133 공간누리 세팅 자료\\11 KAIS 지자체별 데이터`}</CodeBlock>
-                </div>
-              </li>
-              <li>
-                해당 위치에서 <InlineCode>sig_cd</InlineCode>를 기준으로 필터링해서 레이어 추출
-              </li>
-              <li>
-                <p>이후 스케줄러 필터링 기준은 아래 우선순위에 따라 적용됩니다.</p>
-                <p>- runtime.env에 SGG_CODE 넣기</p>
-                <p>
-                  - public_layer.sgg의 <InlineCode>adm_sect_cd</InlineCode> 참고
-                </p>
-              </li>
-            </ul>
-          </section>
-          
         </article>
         </div>
       </main>

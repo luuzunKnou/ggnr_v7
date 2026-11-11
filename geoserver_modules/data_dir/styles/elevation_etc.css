@@ -1,0 +1,6 @@
+/* elevation_etc 등고선(기타) — @sd <= 10000 */
+[@sd <= 10000] {
+  stroke: #B8956C;
+  stroke-width: 0.55;
+  stroke-opacity: 0.85;
+}
