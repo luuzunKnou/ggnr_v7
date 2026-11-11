@@ -15,6 +15,7 @@
  * - 보상편입: road_reward, road_reward_parcel
  * - 공사대장: cons_data_as, cons_data_solo_as
  * - 마을순찰대: village_patrol
+ * - 공사 알림설정: cons_alert_setting
  * - 도로 업무편람: rd_work_target_review, rd_hbook_mat
  * - 개별공시지가 필지 메모: land_price_memo
  */
@@ -1019,6 +1020,28 @@ const WATER_PLAY_SIGN_LAYER_COLUMNS: Array<{ name: string; ddl: string }> = [
   { name: 'safebox_cnt', ddl: 'integer' },
   { name: 'sign_cnt', ddl: 'integer' },
 ];
+
+const CONS_ALERT_SETTING_SQL = `
+CREATE TABLE IF NOT EXISTS layer.cons_alert_setting (
+  id SERIAL PRIMARY KEY,
+  kind varchar(8) NOT NULL,
+  cons_code varchar(64) NOT NULL,
+  cycle_years integer NOT NULL DEFAULT 1,
+  done_before_days integer NOT NULL DEFAULT 30,
+  done_before_on boolean NOT NULL DEFAULT true,
+  done_after_days integer NOT NULL DEFAULT 7,
+  done_after_on boolean NOT NULL DEFAULT false,
+  start_before_days integer NOT NULL DEFAULT 14,
+  start_before_on boolean NOT NULL DEFAULT true,
+  start_after_days integer NOT NULL DEFAULT 7,
+  start_after_on boolean NOT NULL DEFAULT false,
+  updated_by varchar(64) NOT NULL DEFAULT '',
+  updated_at timestamp NOT NULL DEFAULT now()
+);
+CREATE UNIQUE INDEX IF NOT EXISTS cons_alert_setting_kind_code_uidx
+  ON layer.cons_alert_setting (kind, cons_code);
+COMMENT ON TABLE layer.cons_alert_setting IS '상하수도 공사대장 알림설정';
+`;
 
 const VILLAGE_PATROL_SQL = `
 CREATE TABLE IF NOT EXISTS layer.village_patrol (
@@ -2145,6 +2168,18 @@ export async function ensureWaterPlaySignTable(result?: EnsureResult): Promise<E
   return out;
 }
 
+/** 상·하수도 공사대장 알림설정. 공사 하나당 한 행 */
+export async function ensureConsAlertSettingTable(result?: EnsureResult): Promise<EnsureResult> {
+  const out: EnsureResult = result ?? { created: [], moved: [], existed: [], errors: [] };
+  await ensureSchemaLayer();
+  await ensureBaseTable({
+    table: 'cons_alert_setting',
+    createSql: CONS_ALERT_SETTING_SQL,
+    result: out,
+  });
+  return out;
+}
+
 export async function ensureVillagePatrolTable(result?: EnsureResult): Promise<EnsureResult> {
   const out: EnsureResult = result ?? { created: [], moved: [], existed: [], errors: [] };
   await ensureSchemaLayer();
@@ -2229,6 +2264,7 @@ export async function ensureLayerAppTables(): Promise<EnsureResult> {
     await ensureRadiationShelterTable(result);
     await ensureWaterPlaySignTable(result);
     await ensureVillagePatrolTable(result);
+    await ensureConsAlertSettingTable(result);
     await ensureRoadWorkHandbookTables(result);
     await ensureLandPriceMemoTable(result);
   } catch (e: unknown) {

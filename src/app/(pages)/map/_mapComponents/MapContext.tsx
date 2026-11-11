@@ -155,6 +155,11 @@ export type MapContextValue = {
   /** 뷰 오른쪽 패딩(px). 우측 메뉴·확장 패널 폭. 거터 pill 가용 범위용 */
   mapPaddingRight: number;
   setMapPaddingRight: Dispatch<SetStateAction<number>>;
+  /**
+   * 뷰 아래 패딩(px). 상하수도 공사대장 첨부파일이 지도를 가릴 때만 넣고, 없으면 0.
+   * 왼쪽 패널과 같이 지도 맞춤의 보이는 영역으로 쓴다.
+   */
+  mapPaddingBottomRef: MutableRefObject<number>;
   /** MapLayout이 등록 — 지도 인스턴스 준비 후 view.padding 재적용 */
   applyMapViewPaddingRef: MutableRefObject<(() => void) | null>;
   /**
@@ -654,6 +659,7 @@ export function MapContextProvider({ children }: { children: React.ReactNode }) 
     MAP_SPLIT_CONTROL_RIGHT_MENU_RESERVE_PX
   );
   const applyMapViewPaddingRef = useRef<(() => void) | null>(null);
+  const mapPaddingBottomRef = useRef(0);
   const mapViewPaddingOverrideRef = useRef<[number, number, number, number] | null>(null);
   const [mapReady, setMapReady] = useState(false);
   const [mapSplitSecondaryKind, setMapSplitSecondaryKind] = useState<MapSplitSecondaryKind>(null);
@@ -936,6 +942,7 @@ export function MapContextProvider({ children }: { children: React.ReactNode }) 
         mapPaddingRight,
         setMapPaddingRight,
         applyMapViewPaddingRef,
+        mapPaddingBottomRef,
         mapViewPaddingOverrideRef,
         mapReady,
         setMapReady,

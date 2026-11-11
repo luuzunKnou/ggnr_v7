@@ -1,0 +1,19 @@
+<layer>
+  <name>wtl_pres_hj_ps</name>
+  <id>LayerInfoImpl-4fd235f0:1a161359926:-7f6d</id>
+  <type>VECTOR</type>
+  <defaultStyle>
+    <id>StyleInfoImpl-4fd235f0:1a161359926:-7f6c</id>
+  </defaultStyle>
+  <resource class="featureType">
+    <id>FeatureTypeInfoImpl-4fd235f0:1a161359926:-7f6e</id>
+  </resource>
+  <queryable>true</queryable>
+  <opaque>false</opaque>
+  <attribution>
+    <logoWidth>0</logoWidth>
+    <logoHeight>0</logoHeight>
+  </attribution>
+  <dateCreated>2026-10-22 04:01:23.620 UTC</dateCreated>
+  <dateModified>2026-10-22 04:01:23.820 UTC</dateModified>
+</layer>

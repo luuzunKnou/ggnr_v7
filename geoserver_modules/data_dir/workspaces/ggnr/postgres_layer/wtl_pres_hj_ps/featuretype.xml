@@ -1,0 +1,41 @@
+<featureType>
+  <id>FeatureTypeInfoImpl-4fd235f0:1a161359926:-7f6e</id>
+  <name>wtl_pres_hj_ps</name>
+  <nativeName>wtl_pres_hj_ps</nativeName>
+  <namespace>
+    <id>NamespaceInfoImpl-4bf97568:19c4d6c3053:-7ffa</id>
+  </namespace>
+  <title>wtl_pres_hj_ps</title>
+  <keywords>
+    <string>features</string>
+    <string>wtl_pres_hj_ps</string>
+  </keywords>
+  <srs>EPSG:5181</srs>
+  <nativeBoundingBox>
+    <minx>320425.091446999</minx>
+    <maxx>365597.4800952168</maxx>
+    <miny>302810.3006195817</miny>
+    <maxy>334247.0166209574</maxy>
+    <crs class="projected">EPSG:5181</crs>
+  </nativeBoundingBox>
+  <latLonBoundingBox>
+    <minx>128.33924682429895</minx>
+    <maxx>128.84808921143068</maxx>
+    <miny>36.209022902184095</miny>
+    <maxy>36.49892106708455</maxy>
+    <crs>EPSG:4326</crs>
+  </latLonBoundingBox>
+  <projectionPolicy>FORCE_DECLARED</projectionPolicy>
+  <enabled>true</enabled>
+  <store class="dataStore">
+    <id>DataStoreInfoImpl-4bf97568:19c4d6c3053:-7ff9</id>
+  </store>
+  <serviceConfiguration>false</serviceConfiguration>
+  <maxFeatures>0</maxFeatures>
+  <numDecimals>0</numDecimals>
+  <padWithZeros>false</padWithZeros>
+  <forcedDecimal>false</forcedDecimal>
+  <overridingServiceSRS>false</overridingServiceSRS>
+  <skipNumberMatched>false</skipNumberMatched>
+  <circularArcPresent>false</circularArcPresent>
+</featureType>

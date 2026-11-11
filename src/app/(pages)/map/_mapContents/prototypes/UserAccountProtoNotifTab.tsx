@@ -48,6 +48,7 @@ export function UserAccountProtoNotifTab({
   const [expiryExpanded, setExpiryExpanded] = useState(true)
   const [feeExpanded, setFeeExpanded] = useState(true)
   const [geomExpanded, setGeomExpanded] = useState(true)
+  const [consExpanded, setConsExpanded] = useState(true)
 
   const expiryList = useMemo(
     () => items.filter((item) => item.category === '만료임박'),
@@ -61,8 +62,12 @@ export function UserAccountProtoNotifTab({
     () => items.filter((item) => item.category === '위치없음'),
     [items]
   )
+  const consList = useMemo(
+    () => items.filter((item) => item.category === '공사알림'),
+    [items]
+  )
 
-  const totalCount = expiryList.length + feeList.length + geomList.length
+  const totalCount = expiryList.length + feeList.length + geomList.length + consList.length
   const unreadCount = items.filter((n) => !n.read).length
 
   const openItem = (item: ProtoNotifItem) => {
@@ -123,6 +128,23 @@ export function UserAccountProtoNotifTab({
             onToggle={() => setGeomExpanded((prev) => !prev)}
           >
             {geomList.map((item) => (
+              <NotifListRow
+                key={item.id}
+                item={item}
+                onOpen={() => openItem(item)}
+                onDelete={() => onDismiss(item)}
+              />
+            ))}
+          </NotifGroup>
+        ) : null}
+
+        {consList.length > 0 ? (
+          <NotifGroup
+            summary={`공사 알림이 ${consList.length}건입니다`}
+            expanded={consExpanded}
+            onToggle={() => setConsExpanded((prev) => !prev)}
+          >
+            {consList.map((item) => (
               <NotifListRow
                 key={item.id}
                 item={item}

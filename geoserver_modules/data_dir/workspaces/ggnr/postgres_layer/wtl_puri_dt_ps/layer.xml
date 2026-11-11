@@ -1,0 +1,19 @@
+<layer>
+  <name>wtl_puri_dt_ps</name>
+  <id>LayerInfoImpl-4fd235f0:1a161359926:-7f73</id>
+  <type>VECTOR</type>
+  <defaultStyle>
+    <id>StyleInfoImpl-4fd235f0:1a161359926:-7f72</id>
+  </defaultStyle>
+  <resource class="featureType">
+    <id>FeatureTypeInfoImpl-4fd235f0:1a161359926:-7f74</id>
+  </resource>
+  <queryable>true</queryable>
+  <opaque>false</opaque>
+  <attribution>
+    <logoWidth>0</logoWidth>
+    <logoHeight>0</logoHeight>
+  </attribution>
+  <dateCreated>2026-10-22 04:01:19.752 UTC</dateCreated>
+  <dateModified>2026-10-22 04:01:20.934 UTC</dateModified>
+</layer>
