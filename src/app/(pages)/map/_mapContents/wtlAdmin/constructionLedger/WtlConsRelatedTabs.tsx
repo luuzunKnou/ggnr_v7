@@ -69,9 +69,9 @@ type ConsRow = {
   geom?: GeoJSON.Geometry | null
 }
 
-/** 관망조회에 포함된 시설 레이어(수용가·업데이트 내역 제외) */
+/** 관망조회에 포함된 시설 레이어(급수전계량기·업데이트 내역 제외) */
 const FACILITY_LAYER_KEYS = WTL_NET_LAYER_DEFS.filter(
-  (d) => d.table && d.key !== '급수전계량기' && d.key !== '상수 업데이트 내역'
+  (d) => d.table && d.key !== 'wtl_meta_ps' && d.key !== 'wtl_task_as'
 ).map((d) => d.key)
 
 const TABS: { id: RelatedTab; label: string }[] = [

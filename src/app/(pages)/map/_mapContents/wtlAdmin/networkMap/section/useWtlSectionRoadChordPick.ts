@@ -291,8 +291,9 @@ export function useWtlSectionRoadChordPick({
     }
 
     const moveKey = map.on('pointermove', onMove as never) as EventsKey
-    const downKey = map.on('pointerdown', onPointerDown as never) as EventsKey
-    const upKey = map.on('pointerup', onPointerUp as never) as EventsKey
+    // OL Map 타입에 pointerdown/up 미포함 — 브라우저 포인터 이벤트로 사용
+    const downKey = map.on('pointerdown' as 'pointermove', onPointerDown as never) as EventsKey
+    const upKey = map.on('pointerup' as 'pointermove', onPointerUp as never) as EventsKey
 
     return () => {
       loadSeq += 1
