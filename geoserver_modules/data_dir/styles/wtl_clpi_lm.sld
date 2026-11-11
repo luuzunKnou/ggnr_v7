@@ -59,7 +59,7 @@
                   </sld:CssParameter>
                 </sld:Fill>
               </sld:Mark>
-              <sld:Size>
+              <sld:Size><ogc:Function name="if_then_else"><ogc:Function name="greaterThan"><ogc:Function name="env"><ogc:Literal>ignore_scale</ogc:Literal><ogc:Literal>0</ogc:Literal></ogc:Function><ogc:Literal>0</ogc:Literal></ogc:Function><ogc:Literal>18</ogc:Literal>
                 <ogc:Function name="if_then_else">
                   <ogc:Function name="greaterThan">
                     <ogc:Function name="env">
@@ -74,7 +74,7 @@
                   </ogc:Function>
                   <ogc:Literal>16</ogc:Literal>
                 </ogc:Function>
-              </sld:Size>
+              </ogc:Function></sld:Size>
               <sld:Rotation>
                 <ogc:Function name="endAngle">
                   <ogc:PropertyName>geom</ogc:PropertyName>

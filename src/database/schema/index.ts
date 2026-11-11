@@ -4,6 +4,7 @@
 export * from './board';
 export * from './comp';
 export * from './compd';
+export * from './cons_alert_setting';
 export * from './data_batch_snapshot';
 export * from './data_batch_snapshot_row';
 export * from './data_detail_log';
@@ -48,7 +49,7 @@ export * from './road_frontage_marker';
 export * from './road_reward';
 export * from './road_use_ledger';
 export * from './road_video_track';
-export * from './safedata_history';
+export * from './data_history';
 export * from './ser';
 export * from './serd';
 export * from './serp_map';

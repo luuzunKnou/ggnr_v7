@@ -177,6 +177,16 @@ export async function getGnmsLogBootContext(_p: Params) {
   return getBoot();
 }
 
+export async function checkPublicLayerSgg(p: Params = {}) {
+  const { checkPublicLayerSgg: check } = await import('@/service/gnmsBaseDataService');
+  return check(p);
+}
+
+export async function getGnmsBaseDataExportParams(p: Params) {
+  const { getGnmsBaseDataExportParams: getParams } = await import('@/service/gnmsBaseDataService');
+  return getParams(p);
+}
+
 export async function runIntegration(p: Params) {
   const system = normalizeSystem(p.system);
   const mode = (String(p.mode ?? 'daily') as 'daily' | 'initial') ?? 'daily';
@@ -504,6 +514,41 @@ export async function runIntegration(p: Params) {
       console.error(`[INTEGRATION] DONE system=${system} ijlKey=${ijlKey ?? '-'} status=${r.jobStatus}`);
       return { ijlKey, system, ok: r.jobStatus === 'SUCCESS' };
     } else if (system === 'GNMS') {
+      const gnmsMode = String(p.gnmsMode ?? p.mode ?? 'api').trim().toLowerCase();
+      if (gnmsMode === 'gis') {
+        const folder = String(p.folder ?? '').trim();
+        await updateIntegrationJobProgress(
+          ijlKey,
+          `진행중 | GNMS | GIS 파라미터 준비 folder=${folder || '-'}`
+        );
+        const { getGnmsBaseDataExportParams } = await import('@/service/gnmsBaseDataService');
+        const exportParams = await getGnmsBaseDataExportParams({ folder });
+        await pool.query(
+          `update integration_job_log
+           set ijl_status='SUCCESS', ijl_finished_at=now(), ijl_message=$2
+           where ijl_key=$1`,
+          [
+            ijlKey,
+            withSchedulerPrefix(
+              `GIS 다운로드 대기 folder=${exportParams.folder} bjd_cde=${exportParams.bjd_cde}`
+            ),
+          ]
+        );
+        console.error(`[INTEGRATION] DONE system=${system} ijlKey=${ijlKey ?? '-'} gisExport`);
+        return {
+          ijlKey,
+          system,
+          ok: true,
+          browserDownloadRequired: true,
+          folder: exportParams.folder,
+          bjd_cde: exportParams.bjd_cde,
+          adm_sect_c: exportParams.adm_sect_c,
+          sgg_nm: exportParams.sgg_nm,
+          geom: exportParams.geom,
+          sggExists: exportParams.sggExists,
+        };
+      }
+
       const { prepareLocalServiceLogsForBrowser } = await import('@/service/gnmsLogReceiveService');
       const dateRaw = String(p.date ?? '').trim();
       const dateFilter = dateRaw || null;

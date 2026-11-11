@@ -1,14 +1,14 @@
 'use client'
 
-import { useMemo } from 'react'
-import { X } from 'lucide-react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { ChevronUp, X } from 'lucide-react'
+import { call } from '@/lib/api'
 import { formatDefineFieldDisplayValue } from '@/lib/defineLayerCodeDisplay'
+import { cn } from '@/lib/utils'
 import { MapFloatingPanel } from '../../../_mapComponents/MapFloatingPanel'
 import { useMapContext } from '../../../_mapComponents/MapContext'
-import {
-  COMPLAINT_DETAIL_PANEL_DEFAULT_TOP,
-  COMPLAINT_DETAIL_PANEL_Z_INDEX,
-} from '../../../_mapComponents/complaint/complaintPanelLayout'
+import { COMPLAINT_DETAIL_PANEL_DEFAULT_TOP } from '../../../_mapComponents/complaint/complaintPanelLayout'
+import type { MapUiZLayer } from '@/lib/mapUiZIndex'
 import {
   getDefineFieldDisplayLabel,
   getRowValueByField,
@@ -16,7 +16,11 @@ import {
   selectDefineLayerDetailFields,
   type DefineFieldLike,
 } from '../../../_mapComponents/standard/defineLayerRowUtils'
-import type { WtlDefineDisplayBundle } from '../networkMap/wtlNetworkDefineDisplayCache'
+import {
+  loadWtlDefineDisplayBundle,
+  peekWtlDefineDisplayBundle,
+  type WtlDefineDisplayBundle,
+} from '../networkMap/wtlNetworkDefineDisplayCache'
 
 export type WtlFacilityRelatedDetailRow = {
   ogcFid: number | null
@@ -29,6 +33,113 @@ type Props = {
   row: WtlFacilityRelatedDetailRow
   bundle: WtlDefineDisplayBundle | null
   onClose: () => void
+  /** 겹침 방지용 위치·순서 오프셋(px) */
+  stackOffset?: number
+  /** 다른 상세를 새로 열어도 접힘 유지 */
+  collapsed: boolean
+  onToggleCollapsed: () => void
+}
+
+export type WtlMappedFacilityTarget = {
+  table: string
+  schema: string
+  title: string
+  fieldsTable?: string | null
+  ftrIdn: string
+}
+
+function FloatingChrome({
+  title,
+  subtitle,
+  onClose,
+  stackOffset,
+  left,
+  zLayer,
+  collapsed,
+  onToggleCollapsed,
+  children,
+}: {
+  title: string
+  subtitle?: string
+  onClose: () => void
+  stackOffset: number
+  left: number
+  zLayer: MapUiZLayer
+  collapsed: boolean
+  onToggleCollapsed: () => void
+  children: ReactNode
+}) {
+  return (
+    <MapFloatingPanel
+      viewport
+      zLayer={zLayer}
+      width="420px"
+      maxHeight="70vh"
+      className="bg-background backdrop-blur-none"
+      defaultPosition={{
+        top: COMPLAINT_DETAIL_PANEL_DEFAULT_TOP + stackOffset,
+        left,
+      }}
+      header={
+        <>
+          <button
+            type="button"
+            title={collapsed ? '펼치기' : '접기'}
+            aria-label={collapsed ? '펼치기' : '접기'}
+            aria-expanded={!collapsed}
+            onClick={onToggleCollapsed}
+            className="standard-panel-close mr-2 cursor-pointer"
+          >
+            <ChevronUp
+              className={cn('h-4 w-4', collapsed && 'rotate-180')}
+              aria-hidden
+            />
+          </button>
+          <div className="min-w-0 flex-1 pr-2">
+            <span className="block truncate text-xs font-medium text-foreground" title={title}>
+              {title}
+            </span>
+            {subtitle ? (
+              <span
+                className="mt-0.5 block truncate text-[11px] text-muted-foreground"
+                title={subtitle}
+              >
+                {subtitle}
+              </span>
+            ) : null}
+          </div>
+          <button
+            type="button"
+            title="닫기"
+            onClick={onClose}
+            className="standard-panel-close cursor-pointer"
+            aria-label="닫기"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </>
+      }
+    >
+      <div
+        className={cn(
+          'flex min-h-0 flex-1 flex-col overflow-hidden bg-background',
+          collapsed && 'hidden'
+        )}
+      >
+        {children}
+        <div className="standard-detail-edit-footer">
+          <button
+            type="button"
+            title="닫기"
+            onClick={onClose}
+            className="standard-detail-hdr-btn"
+          >
+            닫기
+          </button>
+        </div>
+      </div>
+    </MapFloatingPanel>
+  )
 }
 
 function fallbackDetailFields(record: Record<string, unknown>): DefineFieldLike[] {
@@ -46,15 +157,128 @@ function fallbackDetailFields(record: Record<string, unknown>): DefineFieldLike[
     }))
 }
 
+export function WtlMappedFacilityFloating({
+  target,
+  onClose,
+  collapsed,
+  onToggleCollapsed,
+}: {
+  target: WtlMappedFacilityTarget
+  onClose: () => void
+  collapsed: boolean
+  onToggleCollapsed: () => void
+}) {
+  const [row, setRow] = useState<WtlFacilityRelatedDetailRow | null>(null)
+  const [bundle, setBundle] = useState<WtlDefineDisplayBundle | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const mapContext = useMapContext()
+  const floatingLeftPx = (mapContext?.mapPaddingLeft ?? 0) + 56
+
+  useEffect(() => {
+    if (!target.ftrIdn) {
+      setRow(null)
+      setBundle(null)
+      setError('관리번호를 찾을 수 없습니다.')
+      setLoading(false)
+      return
+    }
+    let cancelled = false
+    setLoading(true)
+    setError(null)
+    setRow(null)
+    const fieldsTable = String(target.fieldsTable ?? target.table).trim() || target.table
+    const peeked = peekWtlDefineDisplayBundle(fieldsTable, null)
+    if (peeked) setBundle(peeked)
+    else {
+      void loadWtlDefineDisplayBundle(fieldsTable, null).then((b) => {
+        if (!cancelled) setBundle(b)
+      })
+    }
+    void call('', 'POST', {
+      service: 'wtlFacilityService',
+      action: 'listFacilityRows',
+      params: {
+        table: target.table,
+        schema: target.schema || 'layer',
+        ftrIdn: target.ftrIdn,
+        limit: 1,
+        offset: 0,
+      },
+    })
+      .then((res) => {
+        if (cancelled) return
+        const data = (res?.data ?? res) as
+          | { rows?: WtlFacilityRelatedDetailRow[] }
+          | undefined
+        const found = Array.isArray(data?.rows) ? data.rows[0] : undefined
+        if (!found) {
+          setRow(null)
+          setError(`${target.title}을 찾을 수 없습니다.`)
+          return
+        }
+        setRow(found)
+      })
+      .catch(() => {
+        if (cancelled) return
+        setRow(null)
+        setError(`${target.title}을 불러오지 못했습니다.`)
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [target.ftrIdn, target.schema, target.table, target.title])
+
+  if (!loading && row) {
+    return (
+      <WtlFacilityRelatedDetailFloating
+        title={target.title}
+        row={row}
+        bundle={bundle}
+        onClose={onClose}
+        stackOffset={36}
+        collapsed={collapsed}
+        onToggleCollapsed={onToggleCollapsed}
+      />
+    )
+  }
+
+  return (
+    <FloatingChrome
+      title={target.title}
+      onClose={onClose}
+      stackOffset={36}
+      left={floatingLeftPx}
+      zLayer="detailRelated"
+      collapsed={collapsed}
+      onToggleCollapsed={onToggleCollapsed}
+    >
+      <div className="standard-detail-scroll">
+        {loading ? (
+          <p className="standard-detail-loading">조회 중…</p>
+        ) : (
+          <p className="standard-detail-error">{error}</p>
+        )}
+      </div>
+    </FloatingChrome>
+  )
+}
+
 /** 현황 행 상세 — 플로팅 모달 */
 export function WtlFacilityRelatedDetailFloating({
   title,
   row,
   bundle,
   onClose,
+  stackOffset = 0,
+  collapsed,
+  onToggleCollapsed,
 }: Props) {
   const mapContext = useMapContext()
-  const floatingLeftPx = (mapContext?.mapPaddingLeft ?? 0) + 20
+  const floatingLeftPx = (mapContext?.mapPaddingLeft ?? 0) + 20 + stackOffset
 
   const detailFields = useMemo(() => {
     const all = bundle?.fields ?? []
@@ -73,7 +297,7 @@ export function WtlFacilityRelatedDetailFloating({
 
   const codesByField = bundle?.codesByField ?? {}
 
-  const headerTitle = useMemo(() => {
+  const subtitle = useMemo(() => {
     const titleField = (bundle?.fields ?? []).find((f) =>
       isDefineFieldFlagTrue(f.define_field_show_title)
     )
@@ -86,40 +310,24 @@ export function WtlFacilityRelatedDetailFloating({
         codesByField[name.toLowerCase()],
         ''
       )
-      if (formatted.trim()) return `${title} · ${formatted}`
+      if (formatted.trim()) return formatted
     }
-    if (row.ogcFid != null) return `${title} · #${row.ogcFid}`
-    return title
-  }, [bundle?.fields, codesByField, row.ogcFid, row.record, title])
+    if (row.ogcFid != null) return `#${row.ogcFid}`
+    return ''
+  }, [bundle?.fields, codesByField, row.ogcFid, row.record])
 
   return (
-    <MapFloatingPanel
-      viewport
-      width="420px"
-      maxHeight="70vh"
-      style={{ zIndex: COMPLAINT_DETAIL_PANEL_Z_INDEX }}
-      defaultPosition={{ top: COMPLAINT_DETAIL_PANEL_DEFAULT_TOP, left: floatingLeftPx }}
-      header={
-        <>
-          <span
-            className="min-w-0 truncate text-xs font-medium text-muted-foreground"
-            title={headerTitle}
-          >
-            {headerTitle}
-          </span>
-          <button
-            type="button"
-            title="닫기"
-            onClick={onClose}
-            className="flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center rounded text-muted-foreground hover:bg-muted/50 hover:text-foreground"
-            aria-label="닫기"
-          >
-            <X className="h-3.5 w-3.5" />
-          </button>
-        </>
-      }
+    <FloatingChrome
+      title={title}
+      subtitle={subtitle}
+      onClose={onClose}
+      stackOffset={stackOffset}
+      left={floatingLeftPx}
+      zLayer={stackOffset > 0 ? 'detailRelated' : 'detailFloating'}
+      collapsed={collapsed}
+      onToggleCollapsed={onToggleCollapsed}
     >
-      <div className="standard-detail-scroll min-h-0 flex-1">
+      <div className="standard-detail-scroll">
         {detailFields.length === 0 ? (
           <p className="standard-detail-attr-empty">표시할 상세 필드가 없습니다.</p>
         ) : (
@@ -140,7 +348,11 @@ export function WtlFacilityRelatedDetailFloating({
                     {label}
                   </div>
                   <div
-                    className="standard-detail-attr-value standard-detail-attr-cell-border text-foreground"
+                    className={cn(
+                      'standard-detail-attr-value standard-detail-attr-cell-border text-foreground',
+                      isDefineFieldFlagTrue(f.define_field_show_title) &&
+                        'standard-detail-attr-value-title'
+                    )}
                     title={value}
                   >
                     {value}
@@ -151,6 +363,6 @@ export function WtlFacilityRelatedDetailFloating({
           </div>
         )}
       </div>
-    </MapFloatingPanel>
+    </FloatingChrome>
   )
 }

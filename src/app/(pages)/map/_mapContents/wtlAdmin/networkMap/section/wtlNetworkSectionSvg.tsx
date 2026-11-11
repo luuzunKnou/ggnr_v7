@@ -1,11 +1,16 @@
 'use client'
 
 import { useMemo } from 'react'
+import { useResolvedThemeSafe } from '@/app/(pages)/(index)/theme-provider'
 import {
   sampleTerrainStations,
   sectionPipeOf,
   WtlNetworkMapSectionFigure,
 } from '../WtlNetworkMapSectionModal'
+import {
+  SectionFeatureLegendPanel,
+  useSectionFeatureLegend,
+} from './wtlNetworkSectionLegend'
 
 export type SectionGroundPt = { distM: number; elevM: number }
 
@@ -33,6 +38,10 @@ export type SectionFeatureMark = {
   label: string
   /** 레이어 한글명(관종) */
   layerKorName?: string
+  /** GeoServer 스타일·범례용 define_table 키 (예: wtl_pipe_lm) */
+  layerKey?: string
+  /** SLD 조건 심볼 키 (ftr_cde 등, 대문자) */
+  styleCode?: string
   color: string
   kind: 'pipe' | 'point'
   /** 종단: 거리축 구간 */
@@ -194,6 +203,22 @@ function yAxisTicksWithDataMax(
   return uniqueAxisTicksByLabel(withoutDup)
 }
 
+function useSectionPaper() {
+  const dark = useResolvedThemeSafe() === 'dark'
+  return {
+    paper: dark ? '#1a1a1a' : '#ffffff',
+    grid: dark ? 'rgba(255,255,255,0.14)' : '#e2e8f0',
+    band: dark ? '#262626' : '#f8fafc',
+    axis: dark ? '#a3a3a3' : '#64748b',
+    label: dark ? '#e5e5e5' : '#3d5560',
+    ink: dark ? '#f5f5f5' : '#1e293b',
+    ground: dark ? '#e5e5e5' : '#111111',
+    soil: dark ? '#3f3428' : '#efe6d6',
+    dim: dark ? '#a3a3a3' : '#7A7A7A',
+    side: dark ? '#c4b496' : '#8a7a5a',
+  }
+}
+
 const SUPPLY_GANTT_ROW_H = 22
 const SUPPLY_GANTT_BAR_H = 14
 const SUPPLY_BAND_ROLE_ORDER: Array<{
@@ -234,6 +259,7 @@ function SupplyAreaGanttGroup({
   padR: number
 }) {
   const roles = supplyGanttRoles(bands)
+  const paper = useSectionPaper()
   if (!roles.length) return null
 
   return (
@@ -243,8 +269,8 @@ function SupplyAreaGanttGroup({
         y={bandTop}
         width={width - padL - padR}
         height={roles.length * SUPPLY_GANTT_ROW_H}
-        fill="#f8fafc"
-        stroke="#e2e8f0"
+        fill={paper.band}
+        stroke={paper.grid}
         strokeWidth={1}
       />
       {roles.map((row, ri) => {
@@ -258,14 +284,14 @@ function SupplyAreaGanttGroup({
               y1={rowY + SUPPLY_GANTT_ROW_H}
               x2={width - padR}
               y2={rowY + SUPPLY_GANTT_ROW_H}
-              stroke="#e2e8f0"
+              stroke={paper.grid}
               strokeWidth={1}
             />
             <text
               x={padL - 6}
               y={rowY + SUPPLY_GANTT_ROW_H / 2 + 3}
               textAnchor="end"
-              fill="#3d5560"
+              fill={paper.label}
               fontSize={10}
               fontWeight={600}
             >
@@ -297,7 +323,7 @@ function SupplyAreaGanttGroup({
                       x={midX}
                       y={barY + SUPPLY_GANTT_BAR_H / 2 + 3}
                       textAnchor="middle"
-                      fill="#1e293b"
+                      fill={paper.ink}
                       fontSize={9}
                       fontWeight={600}
                     >
@@ -337,8 +363,9 @@ function CrossSectionLegacySvg({
   const padT = 56
   /** 단면도(지형) 구역 높이 — 라벨 위까지 최대한 사용 */
   const plotH = 240
-  const AXIS = '#64748b'
-  const AXIS_LABEL = '#3d5560'
+  const paper = useSectionPaper()
+  const AXIS = paper.axis
+  const AXIS_LABEL = paper.label
 
   const layout = useMemo(() => {
     if (!ground.length) return null
@@ -497,17 +524,17 @@ function CrossSectionLegacySvg({
   /** 제목·끝캡·미터 라벨이 겹치지 않도록 절단선 Y */
   const axisY = 22
   return (
-    <div className="overflow-auto rounded border-2 border-[#787878] bg-white">
+    <div className="flex min-h-0 flex-1 items-center justify-center overflow-hidden rounded border-2 border-border bg-background">
       <svg
         viewBox={`0 0 ${width} ${svgHeight}`}
         width="100%"
-        height="auto"
+        height="100%"
         preserveAspectRatio="xMidYMid meet"
-        className="block w-full"
+        className="max-h-full max-w-full"
         role="img"
         aria-label="횡단면도"
       >
-        <rect width={width} height={svgHeight} fill="#ffffff" />
+        <rect width={width} height={svgHeight} fill={paper.paper} />
         <defs>
           <marker
             id="wtl-section-arrowhead"
@@ -517,7 +544,7 @@ function CrossSectionLegacySvg({
             refY="1.5"
             orient="auto-start-reverse"
           >
-            <polygon points="0 0, 3 1.5, 0 3" fill="#7A7A7A" />
+            <polygon points="0 0, 3 1.5, 0 3" fill={paper.dim} />
           </marker>
         </defs>
 
@@ -576,7 +603,7 @@ function CrossSectionLegacySvg({
               y1={t.y}
               x2={width - padR}
               y2={t.y}
-              stroke="#e2e8f0"
+              stroke={paper.grid}
               strokeWidth={1}
             />
             <line
@@ -603,8 +630,8 @@ function CrossSectionLegacySvg({
         </text>
 
         {/* 등고 지반고 — 단면도 구역 전체 채움 */}
-        <path d={soilPath} fill="#efe6d6" stroke="none" />
-        <path d={groundPath} fill="none" stroke="#111" strokeWidth={1.6} />
+        <path d={soilPath} fill={paper.soil} stroke="none" />
+        <path d={groundPath} fill="none" stroke={paper.ground} strokeWidth={1.6} />
 
         {uniqueDistances.length >= 2
           ? uniqueDistances.slice(0, -1).map((d1, i) => {
@@ -616,13 +643,13 @@ function CrossSectionLegacySvg({
               const midX = (x1 + x2) / 2
               return (
                 <g key={`seg-${i}`}>
-                  <line x1={x1} y1={DIM_Y} x2={x2} y2={DIM_Y} stroke="#7A7A7A" strokeWidth={1} />
+                  <line x1={x1} y1={DIM_Y} x2={x2} y2={DIM_Y} stroke={paper.dim} strokeWidth={1} />
                   <line
                     x1={x1}
                     y1={DIM_Y - DIM_TICK}
                     x2={x1}
                     y2={DIM_Y + DIM_TICK}
-                    stroke="#7A7A7A"
+                    stroke={paper.dim}
                     strokeWidth={1}
                   />
                   <line
@@ -630,10 +657,10 @@ function CrossSectionLegacySvg({
                     y1={DIM_Y - DIM_TICK}
                     x2={x2}
                     y2={DIM_Y + DIM_TICK}
-                    stroke="#7A7A7A"
+                    stroke={paper.dim}
                     strokeWidth={1}
                   />
-                  <text x={midX} y={DIM_Y - 4} textAnchor="middle" fill="#7A7A7A" fontSize={11}>
+                  <text x={midX} y={DIM_Y - 4} textAnchor="middle" fill={paper.dim} fontSize={11}>
                     {gapM.toFixed(2)}m
                   </text>
                 </g>
@@ -677,7 +704,7 @@ function CrossSectionLegacySvg({
                     y1={m.surfY}
                     x2={m.startX}
                     y2={m.centerY}
-                    stroke="#7A7A7A"
+                    stroke={paper.dim}
                     strokeWidth={2}
                     markerStart="url(#wtl-section-arrowhead)"
                     markerEnd="url(#wtl-section-arrowhead)"
@@ -686,7 +713,7 @@ function CrossSectionLegacySvg({
                     x={depthLabelX}
                     y={(m.surfY + m.centerY) / 2}
                     dy={4}
-                    fill="#7A7A7A"
+                    fill={paper.dim}
                     fontSize={10}
                   >
                     {Math.round(dep * 1000)}mm
@@ -786,8 +813,9 @@ function LongSectionSvg({
   const padB = 52
   const LONG_LABEL_STEP = 14
   const LONG_LABEL_NEAR = 52
-  const AXIS = '#64748b'
-  const AXIS_LABEL = '#3d5560'
+  const paper = useSectionPaper()
+  const AXIS = paper.axis
+  const AXIS_LABEL = paper.label
 
   const layout = useMemo(() => {
     if (!ground.length) return null
@@ -951,17 +979,17 @@ function LongSectionSvg({
   }
 
   return (
-    <div className="overflow-auto rounded border-2 border-[#787878] bg-white">
+    <div className="flex min-h-0 flex-1 items-center justify-center overflow-hidden rounded border-2 border-border bg-background">
       <svg
         viewBox={`0 0 ${width} ${layout.height}`}
         width="100%"
-        height="auto"
+        height="100%"
         preserveAspectRatio="xMidYMid meet"
-        className="block w-full"
+        className="max-h-full max-w-full"
         role="img"
         aria-label="종단면도"
       >
-        <rect width={width} height={layout.height} fill="#ffffff" />
+        <rect width={width} height={layout.height} fill={paper.paper} />
 
         {/* 축·격자 */}
         <line
@@ -987,7 +1015,7 @@ function LongSectionSvg({
               y1={t.y}
               x2={width - padR}
               y2={t.y}
-              stroke="#e2e8f0"
+              stroke={paper.grid}
               strokeWidth={1}
             />
             <line
@@ -1016,7 +1044,7 @@ function LongSectionSvg({
               y1={layout.plotTop}
               x2={t.x}
               y2={layout.plotBottom}
-              stroke="#e2e8f0"
+              stroke={paper.grid}
               strokeWidth={1}
             />
             <line
@@ -1039,18 +1067,18 @@ function LongSectionSvg({
           </g>
         ))}
 
-        <path d={layout.envelopePath} fill="#efe6d6" stroke="none" opacity={0.85} />
-        <path d={layout.soilPath} fill="#efe6d6" stroke="none" opacity={0.35} />
+        <path d={layout.envelopePath} fill={paper.soil} stroke="none" opacity={0.85} />
+        <path d={layout.soilPath} fill={paper.soil} stroke="none" opacity={0.35} />
         {layout.maxPath ? (
           <path
             d={layout.maxPath}
             fill="none"
-            stroke="#8a7a5a"
+            stroke={paper.side}
             strokeWidth={1}
             strokeDasharray="4 3"
           />
         ) : null}
-        <path d={layout.groundPath} fill="none" stroke="#111" strokeWidth={1.8} />
+        <path d={layout.groundPath} fill="none" stroke={paper.ground} strokeWidth={1.8} />
 
         {/* 절단선 = 깊이축 한 지점(띠 중심) */}
         <line
@@ -1165,6 +1193,64 @@ function PrevOriginalSectionSvg({
   )
 }
 
+function SectionSvgWithLegend({
+  mode,
+  ground,
+  groundMin,
+  groundMax,
+  features,
+  totalLengthM,
+  supplyAreaBands,
+}: {
+  mode: 'cross' | 'long'
+  ground: SectionGroundPt[]
+  groundMin: SectionGroundPt[]
+  groundMax: SectionGroundPt[]
+  features: SectionFeatureMark[]
+  totalLengthM: number
+  supplyAreaBands: SectionSupplyBandSegment[]
+}) {
+  const {
+    stylesByKey,
+    hiddenKeys,
+    featureLegendGroups,
+    visibleFeatures,
+    toggleLegendItem,
+    toggleLegendLayer,
+  } = useSectionFeatureLegend(features)
+
+  return (
+    <div className="flex min-h-0 flex-1 items-stretch gap-2 overflow-hidden">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+        {mode === 'cross' ? (
+          <CrossSectionLegacySvg
+            ground={ground}
+            features={visibleFeatures}
+            totalLengthM={totalLengthM}
+            supplyAreaBands={supplyAreaBands}
+          />
+        ) : (
+          <LongSectionSvg
+            ground={ground}
+            groundMin={groundMin}
+            groundMax={groundMax}
+            features={visibleFeatures}
+            totalLengthM={totalLengthM}
+            supplyAreaBands={supplyAreaBands}
+          />
+        )}
+      </div>
+      <SectionFeatureLegendPanel
+        groups={featureLegendGroups}
+        stylesByKey={stylesByKey}
+        hiddenKeys={hiddenKeys}
+        onToggleItem={toggleLegendItem}
+        onToggleLayer={toggleLegendLayer}
+      />
+    </div>
+  )
+}
+
 export function WtlNetworkSectionSvg({
   mode,
   ground = [],
@@ -1188,10 +1274,13 @@ export function WtlNetworkSectionSvg({
   /** X축 하단 — 급수구역·분구·블록 밴드 */
   supplyAreaBands?: SectionSupplyBandSegment[]
 }) {
-  if (mode === 'cross') {
+  if (mode === 'cross' || mode === 'long') {
     return (
-      <CrossSectionLegacySvg
+      <SectionSvgWithLegend
+        mode={mode}
         ground={ground}
+        groundMin={groundMin}
+        groundMax={groundMax}
         features={features}
         totalLengthM={totalLengthM}
         supplyAreaBands={supplyAreaBands}
@@ -1203,14 +1292,5 @@ export function WtlNetworkSectionSvg({
     const dipMm = pipeFeat ? Math.round(pipeFeat.diameterM * 1000) : undefined
     return <PrevOriginalSectionSvg lineLonLat={lineLonLat} diameterMm={dipMm} />
   }
-  return (
-    <LongSectionSvg
-      ground={ground}
-      groundMin={groundMin}
-      groundMax={groundMax}
-      features={features}
-      totalLengthM={totalLengthM}
-      supplyAreaBands={supplyAreaBands}
-    />
-  )
+  return null
 }

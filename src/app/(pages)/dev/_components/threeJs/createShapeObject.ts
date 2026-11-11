@@ -264,7 +264,7 @@ function buildGround(props: ShapeProps): THREE.Group {
     return group;
   }
 
-  // 윗면만 색상 채움 + 아랫면·옆면 외곽선
+  // 윗면 채움 + 윗면 외곽선(옆면·아랫면 선 없음)
   // 범위: AA 정사각 / 단면: 절단선 중심 ±halfWidth 띠 (관로 조회 polygon과 동일)
   const thicknessM = Math.max(0, props.height ?? 0);
   const sectionLine =
@@ -278,15 +278,36 @@ function buildGround(props: ShapeProps): THREE.Group {
 
   const colorHex = props.color || '#84cc16';
   const groundOpacity = Math.max(0, Math.min(1, props.opacity ?? 0.35));
-  const topMat = fillMaterial(
-    colorHex,
-    groundOpacity > 0 ? groundOpacity : 0.01,
-    THREE.DoubleSide
-  );
-  topMat.wireframe = false;
-  // 반투명 지형: 깊이쓰기 끄면 상단 채움이 구멍처럼 비는 현상 완화
-  if (groundOpacity < 0.99) {
-    topMat.depthWrite = false;
+  const texUrl = props.groundMapTextureUrl?.trim() || '';
+  let topMat: THREE.Material;
+  if (texUrl) {
+    const map = new THREE.TextureLoader().load(texUrl);
+    map.colorSpace = THREE.SRGBColorSpace;
+    map.anisotropy = 8;
+    map.needsUpdate = true;
+    // 항공 사진 — 조명 영향 없이 지도 색 그대로 (초록 반투명 덮개 없음)
+    const basic = new THREE.MeshBasicMaterial({
+      map,
+      color: 0xffffff,
+      transparent: false,
+      opacity: 1,
+      depthWrite: true,
+      side: THREE.DoubleSide,
+    });
+    basic.userData.groundMapTexture = map;
+    topMat = basic;
+  } else {
+    const std = fillMaterial(
+      colorHex,
+      groundOpacity > 0 ? groundOpacity : 0.01,
+      THREE.DoubleSide
+    );
+    // 반투명 지형: 깊이쓰기 끄면 상단 채움이 구멍처럼 비는 현상 완화
+    if (groundOpacity < 0.99) {
+      std.depthWrite = false;
+    }
+    std.wireframe = false;
+    topMat = std;
   }
   const topMesh = new THREE.Mesh(parts.topGeo, topMat);
   topMesh.userData.isFill = true;
@@ -369,6 +390,7 @@ function buildPipe(props: ShapeProps): THREE.Group {
   }
 
   if (props.pipeSegments?.length && cx != null && cy != null) {
+    const pipeDef = getWtlLayerShapeDef(props.kind);
     // 범위·단면 동일 — API 범위 클립만 사용 (클라이언트 단면 재클립 없음)
     group.add(
       createPipesOverlay({
@@ -379,6 +401,7 @@ function buildPipe(props: ShapeProps): THREE.Group {
         opacity: props.opacity ?? 0.92,
         surface: hasField ? 'field' : 'zero',
         field: hasField ? field : null,
+        layerKorName: pipeDef?.label ?? props.kind,
       })
     );
   }
@@ -386,7 +409,7 @@ function buildPipe(props: ShapeProps): THREE.Group {
   return group;
 }
 
-/** POINT(ps) 시설 — 지표→지상 원통. 윗면 SLD SVG 심볼 */
+/** POINT(ps) 시설 — 지표→지상 직육면체. 윗면 SLD SVG 심볼 */
 function buildManhole(props: ShapeProps): THREE.Group {
   const group = new THREE.Group();
   const field = props.manhHeightField;
@@ -439,6 +462,7 @@ function buildManhole(props: ShapeProps): THREE.Group {
         opacity: props.opacity ?? 0.9,
         field: hasField ? field : null,
         symbolStyleName: def?.styleName ?? props.kind,
+        layerKorName: def?.label ?? props.kind,
       })
     );
   }

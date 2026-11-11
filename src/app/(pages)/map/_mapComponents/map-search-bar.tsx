@@ -4,7 +4,7 @@ import React, { useMemo, useState, useEffect, useRef, useCallback } from 'react'
 import { createPortal } from 'react-dom';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useSession } from 'next-auth/react';
-import { Search, X, ChevronDown, LayoutGrid, Check, Loader2, History, EyeOff } from 'lucide-react';
+import { Search, X, ChevronDown, LayoutGrid, Check, Loader2, History, EyeOff, Scaling } from 'lucide-react';
 import { Input } from '@/app/shadcnComponents/ui/input';
 import {
   Dialog,
@@ -14,6 +14,7 @@ import {
 } from '@/app/shadcnComponents/ui/dialog';
 import { call } from '@/lib/api';
 import { cn } from '@/lib/utils';
+import { MAP_UI_Z } from '@/lib/mapUiZIndex';
 import { MapLayergroupBar } from './map-layergroup-bar';
 import {
   getAddressFromCoord,
@@ -58,6 +59,11 @@ const mapSearchBarIconBtnActive = cn(
   'dark:bg-white/20 dark:text-primary'
 );
 
+/** 슈퍼유저 버튼 title. 보이기 조건과 지금 크기 상태만 적는다. */
+function pointScaleSizeButtonTitle(ignoreScale: boolean): string {
+  return ignoreScale ? 'super user 계정 전용.\n변경 X' : 'super user 계정 전용.\n축적따라 변경';
+}
+
 /** 검색바 공통 표면 — 시스템 선택 등 넓은 컨트롤 */
 const mapSearchBarSurface = cn(
   'opacity-90 rounded-[5px] backdrop-blur-sm shadow-lg border transition-colors',
@@ -96,8 +102,6 @@ const ADDRESS_SEARCH_WIDTH_MAX_PX = 350;
 const ADDRESS_SEARCH_WIDTH_MIN_PX = 200;
 /** 확장 시 예상 너비가 이 값 미만이면 주소·시스템 선택 아이콘만 표시 */
 const ADDRESS_SEARCH_COMPACT_BELOW_PX = 200;
-/** 필지정보(10100)·레이어 그룹(9999)보다 위 — 시스템 선택은 항상 최상단 */
-const SYSTEM_SELECT_DIALOG_Z = 20100;
 /** 우측 시스템선택(텍스트)·아이콘·여백 */
 const SEARCH_BAR_RIGHT_RESERVE_FULL_PX = 380;
 /** 컴팩트 시 우측 아이콘만 예약 */
@@ -293,6 +297,8 @@ export function MapSearchBar({
   const { levels: consoleMenuLevels, loading: consoleAccessLoading } = useConsoleMenuAccess();
 
   const showDebugUi = mapContext?.showDebugUi ?? false;
+  const showPointScaleSizeToggle = isSuperUser(session?.user?.id);
+  const pointScaleSizeOn = mapContext?.iconScaleSizeOn ?? false;
   const canToggleGeoserverLog = useMemo(() => {
     if (isSuperUser(session?.user?.id)) return true;
     if (consoleAccessLoading) return false;
@@ -981,6 +987,15 @@ export function MapSearchBar({
               onToggleLog={() => mapContext?.setShowDebugUi(!showDebugUi)}
             />
           )}
+          {showPointScaleSizeToggle && (
+            <MapSearchBarIconButton
+              title={pointScaleSizeButtonTitle(pointScaleSizeOn)}
+              active={pointScaleSizeOn}
+              onClick={() => mapContext?.setIconScaleSizeOn((on) => !on)}
+            >
+              <Scaling className="w-5 h-5" strokeWidth={2} />
+            </MapSearchBarIconButton>
+          )}
           <div className={mapSearchBarIconShell}>
             <ThemeToggle variant="mapIcon" iconBtnClassName={mapSearchBarIconBtnInner} />
           </div>
@@ -1031,7 +1046,7 @@ export function MapSearchBar({
               <Dialog open={systemModalOpen} onOpenChange={handleSystemModalOpenChange}>
                 <DialogContent
                   className="sm:max-w-[380px] p-0 gap-0 overflow-hidden rounded-[10px] border-slate-200/80 shadow-xl dark:border-white/10 dark:bg-black/90"
-                  layerZIndex={SYSTEM_SELECT_DIALOG_Z}
+                  layerZIndex={MAP_UI_Z.systemSelect}
                   showCloseButton={false}
                   onPointerDownOutside={(e) => {
                     if (mustPickSystem) e.preventDefault();

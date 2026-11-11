@@ -18,7 +18,7 @@
                 <sld:OnlineResource xmlns:xlink="http://www.w3.org/1999/xlink" xlink:type="simple" xlink:href="/www/symbol/sewer/swl_manh_ps_smu002.svg"/>
                 <sld:Format>image/svg+xml</sld:Format>
               </sld:ExternalGraphic>
-              <sld:Size>
+              <sld:Size><ogc:Function name="if_then_else"><ogc:Function name="greaterThan"><ogc:Function name="env"><ogc:Literal>ignore_scale</ogc:Literal><ogc:Literal>0</ogc:Literal></ogc:Function><ogc:Literal>0</ogc:Literal></ogc:Function><ogc:Literal>18</ogc:Literal>
                 <ogc:Function name="if_then_else">
                   <ogc:Function name="greaterThan">
                     <ogc:Function name="env">
@@ -44,7 +44,47 @@
                     <ogc:Literal>14</ogc:Literal>
                   </ogc:Function>
                 </ogc:Function>
-              </sld:Size>
+              </ogc:Function></sld:Size>
+            </sld:Graphic>
+          </sld:PointSymbolizer>
+        </sld:Rule><sld:Rule>
+          <sld:Name>Name</sld:Name>
+          <sld:Title>swl_manh_ps_smu002</sld:Title>
+          <sld:Abstract>Abstract</sld:Abstract>
+          <sld:MinScaleDenominator>3000</sld:MinScaleDenominator>
+          <ogc:Filter><ogc:PropertyIsEqualTo><ogc:Function name="env"><ogc:Literal>ignore_scale</ogc:Literal><ogc:Literal>0</ogc:Literal></ogc:Function><ogc:Literal>1</ogc:Literal></ogc:PropertyIsEqualTo></ogc:Filter><sld:PointSymbolizer>
+            <sld:Graphic>
+              <sld:ExternalGraphic>
+                <sld:OnlineResource xmlns:xlink="http://www.w3.org/1999/xlink" xlink:type="simple" xlink:href="/www/symbol/sewer/swl_manh_ps_smu002.svg"/>
+                <sld:Format>image/svg+xml</sld:Format>
+              </sld:ExternalGraphic>
+              <sld:Size><ogc:Function name="if_then_else"><ogc:Function name="greaterThan"><ogc:Function name="env"><ogc:Literal>ignore_scale</ogc:Literal><ogc:Literal>0</ogc:Literal></ogc:Function><ogc:Literal>0</ogc:Literal></ogc:Function><ogc:Literal>18</ogc:Literal>
+                <ogc:Function name="if_then_else">
+                  <ogc:Function name="greaterThan">
+                    <ogc:Function name="env">
+                      <ogc:Literal>swl_manh_ps_smu002_size</ogc:Literal>
+                      <ogc:Literal>0</ogc:Literal>
+                    </ogc:Function>
+                    <ogc:Literal>0</ogc:Literal>
+                  </ogc:Function>
+                  <ogc:Function name="env">
+                    <ogc:Literal>swl_manh_ps_smu002_size</ogc:Literal>
+                    <ogc:Literal>16</ogc:Literal>
+                  </ogc:Function>
+                  <ogc:Function name="Categorize">
+                    <ogc:Function name="env">
+                      <ogc:Literal>wms_scale_denominator</ogc:Literal>
+                    </ogc:Function>
+                    <ogc:Literal>20</ogc:Literal>
+                    <ogc:Literal>500</ogc:Literal>
+                    <ogc:Literal>18</ogc:Literal>
+                    <ogc:Literal>800</ogc:Literal>
+                    <ogc:Literal>16</ogc:Literal>
+                    <ogc:Literal>1500</ogc:Literal>
+                    <ogc:Literal>14</ogc:Literal>
+                  </ogc:Function>
+                </ogc:Function>
+              </ogc:Function></sld:Size>
             </sld:Graphic>
           </sld:PointSymbolizer>
         </sld:Rule>

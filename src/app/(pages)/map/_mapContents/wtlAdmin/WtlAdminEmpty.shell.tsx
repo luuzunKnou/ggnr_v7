@@ -5,6 +5,7 @@ import { X } from 'lucide-react'
 import { MapSideListPanel } from '../../_mapComponents/MapSideListPanel'
 import { WtlConstructionLedgerShell } from './constructionLedger/WtlConstructionLedgerShell'
 import { WtlEquipmentShell } from './equipment/WtlEquipmentShell'
+import { WtlHistoryShell } from './equipment/WtlHistoryShell'
 import { WtlFacilityShell } from './facility/WtlFacilityShell'
 import { WtlMeterLocationShell } from './meterLocation/WtlMeterLocationShell'
 import { WtlNetworkMapShell } from './networkMap/WtlNetworkMapShell'
@@ -56,6 +57,15 @@ export function WtlAdminEmptyShell(props: Props) {
   if (props.serEng === 'wtlEquipment') {
     return (
       <WtlEquipmentShell
+        leftOffsetPx={props.leftOffsetPx}
+        onTotalWidthChange={props.onTotalWidthChange}
+        onClose={props.onClose}
+      />
+    )
+  }
+  if (props.serEng === 'wtlHistory') {
+    return (
+      <WtlHistoryShell
         leftOffsetPx={props.leftOffsetPx}
         onTotalWidthChange={props.onTotalWidthChange}
         onClose={props.onClose}

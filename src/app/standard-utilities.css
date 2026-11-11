@@ -357,7 +357,7 @@
 }
 
 @utility standard-detail-attr-table {
-  /* 라벨 열 ~120px — roadInfra 기본정보와 유사 */
+  /* 라벨 열 ~120px — roadInfra 기본정보와 유사 (div+grid) */
   @apply grid grid-cols-[7.5rem_minmax(0,1fr)] overflow-hidden rounded border border-border;
 
   /* 마지막 행 border-b는 바깥 테두리와 겹치므로 제거 (.contents 래퍼 / 직접 자식 둘 다) */
@@ -370,16 +370,61 @@
   }
 }
 
+/* table/th/td 상세 속성 — div grid와 동일 외형 */
+table.standard-detail-attr-table {
+  display: table;
+  width: 100%;
+  table-layout: fixed;
+  border-collapse: collapse;
+  overflow: hidden;
+  border-radius: var(--radius-sm, 0.25rem);
+  border: 1px solid var(--border);
+}
+
+table.standard-detail-attr-table th.standard-detail-attr-label {
+  width: 7.5rem;
+  white-space: normal;
+  word-break: keep-all;
+  text-align: left;
+  vertical-align: top;
+  font-weight: 500;
+}
+
+table.standard-detail-attr-table td.standard-detail-attr-value {
+  vertical-align: top;
+}
+
+table.standard-detail-attr-table tr:last-child > .standard-detail-attr-cell-border {
+  border-bottom-width: 0;
+}
+
 @utility standard-detail-attr-empty {
   @apply overflow-hidden rounded border border-border px-2.5 py-3 text-[11px] text-muted-foreground;
 }
 
 @utility standard-detail-attr-label {
-  @apply whitespace-nowrap bg-slate-100 px-2 py-1.5 text-[11px] font-medium text-slate-500 dark:bg-muted dark:text-muted-foreground;
+  @apply whitespace-nowrap border-r border-border bg-slate-100 px-2 py-1.5 text-[11px] font-medium text-slate-500 dark:bg-muted dark:text-muted-foreground;
 }
 
 @utility standard-detail-attr-value {
   @apply min-w-0 break-all bg-background px-2 py-1.5 text-[11px] text-slate-900 dark:text-foreground;
+}
+
+/** 상세 값 — 제목 필드 강조. 값 칸 글자색보다 라이트·다크 모두 우선 */
+@utility standard-detail-attr-value-title {
+  @apply font-medium text-primary;
+}
+
+.standard-detail-attr-value.standard-detail-attr-value-title,
+.dark .standard-detail-attr-value.standard-detail-attr-value-title {
+  font-weight: 500;
+  color: var(--primary);
+}
+
+td.standard-detail-attr-value.standard-detail-attr-value-title,
+.dark td.standard-detail-attr-value.standard-detail-attr-value-title {
+  font-weight: 500;
+  color: var(--primary);
 }
 
 @utility standard-detail-attr-cell-border {
@@ -518,4 +563,81 @@
 
 @utility standard-layer-toggle-chip-disabled {
   @apply pointer-events-none border-border bg-muted/50 text-muted-foreground opacity-50 hover:bg-muted;
+}
+
+/* 지도 UI 플로팅·모달 z-index (OL 레이어 zIndex와 별개)
+ * selected = 같은 티어에서 클릭한 패널만 +1 (끝없이 올리지 않음) */
+:root {
+  --map-ui-z-viewport: 120;
+  --map-ui-z-result: 1300;
+  --map-ui-z-address: 10000;
+  --map-ui-z-detail: 10050;
+  --map-ui-z-nested: 10100;
+  --map-ui-z-file-preview: 11000;
+  --map-ui-z-system-select: 20100;
+  --map-ui-z-access-request: 21000;
+}
+
+.map-ui-z-viewport {
+  z-index: var(--map-ui-z-viewport);
+}
+.map-ui-z-viewport.map-ui-z-selected {
+  z-index: calc(var(--map-ui-z-viewport) + 1);
+}
+
+.map-ui-z-result {
+  z-index: var(--map-ui-z-result);
+}
+.map-ui-z-result.map-ui-z-selected {
+  z-index: calc(var(--map-ui-z-result) + 1);
+}
+
+.map-ui-z-address {
+  z-index: var(--map-ui-z-address);
+}
+.map-ui-z-address.map-ui-z-selected {
+  z-index: calc(var(--map-ui-z-address) + 1);
+}
+
+.map-ui-z-detail {
+  z-index: var(--map-ui-z-detail);
+}
+.map-ui-z-detail.map-ui-z-selected {
+  z-index: calc(var(--map-ui-z-detail) + 1);
+}
+
+/** 연관 상세 — 본상세(10050)보다 +2 */
+.map-ui-z-detail-related {
+  z-index: calc(var(--map-ui-z-detail) + 2);
+}
+.map-ui-z-detail-related.map-ui-z-selected {
+  z-index: calc(var(--map-ui-z-detail) + 3);
+}
+
+.map-ui-z-nested {
+  z-index: var(--map-ui-z-nested);
+}
+.map-ui-z-nested.map-ui-z-selected {
+  z-index: calc(var(--map-ui-z-nested) + 1);
+}
+
+.map-ui-z-file-preview {
+  z-index: var(--map-ui-z-file-preview);
+}
+.map-ui-z-file-preview.map-ui-z-selected {
+  z-index: calc(var(--map-ui-z-file-preview) + 1);
+}
+
+.map-ui-z-system-select {
+  z-index: var(--map-ui-z-system-select);
+}
+.map-ui-z-system-select.map-ui-z-selected {
+  z-index: calc(var(--map-ui-z-system-select) + 1);
+}
+
+.map-ui-z-access-request {
+  z-index: var(--map-ui-z-access-request);
+}
+.map-ui-z-access-request.map-ui-z-selected {
+  z-index: calc(var(--map-ui-z-access-request) + 1);
 }

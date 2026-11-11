@@ -26,6 +26,10 @@ type Props = {
   onAdd?: () => void
   onRemove?: (index: number) => void
   onClick?: (item: LayerRowParcelItem, index: number) => void
+  /** 카드에 마우스를 올렸을 때 안내. 기본은 위치 이동 */
+  clickTitle?: string
+  /** 위쪽 탭에 제목이 있을 때 목록 제목을 숨긴다 */
+  hideTitle?: boolean
   emptyHintEdit?: string
   emptyHintView?: string
 }
@@ -43,12 +47,16 @@ export function UsageDataAsAddressList({
   onAdd,
   onRemove,
   onClick,
+  clickTitle = '클릭 시 위치 이동 및 선택',
+  hideTitle = false,
   emptyHintEdit = '「추가」로 등록합니다.',
   emptyHintView = '등록된 항목이 없습니다.',
 }: Props) {
   return (
     <div className={cn('mt-4', fillHeight && 'flex min-h-0 flex-1 flex-col', className)}>
+      {!hideTitle || (isEditing && onAdd) ? (
       <div className="mb-2 flex shrink-0 items-center justify-between gap-2">
+        {!hideTitle ? (
         <div
           className={cn(
             titleClassName ?? 'text-[11px] font-medium text-muted-foreground'
@@ -56,6 +64,9 @@ export function UsageDataAsAddressList({
         >
           {title}
         </div>
+        ) : (
+          <div />
+        )}
         <div className="flex shrink-0 items-center gap-1">
           {isEditing && onAdd && (
             <LayerRowPanelButton className="h-6 px-2 text-[10px]" onClick={onAdd}>
@@ -65,6 +76,7 @@ export function UsageDataAsAddressList({
           )}
         </div>
       </div>
+      ) : null}
       {items.length === 0 ? (
         <div className="shrink-0 rounded border border-border bg-muted/30 px-3 py-4 text-center">
           <MapPin
@@ -108,7 +120,7 @@ export function UsageDataAsAddressList({
                     type="button"
                     className={cn(cardClass, 'min-w-0 flex-1')}
                     onClick={() => onClick?.(item, i)}
-                    title="클릭 시 위치 이동 및 선택"
+                    title={clickTitle}
                   >
                     <MapPin
                       className="h-3.5 w-3.5 shrink-0 text-muted-foreground"

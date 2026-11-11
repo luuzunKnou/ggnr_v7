@@ -49,6 +49,10 @@ export type PipeSegment = {
   depthsM?: number[];
   /** 지표 해발(m) — 등고 상·하 보간(고도 측정과 동일). 없으면 고도장·0 */
   surfaceElevM?: number;
+  /** define 목록(show_list) 표시용 원본 속성 */
+  props?: Record<string, unknown>;
+  /** define_field 테이블명 */
+  fieldsTable?: string;
 };
 
 /** @deprecated PipeSegment 사용 */
@@ -70,6 +74,10 @@ export type ManholeFeature = {
   depthM: number;
   /** 지표 해발(m) */
   surfaceElevM?: number;
+  /** define 목록(show_list) 표시용 원본 속성 */
+  props?: Record<string, unknown>;
+  /** define_field 테이블명 */
+  fieldsTable?: string;
 };
 
 /** 실제 등고선 세그먼트 (elevation.cont, 범위 클립) */
@@ -147,6 +155,8 @@ export type ShapeProps = {
   groundCenterY?: number;
   groundRadiusM?: number;
   groundHeightField?: GroundHeightField | null;
+  /** GROUND — 범위에 맞춘 지도 항공 타일(data URL). 윗면 텍스처 */
+  groundMapTextureUrl?: string | null;
   /** GROUND — 범위(사각형) / 단면도(라인) */
   groundDrawMode?: GroundDrawMode;
   /** GROUND 단면도 — 절단선(밑변)·사각형 깊이 */

@@ -1,0 +1,7 @@
+/* elevation_ctd003 간곡선 — @sd <= 10000 */
+[@sd <= 10000] {
+  stroke: #C4A882;
+  stroke-width: 0.6;
+  stroke-opacity: 0.85;
+  stroke-dasharray: 6 4;
+}

@@ -152,6 +152,7 @@ export function WtlFacilityDataHistoryTab({
           keyValue: keyValues,
           page: 1,
           limit: PAGE_SIZE,
+          excludeWorkTypes: ['조회'],
         },
       })
       const data = res?.data ?? res

@@ -1,6 +1,6 @@
 /**
- * 공사대장 — 하천(cons_data_as / cons_data_solo_as), 상수(wtl_cons_as / wtl_cons_solo_as),
- * 하수(swl_cons_as / swl_cons_solo_as). 모든 action은 params.kind 로 대상 레이어를 고른다(기본 하천).
+ * 공사대장 — 하천(cons_data_as / cons_data_solo_as), 상수(wtl_cons_as / wtl_cons_as_solo),
+ * 하수(swl_cons_as / swl_cons_as_solo). 모든 action은 params.kind 로 대상 레이어를 고른다(기본 하천).
  */
 import { db } from '@/database/db';
 import { sql } from 'drizzle-orm';
@@ -70,6 +70,10 @@ export type ConsDataAsGeom = {
 
 export type ConsDataAsParcelItem = {
   address: string;
+  /** solo 행 식별. ogc_fid 또는 필지코드 */
+  id?: string;
+  remark?: string;
+  descript?: string;
   pnu?: string;
   extent3857: [number, number, number, number] | null;
   /** GeoJSON geometry (EPSG:3857) — 지도에서 그린 필지(소구간) 도형 */
@@ -290,14 +294,62 @@ function mapDbRow(row: Record<string, unknown>, consCode: string): Omit<ConsData
   };
 }
 
-/** 목록 (키·이름·위치·하천·도형) */
+/** 알림 계산용. 공사코드의 이름·착수일·준공일만 가져온다. */
+export async function listConsDatesByCodes(params?: {
+  kind?: string;
+  consCodes?: string[];
+}): Promise<{
+  rows: Array<{
+    consCode: string;
+    consName: string;
+    startDate: string;
+    doneDate: string;
+    sdoneDate: string;
+  }>;
+  error?: string;
+}> {
+  const cfg = variantOf(params);
+  const codes = [...new Set((params?.consCodes ?? []).map((c) => String(c ?? '').trim()).filter(Boolean))].slice(0, 500);
+  if (!codes.length) return { rows: [] };
+  try {
+    const meta = await resolveTableWithSchema(cfg.mainTable);
+    if (!meta) return { rows: [], error: `${cfg.mainTable} 테이블이 없습니다.` };
+    const inList = codes.map((c) => `'${esc(c)}'`).join(',');
+    const res = await db.execute(
+      sql.raw(
+        `SELECT cons_code,
+                COALESCE(cons_name::text, '') AS cons_name,
+                COALESCE(start_date::text, '') AS start_date,
+                COALESCE(done_date::text, '') AS done_date,
+                COALESCE(sdone_date::text, '') AS sdone_date
+         FROM ${quoteIdent(meta.schema)}.${quoteIdent(meta.tableName)}
+         WHERE cons_code IN (${inList})`
+      )
+    );
+    const rows = (res.rows as Record<string, unknown>[]).map((row) => ({
+      consCode: String(row.cons_code ?? '').trim(),
+      consName: cell(row.cons_name),
+      startDate: cell(row.start_date),
+      doneDate: cell(row.done_date),
+      sdoneDate: cell(row.sdone_date),
+    }));
+    return { rows };
+  } catch (e) {
+    return { rows: [], error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+/** 목록. includeGeometry 기본 true — 하천 공사대장은 도형을 함께 받는다. */
 export async function listRows(params?: {
   kind?: string;
   keyword?: string;
+  /** false면 속성만. 상·하수 공사대장 목록용 */
+  includeGeometry?: boolean;
 }): Promise<{ rows: ConsDataAsRow[]; error?: string }> {
   const cfg = variantOf(params);
   try {
     const keyword = String(params?.keyword ?? '').trim();
+    const includeGeometry = params?.includeGeometry !== false;
     const meta = await resolveTableWithSchema(cfg.mainTable);
     if (!meta) return { rows: [], error: `${cfg.mainTable} 테이블이 없습니다.` };
 
@@ -319,9 +371,10 @@ export async function listRows(params?: {
         : `''::text AS ${quoteIdent(f)}`;
     }).join(',\n      ');
 
-    const geomSelect = geomCol
-      ? `ST_AsGeoJSON(ST_Transform(${q(geomCol)}, 4326))::json AS geom_geojson`
-      : `NULL::json AS geom_geojson`;
+    const geomSelect =
+      includeGeometry && geomCol
+        ? `ST_AsGeoJSON(ST_Transform(${q(geomCol)}, 4326))::json AS geom_geojson`
+        : `NULL::json AS geom_geojson`;
 
     const searchCols = columns.filter((c) => !GEOM_COLUMN_NAMES.has(c.toLowerCase()));
     const kwClause = keyword
@@ -347,6 +400,150 @@ export async function listRows(params?: {
         return { ...mapDbRow(row, consCode), parcels: [] as ConsDataAsParcelItem[] };
       })
       .filter((x): x is ConsDataAsRow => x != null);
+    return { rows };
+  } catch (e: unknown) {
+    return { rows: [], error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+/** 공사코드 몇 건의 본표 도형만. 상·하수 공사대장에서 선택된 사업용 */
+export async function listGeomsByConsCodes(params?: {
+  kind?: string;
+  consCodes?: string[];
+}): Promise<{
+  rows: Array<{ consCode: string; geom: ConsDataAsGeom | null }>;
+  error?: string;
+}> {
+  const codes = [
+    ...new Set(
+      (params?.consCodes ?? [])
+        .map((code) => String(code ?? '').trim())
+        .filter((code) => /^[\w.-]+$/.test(code))
+    ),
+  ].slice(0, 500);
+  if (codes.length === 0) return { rows: [] };
+
+  const cfg = variantOf(params);
+  try {
+    const meta = await resolveTableWithSchema(cfg.mainTable);
+    if (!meta) return { rows: [], error: `${cfg.mainTable} 테이블이 없습니다.` };
+    const columns = await getTableColumns(meta.schema, meta.tableName);
+    const keyCol = findColumn(columns, KEY_FIELD);
+    const geomCol = findColumn(columns, 'geom');
+    if (!keyCol || !geomCol) return { rows: [] };
+
+    const safe = meta.tableName.replace(/"/g, '""');
+    const safeSchema = meta.schema.replace(/"/g, '""');
+    const inList = codes.map((code) => `'${esc(code)}'`).join(', ');
+    const sqlText = `
+      SELECT
+        COALESCE(t.${quoteIdent(keyCol)}::text, '') AS cons_code,
+        ST_AsGeoJSON(ST_Transform(t.${quoteIdent(geomCol)}, 4326))::json AS geom_geojson
+      FROM "${safeSchema}"."${safe}" t
+      WHERE COALESCE(t.${quoteIdent(keyCol)}::text, '') IN (${inList})
+        AND t.${quoteIdent(geomCol)} IS NOT NULL`;
+    const res = await db.execute(sql.raw(sqlText));
+    const rows = (res.rows ?? [])
+      .map((raw) => {
+        const row = raw as Record<string, unknown>;
+        const consCode = cell(row.cons_code);
+        if (!consCode) return null;
+        return { consCode, geom: normalizeGeom(row.geom_geojson) };
+      })
+      .filter((row): row is { consCode: string; geom: ConsDataAsGeom | null } => row != null);
+    return { rows };
+  } catch (e: unknown) {
+    return { rows: [], error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+export type ConsIntersectRow = {
+  consCode: string;
+  consName: string;
+  consLocat: string;
+  doneDate: string;
+  sdoneDate: string;
+  amountPre: string;
+  amountAft: string;
+  geom: ConsDataAsGeom | null;
+};
+
+/** 선택한 공사 도형(5181)과 겹치는 같은 종류 공사대장. 자기 자신은 제외 */
+export async function listIntersectingRows(params?: {
+  kind?: string;
+  wkt5181?: string;
+  excludeConsCode?: string;
+  limit?: number;
+}): Promise<{ rows: ConsIntersectRow[]; error?: string }> {
+  const wkt = String(params?.wkt5181 ?? '').trim();
+  if (!wkt) return { rows: [] };
+  const exclude = String(params?.excludeConsCode ?? '').trim();
+  if (exclude && !/^[\w.-]+$/.test(exclude)) return { rows: [], error: '공사코드가 올바르지 않습니다.' };
+  const limitRaw = Number(params?.limit ?? 200);
+  const limit = Number.isFinite(limitRaw) ? Math.min(500, Math.max(1, Math.floor(limitRaw))) : 200;
+
+  const cfg = variantOf(params);
+  try {
+    const meta = await resolveTableWithSchema(cfg.mainTable);
+    if (!meta) return { rows: [], error: `${cfg.mainTable} 테이블이 없습니다.` };
+    const columns = await getTableColumns(meta.schema, meta.tableName);
+    const keyCol = findColumn(columns, KEY_FIELD);
+    const geomCol = findColumn(columns, 'geom');
+    if (!keyCol || !geomCol) return { rows: [] };
+
+    const pick = (field: string) => {
+      const col = findColumn(columns, field);
+      return col ? `COALESCE(t.${quoteIdent(col)}::text, '')` : `''::text`;
+    };
+    const safe = meta.tableName.replace(/"/g, '""');
+    const safeSchema = meta.schema.replace(/"/g, '""');
+    const geom = `t.${quoteIdent(geomCol)}`;
+    const searchGeom = `ST_MakeValid(ST_Force2D(ST_SetSRID(ST_GeomFromText('${esc(wkt)}'), 5181)))`;
+    const excludeSql = exclude ? `AND COALESCE(t.${quoteIdent(keyCol)}::text, '') <> '${esc(exclude)}'` : '';
+    const doneExpr = pick('done_date');
+    const sdoneExpr = pick('sdone_date');
+    const sqlText = `
+      WITH search AS (
+        SELECT ${searchGeom} AS g
+      )
+      SELECT
+        COALESCE(t.${quoteIdent(keyCol)}::text, '') AS cons_code,
+        ${pick('cons_name')} AS cons_name,
+        ${pick('cons_locat')} AS cons_locat,
+        ${doneExpr} AS done_date,
+        ${sdoneExpr} AS sdone_date,
+        ${pick('amount_pre')} AS amount_pre,
+        ${pick('amount_aft')} AS amount_aft,
+        ST_AsGeoJSON(ST_Transform(${geom}, 4326))::json AS geom_geojson
+      FROM "${safeSchema}"."${safe}" t
+      CROSS JOIN search s
+      WHERE ${geom} IS NOT NULL
+        ${excludeSql}
+        AND ST_Intersects(
+          ${geom},
+          CASE WHEN ST_SRID(${geom}) IN (0, 5181) THEN s.g ELSE ST_Transform(s.g, ST_SRID(${geom})) END
+        )
+      ORDER BY NULLIF(COALESCE(NULLIF(${doneExpr}, ''), ${sdoneExpr}), '') DESC NULLS LAST,
+        ${pick('cons_name')}
+      LIMIT ${limit}`;
+    const res = await db.execute(sql.raw(sqlText));
+    const rows = (res.rows ?? [])
+      .map((raw) => {
+        const row = raw as Record<string, unknown>;
+        const consCode = cell(row.cons_code);
+        if (!consCode) return null;
+        return {
+          consCode,
+          consName: cell(row.cons_name),
+          consLocat: cell(row.cons_locat),
+          doneDate: cell(row.done_date),
+          sdoneDate: cell(row.sdone_date),
+          amountPre: cell(row.amount_pre),
+          amountAft: cell(row.amount_aft),
+          geom: normalizeGeom(row.geom_geojson),
+        };
+      })
+      .filter((row): row is ConsIntersectRow => row != null);
     return { rows };
   } catch (e: unknown) {
     return { rows: [], error: e instanceof Error ? e.message : String(e) };
@@ -439,6 +636,9 @@ export async function listParcelsByConsCode(params: {
   if (!parentCol) return { items: [] };
 
   const addressCol = findFirstColumn(cols, cfg.soloAddressFields);
+  const remarkCol = findColumn(cols, 'remark');
+  const descriptCol = findColumn(cols, 'descript');
+  const soloCodeCol = findColumn(cols, 'solo_code');
   const hasGeom = findColumn(cols, 'geom');
   const hasOgcFid = findColumn(cols, 'ogc_fid');
   const hasId = findColumn(cols, 'id');
@@ -453,6 +653,13 @@ export async function listParcelsByConsCode(params: {
   const addressExpr = addressCol
     ? `NULLIF(TRIM(COALESCE(r.${quoteIdent(addressCol)}::text, '')), '')`
     : `NULL::text`;
+  const remarkExpr = remarkCol ? `COALESCE(r.${quoteIdent(remarkCol)}::text, '')` : `''::text`;
+  const descriptExpr = descriptCol ? `COALESCE(r.${quoteIdent(descriptCol)}::text, '')` : `''::text`;
+  const idExpr = hasOgcFid
+    ? `COALESCE(r.${quoteIdent(hasOgcFid)}::text, '')`
+    : soloCodeCol
+      ? `COALESCE(r.${quoteIdent(soloCodeCol)}::text, '')`
+      : `''::text`;
 
   const extentSelect = hasGeom
     ? `,
@@ -470,7 +677,10 @@ export async function listParcelsByConsCode(params: {
 
   const sqlText = `
     SELECT
-      COALESCE(${addressExpr}, '') AS address
+      ${idExpr} AS zone_id,
+      COALESCE(${addressExpr}, '') AS address,
+      ${remarkExpr} AS remark,
+      ${descriptExpr} AS descript
       ${extentSelect}
     FROM "${safeSchema}"."${safe}" r
     WHERE r.${quoteIdent(parentCol)}::text = '${esc(consCode)}'
@@ -482,6 +692,9 @@ export async function listParcelsByConsCode(params: {
       .map((r) => {
         const row = r as Record<string, unknown>;
         const address = String(row.address ?? '').trim();
+        const id = String(row.zone_id ?? '').trim();
+        const remark = String(row.remark ?? '').trim();
+        const descript = String(row.descript ?? '').trim();
         const xmin = Number(row.xmin);
         const ymin = Number(row.ymin);
         const xmax = Number(row.xmax);
@@ -504,12 +717,15 @@ export async function listParcelsByConsCode(params: {
           }
         }
         return {
+          id,
           address,
+          remark,
+          descript,
           extent3857,
           ...(geometry3857 ? { geometry3857 } : {}),
         };
       })
-      .filter((x) => x.address || x.geometry3857 || x.extent3857);
+      .filter((x) => x.address || x.remark || x.geometry3857 || x.extent3857);
     return { items };
   } catch (e: unknown) {
     return { items: [], error: e instanceof Error ? e.message : String(e) };

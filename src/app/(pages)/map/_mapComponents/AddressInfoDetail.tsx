@@ -3,6 +3,8 @@
 import React, { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { X, MapPin } from 'lucide-react';
+import { MAP_UI_Z_CLASS } from '@/lib/mapUiZIndex';
+import { cn } from '@/lib/utils';
 import { useMapContext } from './MapContext';
 import { AddressInfoPanel } from './AddressInfoPanel';
 
@@ -11,9 +13,6 @@ function formatPnuDisplay(pnu: string | null | undefined): string | null {
   if (digits.length !== 19) return null;
   return digits;
 }
-
-/** 우클릭 필지정보 — 목록·우측메뉴·주소검색보다 위(최상단) */
-const ADDRESS_INFO_DETAIL_Z = 10000;
 
 export default function AddressInfoDetail() {
   const mapContext = useMapContext();
@@ -32,13 +31,16 @@ export default function AddressInfoDetail() {
 
   return createPortal(
     <div
-      className="pointer-events-auto flex h-full w-full min-w-0 max-w-[520px] flex-col overflow-hidden rounded-l-xl border-l border-border bg-background text-foreground shadow-2xl"
+      data-address-info-panel=""
+      className={cn(
+        MAP_UI_Z_CLASS.addressInfo,
+        'pointer-events-auto flex h-full w-full min-w-0 max-w-[520px] flex-col overflow-hidden rounded-l-xl border-l border-border bg-background text-foreground shadow-2xl'
+      )}
       style={{
         position: 'fixed',
         top: 0,
         right: 0,
         bottom: 0,
-        zIndex: ADDRESS_INFO_DETAIL_Z,
       }}
     >
       <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border bg-muted/40 px-3 py-1.5">

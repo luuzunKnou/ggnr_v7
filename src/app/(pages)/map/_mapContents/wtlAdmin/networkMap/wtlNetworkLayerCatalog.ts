@@ -1,4 +1,9 @@
-import { getWtlNetMapSource, getWtlNetMapSources } from './wtlNetworkMapSources'
+import {
+  getWtlNetMapSource,
+  getWtlNetMapSources,
+  listWtlNetSameKorTables,
+  wtlNetKorNameForTable,
+} from './wtlNetworkMapSources'
 
 /** ê´ë§ì¡°í íìëª â layer ì¤í¤ë§ íì´ë¸Â·ì©ë ì¡°ê±´ */
 
@@ -18,6 +23,7 @@ export const WTL_NET_LAYER_KEYS = [
   'wtl_fire_ps',
   'wtl_flow_ps',
   'wtl_prga_ps',
+  'cus_cctv_ps',
   'wtl_wtsa_as',
   'wtl_wtssa_as',
   'wtl_wtsba_as',
@@ -130,7 +136,8 @@ export const WTL_NET_LAYER_DEFS: readonly WtlNetLayerDef[] = [
     key: 'wtl_gain_ps',
     table: 'wtl_gain_ps',
     defineTable: 'wtl_gain_ps',
-    geomKind: 'area',
+    /** tables.json define_table_shp_type=POINT */
+    geomKind: 'point',
     nameExpr: `COALESCE(NULLIF(trim(gai_nam),''), NULLIF(trim(ftr_idn::text),''), ogc_fid::text)`,
     diameterCol: null,
     materialCol: null,
@@ -141,6 +148,7 @@ export const WTL_NET_LAYER_DEFS: readonly WtlNetLayerDef[] = [
     key: 'wtl_puri_as',
     table: 'wtl_puri_as',
     defineTable: 'wtl_puri_as',
+    /** tables.json define_table_shp_type=POLYGON */
     geomKind: 'area',
     nameExpr: `COALESCE(NULLIF(trim(pur_nam),''), NULLIF(trim(ftr_idn::text),''), ogc_fid::text)`,
     diameterCol: null,
@@ -152,7 +160,8 @@ export const WTL_NET_LAYER_DEFS: readonly WtlNetLayerDef[] = [
     key: 'wtl_serv_ps',
     table: 'wtl_serv_ps',
     defineTable: 'wtl_serv_ps',
-    geomKind: 'area',
+    /** tables.json define_table_shp_type=POINT */
+    geomKind: 'point',
     nameExpr: `COALESCE(NULLIF(trim(srv_nam),''), NULLIF(trim(ftr_idn::text),''), ogc_fid::text)`,
     diameterCol: null,
     materialCol: null,
@@ -163,14 +172,21 @@ export const WTL_NET_LAYER_DEFS: readonly WtlNetLayerDef[] = [
     key: 'wtl_pres_ps',
     table: 'wtl_pres_ps',
     defineTable: 'wtl_pres_ps',
-    geomKind: 'area',
+    /** tables.json define_table_shp_type=POINT */
+    geomKind: 'point',
     nameExpr: `COALESCE(NULLIF(trim(prs_nam),''), NULLIF(trim(ftr_idn::text),''), ogc_fid::text)`,
     diameterCol: null,
     materialCol: null,
     lengthCol: null,
     yearCol: 'fns_ymd',
   },
-  { key: 'wtl_rsrv_ps', table: 'wtl_rsrv_ps', defineTable: 'wtl_rsrv_ps', geomKind: 'point' },
+  {
+    key: 'wtl_rsrv_ps',
+    table: 'wtl_rsrv_ps',
+    defineTable: 'wtl_rsrv_ps',
+    /** 논리키 POINT. 한글명 remap(wtl_tank_ps)은 POLYGON — 클릭순위는 물리 shp_type */
+    geomKind: 'point',
+  },
   {
     key: 'wtl_fire_ps',
     table: 'wtl_fire_ps',
@@ -203,6 +219,18 @@ export const WTL_NET_LAYER_DEFS: readonly WtlNetLayerDef[] = [
     materialCol: 'mof_cde',
     lengthCol: null,
     yearCol: 'ist_ymd',
+  },
+  {
+    key: 'cus_cctv_ps',
+    table: 'cus_cctv_ps',
+    defineTable: 'cus_cctv_ps',
+    geomKind: 'point',
+    nameExpr: `COALESCE(NULLIF(trim(ftr_idn::text),''), ogc_fid::text)`,
+    diameterCol: null,
+    materialCol: null,
+    lengthCol: null,
+    yearCol: null,
+    hasHjd: false,
   },
   {
     key: 'wtl_wtsa_as',
@@ -349,7 +377,7 @@ export function isWtlNetZoneLayerKey(key: string): boolean {
   return (WTL_NET_ZONE_LAYER_KEYS as readonly string[]).some((z) => z === k)
 }
 
-/** 지하 레이어 tableName ↔ 켜진 관망 키 매칭 (remap·saa 분할 포함) */
+/** 지하 레이어 tableName ↔ 켜진 관망 키 매칭 (remap·saa 분할·한글명 포함) */
 export function matchWtlNetLayerDefForTable(
   tableName: string,
   activeKeys: ReadonlySet<string>
@@ -358,6 +386,7 @@ export function matchWtlNetLayerDefForTable(
     .trim()
     .toLowerCase()
   if (!t) return undefined
+  const tableKor = wtlNetKorNameForTable(t)
   for (const key of activeKeys) {
     const def = getWtlNetLayerDef(key)
     if (!def) continue
@@ -371,6 +400,8 @@ export function matchWtlNetLayerDefForTable(
       .toLowerCase()
     if (!base) continue
     if (base === t || t.endsWith(`_${base}`) || t.endsWith(base)) return def
+    // 시설관리와 동일 — 한글명 일치(저수조: tank ↔ rsrv)
+    if (tableKor && listWtlNetSameKorTables(base).includes(t)) return def
   }
   return undefined
 }
@@ -388,8 +419,10 @@ export function buildWtlNetSearchCql(
 
   const supplyBlock = String(filter.supplyBlock ?? '').trim()
   if (supplyBlock && isWtlSupplyBlockLayerDef(def)) {
-    // 속성 일치 — 인접 블록이 경계만 맞닿아 INTERSECTS로 남는 문제·WKT 부하 회피
-    parts.push(`wbb_nam='${escCql(supplyBlock)}'`)
+    // 속성 일치(이름·부호) — 인접 블록 경계 접침·WKT 부하 회피
+    parts.push(
+      `(wbb_nam='${escCql(supplyBlock)}' OR wbb_cde='${escCql(supplyBlock)}')`
+    )
   } else {
     const areaWkts = (filter.areaWkts5181 ?? [])
       .map((raw) => String(raw ?? '').trim())
@@ -406,6 +439,11 @@ export function buildWtlNetSearchCql(
         for (const wkt of areaWkts) {
           parts.push(`INTERSECTS(geom, ${wkt})`)
         }
+      }
+    } else if (isWtlSupplyBlockLayerDef(def) && areaWkts.length > 0) {
+      // 목록: PointOnSurface ∈ 행정. WMS ECQL은 centroid로 동일 의도
+      for (const wkt of areaWkts) {
+        parts.push(`CONTAINS(${wkt}, centroid(geom))`)
       }
     } else {
       for (const wkt of areaWkts) {

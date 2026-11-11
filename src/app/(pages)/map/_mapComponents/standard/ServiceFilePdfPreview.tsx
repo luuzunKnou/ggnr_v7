@@ -24,6 +24,7 @@ import {
   GalleryThumbnails,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { MAP_UI_Z_CLASS } from '@/lib/mapUiZIndex';
 import { zoomPreviewAtPointer } from './previewZoomAtCursor';
 import {
   ServiceFilePdfPreviewStage,
@@ -61,8 +62,6 @@ const MAX_SCALE = 5;
 const ZOOM_STEP_WHEEL = 0.18;
 const ZOOM_STEP_BUTTON = 0.35;
 const SIDEBAR_WIDTH = 240;
-/** 관망·민원 등 플로팅 상세(z≈10050)보다 위 */
-const PREVIEW_Z_INDEX = 11000;
 /** 휠·버튼 줌 멈춘 뒤 LOD 재렌더 대기(ms) */
 const LOD_SETTLE_MS = 350;
 /** display·render 배율 차이가 이 값 미만이면 재렌더 생략 */
@@ -622,8 +621,7 @@ export function ServiceFilePdfPreview({ items, initialIndex, onClose, titleHint,
 
   return createPortal(
     <div
-      className="fixed inset-0 flex flex-col bg-black/92"
-      style={{ zIndex: PREVIEW_Z_INDEX }}
+      className={cn(MAP_UI_Z_CLASS.filePreview, 'fixed inset-0 flex flex-col bg-black/92')}
       role="dialog"
       aria-modal="true"
       aria-label="PDF 미리보기"

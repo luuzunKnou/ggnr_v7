@@ -708,6 +708,56 @@ function sldExternalGraphicHref(block: string): string | null {
   return href || null;
 }
 
+export type SldConditionalSymbol = {
+  /** 예: ftr_cde */
+  property: string
+  /** 예: SA200 */
+  value: string
+  symbolUrl: string
+}
+
+/**
+ * SLD Rule 중 PointSymbolizer+ExternalGraphic 이고
+ * PropertyIsEqualTo(속성=코드) 조건이 있는 심볼 목록.
+ * (밸브·소방 등 ftr_cde별 SVG)
+ */
+export function parseSldConditionalSymbols(sld: string): SldConditionalSymbol[] {
+  if (!String(sld ?? '').trim()) return []
+  const out: SldConditionalSymbol[] = []
+  const seen = new Set<string>()
+  for (const rule of sldRuleBlocks(sld)) {
+    if (!/<(?:[\w]+:)?PointSymbolizer\b/i.test(rule)) continue
+    if (!/<(?:[\w]+:)?ExternalGraphic\b/i.test(rule)) continue
+    const href = sldExternalGraphicHref(rule)
+    if (!href) continue
+    const symbolUrl = normalizeGeoServerSymbolUrl(href)
+    if (!symbolUrl) continue
+
+    const eqBlocks = [
+      ...rule.matchAll(
+        /<(?:[\w]+:)?PropertyIsEqualTo\b[^>]*>([\s\S]*?)<\/(?:[\w]+:)?PropertyIsEqualTo>/gi
+      ),
+    ]
+    for (const eq of eqBlocks) {
+      const block = eq[1] ?? ''
+      const prop =
+        block.match(/<(?:[\w]+:)?PropertyName>\s*([^<\s]+)\s*<\/(?:[\w]+:)?PropertyName>/i)?.[1]?.trim() ??
+        ''
+      const lit =
+        block.match(/<(?:[\w]+:)?Literal>\s*([^<]*?)\s*<\/(?:[\w]+:)?Literal>/i)?.[1]?.trim() ??
+        ''
+      if (!prop || !lit) continue
+      const property = prop.toLowerCase()
+      const value = lit.toUpperCase()
+      const key = `${property}=${value}|${symbolUrl}`
+      if (seen.has(key)) continue
+      seen.add(key)
+      out.push({ property, value, symbolUrl })
+    }
+  }
+  return out
+}
+
 function sldMimeForSymbolUrl(url: string): string {
   return url.toLowerCase().endsWith('.svg') ? 'image/svg+xml' : 'image/png';
 }

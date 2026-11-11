@@ -1,0 +1,46 @@
+<featureType>
+  <id>FeatureTypeInfoImpl-elevation-ctd002</id>
+  <name>elevation_ctd002</name>
+  <nativeName>elevation</nativeName>
+  <namespace>
+    <id>NamespaceInfoImpl-4bf97568:19c4d6c3053:-7ffa</id>
+  </namespace>
+  <title>elevation_ctd002</title>
+  <keywords>
+    <string>elevation_ctd002</string>
+    <string>features</string>
+    <string>elevation</string>
+  </keywords>
+  <srs>EPSG:5181</srs>
+  <nativeBoundingBox>
+    <minx>271237.58331623627</minx>
+    <maxx>632508.2835420823</maxx>
+    <miny>231557.14935002214</miny>
+    <maxy>457373.7759966862</maxy>
+    <crs class="projected">EPSG:5181</crs>
+  </nativeBoundingBox>
+  <latLonBoundingBox>
+    <minx>127.78592243736219</minx>
+    <maxx>131.89062289871399</maxx>
+    <miny>35.4868080914532</miny>
+    <maxy>37.61319696022455</maxy>
+    <crs>EPSG:4326</crs>
+  </latLonBoundingBox>
+  <projectionPolicy>FORCE_DECLARED</projectionPolicy>
+  <enabled>true</enabled>
+  <advertised>true</advertised>
+  <store class="dataStore">
+    <id>DataStoreInfoImpl-4bf97568:19c4d6c3053:-7ff8</id>
+  </store>
+  <serviceConfiguration>false</serviceConfiguration>
+  <simpleConversionEnabled>false</simpleConversionEnabled>
+  <cqlFilter>divi = &apos;CTD002&apos; OR scls = &apos;F0017111&apos; OR scls = &apos;F0017121&apos;</cqlFilter>
+  <maxFeatures>0</maxFeatures>
+  <numDecimals>0</numDecimals>
+  <padWithZeros>false</padWithZeros>
+  <forcedDecimal>false</forcedDecimal>
+  <overridingServiceSRS>false</overridingServiceSRS>
+  <skipNumberMatched>false</skipNumberMatched>
+  <circularArcPresent>false</circularArcPresent>
+  <encodeMeasures>false</encodeMeasures>
+</featureType>

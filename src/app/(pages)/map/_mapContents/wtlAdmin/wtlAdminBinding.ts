@@ -5,6 +5,7 @@ export const WTL_ADMIN_EMPTY_SER_ENGS = [
   'wtlConstructionLedger',
   'wtlFacility',
   'wtlEquipment',
+  'wtlHistory',
   'wtlSpatialAnalysis',
   'wtlWaterSupply',
   'wtlMeterLocation',
@@ -35,6 +36,10 @@ const BINDINGS: Record<WtlAdminEmptySerEng, WtlAdminEmptyBinding> = {
   wtlEquipment: {
     serEng: 'wtlEquipment',
     title: '설비관리',
+  },
+  wtlHistory: {
+    serEng: 'wtlHistory',
+    title: '이력관리',
   },
   wtlSpatialAnalysis: {
     serEng: 'wtlSpatialAnalysis',

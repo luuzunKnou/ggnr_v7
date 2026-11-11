@@ -55,6 +55,7 @@ const ADMIN_TABS_JSON_PATH = path.join(
 type AdminTabsJson = {
   wtlFacility?: unknown;
   wtlEquipment?: unknown;
+  wtlHistory?: unknown;
 };
 
 /** 탭 라벨 배열 정규화 */
@@ -128,6 +129,16 @@ export async function listEquipmentTabs(): Promise<{
   enabledTabs: string[];
 }> {
   const tabs = normalizeTabLabels(readAdminTabsJson().wtlEquipment);
+  const enabledTabs = await resolveEnabledTabs(tabs, 'equipment');
+  return { tabs, enabledTabs };
+}
+
+/** 이력관리 탭 종류 (adminTabs.json wtlHistory) — 설비와 동일 레이어 그룹 해석 */
+export async function listHistoryTabs(): Promise<{
+  tabs: string[];
+  enabledTabs: string[];
+}> {
+  const tabs = normalizeTabLabels(readAdminTabsJson().wtlHistory);
   const enabledTabs = await resolveEnabledTabs(tabs, 'equipment');
   return { tabs, enabledTabs };
 }
@@ -459,6 +470,8 @@ export async function listFacilityRows(params: {
   areaWkts5181?: string[] | null;
   /** thead 다중 정렬 — 물리 컬럼만 허용 */
   sorts?: WtlFacilityListSortSpec[] | null;
+  /** 관리번호 완전 일치. 펌프·흡수정에서 가압장·정수장 1건 조회 */
+  ftrIdn?: string | null;
   limit?: number;
   offset?: number;
 } = {}): Promise<{
@@ -476,6 +489,7 @@ export async function listFacilityRows(params: {
       .trim()
       .toLowerCase() || 'layer';
   const keyword = String(params.keyword ?? '').trim();
+  const ftrIdn = String(params.ftrIdn ?? '').trim();
   const areaWkts = (params.areaWkts5181 ?? [])
     .map((w) => String(w ?? '').trim())
     .filter(Boolean);
@@ -519,6 +533,16 @@ export async function listFacilityRows(params: {
         : `''`;
 
   const wheres: string[] = ['TRUE'];
+  if (ftrIdn) {
+    if (!ftrCol) {
+      wheres.push('FALSE');
+    } else {
+      const fq = ftrCol.replace(/"/g, '""');
+      wheres.push(
+        `lower(trim(t."${fq}"::text)) = lower(trim('${esc(ftrIdn)}'))`
+      );
+    }
+  }
   if (keyword) {
     const like = `%${esc(keyword)}%`;
     const searchCols = new Set<string>();

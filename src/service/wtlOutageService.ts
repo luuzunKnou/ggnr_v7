@@ -40,6 +40,8 @@ export type WtlOutageCustomerDto = {
   address: string;
   phone: string;
   meterNo: string;
+  /** 경위도. 목록 클릭 시 지도 이동용 */
+  point?: [number, number] | null;
 };
 
 export type WtlOutageResultDto = {
@@ -506,7 +508,9 @@ async function queryCustomersInRing(ring: [number, number][]): Promise<{
          COALESCE(NULLIF(trim(t.hom_nam),''), NULLIF(trim(t.met_num),''), t.ogc_fid::text) AS name,
          COALESCE(NULLIF(trim(t.hom_adr),''), '') AS address,
          COALESCE(NULLIF(trim(t.met_num),''), '') AS "meterNo",
-         COALESCE(NULLIF(trim(t.hom_num),''), '') AS "homNum"
+         COALESCE(NULLIF(trim(t.hom_num),''), '') AS "homNum",
+         ST_X(ST_Centroid(ST_Transform(t.geom, 4326))) AS lon,
+         ST_Y(ST_Centroid(ST_Transform(t.geom, 4326))) AS lat
        FROM layer.wtl_meta_ps t, zone
        WHERE t.geom IS NOT NULL
          AND ST_Intersects(ST_Transform(t.geom, 4326), zone.g)
@@ -519,12 +523,15 @@ async function queryCustomersInRing(ring: [number, number][]): Promise<{
     const id = `c-${asStr(r.id)}`;
     const address = asStr(r.address);
     const meterNo = asStr(r.meterNo);
+    const lon = Number(r.lon);
+    const lat = Number(r.lat);
     customers.push({
       id,
       name: asStr(r.name) || meterNo || id,
       address: address || '—',
       phone: '',
       meterNo: meterNo || '—',
+      point: Number.isFinite(lon) && Number.isFinite(lat) ? [lon, lat] : null,
     });
     if (address) {
       addrMap.set(address, {

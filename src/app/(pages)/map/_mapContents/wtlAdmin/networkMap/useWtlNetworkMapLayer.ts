@@ -13,9 +13,14 @@ import tablesJson from '@/config/defineLayer/tables.json'
 import { getGeoServerBase } from '@/lib/geoserverUrl'
 import { geoserverWmsImageLoadFunction } from '@/lib/geoserverWmsImageLoad'
 import { call } from '@/lib/api'
+import { Stroke, Style } from 'ol/style'
+import type { StyleFunction } from 'ol/style/Style'
+import type { FeatureLike } from 'ol/Feature'
 import {
   compareFeaturesByGeometryStackOrder,
+  GEOM_STACK_UI_ZINDEX_MIN,
   isPointSymbolLayerName,
+  LAYER_GEOM_STACK_SKIP_KEY,
   markLayerGeomStack,
   type LayerStackKind,
 } from '@/lib/mapLayerGeometryOrder'
@@ -37,6 +42,54 @@ import {
   type WtlNetMapSourceId,
 } from './wtlNetworkMapSources'
 import type { WtlNetworkRow } from './wtlNetworkTypes'
+
+/** 하천기본계획 색인도 선택과 동일 — 폴리곤은 윤곽만, 그 외는 데이터조회 펄스 */
+function createWtlNetworkSelectionStyle(getPulsePhase: () => number): StyleFunction {
+  const base = createDataQuerySelectionRowHighlightStyle(getPulsePhase)
+  return (feature: FeatureLike, resolution: number) => {
+    const geomType = feature.getGeometry()?.getType()
+    if (geomType === 'Polygon' || geomType === 'MultiPolygon') {
+      const t = Math.sin(getPulsePhase())
+      const whiteOp = 0.6 + 0.35 * t
+      const redOp = 0.5 + 0.3 * t
+      return [
+        new Style({
+          stroke: new Stroke({ color: `rgba(255, 255, 255, ${whiteOp})`, width: 7 + t }),
+        }),
+        new Style({
+          stroke: new Stroke({ color: `rgba(220, 38, 38, ${redOp})`, width: 4 + 0.8 * t }),
+        }),
+      ]
+    }
+    return base(feature, resolution)
+  }
+}
+
+/**
+ * 좌·우 패널(view.padding)에 가려진 픽셀을 뺀 지도 범위.
+ * calculateExtent(map size)는 캔버스 전체라 패널 뒤·화면 밖 시설까지 포함한다.
+ */
+function extentOfVisibleMap(map: OLMap): [number, number, number, number] | null {
+  const size = map.getSize()
+  if (!size || size.length < 2) return null
+  const padding = map.getView().padding ?? [0, 0, 0, 0]
+  const top = Math.max(0, padding[0] ?? 0)
+  const right = Math.max(0, padding[1] ?? 0)
+  const bottom = Math.max(0, padding[2] ?? 0)
+  const left = Math.max(0, padding[3] ?? 0)
+  const x2 = size[0] - right
+  const y2 = size[1] - bottom
+  if (x2 - left < 8 || y2 - top < 8) return null
+  const sw = map.getCoordinateFromPixel([left, y2])
+  const ne = map.getCoordinateFromPixel([x2, top])
+  if (!sw || !ne) return null
+  const minX = Math.min(sw[0], ne[0])
+  const minY = Math.min(sw[1], ne[1])
+  const maxX = Math.max(sw[0], ne[0])
+  const maxY = Math.max(sw[1], ne[1])
+  if (![minX, minY, maxX, maxY].every((n) => Number.isFinite(n))) return null
+  return [minX, minY, maxX, maxY]
+}
 
 /** tables.json define_table_shp_type → 기하 쌓기 종류 (면→선→점→심볼) */
 function stackKindFromDefineShpType(tableName: string): LayerStackKind {
@@ -151,6 +204,8 @@ export function useWtlNetworkMapLayer({
   const sourcesRef = useRef(mapSources)
   /** 측정·공간그리기·도형편집 등 지도 입력 중에는 레이어 클릭 선택 금지 */
   const drawBlocksClickRef = useRef(false)
+  const suppressIdentifyUntilRef = useRef(mapContext?.suppressMapIdentifyUntilRef)
+  suppressIdentifyUntilRef.current = mapContext?.suppressMapIdentifyUntilRef
   onSelectRef.current = onSelect
   onExtentRef.current = onExtentChange
   onMoveStartRef.current = onMapMoveStart
@@ -203,13 +258,7 @@ export function useWtlNetworkMapLayer({
     wmsBySourceRef.current = bySource
 
     const publishExtent = () => {
-      const size = map.getSize()
-      const extent = size ? map.getView().calculateExtent(size) : null
-      if (!extent || extent.length < 4) {
-        onExtentRef.current(null)
-        return
-      }
-      onExtentRef.current([extent[0], extent[1], extent[2], extent[3]])
+      onExtentRef.current(extentOfVisibleMap(map))
     }
 
     const moveStartKey = map.on('movestart', () => {
@@ -220,6 +269,8 @@ export function useWtlNetworkMapLayer({
 
     const onClick = (evt: MapBrowserEvent<PointerEvent>) => {
       if (drawBlocksClickRef.current) return
+      const suppressUntil = suppressIdentifyUntilRef.current?.current ?? 0
+      if (suppressUntil > Date.now()) return
       const keys = [...keysRef.current]
       const sources = [...sourcesRef.current]
       if (keys.length === 0 || sources.length === 0) return
@@ -233,7 +284,7 @@ export function useWtlNetworkMapLayer({
               y: evt.coordinate[1],
               layerKeys: keys,
               mapSources: sources,
-              tolerance: 12,
+              tolerance: 2,
             },
           })
           const row = (res?.data ?? res)?.row as WtlNetworkRow | null | undefined
@@ -254,6 +305,21 @@ export function useWtlNetworkMapLayer({
     }
   }, [mapContext?.mapInstanceRef, mapContext?.mapReady, availableKey, availableSourceIds])
 
+  /** 패널 너비가 바뀌면 moveend 없이 보이는 범위가 달라진다 */
+  const mapPaddingLeft = mapContext?.mapPaddingLeft ?? 0
+  useEffect(() => {
+    const map = mapContext?.mapInstanceRef?.current
+    if (!map || !mapContext?.mapReady) return
+    const publish = () => {
+      onExtentRef.current(extentOfVisibleMap(map))
+    }
+    publish()
+    const key = map.once('postrender', publish)
+    return () => {
+      unByKey(key)
+    }
+  }, [mapPaddingLeft, mapContext?.mapInstanceRef, mapContext?.mapReady])
+
   useEffect(() => {
     const map = mapContext?.mapInstanceRef?.current
     if (!map || !mapContext?.mapReady) return
@@ -261,9 +327,11 @@ export function useWtlNetworkMapLayer({
     highlightSourceRef.current = source
     const layer = new VectorLayer({
       source,
+      zIndex: GEOM_STACK_UI_ZINDEX_MIN,
       renderOrder: compareFeaturesByGeometryStackOrder,
-      style: createDataQuerySelectionRowHighlightStyle(() => pulsePhaseRef.current),
+      style: createWtlNetworkSelectionStyle(() => pulsePhaseRef.current),
     })
+    layer.set(LAYER_GEOM_STACK_SKIP_KEY, true)
     layer.set('wtlNetworkHighlight', true)
     insertLayerBelowServiceLayer(map, layer)
     return () => {
