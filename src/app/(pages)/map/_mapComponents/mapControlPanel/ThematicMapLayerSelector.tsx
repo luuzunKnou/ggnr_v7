@@ -1,8 +1,10 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useSession } from 'next-auth/react';
 import { ChevronDown, ChevronRight, X } from 'lucide-react';
 import { Switch } from '@/app/shadcnComponents/ui/switch';
+import { isSuperUser } from '@/lib/auth/superUser';
 import { cn } from '@/lib/utils';
 import { getLegendGraphicUrl } from '../layerFactory/serviceLayerFactory';
 import {
@@ -10,7 +12,11 @@ import {
   type ThematicMapLayerGroup,
   type ThematicMapLayerOption,
 } from '../layerFactory/thematicMapLayerFactory';
-import { MAP_LAYER_PANEL_MAX_H_CLASS, MAP_LAYER_PANEL_SURFACE_CLASS } from './mapLayerPanelLayout';
+import {
+  MAP_LAYER_PANEL_MAX_H_CLASS,
+  MAP_LAYER_PANEL_SURFACE_CLASS,
+  layerHoverTitle,
+} from './mapLayerPanelLayout';
 
 const FALLBACK_LEGEND_COLOR = 'rgb(148,163,184)';
 
@@ -165,6 +171,7 @@ function ThematicMapGroupSection({
   onToggleGroup,
   defaultExpanded = false,
   showGroupBulk = true,
+  showEngInTitle = false,
 }: {
   group: ThematicMapLayerGroup;
   selectedTableNames: Set<string>;
@@ -172,6 +179,7 @@ function ThematicMapGroupSection({
   onToggleGroup: (tableNames: string[], checked: boolean) => void;
   defaultExpanded?: boolean;
   showGroupBulk?: boolean;
+  showEngInTitle?: boolean;
 }) {
   const [isExpanded, setIsExpanded] = useState(defaultExpanded);
   const selectedCount = group.layers.filter((l) => selectedTableNames.has(l.tableName)).length;
@@ -246,7 +254,11 @@ function ThematicMapGroupSection({
                         ? 'font-medium text-primary'
                         : 'text-slate-700 dark:text-white/90'
                     )}
-                    title={option.layerName}
+                    title={layerHoverTitle(
+                      option.layerName,
+                      option.tableName,
+                      showEngInTitle
+                    )}
                   >
                     {option.layerName}
                   </span>
@@ -291,6 +303,8 @@ export function ThematicMapLayerSelector({
   title = '주제도',
   showBulkActions = true,
 }: ThematicMapLayerSelectorProps) {
+  const { data: session } = useSession();
+  const showEngInTitle = isSuperUser(session?.user?.id);
   const allTableNames = useMemo(
     () => groups.flatMap((g) => g.layers.map((l) => l.tableName)),
     [groups]
@@ -378,6 +392,7 @@ export function ThematicMapLayerSelector({
               onToggle={toggle}
               onToggleGroup={toggleGroup}
               showGroupBulk={showBulkActions}
+              showEngInTitle={showEngInTitle}
             />
           ))
         )}
