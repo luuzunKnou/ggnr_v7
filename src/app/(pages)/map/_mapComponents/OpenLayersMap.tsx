@@ -50,6 +50,8 @@ import { useMapInstance } from './hooks/useMapInstance';
 import { MapScaleIndicator } from './hooks/MapScaleIndicator';
 import { useMapContext } from './MapContext';
 import { useBackgroundLayer } from './hooks/useBackgroundLayer';
+import { useBackgroundLabelLayer } from './hooks/useBackgroundLabelLayer';
+import { isAerialBackgroundId } from './layerFactory/backgroundLayerFactory';
 import {
   useMapStatePersist,
   loadPersistedMapState,
@@ -58,6 +60,7 @@ import {
   writeLastMapSystemKey,
 } from './hooks/useMapStatePersist';
 import { useServiceLayerSync } from './layerFactory/serviceLayerFactory';
+import { applyIconScaleWmsEnv } from './layerFactory/iconScaleWmsEnv';
 import {
   useCadastralLayerSync,
   useBuildingRoadLayerSync,
@@ -110,6 +113,12 @@ import {
   useDetailWondoAvailable,
   withDetailWondoControl,
 } from '../_mapContents/detailWondo/detailWondoControl';
+import { DigitalMapMapControl } from '../_mapContents/digitalMap/DigitalMapMapControl';
+import {
+  DIGITAL_MAP_CONTROL_ID,
+  useDigitalMapAvailable,
+  withDigitalMapControl,
+} from '../_mapContents/digitalMap/digitalMapControl';
 import { MAP_SPLIT_CONTROL_RIGHT_MENU_RESERVE_PX } from './mapSplit/mapSplitTypes';
 import {
   MAP_MEASUREMENTS_RESET_EVENT,
@@ -289,7 +298,7 @@ type IdentifyHitLayer = {
   features: { data?: Record<string, unknown> }[];
 };
 
-/** 공통 점용대장 identify — 본표 우선, 겹친 도형 전부 (필지·물건지는 허가번호) */
+/** 공통 점용대장 identify — 본표 우선, 겹친 도형 전부 (필지·물건지는 연결 칸·예전 허가번호) */
 function collectOccupationIdentifyHits(
   withFeat: IdentifyHitLayer[],
   binding: OccupationLedgerBinding
@@ -313,6 +322,8 @@ function collectOccupationIdentifyHits(
 
   const keyField = binding.fields.keyField;
   const childParentField = binding.fields.childParentField;
+  const permitField = binding.fields.permitField;
+  const nameField = binding.fields.nameField;
   const mainId = binding.mainTable.toLowerCase();
   const parentRanked = ranked.filter((x) => {
     const tn = String(x.layer.tableName ?? '')
@@ -333,18 +344,19 @@ function collectOccupationIdentifyHits(
       .toLowerCase();
     const pickField = tn === mainId ? keyField : childParentField;
     for (const feat of layer.features) {
+      // 필지·물건지는 본표 키 칸, 예전 국공유지 필지는 허가번호(permit_no)로도
       const rowKey =
         pickIdentifyField(feat?.data, pickField) ||
         (tn !== mainId ? pickIdentifyField(feat?.data, 'permit_no') : '');
       if (!rowKey || seen.has(rowKey)) continue;
       seen.add(rowKey);
       const permit =
-        pickIdentifyField(feat?.data, 'permit_no') ||
-        pickIdentifyField(feat?.data, 'work_name') ||
+        pickIdentifyField(feat?.data, permitField) ||
+        pickIdentifyField(feat?.data, nameField) ||
         rowKey;
       hits.push({
         rowKey,
-        permitNo: pickIdentifyField(feat?.data, 'permit_no') || permit,
+        permitNo: pickIdentifyField(feat?.data, permitField) || permit,
         extent3857: pickIdentifyExtent3857(feat?.data),
       });
     }
@@ -365,6 +377,7 @@ const MULTI_SELECT_IDS = [
   'map-split',
   'official-land-price',
   DETAIL_WONDO_CONTROL_ID,
+  DIGITAL_MAP_CONTROL_ID,
 ];
 
 /** 서로 배타 — 지도 분할 보조 칸은 한 종류만 */
@@ -464,6 +477,19 @@ export default function OpenLayersMap({
   useForwardOverlayPointerMoveToMap(mapReady ? mapInstanceRef.current : null, mapReady);
 
   const showDebugUi = mapContext?.showDebugUi ?? false;
+  const iconScaleSizeOn = mapContext?.iconScaleSizeOn ?? false;
+
+  useEffect(() => {
+    const map = mapInstanceRef.current;
+    if (!mapReady || !map) return;
+    const apply = () => applyIconScaleWmsEnv(map, iconScaleSizeOn);
+    apply();
+    const layers = map.getLayers();
+    layers.on('add', apply);
+    return () => {
+      layers.un('add', apply);
+    };
+  }, [mapReady, iconScaleSizeOn, mapInstanceRef]);
   const [activeControls, setActiveControls] = useState<string[]>([]);
   const [isResetPanelExiting, setIsResetPanelExiting] = useState(false);
   /** 초기화 패널이 실제로 열려 입력·측정을 막는 상태 (퇴장 애니메이션 제외) */
@@ -708,7 +734,10 @@ export default function OpenLayersMap({
   useEffect(() => {
     const state = loadPersistedMapState(projectName);
     if (state) {
-      if (state.backgroundMap) setSelectedBackgroundMap(state.backgroundMap);
+      if (state.backgroundMap) {
+        setSelectedBackgroundMap(state.backgroundMap);
+        mapContext?.setMapBackgroundLabelVisible?.(isAerialBackgroundId(state.backgroundMap));
+      }
       const skipLayers = shouldSkipPersistedLayerRestore(
         state.systemKey,
         systemKeyFromUrl,
@@ -967,6 +996,15 @@ export default function OpenLayersMap({
 
   // 배경지도 관리
   useBackgroundLayer(mapInstanceRef.current, selectedBackgroundMap);
+  const backgroundLabelVisible = mapContext?.mapBackgroundLabelVisible ?? true;
+  useBackgroundLabelLayer(mapInstanceRef.current, backgroundLabelVisible);
+
+  const syncLabelsToBackground = useCallback(
+    (id: string) => {
+      mapContext?.setMapBackgroundLabelVisible?.(isAerialBackgroundId(id));
+    },
+    [mapContext]
+  );
 
   useEffect(() => {
     const r = mapContext?.mapBackgroundMapIdRef;
@@ -979,6 +1017,7 @@ export default function OpenLayersMap({
     ref.current = (id: string) => {
       setSelectedBackgroundMap(id);
       const ctx = mapContextRef.current;
+      ctx?.setMapBackgroundLabelVisible?.(isAerialBackgroundId(id));
       if (ctx?.mapSplitSecondaryKind === 'map') {
         ctx.setMapSplitSecondaryBackgroundId?.(id);
       }
@@ -1006,6 +1045,7 @@ export default function OpenLayersMap({
 
   const handleBackgroundMapChange = (id: string) => {
     setSelectedBackgroundMap(id);
+    syncLabelsToBackground(id);
     if (mapContext?.mapSplitSecondaryKind === 'map') {
       mapContext?.setMapSplitSecondaryBackgroundId?.(id);
     }
@@ -1013,9 +1053,11 @@ export default function OpenLayersMap({
 
   const handleBackgroundMapLeftChange = (id: string) => {
     setSelectedBackgroundMap(id);
+    syncLabelsToBackground(id);
   };
 
   const handleBackgroundMapRightChange = (id: string) => {
+    syncLabelsToBackground(id);
     mapContext?.setMapSplitSecondaryBackgroundId?.(id);
   };
 
@@ -1262,6 +1304,7 @@ export default function OpenLayersMap({
     systemKeyFromUrl
   );
   const spatialFilterWkt = mapContext?.spatialFilterWkt ?? null;
+  const spatialFilterAutoFit = mapContext?.spatialFilterAutoFit !== false;
   const serviceWmsCqlByLayer = mapContext?.serviceWmsCqlByLayer ?? null;
   const serviceWmsStyleByLayer = mapContext?.serviceWmsStyleByLayer ?? null;
 
@@ -1329,7 +1372,8 @@ export default function OpenLayersMap({
     serviceWmsCqlByLayer,
     false,
     wmsForceBottomLayerNames,
-    serviceWmsStyleByLayer
+    serviceWmsStyleByLayer,
+    iconScaleSizeOn
   );
 
   // 검색 조건 도형을 지도에 표시 (WKT 5181 → 3857 변환 후 벡터 레이어)
@@ -1368,7 +1412,7 @@ export default function OpenLayersMap({
       spatialFilterLayerRef.current = layer;
 
       const extent = geom.getExtent();
-      if (!isEmptyExtent(extent)) {
+      if (spatialFilterAutoFit && !isEmptyExtent(extent)) {
         map.getView().fit(extent, {
           padding: [48, 48, 48, 48],
           maxZoom: 17,
@@ -1385,7 +1429,7 @@ export default function OpenLayersMap({
         spatialFilterLayerRef.current = null;
       }
     };
-  }, [mapReady, spatialFilterWkt]);
+  }, [mapReady, spatialFilterWkt, spatialFilterAutoFit]);
 
   // 측정(거리/면적 등) 켜짐 여부를 MapContext에 동기화 (레이어 목록 도형 그리기와 배타 처리용)
   useEffect(() => {
@@ -1709,67 +1753,71 @@ export default function OpenLayersMap({
       if (mapContext?.addressParcelSeedGeom4326Ref) {
         mapContext.addressParcelSeedGeom4326Ref.current = null;
       }
-      setAddressInfoDetail({
-        coordinate,
-        viewProjection,
-        loading: true,
-        pnu: null,
-        jibun: null,
-        road: null,
-      });
-      const coord3857 = transformCoordinate(coordinate, viewProjection, 'EPSG:3857');
-      if (coord3857) {
-        const [x, y] = coord3857;
-        call('', 'POST', {
-          service: 'standardService',
-          action: 'getJijukParcelAtPoint',
-          params: { x, y },
-        })
-          .then((res) => {
+
+      // 지적(jijuk) PNU를 먼저 조회한 뒤 주소정보 패널을 연다.
+      void (async () => {
+        let pnu: string | null = null;
+        let jibun: string | null = null;
+        let geomSeedAt: number | undefined;
+        const coord3857 = transformCoordinate(coordinate, viewProjection, 'EPSG:3857');
+        if (coord3857) {
+          const [x, y] = coord3857;
+          try {
+            const res = await call('', 'POST', {
+              service: 'standardService',
+              action: 'getJijukParcelAtPoint',
+              params: { x, y },
+            });
             const payload = (res?.data ?? res) as {
               results?: { tableName?: string; features?: { data?: Record<string, unknown> }[] }[];
             };
             const results = Array.isArray(payload?.results) ? payload.results : [];
             const jijukResult = results.find((r) => String(r?.tableName ?? '').trim() === 'jijuk');
             const row = jijukResult?.features?.[0]?.data;
-            const pnu = row?.pnu != null ? String(row.pnu).trim() : '';
+            const rowPnu = row?.pnu != null ? String(row.pnu).trim() : '';
+            if (rowPnu) pnu = rowPnu;
             const seedGeom = parseParcelGeomField(row?.geom);
             if (seedGeom && mapContext?.addressParcelSeedGeom4326Ref) {
               mapContext.addressParcelSeedGeom4326Ref.current = seedGeom;
+              geomSeedAt = Date.now();
             }
             const parcelJibun = row?.jibun != null ? String(row.jibun).trim() : '';
-            // 지적 jibun은 「1-3」「1-3잡」처럼 짧은 경우가 많음 — 전체 주소는 브이월드 역지오코딩 결과를 우선
+            // 짧은 지번(예: 1-3잡)은 쓰지 않고, 행정구역이 포함된 경우만 채운다.
             const parcelJibunLooksFull =
               parcelJibun.length >= 8 &&
               /(도|특별|광역|자치)/u.test(parcelJibun) &&
               /(읍|면|동|리)/u.test(parcelJibun);
-            setAddressInfoDetail((prev) =>
-              prev
-                ? {
-                    ...prev,
-                    pnu: prev.pnu ?? (pnu || null),
-                    geomSeedAt: seedGeom ? Date.now() : prev.geomSeedAt,
-                    jibun: prev.jibun ?? (parcelJibunLooksFull ? parcelJibun : null),
-                  }
-                : null
-            );
-          })
-          .catch(() => undefined);
-      }
-      const [lon, lat] = wgs84;
-      const apiKey = mapContext?.vworldApiKey?.trim();
-      if (!apiKey) {
-        setAddressInfoDetail((prev) => (prev ? { ...prev, loading: false, jibun: prev.jibun ?? null, road: null } : null));
-        return;
-      }
-      getAddressFromCoord(lon, lat, { apiKey })
-        .then(async (result) => {
+            if (parcelJibunLooksFull) jibun = parcelJibun;
+          } catch {
+            // 지적 조회 실패 시 브이월드 주소 조회로 이어감
+          }
+        }
+
+        setAddressInfoDetail({
+          coordinate,
+          viewProjection,
+          loading: true,
+          pnu,
+          jibun,
+          road: null,
+          ...(geomSeedAt != null ? { geomSeedAt } : {}),
+        });
+
+        const [lon, lat] = wgs84;
+        const apiKey = mapContext?.vworldApiKey?.trim();
+        if (!apiKey) {
+          setAddressInfoDetail((prev) =>
+            prev ? { ...prev, loading: false, jibun: prev.jibun ?? null, road: null } : null
+          );
+          return;
+        }
+        try {
+          const result = await getAddressFromCoord(lon, lat, { apiKey });
           let roadText = result?.road?.trim() || '';
           if (!roadText) {
             const roadOnly = await getAddressFromCoord(lon, lat, { apiKey, type: 'ROAD' });
             roadText = roadOnly?.road?.trim() || '';
           }
-          // 역지오코딩 ROAD=NOT_FOUND 인 경우 — 지번으로 검색 API에서 road 보강
           if (!roadText) {
             const jibunHint = result?.jibun?.trim() || '';
             if (jibunHint) {
@@ -1782,18 +1830,18 @@ export default function OpenLayersMap({
               ? {
                   ...prev,
                   loading: false,
+                  // 지적 PNU 우선, 없을 때만 브이월드 값 사용
                   pnu: prev.pnu ?? (result?.pnu?.trim() || null),
-                  // 브이월드 법정동 전체 주소를 지적 짧은 지번보다 우선
                   jibun: result?.jibun?.trim() || prev.jibun || null,
                   road: roadText || prev.road || null,
                   buildingName: result?.buildingName?.trim() || prev.buildingName || null,
                 }
               : null
           );
-        })
-        .catch(() => {
+        } catch {
           setAddressInfoDetail((prev) => (prev ? { ...prev, loading: false } : null));
-        });
+        }
+      })();
     },
     [mapContext?.setAddressInfoDetail, mapContext?.vworldApiKey, addressInfoDetail]
   );
@@ -1802,11 +1850,12 @@ export default function OpenLayersMap({
   const systemKey = systemKeyFromUrl;
   const detailWondoAvailable = useDetailWondoAvailable();
   const [detailWondoCheckedCount, setDetailWondoCheckedCount] = useState(0);
-  const mapControlGroups = useMemo(
-    (): MapControlGroup[] =>
-      withDetailWondoControl(mapControlGroupsForSystem(systemKey), detailWondoAvailable),
-    [systemKey, detailWondoAvailable]
-  );
+  const digitalMapAvailable = useDigitalMapAvailable();
+  const [digitalMapCheckedCount, setDigitalMapCheckedCount] = useState(0);
+  const mapControlGroups = useMemo((): MapControlGroup[] => {
+    const base = mapControlGroupsForSystem(systemKey);
+    return withDigitalMapControl(withDetailWondoControl(base, detailWondoAvailable), digitalMapAvailable);
+  }, [systemKey, detailWondoAvailable, digitalMapAvailable]);
 
   const aerialViewPanelOpen = aerialPanelOpen || isAerialViewPanelExiting;
   const aerialButtonOn = aerialPanelOpen || aerialViewCheckedIds.size > 0;
@@ -3111,6 +3160,7 @@ export default function OpenLayersMap({
           center: [center[0], center[1]],
           zoom,
           backgroundMapId: selectedBackgroundMap,
+          backgroundLabelVisible,
           visibleLayerNames: Array.from(visibleLayerNames),
           activeLayerControls: activeControls.filter((c) => layerControls.includes(c)),
           visibleCadastralLayerNames: visibleCadastralLayerNames
@@ -3142,8 +3192,8 @@ export default function OpenLayersMap({
 
     setOpenSubPanel(null);
 
-    // 체크한 원도가 있으면 패널이 닫혀도 버튼이 켜져 보이므로 실제 패널 열림으로 토글
-    if (id === DETAIL_WONDO_CONTROL_ID) {
+    // 체크한 원도·수치지형도가 있으면 패널이 닫혀도 버튼이 켜져 보이므로 실제 패널 열림으로 토글
+    if (id === DETAIL_WONDO_CONTROL_ID || id === DIGITAL_MAP_CONTROL_ID) {
       setActiveControls((prev) =>
         prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
       );
@@ -3369,6 +3419,8 @@ export default function OpenLayersMap({
                     value={selectedBackgroundMap}
                     onValueChange={handleBackgroundMapChange}
                     splitSelect={backgroundSplitSelect}
+                    labelVisible={backgroundLabelVisible}
+                    onLabelVisibleChange={mapContext?.setMapBackgroundLabelVisible}
                   />
                 </div>
               )}
@@ -3417,6 +3469,17 @@ export default function OpenLayersMap({
                     setActiveControls((prev) => prev.filter((x) => x !== DETAIL_WONDO_CONTROL_ID))
                   }
                   onCheckedCountChange={setDetailWondoCheckedCount}
+                  panelClassName={`${overlayListPointerClass} animate-in fade-in-0 slide-in-from-right-4 duration-[400ms]`}
+                />
+              )}
+
+              {digitalMapAvailable && (
+                <DigitalMapMapControl
+                  panelOpen={activeControls.includes(DIGITAL_MAP_CONTROL_ID)}
+                  onClose={() =>
+                    setActiveControls((prev) => prev.filter((x) => x !== DIGITAL_MAP_CONTROL_ID))
+                  }
+                  onCheckedCountChange={setDigitalMapCheckedCount}
                   panelClassName={`${overlayListPointerClass} animate-in fade-in-0 slide-in-from-right-4 duration-[400ms]`}
                 />
               )}
@@ -3577,9 +3640,14 @@ export default function OpenLayersMap({
                         : activeControls;
                     const withoutAerial = base.filter((id) => id !== 'aerial-view');
                     const withAerial = aerialButtonOn ? [...withoutAerial, 'aerial-view'] : withoutAerial;
-                    return detailWondoCheckedCount > 0 && !withAerial.includes(DETAIL_WONDO_CONTROL_ID)
-                      ? [...withAerial, DETAIL_WONDO_CONTROL_ID]
-                      : withAerial;
+                    let next = withAerial;
+                    if (detailWondoCheckedCount > 0 && !next.includes(DETAIL_WONDO_CONTROL_ID)) {
+                      next = [...next, DETAIL_WONDO_CONTROL_ID];
+                    }
+                    if (digitalMapCheckedCount > 0 && !next.includes(DIGITAL_MAP_CONTROL_ID)) {
+                      next = [...next, DIGITAL_MAP_CONTROL_ID];
+                    }
+                    return next;
                   })()}
                   onItemClick={handleControlClick}
                   onItemRightClick={handleItemRightClick}

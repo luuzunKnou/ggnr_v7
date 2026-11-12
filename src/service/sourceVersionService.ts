@@ -6,7 +6,10 @@ import { spawn } from 'node:child_process';
 import { buildGnmsVersionApiBase, resolveGnmsApiUrl, DEFAULT_GNMS_URL } from '@/lib/gnmsSourceUrl';
 import { getGnmsUrl } from '@/service/configService';
 import { resolveAppStartCommand, pickBootForSignalMerge, resolveAppliedVersionLabel } from '@/lib/ggnrBootCommand';
-import { applyLatestHistoryOptions } from '@/lib/versionHistoryMessage';
+import {
+  applyLatestHistoryOptions,
+  type SourceApplyLayout,
+} from '@/lib/versionHistoryMessage';
 import { stopGeoServerAndVerify } from '@/service/geoserverProcessService';
 import {
   releaseSourceApplyLock,
@@ -84,6 +87,10 @@ export function normalizeRestartMode(value: unknown): RestartMode {
     return 'exit';
   }
   return 'none';
+}
+
+export function normalizeSourceApplyLayout(value: unknown): SourceApplyLayout {
+  return value === 'sibling' ? 'sibling' : 'overwrite';
 }
 
 /**
@@ -229,6 +236,9 @@ export type ApplyLatestSourceResult = {
   /** 스키마 모달 확인 전 — 재기동·스냅샷 삭제 보류 */
   pendingSchemaConfirm?: boolean;
   pendingId?: string;
+  applyLayout?: SourceApplyLayout;
+  /** 따로 생성 시 새 설치 폴더 */
+  installDir?: string;
 };
 
 type GnmsLatestPayload = {
@@ -1109,6 +1119,10 @@ export type ApplySourceZipOptions = {
   restartMode: RestartMode;
   /** false=개방망(node_modules 제외), true=폐쇄망(포함) */
   includeNodeModules?: boolean;
+  /** overwrite=현재 폴더 병합, sibling=상위 폴더에 새 설치 */
+  applyLayout?: SourceApplyLayout;
+  /** 따로 생성 폴더 접미사. 화면에서 고른 버전 폴더 이름 */
+  installFolderKey?: string;
   /** 단계별 진행 콜백 (중지·병합·기동 분리) */
   onProgress?: (event: ApplySourceProgressEvent) => void | Promise<void>;
 };
@@ -1118,8 +1132,411 @@ export type ApplySourceZipResult = Omit<
   'gnmsBaseUrl' | 'latestUrl' | 'downloadUrl'
 >;
 
+function isTcpPort(raw: string): boolean {
+  if (!/^[1-9]\d{0,4}$/.test(raw)) return false;
+  const n = Number(raw);
+  return n >= 1 && n <= 65535;
+}
+
+function psSingleQuote(value: string): string {
+  return `'${value.replace(/'/g, "''")}'`;
+}
+
+function sanitizeInstallFolderKey(raw: string): string {
+  const cleaned = raw
+    .trim()
+    .replace(/[<>:"/\\|?*\u0000-\u001f]/g, '_')
+    .replace(/\s+/g, '_')
+    .replace(/\.+$/g, '')
+    .replace(/_+/g, '_')
+    .replace(/^_+|_+$/g, '');
+  const cut = cleaned.slice(0, 80);
+  if (!cut || cut === '.' || cut === '..') {
+    throw new Error('버전 폴더 이름이 올바르지 않습니다.');
+  }
+  return cut;
+}
+
+function resolveSiblingInstallDir(folderKey: string): string {
+  const cwd = path.resolve(process.cwd());
+  const parent = path.dirname(cwd);
+  const name = `${path.basename(cwd)}_${sanitizeInstallFolderKey(folderKey)}`;
+  const target = path.resolve(parent, name);
+  const rel = path.relative(parent, target);
+  if (!rel || rel.startsWith('..') || path.isAbsolute(rel)) {
+    throw new Error('설치 폴더 경로가 올바르지 않습니다.');
+  }
+  if (target.toLowerCase() === cwd.toLowerCase()) {
+    throw new Error('설치 폴더가 현재 실행 폴더와 같습니다.');
+  }
+  return target;
+}
+
+async function pathExists(target: string): Promise<boolean> {
+  try {
+    await fs.access(target);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function resolveSiblingAppPort(): Promise<string> {
+  const fromEnv = (process.env.PORT ?? '').trim();
+  if (isTcpPort(fromEnv)) return fromEnv;
+  try {
+    const text = await fs.readFile(path.join(process.cwd(), 'ggnr_start.bat'), 'utf8');
+    const matched = text.match(/set\s+"?PORT=(\d+)"?/i);
+    if (matched?.[1] && isTcpPort(matched[1])) return matched[1];
+  } catch {
+    /* 시작 파일이 없으면 기본 포트 */
+  }
+  return '80';
+}
+
+function requireCurrentProjectEnv(): { project: string; envName: string } {
+  const project = (process.env.GGNR_PROJECT ?? '').trim();
+  const envName = (process.env.GGNR_ENV ?? '').trim();
+  if (!project || !envName) {
+    throw new Error('현재 서버의 프로젝트 이름 또는 구분이 없습니다. 따로 생성을 중단합니다.');
+  }
+  if (/\s/.test(project) || /\s/.test(envName)) {
+    throw new Error('프로젝트 이름 또는 구분에 공백이 있습니다. 따로 생성을 중단합니다.');
+  }
+  return { project, envName };
+}
+
+function siblingStarterPhase(line: string): ApplySourceProgressPhase {
+  if (/의존성|npm ci|npm install|node_modules/i.test(line)) return 'npm-install';
+  return 'build';
+}
+
+async function spawnDetachedStarterWindow(ps1Path: string, workDir: string): Promise<void> {
+  const argList = ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-NoExit', '-File', ps1Path]
+    .map((part) => psSingleQuote(part))
+    .join(',');
+  const command = [
+    'Start-Process',
+    '-FilePath',
+    'powershell.exe',
+    '-WorkingDirectory',
+    psSingleQuote(workDir),
+    '-WindowStyle',
+    'Normal',
+    '-ArgumentList',
+    argList,
+  ].join(' ');
+  await new Promise<void>((resolve, reject) => {
+    const child = spawn(
+      'powershell.exe',
+      ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', command],
+      { windowsHide: true }
+    );
+    let errText = '';
+    child.stderr?.on('data', (buf: Buffer) => {
+      errText += buf.toString('utf8');
+    });
+    child.on('error', reject);
+    child.on('close', (code) => {
+      if ((code ?? 1) === 0) resolve();
+      else reject(new Error(errText.trim() || `설치 창을 열지 못했습니다 (${code ?? '?'})`));
+    });
+  });
+}
+
+async function writeSiblingLauncher(params: {
+  targetDir: string;
+  project: string;
+  envName: string;
+  port: string;
+  npmSync: 'Y' | 'N';
+}): Promise<{ ps1Path: string; logPath: string }> {
+  const ps1Path = path.join(params.targetDir, 'sibling-install-run.ps1');
+  const logPath = path.join(params.targetDir, 'starter-install.log');
+  const batPath = path.join(params.targetDir, '00_make_ggnr_starter.bat');
+  const q = psSingleQuote;
+  const body = [
+    `$ErrorActionPreference = 'Continue'`,
+    `[Console]::OutputEncoding = New-Object System.Text.UTF8Encoding $false`,
+    `$OutputEncoding = [Console]::OutputEncoding`,
+    `chcp 65001 | Out-Null`,
+    `$env:GGNR_STARTER_NO_PAUSE = '1'`,
+    `$env:GGNR_STARTER_UNATTENDED = '1'`,
+    `$env:GGNR_STARTER_PROJECT = ${q(params.project)}`,
+    `$env:GGNR_STARTER_ENV = ${q(params.envName)}`,
+    `$env:GGNR_STARTER_PORT = ${q(params.port)}`,
+    `$env:GGNR_STARTER_NPM_SYNC = '${params.npmSync}'`,
+    `$env:GGNR_STARTER_NSSM = 'Y'`,
+    `$env:GGNR_STARTER_REREG = 'Y'`,
+    `Set-Location -LiteralPath ${q(params.targetDir)}`,
+    `$bat = ${q(batPath)}`,
+    `$log = ${q(logPath)}`,
+    `if (Test-Path -LiteralPath $log) { Remove-Item -LiteralPath $log -Force }`,
+    `$cmdArg = 'call "' + $bat + '"'`,
+    `& cmd.exe /d /c $cmdArg 2>&1 | ForEach-Object {`,
+    `  $line = $_.ToString()`,
+    `  Write-Host $line`,
+    `  Add-Content -LiteralPath $log -Value $line -Encoding utf8`,
+    `}`,
+    '',
+  ].join('\r\n');
+  await fs.writeFile(ps1Path, `\uFEFF${body}`, 'utf8');
+  return { ps1Path, logPath };
+}
+
+type SiblingTailResult = { buildOk: boolean; failed: boolean };
+
+async function readStarterInstallLog(logPath: string): Promise<string> {
+  const buf = await fs.readFile(logPath);
+  if (buf.length >= 2 && buf[0] === 0xff && buf[1] === 0xfe) {
+    return buf.toString('utf16le').replace(/^\uFEFF/, '');
+  }
+  const sample = buf.subarray(0, Math.min(buf.length, 64));
+  let nulls = 0;
+  for (const byte of sample) {
+    if (byte === 0) nulls += 1;
+  }
+  const text = (nulls > 4 ? buf.toString('utf16le') : buf.toString('utf8')).replace(/^\uFEFF/, '');
+  return text;
+}
+
+async function tailSiblingStarterLog(params: {
+  logPath: string;
+  emit: (phase: ApplySourceProgressPhase, message: string, logLine?: string) => Promise<void>;
+}): Promise<SiblingTailResult> {
+  const limitMs = 25 * 60 * 1000;
+  const started = Date.now();
+  let seen = '';
+  let lastBeat = 0;
+  while (Date.now() - started < limitMs) {
+    await sleep(250);
+    let text = '';
+    try {
+      text = await readStarterInstallLog(params.logPath);
+    } catch {
+      text = '';
+    }
+    if (text.length > seen.length && text.startsWith(seen)) {
+      const chunk = text.slice(seen.length);
+      seen = text;
+      const lines = chunk.split(/\r?\n/).map((line) => line.trimEnd()).filter((line) => line.trim());
+      let buildOk = false;
+      let failed = false;
+      for (const line of lines) {
+        if (line.includes('GGNR_STARTER_BUILD_OK')) buildOk = true;
+        if (line.includes('GGNR_STARTER_FAIL')) failed = true;
+        await params.emit(siblingStarterPhase(line), line, `[SourceCodeUpload] ${line}`);
+      }
+      if (failed) return { buildOk, failed: true };
+      if (buildOk) {
+        await params.emit('app-stop', '빌드가 끝났습니다. 서비스를 새 폴더로 바꿉니다.');
+        return { buildOk: true, failed: false };
+      }
+    } else if (!text && Date.now() - started > 90_000) {
+      throw new Error('설치 스크립트 로그가 시작되지 않았습니다. 관리자 권한과 설치 창을 확인하세요.');
+    } else if (Date.now() - lastBeat > 15_000) {
+      lastBeat = Date.now();
+      const sec = Math.round((Date.now() - started) / 1000);
+      await params.emit('build', `새 폴더에서 설치 중... (${sec}초 경과)`);
+    }
+  }
+  throw new Error(
+    '설치 스크립트 빌드 대기 시간이 초과되었습니다. 설치 창이 열려 있으면 그 창의 결과를 확인하세요.'
+  );
+}
+
+/** 상위 폴더에 새 설치. 빌드는 그 폴더의 설치 스크립트가 현재 프로젝트·구분으로 수행 */
+async function applySourceZipAsSibling(options: ApplySourceZipOptions): Promise<ApplySourceZipResult> {
+  if (process.platform !== 'win32') {
+    throw new Error('따로 생성은 윈도우 서비스 설치에서만 사용할 수 있습니다.');
+  }
+
+  const {
+    zipPath,
+    version,
+    fileName,
+    clientIp,
+    includeNodeModules = true,
+    installFolderKey,
+    onProgress,
+  } = options;
+  const layout: SourceApplyLayout = 'sibling';
+  const { project, envName } = requireCurrentProjectEnv();
+  const port = await resolveSiblingAppPort();
+  const folderKey = (installFolderKey ?? '').trim() || version;
+  const targetDir = resolveSiblingInstallDir(folderKey);
+  if (await pathExists(targetDir)) {
+    throw new Error(`이미 같은 버전 폴더가 있습니다: ${targetDir}`);
+  }
+
+  const lockOwner = `sibling:${options.requestedBy}:${version}:${Date.now()}`;
+  if (!tryAcquireSourceApplyLock(lockOwner)) {
+    throw new Error('다른 최신소스 적용이 진행 중입니다. 완료 후 다시 시도하세요.');
+  }
+
+  const tmpBase = path.join(os.tmpdir(), 'ggnr_source_update', `sibling_${Date.now()}`);
+  const extractDir = path.join(tmpBase, 'extracted');
+  let createdTarget = false;
+  let buildOk = false;
+  let historyRecorded = false;
+  const historyVersion = resolveAppliedVersionLabel(version);
+  const ipTrim = clientIp?.trim() || undefined;
+  const netLabel = includeNodeModules ? '폐쇄망' : '개방망';
+
+  const emit = async (phase: ApplySourceProgressPhase, message: string, logLine?: string) => {
+    const line = logLine ?? `[SourceCodeUpload] ${message}`;
+    console.log(line);
+    await onProgress?.({ phase, message, logLine: line });
+  };
+
+  const recordFail = async (message: string) => {
+    if (historyRecorded) return;
+    const hist = await recordVersionHistory({
+      historyType: 'apply_latest',
+      status: 'fail',
+      message,
+      option: applyLatestHistoryOptions(includeNodeModules, 'none', layout),
+      version: historyVersion,
+      ip: ipTrim,
+    }).catch((histErr) => {
+      console.error('[SourceCodeUpload] 따로 생성 실패 이력 기록 실패', histErr);
+      return { ok: false as const };
+    });
+    historyRecorded = hist?.ok === true;
+  };
+
+  try {
+    await emit('merge-apply', `따로 생성 준비. 폴더=${targetDir}`);
+    const stat = await fs.stat(zipPath);
+    await fs.mkdir(extractDir, { recursive: true });
+    await emit('merge-apply', 'ZIP 압축 해제 중...');
+    {
+      let elapsed = 0;
+      const timer = setInterval(() => {
+        elapsed += 5;
+        void emit('merge-apply', `ZIP 압축 해제 중... (${elapsed}초 경과)`);
+      }, 5000);
+      try {
+        await extractZip(zipPath, extractDir);
+      } finally {
+        clearInterval(timer);
+      }
+    }
+    const extractedRoot = await pickExtractedRoot(extractDir);
+    const starterBat = path.join(extractedRoot, '00_make_ggnr_starter.bat');
+    if (!(await pathExists(starterBat))) {
+      throw new Error('받은 소스에 설치 파일이 없습니다.');
+    }
+
+    if (await pathExists(targetDir)) {
+      throw new Error(`이미 같은 버전 폴더가 있습니다: ${targetDir}`);
+    }
+    await emit('merge-apply', '새 폴더로 복사 중...');
+    createdTarget = true;
+    {
+      let elapsed = 0;
+      const timer = setInterval(() => {
+        elapsed += 5;
+        void emit('merge-apply', `새 폴더로 복사 중... (${elapsed}초 경과)`);
+      }, 5000);
+      try {
+        await fs.cp(extractedRoot, targetDir, { recursive: true });
+      } finally {
+        clearInterval(timer);
+      }
+    }
+    if (!(await pathExists(path.join(targetDir, '00_make_ggnr_starter.bat')))) {
+      throw new Error('새 폴더에 설치 파일을 만들지 못했습니다.');
+    }
+
+    const npmSync: 'Y' | 'N' = includeNodeModules ? 'N' : 'Y';
+    await emit(
+      'build',
+      `설치 스크립트를 실행합니다. 프로젝트=${project} 구분=${envName} 포트=${port} 의존성=${npmSync}`
+    );
+    const { ps1Path, logPath } = await writeSiblingLauncher({
+      targetDir,
+      project,
+      envName,
+      port,
+      npmSync,
+    });
+    await spawnDetachedStarterWindow(ps1Path, targetDir);
+    const tailed = await tailSiblingStarterLog({
+      logPath,
+      emit: async (phase, message, logLine) => {
+        await emit(phase, message, logLine);
+      },
+    });
+    buildOk = tailed.buildOk;
+    if (tailed.failed || !tailed.buildOk) {
+      throw new Error('설치 스크립트가 실패했습니다. 설치 창의 메시지를 확인하세요.');
+    }
+
+    const successMessage = `따로 생성. 설치 폴더 ${targetDir}. 프로젝트 ${project}, 구분 ${envName}, 포트 ${port}. ${netLabel}. 빌드 후 서비스를 새 폴더로 다시 등록합니다.`;
+    const hist = await recordVersionHistory({
+      historyType: 'apply_latest',
+      status: 'success',
+      message: successMessage,
+      option: applyLatestHistoryOptions(includeNodeModules, 'none', layout),
+      version: historyVersion,
+      ip: ipTrim,
+    }).catch((histErr) => {
+      console.error('[SourceCodeUpload] 따로 생성 성공 이력 기록 실패', histErr);
+      return { ok: false as const };
+    });
+    historyRecorded = hist?.ok === true;
+
+    return {
+      version,
+      fileName,
+      downloadedBytes: stat.size,
+      extractedRoot: targetDir,
+      appliedFiles: 0,
+      skippedFiles: 0,
+      skippedSamples: [],
+      applyLayout: layout,
+      installDir: targetDir,
+      geoserver: {
+        stopped: false,
+        started: false,
+        deferredStart: true,
+        message: '따로 생성. 빌드가 끝난 뒤 설치 스크립트가 서비스를 바꿉니다.',
+        stopMessage: '현재 서버 유지(빌드 전)',
+        startMessage: '설치 스크립트가 서비스 재등록',
+      },
+      restart: {
+        requested: true,
+        mode: 'exit',
+        commandConfigured: true,
+        scheduled: true,
+        signalFile: '',
+        message: '빌드가 끝났습니다. 설치 스크립트가 서비스를 새 폴더로 다시 등록합니다.',
+      },
+      pendingSchemaConfirm: false,
+    };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    if (createdTarget && !buildOk) {
+      await fs.rm(targetDir, { recursive: true, force: true }).catch((rmErr) => {
+        console.error('[SourceCodeUpload] 실패한 설치 폴더 삭제 실패', rmErr);
+      });
+    }
+    await recordFail(message);
+    const tagged = new Error(message) as Error & { historyRecorded?: boolean };
+    tagged.historyRecorded = historyRecorded;
+    throw tagged;
+  } finally {
+    releaseSourceApplyLock(lockOwner);
+    await fs.rm(tmpBase, { recursive: true, force: true }).catch(() => {});
+  }
+}
+
 /** ZIP 파일 경로 기준 워크스페이스 적용 (GNMS fetch 없음) */
 export async function applySourceZipFile(options: ApplySourceZipOptions): Promise<ApplySourceZipResult> {
+  if (normalizeSourceApplyLayout(options.applyLayout) === 'sibling') {
+    return applySourceZipAsSibling(options);
+  }
   const {
     zipPath,
     version,

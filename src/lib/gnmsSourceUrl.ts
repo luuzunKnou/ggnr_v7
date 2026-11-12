@@ -38,6 +38,14 @@ export function buildGnmsUploadApiBase(gnmsUrl: string): string {
   return `${base}/api/source/upload`;
 }
 
+/** GNMS_URL → base-data export (`…/api/base-data/export`) — 행정경계·등고선 ZIP */
+export function buildGnmsBaseDataExportUrl(gnmsUrl: string): string {
+  const base = normalizeGnmsOrigin(gnmsUrl);
+  if (!base) return '';
+  if (/\/api\/base-data\/export$/i.test(base)) return base;
+  return `${base}/api/base-data/export`;
+}
+
 /**
  * GNMS source/version API base 기준 URL 조합.
  * base 예: http://dggs.kr/gnms/api/source/version

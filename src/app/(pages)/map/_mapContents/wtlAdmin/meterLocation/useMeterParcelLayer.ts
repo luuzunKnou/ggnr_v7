@@ -2,12 +2,14 @@
 
 import { useEffect, useMemo, useRef } from 'react'
 import type Map from 'ol/Map'
-import GeoJSON from 'ol/format/GeoJSON'
+import Feature from 'ol/Feature'
+import Polygon from 'ol/geom/Polygon'
 import ImageLayer from 'ol/layer/Image'
 import VectorLayer from 'ol/layer/Vector'
+import { fromLonLat } from 'ol/proj'
 import ImageWMS from 'ol/source/ImageWMS'
 import VectorSource from 'ol/source/Vector'
-import { Circle, Fill, Stroke, Style, Text } from 'ol/style'
+import { Fill, Stroke, Style } from 'ol/style'
 import { geoserverWmsImageLoadFunction } from '@/lib/geoserverWmsImageLoad'
 import { getGeoServerBase } from '@/lib/geoserverUrl'
 import { WORKSPACE } from '../../../_mapComponents/layerFactory/serviceLayerFactory'
@@ -25,41 +27,10 @@ const ZONE_TARGET_SCALE_M = 35
 const ZONE_MIN_SCALE_M = 30
 const ZONE_MAX_SCALE_M = 40
 
-function labelText(label: string, offsetY: number): Text {
-  return new Text({
-    text: label,
-    font: '12px sans-serif',
-    fill: new Fill({ color: '#0f172a' }),
-    stroke: new Stroke({ color: '#ffffff', width: 3 }),
-    overflow: true,
-    offsetY,
-  })
-}
-
-function pointStyle(label: string, dimmed = false): Style {
-  return new Style({
-    image: new Circle({
-      radius: dimmed ? 5 : 7,
-      fill: new Fill({
-        color: dimmed ? 'rgba(50, 118, 195, 0.22)' : 'rgba(50, 118, 195, 0.9)',
-      }),
-      stroke: new Stroke({
-        color: dimmed ? 'rgba(255,255,255,0.45)' : '#ffffff',
-        width: dimmed ? 1 : 2,
-      }),
-    }),
-    text: dimmed
-      ? new Text({
-          text: label,
-          font: '11px sans-serif',
-          fill: new Fill({ color: 'rgba(15, 23, 42, 0.35)' }),
-          stroke: new Stroke({ color: 'rgba(255,255,255,0.5)', width: 2 }),
-          overflow: true,
-          offsetY: -14,
-        })
-      : labelText(label, -16),
-  })
-}
+const zonePolygonStyle = new Style({
+  stroke: new Stroke({ color: 'rgba(37, 99, 235, 0.95)', width: 2 }),
+  fill: new Fill({ color: 'rgba(37, 99, 235, 0)' }),
+})
 
 function normalizeZoneExtent(extent: number[]): [number, number, number, number] | null {
   if (extent.length !== 4 || !extent.every((v) => Number.isFinite(v))) return null
@@ -139,7 +110,7 @@ export function useMeterParcelLayer(
   zones: MeterZone[]
 ) {
   const mapContext = useMapContext()
-  const sourceRef = useRef<VectorSource | null>(null)
+  const zoneSourceRef = useRef<VectorSource | null>(null)
   const jijukLayerRef = useRef<ImageLayer<ImageWMS> | null>(null)
 
   const zoneRowIds = useMemo(() => {
@@ -162,11 +133,15 @@ export function useMeterParcelLayer(
     const map = mapContext?.mapInstanceRef?.current
     if (!map) return
 
-    const source = new VectorSource()
-    sourceRef.current = source
-    const pointLayer = new VectorLayer({ source, declutter: true, zIndex: 870 })
-    pointLayer.set('wtlMeterParcels', true)
-    map.addLayer(pointLayer)
+    const zoneSource = new VectorSource()
+    zoneSourceRef.current = zoneSource
+    const zoneLayer = new VectorLayer({
+      source: zoneSource,
+      style: zonePolygonStyle,
+      zIndex: 865,
+    })
+    zoneLayer.set('wtlMeterZones', true)
+    map.addLayer(zoneLayer)
 
     const geoServerBase = getGeoServerBase()
     const jijukLayer = new ImageLayer({
@@ -192,47 +167,36 @@ export function useMeterParcelLayer(
     map.addLayer(jijukLayer)
 
     return () => {
-      sourceRef.current = null
+      zoneSourceRef.current = null
       jijukLayerRef.current = null
-      map.removeLayer(pointLayer)
+      map.removeLayer(zoneLayer)
       map.removeLayer(jijukLayer)
     }
   }, [mapContext?.mapInstanceRef, mapContext?.mapReady])
 
-  // 목록 점 — 구역 선택 시 구역 외 숨김
   useEffect(() => {
-    const source = sourceRef.current
+    const source = zoneSourceRef.current
     if (!source) return
     source.clear()
-    const drawn = rows.filter((row) => {
-      if (row.status === 'miss' || !row.point4326) return false
-      if (zoneRowIds && !zoneRowIds.has(row.id)) return false
-      return true
-    })
-    if (drawn.length === 0) return
-    try {
-      const features = new GeoJSON().readFeatures(
-        {
-          type: 'FeatureCollection',
-          features: drawn.map((row) => ({
-            type: 'Feature',
-            geometry: { type: 'Point', coordinates: row.point4326 },
-            properties: { label: row.input, rowId: row.id },
-          })),
-        },
-        { dataProjection: 'EPSG:4326', featureProjection: 'EPSG:3857' }
-      )
-      for (const feature of features) {
-        const rowId = String(feature.get('rowId') ?? '')
-        const label = String(feature.get('label') ?? '')
-        feature.setId(rowId)
-        feature.setStyle(pointStyle(label, false))
-      }
-      source.addFeatures(features)
-    } catch {
-      source.clear()
+    for (const zone of zones) {
+      const extent = zone.extent3857
+      if (!zone.navigable || !extent) continue
+      const [xmin, ymin, xmax, ymax] = extent
+      const feature = new Feature({
+        geometry: new Polygon([
+          [
+            [xmin, ymin],
+            [xmax, ymin],
+            [xmax, ymax],
+            [xmin, ymax],
+            [xmin, ymin],
+          ],
+        ]),
+      })
+      feature.setId(zone.zoneId)
+      source.addFeature(feature)
     }
-  }, [rows, zoneRowIds])
+  }, [zones, mapContext?.mapReady])
 
   useEffect(() => {
     const layer = jijukLayerRef.current
@@ -256,15 +220,17 @@ export function useMeterParcelLayer(
 
   useEffect(() => {
     const map = mapContext?.mapInstanceRef?.current
-    const source = sourceRef.current
-    if (!map || !source || !focusId) return
-    const extent = source.getFeatureById(focusId)?.getGeometry()?.getExtent()
-    if (!extent || !extent.every((value) => Number.isFinite(value))) return
-    scheduleFitMapToExtent3857(map, extent, {
+    if (!map || !focusId) return
+    const row = rows.find((item) => item.id === focusId)
+    const point = row?.point4326
+    if (!point) return
+    const [x, y] = fromLonLat(point)
+    const pad = 30
+    scheduleFitMapToExtent3857(map, [x - pad, y - pad, x + pad, y + pad], {
       maxZoom: 19,
       applyMapViewPadding: mapContext?.applyMapViewPaddingRef?.current,
     })
-  }, [focusId, mapContext?.applyMapViewPaddingRef, mapContext?.mapInstanceRef])
+  }, [focusId, rows, mapContext?.applyMapViewPaddingRef, mapContext?.mapInstanceRef])
 
   useEffect(() => {
     if (!zoneFocusKey || !zoneExtent3857) return

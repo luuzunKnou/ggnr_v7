@@ -102,3 +102,19 @@ export function formatRoadLedgerFacilityRowLine(
   if (keys.length === 0) return "—";
   return keys.map((k) => formatRoadLedgerFacilityCellValue(k, row)).join(" · ");
 }
+
+/** 시설관리 행에서 안전점검 매칭용 시설명 — 표시열 중 명칭 필드 우선 */
+export function resolveRoadLedgerFacilityDisplayName(
+  defineTableNameLower: string,
+  row: Record<string, unknown> | null | undefined
+): string {
+  if (!row) return "";
+  const keys = getRoadLedgerFacilityColumnKeys(defineTableNameLower, row);
+  const nameKeys = keys.filter((k) => /(?:^|_)(?:name|nm)$/i.test(k) || /name$/i.test(k));
+  for (const key of nameKeys.length > 0 ? nameKeys : keys.slice(0, 1)) {
+    const raw = pickRoadLedgerField(row, key);
+    const t = String(raw ?? "").trim();
+    if (t) return t;
+  }
+  return "";
+}

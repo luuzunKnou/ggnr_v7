@@ -148,17 +148,21 @@ function LengthTable({
   rows,
   progress,
   onExpand,
+  pending = false,
 }: {
   title: string
   rows: { label: string; meters: number }[]
   progress: number
   onExpand?: () => void
+  pending?: boolean
 }) {
   return (
     <section className="shrink-0 overflow-hidden rounded border border-border bg-background">
       <SectionTitle onExpand={onExpand}>{title}</SectionTitle>
       {rows.length === 0 ? (
-        <p className="px-2 py-2 text-[11px] text-muted-foreground">해당 자료가 없습니다.</p>
+        <p className="px-2 py-2 text-[11px] text-muted-foreground">
+          {pending ? '현황 집계 중…' : '해당 자료가 없습니다.'}
+        </p>
       ) : (
         <LengthTableBody rows={rows} progress={progress} />
       )}
@@ -1338,43 +1342,46 @@ export function WtlNetworkMapStatus({
   const expandRows = expandMeta ? stats[expandMeta.rowsKey] : []
   const modalOpen = expandKind != null
   const waitingViewBbox = Boolean(listFilterParam.onlyInView && !listFilterParam.bbox)
+  const pending = loading || waitingViewBbox
 
   return (
     <div
       ref={rootRef}
       className="min-h-0 flex-1 space-y-[13px] overflow-auto border-t border-border px-3 pb-2 pt-[13px]"
     >
-      {loading || waitingViewBbox ? (
-        <p className="text-[11px] text-muted-foreground">현황 집계 중…</p>
-      ) : null}
       <LengthTable
         title="관경별 관로 연장"
         rows={stats.byDiameter}
         progress={progress}
+        pending={pending}
         onExpand={() => setExpandKind('byDiameter')}
       />
-      <LengthTable
+      {/* <LengthTable
         title="관재질별 관로 연장"
         rows={stats.byMaterial}
         progress={progress}
         onExpand={() => setExpandKind('byMaterial')}
-      />
+      /> */}
       <LengthTable
         title="연도별 관로 연장"
         rows={stats.byYear}
         progress={progress}
+        pending={pending}
         onExpand={() => setExpandKind('byYear')}
       />
       <LengthTable
         title="관용도별 관로 연장"
         rows={stats.bySaa}
         progress={progress}
+        pending={pending}
         onExpand={() => setExpandKind('bySaa')}
       />
       <section className="shrink-0 overflow-hidden rounded border border-border bg-background">
         <SectionTitle>시설 개수</SectionTitle>
         {stats.facilityCounts.length === 0 ? (
-          <p className="px-2 py-2 text-[11px] text-muted-foreground">해당 자료가 없습니다.</p>
+          <p className="px-2 py-2 text-[11px] text-muted-foreground">
+            {pending ? '현황 집계 중…' : '해당 자료가 없습니다.'}
+          </p>
         ) : (
           <div className="grid grid-cols-3 gap-1 p-1.5">
             {stats.facilityCounts.map((item) => (

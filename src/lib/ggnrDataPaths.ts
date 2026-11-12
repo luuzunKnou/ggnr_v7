@@ -37,13 +37,21 @@ export const GGNR_DATA_PATHS = {
   ocr: 'OCR',
   /** 정책지도 바로가기 (zip 전개 HTML) */
   policyMap: 'policy_map',
-  /** 지적 세부원도 (원도 JPG + .fitimage 네 모서리 좌표) */
-  detailWondo: 'detail_wondo',
+  /** 지적 세부원도 (원도 JPG + 월드파일 좌표) */
+  detailWondo: 'file_data/detail_wondo',
+  /** 지적기록물 스캔 (구대장·지적도·측량결과도·이동지결의서) */
+  landArchive: 'file_data/land_archive',
+  /** 수치지형도 DXF 도엽 (하위 폴더 = 축척·묶음) */
+  digitalMap: 'digital_map',
+  /** 도면 표시 업로드 DXF */
+  drawingDisplay: 'file_data/drawing_display',
 } as const;
 
 /** ensureBaseStructure 가 생성하는 루트 폴더 */
 export const GGNR_BASE_STRUCTURE = [
   GGNR_DATA_PATHS.fileData,
+  GGNR_DATA_PATHS.detailWondo,
+  GGNR_DATA_PATHS.landArchive,
   GGNR_DATA_PATHS.shpData,
   GGNR_DATA_PATHS.shpHistory,
   GGNR_DATA_PATHS.excelData,
@@ -59,5 +67,7 @@ export const GGNR_BASE_STRUCTURE = [
   GGNR_DATA_PATHS.shpToDxf,
   GGNR_DATA_PATHS.ocr,
   GGNR_DATA_PATHS.policyMap,
+  GGNR_DATA_PATHS.digitalMap,
+  GGNR_DATA_PATHS.drawingDisplay,
   GGNR_DATA_PATHS.meta,
 ] as const;

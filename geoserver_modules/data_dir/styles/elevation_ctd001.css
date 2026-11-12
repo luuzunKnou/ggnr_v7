@@ -1,0 +1,21 @@
+/* elevation_ctd001 계곡선 — @sd <= 50000 */
+[@sd <= 50000] {
+  stroke: #8B5A2B;
+  stroke-width: 1.8;
+  stroke-opacity: 0.85;
+}
+
+[@sd <= 50000] {
+
+  label: [cont];
+  label-follow-line: true;
+  label-offset: 0;
+  font-size: 11;
+  font-fill: #8B5A2B;
+  font-weight: bold;
+  font-family: "Nanum Gothic", "Malgun Gothic", "SansSerif";
+  halo-radius: 1.5;
+  halo-color: #FFFFFF;
+  -gt-label-repeat: 400;
+  -gt-label-group: true;
+}

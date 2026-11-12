@@ -43,6 +43,7 @@ import {
 import { SchemaSyncPreviewModal } from './SchemaSyncPreviewModal';
 import type { SchemaSyncPreviewResult } from '@/lib/schemaSyncPreviewTypes';
 import { formatSchemaSyncHistoryMemo } from '@/lib/schemaSyncHistoryMemo';
+import type { SourceApplyLayout } from '@/lib/versionHistoryMessage';
 
 /** 스키마 안내 모달 생략(자동 진행) — 브라우저에 유지 */
 const SCHEMA_SYNC_AUTO_CONTINUE_LS = 'ggnr.dev.schemaSyncAutoContinue';
@@ -93,6 +94,7 @@ function emptySchemaPreviewFailure(error: string): SchemaSyncPreviewResult {
 
 export function VersionManagerContent() {
   const [profile, setProfile] = useState<SourcePackageProfile>('closed');
+  const [applyLayout, setApplyLayout] = useState<SourceApplyLayout>('overwrite');
   const [restartMode, setRestartMode] = useState<RestartMode>('exit');
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState<SideProgress>(emptySideProgress());
@@ -118,12 +120,15 @@ export function VersionManagerContent() {
   const historyRetryTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
   const mergeCountRef = useRef<{ applied: number; total: number } | null>(null);
   const mergeStepRef = useRef<MergeApplyEtaStep | null>(null);
+  const siblingHandoffRef = useRef(false);
 
-  const restart = restartMode !== 'none';
+  const sibling = applyLayout === 'sibling';
+  const restart = !sibling && restartMode !== 'none';
   const stageOpts = {
-    restart,
-    restartMode,
+    restart: sibling ? true : restart,
+    restartMode: sibling ? ('exit' as const) : restartMode,
     packageProfile: profile,
+    applyLayout,
   };
   const selectedEntry = versionEntries.find((e) => e.folder === selectedFolder) ?? null;
   const canApply = !listLoading && !listError && Boolean(selectedFolder) && versionEntries.length > 0;
@@ -202,7 +207,7 @@ export function VersionManagerContent() {
     if (busy) return;
     setStages(buildRelayBaseStages(stageOpts));
     // eslint-disable-next-line react-hooks/exhaustive-deps -- stageOpts fields listed
-  }, [busy, restartMode, profile]);
+  }, [busy, restartMode, profile, applyLayout]);
 
   const pushLog = (line: string) => {
     const next = [
@@ -338,11 +343,8 @@ export function VersionManagerContent() {
     busyRef.current = true;
     abortRef.current = new AbortController();
     const signal = abortRef.current.signal;
-    const opts = {
-      restart,
-      restartMode,
-      packageProfile: profile,
-    };
+    siblingHandoffRef.current = false;
+    const opts = stageOpts;
 
     setBusy(true);
     setRelayResult(null);
@@ -365,13 +367,16 @@ export function VersionManagerContent() {
       const versionLabel = versionOptionBase(selectedEntry);
       const json = await relayLatestSourceFromGnms({
         restart,
-        restartMode,
+        restartMode: sibling ? 'none' : restartMode,
         packageProfile: profile,
+        applyLayout,
+        installFolderKey: selectedEntry.folder,
         folder: selectedEntry.folder,
         versionLabel,
         isLatest: selectedEntry.isLatest,
         signal,
         onProgress: (p: VersionRelayProgress) => {
+          if (sibling && p.phase === 'app-stop') siblingHandoffRef.current = true;
           if (p.phase === 'merge-apply') {
             const step: MergeApplyEtaStep =
               p.mergeStep ??
@@ -477,6 +482,58 @@ export function VersionManagerContent() {
           }
         },
       });
+      if (applyLayout === 'sibling') {
+        setRelayResult(json);
+        versionDetailRef.current = `version=${json.version}, file=${json.fileName}`;
+        const folderDetail = json.installDir ? `설치 폴더 ${json.installDir}` : '새 폴더에 풀기 완료';
+        setStages(
+          buildRelayStagesFromProgress(
+            {
+              phase: 'done',
+              message: '빌드 완료 · 서비스 다시 등록',
+              versionDetail: versionDetailRef.current,
+              applyDetail: folderDetail,
+              buildDetail: '프로젝트 빌드 완료',
+              npmInstallDetail: profile === 'open' ? '의존성 맞춤 완료' : undefined,
+              appStopDetail: '서비스 다시 등록 중',
+              restartScheduled: true,
+              preRestartCompleted: true,
+            },
+            opts
+          )
+        );
+        setProgress({
+          message: '빌드가 끝났습니다. 서비스를 새 폴더로 바꾼 뒤 화면을 다시 엽니다.',
+          pct: 100,
+          logs: logRef.current,
+          error: null,
+        });
+        pushLog(json.restart?.message ?? '서비스를 새 폴더로 다시 등록합니다.');
+        if (json.installDir) pushLog(`설치 폴더: ${json.installDir}`);
+        keepBusyUntilReload = true;
+        clearDevVersionHistoryRefreshRetry(historyRetryTimersRef.current);
+        historyRetryTimersRef.current = notifyDevVersionHistoryRefreshRetry([
+          0, 5_000, 15_000, 30_000, 60_000,
+        ]);
+        void waitApplyRestartThenHardReload({
+          onPhase: (phase) => {
+            if (phase === 'server') {
+              const msg = '새 폴더 서비스 기동 대기 중… (새로고침하지 마세요)';
+              setProgress((p) => ({ ...p, message: msg, pct: 100 }));
+              pushLog(msg);
+            } else if (phase === 'history') {
+              const msg = '적용 이력 반영 대기 중…';
+              setProgress((p) => ({ ...p, message: msg, pct: 100 }));
+              pushLog(msg);
+            } else {
+              const msg = '이력 반영 완료. 화면 새로고침…';
+              setProgress((p) => ({ ...p, message: msg, pct: 100 }));
+              pushLog(msg);
+            }
+          },
+        });
+        return;
+      }
       setRelayResult(json);
       versionDetailRef.current = `version=${json.version}, file=${json.fileName}`;
       const doneMode = (json.restart?.mode ?? opts.restartMode) as RestartMode;
@@ -657,24 +714,34 @@ export function VersionManagerContent() {
       const isTimeout = isRelayTimeoutError(e);
       const isDisconnect = isRestartDisconnectError(e);
       /** 스키마 확인·재시작 예약 후 서버 종료로 끊긴 경우 — 실패 UI 대신 안내 */
-      if (!isAbort && isDisconnect && restart && restartCommitAfterSchema) {
+      if (
+        !isAbort &&
+        isDisconnect &&
+        ((restart && restartCommitAfterSchema) || (sibling && siblingHandoffRef.current))
+      ) {
         keepBusyUntilReload = true;
+        const switchedFolder = sibling && siblingHandoffRef.current;
         const softOpts = {
           restart: true,
           restartMode,
           packageProfile: profile,
+          applyLayout: switchedFolder ? ('sibling' as const) : applyLayout,
         };
         setStages(
           buildRelayStagesFromProgress(
             {
               phase: 'done',
-              message: '적용 완료 · 재시작으로 연결이 끊김',
+              message: switchedFolder
+                ? '빌드 완료 · 서비스 전환으로 연결이 끊김'
+                : '적용 완료 · 재시작으로 연결이 끊김',
               versionDetail: versionDetailRef.current || undefined,
-              buildDetail: '사전 빌드 완료',
-              npmInstallDetail: profile === 'open' ? '사전 npm install 완료' : undefined,
-              appStopDetail: '앱 종료 단계 완료',
+              buildDetail: switchedFolder ? '프로젝트 빌드 완료' : '사전 빌드 완료',
+              npmInstallDetail: profile === 'open' ? '의존성 맞춤 완료' : undefined,
+              appStopDetail: switchedFolder ? '서비스 다시 등록 중' : '앱 종료 단계 완료',
               appStartDetail:
-                restartMode === 'launcher' ? '콘솔(런처)에서 Next 재기동' : undefined,
+                !switchedFolder && restartMode === 'launcher'
+                  ? '콘솔(런처)에서 Next 재기동'
+                  : undefined,
               restartScheduled: true,
               preRestartCompleted: true,
               geoserverStartOk: true,
@@ -683,12 +750,18 @@ export function VersionManagerContent() {
           )
         );
         setProgress({
-          message: '적용·사전 빌드까지 완료했습니다. 서버 재기동 대기 중… (새로고침하지 마세요)',
+          message: switchedFolder
+            ? '빌드가 끝났습니다. 새 폴더 서비스 기동 대기 중… (새로고침하지 마세요)'
+            : '적용·사전 빌드까지 완료했습니다. 서버 재기동 대기 중… (새로고침하지 마세요)',
           pct: 100,
           logs: logRef.current,
           error: null,
         });
-        pushLog('재시작으로 연결이 끊김 (정상). 서버 재기동 대기 중… (새로고침하지 마세요)');
+        pushLog(
+          switchedFolder
+            ? '서비스 전환으로 연결이 끊김 (정상). 새 폴더 기동 대기 중…'
+            : '재시작으로 연결이 끊김 (정상). 서버 재기동 대기 중… (새로고침하지 마세요)'
+        );
         clearDevVersionHistoryRefreshRetry(historyRetryTimersRef.current);
         historyRetryTimersRef.current = notifyDevVersionHistoryRefreshRetry([
           0, 5_000, 15_000, 30_000, 60_000,
@@ -829,6 +902,38 @@ export function VersionManagerContent() {
               <ProfileRadios />
             </div>
             <div className={sectionClass}>
+              <div className="text-xs text-muted-foreground">적용 방식</div>
+              <div className="flex flex-wrap items-center gap-3 text-xs">
+                <label className="flex cursor-pointer items-center gap-1" title="덮어쓰기">
+                  <input
+                    type="radio"
+                    name="applyLayout"
+                    className="cursor-pointer"
+                    checked={applyLayout === 'overwrite'}
+                    disabled={busy}
+                    onChange={() => setApplyLayout('overwrite')}
+                  />
+                  덮어쓰기
+                </label>
+                <label className="flex cursor-pointer items-center gap-1" title="따로 생성">
+                  <input
+                    type="radio"
+                    name="applyLayout"
+                    className="cursor-pointer"
+                    checked={applyLayout === 'sibling'}
+                    disabled={busy}
+                    onChange={() => setApplyLayout('sibling')}
+                  />
+                  따로 생성
+                </label>
+              </div>
+              {sibling ? (
+                <p className="text-xs text-muted-foreground">
+                  상위 폴더에 버전 폴더를 만든 뒤, 그 폴더에서 현재 프로젝트·구분으로 빌드하고 서비스를 다시 등록합니다.
+                </p>
+              ) : null}
+            </div>
+            <div className={sectionClass}>
               <div className="text-xs text-muted-foreground">재시작 방식</div>
               <div className="flex flex-wrap items-center gap-3 text-xs">
                 <label className="flex items-center gap-1">
@@ -836,7 +941,7 @@ export function VersionManagerContent() {
                     type="radio"
                     name="restartMode"
                     checked={restartMode === 'exit'}
-                    disabled={busy}
+                    disabled={busy || sibling}
                     onChange={() => setRestartMode('exit')}
                   />
                   서비스 재실행(프로세스 종료)
@@ -846,7 +951,7 @@ export function VersionManagerContent() {
                     type="radio"
                     name="restartMode"
                     checked={restartMode === 'launcher'}
-                    disabled={busy}
+                    disabled={busy || sibling}
                     onChange={() => setRestartMode('launcher')}
                   />
                   Node 런처(Node 내 앱 재실행)
@@ -856,7 +961,7 @@ export function VersionManagerContent() {
                     type="radio"
                     name="restartMode"
                     checked={restartMode === 'none'}
-                    disabled={busy}
+                    disabled={busy || sibling}
                     onChange={() => setRestartMode('none')}
                   />
                   재시작 안 함
@@ -873,7 +978,7 @@ export function VersionManagerContent() {
                   type="checkbox"
                   className="cursor-pointer"
                   checked={schemaSyncAutoContinue}
-                  disabled={busy}
+                  disabled={busy || sibling}
                   onChange={(e) => setSchemaSyncAutoContinuePersist(e.target.checked)}
                 />
                 자동 진행 (Drizzle 스키마 안내 모달 없이)
@@ -934,6 +1039,7 @@ export function VersionManagerContent() {
             <div className="min-h-0 flex-1 overflow-auto p-3 text-xs">
               {relayResult ? (
                 <div className="space-y-1">
+                  {relayResult.installDir ? <div>설치 폴더: {relayResult.installDir}</div> : null}
                   <div>적용: {relayResult.appliedFiles}건</div>
                   <div>제외: {relayResult.skippedFiles}건</div>
                   <div>

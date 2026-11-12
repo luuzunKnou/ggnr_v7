@@ -18,7 +18,7 @@
                 <sld:OnlineResource xmlns:xlink="http://www.w3.org/1999/xlink" xlink:type="simple" xlink:href="/www/symbol/water/wtl_serv_ps.png"/>
                 <sld:Format>image/png</sld:Format>
               </sld:ExternalGraphic>
-              <sld:Size>
+              <sld:Size><ogc:Function name="if_then_else"><ogc:Function name="greaterThan"><ogc:Function name="env"><ogc:Literal>ignore_scale</ogc:Literal><ogc:Literal>0</ogc:Literal></ogc:Function><ogc:Literal>0</ogc:Literal></ogc:Function><ogc:Literal>18</ogc:Literal>
                 <ogc:Function name="if_then_else">
                   <ogc:Function name="greaterThan">
                     <ogc:Function name="env">
@@ -48,7 +48,7 @@
                     <ogc:Literal>5</ogc:Literal>
                   </ogc:Function>
                 </ogc:Function>
-              </sld:Size>
+              </ogc:Function></sld:Size>
             </sld:Graphic>
           </sld:PointSymbolizer>
         </sld:Rule>

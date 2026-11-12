@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSessionUsrId } from '@/lib/auth/guard';
 import { pickClientIpFromRequest } from '@/lib/requestClientMeta';
 import { initVersionRelay } from '@/service/sourceVersionRelayService';
-import { normalizeRestartMode } from '@/service/sourceVersionService';
+import { normalizeRestartMode, normalizeSourceApplyLayout } from '@/service/sourceVersionService';
 
 export const dynamic = 'force-dynamic';
 
@@ -17,6 +17,9 @@ export async function POST(req: NextRequest) {
     const version = String(body.version ?? '').trim() || new Date().toISOString();
     const restart = body.restart === true;
     const restartMode = normalizeRestartMode(body.restartMode);
+    const applyLayout = normalizeSourceApplyLayout(body.applyLayout);
+    const installFolderKey =
+      typeof body.installFolderKey === 'string' ? body.installFolderKey.trim() : '';
     const includeNodeModules =
       typeof body.includeNodeModules === 'boolean' ? body.includeNodeModules : null;
     if (includeNodeModules == null) {
@@ -37,6 +40,8 @@ export async function POST(req: NextRequest) {
       restart,
       restartMode,
       includeNodeModules,
+      applyLayout,
+      installFolderKey: installFolderKey || undefined,
     });
 
     return NextResponse.json({ ok: true, ...result });

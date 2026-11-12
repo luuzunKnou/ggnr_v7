@@ -2,8 +2,10 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
 import { nanoid } from 'nanoid';
+import type { SourceApplyLayout } from '@/lib/versionHistoryMessage';
 import {
   applySourceZipFile,
+  normalizeSourceApplyLayout,
   type ApplySourceProgressEvent,
   type RestartMode,
 } from '@/service/sourceVersionService';
@@ -22,6 +24,8 @@ type RelayMeta = {
   restart: boolean;
   restartMode: RestartMode;
   includeNodeModules: boolean;
+  applyLayout?: SourceApplyLayout;
+  installFolderKey?: string;
 };
 
 function assertSafeUploadId(uploadId: string): void {
@@ -68,6 +72,8 @@ export async function initVersionRelay(params: {
   restart: boolean;
   restartMode: RestartMode;
   includeNodeModules?: boolean;
+  applyLayout?: SourceApplyLayout;
+  installFolderKey?: string;
 }): Promise<InitVersionRelayResult> {
   const {
     fileName,
@@ -78,6 +84,8 @@ export async function initVersionRelay(params: {
     restart,
     restartMode,
     includeNodeModules = true,
+    applyLayout = 'overwrite',
+    installFolderKey,
   } = params;
   if (!fileName.trim()) throw new Error('fileName required');
   if (!Number.isFinite(totalSize) || totalSize <= 0) throw new Error('totalSize must be positive');
@@ -98,6 +106,8 @@ export async function initVersionRelay(params: {
     restart,
     restartMode,
     includeNodeModules,
+    applyLayout: normalizeSourceApplyLayout(applyLayout),
+    installFolderKey: installFolderKey?.trim() || undefined,
   };
   await fs.writeFile(path.join(tempDir, 'meta.json'), JSON.stringify(meta), 'utf-8');
 
@@ -146,8 +156,13 @@ export async function completeVersionRelay(params: {
     throw new Error('Invalid fileName');
   }
 
-  /** ZIP 조립은 중지 직전 준비 — 단계 목록 순서는 중지 → 병합·적용 유지 */
-  await onProgress?.({ phase: 'geoserver-stop', message: '적용 준비 중 (ZIP 조립)...' });
+  const applyLayout = normalizeSourceApplyLayout(meta.applyLayout);
+  /** ZIP 조립은 적용 직전 준비. 따로 생성은 현재 서버를 중지하지 않는다. */
+  await onProgress?.({
+    phase: applyLayout === 'sibling' ? 'merge-apply' : 'geoserver-stop',
+    message: applyLayout === 'sibling' ? '따로 생성 준비 중 (ZIP 조립)...' : '적용 준비 중 (ZIP 조립)...',
+    mergeStep: applyLayout === 'sibling' ? 'extract' : undefined,
+  });
 
   const zipPath = path.join(tempDir, safeName);
   const handle = await fs.open(zipPath, 'w');
@@ -175,6 +190,8 @@ export async function completeVersionRelay(params: {
     restart: meta.restart,
     restartMode: meta.restartMode,
     includeNodeModules: meta.includeNodeModules,
+    applyLayout,
+    installFolderKey: meta.installFolderKey,
     onProgress,
   });
 

@@ -24,6 +24,7 @@ import {
 } from '@/lib/mapLayerGeometryOrder';
 import tables from '@/config/defineLayer/tables.json';
 import { useBackgroundLayer } from '@/app/(pages)/map/_mapComponents/hooks/useBackgroundLayer';
+import { useBackgroundLabelLayer } from '@/app/(pages)/map/_mapComponents/hooks/useBackgroundLabelLayer';
 import {
   useCadastralLayerSync,
   useBuildingRoadLayerSync,
@@ -46,6 +47,7 @@ export function useMapPrintMap(
   open: boolean,
   snapshot: MapPrintSnapshot | null,
   backgroundMapId: string,
+  backgroundLabelVisible: boolean,
   visibleLayerNames: Set<string>,
   activeLayerControls: string[],
   visibleCadastral: Set<string> | null,
@@ -115,6 +117,7 @@ export function useMapPrintMap(
   }, [open, hostRef, snapshot]);
 
   useBackgroundLayer(map, backgroundMapId);
+  useBackgroundLabelLayer(map, backgroundLabelVisible);
   useServiceLayerSync(map, mapReady, visibleLayerNames, undefined, undefined, PRINT_WMS_GEOM_TYPES);
   useCadastralLayerSync(map, mapReady, activeLayerControls, visibleCadastral);
   useBuildingRoadLayerSync(map, mapReady, activeLayerControls, visibleBuildingRoad);

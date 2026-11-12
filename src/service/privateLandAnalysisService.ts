@@ -1544,6 +1544,7 @@ type BuildingHitRow = {
   area_sqm?: unknown;
   intersect_area_sqm?: unknown;
   wkt?: unknown;
+  point_wkt?: unknown;
   geometry3857?: Geo | null;
   xmin?: unknown;
   ymin?: unknown;
@@ -1551,25 +1552,25 @@ type BuildingHitRow = {
   ymax?: unknown;
 };
 
-/** 분석 — 구간과 겹치는 건물·건물군. 놓인 필지는 건물과 겹친 지적 중 대지 쪽(공공용 지목 뒤로)·겹친 면적 큰 순 */
-export async function listPrivateLandAnalysisBuildings(params?: ZoneParams): Promise<{
-  buildings: {
-    key: string;
-    kind: PrivateLandBuildingKind;
-    name: string;
-    address: string;
-    pnu: string;
-    jimok: string;
-    areaSqm: number | null;
-    intersectAreaSqm: number | null;
-    geometry3857: Geo | null;
-    extent3857: [number, number, number, number] | null;
-  }[];
-  truncated?: boolean;
-  error?: string;
-}> {
-  const zone = await computeZoneCached(params ?? {});
-  if (!zone.wkt5181) return { buildings: [], error: zone.error };
+export type IntersectingBuilding = {
+  key: string;
+  kind: PrivateLandBuildingKind;
+  name: string;
+  address: string;
+  pnu: string;
+  jimok: string;
+  areaSqm: number | null;
+  intersectAreaSqm: number | null;
+  geometry3857: Geo | null;
+  extent3857: [number, number, number, number] | null;
+};
+
+/** 중부원점 도형과 겹치는 건물·건물군. 사유지분석·공사대장 관련건물이 같이 쓴다. */
+export async function listBuildingsIntersectingWkt5181(params?: {
+  wkt5181?: string;
+}): Promise<{ buildings: IntersectingBuilding[]; truncated?: boolean; error?: string }> {
+  const wkt5181 = String(params?.wkt5181 ?? '').trim();
+  if (!wkt5181) return { buildings: [], error: '검색 범위가 없습니다.' };
 
   try {
     const hits: { key: string; kind: PrivateLandBuildingKind; row: BuildingHitRow }[] = [];
@@ -1581,12 +1582,13 @@ export async function listPrivateLandAnalysisBuildings(params?: ZoneParams): Pro
       const clip = `ST_CollectionExtract(ST_MakeValid(ST_Intersection(${featGeom}, z.g)), 3)`;
       const res = await db.execute(
         sql.raw(
-          `WITH z AS (SELECT ST_MakeValid(ST_SetSRID(ST_GeomFromText('${esc(zone.wkt5181)}'), ${WORK_SRID})) AS g)
+          `WITH z AS (SELECT ST_MakeValid(ST_SetSRID(ST_GeomFromText('${esc(wkt5181)}'), ${WORK_SRID})) AS g)
            SELECT f.ctid::text AS id,
              COALESCE(NULLIF(TRIM(to_jsonb(f)->>'buld_nm'), ''), NULLIF(TRIM(to_jsonb(f)->>'pos_bul_nm'), ''), '') AS name,
              ROUND(ST_Area(${featGeom})::numeric, 2)::float8 AS area_sqm,
              ROUND(ST_Area(${clip})::numeric, 2)::float8 AS intersect_area_sqm,
              ST_AsText(${featGeom}) AS wkt,
+             ST_AsText(ST_PointOnSurface(${featGeom})) AS point_wkt,
              ST_AsGeoJSON(ST_Transform(${featGeom}, 3857))::json AS geometry3857,
              ST_XMin(ST_Transform(${featGeom}, 3857))::float8 AS xmin,
              ST_YMin(ST_Transform(${featGeom}, 3857))::float8 AS ymin,
@@ -1606,7 +1608,10 @@ export async function listPrivateLandAnalysisBuildings(params?: ZoneParams): Pro
     }
 
     const found = await findJijukParcelsForGeoms5181({
-      geoms: hits.map((h) => ({ key: h.key, wkt5181: String(h.row.wkt ?? '') })),
+      geoms: hits.map((h) => ({
+        key: h.key,
+        wkt5181: String(h.row.point_wkt || h.row.wkt || ''),
+      })),
     });
 
     const buildings = hits.map(({ key, kind, row }) => {
@@ -1629,4 +1634,15 @@ export async function listPrivateLandAnalysisBuildings(params?: ZoneParams): Pro
   } catch (e: unknown) {
     return { buildings: [], error: e instanceof Error ? e.message : String(e) };
   }
+}
+
+/** 분석 — 구간과 겹치는 건물·건물군. 놓인 필지는 건물과 겹친 지적 중 대지 쪽(공공용 지목 뒤로)·겹친 면적 큰 순 */
+export async function listPrivateLandAnalysisBuildings(params?: ZoneParams): Promise<{
+  buildings: IntersectingBuilding[];
+  truncated?: boolean;
+  error?: string;
+}> {
+  const zone = await computeZoneCached(params ?? {});
+  if (!zone.wkt5181) return { buildings: [], error: zone.error };
+  return listBuildingsIntersectingWkt5181({ wkt5181: zone.wkt5181 });
 }

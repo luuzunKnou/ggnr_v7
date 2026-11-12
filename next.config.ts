@@ -51,7 +51,7 @@ function resolveBasePath(): string {
     }
   }
   if (!raw) return "";
-  // 실수로 전체 URL을 넣은 경우 pathname만 사용 (예: https://dggs.kr/uav_ulsan)
+  // 실수로 전체 URL을 넣은 경우 pathname만 사용 (예: https://dggs.kr/uav_us)
   if (/^https?:\/\//i.test(raw)) {
     try {
       raw = new URL(raw).pathname;
@@ -75,6 +75,13 @@ const nextConfig: NextConfig = {
   env: {
     BASE_PATH: basePath,
   },
+  /**
+   * proxy 가 요청 본문을 버퍼링할 때 기본 10MB.
+   * 도면 표시 DXF/DWG 업로드(최대 150MB) 등이 잘리지 않도록 맞춤.
+   */
+  experimental: {
+    proxyClientMaxBodySize: '160mb',
+  },
   devIndicators: false,
   /**
    * Turbopack은 orthophotoService 등 대형 Node 서비스 묶을 때 FATAL panic 이 난다.
@@ -93,6 +100,7 @@ const nextConfig: NextConfig = {
     'pg-native',
     'exifr',
     'puppeteer-core',
+    'oracledb',
   ],
   async rewrites() {
     // GeoServer: 브라우저·게이트는 동일 출처 `{basePath}/geoserver` → start.ini·GEOSERVER_URL

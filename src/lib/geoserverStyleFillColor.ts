@@ -201,7 +201,8 @@ export function readGeoServerCssFillColors(
   for (const raw of styleNames) {
     const key = String(raw ?? '').trim().toLowerCase();
     if (!key || out[key]) continue;
-    const color = readGeoServerCssFillColor(key);
+    // 면 fill 우선, 등고선·관로 등 선 전용 스타일은 stroke로 범례색
+    const color = readGeoServerCssFillColor(key) ?? readGeoServerCssStrokeColor(key);
     if (color) out[key] = color;
   }
   return out;

@@ -293,11 +293,13 @@ function formatYmd(raw: string): string {
   return s;
 }
 
-async function loadInspectionsByFacilNo(facilNo: string): Promise<FmsLinkageInspectionRow[]> {
+async function loadInspectionsByFacilNos(facilNos: string[]): Promise<FmsLinkageInspectionRow[]> {
+  const unique = [...new Set(facilNos.map(text).filter(Boolean))];
+  if (unique.length === 0) return [];
   if (!(await layerTableExists(FMS_INSPECTION_TABLE))) return [];
 
-  const escaped = facilNo.replace(/'/g, "''");
-  const sourceSql = `SELECT * FROM layer.${FMS_INSPECTION_TABLE} WHERE facil_no = '${escaped}'`;
+  const inList = unique.map((n) => `'${n.replace(/'/g, "''")}'`).join(', ');
+  const sourceSql = `SELECT * FROM layer.${FMS_INSPECTION_TABLE} WHERE facil_no IN (${inList})`;
 
   try {
     const res = await db.execute(sql`
@@ -325,6 +327,53 @@ async function loadInspectionsByFacilNo(facilNo: string): Promise<FmsLinkageInsp
   } catch {
     return [];
   }
+}
+
+async function loadInspectionsByFacilNo(facilNo: string): Promise<FmsLinkageInspectionRow[]> {
+  return loadInspectionsByFacilNos([facilNo]);
+}
+
+/** 시설명(공백 무시·대소문자 무시)으로 시설번호 찾은 뒤 점검진단실적 조회 */
+export async function getFmsInspectionsByFacilNm(params?: { facilNm?: string }) {
+  const facilNm = text(params?.facilNm);
+  if (!facilNm) {
+    return {
+      facilNm: '',
+      facilNos: [] as string[],
+      inspections: [] as FmsLinkageInspectionRow[],
+      error: '시설명이 없습니다.',
+    };
+  }
+
+  if (!(await layerTableExists(FMS_FACILITY_TABLE))) {
+    return {
+      facilNm,
+      facilNos: [] as string[],
+      inspections: [] as FmsLinkageInspectionRow[],
+    };
+  }
+
+  const norm = facilNm.replace(/\s+/g, '').toLowerCase().replace(/'/g, "''");
+  const facilNos: string[] = [];
+  try {
+    const res = await db.execute(
+      sql.raw(
+        `SELECT DISTINCT facil_no
+         FROM layer.${FMS_FACILITY_TABLE}
+         WHERE facil_no IS NOT NULL AND trim(facil_no) <> ''
+           AND replace(lower(coalesce(facil_nm, '')), ' ', '') = '${norm}'`
+      )
+    );
+    for (const row of (res.rows ?? []) as Record<string, unknown>[]) {
+      const no = text(row.facil_no);
+      if (no && !facilNos.includes(no)) facilNos.push(no);
+    }
+  } catch {
+    return { facilNm, facilNos: [], inspections: [] };
+  }
+
+  const inspections = await loadInspectionsByFacilNos(facilNos);
+  return { facilNm, facilNos, inspections };
 }
 
 export async function getFmsFacilityDetail(params?: { id?: string }) {

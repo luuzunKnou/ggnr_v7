@@ -1,0 +1,19 @@
+<layer>
+  <name>wtl_tank_ps</name>
+  <id>LayerInfoImpl--64f45c08:1a1aeee1651:-7f7a</id>
+  <type>VECTOR</type>
+  <defaultStyle>
+    <id>StyleInfoImpl--64f45c08:1a1aeee1651:-7f79</id>
+  </defaultStyle>
+  <resource class="featureType">
+    <id>FeatureTypeInfoImpl--64f45c08:1a1aeee1651:-7f7b</id>
+  </resource>
+  <queryable>true</queryable>
+  <opaque>false</opaque>
+  <attribution>
+    <logoWidth>0</logoWidth>
+    <logoHeight>0</logoHeight>
+  </attribution>
+  <dateCreated>2026-11-06 04:39:27.841 UTC</dateCreated>
+  <dateModified>2026-11-06 04:39:28.596 UTC</dateModified>
+</layer>

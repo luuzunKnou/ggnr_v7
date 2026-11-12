@@ -13,6 +13,7 @@ import {
 } from '@/app/shadcnComponents/ui/dialog';
 import { Button } from '@/app/shadcnComponents/ui/button';
 import { cn } from '@/lib/utils';
+import { MAP_UI_Z } from '@/lib/mapUiZIndex';
 
 const TEXTAREA_FIELD_CLASS = cn(
   'placeholder:text-muted-foreground border-input w-full min-w-0 rounded-md border bg-transparent px-3 py-2 text-sm shadow-xs outline-none transition-[color,box-shadow]',
@@ -196,7 +197,7 @@ export function ResourceAccessDeniedDialog({
       <DialogContent
         className={cn('rounded-md sm:max-w-md max-h-[90vh] overflow-y-auto')}
         showCloseButton={false}
-        layerZIndex={21000}
+        layerZIndex={MAP_UI_Z.accessRequest}
       >
         <DialogHeader>
           <DialogTitle className="text-base leading-snug flex items-center gap-2.5 font-semibold">

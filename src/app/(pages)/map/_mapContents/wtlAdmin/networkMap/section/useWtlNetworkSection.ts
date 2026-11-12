@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import type { SpatialDrawSketchControl } from '../../../../_mapComponents/hooks/useSpatialDrawOnMap'
 import Feature from 'ol/Feature'
 import LineString from 'ol/geom/LineString'
 import Point from 'ol/geom/Point'
@@ -37,8 +38,16 @@ import type {
   SectionGroundPt,
   SectionSupplyAreaLine,
 } from './wtlNetworkSectionSvg'
+import {
+  useWtlSectionRoadPreview,
+  type SectionRoadPreviewTable,
+} from './useWtlSectionRoadPreview'
+import { useWtlSectionRoadChordPick } from './useWtlSectionRoadChordPick'
 
-export type SectionTab = 'cross' | 'long' | 'crossChart' | 'longChart' | 'prev' | 'threejs'
+export type SectionTab = 'cross' | 'long' | 'crossChart' | 'longChart' | 'threejs'
+
+/** 단면도 절단선 그리기 방식 */
+export type SectionDrawMode = 'free' | 'roadWidth' | 'roadSeg'
 
 /** 단면도 절단선 — 우측 «거리 측정»(#3388ff)과 동일 */
 const SECTION_CUT_LINE_STROKE = new Style({
@@ -94,6 +103,8 @@ type PointRow = {
   diameterM: number
   depthM: number
   surfaceElevM?: number
+  styleCode?: string
+  fieldsTable?: string
 }
 
 export type SectionSupplyAreas = {
@@ -110,6 +121,12 @@ export type SectionSupplyBandSegment = {
   color: string
 }
 
+export type SectionSupplyElevRow = {
+  elevM: number
+  role: 'zone' | 'subzone' | 'block'
+  segs: { name: string; color: string; pct: number }[]
+}
+
 type SectionApi = {
   success?: boolean
   ground?: { distM: number; elevM: number; x3857: number; y3857: number }[]
@@ -120,6 +137,7 @@ type SectionApi = {
   points?: PointRow[]
   supplyAreas?: SectionSupplyAreas
   supplyAreaBands?: SectionSupplyBandSegment[]
+  supplyElevComposition?: SectionSupplyElevRow[]
   error?: string
 }
 
@@ -138,6 +156,30 @@ function halfWidthForTab(tab: SectionTab): number {
 
 function profileAxisForTab(tab: SectionTab): 'along' | 'depth' {
   return isLongProfileTab(tab) ? 'depth' : 'along'
+}
+
+type SectionAxisCache = {
+  ground: SectionGroundPt[]
+  groundMin: SectionGroundPt[]
+  groundMax: SectionGroundPt[]
+  totalLengthM: number
+  supplyAreasRaw: SectionSupplyAreas
+  supplyAreaBands: SectionSupplyBandSegment[]
+  supplyElevComposition: SectionSupplyElevRow[]
+  pipes: PipeRow[]
+  points: PointRow[]
+}
+
+function axisCacheKey(tab: SectionTab): 'cross' | 'long' {
+  return isLongProfileTab(tab) ? 'long' : 'cross'
+}
+
+function mapGroundPts(
+  rows: { distM: number; elevM: number }[] | undefined
+): SectionGroundPt[] {
+  return (rows ?? [])
+    .filter((p) => Number.isFinite(p.elevM))
+    .map((p) => ({ distM: p.distM, elevM: p.elevM }))
 }
 
 const EMPTY_SUPPLY_AREAS: SectionSupplyAreas = {
@@ -237,6 +279,21 @@ const LAYER_KOR: Record<string, string> = {
   wtl_prga_ps: '수압계',
   wtl_meta_ps: '급수전계량기',
   wtl_leak_ps: '누수지점 및 복구내역',
+  wtl_pres_ps: '가압장',
+  wtl_gain_ps: '취수장',
+  wtl_serv_ps: '배수지',
+  wtl_rsrv_ps: '저수조',
+  wtl_pipe_ps: '상수관로 심도',
+}
+
+function pointTableOf(pt: PointRow): string {
+  const fromFields = String(pt.fieldsTable ?? '')
+    .trim()
+    .toLowerCase()
+  if (fromFields) return fromFields
+  const prefix = pt.id.replace(/-\d+$/, '').toLowerCase()
+  if (prefix === 'manh') return 'wtl_manh_ps'
+  return prefix
 }
 
 /** 선택 레이어 키·한글명 (관망조회 켜진 키만) */
@@ -290,7 +347,7 @@ function buildFeatures(
     const label = String(pipe.label ?? '').trim() || `${Math.round(pipe.diameterM * 1000)}mm`
     const depthM = Number.isFinite(pipe.depthM) ? pipe.depthM : 0
 
-    const crossLike = mode === 'cross' || mode === 'crossChart' || mode === 'prev'
+    const crossLike = mode === 'cross' || mode === 'crossChart'
     if (crossLike) {
       // 횡단·차트횡단·기존: 절단선 교차 관만
       const cut = pipeCutIntersect3857(line3857, pipe.coords3857)
@@ -298,6 +355,9 @@ function buildFeatures(
       // 관 중점 IDW(surfaceElevM) 금지 — 절단선 등고만 사용(점시설·CAD와 동일).
       // 중점 지표가 교차점 등고보다 높으면 심도를 빼도 지형선 위에 뜸.
       const surface = groundAtDist(ground, cut.distM) ?? undefined
+      // 범례·GeoServer 스타일: 부모(wtl_pipe_lm)가 아니라 define_table_name(meta.key)
+      const styleLayerKey =
+        getWtlNetLayerDef(meta.key as WtlNetLayerKey)?.defineTable ?? meta.key
       out.push({
         id: `pipe:${pipe.id}:${cut.distM.toFixed(2)}`,
         distM: cut.distM,
@@ -308,6 +368,7 @@ function buildFeatures(
         color: pipe.color || '#7A7A7A',
         kind: 'pipe',
         surfaceElevM: surface,
+        layerKey: styleLayerKey,
       })
       continue
     }
@@ -317,6 +378,8 @@ function buildFeatures(
     if (!span) continue
     // 종단 도면도 깊이축 등고 기준(중점 IDW 미사용)
     const surface = groundAtDist(ground, span.midM) ?? undefined
+    const styleLayerKey =
+      getWtlNetLayerDef(meta.key as WtlNetLayerKey)?.defineTable ?? meta.key
     out.push({
       id: `pipe:${pipe.id}:${span.midM.toFixed(2)}`,
       distM: span.midM,
@@ -329,16 +392,22 @@ function buildFeatures(
       color: pipe.color || '#7A7A7A',
       kind: 'pipe',
       surfaceElevM: surface,
+      layerKey: styleLayerKey,
     })
   }
 
   for (const pt of points) {
-    const table = pt.id.replace(/-\d+$/, '').toLowerCase()
+    const table = pointTableOf(pt)
     if (table && !enabledTables.has(table)) continue
-    if (!enabledKeys.has(table) && ![...enabledKeys].some((k) => getWtlNetLayerDef(k as WtlNetLayerKey)?.table === table)) {
+    if (
+      !enabledKeys.has(table) &&
+      ![...enabledKeys].some(
+        (k) => getWtlNetLayerDef(k as WtlNetLayerKey)?.table === table
+      )
+    ) {
       continue
     }
-    const crossLike = mode === 'cross' || mode === 'crossChart' || mode === 'prev'
+    const crossLike = mode === 'cross' || mode === 'crossChart'
     if (crossLike && distToLineM(line3857, pt.x3857, pt.y3857) > 2) {
       continue
     }
@@ -354,16 +423,27 @@ function buildFeatures(
     // 관로가 아닌 점형(변류·맨홀 등)은 단면 지표에 둔다.
     // API surfaceElevM(IDW)이 등고와 어긋나면 심도처럼 깊게 보이므로 절단선 등고만 사용.
     const surface = groundAtDist(ground, distM) ?? undefined
+    const keyHit =
+      [...enabledKeys].find((k) => {
+        const def = getWtlNetLayerDef(k as WtlNetLayerKey)
+        return def?.table === table || k === table
+      }) ?? table
+    const styleLayerKey =
+      getWtlNetLayerDef(keyHit as WtlNetLayerKey)?.defineTable ?? keyHit
     out.push({
       id: `pt:${pt.id}`,
       distM,
       depthM: 0,
       diameterM: Math.max(0.05, Math.min(0.4, pt.diameterM)),
       label: String(pt.label ?? '').trim() || table,
-      layerKorName: LAYER_KOR[table] || table,
+      layerKorName: LAYER_KOR[keyHit] || LAYER_KOR[table] || table,
       color: pt.color || '#7A7A7A',
       kind: 'point',
       surfaceElevM: surface,
+      styleCode: pt.styleCode
+        ? String(pt.styleCode).trim().toUpperCase()
+        : undefined,
+      layerKey: styleLayerKey,
     })
   }
 
@@ -373,8 +453,18 @@ function buildFeatures(
 export function useWtlNetworkSection(enabledLayerKeys: string[]) {
   const mapContext = useMapContext()
   const [drawing, setDrawing] = useState(false)
+  const [modePickerOpen, setModePickerOpen] = useState(false)
+  const [drawMode, setDrawMode] = useState<SectionDrawMode | null>(null)
+  const [guideMessage, setGuideMessage] = useState('')
+  /** 절단선 초안 — 적용 전(사유지분석 «적용»과 동일) */
+  const [pendingLine3857, setPendingLine3857] = useState<Pt3857[] | null>(null)
+  const [sketchPointCount, setSketchPointCount] = useState(0)
+  const sketchControlRef = useRef<SpatialDrawSketchControl | null>(null)
+  const [roadPreviewTable, setRoadPreviewTable] =
+    useState<SectionRoadPreviewTable>(null)
+  const [roadChordActive, setRoadChordActive] = useState(false)
   const [panelOpen, setPanelOpen] = useState(false)
-  const [tab, setTab] = useState<SectionTab>('cross')
+  const [tab, setTab] = useState<SectionTab>('crossChart')
   const [line3857, setLine3857] = useState<Pt3857[] | null>(null)
   const [ground, setGround] = useState<SectionGroundPt[]>([])
   const [groundMin, setGroundMin] = useState<SectionGroundPt[]>([])
@@ -382,26 +472,52 @@ export function useWtlNetworkSection(enabledLayerKeys: string[]) {
   const [features, setFeatures] = useState<SectionFeatureMark[]>([])
   const [supplyAreasRaw, setSupplyAreasRaw] = useState<SectionSupplyAreas>(EMPTY_SUPPLY_AREAS)
   const [supplyAreaBands, setSupplyAreaBands] = useState<SectionSupplyBandSegment[]>([])
+  const [supplyElevComposition, setSupplyElevComposition] = useState<
+    SectionSupplyElevRow[]
+  >([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [totalLengthM, setTotalLengthM] = useState(0)
   const rawRef = useRef<{ pipes: PipeRow[]; points: PointRow[] }>({ pipes: [], points: [] })
-  const keysRef = useRef(enabledLayerKeys)
-  keysRef.current = enabledLayerKeys
+  /** 지도에서 현재 켜진 키 — 조회 시작 시에만 스냅샷으로 복사 */
+  const liveKeysRef = useRef(enabledLayerKeys)
+  liveKeysRef.current = enabledLayerKeys
+  /** 모달 내용 고정용 — loadSection 시점 레이어 키 */
+  const frozenKeysRef = useRef<string[]>([])
+  const [frozenKeys, setFrozenKeys] = useState<string[]>([])
   const tabRef = useRef(tab)
   tabRef.current = tab
   const cutLineSourceRef = useRef<VectorSource | null>(null)
   const sectionRectSourceRef = useRef<VectorSource | null>(null)
+  /** 횡·종단 조회 결과 캐시 — 탭 전환 시 재조회 없음 */
+  const viewCacheRef = useRef<{
+    cross: SectionAxisCache | null
+    long: SectionAxisCache | null
+  }>({ cross: null, long: null })
 
-  const supplyAreaLines = useMemo(
-    () => buildSupplyAreaLines(supplyAreasRaw, enabledLayerKeys),
-    [supplyAreasRaw, enabledLayerKeys]
+  const setMapDrawInputSuspended = mapContext?.setMapDrawInputSuspended
+
+  useWtlSectionRoadPreview(
+    mapContext?.mapInstanceRef,
+    Boolean(mapContext?.mapReady),
+    roadPreviewTable
   )
 
-  /** 켜진 급수구역·분구·블록만 하단 밴드에 표시 */
+  useEffect(() => {
+    if (!roadChordActive) return
+    setMapDrawInputSuspended?.(true)
+    return () => setMapDrawInputSuspended?.(false)
+  }, [roadChordActive, setMapDrawInputSuspended])
+
+  const supplyAreaLines = useMemo(
+    () => buildSupplyAreaLines(supplyAreasRaw, frozenKeys),
+    [supplyAreasRaw, frozenKeys]
+  )
+
+  /** 조회 당시 켜진 급수구역·분구·블록만 하단 밴드에 표시 */
   const supplyAreaBandsFiltered = useMemo(() => {
     const keys = new Set(
-      enabledLayerKeys.map((k) => String(k).trim().toLowerCase()).filter(Boolean)
+      frozenKeys.map((k) => String(k).trim().toLowerCase()).filter(Boolean)
     )
     const has = (base: string) =>
       keys.has(base) || [...keys].some((k) => k === base || k.endsWith(`_${base}`))
@@ -410,7 +526,20 @@ export function useWtlNetworkSection(enabledLayerKeys: string[]) {
       if (s.role === 'subzone') return has('wtl_wtssa_as')
       return has('wtl_wtsba_as')
     })
-  }, [supplyAreaBands, enabledLayerKeys])
+  }, [supplyAreaBands, frozenKeys])
+
+  const supplyElevCompositionFiltered = useMemo(() => {
+    const keys = new Set(
+      frozenKeys.map((k) => String(k).trim().toLowerCase()).filter(Boolean)
+    )
+    const has = (base: string) =>
+      keys.has(base) || [...keys].some((k) => k === base || k.endsWith(`_${base}`))
+    return supplyElevComposition.filter((s) => {
+      if (s.role === 'zone') return has('wtl_wtsa_as')
+      if (s.role === 'subzone') return has('wtl_wtssa_as')
+      return has('wtl_wtsba_as')
+    })
+  }, [supplyElevComposition, frozenKeys])
 
   const setSpatialDrawRequest = mapContext?.setSpatialDrawRequest
 
@@ -454,240 +583,424 @@ export function useWtlNetworkSection(enabledLayerKeys: string[]) {
     if (!cutSource || !rectSource) return
     cutSource.clear()
     rectSource.clear()
-    if (!line3857 || line3857.length < 2) return
-    cutSource.addFeature(new Feature({ geometry: new LineString(line3857) }))
+    const preview =
+      pendingLine3857 && pendingLine3857.length >= 2
+        ? pendingLine3857
+        : line3857
+    if (!preview || preview.length < 2) return
+    cutSource.addFeature(new Feature({ geometry: new LineString(preview) }))
 
-    const start = line3857[0]!
-    const end = line3857[line3857.length - 1]!
+    const start = preview[0]!
+    const end = preview[preview.length - 1]!
     const ring = sectionCutRectRing3857(start, end, SECTION_RECT_HALF_WIDTH_M)
     rectSource.addFeature(new Feature({ geometry: new Polygon([ring]) }))
-  }, [line3857, mapContext?.mapReady])
+  }, [line3857, pendingLine3857, mapContext?.mapReady])
+
+  const clearRoadPreview = useCallback(() => {
+    setRoadPreviewTable(null)
+  }, [])
+
+  const stopDrawingSession = useCallback(() => {
+    setDrawing(false)
+    setRoadChordActive(false)
+    setSpatialDrawRequest?.(null)
+    clearRoadPreview()
+    setDrawMode(null)
+    setGuideMessage('')
+    setPendingLine3857(null)
+    setSketchPointCount(0)
+    sketchControlRef.current = null
+    // 확정·취소 직후 singleclick이 레이어 선택을 타지 않게
+    const suppress = mapContext?.suppressMapIdentifyUntilRef
+    if (suppress) suppress.current = Date.now() + 500
+    setMapDrawInputSuspended?.(false)
+  }, [
+    setSpatialDrawRequest,
+    clearRoadPreview,
+    setMapDrawInputSuspended,
+    mapContext?.suppressMapIdentifyUntilRef,
+  ])
 
   const cancelDraw = useCallback(() => {
-    setDrawing(false)
-    setSpatialDrawRequest?.(null)
-  }, [setSpatialDrawRequest])
+    stopDrawingSession()
+    setModePickerOpen(false)
+  }, [stopDrawingSession])
 
-  const closePanel = useCallback(() => {
-    setPanelOpen(false)
+  const clearSectionData = useCallback(() => {
     setLine3857(null)
+    setPendingLine3857(null)
     setGround([])
     setGroundMin([])
     setGroundMax([])
     setFeatures([])
     setSupplyAreasRaw(EMPTY_SUPPLY_AREAS)
     setSupplyAreaBands([])
+    setSupplyElevComposition([])
+    frozenKeysRef.current = []
+    setFrozenKeys([])
     setError('')
-    setDrawing(false)
-    setSpatialDrawRequest?.(null)
-  }, [setSpatialDrawRequest])
+    viewCacheRef.current = { cross: null, long: null }
+    rawRef.current = { pipes: [], points: [] }
+  }, [])
 
-  const loadSection = useCallback(
-    async (coords: Pt3857[], tab: SectionTab) => {
+  const closeModePicker = useCallback(() => {
+    setModePickerOpen(false)
+    setDrawMode(null)
+    setGuideMessage('')
+    setPendingLine3857(null)
+    setSketchPointCount(0)
+  }, [])
+
+  const closePanel = useCallback(() => {
+    setPanelOpen(false)
+    clearSectionData()
+    stopDrawingSession()
+    setModePickerOpen(false)
+    setTab('crossChart')
+  }, [clearSectionData, stopDrawingSession])
+
+  const applyAxisCache = useCallback(
+    (tab: SectionTab, coords: Pt3857[]) => {
+      const cached = viewCacheRef.current[axisCacheKey(tab)]
+      if (!cached) return false
+      rawRef.current = { pipes: cached.pipes, points: cached.points }
+      setGround(cached.ground)
+      setGroundMin(cached.groundMin)
+      setGroundMax(cached.groundMax)
+      setTotalLengthM(cached.totalLengthM)
+      setSupplyAreasRaw(cached.supplyAreasRaw)
+      setSupplyAreaBands(cached.supplyAreaBands)
+      setSupplyElevComposition(cached.supplyElevComposition)
+      setFeatures(
+        buildFeatures(
+          tab,
+          coords,
+          cached.ground,
+          cached.pipes,
+          cached.points,
+          new Set(frozenKeysRef.current)
+        )
+      )
+      setError('')
+      return true
+    },
+    []
+  )
+
+  const fetchAxisCache = useCallback(
+    async (
+      coords: Pt3857[],
+      tab: SectionTab,
+      keysAtLoad: string[]
+    ): Promise<SectionAxisCache | null> => {
+      const { lineTables, pointTables, supplyAreaTables } =
+        resolveTables(keysAtLoad)
+      const res = await call('', 'POST', {
+        service: 'elevationService',
+        action: 'getWtlNetworkSectionData',
+        params: {
+          coords3857: coords,
+          halfWidthM: halfWidthForTab(tab),
+          profileAxis: profileAxisForTab(tab),
+          sampleCount: 28,
+          lineTables,
+          pointTables,
+          supplyAreaTables,
+        },
+      })
+      const data = (res?.data ?? res) as SectionApi
+      if (!data?.success) return null
+      const g = mapGroundPts(data.ground)
+      const pipes = data.pipes ?? []
+      const points = data.points ?? []
+      return {
+        ground: g,
+        groundMin: mapGroundPts(data.groundMin),
+        groundMax: mapGroundPts(data.groundMax),
+        totalLengthM:
+          Number(data.totalLengthM) ||
+          g[g.length - 1]?.distM ||
+          (isLongProfileTab(tab) ? LONG_HALF_WIDTH_M * 2 : lineLengthM(coords)) ||
+          0,
+        supplyAreasRaw: data.supplyAreas ?? EMPTY_SUPPLY_AREAS,
+        supplyAreaBands: Array.isArray(data.supplyAreaBands)
+          ? data.supplyAreaBands
+          : [],
+        supplyElevComposition: Array.isArray(data.supplyElevComposition)
+          ? data.supplyElevComposition
+          : [],
+        pipes,
+        points,
+      }
+    },
+    []
+  )
+
+  /** 절단선 확정 시 횡·종단을 한 번만 조회해 캐시 */
+  const loadSectionBoth = useCallback(
+    async (coords: Pt3857[], activeTab: SectionTab, keysOverride?: string[]) => {
       setLoading(true)
       setError('')
+      const keysAtLoad = [
+        ...(keysOverride?.length ? keysOverride : liveKeysRef.current),
+      ]
+      frozenKeysRef.current = keysAtLoad
+      setFrozenKeys(keysAtLoad)
+      viewCacheRef.current = { cross: null, long: null }
       try {
-        const { lineTables, pointTables, supplyAreaTables } = resolveTables(
-          keysRef.current
-        )
-        const halfWidthM = halfWidthForTab(tab)
-        const profileAxis = profileAxisForTab(tab)
-        const res = await call('', 'POST', {
-          service: 'elevationService',
-          action: 'getWtlNetworkSectionData',
-          params: {
-            coords3857: coords,
-            halfWidthM,
-            profileAxis,
-            sampleCount: 28,
-            lineTables,
-            pointTables,
-            supplyAreaTables,
-          },
-        })
-        const data = (res?.data ?? res) as SectionApi
-        if (!data?.success) {
-          setError(data?.error ?? '단면도 조회 실패')
+        const [crossCache, longCache] = await Promise.all([
+          fetchAxisCache(coords, 'crossChart', keysAtLoad),
+          fetchAxisCache(coords, 'longChart', keysAtLoad),
+        ])
+        if (!crossCache && !longCache) {
+          setError('단면도 조회 실패')
           setGround([])
           setGroundMin([])
           setGroundMax([])
           setFeatures([])
           setSupplyAreasRaw(EMPTY_SUPPLY_AREAS)
           setSupplyAreaBands([])
+          setSupplyElevComposition([])
           return
         }
-        const mapPts = (
-          rows: { distM: number; elevM: number }[] | undefined
-        ): SectionGroundPt[] =>
-          (rows ?? [])
-            .filter((p) => Number.isFinite(p.elevM))
-            .map((p) => ({ distM: p.distM, elevM: p.elevM }))
-        const g = mapPts(data.ground)
-        const gMin = mapPts(data.groundMin)
-        const gMax = mapPts(data.groundMax)
-        rawRef.current = {
-          pipes: data.pipes ?? [],
-          points: data.points ?? [],
+        viewCacheRef.current = {
+          cross: crossCache,
+          long: longCache,
         }
-        setSupplyAreasRaw(data.supplyAreas ?? EMPTY_SUPPLY_AREAS)
-        setSupplyAreaBands(
-          Array.isArray(data.supplyAreaBands) ? data.supplyAreaBands : []
-        )
-        setGround(g)
-        setGroundMin(gMin)
-        setGroundMax(gMax)
-        setTotalLengthM(
-          Number(data.totalLengthM) ||
-            g[g.length - 1]?.distM ||
-            (isLongProfileTab(tab) ? LONG_HALF_WIDTH_M * 2 : lineLengthM(coords)) ||
-            0
-        )
-        setFeatures(
-          buildFeatures(
-            tab,
-            coords,
-            g,
-            rawRef.current.pipes,
-            rawRef.current.points,
-            new Set(keysRef.current)
-          )
-        )
+        const showTab =
+          activeTab === 'threejs' ? 'crossChart' : activeTab
+        if (!applyAxisCache(showTab, coords)) {
+          const fallback = crossCache ?? longCache
+          if (fallback) {
+            viewCacheRef.current[axisCacheKey(showTab)] = fallback
+            applyAxisCache(showTab, coords)
+          }
+        }
       } catch (e) {
         setError(e instanceof Error ? e.message : '단면도 조회 오류')
       } finally {
         setLoading(false)
       }
     },
-    []
+    [fetchAxisCache, applyAxisCache]
   )
 
-  const rebuildFeatures = useCallback(
-    (mode: SectionTab, coords: Pt3857[], g: SectionGroundPt[]) => {
-      setFeatures(
-        buildFeatures(
-          mode,
-          coords,
-          g,
-          rawRef.current.pipes,
-          rawRef.current.points,
-          new Set(keysRef.current)
-        )
-      )
-    },
-    []
-  )
-
-  // 켜진 레이어만 바뀌면 표시 재필터 (버퍼 재조회는 탭/다시그리기)
-  useEffect(() => {
-    if (!line3857 || !ground.length) return
-    rebuildFeatures(tab, line3857, ground)
-  }, [enabledLayerKeys, line3857, ground, tab, rebuildFeatures])
-
-  /**
-   * 구역설정(polygon)과 동일 — spatialDrawRequest → useSpatialDrawOnMap.
-   * 모달은 라인 완료 후에만 연다.
-   */
-  const beginLineDraw = useCallback(() => {
-    if (!setSpatialDrawRequest) return
-    if (!canStartMapDrawInteraction(mapContext, 'spatialSearch')) return
-
-    setError('')
-    setGround([])
-    setGroundMin([])
-    setGroundMax([])
-    setFeatures([])
-    setSupplyAreaBands([])
-    setLine3857(null)
-    setPanelOpen(false)
-    setDrawing(true)
-
-    setSpatialDrawRequest({
-      // 구역설정과 동일 spatialDrawRequest 경로 · 두 점 직선(LineString maxPoints:2)
-      type: 'line',
-      onComplete: (wkt5181: string) => {
-        const w = String(wkt5181 ?? '').trim()
-        setDrawing(false)
-        if (!w) return
-        const pts5181 = parseLineWkt5181(w)
-        if (pts5181.length < 2) {
-          setError('라인을 두 점 이상 그려 주세요')
-          setPanelOpen(true)
-          return
-        }
-        const coords3857: Pt3857[] = pts5181.map((p) => {
-          const [x, y] = transform(p, 'EPSG:5181', 'EPSG:3857')
-          return [x, y]
-        })
-        setLine3857(coords3857)
+  const finishWithLine3857 = useCallback(
+    (coords3857: Pt3857[]) => {
+      stopDrawingSession()
+      setModePickerOpen(false)
+      if (coords3857.length < 2) {
+        setError('라인을 두 점 이상 그려 주세요')
         setPanelOpen(true)
-        void loadSection(coords3857, tabRef.current)
-      },
-    })
-  }, [mapContext, setSpatialDrawRequest, loadSection])
+        return
+      }
+      setLine3857(coords3857)
+      setPanelOpen(true)
+      void loadSectionBoth(coords3857, tabRef.current)
+    },
+    [stopDrawingSession, loadSectionBoth]
+  )
 
-  /** 도구 버튼 — 그리는 중이면 취소, 아니면 라인 그리기 시작(모달은 완료 후) */
-  const startSection = useCallback(() => {
-    if (drawing) {
-      setDrawing(false)
+  /** 그리기 완료 → 초안만 보관(적용 전). 패널·조회는 적용 시 */
+  const acceptDraftLine3857 = useCallback(
+    (coords3857: Pt3857[]) => {
+      if (coords3857.length < 2) {
+        setGuideMessage('라인을 두 점 이상 그려 주세요')
+        return
+      }
       setSpatialDrawRequest?.(null)
+      setRoadChordActive(false)
+      setDrawing(false)
+      setSketchPointCount(0)
+      sketchControlRef.current = null
+      clearRoadPreview()
+      setMapDrawInputSuspended?.(false)
+      setPendingLine3857(coords3857)
+      setGuideMessage('')
+      const suppress = mapContext?.suppressMapIdentifyUntilRef
+      if (suppress) suppress.current = Date.now() + 500
+    },
+    [
+      setSpatialDrawRequest,
+      clearRoadPreview,
+      setMapDrawInputSuspended,
+      mapContext?.suppressMapIdentifyUntilRef,
+    ]
+  )
+
+  const flashGuideRef = useRef<(msg: string) => void>(() => undefined)
+
+  useWtlSectionRoadChordPick({
+    mapRef: mapContext?.mapInstanceRef,
+    mapReady: Boolean(mapContext?.mapReady),
+    active: roadChordActive && !pendingLine3857,
+    onComplete: acceptDraftLine3857,
+    onFlash: (msg) => flashGuideRef.current(msg),
+    suppressMapIdentifyUntilRef: mapContext?.suppressMapIdentifyUntilRef,
+  })
+
+  /** 직선·도로구간 — spatialDrawRequest 두 점. 실폭도로는 가로지르기 한 번 찍기. */
+  const beginLineDraw = useCallback(
+    (mode: SectionDrawMode) => {
+      if (!canStartMapDrawInteraction(mapContext, 'spatialSearch')) return
+
+      clearSectionData()
+      setPanelOpen(false)
+      setGuideMessage('')
+      setPendingLine3857(null)
+      setSketchPointCount(0)
+      setDrawMode(mode)
+      setModePickerOpen(true)
+      setDrawing(true)
+      setSpatialDrawRequest?.(null)
+      setRoadChordActive(false)
+
+      if (mode === 'roadWidth') {
+        setRoadPreviewTable(null)
+        setRoadChordActive(true)
+        setMapDrawInputSuspended?.(true)
+        return
+      }
+
+      setMapDrawInputSuspended?.(false)
+
+      if (!setSpatialDrawRequest) return
+      setRoadPreviewTable(mode === 'roadSeg' ? 'tl_sprd_manage' : null)
+
+      setSpatialDrawRequest({
+        type: 'line',
+        snapLayerName: mode === 'roadSeg' ? 'tl_sprd_manage' : undefined,
+        sketchControlRef,
+        onSketchPointCount: setSketchPointCount,
+        onComplete: (wkt5181: string) => {
+          const w = String(wkt5181 ?? '').trim()
+          if (!w) {
+            setDrawing(false)
+            setSketchPointCount(0)
+            return
+          }
+          const pts5181 = parseLineWkt5181(w)
+          const coords3857: Pt3857[] = pts5181.map((p) => {
+            const [x, y] = transform(p, 'EPSG:5181', 'EPSG:3857')
+            return [x, y]
+          })
+          acceptDraftLine3857(coords3857)
+        },
+      })
+    },
+    [
+      mapContext,
+      setSpatialDrawRequest,
+      clearSectionData,
+      acceptDraftLine3857,
+      setMapDrawInputSuspended,
+    ]
+  )
+
+  const chooseDrawMode = useCallback(
+    (mode: SectionDrawMode) => {
+      beginLineDraw(mode)
+    },
+    [beginLineDraw]
+  )
+
+  const flashGuide = useCallback((msg: string) => {
+    setGuideMessage(msg)
+    window.setTimeout(() => {
+      setGuideMessage((cur) => (cur === msg ? '' : cur))
+    }, 2500)
+  }, [])
+  flashGuideRef.current = flashGuide
+
+  /** 적용 — 초안 절단선으로 단면도 조회 */
+  const applyPendingLine = useCallback(() => {
+    if (!pendingLine3857 || pendingLine3857.length < 2) return
+    const coords = pendingLine3857
+    setPendingLine3857(null)
+    finishWithLine3857(coords)
+  }, [pendingLine3857, finishWithLine3857])
+
+  /** 선 되돌리기 — 초안이면 다시 그리기, 스케치 중이면 마지막 점 제거 */
+  const undoLastVertex = useCallback(() => {
+    if (pendingLine3857) {
+      const mode = drawMode
+      setPendingLine3857(null)
+      if (mode) beginLineDraw(mode)
       return
     }
-    // 패널이 열린 채로 다시 누르면 패널 닫고 재그리기
+    if (sketchPointCount > 0) {
+      sketchControlRef.current?.removeLastPoint()
+    }
+  }, [pendingLine3857, drawMode, beginLineDraw, sketchPointCount])
+
+  /** 다시 지정 — 방식 선택부터 */
+  const respecifyCutLine = useCallback(() => {
+    setPendingLine3857(null)
+    setSketchPointCount(0)
+    setSpatialDrawRequest?.(null)
+    setRoadChordActive(false)
+    setDrawing(false)
+    setDrawMode(null)
+    clearRoadPreview()
+    setMapDrawInputSuspended?.(false)
+    setGuideMessage('')
+    setModePickerOpen(true)
+  }, [
+    setSpatialDrawRequest,
+    clearRoadPreview,
+    setMapDrawInputSuspended,
+  ])
+
+  /** 도구 버튼 — 그리는 중·초안이면 취소, 선택 중이면 닫기, 아니면 방식 선택 */
+  const startSection = useCallback(() => {
+    if (drawing || roadChordActive || pendingLine3857) {
+      cancelDraw()
+      return
+    }
+    if (modePickerOpen) {
+      closeModePicker()
+      return
+    }
     if (panelOpen) {
       setPanelOpen(false)
-      setLine3857(null)
-      setGround([])
-      setGroundMin([])
-      setGroundMax([])
-      setFeatures([])
-      setSupplyAreasRaw(EMPTY_SUPPLY_AREAS)
-      setSupplyAreaBands([])
-      setError('')
+      clearSectionData()
     }
-    beginLineDraw()
-  }, [drawing, panelOpen, setSpatialDrawRequest, beginLineDraw])
+    setDrawMode(null)
+    setGuideMessage('')
+    setModePickerOpen(true)
+  }, [
+    drawing,
+    roadChordActive,
+    pendingLine3857,
+    modePickerOpen,
+    panelOpen,
+    cancelDraw,
+    closeModePicker,
+    clearSectionData,
+  ])
 
-  /** 패널 «다시 그리기» — 모달 닫고 라인부터 다시 */
+  /** 패널 «다시 그리기» — 방식 선택부터 */
   const redrawSection = useCallback(() => {
     setPanelOpen(false)
-    setLine3857(null)
-    setGround([])
-    setGroundMin([])
-    setGroundMax([])
-    setFeatures([])
-    setSupplyAreasRaw(EMPTY_SUPPLY_AREAS)
-    setSupplyAreaBands([])
-    setError('')
-    setDrawing(false)
-    setSpatialDrawRequest?.(null)
-    beginLineDraw()
-  }, [setSpatialDrawRequest, beginLineDraw])
-
-  /** 급수구역·분구·블록 레이어 ON/OFF 시 위치 명칭 재조회 */
-  const supplyAreaKeysSig = useMemo(
-    () => resolveTables(enabledLayerKeys).supplyAreaTables.slice().sort().join('\u0001'),
-    [enabledLayerKeys]
-  )
-  const supplyAreaKeysSigRef = useRef(supplyAreaKeysSig)
-  useEffect(() => {
-    if (supplyAreaKeysSigRef.current === supplyAreaKeysSig) return
-    supplyAreaKeysSigRef.current = supplyAreaKeysSig
-    if (!line3857 || line3857.length < 2) return
-    void loadSection(line3857, tab)
-  }, [supplyAreaKeysSig, line3857, tab, loadSection])
+    clearSectionData()
+    stopDrawingSession()
+    setModePickerOpen(true)
+  }, [clearSectionData, stopDrawingSession])
 
   const setTabAndReload = useCallback(
     (next: SectionTab) => {
       setTab(next)
       if (!line3857) return
-      // ThreeJs 탭은 자체 지형·레이어 조회 — 기존 단면 재조회 생략
-      if (next === 'threejs') {
-        rebuildFeatures('cross', line3857, ground)
-        return
-      }
-      void loadSection(line3857, next)
+      // ThreeJs는 자체 조회 — 차트 캐시는 그대로 둠
+      if (next === 'threejs') return
+      if (applyAxisCache(next, line3857)) return
+      void loadSectionBoth(
+        line3857,
+        next,
+        frozenKeysRef.current.length ? frozenKeysRef.current : undefined
+      )
     },
-    [line3857, loadSection, rebuildFeatures, ground]
+    [line3857, applyAxisCache, loadSectionBoth]
   )
 
   const lineLonLat = useMemo((): [number, number][] | null => {
@@ -698,8 +1011,18 @@ export function useWtlNetworkSection(enabledLayerKeys: string[]) {
     })
   }, [line3857])
 
+  const pendingReady =
+    pendingLine3857 != null && pendingLine3857.length >= 2
+  const canUndoLast =
+    pendingReady || sketchPointCount > 0
+
   return {
-    drawing,
+    drawing: drawing || roadChordActive || pendingReady,
+    modePickerOpen,
+    drawMode,
+    guideMessage,
+    pendingReady,
+    canUndoLast,
     panelOpen,
     tab,
     setTab: setTabAndReload,
@@ -709,16 +1032,22 @@ export function useWtlNetworkSection(enabledLayerKeys: string[]) {
     features,
     supplyAreaLines,
     supplyAreaBands: supplyAreaBandsFiltered,
+    supplyElevComposition: supplyElevCompositionFiltered,
     loading,
     error,
     totalLengthM,
     lineLonLat,
     line3857,
-    enabledKeys: enabledLayerKeys,
+    enabledKeys: frozenKeys,
     lineReady: line3857 != null && line3857.length >= 2,
     startSection,
+    chooseDrawMode,
+    closeModePicker,
     redrawSection,
     closePanel,
     cancelDraw,
+    applyPendingLine,
+    undoLastVertex,
+    respecifyCutLine,
   }
 }

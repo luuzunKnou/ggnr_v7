@@ -68,6 +68,10 @@ export const DRAWING_PAINT_CHUNK = 2_500;
 /** 글자 최대 개수 (단계별에서 상한으로 사용) */
 export const DRAWING_MAX_LABELS = 120;
 
+/** 확대 시 도면 문자높이/해상도로 키우되, 이 범위 안으로 */
+export const DRAWING_LABEL_MIN_PX = 10;
+export const DRAWING_LABEL_MAX_PX = 56;
+
 /**
  * 줌 단계 — 1단계는 외곽 개요 이미지만. 2단계부터 선명한 벡터.
  * minZoomFactor: 도면폭/뷰폭

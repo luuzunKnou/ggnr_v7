@@ -13,6 +13,8 @@ export type GnmsBrowserConfig = {
   installDownloadUrl?: string;
   uploadBaseUrl?: string;
   logsUrl?: string;
+  /** 행정경계·등고선 ZIP export (Bearer 없음) */
+  baseDataExportUrl?: string;
   bearer: string;
   restartCommandConfigured?: boolean;
   error?: string;

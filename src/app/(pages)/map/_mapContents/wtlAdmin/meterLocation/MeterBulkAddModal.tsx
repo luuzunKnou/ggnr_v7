@@ -5,7 +5,6 @@ import { createPortal } from 'react-dom'
 import { X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { call } from '@/lib/api'
-import { MeterNumberSuggestInput } from './MeterNumberSuggestInput'
 
 export type MeterBulkCandidate = {
   meterNo: string
@@ -70,17 +69,37 @@ export function MeterBulkAddModal({ open, onClose, onAdd, existingKeys }: Props)
     setSearching(false)
   }
 
-  /** 계량기번호 검색 → 모달 목록에 추가(체크). 입력 중에는 목록 필터도 동작. */
+  /** 개행으로 나눈 계량기번호 검색 → 모달 목록에 추가(체크). 빈 줄은 제외. */
   const handleSearchAdd = async () => {
-    const q = searchText.replace(/\u00a0/g, ' ').trim()
-    if (!q) {
+    const lines = [
+      ...new Set(
+        searchText
+          .split(/\r?\n/)
+          .map((line) => line.replace(/\u00a0/g, ' ').trim())
+          .filter(Boolean)
+      ),
+    ]
+    if (lines.length === 0) {
       setError('계량기 번호 또는 주소를 입력해주세요.')
       return
     }
-    const key = q.replace(/\s+/g, '')
-    const already = rows.find((r) => r.meterNo.replace(/\s+/g, '') === key)
-    if (already) {
-      setChecked((prev) => new Set(prev).add(already.meterNo))
+    const pending = lines.filter(
+      (q) => !rows.some((r) => r.meterNo.replace(/\s+/g, '') === q.replace(/\s+/g, ''))
+    )
+    const alreadyNos = lines.filter((q) =>
+      rows.some((r) => r.meterNo.replace(/\s+/g, '') === q.replace(/\s+/g, ''))
+    )
+    if (alreadyNos.length > 0) {
+      setChecked((prev) => {
+        const next = new Set(prev)
+        for (const q of alreadyNos) {
+          const hit = rows.find((r) => r.meterNo.replace(/\s+/g, '') === q.replace(/\s+/g, ''))
+          if (hit) next.add(hit.meterNo)
+        }
+        return next
+      })
+    }
+    if (pending.length === 0) {
       setSearchText('')
       setError('')
       return
@@ -91,38 +110,52 @@ export function MeterBulkAddModal({ open, onClose, onAdd, existingKeys }: Props)
       const res = await call('', 'POST', {
         service: 'wtlMeterLocationService',
         action: 'locateMetersByNumbers',
-        params: { numbers: [q] },
+        params: { numbers: pending },
       })
       const body = (res as { data?: { rows?: Array<Record<string, unknown>> } })?.data ?? res
-      const hit = Array.isArray((body as { rows?: unknown[] })?.rows)
-        ? ((body as { rows: Array<Record<string, unknown>> }).rows[0] ?? null)
-        : null
-      const meterNo = String(hit?.meterNo ?? q).trim() || q
-      const address = String(hit?.address ?? '').trim()
-      let validPoint: [number, number] | null = null
-      const rawPoint = hit?.point
-      if (Array.isArray(rawPoint) && rawPoint.length >= 2) {
-        const lon = Number(rawPoint[0])
-        const lat = Number(rawPoint[1])
-        if (Number.isFinite(lon) && Number.isFinite(lat)) validPoint = [lon, lat]
-      }
-      const found = Boolean(hit && (hit.found === true || validPoint))
-      const next: MeterBulkCandidate = {
-        meterNo,
-        address: address || (found ? '' : q),
-        point: found ? validPoint : null,
-      }
-      setRows((prev) => {
-        if (prev.some((r) => r.meterNo.replace(/\s+/g, '') === meterNo.replace(/\s+/g, ''))) {
-          return prev
+      const hits = Array.isArray((body as { rows?: unknown[] })?.rows)
+        ? (body as { rows: Array<Record<string, unknown>> }).rows
+        : []
+      const added: MeterBulkCandidate[] = []
+      let miss = 0
+      pending.forEach((q, index) => {
+        const hit = hits[index] ?? null
+        const meterNo = String(hit?.meterNo ?? q).trim() || q
+        const address = String(hit?.address ?? '').trim()
+        let validPoint: [number, number] | null = null
+        const rawPoint = hit?.point
+        if (Array.isArray(rawPoint) && rawPoint.length >= 2) {
+          const lon = Number(rawPoint[0])
+          const lat = Number(rawPoint[1])
+          if (Number.isFinite(lon) && Number.isFinite(lat)) validPoint = [lon, lat]
         }
-        return [...prev, next]
+        const found = Boolean(hit && (hit.found === true || validPoint))
+        if (!found) miss += 1
+        added.push({
+          meterNo,
+          address: address || (found ? '' : q),
+          point: found ? validPoint : null,
+        })
       })
-      setChecked((prev) => new Set(prev).add(meterNo))
+      setRows((prev) => {
+        const next = [...prev]
+        for (const item of added) {
+          if (next.some((r) => r.meterNo.replace(/\s+/g, '') === item.meterNo.replace(/\s+/g, ''))) {
+            continue
+          }
+          next.push(item)
+        }
+        return next
+      })
+      setChecked((prev) => {
+        const next = new Set(prev)
+        for (const item of added) next.add(item.meterNo)
+        return next
+      })
       setSearchText('')
-      if (!found) {
+      if (miss > 0) {
         setError(
-          '계량기 위치를 찾지 못했지만 목록에 추가했습니다. 주소만으로 찾으려면 메인 화면 입력을 이용하세요.'
+          '위치를 찾지 못한 번호도 목록에 추가했습니다. 주소만으로 찾으려면 메인 화면 입력을 이용하세요.'
         )
       }
     } catch {
@@ -296,15 +329,7 @@ export function MeterBulkAddModal({ open, onClose, onAdd, existingKeys }: Props)
     }
   }, [open])
 
-  const filteredRows = useMemo(() => {
-    const q = searchText.replace(/\u00a0/g, ' ').trim().toLowerCase()
-    if (!q) return rows
-    return rows.filter((r) => {
-      const no = r.meterNo.toLowerCase()
-      const addr = r.address.toLowerCase()
-      return no.includes(q) || addr.includes(q)
-    })
-  }, [rows, searchText])
+  const filteredRows = rows
 
   const allChecked =
     filteredRows.length > 0 && filteredRows.every((r) => checked.has(r.meterNo))
@@ -429,41 +454,46 @@ export function MeterBulkAddModal({ open, onClose, onAdd, existingKeys }: Props)
             type="button"
             title="조건 초기화"
             onClick={handleResetFilters}
-            className="inline-flex h-8 shrink-0 cursor-pointer items-center rounded border border-slate-200 bg-white px-2 text-[11px] font-medium text-slate-700 hover:bg-slate-50"
+            className="inline-flex h-8 shrink-0 cursor-pointer items-center rounded border border-border bg-background px-2 text-[11px] font-medium text-foreground hover:bg-muted"
           >
             초기화
           </button>
         </div>
 
-        <div className="flex items-center gap-1.5">
-          <MeterNumberSuggestInput
-            value={searchText}
-            onChange={setSearchText}
-            onSubmit={() => void handleSearchAdd()}
-            disabled={loading || searching}
-            className="h-8 min-w-0 flex-1 rounded-md border border-slate-200 px-2 text-xs text-slate-800 outline-none focus:border-slate-400 disabled:opacity-50"
-            placeholder="계량기 번호 또는 주소 검색"
-          />
+        <div className="flex items-start gap-1.5">
+          <div className="relative min-w-0 flex-1">
+            <textarea
+              value={searchText}
+              onChange={(e) => setSearchText(e.target.value)}
+              disabled={loading || searching}
+              rows={4}
+              title="계량기 번호 또는 주소 검색"
+              className="standard-detail-input min-h-16 w-full resize-y px-2 py-1.5 disabled:opacity-50"
+            />
+            {searchText.length === 0 ? (
+              <div className="pointer-events-none absolute inset-0 px-2 py-1.5 text-xs leading-snug text-muted-foreground">
+                <div>계량기 번호 또는 주소 검색</div>
+                <div>줄내림으로 입력해주세요</div>
+              </div>
+            ) : null}
+          </div>
           <button
             type="button"
             title="검색"
             disabled={loading || searching}
             onClick={() => void handleSearchAdd()}
-            className="inline-flex h-8 shrink-0 cursor-pointer items-center rounded border border-primary bg-primary px-2.5 text-[11px] font-medium text-white hover:bg-primary/90 disabled:opacity-50"
+            className="inline-flex h-8 shrink-0 cursor-pointer items-center rounded border border-primary bg-primary px-2.5 text-[11px] font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
           >
             {searching ? '검색 중' : '검색'}
           </button>
         </div>
 
-        <div className="flex items-center justify-between text-[11px] text-slate-600">
+        <div className="flex items-center justify-between text-[11px] text-muted-foreground">
           <span>
             {loading
               ? '조회 중…'
               : rows.length > 0
-                ? `${checkedCount} / ${rows.length}건 선택` +
-                  (searchText.trim() && filteredRows.length !== rows.length
-                    ? ` (표시 ${filteredRows.length})`
-                    : '')
+                ? `${checkedCount} / ${rows.length}건 선택`
                 : '조건 선택 또는 번호 검색으로 목록을 만드세요.'}
           </span>
           {filteredRows.length > 0 && (
@@ -478,12 +508,12 @@ export function MeterBulkAddModal({ open, onClose, onAdd, existingKeys }: Props)
           )}
         </div>
 
-        {error && <p className="text-[11px] text-red-600">{error}</p>}
+        {error && <p className="text-[11px] text-destructive">{error}</p>}
 
-        <div className="min-h-0 flex-1 overflow-auto rounded border border-slate-200">
-          <table className="w-full border-collapse text-xs">
-            <thead className="sticky top-0 bg-slate-50">
-              <tr className="border-b border-slate-200 text-left text-slate-600">
+        <div className="min-h-0 flex-1 overflow-auto rounded border border-border bg-background">
+          <table className="w-full border-collapse text-xs text-foreground">
+            <thead className="sticky top-0 bg-muted">
+              <tr className="border-b border-border text-left text-muted-foreground">
                 <th className="w-9 px-2 py-1.5">
                   <input
                     type="checkbox"
@@ -502,7 +532,7 @@ export function MeterBulkAddModal({ open, onClose, onAdd, existingKeys }: Props)
             <tbody>
               {filteredRows.length === 0 ? (
                 <tr>
-                  <td colSpan={3} className="px-2 py-8 text-center text-slate-400">
+                  <td colSpan={3} className="px-2 py-8 text-center text-muted-foreground">
                     {loading
                       ? '조회 중…'
                       : rows.length > 0
@@ -520,9 +550,9 @@ export function MeterBulkAddModal({ open, onClose, onAdd, existingKeys }: Props)
                       title={isOn ? '선택 해제' : '선택'}
                       onClick={() => toggleOne(row.meterNo)}
                       className={cn(
-                        'cursor-pointer border-b border-slate-100 last:border-b-0 hover:bg-slate-50',
-                        isOn && 'bg-slate-50',
-                        dup && 'bg-amber-50/60 hover:bg-amber-50'
+                        'cursor-pointer border-b border-border last:border-b-0 hover:bg-muted/60',
+                        isOn && 'bg-muted/80',
+                        dup && 'bg-amber-500/15 hover:bg-amber-500/20'
                       )}
                     >
                       <td className="px-2 py-1">
@@ -536,15 +566,15 @@ export function MeterBulkAddModal({ open, onClose, onAdd, existingKeys }: Props)
                           className="cursor-pointer"
                         />
                       </td>
-                      <td className="px-2 py-1 font-medium text-slate-800">
+                      <td className="px-2 py-1 font-medium text-foreground">
                         {row.meterNo}
                         {dup ? (
-                          <span className="ml-1 text-[10px] font-normal text-amber-700">
+                          <span className="ml-1 text-[10px] font-normal text-amber-700 dark:text-amber-300">
                             (목록에 있음)
                           </span>
                         ) : null}
                       </td>
-                      <td className="truncate px-2 py-1 text-slate-500">{row.address || '—'}</td>
+                      <td className="truncate px-2 py-1 text-muted-foreground">{row.address || '—'}</td>
                     </tr>
                   )
                 })
@@ -558,7 +588,7 @@ export function MeterBulkAddModal({ open, onClose, onAdd, existingKeys }: Props)
             type="button"
             title="취소"
             onClick={onClose}
-            className="inline-flex h-8 cursor-pointer items-center rounded border border-slate-200 bg-white px-3 text-xs font-medium text-slate-700 hover:bg-slate-50"
+            className="inline-flex h-8 cursor-pointer items-center rounded border border-border bg-background px-3 text-xs font-medium text-foreground hover:bg-muted"
           >
             취소
           </button>
@@ -567,7 +597,7 @@ export function MeterBulkAddModal({ open, onClose, onAdd, existingKeys }: Props)
             title="추가"
             disabled={loading || checkedCount === 0}
             onClick={handleAdd}
-            className="inline-flex h-8 cursor-pointer items-center rounded border border-primary bg-primary px-3 text-xs font-medium text-white hover:bg-primary/90 disabled:opacity-50"
+            className="inline-flex h-8 cursor-pointer items-center rounded border border-primary bg-primary px-3 text-xs font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
           >
             추가 ({checkedCount})
           </button>

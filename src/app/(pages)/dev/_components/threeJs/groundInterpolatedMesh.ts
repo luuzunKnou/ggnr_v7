@@ -34,7 +34,7 @@ export function createSectionRectGroundParts(
   const halfW = Math.max(1e-6, axes.halfWidthM);
   const nu = Math.max(2, Math.ceil((halfL * 2) / stepU) + 1);
   const nv = Math.max(2, Math.ceil((halfW * 2) / stepU) + 1);
-  const thick = Math.max(0, thicknessM);
+  void thicknessM;
 
   const xzAt = (iu: number, iv: number) => {
     const u = -halfL + (iu / (nu - 1)) * (halfL * 2);
@@ -45,7 +45,14 @@ export function createSectionRectGroundParts(
     };
   };
 
+  const halfField = Math.max(1e-6, (field.radiusM || 1) / GROUND_SCENE_M_PER_UNIT);
+  const uvAt = (x: number, z: number): [number, number] => [
+    (x + halfField) / (2 * halfField),
+    // +Z=남, −Z=북 → 이미지 위(북)가 v=1
+    (halfField - z) / (2 * halfField),
+  ];
   const topPositions: number[] = [];
+  const topUvs: number[] = [];
   const topIndices: number[] = [];
   const vertIndex = (iu: number, iv: number) => iv * nu + iu;
 
@@ -54,6 +61,8 @@ export function createSectionRectGroundParts(
       const p = xzAt(iu, iv);
       const y = sampleSurfaceY(field, p.x, p.z);
       topPositions.push(p.x, y, p.z);
+      const [uu, vv] = uvAt(p.x, p.z);
+      topUvs.push(uu, vv);
     }
   }
 
@@ -71,6 +80,7 @@ export function createSectionRectGroundParts(
 
   const topGeo = new THREE.BufferGeometry();
   topGeo.setAttribute('position', new THREE.Float32BufferAttribute(topPositions, 3));
+  topGeo.setAttribute('uv', new THREE.Float32BufferAttribute(topUvs, 2));
   topGeo.setIndex(topIndices);
   topGeo.computeVertexNormals();
 
@@ -101,11 +111,8 @@ export function createSectionRectGroundParts(
       const z1 = a.z + (b.z - a.z) * t1;
       const y0 = sampleSurfaceY(field, x0, z0);
       const y1 = sampleSurfaceY(field, x1, z1);
+      // 윗면 외곽만 — 옆면·아랫면 선 없음
       pushSeg(x0, y0, z0, x1, y1, z1);
-      if (thick > 1e-6) {
-        pushSeg(x0, y0 - thick, z0, x1, y1 - thick, z1);
-        pushSeg(x0, y0, z0, x0, y0 - thick, z0);
-      }
     }
   }
 
@@ -127,7 +134,7 @@ export function createInterpolatedGroundParts(
   const stepU = field.stepM / scale;
   const mid = (size - 1) / 2;
   const fallback = field.baseElevM;
-  const thick = Math.max(0, thicknessM);
+  void thicknessM;
 
   const has = (i: number, j: number) => sampleHeight(field, i, j) != null;
   const elevAt = (i: number, j: number): number => {
@@ -136,7 +143,6 @@ export function createInterpolatedGroundParts(
   };
 
   const topY = (i: number, j: number) => elevToSceneY(elevAt(i, j));
-  const botY = (i: number, j: number) => topY(i, j) - thick;
   const xz = (i: number, j: number) => ({
     x: (i - mid) * stepU,
     z: -(j - mid) * stepU,
@@ -146,7 +152,13 @@ export function createInterpolatedGroundParts(
   const cellOk = (i: number, j: number) =>
     has(i, j) && has(i + 1, j) && has(i, j + 1) && has(i + 1, j + 1);
 
+  const halfField = Math.max(1e-6, (size - 1) * stepU * 0.5);
+  const uvAt = (x: number, z: number): [number, number] => [
+    (x + halfField) / (2 * halfField),
+    (halfField - z) / (2 * halfField),
+  ];
   const topPositions: number[] = [];
+  const topUvs: number[] = [];
   const topIndices: number[] = [];
   const vertKey = new Map<string, number>();
   const ensureVert = (i: number, j: number): number => {
@@ -156,6 +168,8 @@ export function createInterpolatedGroundParts(
     const p = xz(i, j);
     const idx = topPositions.length / 3;
     topPositions.push(p.x, topY(i, j), p.z);
+    const [uu, vv] = uvAt(p.x, p.z);
+    topUvs.push(uu, vv);
     vertKey.set(key, idx);
     return idx;
   };
@@ -176,6 +190,7 @@ export function createInterpolatedGroundParts(
 
   const topGeo = new THREE.BufferGeometry();
   topGeo.setAttribute('position', new THREE.Float32BufferAttribute(topPositions, 3));
+  topGeo.setAttribute('uv', new THREE.Float32BufferAttribute(topUvs, 2));
   topGeo.setIndex(topIndices);
   topGeo.computeVertexNormals();
 
@@ -195,11 +210,8 @@ export function createInterpolatedGroundParts(
     if (!has(i0, j0) || !has(i1, j1)) return;
     const a = xz(i0, j0);
     const b = xz(i1, j1);
+    // 윗면 외곽만 — 옆면·아랫면 선 없음
     pushSeg(a.x, topY(i0, j0), a.z, b.x, topY(i1, j1), b.z);
-    if (thick > 1e-6) {
-      pushSeg(a.x, botY(i0, j0), a.z, b.x, botY(i1, j1), b.z);
-      pushSeg(a.x, topY(i0, j0), a.z, a.x, botY(i0, j0), a.z);
-    }
   };
 
   // 유효 셀 경계만 외곽 (이웃 셀 없거나 불완전하면 변 그림)

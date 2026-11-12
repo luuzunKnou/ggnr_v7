@@ -76,7 +76,7 @@ export function DetailWondoPickPopup({
                     'flex w-full cursor-pointer items-center gap-2 px-2.5 py-1.5 text-xs transition-colors hover:bg-slate-50 dark:hover:bg-white/10',
                     on && 'bg-blue-50 font-medium text-primary dark:bg-white/20'
                   )}
-                  title={item.title || item.name}
+                  title={detailWondoLabel(item)}
                 >
                   <span className="min-w-0 flex-1 truncate">{detailWondoLabel(item)}</span>
                   {item.category ? (
