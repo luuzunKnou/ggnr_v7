@@ -66,17 +66,25 @@ export function resolveWtlPipeLmStyleName(saaCde?: string | null): string {
   return 'wtl_pipe_lm';
 }
 
-/** 상수관로 스타일 stroke 색. 실패 시 기본값 */
+/**
+ * 상수관로 스타일 stroke 색 (송수·배수·기타).
+ * CSS → SLD env → SLD 고정 stroke. saa004 등은 CSS 없이 SLD만 있는 경우가 많음.
+ */
 export function readWtlPipeLmStrokeColor(
   saaCde?: string | null,
   fallback = '#F44336'
 ): string {
   const primary = resolveWtlPipeLmStyleName(saaCde);
-  const color =
+  const fromPrimary =
     readGeoServerCssStrokeColor(primary) ??
+    readGeoServerSldEnvStrokeColor(primary) ??
+    readGeoServerSldFixedStrokeColor(primary);
+  if (fromPrimary) return fromPrimary;
+  const fromBase =
     readGeoServerCssStrokeColor('wtl_pipe_lm') ??
-    fallback;
-  return color;
+    readGeoServerSldEnvStrokeColor('wtl_pipe_lm') ??
+    readGeoServerSldFixedStrokeColor('wtl_pipe_lm');
+  return fromBase ?? fallback;
 }
 
 function wwwSymbolPath(fileName: string): string {
@@ -165,7 +173,32 @@ export function readGeoServerSldEnvStrokeColor(styleName: string): string | null
   return `#${m[1]}`;
 }
 
-/** CSS stroke → SLD env stroke → null */
+/**
+ * SLD 고정 CssParameter stroke — 이중 선이면 마지막 비흰색(본선).
+ */
+export function readGeoServerSldFixedStrokeColor(styleName: string): string | null {
+  const sld = readSldFile(styleName);
+  if (!sld) return null;
+  const re =
+    /<(?:[\w]+:)?CssParameter\s+name=["']stroke["']\s*>([\s\S]*?)<\/(?:[\w]+:)?CssParameter>/gi;
+  const colors: string[] = [];
+  for (const m of sld.matchAll(re)) {
+    const plain = (m[1] ?? '').replace(/<[^>]+>/g, '').trim();
+    if (/^#[0-9A-Fa-f]{3,8}$/.test(plain)) colors.push(plain);
+  }
+  if (!colors.length) return null;
+  const isWhite = (h: string) => {
+    const s =
+      h.length === 4 ? `#${h[1]}${h[1]}${h[2]}${h[2]}${h[3]}${h[3]}` : h;
+    return /^#ffffff$/i.test(s);
+  };
+  for (let i = colors.length - 1; i >= 0; i--) {
+    if (!isWhite(colors[i]!)) return colors[i]!;
+  }
+  return colors[colors.length - 1] ?? null;
+}
+
+/** CSS stroke → SLD env stroke → SLD 고정 stroke → null */
 export function readWtlLayerLineColor(
   styleName: string,
   fallback?: string
@@ -173,6 +206,7 @@ export function readWtlLayerLineColor(
   const color =
     readGeoServerCssStrokeColor(styleName) ??
     readGeoServerSldEnvStrokeColor(styleName) ??
+    readGeoServerSldFixedStrokeColor(styleName) ??
     fallback ??
     '#F44336';
   return color;
@@ -201,8 +235,12 @@ export function readGeoServerCssFillColors(
   for (const raw of styleNames) {
     const key = String(raw ?? '').trim().toLowerCase();
     if (!key || out[key]) continue;
-    // 면 fill 우선, 등고선·관로 등 선 전용 스타일은 stroke로 범례색
-    const color = readGeoServerCssFillColor(key) ?? readGeoServerCssStrokeColor(key);
+    // 면 fill 우선, 등고선·관로 등 선 전용 스타일은 stroke로 범례색 (CSS→SLD)
+    const color =
+      readGeoServerCssFillColor(key) ??
+      readGeoServerCssStrokeColor(key) ??
+      readGeoServerSldEnvStrokeColor(key) ??
+      readGeoServerSldFixedStrokeColor(key);
     if (color) out[key] = color;
   }
   return out;

@@ -22,7 +22,8 @@ function fmtElev(h: number): string {
   return Number.isInteger(v) ? String(v) : v.toFixed(1);
 }
 
-function makeJibangoSprite(elevM: number): THREE.Sprite {
+/** 지반고 라벨 스프라이트 — 지형 호버 등에서 재사용 */
+export function createJibangoSprite(elevM: number): THREE.Sprite {
   const pad = 6;
   const canvas = document.createElement('canvas');
   const ctx = canvas.getContext('2d');
@@ -88,6 +89,9 @@ export function createGroundElevMarkers(field: GroundHeightField): THREE.Group {
   const root = new THREE.Group();
   root.name = 'groundElevMarkers';
   root.userData[GROUND_ELEV_MARKER_KEY] = true;
+  root.userData.isGroundElevMarkers = true;
+  // 기본 숨김 — 지형 호버 시에만 표시
+  root.visible = false;
   if (field.size < 2 || !field.heights?.length) return root;
 
   const scale = GROUND_SCENE_M_PER_UNIT;
@@ -150,7 +154,7 @@ export function createGroundElevMarkers(field: GroundHeightField): THREE.Group {
 
   for (const c of placed) {
     const y = sampleSurfaceY(field, c.x, c.z) + Y_EPS;
-    const sprite = makeJibangoSprite(c.elev);
+    const sprite = createJibangoSprite(c.elev);
     sprite.position.set(c.x, y + 0.25, c.z);
     root.add(sprite);
   }

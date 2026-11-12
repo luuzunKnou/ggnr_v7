@@ -2787,7 +2787,7 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
               hjd: '',
               attrs: [],
             },
-            { center: true, openDetail: false }
+            { openDetail: false }
           )
         }}
       />

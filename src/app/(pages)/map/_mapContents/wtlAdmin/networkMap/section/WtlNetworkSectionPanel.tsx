@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { ChevronUp, X } from 'lucide-react'
 import { MapFloatingPanel } from '../../../../_mapComponents/MapFloatingPanel'
 import { cn } from '@/lib/utils'
@@ -67,6 +67,14 @@ export function WtlNetworkSectionPanel({
   onLegendItemSelect,
 }: Props) {
   const [collapsed, setCollapsed] = useState(false)
+  /** 3D는 첫 진입 후 유지 — 탭 전환마다 씬·조회 재생성 방지 (횡·종단 캐시와 동일 의도) */
+  const [keepThreeJs, setKeepThreeJs] = useState(tab === 'threejs')
+  useEffect(() => {
+    if (tab === 'threejs') setKeepThreeJs(true)
+  }, [tab])
+  useEffect(() => {
+    if (!lineReady) setKeepThreeJs(false)
+  }, [lineReady])
 
   if (!open) return null
 
@@ -104,7 +112,7 @@ export function WtlNetworkSectionPanel({
             <div className="truncate text-sm font-semibold text-foreground">단면도</div>
             <div className="truncate text-[11px] text-muted-foreground">
               {lineReady
-                ? `절단선 ${totalLengthM.toFixed(0)} m · 시설 ${features.length}건`
+                ? `절단선 ${totalLengthM.toFixed(0)} m`
                 : '절단선 기준 단면'}
             </div>
           </div>
@@ -160,46 +168,61 @@ export function WtlNetworkSectionPanel({
         </div>
 
         <div className={cn('overflow-hidden p-3', SECTION_PANEL_BODY_CLASS)}>
-          {tab === 'threejs' ? (
-            !lineReady || !line3857 || line3857.length < 2 ? (
+          {tab !== 'threejs' ? (
+            loading ? (
+              <div className="flex h-full min-h-0 gap-2 overflow-hidden rounded border-2 border-border bg-background p-2">
+                <div className="flex min-h-0 min-w-0 flex-1 items-center justify-center">
+                  <p className="text-center text-[12px] text-muted-foreground">
+                    등고·시설 조회 중…
+                  </p>
+                </div>
+                <SectionFeatureLegendSkeleton />
+              </div>
+            ) : error ? (
+              <p className="py-10 text-center text-[12px] text-destructive">
+                {error}
+              </p>
+            ) : !lineReady ? (
               <p className="py-10 text-center text-[12px] text-muted-foreground">
                 절단선 데이터가 없습니다.
               </p>
             ) : (
+              <WtlNetworkSectionChart
+                mode={tab === 'longChart' ? 'longChart' : 'crossChart'}
+                ground={ground}
+                groundMin={groundMin}
+                groundMax={groundMax}
+                features={features}
+                totalLengthM={totalLengthM}
+                supplyAreaBands={supplyAreaBands}
+                supplyElevComposition={supplyElevComposition}
+                onLegendItemSelect={onLegendItemSelect}
+              />
+            )
+          ) : !lineReady || !line3857 || line3857.length < 2 ? (
+            <p className="py-10 text-center text-[12px] text-muted-foreground">
+              절단선 데이터가 없습니다.
+            </p>
+          ) : null}
+
+          {(keepThreeJs || tab === 'threejs') &&
+          lineReady &&
+          line3857 &&
+          line3857.length >= 2 ? (
+            <div
+              className={cn(
+                'h-full min-h-0',
+                tab !== 'threejs' && 'hidden'
+              )}
+              aria-hidden={tab !== 'threejs'}
+            >
               <WtlNetworkSectionThreeJsTab
                 line3857={line3857}
                 enabledKeys={enabledKeys}
                 onLegendItemSelect={onLegendItemSelect}
               />
-            )
-          ) : loading ? (
-            <div className="flex h-full min-h-0 gap-2 overflow-hidden rounded border-2 border-border bg-background p-2">
-              <div className="flex min-h-0 min-w-0 flex-1 items-center justify-center">
-                <p className="text-center text-[12px] text-muted-foreground">
-                  등고·시설 조회 중…
-                </p>
-              </div>
-              <SectionFeatureLegendSkeleton />
             </div>
-          ) : error ? (
-            <p className="py-10 text-center text-[12px] text-destructive">{error}</p>
-          ) : !lineReady ? (
-            <p className="py-10 text-center text-[12px] text-muted-foreground">
-              절단선 데이터가 없습니다.
-            </p>
-          ) : (
-            <WtlNetworkSectionChart
-              mode={tab === 'longChart' ? 'longChart' : 'crossChart'}
-              ground={ground}
-              groundMin={groundMin}
-              groundMax={groundMax}
-              features={features}
-              totalLengthM={totalLengthM}
-              supplyAreaBands={supplyAreaBands}
-              supplyElevComposition={supplyElevComposition}
-              onLegendItemSelect={onLegendItemSelect}
-            />
-          )}
+          ) : null}
         </div>
 
         <div className="shrink-0 border-t border-border px-3 py-2 text-[11px] text-muted-foreground">

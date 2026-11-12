@@ -76,25 +76,24 @@ function horizontalPerp(tangent: THREE.Vector3): THREE.Vector3 {
   return new THREE.Vector3(-t.z, 0, t.x).normalize();
 }
 
-/** 관로 지반고: 이미 표기한 고도와 이 이상 차이날 때만 추가 */
-const PIPE_JIBANGO_MIN_DELTA_M = 0.5;
-
 /**
  * 지형(지표) ↔ 관 윗면 토피 치수 바.
- * 지반고는 고도 차가 나는 관에만 (shownElevs에 기록).
  * 토피 = 지표면 → 관 외경 상단 (심도−관반경). 심도 DB는 관 중심 기준.
+ * 지반고는 지형 호버에서 따로 표시.
  */
 function createDepthBar(
   pipeCenter: THREE.Vector3,
   surfaceY: number,
   depthM: number,
   tangent: THREE.Vector3,
-  outerR: number,
-  shownElevs: number[]
+  outerR: number
 ): THREE.Group {
   const root = new THREE.Group();
   root.name = 'pipeDepthBar';
   root.userData[PIPE_MESH_KEY] = true;
+  root.userData.isDepthBar = true;
+  // 기본 숨김 — 도형 호버 시에만 표시
+  root.visible = false;
   root.raycast = () => {};
 
   const coverM = Math.max(0, depthM - outerR);
@@ -167,22 +166,6 @@ function createDepthBar(
     (top.z + bot.z) / 2 + perp.z * 0.18
   );
   root.add(coverSprite);
-
-  // 지반고: 이미 비슷한 고도가 표기됐으면 생략
-  const groundElevM = Math.round(surfaceY * 10) / 10;
-  const isNewElev = shownElevs.every(
-    (e) => Math.abs(e - groundElevM) >= PIPE_JIBANGO_MIN_DELTA_M
-  );
-  if (isNewElev) {
-    shownElevs.push(groundElevM);
-    const jibanSprite = makeDepthValueSprite(`지반고 ${fmtDepthM(groundElevM)}m`);
-    jibanSprite.position.set(
-      top.x + perp.x * 0.18,
-      top.y + 0.22,
-      top.z + perp.z * 0.18
-    );
-    root.add(jibanSprite);
-  }
   return root;
 }
 
@@ -477,8 +460,6 @@ export function createPipesOverlay(opts: CreatePipesOverlayOpts): THREE.Group {
   };
   const dipEnds: DipEnd[] = [];
   const END_SNAP_M = 0.4;
-  /** 관로 지반고 — 고도 차가 나는 관만 */
-  const shownPipeElevs: number[] = [];
 
   for (const pipe of pipes) {
     if (!pipe.coords3857 || pipe.coords3857.length < 2) continue;
@@ -578,10 +559,11 @@ export function createPipesOverlay(opts: CreatePipesOverlayOpts): THREE.Group {
         midSurf,
         pipe.depthM,
         midT,
-        outerR,
-        shownPipeElevs
+        outerR
       );
       depthBar.userData.pipeId = runId;
+      depthBar.userData.featureId = pipe.id;
+      depthBar.userData.isDepthBar = true;
       root.add(depthBar);
 
       if (dipAdded) continue;

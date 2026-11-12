@@ -123,6 +123,7 @@ export function SectionFeatureLegendPanel({
   onToggleItem,
   onToggleLayer,
   onItemClick,
+  selectedKey = null,
 }: {
   groups: LongPipeLegendGroup[]
   stylesByKey: Record<
@@ -143,6 +144,8 @@ export function SectionFeatureLegendPanel({
   onToggleLayer: (group: LongPipeLegendGroup) => void
   /** 항목 라벨 클릭(체크와 별도) — 지도 선택·이동·ThreeJs 강조 등 */
   onItemClick?: (item: LongPipeLegendItem) => void
+  /** 외부(3D 클릭 등)에서 맞춘 선택 행 */
+  selectedKey?: string | null
 }) {
   const [collapsedLayers, setCollapsedLayers] = useState<Set<string>>(
     () => new Set()
@@ -156,6 +159,10 @@ export function SectionFeatureLegendPanel({
   useEffect(() => {
     setActiveKey(null)
   }, [groupsSig])
+
+  useEffect(() => {
+    setActiveKey(selectedKey ?? null)
+  }, [selectedKey])
 
   const toggleCollapse = (layerName: string) => {
     setCollapsedLayers((prev) => {
@@ -234,7 +241,7 @@ export function SectionFeatureLegendPanel({
                 />
               </div>
               {!collapsed ? (
-                <ul className="space-y-0.5 bg-background px-1.5 py-0.5">
+                <ul className="space-y-0.5 bg-background py-0.5">
                   {g.items.map((it) => {
                     const hidden = hiddenKeys.has(it.key)
                     const isPoint = it.kind === 'point'
@@ -255,7 +262,7 @@ export function SectionFeatureLegendPanel({
                       <li
                         key={it.key}
                         className={cn(
-                          'flex items-center gap-1 rounded py-0.5',
+                          'flex items-center gap-1 px-1.5 py-0.5',
                           selected
                             ? 'bg-primary/15 ring-1 ring-inset ring-primary/25'
                             : 'hover:bg-muted'
@@ -312,7 +319,7 @@ export function SectionFeatureLegendPanel({
                               style={{
                                 textDecoration: hidden ? 'line-through' : undefined,
                               }}
-                              title={`${it.label} 선택·지도 이동`}
+                              title={`${it.label} 선택`}
                               onClick={() => {
                                 setActiveKey(it.key)
                                 onItemClick(it)

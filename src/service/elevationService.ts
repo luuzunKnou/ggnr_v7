@@ -1051,7 +1051,10 @@ async function fetchPipeDepthSamplesInEnv(
   }
 }
 
-/** 꼭짓점마다 10m(투영) 안 최근접 심도점. 없으면 fallback */
+/**
+ * 꼭짓점마다 10m(투영) 안 최근접 심도점. 없으면 fallback.
+ * 인접 꼭짓점 심도 급변은 완화해 3D·종단에서 관이 뚝 끊겨 보이지 않게 한다.
+ */
 function depthsAlongCoords(
   coords: [number, number][],
   samples: PipeDepthSample[],
@@ -1059,48 +1062,68 @@ function depthsAlongCoords(
   fallback: number
 ): number[] {
   if (!coords.length) return [];
-  if (!samples.length) return coords.map(() => fallback);
   const r2 = searchProj * searchProj;
-  return coords.map(([x, y]) => {
-    let bestD = Infinity;
-    let bestDep = fallback;
-    for (const s of samples) {
-      const dx = s.x - x;
-      const dy = s.y - y;
-      const d2 = dx * dx + dy * dy;
-      if (d2 <= r2 && d2 < bestD) {
-        bestD = d2;
-        bestDep = s.depthM;
+  const raw = !samples.length
+    ? coords.map(() => fallback)
+    : coords.map(([x, y]) => {
+        let bestD = Infinity;
+        let bestDep = fallback;
+        for (const s of samples) {
+          const dx = s.x - x;
+          const dy = s.y - y;
+          const d2 = dx * dx + dy * dy;
+          if (d2 <= r2 && d2 < bestD) {
+            bestD = d2;
+            bestDep = s.depthM;
+          }
+        }
+        return bestDep;
+      });
+  if (raw.length < 3) return raw;
+
+  const dist: number[] = [0];
+  for (let i = 1; i < coords.length; i++) {
+    const [x0, y0] = coords[i - 1]!;
+    const [x1, y1] = coords[i]!;
+    dist.push(dist[i - 1]! + Math.hypot(x1 - x0, y1 - y0));
+  }
+  // m 심도 / m 수평 + 절대 여유 — 최근접 pip_dep 전환 시 급강하 완화
+  const MAX_GRAD = 0.08;
+  const FLOOR = 0.08;
+  const out = raw.slice();
+  for (let pass = 0; pass < 2; pass++) {
+    for (let i = 1; i < out.length; i++) {
+      const seg = Math.max(0.05, dist[i]! - dist[i - 1]!);
+      const maxDelta = MAX_GRAD * seg + FLOOR;
+      const d = out[i]! - out[i - 1]!;
+      if (Math.abs(d) > maxDelta) {
+        out[i] = out[i - 1]! + Math.sign(d) * maxDelta;
       }
     }
-    return bestDep;
-  });
+    for (let i = out.length - 2; i >= 0; i--) {
+      const seg = Math.max(0.05, dist[i + 1]! - dist[i]!);
+      const maxDelta = MAX_GRAD * seg + FLOOR;
+      const d = out[i]! - out[i + 1]!;
+      if (Math.abs(d) > maxDelta) {
+        out[i] = out[i + 1]! + Math.sign(d) * maxDelta;
+      }
+    }
+  }
+  return out;
 }
 
+/**
+ * LineString/MultiLineString → 단일 좌표열.
+ * Multi는 이어붙이지 않고 최장 파트만(하위 호환). 관로는 parts API 사용.
+ */
 function parseLineCoords3857(geojson: string): [number, number][] {
-  try {
-    const g = JSON.parse(geojson) as {
-      type?: string;
-      coordinates?: unknown;
-    };
-    const out: [number, number][] = [];
-    const pushRing = (ring: unknown) => {
-      if (!Array.isArray(ring)) return;
-      for (const c of ring) {
-        if (!Array.isArray(c) || c.length < 2) continue;
-        const x = Number(c[0]);
-        const y = Number(c[1]);
-        if (Number.isFinite(x) && Number.isFinite(y)) out.push([x, y]);
-      }
-    };
-    if (g.type === 'LineString') pushRing(g.coordinates);
-    else if (g.type === 'MultiLineString' && Array.isArray(g.coordinates)) {
-      for (const line of g.coordinates) pushRing(line);
-    }
-    return out;
-  } catch {
-    return [];
+  const parts = parseLineCoordsParts3857(geojson);
+  if (!parts.length) return [];
+  let best = parts[0]!;
+  for (let i = 1; i < parts.length; i++) {
+    if (parts[i]!.length > best.length) best = parts[i]!;
   }
+  return best;
 }
 
 /**
@@ -1281,31 +1304,47 @@ export async function getWtlPipesInExtent(params: {
         props?: unknown;
         geojson?: string;
       };
-      const coords = parseLineCoords3857(String(row.geojson ?? ''));
-      if (coords.length < 2) continue;
+      // ST_Intersection MultiLineString — 파트별 관으로 분리(이어붙이면 중간이 끊기거나 가짜 연결)
+      const parts = parseLineCoordsParts3857(String(row.geojson ?? ''));
+      if (!parts.length) continue;
 
       const depthM = resolveLegacyPipeDepthM(row, 1.2);
-      const depthsM = depthsAlongCoords(coords, depthSamples, depSearchProj, depthM);
-
       const labelRaw = row.pip_lbl != null ? String(row.pip_lbl).trim() : '';
       const saaCde =
         row.saa_cde != null ? String(row.saa_cde).trim().toUpperCase() : '';
-      const mid = coords[Math.floor(coords.length / 2)]!;
-      midPoints.push(mid);
       const props = parseRowProps(row.props);
-      pipes.push({
-        id: `pipe-${pipes.length}`,
-        label: labelRaw || undefined,
-        saaCde: saaCde || undefined,
-        color: readWtlPipeLmStrokeColor(saaCde || null),
-        coords3857: coords,
-        diameterM: parseStdDipToMeters(row.std_dip),
-        depthM,
-        depthsM,
-        props,
-        fieldsTable: PIPE_LM_TABLE,
-        ogcFid: ogcFidFromRow(row, props),
-      });
+      const ogcFid = ogcFidFromRow(row, props);
+      const diameterM = parseStdDipToMeters(row.std_dip);
+      const color = readWtlPipeLmStrokeColor(saaCde || null);
+
+      for (let pi = 0; pi < parts.length; pi++) {
+        const coords = parts[pi]!;
+        if (coords.length < 2) continue;
+        const depthsM = depthsAlongCoords(
+          coords,
+          depthSamples,
+          depSearchProj,
+          depthM
+        );
+        const mid = coords[Math.floor(coords.length / 2)]!;
+        midPoints.push(mid);
+        pipes.push({
+          id:
+            parts.length > 1
+              ? `pipe-${pipes.length}#${pi}`
+              : `pipe-${pipes.length}`,
+          label: labelRaw || undefined,
+          saaCde: saaCde || undefined,
+          color,
+          coords3857: coords,
+          diameterM,
+          depthM,
+          depthsM,
+          props,
+          fieldsTable: PIPE_LM_TABLE,
+          ogcFid,
+        });
+      }
     }
 
     // 지표: 관 중점 등고 상·하 보간 (지도 고도 측정과 동일)
@@ -1950,28 +1989,43 @@ export async function getWtlLineLayerInExtent(
         props?: unknown;
         geojson?: string;
       };
-      const coords = parseLineCoords3857(String(row.geojson ?? ''));
-      if (coords.length < 2) continue;
+      // ST_Intersection MultiLineString — 파트별 관으로 분리(이어붙이면 중간이 끊기거나 가짜 연결)
+      const parts = parseLineCoordsParts3857(String(row.geojson ?? ''));
+      if (!parts.length) continue;
 
       const depthM = resolveLegacyPipeDepthM(row, def.defaultDisplayDepthM);
-      const depthsM = depthsAlongCoords(coords, depthSamples, depSearchProj, depthM);
-
       const labelRaw = row.pip_lbl != null ? String(row.pip_lbl).trim() : '';
-      const mid = coords[Math.floor(coords.length / 2)]!;
-      midPoints.push(mid);
       const props = parseRowProps(row.props);
-      pipes.push({
-        id: `${def.table}-${pipes.length}`,
-        label: labelRaw || undefined,
-        color: layerColor,
-        coords3857: coords,
-        diameterM: Math.max(0.02, parseStdDipToMeters(row.std_dip)),
-        depthM,
-        depthsM,
-        props,
-        fieldsTable: def.table,
-        ogcFid: ogcFidFromRow(row, props),
-      });
+      const ogcFid = ogcFidFromRow(row, props);
+      const diameterM = Math.max(0.02, parseStdDipToMeters(row.std_dip));
+
+      for (let pi = 0; pi < parts.length; pi++) {
+        const coords = parts[pi]!;
+        if (coords.length < 2) continue;
+        const depthsM = depthsAlongCoords(
+          coords,
+          depthSamples,
+          depSearchProj,
+          depthM
+        );
+        const mid = coords[Math.floor(coords.length / 2)]!;
+        midPoints.push(mid);
+        pipes.push({
+          id:
+            parts.length > 1
+              ? `${def.table}-${pipes.length}#${pi}`
+              : `${def.table}-${pipes.length}`,
+          label: labelRaw || undefined,
+          color: layerColor,
+          coords3857: coords,
+          diameterM,
+          depthM,
+          depthsM,
+          props,
+          fieldsTable: def.table,
+          ogcFid,
+        });
+      }
     }
 
     try {
