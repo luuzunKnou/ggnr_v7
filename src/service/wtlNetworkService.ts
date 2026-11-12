@@ -1245,7 +1245,7 @@ export async function getWtlNetworkAtPoint(params: {
   mapSources?: string[];
   /** 미터 단위 대략 버퍼 (3857) */
   tolerance?: number;
-}): Promise<{ row: WtlNetworkRow | null }> {
+}): Promise<{ row: WtlNetworkRow | null; rows: WtlNetworkRow[] }> {
   const keys = (params.layerKeys ?? []).map((k) => String(k).trim()).filter(Boolean);
   const sources = parseMapSourceIds(params.mapSources)
     .map((id) => resolveWtlNetMapSource(id))
@@ -1253,7 +1253,7 @@ export async function getWtlNetworkAtPoint(params: {
   const x = Number(params.x);
   const y = Number(params.y);
   if (!Number.isFinite(x) || !Number.isFinite(y) || keys.length === 0 || sources.length === 0) {
-    return { row: null };
+    return { row: null, rows: [] };
   }
   const tol = Math.max(1, Number(params.tolerance) || 8);
 
@@ -1334,9 +1334,10 @@ export async function getWtlNetworkAtPoint(params: {
     }
   }
 
-  if (hits.length === 0) return { row: null };
+  if (hits.length === 0) return { row: null, rows: [] };
   hits.sort((a, b) => a.rank - b.rank || a.dist - b.dist);
-  return { row: hits[0]!.row };
+  const rows = hits.map((h) => h.row);
+  return { row: rows[0] ?? null, rows };
 }
 
 /** layer 스키마에서 wtl_wtsba_as 계열 테이블명 */

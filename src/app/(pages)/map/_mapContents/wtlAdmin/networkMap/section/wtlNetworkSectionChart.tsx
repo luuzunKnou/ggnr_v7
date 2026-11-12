@@ -743,11 +743,13 @@ function CrossSectionChart({
   features,
   totalLengthM,
   supplyAreaBands,
+  onLegendItemSelect,
 }: {
   ground: SectionGroundPt[]
   features: SectionFeatureMark[]
   totalLengthM: number
   supplyAreaBands: SectionSupplyBandSegment[]
+  onLegendItemSelect?: (item: import('./wtlNetworkSectionLegend').LongPipeLegendItem) => void
 }) {
   const ink = sectionChartInk(useResolvedThemeSafe() === 'dark')
   const { plotInset, insetSyncPlugin } = usePlotInsetSync()
@@ -1098,6 +1100,7 @@ function CrossSectionChart({
         hiddenKeys={hiddenKeys}
         onToggleItem={toggleLegendItem}
         onToggleLayer={toggleLegendLayer}
+        onItemClick={onLegendItemSelect}
       />
     </div>
   )
@@ -1111,6 +1114,7 @@ function LongSectionChart({
   totalLengthM,
   supplyAreaBands,
   supplyElevComposition = [],
+  onLegendItemSelect,
 }: {
   ground: SectionGroundPt[]
   groundMin: SectionGroundPt[]
@@ -1119,6 +1123,7 @@ function LongSectionChart({
   totalLengthM: number
   supplyAreaBands: SectionSupplyBandSegment[]
   supplyElevComposition?: import('./useWtlNetworkSection').SectionSupplyElevRow[]
+  onLegendItemSelect?: (item: import('./wtlNetworkSectionLegend').LongPipeLegendItem) => void
 }) {
   const ink = sectionChartInk(useResolvedThemeSafe() === 'dark')
   const {
@@ -1509,6 +1514,7 @@ function LongSectionChart({
         hiddenKeys={hiddenKeys}
         onToggleItem={toggleLegendItem}
         onToggleLayer={toggleLegendLayer}
+        onItemClick={onLegendItemSelect}
       />
     </div>
   )
@@ -1523,6 +1529,7 @@ export function WtlNetworkSectionChart({
   totalLengthM,
   supplyAreaBands = [],
   supplyElevComposition = [],
+  onLegendItemSelect,
 }: {
   mode: 'crossChart' | 'longChart'
   ground?: SectionGroundPt[]
@@ -1532,6 +1539,7 @@ export function WtlNetworkSectionChart({
   totalLengthM: number
   supplyAreaBands?: SectionSupplyBandSegment[]
   supplyElevComposition?: import('./useWtlNetworkSection').SectionSupplyElevRow[]
+  onLegendItemSelect?: (item: import('./wtlNetworkSectionLegend').LongPipeLegendItem) => void
 }) {
   if (mode === 'crossChart') {
     return (
@@ -1541,6 +1549,7 @@ export function WtlNetworkSectionChart({
           features={features}
           totalLengthM={totalLengthM}
           supplyAreaBands={supplyAreaBands}
+          onLegendItemSelect={onLegendItemSelect}
         />
       </div>
     )
@@ -1555,6 +1564,7 @@ export function WtlNetworkSectionChart({
         totalLengthM={totalLengthM}
         supplyAreaBands={supplyAreaBands}
         supplyElevComposition={supplyElevComposition}
+        onLegendItemSelect={onLegendItemSelect}
       />
     </div>
   )

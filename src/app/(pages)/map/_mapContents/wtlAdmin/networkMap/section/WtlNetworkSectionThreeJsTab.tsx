@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Hand, RotateCw } from 'lucide-react'
 import { call } from '@/lib/api'
 import { useResolvedThemeSafe } from '@/app/(pages)/(index)/theme-provider'
 import { WTL_LAYER_SHAPE_DEFS } from '@/lib/wtlLayerShapeDefs'
@@ -19,7 +20,9 @@ import {
   SectionFeatureLegendPanel,
   SectionFeatureLegendSkeleton,
   useSectionFeatureLegend,
+  type LongPipeLegendItem,
 } from './wtlNetworkSectionLegend'
+import { networkIdOf } from './useWtlNetworkSection'
 
 /**
  * ThreeJs 뷰·씬 배경색 (조절 지점)
@@ -39,6 +42,9 @@ const THREEJS_VIEW_BG_CLASS = {
 /** ThreeJs 데이터 범례 — 지형 토글 키 */
 const THREEJS_GROUND_FEATURE_ID = '__wtl_section_ground__'
 
+/** 3D 뷰어 드래그 도구 — 이동·회전 라디오 */
+type ThreeJsViewTool = 'pan' | 'rotate'
+
 import {
   buildThreeJsHoverTipHtml,
   type ThreeJsTipUserData,
@@ -50,6 +56,8 @@ type Props = {
   line3857: Pt3857[]
   /** 관망조회에서 켜진 레이어 키 → 지형 파생 도형 */
   enabledKeys: string[]
+  /** 데이터 범례 항목 선택 — 시설목록과 동일 선택·지도 이동 */
+  onLegendItemSelect?: (item: LongPipeLegendItem) => void
 }
 
 /**
@@ -152,7 +160,11 @@ function featureIdOf(ud: {
   return String(ud.featureId || ud.pipeId || ud.manholeId || '').trim()
 }
 
-export function WtlNetworkSectionThreeJsTab({ line3857, enabledKeys }: Props) {
+export function WtlNetworkSectionThreeJsTab({
+  line3857,
+  enabledKeys,
+  onLegendItemSelect,
+}: Props) {
   const theme = useResolvedThemeSafe()
   const isDark = theme === 'dark'
   const viewBgHex = isDark ? THREEJS_VIEW_BG.dark : THREEJS_VIEW_BG.light
@@ -183,6 +195,7 @@ export function WtlNetworkSectionThreeJsTab({ line3857, enabledKeys }: Props) {
   const [status, setStatus] = useState('')
   const [error, setError] = useState('')
   const [viewReady, setViewReady] = useState(false)
+  const [viewTool, setViewTool] = useState<ThreeJsViewTool>('rotate')
   const [legendFeatures, setLegendFeatures] = useState<SectionFeatureMark[]>([])
 
   const kinds = useMemo(() => resolveGroundLayerKinds(enabledKeys), [enabledKeys])
@@ -714,6 +727,7 @@ export function WtlNetworkSectionThreeJsTab({ line3857, enabledKeys }: Props) {
                 color: pipe.color || layerColor,
                 kind: 'pipe',
                 styleCode: pipe.saaCde,
+                networkId: networkIdOf(meta.defineTable, pipe.ogcFid),
               })
             }
             if (!pipes.length) continue
@@ -781,6 +795,7 @@ export function WtlNetworkSectionThreeJsTab({ line3857, enabledKeys }: Props) {
                 layerKey: pointLayerKey,
                 color: m.color || layerColor,
                 kind: 'point',
+                networkId: networkIdOf(pointLayerKey, m.ogcFid),
               })
             }
           }
@@ -842,6 +857,12 @@ export function WtlNetworkSectionThreeJsTab({ line3857, enabledKeys }: Props) {
         orbit = new OrbitControls(camera, renderer.domElement)
         orbit.enableDamping = true
         orbit.dampingFactor = 0.08
+        // 초기 = 회전(기본). 이동/회전 라디오는 viewTool effect가 덮어씀
+        orbit.enablePan = false
+        orbit.enableRotate = true
+        orbit.mouseButtons.LEFT = THREE.MOUSE.ROTATE
+        orbit.mouseButtons.MIDDLE = THREE.MOUSE.DOLLY
+        orbit.mouseButtons.RIGHT = THREE.MOUSE.PAN
         orbitRef.current = orbit
         fitSectionLineView(camera, orbit, groundGroup, groundProps)
 
@@ -972,6 +993,37 @@ export function WtlNetworkSectionThreeJsTab({ line3857, enabledKeys }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- line3857/kinds는 sig와 동기
   }, [lineSig, kindsSig, clearSelectionPulse])
 
+  /** 이동·회전 라디오 → OrbitControls 왼쪽 드래그 동작 */
+  useEffect(() => {
+    const orbit = orbitRef.current
+    if (!orbit || !viewReady) return
+    let cancelled = false
+    void import('three').then((THREE) => {
+      if (cancelled || orbitRef.current !== orbit) return
+      if (viewTool === 'pan') {
+        orbit.enablePan = true
+        orbit.enableRotate = false
+        orbit.screenSpacePanning = true
+        orbit.mouseButtons.LEFT = THREE.MOUSE.PAN
+        orbit.mouseButtons.MIDDLE = THREE.MOUSE.DOLLY
+        orbit.mouseButtons.RIGHT = THREE.MOUSE.DOLLY
+      } else {
+        orbit.enablePan = false
+        orbit.enableRotate = true
+        orbit.mouseButtons.LEFT = THREE.MOUSE.ROTATE
+        orbit.mouseButtons.MIDDLE = THREE.MOUSE.DOLLY
+        orbit.mouseButtons.RIGHT = THREE.MOUSE.PAN
+      }
+      const canvas = hostRef.current?.querySelector('canvas')
+      if (canvas) {
+        canvas.style.cursor = viewTool === 'pan' ? 'grab' : ''
+      }
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [viewTool, viewReady])
+
   const showLegendSkeleton =
     !error && featureLegendGroups.length === 0 && (busy || !viewReady)
 
@@ -1001,7 +1053,47 @@ export function WtlNetworkSectionThreeJsTab({ line3857, enabledKeys }: Props) {
             style={{ display: 'none' }}
           />
           {viewReady && !error ? (
-            <ViewportCompass getCamera={getCamera} onClick={faceNorth} />
+            <>
+              <ViewportCompass getCamera={getCamera} onClick={faceNorth} />
+              <div
+                role="radiogroup"
+                aria-label="3D 뷰 조작"
+                className="pointer-events-auto absolute bottom-3 left-1/2 z-10 flex -translate-x-1/2 items-center gap-0.5 rounded-md border border-border bg-background/90 p-0.5 shadow-md backdrop-blur-sm"
+              >
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={viewTool === 'pan'}
+                  title="이동"
+                  aria-label="이동"
+                  onClick={() => setViewTool('pan')}
+                  className={cn(
+                    'inline-flex h-8 w-8 cursor-pointer items-center justify-center rounded-sm transition-colors',
+                    viewTool === 'pan'
+                      ? 'bg-primary text-primary-foreground'
+                      : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                  )}
+                >
+                  <Hand className="h-4 w-4" aria-hidden />
+                </button>
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={viewTool === 'rotate'}
+                  title="회전"
+                  aria-label="회전"
+                  onClick={() => setViewTool('rotate')}
+                  className={cn(
+                    'inline-flex h-8 w-8 cursor-pointer items-center justify-center rounded-sm transition-colors',
+                    viewTool === 'rotate'
+                      ? 'bg-primary text-primary-foreground'
+                      : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                  )}
+                >
+                  <RotateCw className="h-4 w-4" aria-hidden />
+                </button>
+              </div>
+            </>
           ) : null}
           {busy || !viewReady ? (
             <p
@@ -1022,7 +1114,10 @@ export function WtlNetworkSectionThreeJsTab({ line3857, enabledKeys }: Props) {
           hiddenKeys={hiddenKeys}
           onToggleItem={toggleLegendItem}
           onToggleLayer={toggleLegendLayer}
-          onItemClick={flashFeature}
+          onItemClick={(item) => {
+            flashFeature(item.key)
+            onLegendItemSelect?.(item)
+          }}
         />
       ) : showLegendSkeleton ? (
         <SectionFeatureLegendSkeleton />

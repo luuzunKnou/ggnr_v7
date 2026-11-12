@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { ChevronDown, ChevronRight } from 'lucide-react'
+import { cn } from '@/lib/utils'
 import type { SectionFeatureMark } from './wtlNetworkSectionSvg'
 import { useWtlSectionLayerStyles } from './useWtlSectionLayerStyles'
 import { SECTION_FEATURE_LEGEND_WIDTH_PX } from './wtlNetworkSectionLayout'
@@ -13,6 +14,8 @@ export type LongPipeLegendItem = {
   kind?: 'pipe' | 'point'
   layerKey?: string
   styleCode?: string
+  /** 시설목록 선택과 동일 — getWtlNetworkDetail id */
+  networkId?: string
 }
 
 export type LongPipeLegendGroup = {
@@ -55,6 +58,7 @@ export function buildLongFeatureLegendGroups(
       kind: f.kind,
       layerKey: f.layerKey,
       styleCode: f.styleCode,
+      networkId: f.networkId,
     }
     if (arr) arr.push(item)
     else byLayer.set(layerName, [item])
@@ -137,12 +141,21 @@ export function SectionFeatureLegendPanel({
   hiddenKeys: Set<string>
   onToggleItem: (key: string) => void
   onToggleLayer: (group: LongPipeLegendGroup) => void
-  /** 항목 라벨 클릭(체크와 별도) — ThreeJs 도형 강조 등 */
-  onItemClick?: (key: string) => void
+  /** 항목 라벨 클릭(체크와 별도) — 지도 선택·이동·ThreeJs 강조 등 */
+  onItemClick?: (item: LongPipeLegendItem) => void
 }) {
   const [collapsedLayers, setCollapsedLayers] = useState<Set<string>>(
     () => new Set()
   )
+  const [activeKey, setActiveKey] = useState<string | null>(null)
+  const groupsSig = useMemo(
+    () => groups.flatMap((g) => g.items.map((it) => it.key)).join('|'),
+    [groups]
+  )
+
+  useEffect(() => {
+    setActiveKey(null)
+  }, [groupsSig])
 
   const toggleCollapse = (layerName: string) => {
     setCollapsedLayers((prev) => {
@@ -237,10 +250,16 @@ export function SectionFeatureLegendPanel({
                     const fill = baseSt?.fillColor ?? stroke
                     const legendSrc =
                       codeSym?.legendSrc || baseSt?.legendSrc || ''
+                    const selected = activeKey === it.key
                     return (
                       <li
                         key={it.key}
-                        className="flex items-center gap-1 rounded py-0.5 hover:bg-muted"
+                        className={cn(
+                          'flex items-center gap-1 rounded py-0.5',
+                          selected
+                            ? 'bg-primary/15 ring-1 ring-inset ring-primary/25'
+                            : 'hover:bg-muted'
+                        )}
                       >
                         <div
                           className={`flex min-w-0 flex-1 items-center gap-1 ${hidden ? 'text-muted-foreground opacity-55' : 'text-foreground'}`}
@@ -286,21 +305,24 @@ export function SectionFeatureLegendPanel({
                               />
                             </svg>
                           )}
-                          {onItemClick ? (
+                          {onItemClick && it.networkId ? (
                             <button
                               type="button"
                               className="min-w-0 flex-1 cursor-pointer truncate text-left text-[10px] hover:underline"
                               style={{
                                 textDecoration: hidden ? 'line-through' : undefined,
                               }}
-                              title={`${it.label} 위치 표시`}
-                              onClick={() => onItemClick(it.key)}
+                              title={`${it.label} 선택·지도 이동`}
+                              onClick={() => {
+                                setActiveKey(it.key)
+                                onItemClick(it)
+                              }}
                             >
                               {it.label}
                             </button>
                           ) : (
                             <span
-                              className="truncate text-[10px]"
+                              className="min-w-0 flex-1 truncate text-[10px]"
                               style={{
                                 textDecoration: hidden ? 'line-through' : 'none',
                               }}

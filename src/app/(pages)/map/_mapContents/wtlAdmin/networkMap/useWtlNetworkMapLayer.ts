@@ -159,7 +159,8 @@ type Props = {
   /** 서버 listWtlNetMapSources로 확정된 출처 id */
   availableSourceIds: readonly string[]
   selected: WtlNetworkRow | null
-  onSelect: (row: WtlNetworkRow) => void
+  /** hits: 클릭 지점 다중 피처(점→선→면 정렬). 목록 선택은 hits 없이 호출 */
+  onSelect: (row: WtlNetworkRow, hits?: WtlNetworkRow[]) => void
   onExtentChange: (bbox3857: [number, number, number, number] | null) => void
   /** 화면 내 조회 시 이동 중 진행 중 요청 취소용 */
   onMapMoveStart?: () => void
@@ -287,8 +288,16 @@ export function useWtlNetworkMapLayer({
               tolerance: 2,
             },
           })
-          const row = (res?.data ?? res)?.row as WtlNetworkRow | null | undefined
-          if (row) onSelectRef.current(row)
+          const data = (res?.data ?? res) as
+            | { row?: WtlNetworkRow | null; rows?: WtlNetworkRow[] }
+            | undefined
+          const rows = Array.isArray(data?.rows)
+            ? data.rows.filter(Boolean)
+            : data?.row
+              ? [data.row]
+              : []
+          const row = rows[0] ?? data?.row ?? null
+          if (row) onSelectRef.current(row, rows)
         } catch {
           /* ignore */
         }

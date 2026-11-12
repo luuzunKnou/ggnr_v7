@@ -53,7 +53,7 @@ import {
   type WtlNetworkExportLayerOption,
   type WtlNetworkExportScope,
 } from './WtlNetworkExportMenu'
-import { flyToWtlNetworkGeom } from './wtlNetworkMapFly'
+import { centerMapOnWtlNetworkGeom, flyToWtlNetworkGeom } from './wtlNetworkMapFly'
 import { WtlNetworkSectionPanel } from './section/WtlNetworkSectionPanel'
 import { WtlNetworkSectionDrawGuide } from './section/WtlNetworkSectionDrawGuide'
 import { useWtlNetworkSection } from './section/useWtlNetworkSection'
@@ -723,6 +723,10 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
   >({})
   /** 지도 레이어 클릭 시 상세 강제 펼침 (목록 행 선택은 접힘 유지) */
   const [detailExpandToken, setDetailExpandToken] = useState(0)
+  /** false면 선택·하이라이트만 (단면도 범례). 시설목록·지도 클릭은 true */
+  const [detailOpen, setDetailOpen] = useState(false)
+  /** 단면도 데이터 범례로 켠 선택자 — 패널 닫을 때 하이라이트 제거용 */
+  const sectionLegendSelectionRef = useRef(false)
 
   const listPageSize = LIST_PAGE_SIZE
   const [group, setGroup] = useState(INITIAL_GROUP)
@@ -746,6 +750,8 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
   const [supplyBlockOptions, setSupplyBlockOptions] = useState<{ value: string; label: string }[]>([])
   const [riOptions, setRiOptions] = useState<{ code: string; name: string }[]>([])
   const [selected, setSelected] = useState<WtlNetworkRow | null>(null)
+  /** 지도 클릭 다중 피처(점→선→면 정렬). 목록·범례 선택은 비움 */
+  const [mapHitRows, setMapHitRows] = useState<WtlNetworkRow[]>([])
   const [detailRelatedLayer, setDetailRelatedLayer] =
     useState<WtlNetworkDetailRelatedLayer>(null)
   const [onlyInView, setOnlyInView] = useState(true)
@@ -1445,8 +1451,17 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
     }
   }, [boxData])
 
-  /** 시설목록 행·지도 클릭 공통. fly=true 일 때만 해당 도형으로 맵 이동 */
-  const pickRow = async (item: WtlNetworkRow, opts?: { fly?: boolean }) => {
+  /**
+   * 시설목록 행·지도 클릭·단면도 범례 공통.
+   * fly=true: extent fit / center=true: 도형 중심으로 맵 센터 이동.
+   * openDetail=false 이면 상세 모달 없이 선택·하이라이트만.
+   */
+  const pickRow = async (
+    item: WtlNetworkRow,
+    opts?: { fly?: boolean; center?: boolean; openDetail?: boolean }
+  ) => {
+    const openDetail = opts?.openDetail !== false
+    if (openDetail) sectionLegendSelectionRef.current = false
     let next: WtlNetworkRow = item
     try {
       const res = await call('', 'POST', {
@@ -1457,17 +1472,18 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
       const row = (res?.data ?? res)?.row as WtlNetworkRow | null | undefined
       next = row ?? item
       setSelected(next)
+      setDetailOpen(openDetail)
     } catch {
       setSelected(item)
+      setDetailOpen(openDetail)
       next = item
     }
-    if (opts?.fly) {
-      const map = mapContext?.mapInstanceRef?.current
-      flyToWtlNetworkGeom(
-        map,
-        next.geom,
-        () => mapContext?.applyMapViewPaddingRef?.current?.()
-      )
+    const map = mapContext?.mapInstanceRef?.current
+    const applyPad = () => mapContext?.applyMapViewPaddingRef?.current?.()
+    if (opts?.center) {
+      centerMapOnWtlNetworkGeom(map, next.geom, applyPad)
+    } else if (opts?.fly) {
+      flyToWtlNetworkGeom(map, next.geom, applyPad)
     }
   }
 
@@ -1565,8 +1581,9 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
     selected,
     searchFilter,
     detailRelatedLayer,
-    onSelect: (row) => {
+    onSelect: (row, hits) => {
       setDetailExpandToken((n) => n + 1)
+      setMapHitRows(Array.isArray(hits) && hits.length > 0 ? hits : [])
       void pickRow(row)
     },
     onMapMoveStart: () => {
@@ -1602,8 +1619,20 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
   }, [])
 
   useEffect(() => {
-    if (!selected) setDetailRelatedLayer(null)
+    if (!selected) {
+      setDetailRelatedLayer(null)
+      setMapHitRows([])
+    }
   }, [selected])
+
+  /** 단면도 패널 닫힘(언마운트) 시 데이터 범례로 켠 선택자 레이어 제거 */
+  useEffect(() => {
+    if (section.panelOpen) return
+    if (!sectionLegendSelectionRef.current) return
+    sectionLegendSelectionRef.current = false
+    setSelected(null)
+    setDetailOpen(false)
+  }, [section.panelOpen])
 
   useEffect(() => {
     if (!selected) return
@@ -1611,10 +1640,12 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
     const sourceId = String(selected.id).split(':')[0] as WtlNetMapSourceId
     if (!extraOn.has(key)) {
       setSelected(null)
+      setDetailOpen(false)
       return
     }
     if (getWtlNetMapSource(sourceId) && !mapSources.has(sourceId)) {
       setSelected(null)
+      setDetailOpen(false)
     }
   }, [extraOn, mapSources, selected])
 
@@ -1665,6 +1696,7 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
     setKeywordDraft('')
     setKeyword('')
     setSelected(null)
+    setDetailOpen(false)
   }
 
   useEffect(() => {
@@ -2582,9 +2614,10 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
                                             rowIdx === box.items.length - 1 &&
                                             'border-b-0'
                                         )}
-                                        onClick={() =>
+                                        onClick={() => {
+                                          setMapHitRows([])
                                           void pickRow(item, { fly: !onlyInView })
-                                        }
+                                        }}
                                       >
                                         {columns.map((col) => {
                                           const cell = listCellParts(
@@ -2656,14 +2689,30 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
         </div>
       )}
       <NetworkDetailModal
-        item={selected}
+        item={detailOpen ? selected : null}
+        hitRows={mapHitRows}
         expandToken={detailExpandToken}
         showFieldKeys={showFieldKeys}
         anchorLeftPx={leftOffsetPx + listWidth + (resultOpen ? resultWidth : 0) + 8}
-        onClose={() => setSelected(null)}
+        onClose={() => {
+          setSelected(null)
+          setDetailOpen(false)
+        }}
+        onSelectHit={(row) => {
+          setDetailExpandToken((n) => n + 1)
+          void pickRow(row)
+        }}
         onRelatedMapLayer={handleDetailRelatedLayer}
         onItemUpdated={(next) => {
           setSelected(next)
+          setMapHitRows((prev) => {
+            if (prev.length === 0) return prev
+            const idx = prev.findIndex((r) => r.id === next.id)
+            if (idx < 0) return prev
+            const rows = prev.slice()
+            rows[idx] = { ...rows[idx], ...next, geom: next.geom ?? rows[idx]?.geom }
+            return rows
+          })
           setBoxData((prev) => {
             let changed = false
             const out: Record<string, LayerBoxData> = {}
@@ -2719,21 +2768,61 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
         supplyElevComposition={section.supplyElevComposition}
         onClose={section.closePanel}
         onRedraw={section.redrawSection}
+        onLegendItemSelect={(item) => {
+          const id = String(item.networkId ?? '').trim()
+          if (!id) return
+          setMapHitRows([])
+          sectionLegendSelectionRef.current = true
+          void pickRow(
+            {
+              id,
+              layerKey: String(item.layerKey ?? '').trim() || id.split(':')[0] || '',
+              geomKind: item.kind === 'point' ? 'point' : 'line',
+              name: item.label,
+              diameter: '',
+              material: '',
+              length: '',
+              year: '',
+              status: '',
+              hjd: '',
+              attrs: [],
+            },
+            { center: true, openDetail: false }
+          )
+        }}
       />
     </>
   )
 }
 
+function networkDetailHitLabel(row: WtlNetworkRow): string {
+  const key = String(row.layerKey ?? '').trim()
+  let kor = key
+  for (const group of DISPLAY_GROUPS) {
+    const hit = group.items.find((i) => i.define_table_name === key)
+    if (hit) {
+      kor = hit.define_table_kor_name
+      break
+    }
+  }
+  const name = String(row.name ?? '').trim()
+  return name ? `${kor} — ${name}` : kor
+}
+
 function NetworkDetailModal({
   item,
+  hitRows = [],
   expandToken = 0,
   showFieldKeys = false,
   anchorLeftPx,
   onClose,
+  onSelectHit,
   onRelatedMapLayer,
   onItemUpdated,
 }: {
   item: WtlNetworkRow | null
+  /** 지도 클릭 다중 피처. 2건 이상일 때 헤더 select */
+  hitRows?: WtlNetworkRow[]
   /** 지도 클릭마다 증가 — 접힌 상세를 펼침. 목록 선택은 올리지 않음 */
   expandToken?: number
   /** 슈퍼유저·개발자 콘솔 — 시설목록과 동일: HTML title에만 영문 필드·코드 원문 괄호 */
@@ -2741,6 +2830,7 @@ function NetworkDetailModal({
   /** 시설목록 패널 오른쪽 끝 */
   anchorLeftPx: number
   onClose: () => void
+  onSelectHit?: (row: WtlNetworkRow) => void
   onRelatedMapLayer: (next: WtlNetworkDetailRelatedLayer) => void
   onItemUpdated: (next: WtlNetworkRow) => void
 }) {
@@ -3098,6 +3188,26 @@ function NetworkDetailModal({
               </span>
             ) : null}
           </div>
+          {hitRows.length > 1 ? (
+            <select
+              className="mr-1 h-7 max-w-[11rem] shrink-0 cursor-pointer rounded border border-border bg-background px-1.5 text-[11px] text-foreground outline-none focus:border-primary"
+              value={item.id}
+              title="상세보기 선택"
+              aria-label="상세보기 선택"
+              onChange={(e) => {
+                const next = hitRows.find((r) => r.id === e.target.value)
+                if (!next || next.id === item.id) return
+                if (editing) cancelEdit()
+                onSelectHit?.(next)
+              }}
+            >
+              {hitRows.map((row) => (
+                <option key={row.id} value={row.id}>
+                  {networkDetailHitLabel(row)}
+                </option>
+              ))}
+            </select>
+          ) : null}
           <button
             type="button"
             title="닫기"

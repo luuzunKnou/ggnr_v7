@@ -946,6 +946,8 @@ export type WtlPipeInExtent = {
   props?: Record<string, unknown>;
   /** define_field 테이블명 */
   fieldsTable?: string;
+  /** 관망 시설목록·상세와 동일 식별 (layer.ogc_fid) */
+  ogcFid?: number;
 };
 
 type PipeDepthSample = { x: number; y: number; depthM: number };
@@ -1221,6 +1223,7 @@ export async function getWtlPipesInExtent(params: {
       sql.raw(
         `WITH hits AS (
            SELECT
+             t.ogc_fid,
              t.pip_lbl,
              t.saa_cde,
              t.std_dip,
@@ -1238,6 +1241,7 @@ export async function getWtlPipesInExtent(params: {
            LIMIT 300
          )
          SELECT
+           h.ogc_fid,
            h.pip_lbl,
            h.saa_cde,
            h.std_dip,
@@ -1262,6 +1266,7 @@ export async function getWtlPipesInExtent(params: {
     const midPoints: [number, number][] = [];
     for (const raw of res.rows ?? []) {
       const row = raw as {
+        ogc_fid?: unknown;
         pip_lbl?: unknown;
         saa_cde?: unknown;
         std_dip?: unknown;
@@ -1287,6 +1292,7 @@ export async function getWtlPipesInExtent(params: {
         row.saa_cde != null ? String(row.saa_cde).trim().toUpperCase() : '';
       const mid = coords[Math.floor(coords.length / 2)]!;
       midPoints.push(mid);
+      const props = parseRowProps(row.props);
       pipes.push({
         id: `pipe-${pipes.length}`,
         label: labelRaw || undefined,
@@ -1296,8 +1302,9 @@ export async function getWtlPipesInExtent(params: {
         diameterM: parseStdDipToMeters(row.std_dip),
         depthM,
         depthsM,
-        props: parseRowProps(row.props),
+        props,
         fieldsTable: PIPE_LM_TABLE,
+        ogcFid: ogcFidFromRow(row, props),
       });
     }
 
@@ -1345,6 +1352,8 @@ export type WtlManholeInExtent = {
   props?: Record<string, unknown>;
   /** define_field 테이블명 */
   fieldsTable?: string;
+  /** 관망 시설목록·상세와 동일 식별 (layer.ogc_fid) */
+  ogcFid?: number;
 };
 
 const GEOM_PROP_KEYS = new Set([
@@ -1380,6 +1389,22 @@ function parseRowProps(raw: unknown): Record<string, unknown> | undefined {
     out[k] = v;
   }
   return Object.keys(out).length ? out : undefined;
+}
+
+/** props·행에서 ogc_fid 추출 — 관망 시설목록 id(`layerKey:ogcFid`)용 */
+function ogcFidFromRow(
+  row: { ogc_fid?: unknown; ogcFid?: unknown; props?: unknown },
+  props?: Record<string, unknown>
+): number | undefined {
+  const direct = Number(row.ogc_fid ?? row.ogcFid);
+  if (Number.isFinite(direct)) return Math.trunc(direct);
+  const p = props ?? parseRowProps(row.props);
+  if (!p) return undefined;
+  for (const key of ['ogc_fid', 'ogcFid', 'OGC_FID']) {
+    const n = Number(p[key]);
+    if (Number.isFinite(n)) return Math.trunc(n);
+  }
+  return undefined;
 }
 
 /** 상수맨홀 3D 표시용 기본 높이(심도 컬럼 없음) */
@@ -1526,6 +1551,7 @@ export async function getWtlManholesInExtent(params: {
 
   const manhGeomName = meta.geomCol.replace(/"/g, '');
   const selectParts = [
+    `t.ogc_fid AS ogc_fid`,
     idCol ? `${quoteIdent(idCol)} AS ftr_idn` : `NULL::text AS ftr_idn`,
     stdCol ? `${quoteIdent(stdCol)} AS man_std` : `NULL::text AS man_std`,
     propsJsonSql('t', manhGeomName),
@@ -1548,6 +1574,7 @@ export async function getWtlManholesInExtent(params: {
     const pts: [number, number][] = [];
     for (const raw of res.rows ?? []) {
       const row = raw as {
+        ogc_fid?: unknown;
         ftr_idn?: unknown;
         man_std?: unknown;
         props?: unknown;
@@ -1557,6 +1584,7 @@ export async function getWtlManholesInExtent(params: {
       if (!xy) continue;
       const labelRaw = row.ftr_idn != null ? String(row.ftr_idn).trim() : '';
       pts.push(xy);
+      const props = parseRowProps(row.props);
       manholes.push({
         id: `${MANH_TABLE}-${manholes.length}`,
         label: labelRaw || undefined,
@@ -1565,8 +1593,9 @@ export async function getWtlManholesInExtent(params: {
         y3857: xy[1],
         diameterM: Math.max(0.2, parseManStdToMeters(row.man_std)),
         depthM: MANHOLE_DISPLAY_DEPTH_M,
-        props: parseRowProps(row.props),
+        props,
         fieldsTable: MANH_TABLE,
+        ogcFid: ogcFidFromRow(row, props),
       });
     }
 
@@ -1850,6 +1879,7 @@ export async function getWtlLineLayerInExtent(
 
   const lineGeomName = meta.geomCol.replace(/"/g, '');
   const hitSelect = [
+    `t.ogc_fid AS ogc_fid`,
     labelCol ? `${quoteIdent(labelCol)} AS pip_lbl` : `NULL::text AS pip_lbl`,
     dipCol ? `${quoteIdent(dipCol)} AS std_dip` : `NULL::double precision AS std_dip`,
     highCol ? `${quoteIdent(highCol)} AS hgh_dep` : `NULL::double precision AS hgh_dep`,
@@ -1878,6 +1908,7 @@ export async function getWtlLineLayerInExtent(
            LIMIT 300
          )
          SELECT
+           h.ogc_fid,
            h.pip_lbl,
            h.std_dip,
            h.hgh_dep,
@@ -1905,6 +1936,7 @@ export async function getWtlLineLayerInExtent(
     const layerColor = resolveLayerColor(def);
     for (const raw of res.rows ?? []) {
       const row = raw as {
+        ogc_fid?: unknown;
         pip_lbl?: unknown;
         std_dip?: unknown;
         hgh_dep?: unknown;
@@ -1927,6 +1959,7 @@ export async function getWtlLineLayerInExtent(
       const labelRaw = row.pip_lbl != null ? String(row.pip_lbl).trim() : '';
       const mid = coords[Math.floor(coords.length / 2)]!;
       midPoints.push(mid);
+      const props = parseRowProps(row.props);
       pipes.push({
         id: `${def.table}-${pipes.length}`,
         label: labelRaw || undefined,
@@ -1935,8 +1968,9 @@ export async function getWtlLineLayerInExtent(
         diameterM: Math.max(0.02, parseStdDipToMeters(row.std_dip)),
         depthM,
         depthsM,
-        props: parseRowProps(row.props),
+        props,
         fieldsTable: def.table,
+        ogcFid: ogcFidFromRow(row, props),
       });
     }
 
@@ -2010,6 +2044,7 @@ export async function getWtlPointLayerInExtent(
 
   const pointGeomName = meta.geomCol.replace(/"/g, '');
   const selectParts = [
+    `t.ogc_fid AS ogc_fid`,
     labelCol ? `${quoteIdent(labelCol)} AS ftr_idn` : `NULL::text AS ftr_idn`,
     dipCol ? `${quoteIdent(dipCol)} AS man_std` : `NULL::text AS man_std`,
     depthCol
@@ -2038,6 +2073,7 @@ export async function getWtlPointLayerInExtent(
     const layerColor = resolveLayerColor(def);
     for (const raw of res.rows ?? []) {
       const row = raw as {
+        ogc_fid?: unknown;
         ftr_idn?: unknown;
         man_std?: unknown;
         pip_dep?: unknown;
@@ -2065,6 +2101,7 @@ export async function getWtlPointLayerInExtent(
         row.style_code != null ? String(row.style_code).trim().toUpperCase() : '';
 
       pts.push(xy);
+      const props = parseRowProps(row.props);
       manholes.push({
         id: `${def.table}-${manholes.length}`,
         label: labelRaw || undefined,
@@ -2074,8 +2111,9 @@ export async function getWtlPointLayerInExtent(
         diameterM,
         depthM,
         styleCode: styleCode || undefined,
-        props: parseRowProps(row.props),
+        props,
         fieldsTable: def.table,
+        ogcFid: ogcFidFromRow(row, props),
       });
     }
 

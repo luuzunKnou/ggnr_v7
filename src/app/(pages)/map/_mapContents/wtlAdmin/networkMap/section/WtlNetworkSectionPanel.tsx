@@ -14,7 +14,10 @@ import type {
 import type { SectionSupplyElevRow } from './useWtlNetworkSection'
 import { WtlNetworkSectionThreeJsTab } from './WtlNetworkSectionThreeJsTab'
 import { WtlNetworkSectionChart } from './wtlNetworkSectionChart'
-import { SectionFeatureLegendSkeleton } from './wtlNetworkSectionLegend'
+import {
+  SectionFeatureLegendSkeleton,
+  type LongPipeLegendItem,
+} from './wtlNetworkSectionLegend'
 import { SECTION_PANEL_BODY_CLASS } from './wtlNetworkSectionLayout'
 
 type Props = {
@@ -37,6 +40,8 @@ type Props = {
   supplyElevComposition?: SectionSupplyElevRow[]
   onClose: () => void
   onRedraw: () => void
+  /** 데이터 범례 항목 — 시설목록 행 선택과 동일 */
+  onLegendItemSelect?: (item: LongPipeLegendItem) => void
 }
 
 export function WtlNetworkSectionPanel({
@@ -59,6 +64,7 @@ export function WtlNetworkSectionPanel({
   supplyElevComposition = [],
   onClose,
   onRedraw,
+  onLegendItemSelect,
 }: Props) {
   const [collapsed, setCollapsed] = useState(false)
 
@@ -133,7 +139,7 @@ export function WtlNetworkSectionPanel({
             [
               { id: 'crossChart' as const, label: '횡단면도' },
               { id: 'longChart' as const, label: '종단면도' },
-              { id: 'threejs' as const, label: 'ThreeJs' },
+              { id: 'threejs' as const, label: '3D' },
             ] as const
           ).map((t) => (
             <button
@@ -163,6 +169,7 @@ export function WtlNetworkSectionPanel({
               <WtlNetworkSectionThreeJsTab
                 line3857={line3857}
                 enabledKeys={enabledKeys}
+                onLegendItemSelect={onLegendItemSelect}
               />
             )
           ) : loading ? (
@@ -190,6 +197,7 @@ export function WtlNetworkSectionPanel({
               totalLengthM={totalLengthM}
               supplyAreaBands={supplyAreaBands}
               supplyElevComposition={supplyElevComposition}
+              onLegendItemSelect={onLegendItemSelect}
             />
           )}
         </div>
