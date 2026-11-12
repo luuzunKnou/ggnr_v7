@@ -4,3 +4,9 @@
   stroke-width: 0.55;
   stroke-opacity: 0.85;
 }
+
+[@sd > 10000] [env('ignore_scale', '0') = '1'] {
+  stroke: #B8956C;
+  stroke-width: 0.55;
+  stroke-opacity: 0.85;
+}
