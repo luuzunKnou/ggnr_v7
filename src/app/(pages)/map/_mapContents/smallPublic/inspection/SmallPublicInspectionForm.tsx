@@ -14,7 +14,12 @@ import {
 import { smallPublicCheckFormFor } from '../smallPublicCheckForms'
 import type { SmallPublicFacility, SmallPublicFile, SmallPublicInspection } from '../smallPublicMock'
 import { smallPublicActions, smallPublicFileFromUpload, useSmallPublicStore } from '../smallPublicStore'
-import { SmallPublicAttrTable, SmallPublicClassBadge, SmallPublicGradeBadge } from '../smallPublicUi'
+import {
+  SmallPublicAttrTable,
+  SmallPublicClassBadge,
+  SmallPublicGradeBadge,
+  smallPublicAttachmentDisplayName,
+} from '../smallPublicUi'
 import { SmallPublicModalShell, type SmallPublicModalOverlay } from './SmallPublicInspectionModal'
 
 function todayYmd(): string {
@@ -238,8 +243,11 @@ export function SmallPublicInspectionFormModal({
                           key={f.id}
                           className="flex items-center gap-1.5 rounded border border-border bg-card px-2 py-1 text-[11px]"
                         >
-                          <span className="min-w-0 flex-1 truncate text-foreground/80" title={f.name}>
-                            {f.name}
+                          <span
+                            className="min-w-0 flex-1 truncate text-foreground/80"
+                            title={f.name}
+                          >
+                            {smallPublicAttachmentDisplayName(f.name, facility.name)}
                           </span>
                           <button
                             type="button"

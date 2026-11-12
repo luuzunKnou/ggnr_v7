@@ -11,6 +11,7 @@ import type {
 } from '../smallPublicMock'
 import {
   candidateEvalsOfFacility,
+  ensureSmallPublicSeed,
   inspectionsOfFacility,
   latestInspectionOf,
   safetyDocsOfFacility,
@@ -52,6 +53,9 @@ function classColor(f: SmallPublicFacility): string {
 
 export function SmallPublicCandidateShell({ leftOffsetPx, onTotalWidthChange, onClose }: Props) {
   const { facilities, inspections, candidateEvals, safetyDocs } = useSmallPublicStore()
+  useEffect(() => {
+    void ensureSmallPublicSeed()
+  }, [])
   const [listWidth, setListWidth] = useState(LIST_DEFAULT_WIDTH)
   const [detailWidth, setDetailWidth] = useState(DETAIL_DEFAULT_WIDTH)
   const [detailId, setDetailId] = useState<string | null>(null)

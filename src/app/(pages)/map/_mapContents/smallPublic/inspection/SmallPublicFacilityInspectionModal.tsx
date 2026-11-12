@@ -86,6 +86,7 @@ export function SmallPublicFacilityInspectionModal({
                         <SmallPublicFileRow
                           key={file.id}
                           file={file}
+                          facilityName={f.name}
                           onPreview={() => preview.open(file, files)}
                           onDownload={() => preview.download(file)}
                         />

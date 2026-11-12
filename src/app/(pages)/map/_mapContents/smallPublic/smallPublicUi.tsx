@@ -510,6 +510,25 @@ export function SmallPublicAttrTable({
 /** 미리보기·행에 필요한 최소 첨부 정보(공사 첨부 등 kind 가 다른 자료도 포함) */
 type SmallPublicFileRef = { id: string; name: string; url?: string }
 
+const SMALL_PUBLIC_FAC_TYPE_ALT = '세천|소교량|취입보|마을진입로|농로|낙차공'
+
+/**
+ * 첨부 화면 표시명 — 관리번호·시설명 접두를 빼고 문서 종류만 남긴다.
+ * 예: SSF01FAC00587_광회리_세천_006_안전점검 위험도 평가.pdf → 안전점검 위험도 평가.pdf
+ */
+export function smallPublicAttachmentDisplayName(fileName: string, facilityName?: string): string {
+  let n = String(fileName ?? '').trim()
+  if (!n) return fileName
+  n = n.replace(/^SSF\d{2}FAC\d{5}_/i, '')
+  const fac = String(facilityName ?? '').trim()
+  if (fac) {
+    const esc = fac.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    n = n.replace(new RegExp(`^${esc}_`), '')
+  }
+  n = n.replace(new RegExp(`^.+?_(?:${SMALL_PUBLIC_FAC_TYPE_ALT})_\\d+_`), '')
+  return n || fileName
+}
+
 function downloadSmallPublicFile(file: SmallPublicFileRef) {
   if (!file.url) {
     window.alert('예시 자료라 실제 파일이 없습니다. 직접 올린 파일만 내려받을 수 있습니다.')
@@ -595,12 +614,16 @@ export function SmallPublicFileRow({
   onPreview,
   onDownload,
   onRemove,
+  facilityName,
 }: {
   file: SmallPublicFileRef
   onPreview: () => void
   onDownload: () => void
   onRemove?: () => void
+  /** 있으면 시설명 접두도 표시명에서 제거 */
+  facilityName?: string
 }) {
+  const label = smallPublicAttachmentDisplayName(file.name, facilityName)
   return (
     <div className="flex items-center gap-2 rounded border border-border bg-card px-2 py-1.5">
       <FileText className="h-4 w-4 shrink-0 text-muted-foreground" />
@@ -610,7 +633,7 @@ export function SmallPublicFileRow({
         className="min-w-0 flex-1 truncate text-left text-[11px] text-foreground hover:text-primary hover:underline"
         title={`${file.name} 미리보기`}
       >
-        {file.name}
+        {label}
       </button>
       {!file.url ? <span className="shrink-0 text-[10px] text-muted-foreground">예시</span> : null}
       <button

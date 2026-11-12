@@ -8,7 +8,12 @@ import { LayerRowPanelButton } from '../../../_mapComponents/layerRowEdit/LayerR
 import { SMALL_PUBLIC_GRADE_COLOR } from '../smallPublicConfig'
 import { SmallPublicPanelHeader } from '../smallPublicUi'
 import type { SmallPublicFacility, SmallPublicInspection } from '../smallPublicMock'
-import { inspectionsOfFacility, smallPublicActions, useSmallPublicStore } from '../smallPublicStore'
+import {
+  ensureSmallPublicSeed,
+  inspectionsOfFacility,
+  smallPublicActions,
+  useSmallPublicStore,
+} from '../smallPublicStore'
 import { smallPublicPlanActions, useSmallPublicPlanStore } from '../plan/smallPublicPlanStore'
 import { useSmallPublicFacilityLayer } from '../useSmallPublicFacilityLayer'
 import { SmallPublicFacilityInspectionModal } from './SmallPublicFacilityInspectionModal'
@@ -61,6 +66,9 @@ function inspectionOfReport(
 export function SmallPublicInspectionShell({ leftOffsetPx, onTotalWidthChange, onClose, onOpenPlan }: Props) {
   const { facilities, inspections, reports } = useSmallPublicStore()
   const { units: planUnits } = useSmallPublicPlanStore()
+  useEffect(() => {
+    void ensureSmallPublicSeed()
+  }, [])
   const [panelWidth, setPanelWidth] = useState(PANEL_DEFAULT_WIDTH)
   const [keyword, setKeyword] = useState('')
   const [year, setYear] = useState('')

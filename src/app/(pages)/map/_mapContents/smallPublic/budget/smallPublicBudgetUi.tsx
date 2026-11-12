@@ -19,7 +19,7 @@ export type PlanRef = {
   qty: number
   costWon: number
   inAnalysis: boolean
-  /** 추정·확정 이후 true, 검토 false */
+  /** 입력 완료 추정·확정 true, 미완료 추정·검토 false */
   canLinkBudget: boolean
 }
 
@@ -38,7 +38,7 @@ export function toPlanRefs(ranked: PlanRanked[]): Map<string, PlanRef> {
         qty: planWorkloadM(r.version),
         costWon: r.summary.cost.total,
         inAnalysis: isPlanInAnalysis(r.version),
-        canLinkBudget: canLinkToBudget(r.version),
+        canLinkBudget: canLinkToBudget(r),
       },
     ])
   )

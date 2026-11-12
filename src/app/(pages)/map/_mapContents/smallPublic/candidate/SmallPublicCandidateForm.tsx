@@ -48,9 +48,15 @@ function draftCoords(d: Pick<Draft, 'start' | 'end' | 'type'>): SmallPublicFacil
 }
 
 function facilityToDraft(f: SmallPublicFacility): Draft {
-  const line = isSmallPublicLine(f.coords)
-  const start = line ? f.coords[0]! : Array.isArray(f.coords) && typeof f.coords[0] === 'number' ? (f.coords as [number, number]) : null
-  const end = line && f.coords.length > 1 ? f.coords[f.coords.length - 1]! : null
+  const coords = f.coords
+  let start: [number, number] | null = null
+  let end: [number, number] | null = null
+  if (isSmallPublicLine(coords)) {
+    start = coords[0] ?? null
+    if (coords.length > 1) end = coords[coords.length - 1]!
+  } else if (coords) {
+    start = coords
+  }
   return {
     name: f.name,
     geomCode: f.geomCode,

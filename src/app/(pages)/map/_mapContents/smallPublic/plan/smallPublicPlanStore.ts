@@ -9,11 +9,10 @@ import { useSyncExternalStore } from 'react'
 import { createSmallPublicMockFacilities, type SmallPublicFacility } from '../smallPublicMock'
 import { smallPublicEmdOfRi } from '../smallPublicRiEmd'
 import { EVAL_ITEMS, SUPP_ITEMS, type SuppCode } from './smallPublicPlanMaster'
-import { compMultiplier, parsePlanDate, suggestWorks, todayYmd } from './smallPublicPlanCalc'
+import { parsePlanDate, suggestWorks, todayYmd } from './smallPublicPlanCalc'
 import { SMALL_PUBLIC_PLAN_REPORT_NAME, SMALL_PUBLIC_PLAN_REPORT_ROWS } from './smallPublicPlanReportData'
 import {
   currentVersion,
-  type PlanParcel,
   type PlanUnit,
   type PlanVersion,
 } from './smallPublicPlanTypes'
@@ -154,146 +153,23 @@ function analysisUnit(f: SmallPublicFacility, version: PlanVersion, by: string):
   }
 }
 
-/** 예시 필지 — 시연용 가상 필지(실제 분석에서는 주소 검색으로 채움) */
-function samplePlanParcels(f: SmallPublicFacility): PlanParcel[] {
-  const total = Math.max(20, Math.round((Number(f.length) || 10) * 2))
-  const rate = compMultiplier().rate
-  return [0.6, 0.4].map((share, k) => ({
-    id: `pc-${f.id}-${k}`,
-    pnu: '',
-    jibun: `${f.ri} ${120 + k}`,
-    landCategory: k === 0 ? '답' : '구',
-    parcelAreaM2: null,
-    inclAreaM2: Math.round(total * share),
-    landPriceWon: k === 0 ? 24000 : null,
-    landPriceYear: k === 0 ? '2025' : '',
-    ownerType: k === 0 ? '개인' : '군유지',
-    multiplier: rate,
-    exclude: k === 1,
-    source: 'MANUAL',
-  }))
-}
-
 /** 예시로 넣는 기존 계획 범위 — 보고서 최종순위 이 순위까지만 */
 const REPORT_SAMPLE_RANK_LIMIT = 50
 
-const SAMPLE_BY = '울진군 건설과'
-
-/** 예시 분석 1건 — 시설 자료로 1판을 만들고 입력값을 덮어쓴다. 저장한 예시는 이력에 저장 줄을 남긴다 */
-function sampleAnalysisUnit(
-  f: SmallPublicFacility,
-  createdAt: string,
-  patch: (v: PlanVersion) => Partial<PlanVersion>,
-  savedAt: string | null
-): PlanUnit {
-  const base = newPlanVersion(f, SAMPLE_BY)
-  const v: PlanVersion = { ...base, createdAt, ...patch(base) }
-  const unit = analysisUnit(f, v, SAMPLE_BY)
-  if (savedAt) unit.history.push({ at: savedAt, by: SAMPLE_BY, text: '저장(시험 자료)' })
-  return unit
-}
+/** 정비계획 목록에서 빼는 시험·기존 계획 시설명 */
+const EXCLUDED_PLAN_UNIT_NAMES = new Set(['봉평리_세천_002', '온정리_소교량_010', '명도리_낙차공_001'])
 
 /**
- * 시험용 분석 3건 — 계산 점검용.
- * 봉평리 세천: 입력 완료(B/C 기본값, 주택침수·세입자 보조, 주민불편도 40명/ha).
- * 명도리 낙차공: 입력 완료(편익 5백만원 ÷ 사업비 → B/C 0.76, 주택 반파·부상, 가등급·부상).
- * 온정리 소교량: 입력 중(저감대책·주민불편도 미입력).
- */
-function sampleAnalyses(facilities: SmallPublicFacility[], planned: Set<string>): PlanUnit[] {
-  const pick = (name: string) => facilities.find((f) => f.name === name && f.candidate === '위험' && !planned.has(f.id))
-  const out: PlanUnit[] = []
-  const a = pick('봉평리_세천_002')
-  if (a) {
-    out.push(
-      sampleAnalysisUnit(
-        a,
-        '2026-03-02 09:00',
-        () => ({
-          measure: '통수단면 확보를 위한 세천 정비공사 실시',
-          parcels: samplePlanParcels(a),
-          damageNone: a.damageEvents.length === 0,
-          damageEvents: a.damageEvents.map((e) => ({
-            id: e.id,
-            occurredOn: e.occurredOn,
-            itemCode: e.itemCode,
-            qty: e.qty,
-            overrideSupportIndex: e.overrideSupportIndex,
-          })),
-          population: 120,
-          areaHa: 3,
-        }),
-        '2026-03-05 16:20'
-      )
-    )
-  }
-  const b = pick('명도리_낙차공_001')
-  if (b) {
-    out.push(
-      sampleAnalysisUnit(
-        b,
-        '2026-04-01 10:00',
-        () => ({
-          measure: '시설물 기능 회복을 위한 하천시설물 재설치',
-          compNone: true,
-          bcBenefitWon: 5_000_000,
-          damageNone: b.damageEvents.length === 0,
-          damageEvents: b.damageEvents.map((e) => ({
-            id: e.id,
-            occurredOn: e.occurredOn,
-            itemCode: e.itemCode,
-            qty: e.qty,
-            overrideSupportIndex: e.overrideSupportIndex,
-          })),
-          riskGrade: 'GA',
-          riskCasualty: 'INJURY',
-          riskDefault: false,
-          population: 45,
-          areaHa: 1.5,
-          supp: { SUSTAIN: 1, POLICY: 1, PLAN: 0 },
-          suppDefault: false,
-        }),
-        '2026-04-03 11:40'
-      )
-    )
-  }
-  const c = pick('온정리_소교량_010')
-  if (c) {
-    out.push(
-      sampleAnalysisUnit(
-        c,
-        '2026-05-11 14:00',
-        () => ({
-          parcels: samplePlanParcels(c),
-          damageNone: c.damageEvents.length === 0,
-          damageEvents: c.damageEvents.map((e) => ({
-            id: e.id,
-            occurredOn: e.occurredOn,
-            itemCode: e.itemCode,
-            qty: e.qty,
-            overrideSupportIndex: e.overrideSupportIndex,
-          })),
-        }),
-        null
-      )
-    )
-  }
-  return out
-}
-
-/**
- * 예시 — 기존 계획(보고서 4장) 최종순위 50위까지와 시험용 분석 3건.
+ * 예시 — 기존 계획(보고서 4장) 최종순위 50위까지.
  * 기존 계획 시설명과 후보지 시설명이 같으면 시설에 연결한다(소교량은 보고서가 리 단위 통합이라 연결 안 됨).
- * 50위 밖 기존 계획에 연결되던 위험시설은 «분석 필요» 대상으로 남는다.
  */
 function initialState(): State {
   const facilities = createSmallPublicMockFacilities()
   const facilityByName = new Map(facilities.map((f) => [f.name, f]))
   const emdByRi = new Map(facilities.map((f) => [f.ri, f.emd]))
-  const units = SMALL_PUBLIC_PLAN_REPORT_ROWS.filter((row) => row[8] <= REPORT_SAMPLE_RANK_LIMIT).map((row) =>
-    reportUnit(row, facilityByName, emdByRi)
-  )
-  const planned = new Set(units.map((u) => u.facilityId).filter(Boolean))
-  units.push(...sampleAnalyses(facilities, planned))
+  const units = SMALL_PUBLIC_PLAN_REPORT_ROWS.filter(
+    (row) => row[8] <= REPORT_SAMPLE_RANK_LIMIT && !EXCLUDED_PLAN_UNIT_NAMES.has(String(row[0]))
+  ).map((row) => reportUnit(row, facilityByName, emdByRi))
   return { units, analyzeRequest: null }
 }
 

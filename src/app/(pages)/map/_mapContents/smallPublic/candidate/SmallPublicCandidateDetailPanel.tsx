@@ -746,6 +746,7 @@ export function SmallPublicCandidateDetailPanel({
                       <SmallPublicFileRow
                         key={p.id}
                         file={p}
+                        facilityName={f.name}
                         onPreview={() => preview.open(p, otherFiles)}
                         onDownload={() => preview.download(p)}
                         onRemove={() => {

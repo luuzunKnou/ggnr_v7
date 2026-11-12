@@ -1133,11 +1133,11 @@ function DamageEventEditor({
         <table className={cn(planTableClass, 'table-fixed')}>
           <colgroup>
             <col className="w-[8.5rem]" />
-            <col />
-            <col className="w-[7.5rem]" />
+            <col className="w-[12rem]" />
+            <col className="w-[6.5rem]" />
             <col className="w-[9.5rem]" />
             <col className="w-[4rem]" />
-            <col className="w-[7.5rem]" />
+            <col />
             {!readOnly ? <col className="w-[2.75rem]" /> : null}
           </colgroup>
           <thead>
@@ -1182,7 +1182,7 @@ function DamageEventEditor({
                         item?.name ?? '—'
                       ) : (
                         <select
-                          className={cn(planFieldClass, 'w-full max-w-none')}
+                          className={cn(planFieldClass, 'w-full')}
                           value={e.itemCode ?? ''}
                           onChange={(ev) => patchEvent(e.id, { itemCode: ev.target.value || null })}
                           aria-label="피해 항목"
@@ -1198,19 +1198,23 @@ function DamageEventEditor({
                     </td>
                     <td className="text-right">
                       {readOnly ? (
-                        <span className="tabular-nums">
+                        <span className="whitespace-nowrap tabular-nums">
                           {e.qty ?? '—'}
                           {item ? <span className="ml-1 text-[11px] text-muted-foreground">{item.unit}</span> : null}
                         </span>
                       ) : (
-                        <div className="flex items-center justify-end gap-1">
+                        <div className="flex items-center justify-end gap-1 whitespace-nowrap">
                           <PlanNumInput
-                            className="w-20"
+                            className="w-14 shrink-0"
                             value={e.qty}
                             onChange={(qty) => patchEvent(e.id, { qty })}
                             aria-label="물량"
                           />
-                          {item ? <span className="text-[11px] text-muted-foreground">{item.unit}</span> : null}
+                          {item ? (
+                            <span className="shrink-0 whitespace-nowrap text-[11px] text-muted-foreground">
+                              {item.unit}
+                            </span>
+                          ) : null}
                         </div>
                       )}
                     </td>

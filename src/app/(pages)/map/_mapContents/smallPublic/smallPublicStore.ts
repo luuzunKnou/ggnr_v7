@@ -1,18 +1,14 @@
 'use client'
 
 /**
- * 소규모 공공시설 — 후보지·안전점검(·정비계획)이 함께 쓰는 예시 자료 저장소.
- * 새로고침 전까지만 유지된다(서버 저장 전 화면 확인용).
+ * 소규모 공공시설 — 후보지·안전점검(·정비계획)이 함께 쓰는 자료 저장소.
+ * file_data/small_public dbf·첨부 폴더를 서버에서 읽어 채운다(새로고침 전까지만 유지).
  */
 
 import { useSyncExternalStore } from 'react'
+import { call } from '@/lib/api'
 import type { SmallPublicClass } from './smallPublicConfig'
 import {
-  applySmallPublicPlanTransferDemo,
-  createSmallPublicMockCandidateEvals,
-  createSmallPublicMockFacilities,
-  createSmallPublicMockInspections,
-  createSmallPublicMockSafetyDocs,
   type SmallPublicCandidateEval,
   type SmallPublicDamageEvent,
   type SmallPublicFacility,
@@ -35,6 +31,10 @@ type State = {
   safetyDocs: SmallPublicSafetyDoc[]
   /** 안전점검 보고서 */
   reports: SmallPublicInspectionReport[]
+  /** dbf 시드 로딩 중 */
+  loading: boolean
+  /** 시드 로드 완료(실패 포함) */
+  ready: boolean
 }
 
 const SAMPLE_AGENCY = '울진군 건설과'
@@ -59,44 +59,99 @@ function sampleReport(
   }
 }
 
-/**
- * 예시 자료 — 일반·관리 시설은 자동 점검 대상이고, 2025년 이후 점검이 있는 위험시설만
- * 계속 점검 대상(예외)으로 둔다. 2025·2026년 보고서를 넣어 둔다.
- * «두천리_세천_004»는 2026년 점검에서 관리→위험으로 바꿔 정비계획 이관 예시에 쓴다.
- */
-function initialState(): State {
-  const base = createSmallPublicMockFacilities()
-  /** 2025·2026년 예시 점검은 그해 예시 보고서에서 한 점검으로 둔다 */
-  let inspections = createSmallPublicMockInspections(base).map((i) => {
-    const y = i.date.slice(0, 4)
-    return y === '2025' || y === '2026' ? { ...i, reportId: `report-sample-${y}` } : i
-  })
-  let facilities = base.map((f) => ({ ...f, inspectionTarget: f.candidate === '위험' }))
-  const demo = applySmallPublicPlanTransferDemo(facilities, inspections)
-  facilities = demo.facilities
-  inspections = demo.inspections
+function emptyState(): State {
+  return {
+    facilities: [],
+    inspections: [],
+    candidateEvals: [],
+    safetyDocs: [],
+    reports: [],
+    loading: true,
+    ready: false,
+  }
+}
+
+function buildStateFromSeed(payload: {
+  facilities: SmallPublicFacility[]
+  inspections: SmallPublicInspection[]
+  candidateEvals: SmallPublicCandidateEval[]
+  safetyDocs: SmallPublicSafetyDoc[]
+}): State {
+  let facilities = payload.facilities.map((f) => ({
+    ...f,
+    inspectionTarget: f.candidate === '위험' || f.inspectionTarget,
+  }))
+  let inspections = payload.inspections
   const inspected = new Set(inspections.filter((i) => i.date >= '2025').map((i) => i.facilityId))
   facilities = facilities.map((f) => ({
     ...f,
     inspectionTarget: f.candidate === '위험' && (f.inspectionTarget || inspected.has(f.id)),
   }))
-  const candidateEvals = createSmallPublicMockCandidateEvals(facilities)
-  const safetyDocs = createSmallPublicMockSafetyDocs(facilities)
   let seeded: State = {
     facilities,
     inspections,
-    candidateEvals,
-    safetyDocs,
+    candidateEvals: payload.candidateEvals,
+    safetyDocs: payload.safetyDocs,
     reports: [sampleReport(facilities, inspections, 2025), sampleReport(facilities, inspections, 2026)],
+    loading: false,
+    ready: true,
   }
-  /** 후보지 평가·최근 점검과 시설 구분을 맞춤(세천 예시 선정제외 모순 방지) */
   for (const f of seeded.facilities) {
     seeded = { ...seeded, facilities: syncFacilityClass(seeded, f.id) }
   }
   return {
     ...seeded,
-    reports: [sampleReport(seeded.facilities, seeded.inspections, 2025), sampleReport(seeded.facilities, seeded.inspections, 2026)],
+    reports: [
+      sampleReport(seeded.facilities, seeded.inspections, 2025),
+      sampleReport(seeded.facilities, seeded.inspections, 2026),
+    ],
+    loading: false,
+    ready: true,
   }
+}
+
+function initialState(): State {
+  return emptyState()
+}
+
+let seedPromise: Promise<void> | null = null
+
+/** 화면 진입 시 한 번 — file_data/small_public dbf·첨부 시드 */
+export function ensureSmallPublicSeed(): Promise<void> {
+  if (getState().ready) return Promise.resolve()
+  if (seedPromise) return seedPromise
+  seedPromise = (async () => {
+    try {
+      const res = await call('', 'POST', {
+        service: 'smallPublicService',
+        action: 'loadSeed',
+        params: {},
+      })
+      const data = (res?.data ?? res) as {
+        facilities?: SmallPublicFacility[]
+        inspections?: SmallPublicInspection[]
+        candidateEvals?: SmallPublicCandidateEval[]
+        safetyDocs?: SmallPublicSafetyDoc[]
+      }
+      if (Array.isArray(data?.facilities) && data.facilities.length > 0) {
+        setState(
+          buildStateFromSeed({
+            facilities: data.facilities,
+            inspections: data.inspections ?? [],
+            candidateEvals: data.candidateEvals ?? [],
+            safetyDocs: data.safetyDocs ?? [],
+          })
+        )
+        return
+      }
+      setState({ ...emptyState(), loading: false, ready: true })
+    } catch {
+      setState({ ...emptyState(), loading: false, ready: true })
+    } finally {
+      seedPromise = null
+    }
+  })()
+  return seedPromise
 }
 
 let state: State | null = null
@@ -202,6 +257,7 @@ export const smallPublicActions = {
   deleteFacility(id: string) {
     const s = getState()
     setState({
+      ...s,
       facilities: s.facilities.filter((f) => f.id !== id),
       inspections: s.inspections.filter((i) => i.facilityId !== id),
       candidateEvals: s.candidateEvals.filter((e) => e.facilityId !== id),

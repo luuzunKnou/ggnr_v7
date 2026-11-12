@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'reac
 import { createPortal } from 'react-dom'
 import { useSession } from 'next-auth/react'
 import type { SmallPublicFacility } from '../smallPublicMock'
-import { useSmallPublicStore } from '../smallPublicStore'
+import { ensureSmallPublicSeed, useSmallPublicStore } from '../smallPublicStore'
 import { applyConstructionToUnits } from '../budget/smallPublicBudgetCalc'
 import { useSmallPublicBudgetStore } from '../budget/smallPublicBudgetStore'
 import { exportSmallPublicPlanExcel } from './exportSmallPublicPlanExcel'
@@ -49,7 +49,7 @@ type Props = {
  * 레이어 관리 패널처럼 body 포털로 띄워 오른쪽 지도 메뉴를 덮고, 닫으면 다시 보인다.
  * 모달은 그 위(z 80)에 뜬다.
  * 추정·검토 행은 분석 모달, 확정 이후 행은 개요·결과 모달. «분석»은 새 위험시설·분석 중 시설을 골라 분석 모달.
- * 확정 시설을 골라 «예산 계획»으로 예산 배정(1차). 예산·공사 준공 실적은 «정비된 부분»에 합쳐 보여 준다.
+ * 입력 완료 추정·확정 시설을 골라 «예산 계획»으로 예산 배정(1차). 예산·공사 준공 실적은 «정비된 부분»에 합쳐 보여 준다.
  */
 export function SmallPublicPlanShell({ leftOffsetPx, onTotalWidthChange, onClose, onOpenBudget }: Props) {
   const { data: session } = useSession()
@@ -57,6 +57,9 @@ export function SmallPublicPlanShell({ leftOffsetPx, onTotalWidthChange, onClose
   const { facilities } = useSmallPublicStore()
   const { units, analyzeRequest } = useSmallPublicPlanStore()
   const { constructions } = useSmallPublicBudgetStore()
+  useEffect(() => {
+    void ensureSmallPublicSeed()
+  }, [])
   const viewport = useViewportWidth()
   const isClient = useIsClient()
   const width = Math.max(MIN_WIDTH, viewport - leftOffsetPx)
@@ -110,7 +113,7 @@ export function SmallPublicPlanShell({ leftOffsetPx, onTotalWidthChange, onClose
 
   const toggleSelect = (unitId: string) => {
     const r = ranked.find((x) => x.unit.id === unitId)
-    if (!r || !canLinkToBudget(r.version)) return
+    if (!r || !canLinkToBudget(r)) return
     setSelectedIds((prev) => {
       const next = new Set(prev)
       if (next.has(unitId)) next.delete(unitId)
@@ -120,7 +123,7 @@ export function SmallPublicPlanShell({ leftOffsetPx, onTotalWidthChange, onClose
   }
 
   const toggleSelectAllShown = () => {
-    const linkable = rows.filter((r) => canLinkToBudget(r.version))
+    const linkable = rows.filter((r) => canLinkToBudget(r))
     const allOn = linkable.length > 0 && linkable.every((r) => selectedIds.has(r.unit.id))
     setSelectedIds((prev) => {
       const next = new Set(prev)
@@ -136,14 +139,16 @@ export function SmallPublicPlanShell({ leftOffsetPx, onTotalWidthChange, onClose
   const budgetLinkRows = useMemo(
     () =>
       ranked
-        .filter((r) => selectedIds.has(r.unit.id) && canLinkToBudget(r.version))
+        .filter((r) => selectedIds.has(r.unit.id) && canLinkToBudget(r))
         .map((r) => ({ ranked: r, defaultAmountWon: r.summary.cost.total })),
     [ranked, selectedIds]
   )
 
   const openBudgetLink = () => {
     if (budgetLinkRows.length === 0) {
-      window.alert('추정·확정 시설을 먼저 선택하세요. (검토 중인 시설은 예산 계획할 수 없습니다)')
+      window.alert(
+        '입력 완료된 추정·확정 시설을 먼저 선택하세요. (입력이 남은 추정·검토 중 시설은 예산 계획할 수 없습니다)'
+      )
       return
     }
     setBudgetLinkOpen(true)

@@ -5,7 +5,7 @@ import { Paperclip, X } from 'lucide-react'
 import { smallPublicBtnGhost, smallPublicBtnPrimary, smallPublicFieldClass } from '../smallPublicConfig'
 import type { SmallPublicFacility, SmallPublicFile, SmallPublicSafetyDoc } from '../smallPublicMock'
 import { smallPublicActions, smallPublicFileFromUpload } from '../smallPublicStore'
-import { SmallPublicAttrTable } from '../smallPublicUi'
+import { SmallPublicAttrTable, smallPublicAttachmentDisplayName } from '../smallPublicUi'
 import { SmallPublicModalShell, type SmallPublicModalOverlay } from '../inspection/SmallPublicInspectionModal'
 
 function todayYmd(): string {
@@ -110,7 +110,7 @@ export function SmallPublicSafetyDocFormModal({
                       {files.map((f) => (
                         <li key={f.id} className="flex items-center gap-1.5 text-[11px]">
                           <span className="min-w-0 flex-1 truncate text-foreground/80" title={f.name}>
-                            {f.name}
+                            {smallPublicAttachmentDisplayName(f.name, facility.name)}
                           </span>
                           <button
                             type="button"

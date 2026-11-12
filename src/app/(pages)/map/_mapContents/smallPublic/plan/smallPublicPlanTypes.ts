@@ -167,7 +167,17 @@ export function isPlanInAnalysis(v: PlanVersion): boolean {
   return v.status === 'DRAFT' || v.status === 'REVIEW'
 }
 
-/** 예산 계획 배정 — 추정·확정 이후 가능, 검토만 제외 */
-export function canLinkToBudget(v: PlanVersion): boolean {
-  return v.status !== 'REVIEW'
+/**
+ * 예산 계획 배정 —
+ * 확정·진행·완료는 가능, 검토는 불가.
+ * 추정(DRAFT)은 분석 입력이 모두 끝난 경우만(missingCount === 0).
+ */
+export function canLinkToBudget(r: {
+  version: PlanVersion
+  summary: { missingCount: number }
+}): boolean {
+  const v = r.version
+  if (v.status === 'REVIEW') return false
+  if (v.status === 'DRAFT') return r.summary.missingCount === 0
+  return true
 }

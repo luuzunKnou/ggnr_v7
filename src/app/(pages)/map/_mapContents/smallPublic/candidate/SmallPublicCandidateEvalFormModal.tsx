@@ -10,7 +10,7 @@ import {
 import type { SmallPublicCandidateResult } from '../smallPublicCandidateForms'
 import type { SmallPublicCandidateEval, SmallPublicFacility } from '../smallPublicMock'
 import { smallPublicActions, smallPublicFileFromUpload } from '../smallPublicStore'
-import { SmallPublicAttrTable } from '../smallPublicUi'
+import { SmallPublicAttrTable, smallPublicAttachmentDisplayName } from '../smallPublicUi'
 import { SmallPublicModalShell, type SmallPublicModalOverlay } from '../inspection/SmallPublicInspectionModal'
 
 function todayYmd(): string {
@@ -137,7 +137,7 @@ export function SmallPublicCandidateEvalFormModal({
                     </button>
                     {file ? (
                       <span className="min-w-0 truncate text-[11px] text-foreground/80" title={file.name}>
-                        {file.name}
+                        {smallPublicAttachmentDisplayName(file.name, facility.name)}
                       </span>
                     ) : (
                       <span className="text-[11px] text-muted-foreground">평가표 PDF·이미지</span>

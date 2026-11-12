@@ -37,7 +37,7 @@ type Props = {
   all: PlanRanked[]
   /** 정비계획에 없는 위험시설 수(분석 필요) */
   needAnalysis: number
-  /** 예산 계획용 선택(추정·확정, 검토 제외) */
+  /** 예산 계획용 선택(입력 완료 추정·확정, 검토·미완료 추정 제외) */
   selectedIds: Set<string>
   onToggleSelect: (unitId: string) => void
   onToggleSelectAllShown: () => void
@@ -103,6 +103,7 @@ function Cells({ c }: { c: PlanSheetCells }) {
 /**
  * 중기 정비계획 명세서(별지 제3호 형태) — 단위 m, 백만원, %.
  * 제목·계는 스크롤 밖(세로), 시설 행만 세로 스크롤. 가로는 표 전체 공유. 추정·검토는 분석, 확정은 개요·결과.
+ * 예산 계획은 입력이 끝난 추정·확정만.
  */
 export function SmallPublicPlanSheet({
   filter,
@@ -126,7 +127,7 @@ export function SmallPublicPlanSheet({
   const total = useMemo(() => sumPlanSheetCells(cells.map((x) => x.c)), [cells])
   const years = Array.from({ length: SYSTEM_PARAMS.PLAN_PERIOD_YEARS }, (_, i) => startYear + i)
   const thisYear = new Date().getFullYear()
-  const linkableRows = useMemo(() => rows.filter((r) => canLinkToBudget(r.version)), [rows])
+  const linkableRows = useMemo(() => rows.filter((r) => canLinkToBudget(r)), [rows])
   const allLinkableSelected =
     linkableRows.length > 0 && linkableRows.every((r) => selectedIds.has(r.unit.id))
   const kpi = useMemo(() => {
@@ -163,7 +164,11 @@ export function SmallPublicPlanSheet({
           <LayerRowPanelButton
             onClick={onOpenBudgetLink}
             disabled={selectedIds.size === 0}
-            title={selectedIds.size > 0 ? `선택한 ${selectedIds.size}곳을 예산에 배정` : '추정·확정 시설을 선택한 뒤 예산 계획'}
+            title={
+              selectedIds.size > 0
+                ? `선택한 ${selectedIds.size}곳을 예산에 배정`
+                : '입력 완료된 추정·확정 시설을 선택한 뒤 예산 계획'
+            }
           >
             <Link2 className="h-3 w-3 shrink-0" aria-hidden />
             예산 계획
@@ -274,8 +279,8 @@ export function SmallPublicPlanSheet({
                           checked={allLinkableSelected}
                           disabled={linkableRows.length === 0}
                           onChange={onToggleSelectAllShown}
-                          title="표시 중 추정·확정 시설 전체 선택"
-                          aria-label="표시 중 추정·확정 시설 전체 선택"
+                          title="표시 중 입력 완료 추정·확정 시설 전체 선택"
+                          aria-label="표시 중 입력 완료 추정·확정 시설 전체 선택"
                         />
                       </th>
                       <th rowSpan={3}>시설명칭</th>
@@ -361,8 +366,14 @@ export function SmallPublicPlanSheet({
                     ) : (
                       cells.map(({ r, c }) => {
                         const analyzing = isPlanInAnalysis(r.version)
-                        const linkable = canLinkToBudget(r.version)
+                        const linkable = canLinkToBudget(r)
                         const selected = selectedIds.has(r.unit.id)
+                        const linkBlockedTitle =
+                          r.version.status === 'REVIEW'
+                            ? '검토 중인 시설은 예산 계획할 수 없습니다'
+                            : r.version.status === 'DRAFT'
+                              ? '입력이 완료된 추정만 예산 계획할 수 있습니다'
+                              : '예산 계획할 수 없습니다'
                         return (
                           <tr
                             key={r.unit.id}
@@ -388,11 +399,7 @@ export function SmallPublicPlanSheet({
                                 e.stopPropagation()
                                 if (linkable) onToggleSelect(r.unit.id)
                               }}
-                              title={
-                                linkable
-                                  ? '예산 계획 선택'
-                                  : '검토 중인 시설은 예산 계획할 수 없습니다'
-                              }
+                              title={linkable ? '예산 계획 선택' : linkBlockedTitle}
                             >
                               <input
                                 type="checkbox"
@@ -432,7 +439,7 @@ export function SmallPublicPlanSheet({
         <span>정비율 = 사업량 ÷ 전체 정비계획 사업량</span>
         <span>
           <span className="mr-1 inline-block h-2.5 w-2.5 rounded-sm bg-amber-100 align-middle" />
-          분석 중(추정·검토) — 누르면 분석 화면, 그 밖에는 개요·결과 · 추정·확정 선택 후 «예산 계획»(검토 제외)
+          분석 중(추정·검토) — 누르면 분석 화면, 그 밖에는 개요·결과 · 입력 완료 추정·확정 선택 후 «예산 계획»
         </span>
       </div>
     </div>
