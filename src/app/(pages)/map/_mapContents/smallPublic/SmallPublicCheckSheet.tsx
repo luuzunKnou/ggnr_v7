@@ -36,7 +36,8 @@ export function smallPublicCheckTotal(form: SmallPublicCheckForm, values: SmallP
   return { total, complete, invalid, grade: smallPublicCheckGradeOf(form, total) }
 }
 
-const HATCH =
+/** 쓰지 않는 칸 사선 무늬 */
+export const SMALL_PUBLIC_HATCH =
   'bg-[repeating-linear-gradient(135deg,transparent,transparent_5px,var(--border)_5px,var(--border)_6px)]'
 
 /**
@@ -144,7 +145,7 @@ export function SmallPublicCheckSheet({
                         key={s}
                         className={cn(
                           'border-r border-border p-0 text-center',
-                          off && HATCH,
+                          off && SMALL_PUBLIC_HATCH,
                           on && (invalid ? 'bg-destructive/15' : 'bg-primary/10')
                         )}
                       >
@@ -198,7 +199,7 @@ export function SmallPublicCheckSheet({
             <td colSpan={3} className="border-r border-border px-1 py-1 text-center text-muted-foreground">
               계
             </td>
-            <td className="px-1 py-1 text-center font-semibold tabular-nums text-foreground">{total}</td>
+            <td className="px-1 py-1 text-center tabular-nums text-foreground">{total}</td>
           </tr>
         </tfoot>
       </table>

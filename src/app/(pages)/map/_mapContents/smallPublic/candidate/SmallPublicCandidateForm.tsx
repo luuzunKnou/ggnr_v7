@@ -13,7 +13,7 @@ import {
   type SmallPublicCandidate,
   type SmallPublicFacType,
 } from '../smallPublicConfig'
-import type { SmallPublicFacility } from '../smallPublicMock'
+import { isSmallPublicLine, type SmallPublicFacility } from '../smallPublicMock'
 import { smallPublicActions } from '../smallPublicStore'
 import { SmallPublicAttrTable, SmallPublicPanelHeader } from '../smallPublicUi'
 import { smallPublicCoordToDms, useSmallPublicMapPick } from '../useSmallPublicMapPick'
@@ -47,23 +47,32 @@ function draftCoords(d: Pick<Draft, 'start' | 'end' | 'type'>): SmallPublicFacil
   return LINE_TYPES.has(d.type) && d.end ? [d.start, d.end] : d.start
 }
 
-/**
- * 후보지 «후보지 등록» — 새 후보지의 속성과 위치(지도에서 시점·종점 찍기)를 넣어 추가한다.
- * 안전점검 대상에는 안전점검 «시설 등록»으로 따로 넣는다.
- */
-export function SmallPublicCandidateForm({
-  initialType,
-  onCancel,
-  onSaved,
-  onDraftChange,
-}: {
-  initialType: SmallPublicFacType
-  onCancel: () => void
-  onSaved: (facility: SmallPublicFacility) => void
-  /** 지도에 미리 보여 줄 위치와 지금 위치 찍는 중인지 */
-  onDraftChange: (draft: { coords: SmallPublicFacility['coords']; type: SmallPublicFacType; picking: boolean }) => void
-}) {
-  const [draft, setDraft] = useState<Draft>({
+function facilityToDraft(f: SmallPublicFacility): Draft {
+  const line = isSmallPublicLine(f.coords)
+  const start = line ? f.coords[0]! : Array.isArray(f.coords) && typeof f.coords[0] === 'number' ? (f.coords as [number, number]) : null
+  const end = line && f.coords.length > 1 ? f.coords[f.coords.length - 1]! : null
+  return {
+    name: f.name,
+    geomCode: f.geomCode,
+    type: f.type,
+    emd: f.emd,
+    ri: f.ri,
+    address: f.address,
+    benefitArea: f.benefitArea,
+    riskDate: f.riskDate,
+    surveyDate: f.surveyDate,
+    surveyor: f.surveyor,
+    candidate: f.candidate,
+    length: f.length ? String(f.length) : '',
+    width: f.width ? String(f.width) : '',
+    height: f.height ? String(f.height) : '',
+    start,
+    end,
+  }
+}
+
+function emptyDraft(initialType: SmallPublicFacType): Draft {
+  return {
     name: '',
     geomCode: '',
     type: initialType,
@@ -80,7 +89,29 @@ export function SmallPublicCandidateForm({
     height: '',
     start: null,
     end: null,
-  })
+  }
+}
+
+/**
+ * 후보지 등록·수정 — 속성과 위치(지도에서 시점·종점 찍기).
+ * initial 이 있으면 수정, 없으면 등록.
+ */
+export function SmallPublicCandidateForm({
+  initial = null,
+  initialType,
+  onCancel,
+  onSaved,
+  onDraftChange,
+}: {
+  initial?: SmallPublicFacility | null
+  initialType: SmallPublicFacType
+  onCancel: () => void
+  onSaved: (facility: SmallPublicFacility) => void
+  /** 지도에 미리 보여 줄 위치와 지금 위치 찍는 중인지 */
+  onDraftChange: (draft: { coords: SmallPublicFacility['coords']; type: SmallPublicFacType; picking: boolean }) => void
+}) {
+  const editing = initial != null
+  const [draft, setDraft] = useState<Draft>(() => (initial ? facilityToDraft(initial) : emptyDraft(initialType)))
   const [picking, setPicking] = useState<PickKind | null>(null)
   const [error, setError] = useState<string | null>(null)
   const isLine = LINE_TYPES.has(draft.type)
@@ -128,7 +159,7 @@ export function SmallPublicCandidateForm({
   const save = () => {
     if (!draft.name.trim()) return setError('시설명을 넣으세요.')
     if (!start) return setError('시점 위치를 지도에서 찍으세요.')
-    const facility = smallPublicActions.addFacility({
+    const patch = {
       name: draft.name.trim(),
       geomCode: draft.geomCode,
       type,
@@ -145,9 +176,19 @@ export function SmallPublicCandidateForm({
       height: draft.height,
       startXy: smallPublicCoordToDms(start),
       endXy: isLine && end ? smallPublicCoordToDms(end) : smallPublicCoordToDms(start),
+      coords,
+    }
+    if (editing && initial) {
+      smallPublicActions.updateFacility(initial.id, patch)
+      const next = { ...initial, ...patch }
+      setPicking(null)
+      onSaved(next)
+      return
+    }
+    const facility = smallPublicActions.addFacility({
+      ...patch,
       riskRank: '',
       riskScore: '',
-      coords,
     })
     setPicking(null)
     onSaved(facility)
@@ -207,23 +248,24 @@ export function SmallPublicCandidateForm({
   return (
     <div className="relative flex h-full min-h-0 flex-col bg-background">
       <SmallPublicPanelHeader
-        title="후보지 등록"
+        title={editing ? '후보지 수정' : '후보지 등록'}
         onClose={onCancel}
         actions={
-          <>
-            <button type="button" className={smallPublicBtnGhost} onClick={onCancel}>
-              취소
-            </button>
+          <div className="flex items-center gap-2.5">
             <button type="button" className={smallPublicBtnPrimary} onClick={save}>
               저장
             </button>
-          </>
+            <button type="button" className={smallPublicBtnGhost} onClick={onCancel}>
+              취소
+            </button>
+          </div>
         }
       />
       <MapSideDetailScroll className="min-h-0 flex-1 overflow-y-auto px-3 py-2.5">
         <p className="mb-2 text-[11px] text-muted-foreground">
-          새 후보지를 등록합니다. 관리번호는 저장할 때 임시 번호로 붙고, 위험도등급·점수는 안전점검에서 점검을
-          등록하면 채워집니다.
+          {editing
+            ? '시설명·유형·위치 등 속성을 고칩니다. 관리번호·위험도등급·점수는 그대로 둡니다.'
+            : '새 후보지를 등록합니다. 관리번호는 저장할 때 임시 번호로 붙고, 위험도등급·점수는 안전점검에서 점검을 등록하면 채워집니다.'}
         </p>
         <SmallPublicAttrTable entries={entries} />
         {picking ? (

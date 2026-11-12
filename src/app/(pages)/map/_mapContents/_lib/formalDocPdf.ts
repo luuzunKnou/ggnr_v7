@@ -69,20 +69,21 @@ export function formalDocSharedCss(): string {
   `;
 }
 
+export type BuildHtmlAsPdfOpts = {
+  title?: string;
+  /** false면 A4 최소높이 강제 안 함(표 칸이 늘어나 글자가 아래로 밀리는 현상 방지) */
+  fillA4Height?: boolean;
+  letterRendering?: boolean;
+};
+
 /**
- * 서식 HTML을 A4 PDF로 저장.
+ * 서식 HTML → A4 PDF Blob.
  * 명조체 로드 후 PNG(고해상도)로 캡처해 글씨·선이 흐려지지 않게 한다.
  */
-export async function downloadHtmlAsPdf(
+export async function buildHtmlAsPdfBlob(
   htmlInner: string,
-  fileName: string,
-  opts?: {
-    title?: string;
-    /** false면 A4 최소높이 강제 안 함(표 칸이 늘어나 글자가 아래로 밀리는 현상 방지) */
-    fillA4Height?: boolean;
-    letterRendering?: boolean;
-  }
-): Promise<void> {
+  opts?: BuildHtmlAsPdfOpts
+): Promise<Blob> {
   await ensureFormalFonts();
 
   const { default: html2canvas } = await import('html2canvas');
@@ -201,11 +202,32 @@ export async function downloadHtmlAsPdf(
       pdf.setProperties({ title: opts.title });
     }
 
-    const base = safeFileBase(fileName);
-    pdf.save(base.toLowerCase().endsWith('.pdf') ? base : `${base}.pdf`);
+    return pdf.output('blob');
   } finally {
     host.remove();
   }
+}
+
+/**
+ * 서식 HTML을 A4 PDF로 저장.
+ * 명조체 로드 후 PNG(고해상도)로 캡처해 글씨·선이 흐려지지 않게 한다.
+ */
+export async function downloadHtmlAsPdf(
+  htmlInner: string,
+  fileName: string,
+  opts?: BuildHtmlAsPdfOpts
+): Promise<void> {
+  const blob = await buildHtmlAsPdfBlob(htmlInner, opts);
+  const base = safeFileBase(fileName);
+  const name = base.toLowerCase().endsWith('.pdf') ? base : `${base}.pdf`;
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = name;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 export function escHtml(s: string): string {

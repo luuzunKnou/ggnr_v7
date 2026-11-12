@@ -2,6 +2,8 @@
 
 export const SMALL_PUBLIC_CANDIDATE_OPENED_KEY = 'smallPublicCandidate'
 export const SMALL_PUBLIC_INSPECTION_OPENED_KEY = 'smallPublicInspection'
+export const SMALL_PUBLIC_PLAN_OPENED_KEY = 'smallPublicPlan'
+export const SMALL_PUBLIC_BUDGET_OPENED_KEY = 'smallPublicBudget'
 
 export const SMALL_PUBLIC_FAC_TYPES = ['세천', '소교량', '취입보', '마을진입로', '농로', '낙차공'] as const
 export type SmallPublicFacType = (typeof SMALL_PUBLIC_FAC_TYPES)[number]
@@ -18,16 +20,6 @@ export type SmallPublicCandidate = (typeof SMALL_PUBLIC_CANDIDATES)[number]
 
 export const SMALL_PUBLIC_GRADES = ['양호', '보통', '불량'] as const
 export type SmallPublicGrade = (typeof SMALL_PUBLIC_GRADES)[number]
-
-/** 연계 = 외부 시스템에서 받은 점검, 입력 = 이 시스템에서 등록한 점검 */
-export type SmallPublicInspectionSource = '연계' | '입력'
-
-/** 등급 기준 — 등급은 합계점수로만 정해진다 */
-export function smallPublicGradeFromScore(score: number): SmallPublicGrade {
-  if (score <= 30) return '양호'
-  if (score <= 70) return '보통'
-  return '불량'
-}
 
 export const SMALL_PUBLIC_CLASS_BADGE: Record<SmallPublicCandidate, string> = {
   일반: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300',

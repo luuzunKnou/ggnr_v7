@@ -48,6 +48,8 @@ export type ServiceFilePdfPreviewItem = {
 type Props = {
   items: ServiceFilePdfPreviewItem[];
   initialIndex: number;
+  /** 열 때 보여줄 페이지(1부터). 미지정이면 1 */
+  initialPage?: number;
   onClose: () => void;
   /** 제목 옆 보조 표시 (예: 관리자용 폴더 경로) */
   titleHint?: string | null;
@@ -85,7 +87,15 @@ function toolbarBtnClass(disabled?: boolean, active?: boolean): string {
 /**
  * PDF 전용 전체화면 뷰어 — 사이드바(PDF 목록·페이지 썸네일) + 확대·패닝·회전·인쇄.
  */
-export function ServiceFilePdfPreview({ items, initialIndex, onClose, titleHint, indexSheetMode, indexSheetGuide }: Props) {
+export function ServiceFilePdfPreview({
+  items,
+  initialIndex,
+  initialPage = 1,
+  onClose,
+  titleHint,
+  indexSheetMode,
+  indexSheetGuide,
+}: Props) {
   const [mounted, setMounted] = useState(false);
   const itemsKey = useMemo(() => items.map((i) => i.fileName).join('\n'), [items]);
 
@@ -107,14 +117,19 @@ export function ServiceFilePdfPreview({ items, initialIndex, onClose, titleHint,
   const viewModeRef = useRef<PdfViewMode>('single');
   viewModeRef.current = viewMode;
   const [dragging, setDragging] = useState(false);
-  const [pdfPage, setPdfPage] = useState(1);
+  const startPage = Math.max(1, Math.floor(initialPage) || 1);
+  const [pdfPage, setPdfPage] = useState(startPage);
   const [pdfNumPages, setPdfNumPages] = useState(0);
   const [pdfPagesLoading, setPdfPagesLoading] = useState(true);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [pdfListSearchDraft, setPdfListSearchDraft] = useState('');
   const [pdfListSearch, setPdfListSearch] = useState('');
   const [pdfListSectionOpen, setPdfListSectionOpen] = useState(true);
-  const [pageInput, setPageInput] = useState('1');
+  const [pageInput, setPageInput] = useState(String(startPage));
+  /** null = 아직 파일 effect 미실행. 파일 전환 시에만 1페이지로 */
+  const prevFileIndexRef = useRef<number | null>(null);
+  /** 열 때 지정한 페이지 — 문서 페이지 수 확인 후 1회 적용 */
+  const pendingInitialPageRef = useRef<number | null>(startPage);
   /** 연속 보기 — 사이드바·툴바 등 명시적 페이지 이동 시에만 스크롤 */
   const [continuousScrollToken, setContinuousScrollToken] = useState(0);
   /** 메인 canvas 첫 렌더 완료 — 썸네일 등 부가 로드 지연 */
@@ -129,6 +144,8 @@ export function ServiceFilePdfPreview({ items, initialIndex, onClose, titleHint,
   const wheelNavRef = useRef({ viewMode: 'single' as PdfViewMode });
   wheelNavRef.current = { viewMode };
   const continuousScrollRef = useRef<HTMLDivElement | null>(null);
+  /** 연속보기에서 썸네일·툴바 이동 중 IO가 다른 페이지로 덮어쓰지 않게 */
+  const pendingContinuousPageRef = useRef<number | null>(null);
   const attachActionBusyRef = useRef(false);
   const [attachBusy, setAttachBusy] = useState<'download' | 'print' | null>(null);
   const [downloadMenuOpen, setDownloadMenuOpen] = useState(false);
@@ -195,15 +212,22 @@ export function ServiceFilePdfPreview({ items, initialIndex, onClose, titleHint,
   useEffect(() => {
     const item = items[index];
     const cachedPages = item?.url ? getCachedPdfNumPages(item.url) : null;
+    const prev = prevFileIndexRef.current;
+    const fileSwitched = prev !== null && prev !== index;
+    prevFileIndexRef.current = index;
 
     setScale(1);
     setRenderScale(1);
     setFitMode('page');
     setRotation(0);
     setPan({ x: 0, y: 0 });
-    setPdfPage(1);
-    setPageInput('1');
+    if (fileSwitched) {
+      setPdfPage(1);
+      setPageInput('1');
+      pendingInitialPageRef.current = null;
+    }
     setMainCanvasReady(false);
+    pendingContinuousPageRef.current = null;
 
     if (cachedPages != null) {
       setPdfNumPages(cachedPages);
@@ -212,7 +236,26 @@ export function ServiceFilePdfPreview({ items, initialIndex, onClose, titleHint,
       setPdfNumPages(0);
       setPdfPagesLoading(true);
     }
-  }, [index, items]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- items[index]는 itemsKey·index로 식별
+  }, [index, itemsKey]);
+
+  /** 첫 오픈 initialPage 적용 → 이후에는 페이지 수 범위만 클램프 */
+  useEffect(() => {
+    if (pdfNumPages < 1) return;
+    const pending = pendingInitialPageRef.current;
+    if (pending != null) {
+      pendingInitialPageRef.current = null;
+      const next = clamp(pending, 1, pdfNumPages);
+      setPdfPage(next);
+      setPageInput(String(next));
+      return;
+    }
+    setPdfPage((p) => {
+      const next = clamp(p, 1, pdfNumPages);
+      if (next !== p) setPageInput(String(next));
+      return next;
+    });
+  }, [pdfNumPages]);
 
   useEffect(() => {
     if (!current?.url) return;
@@ -284,7 +327,13 @@ export function ServiceFilePdfPreview({ items, initialIndex, onClose, titleHint,
     (n: number) => {
       const next = clamp(n, 1, Math.max(1, pdfNumPages));
       if (viewMode === 'continuous') {
+        pendingContinuousPageRef.current = next;
         setContinuousScrollToken((t) => t + 1);
+        window.setTimeout(() => {
+          if (pendingContinuousPageRef.current === next) pendingContinuousPageRef.current = null;
+        }, 1200);
+      } else {
+        pendingContinuousPageRef.current = null;
       }
       setPdfPage(next);
       setPageInput(String(next));
@@ -441,7 +490,13 @@ export function ServiceFilePdfPreview({ items, initialIndex, onClose, titleHint,
   }, []);
 
   const onContinuousVisiblePageChange = useCallback((n: number) => {
+    const pending = pendingContinuousPageRef.current;
+    if (pending != null) {
+      if (n !== pending) return;
+      pendingContinuousPageRef.current = null;
+    }
     setPdfPage((prev) => (prev === n ? prev : n));
+    setPageInput(String(n));
   }, []);
 
   const selectFile = useCallback((fileIndex: number) => {

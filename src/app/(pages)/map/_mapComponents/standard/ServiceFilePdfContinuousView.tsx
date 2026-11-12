@@ -337,7 +337,7 @@ export function ServiceFilePdfContinuousView({
     onMainCanvasReadyRef.current?.();
   }, []);
 
-  /** 사이드바·툴바 등 명시적 페이지 이동 시에만 스크롤 */
+  /** 사이드바·툴바 등 명시적 페이지 이동 시에만 스크롤 — 잠금이 풀릴 때까지 IO가 페이지를 덮어쓰지 않음 */
   useEffect(() => {
     if (scrollToPageToken === 0) return;
     const root = scrollRef.current;
@@ -346,11 +346,23 @@ export function ServiceFilePdfContinuousView({
     if (!target) return;
 
     scrollSyncLockRef.current = true;
-    target.scrollIntoView({ block: 'start', behavior: 'smooth' });
-    const id = window.setTimeout(() => {
+    let unlocked = false;
+    const unlock = () => {
+      if (unlocked) return;
+      unlocked = true;
       scrollSyncLockRef.current = false;
-    }, 450);
-    return () => window.clearTimeout(id);
+      root.removeEventListener('scrollend', onScrollEnd);
+    };
+    const onScrollEnd = () => unlock();
+    root.addEventListener('scrollend', onScrollEnd);
+    target.scrollIntoView({ block: 'start', behavior: 'smooth' });
+    /** smooth 스크롤이 길거나 scrollend 미지원일 때 대비 */
+    const id = window.setTimeout(unlock, 1000);
+    return () => {
+      window.clearTimeout(id);
+      root.removeEventListener('scrollend', onScrollEnd);
+      scrollSyncLockRef.current = false;
+    };
   }, [scrollToPageToken, pdfPage, numPages]);
 
   /** IntersectionObserver — 스크롤·회전·줌 후에도 현재 페이지 감지 */

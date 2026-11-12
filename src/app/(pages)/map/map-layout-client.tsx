@@ -194,9 +194,13 @@ import {
 import {
   SMALL_PUBLIC_CANDIDATE_OPENED_KEY,
   SMALL_PUBLIC_INSPECTION_OPENED_KEY,
+  SMALL_PUBLIC_PLAN_OPENED_KEY,
+  SMALL_PUBLIC_BUDGET_OPENED_KEY,
 } from "./_mapContents/smallPublic/smallPublicConfig"
 import { SmallPublicCandidateShell } from "./_mapContents/smallPublic/candidate/SmallPublicCandidate.shell"
 import { SmallPublicInspectionShell } from "./_mapContents/smallPublic/inspection/SmallPublicInspection.shell"
+import { SmallPublicPlanShell } from "./_mapContents/smallPublic/plan/SmallPublicPlan.shell"
+import { SmallPublicBudgetShell } from "./_mapContents/smallPublic/budget/SmallPublicBudget.shell"
 import {
   WORKS_REGISTER_OPENED_KEY,
   WorksRegisterShell,
@@ -808,6 +812,8 @@ function MapLayoutContent({
   const smallPublicFacOpen = openedWindows.includes(SMALL_PUBLIC_FAC_OPENED_KEY)
   const smallPublicCandidateOpen = openedWindows.includes(SMALL_PUBLIC_CANDIDATE_OPENED_KEY)
   const smallPublicInspectionOpen = openedWindows.includes(SMALL_PUBLIC_INSPECTION_OPENED_KEY)
+  const smallPublicPlanOpen = openedWindows.includes(SMALL_PUBLIC_PLAN_OPENED_KEY)
+  const smallPublicBudgetOpen = openedWindows.includes(SMALL_PUBLIC_BUDGET_OPENED_KEY)
   const worksRegisterOpen = openedWindows.includes(WORKS_REGISTER_OPENED_KEY)
   const wtlAdminEmptySerEng = findOpenedWtlAdminEmptySerEng(openedWindows)
   const wtlAdminEmptyOpen = Boolean(wtlAdminEmptySerEng)
@@ -926,6 +932,8 @@ function MapLayoutContent({
   const [smallPublicFacTotalWidth, setSmallPublicFacTotalWidth] = useState(0)
   const [smallPublicCandidateTotalWidth, setSmallPublicCandidateTotalWidth] = useState(0)
   const [smallPublicInspectionTotalWidth, setSmallPublicInspectionTotalWidth] = useState(0)
+  const [smallPublicPlanTotalWidth, setSmallPublicPlanTotalWidth] = useState(0)
+  const [smallPublicBudgetTotalWidth, setSmallPublicBudgetTotalWidth] = useState(0)
   const [worksRegisterTotalWidth, setWorksRegisterTotalWidth] = useState(0)
   const [wtlAdminEmptyTotalWidth, setWtlAdminEmptyTotalWidth] = useState(0)
   const [swlAdminEmptyTotalWidth, setSwlAdminEmptyTotalWidth] = useState(0)
@@ -1201,6 +1209,8 @@ function MapLayoutContent({
     (smallPublicFacOpen ? smallPublicFacTotalWidth : 0) +
     (smallPublicCandidateOpen ? smallPublicCandidateTotalWidth : 0) +
     (smallPublicInspectionOpen ? smallPublicInspectionTotalWidth : 0) +
+    (smallPublicPlanOpen ? smallPublicPlanTotalWidth : 0) +
+    (smallPublicBudgetOpen ? smallPublicBudgetTotalWidth : 0) +
     (worksRegisterOpen ? worksRegisterTotalWidth : 0) +
     (wtlAdminEmptyOpen ? wtlAdminEmptyTotalWidth : 0) +
     (swlAdminEmptyOpen ? swlAdminEmptyTotalWidth : 0) +
@@ -1370,9 +1380,13 @@ function MapLayoutContent({
   const smallPublicInspectionPanelLeftPx =
     smallPublicCandidatePanelLeftPx +
     (smallPublicCandidateOpen ? smallPublicCandidateTotalWidth : 0)
-  const worksRegisterPanelLeftPx =
+  const smallPublicPlanPanelLeftPx =
     smallPublicInspectionPanelLeftPx +
     (smallPublicInspectionOpen ? smallPublicInspectionTotalWidth : 0)
+  const smallPublicBudgetPanelLeftPx =
+    smallPublicPlanPanelLeftPx + (smallPublicPlanOpen ? smallPublicPlanTotalWidth : 0)
+  const worksRegisterPanelLeftPx =
+    smallPublicBudgetPanelLeftPx + (smallPublicBudgetOpen ? smallPublicBudgetTotalWidth : 0)
   const wtlAdminEmptyPanelLeftPx =
     worksRegisterPanelLeftPx + (worksRegisterOpen ? worksRegisterTotalWidth : 0)
   const swlAdminEmptyPanelLeftPx =
@@ -2012,6 +2026,16 @@ function MapLayoutContent({
     setOpened(openedWindows.filter((w) => w !== SMALL_PUBLIC_INSPECTION_OPENED_KEY))
   }
 
+  const handleCloseSmallPublicPlan = () => {
+    setSmallPublicPlanTotalWidth(0)
+    setOpened(openedWindows.filter((w) => w !== SMALL_PUBLIC_PLAN_OPENED_KEY))
+  }
+
+  const handleCloseSmallPublicBudget = () => {
+    setSmallPublicBudgetTotalWidth(0)
+    setOpened(openedWindows.filter((w) => w !== SMALL_PUBLIC_BUDGET_OPENED_KEY))
+  }
+
   const handleCloseWorksRegister = () => {
     setWorksRegisterTotalWidth(0)
     const next = openedWindows.filter((w) => w !== WORKS_REGISTER_OPENED_KEY)
@@ -2223,6 +2247,14 @@ function MapLayoutContent({
   useEffect(() => {
     if (!smallPublicInspectionOpen) setSmallPublicInspectionTotalWidth(0)
   }, [smallPublicInspectionOpen])
+
+  useEffect(() => {
+    if (!smallPublicPlanOpen) setSmallPublicPlanTotalWidth(0)
+  }, [smallPublicPlanOpen])
+
+  useEffect(() => {
+    if (!smallPublicBudgetOpen) setSmallPublicBudgetTotalWidth(0)
+  }, [smallPublicBudgetOpen])
 
   useEffect(() => {
     if (!worksRegisterOpen) setWorksRegisterTotalWidth(0)
@@ -3881,6 +3913,28 @@ function MapLayoutContent({
               leftOffsetPx={smallPublicInspectionPanelLeftPx}
               onTotalWidthChange={setSmallPublicInspectionTotalWidth}
               onClose={handleCloseSmallPublicInspection}
+              onOpenPlan={() => {
+                setSmallPublicInspectionTotalWidth(0)
+                setOpened([SMALL_PUBLIC_PLAN_OPENED_KEY])
+              }}
+            />
+          )}
+          {smallPublicPlanOpen && (
+            <SmallPublicPlanShell
+              leftOffsetPx={smallPublicPlanPanelLeftPx}
+              onTotalWidthChange={setSmallPublicPlanTotalWidth}
+              onClose={handleCloseSmallPublicPlan}
+              onOpenBudget={() => {
+                setSmallPublicPlanTotalWidth(0)
+                setOpened([SMALL_PUBLIC_BUDGET_OPENED_KEY])
+              }}
+            />
+          )}
+          {smallPublicBudgetOpen && (
+            <SmallPublicBudgetShell
+              leftOffsetPx={smallPublicBudgetPanelLeftPx}
+              onTotalWidthChange={setSmallPublicBudgetTotalWidth}
+              onClose={handleCloseSmallPublicBudget}
             />
           )}
           {worksRegisterOpen && (
