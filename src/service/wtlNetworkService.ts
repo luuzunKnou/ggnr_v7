@@ -41,8 +41,23 @@ import type {
   WtlNetworkYearMatrixParams,
 } from '@/app/(pages)/map/_mapContents/wtlAdmin/networkMap/wtlNetworkTypes';
 import adminTabsJson from '@/config/wtlAdmin/adminTabs.json';
+import { COORDINATE_SYSTEM_OPTIONS } from '@/app/(pages)/map/_mapComponents/landInfo/shared';
 import { exportLayerTableToShp } from '@/service/shpUploadService';
 import { buildCodeKeywordInClauses } from '@/lib/defineLayerCodeKeyword';
+
+const WTL_SHP_ALLOWED_SRS = new Set(
+  COORDINATE_SYSTEM_OPTIONS.map((o) => o.code)
+);
+const WTL_SHP_DEFAULT_SRS = 'EPSG:5179';
+
+function resolveWtlShpTargetSrs(raw: string | null | undefined): string {
+  const code = String(raw ?? '').trim().toUpperCase();
+  if (WTL_SHP_ALLOWED_SRS.has(code)) return code;
+  // short "5179" 형태도 허용
+  const asEpsg = code.startsWith('EPSG:') ? code : `EPSG:${code}`;
+  if (WTL_SHP_ALLOWED_SRS.has(asEpsg)) return asEpsg;
+  return WTL_SHP_DEFAULT_SRS;
+}
 
 export type {
   WtlNetworkAxisMode,
@@ -3249,6 +3264,8 @@ export type ExportWtlNetworkShpParams = {
   riCode?: string | null;
   supplyBlock?: string | null;
   areaWkts5181?: string[] | null;
+  /** ogr2ogr -t_srs (EPSG:xxxx). 미지정·비허용이면 5179 */
+  targetSrs?: string | null;
 };
 
 function safeShpEntryName(raw: string): string {
@@ -3304,6 +3321,7 @@ export async function exportWtlNetworkShpZip(
 
   const parts: Array<{ entryName: string; zipBuffer: Buffer }> = [];
   const errors: string[] = [];
+  const targetSrs = resolveWtlShpTargetSrs(params.targetSrs);
 
   for (const source of sources) {
     for (const key of keys) {
@@ -3320,6 +3338,7 @@ export async function exportWtlNetworkShpZip(
         schema: 'layer',
         sql: sqlText,
         layerName,
+        targetSrs,
       });
       if (!result.success || !result.zipBuffer) {
         errors.push(`${layerName}: ${result.error ?? '실패'}`);

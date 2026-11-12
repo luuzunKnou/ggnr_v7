@@ -181,7 +181,11 @@ function ThematicMapGroupSection({
   showGroupBulk?: boolean;
   showEngInTitle?: boolean;
 }) {
-  const [isExpanded, setIsExpanded] = useState(defaultExpanded);
+  /** 등고선 — 하위 레이어 목록 없이 그룹 일괄만 */
+  const hideLayerList = group.title === '등고선';
+  const [isExpanded, setIsExpanded] = useState(
+    hideLayerList ? false : defaultExpanded
+  );
   const selectedCount = group.layers.filter((l) => selectedTableNames.has(l.tableName)).length;
   const allSelected = selectedCount === group.layers.length && group.layers.length > 0;
   const someSelected = selectedCount > 0 && !allSelected;
@@ -197,29 +201,43 @@ function ThematicMapGroupSection({
           (allSelected || someSelected) && 'text-primary dark:text-primary'
         )}
       >
-        <button
-          type="button"
-          title={group.title}
-          onClick={() => setIsExpanded(!isExpanded)}
-          className="flex min-w-0 flex-1 cursor-pointer items-center gap-2 text-left hover:opacity-90"
-        >
-          {isExpanded ? (
-            <ChevronDown
-              className={cn(
-                'h-3.5 w-3.5 shrink-0',
-                allSelected || someSelected ? 'text-primary' : 'text-slate-400 dark:text-white/50'
-              )}
-            />
-          ) : (
-            <ChevronRight className="h-3.5 w-3.5 shrink-0 text-slate-400 dark:text-white/50" />
-          )}
-          <span className="flex min-w-0 items-baseline gap-1.5">
-            <span className="truncate text-[12px] leading-none">{group.title}</span>
-            <span className="shrink-0 text-[11px] font-normal leading-none text-slate-400 dark:text-white/50">
-              {selectedCount}/{group.layers.length}
+        {hideLayerList ? (
+          <div
+            title={group.title}
+            className="flex min-w-0 flex-1 items-center gap-2 text-left"
+          >
+            <span className="flex min-w-0 items-baseline gap-1.5">
+              <span className="truncate text-[12px] leading-none">{group.title}</span>
+              <span className="shrink-0 text-[11px] font-normal leading-none text-slate-400 dark:text-white/50">
+                {allSelected ? '켜짐' : someSelected ? '일부' : '꺼짐'}
+              </span>
             </span>
-          </span>
-        </button>
+          </div>
+        ) : (
+          <button
+            type="button"
+            title={group.title}
+            onClick={() => setIsExpanded(!isExpanded)}
+            className="flex min-w-0 flex-1 cursor-pointer items-center gap-2 text-left hover:opacity-90"
+          >
+            {isExpanded ? (
+              <ChevronDown
+                className={cn(
+                  'h-3.5 w-3.5 shrink-0',
+                  allSelected || someSelected ? 'text-primary' : 'text-slate-400 dark:text-white/50'
+                )}
+              />
+            ) : (
+              <ChevronRight className="h-3.5 w-3.5 shrink-0 text-slate-400 dark:text-white/50" />
+            )}
+            <span className="flex min-w-0 items-baseline gap-1.5">
+              <span className="truncate text-[12px] leading-none">{group.title}</span>
+              <span className="shrink-0 text-[11px] font-normal leading-none text-slate-400 dark:text-white/50">
+                {selectedCount}/{group.layers.length}
+              </span>
+            </span>
+          </button>
+        )}
         {showGroupBulk ? (
           <GroupSelectCheckbox
             checked={allSelected}
@@ -229,7 +247,7 @@ function ThematicMapGroupSection({
         ) : null}
       </div>
 
-      {isExpanded && (
+      {!hideLayerList && isExpanded && (
         <div className="pb-1">
           {group.layers.map((option: ThematicMapLayerOption) => {
             const checked = selectedTableNames.has(option.tableName);

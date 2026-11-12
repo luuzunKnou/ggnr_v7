@@ -1127,7 +1127,11 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
   )
 
   const buildExportFilterBody = useCallback(
-    (scope: WtlNetworkExportScope, exportSlots: LayerBoxSlot[]) => {
+    (
+      scope: WtlNetworkExportScope,
+      exportSlots: LayerBoxSlot[],
+      targetSrs?: string
+    ) => {
       const all = scope === 'all'
       const year = narrowedRange(yearFrom, yearTo, meta.yearMin, meta.yearMax)
       const diameter = narrowedRange(
@@ -1156,6 +1160,7 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
         supplyBlock: all ? null : supplyBlock || null,
         areaWkts5181:
           all || effectiveAreaWkts5181.length === 0 ? null : effectiveAreaWkts5181,
+        ...(targetSrs ? { targetSrs } : {}),
       }
     },
     [
@@ -1247,7 +1252,11 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
   )
 
   const handleShpExport = useCallback(
-    async (scope: WtlNetworkExportScope, layerKeys: string[]) => {
+    async (
+      scope: WtlNetworkExportScope,
+      layerKeys: string[],
+      targetSrs?: string
+    ) => {
       if (shpExporting) return
       const exportSlots = buildSlotsForKeys(layerKeys)
       if (exportSlots.length === 0) {
@@ -1259,7 +1268,9 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
         const res = await fetch('/api/download/wtl-network-shp', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(buildExportFilterBody(scope, exportSlots)),
+          body: JSON.stringify(
+            buildExportFilterBody(scope, exportSlots, targetSrs)
+          ),
         })
         if (!res.ok) {
           const data = await res.json().catch(() => ({}))
@@ -2132,7 +2143,10 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
               layers={EXPORT_LAYER_OPTIONS}
               selectedKeys={enabledKeys}
               availableKeys={availableLayerKeys}
-              onConfirm={(scope, keys) => void handleShpExport(scope, keys)}
+              showCrsSelect
+              onConfirm={(scope, keys, targetSrs) =>
+                void handleShpExport(scope, keys, targetSrs)
+              }
             />
           )
         }

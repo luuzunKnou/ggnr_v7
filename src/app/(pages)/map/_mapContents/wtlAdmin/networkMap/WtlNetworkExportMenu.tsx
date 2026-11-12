@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { cn } from '@/lib/utils'
+import { COORDINATE_SYSTEM_OPTIONS } from '@/app/(pages)/map/_mapComponents/landInfo/shared'
 import {
   Dialog,
   DialogContent,
@@ -12,6 +13,9 @@ import {
 } from '@/app/shadcnComponents/ui/dialog'
 
 export type WtlNetworkExportScope = 'all' | 'filtered'
+
+/** 관망조회 SHP 다운로드 기본 좌표계 (레이어 등록 목록과 동일) */
+export const WTL_NETWORK_SHP_DEFAULT_SRS = 'EPSG:5179'
 
 export type WtlNetworkExportLayerOption = {
   key: string
@@ -36,7 +40,13 @@ type Props = {
    * Set이면 포함되지 않은 키는 체크 비활성.
    */
   availableKeys?: ReadonlySet<string> | null
-  onConfirm: (scope: WtlNetworkExportScope, layerKeys: string[]) => void
+  /** SHP 전용 — 좌표계 select 표시 */
+  showCrsSelect?: boolean
+  onConfirm: (
+    scope: WtlNetworkExportScope,
+    layerKeys: string[],
+    targetSrs?: string
+  ) => void
 }
 
 /** 하단 도구줄 — 다운로드/Excel 레이어 선택 모달 */
@@ -51,11 +61,13 @@ export function WtlNetworkExportMenu({
   layers,
   selectedKeys = [],
   availableKeys = null,
+  showCrsSelect = false,
   onConfirm,
 }: Props) {
   const [open, setOpen] = useState(false)
   const [scope, setScope] = useState<WtlNetworkExportScope>('all')
   const [checked, setChecked] = useState<Set<string>>(() => new Set())
+  const [targetSrs, setTargetSrs] = useState(WTL_NETWORK_SHP_DEFAULT_SRS)
 
   const selectedKeySet = useMemo(() => {
     const list =
@@ -79,6 +91,7 @@ export function WtlNetworkExportMenu({
   useEffect(() => {
     if (!open) return
     setScope('all')
+    setTargetSrs(WTL_NETWORK_SHP_DEFAULT_SRS)
     const next = new Set<string>()
     for (const layer of layers) {
       if (!isLayerAvailable(layer.key)) continue
@@ -140,7 +153,7 @@ export function WtlNetworkExportMenu({
       return
     }
     setOpen(false)
-    onConfirm(scope, keys)
+    onConfirm(scope, keys, showCrsSelect ? targetSrs : undefined)
   }
 
   return (
@@ -195,6 +208,23 @@ export function WtlNetworkExportMenu({
               />
               검색 조건 다운로드
             </label>
+            {showCrsSelect ? (
+              <label className="flex items-center gap-2 pt-1 text-[12px] text-foreground">
+                <span className="shrink-0 text-muted-foreground">좌표계</span>
+                <select
+                  className="h-8 min-w-0 flex-1 cursor-pointer rounded border border-border bg-background px-2 text-[12px] text-foreground"
+                  value={targetSrs}
+                  title="좌표계"
+                  onChange={(e) => setTargetSrs(e.target.value)}
+                >
+                  {COORDINATE_SYSTEM_OPTIONS.map((o) => (
+                    <option key={o.code} value={o.code}>
+                      {o.shortLabel}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
           </div>
 
           <div className="min-h-0 flex-1 overflow-y-auto px-4 py-2">

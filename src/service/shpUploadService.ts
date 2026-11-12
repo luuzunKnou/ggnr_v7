@@ -7934,9 +7934,10 @@ export async function readShpValues(params: {
 }
 
 /**
- * layer 스키마 테이블을 EPSG:5181 Shapefile로 내보낸 뒤 zip 버퍼로 반환.
+ * layer 스키마 테이블을 Shapefile로 내보낸 뒤 zip 버퍼로 반환.
  * Excel 데이터 상태 탭·레이어 관리·관망조회 등에서 SHP 다운로드용.
  * `sql`이 있으면 해당 SELECT로 필터 내보내기(서버에서만 조립).
+ * 기본 출력 좌표계는 EPSG:5181. `targetSrs`로 변경 가능(관망조회 등).
  */
 export async function exportLayerTableToShp(params: {
   tableName: string;
@@ -7945,6 +7946,8 @@ export async function exportLayerTableToShp(params: {
   sql?: string | null;
   /** 출력 SHP 레이어명(-nln). 기본 tableName */
   layerName?: string | null;
+  /** ogr2ogr -t_srs. 미지정 시 EPSG:5181 */
+  targetSrs?: string | null;
 }): Promise<{ success: boolean; zipBuffer?: Buffer; error?: string }> {
   const tableName = (params?.tableName ?? '').trim().replace(/[^a-zA-Z0-9_]/g, '_') || undefined;
   if (!tableName) return { success: false, error: 'tableName이 필요합니다.' };
@@ -7953,6 +7956,9 @@ export async function exportLayerTableToShp(params: {
   const nln = String(params?.layerName ?? tableName)
     .trim()
     .replace(/[^a-zA-Z0-9_]/g, '_') || tableName;
+  const rawTarget = String(params?.targetSrs ?? '').trim().toUpperCase();
+  const targetSrs =
+    /^EPSG:\d+$/.test(rawTarget) ? rawTarget : 'EPSG:5181';
 
   const tmpBase = path.join(getGgnrDataDir(), 'tmp');
   const tempDir = path.join(tmpBase, `shp_export_${schema}_${nln}_${Date.now()}`);
@@ -7991,7 +7997,7 @@ export async function exportLayerTableToShp(params: {
   if (schema === 'public_layer') {
     ogrBase.push('-s_srs', 'EPSG:5181');
   }
-  ogrBase.push('-t_srs', 'EPSG:5181', '-skipfailures', '-dim', '2');
+  ogrBase.push('-t_srs', targetSrs, '-skipfailures', '-dim', '2');
   const result = await runOgr2ogr(ogrBase, ogrEnv);
 
   let shpSize = 0;
@@ -8018,7 +8024,7 @@ export async function exportLayerTableToShp(params: {
     if (schema === 'public_layer') {
       retryArgs.push('-s_srs', 'EPSG:5181');
     }
-    retryArgs.push('-t_srs', 'EPSG:5181', '-skipfailures', '-dim', '2');
+    retryArgs.push('-t_srs', targetSrs, '-skipfailures', '-dim', '2');
     const result2 = await runOgr2ogr(retryArgs, ogrEnv);
     try {
       shpSize = (await fs.stat(outShp)).size;
