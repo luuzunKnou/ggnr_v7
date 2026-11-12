@@ -15,6 +15,9 @@ const SECTIONS = [
   { id: 'indexSlide', label: 'INDEX 슬라이드' },
   { id: 'indexSlide_text', label: '- 문구 수정' },
   { id: 'indexSlide_image', label: '- 이미지 수정' },
+  { id: 'logo', label: '파비콘 및 로고' },
+  { id: 'logo_favicon', label: '- 파비콘' },
+  { id: 'logo_mark', label: '- 로고' },
 ] as const;
 
 const SUB_LIST =
@@ -231,6 +234,42 @@ export function BaseDataManualClient() {
                       <InlineCode>odor_ph_01.jpg</InlineCode> ~ <InlineCode>odor_ph_04.jpg</InlineCode>
                     </li>
                     
+                  </ul>
+                </li>
+              </ul>
+            </section>
+
+            <section id="logo" className="scroll-mt-4 space-y-3">
+              <h1 className="text-xl font-semibold">파비콘 및 로고</h1>
+              <ul className={SUB_LIST}>
+                <li className="space-y-3">
+                  <h2 id="logo_favicon" className={SUB_HEADING}>
+                    파비콘
+                  </h2>
+                  <p>
+                    브라우저 탭 아이콘이다. <InlineCode>public/favicon.ico</InlineCode> 파일을 두면
+                    된다.
+                  </p>
+                  <ul className={STEP_LIST}>
+                    <li>
+                      파일명은 프로젝트명 뒤에 <InlineCode>_favicon</InlineCode>를 붙인다. 예:{' '}
+                      <InlineCode>odor_ph_favicon.ico</InlineCode>
+                    </li>
+                  </ul>
+                </li>
+                <li className="space-y-3">
+                  <h2 id="logo_mark" className={SUB_HEADING}>
+                    로고
+                  </h2>
+                  <p>
+                    화면 헤더 등에 쓰는 로고다. <InlineCode>public/image/logo</InlineCode> 폴더에
+                    두면 된다.
+                  </p>
+                  <ul className={STEP_LIST}>
+                    <li>
+                      파일명은 프로젝트명 뒤에 <InlineCode>_logo</InlineCode>를 붙인다. 예:{' '}
+                      <InlineCode>odor_ph_logo.svg</InlineCode>
+                    </li>
                   </ul>
                 </li>
               </ul>
