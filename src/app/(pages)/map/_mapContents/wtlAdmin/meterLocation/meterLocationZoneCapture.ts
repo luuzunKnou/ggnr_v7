@@ -15,8 +15,9 @@ import { SCALE_BAR_PX } from '../../../_mapComponents/hooks/mapScale'
 import { WORKSPACE } from '../../../_mapComponents/layerFactory/serviceLayerFactory'
 import { createPrintCaptureBackgroundLayer } from '../../mapPrint/mapPrintCapture'
 
-const CAPTURE_W = 560
-const CAPTURE_H = 320
+/** A4 가로 보고서 지도 열 비중용 — 인쇄 선명도 */
+const CAPTURE_W = 960
+const CAPTURE_H = 540
 /** 구역 캡처 목표 축척막대(m) — 클러스터·화면 이동과 동일 */
 const ZONE_TARGET_SCALE_M = 35
 const ZONE_MIN_SCALE_M = 30
@@ -74,6 +75,12 @@ async function raceUntil(
   await Promise.race([work, whenAborted(signal)])
 }
 
+function waitMs(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    window.setTimeout(resolve, ms)
+  })
+}
+
 function waitRenderComplete(map: MapType, timeoutMs: number): Promise<void> {
   return new Promise((resolve) => {
     let done = false
@@ -83,23 +90,28 @@ function waitRenderComplete(map: MapType, timeoutMs: number): Promise<void> {
       resolve()
     }
     map.once('rendercomplete', finish)
-    map.render()
+    map.renderSync()
     window.setTimeout(finish, timeoutMs)
   })
 }
 
 type ArmedWait = {
   promise: Promise<void>
-  /** 렌더를 건 뒤에 호출. 그 전에 끝나면 타일 요청 전에 통과한다. */
+  /** 뷰·파라미터 갱신·render 직후 호출. 타일 요청이 큐에 잡힐 여유를 둔다. */
   arm: () => void
 }
 
-/** 타일 대기. arm 이후 요청이 없으면 캐시로 보고 바로 통과. */
-function watchTiles(source: XYZ, timeoutMs: number): ArmedWait {
+/**
+ * XYZ 타일 대기.
+ * arm 직후 바로 통과하지 않고, OL이 타일 요청을 걸 여유(grace)를 둔 뒤
+ * pending==0일 때만 통과 — 미로드 격자(뿌연 칸) 캡처 방지.
+ */
+function watchTiles(source: XYZ, timeoutMs: number, graceMs = 280): ArmedWait {
   let pending = 0
   let settled = false
   let armed = false
   let idleTimer: number | null = null
+  let graceTimer: number | null = null
   let capTimer: number | null = null
   let resolveFn: () => void = () => {}
   const promise = new Promise<void>((resolve) => {
@@ -109,6 +121,7 @@ function watchTiles(source: XYZ, timeoutMs: number): ArmedWait {
     if (settled) return
     settled = true
     if (idleTimer != null) window.clearTimeout(idleTimer)
+    if (graceTimer != null) window.clearTimeout(graceTimer)
     if (capTimer != null) window.clearTimeout(capTimer)
     source.un('tileloadstart', onStart)
     source.un('tileloadend', onEnd)
@@ -120,11 +133,15 @@ function watchTiles(source: XYZ, timeoutMs: number): ArmedWait {
     if (idleTimer != null) window.clearTimeout(idleTimer)
     idleTimer = window.setTimeout(() => {
       if (pending === 0) finish()
-    }, 30)
+    }, 120)
   }
   const onStart = () => {
     pending += 1
     if (idleTimer != null) window.clearTimeout(idleTimer)
+    if (graceTimer != null) {
+      window.clearTimeout(graceTimer)
+      graceTimer = null
+    }
   }
   const onEnd = () => {
     pending = Math.max(0, pending - 1)
@@ -138,13 +155,18 @@ function watchTiles(source: XYZ, timeoutMs: number): ArmedWait {
     promise,
     arm() {
       armed = true
-      scheduleIdle()
+      if (graceTimer != null) window.clearTimeout(graceTimer)
+      // 뷰 변경 직후 타일 요청이 오기 전에 idle로 통과하지 않도록 유예
+      graceTimer = window.setTimeout(() => {
+        graceTimer = null
+        if (pending === 0) scheduleIdle()
+      }, graceMs)
     },
   }
 }
 
-/** WMS 한 장. 로드가 시작되지 않으면 캐시로 보고 곧 통과. */
-function watchImageWms(source: ImageWMS, timeoutMs: number): ArmedWait {
+/** WMS 한 장. arm 후 요청이 없으면 캐시로 보고 통과(유예 후). */
+function watchImageWms(source: ImageWMS, timeoutMs: number, graceMs = 320): ArmedWait {
   let settled = false
   let armed = false
   let started = false
@@ -185,9 +207,10 @@ function watchImageWms(source: ImageWMS, timeoutMs: number): ArmedWait {
         finish()
         return
       }
+      if (idleTimer != null) window.clearTimeout(idleTimer)
       idleTimer = window.setTimeout(() => {
         if (!started) finish()
-      }, 40)
+      }, graceMs)
     },
   }
 }
@@ -405,9 +428,9 @@ export function createMeterZoneCaptureSession(
           .filter(Boolean)
         const jijukCql = buildJijukPnuCql(pnus)
         const meterCql = buildMetNumCql(points.map((p) => p.label))
-        // 첫 구역만 타일 워밍 여유. 이후·캐시는 로드가 끝나는 즉시 통과.
-        const tileCap = captureCount === 0 ? 1600 : 700
-        const wmsCap = captureCount === 0 ? 1200 : 600
+        // 타일·WMS가 실제로 끝난 뒤에만 캡처 (미로드 격자 방지)
+        const tileCap = captureCount === 0 ? 6000 : 4500
+        const wmsCap = captureCount === 0 ? 5000 : 4000
         const tileWait = tileSource ? watchTiles(tileSource, tileCap) : null
         const jijukWait = jijukCql ? watchImageWms(jijukSource, wmsCap) : null
         const meterWait = meterCql ? watchImageWms(meterSource, wmsCap) : null
@@ -418,6 +441,7 @@ export function createMeterZoneCaptureSession(
             LAYERS: `${WORKSPACE}:jijuk`,
             STYLES: 'jijuk',
             CQL_FILTER: jijukCql,
+            _: String(Date.now()),
           })
         } else {
           jijukLayer.setVisible(false)
@@ -431,6 +455,7 @@ export function createMeterZoneCaptureSession(
             STYLES: 'wtl_meta_ps',
             ENV: METER_LABEL_ENV,
             CQL_FILTER: meterCql,
+            _: String(Date.now()),
           })
         } else {
           meterLayer.setVisible(false)
@@ -451,7 +476,10 @@ export function createMeterZoneCaptureSession(
           signal
         )
         throwIfAborted(signal)
-        await raceUntil(waitRenderComplete(map, 200), signal)
+        // 타일 그린 뒤 한 프레임 더 안정화 — 인쇄 캡처와 동일 패턴
+        await raceUntil(waitRenderComplete(map, 2000), signal)
+        await raceUntil(waitMs(180), signal)
+        await raceUntil(waitRenderComplete(map, 1500), signal)
 
         const canvas = document.createElement('canvas')
         if (!compositeOffscreenToCanvas(map, canvas) || canvas.width < 2) {

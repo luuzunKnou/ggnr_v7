@@ -9,7 +9,14 @@ import {
   type FocusEvent,
 } from 'react'
 import { useSession } from 'next-auth/react'
-import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Loader2, RefreshCw, X } from 'lucide-react'
+import {
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  Loader2,
+  RefreshCw,
+  X,
+} from 'lucide-react'
 import { call } from '@/lib/api'
 import { useConsoleMenuAccess } from '@/hooks/useConsoleMenuAccess'
 import { hasAnyDevConsoleAccess } from '@/lib/consoleMenuAccess/client'
@@ -23,7 +30,11 @@ import { formatDetailScalarValue } from '@/lib/formatDetailScalar'
 import { cn } from '@/lib/utils'
 import { useMapContext } from '../../../_mapComponents/MapContext'
 import { canStartMapDrawInteraction } from '../../../_mapComponents/mapDrawInteraction'
-import { MapFloatingPanel } from '../../../_mapComponents/MapFloatingPanel'
+import { MapDetailFloatingPanel } from '../../../_mapComponents/MapDetailFloatingPanel'
+import {
+  computeMapDetailDockPin,
+  MAP_DETAIL_FLOAT_MINIMIZED_WIDTH,
+} from '../../../_mapComponents/mapDetailFloatingDock'
 import { MapSideListPanel } from '../../../_mapComponents/MapSideListPanel'
 import {
   getDefineFieldDisplayLabel,
@@ -88,9 +99,32 @@ const RESULT_MAX = 680
 const LIST_PAGE_SIZE = 7
 /** 목록 표 — 행 7개 이상일 때만 적용 (미만은 내용 높이) */
 const LIST_TABLE_MIN_HEIGHT_PX = 206
-/** 시설 상세 플로팅 모달 — 민원형 상세와 동일 티어(클릭 시 앞으로) */
+/** 시설 상세 플로팅 — MapDetailFloatingPanel(detailFloating) */
 const DETAIL_MODAL_WIDTH = 'min(600px, calc(100vw - 2rem))'
 const DETAIL_MODAL_MAX_HEIGHT = '92vh'
+const DETAIL_MODAL_STACK_OFFSET_PX = 28
+
+type DetailModalEntry = {
+  /** 안정 키 (item.id와 다를 수 있음 — 다중 히트 select 전환) */
+  key: string
+  item: WtlNetworkRow
+  hitRows: WtlNetworkRow[]
+  stackIndex: number
+  expandToken: number
+  focusToken: number
+  minimized: boolean
+}
+
+let detailModalKeySeq = 0
+function nextDetailModalKey(): string {
+  detailModalKeySeq += 1
+  return `wtl-detail-${detailModalKeySeq}`
+}
+
+function modalOwnsFacilityId(entry: DetailModalEntry, facilityId: string): boolean {
+  if (entry.item.id === facilityId) return true
+  return entry.hitRows.some((r) => r.id === facilityId)
+}
 
 type LayerBoxSlot = {
   key: string
@@ -721,12 +755,16 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
   const [physicalBySource, setPhysicalBySource] = useState<
     Record<string, Record<string, string>>
   >({})
-  /** 지도 레이어 클릭 시 상세 강제 펼침 (목록 행 선택은 접힘 유지) */
-  const [detailExpandToken, setDetailExpandToken] = useState(0)
-  /** false면 선택·하이라이트만 (단면도 범례). 시설목록·지도 클릭은 true */
-  const [detailOpen, setDetailOpen] = useState(false)
   /** 단면도 데이터 범례로 켠 선택자 — 패널 닫을 때 하이라이트 제거용 */
   const sectionLegendSelectionRef = useRef(false)
+  /** 열린 상세 플로팅 (다중) */
+  const [detailModals, setDetailModals] = useState<DetailModalEntry[]>([])
+  /** Escape·연관 레이어·하이라이트 기준 활성 모달 */
+  const [activeDetailKey, setActiveDetailKey] = useState<string | null>(null)
+  const activeDetailKeyRef = useRef<string | null>(null)
+  activeDetailKeyRef.current = activeDetailKey
+  const detailModalsRef = useRef<DetailModalEntry[]>([])
+  detailModalsRef.current = detailModals
 
   const listPageSize = LIST_PAGE_SIZE
   const [group, setGroup] = useState(INITIAL_GROUP)
@@ -749,9 +787,8 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
   const [emdOptions, setEmdOptions] = useState<{ code: string; name: string }[]>([])
   const [supplyBlockOptions, setSupplyBlockOptions] = useState<{ value: string; label: string }[]>([])
   const [riOptions, setRiOptions] = useState<{ code: string; name: string }[]>([])
+  /** 지도 하이라이트·범례 전용 선택 (활성 상세 item과 동기) */
   const [selected, setSelected] = useState<WtlNetworkRow | null>(null)
-  /** 지도 클릭 다중 피처(점→선→면 정렬). 목록·범례 선택은 비움 */
-  const [mapHitRows, setMapHitRows] = useState<WtlNetworkRow[]>([])
   const [detailRelatedLayer, setDetailRelatedLayer] =
     useState<WtlNetworkDetailRelatedLayer>(null)
   const [onlyInView, setOnlyInView] = useState(true)
@@ -1462,6 +1499,83 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
     }
   }, [boxData])
 
+  const openOrFocusDetailModal = useCallback(
+    (row: WtlNetworkRow, hitRows: WtlNetworkRow[] = []) => {
+      const facilityId = String(row.id)
+      const prev = detailModalsRef.current
+      const existing = prev.find((m) => modalOwnsFacilityId(m, facilityId))
+      if (existing) {
+        setDetailModals(
+          prev.map((m) =>
+            m.key !== existing.key
+              ? m
+              : {
+                  ...m,
+                  item: row,
+                  hitRows,
+                  expandToken: m.expandToken + 1,
+                  focusToken: m.focusToken + 1,
+                  minimized: false,
+                }
+          )
+        )
+        setActiveDetailKey(existing.key)
+        setSelected(row)
+        return
+      }
+      const stackIndex =
+        prev.reduce((max, m) => Math.max(max, m.stackIndex), -1) + 1
+      const key = nextDetailModalKey()
+      setDetailModals([
+        ...prev,
+        {
+          key,
+          item: row,
+          hitRows,
+          stackIndex,
+          expandToken: 0,
+          focusToken: 0,
+          minimized: false,
+        },
+      ])
+      setActiveDetailKey(key)
+      setSelected(row)
+    },
+    []
+  )
+
+  const closeDetailModal = useCallback((modalKey: string) => {
+    const prev = detailModalsRef.current
+    const next = prev.filter((m) => m.key !== modalKey)
+    setDetailModals(next)
+    if (activeDetailKeyRef.current === modalKey) {
+      const last = next[next.length - 1]
+      setActiveDetailKey(last?.key ?? null)
+      setSelected(last?.item ?? null)
+    }
+  }, [])
+
+  const updateDetailModalItem = useCallback(
+    (modalKey: string, next: WtlNetworkRow) => {
+      setDetailModals((prev) =>
+        prev.map((m) => {
+          if (m.key !== modalKey) return m
+          const hitRows =
+            m.hitRows.length === 0
+              ? m.hitRows
+              : m.hitRows.map((r) =>
+                  r.id === next.id
+                    ? { ...r, ...next, geom: next.geom ?? r.geom }
+                    : r
+                )
+          return { ...m, item: next, hitRows }
+        })
+      )
+      if (activeDetailKeyRef.current === modalKey) setSelected(next)
+    },
+    []
+  )
+
   /**
    * 시설목록 행·지도 클릭·단면도 범례 공통.
    * fly=true: extent fit / center=true: 도형 중심으로 맵 센터 이동.
@@ -1469,9 +1583,15 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
    */
   const pickRow = async (
     item: WtlNetworkRow,
-    opts?: { fly?: boolean; center?: boolean; openDetail?: boolean }
+    opts?: {
+      fly?: boolean
+      center?: boolean
+      openDetail?: boolean
+      hitRows?: WtlNetworkRow[]
+    }
   ) => {
     const openDetail = opts?.openDetail !== false
+    const hitRows = opts?.hitRows ?? []
     if (openDetail) sectionLegendSelectionRef.current = false
     let next: WtlNetworkRow = item
     try {
@@ -1482,12 +1602,13 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
       })
       const row = (res?.data ?? res)?.row as WtlNetworkRow | null | undefined
       next = row ?? item
-      setSelected(next)
-      setDetailOpen(openDetail)
     } catch {
-      setSelected(item)
-      setDetailOpen(openDetail)
       next = item
+    }
+    if (openDetail) {
+      openOrFocusDetailModal(next, hitRows)
+    } else {
+      setSelected(next)
     }
     const map = mapContext?.mapInstanceRef?.current
     const applyPad = () => mapContext?.applyMapViewPaddingRef?.current?.()
@@ -1593,9 +1714,8 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
     searchFilter,
     detailRelatedLayer,
     onSelect: (row, hits) => {
-      setDetailExpandToken((n) => n + 1)
-      setMapHitRows(Array.isArray(hits) && hits.length > 0 ? hits : [])
-      void pickRow(row)
+      const hitRows = Array.isArray(hits) && hits.length > 0 ? hits : []
+      void pickRow(row, { hitRows })
     },
     onMapMoveStart: () => {
       // 화면 체크가 켜져 있어도 이동 시작만으로 조회를 끊지 않는다.
@@ -1630,35 +1750,96 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
   }, [])
 
   useEffect(() => {
-    if (!selected) {
-      setDetailRelatedLayer(null)
-      setMapHitRows([])
-    }
-  }, [selected])
+    if (!activeDetailKey) setDetailRelatedLayer(null)
+  }, [activeDetailKey])
 
   /** 단면도 패널 닫힘(언마운트) 시 데이터 범례로 켠 선택자 레이어 제거 */
   useEffect(() => {
     if (section.panelOpen) return
     if (!sectionLegendSelectionRef.current) return
     sectionLegendSelectionRef.current = false
-    setSelected(null)
-    setDetailOpen(false)
+    /** 범례 전용 하이라이트만 제거 — 열린 상세 모달은 유지 */
+    if (detailModalsRef.current.length === 0) {
+      setSelected(null)
+    } else {
+      const active = detailModalsRef.current.find(
+        (m) => m.key === activeDetailKeyRef.current
+      )
+      setSelected(active?.item ?? detailModalsRef.current.at(-1)?.item ?? null)
+    }
   }, [section.panelOpen])
 
   useEffect(() => {
-    if (!selected) return
-    const key = String(selected.layerKey)
-    const sourceId = String(selected.id).split(':')[0] as WtlNetMapSourceId
-    if (!extraOn.has(key)) {
-      setSelected(null)
-      setDetailOpen(false)
+    const isEntryVisible = (m: DetailModalEntry) => {
+      const key = String(m.item.layerKey)
+      const sourceId = String(m.item.id).split(':')[0] as WtlNetMapSourceId
+      if (!extraOn.has(key)) return false
+      if (getWtlNetMapSource(sourceId) && !mapSources.has(sourceId)) return false
+      return true
+    }
+    setDetailModals((prev) => {
+      const next = prev.filter(isEntryVisible)
+      return next.length === prev.length ? prev : next
+    })
+    setSelected((prevSel) => {
+      if (!prevSel) return prevSel
+      const key = String(prevSel.layerKey)
+      const sourceId = String(prevSel.id).split(':')[0] as WtlNetMapSourceId
+      if (!extraOn.has(key)) return null
+      if (getWtlNetMapSource(sourceId) && !mapSources.has(sourceId)) return null
+      return prevSel
+    })
+  }, [extraOn, mapSources])
+
+  useEffect(() => {
+    if (detailModals.length === 0) {
+      if (activeDetailKey != null) setActiveDetailKey(null)
       return
     }
-    if (getWtlNetMapSource(sourceId) && !mapSources.has(sourceId)) {
-      setSelected(null)
-      setDetailOpen(false)
+    if (
+      activeDetailKey &&
+      detailModals.some((m) => m.key === activeDetailKey)
+    ) {
+      return
     }
-  }, [extraOn, mapSources, selected])
+    const last = detailModals[detailModals.length - 1]
+    setActiveDetailKey(last.key)
+    setSelected(last.item)
+  }, [detailModals, activeDetailKey])
+
+  const [viewportSize, setViewportSize] = useState(() => ({
+    w: typeof window !== 'undefined' ? window.innerWidth : 1280,
+    h: typeof window !== 'undefined' ? window.innerHeight : 800,
+  }))
+  useEffect(() => {
+    const onResize = () =>
+      setViewportSize({ w: window.innerWidth, h: window.innerHeight })
+    window.addEventListener('resize', onResize)
+    return () => window.removeEventListener('resize', onResize)
+  }, [])
+
+  /** 최소화된 상세 — 하단 좌→우 도킹 순서 */
+  const minimizedDockKeys = useMemo(
+    () => detailModals.filter((m) => m.minimized).map((m) => m.key),
+    [detailModals]
+  )
+  /** 단면도 최소화 — 상세 도킹 뒤에 이어서 배치 */
+  const [sectionMinimized, setSectionMinimized] = useState(false)
+  useEffect(() => {
+    if (!section.panelOpen) setSectionMinimized(false)
+  }, [section.panelOpen])
+
+  const dockLeftStartPx =
+    leftOffsetPx + listWidth + (resultOpen ? resultWidth : 0) + 8
+
+  const setDetailModalMinimized = useCallback(
+    (modalKey: string, minimized: boolean) => {
+      setDetailModals((prev) =>
+        prev.map((m) => (m.key === modalKey ? { ...m, minimized } : m))
+      )
+    },
+    []
+  )
 
   const layerBoxes = useMemo(() => {
     return listSlots
@@ -1707,7 +1888,8 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
     setKeywordDraft('')
     setKeyword('')
     setSelected(null)
-    setDetailOpen(false)
+    setDetailModals([])
+    setActiveDetailKey(null)
   }
 
   useEffect(() => {
@@ -2629,8 +2811,10 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
                                             'border-b-0'
                                         )}
                                         onClick={() => {
-                                          setMapHitRows([])
-                                          void pickRow(item, { fly: !onlyInView })
+                                          void pickRow(item, {
+                                            fly: !onlyInView,
+                                            hitRows: [],
+                                          })
                                         }}
                                       >
                                         {columns.map((col) => {
@@ -2702,53 +2886,104 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
           </MapSideListPanel>
         </div>
       )}
-      <NetworkDetailModal
-        item={detailOpen ? selected : null}
-        hitRows={mapHitRows}
-        expandToken={detailExpandToken}
-        showFieldKeys={showFieldKeys}
-        anchorLeftPx={leftOffsetPx + listWidth + (resultOpen ? resultWidth : 0) + 8}
-        onClose={() => {
-          setSelected(null)
-          setDetailOpen(false)
-        }}
-        onSelectHit={(row) => {
-          setDetailExpandToken((n) => n + 1)
-          void pickRow(row)
-        }}
-        onRelatedMapLayer={handleDetailRelatedLayer}
-        onItemUpdated={(next) => {
-          setSelected(next)
-          setMapHitRows((prev) => {
-            if (prev.length === 0) return prev
-            const idx = prev.findIndex((r) => r.id === next.id)
-            if (idx < 0) return prev
-            const rows = prev.slice()
-            rows[idx] = { ...rows[idx], ...next, geom: next.geom ?? rows[idx]?.geom }
-            return rows
-          })
-          setBoxData((prev) => {
-            let changed = false
-            const out: Record<string, LayerBoxData> = {}
-            for (const [key, data] of Object.entries(prev)) {
-              const idx = data.rows.findIndex((r) => r.id === next.id)
-              if (idx < 0) {
-                out[key] = data
-                continue
+      {detailModals.map((modal) => {
+        const dockIndex = minimizedDockKeys.indexOf(modal.key)
+        const pinPosition =
+          modal.minimized && dockIndex >= 0
+            ? computeMapDetailDockPin({
+                dockIndex,
+                dockLeftStart: dockLeftStartPx,
+                viewportW: viewportSize.w,
+                viewportH: viewportSize.h,
+              })
+            : null
+        return (
+        <NetworkDetailModal
+          key={modal.key}
+          item={modal.item}
+          hitRows={modal.hitRows}
+          expandToken={modal.expandToken}
+          focusToken={modal.focusToken}
+          showFieldKeys={showFieldKeys}
+          escapeEnabled={activeDetailKey === modal.key}
+          minimized={modal.minimized}
+          pinPosition={pinPosition}
+          onMinimizedChange={(next) =>
+            setDetailModalMinimized(modal.key, next)
+          }
+          anchorLeftPx={
+            leftOffsetPx +
+            listWidth +
+            (resultOpen ? resultWidth : 0) +
+            8 +
+            modal.stackIndex * DETAIL_MODAL_STACK_OFFSET_PX
+          }
+          anchorTopPx={72 + modal.stackIndex * DETAIL_MODAL_STACK_OFFSET_PX}
+          onActivate={() => {
+            setActiveDetailKey(modal.key)
+            const cur = detailModalsRef.current.find((m) => m.key === modal.key)
+            if (cur) setSelected(cur.item)
+          }}
+          onClose={() => closeDetailModal(modal.key)}
+          onSelectHit={(row) => {
+            void (async () => {
+              let next: WtlNetworkRow = row
+              try {
+                const res = await call('', 'POST', {
+                  service: 'wtlNetworkService',
+                  action: 'getWtlNetworkDetail',
+                  params: { id: row.id },
+                })
+                const fetched = (res?.data ?? res)?.row as
+                  | WtlNetworkRow
+                  | null
+                  | undefined
+                next = fetched ?? row
+              } catch {
+                next = row
               }
-              changed = true
-              const rows = data.rows.slice()
-              rows[idx] = {
-                ...rows[idx],
-                ...next,
-                geom: next.geom ?? rows[idx]?.geom,
+              setDetailModals((prev) =>
+                prev.map((m) =>
+                  m.key === modal.key
+                    ? {
+                        ...m,
+                        item: next,
+                        expandToken: m.expandToken + 1,
+                      }
+                    : m
+                )
+              )
+              setActiveDetailKey(modal.key)
+              setSelected(next)
+            })()
+          }}
+          onRelatedMapLayer={handleDetailRelatedLayer}
+          onItemUpdated={(next) => {
+            updateDetailModalItem(modal.key, next)
+            setBoxData((prev) => {
+              let changed = false
+              const out: Record<string, LayerBoxData> = {}
+              for (const [key, data] of Object.entries(prev)) {
+                const idx = data.rows.findIndex((r) => r.id === next.id)
+                if (idx < 0) {
+                  out[key] = data
+                  continue
+                }
+                changed = true
+                const rows = data.rows.slice()
+                rows[idx] = {
+                  ...rows[idx],
+                  ...next,
+                  geom: next.geom ?? rows[idx]?.geom,
+                }
+                out[key] = { ...data, rows }
               }
-              out[key] = { ...data, rows }
-            }
-            return changed ? out : prev
-          })
-        }}
-      />
+              return changed ? out : prev
+            })
+          }}
+        />
+        )
+      })}
       <WtlNetworkSectionDrawGuide
         open={section.modePickerOpen || section.drawing}
         drawMode={section.drawMode}
@@ -2780,12 +3015,23 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
         supplyAreaLines={section.supplyAreaLines}
         supplyAreaBands={section.supplyAreaBands}
         supplyElevComposition={section.supplyElevComposition}
+        minimized={sectionMinimized}
+        pinPosition={
+          section.panelOpen && sectionMinimized
+            ? computeMapDetailDockPin({
+                dockIndex: minimizedDockKeys.length,
+                dockLeftStart: dockLeftStartPx,
+                viewportW: viewportSize.w,
+                viewportH: viewportSize.h,
+              })
+            : null
+        }
+        onMinimizedChange={setSectionMinimized}
         onClose={section.closePanel}
         onRedraw={section.redrawSection}
         onLegendItemSelect={(item) => {
           const id = String(item.networkId ?? '').trim()
           if (!id) return
-          setMapHitRows([])
           sectionLegendSelectionRef.current = true
           void pickRow(
             {
@@ -2809,16 +3055,18 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
   )
 }
 
-function networkDetailHitLabel(row: WtlNetworkRow): string {
+function networkDetailLayerKor(row: WtlNetworkRow): string {
   const key = String(row.layerKey ?? '').trim()
-  let kor = key
+  if (!key) return ''
   for (const group of DISPLAY_GROUPS) {
     const hit = group.items.find((i) => i.define_table_name === key)
-    if (hit) {
-      kor = hit.define_table_kor_name
-      break
-    }
+    if (hit) return hit.define_table_kor_name
   }
+  return key
+}
+
+function networkDetailHitLabel(row: WtlNetworkRow): string {
+  const kor = networkDetailLayerKor(row) || String(row.layerKey ?? '').trim()
   const name = String(row.name ?? '').trim()
   return name ? `${kor} — ${name}` : kor
 }
@@ -2827,8 +3075,15 @@ function NetworkDetailModal({
   item,
   hitRows = [],
   expandToken = 0,
+  focusToken = 0,
   showFieldKeys = false,
+  escapeEnabled = true,
+  minimized = false,
+  pinPosition = null,
+  onMinimizedChange,
   anchorLeftPx,
+  anchorTopPx = 72,
+  onActivate,
   onClose,
   onSelectHit,
   onRelatedMapLayer,
@@ -2837,12 +3092,21 @@ function NetworkDetailModal({
   item: WtlNetworkRow | null
   /** 지도 클릭 다중 피처. 2건 이상일 때 헤더 select */
   hitRows?: WtlNetworkRow[]
-  /** 지도 클릭마다 증가 — 접힌 상세를 펼침. 목록 선택은 올리지 않음 */
+  /** 증가 시 최소화 해제 */
   expandToken?: number
+  /** 증가 시 재마운트 없이 앞으로 */
+  focusToken?: number
   /** 슈퍼유저·개발자 콘솔 — 시설목록과 동일: HTML title에만 영문 필드·코드 원문 괄호 */
   showFieldKeys?: boolean
+  /** 활성 모달만 Escape 닫기 */
+  escapeEnabled?: boolean
+  minimized?: boolean
+  pinPosition?: { top: number; left: number } | null
+  onMinimizedChange?: (minimized: boolean) => void
   /** 시설목록 패널 오른쪽 끝 */
   anchorLeftPx: number
+  anchorTopPx?: number
+  onActivate?: () => void
   onClose: () => void
   onSelectHit?: (row: WtlNetworkRow) => void
   onRelatedMapLayer: (next: WtlNetworkDetailRelatedLayer) => void
@@ -2870,7 +3134,6 @@ function NetworkDetailModal({
   const [draft, setDraft] = useState<Record<string, string>>({})
   const [saving, setSaving] = useState(false)
   const [editError, setEditError] = useState<string | null>(null)
-  const [collapsed, setCollapsed] = useState(false)
 
   const cancelEdit = useCallback(() => {
     setEditing(false)
@@ -2882,12 +3145,16 @@ function NetworkDetailModal({
     cancelEdit()
   }, [item?.id, cancelEdit])
 
+  /** expandToken이 증가할 때만 펼침 — minimized 의존 시 최소화 직후 바로 다시 펼쳐짐 */
+  const prevExpandTokenRef = useRef(expandToken)
   useEffect(() => {
-    if (expandToken > 0) setCollapsed(false)
-  }, [expandToken])
+    const prev = prevExpandTokenRef.current
+    prevExpandTokenRef.current = expandToken
+    if (expandToken > prev) onMinimizedChange?.(false)
+  }, [expandToken, onMinimizedChange])
 
   useEffect(() => {
-    if (!open) return
+    if (!open || !escapeEnabled) return
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return
       if (editing) {
@@ -2898,7 +3165,7 @@ function NetworkDetailModal({
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [open, onClose, editing, cancelEdit])
+  }, [open, escapeEnabled, onClose, editing, cancelEdit])
 
   useEffect(() => {
     if (!open || !fieldsTable) {
@@ -3126,19 +3393,25 @@ function NetworkDetailModal({
   }, [fields, item, codesByField, fieldsReady])
 
   /** 목록 박스와 동일 — DISPLAY_GROUPS 한글명 */
-  const layerKorName = useMemo(() => {
-    const key = String(item?.layerKey ?? '').trim()
-    if (!key) return ''
-    for (const group of DISPLAY_GROUPS) {
-      const hit = group.items.find((i) => i.define_table_name === key)
-      if (hit) return hit.define_table_kor_name
-    }
-    return key
-  }, [item?.layerKey])
+  const layerKorName = useMemo(
+    () => (item ? networkDetailLayerKor(item) : ''),
+    [item]
+  )
 
   if (!open || !item) return null
 
   const subtitle = titleField || item.name
+  const baseTitle = subtitle || layerKorName || '시설 상세'
+  /** select(다중 히트) 최소화 — 첫 히트 레이어명 외 n건 */
+  const multiHitMinimized = minimized && hitRows.length > 1
+  const firstHitLayerKor = multiHitMinimized
+    ? networkDetailLayerKor(hitRows[0] ?? item) || layerKorName
+    : ''
+  const titleLine = multiHitMinimized
+    ? `${firstHitLayerKor || '시설'} 외 ${hitRows.length - 1}건`
+    : baseTitle
+  const showLayerLine =
+    !multiHitMinimized && Boolean(layerKorName && layerKorName !== baseTitle)
 
   const renderCellValue = (row: AttrRow) => {
     if (editing && row.editable) {
@@ -3164,85 +3437,45 @@ function NetworkDetailModal({
   }
 
   return (
-    <MapFloatingPanel
-      viewport
-      zLayer="detailFloating"
+    <MapDetailFloatingPanel
+      layer={showLayerLine ? layerKorName : null}
+      title={titleLine}
+      minimized={minimized}
+      onMinimizedChange={onMinimizedChange}
+      onClose={() => {
+        if (editing) cancelEdit()
+        onClose()
+      }}
+      pinPosition={pinPosition}
+      focusToken={focusToken}
+      onActivate={onActivate}
       width={DETAIL_MODAL_WIDTH}
+      minimizedWidth={MAP_DETAIL_FLOAT_MINIMIZED_WIDTH}
       maxHeight={DETAIL_MODAL_MAX_HEIGHT}
-      defaultPosition={{ top: 72, left: anchorLeftPx }}
-      className="bg-background backdrop-blur-none"
-      header={
-        <>
-          <button
-            type="button"
-            title={collapsed ? '펼치기' : '접기'}
-            aria-label={collapsed ? '펼치기' : '접기'}
-            aria-expanded={!collapsed}
-            onClick={() => setCollapsed((v) => !v)}
-            className="standard-panel-close mr-2 cursor-pointer"
-          >
-            <ChevronUp
-              className={cn('h-4 w-4', collapsed && 'rotate-180')}
-              aria-hidden
-            />
-          </button>
-          <div className="min-w-0 flex-1 pr-2">
-            <span
-              className="block truncate text-xs font-medium text-foreground"
-              title={subtitle || layerKorName || '시설 상세'}
-            >
-              {subtitle || layerKorName || '시설 상세'}
-            </span>
-            {layerKorName && subtitle ? (
-              <span
-                className="mt-0.5 block truncate text-[11px] text-muted-foreground"
-                title={layerKorName}
-              >
-                {layerKorName}
-              </span>
-            ) : null}
-          </div>
-          {hitRows.length > 1 ? (
-            <select
-              className="mr-1 h-7 max-w-[11rem] shrink-0 cursor-pointer rounded border border-border bg-background px-1.5 text-[11px] text-foreground outline-none focus:border-primary"
-              value={item.id}
-              title="상세보기 선택"
-              aria-label="상세보기 선택"
-              onChange={(e) => {
-                const next = hitRows.find((r) => r.id === e.target.value)
-                if (!next || next.id === item.id) return
-                if (editing) cancelEdit()
-                onSelectHit?.(next)
-              }}
-            >
-              {hitRows.map((row) => (
-                <option key={row.id} value={row.id}>
-                  {networkDetailHitLabel(row)}
-                </option>
-              ))}
-            </select>
-          ) : null}
-          <button
-            type="button"
-            title="닫기"
-            onClick={() => {
+      defaultPosition={{ top: anchorTopPx, left: anchorLeftPx }}
+      headerActions={
+        hitRows.length > 1 ? (
+          <select
+            className="h-7 max-w-[11rem] shrink-0 cursor-pointer rounded border border-border bg-background px-1.5 text-[11px] text-foreground outline-none focus:border-primary"
+            value={item.id}
+            title="상세보기 선택"
+            aria-label="상세보기 선택"
+            onChange={(e) => {
+              const next = hitRows.find((r) => r.id === e.target.value)
+              if (!next || next.id === item.id) return
               if (editing) cancelEdit()
-              onClose()
+              onSelectHit?.(next)
             }}
-            className="standard-panel-close cursor-pointer"
-            aria-label="닫기"
           >
-            <X className="h-4 w-4" />
-          </button>
-        </>
+            {hitRows.map((row) => (
+              <option key={row.id} value={row.id}>
+                {networkDetailHitLabel(row)}
+              </option>
+            ))}
+          </select>
+        ) : null
       }
     >
-      <div
-        className={cn(
-          'flex min-h-0 flex-1 flex-col overflow-hidden bg-background',
-          collapsed && 'hidden'
-        )}
-      >
           <div className="standard-detail-scroll">
             {fieldsLoading ? (
               <p className="standard-detail-loading">필드 설정 불러오는 중…</p>
@@ -3334,7 +3567,6 @@ function NetworkDetailModal({
               </>
             )}
           </div>
-      </div>
-    </MapFloatingPanel>
+    </MapDetailFloatingPanel>
   )
 }

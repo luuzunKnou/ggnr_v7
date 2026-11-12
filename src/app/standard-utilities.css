@@ -36,6 +36,30 @@
   @apply text-sm font-semibold text-foreground;
 }
 
+/**
+ * 상세 플로팅·패널 헤더 제목 블록.
+ * 펼침: 위 레이어 / 아래 title. 최소화: 가로 flex(layer + title).
+ */
+@utility standard-detail-float-heading {
+  @apply min-w-0 flex-1;
+}
+
+@utility standard-detail-float-heading-min {
+  @apply flex min-w-0 max-w-[14rem] flex-1 items-center gap-1.5 pr-1;
+}
+
+@utility standard-detail-float-layer {
+  @apply block truncate text-[11px] font-normal text-muted-foreground;
+}
+
+@utility standard-detail-float-title {
+  @apply block truncate text-xs font-medium text-foreground;
+}
+
+@utility standard-detail-float-title-below {
+  @apply mt-0.5 block truncate text-xs font-medium text-foreground;
+}
+
 @utility standard-panel-close {
   @apply shrink-0 rounded p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground;
 }

@@ -96,15 +96,12 @@ function FloatingChrome({
               aria-hidden
             />
           </button>
-          <div className="min-w-0 flex-1 pr-2">
-            <span className="block truncate text-xs font-medium text-foreground" title={title}>
+          <div className="standard-detail-float-heading pr-2">
+            <span className="standard-detail-float-layer" title={title}>
               {title}
             </span>
             {subtitle ? (
-              <span
-                className="mt-0.5 block truncate text-[11px] text-muted-foreground"
-                title={subtitle}
-              >
+              <span className="standard-detail-float-title-below" title={subtitle}>
                 {subtitle}
               </span>
             ) : null}

@@ -1,7 +1,6 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Hand, Rotate3d } from 'lucide-react'
 import { call } from '@/lib/api'
 import { useResolvedThemeSafe } from '@/app/(pages)/(index)/theme-provider'
 import { WTL_LAYER_SHAPE_DEFS } from '@/lib/wtlLayerShapeDefs'
@@ -42,14 +41,10 @@ const THREEJS_VIEW_BG_CLASS = {
 /** ThreeJs 데이터 범례 — 지형 토글 키 */
 const THREEJS_GROUND_FEATURE_ID = '__wtl_section_ground__'
 
-/** 3D 뷰어 드래그 도구 — 이동·회전 라디오 */
-type ThreeJsViewTool = 'pan' | 'rotate'
-
 import {
   buildThreeJsHoverTipHtml,
   type ThreeJsTipUserData,
 } from './wtlNetworkSectionThreeJsTip'
-
 type Pt3857 = [number, number]
 
 type Props = {
@@ -195,7 +190,6 @@ export function WtlNetworkSectionThreeJsTab({
   const [status, setStatus] = useState('')
   const [error, setError] = useState('')
   const [viewReady, setViewReady] = useState(false)
-  const [viewTool, setViewTool] = useState<ThreeJsViewTool>('rotate')
   const [legendFeatures, setLegendFeatures] = useState<SectionFeatureMark[]>([])
   const [legendActiveKey, setLegendActiveKey] = useState<string | null>(null)
 
@@ -858,16 +852,18 @@ export function WtlNetworkSectionThreeJsTab({
         orbit = new OrbitControls(camera, renderer.domElement)
         orbit.enableDamping = true
         orbit.dampingFactor = 0.08
-        // 초기 = 회전(기본). 이동/회전 라디오는 viewTool effect가 덮어씀
-        orbit.enablePan = false
+        // 좌클릭=이동, 휠클릭=회전, 휠스크롤=줌
+        orbit.enablePan = true
         orbit.enableRotate = true
-        orbit.mouseButtons.LEFT = THREE.MOUSE.ROTATE
-        orbit.mouseButtons.MIDDLE = THREE.MOUSE.DOLLY
-        orbit.mouseButtons.RIGHT = THREE.MOUSE.PAN
+        orbit.screenSpacePanning = true
+        orbit.mouseButtons.LEFT = THREE.MOUSE.PAN
+        orbit.mouseButtons.MIDDLE = THREE.MOUSE.ROTATE
+        orbit.mouseButtons.RIGHT = THREE.MOUSE.DOLLY
         orbitRef.current = orbit
         fitSectionLineView(camera, orbit, groundGroup, groundProps)
         // 최초 화면 — 나침반 «북»과 동일하게 정북 방향
         faceNorthView(camera, orbit)
+        renderer.domElement.style.cursor = 'grab'
 
         const resize = () => {
           if (!renderer || cancelled) return
@@ -990,7 +986,8 @@ export function WtlNetworkSectionThreeJsTab({
               featureId?: string
               pipeId?: string
             }
-            setDepthBarsForFeature(featureIdOf(ud) || null)
+            const fid = featureIdOf(ud) || null
+            setDepthBarsForFeature(fid)
             const gen = ++tipGenRef.current
             const localX = ev.clientX - rect.left + 12
             const localY = ev.clientY - rect.top + 12
@@ -1123,37 +1120,6 @@ export function WtlNetworkSectionThreeJsTab({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- line3857/kinds는 sig와 동기
   }, [lineSig, kindsSig, clearSelectionPulse])
 
-  /** 이동·회전 라디오 → OrbitControls 왼쪽 드래그 동작 */
-  useEffect(() => {
-    const orbit = orbitRef.current
-    if (!orbit || !viewReady) return
-    let cancelled = false
-    void import('three').then((THREE) => {
-      if (cancelled || orbitRef.current !== orbit) return
-      if (viewTool === 'pan') {
-        orbit.enablePan = true
-        orbit.enableRotate = false
-        orbit.screenSpacePanning = true
-        orbit.mouseButtons.LEFT = THREE.MOUSE.PAN
-        orbit.mouseButtons.MIDDLE = THREE.MOUSE.DOLLY
-        orbit.mouseButtons.RIGHT = THREE.MOUSE.DOLLY
-      } else {
-        orbit.enablePan = false
-        orbit.enableRotate = true
-        orbit.mouseButtons.LEFT = THREE.MOUSE.ROTATE
-        orbit.mouseButtons.MIDDLE = THREE.MOUSE.DOLLY
-        orbit.mouseButtons.RIGHT = THREE.MOUSE.PAN
-      }
-      const canvas = hostRef.current?.querySelector('canvas')
-      if (canvas) {
-        canvas.style.cursor = viewTool === 'pan' ? 'grab' : ''
-      }
-    })
-    return () => {
-      cancelled = true
-    }
-  }, [viewTool, viewReady])
-
   const showLegendSkeleton =
     !error && featureLegendGroups.length === 0 && (busy || !viewReady)
 
@@ -1183,47 +1149,7 @@ export function WtlNetworkSectionThreeJsTab({
             style={{ display: 'none' }}
           />
           {viewReady && !error ? (
-            <>
-              <ViewportCompass getCamera={getCamera} onClick={faceNorth} />
-              <div
-                role="radiogroup"
-                aria-label="3D 뷰 조작"
-                className="pointer-events-auto absolute bottom-3 left-1/2 z-10 flex -translate-x-1/2 items-center gap-1 rounded-full border border-slate-600/80 bg-slate-900/85 p-1 shadow-md backdrop-blur-sm"
-              >
-                <button
-                  type="button"
-                  role="radio"
-                  aria-checked={viewTool === 'pan'}
-                  title="이동"
-                  aria-label="이동"
-                  onClick={() => setViewTool('pan')}
-                  className={cn(
-                    'inline-flex h-8 w-8 cursor-pointer items-center justify-center rounded-full transition-colors',
-                    viewTool === 'pan'
-                      ? 'bg-primary text-primary-foreground'
-                      : 'text-slate-300 hover:bg-slate-700/80 hover:text-white'
-                  )}
-                >
-                  <Hand className="h-4 w-4" aria-hidden />
-                </button>
-                <button
-                  type="button"
-                  role="radio"
-                  aria-checked={viewTool === 'rotate'}
-                  title="회전"
-                  aria-label="회전"
-                  onClick={() => setViewTool('rotate')}
-                  className={cn(
-                    'inline-flex h-8 w-8 cursor-pointer items-center justify-center rounded-full transition-colors',
-                    viewTool === 'rotate'
-                      ? 'bg-primary text-primary-foreground'
-                      : 'text-slate-300 hover:bg-slate-700/80 hover:text-white'
-                  )}
-                >
-                  <Rotate3d className="h-4 w-4" aria-hidden />
-                </button>
-              </div>
-            </>
+            <ViewportCompass getCamera={getCamera} onClick={faceNorth} />
           ) : null}
           {busy || !viewReady ? (
             <p

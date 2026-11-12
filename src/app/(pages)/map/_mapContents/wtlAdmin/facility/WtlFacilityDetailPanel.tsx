@@ -44,6 +44,7 @@ import {
   WtlMappedFacilityFloating,
   type WtlMappedFacilityTarget,
 } from './WtlFacilityRelatedDetailFloating'
+import { facilityTabLabel } from './wtlFacilityCatalog'
 import { WtlFacilityTableLoadingRow } from './WtlFacilityTableLoadingRow'
 import { DataHistoryCardSection } from '../../../_mapComponents/dataHistoryCard/DataHistoryCardSection'
 import { isTankHistoryGubun } from '../../../_mapComponents/dataHistoryCard/dataHistoryCardExtra'
@@ -332,6 +333,12 @@ export function WtlFacilityDetailPanel({
     titleField?.define_field_type,
     titleFieldName,
   ])
+
+  const headerLayerLabel = useMemo(() => {
+    const table = String(row.tableName || row.fieldsTable || row.layerKey || '').trim()
+    if (!table) return ''
+    return facilityTabLabel(table) || table
+  }, [row.tableName, row.fieldsTable, row.layerKey])
 
   const detailFields = useMemo(() => {
     const selectedFields = selectDefineLayerDetailFields(allFields)
@@ -635,9 +642,23 @@ export function WtlFacilityDetailPanel({
   return (
     <div className="standard-panel-root">
       <div className="standard-panel-header">
-        <span className="standard-panel-title truncate pr-2" title={headerTitle}>
-          {headerTitle}
-        </span>
+        <div className="standard-detail-float-heading pr-2">
+          {headerLayerLabel && headerLayerLabel !== headerTitle ? (
+            <span className="standard-detail-float-layer" title={headerLayerLabel}>
+              {headerLayerLabel}
+            </span>
+          ) : null}
+          <span
+            className={
+              headerLayerLabel && headerLayerLabel !== headerTitle
+                ? 'standard-detail-float-title-below'
+                : 'standard-detail-float-title'
+            }
+            title={headerTitle}
+          >
+            {headerTitle}
+          </span>
+        </div>
         <button
           type="button"
           className="standard-panel-close cursor-pointer"
