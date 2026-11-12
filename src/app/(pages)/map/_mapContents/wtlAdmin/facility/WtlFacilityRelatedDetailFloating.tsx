@@ -14,6 +14,7 @@ import {
   getRowValueByField,
   isDefineFieldFlagTrue,
   selectDefineLayerDetailFields,
+  uniqueDefineLayerFields,
   type DefineFieldLike,
 } from '../../../_mapComponents/standard/defineLayerRowUtils'
 import {
@@ -285,7 +286,7 @@ export function WtlFacilityRelatedDetailFloating({
     const selected = selectDefineLayerDetailFields(all)
     if (selected.length > 0) return selected
     if (all.length > 0) {
-      return all.filter((f) => {
+      return uniqueDefineLayerFields(all).filter((f) => {
         const name = String(f.define_field_name ?? '')
           .trim()
           .toLowerCase()

@@ -27,6 +27,7 @@ import {
   isGeomLikeDefineFieldName,
   selectDefineLayerDetailFields,
   selectDefineLayerListFields,
+  uniqueDefineLayerFields,
   type DefineFieldLike,
 } from '../../../_mapComponents/standard/defineLayerRowUtils'
 import { WtlNetworkMapAttachmentSection } from '../networkMap/WtlNetworkMapAttachmentSection'
@@ -336,7 +337,7 @@ export function WtlFacilityDetailPanel({
     const selectedFields = selectDefineLayerDetailFields(allFields)
     if (selectedFields.length > 0) return selectedFields
     if (allFields.length > 0) {
-      return allFields.filter((f) => {
+      return uniqueDefineLayerFields(allFields).filter((f) => {
         const name = String(f.define_field_name ?? '')
           .trim()
           .toLowerCase()

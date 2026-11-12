@@ -3,6 +3,8 @@
  * row에서 값을 안전하게 조회하기 위한 유틸.
  */
 
+import { dedupeDefineLayerFieldsByName } from '@/lib/defineLayerFieldsNormalize'
+
 /** defineLayer 체크 플래그 (true / 'true' / '1') */
 export function isDefineFieldFlagTrue(v: unknown): boolean {
   if (v === true) return true;
@@ -63,6 +65,13 @@ export type DefineFieldLike = {
   define_field_show_title?: unknown;
 };
 
+/** 동일 필드명 중복 제거 (목록·상세 React key / 폴백 컬럼용) */
+export function uniqueDefineLayerFields(fields: DefineFieldLike[]): DefineFieldLike[] {
+  return dedupeDefineLayerFieldsByName(
+    fields as Array<DefineFieldLike & Record<string, unknown>>
+  );
+}
+
 export function defineFieldIdxNum(f: DefineFieldLike): number {
   const n = parseInt(String(f.define_field_idx ?? '999999'), 10);
   return Number.isFinite(n) ? n : 999999;
@@ -70,7 +79,7 @@ export function defineFieldIdxNum(f: DefineFieldLike): number {
 
 /** define_field_show_list=true, geom 제외, define_field_idx 순 */
 export function selectDefineLayerListFields(fields: DefineFieldLike[]): DefineFieldLike[] {
-  return [...fields]
+  return [...uniqueDefineLayerFields(fields)]
     .filter((f) => {
       const name = String(f.define_field_name ?? '').trim();
       if (!name) return false;
@@ -82,7 +91,7 @@ export function selectDefineLayerListFields(fields: DefineFieldLike[]): DefineFi
 
 /** define_field_show_detail=true, geom 제외, define_field_idx 순 */
 export function selectDefineLayerDetailFields(fields: DefineFieldLike[]): DefineFieldLike[] {
-  return [...fields]
+  return [...uniqueDefineLayerFields(fields)]
     .filter((f) => {
       const name = String(f.define_field_name ?? '').trim();
       if (!name) return false;
