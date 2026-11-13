@@ -225,6 +225,8 @@ type ListParams = {
   supplyBlock?: string | null;
   /** EPSG:5181 위치 도형(읍면동·리·급수블록). 있으면 ST_Intersects */
   areaWkts5181?: string[] | null;
+  /** 행 도형 포함. 공사대장 관련시설 지도 강조용 */
+  withGeom?: boolean;
   limit?: number;
   page?: number;
   pageSize?: number;
@@ -706,10 +708,9 @@ async function collectListWheres(
     }
   } else if (areaWkts.length > 0) {
     for (const wkt of areaWkts) {
-      // ST_Within: 경계만 맞닿은 도형 제외
-      wheres.push(
-        `ST_Within(t.geom, ST_Transform(ST_GeomFromText('${esc(wkt)}', 5181), ST_SRID(t.geom)))`
-      );
+      // ST_Intersects: 관로처럼 구역을 가로지르는 선도 포함 (ST_Within 이면 점만 남고 관로는 탈락)
+      const geomOf = `ST_Transform(ST_GeomFromText('${esc(wkt)}', 5181), ST_SRID(t.geom))`;
+      wheres.push(`(t.geom && ${geomOf} AND ST_Intersects(t.geom, ${geomOf}))`);
     }
   } else {
     if (def.hasHjd !== false) {
@@ -1006,7 +1007,7 @@ export async function getWtlNetworkList(params: ListParams = {}): Promise<{
         riCode: params.riCode,
         supplyBlock: params.supplyBlock,
         areaWkts5181: params.areaWkts5181,
-        withGeom: false,
+        withGeom: params.withGeom === true,
         limit: usePaging && slotCount === 1 ? pageSize : limitPer,
         offset: usePaging && slotCount === 1 ? offset : undefined,
       });
