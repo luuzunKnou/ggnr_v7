@@ -220,7 +220,7 @@ const REMARK_BY_GRADE: Record<SmallPublicGrade, string> = {
 }
 
 /**
- * 점검 이력 — 자료의 현장조사(조사일·조사자)를 첫 점검으로 두고, 일부 시설에 2025·2026년 정기점검을 덧붙인다.
+ * 점검 이력 — 자료의 현장조사(조사일·조사자)를 첫 점검으로 두고, 2025년은 전원·2026년은 일부에 정기점검을 덧붙인다.
  * 일반·관리 시설은 위험도 불량이 나오지 않게 점수를 눌러 자료의 구분과 맞춘다.
  * 구분 평가는 짝수 인덱스만(해마다 없을 수 있음).
  */
@@ -232,7 +232,14 @@ export function createSmallPublicMockInspections(facilities: SmallPublicFacility
     const classForm = smallPublicClassFormFor(f.type)
     const base = Number(f.riskScore)
     if (!f.surveyDate || !Number.isFinite(base)) return
-    const push = (date: string, score: number, inspector: string, withClass: boolean, attachSample: boolean) => {
+    const push = (
+      date: string,
+      score: number,
+      inspector: string,
+      withClass: boolean,
+      attachSample: boolean,
+      reportId: string | null = null
+    ) => {
       const form = smallPublicCheckFormFor(f.type, date)
       const cap = target === '위험' ? 100 : 68
       const values = smallPublicMockCheckValues(form, Math.max(0, Math.min(cap, Math.round(score))))
@@ -264,26 +271,28 @@ export function createSmallPublicMockInspections(facilities: SmallPublicFacility
           attachSample && withClass && f.mngNo === SAMPLE_MNG
             ? mockDoc('class-eval.pdf', `${SAMPLE_LABEL}_일반·관리시설구분평가.pdf`, 'safety')
             : null,
+        reportId,
       })
     }
     const sample = f.mngNo === SAMPLE_MNG
     push(f.surveyDate, base, f.surveyor, idx % 2 === 0, sample)
-    if (idx % 2 === 0) {
-      push(
-        `2025-03-${String(10 + (idx % 15)).padStart(2, '0')}`,
-        base + ((idx % 5) - 1),
-        '울진군 건설과',
-        true,
-        sample
-      )
-    }
+    /** 2025년 정기점검 — 시연용 전원 완료(100%) */
+    push(
+      `2025-03-${String(10 + (idx % 18)).padStart(2, '0')}`,
+      base + ((idx % 5) - 1),
+      '울진군 건설과',
+      true,
+      sample,
+      'report-sample-2025'
+    )
     if (idx % 3 === 0) {
       push(
         `2026-03-${String(12 + (idx % 14)).padStart(2, '0')}`,
         base + ((idx % 4) - 1),
         '울진군 건설과',
         idx % 2 === 0,
-        false
+        false,
+        'report-sample-2026'
       )
     }
   })

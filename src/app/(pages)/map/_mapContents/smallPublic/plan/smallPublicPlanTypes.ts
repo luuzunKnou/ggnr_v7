@@ -153,9 +153,23 @@ export type PlanUnit = {
   emd: string
   ri: string
   location: string
+  /**
+   * 안전점검 등 이관으로 들어온 분석.
+   * true 이면 한 번도 저장하지 않고 닫아도 목록에 남긴다.
+   * 정비계획 «분석»으로 새로 연 건은 false — 미저장 닫기 시 목록에서 뺀다.
+   */
+  retainOnClose?: boolean
   /** 판 목록 — 마지막이 현재 판 */
   versions: PlanVersion[]
   history: PlanHistory[]
+}
+
+/** 추정인데 분석 입력이 아직 남은 경우(예산 계획 선택 불가) */
+export function isPlanDraftIncomplete(r: {
+  version: PlanVersion
+  summary: { missingCount: number }
+}): boolean {
+  return r.version.status === 'DRAFT' && r.summary.missingCount > 0
 }
 
 export function currentVersion(unit: PlanUnit): PlanVersion {

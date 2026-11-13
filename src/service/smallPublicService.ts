@@ -294,9 +294,8 @@ function buildInspections(facilities: SeedFacility[]): SmallPublicInspection[] {
       })
     }
     push(f.surveyDate, base, f.surveyor || '조사자', Boolean(f._att.classFile) || idx % 2 === 0)
-    if (idx % 2 === 0) {
-      push(`2025-03-${String(10 + (idx % 15)).padStart(2, '0')}`, base + ((idx % 5) - 1), '울진군 건설과', true)
-    }
+    /** 2025년 정기점검 — 시연용으로 대상 전원 완료(100%) */
+    push(`2025-03-${String(10 + (idx % 18)).padStart(2, '0')}`, base + ((idx % 5) - 1), '울진군 건설과', true)
     if (idx % 3 === 0) {
       push(
         `2026-03-${String(12 + (idx % 14)).padStart(2, '0')}`,
@@ -714,6 +713,34 @@ function applyDemoScenarios(
   return { facilities: nextFac, inspections: nextInsp, candidateEvals: nextCe, safetyDocs: nextSd }
 }
 
+/**
+ * 2025년 보고서 대상인데 해당 연도 점검이 없으면 채워 시연 완료율 100%를 맞춘다.
+ * (조사일·점수 없어 buildInspections 에서 빠진 시설 등)
+ */
+function ensureYear2025Complete(
+  facilities: SeedFacility[],
+  inspections: SmallPublicInspection[]
+): SmallPublicInspection[] {
+  const reportId = 'report-sample-2025'
+  const covered = new Set(inspections.filter((i) => i.reportId === reportId).map((i) => i.facilityId))
+  const out = [...inspections]
+  facilities.forEach((f, idx) => {
+    if (f.candidate === '제외' || covered.has(f.id)) return
+    if (f.candidate !== '일반' && f.candidate !== '관리' && f.candidate !== '위험') return
+    const score = Number(f.riskScore)
+    pushInspection(out, f, {
+      date: `2025-04-${String(1 + (idx % 28)).padStart(2, '0')}`,
+      score: Number.isFinite(score) ? score : 50,
+      inspector: '울진군 건설과',
+      classResult: f.candidate === '위험' ? '위험' : f.candidate === '관리' ? '관리' : '일반',
+      withClass: f.candidate !== '위험',
+      reportId,
+      remark: '2025년 정기점검',
+    })
+  })
+  return out
+}
+
 export type SmallPublicSeedPayload = {
   facilities: SmallPublicFacility[]
   inspections: SmallPublicInspection[]
@@ -862,9 +889,9 @@ export async function buildSeedFromDisk(
   const baseCandidateEvals = buildCandidateEvals(seedFacilities)
   const baseSafetyDocs = buildSafetyDocs(seedFacilities)
   const demo = applyDemoScenarios(seedFacilities, baseInspections, baseCandidateEvals, baseSafetyDocs)
+  const inspections = ensureYear2025Complete(demo.facilities, demo.inspections)
 
   const facilities: SmallPublicFacility[] = demo.facilities.map(({ _att: _a, ...rest }) => rest)
-  const inspections = demo.inspections
   const candidateEvals = demo.candidateEvals
   const safetyDocs = demo.safetyDocs
 

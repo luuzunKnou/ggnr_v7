@@ -18,10 +18,11 @@ import {
   PLAN_STATUS_LABEL,
   PLAN_STATUSES,
   canLinkToBudget,
+  isPlanDraftIncomplete,
   isPlanInAnalysis,
   type PlanStatus,
 } from './smallPublicPlanTypes'
-import { PlanStatusBadge } from './smallPublicPlanUi'
+import { PlanIncompleteBadge, PlanStatusBadge } from './smallPublicPlanUi'
 
 export type SmallPublicPlanFilter = { keyword: string; emd: string; status: PlanStatus | '' }
 
@@ -57,7 +58,7 @@ const numText = (n: number, digits = 0) => (n ? n.toLocaleString('ko-KR', { maxi
 const planSheetCols = (
   <colgroup>
     <col className="w-9" />
-    <col className="w-[150px]" />
+    <col className="w-[170px]" />
     <col className="w-[110px]" />
     {Array.from({ length: 23 }, (_, i) => (
       <col key={i} />
@@ -366,14 +367,17 @@ export function SmallPublicPlanSheet({
                     ) : (
                       cells.map(({ r, c }) => {
                         const analyzing = isPlanInAnalysis(r.version)
+                        const incomplete = isPlanDraftIncomplete(r)
                         const linkable = canLinkToBudget(r)
                         const selected = selectedIds.has(r.unit.id)
                         const linkBlockedTitle =
                           r.version.status === 'REVIEW'
                             ? '검토 중인 시설은 예산 계획할 수 없습니다'
-                            : r.version.status === 'DRAFT'
-                              ? '입력이 완료된 추정만 예산 계획할 수 있습니다'
-                              : '예산 계획할 수 없습니다'
+                            : incomplete
+                              ? '미입력(입력 미완료) 추정은 예산 계획할 수 없습니다'
+                              : r.version.status === 'DRAFT'
+                                ? '입력이 완료된 추정만 예산 계획할 수 있습니다'
+                                : '예산 계획할 수 없습니다'
                         return (
                           <tr
                             key={r.unit.id}
@@ -412,9 +416,13 @@ export function SmallPublicPlanSheet({
                               />
                             </td>
                             <td>
-                              <div className="flex items-center gap-1">
-                                <span className="min-w-0 truncate">{r.unit.unitName}</span>
-                                {analyzing ? <PlanStatusBadge status={r.version.status} /> : null}
+                              <div className="flex w-full items-center gap-1">
+                                <span className="min-w-0 flex-1 truncate text-left">{r.unit.unitName}</span>
+                                {incomplete ? (
+                                  <PlanIncompleteBadge className="shrink-0" />
+                                ) : analyzing ? (
+                                  <PlanStatusBadge status={r.version.status} />
+                                ) : null}
                               </div>
                             </td>
                             <td className="truncate text-muted-foreground">
@@ -439,7 +447,7 @@ export function SmallPublicPlanSheet({
         <span>정비율 = 사업량 ÷ 전체 정비계획 사업량</span>
         <span>
           <span className="mr-1 inline-block h-2.5 w-2.5 rounded-sm bg-amber-100 align-middle" />
-          분석 중(추정·검토) — 누르면 분석 화면, 그 밖에는 개요·결과 · 입력 완료 추정·확정 선택 후 «예산 계획»
+          분석 중 — 입력 미완료는 «미입력», 입력 완료·검토는 «추정»·«검토» · 입력 완료 추정·확정만 «예산 계획»
         </span>
       </div>
     </div>

@@ -154,7 +154,7 @@ export function SmallPublicPlanShell({ leftOffsetPx, onTotalWidthChange, onClose
     setBudgetLinkOpen(true)
   }
 
-  /** 후보지·안전점검 «정비계획 이관» — 시설을 분석 대상에 넣고 첫 건을 연다 */
+  /** 안전점검 «정비계획 이관» — 시설을 모두 분석 목록에 넣고(닫아도 유지) 첫 건을 연다 */
   useEffect(() => {
     if (!analyzeRequest || analyzeRequest.seq === handledAnalyzeSeq.current) return
     handledAnalyzeSeq.current = analyzeRequest.seq

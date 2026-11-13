@@ -139,7 +139,13 @@ function reportUnit(
   }
 }
 
-function analysisUnit(f: SmallPublicFacility, version: PlanVersion, by: string): PlanUnit {
+function analysisUnit(
+  f: SmallPublicFacility,
+  version: PlanVersion,
+  by: string,
+  opts?: { retainOnClose?: boolean }
+): PlanUnit {
+  const retainOnClose = Boolean(opts?.retainOnClose)
   return {
     id: `plan-${f.id}`,
     facilityId: f.id,
@@ -148,8 +154,15 @@ function analysisUnit(f: SmallPublicFacility, version: PlanVersion, by: string):
     emd: f.emd,
     ri: f.ri,
     location: f.address,
+    retainOnClose,
     versions: [version],
-    history: [{ at: version.createdAt, by, text: '분석 시작(추정)' }],
+    history: [
+      {
+        at: version.createdAt,
+        by,
+        text: retainOnClose ? '정비계획 이관(추정)' : '분석 시작(추정)',
+      },
+    ],
   }
 }
 
@@ -228,15 +241,18 @@ export const smallPublicPlanActions = {
     setState({ ...s, analyzeRequest: null })
   },
 
-  /** 계획에 없는 위험시설 분석 시작 — 1판 추정 */
+  /** 정비계획 «분석»으로 시작 — 1판 추정. 미저장 닫기 시 목록에서 뺌 */
   addUnit(f: SmallPublicFacility, by: string): PlanUnit {
     const s = getState()
-    const unit = analysisUnit(f, newPlanVersion(f, by), by)
+    const unit = analysisUnit(f, newPlanVersion(f, by), by, { retainOnClose: false })
     setState({ ...s, units: [...s.units, unit] })
     return unit
   },
 
-  /** 여러 위험시설을 한 번에 분석 대상으로 넣는다(이미 있는 시설은 건너뜀) */
+  /**
+   * 안전점검 이관 등 — 여러 위험시설을 한 번에 분석 대상으로 넣는다(이미 있는 시설은 건너뜀).
+   * 이관 건은 미저장 닫아도 목록에 남긴다.
+   */
   addUnits(list: SmallPublicFacility[], by: string): PlanUnit[] {
     const s = getState()
     const planned = new Set(s.units.map((u) => u.facilityId).filter(Boolean))
@@ -244,7 +260,7 @@ export const smallPublicPlanActions = {
     const next = [...s.units]
     for (const f of list) {
       if (f.candidate !== '위험' || planned.has(f.id)) continue
-      const unit = analysisUnit(f, newPlanVersion(f, by), by)
+      const unit = analysisUnit(f, newPlanVersion(f, by), by, { retainOnClose: true })
       next.push(unit)
       added.push(unit)
       planned.add(f.id)

@@ -88,6 +88,22 @@ export function PlanStatusBadge({ status }: { status: PlanStatus }) {
   )
 }
 
+/** 추정·분석 중인데 필수 입력이 남은 경우 — 상태(추정)와 별도 표시 */
+export function PlanIncompleteBadge({ className }: { className?: string }) {
+  return (
+    <span
+      className={cn(
+        'inline-flex shrink-0 items-center rounded px-1 py-px text-[10px] font-medium leading-none',
+        'bg-red-100 text-red-800 dark:bg-red-950/60 dark:text-red-300',
+        className
+      )}
+      title="분석 입력이 끝나지 않아 예산 계획할 수 없습니다"
+    >
+      미입력
+    </span>
+  )
+}
+
 /**
  * 계산 방법 안내 — «?»를 누르면 열리고, 다시 누르거나 바깥을 누르면 닫힘.
  * 카드·표 overflow에 잘리지 않도록 body 포털로 띄운다.

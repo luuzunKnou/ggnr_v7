@@ -53,6 +53,7 @@ function initialPlanStep(v: PlanVersion, onDate: string): PlanStepKey {
  * 새 위험시설 정비계획 분석 — 정비내용 → 사업비·보상 → 평가 → 결과(자동).
  * 피해이력은 시작할 때 후보지에서 가져오고, 분석에서 추가·수정할 수 있다.
  * 입력은 이 화면에만 두었다가 «저장»으로 계획에 넣는다. 추정 상태 분석은 삭제할 수 있다.
+ * 정비계획 «분석»으로 연 미저장 건은 닫으면 목록에서 빼고, 이관으로 온 건은 닫아도 남긴다.
  * 목록에서 열 때: 입력이 남으면 정비내용부터, 다 채워져 있으면 결과로 연다.
  */
 export function SmallPublicPlanAnalysisModal({ unit, units, facility: f, baseDate, startYear, userName, onClose, ...overlay }: Props) {
@@ -86,8 +87,12 @@ export function SmallPublicPlanAnalysisModal({ unit, units, facility: f, baseDat
   }
 
   const close = () => {
-    /** 한 번도 저장하지 않은 추정 분석은 닫으면 목록에서 뺀다 */
-    const discardIfUnsaved = saved.status === 'DRAFT' && saved.origin === 'ANALYSIS' && !everSaved
+    /**
+     * 정비계획 «분석»으로 새로 연 추정만 — 한 번도 저장하지 않고 닫으면 목록에서 뺀다.
+     * 안전점검 이관(retainOnClose)은 이미 목록에 넘긴 건이므로 닫아도 남긴다.
+     */
+    const discardIfUnsaved =
+      saved.status === 'DRAFT' && saved.origin === 'ANALYSIS' && !everSaved && !unit.retainOnClose
     if (discardIfUnsaved) {
       if (dirty && !window.confirm('저장하지 않으면 목록에 남지 않습니다. 닫을까요?')) return
       smallPublicPlanActions.deleteUnit(unit.id)
