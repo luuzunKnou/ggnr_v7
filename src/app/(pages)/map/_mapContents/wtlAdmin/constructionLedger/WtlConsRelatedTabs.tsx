@@ -5,12 +5,14 @@ import { call } from '@/lib/api'
 import type { ConsLedgerKind } from '@/lib/consLedgerVariant'
 import { cn } from '@/lib/utils'
 import { useMapContext } from '../../../_mapComponents/MapContext'
+import { getRowValueByField } from '../../../_mapComponents/standard/defineLayerRowUtils'
 import { prepareMapForPanelAwareNavigation } from '../../../_mapComponents/config/mapAutoNavigation'
 import { getParcelExtent3857 } from '../../../_mapComponents/layerRowEdit/layerRowParcelUtils'
 import { useLayerRowParcelHighlight } from '../../../_mapComponents/layerRowEdit/useLayerRowParcelHighlight'
 import type { LayerRowParcelItem } from '../../../_mapComponents/layerRowEdit/types'
 import { UsageDataAsAddressList } from '../../river/usageDataAs/UsageDataAsAddressList'
-import { WTL_NET_LAYER_DEFS } from '../networkMap/wtlNetworkLayerCatalog'
+import { getWtlNetLayerDef, WTL_NET_LAYER_DEFS, WTL_NET_ZONE_LAYER_KEYS } from '../networkMap/wtlNetworkLayerCatalog'
+import { wtlNetKorNameForTable } from '../networkMap/wtlNetworkMapSources'
 import type { WtlNetworkRow } from '../networkMap/wtlNetworkTypes'
 import { wkt5181ToRing4326 } from '../spatialAnalysis/outage/wtlOutageGeom'
 import { geom4326ToWkt5181, loadWtlConsIntersecting, type WtlConsGeom4326 } from './wtlConsLedgerApi'
@@ -69,10 +71,79 @@ type ConsRow = {
   geom?: GeoJSON.Geometry | null
 }
 
-/** 관망조회에 포함된 시설 레이어(급수전계량기·업데이트 내역 제외) */
+/** 관망조회 시설. 급수전계량기·업데이트 내역·급수구역·분구·블록은 제외 */
+const FACILITY_LAYER_SKIP = new Set<string>([
+  'wtl_meta_ps',
+  'wtl_task_as',
+  ...WTL_NET_ZONE_LAYER_KEYS,
+])
 const FACILITY_LAYER_KEYS = WTL_NET_LAYER_DEFS.filter(
-  (d) => d.table && d.key !== 'wtl_meta_ps' && d.key !== 'wtl_task_as'
+  (d) => d.table && !FACILITY_LAYER_SKIP.has(d.key)
 ).map((d) => d.key)
+
+/** 구분 칸은 테이블 키가 아니라 레이어 한글명 */
+function facilityKindLabel(layerKey: string): string {
+  return wtlNetKorNameForTable(layerKey) || layerKey
+}
+
+/** 이름 칸에 실제로 들어온 필드의 한글명. 관라벨 → 관리번호 → 행번호 순 */
+const NAME_FIELD_LABEL: Record<string, string> = {
+  pip_lbl: '관라벨',
+  ftr_idn: '관리번호',
+  ogc_fid: '행번호',
+  gai_nam: '취수장명',
+  pur_nam: '정수장명',
+  srv_nam: '배수지명',
+  prs_nam: '가압장명',
+  met_num: '계량기기물번호',
+  hom_num: '수용가번호',
+}
+
+const NAME_TITLE_ORDER = [
+  '관라벨',
+  '관리번호',
+  '행번호',
+  '취수장명',
+  '정수장명',
+  '배수지명',
+  '가압장명',
+  '계량기기물번호',
+  '수용가번호',
+]
+
+function nameFieldsInOrder(layerKey: string): string[] {
+  const expr =
+    getWtlNetLayerDef(layerKey)?.nameExpr ??
+    `COALESCE(NULLIF(trim(ftr_idn::text),''), ogc_fid::text)`
+  const skip = new Set(['coalesce', 'nullif', 'trim', 'text'])
+  const fields: string[] = []
+  for (const match of expr.matchAll(/\b([a-z][a-z0-9_]*)\b/gi)) {
+    const field = match[1].toLowerCase()
+    if (skip.has(field) || fields.includes(field)) continue
+    fields.push(field)
+  }
+  if (!fields.includes('ogc_fid')) fields.push('ogc_fid')
+  return fields
+}
+
+function facilityNameTitle(row: WtlNetworkRow): string {
+  const record = row.record ?? null
+  for (const field of nameFieldsInOrder(row.layerKey)) {
+    if (field === 'ogc_fid') return '행번호'
+    const text = String(record ? (getRowValueByField(record, field) ?? '') : '').trim()
+    if (text) return NAME_FIELD_LABEL[field] ?? '관리번호'
+  }
+  return '행번호'
+}
+
+function facilityNameHead(rows: WtlNetworkRow[]): string {
+  const labels = [...new Set(rows.map(facilityNameTitle))]
+  if (labels.length === 0) return '관리번호'
+  if (labels.length === 1) return labels[0]!
+  const ordered = NAME_TITLE_ORDER.filter((label) => labels.includes(label))
+  const rest = labels.filter((label) => !ordered.includes(label))
+  return [...ordered, ...rest].join(' · ')
+}
 
 const TABS: { id: RelatedTab; label: string }[] = [
   { id: 'zone', label: '공사구역' },
@@ -81,16 +152,6 @@ const TABS: { id: RelatedTab; label: string }[] = [
   { id: 'building', label: '관련건물' },
   { id: 'customer', label: '수용가' },
   { id: 'cons', label: '공사대장' },
-]
-
-/** 공사구역 탭·표 비교용. v0이 기존 화면 */
-export type ConsRelatedUi = 'v0' | 'v1' | 'v2' | 'v3'
-
-export const CONS_RELATED_UI_OPTIONS: { id: ConsRelatedUi; label: string }[] = [
-  { id: 'v0', label: '시안0 기존' },
-  { id: 'v1', label: '시안1 시설관리' },
-  { id: 'v2', label: '시안2 설비관리' },
-  { id: 'v3', label: '시안3 보상필지' },
 ]
 
 type Tone = {
@@ -136,7 +197,6 @@ type Props = {
   consCode?: string | null
   activeZone: ZoneMock | null
   zoneLoading?: boolean
-  ui?: ConsRelatedUi
 }
 
 export function WtlConsRelatedTabs({
@@ -149,7 +209,6 @@ export function WtlConsRelatedTabs({
   consCode = null,
   activeZone,
   zoneLoading = false,
-  ui = 'v0',
 }: Props) {
   const tone = TONE_V0
   const mapContext = useMapContext()
@@ -211,11 +270,11 @@ export function WtlConsRelatedTabs({
       const [facilityRes, customerRes] = await Promise.allSettled([
         call('', 'POST', {
           service: 'wtlNetworkService',
-          action: 'getWtlNetworkByWkt5181',
+          action: 'getWtlNetworkList',
           params: {
-            wkt5181: parcelWkt,
+            areaWkts5181: [parcelWkt],
             layerKeys: FACILITY_LAYER_KEYS,
-            mapSources: ['daejin'],
+            withGeom: true,
             limit: 600,
           },
         }),
@@ -441,34 +500,6 @@ export function WtlConsRelatedTabs({
     setHighlightParcel(null)
   }, [zoneId])
 
-  const sheet = sheetOf(tab, {
-    zones,
-    zoneId,
-    onSelectZone,
-    facilities,
-    parcels,
-    buildings,
-    customers,
-    consRows,
-    pickedId,
-    onToggle: toggleRow,
-  })
-  const sheetMessage = sheet.rows.length === 0 && tab !== 'zone' ? emptyLabel(tab) : null
-
-  if (ui !== 'v0') {
-    return (
-      <MenuReference
-        ui={ui}
-        tab={tab}
-        counts={counts}
-        onTab={changeTab}
-        heads={sheet.heads}
-        rows={sheet.rows}
-        message={sheetMessage}
-      />
-    )
-  }
-
   return (
     <div className="flex min-h-0 flex-1 flex-col border-t border-border">
       <div className={tone.tabWrap}>
@@ -514,22 +545,6 @@ export function WtlConsRelatedTabs({
   )
 }
 
-type SheetRow = {
-  id: string
-  cells: string[]
-  selected?: boolean
-  onClick?: () => void
-}
-
-function emptyLabel(tab: RelatedTab): string {
-  if (tab === 'facility') return '교차하는 관련시설이 없습니다.'
-  if (tab === 'parcel') return '교차하는 필지가 없습니다.'
-  if (tab === 'building') return '교차하는 관련건물이 없습니다.'
-  if (tab === 'customer') return '교차하는 수용가가 없습니다.'
-  if (tab === 'cons') return '교차하는 공사대장이 없습니다.'
-  return ''
-}
-
 function pnuDigits(value: string | undefined): string {
   return String(value ?? '').replace(/\D/g, '')
 }
@@ -570,279 +585,6 @@ type RowToggle = (
   geom: Record<string, unknown> | GeoJSON.Geometry | null | undefined,
   projection: 'EPSG:4326' | 'EPSG:3857'
 ) => void
-
-function sheetOf(
-  tab: RelatedTab,
-  src: {
-    zones: ZoneMock[]
-    zoneId: string | null
-    onSelectZone: (id: string) => void
-    facilities: WtlNetworkRow[]
-    parcels: ParcelRow[]
-    buildings: BuildingRow[]
-    customers: CustomerRow[]
-    consRows: ConsRow[]
-    pickedId: string | null
-    onToggle: RowToggle
-  }
-): { heads: string[]; rows: SheetRow[] } {
-  if (tab === 'zone') {
-    return {
-      heads: ['공사위치', '비고'],
-      rows: src.zones.map((z) => ({
-        id: z.id,
-        cells: [z.location, z.note],
-        selected: src.zoneId === z.id,
-        onClick: () => src.onSelectZone(z.id),
-      })),
-    }
-  }
-  if (tab === 'facility') {
-    return {
-      heads: ['구분', '관리번호', '구경', '연도'],
-      rows: src.facilities.map((r) => ({
-        id: r.id,
-        cells: [r.layerKey, r.name, r.diameter, r.year],
-        selected: src.pickedId === r.id,
-        onClick: () => src.onToggle(r.id, r.geom, 'EPSG:4326'),
-      })),
-    }
-  }
-  if (tab === 'parcel') {
-    return {
-      heads: ['지번', '지목', '면적'],
-      rows: src.parcels.map((r) => ({
-        id: r.pnu || r.address,
-        cells: [
-          r.address || r.pnu,
-          r.jimok || '—',
-          r.areaSqm != null ? Math.round(r.areaSqm).toLocaleString('ko-KR') : '—',
-        ],
-        selected: src.pickedId === (r.pnu || r.address),
-        onClick: () => src.onToggle(r.pnu || r.address, r.geometry3857, 'EPSG:3857'),
-      })),
-    }
-  }
-  if (tab === 'building') {
-    return {
-      heads: ['건물명', '지목', '주소'],
-      rows: src.buildings.map((r, i) => ({
-        id: buildingRowId(r, i),
-        cells: [r.bldNm || '—', r.jimok || '—', r.addr || r.platLoc || r.jibun || '—'],
-        selected: src.pickedId === buildingRowId(r, i),
-        onClick: () =>
-          src.onToggle(
-            buildingRowId(r, i),
-            r.geometry3857 ?? parcelForBuilding(r, src.parcels)?.geometry3857 ?? null,
-            'EPSG:3857'
-          ),
-      })),
-    }
-  }
-  if (tab === 'customer') {
-    return {
-      heads: ['수용가', '주소', '기물번호'],
-      rows: src.customers.map((r) => ({
-        id: r.id,
-        cells: [r.name, r.address || '—', r.meterNo || '—'],
-        onClick: () =>
-          src.onToggle(r.id, r.point ? { type: 'Point', coordinates: r.point } : null, 'EPSG:4326'),
-        selected: src.pickedId === r.id,
-      })),
-    }
-  }
-  return {
-    heads: ['공사명', '준공', '금액'],
-    rows: src.consRows.map((r) => ({
-      id: r.id,
-      cells: [r.name, r.doneDate, r.amount],
-      selected: src.pickedId === r.id,
-      onClick: () => src.onToggle(r.id, r.geom, 'EPSG:4326'),
-    })),
-  }
-}
-
-/** 시설관리 표 · 설비관리 칩 · 보상 필지목록 탭을 그대로 가져온 비교 */
-function MenuReference({
-  ui,
-  tab,
-  counts,
-  onTab,
-  heads,
-  rows,
-  message,
-}: {
-  ui: Exclude<ConsRelatedUi, 'v0'>
-  tab: RelatedTab
-  counts: Record<RelatedTab, number>
-  onTab: (id: RelatedTab) => void
-  heads: string[]
-  rows: SheetRow[]
-  message: string | null
-}) {
-  return (
-    <div className="flex min-h-0 flex-1 flex-col border-t border-border">
-      {ui === 'v2' ? (
-        <div className="standard-filter-section">
-          <div className="standard-filter-chips">
-            {TABS.map((item) => {
-              const on = tab === item.id
-              return (
-                <button
-                  key={item.id}
-                  type="button"
-                  className={cn('standard-filter-chip', on && 'border-primary bg-primary/10 text-primary')}
-                  onClick={() => onTab(item.id)}
-                >
-                  {item.label} {counts[item.id]}
-                </button>
-              )
-            })}
-          </div>
-        </div>
-      ) : ui === 'v3' ? (
-        <div className="flex h-10 shrink-0 items-center border-b border-border px-2" role="tablist">
-          <div className="flex min-w-0 flex-1 items-stretch gap-0.5 self-stretch overflow-x-auto pt-1.5">
-            {TABS.map((item) => {
-              const on = tab === item.id
-              return (
-                <button
-                  key={item.id}
-                  type="button"
-                  role="tab"
-                  aria-selected={on}
-                  className={cn(
-                    'relative flex shrink-0 items-center px-2.5 pb-1.5 text-[11px] font-medium',
-                    on ? 'text-primary' : 'text-muted-foreground hover:text-foreground'
-                  )}
-                  onClick={() => onTab(item.id)}
-                >
-                  {item.label} ({counts[item.id]})
-                  {on ? <span className="absolute inset-x-1 bottom-1 h-0.5 rounded-full bg-primary" /> : null}
-                </button>
-              )
-            })}
-          </div>
-        </div>
-      ) : (
-        <div className="flex shrink-0 border-b border-border">
-          {TABS.map((item) => {
-            const on = tab === item.id
-            return (
-              <button
-                key={item.id}
-                type="button"
-                className={cn(
-                  'h-7 min-w-0 flex-1 truncate border-b-2 -mb-px px-0.5 text-center text-[11px]',
-                  on
-                    ? 'border-primary font-semibold text-primary'
-                    : 'border-transparent text-muted-foreground hover:text-foreground'
-                )}
-                onClick={() => onTab(item.id)}
-              >
-                {item.label}
-              </button>
-            )
-          })}
-        </div>
-      )}
-
-      {ui === 'v3' ? (
-        <div className="min-h-0 flex-1 overflow-auto px-3 py-2.5 text-xs">
-          {message ? (
-            <p className="py-6 text-center text-[11px] text-muted-foreground">{message}</p>
-          ) : (
-            <RewardSheet heads={heads} rows={rows} />
-          )}
-        </div>
-      ) : (
-        <>
-          <div className="min-h-0 flex-1 overflow-auto">
-            {message ? (
-              <p className="px-2 py-6 text-center text-[11px] text-muted-foreground">{message}</p>
-            ) : (
-              <table className="w-full table-fixed border-collapse text-left text-xs">
-                <thead className="sticky top-0 bg-muted">
-                  <tr className="border-b border-border">
-                    {heads.map((head) => (
-                      <th key={head} className="px-2 py-1.5 font-medium text-muted-foreground">
-                        {head}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {rows.map((row) => (
-                    <tr
-                      key={row.id}
-                      className={cn(
-                        'border-b border-border',
-                        row.onClick && 'cursor-pointer hover:bg-primary/5',
-                        row.selected && 'bg-primary/[0.12] ring-1 ring-inset ring-primary/25'
-                      )}
-                      onClick={row.onClick}
-                    >
-                      {row.cells.map((cell, i) => (
-                        <td key={`${row.id}-${i}`} className="truncate px-2 py-1.5 text-foreground" title={cell}>
-                          {cell}
-                        </td>
-                      ))}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
-          </div>
-          <div className="flex shrink-0 items-center border-t border-border bg-muted/30 px-3 py-1.5">
-            <span className="text-[11px] text-muted-foreground">{counts[tab]}건</span>
-          </div>
-        </>
-      )}
-    </div>
-  )
-}
-
-function RewardSheet({ heads, rows }: { heads: string[]; rows: SheetRow[] }) {
-  const cols = heads.length === 4 ? 'grid-cols-4' : heads.length === 3 ? 'grid-cols-3' : 'grid-cols-2'
-  return (
-    <div className="w-full overflow-hidden rounded border border-border text-[11px]">
-      <div className={cn('grid h-8 items-center border-b border-border bg-muted', cols)}>
-        {heads.map((head) => (
-          <div key={head} className="min-w-0 truncate px-2 text-left font-semibold text-foreground">
-            {head}
-          </div>
-        ))}
-      </div>
-      {rows.map((row) => (
-        <div
-          key={row.id}
-          role={row.onClick ? 'button' : undefined}
-          tabIndex={row.onClick ? 0 : undefined}
-          onClick={row.onClick}
-          onKeyDown={(e) => {
-            if (!row.onClick) return
-            if (e.key === 'Enter' || e.key === ' ') {
-              e.preventDefault()
-              row.onClick()
-            }
-          }}
-          className={cn(
-            'grid min-h-8 items-center border-b border-border last:border-b-0 hover:bg-muted/50',
-            cols,
-            row.onClick && 'cursor-pointer',
-            row.selected && 'bg-primary/5'
-          )}
-        >
-          {row.cells.map((cell, i) => (
-            <div key={`${row.id}-${i}`} className="min-w-0 truncate px-2 py-1 text-left leading-snug text-foreground" title={cell}>
-              {cell}
-            </div>
-          ))}
-        </div>
-      ))}
-    </div>
-  )
-}
 
 function ZoneTable({
   tone,
@@ -909,7 +651,7 @@ function FacilityTable({
     <div className={tone.card}>
       <div className={tone.head}>
         <span className={cn('w-[5.5rem] shrink-0', tone.headPad)}>구분</span>
-        <span className={cn('min-w-0 flex-1', tone.headPad)}>관리번호</span>
+        <span className={cn('min-w-0 flex-1', tone.headPad)}>{facilityNameHead(rows)}</span>
         <span className={cn('w-14 shrink-0', tone.headPad)}>구경</span>
         <span className={cn('w-14 shrink-0', tone.headPad)}>연도</span>
       </div>
@@ -921,8 +663,11 @@ function FacilityTable({
               className={cn(tone.row, pickedId === r.id ? tone.rowOn : tone.rowOff)}
               onClick={() => onToggle(r.id, r.geom, 'EPSG:4326')}
             >
-              <span className={cn('w-[5.5rem] shrink-0 truncate text-slate-600', tone.cell)} title={r.layerKey}>
-                {r.layerKey}
+              <span
+                className={cn('w-[5.5rem] shrink-0 truncate text-slate-600', tone.cell)}
+                title={facilityKindLabel(r.layerKey)}
+              >
+                {facilityKindLabel(r.layerKey)}
               </span>
               <span className={cn('min-w-0 flex-1 truncate', tone.cell)} title={r.name}>
                 {r.name}
