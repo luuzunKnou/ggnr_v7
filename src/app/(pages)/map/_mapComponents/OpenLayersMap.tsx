@@ -39,6 +39,7 @@ import {
   mirrorUndergroundFacilityIntoVisible,
   pickUndergroundFacilityFromVisible,
   sameStringSet,
+  stringSetSignature,
 } from './layerFactory/undergroundFacilityMapSync';
 import { useThematicMapCatalog } from './hooks/useThematicMapCatalog';
 import { useOwnershipCatalog } from './hooks/useOwnershipCatalog';
@@ -599,7 +600,7 @@ export default function OpenLayersMap({
     groups: undergroundFacilityGroups,
     availableLayerTableNames: undergroundFacilityAvailableTableNames,
     loading: undergroundFacilityCatalogLoading,
-  } = useUndergroundFacilityCatalog();
+  } = useUndergroundFacilityCatalog(systemKeyFromUrl);
   const {
     layers: buildingRoadPanelLayers,
     availableLayerTableNames: buildingRoadAvailableTableNames,
@@ -869,16 +870,31 @@ export default function OpenLayersMap({
     });
   }, [ownershipCatalogLoading, ownershipAvailableTableNames]);
 
-  // 지하시설물 가용 목록으로 선택 정리
+  // 지하시설물 가용 목록으로 패널 선택·데이터조회 정리 (시스템 필터 반영, catalog 준비 후)
   useEffect(() => {
     if (undergroundFacilityCatalogLoading) return;
+    const available = undergroundFacilityAvailableTableNames;
     setVisibleUndergroundFacilityLayerNames((prev) => {
       if (prev == null) return prev;
-      const next = new Set(
-        [...prev].filter((t) => undergroundFacilityAvailableTableNames.has(t))
-      );
+      const next = new Set([...prev].filter((t) => available.has(t)));
       if (next.size === prev.size && [...next].every((t) => prev.has(t))) return prev;
       return next;
+    });
+    // 복원·타 시스템에 있던 UF가 visible에 남아 있으면 현재 시스템 가용분만 유지
+    const ufAllNames = new Set(UNDERGROUND_FACILITY_LAYERS.map((l) => l.tableName));
+    const setVisible = mapContextRef.current?.setVisibleLayerNames;
+    if (!setVisible) return;
+    setVisible((prev) => {
+      let changed = false;
+      const next = new Set<string>();
+      for (const name of prev) {
+        if (ufAllNames.has(name) && !available.has(name)) {
+          changed = true;
+          continue;
+        }
+        next.add(name);
+      }
+      return changed ? next : prev;
     });
   }, [undergroundFacilityCatalogLoading, undergroundFacilityAvailableTableNames]);
 
@@ -1164,14 +1180,81 @@ export default function OpenLayersMap({
   const visibleLayerNames = mapContext?.visibleLayerNames ?? EMPTY_LAYER_NAME_SET;
   const setVisibleLayerNames = mapContext?.setVisibleLayerNames;
 
-  // 데이터 조회 → 지하시설물 선택 동기화
+  /** Set 참조 churn으로 양방향 sync가 무한 돌지 않도록 내용 시그니처만 deps */
+  const ufAvailableSig = useMemo(
+    () => stringSetSignature(undergroundFacilityAvailableTableNames),
+    [undergroundFacilityAvailableTableNames]
+  );
+  /** visible 전체 비움 vs 비-UF만 남음 구분 — 둘 다 pick 이 비어도 시그니처가 같으면 마지막 off 누락 */
+  const visibleUfPickSig = useMemo(() => {
+    if (visibleLayerNames.size === 0) return '';
+    return stringSetSignature(
+      pickUndergroundFacilityFromVisible(
+        visibleLayerNames,
+        undergroundFacilityAvailableTableNames
+      )
+    );
+  }, [visibleLayerNames, undergroundFacilityAvailableTableNames]);
+  const undergroundPanelSig = useMemo(
+    () =>
+      visibleUndergroundFacilityLayerNames == null
+        ? ''
+        : stringSetSignature(visibleUndergroundFacilityLayerNames),
+    [visibleUndergroundFacilityLayerNames]
+  );
+
+  const undergroundFacilityAvailableRef = useRef(undergroundFacilityAvailableTableNames);
+  undergroundFacilityAvailableRef.current = undergroundFacilityAvailableTableNames;
+
+  // 관망조회 → 지하시설물 패널·visible 직접 반영 (양방향 effect 루프와 분리)
+  useEffect(() => {
+    const syncRef = mapContextRef.current?.syncUndergroundFromNetworkRef;
+    if (!syncRef) return;
+    syncRef.current = (wanted, managed) => {
+      const available = undergroundFacilityAvailableRef.current;
+      setVisibleUndergroundFacilityLayerNames((prev) => {
+        const next = new Set(prev ?? []);
+        for (const n of managed) {
+          if (available.has(n)) next.delete(n);
+        }
+        for (const n of wanted) {
+          if (available.has(n)) next.add(n);
+        }
+        if (prev != null && sameStringSet(prev, next)) return prev;
+        return next;
+      });
+      const setVisible = mapContextRef.current?.setVisibleLayerNames;
+      if (setVisible) {
+        setVisible((prev) => {
+          const next = new Set(prev);
+          for (const n of managed) next.delete(n);
+          for (const n of wanted) next.add(n);
+          if (sameStringSet(prev, next)) return prev;
+          return next;
+        });
+      }
+      const anyOn = [...wanted].some((n) => available.has(n));
+      if (anyOn) {
+        setActiveControls((prev) =>
+          prev.includes('underground-facility') ? prev : [...prev, 'underground-facility']
+        );
+      }
+    };
+    return () => {
+      syncRef.current = null;
+    };
+  }, []);
+
+  // 데이터 조회(·관망조회) visible → 지하시설물 선택 동기화
   useEffect(() => {
     if (!restored || undergroundFacilityCatalogLoading) return;
-    // visible 전무 → 지하시설물도 끔 (전체 끄기·관망 동기화)
+    // visible 전체 비움: null→empty 변환은 하지 않음(미오픈 패널 건드려 루프·부수효과).
+    // 패널에만 UF가 남은 경우(관망 마지막 off 등)는 비운다.
     if (visibleLayerNames.size === 0) {
-      setVisibleUndergroundFacilityLayerNames((prev) =>
-        prev != null && prev.size === 0 ? prev : new Set()
-      );
+      setVisibleUndergroundFacilityLayerNames((prev) => {
+        if (prev == null || prev.size === 0) return prev;
+        return new Set();
+      });
       return;
     }
     const fromVisible = pickUndergroundFacilityFromVisible(
@@ -1199,12 +1282,8 @@ export default function OpenLayersMap({
     setActiveControls((prev) =>
       prev.includes('underground-facility') ? prev : [...prev, 'underground-facility']
     );
-  }, [
-    restored,
-    undergroundFacilityCatalogLoading,
-    visibleLayerNames,
-    undergroundFacilityAvailableTableNames,
-  ]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- content signatures
+  }, [restored, undergroundFacilityCatalogLoading, visibleUfPickSig, ufAvailableSig]);
 
   // 지하시설물 → 데이터 조회 선택 동기화
   useEffect(() => {
@@ -1218,11 +1297,12 @@ export default function OpenLayersMap({
         selected
       )
     );
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- content signatures
   }, [
     restored,
     undergroundFacilityCatalogLoading,
-    visibleUndergroundFacilityLayerNames,
-    undergroundFacilityAvailableTableNames,
+    undergroundPanelSig,
+    ufAvailableSig,
     setVisibleLayerNames,
   ]);
 
@@ -1522,12 +1602,23 @@ export default function OpenLayersMap({
     visibleThematicLayerNames,
     thematicCatalogLoading ? null : thematicAvailableTableNames
   );
+  const networkMapSuppressUfDraw = useMemo(() => {
+    const sig = mapContext?.networkMapSuppressUfTableNamesSig ?? 0;
+    void sig;
+    const ref = mapContext?.networkMapSuppressUfTableNamesRef;
+    if (!ref || ref.current.size === 0) return null;
+    return new Set(ref.current);
+  }, [
+    mapContext?.networkMapSuppressUfTableNamesSig,
+    mapContext?.networkMapSuppressUfTableNamesRef,
+  ]);
   useUndergroundFacilityLayerSync(
     mapInstanceRef.current,
     mapReady,
     activeControls,
     visibleUndergroundFacilityLayerNames,
-    undergroundFacilityCatalogLoading ? null : undergroundFacilityAvailableTableNames
+    undergroundFacilityCatalogLoading ? null : undergroundFacilityAvailableTableNames,
+    networkMapSuppressUfDraw
   );
 
   const safetyMapLayerVisibility = mapContext?.safetyMapLayerVisibility ?? {};

@@ -87,6 +87,32 @@ export function readWtlPipeLmStrokeColor(
   return fromBase ?? fallback;
 }
 
+/**
+ * SLD 고정 stroke(`<CssParameter name="stroke">#RRGGBB</CssParameter>`) 본색 — 마지막 비흰색.
+ * wtl_pipe_lm_saa003 등 분할 관로 스타일은 CSS가 없고 SLD만 있다.
+ */
+export function readGeoServerSldPlainStrokeColor(styleName: string): string | null {
+  const sld = readSldFile(styleName);
+  if (!sld) return null;
+  const hexes = [
+    ...sld.matchAll(
+      /<(?:sld:)?CssParameter\s+name="stroke">\s*(#[0-9A-Fa-f]{6})\s*<\/(?:sld:)?CssParameter>/g
+    ),
+  ].map((m) => m[1]!);
+  for (let i = hexes.length - 1; i >= 0; i--) {
+    if (!/^#ffffff$/i.test(hexes[i]!)) return hexes[i]!;
+  }
+  return null;
+}
+
+/** 관망 지도와 같은 상수관로 선 색: 분할 스타일 SLD → CSS → 기본값 */
+export function readWtlPipeLmMapStrokeColor(saaCde?: string | null): string {
+  return (
+    readGeoServerSldPlainStrokeColor(resolveWtlPipeLmStyleName(saaCde)) ??
+    readWtlPipeLmStrokeColor(saaCde)
+  );
+}
+
 function wwwSymbolPath(fileName: string): string {
   return path.join(
     process.cwd(),

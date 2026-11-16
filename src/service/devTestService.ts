@@ -1793,9 +1793,15 @@ export async function updateGeoServerStyle(params: {
   const thematicLabel = (styleProps.labelField ?? '').includes('layer_korname');
 
   try {
-    const serverFormat = await readGeoServerStyleFormat(baseUrl, name);
-    const format =
-      params.format === 'sld' ? 'sld' : params.format === 'css' ? 'css' : serverFormat === 'css' ? 'css' : 'sld';
+    // 저장은 기존 format만 유지. CSS↔SLD 전환은 setGeoServerStyleFormat(형식 버튼)만.
+    const locked =
+      (await readGeoServerStyleFormat(baseUrl, name)) ?? readDiskStyleFormat(name);
+    const format: 'css' | 'sld' =
+      locked === 'css' || locked === 'sld'
+        ? locked
+        : params.format === 'css'
+          ? 'css'
+          : 'sld';
 
     // SLD: GeoServer 라이브 본문을 패치 (낡은 CSS sidecar → SLD 재변환으로 Web 수정을 덮지 않음)
     if (format === 'sld') {
@@ -1920,7 +1926,9 @@ function readDiskStyleFormat(name: string): 'css' | 'sld' | null {
   }
 }
 
-/** 형식 변경 뒤에 CSS 본문이 스타일 폴더에 남으면 지오서버가 설정을 다시 CSS로 저장한다. */
+/** 형식 변경 뒤에 CSS 본문이 스타일 폴더에 남으면 지오서버가 설정을 다시 CSS로 저장한다.
+ * allowFormatChange: 형식 버튼(setGeoServerStyleFormat)만 true. 그 외 경로에서 CSS↔SLD 전환 금지.
+ */
 async function commitGeoServerStyle(args: {
   baseUrl: string;
   workspace: string;
@@ -1929,6 +1937,7 @@ async function commitGeoServerStyle(args: {
   format: 'css' | 'sld';
   body: string;
   cssBody: string;
+  allowFormatChange?: boolean;
 }): Promise<{ success: true; format: 'css' | 'sld' } | { success: false; error: string }> {
   // GeoServer CSS→SLD 변환이 file:/D:/… 로컬 경로를 넣어도, 저장·배포는 /www/symbol/… 만 쓴다
   const rawBody = args.format === 'sld' ? formatSldXml(args.body) : args.body;
@@ -1937,6 +1946,13 @@ async function commitGeoServerStyle(args: {
   const contentType = STYLE_FORMAT_CONTENT[args.format];
   const current = await readGeoServerStyleFormat(args.baseUrl, args.styleName);
   const disk = readDiskStyleFormat(args.styleName);
+  const locked = current ?? disk;
+  if (locked && locked !== args.format && !args.allowFormatChange) {
+    return {
+      success: false,
+      error: `스타일 형식(${locked.toUpperCase()})을 ${args.format.toUpperCase()}로 바꾸려면 스타일 수정의 형식 버튼을 사용하세요.`,
+    };
+  }
   if (current !== args.format || disk !== args.format) {
     const replaced = await recreateGeoServerStyle(
       args.baseUrl,
@@ -2177,6 +2193,7 @@ export async function setGeoServerStyleFormat(params: {
         format: 'sld',
         body: sldBody,
         cssBody: '',
+        allowFormatChange: true,
       });
     }
 
@@ -2194,6 +2211,7 @@ export async function setGeoServerStyleFormat(params: {
       format,
       body,
       cssBody,
+      allowFormatChange: true,
     });
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);
@@ -2256,6 +2274,16 @@ export async function putGeoServerCssStyle(params: {
       if (!(postRes.status === 403 && /already exists/i.test(text))) {
         return { success: false, error: `스타일 생성 실패: ${postRes.status} ${text}` };
       }
+    }
+
+    const locked =
+      (await readGeoServerStyleFormat(baseUrl, name)) ?? readDiskStyleFormat(name);
+    if (locked === 'sld') {
+      return {
+        success: false,
+        error:
+          'SLD 스타일은 CSS 업로드로 바꿀 수 없습니다. 형식 전환은 스타일 수정의 형식 버튼을 사용하세요.',
+      };
     }
 
     const putRes = await geoserverFetch(baseUrl, `/rest/styles/${encodeURIComponent(name)}`, {

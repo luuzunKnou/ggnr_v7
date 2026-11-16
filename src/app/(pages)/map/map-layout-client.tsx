@@ -154,6 +154,7 @@ import { WaterAdminShell } from "./_mapContents/waterAdminMemoComplaint/WaterAdm
 import { WaterComplaintFloat } from "./_mapContents/waterAdminMemoComplaint/WaterComplaintFloat"
 import type { WaterPlaceFocus } from "./_mapContents/waterAdminMemoComplaint/waterComplaintMapFly"
 import { findOpenedWaterAdminMenu } from "./_mapContents/waterAdminMemoComplaint/waterAdminMemoComplaint"
+import { complaintMenuLabelForTable } from "@/lib/waterComplaintCategory"
 import { PolicyMapListPanel } from "./_mapContents/policyMap/PolicyMapListPanel"
 import { GcpListPanel } from "./_mapContents/gcp/GcpListPanel"
 import { GcpDetailPanel } from "./_mapContents/gcp/GcpDetailPanel"
@@ -217,11 +218,6 @@ import {
 } from "./_mapContents/odorAlert/odorAlertConfig"
 import { OdorAlertShell } from "./_mapContents/odorAlert/OdorAlert.shell"
 import { OdorAlertPopupHost } from "./_mapContents/odorAlert/OdorAlertPopupHost"
-import { SwlAdminEmptyShell } from "./_mapContents/swlAdmin/SwlAdminEmpty.shell"
-import {
-  findOpenedSwlAdminEmptySerEng,
-  isSwlAdminEmptyOpenedToken,
-} from "./_mapContents/swlAdmin/swlAdminBinding"
 import { FmsLinkageListPanel } from "./_mapContents/fmsLinkage/FmsLinkageListPanel"
 import { FmsLinkageDetailPanel } from "./_mapContents/fmsLinkage/FmsLinkageDetailPanel"
 import { isFmsOpenedToken } from "@/lib/fmsLinkage/fmsBinding"
@@ -470,6 +466,8 @@ const LAYER_DATA_PANEL_MAX_WIDTH = 900
 const STANDARD_LIST_OPENED_KEY = "standardList"
 const LIST_VIEW_OPENED_KEY = "listView"
 const COMPLAINT_OPENED_KEY = "complaintManagement"
+/** 상하수도 통합 민원관리 (구 통합UI) — serviceList ser_eng: complaintCommon */
+const COMPLAINT_COMMON_OPENED_KEY = "complaintCommon"
 const MEMO_OPENED_KEY = "memoManagement"
 const POLICY_MAP_OPENED_KEY = "policyMap"
 const MAP_3D_DATA_OPENED_KEY = "map3dData"
@@ -723,7 +721,9 @@ function MapLayoutContent({
   const dataPanelOpened = openedWindows.includes(LIST_VIEW_OPENED_KEY)
   const layerDataPanelOpen = dataPanelOpened && dataTableFromUrl !== ""
 
-  const complaintManagementOpen = openedWindows.includes(COMPLAINT_OPENED_KEY)
+  const complaintCommonUi = openedWindows.includes(COMPLAINT_COMMON_OPENED_KEY)
+  const complaintManagementOpen =
+    openedWindows.includes(COMPLAINT_OPENED_KEY) || complaintCommonUi
   const memoManagementOpen = openedWindows.includes(MEMO_OPENED_KEY)
   const waterAdminMenu = findOpenedWaterAdminMenu(openedWindows)
   const waterAdminOpen = waterAdminMenu != null
@@ -830,8 +830,6 @@ function MapLayoutContent({
   const worksRegisterOpen = openedWindows.includes(WORKS_REGISTER_OPENED_KEY)
   const wtlAdminEmptySerEng = findOpenedWtlAdminEmptySerEng(openedWindows)
   const wtlAdminEmptyOpen = Boolean(wtlAdminEmptySerEng)
-  const swlAdminEmptySerEng = findOpenedSwlAdminEmptySerEng(openedWindows)
-  const swlAdminEmptyOpen = Boolean(swlAdminEmptySerEng)
   const fmsLinkageOpen = openedWindows.some((w) => isFmsOpenedToken(w))
   const fmsLinkageDetailOpen = fmsLinkageOpen && Boolean(fmsLinkageDetailId)
   const privateLandAnalysisOpen = openedWindows.includes(PRIVATE_LAND_ANALYSIS_OPENED_KEY)
@@ -950,7 +948,6 @@ function MapLayoutContent({
   const [odorAlertTotalWidth, setOdorAlertTotalWidth] = useState(0)
   const [worksRegisterTotalWidth, setWorksRegisterTotalWidth] = useState(0)
   const [wtlAdminEmptyTotalWidth, setWtlAdminEmptyTotalWidth] = useState(0)
-  const [swlAdminEmptyTotalWidth, setSwlAdminEmptyTotalWidth] = useState(0)
   const [protoUserAccountOpen, setProtoUserAccountOpen] = useState(false)
 
   const [memoDetailId, setMemoDetailId] = useState<string | null>(null)
@@ -1140,6 +1137,13 @@ function MapLayoutContent({
   const [waterComplaintAdd, setWaterComplaintAdd] = useState(false)
   const [waterComplaintRefreshKey, setWaterComplaintRefreshKey] = useState(0)
   const [waterDetailFocus, setWaterDetailFocus] = useState<WaterPlaceFocus | null>(null)
+  const [complaintCatKey, setComplaintCatKey] = useState<number | null>(null)
+  const [complaintCatTable, setComplaintCatTable] = useState("")
+  const [complaintCatAdd, setComplaintCatAdd] = useState(false)
+  const [complaintCatAddTable, setComplaintCatAddTable] = useState("")
+  const [complaintCatFly, setComplaintCatFly] = useState(false)
+  const [complaintCatDetailFocus, setComplaintCatDetailFocus] =
+    useState<WaterPlaceFocus | null>(null)
   const [policyMapPanelWidth, setPolicyMapPanelWidth] = useState(POLICY_MAP_PANEL_DEFAULT_WIDTH)
   const [gcpPanelWidth, setGcpPanelWidth] = useState(GCP_PANEL_DEFAULT_WIDTH)
   const [gcpDetailWidth, setGcpDetailWidth] = useState(GCP_DETAIL_DEFAULT_WIDTH)
@@ -1229,7 +1233,6 @@ function MapLayoutContent({
     (smallPublicBudgetOpen ? smallPublicBudgetTotalWidth : 0) +
     (worksRegisterOpen ? worksRegisterTotalWidth : 0) +
     (wtlAdminEmptyOpen ? wtlAdminEmptyTotalWidth : 0) +
-    (swlAdminEmptyOpen ? swlAdminEmptyTotalWidth : 0) +
     (fmsLinkageOpen ? fmsLinkagePanelWidth : 0) +
     (fmsLinkageDetailOpen ? fmsLinkageDetailWidth : 0) +
     (privateLandAnalysisOpen ? privateLandAnalysisPanelWidth : 0) +
@@ -1407,10 +1410,8 @@ function MapLayoutContent({
     smallPublicBudgetPanelLeftPx + (smallPublicBudgetOpen ? smallPublicBudgetTotalWidth : 0)
   const wtlAdminEmptyPanelLeftPx =
     worksRegisterPanelLeftPx + (worksRegisterOpen ? worksRegisterTotalWidth : 0)
-  const swlAdminEmptyPanelLeftPx =
-    wtlAdminEmptyPanelLeftPx + (wtlAdminEmptyOpen ? wtlAdminEmptyTotalWidth : 0)
   const fmsLinkagePanelLeftPx =
-    swlAdminEmptyPanelLeftPx + (swlAdminEmptyOpen ? swlAdminEmptyTotalWidth : 0)
+    wtlAdminEmptyPanelLeftPx + (wtlAdminEmptyOpen ? wtlAdminEmptyTotalWidth : 0)
   const fmsLinkageDetailLeftPx =
     fmsLinkagePanelLeftPx + (fmsLinkageOpen ? fmsLinkagePanelWidth : 0)
   const privateLandAnalysisPanelLeftPx =
@@ -2003,7 +2004,15 @@ function MapLayoutContent({
   const handleCloseComplaintManagement = () => {
     setComplaintAddOpen(false)
     mapContext?.setComplaintDetail?.(null)
-    const next = openedWindows.filter((w) => w !== COMPLAINT_OPENED_KEY)
+    setComplaintCatKey(null)
+    setComplaintCatTable("")
+    setComplaintCatAdd(false)
+    setComplaintCatAddTable("")
+    setComplaintCatFly(false)
+    setComplaintCatDetailFocus(null)
+    const next = openedWindows.filter(
+      (w) => w !== COMPLAINT_OPENED_KEY && w !== COMPLAINT_COMMON_OPENED_KEY
+    )
     setOpened(next)
   }
 
@@ -2074,12 +2083,6 @@ function MapLayoutContent({
   const handleCloseOdorAlert = () => {
     setOdorAlertTotalWidth(0)
     setOpened(openedWindows.filter((w) => w !== ODOR_ALERT_OPENED_KEY))
-  }
-
-  const handleCloseSwlAdminEmpty = () => {
-    setSwlAdminEmptyTotalWidth(0)
-    const next = openedWindows.filter((w) => !isSwlAdminEmptyOpenedToken(w))
-    setOpened(next)
   }
 
   const handleCloseFmsLinkage = () => {
@@ -2295,14 +2298,6 @@ function MapLayoutContent({
   useEffect(() => {
     if (!odorAlertOpen) setOdorAlertTotalWidth(0)
   }, [odorAlertOpen])
-
-  useEffect(() => {
-    if (!wtlAdminEmptyOpen) setWtlAdminEmptyTotalWidth(0)
-  }, [wtlAdminEmptyOpen])
-
-  useEffect(() => {
-    if (!swlAdminEmptyOpen) setSwlAdminEmptyTotalWidth(0)
-  }, [swlAdminEmptyOpen])
 
   useEffect(() => {
     if (!cadastralResurveyOpen) setCadastralResurveyDistrictId(null)
@@ -3572,12 +3567,46 @@ function MapLayoutContent({
                 leftOffsetPx={complaintPanelLeftPx}
                 onWidthChange={setComplaintPanelWidth} serEng="complaint">
                 <ComplaintListPanel
+                  commonUi={complaintCommonUi}
                   refreshKey={complaintListRefreshKey}
                   onClose={handleCloseComplaintManagement}
+                  categorySelected={
+                    complaintCatKey != null && complaintCatTable
+                      ? { tableName: complaintCatTable, compKey: complaintCatKey }
+                      : null
+                  }
+                  onSelectCategoryRow={(tableName, compKey, fly, focus) => {
+                    setComplaintDetail?.(null)
+                    setComplaintAddOpen(false)
+                    if (compKey == null) {
+                      setComplaintCatKey(null)
+                      setComplaintCatTable("")
+                      setComplaintCatFly(false)
+                      setComplaintCatDetailFocus(null)
+                      return
+                    }
+                    setComplaintCatAdd(false)
+                    setComplaintCatTable(tableName)
+                    setComplaintCatFly(fly)
+                    setComplaintCatDetailFocus(focus ?? null)
+                    setComplaintCatKey(compKey)
+                  }}
+                  onRequestAddCategory={(tableName) => {
+                    setComplaintDetail?.(null)
+                    setComplaintAddOpen(false)
+                    setComplaintCatKey(null)
+                    setComplaintCatTable("")
+                    setComplaintCatFly(false)
+                    setComplaintCatDetailFocus(null)
+                    setComplaintCatAddTable(tableName)
+                    setComplaintCatAdd(true)
+                  }}
                   onRequestAdd={() => {
                     setComplaintDetail?.(null)
                     setMemoDetailId(null)
                     setMemoAddTable(null)
+                    setComplaintCatAdd(false)
+                    setComplaintCatKey(null)
                     setComplaintAddOpen(true)
                   }}
                 />
@@ -4001,14 +4030,6 @@ function MapLayoutContent({
               onClose={handleCloseWtlAdminEmpty}
             />
           )}
-          {swlAdminEmptyOpen && swlAdminEmptySerEng && (
-            <SwlAdminEmptyShell
-              serEng={swlAdminEmptySerEng}
-              leftOffsetPx={swlAdminEmptyPanelLeftPx}
-              onTotalWidthChange={setSwlAdminEmptyTotalWidth}
-              onClose={handleCloseSwlAdminEmpty}
-            />
-          )}
           {fmsLinkageOpen && (
             <div className="pointer-events-auto shrink-0">
               <MapSideListPanel
@@ -4380,6 +4401,51 @@ function MapLayoutContent({
                   />
                 </SerWriteAccessProvider>
               )}
+              {complaintManagementOpen && complaintCatAdd && complaintCatAddTable ? (
+                <SerWriteAccessProvider serEng="complaint">
+                  <WaterComplaintFloat
+                    mode="add"
+                    tableName={complaintCatAddTable}
+                    menuLabel={complaintMenuLabelForTable(complaintCatAddTable)}
+                    serEng="complaint"
+                    useDefineFields={complaintCommonUi}
+                    onClose={() => setComplaintCatAdd(false)}
+                    onListRefresh={() => setComplaintListRefreshKey((k) => k + 1)}
+                    onCreated={(key) => {
+                      setComplaintCatAdd(false)
+                      setComplaintCatTable(complaintCatAddTable)
+                      setComplaintCatFly(true)
+                      setComplaintCatKey(key)
+                      setComplaintListRefreshKey((k) => k + 1)
+                    }}
+                  />
+                </SerWriteAccessProvider>
+              ) : null}
+              {complaintManagementOpen &&
+              complaintCatKey != null &&
+              complaintCatTable &&
+              !complaintCatAdd ? (
+                <SerWriteAccessProvider serEng="complaint">
+                  <WaterComplaintFloat
+                    key={`${complaintCatTable}:${complaintCatKey}:${complaintCommonUi}`}
+                    mode="edit"
+                    tableName={complaintCatTable}
+                    menuLabel={complaintMenuLabelForTable(complaintCatTable)}
+                    serEng="complaint"
+                    useDefineFields={complaintCommonUi}
+                    compKey={complaintCatKey}
+                    fly={complaintCatFly}
+                    detailFocus={complaintCatDetailFocus}
+                    onClose={() => {
+                      setComplaintCatKey(null)
+                      setComplaintCatTable("")
+                      setComplaintCatFly(false)
+                      setComplaintCatDetailFocus(null)
+                    }}
+                    onListRefresh={() => setComplaintListRefreshKey((k) => k + 1)}
+                  />
+                </SerWriteAccessProvider>
+              ) : null}
               {complaintAddOpen && (
                 <SerWriteAccessProvider serEng="complaint">
                   <ComplaintAdd
@@ -4390,6 +4456,7 @@ function MapLayoutContent({
               )}
               <SerWriteAccessProvider serEng="complaint">
                 <ComplaintDetail
+                  commonUi={complaintCommonUi}
                   onListRefresh={() => setComplaintListRefreshKey((k) => k + 1)}
                 />
               </SerWriteAccessProvider>

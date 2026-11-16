@@ -625,7 +625,7 @@ export function LayerAttrManager({
                     <button
                       type="button"
                       onClick={() => setSelectedTableKey(key)}
-                      title={label}
+                      title={key}
                       className={cn(
                         "w-full text-left px-2.5 py-1.5 text-sm border-l-2 transition-colors flex items-center min-w-0",
                         "hover:bg-primary/10 focus-visible:bg-primary/10",

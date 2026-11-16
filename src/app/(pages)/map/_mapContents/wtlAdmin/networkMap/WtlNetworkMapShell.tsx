@@ -867,6 +867,18 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
     return () => onTotalWidthChange(0)
   }, [onTotalWidthChange])
 
+  /** 관망조회 중 동일 테이블은 지하시설물 WMS 대신 필터된 관망 WMS만 지도에 표시 */
+  useEffect(() => {
+    const setSuppress = mapContext?.setNetworkMapSuppressUfTableNames
+    if (!setSuppress) return
+    const sourceIds =
+      availableSourceIds.length > 0
+        ? availableSourceIds
+        : getWtlNetMapSources().map((s) => s.id)
+    setSuppress(collectManagedUndergroundNames(sourceIds))
+    return () => setSuppress(null)
+  }, [mapContext?.setNetworkMapSuppressUfTableNames, availableSourceIds])
+
   useEffect(() => {
     return () => {
       mapContext?.setSpatialFilterWkt?.(null)
@@ -2158,6 +2170,7 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
       skipUfToNetworkSyncRef.current = false
     }
   }, [
+    mapContext?.syncUndergroundFromNetworkRef,
     mapContext?.setVisibleLayerNames,
     availableSourceIds,
     mapSources,
