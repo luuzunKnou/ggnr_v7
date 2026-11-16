@@ -974,6 +974,8 @@ export async function getGeoServerLayerList(params: {
 
 /** 백업 테이블명 예: roadUseLedger_BAK20260423 (`_BAK` + 선택 숫자로 끝남, 대소문자 무시) */
 const LAYER_BACKUP_TABLE_NAME_RE = /_bak\d*$/i;
+/** 레이어비교·SHP 정합성·스키마 재생성 임시 테이블 — 목록에서 제외 */
+const LAYER_TEMP_TABLE_NAME_RE = /^_(cmp_|sync_|rctmp_)/i;
 
 /**
  * layer, public_layer 스키마의 geometry 테이블 목록 조회
@@ -999,7 +1001,11 @@ export async function getLayerTableList() {
         table: r.f_table_name,
         geometryColumn: r.f_geometry_column,
       }))
-      .filter((r) => !LAYER_BACKUP_TABLE_NAME_RE.test(String(r.table ?? '')));
+      .filter(
+        (r) =>
+          !LAYER_BACKUP_TABLE_NAME_RE.test(String(r.table ?? '')) &&
+          !LAYER_TEMP_TABLE_NAME_RE.test(String(r.table ?? ''))
+      );
     return { success: true, tables };
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);

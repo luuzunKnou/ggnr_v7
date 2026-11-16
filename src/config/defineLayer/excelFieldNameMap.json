@@ -498,5 +498,21 @@
   "owner_name": "owner_name",
   "owner_addr": "owner_addr",
   "marker_note": "marker_note",
-  "remark": "remark"
+  "remark": "remark",
+  "seculight_key": "seculight_key",
+  "fclt_cd": "fclt_cd",
+  "fclt_type": "fclt_type",
+  "addr": "addr",
+  "road_nm_addr": "road_nm_addr",
+  "stdg_ctpv_cd": "stdg_ctpv_cd",
+  "stdg_sgg_cd": "stdg_sgg_cd",
+  "stdg_emd_cd": "stdg_emd_cd",
+  "xmap_crts": "xmap_crts",
+  "ymap_crts": "ymap_crts",
+  "sn": "sn",
+  "fclt_gvmnfc_nm": "fclt_gvmnfc_nm",
+  "create_user": "create_user",
+  "user_insert": "user_insert",
+  "create_time": "create_time",
+  "source": "source"
 }
