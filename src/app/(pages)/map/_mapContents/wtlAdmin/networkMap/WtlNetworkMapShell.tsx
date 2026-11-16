@@ -13,6 +13,7 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
+  Crosshair,
   Loader2,
   Printer,
   RefreshCw,
@@ -3186,6 +3187,7 @@ function NetworkDetailModal({
   onItemUpdated: (next: WtlNetworkRow) => void
 }) {
   const open = item != null
+  const mapContext = useMapContext()
   const theme = useResolvedThemeSafe()
   const fieldsTable = String(item?.fieldsTable ?? '').trim()
   const fieldsFallback = String(item?.fieldsTableFallback ?? '').trim() || null
@@ -3552,6 +3554,13 @@ function NetworkDetailModal({
     onSelectHit?.(next)
   }
 
+  const handleGoToLocation = () => {
+    const map = mapContext?.mapInstanceRef?.current
+    flyToWtlNetworkGeom(map, item.geom, () =>
+      mapContext?.applyMapViewPaddingRef?.current?.()
+    )
+  }
+
   const renderCellValue = (row: AttrRow) => {
     if (editing && row.editable) {
       return (
@@ -3633,6 +3642,22 @@ function NetworkDetailModal({
             </button>
           </>
         ) : null
+      }
+      headerActionsAlways={
+        <button
+          type="button"
+          title="위치 이동"
+          aria-label="위치 이동"
+          onClick={handleGoToLocation}
+          className={
+            minimized
+              ? 'standard-panel-close cursor-pointer'
+              : 'standard-detail-hdr-btn cursor-pointer'
+          }
+        >
+          <Crosshair className="h-3.5 w-3.5" aria-hidden />
+          {minimized ? null : '위치 이동'}
+        </button>
       }
       headerActions={
         <>

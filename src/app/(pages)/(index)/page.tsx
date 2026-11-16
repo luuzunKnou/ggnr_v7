@@ -4,13 +4,12 @@ import { MapViewLink } from "@/app/(pages)/(index)/map-view-link"
 import { SystemManagementSection, type SystemItem } from "@/app/(pages)/(index)/system-management-section"
 import { SiteIndexShell } from "@/app/(pages)/(index)/site-index-shell"
 import { NoticeLibraryPreview } from "@/app/(pages)/(index)/notice-library-preview"
-// import { IndexDashboardStats } from "@/app/(pages)/(index)/index-dashboard-stats"
 import {
-  getSystemList,
   getSystemListDebug,
   getIndexSliderImages,
   getIndexSliderSlides,
-  // getIndexChartKeys,
+  getSystemKorName,
+  getIndexFooterConfig,
 } from "@/service/configService"
 
 function loadSystemList(): { systems: SystemItem[]; error?: string; debug?: string } {
@@ -44,9 +43,34 @@ function buildParcelSlides(): Array<{ title: string; description: string; image?
   }))
 }
 
-export default function DashboardPage() {
+export default async function DashboardPage() {
+  const projectName =
+    typeof process !== "undefined" ? (process.env.GGNR_PROJECT ?? "build_yy").trim() : "build_yy"
+
+  /** odor 전용 모듈은 분기 안에서만 import — 다른 프로젝트 `/` 컴파일에 OL 등이 묶이지 않게 */
+  if (projectName === "odor_ph") {
+    const [{ OdorIndexConsole }, { listSensors }] = await Promise.all([
+      import("@/app/(pages)/(index)/odorPh/OdorIndexConsole"),
+      import("@/service/odorSensorService"),
+    ])
+    let sensors: Awaited<ReturnType<typeof listSensors>> = []
+    try {
+      sensors = await listSensors()
+    } catch {
+      sensors = []
+    }
+    const { footerAddr, footerRss } = getIndexFooterConfig()
+    return (
+      <OdorIndexConsole
+        title={getSystemKorName()}
+        sensors={sensors}
+        footerAddr={footerAddr}
+        footerRss={footerRss}
+      />
+    )
+  }
+
   const { systems: systemList, error: systemListError, debug: systemListDebug } = loadSystemList()
-  // const indexCharts = getIndexChartKeys()
 
   return (
     <SiteIndexShell>
@@ -62,13 +86,6 @@ export default function DashboardPage() {
       <section className="-mb-8 -mt-5">
         <SystemManagementSection systems={systemList} />
       </section>
-
-      {/* 하단 대시보드 비활성화
-      <IndexDashboardStats
-        charts={indexCharts}
-        systemColors={Object.fromEntries(systemList.map((s) => [s.sys_key, s.sys_col]))}
-      />
-      */}
 
       {systemListError && (
         <section className="mb-12 rounded-lg border border-red-200 bg-red-50/50 dark:border-red-800 dark:bg-red-950/20 p-4">

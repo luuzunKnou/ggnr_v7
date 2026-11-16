@@ -98,6 +98,7 @@ import * as digitalMapService from './digitalMapService';
 import * as drawingDisplayService from './drawingDisplayService';
 import * as landArchiveService from './landArchiveService';
 import * as individualLandPriceService from './individualLandPriceService';
+import * as odorSensorService from './odorSensorService';
 
 export {
   configService,
@@ -196,4 +197,5 @@ export {
   drawingDisplayService,
   landArchiveService,
   individualLandPriceService,
+  odorSensorService,
 };

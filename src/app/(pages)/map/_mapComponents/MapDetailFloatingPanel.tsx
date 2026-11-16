@@ -27,8 +27,10 @@ export type MapDetailFloatingPanelProps = {
   headerLeading?: ReactNode
   /** 펼침 시 standard-detail-float-heading display:none (최소화 시에는 기본 heading 유지) */
   hideHeading?: boolean
-  /** 최소화·닫기 왼쪽 — 건수 표시·다시 그리기 등 */
+  /** 펼침 시 최소화·닫기 왼쪽 — 건수 표시·다시 그리기 등 */
   headerActions?: ReactNode
+  /** 펼침·최소화 모두 최소화·닫기 왼쪽에 표시 (위치 이동 등) */
+  headerActionsAlways?: ReactNode
   pinPosition?: { top: number; left: number } | null
   focusToken?: number
   onActivate?: () => void
@@ -56,6 +58,7 @@ export function MapDetailFloatingPanel({
   headerLeading,
   hideHeading = false,
   headerActions,
+  headerActionsAlways,
   pinPosition = null,
   focusToken,
   onActivate,
@@ -130,6 +133,7 @@ export function MapDetailFloatingPanel({
           ) : null}
           <div className="flex shrink-0 items-center gap-1">
             {!minimized ? headerActions : null}
+            {headerActionsAlways}
             {allowMinimize ? (
               <button
                 type="button"
