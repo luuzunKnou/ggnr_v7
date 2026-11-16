@@ -1,6 +1,7 @@
 "use client"
 
-import { useEffect, useMemo, useState, type ComponentType, type ReactNode } from "react"
+import { useEffect, useMemo, useRef, useState, type ComponentType, type ReactNode } from "react"
+import { createPortal } from "react-dom"
 import Link from "next/link"
 import { ChevronDown, LayoutGrid, List } from "lucide-react"
 import { Button } from "@/app/shadcnComponents/ui/button"
@@ -171,6 +172,46 @@ export function AdminConsoleLayout({
   const [expandedGroupIds, setExpandedGroupIds] = useState<string[]>(defaultExpandedGroupIds)
   const [collapsed, setCollapsed] = useState(false)
   const [storageReady, setStorageReady] = useState(!stateStorageKey)
+  /** 축소 아이콘 레일 그룹 메뉴 — overflow에 잘리지 않도록 body 포털 + fixed */
+  const [collapsedFlyout, setCollapsedFlyout] = useState<{
+    groupId: string
+    top: number
+    left: number
+  } | null>(null)
+  const collapsedFlyoutCloseTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const clearCollapsedFlyoutTimer = () => {
+    if (collapsedFlyoutCloseTimer.current) {
+      clearTimeout(collapsedFlyoutCloseTimer.current)
+      collapsedFlyoutCloseTimer.current = null
+    }
+  }
+
+  const openCollapsedFlyout = (groupId: string, anchor: HTMLElement) => {
+    clearCollapsedFlyoutTimer()
+    const rect = anchor.getBoundingClientRect()
+    setCollapsedFlyout({
+      groupId,
+      top: rect.top,
+      left: rect.right - 6,
+    })
+  }
+
+  const scheduleCloseCollapsedFlyout = () => {
+    clearCollapsedFlyoutTimer()
+    collapsedFlyoutCloseTimer.current = setTimeout(() => {
+      setCollapsedFlyout(null)
+      collapsedFlyoutCloseTimer.current = null
+    }, 120)
+  }
+
+  useEffect(() => {
+    return () => clearCollapsedFlyoutTimer()
+  }, [])
+
+  useEffect(() => {
+    if (!collapsed) setCollapsedFlyout(null)
+  }, [collapsed])
 
   useEffect(() => {
     if (!selectMenuSignal) return
@@ -280,9 +321,11 @@ export function AdminConsoleLayout({
     if (policy === "block") {
       setDeniedMenuId(menuId)
       setDeniedOpen(true)
+      setCollapsedFlyout(null)
       return
     }
     if (policy === "hidden") return
+    setCollapsedFlyout(null)
     setSelectedMenu(menuId)
   }
 
@@ -359,14 +402,28 @@ export function AdminConsoleLayout({
           if (visibleGroupMenuIds.length === 0) return null
           const Icon = group.icon
           const isActiveGroup = group.menuIds.includes(selectedMenu)
+          const isFlyoutOpen = collapsedFlyout?.groupId === group.id
           return (
-            <div key={group.id} className="group/navicon relative w-full flex justify-center">
+            <div
+              key={group.id}
+              className="relative flex w-full justify-center"
+              onMouseEnter={(e) => openCollapsedFlyout(group.id, e.currentTarget)}
+              onMouseLeave={scheduleCloseCollapsedFlyout}
+              onFocus={(e) => openCollapsedFlyout(group.id, e.currentTarget)}
+              onBlur={(e) => {
+                if (!e.currentTarget.contains(e.relatedTarget as Node | null)) {
+                  scheduleCloseCollapsedFlyout()
+                }
+              }}
+            >
               <button
                 type="button"
                 title={group.label}
+                aria-expanded={isFlyoutOpen}
+                aria-haspopup="menu"
                 className={cn(
-                  "flex items-center justify-center w-8 h-8 rounded-md transition-colors",
-                  isActiveGroup
+                  "flex h-8 w-8 items-center justify-center rounded-md transition-colors",
+                  isActiveGroup || isFlyoutOpen
                     ? "bg-primary text-primary-foreground"
                     : "text-muted-foreground hover:bg-muted hover:text-foreground"
                 )}
@@ -377,48 +434,67 @@ export function AdminConsoleLayout({
                   <span className="text-[10px] font-semibold">{group.label.slice(0, 2)}</span>
                 )}
               </button>
-              <div
-                className={cn(
-                  "absolute left-full top-0 z-50 -ml-1.5",
-                  "invisible opacity-0 group-hover/navicon:visible group-hover/navicon:opacity-100",
-                  "transition-opacity"
-                )}
-              >
-                <div className="min-w-40 rounded-md border bg-popover shadow-md py-1">
-                <div className="px-3 py-1.5 text-xs font-semibold text-muted-foreground border-b mb-1 whitespace-nowrap">
-                  {group.label}
-                </div>
-                {visibleGroupMenuIds.map((menuId) => {
-                  const menu = menuById.get(menuId)
-                  if (!menu) return null
-                  const policy = resolvePolicy(menu.id)
-                  const isBlock = policy === "block"
-                  return (
-                    <button
-                      key={menu.id}
-                      type="button"
-                      onClick={() => handleMenuClick(menu.id)}
-                      className={cn(
-                        "w-full text-left px-3 py-1.5 text-sm whitespace-nowrap transition-colors",
-                        selectedMenu === menu.id && !isBlock
-                          ? "bg-primary text-primary-foreground"
-                          : isBlock
-                            ? "text-muted-foreground/80 hover:bg-muted/60 hover:text-foreground"
-                            : "text-muted-foreground hover:bg-muted hover:text-foreground"
-                      )}
-                    >
-                      {menu.label}
-                    </button>
-                  )
-                })}
-                </div>
-              </div>
             </div>
           )
         })}
       </div>
     )
   }
+
+  const collapsedFlyoutGroup = collapsedFlyout
+    ? menuGroups?.find((g) => g.id === collapsedFlyout.groupId) ?? null
+    : null
+  const collapsedFlyoutMenuIds = collapsedFlyoutGroup
+    ? collapsedFlyoutGroup.menuIds.filter((id) => visibleMenuIds.includes(id))
+    : []
+
+  const collapsedFlyoutPortal =
+    typeof document !== "undefined" &&
+    collapsed &&
+    collapsedFlyout &&
+    collapsedFlyoutGroup &&
+    collapsedFlyoutMenuIds.length > 0
+      ? createPortal(
+          <div
+            role="menu"
+            aria-label={collapsedFlyoutGroup.label}
+            className="fixed z-[200] min-w-40 rounded-md border bg-popover py-1 text-popover-foreground shadow-md"
+            style={{ top: collapsedFlyout.top, left: collapsedFlyout.left }}
+            onMouseEnter={clearCollapsedFlyoutTimer}
+            onMouseLeave={scheduleCloseCollapsedFlyout}
+          >
+            <div className="mb-1 whitespace-nowrap border-b px-3 py-1.5 text-xs font-semibold text-muted-foreground">
+              {collapsedFlyoutGroup.label}
+            </div>
+            {collapsedFlyoutMenuIds.map((menuId) => {
+              const menu = menuById.get(menuId)
+              if (!menu) return null
+              const policy = resolvePolicy(menu.id)
+              const isBlock = policy === "block"
+              return (
+                <button
+                  key={menu.id}
+                  type="button"
+                  role="menuitem"
+                  onClick={() => handleMenuClick(menu.id)}
+                  className={cn(
+                    "w-full cursor-pointer whitespace-nowrap px-3 py-1.5 text-left text-sm transition-colors",
+                    selectedMenu === menu.id && !isBlock
+                      ? "bg-primary text-primary-foreground"
+                      : isBlock
+                        ? "text-muted-foreground/80 hover:bg-muted/60 hover:text-foreground"
+                        : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                  )}
+                  title={menu.label}
+                >
+                  {menu.label}
+                </button>
+              )
+            })}
+          </div>,
+          document.body
+        )
+      : null
 
   const renderSidebarToggle = (compact = false) => {
     const atTop = sidebarTogglePlacement === "top"
@@ -521,7 +597,10 @@ export function AdminConsoleLayout({
             </div>
           ) : null}
           {collapsed ? (
-            <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden pt-0 pb-0">
+            <div
+              className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden pt-0 pb-0"
+              onScroll={() => setCollapsedFlyout(null)}
+            >
               {renderCollapsedIconRail()}
             </div>
           ) : (
@@ -674,6 +753,7 @@ export function AdminConsoleLayout({
           menuId={deniedMenuId}
         />
       ) : null}
+      {collapsedFlyoutPortal}
     </div>
   )
 }

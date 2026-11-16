@@ -32,6 +32,7 @@ export default async function OdorIndexPreviewPage() {
       sensors={sensors}
       footerAddr={footerAddr}
       footerRss={footerRss}
+      queriedAt={new Date().toISOString()}
     />
   );
 }

@@ -5,7 +5,6 @@ import { DevModeFooterTrigger } from '@/app/(pages)/(index)/dev-mode-footer-trig
 import { ThemeToggle } from '@/app/(pages)/(index)/theme-toggle';
 import { HeaderAuthLinks } from '@/app/(pages)/(index)/header-auth-links';
 import { SysManagerNavLink } from '@/app/(pages)/(index)/SysManagerNavLink';
-import { OdorIndexNavLink } from '@/app/(pages)/(index)/OdorIndexNavLink';
 import { getIndexLogoSrc, getIndexFooterConfig, getSystemKorName } from '@/service/configService';
 import { cn } from '@/lib/utils';
 
@@ -46,7 +45,6 @@ export function SiteIndexShell({ children, mainClassName, fillViewport = false }
             <h1 className="text-xl font-bold text-foreground">{siteTitle}</h1>
           </Link>
           <div className="flex items-center gap-3">
-            <OdorIndexNavLink />
             <ThemeToggle />
             <SysManagerNavLink />
             <HeaderAuthLinks />

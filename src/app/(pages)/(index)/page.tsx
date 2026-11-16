@@ -66,6 +66,7 @@ export default async function DashboardPage() {
         sensors={sensors}
         footerAddr={footerAddr}
         footerRss={footerRss}
+        queriedAt={new Date().toISOString()}
       />
     )
   }

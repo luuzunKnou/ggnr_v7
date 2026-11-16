@@ -7,6 +7,7 @@ import type {
   OdorGradeStatus,
 } from '@/app/(pages)/(index)/odorPh/odorPhDashboardMock';
 import { getGeoServerBase } from '@/lib/geoserverUrl';
+import { geoserverWmsImageLoadFunction } from '@/lib/geoserverWmsImageLoad';
 import { withBasePathNav } from '@/lib/basePath';
 import {
   createDataQuerySelectionRowHighlightStyle,
@@ -14,6 +15,10 @@ import {
 } from '@/lib/mapDataQueryMapHighlight';
 import { cn } from '@/lib/utils';
 import './odor-ol-minimal.css';
+
+/** 타일/이미지 디코드 실패 시 OL EncodingError 방지 */
+const TRANSPARENT_PIXEL =
+  'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
 
 const WORKSPACE = 'ggnr';
 const SGG_CODE = '47110';
@@ -184,6 +189,36 @@ export function OdorIndexMiniMap({
           crossOrigin: 'anonymous',
           maxZoom: 19,
           attributions: '© VWorld',
+          tileLoadFunction: (tile, src) => {
+            const image = (tile as unknown as { getImage: () => HTMLImageElement }).getImage();
+            const fail = () => {
+              image.src = TRANSPARENT_PIXEL;
+            };
+            if (!src) {
+              fail();
+              return;
+            }
+            fetch(src, { mode: 'cors' })
+              .then(async (res) => {
+                if (!res.ok) throw new Error(String(res.status));
+                const buf = await res.arrayBuffer();
+                const b = new Uint8Array(buf);
+                const okJpeg = b[0] === 0xff && b[1] === 0xd8;
+                const okPng =
+                  b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47;
+                if (!okJpeg && !okPng) throw new Error('not image');
+                const blobUrl = URL.createObjectURL(
+                  new Blob([buf], { type: okJpeg ? 'image/jpeg' : 'image/png' })
+                );
+                image.onload = () => URL.revokeObjectURL(blobUrl);
+                image.onerror = () => {
+                  URL.revokeObjectURL(blobUrl);
+                  fail();
+                };
+                image.src = blobUrl;
+              })
+              .catch(() => fail());
+          },
         }),
       });
 
@@ -198,6 +233,7 @@ export function OdorIndexMiniMap({
           },
           serverType: 'geoserver',
           ratio: 1,
+          imageLoadFunction: geoserverWmsImageLoadFunction,
         }),
         opacity: 1,
         zIndex: 4,
@@ -354,9 +390,15 @@ export function OdorIndexMiniMap({
           maxZoom: 18,
         }),
         controls: defaultControls({ zoom: false, rotate: false, attribution: false }),
+        /** Index 미니맵 — 이동·줌·회전 전부 비활성 */
         interactions: defaultInteractions({
-          mouseWheelZoom: false,
+          altShiftDragRotate: false,
           doubleClickZoom: false,
+          keyboard: false,
+          mouseWheelZoom: false,
+          shiftDragZoom: false,
+          dragPan: false,
+          pinchRotate: false,
           pinchZoom: false,
         }),
       });
