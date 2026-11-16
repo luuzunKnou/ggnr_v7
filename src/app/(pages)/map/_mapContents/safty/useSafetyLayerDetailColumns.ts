@@ -17,8 +17,14 @@ export function useSafetyLayerDetailColumns(tableName: string) {
 
   useEffect(() => {
     let cancelled = false;
+    const name = String(tableName ?? '').trim();
+    if (!name) {
+      setColumns([]);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
-    void fetch(`/api/config/defineLayer/fields/${encodeURIComponent(tableName)}`)
+    void fetch(`/api/config/defineLayer/fields/${encodeURIComponent(name)}`)
       .then((r) => r.json() as Promise<ApiFieldsResponse | DefineFieldLike[]>)
       .then((body) => {
         if (cancelled) return;

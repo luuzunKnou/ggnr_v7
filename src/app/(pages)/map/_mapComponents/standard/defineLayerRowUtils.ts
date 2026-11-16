@@ -61,6 +61,12 @@ export type DefineFieldLike = {
   define_field_sort_type?: string | null;
   define_field_type?: string | null;
   define_field_show_title?: unknown;
+  /** 데이터설정(Field) 기본값 — 신규 등록 시 초기값 */
+  define_field_default_value?: string | null;
+  /** 데이터설정(Field) 최대길이 */
+  define_field_max_length?: string | number | null;
+  define_field_read_only?: unknown;
+  define_field_is_key?: unknown;
 };
 
 export function defineFieldIdxNum(f: DefineFieldLike): number {

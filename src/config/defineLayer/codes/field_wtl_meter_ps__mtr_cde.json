@@ -1,1 +1,32 @@
-[]
+[
+  {
+    "define_code_key": "90000",
+    "define_code_field_key": "",
+    "define_code_name": "pH",
+    "define_code_kor_name": "pH"
+  },
+  {
+    "define_code_key": "90001",
+    "define_code_field_key": "",
+    "define_code_name": "유입잔류염소",
+    "define_code_kor_name": "유입잔류염소"
+  },
+  {
+    "define_code_key": "90002",
+    "define_code_field_key": "",
+    "define_code_name": "유출잔류염소",
+    "define_code_kor_name": "유출잔류염소"
+  },
+  {
+    "define_code_key": "90003",
+    "define_code_field_key": "",
+    "define_code_name": "전기전도도",
+    "define_code_kor_name": "전기전도도"
+  },
+  {
+    "define_code_key": "90004",
+    "define_code_field_key": "",
+    "define_code_name": "탁도",
+    "define_code_kor_name": "탁도"
+  }
+]

@@ -214,6 +214,7 @@ const UNDERGROUND_FACILITY_GROUP_ALLOW = new Set([
   '상수',
   '급수구역',
   '하수',
+  '배수설비',
   '광역상수',
   '가스',
   '도시가스',

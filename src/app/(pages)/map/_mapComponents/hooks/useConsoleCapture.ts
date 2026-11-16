@@ -47,7 +47,7 @@ function formatArgs(args: unknown[]): string {
 /**
  * 브라우저 console.log / warn / error를 가로채서 로그 라인 배열로 관리.
  * 마운트 시 원본 console 메서드를 래핑하고, 언마운트 시 복원.
- * setState는 마이크로태스크로 미뤄 React 렌더/effect 중 동기 setState 루프를 막는다.
+ * setState는 setTimeout(0)으로 미뤄 React effect 중첩 업데이트(max depth)를 막는다.
  */
 export function useConsoleCapture() {
   const [lines, setLines] = useState<ConsoleLine[]>([]);
@@ -58,10 +58,12 @@ export function useConsoleCapture() {
   } | null>(null);
   const pendingRef = useRef<ConsoleLine[]>([]);
   const flushScheduledRef = useRef(false);
+  const flushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const capturingRef = useRef(false);
 
   const flush = useCallback(() => {
     flushScheduledRef.current = false;
+    flushTimerRef.current = null;
     const batch = pendingRef.current;
     if (batch.length === 0) return;
     pendingRef.current = [];
@@ -78,7 +80,8 @@ export function useConsoleCapture() {
       pendingRef.current.push({ timestamp: ts, level, message: formatArgs(args) });
       if (flushScheduledRef.current) return;
       flushScheduledRef.current = true;
-      queueMicrotask(flush);
+      // microtask는 effect 연쇄 중첩 업데이트에 포함되어 max depth를 유발할 수 있음
+      flushTimerRef.current = setTimeout(flush, 0);
     },
     [flush]
   );
@@ -135,6 +138,10 @@ export function useConsoleCapture() {
       originalsRef.current = null;
       pendingRef.current = [];
       flushScheduledRef.current = false;
+      if (flushTimerRef.current != null) {
+        clearTimeout(flushTimerRef.current);
+        flushTimerRef.current = null;
+      }
     };
   }, [push]);
 
@@ -164,16 +171,28 @@ export function useMapViewInfo(map: Map | null, mapReady: boolean): MapViewInfo 
     const update = () => {
       const z = view.getZoom();
       const center = view.getCenter();
-      setInfo({
+      const next: MapViewInfo = {
         zoomLevel: z !== undefined ? z : null,
         projectionCode: proj ? proj.getCode() : null,
         centerX: center ? center[0] : null,
         centerY: center ? center[1] : null,
-      });
+      };
+      setInfo((prev) =>
+        prev.zoomLevel === next.zoomLevel &&
+        prev.projectionCode === next.projectionCode &&
+        prev.centerX === next.centerX &&
+        prev.centerY === next.centerY
+          ? prev
+          : next
+      );
     };
     update();
-    view.on('change', update);
-    return () => view.un('change', update);
+    view.on('change:center', update);
+    view.on('change:resolution', update);
+    return () => {
+      view.un('change:center', update);
+      view.un('change:resolution', update);
+    };
   }, [map, mapReady]);
 
   return info;
