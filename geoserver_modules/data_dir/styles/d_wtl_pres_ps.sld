@@ -86,7 +86,7 @@
         </sld:Rule>
         <sld:Rule>
           <sld:Name>label</sld:Name>
-          <sld:Title>d_wtl_pres_ps_label</sld:Title>
+          <sld:Title>wtl_pres_ps_label</sld:Title>
           <ogc:Filter>
             <ogc:PropertyIsGreaterThan>
               <ogc:Function name="strLength">
@@ -196,4 +196,3 @@
     </sld:UserStyle>
   </sld:NamedLayer>
 </sld:StyledLayerDescriptor>
-

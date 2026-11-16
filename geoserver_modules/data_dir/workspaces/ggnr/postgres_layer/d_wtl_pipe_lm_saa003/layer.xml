@@ -1,0 +1,19 @@
+<layer>
+  <name>d_wtl_pipe_lm_saa003</name>
+  <id>LayerInfoImpl-d-d_wtl_pipe_lm_saa003</id>
+  <type>VECTOR</type>
+  <defaultStyle>
+    <id>StyleInfoImpl-d-d_wtl_pipe_lm_saa003</id>
+  </defaultStyle>
+  <resource class="featureType">
+    <id>FeatureTypeInfoImpl-d-d_wtl_pipe_lm_saa003</id>
+  </resource>
+  <queryable>true</queryable>
+  <opaque>false</opaque>
+  <attribution>
+    <logoWidth>0</logoWidth>
+    <logoHeight>0</logoHeight>
+  </attribution>
+  <dateCreated>2026-11-16 01:56:58.213 UTC</dateCreated>
+  <dateModified>2026-11-16 01:56:58.213 UTC</dateModified>
+</layer>

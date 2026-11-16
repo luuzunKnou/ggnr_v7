@@ -12,16 +12,17 @@
           <sld:Title>wtl_pipe_lm_etc</sld:Title>
           <sld:LineSymbolizer>
             <sld:Stroke>
-              <sld:CssParameter name="stroke">#FFFFFF</sld:CssParameter>
-              <sld:CssParameter name="stroke-opacity">0.4</sld:CssParameter>
-              <sld:CssParameter name="stroke-width">3</sld:CssParameter>
+              <sld:CssParameter name="stroke">#E88AEB</sld:CssParameter>
+              <sld:CssParameter name="stroke-width">2</sld:CssParameter>
             </sld:Stroke>
           </sld:LineSymbolizer>
           <sld:LineSymbolizer>
             <sld:Stroke>
-              <sld:CssParameter name="stroke">#E88AEB</sld:CssParameter>
-              <sld:CssParameter name="stroke-width">2</sld:CssParameter>
+              <sld:CssParameter name="stroke">#FFFFFF</sld:CssParameter>
+              <sld:CssParameter name="stroke-opacity">0.4</sld:CssParameter>
+              <sld:CssParameter name="stroke-width">3</sld:CssParameter>
             </sld:Stroke>
+            <sld:VendorOption name="composite">destination-over</sld:VendorOption>
           </sld:LineSymbolizer>
           <sld:TextSymbolizer>
             <sld:Label>

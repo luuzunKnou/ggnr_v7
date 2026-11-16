@@ -1,0 +1,19 @@
+<layer>
+  <name>wtl_gupsu_ps</name>
+  <id>LayerInfoImpl--62fd8cac:1a1cd6b9dbe:-7b71</id>
+  <type>VECTOR</type>
+  <defaultStyle>
+    <id>StyleInfoImpl--62fd8cac:1a1cd6b9dbe:-7b70</id>
+  </defaultStyle>
+  <resource class="featureType">
+    <id>FeatureTypeInfoImpl--62fd8cac:1a1cd6b9dbe:-7b72</id>
+  </resource>
+  <queryable>true</queryable>
+  <opaque>false</opaque>
+  <attribution>
+    <logoWidth>0</logoWidth>
+    <logoHeight>0</logoHeight>
+  </attribution>
+  <dateCreated>2026-11-13 00:44:30.234 UTC</dateCreated>
+  <dateModified>2026-11-13 00:44:30.638 UTC</dateModified>
+</layer>

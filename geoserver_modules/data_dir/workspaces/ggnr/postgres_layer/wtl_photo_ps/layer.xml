@@ -1,0 +1,19 @@
+<layer>
+  <name>wtl_photo_ps</name>
+  <id>LayerInfoImpl--62fd8cac:1a1cd6b9dbe:-7b73</id>
+  <type>VECTOR</type>
+  <defaultStyle>
+    <id>StyleInfoImpl--58dacf93:1a17aeef9c5:-671e</id>
+  </defaultStyle>
+  <resource class="featureType">
+    <id>FeatureTypeInfoImpl--62fd8cac:1a1cd6b9dbe:-7b74</id>
+  </resource>
+  <queryable>true</queryable>
+  <opaque>false</opaque>
+  <attribution>
+    <logoWidth>0</logoWidth>
+    <logoHeight>0</logoHeight>
+  </attribution>
+  <dateCreated>2026-11-13 00:44:26.774 UTC</dateCreated>
+  <dateModified>2026-11-13 00:44:26.846 UTC</dateModified>
+</layer>
