@@ -7,6 +7,8 @@ export const SER_ENG_TO_OPENED: Record<string, string> = {
   data3d: 'map3dData',
   tifManager: 'highQualityVideo',
   complaint: 'complaintManagement',
+  /** 상하수도 통합 민원관리 (구 통합UI) */
+  complaintCommon: 'complaintCommon',
   memo: 'memoManagement',
   crossSection: 'sectionView',
   waterSupplyWork: 'waterSupply',

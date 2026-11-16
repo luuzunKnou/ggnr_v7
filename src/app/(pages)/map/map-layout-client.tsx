@@ -153,6 +153,7 @@ import { WaterAdminShell } from "./_mapContents/waterAdminMemoComplaint/WaterAdm
 import { WaterComplaintFloat } from "./_mapContents/waterAdminMemoComplaint/WaterComplaintFloat"
 import type { WaterPlaceFocus } from "./_mapContents/waterAdminMemoComplaint/waterComplaintMapFly"
 import { findOpenedWaterAdminMenu } from "./_mapContents/waterAdminMemoComplaint/waterAdminMemoComplaint"
+import { complaintMenuLabelForTable } from "@/lib/waterComplaintCategory"
 import { PolicyMapListPanel } from "./_mapContents/policyMap/PolicyMapListPanel"
 import { GcpListPanel } from "./_mapContents/gcp/GcpListPanel"
 import { GcpDetailPanel } from "./_mapContents/gcp/GcpDetailPanel"
@@ -446,6 +447,8 @@ const LAYER_DATA_PANEL_MAX_WIDTH = 900
 const STANDARD_LIST_OPENED_KEY = "standardList"
 const LIST_VIEW_OPENED_KEY = "listView"
 const COMPLAINT_OPENED_KEY = "complaintManagement"
+/** 상하수도 통합 민원관리 (구 통합UI) — serviceList ser_eng: complaintCommon */
+const COMPLAINT_COMMON_OPENED_KEY = "complaintCommon"
 const MEMO_OPENED_KEY = "memoManagement"
 const POLICY_MAP_OPENED_KEY = "policyMap"
 const MAP_3D_DATA_OPENED_KEY = "map3dData"
@@ -698,7 +701,9 @@ function MapLayoutContent({
   const dataPanelOpened = openedWindows.includes(LIST_VIEW_OPENED_KEY)
   const layerDataPanelOpen = dataPanelOpened && dataTableFromUrl !== ""
 
-  const complaintManagementOpen = openedWindows.includes(COMPLAINT_OPENED_KEY)
+  const complaintCommonUi = openedWindows.includes(COMPLAINT_COMMON_OPENED_KEY)
+  const complaintManagementOpen =
+    openedWindows.includes(COMPLAINT_OPENED_KEY) || complaintCommonUi
   const memoManagementOpen = openedWindows.includes(MEMO_OPENED_KEY)
   const waterAdminMenu = findOpenedWaterAdminMenu(openedWindows)
   const waterAdminOpen = waterAdminMenu != null
@@ -1099,6 +1104,13 @@ function MapLayoutContent({
   const [waterComplaintAdd, setWaterComplaintAdd] = useState(false)
   const [waterComplaintRefreshKey, setWaterComplaintRefreshKey] = useState(0)
   const [waterDetailFocus, setWaterDetailFocus] = useState<WaterPlaceFocus | null>(null)
+  const [complaintCatKey, setComplaintCatKey] = useState<number | null>(null)
+  const [complaintCatTable, setComplaintCatTable] = useState("")
+  const [complaintCatAdd, setComplaintCatAdd] = useState(false)
+  const [complaintCatAddTable, setComplaintCatAddTable] = useState("")
+  const [complaintCatFly, setComplaintCatFly] = useState(false)
+  const [complaintCatDetailFocus, setComplaintCatDetailFocus] =
+    useState<WaterPlaceFocus | null>(null)
   const [policyMapPanelWidth, setPolicyMapPanelWidth] = useState(POLICY_MAP_PANEL_DEFAULT_WIDTH)
   const [gcpPanelWidth, setGcpPanelWidth] = useState(GCP_PANEL_DEFAULT_WIDTH)
   const [gcpDetailWidth, setGcpDetailWidth] = useState(GCP_DETAIL_DEFAULT_WIDTH)
@@ -1941,7 +1953,15 @@ function MapLayoutContent({
   const handleCloseComplaintManagement = () => {
     setComplaintAddOpen(false)
     mapContext?.setComplaintDetail?.(null)
-    const next = openedWindows.filter((w) => w !== COMPLAINT_OPENED_KEY)
+    setComplaintCatKey(null)
+    setComplaintCatTable("")
+    setComplaintCatAdd(false)
+    setComplaintCatAddTable("")
+    setComplaintCatFly(false)
+    setComplaintCatDetailFocus(null)
+    const next = openedWindows.filter(
+      (w) => w !== COMPLAINT_OPENED_KEY && w !== COMPLAINT_COMMON_OPENED_KEY
+    )
     setOpened(next)
   }
 
@@ -3438,12 +3458,46 @@ function MapLayoutContent({
                 leftOffsetPx={complaintPanelLeftPx}
                 onWidthChange={setComplaintPanelWidth} serEng="complaint">
                 <ComplaintListPanel
+                  commonUi={complaintCommonUi}
                   refreshKey={complaintListRefreshKey}
                   onClose={handleCloseComplaintManagement}
+                  categorySelected={
+                    complaintCatKey != null && complaintCatTable
+                      ? { tableName: complaintCatTable, compKey: complaintCatKey }
+                      : null
+                  }
+                  onSelectCategoryRow={(tableName, compKey, fly, focus) => {
+                    setComplaintDetail?.(null)
+                    setComplaintAddOpen(false)
+                    if (compKey == null) {
+                      setComplaintCatKey(null)
+                      setComplaintCatTable("")
+                      setComplaintCatFly(false)
+                      setComplaintCatDetailFocus(null)
+                      return
+                    }
+                    setComplaintCatAdd(false)
+                    setComplaintCatTable(tableName)
+                    setComplaintCatFly(fly)
+                    setComplaintCatDetailFocus(focus ?? null)
+                    setComplaintCatKey(compKey)
+                  }}
+                  onRequestAddCategory={(tableName) => {
+                    setComplaintDetail?.(null)
+                    setComplaintAddOpen(false)
+                    setComplaintCatKey(null)
+                    setComplaintCatTable("")
+                    setComplaintCatFly(false)
+                    setComplaintCatDetailFocus(null)
+                    setComplaintCatAddTable(tableName)
+                    setComplaintCatAdd(true)
+                  }}
                   onRequestAdd={() => {
                     setComplaintDetail?.(null)
                     setMemoDetailId(null)
                     setMemoAddTable(null)
+                    setComplaintCatAdd(false)
+                    setComplaintCatKey(null)
                     setComplaintAddOpen(true)
                   }}
                 />
@@ -4198,6 +4252,51 @@ function MapLayoutContent({
                   />
                 </SerWriteAccessProvider>
               )}
+              {complaintManagementOpen && complaintCatAdd && complaintCatAddTable ? (
+                <SerWriteAccessProvider serEng="complaint">
+                  <WaterComplaintFloat
+                    mode="add"
+                    tableName={complaintCatAddTable}
+                    menuLabel={complaintMenuLabelForTable(complaintCatAddTable)}
+                    serEng="complaint"
+                    useDefineFields={complaintCommonUi}
+                    onClose={() => setComplaintCatAdd(false)}
+                    onListRefresh={() => setComplaintListRefreshKey((k) => k + 1)}
+                    onCreated={(key) => {
+                      setComplaintCatAdd(false)
+                      setComplaintCatTable(complaintCatAddTable)
+                      setComplaintCatFly(true)
+                      setComplaintCatKey(key)
+                      setComplaintListRefreshKey((k) => k + 1)
+                    }}
+                  />
+                </SerWriteAccessProvider>
+              ) : null}
+              {complaintManagementOpen &&
+              complaintCatKey != null &&
+              complaintCatTable &&
+              !complaintCatAdd ? (
+                <SerWriteAccessProvider serEng="complaint">
+                  <WaterComplaintFloat
+                    key={`${complaintCatTable}:${complaintCatKey}:${complaintCommonUi}`}
+                    mode="edit"
+                    tableName={complaintCatTable}
+                    menuLabel={complaintMenuLabelForTable(complaintCatTable)}
+                    serEng="complaint"
+                    useDefineFields={complaintCommonUi}
+                    compKey={complaintCatKey}
+                    fly={complaintCatFly}
+                    detailFocus={complaintCatDetailFocus}
+                    onClose={() => {
+                      setComplaintCatKey(null)
+                      setComplaintCatTable("")
+                      setComplaintCatFly(false)
+                      setComplaintCatDetailFocus(null)
+                    }}
+                    onListRefresh={() => setComplaintListRefreshKey((k) => k + 1)}
+                  />
+                </SerWriteAccessProvider>
+              ) : null}
               {complaintAddOpen && (
                 <SerWriteAccessProvider serEng="complaint">
                   <ComplaintAdd
@@ -4208,6 +4307,7 @@ function MapLayoutContent({
               )}
               <SerWriteAccessProvider serEng="complaint">
                 <ComplaintDetail
+                  commonUi={complaintCommonUi}
                   onListRefresh={() => setComplaintListRefreshKey((k) => k + 1)}
                 />
               </SerWriteAccessProvider>

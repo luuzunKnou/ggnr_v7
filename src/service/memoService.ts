@@ -156,89 +156,162 @@ export type MemoListRow = {
   createUser: string;
 };
 
-export async function getMemoList(params?: {
+type MemoListMeta = { tableName: string; label: string };
+
+function resolveMemoListTargets(params?: {
   table?: string;
-  keyword?: string;
-  limit?: number;
-}): Promise<{ rows: MemoListRow[]; error?: string }> {
-  const limit = Math.min(Math.max(parseInt(String(params?.limit ?? 200), 10) || 200, 1), 500);
-  const keyword = String(params?.keyword ?? '').trim();
+  tables?: string[];
+}): MemoListMeta[] {
   const tableFilter = String(params?.table ?? '').trim().toLowerCase();
+  const tablesFilter = (params?.tables ?? [])
+    .map((t) => String(t ?? '').trim().toLowerCase())
+    .filter(Boolean);
+  const catalog: MemoListMeta[] = [...MEMO_TABLES, ...WATER_SCOPED_MEMO_TABLES].map((t) => ({
+    tableName: t.tableName,
+    label: t.label,
+  }));
+  if (tablesFilter.length > 0) {
+    const allow = new Set(tablesFilter);
+    return catalog.filter((t) => allow.has(t.tableName));
+  }
+  if (tableFilter) {
+    return catalog.filter((t) => t.tableName === tableFilter);
+  }
+  return [...MEMO_TABLES].map((t) => ({ tableName: t.tableName, label: t.label }));
+}
 
-  const targets = [
-    ...MEMO_TABLES.filter((t) => !tableFilter || t.tableName === tableFilter),
-    ...(tableFilter
-      ? WATER_SCOPED_MEMO_TABLES.filter((t) => t.tableName === tableFilter)
-      : []),
-  ];
-  const rows: MemoListRow[] = [];
-
+async function buildMemoListUnionSql(
+  targets: MemoListMeta[],
+  keyword: string
+): Promise<{ unionSql: string; error?: string }> {
+  const parts: string[] = [];
   for (const meta of targets) {
     const resolved = await resolvePhysicalTable(meta.tableName);
     if (!resolved) continue;
-
     const columns = await getTableColumns(resolved.schema, resolved.table);
     const keyCol = findColumn(columns, MEMO_KEY_FIELD);
+    if (!keyCol) continue;
     const titleCol = findColumn(columns, 'memo_title');
     const contentsCol = findColumn(columns, 'memo_contents');
     const dateCol = findColumn(columns, 'memo_create_date');
     const userCol = findColumn(columns, 'memo_create_user');
-    if (!keyCol) continue;
-
     const selectParts = [
       `${quoteIdent(keyCol)}::text AS memo_key`,
       titleCol ? `${quoteIdent(titleCol)}::text AS memo_title` : `''::text AS memo_title`,
       contentsCol ? `${quoteIdent(contentsCol)}::text AS memo_contents` : `''::text AS memo_contents`,
       dateCol ? `${quoteIdent(dateCol)}::text AS memo_create_date` : `''::text AS memo_create_date`,
       userCol ? `${quoteIdent(userCol)}::text AS memo_create_user` : `''::text AS memo_create_user`,
+      `'${esc(meta.tableName)}'::text AS source_table`,
+      `'${esc(meta.label)}'::text AS table_label`,
     ];
+    parts.push(
+      `(SELECT ${selectParts.join(', ')}
+        FROM ${quoteIdent(resolved.schema)}.${quoteIdent(resolved.table)}
+        WHERE 1=1
+        ${notDeletedWhere(columns)}
+        ${keywordWhere(columns, keyword)})`
+    );
+  }
+  if (parts.length === 0) return { unionSql: '', error: undefined };
+  return { unionSql: parts.join(' UNION ALL ') };
+}
 
-    const orderCol = dateCol ?? keyCol;
-    const q = `SELECT ${selectParts.join(', ')}
-               FROM ${quoteIdent(resolved.schema)}.${quoteIdent(resolved.table)}
-               WHERE 1=1
-               ${notDeletedWhere(columns)}
-               ${keywordWhere(columns, keyword)}
-               ORDER BY ${quoteIdent(orderCol)} DESC NULLS LAST
-               LIMIT ${limit}`;
+const MEMO_LIST_ORDER_SQL =
+  `NULLIF(BTRIM(memo_create_date), '') DESC NULLS LAST, memo_key DESC`;
 
-    try {
-      const res = await db.execute(sql.raw(q));
-      for (const r of res.rows ?? []) {
-        const row = r as Record<string, unknown>;
-        const memoKey = String(row.memo_key ?? '').trim();
-        if (!memoKey) continue;
-        rows.push({
-          rowKey: `${meta.tableName}::${memoKey}`,
-          tableName: meta.tableName,
-          tableLabel: meta.label,
-          memoKey,
-          title: String(row.memo_title ?? '').trim() || '(제목 없음)',
-          contents: String(row.memo_contents ?? '').trim(),
-          createDate: formatToYmdOrText(row.memo_create_date),
-          createUser: String(row.memo_create_user ?? '').trim(),
-        });
-      }
-    } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : String(e);
-      return { rows, error: msg };
+export async function getMemoList(params?: {
+  table?: string;
+  tables?: string[];
+  keyword?: string;
+  limit?: number;
+  offset?: number;
+}): Promise<{ rows: MemoListRow[]; total: number; error?: string }> {
+  const limit = Math.min(Math.max(parseInt(String(params?.limit ?? 50), 10) || 50, 1), 200);
+  const offset =
+    typeof params?.offset === 'number' && params.offset >= 0 ? Math.floor(params.offset) : 0;
+  const keyword = String(params?.keyword ?? '').trim();
+  const targets = resolveMemoListTargets(params);
+
+  try {
+    const { unionSql } = await buildMemoListUnionSql(targets, keyword);
+    if (!unionSql) return { rows: [], total: 0 };
+
+    const countRes = await db.execute(sql.raw(`SELECT count(*)::int AS total FROM (${unionSql}) u`));
+    const total = Number((countRes.rows?.[0] as { total?: unknown } | undefined)?.total ?? 0);
+    const rowsRes = await db.execute(
+      sql.raw(
+        `SELECT * FROM (${unionSql}) u
+         ORDER BY ${MEMO_LIST_ORDER_SQL}
+         LIMIT ${limit} OFFSET ${offset}`
+      )
+    );
+
+    const rows: MemoListRow[] = [];
+    for (const r of rowsRes.rows ?? []) {
+      const row = r as Record<string, unknown>;
+      const memoKey = String(row.memo_key ?? '').trim();
+      const tableName = String(row.source_table ?? '').trim();
+      if (!memoKey || !tableName) continue;
+      rows.push({
+        rowKey: `${tableName}::${memoKey}`,
+        tableName,
+        tableLabel: String(row.table_label ?? '').trim() || tableName,
+        memoKey,
+        title: String(row.memo_title ?? '').trim() || '(제목 없음)',
+        contents: String(row.memo_contents ?? '').trim(),
+        createDate: formatToYmdOrText(row.memo_create_date),
+        createUser: String(row.memo_create_user ?? '').trim(),
+      });
     }
+
+    const names = await lookupUserDisplayNames(rows.map((r) => r.createUser));
+    for (const row of rows) {
+      const name = names.get(row.createUser);
+      if (name) row.createUser = name;
+    }
+    return { rows, total };
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return { rows: [], total: 0, error: msg };
   }
+}
 
-  rows.sort((a, b) => {
-    const da = a.createDate || '';
-    const db = b.createDate || '';
-    if (da !== db) return db.localeCompare(da);
-    return b.memoKey.localeCompare(a.memoKey);
-  });
+/** 통합 목록 정렬 기준 0-based 순위. 없으면 index=-1 */
+export async function findMemoListRank(params?: {
+  table?: string;
+  tables?: string[];
+  keyword?: string;
+  tableName?: string;
+  memoKey?: string;
+}): Promise<{ index: number; total: number; error?: string }> {
+  const keyword = String(params?.keyword ?? '').trim();
+  const tableName = String(params?.tableName ?? '').trim().toLowerCase();
+  const memoKey = String(params?.memoKey ?? '').trim();
+  const targets = resolveMemoListTargets(params);
+  if (!tableName || !memoKey) return { index: -1, total: 0 };
 
-  const names = await lookupUserDisplayNames(rows.map((r) => r.createUser));
-  for (const row of rows) {
-    const name = names.get(row.createUser);
-    if (name) row.createUser = name;
+  try {
+    const { unionSql } = await buildMemoListUnionSql(targets, keyword);
+    if (!unionSql) return { index: -1, total: 0 };
+    const countRes = await db.execute(sql.raw(`SELECT count(*)::int AS total FROM (${unionSql}) u`));
+    const total = Number((countRes.rows?.[0] as { total?: unknown } | undefined)?.total ?? 0);
+    const rankRes = await db.execute(
+      sql.raw(
+        `SELECT rn::int AS rn FROM (
+           SELECT source_table, memo_key,
+                  ROW_NUMBER() OVER (ORDER BY ${MEMO_LIST_ORDER_SQL}) AS rn
+           FROM (${unionSql}) u
+         ) r
+         WHERE source_table = '${esc(tableName)}' AND memo_key = '${esc(memoKey)}'
+         LIMIT 1`
+      )
+    );
+    const rn = Number((rankRes.rows?.[0] as { rn?: unknown } | undefined)?.rn ?? 0);
+    return { index: rn > 0 ? rn - 1 : -1, total };
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return { index: -1, total: 0, error: msg };
   }
-
-  return { rows: rows.slice(0, limit) };
 }
 
 export async function getMemoDetail(params?: {
