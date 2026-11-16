@@ -200,11 +200,6 @@ import {
   findOpenedWtlAdminEmptySerEng,
   isWtlAdminEmptyOpenedToken,
 } from "./_mapContents/wtlAdmin/wtlAdminBinding"
-import { SwlAdminEmptyShell } from "./_mapContents/swlAdmin/SwlAdminEmpty.shell"
-import {
-  findOpenedSwlAdminEmptySerEng,
-  isSwlAdminEmptyOpenedToken,
-} from "./_mapContents/swlAdmin/swlAdminBinding"
 import { FmsLinkageListPanel } from "./_mapContents/fmsLinkage/FmsLinkageListPanel"
 import { FmsLinkageDetailPanel } from "./_mapContents/fmsLinkage/FmsLinkageDetailPanel"
 import { isFmsOpenedToken } from "@/lib/fmsLinkage/fmsBinding"
@@ -803,8 +798,6 @@ function MapLayoutContent({
   const worksRegisterOpen = openedWindows.includes(WORKS_REGISTER_OPENED_KEY)
   const wtlAdminEmptySerEng = findOpenedWtlAdminEmptySerEng(openedWindows)
   const wtlAdminEmptyOpen = Boolean(wtlAdminEmptySerEng)
-  const swlAdminEmptySerEng = findOpenedSwlAdminEmptySerEng(openedWindows)
-  const swlAdminEmptyOpen = Boolean(swlAdminEmptySerEng)
   const fmsLinkageOpen = openedWindows.some((w) => isFmsOpenedToken(w))
   const fmsLinkageDetailOpen = fmsLinkageOpen && Boolean(fmsLinkageDetailId)
   const privateLandAnalysisOpen = openedWindows.includes(PRIVATE_LAND_ANALYSIS_OPENED_KEY)
@@ -918,7 +911,6 @@ function MapLayoutContent({
   const [smallPublicFacTotalWidth, setSmallPublicFacTotalWidth] = useState(0)
   const [worksRegisterTotalWidth, setWorksRegisterTotalWidth] = useState(0)
   const [wtlAdminEmptyTotalWidth, setWtlAdminEmptyTotalWidth] = useState(0)
-  const [swlAdminEmptyTotalWidth, setSwlAdminEmptyTotalWidth] = useState(0)
   const [protoUserAccountOpen, setProtoUserAccountOpen] = useState(false)
 
   const [memoDetailId, setMemoDetailId] = useState<string | null>(null)
@@ -1191,7 +1183,6 @@ function MapLayoutContent({
     (smallPublicFacOpen ? smallPublicFacTotalWidth : 0) +
     (worksRegisterOpen ? worksRegisterTotalWidth : 0) +
     (wtlAdminEmptyOpen ? wtlAdminEmptyTotalWidth : 0) +
-    (swlAdminEmptyOpen ? swlAdminEmptyTotalWidth : 0) +
     (fmsLinkageOpen ? fmsLinkagePanelWidth : 0) +
     (fmsLinkageDetailOpen ? fmsLinkageDetailWidth : 0) +
     (privateLandAnalysisOpen ? privateLandAnalysisPanelWidth : 0) +
@@ -1357,10 +1348,8 @@ function MapLayoutContent({
     smallPublicFacPanelLeftPx + (smallPublicFacOpen ? smallPublicFacTotalWidth : 0)
   const wtlAdminEmptyPanelLeftPx =
     worksRegisterPanelLeftPx + (worksRegisterOpen ? worksRegisterTotalWidth : 0)
-  const swlAdminEmptyPanelLeftPx =
-    wtlAdminEmptyPanelLeftPx + (wtlAdminEmptyOpen ? wtlAdminEmptyTotalWidth : 0)
   const fmsLinkagePanelLeftPx =
-    swlAdminEmptyPanelLeftPx + (swlAdminEmptyOpen ? swlAdminEmptyTotalWidth : 0)
+    wtlAdminEmptyPanelLeftPx + (wtlAdminEmptyOpen ? wtlAdminEmptyTotalWidth : 0)
   const fmsLinkageDetailLeftPx =
     fmsLinkagePanelLeftPx + (fmsLinkageOpen ? fmsLinkagePanelWidth : 0)
   const privateLandAnalysisPanelLeftPx =
@@ -2000,12 +1989,6 @@ function MapLayoutContent({
     setOpened(next)
   }
 
-  const handleCloseSwlAdminEmpty = () => {
-    setSwlAdminEmptyTotalWidth(0)
-    const next = openedWindows.filter((w) => !isSwlAdminEmptyOpenedToken(w))
-    setOpened(next)
-  }
-
   const handleCloseFmsLinkage = () => {
     setFmsGeomToastMsg(null)
     setFmsLinkageSelectedId?.(null)
@@ -2199,10 +2182,6 @@ function MapLayoutContent({
   useEffect(() => {
     if (!wtlAdminEmptyOpen) setWtlAdminEmptyTotalWidth(0)
   }, [wtlAdminEmptyOpen])
-
-  useEffect(() => {
-    if (!swlAdminEmptyOpen) setSwlAdminEmptyTotalWidth(0)
-  }, [swlAdminEmptyOpen])
 
   useEffect(() => {
     if (!cadastralResurveyOpen) setCadastralResurveyDistrictId(null)
@@ -3849,14 +3828,6 @@ function MapLayoutContent({
               leftOffsetPx={wtlAdminEmptyPanelLeftPx}
               onTotalWidthChange={setWtlAdminEmptyTotalWidth}
               onClose={handleCloseWtlAdminEmpty}
-            />
-          )}
-          {swlAdminEmptyOpen && swlAdminEmptySerEng && (
-            <SwlAdminEmptyShell
-              serEng={swlAdminEmptySerEng}
-              leftOffsetPx={swlAdminEmptyPanelLeftPx}
-              onTotalWidthChange={setSwlAdminEmptyTotalWidth}
-              onClose={handleCloseSwlAdminEmpty}
             />
           )}
           {fmsLinkageOpen && (
