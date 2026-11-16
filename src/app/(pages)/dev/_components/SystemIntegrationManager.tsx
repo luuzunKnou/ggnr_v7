@@ -192,7 +192,10 @@ export function SystemIntegrationManager() {
   const [gnmsBjdCde, setGnmsBjdCde] = useState("")
   const [gnmsSggNm, setGnmsSggNm] = useState("")
   const [gnmsSggExists, setGnmsSggExists] = useState<boolean | null>(null)
+  const [gnmsParamsLoading, setGnmsParamsLoading] = useState(false)
   const [gnmsKeyword, setGnmsKeyword] = useState("")
+  /** 시군구 탭: 자동 시군구명이 없으면 키워드 직접 입력 */
+  const gnmsSggNeedsKeyword = gnmsTab === "sgg" && !gnmsParamsLoading && !gnmsSggNm
 
   const latestJob = rows[0]
   const latestParsedJob = parseJob(latestJob?.ijl_message ?? "")
@@ -359,6 +362,7 @@ export function SystemIntegrationManager() {
   useEffect(() => {
     if (active !== "GNMS" || gnmsTab === "log") return
     let cancelled = false
+    setGnmsParamsLoading(true)
     void (async () => {
       try {
         const check = await call("", "POST", {
@@ -378,8 +382,8 @@ export function SystemIntegrationManager() {
           params: { folder: "sgg" },
         })
         if (cancelled) return
-        setGnmsAdmSectC(String(res?.data?.adm_sect_c ?? ""))
-        setGnmsBjdCde(String(res?.data?.bjd_cde ?? ""))
+        setGnmsAdmSectC(String(res?.data?.adm_sect_c ?? "").trim())
+        setGnmsBjdCde(String(res?.data?.bjd_cde ?? "").trim())
         setGnmsSggNm(String(res?.data?.sgg_nm ?? "").trim())
         if (res?.data?.sggExists != null) {
           setGnmsSggExists(Boolean(res.data.sggExists))
@@ -390,6 +394,8 @@ export function SystemIntegrationManager() {
           setGnmsBjdCde("")
           setGnmsSggNm("")
         }
+      } finally {
+        if (!cancelled) setGnmsParamsLoading(false)
       }
     })()
     return () => {
@@ -440,14 +446,11 @@ export function SystemIntegrationManager() {
             const bjd_cde = String((data as { bjd_cde?: string }).bjd_cde ?? "")
             const admSectC = String((data as { adm_sect_c?: string }).adm_sect_c ?? gnmsAdmSectC).trim()
             const sggNm = String((data as { sgg_nm?: string }).sgg_nm ?? gnmsSggNm).trim()
-            const sggExists =
-              (data as { sggExists?: boolean }).sggExists ?? gnmsSggExists === true
             const sggKeyword =
-              outFolder === "sgg"
-                ? sggExists
-                  ? sggNm
-                  : gnmsKeyword
-                : ""
+              outFolder === "sgg" ? sggNm || gnmsKeyword.trim() : ""
+            if (outFolder === "sgg" && !sggKeyword) {
+              throw new Error("시군구명을 확인할 수 없습니다. 키워드를 입력하세요.")
+            }
             const colAdmSe =
               outFolder === "emd" || outFolder === "ri"
                 ? admSectC || bjd_cde.replace(/0+$/, "") || bjd_cde
@@ -708,12 +711,12 @@ export function SystemIntegrationManager() {
             <div className="flex flex-col gap-2">
               <p className="text-xs text-muted-foreground">
                 시군구코드{" "}
-                {gnmsAdmSectC || gnmsBjdCde
-                  ? `${gnmsAdmSectC || "-"}${gnmsBjdCde ? ` → ${gnmsBjdCde}` : ""}`
-                  : "조회 중…"}
-                {gnmsTab === "sgg" && gnmsSggExists !== false && gnmsSggNm
-                  ? ` · keyword=${gnmsSggNm}`
-                  : ""}
+                {gnmsParamsLoading
+                  ? "조회 중…"
+                  : gnmsAdmSectC || gnmsBjdCde
+                    ? `${gnmsAdmSectC || "-"}${gnmsBjdCde ? ` → ${gnmsBjdCde}` : ""}`
+                    : "없음"}
+                {gnmsTab === "sgg" && gnmsSggNm ? ` · keyword=${gnmsSggNm}` : ""}
                 {(gnmsTab === "emd" || gnmsTab === "ri") && gnmsAdmSectC
                   ? ` · col_adm_se=${gnmsAdmSectC}`
                   : ""}
@@ -728,7 +731,7 @@ export function SystemIntegrationManager() {
                   시군구(sgg) 테이블이 없어 등고선을 받을 수 없습니다. 행정경계를 먼저 준비하세요.
                 </p>
               ) : null}
-              {gnmsTab === "sgg" && gnmsSggExists === false ? (
+              {gnmsSggNeedsKeyword ? (
                 <label className="text-sm text-muted-foreground flex flex-wrap items-center gap-2">
                   <span>키워드</span>
                   <input
@@ -738,9 +741,12 @@ export function SystemIntegrationManager() {
                     onChange={(e) => setGnmsKeyword(e.target.value)}
                     disabled={loading}
                     placeholder="시군구명 입력"
+                    title="키워드"
                   />
                   <span className="text-xs text-amber-700 dark:text-amber-400">
-                    시군구(sgg) 테이블이 없어 시군구명을 직접 입력하세요. 요청 keyword로 전송됩니다.
+                    {gnmsSggExists === false
+                      ? "시군구(sgg) 테이블이 없어 시군구명을 직접 입력하세요. 요청 keyword로 전송됩니다."
+                      : "시군구코드를 확인할 수 없습니다. 시군구명을 입력하면 키워드 검색으로 요청합니다."}
                   </span>
                 </label>
               ) : null}

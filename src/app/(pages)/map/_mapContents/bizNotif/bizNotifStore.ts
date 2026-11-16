@@ -2,7 +2,7 @@
 
 export type ProtoNotifItem = {
   id: string
-  category: '만료임박' | '미납임박' | '위치없음' | '공사알림'
+  category: '만료임박' | '미납임박' | '위치없음' | '공사알림' | '경보'
   title: string
   name: string
   listKey?: string

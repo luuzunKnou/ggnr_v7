@@ -327,8 +327,14 @@ export function getWtlNetLayerDef(key: string): WtlNetLayerDef | undefined {
 export type WtlNetWmsSearchFilter = {
   yearFrom?: number | null
   yearTo?: number | null
+  /** 메타 전체 구간 — from/to가 이 범위면 WMS 연도 조건 생략 */
+  yearMin?: number | null
+  yearMax?: number | null
   diameterFrom?: number | null
   diameterTo?: number | null
+  /** 메타 전체 구간 — from/to가 이 범위면 WMS 관경 조건 생략 */
+  diameterMin?: number | null
+  diameterMax?: number | null
   /** UI에서 고른 재질 라벨(한글·«기타»). 코드 매핑은 materialLabelToCodes */
   materials?: readonly string[]
   materialLabelToCodes?: Readonly<Record<string, readonly string[]>>

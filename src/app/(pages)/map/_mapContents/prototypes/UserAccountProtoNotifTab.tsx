@@ -15,6 +15,9 @@ function parseNotifListFields(item: ProtoNotifItem): { useName: string; key: str
   if (item.category === '위치없음') {
     return { useName: item.name, key: item.listKey || '위치 없음' }
   }
+  if (item.category === '경보') {
+    return { useName: item.title || item.name, key: item.listKey || item.name || '경보' }
+  }
   if (item.listKey) {
     const matched = item.name.match(/^(\S+)\s+(\S+)\s+(.+)$/)
     if (matched) return { useName: matched[3], key: item.listKey }
@@ -49,6 +52,7 @@ export function UserAccountProtoNotifTab({
   const [feeExpanded, setFeeExpanded] = useState(true)
   const [geomExpanded, setGeomExpanded] = useState(true)
   const [consExpanded, setConsExpanded] = useState(true)
+  const [alertExpanded, setAlertExpanded] = useState(true)
 
   const expiryList = useMemo(
     () => items.filter((item) => item.category === '만료임박'),
@@ -66,8 +70,13 @@ export function UserAccountProtoNotifTab({
     () => items.filter((item) => item.category === '공사알림'),
     [items]
   )
+  const alertList = useMemo(
+    () => items.filter((item) => item.category === '경보'),
+    [items]
+  )
 
-  const totalCount = expiryList.length + feeList.length + geomList.length + consList.length
+  const totalCount =
+    expiryList.length + feeList.length + geomList.length + consList.length + alertList.length
   const unreadCount = items.filter((n) => !n.read).length
 
   const openItem = (item: ProtoNotifItem) => {
@@ -104,6 +113,23 @@ export function UserAccountProtoNotifTab({
       </div>
 
       <div className="scrollbar-thin min-h-0 flex-1 divide-y divide-border overflow-y-auto overflow-x-hidden bg-background">
+        {alertList.length > 0 ? (
+          <NotifGroup
+            summary={`미인지 경보가 ${alertList.length}건입니다`}
+            expanded={alertExpanded}
+            onToggle={() => setAlertExpanded((prev) => !prev)}
+          >
+            {alertList.map((item) => (
+              <NotifListRow
+                key={item.id}
+                item={item}
+                onOpen={() => openItem(item)}
+                onDelete={() => onDismiss(item)}
+              />
+            ))}
+          </NotifGroup>
+        ) : null}
+
         {expiryList.length > 0 ? (
           <NotifGroup
             summary={`점용종료일이 ${BIZ_NOTIF_WITHIN_DAYS}일 이내인 건이 ${expiryList.length}건입니다`}

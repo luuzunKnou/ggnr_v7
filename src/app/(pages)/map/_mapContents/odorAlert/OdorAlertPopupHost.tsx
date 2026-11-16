@@ -19,16 +19,24 @@ const LOGIN_POPUP_KEY = 'odor_alert_login_popup_shown'
 
 type Props = {
   /** true면 로그인 시·신규 경보 자동 팝업 활성 */
-  enabled: boolean
+  enabled?: boolean
+  /** 수동 열기(미리보기) — odor-index 등 */
+  manualOpen?: boolean
+  onManualOpenChange?: (open: boolean) => void
 }
 
 /**
  * P21-06 — 로그인 시·신규 경보 발생 시 경보창 (목업)
+ * odor-index: enabled=false + manualOpen으로 미리보기만
  */
-export function OdorAlertPopupHost({ enabled }: Props) {
+export function OdorAlertPopupHost({
+  enabled = false,
+  manualOpen = false,
+  onManualOpenChange,
+}: Props) {
   const { alerts, latestPopupAlertId } = useOdorAlertStore()
-  const [open, setOpen] = useState(false)
-  const [mode, setMode] = useState<'login' | 'new'>('login')
+  const [autoOpen, setAutoOpen] = useState(false)
+  const [mode, setMode] = useState<'login' | 'new' | 'preview'>('login')
 
   useEffect(() => {
     if (!enabled) return
@@ -39,16 +47,21 @@ export function OdorAlertPopupHost({ enabled }: Props) {
       /* ignore */
     }
     setMode('login')
-    setOpen(true)
+    setAutoOpen(true)
   }, [enabled])
 
   useEffect(() => {
     if (!enabled || !latestPopupAlertId) return
     setMode('new')
-    setOpen(true)
+    setAutoOpen(true)
   }, [enabled, latestPopupAlertId])
 
-  if (!enabled || !open) return null
+  useEffect(() => {
+    if (manualOpen) setMode('preview')
+  }, [manualOpen])
+
+  const open = enabled ? autoOpen : manualOpen
+  if (!open) return null
 
   const unacked = alerts.filter((a) => !a.acked).slice(0, 5)
   const focus =
@@ -57,23 +70,30 @@ export function OdorAlertPopupHost({ enabled }: Props) {
       : null
 
   const close = () => {
-    setOpen(false)
-    clearOdorAlertPopup()
+    if (enabled) {
+      setAutoOpen(false)
+      clearOdorAlertPopup()
+    }
+    onManualOpenChange?.(false)
   }
+
+  const subtitle =
+    mode === 'preview'
+      ? '미리보기로 표시합니다. (목업)'
+      : mode === 'login'
+        ? '로그인 시 자동으로 표시됩니다. (목업)'
+        : '신규 경보가 발생해 자동으로 표시됩니다. (목업)'
+
+  const heading =
+    mode === 'preview' ? '경보창 미리보기' : mode === 'login' ? '미인지 경보 안내' : '신규 경보 발생'
 
   return (
     <div className="pointer-events-auto fixed bottom-4 right-4 z-[70] w-[min(100vw-2rem,360px)]">
       <div className="rounded-lg border border-border bg-card p-3 shadow-xl">
         <div className="flex items-start justify-between gap-2">
           <div>
-            <h3 className="text-sm font-semibold text-foreground">
-              {mode === 'login' ? '미인지 경보 안내' : '신규 경보 발생'}
-            </h3>
-            <p className="text-[10px] text-muted-foreground">
-              {mode === 'login'
-                ? '로그인 시 자동으로 표시됩니다. (목업)'
-                : '신규 경보가 발생해 자동으로 표시됩니다. (목업)'}
-            </p>
+            <h3 className="text-sm font-semibold text-foreground">{heading}</h3>
+            <p className="text-[10px] text-muted-foreground">{subtitle}</p>
           </div>
           <button type="button" className={odorAlertBtnGhost} title="닫기" onClick={close}>
             닫기
@@ -109,18 +129,20 @@ export function OdorAlertPopupHost({ enabled }: Props) {
         </ul>
 
         <div className="mt-2 flex flex-wrap gap-1.5">
-          <button
-            type="button"
-            className={odorAlertBtnGhost}
-            title="신규 경보 시뮬레이션"
-            onClick={() => {
-              pushMockNewOdorAlert()
-              setMode('new')
-              setOpen(true)
-            }}
-          >
-            신규 경보 시뮬
-          </button>
+          {enabled ? (
+            <button
+              type="button"
+              className={odorAlertBtnGhost}
+              title="신규 경보 시뮬레이션"
+              onClick={() => {
+                pushMockNewOdorAlert()
+                setMode('new')
+                setAutoOpen(true)
+              }}
+            >
+              신규 경보 시뮬
+            </button>
+          ) : null}
           <button type="button" className={odorAlertBtnPrimary} title="확인" onClick={close}>
             확인
           </button>

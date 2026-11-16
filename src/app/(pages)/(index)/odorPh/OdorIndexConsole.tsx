@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, type ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { useRouter } from 'next/navigation'
 import { RefreshCw } from 'lucide-react'
 import { AdminConsoleLayout } from '@/app/(pages)/_components/AdminConsoleLayout'
@@ -18,6 +18,7 @@ import {
 } from '@/app/(pages)/(index)/odorPh/odorIndexMenus'
 import { DevModeFooterTrigger } from '@/app/(pages)/(index)/dev-mode-footer-trigger'
 import { OdorSidebarUserAccount } from '@/app/(pages)/(index)/odorPh/OdorSidebarUserAccount'
+import { seedOdorIndexAlertNotifs } from '@/app/(pages)/(index)/odorPh/odorIndexAlertNotifSeed'
 
 type Props = {
   title: string
@@ -50,6 +51,10 @@ export function OdorIndexConsole({ title, sensors, footerAddr, footerRss, querie
   )
   const [refreshing, setRefreshing] = useState(false)
 
+  useEffect(() => {
+    seedOdorIndexAlertNotifs()
+  }, [])
+
   const goMenu = (menuId: OdorIndexMenuId) => {
     setSelectMenuSignal((prev) => ({ menuId, nonce: (prev?.nonce ?? 0) + 1 }))
   }
@@ -78,7 +83,10 @@ export function OdorIndexConsole({ title, sensors, footerAddr, footerRss, querie
           getDescription={getOdorIndexMenuDescription}
           selectMenuSignal={selectMenuSignal}
           renderSidebarBottom={({ collapsed }) => (
-            <OdorSidebarUserAccount collapsed={collapsed} />
+            <OdorSidebarUserAccount
+              collapsed={collapsed}
+              onOpenAlertNotif={() => goMenu('alertList')}
+            />
           )}
           renderContent={(menuId) => {
             const id = menuId as OdorIndexMenuId

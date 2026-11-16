@@ -7,20 +7,24 @@ import { cn } from '@/lib/utils'
 import {
   hasProtoUnreadNotifications,
   PROTO_NOTIF_CHANGED_EVENT,
+  type ProtoNotifItem,
 } from '@/app/(pages)/map/_mapContents/bizNotif/bizNotifStore'
 import {
   ImportantNotifSidebarBubble,
   UserAccountProtoPanel,
 } from '@/app/(pages)/map/_mapContents/prototypes/UserAccountProtoPanel'
+import { isOdorAlertNotif } from '@/app/(pages)/(index)/odorPh/odorIndexAlertNotifSeed'
 
 type Props = {
   collapsed: boolean
+  /** 경보 알림 클릭 시 (경보 목록 메뉴 이동) */
+  onOpenAlertNotif?: (item: ProtoNotifItem) => void
 }
 
 /**
  * 지도 좌측 사이드바 하단 «내 정보»와 동일 — 로그인 상태·패널·알림 버블
  */
-export function OdorSidebarUserAccount({ collapsed }: Props) {
+export function OdorSidebarUserAccount({ collapsed, onOpenAlertNotif }: Props) {
   const { data: session, status } = useSession()
   const [open, setOpen] = useState(false)
   const [protoNotifUnread, setProtoNotifUnread] = useState(false)
@@ -104,7 +108,12 @@ export function OdorSidebarUserAccount({ collapsed }: Props) {
       <UserAccountProtoPanel
         open={open}
         onClose={() => setOpen(false)}
-        onOpenLedger={() => undefined}
+        onOpenLedger={(item) => {
+          if (isOdorAlertNotif(item)) {
+            onOpenAlertNotif?.(item)
+            setOpen(false)
+          }
+        }}
         onOpenFee={() => undefined}
         panelClassName={panelClassName}
         sideModalClassName={sideModalClassName}

@@ -1707,8 +1707,12 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
     return {
       yearFrom: year.from,
       yearTo: year.to,
+      yearMin: meta.yearMin,
+      yearMax: meta.yearMax,
       diameterFrom: diameter.from,
       diameterTo: diameter.to,
+      diameterMin: meta.diameterMin,
+      diameterMax: meta.diameterMax,
       materials: [...materials],
       materialLabelToCodes: meta.materialLabelToCodes,
       materialTopCodes: meta.materialTopCodes,

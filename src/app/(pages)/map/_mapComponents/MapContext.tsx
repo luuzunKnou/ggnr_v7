@@ -123,6 +123,20 @@ export type MapContextValue = {
   wtlNetworkThematicSyncRef: MutableRefObject<{
     applyManaged: (wanted: ReadonlySet<string>, managed: ReadonlySet<string>) => void;
   } | null>;
+  /**
+   * 관망조회 → 지하시설물 패널·visible 동기화.
+   * OpenLayersMap에서 핸들러 등록, WtlNetworkMapShell에서 호출.
+   */
+  syncUndergroundFromNetworkRef: MutableRefObject<
+    ((wanted: ReadonlySet<string>, managed: ReadonlySet<string>) => void) | null
+  >;
+  /**
+   * 관망조회가 관리하는 테이블 — 지하시설물 WMS 그리기 억제(필터된 관망 WMS만 표시).
+   * ref + sig로 구독 갱신.
+   */
+  networkMapSuppressUfTableNamesRef: MutableRefObject<Set<string>>;
+  networkMapSuppressUfTableNamesSig: number;
+  setNetworkMapSuppressUfTableNames: (names: ReadonlySet<string> | null) => void;
   /** 도형 내 데이터만 표시할 때 사용. WKT(5181). null이면 공간 필터 없음 */
   spatialFilterWkt: string | null;
   setSpatialFilterWkt: Dispatch<SetStateAction<string | null>>;
@@ -675,6 +689,31 @@ export function MapContextProvider({ children }: { children: React.ReactNode }) 
   const wtlNetworkThematicSyncRef = useRef<{
     applyManaged: (wanted: ReadonlySet<string>, managed: ReadonlySet<string>) => void;
   } | null>(null);
+  const syncUndergroundFromNetworkRef = useRef<
+    ((wanted: ReadonlySet<string>, managed: ReadonlySet<string>) => void) | null
+  >(null);
+  const networkMapSuppressUfTableNamesRef = useRef<Set<string>>(new Set());
+  const [networkMapSuppressUfTableNamesSig, setNetworkMapSuppressUfTableNamesSig] =
+    useState(0);
+  const setNetworkMapSuppressUfTableNames = useCallback(
+    (names: ReadonlySet<string> | null) => {
+      const next = names == null ? new Set<string>() : new Set(names);
+      const prev = networkMapSuppressUfTableNamesRef.current;
+      if (prev.size === next.size) {
+        let same = true;
+        for (const n of next) {
+          if (!prev.has(n)) {
+            same = false;
+            break;
+          }
+        }
+        if (same) return;
+      }
+      networkMapSuppressUfTableNamesRef.current = next;
+      setNetworkMapSuppressUfTableNamesSig((n) => n + 1);
+    },
+    []
+  );
   const [showDebugUi, setShowDebugUi] = useState(false);
   const [iconScaleSizeOn, setIconScaleSizeOn] = useState(false);
   const [visibleLayerNames, setVisibleLayerNames] = useState<Set<string>>(() => new Set());
@@ -984,6 +1023,10 @@ export function MapContextProvider({ children }: { children: React.ReactNode }) 
         allLayersOffRef,
         wtlNetworkLayersOffRef,
         wtlNetworkThematicSyncRef,
+        syncUndergroundFromNetworkRef,
+        networkMapSuppressUfTableNamesRef,
+        networkMapSuppressUfTableNamesSig,
+        setNetworkMapSuppressUfTableNames,
         spatialFilterWkt,
         setSpatialFilterWkt,
         spatialFilterAutoFit,

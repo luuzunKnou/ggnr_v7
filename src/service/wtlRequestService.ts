@@ -734,7 +734,7 @@ export function mergeAppliedTrace<G extends { id: string }>(
 ): { pipes: [number, number][][]; gates: G[] } {
   if (!applied) return { pipes, gates }
   const seen = new Set(gates.map((gate) => gate.id))
-  const extra = applied.gates.filter((gate) => !seen.has(gate.id)) as G[]
+  const extra = applied.gates.filter((gate) => !seen.has(gate.id)) as unknown as G[]
   return { pipes: [...pipes, ...applied.pipes], gates: [...gates, ...extra] }
 }
 
