@@ -24,17 +24,12 @@ export type MapLayerClickDetailHighlightOwner =
   | 'wtlNetwork'
   | 'wtlFacility'
 
-/** 표시 우선순위 — 앞일수록 우선 */
-const OWNER_PRIORITY: readonly MapLayerClickDetailHighlightOwner[] = [
-  'layerClickDetail',
-  'wtlNetwork',
-  'wtlFacility',
-] as const
-
 type MapEntry = {
   layer: VectorLayer<VectorSource>
   source: VectorSource
   byOwner: Map<MapLayerClickDetailHighlightOwner, unknown>
+  /** 최근 갱신·포커스 순 (뒤가 최신) */
+  mru: MapLayerClickDetailHighlightOwner[]
   pulsePhase: number
   rafId: number
 }
@@ -140,6 +135,7 @@ function ensureEntry(map: OLMap): MapEntry {
     layer,
     source,
     byOwner: new Map(),
+    mru: [],
     pulsePhase: 0,
     rafId: 0,
   }
@@ -147,16 +143,37 @@ function ensureEntry(map: OLMap): MapEntry {
   return entry
 }
 
-function pickGeom(byOwner: Map<MapLayerClickDetailHighlightOwner, unknown>): unknown {
-  for (const owner of OWNER_PRIORITY) {
-    if (byOwner.has(owner)) return byOwner.get(owner)
+function touchMru(
+  entry: MapEntry,
+  owner: MapLayerClickDetailHighlightOwner
+): void {
+  entry.mru = entry.mru.filter((o) => o !== owner)
+  entry.mru.push(owner)
+}
+
+function dropMru(
+  entry: MapEntry,
+  owner: MapLayerClickDetailHighlightOwner
+): void {
+  entry.mru = entry.mru.filter((o) => o !== owner)
+}
+
+function pickGeom(entry: MapEntry): unknown {
+  for (let i = entry.mru.length - 1; i >= 0; i--) {
+    const owner = entry.mru[i]
+    if (owner != null && entry.byOwner.has(owner)) {
+      return entry.byOwner.get(owner)
+    }
+  }
+  for (const geom of entry.byOwner.values()) {
+    return geom
   }
   return null
 }
 
 function publish(map: OLMap, entry: MapEntry) {
   entry.source.clear()
-  const geom = pickGeom(entry.byOwner)
+  const geom = pickGeom(entry)
   const features = selectionFeatures(map, geom)
   if (features.length === 0) {
     stopPulse(entry)
@@ -166,7 +183,7 @@ function publish(map: OLMap, entry: MapEntry) {
   startPulse(entry)
 }
 
-/** 소유자 geom 등록 후 우선순위 1건만 표시 */
+/** 소유자 geom 등록 후 최근 갱신 1건만 표시 */
 export function setMapLayerClickDetailHighlight(
   map: OLMap,
   owner: MapLayerClickDetailHighlightOwner,
@@ -176,13 +193,29 @@ export function setMapLayerClickDetailHighlight(
   const normalized = normalizeGeom(geom)
   if (!normalized) {
     entry.byOwner.delete(owner)
+    dropMru(entry, owner)
   } else {
     entry.byOwner.set(owner, normalized)
+    touchMru(entry, owner)
   }
   publish(map, entry)
 }
 
-/** 해당 소유자만 해제. 남은 소유자가 있으면 그 geom으로 복귀 */
+/**
+ * 이미 등록된 소유자를 최신으로 올림 (포커스·클릭만으로 하이라이트 복귀).
+ * geom이 없으면 no-op.
+ */
+export function claimMapLayerClickDetailHighlight(
+  map: OLMap,
+  owner: MapLayerClickDetailHighlightOwner
+): void {
+  const entry = entries.get(map)
+  if (!entry?.byOwner.has(owner)) return
+  touchMru(entry, owner)
+  publish(map, entry)
+}
+
+/** 해당 소유자만 해제. 남은 소유자가 있으면 그다음 최근 geom으로 복귀 */
 export function clearMapLayerClickDetailHighlight(
   map: OLMap,
   owner: MapLayerClickDetailHighlightOwner
@@ -191,5 +224,6 @@ export function clearMapLayerClickDetailHighlight(
   if (!entry) return
   if (!entry.byOwner.has(owner)) return
   entry.byOwner.delete(owner)
+  dropMru(entry, owner)
   publish(map, entry)
 }

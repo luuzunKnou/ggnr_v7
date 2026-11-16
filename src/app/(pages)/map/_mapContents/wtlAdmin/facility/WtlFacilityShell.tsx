@@ -26,6 +26,7 @@ import {
 } from './wtlFacilityRelatedLayers'
 import { flyToWtlNetworkGeom } from '../networkMap/wtlNetworkMapFly'
 import { WtlLayerMark } from '../networkMap/WtlLayerMark'
+import { claimMapLayerClickDetailHighlight } from '@/lib/mapLayerClickDetailHighlight'
 import { useWtlFacilityMapClick } from './useWtlFacilityMapClick'
 import { useWtlFacilityMapHighlight } from './useWtlFacilityMapHighlight'
 import { notifyLayerClickDetailMatchClose } from '../../layerClickDetail/notifyLayerClickDetailMatchClose'
@@ -35,11 +36,12 @@ import {
   type LayerClickDetailMatchCloseDirectSlot,
 } from '../../layerClickDetail/layerClickDetailMatchClose'
 
-const RELATED_BTN = 'standard-layer-toggle-chip cursor-pointer'
+const RELATED_BTN =
+  'standard-layer-toggle-chip !w-[120px] !max-w-[120px] !min-w-[120px] shrink-0 cursor-pointer'
 const RELATED_BTN_ON = 'standard-layer-toggle-chip-active'
 const RELATED_BTN_OFF = 'standard-layer-toggle-chip-inactive'
 
-const LIST_DEFAULT = 480
+const LIST_DEFAULT = 598
 const LIST_MIN = 400
 const LIST_MAX = 720
 const DETAIL_DEFAULT = 420
@@ -250,6 +252,11 @@ export function WtlFacilityShell({
 
   useWtlFacilityMapHighlight(selected)
 
+  const claimFacilityHighlight = useCallback(() => {
+    const map = mapContext?.mapInstanceRef?.current
+    if (map) claimMapLayerClickDetailHighlight(map, 'wtlFacility')
+  }, [mapContext?.mapInstanceRef])
+
   const selectFacilityRow = useCallback(
     (row: WtlFacilityListRow | null, opts?: { fly?: boolean }) => {
       if (!row) {
@@ -259,6 +266,7 @@ export function WtlFacilityShell({
       }
       setSelectedId(row.id)
       setSelectedRow(row)
+      claimFacilityHighlight()
       notifyLayerClickDetailMatchClose({
         tableNames: [row.tableName, row.fieldsTable, row.fieldsTableFallback, row.layerKey],
         fieldsTable: row.fieldsTable,
@@ -275,7 +283,11 @@ export function WtlFacilityShell({
         )
       }
     },
-    [mapContext?.applyMapViewPaddingRef, mapContext?.mapInstanceRef]
+    [
+      claimFacilityHighlight,
+      mapContext?.applyMapViewPaddingRef,
+      mapContext?.mapInstanceRef,
+    ]
   )
 
   useWtlFacilityMapClick({
@@ -1031,7 +1043,7 @@ export function WtlFacilityShell({
                             >
                               {group.category}
                             </span>
-                            <div className="grid min-w-0 flex-1 grid-cols-3 gap-1.5">
+                            <div className="flex min-w-0 flex-1 flex-wrap gap-1.5">
                               {group.layers.map((item) => {
                                 const on = relatedOn.has(item.tableName)
                                 return (
@@ -1171,7 +1183,10 @@ export function WtlFacilityShell({
       </div>
 
       {detailOpen && selected && (
-        <div className="pointer-events-auto shrink-0">
+        <div
+          className="pointer-events-auto shrink-0"
+          onPointerDownCapture={claimFacilityHighlight}
+        >
           <MapSideListPanel
             width={detailWidth}
             minWidth={DETAIL_MIN}

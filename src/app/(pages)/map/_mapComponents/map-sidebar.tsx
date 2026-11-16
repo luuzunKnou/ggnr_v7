@@ -238,6 +238,8 @@ export function MapSidebar({ indexLogoSrc }: { indexLogoSrc: string }) {
     } else {
       current.set('opened', windowName);
     }
+    /** 업무 패널 전환·종료 시 body portal 상세(최소화 바 포함) 정리 신호 */
+    requestCloseMapFloatingDetail();
     router.push(`/map?${current.toString()}`);
   };
 

@@ -7948,7 +7948,17 @@ export async function exportLayerTableToShp(params: {
   layerName?: string | null;
   /** ogr2ogr -t_srs. 미지정 시 EPSG:5181 */
   targetSrs?: string | null;
-}): Promise<{ success: boolean; zipBuffer?: Buffer; error?: string }> {
+  /**
+   * `files`면 zip 대신 SHP 구성 파일 목록 반환(관망조회 다수 레이어 폴더 묶음용).
+   * 기본 `zip`.
+   */
+  output?: 'zip' | 'files';
+}): Promise<{
+  success: boolean;
+  zipBuffer?: Buffer;
+  files?: Array<{ name: string; buffer: Buffer }>;
+  error?: string;
+}> {
   const tableName = (params?.tableName ?? '').trim().replace(/[^a-zA-Z0-9_]/g, '_') || undefined;
   if (!tableName) return { success: false, error: 'tableName이 필요합니다.' };
   const schema = params?.schema === 'public_layer' ? 'public_layer' : 'layer';
@@ -8047,6 +8057,24 @@ export async function exportLayerTableToShp(params: {
   }
 
   await fs.writeFile(path.join(tempDir, `${nln}.cpg`), `${dbfEncoding}\n`, 'utf8');
+
+  if (params.output === 'files') {
+    const names = await fs.readdir(tempDir);
+    const files: Array<{ name: string; buffer: Buffer }> = [];
+    for (const name of names) {
+      const full = path.join(tempDir, name);
+      const st = await fs.stat(full);
+      if (!st.isFile()) continue;
+      files.push({ name, buffer: await fs.readFile(full) });
+    }
+    await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {});
+    await fs.mkdir(tmpBase, { recursive: true }).catch(() => {});
+    if (files.length === 0) {
+      return { success: false, error: 'SHP 파일이 비어 있습니다.' };
+    }
+    console.log(`[exportLayerTableToShp] ${tableName} files ${files.length}`);
+    return { success: true, files };
+  }
 
   const chunks: Buffer[] = [];
   const archive = archiver('zip', { zlib: { level: 9 } });

@@ -14,8 +14,15 @@ import {
 
 export type WtlNetworkExportScope = 'all' | 'filtered'
 
-/** 관망조회 SHP 다운로드 기본 좌표계 (레이어 등록 목록과 동일) */
-export const WTL_NETWORK_SHP_DEFAULT_SRS = 'EPSG:5179'
+/** 관망조회 SHP 다운로드 기본 좌표계 — 위경도 */
+export const WTL_NETWORK_SHP_DEFAULT_SRS = 'EPSG:4326'
+
+/** SHP select — EPSG 번호 오름차순 */
+const WTL_NETWORK_SHP_CRS_OPTIONS = [...COORDINATE_SYSTEM_OPTIONS].sort(
+  (a, b) =>
+    (Number.parseInt(a.code.replace(/^EPSG:/i, ''), 10) || 0) -
+    (Number.parseInt(b.code.replace(/^EPSG:/i, ''), 10) || 0)
+)
 
 export type WtlNetworkExportLayerOption = {
   key: string
@@ -122,6 +129,19 @@ export function WtlNetworkExportMenu({
   const shown = busy ? busyLabel || `${label}…` : label
   const checkedCount = checked.size
 
+  const selectableLayers = useMemo(
+    () =>
+      layers.filter((l) =>
+        availableKeys == null ? true : availableKeys.has(l.key)
+      ),
+    [layers, availableKeys]
+  )
+  const allLayersSelected =
+    selectableLayers.length > 0 &&
+    selectableLayers.every((l) => checked.has(l.key))
+  const someLayersSelected = selectableLayers.some((l) => checked.has(l.key))
+  const selectAllDisabled = selectableLayers.length === 0
+
   const toggleKey = (key: string) => {
     if (!isLayerAvailable(key)) return
     setChecked((prev) => {
@@ -137,6 +157,17 @@ export function WtlNetworkExportMenu({
       const next = new Set(prev)
       for (const it of items) {
         if (!isLayerAvailable(it.key)) continue
+        if (on) next.add(it.key)
+        else next.delete(it.key)
+      }
+      return next
+    })
+  }
+
+  const toggleAllLayers = (on: boolean) => {
+    setChecked((prev) => {
+      const next = new Set(prev)
+      for (const it of selectableLayers) {
         if (on) next.add(it.key)
         else next.delete(it.key)
       }
@@ -217,7 +248,7 @@ export function WtlNetworkExportMenu({
                   title="좌표계"
                   onChange={(e) => setTargetSrs(e.target.value)}
                 >
-                  {COORDINATE_SYSTEM_OPTIONS.map((o) => (
+                  {WTL_NETWORK_SHP_CRS_OPTIONS.map((o) => (
                     <option key={o.code} value={o.code}>
                       {o.shortLabel}
                     </option>
@@ -228,6 +259,29 @@ export function WtlNetworkExportMenu({
           </div>
 
           <div className="min-h-0 flex-1 overflow-y-auto px-4 py-2">
+            <label
+              className={cn(
+                'mb-2 flex items-center gap-2 border-b border-border pb-2 text-[12px]',
+                selectAllDisabled
+                  ? 'cursor-not-allowed text-muted-foreground opacity-40'
+                  : 'cursor-pointer text-foreground'
+              )}
+              title={
+                selectAllDisabled ? '선택 가능한 레이어 없음' : '전체 선택'
+              }
+            >
+              <input
+                type="checkbox"
+                className="h-3.5 w-3.5 shrink-0 cursor-pointer accent-primary disabled:cursor-not-allowed disabled:opacity-40"
+                checked={allLayersSelected}
+                disabled={selectAllDisabled}
+                ref={(el) => {
+                  if (el) el.indeterminate = someLayersSelected && !allLayersSelected
+                }}
+                onChange={() => toggleAllLayers(!allLayersSelected)}
+              />
+              <span className="font-semibold">전체 선택</span>
+            </label>
             {groups.map(({ group, items }) => {
               const selectableItems = items.filter((it) => isLayerAvailable(it.key))
               const allOn =

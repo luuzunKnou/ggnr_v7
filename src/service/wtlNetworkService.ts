@@ -3281,7 +3281,8 @@ function safeShpEntryName(raw: string): string {
 
 /**
  * 관망조회 SHP — 레이어관리 `/api/download/shp`와 동일 ogr 경로.
- * 레이어가 여러 개면 zip 안에 레이어별 zip을 담아 반환.
+ * - 레이어 1개: 해당 레이어 SHP zip
+ * - 레이어 여러 개: 바깥 zip 안에 레이어별 폴더(SHP 파일)
  */
 export async function exportWtlNetworkShpZip(
   params: ExportWtlNetworkShpParams = {}
@@ -3319,32 +3320,65 @@ export async function exportWtlNetworkShpZip(
           areaWkts5181: params.areaWkts5181,
         };
 
-  const parts: Array<{ entryName: string; zipBuffer: Buffer }> = [];
+  type ShpPart = {
+    folderName: string;
+    zipBuffer?: Buffer;
+    files?: Array<{ name: string; buffer: Buffer }>;
+  };
+  const parts: ShpPart[] = [];
   const errors: string[] = [];
   const targetSrs = resolveWtlShpTargetSrs(params.targetSrs);
 
+  /** 실제 내보내기 대상 수 — 1개면 zip, 여러 개면 files→폴더 */
+  const exportTargets: Array<{
+    source: WtlNetMapSourceDef;
+    key: string;
+    physicalTable: string;
+    def: NonNullable<ReturnType<typeof getWtlNetLayerDef>>;
+  }> = [];
   for (const source of sources) {
     for (const key of keys) {
       const def = getWtlNetLayerDef(key);
       if (!def?.table) continue;
       const physicalTable = await resolvePhysicalTableInSource(source, def.table);
       if (!physicalTable) continue;
-      const sqlText = await buildShpExportSql(def, physicalTable, filterOpts);
-      const layerName = safeShpEntryName(
-        `${source.id}_${def.defineTable || def.key || physicalTable}`
-      );
-      const result = await exportLayerTableToShp({
-        tableName: physicalTable,
-        schema: 'layer',
-        sql: sqlText,
-        layerName,
-        targetSrs,
-      });
-      if (!result.success || !result.zipBuffer) {
-        errors.push(`${layerName}: ${result.error ?? '실패'}`);
+      exportTargets.push({ source, key, physicalTable, def });
+    }
+  }
+
+  if (exportTargets.length === 0) {
+    return { success: false, error: '내보낼 SHP가 없습니다.' };
+  }
+
+  const multi = exportTargets.length > 1;
+
+  for (const { source, physicalTable, def } of exportTargets) {
+    const sqlText = await buildShpExportSql(def, physicalTable, filterOpts);
+    const layerName = safeShpEntryName(
+      `${source.id}_${def.defineTable || def.key || physicalTable}`
+    );
+    const result = await exportLayerTableToShp({
+      tableName: physicalTable,
+      schema: 'layer',
+      sql: sqlText,
+      layerName,
+      targetSrs,
+      output: multi ? 'files' : 'zip',
+    });
+    if (!result.success) {
+      errors.push(`${layerName}: ${result.error ?? '실패'}`);
+      continue;
+    }
+    if (multi) {
+      if (!result.files?.length) {
+        errors.push(`${layerName}: 파일이 비어 있습니다.`);
         continue;
       }
-      parts.push({ entryName: `${layerName}.zip`, zipBuffer: result.zipBuffer });
+      parts.push({ folderName: layerName, files: result.files });
+    } else if (result.zipBuffer) {
+      parts.push({ folderName: layerName, zipBuffer: result.zipBuffer });
+    } else {
+      errors.push(`${layerName}: ZIP이 비어 있습니다.`);
     }
   }
 
@@ -3365,11 +3399,12 @@ export async function exportWtlNetworkShpZip(
   })();
   const scopeTag = scope === 'all' ? '전체' : '조건';
 
-  if (parts.length === 1) {
+  if (!multi) {
+    const only = parts[0]!;
     return {
       success: true,
-      zipBuffer: parts[0]!.zipBuffer,
-      fileName: `관망조회_${scopeTag}_${parts[0]!.entryName.replace(/\.zip$/i, '')}_${stamp}.zip`,
+      zipBuffer: only.zipBuffer,
+      fileName: `관망조회_${scopeTag}_${only.folderName}_${stamp}.zip`,
     };
   }
 
@@ -3382,7 +3417,9 @@ export async function exportWtlNetworkShpZip(
   });
   archive.pipe(out);
   for (const part of parts) {
-    archive.append(part.zipBuffer, { name: part.entryName });
+    for (const file of part.files ?? []) {
+      archive.append(file.buffer, { name: `${part.folderName}/${file.name}` });
+    }
   }
   await archive.finalize();
   await finished(out);

@@ -1,6 +1,7 @@
 /** 레이어 설정에서 코드 분할을 여는 부모 테이블 → 구분 컬럼 */
 export const SPLIT_LAYER_COLUMNS: Record<string, string> = {
   wtl_pipe_lm: "saa_cde",
+  d_wtl_pipe_lm: "saa_cde",
   wtl_valv_ps: "ftr_cde",
   swl_pipe_lm: "sba_cde",
   swl_manh_ps: "smu_cde",

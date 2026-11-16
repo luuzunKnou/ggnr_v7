@@ -6017,6 +6017,48 @@
     "define_table_source": "shp"
   },
   {
+    "define_table_name": "d_wtl_pipe_lm_etc",
+    "define_table_kor_name": "상수관로(기타)",
+    "define_table_shp_type": "LINE",
+    "define_table_read_share": "P",
+    "define_table_write_share": "P",
+    "define_table_group": "상수(대진)",
+    "define_table_idx": "110",
+    "define_table_etc": "",
+    "define_table_schema": "layer",
+    "define_table_source": "shp",
+    "define_table_div_query": "saa_cde IS NULL OR saa_cde NOT IN ('SAA003', 'SAA004')",
+    "define_table_parents_layer": "d_wtl_pipe_lm"
+  },
+  {
+    "define_table_name": "d_wtl_pipe_lm_saa004",
+    "define_table_kor_name": "배수관",
+    "define_table_shp_type": "LINE",
+    "define_table_read_share": "P",
+    "define_table_write_share": "P",
+    "define_table_group": "상수(대진)",
+    "define_table_idx": "120",
+    "define_table_etc": "",
+    "define_table_schema": "layer",
+    "define_table_source": "shp",
+    "define_table_div_query": "saa_cde = 'SAA004'",
+    "define_table_parents_layer": "d_wtl_pipe_lm"
+  },
+  {
+    "define_table_name": "d_wtl_pipe_lm_saa003",
+    "define_table_kor_name": "송수관",
+    "define_table_shp_type": "LINE",
+    "define_table_read_share": "P",
+    "define_table_write_share": "P",
+    "define_table_group": "상수(대진)",
+    "define_table_idx": "130",
+    "define_table_etc": "",
+    "define_table_schema": "layer",
+    "define_table_source": "shp",
+    "define_table_div_query": "saa_cde = 'SAA003'",
+    "define_table_parents_layer": "d_wtl_pipe_lm"
+  },
+  {
     "define_table_name": "d_wtl_sply_ls",
     "define_table_kor_name": "급수관로",
     "define_table_shp_type": "LINE",

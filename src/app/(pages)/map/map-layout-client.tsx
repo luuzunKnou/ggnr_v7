@@ -208,6 +208,11 @@ import {
   WORKS_REGISTER_OPENED_KEY,
   WorksRegisterShell,
 } from "./_mapContents/worksRegister/WorksRegister.shell"
+import {
+  ODOR_ALERT_OPENED_KEY,
+} from "./_mapContents/odorAlert/odorAlertConfig"
+import { OdorAlertShell } from "./_mapContents/odorAlert/OdorAlert.shell"
+import { OdorAlertPopupHost } from "./_mapContents/odorAlert/OdorAlertPopupHost"
 import { SwlAdminEmptyShell } from "./_mapContents/swlAdmin/SwlAdminEmpty.shell"
 import {
   findOpenedSwlAdminEmptySerEng,
@@ -815,6 +820,7 @@ function MapLayoutContent({
   const smallPublicFacOpen = openedWindows.includes(SMALL_PUBLIC_FAC_OPENED_KEY)
   const smallPublicCandidateOpen = openedWindows.includes(SMALL_PUBLIC_CANDIDATE_OPENED_KEY)
   const smallPublicInspectionOpen = openedWindows.includes(SMALL_PUBLIC_INSPECTION_OPENED_KEY)
+  const odorAlertOpen = openedWindows.includes(ODOR_ALERT_OPENED_KEY)
   const worksRegisterOpen = openedWindows.includes(WORKS_REGISTER_OPENED_KEY)
   const wtlAdminEmptySerEng = findOpenedWtlAdminEmptySerEng(openedWindows)
   const wtlAdminEmptyOpen = Boolean(wtlAdminEmptySerEng)
@@ -933,6 +939,7 @@ function MapLayoutContent({
   const [smallPublicFacTotalWidth, setSmallPublicFacTotalWidth] = useState(0)
   const [smallPublicCandidateTotalWidth, setSmallPublicCandidateTotalWidth] = useState(0)
   const [smallPublicInspectionTotalWidth, setSmallPublicInspectionTotalWidth] = useState(0)
+  const [odorAlertTotalWidth, setOdorAlertTotalWidth] = useState(0)
   const [worksRegisterTotalWidth, setWorksRegisterTotalWidth] = useState(0)
   const [wtlAdminEmptyTotalWidth, setWtlAdminEmptyTotalWidth] = useState(0)
   const [swlAdminEmptyTotalWidth, setSwlAdminEmptyTotalWidth] = useState(0)
@@ -1228,7 +1235,8 @@ function MapLayoutContent({
     (developmentChargeOpen ? developmentChargePanelWidth : 0) +
     (developmentChargeDetailOpen ? developmentChargeDetailWidth : 0) +
     (riverIllegalOccupationOpen ? riverIllegalOccupationPanelWidth : 0) +
-    (riverIllegalOccupationDetailOpen ? riverIllegalOccupationDetailWidth : 0)
+    (riverIllegalOccupationDetailOpen ? riverIllegalOccupationDetailWidth : 0) +
+    (odorAlertOpen ? odorAlertTotalWidth : 0)
   const searchBarOffset = {
     leftPx: SIDEBAR_WIDTH + totalListPanelWidth + SEARCH_BAR_MARGIN,
     topPx: 16,
@@ -1422,6 +1430,9 @@ function MapLayoutContent({
   const riverIllegalOccupationDetailLeftPx =
     riverIllegalOccupationPanelLeftPx +
     (riverIllegalOccupationOpen ? riverIllegalOccupationPanelWidth : 0)
+  const odorAlertPanelLeftPx =
+    riverIllegalOccupationDetailLeftPx +
+    (riverIllegalOccupationDetailOpen ? riverIllegalOccupationDetailWidth : 0)
   const mapPaddingLeft = SIDEBAR_WIDTH + totalListPanelWidth
   /** 패딩은 useLayoutEffect — 자식 useEffect(도로대장 fit 등)보다 먼저 적용되어야 함.
    * 거리뷰 ON일 때만 맵 중심(A)을 새 센터마크 위치에 맞춤.
@@ -2036,6 +2047,11 @@ function MapLayoutContent({
     setOpened(next)
   }
 
+  const handleCloseOdorAlert = () => {
+    setOdorAlertTotalWidth(0)
+    setOpened(openedWindows.filter((w) => w !== ODOR_ALERT_OPENED_KEY))
+  }
+
   const handleCloseSwlAdminEmpty = () => {
     setSwlAdminEmptyTotalWidth(0)
     const next = openedWindows.filter((w) => !isSwlAdminEmptyOpenedToken(w))
@@ -2243,6 +2259,10 @@ function MapLayoutContent({
   useEffect(() => {
     if (!worksRegisterOpen) setWorksRegisterTotalWidth(0)
   }, [worksRegisterOpen])
+
+  useEffect(() => {
+    if (!odorAlertOpen) setOdorAlertTotalWidth(0)
+  }, [odorAlertOpen])
 
   useEffect(() => {
     if (!wtlAdminEmptyOpen) setWtlAdminEmptyTotalWidth(0)
@@ -3920,6 +3940,7 @@ function MapLayoutContent({
           )}
           {wtlAdminEmptyOpen && wtlAdminEmptySerEng && (
             <WtlAdminEmptyShell
+              key={wtlAdminEmptySerEng}
               serEng={wtlAdminEmptySerEng}
               leftOffsetPx={wtlAdminEmptyPanelLeftPx}
               onTotalWidthChange={setWtlAdminEmptyTotalWidth}
@@ -4216,6 +4237,14 @@ function MapLayoutContent({
               </MapSideListPanel>
             </div>
           )}
+          {odorAlertOpen && (
+            <OdorAlertShell
+              leftOffsetPx={odorAlertPanelLeftPx}
+              onTotalWidthChange={setOdorAlertTotalWidth}
+              onClose={handleCloseOdorAlert}
+            />
+          )}
+          <OdorAlertPopupHost enabled={systemKeyFromUrl === "odorAdmin"} />
           <div className="flex-1 min-w-0 relative">
             <div className="pointer-events-auto">
               <MapSearchBar

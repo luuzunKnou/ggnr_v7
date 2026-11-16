@@ -284,7 +284,7 @@ function fmtRatio(n: number) {
   return n.toLocaleString('ko-KR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
 
-/** 관재질·계 가로 틀고정. 반투명 방지용 불투명 배경은 class(bg-slate-100 등)로 */
+/** 관재질·계 가로 틀고정. 반투명 방지용 불투명 배경은 class(bg-slate-100 dark:bg-muted 등)로 */
 function dipStickyStyle(
   kind: 'label' | 'total',
   opts: { isHead?: boolean; isTotalRow?: boolean; top?: number } = {}
@@ -514,7 +514,7 @@ function AxisMatrixTable({
             <thead ref={theadRef}>
               <tr>
                 <th
-                  className="sticky border-b border-border bg-slate-100 p-0 font-medium text-foreground"
+                  className="sticky border-b border-border bg-slate-100 dark:bg-muted p-0 font-medium text-foreground"
                   style={dipStickyStyle('label', { isHead: true, top: 0 })}
                 >
                   <DiagonalCornerLabel
@@ -523,7 +523,7 @@ function AxisMatrixTable({
                   />
                 </th>
                 <th
-                  className="sticky border-b border-l border-border bg-slate-100 p-[6px] font-medium text-foreground"
+                  className="sticky border-b border-l border-border bg-slate-100 dark:bg-muted p-[6px] font-medium text-foreground"
                   style={dipStickyStyle('total', { isHead: true, top: 0 })}
                 >
                   계
@@ -572,13 +572,13 @@ function AxisMatrixTable({
               {isYear ? (
                 <tr>
                   <th
-                    className="sticky border-b border-border bg-slate-100 p-[6px] font-medium text-foreground"
+                    className="sticky border-b border-border bg-slate-100 dark:bg-muted p-[6px] font-medium text-foreground"
                     style={dipStickyStyle('label', { isHead: true, top: headerRow0H })}
                   >
                     사용연수
                   </th>
                   <th
-                    className="sticky border-b border-l border-border bg-slate-100 p-[6px] font-medium text-foreground"
+                    className="sticky border-b border-l border-border bg-slate-100 dark:bg-muted p-[6px] font-medium text-foreground"
                     style={dipStickyStyle('total', { isHead: true, top: headerRow0H })}
                   />
                   {matrix.columns.map((col, idx) => (
@@ -619,13 +619,13 @@ function AxisMatrixTable({
                 <tr className="font-semibold">
                   <th
                     scope="row"
-                    className="border-b border-border bg-slate-100 p-[6px] text-left font-medium text-foreground"
+                    className="border-b border-border bg-slate-100 dark:bg-muted p-[6px] text-left font-medium text-foreground"
                     style={dipStickyStyle('label', { isTotalRow: true, top: theadH })}
                   >
                     {totalRow.label}
                   </th>
                   <td
-                    className="border-b border-l border-border bg-slate-100 p-[6px] tabular-nums text-foreground"
+                    className="border-b border-l border-border bg-slate-100 dark:bg-muted p-[6px] tabular-nums text-foreground"
                     style={dipStickyStyle('total', { isTotalRow: true, top: theadH })}
                   >
                     {fmtMeters(totalRow.total)}
@@ -874,13 +874,13 @@ function SaaMatrixTable({
             <thead ref={theadRef}>
               <tr>
                 <th
-                  className="sticky border-b border-border bg-slate-100 p-0 font-medium text-foreground"
+                  className="sticky border-b border-border bg-slate-100 dark:bg-muted p-0 font-medium text-foreground"
                   style={dipStickyStyle('label', { isHead: true, top: 0 })}
                 >
                   <DiagonalCornerLabel rowLabel="관재질" colLabel="관용도" />
                 </th>
                 <th
-                  className="sticky border-b border-l border-border bg-slate-100 p-[6px] font-medium text-foreground"
+                  className="sticky border-b border-l border-border bg-slate-100 dark:bg-muted p-[6px] font-medium text-foreground"
                   style={dipStickyStyle('total', { isHead: true, top: 0 })}
                 >
                   계
@@ -907,13 +907,13 @@ function SaaMatrixTable({
                 <tr className="font-semibold">
                   <th
                     scope="row"
-                    className="border-b border-border bg-slate-100 p-[6px] text-left font-medium text-foreground"
+                    className="border-b border-border bg-slate-100 dark:bg-muted p-[6px] text-left font-medium text-foreground"
                     style={dipStickyStyle('label', { isTotalRow: true, top: theadH })}
                   >
                     {totalRow.label}
                   </th>
                   <td
-                    className="border-b border-l border-border bg-slate-100 p-[6px] tabular-nums text-foreground"
+                    className="border-b border-l border-border bg-slate-100 dark:bg-muted p-[6px] tabular-nums text-foreground"
                     style={dipStickyStyle('total', { isTotalRow: true, top: theadH })}
                   >
                     {fmtMeters(totalRow.total)}
@@ -1094,7 +1094,8 @@ export function WtlNetworkMapStatus({
   filterMeta?: WtlNetworkFilterMeta | null
 }) {
   const [stats, setStats] = useState<WtlNetworkStatusStats>(EMPTY_STATS)
-  const [loading, setLoading] = useState(false)
+  /** 첫 집계 전에 «해당 자료가 없습니다»가 먼저 뜨지 않도록 true로 시작 */
+  const [loading, setLoading] = useState(true)
   const [expandKind, setExpandKind] = useState<ExpandKind>(null)
   const [dipMatrix, setDipMatrix] = useState<WtlNetworkDipMatrix | null>(null)
   const [dipLoading, setDipLoading] = useState(false)

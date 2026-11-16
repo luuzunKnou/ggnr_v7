@@ -22,7 +22,7 @@ const OVERLAY_BOX_CSS = `
   border-radius: 4px;
   font-size: 12px;
   font-weight: 500;
-  white-space: nowrap;
+  white-space: normal;
   pointer-events: none;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
   border: 1px solid rgba(0, 0, 0, 0.1);
@@ -34,6 +34,7 @@ type ElevationApiResult = {
   code?: string;
   message?: string;
   elevation?: number;
+  digitalMapElevation?: number;
 };
 
 function createOverlayShell(withInstruction: boolean): {
@@ -61,13 +62,36 @@ function createOverlayShell(withInstruction: boolean): {
   return { root, valueLine, instructionLine };
 }
 
+function formatValueLine(label: string, value: string): string {
+  return `${escapeHtml(label)} : <span style="color: #3388ff; font-weight: 600;">${escapeHtml(value)}</span>`;
+}
+
 function setValueHtml(valueLine: HTMLDivElement, text: string, isError: boolean) {
   if (isError) {
     valueLine.innerHTML = `<span style="color: #b45309; font-weight: 600;">${escapeHtml(text)}</span>`;
-  } else if (text.startsWith('고도')) {
+    return;
+  }
+
+  const lines = text
+    .split(/\r?\n/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+
+  if (lines.length >= 2 || lines.some((l) => l.includes('수치지형도'))) {
+    const parts: string[] = [];
+    for (const line of lines) {
+      const m = line.match(/^(.+?)\s*:\s*(.+)$/);
+      if (m) parts.push(formatValueLine(m[1].trim(), m[2].trim()));
+      else parts.push(`<span style="color: #3388ff; font-weight: 600;">${escapeHtml(line)}</span>`);
+    }
+    valueLine.innerHTML = parts.join('<br/>');
+    return;
+  }
+
+  if (text.startsWith('고도')) {
     const m = text.match(/^고도\s*:\s*(.+)$/);
     const num = m?.[1]?.trim() ?? text;
-    valueLine.innerHTML = `고도 : <span style="color: #3388ff; font-weight: 600;">${escapeHtml(num)}</span>`;
+    valueLine.innerHTML = formatValueLine('고도', num);
   } else {
     valueLine.innerHTML = `<span style="color: #3388ff; font-weight: 600;">${escapeHtml(text)}</span>`;
   }
@@ -79,6 +103,19 @@ function escapeHtml(s: string): string {
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
+}
+
+function buildElevationMessage(data: ElevationApiResult | null | undefined, ok: boolean): string {
+  const fromApi = data?.message?.trim();
+  if (fromApi) return fromApi;
+  if (ok && data?.elevation != null) {
+    let msg = `고도 : ${data.elevation} m`;
+    if (data.digitalMapElevation != null && Number.isFinite(data.digitalMapElevation)) {
+      msg += `\n수치지형도 고도 : ${data.digitalMapElevation} m`;
+    }
+    return msg;
+  }
+  return '고도 관련 데이터가 없습니다';
 }
 
 async function fetchElevationAt(
@@ -254,11 +291,7 @@ export function useAltitudeMeasure(
         .then((data) => {
           if (id !== reqIdRef.current) return;
           const ok = data?.success === true;
-          const msg =
-            data?.message?.trim() ||
-            (ok && data.elevation != null
-              ? `고도 : ${data.elevation} m`
-              : '고도 관련 데이터가 없습니다');
+          const msg = buildElevationMessage(data, ok);
           if (forPreview && previewValueRef.current) {
             setValueHtml(previewValueRef.current, msg, !ok);
           }
@@ -320,11 +353,7 @@ export function useAltitudeMeasure(
       void fetchElevationAt(coordinate, srid).then((data) => {
         if (id !== reqIdRef.current && !data) return;
         const ok = data?.success === true;
-        const msg =
-          data?.message?.trim() ||
-          (ok && data.elevation != null
-            ? `고도 : ${data.elevation} m`
-            : '고도 관련 데이터가 없습니다');
+        const msg = buildElevationMessage(data, ok);
 
         const feature = new Feature({
           geometry: new Point(coordinate),

@@ -19,6 +19,7 @@ import { useDefineLayerCodes } from '../../_mapComponents/standard/useDefineLaye
 import { useMapContext } from '../../_mapComponents/MapContext'
 import { centerMapOnWtlNetworkGeom } from '../wtlAdmin/networkMap/wtlNetworkMapFly'
 import type { LayerClickHit } from './useLayerClickDetail'
+import { claimMapLayerClickDetailHighlight } from '@/lib/mapLayerClickDetailHighlight'
 import {
   pickLayerClickHitGeom,
   useLayerClickDetailMapHighlight,
@@ -66,6 +67,12 @@ export function LayerClickDetailFloating({
 }: Props) {
   const mapContext = useMapContext()
   useLayerClickDetailMapHighlight(open ? selected : null)
+
+  const handleActivate = () => {
+    const map = mapContext?.mapInstanceRef?.current
+    if (map) claimMapLayerClickDetailHighlight(map, 'layerClickDetail')
+    onActivate?.()
+  }
 
   const tableName = selected ? String(selected.tableName ?? '').trim() : ''
   const fieldsTableKey = selected
@@ -191,7 +198,7 @@ export function LayerClickDetailFloating({
       onClose={onClose}
       pinPosition={pinPosition}
       focusToken={focusToken}
-      onActivate={onActivate}
+      onActivate={handleActivate}
       width={DETAIL_WIDTH}
       minimizedWidth={MAP_DETAIL_FLOAT_MINIMIZED_WIDTH}
       maxHeight={DETAIL_MAX_HEIGHT}

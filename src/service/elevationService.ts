@@ -3,6 +3,8 @@
  */
 import { db } from '@/database/db';
 import { sql } from 'drizzle-orm';
+import { getSessionUsrId } from '@/lib/auth/guard';
+import { isSuperUser } from '@/lib/auth/superUser';
 import {
   readWtlLayerLineColor,
   readWtlLayerPointColor,
@@ -13,14 +15,18 @@ import {
   getWtlLayerShapeDef,
   type WtlLayerShapeDef,
 } from '@/lib/wtlLayerShapeDefs';
+import {
+  interpolateElevationFromCandidates,
+  type ElevCandidate,
+} from '@/service/elevationInterpolate';
+
+export { interpolateElevationFromCandidates } from '@/service/elevationInterpolate';
 
 const ELEVATION_SCHEMA = 'public_layer';
 const ELEVATION_TABLE = 'elevation';
 const SGG_SCHEMA = 'public_layer';
 const SGG_TABLE = 'sgg';
 
-/** 등고선 위에 있다고 볼 거리(m) — 이내면 보간 없이 cont 그대로 */
-const ON_LINE_EPS_M = 0.5;
 /** 점 주변에서만 등고 후보를 모을 반경(m) */
 const SEARCH_RADIUS_M = 300;
 /** 보간에 쓸 서로 다른 높이 후보 개수 */
@@ -37,9 +43,9 @@ export type ElevationAtPointResult = {
   distanceM?: number;
   /** nearest=한 선만, idw=상·하 등고 거리가중 보간 */
   method?: 'nearest' | 'idw';
+  /** 슈퍼유저·digital_map 있을 때 DXF 등고 고도(m) */
+  digitalMapElevation?: number;
 };
-
-type ElevCandidate = { elevation: number; distanceM: number };
 
 function esc(value: string): string {
   return value.replace(/'/g, "''");
@@ -98,54 +104,6 @@ async function tableExists(schema: string, table: string): Promise<boolean> {
   } catch {
     return false;
   }
-}
-
-/**
- * 상·하 인접 등고선으로만 높이 보간 (역거리 가중).
- * - low·high 둘 다 있을 때만 보간 → 결과는 항상 [low, high] 안
- * - 한쪽만 있으면 최근접 cont만 사용 (외삽 금지)
- * - 선 위(0.5m 이내)면 해당 cont 그대로
- */
-export function interpolateElevationFromCandidates(
-  candidates: ElevCandidate[]
-): { elevation: number; method: 'nearest' | 'idw'; distanceM: number } {
-  if (!candidates.length) {
-    return { elevation: NaN, method: 'nearest', distanceM: NaN };
-  }
-  const sorted = [...candidates]
-    .filter((c) => Number.isFinite(c.elevation) && Number.isFinite(c.distanceM) && c.distanceM >= 0)
-    .sort((a, b) => a.distanceM - b.distanceM);
-  if (!sorted.length) {
-    return { elevation: NaN, method: 'nearest', distanceM: NaN };
-  }
-
-  const a = sorted[0];
-  if (a.distanceM <= ON_LINE_EPS_M) {
-    return { elevation: a.elevation, method: 'nearest', distanceM: a.distanceM };
-  }
-
-  let low: ElevCandidate | null = null;
-  let high: ElevCandidate | null = null;
-  for (const c of sorted) {
-    if (c.elevation < a.elevation - 0.05) {
-      if (!low || c.distanceM < low.distanceM) low = c;
-    } else if (c.elevation > a.elevation + 0.05) {
-      if (!high || c.distanceM < high.distanceM) high = c;
-    }
-  }
-
-  if (low && high) {
-    const d0 = Math.max(low.distanceM, 1e-6);
-    const d1 = Math.max(high.distanceM, 1e-6);
-    const elevation = (low.elevation * d1 + high.elevation * d0) / (d0 + d1);
-    return {
-      elevation,
-      method: 'idw',
-      distanceM: a.distanceM,
-    };
-  }
-
-  return { elevation: a.elevation, method: 'nearest', distanceM: a.distanceM };
 }
 
 /**
@@ -290,7 +248,7 @@ export async function getElevationAtPoint(params: {
       };
     }
 
-    return {
+    const base: ElevationAtPointResult = {
       success: true,
       code: 'OK',
       message: `고도 : ${formatElevationM(elevation)}`,
@@ -298,12 +256,39 @@ export async function getElevationAtPoint(params: {
       distanceM: Number.isFinite(distanceM) ? distanceM : undefined,
       method,
     };
+    return appendDigitalMapElevation(base, x, y, inputSrid);
   } catch {
     return {
       success: false,
       code: 'NO_ELEVATION_DATA',
       message: '고도 관련 데이터가 없습니다',
     };
+  }
+}
+
+/** 슈퍼유저·digital_map 폴더 있을 때만 수치지형도 고도 줄 추가 */
+async function appendDigitalMapElevation(
+  base: ElevationAtPointResult,
+  x: number,
+  y: number,
+  srid: number
+): Promise<ElevationAtPointResult> {
+  try {
+    const usrId = await getSessionUsrId();
+    if (!isSuperUser(usrId)) return base;
+    const { hasDigitalMapFolders, getDigitalMapElevationAtPoint } = await import(
+      '@/service/digitalMapElevation'
+    );
+    if (!(await hasDigitalMapFolders())) return base;
+    const dm = await getDigitalMapElevationAtPoint({ x, y, srid });
+    if (!dm || !Number.isFinite(dm.elevation)) return base;
+    return {
+      ...base,
+      digitalMapElevation: dm.elevation,
+      message: `${base.message}\n수치지형도 고도 : ${formatElevationM(dm.elevation)}`,
+    };
+  } catch {
+    return base;
   }
 }
 

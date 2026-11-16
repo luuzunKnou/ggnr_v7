@@ -15,6 +15,7 @@ import {
   ChevronRight,
   Crosshair,
   Loader2,
+  Pentagon,
   Printer,
   RefreshCw,
   X,
@@ -38,6 +39,7 @@ import {
   type DefineCodeRow,
 } from '@/lib/defineLayerCodeDisplay'
 import { formatDetailScalarValue } from '@/lib/formatDetailScalar'
+import { claimMapLayerClickDetailHighlight } from '@/lib/mapLayerClickDetailHighlight'
 import { cn } from '@/lib/utils'
 import { useMapContext } from '../../../_mapComponents/MapContext'
 import { canStartMapDrawInteraction } from '../../../_mapComponents/mapDrawInteraction'
@@ -257,7 +259,7 @@ function getLayerShowMode(key: string): WtlNetLayerShowMode {
   return 'underground'
 }
 
-const SEARCH_TOOLS = ['구역설정', '다운로드', '단면도', 'Excel'] as const
+const SEARCH_TOOLS = ['단면도', 'SHP 다운로드', 'Excel'] as const
 
 function allKeysOfDisplayGroup(title: string): string[] {
   const g = DISPLAY_GROUPS.find((item) => item.title === title)
@@ -841,7 +843,8 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
   const [excelExporting, setExcelExporting] = useState(false)
   const [shpExporting, setShpExporting] = useState(false)
   const [boxData, setBoxData] = useState<Record<string, LayerBoxData>>({})
-  const [listLoading, setListLoading] = useState(false)
+  /** 첫 조회·디바운스 전에도 빈 목록 문구가 먼저 뜨지 않도록 true로 시작 */
+  const [listLoading, setListLoading] = useState(true)
   const [listError, setListError] = useState('')
   /** define 목록 헤더 캐시 로드 후 재렌더 */
   const [defineListTick, setDefineListTick] = useState(0)
@@ -1476,6 +1479,8 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
     if (moveFetchTimerRef.current != null) {
       window.clearTimeout(moveFetchTimerRef.current)
     }
+    // 디바운스·bbox 대기 구간에도 «조회된 항목이 없습니다» 대신 로딩 표시
+    setListLoading(true)
     moveFetchTimerRef.current = window.setTimeout(() => {
       moveFetchTimerRef.current = null
       if (availableLayerKeysRef.current == null) return
@@ -1484,6 +1489,7 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
       if (inView && !bbox) return
       void (async () => {
         const result = await fetchList(inView ? bbox : null)
+        if (result === 'skip') setListLoading(false)
         if (result !== 'done' || !onlyInViewRef.current) return
         setStatsBbox(bboxRef.current)
       })()
@@ -2403,15 +2409,11 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
             />
           )
         }
-        const isZone = label === '구역설정'
         const isSection = label === '단면도'
         const sectionActive =
           section.modePickerOpen || section.drawing || section.panelOpen
-        const title = isZone
-          ? zoneToolLabel
-          : isSection && section.drawing
-            ? '단면취소'
-            : label
+        const title =
+          isSection && section.drawing ? '단면취소' : label
         return (
           <button
             key={label}
@@ -2419,16 +2421,15 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
             title={title}
             className={cn(
               'flex h-7 min-w-0 flex-1 cursor-pointer items-center justify-center whitespace-nowrap rounded-[5px] px-0.5 text-[11px] font-semibold leading-none',
-              (isZone && (zoneDrawing || zoneWkt5181)) || (isSection && sectionActive)
+              isSection && sectionActive
                 ? 'bg-[#14607a] text-white hover:bg-[#0f4d62] dark:bg-[#d7ebf1] dark:text-[#14607a] dark:hover:bg-[#c5e3eb]'
                 : 'bg-[#d7ebf1] text-[#14607a] hover:bg-[#c5e3eb] dark:bg-[#14607a] dark:text-[#d7ebf1] dark:hover:bg-[#0f4d62]'
             )}
             onClick={() => {
-              if (isZone) handleZoneTool()
               if (isSection) section.startSection()
             }}
           >
-            {isZone ? zoneToolLabel : isSection && section.drawing ? '단면취소' : label}
+            {isSection && section.drawing ? '단면취소' : label}
           </button>
         )
       })}
@@ -2581,7 +2582,7 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
                   )}
                   <div className="space-y-2 !mt-[13px] border-t border-border pt-[13px]">
                     <div className="flex items-center gap-1">
-                      <span className="standard-detail-hit-label w-16 !text-foreground">위치</span>
+                      <span className="standard-detail-hit-label w-[4.5rem] shrink-0 !text-foreground">위치</span>
                       <div className="grid min-w-0 flex-1 grid-cols-3 gap-1">
                         <select
                           value={emdSelected}
@@ -2627,6 +2628,21 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
                           ))}
                         </select>
                       </div>
+                      <button
+                        type="button"
+                        title={zoneToolLabel}
+                        aria-label={zoneToolLabel}
+                        aria-pressed={zoneDrawing || Boolean(zoneWkt5181)}
+                        onClick={handleZoneTool}
+                        className={cn(
+                          'inline-flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center rounded border transition-colors',
+                          zoneDrawing || zoneWkt5181
+                            ? 'border-primary bg-primary/10 text-primary'
+                            : 'border-border bg-background text-muted-foreground hover:border-border hover:text-foreground'
+                        )}
+                      >
+                        <Pentagon className="h-3.5 w-3.5 shrink-0" strokeWidth={2} aria-hidden />
+                      </button>
                     </div>
                     <DualRange
                       label="관로 연도"
@@ -2663,7 +2679,7 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
                       />
                     </div>
                     <div className="flex items-center gap-1">
-                      <span className="standard-detail-hit-label w-16 !text-foreground">통합검색</span>
+                      <span className="standard-detail-hit-label w-[4.5rem] shrink-0 !text-foreground">통합검색</span>
                       <input
                         type="search"
                         value={keywordDraft}
@@ -2725,9 +2741,10 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
                   <span className="standard-detail-section-toggle-label">시설목록</span>
                 </button>
                 <span className="text-[11px] text-muted-foreground">
-                  {listLoading && layerBoxes.length === 0
+                  {(listLoading || availableLayerKeys == null) &&
+                  layerBoxes.length === 0
                     ? '조회 중…'
-                    : listLoading
+                    : listLoading || availableLayerKeys == null
                       ? `조회 중… · 레이어 ${layerBoxes.length} · 총 ${listCount.toLocaleString()}건`
                       : `레이어 ${layerBoxes.length} · 총 ${listCount.toLocaleString()}건`}
                 </span>
@@ -2748,7 +2765,9 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
                 <div className="standard-list-scroll space-y-2 p-2">
                   {layerBoxes.length === 0 ? (
                     <p className="standard-table-empty">
-                      {listLoading ? '조회 중…' : '조회된 항목이 없습니다.'}
+                      {listLoading || availableLayerKeys == null
+                        ? '조회 중…'
+                        : '조회된 항목이 없습니다.'}
                     </p>
                   ) : (
                     <>
@@ -2979,6 +2998,8 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
             setActiveDetailKey(modal.key)
             const cur = detailModalsRef.current.find((m) => m.key === modal.key)
             if (cur) setSelected(cur.item)
+            const map = mapContext?.mapInstanceRef?.current
+            if (map) claimMapLayerClickDetailHighlight(map, 'wtlNetwork')
           }}
           onClose={() => closeDetailModal(modal.key)}
           onSelectHit={(row) => {

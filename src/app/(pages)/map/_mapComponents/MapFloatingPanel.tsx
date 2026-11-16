@@ -73,6 +73,11 @@ export function MapFloatingPanel({
   const rootRef = useRef<HTMLDivElement | null>(null);
   /** 화면 기준 모드에서 사용자가 옮긴 뒤에는 기본 위치로 되돌리지 않는다 */
   const movedRef = useRef(false);
+  /** 최소화(pin) 직전 펼침 위치 — 최대화 시 복원 */
+  const prePinPositionRef = useRef<MapFloatingPanelPosition | null>(null);
+  const wasPinnedRef = useRef(false);
+  const positionRef = useRef(position);
+  positionRef.current = position;
   const dragRef = useRef({
     isDragging: false,
     startX: 0,
@@ -121,6 +126,21 @@ export function MapFloatingPanel({
     // onActivate는 마운트 시 1회만 — 의존에 넣지 않음
     // eslint-disable-next-line react-hooks/exhaustive-deps -- mount activate
   }, [zClass]);
+
+  /**
+   * viewport portal은 body에 직접 붙는다.
+   * 부모(업무 패널)가 route/opened 이탈로 언마운트될 때 React 정리보다
+   * DOM이 남는 경우가 있어(특히 최소화 pin), 언마운트 시 루트를 강제 제거한다.
+   */
+  useEffect(() => {
+    if (!viewport) return;
+    return () => {
+      const el = rootRef.current;
+      if (!el) return;
+      clearMapUiZPanelSelection(el);
+      if (el.isConnected) el.remove();
+    };
+  }, [viewport]);
 
   /** 이미 마운트된 패널을 다시 앞으로 */
   useEffect(() => {
@@ -175,10 +195,38 @@ export function MapFloatingPanel({
   const pinLeft = pinPosition?.left;
 
   useEffect(() => {
-    if (pinTop != null && pinLeft != null) {
-      movedRef.current = false;
+    const isPinned = pinTop != null && pinLeft != null;
+    if (isPinned) {
+      if (!wasPinnedRef.current) {
+        prePinPositionRef.current = positionRef.current;
+      }
+      wasPinnedRef.current = true;
       setPosition({ top: pinTop, left: pinLeft });
       return;
+    }
+    if (wasPinnedRef.current) {
+      wasPinnedRef.current = false;
+      const restored = prePinPositionRef.current;
+      prePinPositionRef.current = null;
+      if (restored) {
+        movedRef.current = true;
+        const applyRestored = () => {
+          if (viewport || restored.left != null) {
+            setPosition(
+              clampToViewport({
+                top: restored.top,
+                left: restored.left ?? 0,
+              })
+            );
+          } else {
+            setPosition(restored);
+          }
+        };
+        applyRestored();
+        // 펼침 폭·높이 반영 후 화면 밖 클램프
+        const raf = requestAnimationFrame(applyRestored);
+        return () => cancelAnimationFrame(raf);
+      }
     }
     if (!viewport) {
       if (useLeft) {
