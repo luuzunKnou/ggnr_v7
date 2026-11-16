@@ -15,6 +15,7 @@ import {
   createDataQuerySelectionRowHighlightStyle,
   DATA_QUERY_SELECTION_PULSE_STEP,
 } from '@/lib/mapDataQueryMapHighlight'
+import { LAYER_GEOM_STACK_SKIP_KEY } from '@/lib/mapLayerGeometryOrder'
 import type { WtlConsGeom4326 } from './wtlConsLedgerApi'
 
 /** 공사목록·공사구역 선택 깜빡임. 공통 속도의 2.4배 */
@@ -22,8 +23,11 @@ const FOCUS_PULSE_STEP = DATA_QUERY_SELECTION_PULSE_STEP * 2.4
 
 const MAIN_FILL = 'rgba(37, 99, 235, 0.18)'
 const MAIN_STROKE = '#1d4ed8'
-const FOCUS_FILL = 'rgba(22, 163, 74, 0.28)'
-const FOCUS_STROKE = '#15803d'
+/** 관련시설 강조 — 도로·하천 선택 강조와 같은 최상단대 */
+const FOCUS_LAYER_Z = 9999
+/** 관련시설 선택 시 공사·구역 면이 강조를 가리지 않도록 */
+const WORK_DIM_OPACITY = 0.38
+const ZONE_DIM_OPACITY = 0.45
 
 function pulseFeatureId(id: string) {
   return `pulse:${id}`
@@ -105,14 +109,26 @@ function midSparkleStyle(feature: Feature, phase: number, zIndex = 20): Style | 
   })
 }
 
-function zoneFeatureStyle(feature: Feature, phase: number, selectionStyle: StyleFunction): Style | Style[] | undefined {
-  if (feature.get('focus')) {
-    return new Style({
-      fill: new Fill({ color: FOCUS_FILL }),
-      stroke: new Stroke({ color: FOCUS_STROKE, width: 3 }),
-      zIndex: 40,
-    })
+/** 관련시설 강조. 공통 선택 스타일보다 굵게, 스타일 z도 최상단. */
+function focusFeatureStyle(feature: Feature, selectionStyle: StyleFunction): Style | Style[] | undefined {
+  const geomType = feature.getGeometry()?.getType()
+  const styled = selectionStyle(feature, 1) as Style | Style[] | undefined
+  if (!styled) return undefined
+  const list = Array.isArray(styled) ? styled : [styled]
+  if (geomType === 'LineString' || geomType === 'MultiLineString') {
+    for (const style of list) {
+      const stroke = style.getStroke()
+      if (!stroke) continue
+      const w = stroke.getWidth() ?? 5
+      stroke.setWidth(w + 4)
+      style.setZIndex(FOCUS_LAYER_Z)
+    }
+    return list
   }
+  return withZIndex(styled, FOCUS_LAYER_Z)
+}
+
+function zoneFeatureStyle(feature: Feature, phase: number, selectionStyle: StyleFunction): Style | Style[] | undefined {
   if (feature.get('zoneOn')) {
     return withZIndex(selectionStyle(feature, 1) as Style | Style[] | undefined, 30)
   }
@@ -168,8 +184,19 @@ export function useWtlConsMapLayer(input: WtlConsMapInput) {
   const mapContext = useMapContext()
   const sourceRef = useRef<VectorSource | null>(null)
   const zoneSourceRef = useRef<VectorSource | null>(null)
+  const focusSourceRef = useRef<VectorSource | null>(null)
+  const workLayerRef = useRef<VectorLayer<VectorSource> | null>(null)
+  const zoneLayerRef = useRef<VectorLayer<VectorSource> | null>(null)
+  const focusLayerRef = useRef<VectorLayer<VectorSource> | null>(null)
   const pulsePhaseRef = useRef(0)
   const focusPhaseRef = useRef(0)
+  /** 이전 맞춤 기준. 탭·강조 해제만으로는 지도를 다시 맞추지 않는다. */
+  const fitGateRef = useRef<{
+    fitToken?: number
+    selectedId: string | null
+    projectKey: string
+    focusKey: string
+  } | null>(null)
   const selectionStyleRef = useRef(
     createDataQuerySelectionRowHighlightStyle(() => focusPhaseRef.current)
   )
@@ -200,6 +227,8 @@ export function useWtlConsMapLayer(input: WtlConsMapInput) {
       zIndex: 890,
     })
     layer.set('wtlConsWork', true)
+    layer.set(LAYER_GEOM_STACK_SKIP_KEY, true)
+    workLayerRef.current = layer
     const zoneSource = new VectorSource()
     zoneSourceRef.current = zoneSource
     const zoneLayer = new VectorLayer({
@@ -208,14 +237,32 @@ export function useWtlConsMapLayer(input: WtlConsMapInput) {
       zIndex: 891,
     })
     zoneLayer.set('wtlConsZone', true)
+    zoneLayer.set(LAYER_GEOM_STACK_SKIP_KEY, true)
+    zoneLayerRef.current = zoneLayer
+    const focusSource = new VectorSource()
+    focusSourceRef.current = focusSource
+    const focusLayer = new VectorLayer({
+      source: focusSource,
+      style: (feature) => focusFeatureStyle(feature as Feature, selectionStyleRef.current),
+      zIndex: FOCUS_LAYER_Z,
+    })
+    focusLayer.set('wtlConsFocus', true)
+    focusLayer.set(LAYER_GEOM_STACK_SKIP_KEY, true)
+    focusLayerRef.current = focusLayer
     map.addLayer(layer)
     map.addLayer(zoneLayer)
+    map.addLayer(focusLayer)
 
     return () => {
       sourceRef.current = null
       zoneSourceRef.current = null
+      focusSourceRef.current = null
+      workLayerRef.current = null
+      zoneLayerRef.current = null
+      focusLayerRef.current = null
       map.removeLayer(layer)
       map.removeLayer(zoneLayer)
+      map.removeLayer(focusLayer)
     }
   }, [mapContext?.mapInstanceRef, mapContext?.mapReady])
 
@@ -230,6 +277,9 @@ export function useWtlConsMapLayer(input: WtlConsMapInput) {
       zoneSourceRef.current?.forEachFeature((feature) => {
         if (feature.get('sparkle')) feature.changed()
       })
+      focusSourceRef.current?.forEachFeature((feature) => {
+        if (feature.get('focus')) feature.changed()
+      })
       rafId = requestAnimationFrame(loop)
     }
     rafId = requestAnimationFrame(loop)
@@ -240,10 +290,27 @@ export function useWtlConsMapLayer(input: WtlConsMapInput) {
     const map = mapContext?.mapInstanceRef?.current
     const source = sourceRef.current
     const zoneSource = zoneSourceRef.current
-    if (!map || !source || !zoneSource) return
+    const focusSource = focusSourceRef.current
+    if (!map || !source || !zoneSource || !focusSource) return
     source.clear()
     zoneSource.clear()
+    focusSource.clear()
     const current = inputRef.current
+    const hasFocus = Boolean(current.focus?.geom)
+    const workLayer = workLayerRef.current
+    const zoneLayer = zoneLayerRef.current
+    const focusLayer = focusLayerRef.current
+    if (workLayer) workLayer.setOpacity(hasFocus ? WORK_DIM_OPACITY : 1)
+    if (zoneLayer) zoneLayer.setOpacity(hasFocus ? ZONE_DIM_OPACITY : 1)
+    if (focusLayer) {
+      focusLayer.setZIndex(FOCUS_LAYER_Z)
+      focusLayer.set(LAYER_GEOM_STACK_SKIP_KEY, true)
+      const layers = map.getLayers()
+      if (layers.getArray().includes(focusLayer)) {
+        layers.remove(focusLayer)
+        layers.push(focusLayer)
+      }
+    }
     const format = new GeoJSON()
     let focusFeature: Feature | null = null
     let selectedFeature: Feature | null = null
@@ -278,20 +345,41 @@ export function useWtlConsMapLayer(input: WtlConsMapInput) {
       if (current.focus?.geom) {
         focusFeature = new Feature(readGeom(format, current.focus.geom, current.focus.projection))
         focusFeature.set('focus', true)
-        zoneSource.addFeature(focusFeature)
+        const focusGeomType = focusFeature.getGeometry()?.getType()
+        if (focusGeomType === 'Point' || focusGeomType === 'MultiPoint') {
+          focusFeature.set('isRadarPoint', true)
+        }
+        focusSource.addFeature(focusFeature)
       }
     } catch {
       source.clear()
       zoneSource.clear()
+      focusSource.clear()
       return
     }
+
+    const prev = fitGateRef.current
+    const focusAcquired = Boolean(focusKey) && focusKey !== prev?.focusKey
+    const shouldFit =
+      !prev ||
+      prev.fitToken !== current.fitToken ||
+      prev.selectedId !== current.selectedId ||
+      prev.projectKey !== projectKey ||
+      focusAcquired
+    fitGateRef.current = {
+      fitToken: current.fitToken,
+      selectedId: current.selectedId,
+      projectKey,
+      focusKey,
+    }
+    if (!shouldFit) return
 
     const preferred = (focusFeature ?? zoneFeature ?? selectedFeature)?.getGeometry()?.getExtent()
     const extent = finiteExtent(preferred) ?? finiteExtent(source.getExtent())
     if (!extent) return
     const paddingRef = mapContext?.applyMapViewPaddingRef
     const mapRef = mapContext?.mapInstanceRef
-    // 다른 목록 메뉴와 같이, 패널 여백이 반영된 뒤에 같은 맞춤을 쓴다.
+    // 사업·공사 선택·관련시설 신규 선택·명시 fitToken 때만 맞춤. 탭·강조 해제는 제외.
     const timer = window.setTimeout(() => {
       const liveMap = mapRef?.current
       if (!liveMap) return
@@ -307,7 +395,6 @@ export function useWtlConsMapLayer(input: WtlConsMapInput) {
     input.selectedId,
     zoneKey,
     focusKey,
-    input.bottomInset,
     mapContext?.applyMapViewPaddingRef,
     mapContext?.mapInstanceRef,
     mapContext?.mapReady,

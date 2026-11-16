@@ -1,8 +1,8 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type Ref } from 'react'
 import { createPortal } from 'react-dom'
-import { Bell, CheckSquare, Download, FileText, ImageIcon, RefreshCw, Search, Settings, Square, X } from 'lucide-react'
+import { Bell, CheckSquare, Download, FileText, ImageIcon, RefreshCw, Search, Square, X } from 'lucide-react'
 import { call } from '@/lib/api'
 import { getConsLedgerVariant, type ConsLedgerKind } from '@/lib/consLedgerVariant'
 import { cn } from '@/lib/utils'
@@ -21,7 +21,7 @@ import {
   type WtlConsProject,
   type WtlConsWork,
 } from './wtlConsSample'
-import { loadWtlConsGeoms, loadWtlConsLedger, loadWtlConsZones, type WtlConsGeom4326, type WtlConsLedgerItem, type WtlConsZoneItem } from './wtlConsLedgerApi'
+import { geom4326ToWkt5181, loadWtlConsGeoms, loadWtlConsLedger, loadWtlConsZones, type WtlConsGeom4326, type WtlConsLedgerItem, type WtlConsZoneItem } from './wtlConsLedgerApi'
 import { useWtlConsMapLayer, type WtlConsMapFocus } from './useWtlConsMapLayer'
 import { WtlConsAlertSettingsDialog } from './WtlConsAlertSettingsDialog'
 import {
@@ -39,11 +39,7 @@ import {
   ServiceFilePdfPreview,
   type ServiceFilePdfPreviewItem,
 } from '../../../_mapComponents/standard/ServiceFilePdfPreview'
-import {
-  CONS_RELATED_UI_OPTIONS,
-  WtlConsRelatedTabs,
-  type ConsRelatedUi,
-} from './WtlConsRelatedTabs'
+import { WtlConsRelatedTabs } from './WtlConsRelatedTabs'
 
 const LIST_DEFAULT = 460
 const LIST_MIN = 380
@@ -107,6 +103,13 @@ function attachmentFileUrl(file: WtlConsAttachment): { url: string; fileName: st
 
 type LedgerKind = Extract<ConsLedgerKind, 'wtl' | 'swl'>
 
+/** 관련시설에서 뺀 급수 구역. 공사정보 하단에 칸으로 보여 준다. */
+const SUPPLY_ZONE_COLUMNS = [
+  { key: 'wtl_wtsa_as', label: '급수구역' },
+  { key: 'wtl_wtssa_as', label: '급수분구' },
+  { key: 'wtl_wtsba_as', label: '급수블록' },
+] as const
+
 type Props = {
   kind?: LedgerKind
   leftOffsetPx: number
@@ -166,6 +169,12 @@ function AttrPairRow({
   )
 }
 
+function workMatchesConsQuery(work: WtlConsWork, query: string): boolean {
+  const q = query.trim().toLowerCase()
+  if (!q) return true
+  return work.name.toLowerCase().includes(q) || work.location.toLowerCase().includes(q)
+}
+
 export function WtlConstructionLedgerShell({
   kind = 'wtl',
   leftOffsetPx,
@@ -184,7 +193,6 @@ export function WtlConstructionLedgerShell({
   const [projectId, setProjectId] = useState<string | null>(null)
   const [fitToken, setFitToken] = useState(0)
   const [alertJump, setAlertJump] = useState(0)
-  const filterReadyRef = useRef(false)
   const pinProjectRef = useRef<string | null>(null)
   const keepWorkRef = useRef<string | null>(null)
   const [emdOptions, setEmdOptions] = useState<{ code: string; name: string }[]>([])
@@ -196,7 +204,7 @@ export function WtlConstructionLedgerShell({
   const [geomByCode, setGeomByCode] = useState<Record<string, WtlConsGeom4326 | null>>({})
   const [mapFocus, setMapFocus] = useState<WtlConsMapFocus | null>(null)
   const [alertOpen, setAlertOpen] = useState(false)
-  const [relatedUi, setRelatedUi] = useState<ConsRelatedUi>('v0')
+  const [attachOpen, setAttachOpen] = useState(false)
   const [attachHeight, setAttachHeight] = useState(ATTACH_MIN_HEIGHT)
   const [attachSelectMode, setAttachSelectMode] = useState(false)
   const [attachSelectedIds, setAttachSelectedIds] = useState<string[]>([])
@@ -207,9 +215,10 @@ export function WtlConstructionLedgerShell({
   attachHeightRef.current = attachHeight
   const attachDraggingRef = useRef(false)
   const [mapBottomInset, setMapBottomInset] = useState(0)
+  const [supplyZoneText, setSupplyZoneText] = useState<Record<string, string>>({})
   const [showAllProjectGeoms, setShowAllProjectGeoms] = useState(false)
-  const [uiMenuOpen, setUiMenuOpen] = useState(false)
-  const uiMenuRef = useRef<HTMLDivElement>(null)
+  const [workScrollToken, setWorkScrollToken] = useState(0)
+  const activeProjectRef = useRef<HTMLButtonElement>(null)
 
   const startAttachResize = useCallback((event: React.MouseEvent) => {
     event.preventDefault()
@@ -223,7 +232,6 @@ export function WtlConstructionLedgerShell({
     }
     const onUp = () => {
       attachDraggingRef.current = false
-      setMapBottomInset(attachHeightRef.current)
       window.removeEventListener('mousemove', onMove)
       document.body.style.cursor = ''
       document.body.style.userSelect = ''
@@ -233,15 +241,6 @@ export function WtlConstructionLedgerShell({
     window.addEventListener('mousemove', onMove)
     window.addEventListener('mouseup', onUp, { once: true })
   }, [])
-
-  useEffect(() => {
-    if (!uiMenuOpen) return
-    const onPointer = (event: MouseEvent) => {
-      if (!uiMenuRef.current?.contains(event.target as Node)) setUiMenuOpen(false)
-    }
-    document.addEventListener('mousedown', onPointer)
-    return () => document.removeEventListener('mousedown', onPointer)
-  }, [uiMenuOpen])
 
   useEffect(() => {
     let cancelled = false
@@ -332,8 +331,8 @@ export function WtlConstructionLedgerShell({
   )
 
   const project = projects.find((item) => item.id === projectId) ?? null
-  const work =
-    rows.find((item) => item.id === workId && project?.works.some((w) => w.id === item.id)) ?? null
+  /** 검색·필터와 무관. 클릭으로 연 공사만 우측 패널에 유지 */
+  const work = workId ? (rows.find((item) => item.id === workId) ?? null) : null
 
   useEffect(() => {
     setImagePreviewIndex(null)
@@ -341,13 +340,60 @@ export function WtlConstructionLedgerShell({
     setAttachSelectMode(false)
     setAttachSelectedIds([])
     attachSelectAnchor.current = null
-    if (!work) {
+    setAttachOpen(false)
+    if (!workId) {
       setAttachHeight(ATTACH_MIN_HEIGHT)
       setMapBottomInset(0)
       return
     }
-    if (!attachDraggingRef.current) setMapBottomInset(attachHeightRef.current)
-  }, [work])
+    setMapBottomInset(0)
+  }, [workId])
+
+  const workGeom = work ? geomByCode[work.consCode] ?? null : null
+  useEffect(() => {
+    if (kind === 'swl' || !workGeom) {
+      setSupplyZoneText({})
+      return
+    }
+    const wkt = geom4326ToWkt5181(workGeom)
+    if (!wkt) {
+      setSupplyZoneText({})
+      return
+    }
+    let cancelled = false
+    void call('', 'POST', {
+      service: 'wtlNetworkService',
+      action: 'getWtlNetworkList',
+      params: {
+        areaWkts5181: [wkt],
+        layerKeys: SUPPLY_ZONE_COLUMNS.map((col) => col.key),
+        withGeom: false,
+        limit: 200,
+      },
+    })
+      .then((res) => {
+        if (cancelled) return
+        const body = (res?.data ?? res) as { rows?: Array<{ layerKey?: string; name?: string }> }
+        const grouped: Record<string, string[]> = {}
+        for (const row of Array.isArray(body?.rows) ? body.rows : []) {
+          const key = String(row.layerKey ?? '')
+          const name = String(row.name ?? '').trim()
+          if (!key || !name) continue
+          const list = grouped[key] ?? []
+          if (!list.includes(name)) list.push(name)
+          grouped[key] = list
+        }
+        setSupplyZoneText(
+          Object.fromEntries(SUPPLY_ZONE_COLUMNS.map((col) => [col.key, (grouped[col.key] ?? []).join(', ')]))
+        )
+      })
+      .catch(() => {
+        if (!cancelled) setSupplyZoneText({})
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [kind, workGeom])
 
   const imagePreviewItems = useMemo((): ServiceFilePreviewItem[] => {
     if (!work) return []
@@ -451,6 +497,11 @@ export function WtlConstructionLedgerShell({
     bottomInset: mapBottomInset,
   })
 
+  useEffect(() => {
+    if (workScrollToken === 0) return
+    activeProjectRef.current?.scrollIntoView({ block: 'nearest' })
+  }, [workScrollToken])
+
   const detailOpen = Boolean(work)
   const total = listWidth + (detailOpen ? detailWidth : 0)
 
@@ -475,6 +526,8 @@ export function WtlConstructionLedgerShell({
   }, [projectId])
 
   useEffect(() => {
+    // 우측 상세가 열려 있으면 검색·필터로 사업 선택을 바꾸지 않는다(패널 유지)
+    if (workId && projectId && projects.some((item) => item.id === projectId)) return
     const pinned = pinProjectRef.current
     if (pinned && projects.some((item) => item.id === pinned)) {
       if (projectId !== pinned) setProjectId(pinned)
@@ -482,7 +535,7 @@ export function WtlConstructionLedgerShell({
     }
     if (projectId && filteredProjects.some((item) => item.id === projectId)) return
     setProjectId(filteredProjects[0]?.id ?? null)
-  }, [filteredProjects, projectId, projects])
+  }, [filteredProjects, projectId, projects, workId])
 
   useEffect(() => {
     const ledgerKind = kind === 'swl' ? 'swl' : 'wtl'
@@ -514,17 +567,13 @@ export function WtlConstructionLedgerShell({
     setFitToken((token) => token + 1)
   }, [alertJump, projects, projectId, kind])
 
-  const filterKey = `${projectQuery}\u0000${emdSelected}\u0000${riSelected}\u0000${supplyBlock}`
-  useEffect(() => {
-    if (!filterReadyRef.current) {
-      filterReadyRef.current = true
-      return
-    }
-    pinProjectRef.current = null
-    setWorkId(null)
-    setMapFocus(null)
-    setFitToken((token) => token + 1)
-  }, [filterKey])
+  const searchText = projectQuery.trim()
+  const searchActive = searchText.length > 0
+  const listedWorks = useMemo(() => {
+    if (!project) return []
+    if (!searchActive) return project.works
+    return project.works.filter((item) => workMatchesConsQuery(item, searchText))
+  }, [project, searchActive, searchText])
 
   useEffect(() => {
     setAlertOpen(false)
@@ -565,39 +614,9 @@ export function WtlConstructionLedgerShell({
           <div className="standard-panel-root">
             <div className="standard-panel-header">
               <span className="standard-panel-title">{getConsLedgerVariant(kind).title}</span>
-              <div ref={uiMenuRef} className="relative flex items-center">
-                <button
-                  type="button"
-                  className="standard-panel-close"
-                  aria-label="화면 시안"
-                  aria-expanded={uiMenuOpen}
-                  onClick={() => setUiMenuOpen((open) => !open)}
-                >
-                  <Settings className="h-4 w-4" />
-                </button>
-                {uiMenuOpen && (
-                  <div className="absolute right-0 top-full z-50 mt-1 w-44 rounded border border-border bg-background p-2 shadow-md">
-                    <label className="mb-1 block text-[11px] text-muted-foreground" htmlFor="wtl-cons-related-ui">
-                      참고 메뉴
-                    </label>
-                    <select
-                      id="wtl-cons-related-ui"
-                      value={relatedUi}
-                      onChange={(e) => setRelatedUi(e.target.value as ConsRelatedUi)}
-                      className="h-8 w-full rounded border border-slate-200 bg-white px-1.5 text-[11px] outline-none focus:border-primary"
-                    >
-                      {CONS_RELATED_UI_OPTIONS.map((opt) => (
-                        <option key={opt.id} value={opt.id}>
-                          {opt.label}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                )}
-                <button type="button" className="standard-panel-close" onClick={onClose} aria-label="닫기">
-                  <X className="h-4 w-4" />
-                </button>
-              </div>
+              <button type="button" className="standard-panel-close" onClick={onClose} aria-label="닫기">
+                <X className="h-4 w-4" />
+              </button>
             </div>
             <div className="flex min-h-0 flex-1 flex-col">
               <div className="flex min-h-0 flex-[0.95] flex-col border-b border-border">
@@ -685,6 +704,7 @@ export function WtlConstructionLedgerShell({
                         key={item.id}
                         project={item}
                         active={item.id === projectId}
+                        buttonRef={item.id === projectId ? activeProjectRef : undefined}
                         onSelect={() => {
                           pinProjectRef.current = null
                           setMapFocus(null)
@@ -710,8 +730,9 @@ export function WtlConstructionLedgerShell({
                     <div className="min-w-0 truncate">
                       공사목록
                       <span className="ml-1 font-normal text-slate-400">
-                        {project.workCount}건
-                        {project.changeCount > 0 ? ` · 변경 ${project.changeCount}` : ''}
+                        {searchActive
+                          ? `검색 ${listedWorks.length}건`
+                          : `${project.workCount}건${project.changeCount > 0 ? ` · 변경 ${project.changeCount}` : ''}`}
                       </span>
                     </div>
                     <label className="flex shrink-0 items-center gap-1 font-normal text-slate-500">
@@ -727,9 +748,11 @@ export function WtlConstructionLedgerShell({
                   </div>
                   <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-2">
                     <WorkList
-                      works={project.works}
+                      works={listedWorks}
                       projectName={project.name}
                       selectedId={workId}
+                      scrollToken={workScrollToken}
+                      empty={searchActive ? '검색된 공사가 없습니다.' : '공사가 없습니다.'}
                       onSelect={(item) => {
                         setMapFocus(null)
                         setWorkId(item.id)
@@ -772,14 +795,35 @@ export function WtlConstructionLedgerShell({
                 <div className="min-h-0 flex-1 overflow-y-auto p-2">
                   <div className="mb-1.5 flex items-center justify-between gap-2">
                     <p className="text-[11px] font-semibold text-slate-700">공사정보</p>
-                    <button
-                      type="button"
-                      className="inline-flex h-7 items-center gap-1 rounded border border-slate-200 bg-white px-2 text-[11px] text-slate-700 hover:bg-slate-50"
-                      onClick={() => setAlertOpen(true)}
-                    >
-                      <Bell className="h-3.5 w-3.5 text-primary" aria-hidden />
-                      알림설정
-                    </button>
+                    <div className="flex shrink-0 items-center gap-1">
+                      <button
+                        type="button"
+                        className={cn(
+                          'inline-flex h-7 items-center gap-1 rounded border px-2 text-[11px]',
+                          attachOpen
+                            ? 'border-slate-600 bg-slate-600 text-white'
+                            : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+                        )}
+                        onClick={() => setAttachOpen((open) => !open)}
+                      >
+                        <FileText
+                          className={cn('h-3.5 w-3.5', attachOpen ? 'text-white' : 'text-primary')}
+                          aria-hidden
+                        />
+                        첨부파일
+                        <span className={attachOpen ? 'text-white/80' : 'text-slate-500'}>
+                          {work.attachments.length}
+                        </span>
+                      </button>
+                      <button
+                        type="button"
+                        className="inline-flex h-7 items-center gap-1 rounded border border-slate-200 bg-white px-2 text-[11px] text-slate-700 hover:bg-slate-50"
+                        onClick={() => setAlertOpen(true)}
+                      >
+                        <Bell className="h-3.5 w-3.5 text-primary" aria-hidden />
+                        알림설정
+                      </button>
+                    </div>
                   </div>
                   <div className="overflow-hidden rounded border border-slate-200">
                     <AttrRowEllipsis label={WTL_CONS_FIELD_LABEL.name} value={work.name} />
@@ -809,6 +853,18 @@ export function WtlConstructionLedgerShell({
                     <AttrRow label={WTL_CONS_FIELD_LABEL.directorName} value={work.directorName} />
                     <AttrRow label={WTL_CONS_FIELD_LABEL.reason} value={work.reason} />
                     <AttrRow label={WTL_CONS_FIELD_LABEL.descript} value={work.descript} />
+                    {kind !== 'swl' ? (
+                      <div className="grid grid-cols-3 border-t border-slate-100 text-[11px]">
+                        {SUPPLY_ZONE_COLUMNS.map((col) => (
+                          <div key={col.key} className="min-w-0 border-r border-slate-100 last:border-r-0">
+                            <div className="bg-slate-50 px-2 py-1.5 font-medium text-slate-600">{col.label}</div>
+                            <div className="break-words px-2 py-1.5 text-slate-800">
+                              {supplyZoneText[col.key]?.trim() ? supplyZoneText[col.key] : '—'}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : null}
                   </div>
                 </div>
                 <WtlConsRelatedTabs
@@ -824,7 +880,6 @@ export function WtlConstructionLedgerShell({
                   consCode={work?.consCode ?? null}
                   activeZone={activeZone}
                   zoneLoading={zoneLoading}
-                  ui={relatedUi}
                 />
               </div>
             </div>
@@ -842,6 +897,7 @@ export function WtlConstructionLedgerShell({
       )}
 
       {work &&
+        attachOpen &&
         typeof document !== 'undefined' &&
         createPortal(
         <div
@@ -935,10 +991,7 @@ export function WtlConstructionLedgerShell({
                 type="button"
                 className="rounded p-1 text-slate-500 hover:bg-slate-100"
                 aria-label="첨부 닫기"
-                onClick={() => {
-                    setMapFocus(null)
-                    setWorkId(null)
-                  }}
+                onClick={() => setAttachOpen(false)}
               >
                 <X className="h-3.5 w-3.5" />
               </button>
@@ -986,15 +1039,18 @@ export function WtlConstructionLedgerShell({
 function ProjectRow({
   project,
   active,
+  buttonRef,
   onSelect,
 }: {
   project: WtlConsProject
   active: boolean
+  buttonRef?: Ref<HTMLButtonElement>
   onSelect: () => void
 }) {
   return (
     <li>
       <button
+        ref={buttonRef}
         type="button"
         onClick={onSelect}
         className={cn(
@@ -1034,15 +1090,21 @@ function WorkList({
   works,
   projectName,
   selectedId,
+  scrollToken = 0,
   onSelect,
   empty = '공사가 없습니다.',
 }: {
   works: WtlConsWork[]
   projectName: string
   selectedId: string | null
+  scrollToken?: number
   onSelect: (work: WtlConsWork) => void
   empty?: string
 }) {
+  const selectedRef = useRef<HTMLButtonElement>(null)
+  useEffect(() => {
+    selectedRef.current?.scrollIntoView({ block: 'nearest' })
+  }, [selectedId, scrollToken, works])
   if (works.length === 0) {
     return <p className="py-8 text-center text-xs text-slate-400">{empty}</p>
   }
@@ -1053,6 +1115,7 @@ function WorkList({
         return (
           <li key={w.id}>
             <button
+              ref={selectedId === w.id ? selectedRef : undefined}
               type="button"
               onClick={() => onSelect(w)}
               className={cn(
