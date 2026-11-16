@@ -28,7 +28,8 @@ type SortKey = 'name' | 'emd' | 'candidate' | 'grade'
 const initialSortDir = () => 'asc' as const
 
 export type SmallPublicCandidateFilter = {
-  type: SmallPublicFacType
+  /** '' = 전체 유형 */
+  type: SmallPublicFacType | ''
   candidate: SmallPublicCandidate | ''
   emd: string
   keyword: string
@@ -176,7 +177,7 @@ export function SmallPublicCandidateListPanel({
                     )}
                   >
                     <td
-                      className={cn('truncate py-1.5 pl-3 pr-1.5 font-medium', active ? 'text-primary' : 'text-foreground')}
+                      className={cn('truncate py-1.5 pl-3 pr-1.5', active ? 'text-primary' : 'text-foreground')}
                       title={f.name}
                     >
                       {f.name}
