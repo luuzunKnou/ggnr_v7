@@ -14,10 +14,20 @@ import {
   ChevronLeft,
   ChevronRight,
   Loader2,
+  Printer,
   RefreshCw,
   X,
 } from 'lucide-react'
 import { call } from '@/lib/api'
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/app/shadcnComponents/ui/dialog'
+import { useResolvedThemeSafe } from '@/app/(pages)/(index)/theme-provider'
+import { MAP_UI_Z } from '@/lib/mapUiZIndex'
 import { useConsoleMenuAccess } from '@/hooks/useConsoleMenuAccess'
 import { hasAnyDevConsoleAccess } from '@/lib/consoleMenuAccess/client'
 import { isSuperUser } from '@/lib/auth/superUser'
@@ -84,12 +94,19 @@ import {
   type WtlNetMapSourcePayload,
 } from './wtlNetworkMapSources'
 import { facilityTabLabel } from '../facility/wtlFacilityCatalog'
+import type { FacilityReportAttrRow } from '../facility/wtlFacilityDetailReport'
 import adminTabsJson from '@/config/wtlAdmin/adminTabs.json'
+import { buildWtlNetworkDetailReportHtml } from './wtlNetworkDetailReportData'
 import type {
   WtlNetworkFilterMeta,
   WtlNetworkRow,
   WtlNetworkStatusListFilter,
 } from './wtlNetworkTypes'
+
+const reportBtnPrimary =
+  'inline-flex h-7 items-center gap-1 rounded border border-primary bg-primary px-2 text-[11px] font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50'
+const reportBtnGhost =
+  'inline-flex h-7 items-center gap-1 rounded border border-border bg-background px-2 text-[11px] font-medium text-muted-foreground hover:bg-muted/50 disabled:opacity-50'
 
 const LIST_DEFAULT = 440
 const LIST_MIN = 360
@@ -3169,6 +3186,7 @@ function NetworkDetailModal({
   onItemUpdated: (next: WtlNetworkRow) => void
 }) {
   const open = item != null
+  const theme = useResolvedThemeSafe()
   const fieldsTable = String(item?.fieldsTable ?? '').trim()
   const fieldsFallback = String(item?.fieldsTableFallback ?? '').trim() || null
   const bundleKey = fieldsTable
@@ -3190,6 +3208,10 @@ function NetworkDetailModal({
   const [draft, setDraft] = useState<Record<string, string>>({})
   const [saving, setSaving] = useState(false)
   const [editError, setEditError] = useState<string | null>(null)
+  const [reportOpen, setReportOpen] = useState(false)
+  const [reportHtml, setReportHtml] = useState('')
+  const [printing, setPrinting] = useState(false)
+  const reportIframeRef = useRef<HTMLIFrameElement | null>(null)
 
   const cancelEdit = useCallback(() => {
     setEditing(false)
@@ -3457,6 +3479,54 @@ function NetworkDetailModal({
   /** 다건 option — POINT → LINE → POLYGON 고정 */
   const orderedHitRows = useMemo(() => sortNetworkHitRows(hitRows), [hitRows])
 
+  const closeReportModal = useCallback(() => {
+    setReportOpen(false)
+    setReportHtml('')
+    setPrinting(false)
+  }, [])
+
+  const handlePrintReport = useCallback(async () => {
+    if (!item) return
+    setPrinting(true)
+    setReportHtml('')
+    setReportOpen(true)
+    try {
+      const basicAttrs: FacilityReportAttrRow[] = attrRows.map((row) => ({
+        label: row.label,
+        value: row.value,
+      }))
+      const reportTitle = titleField || item.name || layerKorName || '시설 상세'
+      const html = await buildWtlNetworkDetailReportHtml({
+        title: reportTitle,
+        layerLabel: layerKorName || reportTitle,
+        basicAttrs,
+        item,
+        fields,
+      })
+      setReportHtml(html)
+    } catch {
+      setReportOpen(false)
+      setReportHtml('')
+      window.alert('보고서 인쇄에 실패했습니다.')
+    } finally {
+      setPrinting(false)
+    }
+  }, [attrRows, fields, item, layerKorName, titleField])
+
+  useEffect(() => {
+    const doc = reportIframeRef.current?.contentDocument
+    if (!doc?.documentElement) return
+    doc.documentElement.classList.toggle('dark', theme === 'dark')
+  }, [theme, reportHtml, reportOpen])
+
+  const printReportFromModal = () => {
+    if (printing || !reportHtml) return
+    const win = reportIframeRef.current?.contentWindow
+    if (!win) return
+    win.focus()
+    win.print()
+  }
+
   if (!open || !item) return null
 
   const subtitle = titleField || item.name
@@ -3565,14 +3635,26 @@ function NetworkDetailModal({
         ) : null
       }
       headerActions={
-        multiHit ? (
-          <span
-            className="shrink-0 px-1 text-[11px] tabular-nums text-muted-foreground"
-            title={`${orderedHitRows.length}건 선택됨`}
+        <>
+          <button
+            type="button"
+            title={printing ? '보고서 준비 중…' : '보고서 인쇄'}
+            disabled={printing || editing}
+            onClick={() => void handlePrintReport()}
+            className="standard-detail-hdr-btn"
           >
-            {orderedHitRows.length}건 선택됨
-          </span>
-        ) : null
+            <Printer className="h-3 w-3" aria-hidden />
+            {printing ? '준비 중…' : '보고서 인쇄'}
+          </button>
+          {multiHit ? (
+            <span
+              className="shrink-0 px-1 text-[11px] tabular-nums text-muted-foreground"
+              title={`${orderedHitRows.length}건 선택됨`}
+            >
+              {orderedHitRows.length}건 선택됨
+            </span>
+          ) : null}
+        </>
       }
     >
           <div className="standard-detail-scroll">
@@ -3666,6 +3748,84 @@ function NetworkDetailModal({
               </>
             )}
           </div>
+
+      <Dialog
+        open={reportOpen}
+        onOpenChange={(next) => {
+          if (!next) {
+            closeReportModal()
+            return
+          }
+          setReportOpen(true)
+        }}
+      >
+        <DialogContent
+          layerZIndex={MAP_UI_Z.nestedDialog}
+          className="flex max-h-[min(90vh,900px)] w-[min(56rem,calc(100vw-1.5rem))] max-w-none flex-col gap-0 overflow-hidden bg-background p-0 text-foreground scheme-light dark:scheme-dark sm:max-w-none sm:rounded-lg"
+        >
+          <DialogHeader className="shrink-0 border-b border-border px-4 py-3 text-left">
+            <DialogTitle className="text-base font-semibold text-foreground">
+              {baseTitle} 상세보고서
+            </DialogTitle>
+          </DialogHeader>
+          <div className="min-h-0 flex-1 bg-background">
+            {reportHtml ? (
+              <iframe
+                ref={reportIframeRef}
+                title={`${baseTitle} 상세보고서 미리보기`}
+                className="h-[min(70vh,720px)] w-full border-0 bg-background"
+                onLoad={(e) => {
+                  const doc = e.currentTarget.contentDocument
+                  if (!doc?.documentElement) return
+                  doc.documentElement.classList.toggle(
+                    'dark',
+                    document.documentElement.classList.contains('dark')
+                  )
+                }}
+                srcDoc={reportHtml}
+              />
+            ) : (
+              <div
+                className="flex h-[min(70vh,720px)] flex-col items-center justify-center gap-3 px-6"
+                aria-live="polite"
+              >
+                <p className="text-sm font-medium text-foreground">
+                  보고서 준비 중…
+                </p>
+                {printing ? (
+                  <p className="text-xs text-muted-foreground">
+                    탭 현황·이력을 불러오는 중입니다.
+                  </p>
+                ) : null}
+              </div>
+            )}
+          </div>
+          <DialogFooter className="gap-1 border-t border-border px-4 py-2.5 sm:space-x-0">
+            <button
+              type="button"
+              title={
+                printing || !reportHtml
+                  ? '준비가 끝난 뒤 인쇄할 수 있습니다'
+                  : '인쇄 / PDF 저장'
+              }
+              disabled={printing || !reportHtml}
+              className={cn(reportBtnPrimary, 'cursor-pointer disabled:opacity-50')}
+              onClick={printReportFromModal}
+            >
+              <Printer className="h-3 w-3" aria-hidden />
+              {printing ? '준비 중…' : '인쇄 / PDF 저장'}
+            </button>
+            <button
+              type="button"
+              title="닫기"
+              className={cn(reportBtnGhost, 'cursor-pointer')}
+              onClick={closeReportModal}
+            >
+              닫기
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </MapDetailFloatingPanel>
   )
 }

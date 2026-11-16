@@ -140,7 +140,8 @@ export function buildMeterLocationReportHtml(args: {
   html,body{background:var(--rpt-bg);color:var(--rpt-fg)}
   body{font-family:"Malgun Gothic","Apple SD Gothic Neo",sans-serif;font-size:12px;margin:16px 20px;line-height:1.45}
   .doc-head{border-bottom:2px solid var(--rpt-strong);padding-bottom:10px;margin-bottom:12px}
-  .doc-head h1{font-size:18px;margin:0 0 6px;letter-spacing:-0.02em;color:var(--rpt-fg)}
+  /* 모달 헤더와 제목 중복 — 화면에서는 h1만 숨기고 작성일시 등 메타는 유지 */
+  .doc-head h1{display:none}
   .meta-row{display:flex;flex-wrap:wrap;gap:8px 18px;color:var(--rpt-muted);font-size:11px}
   .summary{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 14px}
   .summary span{border:1px solid var(--rpt-line);background:var(--rpt-soft);color:var(--rpt-fg);border-radius:4px;padding:4px 10px;font-size:11px}
@@ -181,7 +182,12 @@ export function buildMeterLocationReportHtml(args: {
       padding:0 0 2mm;
       border-bottom:1.5pt solid #1a1a1a;
     }
-    .doc-head h1{font-size:14pt;margin:0 0 1.5mm}
+    .doc-head h1{
+      display:block;
+      font-size:14pt;
+      margin:0 0 1.5mm;
+      letter-spacing:-0.02em;
+    }
     .meta-row{font-size:9pt;gap:4px 12px}
     .summary{
       display:flex;
