@@ -1,4 +1,4 @@
-/** 단수구역 도형 좌표 변환 (4326 ring ↔ 3857/5181) */
+/** 단수구역 도형 좌표 변환 (4326 ring ↔ 지도 좌표계 3857/5181) */
 import type { Geometry } from 'ol/geom'
 import Polygon from 'ol/geom/Polygon'
 import MultiPolygon from 'ol/geom/MultiPolygon'
@@ -7,10 +7,11 @@ import { transform } from 'ol/proj'
 
 export type LonLat = [number, number]
 
-export function ringToPolygon3857(ring: LonLat[]): Polygon | null {
+/** 경위도 링 → 지도 좌표계 폴리곤 (viewProjection: 현재 지도 좌표계, 기본 3857) */
+export function ringToViewPolygon(ring: LonLat[], viewProjection = 'EPSG:3857'): Polygon | null {
   if (ring.length < 3) return null
   const coords = ring.map(([lon, lat]) => {
-    const [x, y] = transform([lon, lat], 'EPSG:4326', 'EPSG:3857')
+    const [x, y] = transform([lon, lat], 'EPSG:4326', viewProjection)
     return [x, y]
   })
   const first = coords[0]
@@ -21,7 +22,8 @@ export function ringToPolygon3857(ring: LonLat[]): Polygon | null {
   return new Polygon([coords])
 }
 
-export function geomToRing4326(geom: Geometry): LonLat[] {
+/** 지도 좌표계 폴리곤 → 경위도 외곽 링 (viewProjection: 현재 지도 좌표계, 기본 3857) */
+export function geomToRing4326(geom: Geometry, viewProjection = 'EPSG:3857'): LonLat[] {
   const poly =
     geom instanceof Polygon
       ? geom
@@ -33,7 +35,7 @@ export function geomToRing4326(geom: Geometry): LonLat[] {
   return coords
     .filter((c) => Array.isArray(c) && c.length >= 2)
     .map((c) => {
-      const [lon, lat] = transform([c[0], c[1]], 'EPSG:3857', 'EPSG:4326')
+      const [lon, lat] = transform([c[0], c[1]], viewProjection, 'EPSG:4326')
       return [lon, lat] as LonLat
     })
 }
