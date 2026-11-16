@@ -17,8 +17,17 @@ export type MapDetailFloatingPanelProps = {
   hideTitleWhenMinimized?: boolean
   minimized?: boolean
   onMinimizedChange?: (minimized: boolean) => void
+  /** false면 최소화 버튼·헤더 더블클릭 숨김 (기본 true) */
+  allowMinimize?: boolean
   onClose: () => void
-  /** 최소화·닫기 왼쪽 — select·다시 그리기 등 */
+  /**
+   * 펼침 시 기본 layer/title 자리(좌측)에 표시.
+   * hideHeading과 함께 쓰면 heading은 숨기고 이 슬롯이 flex-1을 차지한다.
+   */
+  headerLeading?: ReactNode
+  /** 펼침 시 standard-detail-float-heading display:none (최소화 시에는 기본 heading 유지) */
+  hideHeading?: boolean
+  /** 최소화·닫기 왼쪽 — 건수 표시·다시 그리기 등 */
   headerActions?: ReactNode
   pinPosition?: { top: number; left: number } | null
   focusToken?: number
@@ -42,7 +51,10 @@ export function MapDetailFloatingPanel({
   hideTitleWhenMinimized = false,
   minimized = false,
   onMinimizedChange,
+  allowMinimize = true,
   onClose,
+  headerLeading,
+  hideHeading = false,
   headerActions,
   pinPosition = null,
   focusToken,
@@ -58,6 +70,8 @@ export function MapDetailFloatingPanel({
   const layerText = String(layer ?? '').trim()
   const showLayer = Boolean(layerText && layerText !== title)
   const showTitle = !(minimized && hideTitleWhenMinimized)
+  const useLeadingSlot = Boolean(headerLeading) && !minimized
+  const hideDefaultHeading = hideHeading && !minimized
 
   return (
     <MapFloatingPanel
@@ -69,16 +83,20 @@ export function MapDetailFloatingPanel({
       pinPosition={pinPosition}
       focusToken={focusToken}
       onActivate={onActivate}
-      onHeaderDoubleClick={() => onMinimizedChange?.(!minimized)}
+      onHeaderDoubleClick={
+        allowMinimize ? () => onMinimizedChange?.(!minimized) : undefined
+      }
       className={cn('bg-background backdrop-blur-none', className)}
       header={
         <>
           <div
-            className={
+            className={cn(
               minimized
                 ? 'standard-detail-float-heading-min'
-                : 'standard-detail-float-heading pr-2'
-            }
+                : 'standard-detail-float-heading pr-2',
+              hideDefaultHeading && 'hidden'
+            )}
+            aria-hidden={hideDefaultHeading || undefined}
           >
             {showLayer ? (
               <span
@@ -105,22 +123,29 @@ export function MapDetailFloatingPanel({
               </span>
             ) : null}
           </div>
+          {useLeadingSlot ? (
+            <div className="flex min-w-0 flex-1 items-center gap-1 pr-2">
+              {headerLeading}
+            </div>
+          ) : null}
           <div className="flex shrink-0 items-center gap-1">
             {!minimized ? headerActions : null}
-            <button
-              type="button"
-              title={minimized ? '펼치기' : '최소화'}
-              aria-label={minimized ? '펼치기' : '최소화'}
-              aria-expanded={!minimized}
-              onClick={() => onMinimizedChange?.(!minimized)}
-              className="standard-panel-close cursor-pointer"
-            >
-              {minimized ? (
-                <Square className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
-              ) : (
-                <Minus className="h-4 w-4" aria-hidden />
-              )}
-            </button>
+            {allowMinimize ? (
+              <button
+                type="button"
+                title={minimized ? '펼치기' : '최소화'}
+                aria-label={minimized ? '펼치기' : '최소화'}
+                aria-expanded={!minimized}
+                onClick={() => onMinimizedChange?.(!minimized)}
+                className="standard-panel-close cursor-pointer"
+              >
+                {minimized ? (
+                  <Square className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
+                ) : (
+                  <Minus className="h-4 w-4" aria-hidden />
+                )}
+              </button>
+            ) : null}
             <button
               type="button"
               title="닫기"

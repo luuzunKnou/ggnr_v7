@@ -63,6 +63,7 @@ export type DefineFieldLike = {
   define_field_sort_type?: string | null;
   define_field_type?: string | null;
   define_field_show_title?: unknown;
+  define_field_is_key?: unknown;
 };
 
 /** 동일 필드명 중복 제거 (목록·상세 React key / 폴백 컬럼용) */
@@ -118,6 +119,44 @@ export function getRowKey(row: Record<string, unknown>, keyFieldName: string | n
   const v = getRowValueByField(row, keyFieldName);
   if (v == null || v === '') return null;
   return typeof v === 'number' ? v : String(v);
+}
+
+/** fields 배열에서 define_field_is_key 필드명 */
+export function findDefineKeyFieldName(
+  fields: ReadonlyArray<DefineFieldLike> | null | undefined
+): string | null {
+  if (!fields?.length) return null;
+  const hit = fields.find((f) => isDefineFieldFlagTrue(f.define_field_is_key));
+  const name = String(hit?.define_field_name ?? '').trim();
+  return name || null;
+}
+
+/** ogc_fid → gid → id 폴백 키 문자열 (데이터조회 resolveHistoryRowKey와 동일) */
+export function fallbackOgcStyleRowKey(
+  row: Record<string, unknown> | null | undefined
+): string | null {
+  if (!row || typeof row !== 'object') return null;
+  for (const f of ['ogc_fid', 'gid', 'id'] as const) {
+    const v = getRowValueByField(row, f);
+    if (v == null || v === '') continue;
+    const s = String(v).trim();
+    if (s) return s;
+  }
+  return null;
+}
+
+/**
+ * 행 키: define_field_is_key 값 우선, 없으면 ogc_fid 계열 폴백.
+ * 분할 레이어는 호출측에서 부모 fields / keyFieldName을 넘긴다.
+ */
+export function extractDefineRowKeyValue(
+  row: Record<string, unknown> | null | undefined,
+  keyFieldName: string | null | undefined
+): string | null {
+  if (!row || typeof row !== 'object') return null;
+  const fromKey = getRowKey(row, keyFieldName ? String(keyFieldName).trim() || null : null);
+  if (fromKey != null && String(fromKey).trim()) return String(fromKey).trim();
+  return fallbackOgcStyleRowKey(row);
 }
 
 const NUMBER_COLUMN_FIELD_NAMES = new Set(['ogc_fid', 'id']);

@@ -78,6 +78,17 @@ import { useMapInteractions } from './hooks/useMapInteractions';
 import { useFeatureIdentify } from './hooks/useFeatureIdentify';
 import { useFeatureIdentifyHoverHighlight } from './hooks/useFeatureIdentifyHoverHighlight';
 import { FeatureIdentifyPopup } from './FeatureIdentifyPopup';
+import { LayerClickDetailFloating } from '../_mapContents/layerClickDetail/LayerClickDetailFloating';
+import {
+  hasNonMatchCloseBlockedOpened,
+  isLayerClickDetailBlockedByPanelFlags,
+} from '../_mapContents/layerClickDetail/layerClickDetailGate';
+import {
+  collectLayerClickDetailMatchCloseOwnedNames,
+  filterIdentifyPopupExcludingOwned,
+  isLayerClickDetailCloseOnMatchOpened,
+} from '../_mapContents/layerClickDetail/layerClickDetailMatchClose';
+import { useLayerClickDetail } from '../_mapContents/layerClickDetail/useLayerClickDetail';
 import { useMapContextMenu } from './hooks/useMapContextMenu';
 import { findRoadAddressByJibun, getAddressFromCoord } from './addressSearch/vworldAddressSearch';
 import { transformCoordinate } from './services/coordinateService';
@@ -1638,23 +1649,25 @@ export default function OpenLayersMap({
   );
 
   // 지도 클릭 → 도형 검색. 측정·도형 그리기·도형편집·CCTV·도로망 점찍기·메모 위치 찍기 중에는 식별 비활성
+  const identifyDisabled =
+    roadCctvPanelOpen ||
+    (mapContext?.safetyFacPanelOpen ?? false) ||
+    (mapContext?.complaintPanelOpen ?? false) ||
+    (mapContext?.memoPanelOpen ?? false) ||
+    (mapContext?.groundwaterPermitPanelOpen ?? false) ||
+    (mapContext?.roadRewardPanelOpen ?? false) ||
+    (mapContext?.roadLedgerVideoOpen ?? false) ||
+    !!layerRowGeomEdit ||
+    !!spatialDrawRequest ||
+    roadNetworkPointPickActive ||
+    roadFrontageMarkerPointPickActive ||
+    (mapContext?.mapDrawInputSuspended ?? false) ||
+    activeControls.some((id) => MEASUREMENT_IDS.includes(id));
   const { popupState, popupElRef, closePopup } = useFeatureIdentify(
     mapInstanceRef.current,
     mapReady,
     visibleLayerNames,
-    roadCctvPanelOpen ||
-      (mapContext?.safetyFacPanelOpen ?? false) ||
-      (mapContext?.complaintPanelOpen ?? false) ||
-      (mapContext?.memoPanelOpen ?? false) ||
-      (mapContext?.groundwaterPermitPanelOpen ?? false) ||
-      (mapContext?.roadRewardPanelOpen ?? false) ||
-      (mapContext?.roadLedgerVideoOpen ?? false) ||
-      !!layerRowGeomEdit ||
-      !!spatialDrawRequest ||
-      roadNetworkPointPickActive ||
-      roadFrontageMarkerPointPickActive ||
-      (mapContext?.mapDrawInputSuspended ?? false) ||
-      activeControls.some((id) => MEASUREMENT_IDS.includes(id)),
+    identifyDisabled,
     serviceWmsCqlByLayer,
     mapContext?.suppressMapIdentifyUntilRef ?? null,
   );
@@ -1679,6 +1692,18 @@ export default function OpenLayersMap({
     w === 'dataQuery' ? 'standardList' : w
   );
   const isDataQueryIdentifyMenu = openedTokensForIdentify.includes('standardList');
+  /** 기존 플로팅은 유지. 신규 오픈만 intake에서 gate로 막음 */
+  const layerClickDetail = useLayerClickDetail();
+  const openLayerClickDetailRef = useRef(layerClickDetail.openFromIdentify);
+  openLayerClickDetailRef.current = layerClickDetail.openFromIdentify;
+  const [viewportSize, setViewportSize] = useState({ w: 1280, h: 720 });
+  useEffect(() => {
+    const update = () =>
+      setViewportSize({ w: window.innerWidth, h: window.innerHeight });
+    update();
+    window.addEventListener('resize', update);
+    return () => window.removeEventListener('resize', update);
+  }, []);
   const popupFeatureCount =
     popupState?.results?.reduce((s, r) => s + r.features.length, 0) ?? 0;
   const showDataQueryIdentifyOverlay =
@@ -2813,6 +2838,57 @@ export default function OpenLayersMap({
         return;
       }
       if (!isRoadInfraMenu) {
+        /** 자체 클릭 모달·identify 가로채기 패널·데이터조회·도로기반이 아니면 목록표시 필드 플로팅.
+         * 관망·시설·설비만 열린 경우: 소유 레이어가 아닌 히트만 전역 상세로 연다. */
+        const panelBlocked = isLayerClickDetailBlockedByPanelFlags({
+          riverBasicPlanPanelOpen: mapContext.riverBasicPlanPanelOpen,
+          usageDataAsPanelOpen: mapContext.usageDataAsPanelOpen,
+          roadNetworkPanelOpen: mapContext.roadNetworkPanelOpen,
+          riverIllegalOccupationPanelOpen: mapContext.riverIllegalOccupationPanelOpen,
+          roadFrontageBuildingPanelOpen: mapContext.roadFrontageBuildingPanelOpen,
+          roadFrontageMarkerPanelOpen: mapContext.roadFrontageMarkerPanelOpen,
+          occupationLedgerPanelOpen: mapContext.occupationLedgerPanelOpen,
+          useFeePanelOpen: mapContext.useFeePanelOpen,
+          roadLedgerPanelOpen: mapContext.roadLedgerPanelOpen,
+          fmsLinkagePanelOpen: mapContext.fmsLinkagePanelOpen,
+        });
+        const otherBlocked = hasNonMatchCloseBlockedOpened(openedTokens);
+        if (!panelBlocked && !otherBlocked) {
+          let popupForDetail = identifyIntakePopup;
+          if (isLayerClickDetailCloseOnMatchOpened(openedTokens)) {
+            const owned = collectLayerClickDetailMatchCloseOwnedNames(openedTokens);
+            const filtered = filterIdentifyPopupExcludingOwned(
+              identifyIntakePopup,
+              owned
+            );
+            if (!filtered) {
+              clearIdentifyIntake();
+              return;
+            }
+            popupForDetail = filtered;
+          }
+          const map = mapInstanceRef.current;
+          const coord = popupForDetail.coordinate;
+          let screenAnchor: { top: number; left: number } | null = null;
+          if (map && Array.isArray(coord) && coord.length >= 2) {
+            const pixel = map.getPixelFromCoordinate(coord as [number, number]);
+            const el = map.getTargetElement?.() as HTMLElement | null | undefined;
+            const rect = el?.getBoundingClientRect?.();
+            if (
+              pixel &&
+              Number.isFinite(pixel[0]) &&
+              Number.isFinite(pixel[1]) &&
+              rect
+            ) {
+              /** 클릭점 우측·아래 약간 띄움 (식별 오버레이와 유사) */
+              screenAnchor = {
+                left: rect.left + pixel[0] + 12,
+                top: rect.top + pixel[1] + 12,
+              };
+            }
+          }
+          openLayerClickDetailRef.current(popupForDetail, screenAnchor);
+        }
         clearIdentifyIntake();
         return;
       }
@@ -3744,6 +3820,24 @@ export default function OpenLayersMap({
           }}
         />
       )}
+
+      {layerClickDetail.open ? (
+        <LayerClickDetailFloating
+          key={layerClickDetail.placementToken}
+          open={layerClickDetail.open}
+          hits={layerClickDetail.hits}
+          selected={layerClickDetail.selected}
+          minimized={layerClickDetail.minimized}
+          onMinimizedChange={layerClickDetail.setMinimized}
+          focusToken={layerClickDetail.focusToken}
+          anchorLeftPx={layerClickDetail.anchor?.left ?? mapPaddingLeft + 56}
+          anchorTopPx={layerClickDetail.anchor?.top ?? 72}
+          viewportW={viewportSize.w}
+          viewportH={viewportSize.h}
+          onSelectHit={layerClickDetail.selectHit}
+          onClose={layerClickDetail.close}
+        />
+      ) : null}
 
       <MapPrintModal
         open={printOpen}

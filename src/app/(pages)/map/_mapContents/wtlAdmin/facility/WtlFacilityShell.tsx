@@ -20,9 +20,24 @@ import {
   listFacilityGroupOptions,
   type WtlFacilityGroupOption,
 } from './wtlFacilityCatalog'
+import {
+  groupRelatedLayersByCategory,
+  resolveRelatedLayers,
+} from './wtlFacilityRelatedLayers'
 import { flyToWtlNetworkGeom } from '../networkMap/wtlNetworkMapFly'
+import { WtlLayerMark } from '../networkMap/WtlLayerMark'
 import { useWtlFacilityMapClick } from './useWtlFacilityMapClick'
 import { useWtlFacilityMapHighlight } from './useWtlFacilityMapHighlight'
+import { notifyLayerClickDetailMatchClose } from '../../layerClickDetail/notifyLayerClickDetailMatchClose'
+import {
+  clearLayerClickDetailMatchCloseDirectNames,
+  setLayerClickDetailMatchCloseDirectNames,
+  type LayerClickDetailMatchCloseDirectSlot,
+} from '../../layerClickDetail/layerClickDetailMatchClose'
+
+const RELATED_BTN = 'standard-layer-toggle-chip cursor-pointer'
+const RELATED_BTN_ON = 'standard-layer-toggle-chip-active'
+const RELATED_BTN_OFF = 'standard-layer-toggle-chip-inactive'
 
 const LIST_DEFAULT = 480
 const LIST_MIN = 400
@@ -148,6 +163,8 @@ export function WtlFacilityShell({
   const tabScrollRef = useRef<HTMLDivElement>(null)
   const [canScrollTabLeft, setCanScrollTabLeft] = useState(false)
   const [canScrollTabRight, setCanScrollTabRight] = useState(false)
+  /** 연관 레이어 토글(물리 테이블명) — 탭·그룹 변경 시 초기화 */
+  const [relatedOn, setRelatedOn] = useState<Set<string>>(() => new Set())
 
   const updateTabScrollState = useCallback(() => {
     const el = tabScrollRef.current
@@ -179,6 +196,45 @@ export function WtlFacilityShell({
 
   const showLocationFilter = isSangsuLayerGroup(selectedSource)
 
+  const relatedLayers = useMemo(() => {
+    if (!selectedSource) return []
+    return resolveRelatedLayers(
+      tab,
+      selectedSource.defineTableGroup || selectedSource.group || null
+    )
+  }, [tab, selectedSource?.defineTableGroup, selectedSource?.group, selectedSource?.tableName])
+
+  const relatedLayerGroups = useMemo(
+    () => groupRelatedLayersByCategory(relatedLayers),
+    [relatedLayers]
+  )
+
+  /** 연관 테이블명 서명(정렬) — relatedOnKey와 동일 형식이어야 visible sync가 진행됨 */
+  const relatedLayerKeys = useMemo(
+    () =>
+      relatedLayers
+        .map((l) => l.tableName)
+        .filter(Boolean)
+        .sort()
+        .join('\0'),
+    [relatedLayers]
+  )
+
+  const hasSelectedSource = selectedSource != null
+
+  /**
+   * 탭·그룹 확정 후 간접(연관) 레이어 전부 ON.
+   * 그룹 로딩 중(hasSelectedSource=false)에는 비우지 않음 — visible 점멸 방지.
+   */
+  useEffect(() => {
+    if (!hasSelectedSource) return
+    const names = relatedLayerKeys ? relatedLayerKeys.split('\0') : []
+    setRelatedOn((prev) => {
+      if (prev.size === names.length && names.every((n) => prev.has(n))) return prev
+      return new Set(names)
+    })
+  }, [relatedLayerKeys, hasSelectedSource])
+
   const selected =
     selectedRow && selectedId && selectedRow.id === selectedId ? selectedRow : null
 
@@ -203,6 +259,13 @@ export function WtlFacilityShell({
       }
       setSelectedId(row.id)
       setSelectedRow(row)
+      notifyLayerClickDetailMatchClose({
+        tableNames: [row.tableName, row.fieldsTable, row.fieldsTableFallback, row.layerKey],
+        fieldsTable: row.fieldsTable,
+        fieldsTableFallback: row.fieldsTableFallback,
+        record: row.record,
+        ogcFid: row.ogcFid,
+      })
       if (opts?.fly) {
         const map = mapContext?.mapInstanceRef?.current
         flyToWtlNetworkGeom(
@@ -222,12 +285,27 @@ export function WtlFacilityShell({
     onSelect: (row) => selectFacilityRow(row),
   })
 
-  const managedUndergroundTables = useMemo(
-    () => catalog.listUndergroundTableNames(),
-    // tabsKey: catalog 객체 참조 대신 탭 목록 내용만 추적
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- tabsKey mirrors catalog.tabs
-    [tabsKey]
-  )
+  /** 전역 클릭 상세 제외용 — 직접 레이어만 등록(연관은 전역 상세 허용) */
+  useEffect(() => {
+    const slot: LayerClickDetailMatchCloseDirectSlot =
+      layerGroupsMode === 'equipment' ? 'wtlEquipment' : 'wtlFacility'
+    const names = selectedSource
+      ? [selectedSource.tableName, tab]
+          .map((v) => String(v ?? '').trim())
+          .filter(Boolean)
+      : null
+    setLayerClickDetailMatchCloseDirectNames(slot, names)
+    return () => {
+      clearLayerClickDetailMatchCloseDirectNames(slot)
+    }
+  }, [layerGroupsMode, selectedSource?.tableName, tab])
+
+  /** 이 셸이 visible에 마지막으로 켠 테이블 — 전 탭 일괄 delete 금지(점멸 원인) */
+  const lastAppliedVisibleRef = useRef<string[]>([])
+  /** 그룹 API가 완료된 탭 — 로딩 중·탭 불일치 시 visible sync 생략 */
+  const groupsReadyTabRef = useRef<string | null>(null)
+  /** 연관 초기 ON 반영 후에만 visible sync (직접만 먼저 켜는 2단 적용 방지) */
+  const [visibleSyncReady, setVisibleSyncReady] = useState(false)
 
   const onTotalWidthChangeRef = useRef(onTotalWidthChange)
   onTotalWidthChangeRef.current = onTotalWidthChange
@@ -321,20 +399,37 @@ export function WtlFacilityShell({
     })
   }, [tabsKey, enabledTabsKey, tabsLoading, isTabEnabled])
 
+  const relatedOnKey = useMemo(
+    () => [...relatedOn].sort().join('\0'),
+    [relatedOn]
+  )
+
   /**
-   * 선택 레이어 그룹의 시설 테이블 ↔ 지하시설물(visibleLayerNames) 동기화.
-   * 시설관리가 다루는 테이블만 교체하고 그 외 UF 선택은 유지.
+   * 직접 매칭 + 연관 ON → visibleLayerNames → 지하시설물 동기화.
+   * visibleSyncReady 이후에만 수행. 토글 시 relatedOnKey 변경으로 재적용.
    */
   useEffect(() => {
     const setVisible = mapContext?.setVisibleLayerNames
     if (!setVisible) return
-    const wanted = String(selectedSource?.tableName ?? '')
+    if (!visibleSyncReady) return
+    const direct = String(selectedSource?.tableName ?? '')
       .trim()
       .toLowerCase()
+    if (!direct) return
+    if (!tab || groupsReadyTabRef.current !== tab) return
+
+    const wantedList = [
+      ...new Set([
+        direct,
+        ...(relatedOnKey ? relatedOnKey.split('\0') : []),
+      ]),
+    ].filter(Boolean)
+    const prevApplied = lastAppliedVisibleRef.current
+
     setVisible((prev) => {
       const next = new Set(prev)
-      for (const t of managedUndergroundTables) next.delete(t)
-      if (wanted) next.add(wanted)
+      for (const t of prevApplied) next.delete(t)
+      for (const t of wantedList) next.add(t)
       if (next.size === prev.size) {
         let same = true
         for (const n of next) {
@@ -347,24 +442,35 @@ export function WtlFacilityShell({
       }
       return next
     })
-  }, [mapContext?.setVisibleLayerNames, managedUndergroundTables, selectedSource?.tableName])
+    lastAppliedVisibleRef.current = wantedList
+  }, [
+    mapContext?.setVisibleLayerNames,
+    selectedSource?.tableName,
+    relatedOnKey,
+    tab,
+    visibleSyncReady,
+  ])
 
+  /** 시설관리 종료 시에만 이 셸이 켠 레이어 제거 */
   useEffect(() => {
     const setVisible = mapContext?.setVisibleLayerNames
     if (!setVisible) return
     return () => {
+      const applied = lastAppliedVisibleRef.current
+      if (applied.length === 0) return
       setVisible((prev) => {
         let changed = false
         const next = new Set(prev)
-        for (const t of managedUndergroundTables) {
+        for (const t of applied) {
           if (next.delete(t)) changed = true
         }
         return changed ? next : prev
       })
+      lastAppliedVisibleRef.current = []
     }
-  }, [mapContext?.setVisibleLayerNames, managedUndergroundTables])
+  }, [mapContext?.setVisibleLayerNames])
 
-  /** 탭 변경 시 목록·필터 초기화 + DB에 있는 레이어 그룹만 조회 */
+  /** 탭 변경 시 목록·필터·연관 레이어 초기화 + DB에 있는 레이어 그룹만 조회 */
   useEffect(() => {
     setKeywordDraft('')
     setKeyword('')
@@ -374,6 +480,9 @@ export function WtlFacilityShell({
     setTotal(0)
     setError(null)
     clearLocationFilters()
+    setRelatedOn(new Set())
+    setVisibleSyncReady(false)
+    groupsReadyTabRef.current = null
     if (!tab || !isTabEnabled(tab)) {
       setGroupOptions([])
       setGroup('')
@@ -381,9 +490,10 @@ export function WtlFacilityShell({
       return
     }
     let cancelled = false
-    setGroupOptions([])
-    setGroup('')
+    // 이전 그룹을 비우지 않음 — selectedSource null 전환으로 visible 점멸 방지
     setGroupsLoading(true)
+    const requestTab = tab
+    const keepGroupHint = group
     void call('', 'POST', {
       service: 'wtlFacilityService',
       action: 'listFacilityLayerGroups',
@@ -408,11 +518,28 @@ export function WtlFacilityShell({
             ).trim(),
           }))
           .filter((o: WtlFacilityGroupOption) => o.group && o.tableName)
+        const nextGroup =
+          opts.find((o) => o.group === keepGroupHint)?.group ??
+          opts[0]?.group ??
+          ''
+        const nextOpt =
+          opts.find((o) => o.group === nextGroup) ?? opts[0] ?? null
+        const related = resolveRelatedLayers(
+          requestTab,
+          nextOpt?.defineTableGroup || nextOpt?.group || null
+        )
+        // 연관 전부 ON 후 sync ready — visible·지하시설물 1회 반영
+        setRelatedOn(new Set(related.map((l) => l.tableName)))
+        groupsReadyTabRef.current = requestTab
         setGroupOptions(opts)
-        setGroup(opts[0]?.group ?? '')
+        setGroup(nextGroup)
+        setVisibleSyncReady(true)
       })
       .catch(() => {
         if (cancelled) return
+        groupsReadyTabRef.current = null
+        setVisibleSyncReady(false)
+        setRelatedOn(new Set())
         setGroupOptions([])
         setGroup('')
       })
@@ -422,9 +549,9 @@ export function WtlFacilityShell({
     return () => {
       cancelled = true
     }
-    // clearLocationFilters는 mapContext 불안정 시 루프 유발 → tab·mode만 의존
+    // isTabEnabled·clearLocationFilters는 참조 불안정 → tab·mode만 의존 (루프·레이어 깜빡임 방지)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tab, layerGroupsMode, isTabEnabled])
+  }, [tab, layerGroupsMode])
 
   useEffect(() => {
     if (!showLocationFilter) {
@@ -749,6 +876,7 @@ export function WtlFacilityShell({
     setSorts([])
     setSelectedId(null)
     setSelectedRow(null)
+    setRelatedOn(new Set(relatedLayers.map((l) => l.tableName)))
     clearLocationFilters()
   }
 
@@ -756,6 +884,19 @@ export function WtlFacilityShell({
     if (!isTabEnabled(name)) return
     setTab(name)
   }
+
+  const toggleRelatedLayer = useCallback((tableName: string) => {
+    const key = String(tableName ?? '')
+      .trim()
+      .toLowerCase()
+    if (!key) return
+    setRelatedOn((prev) => {
+      const next = new Set(prev)
+      if (next.has(key)) next.delete(key)
+      else next.add(key)
+      return next
+    })
+  }, [])
 
   return (
     <>
@@ -783,6 +924,38 @@ export function WtlFacilityShell({
             </div>
             <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
               <div className="standard-filter-section shrink-0 border-b-1 !pb-[13px]">
+                {groupOptions.length > 0 ? (
+                  <div className="mb-2 flex items-center gap-1">
+                    <span className="standard-detail-hit-label w-16 !text-foreground">레이어 그룹</span>
+                    <select
+                      className="standard-detail-hit-select"
+                      value={group || groupOptions[0]?.group || ''}
+                      title="레이어 그룹"
+                      aria-label="레이어 그룹"
+                      onChange={(e) => {
+                        const next = e.target.value
+                        const opt =
+                          groupOptions.find((o) => o.group === next) ?? null
+                        const related = resolveRelatedLayers(
+                          tab,
+                          opt?.defineTableGroup || opt?.group || null
+                        )
+                        setVisibleSyncReady(false)
+                        setRelatedOn(new Set(related.map((l) => l.tableName)))
+                        setGroup(next)
+                        setSelectedId(null)
+                        setSelectedRow(null)
+                        setVisibleSyncReady(true)
+                      }}
+                    >
+                      {groupOptions.map((opt) => (
+                        <option key={opt.group} value={opt.group}>
+                          {opt.group}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                ) : null}
                 <div className="flex items-stretch border-b border-border">
                   {showTabSlide ? (
                     <button
@@ -845,26 +1018,45 @@ export function WtlFacilityShell({
                 </div>
                 {tab && isTabEnabled(tab) && groupOptions.length > 0 ? (
                   <div className="mt-2 space-y-1.5">
-                    {groupOptions.length >= 2 ? (
-                      <div className="flex items-center gap-1">
-                        <span className="standard-detail-hit-label w-16 !text-foreground">레이어 그룹</span>
-                        <select
-                          className="standard-detail-hit-select"
-                          value={group || groupOptions[0]?.group || ''}
-                          title="레이어 그룹"
-                          aria-label="레이어 그룹"
-                          onChange={(e) => {
-                            setGroup(e.target.value)
-                            setSelectedId(null)
-                            setSelectedRow(null)
-                          }}
-                        >
-                          {groupOptions.map((opt) => (
-                            <option key={opt.group} value={opt.group}>
-                              {opt.group}
-                            </option>
-                          ))}
-                        </select>
+                    {relatedLayerGroups.length > 0 ? (
+                      <div className="space-y-1.5" aria-label="연관 레이어">
+                        {relatedLayerGroups.map((group) => (
+                          <div
+                            key={group.category}
+                            className="flex items-start gap-1"
+                          >
+                            <span
+                              className="standard-detail-hit-label mt-1 w-16 shrink-0 !text-foreground"
+                              title={group.category}
+                            >
+                              {group.category}
+                            </span>
+                            <div className="grid min-w-0 flex-1 grid-cols-3 gap-1.5">
+                              {group.layers.map((item) => {
+                                const on = relatedOn.has(item.tableName)
+                                return (
+                                  <button
+                                    key={item.tableName}
+                                    type="button"
+                                    title={item.korName}
+                                    className={cn(
+                                      RELATED_BTN,
+                                      on ? RELATED_BTN_ON : RELATED_BTN_OFF
+                                    )}
+                                    onClick={() =>
+                                      toggleRelatedLayer(item.tableName)
+                                    }
+                                  >
+                                    <WtlLayerMark layerKey={item.tableName} />
+                                    <span className="min-w-0 truncate [word-break:keep-all]">
+                                      {item.korName}
+                                    </span>
+                                  </button>
+                                )
+                              })}
+                            </div>
+                          </div>
+                        ))}
                       </div>
                     ) : null}
                     {showLocationFilter ? (

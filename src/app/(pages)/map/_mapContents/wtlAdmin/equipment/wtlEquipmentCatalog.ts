@@ -3,6 +3,7 @@
  */
 import tablesJson from '@/config/defineLayer/tables.json'
 import type { WtlFacilityGroupOption } from '../facility/wtlFacilityCatalog'
+import { listAllRelatedUndergroundTableNames } from '../facility/wtlFacilityRelatedLayers'
 
 type TablesJsonRow = {
   define_table_name?: string
@@ -82,12 +83,16 @@ export function listEquipmentGroupOptions(tableName: string): WtlFacilityGroupOp
   return out
 }
 
+/** 설비관리가 지하시설물 visible에서 관리하는 테이블명(전 탭·그룹 + 연관 후보) */
 export function listAllEquipmentUndergroundTableNames(tabs: readonly string[]): string[] {
   const out = new Set<string>()
   for (const tab of tabs) {
     for (const opt of listEquipmentGroupOptions(tab)) {
       if (opt.tableName) out.add(opt.tableName)
     }
+  }
+  for (const name of listAllRelatedUndergroundTableNames(tabs)) {
+    if (name) out.add(name)
   }
   return [...out]
 }

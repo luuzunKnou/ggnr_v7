@@ -35,6 +35,8 @@ import {
   computeMapDetailDockPin,
   MAP_DETAIL_FLOAT_MINIMIZED_WIDTH,
 } from '../../../_mapComponents/mapDetailFloatingDock'
+import { MAP_FLOATING_DETAIL_CLOSE_EVENT } from '../../../_mapComponents/mapFloatingDetailEvent'
+import { notifyLayerClickDetailMatchClose } from '../../layerClickDetail/notifyLayerClickDetailMatchClose'
 import { MapSideListPanel } from '../../../_mapComponents/MapSideListPanel'
 import {
   getDefineFieldDisplayLabel,
@@ -830,6 +832,12 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
   const enabledKeys = useMemo(() => [...extraOn], [extraOn])
   const enabledKeySet = useMemo(() => new Set(enabledKeys), [enabledKeys])
   const section = useWtlNetworkSection(enabledKeys)
+  /** 단면도 최소화 — 상세 도킹 뒤에 이어서 배치 */
+  const [sectionMinimized, setSectionMinimized] = useState(false)
+  useEffect(() => {
+    if (!section.panelOpen) setSectionMinimized(false)
+  }, [section.panelOpen])
+
   useEffect(() => {
     onTotalWidthChange(total)
   }, [total, onTotalWidthChange])
@@ -843,6 +851,29 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
       mapContext?.setSpatialFilterWkt?.(null)
     }
   }, [mapContext?.setSpatialFilterWkt])
+
+  /** 상세·단면도 플로팅 일괄 닫기 (패널 X · 다른 메뉴 전환 직전) */
+  const dismissDetailUi = useCallback(() => {
+    setDetailModals([])
+    setActiveDetailKey(null)
+    setSelected(null)
+    setSectionMinimized(false)
+    section.closePanel()
+  }, [section.closePanel])
+
+  const handleClose = useCallback(() => {
+    dismissDetailUi()
+    onClose()
+  }, [dismissDetailUi, onClose])
+
+  /** 사이드바 메뉴 전환 등 — opened 바뀌기 전에 최소화 상세·단면 플로팅 제거 */
+  useEffect(() => {
+    const onCloseFloating = () => dismissDetailUi()
+    window.addEventListener(MAP_FLOATING_DETAIL_CLOSE_EVENT, onCloseFloating)
+    return () => {
+      window.removeEventListener(MAP_FLOATING_DETAIL_CLOSE_EVENT, onCloseFloating)
+    }
+  }, [dismissDetailUi])
 
   useEffect(() => {
     let cancelled = false
@@ -1501,7 +1532,17 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
 
   const openOrFocusDetailModal = useCallback(
     (row: WtlNetworkRow, hitRows: WtlNetworkRow[] = []) => {
+      const orderedHits = sortNetworkHitRows(hitRows)
       const facilityId = String(row.id)
+      notifyLayerClickDetailMatchClose({
+        tableNames: [row.layerKey, row.fieldsTable, row.fieldsTableFallback],
+        fieldsTable: row.fieldsTable,
+        fieldsTableFallback: row.fieldsTableFallback,
+        record:
+          row.record && typeof row.record === 'object'
+            ? (row.record as Record<string, unknown>)
+            : null,
+      })
       const prev = detailModalsRef.current
       const existing = prev.find((m) => modalOwnsFacilityId(m, facilityId))
       if (existing) {
@@ -1512,7 +1553,7 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
               : {
                   ...m,
                   item: row,
-                  hitRows,
+                  hitRows: orderedHits,
                   expandToken: m.expandToken + 1,
                   focusToken: m.focusToken + 1,
                   minimized: false,
@@ -1531,7 +1572,7 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
         {
           key,
           item: row,
-          hitRows,
+          hitRows: orderedHits,
           stackIndex,
           expandToken: 0,
           focusToken: 0,
@@ -1714,8 +1755,10 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
     searchFilter,
     detailRelatedLayer,
     onSelect: (row, hits) => {
-      const hitRows = Array.isArray(hits) && hits.length > 0 ? hits : []
-      void pickRow(row, { hitRows })
+      const hitRows =
+        Array.isArray(hits) && hits.length > 0 ? sortNetworkHitRows(hits) : []
+      const primary = hitRows[0] ?? row
+      void pickRow(primary, { hitRows })
     },
     onMapMoveStart: () => {
       // 화면 체크가 켜져 있어도 이동 시작만으로 조회를 끊지 않는다.
@@ -1823,11 +1866,6 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
     () => detailModals.filter((m) => m.minimized).map((m) => m.key),
     [detailModals]
   )
-  /** 단면도 최소화 — 상세 도킹 뒤에 이어서 배치 */
-  const [sectionMinimized, setSectionMinimized] = useState(false)
-  useEffect(() => {
-    if (!section.panelOpen) setSectionMinimized(false)
-  }, [section.panelOpen])
 
   const dockLeftStartPx =
     leftOffsetPx + listWidth + (resultOpen ? resultWidth : 0) + 8
@@ -2406,7 +2444,7 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
             <div className="standard-panel-header">
               <span className="standard-panel-title">관망조회</span>
               <div className="flex shrink-0 items-center gap-0.5">
-                                <button type="button" className="standard-panel-close" onClick={onClose} title="닫기" aria-label="닫기">
+                                <button type="button" className="standard-panel-close" onClick={handleClose} title="닫기" aria-label="닫기">
                   <X className="h-4 w-4" />
                 </button>
               </div>
@@ -3071,6 +3109,24 @@ function networkDetailHitLabel(row: WtlNetworkRow): string {
   return name ? `${kor} — ${name}` : kor
 }
 
+/** 다건 select option — POINT → LINE → POLYGON */
+function networkHitGeomRank(row: WtlNetworkRow): number {
+  const geomType = row.geom?.type
+  if (geomType === 'Point' || geomType === 'MultiPoint') return 0
+  if (geomType === 'LineString' || geomType === 'MultiLineString') return 1
+  if (geomType === 'Polygon' || geomType === 'MultiPolygon') return 2
+  const k = String(row.geomKind ?? '').trim().toLowerCase()
+  if (k === 'point') return 0
+  if (k === 'line') return 1
+  if (k === 'area' || k === 'polygon') return 2
+  return 1
+}
+
+function sortNetworkHitRows(rows: WtlNetworkRow[]): WtlNetworkRow[] {
+  if (rows.length < 2) return rows
+  return rows.slice().sort((a, b) => networkHitGeomRank(a) - networkHitGeomRank(b))
+}
+
 function NetworkDetailModal({
   item,
   hitRows = [],
@@ -3090,7 +3146,7 @@ function NetworkDetailModal({
   onItemUpdated,
 }: {
   item: WtlNetworkRow | null
-  /** 지도 클릭 다중 피처. 2건 이상일 때 헤더 select */
+  /** 지도 클릭 다중 피처. 2건 이상일 때 heading 자리 select·화살표, 우측에 건수 */
   hitRows?: WtlNetworkRow[]
   /** 증가 시 최소화 해제 */
   expandToken?: number
@@ -3398,20 +3454,33 @@ function NetworkDetailModal({
     [item]
   )
 
+  /** 다건 option — POINT → LINE → POLYGON 고정 */
+  const orderedHitRows = useMemo(() => sortNetworkHitRows(hitRows), [hitRows])
+
   if (!open || !item) return null
 
   const subtitle = titleField || item.name
   const baseTitle = subtitle || layerKorName || '시설 상세'
   /** select(다중 히트) 최소화 — 첫 히트 레이어명 외 n건 */
-  const multiHitMinimized = minimized && hitRows.length > 1
+  const multiHitMinimized = minimized && orderedHitRows.length > 1
   const firstHitLayerKor = multiHitMinimized
-    ? networkDetailLayerKor(hitRows[0] ?? item) || layerKorName
+    ? networkDetailLayerKor(orderedHitRows[0] ?? item) || layerKorName
     : ''
   const titleLine = multiHitMinimized
-    ? `${firstHitLayerKor || '시설'} 외 ${hitRows.length - 1}건`
+    ? `${firstHitLayerKor || '시설'} 외 ${orderedHitRows.length - 1}건`
     : baseTitle
   const showLayerLine =
     !multiHitMinimized && Boolean(layerKorName && layerKorName !== baseTitle)
+  const multiHit = orderedHitRows.length > 1
+  const hitIndex = multiHit
+    ? orderedHitRows.findIndex((r) => r.id === item.id)
+    : -1
+
+  const selectHitRow = (next: WtlNetworkRow | undefined) => {
+    if (!next || next.id === item.id) return
+    if (editing) cancelEdit()
+    onSelectHit?.(next)
+  }
 
   const renderCellValue = (row: AttrRow) => {
     if (editing && row.editable) {
@@ -3453,26 +3522,56 @@ function NetworkDetailModal({
       minimizedWidth={MAP_DETAIL_FLOAT_MINIMIZED_WIDTH}
       maxHeight={DETAIL_MODAL_MAX_HEIGHT}
       defaultPosition={{ top: anchorTopPx, left: anchorLeftPx }}
+      hideHeading={multiHit}
+      headerLeading={
+        multiHit ? (
+          <>
+            <select
+              className="h-7 min-w-0 max-w-[14rem] flex-1 cursor-pointer rounded border border-border bg-background px-1.5 text-[11px] text-foreground outline-none focus:border-primary"
+              value={item.id}
+              title="상세보기 선택"
+              aria-label="상세보기 선택"
+              onChange={(e) => {
+                selectHitRow(orderedHitRows.find((r) => r.id === e.target.value))
+              }}
+            >
+              {orderedHitRows.map((row) => (
+                <option key={row.id} value={row.id}>
+                  {networkDetailHitLabel(row)}
+                </option>
+              ))}
+            </select>
+            <button
+              type="button"
+              title="이전"
+              aria-label="이전 상세"
+              disabled={hitIndex <= 0}
+              onClick={() => selectHitRow(orderedHitRows[hitIndex - 1])}
+              className="standard-panel-close cursor-pointer disabled:pointer-events-none disabled:opacity-40"
+            >
+              <ChevronLeft className="h-4 w-4" aria-hidden />
+            </button>
+            <button
+              type="button"
+              title="다음"
+              aria-label="다음 상세"
+              disabled={hitIndex < 0 || hitIndex >= orderedHitRows.length - 1}
+              onClick={() => selectHitRow(orderedHitRows[hitIndex + 1])}
+              className="standard-panel-close cursor-pointer disabled:pointer-events-none disabled:opacity-40"
+            >
+              <ChevronRight className="h-4 w-4" aria-hidden />
+            </button>
+          </>
+        ) : null
+      }
       headerActions={
-        hitRows.length > 1 ? (
-          <select
-            className="h-7 max-w-[11rem] shrink-0 cursor-pointer rounded border border-border bg-background px-1.5 text-[11px] text-foreground outline-none focus:border-primary"
-            value={item.id}
-            title="상세보기 선택"
-            aria-label="상세보기 선택"
-            onChange={(e) => {
-              const next = hitRows.find((r) => r.id === e.target.value)
-              if (!next || next.id === item.id) return
-              if (editing) cancelEdit()
-              onSelectHit?.(next)
-            }}
+        multiHit ? (
+          <span
+            className="shrink-0 px-1 text-[11px] tabular-nums text-muted-foreground"
+            title={`${orderedHitRows.length}건 선택됨`}
           >
-            {hitRows.map((row) => (
-              <option key={row.id} value={row.id}>
-                {networkDetailHitLabel(row)}
-              </option>
-            ))}
-          </select>
+            {orderedHitRows.length}건 선택됨
+          </span>
         ) : null
       }
     >
