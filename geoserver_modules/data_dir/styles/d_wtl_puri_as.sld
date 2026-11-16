@@ -49,8 +49,8 @@
           </sld:PolygonSymbolizer>
         </sld:Rule>
         <sld:Rule>
-          <sld:Name>label_d_wtl_puri_as</sld:Name>
-          <sld:Title>d_wtl_puri_as_label</sld:Title>
+          <sld:Name>label_wtl_puri_as</sld:Name>
+          <sld:Title>wtl_puri_as_label</sld:Title>
           <ogc:Filter>
             <ogc:PropertyIsGreaterThan>
               <ogc:Function name="strLength">

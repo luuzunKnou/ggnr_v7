@@ -343,3 +343,10 @@ export async function readDxfText(folderRaw: string, fileRaw: string): Promise<s
   const buf = await fs.readFile(abs);
   return decodeDxfBytes(buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength));
 }
+
+/** 수치지형도 DXF 등고 점 고도 — 폴더명 숫자 최소 폴더 */
+export {
+  getDigitalMapElevationAtPoint,
+  hasDigitalMapFolders,
+  pickSmallestNumberFolder,
+} from '@/service/digitalMapElevation';

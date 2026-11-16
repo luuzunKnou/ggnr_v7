@@ -11,7 +11,7 @@ import { sampleHeight, sampleSurfaceY } from './groundSteppedMesh';
 export type InterpolatedGroundParts = {
   /** 윗면만 — 색상 채움용 */
   topGeo: THREE.BufferGeometry;
-  /** 아랫면·옆면 외곽선 (LineSegments용 xyz 쌍) */
+  /** 윗면·아랫면 외곽 + (두께 시) 네 모서리 세로 (LineSegments용 xyz 쌍) */
   outlinePositions: number[];
 };
 
@@ -34,7 +34,7 @@ export function createSectionRectGroundParts(
   const halfW = Math.max(1e-6, axes.halfWidthM);
   const nu = Math.max(2, Math.ceil((halfL * 2) / stepU) + 1);
   const nv = Math.max(2, Math.ceil((halfW * 2) / stepU) + 1);
-  void thicknessM;
+  const thick = Math.max(0, thicknessM);
 
   const xzAt = (iu: number, iv: number) => {
     const u = -halfL + (iu / (nu - 1)) * (halfL * 2);
@@ -96,7 +96,7 @@ export function createSectionRectGroundParts(
     outlinePositions.push(x0, y0, z0, x1, y1, z1);
   };
 
-  // 사각형 네 변 외곽 (표면 높이 따라감)
+  // 윗면 네 변 외곽 (표면 높이 따라감). 두께 있으면 아랫변·네 모서리 세로
   const corners = sectionRectCornersLocal(axes);
   for (let i = 0; i < 4; i++) {
     const a = corners[i]!;
@@ -111,8 +111,17 @@ export function createSectionRectGroundParts(
       const z1 = a.z + (b.z - a.z) * t1;
       const y0 = sampleSurfaceY(field, x0, z0);
       const y1 = sampleSurfaceY(field, x1, z1);
-      // 윗면 외곽만 — 옆면·아랫면 선 없음
       pushSeg(x0, y0, z0, x1, y1, z1);
+      if (thick > 1e-6) {
+        pushSeg(x0, y0 - thick, z0, x1, y1 - thick, z1);
+      }
+    }
+  }
+
+  if (thick > 1e-6) {
+    for (const c of corners) {
+      const yTop = sampleSurfaceY(field, c.x, c.z);
+      pushSeg(c.x, yTop, c.z, c.x, yTop - thick, c.z);
     }
   }
 
@@ -134,7 +143,7 @@ export function createInterpolatedGroundParts(
   const stepU = field.stepM / scale;
   const mid = (size - 1) / 2;
   const fallback = field.baseElevM;
-  void thicknessM;
+  const thick = Math.max(0, thicknessM);
 
   const has = (i: number, j: number) => sampleHeight(field, i, j) != null;
   const elevAt = (i: number, j: number): number => {
@@ -143,6 +152,7 @@ export function createInterpolatedGroundParts(
   };
 
   const topY = (i: number, j: number) => elevToSceneY(elevAt(i, j));
+  const botY = (i: number, j: number) => topY(i, j) - thick;
   const xz = (i: number, j: number) => ({
     x: (i - mid) * stepU,
     z: -(j - mid) * stepU,
@@ -210,8 +220,11 @@ export function createInterpolatedGroundParts(
     if (!has(i0, j0) || !has(i1, j1)) return;
     const a = xz(i0, j0);
     const b = xz(i1, j1);
-    // 윗면 외곽만 — 옆면·아랫면 선 없음
+    // 윗면 외곽 + (두께 시) 아랫변 — 옆면 세로는 모서리만
     pushSeg(a.x, topY(i0, j0), a.z, b.x, topY(i1, j1), b.z);
+    if (thick > 1e-6) {
+      pushSeg(a.x, botY(i0, j0), a.z, b.x, botY(i1, j1), b.z);
+    }
   };
 
   // 유효 셀 경계만 외곽 (이웃 셀 없거나 불완전하면 변 그림)
@@ -222,6 +235,21 @@ export function createInterpolatedGroundParts(
       if (i === size - 2 || !cellOk(i + 1, j)) pushEdge(i + 1, j, i + 1, j + 1);
       if (j === 0 || !cellOk(i, j - 1)) pushEdge(i, j, i + 1, j);
       if (j === size - 2 || !cellOk(i, j + 1)) pushEdge(i, j + 1, i + 1, j + 1);
+    }
+  }
+
+  // 두께가 있으면 격자 네 모서리 세로선만
+  if (thick > 1e-6) {
+    const last = size - 1;
+    for (const [i, j] of [
+      [0, 0],
+      [last, 0],
+      [last, last],
+      [0, last],
+    ] as const) {
+      if (!has(i, j)) continue;
+      const p = xz(i, j);
+      pushSeg(p.x, topY(i, j), p.z, p.x, botY(i, j), p.z);
     }
   }
 

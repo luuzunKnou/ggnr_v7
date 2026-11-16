@@ -6,7 +6,11 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { sql } from 'drizzle-orm';
 import db from '@/database/db';
-import { buildCodeKeywordInClauses } from '@/lib/defineLayerCodeKeyword';
+import {
+  buildCodeKeywordInClauses,
+  buildCodeLabelSortJoin,
+  isDefineCodeFieldType,
+} from '@/lib/defineLayerCodeKeyword';
 
 export type WtlFacilitySource = {
   group: string;
@@ -607,8 +611,18 @@ export async function listFacilityRows(params: {
   );
   const total = Number((countRes.rows?.[0] as { c?: number } | undefined)?.c ?? 0) || 0;
 
+  const fieldTypeByName = new Map<string, unknown>();
+  for (const f of defineFields) {
+    const fn = asStr(f.define_field_name);
+    if (!fn) continue;
+    fieldTypeByName.set(fn.toLowerCase(), f.define_field_type);
+  }
+
   const orderParts: string[] = [];
+  const sortJoins: string[] = [];
   const seenSortCols = new Set<string>();
+  let codeSortIdx = 0;
+  let userSortCount = 0;
   for (const s of rawSorts) {
     const field = String(s?.field ?? '').trim();
     if (!field || GEOM_COLS.has(field.toLowerCase())) continue;
@@ -616,13 +630,36 @@ export async function listFacilityRows(params: {
     if (!col || seenSortCols.has(col.toLowerCase())) continue;
     seenSortCols.add(col.toLowerCase());
     const dir = String(s?.dir ?? '').trim().toLowerCase() === 'desc' ? 'DESC' : 'ASC';
-    orderParts.push(`t."${col.replace(/"/g, '""')}" ${dir} NULLS LAST`);
-    if (orderParts.length >= 5) break;
+    const colQ = col.replace(/"/g, '""');
+    const isCode = isDefineCodeFieldType(fieldTypeByName.get(field.toLowerCase()));
+    if (isCode) {
+      const join = buildCodeLabelSortJoin({
+        fieldsTable,
+        fieldName: field,
+        physicalCol: col,
+        alias: `csort${codeSortIdx}`,
+        esc,
+      });
+      if (join) {
+        sortJoins.push(join.joinSql);
+        orderParts.push(`${join.orderExpr} ${dir} NULLS LAST`);
+        // 동일 한글명·미매핑 코드 안정 정렬
+        orderParts.push(`t."${colQ}" ${dir} NULLS LAST`);
+        codeSortIdx += 1;
+        userSortCount += 1;
+        if (userSortCount >= 5) break;
+        continue;
+      }
+    }
+    orderParts.push(`t."${colQ}" ${dir} NULLS LAST`);
+    userSortCount += 1;
+    if (userSortCount >= 5) break;
   }
   if (ogcCol && !seenSortCols.has(ogcCol.toLowerCase())) {
     orderParts.push(`t."${ogcCol.replace(/"/g, '""')}" ASC`);
   }
   const orderSql = orderParts.length > 0 ? orderParts.join(', ') : '1';
+  const joinSql = sortJoins.length > 0 ? `\n       ${sortJoins.join('\n       ')}` : '';
 
   const dataRes = await db.execute(
     sql.raw(
@@ -631,7 +668,7 @@ export async function listFacilityRows(params: {
          (${nameExpr}) AS name,
          ${geomSel} AS geom,
          ${recordSel} AS record
-       FROM "${safeSchema}"."${safeTable}" t
+       FROM "${safeSchema}"."${safeTable}" t${joinSql}
        WHERE ${whereSql}
        ORDER BY ${orderSql}
        LIMIT ${limit} OFFSET ${offset}`

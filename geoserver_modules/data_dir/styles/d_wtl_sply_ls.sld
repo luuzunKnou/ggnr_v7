@@ -67,7 +67,7 @@
         </sld:Rule>
         <sld:Rule>
           <sld:Name>Name</sld:Name>
-          <sld:Title>d_wtl_sply_ls_label</sld:Title>
+          <sld:Title>wtl_sply_ls_label</sld:Title>
           <sld:Abstract>Abstract</sld:Abstract>
           <ogc:Filter>
             <ogc:PropertyIsGreaterThan>

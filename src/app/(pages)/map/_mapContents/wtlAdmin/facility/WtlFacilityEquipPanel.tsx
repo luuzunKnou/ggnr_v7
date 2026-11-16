@@ -71,11 +71,16 @@ export function WtlFacilityEquipPanel({ plant, equipment, onClose }: Props) {
   return (
     <div className="standard-panel-root">
       <div className="standard-panel-header">
-        <div className="min-w-0 flex-1">
-          <span className="standard-panel-title truncate">{equipment.name}</span>
-          <p className="truncate text-[11px] text-muted-foreground">
+        <div className="standard-detail-float-heading pr-2">
+          <span
+            className="standard-detail-float-layer"
+            title={`${plant.name} · ${equipment.kind}`}
+          >
             {plant.name} · {equipment.kind}
-          </p>
+          </span>
+          <span className="standard-detail-float-title-below" title={equipment.name}>
+            {equipment.name}
+          </span>
         </div>
         <button type="button" className="standard-panel-close" onClick={onClose} aria-label="닫기">
           <X className="h-4 w-4" />

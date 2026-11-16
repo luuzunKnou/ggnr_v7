@@ -2,6 +2,7 @@
  * 시설관리 그룹·활성 판별 — 탭 키는 adminTabs.json wtlFacility(영문 테이블명)
  */
 import tablesJson from '@/config/defineLayer/tables.json'
+import { listAllRelatedUndergroundTableNames } from './wtlFacilityRelatedLayers'
 
 export type WtlFacilityGroupOption = {
   /** select 표시·값 (시설: define_table_group / 설비: 한글명) */
@@ -95,13 +96,16 @@ export function listFacilityGroupOptions(tableName: string): WtlFacilityGroupOpt
   return out
 }
 
-/** 시설관리가 지하시설물 visible에서 관리하는 테이블명(전 탭·그룹) */
+/** 시설관리가 지하시설물 visible에서 관리하는 테이블명(전 탭·그룹 + 연관 후보) */
 export function listAllFacilityUndergroundTableNames(tabs: readonly string[]): string[] {
   const out = new Set<string>()
   for (const tab of tabs) {
     for (const opt of listFacilityGroupOptions(tab)) {
       if (opt.tableName) out.add(opt.tableName)
     }
+  }
+  for (const name of listAllRelatedUndergroundTableNames(tabs)) {
+    if (name) out.add(name)
   }
   return [...out]
 }

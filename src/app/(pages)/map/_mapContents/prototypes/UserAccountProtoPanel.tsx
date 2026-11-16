@@ -80,6 +80,10 @@ type Props = {
   onOpenMissingGeom?: (item: ProtoNotifItem) => void
   /** 내 촬영요청 행 선택 시 (신청서 모달 등) */
   onSelectShootingRequest?: (id: string) => void
+  /** 패널 위치·크기 클래스 (기본: 지도 좌측 사이드바 옆) */
+  panelClassName?: string
+  /** 알림·촬영요청 옆 모달 위치 클래스 */
+  sideModalClassName?: string
 }
 
 export function UserAccountProtoPanel({
@@ -89,6 +93,8 @@ export function UserAccountProtoPanel({
   onOpenFee,
   onOpenMissingGeom,
   onSelectShootingRequest,
+  panelClassName,
+  sideModalClassName,
 }: Props) {
   const { data: session, status } = useSession()
   const searchParams = useSearchParams()
@@ -241,9 +247,10 @@ export function UserAccountProtoPanel({
       <div
         ref={panelRef}
         className={cn(
-          'fixed bottom-[7px] left-[72px] z-[90] flex w-[340px] flex-col overflow-hidden border border-border bg-background shadow-2xl',
+          'fixed bottom-[7px] z-[90] flex w-[340px] flex-col overflow-hidden border border-border bg-background shadow-2xl',
           USER_ACCOUNT_PANEL_HEIGHT,
-          PANEL_SHELL_ROUND
+          PANEL_SHELL_ROUND,
+          panelClassName ?? 'left-[72px]'
         )}
         role="dialog"
         aria-label="내 정보"
@@ -281,7 +288,10 @@ export function UserAccountProtoPanel({
                 onClick={() => setActiveTab(null)}
               />
               <div
-                className={SIDE_MODAL}
+                className={
+                  sideModalClassName ??
+                  SIDE_MODAL
+                }
                 style={panelHeightPx ? { height: panelHeightPx } : undefined}
                 role="dialog"
                 aria-label={activeTab === 'shooting' ? '촬영요청' : '알림'}

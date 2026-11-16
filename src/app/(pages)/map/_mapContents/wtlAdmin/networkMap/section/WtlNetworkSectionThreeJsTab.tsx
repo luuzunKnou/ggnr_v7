@@ -19,7 +19,9 @@ import {
   SectionFeatureLegendPanel,
   SectionFeatureLegendSkeleton,
   useSectionFeatureLegend,
+  type LongPipeLegendItem,
 } from './wtlNetworkSectionLegend'
+import { networkIdOf } from './useWtlNetworkSection'
 
 /**
  * ThreeJs 뷰·씬 배경색 (조절 지점)
@@ -43,13 +45,14 @@ import {
   buildThreeJsHoverTipHtml,
   type ThreeJsTipUserData,
 } from './wtlNetworkSectionThreeJsTip'
-
 type Pt3857 = [number, number]
 
 type Props = {
   line3857: Pt3857[]
   /** 관망조회에서 켜진 레이어 키 → 지형 파생 도형 */
   enabledKeys: string[]
+  /** 데이터 범례 항목 선택 — 지도 하이라이트(이동 없음) */
+  onLegendItemSelect?: (item: LongPipeLegendItem) => void
 }
 
 /**
@@ -152,7 +155,11 @@ function featureIdOf(ud: {
   return String(ud.featureId || ud.pipeId || ud.manholeId || '').trim()
 }
 
-export function WtlNetworkSectionThreeJsTab({ line3857, enabledKeys }: Props) {
+export function WtlNetworkSectionThreeJsTab({
+  line3857,
+  enabledKeys,
+  onLegendItemSelect,
+}: Props) {
   const theme = useResolvedThemeSafe()
   const isDark = theme === 'dark'
   const viewBgHex = isDark ? THREEJS_VIEW_BG.dark : THREEJS_VIEW_BG.light
@@ -184,6 +191,7 @@ export function WtlNetworkSectionThreeJsTab({ line3857, enabledKeys }: Props) {
   const [error, setError] = useState('')
   const [viewReady, setViewReady] = useState(false)
   const [legendFeatures, setLegendFeatures] = useState<SectionFeatureMark[]>([])
+  const [legendActiveKey, setLegendActiveKey] = useState<string | null>(null)
 
   const kinds = useMemo(() => resolveGroundLayerKinds(enabledKeys), [enabledKeys])
   const kindsSig = kinds.slice().sort().join('\u0001')
@@ -197,6 +205,23 @@ export function WtlNetworkSectionThreeJsTab({ line3857, enabledKeys }: Props) {
     toggleLegendLayer,
   } = useSectionFeatureLegend(legendFeatures)
   hiddenKeysRef.current = hiddenKeys
+
+  const legendByFeatureIdRef = useRef(
+    new Map<string, LongPipeLegendItem>()
+  )
+  const onLegendItemSelectRef = useRef(onLegendItemSelect)
+  onLegendItemSelectRef.current = onLegendItemSelect
+  const flashFeatureRef = useRef<(featureId: string) => void>(() => {})
+  useEffect(() => {
+    const m = new Map<string, LongPipeLegendItem>()
+    for (const g of featureLegendGroups) {
+      for (const it of g.items) m.set(it.key, it)
+    }
+    legendByFeatureIdRef.current = m
+  }, [featureLegendGroups])
+  useEffect(() => {
+    setLegendActiveKey(null)
+  }, [lineSig, kindsSig])
 
   useEffect(() => {
     prefetchWtlDefineDisplayBundles(kinds)
@@ -462,6 +487,7 @@ export function WtlNetworkSectionThreeJsTab({ line3857, enabledKeys }: Props) {
     },
     [clearSelectionPulse]
   )
+  flashFeatureRef.current = flashFeature
 
   const metaLine = useMemo(() => {
     if (line3857.length < 2) return ''
@@ -530,13 +556,12 @@ export function WtlNetworkSectionThreeJsTab({ line3857, enabledKeys }: Props) {
             sectionRectCenter3857,
             sectionRectRing3857,
           },
-          { fitSectionLineView },
+          { fitSectionLineView, faceNorthView },
           {
             SHAPE_NAME_KEY,
             isLineLayerShape,
             isPointLayerShape,
           },
-          { captureExtentTileImage, extent3857FromCenterRadius },
         ] = await Promise.all([
           import('three'),
           import('three/addons/controls/OrbitControls.js'),
@@ -545,7 +570,6 @@ export function WtlNetworkSectionThreeJsTab({ line3857, enabledKeys }: Props) {
           import('@/app/(pages)/dev/_components/threeJs/groundSection'),
           import('@/app/(pages)/dev/_components/threeJs/fitGroundCamera'),
           import('@/app/(pages)/dev/_components/threeJs/shapeTypes'),
-          import('@/app/(pages)/dev/_components/threeJs/captureExtentTileImage'),
         ])
         type ShapeKind = import('@/app/(pages)/dev/_components/threeJs/shapeTypes').ShapeKind
         type GroundHeightField =
@@ -614,18 +638,6 @@ export function WtlNetworkSectionThreeJsTab({ line3857, enabledKeys }: Props) {
           throw new Error('절단 범위 내 고도 샘플이 없습니다')
         }
 
-        setStatus('지도 항공 타일 불러오는 중…')
-        let mapTex: string | null = null
-        try {
-          mapTex = await captureExtentTileImage(
-            extent3857FromCenterRadius(field.centerX, field.centerY, field.radiusM),
-            { targetPx: 1280 }
-          )
-        } catch {
-          mapTex = null
-        }
-        if (cancelled) return
-
         const root = new THREE.Group()
         shapesRoot = root
         const groundProps = cloneDefaults('ground') as ShapeProps
@@ -633,11 +645,7 @@ export function WtlNetworkSectionThreeJsTab({ line3857, enabledKeys }: Props) {
         groundProps.groundDrawMode = 'section'
         groundProps.groundSectionLine = sectionLine
         groundProps.groundHeightField = field
-        groundProps.groundMapTextureUrl = mapTex
-        if (mapTex) {
-          groundProps.color = '#ffffff'
-          groundProps.opacity = 1
-        }
+        groundProps.groundMapTextureUrl = null
         groundProps.groundCenterX = field.centerX
         groundProps.groundCenterY = field.centerY
         groundProps.groundRadiusM = field.radiusM
@@ -714,6 +722,7 @@ export function WtlNetworkSectionThreeJsTab({ line3857, enabledKeys }: Props) {
                 color: pipe.color || layerColor,
                 kind: 'pipe',
                 styleCode: pipe.saaCde,
+                networkId: networkIdOf(meta.defineTable, pipe.ogcFid),
               })
             }
             if (!pipes.length) continue
@@ -781,6 +790,7 @@ export function WtlNetworkSectionThreeJsTab({ line3857, enabledKeys }: Props) {
                 layerKey: pointLayerKey,
                 color: m.color || layerColor,
                 kind: 'point',
+                networkId: networkIdOf(pointLayerKey, m.ogcFid),
               })
             }
           }
@@ -842,8 +852,18 @@ export function WtlNetworkSectionThreeJsTab({ line3857, enabledKeys }: Props) {
         orbit = new OrbitControls(camera, renderer.domElement)
         orbit.enableDamping = true
         orbit.dampingFactor = 0.08
+        // 좌클릭=이동, 휠클릭=회전, 휠스크롤=줌
+        orbit.enablePan = true
+        orbit.enableRotate = true
+        orbit.screenSpacePanning = true
+        orbit.mouseButtons.LEFT = THREE.MOUSE.PAN
+        orbit.mouseButtons.MIDDLE = THREE.MOUSE.ROTATE
+        orbit.mouseButtons.RIGHT = THREE.MOUSE.DOLLY
         orbitRef.current = orbit
         fitSectionLineView(camera, orbit, groundGroup, groundProps)
+        // 최초 화면 — 나침반 «북»과 동일하게 정북 방향
+        faceNorthView(camera, orbit)
+        renderer.domElement.style.cursor = 'grab'
 
         const resize = () => {
           if (!renderer || cancelled) return
@@ -857,54 +877,179 @@ export function WtlNetworkSectionThreeJsTab({ line3857, enabledKeys }: Props) {
         resizeObs = new ResizeObserver(resize)
         resizeObs.observe(host)
 
-        // 관로·시설 fill 호버 툴팁
+        // 관로·시설 호버 툴팁·토피 / 지형 호버 지반고 / 클릭=범례 선택
         const raycaster = new THREE.Raycaster()
         const pointer = new THREE.Vector2()
+        let hoverDepthFeatureId: string | null = null
+        let jibanHover: import('three').Sprite | null = null
+        let jibanHoverElev: number | null = null
+        let ptrDown: { x: number; y: number } | null = null
+        const { createJibangoSprite } = await import(
+          '@/app/(pages)/dev/_components/threeJs/groundElevMarkers'
+        )
+        const disposeJibanHover = () => {
+          if (!jibanHover) return
+          root.remove(jibanHover)
+          const mat = jibanHover.material as import('three').SpriteMaterial
+          mat.map?.dispose()
+          mat.dispose()
+          jibanHover = null
+          jibanHoverElev = null
+        }
+        const hideJibanHover = () => {
+          if (jibanHover) jibanHover.visible = false
+        }
+        const showJibanAt = (point: import('three').Vector3) => {
+          const elev = Math.round(point.y * 10) / 10
+          if (!jibanHover || jibanHoverElev !== elev) {
+            disposeJibanHover()
+            jibanHover = createJibangoSprite(elev)
+            jibanHoverElev = elev
+            root.add(jibanHover)
+          }
+          jibanHover.visible = true
+          jibanHover.position.set(point.x, point.y + 0.35, point.z)
+        }
+        const setGroundElevMarkersVisible = (visible: boolean) => {
+          root.traverse((obj) => {
+            if (obj.userData?.isGroundElevMarkers) obj.visible = visible
+          })
+        }
+        const setDepthBarsForFeature = (featureId: string | null) => {
+          if (hoverDepthFeatureId === featureId) return
+          hoverDepthFeatureId = featureId
+          root.traverse((obj) => {
+            const ud = obj.userData as {
+              isDepthBar?: boolean
+              featureId?: string
+              pipeId?: string
+            }
+            if (!ud.isDepthBar) return
+            if (!featureId) {
+              obj.visible = false
+              return
+            }
+            const fid = String(ud.featureId ?? '').trim()
+            const pid = String(ud.pipeId ?? '').trim()
+            obj.visible =
+              fid === featureId ||
+              pid === featureId ||
+              pid.startsWith(`${featureId}#`)
+          })
+        }
         const hideTip = () => {
           tipGenRef.current += 1
           const tip = tipRef.current
           if (tip) tip.style.display = 'none'
         }
-        const onPointerMove = (ev: PointerEvent) => {
-          if (cancelled || !renderer) return
-          const rect = renderer.domElement.getBoundingClientRect()
-          if (rect.width <= 0 || rect.height <= 0) return
+        const pickHits = (ev: PointerEvent) => {
+          const rect = renderer!.domElement.getBoundingClientRect()
+          if (rect.width <= 0 || rect.height <= 0) {
+            return {
+              rect,
+              facilityHit: undefined as (import('three').Intersection) | undefined,
+              groundHit: undefined as (import('three').Intersection) | undefined,
+            }
+          }
           pointer.x = ((ev.clientX - rect.left) / rect.width) * 2 - 1
           pointer.y = -((ev.clientY - rect.top) / rect.height) * 2 + 1
           raycaster.setFromCamera(pointer, camera)
           const hits = raycaster.intersectObjects(root.children, true)
-          let hit: (typeof hits)[number] | undefined
+          let facilityHit: (typeof hits)[number] | undefined
+          let groundHit: (typeof hits)[number] | undefined
           for (const h of hits) {
             const ud = h.object.userData as ThreeJsTipUserData & {
               isFill?: boolean
+              isGroundSurface?: boolean
             }
-            if (ud?.isFill && (ud.tooltipLayer || ud.tooltipLabel)) {
-              hit = h
-              break
+            if (
+              !facilityHit &&
+              ud?.isFill &&
+              !ud.isGroundSurface &&
+              (ud.tooltipLayer || ud.tooltipLabel)
+            ) {
+              facilityHit = h
             }
+            if (!groundHit && ud?.isGroundSurface) groundHit = h
+            if (facilityHit && groundHit) break
           }
+          return { rect, facilityHit, groundHit }
+        }
+        const onPointerMove = (ev: PointerEvent) => {
+          if (cancelled || !renderer) return
+          const { rect, facilityHit, groundHit } = pickHits(ev)
           const tip = tipRef.current
-          if (!tip || !hit) {
-            hideTip()
+          if (facilityHit && tip) {
+            hideJibanHover()
+            setGroundElevMarkersVisible(false)
+            const ud = facilityHit.object.userData as ThreeJsTipUserData & {
+              featureId?: string
+              pipeId?: string
+            }
+            const fid = featureIdOf(ud) || null
+            setDepthBarsForFeature(fid)
+            const gen = ++tipGenRef.current
+            const localX = ev.clientX - rect.left + 12
+            const localY = ev.clientY - rect.top + 12
+            void buildThreeJsHoverTipHtml(ud).then((html) => {
+              if (cancelled || tipGenRef.current !== gen) return
+              const el = tipRef.current
+              if (!el) return
+              el.innerHTML = html
+              el.style.display = 'block'
+              el.style.left = `${Math.min(localX, rect.width - el.offsetWidth - 8)}px`
+              el.style.top = `${Math.min(localY, rect.height - el.offsetHeight - 8)}px`
+            })
             return
           }
-          const ud = hit.object.userData as ThreeJsTipUserData
-          const gen = ++tipGenRef.current
-          const localX = ev.clientX - rect.left + 12
-          const localY = ev.clientY - rect.top + 12
-          void buildThreeJsHoverTipHtml(ud).then((html) => {
-            if (cancelled || tipGenRef.current !== gen) return
-            const el = tipRef.current
-            if (!el) return
-            el.innerHTML = html
-            el.style.display = 'block'
-            el.style.left = `${Math.min(localX, rect.width - el.offsetWidth - 8)}px`
-            el.style.top = `${Math.min(localY, rect.height - el.offsetHeight - 8)}px`
-          })
+          hideTip()
+          setDepthBarsForFeature(null)
+          if (groundHit) {
+            setGroundElevMarkersVisible(true)
+            showJibanAt(groundHit.point)
+            return
+          }
+          hideJibanHover()
+          setGroundElevMarkersVisible(false)
         }
-        const onPointerLeave = () => hideTip()
+        const onPointerLeave = () => {
+          hideTip()
+          setDepthBarsForFeature(null)
+          hideJibanHover()
+          setGroundElevMarkersVisible(false)
+        }
+        const onPointerDown = (ev: PointerEvent) => {
+          if (ev.button !== 0) return
+          ptrDown = { x: ev.clientX, y: ev.clientY }
+        }
+        const onPointerUp = (ev: PointerEvent) => {
+          if (ev.button !== 0 || !ptrDown || cancelled) {
+            ptrDown = null
+            return
+          }
+          const dx = ev.clientX - ptrDown.x
+          const dy = ev.clientY - ptrDown.y
+          ptrDown = null
+          if (dx * dx + dy * dy > 25) return
+          const { facilityHit } = pickHits(ev)
+          if (!facilityHit) return
+          const ud = facilityHit.object.userData as {
+            featureId?: string
+            pipeId?: string
+            manholeId?: string
+          }
+          const fid = featureIdOf(ud)
+          if (!fid || fid === THREEJS_GROUND_FEATURE_ID) return
+          const item = legendByFeatureIdRef.current.get(fid)
+          if (!item?.networkId) return
+          setLegendActiveKey(fid)
+          flashFeatureRef.current(fid)
+          onLegendItemSelectRef.current?.(item)
+        }
         renderer.domElement.addEventListener('pointermove', onPointerMove)
         renderer.domElement.addEventListener('pointerleave', onPointerLeave)
+        renderer.domElement.addEventListener('pointerdown', onPointerDown)
+        renderer.domElement.addEventListener('pointerup', onPointerUp)
 
         const tick = () => {
           if (cancelled || !renderer) return
@@ -920,7 +1065,10 @@ export function WtlNetworkSectionThreeJsTab({ line3857, enabledKeys }: Props) {
         }).__wtlTipCleanup = () => {
           renderer?.domElement.removeEventListener('pointermove', onPointerMove)
           renderer?.domElement.removeEventListener('pointerleave', onPointerLeave)
+          renderer?.domElement.removeEventListener('pointerdown', onPointerDown)
+          renderer?.domElement.removeEventListener('pointerup', onPointerUp)
           hideTip()
+          disposeJibanHover()
         }
 
         setStatus('')
@@ -1020,9 +1168,14 @@ export function WtlNetworkSectionThreeJsTab({ line3857, enabledKeys }: Props) {
           groups={featureLegendGroups}
           stylesByKey={stylesByKey}
           hiddenKeys={hiddenKeys}
+          selectedKey={legendActiveKey}
           onToggleItem={toggleLegendItem}
           onToggleLayer={toggleLegendLayer}
-          onItemClick={flashFeature}
+          onItemClick={(item) => {
+            setLegendActiveKey(item.key)
+            flashFeature(item.key)
+            onLegendItemSelect?.(item)
+          }}
         />
       ) : showLegendSkeleton ? (
         <SectionFeatureLegendSkeleton />

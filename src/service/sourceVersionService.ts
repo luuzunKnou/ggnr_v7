@@ -17,6 +17,7 @@ import {
 } from '@/service/sourceApplyLock';
 import { cleanupOrphanManagedFiles } from '@/service/sourceApplyOrphanCleanup';
 import { runStagingTypeCheck } from '@/service/sourceApplyStagingService';
+import { withNativeExtractProgress } from '@/service/sourceZipExtractProgress';
 import {
   disableMaintenanceForApply,
   enableMaintenanceForApply,
@@ -237,7 +238,7 @@ export type ApplyLatestSourceResult = {
   pendingSchemaConfirm?: boolean;
   pendingId?: string;
   applyLayout?: SourceApplyLayout;
-  /** 따로 생성 시 새 설치 폴더 */
+  /** 새 폴더 생성 시 새 설치 폴더 */
   installDir?: string;
 };
 
@@ -1104,6 +1105,9 @@ export type ApplySourceProgressEvent = {
   appliedFiles?: number;
   skippedFiles?: number;
   totalFiles?: number;
+  /** ZIP 해제 근사 진행 (비압축 총량 대비 목적지 용량) */
+  bytesDone?: number;
+  totalBytes?: number;
   /** merge-apply 내부 단계 */
   mergeStep?: MergeApplyStep;
 };
@@ -1121,7 +1125,7 @@ export type ApplySourceZipOptions = {
   includeNodeModules?: boolean;
   /** overwrite=현재 폴더 병합, sibling=상위 폴더에 새 설치 */
   applyLayout?: SourceApplyLayout;
-  /** 따로 생성 폴더 접미사. 화면에서 고른 버전 폴더 이름 */
+  /** 새 폴더 생성 폴더 접미사. 화면에서 고른 버전 폴더 이름 */
   installFolderKey?: string;
   /** 단계별 진행 콜백 (중지·병합·기동 분리) */
   onProgress?: (event: ApplySourceProgressEvent) => void | Promise<void>;
@@ -1198,10 +1202,10 @@ function requireCurrentProjectEnv(): { project: string; envName: string } {
   const project = (process.env.GGNR_PROJECT ?? '').trim();
   const envName = (process.env.GGNR_ENV ?? '').trim();
   if (!project || !envName) {
-    throw new Error('현재 서버의 프로젝트 이름 또는 구분이 없습니다. 따로 생성을 중단합니다.');
+    throw new Error('현재 서버의 프로젝트 이름 또는 구분이 없습니다. 새 폴더 생성을 중단합니다.');
   }
   if (/\s/.test(project) || /\s/.test(envName)) {
-    throw new Error('프로젝트 이름 또는 구분에 공백이 있습니다. 따로 생성을 중단합니다.');
+    throw new Error('프로젝트 이름 또는 구분에 공백이 있습니다. 새 폴더 생성을 중단합니다.');
   }
   return { project, envName };
 }
@@ -1348,7 +1352,7 @@ async function tailSiblingStarterLog(params: {
 /** 상위 폴더에 새 설치. 빌드는 그 폴더의 설치 스크립트가 현재 프로젝트·구분으로 수행 */
 async function applySourceZipAsSibling(options: ApplySourceZipOptions): Promise<ApplySourceZipResult> {
   if (process.platform !== 'win32') {
-    throw new Error('따로 생성은 윈도우 서비스 설치에서만 사용할 수 있습니다.');
+    throw new Error('새 폴더 생성은 윈도우 서비스 설치에서만 사용할 수 있습니다.');
   }
 
   const {
@@ -1383,10 +1387,15 @@ async function applySourceZipAsSibling(options: ApplySourceZipOptions): Promise<
   const ipTrim = clientIp?.trim() || undefined;
   const netLabel = includeNodeModules ? '폐쇄망' : '개방망';
 
-  const emit = async (phase: ApplySourceProgressPhase, message: string, logLine?: string) => {
-    const line = logLine ?? `[SourceCodeUpload] ${message}`;
+  const emit = async (
+    phase: ApplySourceProgressPhase,
+    message: string,
+    extra?: Partial<ApplySourceProgressEvent> | string
+  ) => {
+    const extraObj = typeof extra === 'string' ? { logLine: extra } : extra;
+    const line = extraObj?.logLine ?? `[SourceCodeUpload] ${message}`;
     console.log(line);
-    await onProgress?.({ phase, message, logLine: line });
+    await onProgress?.({ phase, message, logLine: line, ...extraObj });
   };
 
   const recordFail = async (message: string) => {
@@ -1399,29 +1408,28 @@ async function applySourceZipAsSibling(options: ApplySourceZipOptions): Promise<
       version: historyVersion,
       ip: ipTrim,
     }).catch((histErr) => {
-      console.error('[SourceCodeUpload] 따로 생성 실패 이력 기록 실패', histErr);
+      console.error('[SourceCodeUpload] 새 폴더 생성 실패 이력 기록 실패', histErr);
       return { ok: false as const };
     });
     historyRecorded = hist?.ok === true;
   };
 
   try {
-    await emit('merge-apply', `따로 생성 준비. 폴더=${targetDir}`);
+    await emit('merge-apply', `새 폴더 생성 준비. 폴더=${targetDir}`, { mergeStep: 'extract' });
     const stat = await fs.stat(zipPath);
     await fs.mkdir(extractDir, { recursive: true });
-    await emit('merge-apply', 'ZIP 압축 해제 중...');
-    {
-      let elapsed = 0;
-      const timer = setInterval(() => {
-        elapsed += 5;
-        void emit('merge-apply', `ZIP 압축 해제 중... (${elapsed}초 경과)`);
-      }, 5000);
-      try {
-        await extractZip(zipPath, extractDir);
-      } finally {
-        clearInterval(timer);
-      }
-    }
+    await emit('merge-apply', 'ZIP 압축 해제 중...', { mergeStep: 'extract' });
+    await withNativeExtractProgress({
+      zipPath,
+      extractDir,
+      extract: () => extractZip(zipPath, extractDir),
+      onPulse: (pulse) =>
+        emit('merge-apply', pulse.message, {
+          mergeStep: 'extract',
+          bytesDone: pulse.bytesDone,
+          ...(pulse.totalBytes != null ? { totalBytes: pulse.totalBytes } : {}),
+        }),
+    });
     const extractedRoot = await pickExtractedRoot(extractDir);
     const starterBat = path.join(extractedRoot, '00_make_ggnr_starter.bat');
     if (!(await pathExists(starterBat))) {
@@ -1473,7 +1481,7 @@ async function applySourceZipAsSibling(options: ApplySourceZipOptions): Promise<
       throw new Error('설치 스크립트가 실패했습니다. 설치 창의 메시지를 확인하세요.');
     }
 
-    const successMessage = `따로 생성. 설치 폴더 ${targetDir}. 프로젝트 ${project}, 구분 ${envName}, 포트 ${port}. ${netLabel}. 빌드 후 서비스를 새 폴더로 다시 등록합니다.`;
+    const successMessage = `새 폴더 생성. 설치 폴더 ${targetDir}. 프로젝트 ${project}, 구분 ${envName}, 포트 ${port}. ${netLabel}. 빌드 후 서비스를 새 폴더로 다시 등록합니다.`;
     const hist = await recordVersionHistory({
       historyType: 'apply_latest',
       status: 'success',
@@ -1482,7 +1490,7 @@ async function applySourceZipAsSibling(options: ApplySourceZipOptions): Promise<
       version: historyVersion,
       ip: ipTrim,
     }).catch((histErr) => {
-      console.error('[SourceCodeUpload] 따로 생성 성공 이력 기록 실패', histErr);
+      console.error('[SourceCodeUpload] 새 폴더 생성 성공 이력 기록 실패', histErr);
       return { ok: false as const };
     });
     historyRecorded = hist?.ok === true;
@@ -1501,7 +1509,7 @@ async function applySourceZipAsSibling(options: ApplySourceZipOptions): Promise<
         stopped: false,
         started: false,
         deferredStart: true,
-        message: '따로 생성. 빌드가 끝난 뒤 설치 스크립트가 서비스를 바꿉니다.',
+        message: '새 폴더 생성. 빌드가 끝난 뒤 설치 스크립트가 서비스를 바꿉니다.',
         stopMessage: '현재 서버 유지(빌드 전)',
         startMessage: '설치 스크립트가 서비스 재등록',
       },
@@ -1619,31 +1627,17 @@ export async function applySourceZipFile(options: ApplySourceZipOptions): Promis
       mergeStep: 'extract',
     });
     await emit('merge-apply', 'ZIP 압축 해제 시작', { mergeStep: 'extract' });
-    {
-      /** Expand-Archive 등 장시간 작업 — 60초 유휴 프록시 끊김 방지 (5초마다 + 즉시 1회) */
-      const EXTRACT_HEARTBEAT_MS = 5_000;
-      let extractElapsedSec = 0;
-      let heartbeatBusy = false;
-      const pulseExtract = () => {
-        if (heartbeatBusy) return;
-        heartbeatBusy = true;
-        void emit('merge-apply', `ZIP 압축 해제 중... (${extractElapsedSec}초 경과)`, {
+    await withNativeExtractProgress({
+      zipPath,
+      extractDir,
+      extract: () => extractZip(zipPath, extractDir),
+      onPulse: (pulse) =>
+        emit('merge-apply', pulse.message, {
           mergeStep: 'extract',
-        }).finally(() => {
-          heartbeatBusy = false;
-        });
-      };
-      pulseExtract();
-      const heartbeatTimer = setInterval(() => {
-        extractElapsedSec += EXTRACT_HEARTBEAT_MS / 1000;
-        pulseExtract();
-      }, EXTRACT_HEARTBEAT_MS);
-      try {
-        await extractZip(zipPath, extractDir);
-      } finally {
-        clearInterval(heartbeatTimer);
-      }
-    }
+          bytesDone: pulse.bytesDone,
+          ...(pulse.totalBytes != null ? { totalBytes: pulse.totalBytes } : {}),
+        }),
+    });
     const extractedRoot = await pickExtractedRoot(extractDir);
     await emit('merge-apply', 'ZIP 압축 해제 완료', { mergeStep: 'extract' });
 

@@ -55,6 +55,8 @@ export type PipeSegment = {
   fieldsTable?: string;
   /** 레이어 한글명 (단면도·범례 표기) */
   layerKorName?: string;
+  /** layer.ogc_fid — 관망 시설목록 선택 id용 */
+  ogcFid?: number;
 };
 
 /** @deprecated PipeSegment 사용 */
@@ -80,6 +82,8 @@ export type ManholeFeature = {
   props?: Record<string, unknown>;
   /** define_field 테이블명 */
   fieldsTable?: string;
+  /** layer.ogc_fid — 관망 시설목록 선택 id용 */
+  ogcFid?: number;
 };
 
 /** 실제 등고선 세그먼트 (elevation.cont, 범위 클립) */

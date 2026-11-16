@@ -8,6 +8,7 @@ import {
   getDefineFieldDisplayLabel,
   getRowValueByField,
   selectDefineLayerListFields,
+  uniqueDefineLayerFields,
   type DefineFieldLike,
 } from '../../../_mapComponents/standard/defineLayerRowUtils'
 import {
@@ -174,7 +175,7 @@ export function WtlFacilityListView({
     const selectedFields = selectDefineLayerListFields(all)
     if (selectedFields.length > 0) return selectedFields
     if (all.length > 0) {
-      return all
+      return uniqueDefineLayerFields(all)
         .filter((f) => {
           const name = String(f.define_field_name ?? '')
             .trim()

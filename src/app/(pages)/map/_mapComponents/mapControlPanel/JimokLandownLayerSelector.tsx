@@ -1,10 +1,16 @@
 'use client';
 
 import { useState, useCallback } from 'react';
+import { useSession } from 'next-auth/react';
 import { Switch } from '@/app/shadcnComponents/ui/switch';
+import { isSuperUser } from '@/lib/auth/superUser';
 import { cn } from '@/lib/utils';
 import { getLegendGraphicUrl } from '@/app/(pages)/map/_mapComponents/layerFactory/serviceLayerFactory';
-import { MAP_LAYER_PANEL_MAX_H_CLASS, MAP_LAYER_PANEL_SURFACE_CLASS } from './mapLayerPanelLayout';
+import {
+  MAP_LAYER_PANEL_MAX_H_CLASS,
+  MAP_LAYER_PANEL_SURFACE_CLASS,
+  layerHoverTitle,
+} from './mapLayerPanelLayout';
 
 export interface LayerOption {
   tableName: string;
@@ -37,6 +43,9 @@ export function JimokLandownLayerSelector({
   className,
   showBulkActions = true,
 }: JimokLandownLayerSelectorProps) {
+  const { data: session } = useSession();
+  const showEngInTitle = isSuperUser(session?.user?.id);
+
   const toggle = (tableName: string, checked: boolean) => {
     const next = new Set(selectedTableNames);
     if (checked) next.add(tableName);
@@ -140,6 +149,11 @@ export function JimokLandownLayerSelector({
                       checked
                         ? 'font-medium text-primary'
                         : 'text-slate-700 dark:text-white/90'
+                    )}
+                    title={layerHoverTitle(
+                      opt.layerName,
+                      opt.tableName,
+                      showEngInTitle
                     )}
                   >
                     {opt.layerName}

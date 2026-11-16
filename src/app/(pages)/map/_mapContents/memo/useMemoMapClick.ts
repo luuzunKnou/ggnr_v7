@@ -6,6 +6,7 @@ import { unByKey } from 'ol/Observable';
 import { call } from '@/lib/api';
 import { useMapContext } from '../../_mapComponents/MapContext';
 import { encodeMemoRowKey, MEMO_SCHEMA, MEMO_TABLES } from './memoConfig';
+import { extractDefineRowKeyValue } from '../../_mapComponents/standard/defineLayerRowUtils';
 
 type MemoTableRef = { tableName: string };
 
@@ -14,10 +15,9 @@ function zoomToBuffer(zoom: number): number {
   return 300_000 * Math.pow(0.54, zoom);
 }
 
+/** is_key(통상 memo_key) → 없으면 ogc_fid 계열 폴백 */
 function pickMemoKey(row: Record<string, unknown>): string | null {
-  const raw = row.memo_key ?? row.memoKey ?? row.MEMO_KEY;
-  const s = String(raw ?? '').trim();
-  return s || null;
+  return extractDefineRowKeyValue(row, 'memo_key');
 }
 
 type Props = {

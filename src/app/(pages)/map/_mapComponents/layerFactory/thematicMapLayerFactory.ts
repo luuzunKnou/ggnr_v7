@@ -44,7 +44,6 @@ export type ThematicMapLayerGroup = {
  */
 const THEMATIC_MAP_GROUP_ALLOW = new Set([
   '도시계획시설',
-  '등고선',
   '용도구역',
   '용도지구',
   '용도지역',
@@ -68,7 +67,6 @@ const THEMATIC_MAP_GROUP_ORDER = [
   '지구단위계획구역',
   '행정제한/특별고시',
   '주제도(기타)',
-  '등고선',
 ];
 
 function groupSortKey(title: string): number {

@@ -10,34 +10,32 @@ import {
   type SmallPublicFacType,
 } from '../smallPublicConfig'
 import type { SmallPublicFacility } from '../smallPublicMock'
-import { smallPublicActions } from '../smallPublicStore'
 import { SmallPublicClassBadge } from '../smallPublicUi'
 import { SmallPublicModalShell, type SmallPublicModalOverlay } from './SmallPublicInspectionModal'
 
 /**
- * 안전점검 «시설 등록» — 연계로 들어오지 않은 시설에 점검을 직접 넣을 때, 후보지(제외 빼고) 중 한 곳을 고른다.
- * 고르면 점검 대상이 되고 이어서 점검 등록을 연다(호출측).
+ * 보고서 «시설 추가» — 보고서 대상에 없는 시설(위험시설 재점검 등, 제외 빼고) 중 한 곳을 고른다.
+ * 고르면 보고서에 넣고 그 시설 점검 모달을 연다(호출측).
  */
 export function SmallPublicInspectionTargetPickerModal({
   facilities,
-  initialType,
   onCancel,
   onPicked,
   ...overlay
 }: SmallPublicModalOverlay & {
+  /** 고를 수 있는 시설(보고서 대상 밖, 제외 빼고) */
   facilities: SmallPublicFacility[]
-  initialType: SmallPublicFacType
   onCancel: () => void
   onPicked: (facility: SmallPublicFacility) => void
 }) {
-  const [type, setType] = useState<SmallPublicFacType>(initialType)
+  const [type, setType] = useState<SmallPublicFacType | ''>('')
   const [keyword, setKeyword] = useState('')
   const [pickedId, setPickedId] = useState<string | null>(null)
 
   const rows = useMemo(() => {
     const q = keyword.trim().toLowerCase()
     return facilities
-      .filter((f) => !f.inspectionTarget && f.candidate !== '제외' && f.type === type)
+      .filter((f) => !type || f.type === type)
       .filter((f) => !q || [f.name, f.mngNo, f.ri, f.emd].join(' ').toLowerCase().includes(q))
       .sort((a, b) => a.emd.localeCompare(b.emd, 'ko') || a.name.localeCompare(b.name, 'ko'))
   }, [facilities, type, keyword])
@@ -45,17 +43,15 @@ export function SmallPublicInspectionTargetPickerModal({
   const picked = rows.find((f) => f.id === pickedId) ?? null
 
   const choose = (f: SmallPublicFacility | null) => {
-    if (!f) return
-    smallPublicActions.registerInspectionTargets([f.id])
-    onPicked(f)
+    if (f) onPicked(f)
   }
 
   return (
     <SmallPublicModalShell
       {...overlay}
       size="sm"
-      title="시설 등록"
-      subtitle="점검을 직접 등록할 시설을 후보지에서 고르세요."
+      title="시설 추가"
+      subtitle="보고서 대상에 없는 시설(위험시설 재점검 등)을 고르세요."
       onClose={onCancel}
       bodyClassName="flex min-h-0 flex-1 flex-col"
       footer={
@@ -74,11 +70,12 @@ export function SmallPublicInspectionTargetPickerModal({
           className="standard-filter-select h-8 w-[6.5rem] max-w-none text-[11px]"
           value={type}
           onChange={(e) => {
-            setType(e.target.value as SmallPublicFacType)
+            setType(e.target.value as SmallPublicFacType | '')
             setPickedId(null)
           }}
           aria-label="시설 유형"
         >
+          <option value="">전체 유형</option>
           {SMALL_PUBLIC_FAC_TYPES.map((t) => (
             <option key={t} value={t}>
               {t}
@@ -99,7 +96,7 @@ export function SmallPublicInspectionTargetPickerModal({
       <ul className="max-h-[300px] min-h-[120px] overflow-auto py-1 scrollbar-thin" role="listbox" aria-label="후보지">
         {rows.length === 0 ? (
           <li className="px-3 py-6 text-center text-[11px] text-muted-foreground">
-            {keyword.trim() ? '검색 결과가 없습니다.' : `고를 수 있는 ${type} 후보지가 없습니다.`}
+            {keyword.trim() ? '검색 결과가 없습니다.' : '추가할 수 있는 시설이 없습니다.'}
           </li>
         ) : (
           rows.map((f) => {
@@ -115,7 +112,7 @@ export function SmallPublicInspectionTargetPickerModal({
                     on ? 'bg-primary/15 shadow-[inset_3px_0_0_0_var(--primary)]' : 'hover:bg-muted/50'
                   )}
                 >
-                  <span className={cn('min-w-0 flex-1 truncate font-medium', on ? 'text-primary' : 'text-foreground')}>
+                  <span className={cn('min-w-0 flex-1 truncate', on ? 'text-primary' : 'text-foreground')}>
                     {f.name}
                   </span>
                   <span className="shrink-0 text-[11px] text-muted-foreground">

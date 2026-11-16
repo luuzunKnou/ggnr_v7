@@ -156,19 +156,22 @@ function clusterFitOneScreen(points: PointRow[]): PointRow[][] {
   return clusters
 }
 
-function padExtent(
+/** 구역 나눔 화면 바깥 여유(m) — 폴리곤이 경계에 딱 붙지 않게 */
+const ZONE_EXTENT_BUFFER_M = 5
+
+/**
+ * 구역 폴리곤·맞춤용 extent = 구역 나눔 화면(MAX_ZONE_WIDTH×HEIGHT) + buffer.
+ * 점 bbox가 아니라 군집 중심 기준 한 화면 범위.
+ */
+function zoneDivisionExtent(
   ext: [number, number, number, number]
 ): [number, number, number, number] {
-  let [xmin, ymin, xmax, ymax] = ext
-  const w = xmax - xmin
-  const h = ymax - ymin
-  if (w < 2 && h < 2) {
-    const cx = (xmin + xmax) / 2
-    const cy = (ymin + ymax) / 2
-    const pad = 40
-    return [cx - pad, cy - pad, cx + pad, cy + pad]
-  }
-  return [xmin, ymin, xmax, ymax]
+  const [xmin, ymin, xmax, ymax] = ext
+  const cx = (xmin + xmax) / 2
+  const cy = (ymin + ymax) / 2
+  const halfW = MAX_ZONE_WIDTH_M / 2 + ZONE_EXTENT_BUFFER_M
+  const halfH = MAX_ZONE_HEIGHT_M / 2 + ZONE_EXTENT_BUFFER_M
+  return [cx - halfW, cy - halfH, cx + halfW, cy + halfH]
 }
 
 /**
@@ -216,7 +219,7 @@ export function clusterMeterZones(rows: MeterLocateResult[]): MeterZone[] {
       label: `구역${zoneIdx}`,
       navigable: true,
       rowIds: g.map((p) => p.row.id),
-      extent3857: padExtent(extentOf(g)),
+      extent3857: zoneDivisionExtent(extentOf(g)),
     })
     zoneIdx += 1
   }

@@ -76,13 +76,10 @@ function horizontalPerp(tangent: THREE.Vector3): THREE.Vector3 {
   return new THREE.Vector3(-t.z, 0, t.x).normalize();
 }
 
-/** 관로 지반고: 이미 표기한 고도와 이 이상 차이날 때만 추가 */
-const PIPE_JIBANGO_MIN_DELTA_M = 0.5;
-
 /**
- * 지형(지표) ↔ 관 윗면 토피 치수 바.
- * 지반고는 고도 차가 나는 관에만 (shownElevs에 기록).
+ * 지형(지표) ↔ 관 윗면 토피 + 관경 치수.
  * 토피 = 지표면 → 관 외경 상단 (심도−관반경). 심도 DB는 관 중심 기준.
+ * 관경은 구간 중점·관 윗면 위에 고정 (마우스 위치 무관).
  */
 function createDepthBar(
   pipeCenter: THREE.Vector3,
@@ -90,28 +87,31 @@ function createDepthBar(
   depthM: number,
   tangent: THREE.Vector3,
   outerR: number,
-  shownElevs: number[]
+  diameterM: number
 ): THREE.Group {
   const root = new THREE.Group();
   root.name = 'pipeDepthBar';
   root.userData[PIPE_MESH_KEY] = true;
+  root.userData.isDepthBar = true;
+  // 기본 숨김 — 도형 호버 시에만 표시
+  root.visible = false;
   root.raycast = () => {};
 
   const coverM = Math.max(0, depthM - outerR);
-  const perp = horizontalPerp(tangent);
+  const midPerp = horizontalPerp(tangent);
   const side = outerR + 0.35;
-  // 지표 · 관 윗면(크라운)
+  // 지표 · 관 윗면(크라운) — 토피는 구간 중점에 고정
   const topOnSurf = new THREE.Vector3(pipeCenter.x, surfaceY, pipeCenter.z);
   const botOnCrown = new THREE.Vector3(
     pipeCenter.x,
     pipeCenter.y + outerR,
     pipeCenter.z
   );
-  const top = topOnSurf.clone().addScaledVector(perp, side);
-  const bot = botOnCrown.clone().addScaledVector(perp, side);
+  const top = topOnSurf.clone().addScaledVector(midPerp, side);
+  const bot = botOnCrown.clone().addScaledVector(midPerp, side);
 
   const tick = 0.08;
-  const positions = [
+  const topiPositions = [
     topOnSurf.x,
     topOnSurf.y,
     topOnSurf.z,
@@ -130,24 +130,27 @@ function createDepthBar(
     bot.x,
     bot.y,
     bot.z,
-    top.x - perp.x * tick,
+    top.x - midPerp.x * tick,
     top.y,
-    top.z - perp.z * tick,
-    top.x + perp.x * tick,
+    top.z - midPerp.z * tick,
+    top.x + midPerp.x * tick,
     top.y,
-    top.z + perp.z * tick,
-    bot.x - perp.x * tick,
+    top.z + midPerp.z * tick,
+    bot.x - midPerp.x * tick,
     bot.y,
-    bot.z - perp.z * tick,
-    bot.x + perp.x * tick,
+    bot.z - midPerp.z * tick,
+    bot.x + midPerp.x * tick,
     bot.y,
-    bot.z + perp.z * tick,
+    bot.z + midPerp.z * tick,
   ];
 
-  const geo = new THREE.BufferGeometry();
-  geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-  const lines = new THREE.LineSegments(
-    geo,
+  const topiGeo = new THREE.BufferGeometry();
+  topiGeo.setAttribute(
+    'position',
+    new THREE.Float32BufferAttribute(topiPositions, 3)
+  );
+  const topiLines = new THREE.LineSegments(
+    topiGeo,
     new THREE.LineBasicMaterial({
       color: DEPTH_COLOR,
       depthTest: true,
@@ -155,54 +158,119 @@ function createDepthBar(
       opacity: 0.95,
     })
   );
-  lines.userData.isEdge = true;
-  lines.userData[PIPE_MESH_KEY] = true;
-  lines.raycast = () => {};
-  root.add(lines);
+  topiLines.userData.isEdge = true;
+  topiLines.userData[PIPE_MESH_KEY] = true;
+  topiLines.raycast = () => {};
+  root.add(topiLines);
 
   const coverSprite = makeDepthValueSprite(`토피 ${fmtDepthM(coverM)}m`);
   coverSprite.position.set(
-    (top.x + bot.x) / 2 + perp.x * 0.18,
+    (top.x + bot.x) / 2 + midPerp.x * 0.18,
     (top.y + bot.y) / 2,
-    (top.z + bot.z) / 2 + perp.z * 0.18
+    (top.z + bot.z) / 2 + midPerp.z * 0.18
   );
   root.add(coverSprite);
 
-  // 지반고: 이미 비슷한 고도가 표기됐으면 생략
-  const groundElevM = Math.round(surfaceY * 10) / 10;
-  const isNewElev = shownElevs.every(
-    (e) => Math.abs(e - groundElevM) >= PIPE_JIBANGO_MIN_DELTA_M
+  // 관경 — 구간 중점·관 윗면 위에 고정 (마우스 위치 무관)
+  const dipPerp = midPerp;
+  const crownY = pipeCenter.y + outerR;
+  const dipGap = 0.22;
+  const dipA = new THREE.Vector3(
+    pipeCenter.x - dipPerp.x * outerR,
+    crownY,
+    pipeCenter.z - dipPerp.z * outerR
   );
-  if (isNewElev) {
-    shownElevs.push(groundElevM);
-    const jibanSprite = makeDepthValueSprite(`지반고 ${fmtDepthM(groundElevM)}m`);
-    jibanSprite.position.set(
-      top.x + perp.x * 0.18,
-      top.y + 0.22,
-      top.z + perp.z * 0.18
-    );
-    root.add(jibanSprite);
-  }
+  const dipB = new THREE.Vector3(
+    pipeCenter.x + dipPerp.x * outerR,
+    crownY,
+    pipeCenter.z + dipPerp.z * outerR
+  );
+  const dipA1 = dipA.clone().add(new THREE.Vector3(0, dipGap, 0));
+  const dipB1 = dipB.clone().add(new THREE.Vector3(0, dipGap, 0));
+  const dipAlong = tangent.clone();
+  dipAlong.y = 0;
+  if (dipAlong.lengthSq() < 1e-10) dipAlong.set(1, 0, 0);
+  else dipAlong.normalize();
+  const dipTick = 0.07;
+  const dipPositions = [
+    dipA.x,
+    dipA.y,
+    dipA.z,
+    dipA1.x,
+    dipA1.y,
+    dipA1.z,
+    dipB.x,
+    dipB.y,
+    dipB.z,
+    dipB1.x,
+    dipB1.y,
+    dipB1.z,
+    dipA1.x,
+    dipA1.y,
+    dipA1.z,
+    dipB1.x,
+    dipB1.y,
+    dipB1.z,
+    dipA1.x - dipAlong.x * dipTick,
+    dipA1.y,
+    dipA1.z - dipAlong.z * dipTick,
+    dipA1.x + dipAlong.x * dipTick,
+    dipA1.y,
+    dipA1.z + dipAlong.z * dipTick,
+    dipB1.x - dipAlong.x * dipTick,
+    dipB1.y,
+    dipB1.z - dipAlong.z * dipTick,
+    dipB1.x + dipAlong.x * dipTick,
+    dipB1.y,
+    dipB1.z + dipAlong.z * dipTick,
+  ];
+  const dipGeo = new THREE.BufferGeometry();
+  dipGeo.setAttribute(
+    'position',
+    new THREE.Float32BufferAttribute(dipPositions, 3)
+  );
+  const dipLines = new THREE.LineSegments(
+    dipGeo,
+    new THREE.LineBasicMaterial({
+      color: DEPTH_COLOR,
+      depthTest: true,
+      transparent: true,
+      opacity: 0.95,
+    })
+  );
+  dipLines.userData.isEdge = true;
+  dipLines.userData[PIPE_MESH_KEY] = true;
+  dipLines.raycast = () => {};
+  root.add(dipLines);
+  const dipSprite = makeDepthValueSprite(`관경 ${fmtDipMm(diameterM)}mm`);
+  dipSprite.position.set(
+    (dipA1.x + dipB1.x) / 2,
+    (dipA1.y + dipB1.y) / 2 + 0.12,
+    (dipA1.z + dipB1.z) / 2
+  );
+  root.add(dipSprite);
+
   return root;
 }
 
 function makeDepthValueSprite(text: string): THREE.Sprite {
-  const pad = 5;
+  const pad = 4;
   const canvas = document.createElement('canvas');
   const ctx = canvas.getContext('2d');
   if (!ctx) {
     return new THREE.Sprite(new THREE.SpriteMaterial({ color: DEPTH_COLOR }));
   }
-  ctx.font = 'bold 26px "Malgun Gothic", "Nanum Gothic", sans-serif';
+  const fontCss = 'bold 18px "Malgun Gothic", "Nanum Gothic", sans-serif';
+  ctx.font = fontCss;
   const tw = Math.ceil(ctx.measureText(text).width);
-  const th = 30;
+  const th = 22;
   canvas.width = tw + pad * 2;
   canvas.height = th + pad * 2;
-  ctx.font = 'bold 26px "Malgun Gothic", "Nanum Gothic", sans-serif';
+  ctx.font = fontCss;
   ctx.fillStyle = 'rgba(15, 23, 42, 0.8)';
   ctx.strokeStyle = '#fbbf24';
-  ctx.lineWidth = 1.5;
-  const r = 4;
+  ctx.lineWidth = 1.25;
+  const r = 3;
   const w = canvas.width;
   const h = canvas.height;
   ctx.beginPath();
@@ -229,7 +297,7 @@ function makeDepthValueSprite(text: string): THREE.Sprite {
     })
   );
   const aspect = w / Math.max(1, h);
-  sprite.scale.set(0.32 * aspect, 0.32, 1);
+  sprite.scale.set(0.22 * aspect, 0.22, 1);
   sprite.raycast = () => {};
   sprite.userData[PIPE_LABEL_KEY] = true;
   sprite.userData[PIPE_MESH_KEY] = true;
@@ -477,8 +545,6 @@ export function createPipesOverlay(opts: CreatePipesOverlayOpts): THREE.Group {
   };
   const dipEnds: DipEnd[] = [];
   const END_SNAP_M = 0.4;
-  /** 관로 지반고 — 고도 차가 나는 관만 */
-  const shownPipeElevs: number[] = [];
 
   for (const pipe of pipes) {
     if (!pipe.coords3857 || pipe.coords3857.length < 2) continue;
@@ -579,9 +645,11 @@ export function createPipesOverlay(opts: CreatePipesOverlayOpts): THREE.Group {
         pipe.depthM,
         midT,
         outerR,
-        shownPipeElevs
+        pipe.diameterM
       );
       depthBar.userData.pipeId = runId;
+      depthBar.userData.featureId = pipe.id;
+      depthBar.userData.isDepthBar = true;
       root.add(depthBar);
 
       if (dipAdded) continue;

@@ -45,6 +45,10 @@ export const GGNR_DATA_PATHS = {
   digitalMap: 'digital_map',
   /** 도면 표시 업로드 DXF */
   drawingDisplay: 'file_data/drawing_display',
+  /** 소규모 공공시설 관리번호별 첨부 */
+  smallPublic: 'file_data/small_public',
+  /** 소규모 공공시설 dbf·shp */
+  smallPublicShp: 'file_data/small_public/shp',
 } as const;
 
 /** ensureBaseStructure 가 생성하는 루트 폴더 */

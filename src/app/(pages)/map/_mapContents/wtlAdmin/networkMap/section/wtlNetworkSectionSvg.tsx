@@ -49,6 +49,8 @@ export type SectionFeatureMark = {
   spanToM?: number
   /** «기존» 탭 — 등고 지표 해발(m) */
   surfaceElevM?: number
+  /** 시설목록과 동일 — getWtlNetworkDetail id (`layerKey:ogcFid`) */
+  networkId?: string
 }
 
 const SECTION_LINE_COLOR = '#FF9100'

@@ -5,7 +5,8 @@ import { sampleHeight, sampleSurfaceY } from './groundSteppedMesh';
 
 export const GROUND_ELEV_MARKER_KEY = 'ggnrGroundElevMarker';
 
-const LABEL_SCALE = 0.38;
+/** 토피·관경 호버 라벨과 동일 스케일 */
+const LABEL_SCALE = 0.22;
 const Y_EPS = 0.06;
 /** 이 이상 고도 차가 날 때만 별도 표기 */
 const MIN_DELTA_M = 0.5;
@@ -22,24 +23,26 @@ function fmtElev(h: number): string {
   return Number.isInteger(v) ? String(v) : v.toFixed(1);
 }
 
-function makeJibangoSprite(elevM: number): THREE.Sprite {
-  const pad = 6;
+/** 지반고 라벨 스프라이트 — 지형 호버 등에서 재사용 (토피·관경과 동일 폰트 크기) */
+export function createJibangoSprite(elevM: number): THREE.Sprite {
+  const pad = 4;
   const canvas = document.createElement('canvas');
   const ctx = canvas.getContext('2d');
   const text = `지반고 ${fmtElev(elevM)}m`;
   if (!ctx) {
     return new THREE.Sprite(new THREE.SpriteMaterial({ color: 0x84cc16 }));
   }
-  ctx.font = 'bold 26px "Malgun Gothic", "Nanum Gothic", sans-serif';
+  const fontCss = 'bold 18px "Malgun Gothic", "Nanum Gothic", sans-serif';
+  ctx.font = fontCss;
   const tw = Math.ceil(ctx.measureText(text).width);
-  const th = 30;
+  const th = 22;
   canvas.width = tw + pad * 2;
   canvas.height = th + pad * 2;
-  ctx.font = 'bold 26px "Malgun Gothic", "Nanum Gothic", sans-serif';
+  ctx.font = fontCss;
   ctx.fillStyle = 'rgba(15, 23, 42, 0.82)';
   ctx.strokeStyle = '#84cc16';
-  ctx.lineWidth = 1.5;
-  const r = 5;
+  ctx.lineWidth = 1.25;
+  const r = 3;
   const w = canvas.width;
   const h = canvas.height;
   ctx.beginPath();
@@ -88,6 +91,9 @@ export function createGroundElevMarkers(field: GroundHeightField): THREE.Group {
   const root = new THREE.Group();
   root.name = 'groundElevMarkers';
   root.userData[GROUND_ELEV_MARKER_KEY] = true;
+  root.userData.isGroundElevMarkers = true;
+  // 기본 숨김 — 지형 호버 시에만 표시
+  root.visible = false;
   if (field.size < 2 || !field.heights?.length) return root;
 
   const scale = GROUND_SCENE_M_PER_UNIT;
@@ -150,7 +156,7 @@ export function createGroundElevMarkers(field: GroundHeightField): THREE.Group {
 
   for (const c of placed) {
     const y = sampleSurfaceY(field, c.x, c.z) + Y_EPS;
-    const sprite = makeJibangoSprite(c.elev);
+    const sprite = createJibangoSprite(c.elev);
     sprite.position.set(c.x, y + 0.25, c.z);
     root.add(sprite);
   }

@@ -26,6 +26,7 @@ import {
   type MeterBulkCandidate,
 } from './MeterBulkAddModal'
 import { MeterNumberSuggestInput } from './MeterNumberSuggestInput'
+import { MAP_UI_Z } from '@/lib/mapUiZIndex'
 import { buildMeterLocationReportHtml } from './meterLocationReport'
 import { createMeterZoneCaptureSession } from './meterLocationZoneCapture'
 import { useMeterParcelLayer } from './useMeterParcelLayer'
@@ -799,7 +800,10 @@ export function WtlMeterLocationShell({ leftOffsetPx, onTotalWidthChange, onClos
           setReportOpen(true)
         }}
       >
-        <DialogContent className="flex max-h-[min(90vh,900px)] w-[min(56rem,calc(100vw-1.5rem))] max-w-none flex-col gap-0 overflow-hidden bg-background p-0 text-foreground scheme-light dark:scheme-dark sm:max-w-none sm:rounded-lg">
+        <DialogContent
+          layerZIndex={MAP_UI_Z.nestedDialog}
+          className="flex max-h-[min(90vh,900px)] w-[min(56rem,calc(100vw-1.5rem))] max-w-none flex-col gap-0 overflow-hidden bg-background p-0 text-foreground scheme-light dark:scheme-dark sm:max-w-none sm:rounded-lg"
+        >
           <DialogHeader className="shrink-0 border-b border-border px-4 py-3 text-left">
             <DialogTitle className="text-base font-semibold text-foreground">
               계량기위치 보고서
@@ -842,14 +846,6 @@ export function WtlMeterLocationShell({ leftOffsetPx, onTotalWidthChange, onClos
           <DialogFooter className="gap-1 border-t border-border px-4 py-2.5 sm:space-x-0">
             <button
               type="button"
-              title={printing ? '캡처 취소 후 닫기' : '닫기'}
-              className={cn(btnGhost, 'cursor-pointer')}
-              onClick={closeReportModal}
-            >
-              닫기
-            </button>
-            <button
-              type="button"
               title={
                 printing || !reportHtml
                   ? '캡처가 끝난 뒤 인쇄할 수 있습니다'
@@ -861,6 +857,14 @@ export function WtlMeterLocationShell({ leftOffsetPx, onTotalWidthChange, onClos
             >
               <Printer className="h-3 w-3" aria-hidden />
               {printing ? '캡처 중…' : '인쇄 / PDF 저장'}
+            </button>
+            <button
+              type="button"
+              title={printing ? '캡처 취소 후 닫기' : '닫기'}
+              className={cn(btnGhost, 'cursor-pointer')}
+              onClick={closeReportModal}
+            >
+              닫기
             </button>
           </DialogFooter>
         </DialogContent>

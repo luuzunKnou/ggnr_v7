@@ -92,6 +92,7 @@ type PipeRow = {
   diameterM: number
   depthM: number
   surfaceElevM?: number
+  ogcFid?: number
 }
 
 type PointRow = {
@@ -105,6 +106,17 @@ type PointRow = {
   surfaceElevM?: number
   styleCode?: string
   fieldsTable?: string
+  ogcFid?: number
+}
+
+/** 시설목록 pickRow id — `layerKey:ogcFid` */
+export function networkIdOf(
+  layerKey: string | undefined,
+  ogcFid?: number
+): string | undefined {
+  const key = String(layerKey ?? '').trim()
+  if (!key || ogcFid == null || !Number.isFinite(ogcFid)) return undefined
+  return `${key}:${Math.trunc(ogcFid)}`
 }
 
 export type SectionSupplyAreas = {
@@ -369,6 +381,7 @@ function buildFeatures(
         kind: 'pipe',
         surfaceElevM: surface,
         layerKey: styleLayerKey,
+        networkId: networkIdOf(styleLayerKey, pipe.ogcFid),
       })
       continue
     }
@@ -393,6 +406,7 @@ function buildFeatures(
       kind: 'pipe',
       surfaceElevM: surface,
       layerKey: styleLayerKey,
+      networkId: networkIdOf(styleLayerKey, pipe.ogcFid),
     })
   }
 
@@ -444,6 +458,7 @@ function buildFeatures(
         ? String(pt.styleCode).trim().toUpperCase()
         : undefined,
       layerKey: styleLayerKey,
+      networkId: networkIdOf(styleLayerKey, pt.ogcFid),
     })
   }
 

@@ -18,6 +18,8 @@ export interface IdentifyFeatureItem {
 
 export interface IdentifyLayerResult {
   tableName: string;
+  /** fields/CODE 키 — 분할이면 부모, 없으면 tableName */
+  physicalTable?: string;
   korName: string;
   titleField: string | null;
   /** 분할 레이어 식별 결과(부모 테이블+CQL). 목록·자동 패널에서 부모보다 우선 */
@@ -144,6 +146,20 @@ export function useFeatureIdentify(
             ...(filters && Object.keys(filters).length > 0 ? { tableFilters: filters } : {}),
           },
         });
+        /** 측정·메모 등으로 비활성된 뒤 도착한 응답은 버림 */
+        if (disabledRef.current) {
+          closePopup();
+          return;
+        }
+        if (Date.now() < ignoreClickUntilRef.current) {
+          closePopup();
+          return;
+        }
+        const extUntilAfter = externalIgnoreRef.current?.current ?? 0;
+        if (Date.now() < extUntilAfter) {
+          closePopup();
+          return;
+        }
         const data = res?.data ?? res;
         const results: IdentifyLayerResult[] = Array.isArray(data?.results) ? data.results : [];
 

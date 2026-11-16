@@ -14,6 +14,7 @@ import {
   getRowValueByField,
   isDefineFieldFlagTrue,
   selectDefineLayerDetailFields,
+  uniqueDefineLayerFields,
   type DefineFieldLike,
 } from '../../../_mapComponents/standard/defineLayerRowUtils'
 import {
@@ -95,15 +96,12 @@ function FloatingChrome({
               aria-hidden
             />
           </button>
-          <div className="min-w-0 flex-1 pr-2">
-            <span className="block truncate text-xs font-medium text-foreground" title={title}>
+          <div className="standard-detail-float-heading pr-2">
+            <span className="standard-detail-float-layer" title={title}>
               {title}
             </span>
             {subtitle ? (
-              <span
-                className="mt-0.5 block truncate text-[11px] text-muted-foreground"
-                title={subtitle}
-              >
+              <span className="standard-detail-float-title-below" title={subtitle}>
                 {subtitle}
               </span>
             ) : null}
@@ -285,7 +283,7 @@ export function WtlFacilityRelatedDetailFloating({
     const selected = selectDefineLayerDetailFields(all)
     if (selected.length > 0) return selected
     if (all.length > 0) {
-      return all.filter((f) => {
+      return uniqueDefineLayerFields(all).filter((f) => {
         const name = String(f.define_field_name ?? '')
           .trim()
           .toLowerCase()

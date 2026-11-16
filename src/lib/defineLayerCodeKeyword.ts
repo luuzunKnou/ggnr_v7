@@ -63,6 +63,48 @@ export function matchCodesByKeyword(
 }
 
 /**
+ * CODE 필드 한글명 기준 정렬용 VALUES JOIN.
+ * localeCompare('ko')로 순번(sk)을 매긴 뒤 ORDER BY alias.sk 에 사용.
+ */
+export function buildCodeLabelSortJoin(opts: {
+  fieldsTable: string
+  fieldName: string
+  physicalCol: string
+  alias: string
+  esc: (s: string) => string
+}): { joinSql: string; orderExpr: string } | null {
+  const codes = loadDefineFieldCodesForKeyword(opts.fieldsTable, opts.fieldName)
+  const byCode = new Map<string, string>()
+  for (const row of codes) {
+    const code = String(row.code ?? '').trim()
+    if (!code || byCode.has(code)) continue
+    const kor = String(row.kor ?? '').trim()
+    byCode.set(code, kor || code)
+  }
+  if (byCode.size === 0) return null
+
+  const sorted = [...byCode.entries()].sort((a, b) => {
+    const byLabel = a[1].localeCompare(b[1], 'ko')
+    return byLabel !== 0 ? byLabel : a[0].localeCompare(b[0], 'ko')
+  })
+
+  const alias = String(opts.alias ?? '')
+    .replace(/[^a-zA-Z0-9_]/g, '')
+    .slice(0, 32)
+  if (!alias) return null
+
+  const valuesSql = sorted
+    .map(([code], i) => `('${opts.esc(code)}', ${i})`)
+    .join(', ')
+  const col = opts.physicalCol.replace(/"/g, '""')
+
+  return {
+    joinSql: `LEFT JOIN (VALUES ${valuesSql}) AS ${alias}(code, sk) ON COALESCE(t."${col}"::text,'') = ${alias}.code`,
+    orderExpr: `${alias}.sk`,
+  }
+}
+
+/**
  * define CODE 필드 → `COALESCE(t."col"::text,'') IN (...)` SQL 조각들.
  * skipField: 컬럼 미존재 등 제외 (소문자 필드명).
  */

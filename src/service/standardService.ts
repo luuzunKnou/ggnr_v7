@@ -392,20 +392,28 @@ function resolveDefaultListOrderColumn(
   return null;
 }
 
-/** 테이블 필드 설정에서 define_field_is_key === 'true' 인 필드명 반환 (첨부 폴더 키와 동일) */
+/** 테이블 필드 설정에서 define_field_is_key === 'true' 인 필드명 반환 (첨부 폴더 키와 동일). 분할이면 부모 fields 우선. */
 export function getDefineTableKeyFieldName(tableName: string): string | null {
-  const safe = tableName.replace(/[^a-zA-Z0-9_-]/g, '').toLowerCase();
-  const filePath = path.join(FIELDS_DIR, `table_${safe}.json`);
-  try {
-    if (!fs.existsSync(filePath)) return null;
-    const fields: Record<string, string>[] = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
-    const keyField = Array.isArray(fields)
-      ? fields.find((f) => defineFlagTrue(f?.define_field_is_key))
-      : null;
-    return keyField ? String(keyField.define_field_name ?? '').trim() || null : null;
-  } catch {
-    return null;
+  const display = String(tableName ?? '').trim().toLowerCase();
+  if (!display) return null;
+  const physical = resolveDefineTablePhysicalBaseName(display);
+  const candidates = physical && physical !== display ? [physical, display] : [display];
+  for (const name of candidates) {
+    const safe = name.replace(/[^a-zA-Z0-9_-]/g, '').toLowerCase();
+    const filePath = path.join(FIELDS_DIR, `table_${safe}.json`);
+    try {
+      if (!fs.existsSync(filePath)) continue;
+      const fields: Record<string, string>[] = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+      const keyField = Array.isArray(fields)
+        ? fields.find((f) => defineFlagTrue(f?.define_field_is_key))
+        : null;
+      const found = keyField ? String(keyField.define_field_name ?? '').trim() || null : null;
+      if (found) return found;
+    } catch {
+      /* try next */
+    }
   }
+  return null;
 }
 
 function loadDefineFieldRows(tableName: string): Record<string, unknown>[] {
@@ -903,6 +911,8 @@ export async function identifyFeatures(params: {
   const esc = (s: string) => s.replace(/'/g, "''");
   const results: {
     tableName: string;
+    /** fields/CODE 키 — 분할이면 부모, 아니면 tableName */
+    physicalTable: string;
     korName: string;
     titleField: string | null;
     /** define 분할 레이어(부모+CQL) 조회 결과 — UI에서 부모보다 우선 표시 */
@@ -1042,6 +1052,7 @@ export async function identifyFeatures(params: {
           const features = mapRowsToIdentifyFeatures(rawFeatures, physicalTable, columns, geomCol);
           results.push({
             tableName: displayName,
+            physicalTable,
             korName,
             titleField,
             isSplitLayer,
@@ -1625,6 +1636,7 @@ export async function searchDefineLayersByGeometry(params: {
 
   type LayerOut = {
     tableName: string;
+    physicalTable: string;
     korName: string;
     titleField: string | null;
     isSplitLayer: boolean;
@@ -1725,6 +1737,7 @@ export async function searchDefineLayersByGeometry(params: {
         const features = mapRowsToIdentifyFeatures(rawFeatures, physicalTable, columns, geomCol);
         results.push({
           tableName: displayName,
+          physicalTable,
           korName,
           titleField,
           isSplitLayer,
@@ -1786,6 +1799,7 @@ export async function searchDefineLayersByKeyword(params: {
 
   type LayerOutKw = {
     tableName: string;
+    physicalTable: string;
     korName: string;
     titleField: string | null;
     isSplitLayer: boolean;
@@ -1897,6 +1911,7 @@ export async function searchDefineLayersByKeyword(params: {
         const features = attachKeywordMatchToFeatures(baseFeatures, textCols, keywordRaw, physicalTable);
         results.push({
           tableName: displayName,
+          physicalTable,
           korName,
           titleField,
           isSplitLayer,

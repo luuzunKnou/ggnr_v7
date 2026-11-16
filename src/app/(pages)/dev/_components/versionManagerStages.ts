@@ -25,7 +25,7 @@ export type RelayStageOptions = {
   restartMode?: RestartMode;
   /** 개방망이면 런처 재시작 파이프라인에 npm install 단계 표시 */
   packageProfile?: SourcePackageProfile;
-  /** 따로 생성이면 현재 폴더 병합·지오서버 단계 대신 새 폴더 설치 */
+  /** 새 폴더 생성이면 현재 폴더 병합·지오서버 단계 대신 새 폴더 설치 */
   applyLayout?: SourceApplyLayout;
 };
 

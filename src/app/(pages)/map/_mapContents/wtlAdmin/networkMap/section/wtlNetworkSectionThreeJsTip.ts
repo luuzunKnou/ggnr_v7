@@ -20,6 +20,11 @@ function escapeHtml(s: string): string {
     .replace(/"/g, '&quot;')
 }
 
+/** 3D 호버 툴팁에서 제외 — 행정동 코드 계열 */
+function isExcludedThreeJsTipField(fieldName: string): boolean {
+  return String(fieldName).trim().toLowerCase().includes('hjd_cde')
+}
+
 export type ThreeJsTipUserData = {
   tooltipLayer?: string
   tooltipLabel?: string
@@ -54,7 +59,7 @@ export async function buildThreeJsHoverTipHtml(
     )
     if (titleField) {
       const titleKey = String(titleField.define_field_name ?? '').trim()
-      if (titleKey) {
+      if (titleKey && !isExcludedThreeJsTipField(titleKey)) {
         const raw = getRowValueByField(props, titleKey)
         const text = formatDefineFieldDisplayValue(
           raw,
@@ -73,7 +78,7 @@ export async function buildThreeJsHoverTipHtml(
       const rows: string[] = []
       for (const f of listFields) {
         const key = String(f.define_field_name ?? '').trim()
-        if (!key) continue
+        if (!key || isExcludedThreeJsTipField(key)) continue
         const kor = getDefineFieldDisplayLabel(key, f.define_field_kor_name)
         const raw = getRowValueByField(props, key)
         const text = formatDefineFieldDisplayValue(

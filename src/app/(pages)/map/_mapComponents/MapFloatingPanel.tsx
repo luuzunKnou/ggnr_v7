@@ -39,6 +39,17 @@ export interface MapFloatingPanelProps {
    * 미지정 + viewport면 viewportFloating. 클릭 시 selected(+1).
    */
   zLayer?: MapUiZLayer;
+  /** 마운트·클릭으로 앞으로 올 때 (활성 상세·Escape 등) */
+  onActivate?: () => void;
+  /** 증가 시 재마운트 없이 앞으로 (이미 열린 상세 포커스) */
+  focusToken?: number;
+  /**
+   * 지정 시 해당 좌표로 고정(드래그·moved 무시).
+   * 최소화 하단 도킹 등. null/미지정이면 defaultPosition.
+   */
+  pinPosition?: { top: number; left: number } | null;
+  /** 헤더 더블클릭 (최소화 펼치기 등). 버튼·select 위는 무시 */
+  onHeaderDoubleClick?: () => void;
 }
 
 export function MapFloatingPanel({
@@ -52,12 +63,21 @@ export function MapFloatingPanel({
   panelRef,
   viewport = false,
   zLayer,
+  onActivate,
+  focusToken = 0,
+  pinPosition = null,
+  onHeaderDoubleClick,
 }: MapFloatingPanelProps) {
   const useLeft = defaultPosition.left != null;
   const [position, setPosition] = useState(defaultPosition);
   const rootRef = useRef<HTMLDivElement | null>(null);
   /** 화면 기준 모드에서 사용자가 옮긴 뒤에는 기본 위치로 되돌리지 않는다 */
   const movedRef = useRef(false);
+  /** 최소화(pin) 직전 펼침 위치 — 최대화 시 복원 */
+  const prePinPositionRef = useRef<MapFloatingPanelPosition | null>(null);
+  const wasPinnedRef = useRef(false);
+  const positionRef = useRef(position);
+  positionRef.current = position;
   const dragRef = useRef({
     isDragging: false,
     startX: 0,
@@ -74,7 +94,8 @@ export function MapFloatingPanel({
   const bringToFront = useCallback(() => {
     if (!zClass || !rootRef.current) return;
     selectMapUiZPanel(rootRef.current);
-  }, [zClass]);
+    onActivate?.();
+  }, [zClass, onActivate]);
 
   const setRootRef = useCallback(
     (node: HTMLDivElement | null) => {
@@ -95,11 +116,41 @@ export function MapFloatingPanel({
   useEffect(() => {
     if (!zClass) return;
     const el = rootRef.current;
-    if (el) selectMapUiZPanel(el);
+    if (el) {
+      selectMapUiZPanel(el);
+      onActivate?.();
+    }
     return () => {
       clearMapUiZPanelSelection(rootRef.current);
     };
+    // onActivate는 마운트 시 1회만 — 의존에 넣지 않음
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount activate
   }, [zClass]);
+
+  /**
+   * viewport portal은 body에 직접 붙는다.
+   * 부모(업무 패널)가 route/opened 이탈로 언마운트될 때 React 정리보다
+   * DOM이 남는 경우가 있어(특히 최소화 pin), 언마운트 시 루트를 강제 제거한다.
+   */
+  useEffect(() => {
+    if (!viewport) return;
+    return () => {
+      const el = rootRef.current;
+      if (!el) return;
+      clearMapUiZPanelSelection(el);
+      if (el.isConnected) el.remove();
+    };
+  }, [viewport]);
+
+  /** 이미 마운트된 패널을 다시 앞으로 */
+  useEffect(() => {
+    if (!zClass || focusToken <= 0) return;
+    const el = rootRef.current;
+    if (!el) return;
+    selectMapUiZPanel(el);
+    onActivate?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- token-driven focus
+  }, [focusToken, zClass]);
 
   const clampToViewport = useCallback((next: { top: number; left: number }) => {
     const el = rootRef.current;
@@ -121,6 +172,7 @@ export function MapFloatingPanel({
 
   const handlePointerDown = useCallback(
     (e: React.PointerEvent) => {
+      if (pinPosition) return;
       if ((e.target as HTMLElement).closest('button')) return;
       dragRef.current = {
         isDragging: true,
@@ -132,15 +184,50 @@ export function MapFloatingPanel({
       };
       (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
     },
-    [position]
+    [position, pinPosition]
   );
 
   const anchorTop = defaultPosition.top;
   const anchorH = useLeft
     ? (defaultPosition as { left: number }).left
     : (defaultPosition as { right: number }).right;
+  const pinTop = pinPosition?.top;
+  const pinLeft = pinPosition?.left;
 
   useEffect(() => {
+    const isPinned = pinTop != null && pinLeft != null;
+    if (isPinned) {
+      if (!wasPinnedRef.current) {
+        prePinPositionRef.current = positionRef.current;
+      }
+      wasPinnedRef.current = true;
+      setPosition({ top: pinTop, left: pinLeft });
+      return;
+    }
+    if (wasPinnedRef.current) {
+      wasPinnedRef.current = false;
+      const restored = prePinPositionRef.current;
+      prePinPositionRef.current = null;
+      if (restored) {
+        movedRef.current = true;
+        const applyRestored = () => {
+          if (viewport || restored.left != null) {
+            setPosition(
+              clampToViewport({
+                top: restored.top,
+                left: restored.left ?? 0,
+              })
+            );
+          } else {
+            setPosition(restored);
+          }
+        };
+        applyRestored();
+        // 펼침 폭·높이 반영 후 화면 밖 클램프
+        const raf = requestAnimationFrame(applyRestored);
+        return () => cancelAnimationFrame(raf);
+      }
+    }
     if (!viewport) {
       if (useLeft) {
         setPosition({ top: anchorTop, left: anchorH });
@@ -161,7 +248,7 @@ export function MapFloatingPanel({
     // 첫 페인트 후 실측 높이로 하단 배치 등을 한 번 더 맞춤
     const raf = requestAnimationFrame(place);
     return () => cancelAnimationFrame(raf);
-  }, [anchorTop, anchorH, useLeft, viewport, clampToViewport]);
+  }, [anchorTop, anchorH, useLeft, viewport, clampToViewport, pinTop, pinLeft]);
 
   useEffect(() => {
     const onMove = (e: PointerEvent) => {
@@ -240,14 +327,32 @@ export function MapFloatingPanel({
         role="button"
         tabIndex={0}
         onPointerDown={handlePointerDown}
-        className="flex items-center justify-between border-b border-border/60 px-3 py-1.5 shrink-0 cursor-grab active:cursor-grabbing hover:bg-muted/60 select-none bg-muted/40"
+        onDoubleClick={(e) => {
+          if ((e.target as HTMLElement).closest('button, select, input, a')) return
+          onHeaderDoubleClick?.()
+        }}
+        className={cn(
+          'flex shrink-0 items-center justify-between select-none bg-muted/40 hover:bg-muted/60',
+          pinPosition
+            ? 'cursor-pointer border-b-0 px-2 py-1'
+            : 'cursor-grab border-b border-border/60 px-3 py-1.5 active:cursor-grabbing'
+        )}
         onKeyDown={(e) => {
           if (e.key === ' ' || e.key === 'Enter') e.preventDefault();
         }}
       >
         {header}
       </div>
-      <div className="flex-1 min-h-0 flex flex-col">{children}</div>
+      {/* 최소화(pin) 시 본문 숨김(마운트 유지) — 높이·클릭은 헤더만 */}
+      <div
+        className={cn(
+          'flex min-h-0 flex-1 flex-col',
+          pinPosition && 'pointer-events-none hidden h-0 max-h-0 overflow-hidden !flex-none'
+        )}
+        aria-hidden={Boolean(pinPosition)}
+      >
+        {children}
+      </div>
     </div>
   );
 

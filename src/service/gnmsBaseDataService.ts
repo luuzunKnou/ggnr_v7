@@ -5,11 +5,22 @@ import { db } from '@/database/db';
 import { sql } from 'drizzle-orm';
 import { getSggCode } from '@/service/configService';
 
-export const GNMS_BASE_DATA_FOLDERS = ['elevation', 'ri', 'emd', 'sgg'] as const;
+export const GNMS_BASE_DATA_FOLDERS = ['elevation', 'kais_gb', 'ri', 'emd', 'sgg'] as const;
 export type GnmsBaseDataFolder = (typeof GNMS_BASE_DATA_FOLDERS)[number];
 
-export const SGG_MISSING_FOR_ELEVATION_MSG =
+/** sgg geom으로 잘라 받는 폴더 (등고선). kais_gb는 geom 미전송 */
+export const GNMS_BASE_DATA_GEOM_FOLDERS = ['elevation'] as const;
+export type GnmsBaseDataGeomFolder = (typeof GNMS_BASE_DATA_GEOM_FOLDERS)[number];
+
+export const SGG_MISSING_FOR_GEOM_EXPORT_MSG =
   '시군구(sgg) 테이블이 없어 등고선(elevation)을 요청할 수 없습니다. 행정경계를 먼저 준비하세요.';
+
+/** @deprecated SGG_MISSING_FOR_GEOM_EXPORT_MSG 사용 */
+export const SGG_MISSING_FOR_ELEVATION_MSG = SGG_MISSING_FOR_GEOM_EXPORT_MSG;
+
+export function isGnmsBaseDataGeomFolder(v: unknown): v is GnmsBaseDataGeomFolder {
+  return GNMS_BASE_DATA_GEOM_FOLDERS.includes(String(v ?? '').trim() as GnmsBaseDataGeomFolder);
+}
 
 const SGG_SCHEMA = 'public_layer';
 const SGG_TABLE = 'sgg';
@@ -70,13 +81,52 @@ async function getGeomMeta(
   }
 }
 
-function sggCodeWhere(code: string): string {
+async function listTableColumns(schema: string, table: string): Promise<Set<string>> {
+  try {
+    const res = await db.execute(
+      sql.raw(
+        `SELECT column_name
+         FROM information_schema.columns
+         WHERE table_schema = '${esc(schema)}' AND table_name = '${esc(table)}'`
+      )
+    );
+    const set = new Set<string>();
+    for (const row of res.rows ?? []) {
+      const name = String((row as { column_name?: unknown }).column_name ?? '')
+        .trim()
+        .toLowerCase();
+      if (name) set.add(name);
+    }
+    return set;
+  } catch {
+    return new Set();
+  }
+}
+
+type SggColumnMap = { codeCol: string | null; nameCol: string | null };
+
+/** SHP 출처에 따라 adm_sect_c/sgg_nm 또는 bjcd/name 등 */
+async function resolveSggColumnMap(): Promise<SggColumnMap> {
+  const cols = await listTableColumns(SGG_SCHEMA, SGG_TABLE);
+  const pick = (...candidates: string[]) => candidates.find((c) => cols.has(c)) ?? null;
+  return {
+    codeCol: pick('adm_sect_c', 'adm_sect_cd', 'bjcd', 'sgg_cd', 'sig_cd'),
+    nameCol: pick('sgg_nm', 'name', 'sig_kor_nm', 'kor_nm'),
+  };
+}
+
+function quoteIdent(ident: string): string {
+  return `"${ident.replace(/"/g, '""')}"`;
+}
+
+function sggCodeWhere(codeCol: string, code: string): string {
+  const col = `trim(${quoteIdent(codeCol)}::text)`;
   const c = esc(code);
   const padded = esc(padBjdCde(code, 10));
   return `(
-    trim(adm_sect_c::text) = '${c}'
-    OR trim(adm_sect_c::text) LIKE '${c}' || '%'
-    OR rpad(trim(adm_sect_c::text), 10, '0') = '${padded}'
+    ${col} = '${c}'
+    OR ${col} LIKE '${c}' || '%'
+    OR rpad(${col}, 10, '0') = '${padded}'
   )`;
 }
 
@@ -104,15 +154,27 @@ async function resolveAdmSectCodeFromSgg(preferred?: string): Promise<{
     return { admSectC: preferredCode, bjdCde: padBjdCde(preferredCode, 10), sggNm: '' };
   }
 
+  const { codeCol, nameCol } = await resolveSggColumnMap();
+  if (!codeCol) {
+    if (!preferredCode) {
+      throw new Error('시군구(sgg)에서 코드 컬럼(adm_sect_c/bjcd 등)을 찾지 못했습니다.');
+    }
+    return { admSectC: preferredCode, bjdCde: padBjdCde(preferredCode, 10), sggNm: '' };
+  }
+
+  const codeExpr = `trim(${quoteIdent(codeCol)}::text)`;
+  const nameExpr = nameCol
+    ? `trim(COALESCE(${quoteIdent(nameCol)}::text, ''))`
+    : `''`;
   const orderPrefer = preferredCode
-    ? `CASE WHEN ${sggCodeWhere(preferredCode)} THEN 0 ELSE 1 END,`
+    ? `CASE WHEN ${sggCodeWhere(codeCol, preferredCode)} THEN 0 ELSE 1 END,`
     : '';
   const res = await db.execute(
     sql.raw(
-      `SELECT trim(adm_sect_c::text) AS adm_sect_c,
-              trim(COALESCE(sgg_nm::text, '')) AS sgg_nm
+      `SELECT ${codeExpr} AS adm_sect_c,
+              ${nameExpr} AS sgg_nm
        FROM "${SGG_SCHEMA}"."${SGG_TABLE}"
-       WHERE adm_sect_c IS NOT NULL AND trim(adm_sect_c::text) <> ''
+       WHERE ${quoteIdent(codeCol)} IS NOT NULL AND ${codeExpr} <> ''
        ORDER BY ${orderPrefer} 1
        LIMIT 1`
     )
@@ -120,7 +182,7 @@ async function resolveAdmSectCodeFromSgg(preferred?: string): Promise<{
   const row = res.rows?.[0] as { adm_sect_c?: unknown; sgg_nm?: unknown } | undefined;
   const admSectC = normalizeAdmSectCode(row?.adm_sect_c) || preferredCode;
   if (!admSectC) {
-    throw new Error('시군구(sgg)에서 adm_sect_c 값을 찾지 못했습니다.');
+    throw new Error('시군구(sgg)에서 코드 값을 찾지 못했습니다.');
   }
   return {
     admSectC,
@@ -138,6 +200,10 @@ async function resolveSggGeomWkt5181(admSectC: string): Promise<string> {
   if (!meta) {
     throw new Error('시군구(sgg) 도형 컬럼을 찾을 수 없습니다.');
   }
+  const { codeCol } = await resolveSggColumnMap();
+  if (!codeCol) {
+    throw new Error('시군구(sgg)에서 코드 컬럼(adm_sect_c/bjcd 등)을 찾지 못했습니다.');
+  }
   const g = `"${meta.geomCol.replace(/"/g, '""')}"`;
   const stamped = `ST_SetSRID(${g}, ${meta.srid})`;
   const res = await db.execute(
@@ -145,14 +211,14 @@ async function resolveSggGeomWkt5181(admSectC: string): Promise<string> {
       `SELECT ST_AsText(ST_Transform(ST_MakeValid(${stamped}), 5181)) AS wkt
        FROM "${SGG_SCHEMA}"."${SGG_TABLE}"
        WHERE ${g} IS NOT NULL
-         AND ${sggCodeWhere(admSectC)}
+         AND ${sggCodeWhere(codeCol, admSectC)}
        ORDER BY 1
        LIMIT 1`
     )
   );
   const wkt = String((res.rows?.[0] as { wkt?: unknown } | undefined)?.wkt ?? '').trim();
   if (!wkt) {
-    throw new Error(`시군구(sgg)에서 코드(${admSectC})에 해당하는 도형을 찾지 못했습니다.`);
+    throw new Error(`시군구(sgg)에서 코드(${admSectC})에 맞는 도형을 찾지 못했습니다.`);
   }
   return wkt;
 }
@@ -176,15 +242,15 @@ export async function getGnmsBaseDataExportParams(p: Params): Promise<GnmsBaseDa
   const folder = folderRaw;
   const sggExists = await tableExists(SGG_SCHEMA, SGG_TABLE);
 
-  if (folder === 'elevation' && !sggExists) {
-    throw new Error(SGG_MISSING_FOR_ELEVATION_MSG);
+  if (isGnmsBaseDataGeomFolder(folder) && !sggExists) {
+    throw new Error(SGG_MISSING_FOR_GEOM_EXPORT_MSG);
   }
 
   const { admSectC, bjdCde, sggNm } = await resolveAdmSectCodeFromSgg(
     normalizeAdmSectCode(p.admSectC ?? p.sggCode)
   );
 
-  if (folder === 'elevation') {
+  if (isGnmsBaseDataGeomFolder(folder)) {
     const geom = await resolveSggGeomWkt5181(admSectC);
     return {
       folder,

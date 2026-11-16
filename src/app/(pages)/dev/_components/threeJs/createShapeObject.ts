@@ -248,6 +248,7 @@ function buildGround(props: ShapeProps): THREE.Group {
       fillMaterial(props.color || '#84cc16', Math.max(props.opacity, 0.15), THREE.DoubleSide)
     );
     mesh.userData.isFill = true;
+    mesh.userData.isGroundSurface = true;
     group.add(mesh);
     const rimPts = [
       new THREE.Vector3(-halfU, 0.01, -halfU),
@@ -264,7 +265,7 @@ function buildGround(props: ShapeProps): THREE.Group {
     return group;
   }
 
-  // 윗면 채움 + 윗면 외곽선(옆면·아랫면 선 없음)
+  // 윗면 채움 + 윗·아랫면 외곽 + (두께 시) 네 모서리 세로 — 옆면 세로 밀집은 없음
   // 범위: AA 정사각 / 단면: 절단선 중심 ±halfWidth 띠 (관로 조회 polygon과 동일)
   const thicknessM = Math.max(0, props.height ?? 0);
   const sectionLine =
@@ -311,6 +312,7 @@ function buildGround(props: ShapeProps): THREE.Group {
   }
   const topMesh = new THREE.Mesh(parts.topGeo, topMat);
   topMesh.userData.isFill = true;
+  topMesh.userData.isGroundSurface = true;
   topMesh.renderOrder = 1;
   group.add(topMesh);
 

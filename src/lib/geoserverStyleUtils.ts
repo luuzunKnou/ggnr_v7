@@ -669,6 +669,50 @@ function sldCssParamLiteral(rule: string, paramName: string): string | null {
   return null;
 }
 
+function isNearWhiteHexLiteral(value: string): boolean {
+  const raw = value.trim();
+  const hex = raw.startsWith('#') ? raw.slice(1) : raw;
+  if (!/^[0-9a-fA-F]{3}(?:[0-9a-fA-F]{3})?$/.test(hex)) return false;
+  const full =
+    hex.length === 3
+      ? `${hex[0]}${hex[0]}${hex[1]}${hex[1]}${hex[2]}${hex[2]}`
+      : hex;
+  return /^f{6}$/i.test(full);
+}
+
+/**
+ * 관로 SLD 이중 LineSymbolizer(흰 테두리 + 본선)에서 범례용 본선색.
+ * 모든 stroke CssParameter를 모아 마지막 비흰색을 쓴다.
+ */
+function sldLineStrokeLiteral(rule: string): string | null {
+  const re =
+    /<(?:[\w]+:)?CssParameter\s+name=["']stroke["']\s*>([\s\S]*?)<\/(?:[\w]+:)?CssParameter>/gi;
+  const colors: string[] = [];
+  for (const m of rule.matchAll(re)) {
+    const body = m[1] ?? '';
+    const plain = body.replace(/<[^>]+>/g, '').trim();
+    if (/^#?[0-9a-fA-F]{6}$/.test(plain)) {
+      colors.push(plain);
+      continue;
+    }
+    const literals = [
+      ...body.matchAll(/<(?:[\w]+:)?Literal>\s*([^<]*?)\s*<\/(?:[\w]+:)?Literal>/gi),
+    ].map((x) => x[1].trim());
+    for (let i = literals.length - 1; i >= 0; i--) {
+      const v = literals[i];
+      if (/^#?[0-9a-fA-F]{6}$/.test(v)) {
+        colors.push(v);
+        break;
+      }
+    }
+  }
+  if (!colors.length) return null;
+  for (let i = colors.length - 1; i >= 0; i--) {
+    if (!isNearWhiteHexLiteral(colors[i]!)) return colors[i]!;
+  }
+  return colors[colors.length - 1] ?? null;
+}
+
 function sldGraphicSize(rule: string): number | undefined {
   const sizeBlock = rule.match(/<(?:[\w]+:)?Size>([\s\S]*?)<\/(?:[\w]+:)?Size>/i)?.[1];
   if (!sizeBlock) return undefined;
@@ -867,7 +911,11 @@ export function parseSldEnvStyle(
   const labelEnv = labelRule ? sldEnvDefaults(labelRule) : env;
 
   const styleProps: StyleProps = {};
-  const stroke = envValueBySuffixes(env, styleName, title, '_stroke') ?? sldCssParamLiteral(rule, 'stroke');
+  // 이중 선(흰 테두리+본색)은 첫 stroke가 #FFFFFF라 범례가 안 보이므로 본선색 우선
+  const stroke =
+    envValueBySuffixes(env, styleName, title, '_stroke') ??
+    sldLineStrokeLiteral(rule) ??
+    sldCssParamLiteral(rule, 'stroke');
   const strokeOpacity =
     envValueBySuffixes(env, styleName, title, '_stroke_opacity') ?? sldCssParamLiteral(rule, 'stroke-opacity');
   const strokeWidth =

@@ -4,3 +4,18 @@ export const MAP_LAYER_PANEL_MAX_H_CLASS = 'max-h-[calc(100vh-70px)]';
 /** 확장 패널 표면 — 주소검색과 동일(테두리·그림자·반투명) */
 export const MAP_LAYER_PANEL_SURFACE_CLASS =
   'opacity-90 rounded-[5px] border border-slate-200 bg-white/95 shadow-lg backdrop-blur-sm dark:border-white/10 dark:bg-black/95 dark:text-white/90 dark:opacity-100';
+
+/** 슈퍼유저: 호버 title에 한글·영문 테이블명 병기 (관망도 dualTitle과 동일) */
+export function layerHoverTitle(
+  korName: string,
+  tableName: string,
+  showEng: boolean
+): string {
+  const primary = String(korName ?? '').trim();
+  const eng = String(tableName ?? '').trim();
+  if (!showEng) return primary || eng;
+  if (primary && eng && primary.toLowerCase() !== eng.toLowerCase()) {
+    return `${primary} (${eng})`;
+  }
+  return primary || eng;
+}

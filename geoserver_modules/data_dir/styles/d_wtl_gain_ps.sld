@@ -90,7 +90,7 @@
         </sld:Rule>
         <sld:Rule>
           <sld:Name>Name</sld:Name>
-          <sld:Title>d_wtl_gain_ps_label</sld:Title>
+          <sld:Title>wtl_gain_ps_label</sld:Title>
           <sld:Abstract>Abstract</sld:Abstract>
           <ogc:Filter>
             <ogc:PropertyIsGreaterThan>
@@ -179,4 +179,3 @@
     </sld:UserStyle>
   </sld:NamedLayer>
 </sld:StyledLayerDescriptor>
-
