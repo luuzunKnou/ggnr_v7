@@ -149,6 +149,7 @@ export function useWtlNetworkMapLayer({
   const onMoveStartRef = useRef(onMapMoveStart)
   const keysRef = useRef(enabledLayerKeys)
   const sourcesRef = useRef(mapSources)
+  const searchFilterRef = useRef(searchFilter)
   /** 측정·공간그리기·도형편집 등 지도 입력 중에는 레이어 클릭 선택 금지 */
   const drawBlocksClickRef = useRef(false)
   onSelectRef.current = onSelect
@@ -156,6 +157,7 @@ export function useWtlNetworkMapLayer({
   onMoveStartRef.current = onMapMoveStart
   keysRef.current = enabledLayerKeys
   sourcesRef.current = mapSources
+  searchFilterRef.current = searchFilter
   drawBlocksClickRef.current = Boolean(
     mapContext?.spatialDrawRequest ||
       mapContext?.mapMeasureTool ||
@@ -223,6 +225,7 @@ export function useWtlNetworkMapLayer({
       const keys = [...keysRef.current]
       const sources = [...sourcesRef.current]
       if (keys.length === 0 || sources.length === 0) return
+      const f = searchFilterRef.current
       void (async () => {
         try {
           const res = await call('', 'POST', {
@@ -234,6 +237,12 @@ export function useWtlNetworkMapLayer({
               layerKeys: keys,
               mapSources: sources,
               tolerance: 12,
+              keyword: f?.keyword,
+              yearFrom: f?.yearFrom,
+              yearTo: f?.yearTo,
+              diameterFrom: f?.diameterFrom,
+              diameterTo: f?.diameterTo,
+              materials: f?.materials ? [...f.materials] : undefined,
             },
           })
           const row = (res?.data ?? res)?.row as WtlNetworkRow | null | undefined

@@ -988,6 +988,12 @@ export async function getWtlNetworkAtPoint(params: {
   mapSources?: string[];
   /** 미터 단위 대략 버퍼 (3857) */
   tolerance?: number;
+  keyword?: string;
+  yearFrom?: number | null;
+  yearTo?: number | null;
+  diameterFrom?: number | null;
+  diameterTo?: number | null;
+  materials?: string[];
 }): Promise<{ row: WtlNetworkRow | null }> {
   const keys = (params.layerKeys ?? []).map((k) => String(k).trim()).filter(Boolean);
   const sources = parseMapSourceIds(params.mapSources)
@@ -999,6 +1005,7 @@ export async function getWtlNetworkAtPoint(params: {
     return { row: null };
   }
   const tol = Math.max(1, Number(params.tolerance) || 8);
+  const materialBundle = await ensureMaterialTopBundle();
 
   type Hit = { row: WtlNetworkRow; rank: number; dist: number };
   const hits: Hit[] = [];
@@ -1027,6 +1034,48 @@ export async function getWtlNetworkAtPoint(params: {
         ? `'${esc(fieldsTableFallback)}'`
         : `NULL`;
 
+      const attrParts: string[] = [];
+      if (dipCol && params.diameterFrom != null && params.diameterTo != null) {
+        attrParts.push(
+          `(
+            NULLIF(regexp_replace(COALESCE(t."${dipCol}"::text,''), '[^0-9.]', '', 'g'),'') IS NULL
+            OR (
+              NULLIF(regexp_replace(COALESCE(t."${dipCol}"::text,''), '[^0-9.]', '', 'g'),'') ~ '^[0-9]+(\\.[0-9]+)?$'
+              AND NULLIF(regexp_replace(COALESCE(t."${dipCol}"::text,''), '[^0-9.]', '', 'g'),'')::numeric
+                BETWEEN ${Number(params.diameterFrom)} AND ${Number(params.diameterTo)}
+            )
+          )`
+        );
+      }
+      if (yearCol && params.yearFrom != null && params.yearTo != null) {
+        attrParts.push(
+          `(
+            NULLIF(left(regexp_replace(COALESCE(t."${yearCol}"::text,''), '[^0-9]', '', 'g'), 4),'') IS NULL
+            OR (
+              NULLIF(left(regexp_replace(COALESCE(t."${yearCol}"::text,''), '[^0-9]', '', 'g'), 4),'') ~ '^[0-9]{4}$'
+              AND NULLIF(left(regexp_replace(COALESCE(t."${yearCol}"::text,''), '[^0-9]', '', 'g'), 4),'')::int
+                BETWEEN ${Number(params.yearFrom)} AND ${Number(params.yearTo)}
+            )
+          )`
+        );
+      }
+      if (mopCol && params.materials && params.materials.length > 0) {
+        const mw = buildMaterialWhere(mopCol, params.materials, materialBundle);
+        if (mw) attrParts.push(mw);
+      }
+      const kw = String(params.keyword ?? '').trim();
+      if (kw) {
+        const like = `%${esc(kw)}%`;
+        const parts = [
+          `${nameExpr} ILIKE '${like}'`,
+          `COALESCE(t.ftr_idn::text,'') ILIKE '${like}'`,
+        ];
+        if (dipCol) parts.push(`COALESCE(t."${dipCol}"::text,'') ILIKE '${like}'`);
+        if (mopCol) parts.push(`COALESCE(t."${mopCol}"::text,'') ILIKE '${like}'`);
+        attrParts.push(`(${parts.join(' OR ')})`);
+      }
+      const attrSql = attrParts.map((w) => `AND ${w}`).join('\n            ');
+
       const res = await db.execute(
         sql.raw(
           `SELECT
@@ -1051,6 +1100,7 @@ export async function getWtlNetworkAtPoint(params: {
           FROM layer."${tbl}" t
           WHERE t.geom IS NOT NULL
             ${saaClause}
+            ${attrSql}
             AND ST_DWithin(
               ST_Transform(t.geom, 3857),
               ST_SetSRID(ST_MakePoint(${x}, ${y}), 3857),

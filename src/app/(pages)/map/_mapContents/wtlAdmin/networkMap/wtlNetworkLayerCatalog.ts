@@ -424,9 +424,14 @@ export function buildWtlNetSearchCql(
   ) {
     const from = Number(filter.diameterFrom)
     const to = Number(filter.diameterTo)
-    parts.push(
-      `(${dipCol} IS NULL OR (${dipCol} >= ${from} AND ${dipCol} <= ${to}))`
-    )
+    const fullRange =
+      filter.diameterMin != null &&
+      filter.diameterMax != null &&
+      from <= Number(filter.diameterMin) &&
+      to >= Number(filter.diameterMax)
+    if (!fullRange) {
+      parts.push(`(${dipCol} IS NULL OR (${dipCol} >= ${from} AND ${dipCol} <= ${to}))`)
+    }
   }
 
   if (
@@ -438,9 +443,16 @@ export function buildWtlNetSearchCql(
   ) {
     const y0 = Math.trunc(Number(filter.yearFrom))
     const y1 = Math.trunc(Number(filter.yearTo))
-    const lo = `'${y0}0101'`
-    const hi = `'${y1}1231'`
-    parts.push(`(${yearCol} IS NULL OR (${yearCol} >= ${lo} AND ${yearCol} <= ${hi}))`)
+    const fullRange =
+      filter.yearMin != null &&
+      filter.yearMax != null &&
+      y0 <= Number(filter.yearMin) &&
+      y1 >= Number(filter.yearMax)
+    if (!fullRange) {
+      parts.push(
+        `(${yearCol} IS NULL OR (${yearCol} >= '${y0}' AND ${yearCol} < '${y1 + 1}'))`
+      )
+    }
   }
 
   const mats = (filter.materials ?? []).map((m) => String(m).trim()).filter(Boolean)
