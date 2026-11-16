@@ -25,7 +25,7 @@ function AttrLabelCell({
   return (
     <div
       className={cn(
-        "flex h-7 items-center border-r border-border bg-muted px-2",
+        "flex min-h-7 items-center border-r border-border bg-muted px-2",
         borderBottom && "border-b border-border",
         roundedCorner === "tl" && "rounded-tl-[5px]",
         roundedCorner === "bl" && "rounded-bl-[5px]"
@@ -44,16 +44,21 @@ function AttrValueCell({
   borderBottom,
   borderRight,
   gridColumn,
+  stringValueMaxLines = 1,
 }: {
   value: ReactNode;
   borderBottom: boolean;
   borderRight: boolean;
   gridColumn?: string;
+  stringValueMaxLines?: number;
 }) {
+  const multiline = stringValueMaxLines > 1;
+  const multilineString = multiline && typeof value === "string";
   return (
     <div
       className={cn(
-        "flex h-7 min-w-0 items-center px-2",
+        "flex min-h-7 min-w-0 px-2",
+        multilineString ? "items-start py-1" : "items-center",
         borderBottom && "border-b border-border",
         borderRight && "border-r border-border"
       )}
@@ -62,8 +67,13 @@ function AttrValueCell({
       <div className="min-w-0 w-full">
         {typeof value === "string" ? (
           <span
-            className="block truncate text-[11px] leading-snug text-foreground/90"
-            title={value && value !== "—" ? value : undefined}
+            className={cn(
+              "block text-[11px] leading-snug text-foreground/90",
+              multilineString
+                ? "whitespace-normal break-keep [overflow-wrap:anywhere] line-clamp-2"
+                : "truncate"
+            )}
+            title={!multiline && value && value !== "—" ? value : undefined}
           >
             {value || "—"}
           </span>
@@ -79,7 +89,14 @@ function AttrValueCell({
  * 공사대장 속성정보와 같은 표 — 한 grid(라벨·값·라벨·값)로 묶어 라벨 칸 폭을 행끼리 맞춘다.
  * fullWidth 항목만 값 칸이 오른쪽 끝까지 이어진다.
  */
-export function RoadRewardAttrTable({ entries }: { entries: RoadRewardAttrEntry[] }) {
+export function RoadRewardAttrTable({
+  entries,
+  /** 1=말줄임(기본). 2 이상이면 문자열 값을 최대 N줄 줄바꿈(점용명·점용목적 등) */
+  stringValueMaxLines = 1,
+}: {
+  entries: RoadRewardAttrEntry[];
+  stringValueMaxLines?: number;
+}) {
   if (entries.length === 0) {
     return <p className="standard-detail-attr-empty">표시할 항목이 없습니다.</p>;
   }
@@ -120,6 +137,7 @@ export function RoadRewardAttrTable({ entries }: { entries: RoadRewardAttrEntry[
                 borderBottom={borderBottom}
                 borderRight={false}
                 gridColumn="2 / -1"
+                stringValueMaxLines={stringValueMaxLines}
               />
             </Fragment>
           );
@@ -132,9 +150,23 @@ export function RoadRewardAttrTable({ entries }: { entries: RoadRewardAttrEntry[
               borderBottom={borderBottom}
               roundedCorner={roundedCorner}
             />
-            <AttrValueCell value={row.left.value} borderBottom={borderBottom} borderRight />
-            <AttrLabelCell label={row.right.label} required={row.right.required} borderBottom={borderBottom} />
-            <AttrValueCell value={row.right.value} borderBottom={borderBottom} borderRight={false} />
+            <AttrValueCell
+              value={row.left.value}
+              borderBottom={borderBottom}
+              borderRight
+              stringValueMaxLines={stringValueMaxLines}
+            />
+            <AttrLabelCell
+              label={row.right.label}
+              required={row.right.required}
+              borderBottom={borderBottom}
+            />
+            <AttrValueCell
+              value={row.right.value}
+              borderBottom={borderBottom}
+              borderRight={false}
+              stringValueMaxLines={stringValueMaxLines}
+            />
           </Fragment>
         );
       })}

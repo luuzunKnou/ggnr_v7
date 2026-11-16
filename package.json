@@ -70,6 +70,7 @@
     "next-auth": "^5.0.0-beta.30",
     "ol": "^10.7.0",
     "ol-ext": "^4.0.37",
+    "oracledb": "^6.10.0",
     "pannellum": "^2.5.7",
     "pdf-lib": "^1.17.1",
     "pdfjs-dist": "^4.10.38",

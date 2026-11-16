@@ -21,8 +21,8 @@ import {
 } from "../../../_mapComponents/standard/useServiceFileData";
 
 const ATTACH_ROOT_FOLDER = "기타";
-const FILE_LAYER = "usage_data_as";
-const FILE_SER_ENG = SER_FILE_ENG.usageDataAs;
+const DEFAULT_FILE_LAYER = "usage_data_as";
+const DEFAULT_FILE_SER_ENG: string = SER_FILE_ENG.usageDataAs;
 
 const ATTACH_GRID_GAP_PX = 8;
 const ATTACH_GRID_LABEL_PX = 14;
@@ -33,7 +33,7 @@ const btnPrimary =
 const btnSecondary =
   "inline-flex h-7 items-center gap-1 rounded border border-border bg-background px-2 text-[11px] font-medium text-foreground/90 hover:bg-muted/50 disabled:opacity-50";
 
-type PreviewKind = "image" | "pdf" | "excel" | "other";
+type PreviewKind = "image" | "pdf" | "other";
 
 type AttachmentItem = {
   id: string;
@@ -47,7 +47,6 @@ function guessPreviewKind(name: string): PreviewKind {
   const lower = name.toLowerCase();
   if (/\.(png|jpe?g|gif|webp|bmp)$/i.test(lower)) return "image";
   if (lower.endsWith(".pdf")) return "pdf";
-  if (/\.xlsx?$/i.test(lower)) return "excel";
   return "other";
 }
 
@@ -94,13 +93,7 @@ function AttachmentThumb({
               <FileText className="h-5 w-5" />
             )}
             <span className="text-[10px] font-semibold">
-              {isImage
-                ? "이미지"
-                : isPdf
-                  ? "PDF"
-                  : att.previewKind === "excel"
-                    ? "엑셀"
-                    : "파일"}
+              {isImage ? "이미지" : isPdf ? "PDF" : "파일"}
             </span>
           </div>
         )}
@@ -255,12 +248,18 @@ type Props = {
   fileKey: string;
   zipLabel?: string;
   ready?: boolean;
+  /** 파일 권한 서비스 (기본: 울진 하천점용) */
+  serEng?: string;
+  /** file_data/{layer}/{fileKey} (기본: usage_data_as) */
+  layer?: string;
 };
 
 export function UsageDataAsAttachmentSection({
   fileKey,
   zipLabel,
   ready = true,
+  serEng: FILE_SER_ENG = DEFAULT_FILE_SER_ENG,
+  layer: FILE_LAYER = DEFAULT_FILE_LAYER,
 }: Props) {
   const attachInputRef = useRef<HTMLInputElement>(null);
   const attachScrollRef = useRef<HTMLDivElement>(null);
@@ -299,11 +298,10 @@ export function UsageDataAsAttachmentSection({
         name: f.name,
         category: attachmentTab,
         previewKind: kind,
-        previewUrl:
-          kind === "image" || kind === "pdf" || kind === "excel" ? url : undefined,
+        previewUrl: kind === "image" || kind === "pdf" ? url : undefined,
       } satisfies AttachmentItem;
     });
-  }, [attachmentTab, folderFiles, key]);
+  }, [FILE_LAYER, FILE_SER_ENG, attachmentTab, folderFiles, key]);
 
   useEffect(() => {
     if (!attachmentsReady || !key) {
@@ -337,7 +335,7 @@ export function UsageDataAsAttachmentSection({
     return () => {
       cancelled = true;
     };
-  }, [attachmentsReady, key, foldersRefreshNonce]);
+  }, [FILE_LAYER, FILE_SER_ENG, attachmentsReady, key, foldersRefreshNonce]);
 
   const handleUploadFiles = async (files: FileList | null) => {
     if (!files?.length) return;
@@ -411,22 +409,11 @@ export function UsageDataAsAttachmentSection({
   const openPreview = (att: AttachmentItem) => {
     const scoped = attachments.filter((a) => a.category === att.category);
     const items: ServiceFilePreviewItem[] = scoped
-      .filter(
-        (a) =>
-          a.previewUrl &&
-          (a.previewKind === "image" ||
-            a.previewKind === "pdf" ||
-            a.previewKind === "excel")
-      )
+      .filter((a) => a.previewUrl && (a.previewKind === "image" || a.previewKind === "pdf"))
       .map((a) => ({
         url: a.previewUrl!,
         fileName: a.name,
-        kind:
-          a.previewKind === "pdf"
-            ? ("pdf" as const)
-            : a.previewKind === "excel"
-              ? ("excel" as const)
-              : ("image" as const),
+        kind: a.previewKind === "pdf" ? ("pdf" as const) : ("image" as const),
       }));
     const idx = items.findIndex((i) => i.fileName === att.name);
     if (idx < 0) {

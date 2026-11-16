@@ -1,14 +1,13 @@
-import { tryFormatToYmd } from '@/lib/formatDateYmd';
 import {
   OCCUPATION_PERIOD_STATE_IN_PROGRESS,
+  parseOccupationPeriodYmd,
 } from '@/lib/occupationLedgerPeriodState';
 
-export type OccupationLedgerListSortKey =
-  | 'status'
-  | 'name'
-  | 'place'
-  | 'startDate'
-  | 'endDate';
+/**
+ * 정렬 키 — 'status'(상태), 예전 고정 열('name'|'place'|'startDate'|'endDate'),
+ * 또는 목록 열(필드 정의 «목록» 칸 이름).
+ */
+export type OccupationLedgerListSortKey = string;
 
 export type OccupationLedgerListSortDir = 'asc' | 'desc';
 
@@ -24,28 +23,35 @@ export type OccupationLedgerListSortRow = {
   startDate: string;
   endDate: string;
   status: string;
+  /** 목록 열 값 (칸 이름 → 글자) */
+  values?: Record<string, string>;
 };
 
-const SORT_KEYS = new Set<OccupationLedgerListSortKey>([
-  'status',
-  'name',
-  'place',
-  'startDate',
-  'endDate',
-]);
+/** 목록 열 — 필드 정의 «목록» 칸. 시작·종료 칸은 날짜 순으로 정렬 */
+export type OccupationLedgerListColumn = {
+  field: string;
+  label: string;
+  edge?: 'start' | 'end';
+};
+
+const LEGACY_KEYS: Record<string, keyof OccupationLedgerListSortRow> = {
+  name: 'name',
+  place: 'place',
+  startDate: 'startDate',
+  endDate: 'endDate',
+};
 
 export function initialOccupationLedgerSortDir(
-  key: OccupationLedgerListSortKey
+  key: OccupationLedgerListSortKey,
+  columns?: OccupationLedgerListColumn[] | null
 ): OccupationLedgerListSortDir {
-  return key === 'startDate' ? 'desc' : 'asc';
+  if (key === 'startDate') return 'desc';
+  const col = columns?.find((c) => c.field === key);
+  return col?.edge === 'start' ? 'desc' : 'asc';
 }
 
 function statusRank(status: string): number {
   return status === OCCUPATION_PERIOD_STATE_IN_PROGRESS ? 0 : 1;
-}
-
-function ymd(raw: string): string {
-  return tryFormatToYmd(raw) ?? String(raw ?? '').trim().slice(0, 10);
 }
 
 function compareText(a: string, b: string, dir: OccupationLedgerListSortDir): number {
@@ -54,13 +60,19 @@ function compareText(a: string, b: string, dir: OccupationLedgerListSortDir): nu
   if (!av && !bv) return 0;
   if (!av) return 1;
   if (!bv) return -1;
-  const cmp = av.localeCompare(bv, 'ko');
+  const cmp = av.localeCompare(bv, 'ko', { numeric: true });
   return dir === 'asc' ? cmp : -cmp;
 }
 
-function compareDate(a: string, b: string, dir: OccupationLedgerListSortDir): number {
-  const av = ymd(a);
-  const bv = ymd(b);
+/** 점용 시작·종료 글자 — 날짜로 읽히는 값끼리 날짜 순, 읽히지 않는 값은 뒤 */
+function compareDate(
+  a: string,
+  b: string,
+  dir: OccupationLedgerListSortDir,
+  edge: 'start' | 'end'
+): number {
+  const av = parseOccupationPeriodYmd(a, edge) ?? '';
+  const bv = parseOccupationPeriodYmd(b, edge) ?? '';
   if (!av && !bv) return 0;
   if (!av) return 1;
   if (!bv) return -1;
@@ -93,24 +105,25 @@ function compareByKey(
   a: OccupationLedgerListSortRow,
   b: OccupationLedgerListSortRow,
   key: OccupationLedgerListSortKey,
-  dir: OccupationLedgerListSortDir
+  dir: OccupationLedgerListSortDir,
+  columns?: OccupationLedgerListColumn[] | null
 ): number {
-  switch (key) {
-    case 'status': {
-      const cmp = statusRank(a.status) - statusRank(b.status);
-      return dir === 'asc' ? cmp : -cmp;
-    }
-    case 'name':
-      return compareText(a.name || a.rowKey, b.name || b.rowKey, dir);
-    case 'place':
-      return compareText(a.place, b.place, dir);
-    case 'startDate':
-      return compareDate(a.startDate, b.startDate, dir);
-    case 'endDate':
-      return compareDate(a.endDate, b.endDate, dir);
-    default:
-      return 0;
+  if (key === 'status') {
+    const cmp = statusRank(a.status) - statusRank(b.status);
+    return dir === 'asc' ? cmp : -cmp;
   }
+  const col = columns?.find((c) => c.field === key);
+  if (col) {
+    const av = a.values?.[col.field] ?? '';
+    const bv = b.values?.[col.field] ?? '';
+    return col.edge ? compareDate(av, bv, dir, col.edge) : compareText(av, bv, dir);
+  }
+  const legacy = LEGACY_KEYS[key];
+  if (!legacy) return 0;
+  if (legacy === 'startDate') return compareDate(a.startDate, b.startDate, dir, 'start');
+  if (legacy === 'endDate') return compareDate(a.endDate, b.endDate, dir, 'end');
+  if (legacy === 'name') return compareText(a.name || a.rowKey, b.name || b.rowKey, dir);
+  return compareText(String(a[legacy] ?? ''), String(b[legacy] ?? ''), dir);
 }
 
 /** 기본: 진행중 위 → 점용종료일 빠른 순 → 허가번호 최신 순 */
@@ -120,7 +133,7 @@ export function compareOccupationLedgerDefault(
 ): number {
   const statusCmp = statusRank(a.status) - statusRank(b.status);
   if (statusCmp !== 0) return statusCmp;
-  const endCmp = compareDate(a.endDate, b.endDate, 'asc');
+  const endCmp = compareDate(a.endDate, b.endDate, 'asc', 'end');
   if (endCmp !== 0) return endCmp;
   return comparePermitNo(a.rowKey, b.rowKey, 'desc');
 }
@@ -128,12 +141,13 @@ export function compareOccupationLedgerDefault(
 /** 헤더 정렬이 있으면 우선, 동점이면 기본 순서 */
 export function sortOccupationLedgerListRows<T extends OccupationLedgerListSortRow>(
   rows: T[],
-  sorts?: OccupationLedgerListSortSpec[] | null
+  sorts?: OccupationLedgerListSortSpec[] | null,
+  columns?: OccupationLedgerListColumn[] | null
 ): T[] {
-  const specs = (sorts ?? []).filter((s) => SORT_KEYS.has(s.key));
+  const specs = sorts ?? [];
   return [...rows].sort((a, b) => {
     for (const spec of specs) {
-      const cmp = compareByKey(a, b, spec.key, spec.dir);
+      const cmp = compareByKey(a, b, spec.key, spec.dir, columns);
       if (cmp !== 0) return cmp;
     }
     return compareOccupationLedgerDefault(a, b);

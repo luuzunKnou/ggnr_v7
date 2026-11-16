@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { History, Paperclip } from 'lucide-react'
+import { Gauge, History, Paperclip } from 'lucide-react'
 import GeoJSON from 'ol/format/GeoJSON'
 import VectorLayer from 'ol/layer/Vector'
 import VectorSource from 'ol/source/Vector'
@@ -9,6 +9,7 @@ import { Circle as CircleStyle, Fill, Stroke, Style } from 'ol/style'
 import { call } from '@/lib/api'
 import { formatDefineFieldDisplayValue } from '@/lib/defineLayerCodeDisplay'
 import { cn } from '@/lib/utils'
+import { loadWimsStatus } from '@/app/(pages)/map/_mapComponents/landInfo/wimsClient'
 import { useMapContext } from '../../../_mapComponents/MapContext'
 import {
   getDefineFieldDisplayLabel,
@@ -27,6 +28,10 @@ import {
   type WtlDefineDisplayBundle,
 } from './wtlNetworkDefineDisplayCache'
 import { flyToWtlNetworkGeom } from './wtlNetworkMapFly'
+import {
+  isWtlMetaPsLayer,
+  WtlNetworkWimsHistoryTab,
+} from './WtlNetworkWimsHistoryTab'
 import type { WtlNetworkRow } from './wtlNetworkTypes'
 
 export type WtlNetworkDetailRelatedOverlay = {
@@ -54,7 +59,7 @@ type Props = {
   onHistoryReverted?: () => void
 }
 
-type ActiveTab = 'attach' | 'dataHistory' | string
+type ActiveTab = 'attach' | 'dataHistory' | 'wimsHistory' | string
 
 function resolveOgcFid(item: WtlNetworkRow): number | null {
   const record = item.record
@@ -111,6 +116,19 @@ export function WtlNetworkDetailRelatedTabs({
 
   const itemId = String(item.id ?? '')
   const ftrIdn = resolveParentFtrIdn(item)
+  const [wimsEnabled, setWimsEnabled] = useState(false)
+  const showWimsTab = isWtlMetaPsLayer(item) && wimsEnabled
+
+  useEffect(() => {
+    let alive = true
+    void loadWimsStatus().then((status) => {
+      if (!alive) return
+      setWimsEnabled(status.enabled)
+    })
+    return () => {
+      alive = false
+    }
+  }, [])
 
   const historySourceRow = useMemo(() => {
     const keyTarget = resolveWtlNetworkRowKeyTarget(item, fields)
@@ -127,7 +145,8 @@ export function WtlNetworkDetailRelatedTabs({
   onRelatedMapLayerRef.current = onRelatedMapLayer
 
   const [relatedTabs, setRelatedTabs] = useState<RelatedTabDef[]>([])
-  const [active, setActive] = useState<ActiveTab>('attach')
+  const [active, setActive] = useState<ActiveTab>('')
+  const [tabSelectEpoch, setTabSelectEpoch] = useState(0)
   const [listLoading, setListLoading] = useState(false)
   const [listError, setListError] = useState<string | null>(null)
   const [listRows, setListRows] = useState<RelatedRow[]>([])
@@ -220,7 +239,8 @@ export function WtlNetworkDetailRelatedTabs({
   useEffect(() => {
     let cancelled = false
     setRelatedTabs([])
-    setActive('attach')
+    setActive('')
+    setTabSelectEpoch((n) => n + 1)
     setListRows([])
     setListTotal(0)
     setListBundle(null)
@@ -261,9 +281,13 @@ export function WtlNetworkDetailRelatedTabs({
           })
           .filter((t) => t.table)
         setRelatedTabs(tabs)
+        setTabSelectEpoch((n) => n + 1)
       })
       .catch(() => {
-        if (!cancelled) setRelatedTabs([])
+        if (!cancelled) {
+          setRelatedTabs([])
+          setTabSelectEpoch((n) => n + 1)
+        }
       })
 
     return () => {
@@ -272,8 +296,44 @@ export function WtlNetworkDetailRelatedTabs({
     }
   }, [parentKey, itemId, clearRowHighlight])
 
+  const tabItems = useMemo(() => {
+    const out: { id: ActiveTab; label: string }[] = [
+      { id: 'attach', label: '첨부파일' },
+    ]
+    for (const tab of relatedTabs) {
+      out.push({ id: tab.table, label: tab.label })
+    }
+    if (showWimsTab) {
+      out.push({ id: 'wimsHistory', label: 'WIMS 검침 이력' })
+    }
+    out.push({ id: 'dataHistory', label: '데이터 이력관리' })
+    return out
+  }, [relatedTabs, showWimsTab])
+
   useEffect(() => {
-    if (active === 'attach' || active === 'dataHistory' || !activeTable || !ftrIdn) {
+    const first = tabItems[0]?.id
+    if (!first) return
+    setActive(first)
+    // 행·연관탭 전환(epoch) 시에만 첫 탭으로 맞춤
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- tabSelectEpoch
+  }, [tabSelectEpoch])
+
+  useEffect(() => {
+    const first = tabItems[0]?.id
+    if (!first) return
+    if (!tabItems.some((t) => t.id === active)) {
+      setActive(first)
+    }
+  }, [tabItems, active])
+
+  useEffect(() => {
+    if (
+      active === 'attach' ||
+      active === 'dataHistory' ||
+      active === 'wimsHistory' ||
+      !activeTable ||
+      !ftrIdn
+    ) {
       onRelatedMapLayerRef.current(null)
       return
     }
@@ -282,7 +342,13 @@ export function WtlNetworkDetailRelatedTabs({
 
   useEffect(() => {
     clearRowHighlight()
-    if (active === 'attach' || active === 'dataHistory' || !activeTable || !ftrIdn) {
+    if (
+      active === 'attach' ||
+      active === 'dataHistory' ||
+      active === 'wimsHistory' ||
+      !activeTable ||
+      !ftrIdn
+    ) {
       setListRows((prev) => (prev.length === 0 ? prev : []))
       setListTotal((prev) => (prev === 0 ? prev : 0))
       setListBundle((prev) => (prev == null ? prev : null))
@@ -369,7 +435,7 @@ export function WtlNetworkDetailRelatedTabs({
 
   return (
     <div className="flex shrink-0 flex-col border-t border-border">
-      <div className="flex shrink-0 overflow-x-auto px-2">
+      <div className="flex shrink-0 overflow-x-auto border-b border-border px-2">
         <button
           type="button"
           title="첨부파일"
@@ -400,6 +466,22 @@ export function WtlNetworkDetailRelatedTabs({
             <span className="truncate">{tab.label}</span>
           </button>
         ))}
+        {showWimsTab ? (
+          <button
+            type="button"
+            title="WIMS 검침 이력"
+            className={cn(
+              'inline-flex h-9 min-w-[7.5rem] shrink-0 cursor-pointer items-center justify-center gap-1 border-b-2 px-2 text-[11px] font-medium pointer-events-auto',
+              active === 'wimsHistory'
+                ? 'border-primary bg-primary/5 text-primary'
+                : 'border-transparent text-muted-foreground hover:bg-muted/50 hover:text-foreground'
+            )}
+            onClick={() => setActive('wimsHistory')}
+          >
+            <Gauge className="h-3 w-3 shrink-0" aria-hidden />
+            <span className="truncate">WIMS 검침 이력</span>
+          </button>
+        ) : null}
         <button
           type="button"
           title="데이터 이력관리"
@@ -419,6 +501,10 @@ export function WtlNetworkDetailRelatedTabs({
         {active === 'attach' ? (
           <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-xl border border-border bg-card">
             <WtlNetworkMapAttachmentSection item={item} fields={fields} />
+          </div>
+        ) : active === 'wimsHistory' ? (
+          <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-xl border border-border bg-card">
+            <WtlNetworkWimsHistoryTab item={item} />
           </div>
         ) : active === 'dataHistory' ? (
           <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-xl border border-border bg-card">

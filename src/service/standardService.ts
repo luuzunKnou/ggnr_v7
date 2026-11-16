@@ -1188,7 +1188,8 @@ export async function getJijukParcelAtPoint(params: { x: number; y: number }) {
   const pointInTable = `ST_Transform(${point}, ${tableSrid})`;
   // jijuk.geom 좌표는 5181인데 SRID 메타가 0인 DB가 많음 — 엑셀·도로 연계와 동일하게 SetSRID 후 intersect
   const jijukGeom5181 = `ST_SetSRID("${geomCol}", COALESCE(NULLIF(ST_SRID("${geomCol}"), 0), ${tableSrid}))`;
-  const queryStr = `SELECT "gid", "pnu", "jibun", "bchk", ST_AsGeoJSON(ST_Transform(${jijukGeom5181}, 4326))::json AS "${geomCol}" FROM "${schema}"."${tableName}" WHERE ST_Intersects(${jijukGeom5181}, ${pointInTable}) LIMIT 50`;
+  // water_us 등 일부 DB는 PK가 gid가 아니라 fid — 공통으로 필요한 속성만 조회
+  const queryStr = `SELECT "pnu", "jibun", "bchk", ST_AsGeoJSON(ST_Transform(${jijukGeom5181}, 4326))::json AS "${geomCol}" FROM "${schema}"."${tableName}" WHERE ST_Intersects(${jijukGeom5181}, ${pointInTable}) LIMIT 50`;
 
   try {
     const dataRes = await db.execute(sql.raw(queryStr));
@@ -1210,7 +1211,12 @@ export async function getJijukParcelAtPoint(params: { x: number; y: number }) {
     return {
       results: rawFeatures.length > 0 ? [{ tableName, korName, titleField, features }] : [],
     };
-  } catch {
+  } catch (err) {
+    console.error('[getJijukParcelAtPoint] failed', {
+      x,
+      y,
+      message: err instanceof Error ? err.message : String(err),
+    });
     return { results: [] };
   }
 }

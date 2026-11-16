@@ -1,6 +1,5 @@
 import { call } from '@/lib/api'
 import {
-  getAddressFromCoord,
   matchesPreferRegion,
   searchAddress,
   type PreferRegion,
@@ -128,12 +127,16 @@ function pnuDigits(value: string | undefined): string {
   return digits.length >= 19 ? digits.slice(0, 19) : ''
 }
 
-async function parcelAtPoint(
-  lon: number,
-  lat: number,
-  apiKey: string,
-  pnu: string
-): Promise<ParcelHit | null> {
+/** 주소처럼 보일 때만 브이월드 검색. 번호·와일드카드·특수문자는 호출하지 않음 */
+function looksLikeAddressQuery(input: string): boolean {
+  const s = input.trim()
+  if (!s || s.length < 2) return false
+  if (/[%_\\'";<>*#]/.test(s)) return false
+  if (/^[\d\s-]+$/.test(s)) return false
+  return /(로|길|읍|면|동|리|가|번지)/.test(s)
+}
+
+async function parcelAtPoint(lon: number, lat: number, pnu: string): Promise<ParcelHit | null> {
   try {
     const coord = transformCoordinate([lon, lat], 'EPSG:4326', 'EPSG:3857')
     if (coord) {
@@ -144,13 +147,7 @@ async function parcelAtPoint(
       })
       if (atPoint) return atPoint
     }
-    const fromSearch = pnu ? await fetchParcelGeometry({ pnu }) : null
-    if (fromSearch) return fromSearch
-    if (!apiKey.trim()) return null
-    const addr = await getAddressFromCoord(lon, lat, { apiKey })
-    const fromCoord = pnuDigits(addr?.pnu)
-    if (!fromCoord || fromCoord === pnu) return null
-    return fetchParcelGeometry({ pnu: fromCoord })
+    return pnu ? await fetchParcelGeometry({ pnu }) : null
   } catch {
     return null
   }
@@ -163,21 +160,25 @@ async function locateOne(
   region: PreferRegion | undefined
 ): Promise<MeterLocateResult> {
   const id = nextMeterRowId(input)
-  const road = await searchAddress(input, { apiKey, maxResults: 8, category: 'road' })
-  let hit = pickAddress(input, road)
-  if (!hit) {
-    const parcel = await searchAddress(input, { apiKey, maxResults: 8, category: 'parcel' })
-    hit = pickAddress(input, parcel)
+  if (!apiKey.trim() || !looksLikeAddressQuery(input)) {
+    return {
+      id,
+      input,
+      status: 'miss',
+      detail: '주소를 찾지 못했습니다',
+      geometry4326: null,
+      point4326: null,
+      pnu: null,
+    }
   }
-  if (!hit && region) {
-    const local = await searchAddress(input, {
-      apiKey,
-      maxResults: 8,
-      category: 'road',
-      preferRegion: region,
-    })
-    hit = pickAddress(input, local, region)
-  }
+  const category = /(로|길)/.test(input) ? 'road' : 'parcel'
+  const found = await searchAddress(input, {
+    apiKey,
+    maxResults: 5,
+    category,
+    preferRegion: region,
+  })
+  const hit = pickAddress(input, found, region)
   if (!hit || !Number.isFinite(hit.point?.x) || !Number.isFinite(hit.point?.y)) {
     return {
       id,
@@ -191,7 +192,7 @@ async function locateOne(
   }
   const point4326: [number, number] = [hit.point.x, hit.point.y]
   const detail = (hit.jibunAddress || hit.roadAddress || hit.address || input).trim()
-  const hitParcel = await parcelAtPoint(hit.point.x, hit.point.y, apiKey, pnuDigits(hit.id))
+  const hitParcel = await parcelAtPoint(hit.point.x, hit.point.y, pnuDigits(hit.id))
   if (!hitParcel) {
     return {
       id,
@@ -249,7 +250,7 @@ export async function locateMeterAddresses(args: {
       onProgress?.(done, lines.length)
     }
   }
-  const workers = Array.from({ length: Math.min(6, lines.length) }, () => worker())
+  const workers = Array.from({ length: Math.min(1, lines.length) }, () => worker())
   await Promise.all(workers)
   return results.filter((row): row is MeterLocateResult => Boolean(row))
 }
@@ -264,8 +265,7 @@ type MeterByNumberRow = {
 
 async function locateOneByNumber(
   row: MeterByNumberRow,
-  _index: number,
-  apiKey: string
+  _index: number
 ): Promise<MeterLocateResult> {
   const id = nextMeterRowId(row.input)
   if (!row.found || !row.point) {
@@ -281,7 +281,7 @@ async function locateOneByNumber(
   }
   const point4326 = row.point
   const detail = (row.address || row.meterNo || row.input).trim()
-  const hitParcel = await parcelAtPoint(point4326[0], point4326[1], apiKey, '')
+  const hitParcel = await parcelAtPoint(point4326[0], point4326[1], '')
   if (!hitParcel) {
     return {
       id,
@@ -304,8 +304,8 @@ async function locateOneByNumber(
   }
 }
 
-/** 청크 단위 순차 조회 — 진행 문구가 25건씩 올라감 (병렬이면 한 번에 끝나 점프) */
-const JIJUK_BATCH = 25
+/** 한 번에 조회 — 필지 도형은 내려받지 않고 PNU만 */
+const JIJUK_BATCH = 500
 
 type JijukResolveRow = {
   index: number
@@ -413,15 +413,14 @@ export async function locateMetersFromKnown(args: {
       }
     }
     const hit = resolved[index]
-    const geometry4326 = hit?.geometry4326 ?? null
     const pnu = hit?.pnu ?? null
-    if (geometry4326) {
+    if (pnu) {
       return {
         id,
         input: meterNo,
         status: 'shown' as const,
         detail,
-        geometry4326,
+        geometry4326: null,
         point4326: [point![0], point![1]],
         pnu,
       }
@@ -489,7 +488,7 @@ export async function locateMeterInputs(args: {
       try {
         const meter = byMeter.get(line)
         if (meter?.found && meter.point) {
-          results[index] = await locateOneByNumber(meter, index, apiKey)
+          results[index] = await locateOneByNumber(meter, index)
         } else if (apiKey) {
           results[index] = await locateOne(line, index, apiKey, region)
         } else {
@@ -518,7 +517,7 @@ export async function locateMeterInputs(args: {
       onProgress?.(done, lines.length)
     }
   }
-  const workers = Array.from({ length: Math.min(6, lines.length) }, () => worker())
+  const workers = Array.from({ length: Math.min(1, lines.length) }, () => worker())
   await Promise.all(workers)
   return results.filter((row): row is MeterLocateResult => Boolean(row))
 }

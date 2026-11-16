@@ -1,7 +1,10 @@
 /**
  * 관망조회 — 상수·광역상수 그룹 출처
  * 그룹 목록·실테이블 여부는 서버(listWtlNetMapSources)가 tables.json∩DB로 계산해 내려준다.
+ * 시설관리와 같이 한글명으로 그룹 내 실테이블을 고른다.
  */
+
+import tablesJson from '@/config/defineLayer/tables.json'
 
 export type WtlNetMapSourceId = string
 
@@ -24,6 +27,106 @@ export type WtlNetMapSourcePayload = {
 export type TablesJsonRow = {
   define_table_group?: string
   define_table_name?: string
+  define_table_kor_name?: string
+}
+
+type TablesJsonKorRow = {
+  define_table_name?: string
+  define_table_kor_name?: string
+}
+
+const TABLES_ROWS = (Array.isArray(tablesJson) ? tablesJson : []) as TablesJsonKorRow[]
+
+/** define_table_name → 한글명 */
+const KOR_BY_TABLE = (() => {
+  const map = new Map<string, string>()
+  for (const row of TABLES_ROWS) {
+    const name = String(row.define_table_name ?? '')
+      .trim()
+      .toLowerCase()
+    const kor = String(row.define_table_kor_name ?? '').trim()
+    if (!name || !kor || map.has(name)) continue
+    map.set(name, kor)
+  }
+  return map
+})()
+
+/** 한글명 → tables.json 등장 순 테이블명 */
+const TABLES_BY_KOR = (() => {
+  const map = new Map<string, string[]>()
+  for (const row of TABLES_ROWS) {
+    const name = String(row.define_table_name ?? '')
+      .trim()
+      .toLowerCase()
+    const kor = String(row.define_table_kor_name ?? '').trim()
+    if (!name || !kor) continue
+    const list = map.get(kor)
+    if (list) {
+      if (!list.includes(name)) list.push(name)
+    } else {
+      map.set(kor, [name])
+    }
+  }
+  return map
+})()
+
+export function wtlNetKorNameForTable(tableName: string): string | null {
+  const want = String(tableName ?? '')
+    .trim()
+    .toLowerCase()
+  if (!want) return null
+  return KOR_BY_TABLE.get(want) ?? null
+}
+
+/** 기준 테이블과 한글명이 같은 전체 후보(tables.json 순) */
+export function listWtlNetSameKorTables(baseTable: string): string[] {
+  const base = String(baseTable ?? '')
+    .trim()
+    .toLowerCase()
+  if (!base) return []
+  const kor = KOR_BY_TABLE.get(base)
+  if (!kor) return [base]
+  const list = TABLES_BY_KOR.get(kor) ?? []
+  return list.length > 0 ? [...list] : [base]
+}
+
+/**
+ * 시설관리와 동일 — 기준 테이블 한글명과 같은 레이어 중 그룹(출처)에 속한 후보.
+ * 우선순위: tables.json 한글명 순 → 그룹 내 동일 한글명 → 동일명 → 접미어.
+ */
+export function listWtlNetSameKorTablesInGroup(
+  groupTables: readonly string[],
+  baseTable: string
+): string[] {
+  const lower = groupTables.map((t) => String(t ?? '').trim().toLowerCase()).filter(Boolean)
+  const set = new Set(lower)
+  const base = String(baseTable ?? '')
+    .trim()
+    .toLowerCase()
+  if (!base) return []
+
+  const out: string[] = []
+  const push = (name: string) => {
+    const n = String(name ?? '')
+      .trim()
+      .toLowerCase()
+    if (!n || out.includes(n)) return
+    out.push(n)
+  }
+
+  const kor = KOR_BY_TABLE.get(base)
+  if (kor) {
+    for (const name of TABLES_BY_KOR.get(kor) ?? []) {
+      if (set.has(name)) push(name)
+    }
+    for (const t of lower) {
+      if (KOR_BY_TABLE.get(t) === kor) push(t)
+    }
+  }
+  if (set.has(base)) push(base)
+  const ends = lower.find((t) => t !== base && t.endsWith(base))
+  if (ends) push(ends)
+  return out
 }
 
 /** 상수% + 광역상수 */
@@ -67,13 +170,19 @@ export function compareWtlNetMapSources(
 export function makeWtlNetMapRemap(
   groupTables: readonly string[]
 ): (baseTable: string) => string {
-  const lower = groupTables.map((t) => t.toLowerCase())
+  const lower = groupTables.map((t) => String(t ?? '').trim().toLowerCase()).filter(Boolean)
   const set = new Set(lower)
   return (baseTable: string) => {
-    const base = baseTable.toLowerCase()
+    const base = String(baseTable ?? '')
+      .trim()
+      .toLowerCase()
+    if (!base) return base
+    // 시설관리와 동일 — 한글명 일치 첫 후보(없으면 동일명·접미어)
+    const sameKor = listWtlNetSameKorTablesInGroup(lower, base)
+    if (sameKor[0]) return sameKor[0]
     if (set.has(base)) return base
-    const hit = lower.find((t) => t.endsWith(base))
-    return hit ?? base
+    const ends = lower.find((t) => t.endsWith(base))
+    return ends ?? base
   }
 }
 
@@ -117,6 +226,9 @@ export function buildWtlNetMapSourcesFromRows(
 let runtimeSources: WtlNetMapSourceDef[] = []
 let byId = new Map<string, WtlNetMapSourceDef>()
 
+/** 출처×논리키 → 한글명·데이터 실존 물리 테이블 (listWtlNetworkAvailableLayerKeys) */
+let runtimePhysicalBySource: Record<string, Record<string, string>> = {}
+
 function rebuildIndex() {
   byId = new Map(runtimeSources.map((s) => [s.id, s]))
 }
@@ -124,6 +236,46 @@ function rebuildIndex() {
 export function setWtlNetMapSources(payloads: readonly WtlNetMapSourcePayload[]) {
   runtimeSources = payloads.map(toWtlNetMapSourceDef).sort(compareWtlNetMapSources)
   rebuildIndex()
+}
+
+export function setWtlNetPhysicalBySource(
+  map: Record<string, Record<string, string>> | null | undefined
+) {
+  const next: Record<string, Record<string, string>> = {}
+  if (map && typeof map === 'object') {
+    for (const [sid, byKey] of Object.entries(map)) {
+      if (!byKey || typeof byKey !== 'object') continue
+      const inner: Record<string, string> = {}
+      for (const [k, v] of Object.entries(byKey)) {
+        const key = String(k ?? '').trim()
+        const phys = String(v ?? '')
+          .trim()
+          .toLowerCase()
+        if (key && phys) inner[key] = phys
+      }
+      if (Object.keys(inner).length > 0) next[String(sid)] = inner
+    }
+  }
+  runtimePhysicalBySource = next
+}
+
+/** 논리 레이어 키 → 실제 조회용 물리 테이블 (범례 SLD는 define_table_name 사용) */
+export function getWtlNetPhysicalTable(
+  layerKey: string,
+  sourceId?: string | null
+): string | null {
+  const key = String(layerKey ?? '').trim()
+  if (!key) return null
+  const sid = String(sourceId ?? '').trim()
+  if (sid) {
+    const hit = runtimePhysicalBySource[sid]?.[key]
+    if (hit) return hit
+  }
+  for (const byKey of Object.values(runtimePhysicalBySource)) {
+    const hit = byKey[key]
+    if (hit) return hit
+  }
+  return null
 }
 
 export function getWtlNetMapSources(): readonly WtlNetMapSourceDef[] {

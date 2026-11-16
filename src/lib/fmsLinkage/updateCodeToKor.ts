@@ -1,11 +1,7 @@
 import { and, asc, eq, isNotNull, sql } from 'drizzle-orm';
 import { db } from '@/database/db';
 import { fmsIdentifierHeader } from '@/database/schema/fms_identifier_header';
-import {
-  FMS_FACILITY_TABLE_NAMES,
-  FMS_INSPECTION_TABLE_NAMES,
-  getFmsDataKindForIdentifier,
-} from '@/lib/fmsLinkage/fmsBinding';
+import { getFmsDataKindForIdentifier, getFmsLayerTableName } from '@/lib/fmsLinkage/fmsBinding';
 
 type CodeField = {
   colName: string;
@@ -85,22 +81,16 @@ export async function updateFmsCodeToKor(identifier: string): Promise<void> {
     return;
   }
 
-  const tables =
-    kind === 'facility' ? FMS_FACILITY_TABLE_NAMES : FMS_INSPECTION_TABLE_NAMES;
-  const includeAddrFull = kind === 'facility';
+  const tableName = getFmsLayerTableName(kind);
+  const exists = await db.execute(
+    sql.raw(
+      `SELECT 1 FROM information_schema.tables
+       WHERE table_schema='layer' AND table_name='${tableName}' LIMIT 1`
+    )
+  );
+  if (!(exists.rows?.length ?? 0)) return;
 
-  for (const tableName of tables) {
-    const exists = await db.execute(
-      sql.raw(
-        `SELECT 1 FROM information_schema.tables
-         WHERE table_schema='layer' AND table_name='${tableName}' LIMIT 1`
-      )
-    );
-    if (!(exists.rows?.length ?? 0)) continue;
-
-    const setClause = buildSetClause(fields, includeAddrFull);
-    const sqlText = `UPDATE layer.${tableName} AS target SET ${setClause}`;
-    await db.execute(sql.raw(sqlText));
-    console.info(`[fms-kor] ${id} → layer.${tableName}`);
-  }
+  const setClause = buildSetClause(fields, kind === 'facility');
+  await db.execute(sql.raw(`UPDATE layer.${tableName} AS target SET ${setClause}`));
+  console.info(`[fms-kor] ${id} → layer.${tableName}`);
 }

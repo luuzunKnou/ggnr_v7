@@ -217,6 +217,27 @@ function sourceOf(rot: RiverIndexRotation, w: number, h: number, xr: number, yr:
   }
 }
 
+/** 큰 마스크를 긴 변 longCells 칸 격자로 줄임(칸 안 비율로 판단) — 미리보기 저장용 */
+export function shrinkGrid(mask: BinaryGrid, longCells: number): BinaryGrid {
+  const scale = Math.min(1, longCells / Math.max(mask.w, mask.h));
+  if (scale >= 1) return mask;
+  const w = Math.max(1, Math.round(mask.w * scale));
+  const h = Math.max(1, Math.round(mask.h * scale));
+  const count = new Uint32Array(w * h);
+  const total = new Uint32Array(w * h);
+  for (let y = 0; y < mask.h; y++) {
+    const cy = Math.min(h - 1, Math.floor((y / mask.h) * h));
+    for (let x = 0; x < mask.w; x++) {
+      const k = cy * w + Math.min(w - 1, Math.floor((x / mask.w) * w));
+      total[k]!++;
+      if (mask.data[y * mask.w + x]) count[k]!++;
+    }
+  }
+  const data = new Uint8Array(w * h);
+  for (let k = 0; k < w * h; k++) if (total[k]! > 0 && count[k]! / total[k]! >= CELL_FILL_MIN) data[k] = 1;
+  return { w, h, data };
+}
+
 /** 마스크를 rot 만큼 돌린 뒤 target 격자 크기로 줄임 */
 export function rotateAndResample(mask: BinaryGrid, rot: RiverIndexRotation, tw: number, th: number): BinaryGrid {
   const swap = rot === 90 || rot === 270;

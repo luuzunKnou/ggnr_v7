@@ -8,10 +8,13 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { call } from '@/lib/api';
 import { cn } from '@/lib/utils';
 
+type ShpCadOutputFormat = 'dxf' | 'dwg';
+
 type ShpToDxfJobRow = {
   jobName: string;
   shpCount: number;
   dxfCount: number;
+  dwgCount: number;
   pendingCount: number;
   incompleteCount: number;
   modified?: string;
@@ -33,6 +36,8 @@ export function ShpToDxfTab() {
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [convertingJob, setConvertingJob] = useState<string | null>(null);
+  const [outputFormat, setOutputFormat] = useState<ShpCadOutputFormat>('dxf');
+  const [dwgConverterAvailable, setDwgConverterAvailable] = useState(false);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -45,9 +50,11 @@ export function ShpToDxfTab() {
       });
       const data = res?.data ?? res;
       setRows(Array.isArray(data?.rows) ? (data.rows as ShpToDxfJobRow[]) : []);
+      setDwgConverterAvailable(Boolean(data?.dwgConverterAvailable));
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
       setRows([]);
+      setDwgConverterAvailable(false);
     } finally {
       setLoading(false);
     }
@@ -84,7 +91,7 @@ export function ShpToDxfTab() {
       const res = await call('', 'POST', {
         service: 'shpToDxfService',
         action: 'runShpToDxfConversion',
-        params: { jobName: selectedName },
+        params: { jobName: selectedName, outputFormat },
       });
       const data = res?.data ?? res;
       setMessage(
@@ -108,7 +115,7 @@ export function ShpToDxfTab() {
     } finally {
       setConvertingJob(null);
     }
-  }, [refresh, selectedName, selectedRow]);
+  }, [outputFormat, refresh, selectedName, selectedRow]);
 
   const isBusy = loading || convertingJob != null;
 
@@ -120,8 +127,7 @@ export function ShpToDxfTab() {
             <div>
               <CardTitle className="text-base">SHPToDXF 폴더</CardTitle>
               <CardDescription>
-                SHPToDXF/작업명/SHP 에 형상파일(.shp·.shx·.dbf)을 넣으면 DXF/파일명.dxf 로 변환합니다. 좌표는 그대로
-                둡니다.
+                SHPToDXF/작업명/SHP 의 형상파일을 도면(DXF) 또는 캐드(DWG)로 변환합니다. 좌표는 그대로 둡니다.
               </CardDescription>
             </div>
             <div className="flex flex-wrap gap-2">
@@ -143,6 +149,32 @@ export function ShpToDxfTab() {
           </div>
         </CardHeader>
         <CardContent className="flex min-h-0 flex-1 flex-col gap-3">
+          <div className="flex flex-wrap items-center gap-4 text-sm">
+            <span className="text-muted-foreground">출력</span>
+            <label className="inline-flex items-center gap-1.5">
+              <input
+                type="radio"
+                name="shp-cad-output"
+                checked={outputFormat === 'dxf'}
+                onChange={() => setOutputFormat('dxf')}
+                disabled={isBusy}
+              />
+              도면(DXF)
+            </label>
+            <label className={cn('inline-flex items-center gap-1.5', !dwgConverterAvailable && 'opacity-60')}>
+              <input
+                type="radio"
+                name="shp-cad-output"
+                checked={outputFormat === 'dwg'}
+                onChange={() => setOutputFormat('dwg')}
+                disabled={isBusy || !dwgConverterAvailable}
+              />
+              캐드(DWG)
+            </label>
+            {!dwgConverterAvailable && (
+              <span className="text-xs text-muted-foreground">QCAD가 없어 캐드 변환을 쓸 수 없습니다.</span>
+            )}
+          </div>
           {message && (
             <div className="rounded border border-green-600/40 bg-green-500/10 px-3 py-2 text-xs text-green-700 dark:text-green-300">
               {message}
@@ -159,10 +191,10 @@ export function ShpToDxfTab() {
                 <TableRow>
                   <TableHead>선택</TableHead>
                   <TableHead>작업명</TableHead>
-                  <TableHead className="text-right">형상파일</TableHead>
-                  <TableHead className="text-right">도면</TableHead>
-                  <TableHead className="text-right">미변환</TableHead>
-                  <TableHead className="text-right">짝 파일 없음</TableHead>
+                  <TableHead className="text-right">SHP</TableHead>
+                  <TableHead className="text-right">DXF</TableHead>
+                  <TableHead className="text-right">DWG</TableHead>
+                  <TableHead className="text-right">미완료</TableHead>
                   <TableHead>수정일</TableHead>
                 </TableRow>
               </TableHeader>
@@ -193,7 +225,7 @@ export function ShpToDxfTab() {
                         <TableCell className="font-medium">{row.jobName}</TableCell>
                         <TableCell className="text-right tabular-nums">{row.shpCount}</TableCell>
                         <TableCell className="text-right tabular-nums">{row.dxfCount}</TableCell>
-                        <TableCell className="text-right tabular-nums">{row.pendingCount}</TableCell>
+                        <TableCell className="text-right tabular-nums">{row.dwgCount ?? 0}</TableCell>
                         <TableCell className="text-right tabular-nums">{row.incompleteCount}</TableCell>
                         <TableCell>{formatModified(row.modified)}</TableCell>
                       </TableRow>

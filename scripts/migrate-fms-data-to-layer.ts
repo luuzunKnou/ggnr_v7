@@ -1,42 +1,16 @@
 /**
- * fms_linkage.bastb_master / mantb_dign_result → layer.{prefix}_fms_facility / _fms_inspection
+ * fms_linkage.bastb_master / mantb_dign_result → layer.road_fms_facility / road_fms_inspection
+ * (상하수도·도로·건축물 모두 도로 테이블 한 쌍, 구분은 facil_gbn)
  * 사용: npx tsx scripts/migrate-fms-data-to-layer.ts build_uj dev
  */
-import fs from 'node:fs';
-import path from 'node:path';
 import { loadProjectEnv } from './load-project-env';
-import { getFmsPrefixesForEnabledSystems } from '../src/lib/fmsLinkage/fmsBinding';
+import { FMS_FACILITY_TABLE, FMS_INSPECTION_TABLE } from '../src/lib/fmsLinkage/fmsBinding';
 
 const project = process.argv[2] || 'build_uj';
 const type = process.argv[3] || 'dev';
 loadProjectEnv(project, type);
 process.env.GGNR_PROJECT = project;
 process.env.GGNR_ENV = type;
-
-function readEnabledSystemsFromRuntime(): string[] | null {
-  const filePath = path.join(
-    process.cwd(),
-    'src',
-    'config',
-    'projects',
-    `${project}.runtime.env`
-  );
-  if (!fs.existsSync(filePath)) return null;
-  const content = fs.readFileSync(filePath, 'utf-8');
-  for (const line of content.split(/\r?\n/)) {
-    const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith('#')) continue;
-    if (!trimmed.startsWith('ENABLED_SYSTEMS=')) continue;
-    const raw = trimmed.slice('ENABLED_SYSTEMS='.length).trim();
-    if (!raw) return null;
-    const keys = raw
-      .split(',')
-      .map((s) => s.trim().toLowerCase())
-      .filter(Boolean);
-    return keys.length ? keys : null;
-  }
-  return null;
-}
 
 const FACILITY_COLS = [
   'facil_no',
@@ -105,9 +79,7 @@ async function main() {
   const { sql } = await import('drizzle-orm');
   const { ensureFmsTables } = await import('../src/service/ensureLayerAppTables');
 
-  const enabledSystems = readEnabledSystemsFromRuntime();
-  const prefixes = getFmsPrefixesForEnabledSystems(enabledSystems);
-  console.log('[migrate-fms] project=', project, 'prefixes=', prefixes.join(','));
+  console.log('[migrate-fms] project=', project, 'tables=', FMS_FACILITY_TABLE, FMS_INSPECTION_TABLE);
 
   const ensureResult = await ensureFmsTables();
   for (const t of ensureResult.created) console.log('[created]', t);
@@ -137,33 +109,28 @@ async function main() {
   const facilitySelect = FACILITY_COLS.join(', ');
   const inspectionSelect = INSPECTION_COLS.join(', ');
 
-  for (const prefix of prefixes) {
-    const facilityTable = `${prefix}_fms_facility`;
-    const inspectionTable = `${prefix}_fms_inspection`;
+  if (hasLegacyFacility) {
+    await db.execute(sql.raw(`TRUNCATE TABLE layer.${FMS_FACILITY_TABLE}`));
+    const ins = await db.execute(
+      sql.raw(`
+        INSERT INTO layer.${FMS_FACILITY_TABLE} (${facilitySelect}, sync_status, synced_at, created_at, updated_at)
+        SELECT ${facilitySelect}, 'migrated', now(), now(), now()
+        FROM fms_linkage.bastb_master
+      `)
+    );
+    console.log(`[copied] ${FMS_FACILITY_TABLE} rows=${ins.rowCount ?? '?'}`);
+  }
 
-    if (hasLegacyFacility) {
-      await db.execute(sql.raw(`TRUNCATE TABLE layer.${facilityTable}`));
-      const ins = await db.execute(
-        sql.raw(`
-          INSERT INTO layer.${facilityTable} (${facilitySelect}, sync_status, synced_at, created_at, updated_at)
-          SELECT ${facilitySelect}, 'migrated', now(), now(), now()
-          FROM fms_linkage.bastb_master
-        `)
-      );
-      console.log(`[copied] ${facilityTable} rows=${ins.rowCount ?? '?'}`);
-    }
-
-    if (hasLegacyInspection) {
-      await db.execute(sql.raw(`TRUNCATE TABLE layer.${inspectionTable}`));
-      const ins = await db.execute(
-        sql.raw(`
-          INSERT INTO layer.${inspectionTable} (${inspectionSelect}, sync_status, synced_at, created_at, updated_at)
-          SELECT ${inspectionSelect}, 'migrated', now(), now(), now()
-          FROM fms_linkage.mantb_dign_result
-        `)
-      );
-      console.log(`[copied] ${inspectionTable} rows=${ins.rowCount ?? '?'}`);
-    }
+  if (hasLegacyInspection) {
+    await db.execute(sql.raw(`TRUNCATE TABLE layer.${FMS_INSPECTION_TABLE}`));
+    const ins = await db.execute(
+      sql.raw(`
+        INSERT INTO layer.${FMS_INSPECTION_TABLE} (${inspectionSelect}, sync_status, synced_at, created_at, updated_at)
+        SELECT ${inspectionSelect}, 'migrated', now(), now(), now()
+        FROM fms_linkage.mantb_dign_result
+      `)
+    );
+    console.log(`[copied] ${FMS_INSPECTION_TABLE} rows=${ins.rowCount ?? '?'}`);
   }
 
   if (hasLegacyFacility) {

@@ -1,0 +1,19 @@
+<layer>
+  <name>swl_cons_as_solo</name>
+  <id>LayerInfoImpl-4fd235f0:1a161359926:-7ebe</id>
+  <type>VECTOR</type>
+  <defaultStyle>
+    <id>StyleInfoImpl-4fd235f0:1a161359926:-7ebd</id>
+  </defaultStyle>
+  <resource class="featureType">
+    <id>FeatureTypeInfoImpl-4fd235f0:1a161359926:-7ebf</id>
+  </resource>
+  <queryable>true</queryable>
+  <opaque>false</opaque>
+  <attribution>
+    <logoWidth>0</logoWidth>
+    <logoHeight>0</logoHeight>
+  </attribution>
+  <dateCreated>2026-11-03 01:14:53.187 UTC</dateCreated>
+  <dateModified>2026-11-03 01:14:53.378 UTC</dateModified>
+</layer>

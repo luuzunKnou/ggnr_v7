@@ -18,6 +18,8 @@ import {
 } from './api';
 import { BuildingPermitPanel, BuildingRegisterPanel } from './LandInfoBuildingPanels';
 import { LandInfoParcelPanel } from './LandInfoParcelPanel';
+import { WimsInfoPanel } from './WimsInfoPanel';
+import { loadWimsStatus } from './wimsClient';
 import { withBasePath } from '@/lib/basePath';
 import { formatAddressStripSidoSigungu } from '@/lib/formatAddressStripAdmin';
 import { copyTextToClipboard } from '@/lib/utils';
@@ -188,13 +190,33 @@ export function LandInfoPanelContent({
   const [permitNotice, setPermitNotice] = useState<string | null>(null);
   const [permitFetching, setPermitFetching] = useState(false);
   const effectivePnu = pnuFromContext ?? resolvedPnu;
-  const eumPnu = /^\d{19}$/.test(String(effectivePnu ?? '').trim()) ? String(effectivePnu).trim() : '';
-  const [embedKind, setEmbedKind] = useState<'eum' | 'plan' | null>(null);
+  const effectivePnuRaw = String(effectivePnu ?? '').trim();
+  const eumPnu = /^\d{19}$/.test(effectivePnuRaw) ? effectivePnuRaw : '';
+  const [embedKind, setEmbedKind] = useState<'eum' | 'plan' | 'wims' | null>(null);
+  const [wimsEnabled, setWimsEnabled] = useState(false);
+  const [wimsConnected, setWimsConnected] = useState<boolean | null>(null);
   const eumFrameRef = useRef<HTMLIFrameElement>(null);
+  const prevEumPnuRef = useRef(eumPnu);
 
   useEffect(() => {
+    const prev = prevEumPnuRef.current;
+    prevEumPnuRef.current = eumPnu;
+    // 같은 필지의 번호가 늦게 채워지는 경우는 유지. 다른 필지로 바뀌면 탭을 필지정보로 돌린다.
+    if (!prev || prev === eumPnu) return;
     setEmbedKind(null);
   }, [eumPnu]);
+
+  useEffect(() => {
+    let alive = true;
+    void loadWimsStatus().then((status) => {
+      if (!alive) return;
+      setWimsEnabled(status.enabled);
+      setWimsConnected(status.connected);
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   useEffect(() => {
     if (!eumPnu || (embedKind !== 'eum' && embedKind !== 'plan')) return;
@@ -633,8 +655,28 @@ export function LandInfoPanelContent({
           >
             도시계획도
           </button>
+          {wimsEnabled ? (
+            <button
+              type="button"
+              onClick={() => {
+                if (!eumPnu) return;
+                setEmbedKind('wims');
+              }}
+              disabled={!eumPnu}
+              title="수용가 정보"
+              className={`flex-1 min-w-0 cursor-pointer whitespace-nowrap px-1 py-2 text-[11px] border-b-2 -mb-px disabled:opacity-50 ${
+                embedKind === 'wims'
+                  ? 'border-primary text-primary'
+                  : 'border-transparent text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              수용가 정보
+            </button>
+          ) : null}
         </div>
-        {embedKind && eumPnu ? (
+        {embedKind === 'wims' && eumPnu ? (
+          <WimsInfoPanel pnu={eumPnu} connected={wimsConnected} />
+        ) : embedKind && eumPnu ? (
           <iframe
             ref={eumFrameRef}
             title={embedKind === 'plan' ? '도시계획도' : '토지이음'}

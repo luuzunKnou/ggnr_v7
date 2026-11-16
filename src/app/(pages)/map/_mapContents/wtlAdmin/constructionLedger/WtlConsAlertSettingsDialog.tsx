@@ -2,6 +2,11 @@
 
 import { useEffect, useState } from 'react'
 import { Bell } from 'lucide-react'
+import { call } from '@/lib/api'
+import {
+  DEFAULT_CONS_ALERT,
+  type ConsAlertSettings,
+} from '@/lib/consAlertSchedule'
 import {
   Dialog,
   DialogContent,
@@ -12,36 +17,17 @@ import {
 import { Button } from '@/app/shadcnComponents/ui/button'
 import { cn } from '@/lib/utils'
 
-export type WtlConsAlertSettings = {
-  /** 알림 주기(년). 0이면 미사용 */
-  cycleYears: number
-  doneBeforeDays: number
-  doneBeforeOn: boolean
-  doneAfterDays: number
-  doneAfterOn: boolean
-  startBeforeDays: number
-  startBeforeOn: boolean
-  startAfterDays: number
-  startAfterOn: boolean
-}
+export type WtlConsAlertSettings = ConsAlertSettings
+export { DEFAULT_CONS_ALERT }
 
-export const DEFAULT_CONS_ALERT: WtlConsAlertSettings = {
-  cycleYears: 1,
-  doneBeforeDays: 30,
-  doneBeforeOn: true,
-  doneAfterDays: 7,
-  doneAfterOn: false,
-  startBeforeDays: 14,
-  startBeforeOn: true,
-  startAfterDays: 7,
-  startAfterOn: false,
-}
+export const CONS_ALERT_STORAGE_PREFIX = 'wtl-cons-alert-settings'
+export const CONS_ALERT_SAVED_EVENT = 'ggnr-cons-alert-saved'
 
-const STORAGE_KEY = 'wtl-cons-alert-settings'
+export type StoredConsAlert = WtlConsAlertSettings & { kind?: 'wtl' | 'swl' }
 
 export function loadConsAlertSettings(workId: string): WtlConsAlertSettings {
   try {
-    const raw = localStorage.getItem(`${STORAGE_KEY}:${workId}`)
+    const raw = localStorage.getItem(`${CONS_ALERT_STORAGE_PREFIX}:${workId}`)
     if (!raw) return { ...DEFAULT_CONS_ALERT }
     return { ...DEFAULT_CONS_ALERT, ...(JSON.parse(raw) as Partial<WtlConsAlertSettings>) }
   } catch {
@@ -49,12 +35,60 @@ export function loadConsAlertSettings(workId: string): WtlConsAlertSettings {
   }
 }
 
-export function saveConsAlertSettings(workId: string, settings: WtlConsAlertSettings) {
-  try {
-    localStorage.setItem(`${STORAGE_KEY}:${workId}`, JSON.stringify(settings))
-  } catch {
-    /* ignore */
+function asBody(res: unknown): Record<string, unknown> {
+  if (res && typeof res === 'object' && 'data' in res && (res as { data?: unknown }).data) {
+    return (res as { data: Record<string, unknown> }).data
   }
+  return (res ?? {}) as Record<string, unknown>
+}
+
+export async function saveConsAlertSettings(
+  workId: string,
+  settings: WtlConsAlertSettings,
+  kind?: 'wtl' | 'swl',
+  options?: { notify?: boolean }
+) {
+  const res = await call('', 'POST', {
+    service: 'consAlertService',
+    action: 'saveSettings',
+    params: { workId, kind, settings },
+  })
+  const body = asBody(res)
+  if (body.ok === false || typeof body.error === 'string') {
+    throw new Error(typeof body.error === 'string' ? body.error : '알림설정을 저장하지 못했습니다.')
+  }
+  try {
+    const prev = JSON.parse(
+      localStorage.getItem(`${CONS_ALERT_STORAGE_PREFIX}:${workId}`) || '{}'
+    ) as StoredConsAlert
+    const savedKind = body.kind === 'swl' || body.kind === 'wtl' ? body.kind : kind ?? prev.kind
+    const next: StoredConsAlert = { ...settings, kind: savedKind }
+    localStorage.setItem(`${CONS_ALERT_STORAGE_PREFIX}:${workId}`, JSON.stringify(next))
+  } catch {
+    /* 화면 캐시 실패는 서버 저장을 되돌리지 않는다 */
+  }
+  if (options?.notify !== false) {
+    window.dispatchEvent(new CustomEvent(CONS_ALERT_SAVED_EVENT))
+  }
+}
+
+/** 이 브라우저에 저장된 공사 알림설정 */
+export function listStoredConsAlerts(): { workId: string; settings: StoredConsAlert }[] {
+  if (typeof localStorage === 'undefined') return []
+  const out: { workId: string; settings: StoredConsAlert }[] = []
+  for (let i = 0; i < localStorage.length; i += 1) {
+    const key = localStorage.key(i)
+    if (!key?.startsWith(`${CONS_ALERT_STORAGE_PREFIX}:`)) continue
+    const workId = key.slice(CONS_ALERT_STORAGE_PREFIX.length + 1).trim()
+    if (!workId) continue
+    try {
+      const parsed = JSON.parse(localStorage.getItem(key) || '{}') as Partial<StoredConsAlert>
+      out.push({ workId, settings: { ...DEFAULT_CONS_ALERT, ...parsed } })
+    } catch {
+      /* skip */
+    }
+  }
+  return out
 }
 
 type Props = {
@@ -62,6 +96,8 @@ type Props = {
   onOpenChange: (open: boolean) => void
   workId: string
   workName: string
+  /** 상수도·하수도 구분. 알림 목록이 어느 메뉴로 열지 정한다 */
+  kind?: 'wtl' | 'swl'
   startDate?: string
   doneDate?: string
 }
@@ -71,15 +107,36 @@ export function WtlConsAlertSettingsDialog({
   onOpenChange,
   workId,
   workName,
+  kind,
   startDate,
   doneDate,
 }: Props) {
   const [draft, setDraft] = useState<WtlConsAlertSettings>(DEFAULT_CONS_ALERT)
+  const [saving, setSaving] = useState(false)
+  const [saveError, setSaveError] = useState<string | null>(null)
 
   useEffect(() => {
     if (!open) return
+    let cancelled = false
+    setSaveError(null)
     setDraft(loadConsAlertSettings(workId))
-  }, [open, workId])
+    void call('', 'POST', {
+      service: 'consAlertService',
+      action: 'getSettings',
+      params: { workId, kind },
+    })
+      .then((res) => {
+        if (cancelled) return
+        const body = asBody(res)
+        if (body.settings && typeof body.settings === 'object') {
+          setDraft({ ...DEFAULT_CONS_ALERT, ...(body.settings as Partial<WtlConsAlertSettings>) })
+        }
+      })
+      .catch(() => undefined)
+    return () => {
+      cancelled = true
+    }
+  }, [open, workId, kind])
 
   const setNum = (key: keyof WtlConsAlertSettings, value: string) => {
     const n = Math.max(0, Math.min(9999, Math.floor(Number(value) || 0)))
@@ -91,8 +148,14 @@ export function WtlConsAlertSettingsDialog({
   }
 
   const handleSave = () => {
-    saveConsAlertSettings(workId, draft)
-    onOpenChange(false)
+    setSaving(true)
+    setSaveError(null)
+    void saveConsAlertSettings(workId, draft, kind)
+      .then(() => onOpenChange(false))
+      .catch((e: unknown) => {
+        setSaveError(e instanceof Error ? e.message : '알림설정을 저장하지 못했습니다.')
+      })
+      .finally(() => setSaving(false))
   }
 
   return (
@@ -164,10 +227,11 @@ export function WtlConsAlertSettingsDialog({
         </div>
 
         <DialogFooter className="gap-2 border-t border-border px-4 py-3 sm:justify-end">
+          {saveError ? <p className="mr-auto text-xs text-red-600">{saveError}</p> : null}
           <Button type="button" variant="outline" size="sm" onClick={() => onOpenChange(false)}>
             취소
           </Button>
-          <Button type="button" size="sm" onClick={handleSave}>
+          <Button type="button" size="sm" disabled={saving} onClick={handleSave}>
             저장
           </Button>
         </DialogFooter>

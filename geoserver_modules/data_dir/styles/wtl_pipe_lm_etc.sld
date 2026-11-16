@@ -18,6 +18,87 @@
               <sld:CssParameter name="stroke-width">2</sld:CssParameter>
             </sld:Stroke>
           </sld:LineSymbolizer>
+          <sld:TextSymbolizer>
+            <sld:Label>
+              <ogc:PropertyName>pip_lbl</ogc:PropertyName>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">Gulim</sld:CssParameter>
+              <sld:CssParameter name="font-size">12</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:LinePlacement>
+                <sld:PerpendicularOffset>5</sld:PerpendicularOffset>
+              </sld:LinePlacement>
+            </sld:LabelPlacement>
+            <sld:Halo>
+              <sld:Radius>2</sld:Radius>
+              <sld:Fill>
+                <sld:CssParameter name="fill">#E88AEB</sld:CssParameter>
+              </sld:Fill>
+            </sld:Halo>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+            </sld:Fill>
+            <sld:VendorOption name="followLine">true</sld:VendorOption>
+            <sld:VendorOption name="group">true</sld:VendorOption>
+          </sld:TextSymbolizer>
+          <sld:TextSymbolizer>
+            <sld:Label>
+              <ogc:PropertyName>pip_lbl</ogc:PropertyName>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">Malgun Gothic</sld:CssParameter>
+              <sld:CssParameter name="font-size">12</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:LinePlacement>
+                <sld:PerpendicularOffset>5</sld:PerpendicularOffset>
+              </sld:LinePlacement>
+            </sld:LabelPlacement>
+            <sld:Halo>
+              <sld:Radius>2</sld:Radius>
+              <sld:Fill>
+                <sld:CssParameter name="fill">#E88AEB</sld:CssParameter>
+              </sld:Fill>
+            </sld:Halo>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+            </sld:Fill>
+            <sld:VendorOption name="followLine">true</sld:VendorOption>
+            <sld:VendorOption name="group">true</sld:VendorOption>
+          </sld:TextSymbolizer>
+          <sld:TextSymbolizer>
+            <sld:Label>
+              <ogc:PropertyName>pip_lbl</ogc:PropertyName>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">SansSerif</sld:CssParameter>
+              <sld:CssParameter name="font-size">12</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:LinePlacement>
+                <sld:PerpendicularOffset>5</sld:PerpendicularOffset>
+              </sld:LinePlacement>
+            </sld:LabelPlacement>
+            <sld:Halo>
+              <sld:Radius>2</sld:Radius>
+              <sld:Fill>
+                <sld:CssParameter name="fill">#E88AEB</sld:CssParameter>
+              </sld:Fill>
+            </sld:Halo>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+            </sld:Fill>
+            <sld:VendorOption name="followLine">true</sld:VendorOption>
+            <sld:VendorOption name="group">true</sld:VendorOption>
+          </sld:TextSymbolizer>
         </sld:Rule>
         <sld:VendorOption name="ruleEvaluation">first</sld:VendorOption>
       </sld:FeatureTypeStyle>

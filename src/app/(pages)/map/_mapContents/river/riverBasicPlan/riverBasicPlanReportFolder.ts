@@ -2,19 +2,18 @@ import { assertSafeFileDataSegment } from '@/lib/serviceFileData';
 import type { RiverBasicPlanTab } from '@/lib/riverBasicPlanMapAttachmentLayers';
 
 /**
- * rivp_name 에서 폴더에 쓸 접미사만 추출.
- * `_` 앞(하천명 등)은 무시하고, `_1차` `_2차`처럼 `_`+`숫자차` 일 때만 `"1차"` 반환.
+ * rivp_name 에서 폴더에 쓸 접미사 — 마지막 `_` 뒤 값(`부구천_2차` → `2차`, `남대천_울진읍` → `울진읍`).
+ * `_` 가 없으면 빈 문자열. 서버 rivpFolderSuffixSql 과 같은 규칙.
  */
 export function extractRiverBasicPlanRivpFolderSuffix(
   rivpName: string | null | undefined
 ): string {
   const raw = String(rivpName ?? '').trim();
-  if (!raw) return '';
-  const m = raw.match(/_(\d+차)$/);
+  const m = raw.match(/_([^_]+)$/);
   return m?.[1] ? m[1] : '';
 }
 
-/** 기본계획 보고서 1단: {plan_year}_{plan_name} 또는 …_{1차|2차} */
+/** 기본계획 보고서 1단: {plan_year}_{plan_name} 또는 …_{rivp_name 의 `_` 뒤 값} */
 export function buildRiverBasicPlanReportPlanFolderKey(
   detail: Record<string, unknown> | null | undefined
 ): string | null {

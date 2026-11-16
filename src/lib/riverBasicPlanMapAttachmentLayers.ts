@@ -186,6 +186,31 @@ export function buildRiverBasicPlanMapCqlByLayer(
   return out;
 }
 
+/**
+ * 보고서 하나에 속한 여러 하천을 함께 보여 줄 레이어별 CQL.
+ * 기본계획(AS)은 그 보고서(연도·계획명)만 남겨, 같은 하천의 다른 보고서 구역은 보이지 않게 함.
+ */
+export function buildRiverBasicPlanReportRiversCqlByLayer(
+  tab: RiverBasicPlanTab,
+  riverNames: readonly string[],
+  plan: { planYear?: string; planName?: string }
+): Record<string, string> | null {
+  const names = [...new Set(riverNames.map((n) => String(n ?? '').trim()).filter(Boolean))];
+  if (names.length === 0) return null;
+  const riverCql = `river_name IN (${names.map(cqlQuote).join(',')})`;
+  const out: Record<string, string> = {};
+  for (const layer of riverBasicPlanRiverNameFilterableLayers(tab)) {
+    out[layer] = riverCql;
+  }
+  const asParts = [riverCql];
+  const year = String(plan.planYear ?? '').trim();
+  const planName = String(plan.planName ?? '').trim();
+  if (year) asParts.push(`plan_year=${cqlQuote(year)}`);
+  if (planName) asParts.push(`plan_name=${cqlQuote(planName)}`);
+  out[riverBasicPlanAsDefineTable(tab)] = asParts.join(' AND ');
+  return out;
+}
+
 /** 선택 하천·탭에 대한 레이어별 CQL 맵 (비우면 null) */
 export function buildRiverBasicPlanRiverNameCqlByLayer(
   tab: RiverBasicPlanTab,

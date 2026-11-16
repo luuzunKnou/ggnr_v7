@@ -195,7 +195,7 @@ export type WtlOutageCustomerDto = {
   phone: string;
   meterNo: string;
   /** 수용가 위치 [lon, lat] — 목록 클릭 이동용 */
-  point?: [number, number];
+  point?: [number, number] | null;
   /** wtl_meta_ps ogc_fid */
   ogcFid?: number;
 };

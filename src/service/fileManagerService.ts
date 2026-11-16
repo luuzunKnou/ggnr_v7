@@ -841,6 +841,7 @@ export type UploadConvertHistoryEntry = {
     | 'convert_orthophoto_xyz'
     | 'convert_pdf_to_jpg'
     | 'convert_shp_to_dxf'
+    | 'convert_shp_to_dwg'
     | 'ocr_migration';
   sourceFile: string;
   pathOrResult: string;

@@ -50,7 +50,7 @@ export function DetailWondoMapControl({ panelOpen, onClose, onCheckedCountChange
     }
   }
 
-  const { items, loading, error } = useDetailWondoData(everOpened)
+  const { items, loading, error, progress } = useDetailWondoData(everOpened)
 
   const byId = useMemo(() => new Map(items.map((it) => [it.id, it])), [items])
   const checkedSet = useMemo(() => new Set(checkedIds), [checkedIds])
@@ -60,7 +60,7 @@ export function DetailWondoMapControl({ panelOpen, onClose, onCheckedCountChange
     const pick = (ids: string[]) =>
       ids.map((id) => byId.get(id)).filter((it): it is DetailWondoItem => it != null)
     if (!panelOpen) return pick(checkedIds)
-    const base = filterDetailWondoByArea(items, area)
+    const base = area.eupmyeon || area.dong ? filterDetailWondoByArea(items, area) : []
     const inBase = new Set(base.map((it) => it.id))
     const extra = pick([...checkedIds, ...pickedIds].filter((id) => !inBase.has(id)))
     return extra.length ? [...base, ...extra] : base
@@ -160,6 +160,7 @@ export function DetailWondoMapControl({ panelOpen, onClose, onCheckedCountChange
           items={items}
           loading={loading}
           error={error}
+          progress={progress}
           area={area}
           onAreaChange={handleAreaChange}
           checkedIds={checkedSet}

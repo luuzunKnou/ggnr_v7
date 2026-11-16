@@ -22,6 +22,7 @@ import {
   rasterizePolygons,
   rotateAndResample,
   scoreRotations,
+  shrinkGrid,
   sheetFrameFromRing,
   type BinaryGrid,
   type Pt,
@@ -135,8 +136,130 @@ async function readStore(tab: Tab): Promise<OrientationStore> {
   return { version: 1, items: {} };
 }
 
+/** 검토 화면용 — 파일이 바뀌지 않았으면 읽어 둔 값을 그대로 씀 */
+const storeMemo = new Map<Tab, { mtimeMs: number; store: OrientationStore }>();
+
+async function readStoreCached(tab: Tab): Promise<OrientationStore> {
+  try {
+    const { mtimeMs } = await fs.stat(storePath(tab));
+    const hit = storeMemo.get(tab);
+    if (hit && hit.mtimeMs === mtimeMs) return hit.store;
+    const store = await readStore(tab);
+    storeMemo.set(tab, { mtimeMs, store });
+    return store;
+  } catch {
+    return { version: 1, items: {} };
+  }
+}
+
+/* ── 미리보기 격자 저장 ─────────────────────────────────
+ * 판정할 때 지도 하천 모양·도면 수면을 작은 격자로 색인도마다 따로 저장해 두고,
+ * 검토 화면 그림·방향 바꿔 보기는 이 격자만 읽어 그린다(DB 조회·PDF 그리기 없음).
+ */
+
+const GRID_DIR = '_index_orientation_grids';
+/** 저장할 도면 수면 격자 긴 변 칸 수 — 비교 격자(96)의 2배 */
+const PREVIEW_WATER_CELLS = 192;
+const GRID_MEMO_MAX = 600;
+
+type SheetGrids = { judgedAt: string; ref?: BinaryGrid; water?: BinaryGrid; error?: string };
+type PackedGrid = { w: number; h: number; b64: string };
+
+function packGrid(g: BinaryGrid): PackedGrid {
+  const bytes = new Uint8Array(Math.ceil(g.data.length / 8));
+  for (let k = 0; k < g.data.length; k++) if (g.data[k]) bytes[k >> 3]! |= 1 << (k & 7);
+  return { w: g.w, h: g.h, b64: Buffer.from(bytes).toString('base64') };
+}
+
+function unpackGrid(p: PackedGrid | undefined): BinaryGrid | undefined {
+  if (!p || !(p.w > 0) || !(p.h > 0)) return undefined;
+  const bytes = Buffer.from(p.b64, 'base64');
+  const data = new Uint8Array(p.w * p.h);
+  for (let k = 0; k < data.length; k++) if (bytes[k >> 3]! & (1 << (k & 7))) data[k] = 1;
+  return { w: p.w, h: p.h, data };
+}
+
+function gridPath(tab: Tab, key: string): string | null {
+  if (!key || /[\\/:*?"<>|]|\.\./.test(key)) return null;
+  return path.join(resolveGgnrDataDir(), 'file_data', riverBasicPlanIndexDefineTable(tab), GRID_DIR, `${key}.json`);
+}
+
+const gridMemo = new Map<string, SheetGrids>();
+
+function rememberGrids(id: string, g: SheetGrids): void {
+  gridMemo.delete(id);
+  gridMemo.set(id, g);
+  if (gridMemo.size > GRID_MEMO_MAX) gridMemo.delete(gridMemo.keys().next().value!);
+}
+
+async function saveGrids(tab: Tab, key: string, g: SheetGrids): Promise<void> {
+  rememberGrids(`${tab}|${key}`, g);
+  const file = gridPath(tab, key);
+  if (!file) return;
+  try {
+    await fs.mkdir(path.dirname(file), { recursive: true });
+    const body = {
+      judgedAt: g.judgedAt,
+      error: g.error,
+      ref: g.ref ? packGrid(g.ref) : undefined,
+      water: g.water ? packGrid(g.water) : undefined,
+    };
+    await fs.writeFile(file, JSON.stringify(body), 'utf8');
+  } catch {
+    /* 미리보기 저장 실패는 판정 결과에 영향 없음 — 다음에 다시 만든다 */
+  }
+}
+
+async function loadGrids(tab: Tab, key: string): Promise<SheetGrids | null> {
+  const id = `${tab}|${key}`;
+  const hit = gridMemo.get(id);
+  if (hit) return hit;
+  const file = gridPath(tab, key);
+  if (!file) return null;
+  try {
+    const raw = JSON.parse(await fs.readFile(file, 'utf8')) as {
+      judgedAt?: string;
+      error?: string;
+      ref?: PackedGrid;
+      water?: PackedGrid;
+    };
+    const g: SheetGrids = {
+      judgedAt: String(raw.judgedAt ?? ''),
+      error: raw.error,
+      ref: unpackGrid(raw.ref),
+      water: unpackGrid(raw.water),
+    };
+    rememberGrids(id, g);
+    return g;
+  } catch {
+    return null;
+  }
+}
+
 /** 같은 탭 저장이 겹치지 않게 순서대로 */
 const writeChains = new Map<Tab, Promise<void>>();
+
+/**
+ * 임시 파일로 덮어쓰기. 네트워크 공유 폴더에서는 다른 요청이 파일을 읽는 중이면 EPERM·EBUSY 로 거부되므로
+ * 잠깐씩 기다렸다 다시 하고, 끝까지 안 되면 복사로 덮어쓴다.
+ */
+async function replaceFile(tmp: string, file: string): Promise<void> {
+  for (const wait of [0, 50, 150, 300, 600, 1200]) {
+    if (wait) await new Promise((r) => setTimeout(r, wait));
+    try {
+      await fs.rename(tmp, file);
+      return;
+    } catch (e) {
+      const code = (e as NodeJS.ErrnoException).code;
+      if (code !== 'EPERM' && code !== 'EBUSY' && code !== 'EACCES') throw e;
+    }
+  }
+  try {
+    await fs.copyFile(tmp, file);
+  } finally {
+    await fs.unlink(tmp).catch(() => undefined);
+  }
+}
 
 function updateStore(tab: Tab, mutate: (s: OrientationStore) => void): Promise<void> {
   const prev = writeChains.get(tab) ?? Promise.resolve();
@@ -147,7 +270,13 @@ function updateStore(tab: Tab, mutate: (s: OrientationStore) => void): Promise<v
     await fs.mkdir(path.dirname(file), { recursive: true });
     const tmp = `${file}.${process.pid}.${Date.now()}.tmp`;
     await fs.writeFile(tmp, JSON.stringify(store), 'utf8');
-    await fs.rename(tmp, file);
+    try {
+      await replaceFile(tmp, file);
+    } catch (e) {
+      await fs.unlink(tmp).catch(() => undefined);
+      throw e;
+    }
+    storeMemo.set(tab, { mtimeMs: (await fs.stat(file)).mtimeMs, store });
   });
   writeChains.set(
     tab,
@@ -500,9 +629,67 @@ async function judgeSheet(tab: Tab, sheet: RiverIndexSheetRow): Promise<JudgeRes
       refLayer: refLayer ?? undefined,
       refTrials: trials,
     },
-    water,
+    water: shrinkGrid(water, PREVIEW_WATER_CELLS),
     ref,
   };
+}
+
+function gridsOf(r: JudgeResult): SheetGrids {
+  return { judgedAt: r.record.judgedAt, ref: r.ref, water: r.water, error: r.record.error };
+}
+
+function withManualOf(
+  rec: RiverIndexOrientationRecord,
+  prev: RiverIndexOrientationRecord | undefined
+): RiverIndexOrientationRecord {
+  return prev?.manualRotation != null
+    ? { ...rec, manualRotation: prev.manualRotation, manualBy: prev.manualBy, manualAt: prev.manualAt }
+    : rec;
+}
+
+/** 한 장 판정 결과 저장 — 사람 확정은 유지, 미리보기 격자도 함께 */
+async function saveJudged(tab: Tab, key: string, r: JudgeResult): Promise<RiverIndexOrientationRecord> {
+  let saved: RiverIndexOrientationRecord = r.record;
+  await updateStore(tab, (s) => {
+    saved = withManualOf(r.record, s.items[key]);
+    s.items[key] = saved;
+  });
+  await saveGrids(tab, key, gridsOf(r));
+  return saved;
+}
+
+/**
+ * 검토 화면 미리보기에서 생긴 판정 결과 — 한 화면 여러 장이 한꺼번에 저장하지 않게 잠깐 모았다가 한 번에 저장.
+ * 저장이 실패해도 미리보기는 보여 주고, 다음에 그 장을 열 때 다시 판정한다.
+ */
+const pendingPreviewRecords = new Map<Tab, Map<string, RiverIndexOrientationRecord>>();
+const pendingPreviewTimers = new Map<Tab, ReturnType<typeof setTimeout>>();
+const PREVIEW_SAVE_DELAY_MS = 1000;
+
+function queuePreviewRecord(tab: Tab, key: string, rec: RiverIndexOrientationRecord): void {
+  const m = pendingPreviewRecords.get(tab) ?? new Map<string, RiverIndexOrientationRecord>();
+  m.set(key, rec);
+  pendingPreviewRecords.set(tab, m);
+  if (pendingPreviewTimers.has(tab)) return;
+  pendingPreviewTimers.set(
+    tab,
+    setTimeout(() => {
+      pendingPreviewTimers.delete(tab);
+      const batch = pendingPreviewRecords.get(tab);
+      pendingPreviewRecords.delete(tab);
+      if (!batch || batch.size === 0) return;
+      void updateStore(tab, (s) => {
+        for (const [k, rec] of batch) s.items[k] = withManualOf(rec, s.items[k]);
+      }).catch((e) => {
+        console.warn('[riverIndexOrientation] 미리보기 판정 결과 저장 실패', e instanceof Error ? e.message : e);
+        for (const k of batch.keys()) {
+          gridMemo.delete(`${tab}|${k}`);
+          const file = gridPath(tab, k);
+          if (file) void fs.unlink(file).catch(() => undefined);
+        }
+      });
+    }, PREVIEW_SAVE_DELAY_MS)
+  );
 }
 
 /* ── 전체 판정(뒤에서) ────────────────────────────────── */
@@ -569,9 +756,10 @@ async function runBatch(tab: Tab, mode: BatchMode): Promise<void> {
       while (next < sheets.length) {
         const sheet = sheets[next++]!;
         try {
-          const { record } = await judgeSheet(tab, sheet);
-          pending[sheet.key] = record;
-          if (record.error) st.failed++;
+          const r = await judgeSheet(tab, sheet);
+          pending[sheet.key] = r.record;
+          await saveGrids(tab, sheet.key, gridsOf(r));
+          if (r.record.error) st.failed++;
         } catch (e) {
           st.failed++;
           pending[sheet.key] = {
@@ -631,7 +819,7 @@ export async function listRiverIndexOrientations(params?: { tab?: string }): Pro
 }> {
   await requireMapAdminToolsAccess();
   const tab = normalizeTab(params?.tab);
-  const [sheets, store] = await Promise.all([listIndexSheets(tab), readStore(tab)]);
+  const [sheets, store] = await Promise.all([listIndexSheets(tab), readStoreCached(tab)]);
   return {
     layer: riverBasicPlanIndexDefineTable(tab),
     rows: sheets.map((s) => {
@@ -684,16 +872,7 @@ export async function judgeRiverIndexOrientation(params?: {
   const key = String(params?.key ?? '').trim();
   const sheet = (await listIndexSheets(tab)).find((s) => s.key === key);
   if (!sheet) throw new Error('색인도를 찾을 수 없습니다.');
-  const { record } = await judgeSheet(tab, sheet);
-  let saved: RiverIndexOrientationRecord | null = null;
-  await updateStore(tab, (s) => {
-    const prev = s.items[key];
-    saved = prev?.manualRotation
-      ? { ...record, manualRotation: prev.manualRotation, manualBy: prev.manualBy, manualAt: prev.manualAt }
-      : record;
-    s.items[key] = saved;
-  });
-  return { record: saved };
+  return { record: await saveJudged(tab, key, await judgeSheet(tab, sheet)) };
 }
 
 /** 사람 확정 — rotation 이 null 이면 확정 해제(자동 판정으로) */
@@ -773,30 +952,30 @@ export async function getRiverIndexOrientationPreview(params?: {
   await requireMapAdminToolsAccess();
   const tab = normalizeTab(params?.tab);
   const key = String(params?.key ?? '').trim();
-  const sheet = (await listIndexSheets(tab)).find((s) => s.key === key);
-  if (!sheet) {
-    return {
-      refPng: null,
-      waterPng: null,
-      overlayPng: null,
-      refLayer: null,
-      refTrials: [],
-      error: '색인도를 찾을 수 없습니다.',
-    };
+  const empty = (error: string, record?: RiverIndexOrientationRecord | null) => ({
+    refPng: null,
+    waterPng: null,
+    overlayPng: null,
+    refLayer: record?.refLayer ?? null,
+    refTrials: record?.refTrials ?? [],
+    error,
+  });
+
+  /** 저장된 격자가 있으면 그것만으로 그림. 없을 때(이전 판정분)만 한 번 판정해 결과·격자를 저장 */
+  let record: RiverIndexOrientationRecord | null = (await readStoreCached(tab)).items[key] ?? null;
+  let grids = record ? await loadGrids(tab, key) : null;
+  if (!record || !grids) {
+    const sheet = (await listIndexSheets(tab)).find((s) => s.key === key);
+    if (!sheet) return empty('색인도를 찾을 수 없습니다.');
+    const r = await withPreviewSlot(() => judgeSheet(tab, sheet));
+    record = withManualOf(r.record, record ?? undefined);
+    grids = gridsOf(r);
+    queuePreviewRecord(tab, key, r.record);
+    await saveGrids(tab, key, grids);
   }
-  const { record, water, ref } = await withPreviewSlot(() => judgeSheet(tab, sheet));
-  if (!water || !ref) {
-    return {
-      refPng: null,
-      waterPng: null,
-      overlayPng: null,
-      refLayer: record.refLayer ?? null,
-      refTrials: record.refTrials ?? [],
-      error: record.error,
-    };
-  }
-  const stored = (await readStore(tab)).items[key];
-  const rot = (params?.rotation ?? (stored ? finalRotation(stored) : record.autoRotation)) as RiverIndexRotation;
+  const { water, ref } = grids;
+  if (!water || !ref) return empty(grids.error ?? record.error ?? '그림 없음', record);
+  const rot = (params?.rotation ?? finalRotation(record)) as RiverIndexRotation;
   const rotated = rotateAndResample(water, rot, ref.w, ref.h);
   return {
     refPng: await gridsToPng([{ g: ref, color: [37, 99, 235] }]),

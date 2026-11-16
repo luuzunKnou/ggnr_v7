@@ -19,7 +19,6 @@ import {
   COMPLAINT_DETAIL_PANEL_DEFAULT_TOP,
   COMPLAINT_DETAIL_PANEL_MAX_HEIGHT,
   COMPLAINT_DETAIL_PANEL_WIDTH,
-  COMPLAINT_DETAIL_PANEL_Z_INDEX,
 } from './complaintPanelLayout';
 import { useSerWriteAccess } from '@/hooks/useSerWriteAccess';
 import { useSafetyLayerDetailColumns } from '../../_mapContents/safty/useSafetyLayerDetailColumns';
@@ -298,9 +297,9 @@ export default function ComplaintDetail({ commonUi = false, onListRefresh }: Pro
   return (
     <MapFloatingPanel
       viewport
+      zLayer="detailFloating"
       width={COMPLAINT_DETAIL_PANEL_WIDTH}
       maxHeight={COMPLAINT_DETAIL_PANEL_MAX_HEIGHT}
-      style={{ zIndex: COMPLAINT_DETAIL_PANEL_Z_INDEX }}
       defaultPosition={{ top: COMPLAINT_DETAIL_PANEL_DEFAULT_TOP, left: floatingLeftPx }}
       header={
         <>

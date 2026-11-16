@@ -29,6 +29,8 @@ import {
 import { useMapContext } from '../../_mapComponents/MapContext';
 import '../../_mapComponents/config/projections';
 import {
+  DRAWING_LABEL_MAX_PX,
+  DRAWING_LABEL_MIN_PX,
   DRAWING_LARGE_FEATURE_THRESHOLD,
   DRAWING_LOD_LEVELS,
   type DrawingCrsCode,
@@ -43,8 +45,21 @@ import {
   type PaintController,
 } from './drawingLodPaint';
 
-const LAYER_KEY = 'drawing-display-overlay';
-const IMAGE_KEY = 'drawing-display-overview';
+const DEFAULT_LAYER_KEY = 'drawing-display-overlay';
+const DEFAULT_IMAGE_KEY = 'drawing-display-overview';
+
+export type DrawingDisplayLayerOptions = {
+  /** OpenLayers 레이어 id (여러 인스턴스 구분) */
+  layerKey?: string;
+  imageKey?: string;
+  /** false면 투영 후 자동 fit 안 함 (수치지형도 등) */
+  fitView?: boolean;
+  /**
+   * true면 줌 LOD·moveend 재샘플 안 함.
+   * 이미 화면 범위만 골라 올린 수치지형도 등에 사용 (이동 깜빡임 방지)
+   */
+  disableLod?: boolean;
+};
 
 const KOREA_EXTENT_4326: [number, number, number, number] = [124, 33, 132, 39];
 
@@ -64,6 +79,59 @@ function cachedLineStyle(strokeCss: string, width: number, fillRgba?: string): S
     styleCache.set(key, s);
   }
   return s;
+}
+
+/** 도면 문자높이(지도 단위) ÷ 해상도(단위/px) → 화면 px. 확대할수록 커진다. */
+function labelFontPx(heightMapUnits: number, resolution: number | undefined): number {
+  const h = Number(heightMapUnits);
+  const res = resolution != null && resolution > 0 ? resolution : 0;
+  const worldPx = h > 0 && res > 0 ? h / res : DRAWING_LABEL_MIN_PX;
+  if (!Number.isFinite(worldPx) || worldPx <= 0) return DRAWING_LABEL_MIN_PX;
+  return Math.round(Math.min(DRAWING_LABEL_MAX_PX, Math.max(DRAWING_LABEL_MIN_PX, worldPx)));
+}
+
+function cachedLabelStyle(
+  text: string,
+  fontPx: number,
+  fillColor: string,
+  rot: number,
+  textAlign: CanvasTextAlign,
+  textBaseline: CanvasTextBaseline
+): Style {
+  const rotKey = Math.round(rot * 100);
+  const key = `T|${fontPx}|${text}|${fillColor}|${rotKey}|${textAlign}|${textBaseline}`;
+  let s = styleCache.get(key);
+  if (!s) {
+    const halo = Math.max(2, Math.min(6, Math.round(fontPx * 0.22)));
+    s = new Style({
+      text: new OlText({
+        text,
+        font: `500 ${fontPx}px ${FONT_STACK}`,
+        fill: new Fill({ color: fillColor }),
+        stroke: new Stroke({ color: 'rgba(255,255,255,0.92)', width: halo }),
+        rotation: rot,
+        textAlign,
+        textBaseline,
+        overflow: true,
+        padding: [1, 2, 1, 2],
+      }),
+    });
+    styleCache.set(key, s);
+  }
+  return s;
+}
+
+/** 원점 근처 1단위가 지도 투영에서 몇 단위인지 — 문자높이 환산 */
+function mapUnitScale(coord: [number, number], from: string, to: string): number {
+  if (from === to) return 1;
+  try {
+    const a = transform(coord, from, to);
+    const b = transform([coord[0] + 1, coord[1]], from, to);
+    const s = Math.hypot(b[0] - a[0], b[1] - a[1]);
+    return Number.isFinite(s) && s > 1e-12 ? s : 1;
+  } catch {
+    return 1;
+  }
 }
 
 function geometryLength(g: Geometry): number {
@@ -94,7 +162,6 @@ function styleFeature(
 
   const g = feat.getGeometry();
   if (!g) return undefined;
-  void resolution;
   const t = g.getType();
   const label = feat.get(DXF_LABEL) as string | undefined;
   const strokeCss = feat.get(DXF_STROKE) as string | undefined;
@@ -103,28 +170,15 @@ function styleFeature(
 
   if (label != null && (t === 'Point' || t === 'MultiPoint')) {
     if (!showLabels) return undefined;
-    // 화면 기준 고정 크기 — CAD 문자높이/해상도 비율이 너무 작아져 전부 사라지던 문제 방지
-    const fontPx = 10;
+    const cadH = Number(feat.get(DXF_TEXT_HEIGHT));
+    const fontPx = labelFontPx(cadH, resolution);
     const rot = (feat.get(DXF_ROTATION) as number) ?? 0;
     const textAlign = (feat.get(DXF_TEXT_ALIGN) as CanvasTextAlign) ?? 'left';
     const textBaseline = (feat.get(DXF_TEXT_BASELINE) as CanvasTextBaseline) ?? 'alphabetic';
     const fillColor = strokeCss ?? 'rgb(15, 23, 42)';
-    const raw = String(label).trim();
-    if (!raw) return undefined;
-    const text = raw.length > 16 ? `${raw.slice(0, 15)}…` : raw;
-    return new Style({
-      text: new OlText({
-        text,
-        font: `500 ${fontPx}px ${FONT_STACK}`,
-        fill: new Fill({ color: fillColor }),
-        stroke: new Stroke({ color: 'rgba(255,255,255,0.92)', width: 3 }),
-        rotation: rot,
-        textAlign,
-        textBaseline,
-        overflow: false,
-        padding: [1, 2, 1, 2],
-      }),
-    });
+    const text = String(label).trim();
+    if (!text) return undefined;
+    return cachedLabelStyle(text, fontPx, fillColor, rot, textAlign, textBaseline);
   }
   if (t === 'Point' || t === 'MultiPoint') {
     const dot = strokeCss ?? 'rgb(37, 99, 235)';
@@ -229,6 +283,12 @@ function prepareFeatures(
       f.setGeometry(gMap);
       f.set(DXF_STABLE_IDX, out.length);
       f.set(DXF_LENGTH, geometryLength(gMap));
+      const srcH = Number(src.get(DXF_TEXT_HEIGHT));
+      if (Number.isFinite(srcH) && srcH > 0) {
+        const cx = (eRaw[0] + eRaw[2]) / 2;
+        const cy = (eRaw[1] + eRaw[3]) / 2;
+        f.set(DXF_TEXT_HEIGHT, srcH * mapUnitScale([cx, cy], sourceProjection, mapProjectionCode));
+      }
       out.push(f);
     } catch {
       failed++;
@@ -282,8 +342,13 @@ export function useDrawingDisplayLayer(
   enabled: boolean,
   sourceFeatures: Feature<Geometry>[] | null,
   crs: DrawingCrsCode | '',
-  hiddenLayers: ReadonlySet<string>
+  hiddenLayers: ReadonlySet<string>,
+  options?: DrawingDisplayLayerOptions
 ): DrawingLayerStatus {
+  const layerKey = options?.layerKey ?? DEFAULT_LAYER_KEY;
+  const imageKey = options?.imageKey ?? DEFAULT_IMAGE_KEY;
+  const fitView = options?.fitView !== false;
+  const disableLod = options?.disableLod === true;
   const mapContext = useMapContext();
   const vectorSourceRef = useRef(new VectorSource({ useSpatialIndex: true }));
   /** 지도에 올리지 않는 공간 인덱스 — 상세 모드 뷰포트 조회용 */
@@ -316,7 +381,7 @@ export function useDrawingDisplayLayer(
           styleFeature(feat as Feature<Geometry>, resolution, hiddenRef.current, showLabelsRef),
         zIndex: GEOM_STACK_UI_ZINDEX_MIN + 6,
         imageRatio: 1.25,
-        properties: { id: LAYER_KEY, geomStackSkip: true },
+        properties: { id: layerKey, geomStackSkip: true },
       });
     }
 
@@ -348,40 +413,46 @@ export function useDrawingDisplayLayer(
       if (imageLayerRef.current) map.removeLayer(imageLayerRef.current);
       vectorSourceRef.current.clear();
     };
-  }, [mapRef, enabled]);
+  }, [mapRef, enabled, layerKey]);
 
-  /** 좌표계·원본 변경 시 투영·개요 베이크 */
+  /** 좌표계·원본 변경 시 투영·개요 베이크 — 준비될 때까지 기존 표시 유지(깜빡임 방지) */
   useEffect(() => {
     const map = mapRef?.current;
     const vSource = vectorSourceRef.current;
-    vSource.clear();
-
-    revokeOverviewUrl(bakedRef.current);
-    bakedRef.current = null;
-    preparedRef.current = null;
-
-    if (imageLayerRef.current && map) {
-      map.removeLayer(imageLayerRef.current);
-      imageLayerRef.current = null;
-    }
 
     if (!map || !enabled || !sourceFeatures?.length || !crs) {
+      paintCtlRef.current?.cancel();
+      paintCtlRef.current = null;
+      vSource.clear();
+      revokeOverviewUrl(bakedRef.current);
+      bakedRef.current = null;
+      preparedRef.current = null;
+      if (imageLayerRef.current) {
+        map?.removeLayer(imageLayerRef.current);
+        imageLayerRef.current = null;
+      }
+      overviewActiveRef.current = false;
+      loadedExtentRef.current = null;
+      lastLodIndexRef.current = -1;
       modeRef.current = 'idle';
       setStatus(EMPTY_STATUS);
       return;
     }
 
     modeRef.current = 'preparing';
-    setStatus({ ...EMPTY_STATUS, mode: 'preparing' });
+    setStatus((prev) => ({ ...prev, mode: 'preparing' }));
 
     let cancelled = false;
     const mapProjectionCode = map.getView().getProjection().getCode();
 
-    // 다음 프레임에 투영 — UI 멈춤 완화
+    // 다음 프레임에 투영 — 끝나면 소스 교체 (먼저 clear 하지 않음)
     const timer = window.setTimeout(() => {
       if (cancelled) return;
       const prepared = prepareFeatures(sourceFeatures, crs, mapProjectionCode);
       if (cancelled) return;
+      if (disableLod) prepared.large = false;
+
+      const prevBaked = bakedRef.current;
       preparedRef.current = prepared;
       indexSourceRef.current.clear(true);
       indexSourceRef.current.addFeatures(prepared.features);
@@ -392,26 +463,31 @@ export function useDrawingDisplayLayer(
           prepared.extent,
           hiddenRef.current
         );
+      } else {
+        bakedRef.current = null;
       }
+      revokeOverviewUrl(prevBaked);
+      overviewActiveRef.current = false;
+      loadedExtentRef.current = null;
+      lastLodIndexRef.current = -1;
 
       if (cancelled) return;
 
-      if (!prepared.outOfKorea && !isEmpty(prepared.extent)) {
+      if (fitView && !prepared.outOfKorea && !isEmpty(prepared.extent)) {
         map.getView().fit(prepared.extent, { padding: [80, 80, 80, 80], maxZoom: 18, duration: 400 });
       }
 
-      // fit 직후 extent 반영을 위해 한 틱 뒤 표시 갱신
       window.setTimeout(() => {
         if (cancelled) return;
         refreshRef.current(map);
-      }, 450);
+      }, fitView ? 450 : 0);
     }, 0);
 
     return () => {
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [mapRef, enabled, sourceFeatures, crs]);
+  }, [mapRef, enabled, sourceFeatures, crs, fitView, disableLod]);
 
   /** 숨김 레이어 변경 — 개요 재베이크 + 리프레시 */
   useEffect(() => {
@@ -467,7 +543,7 @@ export function useDrawingDisplayLayer(
       imageLayerRef.current = new ImageLayer({
         source: src,
         zIndex: GEOM_STACK_UI_ZINDEX_MIN + 5,
-        properties: { id: IMAGE_KEY, geomStackSkip: true },
+        properties: { id: imageKey, geomStackSkip: true },
         opacity: 1,
       });
       map.addLayer(imageLayerRef.current);
@@ -493,9 +569,24 @@ export function useDrawingDisplayLayer(
       removeOverview();
       showLabelsRef.current = true;
       modeRef.current = 'vector';
-      if (vSource.getFeatures().length !== prepared.features.length) {
-        vSource.clear(true);
-        vSource.addFeatures(prepared.features);
+      const cur = vSource.getFeatures();
+      const same =
+        cur.length === prepared.features.length &&
+        cur.every((f, i) => f === prepared.features[i]);
+      if (!same) {
+        // disableLod(수치지형도): 확대 직후 바로 보이도록 한 번에 교체
+        replaceFeaturesAtomic(vSource, prepared.features);
+        setStatus({
+          ...EMPTY_STATUS,
+          drawn: prepared.features.length,
+          visible: prepared.features.length,
+          target: prepared.features.length,
+          failed: prepared.failed,
+          outOfKorea: prepared.outOfKorea,
+          mode: 'vector',
+        });
+        vLayer?.changed();
+        return;
       }
       vLayer?.changed();
       setStatus({
@@ -572,10 +663,10 @@ export function useDrawingDisplayLayer(
     }
   };
 
-  /** 이동·줌 종료 시에만 갱신 — resolution 연속 이벤트가 깜빡임의 주원인 */
+  /** 이동·줌 종료 시에만 LOD 갱신 — disableLod 면 구독 안 함 */
   useEffect(() => {
     const map = mapRef?.current;
-    if (!map || !enabled) return;
+    if (!map || !enabled || disableLod) return;
 
     let debounce: number | undefined;
     const schedule = () => {
@@ -589,7 +680,7 @@ export function useDrawingDisplayLayer(
       map.un('moveend', schedule);
       window.clearTimeout(debounce);
     };
-  }, [mapRef, enabled, sourceFeatures, crs]);
+  }, [mapRef, enabled, sourceFeatures, crs, disableLod]);
 
   return status;
 }

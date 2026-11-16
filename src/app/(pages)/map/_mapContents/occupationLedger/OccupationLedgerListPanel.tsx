@@ -12,6 +12,7 @@ import {
 import {
   initialOccupationLedgerSortDir,
   sortOccupationLedgerListRows,
+  type OccupationLedgerListColumn,
   type OccupationLedgerListSortKey,
   type OccupationLedgerListSortSpec,
 } from '@/lib/occupationLedgerListSort';
@@ -27,7 +28,13 @@ import {
 } from './occupationLedgerMapSync';
 import { refreshServiceWmsLayer } from '../../_mapComponents/layerFactory/serviceLayerFactory';
 import { isUseFeeWmsVisible, toggleUseFeeWmsLayer } from '../useFee/useFeeMapSync';
+import {
+  isUsageDataAsSisulWmsVisible,
+  toggleUsageDataAsSisulWmsLayer,
+} from '../river/usageDataAs/usageDataAsMapSync';
+import { USAGE_DATA_AS_SISUL_WMS_LAYER_ID } from '../river/usageDataAs/usageDataAsLayerId';
 import { occupationLayerToggleActiveStyle } from '@/lib/occupationLayerStyle';
+import { listHeaderMinPx } from './occupationLedgerListWidth';
 
 type ListRow = {
   rowKey: string;
@@ -36,6 +43,7 @@ type ListRow = {
   startDate: string;
   endDate: string;
   status: string;
+  values?: Record<string, string>;
 };
 
 const STATUS_FILTER_OPTIONS = [
@@ -47,20 +55,14 @@ const STATUS_FILTER_OPTIONS = [
 type SortKey = OccupationLedgerListSortKey;
 type SortSpec = OccupationLedgerListSortSpec;
 
-const SORT_COLUMNS: { key: SortKey; label: string }[] = [
-  { key: 'status', label: '상태' },
-  { key: 'name', label: '점용명' },
-  { key: 'place', label: '점용장소' },
-  { key: 'startDate', label: '점용시작일' },
-  { key: 'endDate', label: '점용종료일' },
-];
-
-const HEADER_ALIGN_LEFT = new Set<SortKey>(['name', 'place']);
+const STATUS_COLUMN = { key: 'status', label: '상태' } as const;
 /** 점용장소 도형 채우기 단추 — 당분간 숨김 */
 const SHOW_OCCUP_PLACE_GEOM_BUTTON = false;
 
 type Props = {
   serEng: string;
+  /** map layout에서 전달 — build_uj 하천점용 시설물 레이어 버튼 (SSR·클라이언트 동일) */
+  projectName?: string;
   onClose: () => void;
   selectedDetailId: string | null;
   onSelectDetailId: (id: string) => void;
@@ -70,6 +72,7 @@ type Props = {
 
 export function OccupationLedgerListPanel({
   serEng,
+  projectName = '',
   onClose,
   selectedDetailId,
   onSelectDetailId,
@@ -90,16 +93,31 @@ export function OccupationLedgerListPanel({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [items, setItems] = useState<ListRow[]>([]);
+  /** 목록 열 — 필드 정의 «목록» 칸 (상태 배지는 맨 앞 고정) */
+  const [listColumns, setListColumns] = useState<OccupationLedgerListColumn[]>([]);
   const [geomFillBusy, setGeomFillBusy] = useState(false);
   const [geomFillMsg, setGeomFillMsg] = useState<string | null>(null);
+
+  const showSisulLayerButton =
+    projectName.trim() === 'build_uj' && serEng === 'waterOccupationLedger';
 
   useEffect(() => {
     ensureOccupationLedgerWmsLayers(mapContextRef.current?.setVisibleLayerNames, { serEng });
     setOccupationLedgerCadastralOverlay(true);
     return () => {
-      clearOccupationLedgerWmsLayers(mapContextRef.current?.setVisibleLayerNames, { serEng });
+      const setVisible = mapContextRef.current?.setVisibleLayerNames;
+      clearOccupationLedgerWmsLayers(setVisible, { serEng });
+      if (showSisulLayerButton && setVisible) {
+        const lid = USAGE_DATA_AS_SISUL_WMS_LAYER_ID.toLowerCase();
+        setVisible((prev) => {
+          if (!prev.has(lid)) return prev;
+          const next = new Set(prev);
+          next.delete(lid);
+          return next;
+        });
+      }
     };
-  }, [serEng]);
+  }, [serEng, showSisulLayerButton]);
 
   const fitMapAfterDetailLayout = useCallback(
     (extent3857: number[]) => {
@@ -231,6 +249,7 @@ export function OccupationLedgerListPanel({
           return;
         }
         const rows = Array.isArray(data?.rows) ? data.rows : [];
+        setListColumns(Array.isArray(data?.columns) ? data.columns : []);
         setItems(
           rows.map((r: ListRow) => ({
             ...r,
@@ -251,11 +270,25 @@ export function OccupationLedgerListPanel({
 
   const filteredItems = useMemo(() => {
     const byStatus = statusFilter ? items.filter((row) => row.status === statusFilter) : items;
-    return sortOccupationLedgerListRows(byStatus, sorts);
-  }, [items, statusFilter, sorts]);
+    return sortOccupationLedgerListRows(byStatus, sorts, listColumns);
+  }, [items, statusFilter, sorts, listColumns]);
+
+  /** 열 폭 — 기본 폭, 제목이 더 길면 제목이 다 보이는 폭 */
+  const columnWidths = useMemo(
+    () => listColumns.map((c) => Math.max(c.edge ? 88 : 120, listHeaderMinPx(c.label))),
+    [listColumns]
+  );
+
+  const headerColumns = useMemo(
+    () => [
+      STATUS_COLUMN,
+      ...listColumns.map((c) => ({ key: c.field, label: c.label, edge: c.edge })),
+    ],
+    [listColumns]
+  );
 
   const toggleSort = (key: SortKey) => {
-    const initial = initialOccupationLedgerSortDir(key);
+    const initial = initialOccupationLedgerSortDir(key, listColumns);
     setSorts((prev) => {
       const idx = prev.findIndex((s) => s.key === key);
       if (idx < 0) return [...prev, { key, dir: initial }];
@@ -292,12 +325,27 @@ export function OccupationLedgerListPanel({
         ? 'build'
         : 'river';
   const useFeeLayerOn = isUseFeeWmsVisible(mapContext?.visibleLayerNames, useFeeSystem);
+  const sisulLayerOn = isUsageDataAsSisulWmsVisible(mapContext?.visibleLayerNames);
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-background">
       <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border px-3 py-1.5">
         <span className="text-sm font-semibold text-foreground">{title}</span>
         <div className="flex items-center gap-1">
+          {showSisulLayerButton ? (
+            <LayerRowPanelButton
+              type="button"
+              title={sisulLayerOn ? '점용시설물 레이어 끄기' : '점용시설물 레이어 켜기'}
+              aria-label={sisulLayerOn ? '점용시설물 레이어 끄기' : '점용시설물 레이어 켜기'}
+              aria-pressed={sisulLayerOn}
+              onClick={() => toggleUsageDataAsSisulWmsLayer(mapContext?.setVisibleLayerNames)}
+              style={sisulLayerOn ? occupationLayerToggleActiveStyle('facility') : undefined}
+              className={sisulLayerOn ? 'hover:opacity-90' : undefined}
+            >
+              <Layers className="h-3 w-3 shrink-0" aria-hidden />
+              시설물
+            </LayerRowPanelButton>
+          ) : null}
           <LayerRowPanelButton
             type="button"
             title={useFeeLayerOn ? '점사용료 레이어 끄기' : '점사용료 레이어 켜기'}
@@ -351,7 +399,7 @@ export function OccupationLedgerListPanel({
             type="search"
             value={keyword}
             onChange={(e) => setKeyword(e.target.value)}
-            placeholder="검색 (점용명, 장소, 기간 등)"
+            placeholder="검색 (점용명, 장소, 시작일·종료일 등)"
             className="w-full rounded-md border border-border bg-background py-1.5 pl-8 pr-3 text-sm outline-none ring-offset-2 focus:border-border focus:ring-2 focus:ring-ring"
           />
         </div>
@@ -389,17 +437,19 @@ export function OccupationLedgerListPanel({
           </div>
         )}
         <div ref={listScrollRef} className="min-h-0 flex-1 overflow-auto scrollbar-thin">
-          <table className="w-full min-w-[596px] table-fixed border-collapse text-left text-xs">
+          <table
+            className="w-full table-fixed border-collapse text-left text-xs"
+            style={{ minWidth: 60 + columnWidths.reduce((sum, w) => sum + w, 0) }}
+          >
             <colgroup>
               <col className="w-[60px]" />
-              <col className="w-[180px]" />
-              <col className="w-[180px]" />
-              <col className="w-[88px]" />
-              <col className="w-[88px]" />
+              {listColumns.map((c, i) => (
+                <col key={c.field} style={{ width: columnWidths[i] }} />
+              ))}
             </colgroup>
             <thead className="sticky top-0 z-[1] bg-muted shadow-[0_1px_0_0_var(--border)]">
               <tr>
-                {SORT_COLUMNS.map((col) => {
+                {headerColumns.map((col) => {
                   const sortIdx = sorts.findIndex((s) => s.key === col.key);
                   const active = sortIdx >= 0;
                   const sortDir = active ? sorts[sortIdx].dir : null;
@@ -408,8 +458,8 @@ export function OccupationLedgerListPanel({
                     : sortDir === 'asc'
                       ? ArrowUp
                       : ArrowDown;
-                  const initial = initialOccupationLedgerSortDir(col.key);
-                  const alignLeft = HEADER_ALIGN_LEFT.has(col.key);
+                  const initial = initialOccupationLedgerSortDir(col.key, listColumns);
+                  const alignLeft = col.key !== 'status' && !('edge' in col && col.edge);
                   return (
                     <th
                       key={col.key}
@@ -434,7 +484,7 @@ export function OccupationLedgerListPanel({
                               : `${col.label} 정렬 해제`
                         }
                       >
-                        <span className="truncate">{col.label}</span>
+                        <span className="whitespace-nowrap">{col.label}</span>
                         <Icon className="h-3 w-3 shrink-0 opacity-70" aria-hidden />
                       </button>
                     </th>
@@ -446,7 +496,7 @@ export function OccupationLedgerListPanel({
               {loading ? (
                 <tr>
                   <td
-                    colSpan={SORT_COLUMNS.length}
+                    colSpan={headerColumns.length}
                     className="px-3 py-6 text-center text-xs text-muted-foreground"
                   >
                     불러오는 중…
@@ -455,7 +505,7 @@ export function OccupationLedgerListPanel({
               ) : filteredItems.length === 0 && !error ? (
                 <tr>
                   <td
-                    colSpan={SORT_COLUMNS.length}
+                    colSpan={headerColumns.length}
                     className="px-3 py-6 text-center text-xs text-muted-foreground"
                   >
                     {items.length === 0
@@ -496,24 +546,21 @@ export function OccupationLedgerListPanel({
                           {row.status || OCCUPATION_PERIOD_STATE_IN_PROGRESS}
                         </span>
                       </td>
-                      <td className="max-w-0 truncate px-2 py-1.5 text-foreground" title={row.name}>
-                        {row.name || '-'}
-                      </td>
-                      <td className="max-w-0 truncate px-2 py-1.5 text-foreground/90" title={row.place}>
-                        {row.place || '-'}
-                      </td>
-                      <td
-                        className="max-w-0 truncate px-2 py-1.5 tabular-nums text-foreground/90"
-                        title={row.startDate}
-                      >
-                        {row.startDate || '-'}
-                      </td>
-                      <td
-                        className="max-w-0 truncate px-2 py-1.5 tabular-nums text-foreground/90"
-                        title={row.endDate}
-                      >
-                        {row.endDate || '-'}
-                      </td>
+                      {listColumns.map((c) => {
+                        const v = String(row.values?.[c.field] ?? '').trim();
+                        return (
+                          <td
+                            key={c.field}
+                            className={cn(
+                              'max-w-0 truncate px-2 py-1.5 text-foreground/90',
+                              c.edge && 'tabular-nums'
+                            )}
+                            title={v || undefined}
+                          >
+                            {v || '-'}
+                          </td>
+                        );
+                      })}
                     </tr>
                   );
                 })

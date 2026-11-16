@@ -23,6 +23,10 @@ import { isShpSyncDetailModalTarget } from './shpModalLayers';
 import { beginShpHistoryListHold, endShpHistoryListHold, requestShpHistoryRefresh } from '../layerManager/layerManagerUploadBridge';
 import { ShpCrsCandidateModal, type ShpCrsCandidate } from './ShpCrsCandidateModal';
 import {
+  ShpExtraFieldsPicker,
+  type ShpExtraFieldMapping,
+} from './ShpExtraFieldsPicker';
+import {
   ShpSchemaResolveModal,
   type SchemaResolveApplyInput,
   type SchemaResolvePayload,
@@ -525,6 +529,14 @@ export function ShpWizardModal({
   const [layers, setLayers] = useState<LayerRow[]>([]);
   const [layersLoading, setLayersLoading] = useState(false);
   const [layersError, setLayersError] = useState<string | null>(null);
+  /** 신규(테이블 없음) SHP만 — pathOrResult → extra로 옮길 속성 */
+  const [extraFieldsByPath, setExtraFieldsByPath] = useState<
+    Record<string, ShpExtraFieldMapping[]>
+  >({});
+  /** 기존 테이블 — 추가속성 유지 / 다시 지정 */
+  const [extraModeByPath, setExtraModeByPath] = useState<
+    Record<string, 'keep' | 'respecify'>
+  >({});
 
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState({ current: 0, total: 0 });
@@ -613,6 +625,7 @@ export function ShpWizardModal({
     setLayers([]);
     setLayersLoading(false);
     setLayersError(null);
+    setExtraFieldsByPath({});
     setUploading(false);
     setUploadProgress({ current: 0, total: 0 });
     setUploadFileName('');
@@ -1457,9 +1470,15 @@ export function ShpWizardModal({
     try {
       const shpPaths = statusRows.map((r) => r.pathOrResult);
       const sourceSrsByPath: Record<string, string> = {};
+      const extraPayload: Record<string, ShpExtraFieldMapping[]> = {};
       for (const r of statusRows) {
+        const pathKey = r.pathOrResult.replace(/\\/g, '/');
         const layerRow = layers.find((l) => l.name.toLowerCase() === r.sourceFile.toLowerCase());
-        if (layerRow?.epsg != null) sourceSrsByPath[r.pathOrResult.replace(/\\/g, '/')] = `EPSG:${layerRow.epsg}`;
+        if (layerRow?.epsg != null) sourceSrsByPath[pathKey] = `EPSG:${layerRow.epsg}`;
+        const maps = extraFieldsByPath[pathKey];
+        if (!r.table && Array.isArray(maps) && maps.length > 0) {
+          extraPayload[pathKey] = maps;
+        }
       }
       // #region agent log
       fetch('http://127.0.0.1:7353/ingest/77cac651-6745-4e00-bb84-3f2a3e31b934', {
@@ -1495,6 +1514,7 @@ export function ShpWizardModal({
               relativePath: readyPath,
               shpPaths,
               sourceSrsByPath,
+              extraFieldsByPath: Object.keys(extraPayload).length > 0 ? extraPayload : undefined,
               dbSchema: targetDbSchema,
               group: groupNameRef.current.trim() || undefined,
               createUser: operatorLabel || undefined,
@@ -1502,6 +1522,7 @@ export function ShpWizardModal({
           : {
               relativePath: readyPath,
               sourceSrsByPath,
+              extraFieldsByPath: Object.keys(extraPayload).length > 0 ? extraPayload : undefined,
               dbSchema: targetDbSchema,
               group: groupNameRef.current.trim() || undefined,
               createUser: operatorLabel || undefined,
@@ -1604,7 +1625,7 @@ export function ShpWizardModal({
     } finally {
       setComponentSetupRunning(false);
     }
-  }, [readyPath, fetchStatusList, statusRows, layers, targetDbSchema, operatorLabel]);
+  }, [readyPath, fetchStatusList, statusRows, layers, targetDbSchema, operatorLabel, extraFieldsByPath]);
 
   const loadServerFolder = useCallback(
     async (relPath: string, folderName: string) => {
@@ -1934,11 +1955,47 @@ export function ShpWizardModal({
     if (step === 2) {
       if (!allComponentsReady) return;
       setLayersError(null);
-      setConsistencyRows([]);
-      setConsistencyDone(false);
-      consistencyStartedRef.current = false;
-      step3NextClickRef.current = 0;
-      setStep(3);
+      setStepBusy(true);
+      try {
+        const existingRows = statusRows.filter((r) => r.table);
+        for (const row of existingRows) {
+          const pathKey = row.pathOrResult.replace(/\\/g, '/');
+          const mode = extraModeByPath[pathKey] === 'respecify' ? 'respecify' : 'keep';
+          const fields = extraFieldsByPath[pathKey] ?? [];
+          if (mode === 'respecify' && fields.length === 0) {
+            throw new Error(
+              `${row.sourceFile}: 추가속성을 «다시 지정»으로 선택했으면 속성을 하나 이상 고르세요.`
+            );
+          }
+          const prep = await call('', 'POST', {
+            service: 'shpUploadService',
+            action: 'prepareExistingShpExtra',
+            params: {
+              pathOrResult: row.pathOrResult,
+              mode,
+              fields: mode === 'respecify' ? fields : undefined,
+              dbSchema: targetDbSchema,
+            },
+          });
+          const pd = prep?.data ?? prep;
+          if (!pd?.success) {
+            throw new Error(
+              pd?.error
+                ? `${row.sourceFile}: ${pd.error}`
+                : `${row.sourceFile}: 추가속성 준비에 실패했습니다.`
+            );
+          }
+        }
+        setConsistencyRows([]);
+        setConsistencyDone(false);
+        consistencyStartedRef.current = false;
+        step3NextClickRef.current = 0;
+        setStep(3);
+      } catch (e: unknown) {
+        setLayersError(e instanceof Error ? e.message : String(e));
+      } finally {
+        setStepBusy(false);
+      }
       return;
     }
 
@@ -2896,7 +2953,114 @@ export function ShpWizardModal({
                   </div>
                 </div>
 
-                <div className="min-h-[470px] flex-1 overflow-auto rounded-md border border-border/60">
+                {statusRows.some((r) => !r.table) ? (
+                  <div className="space-y-2">
+                    <p className="text-xs font-medium text-foreground">
+                      추가속성으로 넣을 속성 (신규 테이블)
+                    </p>
+                    <p className="text-[10px] leading-relaxed text-muted-foreground">
+                      선택한 속성은 일반 속성 컬럼이 아니라 추가속성(extra)으로만 저장됩니다.
+                      「시작」을 누르기 전에 여기서 고르세요.
+                    </p>
+                    <div className="max-h-[220px] space-y-2 overflow-y-auto pr-0.5">
+                      {statusRows
+                        .filter((r) => !r.table)
+                        .map((row) => {
+                          const pathKey = row.pathOrResult.replace(/\\/g, '/');
+                          return (
+                            <ShpExtraFieldsPicker
+                              key={pathKey}
+                              pathOrResult={row.pathOrResult}
+                              sourceFile={row.sourceFile}
+                              value={extraFieldsByPath[pathKey] ?? []}
+                              onChange={(next) => {
+                                setExtraFieldsByPath((prev) => {
+                                  const copy = { ...prev };
+                                  if (next.length === 0) delete copy[pathKey];
+                                  else copy[pathKey] = next;
+                                  return copy;
+                                });
+                              }}
+                            />
+                          );
+                        })}
+                    </div>
+                  </div>
+                ) : null}
+
+                {statusRows.some((r) => r.table) ? (
+                  <div className="space-y-2">
+                    <p className="text-xs font-medium text-foreground">
+                      추가속성 (기존 테이블 재업로드)
+                    </p>
+                    <p className="text-[10px] leading-relaxed text-muted-foreground">
+                      «유지»는 이전에 지정한 추가속성을 그대로 쓰고, «다시 지정»은 SHP에서 속성을
+                      다시 고릅니다. 값은 정합성 반영 때 SHP 기준으로 맞춰집니다.
+                    </p>
+                    <div className="max-h-[260px] space-y-3 overflow-y-auto pr-0.5">
+                      {statusRows
+                        .filter((r) => r.table)
+                        .map((row) => {
+                          const pathKey = row.pathOrResult.replace(/\\/g, '/');
+                          const mode = extraModeByPath[pathKey] === 'respecify' ? 'respecify' : 'keep';
+                          return (
+                            <div
+                              key={pathKey}
+                              className="space-y-2 rounded-md border border-border/60 bg-background/80 p-2"
+                            >
+                              <p className="truncate text-xs font-medium" title={row.sourceFile}>
+                                {row.sourceFile}
+                              </p>
+                              <div className="flex flex-wrap gap-3 text-xs">
+                                <label className="inline-flex cursor-pointer items-center gap-1.5">
+                                  <input
+                                    type="radio"
+                                    name={`extra-mode-${pathKey}`}
+                                    checked={mode === 'keep'}
+                                    onChange={() => {
+                                      setExtraModeByPath((prev) => ({ ...prev, [pathKey]: 'keep' }));
+                                    }}
+                                  />
+                                  유지
+                                </label>
+                                <label className="inline-flex cursor-pointer items-center gap-1.5">
+                                  <input
+                                    type="radio"
+                                    name={`extra-mode-${pathKey}`}
+                                    checked={mode === 'respecify'}
+                                    onChange={() => {
+                                      setExtraModeByPath((prev) => ({
+                                        ...prev,
+                                        [pathKey]: 'respecify',
+                                      }));
+                                    }}
+                                  />
+                                  다시 지정
+                                </label>
+                              </div>
+                              {mode === 'respecify' ? (
+                                <ShpExtraFieldsPicker
+                                  pathOrResult={row.pathOrResult}
+                                  sourceFile={row.sourceFile}
+                                  value={extraFieldsByPath[pathKey] ?? []}
+                                  onChange={(next) => {
+                                    setExtraFieldsByPath((prev) => {
+                                      const copy = { ...prev };
+                                      if (next.length === 0) delete copy[pathKey];
+                                      else copy[pathKey] = next;
+                                      return copy;
+                                    });
+                                  }}
+                                />
+                              ) : null}
+                            </div>
+                          );
+                        })}
+                    </div>
+                  </div>
+                ) : null}
+
+                <div className="min-h-[240px] max-h-[320px] flex-1 overflow-auto rounded-md border border-border/60">
                   <table className="w-full text-xs">
                     <thead className="sticky top-0 z-10 bg-muted">
                       <tr className="text-center text-muted-foreground">

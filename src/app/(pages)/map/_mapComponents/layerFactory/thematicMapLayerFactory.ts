@@ -5,6 +5,7 @@ import type { Map as OlMap } from 'ol';
 import tables from '@/config/defineLayer/tables.json';
 import { WORKSPACE } from './serviceLayerFactory';
 import { getGeoServerBase } from '@/lib/geoserverUrl';
+import { geoserverWmsImageLoadFunction } from '@/lib/geoserverWmsImageLoad';
 
 type DefineTableRow = {
   define_table_name?: string;
@@ -43,6 +44,7 @@ export type ThematicMapLayerGroup = {
  */
 const THEMATIC_MAP_GROUP_ALLOW = new Set([
   '도시계획시설',
+  '등고선',
   '용도구역',
   '용도지구',
   '용도지역',
@@ -66,6 +68,7 @@ const THEMATIC_MAP_GROUP_ORDER = [
   '지구단위계획구역',
   '행정제한/특별고시',
   '주제도(기타)',
+  '등고선',
 ];
 
 function groupSortKey(title: string): number {
@@ -177,7 +180,7 @@ export function createThematicMapLayers(
   const wmsUrl = `${geoServerBase}/${WORKSPACE}/wms`;
 
   return layers.map(({ tableName, layerName, parentTableName, cqlFilter, minZoom, maxZoom }) => {
-    // 분할: GeoServer 발행명(자식)을 쓰되 CQL은 tables.json div_query를 GetMap에 직접 적용
+    // 지하시설물 분할(송수관로 등)과 동일: 자식 발행명 + 자식 스타일 + GetMap CQL
     const params: Record<string, string> = {
       LAYERS: `${WORKSPACE}:${tableName}`,
       STYLES: tableName,
@@ -195,6 +198,7 @@ export function createThematicMapLayers(
         params,
         serverType: 'geoserver',
         ratio: 1.5,
+        imageLoadFunction: geoserverWmsImageLoadFunction,
       }),
     });
     layer.set('name', layerName);
