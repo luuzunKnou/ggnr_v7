@@ -1,9 +1,10 @@
 import type { ReactNode } from "react"
-import { Settings, Database, Wrench, GitBranch, BarChart3 } from "lucide-react"
+import { Settings, Database, Wrench, GitBranch, BarChart3, Box, Book } from "lucide-react"
 import { DbManagerContent } from "./DbManagerContent"
 import { SystemListManager } from "./SystemListManager"
 import { ServiceListManager } from "./ServiceListManager"
 import { LayerManagerContent } from "./LayerManagerContent"
+import { LayerCompareContent } from "./layerCompare/LayerCompareContent"
 import { DataHistoryManagerContent } from "./DataHistoryManagerContent"
 import { GeoserverManagerContent } from "./GeoserverManagerContent"
 import { LasFileUploaderContent } from "./LasFileUploaderContent"
@@ -14,6 +15,7 @@ import { FileManagerContent } from "./FileManagerContent"
 import { FileConverterContent } from "./FileConverterContent"
 import { LasFixerContent } from "./LasFixerContent"
 import { OrthophotoManagerContent } from "./OrthophotoManagerContent"
+import { IndexOrientationContent } from "./IndexOrientationContent"
 import { PermissionFeatureManager } from "./PermissionFeatureManager"
 import { AccessRequestQueue } from "./AccessRequestQueue"
 import { UserManager } from "./UserManager"
@@ -21,12 +23,18 @@ import { SignUpApprove } from "./SignUpApprove"
 import { UserMgmtHistory } from "./UserMgmtHistory"
 import { UserAccessStats } from "./UserAccessStats"
 import { RuntimeEnvEditor } from "./RuntimeEnvEditor"
+import { SystemControlContent } from "./SystemControlContent"
+import { ProjectComposeManager } from "./ProjectComposeManager"
 import { SystemIntegrationManager } from "./SystemIntegrationManager"
 import { GeocodingTestPanel } from "./GeocodingTestPanel"
 import { SourceCodeUploaderContent } from "./SourceCodeUploaderContent"
 import { VersionManagerContent } from "./VersionManagerContent"
+import { ThreeJsContent } from "./ThreeJsContent"
+import { CesiumSplitContent } from "./cesiumSplit/CesiumSplitContent"
 import type { AdminConsoleMenuGroup } from "@/app/(pages)/_components/AdminConsoleLayout"
 import { DEV_CONSOLE_MENUS, type DevConsoleMenuId } from "@/lib/consoleMenuAccess/menus/dev"
+import { InstallManualClient } from "../install-manual/InstallManualClient"
+import { BaseDataManualClient } from "../base-data-manual/BaseDataManualClient"
 
 export const DEV_SUBMENUS = DEV_CONSOLE_MENUS
 
@@ -43,6 +51,8 @@ export const DEV_MENU_GROUPS: readonly AdminConsoleMenuGroup[] = [
       "permissionFeature",
       "accessRequestQueue",
       "systemVar",
+      "systemControl",
+      "projectCompose",
     ],
   },
   {
@@ -51,8 +61,10 @@ export const DEV_MENU_GROUPS: readonly AdminConsoleMenuGroup[] = [
     icon: Database,
     menuIds: [
       "layerManager",
+      "layerCompare",
       "dataHistoryManager",
       "orthophotoManager",
+      "indexOrientation",
       "dataFileUploader",
       "systemIntegration",
       "fileManager",
@@ -91,7 +103,36 @@ export const DEV_MENU_GROUPS: readonly AdminConsoleMenuGroup[] = [
     icon: GitBranch,
     menuIds: ["sourceCodeUploader", "versionManager"],
   },
+  {
+    id: "featureTest",
+    label: "기능테스트",
+    icon: Box,
+    menuIds: ["threeJs", "cesium"],
+  },
+  {
+    id: "manualList",
+    label: "메뉴얼 목록",
+    icon: Book,
+    menuIds: ["installManual", "baseDataManual"],
+  },
 ]
+
+const SU_ONLY_MENU_IDS = new Set<string>(
+  DEV_SUBMENUS.filter((m) => "suOnly" in m && m.suOnly).map((m) => m.id)
+)
+
+/** su 계정이 아니면 su 전용 메뉴·빈 그룹 제외 */
+export function devMenusForUser(usrId: string | null | undefined) {
+  const isSu = String(usrId ?? "").trim().toLowerCase() === "su"
+  if (isSu) return { menus: DEV_SUBMENUS, menuGroups: DEV_MENU_GROUPS }
+  return {
+    menus: DEV_SUBMENUS.filter((m) => !SU_ONLY_MENU_IDS.has(m.id)),
+    menuGroups: DEV_MENU_GROUPS.map((g) => ({
+      ...g,
+      menuIds: g.menuIds.filter((id) => !SU_ONLY_MENU_IDS.has(id)),
+    })).filter((g) => g.menuIds.length > 0),
+  }
+}
 
 /** 이 메뉴로 진입 시 사이드바를 자동으로 접음. 필요에 따라 메뉴 id를 추가/삭제하세요. */
 export const DEV_AUTO_COLLAPSE_MENU_IDS: readonly DevConsoleMenuId[] = ["layerManager"]
@@ -130,10 +171,16 @@ export function getDevMenuDescription(menuId: string): string {
       return "권한 부여·변경 이력 조회 (구현 예정)"
     case "layerManager":
       return "레이어 목록·SHP/Excel 업데이트 이력·설정(Layer/Field/Code)·오류수정 및 SHP·Excel 업로드 진입 화면입니다."
+    case "layerCompare":
+      return "기준 DB 레이어와 첨부 파일의 구조(컬럼·건수·도형·좌표계)를 비교하고, 맞춰진 데이터의 값 차이를 봅니다. 반영 없이 엑셀만 제공합니다."
     case "dataHistoryManager":
       return "지도·SHP·Excel 데이터 변경·조회·내보내기 이력을 한곳에서 검색·조회합니다."
     case "systemVar":
       return "현재 프로젝트 runtime.env (GGNR_PROJECT) 를 표에서 바로 편집합니다."
+    case "systemControl":
+      return "시스템 전체에 적용되는 기능을 켜고 끕니다. (su 전용)"
+    case "projectCompose":
+      return "프로젝트별 runtime 설정(시스템 노출·기능 숨김·레이어 그룹)을 선택·편집합니다."
     case "dbManager":
       return "데이터 가져오기 / 백업 / 업데이트"
     case "geoserverManagerLayer":
@@ -145,7 +192,7 @@ export function getDevMenuDescription(menuId: string): string {
     case "fileManager":
       return "GGNR_DATA_DIR 현재 프로젝트 폴더 전체 탐색 및 업로드·다운로드·이동·이름변경·삭제"
     case "fileConverter":
-      return "TIF·PDF·OBJ·LAS 변환, OCR 마이그레이션"
+      return "TIF·PDF·OBJ·LAS·SHP 변환, OCR 마이그레이션"
     case "shpFileUploader":
       return "SHP 파일 업로드 및 GeoServer·스타일 확인·후처리"
     case "dataFileUploader":
@@ -158,6 +205,16 @@ export function getDevMenuDescription(menuId: string): string {
       return "WKT/비표준 좌표계 LAS를 EPSG:4326으로 변환"
     case "orthophotoManager":
       return "GeoTIFF 그룹 목록 기반 일괄 변환(VRT합본) 및 XYZ JPEG 타일(tiles_jpg)"
+    case "indexOrientation":
+      return "하천기본계획 색인도 도면 방향을 지도 하천 모양과 비교해 판정·검토·확정합니다."
+    case "threeJs":
+      return "Three.js WebGL 렌더·기능 테스트"
+    case "cesium":
+      return "왼쪽 Cesium 3D, 오른쪽 2D. Three.js와 같은 레이어 도형을 현재 범위에 표시"
+    case "installManual":
+      return "매뉴얼 수정시 InstallManualClient.tsx 파일을 수정하세요."
+    case "baseDataManual":
+      return "매뉴얼 수정시 BaseDataManualClient.tsx 파일을 수정하세요."
     default:
       return `${devMenuLabel(menuId)} 설정 화면입니다. (구현 예정)`
   }
@@ -227,6 +284,12 @@ export function renderDevMenuContent(menuId: string): ReactNode {
           <LayerManagerContent />
         </div>
       )
+    case "layerCompare":
+      return (
+        <div className="flex flex-col overflow-hidden min-h-0 h-[calc(100vh-14rem)]">
+          <LayerCompareContent />
+        </div>
+      )
     case "dataHistoryManager":
       return (
         <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
@@ -235,6 +298,18 @@ export function renderDevMenuContent(menuId: string): ReactNode {
       )
     case "systemVar":
       return <RuntimeEnvEditor />
+    case "systemControl":
+      return (
+        <div className="flex flex-col overflow-hidden min-h-0 h-[calc(100vh-14rem)]">
+          <SystemControlContent />
+        </div>
+      )
+    case "projectCompose":
+      return (
+        <div className="flex flex-col overflow-hidden min-h-0 h-[calc(100vh-14rem)]">
+          <ProjectComposeManager />
+        </div>
+      )
     case "dbManager":
       return (
         <div className="flex flex-col overflow-hidden min-h-0 h-[calc(100vh-14rem)]">
@@ -307,6 +382,36 @@ export function renderDevMenuContent(menuId: string): ReactNode {
       return (
         <div className="flex flex-col overflow-hidden min-h-0 h-[calc(100vh-14rem)]">
           <OrthophotoManagerContent />
+        </div>
+      )
+    case "indexOrientation":
+      return (
+        <div className="flex flex-col overflow-hidden min-h-0 h-[calc(100vh-14rem)]">
+          <IndexOrientationContent />
+        </div>
+      )
+    case "threeJs":
+      return (
+        <div className="flex flex-col overflow-hidden min-h-0 h-[calc(100vh-14rem)]">
+          <ThreeJsContent />
+        </div>
+      )
+    case "cesium":
+      return (
+        <div className="flex flex-col overflow-hidden min-h-0 h-[calc(100vh-14rem)]">
+          <CesiumSplitContent />
+        </div>
+      )
+    case "installManual":
+      return (
+        <div className="flex flex-col overflow-hidden min-h-0 h-[calc(100vh-14rem)]">
+          <InstallManualClient />
+        </div>
+      )
+    case "baseDataManual":
+      return (
+        <div className="flex flex-col overflow-hidden min-h-0 h-[calc(100vh-14rem)]">
+          <BaseDataManualClient />
         </div>
       )
     default:

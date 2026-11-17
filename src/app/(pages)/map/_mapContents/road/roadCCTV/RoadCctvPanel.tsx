@@ -147,6 +147,15 @@ export function RoadCctvPanel({ onClose }: Props) {
     setRoadCctvExtentWgs84?.(emdExtent);
   }, [emdExtent, setRoadCctvExtentWgs84]);
 
+  /** 언마운트 시 진행 중 조회 무효화 + 오버레이·범위 제거 (닫힌 뒤 레이어 잔류 방지) */
+  useEffect(() => {
+    return () => {
+      fetchGenRef.current += 1;
+      setRoadCctvOverlay?.(null);
+      setRoadCctvExtentWgs84?.(null);
+    };
+  }, [setRoadCctvOverlay, setRoadCctvExtentWgs84]);
+
   const loadForExtent = useCallback(async () => {
     if (!setRoadCctvOverlay) return;
     if (!emdExtent) return;

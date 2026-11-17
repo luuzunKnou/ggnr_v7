@@ -1,3 +1,8 @@
+/* 축척 표시 약 120.00m(줌~17) 이하 → 굵기 2배. GeoServer @sd ≈ 4500 */
+[@sd <= 4500] {
+  stroke-width: 6, 4;
+}
+
 * {
   stroke: #FFFFFF, #4CAF50;
   stroke-width: 3, 2;

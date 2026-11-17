@@ -1,0 +1,7 @@
+{
+  "packageName": "pdfjs-dist",
+  "version": "4.10.38",
+  "copies": [
+    "build/pdf.worker.min.mjs->public/pdf.worker.min.mjs"
+  ]
+}

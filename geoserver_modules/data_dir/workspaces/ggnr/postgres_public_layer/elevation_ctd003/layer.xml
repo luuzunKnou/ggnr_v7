@@ -1,0 +1,18 @@
+<layer>
+  <name>elevation_ctd003</name>
+  <id>LayerInfoImpl-elevation-ctd003</id>
+  <type>VECTOR</type>
+  <defaultStyle>
+    <id>StyleInfoImpl-elevation-ctd003</id>
+  </defaultStyle>
+  <resource class="featureType">
+    <id>FeatureTypeInfoImpl-elevation-ctd003</id>
+  </resource>
+  <queryable>true</queryable>
+  <opaque>false</opaque>
+  <attribution>
+    <logoWidth>0</logoWidth>
+    <logoHeight>0</logoHeight>
+  </attribution>
+  <dateModified>2026-11-11 01:12:58.17 UTC</dateModified>
+</layer>

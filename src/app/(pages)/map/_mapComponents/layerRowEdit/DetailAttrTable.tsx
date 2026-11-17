@@ -39,12 +39,14 @@ export function DetailAttrRow({
   children,
   isLast = false,
   required = false,
+  labelClassName,
   valueClassName,
 }: {
   label: ReactNode;
   children: ReactNode;
   isLast?: boolean;
   required?: boolean;
+  labelClassName?: string;
   valueClassName?: string;
 }) {
   const edge = isLast ? '' : CELL_BORDER;
@@ -54,6 +56,7 @@ export function DetailAttrRow({
         className={cn(
           'whitespace-nowrap border-r border-border',
           PANEL_DETAIL_LABEL_CELL,
+          labelClassName,
           edge
         )}
       >

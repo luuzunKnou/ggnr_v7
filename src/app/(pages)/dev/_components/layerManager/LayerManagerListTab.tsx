@@ -15,16 +15,17 @@ import { Check, X, Download, FileSpreadsheet, History, Loader2 } from "lucide-re
 import type { LayerManagerRow } from "./types"
 import { SchemaBadge, SourceBadge } from "./defineBadges"
 import { downloadLayerCsvFromDb, downloadLayerExcel, downloadLayerShp } from "./layerListDownload"
+import { LayerManagerCadDownloadModal } from "./LayerManagerCadDownloadModal"
 import { LayerManagerRowHistoryDialog } from "./LayerManagerRowHistoryDialog"
 import { registerLayerManagerListRefresh, requestLayerManagerDefineRefresh } from "./layerManagerUploadBridge"
 import { StyleLegendThumb } from "./StylePreviewSwatch"
-import { parseSimpleStyleFromCss, type GeometryType, type StyleProps } from "@/lib/geoserverStyleUtils"
+import { SearchClearButton } from "./SearchClearButton"
+import { parseSimpleStyleFromCss, parseSldEnvStyle, type GeometryType, type StyleProps } from "@/lib/geoserverStyleUtils"
 import { fetchDefineLayerTables, fetchLayerDbTableList } from "./layerManagerListCache"
 import { getGeoServerBase } from "@/lib/geoserverUrl"
+import { withBasePath } from "@/lib/basePath"
 
 const GEOSERVER_DEFAULT_URL = getGeoServerBase()
-
-const GEOSERVER_WORKSPACE = "ggnr"
 
 const SHARE_OPTIONS = [
   { label: "전체", value: "P" },
@@ -117,21 +118,16 @@ function pickLatestDate(...values: Array<string | null | undefined>): string | n
 }
 
 function getLegendGraphicUrl(layerName: string, styleName?: string, version?: number): string {
-  // GeoServer 레이어·스타일은 항상 소문자로 생성되므로 원본 대소문자와 무관하게 소문자로 조회
   const layerKey = layerName.toLowerCase()
   const params = new URLSearchParams({
-    SERVICE: "WMS",
-    REQUEST: "GetLegendGraphic",
-    VERSION: "1.0.0",
-    LAYER: `${GEOSERVER_WORKSPACE}:${layerKey}`,
-    STYLE: styleName?.trim() || layerKey,
-    FORMAT: "image/png",
-    WIDTH: "32",
-    HEIGHT: "32",
-    TRANSPARENT: "true",
-    ...(version != null ? { _v: String(version) } : {}),
+    layer: layerKey,
+    style: styleName?.trim() || layerKey,
+    width: "32",
+    height: "32",
+    primary: "1",
   })
-  return `${GEOSERVER_DEFAULT_URL}/wms?${params.toString()}`
+  if (version != null) params.set("v", String(version))
+  return withBasePath(`/api/geoserver/legend?${params.toString()}`)
 }
 
 function shareLabel(value: string): string {
@@ -210,6 +206,7 @@ export function LayerManagerListTab() {
   const [metaLoading, setMetaLoading] = useState(false)
   const [downloadingShp, setDownloadingShp] = useState<string | null>(null)
   const [downloadingExcel, setDownloadingExcel] = useState<string | null>(null)
+  const [cadModalOpen, setCadModalOpen] = useState(false)
   const [historyTarget, setHistoryTarget] = useState<{ tableName: string; korName: string } | null>(
     null
   )
@@ -328,7 +325,6 @@ export function LayerManagerListTab() {
           }
         }
         setStyleInfoMap(map)
-        setStyleVersion((v) => v + 1)
       }
     } catch {
       // 스타일 정보 실패해도 목록은 유지
@@ -337,7 +333,7 @@ export function LayerManagerListTab() {
     }
   }, [])
 
-  /** WMS 범례가 실패한 스타일의 CSS를 직접 조회해서 파싱 (DB 테이블 유무와 무관하게 스타일 미리보기 표시) */
+  /** WMS 범례 실패 시 CSS/SLD를 읽어 미리보기. 심볼 URL 있으면 모달 SYMBOL과 동일하게 아이콘 표시 */
   const loadCssFallback = useCallback((key: string, force = false) => {
     setCssFallbackMap((prev) => (prev[key] && !force ? prev : { ...prev, [key]: "loading" }))
     call("", "POST", {
@@ -347,12 +343,26 @@ export function LayerManagerListTab() {
     })
       .then((res) => {
         const data = res?.data ?? res
-        if (data?.success && data.format === "css" && data.body) {
+        if (!data?.success || !data.body) {
+          setCssFallbackMap((prev) => ({ ...prev, [key]: "error" }))
+          return
+        }
+        if (data.format === "css") {
           const { styleProps, geometryType } = parseSimpleStyleFromCss(data.body)
           setCssFallbackMap((prev) => ({ ...prev, [key]: { ...styleProps, geometryType } }))
-        } else {
-          setCssFallbackMap((prev) => ({ ...prev, [key]: "error" }))
+          return
         }
+        if (data.format === "sld") {
+          const parsed = parseSldEnvStyle(data.body, key)
+          if (parsed) {
+            setCssFallbackMap((prev) => ({
+              ...prev,
+              [key]: { ...parsed.styleProps, geometryType: parsed.geometryType },
+            }))
+            return
+          }
+        }
+        setCssFallbackMap((prev) => ({ ...prev, [key]: "error" }))
       })
       .catch(() => setCssFallbackMap((prev) => ({ ...prev, [key]: "error" })))
   }, [])
@@ -655,12 +665,21 @@ export function LayerManagerListTab() {
   return (
     <div className="flex flex-col gap-3 p-2 min-h-0 h-full">
       <div className="flex items-center gap-3 flex-nowrap shrink-0 overflow-x-auto">
-        <Input
-          placeholder="그룹명·테이블명·한글명 검색"
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          className="h-8 w-56 rounded-md text-sm"
-        />
+        <div className="relative w-56 shrink-0">
+          <Input
+            placeholder="그룹명·테이블명·한글명 검색"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className={`h-8 w-full rounded-md text-sm${searchQuery ? " pr-8" : ""}`}
+          />
+          <SearchClearButton
+            value={searchQuery}
+            onClear={() => {
+              setSearchQuery("")
+              setDebouncedSearch("")
+            }}
+          />
+        </div>
         <div className="flex items-center gap-1 rounded-md border p-0.5">
               {FILTER_OPTIONS.map((opt) => (
             <button
@@ -684,6 +703,17 @@ export function LayerManagerListTab() {
             <span className="text-xs text-muted-foreground ml-1">(표시: {displayedRows.length})</span>
           )}
         </span>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="h-8 ml-auto shrink-0 gap-1.5"
+          onClick={() => setCadModalOpen(true)}
+          title="선택한 레이어를 CAD(DXF/DWG)로 다운로드"
+        >
+          <Download className="w-3.5 h-3.5" />
+          CAD 다운로드
+        </Button>
       </div>
 
       {error && <span className="text-sm text-destructive">{error}</span>}
@@ -875,8 +905,7 @@ export function LayerManagerListTab() {
                             cacheBust={styleVersion}
                             onNeedCssFallback={() => {
                               if (!fallbackKey) return
-                              if (hasCssStyle) loadCssFallback(fallbackKey)
-                              else setCssFallbackMap((prev) => ({ ...prev, [fallbackKey]: "error" }))
+                              loadCssFallback(fallbackKey)
                             }}
                           />
                         </div>
@@ -982,6 +1011,12 @@ export function LayerManagerListTab() {
           )}
         </div>
       )}
+
+      <LayerManagerCadDownloadModal
+        open={cadModalOpen}
+        onClose={() => setCadModalOpen(false)}
+        rows={rows}
+      />
 
       <LayerManagerRowHistoryDialog
         open={!!historyTarget}

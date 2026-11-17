@@ -43,7 +43,9 @@ const TYPE = resolveTypeArg();
 const SIGNAL_PATH = path.join(process.cwd(), '.cursor-runtime', 'restart-request.json');
 const RELAUNCH_POLL_MS = 1000;
 
-/** common.runtime.env + 프로젝트 runtime.env (loadProjectEnv 이후 호출) */
+/** common.runtime.env + 프로젝트 runtime.env (loadProjectEnv 이후 호출)
+ *  GGNR_DATA_UNC_ROOT 는 common.runtime.env 전용 — resolveGgnrDataUncRoot() 가 파일을 직접 읽음.
+ */
 function loadRuntimeEnv(projectName: string): void {
   const dir = path.join(process.cwd(), 'src', 'config', 'projects');
   const applyRuntimeEnvFile = (filePath: string): void => {
@@ -56,7 +58,8 @@ function loadRuntimeEnv(projectName: string): void {
       if (eq <= 0) continue;
       const key = trimmed.slice(0, eq).trim();
       const value = trimmed.slice(eq + 1).trim();
-      if (key) (process.env as Record<string, string>)[key] = value;
+      if (!key || key === 'GGNR_DATA_DIR') continue;
+      (process.env as Record<string, string>)[key] = value;
     }
   };
   applyRuntimeEnvFile(path.join(dir, 'common.runtime.env'));

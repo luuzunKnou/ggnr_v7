@@ -1,0 +1,19 @@
+<layer>
+  <name>sewer_fee</name>
+  <id>LayerInfoImpl-7b45823a:1a113f17c5f:-7b4d</id>
+  <type>VECTOR</type>
+  <defaultStyle>
+    <id>StyleInfoImpl-7b45823a:1a113f17c5f:-7b4c</id>
+  </defaultStyle>
+  <resource class="featureType">
+    <id>FeatureTypeInfoImpl-7b45823a:1a113f17c5f:-7b4e</id>
+  </resource>
+  <queryable>true</queryable>
+  <opaque>false</opaque>
+  <attribution>
+    <logoWidth>0</logoWidth>
+    <logoHeight>0</logoHeight>
+  </attribution>
+  <dateCreated>2026-10-07 06:06:37.643 UTC</dateCreated>
+  <dateModified>2026-10-07 06:06:38.445 UTC</dateModified>
+</layer>

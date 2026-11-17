@@ -9,52 +9,64 @@ interface Props {
   portalTarget: HTMLDivElement;
   onClose: () => void;
   onSelect?: (tableName: string, featureIndex: number, feature: Record<string, unknown>) => void;
+  onHover?: (feature: Record<string, unknown> | null) => void;
 }
 
-export function FeatureIdentifyPopup({ state, portalTarget, onClose, onSelect }: Props) {
+export function FeatureIdentifyPopup({ state, portalTarget, onClose, onSelect, onHover }: Props) {
   const totalCount = state.results.reduce((s, r) => s + r.features.length, 0);
 
   const content = (
     <div
-      className="bg-background rounded-lg shadow-xl border border-gray-200 font-size-[12px]w-72 max-h-80 flex flex-col select-none"
+      className="flex w-72 max-h-80 select-none flex-col overflow-hidden rounded-lg border border-gray-200 bg-background text-[12px] shadow-xl"
       style={{ pointerEvents: 'auto' }}
+      onMouseDown={(e) => e.stopPropagation()}
+      onPointerDown={(e) => e.stopPropagation()}
+      onClick={(e) => e.stopPropagation()}
     >
-      {/* Header */}
-      <div className="flex items-center justify-between px-3 py-[7px] border-b border-gray-200 bg-gray-50 rounded-t-lg shrink-0">
-        <span className="font-medium text-muted-foreground text-[13px]">
+      <div className="flex shrink-0 items-center justify-between rounded-t-lg border-b border-gray-200 bg-gray-50 px-3 py-[7px]">
+        <span className="text-[13px] font-medium text-muted-foreground">
           데이터 목록 ({totalCount})
         </span>
         <button
           type="button"
-          onClick={onClose}
-          className="p-0.5 rounded hover:bg-gray-200 transition-colors"
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            onClose();
+          }}
+          className="rounded p-0.5 transition-colors hover:bg-gray-200"
+          title="닫기"
+          aria-label="닫기"
         >
-          <X className="w-3.5 h-3.5 text-gray-500" />
+          <X className="h-3.5 w-3.5 text-gray-500" />
         </button>
       </div>
 
-      {/* List */}
-      <div className="overflow-y-auto flex-1 py-1">
+      <div
+        className="flex-1 overflow-y-auto py-1"
+        onMouseLeave={() => onHover?.(null)}
+      >
         {state.results.map((layer) =>
           layer.features.map((feat, fi) => (
             <button
               key={`${layer.tableName}-${fi}`}
               type="button"
+              onMouseEnter={() => onHover?.(feat.data)}
               onClick={() => onSelect?.(layer.tableName, fi, feat.data)}
-              className="w-[265px] text-left px-3 py-[2px] hover:bg-blue-50 flex items-center gap-1 transition-colors"
+              className="flex w-full items-center gap-1 px-3 py-[2px] text-left transition-colors hover:bg-blue-50"
             >
               <img
                 src={getLegendUrl(layer.tableName)}
                 alt=""
-                className="w-5 h-5 shrink-0 object-contain"
+                className="h-5 w-5 shrink-0 object-contain"
                 onError={(e) => { e.currentTarget.style.display = 'none'; }}
               />
-              <span className="text-[#444] text-xs truncate">
+              <span className="truncate text-xs text-[#444]">
                 <span className="font-normal">{layer.korName}</span>
                 {feat.titleValue && (
                   <>
                     <span className="mx-1">|</span>
-                    <span className="">{feat.titleValue}</span>
+                    <span>{feat.titleValue}</span>
                   </>
                 )}
               </span>

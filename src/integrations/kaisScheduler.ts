@@ -1,37 +1,13 @@
-import { defaultDailyWindow, resolveKaisSggCode, runKais } from '@/integrations/kais';
-import { KAIS_CNTC_CODES, KAIS_REFRESH_SCHEDULE } from '@/integrations/kais.config';
+import { KAIS_REFRESH_SCHEDULE } from '@/integrations/kais.config';
 import { calendarSlotKey, intervalSlotKey } from '@/integrations/integrationSchedule';
 import { describeSafetydataSchedule } from '@/integrations/safetydata';
+import { runIntegration } from '@/service/integrationService';
 
 const LOG = '[kais-scheduler]';
 
-const HARDCODED_KAIS_APP_KEY = 'U01TX0FVVEgyMDIzMDUzMDE3MzU1NDExMzgxMTM=';
-
-async function runKaisDailyJob(label: string): Promise<void> {
-  const appKey = (process.env.KAIS_APP_KEY ?? '').trim() || HARDCODED_KAIS_APP_KEY;
-  const sggCode = await resolveKaisSggCode();
-  const window = defaultDailyWindow();
-  try {
-    for (const cntcCd of KAIS_CNTC_CODES) {
-      await runKais({
-        mode: 'daily',
-        appKey,
-        cntcCd,
-        dateGb: 'D',
-        retryIn: 'Y',
-        from: window.from,
-        to: window.to,
-        sggCode,
-      });
-    }
-    console.info(`${LOG} ok (${label})`);
-  } catch (e) {
-    console.warn(`${LOG} fail:`, e instanceof Error ? e.message : e);
-  }
-}
-
 /**
- * `kais.config`의 KAIS_REFRESH_SCHEDULE(일/주/월/interval)에 맞춰 실행. 기동 직시 실행 없음.
+ * `kais.config`의 KAIS_REFRESH_SCHEDULE(일/주/월·interval)에 맞춰 실행. 기동 직후 실행 없음.
+ * 실행 결과는 수동 연계와 동일하게 integration_job_log 에 기록.
  */
 export function startKaisScheduler(): void {
   const sched = KAIS_REFRESH_SCHEDULE;
@@ -41,7 +17,9 @@ export function startKaisScheduler(): void {
   let lastSlot: string | null = null;
 
   setInterval(() => {
-    const now = new Date();
+    const now = new Date(
+      new Date().toLocaleString('en-US', { timeZone: 'Asia/Seoul' })
+    );
     let slot: string | null = null;
     if (sched.mode === 'interval') {
       slot = intervalSlotKey(sched, now);
@@ -51,6 +29,14 @@ export function startKaisScheduler(): void {
     if (!slot) return;
     if (lastSlot === slot) return;
     lastSlot = slot;
-    void runKaisDailyJob(desc);
+
+    console.info(`${LOG} 스케줄 시각 — 연계 시작`);
+    void runIntegration({ system: 'KAIS', mode: 'daily', trigger: 'scheduler' })
+      .then((r) => {
+        console.info(`${LOG} done ijlKey=${r.ijlKey ?? '-'} ok=${r.ok}`);
+      })
+      .catch((e) => {
+        console.warn(`${LOG} fail:`, e instanceof Error ? e.message : e);
+      });
   }, 15_000);
 }

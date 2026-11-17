@@ -24,6 +24,7 @@ import {
   GalleryThumbnails,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { MAP_UI_Z_CLASS } from '@/lib/mapUiZIndex';
 import { zoomPreviewAtPointer } from './previewZoomAtCursor';
 import {
   ServiceFilePdfPreviewStage,
@@ -38,6 +39,7 @@ import {
   printServiceFilePreviewBlob,
 } from './ServiceFileImagePreview';
 import { setPdfViewerFocusUrl, getCachedPdfNumPages, prefetchPdfDocument } from './pdfDocumentCache';
+import type { IndexSheetGuide, IndexSheetMode } from './inferPdfPageUprightRotation';
 
 export type ServiceFilePdfPreviewItem = {
   url: string;
@@ -47,7 +49,14 @@ export type ServiceFilePdfPreviewItem = {
 type Props = {
   items: ServiceFilePdfPreviewItem[];
   initialIndex: number;
+  /** 열 때 보여줄 페이지(1부터). 미지정이면 1 */
+  initialPage?: number;
   onClose: () => void;
+  /** 제목 옆 보조 표시 (예: 관리자용 폴더 경로) */
+  titleHint?: string | null;
+  /** 색인도일 때만 지정. 가로 칸은 90·180·270, 세로 칸은 180만 */
+  indexSheetMode?: IndexSheetMode;
+  indexSheetGuide?: IndexSheetGuide;
 };
 
 const MIN_SCALE = 0.25;
@@ -77,7 +86,15 @@ function toolbarBtnClass(disabled?: boolean, active?: boolean): string {
 /**
  * PDF 전용 전체화면 뷰어 — 사이드바(PDF 목록·페이지 썸네일) + 확대·패닝·회전·인쇄.
  */
-export function ServiceFilePdfPreview({ items, initialIndex, onClose }: Props) {
+export function ServiceFilePdfPreview({
+  items,
+  initialIndex,
+  initialPage = 1,
+  onClose,
+  titleHint,
+  indexSheetMode,
+  indexSheetGuide,
+}: Props) {
   const [mounted, setMounted] = useState(false);
   const itemsKey = useMemo(() => items.map((i) => i.fileName).join('\n'), [items]);
 
@@ -88,6 +105,8 @@ export function ServiceFilePdfPreview({ items, initialIndex, onClose }: Props) {
   const [renderScale, setRenderScale] = useState(1);
   const [fitMode, setFitMode] = useState<PdfPreviewFitMode>('page');
   const [viewMode, setViewMode] = useState<PdfViewMode>('single');
+  const [rotation, setRotation] = useState(0);
+  const [pan, setPan] = useState({ x: 0, y: 0 });
   const scaleRef = useRef(1);
   scaleRef.current = scale;
   const panRef = useRef(pan);
@@ -96,17 +115,20 @@ export function ServiceFilePdfPreview({ items, initialIndex, onClose }: Props) {
   rotationRef.current = rotation;
   const viewModeRef = useRef<PdfViewMode>('single');
   viewModeRef.current = viewMode;
-  const [rotation, setRotation] = useState(0);
-  const [pan, setPan] = useState({ x: 0, y: 0 });
   const [dragging, setDragging] = useState(false);
-  const [pdfPage, setPdfPage] = useState(1);
+  const startPage = Math.max(1, Math.floor(initialPage) || 1);
+  const [pdfPage, setPdfPage] = useState(startPage);
   const [pdfNumPages, setPdfNumPages] = useState(0);
   const [pdfPagesLoading, setPdfPagesLoading] = useState(true);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [pdfListSearchDraft, setPdfListSearchDraft] = useState('');
   const [pdfListSearch, setPdfListSearch] = useState('');
   const [pdfListSectionOpen, setPdfListSectionOpen] = useState(true);
-  const [pageInput, setPageInput] = useState('1');
+  const [pageInput, setPageInput] = useState(String(startPage));
+  /** null = 아직 파일 effect 미실행. 파일 전환 시에만 1페이지로 */
+  const prevFileIndexRef = useRef<number | null>(null);
+  /** 열 때 지정한 페이지 — 문서 페이지 수 확인 후 1회 적용 */
+  const pendingInitialPageRef = useRef<number | null>(startPage);
   /** 연속 보기 — 사이드바·툴바 등 명시적 페이지 이동 시에만 스크롤 */
   const [continuousScrollToken, setContinuousScrollToken] = useState(0);
   /** 메인 canvas 첫 렌더 완료 — 썸네일 등 부가 로드 지연 */
@@ -121,10 +143,14 @@ export function ServiceFilePdfPreview({ items, initialIndex, onClose }: Props) {
   const wheelNavRef = useRef({ viewMode: 'single' as PdfViewMode });
   wheelNavRef.current = { viewMode };
   const continuousScrollRef = useRef<HTMLDivElement | null>(null);
+  /** 연속보기에서 썸네일·툴바 이동 중 IO가 다른 페이지로 덮어쓰지 않게 */
+  const pendingContinuousPageRef = useRef<number | null>(null);
   const attachActionBusyRef = useRef(false);
   const [attachBusy, setAttachBusy] = useState<'download' | 'print' | null>(null);
   const [downloadMenuOpen, setDownloadMenuOpen] = useState(false);
   const downloadMenuRef = useRef<HTMLDivElement>(null);
+  /** 미리보기 영역 실측 — 페이지 맞춤·화면 중앙 배치용 */
+  const [stageViewport, setStageViewport] = useState({ w: 0, h: 0 });
 
   const current = items[index];
 
@@ -164,6 +190,20 @@ export function ServiceFilePdfPreview({ items, initialIndex, onClose }: Props) {
     setMounted(true);
   }, []);
 
+  /** 사이드바·창 크기 변경 시 미리보기 영역 실측 */
+  useEffect(() => {
+    if (!mounted) return;
+    const el = wheelTargetRef.current;
+    if (!el) return;
+    const measure = () => {
+      setStageViewport({ w: el.clientWidth, h: el.clientHeight });
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [mounted, sidebarOpen]);
+
   useEffect(() => {
     setIndex(clamp(initialIndex, 0, Math.max(0, items.length - 1)));
   }, [initialIndex, items.length, itemsKey]);
@@ -171,15 +211,22 @@ export function ServiceFilePdfPreview({ items, initialIndex, onClose }: Props) {
   useEffect(() => {
     const item = items[index];
     const cachedPages = item?.url ? getCachedPdfNumPages(item.url) : null;
+    const prev = prevFileIndexRef.current;
+    const fileSwitched = prev !== null && prev !== index;
+    prevFileIndexRef.current = index;
 
     setScale(1);
     setRenderScale(1);
     setFitMode('page');
     setRotation(0);
     setPan({ x: 0, y: 0 });
-    setPdfPage(1);
-    setPageInput('1');
+    if (fileSwitched) {
+      setPdfPage(1);
+      setPageInput('1');
+      pendingInitialPageRef.current = null;
+    }
     setMainCanvasReady(false);
+    pendingContinuousPageRef.current = null;
 
     if (cachedPages != null) {
       setPdfNumPages(cachedPages);
@@ -188,7 +235,26 @@ export function ServiceFilePdfPreview({ items, initialIndex, onClose }: Props) {
       setPdfNumPages(0);
       setPdfPagesLoading(true);
     }
-  }, [index, items]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- items[index]는 itemsKey·index로 식별
+  }, [index, itemsKey]);
+
+  /** 첫 오픈 initialPage 적용 → 이후에는 페이지 수 범위만 클램프 */
+  useEffect(() => {
+    if (pdfNumPages < 1) return;
+    const pending = pendingInitialPageRef.current;
+    if (pending != null) {
+      pendingInitialPageRef.current = null;
+      const next = clamp(pending, 1, pdfNumPages);
+      setPdfPage(next);
+      setPageInput(String(next));
+      return;
+    }
+    setPdfPage((p) => {
+      const next = clamp(p, 1, pdfNumPages);
+      if (next !== p) setPageInput(String(next));
+      return next;
+    });
+  }, [pdfNumPages]);
 
   useEffect(() => {
     if (!current?.url) return;
@@ -260,7 +326,13 @@ export function ServiceFilePdfPreview({ items, initialIndex, onClose }: Props) {
     (n: number) => {
       const next = clamp(n, 1, Math.max(1, pdfNumPages));
       if (viewMode === 'continuous') {
+        pendingContinuousPageRef.current = next;
         setContinuousScrollToken((t) => t + 1);
+        window.setTimeout(() => {
+          if (pendingContinuousPageRef.current === next) pendingContinuousPageRef.current = null;
+        }, 1200);
+      } else {
+        pendingContinuousPageRef.current = null;
       }
       setPdfPage(next);
       setPageInput(String(next));
@@ -417,7 +489,13 @@ export function ServiceFilePdfPreview({ items, initialIndex, onClose }: Props) {
   }, []);
 
   const onContinuousVisiblePageChange = useCallback((n: number) => {
+    const pending = pendingContinuousPageRef.current;
+    if (pending != null) {
+      if (n !== pending) return;
+      pendingContinuousPageRef.current = null;
+    }
     setPdfPage((prev) => (prev === n ? prev : n));
+    setPageInput(String(n));
   }, []);
 
   const selectFile = useCallback((fileIndex: number) => {
@@ -593,10 +671,12 @@ export function ServiceFilePdfPreview({ items, initialIndex, onClose }: Props) {
   const isWidthFitActive = fitMode === 'width' && isAtBaseZoom;
 
   const cssZoomRatio = renderScale > 0 ? scale / renderScale : scale;
+  const fitMaxWidth = stageViewport.w > 0 ? stageViewport.w * 0.96 : undefined;
+  const fitMaxHeight = stageViewport.h > 0 ? stageViewport.h * 0.85 : undefined;
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[500] flex flex-col bg-black/92"
+      className={cn(MAP_UI_Z_CLASS.filePreview, 'fixed inset-0 flex flex-col bg-black/92')}
       role="dialog"
       aria-modal="true"
       aria-label="PDF 미리보기"
@@ -618,9 +698,19 @@ export function ServiceFilePdfPreview({ items, initialIndex, onClose }: Props) {
         >
           <Menu className="h-5 w-5" aria-hidden />
         </button>
-        <span className="min-w-0 flex-1 truncate text-xs font-medium sm:text-sm" title={current.fileName}>
-          {current.fileName}
-        </span>
+        <div className="flex min-w-0 flex-1 items-baseline gap-2">
+          <span className="min-w-0 truncate text-xs font-medium sm:text-sm" title={current.fileName}>
+            {current.fileName}
+          </span>
+          {titleHint ? (
+            <span
+              className="min-w-0 shrink truncate font-mono text-[10px] text-white/55 sm:text-[11px]"
+              title={titleHint}
+            >
+              {titleHint}
+            </span>
+          ) : null}
+        </div>
         <div className="relative flex shrink-0 items-center gap-0.5 sm:gap-1" ref={downloadMenuRef}>
           <button
             type="button"
@@ -647,25 +737,25 @@ export function ServiceFilePdfPreview({ items, initialIndex, onClose }: Props) {
                 type="button"
                 role="menuitem"
                 className="flex w-full cursor-pointer px-3 py-2 text-left text-[12px] text-white/90 transition-colors hover:bg-white/10"
-                title="전체 다운로드"
+                title="묶음 내려받기"
                 onClick={() => {
                   setDownloadMenuOpen(false);
                   void handleDownloadAll();
                 }}
               >
-                전체 다운로드
+                묶음 내려받기
               </button>
               <button
                 type="button"
                 role="menuitem"
                 className="flex w-full cursor-pointer px-3 py-2 text-left text-[12px] text-white/90 transition-colors hover:bg-white/10"
-                title="현재 파일 다운로드"
+                title="개별 다운로드"
                 onClick={() => {
                   setDownloadMenuOpen(false);
                   void handleDownloadCurrent();
                 }}
               >
-                현재 파일 다운로드
+                개별 다운로드
               </button>
             </div>
           ) : null}
@@ -708,7 +798,7 @@ export function ServiceFilePdfPreview({ items, initialIndex, onClose }: Props) {
             className="flex h-full flex-col"
             style={{ width: SIDEBAR_WIDTH }}
           >
-            <div className="shrink-0 border-b border-white/10 px-2 py-2">
+            <div className="shrink-0 border-b border-white/10 p-1">
               <button
                 type="button"
                 onClick={() => setPdfListSectionOpen((o) => !o)}
@@ -763,7 +853,7 @@ export function ServiceFilePdfPreview({ items, initialIndex, onClose }: Props) {
               </div>
               <ul className="max-h-[28vh] space-y-0.5 overflow-y-auto">
                 {pdfListSearch.trim() !== '' && filteredFileEntries.length === 0 ? (
-                  <li className="px-2 py-2 text-[11px] text-white/45">검색 결과가 없습니다.</li>
+                  <li className="p-1 text-[11px] text-white/45">검색 결과가 없습니다.</li>
                 ) : (
                   filteredFileEntries.map(({ item, fileIndex }) => (
                     <li key={item.fileName}>
@@ -772,7 +862,7 @@ export function ServiceFilePdfPreview({ items, initialIndex, onClose }: Props) {
                         onClick={() => selectFile(fileIndex)}
                         title={item.fileName}
                         className={cn(
-                          'w-full truncate rounded px-2 py-1.5 text-left text-[11px] transition-colors hover:bg-white/10',
+                          'w-full truncate rounded p-1 text-left text-[11px] transition-colors hover:bg-white/10',
                           fileIndex === index
                             ? 'border-l-[3px] border-l-primary bg-primary/15 text-white'
                             : 'text-white/75'
@@ -787,7 +877,7 @@ export function ServiceFilePdfPreview({ items, initialIndex, onClose }: Props) {
                 </>
               ) : null}
             </div>
-            <div className="flex min-h-0 flex-1 flex-col px-2 py-2">
+            <div className="flex min-h-0 flex-1 flex-col p-1">
               <div className="mb-2 flex items-baseline justify-between gap-2">
                 <p className="text-[12px] font-semibold text-white/80">페이지</p>
                 <span className="shrink-0 text-[11px] tabular-nums text-white/55">
@@ -813,6 +903,8 @@ export function ServiceFilePdfPreview({ items, initialIndex, onClose }: Props) {
                       loadEnabled={mainCanvasReady}
                       onClick={() => navigateToPdfPage(pn)}
                       thumbMaxPx={PDF_PAGE_THUMB_DISPLAY_PX}
+                      indexSheetMode={indexSheetMode}
+                      indexSheetGuide={indexSheetGuide}
                     />
                   </div>
                 ))}
@@ -835,15 +927,15 @@ export function ServiceFilePdfPreview({ items, initialIndex, onClose }: Props) {
           onPointerCancel={viewMode === 'single' ? onPointerUp : undefined}
         >
           {viewMode === 'single' ? (
-          <div className="absolute inset-0 overflow-hidden">
+          <div className="absolute inset-0 flex items-center justify-center overflow-hidden">
             <div
-              className="absolute left-1/2 top-1/2 flex max-h-[85vh] max-w-[96vw] items-center justify-center"
+              className="flex max-h-full max-w-full items-center justify-center"
               onDoubleClick={(e) => {
                 e.stopPropagation();
                 resetView();
               }}
               style={{
-                transform: `translate(-50%, -50%) translate(${pan.x}px, ${pan.y}px) rotate(${rotation}deg) scale(${cssZoomRatio})`,
+                transform: `translate(${pan.x}px, ${pan.y}px) rotate(${rotation}deg) scale(${cssZoomRatio})`,
                 transformOrigin: 'center center',
               }}
             >
@@ -853,8 +945,12 @@ export function ServiceFilePdfPreview({ items, initialIndex, onClose }: Props) {
                 pageNumber={pdfPage}
                 fitMode={fitMode}
                 renderScale={renderScale}
+                fitMaxWidth={fitMaxWidth}
+                fitMaxHeight={fitMaxHeight}
                 onPagesReady={setPdfNumPagesStable}
                 onMainCanvasReady={handleMainCanvasReady}
+                indexSheetMode={indexSheetMode}
+                indexSheetGuide={indexSheetGuide}
               />
             </div>
           </div>
@@ -871,9 +967,19 @@ export function ServiceFilePdfPreview({ items, initialIndex, onClose }: Props) {
               onVisiblePageChange={onContinuousVisiblePageChange}
               onMainCanvasReady={handleMainCanvasReady}
               scrollContainerRef={continuousScrollRef}
+              fitMaxWidth={fitMaxWidth}
+              fitMaxHeight={fitMaxHeight}
+              indexSheetMode={indexSheetMode}
+              indexSheetGuide={indexSheetGuide}
             />
           )}
         </div>
+        {/* 좌측 사이드바와 동일 폭 — 문서가 화면 정중앙에 오도록 */}
+        <div
+          aria-hidden
+          className="pointer-events-none shrink-0 transition-[width] duration-200 ease-out"
+          style={{ width: sidebarOpen ? SIDEBAR_WIDTH : 0 }}
+        />
       </div>
 
       <div

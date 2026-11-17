@@ -4,7 +4,7 @@ import React, { useMemo, useState, useEffect, useRef, useCallback } from 'react'
 import { createPortal } from 'react-dom';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useSession } from 'next-auth/react';
-import { Search, X, ChevronDown, LayoutGrid, Check, Loader2, History, EyeOff } from 'lucide-react';
+import { Search, X, ChevronDown, LayoutGrid, Check, Loader2, History, EyeOff, Scaling } from 'lucide-react';
 import { Input } from '@/app/shadcnComponents/ui/input';
 import {
   Dialog,
@@ -14,6 +14,7 @@ import {
 } from '@/app/shadcnComponents/ui/dialog';
 import { call } from '@/lib/api';
 import { cn } from '@/lib/utils';
+import { MAP_UI_Z } from '@/lib/mapUiZIndex';
 import { MapLayergroupBar } from './map-layergroup-bar';
 import {
   getAddressFromCoord,
@@ -36,6 +37,8 @@ import { scrubOccupationLedgerFromMapSearchParams } from '@/lib/occupationLedger
 import { scrubUseFeeFromMapSearchParams } from '@/lib/useFeeBinding';
 import { scrubMapSearchParamsOnSystemSwitch } from '@/lib/mapSystemSwitch';
 import { MapAdminToolsMenu } from './mapAdminTools/MapAdminToolsMenu';
+import { scheduleAnimateMapToCenter3857 } from './config/mapAutoNavigation';
+import { MAP_LOCAL_VIEW_MIN_ZOOM } from './config/mapDefaults';
 
 /** 검색바 아이콘 버튼 — 우측 메뉴와 동일: 바깥=패널 배경, 안=투명+hover만 */
 const mapSearchBarIconShell = cn(
@@ -55,6 +58,11 @@ const mapSearchBarIconBtnActive = cn(
   'bg-slate-100 text-primary',
   'dark:bg-white/20 dark:text-primary'
 );
+
+/** 슈퍼유저 버튼 title. 보이기 조건과 지금 크기 상태만 적는다. */
+function pointScaleSizeButtonTitle(ignoreScale: boolean): string {
+  return ignoreScale ? 'super user 계정 전용.\n변경 X' : 'super user 계정 전용.\n축적따라 변경';
+}
 
 /** 검색바 공통 표면 — 시스템 선택 등 넓은 컨트롤 */
 const mapSearchBarSurface = cn(
@@ -289,6 +297,8 @@ export function MapSearchBar({
   const { levels: consoleMenuLevels, loading: consoleAccessLoading } = useConsoleMenuAccess();
 
   const showDebugUi = mapContext?.showDebugUi ?? false;
+  const showPointScaleSizeToggle = isSuperUser(session?.user?.id);
+  const pointScaleSizeOn = mapContext?.iconScaleSizeOn ?? false;
   const canToggleGeoserverLog = useMemo(() => {
     if (isSuperUser(session?.user?.id)) return true;
     if (consoleAccessLoading) return false;
@@ -303,7 +313,7 @@ export function MapSearchBar({
   const [systemModalOpen, setSystemModalOpen] = useState(false);
   const [deniedOpen, setDeniedOpen] = useState(false);
   const [deniedSysKey, setDeniedSysKey] = useState('');
-  const { snapshot } = useMyAccessSnapshot();
+  const { snapshot, reload } = useMyAccessSnapshot();
 
   const [mapAddressSearch, setMapAddressSearch] =
     useState<MapAddressSearchState>(MAP_ADDRESS_SEARCH_IDLE);
@@ -442,9 +452,16 @@ export function MapSearchBar({
           [item.point.x, item.point.y],
           'EPSG:4326',
           'EPSG:3857'
+        ) as [number, number];
+        const currentZoom = view.getZoom() ?? 0;
+        scheduleAnimateMapToCenter3857(
+          map,
+          center3857,
+          Math.max(currentZoom, MAP_LOCAL_VIEW_MIN_ZOOM),
+          {
+            applyMapViewPadding: () => mapContext?.applyMapViewPaddingRef?.current?.(),
+          }
         );
-        view.setCenter(center3857);
-        view.setZoom(17);
       }
       if (query.trim()) addRecentQuery(query.trim());
     },
@@ -594,6 +611,8 @@ export function MapSearchBar({
 
   const handleSystemModalOpenChange = (open: boolean) => {
     if (!open && mustPickSystem) return;
+    /** 접근권한 모달이 위에 열린 채 닫힐 때 시스템 모달까지 같이 닫히는 Radix 중첩 방지 */
+    if (!open && deniedOpen) return;
     setSystemModalOpen(open);
   };
 
@@ -629,20 +648,33 @@ export function MapSearchBar({
       scrubMapSearchParamsOnSystemSwitch(current, sysKey, target?.serviceList ?? []);
       mapContext?.allLayersOffRef?.current?.();
     } else {
-      scrubOccupationLedgerFromMapSearchParams(current, sysKey);
-      scrubUseFeeFromMapSearchParams(current, sysKey);
+      const target = systemList.find((s) => s.sys_key === sysKey);
+      scrubOccupationLedgerFromMapSearchParams(current, sysKey, target?.serviceList ?? []);
+      scrubUseFeeFromMapSearchParams(current, sysKey, target?.serviceList ?? []);
     }
     router.push(`/map?${current.toString()}`);
     setSystemModalOpen(false);
   };
 
   const trySelectSystem = (sys: SystemOption) => {
-    if (!canAccessPrivateSystem(snapshot, sys.sys_key, sys.sys_is_private)) {
-      setDeniedSysKey(sys.sys_key);
-      setDeniedOpen(true);
-      return;
-    }
-    selectSystem(sys.sys_key);
+    void (async () => {
+      let snap = snapshot;
+      if (!canAccessPrivateSystem(snap, sys.sys_key, sys.sys_is_private)) {
+        snap = await reload({ silent: true });
+      }
+      if (!canAccessPrivateSystem(snap, sys.sys_key, sys.sys_is_private)) {
+        setDeniedSysKey(sys.sys_key);
+        setSystemModalOpen(false);
+        setDeniedOpen(true);
+        return;
+      }
+      selectSystem(sys.sys_key);
+    })();
+  };
+
+  const handleDeniedOpenChange = (open: boolean) => {
+    setDeniedOpen(open);
+    if (!open && mustPickSystem) setSystemModalOpen(true);
   };
 
   const submit = (nextQuery: string) => {
@@ -955,6 +987,15 @@ export function MapSearchBar({
               onToggleLog={() => mapContext?.setShowDebugUi(!showDebugUi)}
             />
           )}
+          {showPointScaleSizeToggle && (
+            <MapSearchBarIconButton
+              title={pointScaleSizeButtonTitle(pointScaleSizeOn)}
+              active={pointScaleSizeOn}
+              onClick={() => mapContext?.setIconScaleSizeOn((on) => !on)}
+            >
+              <Scaling className="w-5 h-5" strokeWidth={2} />
+            </MapSearchBarIconButton>
+          )}
           <div className={mapSearchBarIconShell}>
             <ThemeToggle variant="mapIcon" iconBtnClassName={mapSearchBarIconBtnInner} />
           </div>
@@ -1005,6 +1046,7 @@ export function MapSearchBar({
               <Dialog open={systemModalOpen} onOpenChange={handleSystemModalOpenChange}>
                 <DialogContent
                   className="sm:max-w-[380px] p-0 gap-0 overflow-hidden rounded-[10px] border-slate-200/80 shadow-xl dark:border-white/10 dark:bg-black/90"
+                  layerZIndex={MAP_UI_Z.systemSelect}
                   showCloseButton={false}
                   onPointerDownOutside={(e) => {
                     if (mustPickSystem) e.preventDefault();
@@ -1070,7 +1112,7 @@ export function MapSearchBar({
               </Dialog>
               <ResourceAccessDeniedDialog
                 open={deniedOpen}
-                onOpenChange={setDeniedOpen}
+                onOpenChange={handleDeniedOpenChange}
                 resource="system"
                 sysKey={deniedSysKey}
               />

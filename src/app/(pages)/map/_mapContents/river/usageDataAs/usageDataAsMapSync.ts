@@ -93,6 +93,16 @@ export function isUsageDataAsSisulWmsVisible(
   return visibleLayerNames.has(USAGE_DATA_AS_SISUL_WMS_LAYER_ID.toLowerCase());
 }
 
+/** 부서업무 점용 — 연속지적만 추가로 켬. 읍면동·리 등 사용자가 켠 지적도는 끄지 않음 */
+export function setUsageDataAsCadastralOverlay(active: boolean): void {
+  if (typeof window === "undefined" || !active) return;
+  window.dispatchEvent(
+    new CustomEvent("ggnr-map-control-set", {
+      detail: { id: "cadastral", active: true, tableNames: ["jijuk"] },
+    })
+  );
+}
+
 /** 저장·상세 갱신 후 WMS·뷰 동기화 */
 export async function refreshUsageDataAsMapView(opts: {
   map: Map | null | undefined;

@@ -1,0 +1,19 @@
+<layer>
+  <name>swl_pipe_lm_sba003</name>
+  <id>LayerInfoImpl--4d2f0c14:1a1671e8ffa:-7eb9</id>
+  <type>VECTOR</type>
+  <defaultStyle>
+    <id>StyleInfoImpl--4d2f0c14:1a1671e8ffa:-7eb8</id>
+  </defaultStyle>
+  <resource class="featureType">
+    <id>FeatureTypeInfoImpl--4d2f0c14:1a1671e8ffa:-7eba</id>
+  </resource>
+  <queryable>true</queryable>
+  <opaque>false</opaque>
+  <attribution>
+    <logoWidth>0</logoWidth>
+    <logoHeight>0</logoHeight>
+  </attribution>
+  <dateCreated>2026-10-23 05:07:52.129 UTC</dateCreated>
+  <dateModified>2026-10-23 05:07:52.674 UTC</dateModified>
+</layer>

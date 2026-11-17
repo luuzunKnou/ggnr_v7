@@ -21,7 +21,7 @@
               <ogc:PropertyName>geom</ogc:PropertyName>
             </sld:Geometry>
             <sld:Stroke>
-              <sld:CssParameter name="stroke">#e91e63</sld:CssParameter>
+              <sld:CssParameter name="stroke">#142DAD</sld:CssParameter>
               <sld:CssParameter name="stroke-width">2</sld:CssParameter>
             </sld:Stroke>
           </sld:LineSymbolizer>
@@ -92,7 +92,7 @@
               <ogc:PropertyName>geom</ogc:PropertyName>
             </sld:Geometry>
             <sld:Stroke>
-              <sld:CssParameter name="stroke">#e91e63</sld:CssParameter>
+              <sld:CssParameter name="stroke">#142DAD</sld:CssParameter>
               <sld:CssParameter name="stroke-width">2</sld:CssParameter>
             </sld:Stroke>
           </sld:LineSymbolizer>

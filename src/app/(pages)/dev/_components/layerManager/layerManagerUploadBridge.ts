@@ -34,6 +34,37 @@ export function requestLayerManagerListRefresh() {
 type RefreshHistoryFn = () => void
 let refreshHistory: RefreshHistoryFn | null = null
 
+/** 완료 처리 중에는 목록을 그리지 않고, 건수 반영 뒤에 한 번만 다시 읽는다. */
+let shpHistoryHoldCount = 0
+const shpHistoryHoldListeners = new Set<() => void>()
+
+export function isShpHistoryListHeld() {
+  return shpHistoryHoldCount > 0
+}
+
+export function registerShpHistoryHoldChange(fn: () => void) {
+  shpHistoryHoldListeners.add(fn)
+  return () => {
+    shpHistoryHoldListeners.delete(fn)
+  }
+}
+
+function notifyShpHistoryHold() {
+  for (const fn of shpHistoryHoldListeners) fn()
+}
+
+export function beginShpHistoryListHold() {
+  shpHistoryHoldCount += 1
+  notifyShpHistoryHold()
+}
+
+export function endShpHistoryListHold() {
+  if (shpHistoryHoldCount === 0) return
+  shpHistoryHoldCount -= 1
+  notifyShpHistoryHold()
+  if (shpHistoryHoldCount === 0) requestShpHistoryRefresh()
+}
+
 export function registerShpHistoryRefresh(fn: RefreshHistoryFn) {
   refreshHistory = fn
   return () => {
@@ -42,6 +73,7 @@ export function registerShpHistoryRefresh(fn: RefreshHistoryFn) {
 }
 
 export function requestShpHistoryRefresh() {
+  if (shpHistoryHoldCount > 0) return
   refreshHistory?.()
 }
 

@@ -16,16 +16,21 @@ import {
   Loader2,
   Download,
   Printer,
+  Menu,
+  XCircle,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { MAP_UI_Z_CLASS } from '@/lib/mapUiZIndex';
 import { zoomPreviewAtPointer } from './previewZoomAtCursor';
+import { ServiceFileExcelPreviewStage } from './ServiceFileExcelPreviewStage';
 import { ServiceFilePdfPreviewStage } from './ServiceFilePdfPreviewStage';
+import type { IndexSheetGuide, IndexSheetMode } from './inferPdfPageUprightRotation';
 
 export type ServiceFilePreviewItem = {
   url: string;
   fileName: string;
-  /** 이미지: 기존 img 뷰 · PDF: pdf.js 1페이지 기준 캔버스 + 페이지 이동 */
-  kind: 'image' | 'pdf';
+  /** 이미지 · PDF · 엑셀(.xlsx/.xls) */
+  kind: 'image' | 'pdf' | 'excel';
 };
 
 /** @deprecated ServiceFilePreviewItem 사용 */
@@ -35,12 +40,16 @@ type Props = {
   items: ServiceFilePreviewItem[];
   initialIndex: number;
   onClose: () => void;
+  /** 색인도일 때만 지정. 가로 칸은 90·180·270, 세로 칸은 180만 */
+  indexSheetMode?: IndexSheetMode;
+  indexSheetGuide?: IndexSheetGuide;
 };
 
 const MIN_SCALE = 0.25;
 const MAX_SCALE = 5;
 const ZOOM_STEP_WHEEL = 0.18;
 const ZOOM_STEP_BUTTON = 0.35;
+const SIDEBAR_WIDTH = 240;
 
 function clamp(n: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, n));
@@ -135,34 +144,110 @@ function clampPreviewIndex(index: number, len: number): number {
 }
 
 /**
- * 이미지: 숨김 iframe에서 인쇄 대화상자.
- * PDF: 새 탭에서 뷰어 연 뒤 print() (브라우저 PDF UI에 따름).
+ * 이미지·PDF: 숨김 iframe에서 브라우저 인쇄 대화상자 (새 탭/팝업 없음).
+ * PDF는 blob URL을 iframe.src로 두어 파일 자체를 인쇄한다 (canvas 렌더 아님).
+ * 대용량·다페이지 PDF는 0×0 iframe에서 인쇄가 실패하므로 오프스크린 실크기 iframe + 지연·재시도.
  */
 export async function printServiceFilePreviewBlob(
   url: string,
   fileName: string,
-  kind: 'image' | 'pdf'
+  kind: 'image' | 'pdf' | 'excel'
 ): Promise<void> {
+  if (kind === 'excel') {
+    throw new Error('excel print not supported');
+  }
   const res = await fetch(url, { credentials: 'include' });
   if (!res.ok) throw new Error('print fetch failed');
   const blob = await res.blob();
   const objectUrl = URL.createObjectURL(blob);
 
   if (kind === 'pdf') {
-    const w = window.open(objectUrl, '_blank', 'noopener,noreferrer');
-    if (!w) {
-      URL.revokeObjectURL(objectUrl);
-      throw new Error('popup blocked');
-    }
-    window.setTimeout(() => {
-      try {
-        w.focus();
-        w.print();
-      } catch {
-        /* 사용자가 탭에서 수동 인쇄 가능 */
-      }
-    }, 600);
-    window.setTimeout(() => URL.revokeObjectURL(objectUrl), 120_000);
+    await new Promise<void>((resolve, reject) => {
+      const iframe = document.createElement('iframe');
+      // Chrome PDF 뷰어는 0×0이면 다페이지 문서를 준비하지 못함 → 실크기 + 화면 밖
+      iframe.setAttribute(
+        'style',
+        'position:fixed;left:-10000px;top:0;width:1024px;height:768px;border:0;opacity:0;pointer-events:none'
+      );
+      iframe.setAttribute('title', fileName || 'PDF print');
+      document.body.appendChild(iframe);
+
+      let cleaned = false;
+      const cleanup = () => {
+        if (cleaned) return;
+        cleaned = true;
+        try {
+          document.body.removeChild(iframe);
+        } catch {
+          /* ignore */
+        }
+        URL.revokeObjectURL(objectUrl);
+      };
+
+      let settled = false;
+      const finishOk = () => {
+        if (settled) return;
+        settled = true;
+        resolve();
+      };
+      const finishErr = (err: Error) => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        reject(err);
+      };
+
+      const runPrint = (): boolean => {
+        if (cleaned) return false;
+        try {
+          const win = iframe.contentWindow;
+          if (!win) return false;
+          win.focus();
+          win.print();
+          win.addEventListener('afterprint', () => window.setTimeout(cleanup, 300), {
+            once: true,
+          });
+          // afterprint 미지원·취소 시 대비 (인쇄 중 blob 유지)
+          window.setTimeout(cleanup, 180_000);
+          finishOk();
+          return true;
+        } catch {
+          return false;
+        }
+      };
+
+      const sizeMb = blob.size / (1024 * 1024);
+      // 용량이 클수록 PDF 뷰어 준비 대기 (최대 약 10초). print()는 한 번만 호출.
+      const baseDelay = Math.min(10_000, Math.max(1_200, 1_000 + sizeMb * 700));
+
+      const loadTimer = window.setTimeout(() => {
+        finishErr(new Error('pdf load timeout'));
+      }, 60_000);
+
+      iframe.addEventListener(
+        'load',
+        () => {
+          window.clearTimeout(loadTimer);
+          window.setTimeout(() => {
+            if (runPrint()) return;
+            // contentWindow 미준비 시 한 번만 재시도 (대화상자가 열린 뒤 재호출하면 닫힐 수 있음)
+            window.setTimeout(() => {
+              if (!runPrint()) finishErr(new Error('print failed'));
+            }, 2_000);
+          }, baseDelay);
+        },
+        { once: true }
+      );
+      iframe.addEventListener(
+        'error',
+        () => {
+          window.clearTimeout(loadTimer);
+          finishErr(new Error('pdf iframe error'));
+        },
+        { once: true }
+      );
+      iframe.src = objectUrl;
+    });
     return;
   }
 
@@ -172,21 +257,6 @@ export async function printServiceFilePreviewBlob(
     'position:fixed;right:0;bottom:0;width:0;height:0;border:0;opacity:0;pointer-events:none'
   );
   document.body.appendChild(iframe);
-  const doc = iframe.contentDocument;
-  if (!doc) {
-    URL.revokeObjectURL(objectUrl);
-    document.body.removeChild(iframe);
-    throw new Error('iframe');
-  }
-  const safeName = escapeHtml(fileName);
-  doc.open();
-  doc.write(
-    `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${safeName}</title></head>` +
-      `<body style="margin:0;text-align:center">` +
-      `<img src="${objectUrl}" alt="" style="max-width:100%;height:auto"/>` +
-      `</body></html>`
-  );
-  doc.close();
 
   const cleanup = () => {
     try {
@@ -206,6 +276,21 @@ export async function printServiceFilePreviewBlob(
     }
     window.setTimeout(cleanup, 2000);
   };
+
+  const doc = iframe.contentDocument;
+  if (!doc) {
+    cleanup();
+    throw new Error('iframe');
+  }
+  const safeName = escapeHtml(fileName);
+  doc.open();
+  doc.write(
+    `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${safeName}</title></head>` +
+      `<body style="margin:0;text-align:center">` +
+      `<img src="${objectUrl}" alt="" style="max-width:100%;height:auto"/>` +
+      `</body></html>`
+  );
+  doc.close();
 
   const img = doc.querySelector('img');
   if (!img) {
@@ -228,9 +313,9 @@ function toolbarBtnClass(disabled?: boolean): string {
 }
 
 /**
- * 첨부 이미지·PDF 전체화면 미리보기. 확대·축소·회전·파일 이전/다음, PDF는 페이지 이동.
+ * 첨부 이미지·PDF·엑셀 전체화면 미리보기. 확대·축소·회전·파일 이전/다음, PDF 페이지·엑셀 시트 이동.
  */
-export function ServiceFileImagePreview({ items, initialIndex, onClose }: Props) {
+export function ServiceFileImagePreview({ items, initialIndex, onClose, indexSheetMode, indexSheetGuide }: Props) {
   const [mounted, setMounted] = useState(false);
   const itemsKey = useMemo(() => items.map((i) => `${i.fileName}\0${i.kind}`).join('\n'), [items]);
 
@@ -242,6 +327,12 @@ export function ServiceFileImagePreview({ items, initialIndex, onClose }: Props)
   const [dragging, setDragging] = useState(false);
   const [pdfPage, setPdfPage] = useState(1);
   const [pdfNumPages, setPdfNumPages] = useState(1);
+  const [excelSheetNames, setExcelSheetNames] = useState<string[]>([]);
+  const [excelSheetIndex, setExcelSheetIndex] = useState(0);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [fileListSectionOpen, setFileListSectionOpen] = useState(true);
+  const [fileListSearchDraft, setFileListSearchDraft] = useState('');
+  const [fileListSearch, setFileListSearch] = useState('');
 
   const draggingRef = useRef(false);
   const lastPointerRef = useRef({ x: 0, y: 0 });
@@ -254,6 +345,8 @@ export function ServiceFileImagePreview({ items, initialIndex, onClose }: Props)
   rotationRef.current = rotation;
   const attachActionBusyRef = useRef(false);
   const [attachBusy, setAttachBusy] = useState<'download' | 'print' | null>(null);
+  const [downloadMenuOpen, setDownloadMenuOpen] = useState(false);
+  const downloadMenuRef = useRef<HTMLDivElement>(null);
 
   const current = items[index];
 
@@ -297,6 +390,8 @@ export function ServiceFileImagePreview({ items, initialIndex, onClose }: Props)
     setPan({ x: 0, y: 0 });
     setPdfPage(1);
     setPdfNumPages(1);
+    setExcelSheetNames([]);
+    setExcelSheetIndex(0);
   }, [index]);
 
   useEffect(() => {
@@ -309,30 +404,12 @@ export function ServiceFileImagePreview({ items, initialIndex, onClose }: Props)
       }
       const cur = items[index];
       const isPdf = cur?.kind === 'pdf';
-
+      const isExcel = cur?.kind === 'excel';
       const pdfPageNav = isPdf && pdfNumPages > 1;
-      if (pdfPageNav) {
-        if (
-          e.key === 'PageDown' ||
-          e.key === 'ArrowDown' ||
-          e.key === 'ArrowRight'
-        ) {
-          e.preventDefault();
-          setPdfPage((p) => Math.min(pdfNumPages, p + 1));
-          return;
-        }
-        if (
-          e.key === 'PageUp' ||
-          e.key === 'ArrowUp' ||
-          e.key === 'ArrowLeft'
-        ) {
-          e.preventDefault();
-          setPdfPage((p) => Math.max(1, p - 1));
-          return;
-        }
-      }
+      const excelSheetNav = isExcel && excelSheetNames.length > 1;
 
-      if (items.length > 1 && !pdfPageNav) {
+      /** ← → 파일 전환 · ↑ ↓ / PageUp·Down PDF 페이지·엑셀 시트 */
+      if (items.length > 1) {
         if (e.key === 'ArrowLeft') {
           e.preventDefault();
           setIndex((i) => (i - 1 + items.length) % items.length);
@@ -344,6 +421,31 @@ export function ServiceFileImagePreview({ items, initialIndex, onClose }: Props)
           return;
         }
       }
+      if (pdfPageNav) {
+        if (e.key === 'PageDown' || e.key === 'ArrowDown') {
+          e.preventDefault();
+          setPdfPage((p) => Math.min(pdfNumPages, p + 1));
+          return;
+        }
+        if (e.key === 'PageUp' || e.key === 'ArrowUp') {
+          e.preventDefault();
+          setPdfPage((p) => Math.max(1, p - 1));
+          return;
+        }
+      }
+      if (excelSheetNav) {
+        if (e.key === 'PageDown' || e.key === 'ArrowDown') {
+          e.preventDefault();
+          setExcelSheetIndex((i) => Math.min(excelSheetNames.length - 1, i + 1));
+          return;
+        }
+        if (e.key === 'PageUp' || e.key === 'ArrowUp') {
+          e.preventDefault();
+          setExcelSheetIndex((i) => Math.max(0, i - 1));
+          return;
+        }
+      }
+      if (isExcel) return;
       if (e.key === '+' || e.key === '=') {
         e.preventDefault();
         applyZoomStepRef.current(ZOOM_STEP_BUTTON, null);
@@ -358,7 +460,7 @@ export function ServiceFileImagePreview({ items, initialIndex, onClose }: Props)
       document.body.style.overflow = prevOverflow;
       window.removeEventListener('keydown', onKey);
     };
-  }, [onClose, items.length, items, index, pdfNumPages]);
+  }, [onClose, items.length, items, index, pdfNumPages, excelSheetNames.length]);
 
   const goPrev = useCallback(() => {
     setIndex((i) => (i - 1 + items.length) % items.length);
@@ -367,6 +469,26 @@ export function ServiceFileImagePreview({ items, initialIndex, onClose }: Props)
   const goNext = useCallback(() => {
     setIndex((i) => (i + 1) % items.length);
   }, [items.length]);
+
+  const selectFile = useCallback((fileIndex: number) => {
+    setIndex(clamp(fileIndex, 0, Math.max(0, items.length - 1)));
+  }, [items.length]);
+
+  const commitFileListSearch = useCallback(() => {
+    setFileListSearch(fileListSearchDraft.trim());
+  }, [fileListSearchDraft]);
+
+  const clearFileListSearch = useCallback(() => {
+    setFileListSearchDraft('');
+    setFileListSearch('');
+  }, []);
+
+  const filteredFileEntries = useMemo(() => {
+    const q = fileListSearch.trim().toLowerCase();
+    return items
+      .map((item, fileIndex) => ({ item, fileIndex }))
+      .filter(({ item }) => (q ? item.fileName.toLowerCase().includes(q) : true));
+  }, [items, fileListSearch]);
 
   const pdfPagePrev = useCallback(() => {
     setPdfPage((p) => Math.max(1, p - 1));
@@ -398,7 +520,7 @@ export function ServiceFileImagePreview({ items, initialIndex, onClose }: Props)
     setPan({ x: 0, y: 0 });
   }, []);
 
-  const handleDownload = useCallback(async () => {
+  const handleDownloadCurrent = useCallback(async () => {
     const cur = items[index];
     if (!cur || attachActionBusyRef.current) return;
     attachActionBusyRef.current = true;
@@ -413,9 +535,48 @@ export function ServiceFileImagePreview({ items, initialIndex, onClose }: Props)
     }
   }, [items, index]);
 
+  const handleDownloadAll = useCallback(async () => {
+    if (items.length === 0 || attachActionBusyRef.current) return;
+    attachActionBusyRef.current = true;
+    setAttachBusy('download');
+    try {
+      await downloadServiceFilePreviewItemsZip(
+        items,
+        buildServiceFilePreviewListZipName(items, index)
+      );
+    } catch {
+      window.alert('ZIP 다운로드에 실패했습니다.');
+    } finally {
+      attachActionBusyRef.current = false;
+      setAttachBusy(null);
+    }
+  }, [items, index]);
+
+  const onDownloadButtonClick = useCallback(() => {
+    if (items.length >= 2) {
+      setDownloadMenuOpen((o) => !o);
+      return;
+    }
+    void handleDownloadCurrent();
+  }, [items.length, handleDownloadCurrent]);
+
+  useEffect(() => {
+    if (!downloadMenuOpen) return;
+    const onDoc = (e: MouseEvent) => {
+      if (downloadMenuRef.current?.contains(e.target as Node)) return;
+      setDownloadMenuOpen(false);
+    };
+    document.addEventListener('mousedown', onDoc);
+    return () => document.removeEventListener('mousedown', onDoc);
+  }, [downloadMenuOpen]);
+
   const handlePrint = useCallback(async () => {
     const cur = items[index];
     if (!cur || attachActionBusyRef.current) return;
+    if (cur.kind === 'excel') {
+      window.alert('엑셀 파일은 인쇄 미리보기를 지원하지 않습니다. 다운로드 후 사용해 주세요.');
+      return;
+    }
     attachActionBusyRef.current = true;
     setAttachBusy('print');
     try {
@@ -433,10 +594,27 @@ export function ServiceFileImagePreview({ items, initialIndex, onClose }: Props)
     }
   }, [items, index]);
 
+  const onExcelSheetNamesReady = useCallback((names: string[]) => {
+    setExcelSheetNames(names);
+  }, []);
+
+  const onExcelSheetIndexChange = useCallback((i: number) => {
+    setExcelSheetIndex(i);
+  }, []);
+
+  const excelSheetPrev = useCallback(() => {
+    setExcelSheetIndex((i) => Math.max(0, i - 1));
+  }, []);
+
+  const excelSheetNext = useCallback(() => {
+    setExcelSheetIndex((i) => Math.min(Math.max(0, excelSheetNames.length - 1), i + 1));
+  }, [excelSheetNames.length]);
+
   useEffect(() => {
     if (!mounted) return;
     const el = wheelTargetRef.current;
     if (!el) return;
+    if (items[index]?.kind === 'excel') return;
     const onWheelNative = (e: WheelEvent) => {
       e.preventDefault();
       const rect = el.getBoundingClientRect();
@@ -448,7 +626,7 @@ export function ServiceFileImagePreview({ items, initialIndex, onClose }: Props)
     };
     el.addEventListener('wheel', onWheelNative, { passive: false });
     return () => el.removeEventListener('wheel', onWheelNative);
-  }, [mounted]);
+  }, [mounted, items, index]);
 
   const onPointerDown = useCallback((e: React.PointerEvent) => {
     if (e.button !== 0) return;
@@ -485,24 +663,53 @@ export function ServiceFileImagePreview({ items, initialIndex, onClose }: Props)
   const canNav = items.length > 1;
   const scalePct = Math.round(scale * 100);
   const isPdf = current.kind === 'pdf';
+  const isExcel = current.kind === 'excel';
   const canPdfPage = isPdf && pdfNumPages > 1;
+  const canExcelSheet = isExcel && excelSheetNames.length > 1;
+  const excelSheetLabel =
+    isExcel && excelSheetNames.length > 0
+      ? excelSheetNames[Math.min(excelSheetIndex, excelSheetNames.length - 1)] ?? ''
+      : '';
+  const canViewTransform = !isExcel;
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[500] flex flex-col bg-black/92"
+      className={cn(MAP_UI_Z_CLASS.filePreview, 'fixed inset-0 flex flex-col bg-black/92')}
       role="dialog"
       aria-modal="true"
       aria-label="첨부 미리보기"
     >
       <div
-        className="flex shrink-0 items-center justify-between gap-2 border-b border-white/10 px-3 py-2 text-white sm:px-4"
+        className="flex shrink-0 items-center gap-2 border-b border-white/10 px-3 py-2 text-white sm:px-4"
         onClick={(e) => e.stopPropagation()}
       >
+        <button
+          type="button"
+          onClick={() => setSidebarOpen((o) => !o)}
+          className={cn(
+            'flex h-9 w-9 shrink-0 items-center justify-center rounded-md transition-colors hover:bg-background/10',
+            sidebarOpen ? 'bg-background/10 text-white' : 'text-white/80'
+          )}
+          title={sidebarOpen ? '목록 닫기' : '목록 열기'}
+          aria-label={sidebarOpen ? '목록 닫기' : '목록 열기'}
+          aria-expanded={sidebarOpen}
+        >
+          <Menu className="h-5 w-5" aria-hidden />
+        </button>
         <span className="min-w-0 flex-1 truncate text-xs font-medium sm:text-sm" title={current.fileName}>
           {current.fileName}
           {isPdf && pdfNumPages >= 1 ? (
             <span className="ml-2 font-normal text-white/55">
               (페이지 {pdfPage} / {pdfNumPages})
+            </span>
+          ) : null}
+          {isExcel && excelSheetLabel ? (
+            <span className="ml-2 font-normal text-white/55">
+              ({excelSheetLabel}
+              {excelSheetNames.length > 1
+                ? ` · 시트 ${excelSheetIndex + 1} / ${excelSheetNames.length}`
+                : ''}
+              )
             </span>
           ) : null}
           {canNav ? (
@@ -511,14 +718,16 @@ export function ServiceFileImagePreview({ items, initialIndex, onClose }: Props)
             </span>
           ) : null}
         </span>
-        <div className="flex shrink-0 items-center gap-0.5 sm:gap-1">
+        <div className="relative flex shrink-0 items-center gap-0.5 sm:gap-1" ref={downloadMenuRef}>
           <button
             type="button"
-            onClick={() => void handleDownload()}
+            onClick={onDownloadButtonClick}
             disabled={attachBusy != null}
             className={toolbarBtnClass(attachBusy != null)}
             title="다운로드"
             aria-label="다운로드"
+            aria-expanded={items.length >= 2 ? downloadMenuOpen : undefined}
+            aria-haspopup={items.length >= 2 ? 'menu' : undefined}
           >
             {attachBusy === 'download' ? (
               <Loader2 className="h-5 w-5 animate-spin" aria-hidden />
@@ -526,12 +735,43 @@ export function ServiceFileImagePreview({ items, initialIndex, onClose }: Props)
               <Download className="h-5 w-5" aria-hidden />
             )}
           </button>
+          {downloadMenuOpen && items.length >= 2 ? (
+            <div
+              role="menu"
+              className="absolute right-0 top-full z-20 mt-1 min-w-[10.5rem] overflow-hidden rounded-md border border-white/15 bg-zinc-900 py-1 shadow-lg"
+            >
+              <button
+                type="button"
+                role="menuitem"
+                className="flex w-full cursor-pointer px-3 py-2 text-left text-[12px] text-white/90 transition-colors hover:bg-white/10"
+                title="묶음 내려받기"
+                onClick={() => {
+                  setDownloadMenuOpen(false);
+                  void handleDownloadAll();
+                }}
+              >
+                묶음 내려받기
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                className="flex w-full cursor-pointer px-3 py-2 text-left text-[12px] text-white/90 transition-colors hover:bg-white/10"
+                title="개별 다운로드"
+                onClick={() => {
+                  setDownloadMenuOpen(false);
+                  void handleDownloadCurrent();
+                }}
+              >
+                개별 다운로드
+              </button>
+            </div>
+          ) : null}
           <button
             type="button"
             onClick={() => void handlePrint()}
-            disabled={attachBusy != null}
-            className={toolbarBtnClass(attachBusy != null)}
-            title="인쇄"
+            disabled={attachBusy != null || isExcel}
+            className={toolbarBtnClass(attachBusy != null || isExcel)}
+            title={isExcel ? '엑셀은 인쇄를 지원하지 않습니다' : '인쇄'}
             aria-label="인쇄"
           >
             {attachBusy === 'print' ? (
@@ -545,6 +785,7 @@ export function ServiceFileImagePreview({ items, initialIndex, onClose }: Props)
             type="button"
             onClick={onClose}
             className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-white/90 transition-colors hover:bg-background/10"
+            title="닫기"
             aria-label="닫기"
           >
             <X className="h-5 w-5" />
@@ -552,6 +793,113 @@ export function ServiceFileImagePreview({ items, initialIndex, onClose }: Props)
         </div>
       </div>
 
+      <div className="flex min-h-0 flex-1 overflow-hidden">
+        <div
+          className={cn(
+            'shrink-0 overflow-hidden border-r border-white/10 bg-black/40 transition-[width,opacity] duration-200 ease-out',
+            sidebarOpen ? 'opacity-100' : 'opacity-0'
+          )}
+          style={{ width: sidebarOpen ? SIDEBAR_WIDTH : 0 }}
+        >
+          <div className="flex h-full flex-col" style={{ width: SIDEBAR_WIDTH }}>
+            <div className="flex min-h-0 flex-1 flex-col p-1">
+              <button
+                type="button"
+                onClick={() => setFileListSectionOpen((o) => !o)}
+                className={cn(
+                  'flex w-full cursor-pointer items-baseline justify-between gap-2 rounded px-0.5 py-0.5 text-left transition-colors hover:bg-white/5',
+                  fileListSectionOpen ? 'mb-2' : 'mb-0'
+                )}
+                title={fileListSectionOpen ? '파일 목록 접기' : '파일 목록 펼치기'}
+                aria-expanded={fileListSectionOpen}
+                aria-label={fileListSectionOpen ? '파일 목록 접기' : '파일 목록 펼치기'}
+              >
+                <span className="flex min-w-0 items-center gap-1">
+                  <ChevronDown
+                    className={cn(
+                      'h-3.5 w-3.5 shrink-0 text-white/55 transition-transform duration-200',
+                      !fileListSectionOpen && '-rotate-90'
+                    )}
+                    aria-hidden
+                  />
+                  <span className="text-[12px] font-semibold text-white/80">파일 목록</span>
+                </span>
+                <span className="shrink-0 text-[11px] tabular-nums text-white/55">
+                  총 {items.length}건
+                </span>
+              </button>
+              {fileListSectionOpen ? (
+                <>
+                  <div className="relative mb-2 shrink-0">
+                    <input
+                      type="text"
+                      value={fileListSearchDraft}
+                      onChange={(e) => setFileListSearchDraft(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key !== 'Enter') return;
+                        e.preventDefault();
+                        commitFileListSearch();
+                      }}
+                      placeholder="파일명 검색 (Enter)"
+                      className="h-8 w-full rounded border border-white/15 bg-white/5 py-1 pl-2 pr-8 text-[11px] text-white outline-none placeholder:text-white/35 focus:border-primary/50 focus:ring-1 focus:ring-primary/30"
+                      aria-label="파일명 검색"
+                    />
+                    {fileListSearchDraft.trim() !== '' || fileListSearch.trim() !== '' ? (
+                      <button
+                        type="button"
+                        onClick={clearFileListSearch}
+                        className="absolute right-1 top-1/2 flex h-6 w-6 -translate-y-1/2 cursor-pointer items-center justify-center rounded text-white/55 transition-colors hover:bg-white/10 hover:text-white"
+                        title="검색 초기화"
+                        aria-label="검색 초기화"
+                      >
+                        <XCircle className="h-4 w-4" aria-hidden />
+                      </button>
+                    ) : null}
+                  </div>
+                  <ul className="min-h-0 flex-1 space-y-0.5 overflow-y-auto">
+                    {fileListSearch.trim() !== '' && filteredFileEntries.length === 0 ? (
+                      <li className="p-1 text-[11px] text-white/45">검색 결과가 없습니다.</li>
+                    ) : (
+                      filteredFileEntries.map(({ item, fileIndex }) => (
+                        <li key={`${item.fileName}-${fileIndex}`}>
+                          <button
+                            type="button"
+                            onClick={() => selectFile(fileIndex)}
+                            title={item.fileName}
+                            className={cn(
+                              'w-full cursor-pointer truncate rounded p-1 text-left text-[11px] transition-colors hover:bg-white/10',
+                              fileIndex === index
+                                ? 'border-l-[3px] border-l-primary bg-primary/15 text-white'
+                                : 'text-white/75'
+                            )}
+                          >
+                            {item.fileName}
+                          </button>
+                        </li>
+                      ))
+                    )}
+                  </ul>
+                </>
+              ) : null}
+            </div>
+          </div>
+        </div>
+
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+      {isExcel ? (
+        <div className="relative min-h-0 flex-1 overflow-hidden px-2 pb-1 pt-2 sm:px-3">
+          <div className="h-full min-h-0 overflow-hidden rounded-md border border-zinc-300 bg-white shadow-2xl">
+            <ServiceFileExcelPreviewStage
+              key={current.url}
+              url={current.url}
+              fileName={current.fileName}
+              sheetIndex={excelSheetIndex}
+              onSheetIndexChange={onExcelSheetIndexChange}
+              onSheetNamesReady={onExcelSheetNamesReady}
+            />
+          </div>
+        </div>
+      ) : (
       <div
         ref={wheelTargetRef}
         className={cn(
@@ -591,11 +939,14 @@ export function ServiceFileImagePreview({ items, initialIndex, onClose }: Props)
                 url={current.url}
                 pageNumber={pdfPage}
                 onPagesReady={setPdfNumPagesStable}
+                indexSheetMode={indexSheetMode}
+                indexSheetGuide={indexSheetGuide}
               />
             )}
           </div>
         </div>
       </div>
+      )}
 
       <div
         className="flex shrink-0 flex-wrap items-center justify-center gap-1 border-t border-white/10 px-2 py-2 text-white"
@@ -624,43 +975,82 @@ export function ServiceFileImagePreview({ items, initialIndex, onClose }: Props)
         <span className="mx-1 hidden h-5 w-px bg-background/20 sm:block" aria-hidden />
         <button
           type="button"
-          className={toolbarBtnClass(!canPdfPage)}
-          onClick={pdfPagePrev}
-          disabled={!canPdfPage}
-          title="PDF 이전 페이지 (↑ / Page Up)"
-          aria-label="PDF 이전 페이지"
+          className={toolbarBtnClass(!(canPdfPage || canExcelSheet))}
+          onClick={isExcel ? excelSheetPrev : pdfPagePrev}
+          disabled={!(canPdfPage || canExcelSheet)}
+          title={
+            isExcel
+              ? '이전 시트 (↑ / Page Up)'
+              : 'PDF 이전 페이지 (↑ / Page Up)'
+          }
+          aria-label={isExcel ? '이전 시트' : 'PDF 이전 페이지'}
         >
           <ChevronUp className="h-5 w-5" />
         </button>
         <button
           type="button"
-          className={toolbarBtnClass(!canPdfPage)}
-          onClick={pdfPageNext}
-          disabled={!canPdfPage}
-          title="PDF 다음 페이지 (↓ / Page Down)"
-          aria-label="PDF 다음 페이지"
+          className={toolbarBtnClass(!(canPdfPage || canExcelSheet))}
+          onClick={isExcel ? excelSheetNext : pdfPageNext}
+          disabled={!(canPdfPage || canExcelSheet)}
+          title={
+            isExcel
+              ? '다음 시트 (↓ / Page Down)'
+              : 'PDF 다음 페이지 (↓ / Page Down)'
+          }
+          aria-label={isExcel ? '다음 시트' : 'PDF 다음 페이지'}
         >
           <ChevronDown className="h-5 w-5" />
         </button>
         <span className="mx-1 hidden h-5 w-px bg-background/20 sm:block" aria-hidden />
-        <button type="button" className={toolbarBtnClass()} onClick={zoomOut} title="축소 (-)" aria-label="축소">
+        <button
+          type="button"
+          className={toolbarBtnClass(!canViewTransform)}
+          onClick={zoomOut}
+          disabled={!canViewTransform}
+          title="축소 (-)"
+          aria-label="축소"
+        >
           <ZoomOut className="h-5 w-5" />
         </button>
-        <span className="min-w-[3rem] text-center text-[11px] tabular-nums text-white/80">{scalePct}%</span>
-        <button type="button" className={toolbarBtnClass()} onClick={zoomIn} title="확대 (+)" aria-label="확대">
+        <span className="min-w-[3rem] text-center text-[11px] tabular-nums text-white/80">
+          {canViewTransform ? `${scalePct}%` : '—'}
+        </span>
+        <button
+          type="button"
+          className={toolbarBtnClass(!canViewTransform)}
+          onClick={zoomIn}
+          disabled={!canViewTransform}
+          title="확대 (+)"
+          aria-label="확대"
+        >
           <ZoomIn className="h-5 w-5" />
         </button>
         <span className="mx-1 hidden h-5 w-px bg-background/20 sm:block" aria-hidden />
-        <button type="button" className={toolbarBtnClass()} onClick={rotateCcw} title="반시계 회전" aria-label="반시계 방향 회전">
+        <button
+          type="button"
+          className={toolbarBtnClass(!canViewTransform)}
+          onClick={rotateCcw}
+          disabled={!canViewTransform}
+          title="반시계 회전"
+          aria-label="반시계 방향 회전"
+        >
           <RotateCcw className="h-5 w-5" />
         </button>
-        <button type="button" className={toolbarBtnClass()} onClick={rotateCw} title="시계 회전" aria-label="시계 방향 회전">
+        <button
+          type="button"
+          className={toolbarBtnClass(!canViewTransform)}
+          onClick={rotateCw}
+          disabled={!canViewTransform}
+          title="시계 회전"
+          aria-label="시계 방향 회전"
+        >
           <RotateCw className="h-5 w-5" />
         </button>
         <button
           type="button"
-          className={toolbarBtnClass()}
+          className={toolbarBtnClass(!canViewTransform)}
           onClick={resetView}
+          disabled={!canViewTransform}
           title="보기 초기화 (더블클릭과 동일)"
           aria-label="확대·이동·회전 초기화"
         >
@@ -668,11 +1058,15 @@ export function ServiceFileImagePreview({ items, initialIndex, onClose }: Props)
         </button>
       </div>
       <p className="shrink-0 px-3 pb-2 text-center text-[10px] text-white/45">
-        휠로 확대·축소
-        {' · 확대 시 끌어서 이동 · 더블클릭 시 초기화'}
-        {canNav && !canPdfPage ? ' · ← → 이전·다음 파일' : ''}
-        {canPdfPage ? ' · 방향키로 이전·다음 페이지' : ''}
+        {isExcel
+          ? '시트 탭으로 이동'
+          : '휠로 확대·축소 · 확대 시 끌어서 이동 · 더블클릭 시 초기화'}
+        {canNav ? ' · ← → 이전·다음 파일' : ''}
+        {canPdfPage ? ' · ↑ ↓ 이전·다음 페이지' : ''}
+        {canExcelSheet ? ' · ↑ ↓ 이전·다음 시트' : ''}
       </p>
+        </div>
+      </div>
     </div>,
     document.body
   );

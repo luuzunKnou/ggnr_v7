@@ -52,19 +52,52 @@ async function loadCodesForField(
   tables: string[],
   fieldName: string
 ): Promise<DefineCodeRow[]> {
-  const nameVariants = [fieldName];
-  const upper = fieldName.toUpperCase();
-  if (upper !== fieldName) nameVariants.push(upper);
-  const lower = fieldName.toLowerCase();
-  if (lower !== fieldName && lower !== upper) nameVariants.push(lower);
+  const exact = String(fieldName ?? '').trim();
+  if (!exact) return [];
 
   for (const table of tables) {
-    for (const name of nameVariants) {
-      const codes = await fetchCodes(`${table}__${name}`);
-      if (codes.length > 0) return codes;
-    }
+    const codes = await fetchCodes(`${table}__${exact}`);
+    if (codes.length > 0) return codes;
   }
   return [];
+}
+
+/** 필드명 목록으로 `{테이블}__{필드}` CODE만 각각 조회 (select 옵션용) */
+export function useDefineLayerCodesByFieldNames(
+  tableName: string | null | undefined,
+  fieldNames: readonly string[]
+): Record<string, DefineCodeRow[]> {
+  const [codesByField, setCodesByField] = useState<Record<string, DefineCodeRow[]>>({});
+  const table = String(tableName ?? '').trim();
+  const namesKey = fieldNames
+    .map((n) => String(n ?? '').trim())
+    .filter(Boolean)
+    .join('\0');
+
+  useEffect(() => {
+    if (!table || !namesKey) {
+      setCodesByField((prev) => (Object.keys(prev).length === 0 ? prev : {}));
+      return;
+    }
+    const names = namesKey.split('\0');
+    let cancelled = false;
+    void Promise.all(
+      names.map(async (name) => {
+        const codes = await fetchCodes(`${table}__${name}`);
+        return [name.toLowerCase(), codes] as const;
+      })
+    ).then((entries) => {
+      if (cancelled) return;
+      const next: Record<string, DefineCodeRow[]> = {};
+      for (const [k, codes] of entries) next[k] = codes;
+      setCodesByField(next);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [table, namesKey]);
+
+  return codesByField;
 }
 
 /** 레이어 설정(Code) JSON — 필드명 소문자 키 */

@@ -1,0 +1,19 @@
+<layer>
+  <name>food_service</name>
+  <id>LayerInfoImpl--610c9460:1a10fc86a73:-7b03</id>
+  <type>VECTOR</type>
+  <defaultStyle>
+    <id>StyleInfoImpl--610c9460:1a10fc86a73:-7b02</id>
+  </defaultStyle>
+  <resource class="featureType">
+    <id>FeatureTypeInfoImpl--610c9460:1a10fc86a73:-7b04</id>
+  </resource>
+  <queryable>true</queryable>
+  <opaque>false</opaque>
+  <attribution>
+    <logoWidth>0</logoWidth>
+    <logoHeight>0</logoHeight>
+  </attribution>
+  <dateCreated>2026-10-16 06:47:11.951 UTC</dateCreated>
+  <dateModified>2026-10-16 06:47:12.240 UTC</dateModified>
+</layer>

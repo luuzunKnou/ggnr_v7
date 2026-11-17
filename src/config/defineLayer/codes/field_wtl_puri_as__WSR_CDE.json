@@ -1,43 +1,73 @@
 [
   {
-    "define_code_key": "64037",
-    "define_code_field_key": "4346",
+    "define_code_key": "15196",
+    "define_code_field_key": "",
     "define_code_name": "WSR000",
     "define_code_kor_name": "미분류"
   },
   {
-    "define_code_key": "64038",
-    "define_code_field_key": "4346",
+    "define_code_key": "26933",
+    "define_code_field_key": "",
     "define_code_name": "WSR001",
     "define_code_kor_name": "천수"
   },
   {
-    "define_code_key": "64039",
-    "define_code_field_key": "4346",
+    "define_code_key": "26934",
+    "define_code_field_key": "",
     "define_code_name": "WSR002",
     "define_code_kor_name": "하천수"
   },
   {
-    "define_code_key": "64040",
-    "define_code_field_key": "4346",
+    "define_code_key": "26935",
+    "define_code_field_key": "",
     "define_code_name": "WSR003",
     "define_code_kor_name": "복류수"
   },
   {
-    "define_code_key": "64041",
-    "define_code_field_key": "4346",
+    "define_code_key": "26936",
+    "define_code_field_key": "",
     "define_code_name": "WSR004",
     "define_code_kor_name": "호소수"
   },
   {
-    "define_code_key": "64042",
-    "define_code_field_key": "4346",
+    "define_code_key": "26937",
+    "define_code_field_key": "",
     "define_code_name": "WSR005",
     "define_code_kor_name": "지하수"
   },
   {
-    "define_code_key": "64043",
-    "define_code_field_key": "4346",
+    "define_code_key": "26939",
+    "define_code_field_key": "",
+    "define_code_name": "WSR900",
+    "define_code_kor_name": "계곡수"
+  },
+  {
+    "define_code_key": "26940",
+    "define_code_field_key": "",
+    "define_code_name": "WSR901",
+    "define_code_kor_name": "용천수"
+  },
+  {
+    "define_code_key": "26941",
+    "define_code_field_key": "",
+    "define_code_name": "WSR902",
+    "define_code_kor_name": "저수지"
+  },
+  {
+    "define_code_key": "26942",
+    "define_code_field_key": "",
+    "define_code_name": "WSR904",
+    "define_code_kor_name": "하천복류수"
+  },
+  {
+    "define_code_key": "26943",
+    "define_code_field_key": "",
+    "define_code_name": "WSR905",
+    "define_code_kor_name": "하천표류수"
+  },
+  {
+    "define_code_key": "26938",
+    "define_code_field_key": "",
     "define_code_name": "WSR999",
     "define_code_kor_name": "기타"
   }

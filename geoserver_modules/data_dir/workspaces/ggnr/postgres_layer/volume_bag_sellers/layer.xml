@@ -1,0 +1,19 @@
+<layer>
+  <name>volume_bag_sellers</name>
+  <id>LayerInfoImpl--610c9460:1a10fc86a73:-7b63</id>
+  <type>VECTOR</type>
+  <defaultStyle>
+    <id>StyleInfoImpl--610c9460:1a10fc86a73:-7b62</id>
+  </defaultStyle>
+  <resource class="featureType">
+    <id>FeatureTypeInfoImpl--610c9460:1a10fc86a73:-7b64</id>
+  </resource>
+  <queryable>true</queryable>
+  <opaque>false</opaque>
+  <attribution>
+    <logoWidth>0</logoWidth>
+    <logoHeight>0</logoHeight>
+  </attribution>
+  <dateCreated>2026-10-16 06:46:19.531 UTC</dateCreated>
+  <dateModified>2026-10-16 06:46:19.810 UTC</dateModified>
+</layer>

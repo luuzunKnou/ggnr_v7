@@ -9,7 +9,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/app/shadcnComponents/ui/dialog';
-import { FlightLogbookForm } from '../aerialView/FlightLogbookForm';
+import { FlightLogbookList } from '../aerialView/FlightLogbookList';
 import {
   FolderBatchUploadDialog,
   type FolderCreatedInfo,
@@ -68,6 +68,7 @@ export function ShootingRequestDetailPanel({
   const [rejectReason, setRejectReason] = useState('');
   const [notice, setNotice] = useState<string | null>(null);
   const [flightOpen, setFlightOpen] = useState(false);
+  const [flightCount, setFlightCount] = useState(0);
   const [uploadOpen, setUploadOpen] = useState(false);
   const [mediaTarget, setMediaTarget] = useState<FolderCreatedInfo | null>(null);
   const [cancelConfirmOpen, setCancelConfirmOpen] = useState(false);
@@ -80,6 +81,33 @@ export function ShootingRequestDetailPanel({
   const canRegisterMedia =
     existing != null &&
     (existing.status === 'approved' || existing.status === 'registering');
+
+  useEffect(() => {
+    if (!isAdmin || !existing || !canRegisterMedia) {
+      setFlightCount(0);
+      return;
+    }
+    const srKey = Number(existing.id);
+    if (!Number.isFinite(srKey)) return;
+    let cancelled = false;
+    void call('', 'POST', {
+      service: 'flightLogbookService',
+      action: 'list',
+      params: { srKey, limit: 50 },
+    })
+      .then((res) => {
+        if (cancelled) return;
+        const data = res?.data ?? res;
+        const items = Array.isArray(data?.items) ? data.items : [];
+        setFlightCount(items.length);
+      })
+      .catch(() => {
+        if (!cancelled) setFlightCount(0);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isAdmin, canRegisterMedia, existing?.id]);
 
   useEffect(() => {
     if (isNew || !detailId) return;
@@ -394,7 +422,7 @@ export function ShootingRequestDetailPanel({
               파일 업로드
             </button>
             <button type="button" className={footerBtnClass} onClick={() => setFlightOpen(true)}>
-              비행기록부 작성
+              {flightCount > 0 ? `비행기록부 ${flightCount}건` : '비행기록부'}
             </button>
           </div>
           {notice ? (
@@ -462,10 +490,12 @@ export function ShootingRequestDetailPanel({
                 <DialogTitle>무인비행장치 비행기록부</DialogTitle>
               </DialogHeader>
               <div className="min-h-0 flex-1 overflow-hidden">
-                <FlightLogbookForm
+                <FlightLogbookList
                   srKey={Number(existing.id)}
                   workUnitLabel={existing.purpose || existing.address || existing.id}
+                  fill
                   onClose={() => setFlightOpen(false)}
+                  onCountChange={setFlightCount}
                 />
               </div>
             </DialogContent>

@@ -3,14 +3,17 @@
   <id>LayerInfoImpl--7d7f4649:19fd5fa9345:-7fb2</id>
   <type>VECTOR</type>
   <defaultStyle>
-    <id>StyleInfoImpl--30e19f83:19cb3d4f76b:-7ffc</id>
+    <id>StyleInfoImpl-6e125944:1a17ff3f0fb:-7b6e</id>
   </defaultStyle>
   <resource class="featureType">
     <id>FeatureTypeInfoImpl--7d7f4649:19fd5fa9345:-7fb3</id>
   </resource>
+  <queryable>true</queryable>
+  <opaque>false</opaque>
   <attribution>
     <logoWidth>0</logoWidth>
     <logoHeight>0</logoHeight>
   </attribution>
   <dateCreated>2026-08-06 07:31:29.684 UTC</dateCreated>
+  <dateModified>2026-10-29 01:26:22.793 UTC</dateModified>
 </layer>

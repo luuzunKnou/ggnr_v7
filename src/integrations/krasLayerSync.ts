@@ -112,6 +112,7 @@ async function catalogRows(): Promise<{ layer_cd: string; layer_nm: string; grp_
   const schema = qi(KRAS_LAYER_CATALOG_SCHEMA);
   const table = qi(KRAS_LAYER_CATALOG_TABLE);
   try {
+    await pool.query(`create schema if not exists ${schema}`);
     const { rows: cols } = await pool.query<{ column_name: string }>(
       `select column_name from information_schema.columns
        where table_schema = $1 and table_name = $2`,

@@ -23,6 +23,7 @@ import {
   isRoadNetworkWmsVisible,
   toggleRoadNetworkWmsLayers,
 } from '../roadNetwork/roadNetworkMapSync';
+import { useRoadNetworkSourceMode } from '../roadNetwork/useRoadNetworkSourceMode';
 import { getRoadFrontageMarkerRoadTypeBadgeClass } from '../roadFrontageMarker/roadFrontageMarkerFormat';
 
 type SortKey = 'roadType' | 'locAdr' | 'preYmd';
@@ -110,19 +111,13 @@ export function RoadFrontageBuildingListPanel({
       if (!ftrIdn) return;
       const opts = Array.isArray(pick?.overlapOptions) ? pick.overlapOptions : [];
       mapContext?.setRoadFrontageBuildingMapHitOptions?.(opts.length > 1 ? opts : []);
+      // 지도 객체 클릭: 선택·강조만 (맵 이동은 목록 행 선택 시)
       onSelectId(ftrIdn);
-      if (
-        Array.isArray(pick?.extent3857) &&
-        pick.extent3857.length === 4 &&
-        pick.extent3857.every((v) => Number.isFinite(Number(v)))
-      ) {
-        fitMapAfterDetailLayout(pick.extent3857.map(Number));
-      }
     };
     return () => {
       pickRef.current = null;
     };
-  }, [mapContext, onSelectId, fitMapAfterDetailLayout]);
+  }, [mapContext, onSelectId]);
 
   useEffect(() => {
     const t = setTimeout(async () => {
@@ -255,6 +250,7 @@ export function RoadFrontageBuildingListPanel({
   }, [selectedId, items]);
 
   const roadNetworkLayerOn = isRoadNetworkWmsVisible(mapContext?.visibleLayerNames);
+  const roadNetworkSourceMode = useRoadNetworkSourceMode();
 
   return (
     <div className="standard-panel-root">
@@ -266,7 +262,12 @@ export function RoadFrontageBuildingListPanel({
             title={roadNetworkLayerOn ? '도로망도 레이어 끄기' : '도로망도 레이어 켜기'}
             aria-label={roadNetworkLayerOn ? '도로망도 레이어 끄기' : '도로망도 레이어 켜기'}
             aria-pressed={roadNetworkLayerOn}
-            onClick={() => toggleRoadNetworkWmsLayers(mapContext?.setVisibleLayerNames)}
+            onClick={() =>
+              toggleRoadNetworkWmsLayers(
+                mapContext?.setVisibleLayerNames,
+                roadNetworkSourceMode ?? 'legacy'
+              )
+            }
             className={cn(
               'standard-layer-toggle-chip',
               roadNetworkLayerOn

@@ -40,6 +40,38 @@ export function isDynamicOrthoBackgroundId(id: string): boolean {
   return DYNAMIC_ORTHO_ID_RE.test(id);
 }
 
+/** 배경 바로 위에 겹치는 다음 명칭(하이브리드) 타일 */
+export const BACKGROUND_LABEL_LAYER_NAME = 'background-labels';
+
+const KAKAO_RESOLUTIONS = [2048, 1024, 512, 256, 128, 64, 32, 16, 8, 4, 2, 1, 0.5, 0.25];
+const KAKAO_EXTENT = [-30000, -60000, 494288, 988576];
+
+function createKakaoTileGrid(): { projection: Projection; tileGrid: TileGrid } {
+  const projection = new Projection({
+    code: 'EPSG:5181',
+    extent: KAKAO_EXTENT,
+    units: 'm',
+  });
+  return {
+    projection,
+    tileGrid: new TileGrid({
+      origin: [KAKAO_EXTENT[0], KAKAO_EXTENT[1]],
+      resolutions: KAKAO_RESOLUTIONS,
+    }),
+  };
+}
+
+function kakaoTileUrlFunction(buildUrl: (z: number, y: number, x: number, s: number) => string) {
+  return (tileCoord: number[] | null): string | undefined => {
+    if (!tileCoord) return undefined;
+    const z = KAKAO_RESOLUTIONS.length - tileCoord[0];
+    const x = tileCoord[1];
+    const y = tileCoord[2] * -1 - 1;
+    const s = Math.abs((tileCoord[1] + tileCoord[2]) % 4);
+    return buildUrl(z, y, x, s);
+  };
+}
+
 // VWorld 레이어 타입
 export type VWorldLayerType = 'base' | 'satellite' | 'white' | 'night';
 
@@ -136,6 +168,29 @@ export function createVWorldLayer(type: VWorldLayerType): WebGLTileLayer {
 }
 
 /**
+ * VWorld 캔버스(Tile) 레이어 — 위치도·범위그리기 등 보조 지도용.
+ * WebGL 컨텍스트를 쓰지 않아 메인 지도가 간헐적으로 비는 현상을 막는다.
+ */
+export function createVWorldRasterLayer(type: VWorldLayerType): TileLayer<XYZ> {
+  const layerMap: Record<VWorldLayerType, { path: string; ext: string }> = {
+    base: { path: 'Base', ext: 'png' },
+    satellite: { path: 'Satellite', ext: 'jpeg' },
+    white: { path: 'white', ext: 'png' },
+    night: { path: 'midnight', ext: 'png' },
+  };
+  const layerInfo = layerMap[type];
+  return new TileLayer({
+    source: new XYZ({
+      url: `https://xdworld.vworld.kr/2d/${layerInfo.path}/service/{z}/{x}/{y}.${layerInfo.ext}`,
+      crossOrigin: 'anonymous',
+      maxZoom: VWORLD_MAX_ZOOM_INDEX,
+      wrapX: false,
+      attributions: '© VWorld',
+    }),
+  });
+}
+
+/**
  * 카카오맵 배경지도 레이어 생성
  * EPSG:5181 좌표계 사용
  */
@@ -188,6 +243,27 @@ export function createKakaoLayer(type: KakaoLayerType): TileLayer<XYZ> {
       }),
     });
   }
+}
+
+/**
+ * 다음 하이브리드 명칭 타일 — 항공영상 위에 지명·도로명을 겹친다.
+ * 뷰가 3857이어도 소스 5181을 재투영한다.
+ */
+export function createKakaoHybridLabelLayer(): TileLayer<XYZ> {
+  const { projection, tileGrid } = createKakaoTileGrid();
+  return new TileLayer({
+    source: new XYZ({
+      projection,
+      tileSize: 256,
+      tileGrid,
+      wrapX: false,
+      tileUrlFunction: kakaoTileUrlFunction(
+        (z, y, x, s) => `http://map${s}.daumcdn.net/map_hybrid/1807hsm/L${z}/${y}/${x}.png`
+      ),
+      attributions: '© Kakao',
+    }),
+    zIndex: 1,
+  });
 }
 
 /**
@@ -331,6 +407,13 @@ export function parseBackgroundMapId(
   }
 
   return { provider: 'osm', layerType: 'base' };
+}
+
+/** 항공영상·자체항공영상 — 명칭보기 자동 켜기 대상 */
+export function isAerialBackgroundId(id: string): boolean {
+  if (!id || id === 'no-background') return false;
+  if (isLocalOrthoBackgroundId(id)) return true;
+  return parseBackgroundMapId(id)?.layerType === 'satellite';
 }
 
 /** Cesium UrlTemplateImageryProvider(WebMercator)와 동일 규칙의 XYZ 타일 스펙 */

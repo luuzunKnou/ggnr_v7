@@ -1,0 +1,19 @@
+<layer>
+  <name>wtl_meter_ps</name>
+  <id>LayerInfoImpl--39720bc2:1a199d665f1:-79bb</id>
+  <type>VECTOR</type>
+  <defaultStyle>
+    <id>StyleInfoImpl--39720bc2:1a199d665f1:-79ba</id>
+  </defaultStyle>
+  <resource class="featureType">
+    <id>FeatureTypeInfoImpl--39720bc2:1a199d665f1:-79bc</id>
+  </resource>
+  <queryable>true</queryable>
+  <opaque>false</opaque>
+  <attribution>
+    <logoWidth>0</logoWidth>
+    <logoHeight>0</logoHeight>
+  </attribution>
+  <dateCreated>2026-11-03 03:00:58.362 UTC</dateCreated>
+  <dateModified>2026-11-03 03:00:59.348 UTC</dateModified>
+</layer>

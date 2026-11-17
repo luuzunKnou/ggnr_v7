@@ -1,19 +1,16 @@
 <layer>
   <name>sd_earthquake_outdoor_evac_site</name>
-  <id>LayerInfoImpl--2053d3:19d606c4ff1:30dc</id>
+  <id>LayerInfoImpl--142a32cb:1a0f5eeadac:-7ff7</id>
   <type>VECTOR</type>
   <defaultStyle>
-    <id>StyleInfoImpl--2053d3:19d606c4ff1:30f3</id>
+    <id>StyleInfoImpl--30e19f83:19cb3d4f76b:-7ffc</id>
   </defaultStyle>
   <resource class="featureType">
-    <id>FeatureTypeInfoImpl--2053d3:19d606c4ff1:30db</id>
+    <id>FeatureTypeInfoImpl--142a32cb:1a0f5eeadac:-7ff8</id>
   </resource>
-  <queryable>true</queryable>
-  <opaque>false</opaque>
   <attribution>
     <logoWidth>0</logoWidth>
     <logoHeight>0</logoHeight>
   </attribution>
-  <dateCreated>2026-04-08 11:06:25.125 UTC</dateCreated>
-  <dateModified>2026-04-08 11:06:46.669 UTC</dateModified>
+  <dateCreated>2026-10-04 18:00:48.101 UTC</dateCreated>
 </layer>

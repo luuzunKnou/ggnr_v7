@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { Lock, FlaskConical } from "lucide-react"
 import Link from "next/link"
 import { Button } from "@/app/shadcnComponents/ui/button"
@@ -9,8 +9,7 @@ import { Input } from "@/app/shadcnComponents/ui/input"
 import { AdminConsoleLayout } from "@/app/(pages)/_components/AdminConsoleLayout"
 import {
   DEV_AUTO_COLLAPSE_MENU_IDS,
-  DEV_MENU_GROUPS,
-  DEV_SUBMENUS,
+  devMenusForUser,
   getDevMenuDescription,
   renderDevMenuContent,
 } from "./_components/devConsolePanels"
@@ -18,7 +17,7 @@ import { VersionHistoryDialog } from "./_components/VersionHistoryDialog"
 import { registerDevVersionHistoryClose } from "./_components/devVersionHistoryBridge"
 import { LayerManagerUploadButtons } from "./_components/layerManager/LayerManagerUploadButtons"
 import { call } from "@/lib/api"
-import { signOut } from "next-auth/react"
+import { signOut, useSession } from "next-auth/react"
 
 const DEV_AUTH_KEY = "dev_mode_auth"
 const DEV_PASSWORD = "admin00!!"
@@ -32,6 +31,9 @@ export default function DevPage() {
   const [sampleGenMessage, setSampleGenMessage] = useState("")
   const [historyOpen, setHistoryOpen] = useState(false)
   const [historyMenuId, setHistoryMenuId] = useState<"sourceCodeUploader" | "versionManager">("sourceCodeUploader")
+  const { data: session } = useSession()
+  const usrId = session?.user?.id
+  const { menus, menuGroups } = useMemo(() => devMenusForUser(usrId), [usrId])
 
   useEffect(() => {
     setMounted(true)
@@ -161,8 +163,8 @@ export default function DevPage() {
     <>
     <AdminConsoleLayout
       title="개발자 모드"
-      menus={DEV_SUBMENUS}
-      menuGroups={DEV_MENU_GROUPS}
+      menus={menus}
+      menuGroups={menuGroups}
       stateStorageKey="devConsoleMenu"
       defaultMenuId="systemList"
       getDescription={getDevMenuDescription}

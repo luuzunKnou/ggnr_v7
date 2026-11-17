@@ -1,0 +1,19 @@
+<layer>
+  <name>gcp</name>
+  <id>LayerInfoImpl--54fd3aec:1a0a8175cdc:-7fff</id>
+  <type>VECTOR</type>
+  <defaultStyle>
+    <id>StyleInfoImpl--54fd3aec:1a0a8175cdc:-7ffe</id>
+  </defaultStyle>
+  <resource class="featureType">
+    <id>FeatureTypeInfoImpl--54fd3aec:1a0a8175cdc:-8000</id>
+  </resource>
+  <queryable>true</queryable>
+  <opaque>false</opaque>
+  <attribution>
+    <logoWidth>0</logoWidth>
+    <logoHeight>0</logoHeight>
+  </attribution>
+  <dateCreated>2026-09-16 02:41:38.551 UTC</dateCreated>
+  <dateModified>2026-09-16 02:41:40.1 UTC</dateModified>
+</layer>

@@ -1,0 +1,1388 @@
+[
+  {
+    "define_code_key": "47479",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717010100",
+    "define_code_kor_name": "삼산동"
+  },
+  {
+    "define_code_key": "47480",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717010200",
+    "define_code_kor_name": "서부동"
+  },
+  {
+    "define_code_key": "47481",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717010300",
+    "define_code_kor_name": "북문동"
+  },
+  {
+    "define_code_key": "47482",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717010400",
+    "define_code_kor_name": "명륜동"
+  },
+  {
+    "define_code_key": "47483",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717010500",
+    "define_code_kor_name": "신안동"
+  },
+  {
+    "define_code_key": "47484",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717010600",
+    "define_code_kor_name": "율세동"
+  },
+  {
+    "define_code_key": "47485",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717010700",
+    "define_code_kor_name": "옥정동"
+  },
+  {
+    "define_code_key": "47486",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717010800",
+    "define_code_kor_name": "신세동"
+  },
+  {
+    "define_code_key": "47487",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717010900",
+    "define_code_kor_name": "법흥동"
+  },
+  {
+    "define_code_key": "47488",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717011000",
+    "define_code_kor_name": "용상동"
+  },
+  {
+    "define_code_key": "47489",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717011100",
+    "define_code_kor_name": "동문동"
+  },
+  {
+    "define_code_key": "47490",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717011200",
+    "define_code_kor_name": "동부동"
+  },
+  {
+    "define_code_key": "47491",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717011300",
+    "define_code_kor_name": "운흥동"
+  },
+  {
+    "define_code_key": "47492",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717011400",
+    "define_code_kor_name": "천리동"
+  },
+  {
+    "define_code_key": "47493",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717011500",
+    "define_code_kor_name": "남부동"
+  },
+  {
+    "define_code_key": "47494",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717011600",
+    "define_code_kor_name": "남문동"
+  },
+  {
+    "define_code_key": "47495",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717011700",
+    "define_code_kor_name": "안흥동"
+  },
+  {
+    "define_code_key": "47496",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717011800",
+    "define_code_kor_name": "대석동"
+  },
+  {
+    "define_code_key": "47497",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717011900",
+    "define_code_kor_name": "옥야동"
+  },
+  {
+    "define_code_key": "47498",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717012000",
+    "define_code_kor_name": "광석동"
+  },
+  {
+    "define_code_key": "47499",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717012100",
+    "define_code_kor_name": "당북동"
+  },
+  {
+    "define_code_key": "47500",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717012200",
+    "define_code_kor_name": "태화동"
+  },
+  {
+    "define_code_key": "47501",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717012300",
+    "define_code_kor_name": "화성동"
+  },
+  {
+    "define_code_key": "47502",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717012400",
+    "define_code_kor_name": "목성동"
+  },
+  {
+    "define_code_key": "47503",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717012500",
+    "define_code_kor_name": "법상동"
+  },
+  {
+    "define_code_key": "47504",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717012600",
+    "define_code_kor_name": "금곡동"
+  },
+  {
+    "define_code_key": "47505",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717012700",
+    "define_code_kor_name": "평화동"
+  },
+  {
+    "define_code_key": "47506",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717012800",
+    "define_code_kor_name": "안기동"
+  },
+  {
+    "define_code_key": "47507",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717012900",
+    "define_code_kor_name": "운안동"
+  },
+  {
+    "define_code_key": "47508",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717013000",
+    "define_code_kor_name": "성곡동"
+  },
+  {
+    "define_code_key": "47509",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717013100",
+    "define_code_kor_name": "상아동"
+  },
+  {
+    "define_code_key": "47510",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717013200",
+    "define_code_kor_name": "안막동"
+  },
+  {
+    "define_code_key": "47511",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717013300",
+    "define_code_kor_name": "옥동"
+  },
+  {
+    "define_code_key": "47512",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717013400",
+    "define_code_kor_name": "이천동"
+  },
+  {
+    "define_code_key": "47513",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717013500",
+    "define_code_kor_name": "노하동"
+  },
+  {
+    "define_code_key": "47514",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717013600",
+    "define_code_kor_name": "송현동"
+  },
+  {
+    "define_code_key": "47515",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717013700",
+    "define_code_kor_name": "송천동"
+  },
+  {
+    "define_code_key": "47516",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717013800",
+    "define_code_kor_name": "석동동"
+  },
+  {
+    "define_code_key": "47517",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717013900",
+    "define_code_kor_name": "정상동"
+  },
+  {
+    "define_code_key": "47518",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717014000",
+    "define_code_kor_name": "정하동"
+  },
+  {
+    "define_code_key": "47519",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717014100",
+    "define_code_kor_name": "수상동"
+  },
+  {
+    "define_code_key": "47520",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717014200",
+    "define_code_kor_name": "수하동"
+  },
+  {
+    "define_code_key": "47521",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717025000",
+    "define_code_kor_name": "풍산읍"
+  },
+  {
+    "define_code_key": "47522",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717025021",
+    "define_code_kor_name": "풍산읍 안교리"
+  },
+  {
+    "define_code_key": "47523",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717025022",
+    "define_code_kor_name": "풍산읍 상리리"
+  },
+  {
+    "define_code_key": "47524",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717025023",
+    "define_code_kor_name": "풍산읍 하리리"
+  },
+  {
+    "define_code_key": "47525",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717025024",
+    "define_code_kor_name": "풍산읍 마애리"
+  },
+  {
+    "define_code_key": "47526",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717025025",
+    "define_code_kor_name": "풍산읍 수리"
+  },
+  {
+    "define_code_key": "47527",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717025026",
+    "define_code_kor_name": "풍산읍 회곡리"
+  },
+  {
+    "define_code_key": "47528",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717025027",
+    "define_code_kor_name": "풍산읍 계평리"
+  },
+  {
+    "define_code_key": "47529",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717025028",
+    "define_code_kor_name": "풍산읍 막곡리"
+  },
+  {
+    "define_code_key": "47530",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717025029",
+    "define_code_kor_name": "풍산읍 수곡리"
+  },
+  {
+    "define_code_key": "47531",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717025030",
+    "define_code_kor_name": "풍산읍 노리"
+  },
+  {
+    "define_code_key": "47532",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717025031",
+    "define_code_kor_name": "풍산읍 죽전리"
+  },
+  {
+    "define_code_key": "47533",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717025032",
+    "define_code_kor_name": "풍산읍 만운리"
+  },
+  {
+    "define_code_key": "47534",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717025033",
+    "define_code_kor_name": "풍산읍 서미리"
+  },
+  {
+    "define_code_key": "47535",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717025034",
+    "define_code_kor_name": "풍산읍 신양리"
+  },
+  {
+    "define_code_key": "47536",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717025035",
+    "define_code_kor_name": "풍산읍 현애리"
+  },
+  {
+    "define_code_key": "47537",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717025036",
+    "define_code_kor_name": "풍산읍 오미리"
+  },
+  {
+    "define_code_key": "47538",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717025037",
+    "define_code_kor_name": "풍산읍 괴정리"
+  },
+  {
+    "define_code_key": "47539",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717025038",
+    "define_code_kor_name": "풍산읍 매곡리"
+  },
+  {
+    "define_code_key": "47540",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717025039",
+    "define_code_kor_name": "풍산읍 소산리"
+  },
+  {
+    "define_code_key": "47541",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717031000",
+    "define_code_kor_name": "와룡면"
+  },
+  {
+    "define_code_key": "47542",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717031021",
+    "define_code_kor_name": "와룡면 중가구리"
+  },
+  {
+    "define_code_key": "47543",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717031022",
+    "define_code_kor_name": "와룡면 가구리"
+  },
+  {
+    "define_code_key": "47544",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717031023",
+    "define_code_kor_name": "와룡면 산야리"
+  },
+  {
+    "define_code_key": "47545",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717031024",
+    "define_code_kor_name": "와룡면 주계리"
+  },
+  {
+    "define_code_key": "47546",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717031025",
+    "define_code_kor_name": "와룡면 가야리"
+  },
+  {
+    "define_code_key": "47547",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717031026",
+    "define_code_kor_name": "와룡면 지내리"
+  },
+  {
+    "define_code_key": "47548",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717031027",
+    "define_code_kor_name": "와룡면 태리"
+  },
+  {
+    "define_code_key": "47549",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717031028",
+    "define_code_kor_name": "와룡면 서지리"
+  },
+  {
+    "define_code_key": "47550",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717031029",
+    "define_code_kor_name": "와룡면 이하리"
+  },
+  {
+    "define_code_key": "47551",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717031030",
+    "define_code_kor_name": "와룡면 이상리"
+  },
+  {
+    "define_code_key": "47552",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717031031",
+    "define_code_kor_name": "와룡면 주하리"
+  },
+  {
+    "define_code_key": "47553",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717031032",
+    "define_code_kor_name": "와룡면 감애리"
+  },
+  {
+    "define_code_key": "47554",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717031033",
+    "define_code_kor_name": "와룡면 서현리"
+  },
+  {
+    "define_code_key": "47555",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717031034",
+    "define_code_kor_name": "와룡면 라소리"
+  },
+  {
+    "define_code_key": "47556",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717031035",
+    "define_code_kor_name": "와룡면 가류리"
+  },
+  {
+    "define_code_key": "47557",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717031036",
+    "define_code_kor_name": "와룡면 도곡리"
+  },
+  {
+    "define_code_key": "47558",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717031037",
+    "define_code_kor_name": "와룡면 절강리"
+  },
+  {
+    "define_code_key": "47559",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717031038",
+    "define_code_kor_name": "와룡면 오천리"
+  },
+  {
+    "define_code_key": "47560",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717032000",
+    "define_code_kor_name": "북후면"
+  },
+  {
+    "define_code_key": "47561",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717032021",
+    "define_code_kor_name": "북후면 옹천리"
+  },
+  {
+    "define_code_key": "47562",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717032022",
+    "define_code_kor_name": "북후면 장기리"
+  },
+  {
+    "define_code_key": "47563",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717032023",
+    "define_code_kor_name": "북후면 도촌리"
+  },
+  {
+    "define_code_key": "47564",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717032024",
+    "define_code_kor_name": "북후면 오산리"
+  },
+  {
+    "define_code_key": "47565",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717032025",
+    "define_code_kor_name": "북후면 도진리"
+  },
+  {
+    "define_code_key": "47566",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717032026",
+    "define_code_kor_name": "북후면 물한리"
+  },
+  {
+    "define_code_key": "47567",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717032027",
+    "define_code_kor_name": "북후면 연곡리"
+  },
+  {
+    "define_code_key": "47568",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717032028",
+    "define_code_kor_name": "북후면 두산리"
+  },
+  {
+    "define_code_key": "47569",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717032029",
+    "define_code_kor_name": "북후면 신전리"
+  },
+  {
+    "define_code_key": "47570",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717032030",
+    "define_code_kor_name": "북후면 월전리"
+  },
+  {
+    "define_code_key": "47571",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717032031",
+    "define_code_kor_name": "북후면 석탑리"
+  },
+  {
+    "define_code_key": "47572",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717032032",
+    "define_code_kor_name": "북후면 대현리"
+  },
+  {
+    "define_code_key": "47573",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717033000",
+    "define_code_kor_name": "서후면"
+  },
+  {
+    "define_code_key": "47574",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717033021",
+    "define_code_kor_name": "서후면 광평리"
+  },
+  {
+    "define_code_key": "47575",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717033022",
+    "define_code_kor_name": "서후면 저전리"
+  },
+  {
+    "define_code_key": "47576",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717033023",
+    "define_code_kor_name": "서후면 태장리"
+  },
+  {
+    "define_code_key": "47577",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717033024",
+    "define_code_kor_name": "서후면 이송천리"
+  },
+  {
+    "define_code_key": "47578",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717033025",
+    "define_code_kor_name": "서후면 금계리"
+  },
+  {
+    "define_code_key": "47579",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717033026",
+    "define_code_kor_name": "서후면 성곡리"
+  },
+  {
+    "define_code_key": "47580",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717033027",
+    "define_code_kor_name": "서후면 이개리"
+  },
+  {
+    "define_code_key": "47581",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717033028",
+    "define_code_kor_name": "서후면 교리"
+  },
+  {
+    "define_code_key": "47582",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717033029",
+    "define_code_kor_name": "서후면 명리"
+  },
+  {
+    "define_code_key": "47583",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717033030",
+    "define_code_kor_name": "서후면 대두서리"
+  },
+  {
+    "define_code_key": "47584",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717033032",
+    "define_code_kor_name": "서후면 재품리"
+  },
+  {
+    "define_code_key": "47585",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717034000",
+    "define_code_kor_name": "풍천면"
+  },
+  {
+    "define_code_key": "47586",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717034021",
+    "define_code_kor_name": "풍천면 갈전리"
+  },
+  {
+    "define_code_key": "47587",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717034022",
+    "define_code_kor_name": "풍천면 도양리"
+  },
+  {
+    "define_code_key": "47588",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717034023",
+    "define_code_kor_name": "풍천면 구담리"
+  },
+  {
+    "define_code_key": "47589",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717034024",
+    "define_code_kor_name": "풍천면 광덕리"
+  },
+  {
+    "define_code_key": "47590",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717034025",
+    "define_code_kor_name": "풍천면 기산리"
+  },
+  {
+    "define_code_key": "47591",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717034026",
+    "define_code_kor_name": "풍천면 신성리"
+  },
+  {
+    "define_code_key": "47592",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717034027",
+    "define_code_kor_name": "풍천면 금계리"
+  },
+  {
+    "define_code_key": "47593",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717034028",
+    "define_code_kor_name": "풍천면 구호리"
+  },
+  {
+    "define_code_key": "47594",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717034029",
+    "define_code_kor_name": "풍천면 어담리"
+  },
+  {
+    "define_code_key": "47595",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717034030",
+    "define_code_kor_name": "풍천면 인금리"
+  },
+  {
+    "define_code_key": "47596",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717034031",
+    "define_code_kor_name": "풍천면 가곡리"
+  },
+  {
+    "define_code_key": "47597",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717034032",
+    "define_code_kor_name": "풍천면 병산리"
+  },
+  {
+    "define_code_key": "47598",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717034033",
+    "define_code_kor_name": "풍천면 하회리"
+  },
+  {
+    "define_code_key": "47599",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717035000",
+    "define_code_kor_name": "일직면"
+  },
+  {
+    "define_code_key": "47600",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717035021",
+    "define_code_kor_name": "일직면 귀미리"
+  },
+  {
+    "define_code_key": "47601",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717035022",
+    "define_code_kor_name": "일직면 구천리"
+  },
+  {
+    "define_code_key": "47602",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717035023",
+    "define_code_kor_name": "일직면 망호리"
+  },
+  {
+    "define_code_key": "47603",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717035024",
+    "define_code_kor_name": "일직면 원리"
+  },
+  {
+    "define_code_key": "47604",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717035025",
+    "define_code_kor_name": "일직면 광연리"
+  },
+  {
+    "define_code_key": "47605",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717035026",
+    "define_code_kor_name": "일직면 명진리"
+  },
+  {
+    "define_code_key": "47606",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717035027",
+    "define_code_kor_name": "일직면 평팔리"
+  },
+  {
+    "define_code_key": "47607",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717035028",
+    "define_code_kor_name": "일직면 용각리"
+  },
+  {
+    "define_code_key": "47608",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717035029",
+    "define_code_kor_name": "일직면 국곡리"
+  },
+  {
+    "define_code_key": "47609",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717035030",
+    "define_code_kor_name": "일직면 조탑리"
+  },
+  {
+    "define_code_key": "47610",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717035031",
+    "define_code_kor_name": "일직면 송리리"
+  },
+  {
+    "define_code_key": "47611",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717035032",
+    "define_code_kor_name": "일직면 원호리"
+  },
+  {
+    "define_code_key": "47612",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717035033",
+    "define_code_kor_name": "일직면 운산리"
+  },
+  {
+    "define_code_key": "47613",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717036000",
+    "define_code_kor_name": "남후면"
+  },
+  {
+    "define_code_key": "47614",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717036021",
+    "define_code_kor_name": "남후면 광음리"
+  },
+  {
+    "define_code_key": "47615",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717036022",
+    "define_code_kor_name": "남후면 무릉리"
+  },
+  {
+    "define_code_key": "47616",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717036023",
+    "define_code_kor_name": "남후면 개곡리"
+  },
+  {
+    "define_code_key": "47617",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717036024",
+    "define_code_kor_name": "남후면 검암리"
+  },
+  {
+    "define_code_key": "47618",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717036025",
+    "define_code_kor_name": "남후면 고하리"
+  },
+  {
+    "define_code_key": "47619",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717036026",
+    "define_code_kor_name": "남후면 고상리"
+  },
+  {
+    "define_code_key": "47620",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717036027",
+    "define_code_kor_name": "남후면 상아리"
+  },
+  {
+    "define_code_key": "47621",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717036028",
+    "define_code_kor_name": "남후면 하아리"
+  },
+  {
+    "define_code_key": "47622",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717036029",
+    "define_code_kor_name": "남후면 단호리"
+  },
+  {
+    "define_code_key": "47623",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717037000",
+    "define_code_kor_name": "남선면"
+  },
+  {
+    "define_code_key": "47624",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717037021",
+    "define_code_kor_name": "남선면 이천리"
+  },
+  {
+    "define_code_key": "47625",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717037022",
+    "define_code_kor_name": "남선면 신석리"
+  },
+  {
+    "define_code_key": "47626",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717037023",
+    "define_code_kor_name": "남선면 구미리"
+  },
+  {
+    "define_code_key": "47627",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717037024",
+    "define_code_kor_name": "남선면 신흥리"
+  },
+  {
+    "define_code_key": "47628",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717037025",
+    "define_code_kor_name": "남선면 도로리"
+  },
+  {
+    "define_code_key": "47629",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717037026",
+    "define_code_kor_name": "남선면 현내리"
+  },
+  {
+    "define_code_key": "47630",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717037027",
+    "define_code_kor_name": "남선면 원림리"
+  },
+  {
+    "define_code_key": "47631",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717037028",
+    "define_code_kor_name": "남선면 외하리"
+  },
+  {
+    "define_code_key": "47632",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717038000",
+    "define_code_kor_name": "임하면"
+  },
+  {
+    "define_code_key": "47633",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717038021",
+    "define_code_kor_name": "임하면 임하리"
+  },
+  {
+    "define_code_key": "47634",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717038022",
+    "define_code_kor_name": "임하면 천전리"
+  },
+  {
+    "define_code_key": "47635",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717038023",
+    "define_code_kor_name": "임하면 추목리"
+  },
+  {
+    "define_code_key": "47636",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717038024",
+    "define_code_kor_name": "임하면 신덕리"
+  },
+  {
+    "define_code_key": "47637",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717038025",
+    "define_code_kor_name": "임하면 금소리"
+  },
+  {
+    "define_code_key": "47638",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717038026",
+    "define_code_kor_name": "임하면 고곡리"
+  },
+  {
+    "define_code_key": "47639",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717038027",
+    "define_code_kor_name": "임하면 오대리"
+  },
+  {
+    "define_code_key": "47640",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717038028",
+    "define_code_kor_name": "임하면 노산리"
+  },
+  {
+    "define_code_key": "47641",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717039000",
+    "define_code_kor_name": "길안면"
+  },
+  {
+    "define_code_key": "47642",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717039021",
+    "define_code_kor_name": "길안면 천지리"
+  },
+  {
+    "define_code_key": "47643",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717039022",
+    "define_code_kor_name": "길안면 만음리"
+  },
+  {
+    "define_code_key": "47644",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717039023",
+    "define_code_kor_name": "길안면 백자리"
+  },
+  {
+    "define_code_key": "47645",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717039024",
+    "define_code_kor_name": "길안면 금곡리"
+  },
+  {
+    "define_code_key": "47646",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717039025",
+    "define_code_kor_name": "길안면 송사리"
+  },
+  {
+    "define_code_key": "47647",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717039026",
+    "define_code_kor_name": "길안면 대사리"
+  },
+  {
+    "define_code_key": "47648",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717039027",
+    "define_code_kor_name": "길안면 고란리"
+  },
+  {
+    "define_code_key": "47649",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717039028",
+    "define_code_kor_name": "길안면 묵계리"
+  },
+  {
+    "define_code_key": "47650",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717039029",
+    "define_code_kor_name": "길안면 구수리"
+  },
+  {
+    "define_code_key": "47651",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717039030",
+    "define_code_kor_name": "길안면 배방리"
+  },
+  {
+    "define_code_key": "47652",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717039031",
+    "define_code_kor_name": "길안면 용계리"
+  },
+  {
+    "define_code_key": "47653",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717039032",
+    "define_code_kor_name": "길안면 대곡리"
+  },
+  {
+    "define_code_key": "47654",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717039033",
+    "define_code_kor_name": "길안면 현하리"
+  },
+  {
+    "define_code_key": "47655",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717040000",
+    "define_code_kor_name": "임동면"
+  },
+  {
+    "define_code_key": "47656",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717040021",
+    "define_code_kor_name": "임동면 중평리"
+  },
+  {
+    "define_code_key": "47657",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717040022",
+    "define_code_kor_name": "임동면 수곡리"
+  },
+  {
+    "define_code_key": "47658",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717040023",
+    "define_code_kor_name": "임동면 고천리"
+  },
+  {
+    "define_code_key": "47659",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717040024",
+    "define_code_kor_name": "임동면 갈전리"
+  },
+  {
+    "define_code_key": "47660",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717040025",
+    "define_code_kor_name": "임동면 마령리"
+  },
+  {
+    "define_code_key": "47661",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717040026",
+    "define_code_kor_name": "임동면 위리"
+  },
+  {
+    "define_code_key": "47662",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717040027",
+    "define_code_kor_name": "임동면 대곡리"
+  },
+  {
+    "define_code_key": "47663",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717040028",
+    "define_code_kor_name": "임동면 박곡리"
+  },
+  {
+    "define_code_key": "47664",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717040029",
+    "define_code_kor_name": "임동면 마리"
+  },
+  {
+    "define_code_key": "47665",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717040030",
+    "define_code_kor_name": "임동면 사월리"
+  },
+  {
+    "define_code_key": "47666",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717040031",
+    "define_code_kor_name": "임동면 지리"
+  },
+  {
+    "define_code_key": "47667",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717040032",
+    "define_code_kor_name": "임동면 망천리"
+  },
+  {
+    "define_code_key": "47668",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717041000",
+    "define_code_kor_name": "예안면"
+  },
+  {
+    "define_code_key": "47669",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717041021",
+    "define_code_kor_name": "예안면 천전리"
+  },
+  {
+    "define_code_key": "47670",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717041022",
+    "define_code_kor_name": "예안면 부포리"
+  },
+  {
+    "define_code_key": "47671",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717041023",
+    "define_code_kor_name": "예안면 귀단리"
+  },
+  {
+    "define_code_key": "47672",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717041024",
+    "define_code_kor_name": "예안면 태곡리"
+  },
+  {
+    "define_code_key": "47673",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717041025",
+    "define_code_kor_name": "예안면 인계리"
+  },
+  {
+    "define_code_key": "47674",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717041026",
+    "define_code_kor_name": "예안면 삼계리"
+  },
+  {
+    "define_code_key": "47675",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717041027",
+    "define_code_kor_name": "예안면 도촌리"
+  },
+  {
+    "define_code_key": "47676",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717041028",
+    "define_code_kor_name": "예안면 동천리"
+  },
+  {
+    "define_code_key": "47677",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717041029",
+    "define_code_kor_name": "예안면 신남리"
+  },
+  {
+    "define_code_key": "47678",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717041030",
+    "define_code_kor_name": "예안면 기사리"
+  },
+  {
+    "define_code_key": "47679",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717041031",
+    "define_code_kor_name": "예안면 도목리"
+  },
+  {
+    "define_code_key": "47680",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717041032",
+    "define_code_kor_name": "예안면 주진리"
+  },
+  {
+    "define_code_key": "47681",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717041033",
+    "define_code_kor_name": "예안면 계곡리"
+  },
+  {
+    "define_code_key": "47682",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717041034",
+    "define_code_kor_name": "예안면 정산리"
+  },
+  {
+    "define_code_key": "47683",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717041035",
+    "define_code_kor_name": "예안면 구룡리"
+  },
+  {
+    "define_code_key": "47684",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717041036",
+    "define_code_kor_name": "예안면 미질리"
+  },
+  {
+    "define_code_key": "47685",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717042000",
+    "define_code_kor_name": "도산면"
+  },
+  {
+    "define_code_key": "47686",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717042021",
+    "define_code_kor_name": "도산면 토계리"
+  },
+  {
+    "define_code_key": "47687",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717042022",
+    "define_code_kor_name": "도산면 분천리"
+  },
+  {
+    "define_code_key": "47688",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717042023",
+    "define_code_kor_name": "도산면 의촌리"
+  },
+  {
+    "define_code_key": "47689",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717042024",
+    "define_code_kor_name": "도산면 원천리"
+  },
+  {
+    "define_code_key": "47690",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717042025",
+    "define_code_kor_name": "도산면 단천리"
+  },
+  {
+    "define_code_key": "47691",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717042026",
+    "define_code_kor_name": "도산면 가송리"
+  },
+  {
+    "define_code_key": "47692",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717042027",
+    "define_code_kor_name": "도산면 태자리"
+  },
+  {
+    "define_code_key": "47693",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717042028",
+    "define_code_kor_name": "도산면 온혜리"
+  },
+  {
+    "define_code_key": "47694",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717042029",
+    "define_code_kor_name": "도산면 운곡리"
+  },
+  {
+    "define_code_key": "47695",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717042030",
+    "define_code_kor_name": "도산면 의일리"
+  },
+  {
+    "define_code_key": "47696",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717042031",
+    "define_code_kor_name": "도산면 동부리"
+  },
+  {
+    "define_code_key": "47697",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717042032",
+    "define_code_kor_name": "도산면 서부리"
+  },
+  {
+    "define_code_key": "47698",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717042033",
+    "define_code_kor_name": "도산면 선양리"
+  },
+  {
+    "define_code_key": "47699",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717043000",
+    "define_code_kor_name": "녹전면"
+  },
+  {
+    "define_code_key": "47700",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717043021",
+    "define_code_kor_name": "녹전면 신평리"
+  },
+  {
+    "define_code_key": "47701",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717043022",
+    "define_code_kor_name": "녹전면 갈현리"
+  },
+  {
+    "define_code_key": "47702",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717043023",
+    "define_code_kor_name": "녹전면 매정리"
+  },
+  {
+    "define_code_key": "47703",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717043024",
+    "define_code_kor_name": "녹전면 원천리"
+  },
+  {
+    "define_code_key": "47704",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717043025",
+    "define_code_kor_name": "녹전면 사천리"
+  },
+  {
+    "define_code_key": "47705",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717043026",
+    "define_code_kor_name": "녹전면 녹래리"
+  },
+  {
+    "define_code_key": "47706",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717043027",
+    "define_code_kor_name": "녹전면 죽송리"
+  },
+  {
+    "define_code_key": "47707",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717043028",
+    "define_code_kor_name": "녹전면 구송리"
+  },
+  {
+    "define_code_key": "47708",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717043029",
+    "define_code_kor_name": "녹전면 사신리"
+  },
+  {
+    "define_code_key": "47709",
+    "define_code_field_key": "4221",
+    "define_code_name": "4717043030",
+    "define_code_kor_name": "녹전면 서삼리"
+  }
+]

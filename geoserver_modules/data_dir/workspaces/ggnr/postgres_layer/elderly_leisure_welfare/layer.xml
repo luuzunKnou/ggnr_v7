@@ -1,0 +1,19 @@
+<layer>
+  <name>elderly_leisure_welfare</name>
+  <id>LayerInfoImpl--610c9460:1a10fc86a73:-7afa</id>
+  <type>VECTOR</type>
+  <defaultStyle>
+    <id>StyleInfoImpl--610c9460:1a10fc86a73:-7af9</id>
+  </defaultStyle>
+  <resource class="featureType">
+    <id>FeatureTypeInfoImpl--610c9460:1a10fc86a73:-7afb</id>
+  </resource>
+  <queryable>true</queryable>
+  <opaque>false</opaque>
+  <attribution>
+    <logoWidth>0</logoWidth>
+    <logoHeight>0</logoHeight>
+  </attribution>
+  <dateCreated>2026-10-16 06:47:16.623 UTC</dateCreated>
+  <dateModified>2026-10-16 06:47:16.895 UTC</dateModified>
+</layer>

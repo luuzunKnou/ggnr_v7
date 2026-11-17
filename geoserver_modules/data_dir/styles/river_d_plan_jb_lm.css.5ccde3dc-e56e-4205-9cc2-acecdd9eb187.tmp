@@ -1,0 +1,28 @@
+/* levee line + jb_name label (same pattern as river_plan_hd_lm) */
+* {
+  stroke: #FFFFFF, #B91C1C;
+  stroke-width: 4.5, 2.5;
+  stroke-opacity: 0.8, 0.8;
+
+  label: [jb_name];
+  label-follow-line: false;
+  label-geometry: [centroid(geom)];
+  label-anchor: 0.5 0.5;
+  label-offset: 0 0;
+  label-rotation: 0;
+
+  font-family: "Yu Gothic Bold";
+  font-size: 12;
+  font-weight: bold;
+  font-fill: #b91c1c;
+  halo-color: #ffffff;
+  halo-radius: 2;
+  halo-opacity: 0.85;
+
+  label-conflict-resolution: false;
+  label-group: false;
+  label-max-displacement: 120;
+  label-fit-goodness: 0;
+  label-priority: 1000000;
+  -gt-label-polygon-align: false;
+}

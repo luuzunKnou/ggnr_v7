@@ -1,6 +1,10 @@
 # 저장·작업 트리 모두 LF. Windows autocrlf가 줄바꿈만 다른 파일로 표시하지 않게 함.
 * text=auto eol=lf
 
+# GeoServer 데이터 폴더는 작업 파일 CRLF, 저장 내용은 LF.
+# Windows에서 설정을 다시 저장해도 줄바꿈만으로 수정되지 않음. 아래 바이너리 규칙이 우선.
+geoserver_modules/data_dir/** text eol=crlf
+
 *.bat text eol=crlf
 *.cmd text eol=crlf
 
@@ -22,3 +26,6 @@
 *.7z binary
 *.gz binary
 *.br binary
+# 암호 저장 파일. 데이터 폴더 텍스트 규칙에서 빼 바이트가 바뀌지 않게 함.
+*.jceks binary
+*.digest binary

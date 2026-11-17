@@ -52,8 +52,8 @@ export function UploadCompleteDialog({ notice }: Props) {
           if (Date.now() < ignoreCloseUntilRef.current) e.preventDefault();
         }}
       >
-        <DialogHeader className="border-b border-emerald-100 bg-emerald-50/90 px-4 py-3">
-          <DialogTitle className="flex items-center gap-2 text-sm font-semibold text-emerald-900">
+        <DialogHeader className="border-b border-emerald-100 dark:border-emerald-900 bg-emerald-50/90 dark:bg-emerald-950/50 px-4 py-3">
+          <DialogTitle className="flex items-center gap-2 text-sm font-semibold text-emerald-900 dark:text-emerald-100">
             <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600" />
             {notice && notice.fileTotal > 0 ? '업로드 완료' : '폴더 생성 완료'}
           </DialogTitle>
@@ -61,13 +61,13 @@ export function UploadCompleteDialog({ notice }: Props) {
 
         {notice ? (
           <div className="space-y-3 px-4 py-3">
-            <p className="text-[12px] leading-relaxed text-slate-700">
+            <p className="text-[12px] leading-relaxed text-foreground">
               {notice.fileTotal > 0
                 ? '사진·동영상 업로드가 끝났습니다. 작업단위 상세에서 파일을 확인하고 지도에서 위치를 볼 수 있습니다.'
                 : '작업단위 폴더가 생성되었습니다. 목록에서 상세를 열어 사진·동영상 등 파일을 추가하세요.'}
             </p>
 
-            <div className="overflow-hidden rounded-lg border border-slate-200 bg-slate-50/80">
+            <div className="overflow-hidden rounded-lg border border-border bg-muted/50">
               <dl className="divide-y divide-slate-100 text-[11px]">
                 <Row label="작업명" value={notice.workName} />
                 {notice.fileTotal > 0 ? <Row label="파일" value={`${notice.fileTotal}개`} /> : null}
@@ -81,8 +81,8 @@ export function UploadCompleteDialog({ notice }: Props) {
               <p
                 className={
                   notice.fileTotal > 0
-                    ? 'rounded-md border border-emerald-200 bg-emerald-50 px-2.5 py-2 text-[10px] leading-relaxed text-emerald-900'
-                    : 'rounded-md border border-amber-200 bg-amber-50 px-2.5 py-2 text-[10px] leading-relaxed text-amber-900'
+                    ? 'rounded-md border border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/40 px-2.5 py-2 text-[10px] leading-relaxed text-emerald-900 dark:text-emerald-100'
+                    : 'rounded-md border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/40 px-2.5 py-2 text-[10px] leading-relaxed text-amber-900 dark:text-amber-100'
                 }
               >
                 {notice.fileTotal > 0 ? (
@@ -101,7 +101,7 @@ export function UploadCompleteDialog({ notice }: Props) {
           </div>
         ) : null}
 
-        <div className="flex justify-end border-t border-slate-200 bg-white px-4 py-3">
+        <div className="flex justify-end border-t border-border bg-background px-4 py-3">
           <Button
             type="button"
             size="sm"
@@ -119,8 +119,8 @@ export function UploadCompleteDialog({ notice }: Props) {
 function Row({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex gap-2 px-3 py-2">
-      <dt className="w-14 shrink-0 font-medium text-slate-500">{label}</dt>
-      <dd className="min-w-0 flex-1 break-all text-slate-800">{value}</dd>
+      <dt className="w-14 shrink-0 font-medium text-muted-foreground">{label}</dt>
+      <dd className="min-w-0 flex-1 break-all text-foreground">{value}</dd>
     </div>
   );
 }

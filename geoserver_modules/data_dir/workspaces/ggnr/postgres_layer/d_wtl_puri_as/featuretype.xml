@@ -1,0 +1,41 @@
+<featureType>
+  <id>FeatureTypeInfoImpl--51390c14:1a166f7a0a1:-7f04</id>
+  <name>d_wtl_puri_as</name>
+  <nativeName>d_wtl_puri_as</nativeName>
+  <namespace>
+    <id>NamespaceInfoImpl-4bf97568:19c4d6c3053:-7ffa</id>
+  </namespace>
+  <title>d_wtl_puri_as</title>
+  <keywords>
+    <string>features</string>
+    <string>d_wtl_puri_as</string>
+  </keywords>
+  <srs>EPSG:5181</srs>
+  <nativeBoundingBox>
+    <minx>330608.14836954937</minx>
+    <maxx>359500.39430808945</maxx>
+    <miny>306584.45455703174</miny>
+    <maxy>327683.9819103343</maxy>
+    <crs class="projected">EPSG:5181</crs>
+  </nativeBoundingBox>
+  <latLonBoundingBox>
+    <minx>128.45309012264826</minx>
+    <maxx>128.77872396986288</maxx>
+    <miny>36.2440430484043</miny>
+    <maxy>36.43846216368631</maxy>
+    <crs>EPSG:4326</crs>
+  </latLonBoundingBox>
+  <projectionPolicy>FORCE_DECLARED</projectionPolicy>
+  <enabled>true</enabled>
+  <store class="dataStore">
+    <id>DataStoreInfoImpl-4bf97568:19c4d6c3053:-7ff9</id>
+  </store>
+  <serviceConfiguration>false</serviceConfiguration>
+  <maxFeatures>0</maxFeatures>
+  <numDecimals>0</numDecimals>
+  <padWithZeros>false</padWithZeros>
+  <forcedDecimal>false</forcedDecimal>
+  <overridingServiceSRS>false</overridingServiceSRS>
+  <skipNumberMatched>false</skipNumberMatched>
+  <circularArcPresent>false</circularArcPresent>
+</featureType>

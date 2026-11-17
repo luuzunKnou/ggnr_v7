@@ -1,6 +1,7 @@
 /**
  * Chunked upload service.
- * 베이스 = GGNR_DATA_DIR. 3dtiles_*, tiles_*, shp_data, excel_data, file_data/... 루트에 저장.
+ * 베이스 = resolveGgnrDataDir() (목록과 동일, G:→UNC 포함).
+ * 3dtiles_*, tiles_*, shp_data, excel_data, file_data/... 루트에 저장.
  */
 import fs from 'node:fs/promises';
 import path from 'node:path';
@@ -9,14 +10,15 @@ import { getSessionUsrId } from '@/lib/auth/guard';
 import { userCanAccessServiceFileData } from '@/lib/serviceFileDataAccess';
 import { assertSafeServiceFileBasename, fileDataRelativeDir } from '@/lib/serviceFileData';
 import { GGNR_DATA_PATHS } from '@/lib/ggnrDataPaths';
+import { resolveGgnrDataDir } from '@/lib/turbopackFsPath';
 import { appendUploadConvertHistory, ensureBaseStructure } from './fileManagerService';
 import { runLasPipeline } from './pipelineService';
 
-const GGNR_DATA_DIR = process.env.GGNR_DATA_DIR ?? 'd:\\ggnr_data_dir';
 const CHUNK_SIZE = 512 * 1024; // 512KB
 
+/** 목록(fileManager)과 동일 — G: → UNC 치환 포함 */
 function getBaseDir(): string {
-  return GGNR_DATA_DIR;
+  return resolveGgnrDataDir();
 }
 
 function getUploadTempDir(uploadId: string): string {

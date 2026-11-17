@@ -1,6 +1,39 @@
 import type { LayerRowEditPreset } from "./types";
 import { USAGE_DATA_AS_FIELD_LABELS } from "../../_mapContents/river/usageDataAs/usageDataAsFieldLabels";
 import { OCCUPATION_LEDGER_FIELD_LABELS } from "../../_mapContents/occupationLedger/occupationLedgerFieldLabels";
+import {
+  getOccupationLedgerBinding,
+  type OccupationLedgerSerEng,
+} from "@/lib/occupationLedgerBinding";
+
+/**
+ * 공통 점용대장(하천·도로·국공유지) — 테이블·칸 이름은 연결 설정(occupationLedgerBinding) 한 곳에서.
+ * 점용 시작·종료·허가일자는 «영구»·«허가일로부터 ○개월» 등 글자도 들어와 날짜 선택을 쓰지 않는다.
+ * 필드 정의가 아직 옛 칸 이름이어도 공통 칸은 저장되게 실제 DB 칸 저장을 허용한다.
+ */
+function occupationLedgerPreset(
+  serEng: OccupationLedgerSerEng
+): LayerRowEditPreset & { keyField: string; childTableName: string } {
+  const b = getOccupationLedgerBinding({ serEng })!;
+  const f = b.fields;
+  return {
+    tableName: b.mainTable,
+    schema: b.schema,
+    keyField: f.keyField,
+    excludeFields: ["ogc_fid", "id", "extra", "geom"],
+    includeHiddenDetail: true,
+    dateFields: [],
+    childTableName: b.jijukTable,
+    additionalChildTableNames: [b.mgjTable],
+    childParentField: f.childParentField,
+    childAddressField: f.childAddressField,
+    childAddressPartFields: f.childAddressPartFields,
+    fieldLabels: OCCUPATION_LEDGER_FIELD_LABELS,
+    allowEmptyGeom: true,
+    allowPhysicalColumns: true,
+    permitField: f.permitField,
+  };
+}
 
 /** 화면별 preset — 새 기능 추가 시 여기만 등록 */
 export const LAYER_ROW_EDIT_PRESETS = {
@@ -62,48 +95,9 @@ export const LAYER_ROW_EDIT_PRESETS = {
     requirePeriodAndGeomOnSave: true,
     allowEmptyGeom: true,
   },
-  waterOccupationLedger: {
-    tableName: "water_occupationledger",
-    schema: "layer",
-    keyField: "ogc_fid",
-    excludeFields: ["ogc_fid", "id", "extra"],
-    includeHiddenDetail: true,
-    dateFields: ["perm_start_date", "perm_end_date", "permit_date"],
-    childTableName: "water_occupationledger_jijuk",
-    additionalChildTableNames: ["water_occupationledger_mgj"],
-    childParentField: "permit_no",
-    childAddressField: "occup_place",
-    fieldLabels: OCCUPATION_LEDGER_FIELD_LABELS,
-    allowEmptyGeom: true,
-  },
-  roadOccupationLedger: {
-    tableName: "road_occupationledger",
-    schema: "layer",
-    keyField: "ogc_fid",
-    excludeFields: ["ogc_fid", "id", "extra"],
-    includeHiddenDetail: true,
-    dateFields: ["perm_start_date", "perm_end_date", "permit_date"],
-    childTableName: "road_occupationledger_jijuk",
-    additionalChildTableNames: ["road_occupationledger_mgj"],
-    childParentField: "permit_no",
-    childAddressField: "occup_place",
-    fieldLabels: OCCUPATION_LEDGER_FIELD_LABELS,
-    allowEmptyGeom: true,
-  },
-  publicOccupationLedger: {
-    tableName: "public_occupationledger",
-    schema: "layer",
-    keyField: "ogc_fid",
-    excludeFields: ["ogc_fid", "id", "extra"],
-    includeHiddenDetail: true,
-    dateFields: ["perm_start_date", "perm_end_date", "permit_date"],
-    childTableName: "public_occupationledger_jijuk",
-    additionalChildTableNames: ["public_occupationledger_mgj"],
-    childParentField: "permit_no",
-    childAddressField: "occup_place",
-    fieldLabels: OCCUPATION_LEDGER_FIELD_LABELS,
-    allowEmptyGeom: true,
-  },
+  waterOccupationLedger: occupationLedgerPreset("waterOccupationLedger"),
+  roadOccupationLedger: occupationLedgerPreset("roadOccupationLedger"),
+  publicOccupationLedger: occupationLedgerPreset("publicOccupationLedger"),
 } as const satisfies Record<string, LayerRowEditPreset>;
 
 export type LayerRowEditPresetKey = keyof typeof LAYER_ROW_EDIT_PRESETS;

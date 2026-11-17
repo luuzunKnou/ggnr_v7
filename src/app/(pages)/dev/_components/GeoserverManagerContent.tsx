@@ -422,13 +422,28 @@ export function GeoserverManagerContent({ schema = "layer" }: { schema?: Geoserv
     if (diffRows.length === 0) return
     setStyleBulkRecreateLoading(true)
     try {
+      const failed: string[] = []
       for (const row of diffRows) {
         if (!row.tablesJson) continue
-        await call("", "POST", {
-          service: "devTestService",
-          action: "applyDefaultStyleToLayer",
-          params: { layerName: row.key, url: geoserverUrl },
-        })
+        try {
+          const res = await call("", "POST", {
+            service: "devTestService",
+            action: "applyDefaultStyleToLayer",
+            params: { layerName: row.key, url: geoserverUrl },
+          })
+          const d = res?.data ?? res
+          if (!d?.success) failed.push(`${row.key}: ${String(d?.error ?? "알 수 없는 오류")}`)
+        } catch (e) {
+          failed.push(`${row.key}: ${e instanceof Error ? e.message : String(e)}`)
+        }
+      }
+      setLogLines((prev) => [
+        ...prev,
+        `[전체 스타일 재생성] 실패 ${failed.length}건`,
+        ...failed.map((f) => `[전체 스타일 재생성] ${f}`),
+      ])
+      if (failed.length > 0) {
+        window.alert(`스타일 재생성 실패 ${failed.length}건\n${failed.slice(0, 10).join("\n")}`)
       }
       await Promise.all([fetchCounts(), fetchDiff()])
     } finally {

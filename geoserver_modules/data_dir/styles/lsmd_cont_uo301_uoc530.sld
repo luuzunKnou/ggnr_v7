@@ -5,11 +5,15 @@
       <sld:Name>Default Styler</sld:Name>
       <sld:FeatureTypeStyle>
         <sld:Rule>
-          <sld:LineSymbolizer>
+          <sld:PolygonSymbolizer>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#03A9F4</sld:CssParameter>
+              <sld:CssParameter name="fill-opacity">0.3</sld:CssParameter>
+            </sld:Fill>
             <sld:Stroke>
               <sld:CssParameter name="stroke">#FFFFFF</sld:CssParameter>
             </sld:Stroke>
-          </sld:LineSymbolizer>
+          </sld:PolygonSymbolizer>
           <sld:TextSymbolizer>
             <sld:Geometry>
               <ogc:Function name="centroid">

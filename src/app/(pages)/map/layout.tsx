@@ -7,9 +7,10 @@ import MapLayoutClient from "./map-layout-client"
 
 export default function MapLayout({ children }: { children: React.ReactNode }) {
   const indexLogoSrc = getIndexLogoSrc()
+  const projectName = (process.env.GGNR_PROJECT ?? "").trim()
   return (
     <Suspense fallback={<div className="flex h-full min-h-screen items-center justify-center text-sm text-muted-foreground">지도 로딩 중...</div>}>
-      <MapLayoutClient indexLogoSrc={indexLogoSrc}>{children}</MapLayoutClient>
+      <MapLayoutClient indexLogoSrc={indexLogoSrc} projectName={projectName}>{children}</MapLayoutClient>
     </Suspense>
   )
 }

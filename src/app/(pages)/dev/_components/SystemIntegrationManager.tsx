@@ -5,8 +5,20 @@ import { Button } from "@/app/shadcnComponents/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/app/shadcnComponents/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/app/shadcnComponents/ui/table"
 import { call } from "@/lib/api"
+import { loadGnmsBrowserConfig } from "@/lib/gnmsBrowserClient"
 
-type SystemKey = "KAIS" | "KRAS" | "KORPES" | "SEUMTEO" | "SAEOL" | "SAFETYDATA" | "FMS" | "NEXTGEN" | "GEOM"
+type SystemKey =
+  | "KAIS"
+  | "KRAS"
+  | "KORPES"
+  | "SEUMTEO"
+  | "SAEOL"
+  | "SAFETYDATA"
+  | "SAFEMAP"
+  | "FMS"
+  | "NEXTGEN"
+  | "GEOM"
+  | "GNMS"
 
 type LogRow = {
   ijl_key: number
@@ -65,6 +77,10 @@ type ParsedJob = {
 }
 
 const INTEGRATION_POLL_MS = 2000
+
+function isOpenApiDatasetSystem(system: SystemKey): system is "SAFETYDATA" | "SAFEMAP" {
+  return system === "SAFETYDATA" || system === "SAFEMAP"
+}
 
 function formatDt(v: unknown): string {
   const s = String(v ?? "")
@@ -138,9 +154,11 @@ export function SystemIntegrationManager() {
         { key: "SEUMTEO", label: "세움터" },
         { key: "SAEOL", label: "새올" },
         { key: "SAFETYDATA", label: "재난안전데이터" },
+        { key: "SAFEMAP", label: "생활안전정보" },
         { key: "FMS", label: "FMS" },
         { key: "NEXTGEN", label: "차세대" },
-        { key: "GEOM", label: "GEOM" },
+        { key: "GEOM", label: "VWORD 좌표 검색" },
+        { key: "GNMS", label: "GNMS" },
       ] as const,
     []
   )
@@ -163,6 +181,16 @@ export function SystemIntegrationManager() {
   const [geomColumnsLoading, setGeomColumnsLoading] = useState(false)
   const [geomAddressColumn, setGeomAddressColumn] = useState("")
   const [geomPlaceNameColumn, setGeomPlaceNameColumn] = useState("")
+  const [gnmsDate, setGnmsDate] = useState("")
+  const [gnmsBoot, setGnmsBoot] = useState<{ project: string; type: string } | null>(null)
+  const [gnmsServerStatus, setGnmsServerStatus] = useState<"checking" | "ok" | "failed">("checking")
+  type GnmsTab = "log" | "sgg" | "emd" | "ri"
+  const [gnmsTab, setGnmsTab] = useState<GnmsTab>("log")
+  const [gnmsAdmSectC, setGnmsAdmSectC] = useState("")
+  const [gnmsBjdCde, setGnmsBjdCde] = useState("")
+  const [gnmsSggNm, setGnmsSggNm] = useState("")
+  const [gnmsSggExists, setGnmsSggExists] = useState<boolean | null>(null)
+  const [gnmsKeyword, setGnmsKeyword] = useState("")
 
   const latestJob = rows[0]
   const latestParsedJob = parseJob(latestJob?.ijl_message ?? "")
@@ -185,15 +213,16 @@ export function SystemIntegrationManager() {
     }
   }
 
-  const fetchSafetydataDatasets = async () => {
+  const fetchOpenApiDatasets = async (system: "SAFETYDATA" | "SAFEMAP") => {
     setSafetyDatasetsLoading(true)
     try {
       const res = await call("", "POST", {
         service: "integrationService",
-        action: "listSafetydataDatasets",
+        action: system === "SAFEMAP" ? "listSafemapDatasets" : "listSafetydataDatasets",
         params: {},
       })
       setSafetyDatasets((res?.data?.rows ?? []) as SafetydataDatasetRow[])
+      setSafetyDatasetId("__ALL__")
     } catch {
       setSafetyDatasets([])
     } finally {
@@ -255,13 +284,19 @@ export function SystemIntegrationManager() {
     }
   }
 
-  const fetchSafetydataDetailLogs = async (opts?: { silent?: boolean }) => {
+  const fetchSafetydataDetailLogs = async (
+    system: "SAFETYDATA" | "SAFEMAP",
+    opts?: { silent?: boolean }
+  ) => {
     if (!opts?.silent) setDetailLogsLoading(true)
     try {
+      const params: Record<string, unknown> = { limit: 100 }
+      if (system === "SAFEMAP") params.idPrefix = "sm-"
+      else params.excludeIdPrefix = "sm-"
       const res = await call("", "POST", {
         service: "integrationService",
         action: "listSafetydataDetailLogs",
-        params: { limit: 100 },
+        params,
       })
       setSafetyDetailRows((res?.data?.rows ?? []) as SafetydataDetailLogRow[])
     } catch {
@@ -274,15 +309,91 @@ export function SystemIntegrationManager() {
   useEffect(() => {
     setError("")
     fetchLogs(active)
-    if (active === "SAFETYDATA") {
-      fetchSafetydataDatasets()
-      fetchSafetydataDetailLogs()
+    if (isOpenApiDatasetSystem(active)) {
+      fetchOpenApiDatasets(active)
+      fetchSafetydataDetailLogs(active)
     }
     if (active === "GEOM") {
       void fetchGeomTables()
     }
+    if (active === "GNMS") {
+      let cancelled = false
+      setGnmsServerStatus("checking")
+      void (async () => {
+        try {
+          const cfg = await loadGnmsBrowserConfig()
+          const base = (cfg.uploadBaseUrl ?? "").replace(/\/+$/, "")
+          if (!base) throw new Error("GNMS uploadBaseUrl이 없습니다")
+          const reachRes = await fetch(base, { method: "GET", cache: "no-store" })
+          if (cancelled) return
+          setGnmsServerStatus(reachRes.status < 500 ? "ok" : "failed")
+        } catch {
+          if (!cancelled) setGnmsServerStatus("failed")
+        }
+      })()
+      void (async () => {
+        try {
+          const res = await call("", "POST", {
+            service: "integrationService",
+            action: "getGnmsLogBootContext",
+            params: {},
+          })
+          if (cancelled) return
+          setGnmsBoot({
+            project: String(res?.data?.project ?? ""),
+            type: String(res?.data?.type ?? ""),
+          })
+        } catch {
+          if (!cancelled) setGnmsBoot(null)
+        }
+      })()
+      return () => {
+        cancelled = true
+      }
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active])
+
+  useEffect(() => {
+    if (active !== "GNMS" || gnmsTab === "log") return
+    let cancelled = false
+    void (async () => {
+      try {
+        const check = await call("", "POST", {
+          service: "integrationService",
+          action: "checkPublicLayerSgg",
+          params: {},
+        })
+        if (cancelled) return
+        setGnmsSggExists(Boolean(check?.data?.exists))
+      } catch {
+        if (!cancelled) setGnmsSggExists(null)
+      }
+      try {
+        const res = await call("", "POST", {
+          service: "integrationService",
+          action: "getGnmsBaseDataExportParams",
+          params: { folder: "sgg" },
+        })
+        if (cancelled) return
+        setGnmsAdmSectC(String(res?.data?.adm_sect_c ?? ""))
+        setGnmsBjdCde(String(res?.data?.bjd_cde ?? ""))
+        setGnmsSggNm(String(res?.data?.sgg_nm ?? "").trim())
+        if (res?.data?.sggExists != null) {
+          setGnmsSggExists(Boolean(res.data.sggExists))
+        }
+      } catch {
+        if (!cancelled) {
+          setGnmsAdmSectC("")
+          setGnmsBjdCde("")
+          setGnmsSggNm("")
+        }
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [active, gnmsTab])
 
   useEffect(() => {
     if (active !== "GEOM") return
@@ -295,8 +406,8 @@ export function SystemIntegrationManager() {
     if (!loading) return
     const id = window.setInterval(() => {
       void fetchLogs(active, { silent: true })
-      if (active === "SAFETYDATA") {
-        void fetchSafetydataDetailLogs({ silent: true })
+      if (isOpenApiDatasetSystem(active)) {
+        void fetchSafetydataDetailLogs(active, { silent: true })
       }
     }, INTEGRATION_POLL_MS)
     return () => {
@@ -309,8 +420,88 @@ export function SystemIntegrationManager() {
     setLoading(true)
     setError("")
     try {
+      if (active === "GNMS") {
+        if (gnmsTab !== "log") {
+          const folder = gnmsTab
+          const runPromise = call("", "POST", {
+            service: "integrationService",
+            action: "runIntegration",
+            params: { system: "GNMS", gnmsMode: "gis", folder },
+          })
+          await new Promise((resolve) => window.setTimeout(resolve, 250))
+          await fetchLogs(active)
+          const result = await runPromise
+          const data = (result as { data?: Record<string, unknown> })?.data ?? result
+          if (data && (data as { browserDownloadRequired?: boolean }).browserDownloadRequired) {
+            const { downloadGnmsBaseDataZipFromBrowser } = await import("@/lib/gnmsBaseDataBrowser")
+            const outFolder = String((data as { folder?: string }).folder ?? folder)
+            const bjd_cde = String((data as { bjd_cde?: string }).bjd_cde ?? "")
+            const admSectC = String((data as { adm_sect_c?: string }).adm_sect_c ?? gnmsAdmSectC).trim()
+            const sggNm = String((data as { sgg_nm?: string }).sgg_nm ?? gnmsSggNm).trim()
+            const sggExists =
+              (data as { sggExists?: boolean }).sggExists ?? gnmsSggExists === true
+            const sggKeyword =
+              outFolder === "sgg"
+                ? sggExists
+                  ? sggNm
+                  : gnmsKeyword
+                : ""
+            const colAdmSe =
+              outFolder === "emd" || outFolder === "ri"
+                ? admSectC || bjd_cde.replace(/0+$/, "") || bjd_cde
+                : ""
+            await downloadGnmsBaseDataZipFromBrowser({
+              body: {
+                folder: outFolder,
+                bjd_cde,
+                keyword: sggKeyword,
+                ...(colAdmSe ? { col_adm_se: colAdmSe } : {}),
+              },
+              onLog: (line) => {
+                console.info(`[GNMS GIS] ${line}`)
+              },
+            })
+          }
+          await fetchLogs(active)
+          return
+        }
+
+        const date = gnmsDate.trim()
+        const params: Record<string, unknown> = { system: "GNMS", gnmsMode: "api" }
+        if (date) params.date = date
+        const runPromise = call("", "POST", {
+          service: "integrationService",
+          action: "runIntegration",
+          params,
+        })
+        await new Promise((resolve) => window.setTimeout(resolve, 250))
+        await fetchLogs(active)
+        const result = await runPromise
+        const data = (result as { data?: Record<string, unknown> })?.data ?? result
+        if (data && (data as { browserUploadRequired?: boolean }).browserUploadRequired) {
+          const { uploadGnmsLogsFromBrowser } = await import("@/lib/gnmsLogUploadBrowser")
+          const sessionId = String((data as { sessionId?: string }).sessionId ?? "")
+          const project = String((data as { project?: string }).project ?? "")
+          const type = String((data as { type?: string }).type ?? "")
+          const files = Array.isArray((data as { files?: unknown }).files)
+            ? ((data as { files: { index: number; fileName: string; date: string; size: number }[] }).files)
+            : []
+          await uploadGnmsLogsFromBrowser({
+            sessionId,
+            project,
+            type,
+            files,
+            onLog: (line) => {
+              console.info(`[GNMS logs] ${line}`)
+            },
+          })
+        }
+        await fetchLogs(active)
+        return
+      }
+
       const params: Record<string, unknown> = { system: active, mode: "daily" }
-      if (active === "SAFETYDATA") {
+      if (isOpenApiDatasetSystem(active)) {
         if (safetyDatasetId === "__ALL__") {
           params.runAll = true
           params.datasetId = "__ALL__"
@@ -336,22 +527,23 @@ export function SystemIntegrationManager() {
       // STARTED 로그가 찍힐 시간을 조금 준 뒤 즉시 1회 동기화
       await new Promise((resolve) => window.setTimeout(resolve, 250))
       await fetchLogs(active)
-      if (active === "SAFETYDATA") await fetchSafetydataDetailLogs()
+      if (isOpenApiDatasetSystem(active)) await fetchSafetydataDetailLogs(active)
       await runPromise
       await fetchLogs(active)
-      if (active === "SAFETYDATA") await fetchSafetydataDetailLogs()
+      if (isOpenApiDatasetSystem(active)) await fetchSafetydataDetailLogs(active)
     } catch (e) {
       setError(formatApiError(e))
       await fetchLogs(active)
-      if (active === "SAFETYDATA") await fetchSafetydataDetailLogs()
+      if (isOpenApiDatasetSystem(active)) await fetchSafetydataDetailLogs(active)
     } finally {
       setLoading(false)
     }
   }
 
-  const refreshSafetydataOnly = async () => {
+  const refreshOpenApiOnly = async () => {
+    if (!isOpenApiDatasetSystem(active)) return
     await fetchLogs(active)
-    await fetchSafetydataDetailLogs()
+    await fetchSafetydataDetailLogs(active)
   }
 
   return (
@@ -392,7 +584,7 @@ export function SystemIntegrationManager() {
         </div>
       ) : null}
 
-      {active === "SAFETYDATA" ? (
+      {isOpenApiDatasetSystem(active) ? (
         <div className="flex flex-col gap-2 shrink-0">
           <label className="text-sm text-muted-foreground flex flex-wrap items-center gap-2">
             <span>데이터셋</span>
@@ -411,6 +603,130 @@ export function SystemIntegrationManager() {
             </select>
             {safetyDatasetsLoading ? <span className="text-xs">목록 불러오는 중…</span> : null}
           </label>
+        </div>
+      ) : null}
+
+      {active === "GNMS" ? (
+        <div className="flex flex-col gap-2 shrink-0">
+          <div className="flex flex-wrap items-center gap-4 text-sm">
+            {(
+              [
+                { id: "log", label: "로그" },
+                { id: "sgg", label: "시군구" },
+                { id: "emd", label: "읍면동" },
+                { id: "ri", label: "리" },
+              ] as const
+            ).map((opt) => (
+              <label key={opt.id} className="inline-flex items-center gap-1.5 cursor-pointer">
+                <input
+                  type="radio"
+                  name="gnmsTab"
+                  checked={gnmsTab === opt.id}
+                  onChange={() => setGnmsTab(opt.id)}
+                  disabled={loading}
+                />
+                {opt.label}
+              </label>
+            ))}
+          </div>
+          <div className="flex items-center gap-2 text-sm">
+            <span className="text-muted-foreground">GNMS 서버 상태</span>
+            <span
+              className={`inline-block h-2.5 w-2.5 shrink-0 rounded-full ${
+                gnmsServerStatus === "checking"
+                  ? "animate-pulse bg-amber-500"
+                  : gnmsServerStatus === "ok"
+                    ? "bg-green-500"
+                    : "bg-red-500"
+              }`}
+              title={
+                gnmsServerStatus === "checking"
+                  ? "확인 중"
+                  : gnmsServerStatus === "ok"
+                    ? "OK"
+                    : "FAILED"
+              }
+            />
+            <span
+              className={
+                gnmsServerStatus === "ok"
+                  ? "font-medium text-green-600 dark:text-green-400"
+                  : gnmsServerStatus === "failed"
+                    ? "font-medium text-red-600 dark:text-red-400"
+                    : "text-muted-foreground"
+              }
+            >
+              {gnmsServerStatus === "checking"
+                ? "확인 중"
+                : gnmsServerStatus === "ok"
+                  ? "OK"
+                  : "FAILED"}
+            </span>
+          </div>
+          {gnmsTab === "log" ? (
+            <div className="flex flex-col gap-2">
+              <p className="text-sm text-muted-foreground">
+                project / type (기동 인자):{" "}
+                <span className="font-medium text-foreground">
+                  {gnmsBoot ? `${gnmsBoot.project} / ${gnmsBoot.type}` : "불러오는 중…"}
+                </span>
+              </p>
+              <label className="text-sm text-muted-foreground flex flex-wrap items-center gap-2">
+                <span>date</span>
+                <input
+                  type="date"
+                  className="border rounded-md px-2 py-1.5 text-sm bg-background min-w-[12rem] max-w-full"
+                  value={gnmsDate}
+                  onChange={(e) => setGnmsDate(e.target.value)}
+                  disabled={loading}
+                  title="date"
+                />
+                <button
+                  type="button"
+                  className="cursor-pointer text-xs text-primary underline"
+                  title="전체"
+                  disabled={loading}
+                  onClick={() => setGnmsDate("")}
+                >
+                  전체
+                </button>
+                <span className="text-xs text-muted-foreground">
+                  비우면 C:\logs + backup 전체 → GNMS · 지정 시 해당 날짜만
+                </span>
+              </label>
+            </div>
+          ) : (
+            <div className="flex flex-col gap-2">
+              <p className="text-xs text-muted-foreground">
+                시군구코드{" "}
+                {gnmsAdmSectC || gnmsBjdCde
+                  ? `${gnmsAdmSectC || "-"}${gnmsBjdCde ? ` → ${gnmsBjdCde}` : ""}`
+                  : "조회 중…"}
+                {gnmsTab === "sgg" && gnmsSggExists !== false && gnmsSggNm
+                  ? ` · keyword=${gnmsSggNm}`
+                  : ""}
+                {(gnmsTab === "emd" || gnmsTab === "ri") && gnmsAdmSectC
+                  ? ` · col_adm_se=${gnmsAdmSectC}`
+                  : ""}
+              </p>
+              {gnmsTab === "sgg" && gnmsSggExists === false ? (
+                <label className="text-sm text-muted-foreground flex flex-wrap items-center gap-2">
+                  <span>키워드</span>
+                  <input
+                    type="text"
+                    className="border rounded-md px-2 py-1.5 text-sm bg-background min-w-[16rem] max-w-full"
+                    value={gnmsKeyword}
+                    onChange={(e) => setGnmsKeyword(e.target.value)}
+                    disabled={loading}
+                    placeholder="시군구명 입력"
+                  />
+                  <span className="text-xs text-amber-700 dark:text-amber-400">
+                    시군구(sgg) 테이블이 없어 시군구명을 직접 입력하세요. 요청 keyword로 전송됩니다.
+                  </span>
+                </label>
+              ) : null}
+            </div>
+          )}
         </div>
       ) : null}
 
@@ -491,10 +807,10 @@ export function SystemIntegrationManager() {
               variant="outline"
               size="sm"
               className="min-w-[5.5rem]"
-              onClick={() => (active === "SAFETYDATA" ? refreshSafetydataOnly() : fetchLogs(active))}
-              disabled={logsLoading || (active === "SAFETYDATA" && detailLogsLoading)}
+              onClick={() => (isOpenApiDatasetSystem(active) ? refreshOpenApiOnly() : fetchLogs(active))}
+              disabled={logsLoading || (isOpenApiDatasetSystem(active) && detailLogsLoading)}
             >
-              {logsLoading || (active === "SAFETYDATA" && detailLogsLoading) ? "새로고침…" : "새로고침"}
+              {logsLoading || (isOpenApiDatasetSystem(active) && detailLogsLoading) ? "새로고침…" : "새로고침"}
             </Button>
           </div>
         </CardHeader>
@@ -505,7 +821,7 @@ export function SystemIntegrationManager() {
         ) : null}
       </Card>
 
-      {active !== "SAFETYDATA" ? (
+      {!isOpenApiDatasetSystem(active) ? (
         <Card className="min-h-0 flex flex-col">
           <CardHeader className="pb-2">
             <CardTitle className="text-base">실행 로그</CardTitle>
@@ -575,94 +891,96 @@ export function SystemIntegrationManager() {
             </CardContent>
           </Card>
 
-          <Card className="min-h-0 flex flex-col">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base">실행 로그 (integration_job_log)</CardTitle>
-            </CardHeader>
-            <CardContent className="min-h-0 overflow-y-scroll overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>시작시각</TableHead>
-                    <TableHead>상태</TableHead>
-                    <TableHead>진행</TableHead>
-                    <TableHead>데이터셋</TableHead>
-                    <TableHead>대상테이블</TableHead>
-                    <TableHead>건수요약</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {rows.length === 0 ? (
+          <div className="min-h-0 flex-1 flex flex-row gap-3">
+            <Card className="min-h-0 min-w-0 flex-1 flex flex-col">
+              <CardHeader className="pb-2 shrink-0">
+                <CardTitle className="text-base">실행 로그 (integration_job_log)</CardTitle>
+              </CardHeader>
+              <CardContent className="min-h-0 flex-1 overflow-y-scroll overflow-x-auto">
+                <Table>
+                  <TableHeader>
                     <TableRow>
-                      <TableCell colSpan={6} className="text-muted-foreground">
-                        {logsLoading ? "불러오는 중…" : "로그가 없습니다."}
-                      </TableCell>
+                      <TableHead>시작시각</TableHead>
+                      <TableHead>상태</TableHead>
+                      <TableHead>진행</TableHead>
+                      <TableHead>데이터셋</TableHead>
+                      <TableHead>대상테이블</TableHead>
+                      <TableHead>건수요약</TableHead>
                     </TableRow>
-                  ) : (
-                    rows.map((r) => {
-                      const p = parseJob(r.ijl_message)
-                      return (
-                        <TableRow key={r.ijl_key}>
-                          <TableCell className="whitespace-nowrap">{formatDt(r.ijl_started_at)}</TableCell>
-                          <TableCell>{r.ijl_status}</TableCell>
-                          <TableCell className="whitespace-nowrap">{p.progress}</TableCell>
-                          <TableCell className="whitespace-nowrap">{p.dataset}</TableCell>
-                          <TableCell className="whitespace-nowrap">{p.table}</TableCell>
-                          <TableCell className="whitespace-nowrap">{p.metrics}</TableCell>
-                        </TableRow>
-                      )
-                    })
-                  )}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
-
-          <Card className="min-h-0 flex flex-col">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base">데이터셋 결과 (log_safetydata)</CardTitle>
-            </CardHeader>
-            <CardContent className="min-h-0 overflow-y-scroll overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>요청시각</TableHead>
-                    <TableHead>데이터셋</TableHead>
-                    <TableHead>상태</TableHead>
-                    <TableHead>대상테이블</TableHead>
-                    <TableHead className="text-right">가져옴</TableHead>
-                    <TableHead className="text-right">적재</TableHead>
-                    <TableHead className="text-right">필터제외</TableHead>
-                    <TableHead className="text-right">페이지</TableHead>
-                    <TableHead>메시지</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {parsedDetails.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={9} className="text-muted-foreground">
-                        {detailLogsLoading ? "불러오는 중…" : "상세 로그가 없습니다."}
-                      </TableCell>
-                    </TableRow>
-                  ) : (
-                    parsedDetails.map(({ row, parsed }) => (
-                      <TableRow key={row.log_safetydata_key}>
-                        <TableCell className="whitespace-nowrap">{formatDt(row.log_safetydata_request_date)}</TableCell>
-                        <TableCell className="whitespace-nowrap">{row.log_safetydata_dataset_id}</TableCell>
-                        <TableCell>{row.log_safetydata_status}</TableCell>
-                        <TableCell className="whitespace-nowrap">{parsed.table}</TableCell>
-                        <TableCell className="text-right tabular-nums">{parsed.fetched ?? "-"}</TableCell>
-                        <TableCell className="text-right tabular-nums">{parsed.inserted ?? "-"}</TableCell>
-                        <TableCell className="text-right tabular-nums">{parsed.filteredOut ?? "-"}</TableCell>
-                        <TableCell className="text-right tabular-nums">{parsed.pages ?? "-"}</TableCell>
-                        <TableCell className="whitespace-normal break-all max-w-[24rem]">{parsed.raw}</TableCell>
+                  </TableHeader>
+                  <TableBody>
+                    {rows.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={6} className="text-muted-foreground">
+                          {logsLoading ? "불러오는 중…" : "로그가 없습니다."}
+                        </TableCell>
                       </TableRow>
-                    ))
-                  )}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
+                    ) : (
+                      rows.map((r) => {
+                        const p = parseJob(r.ijl_message)
+                        return (
+                          <TableRow key={r.ijl_key}>
+                            <TableCell className="whitespace-nowrap">{formatDt(r.ijl_started_at)}</TableCell>
+                            <TableCell>{r.ijl_status}</TableCell>
+                            <TableCell className="whitespace-nowrap">{p.progress}</TableCell>
+                            <TableCell className="whitespace-nowrap">{p.dataset}</TableCell>
+                            <TableCell className="whitespace-nowrap">{p.table}</TableCell>
+                            <TableCell className="whitespace-nowrap">{p.metrics}</TableCell>
+                          </TableRow>
+                        )
+                      })
+                    )}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+
+            <Card className="min-h-0 min-w-0 flex-1 flex flex-col">
+              <CardHeader className="pb-2 shrink-0">
+                <CardTitle className="text-base">데이터셋 결과 (log_safetydata)</CardTitle>
+              </CardHeader>
+              <CardContent className="min-h-0 flex-1 overflow-y-scroll overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>요청시각</TableHead>
+                      <TableHead>데이터셋</TableHead>
+                      <TableHead>상태</TableHead>
+                      <TableHead>대상테이블</TableHead>
+                      <TableHead className="text-right">가져옴</TableHead>
+                      <TableHead className="text-right">적재</TableHead>
+                      <TableHead className="text-right">필터제외</TableHead>
+                      <TableHead className="text-right">페이지</TableHead>
+                      <TableHead>메시지</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {parsedDetails.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={9} className="text-muted-foreground">
+                          {detailLogsLoading ? "불러오는 중…" : "상세 로그가 없습니다."}
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      parsedDetails.map(({ row, parsed }) => (
+                        <TableRow key={row.log_safetydata_key}>
+                          <TableCell className="whitespace-nowrap">{formatDt(row.log_safetydata_request_date)}</TableCell>
+                          <TableCell className="whitespace-nowrap">{row.log_safetydata_dataset_id}</TableCell>
+                          <TableCell>{row.log_safetydata_status}</TableCell>
+                          <TableCell className="whitespace-nowrap">{parsed.table}</TableCell>
+                          <TableCell className="text-right tabular-nums">{parsed.fetched ?? "-"}</TableCell>
+                          <TableCell className="text-right tabular-nums">{parsed.inserted ?? "-"}</TableCell>
+                          <TableCell className="text-right tabular-nums">{parsed.filteredOut ?? "-"}</TableCell>
+                          <TableCell className="text-right tabular-nums">{parsed.pages ?? "-"}</TableCell>
+                          <TableCell className="whitespace-normal break-all max-w-[24rem]">{parsed.raw}</TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          </div>
         </>
       )}
     </div>

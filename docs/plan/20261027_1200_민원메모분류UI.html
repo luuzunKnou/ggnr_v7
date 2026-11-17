@@ -1,0 +1,645 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>민원·메모 업무 분류 UI</title>
+  <style>
+    :root {
+      --background: #ffffff;
+      --foreground: #0f172a;
+      --card: #ffffff;
+      --muted: #f1f5f9;
+      --muted-foreground: #64748b;
+      --border: #e2e8f0;
+      --primary: #2563eb;
+      --primary-soft: rgba(37, 99, 235, 0.05);
+      --primary-ring: rgba(37, 99, 235, 0.15);
+      --primary-border: rgba(37, 99, 235, 0.3);
+      --radius: 8px;
+      --font: "Pretendard", "Malgun Gothic", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: var(--font);
+      background: #e8eef5;
+      color: var(--foreground);
+      padding: 28px 20px 40px;
+    }
+
+    .page-title {
+      max-width: 920px;
+      margin: 0 auto 16px;
+      font-size: 13px;
+      color: #475569;
+      line-height: 1.5;
+    }
+    .page-title strong { color: #0f172a; }
+
+    .stage {
+      max-width: 920px;
+      margin: 0 auto;
+      display: grid;
+      grid-template-columns: 340px 340px;
+      gap: 20px;
+      justify-content: center;
+    }
+    @media (max-width: 760px) {
+      .stage { grid-template-columns: 1fr; }
+    }
+
+    .panel {
+      width: 100%;
+      height: 640px;
+      background: var(--background);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .panel-head {
+      flex-shrink: 0;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .title-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 12px 8px;
+    }
+    .title-left {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .icon-box {
+      width: 32px;
+      height: 32px;
+      border-radius: var(--radius);
+      background: var(--primary-soft);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: rgba(37, 99, 235, 0.85);
+    }
+    .icon-box svg { width: 16px; height: 16px; }
+    .title-text h1 {
+      margin: 0;
+      font-size: 14px;
+      font-weight: 600;
+      color: rgba(15, 23, 42, 0.9);
+    }
+    .title-text p {
+      margin: 2px 0 0;
+      font-size: 11px;
+      color: var(--muted-foreground);
+    }
+    .title-text p span {
+      font-weight: 500;
+      color: rgba(15, 23, 42, 0.8);
+    }
+
+    .title-actions {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .btn-add {
+      height: 26px;
+      padding: 0 10px;
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+      background: rgba(241, 245, 249, 0.5);
+      color: var(--muted-foreground);
+      font-size: 12px;
+      font-weight: 300;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      cursor: pointer;
+    }
+    .btn-add:hover {
+      border-color: var(--primary);
+      background: rgba(37, 99, 235, 0.15);
+      color: var(--primary);
+    }
+    .btn-close {
+      border: 0;
+      background: transparent;
+      color: var(--muted-foreground);
+      width: 28px;
+      height: 28px;
+      border-radius: 6px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .btn-close:hover {
+      background: var(--muted);
+      color: var(--foreground);
+    }
+
+    /* 1차: 업무 분류 — 관망조회와 같은 밑줄 탭 */
+    .category-wrap {
+      padding: 0 12px 8px;
+    }
+    .category-bar {
+      display: flex;
+      width: 100%;
+      border-bottom: 1px solid var(--border);
+    }
+    .category-btn {
+      flex: 1;
+      min-width: 0;
+      border: 0;
+      border-bottom: 2px solid transparent;
+      margin-bottom: -1px;
+      background: transparent;
+      color: var(--muted-foreground);
+      font-size: 11px;
+      font-weight: 500;
+      height: 28px;
+      padding: 0 2px;
+      cursor: pointer;
+      text-align: center;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .category-btn:hover {
+      color: var(--foreground);
+    }
+    .category-btn.is-active {
+      border-bottom-color: var(--primary);
+      color: var(--primary);
+      font-weight: 600;
+    }
+
+    .search-wrap {
+      padding: 0 12px 8px;
+      position: relative;
+    }
+    .search-wrap svg {
+      position: absolute;
+      left: 22px;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 14px;
+      height: 14px;
+      color: var(--muted-foreground);
+      pointer-events: none;
+    }
+    .search-wrap input {
+      width: 100%;
+      height: 32px;
+      border-radius: var(--radius);
+      border: 1px solid transparent;
+      background: rgba(241, 245, 249, 0.5);
+      padding: 0 10px 0 32px;
+      font-size: 12px;
+      color: var(--foreground);
+      outline: none;
+      font-family: inherit;
+    }
+    .search-wrap input::placeholder { color: #94a3b8; }
+    .search-wrap input:focus {
+      background: var(--background);
+      border-color: var(--border);
+    }
+
+    /* 2차: 상태 칩 (민원만) */
+    .state-wrap {
+      padding: 0 12px 8px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+    .chip {
+      border: 1px solid transparent;
+      border-radius: 999px;
+      padding: 4px 10px;
+      font-size: 12px;
+      font-weight: 400;
+      background: var(--muted);
+      color: var(--muted-foreground);
+      cursor: pointer;
+    }
+    .chip:hover { background: #e2e8f0; }
+    .chip.is-active {
+      background: var(--foreground);
+      color: var(--background);
+      border-color: transparent;
+    }
+    .chip.state-접수.is-active { background: #eff6ff; color: #1d6ae3; border-color: rgba(29, 106, 227, 0.3); }
+    .chip.state-점검.is-active { background: #f5f3ff; color: #7c3aed; border-color: rgba(124, 58, 237, 0.3); }
+    .chip.state-처리중.is-active { background: #fff7ed; color: #ea580c; border-color: rgba(234, 88, 12, 0.3); }
+    .chip.state-완료.is-active { background: #f0fdf4; color: #16a34a; border-color: rgba(22, 163, 74, 0.3); }
+
+    .list {
+      flex: 1;
+      min-height: 0;
+      overflow-y: auto;
+      padding: 12px 0 12px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .list::-webkit-scrollbar { width: 6px; }
+    .list::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+
+    .card {
+      width: calc(100% - 12px);
+      text-align: left;
+      border: 1px solid rgba(226, 232, 240, 0.9);
+      background: var(--card);
+      border-radius: var(--radius);
+      padding: 8px 12px;
+      cursor: pointer;
+      font-family: inherit;
+      color: inherit;
+      transition: border-color 0.15s, background 0.15s;
+    }
+    .card:hover {
+      border-color: var(--border);
+      background: rgba(241, 245, 249, 0.2);
+    }
+    .card.is-selected {
+      border-color: var(--primary-border);
+      background: var(--primary-soft);
+      box-shadow: inset 0 0 0 1px var(--primary-ring);
+    }
+
+    .card-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      font-size: 12px;
+      color: rgba(100, 116, 139, 0.9);
+    }
+    .card-meta {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-width: 0;
+      overflow: hidden;
+      flex: 1;
+    }
+    .badge-state {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      border-radius: 999px;
+      padding: 2px 8px;
+      font-size: 11px;
+      font-weight: 500;
+      border: 1px solid;
+      flex-shrink: 0;
+    }
+    .badge-state.접수 { background: rgba(239, 246, 255, 0.9); color: #1d6ae3; border-color: rgba(29, 106, 227, 0.3); }
+    .badge-state.점검 { background: rgba(245, 243, 255, 0.9); color: #7c3aed; border-color: #ede9fe; }
+    .badge-state.처리중 { background: rgba(255, 247, 237, 0.9); color: #ea580c; border-color: #ffedd5; }
+    .badge-state.완료 { background: rgba(240, 253, 244, 0.9); color: #16a34a; border-color: #dcfce7; }
+
+    .badge-tag {
+      display: inline-flex;
+      align-items: center;
+      border-radius: 999px;
+      padding: 2px 7px;
+      font-size: 11px;
+      font-weight: 500;
+      background: #f8fafc;
+      color: #334155;
+      border: 1px solid #e2e8f0;
+      flex-shrink: 0;
+    }
+
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 11px; flex-shrink: 0; }
+    .meta-item {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 11px;
+      flex-shrink: 0;
+    }
+    .meta-item svg { width: 12px; height: 12px; }
+    .chevron {
+      width: 16px;
+      height: 16px;
+      color: rgba(100, 116, 139, 0.4);
+      flex-shrink: 0;
+    }
+    .card.is-selected .chevron { color: rgba(37, 99, 235, 0.8); }
+
+    .card-bottom {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-top: 4px;
+      font-size: 11px;
+      line-height: 1.35;
+      min-width: 0;
+      overflow: hidden;
+    }
+    .card-bottom svg {
+      width: 12px;
+      height: 12px;
+      flex-shrink: 0;
+      color: rgba(100, 116, 139, 0.9);
+    }
+    .addr { color: rgba(100, 116, 139, 0.9); flex-shrink: 0; max-width: 42%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .dot { color: rgba(100, 116, 139, 0.35); flex-shrink: 0; }
+    .content {
+      min-width: 0;
+      flex: 1;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      color: rgba(15, 23, 42, 0.9);
+    }
+
+    .empty {
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 64px 12px 0 0;
+      color: rgba(100, 116, 139, 0.8);
+      text-align: center;
+    }
+    .empty.is-show { display: flex; }
+    .empty svg { width: 40px; height: 40px; opacity: 0.25; margin-bottom: 12px; }
+    .empty p { margin: 0; font-size: 14px; font-weight: 500; color: rgba(15, 23, 42, 0.7); }
+    .empty span { margin-top: 4px; font-size: 12px; }
+
+    .note {
+      max-width: 920px;
+      margin: 18px auto 0;
+      font-size: 12px;
+      color: #64748b;
+      line-height: 1.6;
+    }
+    .note code {
+      font-size: 11px;
+      background: #fff;
+      border: 1px solid #e2e8f0;
+      border-radius: 4px;
+      padding: 1px 5px;
+    }
+  </style>
+</head>
+<body>
+  <p class="page-title">
+    <strong>업무 분류 UI 목업</strong> — 현재 민원관리·메모관리 패널 톤에 맞춤.
+    상단 밑줄 탭 <code>전체 | 상수 | 하수 | 급수 | 준설</code>（관망조회와 동일）→ 검색 → (민원만) 상태 칩 → 목록.
+    분류·상태 클릭으로 필터됩니다.
+  </p>
+
+  <div class="stage">
+    <!-- 민원관리 -->
+    <section class="panel" id="complaintPanel" data-kind="complaint">
+      <div class="panel-head">
+        <div class="title-row">
+          <div class="title-left">
+            <div class="icon-box" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+            </div>
+            <div class="title-text">
+              <h1>민원관리</h1>
+              <p>표시 <span class="count">0</span>건</p>
+            </div>
+          </div>
+          <div class="title-actions">
+            <button type="button" class="btn-add">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+              민원 추가
+            </button>
+            <button type="button" class="btn-close" aria-label="닫기">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg>
+            </button>
+          </div>
+        </div>
+
+        <div class="category-wrap">
+          <div class="category-bar" role="tablist" aria-label="업무 분류">
+            <button type="button" class="category-btn is-active" data-category="전체">전체</button>
+            <button type="button" class="category-btn" data-category="상수">상수</button>
+            <button type="button" class="category-btn" data-category="하수">하수</button>
+            <button type="button" class="category-btn" data-category="급수">급수</button>
+            <button type="button" class="category-btn" data-category="준설">준설</button>
+          </div>
+        </div>
+
+        <div class="search-wrap">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3-3"/></svg>
+          <input type="search" class="search-input" placeholder="접수번호, 민원인, 주소 검색..." />
+        </div>
+
+        <div class="state-wrap" aria-label="처리 상태">
+          <button type="button" class="chip is-active" data-state="">전체</button>
+          <button type="button" class="chip state-접수" data-state="접수">접수</button>
+          <button type="button" class="chip state-점검" data-state="점검">점검</button>
+          <button type="button" class="chip state-처리중" data-state="처리중">처리중</button>
+          <button type="button" class="chip state-완료" data-state="완료">완료</button>
+        </div>
+      </div>
+
+      <div class="list"></div>
+      <div class="empty">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="11" cy="11" r="7"/><path d="m20 20-3-3"/></svg>
+        <p>검색 결과가 없습니다</p>
+        <span>다른 분류나 검색어를 선택해보세요</span>
+      </div>
+    </section>
+
+    <!-- 메모관리 -->
+    <section class="panel" id="memoPanel" data-kind="memo">
+      <div class="panel-head">
+        <div class="title-row">
+          <div class="title-left">
+            <div class="icon-box" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M16 13H8"/><path d="M16 17H8"/><path d="M10 9H8"/></svg>
+            </div>
+            <div class="title-text">
+              <h1>메모관리</h1>
+              <p>표시 <span class="count">0</span>건</p>
+            </div>
+          </div>
+          <div class="title-actions">
+            <button type="button" class="btn-add">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+              메모 추가
+            </button>
+            <button type="button" class="btn-close" aria-label="닫기">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg>
+            </button>
+          </div>
+        </div>
+
+        <div class="category-wrap">
+          <div class="category-bar" role="tablist" aria-label="업무 분류">
+            <button type="button" class="category-btn is-active" data-category="전체">전체</button>
+            <button type="button" class="category-btn" data-category="상수">상수</button>
+            <button type="button" class="category-btn" data-category="하수">하수</button>
+            <button type="button" class="category-btn" data-category="급수">급수</button>
+            <button type="button" class="category-btn" data-category="준설">준설</button>
+          </div>
+        </div>
+
+        <div class="search-wrap">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3-3"/></svg>
+          <input type="search" class="search-input" placeholder="제목, 내용, 작성자 검색..." />
+        </div>
+      </div>
+
+      <div class="list"></div>
+      <div class="empty">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="11" cy="11" r="7"/><path d="m20 20-3-3"/></svg>
+        <p>검색 결과가 없습니다</p>
+        <span>다른 분류나 검색어를 선택해보세요</span>
+      </div>
+    </section>
+  </div>
+
+  <p class="note">
+    · 분류는 관망조회와 같은 밑줄 탭(한 줄·단일 선택), 상태는 기존 민원 칩 스타일.<br />
+    · 카드에는 <code>#상수</code> 형태로 태그 배지 표시. 분류가 특정값이면 배지를 숨겨도 됨.<br />
+    · 상수도만 쓸 때는 세그먼트를 <code>전체 | 상수 | 급수</code>, 하수도는 <code>전체 | 하수 | 준설</code>로 줄이면 됨.
+  </p>
+
+  <script>
+    const complaints = [
+      { key: 1042, tag: "상수", state: "접수", name: "김○○", date: "2026-10-24", addr: "의성읍 ○○리 12", content: "누수 의심 신고" },
+      { key: 1041, tag: "하수", state: "처리중", name: "이○○", date: "2026-10-23", addr: "안계면 △△리 3", content: "맨홀 악취" },
+      { key: 1040, tag: "급수", state: "점검", name: "박○○", date: "2026-10-22", addr: "봉양면 □□리 8", content: "급수공사 관련 문의" },
+      { key: 1039, tag: "준설", state: "접수", name: "최○○", date: "2026-10-21", addr: "금성면 ◇◇리 1", content: "하천 준설 요청" },
+      { key: 1038, tag: "상수", state: "완료", name: "정○○", date: "2026-10-18", addr: "단촌면 ▽▽리 5", content: "수압 저하 조치 완료" },
+      { key: 1037, tag: "하수", state: "완료", name: "한○○", date: "2026-10-15", addr: "의성읍 ○○리 44", content: "하수관 점검" },
+      { key: 1036, tag: "급수", state: "접수", name: "오○○", date: "2026-10-14", addr: "점곡면 ★★리 2", content: "신규 급수 신청" },
+      { key: 1035, tag: "준설", state: "처리중", name: "윤○○", date: "2026-10-12", addr: "사곡면 ◆◆리 9", content: "준설 대상지 현장 확인" },
+    ];
+
+    const memos = [
+      { key: "m-21", tag: "상수", title: "누수 현장 메모", user: "김담당", date: "2026-10-24", content: "밸브 교체 예정" },
+      { key: "m-20", tag: "하수", title: "맨홀 사진", user: "이담당", date: "2026-10-23", content: "뚜껑 파손 확인" },
+      { key: "m-19", tag: "급수", title: "급수 공사 일정", user: "박담당", date: "2026-10-22", content: "다음 주 시공" },
+      { key: "m-18", tag: "준설", title: "준설 구간 메모", user: "최담당", date: "2026-10-21", content: "연장 120m" },
+      { key: "m-17", tag: "상수", title: "수압 측정", user: "정담당", date: "2026-10-18", content: "정상 범위" },
+      { key: "m-16", tag: "하수", title: "악취 민원 후속", user: "한담당", date: "2026-10-15", content: "재발 없음" },
+    ];
+
+    const iconUser = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>`;
+    const iconCal = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>`;
+    const iconPin = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>`;
+    const iconChev = `<svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg>`;
+    const iconNote = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>`;
+
+    function bindPanel(panel, rows, kind) {
+      let category = "전체";
+      let state = "";
+      let query = "";
+      let selected = null;
+      const listEl = panel.querySelector(".list");
+      const emptyEl = panel.querySelector(".empty");
+      const countEl = panel.querySelector(".count");
+
+      function filtered() {
+        const q = query.trim().toLowerCase();
+        return rows.filter((row) => {
+          if (category !== "전체" && row.tag !== category) return false;
+          if (kind === "complaint" && state && row.state !== state) return false;
+          if (!q) return true;
+          const hay = kind === "complaint"
+            ? [row.key, row.name, row.addr, row.content, row.tag].join(" ").toLowerCase()
+            : [row.title, row.content, row.user, row.tag].join(" ").toLowerCase();
+          return hay.includes(q);
+        });
+      }
+
+      function render() {
+        const items = filtered();
+        countEl.textContent = String(items.length);
+        listEl.innerHTML = "";
+        emptyEl.classList.toggle("is-show", items.length === 0);
+        items.forEach((row) => {
+          const btn = document.createElement("button");
+          btn.type = "button";
+          btn.className = "card" + (selected === row.key ? " is-selected" : "");
+          if (kind === "complaint") {
+            btn.innerHTML = `
+              <div class="card-top">
+                <div class="card-meta">
+                  <span class="badge-state ${row.state}">${row.state}</span>
+                  <span class="badge-tag">#${row.tag}</span>
+                  <span class="mono">#${row.key}</span>
+                  <span class="meta-item">${iconUser}<span>${row.name}</span></span>
+                  <span class="meta-item">${iconCal}<span>${row.date}</span></span>
+                </div>
+                ${iconChev}
+              </div>
+              <div class="card-bottom">
+                ${iconPin}
+                <span class="addr">${row.addr}</span>
+                <span class="dot">·</span>
+                <span class="content">${row.content}</span>
+              </div>`;
+          } else {
+            btn.innerHTML = `
+              <div class="card-top">
+                <div class="card-meta">
+                  <span class="badge-tag">#${row.tag}</span>
+                  <span class="meta-item">${iconNote}<span style="max-width:7rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:rgba(15,23,42,.9);font-weight:500">${row.title}</span></span>
+                  <span class="meta-item">${iconUser}<span>${row.user}</span></span>
+                  <span class="meta-item">${iconCal}<span>${row.date}</span></span>
+                </div>
+                ${iconChev}
+              </div>
+              <div class="card-bottom">
+                <span class="content" style="padding-left:2px">${row.content}</span>
+              </div>`;
+          }
+          btn.addEventListener("click", () => {
+            selected = selected === row.key ? null : row.key;
+            render();
+          });
+          listEl.appendChild(btn);
+        });
+      }
+
+      panel.querySelectorAll(".category-btn").forEach((el) => {
+        el.addEventListener("click", () => {
+          category = el.dataset.category;
+          panel.querySelectorAll(".category-btn").forEach((b) => b.classList.toggle("is-active", b === el));
+          render();
+        });
+      });
+
+      panel.querySelectorAll(".chip").forEach((el) => {
+        el.addEventListener("click", () => {
+          state = el.dataset.state || "";
+          panel.querySelectorAll(".chip").forEach((b) => b.classList.toggle("is-active", b === el));
+          render();
+        });
+      });
+
+      panel.querySelector(".search-input").addEventListener("input", (e) => {
+        query = e.target.value;
+        render();
+      });
+
+      render();
+    }
+
+    bindPanel(document.getElementById("complaintPanel"), complaints, "complaint");
+    bindPanel(document.getElementById("memoPanel"), memos, "memo");
+  </script>
+</body>
+</html>

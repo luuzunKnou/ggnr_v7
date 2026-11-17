@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Circle, Landmark, Loader2, Pentagon, Plus, RefreshCw, Search, Square, X } from 'lucide-react';
 import { call } from '@/lib/api';
 import { cn } from '@/lib/utils';
+import { useTheme } from '@/app/(pages)/(index)/theme-provider';
 import { useMapContext } from '../../../_mapComponents/MapContext';
 import { canStartMapDrawInteraction } from '../../../_mapComponents/mapDrawInteraction';
 import { SAFETY_FAC_PANEL_GEO_TABLE_NAMES } from '../../../_mapComponents/layerFactory/safetydataMapLayerFactory';
@@ -101,6 +102,8 @@ function formatSafetyFacListAddress(raw: string): string {
 
 export function SafetyFacPanel({ onClose, selectedFacility, onSelectFacility }: Props) {
   const mapContext = useMapContext();
+  const { resolvedTheme } = useTheme();
+  const isDark = resolvedTheme === 'dark';
   const setSpatialDrawRequest = mapContext?.setSpatialDrawRequest;
   const setSpatialFilterWkt = mapContext?.setSpatialFilterWkt;
   const spatialDrawRequest = mapContext?.spatialDrawRequest ?? null;
@@ -622,7 +625,7 @@ export function SafetyFacPanel({ onClose, selectedFacility, onSelectFacility }: 
                       className={cn(
                         'flex min-w-[2.25rem] flex-1 flex-col items-center justify-center gap-0.5 rounded border py-1.5 text-[10px] transition-colors',
                         active
-                          ? 'border-primary bg-primary/5 text-primary'
+                          ? 'border-primary bg-primary/5 text-primary dark:bg-primary/20'
                           : 'border-border bg-background text-muted-foreground hover:border-border hover:text-foreground'
                       )}
                     >
@@ -759,7 +762,7 @@ export function SafetyFacPanel({ onClose, selectedFacility, onSelectFacility }: 
                 className={cn(
                   'inline-flex items-center rounded px-2.5 py-1.5 text-[10px] font-medium leading-tight transition-colors',
                   allSubtypesOn
-                    ? 'border border-primary/40 bg-primary/14 text-primary'
+                    ? 'border border-primary/40 bg-primary/14 text-primary dark:bg-primary/25'
                     : 'border border-border bg-background text-muted-foreground hover:border-border'
                 )}
               >
@@ -777,7 +780,7 @@ export function SafetyFacPanel({ onClose, selectedFacility, onSelectFacility }: 
                     aria-checked={on}
                     onClick={() => toggleSubtype(s.id)}
                     className="inline-flex items-center rounded px-2.5 py-1.5 text-[10px] font-medium leading-tight transition-colors"
-                    style={getSafetyFacBadgeStyle(s.id, on)}
+                    style={getSafetyFacBadgeStyle(s.id, on, isDark)}
                   >
                     {chipName}
                   </button>
@@ -838,7 +841,7 @@ export function SafetyFacPanel({ onClose, selectedFacility, onSelectFacility }: 
                         className={cn(
                           'cursor-pointer border-b border-border align-middle transition-colors',
                           isSelected
-                            ? 'border-l-[3px] border-l-primary bg-primary/[0.11] ring-1 ring-inset ring-primary/20 hover:bg-primary/[0.14]'
+                            ? 'border-l-[3px] border-l-primary bg-primary/[0.11] ring-1 ring-inset ring-primary/20 hover:bg-primary/[0.14] dark:bg-primary/20 dark:hover:bg-primary/25'
                             : 'border-l-[3px] border-l-transparent hover:bg-muted/50'
                         )}
                       >
@@ -847,7 +850,7 @@ export function SafetyFacPanel({ onClose, selectedFacility, onSelectFacility }: 
                             {f.subtype !== 'displacedHousing' ? (
                               <span
                                 className="inline-flex shrink-0 items-center justify-center whitespace-nowrap rounded border px-1.5 py-0.5 text-[10px] font-semibold leading-none"
-                                style={getSafetyFacBadgeStyle(f.subtype)}
+                                style={getSafetyFacBadgeStyle(f.subtype, true, isDark)}
                               >
                                 {chipName}
                               </span>

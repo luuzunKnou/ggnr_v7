@@ -14,10 +14,32 @@ import { compareFeaturesByGeometryStackOrder } from '@/lib/mapLayerGeometryOrder
 import {
   createDataQuerySelectionRowHighlightStyle,
   DATA_QUERY_SELECTION_PULSE_STEP,
+  insertLayerBelowServiceLayer,
 } from '@/lib/mapDataQueryMapHighlight'
 import { useMapContext } from '../../_mapComponents/MapContext'
 import { scheduleFitMapToExtent3857 } from '../../_mapComponents/config/mapAutoNavigation'
 import { MAP_AUTO_NAV_MAX_ZOOM } from '../../_mapComponents/config/mapDefaults'
+
+/**
+ * 상세 강조 시 맵 이동 여부 (id별).
+ * 단일 boolean ref는 Strict Mode effect 재실행 때 false→true 로 바뀌어
+ * 지도 첫 클릭에도 fit 이 다시 켜진다. id별 Map 으로 유지한다.
+ * 목록 선택 true / 지도 클릭 false. 미등록 id 는 fit true.
+ */
+export const groundwaterPermitHighlightFitByIdRef = {
+  current: new Map<string, boolean>(),
+}
+
+export function setGroundwaterPermitHighlightFit(id: string, fit: boolean) {
+  groundwaterPermitHighlightFitByIdRef.current.set(id, fit)
+}
+
+/** 읽기만 하고 지우지 않음 — Strict Mode 재실행에도 동일 fit 유지 */
+export function getGroundwaterPermitHighlightFit(id: string): boolean {
+  const m = groundwaterPermitHighlightFitByIdRef.current
+  if (m.has(id)) return m.get(id) === true
+  return true
+}
 
 /** 데이터조회 레이더 + 중심 점(레이더만 있으면 위치가 흐려 보임) */
 function createGroundwaterPermitHighlightStyle(getPulsePhase: () => number): StyleFunction {
@@ -82,11 +104,10 @@ function ensureSharedLayer(map: OLMap): VectorSource {
     source,
     renderOrder: compareFeaturesByGeometryStackOrder,
     style: createGroundwaterPermitHighlightStyle(() => sharedPulsePhase),
-    zIndex: 9600,
   })
   layer.set(LAYER_PROP, true)
-  // 포인트는 WMS 위에 올려 중심 점·레이더가 가리지 않게 함
-  map.addLayer(layer)
+  // 데이터조회와 동일 — 서비스 WMS(기본 레이어) 아래에 두어 라벨을 가리지 않음
+  insertLayerBelowServiceLayer(map, layer)
 
   sharedMap = map
   sharedSource = source
@@ -109,7 +130,8 @@ function disposeSharedLayerIfUnused() {
 }
 
 /**
- * 지하수 개발허가 선택/상세 → 데이터조회와 동일한 포인트 레이더 강조 + 지도 이동
+ * 지하수 개발허가 선택/상세 → 데이터조회와 동일한 포인트 레이더 강조.
+ * 맵 이동은 options.fit (기본 true). 지도 객체 클릭은 fit:false.
  */
 export function useGroundwaterPermitMapHighlight() {
   const mapContext = useMapContext()

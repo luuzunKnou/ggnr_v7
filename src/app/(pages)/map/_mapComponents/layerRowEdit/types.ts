@@ -20,6 +20,12 @@ export type LayerRowEditPreset = {
   childParentField?: string;
   /** 자식 테이블 주소 컬럼 (기본 parcel_address, 없으면 usage_loc) */
   childAddressField?: string;
+  /** 주소 칸이 없는 자식 테이블 — 주소를 나눠 넣을 칸 [읍면동, 리, 지번] */
+  childAddressPartFields?: string[];
+  /** 레이어 필드 정의에 없어도 실제 DB 칸이면 저장 (공통 점용대장 — 정의 갱신 전에도 공통 칸 저장) */
+  allowPhysicalColumns?: boolean;
+  /** 허가번호 칸 (공통 점용대장) */
+  permitField?: string;
   /** 신규 등록 시 PK(텍스트 키) 직접 입력 허용 */
   keyFieldEditableOnCreate?: boolean;
   /** 신규 등록 시 PK를 서버에서 자동 채번 (defineLayer 읽기전용 키) */
@@ -77,4 +83,6 @@ export type LayerRowParcelItem = {
   riverName?: string;
   /** 공사대장 등 — 필지별 비고 */
   remark?: string;
+  /** 점용대장 필지·물건지 목록 열 값 (필드 정의 «목록» 칸 이름 → 글자) */
+  listValues?: Record<string, string>;
 };

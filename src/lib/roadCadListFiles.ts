@@ -1,5 +1,5 @@
 /**
- * `roadDoc/cad` 트리 전체를 순회해 파일만 수집 (이름은 cad 루트 기준 `/` 구분 상대 경로).
+ * `file_data/road_doc/cad` 트리 전체를 순회해 파일만 수집 (이름은 cad 루트 기준 `/` 구분 상대 경로).
  * `_` 로 시작하는 항목은 제외 (미리보기 PNG 등).
  */
 import path from "path";

@@ -92,6 +92,9 @@ export type MapContextValue = {
   mapInstanceRef: RefObject<Map | null>;
   showDebugUi: boolean;
   setShowDebugUi: Dispatch<SetStateAction<boolean>>;
+  /** 꺼짐(기본)은 축척 따라 변경. 켜면 점·심볼 크기를 18로 고정 */
+  iconScaleSizeOn: boolean;
+  setIconScaleSizeOn: Dispatch<SetStateAction<boolean>>;
   visibleLayerNames: Set<string>;
   setVisibleLayerNames: Dispatch<SetStateAction<Set<string>>>;
   selectedDetail: SelectedDetail;
@@ -111,9 +114,21 @@ export type MapContextValue = {
   addressParcelSeedGeom4326Ref: MutableRefObject<Record<string, unknown> | null>;
   /** 전체 레이어 끄기(지적도·건물도로·기초구간 + defineLayer 레이어) 콜백. OpenLayersMap에서 등록 */
   allLayersOffRef: MutableRefObject<(() => void) | null>;
+  /** 관망조회 표시 레이어 선택 초기화. WtlNetworkMapShell에서 등록, allLayersOff 시 호출 */
+  wtlNetworkLayersOffRef: MutableRefObject<(() => void) | null>;
+  /**
+   * 관망조회 보호구역 → 주제도 선택 동기화.
+   * OpenLayersMap에서 등록, WtlNetworkMapShell에서 호출.
+   */
+  wtlNetworkThematicSyncRef: MutableRefObject<{
+    applyManaged: (wanted: ReadonlySet<string>, managed: ReadonlySet<string>) => void;
+  } | null>;
   /** 도형 내 데이터만 표시할 때 사용. WKT(5181). null이면 공간 필터 없음 */
   spatialFilterWkt: string | null;
   setSpatialFilterWkt: Dispatch<SetStateAction<string | null>>;
+  /** false면 공간필터 도형은 그리되 지도 fit(줌·이동)은 하지 않음 */
+  spatialFilterAutoFit: boolean;
+  setSpatialFilterAutoFit: Dispatch<SetStateAction<boolean>>;
   /** 공간 필터 적용 시 레이어 목록에 표시할 테이블 이름 집합. null이면 전체 표시 */
   spatialFilteredLayerNames: Set<string> | null;
   setSpatialFilteredLayerNames: Dispatch<SetStateAction<Set<string> | null>>;
@@ -123,15 +138,17 @@ export type MapContextValue = {
    */
   serviceWmsCqlByLayer: Record<string, string> | null;
   setServiceWmsCqlByLayer: Dispatch<SetStateAction<Record<string, string> | null>>;
+  /**
+   * 서비스 WMS 레이어별 STYLES 대체 (define_table_name → GeoServer 스타일명).
+   * 없으면 테이블명 스타일. 하천기본계획 하천구역 «선만» 등.
+   */
+  serviceWmsStyleByLayer: Record<string, string> | null;
+  setServiceWmsStyleByLayer: Dispatch<SetStateAction<Record<string, string> | null>>;
   /** 레이어 목록에서 도형 그리기 요청. OpenLayersMap에서 구독 후 Draw 추가, 완료 시 onComplete 호출 후 null로 초기화 */
-  spatialDrawRequest: {
-    type: 'rectangle' | 'polygon' | 'circle';
-    onComplete: (wkt5181: string) => void;
-  } | null;
-  setSpatialDrawRequest: Dispatch<SetStateAction<{
-    type: 'rectangle' | 'polygon' | 'circle';
-    onComplete: (wkt5181: string) => void;
-  } | null>>;
+  spatialDrawRequest: import('./hooks/useSpatialDrawOnMap').SpatialDrawRequest;
+  setSpatialDrawRequest: Dispatch<
+    SetStateAction<import('./hooks/useSpatialDrawOnMap').SpatialDrawRequest>
+  >;
   /** 거리/면적 등 측정 도구가 켜져 있는지. OpenLayersMap에서 동기화. 레이어 목록 도형 그리기와 배타 */
   measurementActive: boolean;
   setMeasurementActive: Dispatch<SetStateAction<boolean>>;
@@ -149,6 +166,11 @@ export type MapContextValue = {
   /** 뷰 오른쪽 패딩(px). 우측 메뉴·확장 패널 폭. 거터 pill 가용 범위용 */
   mapPaddingRight: number;
   setMapPaddingRight: Dispatch<SetStateAction<number>>;
+  /**
+   * 뷰 아래 패딩(px). 상하수도 공사대장 첨부파일이 지도를 가릴 때만 넣고, 없으면 0.
+   * 왼쪽 패널과 같이 지도 맞춤의 보이는 영역으로 쓴다.
+   */
+  mapPaddingBottomRef: MutableRefObject<number>;
   /** MapLayout이 등록 — 지도 인스턴스 준비 후 view.padding 재적용 */
   applyMapViewPaddingRef: MutableRefObject<(() => void) | null>;
   /**
@@ -200,17 +222,29 @@ export type MapContextValue = {
   applyRiverBasicPlanMapPickRef: MutableRefObject<
     ((pick: { riverName: string; tab: 'river' | 'smallRiver' }) => void) | null
   >;
+  /**
+   * 상세에서 선택 중인 기본계획(연도·명·연장) — 색인도 식별 시 해당 건이 맞으면 우선 매칭.
+   * DetailPanel이 갱신.
+   */
+  riverBasicPlanSelectedPlanRef: MutableRefObject<{
+    planYear: string;
+    planName: string;
+    planLen: string;
+  } | null>;
   /** 지도에서 색인도(river_d_index) 클릭 시 상세 패널이 소비 후 null로 초기화 */
   riverBasicPlanIndexFromMap: {
     indexOgcFid: number;
     planYear?: string;
     planName?: string;
+    /** 동일 연도·계획명에 연장이 여러 건일 때 구분 */
+    planLen?: string;
   } | null;
   setRiverBasicPlanIndexFromMap: Dispatch<
     SetStateAction<{
       indexOgcFid: number;
       planYear?: string;
       planName?: string;
+      planLen?: string;
     } | null>
   >;
   /** 종단·횡단·구조물도 지도 식별 시 도면보기 — RiverBasicPlanMapDrawingFromMapHandler가 소비 */
@@ -289,12 +323,16 @@ export type MapContextValue = {
   /** 지도 클릭으로 식별된 도로대장(a0020000) 피처 속성 — 상세 패널 표시 */
   roadLedgerIdentifyRow: Record<string, unknown> | null;
   setRoadLedgerIdentifyRow: Dispatch<SetStateAction<Record<string, unknown> | null>>;
-  /** 시설 하위 레이어 1건 — 모달 속성 + 지도 강조(geom). pickFromMap: 지도 클릭(줌 생략), 목록은 false */
+  /**
+   * 시설 하위 레이어 1건 — 모달 속성 + 지도 강조(geom). pickFromMap: 지도 클릭(줌 생략), 목록은 false.
+   * inline: 도면 구분처럼 상세 패널 안에서 표시(모달 생략, 강조만)
+   */
   roadLedgerFacilityModal: {
     row: Record<string, unknown>;
     defineTableName: string;
     defineTableTitle: string;
     pickFromMap?: boolean;
+    inline?: boolean;
   } | null;
   setRoadLedgerFacilityModal: Dispatch<
     SetStateAction<{
@@ -302,6 +340,7 @@ export type MapContextValue = {
       defineTableName: string;
       defineTableTitle: string;
       pickFromMap?: boolean;
+      inline?: boolean;
     } | null>
   >;
   /** 도로망도 임시 목록(CRUD 반영) */
@@ -310,6 +349,9 @@ export type MapContextValue = {
   /** 도로망도 목록에서 선택한 도로 id — 상세·지도 강조 */
   roadNetworkSelectedId: string | null;
   setRoadNetworkSelectedId: Dispatch<SetStateAction<string | null>>;
+  /** 같은 노선번호 구간이 여럿일 때 구간 미선택(노선 전체) 상태 — 선택 id는 대표 구간 */
+  roadNetworkWholeRoad: boolean;
+  setRoadNetworkWholeRoad: Dispatch<SetStateAction<boolean>>;
   /** URL opened 도로망도 패널 열림 */
   roadNetworkPanelOpen: boolean;
   setRoadNetworkPanelOpen: Dispatch<SetStateAction<boolean>>;
@@ -408,6 +450,21 @@ export type MapContextValue = {
   setRoadFrontageMarkerDraftPoint: Dispatch<
     SetStateAction<{ lon: number; lat: number } | null>
   >;
+  /** 불법점용 관리카드 패널 열림 — 지도 식별 시 목록·상세 선택 */
+  riverIllegalOccupationPanelOpen: boolean;
+  setRiverIllegalOccupationPanelOpen: Dispatch<SetStateAction<boolean>>;
+  /**
+   * 지도에서 illegal_usage_as 식별 직후 목록이 키 선택하도록 호출
+   * (RiverIllegalOccupationListPanel이 등록)
+   */
+  applyRiverIllegalOccupationMapPickRef: MutableRefObject<
+    | ((pick: {
+        ogcFid: string;
+        mgmtNo?: string;
+        overlapOptions?: MapHitOverlapOption[];
+      }) => void)
+    | null
+  >;
   /** 하천 공사대장 임시 목록(CRUD 반영) */
   riverConstructionLedgerRows: RiverConstructionLedgerRow[];
   setRiverConstructionLedgerRows: Dispatch<SetStateAction<RiverConstructionLedgerRow[]>>;
@@ -458,9 +515,18 @@ export type MapContextValue = {
   /** URL 기준 민원관리 패널 열림 — 일반 식별 비활성화·지도 클릭 상세용 */
   complaintPanelOpen: boolean;
   setComplaintPanelOpen: Dispatch<SetStateAction<boolean>>;
+  /** URL 기준 메모관리 패널 열림 — 일반 식별 비활성화·지도 클릭 상세용 */
+  memoPanelOpen: boolean;
+  setMemoPanelOpen: Dispatch<SetStateAction<boolean>>;
+  /** URL 기준 지하수 개발허가 패널 열림 — 일반 식별 비활성화·지도 클릭 상세용 */
+  groundwaterPermitPanelOpen: boolean;
+  setGroundwaterPermitPanelOpen: Dispatch<SetStateAction<boolean>>;
   /** URL 기준 보상편입용지 패널 열림 — 일반 식별 비활성화용 */
   roadRewardPanelOpen: boolean;
   setRoadRewardPanelOpen: Dispatch<SetStateAction<boolean>>;
+  /** 도로대장 도로영상 창 열림 — 일반 식별 비활성화용 (노선 클릭은 영상 이동에 씀) */
+  roadLedgerVideoOpen: boolean;
+  setRoadLedgerVideoOpen: Dispatch<SetStateAction<boolean>>;
   /** 재난시설 상세 — 건물·도로 WMS (켜진 테이블 + CQL). null이면 미사용 */
   safetyFacBuildingRoadLayerState: {
     visibleTableNames: Set<string>;
@@ -480,6 +546,11 @@ export type MapContextValue = {
   setRoadCctvExtentWgs84: Dispatch<SetStateAction<RoadCctvExtentWgs84 | null>>;
   /** OpenLayersMap이 배경지도 id를 매 갱신 */
   mapBackgroundMapIdRef: MutableRefObject<string>;
+  /** 항공영상 목록 등에서 배경지도 «자체항공영상»을 켠다 */
+  setMapBackgroundMapIdRef: MutableRefObject<((id: string) => void) | null>;
+  /** 배경지도 «명칭보기»(다음 하이브리드 타일). 항공영상일 때 켜지고, 아니면 꺼짐 */
+  mapBackgroundLabelVisible: boolean;
+  setMapBackgroundLabelVisible: Dispatch<SetStateAction<boolean>>;
   /** 레이어 행 등록/수정 — 지도 도형 그리기·수정 모드 */
   layerRowGeomEdit: LayerRowGeomEditState;
   setLayerRowGeomEdit: Dispatch<SetStateAction<LayerRowGeomEditState>>;
@@ -553,6 +624,25 @@ export type MapContextValue = {
    */
   dataQueryMapPickEnabled: boolean;
   setDataQueryMapPickEnabled: Dispatch<SetStateAction<boolean>>;
+  /**
+   * 지도 식별에서 고른 1건 → 기존 데이터 목록의 해당 페이지로 이동.
+   * LayerDataPanel에서 소비 후 null.
+   */
+  dataQueryMapPick: { tableName: string; row: Record<string, unknown> } | null;
+  setDataQueryMapPick: Dispatch<
+    SetStateAction<{ tableName: string; row: Record<string, unknown> } | null>
+  >;
+  /** 목록 창·지도 위 목록 닫기 직후, 같은 클릭이 지도 식별로 새어 창이 다시 열리지 않게 */
+  suppressMapIdentifyUntilRef: MutableRefObject<number>;
+  /** 데이터조회 «드론영상 범위» bbox 표시 */
+  orthoDataQueryBboxOn: boolean;
+  setOrthoDataQueryBboxOn: Dispatch<SetStateAction<boolean>>;
+  /** 데이터조회에서 클릭해 켠 드론영상 tuKey */
+  orthoDataQueryTuKeys: number[];
+  setOrthoDataQueryTuKeys: Dispatch<SetStateAction<number[]>>;
+  /** 드론영상 범위 클릭 시 겹친 후보 (2건 이상이면 선택 UI) */
+  orthoDataQueryHitOptions: MapHitOverlapOption[];
+  setOrthoDataQueryHitOptions: Dispatch<SetStateAction<MapHitOverlapOption[]>>;
   /** 좌측 서비스 메뉴 전환 시 증가 — 패널이 레이어를 다시 켜도록 트리거 */
   serviceMenuEpoch: number;
   bumpServiceMenuEpoch: () => void;
@@ -581,7 +671,12 @@ const MapContext = createContext<MapContextValue | null>(null);
 export function MapContextProvider({ children }: { children: React.ReactNode }) {
   const mapInstanceRef = useRef<Map | null>(null);
   const allLayersOffRef = useRef<(() => void) | null>(null);
+  const wtlNetworkLayersOffRef = useRef<(() => void) | null>(null);
+  const wtlNetworkThematicSyncRef = useRef<{
+    applyManaged: (wanted: ReadonlySet<string>, managed: ReadonlySet<string>) => void;
+  } | null>(null);
   const [showDebugUi, setShowDebugUi] = useState(false);
+  const [iconScaleSizeOn, setIconScaleSizeOn] = useState(false);
   const [visibleLayerNames, setVisibleLayerNames] = useState<Set<string>>(() => new Set());
   const [selectedDetail, setSelectedDetail] = useState<SelectedDetail>(null);
   const [identifyResultList, setIdentifyResultList] = useState<IdentifyPopupState | null>(null);
@@ -591,12 +686,13 @@ export function MapContextProvider({ children }: { children: React.ReactNode }) 
   const addressParcelGeometryRef = useRef<import('ol/geom').Geometry | null>(null);
   const addressParcelSeedGeom4326Ref = useRef<Record<string, unknown> | null>(null);
   const [spatialFilterWkt, setSpatialFilterWkt] = useState<string | null>(null);
+  const [spatialFilterAutoFit, setSpatialFilterAutoFit] = useState(true);
   const [spatialFilteredLayerNames, setSpatialFilteredLayerNames] = useState<Set<string> | null>(null);
   const [serviceWmsCqlByLayer, setServiceWmsCqlByLayer] = useState<Record<string, string> | null>(null);
-  const [spatialDrawRequest, setSpatialDrawRequest] = useState<{
-    type: 'rectangle' | 'polygon' | 'circle';
-    onComplete: (wkt5181: string) => void;
-  } | null>(null);
+  const [serviceWmsStyleByLayer, setServiceWmsStyleByLayer] = useState<Record<string, string> | null>(null);
+  const [spatialDrawRequest, setSpatialDrawRequest] = useState<
+    import('./hooks/useSpatialDrawOnMap').SpatialDrawRequest
+  >(null);
   const [measurementActive, setMeasurementActive] = useState(false);
   const [mapMeasureTool, setMapMeasureTool] = useState<
     'distance' | 'area' | 'altitude' | 'slope' | null
@@ -607,6 +703,7 @@ export function MapContextProvider({ children }: { children: React.ReactNode }) 
     MAP_SPLIT_CONTROL_RIGHT_MENU_RESERVE_PX
   );
   const applyMapViewPaddingRef = useRef<(() => void) | null>(null);
+  const mapPaddingBottomRef = useRef(0);
   const mapViewPaddingOverrideRef = useRef<[number, number, number, number] | null>(null);
   const [mapReady, setMapReady] = useState(false);
   const [mapSplitSecondaryKind, setMapSplitSecondaryKind] = useState<MapSplitSecondaryKind>(null);
@@ -625,10 +722,16 @@ export function MapContextProvider({ children }: { children: React.ReactNode }) 
   const applyRiverBasicPlanMapPickRef = useRef<
     ((pick: { riverName: string; tab: 'river' | 'smallRiver' }) => void) | null
   >(null);
+  const riverBasicPlanSelectedPlanRef = useRef<{
+    planYear: string;
+    planName: string;
+    planLen: string;
+  } | null>(null);
   const [riverBasicPlanIndexFromMap, setRiverBasicPlanIndexFromMap] = useState<{
     indexOgcFid: number;
     planYear?: string;
     planName?: string;
+    planLen?: string;
   } | null>(null);
   const [riverBasicPlanDrawingFromMap, setRiverBasicPlanDrawingFromMap] = useState<{
     fileLayer: string;
@@ -676,9 +779,11 @@ export function MapContextProvider({ children }: { children: React.ReactNode }) 
     defineTableName: string;
     defineTableTitle: string;
     pickFromMap?: boolean;
+    inline?: boolean;
   } | null>(null);
   const [roadNetworkRows, setRoadNetworkRows] = useState<RoadNetworkRow[]>([]);
   const [roadNetworkSelectedId, setRoadNetworkSelectedId] = useState<string | null>(null);
+  const [roadNetworkWholeRoad, setRoadNetworkWholeRoad] = useState(false);
   const [roadNetworkPanelOpen, setRoadNetworkPanelOpen] = useState(false);
   const applyRoadNetworkMapPickRef = useRef<
     | ((pick: {
@@ -743,6 +848,15 @@ export function MapContextProvider({ children }: { children: React.ReactNode }) 
     ledgerId: string;
     markerItemId: string;
   } | null>(null);
+  const [riverIllegalOccupationPanelOpen, setRiverIllegalOccupationPanelOpen] = useState(false);
+  const applyRiverIllegalOccupationMapPickRef = useRef<
+    | ((pick: {
+        ogcFid: string;
+        mgmtNo?: string;
+        overlapOptions?: MapHitOverlapOption[];
+      }) => void)
+    | null
+  >(null);
   const [riverConstructionLedgerRows, setRiverConstructionLedgerRows] = useState<
     RiverConstructionLedgerRow[]
   >([]);
@@ -769,7 +883,10 @@ export function MapContextProvider({ children }: { children: React.ReactNode }) 
   const [roadCctvPanelOpen, setRoadCctvPanelOpen] = useState(false);
   const [safetyFacPanelOpen, setSafetyFacPanelOpen] = useState(false);
   const [complaintPanelOpen, setComplaintPanelOpen] = useState(false);
+  const [memoPanelOpen, setMemoPanelOpen] = useState(false);
+  const [groundwaterPermitPanelOpen, setGroundwaterPermitPanelOpen] = useState(false);
   const [roadRewardPanelOpen, setRoadRewardPanelOpen] = useState(false);
+  const [roadLedgerVideoOpen, setRoadLedgerVideoOpen] = useState(false);
   const [safetyFacBuildingRoadLayerState, setSafetyFacBuildingRoadLayerState] = useState<{
     visibleTableNames: Set<string>;
     cqlByTable: Record<string, string>;
@@ -777,6 +894,8 @@ export function MapContextProvider({ children }: { children: React.ReactNode }) 
   const [roadCctvUnderlayMode, setRoadCctvUnderlayMode] = useState<RoadCctvUnderlayMode>('traffic');
   const [roadCctvExtentWgs84, setRoadCctvExtentWgs84] = useState<RoadCctvExtentWgs84 | null>(null);
   const mapBackgroundMapIdRef = useRef<string>('aerial-2022');
+  const setMapBackgroundMapIdRef = useRef<((id: string) => void) | null>(null);
+  const [mapBackgroundLabelVisible, setMapBackgroundLabelVisible] = useState(true);
   const [layerRowGeomEdit, setLayerRowGeomEdit] = useState<LayerRowGeomEditState>(null);
   const layerRowGeomEditWktRef = useRef<string | null>(null);
   const layerRowGeomEditDirtyRef = useRef(false);
@@ -825,6 +944,16 @@ export function MapContextProvider({ children }: { children: React.ReactNode }) 
   >([]);
   const clearMapDrawInteractionsRef = useRef<((except?: MapDrawInteractionKind) => void) | null>(null);
   const [dataQueryMapPickEnabled, setDataQueryMapPickEnabled] = useState(true);
+  const [dataQueryMapPick, setDataQueryMapPick] = useState<{
+    tableName: string;
+    row: Record<string, unknown>;
+  } | null>(null);
+  const suppressMapIdentifyUntilRef = useRef(0);
+  const [orthoDataQueryBboxOn, setOrthoDataQueryBboxOn] = useState(false);
+  const [orthoDataQueryTuKeys, setOrthoDataQueryTuKeys] = useState<number[]>([]);
+  const [orthoDataQueryHitOptions, setOrthoDataQueryHitOptions] = useState<
+    MapHitOverlapOption[]
+  >([]);
   const [serviceMenuEpoch, setServiceMenuEpoch] = useState(0);
   const bumpServiceMenuEpoch = useCallback(() => {
     setServiceMenuEpoch((n) => n + 1);
@@ -836,6 +965,8 @@ export function MapContextProvider({ children }: { children: React.ReactNode }) 
         mapInstanceRef,
         showDebugUi,
         setShowDebugUi,
+        iconScaleSizeOn,
+        setIconScaleSizeOn,
         visibleLayerNames,
         setVisibleLayerNames,
         selectedDetail,
@@ -851,12 +982,18 @@ export function MapContextProvider({ children }: { children: React.ReactNode }) 
         addressParcelGeometryRef,
         addressParcelSeedGeom4326Ref,
         allLayersOffRef,
+        wtlNetworkLayersOffRef,
+        wtlNetworkThematicSyncRef,
         spatialFilterWkt,
         setSpatialFilterWkt,
+        spatialFilterAutoFit,
+        setSpatialFilterAutoFit,
         spatialFilteredLayerNames,
         setSpatialFilteredLayerNames,
         serviceWmsCqlByLayer,
         setServiceWmsCqlByLayer,
+        serviceWmsStyleByLayer,
+        setServiceWmsStyleByLayer,
         spatialDrawRequest,
         setSpatialDrawRequest,
         measurementActive,
@@ -870,6 +1007,7 @@ export function MapContextProvider({ children }: { children: React.ReactNode }) 
         mapPaddingRight,
         setMapPaddingRight,
         applyMapViewPaddingRef,
+        mapPaddingBottomRef,
         mapViewPaddingOverrideRef,
         mapReady,
         setMapReady,
@@ -893,6 +1031,7 @@ export function MapContextProvider({ children }: { children: React.ReactNode }) 
         riverBasicPlanSelectedRiver,
         setRiverBasicPlanSelectedRiver,
         applyRiverBasicPlanMapPickRef,
+        riverBasicPlanSelectedPlanRef,
         riverBasicPlanIndexFromMap,
         setRiverBasicPlanIndexFromMap,
         riverBasicPlanDrawingFromMap,
@@ -926,6 +1065,8 @@ export function MapContextProvider({ children }: { children: React.ReactNode }) 
         setRoadNetworkRows,
         roadNetworkSelectedId,
         setRoadNetworkSelectedId,
+        roadNetworkWholeRoad,
+        setRoadNetworkWholeRoad,
         roadNetworkPanelOpen,
         setRoadNetworkPanelOpen,
         applyRoadNetworkMapPickRef,
@@ -961,6 +1102,9 @@ export function MapContextProvider({ children }: { children: React.ReactNode }) 
         setRoadFrontageMarkerPointPickActive,
         roadFrontageMarkerDraftPoint,
         setRoadFrontageMarkerDraftPoint,
+        riverIllegalOccupationPanelOpen,
+        setRiverIllegalOccupationPanelOpen,
+        applyRiverIllegalOccupationMapPickRef,
         riverConstructionLedgerRows,
         setRiverConstructionLedgerRows,
         riverConstructionLedgerSelectedId,
@@ -989,8 +1133,14 @@ export function MapContextProvider({ children }: { children: React.ReactNode }) 
         setSafetyFacPanelOpen,
         complaintPanelOpen,
         setComplaintPanelOpen,
+        memoPanelOpen,
+        setMemoPanelOpen,
+        groundwaterPermitPanelOpen,
+        setGroundwaterPermitPanelOpen,
         roadRewardPanelOpen,
         setRoadRewardPanelOpen,
+        roadLedgerVideoOpen,
+        setRoadLedgerVideoOpen,
         safetyFacBuildingRoadLayerState,
         setSafetyFacBuildingRoadLayerState,
         roadCctvUnderlayMode,
@@ -998,6 +1148,9 @@ export function MapContextProvider({ children }: { children: React.ReactNode }) 
         roadCctvExtentWgs84,
         setRoadCctvExtentWgs84,
         mapBackgroundMapIdRef,
+        setMapBackgroundMapIdRef,
+        mapBackgroundLabelVisible,
+        setMapBackgroundLabelVisible,
         layerRowGeomEdit,
         setLayerRowGeomEdit,
         layerRowGeomEditWktRef,
@@ -1010,6 +1163,15 @@ export function MapContextProvider({ children }: { children: React.ReactNode }) 
         clearMapDrawInteractionsRef,
         dataQueryMapPickEnabled,
         setDataQueryMapPickEnabled,
+        dataQueryMapPick,
+        setDataQueryMapPick,
+        suppressMapIdentifyUntilRef,
+        orthoDataQueryBboxOn,
+        setOrthoDataQueryBboxOn,
+        orthoDataQueryTuKeys,
+        setOrthoDataQueryTuKeys,
+        orthoDataQueryHitOptions,
+        setOrthoDataQueryHitOptions,
         serviceMenuEpoch,
         bumpServiceMenuEpoch,
       }}

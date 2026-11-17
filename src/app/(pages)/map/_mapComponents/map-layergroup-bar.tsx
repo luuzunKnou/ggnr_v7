@@ -32,6 +32,7 @@ import { LayerManagementPanel } from './LayerManagementPanel';
 import { cn } from '@/lib/utils';
 import { call } from '@/lib/api';
 import { getLayerGroupIconMap, defaultLayerGroupIcon } from '@/config/layerGroupIcon';
+import { isWmsCompanionLayer } from '@/lib/wmsCompanionLayers';
 import { getLegendGraphicUrl } from './layerFactory/serviceLayerFactory';
 import type { LayerFilterRow } from './layerFactory/serviceLayerFactory';
 export type { LayerFilterRow };
@@ -125,6 +126,7 @@ export function MapLayergroupBar() {
           const name = String(row.define_table_name ?? '').trim();
           if (!name || !layerSchemaTableSet.has(name)) return false;
           if (parentTablesWithSplitDefs.has(name.toLowerCase())) return false;
+          if (isWmsCompanionLayer(name)) return false;
           return true;
         });
         const seen = new Set<string>();

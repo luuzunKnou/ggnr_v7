@@ -89,14 +89,17 @@ export async function ensureDbUser(
     await client2.query(`GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO "${dbUser}"`);
     await client2.query(`ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO "${dbUser}"`);
 
-    // layer, public_layer 스키마 생성 및 앱 유저 권한 부여 (GeoServer/레이어 테이블용)
+    // layer, public_layer, land_linkage 스키마 생성 및 앱 유저 권한 부여
     await client2.query('CREATE SCHEMA IF NOT EXISTS layer');
     await client2.query('CREATE SCHEMA IF NOT EXISTS public_layer');
+    await client2.query('CREATE SCHEMA IF NOT EXISTS land_linkage');
     await client2.query(`GRANT USAGE ON SCHEMA layer TO "${dbUser}"`);
     await client2.query(`GRANT USAGE ON SCHEMA public_layer TO "${dbUser}"`);
+    await client2.query(`GRANT USAGE ON SCHEMA land_linkage TO "${dbUser}"`);
     await client2.query(`GRANT CREATE ON SCHEMA layer TO "${dbUser}"`);
     await client2.query(`GRANT CREATE ON SCHEMA public_layer TO "${dbUser}"`);
-    console.log('[run] 스키마 생성됨: layer, public_layer');
+    await client2.query(`GRANT CREATE ON SCHEMA land_linkage TO "${dbUser}"`);
+    console.log('[run] 스키마 생성됨: layer, public_layer, land_linkage');
   } finally {
     await client2.end();
   }

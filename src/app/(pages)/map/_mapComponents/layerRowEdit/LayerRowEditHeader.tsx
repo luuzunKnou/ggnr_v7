@@ -1,7 +1,8 @@
-"use client";
+'use client';
 
 import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useSerWriteAccess } from "@/hooks/useSerWriteAccess";
 import { LayerRowPanelButton } from "./LayerRowPanelButton";
 
 export type LayerRowEditToolbarProps = {
@@ -13,7 +14,10 @@ export type LayerRowEditToolbarProps = {
   onSave: () => void;
   onCancel: () => void;
   onDelete?: () => void;
+  /** false면 수정·삭제·저장 숨김 (프로토타입·조회전용) */
   editable?: boolean;
+  /** 지정 시 해당 서비스 쓰기 권한. 없으면 SerWriteAccessProvider */
+  serEng?: string;
 };
 
 type HeaderProps = LayerRowEditToolbarProps & {
@@ -34,10 +38,12 @@ export function LayerRowEditToolbar({
   onCancel,
   onDelete,
   editable = true,
+  serEng,
 }: LayerRowEditToolbarProps) {
+  const canWrite = useSerWriteAccess(serEng);
   const busy = saving || deleting;
 
-  if (!editable) return null;
+  if (!editable || !canWrite) return null;
 
   return (
     <>
@@ -88,6 +94,7 @@ export function LayerRowEditHeader({
   onDelete,
   onClose,
   editable = true,
+  serEng,
   actionsPlacement = "header",
   className,
 }: HeaderProps) {
@@ -102,6 +109,7 @@ export function LayerRowEditHeader({
     onCancel,
     onDelete,
     editable,
+    serEng,
   };
 
   return (

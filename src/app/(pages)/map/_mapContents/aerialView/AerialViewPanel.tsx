@@ -7,7 +7,7 @@ type Props = {
   onContentWidthChange?: (widthPx: number) => void;
 };
 
-/** 지도 «영상조회» — 드론영상·파노라마·사진동영상·항공 조회전용 (관리 기능 없음) */
+/** 지도 «영상조회» — 드론영상·항공뷰·사진동영상·항공 조회전용 (관리 기능 없음) */
 export function AerialViewPanel({ onClose, onContentWidthChange }: Props) {
   return (
     <AerialMediaShell

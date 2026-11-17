@@ -33,7 +33,12 @@ import { InfoSection } from './DetailInfoSection';
 import { ServiceFileAttachmentThumb } from './ServiceFileAttachmentThumb';
 import { ServiceFilePdfThumb } from './ServiceFilePdfThumb';
 import { ServiceFileImagePreview, type ServiceFilePreviewItem } from './ServiceFileImagePreview';
+import {
+  buildServiceFilePreviewGalleryItems,
+  isServiceFilePreviewableName,
+} from './serviceFilePreviewItems';
 import { useDefineLayerCodes } from './useDefineLayerCodes';
+import { SerWriteOnly } from '@/hooks/useSerWriteAccess';
 
 type DetailTab = 'basic' | 'history' | 'attach';
 
@@ -150,18 +155,14 @@ export default function StandardDetail() {
   });
   const attachmentPreviewGalleryItems = useMemo((): ServiceFilePreviewItem[] => {
     if (layerSegmentForFiles == null || rowKeyForAttachments == null) return [];
-    return attachmentQuery.files
-      .filter((f) => isImageServiceFileName(f.name) || isPdfServiceFileName(f.name))
-      .map((f) => ({
-        url: serviceFileDataDownloadUrl(
-          SER_FILE_ENG.dataQuery,
-          layerSegmentForFiles,
-          rowKeyForAttachments,
-          f.name
-        ),
-        fileName: f.name,
-        kind: isPdfServiceFileName(f.name) ? ('pdf' as const) : ('image' as const),
-      }));
+    return buildServiceFilePreviewGalleryItems(attachmentQuery.files, (fileName) =>
+      serviceFileDataDownloadUrl(
+        SER_FILE_ENG.dataQuery,
+        layerSegmentForFiles,
+        rowKeyForAttachments,
+        fileName
+      )
+    );
   }, [attachmentQuery.files, layerSegmentForFiles, rowKeyForAttachments]);
   const attachChunkUpload = useServiceFileChunkedUpload();
 
@@ -400,6 +401,7 @@ export default function StandardDetail() {
                 ) : (
               <div className="space-y-2">
                 {attachmentQuery.files.map((file) => {
+                  const canPreview = isServiceFilePreviewableName(file.name);
                   const isImg = isImageServiceFileName(file.name);
                   const isPdf = isPdfServiceFileName(file.name);
                   const dateStr =
@@ -416,7 +418,7 @@ export default function StandardDetail() {
                     file.name
                   );
                   const activateRow = () => {
-                    if (isImg || isPdf) {
+                    if (canPreview) {
                       const idx = attachmentPreviewGalleryItems.findIndex((i) => i.fileName === file.name);
                       setAttachmentImagePreview({
                         items: attachmentPreviewGalleryItems,
@@ -432,7 +434,7 @@ export default function StandardDetail() {
                       tabIndex={0}
                       role="group"
                       aria-label={
-                        isImg || isPdf ? `${file.name} 크게 보기` : `${file.name} 다운로드`
+                        canPreview ? `${file.name} 크게 보기` : `${file.name} 다운로드`
                       }
                       className="flex cursor-pointer items-center gap-3 rounded border border-border bg-background p-3 transition-colors hover:bg-muted/50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
                       onClick={activateRow}
@@ -528,12 +530,14 @@ export default function StandardDetail() {
           <div className="flex items-center justify-between gap-2">
             <span className="text-[11px] text-muted-foreground">기본정보</span>
             <div className="flex gap-2">
-              <button
-                type="button"
-                className="rounded border border-border bg-background px-3 py-1.5 text-xs text-foreground transition-colors hover:bg-muted/50"
-              >
-                수정
-              </button>
+              <SerWriteOnly serEng="dataQuery">
+                <button
+                  type="button"
+                  className="rounded border border-border bg-background px-3 py-1.5 text-xs text-foreground transition-colors hover:bg-muted/50"
+                >
+                  수정
+                </button>
+              </SerWriteOnly>
               <button
                 type="button"
                 className="rounded bg-primary px-3 py-1.5 text-xs text-primary-foreground transition-colors hover:bg-primary/90"
@@ -548,12 +552,14 @@ export default function StandardDetail() {
             <span className="text-[11px] text-muted-foreground">
               이력 {SAMPLE_HISTORY.length}건
             </span>
-            <button
-              type="button"
-              className="rounded bg-primary px-3 py-1.5 text-xs text-primary-foreground transition-colors hover:bg-primary/90"
-            >
-              이력 추가
-            </button>
+            <SerWriteOnly serEng="dataQuery">
+              <button
+                type="button"
+                className="rounded bg-primary px-3 py-1.5 text-xs text-primary-foreground transition-colors hover:bg-primary/90"
+              >
+                이력 추가
+              </button>
+            </SerWriteOnly>
           </div>
         )}
         {activeTab === 'attach' && (
@@ -565,22 +571,24 @@ export default function StandardDetail() {
                 : '—'}
             </span>
             <div className="flex flex-wrap items-center justify-end gap-2">
-              <button
-                type="button"
-                disabled={
-                  keyFieldName == null ||
-                  rowKeyForAttachments == null ||
-                  layerSegmentForFiles == null ||
-                  attachChunkUpload.state.status === 'uploading'
-                }
-                onClick={() => {
-                  attachChunkUpload.reset();
-                  attachUploadInputRef.current?.click();
-                }}
-                className="rounded bg-primary px-3 py-1.5 text-xs text-primary-foreground transition-colors hover:bg-primary/90 disabled:pointer-events-none disabled:opacity-50"
-              >
-                파일 추가
-              </button>
+              <SerWriteOnly serEng="dataQuery">
+                <button
+                  type="button"
+                  disabled={
+                    keyFieldName == null ||
+                    rowKeyForAttachments == null ||
+                    layerSegmentForFiles == null ||
+                    attachChunkUpload.state.status === 'uploading'
+                  }
+                  onClick={() => {
+                    attachChunkUpload.reset();
+                    attachUploadInputRef.current?.click();
+                  }}
+                  className="rounded bg-primary px-3 py-1.5 text-xs text-primary-foreground transition-colors hover:bg-primary/90 disabled:pointer-events-none disabled:opacity-50"
+                >
+                  파일 추가
+                </button>
+              </SerWriteOnly>
               {keyFieldName != null &&
               rowKeyForAttachments != null &&
               layerSegmentForFiles != null &&

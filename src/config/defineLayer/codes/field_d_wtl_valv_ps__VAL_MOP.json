@@ -1,0 +1,494 @@
+[
+  {
+    "define_code_key": "66473",
+    "define_code_field_key": "4443",
+    "define_code_name": "MOP000",
+    "define_code_kor_name": "미분류"
+  },
+  {
+    "define_code_key": "66474",
+    "define_code_field_key": "4443",
+    "define_code_name": "MOP023",
+    "define_code_kor_name": "고무몰딩"
+  },
+  {
+    "define_code_key": "66475",
+    "define_code_field_key": "4443",
+    "define_code_name": "MOP100",
+    "define_code_kor_name": "주철"
+  },
+  {
+    "define_code_key": "66476",
+    "define_code_field_key": "4443",
+    "define_code_name": "MOP101",
+    "define_code_kor_name": "청동"
+  },
+  {
+    "define_code_key": "66477",
+    "define_code_field_key": "4443",
+    "define_code_name": "MOP999",
+    "define_code_kor_name": "기타"
+  },
+  {
+    "define_code_key": "66478",
+    "define_code_field_key": "4443",
+    "define_code_name": "MOP900",
+    "define_code_kor_name": "강관(SP)"
+  },
+  {
+    "define_code_key": "66479",
+    "define_code_field_key": "4443",
+    "define_code_name": "MOP901",
+    "define_code_kor_name": "강관(ST)"
+  },
+  {
+    "define_code_key": "66480",
+    "define_code_field_key": "4443",
+    "define_code_name": "MOP902",
+    "define_code_kor_name": "강재"
+  },
+  {
+    "define_code_key": "66481",
+    "define_code_field_key": "4443",
+    "define_code_name": "MOP903",
+    "define_code_kor_name": "경화염화비닐관(PVC)"
+  },
+  {
+    "define_code_key": "66482",
+    "define_code_field_key": "4443",
+    "define_code_name": "MOP904",
+    "define_code_kor_name": "공장제박스관"
+  },
+  {
+    "define_code_key": "66483",
+    "define_code_field_key": "4443",
+    "define_code_name": "MOP905",
+    "define_code_kor_name": "닥타일주철관(DCIP)"
+  },
+  {
+    "define_code_key": "66484",
+    "define_code_field_key": "4443",
+    "define_code_name": "MOP906",
+    "define_code_kor_name": "도관(VC)"
+  },
+  {
+    "define_code_key": "66485",
+    "define_code_field_key": "4443",
+    "define_code_name": "MOP907",
+    "define_code_kor_name": "도복장강관(CSP)"
+  },
+  {
+    "define_code_key": "66486",
+    "define_code_field_key": "4443",
+    "define_code_name": "MOP908",
+    "define_code_kor_name": "도복장강관(PV)"
+  },
+  {
+    "define_code_key": "66487",
+    "define_code_field_key": "4443",
+    "define_code_name": "MOP909",
+    "define_code_kor_name": "도복장강관(SP)"
+  },
+  {
+    "define_code_key": "66488",
+    "define_code_field_key": "4443",
+    "define_code_name": "MOP910",
+    "define_code_kor_name": "동관(COP)"
+  },
+  {
+    "define_code_key": "66489",
+    "define_code_field_key": "4443",
+    "define_code_name": "MOP911",
+    "define_code_kor_name": "무근콘크리트"
+  },
+  {
+    "define_code_key": "66490",
+    "define_code_field_key": "4443",
+    "define_code_name": "MOP912",
+    "define_code_kor_name": "미확인"
+  },
+  {
+    "define_code_key": "66491",
+    "define_code_field_key": "4443",
+    "define_code_name": "MOP913",
+    "define_code_kor_name": "박스형"
+  },
+  {
+    "define_code_key": "66492",
+    "define_code_field_key": "4443",
+    "define_code_name": "MOP914",
+    "define_code_kor_name": "비폐쇄"
+  },
+  {
+    "define_code_key": "66493",
+    "define_code_field_key": "4443",
+    "define_code_name": "MOP915",
+    "define_code_kor_name": "석면시멘트관(AS)"
+  },
+  {
+    "define_code_key": "66494",
+    "define_code_field_key": "4443",
+    "define_code_name": "MOP916",
+    "define_code_kor_name": "석축(SE)"
+  },
+  {
+    "define_code_key": "66495",
+    "define_code_field_key": "4443",
+    "define_code_name": "MOP917",
+    "define_code_kor_name": "수도용경질염화비닐관(PVC)"
+  },
+  {
+    "define_code_key": "66496",
+    "define_code_field_key": "4443",
+    "define_code_name": "MOP918",
+    "define_code_kor_name": "수도용폴리에틸렌관(PE)"
+  },
+  {
+    "define_code_key": "66497",
+    "define_code_field_key": "4443",
+    "define_code_name": "MOP919",
+    "define_code_kor_name": "스테인레스관(SSP)"
+  },
+  {
+    "define_code_key": "66498",
+    "define_code_field_key": "4443",
+    "define_code_name": "MOP920",
+    "define_code_kor_name": "시멘트라이닝주철관ⓒ"
+  },
+  {
+    "define_code_key": "66499",
+    "define_code_field_key": "4443",
+    "define_code_name": "MOP921",
+    "define_code_kor_name": "아연도강관(GP)"
+  },
+  {
+    "define_code_key": "66500",
+    "define_code_field_key": "4443",
+    "define_code_name": "MOP922",
+    "define_code_kor_name": "아연도강관(GS)"
+  },
+  {
+    "define_code_key": "66501",
+    "define_code_field_key": "4443",
+    "define_code_name": "MOP923",
+    "define_code_kor_name": "에폭시코팅강관(EPS)"
+  },
+  {
+    "define_code_key": "66502",
+    "define_code_field_key": "4443",
+    "define_code_name": "MOP924",
+    "define_code_kor_name": "연관(LP)"
+  },
+  {
+    "define_code_key": "66503",
+    "define_code_field_key": "4443",
+    "define_code_name": "MOP925",
+    "define_code_kor_name": "원심력철근콘크리트"
+  },
+  {
+    "define_code_key": "66504",
+    "define_code_field_key": "4443",
+    "define_code_name": "MOP926",
+    "define_code_kor_name": "유리섬유관"
+  },
+  {
+    "define_code_key": "66505",
+    "define_code_field_key": "4443",
+    "define_code_name": "MOP927",
+    "define_code_kor_name": "이단철개"
+  },
+  {
+    "define_code_key": "66506",
+    "define_code_field_key": "4443",
+    "define_code_name": "MOP928",
+    "define_code_kor_name": "이중보온관"
+  },
+  {
+    "define_code_key": "66507",
+    "define_code_field_key": "4443",
+    "define_code_name": "MOP929",
+    "define_code_kor_name": "일반 제수변"
+  },
+  {
+    "define_code_key": "66508",
+    "define_code_field_key": "4443",
+    "define_code_name": "MOP930",
+    "define_code_kor_name": "전선함(FD)"
+  },
+  {
+    "define_code_key": "66509",
+    "define_code_field_key": "4443",
+    "define_code_name": "MOP931",
+    "define_code_kor_name": "전압콘크리트관"
+  },
+  {
+    "define_code_key": "66510",
+    "define_code_field_key": "4443",
+    "define_code_name": "MOP932",
+    "define_code_kor_name": "주강(CS)"
+  },
+  {
+    "define_code_key": "66511",
+    "define_code_field_key": "4443",
+    "define_code_name": "MOP933",
+    "define_code_kor_name": "주름관"
+  },
+  {
+    "define_code_key": "66512",
+    "define_code_field_key": "4443",
+    "define_code_name": "MOP934",
+    "define_code_kor_name": "주철(소프트)"
+  },
+  {
+    "define_code_key": "66513",
+    "define_code_field_key": "4443",
+    "define_code_name": "MOP935",
+    "define_code_kor_name": "주철관(CI)"
+  },
+  {
+    "define_code_key": "66514",
+    "define_code_field_key": "4443",
+    "define_code_name": "MOP936",
+    "define_code_kor_name": "철근콘크리트관(RC)"
+  },
+  {
+    "define_code_key": "66515",
+    "define_code_field_key": "4443",
+    "define_code_name": "MOP937",
+    "define_code_kor_name": "철근콘크리트박스(RCB)"
+  },
+  {
+    "define_code_key": "66516",
+    "define_code_field_key": "4443",
+    "define_code_name": "MOP938",
+    "define_code_kor_name": "청동관(BR)"
+  },
+  {
+    "define_code_key": "66517",
+    "define_code_field_key": "4443",
+    "define_code_name": "MOP939",
+    "define_code_kor_name": "콘크리트중선함(CD)"
+  },
+  {
+    "define_code_key": "66518",
+    "define_code_field_key": "4443",
+    "define_code_name": "MOP940",
+    "define_code_kor_name": "탄소강(카본스틸)"
+  },
+  {
+    "define_code_key": "66519",
+    "define_code_field_key": "4443",
+    "define_code_name": "MOP941",
+    "define_code_kor_name": "토관(EP)"
+  },
+  {
+    "define_code_key": "66520",
+    "define_code_field_key": "4443",
+    "define_code_name": "MOP942",
+    "define_code_kor_name": "토류형"
+  },
+  {
+    "define_code_key": "66521",
+    "define_code_field_key": "4443",
+    "define_code_name": "MOP943",
+    "define_code_kor_name": "토몰"
+  },
+  {
+    "define_code_key": "66522",
+    "define_code_field_key": "4443",
+    "define_code_name": "MOP944",
+    "define_code_kor_name": "토사"
+  },
+  {
+    "define_code_key": "66523",
+    "define_code_field_key": "4443",
+    "define_code_name": "MOP945",
+    "define_code_kor_name": "파형강관"
+  },
+  {
+    "define_code_key": "66524",
+    "define_code_field_key": "4443",
+    "define_code_name": "MOP946",
+    "define_code_kor_name": "폴리에틸렌관(PE)"
+  },
+  {
+    "define_code_key": "66525",
+    "define_code_field_key": "4443",
+    "define_code_name": "MOP947",
+    "define_code_kor_name": "폴리에틸렌분체라이닝강관(PEP)"
+  },
+  {
+    "define_code_key": "66526",
+    "define_code_field_key": "4443",
+    "define_code_name": "MOP948",
+    "define_code_kor_name": "폴리에틸렌피복강관(PLP)"
+  },
+  {
+    "define_code_key": "66527",
+    "define_code_field_key": "4443",
+    "define_code_name": "MOP949",
+    "define_code_kor_name": "화학제품류관(PV)"
+  },
+  {
+    "define_code_key": "66528",
+    "define_code_field_key": "4443",
+    "define_code_name": "MOP950",
+    "define_code_kor_name": "회주철관(CIP)"
+  },
+  {
+    "define_code_key": "66529",
+    "define_code_field_key": "4443",
+    "define_code_name": "MOP951",
+    "define_code_kor_name": "후렉시불전선함(FP)"
+  },
+  {
+    "define_code_key": "66530",
+    "define_code_field_key": "4443",
+    "define_code_name": "MOP952",
+    "define_code_kor_name": "흄관(EP)"
+  },
+  {
+    "define_code_key": "66531",
+    "define_code_field_key": "4443",
+    "define_code_name": "MOP953",
+    "define_code_kor_name": "흄관(HP)"
+  },
+  {
+    "define_code_key": "66532",
+    "define_code_field_key": "4443",
+    "define_code_name": "MOP954",
+    "define_code_kor_name": "BR(벨로즈식)"
+  },
+  {
+    "define_code_key": "66533",
+    "define_code_field_key": "4443",
+    "define_code_name": "MOP955",
+    "define_code_kor_name": "BV(Butter Fly식)"
+  },
+  {
+    "define_code_key": "66534",
+    "define_code_field_key": "4443",
+    "define_code_name": "MOP956",
+    "define_code_kor_name": "DR(다이어램프식)"
+  },
+  {
+    "define_code_key": "66535",
+    "define_code_field_key": "4443",
+    "define_code_name": "MOP957",
+    "define_code_kor_name": "FC"
+  },
+  {
+    "define_code_key": "66536",
+    "define_code_field_key": "4443",
+    "define_code_name": "MOP958",
+    "define_code_kor_name": "FRP"
+  },
+  {
+    "define_code_key": "66537",
+    "define_code_field_key": "4443",
+    "define_code_name": "MOP959",
+    "define_code_kor_name": "GV(Gate식)"
+  },
+  {
+    "define_code_key": "66538",
+    "define_code_field_key": "4443",
+    "define_code_name": "MOP960",
+    "define_code_kor_name": "HDPE관"
+  },
+  {
+    "define_code_key": "66539",
+    "define_code_field_key": "4443",
+    "define_code_name": "MOP961",
+    "define_code_kor_name": "HI-3P"
+  },
+  {
+    "define_code_key": "66540",
+    "define_code_field_key": "4443",
+    "define_code_name": "MOP962",
+    "define_code_kor_name": "KP"
+  },
+  {
+    "define_code_key": "66541",
+    "define_code_field_key": "4443",
+    "define_code_name": "MOP963",
+    "define_code_kor_name": "LS(지렛대식)"
+  },
+  {
+    "define_code_key": "66542",
+    "define_code_field_key": "4443",
+    "define_code_name": "MOP964",
+    "define_code_kor_name": "P.S.콘크리트관(PC)"
+  },
+  {
+    "define_code_key": "66543",
+    "define_code_field_key": "4443",
+    "define_code_name": "MOP965",
+    "define_code_kor_name": "PC(완폐식)"
+  },
+  {
+    "define_code_key": "66544",
+    "define_code_field_key": "4443",
+    "define_code_name": "MOP966",
+    "define_code_kor_name": "PFP"
+  },
+  {
+    "define_code_key": "66545",
+    "define_code_field_key": "4443",
+    "define_code_name": "MOP967",
+    "define_code_kor_name": "PR(피스톤식)"
+  },
+  {
+    "define_code_key": "66546",
+    "define_code_field_key": "4443",
+    "define_code_name": "MOP968",
+    "define_code_kor_name": "PVC이중벽관"
+  },
+  {
+    "define_code_key": "66547",
+    "define_code_field_key": "4443",
+    "define_code_name": "MOP969",
+    "define_code_kor_name": "SC(Saing 직폐식)"
+  },
+  {
+    "define_code_key": "66548",
+    "define_code_field_key": "4443",
+    "define_code_name": "MOP970",
+    "define_code_kor_name": "SG(Sliuice Gate식)"
+  },
+  {
+    "define_code_key": "66549",
+    "define_code_field_key": "4443",
+    "define_code_name": "MOP971",
+    "define_code_kor_name": "SRS"
+  },
+  {
+    "define_code_key": "66550",
+    "define_code_field_key": "4443",
+    "define_code_name": "MOP972",
+    "define_code_kor_name": "SS(스프링식)"
+  },
+  {
+    "define_code_key": "66551",
+    "define_code_field_key": "4443",
+    "define_code_name": "MOP973",
+    "define_code_kor_name": "스테인레스(STS)"
+  },
+  {
+    "define_code_key": "66552",
+    "define_code_field_key": "4443",
+    "define_code_name": "MOP974",
+    "define_code_kor_name": "SV(Sluice식)"
+  },
+  {
+    "define_code_key": "66553",
+    "define_code_field_key": "4443",
+    "define_code_name": "MOP975",
+    "define_code_kor_name": "VR 관"
+  },
+  {
+    "define_code_key": "66554",
+    "define_code_field_key": "4443",
+    "define_code_name": "MOP976",
+    "define_code_kor_name": "WS(추식)"
+  }
+]

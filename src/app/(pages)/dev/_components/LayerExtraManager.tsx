@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo, useCallback } from "react"
 import { Button } from "@/app/shadcnComponents/ui/button"
 import { Input } from "@/app/shadcnComponents/ui/input"
 import { Save, RotateCcw, Plus, Trash2, Search, AlertCircle, DatabaseZap } from "lucide-react"
+import { SearchClearButton } from "./layerManager/SearchClearButton"
 import { cn } from "@/lib/utils"
 import { call } from "@/lib/api"
 import type { LayerDefineEmbedProps } from "./layerManager/types"
@@ -336,7 +337,17 @@ export function LayerExtraManager({
                 placeholder="레이어 검색 (그룹/테이블명/한글명)"
                 value={layerListSearch}
                 onChange={(e) => setLayerListSearch(e.target.value)}
-                className="h-9 pl-8 rounded-md text-sm bg-background"
+                className={cn(
+                  "h-9 pl-8 rounded-md text-sm bg-background",
+                  layerListSearch && "pr-8"
+                )}
+              />
+              <SearchClearButton
+                value={layerListSearch}
+                onClear={() => {
+                  setLayerListSearch("")
+                  setDebouncedLayerListSearch("")
+                }}
               />
             </div>
           </div>

@@ -20,8 +20,12 @@ import { shpTableNameFromRelPath } from '@/lib/shpTableName';
 import { type FolderPickFile } from './pickShpFolderFiles';
 import { SyncDetailModal } from './SyncDetailModal';
 import { isShpSyncDetailModalTarget } from './shpModalLayers';
-import { requestShpHistoryRefresh } from '../layerManager/layerManagerUploadBridge';
+import { beginShpHistoryListHold, endShpHistoryListHold, requestShpHistoryRefresh } from '../layerManager/layerManagerUploadBridge';
 import { ShpCrsCandidateModal, type ShpCrsCandidate } from './ShpCrsCandidateModal';
+import {
+  ShpExtraFieldsPicker,
+  type ShpExtraFieldMapping,
+} from './ShpExtraFieldsPicker';
 import {
   ShpSchemaResolveModal,
   type SchemaResolveApplyInput,
@@ -432,16 +436,17 @@ function schemaRemark(status?: LayerRow['schemaStatus'], detail?: string): strin
   return '';
 }
 
-function isSchemaFailed(status?: LayerRow['schemaStatus']) {
-  return status === 'mismatch' || status === 'error';
-}
-
+/** 1단계에서 진행 가능한(일치·신규) SHP만 2단계 구성요소 검사에 남긴다. 폴더에 남은 다른 파일은 제외. */
 function filterStatusRowsForLayers(rows: ShpStatusRow[], layerList: LayerRow[]) {
-  const failedNames = new Set(
-    layerList.filter((l) => isSchemaFailed(l.schemaStatus)).map((l) => l.name.toLowerCase())
+  const allowedNames = new Set(
+    layerList
+      .filter((l) => l.schemaStatus === 'ok' || l.schemaStatus === 'new')
+      .map((l) => l.name.replace(/\\/g, '/').toLowerCase())
   );
-  if (failedNames.size === 0) return rows;
-  return rows.filter((r) => !failedNames.has(r.sourceFile.toLowerCase()));
+  if (allowedNames.size === 0) return [];
+  return rows.filter((r) =>
+    allowedNames.has(String(r.sourceFile ?? '').replace(/\\/g, '/').toLowerCase())
+  );
 }
 
 type Props = {
@@ -524,6 +529,14 @@ export function ShpWizardModal({
   const [layers, setLayers] = useState<LayerRow[]>([]);
   const [layersLoading, setLayersLoading] = useState(false);
   const [layersError, setLayersError] = useState<string | null>(null);
+  /** 신규(테이블 없음) SHP만 — pathOrResult → extra로 옮길 속성 */
+  const [extraFieldsByPath, setExtraFieldsByPath] = useState<
+    Record<string, ShpExtraFieldMapping[]>
+  >({});
+  /** 기존 테이블 — 추가속성 유지 / 다시 지정 */
+  const [extraModeByPath, setExtraModeByPath] = useState<
+    Record<string, 'keep' | 'respecify'>
+  >({});
 
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState({ current: 0, total: 0 });
@@ -612,6 +625,7 @@ export function ShpWizardModal({
     setLayers([]);
     setLayersLoading(false);
     setLayersError(null);
+    setExtraFieldsByPath({});
     setUploading(false);
     setUploadProgress({ current: 0, total: 0 });
     setUploadFileName('');
@@ -968,8 +982,8 @@ export function ShpWizardModal({
     const initial =
       initialCompareCountsRef.current[tableName]
       ?? initialCompareCountsRef.current[tableName.toLowerCase()];
-    setConsistencyRows((prev) =>
-      prev.map((r) => {
+    setConsistencyRows((prev) => {
+      const next = prev.map((r) => {
         if (r.tableName.toLowerCase() !== tableName.toLowerCase()) return r;
         return {
           ...r,
@@ -984,8 +998,11 @@ export function ShpWizardModal({
           pendingRemaining,
           error: undefined,
         };
-      })
-    );
+      });
+      const allOk = next.every((r) => !r.error && (r.isNew || !consistencyNeedsReview(r)));
+      setConsistencyDone(allOk);
+      return next;
+    });
   }, []);
 
   const copyRemark = useCallback((text: string, key: string) => {
@@ -1453,9 +1470,15 @@ export function ShpWizardModal({
     try {
       const shpPaths = statusRows.map((r) => r.pathOrResult);
       const sourceSrsByPath: Record<string, string> = {};
+      const extraPayload: Record<string, ShpExtraFieldMapping[]> = {};
       for (const r of statusRows) {
+        const pathKey = r.pathOrResult.replace(/\\/g, '/');
         const layerRow = layers.find((l) => l.name.toLowerCase() === r.sourceFile.toLowerCase());
-        if (layerRow?.epsg != null) sourceSrsByPath[r.pathOrResult.replace(/\\/g, '/')] = `EPSG:${layerRow.epsg}`;
+        if (layerRow?.epsg != null) sourceSrsByPath[pathKey] = `EPSG:${layerRow.epsg}`;
+        const maps = extraFieldsByPath[pathKey];
+        if (!r.table && Array.isArray(maps) && maps.length > 0) {
+          extraPayload[pathKey] = maps;
+        }
       }
       // #region agent log
       fetch('http://127.0.0.1:7353/ingest/77cac651-6745-4e00-bb84-3f2a3e31b934', {
@@ -1491,14 +1514,18 @@ export function ShpWizardModal({
               relativePath: readyPath,
               shpPaths,
               sourceSrsByPath,
+              extraFieldsByPath: Object.keys(extraPayload).length > 0 ? extraPayload : undefined,
               dbSchema: targetDbSchema,
               group: groupNameRef.current.trim() || undefined,
+              createUser: operatorLabel || undefined,
             }
           : {
               relativePath: readyPath,
               sourceSrsByPath,
+              extraFieldsByPath: Object.keys(extraPayload).length > 0 ? extraPayload : undefined,
               dbSchema: targetDbSchema,
               group: groupNameRef.current.trim() || undefined,
+              createUser: operatorLabel || undefined,
             },
       });
       const d = res?.data ?? res;
@@ -1598,7 +1625,7 @@ export function ShpWizardModal({
     } finally {
       setComponentSetupRunning(false);
     }
-  }, [readyPath, fetchStatusList, statusRows, layers, targetDbSchema]);
+  }, [readyPath, fetchStatusList, statusRows, layers, targetDbSchema, operatorLabel, extraFieldsByPath]);
 
   const loadServerFolder = useCallback(
     async (relPath: string, folderName: string) => {
@@ -1928,11 +1955,47 @@ export function ShpWizardModal({
     if (step === 2) {
       if (!allComponentsReady) return;
       setLayersError(null);
-      setConsistencyRows([]);
-      setConsistencyDone(false);
-      consistencyStartedRef.current = false;
-      step3NextClickRef.current = 0;
-      setStep(3);
+      setStepBusy(true);
+      try {
+        const existingRows = statusRows.filter((r) => r.table);
+        for (const row of existingRows) {
+          const pathKey = row.pathOrResult.replace(/\\/g, '/');
+          const mode = extraModeByPath[pathKey] === 'respecify' ? 'respecify' : 'keep';
+          const fields = extraFieldsByPath[pathKey] ?? [];
+          if (mode === 'respecify' && fields.length === 0) {
+            throw new Error(
+              `${row.sourceFile}: 추가속성을 «다시 지정»으로 선택했으면 속성을 하나 이상 고르세요.`
+            );
+          }
+          const prep = await call('', 'POST', {
+            service: 'shpUploadService',
+            action: 'prepareExistingShpExtra',
+            params: {
+              pathOrResult: row.pathOrResult,
+              mode,
+              fields: mode === 'respecify' ? fields : undefined,
+              dbSchema: targetDbSchema,
+            },
+          });
+          const pd = prep?.data ?? prep;
+          if (!pd?.success) {
+            throw new Error(
+              pd?.error
+                ? `${row.sourceFile}: ${pd.error}`
+                : `${row.sourceFile}: 추가속성 준비에 실패했습니다.`
+            );
+          }
+        }
+        setConsistencyRows([]);
+        setConsistencyDone(false);
+        consistencyStartedRef.current = false;
+        step3NextClickRef.current = 0;
+        setStep(3);
+      } catch (e: unknown) {
+        setLayersError(e instanceof Error ? e.message : String(e));
+      } finally {
+        setStepBusy(false);
+      }
       return;
     }
 
@@ -2181,13 +2244,49 @@ export function ShpWizardModal({
    * 4단계 완료: 3단계에서 만든 이력에 의도 확정·결과 문구 갱신.
    * (배치·상세 초안은 3단계 비교 시 이미 생성됨)
    */
-  const finalizeHistory = useCallback(async () => {
-    if (reportRows.length === 0) return;
-
+  /**
+   * 완료 직전(대기): 배치·상세 이력 키를 확보하고, 모달 초기화와 무관하게 쓸 값을 복사.
+   * 실제 반영·이력 기록은 모달을 닫은 뒤 백그라운드에서 이 스냅샷으로 진행한다.
+   */
+  const prepareFinalizeHistory = useCallback(async () => {
     const lhKey = await ensureWizardLhKey();
     if (!lhKey) {
       throw new Error('이력 생성에 실패했습니다.');
     }
+    for (const r of reportRows) {
+      const tableName = r.tableName;
+      if (!tableName || lookupDhKey(dhKeyByTableRef.current, tableName)) continue;
+      const status = statusRows.find((s) => s.pathOrResult === r.pathOrResult);
+      await ensureDhKeyForTable({
+        tableName,
+        shpPath: status?.pathOrResult ?? r.pathOrResult,
+        group: groupNameRef.current.trim() || r.group || undefined,
+        korName: r.korName || undefined,
+      });
+    }
+    // 백그라운드 반영이 끝날 때까지 같은 테이블의 새 비교·미반영 정리를 서버에서 차단
+    await call('', 'POST', {
+      service: 'shpUploadService',
+      action: 'beginShpFinalize',
+      params: { tableNames: reportRows.map((r) => r.tableName).filter(Boolean) },
+    }).catch(() => {});
+    return {
+      lhKey,
+      reportRows,
+      statusRows,
+      layers,
+      operatorLabel,
+      wizardGroupName: groupNameRef.current.trim(),
+      dhKeyByTable: { ...dhKeyByTableRef.current },
+      initialCompareCounts: { ...initialCompareCountsRef.current },
+    };
+  }, [reportRows, statusRows, layers, operatorLabel, ensureWizardLhKey, ensureDhKeyForTable]);
+
+  const finalizeHistory = useCallback(async (
+    snap: Awaited<ReturnType<typeof prepareFinalizeHistory>>
+  ) => {
+    const { lhKey, reportRows, statusRows, layers, operatorLabel } = snap;
+    if (reportRows.length === 0) return;
 
     for (const r of reportRows) {
       const tableName = r.tableName;
@@ -2198,16 +2297,8 @@ export function ShpWizardModal({
           (s) => tableNameFromShpPath(s.pathOrResult, s.sourceFile).toLowerCase() === tableName.toLowerCase()
         );
 
-      let dhKey = lookupDhKey(dhKeyByTableRef.current, tableName);
-      const wizardGroup = groupNameRef.current.trim() || r.group || undefined;
-      if (!dhKey) {
-        dhKey = await ensureDhKeyForTable({
-          tableName,
-          shpPath: status?.pathOrResult ?? r.pathOrResult,
-          group: wizardGroup,
-          korName: r.korName || undefined,
-        });
-      }
+      const dhKey = lookupDhKey(snap.dhKeyByTable, tableName);
+      const wizardGroup = snap.wizardGroupName || r.group || undefined;
       if (!dhKey) continue;
       const layerRow = layers.find((l) => l.name.toLowerCase() === (status?.sourceFile ?? '').toLowerCase());
       const sourceSrsOverride = layerRow?.epsg != null ? `EPSG:${layerRow.epsg}` : undefined;
@@ -2304,8 +2395,8 @@ export function ShpWizardModal({
       }
 
       const initial =
-        initialCompareCountsRef.current[tableName]
-        ?? initialCompareCountsRef.current[tableName.toLowerCase()];
+        snap.initialCompareCounts[tableName]
+        ?? snap.initialCompareCounts[tableName.toLowerCase()];
       const hasDiff = initial
         ? initial.appendCount + initial.conflictCount + initial.removeCount > 0
         : (syncAppend + syncUpdated + syncRemoved > 0);
@@ -2314,7 +2405,13 @@ export function ShpWizardModal({
         : hasDiff || syncKept > 0
           ? '정합성 검증'
           : '기존';
-      const newRowCount = r.rowCount ?? 0;
+      const oldRowCount = r.layerType === '신규' ? 0 : (r.oldRowCount ?? 0);
+      // 기존 테이블은 완료 시점에 반영되므로, 보고서의 현재 행 수는 반영 전 값이다.
+      const newRowCount = r.layerType === '신규'
+        ? (r.rowCount ?? 0)
+        : commitError
+          ? (r.rowCount ?? oldRowCount)
+          : Math.max(0, oldRowCount + syncAppend - syncRemoved);
       const countPatch = r.layerType === '신규'
         ? {
             appendCount: syncAppend > 0 ? syncAppend : newRowCount,
@@ -2352,7 +2449,7 @@ export function ShpWizardModal({
           action: 'updateDetailCounts',
           params: {
             dhKey,
-            oldData: r.layerType === '신규' ? 0 : (r.oldRowCount ?? 0),
+            oldData: oldRowCount,
             newData: newRowCount,
             ...countPatch,
           },
@@ -2385,20 +2482,41 @@ export function ShpWizardModal({
     } catch {
       /* ignore */
     }
-  }, [reportRows, statusRows, layers, ensureWizardLhKey, ensureDhKeyForTable, operatorLabel]);
+  }, []);
 
   const handleComplete = async () => {
     if (step !== 4 || !reportLoaded || reportLoading || completing) return;
     setCompleting(true);
+    // 레이어 수·성공 건수가 기록되기 전에는 이력 목록을 그리지 않는다.
+    beginShpHistoryListHold();
+    let snap: Awaited<ReturnType<typeof prepareFinalizeHistory>> | null = null;
     try {
-      await finalizeHistory();
-      requestShpHistoryRefresh();
+      snap = await prepareFinalizeHistory();
     } catch (e: unknown) {
+      endShpHistoryListHold();
       alert(e instanceof Error ? e.message : String(e));
       return;
     } finally {
       setCompleting(false);
     }
+    if (!snap) {
+      endShpHistoryListHold();
+      return;
+    }
+    const ready = snap;
+    // 이력 반영은 모달을 닫은 뒤 진행. 목록은 건수 반영이 끝난 뒤에 한 번만 읽는다.
+    void finalizeHistory(ready)
+      .catch((e: unknown) => {
+        alert(`SHP 이력 기록 중 오류가 발생했습니다.\n${e instanceof Error ? e.message : String(e)}`);
+      })
+      .finally(() => {
+        void call('', 'POST', {
+          service: 'shpUploadService',
+          action: 'endShpFinalize',
+          params: { tableNames: ready.reportRows.map((r) => r.tableName).filter(Boolean) },
+        }).catch(() => {});
+        endShpHistoryListHold();
+      });
     resetForm();
     onOpenChange(false);
     onSuccess?.();
@@ -2835,7 +2953,114 @@ export function ShpWizardModal({
                   </div>
                 </div>
 
-                <div className="min-h-[470px] flex-1 overflow-auto rounded-md border border-border/60">
+                {statusRows.some((r) => !r.table) ? (
+                  <div className="space-y-2">
+                    <p className="text-xs font-medium text-foreground">
+                      추가속성으로 넣을 속성 (신규 테이블)
+                    </p>
+                    <p className="text-[10px] leading-relaxed text-muted-foreground">
+                      선택한 속성은 일반 속성 컬럼이 아니라 추가속성(extra)으로만 저장됩니다.
+                      「시작」을 누르기 전에 여기서 고르세요.
+                    </p>
+                    <div className="max-h-[220px] space-y-2 overflow-y-auto pr-0.5">
+                      {statusRows
+                        .filter((r) => !r.table)
+                        .map((row) => {
+                          const pathKey = row.pathOrResult.replace(/\\/g, '/');
+                          return (
+                            <ShpExtraFieldsPicker
+                              key={pathKey}
+                              pathOrResult={row.pathOrResult}
+                              sourceFile={row.sourceFile}
+                              value={extraFieldsByPath[pathKey] ?? []}
+                              onChange={(next) => {
+                                setExtraFieldsByPath((prev) => {
+                                  const copy = { ...prev };
+                                  if (next.length === 0) delete copy[pathKey];
+                                  else copy[pathKey] = next;
+                                  return copy;
+                                });
+                              }}
+                            />
+                          );
+                        })}
+                    </div>
+                  </div>
+                ) : null}
+
+                {statusRows.some((r) => r.table) ? (
+                  <div className="space-y-2">
+                    <p className="text-xs font-medium text-foreground">
+                      추가속성 (기존 테이블 재업로드)
+                    </p>
+                    <p className="text-[10px] leading-relaxed text-muted-foreground">
+                      «유지»는 이전에 지정한 추가속성을 그대로 쓰고, «다시 지정»은 SHP에서 속성을
+                      다시 고릅니다. 값은 정합성 반영 때 SHP 기준으로 맞춰집니다.
+                    </p>
+                    <div className="max-h-[260px] space-y-3 overflow-y-auto pr-0.5">
+                      {statusRows
+                        .filter((r) => r.table)
+                        .map((row) => {
+                          const pathKey = row.pathOrResult.replace(/\\/g, '/');
+                          const mode = extraModeByPath[pathKey] === 'respecify' ? 'respecify' : 'keep';
+                          return (
+                            <div
+                              key={pathKey}
+                              className="space-y-2 rounded-md border border-border/60 bg-background/80 p-2"
+                            >
+                              <p className="truncate text-xs font-medium" title={row.sourceFile}>
+                                {row.sourceFile}
+                              </p>
+                              <div className="flex flex-wrap gap-3 text-xs">
+                                <label className="inline-flex cursor-pointer items-center gap-1.5">
+                                  <input
+                                    type="radio"
+                                    name={`extra-mode-${pathKey}`}
+                                    checked={mode === 'keep'}
+                                    onChange={() => {
+                                      setExtraModeByPath((prev) => ({ ...prev, [pathKey]: 'keep' }));
+                                    }}
+                                  />
+                                  유지
+                                </label>
+                                <label className="inline-flex cursor-pointer items-center gap-1.5">
+                                  <input
+                                    type="radio"
+                                    name={`extra-mode-${pathKey}`}
+                                    checked={mode === 'respecify'}
+                                    onChange={() => {
+                                      setExtraModeByPath((prev) => ({
+                                        ...prev,
+                                        [pathKey]: 'respecify',
+                                      }));
+                                    }}
+                                  />
+                                  다시 지정
+                                </label>
+                              </div>
+                              {mode === 'respecify' ? (
+                                <ShpExtraFieldsPicker
+                                  pathOrResult={row.pathOrResult}
+                                  sourceFile={row.sourceFile}
+                                  value={extraFieldsByPath[pathKey] ?? []}
+                                  onChange={(next) => {
+                                    setExtraFieldsByPath((prev) => {
+                                      const copy = { ...prev };
+                                      if (next.length === 0) delete copy[pathKey];
+                                      else copy[pathKey] = next;
+                                      return copy;
+                                    });
+                                  }}
+                                />
+                              ) : null}
+                            </div>
+                          );
+                        })}
+                    </div>
+                  </div>
+                ) : null}
+
+                <div className="min-h-[240px] max-h-[320px] flex-1 overflow-auto rounded-md border border-border/60">
                   <table className="w-full text-xs">
                     <thead className="sticky top-0 z-10 bg-muted">
                       <tr className="text-center text-muted-foreground">

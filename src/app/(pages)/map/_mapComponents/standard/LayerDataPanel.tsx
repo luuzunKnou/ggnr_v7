@@ -6,6 +6,7 @@ import {
   FileText,
   History,
   Paperclip,
+  ShieldCheck,
   Wrench,
   AlertTriangle,
   CheckCircle2,
@@ -21,6 +22,7 @@ import { formatDefineFieldDisplayValue } from '@/lib/defineLayerCodeDisplay';
 import { isLayerExtraFieldName } from '@/lib/layerExtraField';
 import { useDefineLayerCodes } from './useDefineLayerCodes';
 import { cn, formatFileSize } from '@/lib/utils';
+import { useSerWriteAccess } from '@/hooks/useSerWriteAccess';
 import {
   isImageServiceFileName,
   isPdfServiceFileName,
@@ -36,7 +38,12 @@ import { getDefineFieldDisplayLabel, getRowKey, getRowValueByField, isDefineFiel
 import { ServiceFileAttachmentThumb } from './ServiceFileAttachmentThumb';
 import { ServiceFilePdfThumb } from './ServiceFilePdfThumb';
 import { ServiceFileImagePreview, type ServiceFilePreviewItem } from './ServiceFileImagePreview';
-import type { IdentifyLayerResult, IdentifyFeatureItem } from '../hooks/useFeatureIdentify';
+import {
+  buildServiceFilePreviewGalleryItems,
+  isServiceFilePreviewableName,
+} from './serviceFilePreviewItems';
+import type { IdentifyLayerResult, IdentifyFeatureItem, IdentifyPopupState } from '../hooks/useFeatureIdentify';
+import { isOrthoDataQueryLayerId } from '../../_mapContents/aerialView/orthoDataQueryLayerId';
 import { IdentifyHitListBlock } from './IdentifyHitListBlock';
 import { compareFeaturesByGeometryStackOrder } from '@/lib/mapLayerGeometryOrder';
 import {
@@ -51,11 +58,17 @@ import GeoJSON from 'ol/format/GeoJSON';
 import { MAP_AUTO_NAV_MAX_ZOOM } from '../config/mapDefaults';
 import { scheduleFitMapToExtent3857 } from '../config/mapAutoNavigation';
 import { isFmsFacilityLayerTable } from '@/lib/fmsLinkage/fmsBinding';
-import { getAllRoadLedgerDocLayerIds } from '../../_mapContents/road/roadLedger/roadLedgerDocLayerMap';
+import { getAllRoadLedgerFacilityLayerIds } from '../../_mapContents/road/roadLedger/roadLedgerDocLayerMap';
 import {
   formatRoadLedgerFacilityCellValue,
   getRoadLedgerFacilityColumnKeys,
+  resolveRoadLedgerFacilityDisplayName,
 } from '../../_mapContents/road/roadLedger/roadLedgerTableDisplayFields';
+import {
+  FmsInspectionRecordsSection,
+  type FmsInspectionRecordRow,
+} from '../../_mapContents/fmsLinkage/FmsInspectionRecordsSection';
+import { FMS_EMPTY_INSPECTION_MESSAGE } from '../../_mapContents/fmsLinkage/fmsLinkageBinding';
 import type { DataQueryHistoryType } from '@/lib/dataQueryHistoryTypes';
 import {
   DataQueryHistoryAddDialog,
@@ -74,7 +87,7 @@ type DefineFieldRow = {
   [key: string]: unknown;
 };
 
-type DetailTab = 'basic' | 'history' | 'attach';
+type DetailTab = 'basic' | 'history' | 'attach' | 'safety';
 
 type TimelineEvent = {
   id: number;
@@ -104,15 +117,6 @@ interface InfoField {
   highlight?: boolean;
   /** 편집 모드에서도 인풋 대신 값을 고정 표시 (읽기전용 필드·키 필드) */
   readOnly?: boolean;
-}
-
-/** 목록·기본정보 라벨 폭 — CJK는 대략 2, 그 외 1 */
-function estimateDisplayTextWeight(text: string): number {
-  let w = 0;
-  for (const ch of text) {
-    w += ch.charCodeAt(0) > 0x2e80 ? 2 : 1;
-  }
-  return Math.max(w, 1);
 }
 
 /** 기본정보 좌측 속성명 열 너비(px) — 가장 긴 라벨 기준 (11px 폰트) */
@@ -228,130 +232,124 @@ function InfoSection({
 const PAGE_SIZE_LIST = 30;
 const PAGE_SIZE_DETAIL = 7;
 
-/** 헤더·셀 패딩(px-2·pl-4) + 말줄임 여유 (가중치 단위) */
-const LIST_COL_TEXT_PAD_WEIGHT = 8;
-/** ogc_fid·id 컬럼 — 고정 너비(px), min=max */
-const LIST_COL_OGC_FID_FIXED_PX = 58;
+/** 목록 12px — 글자 폭. 번호 칸은 이 값으로만 잡고 남는 폭은 주지 않음 */
+const LIST_COL_LATIN_CHAR_PX = 7.2;
+const LIST_COL_CJK_CHAR_PX = 12;
+const LIST_COL_CELL_PAD_PX = 16;
+const LIST_COL_EDGE_EXTRA_PX = 8;
+const LIST_COL_SAFETY_PX = 4;
 /** ogc_fid·id 외 컬럼 최소 너비(px) */
 const LIST_COL_DEFAULT_MIN_PX = 75;
-const LIST_COL_WIDTH_REF_PX = 450;
+const LIST_COL_NUMBER_MIN_PX = 40;
 
 function getListColMinPx(fieldName: string, korName?: string | null): number {
   if (isNumberColumnField(fieldName, korName)) {
-    return LIST_COL_OGC_FID_FIXED_PX;
+    return LIST_COL_NUMBER_MIN_PX;
   }
   return LIST_COL_DEFAULT_MIN_PX;
 }
 
-function getListColMinPct(fieldName: string, korName?: string | null): number {
-  return (getListColMinPx(fieldName, korName) / LIST_COL_WIDTH_REF_PX) * 100;
+function estimateListTextWidthPx(text: string): number {
+  let w = 0;
+  for (const ch of text) {
+    w += ch.charCodeAt(0) > 0x2e80 ? LIST_COL_CJK_CHAR_PX : LIST_COL_LATIN_CHAR_PX;
+  }
+  return w;
 }
 
-function getOgcFidColFixedPct(): number {
-  return (LIST_COL_OGC_FID_FIXED_PX / LIST_COL_WIDTH_REF_PX) * 100;
-}
-
-/** ogc_fid 제외 컬럼만 totalPct(보통 100−고정합) 안에서 비율 분배 */
-function distributeFlexColumnWidthsPct(
-  weights: number[],
-  columnMinPcts: number[],
-  totalPct: number
-): number[] {
-  const n = weights.length;
-  if (n === 0) return [];
-  if (n === 1) return [totalPct];
-  const equal = totalPct / n;
-  const defaultMinPct = Math.max(equal * 0.72, (LIST_COL_DEFAULT_MIN_PX / LIST_COL_WIDTH_REF_PX) * 100);
-  const maxPct = Math.min(totalPct * 0.5, equal * 2.5);
-  const colMinPct = (i: number) => {
-    const extra = columnMinPcts[i];
-    if (extra != null && extra > 0) return Math.min(extra, totalPct);
-    return Math.min(defaultMinPct, totalPct);
-  };
-  let ws = weights.map((w) => Math.max(1, w));
-  for (let i = 0; i < 8; i++) {
-    const sum = ws.reduce((a, b) => a + b, 0) || 1;
-    ws = ws.map((w, idx) => {
-      const pct = (w / sum) * totalPct;
-      const minPct = colMinPct(idx);
-      if (pct < minPct) return (minPct / totalPct) * sum;
-      if (pct > maxPct) return (maxPct / totalPct) * sum;
-      return w;
-    });
-  }
-  const sum = ws.reduce((a, b) => a + b, 0) || 1;
-  const pcts = ws.map((w) => (w / sum) * totalPct);
-  const rounded = pcts.map((p) => Math.round(p * 10) / 10);
-  const drift = totalPct - rounded.reduce((a, b) => a + b, 0);
-  rounded[n - 1] = Math.round((rounded[n - 1] + drift) * 10) / 10;
-  return rounded;
-}
-
-/** 글자 가중치 → 합 100% 컬럼 폭. 번호 컬럼(한글명 기준)은 고정%, 나머지는 잔여 비율 분배 */
-function computeListColWidthsPct(
-  weights: number[],
-  cols: { name: string; kor?: string | null }[]
-): number[] {
-  const n = weights.length;
-  if (n === 0) return [];
-  if (n === 1) {
-    return isNumberColumnField(cols[0].name, cols[0].kor) ? [getOgcFidColFixedPct()] : [100];
-  }
-
-  const result = new Array<number>(n).fill(0);
-  const flexIndices: number[] = [];
-  let fixedTotal = 0;
-
-  for (let i = 0; i < n; i++) {
-    if (isNumberColumnField(cols[i].name, cols[i].kor)) {
-      result[i] = getOgcFidColFixedPct();
-      fixedTotal += result[i];
-    } else {
-      flexIndices.push(i);
-    }
-  }
-
-  const remaining = Math.max(0, 100 - fixedTotal);
-  if (flexIndices.length === 0) {
-    return result;
-  }
-  if (flexIndices.length === weights.length) {
-    return distributeFlexColumnWidthsPct(
-      weights,
-      cols.map((c) => getListColMinPct(c.name, c.kor)),
-      100
-    );
-  }
-
-  const flexWeights = flexIndices.map((i) => weights[i]);
-  const flexMinPcts = flexIndices.map((i) => getListColMinPct(cols[i].name, cols[i].kor));
-  const flexPcts = distributeFlexColumnWidthsPct(flexWeights, flexMinPcts, remaining);
-  flexIndices.forEach((idx, j) => {
-    result[idx] = flexPcts[j];
-  });
-  return result;
-}
-
-function estimateListColWeight(header: string, cellTexts: string[]): number {
-  const headerW = estimateDisplayTextWeight(header);
-  let maxW = headerW;
+/** 헤더·셀 최장 문자열 기준 필요 너비(px). 첫·끝 열은 pl-4/pr-4 포함 */
+function estimateListColNeededPx(
+  header: string,
+  cellTexts: string[],
+  opts: { isFirst: boolean; isLast: boolean }
+): number {
+  let maxText = estimateListTextWidthPx(header);
   for (const t of cellTexts) {
-    maxW = Math.max(maxW, estimateDisplayTextWeight(t));
+    maxText = Math.max(maxText, estimateListTextWidthPx(t));
   }
-  const withPad = maxW + LIST_COL_TEXT_PAD_WEIGHT;
-  // 헤더 전체(예: «번호»)가 말줄임되지 않도록 헤더 기준 하한
-  const headerFloor = headerW + LIST_COL_TEXT_PAD_WEIGHT + 2;
-  return Math.max(withPad, headerFloor);
+  let pad = LIST_COL_CELL_PAD_PX;
+  if (opts.isFirst) pad += LIST_COL_EDGE_EXTRA_PX;
+  if (opts.isLast) pad += LIST_COL_EDGE_EXTRA_PX;
+  return Math.ceil(maxText + pad + LIST_COL_SAFETY_PX);
 }
 
 type LayerDataPanelProps = {
   dataTable: string;
   onClose?: () => void;
   onDataKeyChange?: (keyValue: string | number | null) => void;
+  /** 지도 식별 «이전»으로 돌아갈 때 dataTable URL 복원 */
+  onDataTableChange?: (tableName: string) => void;
   initialDataKey?: string;
   /** true: 도로대장 시설 목록과 동일한 컬럼·표시(코드표 기반). 시설관리에서 연 경우에만 켬 */
   useRoadLedgerFacilityListColumns?: boolean;
 };
+
+type IdentifyHistoryEntry =
+  | {
+      kind: 'identify';
+      identify: IdentifyPopupState;
+      dataTable: string;
+      selectedRow: Record<string, unknown> | null;
+      selectedIdentifyIndex: number | null;
+    }
+  | {
+      kind: 'list';
+      dataTable: string;
+      dataKey: string | null;
+      selectedRow: Record<string, unknown> | null;
+      /** 5번 클릭 직후와 동일한 목록(30/7)·페이지·하이라이트 */
+      listPageSize: number;
+      page: number;
+      highlightedRow: number | null;
+      total: number;
+    };
+
+type ListHistoryRestore = {
+  dataTable: string;
+  dataKey: string | null;
+  selectedRow: Record<string, unknown> | null;
+  listPageSize: number;
+  page: number;
+  highlightedRow: number | null;
+  total: number;
+};
+
+/** 이력용 행 키 — is_key 없으면 ogc_fid/gid/id 사용(하천구역 번호 등) */
+function resolveHistoryRowKey(
+  row: Record<string, unknown> | null | undefined,
+  keyFieldName: string | null
+): string | null {
+  if (!row) return null;
+  const fromKey = getRowKey(row, keyFieldName);
+  if (fromKey != null && String(fromKey).trim() !== '') return String(fromKey);
+  for (const f of ['ogc_fid', 'gid', 'id']) {
+    const v = getRowValueByField(row, f);
+    if (v != null && String(v).trim() !== '') return String(v);
+  }
+  return null;
+}
+
+function findRowIndexByHistoryKey(
+  rows: Record<string, unknown>[],
+  key: string,
+  keyFieldName: string | null
+): number {
+  if (!key) return -1;
+  const tryFields = [
+    keyFieldName,
+    'ogc_fid',
+    'gid',
+    'id',
+  ].filter((f, i, arr): f is string => !!f && arr.indexOf(f) === i);
+  for (const field of tryFields) {
+    const idx = rows.findIndex((r) => {
+      const rowKey = getRowKey(r, field) ?? getRowValueByField(r, field);
+      return rowKey != null && String(rowKey) === key;
+    });
+    if (idx >= 0) return idx;
+  }
+  return -1;
+}
 
 function flattenIdentifyResults(
   results: IdentifyLayerResult[]
@@ -379,16 +377,20 @@ export function LayerDataPanel({
   dataTable,
   onClose,
   onDataKeyChange,
+  onDataTableChange,
   initialDataKey,
   useRoadLedgerFacilityListColumns = false,
 }: LayerDataPanelProps) {
   const mapContext = useMapContext();
+  const canWriteDataQuery = useSerWriteAccess('dataQuery');
   const mapInstanceRef = mapContext?.mapInstanceRef;
   const spatialFilterWkt = mapContext?.spatialFilterWkt ?? null;
   const [activeLayer, setActiveLayer] = useState<ActiveLayerInfo | null>(null);
   const identifyResultList = mapContext?.identifyResultList ?? null;
   const identifySelectedRow = mapContext?.identifySelectedRow ?? null;
   const setIdentifySelectedRow = mapContext?.setIdentifySelectedRow;
+  const dataQueryMapPick = mapContext?.dataQueryMapPick ?? null;
+  const setDataQueryMapPick = mapContext?.setDataQueryMapPick;
   const identifyFeatureTotal =
     identifyResultList?.results?.reduce((s, r) => s + r.features.length, 0) ?? 0;
   /** 지도 식별·검색: 행이 있거나, 검색 완료 후 0건이어도 listHeaderLabel 이 있으면 결과 패널(빈 목록) 표시 */
@@ -417,6 +419,9 @@ export function LayerDataPanel({
   const [highlightedRow, setHighlightedRow] = useState<number | null>(null);
   const [selectedRowData, setSelectedRowData] = useState<Record<string, unknown> | null>(null);
   const [activeTab, setActiveTab] = useState<DetailTab>('basic');
+  const [safetyInspections, setSafetyInspections] = useState<FmsInspectionRecordRow[]>([]);
+  const [safetyLoading, setSafetyLoading] = useState(false);
+  const [safetyError, setSafetyError] = useState<string | null>(null);
   /**
    * 목록 그리드 칸 수 — 선택 여부와 분리.
    * 상세 닫기 직후 selectedRow=null 인데 rows는 아직 7건인 레이스에서
@@ -432,10 +437,15 @@ export function LayerDataPanel({
   const selectionLayerRef = useRef<VectorLayer<VectorSource> | null>(null);
   const pulsePhaseRef = useRef(0);
   const [radarActive, setRadarActive] = useState(false);
-  const prevLayerRef = useRef<string | null>(null);
+  /** 목록 초기 로드 키(테이블|공간필터|식별여부). 중단된 로드는 cleanup에서 null로 되돌려 재시도 */
+  const prevListLoadKeyRef = useRef<string | null>(null);
   const [selectedIdentifyIndex, setSelectedIdentifyIndex] = useState<number | null>(null);
   /** loadPage 응답 순서 보장 — 늦게 도착한 7건 응답이 30건 목록을 덮지 않게 */
   const loadPageSeqRef = useRef(0);
+  /** 지도에서 고른 항목의 목록 위치 조회 순서 */
+  const mapPickSeqRef = useRef(0);
+  /** 지도에서 고른 뒤에는 해당 도형만 강조 — 같은 페이지 다른 건은 색을 넣지 않음 */
+  const highlightOnlySelectedRef = useRef(false);
   /** 상세 닫기 후 URL dataKey 반영 전, 목록 재조회로 상세가 다시 열리는 것 방지 */
   const suppressDataKeySelectRef = useRef(false);
   /** 레이어 최초 목록 로드 시 첫 행 자동선택 1회. 상세 수동 닫기 후에는 false 유지 */
@@ -446,15 +456,112 @@ export function LayerDataPanel({
   const pendingHighlightIndexRef = useRef<number | null>(null);
   /** 이전/다음 페이지 이동 직후 dataKey·pending 하이라이트 동기화 스킵 */
   const paginationOnlyLoadRef = useRef(false);
-  /** 레이어 오픈 시 1회 계산한 목록 컬럼 폭(%). 페이지 이동 시 유지 */
+  /** 레이어별 목록 컬럼 폭(px). 페이지가 바뀌면 더 긴 값만 반영해 늘림 */
   const listColWidthsLayerRef = useRef<string | null>(null);
-  const [listColWidthsPct, setListColWidthsPct] = useState<number[] | null>(null);
+  const [listColWidthsPx, setListColWidthsPx] = useState<number[] | null>(null);
   const selectedRowDataRef = useRef(selectedRowData);
   selectedRowDataRef.current = selectedRowData;
   const keyFieldNameRef = useRef(keyFieldName);
   keyFieldNameRef.current = keyFieldName;
 
   const prevHadIdentifyRef = useRef(false);
+  /** 지도·검색 식별 결과 히스토리(브라우저 뒤로가기처럼 «이전»으로 한 단계씩) */
+  const identifyHistoryRef = useRef<IdentifyHistoryEntry[]>([]);
+  /** 라벨·동작용 — 스택 깊이(0이면 «닫기») */
+  const [identifyHistoryDepth, setIdentifyHistoryDepth] = useState(0);
+  const identifyHistorySkipRef = useRef(false);
+  const identifyHistorySkipClearRef = useRef(false);
+  /** 목록→식별 직전 화면으로 «이전»할 때, 식별 종료 effect가 선택을 지우지 않도록 */
+  const restoreListSelectionRef = useRef<ListHistoryRestore | null>(null);
+  /** 목록 복원 중 — 초기 로드가 선택·목록 상태를 덮어쓰지 않게 */
+  const restoringListFromHistoryRef = useRef<ListHistoryRestore | null>(null);
+  const identifySnapshotRef = useRef<{
+    identify: IdentifyPopupState | null;
+    dataTable: string;
+    selectedRow: Record<string, unknown> | null;
+    selectedIdentifyIndex: number | null;
+    listPageSize: number;
+    page: number;
+    highlightedRow: number | null;
+    total: number;
+  }>({
+    identify: null,
+    dataTable: '',
+    selectedRow: null,
+    selectedIdentifyIndex: null,
+    listPageSize: PAGE_SIZE_LIST,
+    page: 1,
+    highlightedRow: null,
+    total: 0,
+  });
+
+  /** 새 식별·검색이 들어오면 직전 화면(목록 또는 이전 식별)을 스택에 push */
+  useEffect(() => {
+    const skipping = identifyHistorySkipRef.current;
+    if (skipping) {
+      identifyHistorySkipRef.current = false;
+    }
+
+    const prev = identifySnapshotRef.current;
+    const identifyChanged = prev.identify !== identifyResultList;
+    if (!skipping && identifyChanged) {
+      if (identifyResultList != null && prev.identify != null) {
+        identifyHistoryRef.current.push({
+          kind: 'identify',
+          identify: prev.identify,
+          dataTable: prev.dataTable,
+          selectedRow: prev.selectedRow,
+          selectedIdentifyIndex: prev.selectedIdentifyIndex,
+        });
+        setIdentifyHistoryDepth(identifyHistoryRef.current.length);
+      } else if (identifyResultList != null && prev.identify == null) {
+        // 패널이 닫힌 채 지도만 클릭해 연 경우는 복원할 목록이 없음 → push 안 함(«닫기»)
+        const hasListToRestore =
+          prev.selectedRow != null ||
+          prev.total > 0 ||
+          (prev.highlightedRow != null && prev.highlightedRow >= 0);
+        if (hasListToRestore) {
+          const row = prev.selectedRow;
+          const keyVal = resolveHistoryRowKey(row, keyFieldNameRef.current);
+          identifyHistoryRef.current.push({
+            kind: 'list',
+            dataTable: prev.dataTable,
+            dataKey: keyVal,
+            selectedRow: row,
+            listPageSize: prev.listPageSize,
+            page: prev.page,
+            highlightedRow: prev.highlightedRow,
+            total: prev.total,
+          });
+          setIdentifyHistoryDepth(identifyHistoryRef.current.length);
+        }
+      } else if (identifyResultList == null) {
+        identifyHistoryRef.current = [];
+        setIdentifyHistoryDepth(0);
+      }
+    }
+
+    identifySnapshotRef.current = {
+      identify: identifyResultList,
+      dataTable: dataTable.trim(),
+      selectedRow: selectedRowDataRef.current,
+      selectedIdentifyIndex: selectedIdentifyIndex,
+      listPageSize,
+      page,
+      highlightedRow,
+      total,
+    };
+  }, [
+    identifyResultList,
+    dataTable,
+    selectedIdentifyIndex,
+    selectedRowData,
+    listPageSize,
+    page,
+    highlightedRow,
+    total,
+  ]);
+
   /** 새 식별·검색 결과 시 목록 선택 초기화. 식별 종료 시에만 상세 상태 정리(일반 목록 조회와 충돌 방지). */
   useEffect(() => {
     const total =
@@ -463,13 +570,26 @@ export function LayerDataPanel({
       identifyResultList != null &&
       (total > 0 || (Boolean(identifyResultList.listHeaderLabel?.trim()) && total === 0));
     if (hasIdentify) {
-      setSelectedIdentifyIndex(null);
-      setSelectedRowData(null);
+      if (identifyHistorySkipClearRef.current) {
+        identifyHistorySkipClearRef.current = false;
+      } else {
+        setSelectedIdentifyIndex(null);
+        setSelectedRowData(null);
+      }
     } else if (prevHadIdentifyRef.current) {
-      setSelectedIdentifyIndex(null);
-      setSelectedRowData(null);
-      selectionSourceRef.current?.clear();
-      setRadarActive(false);
+      const restore = restoreListSelectionRef.current;
+      if (restore) {
+        restoreListSelectionRef.current = null;
+        pendingAutoSelectFirstRef.current = false;
+        suppressDataKeySelectRef.current = false;
+        setSelectedIdentifyIndex(null);
+        setSelectedRowData(restore.selectedRow);
+      } else {
+        setSelectedIdentifyIndex(null);
+        setSelectedRowData(null);
+        selectionSourceRef.current?.clear();
+        setRadarActive(false);
+      }
     }
     prevHadIdentifyRef.current = hasIdentify;
   }, [identifyResultList]);
@@ -570,18 +690,14 @@ export function LayerDataPanel({
   });
   const attachmentPreviewGalleryItems = useMemo((): ServiceFilePreviewItem[] => {
     if (activeLayer == null || rowKeyForAttachments == null) return [];
-    return attachmentQuery.files
-      .filter((f) => isImageServiceFileName(f.name) || isPdfServiceFileName(f.name))
-      .map((f) => ({
-        url: serviceFileDataDownloadUrl(
-          SER_FILE_ENG.dataQuery,
-          activeLayer.physicalTableName,
-          rowKeyForAttachments,
-          f.name
-        ),
-        fileName: f.name,
-        kind: isPdfServiceFileName(f.name) ? ('pdf' as const) : ('image' as const),
-      }));
+    return buildServiceFilePreviewGalleryItems(attachmentQuery.files, (fileName) =>
+      serviceFileDataDownloadUrl(
+        SER_FILE_ENG.dataQuery,
+        activeLayer.physicalTableName,
+        rowKeyForAttachments,
+        fileName
+      )
+    );
   }, [attachmentQuery.files, activeLayer, rowKeyForAttachments]);
   const attachChunkUpload = useServiceFileChunkedUpload();
 
@@ -591,13 +707,13 @@ export function LayerDataPanel({
   /** 기본정보 수정에 쓰는 행 키 — 위 첨부·이력용과 동일 계산 */
   const currentRowKey = selectedRow != null ? getRowKey(selectedRow, keyFieldName) : null;
 
-  /** 안전점검 시설물 3테이블 — 데이터조회에서 조회만 */
+  /** 안전점검 시설물 3테이블 — 데이터조회에서 조회만. 또는 서비스 읽기 권한만 */
   const dataQueryReadOnly = useMemo(
     () =>
       isFmsFacilityLayerTable(
         activeLayer?.physicalTableName ?? activeLayer?.tableName ?? null
-      ),
-    [activeLayer?.physicalTableName, activeLayer?.tableName]
+      ) || !canWriteDataQuery,
+    [activeLayer?.physicalTableName, activeLayer?.tableName, canWriteDataQuery]
   );
 
   // 데이터 이력관리에 조회 저장을 위해 추가
@@ -621,6 +737,63 @@ export function LayerDataPanel({
     setBasicDraft({});
     setBasicError(null);
   }, [selectedRowData, activeTab, dataQueryReadOnly]);
+
+  const safetyFacilityName = useMemo(() => {
+    if (!useRoadLedgerFacilityListColumns || !selectedRowData || !activeLayer) return '';
+    const tn = String(activeLayer.tableName || activeLayer.physicalTableName || '')
+      .trim()
+      .toLowerCase();
+    return resolveRoadLedgerFacilityDisplayName(tn, selectedRowData);
+  }, [useRoadLedgerFacilityListColumns, selectedRowData, activeLayer]);
+
+  useEffect(() => {
+    if (!useRoadLedgerFacilityListColumns && activeTab === 'safety') {
+      setActiveTab('basic');
+    }
+  }, [useRoadLedgerFacilityListColumns, activeTab]);
+
+  useEffect(() => {
+    if (!useRoadLedgerFacilityListColumns || activeTab !== 'safety') return;
+    let cancelled = false;
+    const facilNm = safetyFacilityName.trim();
+    setSafetyLoading(true);
+    setSafetyError(null);
+    setSafetyInspections([]);
+    if (!facilNm) {
+      setSafetyLoading(false);
+      setSafetyError('시설명이 없습니다.');
+      return;
+    }
+    void call('', 'POST', {
+      service: 'fmsLinkageService',
+      action: 'getFmsInspectionsByFacilNm',
+      params: { facilNm },
+    })
+      .then((res) => {
+        if (cancelled) return;
+        const data = (res?.data ?? res) as {
+          inspections?: FmsInspectionRecordRow[];
+          error?: string;
+        };
+        if (data?.error) {
+          setSafetyError(data.error);
+          setSafetyInspections([]);
+          return;
+        }
+        setSafetyInspections(Array.isArray(data?.inspections) ? data.inspections : []);
+      })
+      .catch((e: unknown) => {
+        if (cancelled) return;
+        setSafetyError(e instanceof Error ? e.message : String(e));
+        setSafetyInspections([]);
+      })
+      .finally(() => {
+        if (!cancelled) setSafetyLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [useRoadLedgerFacilityListColumns, activeTab, safetyFacilityName]);
 
   useEffect(() => {
     if (activeTab !== 'history') return;
@@ -763,10 +936,11 @@ export function LayerDataPanel({
     setHistoryAddOpen(true);
   }, []);
 
-  const map = mapContext?.mapInstanceRef?.current;
+  const mapReady = mapContext?.mapReady ?? false;
 
   useEffect(() => {
-    if (!map || highlightLayerRef.current) return;
+    const mapInstance = mapInstanceRef?.current;
+    if (!mapReady || !mapInstance) return;
     const source = new VectorSource();
     highlightSourceRef.current = source;
     const layer = new VectorLayer({
@@ -776,7 +950,7 @@ export function LayerDataPanel({
       properties: { listHighlightLayer: true },
     });
     layer.set('listHighlightLayer', true);
-    insertLayerBelowServiceLayer(map, layer);
+    insertLayerBelowServiceLayer(mapInstance, layer);
     highlightLayerRef.current = layer;
 
     const selSource = new VectorSource();
@@ -787,18 +961,18 @@ export function LayerDataPanel({
       style: createDataQuerySelectionRowHighlightStyle(() => pulsePhaseRef.current),
     });
     selectionLayer.set('listSelectionLayer', true);
-    insertLayerBelowServiceLayer(map, selectionLayer);
+    insertLayerBelowServiceLayer(mapInstance, selectionLayer);
     selectionLayerRef.current = selectionLayer;
 
     return () => {
-      map.removeLayer(selectionLayer);
-      map.removeLayer(layer);
-      selectionSourceRef.current = null;
-      selectionLayerRef.current = null;
-      highlightSourceRef.current = null;
-      highlightLayerRef.current = null;
+      mapInstance.removeLayer(selectionLayer);
+      mapInstance.removeLayer(layer);
+      if (selectionSourceRef.current === selSource) selectionSourceRef.current = null;
+      if (selectionLayerRef.current === selectionLayer) selectionLayerRef.current = null;
+      if (highlightSourceRef.current === source) highlightSourceRef.current = null;
+      if (highlightLayerRef.current === layer) highlightLayerRef.current = null;
     };
-  }, [map]);
+  }, [mapReady, mapInstanceRef]);
 
   useEffect(() => {
     if (!radarActive) return;
@@ -812,11 +986,22 @@ export function LayerDataPanel({
     return () => cancelAnimationFrame(rafId);
   }, [radarActive]);
 
+  const ensureListMapLayers = useCallback(() => {
+    const mapInstance = mapInstanceRef?.current;
+    if (!mapInstance) return null;
+    const onMap = mapInstance.getLayers().getArray();
+    const bulk = highlightLayerRef.current;
+    const sel = selectionLayerRef.current;
+    if (bulk && !onMap.includes(bulk)) insertLayerBelowServiceLayer(mapInstance, bulk);
+    if (sel && !onMap.includes(sel)) insertLayerBelowServiceLayer(mapInstance, sel);
+    return mapInstance;
+  }, [mapInstanceRef]);
+
   /** 목록 데이터를 지도에 표시만 함. 레이어 on/off 시 지도 이동·줌은 하지 않음 */
   const showCurrentListOnMap = useCallback(
     (dataRows: Record<string, unknown>[]) => {
+      const mapInstance = ensureListMapLayers();
       const source = highlightSourceRef.current;
-      const mapInstance = mapInstanceRef?.current;
       if (!source || !mapInstance) return;
       const geoms: unknown[] = [];
       for (const row of dataRows) {
@@ -835,45 +1020,17 @@ export function LayerDataPanel({
       source.addFeatures(features);
       // 지도 이동/줌 없음 (레이어 목록에서 껐다 켰다 할 때 뷰 유지)
     },
-    [mapInstanceRef]
+    [ensureListMapLayers]
   );
 
-  const showHighlightedRowOnMap = useCallback(
-    (rowIndex: number) => {
-      const mapInstance = mapContext?.mapInstanceRef?.current;
-      const source = selectionSourceRef.current;
-      if (!mapInstance || !source) return;
-      const row = rows[rowIndex];
-      if (!row || typeof row !== 'object') return;
-      const g = (row as Record<string, unknown>).geom;
-      if (g == null) return;
-      const geom = typeof g === 'string' ? (JSON.parse(g) as unknown) : g;
-      if (!geom || typeof geom !== 'object' || !('type' in geom) || !('coordinates' in geom)) return;
-      const geojson = { type: 'FeatureCollection' as const, features: [{ type: 'Feature' as const, geometry: geom, properties: {} }] };
-      const format = new GeoJSON();
-      const viewProj = mapInstance.getView().getProjection()?.getCode() || 'EPSG:3857';
-      const features = format.readFeatures(geojson, { dataProjection: 'EPSG:4326', featureProjection: viewProj });
-      source.clear();
-      if (features.length === 0) return;
-      const geomType = features[0].getGeometry()?.getType();
-      if (geomType === 'Point' || geomType === 'MultiPoint') features[0].set('isRadarPoint', true);
-      source.addFeatures(features);
-      const ext = source.getExtent();
-      if (ext.every((v) => isFinite(v))) {
-        scheduleFitMapToExtent3857(mapInstance, ext as [number, number, number, number], {
-          maxZoom: Math.min(16, MAP_AUTO_NAV_MAX_ZOOM),
-          applyMapViewPadding: () => mapContext?.applyMapViewPaddingRef?.current?.(),
-        });
-      }
-      setRadarActive(true);
-    },
-    [mapContext, rows]
-  );
-
-  /** 지도 식별 항목 선택 시: 도형 강조 + 패널 padding 반영해 지도 이동·확대 (목록 행 선택과 동일) */
+  /**
+   * 식별·행 선택 시 도형 강조.
+   * fit 기본 true(목록·URL 선택). 지도 객체 클릭은 fit:false — 강조만.
+   */
   const showIdentifyFeatureOnMap = useCallback(
-    (record: Record<string, unknown>) => {
-      const mapInstance = mapContext?.mapInstanceRef?.current;
+    (record: Record<string, unknown>, opts?: { fit?: boolean }) => {
+      const doFit = opts?.fit !== false;
+      const mapInstance = ensureListMapLayers() ?? mapContext?.mapInstanceRef?.current;
       const source = selectionSourceRef.current;
       if (!mapInstance || !source) return;
       const g = record?.geom;
@@ -889,21 +1046,23 @@ export function LayerDataPanel({
       const geomType = features[0].getGeometry()?.getType();
       if (geomType === 'Point' || geomType === 'MultiPoint') features[0].set('isRadarPoint', true);
       source.addFeatures(features);
-      const ext = source.getExtent();
-      if (ext.every((v) => isFinite(v))) {
-        scheduleFitMapToExtent3857(mapInstance, ext as [number, number, number, number], {
-          maxZoom: Math.min(16, MAP_AUTO_NAV_MAX_ZOOM),
-          applyMapViewPadding: () => mapContext?.applyMapViewPaddingRef?.current?.(),
-        });
+      if (doFit) {
+        const ext = source.getExtent();
+        if (ext.every((v) => isFinite(v))) {
+          scheduleFitMapToExtent3857(mapInstance, ext as [number, number, number, number], {
+            maxZoom: Math.min(16, MAP_AUTO_NAV_MAX_ZOOM),
+            applyMapViewPadding: () => mapContext?.applyMapViewPaddingRef?.current?.(),
+          });
+        }
       }
       setRadarActive(true);
     },
-    [mapContext]
+    [mapContext, ensureListMapLayers]
   );
 
   /** 상세 하단 「지도보기」 — 현재 선택된 행 도형으로 지도 이동·확대 (목록 클릭 자동이동과 별개로 수동 재이동) */
   const handleShowSelectedOnMap = useCallback(() => {
-    const mapInstance = mapContext?.mapInstanceRef?.current;
+    const mapInstance = ensureListMapLayers() ?? mapContext?.mapInstanceRef?.current;
     const source = selectionSourceRef.current;
     if (!mapInstance || !source || !selectedRowData) return;
     const g = (selectedRowData as Record<string, unknown>).geom;
@@ -929,92 +1088,152 @@ export function LayerDataPanel({
       });
     }
     setRadarActive(true);
-  }, [mapContext, selectedRowData]);
+  }, [mapContext, selectedRowData, ensureListMapLayers]);
 
   useEffect(() => {
-    if (highlightedRow == null) {
-      if (!isIdentifyMode) {
-        selectionSourceRef.current?.clear();
-        setRadarActive(false);
-      }
+    if (isIdentifyMode) return;
+    if (!mapReady) return;
+    if (selectedRowData == null) {
+      selectionSourceRef.current?.clear();
+      setRadarActive(false);
       return;
     }
-    // 페이지 이동으로 rows만 갱신된 경우 첫 행(또는 이전 인덱스)으로 지도를 다시 맞추지 않음
-    if (!pendingMapFitFromSelectionRef.current) return;
-    const row = rows[highlightedRow] ?? selectedRowDataRef.current;
-    if (!row) return;
+    const doFit = pendingMapFitFromSelectionRef.current;
     pendingMapFitFromSelectionRef.current = false;
-    if (rows[highlightedRow]) {
-      showHighlightedRowOnMap(highlightedRow);
-    } else {
-      showIdentifyFeatureOnMap(row);
-    }
-  }, [highlightedRow, rows, isIdentifyMode, showHighlightedRowOnMap, showIdentifyFeatureOnMap]);
+    showIdentifyFeatureOnMap(selectedRowData, { fit: doFit });
+  }, [isIdentifyMode, mapReady, selectedRowData, showIdentifyFeatureOnMap]);
 
   useEffect(() => {
     if (selectedIdentifyIndex == null) return;
     selectedIdentifyRowRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
   }, [selectedIdentifyIndex, selectedRowData]);
 
+  /**
+   * 목록 초기 로드.
+   * - 로드 키: 테이블 + 공간필터 + 식별모드 (행 선택 dataKey·identify 결과 객체 변경은 재조회하지 않음)
+   * - cleanup에서 미완료 로드 키를 비워, Strict Mode 재마운트·의존성 재실행 시 조기 return으로
+   *   loading이 영구 true로 남는 레이스를 방지한다.
+   */
   useEffect(() => {
     if (!activeLayer) return;
     const isIdentify = isIdentifyMode;
-    // 같은 테이블이면 재조회하지 않음 (앱 안에서 행 선택 시 전체 목록 유지)
-    if (prevLayerRef.current === activeLayer.tableName && !isIdentify) return;
-    prevLayerRef.current = activeLayer.tableName;
+    const restorePending = restoringListFromHistoryRef.current;
+    // 지도 클릭으로 dataTable이 바뀐 뒤 «이전» 시: URL 테이블이 맞을 때까지 복원 플래그 유지
+    if (
+      !isIdentify &&
+      restorePending != null &&
+      restorePending.dataTable.trim().toLowerCase() !==
+        activeLayer.tableName.trim().toLowerCase()
+    ) {
+      pendingAutoSelectFirstRef.current = false;
+      return;
+    }
+
+    const loadKey = [
+      activeLayer.tableName,
+      activeLayer.physicalTableName,
+      activeLayer.schema,
+      activeLayer.rowFilterSql ?? '',
+      spatialFilterWkt ?? '',
+      isIdentify ? 'id' : 'list',
+    ].join('|');
+    if (prevListLoadKeyRef.current === loadKey) return;
+
+    let cancelled = false;
+    let settled = false;
+    prevListLoadKeyRef.current = loadKey;
 
     setFields([]);
     setDetailFields([]);
     setKeyFieldName(null);
+    const restoreState = restoringListFromHistoryRef.current;
+    const isListRestore = !isIdentify && restoreState != null;
+    const keyAtOpen =
+      !isListRestore && initialDataKey != null ? String(initialDataKey).trim() : '';
+    const useKey = !isIdentify && keyAtOpen !== '';
+    const restorePs = isListRestore
+      ? Math.max(1, restoreState.listPageSize || PAGE_SIZE_DETAIL)
+      : useKey
+        ? PAGE_SIZE_DETAIL
+        : PAGE_SIZE_LIST;
+    const restorePage = isListRestore ? Math.max(1, restoreState.page || 1) : 1;
     if (!isIdentify) {
       setRows([]);
       setHighlightedRow(null);
-      setSelectedRowData(null);
+      if (!isListRestore) {
+        setSelectedRowData(null);
+      }
       setSelectedIdentifyIndex(null);
-      setListPageSize(PAGE_SIZE_LIST);
+      setListPageSize(restorePs);
       suppressDataKeySelectRef.current = false;
-      pendingAutoSelectFirstRef.current = true;
+      pendingAutoSelectFirstRef.current = !isListRestore && mapContext?.dataQueryMapPick == null;
       pendingHighlightIndexRef.current = null;
       listColWidthsLayerRef.current = null;
-      setListColWidthsPct(null);
+      setListColWidthsPx(null);
       loadPageSeqRef.current += 1;
     }
     const initSeq = loadPageSeqRef.current;
     setLoading(true);
     setError(null);
-    setPage(1);
+    setPage(isListRestore ? restorePage : 1);
     setTotal(0);
     if (!isIdentify) setActiveTab('basic');
     if (!isIdentify) {
       highlightSourceRef.current?.clear();
-      selectionSourceRef.current?.clear();
-      setRadarActive(false);
+      if (!isListRestore) {
+        selectionSourceRef.current?.clear();
+        setRadarActive(false);
+      }
     }
 
     const tableDataParams = {
       table: activeLayer.physicalTableName,
       schema: activeLayer.schema,
-      limit: PAGE_SIZE_LIST,
-      offset: 0,
+      limit: restorePs,
+      offset: isListRestore ? (restorePage - 1) * restorePs : 0,
       ...(spatialFilterWkt ? { spatialWkt: spatialFilterWkt, spatialSrid: 5181 } : {}),
       ...(activeLayer.rowFilterSql ? { rowFilter: activeLayer.rowFilterSql } : {}),
     };
     const fieldsPromise = fetch(
       `/api/config/defineLayer/fields/${encodeURIComponent(activeLayer.physicalTableName)}`
     ).then((r) => r.json());
-    const useKey = !isIdentify && initialDataKey != null && String(initialDataKey).trim() !== '';
+    // 목록 복원: 클릭 당시와 같은 페이지·건수로 getTableData (1건 key 조회 금지)
+    // 새로고침(dataKey): 1건만 넣지 않고 상세 목록과 같은 칸 수로 해당 페이지를 연다
     const dataPromise = isIdentify
       ? Promise.resolve({ rows: [] as Record<string, unknown>[], total: 0 })
       : useKey
       ? call('', 'POST', {
           service: 'standardService',
-          action: 'getTableRowByKey',
+          action: 'getTableRowOffset',
           params: {
             table: activeLayer.physicalTableName,
             schema: activeLayer.schema,
-            keyValue: initialDataKey!.trim(),
+            keyValue: keyAtOpen,
+            ...(spatialFilterWkt ? { spatialWkt: spatialFilterWkt, spatialSrid: 5181 } : {}),
             ...(activeLayer.rowFilterSql ? { rowFilter: activeLayer.rowFilterSql } : {}),
           },
+        }).then((offsetRes) => {
+          const d = offsetRes?.data ?? offsetRes;
+          const offset = typeof d?.offset === 'number' ? d.offset : -1;
+          const totalHint = typeof d?.total === 'number' ? d.total : 0;
+          const safeOffset = offset >= 0 ? offset : 0;
+          const keyPage = Math.floor(safeOffset / PAGE_SIZE_DETAIL) + 1;
+          const rowIndex = offset >= 0 ? safeOffset % PAGE_SIZE_DETAIL : 0;
+          return call('', 'POST', {
+            service: 'standardService',
+            action: 'getTableData',
+            params: {
+              ...tableDataParams,
+              limit: PAGE_SIZE_DETAIL,
+              offset: (keyPage - 1) * PAGE_SIZE_DETAIL,
+            },
+          }).then((listRes) => ({
+            __keyOpen: true as const,
+            dataRes: listRes,
+            page: keyPage,
+            rowIndex,
+            totalHint,
+          }));
         })
       : call('', 'POST', {
           service: 'standardService',
@@ -1024,7 +1243,12 @@ export function LayerDataPanel({
 
     Promise.all([fieldsPromise, dataPromise])
       .then(([fieldsRes, dataRes]) => {
-        if (initSeq !== loadPageSeqRef.current) return;
+        if (cancelled || initSeq !== loadPageSeqRef.current) return;
+        // 복원 페이로드는 이 로드가 대상 테이블일 때만 소비
+        const restoreDone = isListRestore ? restoreState : null;
+        if (isListRestore) {
+          restoringListFromHistoryRef.current = null;
+        }
         const rawFields = (fieldsRes?.data ?? fieldsRes) as DefineFieldRow[] | undefined;
         const sortedAll = Array.isArray(rawFields)
           ? [...rawFields].sort((a, b) => parseInt(String(a.define_field_idx ?? '999999'), 10) - parseInt(String(b.define_field_idx ?? '999999'), 10))
@@ -1054,36 +1278,93 @@ export function LayerDataPanel({
         const keyField = Array.isArray(rawFields)
           ? rawFields.find((f) => isDefineFieldFlagTrue(f.define_field_is_key))
           : null;
-        setKeyFieldName(keyField ? String(keyField.define_field_name ?? '').trim() || null : null);
+        const resolvedKeyFieldName = keyField
+          ? String(keyField.define_field_name ?? '').trim() || null
+          : null;
+        setKeyFieldName(resolvedKeyFieldName);
+
+        if (isListRestore && restoreDone) {
+          const data = dataRes?.data ?? dataRes;
+          const dataRows: Record<string, unknown>[] = Array.isArray(data?.rows) ? data.rows : [];
+          const dataTotal =
+            typeof data?.total === 'number'
+              ? data.total
+              : restoreDone.total > 0
+                ? restoreDone.total
+                : 0;
+          pendingAutoSelectFirstRef.current = false;
+          setListPageSize(restorePs);
+          setPage(restorePage);
+          setRows(dataRows);
+          setTotal(dataTotal);
+
+          const key = restoreDone.dataKey != null ? String(restoreDone.dataKey).trim() : '';
+          let idx = key
+            ? findRowIndexByHistoryKey(dataRows, key, resolvedKeyFieldName)
+            : -1;
+          if (
+            idx < 0 &&
+            restoreDone.highlightedRow != null &&
+            restoreDone.highlightedRow >= 0 &&
+            restoreDone.highlightedRow < dataRows.length
+          ) {
+            idx = restoreDone.highlightedRow;
+          }
+          if (idx >= 0 && dataRows[idx]) {
+            pendingMapFitFromSelectionRef.current = false;
+            pendingHighlightIndexRef.current = idx;
+            setHighlightedRow(idx);
+            setSelectedRowData(dataRows[idx]);
+            highlightSourceRef.current?.clear();
+            showIdentifyFeatureOnMap(dataRows[idx]);
+          } else if (restoreDone.selectedRow) {
+            setSelectedRowData(restoreDone.selectedRow);
+            highlightSourceRef.current?.clear();
+            showIdentifyFeatureOnMap(restoreDone.selectedRow);
+          } else {
+            showCurrentListOnMap(dataRows);
+          }
+          settled = true;
+          setLoading(false);
+          return;
+        }
 
         if (useKey) {
-          const keyData = dataRes?.data ?? dataRes;
-          const row = (keyData?.row ?? null) as Record<string, unknown> | null;
+          const packed = dataRes as {
+            __keyOpen?: boolean;
+            dataRes?: { data?: unknown } | Record<string, unknown>;
+            page?: number;
+            rowIndex?: number;
+            totalHint?: number;
+          };
+          const inner = packed?.__keyOpen ? packed.dataRes : dataRes;
+          const data = (inner as { data?: unknown } | undefined)?.data ?? inner;
+          const dataRows: Record<string, unknown>[] = Array.isArray(
+            (data as { rows?: unknown } | undefined)?.rows
+          )
+            ? ((data as { rows: Record<string, unknown>[] }).rows)
+            : [];
+          const dataTotal =
+            typeof (data as { total?: unknown } | undefined)?.total === 'number'
+              ? (data as { total: number }).total
+              : typeof packed?.totalHint === 'number'
+                ? packed.totalHint
+                : 0;
+          const keyPage = packed?.page ?? 1;
+          const rowIndex = packed?.rowIndex ?? 0;
+          pendingAutoSelectFirstRef.current = false;
+          pendingMapFitFromSelectionRef.current = false;
+          setListPageSize(PAGE_SIZE_DETAIL);
+          setPage(keyPage);
+          setRows(dataRows);
+          setTotal(dataTotal);
+          highlightSourceRef.current?.clear();
+          const row = dataRows[rowIndex];
           if (row) {
-            pendingAutoSelectFirstRef.current = false;
-            pendingMapFitFromSelectionRef.current = true;
-            pendingHighlightIndexRef.current = 0;
-            setRows([row]);
-            setTotal(1);
+            pendingHighlightIndexRef.current = rowIndex;
             setSelectedRowData(row);
-            setHighlightedRow(0);
-            setPage(1);
-            showCurrentListOnMap([row]);
+            setHighlightedRow(rowIndex);
             showIdentifyFeatureOnMap(row);
-          } else {
-            call('', 'POST', {
-              service: 'standardService',
-              action: 'getTableData',
-              params: tableDataParams,
-            }).then((res) => {
-              if (initSeq !== loadPageSeqRef.current) return;
-              const d = res?.data ?? res;
-              const dataRows = Array.isArray(d?.rows) ? d.rows : [];
-              const dataTotal = typeof d?.total === 'number' ? d.total : 0;
-              setRows(dataRows);
-              setTotal(dataTotal);
-              showCurrentListOnMap(dataRows);
-            });
           }
         } else if (!isIdentify) {
           const data = dataRes?.data ?? dataRes;
@@ -1091,47 +1372,81 @@ export function LayerDataPanel({
           const dataTotal = typeof data?.total === 'number' ? data.total : 0;
           setRows(dataRows);
           setTotal(dataTotal);
-          showCurrentListOnMap(dataRows);
+          if (pendingAutoSelectFirstRef.current) {
+            highlightSourceRef.current?.clear();
+          } else {
+            showCurrentListOnMap(dataRows);
+          }
         } else {
           setRows([]);
           setTotal(identifyResultList?.results?.reduce((s, r) => s + r.features.length, 0) ?? 0);
         }
+        settled = true;
         setLoading(false);
       })
       .catch((err) => {
-        if (initSeq !== loadPageSeqRef.current) return;
+        if (cancelled || initSeq !== loadPageSeqRef.current) return;
+        if (isListRestore) {
+          restoringListFromHistoryRef.current = null;
+        }
+        settled = true;
         setError(err?.message ?? String(err));
         setLoading(false);
       });
 
     return () => {
+      cancelled = true;
       loadPageSeqRef.current += 1;
+      // 미완료 로드만 키를 비움 → 재실행 시 조기 return으로 loading 고정되는 것 방지
+      if (!settled && prevListLoadKeyRef.current === loadKey) {
+        prevListLoadKeyRef.current = null;
+      }
     };
-  }, [activeLayer, spatialFilterWkt, showCurrentListOnMap, initialDataKey, identifyResultList]);
+    // initialDataKey·identifyResultList·콜백은 로드 키에 넣지 않음(행 선택·식별 결과 갱신 시 전체 재조회로 loading 레이스 유발)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- showCurrentListOnMap/showIdentifyFeatureOnMap/identifyResultList/initialDataKey 의도적 제외
+  }, [
+    activeLayer,
+    spatialFilterWkt,
+    isIdentifyMode,
+  ]);
 
-  // 지도 식별 후 패널 열렸을 때 해당 행 상세 + 도형 강조·지도 이동
+  // 지도 객체 클릭(식별) → 상세·강조만 (맵 무브 없음)
   useEffect(() => {
     if (!isIdentifyMode || identifySelectedRow == null || !setIdentifySelectedRow) return;
-    const idx = identifyFlat.findIndex((item) => item.feature.data === identifySelectedRow);
-    setSelectedRowData(identifySelectedRow);
+    const row = identifySelectedRow;
+    const idx = identifyFlat.findIndex((item) => item.feature.data === row);
+    setSelectedRowData(row);
     setSelectedIdentifyIndex(idx >= 0 ? idx : null);
     setActiveTab('basic');
-    showIdentifyFeatureOnMap(identifySelectedRow);
     setIdentifySelectedRow(null);
+    // 레이어 생성·activeLayer null 클리어 이후 강조 (첫 패널 오픈 레이스 방지)
+    let cancelled = false;
+    queueMicrotask(() => {
+      requestAnimationFrame(() => {
+        if (cancelled) return;
+        showIdentifyFeatureOnMap(row, { fit: false });
+      });
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [isIdentifyMode, identifySelectedRow, identifyFlat, setIdentifySelectedRow, showIdentifyFeatureOnMap]);
 
   useEffect(() => {
     if (!activeLayer) {
-      prevLayerRef.current = null;
+      prevListLoadKeyRef.current = null;
       pendingAutoSelectFirstRef.current = false;
       pendingHighlightIndexRef.current = null;
       listColWidthsLayerRef.current = null;
-      setListColWidthsPct(null);
-      highlightSourceRef.current?.clear();
-      selectionSourceRef.current?.clear();
-      setRadarActive(false);
+      setListColWidthsPx(null);
+      // 식별으로 패널이 열릴 때 activeLayer 로드 전에 강조를 지우면 첫 선택이 비어 보임
+      if (!isIdentifyMode) {
+        highlightSourceRef.current?.clear();
+        selectionSourceRef.current?.clear();
+        setRadarActive(false);
+      }
     }
-  }, [activeLayer]);
+  }, [activeLayer, isIdentifyMode]);
 
   const loadPage = useCallback(
     (newPage: number, size?: number, opts?: { paginationOnly?: boolean }) => {
@@ -1205,10 +1520,19 @@ export function LayerDataPanel({
           }
           setLoading(false);
           setTimeout(() => { if (listScrollRef.current) listScrollRef.current.scrollTop = savedScrollTop; }, 0);
-          showCurrentListOnMap(dataRows);
+          if (
+            highlightOnlySelectedRef.current ||
+            selectedRowDataRef.current != null
+          ) {
+            highlightOnlySelectedRef.current = false;
+            highlightSourceRef.current?.clear();
+          } else {
+            showCurrentListOnMap(dataRows);
+          }
         })
         .catch((err) => {
           if (seq !== loadPageSeqRef.current) return;
+          highlightOnlySelectedRef.current = false;
           setError(err?.message ?? String(err));
           setLoading(false);
         });
@@ -1219,20 +1543,27 @@ export function LayerDataPanel({
   // 앱 안에서 행 선택 시 URL의 dataKey만 반영 → 선택/하이라이트 동기화 (목록↔상세 칸 수 맞춤)
   useEffect(() => {
     if (paginationOnlyLoadRef.current) return;
+    if (dataQueryMapPick) return;
     if (!activeLayer || isIdentifyMode || !keyFieldName || rows.length === 0) return;
     const key = initialDataKey != null ? String(initialDataKey).trim() : '';
     if (key === '') {
       suppressDataKeySelectRef.current = false;
       return;
     }
-    if (suppressDataKeySelectRef.current) return;
+    if (suppressDataKeySelectRef.current) {
+      const alreadyKey = resolveHistoryRowKey(selectedRowData, keyFieldName);
+      if (alreadyKey != null && String(alreadyKey) === key) {
+        suppressDataKeySelectRef.current = false;
+      }
+      return;
+    }
     const idx = rows.findIndex((r) => {
       const rowKey = getRowKey(r, keyFieldName);
       return rowKey != null && String(rowKey) === key;
     });
     if (idx < 0) return;
     pendingAutoSelectFirstRef.current = false;
-    pendingMapFitFromSelectionRef.current = true;
+    pendingMapFitFromSelectionRef.current = false;
     if (listPageSize === PAGE_SIZE_LIST && selectedRowData == null) {
       const absoluteOffset = (page - 1) * PAGE_SIZE_LIST + idx;
       const newPage = Math.floor(absoluteOffset / PAGE_SIZE_DETAIL) + 1;
@@ -1263,6 +1594,7 @@ export function LayerDataPanel({
     page,
     loadPage,
     showIdentifyFeatureOnMap,
+    dataQueryMapPick,
   ]);
 
   // 페이지 이동 직후 dataKey 동기화 스킵 플래그 해제 (dataKey effect 다음 틱)
@@ -1275,6 +1607,7 @@ export function LayerDataPanel({
   // 레이어 최초 목록 로드 시 첫 행 자동 상세·지도 이동 (URL/지도 dataKey·수동 닫기 우선)
   useEffect(() => {
     if (!pendingAutoSelectFirstRef.current) return;
+    if (dataQueryMapPick) return;
     if (!activeLayer || isIdentifyMode || loading) return;
     if (rows.length === 0) return;
     if (selectedRowData != null) return;
@@ -1303,10 +1636,12 @@ export function LayerDataPanel({
     const absoluteOffset = (page - 1) * PAGE_SIZE_LIST;
     const newPage = Math.floor(absoluteOffset / PAGE_SIZE_DETAIL) + 1;
     const newRowIndex = absoluteOffset % PAGE_SIZE_DETAIL;
-    pendingMapFitFromSelectionRef.current = true;
+    pendingMapFitFromSelectionRef.current = false;
+    highlightOnlySelectedRef.current = true;
     pendingHighlightIndexRef.current = newRowIndex;
     setHighlightedRow(newRowIndex);
     setSelectedRowData(rowData);
+    highlightSourceRef.current?.clear();
     showIdentifyFeatureOnMap(rowData);
     setRows([]);
     setListPageSize(PAGE_SIZE_DETAIL);
@@ -1326,15 +1661,206 @@ export function LayerDataPanel({
     loadPage,
     onDataKeyChange,
     showIdentifyFeatureOnMap,
+    dataQueryMapPick,
+  ]);
+
+  /** 지도에서 고른 1건 → 기존 목록의 해당 페이지·상세 */
+  useEffect(() => {
+    if (!dataQueryMapPick || !setDataQueryMapPick) return;
+    pendingAutoSelectFirstRef.current = false;
+    const pickTable = String(dataQueryMapPick.tableName ?? '').trim();
+    if (!pickTable || pickTable !== dataTable.trim()) return;
+    if (!activeLayer || activeLayer.tableName !== pickTable) return;
+    if (isIdentifyMode) return;
+    if (keyFieldName == null && loading) return;
+
+    const row = dataQueryMapPick.row;
+    const keyVal = resolveHistoryRowKey(row, keyFieldName);
+    const seq = ++mapPickSeqRef.current;
+    let cancelled = false;
+
+    const applyAtOffset = (offset: number, totalHint: number) => {
+      if (cancelled || seq !== mapPickSeqRef.current) return;
+      pendingAutoSelectFirstRef.current = false;
+      suppressDataKeySelectRef.current = true;
+      highlightOnlySelectedRef.current = true;
+      /** 지도에서 이미 보고 있는 도형 — 목록·URL 동기화가 다시 맞추지 않게 */
+      pendingMapFitFromSelectionRef.current = false;
+      if (offset < 0) {
+        pendingHighlightIndexRef.current = 0;
+        setRows([row]);
+        setTotal(Math.max(1, totalHint));
+        setSelectedRowData(row);
+        setHighlightedRow(0);
+        setPage(1);
+        setListPageSize(PAGE_SIZE_DETAIL);
+        setActiveTab('basic');
+        onDataKeyChange?.(keyVal);
+        showIdentifyFeatureOnMap(row, { fit: false });
+        setDataQueryMapPick(null);
+        return;
+      }
+      const newPage = Math.floor(offset / PAGE_SIZE_DETAIL) + 1;
+      const newRowIndex = offset % PAGE_SIZE_DETAIL;
+      pendingHighlightIndexRef.current = newRowIndex;
+      setSelectedRowData(row);
+      setHighlightedRow(newRowIndex);
+      setListPageSize(PAGE_SIZE_DETAIL);
+      setActiveTab('basic');
+      onDataKeyChange?.(keyVal);
+      showIdentifyFeatureOnMap(row, { fit: false });
+      setDataQueryMapPick(null);
+      loadPage(newPage, PAGE_SIZE_DETAIL);
+    };
+
+    if (keyVal == null) {
+      applyAtOffset(-1, 1);
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    call('', 'POST', {
+      service: 'standardService',
+      action: 'getTableRowOffset',
+      params: {
+        table: activeLayer.physicalTableName,
+        schema: activeLayer.schema,
+        keyValue: keyVal,
+        ...(keyFieldName ? { keyField: keyFieldName } : {}),
+        ...(spatialFilterWkt ? { spatialWkt: spatialFilterWkt, spatialSrid: 5181 } : {}),
+        ...(activeLayer.rowFilterSql ? { rowFilter: activeLayer.rowFilterSql } : {}),
+      },
+    })
+      .then((res) => {
+        if (cancelled || seq !== mapPickSeqRef.current) return;
+        const d = res?.data ?? res;
+        const offset = typeof d?.offset === 'number' ? d.offset : -1;
+        const totalHint = typeof d?.total === 'number' ? d.total : 0;
+        applyAtOffset(offset, totalHint);
+      })
+      .catch(() => {
+        if (cancelled || seq !== mapPickSeqRef.current) return;
+        applyAtOffset(-1, 1);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    dataQueryMapPick,
+    setDataQueryMapPick,
+    dataTable,
+    activeLayer,
+    isIdentifyMode,
+    keyFieldName,
+    loading,
+    spatialFilterWkt,
+    loadPage,
+    onDataKeyChange,
+    showIdentifyFeatureOnMap,
   ]);
 
   const handleClose = () => {
+    if (mapContext?.suppressMapIdentifyUntilRef) {
+      mapContext.suppressMapIdentifyUntilRef.current = Date.now() + 400;
+    }
+    identifyHistoryRef.current = [];
+    setIdentifyHistoryDepth(0);
     mapContext?.setIdentifyResultList?.(null);
+    setDataQueryMapPick?.(null);
     onClose?.();
   };
 
+  /**
+   * 식별 화면 하단·헤더 동작.
+   * - 스택이 있으면 «이전»(직전 목록·식별으로 복귀)
+   * - 스택이 없으면 «닫기»(패널이 닫힌 채 지도만 클릭한 경우 등)
+   */
+  const handleBackFromIdentify = () => {
+    const prev = identifyHistoryRef.current.pop();
+    setIdentifyHistoryDepth(identifyHistoryRef.current.length);
+    if (prev?.kind === 'identify') {
+      identifyHistorySkipRef.current = true;
+      identifyHistorySkipClearRef.current = true;
+      mapContext?.setIdentifyResultList?.(prev.identify);
+      mapContext?.setIdentifySelectedRow?.(null);
+      setSelectedRowData(prev.selectedRow);
+      setSelectedIdentifyIndex(prev.selectedIdentifyIndex);
+      setActiveTab('basic');
+      if (prev.selectedRow) {
+        showIdentifyFeatureOnMap(prev.selectedRow);
+      } else {
+        selectionSourceRef.current?.clear();
+        setRadarActive(false);
+      }
+      if (prev.dataTable && prev.dataTable !== dataTable.trim()) {
+        onDataTableChange?.(prev.dataTable);
+      }
+      onDataKeyChange?.(null);
+      return;
+    }
+
+    if (prev?.kind === 'list') {
+      const restorePayload: ListHistoryRestore = {
+        dataTable: prev.dataTable,
+        dataKey: prev.dataKey,
+        selectedRow: prev.selectedRow,
+        listPageSize: prev.listPageSize,
+        page: prev.page,
+        highlightedRow: prev.highlightedRow,
+        total: prev.total,
+      };
+      identifyHistorySkipRef.current = true;
+      restoreListSelectionRef.current = restorePayload;
+      restoringListFromHistoryRef.current = restorePayload;
+      pendingAutoSelectFirstRef.current = false;
+      suppressDataKeySelectRef.current = false;
+      mapContext?.setIdentifyResultList?.(null);
+      mapContext?.setIdentifySelectedRow?.(null);
+      setSelectedIdentifyIndex(null);
+      if (prev.dataTable && prev.dataTable !== dataTable.trim()) {
+        onDataTableChange?.(prev.dataTable);
+      }
+      onDataKeyChange?.(prev.dataKey);
+      return;
+    }
+
+    handleClose();
+  };
+
+  const identifyNavLabel = identifyHistoryDepth > 0 ? '이전' : '닫기';
+  const handleIdentifyNav = identifyHistoryDepth > 0 ? handleBackFromIdentify : handleClose;
+
   const handleIdentifyItemClick = (item: { layer: IdentifyLayerResult; feature: IdentifyFeatureItem; index: number }) => {
-    const { feature, index } = item;
+    const { feature, index, layer } = item;
+
+    // 드론영상 범위(가상): 우측 목록에서 고르면 해당 영상만 지도에 표시
+    if (isOrthoDataQueryLayerId(layer.tableName) || feature.data?.__orthoExtent === true) {
+      const tu = Number(feature.data?.tuKey);
+      if (Number.isFinite(tu)) {
+        mapContext?.setOrthoDataQueryTuKeys?.([tu]);
+      }
+      setSelectedRowData(feature.data);
+      setSelectedIdentifyIndex(index);
+      setActiveTab('basic');
+      const ext = feature.data?.extent3857;
+      const map = mapInstanceRef?.current;
+      if (
+        map &&
+        Array.isArray(ext) &&
+        ext.length === 4 &&
+        ext.every((n) => typeof n === 'number' && Number.isFinite(n))
+      ) {
+        map.getView().fit(ext as [number, number, number, number], {
+          padding: [80, 80, 80, 80],
+          maxZoom: 18,
+          duration: 400,
+        });
+      }
+      return;
+    }
+
     if (selectedIdentifyIndex === index && selectedRowData != null) {
       setSelectedRowData(null);
       setSelectedIdentifyIndex(null);
@@ -1345,7 +1871,7 @@ export function LayerDataPanel({
     setSelectedRowData(feature.data);
     setSelectedIdentifyIndex(index);
     setActiveTab('basic');
-    showIdentifyFeatureOnMap(feature.data);
+    showIdentifyFeatureOnMap(feature.data, { fit: false });
   };
 
   const closeDetail = () => {
@@ -1378,10 +1904,12 @@ export function LayerDataPanel({
       const wasDetailOpen = selectedRowData != null;
       suppressDataKeySelectRef.current = false;
       if (wasDetailOpen) {
-        pendingMapFitFromSelectionRef.current = true;
+        pendingMapFitFromSelectionRef.current = false;
+        highlightOnlySelectedRef.current = true;
         pendingHighlightIndexRef.current = rowIndex;
         setHighlightedRow(rowIndex);
         setSelectedRowData(rowData);
+        highlightSourceRef.current?.clear();
         showIdentifyFeatureOnMap(rowData);
         setActiveTab((tab) => (tab === 'attach' ? 'attach' : 'basic'));
         onDataKeyChange?.(keyVal);
@@ -1389,10 +1917,12 @@ export function LayerDataPanel({
         const absoluteOffset = (page - 1) * PAGE_SIZE_LIST + rowIndex;
         const newPage = Math.floor(absoluteOffset / PAGE_SIZE_DETAIL) + 1;
         const newRowIndex = absoluteOffset % PAGE_SIZE_DETAIL;
-        pendingMapFitFromSelectionRef.current = true;
+        pendingMapFitFromSelectionRef.current = false;
+        highlightOnlySelectedRef.current = true;
         pendingHighlightIndexRef.current = newRowIndex;
         setHighlightedRow(newRowIndex);
         setSelectedRowData(rowData);
+        highlightSourceRef.current?.clear();
         showIdentifyFeatureOnMap(rowData);
         setRows([]);
         setListPageSize(PAGE_SIZE_DETAIL);
@@ -1468,7 +1998,7 @@ export function LayerDataPanel({
   };
 
   const roadLedgerFacilityTableSet = useMemo(
-    () => new Set(getAllRoadLedgerDocLayerIds().map((x) => String(x).trim().toLowerCase())),
+    () => new Set(getAllRoadLedgerFacilityLayerIds()),
     []
   );
 
@@ -1480,10 +2010,9 @@ export function LayerDataPanel({
     return getRoadLedgerFacilityColumnKeys(tn, sample);
   }, [activeLayer, useRoadLedgerFacilityListColumns, rows, roadLedgerFacilityTableSet]);
 
-  // 레이어 최초 목록(자동선택 전)에서 컬럼 폭 1회 산정 — 페이지 이동 시 유지
+  // 헤더·현재 페이지 셀 최장 길이로 컬럼 폭(px) 산정. 이후 페이지는 더 긴 값만 반영
   useLayoutEffect(() => {
     if (!activeLayer || isIdentifyMode) return;
-    if (listColWidthsLayerRef.current === activeLayer.tableName) return;
     if (rows.length === 0) return;
 
     const isGeomLikeFieldName = (name: string) => {
@@ -1527,7 +2056,7 @@ export function LayerDataPanel({
       : listFieldsAll.slice(0, 5);
     if (cols.length === 0) return;
 
-    const weights = cols.map((f) => {
+    const needed = cols.map((f, colIndex) => {
       const header = getDefineFieldDisplayLabel(f.define_field_name, f.define_field_kor_name);
       const fieldName = String(f.define_field_name ?? '');
       const cellTexts: string[] = [];
@@ -1550,16 +2079,22 @@ export function LayerDataPanel({
             })();
         cellTexts.push(String(display ?? ''));
       }
-      return estimateListColWeight(header, cellTexts);
+      const fromText = estimateListColNeededPx(header, cellTexts, {
+        isFirst: colIndex === 0,
+        isLast: colIndex === cols.length - 1,
+      });
+      return Math.max(fromText, getListColMinPx(fieldName, f.define_field_kor_name));
     });
 
-    const listColRefs = cols.map((f) => ({
-      name: String(f.define_field_name ?? ''),
-      kor: f.define_field_kor_name,
-    }));
-
-    listColWidthsLayerRef.current = activeLayer.tableName;
-    setListColWidthsPct(computeListColWidthsPct(weights, listColRefs));
+    const tableName = activeLayer.tableName;
+    setListColWidthsPx((prev) => {
+      const sameLayer = listColWidthsLayerRef.current === tableName;
+      listColWidthsLayerRef.current = tableName;
+      if (!sameLayer || prev == null || prev.length !== needed.length) {
+        return needed;
+      }
+      return needed.map((n, i) => Math.max(n, prev[i] ?? 0));
+    });
   }, [
     activeLayer,
     isIdentifyMode,
@@ -1677,6 +2212,9 @@ export function LayerDataPanel({
     { id: 'basic', label: '기본정보', icon: FileText },
     { id: 'history', label: '이력관리', icon: History },
     { id: 'attach', label: '첨부파일', icon: Paperclip },
+    ...(useRoadLedgerFacilityListColumns
+      ? [{ id: 'safety' as const, label: '안전점검', icon: ShieldCheck }]
+      : []),
   ];
 
   /** 현재 페이지 끝이 전체 건수 미만일 때만 다음 페이지 가능 (7건·30건 꽉 찬 마지막 페이지 제외) */
@@ -1688,7 +2226,7 @@ export function LayerDataPanel({
   return (
     <>
     <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
-      {/* 상세 열림 시 패널 닫기는 레이어 목록과 동일하게 헤더 우측 X */}
+      {/* 상세 열림 시: 일반 목록은 패널 닫기(X), 지도 식별은 이력 있으면 이전·없으면 닫기 */}
       <div className="flex items-center justify-between gap-2 border-b border-border px-4 py-2.5 shrink-0 bg-background">
         <div className="min-w-0 flex-1">
           <h3 className="text-sm font-semibold text-foreground truncate">{activeLayer.name}</h3>
@@ -1696,13 +2234,13 @@ export function LayerDataPanel({
             <span className="text-[11px] text-muted-foreground">{activeLayer.tableName}</span>
           )}
         </div>
-        {hasDetail && (
+        {(hasDetail || isIdentifyMode) && (
           <button
             type="button"
-            onClick={handleClose}
+            onClick={isIdentifyMode ? handleIdentifyNav : handleClose}
             className="shrink-0 rounded p-1 text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
-            title="닫기"
-            aria-label="닫기"
+            title={isIdentifyMode ? identifyNavLabel : '닫기'}
+            aria-label={isIdentifyMode ? identifyNavLabel : '닫기'}
           >
             <X className="h-4 w-4" />
           </button>
@@ -1736,8 +2274,9 @@ export function LayerDataPanel({
               selectedIndex={selectedIdentifyIndex}
               selectedRowRef={selectedIdentifyRowRef}
               onItemClick={handleIdentifyItemClick}
-              onClose={handleClose}
+              onClose={handleIdentifyNav}
               showFooterClose={!hasDetail}
+              footerActionLabel={identifyNavLabel}
             />
           )}
           {!isIdentifyMode && !error && listFields.length > 0 && (rows.length > 0 || !loading) && (
@@ -1747,34 +2286,39 @@ export function LayerDataPanel({
                   const fieldName = String(f.define_field_name ?? '');
                   const korName = f.define_field_kor_name;
                   const isNumberCol = isNumberColumnField(fieldName, korName);
-                  const colWidth = listColWidthsPct?.[colIndex];
-                  const colMinPx = getListColMinPx(fieldName, korName);
+                  const colPx = listColWidthsPx?.[colIndex] ?? getListColMinPx(fieldName, korName);
                   return (
                     <col
                       key={fieldName}
-                      style={{
-                        ...(colWidth != null ? { width: `${colWidth}%` } : {}),
-                        minWidth: colMinPx,
-                        ...(isNumberCol ? { maxWidth: colMinPx } : {}),
-                      }}
+                      style={
+                        isNumberCol
+                          ? { width: colPx, minWidth: colPx, maxWidth: colPx }
+                          : { minWidth: colPx }
+                      }
                     />
                   );
                 })}
               </colgroup>
               <thead className="bg-slate-100 dark:bg-muted">
                 <tr>
-                  {listFields.map((f) => {
+                  {listFields.map((f, colIndex) => {
                     const fieldName = String(f.define_field_name ?? '');
                     const korName = f.define_field_kor_name;
                     const isNumberCol = isNumberColumnField(fieldName, korName);
                     const headerLabel = getDefineFieldDisplayLabel(fieldName, korName);
+                    const colPx = listColWidthsPx?.[colIndex] ?? getListColMinPx(fieldName, korName);
                     return (
                       <th
                         key={fieldName}
                         className={cn(
-                          'min-w-0 truncate border-b border-border px-2 py-1.5 align-middle text-[12px] font-medium text-slate-500 dark:text-muted-foreground',
+                          'overflow-hidden truncate whitespace-nowrap border-b border-border px-2 py-1.5 first:pl-4 last:pr-4 align-middle text-[12px] font-medium text-slate-500 dark:text-muted-foreground',
                           isNumberCol ? 'text-center' : 'text-left'
                         )}
+                        style={
+                          isNumberCol
+                            ? { width: colPx, maxWidth: colPx }
+                            : { minWidth: colPx }
+                        }
                         title={headerLabel}
                       >
                         {headerLabel}
@@ -1834,10 +2378,11 @@ export function LayerDataPanel({
                           isHighlighted && 'bg-primary/10'
                         )}
                       >
-                        {listFields.map((f) => {
+                        {listFields.map((f, colIndex) => {
                           const fieldName = String(f.define_field_name ?? '');
                           const korName = f.define_field_kor_name;
                           const isNumberCol = isNumberColumnField(fieldName, korName);
+                          const colPx = listColWidthsPx?.[colIndex] ?? getListColMinPx(fieldName, korName);
                           const display = useFacilityCols
                             ? formatRoadLedgerFacilityCellValue(fieldName, row)
                             : (() => {
@@ -1854,14 +2399,20 @@ export function LayerDataPanel({
                                   codesByField[fieldName.trim().toLowerCase()]
                                 );
                               })();
+                          const cellText = String(display ?? '');
                           return (
                             <td
                               key={fieldName}
                               className={cn(
-                                'min-w-0 truncate px-2 first:pl-4 last:pr-4 text-slate-900 dark:text-foreground',
+                                'overflow-hidden truncate whitespace-nowrap px-2 first:pl-4 last:pr-4 text-slate-900 dark:text-foreground',
                                 isNumberCol && 'text-center'
                               )}
-                              title={display}
+                              style={
+                                isNumberCol
+                                  ? { width: colPx, maxWidth: colPx }
+                                  : { minWidth: colPx }
+                              }
+                              title={cellText}
                             >
                               {display}
                             </td>
@@ -2127,6 +2678,7 @@ export function LayerDataPanel({
                     ) : (
                   <div className="space-y-1.5">
                     {attachmentQuery.files.map((file) => {
+                      const canPreview = isServiceFilePreviewableName(file.name);
                       const isImg = isImageServiceFileName(file.name);
                       const isPdf = isPdfServiceFileName(file.name);
                       const dateStr =
@@ -2143,7 +2695,7 @@ export function LayerDataPanel({
                         file.name
                       );
                       const activateRow = () => {
-                        if (isImg || isPdf) {
+                        if (canPreview) {
                           const idx = attachmentPreviewGalleryItems.findIndex((i) => i.fileName === file.name);
                           setAttachmentImagePreview({
                             items: attachmentPreviewGalleryItems,
@@ -2159,7 +2711,7 @@ export function LayerDataPanel({
                           tabIndex={0}
                           role="group"
                           aria-label={
-                            isImg || isPdf ? `${file.name} 크게 보기` : `${file.name} 다운로드`
+                            canPreview ? `${file.name} 크게 보기` : `${file.name} 다운로드`
                           }
                           className="flex cursor-pointer items-center gap-2.5 rounded border border-border bg-background p-2.5 pr-1 transition-colors hover:bg-muted/50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
                           onClick={activateRow}
@@ -2249,6 +2801,19 @@ export function LayerDataPanel({
                 )}
               </div>
             )}
+
+            {activeTab === 'safety' && useRoadLedgerFacilityListColumns && (
+              <div className="px-3 py-2">
+                <FmsInspectionRecordsSection
+                  inspections={safetyInspections}
+                  loading={safetyLoading}
+                  error={safetyError}
+                  emptyMessage={FMS_EMPTY_INSPECTION_MESSAGE}
+                  selfScroll={false}
+                  pageSize={13}
+                />
+              </div>
+            )}
           </div>
 
           {/* Detail footer */}
@@ -2295,7 +2860,7 @@ export function LayerDataPanel({
                       >
                         지도보기
                       </button>
-                      <button type="button" onClick={closeDetail} className="rounded border border-border bg-background px-2.5 py-1 text-[11px] text-muted-foreground transition-colors hover:bg-muted/50">닫기</button>
+                      <button type="button" onClick={handleClose} className="rounded border border-border bg-background px-2.5 py-1 text-[11px] text-muted-foreground transition-colors hover:bg-muted/50">닫기</button>
                     </>
                   )}
                 </div>
@@ -2318,8 +2883,27 @@ export function LayerDataPanel({
                     이력 추가
                   </button>
                   )}
-                  <button type="button" onClick={closeDetail} className="rounded border border-border bg-background px-2.5 py-1 text-[11px] text-muted-foreground transition-colors hover:bg-muted/50">닫기</button>
+                  <button type="button" onClick={handleClose} className="rounded border border-border bg-background px-2.5 py-1 text-[11px] text-muted-foreground transition-colors hover:bg-muted/50">닫기</button>
                 </div>
+              </div>
+            )}
+            {activeTab === 'safety' && useRoadLedgerFacilityListColumns && (
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-[10px] text-muted-foreground">
+                  점검진단실적{' '}
+                  {safetyLoading
+                    ? '…'
+                    : safetyFacilityName
+                      ? `${safetyInspections.length}건`
+                      : '—'}
+                </span>
+                <button
+                  type="button"
+                  onClick={handleClose}
+                  className="rounded border border-border bg-background px-2.5 py-1 text-[11px] text-muted-foreground transition-colors hover:bg-muted/50"
+                >
+                  닫기
+                </button>
               </div>
             )}
             {activeTab === 'attach' && (
@@ -2367,7 +2951,7 @@ export function LayerDataPanel({
                       전체 다운로드
                     </span>
                   )}
-                  <button type="button" onClick={closeDetail} className="rounded border border-border bg-background px-2.5 py-1 text-[11px] text-muted-foreground transition-colors hover:bg-muted/50">닫기</button>
+                  <button type="button" onClick={handleClose} className="rounded border border-border bg-background px-2.5 py-1 text-[11px] text-muted-foreground transition-colors hover:bg-muted/50">닫기</button>
                 </div>
               </div>
             )}

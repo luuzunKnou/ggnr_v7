@@ -7,14 +7,21 @@ export const SER_FILE_ENG = {
   dataQuery: 'dataQuery',
   riverBasicPlan: 'riverBasicPlan',
   riverUseLedger: 'riverUseLedger',
+  /** 울진 하천점용 — file_data/usage_data_as/{cons_code}/ */
+  usageDataAs: 'usageDataAs',
   riverConstructionLedger: 'riverConstructionLedger',
   smallRiverUseLedger: 'smallRiverUseLedger',
   roadUseLedger: 'roadUseLedger',
   roadLedger: 'roadLedger',
   roadFrontageBuilding: 'roadFrontageBuilding',
+  /** 상수도 공사대장 — file_data/wtl_cons_as/{cons_code}/ */
   waterworksLedger: 'waterworksLedger',
+  /** 하수도 공사대장 — file_data/swl_cons_as/{cons_code}/ */
+  sewerConstructionLedger: 'sewerConstructionLedger',
   complaint: 'complaint',
   memo: 'memo',
+  /** GCP 위치 사진 1장 — file_data/gcp/{ogc_fid}/ */
+  gcp: 'gcp',
   /** 공지사항 첨부 — file_data/notice/{key}/ */
   notice: 'notice',
   /** 자료실 첨부 — file_data/board/{key}/ */

@@ -2,7 +2,7 @@
  * 서버 전용: roadDoc CAD(dwg/dxf) → 미리보기용 `_${stem}.png` (투명 배경)
  * 저장소 루트의 `QCAD_modules` 아래 QCAD(dwg2bmp.bat) 필요.
  *
- * - `roadDoc/file` 경로의 `(pages)`·한글·괄호는 QCAD 인자에서 깨질 수 있어, 입력/출력은
+ * - 원본 경로의 한글·괄호는 QCAD 인자에서 깨질 수 있어, 입력/출력은
  *   저장소 루트의 `.cad-preview-work`(ASCII)에서 처리한 뒤 최종 경로로 복사한다.
  * - `%TEMP%`에 한글 사용자명 등이 있으면 QCAD가 PNG를 쓰지 않고 exit 0만 나오는 경우가 있어
  *   OS 임시 폴더는 쓰지 않는다.

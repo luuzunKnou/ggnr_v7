@@ -20,10 +20,16 @@ type Props = {
   maxVisibleCards?: number
   /** true면 남은 패널 높이를 채우고 목록만 내부 스크롤 */
   fillHeight?: boolean
+  /** 제목 글자 스타일 (기본: text-[11px] font-medium text-muted-foreground) */
+  titleClassName?: string
   className?: string
   onAdd?: () => void
   onRemove?: (index: number) => void
   onClick?: (item: LayerRowParcelItem, index: number) => void
+  /** 카드에 마우스를 올렸을 때 안내. 기본은 위치 이동 */
+  clickTitle?: string
+  /** 위쪽 탭에 제목이 있을 때 목록 제목을 숨긴다 */
+  hideTitle?: boolean
   emptyHintEdit?: string
   emptyHintView?: string
 }
@@ -36,17 +42,31 @@ export function UsageDataAsAddressList({
   selectionTone = 'primary',
   maxVisibleCards = MAX_VISIBLE_CARDS,
   fillHeight = false,
+  titleClassName,
   className,
   onAdd,
   onRemove,
   onClick,
+  clickTitle = '클릭 시 위치 이동 및 선택',
+  hideTitle = false,
   emptyHintEdit = '「추가」로 등록합니다.',
   emptyHintView = '등록된 항목이 없습니다.',
 }: Props) {
   return (
     <div className={cn('mt-4', fillHeight && 'flex min-h-0 flex-1 flex-col', className)}>
+      {!hideTitle || (isEditing && onAdd) ? (
       <div className="mb-2 flex shrink-0 items-center justify-between gap-2">
-        <div className="text-[11px] font-medium text-muted-foreground">{title}</div>
+        {!hideTitle ? (
+        <div
+          className={cn(
+            titleClassName ?? 'text-[11px] font-medium text-muted-foreground'
+          )}
+        >
+          {title}
+        </div>
+        ) : (
+          <div />
+        )}
         <div className="flex shrink-0 items-center gap-1">
           {isEditing && onAdd && (
             <LayerRowPanelButton className="h-6 px-2 text-[10px]" onClick={onAdd}>
@@ -56,22 +76,25 @@ export function UsageDataAsAddressList({
           )}
         </div>
       </div>
+      ) : null}
       {items.length === 0 ? (
-        <div
-          className={cn(
-            'rounded border border-dashed border-border bg-muted/50 px-2 py-3 text-muted-foreground',
-            fillHeight && 'min-h-0 flex-1'
-          )}
-        >
-          {isEditing ? emptyHintEdit : emptyHintView}
+        <div className="shrink-0 rounded border border-border bg-muted/30 px-3 py-4 text-center">
+          <MapPin
+            className="mx-auto mb-1.5 h-4 w-4 text-muted-foreground/60"
+            strokeWidth={1.5}
+            aria-hidden
+          />
+          <p className="text-[11px] leading-relaxed text-muted-foreground">
+            {isEditing ? emptyHintEdit : emptyHintView}
+          </p>
         </div>
       ) : (
         <ul
           className={cn(
             'list-none space-y-1.5',
             fillHeight
-              ? 'min-h-0 flex-1 overflow-y-auto scrollbar-hide pr-0.5'
-              : items.length > maxVisibleCards && 'overflow-y-auto scrollbar-hide pr-0.5'
+              ? 'min-h-0 flex-1 overflow-y-auto scrollbar-thin pr-0.5'
+              : items.length > maxVisibleCards && 'overflow-y-auto scrollbar-thin pr-0.5'
           )}
           style={
             !fillHeight && items.length > maxVisibleCards
@@ -97,7 +120,7 @@ export function UsageDataAsAddressList({
                     type="button"
                     className={cn(cardClass, 'min-w-0 flex-1')}
                     onClick={() => onClick?.(item, i)}
-                    title="클릭 시 위치 이동 및 선택"
+                    title={clickTitle}
                   >
                     <MapPin
                       className="h-3.5 w-3.5 shrink-0 text-muted-foreground"

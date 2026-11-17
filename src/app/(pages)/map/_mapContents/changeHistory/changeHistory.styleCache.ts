@@ -10,11 +10,11 @@ import type { StyleLike } from 'ol/style/Style';
 import { call } from '@/lib/api';
 import {
   parseSimpleStyleFromCss,
-  toPublicSymbolPreviewUrl,
+  resolveSymbolPreviewUrl,
   type GeometryType,
   type StyleProps,
 } from '@/lib/geoserverStyleUtils';
-import { getGeoServerBase } from '@/lib/geoserverUrl';
+import { getGeoServerBase, getGeoServerPublicBase } from '@/lib/geoserverUrl';
 
 const GEOSERVER_DEFAULT_URL = getGeoServerBase();
 
@@ -105,8 +105,10 @@ async function fetchStyleInfo(tableName: string): Promise<CachedStyleInfo | null
         return DEFAULT_POINT_STYLE;
       }
       if (styleProps.symbolUrl?.trim()) {
-        const pub = toPublicSymbolPreviewUrl(styleProps.symbolUrl) ?? styleProps.symbolUrl.trim();
-        styleProps = { ...styleProps, symbolUrl: pub };
+        const resolved =
+          resolveSymbolPreviewUrl(styleProps.symbolUrl, getGeoServerPublicBase()) ??
+          styleProps.symbolUrl.trim();
+        styleProps = { ...styleProps, symbolUrl: resolved };
       }
       const info: CachedStyleInfo = { styleProps, geometryType };
       styleInfoCache.set(key, info);
@@ -372,10 +374,16 @@ export function resolveCompareFeatureStyle(
   return buildVectorStyle(key, info, side, geomType, null);
 }
 
-/** 테이블 스타일 + 점 심볼(원색·변경 전 회색)을 미리 로드 — 토글 시 임시→확정 깜빡임 방지 */
-export async function prefetchCompareStyles(tableNames: string[]): Promise<void> {
+/** GeoServer 스타일 메타만 (아이콘 X) — 지도 먼저 그릴 때 */
+export async function prefetchCompareStyleMeta(tableNames: string[]): Promise<void> {
   const uniq = [...new Set(tableNames.map((t) => t.trim()).filter(Boolean))];
   await Promise.all(uniq.map((t) => fetchStyleInfo(t)));
+}
+
+/** 테이블 스타일 + 점 심볼(원색·변경 전 회색). 메타 캐시 후 아이콘 */
+export async function prefetchCompareStyles(tableNames: string[]): Promise<void> {
+  const uniq = [...new Set(tableNames.map((t) => t.trim()).filter(Boolean))];
+  await prefetchCompareStyleMeta(uniq);
   await Promise.all(
     uniq.map(async (t) => {
       const info = styleInfoCache.get(t.toLowerCase());

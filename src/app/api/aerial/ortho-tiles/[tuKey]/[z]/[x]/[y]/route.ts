@@ -5,10 +5,35 @@ import { and, eq } from 'drizzle-orm';
 import { db } from '@/database/db';
 import { tifUnit } from '@/database/schema/tif_unit';
 import { getSessionUsrId } from '@/lib/auth/guard';
+import { resolveGgnrDataDir } from '@/lib/turbopackFsPath';
 
 export const dynamic = 'force-dynamic';
 
-const GGNR_DATA_DIR = process.env.GGNR_DATA_DIR ?? 'd:\\ggnr_data_dir';
+type TileMeta = { tilesRelativePath: string; convertStatus: string };
+const tileMetaCache = new Map<number, { meta: TileMeta | null; exp: number }>();
+const TILE_META_TTL_MS = 60_000;
+
+async function loadTileMeta(tuKey: number): Promise<TileMeta | null> {
+  const now = Date.now();
+  const hit = tileMetaCache.get(tuKey);
+  if (hit && hit.exp > now) return hit.meta;
+  const row = (
+    await db
+      .select({
+        tilesRelativePath: tifUnit.tilesRelativePath,
+        convertStatus: tifUnit.convertStatus,
+      })
+      .from(tifUnit)
+      .where(and(eq(tifUnit.tuKey, tuKey), eq(tifUnit.tuIsDel, false)))
+      .limit(1)
+  )[0];
+  const meta =
+    row?.tilesRelativePath && (row.convertStatus === 'done' || row.convertStatus === 'converting')
+      ? { tilesRelativePath: row.tilesRelativePath, convertStatus: row.convertStatus }
+      : null;
+  tileMetaCache.set(tuKey, { meta, exp: now + TILE_META_TTL_MS });
+  return meta;
+}
 
 /**
  * GET /api/aerial/ortho-tiles/{tuKey}/{z}/{x}/{y}.jpg
@@ -38,23 +63,10 @@ export async function GET(
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
-  const row = (
-    await db
-      .select({
-        tilesRelativePath: tifUnit.tilesRelativePath,
-        convertStatus: tifUnit.convertStatus,
-        tuIsDel: tifUnit.tuIsDel,
-      })
-      .from(tifUnit)
-      .where(and(eq(tifUnit.tuKey, tuKey), eq(tifUnit.tuIsDel, false)))
-      .limit(1)
-  )[0];
+  const row = await loadTileMeta(tuKey);
 
   /** 재변환 중에도 기존 타일은 계속 서빙 */
-  if (
-    !row?.tilesRelativePath ||
-    (row.convertStatus !== 'done' && row.convertStatus !== 'converting')
-  ) {
+  if (!row) {
     return NextResponse.json({ error: 'Not found' }, { status: 404 });
   }
 
@@ -63,7 +75,7 @@ export async function GET(
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
-  const base = path.resolve(GGNR_DATA_DIR);
+  const base = path.resolve(resolveGgnrDataDir());
   const resolved = path.resolve(base, ...tilesRel.split('/').filter(Boolean), z, x, yFile);
   const rel = path.relative(base, resolved);
   if (!rel || rel.startsWith('..') || path.isAbsolute(rel)) {
@@ -88,7 +100,8 @@ export async function GET(
       return new NextResponse(buf, {
         headers: {
           'Content-Type': contentType,
-          'Cache-Control': 'private, max-age=300',
+          'Cache-Control':
+            row.convertStatus === 'done' ? 'private, max-age=86400' : 'private, max-age=60',
         },
       });
     } catch (err: unknown) {

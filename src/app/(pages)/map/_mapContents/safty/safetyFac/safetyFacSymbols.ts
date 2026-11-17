@@ -108,23 +108,28 @@ function hexToRgba(hex: string, alpha: number): string {
   return `rgba(${r},${g},${b},${alpha})`;
 }
 
-/** 도로대장 도로종류 뱃지와 동일: 연한 배경 + 진한 글자 + 반투명 테두리 */
-export function getSafetyFacBadgeStyle(subtype: SafetyFacSubtypeId, selected = true): CSSProperties {
+/** 도로대장 도로종류 뱃지와 동일: 연한 배경 + 진한 글자 + 반투명 테두리
+ *  다크모드에서는 글자를 원색으로 두고 배경·테두리 알파를 높여 대비를 확보한다. */
+export function getSafetyFacBadgeStyle(
+  subtype: SafetyFacSubtypeId,
+  selected = true,
+  isDark = false
+): CSSProperties {
   const hex = SAFETY_FAC_SYMBOL[subtype].color;
   if (!selected) {
     return {
       backgroundColor: 'var(--background)',
-      color: darkerHex(hex, 0.52),
+      color: isDark ? hex : darkerHex(hex, 0.52),
       borderWidth: 1,
       borderStyle: 'solid',
-      borderColor: hexToRgba(hex, 0.22),
+      borderColor: hexToRgba(hex, isDark ? 0.42 : 0.22),
     };
   }
   return {
-    backgroundColor: hexToRgba(hex, 0.14),
-    color: darkerHex(hex, 0.52),
+    backgroundColor: hexToRgba(hex, isDark ? 0.3 : 0.14),
+    color: isDark ? hex : darkerHex(hex, 0.52),
     borderWidth: 1,
     borderStyle: 'solid',
-    borderColor: hexToRgba(hex, 0.38),
+    borderColor: hexToRgba(hex, isDark ? 0.58 : 0.38),
   };
 }

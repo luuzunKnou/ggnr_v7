@@ -1,0 +1,19 @@
+<layer>
+  <name>meal_card_merchants</name>
+  <id>LayerInfoImpl--610c9460:1a10fc86a73:-7b1e</id>
+  <type>VECTOR</type>
+  <defaultStyle>
+    <id>StyleInfoImpl--610c9460:1a10fc86a73:-7b1d</id>
+  </defaultStyle>
+  <resource class="featureType">
+    <id>FeatureTypeInfoImpl--610c9460:1a10fc86a73:-7b1f</id>
+  </resource>
+  <queryable>true</queryable>
+  <opaque>false</opaque>
+  <attribution>
+    <logoWidth>0</logoWidth>
+    <logoHeight>0</logoHeight>
+  </attribution>
+  <dateCreated>2026-10-16 06:46:56.905 UTC</dateCreated>
+  <dateModified>2026-10-16 06:46:57.184 UTC</dateModified>
+</layer>

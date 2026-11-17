@@ -22,10 +22,15 @@
 
 # CAD 미리보기 작업 파일 (roadDocCadPreviewPng)
 /.cad-preview-work/
+# 레이어 CAD 다운로드 잡/임시 파일
+/.cad-export-jobs/
 
 # misc
 .DS_Store
 *.pem
+# Git Bash `>nul` 이 Windows에서 파일로 생김 (예약 장치명 — 커밋 불가)
+/nul
+/NUL
 .cursor/local/
 .cursor/plans/
 .cursor/rules/_personal/
@@ -73,9 +78,7 @@ next-env.d.ts
 # 3D 샘플·타일 데이터 (대용량)
 /3d_data_dir/
 
-# 도로 문서 원본 (업로드/API로 관리, Git 제외)
-/src/app/(pages)/map/_mapContents/road/roadDoc/cad/
-/src/app/(pages)/map/_mapContents/road/roadDoc/file/
+# 업무자료 원본은 GGNR_DATA_DIR/file_data/road_doc (저장소 밖)
 
 # pg_map_modules (바이너리 파일 포함)
 /pg_map_modules/services/pg_tileserv/
@@ -102,4 +105,5 @@ next-env.d.ts
 
 # 00_make_ggnr_starter.bat 실행시 생성되는 파일 (배포용 빌드 스크립트)
 /ggnr_start.bat
+/00_ggnr_build_project.bat
 /ggnr_build_project.bat

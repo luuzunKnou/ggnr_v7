@@ -33,7 +33,7 @@ async function resolveSessionLogUser(): Promise<string | null> {
 
 export async function recordLayerDownloadLog(params: {
   tableName: string;
-  format: 'SHP' | 'CSV';
+  format: 'SHP' | 'CSV' | 'DXF' | 'DWG';
   user?: string | null;
 }): Promise<{ success: boolean; dlKey?: number; skipped?: boolean; error?: string }> {
   const tableName = String(params.tableName ?? '').trim();

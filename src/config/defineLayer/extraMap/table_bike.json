@@ -1,0 +1,27 @@
+{
+  "knownSources": [
+    "UPD_NAM",
+    "SYS_CHK",
+    "STO_CNT"
+  ],
+  "active": [
+    {
+      "sourceField": "UPD_NAM",
+      "fieldName": "ㅁㄴㅇㅇㅇ",
+      "dataType": "text",
+      "sortOrder": 1
+    },
+    {
+      "sourceField": "SYS_CHK",
+      "fieldName": "ㅁㄴㅇㄹ",
+      "dataType": "text",
+      "sortOrder": 2
+    },
+    {
+      "sourceField": "STO_CNT",
+      "fieldName": "ㅁㄴㅇ",
+      "dataType": "number",
+      "sortOrder": 3
+    }
+  ]
+}

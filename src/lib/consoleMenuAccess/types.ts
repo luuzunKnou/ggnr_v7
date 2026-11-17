@@ -4,6 +4,8 @@ export type ConsoleAreaId = 'dev' | 'sysManager' | 'notice' | 'library';
 export type ConsoleMenuDef = {
   id: string;
   label: string;
+  /** su 계정 전용 — 권한관리 부여 목록에서 제외 */
+  suOnly?: boolean;
 };
 
 export type ConsoleAreaDef = {

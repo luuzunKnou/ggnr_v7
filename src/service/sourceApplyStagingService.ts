@@ -1,5 +1,6 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { cleanupOrphanManagedFiles } from '@/service/sourceApplyOrphanCleanup';
 import { runWorkspaceTypeCheck } from '@/service/sourceBuildCheckService';
 
 function normalizeSlashes(value: string): string {
@@ -15,11 +16,17 @@ function shouldSkipStagingCopyRel(relPath: string, excludePrefixes: string[]): b
 
 /**
  * 타입검사 스테이징 전용 추가 제외 — live 병합 exclude 와 별도.
- * tsc에 불필요한 대용량·문서·런타임 산출물만 (누락 시 타입오류 위험 낮은 것).
+ * (주석에 글롭 별표-슬래시 조합을 넣지 말 것: 블록 주석이 중간에 닫힘)
+ * tsc가 긁는 ts 파일 중 불필요한 대용량·바이너리·문서·런타임 산출물.
+ * - geoserver_modules / python: 타입 검사 대상 아님 (요청)
+ * - runtime: 번들 Node 런타임(node_modules 의 d.ts 다수)
+ * - QCAD/Blender 모듈·미리보기·임시·정적 public 등
+ * scripts/ 는 프로젝트 ts 스크립트가 있어 유지.
  */
 const STAGING_ALWAYS_EXCLUDE = [
   'node_modules/',
   'geoserver_modules/',
+  'python/',
   'docs/',
   'drizzle/',
   'coverage/',
@@ -30,6 +37,9 @@ const STAGING_ALWAYS_EXCLUDE = [
   'nssm/',
   '.cursor/',
   '.cursor-runtime/',
+  '.vscode/',
+  '.tmp/',
+  '.cad-preview-work/',
   'file_data/',
   'shp_data/',
   'excel_data/',
@@ -41,8 +51,15 @@ const STAGING_ALWAYS_EXCLUDE = [
   '3dtiles_pnts/',
   '3dtiles_obj/',
   '3dtiles_tiff/',
-  'python/env/',
-  'python/env_parts/',
+  'runtime/',
+  'modules_blender/',
+  'QCAD_modules/',
+  'public/',
+  'patches/',
+  'temp/',
+  'default/',
+  'integrations/',
+  'lib/',
 ] as const;
 
 /** merge용 exclude + 스테이징 전용 제외를 합치고, node_modules 는 항상 제외 */
@@ -145,12 +162,21 @@ async function linkNodeModulesForStaging(params: {
   }
 }
 
-/** 타입 검사용 스테이징: 워크스페이스 복제(제외 경로 생략) + ZIP 병합 오버레이 */
+function includeNodeModulesFromExcludePrefixes(excludePrefixes: string[]): boolean {
+  return !excludePrefixes.some((p) => {
+    const n = normalizeSlashes(p).replace(/\/+$/, '');
+    return n === 'node_modules' || n.startsWith('node_modules/');
+  });
+}
+
+/** 타입 검사용 스테이징: 워크스페이스 복제(제외 경로 생략) + ZIP 병합 오버레이 + 잔여 정리 */
 export async function buildTypeCheckStagingRoot(params: {
   workspaceRoot: string;
   extractRoot: string;
   stagingRoot: string;
   excludePrefixes: string[];
+  /** ZIP에 포함된 상대 경로 (잔여 소스 정리용). 없으면 extractRoot에서 재집계 */
+  mergeRelPaths?: string[];
   onLog?: StagingLog;
 }): Promise<void> {
   const { workspaceRoot, extractRoot, stagingRoot, onLog } = params;
@@ -198,12 +224,47 @@ export async function buildTypeCheckStagingRoot(params: {
     `staging: ZIP 오버레이 완료 — 파일 ${overlay.copied}건 · ${overlay.elapsedSec}초`
   );
 
+  const mergeRelPaths =
+    params.mergeRelPaths ??
+    (await listExtractRelFiles(extractRoot, params.excludePrefixes));
+  const includeNodeModules = includeNodeModulesFromExcludePrefixes(params.excludePrefixes);
+  onLog?.('staging: 패키지에 없는 잔여 소스 정리 시작');
+  const orphanRemoved = await cleanupOrphanManagedFiles({
+    workspaceRoot: stagingRoot,
+    mergeRelSet: new Set(mergeRelPaths.map(normalizeSlashes)),
+    includeNodeModules,
+    onLog: (msg) => onLog?.(`staging: ${msg}`),
+  });
+  onLog?.(`staging: 잔여 소스 정리 완료 — ${orphanRemoved}건`);
+
   await linkNodeModulesForStaging({
     workspaceRoot,
     extractRoot,
     stagingRoot,
     onLog,
   });
+}
+
+async function listExtractRelFiles(
+  extractRoot: string,
+  excludePrefixes: string[]
+): Promise<string[]> {
+  const out: string[] = [];
+  async function walk(relDir: string): Promise<void> {
+    const absDir = relDir ? path.join(extractRoot, relDir) : extractRoot;
+    const entries = await fs.readdir(absDir, { withFileTypes: true });
+    for (const entry of entries) {
+      const relPath = normalizeSlashes(relDir ? `${relDir}/${entry.name}` : entry.name);
+      if (shouldSkipStagingCopyRel(relPath, excludePrefixes)) continue;
+      if (entry.isDirectory()) {
+        await walk(relPath);
+        continue;
+      }
+      if (entry.isFile()) out.push(relPath);
+    }
+  }
+  await walk('');
+  return out;
 }
 
 async function overlayExtractOntoStaging(params: {
@@ -254,6 +315,7 @@ export async function runStagingTypeCheck(params: {
   extractRoot: string;
   stagingRoot: string;
   excludePrefixes: string[];
+  mergeRelPaths?: string[];
   onLine?: (line: string) => void;
 }): Promise<{ ok: boolean; message: string }> {
   await buildTypeCheckStagingRoot({

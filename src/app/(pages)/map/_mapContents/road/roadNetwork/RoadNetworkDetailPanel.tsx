@@ -69,8 +69,11 @@ import {
   roadTypeHasGeomAttrs,
   roadTypeHasSinuosity,
 } from "./roadNetworkFields";
+import { ROAD_NETWORK_GRADES, roadNetworkTypeFromGrade } from "./roadNetworkGrade";
 import { refreshRoadNetworkWmsLayer } from "./roadNetworkMapSync";
 import { RoadNetworkSiteItemModal } from "./RoadNetworkSiteItemModal";
+import { RoadNetworkSegmentListSection } from "./RoadNetworkSegmentListSection";
+import { roadNetworkGroupKey, roadNetworkVisibleSiblingSegments } from "./roadNetworkGroup";
 import {
   ROAD_NETWORK_COMPLAINT_STATE_FILTERS,
   ROAD_NETWORK_OPEN_STATUSES,
@@ -84,6 +87,7 @@ import {
   describeAttrHistoryDetail,
   describeComplaintHistoryDetail,
   describeMaintHistoryDetail,
+  isCountyTableRoadType,
   isNewRoadNetworkRowId,
   revokeAttachmentPreview,
   type RoadNetworkAttachment,
@@ -256,6 +260,7 @@ function AttachmentThumb({
 }) {
   const isImage = att.previewKind === "image" && !!att.previewUrl;
   const isPdf = att.previewKind === "pdf";
+  const isExcel = att.previewKind === "excel";
   return (
     <div className="group relative">
       <button
@@ -274,7 +279,9 @@ function AttachmentThumb({
         ) : (
           <div className="flex h-full w-full flex-col items-center justify-center gap-1 text-muted-foreground">
             <FileText className="h-5 w-5" />
-            <span className="text-[10px] font-semibold">{isPdf ? "PDF" : "파일"}</span>
+            <span className="text-[10px] font-semibold">
+              {isPdf ? "PDF" : isExcel ? "엑셀" : "파일"}
+            </span>
           </div>
         )}
       </button>
@@ -349,6 +356,8 @@ type AttrDraft = {
   roadName: string;
   roadNo: string;
   roadType: RoadNetworkType;
+  /** 통합 도로망 행만 값이 있음 */
+  roadGrade?: string;
   openStatus: RoadNetworkOpenStatus | "";
   dept: string;
   manager: string;
@@ -368,6 +377,7 @@ function rowToAttrDraft(row: RoadNetworkRow): AttrDraft {
     roadName: row.roadName,
     roadNo: row.roadNo,
     roadType: row.roadType,
+    roadGrade: row.roadGrade,
     openStatus: row.openStatus ?? "",
     dept: row.dept,
     manager: row.manager,
@@ -519,6 +529,15 @@ export function RoadNetworkDetailPanel({
 
   const badge = ROAD_NETWORK_TYPE_BADGE[row.roadType];
   const displayTitle = formatRoadNetworkListTitle(row);
+  const allNetworkRows = mapContext?.roadNetworkRows;
+  const visibleNetworkRows = mapContext?.roadNetworkOverlayRows;
+  const wholeRoadFlag = mapContext?.roadNetworkWholeRoad ?? false;
+  /** 구간 미선택(노선 전체) 상태의 구간 목록 — 구간이 하나뿐이면 null */
+  const wholeRoadSegments = useMemo(() => {
+    if (!wholeRoadFlag || isNewRoad || !allNetworkRows) return null;
+    const segs = roadNetworkVisibleSiblingSegments(allNetworkRows, visibleNetworkRows, row);
+    return segs.length > 1 ? segs : null;
+  }, [wholeRoadFlag, isNewRoad, allNetworkRows, visibleNetworkRows, row]);
   const hasRoadName = Boolean(row.roadName.trim());
   const roadAttachments = ensureAttachments(row.attachments);
   const historyNewestFirst = useMemo(
@@ -595,7 +614,7 @@ export function RoadNetworkDetailPanel({
   }, [setSitePointKind, setEndpointMarkers, setFocusedSiteKey]);
 
   useEffect(() => {
-    if (row.roadType !== "군도" && row.roadType !== "농도") {
+    if (!isCountyTableRoadType(row.roadType) && row.roadType !== "농도") {
       setEndpointMarkers?.(null);
       return;
     }
@@ -900,6 +919,7 @@ export function RoadNetworkDetailPanel({
             roadName: row.roadName,
             roadNo: row.roadNo,
             roadType: row.roadType,
+            roadGrade: row.roadGrade,
             openStatus: row.openStatus,
             dept: row.dept,
             lengthAttr: row.lengthAttr,
@@ -1184,8 +1204,14 @@ export function RoadNetworkDetailPanel({
   };
 
   const handleSaveAttrs = async () => {
-    const nextType = attrDraft.roadType;
-    const fields = getRoadNetworkFieldsForType(nextType);
+    const unifiedGrade = attrDraft.roadGrade?.trim();
+    const isUnified = attrDraft.roadGrade !== undefined;
+    if (isUnified && !unifiedGrade) {
+      window.alert("도로등급을 선택하세요.");
+      return;
+    }
+    const nextType = isUnified ? roadNetworkTypeFromGrade(unifiedGrade!) : attrDraft.roadType;
+    const fields = getRoadNetworkFieldsForType(nextType, attrDraft.roadGrade);
     const name = attrDraft.roadName.trim();
     const nameRequired = fields.some((f) => f.key === "roadName" && f.required);
     if (nameRequired && !name) {
@@ -1204,11 +1230,16 @@ export function RoadNetworkDetailPanel({
       window.alert(`${sinuosityField.label}은(는) 숫자만 입력하세요.`);
       return;
     }
-    const nextOpen = defaultOpenStatusForType(nextType, attrDraft.openStatus);
+    const nextOpen: RoadNetworkOpenStatus = isUnified
+      ? attrDraft.openStatus === "미개설"
+        ? "미개설"
+        : "개설"
+      : defaultOpenStatusForType(nextType, attrDraft.openStatus);
     const nextFields = {
       roadName: name,
       roadNo,
       roadType: nextType,
+      roadGrade: isUnified ? unifiedGrade : undefined,
       openStatus: nextOpen,
       dept: roadTypeHasDept(nextType) ? attrDraft.dept.trim() : "",
       manager: attrDraft.manager.trim(),
@@ -1221,12 +1252,9 @@ export function RoadNetworkDetailPanel({
       sinuosity: roadTypeHasSinuosity(nextType)
         ? formatRoadNetworkNumericAttr(attrDraft.sinuosity)
         : "",
-      detailReason:
-        nextType === "국지도" || nextType === "일반도로" || nextType === "임도"
-          ? attrDraft.detailReason.trim()
-          : "",
+      detailReason: nextType === "국지도" ? attrDraft.detailReason.trim() : "",
       address:
-        nextType === "일반도로" || nextType === "임도"
+        isUnified && fields.some((f) => f.key === "address")
           ? attrDraft.address.trim()
           : "",
     };
@@ -1245,6 +1273,7 @@ export function RoadNetworkDetailPanel({
           roadName: nextFields.roadName,
           roadNo: nextFields.roadNo,
           roadType: nextFields.roadType,
+          roadGrade: nextFields.roadGrade,
           openStatus: nextFields.openStatus,
           dept: nextFields.dept,
           lengthAttr: nextFields.lengthAttr,
@@ -1283,7 +1312,7 @@ export function RoadNetworkDetailPanel({
           },
           isNew ? "도로 등록" : "속성 수정",
           isNew
-            ? `도로명: ${name}${nextFields.roadNo ? `\n도로번호: ${nextFields.roadNo}` : ""}`
+            ? `${isUnified ? `도로등급: ${unifiedGrade}` : `도로명: ${name}`}${nextFields.roadNo ? `\n도로번호: ${nextFields.roadNo}` : ""}`
             : describeAttrHistoryDetail(row, nextFields),
           historyUser
         ),
@@ -1505,7 +1534,9 @@ export function RoadNetworkDetailPanel({
     const previewable = list.filter(
       (a) =>
         a.previewUrl &&
-        (a.previewKind === "image" || a.previewKind === "pdf")
+        (a.previewKind === "image" ||
+          a.previewKind === "pdf" ||
+          a.previewKind === "excel")
     );
     if (previewable.length === 0) {
       const focus = focusId ? list.find((a) => a.id === focusId) : list[0];
@@ -1516,7 +1547,12 @@ export function RoadNetworkDetailPanel({
     const items: ServiceFilePreviewItem[] = previewable.map((a) => ({
       url: a.previewUrl!,
       fileName: a.name,
-      kind: a.previewKind === "pdf" ? "pdf" : "image",
+      kind:
+        a.previewKind === "pdf"
+          ? "pdf"
+          : a.previewKind === "excel"
+            ? "excel"
+            : "image",
     }));
     let index = 0;
     if (focusId) {
@@ -1811,13 +1847,22 @@ export function RoadNetworkDetailPanel({
   );
 
   const attrEntries = useMemo(() => {
-    const fields = getRoadNetworkFieldsForType(row.roadType);
+    const fields = getRoadNetworkFieldsForType(row.roadType, row.roadGrade);
+    const joinDistinct = (values: (string | null | undefined)[]) =>
+      [...new Set(values.map((v) => String(v ?? "").trim()).filter(Boolean))].join(", ") || "—";
     const valueOf = (key: string): string => {
+      // 구간 미선택: 구간마다 다른 값은 노선 전체 기준으로 합쳐 보여 준다
+      if (wholeRoadSegments) {
+        if (key === "address") return joinDistinct(wholeRoadSegments.map((s) => s.address));
+        if (key === "openStatus") return joinDistinct(wholeRoadSegments.map((s) => s.openStatus));
+      }
       switch (key) {
         case "roadName":
           return row.roadName || "—";
         case "roadType":
           return row.roadType;
+        case "roadGrade":
+          return row.roadGrade || "—";
         case "openStatus":
           return row.openStatus || "—";
         case "roadNo":
@@ -1844,10 +1889,10 @@ export function RoadNetworkDetailPanel({
       value: valueOf(f.key),
     }));
     return entries;
-  }, [row]);
+  }, [row, wholeRoadSegments]);
 
   const attrEditEntries = useMemo(() => {
-    const fields = getRoadNetworkFieldsForType(attrDraft.roadType);
+    const fields = getRoadNetworkFieldsForType(attrDraft.roadType, attrDraft.roadGrade);
     const entries: {
       fieldKey: string;
       label: string;
@@ -1895,6 +1940,34 @@ export function RoadNetworkDetailPanel({
               {ROAD_NETWORK_TYPES.map((t) => (
                 <option key={t} value={t}>
                   {t}
+                </option>
+              ))}
+            </select>
+          ),
+        });
+        continue;
+      }
+      if (f.key === "roadGrade") {
+        entries.push({
+          fieldKey: "roadGrade",
+          label: f.label,
+          value: (
+            <select
+              className={fieldClass}
+              value={attrDraft.roadGrade ?? ""}
+              onChange={(e) => {
+                const grade = e.target.value;
+                setAttrDraft((d) => ({
+                  ...d,
+                  roadGrade: grade,
+                  roadType: roadNetworkTypeFromGrade(grade),
+                }));
+              }}
+            >
+              <option value="">선택</option>
+              {ROAD_NETWORK_GRADES.map((g) => (
+                <option key={g} value={g}>
+                  {g}
                 </option>
               ))}
             </select>
@@ -2129,45 +2202,6 @@ export function RoadNetworkDetailPanel({
             )}
             속성정보
           </button>
-          {attrsOpen ? (
-            <div className="flex shrink-0 items-center gap-1">
-              {!attrEditing ? (
-                <>
-                  <button type="button" className={btnGhost} onClick={beginAttrEdit}>
-                    <Pencil className="h-3 w-3" />
-                    수정
-                  </button>
-                  <button
-                    type="button"
-                    className={btnDanger}
-                    onClick={() => void handleDeleteRoad()}
-                  >
-                    <Trash2 className="h-3 w-3" />
-                    삭제
-                  </button>
-                </>
-              ) : (
-                <>
-                  <button
-                    type="button"
-                    className={btnGhost}
-                    onClick={cancelAttrEdit}
-                    disabled={attrSaving}
-                  >
-                    취소
-                  </button>
-                  <button
-                    type="button"
-                    className={btnPrimary}
-                    onClick={() => void handleSaveAttrs()}
-                    disabled={attrSaving}
-                  >
-                    {attrSaving ? "저장 중…" : "저장"}
-                  </button>
-                </>
-              )}
-            </div>
-          ) : null}
         </div>
         {attrsOpen ? (
           <div
@@ -2184,6 +2218,14 @@ export function RoadNetworkDetailPanel({
           </div>
         ) : null}
       </section>
+
+      {!isNewRoad ? (
+        <RoadNetworkSegmentListSection
+          key={roadNetworkGroupKey(row)}
+          row={row}
+          disabled={attrEditing || geomEditMode != null || pointPickKind != null || siteModal != null}
+        />
+      ) : null}
 
       {!isNewRoad ? (
       <div className="relative flex min-h-0 flex-1 flex-col">
@@ -2663,6 +2705,61 @@ export function RoadNetworkDetailPanel({
       ) : null}
 
       {mapEditBanner}
+
+      {/* 점용대장과 동일 — 수정·삭제는 하단 고정 */}
+      <div className="flex shrink-0 items-center justify-end gap-1 border-t border-border bg-background px-3 py-2">
+        {!attrEditing ? (
+          <>
+            <button
+              type="button"
+              className={btnGhost}
+              onClick={beginAttrEdit}
+              disabled={wholeRoadSegments != null}
+              title={
+                wholeRoadSegments
+                  ? "아래 구간 목록에서 구간을 선택한 뒤 수정할 수 있습니다"
+                  : undefined
+              }
+            >
+              <Pencil className="h-3 w-3" />
+              수정
+            </button>
+            <button
+              type="button"
+              className={btnDanger}
+              onClick={() => void handleDeleteRoad()}
+              disabled={wholeRoadSegments != null}
+              title={
+                wholeRoadSegments
+                  ? "아래 구간 목록에서 구간을 선택한 뒤 삭제할 수 있습니다"
+                  : undefined
+              }
+            >
+              <Trash2 className="h-3 w-3" />
+              삭제
+            </button>
+          </>
+        ) : (
+          <>
+            <button
+              type="button"
+              className={btnPrimary}
+              onClick={() => void handleSaveAttrs()}
+              disabled={attrSaving}
+            >
+              {attrSaving ? "저장 중…" : isNewRoad ? "등록" : "저장"}
+            </button>
+            <button
+              type="button"
+              className={btnGhost}
+              onClick={cancelAttrEdit}
+              disabled={attrSaving}
+            >
+              취소
+            </button>
+          </>
+        )}
+      </div>
     </div>
   );
 }

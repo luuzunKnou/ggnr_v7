@@ -6,9 +6,11 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/app/shadcnCo
 import {
   fetchParcelLandModalList,
   fetchParcelTabData,
+  fetchPersonInfoMaskEnabled,
   type ParcelLandModalKind,
   type ParcelTabData,
 } from './api';
+import { formatPersonField } from './landPersonInfoMask';
 import {
   BuildingDataSourceLine,
   LandLinkageLegendText,
@@ -30,7 +32,7 @@ import {
   LAND_INFO_TABLE_TEXT,
   LAND_INFO_TABLE_WRAP,
 } from './landInfoTableStyles';
-import { LAND_INFO_MODAL_Z } from './landInfoModalZ';
+import { MAP_UI_Z } from '@/lib/mapUiZIndex';
 
 const PRICE_MODAL_HEADERS = ['공시지가', '공시일자', '기준년도', '기준월', '지번', '비고'] as const;
 
@@ -51,6 +53,20 @@ function toNumText(value: unknown): string {
   const num = Number(value);
   if (!Number.isFinite(num)) return '-';
   return num.toLocaleString('ko-KR');
+}
+
+function codeDashName(code: string, name: string): string {
+  const c = !code || code === '-' ? '' : code;
+  const n = !name || name === '-' ? '' : name;
+  if (c && n) return `${c} - ${n}`;
+  return n || c || '-';
+}
+
+function formatYmd(raw: string): string {
+  if (!raw || raw === '-') return '-';
+  const digits = raw.replace(/\D/g, '');
+  if (digits.length >= 8) return `${digits.slice(0, 4)}-${digits.slice(4, 6)}-${digits.slice(6, 8)}`;
+  return raw;
 }
 
 function getField(row: Record<string, unknown> | undefined, keys: string[], fallback = '-'): string {
@@ -75,11 +91,13 @@ function DataTable({
   rows,
   linkageSource,
   nowrap = false,
+  headerClassName,
 }: {
   headers: string[];
   rows: string[][];
   linkageSource?: ParcelLandRowSource;
   nowrap?: boolean;
+  headerClassName?: string;
 }) {
   const wrapClass = nowrap ? 'whitespace-nowrap' : 'whitespace-normal break-words';
   return (
@@ -88,7 +106,7 @@ function DataTable({
         <thead className={LAND_INFO_LIST_THEAD}>
           <tr>
             {headers.map((h) => (
-              <th key={h} className={cn(LAND_INFO_LIST_TH, wrapClass)}>
+              <th key={h} className={cn(LAND_INFO_LIST_TH, wrapClass, headerClassName)}>
                 {h}
               </th>
             ))}
@@ -110,11 +128,31 @@ function DataTable({
   );
 }
 
-function LinkageCell({ k, v, source }: { k: string; v: string; source?: ParcelLandRowSource }) {
+/** 좁은 패널 — 항목명·값 2열 표 (사유지분석 분석 정보와 동일) */
+const NARROW_FIELD_GRID =
+  'grid grid-cols-[5.5rem_minmax(0,1fr)] overflow-hidden rounded border border-border bg-background text-[11px] [&>*:nth-last-child(-n+2)]:border-b-0';
+const NARROW_GRID_LABEL = 'border-b border-border bg-muted px-2 py-1.5 text-[11px] text-muted-foreground break-keep';
+const NARROW_GRID_VALUE = 'min-w-0 border-b border-border px-2.5 py-1.5 text-[11px] text-foreground break-all';
+const NARROW_LIST_TH = 'font-normal text-muted-foreground';
+
+function LinkageCell({
+  k,
+  v,
+  source,
+  narrow = false,
+  span = false,
+}: {
+  k: string;
+  v: string;
+  source?: ParcelLandRowSource;
+  narrow?: boolean;
+  /** 넓은 패널에서 값 칸이 오른쪽 끝까지 차지 (v6 주소 행) */
+  span?: boolean;
+}) {
   return (
     <>
-      <div className={LAND_INFO_GRID_LABEL}>{k}</div>
-      <div className={LAND_INFO_GRID_VALUE}>
+      <div className={narrow ? NARROW_GRID_LABEL : LAND_INFO_GRID_LABEL}>{k}</div>
+      <div className={cn(narrow ? NARROW_GRID_VALUE : LAND_INFO_GRID_VALUE, span && !narrow && 'col-span-3')}>
         <ParcelLinkageValueText value={v} source={source} />
       </div>
     </>
@@ -127,18 +165,29 @@ function LinkageCellButton({
   button,
   source,
   onClick,
+  narrow = false,
 }: {
   k: string;
   v: string;
   button: string;
   source?: ParcelLandRowSource;
   onClick: () => void;
+  narrow?: boolean;
 }) {
   return (
     <>
-      <div className={LAND_INFO_GRID_LABEL}>{k}</div>
-      <div className={cn(LAND_INFO_GRID_VALUE, 'flex items-start justify-between gap-2')}>
-        <ParcelLinkageValueText value={v} source={source} className="min-w-0 whitespace-normal break-words" />
+      <div className={narrow ? NARROW_GRID_LABEL : LAND_INFO_GRID_LABEL}>{k}</div>
+      <div
+        className={cn(
+          narrow ? NARROW_GRID_VALUE : LAND_INFO_GRID_VALUE,
+          narrow ? 'flex items-center justify-between gap-2' : 'flex items-start justify-between gap-2'
+        )}
+      >
+        <ParcelLinkageValueText
+          value={v}
+          source={source}
+          className={cn('min-w-0', narrow ? 'whitespace-nowrap' : 'whitespace-normal break-words')}
+        />
         <button type="button" className={LAND_INFO_TABLE_BTN} onClick={onClick} title={button}>
           {button}
         </button>
@@ -156,6 +205,12 @@ export type LandInfoParcelPanelProps = {
   parcelData?: ParcelTabData;
   parcelFetching?: boolean;
   parcelError?: string | null;
+  /** 좁은 상세 패널 — 항목명·값 2열 표, 출처를 토지이용계획 바로 아래에 */
+  narrow?: boolean;
+  /** 토지기본정보에서 숨길 항목명 (상위 화면에 이미 있는 항목) */
+  hideBasicFields?: string[];
+  /** «행망 미사용: …» 안내 숨김 (VWorld 대체 조회 시 안내가 필요 없는 화면) */
+  hideKrasSkipReason?: boolean;
 };
 
 export function LandInfoParcelPanel({
@@ -165,6 +220,9 @@ export function LandInfoParcelPanel({
   parcelData: parcelDataProp,
   parcelFetching: parcelFetchingProp,
   parcelError: parcelErrorProp,
+  narrow = false,
+  hideBasicFields,
+  hideKrasSkipReason = false,
 }: LandInfoParcelPanelProps) {
   const controlled = parcelDataProp !== undefined;
   const [internalData, setInternalData] = useState<ParcelTabData>({
@@ -181,6 +239,17 @@ export function LandInfoParcelPanel({
   const [modalHeaders, setModalHeaders] = useState<string[]>([]);
   const [modalRows, setModalRows] = useState<string[][]>([]);
   const [modalMessage, setModalMessage] = useState<string | null>(null);
+  const [personInfoMask, setPersonInfoMask] = useState(false);
+
+  useEffect(() => {
+    let alive = true;
+    void fetchPersonInfoMaskEnabled().then((enabled) => {
+      if (alive) setPersonInfoMask(enabled);
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   const parcelData = controlled ? parcelDataProp! : internalData;
   const parcelFetching = controlled ? (parcelFetchingProp ?? false) : internalFetching;
@@ -211,6 +280,7 @@ export function LandInfoParcelPanel({
     };
   }, [controlled, pnu, vworldKey]);
 
+  const showBasic = (key: string) => !hideBasicFields?.includes(key);
   const latestChar = parcelData.characteristics[0];
   const latestPrice = parcelData.prices[0];
   const latestPossession = parcelData.possessions[0];
@@ -291,13 +361,13 @@ export function LandInfoParcelPanel({
 
   return (
     <>
-      <div className="min-h-full flex min-w-0 flex-col">
-        <div className="flex-1 space-y-3">
+      <div className={cn('flex min-w-0 flex-col', !narrow && 'min-h-full')}>
+        <div className={cn('space-y-3', !narrow && 'flex-1')}>
           {!parcelData.source && hasNoLinkageRows ? (
             <p className="text-[11px] text-muted-foreground">연계 데이터 없음</p>
           ) : null}
           {parcelData.source ? <ParcelLandLinkageSourceText source={parcelData.source} /> : null}
-          {parcelData.krasSkipReason ? (
+          {parcelData.krasSkipReason && !hideKrasSkipReason ? (
             <p className="text-[11px] leading-relaxed text-amber-800">
               행망 미사용: {parcelData.krasSkipReason}
             </p>
@@ -305,26 +375,59 @@ export function LandInfoParcelPanel({
           <LandLinkageLegendText source={parcelData.source} />
           <section className="space-y-1.5">
             <p className="text-xs font-semibold text-foreground">토지기본정보</p>
-            <div className={LAND_INFO_FIELD_GRID}>
+            <div className={narrow ? NARROW_FIELD_GRID : LAND_INFO_FIELD_GRID}>
+              {showBasic('지목') ? (
+                <LinkageCell
+                  k="지목"
+                  v={codeDashName(
+                    getField(latestChar, ['lndcgrCode'], ''),
+                    getField(latestChar, ['lndcgrCodeNm', 'jimok'], '')
+                  )}
+                  source={parcelData.source}
+                  narrow={narrow}
+                />
+              ) : null}
+              {showBasic('면적') ? (
+                <LinkageCell
+                  k="면적"
+                  v={`${toNumText(getField(latestChar, ['lndpclAr', 'area'], '0'))}㎡`}
+                  source={parcelData.source}
+                  narrow={narrow}
+                />
+              ) : null}
               <LinkageCell
-                k="지목"
-                v={getField(latestChar, ['lndcgrCodeNm', 'jimok'])}
+                k="토지등급"
+                v={getField(latestChar, ['grd'])}
                 source={parcelData.source}
+                narrow={narrow}
               />
               <LinkageCell
-                k="면적"
-                v={`${toNumText(getField(latestChar, ['lndpclAr', 'area'], '0'))}㎡`}
+                k="등급변동일자"
+                v={formatYmd(getField(latestChar, ['grdYmd'], ''))}
                 source={parcelData.source}
+                narrow={narrow}
               />
               <LinkageCell
-                k="용도지역"
-                v={getField(latestChar, ['prposArea1Nm', 'prposAreaDstrcCodeNm'])}
+                k="사업시행신고"
+                v={getField(latestChar, ['bizActNtcGbn'])}
                 source={parcelData.source}
+                narrow={narrow}
+              />
+              <LinkageCell
+                k="대장대조필"
+                v={getField(latestChar, ['ledgCntrstCnfGbn'])}
+                source={parcelData.source}
+                narrow={narrow}
               />
               <LinkageCell
                 k="이동사유"
-                v={getField(latestChar, ['lndMoveResnNm', 'landMoveReason'])}
+                v={codeDashName(
+                  getField(latestChar, ['lndMoveRsnCd'], ''),
+                  getField(latestChar, ['lndMoveResnNm', 'landMoveReason'], '')
+                )}
                 source={parcelData.source}
+                narrow={narrow}
+                span
               />
               {canOpenMove ? (
                 <LinkageCellButton
@@ -332,16 +435,18 @@ export function LandInfoParcelPanel({
                   v={moveDate}
                   button="연혁 조회"
                   source={parcelData.source}
+                  narrow={narrow}
                   onClick={() => void openLandModal('move')}
                 />
               ) : (
-                <LinkageCell k="이동일자" v={moveDate} source={parcelData.source} />
+                <LinkageCell k="이동일자" v={moveDate} source={parcelData.source} narrow={narrow} />
               )}
               <LinkageCellButton
                 k="공시지가"
                 v={`${toNumText(getField(latestPrice, ['pblntfPclnd'], '0'))}원/㎡`}
                 button="조회"
                 source={parcelData.source}
+                narrow={narrow}
                 onClick={() => void openLandModal('price')}
               />
             </div>
@@ -349,11 +454,24 @@ export function LandInfoParcelPanel({
 
           <section className="space-y-1.5">
             <p className="text-xs font-semibold text-foreground">토지소유내역</p>
-            <div className={LAND_INFO_FIELD_GRID}>
+            <div className={narrow ? NARROW_FIELD_GRID : LAND_INFO_FIELD_GRID}>
+              <LinkageCell
+                k="소유자명"
+                v={formatPersonField(getField(latestPossession, ['ownerNm', 'ownerName']), personInfoMask)}
+                source={parcelData.source}
+                narrow={narrow}
+              />
+              <LinkageCell
+                k="등록번호"
+                v={getField(latestPossession, ['dregno', 'DREGNO'])}
+                source={parcelData.source}
+                narrow={narrow}
+              />
               <LinkageCell
                 k="소유구분"
                 v={getField(latestPossession, ['posesnSeCodeNm'])}
                 source={parcelData.source}
+                narrow={narrow}
               />
               {canOpenShare ? (
                 <LinkageCellButton
@@ -361,25 +479,24 @@ export function LandInfoParcelPanel({
                   v={shareCntRaw || '-'}
                   button="공유인 조회"
                   source={parcelData.source}
+                  narrow={narrow}
                   onClick={() => void openLandModal('share')}
                 />
               ) : (
-                <LinkageCell k="공유인수" v={shareCntRaw || '-'} source={parcelData.source} />
+                <LinkageCell k="공유인수" v={shareCntRaw || '-'} source={parcelData.source} narrow={narrow} />
               )}
-              <LinkageCell
-                k="소유자명"
-                v={getField(latestPossession, ['ownerNm', 'ownerName'])}
-                source={parcelData.source}
-              />
               <LinkageCell
                 k="주소"
                 v={getField(latestPossession, ['ownerAddr', 'address'])}
                 source={parcelData.source}
+                narrow={narrow}
+                span
               />
               <LinkageCell
                 k="변동원인"
                 v={getField(latestPossession, ['ownshipChgCauseCodeNm'])}
                 source={parcelData.source}
+                narrow={narrow}
               />
               {canOpenChange ? (
                 <LinkageCellButton
@@ -387,10 +504,11 @@ export function LandInfoParcelPanel({
                   v={changeDate}
                   button="연혁조회"
                   source={parcelData.source}
+                  narrow={narrow}
                   onClick={() => void openLandModal('change')}
                 />
               ) : (
-                <LinkageCell k="변동일자" v={changeDate} source={parcelData.source} />
+                <LinkageCell k="변동일자" v={changeDate} source={parcelData.source} narrow={narrow} />
               )}
             </div>
           </section>
@@ -400,6 +518,7 @@ export function LandInfoParcelPanel({
             <DataTable
               headers={['용도지역지구', '저촉여부', '비고']}
               linkageSource={parcelData.source}
+              headerClassName={narrow ? NARROW_LIST_TH : undefined}
               rows={(parcelData.landUses.length ? parcelData.landUses : [{}]).map((row) => [
                 toText(row.prposAreaDstrcCodeNm),
                 toText(row.cnflcAtNm),
@@ -426,9 +545,8 @@ export function LandInfoParcelPanel({
         }}
       >
         <DialogContent
-          overlayClassName={LAND_INFO_MODAL_Z}
+          layerZIndex={MAP_UI_Z.nestedDialog}
           className={cn(
-            LAND_INFO_MODAL_Z,
             'flex max-h-[86vh] min-w-0 flex-col gap-0 overflow-hidden border-border bg-card p-0 text-card-foreground',
             PARCEL_LAND_MODAL_SIZE_CLASS
           )}

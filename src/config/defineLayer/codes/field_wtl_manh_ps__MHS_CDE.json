@@ -1,32 +1,212 @@
 [
   {
-    "define_code_key": "65385",
-    "define_code_field_key": "4226",
+    "define_code_key": "24024",
+    "define_code_field_key": "",
     "define_code_name": "MHS000",
     "define_code_kor_name": "미분류"
   },
   {
-    "define_code_key": "65386",
-    "define_code_field_key": "4226",
+    "define_code_key": "24025",
+    "define_code_field_key": "",
     "define_code_name": "MHS001",
     "define_code_kor_name": "흄관원형"
   },
   {
-    "define_code_key": "65387",
-    "define_code_field_key": "4226",
+    "define_code_key": "24026",
+    "define_code_field_key": "",
     "define_code_name": "MHS002",
     "define_code_kor_name": "사각철판"
   },
   {
-    "define_code_key": "65388",
-    "define_code_field_key": "4226",
+    "define_code_key": "24027",
+    "define_code_field_key": "",
     "define_code_name": "MHS003",
     "define_code_kor_name": "박스형"
   },
   {
-    "define_code_key": "65389",
-    "define_code_field_key": "4226",
+    "define_code_key": "24028",
+    "define_code_field_key": "",
     "define_code_name": "MHS004",
     "define_code_kor_name": "토류형"
+  },
+  {
+    "define_code_key": "24030",
+    "define_code_field_key": "",
+    "define_code_name": "MHS900",
+    "define_code_kor_name": "각형"
+  },
+  {
+    "define_code_key": "24031",
+    "define_code_field_key": "",
+    "define_code_name": "MHS901",
+    "define_code_kor_name": "고형체형"
+  },
+  {
+    "define_code_key": "24032",
+    "define_code_field_key": "",
+    "define_code_name": "MHS902",
+    "define_code_kor_name": "구형"
+  },
+  {
+    "define_code_key": "24033",
+    "define_code_field_key": "",
+    "define_code_name": "MHS903",
+    "define_code_kor_name": "기둥,축"
+  },
+  {
+    "define_code_key": "24034",
+    "define_code_field_key": "",
+    "define_code_name": "MHS904",
+    "define_code_kor_name": "난원"
+  },
+  {
+    "define_code_key": "24035",
+    "define_code_field_key": "",
+    "define_code_name": "MHS905",
+    "define_code_kor_name": "다이아몬드형"
+  },
+  {
+    "define_code_key": "24036",
+    "define_code_field_key": "",
+    "define_code_name": "MHS906",
+    "define_code_kor_name": "다중아치형"
+  },
+  {
+    "define_code_key": "24037",
+    "define_code_field_key": "",
+    "define_code_name": "MHS907",
+    "define_code_kor_name": "돔형"
+  },
+  {
+    "define_code_key": "24038",
+    "define_code_field_key": "",
+    "define_code_name": "MHS908",
+    "define_code_kor_name": "돛대,활대처럼 둥글고 긴 원재"
+  },
+  {
+    "define_code_key": "24039",
+    "define_code_field_key": "",
+    "define_code_name": "MHS909",
+    "define_code_kor_name": "마제형관"
+  },
+  {
+    "define_code_key": "24040",
+    "define_code_field_key": "",
+    "define_code_name": "MHS910",
+    "define_code_kor_name": "반원형"
+  },
+  {
+    "define_code_key": "24041",
+    "define_code_field_key": "",
+    "define_code_name": "MHS911",
+    "define_code_kor_name": "벽돌탑재"
+  },
+  {
+    "define_code_key": "24042",
+    "define_code_field_key": "",
+    "define_code_name": "MHS912",
+    "define_code_kor_name": "불규칙한 형태"
+  },
+  {
+    "define_code_key": "24043",
+    "define_code_field_key": "",
+    "define_code_name": "MHS913",
+    "define_code_kor_name": "사각형"
+  },
+  {
+    "define_code_key": "24044",
+    "define_code_field_key": "",
+    "define_code_name": "MHS914",
+    "define_code_kor_name": "사다리꼴"
+  },
+  {
+    "define_code_key": "24045",
+    "define_code_field_key": "",
+    "define_code_name": "MHS915",
+    "define_code_kor_name": "사면체형"
+  },
+  {
+    "define_code_key": "24046",
+    "define_code_field_key": "",
+    "define_code_name": "MHS916",
+    "define_code_kor_name": "아치형"
+  },
+  {
+    "define_code_key": "24047",
+    "define_code_field_key": "",
+    "define_code_name": "MHS917",
+    "define_code_kor_name": "원추형"
+  },
+  {
+    "define_code_key": "24048",
+    "define_code_field_key": "",
+    "define_code_name": "MHS918",
+    "define_code_kor_name": "원통형"
+  },
+  {
+    "define_code_key": "24049",
+    "define_code_field_key": "",
+    "define_code_name": "MHS919",
+    "define_code_kor_name": "콘크리트타설"
+  },
+  {
+    "define_code_key": "24050",
+    "define_code_field_key": "",
+    "define_code_name": "MHS920",
+    "define_code_kor_name": "타원형"
+  },
+  {
+    "define_code_key": "24051",
+    "define_code_field_key": "",
+    "define_code_name": "MHS921",
+    "define_code_kor_name": "태형"
+  },
+  {
+    "define_code_key": "24052",
+    "define_code_field_key": "",
+    "define_code_name": "MHS922",
+    "define_code_kor_name": "평방형"
+  },
+  {
+    "define_code_key": "24053",
+    "define_code_field_key": "",
+    "define_code_name": "MHS923",
+    "define_code_kor_name": "피라미드형"
+  },
+  {
+    "define_code_key": "24054",
+    "define_code_field_key": "",
+    "define_code_name": "MHS924",
+    "define_code_kor_name": "A형"
+  },
+  {
+    "define_code_key": "24055",
+    "define_code_field_key": "",
+    "define_code_name": "MHS925",
+    "define_code_kor_name": "H형"
+  },
+  {
+    "define_code_key": "24056",
+    "define_code_field_key": "",
+    "define_code_name": "MHS926",
+    "define_code_kor_name": "I형"
+  },
+  {
+    "define_code_key": "24057",
+    "define_code_field_key": "",
+    "define_code_name": "MHS927",
+    "define_code_kor_name": "T형"
+  },
+  {
+    "define_code_key": "24058",
+    "define_code_field_key": "",
+    "define_code_name": "MHS928",
+    "define_code_kor_name": "Y형"
+  },
+  {
+    "define_code_key": "24029",
+    "define_code_field_key": "",
+    "define_code_name": "MHS999",
+    "define_code_kor_name": "기타"
   }
 ]

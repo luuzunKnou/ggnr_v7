@@ -1,9 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Calendar,
   ChevronRight,
+  FileText,
   Loader2,
   Plus,
   Search,
@@ -16,13 +17,13 @@ import { cn } from "@/lib/utils";
 import { Input } from "@/app/shadcnComponents/ui/input";
 import { Button } from "@/app/shadcnComponents/ui/button";
 import { useMapContext } from "../../_mapComponents/MapContext";
+import { MAP_AUTO_NAV_MAX_ZOOM } from "../../_mapComponents/config/mapDefaults";
+import { scheduleFitMapToExtent3857 } from "../../_mapComponents/config/mapAutoNavigation";
 import { refreshServiceWmsLayer } from "../../_mapComponents/layerFactory/serviceLayerFactory";
 import { memoWmsLayerId, parseMemoRowKey } from "./memoConfig";
-import {
-  animateMemoToCenter3857,
-  center3857FromExtent,
-  useMemoMapHighlight,
-} from "./useMemoMapHighlight";
+import { useMemoMapHighlight } from "./useMemoMapHighlight";
+import { useMemoMapClick } from "./useMemoMapClick";
+import { useSerWriteAccess } from "@/hooks/useSerWriteAccess";
 
 type ListRow = {
   rowKey: string;
@@ -37,12 +38,36 @@ type ListRow = {
 
 type TableOption = { tableName: string; label: string };
 
+/** 임시 UI 비교용. sessionStorage에 유지. 확정 후 제거 */
+const MEMO_UI_THEME_KEY = "ggnr.memoListUiTheme";
+type MemoUiTheme = "current" | "category";
+const MEMO_CATEGORY_OPTIONS = ["전체", "상수", "하수", "급수", "준설"] as const;
+type MemoCategory = (typeof MEMO_CATEGORY_OPTIONS)[number];
+
+function readMemoUiTheme(): MemoUiTheme {
+  if (typeof window === "undefined") return "current";
+  return window.sessionStorage.getItem(MEMO_UI_THEME_KEY) === "category" ? "category" : "current";
+}
+
+function resolveMemoCategory(tableName: string, tableLabel: string): Exclude<MemoCategory, "전체"> | null {
+  const name = String(tableName ?? "").toLowerCase();
+  const label = String(tableLabel ?? "");
+  if (name.includes("sply") || label.includes("급수")) return "급수";
+  if (name.includes("dre") || label.includes("준설")) return "준설";
+  if (name.includes("swl") || label.includes("하수")) return "하수";
+  if (name.includes("wtl") || label.includes("상수")) return "상수";
+  return null;
+}
+
 type Props = {
   onClose: () => void;
   selectedDetailId: string | null;
   onSelectDetailId: (id: string | null) => void;
   refreshKey?: number;
   onAdd?: (tableName: string) => void;
+  /** 있으면 이 테이블만 조회한다 */
+  fixedTables?: TableOption[];
+  title?: string;
 };
 
 export function MemoListPanel({
@@ -51,8 +76,11 @@ export function MemoListPanel({
   onSelectDetailId,
   refreshKey = 0,
   onAdd,
+  fixedTables,
+  title = "메모관리",
 }: Props) {
   const mapContext = useMapContext();
+  const canWrite = useSerWriteAccess();
   const mapContextRef = useRef(mapContext);
   mapContextRef.current = mapContext;
   const layersAddedRef = useRef<Set<string>>(new Set());
@@ -64,10 +92,43 @@ export function MemoListPanel({
   const [items, setItems] = useState<ListRow[]>([]);
   const [navigatingId, setNavigatingId] = useState<string | null>(null);
   const [highlightGeom, setHighlightGeom] = useState<Record<string, unknown> | null>(null);
+  const [filterCategory, setFilterCategory] = useState<MemoCategory>("전체");
+  // SSR·첫 클라이언트 렌더는 동일하게 current. sessionStorage는 mount 후 반영 (hydration 방지)
+  const [uiTheme, setUiTheme] = useState<MemoUiTheme>("current");
+  const useCategoryUi = uiTheme === "category";
+
+  useEffect(() => {
+    setUiTheme(readMemoUiTheme());
+  }, []);
+
+  const toggleUiTheme = useCallback(() => {
+    setUiTheme((prev) => {
+      const next: MemoUiTheme = prev === "current" ? "category" : "current";
+      try {
+        window.sessionStorage.setItem(MEMO_UI_THEME_KEY, next);
+      } catch {
+        /* ignore */
+      }
+      return next;
+    });
+    setFilterCategory("전체");
+  }, []);
+
+  const filteredItems = useMemo(() => {
+    if (!useCategoryUi || filterCategory === "전체") return items;
+    return items.filter((row) => resolveMemoCategory(row.tableName, row.tableLabel) === filterCategory);
+  }, [filterCategory, items, useCategoryUi]);
 
   useMemoMapHighlight(Boolean(mapContext?.mapReady), highlightGeom);
 
+  const fixedTableKey = fixedTables?.map((t) => t.tableName).join(",") ?? "";
+
   useEffect(() => {
+    const tables = fixedTables;
+    if (tables && tables.length > 0) {
+      setTableOptions(tables);
+      return;
+    }
     void call("", "POST", {
       service: "memoService",
       action: "listAvailableMemoTables",
@@ -77,7 +138,9 @@ export function MemoListPanel({
       const rows = Array.isArray(data?.tables) ? data.tables : Array.isArray(data) ? data : [];
       setTableOptions(rows as TableOption[]);
     });
-  }, []);
+    // fixedTableKey만 보면 된다. 배열 참조가 바뀌어도 같은 테이블이면 다시 받지 않는다.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- fixedTableKey
+  }, [fixedTableKey]);
 
   const ensureLayerVisible = useCallback((tableName: string) => {
     const lid = memoWmsLayerId(tableName);
@@ -110,11 +173,19 @@ export function MemoListPanel({
   }, [ensureLayerVisible, tableOptions]);
 
   const focusedIdRef = useRef<string | null>(null);
+  /** 목록 클릭·저장 후: true / 지도 객체 클릭: false — 지도 이동만 제어 */
+  const fitOnFocusRef = useRef(true);
 
-  const focusMemoOnMap = useCallback(async (rowKey: string, tableName: string, memoKey: string) => {
+  const focusMemoOnMap = useCallback(async (
+    rowKey: string,
+    tableName: string,
+    memoKey: string,
+    opts?: { fit?: boolean }
+  ) => {
     focusedIdRef.current = rowKey;
     ensureLayerVisible(tableName);
-    setNavigatingId(rowKey);
+    const doFit = opts?.fit !== false;
+    if (doFit) setNavigatingId(rowKey);
     try {
       const res = await call("", "POST", {
         service: "memoService",
@@ -124,19 +195,37 @@ export function MemoListPanel({
       const data = res?.data ?? res;
       const geom = data?.geomGeoJson4326;
       setHighlightGeom(geom && typeof geom === "object" ? (geom as Record<string, unknown>) : null);
+      if (!doFit) return;
       const map = mapContextRef.current?.mapInstanceRef?.current;
-      const center = center3857FromExtent(data?.extent3857);
-      if (map && center) {
-        animateMemoToCenter3857(map, center, () =>
-          mapContextRef.current?.applyMapViewPaddingRef?.current?.()
-        );
+      const extent = data?.extent3857;
+      if (
+        map &&
+        Array.isArray(extent) &&
+        extent.length === 4 &&
+        extent.every((v: unknown) => Number.isFinite(Number(v)))
+      ) {
+        scheduleFitMapToExtent3857(map, extent.map(Number), {
+          maxZoom: MAP_AUTO_NAV_MAX_ZOOM,
+          pointZoom: 18,
+          applyMapViewPadding: () =>
+            mapContextRef.current?.applyMapViewPaddingRef?.current?.(),
+        });
       }
     } catch {
       setHighlightGeom(null);
     } finally {
-      setNavigatingId(null);
+      if (doFit) setNavigatingId(null);
     }
   }, [ensureLayerVisible]);
+
+  useMemoMapClick({
+    enabled: true,
+    tables: fixedTables,
+    onSelectRowKey: (rowKey) => {
+      fitOnFocusRef.current = false;
+      onSelectDetailId(rowKey);
+    },
+  });
 
   const handleRowClick = useCallback(
     (row: ListRow) => {
@@ -147,8 +236,9 @@ export function MemoListPanel({
         onSelectDetailId(null);
         return;
       }
+      fitOnFocusRef.current = true;
       onSelectDetailId(row.rowKey);
-      void focusMemoOnMap(row.rowKey, row.tableName, row.memoKey);
+      void focusMemoOnMap(row.rowKey, row.tableName, row.memoKey, { fit: true });
     },
     [focusMemoOnMap, onSelectDetailId, selectedDetailId]
   );
@@ -165,7 +255,9 @@ export function MemoListPanel({
       setHighlightGeom(null);
       return;
     }
-    void focusMemoOnMap(selectedDetailId, parsed.tableName, parsed.memoKey);
+    const fit = fitOnFocusRef.current;
+    fitOnFocusRef.current = true;
+    void focusMemoOnMap(selectedDetailId, parsed.tableName, parsed.memoKey, { fit });
   }, [focusMemoOnMap, selectedDetailId]);
 
   const prevRefreshKeyRef = useRef(refreshKey);
@@ -176,7 +268,7 @@ export function MemoListPanel({
     const parsed = parseMemoRowKey(selectedDetailId);
     if (!parsed) return;
     refreshServiceWmsLayer(mapContextRef.current?.mapInstanceRef?.current);
-    void focusMemoOnMap(selectedDetailId, parsed.tableName, parsed.memoKey);
+    void focusMemoOnMap(selectedDetailId, parsed.tableName, parsed.memoKey, { fit: true });
   }, [focusMemoOnMap, refreshKey, selectedDetailId]);
 
   useEffect(() => {
@@ -184,10 +276,11 @@ export function MemoListPanel({
       setLoading(true);
       setError(null);
       try {
+        const onlyTable = fixedTableKey.includes(",") || !fixedTableKey ? "" : fixedTableKey;
         const res = await call("", "POST", {
           service: "memoService",
           action: "getMemoList",
-          params: { keyword, limit: 200 },
+          params: { keyword, limit: 200, ...(onlyTable ? { table: onlyTable } : {}) },
         });
         const data = res?.data ?? res;
         if (data?.error) setError(String(data.error));
@@ -200,7 +293,7 @@ export function MemoListPanel({
       }
     }, 250);
     return () => clearTimeout(t);
-  }, [keyword, refreshKey]);
+  }, [fixedTableKey, keyword, refreshKey]);
 
   const handleAdd = () => {
     const table = tableOptions[0]?.tableName;
@@ -218,25 +311,49 @@ export function MemoListPanel({
           <div className="flex items-center justify-between px-3 pt-3 pb-2">
             <div className="flex items-center gap-2">
               <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/5">
-                <StickyNote className="h-4 w-4 text-primary/80" />
+                <FileText className="h-4 w-4 text-primary/80" />
               </div>
               <div>
-                <h1 className="text-sm font-semibold text-foreground/90">메모관리</h1>
+                <h1 className="text-sm font-semibold text-foreground/90">{title}</h1>
                 <p className="text-[11px] text-muted-foreground">
-                  전체 <span className="font-medium text-foreground/80">{items.length}</span>건
+                  {useCategoryUi && filterCategory !== "전체" ? "표시" : "전체"}{" "}
+                  <span className="font-medium text-foreground/80">
+                    {useCategoryUi ? filteredItems.length : items.length}
+                  </span>
+                  건
+                  {useCategoryUi ? (
+                    <span className="ml-1 text-muted-foreground/70">(분류 UI)</span>
+                  ) : null}
                 </p>
               </div>
             </div>
             <div className="flex items-center gap-1">
               <Button
+                type="button"
                 size="sm"
-                className="h-[26px] min-h-[26px] gap-1 px-2.5 text-[12px] font-light border border-border bg-muted/50 text-muted-foreground hover:border-primary hover:bg-primary/15 hover:text-primary rounded-lg"
-                onClick={handleAdd}
-                disabled={tableOptions.length === 0}
+                variant="outline"
+                className={cn(
+                  "h-[26px] min-h-[26px] gap-1 px-2 text-[11px] font-medium rounded-lg",
+                  useCategoryUi
+                    ? "border-primary/40 bg-primary/10 text-primary hover:bg-primary/15"
+                    : "border-border bg-muted/50 text-muted-foreground hover:bg-muted"
+                )}
+                onClick={toggleUiTheme}
+                title="임시: 기존 UI와 업무 분류 UI 전환"
               >
-                <Plus className="h-3 w-3" />
-                메모 추가
+                {useCategoryUi ? "분류UI" : "기존UI"}
               </Button>
+              {canWrite ? (
+                <Button
+                  size="sm"
+                  className="h-[26px] min-h-[26px] gap-1 px-2.5 text-[12px] font-light border border-border bg-muted/50 text-muted-foreground hover:border-primary hover:bg-primary/15 hover:text-primary rounded-lg"
+                  onClick={handleAdd}
+                  disabled={tableOptions.length === 0}
+                >
+                  <Plus className="h-3 w-3" />
+                  메모 추가
+                </Button>
+              ) : null}
               <button
                 type="button"
                 onClick={onClose}
@@ -248,6 +365,33 @@ export function MemoListPanel({
               </button>
             </div>
           </div>
+
+          {useCategoryUi ? (
+            <div className="px-3 pb-2">
+              <div className="flex border-b border-border" role="tablist" aria-label="업무 분류">
+                {MEMO_CATEGORY_OPTIONS.map((cat) => {
+                  const isActive = filterCategory === cat;
+                  return (
+                    <button
+                      key={cat}
+                      type="button"
+                      role="tab"
+                      aria-selected={isActive}
+                      onClick={() => setFilterCategory(cat)}
+                      className={cn(
+                        "h-7 min-w-0 flex-1 truncate border-b-2 px-0.5 text-center text-[11px] -mb-px",
+                        isActive
+                          ? "border-primary font-semibold text-primary"
+                          : "border-transparent text-muted-foreground hover:text-foreground"
+                      )}
+                    >
+                      {cat}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ) : null}
 
           <div className="px-3 pb-2">
             <div className="relative">
@@ -275,7 +419,7 @@ export function MemoListPanel({
                 {error}
               </div>
             )}
-            {!loading && !error && items.length === 0 && (
+            {!loading && !error && filteredItems.length === 0 && (
               <div className="flex flex-col items-center justify-center py-16 pr-3 text-muted-foreground/80">
                 <Search className="mb-3 h-10 w-10 opacity-25" />
                 <p className="text-sm font-medium text-foreground/70">검색 결과가 없습니다</p>
@@ -283,9 +427,12 @@ export function MemoListPanel({
               </div>
             )}
             {!loading &&
-              items.map((row) => {
+              filteredItems.map((row) => {
                 const isSelected = selectedDetailId === row.rowKey;
                 const navigating = navigatingId === row.rowKey;
+                const category = useCategoryUi
+                  ? resolveMemoCategory(row.tableName, row.tableLabel)
+                  : null;
                 return (
                   <button
                     key={row.rowKey}
@@ -301,9 +448,15 @@ export function MemoListPanel({
                     <div className="flex flex-col gap-1">
                       <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground/90">
                         <div className="flex min-w-0 flex-1 items-center gap-2.5 overflow-hidden">
-                          <span className="inline-flex shrink-0 items-center rounded-full border border-primary/20 bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary">
-                            {row.tableLabel}
-                          </span>
+                          {category ? (
+                            <span className="inline-flex shrink-0 items-center rounded-full border border-border bg-slate-50 px-2 py-0.5 text-[11px] font-medium text-slate-700">
+                              #{category}
+                            </span>
+                          ) : (
+                            <span className="inline-flex shrink-0 items-center rounded-full border border-primary/20 bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary">
+                              {row.tableLabel}
+                            </span>
+                          )}
                           <span className="shrink-0 font-mono text-[11px]">#{row.memoKey}</span>
                           {row.createUser ? (
                             <span className="inline-flex shrink-0 items-center gap-1 text-[11px]">

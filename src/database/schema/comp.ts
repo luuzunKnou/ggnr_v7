@@ -5,6 +5,7 @@ const layer = pgSchema('layer');
 /**
  * 민원 접수 — 지도 레이어와 동일하게 layer 스키마.
  * geom(geometry Point 5181) 은 drizzle 스키마에 넣지 않음 — complaintService 가 raw SQL 로 갱신.
+ * 기동 시 ensureLayerAppTables / ensureComplaintTables 가 없으면 생성한다.
  */
 export const comp = layer.table('comp', {
   compKey: serial('comp_key').primaryKey().notNull(),

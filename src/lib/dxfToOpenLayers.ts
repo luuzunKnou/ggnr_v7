@@ -26,6 +26,10 @@ export const DXF_TEXT_HEIGHT = "dxfTextHeight";
 export const DXF_ROTATION = "dxfRotation";
 export const DXF_TEXT_ALIGN = "dxfTextAlign";
 export const DXF_TEXT_BASELINE = "dxfTextBaseline";
+/** DXF LAYER 이름 — 지도에서 레이어 on/off */
+export const DXF_LAYER = "dxfLayer";
+/** 도형 길이(지도 단위) — LOD·외곽 선 선별 */
+export const DXF_LENGTH = "dxfLength";
 
 function applyDxfSymbology(f: Feature<Geometry>, ent: IEntity, dxf: IDxf | null) {
   const { strokeCss, fillRgba, strokeWidth } = resolveEntityStyle(ent, dxf);
@@ -33,15 +37,26 @@ function applyDxfSymbology(f: Feature<Geometry>, ent: IEntity, dxf: IDxf | null)
     [DXF_STROKE]: strokeCss,
     [DXF_FILL]: fillRgba,
     [DXF_STROKE_WIDTH]: strokeWidth,
+    [DXF_LAYER]: String(ent.layer ?? "0").trim() || "0",
   });
 }
 
-/** MTEXT 제어코드 제거(본문·줄바꿈 유지) */
+/** MTEXT 제어코드 제거(본문·줄바꿈 유지) + \\U+XXXX 유니코드 */
 export function cleanMtext(raw: string): string {
   if (!raw) return "";
   let s = raw.replace(/\r\n/g, "\n");
+  s = s.replace(/\\U\+([0-9A-Fa-f]{4,6})/gi, (_, h: string) => {
+    const cp = parseInt(h, 16);
+    if (!Number.isFinite(cp)) return "";
+    try {
+      return String.fromCodePoint(cp);
+    } catch {
+      return "";
+    }
+  });
   s = s.replace(/\\P/gi, "\n");
   s = s.replace(/\\[^{};P\n\r\t\\]+(;|(?=[\s\n{]))/gi, " ");
+  s = s.replace(/\{[^}]*;([^}]*)\}/g, "$1");
   s = s.replace(/[ \t]{2,}/g, " ");
   return s.trim();
 }
@@ -296,8 +311,10 @@ function entityToGeometry(ent: IEntity, aff: Aff2D): Geometry | null {
     const r0 = e.radius;
     const scale = Math.hypot(aff.xx, aff.yx);
     const r = r0 * scale;
+    /** 면 채움 없이 원 윤곽만 (닫힌 선) */
     const ring = arcToCoords(cc[0], cc[1], r, 0, 2 * Math.PI, 64);
-    return new Polygon([ring]);
+    if (ring.length > 0) ring.push(ring[0]);
+    return new LineString(ring);
   }
   if (t === "ARC") {
     const e = ent as IArcEntity;
@@ -334,13 +351,13 @@ function entityToGeometry(ent: IEntity, aff: Aff2D): Geometry | null {
       }
     }
     if (coords.length < 2) return null;
+    /** 닫힌 폴리라인도 선으로 — Polygon+채움이면 면 배경색이 생김 */
     if (closed && coords.length > 2) {
       const first = coords[0];
       const last = coords[coords.length - 1];
       if (Math.hypot(first[0] - last[0], first[1] - last[1]) > 1e-6) {
         coords.push([first[0], first[1]]);
       }
-      return new Polygon([coords]);
     }
     return new LineString(coords);
   }
@@ -353,7 +370,6 @@ function entityToGeometry(ent: IEntity, aff: Aff2D): Geometry | null {
       const first = coords[0];
       const last = coords[coords.length - 1];
       if (Math.hypot(first[0] - last[0], first[1] - last[1]) > 1e-6) coords.push([first[0], first[1]]);
-      return new Polygon([coords]);
     }
     return new LineString(coords);
   }

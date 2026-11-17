@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useRef, useState, useCallback, type MutableRefObject } from 'react';
 import type { Map, MapBrowserEvent } from 'ol';
 import Overlay from 'ol/Overlay';
 import { unByKey } from 'ol/Observable';
@@ -56,17 +56,33 @@ export function useFeatureIdentify(
   visibleLayerNames: Set<string>,
   /** true이면 지도 클릭 식별(identifyFeatures)을 수행하지 않음 (예: CCTV 패널 열림) */
   identifyDisabled = false,
+  /**
+   * WMS와 동일 레이어별 속성 필터 (예: 하천기본계획 선택 하천 river_name).
+   * 화면에 안 보이는 도형이 식별되지 않도록 서버 identify에 함께 전달.
+   */
+  tableFilters: Record<string, string> | null = null,
+  externalIgnoreUntilRef: MutableRefObject<number> | null = null,
 ) {
   const visibleRef = useRef(visibleLayerNames);
   visibleRef.current = visibleLayerNames;
   const disabledRef = useRef(identifyDisabled);
   disabledRef.current = identifyDisabled;
+  const tableFiltersRef = useRef(tableFilters);
+  tableFiltersRef.current = tableFilters;
+  const externalIgnoreRef = useRef(externalIgnoreUntilRef);
+  externalIgnoreRef.current = externalIgnoreUntilRef;
 
   const [popupState, setPopupState] = useState<IdentifyPopupState | null>(null);
   const overlayRef = useRef<Overlay | null>(null);
   const popupElRef = useRef<HTMLDivElement | null>(null);
+  /** 지도 위 목록 닫기 클릭이 지도 식별로 새어 목록 창이 다시 열리는 것 방지 */
+  const ignoreClickUntilRef = useRef(0);
 
   const closePopup = useCallback(() => {
+    const until = Date.now() + 400;
+    ignoreClickUntilRef.current = until;
+    const ext = externalIgnoreRef.current;
+    if (ext) ext.current = until;
     setPopupState(null);
     overlayRef.current?.setPosition(undefined);
   }, []);
@@ -96,6 +112,9 @@ export function useFeatureIdentify(
   const handleClick = useCallback(
     async (evt: MapBrowserEvent<PointerEvent>) => {
       if (!evt.map) return;
+      if (Date.now() < ignoreClickUntilRef.current) return;
+      const extUntil = externalIgnoreRef.current?.current ?? 0;
+      if (Date.now() < extUntil) return;
       if (disabledRef.current) {
         closePopup();
         return;
@@ -110,12 +129,20 @@ export function useFeatureIdentify(
       const bufferMeters = zoomToBuffer(zoom);
       const coord = evt.coordinate as [number, number];
       const [x, y] = coord;
+      const filters = tableFiltersRef.current;
 
       try {
         const res = await call('', 'POST', {
           service: 'standardService',
           action: 'identifyFeatures',
-          params: { x, y, buffer: bufferMeters, tables, schema: 'layer' },
+          params: {
+            x,
+            y,
+            buffer: bufferMeters,
+            tables,
+            schema: 'layer',
+            ...(filters && Object.keys(filters).length > 0 ? { tableFilters: filters } : {}),
+          },
         });
         const data = res?.data ?? res;
         const results: IdentifyLayerResult[] = Array.isArray(data?.results) ? data.results : [];
@@ -146,4 +173,4 @@ export function useFeatureIdentify(
   }, [map, mapReady, handleClick]);
 
   return { popupState, popupElRef, closePopup };
- }
+}

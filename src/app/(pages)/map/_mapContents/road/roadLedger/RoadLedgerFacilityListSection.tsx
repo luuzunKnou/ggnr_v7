@@ -7,10 +7,12 @@ import { useMapContext } from "../../../_mapComponents/MapContext";
 import { getLegendUrl } from "../../../_mapComponents/hooks/useFeatureIdentify";
 import {
   isRoadLedgerDocGroupActive,
-  ROAD_LEDGER_DOC_LABELS_WITH_LAYER_COUNT,
+  isRoadLedgerDrawingGroup,
+  ROAD_LEDGER_DOC_LIST_GROUP_LABELS,
   ROAD_LEDGER_RDID_MIN_LEN_FOR_FACILITY_JOIN,
   type RoadLedgerDocButtonKey,
 } from "./roadLedgerDocLayerMap";
+import { RoadLedgerDrawingSection } from "./RoadLedgerDrawingSection";
 import { pickRoadLedgerField, pickRoadLedgerOgcFid } from "./roadLedgerFormat";
 import {
   fetchRoadLedgerDefineFieldLabels,
@@ -68,12 +70,15 @@ type Props = {
   visibleLayerNames: Set<string>;
   /** DB에 존재하는 define 레이어만 포함한 그룹별 id 목록 */
   getLayersForGroup: (key: RoadLedgerDocButtonKey) => string[];
+  /** 도면 상세를 속성정보·목록 위에 덮어 그릴 영역 */
+  overlayHost?: HTMLElement | null;
 };
 
 export function RoadLedgerFacilityListSection({
   row,
   visibleLayerNames,
   getLayersForGroup,
+  overlayHost = null,
 }: Props) {
   const mapContext = useMapContext();
   const visibleLayerKey = useMemo(
@@ -89,7 +94,7 @@ export function RoadLedgerFacilityListSection({
       names = [];
     }
     const vis = new Set(names);
-    return ROAD_LEDGER_DOC_LABELS_WITH_LAYER_COUNT.filter((g) =>
+    return ROAD_LEDGER_DOC_LIST_GROUP_LABELS.filter((g) =>
       isRoadLedgerDocGroupActive(vis, getLayersForGroup(g))
     );
   }, [visibleLayerKey, getLayersForGroup]);
@@ -110,7 +115,12 @@ export function RoadLedgerFacilityListSection({
   >({});
 
   const handleFacilityRowClick = useCallback(
-    async (defineTableName: string, tableTitle: string, facilityRow: Record<string, unknown>) => {
+    async (
+      defineTableName: string,
+      tableTitle: string,
+      facilityRow: Record<string, unknown>,
+      inline = false
+    ) => {
       const ogcRaw = pickRoadLedgerField(facilityRow, "ogc_fid");
       const ogc = typeof ogcRaw === "string" ? parseInt(ogcRaw, 10) : Number(ogcRaw);
       if (!mapContext?.setRoadLedgerFacilityModal || !Number.isFinite(ogc) || ogc <= 0) return;
@@ -131,6 +141,7 @@ export function RoadLedgerFacilityListSection({
             defineTableName,
             defineTableTitle: kor || tableTitle,
             pickFromMap: false,
+            inline,
           });
         }
       } catch {
@@ -263,12 +274,39 @@ export function RoadLedgerFacilityListSection({
     ? String(facilityModal.defineTableName).trim().toLowerCase()
     : null;
   const modalOgc = facilityModal ? pickRoadLedgerOgcFid(facilityModal.row) : null;
+  const setFacilityModal = mapContext?.setRoadLedgerFacilityModal;
+
+  /** 도면 구분: 패널 안 상세로 표시하는 선택(목록·지도 클릭 공통) */
+  const inlineDrawing = facilityModal?.inline ? facilityModal : null;
+  const inlineDrawingGroup = useMemo(() => {
+    if (!modalTableLc || !facilityModal?.inline) return null;
+    return (
+      activeFacilityGroups.find(
+        (g) =>
+          isRoadLedgerDrawingGroup(g) &&
+          getLayersForGroup(g).some((id) => id.toLowerCase() === modalTableLc)
+      ) ?? null
+    );
+  }, [modalTableLc, facilityModal?.inline, activeFacilityGroups, getLayersForGroup]);
+
+  /** 지도에서 도면을 고른 경우 해당 도면 탭으로 전환 */
+  const inlineDrawingKey = inlineDrawing ? `${modalTableLc}:${modalOgc ?? ""}` : null;
+  const [appliedInlineDrawingKey, setAppliedInlineDrawingKey] = useState<string | null>(null);
+  if (inlineDrawingKey !== appliedInlineDrawingKey) {
+    setAppliedInlineDrawingKey(inlineDrawingKey);
+    if (inlineDrawingGroup) setSelectedTabKey(inlineDrawingGroup);
+  }
+
+  /** 도면 버튼을 꺼서 탭이 사라지면 선택·강조 해제 */
+  useEffect(() => {
+    if (inlineDrawing && !inlineDrawingGroup) setFacilityModal?.(null);
+  }, [inlineDrawing, inlineDrawingGroup, setFacilityModal]);
 
   if (activeFacilityGroups.length === 0) {
     return (
       <div className="mt-3 border-t border-border pt-3">
         <p className="text-[11px] leading-relaxed text-muted-foreground">
-          주요시설~기타시설 구분을 켜면, 하위 시설 목록이 여기에 표시됩니다.
+          도면(매설물도·종평면도·용지도)이나 주요시설~기타시설 구분을 켜면, 하위 목록이 여기에 표시됩니다.
         </p>
       </div>
     );
@@ -286,8 +324,8 @@ export function RoadLedgerFacilityListSection({
   }
 
   return (
-    <div className="mt-3 border-t border-border pt-3">
-      <div className="flex flex-col gap-0">
+    <div className="mt-3 flex flex-1 flex-col border-t border-border pt-3">
+      <div className="flex flex-1 flex-col gap-0">
         <div
           className="-mx-0 flex flex-nowrap gap-0 overflow-x-auto border-b border-border scrollbar-hide"
           role="tablist"
@@ -301,7 +339,10 @@ export function RoadLedgerFacilityListSection({
                 type="button"
                 role="tab"
                 aria-selected={isSel}
-                onClick={() => setSelectedTabKey(key)}
+                onClick={() => {
+                  setSelectedTabKey(key);
+                  if (inlineDrawingGroup && key !== inlineDrawingGroup) setFacilityModal?.(null);
+                }}
                 className={cn(
                   "relative min-w-0 shrink-0 truncate whitespace-nowrap border px-2.5 py-1.5 text-center text-[11px] font-medium transition-colors",
                   isSel
@@ -316,7 +357,7 @@ export function RoadLedgerFacilityListSection({
         </div>
 
         <div
-          className="min-h-[4rem] border border-t-0 border-border bg-background p-1"
+          className="flex min-h-[4rem] flex-1 flex-col border border-t-0 border-border bg-background p-1"
           role="tabpanel"
         >
           {loading ? (
@@ -327,6 +368,27 @@ export function RoadLedgerFacilityListSection({
             <p className="px-2 text-[11px] text-muted-foreground">구분을 선택해 주세요.</p>
           ) : !selectedSection || selectedSection.tables.length === 0 ? (
             <p className="px-2 text-[11px] text-muted-foreground">해당 구분에 표시할 시설 데이터가 없습니다.</p>
+          ) : isRoadLedgerDrawingGroup(selectedSection.groupKey) ? (
+            <div className="flex flex-1 flex-col gap-2">
+              {selectedSection.tables.map((t) => {
+                const tableLc = String(t.defineTableName).trim().toLowerCase();
+                const busyPrefix = `${t.defineTableName}:`;
+                const busyOgc = loadingFacilityRowKey?.startsWith(busyPrefix)
+                  ? Number(loadingFacilityRowKey.slice(busyPrefix.length))
+                  : null;
+                return (
+                  <RoadLedgerDrawingSection
+                    key={`${selectedSection.groupKey}-${t.defineTableName}`}
+                    table={t}
+                    overlayHost={overlayHost}
+                    selectedRow={inlineDrawing && modalTableLc === tableLc ? inlineDrawing.row : null}
+                    busyOgcFid={busyOgc != null && Number.isFinite(busyOgc) ? busyOgc : null}
+                    onSelect={(r) => void handleFacilityRowClick(t.defineTableName, t.title, r, true)}
+                    onBack={() => setFacilityModal?.(null)}
+                  />
+                );
+              })}
+            </div>
           ) : (
             <div className="space-y-2">
               {selectedSection.tables.map((t) => {

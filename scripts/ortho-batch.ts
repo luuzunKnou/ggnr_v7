@@ -8,10 +8,12 @@
  *   npx tsx scripts/ortho-batch.ts build_yy dev --group=satellite_2011_5187
  *   npx tsx scripts/ortho-batch.ts build_yy dev --force
  *   npx tsx scripts/ortho-batch.ts build_yy dev --continue-on-error
+ *   npx tsx scripts/ortho-batch.ts build_uj dev --source-dir=F:\tiles_tif --work-dir=F:\temp\ortho_work
  *   npm run ortho:batch -- build_yy dev
  *
  * 기본: 미변환 그룹만, 좌표계 있는 그룹만, 한 그룹 완료 후 다음.
- * 작업은 로컬 SSD 우선(temp/ortho_work), 여유 부족 시 GGNR_DATA_DIR/.tmp.
+ * 작업은 --work-dir 또는 E:\temp\ortho_work 우선, 여유 부족 시 GGNR_DATA_DIR/.tmp.
+ * 원본은 --source-dir(tiles_tif 또는 그룹 폴더) 또는 GGNR_DATA_DIR/tiles_tif.
  * 완료 후 tiles_jpg 로 robocopy(다른 드라이브) 또는 rename(같은 드라이브).
  */
 import fs from 'node:fs';
@@ -31,6 +33,12 @@ type CliArgs = {
   force: boolean;
   dryRun: boolean;
   continueOnError: boolean;
+  /** 원본 tiles_tif 루트 또는 그룹 폴더 */
+  sourceDir: string | null;
+  /** warp·타일 임시 작업 경로 */
+  workDir: string | null;
+  /** GGNR_DATA_DIR 덮어쓰기 (tiles_jpg·메타 등) */
+  dataDir: string | null;
 };
 
 function usage(): never {
@@ -42,6 +50,9 @@ Usage: npx tsx scripts/ortho-batch.ts <project> <type> [options]
 
 Options:
   --group=NAME          특정 그룹만 (여러 번 지정 가능)
+  --source-dir=PATH     원본 경로 (tiles_tif 폴더 또는 그룹 폴더)
+  --work-dir=PATH       임시 작업 경로 (warp·타일 staging)
+  --data-dir=PATH       데이터 루트 덮어쓰기 (tiles_jpg 등, GGNR_DATA_DIR)
   --tile-set=ID         UI 타일셋 id (기본 aerial-2017)
   --jpeg-quality=N      1~100 (기본 80)
   --zoom-min=N          기본 6
@@ -63,6 +74,9 @@ function parseArgs(argv: string[]): CliArgs {
   let force = false;
   let dryRun = false;
   let continueOnError = false;
+  let sourceDir: string | null = null;
+  let workDir: string | null = null;
+  let dataDir: string | null = null;
 
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i]!;
@@ -87,6 +101,30 @@ function parseArgs(argv: string[]): CliArgs {
     if (a === '--group') {
       const v = (argv[++i] ?? '').trim();
       if (v) groups.push(v);
+      continue;
+    }
+    if (a.startsWith('--source-dir=')) {
+      sourceDir = a.slice('--source-dir='.length).trim() || null;
+      continue;
+    }
+    if (a === '--source-dir') {
+      sourceDir = (argv[++i] ?? '').trim() || null;
+      continue;
+    }
+    if (a.startsWith('--work-dir=')) {
+      workDir = a.slice('--work-dir='.length).trim() || null;
+      continue;
+    }
+    if (a === '--work-dir') {
+      workDir = (argv[++i] ?? '').trim() || null;
+      continue;
+    }
+    if (a.startsWith('--data-dir=')) {
+      dataDir = a.slice('--data-dir='.length).trim() || null;
+      continue;
+    }
+    if (a === '--data-dir') {
+      dataDir = (argv[++i] ?? '').trim() || null;
       continue;
     }
     if (a.startsWith('--tile-set=')) {
@@ -141,6 +179,9 @@ function parseArgs(argv: string[]): CliArgs {
     force,
     dryRun,
     continueOnError,
+    sourceDir,
+    workDir,
+    dataDir,
   };
 }
 
@@ -184,9 +225,21 @@ async function main(): Promise<void> {
   process.env.GGNR_PROJECT = args.project;
   process.env.GGNR_ENV = args.type;
 
+  if (args.dataDir) {
+    process.env.GGNR_DATA_DIR = path.resolve(args.dataDir);
+  }
+  if (args.sourceDir) {
+    process.env.GGNR_ORTHO_SOURCE_DIR = path.resolve(args.sourceDir);
+  }
+  if (args.workDir) {
+    process.env.GGNR_ORTHO_WORK_DIR = path.resolve(args.workDir);
+  }
+
   const dataDir = (process.env.GGNR_DATA_DIR ?? '').trim();
+  const sourceDir = (process.env.GGNR_ORTHO_SOURCE_DIR ?? '').trim();
+  const workDir = (process.env.GGNR_ORTHO_WORK_DIR ?? '').trim() || 'E:\\temp\\ortho_work';
   console.log(
-    `${LOG} project=${args.project} type=${args.type} dataDir=${dataDir || '(default)'} tileSet=${args.tileSetId} z=${args.zoomMin}-${args.zoomMax} q=${args.jpegQuality} (로컬 우선 → 부족 시 G 데이터 경로, robocopy/rename 배포)`
+    `${LOG} project=${args.project} type=${args.type} dataDir=${dataDir || '(default)'} sourceDir=${sourceDir || '(dataDir/tiles_tif)'} workDir=${workDir} tileSet=${args.tileSetId} z=${args.zoomMin}-${args.zoomMax} q=${args.jpegQuality}`
   );
 
   // env 로드 후 서비스 import (DB 풀이 env를 읽음)

@@ -5,6 +5,39 @@
 
 const UNSAFE_SEGMENT = /[\0\/\\]/;
 
+/**
+ * 게이트(BASE_PATH)·프록시가 쿼리의 한글·비ASCII 파일명을 깨뜨리는 경우 대비.
+ * 상대경로를 ASCII-only base64url 로 실어 보낸다.
+ */
+export function encodeServiceFileDataPathB64(relativePath: string): string {
+  const bytes = new TextEncoder().encode(relativePath);
+  let bin = '';
+  for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]!);
+  const b64 =
+    typeof btoa === 'function' ? btoa(bin) : Buffer.from(bytes).toString('base64');
+  return b64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
+}
+
+/** pathB64 → UTF-8 상대경로. 실패 시 null */
+export function decodeServiceFileDataPathB64(pathB64: string): string | null {
+  const raw = String(pathB64 ?? '').trim();
+  if (!raw || !/^[A-Za-z0-9_-]+$/.test(raw)) return null;
+  try {
+    const b64 = raw.replace(/-/g, '+').replace(/_/g, '/');
+    const pad = b64.length % 4 === 0 ? '' : '='.repeat(4 - (b64.length % 4));
+    const padded = b64 + pad;
+    if (typeof Buffer !== 'undefined') {
+      return Buffer.from(padded, 'base64').toString('utf8');
+    }
+    const binary = atob(padded);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    return new TextDecoder().decode(bytes);
+  } catch {
+    return null;
+  }
+}
+
 /** 단일 경로 세그먼트(폴더명) 검증 */
 export function assertSafeFileDataSegment(segment: string): string | null {
   const t = segment.trim();
@@ -62,18 +95,23 @@ export function isServiceFileDataTmpMarkedFileName(fileName: string): boolean {
   return fileName.endsWith('.tmp');
 }
 
-/** OS가 폴더 탐색 시 만드는 캐시·설정 파일 — 첨부 목록·다운로드에서 제외 */
+/** OS가 폴더 탐색 시 만드는 캐시·설정 파일·폴더 — 첨부 목록·다운로드에서 제외 */
 const SERVICE_FILE_DATA_SYSTEM_JUNK = new Set([
+  'thumbs',
   'thumbs.db',
   'ehthumbs.db',
   'desktop.ini',
   '.ds_store',
 ]);
 
+/** Thumbs.db, Thumbs_기타.db, Thumbs_도면.db 등 탐색기 미리보기 캐시 */
+const THUMBS_DB_RE = /^(eh)?thumbs.*\.db$/i;
+
 export function isServiceFileDataSystemJunkFileName(fileName: string): boolean {
-  const name = String(fileName ?? '').trim();
+  const name = String(fileName ?? '').trim().toLowerCase();
   if (!name) return false;
-  return SERVICE_FILE_DATA_SYSTEM_JUNK.has(name.toLowerCase());
+  if (SERVICE_FILE_DATA_SYSTEM_JUNK.has(name)) return true;
+  return THUMBS_DB_RE.test(name);
 }
 
 /** 목록·다운로드·루트파일 판정에서 숨길 파일 */

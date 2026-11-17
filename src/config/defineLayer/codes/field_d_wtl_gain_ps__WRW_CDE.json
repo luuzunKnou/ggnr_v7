@@ -1,0 +1,62 @@
+[
+  {
+    "define_code_key": "64019",
+    "define_code_field_key": "4179",
+    "define_code_name": "WRW000",
+    "define_code_kor_name": "미분류"
+  },
+  {
+    "define_code_key": "64020",
+    "define_code_field_key": "4179",
+    "define_code_name": "WRW001",
+    "define_code_kor_name": "자연유하식"
+  },
+  {
+    "define_code_key": "64021",
+    "define_code_field_key": "4179",
+    "define_code_name": "WRW002",
+    "define_code_kor_name": "압송식"
+  },
+  {
+    "define_code_key": "64022",
+    "define_code_field_key": "4179",
+    "define_code_name": "WRW999",
+    "define_code_kor_name": "기타"
+  },
+  {
+    "define_code_key": "66019",
+    "define_code_field_key": "4179",
+    "define_code_name": "WRW000",
+    "define_code_kor_name": "미분류"
+  },
+  {
+    "define_code_key": "66020",
+    "define_code_field_key": "4179",
+    "define_code_name": "WRW001",
+    "define_code_kor_name": "자연유하식"
+  },
+  {
+    "define_code_key": "66021",
+    "define_code_field_key": "4179",
+    "define_code_name": "WRW002",
+    "define_code_kor_name": "압송식"
+  },
+  {
+    "define_code_key": "66022",
+    "define_code_field_key": "4179",
+    "define_code_name": "WRW999",
+    "define_code_kor_name": "기타"
+  },
+  {
+    "define_code_key": "66023",
+    "define_code_field_key": "4179",
+    "define_code_name": "WRW900",
+    "define_code_kor_name": "압승식"
+  },
+  {
+    "define_code_key": "66024",
+    "define_code_field_key": "4179",
+    "define_code_name": "WRW901",
+    "define_code_kor_name": "양수식"
+  }
+]

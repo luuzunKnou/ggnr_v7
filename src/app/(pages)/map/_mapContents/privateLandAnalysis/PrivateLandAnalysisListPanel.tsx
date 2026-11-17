@@ -1,0 +1,492 @@
+'use client';
+
+import { useMemo, useState } from 'react';
+import { Inbox, Loader2, MapPin, Pencil, RotateCcw, Search, SearchX, X, type LucideIcon } from 'lucide-react';
+import { cn } from '@/lib/utils';
+import { Button } from '@/app/shadcnComponents/ui/button';
+import { usePrivateLandAnalysis, type PrivateLandAnalysisPhase } from './PrivateLandAnalysisContext';
+import { PrivateLandAnalysisAreaModal } from './PrivateLandAnalysisAreaModal';
+import { PrivateLandAnalysisMapGuide } from './PrivateLandAnalysisMapGuide';
+import {
+  BUILDING_KIND_LABEL,
+  buildingBadgeStyle,
+  formatSqm,
+  jimokBadgeStyle,
+  jimokFilterOptions,
+  jimokFullName,
+  matchesJimokFilter,
+  matchesOwnFilter,
+  OWN_FILTER_ALL,
+  OWN_FILTER_OPTIONS,
+  ownGbnBadgeStyle,
+  ownGbnShort,
+} from './privateLandAnalysisFormat';
+
+type Props = {
+  onClose: () => void;
+};
+
+const RANGING_TEXT: Partial<Record<PrivateLandAnalysisPhase, string>> = {
+  start: '지도에서 하천 위 시작 위치를 찍으세요.',
+  loadingBase: '하천 도형을 불러오는 중…',
+  end: '하천을 따라 끝 위치를 찍으세요.',
+  ranged: '지도에서 적용을 누르면 바로 분석합니다.',
+  applying: '구간을 계산하는 중…',
+};
+
+const CLOSED_RANGING_TEXT: Partial<Record<PrivateLandAnalysisPhase, string>> = {
+  start: '지도에서 도로를 가로질러 경계선을 찍으세요.',
+  ranged: '경계선으로 범위를 닫고 적용하세요.',
+};
+
+const CHIP_BASE =
+  'min-w-0 truncate rounded border px-0.5 py-1 text-center text-[10px] font-medium leading-tight transition-colors';
+const CHIP_ON = 'border-primary bg-primary/10 text-primary';
+const CHIP_OFF = 'border-border bg-background text-muted-foreground hover:bg-muted/50';
+/** 지목 필터 한 줄 칸 수 — 넘치면 다음 줄 */
+const JIMOK_FILTER_COLS = 6;
+
+type FilterTab = 'own' | 'jimok';
+type FilterOption = { key: string; label: string };
+
+/** 목록이 비었을 때 — 아이콘·제목·설명, 필요하면 되돌리기 버튼 */
+function ListEmptyState({
+  icon: Icon,
+  title,
+  description,
+  actionLabel,
+  onAction,
+}: {
+  icon: LucideIcon;
+  title: string;
+  description: string;
+  actionLabel?: string;
+  onAction?: () => void;
+}) {
+  return (
+    <div className="flex flex-col items-center px-4 py-8 text-center">
+      <span className="flex size-10 items-center justify-center rounded-full bg-muted text-muted-foreground">
+        <Icon className="size-5" aria-hidden />
+      </span>
+      <p className="mt-2.5 text-sm font-medium text-foreground">{title}</p>
+      <p className="mt-1 text-[11px] leading-snug text-muted-foreground">{description}</p>
+      {actionLabel && onAction ? (
+        <button
+          type="button"
+          onClick={onAction}
+          className="mt-3 rounded border border-border bg-background px-3 py-1 text-[11px] font-medium text-foreground transition-colors hover:bg-muted/50"
+        >
+          {actionLabel}
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
+/** 필터 버튼 묶음 — 0건은 흐리게(누르면 목록에 «없습니다» 안내), 마우스를 올리면 건수 */
+function FilterChips({
+  title,
+  options,
+  counts,
+  value,
+  cols,
+  onChange,
+}: {
+  title: string;
+  options: FilterOption[];
+  counts: Map<string, number>;
+  value: string;
+  cols: number;
+  onChange: (key: string) => void;
+}) {
+  return (
+    <div
+      className="grid w-full gap-0.5"
+      style={{ gridTemplateColumns: `repeat(${Math.min(options.length, cols)}, minmax(0, 1fr))` }}
+      role="group"
+      aria-label={`${title} 필터`}
+    >
+      {options.map((f) => {
+        const active = value === f.key;
+        const count = counts.get(f.key) ?? 0;
+        const empty = count === 0 && !active;
+        return (
+          <button
+            key={f.key}
+            type="button"
+            onClick={() => onChange(f.key)}
+            title={empty ? `${f.label} 없음` : `${f.label} ${count}건`}
+            aria-pressed={active}
+            className={cn(CHIP_BASE, active ? CHIP_ON : CHIP_OFF, empty && 'opacity-40')}
+          >
+            <span className="block truncate">{f.label}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+const BTN_CHANGE =
+  'h-7 flex-1 gap-1 border-primary/40 bg-primary/5 px-2 text-[10px] font-medium text-primary hover:bg-primary/10 hover:text-primary';
+const BTN_RESET =
+  'h-7 flex-1 gap-1 border-amber-300/80 bg-amber-50 px-2 text-[11px] font-medium text-amber-900 hover:bg-amber-100 hover:text-amber-950 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-200 dark:hover:bg-amber-950/60 dark:hover:text-amber-100';
+type SummaryRow = { label: string; value: string; highlight?: boolean };
+
+function SummaryTable({ rows }: { rows: SummaryRow[] }) {
+  return (
+    <div className="overflow-hidden rounded border border-border">
+      {rows.map((row, index) => (
+        <div
+          key={row.label}
+          className={cn('flex items-stretch', index !== rows.length - 1 && 'border-b border-border')}
+        >
+          <div className="flex w-[64px] shrink-0 items-start bg-muted px-2.5 py-1.5">
+            <span className="text-[11px] leading-snug text-muted-foreground">{row.label}</span>
+          </div>
+          <div className="flex min-w-0 flex-1 items-start px-2.5 py-1.5">
+            <span
+              className={cn(
+                'break-words text-[11px] leading-snug',
+                row.highlight ? 'font-medium text-primary' : 'text-muted-foreground'
+              )}
+            >
+              {row.value}
+            </span>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+export function PrivateLandAnalysisListPanel({ onClose }: Props) {
+  const {
+    layer,
+    phase,
+    baseName,
+    zoneAreaSqm,
+    parcels,
+    truncated,
+    ownFilter,
+    jimokFilter,
+    keyword,
+    filteredParcels,
+    selectedKey,
+    includeTributary,
+    tribCutCount,
+    rangeMode,
+    closedLineCount,
+    openAreaModal,
+    changeArea,
+    resetAll,
+    setOwnFilter,
+    setJimokFilter,
+    setKeyword,
+    selectParcel,
+  } = usePrivateLandAnalysis();
+
+  const [filterTab, setFilterTab] = useState<FilterTab>('own');
+
+  /** 지목 필터 — 분석 결과에 있는 지목만 */
+  const jimokOptions = useMemo(
+    () => jimokFilterOptions(parcels.filter((p) => p.kind === 'parcel').map((p) => p.jimok)),
+    [parcels]
+  );
+
+  /** 필터별 건수 — 0건 필터는 흐리게·선택 불가 */
+  const ownFilterCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const f of OWN_FILTER_OPTIONS) {
+      counts.set(f.key, parcels.filter((p) => matchesOwnFilter(f.key, p.ownGbn, p.kind !== 'parcel')).length);
+    }
+    return counts;
+  }, [parcels]);
+  const jimokFilterCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const f of jimokOptions) {
+      counts.set(f.key, parcels.filter((p) => matchesJimokFilter(f.key, p.jimok, p.kind !== 'parcel')).length);
+    }
+    return counts;
+  }, [jimokOptions, parcels]);
+
+  /** 고른 필터가 결과에 없으면 목록에 «건축물이 없습니다»처럼 안내 */
+  const emptyFilterLabel =
+    filterTab === 'own'
+      ? ownFilter !== OWN_FILTER_ALL && (ownFilterCounts.get(ownFilter) ?? 0) === 0
+        ? (OWN_FILTER_OPTIONS.find((f) => f.key === ownFilter)?.label ?? ownFilter)
+        : null
+      : jimokFilter !== OWN_FILTER_ALL && (jimokFilterCounts.get(jimokFilter) ?? 0) === 0
+        ? jimokFilter
+        : null;
+
+  /** 한 번에 한 기준만 — 탭을 바꾸면 두 필터 모두 «전체» */
+  const handleFilterTabChange = (tab: FilterTab) => {
+    if (tab === filterTab) return;
+    setFilterTab(tab);
+    setOwnFilter(OWN_FILTER_ALL);
+    setJimokFilter(OWN_FILTER_ALL);
+  };
+  const filterTabs: { id: FilterTab; label: string }[] = [
+    { id: 'own', label: '소유구분' },
+    { id: 'jimok', label: '지목' },
+  ];
+
+  const confirmed = phase === 'applied' || phase === 'analyzing' || phase === 'result';
+  const closed = rangeMode === 'closed';
+  const rangingText = closed ? (CLOSED_RANGING_TEXT[phase] ?? RANGING_TEXT[phase]) : RANGING_TEXT[phase];
+
+  const summaryRows: SummaryRow[] = [
+    { label: '구역', value: layer?.label ?? '—' },
+    ...(closed
+      ? [{ label: '경계선', value: `${closedLineCount}개` }]
+      : [
+          { label: '대상', value: baseName || '—', highlight: true },
+          { label: '지류', value: includeTributary && tribCutCount > 0 ? `포함 ${tribCutCount}곳` : '미포함' },
+        ]),
+    ...(zoneAreaSqm != null ? [{ label: '면적', value: `약 ${formatSqm(zoneAreaSqm)}` }] : []),
+  ];
+
+  return (
+    <div className="flex min-h-0 h-full flex-col bg-background">
+      <header className="shrink-0 border-b border-border bg-background px-4 py-2.5">
+        <div className="flex items-center justify-between gap-2">
+          <h3 className="text-sm font-semibold text-foreground">사유지분석</h3>
+          <button
+            type="button"
+            onClick={onClose}
+            className="shrink-0 rounded p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            title="닫기"
+            aria-label="닫기"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+        <span className="text-[11px] text-muted-foreground">분석 구역·구간 지정</span>
+      </header>
+
+      <div className="shrink-0 border-b border-border">
+        <div className="px-4 py-2">
+          <span className="text-[12px] font-semibold text-muted-foreground">분석 영역</span>
+        </div>
+        <div className="px-3 pb-3">
+          {confirmed ? (
+            <SummaryTable rows={summaryRows} />
+          ) : rangingText ? (
+            <div className="rounded border border-border bg-muted/30 px-2.5 py-1.5 text-[11px] leading-snug text-muted-foreground">
+              <p className="font-medium text-foreground/80">{layer?.label}</p>
+              <p className="mt-0.5 flex items-center gap-1">
+                {phase === 'loadingBase' || phase === 'applying' ? (
+                  <Loader2 className="h-3 w-3 shrink-0 animate-spin" aria-hidden />
+                ) : null}
+                {rangingText}
+              </p>
+            </div>
+          ) : (
+            <p className="text-[11px] text-amber-700 dark:text-amber-300">분석 영역을 먼저 지정하세요.</p>
+          )}
+
+          <div className="mt-2 flex gap-1.5">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className={BTN_CHANGE}
+              title={confirmed || rangingText ? '같은 구역에서 구간만 다시 지정' : '분석할 구역을 선택'}
+              onClick={confirmed || rangingText ? changeArea : openAreaModal}
+              disabled={phase === 'analyzing' || phase === 'applying'}
+            >
+              {confirmed || rangingText ? (
+                <Pencil className="size-3 shrink-0" aria-hidden />
+              ) : (
+                <MapPin className="size-3 shrink-0" aria-hidden />
+              )}
+              {confirmed || rangingText ? '영역 변경' : '영역 지정'}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className={BTN_RESET}
+              title="구역 선택부터 다시 시작"
+              onClick={resetAll}
+              disabled={phase === 'analyzing' || phase === 'applying'}
+            >
+              <RotateCcw className="size-3 shrink-0" aria-hidden />
+              재설정
+            </Button>
+          </div>
+        </div>
+      </div>
+
+      {phase === 'result' ? (
+        <div className="shrink-0 space-y-1.5 border-b border-border px-2.5 py-2">
+          <div className="relative">
+            <Search className="absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+            <input
+              type="search"
+              value={keyword}
+              onChange={(e) => setKeyword(e.target.value)}
+              placeholder="주소·소유구분·지목·건물명"
+              className="h-8 w-full rounded border border-border pl-7 pr-2.5 text-xs outline-none focus:border-primary focus:ring-2 focus:ring-primary/25"
+            />
+          </div>
+          <div className="overflow-hidden rounded border border-border">
+            <div className="flex border-b border-border" role="tablist" aria-label="필터 구분">
+              {filterTabs.map((t) => {
+                const selected = filterTab === t.id;
+                return (
+                  <button
+                    key={t.id}
+                    type="button"
+                    role="tab"
+                    aria-selected={selected}
+                    onClick={() => handleFilterTabChange(t.id)}
+                    className={cn(
+                      'flex w-1/2 items-center justify-center px-2 py-1.5 text-xs font-medium transition-colors',
+                      selected
+                        ? 'border-b-2 border-primary bg-primary/5 text-primary'
+                        : 'text-muted-foreground hover:bg-muted/40 hover:text-foreground'
+                    )}
+                  >
+                    {t.label}
+                  </button>
+                );
+              })}
+            </div>
+            <div className="bg-muted/20 p-1.5">
+              {filterTab === 'jimok' ? (
+                <FilterChips
+                  title="지목"
+                  options={jimokOptions}
+                  counts={jimokFilterCounts}
+                  value={jimokFilter}
+                  cols={JIMOK_FILTER_COLS}
+                  onChange={setJimokFilter}
+                />
+              ) : (
+                <FilterChips
+                  title="소유구분"
+                  options={OWN_FILTER_OPTIONS}
+                  counts={ownFilterCounts}
+                  value={ownFilter}
+                  cols={OWN_FILTER_OPTIONS.length}
+                  onChange={setOwnFilter}
+                />
+              )}
+            </div>
+          </div>
+          <div className="flex items-center justify-between gap-2 text-[11px] text-muted-foreground">
+            <span>목록 {filteredParcels.length}건</span>
+            {truncated ? <span className="text-[10px] text-chart-4">최대 1,000건까지 표시</span> : null}
+          </div>
+        </div>
+      ) : null}
+
+      <div className="min-h-0 flex-1 overflow-auto scrollbar-thin">
+        {phase !== 'result' ? (
+          <p className="px-3 py-2.5 text-xs text-muted-foreground">
+            {phase === 'analyzing' ? '필지·건물을 분석하는 중…' : '구간을 적용하면 필지·건물 목록이 표시됩니다.'}
+          </p>
+        ) : filteredParcels.length === 0 ? (
+          parcels.length === 0 ? (
+            <ListEmptyState
+              icon={Inbox}
+              title="필지·건물 없음"
+              description="분석 구간과 겹치는 필지·건물이 없습니다."
+            />
+          ) : emptyFilterLabel ? (
+            <ListEmptyState
+              icon={Inbox}
+              title={`${emptyFilterLabel} 없음`}
+              description={`이 분석 구간에는 «${emptyFilterLabel}»에 해당하는 항목이 없습니다.`}
+              actionLabel="전체 보기"
+              onAction={() => {
+                setOwnFilter(OWN_FILTER_ALL);
+                setJimokFilter(OWN_FILTER_ALL);
+              }}
+            />
+          ) : (
+            <ListEmptyState
+              icon={SearchX}
+              title="검색 결과 없음"
+              description={`«${keyword.trim()}»와 일치하는 필지·건물이 없습니다.`}
+              actionLabel="검색어 지우기"
+              onAction={() => setKeyword('')}
+            />
+          )
+        ) : (
+          <table className="w-full table-fixed border-collapse text-xs">
+            <colgroup>
+              <col />
+              <col className="w-[5.75rem]" />
+            </colgroup>
+            <tbody>
+              {filteredParcels.map((p) => {
+                const isSelected = selectedKey === p.key;
+                const isBuilding = p.kind !== 'parcel';
+                const badgeLabel = p.kind === 'parcel' ? ownGbnShort(p.ownGbn) : BUILDING_KIND_LABEL[p.kind];
+                return (
+                  <tr
+                    key={p.key}
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => selectParcel(isSelected ? null : p.key)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        selectParcel(isSelected ? null : p.key);
+                      }
+                    }}
+                    className={cn(
+                      'cursor-pointer border-b border-border align-middle transition-colors',
+                      isSelected
+                        ? 'border-l-[3px] border-l-primary bg-primary/[0.11] ring-1 ring-inset ring-primary/20 hover:bg-primary/[0.14]'
+                        : 'border-l-[3px] border-l-transparent hover:bg-muted/50'
+                    )}
+                  >
+                    <td className="min-w-0 overflow-hidden px-3 py-1.5">
+                      <div className="flex min-w-0 items-center gap-1.5">
+                        <span
+                          className="inline-flex w-[3.5rem] shrink-0 items-center justify-center truncate whitespace-nowrap rounded border px-1.5 py-0.5 text-[10px] font-semibold leading-none"
+                          style={isBuilding ? buildingBadgeStyle() : ownGbnBadgeStyle(p.ownGbn)}
+                          title={isBuilding ? p.name || badgeLabel : p.ownGbn}
+                        >
+                          {badgeLabel}
+                        </span>
+                        {p.jimok ? (
+                          <span
+                            className="inline-flex w-[2.5rem] shrink-0 items-center justify-center truncate whitespace-nowrap rounded border px-0.5 py-0.5 text-[10px] font-semibold leading-none"
+                            style={jimokBadgeStyle(p.jimok)}
+                            title={jimokFullName(p.jimok)}
+                          >
+                            {p.jimok}
+                          </span>
+                        ) : null}
+                        <p
+                          className="min-w-0 flex-1 truncate text-sm font-medium leading-tight text-foreground"
+                          title={p.address || p.pnu || p.name}
+                        >
+                          {p.address || p.pnu || p.name || '필지 미확인'}
+                        </p>
+                      </div>
+                    </td>
+                    <td
+                      className="min-w-0 px-3 py-2.5 pl-1.5 text-right text-[11px] tabular-nums text-muted-foreground"
+                      title="편입면적"
+                    >
+                      <span className="block truncate">{formatSqm(p.intersectAreaSqm)}</span>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        )}
+      </div>
+
+      <PrivateLandAnalysisAreaModal />
+      <PrivateLandAnalysisMapGuide />
+    </div>
+  );
+}

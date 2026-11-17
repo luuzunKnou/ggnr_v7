@@ -1,6 +1,5 @@
 import type { NextConfig } from "next";
 import path from "path";
-import CopyPlugin from "copy-webpack-plugin";
 import webpack from "webpack";
 import { getProjectEnvVars } from "./scripts/load-project-env";
 import { resolveGeoServerInternalUrl } from "./scripts/resolve-geoserver-url";
@@ -14,6 +13,30 @@ import { resolveGeoServerInternalUrl } from "./scripts/resolve-geoserver-url";
  * 주의: basePath 는 next build / next dev 기동 시점에 반영됨. env만 바꾸고 재빌드 없이 start 하면 CSS/JS 경로가 어긋날 수 있음.
  * 게이트: BASE_PATH=/build_yy (끝 / 없음) → 공개 URL …/build_yy (trailingSlash 기본값 false)
  */
+/**
+ * 빌드 파일 추적에서 아예 들어가지 않을 대량 폴더(conda env·GeoServer·Java).
+ * outputFileTracingExcludes 는 추적이 끝난 뒤 결과에서만 빼므로, 서버 코드에 이 폴더 경로가 한 번만 잡혀도
+ * 수만 개 파일을 모두 읽어 빌드 메모리가 폴더 크기에 비례해 늘어난다(종료 134). webpack 추적기 무시 목록에도 넣는다.
+ */
+const HEAVY_TRACE_DIRS = [
+  "python/env/**",
+  "python/env.zip",
+  "python/env.z*",
+  "python/env_parts/**",
+  "python/**/__pycache__/**",
+  "geoserver_modules/geoserver/**",
+  "geoserver_modules/java/**",
+  "geoserver_modules/data_dir/**",
+  "QCAD_modules/**",
+  "modules_blender/**",
+  "runtime/**",
+  "nssm/**",
+  ".cad-preview-work/**",
+  "download/**",
+  "docs/**",
+  "public/cesiumStatic/**",
+];
+
 function resolveBasePath(): string {
   let raw = (process.env.BASE_PATH ?? "").trim();
   if (!raw) {
@@ -28,7 +51,7 @@ function resolveBasePath(): string {
     }
   }
   if (!raw) return "";
-  // 실수로 전체 URL을 넣은 경우 pathname만 사용 (예: https://dggs.kr/uav_ulsan)
+  // 실수로 전체 URL을 넣은 경우 pathname만 사용 (예: https://dggs.kr/uav_us)
   if (/^https?:\/\//i.test(raw)) {
     try {
       raw = new URL(raw).pathname;
@@ -46,28 +69,28 @@ function resolveBasePath(): string {
 const basePath = resolveBasePath();
 const cesiumBaseUrl = `${basePath}/cesiumStatic`;
 
-const cesiumSource = path.join(__dirname, "node_modules/cesium/Build/Cesium");
-const cesiumStatic = path.join(__dirname, "public/cesiumStatic");
-
+/** Cesium Workers/Assets 등은 public/cesiumStatic 에 두고 빌드 시 CopyPlugin 복사하지 않음(속도 비교 테스트). */
 const nextConfig: NextConfig = {
   ...(basePath ? { basePath } : {}),
   env: {
     BASE_PATH: basePath,
   },
+  /**
+   * proxy 가 요청 본문을 버퍼링할 때 기본 10MB.
+   * 도면 표시 DXF/DWG 업로드(최대 150MB) 등이 잘리지 않도록 맞춤.
+   */
+  experimental: {
+    proxyClientMaxBodySize: '160mb',
+  },
   devIndicators: false,
+  /**
+   * Turbopack은 orthophotoService 등 대형 Node 서비스 묶을 때 FATAL panic 이 난다.
+   * 운영·빌드프로그램은 `next build --webpack` (package.json build 스크립트) 사용.
+   */
   turbopack: {},
   /** conda env 등 대량 파일이 Turbopack 파일 추적에 잡히지 않게 */
   outputFileTracingExcludes: {
-    '*': [
-      './python/env/**',
-      './python/env.zip',
-      './python/env.z*',
-      './python/env_parts/**',
-      './python/**/__pycache__/**',
-      './geoserver_modules/geoserver/**',
-      './geoserver_modules/java/**',
-      './.next/**',
-    ],
+    '*': [...HEAVY_TRACE_DIRS.map((g) => `./${g}`), './.next/**'],
   },
   serverExternalPackages: [
     '@napi-rs/canvas',
@@ -75,6 +98,9 @@ const nextConfig: NextConfig = {
     'pdfjs-dist',
     'pg',
     'pg-native',
+    'exifr',
+    'puppeteer-core',
+    'oracledb',
   ],
   async rewrites() {
     // GeoServer: 브라우저·게이트는 동일 출처 `{basePath}/geoserver` → start.ini·GEOSERVER_URL
@@ -82,6 +108,10 @@ const nextConfig: NextConfig = {
     return [
       { source: '/geoserver', destination: geoInternal },
       { source: '/geoserver/:path*', destination: `${geoInternal}/:path*` },
+      // QGIS 레거시 호환 — key 권한 WFS/WMS 프록시
+      { source: '/wfs.do', destination: '/api/ogc/wfs' },
+      { source: '/wfsUpdate.do', destination: '/api/ogc/wfs-update' },
+      { source: '/wms.do', destination: '/api/ogc/wms' },
       { source: '/vworldLandCharacteristics.api', destination: '/api/vworld/land-characteristics' },
       { source: '/vworldLandCharacteristics_https.api', destination: '/api/vworld/land-characteristics' },
       { source: '/vworldLandUseAttr.api', destination: '/api/vworld/land-use' },
@@ -109,17 +139,17 @@ const nextConfig: NextConfig = {
     config.plugins.push(
       new webpack.IgnorePlugin({ resourceRegExp: /^pg-native$/ })
     );
+    if (isServer) {
+      // Next 가 traceIgnores: [] 로 고정해 넘기므로 플러그인 인스턴스에 직접 추가.
+      // .next/server 는 추적 시작점이라 넣지 않고, 개발 서버 산출물(.next/dev)·캐시(.next/cache)만 막는다
+      for (const plugin of config.plugins as unknown[]) {
+        const p = plugin as { constructor?: { name?: string }; traceIgnores?: string[] } | null;
+        if (p?.constructor?.name === "TraceEntryPointsPlugin" && Array.isArray(p.traceIgnores)) {
+          p.traceIgnores.push(...HEAVY_TRACE_DIRS.map((g) => `**/${g}`), "**/.next/dev/**", "**/.next/cache/**");
+        }
+      }
+    }
     if (!isServer) {
-      config.plugins.push(
-        new CopyPlugin({
-          patterns: [
-            { from: path.join(cesiumSource, "Workers"), to: path.join(cesiumStatic, "Workers") },
-            { from: path.join(cesiumSource, "ThirdParty"), to: path.join(cesiumStatic, "ThirdParty") },
-            { from: path.join(cesiumSource, "Assets"), to: path.join(cesiumStatic, "Assets") },
-            { from: path.join(cesiumSource, "Widgets"), to: path.join(cesiumStatic, "Widgets") },
-          ],
-        })
-      );
       config.resolve.alias = config.resolve.alias || {};
       (config.resolve.alias as Record<string, string>)["cesium"] = path.join(__dirname, "node_modules/cesium");
       config.plugins.push(

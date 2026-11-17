@@ -1,5 +1,14 @@
+import fs from 'node:fs/promises';
+import path from 'node:path';
 import { db } from '@/database/db';
 import { sql } from 'drizzle-orm';
+import { parseRiverOrthoGroup, type RiverOrthoGroup } from '@/lib/riverOrthoGroups';
+import { resolveGgnrDataDir } from '@/lib/turbopackFsPath';
+import { getGeoServerInternalBase } from '@/lib/geoserverUrl';
+import {
+  isServiceFileDataSystemJunkFileName,
+  isServiceFileDataTmpMarkedFileName,
+} from '@/lib/serviceFileData';
 import {
   isRiverBasicPlanIndexDefineTable,
   isRiverBasicPlanMapAttachmentDefineTable,
@@ -7,6 +16,8 @@ import {
   riverBasicPlanGdParentDefineTable,
   riverBasicPlanHdDefineTable,
   riverBasicPlanIndexDefineTable,
+  riverBasicPlanJbDefineTable,
+  riverBasicPlanJbLabel,
   riverBasicPlanJdDefineTable,
   riverBasicPlanRiverNameFilterableLayers,
   riverBasicPlanTabFromIndexDefineTable,
@@ -32,21 +43,47 @@ function normalizePlanLenParam(raw: unknown): string {
   return String(raw ?? '').trim().replace(/,/g, '');
 }
 
+/** 제방 연장 → «(L=1,077m)» */
+function formatJbLenSuffix(raw: unknown): string {
+  if (raw == null || raw === '') return '';
+  const n = Number(String(raw).replace(/,/g, '').trim());
+  if (!Number.isFinite(n) || n <= 0) return '';
+  const rounded = Math.round(n);
+  return ` (L=${rounded.toLocaleString('en-US')}m)`;
+}
+
 /**
- * 기본계획 1건 식별 조건 (목록 GROUP BY: 연도·계획명·연장과 동일).
- * planLen 이 undefined 이면 연장 조건 생략.
+ * rivp_name → 폴더·그룹용 접미사 SQL — 마지막 `_` 뒤 값(`부구천_2차` → `2차`, `남대천_울진읍` → `울진읍`).
+ * `_` 가 없으면 빈 문자열. 화면 쪽 extractRiverBasicPlanRivpFolderSuffix 와 같은 규칙.
+ */
+function rivpFolderSuffixSql(alias = ''): string {
+  const col = alias ? `${alias}.rivp_name` : 'rivp_name';
+  return `COALESCE(substring(TRIM(COALESCE(${col}, '')) from '_([^_]+)$'), '')`;
+}
+
+/**
+ * 기본계획 1건 식별 조건 (연도·계획명·연장·rivp).
+ * planLen / rivpName / rivpSuffix 가 undefined 이면 해당 조건 생략.
+ * rivpName(정확 일치)이 있으면 rivpSuffix보다 우선.
  */
 function planIdentityWhereParts(opts: {
   riverName: string;
   planYear: string;
   planName: string;
   planLen?: string;
+  rivpName?: string;
+  rivpSuffix?: string;
 }): string[] {
   const parts = [
     `river_name = '${esc(opts.riverName)}'`,
     opts.planYear ? `COALESCE(plan_year, '') = '${esc(opts.planYear)}'` : '',
     opts.planName ? `COALESCE(plan_name, '') = '${esc(opts.planName)}'` : '',
   ];
+  if (opts.rivpName !== undefined) {
+    parts.push(`COALESCE(rivp_name, '') = '${esc(String(opts.rivpName).trim())}'`);
+  } else if (opts.rivpSuffix !== undefined) {
+    parts.push(`${rivpFolderSuffixSql()} = '${esc(String(opts.rivpSuffix).trim())}'`);
+  }
   if (opts.planLen !== undefined) {
     const len = normalizePlanLenParam(opts.planLen);
     if (len === '') {
@@ -90,14 +127,42 @@ async function resolveLayerTableNameOrNull(wantedLower: string): Promise<string 
   return name || null;
 }
 
-/** 탭 기본 지도 레이어 중 layer 스키마에 실제 테이블이 있는 것만 */
+/** GeoServer에 실제로 올라간 레이어명. 조회 실패 시 null(DB 목록만 사용) */
+async function publishedGgnrLayerNames(): Promise<Set<string> | null> {
+  try {
+    const base = getGeoServerInternalBase();
+    const workspace = (process.env.GEOSERVER_WORKSPACE?.trim() || 'ggnr').replace(/\/$/, '');
+    const user = process.env.GEOSERVER_USER ?? 'admin';
+    const pass = process.env.GEOSERVER_PASSWORD ?? 'geoserver';
+    const res = await fetch(`${base}/rest/workspaces/${encodeURIComponent(workspace)}/layers.json`, {
+      headers: { Authorization: `Basic ${Buffer.from(`${user}:${pass}`).toString('base64')}` },
+    });
+    if (!res.ok) return null;
+    const data = (await res.json()) as {
+      layers?: { layer?: { name?: string } | { name?: string }[] };
+    };
+    const raw = data.layers?.layer;
+    const arr = Array.isArray(raw) ? raw : raw ? [raw] : [];
+    return new Set(
+      arr.map((row) => String(row.name ?? '').trim().toLowerCase()).filter(Boolean)
+    );
+  } catch {
+    return null;
+  }
+}
+
+/** 탭 기본 지도 레이어 중 DB 테이블이 있고 GeoServer에 올라간 것만 */
 export async function getRiverBasicPlanExistingMapLayers(params?: {
   tab?: RiverType;
 }): Promise<{ layers: string[] }> {
   const tab = normalizeTab(params?.tab);
   const wanted = [...riverBasicPlanRiverNameFilterableLayers(tab)];
   if (wanted.length === 0) return { layers: [] };
-  const inList = wanted.map((n) => `'${esc(n.toLowerCase())}'`).join(',');
+  /** 구조물 분할 레이어처럼 부모 테이블을 나눠 보여 주는 레이어는 부모 테이블 존재로 판단 */
+  const physicalOf = new Map(
+    wanted.map((n) => [n, resolveDefineTablePhysicalBaseName(n, 'layer').toLowerCase() || n.toLowerCase()])
+  );
+  const inList = [...new Set(physicalOf.values())].map((n) => `'${esc(n)}'`).join(',');
   const res = await db.execute(
     sql.raw(
       `SELECT table_name
@@ -108,14 +173,50 @@ export async function getRiverBasicPlanExistingMapLayers(params?: {
   const have = new Set(
     (res.rows ?? []).map((r) => String((r as { table_name?: string }).table_name ?? '').toLowerCase()).filter(Boolean)
   );
-  return { layers: wanted.filter((n) => have.has(n.toLowerCase())) };
+  let layers = wanted.filter((n) => have.has(physicalOf.get(n)!));
+  const published = await publishedGgnrLayerNames();
+  if (published) {
+    layers = layers.filter((n) => published.has(n.toLowerCase()));
+  }
+  return { layers };
 }
 
+/** tiles_jpg 의 하천 드론영상 그룹 (bigriver_·smallriver_), 타일 폴더가 있는 것만 */
+export async function listRiverOrthoGroups(): Promise<{ groups: RiverOrthoGroup[] }> {
+  const root = path.join(resolveGgnrDataDir(), 'tiles_jpg');
+  let entries: { name: string; isDirectory: () => boolean }[];
+  try {
+    entries = await fs.readdir(root, { withFileTypes: true });
+  } catch {
+    return { groups: [] };
+  }
+  const groups: RiverOrthoGroup[] = [];
+  for (const e of entries) {
+    if (!e.isDirectory()) continue;
+    const g = parseRiverOrthoGroup(e.name);
+    if (!g) continue;
+    const zooms = await fs.readdir(path.join(root, e.name)).catch(() => [] as string[]);
+    if (zooms.some((n) => /^\d+$/.test(n))) groups.push(g);
+  }
+  groups.sort((a, b) => b.year - a.year || a.kind.localeCompare(b.kind));
+  return { groups };
+}
+
+/**
+ * 하천별 목록 — 하천명·하천코드로 나눈다. 같은 하천명이 하천코드로 여러 개면
+ * rivpLabel(rivp_name 의 마지막 `_` 뒤 값)을 붙여 목록에서 구분한다(한 개면 빈 값).
+ */
 export async function getRiverBasicPlanRiverList(params?: {
   tab?: RiverType;
   keyword?: string;
 }): Promise<{
-  rivers: { riverName: string; riverType: string | null; count: number }[];
+  rivers: {
+    riverName: string;
+    riverType: string | null;
+    riverCode: string;
+    rivpLabel: string;
+    count: number;
+  }[];
 }> {
   const tab = normalizeTab(params?.tab);
   const keyword = String(params?.keyword ?? '').trim();
@@ -132,25 +233,46 @@ export async function getRiverBasicPlanRiverList(params?: {
       sql.raw(
         `SELECT
            river_name AS "riverName",
+           COALESCE(river_code::text, '') AS "riverCode",
            MAX(river_type) AS "riverType",
+           MIN(NULLIF(TRIM(COALESCE(rivp_name, '')), '')) AS "rivpName",
            COUNT(*)::int AS "count"
          FROM layer."${tableName.replace(/"/g, '""')}"
          WHERE COALESCE(river_name, '') <> ''
            ${keywordWhere}
-         GROUP BY river_name
-         ORDER BY river_name`
+         GROUP BY river_name, COALESCE(river_code::text, '')
+         ORDER BY river_name, COALESCE(river_code::text, '')`
       )
     );
 
-    return {
-      rivers: (res.rows ?? []).map((r) => {
-        const row = r as { riverName?: string; riverType?: string | null; count?: number | string };
+    const rows = (res.rows ?? [])
+      .map((r) => {
+        const row = r as {
+          riverName?: string;
+          riverCode?: string | null;
+          riverType?: string | null;
+          rivpName?: string | null;
+          count?: number | string;
+        };
         return {
           riverName: String(row.riverName ?? '').trim(),
           riverType: row.riverType == null ? null : String(row.riverType),
+          riverCode: String(row.riverCode ?? '').trim(),
+          rivpName: String(row.rivpName ?? '').trim(),
           count: Number(row.count ?? 0) || 0,
         };
-      }).filter((r) => r.riverName),
+      })
+      .filter((r) => r.riverName);
+    const codesByName = new Map<string, number>();
+    for (const r of rows) codesByName.set(r.riverName, (codesByName.get(r.riverName) ?? 0) + 1);
+
+    return {
+      rivers: rows.map(({ rivpName, ...r }) => {
+        const duplicated = (codesByName.get(r.riverName) ?? 0) > 1;
+        const cut = rivpName.lastIndexOf('_');
+        const label = cut >= 0 ? rivpName.slice(cut + 1).trim() : rivpName;
+        return { ...r, rivpLabel: duplicated ? label || r.riverCode : '' };
+      }),
     };
   } catch {
     return { rivers: [] };
@@ -158,17 +280,23 @@ export async function getRiverBasicPlanRiverList(params?: {
 }
 
 /**
- * 색인도 피처와 공간으로 겹치는 기본계획 1건을 찾아
+ * 색인도 피처와 공간·속성(하천명·차수)으로 맞는 기본계획 1건을 찾아
  * 하천·연도·탭(지방/소하천)을 맞출 때 사용.
  * indexDefineTable: river_d_index | river_s_index
+ * preferPlan*: 현재 상세에서 선택한 기본계획이 색인도와 맞으면 그 건을 우선.
  */
 export async function getRiverBasicPlanPickFromIndex(params?: {
   indexOgcFid?: number;
   indexDefineTable?: string;
+  preferPlanYear?: string;
+  preferPlanName?: string;
+  preferPlanLen?: string;
 }): Promise<{
   riverName: string;
   planYear: string;
   planName: string;
+  /** GROUP BY 연도와 동일 — 동일 연도·계획명에 연장이 여러 건일 때 구분 */
+  planLen: string;
   tab: RiverType;
 } | null> {
   const fid = Number(params?.indexOgcFid);
@@ -186,16 +314,82 @@ export async function getRiverBasicPlanPickFromIndex(params?: {
   const asTable = await resolveLayerTableName(riverBasicPlanAsDefineTable(tab));
   const safeIdx = idxTable.replace(/"/g, '""');
   const safeAs = asTable.replace(/"/g, '""');
+  const pinnedSql = Math.floor(fid);
 
-  const res = await db.execute(
-    sql.raw(`SELECT
+  /** 색인도 목록과 동일: 교차 + 같은 하천(+ 차수코드) */
+  const matchJoin = `p.geom IS NOT NULL AND i.geom IS NOT NULL
+      AND ST_Intersects(i.geom, p.geom)
+      AND COALESCE(i.river_name, '') = COALESCE(p.river_name, '')
+      AND (
+        COALESCE(p.rivp_code, '') = ''
+        OR COALESCE(i.rivp_code, '') = COALESCE(p.rivp_code, '')
+      )`;
+
+  const selectPlan = `SELECT
       COALESCE(p.river_name, '') AS "riverName",
       COALESCE(p.plan_year, '') AS "planYear",
-      COALESCE(p.plan_name, '') AS "planName"
+      COALESCE(p.plan_name, '') AS "planName",
+      COALESCE(p.plan_len::text, '') AS "planLen"
     FROM layer."${safeIdx}" i
     INNER JOIN layer."${safeAs}" p
-      ON p.geom IS NOT NULL AND i.geom IS NOT NULL AND ST_Intersects(i.geom, p.geom)
-    WHERE i.ogc_fid = ${Math.floor(fid)}
+      ON ${matchJoin}
+    WHERE i.ogc_fid = ${pinnedSql}`;
+
+  const mapRow = (
+    row:
+      | { riverName?: string; planYear?: string; planName?: string; planLen?: string | number | null }
+      | undefined
+  ) => {
+    const riverName = String(row?.riverName ?? '').trim();
+    if (!riverName) return null;
+    return {
+      riverName,
+      planYear: String(row?.planYear ?? '').trim(),
+      planName: String(row?.planName ?? '').trim(),
+      planLen: row?.planLen == null ? '' : String(row.planLen).trim(),
+      tab,
+    };
+  };
+
+  const preferYear = String(params?.preferPlanYear ?? '').trim();
+  const preferName = String(params?.preferPlanName ?? '').trim();
+  const preferLenRaw = params?.preferPlanLen;
+  if (preferYear || preferName || preferLenRaw !== undefined) {
+    const preferParts: string[] = [];
+    if (preferYear) preferParts.push(`COALESCE(p.plan_year, '') = '${esc(preferYear)}'`);
+    if (preferName) preferParts.push(`COALESCE(p.plan_name, '') = '${esc(preferName)}'`);
+    if (preferLenRaw !== undefined) {
+      const len = normalizePlanLenParam(preferLenRaw);
+      if (len === '') {
+        preferParts.push(`COALESCE(p.plan_len::text, '') = ''`);
+      } else if (/^-?\d+(\.\d+)?([eE][+-]?\d+)?$/.test(len)) {
+        preferParts.push(
+          `(COALESCE(p.plan_len::text, '') ~ '^-?[0-9]+(\\.[0-9]+)?([eE][+-]?[0-9]+)?$' AND p.plan_len::float8 = '${esc(len)}'::float8)`,
+        );
+      } else {
+        preferParts.push(`COALESCE(p.plan_len::text, '') = '${esc(len)}'`);
+      }
+    }
+    if (preferParts.length > 0) {
+      const preferRes = await db.execute(
+        sql.raw(
+          `${selectPlan}
+           AND ${preferParts.join(' AND ')}
+           ORDER BY p.ogc_fid ASC
+           LIMIT 1`
+        )
+      );
+      const preferred = mapRow(
+        preferRes.rows?.[0] as
+          | { riverName?: string; planYear?: string; planName?: string; planLen?: string | number | null }
+          | undefined
+      );
+      if (preferred) return preferred;
+    }
+  }
+
+  const res = await db.execute(
+    sql.raw(`${selectPlan}
     ORDER BY
       CASE
         WHEN COALESCE(p.plan_year, '') ~ '^[0-9]+$' THEN COALESCE(p.plan_year, '')::int
@@ -205,29 +399,35 @@ export async function getRiverBasicPlanPickFromIndex(params?: {
     LIMIT 1`)
   );
 
-  const row = res.rows?.[0] as
-    | { riverName?: string; planYear?: string; planName?: string }
-    | undefined;
-  const riverName = String(row?.riverName ?? '').trim();
-  if (!riverName) return null;
-
-  return {
-    riverName,
-    planYear: String(row?.planYear ?? '').trim(),
-    planName: String(row?.planName ?? '').trim(),
-    tab,
-  };
+  return mapRow(
+    res.rows?.[0] as
+      | { riverName?: string; planYear?: string; planName?: string; planLen?: string | number | null }
+      | undefined
+  );
 }
 
 export async function getRiverBasicPlanYearList(params?: {
   tab?: RiverType;
   riverName?: string;
-}): Promise<{ plans: { planYear: string; planName: string; planLen: string }[] }> {
+  /** 같은 하천명이 하천코드로 나뉠 때 — 그 하천코드의 기본계획만 */
+  riverCode?: string;
+}): Promise<{
+  plans: {
+    planYear: string;
+    planName: string;
+    planLen: string;
+    rivpName: string;
+    rivpSuffix: string;
+  }[];
+}> {
   const tab = normalizeTab(params?.tab);
   const riverName = String(params?.riverName ?? '').trim();
   if (!riverName) return { plans: [] };
   const tableName = await resolveLayerTableNameOrNull(riverBasicPlanAsDefineTable(tab));
   if (!tableName) return { plans: [] };
+  const suffixExpr = rivpFolderSuffixSql();
+  const riverCode = String(params?.riverCode ?? '').trim();
+  const riverCodeWhere = riverCode ? ` AND COALESCE(river_code::text, '') = '${esc(riverCode)}'` : '';
 
   try {
     const res = await db.execute(
@@ -235,33 +435,335 @@ export async function getRiverBasicPlanYearList(params?: {
         `SELECT
            COALESCE(plan_year, '') AS "planYear",
            COALESCE(plan_name, '') AS "planName",
-           COALESCE(plan_len::text, '') AS "planLen"
+           COALESCE(plan_len::text, '') AS "planLen",
+           COALESCE(rivp_name, '') AS "rivpName",
+           (${suffixExpr}) AS "rivpSuffix"
          FROM layer."${tableName.replace(/"/g, '""')}"
-         WHERE river_name = '${esc(riverName)}'
-         GROUP BY COALESCE(plan_year, ''), COALESCE(plan_name, ''), COALESCE(plan_len::text, '')
+         WHERE river_name = '${esc(riverName)}'${riverCodeWhere}
+         GROUP BY
+           COALESCE(plan_year, ''),
+           COALESCE(plan_name, ''),
+           COALESCE(plan_len::text, ''),
+           COALESCE(rivp_name, '')
          ORDER BY
            CASE
              WHEN COALESCE(plan_year, '') ~ '^[0-9]+$' THEN COALESCE(plan_year, '')::int
              ELSE 0
            END DESC,
-           COALESCE(plan_name, '')`
+           COALESCE(plan_name, ''),
+           (${suffixExpr}),
+           COALESCE(rivp_name, '')`
       )
     );
 
     return {
       plans: (res.rows ?? []).map((r) => {
-        const row = r as { planYear?: string; planName?: string; planLen?: string | number | null };
+        const row = r as {
+          planYear?: string;
+          planName?: string;
+          planLen?: string | number | null;
+          rivpName?: string | null;
+          rivpSuffix?: string | null;
+        };
         const rawLen = row.planLen == null ? '' : String(row.planLen).trim();
         return {
           planYear: String(row.planYear ?? '').trim(),
           planName: String(row.planName ?? '').trim(),
           // GROUP BY 원문 유지 — 상세/색인도 조회 시 연장 매칭용 (표시 포맷은 UI에서)
           planLen: rawLen,
+          rivpName: String(row.rivpName ?? '').trim(),
+          rivpSuffix: String(row.rivpSuffix ?? '').trim(),
         };
       }),
     };
   } catch {
     return { plans: [] };
+  }
+}
+
+export type RiverBasicPlanPlanRiver = {
+  riverName: string;
+  planLen: string;
+  riverType: string;
+  riverCode: string;
+};
+
+/** jsonb_agg 결과 → 하천당 1건(같은 하천 여러 연장이면 첫 건), 이름순 */
+function dedupePlanRivers(raw: unknown): RiverBasicPlanPlanRiver[] {
+  const list = Array.isArray(raw) ? raw : [];
+  const byName = new Map<string, RiverBasicPlanPlanRiver>();
+  for (const m of list as Record<string, unknown>[]) {
+    const riverName = String(m?.riverName ?? '').trim();
+    if (!riverName || byName.has(riverName)) continue;
+    byName.set(riverName, {
+      riverName,
+      planLen: String(m?.planLen ?? '').trim(),
+      riverType: String(m?.riverType ?? '').trim(),
+      riverCode: String(m?.riverCode ?? '').trim(),
+    });
+  }
+  return [...byName.values()].sort((a, b) => a.riverName.localeCompare(b.riverName, 'ko'));
+}
+
+/**
+ * 보고서 폴더 구성 — file_data/{AS}/{계획 폴더}/ 아래
+ * - rootPdfs: 계획 폴더에 바로 있는 PDF (소하천처럼 모든 하천이 한 파일을 함께 씀)
+ * - riverFolders: PDF가 들어 있는 하천 하위 폴더명 ({river_type}_{river_code}_{plan_year}_{plan_len})
+ * 목록 카드에서 «보고서» 버튼·하천별 보고서 유무를 한 번에 판단할 때 사용.
+ */
+export type RiverBasicPlanReportFolderInfo = {
+  /** 계획 폴더 바로 아래 PDF(모든 하천 공통) */
+  rootPdfs: string[];
+  /** PDF 가 있는 하천 하위 폴더 */
+  riverFolders: string[];
+  /** 하천 하위 폴더별 PDF */
+  riverPdfs: Record<string, string[]>;
+};
+
+export async function getRiverBasicPlanReportFolderSummary(params?: {
+  tab?: RiverType;
+}): Promise<{ folders: Record<string, RiverBasicPlanReportFolderInfo> }> {
+  const tab = normalizeTab(params?.tab);
+  const root = path.join(resolveGgnrDataDir(), 'file_data', riverBasicPlanAsDefineTable(tab));
+  const isPdf = (name: string) =>
+    /\.pdf$/i.test(name) &&
+    !isServiceFileDataTmpMarkedFileName(name) &&
+    !isServiceFileDataSystemJunkFileName(name);
+
+  let planDirs: string[];
+  try {
+    planDirs = (await fs.readdir(root, { withFileTypes: true }))
+      .filter((d) => d.isDirectory())
+      .map((d) => d.name);
+  } catch {
+    return { folders: {} };
+  }
+
+  const folders: Record<string, RiverBasicPlanReportFolderInfo> = {};
+  const readPlanDir = async (planDir: string) => {
+    const planPath = path.join(root, planDir);
+    const entries = await fs.readdir(planPath, { withFileTypes: true }).catch(() => null);
+    if (!entries) return;
+    const rootPdfs = entries
+      .filter((e) => e.isFile() && isPdf(e.name))
+      .map((e) => e.name)
+      .sort((a, b) => a.localeCompare(b, 'ko'));
+    const subDirs = entries.filter((e) => e.isDirectory()).map((e) => e.name);
+    const riverPdfs: Record<string, string[]> = {};
+    await Promise.all(
+      subDirs.map(async (name) => {
+        const inner = await fs.readdir(path.join(planPath, name)).catch(() => [] as string[]);
+        const pdfs = inner.filter(isPdf).sort((a, b) => a.localeCompare(b, 'ko'));
+        if (pdfs.length > 0) riverPdfs[name] = pdfs;
+      })
+    );
+    const riverFolders = Object.keys(riverPdfs).sort((a, b) => a.localeCompare(b, 'ko'));
+    folders[planDir] = { rootPdfs, riverFolders, riverPdfs };
+  };
+  /** 네트워크 공유 폴더라 한 번에 몇 개씩 나눠 병렬로 읽음 */
+  const PLAN_DIR_CONCURRENCY = 6;
+  for (let i = 0; i < planDirs.length; i += PLAN_DIR_CONCURRENCY) {
+    await Promise.all(planDirs.slice(i, i + PLAN_DIR_CONCURRENCY).map(readPlanDir));
+  }
+  return { folders };
+}
+
+/**
+ * 보고서별 목록 — plan_year + plan_name + rivp 접미사(rivp_name 마지막 `_` 뒤 값, 없으면 빈값) 그룹.
+ * 여러 하천이 같은 계획(접미사 없음)이면 한 행으로 묶인다.
+ * 검색어가 하천명에 걸리면 matchedRivers 로 해당 하천만 돌려준다. riverCount 는 검색과 무관한 전체 하천 수.
+ */
+export async function getRiverBasicPlanPlanList(params?: {
+  tab?: RiverType;
+  keyword?: string;
+}): Promise<{
+  plans: {
+    planYear: string;
+    planName: string;
+    rivpSuffix: string;
+    riverCount: number;
+    matchedRivers: { riverName: string; planLen: string }[];
+    /** 소속 하천 전체 — 카드 하천 버튼·하천 보고서 폴더 판단용 */
+    rivers: RiverBasicPlanPlanRiver[];
+    /** 소속 하천 계획연장 합계 (하천당 1건) */
+    totalPlanLen: number | null;
+  }[];
+}> {
+  const tab = normalizeTab(params?.tab);
+  const keyword = String(params?.keyword ?? '').trim();
+  const tableName = await resolveLayerTableNameOrNull(riverBasicPlanAsDefineTable(tab));
+  if (!tableName) return { plans: [] };
+  const suffixExpr = rivpFolderSuffixSql();
+
+  const kw = `'%${esc(keyword)}%'`;
+  const riverMatchExpr = keyword ? `COALESCE(river_name, '') ILIKE ${kw}` : 'FALSE';
+  const rowMatchExpr = keyword
+    ? `(
+         COALESCE(plan_name, '') ILIKE ${kw}
+         OR COALESCE(rivp_name, '') ILIKE ${kw}
+         OR COALESCE(plan_year, '') ILIKE ${kw}
+         OR ${riverMatchExpr}
+       )`
+    : 'TRUE';
+
+  try {
+    const res = await db.execute(
+      sql.raw(
+        `SELECT
+           COALESCE(plan_year, '') AS "planYear",
+           COALESCE(plan_name, '') AS "planName",
+           (${suffixExpr}) AS "rivpSuffix",
+           COUNT(DISTINCT NULLIF(TRIM(COALESCE(river_name, '')), ''))::int AS "riverCount",
+           COALESCE(
+             jsonb_agg(
+               DISTINCT jsonb_build_object(
+                 'riverName', TRIM(river_name),
+                 'planLen', COALESCE(plan_len::text, '')
+               )
+             ) FILTER (WHERE ${riverMatchExpr} AND TRIM(COALESCE(river_name, '')) <> ''),
+             '[]'::jsonb
+           ) AS "matchedRivers",
+           COALESCE(
+             jsonb_agg(
+               DISTINCT jsonb_build_object(
+                 'riverName', TRIM(river_name),
+                 'planLen', COALESCE(plan_len::text, ''),
+                 'riverType', COALESCE(river_type::text, ''),
+                 'riverCode', COALESCE(river_code::text, '')
+               )
+             ) FILTER (WHERE TRIM(COALESCE(river_name, '')) <> ''),
+             '[]'::jsonb
+           ) AS "rivers"
+         FROM layer."${tableName.replace(/"/g, '""')}"
+         WHERE COALESCE(plan_year, '') <> ''
+           AND COALESCE(plan_name, '') <> ''
+         GROUP BY
+           COALESCE(plan_year, ''),
+           COALESCE(plan_name, ''),
+           (${suffixExpr})
+         HAVING bool_or(${rowMatchExpr})
+         ORDER BY
+           CASE
+             WHEN COALESCE(plan_year, '') ~ '^[0-9]+$' THEN COALESCE(plan_year, '')::int
+             ELSE 0
+           END DESC,
+           COALESCE(plan_name, ''),
+           (${suffixExpr})`
+      )
+    );
+
+    return {
+      plans: (res.rows ?? [])
+        .map((r) => {
+          const row = r as {
+            planYear?: string;
+            planName?: string;
+            rivpSuffix?: string | null;
+            riverCount?: number | string;
+            matchedRivers?: unknown;
+            rivers?: unknown;
+          };
+          const rawMatched = Array.isArray(row.matchedRivers) ? row.matchedRivers : [];
+          const seen = new Set<string>();
+          const matchedRivers: { riverName: string; planLen: string }[] = [];
+          for (const m of rawMatched as { riverName?: unknown; planLen?: unknown }[]) {
+            const riverName = String(m?.riverName ?? '').trim();
+            if (!riverName || seen.has(riverName)) continue;
+            seen.add(riverName);
+            matchedRivers.push({ riverName, planLen: String(m?.planLen ?? '').trim() });
+          }
+          matchedRivers.sort((a, b) => a.riverName.localeCompare(b.riverName, 'ko'));
+          const rivers = dedupePlanRivers(row.rivers);
+          let totalPlanLen: number | null = null;
+          for (const r of rivers) {
+            const n = Number(String(r.planLen).replace(/,/g, ''));
+            if (Number.isFinite(n)) totalPlanLen = (totalPlanLen ?? 0) + n;
+          }
+          return {
+            planYear: String(row.planYear ?? '').trim(),
+            planName: String(row.planName ?? '').trim(),
+            rivpSuffix: String(row.rivpSuffix ?? '').trim(),
+            riverCount: Number(row.riverCount ?? 0) || 0,
+            matchedRivers,
+            rivers,
+            totalPlanLen,
+          };
+        })
+        .filter((p) => p.planYear && p.planName),
+    };
+  } catch {
+    return { plans: [] };
+  }
+}
+
+/**
+ * 기본계획 1건에 속한 하천 목록 (1:N) — 연도·계획명·rivp 접미사(rivp_name 마지막 `_` 뒤 값, 없으면 빈값).
+ */
+export async function getRiverBasicPlanRiversUnderPlan(params?: {
+  tab?: RiverType;
+  planYear?: string;
+  planName?: string;
+  rivpSuffix?: string;
+  /** @deprecated rivpSuffix 사용 */
+  rivpName?: string;
+}): Promise<{
+  rivers: {
+    riverName: string;
+    riverType: string | null;
+    riverCode: string | null;
+    planLen: string;
+  }[];
+}> {
+  const tab = normalizeTab(params?.tab);
+  const planYear = String(params?.planYear ?? '').trim();
+  const planName = String(params?.planName ?? '').trim();
+  const rivpSuffix =
+    params?.rivpSuffix !== undefined
+      ? String(params.rivpSuffix ?? '').trim()
+      : '';
+  if (!planYear || !planName) return { rivers: [] };
+  const tableName = await resolveLayerTableNameOrNull(riverBasicPlanAsDefineTable(tab));
+  if (!tableName) return { rivers: [] };
+  const suffixExpr = rivpFolderSuffixSql();
+
+  try {
+    const res = await db.execute(
+      sql.raw(
+        `SELECT
+           river_name AS "riverName",
+           MAX(river_type) AS "riverType",
+           MAX(river_code) AS "riverCode",
+           COALESCE(MAX(plan_len::text), '') AS "planLen"
+         FROM layer."${tableName.replace(/"/g, '""')}"
+         WHERE COALESCE(plan_year, '') = '${esc(planYear)}'
+           AND COALESCE(plan_name, '') = '${esc(planName)}'
+           AND (${suffixExpr}) = '${esc(rivpSuffix)}'
+           AND COALESCE(river_name, '') <> ''
+         GROUP BY river_name
+         ORDER BY river_name`
+      )
+    );
+
+    return {
+      rivers: (res.rows ?? [])
+        .map((r) => {
+          const row = r as {
+            riverName?: string;
+            riverType?: string | null;
+            riverCode?: string | null;
+            planLen?: string | number | null;
+          };
+          return {
+            riverName: String(row.riverName ?? '').trim(),
+            riverType: row.riverType == null ? null : String(row.riverType),
+            riverCode: row.riverCode == null ? null : String(row.riverCode),
+            planLen: row.planLen == null ? '' : String(row.planLen).trim(),
+          };
+        })
+        .filter((r) => r.riverName),
+    };
+  } catch {
+    return { rivers: [] };
   }
 }
 
@@ -271,6 +773,8 @@ export async function getRiverBasicPlanDetail(params?: {
   planYear?: string;
   planName?: string;
   planLen?: string;
+  rivpName?: string;
+  rivpSuffix?: string;
 }): Promise<{ row: Record<string, unknown> | null }> {
   const tab = normalizeTab(params?.tab);
   const riverName = String(params?.riverName ?? '').trim();
@@ -284,6 +788,11 @@ export async function getRiverBasicPlanDetail(params?: {
     planYear,
     planName,
     planLen: params?.planLen,
+    rivpName: params?.rivpName !== undefined ? String(params.rivpName) : undefined,
+    rivpSuffix:
+      params?.rivpName === undefined && params?.rivpSuffix !== undefined
+        ? String(params.rivpSuffix)
+        : undefined,
   }).join(' AND ');
 
   const res = await db.execute(
@@ -336,6 +845,41 @@ export async function getRiverBasicPlanExtent(params?: {
     return { extent3857: null };
   }
   return { extent3857: [xmin, ymin, xmax, ymax] };
+}
+
+export async function loadJijukOwnGbn(pnus: string[]): Promise<Map<string, string>> {
+  const out = new Map<string, string>();
+  const keys = [...new Set(pnus.map((p) => String(p ?? '').trim()).filter(Boolean))];
+  if (keys.length === 0) return out;
+  const col = await db.execute(
+    sql.raw(
+      `SELECT table_schema, table_name
+       FROM information_schema.columns
+       WHERE lower(table_name) = 'jijuk'
+         AND lower(column_name) = 'own_gbn'
+         AND table_schema IN ('layer', 'public_layer', 'public')
+       LIMIT 1`
+    )
+  );
+  const loc = col.rows?.[0] as { table_schema?: string; table_name?: string } | undefined;
+  const schema = String(loc?.table_schema ?? '').replace(/"/g, '""');
+  const table = String(loc?.table_name ?? '').replace(/"/g, '""');
+  if (!schema || !table) return out;
+  const inList = keys.map((p) => `'${esc(p)}'`).join(',');
+  const res = await db.execute(
+    sql.raw(
+      `SELECT pnu::text AS pnu, NULLIF(TRIM(own_gbn::text), '') AS own_gbn
+       FROM "${schema}"."${table}"
+       WHERE pnu::text IN (${inList})`
+    )
+  );
+  for (const raw of res.rows ?? []) {
+    const row = raw as { pnu?: string; own_gbn?: string | null };
+    const pnu = String(row.pnu ?? '').trim();
+    const gbn = String(row.own_gbn ?? '').trim();
+    if (pnu && gbn) out.set(pnu, gbn);
+  }
+  return out;
 }
 
 /**
@@ -404,6 +948,11 @@ function indexNoFromConsCode(consCode: string, ogcFid: number): { label: string;
 /** 종단·횡단·구조물 도형 중심이 색인도 폴리곤 내부에 있는지 (경계 제외) */
 function relatedCentroidWithinIndexSql(indexAlias = 'idx', tableAlias = 't'): string {
   return `ST_Within(ST_Centroid(${tableAlias}.geom), ${indexAlias}.geom)`;
+}
+
+/** 제방처럼 여러 색인도에 걸치는 선: 선 내부가 색인도 내부를 지나면 연결 (경계 접촉만은 제외) */
+function relatedInteriorIntersectsIndexSql(indexAlias = 'idx', tableAlias = 't'): string {
+  return `ST_Relate(${tableAlias}.geom, ${indexAlias}.geom, 'T********')`;
 }
 
 /** 색인도 ↔ 종단·횡단·구조물: 동일 river_code (색인도 코드 없으면 조건 생략) */
@@ -623,6 +1172,115 @@ function parseExtent3857(row: {
   return [xmin, ymin, xmax, ymax];
 }
 
+function asCoordPair(v: unknown): [number, number] | null {
+  if (!Array.isArray(v) || v.length < 2) return null;
+  const x = Number(v[0]);
+  const y = Number(v[1]);
+  if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+  return [x, y];
+}
+
+function lineCoords(coords: unknown): [number, number][] {
+  if (!Array.isArray(coords)) return [];
+  return coords.flatMap((p) => {
+    const pair = asCoordPair(p);
+    return pair ? [pair] : [];
+  });
+}
+
+function polyLen(pts: [number, number][]): number {
+  let n = 0;
+  for (let i = 1; i < pts.length; i++) {
+    n += Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]);
+  }
+  return n;
+}
+
+/** GeoJSON 선·면 → 3857 좌표열. 다중선은 가장 긴 부분. */
+function parseGeoJson3857Points(raw: unknown): [number, number][] | null {
+  let gj: unknown = raw;
+  if (typeof raw === 'string') {
+    try {
+      gj = JSON.parse(raw) as unknown;
+    } catch {
+      return null;
+    }
+  }
+  if (gj == null || typeof gj !== 'object') return null;
+  const rec = gj as { type?: unknown; coordinates?: unknown };
+  const t = String(rec.type ?? '');
+  const c = rec.coordinates;
+  if (t === 'LineString') {
+    const pts = lineCoords(c);
+    return pts.length >= 2 ? pts : null;
+  }
+  if (t === 'MultiLineString' && Array.isArray(c)) {
+    let best: [number, number][] = [];
+    let bestLen = -1;
+    for (const part of c) {
+      const pts = lineCoords(part);
+      if (pts.length < 2) continue;
+      const len = polyLen(pts);
+      if (len > bestLen) {
+        bestLen = len;
+        best = pts;
+      }
+    }
+    return best.length >= 2 ? best : null;
+  }
+  if (t === 'Polygon' && Array.isArray(c)) {
+    const pts = lineCoords(c[0]);
+    return pts.length >= 3 ? pts : null;
+  }
+  if (t === 'MultiPolygon' && Array.isArray(c) && Array.isArray(c[0])) {
+    const pts = lineCoords((c[0] as unknown[])[0]);
+    return pts.length >= 3 ? pts : null;
+  }
+  return null;
+}
+
+async function loadIndexSheetRing(
+  idxTable: string,
+  idxOgcFid: number
+): Promise<[number, number][] | null> {
+  const safeIdx = idxTable.replace(/"/g, '""');
+  const q = `SELECT ST_AsGeoJSON(ST_Transform(geom, 3857)) AS gj
+    FROM layer."${safeIdx}" WHERE ogc_fid = ${idxOgcFid} LIMIT 1`;
+  try {
+    const res = await db.execute(sql.raw(q));
+    return parseGeoJson3857Points((res.rows?.[0] as { gj?: unknown } | undefined)?.gj);
+  } catch {
+    return null;
+  }
+}
+
+async function loadIndexSheetGuide(
+  idxTable: string,
+  lineLogical: string,
+  idxOgcFid: number
+): Promise<[number, number][] | null> {
+  const t = await resolveLayerTableName(lineLogical.toLowerCase());
+  const safeT = t.replace(/"/g, '""');
+  const safeIdx = idxTable.replace(/"/g, '""');
+  const q = `
+    SELECT ST_AsGeoJSON(ST_Transform(
+      ST_Simplify(
+        ST_LineMerge(ST_CollectionExtract(ST_Union(ST_Intersection(t.geom, i.geom)), 2)),
+        2
+      ), 3857)) AS gj
+    FROM layer."${safeT}" t
+    INNER JOIN layer."${safeIdx}" i ON i.ogc_fid = ${idxOgcFid}
+    WHERE t.geom IS NOT NULL AND i.geom IS NOT NULL AND ST_Intersects(t.geom, i.geom)
+  `;
+  try {
+    const res = await db.execute(sql.raw(q));
+    const pts = parseGeoJson3857Points((res.rows?.[0] as { gj?: unknown } | undefined)?.gj);
+    return pts != null && pts.length >= 2 ? pts : null;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * 선택한 기본계획 폴리곤과 교차하는 색인도 1건 + 중심이 색인도 안이고 river_code 가 같은 종단/횡단/구조물 목록
  */
@@ -639,6 +1297,10 @@ export async function getRiverBasicPlanIndexView(params?: {
     row: Record<string, unknown>;
     extent3857: [number, number, number, number] | null;
     ogcFid: number;
+    /** 색인도 외곽 링(3857) — 도면 방향 맞춤 */
+    ring3857: [number, number][] | null;
+    /** 칸 안 종단(없으면 제방) 선(3857) */
+    guide3857: [number, number][] | null;
   } | null;
   related: {
     kind: string;
@@ -736,6 +1398,19 @@ export async function getRiverBasicPlanIndexView(params?: {
       : {};
 
   const indexExtent = parseExtent3857(idxRes);
+  const ring3857 = await loadIndexSheetRing(idxTable, idxOgcFid);
+  let guide3857 = await loadIndexSheetGuide(
+    idxTable,
+    riverBasicPlanJdDefineTable(tab),
+    idxOgcFid
+  );
+  if (guide3857 == null) {
+    guide3857 = await loadIndexSheetGuide(
+      idxTable,
+      riverBasicPlanJbDefineTable(tab),
+      idxOgcFid
+    );
+  }
 
   const related: {
     kind: string;
@@ -748,15 +1423,33 @@ export async function getRiverBasicPlanIndexView(params?: {
     extent3857: [number, number, number, number] | null;
   }[] = [];
 
-  /** 종단·횡단: draw_name → 제목, 배지는 종류명 */
-  const queryRelatedLm = async (logicalName: string, kindLabel: string) => {
+  /**
+   * 종단·횡단·제방(선): 제목 컬럼(종단·횡단 draw_name, 제방 jb_name) → 제목.
+   * 제방은 lengthColumn(jb_len)이 있으면 «이름 (L=1,077m)» 형식.
+   * 배지는 badge(없으면 종류명).
+   */
+  const queryRelatedLm = async (
+    logicalName: string,
+    kindLabel: string,
+    opts?: {
+      nameColumn?: string;
+      lengthColumn?: string;
+      badge?: string;
+      matchIntersects?: boolean;
+    }
+  ) => {
     const t = await resolveLayerTableName(logicalName.toLowerCase());
     const safeT = t.replace(/"/g, '""');
     const keySql = attachmentKeySelectSql(logicalName);
+    const nameCol = safeSqlColumnName(opts?.nameColumn ?? 'draw_name') ?? 'draw_name';
+    const lenCol = opts?.lengthColumn ? safeSqlColumnName(opts.lengthColumn) : null;
+    const badge = opts?.badge ?? kindLabel;
+    const lenSelect = lenCol ? `t."${lenCol}" AS jb_len,` : '';
     const q = `
       SELECT
         t.ogc_fid AS fid,
-        TRIM(COALESCE(t.draw_name::text, '')) AS draw_name,
+        TRIM(COALESCE(t."${nameCol}"::text, '')) AS draw_name,
+        ${lenSelect}
         ${keySql},
         ST_XMin(ST_Transform(t.geom, 3857))::float8 AS xmin,
         ST_YMin(ST_Transform(t.geom, 3857))::float8 AS ymin,
@@ -766,7 +1459,11 @@ export async function getRiverBasicPlanIndexView(params?: {
       INNER JOIN layer."${safeIdx}" idx ON idx.ogc_fid = ${idxOgcFid}
       WHERE idx.geom IS NOT NULL
         AND t.geom IS NOT NULL
-        AND ${relatedCentroidWithinIndexSql('idx', 't')}
+        AND ${
+          opts?.matchIntersects
+            ? relatedInteriorIntersectsIndexSql('idx', 't')
+            : relatedCentroidWithinIndexSql('idx', 't')
+        }
         AND ${relatedMatchesIndexRiverCodeSql('idx', 't')}
       ORDER BY t.ogc_fid ASC
     `;
@@ -776,6 +1473,7 @@ export async function getRiverBasicPlanIndexView(params?: {
         const rr = row as {
           fid?: unknown;
           draw_name?: unknown;
+          jb_len?: unknown;
           attachment_key?: unknown;
           xmin?: unknown;
           ymin?: unknown;
@@ -785,14 +1483,15 @@ export async function getRiverBasicPlanIndexView(params?: {
         const fid = Number(rr.fid);
         if (!Number.isFinite(fid)) continue;
         const dn = String(rr.draw_name ?? '').trim();
+        const lenSuffix = lenCol ? formatJbLenSuffix(rr.jb_len) : '';
         const rawKey = String(rr.attachment_key ?? '').trim();
         const fileKey = rawKey || String(fid);
         related.push({
           kind: kindLabel,
           table: t,
           ogcFid: fid,
-          label: dn || `${kindLabel} #${fid}`,
-          badge: kindLabel,
+          label: (dn ? `${dn}${lenSuffix}` : '') || `${badge} #${fid}`,
+          badge,
           fileLayer: t,
           fileKey,
           extent3857: parseExtent3857(rr),
@@ -869,14 +1568,117 @@ export async function getRiverBasicPlanIndexView(params?: {
   await queryRelatedLm(riverBasicPlanJdDefineTable(tab), '종단면도');
   await queryRelatedLm(riverBasicPlanHdDefineTable(tab), '횡단면도');
   await queryRelatedStructurePoints();
+  await queryRelatedLm(riverBasicPlanJbDefineTable(tab), '제방', {
+    nameColumn: 'jb_name',
+    lengthColumn: 'jb_len',
+    badge: riverBasicPlanJbLabel(tab),
+    matchIntersects: true,
+  });
 
   return {
     index: {
       row: idxRow,
       extent3857: indexExtent,
       ogcFid: idxOgcFid,
+      ring3857,
+      guide3857,
     },
     related,
   };
+}
+
+/**
+ * 사업계획 — 하천명 기준 제방 목록 + 3857 GeoJSON (라벨·펄스용).
+ */
+export async function getRiverBasicPlanJbList(params?: {
+  tab?: RiverType;
+  riverName?: string;
+}) {
+  const tab = normalizeTab(params?.tab);
+  const riverName = String(params?.riverName ?? '').trim();
+  if (!riverName) return { items: [] as const, table: '' };
+
+  const logical = riverBasicPlanJbDefineTable(tab);
+  const t = await resolveLayerTableName(logical.toLowerCase());
+  const safeT = t.replace(/"/g, '""');
+  const badge = riverBasicPlanJbLabel(tab);
+  /** 라벨점은 가장 긴 선 길이의 50% 지점(서버). MultiLine이면 LineMerge 후 최장 파트로. */
+  const q = `
+    SELECT
+      t.ogc_fid AS fid,
+      TRIM(COALESCE(t.jb_name::text, '')) AS jb_name,
+      t.jb_len AS jb_len,
+      ST_AsGeoJSON(ST_Transform(t.geom, 3857))::text AS geojson,
+      ST_AsGeoJSON(
+        COALESCE(
+          ST_LineInterpolatePoint(
+            (
+              SELECT d.geom
+              FROM ST_Dump(ST_LineMerge(ST_Transform(t.geom, 3857))) AS d
+              ORDER BY ST_Length(d.geom) DESC
+              LIMIT 1
+            ),
+            0.5
+          ),
+          ST_ClosestPoint(
+            ST_Transform(t.geom, 3857),
+            ST_Centroid(ST_Transform(t.geom, 3857))
+          )
+        )
+      )::text AS label_geojson
+    FROM layer."${safeT}" t
+    WHERE t.geom IS NOT NULL
+      AND COALESCE(t.river_name, '') = '${esc(riverName)}'
+    ORDER BY t.ogc_fid ASC
+  `;
+  try {
+    const r = await db.execute(sql.raw(q));
+    const items: {
+      ogcFid: number;
+      table: string;
+      label: string;
+      badge: string;
+      geometry: Record<string, unknown> | null;
+      labelPoint: Record<string, unknown> | null;
+    }[] = [];
+    for (const row of r.rows ?? []) {
+      const rr = row as {
+        fid?: unknown;
+        jb_name?: unknown;
+        jb_len?: unknown;
+        geojson?: unknown;
+        label_geojson?: unknown;
+      };
+      const fid = Number(rr.fid);
+      if (!Number.isFinite(fid)) continue;
+      const dn = String(rr.jb_name ?? '').trim();
+      const lenSuffix = formatJbLenSuffix(rr.jb_len);
+      let geometry: Record<string, unknown> | null = null;
+      let labelPoint: Record<string, unknown> | null = null;
+      try {
+        const raw = String(rr.geojson ?? '').trim();
+        if (raw) geometry = JSON.parse(raw) as Record<string, unknown>;
+      } catch {
+        geometry = null;
+      }
+      try {
+        const raw = String(rr.label_geojson ?? '').trim();
+        if (raw) labelPoint = JSON.parse(raw) as Record<string, unknown>;
+      } catch {
+        labelPoint = null;
+      }
+      items.push({
+        ogcFid: fid,
+        table: t,
+        label: (dn ? `${dn}${lenSuffix}` : '') || `${badge} #${fid}`,
+        badge,
+        geometry,
+        labelPoint,
+      });
+    }
+    return { items, table: t };
+  } catch {
+    return { items: [], table: t };
+  }
 }
 

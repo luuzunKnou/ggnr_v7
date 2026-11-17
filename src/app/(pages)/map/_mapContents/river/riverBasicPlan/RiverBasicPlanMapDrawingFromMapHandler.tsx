@@ -3,15 +3,12 @@
 import { useCallback, useEffect, useState } from "react";
 import { appFetch } from "@/lib/basePath";
 import { SER_FILE_ENG } from "@/lib/serviceFileDataSerEng";
-import {
-  isImageServiceFileName,
-  isPdfServiceFileName,
-  serviceFileDataDownloadUrl,
-} from "../../../_mapComponents/standard/useServiceFileData";
+import { serviceFileDataDownloadUrl } from "../../../_mapComponents/standard/useServiceFileData";
 import {
   ServiceFileImagePreview,
   type ServiceFilePreviewItem,
 } from "../../../_mapComponents/standard/ServiceFileImagePreview";
+import { buildServiceFilePreviewGalleryItems } from "../../../_mapComponents/standard/serviceFilePreviewItems";
 import { useMapContext } from "../../../_mapComponents/MapContext";
 
 /** 하천기본계획 패널 열림 시 지도에서 종단·횡단·구조물 식별 → 도면보기와 동일 전체화면 미리보기 */
@@ -58,16 +55,13 @@ export function RiverBasicPlanMapDrawingFromMapHandler() {
         }
         const data = (await res.json()) as { files?: { name: string }[] };
         const files = Array.isArray(data.files) ? data.files : [];
-        const items: ServiceFilePreviewItem[] = files
-          .filter((f) => isImageServiceFileName(f.name) || isPdfServiceFileName(f.name))
-          .map((f) => ({
-            url: serviceFileDataDownloadUrl(SER_FILE_ENG.riverBasicPlan, layer, key, f.name),
-            fileName: f.name,
-            kind: isPdfServiceFileName(f.name) ? ("pdf" as const) : ("image" as const),
-          }));
+        const items: ServiceFilePreviewItem[] = buildServiceFilePreviewGalleryItems(
+          files,
+          (fileName) => serviceFileDataDownloadUrl(SER_FILE_ENG.riverBasicPlan, layer, key, fileName)
+        );
         if (cancelled) return;
         if (items.length === 0) {
-          window.alert("도면으로 볼 수 있는 첨부파일(이미지·PDF)이 없습니다.");
+          window.alert("도면으로 볼 수 있는 첨부파일(이미지·PDF·엑셀)이 없습니다.");
           return;
         }
         setPreview({ items, initialIndex: 0 });

@@ -53,11 +53,23 @@ export default auth((req) => {
   if (isStaticAssetPath(path)) return NextResponse.next();
 
   // GeoServer 동일출처 프록시 (WMS img 등) — 로그인 리다이렉트 금지
+  // 관리 화면(/web)만 앱 라우트로 넘겨, 내부 주소 리다이렉트와 세션 쿠키 경로를 고친다.
+  // next.config rewrite 가 /geoserver/* 를 먼저 가져가므로 여기서 갈라 둔다.
   if (
     path === '/geoserver' ||
     path.startsWith('/geoserver/') ||
     path.includes('/geoserver/')
   ) {
+    if (path === '/geoserver/web' || path.startsWith('/geoserver/web/')) {
+      const url = req.nextUrl.clone();
+      url.pathname = `/api/geoserver/web-proxy${path.slice('/geoserver/web'.length)}`;
+      return NextResponse.rewrite(url);
+    }
+    return NextResponse.next();
+  }
+
+  // QGIS WFS/WMS 권한 프록시 (key 인증) — 로그인 세션 없이 접근
+  if (path === '/wfs.do' || path === '/wfsUpdate.do' || path === '/wms.do') {
     return NextResponse.next();
   }
 
@@ -87,7 +99,7 @@ export default auth((req) => {
 export const config = {
   /**
    * 게이트: dggskorea/[프로젝트명] → Next basePath.
-   * 요청 path가 `/uav_ulsan/_next/static/...` 형태여도 _next·확장자 정적파일은 미들웨어 제외.
+   * 요청 path가 `/uav_us/_next/static/...` 형태여도 _next·확장자 정적파일은 미들웨어 제외.
    *
    * `'/'` 필수: basePath 홈(`/build_yy`)은 앱 경로 `/` 인데,
    * 아래 캡처 패턴만으로는 루트가 미매칭되어 빈 200이 된다 (Next 16).

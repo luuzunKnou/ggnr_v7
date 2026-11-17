@@ -5,26 +5,48 @@ import { and, eq, inArray, sql } from 'drizzle-orm';
 import { db } from '@/database/db';
 import { usrBizNotifState } from '@/database/schema/usr_biz_notif_state';
 import { getSessionUsrId } from '@/lib/auth/guard';
-import { getUsageDataAsExpiryNotifications, usageDataAsTableExists, type UsageDataAsExpiryNotifRow } from '@/service/usageDataAsService';
 import { getOccupationLedgerExpiryNotifications } from '@/service/occupationLedgerService';
 import { getUseFeeUnpaidDueNotifications } from '@/service/useFeeService';
 import { getUseFeeBinding } from '@/lib/useFeeBinding';
 import { getOccupationLedgerBinding } from '@/lib/occupationLedgerBinding';
+import { getSystemList } from '@/service/configService';
+import { listDueConsAlerts } from '@/service/consAlertService';
 
 export type BizNotifItem = {
   id: string;
   notifKey: string;
-  category: '만료임박' | '미납임박';
+  category: '만료임박' | '미납임박' | '위치없음' | '공사알림';
   title: string;
   name: string;
   listKey: string;
   read: boolean;
   important: true;
-  target: 'ledger' | 'fee';
+  target: 'ledger' | 'fee' | 'aerial';
   targetId: string;
-  /** URL system= 과 맞춤 (예: river) */
+  /** URL system= 필터용 — systemList 메뉴에 해당 ser_eng 가 있는 시스템 */
   systemScope: string;
+  /** 열 패널 opened 토큰 (roadOccupationLedger 등) */
+  serEng: string;
 };
+
+/** 데이터 접두 기본값 대신, 실제 부서업무(systemList.serviceList)에 ser_eng 이 있는 시스템으로 맞춤 */
+function resolveNotifSystemScope(serEng: string, fallback: string): string {
+  const eng = String(serEng ?? '').trim();
+  const fb = String(fallback ?? '').trim().toLowerCase();
+  if (!eng) return fb;
+  const homes: string[] = [];
+  for (const s of getSystemList().systems) {
+    const sysKey = String(s.sys_key ?? '').trim();
+    if (!sysKey) continue;
+    if ((s.serviceList ?? []).some((x) => String(x).trim() === eng)) {
+      homes.push(sysKey);
+    }
+  }
+  // 메뉴에 없으면 알림 소속도 비움 → 어떤 시스템 필터에도 안 걸림(목록 기준 필터가 우선)
+  if (homes.length === 0) return '';
+  if (fb && homes.includes(fb)) return fb;
+  return homes[0]!;
+}
 
 const WITHIN_DAYS = 15;
 
@@ -129,6 +151,57 @@ async function upsertState(params: {
   }
 }
 
+/** 사진·동영상 중 위치가 없는 파일. 관리 시스템 알림용 */
+async function listMissingDroneGeomNotifications(): Promise<Omit<BizNotifItem, 'read'>[]> {
+  try {
+    const res = await db.execute(sql`
+      SELECT f.fu_key, f.file_name, w.wu_key, w.work_name
+      FROM layer.file_unit f
+      INNER JOIN layer.work_unit w ON w.wu_key = f.wu_key
+      WHERE COALESCE(f.fu_is_del, false) = false
+        AND COALESCE(w.wu_is_del, false) = false
+        AND w.kind = 'drone'
+        AND f.geom IS NULL
+        AND f.x_5181 IS NULL
+        AND f.y_5181 IS NULL
+      ORDER BY w.wu_key DESC, f.fu_key
+      LIMIT 200
+    `);
+    const rows =
+      res && typeof res === 'object' && 'rows' in res && Array.isArray((res as { rows: unknown }).rows)
+        ? (res as { rows: Array<{ fu_key?: number; file_name?: string; wu_key?: number; work_name?: string }> }).rows
+        : [];
+    const out: Omit<BizNotifItem, 'read'>[] = [];
+    for (const row of rows) {
+      const fuKey = Number(row.fu_key);
+      const wuKey = Number(row.wu_key);
+      if (!Number.isFinite(fuKey) || !Number.isFinite(wuKey)) continue;
+      const fileName = String(row.file_name ?? '').trim() || '파일';
+      const workName = String(row.work_name ?? '').trim() || '작업';
+      out.push({
+        id: `file-geom-missing:${fuKey}`,
+        notifKey: `file-geom-missing:${fuKey}`,
+        category: '위치없음',
+        title: '위치 추가',
+        name: `${workName} · ${fileName}`,
+        listKey: '사진·동영상',
+        important: true,
+        target: 'aerial',
+        targetId: `wu-${wuKey}:fu-${fuKey}`,
+        systemScope: 'uav',
+        serEng: 'aerialDrone',
+      });
+    }
+    return out;
+  } catch (e) {
+    console.warn(
+      '[bizNotif] missing geom load failed:',
+      e instanceof Error ? e.message : e
+    );
+    return [];
+  }
+}
+
 /** 전체 후보 + 서버 상태. system 있으면 해당 시스템만 */
 export async function listMyBizNotifications(params?: {
   system?: string;
@@ -142,34 +215,20 @@ export async function listMyBizNotifications(params?: {
     .trim()
     .toLowerCase();
 
-  const useUljinLedger = await usageDataAsTableExists();
-  const [uljinExpiryRes, occupExpiryRes, feeRes] = await Promise.all([
-    useUljinLedger
-      ? getUsageDataAsExpiryNotifications({ withinDays })
-      : Promise.resolve({ items: [] as UsageDataAsExpiryNotifRow[], error: undefined }),
+  const [occupExpiryRes, feeRes] = await Promise.all([
     getOccupationLedgerExpiryNotifications({ withinDays }),
     getUseFeeUnpaidDueNotifications({ withinDays }),
   ]);
 
   const candidates: Omit<BizNotifItem, 'read'>[] = [];
-
-  for (const row of uljinExpiryRes.items ?? []) {
-    candidates.push({
-      id: `usage-expiry:${row.rowKey}`,
-      notifKey: `usage-expiry:${row.rowKey}`,
-      category: '만료임박',
-      title: '점용 종료 임박',
-      name: `울진하천점용 ${row.rowKey} ${row.name}`,
-      listKey: `${row.endDate} · ${formatDaysRemainingLabel(row.daysRemaining, 'expiry')}`,
-      important: true,
-      target: 'ledger',
-      targetId: row.rowKey,
-      systemScope: 'river',
-    });
+  for (const row of await listMissingDroneGeomNotifications()) {
+    candidates.push(row);
   }
 
   for (const row of occupExpiryRes.items ?? []) {
-    const ledgerTitle = getOccupationLedgerBinding({ prefix: row.prefix })?.title ?? '점용';
+    const binding = getOccupationLedgerBinding({ prefix: row.prefix });
+    const ledgerTitle = binding?.title ?? '점용';
+    const serEng = binding?.serEng ?? '';
     candidates.push({
       id: `occup-expiry:${row.prefix}:${row.rowKey}`,
       notifKey: `occup-expiry:${row.prefix}:${row.rowKey}`,
@@ -180,12 +239,36 @@ export async function listMyBizNotifications(params?: {
       important: true,
       target: 'ledger',
       targetId: row.rowKey,
-      systemScope: row.systemScope,
+      serEng,
+      systemScope: resolveNotifSystemScope(serEng, row.systemScope),
     });
   }
 
+  try {
+    const consAlerts = await listDueConsAlerts(withinDays);
+    for (const row of consAlerts) {
+      candidates.push({
+        id: row.id,
+        notifKey: row.notifKey,
+        category: '공사알림',
+        title: '공사 알림',
+        name: row.name,
+        listKey: row.listKey,
+        important: true,
+        target: 'ledger',
+        targetId: row.targetId,
+        serEng: row.serEng,
+        systemScope: resolveNotifSystemScope(row.serEng, row.kind === 'swl' ? 'swl' : 'wtlAdmin'),
+      });
+    }
+  } catch (e) {
+    console.warn('[bizNotif] cons alert load failed:', e instanceof Error ? e.message : e);
+  }
+
   for (const row of feeRes.items ?? []) {
-    const feeTitle = getUseFeeBinding({ prefix: row.prefix }).title;
+    const feeBinding = getUseFeeBinding({ prefix: row.prefix });
+    const feeTitle = feeBinding.title;
+    const serEng = feeBinding.serEng;
     candidates.push({
       id: `use-fee-due:${row.prefix}:${row.id}`,
       notifKey: `use-fee-due:${row.prefix}:${row.id}`,
@@ -196,7 +279,8 @@ export async function listMyBizNotifications(params?: {
       important: true,
       target: 'fee',
       targetId: row.id,
-      systemScope: row.systemScope,
+      serEng,
+      systemScope: resolveNotifSystemScope(serEng, row.systemScope),
     });
   }
 
@@ -216,12 +300,19 @@ export async function listMyBizNotifications(params?: {
     items.push({ ...c, read: Boolean(st?.read) });
   }
 
+  const categoryOrder: Record<BizNotifItem['category'], number> = {
+    만료임박: 0,
+    미납임박: 1,
+    위치없음: 2,
+    공사알림: 3,
+  };
   items.sort((a, b) => {
-    if (a.category !== b.category) return a.category === '만료임박' ? -1 : 1;
+    const byCategory = categoryOrder[a.category] - categoryOrder[b.category];
+    if (byCategory !== 0) return byCategory;
     return a.listKey.localeCompare(b.listKey);
   });
 
-  const err = [uljinExpiryRes.error, occupExpiryRes.error, feeRes.error]
+  const err = [occupExpiryRes.error, feeRes.error]
     .filter((e): e is string => Boolean(e) && !isAbsentTableError(e))
     .join(' | ');
   return err ? { items, error: err } : { items };

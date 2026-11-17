@@ -12,7 +12,7 @@ import { dbs } from './data_batch_snapshot';
 
 const geometry5181 = customType<{ data: unknown; driverData: unknown }>({
   dataType() {
-    return 'geometry(Geometry, 5181)';
+    return 'geometry(Geometry,5181)';
   },
 });
 

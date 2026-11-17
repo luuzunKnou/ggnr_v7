@@ -4,7 +4,7 @@ import React, { useRef, useCallback, useState, useEffect } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { ChevronDown, ChevronUp, UserRound } from 'lucide-react';
+import { ChevronDown, ChevronUp, Ellipsis, UserRound } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { call } from '@/lib/api';
 import { sidebarServicePolicy } from '@/lib/accessClient';
@@ -132,7 +132,7 @@ export function MapSidebar({ indexLogoSrc }: { indexLogoSrc: string }) {
   const [deniedSerOpen, setDeniedSerOpen] = useState(false);
   const [deniedSerEng, setDeniedSerEng] = useState('');
   const [bootProject, setBootProject] = useState('');
-  const { snapshot } = useMyAccessSnapshot();
+  const { snapshot, reload } = useMyAccessSnapshot();
   const systemKeyFromUrl = searchParams.get('system') ?? '';
 
   const fetchServiceList = useCallback(() => {
@@ -208,9 +208,11 @@ export function MapSidebar({ indexLogoSrc }: { indexLogoSrc: string }) {
     .map((key) => serviceMap.get(key))
     .filter((s): s is ServiceItem => s != null)
     .filter((item) => {
-      // 비공개 Y → 관리자 포함 사이드바에서 숨김
-      if (item.ser_is_private === true) return false;
       if (bootProject === 'build_uj' && item.ser_eng === 'riverUseLedger') return false;
+      // 비공개: 버튼보기(1) 이상만 표시. 없음(0)은 숨김
+      if (item.ser_is_private === true) {
+        return sidebarServicePolicy(snapshot, item.ser_eng ?? '', true) !== 'hidden';
+      }
       return true;
     });
 
@@ -327,8 +329,21 @@ export function MapSidebar({ indexLogoSrc }: { indexLogoSrc: string }) {
               const onSvcClick =
                 policy === 'block'
                   ? () => {
-                      setDeniedSerEng(serEng);
-                      setDeniedSerOpen(true);
+                      void (async () => {
+                        const snap = await reload({ silent: true });
+                        const next = sidebarServicePolicy(snap, serEng, true);
+                        if (next === 'block') {
+                          setDeniedSerEng(serEng);
+                          setDeniedSerOpen(true);
+                          return;
+                        }
+                        if (next === 'hidden') return;
+                        if (serEng === 'shapeEditor') {
+                          handleShapeEditorClick();
+                          return;
+                        }
+                        toggleWindow(getOpenedKeyForSerEng(serEng));
+                      })();
                     }
                   : serEng === 'shapeEditor'
                     ? handleShapeEditorClick
@@ -369,16 +384,23 @@ export function MapSidebar({ indexLogoSrc }: { indexLogoSrc: string }) {
             <SidebarButton
               icon={
                 <span
-                  className="relative inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-white"
+                  className="relative inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-white"
                   style={{ backgroundColor: 'var(--color-blue-600)' }}
                 >
-                  <UserRound className="h-4 w-4" strokeWidth={2} aria-hidden />
+                  <UserRound className="h-5 w-5" strokeWidth={2} aria-hidden />
+                  <span
+                    className="absolute -bottom-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full border border-white bg-[var(--color-blue-600)] text-white"
+                    aria-hidden
+                  >
+                    <Ellipsis className="h-2.5 w-2.5" strokeWidth={2.5} />
+                  </span>
                   {protoNotifUnread ? (
-                    <span className="absolute -right-0.5 -top-0.5 h-1.5 w-1.5 rounded-full bg-red-500" />
+                    <span className="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full bg-red-500" />
                   ) : null}
                 </span>
               }
               label="내 정보"
+              iconOnly
               onClick={() => {
                 window.dispatchEvent(new CustomEvent('ggnr-proto-user-account-toggle'));
               }}

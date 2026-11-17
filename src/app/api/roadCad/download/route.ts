@@ -62,7 +62,7 @@ export async function HEAD(req: NextRequest) {
 }
 
 /**
- * GET /api/roadCad/download?name= — `roadDoc/cad` 내 파일
+ * GET /api/roadCad/download?name= — `file_data/road_doc/cad` 내 파일
  */
 export async function GET(req: NextRequest) {
   const name = req.nextUrl.searchParams.get("name")?.trim() ?? "";

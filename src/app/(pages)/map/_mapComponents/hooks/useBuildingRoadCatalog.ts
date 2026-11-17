@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { call } from '@/lib/api';
+import { sortLayersByDefineIdx } from '@/lib/defineTableOrder';
 import {
   BUILDING_ROAD_LAYERS,
   BUILDING_ROAD_DEFINED_TABLE_NAMES,
@@ -61,7 +62,10 @@ export function useBuildingRoadCatalog(): BuildingRoadCatalog {
   }, [layersWithData]);
 
   const layers = useMemo(
-    () => BUILDING_ROAD_LAYERS.filter((l) => availableLayerTableNames.has(l.tableName)),
+    () =>
+      sortLayersByDefineIdx(
+        BUILDING_ROAD_LAYERS.filter((l) => availableLayerTableNames.has(l.tableName)),
+      ),
     [availableLayerTableNames]
   );
 

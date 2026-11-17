@@ -1,0 +1,19 @@
+<layer>
+  <name>uq101</name>
+  <id>LayerInfoImpl-6e125944:1a17ff3f0fb:-7b85</id>
+  <type>VECTOR</type>
+  <defaultStyle>
+    <id>StyleInfoImpl-6e125944:1a17ff3f0fb:-7b84</id>
+  </defaultStyle>
+  <resource class="featureType">
+    <id>FeatureTypeInfoImpl-6e125944:1a17ff3f0fb:-7b86</id>
+  </resource>
+  <queryable>true</queryable>
+  <opaque>false</opaque>
+  <attribution>
+    <logoWidth>0</logoWidth>
+    <logoHeight>0</logoHeight>
+  </attribution>
+  <dateCreated>2026-10-29 01:25:54.234 UTC</dateCreated>
+  <dateModified>2026-10-29 01:25:54.749 UTC</dateModified>
+</layer>

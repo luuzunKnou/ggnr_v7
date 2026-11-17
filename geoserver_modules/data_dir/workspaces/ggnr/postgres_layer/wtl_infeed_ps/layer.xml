@@ -1,0 +1,19 @@
+<layer>
+  <name>wtl_infeed_ps</name>
+  <id>LayerInfoImpl--39720bc2:1a199d665f1:-7989</id>
+  <type>VECTOR</type>
+  <defaultStyle>
+    <id>StyleInfoImpl--39720bc2:1a199d665f1:-7988</id>
+  </defaultStyle>
+  <resource class="featureType">
+    <id>FeatureTypeInfoImpl--39720bc2:1a199d665f1:-798a</id>
+  </resource>
+  <queryable>true</queryable>
+  <opaque>false</opaque>
+  <attribution>
+    <logoWidth>0</logoWidth>
+    <logoHeight>0</logoHeight>
+  </attribution>
+  <dateCreated>2026-11-03 04:03:02.941 UTC</dateCreated>
+  <dateModified>2026-11-03 04:03:03.672 UTC</dateModified>
+</layer>

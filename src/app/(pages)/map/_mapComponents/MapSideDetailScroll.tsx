@@ -11,6 +11,7 @@ import { cn } from '@/lib/utils';
 /**
  * 상세 패널 본문 스크롤 영역.
  * 내용이 넘칠 때만 세로 스크롤·오른쪽 여유(10px) — 스크롤 없으면 여백·스크롤바 없음.
+ * (목록의 고정 10px·너비 조절 구분과 별개 — map-side-detail-scroll)
  */
 export type MapSideDetailScrollProps = ComponentPropsWithoutRef<'div'>;
 
@@ -47,7 +48,7 @@ export function MapSideDetailScroll({
     <div
       ref={ref}
       className={cn(
-        'scrollbar-thin min-h-0',
+        'map-side-detail-scroll scrollbar-thin min-h-0',
         overflowY ? 'mr-[10px] overflow-y-auto overscroll-contain' : '!mr-0 overflow-y-hidden',
         className,
       )}

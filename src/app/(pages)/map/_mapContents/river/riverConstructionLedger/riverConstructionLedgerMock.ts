@@ -8,13 +8,12 @@ export type RiverConstructionLedgerGeom = {
   coordinates: [number, number][][][];
 };
 
-export type RiverConstructionLedgerPreviewKind = "image" | "pdf" | "other";
+export type RiverConstructionLedgerPreviewKind = "image" | "pdf" | "excel" | "other";
 
 /** 첨부 폴더명(=탭). 루트 파일은 «기타» */
 export type RiverConstructionLedgerAttachmentCategory = string;
 
 export const CONS_ATTACH_ROOT_FOLDER = "기타";
-export const CONS_DATA_AS_FILE_LAYER = "cons_data_as";
 /** 목록에 넣지 않는 신규 등록 화면용 고정 id (점용·보상편입과 동일 패턴) */
 export const CONS_DATA_AS_NEW_ID = "rcl-new";
 /** 예전 timestamp 임시 행 호환 */
@@ -201,6 +200,7 @@ export function guessPreviewKind(name: string, mime?: string): RiverConstruction
   const lower = name.toLowerCase();
   if (mime?.startsWith("image/") || /\.(png|jpe?g|gif|webp|bmp)$/i.test(lower)) return "image";
   if (mime === "application/pdf" || lower.endsWith(".pdf")) return "pdf";
+  if (/\.xlsx?$/i.test(lower)) return "excel";
   return "other";
 }
 

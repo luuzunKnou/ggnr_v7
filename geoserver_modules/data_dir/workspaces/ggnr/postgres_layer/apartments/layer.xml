@@ -1,0 +1,19 @@
+<layer>
+  <name>apartments</name>
+  <id>LayerInfoImpl--610c9460:1a10fc86a73:-7ad9</id>
+  <type>VECTOR</type>
+  <defaultStyle>
+    <id>StyleInfoImpl--610c9460:1a10fc86a73:-7ad8</id>
+  </defaultStyle>
+  <resource class="featureType">
+    <id>FeatureTypeInfoImpl--610c9460:1a10fc86a73:-7ada</id>
+  </resource>
+  <queryable>true</queryable>
+  <opaque>false</opaque>
+  <attribution>
+    <logoWidth>0</logoWidth>
+    <logoHeight>0</logoHeight>
+  </attribution>
+  <dateCreated>2026-10-16 06:47:33.254 UTC</dateCreated>
+  <dateModified>2026-10-16 06:47:33.527 UTC</dateModified>
+</layer>

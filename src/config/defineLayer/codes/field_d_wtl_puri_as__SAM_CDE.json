@@ -1,0 +1,74 @@
+[
+  {
+    "define_code_key": "65511",
+    "define_code_field_key": "4352",
+    "define_code_name": "SAM000",
+    "define_code_kor_name": "미분류"
+  },
+  {
+    "define_code_key": "65512",
+    "define_code_field_key": "4352",
+    "define_code_name": "SAM001",
+    "define_code_kor_name": "급속여과"
+  },
+  {
+    "define_code_key": "65513",
+    "define_code_field_key": "4352",
+    "define_code_name": "SAM002",
+    "define_code_kor_name": "완속여과"
+  },
+  {
+    "define_code_key": "65514",
+    "define_code_field_key": "4352",
+    "define_code_name": "SAM999",
+    "define_code_kor_name": "기타"
+  },
+  {
+    "define_code_key": "66387",
+    "define_code_field_key": "4352",
+    "define_code_name": "SAM000",
+    "define_code_kor_name": "미분류"
+  },
+  {
+    "define_code_key": "66388",
+    "define_code_field_key": "4352",
+    "define_code_name": "SAM001",
+    "define_code_kor_name": "급속여과"
+  },
+  {
+    "define_code_key": "66389",
+    "define_code_field_key": "4352",
+    "define_code_name": "SAM002",
+    "define_code_kor_name": "완속여과"
+  },
+  {
+    "define_code_key": "66390",
+    "define_code_field_key": "4352",
+    "define_code_name": "SAM999",
+    "define_code_kor_name": "기타"
+  },
+  {
+    "define_code_key": "66391",
+    "define_code_field_key": "4352",
+    "define_code_name": "SAM900",
+    "define_code_kor_name": "간이여과"
+  },
+  {
+    "define_code_key": "66392",
+    "define_code_field_key": "4352",
+    "define_code_name": "SAM901",
+    "define_code_kor_name": "감속여과"
+  },
+  {
+    "define_code_key": "66393",
+    "define_code_field_key": "4352",
+    "define_code_name": "SAM902",
+    "define_code_kor_name": "고도정수"
+  },
+  {
+    "define_code_key": "66394",
+    "define_code_field_key": "4352",
+    "define_code_name": "SAM903",
+    "define_code_kor_name": "정속여과"
+  }
+]

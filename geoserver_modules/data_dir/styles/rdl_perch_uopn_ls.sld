@@ -5,11 +5,32 @@
       <sld:Name>Default Styler</sld:Name>
       <sld:FeatureTypeStyle>
         <sld:Rule>
+          <sld:MaxScaleDenominator>4500.0</sld:MaxScaleDenominator>
+          <sld:LineSymbolizer>
+            <sld:Stroke>
+              <sld:CssParameter name="stroke">#FFFFFF</sld:CssParameter>
+              <sld:CssParameter name="stroke-opacity">0.4</sld:CssParameter>
+              <sld:CssParameter name="stroke-width">6</sld:CssParameter>
+              <sld:CssParameter name="stroke-dasharray">8.0 6.0</sld:CssParameter>
+            </sld:Stroke>
+          </sld:LineSymbolizer>
+          <sld:LineSymbolizer>
+            <sld:Stroke>
+              <sld:CssParameter name="stroke">#3F51B5</sld:CssParameter>
+              <sld:CssParameter name="stroke-opacity">0.5</sld:CssParameter>
+              <sld:CssParameter name="stroke-width">4</sld:CssParameter>
+              <sld:CssParameter name="stroke-dasharray">8.0 6.0</sld:CssParameter>
+            </sld:Stroke>
+          </sld:LineSymbolizer>
+        </sld:Rule>
+        <sld:Rule>
+          <sld:MinScaleDenominator>4500.0</sld:MinScaleDenominator>
           <sld:LineSymbolizer>
             <sld:Stroke>
               <sld:CssParameter name="stroke">#FFFFFF</sld:CssParameter>
               <sld:CssParameter name="stroke-opacity">0.4</sld:CssParameter>
               <sld:CssParameter name="stroke-width">3</sld:CssParameter>
+              <sld:CssParameter name="stroke-dasharray">8.0 6.0</sld:CssParameter>
             </sld:Stroke>
           </sld:LineSymbolizer>
           <sld:LineSymbolizer>
@@ -17,6 +38,7 @@
               <sld:CssParameter name="stroke">#3F51B5</sld:CssParameter>
               <sld:CssParameter name="stroke-opacity">0.5</sld:CssParameter>
               <sld:CssParameter name="stroke-width">2</sld:CssParameter>
+              <sld:CssParameter name="stroke-dasharray">8.0 6.0</sld:CssParameter>
             </sld:Stroke>
           </sld:LineSymbolizer>
         </sld:Rule>

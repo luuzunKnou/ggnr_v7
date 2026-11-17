@@ -6,33 +6,42 @@ import { cn } from "@/lib/utils"
 import { call } from "@/lib/api"
 import {
   explainHandbookExample,
+  HANDBOOK_MATCH_LABEL,
   HANDBOOK_SCALE_FIELDS,
   handbookFileAccess,
   handbookFileOrg,
   handbookMaterialAccess,
   handbookMaterialOrg,
   handbookChapterLabel,
+  matchHandbookProcedure,
   parseHandbookLaw,
   type HandbookExampleNumberField,
   type HandbookFile,
   type HandbookFileAccess,
   type HandbookGuideLine,
+  type HandbookMatchStatus,
   type HandbookMaterial,
-  type HandbookOrg,
   type HandbookProcedure,
 } from "./roadWorkHandbookData"
 import { useHandbookMapPick, type HandbookMapDrawKind } from "./roadWorkHandbookMapContext"
 
-function orgBadgeClass(org: HandbookOrg) {
-  if (org === "과업포함") return "bg-primary text-white"
-  if (org === "별도") return "bg-[#3B8DE0] text-white"
-  return "bg-muted text-muted-foreground"
+export function matchBadgeClass(status: HandbookMatchStatus) {
+  if (status === "met") return "bg-primary text-white"
+  if (status === "unmet") return "bg-destructive text-white"
+  if (status === "check") return "border border-border bg-background text-muted-foreground"
+  return "bg-muted/70 text-muted-foreground"
 }
 
-export function OrgBadge({ org }: { org: HandbookOrg }) {
+export function MatchBadge({ status }: { status: HandbookMatchStatus }) {
+  if (status === "wait") return null
   return (
-    <span className={cn("shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium leading-none", orgBadgeClass(org))}>
-      {org}
+    <span
+      className={cn(
+        "shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold leading-none",
+        matchBadgeClass(status)
+      )}
+    >
+      {HANDBOOK_MATCH_LABEL[status]}
     </span>
   )
 }
@@ -69,88 +78,98 @@ function mapKindForField(field: HandbookExampleNumberField): HandbookMapDrawKind
   return null
 }
 
-export function HandbookScaleCard() {
+function ScaleFieldControl({
+  field,
+}: {
+  field: (typeof HANDBOOK_SCALE_FIELDS)[number]
+}) {
   const mapPick = useHandbookMapPick()
   const vals = mapPick?.scaleVals ?? {}
   const setScaleField = mapPick?.setScaleField
+  const mapKind = field.kind === "select" ? null : mapKindForField(field)
 
+  return (
+    <div className="flex items-center gap-1.5">
+      <label
+        htmlFor={`hb-scale-${field.key}`}
+        className="w-[4.5rem] shrink-0 text-[11px] font-medium leading-tight text-foreground"
+        title={field.label}
+      >
+        {field.label}
+      </label>
+      {field.kind === "select" ? (
+        <select
+          id={`hb-scale-${field.key}`}
+          value={vals[field.key] ?? ""}
+          onChange={(e) => setScaleField?.(field.key, e.target.value)}
+          className={cn(fieldControlClass, "min-w-0 flex-1")}
+        >
+          <option value="">선택</option>
+          {field.options.map((opt) => (
+            <option key={opt.value} value={opt.value}>
+              {opt.label}
+            </option>
+          ))}
+        </select>
+      ) : (
+        <>
+          <input
+            id={`hb-scale-${field.key}`}
+            type="number"
+            min={0}
+            inputMode="decimal"
+            placeholder={field.placeholder}
+            value={vals[field.key] ?? ""}
+            onChange={(e) => setScaleField?.(field.key, e.target.value)}
+            className={cn(fieldControlClass, "min-w-0 flex-1")}
+          />
+          <span className="w-7 shrink-0 text-[11px] text-muted-foreground">{field.unit}</span>
+          {mapPick && mapKind ? (
+            <button
+              type="button"
+              title={mapKind === "line" ? "지도에서 구간 그리기" : "지도에서 범위 그리기"}
+              className={cn(
+                "h-7 shrink-0 rounded border px-1.5 text-[11px]",
+                mapPick.activePick?.fieldKey === field.key
+                  ? "border-primary bg-primary/10 text-primary"
+                  : "border-border bg-background text-foreground hover:bg-muted/50"
+              )}
+              onClick={() => {
+                if (mapPick.activePick?.fieldKey === field.key) {
+                  mapPick.cancelPick()
+                  return
+                }
+                mapPick.startPick({ kind: mapKind, fieldKey: field.key, label: field.label })
+              }}
+            >
+              {mapKind === "line" ? "구간" : "범위"}
+            </button>
+          ) : null}
+          {mapPick?.drawnFieldKeys.includes(field.key) ? (
+            <button
+              type="button"
+              title="지도 도형 지우기"
+              className="h-7 shrink-0 rounded border border-border bg-background px-1.5 text-[11px] text-muted-foreground hover:bg-muted/50 hover:text-foreground"
+              onClick={() => mapPick.clearDrawn(field.key)}
+            >
+              지우기
+            </button>
+          ) : null}
+        </>
+      )}
+    </div>
+  )
+}
+
+export function HandbookScaleCard() {
   return (
     <div className="space-y-1.5">
       <p className="text-[11px] leading-snug text-muted-foreground">
-        규모를 적은 뒤 적용하면 절차별 해당 여부가 갱신됩니다. 길이와 면적은 지도에서 그릴 수 있습니다.
+        규모를 적은 뒤 적용하면 목록의 해당 여부가 바뀝니다. 길이와 면적은 지도에서 그릴 수 있습니다.
       </p>
-      <div className="space-y-1.5">
+      <div className="grid grid-cols-2 gap-x-3 gap-y-1.5">
         {HANDBOOK_SCALE_FIELDS.map((field) => (
-          <div key={field.key} className="flex items-center gap-1.5">
-            <label
-              htmlFor={`hb-scale-${field.key}`}
-              className="w-[5.5rem] shrink-0 whitespace-nowrap text-[11px] font-medium leading-tight text-foreground"
-            >
-              {field.label}
-            </label>
-            {field.kind === "select" ? (
-              <select
-                id={`hb-scale-${field.key}`}
-                value={vals[field.key] ?? ""}
-                onChange={(e) => setScaleField?.(field.key, e.target.value)}
-                className={cn(fieldControlClass, "min-w-0 flex-1")}
-              >
-                <option value="">선택</option>
-                {field.options.map((opt) => (
-                  <option key={opt.value} value={opt.value}>
-                    {opt.label}
-                  </option>
-                ))}
-              </select>
-            ) : (
-              <>
-                <input
-                  id={`hb-scale-${field.key}`}
-                  type="number"
-                  min={0}
-                  inputMode="decimal"
-                  placeholder={field.placeholder}
-                  value={vals[field.key] ?? ""}
-                  onChange={(e) => setScaleField?.(field.key, e.target.value)}
-                  className={cn(fieldControlClass, "min-w-0 flex-1")}
-                />
-                <span className="w-7 shrink-0 text-[11px] text-muted-foreground">{field.unit}</span>
-                {mapPick && mapKindForField(field) ? (
-                  <button
-                    type="button"
-                    title={mapKindForField(field) === "line" ? "지도에서 구간 그리기" : "지도에서 범위 그리기"}
-                    className={cn(
-                      "h-7 shrink-0 rounded border px-1.5 text-[11px]",
-                      mapPick.activePick?.fieldKey === field.key
-                        ? "border-primary bg-primary/10 text-primary"
-                        : "border-border bg-background text-foreground hover:bg-muted/50"
-                    )}
-                    onClick={() => {
-                      const kind = mapKindForField(field)
-                      if (!kind) return
-                      if (mapPick.activePick?.fieldKey === field.key) {
-                        mapPick.cancelPick()
-                        return
-                      }
-                      mapPick.startPick({ kind, fieldKey: field.key, label: field.label })
-                    }}
-                  >
-                    {mapKindForField(field) === "line" ? "구간" : "범위"}
-                  </button>
-                ) : null}
-                {mapPick?.drawnFieldKeys.includes(field.key) ? (
-                  <button
-                    type="button"
-                    title="지도 도형 지우기"
-                    className="h-7 shrink-0 rounded border border-border bg-background px-1.5 text-[11px] text-muted-foreground hover:bg-muted/50 hover:text-foreground"
-                    onClick={() => mapPick.clearDrawn(field.key)}
-                  >
-                    지우기
-                  </button>
-                ) : null}
-              </>
-            )}
-          </div>
+          <ScaleFieldControl key={field.key} field={field} />
         ))}
       </div>
     </div>
@@ -161,11 +180,15 @@ export function ProcedureGuideCard({ proc }: { proc: HandbookProcedure }) {
   const mapPick = useHandbookMapPick()
   const vals = mapPick?.scaleVals ?? {}
   const lines = explainHandbookExample(proc, vals)
+  const status = matchHandbookProcedure(proc, vals)
 
   if (!proc.exampleKind) {
     return (
       <div className="rounded-[5px] border border-border/90 bg-card p-3 text-left shadow-sm">
-        <p className="border-b border-border/70 pb-1 text-[12px] font-semibold text-foreground">규모로 본 결과</p>
+        <div className="flex items-center justify-between gap-2 border-b border-border/70 pb-1">
+          <p className="text-[12px] font-semibold text-foreground">규모로 본 결과</p>
+          <MatchBadge status={status} />
+        </div>
         <p className="mt-2 break-keep text-[11px] leading-relaxed text-muted-foreground">
           이 절차는 길이·면적·공사비로 대상 여부를 정하지 않습니다. 대상 기준을 직접 확인합니다.
         </p>
@@ -175,7 +198,10 @@ export function ProcedureGuideCard({ proc }: { proc: HandbookProcedure }) {
 
   return (
     <div className="rounded-[5px] border border-border/90 bg-card p-3 text-left shadow-sm">
-      <p className="border-b border-border/70 pb-1 text-[12px] font-semibold text-foreground">규모로 본 결과</p>
+      <div className="flex items-center justify-between gap-2 border-b border-border/70 pb-1">
+        <p className="text-[12px] font-semibold text-foreground">규모로 본 결과</p>
+        <MatchBadge status={status} />
+      </div>
       <div className="mt-2">
         {lines.length > 0 ? (
           <ul className="space-y-2">
@@ -185,7 +211,7 @@ export function ProcedureGuideCard({ proc }: { proc: HandbookProcedure }) {
           </ul>
         ) : (
           <p className="text-[11px] leading-relaxed text-muted-foreground">
-            왼쪽에서 규모를 넣으면 이 절차 기준과 비교합니다.
+            위에서 규모를 넣고 적용하면 이 절차 기준과 비교합니다.
           </p>
         )}
       </div>
@@ -195,17 +221,30 @@ export function ProcedureGuideCard({ proc }: { proc: HandbookProcedure }) {
 
 export function ProcedureDetailCard({ proc }: { proc: HandbookProcedure }) {
   const law = parseHandbookLaw(proc.law)
+  const mapPick = useHandbookMapPick()
+  const status = matchHandbookProcedure(proc, mapPick?.scaleVals ?? {})
 
   return (
     <div className="flex flex-col gap-2">
       <div className="rounded-[5px] border border-border/90 bg-card p-3 text-left shadow-sm">
         <div className="border-b border-border/60 pb-2">
           <div className="flex items-center gap-2">
-            <Scale className="h-4 w-4 shrink-0 text-primary" strokeWidth={1.75} aria-hidden />
+            <Scale
+              className={cn(
+                "h-4 w-4 shrink-0",
+                status === "unmet"
+                  ? "text-destructive"
+                  : status === "met"
+                    ? "text-primary"
+                    : "text-foreground"
+              )}
+              strokeWidth={1.75}
+              aria-hidden
+            />
             <h3 className="min-w-0 flex-1 break-keep text-[12px] font-semibold leading-snug text-foreground">
               {proc.name}
             </h3>
-            <OrgBadge org={proc.org} />
+            <MatchBadge status={status} />
           </div>
           <p className="mt-1.5 break-keep text-[11px] leading-relaxed text-muted-foreground">{proc.criteria}</p>
         </div>
@@ -419,12 +458,7 @@ export function HandbookMaterialListButton({
       <div className="flex min-w-0 flex-1 flex-col gap-0.5">
         <div className="flex min-w-0 items-center gap-1.5">
           {showAccessBadge ? <HandbookFileAccessBadge access={access} /> : null}
-          <span
-            className={cn(
-              "min-w-0 truncate text-[12px] font-medium leading-snug",
-              selected ? "text-primary" : "text-foreground"
-            )}
-          >
+          <span className="min-w-0 truncate text-[12px] font-medium leading-snug text-foreground">
             {material.name}
           </span>
         </div>

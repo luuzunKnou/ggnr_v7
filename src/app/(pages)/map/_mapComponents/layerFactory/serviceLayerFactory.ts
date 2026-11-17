@@ -9,7 +9,9 @@ import {
   type LayerDbGeometryKind,
 } from '@/lib/mapLayerGeometryOrder';
 import { getGeoServerBase } from '@/lib/geoserverUrl';
+import { mergeIgnoreScaleEnv } from './iconScaleWmsEnv';
 import { withBasePath } from '@/lib/basePath';
+import { isOrthoDataQueryLayerId } from '../../_mapContents/aerialView/orthoDataQueryLayerId';
 
 const WORKSPACE = 'ggnr';
 
@@ -18,6 +20,7 @@ const WMS_VIEWPORT_IMAGE_RATIO = 1.5;
 
 /**
  * 범례 이미지 — 테이블이 없어도 500이 나지 않도록 앱 프록시를 탄다.
+ * primary=1 이면 라벨·화살표가 있어도 대표 선·면·점만 받는다.
  */
 export function getLegendGraphicUrl(layerName: string, styleName?: string): string {
   const layer = String(layerName ?? '').trim();
@@ -26,6 +29,7 @@ export function getLegendGraphicUrl(layerName: string, styleName?: string): stri
     layer,
     width: '20',
     height: '20',
+    primary: '1',
   });
   const style = String(styleName ?? '').trim();
   if (style) params.set('style', style);
@@ -324,6 +328,10 @@ export function useServiceLayerSync(
    * (부서업무 본표는 위, 패널에서 켠 점사용료 등은 아래)
    */
   wmsForceBottomLayerNames?: Iterable<string>,
+  /** 레이어별 STYLES 대체 (define_table_name → 스타일명). 없으면 테이블명 */
+  serviceWmsStyleByLayer?: Record<string, string> | null,
+  /** 켜면 축척 무시(크기 18). 꺼짐이 기본이며 축척에 따라 크기가 변한다. */
+  iconScaleSizeOn: boolean = false,
 ) {
   const filterRef = useRef(layerFilterRows);
   filterRef.current = layerFilterRows;
@@ -375,7 +383,9 @@ export function useServiceLayerSync(
       return;
     }
 
-    const rawNames = Array.from(visibleLayerNames);
+    const rawNames = Array.from(visibleLayerNames).filter(
+      (n) => !isOrthoDataQueryLayerId(n)
+    );
     // 기하 타입 없어도 강제 하단(시설물·보조 레이어) 정렬은 항상 적용
     const names = sortLayerNamesForWmsStack(
       rawNames,
@@ -383,7 +393,12 @@ export function useServiceLayerSync(
       wmsForceBottomLayerNames
     );
     const layersParam = names.map((n) => `${WORKSPACE}:${n}`).join(',');
-    const stylesParam = names.join(',');
+    const styleNames = names.map((n) => serviceWmsStyleByLayer?.[n]?.trim() || n);
+    const stylesParam = styleNames.join(',');
+    const envParam = mergeIgnoreScaleEnv(
+      typeof params.ENV === 'string' ? params.ENV : undefined,
+      iconScaleSizeOn,
+    );
     const filters = filterRef.current;
     const wkt = typeof spatialFilterWkt === 'string' && spatialFilterWkt.trim() ? spatialFilterWkt.trim() : null;
     const hidden = hiddenRef.current;
@@ -404,13 +419,14 @@ export function useServiceLayerSync(
     });
     const allInclude = cqlArr.every((c) => c === 'INCLUDE');
     const cqlParam = allInclude ? '' : cqlArr.join(';');
-    const syncKey = `${layersParam}|${stylesParam}|${cqlParam}|fb:${forceBottomKey}`;
+    const syncKey = `${layersParam}|${stylesParam}|${cqlParam}|fb:${forceBottomKey}|env:${envParam}`;
 
     if (
       lastSyncKeyRef.current === syncKey &&
       params.LAYERS === layersParam &&
       params.STYLES === stylesParam &&
       (params.CQL_FILTER ?? '') === cqlParam &&
+      (params.ENV ?? '') === envParam &&
       serviceLayer.getVisible()
     ) {
       return;
@@ -422,18 +438,24 @@ export function useServiceLayerSync(
         LAYERS: layersParam,
         STYLES: stylesParam,
         CQL_FILTER: undefined,
+        ENV: envParam || undefined,
+        _dc: String(Date.now()),
         TRANSPARENT: 'true',
         EXCEPTIONS: 'application/vnd.ogc.se_xml',
       });
       delete params.CQL_FILTER;
+      if (!envParam) delete params.ENV;
     } else {
       update({
         LAYERS: layersParam,
         STYLES: stylesParam,
         CQL_FILTER: cqlParam,
+        ENV: envParam || undefined,
+        _dc: String(Date.now()),
         TRANSPARENT: 'true',
         EXCEPTIONS: 'application/vnd.ogc.se_xml',
       });
+      if (!envParam) delete params.ENV;
     }
     serviceLayer.setVisible(true);
     source.changed();
@@ -445,8 +467,10 @@ export function useServiceLayerSync(
     layerGeometryTypes,
     hiddenFeaturesByLayer,
     serviceWmsCqlByLayer,
+    serviceWmsStyleByLayer,
     forceBottomKey,
     wmsForceBottomLayerNames,
+    iconScaleSizeOn,
   ]);
 }
 

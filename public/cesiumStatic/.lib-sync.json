@@ -1,0 +1,10 @@
+{
+  "packageName": "cesium",
+  "version": "1.138.0",
+  "copies": [
+    "Build/Cesium/Assets->public/cesiumStatic/Assets",
+    "Build/Cesium/ThirdParty->public/cesiumStatic/ThirdParty",
+    "Build/Cesium/Widgets->public/cesiumStatic/Widgets",
+    "Build/Cesium/Workers->public/cesiumStatic/Workers"
+  ]
+}

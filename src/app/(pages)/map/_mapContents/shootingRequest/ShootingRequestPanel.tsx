@@ -138,28 +138,28 @@ export function ShootingRequestPanel({
     onSelectDetailId(null);
   };
 
-  const title = listMode === 'mine' ? '내 신청 목록' : '승인 관리';
-  const subtitle =
-    listMode === 'mine'
-      ? loading
-        ? '불러오는 중…'
-        : `${filtered.length}건${keyword.trim() ? ' · 검색' : ''}`
-      : loading
-        ? '불러오는 중…'
-        : `대기 ${pendingCount} · 승인 ${approvedCount} · 반려 ${rejectedCount}`;
+  const title = listMode === 'mine' ? '내 신청 목록' : '촬영요청승인';
+  const countLabel = loading
+    ? '불러오는 중…'
+    : listMode === 'mine'
+      ? `${filtered.length.toLocaleString()}건${keyword.trim() ? ' · 검색' : ''}`
+      : `${filtered.length.toLocaleString()}건 · 대기 ${pendingCount} · 승인 ${approvedCount} · 반려 ${rejectedCount}`;
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-background">
-      <div className="flex shrink-0 items-center gap-2 border-b border-border px-3 py-2.5">
+      <div className="flex shrink-0 items-center gap-2 border-b border-border px-3 py-1.5">
         <div className="min-w-0 flex-1">
-          <h2 className="text-[13px] font-semibold text-foreground">{title}</h2>
-          <p className="mt-0.5 text-[10px] text-muted-foreground">{subtitle}</p>
+          <h2 className="truncate text-[13px] font-semibold leading-none text-foreground">{title}</h2>
         </div>
         {listMode === 'mine' ? (
-          <Button type="button" size="sm" className="h-8 gap-1 px-2.5 text-[11px]" onClick={handleAdd}>
+          <button
+            type="button"
+            onClick={handleAdd}
+            className="inline-flex h-6 shrink-0 items-center gap-0.5 rounded-md bg-primary px-2 text-[11px] font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+          >
             <Plus className="h-3.5 w-3.5" />
             추가
-          </Button>
+          </button>
         ) : null}
         <button
           type="button"
@@ -177,7 +177,7 @@ export function ShootingRequestPanel({
         {(
           [
             { id: 'mine' as const, label: '내 신청' },
-            { id: 'approval' as const, label: `승인관리${pendingCount > 0 ? ` (${pendingCount})` : ''}` },
+            { id: 'approval' as const, label: `촬영요청승인${pendingCount > 0 ? ` (${pendingCount})` : ''}` },
           ] as const
         ).map((t) => {
           const active = listMode === t.id;
@@ -252,6 +252,10 @@ export function ShootingRequestPanel({
             {loadError}
           </p>
         ) : null}
+      </div>
+
+      <div className="shrink-0 border-b border-border px-3 py-1.5 text-[11px] text-muted-foreground">
+        {countLabel}
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto px-2.5 py-2">

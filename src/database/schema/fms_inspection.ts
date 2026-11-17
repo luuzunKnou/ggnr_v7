@@ -1,10 +1,11 @@
 import { bigserial, pgSchema, text, timestamp, unique } from 'drizzle-orm/pg-core';
 
-/** FMS 점검진단실적 — layer, 접두 water|road|public */
+/** FMS 점검진단실적 — layer.road_fms_inspection 한 테이블(시설물은 road_fms_facility 와 facil_no 로 연결) */
 const layer = pgSchema('layer');
 
-function buildFmsInspectionColumns() {
-  return {
+export const roadFmsInspection = layer.table(
+  'road_fms_inspection',
+  {
     id: bigserial('id', { mode: 'number' }).primaryKey(),
     facilNo: text('facil_no'),
     dignSeq: text('dign_seq'),
@@ -23,34 +24,9 @@ function buildFmsInspectionColumns() {
     syncedAt: timestamp('synced_at', { withTimezone: true, mode: 'string' }),
     createdAt: timestamp('created_at', { withTimezone: true, mode: 'string' }),
     updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'string' }),
-  };
-}
-
-function defineFmsInspectionTable(tableName: string, uniqueConstraintName: string) {
-  return layer.table(tableName, buildFmsInspectionColumns(), (t) => [
-    unique(uniqueConstraintName).on(t.facilNo, t.dignSeq),
-  ]);
-}
-
-export const waterFmsInspection = defineFmsInspectionTable(
-  'water_fms_inspection',
-  'water_fms_inspection_facil_dign_key'
+  },
+  (t) => [unique('road_fms_inspection_facil_dign_key').on(t.facilNo, t.dignSeq)]
 );
 
-export const roadFmsInspection = defineFmsInspectionTable(
-  'road_fms_inspection',
-  'road_fms_inspection_facil_dign_key'
-);
-
-export const publicFmsInspection = defineFmsInspectionTable(
-  'public_fms_inspection',
-  'public_fms_inspection_facil_dign_key'
-);
-
-export type FmsInspectionTable =
-  | typeof waterFmsInspection
-  | typeof roadFmsInspection
-  | typeof publicFmsInspection;
-
-export type FmsInspection = typeof waterFmsInspection.$inferSelect;
-export type NewFmsInspection = typeof waterFmsInspection.$inferInsert;
+export type FmsInspection = typeof roadFmsInspection.$inferSelect;
+export type NewFmsInspection = typeof roadFmsInspection.$inferInsert;

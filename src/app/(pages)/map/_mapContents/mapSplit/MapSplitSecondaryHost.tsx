@@ -7,7 +7,7 @@ import OSM from 'ol/source/OSM';
 import { defaults } from 'ol/control';
 import { Crosshair } from 'lucide-react';
 import { useMapContext } from '../../_mapComponents/MapContext';
-import { RESOLUTIONS_3857 } from '../../_mapComponents/config/mapDefaults';
+import { VIEW_RESOLUTIONS_3857 } from '../../_mapComponents/config/mapDefaults';
 import '../../_mapComponents/config/projections';
 import { createCadastralLayers, createBuildingRoadLayers } from '../../_mapComponents/layerFactory/boundaryLayerFactory';
 import { createBasicSectionLayers } from '../../_mapComponents/layerFactory/basicSectionLayerFactory';
@@ -19,6 +19,7 @@ import { createServiceLayer } from '../../_mapComponents/layerFactory/serviceLay
 import { bindMapGeometryStackOrder, mergeDefineLayerShpTypesIntoGeometryMap } from '@/lib/mapLayerGeometryOrder';
 import tables from '@/config/defineLayer/tables.json';
 import { useBackgroundLayer } from '../../_mapComponents/hooks/useBackgroundLayer';
+import { useBackgroundLabelLayer } from '../../_mapComponents/hooks/useBackgroundLabelLayer';
 import { FALLBACK_BACKGROUND_MAP_ID } from '../../_mapComponents/mapControlPanel/backgroundMapSelector';
 import { syncSecondaryLayersFromPrimary } from './syncSecondaryLayersFromPrimary';
 import {
@@ -82,9 +83,9 @@ export function MapSplitSecondaryHost({ active }: MapSplitSecondaryHostProps) {
       view: new View({
         center: [...center],
         ...(resolution != null ? { resolution } : { zoom: zoom ?? 12 }),
-        resolutions: RESOLUTIONS_3857,
+        resolutions: VIEW_RESOLUTIONS_3857,
         minZoom: 0,
-        maxZoom: RESOLUTIONS_3857.length - 1,
+        maxZoom: VIEW_RESOLUTIONS_3857.length - 1,
         constrainResolution: true,
       }),
       controls: defaults({
@@ -128,6 +129,10 @@ export function MapSplitSecondaryHost({ active }: MapSplitSecondaryHostProps) {
   useBackgroundLayer(
     secondaryReady ? secondaryMap : null,
     secondaryBackgroundId
+  );
+  useBackgroundLabelLayer(
+    secondaryReady ? secondaryMap : null,
+    mapContext?.mapBackgroundLabelVisible ?? true
   );
 
   // 레이어 visible/params + 동적(API) 레이어 미러

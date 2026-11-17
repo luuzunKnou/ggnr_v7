@@ -2,7 +2,7 @@
  * 클라이언트 전용 접근 판별 (DB 미사용). 서버 loadUserAccess 스냅샷과 조합해 사용.
  */
 
-import { SERP_TYPE_LIST } from '@/database/schema/serp_map';
+import { SERP_TYPE_LIST, SERP_TYPE_WRITE } from '@/database/schema/serp_map';
 
 export type ClientAccessSnapshot = {
   privateSerLevel: Record<string, number>;
@@ -16,6 +16,14 @@ export function canAccessPrivateSystem(
 ): boolean {
   if (sysIsPrivate !== true) return true;
   return snap.privateSysKeys.includes(String(sysKey).trim());
+}
+
+/** 공개 서비스이거나 비공개인데 쓰기(3) 이상 */
+export function canWriteSer(snap: ClientAccessSnapshot, serEng: string): boolean {
+  const eng = serEng.trim();
+  if (!eng) return true;
+  if (!(eng in snap.privateSerLevel)) return true;
+  return (snap.privateSerLevel[eng] ?? 0) >= SERP_TYPE_WRITE;
 }
 
 /** 사이드바 서비스: 공개면 항상 열림. 비공개면 단계별 */
@@ -35,4 +43,4 @@ export function sidebarServicePolicy(
   return 'open';
 }
 
-export { SERP_TYPE_LIST };
+export { SERP_TYPE_LIST, SERP_TYPE_WRITE };

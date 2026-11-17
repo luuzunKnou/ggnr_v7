@@ -2,18 +2,18 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { appFetch, withBasePath } from '@/lib/basePath';
+import { encodeServiceFileDataPathB64 } from '@/lib/serviceFileData';
 
 /** serviceList.config 의 ser_eng (예: dataQuery, riverBasicPlan, complaint) */
 export type ServiceFileDataSerEng = string;
 
 export type ServiceFileDataRow = { name: string; size: number; modified?: string };
 
-export function isImageServiceFileName(name: string): boolean {
-  return /\.(jpe?g|png|gif|webp|bmp|svg)$/i.test(name);
-}
+export { isImageServiceFileName, isPdfServiceFileName } from '@/lib/serviceFileName';
 
-export function isPdfServiceFileName(name: string): boolean {
-  return /\.pdf$/i.test(name);
+/** 첨부 엑셀 미리보기 (.xlsx / .xls — csv 제외) */
+export function isExcelServiceFileName(name: string): boolean {
+  return /\.xlsx?$/i.test(name);
 }
 
 export function serviceFileDataDownloadUrl(
@@ -28,9 +28,10 @@ export function serviceFileDataDownloadUrl(
     sub && sub !== '기타'
       ? `file_data/${layerSegment}/${keyValue}/${sub}/${fileName}`
       : `file_data/${layerSegment}/${keyValue}/${fileName}`;
+  // path 대신 pathB64 — 게이트/프록시가 쿼리 한글을 깨뜨려 404 나는 경우 방지
   const qs = new URLSearchParams({
     serEng: serEng.trim(),
-    path: rel,
+    pathB64: encodeServiceFileDataPathB64(rel),
   });
   if (options?.thumb != null && options.thumb !== false) {
     qs.set('thumb', options.thumb === true ? '1' : String(options.thumb));

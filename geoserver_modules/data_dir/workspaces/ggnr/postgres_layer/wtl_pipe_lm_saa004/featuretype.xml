@@ -1,0 +1,45 @@
+<featureType>
+  <id>FeatureTypeInfoImpl--78c241d:1a151a32358:-6c4c</id>
+  <name>wtl_pipe_lm_saa004</name>
+  <nativeName>wtl_pipe_lm</nativeName>
+  <namespace>
+    <id>NamespaceInfoImpl-4bf97568:19c4d6c3053:-7ffa</id>
+  </namespace>
+  <title>wtl_pipe_lm</title>
+  <keywords>
+    <string>features</string>
+    <string>wtl_pipe_lm</string>
+  </keywords>
+  <srs>EPSG:5181</srs>
+  <nativeBoundingBox>
+    <minx>380264.19931676844</minx>
+    <maxx>398263.4288098812</maxx>
+    <miny>340545.273739522</miny>
+    <maxy>366742.21905714716</maxy>
+    <crs class="projected">EPSG:5181</crs>
+  </nativeBoundingBox>
+  <latLonBoundingBox>
+    <minx>129.0131535389887</minx>
+    <maxx>129.22080471106722</maxx>
+    <miny>36.5426902904676</miny>
+    <maxy>36.78217517819462</maxy>
+    <crs>EPSG:4326</crs>
+  </latLonBoundingBox>
+  <projectionPolicy>FORCE_DECLARED</projectionPolicy>
+  <enabled>true</enabled>
+  <advertised>true</advertised>
+  <store class="dataStore">
+    <id>DataStoreInfoImpl-4bf97568:19c4d6c3053:-7ff9</id>
+  </store>
+  <serviceConfiguration>false</serviceConfiguration>
+  <simpleConversionEnabled>false</simpleConversionEnabled>
+  <cqlFilter>saa_cde = &apos;SAA004&apos;</cqlFilter>
+  <maxFeatures>0</maxFeatures>
+  <numDecimals>0</numDecimals>
+  <padWithZeros>false</padWithZeros>
+  <forcedDecimal>false</forcedDecimal>
+  <overridingServiceSRS>false</overridingServiceSRS>
+  <skipNumberMatched>false</skipNumberMatched>
+  <circularArcPresent>false</circularArcPresent>
+  <encodeMeasures>false</encodeMeasures>
+</featureType>

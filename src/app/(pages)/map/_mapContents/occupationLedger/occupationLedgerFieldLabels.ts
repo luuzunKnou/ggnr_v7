@@ -1,8 +1,23 @@
 /**
- * 공통 점용대장(water|road|public_occupationledger) 상세·편집용 한글 필드명.
- * defineLayer 한글명과 분리 — 여기 값을 바꾸지 않으면 화면 라벨이 바뀌지 않는다.
+ * 공통 점용대장 상세·편집용 한글 필드명.
+ * 공통 칸(하천·도로 원천자료 기준)과 국공유지 기존 칸. 여기 없는 칸은 레이어 필드 정의 한글명을 쓴다.
  */
 export const OCCUPATION_LEDGER_FIELD_LABELS: Record<string, string> = {
+  ogc_fid: '고유키',
+  ftr_idn: '관리번호',
+  prmt_no: '허가번호',
+  prmt_ymd: '허가일자',
+  occ_nam: '점용명',
+  occ_loc: '점용장소',
+  occ_purp: '점용목적',
+  prmt_sta: '점용 시작일',
+  prmt_end: '점용 종료일',
+  occ_area: '점용면적',
+  prmt_nam: '점용자명',
+  prmt_addr: '점용자주소',
+  state: '상태',
+  descript: '비고',
+  // 국공유지(기존 공통 점용 테이블)
   id: '키',
   work_name: '점용명',
   occup_place: '점용장소',
@@ -16,7 +31,6 @@ export const OCCUPATION_LEDGER_FIELD_LABELS: Record<string, string> = {
   occup_phone: '신청자 전화번호',
   applicant_addr: '신청자 주소',
   manage_name: '담당자명',
-  state: '상태',
   remark: '비고',
 };
 

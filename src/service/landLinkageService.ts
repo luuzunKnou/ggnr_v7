@@ -19,6 +19,8 @@ import {
   type ParcelLandSource,
 } from '@/lib/parcelLandNormalize';
 import { getLandLinkageConfig } from '@/service/configService';
+import { isPersonInfoMaskEnabled } from '@/service/systemControlService';
+import { maskPersonFieldByLength } from '@/lib/personInfoMask';
 import {
   PARCEL_ANALYSIS_LINKAGE_CONCURRENCY,
   PARCEL_ANALYSIS_LINKAGE_TIMEOUT_MS,
@@ -575,6 +577,11 @@ export async function fetchParcelLandInfoTab(params: { pnu?: string }): Promise<
     const landRow = parseKrasLandInfoRows(probed.landXml)[0] ?? null;
     const useRows = parseKrasBodyFieldMaps(probed.useXml);
     const krasTab = mapKrasToParcelLandInfoTab(landRow, useRows);
+    if (await isPersonInfoMaskEnabled()) {
+      krasTab.possessions = krasTab.possessions.map((row) =>
+        row.ownerNm ? { ...row, ownerNm: maskPersonFieldByLength(row.ownerNm) } : row
+      );
+    }
     if (hasParcelLandInfoTabData(krasTab)) {
       return { ...krasTab, ok: true, hangmangCalls: probed.calls };
     }
@@ -615,6 +622,51 @@ function formatAreaCell(value: unknown): string {
   const n = Number(raw.replace(/,/g, ''));
   if (!Number.isFinite(n)) return raw || '-';
   return `${n.toLocaleString('ko-KR')}㎡`;
+}
+
+export type KorepsPriceHistoryItem = {
+  year: string;
+  month: string;
+  price: number | null;
+  announceDate: string;
+  remark: string;
+};
+
+/**
+ * 필지 1건 연도별 공시지가 — 우클릭 «공시지가 조회»와 같은 행망 요청을 숫자 값으로 돌려준다.
+ * 행망을 쓰지 않는 실행(개발 등)이거나 접속정보가 없으면 rows 없이 message만 채운다.
+ */
+export async function fetchKorepsPriceHistory(params: { pnu?: string }): Promise<{
+  rows: KorepsPriceHistoryItem[];
+  message?: string;
+  error?: string;
+}> {
+  const pnu = toStr(params.pnu);
+  if (!/^\d{19}$/.test(pnu)) return { rows: [], error: '유효한 PNU(19자리)가 필요합니다.' };
+  const cfg = getLandLinkageConfig();
+  if (!cfg.useKras) return { rows: [], message: '개발 실행이라 공시지가 행망을 호출하지 않음' };
+  const url = buildKorepsUrl(cfg);
+  if (!url) return { rows: [], message: '공시지가 접속정보가 없습니다.' };
+  try {
+    const r = await fetchLinkageXmlResult(
+      url,
+      buildKrasParam(pnu, KOREPS_PRICE_QUERY_ID, cfg, cfg.korepsKey),
+      undefined,
+      'POST'
+    );
+    if (r.error) return { rows: [], error: r.error };
+    return {
+      rows: parseKorepsPriceRows(r.xml).map((item) => ({
+        year: item.baseYear,
+        month: item.baseMon,
+        price: item.pannJiga,
+        announceDate: item.pannYmd,
+        remark: item.remark,
+      })),
+    };
+  } catch (e: unknown) {
+    return { rows: [], error: e instanceof Error ? e.message : String(e) };
+  }
 }
 
 /** 우클릭 필지정보 모달 — 공유인·이동연혁·변동연혁·공시지가 목록 */
@@ -695,6 +747,9 @@ export async function fetchParcelLandModalList(params: {
     const r = await fetchLinkageXmlResult(url, buildKrasParam(pnu, svcId, cfg), undefined, 'GET');
     if (r.error) return { ok: false, kind, headers: [], rows: [], error: r.error };
     let maps = parseKrasBodyFieldMaps(r.xml);
+    const ownerNm = (await isPersonInfoMaskEnabled())
+      ? (item: KrasBodyRecord) => maskPersonFieldByLength(toStr(item.OWNER_NM) || '-')
+      : (item: KrasBodyRecord) => toStr(item.OWNER_NM) || '-';
 
     if (kind === 'share') {
       maps = [...maps].sort((a, b) => Number(a.SHR_SEQNO ?? 0) - Number(b.SHR_SEQNO ?? 0));
@@ -710,7 +765,7 @@ export async function fetchParcelLandModalList(params: {
       ];
       const rows = maps.map((item) => [
         toStr(item.OWNER_REGNO) || '-',
-        toStr(item.OWNER_NM) || '-',
+        ownerNm(item),
         toStr(item.OWNER_ADDR) || '-',
         toStr(item.OWN_GBN_NM) || '-',
         toStr(item.OWN_RGT_JIBUN) || '-',
@@ -768,7 +823,7 @@ export async function fetchParcelLandModalList(params: {
       toStr(item.LAND_LOC_CD) || '-',
       toStr(item.DREGNO) || '-',
       toStr(item.OWN_GBN_NM) || '-',
-      toStr(item.OWNER_NM) || '-',
+      ownerNm(item),
       toStr(item.OWN_RGT_CHG_RSN_CD_NM) || '-',
       formatKrasYmd(toStr(item.DYMD)) || '-',
       toStr(item.SHR_CNT) ? `${toStr(item.SHR_CNT)}명` : '-',

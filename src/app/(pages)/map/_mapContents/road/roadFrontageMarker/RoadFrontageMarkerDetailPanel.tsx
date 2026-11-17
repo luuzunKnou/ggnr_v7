@@ -29,7 +29,6 @@ import {
   type RoadFrontageMarkerLedger,
 } from './roadFrontageMarkerMock';
 import {
-  fitMapToMarkerPoints,
   flyToMarker,
   useRoadFrontageMarkerMapHighlight,
 } from './useRoadFrontageMarkerMapHighlight';
@@ -243,14 +242,7 @@ export function RoadFrontageMarkerDetailPanel({
     itemModal?.mode === 'view' ? selectedMarkerId : (itemModal?.draft.id ?? selectedMarkerId)
   );
 
-
-  useEffect(() => {
-    if (!map || loading) return;
-    if (displayMarkers.length === 0) return;
-    fitMapToMarkerPoints(map, displayMarkers);
-  }, [map, loading, ledgerId]);
-
-  /** 지도 레이어 클릭 → 노선 상세 + 표주 읽기 전용 모달 */
+  /** 지도 레이어 클릭 → 노선 상세 + 표주 읽기 전용 모달 (맵 이동 없음, 선택 강조만) */
   useEffect(() => {
     const pending = mapContext?.roadFrontageMarkerPendingItemPick;
     if (!pending || pending.ledgerId !== ledgerId || loading) return;
@@ -259,9 +251,6 @@ export function RoadFrontageMarkerDetailPanel({
     if (!item) return;
     mapContext?.setRoadFrontageMarkerPendingItemPick?.(null);
     setSelectedMarkerId(item.id);
-    if (item.lon != null && item.lat != null) {
-      flyToMarker(map, item);
-    }
     if (!isEditing) {
       setItemModal({ mode: 'view', draft: { ...item } });
     }
@@ -273,7 +262,6 @@ export function RoadFrontageMarkerDetailPanel({
     isEditing,
     saved,
     draft.markers,
-    map,
   ]);
 
   useEffect(() => {

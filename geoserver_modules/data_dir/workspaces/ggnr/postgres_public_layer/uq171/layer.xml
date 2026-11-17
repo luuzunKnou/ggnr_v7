@@ -1,0 +1,19 @@
+<layer>
+  <name>uq171</name>
+  <id>LayerInfoImpl-6e125944:1a17ff3f0fb:-7b8e</id>
+  <type>VECTOR</type>
+  <defaultStyle>
+    <id>StyleInfoImpl-6e125944:1a17ff3f0fb:-7b8d</id>
+  </defaultStyle>
+  <resource class="featureType">
+    <id>FeatureTypeInfoImpl-6e125944:1a17ff3f0fb:-7b8f</id>
+  </resource>
+  <queryable>true</queryable>
+  <opaque>false</opaque>
+  <attribution>
+    <logoWidth>0</logoWidth>
+    <logoHeight>0</logoHeight>
+  </attribution>
+  <dateCreated>2026-10-29 01:25:46.74 UTC</dateCreated>
+  <dateModified>2026-10-29 01:25:48.186 UTC</dateModified>
+</layer>

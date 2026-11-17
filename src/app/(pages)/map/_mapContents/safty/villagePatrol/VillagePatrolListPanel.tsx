@@ -12,6 +12,7 @@ import {
 } from '@/app/shadcnComponents/ui/dialog'
 import { cn } from '@/lib/utils'
 import { call } from '@/lib/api'
+import { useSerWriteAccess } from '@/hooks/useSerWriteAccess'
 import { getSafetyFacBadgeStyle } from '../safetyFac/safetyFacSymbols'
 import {
   TEAMS,
@@ -132,6 +133,7 @@ function formsEqual(a: FormState, b: FormState) {
 }
 
 export function VillagePatrolListPanel({ onClose }: Props) {
+  const canWrite = useSerWriteAccess()
   const allRows = useSyncExternalStore(subscribeVillagePatrol, getVillagePatrolRows, getVillagePatrolRows)
   const [keyword, setKeyword] = useState('')
   const [eup, setEup] = useState('')
@@ -901,56 +903,70 @@ export function VillagePatrolListPanel({ onClose }: Props) {
       <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border px-3 py-1.5">
         <span className="text-sm font-semibold text-foreground">마을순찰대</span>
         <div className="flex items-center gap-1">
-          <LayerRowPanelButton
-            type="button"
-            onClick={openImportModal}
-            title="엑셀 가져오기"
-            disabled={sessionOpen}
-          >
-            <Upload className="h-3 w-3 shrink-0" aria-hidden />
-            가져오기
-          </LayerRowPanelButton>
-          <LayerRowPanelButton
-            type="button"
-            onClick={() => void exportExcel()}
-            title="엑셀 내보내기 (전체 편성)"
-            disabled={sessionOpen}
-          >
-            <Download className="h-3 w-3 shrink-0" aria-hidden />
-            엑셀
-          </LayerRowPanelButton>
-          <LayerRowAddButton
-            onClick={startCreate}
-            disabled={editMode || deleteMode}
-          />
-          <LayerRowPanelButton
-            type="button"
-            onClick={enterEditMode}
-            title="수정 모드"
-            disabled={hasCreateRows || deleteMode}
-            className={
-              editMode
-                ? 'border-primary/40 bg-primary/10 text-primary'
-                : undefined
-            }
-          >
-            <Pencil className="h-3 w-3 shrink-0" aria-hidden />
-            수정
-          </LayerRowPanelButton>
-          <LayerRowPanelButton
-            type="button"
-            onClick={enterDeleteMode}
-            title="삭제 모드"
-            disabled={hasCreateRows || editMode}
-            className={
-              deleteMode
-                ? 'border-destructive/40 bg-destructive/10 text-destructive'
-                : undefined
-            }
-          >
-            <Trash2 className="h-3 w-3 shrink-0" aria-hidden />
-            삭제
-          </LayerRowPanelButton>
+          {canWrite ? (
+            <>
+              <LayerRowPanelButton
+                type="button"
+                onClick={openImportModal}
+                title="엑셀 가져오기"
+                disabled={sessionOpen}
+              >
+                <Upload className="h-3 w-3 shrink-0" aria-hidden />
+                가져오기
+              </LayerRowPanelButton>
+              <LayerRowPanelButton
+                type="button"
+                onClick={() => void exportExcel()}
+                title="엑셀 내보내기 (전체 편성)"
+                disabled={sessionOpen}
+              >
+                <Download className="h-3 w-3 shrink-0" aria-hidden />
+                엑셀
+              </LayerRowPanelButton>
+              <LayerRowAddButton
+                onClick={startCreate}
+                disabled={editMode || deleteMode}
+              />
+              <LayerRowPanelButton
+                type="button"
+                onClick={enterEditMode}
+                title="수정 모드"
+                disabled={hasCreateRows || deleteMode}
+                className={
+                  editMode
+                    ? 'border-primary/40 bg-primary/10 text-primary'
+                    : undefined
+                }
+              >
+                <Pencil className="h-3 w-3 shrink-0" aria-hidden />
+                수정
+              </LayerRowPanelButton>
+              <LayerRowPanelButton
+                type="button"
+                onClick={enterDeleteMode}
+                title="삭제 모드"
+                disabled={hasCreateRows || editMode}
+                className={
+                  deleteMode
+                    ? 'border-destructive/40 bg-destructive/10 text-destructive'
+                    : undefined
+                }
+              >
+                <Trash2 className="h-3 w-3 shrink-0" aria-hidden />
+                삭제
+              </LayerRowPanelButton>
+            </>
+          ) : (
+            <LayerRowPanelButton
+              type="button"
+              onClick={() => void exportExcel()}
+              title="엑셀 내보내기 (전체 편성)"
+              disabled={sessionOpen}
+            >
+              <Download className="h-3 w-3 shrink-0" aria-hidden />
+              엑셀
+            </LayerRowPanelButton>
+          )}
           {sessionOpen ? (
             <>
               <LayerRowPanelButton

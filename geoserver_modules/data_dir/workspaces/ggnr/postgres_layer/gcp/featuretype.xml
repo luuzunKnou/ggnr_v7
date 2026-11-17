@@ -1,0 +1,41 @@
+<featureType>
+  <id>FeatureTypeInfoImpl--54fd3aec:1a0a8175cdc:-8000</id>
+  <name>gcp</name>
+  <nativeName>gcp</nativeName>
+  <namespace>
+    <id>NamespaceInfoImpl-4bf97568:19c4d6c3053:-7ffa</id>
+  </namespace>
+  <title>gcp</title>
+  <keywords>
+    <string>features</string>
+    <string>gcp</string>
+  </keywords>
+  <srs>EPSG:5181</srs>
+  <nativeBoundingBox>
+    <minx>418547.412973</minx>
+    <maxx>422877.06048797</maxx>
+    <miny>222422.51658808</miny>
+    <maxy>233324.68061242</maxy>
+    <crs class="projected">EPSG:5181</crs>
+  </nativeBoundingBox>
+  <latLonBoundingBox>
+    <minx>129.4077937809847</minx>
+    <maxx>129.45844971234237</maxx>
+    <miny>35.47370454761568</miny>
+    <maxy>35.57284005665093</maxy>
+    <crs>EPSG:4326</crs>
+  </latLonBoundingBox>
+  <projectionPolicy>FORCE_DECLARED</projectionPolicy>
+  <enabled>true</enabled>
+  <store class="dataStore">
+    <id>DataStoreInfoImpl-4bf97568:19c4d6c3053:-7ff9</id>
+  </store>
+  <serviceConfiguration>false</serviceConfiguration>
+  <maxFeatures>0</maxFeatures>
+  <numDecimals>0</numDecimals>
+  <padWithZeros>false</padWithZeros>
+  <forcedDecimal>false</forcedDecimal>
+  <overridingServiceSRS>false</overridingServiceSRS>
+  <skipNumberMatched>false</skipNumberMatched>
+  <circularArcPresent>false</circularArcPresent>
+</featureType>

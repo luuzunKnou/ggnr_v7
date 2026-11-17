@@ -1,0 +1,260 @@
+[
+  {
+    "define_code_key": "1306",
+    "define_code_field_key": "4271",
+    "define_code_name": "JHT000",
+    "define_code_kor_name": "미분류"
+  },
+  {
+    "define_code_key": "1307",
+    "define_code_field_key": "4271",
+    "define_code_name": "JHT001",
+    "define_code_kor_name": "플랜지"
+  },
+  {
+    "define_code_key": "1308",
+    "define_code_field_key": "4271",
+    "define_code_name": "JHT002",
+    "define_code_kor_name": "KP메카니칼"
+  },
+  {
+    "define_code_key": "1309",
+    "define_code_field_key": "4271",
+    "define_code_name": "JHT003",
+    "define_code_kor_name": "타이튼"
+  },
+  {
+    "define_code_key": "1310",
+    "define_code_field_key": "4271",
+    "define_code_name": "JHT004",
+    "define_code_kor_name": "용접"
+  },
+  {
+    "define_code_key": "1311",
+    "define_code_field_key": "4271",
+    "define_code_name": "JHT005",
+    "define_code_kor_name": "메카니칼"
+  },
+  {
+    "define_code_key": "1312",
+    "define_code_field_key": "4271",
+    "define_code_name": "JHT006",
+    "define_code_kor_name": "고무링"
+  },
+  {
+    "define_code_key": "1313",
+    "define_code_field_key": "4271",
+    "define_code_name": "JHT007",
+    "define_code_kor_name": "t.s"
+  },
+  {
+    "define_code_key": "1314",
+    "define_code_field_key": "4271",
+    "define_code_name": "JHT008",
+    "define_code_kor_name": "프레스"
+  },
+  {
+    "define_code_key": "1315",
+    "define_code_field_key": "4271",
+    "define_code_name": "JHT091",
+    "define_code_kor_name": "KC접합(PH접합)"
+  },
+  {
+    "define_code_key": "1316",
+    "define_code_field_key": "4271",
+    "define_code_name": "JHT092",
+    "define_code_kor_name": "소켓접합"
+  },
+  {
+    "define_code_key": "1317",
+    "define_code_field_key": "4271",
+    "define_code_name": "JHT093",
+    "define_code_kor_name": "슬로스접합"
+  },
+  {
+    "define_code_key": "1318",
+    "define_code_field_key": "4271",
+    "define_code_name": "JHT900",
+    "define_code_kor_name": "고무링"
+  },
+  {
+    "define_code_key": "1319",
+    "define_code_field_key": "4271",
+    "define_code_name": "JHT901",
+    "define_code_kor_name": "나사식"
+  },
+  {
+    "define_code_key": "1320",
+    "define_code_field_key": "4271",
+    "define_code_name": "JHT902",
+    "define_code_kor_name": "나사식고무링"
+  },
+  {
+    "define_code_key": "1321",
+    "define_code_field_key": "4271",
+    "define_code_name": "JHT903",
+    "define_code_kor_name": "나사접합"
+  },
+  {
+    "define_code_key": "1322",
+    "define_code_field_key": "4271",
+    "define_code_name": "JHT904",
+    "define_code_kor_name": "나사조임식접합"
+  },
+  {
+    "define_code_key": "1323",
+    "define_code_field_key": "4271",
+    "define_code_name": "JHT905",
+    "define_code_kor_name": "납조인트"
+  },
+  {
+    "define_code_key": "1324",
+    "define_code_field_key": "4271",
+    "define_code_name": "JHT906",
+    "define_code_kor_name": "단갑식(익차형)"
+  },
+  {
+    "define_code_key": "1325",
+    "define_code_field_key": "4271",
+    "define_code_name": "JHT907",
+    "define_code_kor_name": "메카니칼"
+  },
+  {
+    "define_code_key": "1326",
+    "define_code_field_key": "4271",
+    "define_code_name": "JHT908",
+    "define_code_kor_name": "몰크조인트"
+  },
+  {
+    "define_code_key": "1327",
+    "define_code_field_key": "4271",
+    "define_code_name": "JHT909",
+    "define_code_kor_name": "버트(PVC.PE)"
+  },
+  {
+    "define_code_key": "1328",
+    "define_code_field_key": "4271",
+    "define_code_name": "JHT910",
+    "define_code_kor_name": "버트융착접합"
+  },
+  {
+    "define_code_key": "1329",
+    "define_code_field_key": "4271",
+    "define_code_name": "JHT911",
+    "define_code_kor_name": "벤츄리분류관식"
+  },
+  {
+    "define_code_key": "1330",
+    "define_code_field_key": "4271",
+    "define_code_name": "JHT912",
+    "define_code_kor_name": "복갑식(익차형)"
+  },
+  {
+    "define_code_key": "1331",
+    "define_code_field_key": "4271",
+    "define_code_name": "JHT913",
+    "define_code_kor_name": "부관부연결식"
+  },
+  {
+    "define_code_key": "1332",
+    "define_code_field_key": "4271",
+    "define_code_name": "JHT914",
+    "define_code_kor_name": "비트소켓"
+  },
+  {
+    "define_code_key": "1333",
+    "define_code_field_key": "4271",
+    "define_code_name": "JHT915",
+    "define_code_kor_name": "삽입식"
+  },
+  {
+    "define_code_key": "1334",
+    "define_code_field_key": "4271",
+    "define_code_name": "JHT916",
+    "define_code_kor_name": "원심력식"
+  },
+  {
+    "define_code_key": "1335",
+    "define_code_field_key": "4271",
+    "define_code_name": "JHT917",
+    "define_code_kor_name": "월트만식"
+  },
+  {
+    "define_code_key": "1336",
+    "define_code_field_key": "4271",
+    "define_code_name": "JHT918",
+    "define_code_kor_name": "융착"
+  },
+  {
+    "define_code_key": "1337",
+    "define_code_field_key": "4271",
+    "define_code_name": "JHT919",
+    "define_code_kor_name": "익차형"
+  },
+  {
+    "define_code_key": "1338",
+    "define_code_field_key": "4271",
+    "define_code_name": "JHT920",
+    "define_code_kor_name": "전자유량계"
+  },
+  {
+    "define_code_key": "1339",
+    "define_code_field_key": "4271",
+    "define_code_name": "JHT921",
+    "define_code_kor_name": "초음파식"
+  },
+  {
+    "define_code_key": "1340",
+    "define_code_field_key": "4271",
+    "define_code_name": "JHT922",
+    "define_code_kor_name": "터닝락조인트(강관)"
+  },
+  {
+    "define_code_key": "1341",
+    "define_code_field_key": "4271",
+    "define_code_name": "JHT923",
+    "define_code_kor_name": "편나사식"
+  },
+  {
+    "define_code_key": "1342",
+    "define_code_field_key": "4271",
+    "define_code_name": "JHT924",
+    "define_code_kor_name": "편수접합"
+  },
+  {
+    "define_code_key": "1343",
+    "define_code_field_key": "4271",
+    "define_code_name": "JHT925",
+    "define_code_kor_name": "편수칼라"
+  },
+  {
+    "define_code_key": "1344",
+    "define_code_field_key": "4271",
+    "define_code_name": "JHT926",
+    "define_code_kor_name": "편수칼라관접합(HI-3P)"
+  },
+  {
+    "define_code_key": "1345",
+    "define_code_field_key": "4271",
+    "define_code_name": "JHT927",
+    "define_code_kor_name": "홈조인트"
+  },
+  {
+    "define_code_key": "1346",
+    "define_code_field_key": "4271",
+    "define_code_name": "JHT928",
+    "define_code_kor_name": "D/R조인트"
+  },
+  {
+    "define_code_key": "1347",
+    "define_code_field_key": "4271",
+    "define_code_name": "JHT929",
+    "define_code_kor_name": "HI-GP접합"
+  },
+  {
+    "define_code_key": "1348",
+    "define_code_field_key": "4271",
+    "define_code_name": "JHT999",
+    "define_code_kor_name": "기타"
+  }
+]

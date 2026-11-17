@@ -1,29 +1,38 @@
 /**
  * 서버 기동 시 앱 필수 테이블 확보 (없으면 생성, public에만 있으면 layer로 이동).
  * - 추가속성 정의: public.layer_extra_def
+ * - 추가속성 SHP 원본 이력: public.layer_extra_source
  * - 도로점용: road_use_ledger, road_use_ledger_jijuk
  * - 접도구역 건축물: road_frontage_building(+_detail|_confirm)
  * - 접도구역 표주: road_frontage_marker(+_item)
- * - 공통점용: water|road|public_occupationledger(+_jijuk|_mgj) — 9개
+ * - 공통점용: 하천 usage_data_as·도로 rdl_occ_as(공통 칸, +필지·물건지) + 국공유지 public_occupationledger(+_jijuk|_mgj) — 9개
  * - 점사용료: water|road|public_ngl_fee_list — 3개
- * - FMS: water|road|public_fms_facility + _fms_inspection — 6개
+ * - FMS: road_fms_facility + road_fms_inspection — 2개 (상하수도·건축물도 시설물구분으로 함께)
  * - 차세대 연계: next_gen_linkage.ngl_error_log, ngl_query_table
+ * - 토지행정망 파일: land_linkage (목록·토지기본·공시지가)
  * - 메모: memo 및 memo_* 계열
+ * - 민원: comp, compd
  * - 영상: work_unit, file_unit
  * - 보상편입: road_reward, road_reward_parcel
  * - 공사대장: cons_data_as, cons_data_solo_as
  * - 마을순찰대: village_patrol
+ * - 공사 알림설정: cons_alert_setting
  * - 도로 업무편람: rd_work_target_review, rd_hbook_mat
+ * - 개별공시지가 필지 메모: land_price_memo
+ * - 시설 이력: public.data_history (구 safedata_history rename)
  */
 import { db, pool } from '@/database/db';
 import { sql } from 'drizzle-orm';
 import { MEMO_TABLES } from '@/lib/memoConfig';
+import { KRAS_LAYER_CATALOG_SCHEMA } from '@/integrations/krasLayerSync.config';
+import { FMS_FACILITY_TABLE, FMS_INSPECTION_TABLE } from '@/lib/fmsLinkage/fmsBinding';
 import {
   ROAD_FRONTAGE_BUILDING_CONFIRM_LAYER_COLUMNS,
   ROAD_FRONTAGE_BUILDING_DETAIL_LAYER_COLUMNS,
   ROAD_FRONTAGE_BUILDING_LAYER_COLUMNS,
   type RoadFrontageBuildingLayerColumnDef,
 } from '@/database/schema/road_frontage_building';
+import { getOccupationLedgerBinding, type OccupationLedgerBinding } from '@/lib/occupationLedgerBinding';
 
 type EnsureResult = {
   created: string[];
@@ -144,6 +153,18 @@ async function ensureSchemaLayer(): Promise<void> {
 async function ensureSchemaNextGenLinkage(): Promise<void> {
   if (await schemaExists('next_gen_linkage')) return;
   await db.execute(sql.raw(`CREATE SCHEMA IF NOT EXISTS next_gen_linkage`));
+}
+
+async function ensureSchemaLandLinkage(): Promise<void> {
+  if (await schemaExists(KRAS_LAYER_CATALOG_SCHEMA)) return;
+  try {
+    await pool.query(`CREATE SCHEMA IF NOT EXISTS "${KRAS_LAYER_CATALOG_SCHEMA.replace(/"/g, '""')}"`);
+  } catch (e: unknown) {
+    if (await schemaExists(KRAS_LAYER_CATALOG_SCHEMA)) return;
+    const code = pgErrCode(e);
+    if (code === '42P06' || code === '42501') return;
+    throw e;
+  }
 }
 
 async function execSqlStatements(raw: string): Promise<void> {
@@ -779,7 +800,7 @@ CREATE TABLE IF NOT EXISTS layer.file_unit (
   file_size bigint,
   x_5181 double precision,
   y_5181 double precision,
-  geom geometry(Point, 5181),
+  geom geometry(Geometry, 5181),
   fu_is_del boolean NOT NULL DEFAULT false,
   fu_create_date timestamp,
   fu_create_user varchar,
@@ -789,6 +810,36 @@ CREATE TABLE IF NOT EXISTS layer.file_unit (
 CREATE INDEX IF NOT EXISTS file_unit_wu_key_idx ON layer.file_unit (wu_key);
 CREATE INDEX IF NOT EXISTS file_unit_geom_gix ON layer.file_unit USING GIST (geom);
 COMMENT ON TABLE layer.file_unit IS '영상작업단위파일';
+`;
+
+/** QGIS WFS 권한 — 사용자 키 + 레이어별 읽기·쓰기 */
+const USER_LAYER_CONTROL_SQL = `
+CREATE TABLE IF NOT EXISTS layer.user_layer_control (
+  control_id SERIAL PRIMARY KEY,
+  usr_id varchar NOT NULL,
+  qgis_key varchar,
+  CONSTRAINT user_layer_control_usr_id_unique UNIQUE (usr_id),
+  CONSTRAINT user_layer_control_usr_id_fkey
+    FOREIGN KEY (usr_id) REFERENCES public.usr(usr_id) ON DELETE CASCADE
+);
+CREATE UNIQUE INDEX IF NOT EXISTS user_layer_control_qgis_key_uidx
+  ON layer.user_layer_control (qgis_key)
+  WHERE qgis_key IS NOT NULL;
+COMMENT ON TABLE layer.user_layer_control IS '사용자별 QGIS 레이어 권한 묶음';
+`;
+
+const LAYER_CONTROL_SQL = `
+CREATE TABLE IF NOT EXISTS layer.layer_control (
+  layer_control_id SERIAL PRIMARY KEY,
+  control_id integer,
+  layer_name varchar NOT NULL,
+  can_read varchar,
+  can_write varchar,
+  CONSTRAINT uq_layer_control UNIQUE (control_id, layer_name)
+);
+CREATE INDEX IF NOT EXISTS layer_control_control_id_idx
+  ON layer.layer_control (control_id);
+COMMENT ON TABLE layer.layer_control IS 'QGIS 레이어별 읽기·쓰기 권한';
 `;
 
 /** scripts/sql/road_reward.sql 과 동일 컬럼 */
@@ -925,10 +976,43 @@ CREATE TABLE IF NOT EXISTS layer.water_play_sign (
   safebox_cnt integer,
   sign_cnt integer,
   remark text,
-  geom geometry(Point, 5181)
+  geom public.geometry(MultiPolygon, 5181)
 );
 CREATE INDEX IF NOT EXISTS water_play_sign_addr_idx ON layer.water_play_sign (addr);
+CREATE INDEX IF NOT EXISTS water_play_sign_geom_gix ON layer.water_play_sign USING GIST (geom);
 COMMENT ON TABLE layer.water_play_sign IS '물놀이 표지판';
+`;
+
+const WATER_PLAY_BOX_LIST_SQL = `
+CREATE TABLE IF NOT EXISTS layer.water_play_box_list (
+  fid SERIAL PRIMARY KEY,
+  id integer NOT NULL REFERENCES layer.water_play_sign (id) ON DELETE CASCADE,
+  addr text,
+  geom geometry(Point, 5181)
+);
+CREATE INDEX IF NOT EXISTS water_play_box_list_parent_idx ON layer.water_play_box_list (id);
+CREATE INDEX IF NOT EXISTS water_play_box_list_geom_gix ON layer.water_play_box_list USING GIST (geom);
+COMMENT ON TABLE layer.water_play_box_list IS '물놀이 구조함';
+COMMENT ON COLUMN layer.water_play_box_list.fid IS '키';
+COMMENT ON COLUMN layer.water_play_box_list.id IS '관리 구간';
+COMMENT ON COLUMN layer.water_play_box_list.addr IS '주소';
+COMMENT ON COLUMN layer.water_play_box_list.geom IS '위치';
+`;
+
+const WATER_PLAY_SIGN_LIST_SQL = `
+CREATE TABLE IF NOT EXISTS layer.water_play_sign_list (
+  fid SERIAL PRIMARY KEY,
+  id integer NOT NULL REFERENCES layer.water_play_sign (id) ON DELETE CASCADE,
+  addr text,
+  geom geometry(Point, 5181)
+);
+CREATE INDEX IF NOT EXISTS water_play_sign_list_parent_idx ON layer.water_play_sign_list (id);
+CREATE INDEX IF NOT EXISTS water_play_sign_list_geom_gix ON layer.water_play_sign_list USING GIST (geom);
+COMMENT ON TABLE layer.water_play_sign_list IS '물놀이 표지판 위치';
+COMMENT ON COLUMN layer.water_play_sign_list.fid IS '키';
+COMMENT ON COLUMN layer.water_play_sign_list.id IS '관리 구간';
+COMMENT ON COLUMN layer.water_play_sign_list.addr IS '주소';
+COMMENT ON COLUMN layer.water_play_sign_list.geom IS '위치';
 `;
 
 const WATER_PLAY_SIGN_LAYER_COLUMNS: Array<{ name: string; ddl: string }> = [
@@ -940,6 +1024,28 @@ const WATER_PLAY_SIGN_LAYER_COLUMNS: Array<{ name: string; ddl: string }> = [
   { name: 'safebox_cnt', ddl: 'integer' },
   { name: 'sign_cnt', ddl: 'integer' },
 ];
+
+const CONS_ALERT_SETTING_SQL = `
+CREATE TABLE IF NOT EXISTS layer.cons_alert_setting (
+  id SERIAL PRIMARY KEY,
+  kind varchar(8) NOT NULL,
+  cons_code varchar(64) NOT NULL,
+  cycle_years integer NOT NULL DEFAULT 1,
+  done_before_days integer NOT NULL DEFAULT 30,
+  done_before_on boolean NOT NULL DEFAULT true,
+  done_after_days integer NOT NULL DEFAULT 7,
+  done_after_on boolean NOT NULL DEFAULT false,
+  start_before_days integer NOT NULL DEFAULT 14,
+  start_before_on boolean NOT NULL DEFAULT true,
+  start_after_days integer NOT NULL DEFAULT 7,
+  start_after_on boolean NOT NULL DEFAULT false,
+  updated_by varchar(64) NOT NULL DEFAULT '',
+  updated_at timestamp NOT NULL DEFAULT now()
+);
+CREATE UNIQUE INDEX IF NOT EXISTS cons_alert_setting_kind_code_uidx
+  ON layer.cons_alert_setting (kind, cons_code);
+COMMENT ON TABLE layer.cons_alert_setting IS '상하수도 공사대장 알림설정';
+`;
 
 const VILLAGE_PATROL_SQL = `
 CREATE TABLE IF NOT EXISTS layer.village_patrol (
@@ -1011,6 +1117,24 @@ COMMENT ON COLUMN layer.rd_hbook_mat.xml_url IS '자료 xml';
 COMMENT ON COLUMN layer.rd_hbook_mat.orig_url IS '원문';
 `;
 
+const LAND_PRICE_MEMO_SQL = `
+CREATE TABLE IF NOT EXISTS layer.land_price_memo (
+  memo_key SERIAL PRIMARY KEY,
+  pnu text NOT NULL,
+  memo_contents text NOT NULL DEFAULT '',
+  memo_create_date timestamp NOT NULL DEFAULT now(),
+  memo_create_user text,
+  memo_is_del boolean NOT NULL DEFAULT false
+);
+CREATE INDEX IF NOT EXISTS land_price_memo_pnu_idx ON layer.land_price_memo (pnu);
+COMMENT ON TABLE layer.land_price_memo IS '개별공시지가 필지 메모';
+COMMENT ON COLUMN layer.land_price_memo.pnu IS '필지번호';
+COMMENT ON COLUMN layer.land_price_memo.memo_contents IS '내용';
+COMMENT ON COLUMN layer.land_price_memo.memo_create_date IS '작성일시';
+COMMENT ON COLUMN layer.land_price_memo.memo_create_user IS '작성자 아이디';
+COMMENT ON COLUMN layer.land_price_memo.memo_is_del IS '삭제여부';
+`;
+
 /** 기존 중복 정리 후 편성 유니크 인덱스 확보 */
 async function ensureVillagePatrolAssignmentUnique(result: EnsureResult): Promise<void> {
   const fq = 'layer.village_patrol';
@@ -1061,6 +1185,69 @@ CREATE INDEX IF NOT EXISTS "${t}_geom_gix" ON layer."${t}" USING GIST (geom);
 COMMENT ON TABLE layer."${t}" IS '메모';
 `;
 }
+
+function quoteSqlIdent(name: string): string {
+  return `"${String(name).replace(/"/g, '""')}"`;
+}
+
+/** 하천·도로 공통 점용 본표 — 연결 설정의 공통 칸(글자) + 추가속성(extra) */
+function occupationCommonMainSql(binding: OccupationLedgerBinding): string {
+  const t = binding.mainTable;
+  const f = binding.fields;
+  const cols = [
+    f.mgmtField,
+    f.permitField,
+    f.permitDateField,
+    f.nameField,
+    f.placeField,
+    f.purposeField,
+    f.startField,
+    f.endField,
+    f.areaField,
+    f.ownerNameField,
+    f.ownerAddrField,
+    f.stateField,
+    f.remarkField,
+  ].filter((c): c is string => Boolean(c) && c !== 'ogc_fid');
+  return `
+CREATE TABLE IF NOT EXISTS layer.${quoteSqlIdent(t)} (
+  ogc_fid serial PRIMARY KEY,
+${[...new Set(cols)].map((c) => `  ${quoteSqlIdent(c)} text,`).join('\n')}
+  extra jsonb,
+  geom geometry(MultiPolygon, 5181)
+);
+CREATE INDEX IF NOT EXISTS ${quoteSqlIdent(`${t}_geom_gix`)} ON layer.${quoteSqlIdent(t)} USING GIST (geom);
+CREATE INDEX IF NOT EXISTS ${quoteSqlIdent(`${t}_${f.keyField}_idx`)} ON layer.${quoteSqlIdent(t)} (${quoteSqlIdent(f.keyField)});
+CREATE INDEX IF NOT EXISTS ${quoteSqlIdent(`${t}_${f.permitField}_idx`)} ON layer.${quoteSqlIdent(t)} (${quoteSqlIdent(f.permitField)});
+COMMENT ON TABLE layer.${quoteSqlIdent(t)} IS '공통 점용대장 (${binding.title})';
+`;
+}
+
+/** 하천·도로 공통 점용 필지·물건지 — 본표 키(관리번호) 연결 칸 + 주소(또는 읍면동·리·지번) + 추가속성 */
+function occupationCommonChildSql(
+  binding: OccupationLedgerBinding,
+  tableName: string,
+  comment: string
+): string {
+  const f = binding.fields;
+  const addressCols =
+    f.childAddressPartFields && f.childAddressPartFields.length > 0
+      ? f.childAddressPartFields
+      : [f.childAddressField];
+  return `
+CREATE TABLE IF NOT EXISTS layer.${quoteSqlIdent(tableName)} (
+  ogc_fid serial PRIMARY KEY,
+  ${quoteSqlIdent(f.childParentField)} text,
+${addressCols.map((c) => `  ${quoteSqlIdent(c)} text,`).join('\n')}
+  extra jsonb,
+  geom geometry(MultiPolygon, 5181)
+);
+CREATE INDEX IF NOT EXISTS ${quoteSqlIdent(`${tableName}_${f.childParentField}_idx`)} ON layer.${quoteSqlIdent(tableName)} (${quoteSqlIdent(f.childParentField)});
+CREATE INDEX IF NOT EXISTS ${quoteSqlIdent(`${tableName}_geom_gix`)} ON layer.${quoteSqlIdent(tableName)} USING GIST (geom);
+COMMENT ON TABLE layer.${quoteSqlIdent(tableName)} IS '${comment.replace(/'/g, "''")}';
+`;
+}
+
 
 function occupationLedgerMainSql(prefix: string): string {
   const t = `${prefix}_occupationledger`;
@@ -1344,10 +1531,30 @@ async function ensureFileUnitGeom(result: EnsureResult): Promise<void> {
 
     if (!(await columnExists('layer', 'file_unit', 'geom'))) {
       await db.execute(
-        sql.raw(`ALTER TABLE layer.file_unit ADD COLUMN geom geometry(Point, 5181)`)
+        sql.raw(`ALTER TABLE layer.file_unit ADD COLUMN geom geometry(Geometry, 5181)`)
       );
       result.created.push(`${fq}.geom`);
     }
+
+    await db.execute(
+      sql.raw(`
+        DO $$
+        BEGIN
+          IF EXISTS (
+            SELECT 1 FROM geometry_columns
+            WHERE f_table_schema = 'layer'
+              AND f_table_name = 'file_unit'
+              AND f_geometry_column = 'geom'
+              AND upper(type) = 'POINT'
+          ) THEN
+            EXECUTE 'DROP INDEX IF EXISTS layer.file_unit_geom_gix';
+            EXECUTE 'DROP INDEX IF EXISTS public.file_unit_geom_gix';
+            EXECUTE 'ALTER TABLE layer.file_unit ALTER COLUMN geom TYPE geometry(Geometry, 5181) USING geom::geometry(Geometry, 5181)';
+            EXECUTE 'CREATE INDEX IF NOT EXISTS file_unit_geom_gix ON layer.file_unit USING GIST (geom)';
+          END IF;
+        END $$;
+      `)
+    );
 
     await db.execute(
       sql.raw(`
@@ -1506,11 +1713,102 @@ export async function ensureRoadFrontageMarkerTables(result?: EnsureResult): Pro
   return out;
 }
 
-/** 공통 점용대장 본대·필지·물건지 × water|road|public (9개) */
+/** 국공유지(예전 칸 이름 그대로 쓰는 점용대장) 접두 */
+const LEGACY_OCCUPATION_PREFIXES = ['public'] as const;
+/** 받은 원천자료 기준 공통 칸 점용대장 */
+const COMMON_OCCUPATION_SER_ENGS = ['waterOccupationLedger', 'roadOccupationLedger'] as const;
+
+/** 기존 필지·물건지 테이블에 허가번호 컬럼 보강 (CREATE IF NOT EXISTS 로는 안 붙음) — 국공유지만 */
+async function ensureOccupationLedgerChildPermitNo(result: EnsureResult): Promise<void> {
+  for (const prefix of LEGACY_OCCUPATION_PREFIXES) {
+    const base = `${prefix}_occupationledger`;
+    for (const suffix of ['_jijuk', '_mgj'] as const) {
+      const table = `${base}${suffix}`;
+      const fq = `layer.${table}`;
+      try {
+        if ((await tableExists('layer', table)) !== 'BASE TABLE') continue;
+        if (!(await columnExists('layer', table, 'permit_no'))) {
+          await db.execute(
+            sql.raw(`ALTER TABLE layer.${table} ADD COLUMN IF NOT EXISTS permit_no text`)
+          );
+          result.created.push(`${fq}.permit_no`);
+        }
+        await db.execute(
+          sql.raw(
+            `CREATE INDEX IF NOT EXISTS ${table}_permit_no_idx ON layer.${table} (permit_no)`
+          )
+        );
+        await db.execute(
+          sql.raw(`COMMENT ON COLUMN layer.${table}.permit_no IS '본표 허가번호(예전 연결, 참고용)'`)
+        );
+        // 필지·물건지 연결 = 본표 ogc_fid 값을 담는 id
+        await db.execute(
+          sql.raw(`CREATE INDEX IF NOT EXISTS ${table}_id_idx ON layer.${table} (id)`)
+        );
+        await db.execute(sql.raw(`COMMENT ON COLUMN layer.${table}.id IS '본표 고유키(ogc_fid)'`));
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : String(e);
+        result.errors.push(`${fq}.permit_no: ${msg}`);
+      }
+    }
+  }
+}
+
+/**
+ * 점용 시작·종료 — 날짜 칸이던 기존 본표를 글자 칸으로 (영구·허가일로부터 ○개월 등).
+ * 기존 날짜는 YYYY-MM-DD 글자로 남는다.
+ */
+async function ensureOccupationLedgerPeriodText(result: EnsureResult): Promise<void> {
+  for (const prefix of LEGACY_OCCUPATION_PREFIXES) {
+    const table = `${prefix}_occupationledger`;
+    try {
+      if ((await tableExists('layer', table)) !== 'BASE TABLE') continue;
+      const res = await pool.query<{ column_name: string }>(
+        `SELECT column_name FROM information_schema.columns
+          WHERE table_schema = 'layer' AND table_name = $1
+            AND column_name IN ('perm_start_date', 'perm_end_date') AND data_type = 'date'`,
+        [table]
+      );
+      for (const { column_name: col } of res.rows) {
+        await pool.query(
+          `ALTER TABLE layer.${table} ALTER COLUMN ${col} TYPE text USING to_char(${col}, 'YYYY-MM-DD')`
+        );
+        result.created.push(`layer.${table}.${col}(text)`);
+      }
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      result.errors.push(`layer.${table}.period_text: ${msg}`);
+    }
+  }
+}
+
+/**
+ * 공통 점용대장 본표·필지·물건지 — 없을 때만 만든다(있으면 칸을 바꾸지 않음).
+ * 하천 usage_data_as·도로 rdl_occ_as 계열은 공통 칸으로, 국공유지는 예전 칸 이름 그대로.
+ */
 export async function ensureOccupationLedgerTables(result?: EnsureResult): Promise<EnsureResult> {
   const out: EnsureResult = result ?? { created: [], moved: [], existed: [], errors: [] };
   await ensureSchemaLayer();
-  for (const prefix of OCCUPATION_PREFIXES) {
+  for (const serEng of COMMON_OCCUPATION_SER_ENGS) {
+    const binding = getOccupationLedgerBinding({ serEng });
+    if (!binding) continue;
+    await ensureBaseTable({
+      table: binding.mainTable,
+      createSql: occupationCommonMainSql(binding),
+      result: out,
+    });
+    await ensureBaseTable({
+      table: binding.jijukTable,
+      createSql: occupationCommonChildSql(binding, binding.jijukTable, `${binding.title} 필지`),
+      result: out,
+    });
+    await ensureBaseTable({
+      table: binding.mgjTable,
+      createSql: occupationCommonChildSql(binding, binding.mgjTable, `${binding.title} 물건지`),
+      result: out,
+    });
+  }
+  for (const prefix of LEGACY_OCCUPATION_PREFIXES) {
     const base = `${prefix}_occupationledger`;
     await ensureBaseTable({
       table: base,
@@ -1528,6 +1826,8 @@ export async function ensureOccupationLedgerTables(result?: EnsureResult): Promi
       result: out,
     });
   }
+  await ensureOccupationLedgerChildPermitNo(out);
+  await ensureOccupationLedgerPeriodText(out);
   return out;
 }
 
@@ -1535,36 +1835,34 @@ export async function ensureOccupationLedgerTables(result?: EnsureResult): Promi
 export async function ensureFmsTables(result?: EnsureResult): Promise<EnsureResult> {
   const out: EnsureResult = result ?? { created: [], moved: [], existed: [], errors: [] };
   await ensureSchemaLayer();
-  for (const prefix of OCCUPATION_PREFIXES) {
-    const facility = `${prefix}_fms_facility`;
-    const inspection = `${prefix}_fms_inspection`;
-    await ensureBaseTable({
-      table: facility,
-      createSql: fmsFacilitySql(facility),
-      result: out,
-    });
-    try {
-      if (!(await columnExists('layer', facility, 'geom'))) {
-        await db.execute(
-          sql.raw(`
-            ALTER TABLE layer.${facility}
-              ADD COLUMN IF NOT EXISTS geom geometry(MultiPolygon, 5181);
-            CREATE INDEX IF NOT EXISTS ${facility}_geom_gix
-              ON layer.${facility} USING GIST (geom);
-          `)
-        );
-      }
-    } catch (e) {
-      out.errors.push(
-        `layer.${facility}.geom: ${e instanceof Error ? e.message : String(e)}`
+  const facility = FMS_FACILITY_TABLE;
+  const inspection = FMS_INSPECTION_TABLE;
+  await ensureBaseTable({
+    table: facility,
+    createSql: fmsFacilitySql(facility),
+    result: out,
+  });
+  try {
+    if (!(await columnExists('layer', facility, 'geom'))) {
+      await db.execute(
+        sql.raw(`
+          ALTER TABLE layer.${facility}
+            ADD COLUMN IF NOT EXISTS geom geometry(MultiPolygon, 5181);
+          CREATE INDEX IF NOT EXISTS ${facility}_geom_gix
+            ON layer.${facility} USING GIST (geom);
+        `)
       );
     }
-    await ensureBaseTable({
-      table: inspection,
-      createSql: fmsInspectionSql(inspection),
-      result: out,
-    });
+  } catch (e) {
+    out.errors.push(
+      `layer.${facility}.geom: ${e instanceof Error ? e.message : String(e)}`
+    );
   }
+  await ensureBaseTable({
+    table: inspection,
+    createSql: fmsInspectionSql(inspection),
+    result: out,
+  });
   return out;
 }
 
@@ -1669,6 +1967,101 @@ export async function ensureMemoTables(result?: EnsureResult): Promise<EnsureRes
   return out;
 }
 
+const COMP_SQL = `
+CREATE TABLE IF NOT EXISTS layer.comp (
+  comp_key SERIAL PRIMARY KEY,
+  comp_date timestamp,
+  comp_cu varchar,
+  comp_ct varchar,
+  comp_cg varchar,
+  comp_adr varchar,
+  comp_name varchar,
+  comp_tel varchar,
+  comp_content varchar,
+  comp_extra json,
+  geom geometry(Point, 5181)
+);
+CREATE INDEX IF NOT EXISTS comp_geom_gix ON layer.comp USING GIST (geom);
+COMMENT ON TABLE layer.comp IS '민원 접수';
+COMMENT ON COLUMN layer.comp.comp_key IS '접수번호';
+COMMENT ON COLUMN layer.comp.comp_date IS '접수일자';
+COMMENT ON COLUMN layer.comp.comp_cu IS '접수자';
+COMMENT ON COLUMN layer.comp.comp_ct IS '접수팀';
+COMMENT ON COLUMN layer.comp.comp_cg IS '접수부서';
+COMMENT ON COLUMN layer.comp.comp_adr IS '주소';
+COMMENT ON COLUMN layer.comp.comp_name IS '민원인';
+COMMENT ON COLUMN layer.comp.comp_tel IS '연락처';
+COMMENT ON COLUMN layer.comp.comp_content IS '민원내용';
+COMMENT ON COLUMN layer.comp.comp_extra IS '확장컬럼';
+COMMENT ON COLUMN layer.comp.geom IS '민원 위치 (주소 기반 Point, EPSG:5181)';
+`;
+
+const COMPD_SQL = `
+CREATE TABLE IF NOT EXISTS layer.compd (
+  compd_key SERIAL PRIMARY KEY,
+  comp_key integer NOT NULL REFERENCES layer.comp(comp_key) ON DELETE CASCADE,
+  compd_date timestamp,
+  compd_cu varchar,
+  compd_ct varchar,
+  compd_cg varchar,
+  compd_state varchar,
+  compd_contents varchar,
+  compd_extra json
+);
+CREATE INDEX IF NOT EXISTS compd_comp_key_idx ON layer.compd (comp_key);
+COMMENT ON TABLE layer.compd IS '민원 처리내역';
+COMMENT ON COLUMN layer.compd.compd_key IS '처리내역 번호';
+COMMENT ON COLUMN layer.compd.comp_key IS '접수번호';
+COMMENT ON COLUMN layer.compd.compd_date IS '처리일';
+COMMENT ON COLUMN layer.compd.compd_cu IS '처리자';
+COMMENT ON COLUMN layer.compd.compd_ct IS '처리팀';
+COMMENT ON COLUMN layer.compd.compd_cg IS '처리부서';
+COMMENT ON COLUMN layer.compd.compd_state IS '처리상태';
+COMMENT ON COLUMN layer.compd.compd_contents IS '처리내용';
+COMMENT ON COLUMN layer.compd.compd_extra IS '확장컬럼';
+`;
+
+/** 기존 layer.comp 에 geom 없으면 추가 */
+async function ensureCompGeom(result: EnsureResult): Promise<void> {
+  const fq = 'layer.comp';
+  try {
+    if ((await tableExists('layer', 'comp')) !== 'BASE TABLE') return;
+    if (!(await columnExists('layer', 'comp', 'geom'))) {
+      await db.execute(
+        sql.raw(`ALTER TABLE layer.comp ADD COLUMN geom geometry(Point, 5181)`)
+      );
+      await db.execute(
+        sql.raw(`COMMENT ON COLUMN layer.comp.geom IS '민원 위치 (주소 기반 Point, EPSG:5181)'`)
+      );
+      result.created.push(`${fq}.geom`);
+    }
+    await db.execute(
+      sql.raw(`CREATE INDEX IF NOT EXISTS comp_geom_gix ON layer.comp USING GIST (geom)`)
+    );
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    result.errors.push(`${fq}.geom: ${msg}`);
+  }
+}
+
+/** 민원 접수·처리내역 layer.comp / layer.compd */
+export async function ensureComplaintTables(result?: EnsureResult): Promise<EnsureResult> {
+  const out: EnsureResult = result ?? { created: [], moved: [], existed: [], errors: [] };
+  await ensureSchemaLayer();
+  await ensureBaseTable({
+    table: 'comp',
+    createSql: COMP_SQL,
+    result: out,
+  });
+  await ensureCompGeom(out);
+  await ensureBaseTable({
+    table: 'compd',
+    createSql: COMPD_SQL,
+    result: out,
+  });
+  return out;
+}
+
 export async function ensureAerialWorkUnitTables(result?: EnsureResult): Promise<EnsureResult> {
   const out: EnsureResult = result ?? { created: [], moved: [], existed: [], errors: [] };
   await ensureSchemaLayer();
@@ -1683,6 +2076,22 @@ export async function ensureAerialWorkUnitTables(result?: EnsureResult): Promise
     result: out,
   });
   await ensureFileUnitGeom(out);
+  return out;
+}
+
+export async function ensureQgisLayerControlTables(result?: EnsureResult): Promise<EnsureResult> {
+  const out: EnsureResult = result ?? { created: [], moved: [], existed: [], errors: [] };
+  await ensureSchemaLayer();
+  await ensureBaseTable({
+    table: 'user_layer_control',
+    createSql: USER_LAYER_CONTROL_SQL,
+    result: out,
+  });
+  await ensureBaseTable({
+    table: 'layer_control',
+    createSql: LAYER_CONTROL_SQL,
+    result: out,
+  });
   return out;
 }
 
@@ -1837,6 +2246,63 @@ export async function ensureWaterPlaySignTable(result?: EnsureResult): Promise<E
       out.errors.push(`layer.water_play_sign.${col.name}: ${msg}`);
     }
   }
+  try {
+    const geomTypeRes = await db.execute(
+      sql.raw(`
+        SELECT type
+        FROM geometry_columns
+        WHERE f_table_schema = 'layer' AND f_table_name = 'water_play_sign'
+        LIMIT 1
+      `)
+    );
+    const geomType = String(
+      (geomTypeRes.rows?.[0] as { type?: string } | undefined)?.type ?? ''
+    ).toUpperCase();
+    if (!geomType.includes('MULTIPOLYGON')) {
+      await db.execute(sql.raw(`
+        ALTER TABLE layer.water_play_sign
+          ALTER COLUMN geom TYPE public.geometry(MultiPolygon,5181)
+          USING NULL::public.geometry
+      `));
+    }
+    await db.execute(sql.raw(`
+      UPDATE layer.water_play_sign
+      SET geom = NULL
+      WHERE EXISTS (
+        SELECT 1
+        FROM layer.water_play_sign x
+        WHERE x.geom IS NOT NULL
+          AND GeometryType(x.geom) IN ('POINT', 'MULTIPOINT')
+      )
+    `));
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    if (!/already|same type|cannot be cast/i.test(msg)) {
+      out.errors.push(`layer.water_play_sign.geom: ${msg}`);
+    }
+  }
+  await ensureBaseTable({
+    table: 'water_play_box_list',
+    createSql: WATER_PLAY_BOX_LIST_SQL,
+    result: out,
+  });
+  await ensureBaseTable({
+    table: 'water_play_sign_list',
+    createSql: WATER_PLAY_SIGN_LIST_SQL,
+    result: out,
+  });
+  return out;
+}
+
+/** 상·하수도 공사대장 알림설정. 공사 하나당 한 행 */
+export async function ensureConsAlertSettingTable(result?: EnsureResult): Promise<EnsureResult> {
+  const out: EnsureResult = result ?? { created: [], moved: [], existed: [], errors: [] };
+  await ensureSchemaLayer();
+  await ensureBaseTable({
+    table: 'cons_alert_setting',
+    createSql: CONS_ALERT_SETTING_SQL,
+    result: out,
+  });
   return out;
 }
 
@@ -1868,6 +2334,212 @@ export async function ensureRoadWorkHandbookTables(result?: EnsureResult): Promi
   return out;
 }
 
+/** 개별공시지가 필지 메모 */
+export async function ensureLandPriceMemoTable(result?: EnsureResult): Promise<EnsureResult> {
+  const out: EnsureResult = result ?? { created: [], moved: [], existed: [], errors: [] };
+  await ensureSchemaLayer();
+  await ensureBaseTable({
+    table: 'land_price_memo',
+    createSql: LAND_PRICE_MEMO_SQL,
+    result: out,
+  });
+  return out;
+}
+
+const DATA_HISTORY_CREATE_SQL = `
+CREATE TABLE IF NOT EXISTS public.data_history (
+  history_key serial PRIMARY KEY NOT NULL,
+  his_gubun varchar NOT NULL,
+  ftr_idn varchar NOT NULL,
+  his_contents text NOT NULL,
+  agency varchar,
+  his_extra jsonb,
+  created_at timestamp DEFAULT now() NOT NULL,
+  created_by varchar NOT NULL
+);
+CREATE INDEX IF NOT EXISTS data_history_gubun_ftr_idx
+  ON public.data_history (his_gubun, ftr_idn);
+COMMENT ON TABLE public.data_history IS '시설 이력';
+COMMENT ON COLUMN public.data_history.agency IS '업체';
+COMMENT ON COLUMN public.data_history.his_extra IS '확장 속성(JSONB)';
+`;
+
+/** data_history.agency 컬럼 확보 (구 safedata_history rename 후 포함) */
+async function ensureDataHistoryAgencyColumn(result: EnsureResult): Promise<void> {
+  const fq = 'public.data_history.agency';
+  try {
+    if (await columnExists('public', 'data_history', 'agency')) return;
+    await db.execute(sql.raw(`ALTER TABLE public.data_history ADD COLUMN agency varchar`));
+    await db.execute(sql.raw(`COMMENT ON COLUMN public.data_history.agency IS '업체'`));
+    result.created.push(fq);
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    result.errors.push(`${fq}: ${msg}`);
+  }
+}
+
+/** data_history.his_extra 컬럼 확보 (테이블·컬럼 IF EXISTS / IF NOT EXISTS) */
+async function ensureDataHistoryExtraColumn(result: EnsureResult): Promise<void> {
+  const fq = 'public.data_history.his_extra';
+  try {
+    const existed = await columnExists('public', 'data_history', 'his_extra');
+    await db.execute(sql.raw(`
+      DO $his_extra$
+      BEGIN
+        IF EXISTS (
+          SELECT 1
+          FROM information_schema.tables
+          WHERE table_schema = 'public'
+            AND table_name = 'data_history'
+            AND table_type = 'BASE TABLE'
+        ) AND NOT EXISTS (
+          SELECT 1
+          FROM information_schema.columns
+          WHERE table_schema = 'public'
+            AND table_name = 'data_history'
+            AND column_name = 'his_extra'
+        ) THEN
+          ALTER TABLE public.data_history ADD COLUMN his_extra jsonb;
+          COMMENT ON COLUMN public.data_history.his_extra IS '확장 속성(JSONB)';
+        END IF;
+      END
+      $his_extra$;
+    `));
+    if (!existed && (await columnExists('public', 'data_history', 'his_extra'))) {
+      result.created.push(fq);
+    }
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    result.errors.push(`${fq}: ${msg}`);
+  }
+}
+
+/**
+ * public.data_history 확보.
+ * safedata_history 가 있고 data_history 가 없으면 rename, 없으면 생성.
+ * agency 는 data_history 에만 추가(구 테이블 이관 시 값 이관 없음).
+ */
+export async function ensureDataHistoryTable(result?: EnsureResult): Promise<EnsureResult> {
+  const out: EnsureResult = result ?? { created: [], moved: [], existed: [], errors: [] };
+  const fq = 'public.data_history';
+  const legacyFq = 'public.safedata_history';
+  try {
+    const hasNew = await tableExists('public', 'data_history');
+    const hasLegacy = await tableExists('public', 'safedata_history');
+
+    if (hasNew === 'BASE TABLE') {
+      out.existed.push(fq);
+      // 구 인덱스명이 남아 있으면 정리
+      try {
+        await db.execute(sql.raw(`
+          DO $$
+          BEGIN
+            IF EXISTS (
+              SELECT 1 FROM pg_class c
+              JOIN pg_namespace n ON n.oid = c.relnamespace
+              WHERE n.nspname = 'public' AND c.relkind = 'i'
+                AND c.relname = 'safedata_history_gubun_ftr_idx'
+            ) AND NOT EXISTS (
+              SELECT 1 FROM pg_class c
+              JOIN pg_namespace n ON n.oid = c.relnamespace
+              WHERE n.nspname = 'public' AND c.relkind = 'i'
+                AND c.relname = 'data_history_gubun_ftr_idx'
+            ) THEN
+              ALTER INDEX public.safedata_history_gubun_ftr_idx RENAME TO data_history_gubun_ftr_idx;
+            END IF;
+            IF EXISTS (
+              SELECT 1 FROM pg_class c
+              JOIN pg_namespace n ON n.oid = c.relnamespace
+              WHERE n.nspname = 'public' AND c.relkind = 'i'
+                AND c.relname = 'safedata_history_pkey'
+            ) AND NOT EXISTS (
+              SELECT 1 FROM pg_class c
+              JOIN pg_namespace n ON n.oid = c.relnamespace
+              WHERE n.nspname = 'public' AND c.relkind = 'i'
+                AND c.relname = 'data_history_pkey'
+            ) THEN
+              ALTER INDEX public.safedata_history_pkey RENAME TO data_history_pkey;
+            END IF;
+            IF EXISTS (
+              SELECT 1 FROM pg_class c
+              JOIN pg_namespace n ON n.oid = c.relnamespace
+              WHERE n.nspname = 'public' AND c.relkind = 'S'
+                AND c.relname = 'safedata_history_history_key_seq'
+            ) AND NOT EXISTS (
+              SELECT 1 FROM pg_class c
+              JOIN pg_namespace n ON n.oid = c.relnamespace
+              WHERE n.nspname = 'public' AND c.relkind = 'S'
+                AND c.relname = 'data_history_history_key_seq'
+            ) THEN
+              ALTER SEQUENCE public.safedata_history_history_key_seq RENAME TO data_history_history_key_seq;
+            END IF;
+          END $$;
+        `));
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : String(e);
+        out.errors.push(`${fq} index/seq rename: ${msg}`);
+      }
+      await ensureDataHistoryAgencyColumn(out);
+      await ensureDataHistoryExtraColumn(out);
+      return out;
+    }
+
+    if (hasLegacy === 'BASE TABLE') {
+      await db.execute(sql.raw(`ALTER TABLE public.safedata_history RENAME TO data_history`));
+      try {
+        await db.execute(sql.raw(`
+          DO $$
+          BEGIN
+            IF EXISTS (
+              SELECT 1 FROM pg_class c
+              JOIN pg_namespace n ON n.oid = c.relnamespace
+              WHERE n.nspname = 'public' AND c.relkind = 'i'
+                AND c.relname = 'safedata_history_gubun_ftr_idx'
+            ) THEN
+              ALTER INDEX public.safedata_history_gubun_ftr_idx RENAME TO data_history_gubun_ftr_idx;
+            END IF;
+            IF EXISTS (
+              SELECT 1 FROM pg_class c
+              JOIN pg_namespace n ON n.oid = c.relnamespace
+              WHERE n.nspname = 'public' AND c.relkind = 'i'
+                AND c.relname = 'safedata_history_pkey'
+            ) THEN
+              ALTER INDEX public.safedata_history_pkey RENAME TO data_history_pkey;
+            END IF;
+            IF EXISTS (
+              SELECT 1 FROM pg_class c
+              JOIN pg_namespace n ON n.oid = c.relnamespace
+              WHERE n.nspname = 'public' AND c.relkind = 'S'
+                AND c.relname = 'safedata_history_history_key_seq'
+            ) THEN
+              ALTER SEQUENCE public.safedata_history_history_key_seq RENAME TO data_history_history_key_seq;
+            END IF;
+          END $$;
+        `));
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : String(e);
+        out.errors.push(`${fq} index/seq rename: ${msg}`);
+      }
+      try {
+        await db.execute(sql.raw(`COMMENT ON TABLE public.data_history IS '시설 이력'`));
+      } catch {
+        /* ignore */
+      }
+      out.moved.push(`${legacyFq}→${fq}`);
+      await ensureDataHistoryAgencyColumn(out);
+      await ensureDataHistoryExtraColumn(out);
+      return out;
+    }
+
+    await execSqlStatements(DATA_HISTORY_CREATE_SQL);
+    out.created.push(fq);
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    out.errors.push(`${fq}: ${msg}`);
+  }
+  return out;
+}
+
 /** public.layer_extra_def — 추가속성 정의 (점용 본대 extra 컬럼과는 별개) */
 export async function ensureLayerExtraDefTable(result?: EnsureResult): Promise<EnsureResult> {
   const out: EnsureResult = result ?? { created: [], moved: [], existed: [], errors: [] };
@@ -1889,12 +2561,36 @@ export async function ensureLayerExtraDefTable(result?: EnsureResult): Promise<E
   return out;
 }
 
+/** public.layer_extra_source — SHP 추가속성 원본 필드 이력 */
+export async function ensureLayerExtraSourceTable(result?: EnsureResult): Promise<EnsureResult> {
+  const out: EnsureResult = result ?? { created: [], moved: [], existed: [], errors: [] };
+  const fq = 'public.layer_extra_source';
+  try {
+    const { ensureLayerExtraSourceTable: ensureSrc } = await import('@/service/layerExtraService');
+    const r = await ensureSrc();
+    if (!r.ok) {
+      out.errors.push(`${fq}: ${r.error ?? 'failed'}`);
+      return out;
+    }
+    const exists = await tableExists('public', 'layer_extra_source');
+    if (exists === 'BASE TABLE') out.existed.push(fq);
+    else out.created.push(fq);
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    out.errors.push(`${fq}: ${msg}`);
+  }
+  return out;
+}
+
 /** instrumentation / 수동 호출용 */
 export async function ensureLayerAppTables(): Promise<EnsureResult> {
   const result: EnsureResult = { created: [], moved: [], existed: [], errors: [] };
   try {
     await ensureSchemaLayer();
+    await ensureSchemaLandLinkage();
     await ensureLayerExtraDefTable(result);
+    await ensureDataHistoryTable(result);
+    await ensureLayerExtraSourceTable(result);
     await ensureRoadUseLedgerTables(result);
     await ensureRoadFrontageBuildingTables(result);
     await ensureRoadFrontageMarkerTables(result);
@@ -1903,13 +2599,17 @@ export async function ensureLayerAppTables(): Promise<EnsureResult> {
     await ensureFmsTables(result);
     await ensureNextGenLinkageTables(result);
     await ensureMemoTables(result);
+    await ensureComplaintTables(result);
     await ensureAerialWorkUnitTables(result);
+    await ensureQgisLayerControlTables(result);
     await ensureRoadRewardTables(result);
     await ensureConsDataAsTables(result);
     await ensureRadiationShelterTable(result);
     await ensureWaterPlaySignTable(result);
     await ensureVillagePatrolTable(result);
+    await ensureConsAlertSettingTable(result);
     await ensureRoadWorkHandbookTables(result);
+    await ensureLandPriceMemoTable(result);
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);
     result.errors.push(msg);

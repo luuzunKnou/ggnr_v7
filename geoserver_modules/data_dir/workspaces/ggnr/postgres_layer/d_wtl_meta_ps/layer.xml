@@ -1,0 +1,19 @@
+<layer>
+  <name>d_wtl_meta_ps</name>
+  <id>LayerInfoImpl--51390c14:1a166f7a0a1:-7ef7</id>
+  <type>VECTOR</type>
+  <defaultStyle>
+    <id>StyleInfoImpl--51390c14:1a166f7a0a1:-7ef6</id>
+  </defaultStyle>
+  <resource class="featureType">
+    <id>FeatureTypeInfoImpl--51390c14:1a166f7a0a1:-7ef8</id>
+  </resource>
+  <queryable>true</queryable>
+  <opaque>false</opaque>
+  <attribution>
+    <logoWidth>0</logoWidth>
+    <logoHeight>0</logoHeight>
+  </attribution>
+  <dateCreated>2026-10-23 04:37:32.55 UTC</dateCreated>
+  <dateModified>2026-10-23 04:37:32.457 UTC</dateModified>
+</layer>

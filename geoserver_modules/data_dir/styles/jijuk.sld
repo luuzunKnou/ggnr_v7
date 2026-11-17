@@ -30,7 +30,7 @@
           </sld:PolygonSymbolizer>
           <sld:TextSymbolizer>
             <sld:Geometry>
-              <ogc:Function name="centroid">
+              <ogc:Function name="interiorPoint">
                 <ogc:PropertyName>geom</ogc:PropertyName>
               </ogc:Function>
             </sld:Geometry>
@@ -73,7 +73,7 @@
           </sld:TextSymbolizer>
           <sld:TextSymbolizer>
             <sld:Geometry>
-              <ogc:Function name="centroid">
+              <ogc:Function name="interiorPoint">
                 <ogc:PropertyName>geom</ogc:PropertyName>
               </ogc:Function>
             </sld:Geometry>
@@ -116,7 +116,7 @@
           </sld:TextSymbolizer>
           <sld:TextSymbolizer>
             <sld:Geometry>
-              <ogc:Function name="centroid">
+              <ogc:Function name="interiorPoint">
                 <ogc:PropertyName>geom</ogc:PropertyName>
               </ogc:Function>
             </sld:Geometry>

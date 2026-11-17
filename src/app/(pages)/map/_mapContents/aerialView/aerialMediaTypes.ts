@@ -18,13 +18,15 @@ export type WorkFileItem = {
   sizeLabel: string;
   format: string;
   status: ConvertStatus;
-  /** 드론·파노라마 미리보기용 */
+  /** 드론·항공뷰 미리보기용 */
   previewKind?: 'image' | 'video' | 'panorama';
   /** 촬영 위치 표시(지번). 지도 이동은 x5181/y5181 사용 */
   locationLabel?: string;
   /** EPSG:5181 — 지도 포커스용 (화면에는 지번만 표시) */
   x5181?: number | null;
   y5181?: number | null;
+  /** 여러 점. 없으면 x5181/y5181 한 점 */
+  points5181?: [number, number][] | null;
   /** GGNR_DATA_DIR 기준 상대 경로 — 미리보기·다운로드 */
   relativePath?: string;
   /** 드론영상 변환 타일 루트 (상대 경로) */
@@ -54,7 +56,7 @@ export type WorkUnitItem = {
 export const AERIAL_KIND_LABEL: Record<AerialKind, string> = {
   ortho: '드론영상 관리',
   drone: '사진,동영상',
-  panorama: '파노라마 영상',
+  panorama: '항공뷰',
   satellite: '항공영상 관리',
 };
 
@@ -67,7 +69,7 @@ export const CONVERT_STATUS_LABEL: Record<ConvertStatus, string> = {
   failed: '변환실패',
 };
 
-/** 사진·동영상·파노라마 — 업로드하면 종료 */
+/** 사진·동영상·항공뷰 — 업로드하면 종료 */
 export const UPLOAD_STATUS_LABEL: Record<ConvertStatus, string> = {
   done: '업로드완료',
   converting: '업로드중',
@@ -96,4 +98,24 @@ export function deriveOrthoUnitStatus(files: WorkFileItem[]): ConvertStatus {
 /** 종류별 배지 모드 */
 export function statusModeForKind(kind: AerialKind): StatusBadgeMode {
   return kind === 'ortho' || kind === 'satellite' ? 'convert' : 'upload';
+}
+
+function attrText(attrs: AttrRow[], label: string): string {
+  return attrs.find((row) => row.label === label)?.value.trim() ?? '';
+}
+
+/** 점·뷰어에 짧게 보여줄 촬영 정보. 빈 값·대시는 뺀다. */
+export function aerialShotMeta(unit: Pick<WorkUnitItem, 'workName' | 'workDate' | 'attrs'> | null | undefined): {
+  workName: string;
+  shotDate: string;
+  photographer: string;
+} {
+  if (!unit) return { workName: '', shotDate: '', photographer: '' };
+  const rawDate = attrText(unit.attrs, '촬영일') || attrText(unit.attrs, '작업일') || unit.workDate;
+  const photographer = attrText(unit.attrs, '촬영자');
+  return {
+    workName: unit.workName.trim(),
+    shotDate: rawDate && rawDate !== '—' ? rawDate : '',
+    photographer: photographer && photographer !== '—' ? photographer : '',
+  };
 }

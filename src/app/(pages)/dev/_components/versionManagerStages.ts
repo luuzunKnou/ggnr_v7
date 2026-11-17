@@ -1,3 +1,4 @@
+import type { SourceApplyLayout } from '@/lib/versionHistoryMessage';
 import type { InstallZipPhase } from '@/service/sourceInstallZipProgress';
 import type { RestartMode, VersionRelayPhase } from '@/lib/sourceVersionClientRelay';
 import type { SourcePackageProfile } from './sourceUpload/sourceUploadProfiles';
@@ -24,6 +25,8 @@ export type RelayStageOptions = {
   restartMode?: RestartMode;
   /** 개방망이면 런처 재시작 파이프라인에 npm install 단계 표시 */
   packageProfile?: SourcePackageProfile;
+  /** 따로 생성이면 현재 폴더 병합·지오서버 단계 대신 새 폴더 설치 */
+  applyLayout?: SourceApplyLayout;
 };
 
 const INSTALL_STAGE_ORDER: InstallStageId[] = ['typeCheck', 'info', 'scan', 'zip', 'download'];
@@ -91,6 +94,20 @@ function effectiveRestartMode(opts?: RelayStageOptions): RestartMode | 'off' {
 
 /** 재시작 방법·패키지 프로필에 따른 단계 목록 */
 export function relayStageOrder(opts?: RelayStageOptions): RelayStageId[] {
+  if (opts?.applyLayout === 'sibling') {
+    const withNpm =
+      opts.packageProfile === 'open' ? (['npm-install'] as RelayStageId[]) : [];
+    return [
+      'latest',
+      'download',
+      'relay-init',
+      'relay-chunk',
+      'merge-apply',
+      ...withNpm,
+      'build',
+      'app-stop',
+    ];
+  }
   const mode = effectiveRestartMode(opts);
   /** «재시작 안 함»일 때만 병합 후 GeoServer 기동. 재기동은 run.ts ensure */
   if (mode === 'off') return [...RELAY_COMMON_STAGES, 'geoserver-start'];
@@ -104,6 +121,12 @@ export function relayStageOrder(opts?: RelayStageOptions): RelayStageId[] {
 }
 
 export function relayStageLabel(id: RelayStageId, opts?: RelayStageOptions): string {
+  if (opts?.applyLayout === 'sibling') {
+    if (id === 'merge-apply') return '새 폴더에 풀기';
+    if (id === 'npm-install') return '의존성 맞춤';
+    if (id === 'build') return '프로젝트 빌드';
+    if (id === 'app-stop') return '서비스 다시 등록';
+  }
   const mode = effectiveRestartMode(opts);
   if (id === 'app-stop') {
     if (mode === 'exit') return '앱 종료(nssm 재기동)';

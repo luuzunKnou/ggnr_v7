@@ -37,10 +37,11 @@ export function clearOccupationLedgerWmsLayers(
 /** 시스템 전환 시 — 현재 시스템이 아닌 점용대장 레이어만 끄기 */
 export function clearForeignOccupationLedgerWmsLayers(
   setVisibleLayerNames: SetVisible | null | undefined,
-  system?: string | null
+  system?: string | null,
+  serviceList?: readonly string[] | null
 ) {
   if (!setVisibleLayerNames) return;
-  const ids = getForeignOccupationLedgerTableIds(system);
+  const ids = getForeignOccupationLedgerTableIds(system, serviceList);
   if (ids.length === 0) return;
   setVisibleLayerNames((prev) => {
     let changed = false;
@@ -97,14 +98,12 @@ export function ensureOccupationLedgerWmsLayers(
   });
 }
 
-/** 부서업무 점용 — 지적(연속지적) 켜기/끄기. 점용 필지 WMS 대신 사용 */
+/** 부서업무 점용 — 연속지적만 추가로 켬. 읍면동·리 등 사용자가 켠 지적도는 끄지 않음 */
 export function setOccupationLedgerCadastralOverlay(active: boolean): void {
-  if (typeof window === 'undefined') return;
+  if (typeof window === 'undefined' || !active) return;
   window.dispatchEvent(
     new CustomEvent('ggnr-map-control-set', {
-      detail: active
-        ? { id: 'cadastral', active: true, tableNames: ['jijuk'] }
-        : { id: 'cadastral', active: false },
+      detail: { id: 'cadastral', active: true, tableNames: ['jijuk'] },
     })
   );
 }

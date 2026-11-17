@@ -3,6 +3,10 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { CircleQuestionMark, Loader2, Upload } from 'lucide-react';
 import { Button } from '@/app/shadcnComponents/ui/button';
+import {
+  cancelGnmsSourceUploadFromBrowser,
+  uploadPreparedZipToGnmsFromBrowser,
+} from '@/lib/gnmsSourceUploadBrowser';
 import { resolveClientMachineIp, prefetchClientMachineIp } from '@/lib/clientMachineIp';
 import { recordVersionHistoryClient } from '@/lib/recordVersionHistoryClient';
 import {
@@ -326,8 +330,11 @@ export function SourceCodeUploaderContent() {
   const lastPhaseLoggedRef = useRef('');
   const liveLogScrollRef = useRef<HTMLDivElement>(null);
   const uploadHistoryRecordedRef = useRef(false);
+  /** 청크 실패 등 error 확정 후 이후 progress(complete 등) 무시 */
+  const hardFailProgressIdRef = useRef<string | null>(null);
   const completeStartedAtRef = useRef(0);
   const progressPhaseRef = useRef('idle');
+  const uploadingRef = useRef(false);
   const stagesRef = useRef(stages);
   const includeNodeModulesRef = useRef(includeNodeModules);
   const changeNoteRef = useRef(changeNote);
@@ -375,6 +382,15 @@ export function SourceCodeUploaderContent() {
       ? 'npm install 중에는 취소할 수 없습니다. 완료될 때까지 기다려 주세요.'
       : '원격 병합/압축 해제 중에는 취소할 수 없습니다. 완료될 때까지 기다려 주세요.'
     : '원격 병합/압축 해제(또는 npm install) 중에는 취소할 수 없습니다. 완료될 때까지 기다려 주세요.';
+  const cancelDisabled = typeChecking ? false : !uploading || cancelBlocked;
+  const cancelActiveTitle = typeChecking
+    ? '타입 검사 취소'
+    : uploading
+      ? '업로드 취소'
+      : '취소';
+  const cancelDisabledTitle = cancelBlocked
+    ? cancelBlockedTitle
+    : '업로드가 진행 중이 아닙니다.';
 
   useLayoutEffect(() => {
     const el = liveLogScrollRef.current;
@@ -461,6 +477,14 @@ export function SourceCodeUploaderContent() {
   };
 
   const applyProgressSnapshot = (p: UploadProgressPayload) => {
+    if (
+      hardFailProgressIdRef.current &&
+      progressIdRef.current === hardFailProgressIdRef.current &&
+      p.phase !== 'error'
+    ) {
+      // 실패 확정 후 complete/done 스냅샷으로 UI가 다시 진행 표시되는 것 방지
+      return;
+    }
     if (p.remoteUploadId?.trim()) {
       remoteUploadIdRef.current = p.remoteUploadId.trim();
     }
@@ -505,6 +529,9 @@ export function SourceCodeUploaderContent() {
         appendLog(`청크 ${p.sentChunks}/${p.expectedChunks ?? '?'} (${p.progressPct}%)`);
       }
     } else if (p.phase === 'error') {
+      if (progressIdRef.current) {
+        hardFailProgressIdRef.current = progressIdRef.current;
+      }
       appendLog(`오류 [${p.failedStage ?? '?'}] ${p.error ?? p.message}`);
     } else if (p.phase === 'scan' && p.scanIncluded != null) {
       const total = p.scanIncluded + (p.scanSkipped ?? 0);
@@ -553,7 +580,9 @@ export function SourceCodeUploaderContent() {
         if (!p) return;
         applyProgressSnapshot(p);
         if (p.done && p.phase === 'error') {
+          hardFailProgressIdRef.current = progressId;
           setRows([{ file: '(전체)', category: 'core', status: 'fail', error: p.error ?? p.message }]);
+          stopPoll();
         }
       });
     };
@@ -643,6 +672,10 @@ export function SourceCodeUploaderContent() {
   };
 
   const runUploadCurrentWorkspace = async (confirmDbMismatch = false) => {
+    if (uploadingRef.current && !confirmDbMismatch) {
+      appendLog('이미 업로드가 진행 중입니다. 중복 실행을 무시합니다.');
+      return;
+    }
     if (!confirmDbMismatch) {
       setRows([]);
       setChunkProgress(null);
@@ -652,6 +685,8 @@ export function SourceCodeUploaderContent() {
       appendLog('DB 불일치 확인 후 업로드 계속');
     }
     completeStartedAtRef.current = 0;
+    hardFailProgressIdRef.current = null;
+    uploadingRef.current = true;
     setUploading(true);
     setProgressPhase('idle');
     setProgressPct(2);
@@ -799,12 +834,14 @@ export function SourceCodeUploaderContent() {
         return;
       }
 
-      mergeServerStages(
-        json.localStages as StageReport[] | undefined,
-        json.remoteStages as StageReport[] | undefined
-      );
-
       if (!res.ok) {
+        hardFailProgressIdRef.current = progressId;
+        stopPoll();
+        // 실패 시에만 단계 반영 — 성공 경로 merge 전에 complete가 켜지지 않게
+        mergeServerStages(
+          json.localStages as StageReport[] | undefined,
+          json.remoteStages as StageReport[] | undefined
+        );
         const failedStage = typeof json.failedStage === 'string' ? json.failedStage : '';
         const stageMsg = failedStage ? `[${failedStage}] ` : '';
         const sentChunks = typeof json.sentChunks === 'number' ? json.sentChunks : null;
@@ -825,6 +862,131 @@ export function SourceCodeUploaderContent() {
           });
         }
         throw new Error(`${stageMsg}${errText}${chunkMsg}${chunkIdx}`);
+      }
+
+      mergeServerStages(
+        json.localStages as StageReport[] | undefined,
+        json.remoteStages as StageReport[] | undefined
+      );
+
+      if (json.browserRemoteRequired === true) {
+        appendLog('로컬 ZIP 준비 완료 — 브라우저→GNMS 원격 전송 시작');
+        patchStages({
+          zip: { state: 'done', detail: typeof json.zipName === 'string' ? json.zipName : undefined },
+          init: { state: 'active' },
+        });
+        setProgressText('브라우저→GNMS 전송 중...');
+        let remoteUpload: Awaited<ReturnType<typeof uploadPreparedZipToGnmsFromBrowser>>;
+        try {
+          remoteUpload = await uploadPreparedZipToGnmsFromBrowser({
+            progressId,
+            zipName: String(json.zipName ?? ''),
+            zipSize: Number(json.zipSize ?? 0),
+            mode: String(json.mode ?? mode),
+            date: String(json.date ?? date),
+            changeNote: String(json.changeNote ?? changeNote),
+            bundleRoot: String(json.bundleRoot ?? ''),
+            includeNodeModules,
+            signal,
+            onLog: appendLog,
+            onChunkProgress: (sent, expected) => {
+              setChunkProgress({ sent, expected });
+              setProgressPct(Math.min(95, 40 + Math.round((sent / Math.max(expected, 1)) * 50)));
+              const chunkDone = sent >= expected && expected > 0;
+              patchStages({
+                init: { state: 'done' },
+                chunk: {
+                  state: chunkDone ? 'done' : 'active',
+                  detail: `${sent}/${expected}`,
+                },
+                ...(chunkDone
+                  ? {
+                      complete: {
+                        state: 'active' as const,
+                        detail: '요청 준비 중',
+                      },
+                    }
+                  : {}),
+              });
+            },
+            onRemotePhase: (phase) => {
+              if (phase === 'init') {
+                setProgressPhase('init');
+                progressPhaseRef.current = 'init';
+                setProgressText(STAGE_LABEL.init);
+                patchStages({ init: { state: 'active' } });
+                return;
+              }
+              if (phase === 'chunk') {
+                setProgressPhase('chunk');
+                progressPhaseRef.current = 'chunk';
+                setProgressText(STAGE_LABEL.chunk);
+                patchStages({
+                  init: { state: 'done' },
+                  chunk: { state: 'active' },
+                });
+                return;
+              }
+              if (phase === 'complete') {
+                setProgressPhase('complete');
+                progressPhaseRef.current = 'complete';
+                if (completeStartedAtRef.current <= 0) {
+                  completeStartedAtRef.current = Date.now();
+                }
+                setProgressText(STAGE_LABEL.complete);
+                setProgressPct(96);
+                appendLog('원격 병합/압축 해제(complete) API 호출 시작');
+                patchStages({
+                  init: { state: 'done' },
+                  chunk: { state: 'done' },
+                  complete: { state: 'active', detail: 'GNMS 응답 대기' },
+                });
+                return;
+              }
+              if (phase === 'npmInstall') {
+                setProgressPhase('npmInstall');
+                progressPhaseRef.current = 'npmInstall';
+                setProgressText(STAGE_LABEL.npmInstall);
+                setProgressPct(98);
+                appendLog('원격 npm install API 호출 시작');
+                patchStages({
+                  complete: { state: 'done' },
+                  npmInstall: { state: 'active' },
+                });
+              }
+            },
+          });
+          remoteUploadIdRef.current = remoteUpload.uploadId;
+        } catch (remoteErr: unknown) {
+          const msg = remoteErr instanceof Error ? remoteErr.message : String(remoteErr);
+          await fetch('/api/source/upload/remote-complete', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ progressId, ok: false, error: msg }),
+          }).catch(() => {});
+          throw remoteErr;
+        }
+
+        const doneRes = await fetch('/api/source/upload/remote-complete', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            progressId,
+            ok: true,
+            remoteResult: remoteUpload,
+            remoteStages: remoteUpload.stages,
+          }),
+          signal,
+        });
+        const doneJson = (await doneRes.json().catch(() => ({}))) as Record<string, unknown>;
+        if (!doneRes.ok) {
+          throw new Error(String(doneJson.error ?? 'remote-complete 실패'));
+        }
+        json = { ...json, ...doneJson, remoteResult: remoteUpload, remoteStages: remoteUpload.stages };
+        mergeServerStages(
+          json.localStages as StageReport[] | undefined,
+          json.remoteStages as StageReport[] | undefined
+        );
       }
 
       setLastSavedRoot(
@@ -957,6 +1119,7 @@ export function SourceCodeUploaderContent() {
       setProgressText(`실패: ${display}`);
     } finally {
       stopPoll();
+      uploadingRef.current = false;
       setUploading(false);
       setProgressPhase('idle');
       abortControllerRef.current = null;
@@ -1113,49 +1276,48 @@ export function SourceCodeUploaderContent() {
             {typeChecking ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
             현재 코드 자동 업로드
           </Button>
-          <Button
-            type="button"
-            variant="outline"
-            disabled={
-              typeChecking
-                ? false
-                : !uploading || cancelBlocked
-            }
-            title={
-              typeChecking
-                ? '타입 검사 취소'
-                : cancelBlocked
-                  ? cancelBlockedTitle
-                  : uploading
-                    ? '업로드 취소'
-                    : '취소'
-            }
-            onClick={() => {
-              if (typeChecking) {
-                abortTypeCheck();
-                return;
-              }
-              if (cancelBlocked) return;
-              const uploadId = remoteUploadIdRef.current;
-              const progressId = progressIdRef.current;
-              if (uploadId || progressId) {
-                void fetch('/api/source/upload/cancel', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({
-                    uploadId: uploadId || undefined,
-                    progressId: progressId || undefined,
-                    reason: 'user_abort',
-                  }),
-                  keepalive: true,
-                }).catch(() => {});
-              }
-              abortControllerRef.current?.abort();
-            }}
-            className="cursor-pointer"
+          <span
+            className="inline-flex"
+            title={cancelDisabled ? cancelDisabledTitle : undefined}
           >
-            취소
-          </Button>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={cancelDisabled}
+              title={cancelDisabled ? undefined : cancelActiveTitle}
+              onClick={() => {
+                if (typeChecking) {
+                  abortTypeCheck();
+                  return;
+                }
+                if (cancelBlocked) return;
+                const uploadId = remoteUploadIdRef.current;
+                if (uploadId) {
+                  void cancelGnmsSourceUploadFromBrowser({
+                    uploadId,
+                    log: appendLog,
+                  });
+                }
+                const progressId = progressIdRef.current;
+                if (progressId) {
+                  void fetch('/api/source/upload/cancel', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      progressId,
+                      reason: 'user_abort',
+                      localOnly: true,
+                    }),
+                    keepalive: true,
+                  }).catch(() => {});
+                }
+                abortControllerRef.current?.abort();
+              }}
+              className={cancelDisabled ? undefined : 'cursor-pointer'}
+            >
+              취소
+            </Button>
+          </span>
           {lastSavedRoot && <span className="truncate text-xs text-muted-foreground">전송 대상: {lastSavedRoot}</span>}
         </div>
       </div>

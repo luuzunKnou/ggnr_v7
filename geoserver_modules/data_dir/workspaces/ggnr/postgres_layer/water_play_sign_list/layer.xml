@@ -1,0 +1,19 @@
+<layer>
+  <name>water_play_sign_list</name>
+  <id>LayerInfoImpl--79762301:1a0848f7abc:-7315</id>
+  <type>VECTOR</type>
+  <defaultStyle>
+    <id>StyleInfoImpl--79762301:1a0848f7abc:-7da2</id>
+  </defaultStyle>
+  <resource class="featureType">
+    <id>FeatureTypeInfoImpl--79762301:1a0848f7abc:-7316</id>
+  </resource>
+  <queryable>true</queryable>
+  <opaque>false</opaque>
+  <attribution>
+    <logoWidth>0</logoWidth>
+    <logoHeight>0</logoHeight>
+  </attribution>
+  <dateCreated>2026-09-14 08:23:00.779 UTC</dateCreated>
+  <dateModified>2026-09-14 08:23:07.0 UTC</dateModified>
+</layer>

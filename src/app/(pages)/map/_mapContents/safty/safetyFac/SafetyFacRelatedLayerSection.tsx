@@ -113,7 +113,7 @@ export function SafetyFacRelatedLayerSection({ lon, lat }: Props) {
               !hasData || !setLayerState
                 ? 'pointer-events-none border-border bg-muted/50 text-muted-foreground opacity-60'
                 : active
-                  ? 'border-primary/45 bg-primary/[0.08] text-foreground ring-1 ring-inset ring-primary/15 hover:bg-primary/[0.11]'
+                  ? 'border-primary/45 bg-primary/[0.08] text-foreground ring-1 ring-inset ring-primary/15 hover:bg-primary/[0.11] dark:bg-primary/20 dark:hover:bg-primary/25'
                   : 'border-border bg-muted/40 text-foreground hover:bg-muted'
             )}
           >

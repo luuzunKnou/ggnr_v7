@@ -25,8 +25,20 @@ import * as usrService from './usrService';
 import * as userLogService from './userLogService';
 import * as loginLogService from './loginLogService';
 import * as riverBasicPlanService from './riverBasicPlanService';
+import * as riverIndexOrientationService from './riverIndexOrientationService';
+import * as riverIllegalOccupationService from './riverIllegalOccupationService';
+import * as privateLandAnalysisService from './privateLandAnalysisService';
 import * as roadLedgerService from './roadLedgerService';
+import * as roadVideoTrackService from './roadVideoTrackService';
 import * as roadNetworkService from './roadNetworkService';
+import * as wtlNetworkService from './wtlNetworkService';
+import * as wtlFacilityService from './wtlFacilityService';
+import * as swlNetworkService from './swlNetworkService';
+import * as wtlOutageService from './wtlOutageService';
+import * as wtlLeakService from './wtlLeakService';
+import * as wtlSupplyPathService from './wtlSupplyPathService';
+import * as wtlTopologyService from './wtlTopologyService';
+import * as wtlMeterLocationService from './wtlMeterLocationService';
 import * as roadUseLedgerService from './roadUseLedgerService';
 import * as roadFrontageBuildingService from './roadFrontageBuildingService';
 import * as roadFrontageMarkerService from './roadFrontageMarkerService';
@@ -43,9 +55,13 @@ import * as fileDataUploadService from './fileDataUploadService';
 import * as integrationService from './integrationService';
 import * as fileConverterService from './fileConverterService';
 import * as pdfToJpgService from './pdfToJpgService';
+import * as shpToDxfService from './shpToDxfService';
+import * as layerCadExportService from './layerCadExportService';
+import * as layerCompareService from './layerCompareService';
 import * as ocrMigrationService from './ocrMigrationService';
 import * as layerRowService from './layerRowService';
 import * as layerExtraService from './layerExtraService';
+import * as gcpService from './gcpService';
 import * as mapAnalyseService from './mapAnalyseService';
 import * as elevationService from './elevationService';
 import * as floodRiskService from './floodRiskService';
@@ -59,6 +75,7 @@ import * as dataQueryHistoryService from './dataQueryHistoryService';
 import * as safedataHistoryService from './safedataHistoryService';
 import * as noticeService from './noticeService';
 import * as boardService from './boardService';
+import * as policyMapService from './policyMapService';
 import * as mngVersionHistoryService from './mngVersionHistoryService';
 import * as geoserverProcessService from './geoserverProcessService';
 import * as shootingRequestService from './shootingRequestService';
@@ -68,9 +85,21 @@ import * as aerialOrthoService from './aerialOrthoService';
 import * as useFeeService from './useFeeService';
 import * as fmsLinkageService from './fmsLinkageService';
 import * as groundwaterPermitService from './groundwaterPermitService';
+import * as waterAdminComplaintService from './waterAdminComplaintService';
 import * as bizNotifService from './bizNotifService';
 import * as thematicMapService from './thematicMapService';
 import * as roadWorkHandbookService from './roadWorkHandbookService';
+import * as qgisLayerControlService from './qgisLayerControlService';
+import * as userDataUploadService from './userDataUploadService';
+import * as systemControlService from './systemControlService';
+import * as splitLayerService from './splitLayerService';
+import * as dashboardStatsService from './dashboardStatsService';
+import * as detailWondoService from './detailWondoService';
+import * as digitalMapService from './digitalMapService';
+import * as drawingDisplayService from './drawingDisplayService';
+import * as landArchiveService from './landArchiveService';
+import * as individualLandPriceService from './individualLandPriceService';
+import * as smallPublicService from './smallPublicService';
 
 export {
   configService,
@@ -99,8 +128,20 @@ export {
   userLogService,
   loginLogService,
   riverBasicPlanService,
+  riverIndexOrientationService,
+  riverIllegalOccupationService,
+  privateLandAnalysisService,
   roadLedgerService,
+  roadVideoTrackService,
   roadNetworkService,
+  wtlNetworkService,
+  wtlFacilityService,
+  swlNetworkService,
+  wtlOutageService,
+  wtlLeakService,
+  wtlSupplyPathService,
+  wtlTopologyService,
+  wtlMeterLocationService,
   roadUseLedgerService,
   roadFrontageBuildingService,
   roadFrontageMarkerService,
@@ -117,9 +158,13 @@ export {
   integrationService,
   fileConverterService,
   pdfToJpgService,
+  shpToDxfService,
+  layerCadExportService,
+  layerCompareService,
   ocrMigrationService,
   layerRowService,
   layerExtraService,
+  gcpService,
   mapAnalyseService,
   elevationService,
   floodRiskService,
@@ -132,6 +177,7 @@ export {
   safedataHistoryService,
   noticeService,
   boardService,
+  policyMapService,
   mngVersionHistoryService,
   shootingRequestService,
   flightLogbookService,
@@ -140,6 +186,18 @@ export {
   useFeeService,
   fmsLinkageService,
   groundwaterPermitService,
+  waterAdminComplaintService,
   bizNotifService,
   roadWorkHandbookService,
+  qgisLayerControlService,
+  userDataUploadService,
+  systemControlService,
+  splitLayerService,
+  dashboardStatsService,
+  detailWondoService,
+  digitalMapService,
+  drawingDisplayService,
+  landArchiveService,
+  individualLandPriceService,
+  smallPublicService,
 };

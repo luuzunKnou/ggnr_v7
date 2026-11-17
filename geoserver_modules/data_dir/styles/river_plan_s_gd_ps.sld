@@ -11,11 +11,11 @@
                 <sld:WellKnownName>circle</sld:WellKnownName>
                 <sld:Fill>
                   <sld:CssParameter name="fill">#8BC34A</sld:CssParameter>
-                  <sld:CssParameter name="fill-opacity">0.5</sld:CssParameter>
+                  <sld:CssParameter name="fill-opacity">0.8</sld:CssParameter>
                 </sld:Fill>
                 <sld:Stroke>
                   <sld:CssParameter name="stroke">#FFFFFF</sld:CssParameter>
-                  <sld:CssParameter name="stroke-opacity">0.5</sld:CssParameter>
+                  <sld:CssParameter name="stroke-opacity">0.8</sld:CssParameter>
                   <sld:CssParameter name="stroke-width">1.5</sld:CssParameter>
                 </sld:Stroke>
               </sld:Mark>

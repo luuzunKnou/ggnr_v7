@@ -1,0 +1,41 @@
+<featureType>
+  <id>FeatureTypeInfoImpl-6e125944:1a17ff3f0fb:-7b8c</id>
+  <name>uq112</name>
+  <nativeName>uq112</nativeName>
+  <namespace>
+    <id>NamespaceInfoImpl-4bf97568:19c4d6c3053:-7ffa</id>
+  </namespace>
+  <title>uq112</title>
+  <keywords>
+    <string>features</string>
+    <string>uq112</string>
+  </keywords>
+  <srs>EPSG:5181</srs>
+  <nativeBoundingBox>
+    <minx>315596.10394359</minx>
+    <maxx>370496.78513842</maxx>
+    <miny>301009.79436473</miny>
+    <maxy>338001.40163465</maxy>
+    <crs class="projected">EPSG:5181</crs>
+  </nativeBoundingBox>
+  <latLonBoundingBox>
+    <minx>128.2852907917412</minx>
+    <maxx>128.90356727659645</maxx>
+    <miny>36.19195509143822</miny>
+    <maxy>36.533340319613615</maxy>
+    <crs>EPSG:4326</crs>
+  </latLonBoundingBox>
+  <projectionPolicy>FORCE_DECLARED</projectionPolicy>
+  <enabled>true</enabled>
+  <store class="dataStore">
+    <id>DataStoreInfoImpl-4bf97568:19c4d6c3053:-7ff8</id>
+  </store>
+  <serviceConfiguration>false</serviceConfiguration>
+  <maxFeatures>0</maxFeatures>
+  <numDecimals>0</numDecimals>
+  <padWithZeros>false</padWithZeros>
+  <forcedDecimal>false</forcedDecimal>
+  <overridingServiceSRS>false</overridingServiceSRS>
+  <skipNumberMatched>false</skipNumberMatched>
+  <circularArcPresent>false</circularArcPresent>
+</featureType>

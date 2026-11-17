@@ -26,11 +26,24 @@ export function fileCoord5181(file: WorkFileItem): [number, number] | null {
   return parseLocation5181(file.locationLabel);
 }
 
+export function fileMissingGeom(file: WorkFileItem): boolean {
+  if (file.points5181 && file.points5181.length > 0) return false;
+  return fileCoord5181(file) == null;
+}
+
 export function collectFileLocations5181(
   files: WorkFileItem[]
 ): { fileId: string; coord: [number, number] }[] {
   const out: { fileId: string; coord: [number, number] }[] = [];
   for (const f of files) {
+    const many = (f.points5181 ?? []).filter(
+      (p): p is [number, number] =>
+        Array.isArray(p) && Number.isFinite(p[0]) && Number.isFinite(p[1])
+    );
+    if (many.length > 0) {
+      for (const coord of many) out.push({ fileId: f.id, coord });
+      continue;
+    }
     const coord = fileCoord5181(f);
     if (coord) out.push({ fileId: f.id, coord });
   }

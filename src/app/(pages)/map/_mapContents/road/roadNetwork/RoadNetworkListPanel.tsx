@@ -10,13 +10,18 @@ import {
   Plus,
   RefreshCw,
   Search,
+  Signpost,
   Square,
   X,
 } from "lucide-react";
 import { call } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { useMapContext } from "../../../_mapComponents/MapContext";
-import { scheduleAnimateMapToCenter3857 } from "../../../_mapComponents/config/mapAutoNavigation";
+import {
+  scheduleAnimateMapToCenter3857,
+  scheduleFitMapToExtent3857,
+} from "../../../_mapComponents/config/mapAutoNavigation";
+import { MAP_AUTO_NAV_MAX_ZOOM } from "../../../_mapComponents/config/mapDefaults";
 import { canStartMapDrawInteraction } from "../../../_mapComponents/mapDrawInteraction";
 import {
   LayerRowAddButton,
@@ -27,21 +32,42 @@ import { exportRoadNetworkExcel } from "./exportRoadNetworkExcel";
 import { formatRoadNetworkListTitle } from "./roadNetworkFormat";
 import { filterRoadNetworkRowsByWkt5181 } from "./roadNetworkSpatial";
 import {
+  extent3857FromRoadNetworkGeoms,
+  groupRoadNetworkRows,
+  type RoadNetworkRowGroup,
+} from "./roadNetworkGroup";
+import {
+  clearRoadNetworkUnifiedCql,
   clearRoadNetworkWmsLayers,
   ensureRoadNetworkWmsLayers,
+  syncRoadNetworkLayerCql,
+  syncRoadNetworkUnifiedCql,
 } from "./roadNetworkMapSync";
+import { buildRoadNetworkSharedTableCql } from "./roadNetworkLayerId";
+import { useRoadNetworkSourceMode } from "./useRoadNetworkSourceMode";
+import { useRoadNetworkUnopenedSignLayer } from "./useRoadNetworkUnopenedSignLayer";
+import {
+  buildRoadNetworkUnifiedLineCql,
+  buildRoadNetworkUnifiedSignCql,
+  type RoadNetworkSignIndexItem,
+} from "./roadNetworkGrade";
 import {
   ROAD_NETWORK_NEW_ID,
-  ROAD_NETWORK_OPEN_STATUS_BADGE,
   ROAD_NETWORK_OPEN_STATUS_FILTERS,
   ROAD_NETWORK_TYPE_BADGE,
   ROAD_NETWORK_TYPE_FILTERS,
   createEmptyRoadNetworkRow,
   isNewRoadNetworkRowId,
   matchesRoadNetworkTypeFilter,
+  matchesRoadNetworkTypeSelection,
   type RoadNetworkOpenStatusFilter,
-  type RoadNetworkTypeFilter,
+  type RoadNetworkRow,
+  type RoadNetworkTypeSelection,
 } from "./roadNetworkMock";
+
+const EMPTY_ROWS: RoadNetworkRow[] = [];
+const LIST_FIT_PADDING = [80, 80, 80, 80] as const;
+const LIST_FIT_MAX_ZOOM = Math.min(16, MAP_AUTO_NAV_MAX_ZOOM);
 
 type SpatialTool = "rectangle" | "polygon" | "circle";
 type SearchTab = "keyword" | "shape" | "boundary";
@@ -66,16 +92,20 @@ export function RoadNetworkListPanel({ onClose }: Props) {
     "미확인";
 
   const mapContext = useMapContext();
-  const rows = mapContext?.roadNetworkRows ?? [];
+  const rows = mapContext?.roadNetworkRows ?? EMPTY_ROWS;
   const selectedId = mapContext?.roadNetworkSelectedId ?? null;
   const setSpatialDrawRequest = mapContext?.setSpatialDrawRequest;
   const setSpatialFilterWkt = mapContext?.setSpatialFilterWkt;
   const setVisibleLayerNames = mapContext?.setVisibleLayerNames;
+  const setServiceWmsCqlByLayer = mapContext?.setServiceWmsCqlByLayer;
+  const sourceMode = useRoadNetworkSourceMode();
   const setRoadNetworkOverlayRows = mapContext?.setRoadNetworkOverlayRows;
   const setRoadNetworkRows = mapContext?.setRoadNetworkRows;
   const setRoadNetworkSelectedId = mapContext?.setRoadNetworkSelectedId;
+  const setRoadNetworkWholeRoad = mapContext?.setRoadNetworkWholeRoad;
   const [keyword, setKeyword] = useState("");
-  const [typeFilter, setTypeFilter] = useState<RoadNetworkTypeFilter>("전체");
+  /** 종류 중복 선택 — 빈 배열이면 전체 */
+  const [typeFilter, setTypeFilter] = useState<RoadNetworkTypeSelection>([]);
   const [openStatusFilter, setOpenStatusFilter] =
     useState<RoadNetworkOpenStatusFilter>("전체");
   const [spatialWkt, setSpatialWkt] = useState<string | null>(null);
@@ -99,6 +129,28 @@ export function RoadNetworkListPanel({ onClose }: Props) {
 
   const spatialDrawRequest = mapContext?.spatialDrawRequest ?? null;
   const isSpatialActive = !!(spatialWkt || spatialDrawRequest);
+
+  /** 자료가 있는 종류 탭만 (목록 로드 전에는 전부) */
+  const visibleTypeFilters = useMemo(() => {
+    const saved = rows.filter((r) => !isNewRoadNetworkRowId(r.id));
+    if (saved.length === 0) return ROAD_NETWORK_TYPE_FILTERS;
+    return ROAD_NETWORK_TYPE_FILTERS.filter(
+      (f) => f === "전체" || saved.some((r) => matchesRoadNetworkTypeFilter(r.roadType, f))
+    );
+  }, [rows]);
+  const activeTypeFilter = useMemo<RoadNetworkTypeSelection>(
+    () => typeFilter.filter((f) => visibleTypeFilters.includes(f)),
+    [typeFilter, visibleTypeFilters]
+  );
+  const toggleTypeFilter = useCallback((filter: (typeof visibleTypeFilters)[number]) => {
+    if (filter === "전체") {
+      setTypeFilter([]);
+      return;
+    }
+    setTypeFilter((prev) =>
+      prev.includes(filter) ? prev.filter((f) => f !== filter) : [...prev, filter]
+    );
+  }, []);
 
   const reloadList = useCallback(async () => {
     const seq = ++listLoadSeqRef.current;
@@ -132,19 +184,89 @@ export function RoadNetworkListPanel({ onClose }: Props) {
     void reloadList();
   }, [reloadList]);
 
-  /** GeoServer WMS — 종류·개설 필터에 맞는 레이어만 표시 */
+  /** 통합 도로망 표지 점 — 종류 필터용 id 목록 */
+  const [signIndex, setSignIndex] = useState<RoadNetworkSignIndexItem[]>([]);
   useEffect(() => {
-    ensureRoadNetworkWmsLayers(setVisibleLayerNames, {
-      typeFilter,
-      openStatusFilter,
-    });
-  }, [typeFilter, openStatusFilter, setVisibleLayerNames]);
+    if (sourceMode !== "unified") return;
+    let cancelled = false;
+    void call("", "POST", {
+      service: "roadNetworkService",
+      action: "getRoadNetworkSignIndex",
+      params: {},
+    })
+      .then((res) => {
+        if (cancelled) return;
+        const data = res?.data ?? res;
+        setSignIndex(Array.isArray(data?.signs) ? data.signs : []);
+      })
+      .catch(() => {
+        if (!cancelled) setSignIndex([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [sourceMode]);
+
+  const unifiedCql = useMemo(() => {
+    if (sourceMode !== "unified") return { line: null, sign: null };
+    const opts = { typeFilter: activeTypeFilter, openStatusFilter };
+    return {
+      line: buildRoadNetworkUnifiedLineCql(rows, opts),
+      sign: buildRoadNetworkUnifiedSignCql(signIndex, rows, opts),
+    };
+  }, [sourceMode, rows, signIndex, activeTypeFilter, openStatusFilter]);
+
+  /** 군도 표에 섞인 면도·리도 — 종류 필터 시 해당 피처만 그림 */
+  const sharedTableCql = useMemo(
+    () =>
+      buildRoadNetworkSharedTableCql(
+        sourceMode === "legacy" ? rows : EMPTY_ROWS,
+        sourceMode === "legacy" ? activeTypeFilter : []
+      ),
+    [sourceMode, rows, activeTypeFilter]
+  );
+
+  const [showSigns, setShowSigns] = useState(true);
+  /** 표지 점은 개설 구간 기준으로 찍혀 있어 미개설 필터 때는 미개설 선 위에 표지를 직접 그린다 */
+  const signsOnUnopenedLines =
+    sourceMode === "unified" && openStatusFilter === "미개설" && showSigns;
+
+  /** GeoServer WMS — 종류·개설 필터에 맞는 레이어만 표시 (통합 도로망은 피처 id CQL로 거름) */
+  useEffect(() => {
+    if (!sourceMode) return;
+    ensureRoadNetworkWmsLayers(
+      setVisibleLayerNames,
+      {
+        typeFilter: activeTypeFilter,
+        openStatusFilter,
+        showSigns: showSigns && !signsOnUnopenedLines,
+      },
+      sourceMode
+    );
+    syncRoadNetworkUnifiedCql(setServiceWmsCqlByLayer, unifiedCql.line, unifiedCql.sign);
+    syncRoadNetworkLayerCql(setServiceWmsCqlByLayer, sharedTableCql);
+  }, [
+    activeTypeFilter,
+    openStatusFilter,
+    showSigns,
+    signsOnUnopenedLines,
+    sourceMode,
+    unifiedCql,
+    sharedTableCql,
+    setVisibleLayerNames,
+    setServiceWmsCqlByLayer,
+  ]);
 
   useEffect(() => {
     return () => {
       clearRoadNetworkWmsLayers(setVisibleLayerNames);
+      clearRoadNetworkUnifiedCql(setServiceWmsCqlByLayer);
+      syncRoadNetworkLayerCql(
+        setServiceWmsCqlByLayer,
+        buildRoadNetworkSharedTableCql(EMPTY_ROWS, [])
+      );
     };
-  }, [setVisibleLayerNames]);
+  }, [setVisibleLayerNames, setServiceWmsCqlByLayer]);
 
   /** 지도 WMS 클릭 → 목록 선택 */
   useEffect(() => {
@@ -157,11 +279,17 @@ export function RoadNetworkListPanel({ onClose }: Props) {
         prev.filter((r) => !isNewRoadNetworkRowId(r.id))
       );
       setRoadNetworkSelectedId?.(rowId);
+      setRoadNetworkWholeRoad?.(false);
     };
     return () => {
       pickRef.current = null;
     };
-  }, [mapContext?.applyRoadNetworkMapPickRef, setRoadNetworkRows, setRoadNetworkSelectedId]);
+  }, [
+    mapContext?.applyRoadNetworkMapPickRef,
+    setRoadNetworkRows,
+    setRoadNetworkSelectedId,
+    setRoadNetworkWholeRoad,
+  ]);
 
   useEffect(() => {
     let cancelled = false;
@@ -377,8 +505,7 @@ export function RoadNetworkListPanel({ onClose }: Props) {
       .filter((row) => {
         // 미저장 신규는 목록에 표시하지 않음
         if (isNewRoadNetworkRowId(row.id)) return false;
-        if (typeFilter !== "전체" && !matchesRoadNetworkTypeFilter(row.roadType, typeFilter))
-          return false;
+        if (!matchesRoadNetworkTypeSelection(row.roadType, activeTypeFilter)) return false;
         if (openStatusFilter !== "전체" && row.openStatus !== openStatusFilter) {
           return false;
         }
@@ -387,6 +514,8 @@ export function RoadNetworkListPanel({ onClose }: Props) {
           row.roadName,
           row.roadNo,
           row.roadType,
+          row.roadGrade ?? "",
+          row.address ?? "",
           row.openStatus ?? "",
           row.sect,
           row.dept,
@@ -401,7 +530,16 @@ export function RoadNetworkListPanel({ onClose }: Props) {
         const bBottom = b.roadType === "입체교차로" ? 1 : 0;
         return aBottom - bBottom;
       });
-  }, [keyword, typeFilter, openStatusFilter, rows, spatialWkt]);
+  }, [keyword, activeTypeFilter, openStatusFilter, rows, spatialWkt]);
+
+  useRoadNetworkUnopenedSignLayer(
+    mapContext?.mapInstanceRef?.current,
+    items,
+    signsOnUnopenedLines
+  );
+
+  /** 같은 노선번호 구간은 한 행 — 구간 구분은 상세 패널에서 */
+  const groups = useMemo(() => groupRoadNetworkRows(items), [items]);
 
   /** 지도 도로명 라벨용 — 필터된 목록과 동일 */
   useEffect(() => {
@@ -412,14 +550,33 @@ export function RoadNetworkListPanel({ onClose }: Props) {
     // 목록 행은 만들지 않고 상세 등록만 연다(저장 시 목록에 반영)
     setRoadNetworkRows?.((prev) => {
       const withoutDraft = prev.filter((r) => !isNewRoadNetworkRowId(r.id));
-      return [createEmptyRoadNetworkRow(String(historyUser), ROAD_NETWORK_NEW_ID), ...withoutDraft];
+      const draft = createEmptyRoadNetworkRow(String(historyUser), ROAD_NETWORK_NEW_ID);
+      if (sourceMode === "unified") {
+        draft.roadGrade = "국도";
+        draft.roadType = "국도";
+      }
+      return [draft, ...withoutDraft];
     });
     setRoadNetworkSelectedId?.(ROAD_NETWORK_NEW_ID);
+    setRoadNetworkWholeRoad?.(false);
   };
 
-  const handleSelectRow = (id: string) => {
+  const handleSelectGroup = (group: RoadNetworkRowGroup) => {
+    const first = group.rows[0];
+    if (!first) return;
     setRoadNetworkRows?.((prev) => prev.filter((r) => !isNewRoadNetworkRowId(r.id)));
-    setRoadNetworkSelectedId?.(id);
+    // 대표 구간을 열고 구간은 미선택(노선 전체 강조) — 구간 선택은 상세에서
+    setRoadNetworkSelectedId?.(first.id);
+    setRoadNetworkWholeRoad?.(group.rows.length > 1);
+    const map = mapContext?.mapInstanceRef?.current;
+    if (!map) return;
+    const ext = extent3857FromRoadNetworkGeoms(group.rows.map((r) => r.geom));
+    if (!ext) return;
+    scheduleFitMapToExtent3857(map, ext, {
+      fitPadding: [...LIST_FIT_PADDING],
+      maxZoom: LIST_FIT_MAX_ZOOM,
+      applyMapViewPadding: () => mapContext?.applyMapViewPaddingRef?.current?.(),
+    });
   };
 
   const handleExport = () => {
@@ -442,6 +599,18 @@ export function RoadNetworkListPanel({ onClose }: Props) {
       <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border px-3 py-1.5">
         <span className="text-sm font-semibold text-foreground">도로망도</span>
         <div className="flex items-center gap-1">
+          {sourceMode === "unified" ? (
+            <LayerRowPanelButton
+              type="button"
+              onClick={() => setShowSigns((v) => !v)}
+              title={showSigns ? "지도 노선번호 표지 끄기" : "지도 노선번호 표지 켜기"}
+              aria-pressed={showSigns}
+              className={cn(showSigns && "border-primary bg-primary/10 text-primary hover:bg-primary/15")}
+            >
+              <Signpost className="h-3 w-3 shrink-0" aria-hidden />
+              번호표지
+            </LayerRowPanelButton>
+          ) : null}
           <LayerRowPanelButton type="button" onClick={handleExport} title="엑셀 내보내기">
             <Download className="h-3 w-3 shrink-0" aria-hidden />
             엑셀
@@ -559,23 +728,26 @@ export function RoadNetworkListPanel({ onClose }: Props) {
               role="group"
               aria-label="도로 종류 필터"
             >
-              {ROAD_NETWORK_TYPE_FILTERS.map((filter) => {
-                const active = typeFilter === filter;
+              {visibleTypeFilters.map((filter) => {
+                const active =
+                  filter === "전체"
+                    ? activeTypeFilter.length === 0
+                    : activeTypeFilter.includes(filter);
                 return (
                   <button
                     key={filter}
                     type="button"
-                    onClick={() => setTypeFilter(filter)}
+                    onClick={() => toggleTypeFilter(filter)}
                     title={filter}
                     className={cn(
-                      "min-w-0 flex-1 truncate rounded border px-0.5 py-1 text-center text-[10px] font-medium leading-tight transition-colors",
+                      "flex-auto whitespace-nowrap rounded border px-1 py-1 text-center text-[10px] font-medium leading-tight transition-colors",
                       active
                         ? "border-primary bg-primary/10 text-primary"
                         : "border-border bg-background text-muted-foreground hover:border-border hover:bg-muted/50"
                     )}
                     aria-pressed={active}
                   >
-                    <span className="block truncate">{filter}</span>
+                    {filter}
                   </button>
                 );
               })}
@@ -727,7 +899,10 @@ export function RoadNetworkListPanel({ onClose }: Props) {
         ) : null}
 
         <div className="flex items-center justify-between gap-2 text-[11px] text-muted-foreground">
-          <span>목록 {items.length}건</span>
+          <span>
+            목록 {groups.length}건
+            {groups.length !== items.length ? ` · 구간 ${items.length}개` : ""}
+          </span>
           {isSpatialActive ? (
             <button
               type="button"
@@ -755,25 +930,24 @@ export function RoadNetworkListPanel({ onClose }: Props) {
               <col className="w-[5.75rem]" />
             </colgroup>
             <tbody>
-              {items.map((item) => {
+              {groups.map((group) => {
+                const item = group.rows[0]!;
+                const segCount = group.rows.length;
                 const titleLine = formatRoadNetworkListTitle(item);
                 const hasName = Boolean(item.roadName.trim());
-                const isSelected = selectedId === item.id;
+                const isSelected = group.rows.some((r) => r.id === selectedId);
                 const badge = ROAD_NETWORK_TYPE_BADGE[item.roadType];
-                const openBadge =
-                  item.openStatus != null
-                    ? ROAD_NETWORK_OPEN_STATUS_BADGE[item.openStatus]
-                    : null;
+                const rightText = segCount > 1 ? `${segCount}구간` : item.dept || "—";
                 return (
                   <tr
-                    key={item.id}
+                    key={group.key}
                     role="button"
                     tabIndex={0}
-                    onClick={() => handleSelectRow(item.id)}
+                    onClick={() => handleSelectGroup(group)}
                     onKeyDown={(e) => {
                       if (e.key === "Enter" || e.key === " ") {
                         e.preventDefault();
-                        handleSelectRow(item.id);
+                        handleSelectGroup(group);
                       }
                     }}
                     className={cn(
@@ -799,18 +973,6 @@ export function RoadNetworkListPanel({ onClose }: Props) {
                         >
                           {item.roadType}
                         </span>
-                        {openBadge ? (
-                          <span
-                            className={cn(
-                              "inline-flex w-[2.5rem] shrink-0 items-center justify-center whitespace-nowrap rounded border px-0.5 py-0.5 text-[10px] font-semibold leading-none",
-                              openBadge.bg,
-                              openBadge.text,
-                              openBadge.border
-                            )}
-                          >
-                            {item.openStatus}
-                          </span>
-                        ) : null}
                         <p
                           className={cn(
                             "min-w-0 flex-1 truncate text-sm font-medium leading-tight",
@@ -824,9 +986,9 @@ export function RoadNetworkListPanel({ onClose }: Props) {
                     </td>
                     <td
                       className="min-w-0 px-3 py-2.5 pl-1.5 text-right text-[11px] text-muted-foreground"
-                      title={item.dept || undefined}
+                      title={segCount > 1 ? `같은 번호 구간 ${segCount}개` : item.dept || undefined}
                     >
-                      <span className="block truncate">{item.dept || "—"}</span>
+                      <span className="block truncate">{rightText}</span>
                     </td>
                   </tr>
                 );

@@ -1,0 +1,18 @@
+<layer>
+  <name>wtl_pres_pm_ps</name>
+  <id>LayerInfoImpl-6e125944:1a180a00001:-7a12</id>
+  <type>VECTOR</type>
+  <defaultStyle>
+    <id>StyleInfoImpl-6e125944:1a17ff3f0fb:-7823</id>
+  </defaultStyle>
+  <resource class="featureType">
+    <id>FeatureTypeInfoImpl-6e125944:1a180a00001:-7a11</id>
+  </resource>
+  <queryable>true</queryable>
+  <opaque>false</opaque>
+  <attribution>
+    <logoWidth>0</logoWidth>
+    <logoHeight>0</logoHeight>
+  </attribution>
+  <dateCreated>2026-10-29 06:50:00.0 UTC</dateCreated>
+</layer>

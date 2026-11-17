@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { FileText, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { getPdfPageThumbDataUrl } from './renderPdfPageThumb';
+import type { IndexSheetGuide, IndexSheetMode } from './inferPdfPageUprightRotation';
 
 /** 사이드바(240px) 기준 썸네일 표시 너비 */
 export const PDF_PAGE_THUMB_DISPLAY_PX = 180;
@@ -22,6 +23,8 @@ export function ServiceFilePdfPageThumb({
   thumbMaxPx = PDF_PAGE_THUMB_DISPLAY_PX,
   priority = false,
   loadEnabled = true,
+  indexSheetMode,
+  indexSheetGuide,
 }: {
   url: string;
   pageNumber: number;
@@ -34,6 +37,9 @@ export function ServiceFilePdfPageThumb({
   priority?: boolean;
   /** false면 메인 canvas 준비 전까지 썸네일 렌더 지연 */
   loadEnabled?: boolean;
+  /** 색인도일 때만 지정. 가로 칸은 90·180·270, 세로 칸은 180만 */
+  indexSheetMode?: IndexSheetMode;
+  indexSheetGuide?: IndexSheetGuide;
 }) {
   const rootRef = useRef<HTMLButtonElement>(null);
   const [visible, setVisible] = useState(priority);
@@ -68,7 +74,7 @@ export function ServiceFilePdfPageThumb({
     setDataUrl(null);
 
     const ac = new AbortController();
-    void getPdfPageThumbDataUrl(url, pageNumber, thumbMaxPx, ac.signal)
+    void getPdfPageThumbDataUrl(url, pageNumber, thumbMaxPx, ac.signal, { indexSheetMode, indexSheetGuide })
       .then((thumb) => {
         if (!alive.current) return;
         setDataUrl(thumb);
@@ -84,7 +90,7 @@ export function ServiceFilePdfPageThumb({
       alive.current = false;
       ac.abort();
     };
-  }, [visible, loadEnabled, url, pageNumber, thumbMaxPx]);
+  }, [visible, loadEnabled, url, pageNumber, thumbMaxPx, indexSheetMode, indexSheetGuide]);
 
   return (
     <button

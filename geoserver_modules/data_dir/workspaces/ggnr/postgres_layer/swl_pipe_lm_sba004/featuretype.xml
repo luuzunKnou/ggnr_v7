@@ -1,0 +1,45 @@
+<featureType>
+  <id>FeatureTypeInfoImpl--4d2f0c14:1a1671e8ffa:-7eb7</id>
+  <name>swl_pipe_lm_sba004</name>
+  <nativeName>swl_pipe_lm</nativeName>
+  <namespace>
+    <id>NamespaceInfoImpl-4bf97568:19c4d6c3053:-7ffa</id>
+  </namespace>
+  <title>swl_pipe_lm</title>
+  <keywords>
+    <string>features</string>
+    <string>swl_pipe_lm</string>
+  </keywords>
+  <srs>EPSG:5181</srs>
+  <nativeBoundingBox>
+    <minx>320522.3648824554</minx>
+    <maxx>363822.4071499882</maxx>
+    <miny>304629.281379229</miny>
+    <maxy>331249.4920173697</maxy>
+    <crs class="projected">EPSG:5181</crs>
+  </nativeBoundingBox>
+  <latLonBoundingBox>
+    <minx>128.34060801952782</minx>
+    <maxx>128.82765399239722</maxx>
+    <miny>36.22570929605808</miny>
+    <maxy>36.47190378682699</maxy>
+    <crs>EPSG:4326</crs>
+  </latLonBoundingBox>
+  <projectionPolicy>FORCE_DECLARED</projectionPolicy>
+  <enabled>true</enabled>
+  <advertised>true</advertised>
+  <store class="dataStore">
+    <id>DataStoreInfoImpl-4bf97568:19c4d6c3053:-7ff9</id>
+  </store>
+  <serviceConfiguration>false</serviceConfiguration>
+  <simpleConversionEnabled>false</simpleConversionEnabled>
+  <cqlFilter>sba_cde = &apos;SBA004&apos;</cqlFilter>
+  <maxFeatures>0</maxFeatures>
+  <numDecimals>0</numDecimals>
+  <padWithZeros>false</padWithZeros>
+  <forcedDecimal>false</forcedDecimal>
+  <overridingServiceSRS>false</overridingServiceSRS>
+  <skipNumberMatched>false</skipNumberMatched>
+  <circularArcPresent>false</circularArcPresent>
+  <encodeMeasures>false</encodeMeasures>
+</featureType>

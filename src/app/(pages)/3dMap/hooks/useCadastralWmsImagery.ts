@@ -13,7 +13,7 @@ type ImageryLayer = import('cesium').ImageryLayer;
 const RAISE_AGAIN_DELAYS_MS = [0, 200, 800, 2000] as const;
 
 /**
- * 2D 지적도와 동일 GeoServer WMS(jijuk, ri, emd)를 Cesium 글로브에 이미지 레이어로 올림.
+ * 2D 지적도와 동일 GeoServer WMS(jijuk, sgg, emd, ri)를 Cesium 글로브에 이미지 레이어로 올림.
  * - groupOn: activeControls 에 cadastral 포함 여부
  * - visibleTableNames: null 이면 전부, 배열이면 해당 tableName 만 (2D visibleCadastralLayerNames 와 동일 규칙)
  */

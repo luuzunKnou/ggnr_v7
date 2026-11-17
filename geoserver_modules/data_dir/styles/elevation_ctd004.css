@@ -1,0 +1,7 @@
+/* elevation_ctd004 조곡선 — @sd <= 10000 */
+[@sd <= 10000] {
+  stroke: #D4C4A8;
+  stroke-width: 0.45;
+  stroke-opacity: 0.85;
+  stroke-dasharray: 2 3;
+}

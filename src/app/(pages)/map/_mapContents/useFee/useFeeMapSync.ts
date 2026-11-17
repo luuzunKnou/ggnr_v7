@@ -3,7 +3,8 @@ import {
   getAllUseFeeWmsLayerIds,
   getUseFeeWmsLayerId,
 } from './useFeeLayerId'
-import { getForeignUseFeeWmsLayerIds } from '@/lib/useFeeBinding'
+import { getForeignUseFeeWmsLayerIds, getUseFeeBinding } from '@/lib/useFeeBinding'
+import { getOccupationLedgerBinding } from '@/lib/occupationLedgerBinding'
 
 type SetVisible = (updater: (prev: Set<string>) => Set<string>) => void
 
@@ -14,18 +15,17 @@ type FeeLayerOpts = {
 
 /** 울진 하천점용 본표 */
 export const USE_FEE_ULJIN_OCCUPATION_WMS_LAYER_ID = USAGE_DATA_AS_WMS_LAYER_ID
-/** 공통 하천·도로·국공유지 점용 본표 */
-export const USE_FEE_WATER_OCCUPATION_WMS_LAYER_ID = 'water_occupationledger'
-export const USE_FEE_ROAD_OCCUPATION_WMS_LAYER_ID = 'road_occupationledger'
-export const USE_FEE_PUBLIC_OCCUPATION_WMS_LAYER_ID = 'public_occupationledger'
+/** 공통 하천·도로·국공유지 점용 본표 (공통 점용대장 연결 설정 기준) */
+export const USE_FEE_WATER_OCCUPATION_WMS_LAYER_ID =
+  getOccupationLedgerBinding({ serEng: 'waterOccupationLedger' })!.mainTable
+export const USE_FEE_ROAD_OCCUPATION_WMS_LAYER_ID =
+  getOccupationLedgerBinding({ serEng: 'roadOccupationLedger' })!.mainTable
+export const USE_FEE_PUBLIC_OCCUPATION_WMS_LAYER_ID =
+  getOccupationLedgerBinding({ serEng: 'publicOccupationLedger' })!.mainTable
 
 export type UseFeeOccupationLedgerTarget = {
   layerId: string
   label: string
-}
-
-function normalizeSystemKey(system?: string | null): string {
-  return String(system ?? '').trim().toLowerCase()
 }
 
 function feeLayerOpts(
@@ -37,26 +37,20 @@ function feeLayerOpts(
 }
 
 /**
- * 점사용료 상단 점용 레이어 버튼 — 시스템별 라벨·레이어.
- * 울진도 라벨은 «하천점용»(레이어만 usage_data_as).
+ * 점사용료 상단 점용 레이어 버튼 — 열린 점사용료(serEng)에 맞는 대장.
+ * 건설처럼 한 시스템에 국공유지·도로가 같이 있어도 도로점사용료는 도로점용.
+ * 울진 하천만 라벨은 «하천점용»(레이어는 usage_data_as).
  */
 export function getUseFeeOccupationLedgerTarget(opts: {
   system?: string | null
   serEng?: string | null
   isUljinRiver?: boolean
 }): UseFeeOccupationLedgerTarget {
-  const sys = normalizeSystemKey(
-    opts.system ??
-      (String(opts.serEng ?? '').includes('road')
-        ? 'road'
-        : String(opts.serEng ?? '').includes('public')
-          ? 'build'
-          : 'river')
-  )
-  if (sys === 'road') {
+  const prefix = getUseFeeBinding({ serEng: opts.serEng, system: opts.system }).prefix
+  if (prefix === 'road') {
     return { layerId: USE_FEE_ROAD_OCCUPATION_WMS_LAYER_ID, label: '도로점용' }
   }
-  if (sys === 'build') {
+  if (prefix === 'public') {
     return { layerId: USE_FEE_PUBLIC_OCCUPATION_WMS_LAYER_ID, label: '국공유지점용' }
   }
   return {
@@ -121,10 +115,11 @@ export function clearUseFeeWmsLayer(setVisibleLayerNames?: SetVisible | null): v
 /** 시스템 전환 시 — 다른 시스템 점사용료 WMS만 끄기 */
 export function clearForeignUseFeeWmsLayers(
   setVisibleLayerNames?: SetVisible | null,
-  system?: string | null
+  system?: string | null,
+  serviceList?: readonly string[] | null
 ): void {
   if (!setVisibleLayerNames) return
-  const ids = getForeignUseFeeWmsLayerIds(system).map((id) => id.toLowerCase())
+  const ids = getForeignUseFeeWmsLayerIds(system, serviceList).map((id) => id.toLowerCase())
   if (ids.length === 0) return
   setVisibleLayerNames((prev) => {
     let changed = false

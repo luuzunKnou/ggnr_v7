@@ -1,7 +1,7 @@
 import { get as getProjection, transform } from 'ol/proj';
 import { View } from 'ol';
 import { Map } from 'ol';
-import { RESOLUTIONS_3857 } from '../config/mapDefaults';
+import { VIEW_RESOLUTIONS_3857 } from '../config/mapDefaults';
 
 /**
  * 좌표계 변환 서비스
@@ -202,9 +202,9 @@ export function updateViewProjection(
       zoom: currentZoom,
     };
     if (newProjection === 'EPSG:3857') {
-      viewOptions.resolutions = RESOLUTIONS_3857;
+      viewOptions.resolutions = VIEW_RESOLUTIONS_3857;
       viewOptions.minZoom = 0;
-      viewOptions.maxZoom = RESOLUTIONS_3857.length - 1;
+      viewOptions.maxZoom = VIEW_RESOLUTIONS_3857.length - 1;
       viewOptions.constrainResolution = true;
     }
     if (prevPadding) {

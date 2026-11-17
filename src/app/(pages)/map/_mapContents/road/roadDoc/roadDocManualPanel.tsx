@@ -132,7 +132,7 @@ function listCadFolderChildren(
 type ManualTab = "doc" | "drawing" | "target" | "ref";
 type ApiScope = "doc" | "cad";
 
-/** SHOW_SERVICES 에 있으면 업무자료 안 편람 탭만 표시 (사이드바 메뉴와 무관) */
+/** 시스템 서비스 목록에 있으면 업무자료 안 편람 탭만 표시 (사이드바 메뉴와 무관) */
 const ROAD_WORK_HANDBOOK_SHOW_ENG = "roadWorkHandbook";
 
 const TAB_BTN =
@@ -154,6 +154,7 @@ export function RoadDocManualPanel({
   handbookSelected,
   onHandbookSelect,
   startOnHandbook = false,
+  onHandbookWideChange,
 }: {
   onClose: () => void;
   handbookMode: HandbookViewMode;
@@ -161,6 +162,7 @@ export function RoadDocManualPanel({
   handbookSelected: HandbookDetailSelection | null;
   onHandbookSelect: (next: HandbookDetailSelection | null) => void;
   startOnHandbook?: boolean;
+  onHandbookWideChange?: (wide: boolean) => void;
 }) {
   const [handbookTabsVisible, setHandbookTabsVisible] = useState(false);
   const handbookDeeplinkApplied = useRef(false);
@@ -172,11 +174,15 @@ export function RoadDocManualPanel({
   const [listError, setListError] = useState<string | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  /** 도면 탭: `roadDoc/cad` 기준 상대 경로 (빈 문자열 = 루트) */
+  /** 도면 탭: `file_data/road_doc/cad` 기준 상대 경로 (빈 문자열 = 루트) */
   const [cadPath, setCadPath] = useState("");
   const isHandbookTab =
     handbookTabsVisible && (activeTab === "target" || activeTab === "ref");
   const mapPick = useHandbookMapPick();
+
+  useEffect(() => {
+    onHandbookWideChange?.(isHandbookTab && activeTab === "target");
+  }, [isHandbookTab, activeTab, onHandbookWideChange]);
 
   useEffect(() => {
     let cancelled = false;
@@ -412,7 +418,7 @@ export function RoadDocManualPanel({
       if (docDisplayFiles.length === 0) return "문서 파일이 없습니다.";
       return null;
     }
-    if (cadFiles.length === 0) return "roadDoc\\cad 폴더에 도면 파일이 없습니다.";
+    if (cadFiles.length === 0) return "도면 파일이 없습니다.";
     return null;
   }, [activeTab, docFiles.length, docDisplayFiles.length, cadFiles.length]);
 

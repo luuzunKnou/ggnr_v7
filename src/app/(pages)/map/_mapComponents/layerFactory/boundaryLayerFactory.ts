@@ -46,8 +46,9 @@ export const CADASTRAL_LAYERS: {
   maxZoom: number;
 }[] = [
   { tableName: 'jijuk', layerName: '지적', minZoom: 16, maxZoom: 30 },
-  { tableName: 'ri', layerName: '리', minZoom: 11, maxZoom: 18 },
+  { tableName: 'sgg', layerName: '시군구', minZoom: 6, maxZoom: 18 },
   { tableName: 'emd', layerName: '읍면동', minZoom: 8, maxZoom: 18 },
+  { tableName: 'ri', layerName: '리', minZoom: 11, maxZoom: 18 },
 ];
 
 /**

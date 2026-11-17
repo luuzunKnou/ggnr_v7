@@ -18,7 +18,7 @@ import { resolveClientMachineIp, prefetchClientMachineIp } from '@/lib/clientMac
 import { streamDownloadFile, streamDownloadResponse } from '@/lib/streamFileDownload';
 import { recordVersionHistoryClient } from '@/lib/recordVersionHistoryClient';
 import {
-  fetchGnmsInstallZipViaLocal,
+  fetchGnmsInstallZipForBrowserSave,
   notifyGnmsLatestDownloadCancel,
 } from '@/lib/sourceVersionClientRelay';
 import { notifyDevVersionHistoryRefresh } from './devVersionHistoryBridge';
@@ -324,8 +324,8 @@ export function InstallZipDownloadPanel() {
     let gnmsFileName: string | undefined;
 
     try {
-      pushLog('GNMS 최신 설치파일 조회 시작 (로컬 서버 경유)');
-      const { downloadRes, fileName, version, jobId } = await fetchGnmsInstallZipViaLocal({
+      pushLog('GNMS 최신 설치파일 조회 시작 (브라우저 → GNMS)');
+      const { downloadRes, fileName, version, jobId } = await fetchGnmsInstallZipForBrowserSave({
         signal,
         log: pushLog,
       });
@@ -674,16 +674,6 @@ export function InstallZipDownloadPanel() {
     <div className="flex min-h-0 flex-1 flex-col rounded border p-3 gap-2">
       {typeCheckModal}
       <div className="shrink-0 space-y-2">
-        <Button
-          type="button"
-          variant="outline"
-          onClick={openInstallManualPopup}
-          className="gap-1 cursor-pointer"
-          title="설치 매뉴얼"
-        >
-          <BookOpenText className="h-4 w-4" />
-          설치 매뉴얼
-        </Button>
         <SourceModeRadios mode={sourceMode} setMode={setSourceMode} disabled={uiBusy} />
         <ModeDescription mode={sourceMode} />
         {sourceMode === 'local' ? (

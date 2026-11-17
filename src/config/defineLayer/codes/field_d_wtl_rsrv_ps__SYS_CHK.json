@@ -1,0 +1,14 @@
+[
+  {
+    "define_code_key": "61852",
+    "define_code_field_key": "4379",
+    "define_code_name": "0",
+    "define_code_kor_name": "대장초기화"
+  },
+  {
+    "define_code_key": "61853",
+    "define_code_field_key": "4379",
+    "define_code_name": "1",
+    "define_code_kor_name": "대장입력완료"
+  }
+]

@@ -1,0 +1,19 @@
+<layer>
+  <name>disability_welfare</name>
+  <id>LayerInfoImpl--610c9460:1a10fc86a73:-7aee</id>
+  <type>VECTOR</type>
+  <defaultStyle>
+    <id>StyleInfoImpl--610c9460:1a10fc86a73:-7aed</id>
+  </defaultStyle>
+  <resource class="featureType">
+    <id>FeatureTypeInfoImpl--610c9460:1a10fc86a73:-7aef</id>
+  </resource>
+  <queryable>true</queryable>
+  <opaque>false</opaque>
+  <attribution>
+    <logoWidth>0</logoWidth>
+    <logoHeight>0</logoHeight>
+  </attribution>
+  <dateCreated>2026-10-16 06:47:22.566 UTC</dateCreated>
+  <dateModified>2026-10-16 06:47:22.895 UTC</dateModified>
+</layer>

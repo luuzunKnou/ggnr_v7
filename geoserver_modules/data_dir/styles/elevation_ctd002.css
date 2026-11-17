@@ -1,0 +1,6 @@
+/* elevation_ctd002 주곡선 — @sd <= 50000 */
+[@sd <= 50000] {
+  stroke: #A67C52;
+  stroke-width: 0.7;
+  stroke-opacity: 0.85;
+}

@@ -123,15 +123,48 @@ function selectOptionText(bracket: string, rest: string): string {
   return body;
 }
 
+/** 좁은 상세 패널 — 짧은 값은 한 줄에 2칸, 긴 값은 한 줄 전체 */
+const NarrowContext = React.createContext(false);
+
+/** 반 칸 값에 한 줄로 들어가는 폭(한글 2·그 외 1) — 넘으면 한 줄 전체 사용 */
+const NARROW_SHORT_VALUE_UNITS = 10;
+
+function textUnits(text: string): number {
+  let n = 0;
+  for (const ch of text) n += ch.charCodeAt(0) > 0x2e80 ? 2 : 1;
+  return n;
+}
+const NARROW_ITEM = 'flex min-w-0 border-b border-r border-border';
+const NARROW_LABEL =
+  'w-[5.5rem] shrink-0 bg-muted px-2 py-1.5 text-left font-normal text-muted-foreground break-keep';
+const NARROW_VALUE = 'min-w-0 flex-1 bg-background px-2 py-1.5 text-left text-foreground break-all';
+
+function NarrowItem({ label, value, wide }: { label: string; value: React.ReactNode; wide: boolean }) {
+  return (
+    <td className={cn(NARROW_ITEM, wide && 'col-span-2')}>
+      <div className={NARROW_LABEL}>{label}</div>
+      <div className={NARROW_VALUE}>{value}</div>
+    </td>
+  );
+}
+
 function ThTd({
   label,
   value,
   colSpan,
+  narrowWide = false,
 }: {
   label: string;
   value: React.ReactNode;
   colSpan?: number;
+  /** 좁은 모드에서 값 길이와 관계없이 한 줄 전체 */
+  narrowWide?: boolean;
 }) {
+  const narrow = React.useContext(NarrowContext);
+  if (narrow) {
+    const wide = narrowWide || (typeof value === 'string' && textUnits(value) > NARROW_SHORT_VALUE_UNITS);
+    return <NarrowItem label={label} value={value} wide={wide} />;
+  }
   return (
     <>
       <th className={LAND_INFO_LABEL_CELL}>{label}</th>
@@ -142,7 +175,69 @@ function ThTd({
   );
 }
 
+function ViolCell() {
+  const narrow = React.useContext(NarrowContext);
+  return (
+    <td
+      className={cn(
+        narrow ? cn(NARROW_ITEM, 'col-span-2 px-2 py-1.5') : LAND_INFO_VALUE_CELL,
+        'font-semibold text-red-600 dark:text-red-400'
+      )}
+    >
+      위반건축물
+    </td>
+  );
+}
+
+function JijiguRows({ items }: { items: string[] }) {
+  const narrow = React.useContext(NarrowContext);
+  if (narrow) {
+    return (
+      <tr>
+        <NarrowItem
+          label="지역지구구역"
+          wide
+          value={items.map((v, i) => (
+            <div key={`j-${i}`}>{v}</div>
+          ))}
+        />
+      </tr>
+    );
+  }
+  return (
+    <>
+      {items.map((v, i) => (
+        <tr key={`j-${i}`}>
+          {i === 0 ? (
+            <th rowSpan={items.length} className={cn(LAND_INFO_LABEL_CELL, 'w-[28%] align-top')}>
+              지역지구구역
+            </th>
+          ) : null}
+          <td colSpan={3} className={LAND_INFO_VALUE_CELL}>
+            {v}
+          </td>
+        </tr>
+      ))}
+    </>
+  );
+}
+
 function DetailTable({ children }: { children: React.ReactNode }) {
+  const narrow = React.useContext(NarrowContext);
+  if (narrow) {
+    return (
+      <div className="overflow-hidden rounded border border-border">
+        <table
+          className={cn(
+            '-mb-px grid w-[calc(100%+1px)] grid-flow-row-dense grid-cols-2 [&_tbody]:contents [&_tr]:contents',
+            LAND_INFO_TABLE_TEXT
+          )}
+        >
+          <tbody>{children}</tbody>
+        </table>
+      </div>
+    );
+  }
   return (
     <div className={cn(LAND_INFO_TABLE_WRAP, 'overflow-hidden')}>
       <table className={cn('w-full table-fixed border-collapse', LAND_INFO_TABLE_TEXT)}>
@@ -169,11 +264,7 @@ function RecapDetail({ data }: { data: BuildingRegisterRow }) {
           value={fmt(field(data, 'comm_bld_esnc_no', 'mgmBldrgstPk', 'mgm_bldrgst_pk'))}
           colSpan={viol ? 1 : 3}
         />
-        {viol ? (
-          <td className={cn(LAND_INFO_VALUE_CELL, 'font-semibold text-red-600 dark:text-red-400')}>
-            위반건축물
-          </td>
-        ) : null}
+        {viol ? <ViolCell /> : null}
       </tr>
       <tr>
         <ThTd label="명칭" value={fmt(field(data, 'bld_nm', 'bldNm'))} />
@@ -190,20 +281,7 @@ function RecapDetail({ data }: { data: BuildingRegisterRow }) {
         <ThTd label="대지면적(㎡)" value={fmt(field(data, 'plat_area', 'platArea'), '㎡')} />
         <ThTd label="연면적(㎡)" value={fmt(field(data, 'totarea', 'totArea'), '㎡')} />
       </tr>
-      {jijigus.length
-        ? jijigus.map((v, i) => (
-            <tr key={`j-${i}`}>
-              {i === 0 ? (
-                <th rowSpan={jijigus.length} className={cn(LAND_INFO_LABEL_CELL, 'w-[28%] align-top')}>
-                  지역지구구역
-                </th>
-              ) : null}
-              <td colSpan={3} className={LAND_INFO_VALUE_CELL}>
-                {v}
-              </td>
-            </tr>
-          ))
-        : null}
+      {jijigus.length ? <JijiguRows items={jijigus} /> : null}
       <tr>
         <ThTd label="주용도" value={fmt(field(data, 'main_prpos_cd_nm', 'mainPurpsCdNm'))} />
         <ThTd label="건축면적(㎡)" value={fmt(field(data, 'arch_area', 'archArea'), '㎡')} />
@@ -229,7 +307,7 @@ function RecapDetail({ data }: { data: BuildingRegisterRow }) {
       </tr>
       <tr>
         <ThTd label="부속건축물 수" value={fmt(field(data, 'atch_bild_cnt', 'atchBldCnt'), '동')} />
-        <ThTd label="부속건축물 면적" value={fmt(field(data, 'atch_bild_area', 'atchBldArea'), '㎡')} />
+        <ThTd label="부속건축물 면적" value={fmt(field(data, 'atch_bild_area', 'atchBldArea'), '㎡')} narrowWide />
       </tr>
     </DetailTable>
   );
@@ -246,11 +324,7 @@ function TitleDetail({ data }: { data: BuildingRegisterRow }) {
           value={fmt(field(data, 'comm_bld_esnc_no', 'mgmBldrgstPk', 'mgm_bldrgst_pk'))}
           colSpan={viol ? 1 : 3}
         />
-        {viol ? (
-          <td className={cn(LAND_INFO_VALUE_CELL, 'font-semibold text-red-600 dark:text-red-400')}>
-            위반건축물
-          </td>
-        ) : null}
+        {viol ? <ViolCell /> : null}
       </tr>
       <tr>
         <ThTd
@@ -273,20 +347,7 @@ function TitleDetail({ data }: { data: BuildingRegisterRow }) {
       <tr>
         <ThTd label="건축면적(㎡)" value={fmt(field(data, 'arch_area', 'archArea'), '㎡')} colSpan={3} />
       </tr>
-      {jijigus.length
-        ? jijigus.map((v, i) => (
-            <tr key={`j-${i}`}>
-              {i === 0 ? (
-                <th rowSpan={jijigus.length} className={cn(LAND_INFO_LABEL_CELL, 'w-[28%] align-top')}>
-                  지역지구구역
-                </th>
-              ) : null}
-              <td colSpan={3} className={LAND_INFO_VALUE_CELL}>
-                {v}
-              </td>
-            </tr>
-          ))
-        : null}
+      {jijigus.length ? <JijiguRows items={jijigus} /> : null}
           <tr>
             <ThTd label="주구조" value={fmt(field(data, 'strct_cd_nm', 'strctCdNm', 'mainStrctCdNm'))} />
             <ThTd
@@ -315,7 +376,7 @@ function TitleDetail({ data }: { data: BuildingRegisterRow }) {
           </tr>
           <tr>
             <ThTd label="부속건축물 수" value={fmt(field(data, 'atch_bild_cnt', 'atchBldCnt'), '동')} />
-            <ThTd label="부속건축물 면적" value={fmt(field(data, 'atch_bild_area', 'atchBldArea'), '㎡')} />
+            <ThTd label="부속건축물 면적" value={fmt(field(data, 'atch_bild_area', 'atchBldArea'), '㎡')} narrowWide />
           </tr>
     </DetailTable>
   );
@@ -340,6 +401,8 @@ function ChildListTable({
   onDongLookup?: (bldNm: string) => void;
 }) {
   const isRecap = mode === 'recap';
+  const narrow = React.useContext(NarrowContext);
+  const th = narrow ? cn(LAND_INFO_LIST_TH, 'font-normal text-muted-foreground') : LAND_INFO_LIST_TH;
   return (
     <div className={LAND_INFO_TABLE_WRAP}>
       <table className={cn('w-full table-auto border-collapse', LAND_INFO_TABLE_TEXT)}>
@@ -347,19 +410,19 @@ function ChildListTable({
           <tr>
             {isRecap ? (
               <>
-                <th className={cn(LAND_INFO_LIST_TH, 'whitespace-nowrap')}>구분</th>
-                <th className={LAND_INFO_LIST_TH}>건물명</th>
-                <th className={LAND_INFO_LIST_TH}>용도</th>
-                <th className={LAND_INFO_LIST_TH}>주구조</th>
-                <th className={cn(LAND_INFO_LIST_TH, 'whitespace-nowrap text-right')}>면적(㎡)</th>
-                <th className={cn(LAND_INFO_LIST_TH, 'whitespace-nowrap w-[1%]')}>조회</th>
+                <th className={cn(th, 'whitespace-nowrap')}>구분</th>
+                <th className={th}>건물명</th>
+                <th className={th}>용도</th>
+                <th className={th}>주구조</th>
+                <th className={cn(th, 'whitespace-nowrap text-right')}>면적(㎡)</th>
+                <th className={cn(th, 'whitespace-nowrap w-[1%]')}>조회</th>
               </>
             ) : (
               <>
-                <th className={cn(LAND_INFO_LIST_TH, 'whitespace-nowrap')}>층별</th>
-                <th className={LAND_INFO_LIST_TH}>구조</th>
-                <th className={LAND_INFO_LIST_TH}>용도</th>
-                <th className={cn(LAND_INFO_LIST_TH, 'whitespace-nowrap text-right')}>면적(㎡)</th>
+                <th className={cn(th, 'whitespace-nowrap')}>층별</th>
+                <th className={th}>구조</th>
+                <th className={th}>용도</th>
+                <th className={cn(th, 'whitespace-nowrap text-right')}>면적(㎡)</th>
               </>
             )}
           </tr>
@@ -433,6 +496,8 @@ export function BuildingRegisterPanel({
   buildings,
   childRows,
   onResetRoot,
+  narrow = false,
+  title = '건축물대장',
 }: {
   pnu: string;
   fetching: boolean;
@@ -443,6 +508,10 @@ export function BuildingRegisterPanel({
   childRows: BuildingRegisterRow[];
   /** 총괄로 되돌리기 */
   onResetRoot?: () => void;
+  /** 좁은 상세 패널용 — 2열 표, 제목·선택 한 줄, 출처 숨김 */
+  narrow?: boolean;
+  /** 좁은 모드 제목 */
+  title?: string;
 }) {
   const [selectedSeq, setSelectedSeq] = useState('');
   const [localBuildings, setLocalBuildings] = useState(buildings);
@@ -528,10 +597,19 @@ export function BuildingRegisterPanel({
     onResetRoot?.();
   };
 
-  if (fetching) return <p className="text-xs text-muted-foreground">건축물대장 조회 중...</p>;
+  const narrowTitle = narrow ? <p className="text-xs font-semibold text-foreground">{title}</p> : null;
+  if (fetching) {
+    return (
+      <div className="space-y-1.5">
+        {narrowTitle}
+        <p className="text-xs text-muted-foreground">건축물대장 조회 중...</p>
+      </div>
+    );
+  }
   if (!localBuildings.length) {
     return (
-      <div className="space-y-2">
+      <div className={narrow ? 'space-y-1.5' : 'space-y-2'}>
+        {narrowTitle}
         {notice ? (
           <p className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded px-2 py-1.5">
             {notice}
@@ -547,7 +625,8 @@ export function BuildingRegisterPanel({
   const recapView = isRecapRegisterView(selected, localMode);
 
   return (
-    <div className="min-h-full flex flex-col space-y-3">
+    <NarrowContext.Provider value={narrow}>
+    <div className={cn('flex flex-col', narrow ? 'space-y-2' : 'min-h-full space-y-3')}>
       {notice ? (
         <p className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded px-2 py-1.5">
           {notice}
@@ -555,10 +634,10 @@ export function BuildingRegisterPanel({
       ) : null}
 
       <div className="flex items-center justify-between gap-2">
-        <p className="min-w-0 text-xs font-semibold text-foreground">
-          건축물대장 {ledgerTypeLabel(typeLabel)}
+        <p className="min-w-0 shrink-0 text-xs font-semibold text-foreground">
+          {narrow ? title : `건축물대장 ${ledgerTypeLabel(typeLabel)}`}
         </p>
-        <div className="flex shrink-0 items-center gap-2">
+        <div className={cn('flex items-center gap-2', narrow ? 'min-w-0 flex-1 justify-end' : 'shrink-0')}>
         {showBack ? (
           <button
             type="button"
@@ -570,7 +649,10 @@ export function BuildingRegisterPanel({
           </button>
         ) : localBuildings.length > 0 ? (
           <select
-            className="max-w-[14rem] rounded border border-border bg-background px-1.5 py-0.5 text-[12px] text-foreground"
+            className={cn(
+              'rounded border border-border bg-background px-1.5 py-0.5 text-foreground',
+              narrow ? 'min-w-0 max-w-[150px] text-[11px]' : 'max-w-[14rem] text-[12px]'
+            )}
             value={selectedSeq}
             onChange={(e) => void handleSelectChange(e.target.value)}
           >
@@ -609,8 +691,9 @@ export function BuildingRegisterPanel({
           />
         </div>
       ) : null}
-      <BuildingDataSourceLine className="text-right" sources={[source]} />
+      {narrow ? null : <BuildingDataSourceLine className="text-right" sources={[source]} />}
     </div>
+    </NarrowContext.Provider>
   );
 }
 
@@ -619,11 +702,17 @@ export function BuildingPermitPanel({
   notice,
   source,
   rows,
+  narrow = false,
+  title = '건축허가대장',
 }: {
   fetching: boolean;
   notice?: string | null;
   source: BuildingPermitSource;
   rows: BuildingLedgerRow[];
+  /** 좁은 상세 패널용 — 2열 표, 출처 숨김 */
+  narrow?: boolean;
+  /** 제목 */
+  title?: string;
 }) {
   const [selectedKey, setSelectedKey] = useState('');
 
@@ -645,10 +734,19 @@ export function BuildingPermitPanel({
     );
   }, [rows, selectedKey]);
 
-  if (fetching) return <p className="text-xs text-muted-foreground">건축인허가 조회 중...</p>;
+  const narrowTitle = narrow ? <p className="text-xs font-semibold text-foreground">{title}</p> : null;
+  if (fetching) {
+    return (
+      <div className="space-y-1.5">
+        {narrowTitle}
+        <p className="text-xs text-muted-foreground">건축인허가 조회 중...</p>
+      </div>
+    );
+  }
   if (!rows.length) {
     return (
-      <div className="space-y-2">
+      <div className={narrow ? 'space-y-1.5' : 'space-y-2'}>
+        {narrowTitle}
         {notice ? (
           <p className="text-[11px] text-amber-800 bg-amber-50 border border-amber-200 rounded px-2 py-1.5 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200">
             {notice}
@@ -661,7 +759,8 @@ export function BuildingPermitPanel({
   }
 
   return (
-    <div className="min-h-full flex flex-col space-y-3">
+    <NarrowContext.Provider value={narrow}>
+    <div className={cn('flex flex-col', narrow ? 'space-y-2' : 'min-h-full space-y-3')}>
       {notice ? (
         <p className="text-[11px] text-amber-800 bg-amber-50 border border-amber-200 rounded px-2 py-1.5 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200">
           {notice}
@@ -669,10 +768,13 @@ export function BuildingPermitPanel({
       ) : null}
 
       <div className="flex items-center justify-between gap-2">
-        <p className="min-w-0 text-xs font-semibold text-foreground">건축허가대장</p>
+        <p className="min-w-0 shrink-0 text-xs font-semibold text-foreground">{title}</p>
         {rows.length > 0 ? (
           <select
-            className="max-w-[14rem] shrink-0 rounded border border-border bg-background px-1.5 py-0.5 text-[12px] text-foreground"
+            className={cn(
+              'rounded border border-border bg-background px-1.5 py-0.5 text-foreground',
+              narrow ? 'min-w-0 max-w-[150px] text-[11px]' : 'max-w-[14rem] shrink-0 text-[12px]'
+            )}
             value={selectedKey}
             onChange={(e) => setSelectedKey(e.target.value)}
           >
@@ -717,20 +819,40 @@ export function BuildingPermitPanel({
               colSpan={3}
             />
           </tr>
-          <tr>
-            <ThTd label="건물명" value={fmt(field(selected, 'bld_nm', 'bldNm'))} />
-            <ThTd
-              label="건축허가일"
-              value={fmt(field(selected, 'arch_pms_date', 'archPmsDay', 'apprv_date', 'apprvDay'))}
-            />
-          </tr>
-          <tr>
-            <ThTd label="지번" value={jibunText(selected)} />
-            <ThTd
-              label="대지위치"
-              value={platLocText(selected)}
-            />
-          </tr>
+          {narrow ? (
+            <>
+              <tr>
+                <ThTd label="건물명" value={fmt(field(selected, 'bld_nm', 'bldNm'))} narrowWide />
+              </tr>
+              <tr>
+                <ThTd label="대지위치" value={platLocText(selected)} narrowWide />
+              </tr>
+              <tr>
+                <ThTd
+                  label="건축허가일"
+                  value={fmt(field(selected, 'arch_pms_date', 'archPmsDay', 'apprv_date', 'apprvDay'))}
+                />
+                <ThTd label="지번" value={jibunText(selected)} />
+              </tr>
+            </>
+          ) : (
+            <>
+              <tr>
+                <ThTd label="건물명" value={fmt(field(selected, 'bld_nm', 'bldNm'))} />
+                <ThTd
+                  label="건축허가일"
+                  value={fmt(field(selected, 'arch_pms_date', 'archPmsDay', 'apprv_date', 'apprvDay'))}
+                />
+              </tr>
+              <tr>
+                <ThTd label="지번" value={jibunText(selected)} />
+                <ThTd
+                  label="대지위치"
+                  value={platLocText(selected)}
+                />
+              </tr>
+            </>
+          )}
           <tr>
             <ThTd
               label="건축구분명"
@@ -811,10 +933,13 @@ export function BuildingPermitPanel({
           </tr>
         </DetailTable>
       ) : null}
-      <BuildingDataSourceLine
-        className="text-right"
-        sources={[source === 'arch' || source === 'housing' ? 'portal' : source]}
-      />
+      {narrow ? null : (
+        <BuildingDataSourceLine
+          className="text-right"
+          sources={[source === 'arch' || source === 'housing' ? 'portal' : source]}
+        />
+      )}
     </div>
+    </NarrowContext.Provider>
   );
 }

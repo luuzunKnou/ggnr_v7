@@ -57,57 +57,84 @@ declare global {
   }
 }
 
+/** proxy=서버가 dapi를 받는 단계, domain=카카오 도메인 거절, followup=이어받는 CDN 단계 */
+export type KakaoSdkStage = 'proxy' | 'domain' | 'followup';
+
 export type KakaoSdkFailureDetail = {
+  stage?: KakaoSdkStage;
   kakaoOfficialMsg?: string;
   kakaoCode?: number;
   httpStatus?: number;
-  /** script onerror — 네트워크 401(도메인 미등록) 가능성 높음 */
-  scriptLoadFailed?: boolean;
 };
 
 /** loadKakaoMapsSdk reject — message 는 앱 내부 구분용 */
 export class KakaoMapsSdkLoadError extends Error {
+  readonly stage?: KakaoSdkStage;
   readonly kakaoOfficialMsg?: string;
   readonly kakaoCode?: number;
   readonly httpStatus?: number;
-  readonly scriptLoadFailed?: boolean;
 
   constructor(message: string, detail?: KakaoSdkFailureDetail) {
     super(message);
     this.name = 'KakaoMapsSdkLoadError';
+    this.stage = detail?.stage;
     this.kakaoOfficialMsg = detail?.kakaoOfficialMsg;
     this.kakaoCode = detail?.kakaoCode;
     this.httpStatus = detail?.httpStatus;
-    this.scriptLoadFailed = detail?.scriptLoadFailed;
   }
 }
 
-export function isKakaoDomainMismatch(detail?: {
-  kakaoOfficialMsg?: string;
-  kakaoCode?: number;
-  httpStatus?: number;
-  scriptLoadFailed?: boolean;
-}): boolean {
-  if (detail?.scriptLoadFailed) return true;
-  const msg = detail?.kakaoOfficialMsg ?? '';
+function looksLikeDomainMismatch(text: string): boolean {
   return (
-    detail?.kakaoCode === -401 ||
-    detail?.httpStatus === 401 ||
-    /domain mismatched/i.test(msg) ||
-    /registered web domains/i.test(msg) ||
-    /잘못된 접근/i.test(msg)
+    /domain mismatched/i.test(text) ||
+    /registered web domains/i.test(text) ||
+    /잘못된 접근/.test(text)
   );
 }
 
-/** script onerror 시 CORS 로 본문을 읽을 수 없음 — 카카오 공식 응답 형식으로 caller 치환 */
-function buildScriptUnauthorizedDetail(): KakaoSdkFailureDetail {
-  const origin = typeof window !== 'undefined' ? window.location.origin : '';
-  return {
-    scriptLoadFailed: true,
-    httpStatus: 401,
-    kakaoCode: -401,
-    kakaoOfficialMsg: `domain mismatched! caller=${origin}. check out registered web domains.`,
-  };
+export function isKakaoDomainMismatch(detail?: {
+  stage?: KakaoSdkStage;
+  kakaoOfficialMsg?: string;
+  kakaoCode?: number;
+  httpStatus?: number;
+}): boolean {
+  if (detail?.stage === 'domain') return true;
+  return looksLikeDomainMismatch(detail?.kakaoOfficialMsg ?? '');
+}
+
+function clipProbeText(text: string): string {
+  return text.replace(/\s+/g, ' ').slice(0, 180);
+}
+
+/** script onerror는 상태 코드가 없다. 같은 프록시 주소를 다시 읽어 단계만 가른다. */
+async function probeProxyFailure(scriptUrl: string): Promise<KakaoSdkFailureDetail> {
+  try {
+    const res = await fetch(scriptUrl, { cache: 'no-store' });
+    const text = await res.text();
+    let headerMsg = '';
+    try {
+      headerMsg = decodeURIComponent(res.headers.get('x-kakao-proxy-error') ?? '');
+    } catch {
+      headerMsg = res.headers.get('x-kakao-proxy-error') ?? '';
+    }
+    if (looksLikeDomainMismatch(text) || looksLikeDomainMismatch(headerMsg)) {
+      return {
+        stage: 'domain',
+        httpStatus: res.status,
+        kakaoOfficialMsg: clipProbeText(headerMsg || text),
+      };
+    }
+    return {
+      stage: 'proxy',
+      httpStatus: res.status,
+      kakaoOfficialMsg: clipProbeText(headerMsg || text),
+    };
+  } catch (error) {
+    return {
+      stage: 'proxy',
+      kakaoOfficialMsg: error instanceof Error ? error.message : String(error),
+    };
+  }
 }
 
 let loadPromise: Promise<KakaoMapsNs> | null = null;
@@ -143,12 +170,15 @@ export function loadKakaoMapsSdk(appKey: string): Promise<KakaoMapsNs> {
     const finish = () => {
       const kakao = window.kakao;
       if (!kakao?.maps?.load) {
-        rejectSdkLoad('카카오 지도 SDK 로드 실패', reject);
+        rejectSdkLoad('카카오 지도 SDK 로드 실패', reject, {
+          stage: 'proxy',
+          kakaoOfficialMsg: '스크립트는 왔지만 카카오 로더가 없습니다.',
+        });
         return;
       }
       kakao.maps.load(() => {
         if (!window.kakao?.maps?.Roadview) {
-          rejectSdkLoad('카카오 로드뷰 모듈 없음', reject);
+          rejectSdkLoad('카카오 로드뷰 모듈 없음', reject, { stage: 'followup' });
           return;
         }
         resolve(window.kakao);
@@ -168,7 +198,9 @@ export function loadKakaoMapsSdk(appKey: string): Promise<KakaoMapsNs> {
     script.src = scriptUrl;
     script.onload = finish;
     script.onerror = () => {
-      rejectSdkLoad('카카오 지도 스크립트 오류', reject, buildScriptUnauthorizedDetail());
+      void probeProxyFailure(scriptUrl).then((detail) => {
+        rejectSdkLoad('카카오 지도 스크립트 오류', reject, detail);
+      });
     };
     document.head.appendChild(script);
   });

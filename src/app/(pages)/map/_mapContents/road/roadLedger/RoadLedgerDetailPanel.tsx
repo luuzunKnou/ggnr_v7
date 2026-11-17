@@ -60,7 +60,20 @@ import {
   type RoadLedgerDocButtonKey,
   toggleRoadLedgerDocLayers,
 } from "./roadLedgerDocLayerMap";
+import {
+  fetchRoadLedgerDefineFieldLabels,
+  resolveRoadLedgerFieldLabel,
+} from "./roadLedgerDefineFieldLabels";
 import { RoadLedgerFacilityListSection } from "./RoadLedgerFacilityListSection";
+import dynamic from "next/dynamic";
+import type { RoadLedgerVideoItem } from "./RoadLedgerVideoViewer";
+
+const RoadLedgerVideoSync = dynamic(
+  () => import("./RoadLedgerVideoSync").then((m) => m.RoadLedgerVideoSync),
+  { ssr: false }
+);
+
+const ROAD_LEDGER_VIDEO_EXT_RE = /\.(mp4|mov|webm)$/i;
 
 /** 하천 기본계획 상세와 동일 버튼 스타일 + 라벨별 아이콘 (라벨 키는 roadLedgerDocLayerMap 과 일치) */
 const DOC_ACTION_BUTTONS: { label: RoadLedgerDocButtonKey; icon: LucideIcon }[] = [
@@ -114,7 +127,7 @@ function cellText(field: string, raw: unknown): string {
   return t === "" ? "—" : t;
 }
 
-function primaryCellDisplay(field: string, raw: unknown): string {
+function primaryCellDisplay(field: string, raw: unknown, project?: string | null): string {
   if (field === "dsgdate") {
     return formatRoadLedgerDsgdateDisplay(raw);
   }
@@ -122,7 +135,7 @@ function primaryCellDisplay(field: string, raw: unknown): string {
     return formatRoadLedgerLenthWithUnit(raw);
   }
   if (field === "road_rank") {
-    return formatRoadLedgerRoadRankDisplay(raw);
+    return formatRoadLedgerRoadRankDisplay(raw, project);
   }
   if (field === "sect") {
     const t = formatRoadLedgerNumericToken(raw);
@@ -133,28 +146,37 @@ function primaryCellDisplay(field: string, raw: unknown): string {
 
 function DetailInfoRow({
   field,
-  showBottomBorder,
   labelClassName,
+  className,
 }: {
   field: { fieldKey: string; label: string; value: string };
-  showBottomBorder: boolean;
   labelClassName: string;
+  className?: string;
 }) {
   return (
-    <div className={cn("flex", showBottomBorder && "border-b border-border")}>
+    <div className={cn("flex h-full min-h-0 min-w-0", className)}>
       <div
         className={cn(
-          "flex min-w-0 shrink-0 items-start bg-muted px-2 py-1.5",
+          "flex shrink-0 items-start self-stretch bg-muted px-2 py-1.5",
           labelClassName,
         )}
       >
-        <span className="min-w-0 w-full whitespace-normal break-words text-[11px] leading-snug text-muted-foreground">
+        <span className="min-w-0 w-full whitespace-normal break-words text-[11px] leading-snug text-muted-foreground [word-break:keep-all]">
           {field.label}
         </span>
       </div>
-      <div className="flex min-w-0 flex-1 items-start px-2 py-1.5">
+      <div className="flex min-w-0 flex-1 items-start self-stretch px-2 py-1.5">
         <span className="break-all text-[11px] leading-snug text-muted-foreground">{field.value}</span>
       </div>
+    </div>
+  );
+}
+
+function DetailInfoEmptyCell({ labelClassName }: { labelClassName: string }) {
+  return (
+    <div className="flex h-full min-w-0" aria-hidden>
+      <div className={cn("shrink-0 self-stretch bg-muted px-2 py-1.5", labelClassName)} />
+      <div className="min-w-0 flex-1 self-stretch px-2 py-1.5" />
     </div>
   );
 }
@@ -168,42 +190,37 @@ export function DetailInfoTable({
     return <p className="text-[11px] text-muted-foreground">표시할 항목이 없습니다.</p>;
   }
 
-  const mid = Math.ceil(entries.length / 2);
-  const leftCol = entries.slice(0, mid);
-  const rightCol = entries.slice(mid);
-  const labelW = "w-[min(5.5rem,32%)]";
-
-  if (entries.length === 1) {
-    const field = entries[0]!;
-    return (
-      <div className="overflow-hidden rounded-[5px] border border-border">
-        <DetailInfoRow field={field} showBottomBorder={false} labelClassName="w-[100px]" />
-      </div>
-    );
+  /** 한글 라벨 줄바꿈 대비 — 한 줄(좌·우 쌍) 높이를 같이 맞춤 */
+  const labelW = "w-[min(7.5rem,40%)]";
+  const rows: Array<{
+    left: (typeof entries)[number];
+    right: (typeof entries)[number] | null;
+  }> = [];
+  for (let i = 0; i < entries.length; i += 2) {
+    rows.push({ left: entries[i]!, right: entries[i + 1] ?? null });
   }
 
   return (
-    <div className="grid grid-cols-2 divide-x divide-border overflow-hidden rounded-[5px] border border-border">
-      <div className="min-w-0">
-        {leftCol.map((field, index) => (
-          <DetailInfoRow
-            key={field.fieldKey}
-            field={field}
-            showBottomBorder={index !== leftCol.length - 1}
-            labelClassName={labelW}
-          />
-        ))}
-      </div>
-      <div className="min-w-0">
-        {rightCol.map((field, index) => (
-          <DetailInfoRow
-            key={field.fieldKey}
-            field={field}
-            showBottomBorder={index !== rightCol.length - 1}
-            labelClassName={labelW}
-          />
-        ))}
-      </div>
+    <div className="overflow-hidden rounded-[5px] border border-border">
+      {rows.map((row, rowIndex) => {
+        const isLast = rowIndex === rows.length - 1;
+        return (
+          <div
+            key={`${row.left.fieldKey}-${row.right?.fieldKey ?? "empty"}`}
+            className={cn(
+              "grid grid-cols-2 items-stretch divide-x divide-border",
+              !isLast && "border-b border-border",
+            )}
+          >
+            <DetailInfoRow field={row.left} labelClassName={labelW} />
+            {row.right ? (
+              <DetailInfoRow field={row.right} labelClassName={labelW} />
+            ) : (
+              <DetailInfoEmptyCell labelClassName={labelW} />
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -227,6 +244,8 @@ function RoadLedgerDocActionGrid({
   reportPdfActive,
   reportFileListLoading,
   reportPdfAvailable,
+  videoAvailable,
+  videoActive,
 }: {
   items: { label: RoadLedgerDocButtonKey; icon: LucideIcon }[];
   gridClassName: string;
@@ -241,23 +260,31 @@ function RoadLedgerDocActionGrid({
   reportPdfActive: boolean;
   reportFileListLoading: boolean;
   reportPdfAvailable: boolean;
+  videoAvailable: boolean;
+  videoActive: boolean;
 }) {
   return (
     <div className={cn("grid gap-1.5", gridClassName)}>
       {items.map(({ label, icon: Icon }) => {
         const layers = getLayersForKey(label);
-        const isReportOnly = label === "보고서";
+        const isReport = label === "보고서";
+        const isVideo = label === "도로영상";
+        const isReportOnly = isReport || isVideo;
         const hasLayers = layers.length > 0;
         const active =
           !isReportOnly && hasLayers && isRoadLedgerDocGroupActive(visibleLayerNames, layers);
-        const reportDisabled =
-          isReportOnly && (reportFileListLoading || reportPdfLoading || !reportPdfAvailable);
+        const reportDisabled = isReport
+          ? reportFileListLoading || reportPdfLoading || !reportPdfAvailable
+          : isVideo && (reportFileListLoading || !videoAvailable);
+        const fileActive = isReport ? reportPdfActive : videoActive;
         const showCount = ROAD_LEDGER_DOC_LABELS_WITH_LAYER_COUNT.includes(label);
         const dataN = facilityDataCounts?.[label];
+        const layerButtonDisabled = !setVisibleLayerNames || !hasLayers;
         const displayLabel =
           showCount && hasRdidForFacility
             ? `${label} (${facilityCountsLoading ? "…" : typeof dataN === "number" ? dataN : "—"})`
             : label;
+        const disabledLook = isReportOnly ? reportDisabled : layerButtonDisabled;
         return (
           <button
             key={label}
@@ -265,33 +292,34 @@ function RoadLedgerDocActionGrid({
             title={
               isReportOnly
                 ? reportFileListLoading
-                  ? "보고서 확인 중"
-                  : reportPdfAvailable
-                    ? "보고서 PDF 보기"
-                    : "보고서 PDF 없음"
-                : hasLayers
-                  ? "클릭: 해당 공간정보 레이어 켜기 / 다시 클릭: 끄기"
-                  : "연결 레이어 없음"
+                  ? `${label} 확인 중`
+                  : isVideo
+                    ? videoAvailable
+                      ? "360° 도로영상 보기"
+                      : "도로영상 없음"
+                    : reportPdfAvailable
+                      ? "보고서 PDF 보기"
+                      : "보고서 PDF 없음"
+                : layerButtonDisabled
+                  ? undefined
+                  : "클릭: 해당 공간정보 레이어 켜기 / 다시 클릭: 끄기"
             }
             onClick={() => onDocClick(label)}
-            disabled={isReportOnly ? reportDisabled : !setVisibleLayerNames}
+            disabled={isReportOnly ? reportDisabled : layerButtonDisabled}
             className={cn(
               "h-7 text-[11px] rounded border min-w-0 inline-flex items-center justify-center gap-0.5 px-1 leading-none whitespace-nowrap",
-              !isReportOnly && !setVisibleLayerNames && "pointer-events-none opacity-50",
-              isReportOnly
-                ? reportDisabled
-                  ? "border-border bg-muted/50 text-muted-foreground opacity-50 cursor-not-allowed"
-                  : reportPdfActive
+              disabledLook
+                ? "border-border bg-muted/50 text-muted-foreground opacity-50 cursor-not-allowed"
+                : isReportOnly
+                  ? fileActive
                     ? "border-primary/45 bg-primary/[0.08] text-foreground ring-1 ring-inset ring-primary/15 hover:bg-primary/[0.11]"
                     : "border-border bg-muted/50 text-foreground/90 hover:bg-muted"
-                : hasLayers
-                  ? active
+                  : active
                     ? "border-primary/45 bg-primary/[0.08] text-foreground ring-1 ring-inset ring-primary/15 hover:bg-primary/[0.11]"
-                    : "border-border bg-muted/50 text-foreground/90 hover:bg-muted"
-                  : "border-border bg-muted/50 text-muted-foreground hover:bg-muted",
+                    : "border-border bg-muted/50 text-foreground/90 hover:bg-muted",
             )}
           >
-            {isReportOnly && (reportFileListLoading || reportPdfLoading) ? (
+            {isReportOnly && (reportFileListLoading || (isReport && reportPdfLoading)) ? (
               <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" aria-hidden />
             ) : (
               <Icon className="h-3.5 w-3.5 shrink-0" aria-hidden />
@@ -307,6 +335,8 @@ function RoadLedgerDocActionGrid({
 export function RoadLedgerDetailPanel({ row, onClose }: Props) {
   const [attrOpen, setAttrOpen] = useState(true);
   const [detailModalOpen, setDetailModalOpen] = useState(false);
+  const [drawingOverlayHost, setDrawingOverlayHost] = useState<HTMLDivElement | null>(null);
+  const [detailFieldLabels, setDetailFieldLabels] = useState<Record<string, string>>({});
   const [facilityDataCounts, setFacilityDataCounts] = useState<Partial<
     Record<RoadLedgerDocButtonKey, number>
   > | null>(null);
@@ -317,38 +347,70 @@ export function RoadLedgerDetailPanel({ row, onClose }: Props) {
     initialIndex: number;
   } | null>(null);
   const [reportPdfLoading, setReportPdfLoading] = useState(false);
+  const [videoViewerOpen, setVideoViewerOpen] = useState(false);
+  const [bootProject, setBootProject] = useState("");
   const reportPdfBusyRef = useRef(false);
   const mapContext = useMapContext();
   const visibleLayerNames = mapContext?.visibleLayerNames ?? new Set<string>();
   const setVisibleLayerNames = mapContext?.setVisibleLayerNames;
-  const reportOgcFid = pickRoadLedgerOgcFid(row);
+
+  useEffect(() => {
+    call("", "POST", { service: "configService", action: "getBootProject", params: {} })
+      .then((res) => {
+        const data = res?.data ?? res;
+        setBootProject(String(data?.project ?? "").trim());
+      })
+      .catch(() => setBootProject(""));
+  }, []);
+  /** 보고서 첨부 폴더 키: file_data/a0020000/{rdid} (rdid 없으면 ogc_fid) */
+  const reportFileKey = useMemo((): string | number | null => {
+    const rdid = String(pickRoadLedgerField(row, "rdid") ?? "").trim();
+    return rdid || pickRoadLedgerOgcFid(row);
+  }, [row]);
 
   const reportFileQuery = useServiceFileData({
     serEng: SER_FILE_ENG.roadLedger,
-    enabled: reportOgcFid != null,
+    enabled: reportFileKey != null,
     layerSegment: ROAD_LEDGER_SUMMARY_LAYER_ID,
-    keyValue: reportOgcFid,
-    includeMeta: false,
+    keyValue: reportFileKey,
+    includeMeta: true,
   });
 
   const reportPdfItems = useMemo((): ServiceFilePdfPreviewItem[] => {
-    if (reportOgcFid == null) return [];
+    if (reportFileKey == null) return [];
     return reportFileQuery.files
       .filter((f) => isPdfServiceFileName(f.name))
       .map((f) => ({
         url: serviceFileDataDownloadUrl(
           SER_FILE_ENG.roadLedger,
           ROAD_LEDGER_SUMMARY_LAYER_ID,
-          reportOgcFid,
+          reportFileKey,
           f.name
         ),
         fileName: f.name,
       }));
-  }, [reportFileQuery.files, reportOgcFid]);
+  }, [reportFileQuery.files, reportFileKey]);
+
+  const videoItems = useMemo((): RoadLedgerVideoItem[] => {
+    if (reportFileKey == null) return [];
+    return reportFileQuery.files
+      .filter((f) => ROAD_LEDGER_VIDEO_EXT_RE.test(f.name))
+      .map((f) => ({
+        url: serviceFileDataDownloadUrl(
+          SER_FILE_ENG.roadLedger,
+          ROAD_LEDGER_SUMMARY_LAYER_ID,
+          reportFileKey,
+          f.name
+        ),
+        fileName: f.name,
+        modified: f.modified,
+      }))
+      .sort((a, b) => a.fileName.localeCompare(b.fileName, "ko"));
+  }, [reportFileQuery.files, reportFileKey]);
 
   const reportPdfAvailable = reportPdfItems.length > 0;
   const reportButtonDisabled =
-    reportOgcFid == null || reportFileQuery.loading || !reportPdfAvailable || reportPdfLoading;
+    reportFileKey == null || reportFileQuery.loading || !reportPdfAvailable || reportPdfLoading;
 
   // 데이터 이력관리에 조회 저장을 위해 추가
   useEffect(() => {
@@ -379,7 +441,7 @@ export function RoadLedgerDetailPanel({ row, onClose }: Props) {
 
   const openReportPdfViewer = useCallback(async () => {
     if (reportPdfBusyRef.current || reportButtonDisabled) return;
-    if (reportOgcFid == null || reportPdfItems.length === 0) return;
+    if (reportFileKey == null || reportPdfItems.length === 0) return;
     reportPdfBusyRef.current = true;
     setReportPdfLoading(true);
     try {
@@ -388,12 +450,16 @@ export function RoadLedgerDetailPanel({ row, onClose }: Props) {
       reportPdfBusyRef.current = false;
       setReportPdfLoading(false);
     }
-  }, [reportOgcFid, reportPdfItems, reportButtonDisabled]);
+  }, [reportFileKey, reportPdfItems, reportButtonDisabled]);
 
   const handleDocButtonClick = useCallback(
     (key: RoadLedgerDocButtonKey) => {
       if (key === "보고서") {
         void openReportPdfViewer();
+        return;
+      }
+      if (key === "도로영상") {
+        if (videoItems.length > 0) setVideoViewerOpen((open) => !open);
         return;
       }
       const layers = getEffectiveDocLayers(key);
@@ -404,7 +470,7 @@ export function RoadLedgerDetailPanel({ row, onClose }: Props) {
       if (!setVisibleLayerNames) return;
       setVisibleLayerNames((prev) => toggleRoadLedgerDocLayers(prev, layers));
     },
-    [getEffectiveDocLayers, setVisibleLayerNames, openReportPdfViewer]
+    [getEffectiveDocLayers, setVisibleLayerNames, openReportPdfViewer, videoItems.length]
   );
 
   useEffect(() => {
@@ -457,7 +523,8 @@ export function RoadLedgerDetailPanel({ row, onClose }: Props) {
   const titleParen = formatRoadLedgerDetailTitleParen(
     pickRoadLedgerField(row, "road_rank"),
     pickRoadLedgerField(row, "road_no"),
-    pickRoadLedgerField(row, "sect")
+    pickRoadLedgerField(row, "sect"),
+    bootProject
   );
 
   useEffect(() => {
@@ -490,15 +557,28 @@ export function RoadLedgerDetailPanel({ row, onClose }: Props) {
     };
   }, [hasRdidForFacility, rdid]);
 
+  useEffect(() => {
+    let cancelled = false;
+    void fetchRoadLedgerDefineFieldLabels(ROAD_LEDGER_SUMMARY_LAYER_ID).then((labels) => {
+      if (!cancelled) setDetailFieldLabels(labels);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const otherEntries = Object.entries(row)
-    .filter(([k]) => k.toLowerCase() !== "geom")
+    .filter(([k]) => {
+      const lk = k.toLowerCase();
+      return lk !== "geom" && lk !== "geometry" && lk !== "the_geom" && lk !== "wkb_geometry" && lk !== "shape";
+    })
     .filter(([k]) => !PRIMARY_ATTR_KEYS.has(k.toLowerCase()))
-    .sort(([a], [b]) => a.localeCompare(b, "ko"))
     .map(([key, val]) => ({
       fieldKey: key,
-      label: key,
+      label: resolveRoadLedgerFieldLabel(detailFieldLabels, key),
       value: cellText(key, val),
-    }));
+    }))
+    .sort((a, b) => a.label.localeCompare(b.label, "ko"));
 
   return (
     <>
@@ -538,6 +618,8 @@ export function RoadLedgerDetailPanel({ row, onClose }: Props) {
               reportPdfActive={reportPdfPreview != null}
               reportFileListLoading={reportFileQuery.loading}
               reportPdfAvailable={reportPdfAvailable}
+              videoAvailable={videoItems.length > 0}
+              videoActive={videoViewerOpen}
             />
             <RoadLedgerDocActionGrid
               items={DOC_ACTION_BUTTONS_REST}
@@ -553,11 +635,14 @@ export function RoadLedgerDetailPanel({ row, onClose }: Props) {
               reportPdfActive={reportPdfPreview != null}
               reportFileListLoading={reportFileQuery.loading}
               reportPdfAvailable={reportPdfAvailable}
+              videoAvailable={videoItems.length > 0}
+              videoActive={videoViewerOpen}
             />
           </div>
         </div>
 
-        <MapSideDetailScroll className="min-h-0 flex-1 overflow-auto border-border p-3 pt-0">
+        <div className="relative flex min-h-0 flex-1 flex-col">
+        <MapSideDetailScroll className="flex min-h-0 flex-1 flex-col overflow-auto border-border p-3 pt-0">
           <div className="mt-3 border-t border-border">
             <div className="flex items-center justify-between gap-2 mt-1">
               <button
@@ -587,7 +672,7 @@ export function RoadLedgerDetailPanel({ row, onClose }: Props) {
                 <div className="overflow-hidden border border-border">
                   {PRIMARY_TABLE_ROWS.map(({ field, label }, idx) => {
                     const raw = pickRoadLedgerField(row, field);
-                    const display = primaryCellDisplay(field, raw);
+                    const display = primaryCellDisplay(field, raw, bootProject);
                     return (
                       <div
                         key={field}
@@ -621,8 +706,11 @@ export function RoadLedgerDetailPanel({ row, onClose }: Props) {
             row={row}
             visibleLayerNames={visibleLayerNames}
             getLayersForGroup={getEffectiveDocLayers}
+            overlayHost={drawingOverlayHost}
           />
         </MapSideDetailScroll>
+        <div ref={setDrawingOverlayHost} className="absolute inset-0 z-10 empty:hidden" />
+        </div>
       </div>
     </div>
     {reportPdfPreview != null && (
@@ -630,6 +718,14 @@ export function RoadLedgerDetailPanel({ row, onClose }: Props) {
         items={reportPdfPreview.items}
         initialIndex={reportPdfPreview.initialIndex}
         onClose={() => setReportPdfPreview(null)}
+      />
+    )}
+    {videoViewerOpen && videoItems.length > 0 && reportFileKey != null && (
+      <RoadLedgerVideoSync
+        items={videoItems}
+        roadKey={reportFileKey}
+        roadName={[roadName, titleParen].filter(Boolean).join(" ")}
+        onClose={() => setVideoViewerOpen(false)}
       />
     )}
     </>

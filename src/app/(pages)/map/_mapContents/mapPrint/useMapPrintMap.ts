@@ -7,7 +7,7 @@ import OSM from 'ol/source/OSM';
 import { defaults as defaultControls } from 'ol/control';
 import { defaults as defaultInteractions } from 'ol/interaction';
 import '@/app/(pages)/map/_mapComponents/config/projections';
-import { RESOLUTIONS_3857 } from '@/app/(pages)/map/_mapComponents/config/mapDefaults';
+import { VIEW_RESOLUTIONS_3857 } from '@/app/(pages)/map/_mapComponents/config/mapDefaults';
 import { createCadastralLayers, createBuildingRoadLayers } from '@/app/(pages)/map/_mapComponents/layerFactory/boundaryLayerFactory';
 import { createBasicSectionLayers } from '@/app/(pages)/map/_mapComponents/layerFactory/basicSectionLayerFactory';
 import { createJimokLayers } from '@/app/(pages)/map/_mapComponents/layerFactory/jimokLayerFactory';
@@ -24,6 +24,7 @@ import {
 } from '@/lib/mapLayerGeometryOrder';
 import tables from '@/config/defineLayer/tables.json';
 import { useBackgroundLayer } from '@/app/(pages)/map/_mapComponents/hooks/useBackgroundLayer';
+import { useBackgroundLabelLayer } from '@/app/(pages)/map/_mapComponents/hooks/useBackgroundLabelLayer';
 import {
   useCadastralLayerSync,
   useBuildingRoadLayerSync,
@@ -46,6 +47,7 @@ export function useMapPrintMap(
   open: boolean,
   snapshot: MapPrintSnapshot | null,
   backgroundMapId: string,
+  backgroundLabelVisible: boolean,
   visibleLayerNames: Set<string>,
   activeLayerControls: string[],
   visibleCadastral: Set<string> | null,
@@ -86,9 +88,9 @@ export function useMapPrintMap(
       view: new View({
         center: snapshot.center,
         zoom: snapshot.zoom,
-        resolutions: RESOLUTIONS_3857,
+        resolutions: VIEW_RESOLUTIONS_3857,
         minZoom: 0,
-        maxZoom: RESOLUTIONS_3857.length - 1,
+        maxZoom: VIEW_RESOLUTIONS_3857.length - 1,
         constrainResolution: true,
       }),
       controls: defaultControls({ zoom: false, attribution: false }),
@@ -115,6 +117,7 @@ export function useMapPrintMap(
   }, [open, hostRef, snapshot]);
 
   useBackgroundLayer(map, backgroundMapId);
+  useBackgroundLabelLayer(map, backgroundLabelVisible);
   useServiceLayerSync(map, mapReady, visibleLayerNames, undefined, undefined, PRINT_WMS_GEOM_TYPES);
   useCadastralLayerSync(map, mapReady, activeLayerControls, visibleCadastral);
   useBuildingRoadLayerSync(map, mapReady, activeLayerControls, visibleBuildingRoad);

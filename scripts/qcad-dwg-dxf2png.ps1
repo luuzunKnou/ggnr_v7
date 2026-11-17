@@ -1,6 +1,7 @@
 #Requires -Version 5.1
 <#
-  roadDoc/cad 내 *.dwg, *.dxf → 투명 배경 PNG (QCAD dwg2bmp).
+  file_data/road_doc/cad 내 *.dwg, *.dxf → 투명 배경 PNG (QCAD dwg2bmp).
+  대상: $env:GGNR_DATA_DIR\file_data\road_doc\cad (없으면 d:\ggnr_data_dir)
   QCAD 베이스: 저장소 루트의 QCAD_modules (dwg2bmp.bat 또는 bin\dwg2bmp.bat)
 
   사용:
@@ -22,7 +23,8 @@ $ErrorActionPreference = "Stop"
 
 $RepoRoot = Split-Path $PSScriptRoot -Parent
 $QcadBase = Join-Path $RepoRoot "QCAD_modules"
-$FileDir = Join-Path $RepoRoot "src\app\(pages)\map\_mapContents\road\roadDoc\cad"
+$DataDir = if ($env:GGNR_DATA_DIR -and $env:GGNR_DATA_DIR.Trim()) { $env:GGNR_DATA_DIR.Trim() } else { "d:\ggnr_data_dir" }
+$FileDir = Join-Path $DataDir "file_data\road_doc\cad"
 
 function Resolve-Dwg2BmpBat {
   $candidates = @(

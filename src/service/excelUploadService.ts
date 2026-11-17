@@ -8,6 +8,7 @@
 import fs from 'node:fs/promises';
 import fsSync from 'node:fs';
 import path from 'node:path';
+import iconv from 'iconv-lite';
 import * as XLSX from 'xlsx';
 import { sql } from 'drizzle-orm';
 import { db, pool } from '@/database/db';
@@ -638,17 +639,17 @@ export type ResolvePnuFromAddressResult = {
   usedHangjeongToBeopjeong: boolean;
 };
 
-export async function resolvePnuFromAddress(
-  address: string
+const EMPTY_PNU_FROM_ADDRESS: ResolvePnuFromAddressResult = {
+  pnu: null,
+  originalRi: null,
+  matchedRi: null,
+  usedHangjeongToBeopjeong: false,
+};
+
+/** 읍·면·동·리·본번·부번으로 지적 키(PNU) 조회 */
+export async function resolvePnuFromParsedParts(
+  parsed: ExcelUploadParsedPnuParts
 ): Promise<ResolvePnuFromAddressResult> {
-  const empty: ResolvePnuFromAddressResult = {
-    pnu: null,
-    originalRi: null,
-    matchedRi: null,
-    usedHangjeongToBeopjeong: false,
-  };
-  const parsed = parseAddressForPnu(address);
-  if (!parsed) return empty;
   const { emdName, riName, bonbun, bubun, isMountain } = parsed;
   const esc = (v: string) => v.replace(/'/g, "''");
   let emdCd: string | null = null;
@@ -669,7 +670,7 @@ export async function resolvePnuFromAddress(
     }
   }
   if (!emdCd) {
-    return { ...empty, originalRi: riName };
+    return { ...EMPTY_PNU_FROM_ADDRESS, originalRi: riName };
   }
   const riCandidates = riNameLookupCandidates(riName);
   let riCd: string | null = null;
@@ -695,7 +696,7 @@ export async function resolvePnuFromAddress(
     if (riCd) break;
   }
   if (!riCd || !matchedRi) {
-    return { ...empty, originalRi: riName };
+    return { ...EMPTY_PNU_FROM_ADDRESS, originalRi: riName };
   }
   return {
     pnu: buildPnu19(riCd, { bonbun, bubun, isMountain }),
@@ -703,6 +704,14 @@ export async function resolvePnuFromAddress(
     matchedRi,
     usedHangjeongToBeopjeong: matchedRi !== riName,
   };
+}
+
+export async function resolvePnuFromAddress(
+  address: string
+): Promise<ResolvePnuFromAddressResult> {
+  const parsed = parseAddressForPnu(address);
+  if (!parsed) return EMPTY_PNU_FROM_ADDRESS;
+  return resolvePnuFromParsedParts(parsed);
 }
 
 export async function getPnuFromAddress(address: string): Promise<string | null> {
@@ -2724,7 +2733,8 @@ export async function exportLayerTableToCsv(params: {
         ? XLSX.utils.json_to_sheet(sheetRows)
         : XLSX.utils.aoa_to_sheet([columns]);
     const csvBody = XLSX.utils.sheet_to_csv(ws);
-    const buffer = Buffer.from(`\uFEFF${csvBody}`, 'utf8');
+    /** 국내 엑셀·한셀은 CSV를 CP949로 연다. UTF-8 BOM은 무시되면 한글이 깨진다. */
+    const buffer = iconv.encode(csvBody, 'cp949');
     const safeFile = physical.replace(/[^a-zA-Z0-9_가-힣-]/g, '_');
     return { success: true, buffer, fileName: `${safeFile}.csv` };
   } catch (e: unknown) {

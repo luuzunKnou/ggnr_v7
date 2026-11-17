@@ -1,0 +1,104 @@
+[
+  {
+    "define_code_key": "64104",
+    "define_code_field_key": "4210",
+    "define_code_name": "LRS000",
+    "define_code_kor_name": "미분류"
+  },
+  {
+    "define_code_key": "64105",
+    "define_code_field_key": "4210",
+    "define_code_name": "LRS110",
+    "define_code_kor_name": "자연누수(노후)"
+  },
+  {
+    "define_code_key": "64106",
+    "define_code_field_key": "4210",
+    "define_code_name": "LRS120",
+    "define_code_kor_name": "자연누수(과수압)"
+  },
+  {
+    "define_code_key": "64107",
+    "define_code_field_key": "4210",
+    "define_code_name": "LRS130",
+    "define_code_kor_name": "자연누수(부동침하)"
+  },
+  {
+    "define_code_key": "64108",
+    "define_code_field_key": "4210",
+    "define_code_name": "LRS140",
+    "define_code_kor_name": "자연누수(교통하중)"
+  },
+  {
+    "define_code_key": "64109",
+    "define_code_field_key": "4210",
+    "define_code_name": "LRS150",
+    "define_code_kor_name": "자연누수(기온변화)"
+  },
+  {
+    "define_code_key": "64110",
+    "define_code_field_key": "4210",
+    "define_code_name": "LRS160",
+    "define_code_kor_name": "자연누수(폐관미비)"
+  },
+  {
+    "define_code_key": "64111",
+    "define_code_field_key": "4210",
+    "define_code_name": "LRS170",
+    "define_code_kor_name": "자연누수(심도부족)"
+  },
+  {
+    "define_code_key": "64112",
+    "define_code_field_key": "4210",
+    "define_code_name": "LRS211",
+    "define_code_kor_name": "인위파열(지하철)"
+  },
+  {
+    "define_code_key": "64113",
+    "define_code_field_key": "4210",
+    "define_code_name": "LRS212",
+    "define_code_kor_name": "인위파열(통신)"
+  },
+  {
+    "define_code_key": "64114",
+    "define_code_field_key": "4210",
+    "define_code_name": "LRS213",
+    "define_code_kor_name": "인위파열(전력)"
+  },
+  {
+    "define_code_key": "64115",
+    "define_code_field_key": "4210",
+    "define_code_name": "LRS214",
+    "define_code_kor_name": "인위파열(가스)"
+  },
+  {
+    "define_code_key": "64116",
+    "define_code_field_key": "4210",
+    "define_code_name": "LRS215",
+    "define_code_kor_name": "인위파열(하수)"
+  },
+  {
+    "define_code_key": "64117",
+    "define_code_field_key": "4210",
+    "define_code_name": "LRS216",
+    "define_code_kor_name": "인위파열(기타)"
+  },
+  {
+    "define_code_key": "64118",
+    "define_code_field_key": "4210",
+    "define_code_name": "LRS220",
+    "define_code_kor_name": "인위파열(시공하자)"
+  },
+  {
+    "define_code_key": "64119",
+    "define_code_field_key": "4210",
+    "define_code_name": "LRS230",
+    "define_code_kor_name": "인위파열(자재하자)"
+  },
+  {
+    "define_code_key": "64120",
+    "define_code_field_key": "4210",
+    "define_code_name": "LRS999",
+    "define_code_kor_name": "기타"
+  }
+]

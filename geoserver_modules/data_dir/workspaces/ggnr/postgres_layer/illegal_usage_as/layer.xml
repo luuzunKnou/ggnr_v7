@@ -1,0 +1,19 @@
+<layer>
+  <name>illegal_usage_as</name>
+  <id>LayerInfoImpl-79b90470:1a186cf97dd:-7f8c</id>
+  <type>VECTOR</type>
+  <defaultStyle>
+    <id>StyleInfoImpl-79b90470:1a186cf97dd:-7f8b</id>
+  </defaultStyle>
+  <resource class="featureType">
+    <id>FeatureTypeInfoImpl-79b90470:1a186cf97dd:-7f8d</id>
+  </resource>
+  <queryable>true</queryable>
+  <opaque>false</opaque>
+  <attribution>
+    <logoWidth>0</logoWidth>
+    <logoHeight>0</logoHeight>
+  </attribution>
+  <dateCreated>2026-10-30 02:59:17.545 UTC</dateCreated>
+  <dateModified>2026-10-30 02:59:18.258 UTC</dateModified>
+</layer>

@@ -2,10 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import path from 'node:path';
 import fs from 'node:fs/promises';
 import { getSessionUsrId, userHasSerAccess } from '@/lib/auth/guard';
+import { resolveGgnrDataDir } from '@/lib/turbopackFsPath';
 import { exportLayerTableToCsv } from '@/service/excelUploadService';
 import { recordLayerDownloadLog } from '@/service/layerDownloadLog';
-
-const GGNR_DATA_DIR = process.env.GGNR_DATA_DIR ?? 'd:\\ggnr_data_dir';
 
 export async function GET(req: NextRequest) {
   const usrId = await getSessionUsrId();
@@ -19,9 +18,10 @@ export async function GET(req: NextRequest) {
   if (!pathParam || typeof pathParam !== 'string') {
     return NextResponse.json({ error: 'path 쿼리가 필요합니다.' }, { status: 400 });
   }
+  const dataDir = resolveGgnrDataDir();
   const normalized = pathParam.replace(/\//g, path.sep).replace(/^[/\\]+/, '');
-  const resolved = path.resolve(GGNR_DATA_DIR, normalized);
-  const base = path.resolve(GGNR_DATA_DIR);
+  const resolved = path.resolve(dataDir, normalized);
+  const base = path.resolve(dataDir);
   const rel = path.relative(base, resolved);
   if (!rel || rel.startsWith('..') || path.isAbsolute(rel)) {
     console.warn('[download/excel] path outside data dir:', normalized);
@@ -86,7 +86,7 @@ export async function POST(req: NextRequest) {
     }
     return new NextResponse(new Uint8Array(result.buffer), {
       headers: {
-        'Content-Type': 'text/csv; charset=utf-8',
+        'Content-Type': 'text/csv; charset=windows-949',
         'Content-Disposition': `attachment; filename="${encodeURIComponent(fileName)}"`,
       },
     });

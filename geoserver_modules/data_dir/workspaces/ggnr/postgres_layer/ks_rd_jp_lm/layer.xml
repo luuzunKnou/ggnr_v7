@@ -1,0 +1,19 @@
+<layer>
+  <name>ks_rd_jp_lm</name>
+  <id>LayerInfoImpl-7b45823a:1a113f17c5f:-7796</id>
+  <type>VECTOR</type>
+  <defaultStyle>
+    <id>StyleInfoImpl-7b45823a:1a113f17c5f:-7795</id>
+  </defaultStyle>
+  <resource class="featureType">
+    <id>FeatureTypeInfoImpl-7b45823a:1a113f17c5f:-7797</id>
+  </resource>
+  <queryable>true</queryable>
+  <opaque>false</opaque>
+  <attribution>
+    <logoWidth>0</logoWidth>
+    <logoHeight>0</logoHeight>
+  </attribution>
+  <dateCreated>2026-10-07 08:06:48.653 UTC</dateCreated>
+  <dateModified>2026-10-07 08:06:49.7 UTC</dateModified>
+</layer>
