@@ -21,6 +21,11 @@ import {
 import { getGeoServerBase } from '@/lib/geoserverUrl'
 import { scaleMetersFromZoom } from '../../../../_mapComponents/hooks/mapScale'
 import '../../../../_mapComponents/config/projections'
+import {
+  FORCE_IGNORE_SCALE_LAYER_KEY,
+  mergeIgnoreScaleEnv,
+  setIgnoreScaleFlag,
+} from '../../../../_mapComponents/layerFactory/iconScaleWmsEnv'
 import { useMapContext } from '../../../../_mapComponents/MapContext'
 import { fetchWtlAnalysisPipeWmsParams } from '../resolveWtlAnalysisPipeWms'
 import { lonLatToView, useMapViewProjection, viewExtentToMercator } from '../topology/topoMapProjection'
@@ -32,17 +37,11 @@ const WORKSPACE = 'ggnr'
 /** 급수전계량기 레이어 스타일 기본값(sld env 기본과 동일) — WMS 불가 시 폴백 */
 const META_PS_FILL = 'rgba(255, 255, 255, 0.3)'
 const META_PS_STROKE = '#17499d'
-/**
- * wtl_meta_ps SLD는 1:3000 이하(MaxScaleDenominator)에서만 그린다.
- * 그보다 축소되면 WMS가 빈 이미지라, 같은 기본 모양을 화면에서 직접 그린다.
- */
-const META_PS_WMS_MAX_SCALE = 3000
 /** GeoServer(OGC) 축척 계산: 해상도(m/px) ÷ 0.28mm */
 const OGC_PIXEL_M = 0.00028
 /**
  * 수용가 점 지름(px) — 축척(1:N)별. 확대할수록 크게, 축소할수록 작게.
- * 1:3000 이하는 WMS에 ENV wtl_meta_ps_size로 넘기고(SLD 기본 14~20보다 조금 키움),
- * 그보다 축소되면 화면에서 직접 그리는 원(SLD 기본 원보다 작게).
+ * WMS에 ENV wtl_meta_ps_size + ignore_scale=1 로 넘긴다(공간분석은 축척 무관 표시).
  */
 const META_PS_SIZE_STEPS: { maxScale: number; size: number }[] = [
   { maxScale: 300, size: 26 },
@@ -89,18 +88,16 @@ function metaPsFidCql(ids: number[]): string {
   return `IN (${ids.map((id) => `'wtl_meta_ps.${Math.trunc(id)}'`).join(',')})`
 }
 
-/** WMS가 그리는 축척이면 숨기고, 아니면 SLD 기본값과 같은 원(축척별 크기) */
-function metaPsFallbackStyle(_feature: unknown, resolution: number) {
-  return resolution / OGC_PIXEL_M > META_PS_WMS_MAX_SCALE
-    ? metaPsCircleStyle(metaPsSizeAt(resolution))
-    : undefined
+/** WMS(ignore_scale)가 그릴 때는 벡터 폴백 숨김 — 필터 불가 시에만 always 스타일 */
+function metaPsFallbackStyle(_feature: unknown, _resolution: number) {
+  return undefined
 }
 
-/** WMS 수용가 점 크기를 현재 축척에 맞춰 ENV로 지정 */
+/** WMS 수용가 점 크기 + 축척 무시(ignore_scale=1) */
 function applyMetaPsWmsSize(layer: ImageLayer<ImageWMS> | null, resolution: number | undefined) {
   const source = layer?.getSource()
   if (!source || !resolution) return
-  const env = `wtl_meta_ps_size:${metaPsSizeAt(resolution)}`
+  const env = setIgnoreScaleFlag(`wtl_meta_ps_size:${metaPsSizeAt(resolution)}`, true)
   if (source.getParams().ENV === env) return
   source.updateParams({ ...source.getParams(), ENV: env })
 }
@@ -265,8 +262,8 @@ export function useWtlOutageMapLayer({
     // 분할 없으면 부모+급수, 있으면 분할+급수(부모 제외). 조회 전엔 부모로 두고 갱신
     const initialPipeWms = {
       LAYERS: 'wtl_pipe_lm,wtl_sply_ls',
-      STYLES: 'wtl_pipe_lm_nolabel,wtl_sply_ls_nolabel',
-      ENV: 'wtl_pipe_lm_stroke_width:3;wtl_sply_ls_stroke_width:2.5',
+      STYLES: 'wtl_pipe_lm,wtl_sply_ls',
+      ENV: 'wtl_pipe_lm_stroke_width:3;wtl_pipe_lm_label_property_name:;wtl_sply_ls_label_property_name:',
     }
     const wms = new ImageLayer({
       source: new ImageWMS({
@@ -288,7 +285,7 @@ export function useWtlOutageMapLayer({
     wmsRef.current = wms
 
     let pipeWmsCancelled = false
-    void fetchWtlAnalysisPipeWmsParams({ pipeWidth: 3, splyWidth: 2.5 }).then((pipeParams) => {
+    void fetchWtlAnalysisPipeWmsParams({ pipeWidth: 3 }).then((pipeParams) => {
       if (pipeWmsCancelled) return
       const source = wms.getSource()
       if (!source) return
@@ -301,14 +298,16 @@ export function useWtlOutageMapLayer({
       source.updateParams(next)
     })
 
-    // 제수변(SA200)은 관로·단수 면·관로 펄스(벡터 920)보다 항상 위에 그리도록 별도 레이어(925)로 분리
+    // 제수변(SA200) — 열림·잠금 오버레이와 같은 축척(≤240m)에서만 표시.
+    // SLD 1:3000보다 오버레이가 먼저 뜨므로, 보일 때는 ignore_scale=1로 심볼도 같이 그린다.
     const valveWms = new ImageLayer({
       source: new ImageWMS({
         url: wmsUrl,
         params: {
           LAYERS: 'wtl_valv_ps',
-          STYLES: '',
+          STYLES: 'wtl_valv_ps',
           CQL_FILTER: `ftr_cde='SA200'`,
+          ENV: mergeIgnoreScaleEnv(undefined, true),
           TRANSPARENT: true,
           FORMAT: 'image/png',
         },
@@ -316,15 +315,18 @@ export function useWtlOutageMapLayer({
         ratio: 1.5,
       }),
       zIndex: 925,
+      visible: isOutageOverlayScaleVisible(map.getView().getZoom()),
     })
     valveWms.set('wtlOutageValveWms', true)
+    valveWms.set(FORCE_IGNORE_SCALE_LAYER_KEY, true)
     map.addLayer(valveWms)
 
-    // vector fallback — WMS 미가용 시 DB에서 직접 관로 표시
+    // vector fallback — WMS와 겹치면 고정 굵기로 번지므로 기본 숨김(미사용)
     const pipeSource = new VectorSource()
     const pipeLayer = new VectorLayer({
       source: pipeSource,
       zIndex: 879,
+      visible: false,
       style: (feature) => {
         const table = String(feature.get('pipeTable') ?? '')
         if (table === 'wtl_sply_ls') {
@@ -392,13 +394,14 @@ export function useWtlOutageMapLayer({
     highlightLayerRef.current = highlightLayer
     highlightSourceRef.current = highlightSource
 
-    // 수용가·도로명 — wtl_meta_ps 레이어 스타일로 점 표시
+    // 수용가·도로명 — wtl_meta_ps 레이어 스타일로 점 표시 (ignore_scale로 축척 무관)
     const metaWms = new ImageLayer({
       source: new ImageWMS({
         url: `${getGeoServerBase()}/${WORKSPACE}/wms`,
         params: {
           LAYERS: `${WORKSPACE}:wtl_meta_ps`,
           STYLES: 'wtl_meta_ps',
+          ENV: mergeIgnoreScaleEnv(undefined, true),
           TRANSPARENT: true,
           FORMAT: 'image/png',
         },
@@ -411,6 +414,7 @@ export function useWtlOutageMapLayer({
       visible: false,
     })
     metaWms.set('wtlOutageMetaWms', true)
+    metaWms.set(FORCE_IGNORE_SCALE_LAYER_KEY, true)
 
     const jijukWms = new ImageLayer({
       source: new ImageWMS({
@@ -460,6 +464,7 @@ export function useWtlOutageMapLayer({
         params: {
           LAYERS: `${WORKSPACE}:wtl_meta_ps`,
           STYLES: 'wtl_meta_ps',
+          ENV: mergeIgnoreScaleEnv(undefined, true),
           TRANSPARENT: true,
           FORMAT: 'image/png',
         },
@@ -472,6 +477,7 @@ export function useWtlOutageMapLayer({
       visible: false,
     })
     resultMetaWms.set('wtlOutageResultMetaWms', true)
+    resultMetaWms.set(FORCE_IGNORE_SCALE_LAYER_KEY, true)
     map.addLayer(resultMetaWms)
     resultMetaWmsRef.current = resultMetaWms
 
@@ -640,45 +646,9 @@ export function useWtlOutageMapLayer({
     }
 
     const onResolution = () => {
-      if (!isOutageOverlayScaleVisible(map.getView().getZoom())) clearControls()
-    }
-
-    let pipeFetchSeq = 0
-    const fetchVisiblePipes = async () => {
-      const size = map.getSize()
-      const extent = size ? map.getView().calculateExtent(size) : null
-      if (!extent || extent.length < 4) return
-      const pad = Math.max((extent[2] - extent[0]) * 0.02, 20)
-      // 서버는 3857 bbox를 받는다
-      const bbox = viewExtentToMercator(
-        [extent[0] - pad, extent[1] - pad, extent[2] + pad, extent[3] + pad],
-        viewProj
-      )
-      const seq = ++pipeFetchSeq
-      try {
-        const response = await call('', 'POST', {
-          service: 'wtlOutageService',
-          action: 'listWtlPipesInView',
-          params: { bbox, limit: 3000 },
-        })
-        if (seq !== pipeFetchSeq) return
-        const rows = ((response?.data ?? response)?.pipes ?? []) as {
-          coords: [number, number][]
-          table: string
-        }[]
-        const src = pipeSourceRef.current
-        if (!src) return
-        src.clear()
-        for (const row of rows) {
-          if (!row.coords || row.coords.length < 2) continue
-          const f = new Feature({ geometry: new LineString(row.coords.map(toView)) })
-          f.set('pipeTable', row.table)
-          f.set('role', 'view-pipe')
-          src.addFeature(f)
-        }
-      } catch {
-        /* skip */
-      }
+      const scaleOk = isOutageOverlayScaleVisible(map.getView().getZoom())
+      valveWms.setVisible(scaleOk)
+      if (!scaleOk) clearControls()
     }
 
     const syncMetaPsSize = () => {
@@ -693,7 +663,7 @@ export function useWtlOutageMapLayer({
       if (moveTimer) clearTimeout(moveTimer)
       moveTimer = setTimeout(() => {
         void fetchVisibleGates()
-        void fetchVisiblePipes()
+        // 벡터 관로는 WMS와 중복·고정 굵기 번짐 → 조회하지 않음
       }, 200)
     }
 
@@ -733,7 +703,6 @@ export function useWtlOutageMapLayer({
     const resolutionKey = map.getView().on('change:resolution', onResolution)
     const clickKey = map.on('singleclick', onClick as never)
     void fetchVisibleGates()
-    void fetchVisiblePipes()
 
     return () => {
       pipeWmsCancelled = true
@@ -902,7 +871,7 @@ export function useWtlOutageMapLayer({
       } else {
         hideMetaWms()
       }
-      // SLD가 그리지 않는 축척(1:3000 초과)이거나 WMS 필터를 못 만들 때 같은 기본 모양 원
+      // WMS(ignore_scale) 실패·필터 불가 시에만 같은 기본 모양 원
       const base = new Feature({ geometry: new Point(lonLatToView(selectionHighlight.point, viewProj)) })
       base.setId('outage-meta-point-fallback')
       base.set('role', 'meta-point-fallback')

@@ -17,19 +17,23 @@ export type WtlAnalysisPipeWmsParams = {
 
 type BuildOpts = {
   pipeWidth?: number
+  /**
+   * 급수관 고정 굵기(px). 양수일 때만 ENV로 고정.
+   * 생략 시 지하시설물과 동일하게 stroke_width ENV 없이 SLD Categorize 사용.
+   */
   splyWidth?: number
 }
 
 /**
  * 분할 레이어가 있으면 분할+급수관, 없으면 부모 관로+급수관.
- * 분할 스타일은 라벨 룰이 없고, 부모·급수관은 *_nolabel 을 쓴다.
+ * 상수·급수 모두 본편 스타일 + 라벨 ENV 비움.
  */
 export function buildWtlAnalysisPipeWmsParams(
   availableNames: Iterable<string>,
   opts: BuildOpts = {}
 ): WtlAnalysisPipeWmsParams {
   const pipeW = opts.pipeWidth ?? 3
-  const splyW = opts.splyWidth ?? 2.5
+  const splyW = opts.splyWidth
   const avail = new Set(
     [...availableNames].map((n) => String(n ?? '').trim().toLowerCase()).filter(Boolean)
   )
@@ -38,18 +42,19 @@ export function buildWtlAnalysisPipeWmsParams(
   const pipes = splits.length > 0 ? [...splits] : (['wtl_pipe_lm'] as const)
 
   const layers = [...pipes, 'wtl_sply_ls']
-  const styles = [
-    ...pipes.map((p) => (p === 'wtl_pipe_lm' ? 'wtl_pipe_lm_nolabel' : p)),
-    'wtl_sply_ls_nolabel',
-  ]
+  const styles = [...pipes, 'wtl_sply_ls']
   const envParts = [
     ...pipes.map((p) =>
       p === 'wtl_pipe_lm'
         ? `wtl_pipe_lm_stroke_width:${pipeW}`
         : `${p}_stroke_width:${pipeW}`
     ),
-    `wtl_sply_ls_stroke_width:${splyW}`,
+    'wtl_pipe_lm_label_property_name:',
+    'wtl_sply_ls_label_property_name:',
   ]
+  if (splyW != null && splyW > 0) {
+    envParts.push(`wtl_sply_ls_stroke_width:${splyW}`)
+  }
 
   return {
     LAYERS: layers.join(','),
@@ -58,7 +63,7 @@ export function buildWtlAnalysisPipeWmsParams(
   }
 }
 
-/** 지하시설물 가용 테이블 조회 후 단수·누수 배경 WMS params (분할 관로는 라벨 제거 SLD) */
+/** 지하시설물 가용 테이블 조회 후 단수·누수 배경 WMS params */
 export async function fetchWtlAnalysisPipeWmsParams(
   opts: BuildOpts = {}
 ): Promise<WtlAnalysisPipeWmsParams> {

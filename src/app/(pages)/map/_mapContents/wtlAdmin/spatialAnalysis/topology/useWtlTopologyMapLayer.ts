@@ -14,8 +14,11 @@ import VectorSource from 'ol/source/Vector'
 import { Circle, Fill, RegularShape, Stroke, Style, Text } from 'ol/style'
 import '../../../../_mapComponents/config/projections'
 import { call } from '@/lib/api'
-import { zoomFromScaleMeters } from '../../../../_mapComponents/hooks/mapScale'
 import { useMapContext } from '../../../../_mapComponents/MapContext'
+import {
+  FORCE_IGNORE_SCALE_LAYER_KEY,
+  mergeIgnoreScaleEnv,
+} from '../../../../_mapComponents/layerFactory/iconScaleWmsEnv'
 import { lonLatToView, useMapViewProjection } from './topoMapProjection'
 import {
   createUndergroundFacilityLayers,
@@ -77,23 +80,19 @@ const BG_Z_INDEX = 40
  * 급수관 스타일의 라벨 규칙을 끄는 GeoServer ENV (라벨 속성명을 비움)
  * + 선 굵기를 누수분석·단수구역과 같은 2.5px로
  */
-const SPLY_NO_LABEL_ENV = 'wtl_sply_ls_label_property_name:;wtl_sply_ls_stroke_width:2.5'
+/** 라벨만 끔 — 굵기는 지하시설물과 동일하게 본편 SLD Categorize */
+const SPLY_NO_LABEL_ENV = 'wtl_sply_ls_label_property_name:'
 /** 굵기를 누수분석·단수구역(선 3px)에 맞춘 SLD_BODY로 다시 그릴 관로 분할 레이어 */
 const PIPE_WIDEN_TABLES = new Set(['wtl_pipe_lm_etc', 'wtl_pipe_lm_saa004', 'wtl_pipe_lm_saa003'])
 /**
- * 시설 심볼 표시 시작 줌. 축척 막대 120.00m = 줌 17 (mapScale: 7864320 / 2^(zoom-1)).
- * OL minZoom은 "초과"일 때 보이므로 17에서도 보이도록 살짝 낮춘다.
- */
-const FACILITY_MIN_ZOOM = zoomFromScaleMeters(120) - 0.001
-
-/**
- * 축척과 무관하게 보여 줄 시설 레이어.
- * 계량기(wtl_meta_ps)는 수가 많아 축소 시 화면·GeoServer 부하가 커서 원래 축척 제한을 유지한다.
+ * 축척과 무관하게 보여 줄 시설 레이어(_ps 포함).
+ * SLD의 ignore_scale env + OL minZoom 해제로 항상 표시.
  */
 const FACILITY_TABLES = new Set([
   'wtl_valv_ps',
   'wtl_flow_ps',
   'wtl_serv_ps',
+  'wtl_meta_ps',
   'wtl_puri_as',
 ])
 /** 접합점 검토: 체크(선택)·마우스 올린 관로의 선 굵기(px). 일반 관로는 3 */
@@ -313,25 +312,35 @@ export function useWtlTopologyMapLayer({
         const source = layer.getSource()
         source?.updateParams({ ...source.getParams(), ENV: SPLY_NO_LABEL_ENV })
       }
-      if (FACILITY_TABLES.has(tableName) || tableName === 'wtl_meta_ps') {
-        // 시설 심볼은 축척 막대 120m(줌 17) 이상 확대했을 때만 그린다.
-        // (스타일 자체의 축척 제한은 아래 SLD_BODY로 해제 — 계량기는 원래 스타일 제한도 유지)
-        layer.setMinZoom(FACILITY_MIN_ZOOM)
+      if (FACILITY_TABLES.has(tableName)) {
+        // 공간분석 배경 _ps·시설 — ignore_scale=1 + factory minZoom 해제
+        // 검색바 축척 토글이 덮어쓰지 않도록 force 표식
+        layer.setMinZoom(0)
         layer.setMaxZoom(Infinity)
+        layer.set(FORCE_IGNORE_SCALE_LAYER_KEY, true)
+        const source = layer.getSource()
+        if (source) {
+          const params = source.getParams()
+          const current = typeof params.ENV === 'string' ? params.ENV : undefined
+          source.updateParams({
+            ...params,
+            ENV: mergeIgnoreScaleEnv(current, true),
+          })
+        }
       }
       map.addLayer(layer)
     })
 
-    // 시설은 축척 제한을 뺀 SLD, 관로 분할 레이어는 굵기를 키운 SLD로 다시 그린다. 실패하면 원래 스타일 유지.
+    // 관로 분할 레이어만 굵기·라벨 제거 SLD로 다시 그린다. 시설 축척은 ignore_scale ENV.
     let cancelled = false
-    const facilityTables = layers
+    const pipeWidenTables = layers
       .map((l) => String(l.get('layerTableName') ?? ''))
-      .filter((t) => FACILITY_TABLES.has(t) || PIPE_WIDEN_TABLES.has(t))
-    if (facilityTables.length > 0) {
+      .filter((t) => PIPE_WIDEN_TABLES.has(t))
+    if (pipeWidenTables.length > 0) {
       call('', 'POST', {
         service: 'wtlTopologyService',
         action: 'loadWtlTopoFacilitySlds',
-        params: { tables: facilityTables },
+        params: { tables: pipeWidenTables },
       })
         .then((res) => {
           if (cancelled) return
@@ -349,7 +358,7 @@ export function useWtlTopologyMapLayer({
           })
         })
         .catch(() => {
-          // 원래 스타일(축척 제한 포함) 그대로 둔다
+          // 원래 스타일 그대로 둔다
         })
     }
 

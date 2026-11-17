@@ -12,6 +12,10 @@ import { getGeoServerBase } from '@/lib/geoserverUrl'
 import { transform } from 'ol/proj'
 import '../../../../_mapComponents/config/projections'
 import { useMapContext } from '../../../../_mapComponents/MapContext'
+import {
+  FORCE_IGNORE_SCALE_LAYER_KEY,
+  mergeIgnoreScaleEnv,
+} from '../../../../_mapComponents/layerFactory/iconScaleWmsEnv'
 import { zoomFromScaleMeters } from '../../../../_mapComponents/hooks/mapScale'
 import { scheduleFitMapToExtent3857 } from '../../../../_mapComponents/config/mapAutoNavigation'
 import {
@@ -816,7 +820,7 @@ export function useWtlSupplyPathMapLayer({
     if (!map || !mapContext?.mapReady || !active) return
 
     // 기존 GeoServer SLD(스타일명 = 테이블명)로 정수장·배수지를 관로 위에 다시 그림
-    // (면 도형 등 실제 형상. 제수변 열림/잠금 오버레이 위 표시는 아래 DOM 오버레이가 담당)
+    // (면 도형 등 실제 형상. ignore_scale로 _ps 축척 제한 해제)
     const wms = new ImageLayer({
       zIndex: 944,
       source: new ImageWMS({
@@ -824,6 +828,7 @@ export function useWtlSupplyPathMapLayer({
         params: {
           LAYERS: FACILITY_WMS_LAYERS.join(','),
           STYLES: FACILITY_WMS_LAYERS.join(','),
+          ENV: mergeIgnoreScaleEnv(undefined, true),
           TRANSPARENT: true,
           EXCEPTIONS: 'application/vnd.ogc.se_xml',
         },
@@ -834,6 +839,7 @@ export function useWtlSupplyPathMapLayer({
       }),
     })
     wms.set('wtlSupplyFacilityWms', true)
+    wms.set(FORCE_IGNORE_SCALE_LAYER_KEY, true)
     map.addLayer(wms)
     return () => {
       map.removeLayer(wms)

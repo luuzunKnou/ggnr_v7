@@ -1643,17 +1643,10 @@ export async function findWtlTopoFeatureAt(params: {
   return { feature };
 }
 
-/** 위상검증 배경에서 축척과 무관하게 보여 줄 시설 레이어 (계량기는 수가 많아 원래 축척 제한 유지) */
-const TOPO_FACILITY_STYLE_TABLES = new Set([
-  'wtl_valv_ps',
-  'wtl_flow_ps',
-  'wtl_serv_ps',
-  'wtl_puri_as',
-]);
-
 /**
  * 위상검증 배경 관로(분할 레이어) — 스타일 굵기가 고정값(테두리 3·선 2)이라 ENV로 못 바꾼다.
  * 누수분석·단수구역 관로(선 3px)와 맞추려고 SLD의 stroke-width를 모두 +1px 한다(색은 원본 그대로).
+ * 시설(_ps) 축척 해제는 SLD ignore_scale env + 클라이언트 ENV로 처리한다.
  */
 const TOPO_PIPE_WIDEN_TABLES = new Set(['wtl_pipe_lm_etc', 'wtl_pipe_lm_saa004', 'wtl_pipe_lm_saa003']);
 const TOPO_PIPE_WIDEN_PX = 1;
@@ -1663,7 +1656,27 @@ function stripSldTextSymbolizers(raw: string): string {
   return raw.replace(/<(?:sld:)?TextSymbolizer\b[\s\S]*?<\/(?:sld:)?TextSymbolizer>\s*/gi, '');
 }
 
-function prepareSpatialPipeSld(raw: string, table: string, gsBase: string, widenPx = 0): string {
+type PrepareSpatialPipeSldOpts = {
+  /** true면 Min/MaxScale 유지(급수관 flow_arrow 등). 기본은 제거 */
+  keepScaleLimits?: boolean
+  /** true면 PointSymbolizer Rule 제거(배경은 선만) */
+  stripPointSymbolizers?: boolean
+}
+
+/** PointSymbolizer가 있는 Rule만 제거. Rule 단위로 잘라 선 Rule을 같이 지우지 않는다. */
+function stripSldPointSymbolizerRules(raw: string): string {
+  return raw.replace(/<(?:sld:)?Rule\b[\s\S]*?<\/(?:sld:)?Rule>\s*/gi, (rule) =>
+    /<(?:sld:)?PointSymbolizer\b/i.test(rule) ? '' : rule
+  )
+}
+
+function prepareSpatialPipeSld(
+  raw: string,
+  table: string,
+  gsBase: string,
+  widenPx = 0,
+  opts: PrepareSpatialPipeSldOpts = {}
+): string {
   let out = raw;
   if (widenPx > 0) {
     out = out.replace(
@@ -1671,16 +1684,24 @@ function prepareSpatialPipeSld(raw: string, table: string, gsBase: string, widen
       (_m, a: string, w: string, b: string) => `${a}${Number(w) + widenPx}${b}`
     );
   }
-  out = stripSldTextSymbolizers(out)
-    .replace(/<(sld:)?(Min|Max)ScaleDenominator>[^<]*<\/(sld:)?(Min|Max)ScaleDenominator>\s*/g, '')
+  out = stripSldTextSymbolizers(out);
+  if (opts.stripPointSymbolizers) {
+    out = stripSldPointSymbolizerRules(out);
+  }
+  if (!opts.keepScaleLimits) {
+    out = out.replace(
+      /<(sld:)?(Min|Max)ScaleDenominator>[^<]*<\/(sld:)?(Min|Max)ScaleDenominator>\s*/g,
+      ''
+    );
+  }
+  out = out
     .replace(/(<(?:sld:)?NamedLayer>\s*<(?:sld:)?Name>)[^<]*(<\/(?:sld:)?Name>)/, `$1${table}$2`)
     .replace(/xlink:href="\/www\//g, `xlink:href="${gsBase}/www/`);
   return out;
 }
 
 /**
- * 위상검증 배경용 시설 SLD — GeoServer 스타일에서 축척 제한(Min/MaxScaleDenominator)만 뺀다.
- * 관로 분할 레이어(TOPO_PIPE_WIDEN_TABLES)는 선 굵기만 키우고 라벨(TextSymbolizer)을 뺀다.
+ * 위상검증 배경 관로 분할 SLD — 선 굵기만 키우고 라벨(TextSymbolizer)을 뺀다.
  * WMS SLD_BODY로 쓰므로
  * - NamedLayer 이름을 레이어명으로 맞추고(다르면 GeoServer가 기본 스타일로 그린다)
  * - 상대 심볼 경로(/www/...)를 GeoServer 절대 URL로 바꾼다(SLD_BODY에서는 상대 경로를 못 푼다).
@@ -1688,8 +1709,8 @@ function prepareSpatialPipeSld(raw: string, table: string, gsBase: string, widen
 export async function loadWtlTopoFacilitySlds(params: {
   tables?: string[];
 }): Promise<{ slds: Record<string, string> }> {
-  const list = (Array.isArray(params.tables) ? params.tables : []).filter(
-    (t) => TOPO_FACILITY_STYLE_TABLES.has(String(t)) || TOPO_PIPE_WIDEN_TABLES.has(String(t))
+  const list = (Array.isArray(params.tables) ? params.tables : []).filter((t) =>
+    TOPO_PIPE_WIDEN_TABLES.has(String(t))
   );
   const stylesDir = path.join(process.cwd(), 'geoserver_modules', 'data_dir', 'styles');
   const gsBase = getGeoServerInternalBase();
@@ -1697,10 +1718,9 @@ export async function loadWtlTopoFacilitySlds(params: {
   for (const table of list) {
     try {
       const raw = await fs.readFile(path.join(stylesDir, `${table}.sld`), 'utf8');
-      const widen = TOPO_PIPE_WIDEN_TABLES.has(table) ? TOPO_PIPE_WIDEN_PX : 0;
-      slds[table] = prepareSpatialPipeSld(raw, table, gsBase, widen);
+      slds[table] = prepareSpatialPipeSld(raw, table, gsBase, TOPO_PIPE_WIDEN_PX);
     } catch {
-      // 스타일 파일이 없으면 원래 스타일(축척 제한 포함)로 둔다
+      // 스타일 파일이 없으면 원래 스타일로 둔다
     }
   }
   return { slds };
@@ -1723,14 +1743,13 @@ export async function loadWtlSpatialPipeNolabelSldBody(params: {
   const named: string[] = [];
   for (const table of list) {
     try {
-      const file =
-        table === 'wtl_sply_ls'
-          ? 'wtl_sply_ls_nolabel.sld'
-          : table === 'wtl_pipe_lm'
-            ? 'wtl_pipe_lm_nolabel.sld'
-            : `${table}.sld`;
+      // 상수·급수 본편 SLD + 라벨/화살표 정리(prepareSpatialPipeSld)
+      const file = `${table}.sld`;
       const raw = await fs.readFile(path.join(stylesDir, file), 'utf8');
-      const prepared = prepareSpatialPipeSld(raw, table, gsBase, 0);
+      const prepared = prepareSpatialPipeSld(raw, table, gsBase, 0, {
+        keepScaleLimits: true,
+        stripPointSymbolizers: table === 'wtl_sply_ls',
+      });
       const inner = prepared
         .replace(/<\?xml[^?]*\?>\s*/i, '')
         .replace(/<\/?(?:sld:)?StyledLayerDescriptor\b[^>]*>/gi, '')
