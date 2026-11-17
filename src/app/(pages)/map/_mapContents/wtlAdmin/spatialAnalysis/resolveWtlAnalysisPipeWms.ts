@@ -11,6 +11,8 @@ export type WtlAnalysisPipeWmsParams = {
   LAYERS: string
   STYLES: string
   ENV: string
+  /** 분할 관로 등 라벨 제거 SLD — 있으면 STYLES 대신 사용 */
+  SLD_BODY?: string
 }
 
 type BuildOpts = {
@@ -56,11 +58,12 @@ export function buildWtlAnalysisPipeWmsParams(
   }
 }
 
-/** 지하시설물 가용 테이블 조회 후 단수·누수 배경 WMS params */
+/** 지하시설물 가용 테이블 조회 후 단수·누수 배경 WMS params (분할 관로는 라벨 제거 SLD) */
 export async function fetchWtlAnalysisPipeWmsParams(
   opts: BuildOpts = {}
 ): Promise<WtlAnalysisPipeWmsParams> {
   const fallback = buildWtlAnalysisPipeWmsParams([], opts)
+  let base = fallback
   try {
     const res = await call('', 'POST', {
       service: 'thematicMapService',
@@ -69,8 +72,33 @@ export async function fetchWtlAnalysisPipeWmsParams(
     })
     const body = (res?.data ?? res) as { success?: boolean; tableNames?: string[] }
     const names = Array.isArray(body?.tableNames) ? body.tableNames : []
-    return buildWtlAnalysisPipeWmsParams(names, opts)
+    base = buildWtlAnalysisPipeWmsParams(names, opts)
   } catch {
-    return fallback
+    base = fallback
+  }
+
+  const layers = base.LAYERS.split(',').map((s) => s.trim()).filter(Boolean)
+  const usesSplit = layers.some((l) =>
+    (WTL_PIPE_SPLIT_LAYERS as readonly string[]).includes(l)
+  )
+  if (!usesSplit) return base
+
+  try {
+    const res = await call('', 'POST', {
+      service: 'wtlTopologyService',
+      action: 'loadWtlSpatialPipeNolabelSldBody',
+      params: { tables: layers },
+    })
+    const body = (res?.data ?? res) as { sldBody?: string | null }
+    const sldBody = typeof body?.sldBody === 'string' && body.sldBody.trim() ? body.sldBody : null
+    if (!sldBody) return base
+    return {
+      LAYERS: base.LAYERS,
+      STYLES: '',
+      ENV: base.ENV,
+      SLD_BODY: sldBody,
+    }
+  } catch {
+    return base
   }
 }
