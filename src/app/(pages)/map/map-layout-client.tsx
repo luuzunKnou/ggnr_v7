@@ -20,10 +20,7 @@ import {
   RiverBasicPlanDetailPanel,
   type RiverBasicPlanPreferredPlan,
 } from "./_mapContents/river/riverBasicPlan/RiverBasicPlanDetailPanel"
-import {
-  RiverBasicPlanScopeModal,
-  type RiverBasicPlanListAxis,
-} from "./_mapContents/river/riverBasicPlan/RiverBasicPlanScopeModal"
+import type { RiverBasicPlanListAxis } from "./_mapContents/river/riverBasicPlan/RiverBasicPlanScopeModal"
 import { RiverBasicPlanMapDrawingFromMapHandler } from "./_mapContents/river/riverBasicPlan/RiverBasicPlanMapDrawingFromMapHandler"
 import { RoadLedgerListPanel } from "./_mapContents/road/roadLedger/RoadLedgerListPanel"
 import { RoadLedgerDetailPanel } from "./_mapContents/road/roadLedger/RoadLedgerDetailPanel"
@@ -31,6 +28,15 @@ import { RoadLedgerFacilityAttrModal } from "./_mapContents/road/roadLedger/Road
 import { RoadNetworkListPanel } from "./_mapContents/road/roadNetwork/RoadNetworkListPanel"
 import { RoadNetworkDetailPanel } from "./_mapContents/road/roadNetwork/RoadNetworkDetailPanel"
 import { clearRoadNetworkWmsLayers } from "./_mapContents/road/roadNetwork/roadNetworkMapSync"
+import { BikeRoadListPanel } from "./_mapContents/road/bikeRoad/BikeRoadListPanel"
+import { BikeRoadDetailPanel } from "./_mapContents/road/bikeRoad/BikeRoadDetailPanel"
+import { BikeRoadMapOverlay } from "./_mapContents/road/bikeRoad/useBikeRoadMapOverlay"
+import {
+  BIKE_ROAD_MOCK_ROUTES,
+  createEmptyBikeRoadRoute,
+  isNewBikeRoadRouteId,
+  type BikeRoadRoute,
+} from "./_mapContents/road/bikeRoad/bikeRoadMock"
 import { SafetyMapLayerPanel } from "./_mapContents/safty/safetyMap/SafetyMapLayerPanel"
 import { SafetyInfoLayerPanel } from "./_mapContents/safty/safetyInfo/SafetyInfoLayerPanel"
 import { SafetyWaterShell } from "./_mapContents/safty/safetyWater/SafetyWaterShell"
@@ -371,6 +377,13 @@ const ROAD_NETWORK_DETAIL_DEFAULT_WIDTH = 420
 const ROAD_NETWORK_DETAIL_MIN_WIDTH = 340
 const ROAD_NETWORK_DETAIL_MAX_WIDTH = 720
 
+const BIKE_ROAD_LIST_DEFAULT_WIDTH = STANDARD_LIST_DEFAULT_WIDTH
+const BIKE_ROAD_LIST_MIN_WIDTH = STANDARD_LIST_MIN_WIDTH
+const BIKE_ROAD_LIST_MAX_WIDTH = 680
+const BIKE_ROAD_DETAIL_DEFAULT_WIDTH = 980
+const BIKE_ROAD_DETAIL_MIN_WIDTH = 800
+const BIKE_ROAD_DETAIL_MAX_WIDTH = 1200
+
 const SAFETY_MAP_PANEL_DEFAULT_WIDTH = 360
 const SAFETY_MAP_PANEL_MIN_WIDTH = 280
 const SAFETY_MAP_PANEL_MAX_WIDTH = 600
@@ -474,6 +487,7 @@ const MAP_3D_DATA_OPENED_KEY = "map3dData"
 const RIVER_BASIC_PLAN_OPENED_KEY = "riverBasicPlan"
 const ROAD_LEDGER_OPENED_KEY = "roadLedger"
 const ROAD_NETWORK_OPENED_KEY = "roadNetwork"
+const BIKE_ROAD_OPENED_KEY = "bikeRoad"
 const SAFETY_MAP_OPENED_KEY = "safetyMap"
 const SAFETY_INFO_OPENED_KEY = "safetyInfo"
 const SAFETY_WATER_OPENED_KEY = "safetyWater"
@@ -700,7 +714,6 @@ function MapLayoutContent({
     mapContext.applyRiverBasicPlanMapPickRef.current = (pick) => {
       setRiverPlanTab(pick.tab)
       if (riverBasicPlanListAxis == null) setRiverBasicPlanListAxis("byRiver")
-      setRiverBasicPlanScopeModalOpen(false)
       setRiverBasicPlanPreferredPlan(null)
       setSelectedRiverName(pick.riverName)
     }
@@ -740,6 +753,7 @@ function MapLayoutContent({
     roadNetworkOpen && Boolean(mapContext?.roadNetworkSelectedId)
   const roadNetworkSelectedRow =
     mapContext?.roadNetworkRows?.find((r) => r.id === mapContext?.roadNetworkSelectedId) ?? null
+  const bikeRoadOpen = openedWindows.includes(BIKE_ROAD_OPENED_KEY)
   const safetyMapOpen = openedWindows.includes(SAFETY_MAP_OPENED_KEY)
   const safetyInfoOpen = openedWindows.includes(SAFETY_INFO_OPENED_KEY)
   const safetyWaterOpen = openedWindows.includes(SAFETY_WATER_OPENED_KEY)
@@ -1003,7 +1017,6 @@ function MapLayoutContent({
   const [riverPlanTab, setRiverPlanTab] = useState<"river" | "smallRiver">("river")
   const [riverBasicPlanListAxis, setRiverBasicPlanListAxis] =
     useState<RiverBasicPlanListAxis | null>(null)
-  const [riverBasicPlanScopeModalOpen, setRiverBasicPlanScopeModalOpen] = useState(false)
   const [selectedRiverName, setSelectedRiverName] = useState("")
   const [riverBasicPlanPreferredPlan, setRiverBasicPlanPreferredPlan] =
     useState<RiverBasicPlanPreferredPlan | null>(null)
@@ -1016,6 +1029,15 @@ function MapLayoutContent({
   const [roadLedgerDetailWidth, setRoadLedgerDetailWidth] = useState(ROAD_LEDGER_DETAIL_DEFAULT_WIDTH)
   const [roadNetworkListWidth, setRoadNetworkListWidth] = useState(ROAD_NETWORK_LIST_DEFAULT_WIDTH)
   const [roadNetworkDetailWidth, setRoadNetworkDetailWidth] = useState(ROAD_NETWORK_DETAIL_DEFAULT_WIDTH)
+  const [bikeRoadListWidth, setBikeRoadListWidth] = useState(BIKE_ROAD_LIST_DEFAULT_WIDTH)
+  const [bikeRoadDetailWidth, setBikeRoadDetailWidth] = useState(BIKE_ROAD_DETAIL_DEFAULT_WIDTH)
+  const [bikeRoadSelectedId, setBikeRoadSelectedId] = useState<string | null>(null)
+  const [bikeRoadRoutes, setBikeRoadRoutes] = useState<BikeRoadRoute[]>(() => [
+    ...BIKE_ROAD_MOCK_ROUTES,
+  ])
+  const bikeRoadSelectedRoute =
+    bikeRoadRoutes.find((r) => r.id === bikeRoadSelectedId) ?? null
+  const bikeRoadDetailOpen = bikeRoadOpen && Boolean(bikeRoadSelectedRoute)
   const [safetyMapPanelWidth, setSafetyMapPanelWidth] = useState(SAFETY_MAP_PANEL_DEFAULT_WIDTH)
   const [safetyInfoPanelWidth, setSafetyInfoPanelWidth] = useState(SAFETY_INFO_PANEL_DEFAULT_WIDTH)
   const [safetyWaterPanelWidth, setSafetyWaterPanelWidth] = useState(SAFETY_WATER_PANEL_DEFAULT_WIDTH)
@@ -1173,6 +1195,8 @@ function MapLayoutContent({
     (roadLedgerDetailOpen ? roadLedgerDetailWidth : 0) +
     (roadNetworkOpen ? roadNetworkListWidth : 0) +
     (roadNetworkDetailOpen ? roadNetworkDetailWidth : 0) +
+    (bikeRoadOpen ? bikeRoadListWidth : 0) +
+    (bikeRoadDetailOpen ? bikeRoadDetailWidth : 0) +
     (buildPublicLandOpen ? buildPublicLandPanelWidth : 0) +
     (buildPublicLandDetailOpen ? buildPublicLandDetailWidth : 0) +
     (roadUseLedgerOpen ? roadUseLedgerPanelWidth : 0) +
@@ -1279,8 +1303,12 @@ function MapLayoutContent({
   const roadNetworkListLeftPx = afterRoadLedgerPanelsLeftPx
   const roadNetworkDetailLeftPx =
     roadNetworkListLeftPx + (roadNetworkOpen ? roadNetworkListWidth : 0)
-  const buildPublicLandPanelLeftPx =
+  const bikeRoadListLeftPx =
     roadNetworkDetailLeftPx + (roadNetworkDetailOpen ? roadNetworkDetailWidth : 0)
+  const bikeRoadDetailLeftPx =
+    bikeRoadListLeftPx + (bikeRoadOpen ? bikeRoadListWidth : 0)
+  const buildPublicLandPanelLeftPx =
+    bikeRoadDetailLeftPx + (bikeRoadDetailOpen ? bikeRoadDetailWidth : 0)
   const buildPublicLandDetailLeftPx =
     buildPublicLandPanelLeftPx + (buildPublicLandOpen ? buildPublicLandPanelWidth : 0)
   const roadUseLedgerPanelLeftPx =
@@ -1489,12 +1517,11 @@ function MapLayoutContent({
     setRiverBasicPlanSelectedRiver?.(selectedRiverName)
   }, [setRiverBasicPlanPanelOpen, setRiverBasicPlanSelectedRiver, riverBasicPlanOpen, selectedRiverName])
 
-  /** 기본계획 열릴 때 보기(보고서별·하천별) 미선택이면 모달. 닫히면 초기화 */
+  /** 기본계획 열릴 때 보고서 기준. 닫히면 초기화 */
   useEffect(() => {
     if (riverBasicPlanOpen) {
-      if (riverBasicPlanListAxis == null) setRiverBasicPlanScopeModalOpen(true)
+      if (riverBasicPlanListAxis == null) setRiverBasicPlanListAxis("byPlan")
     } else {
-      setRiverBasicPlanScopeModalOpen(false)
       setRiverBasicPlanListAxis(null)
       setRiverPlanTab("river")
       setRiverBasicPlanPreferredPlan(null)
@@ -1863,7 +1890,6 @@ function MapLayoutContent({
   const handleHideRiverBasicPlan = () => {
     const next = openedWindows.filter((w) => w !== RIVER_BASIC_PLAN_OPENED_KEY)
     setOpened(next)
-    setRiverBasicPlanScopeModalOpen(false)
     setRiverBasicPlanListAxis(null)
     setRiverPlanTab("river")
     setRiverBasicPlanPreferredPlan(null)
@@ -1874,7 +1900,6 @@ function MapLayoutContent({
     setRiverBasicPlanListAxis(axis)
     setRiverBasicPlanPreferredPlan(null)
     setSelectedRiverName("")
-    setRiverBasicPlanScopeModalOpen(false)
   }
 
   const handleHideRoadLedger = () => {
@@ -1891,6 +1916,45 @@ function MapLayoutContent({
     setSpatialFilterWkt?.(null)
     const next = openedWindows.filter((w) => w !== ROAD_NETWORK_OPENED_KEY)
     setOpened(next)
+  }
+
+  const handleHideBikeRoad = () => {
+    setBikeRoadRoutes((prev) => prev.filter((r) => !isNewBikeRoadRouteId(r.id)))
+    setBikeRoadSelectedId(null)
+    const next = openedWindows.filter((w) => w !== BIKE_ROAD_OPENED_KEY)
+    setOpened(next)
+  }
+
+  useEffect(() => {
+    if (!bikeRoadOpen) {
+      setBikeRoadRoutes((prev) => prev.filter((r) => !isNewBikeRoadRouteId(r.id)))
+      setBikeRoadSelectedId(null)
+    }
+  }, [bikeRoadOpen])
+
+  const handleAddBikeRoad = () => {
+    const draft = createEmptyBikeRoadRoute()
+    setBikeRoadRoutes((prev) => [
+      draft,
+      ...prev.filter((r) => !isNewBikeRoadRouteId(r.id)),
+    ])
+    setBikeRoadSelectedId(draft.id)
+  }
+
+  const handleSaveBikeRoad = (next: BikeRoadRoute) => {
+    setBikeRoadRoutes((prev) => {
+      // 임시 신규·동일 id 제거 후 저장본을 맨 앞에
+      const rest = prev.filter(
+        (r) => !isNewBikeRoadRouteId(r.id) && r.id !== next.id
+      )
+      return [next, ...rest]
+    })
+    setBikeRoadSelectedId(next.id)
+  }
+
+  const handleDeleteBikeRoad = (id: string) => {
+    setBikeRoadRoutes((prev) => prev.filter((r) => r.id !== id))
+    setBikeRoadSelectedId((cur) => (cur === id ? null : cur))
   }
 
   const handleCloseRoadUseLedger = () => {
@@ -2803,16 +2867,6 @@ function MapLayoutContent({
               </MapSideListPanel>
             </div>
           )}
-          <RiverBasicPlanScopeModal
-            open={riverBasicPlanOpen && riverBasicPlanScopeModalOpen}
-            selectedAxis={riverBasicPlanListAxis}
-            onSelect={handleRiverBasicPlanSelectAxis}
-            onClose={() => {
-              setRiverBasicPlanScopeModalOpen(false)
-              /** 보기를 한 번도 고르지 않은 채 닫으면 패널도 닫음 */
-              if (riverBasicPlanListAxis == null) handleHideRiverBasicPlan()
-            }}
-          />
           {roadLedgerOpen && (
             <div className="pointer-events-auto shrink-0">
               <MapSideListPanel
@@ -2872,6 +2926,57 @@ function MapLayoutContent({
                     roadNetworkListWidth +
                     (roadNetworkDetailOpen ? roadNetworkDetailWidth : 0)
                   }
+                />
+              </MapSideListPanel>
+            </div>
+          )}
+          <BikeRoadMapOverlay
+            open={bikeRoadOpen}
+            selectedId={bikeRoadSelectedId}
+            routes={bikeRoadRoutes}
+          />
+          {bikeRoadOpen && (
+            <div className="pointer-events-auto flex h-full shrink-0 flex-col">
+              <MapSideListPanel
+                width={bikeRoadListWidth}
+                minWidth={BIKE_ROAD_LIST_MIN_WIDTH}
+                maxWidth={BIKE_ROAD_LIST_MAX_WIDTH}
+                leftOffsetPx={bikeRoadListLeftPx}
+                onWidthChange={setBikeRoadListWidth}
+                contentClassName="overflow-hidden"
+                serEng="bikeRoad"
+              >
+                <BikeRoadListPanel
+                  onClose={handleHideBikeRoad}
+                  selectedId={bikeRoadSelectedId}
+                  onSelect={(id) => {
+                    setBikeRoadRoutes((prev) =>
+                      prev.filter((r) => !isNewBikeRoadRouteId(r.id) || r.id === id)
+                    )
+                    setBikeRoadSelectedId(id)
+                  }}
+                  onAdd={handleAddBikeRoad}
+                  routes={bikeRoadRoutes}
+                />
+              </MapSideListPanel>
+            </div>
+          )}
+          {bikeRoadOpen && bikeRoadSelectedRoute && (
+            <div className="pointer-events-auto flex h-full shrink-0 flex-col">
+              <MapSideListPanel
+                width={bikeRoadDetailWidth}
+                minWidth={BIKE_ROAD_DETAIL_MIN_WIDTH}
+                maxWidth={BIKE_ROAD_DETAIL_MAX_WIDTH}
+                leftOffsetPx={bikeRoadDetailLeftPx}
+                onWidthChange={setBikeRoadDetailWidth}
+                contentClassName="overflow-hidden"
+                serEng="bikeRoad"
+              >
+                <BikeRoadDetailPanel
+                  route={bikeRoadSelectedRoute}
+                  onClose={() => setBikeRoadSelectedId(null)}
+                  onSave={handleSaveBikeRoad}
+                  onDelete={handleDeleteBikeRoad}
                 />
               </MapSideListPanel>
             </div>
