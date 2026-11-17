@@ -5,7 +5,7 @@ import Feature from 'ol/Feature'
 import GeoJSON from 'ol/format/GeoJSON'
 import VectorLayer from 'ol/layer/Vector'
 import VectorSource from 'ol/source/Vector'
-import { Fill, Stroke, Style } from 'ol/style'
+import { Circle as CircleStyle, Fill, Stroke, Style } from 'ol/style'
 import type { StyleFunction } from 'ol/style/Style'
 import '../../../_mapComponents/config/projections'
 import { MAP_AUTO_NAV_MAX_ZOOM } from '../../../_mapComponents/config/mapDefaults'
@@ -18,16 +18,20 @@ import {
 import { LAYER_GEOM_STACK_SKIP_KEY } from '@/lib/mapLayerGeometryOrder'
 import type { WtlConsGeom4326 } from './wtlConsLedgerApi'
 
-/** 공사목록·공사구역 선택 깜빡임. 공통 속도의 2.4배 */
-const FOCUS_PULSE_STEP = DATA_QUERY_SELECTION_PULSE_STEP * 2.4
+/** 관련시설 강조 깜빡임 — 데이터조회·시설목록과 동일 속도 */
+const FOCUS_PULSE_STEP = DATA_QUERY_SELECTION_PULSE_STEP
 
 const MAIN_FILL = 'rgba(37, 99, 235, 0.18)'
 const MAIN_STROKE = '#1d4ed8'
 /** 관련시설 강조 — 도로·하천 선택 강조와 같은 최상단대 */
 const FOCUS_LAYER_Z = 9999
+/** 관련시설 전체(미선택) — 공사·구역 위, 선택 강조 아래 */
+const RELATED_LAYER_Z = 892
 /** 관련시설 선택 시 공사·구역 면이 강조를 가리지 않도록 */
 const WORK_DIM_OPACITY = 0.38
 const ZONE_DIM_OPACITY = 0.45
+const RELATED_STROKE = '#0f766e'
+const RELATED_FILL = 'rgba(13, 148, 136, 0.22)'
 
 function pulseFeatureId(id: string) {
   return `pulse:${id}`
@@ -109,6 +113,38 @@ function midSparkleStyle(feature: Feature, phase: number, zIndex = 20): Style | 
   })
 }
 
+/** 관련시설 목록 전체 — 지하시설물 WMS 없이 공사대장 전용 표시 */
+function relatedFacilityStyle(feature: Feature): Style | Style[] {
+  const geomType = feature.getGeometry()?.getType()
+  if (geomType === 'Point' || geomType === 'MultiPoint') {
+    return new Style({
+      image: new CircleStyle({
+        radius: 6,
+        fill: new Fill({ color: RELATED_FILL }),
+        stroke: new Stroke({ color: RELATED_STROKE, width: 2 }),
+      }),
+      zIndex: 2,
+    })
+  }
+  if (geomType === 'LineString' || geomType === 'MultiLineString') {
+    return [
+      new Style({
+        stroke: new Stroke({ color: 'rgba(255, 255, 255, 0.85)', width: 5 }),
+        zIndex: 1,
+      }),
+      new Style({
+        stroke: new Stroke({ color: RELATED_STROKE, width: 2.5 }),
+        zIndex: 2,
+      }),
+    ]
+  }
+  return new Style({
+    fill: new Fill({ color: RELATED_FILL }),
+    stroke: new Stroke({ color: RELATED_STROKE, width: 1.5 }),
+    zIndex: 1,
+  })
+}
+
 /** 관련시설 강조. 공통 선택 스타일보다 굵게, 스타일 z도 최상단. */
 function focusFeatureStyle(feature: Feature, selectionStyle: StyleFunction): Style | Style[] | undefined {
   const geomType = feature.getGeometry()?.getType()
@@ -151,6 +187,13 @@ export type WtlConsMapFocus = {
   projection: 'EPSG:4326' | 'EPSG:3857'
 }
 
+/** 관련시설 목록 도형 — 지하시설물 패널과 무관하게 벡터로만 그림 */
+export type WtlConsRelatedFacility = {
+  id: string
+  geom: Record<string, unknown>
+  projection: 'EPSG:4326' | 'EPSG:3857'
+}
+
 export type WtlConsProjectGeom = {
   id: string
   geom4326: WtlConsGeom4326 | null
@@ -167,6 +210,8 @@ export type WtlConsMapInput = {
   zones: WtlConsMapZone[]
   zoneId: string | null
   focus: WtlConsMapFocus | null
+  /** 관련시설(변류·관로 등) 전체. 패널 체크 없이 표시 */
+  relatedFacilities?: WtlConsRelatedFacility[]
   /** 검색·사업 선택처럼 도형이 그대로여도 지도를 다시 맞출 때 올린다. */
   fitToken?: number
   /** 첨부파일이 가리는 아래 높이. 드래그 중에는 바꾸지 않는다. */
@@ -184,9 +229,11 @@ export function useWtlConsMapLayer(input: WtlConsMapInput) {
   const mapContext = useMapContext()
   const sourceRef = useRef<VectorSource | null>(null)
   const zoneSourceRef = useRef<VectorSource | null>(null)
+  const relatedSourceRef = useRef<VectorSource | null>(null)
   const focusSourceRef = useRef<VectorSource | null>(null)
   const workLayerRef = useRef<VectorLayer<VectorSource> | null>(null)
   const zoneLayerRef = useRef<VectorLayer<VectorSource> | null>(null)
+  const relatedLayerRef = useRef<VectorLayer<VectorSource> | null>(null)
   const focusLayerRef = useRef<VectorLayer<VectorSource> | null>(null)
   const pulsePhaseRef = useRef(0)
   const focusPhaseRef = useRef(0)
@@ -214,6 +261,9 @@ export function useWtlConsMapLayer(input: WtlConsMapInput) {
   const projectKey = input.projectGeoms.map((item) => `${item.id}:${item.geom4326 ? 1 : 0}`).join(',')
   const zoneKey = `${input.zoneId ?? ''}|${input.zones.map((zone) => `${zone.id}:${zone.geometry3857 ? 1 : 0}`).join(',')}`
   const focusKey = input.focus ? `${input.focus.projection}:${JSON.stringify(input.focus.geom).slice(0, 180)}` : ''
+  const relatedKey = (input.relatedFacilities ?? [])
+    .map((item) => `${item.id}:${item.projection}:${JSON.stringify(item.geom).slice(0, 80)}`)
+    .join('|')
 
   useEffect(() => {
     const map = mapContext?.mapInstanceRef?.current
@@ -239,6 +289,16 @@ export function useWtlConsMapLayer(input: WtlConsMapInput) {
     zoneLayer.set('wtlConsZone', true)
     zoneLayer.set(LAYER_GEOM_STACK_SKIP_KEY, true)
     zoneLayerRef.current = zoneLayer
+    const relatedSource = new VectorSource()
+    relatedSourceRef.current = relatedSource
+    const relatedLayer = new VectorLayer({
+      source: relatedSource,
+      style: (feature) => relatedFacilityStyle(feature as Feature),
+      zIndex: RELATED_LAYER_Z,
+    })
+    relatedLayer.set('wtlConsRelated', true)
+    relatedLayer.set(LAYER_GEOM_STACK_SKIP_KEY, true)
+    relatedLayerRef.current = relatedLayer
     const focusSource = new VectorSource()
     focusSourceRef.current = focusSource
     const focusLayer = new VectorLayer({
@@ -251,17 +311,21 @@ export function useWtlConsMapLayer(input: WtlConsMapInput) {
     focusLayerRef.current = focusLayer
     map.addLayer(layer)
     map.addLayer(zoneLayer)
+    map.addLayer(relatedLayer)
     map.addLayer(focusLayer)
 
     return () => {
       sourceRef.current = null
       zoneSourceRef.current = null
+      relatedSourceRef.current = null
       focusSourceRef.current = null
       workLayerRef.current = null
       zoneLayerRef.current = null
+      relatedLayerRef.current = null
       focusLayerRef.current = null
       map.removeLayer(layer)
       map.removeLayer(zoneLayer)
+      map.removeLayer(relatedLayer)
       map.removeLayer(focusLayer)
     }
   }, [mapContext?.mapInstanceRef, mapContext?.mapReady])
@@ -290,18 +354,22 @@ export function useWtlConsMapLayer(input: WtlConsMapInput) {
     const map = mapContext?.mapInstanceRef?.current
     const source = sourceRef.current
     const zoneSource = zoneSourceRef.current
+    const relatedSource = relatedSourceRef.current
     const focusSource = focusSourceRef.current
-    if (!map || !source || !zoneSource || !focusSource) return
+    if (!map || !source || !zoneSource || !relatedSource || !focusSource) return
     source.clear()
     zoneSource.clear()
+    relatedSource.clear()
     focusSource.clear()
     const current = inputRef.current
     const hasFocus = Boolean(current.focus?.geom)
     const workLayer = workLayerRef.current
     const zoneLayer = zoneLayerRef.current
+    const relatedLayer = relatedLayerRef.current
     const focusLayer = focusLayerRef.current
     if (workLayer) workLayer.setOpacity(hasFocus ? WORK_DIM_OPACITY : 1)
     if (zoneLayer) zoneLayer.setOpacity(hasFocus ? ZONE_DIM_OPACITY : 1)
+    if (relatedLayer) relatedLayer.setOpacity(hasFocus ? 0.55 : 1)
     if (focusLayer) {
       focusLayer.setZIndex(FOCUS_LAYER_Z)
       focusLayer.set(LAYER_GEOM_STACK_SKIP_KEY, true)
@@ -342,6 +410,13 @@ export function useWtlConsMapLayer(input: WtlConsMapInput) {
         zoneSource.addFeature(feature)
         if (selected) zoneFeature = feature
       }
+      for (const item of current.relatedFacilities ?? []) {
+        if (!item.geom) continue
+        const feature = new Feature(readGeom(format, item.geom, item.projection))
+        feature.setId(`related:${item.id}`)
+        feature.set('related', true)
+        relatedSource.addFeature(feature)
+      }
       if (current.focus?.geom) {
         focusFeature = new Feature(readGeom(format, current.focus.geom, current.focus.projection))
         focusFeature.set('focus', true)
@@ -354,6 +429,7 @@ export function useWtlConsMapLayer(input: WtlConsMapInput) {
     } catch {
       source.clear()
       zoneSource.clear()
+      relatedSource.clear()
       focusSource.clear()
       return
     }
@@ -395,6 +471,7 @@ export function useWtlConsMapLayer(input: WtlConsMapInput) {
     input.selectedId,
     zoneKey,
     focusKey,
+    relatedKey,
     mapContext?.applyMapViewPaddingRef,
     mapContext?.mapInstanceRef,
     mapContext?.mapReady,

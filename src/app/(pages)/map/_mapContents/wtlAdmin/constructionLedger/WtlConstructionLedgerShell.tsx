@@ -22,7 +22,11 @@ import {
   type WtlConsWork,
 } from './wtlConsSample'
 import { geom4326ToWkt5181, loadWtlConsGeoms, loadWtlConsLedger, loadWtlConsZones, type WtlConsGeom4326, type WtlConsLedgerItem, type WtlConsZoneItem } from './wtlConsLedgerApi'
-import { useWtlConsMapLayer, type WtlConsMapFocus } from './useWtlConsMapLayer'
+import {
+  useWtlConsMapLayer,
+  type WtlConsMapFocus,
+  type WtlConsRelatedFacility,
+} from './useWtlConsMapLayer'
 import { WtlConsAlertSettingsDialog } from './WtlConsAlertSettingsDialog'
 import {
   CONS_ALERT_OPEN_EVENT,
@@ -203,6 +207,7 @@ export function WtlConstructionLedgerShell({
   const [zoneId, setZoneId] = useState<string | null>(null)
   const [geomByCode, setGeomByCode] = useState<Record<string, WtlConsGeom4326 | null>>({})
   const [mapFocus, setMapFocus] = useState<WtlConsMapFocus | null>(null)
+  const [relatedFacilities, setRelatedFacilities] = useState<WtlConsRelatedFacility[]>([])
   const [alertOpen, setAlertOpen] = useState(false)
   const [attachOpen, setAttachOpen] = useState(false)
   const [attachHeight, setAttachHeight] = useState(ATTACH_MIN_HEIGHT)
@@ -493,6 +498,7 @@ export function WtlConstructionLedgerShell({
     zones,
     zoneId,
     focus: mapFocus,
+    relatedFacilities,
     fitToken,
     bottomInset: mapBottomInset,
   })
@@ -875,6 +881,7 @@ export function WtlConstructionLedgerShell({
                     setZoneId((prev) => (prev === id ? null : id))
                   }}
                   onFocus={setMapFocus}
+                  onRelatedFacilities={setRelatedFacilities}
                   workGeom4326={work ? geomByCode[work.consCode] ?? null : null}
                   kind={kind}
                   consCode={work?.consCode ?? null}
