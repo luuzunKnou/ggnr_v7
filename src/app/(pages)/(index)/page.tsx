@@ -8,8 +8,6 @@ import {
   getSystemListDebug,
   getIndexSliderImages,
   getIndexSliderSlides,
-  getSystemKorName,
-  getIndexFooterConfig,
 } from "@/service/configService"
 
 function loadSystemList(): { systems: SystemItem[]; error?: string; debug?: string } {
@@ -44,33 +42,6 @@ function buildParcelSlides(): Array<{ title: string; description: string; image?
 }
 
 export default async function DashboardPage() {
-  const projectName =
-    typeof process !== "undefined" ? (process.env.GGNR_PROJECT ?? "build_yy").trim() : "build_yy"
-
-  /** odor 전용 모듈은 분기 안에서만 import — 다른 프로젝트 `/` 컴파일에 OL 등이 묶이지 않게 */
-  if (projectName === "odor_ph") {
-    const [{ OdorIndexConsole }, { listSensors }] = await Promise.all([
-      import("@/app/(pages)/(index)/odorPh/OdorIndexConsole"),
-      import("@/service/odorSensorService"),
-    ])
-    let sensors: Awaited<ReturnType<typeof listSensors>> = []
-    try {
-      sensors = await listSensors()
-    } catch {
-      sensors = []
-    }
-    const { footerAddr, footerRss } = getIndexFooterConfig()
-    return (
-      <OdorIndexConsole
-        title={getSystemKorName()}
-        sensors={sensors}
-        footerAddr={footerAddr}
-        footerRss={footerRss}
-        queriedAt={new Date().toISOString()}
-      />
-    )
-  }
-
   const { systems: systemList, error: systemListError, debug: systemListDebug } = loadSystemList()
 
   return (

@@ -40,7 +40,6 @@ export * from './ngl_error_log';
 export * from './ngl_fee_list';
 export * from './ngl_query_table';
 export * from './notice';
-export * from './odor_sensor';
 export * from './perm';
 export * from './policy_map';
 export * from './radiation_shelter';

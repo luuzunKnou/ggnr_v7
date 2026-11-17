@@ -219,11 +219,6 @@ import {
   WORKS_REGISTER_OPENED_KEY,
   WorksRegisterShell,
 } from "./_mapContents/worksRegister/WorksRegister.shell"
-import {
-  ODOR_ALERT_OPENED_KEY,
-} from "./_mapContents/odorAlert/odorAlertConfig"
-import { OdorAlertShell } from "./_mapContents/odorAlert/OdorAlert.shell"
-import { OdorAlertPopupHost } from "./_mapContents/odorAlert/OdorAlertPopupHost"
 import { FmsLinkageListPanel } from "./_mapContents/fmsLinkage/FmsLinkageListPanel"
 import { FmsLinkageDetailPanel } from "./_mapContents/fmsLinkage/FmsLinkageDetailPanel"
 import { isFmsOpenedToken } from "@/lib/fmsLinkage/fmsBinding"
@@ -840,7 +835,6 @@ function MapLayoutContent({
   const smallPublicInspectionOpen = openedWindows.includes(SMALL_PUBLIC_INSPECTION_OPENED_KEY)
   const smallPublicPlanOpen = openedWindows.includes(SMALL_PUBLIC_PLAN_OPENED_KEY)
   const smallPublicBudgetOpen = openedWindows.includes(SMALL_PUBLIC_BUDGET_OPENED_KEY)
-  const odorAlertOpen = openedWindows.includes(ODOR_ALERT_OPENED_KEY)
   const worksRegisterOpen = openedWindows.includes(WORKS_REGISTER_OPENED_KEY)
   const wtlAdminEmptySerEng = findOpenedWtlAdminEmptySerEng(openedWindows)
   const wtlAdminEmptyOpen = Boolean(wtlAdminEmptySerEng)
@@ -959,7 +953,6 @@ function MapLayoutContent({
   const [smallPublicInspectionTotalWidth, setSmallPublicInspectionTotalWidth] = useState(0)
   const [smallPublicPlanTotalWidth, setSmallPublicPlanTotalWidth] = useState(0)
   const [smallPublicBudgetTotalWidth, setSmallPublicBudgetTotalWidth] = useState(0)
-  const [odorAlertTotalWidth, setOdorAlertTotalWidth] = useState(0)
   const [worksRegisterTotalWidth, setWorksRegisterTotalWidth] = useState(0)
   const [wtlAdminEmptyTotalWidth, setWtlAdminEmptyTotalWidth] = useState(0)
   const [protoUserAccountOpen, setProtoUserAccountOpen] = useState(false)
@@ -1272,8 +1265,7 @@ function MapLayoutContent({
     (developmentChargeOpen ? developmentChargePanelWidth : 0) +
     (developmentChargeDetailOpen ? developmentChargeDetailWidth : 0) +
     (riverIllegalOccupationOpen ? riverIllegalOccupationPanelWidth : 0) +
-    (riverIllegalOccupationDetailOpen ? riverIllegalOccupationDetailWidth : 0) +
-    (odorAlertOpen ? odorAlertTotalWidth : 0)
+    (riverIllegalOccupationDetailOpen ? riverIllegalOccupationDetailWidth : 0)
   const searchBarOffset = {
     leftPx: SIDEBAR_WIDTH + totalListPanelWidth + SEARCH_BAR_MARGIN,
     topPx: 16,
@@ -1473,9 +1465,6 @@ function MapLayoutContent({
   const riverIllegalOccupationDetailLeftPx =
     riverIllegalOccupationPanelLeftPx +
     (riverIllegalOccupationOpen ? riverIllegalOccupationPanelWidth : 0)
-  const odorAlertPanelLeftPx =
-    riverIllegalOccupationDetailLeftPx +
-    (riverIllegalOccupationDetailOpen ? riverIllegalOccupationDetailWidth : 0)
   const mapPaddingLeft = SIDEBAR_WIDTH + totalListPanelWidth
   /** 패딩은 useLayoutEffect — 자식 useEffect(도로대장 fit 등)보다 먼저 적용되어야 함.
    * 거리뷰 ON일 때만 맵 중심(A)을 새 센터마크 위치에 맞춤.
@@ -2142,11 +2131,6 @@ function MapLayoutContent({
     setWorksRegisterTotalWidth(0)
     const next = openedWindows.filter((w) => w !== WORKS_REGISTER_OPENED_KEY)
     setOpened(next)
-  }
-
-  const handleCloseOdorAlert = () => {
-    setOdorAlertTotalWidth(0)
-    setOpened(openedWindows.filter((w) => w !== ODOR_ALERT_OPENED_KEY))
   }
 
   const handleCloseFmsLinkage = () => {
@@ -4421,14 +4405,6 @@ function MapLayoutContent({
               </MapSideListPanel>
             </div>
           )}
-          {odorAlertOpen && (
-            <OdorAlertShell
-              leftOffsetPx={odorAlertPanelLeftPx}
-              onTotalWidthChange={setOdorAlertTotalWidth}
-              onClose={handleCloseOdorAlert}
-            />
-          )}
-          <OdorAlertPopupHost enabled={systemKeyFromUrl === "odorAdmin"} />
           <div className="flex-1 min-w-0 relative">
             <div className="pointer-events-auto">
               <MapSearchBar
