@@ -234,6 +234,12 @@ async function main(): Promise<void> {
   if (args.workDir) {
     process.env.GGNR_ORTHO_WORK_DIR = path.resolve(args.workDir);
   }
+  // 원본 폴더명이 한글·괄호 등이어도 --group 한 개면 그 이름으로 매핑
+  if (args.groups.length === 1) {
+    process.env.GGNR_ORTHO_SOURCE_GROUP = args.groups[0]!;
+  } else {
+    delete process.env.GGNR_ORTHO_SOURCE_GROUP;
+  }
 
   const dataDir = (process.env.GGNR_DATA_DIR ?? '').trim();
   const sourceDir = (process.env.GGNR_ORTHO_SOURCE_DIR ?? '').trim();
@@ -242,11 +248,25 @@ async function main(): Promise<void> {
     `${LOG} project=${args.project} type=${args.type} dataDir=${dataDir || '(default)'} sourceDir=${sourceDir || '(dataDir/tiles_tif)'} workDir=${workDir} tileSet=${args.tileSetId} z=${args.zoomMin}-${args.zoomMax} q=${args.jpegQuality}`
   );
 
+  if (sourceDir) {
+    try {
+      const st = fs.statSync(sourceDir);
+      console.log(`${LOG} sourceDir exists=${st.isDirectory() ? 'dir' : 'file'}`);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      console.warn(`${LOG} sourceDir 접근 실패: ${msg}`);
+      console.warn(`${LOG} 배치 파일 인코딩(UTF-8) 또는 네트워크 경로를 확인하세요.`);
+    }
+  }
+
   // env 로드 후 서비스 import (DB 풀이 env를 읽음)
   const ortho = await import('../src/service/orthophotoService');
 
   const { groups } = await ortho.listSatelliteTifGroupedUploads();
   const outputs = await ortho.listOrthophotoTileOutputs();
+  console.log(
+    `${LOG} sourceGroup=${process.env.GGNR_ORTHO_SOURCE_GROUP ?? '(none)'} listed=${groups.map((g) => `${g.groupName}:${g.files.length}`).join(', ') || '(empty)'}`
+  );
 
   const hasOutput = (groupName: string) =>
     outputs.groups.some((g) => g.groupName === groupName && g.tileSetIds.length > 0) ||

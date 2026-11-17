@@ -40,6 +40,27 @@ function getOrthoLocalWorkDir(): string {
 }
 
 /**
+ * Windows 심볼릭 링크·네트워크 경로는 Dirent.isDirectory/isFile 이 false 인 경우가 있어 stat 으로 판별.
+ */
+function direntIsDirectory(parentAbs: string, e: fs.Dirent): boolean {
+  if (e.isDirectory()) return true;
+  try {
+    return fs.statSync(path.join(parentAbs, e.name)).isDirectory();
+  } catch {
+    return false;
+  }
+}
+
+function direntIsFile(parentAbs: string, e: fs.Dirent): boolean {
+  if (e.isFile()) return true;
+  try {
+    return fs.statSync(path.join(parentAbs, e.name)).isFile();
+  } catch {
+    return false;
+  }
+}
+
+/**
  * 원본 GeoTIFF 루트 (그룹 폴더들의 부모 = tiles_tif).
  * - env GGNR_ORTHO_SOURCE_DIR (배치 --source-dir)
  * - 그룹 폴더를 넘기면 부모를 tiles_tif 로 사용
@@ -50,8 +71,8 @@ function normalizeOrthoSourceTilesTifRoot(input: string): string {
   if (path.basename(abs).toLowerCase() === 'tiles_tif') return abs;
   try {
     const entries = fs.readdirSync(abs, { withFileTypes: true });
-    const hasTif = entries.some((e) => e.isFile() && /\.tiff?$/i.test(e.name));
-    const hasSubdir = entries.some((e) => e.isDirectory());
+    const hasTif = entries.some((e) => direntIsFile(abs, e) && /\.tiff?$/i.test(e.name));
+    const hasSubdir = entries.some((e) => direntIsDirectory(abs, e));
     if (hasTif && !hasSubdir) return path.dirname(abs);
   } catch {
     /* keep abs */
@@ -63,6 +84,28 @@ function getTilesTifRoot(): string {
   const override = (process.env.GGNR_ORTHO_SOURCE_DIR ?? '').trim();
   if (override) return normalizeOrthoSourceTilesTifRoot(override);
   return path.join(getBaseDir(), 'tiles_tif');
+}
+
+/**
+ * 배치 --group + --source-dir(한글·UNC 등 비안전 폴더명)일 때
+ * 실제 tif 가 있는 절대 경로. 없으면 null.
+ */
+function getForcedOrthoSourceGroupAbsDir(groupName: string): string | null {
+  const force = (process.env.GGNR_ORTHO_SOURCE_GROUP ?? '').trim();
+  const override = (process.env.GGNR_ORTHO_SOURCE_DIR ?? '').trim();
+  if (!force || !override || force !== groupName || !isSafeOrthoSegment(groupName)) return null;
+  const abs = path.resolve(override);
+  if (path.basename(abs).toLowerCase() === 'tiles_tif') {
+    return path.join(abs, groupName);
+  }
+  try {
+    const entries = fs.readdirSync(abs, { withFileTypes: true });
+    const hasTif = entries.some((e) => direntIsFile(abs, e) && /\.tiff?$/i.test(e.name));
+    if (hasTif) return abs;
+  } catch {
+    /* fall through */
+  }
+  return path.join(normalizeOrthoSourceTilesTifRoot(override), groupName);
 }
 
 function pathUnderRoot(absPath: string, root: string): boolean {
@@ -635,8 +678,16 @@ function resolveSafeRelative(rel: string): string | null {
   const norm = raw.replace(/\\/g, '/');
   if (norm.startsWith('tiles_tif/')) {
     const tail = norm.slice('tiles_tif/'.length);
+    const parts = tail.split('/').filter(Boolean);
+    const groupName = parts[0] ?? '';
+    const forcedDir = groupName ? getForcedOrthoSourceGroupAbsDir(groupName) : null;
+    if (forcedDir) {
+      const resolved = path.normalize(path.join(forcedDir, ...parts.slice(1)));
+      if (resolved !== path.resolve(forcedDir) && !pathUnderRoot(resolved, forcedDir)) return null;
+      return resolved;
+    }
     const root = getTilesTifRoot();
-    const resolved = path.normalize(path.join(root, ...tail.split('/').filter(Boolean)));
+    const resolved = path.normalize(path.join(root, ...parts));
     if (!pathUnderRoot(resolved, root)) return null;
     return resolved;
   }
@@ -754,6 +805,18 @@ function buildGdalChildEnv(gdalExe: string): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = { ...PYTHON_ENV };
   const root = resolveCondaEnvRootForGdal(gdalExe);
   if (!root) return env;
+
+  // Python osgeo._gdal 은 Library\bin DLL 이 PATH 에 있어야 함.
+  // 없으면: ImportError: DLL load failed while importing _gdal
+  const binDirs = [
+    path.join(root, 'Library', 'bin'),
+    path.join(root, 'Scripts'),
+    path.join(root, 'bin'),
+  ].filter((d) => opaqueExists(d));
+  if (binDirs.length) {
+    const sep = path.delimiter;
+    env.PATH = `${binDirs.join(sep)}${sep}${env.PATH ?? ''}`;
+  }
 
   const projDirs = [path.join(root, 'Library', 'share', 'proj'), path.join(root, 'share', 'proj')];
   for (const d of projDirs) {
@@ -1085,10 +1148,10 @@ async function collectTifsUnderDir(
   for (const e of entries) {
     const full = path.join(dirAbs, e.name);
     const relJoin = `${baseRel}/${e.name}`.replace(/\\/g, '/');
-    if (e.isDirectory()) {
+    if (direntIsDirectory(dirAbs, e)) {
       const sub = await collectTifsUnderDir(full, relJoin);
       out.push(...sub);
-    } else if (e.isFile() && TIF_EXT.test(e.name)) {
+    } else if (direntIsFile(dirAbs, e) && TIF_EXT.test(e.name)) {
       try {
         const st = await fsPromises.stat(full);
         out.push({
@@ -1108,6 +1171,7 @@ async function collectTifsUnderDir(
 
 /**
  * tiles_tif/{그룹폴더}/… 하위 모든 tif 수집 (그룹명 = 직계 하위 폴더명).
+ * 배치: GGNR_ORTHO_SOURCE_GROUP + SOURCE_DIR 이면 폴더명이 한글·UNC 여도 그룹으로 편입.
  */
 export async function listSatelliteTifGroupedUploads(): Promise<SatelliteTifGroupedUploadsResult> {
   await ensureBaseStructure();
@@ -1117,16 +1181,26 @@ export async function listSatelliteTifGroupedUploads(): Promise<SatelliteTifGrou
   try {
     top = await fsPromises.readdir(root, { withFileTypes: true });
   } catch {
-    return { groups: [] };
+    top = [];
   }
   for (const e of top) {
-    if (!e.isDirectory()) continue;
+    if (!direntIsDirectory(root, e)) continue;
     const groupName = e.name;
     if (!isSafeOrthoSegment(groupName)) continue;
     const groupDir = path.join(root, groupName);
     const files = await collectTifsUnderDir(groupDir, groupName);
     if (files.length) groups.push({ groupName, sourceCrs: null, files });
   }
+
+  const forceGroup = (process.env.GGNR_ORTHO_SOURCE_GROUP ?? '').trim();
+  if (forceGroup && isSafeOrthoSegment(forceGroup) && !groups.some((g) => g.groupName === forceGroup)) {
+    const forcedDir = getForcedOrthoSourceGroupAbsDir(forceGroup);
+    if (forcedDir) {
+      const files = await collectTifsUnderDir(forcedDir, forceGroup);
+      if (files.length) groups.push({ groupName: forceGroup, sourceCrs: null, files });
+    }
+  }
+
   const crsMeta = await readOrthoGroupCrsMeta();
   for (const g of groups) {
     const fromName = parseOrthoGroupNameLoose(g.groupName)?.sourceCrs || null;
@@ -1950,7 +2024,12 @@ async function runOrthophotoJob(params: {
     const tileFailHint = `${t.stderr}\n${t.stdout}`;
     if (t.code !== 0 || tileFailHint.toLowerCase().includes('failed to create process')) {
       orthoJobLog(logCtx, '2/3 gdal2tiles 실패', `code=${t.code} ${tileMs}ms stderr_tail=${t.stderr.slice(-400).replace(/\s+/g, ' ')}`);
-      await fail(`gdal2tiles 실패 code=${t.code}\n${t.stderr.slice(-2000) || t.stdout.slice(-2000)}`, tmpRoot);
+      // warp 는 수 시간 걸릴 수 있음 — 타일 실패 시 삭제하지 않고 경로만 남김
+      await fsPromises.rm(tilesStaging, { recursive: true, force: true }).catch(() => {});
+      orthoJobLog(logCtx, '2/3 gdal2tiles 실패 — warp TIF 보존', warp3857);
+      await fail(
+        `gdal2tiles 실패 code=${t.code}\nwarp 보존: ${warp3857}\n${t.stderr.slice(-2000) || t.stdout.slice(-2000)}`
+      );
       return;
     }
     orthoJobLog(logCtx, '2/3 gdal2tiles 완료', `${tileMs}ms`);

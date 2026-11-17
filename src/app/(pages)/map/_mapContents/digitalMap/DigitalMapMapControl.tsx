@@ -2,11 +2,12 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { call } from '@/lib/api';
-import { DigitalMapListPanel, type DigitalMapFolderRow } from './DigitalMapListPanel';
+import { DigitalMapListPanel } from './DigitalMapListPanel';
 import {
-  useDigitalMapFolderLayer,
+  useDigitalMapTileLayer,
   type DigitalMapFolderLayerStatus,
-} from './useDigitalMapFolderLayer';
+  type DigitalMapFolderRow,
+} from './useDigitalMapTileLayer';
 
 type Props = {
   panelOpen: boolean;
@@ -15,22 +16,22 @@ type Props = {
   panelClassName?: string;
 };
 
-function FolderLayerHost({
-  folder,
-  onStatus,
-}: {
-  folder: string;
+type HostProps = {
+  row: DigitalMapFolderRow;
   onStatus: (folder: string, s: DigitalMapFolderLayerStatus) => void;
-}) {
-  const status = useDigitalMapFolderLayer(folder, true);
+};
+
+/** 폴더(PMTiles) 하나를 지도에 올리고 상태를 위로 알린다 */
+function FolderLayerHost({ row, onStatus }: HostProps) {
+  const status = useDigitalMapTileLayer(row, true);
   useEffect(() => {
-    onStatus(folder, status);
-  }, [folder, status, onStatus]);
+    onStatus(row.name, status);
+  }, [row.name, status, onStatus]);
   return null;
 }
 
 /**
- * 수치지형도 지도 제어 — 폴더 체크·테두리/상세 표시.
+ * 수치지형도 지도 제어 — 폴더(PMTiles) 체크·테두리/상세 표시.
  * 패널을 닫아도 체크한 폴더는 지도에 남는다.
  */
 export function DigitalMapMapControl({ panelOpen, onClose, onCheckedCountChange, panelClassName }: Props) {
@@ -81,6 +82,10 @@ export function DigitalMapMapControl({ panelOpen, onClose, onCheckedCountChange,
   }, [everOpened]);
 
   const checkedSet = useMemo(() => new Set(checkedNames), [checkedNames]);
+  const checkedRows = useMemo(
+    () => checkedNames.map((n) => folders.find((f) => f.name === n)).filter((r): r is DigitalMapFolderRow => !!r),
+    [checkedNames, folders]
+  );
 
   const handleChecked = useCallback((name: string, on: boolean) => {
     setCheckedNames((prev) => {
@@ -100,14 +105,7 @@ export function DigitalMapMapControl({ panelOpen, onClose, onCheckedCountChange,
   const handleStatus = useCallback((folder: string, s: DigitalMapFolderLayerStatus) => {
     setFolderStatus((prev) => {
       const cur = prev[folder];
-      if (
-        cur &&
-        cur.loading === s.loading &&
-        cur.outlineOnly === s.outlineOnly &&
-        cur.sheetCount === s.sheetCount &&
-        cur.footprintCount === s.footprintCount &&
-        cur.error === s.error
-      ) {
+      if (cur && cur.loading === s.loading && cur.outlineOnly === s.outlineOnly && cur.error === s.error) {
         return prev;
       }
       return { ...prev, [folder]: s };
@@ -126,8 +124,8 @@ export function DigitalMapMapControl({ panelOpen, onClose, onCheckedCountChange,
 
   return (
     <>
-      {checkedNames.map((name) => (
-        <FolderLayerHost key={name} folder={name} onStatus={handleStatus} />
+      {checkedRows.map((row) => (
+        <FolderLayerHost key={row.name} row={row} onStatus={handleStatus} />
       ))}
       {panelOpen ? (
         <div data-map-control-expand-panel className={panelClassName}>

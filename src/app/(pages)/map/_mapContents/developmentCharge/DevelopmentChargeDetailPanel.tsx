@@ -63,12 +63,12 @@ export function DevelopmentChargeDetailPanel({ areaId, onClose }: Props) {
         onClose={onClose}
         editable={false}
       />
-      <div className="standard-detail-scroll min-h-0 flex-1 overflow-y-auto">
+      <div className="standard-detail-scroll min-h-0 flex-1 overflow-y-auto py-1">
         <section className="standard-detail-section">
-          <div className="standard-detail-section-header">
-            <span className="standard-detail-section-toggle-label px-3 py-2">기본정보</span>
+          <div className="standard-detail-section-header py-1">
+            <span className="standard-detail-section-toggle-label">기본정보</span>
           </div>
-          <div className="standard-detail-section-body">
+          <div className="standard-detail-section-body px-0 pb-1.5">
             <AttrTable
               rows={[
                 ['사업명', area.name],

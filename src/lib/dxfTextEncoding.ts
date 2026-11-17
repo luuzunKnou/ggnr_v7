@@ -54,3 +54,14 @@ export function decodeDxfBytes(buf: ArrayBuffer): string {
 export async function readDxfFileAsText(file: File): Promise<string> {
   return decodeDxfBytes(await file.arrayBuffer());
 }
+
+/**
+ * DXF TEXT/MTEXT 유니코드 이스케이프 → 실제 문자.
+ * 일부 수치지형도 도엽은 한글을 `\U+AC00` 형태로만 저장한다. ogr2ogr 가 그대로 넘기면 화면에 깨져 보인다.
+ */
+export function decodeDxfTextEscapes(text: string): string {
+  if (!text.includes('\\U+') && !text.includes('\\u+')) return text;
+  return text.replace(/\\[Uu]\+([0-9A-Fa-f]{4})/g, (_, h: string) =>
+    String.fromCharCode(parseInt(h, 16))
+  );
+}

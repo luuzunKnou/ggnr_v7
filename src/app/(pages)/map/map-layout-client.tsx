@@ -289,6 +289,18 @@ import {
   INDIVIDUAL_LAND_PRICE_PANEL_MAX_WIDTH,
   INDIVIDUAL_LAND_PRICE_PANEL_MIN_WIDTH,
 } from "./_mapContents/individualLandPrice/individualLandPriceConfig"
+import { RealTransactionPriceListPanel } from "./_mapContents/realTransactionPrice/RealTransactionPriceListPanel"
+import { RealTransactionPriceDetailPanel } from "./_mapContents/realTransactionPrice/RealTransactionPriceDetailPanel"
+import {
+  REAL_TRANSACTION_PRICE_DETAIL_DEFAULT_WIDTH,
+  REAL_TRANSACTION_PRICE_DETAIL_MAX_WIDTH,
+  REAL_TRANSACTION_PRICE_DETAIL_MIN_WIDTH,
+  REAL_TRANSACTION_PRICE_OPENED_KEY,
+  REAL_TRANSACTION_PRICE_PANEL_DEFAULT_WIDTH,
+  REAL_TRANSACTION_PRICE_PANEL_MAX_WIDTH,
+  REAL_TRANSACTION_PRICE_PANEL_MIN_WIDTH,
+  defaultDealYmd,
+} from "./_mapContents/realTransactionPrice/realTransactionPriceConfig"
 import { DevelopmentChargeListPanel } from "./_mapContents/developmentCharge/DevelopmentChargeListPanel"
 import { DevelopmentChargeDetailPanel } from "./_mapContents/developmentCharge/DevelopmentChargeDetailPanel"
 import {
@@ -300,6 +312,17 @@ import {
   DEVELOPMENT_CHARGE_PANEL_MAX_WIDTH,
   DEVELOPMENT_CHARGE_PANEL_MIN_WIDTH,
 } from "./_mapContents/developmentCharge/developmentChargeConfig"
+import { CadastralControlPointListPanel } from "./_mapContents/cadastralControlPoint/CadastralControlPointListPanel"
+import { CadastralControlPointDetailPanel } from "./_mapContents/cadastralControlPoint/CadastralControlPointDetailPanel"
+import {
+  CADASTRAL_CONTROL_POINT_DETAIL_DEFAULT_WIDTH,
+  CADASTRAL_CONTROL_POINT_DETAIL_MAX_WIDTH,
+  CADASTRAL_CONTROL_POINT_DETAIL_MIN_WIDTH,
+  CADASTRAL_CONTROL_POINT_OPENED_KEY,
+  CADASTRAL_CONTROL_POINT_PANEL_DEFAULT_WIDTH,
+  CADASTRAL_CONTROL_POINT_PANEL_MAX_WIDTH,
+  CADASTRAL_CONTROL_POINT_PANEL_MIN_WIDTH,
+} from "./_mapContents/cadastralControlPoint/cadastralControlPointConfig"
 import { RiverIllegalOccupationListPanel } from "./_mapContents/river/riverIllegalOccupation/RiverIllegalOccupationListPanel"
 import { RiverIllegalOccupationDetailPanel } from "./_mapContents/river/riverIllegalOccupation/RiverIllegalOccupationDetailPanel"
 import {
@@ -854,6 +877,17 @@ function MapLayoutContent({
   const [individualLandPriceDetailWidth, setIndividualLandPriceDetailWidth] = useState(
     INDIVIDUAL_LAND_PRICE_DETAIL_DEFAULT_WIDTH
   )
+  const realTransactionPriceOpen = openedWindows.includes(REAL_TRANSACTION_PRICE_OPENED_KEY)
+  const [realTransactionPriceUmd, setRealTransactionPriceUmd] = useState<string | null>(null)
+  const [realTransactionPriceDealYmd, setRealTransactionPriceDealYmd] = useState(defaultDealYmd)
+  const realTransactionPriceDetailOpen =
+    realTransactionPriceOpen && Boolean(realTransactionPriceUmd)
+  const [realTransactionPricePanelWidth, setRealTransactionPricePanelWidth] = useState(
+    REAL_TRANSACTION_PRICE_PANEL_DEFAULT_WIDTH
+  )
+  const [realTransactionPriceDetailWidth, setRealTransactionPriceDetailWidth] = useState(
+    REAL_TRANSACTION_PRICE_DETAIL_DEFAULT_WIDTH
+  )
   const developmentChargeOpen = openedWindows.includes(DEVELOPMENT_CHARGE_OPENED_KEY)
   const [developmentChargeAreaId, setDevelopmentChargeAreaId] = useState<string | null>(null)
   const developmentChargeDetailOpen = developmentChargeOpen && Boolean(developmentChargeAreaId)
@@ -862,6 +896,16 @@ function MapLayoutContent({
   )
   const [developmentChargeDetailWidth, setDevelopmentChargeDetailWidth] = useState(
     DEVELOPMENT_CHARGE_DETAIL_DEFAULT_WIDTH
+  )
+  const cadastralControlPointOpen = openedWindows.includes(CADASTRAL_CONTROL_POINT_OPENED_KEY)
+  const [cadastralControlPointId, setCadastralControlPointId] = useState<string | null>(null)
+  const cadastralControlPointDetailOpen =
+    cadastralControlPointOpen && Boolean(cadastralControlPointId)
+  const [cadastralControlPointPanelWidth, setCadastralControlPointPanelWidth] = useState(
+    CADASTRAL_CONTROL_POINT_PANEL_DEFAULT_WIDTH
+  )
+  const [cadastralControlPointDetailWidth, setCadastralControlPointDetailWidth] = useState(
+    CADASTRAL_CONTROL_POINT_DETAIL_DEFAULT_WIDTH
   )
   const riverIllegalOccupationOpen = openedWindows.includes(RIVER_ILLEGAL_OCCUPATION_OPENED_KEY)
   const [riverIllegalOccupationPanelWidth, setRiverIllegalOccupationPanelWidth] = useState(
@@ -1215,8 +1259,12 @@ function MapLayoutContent({
     (landArchiveDetailOpen ? landArchiveDetailWidth : 0) +
     (individualLandPriceOpen ? individualLandPricePanelWidth : 0) +
     (individualLandPriceDetailOpen ? individualLandPriceDetailWidth : 0) +
+    (realTransactionPriceOpen ? realTransactionPricePanelWidth : 0) +
+    (realTransactionPriceDetailOpen ? realTransactionPriceDetailWidth : 0) +
     (developmentChargeOpen ? developmentChargePanelWidth : 0) +
     (developmentChargeDetailOpen ? developmentChargeDetailWidth : 0) +
+    (cadastralControlPointOpen ? cadastralControlPointPanelWidth : 0) +
+    (cadastralControlPointDetailOpen ? cadastralControlPointDetailWidth : 0) +
     (riverIllegalOccupationOpen ? riverIllegalOccupationPanelWidth : 0) +
     (riverIllegalOccupationDetailOpen ? riverIllegalOccupationDetailWidth : 0)
   const searchBarOffset = {
@@ -1400,14 +1448,26 @@ function MapLayoutContent({
     landArchiveDetailLeftPx + (landArchiveDetailOpen ? landArchiveDetailWidth : 0)
   const individualLandPriceDetailLeftPx =
     individualLandPricePanelLeftPx + (individualLandPriceOpen ? individualLandPricePanelWidth : 0)
-  const developmentChargePanelLeftPx =
+  const realTransactionPricePanelLeftPx =
     individualLandPriceDetailLeftPx +
     (individualLandPriceDetailOpen ? individualLandPriceDetailWidth : 0)
+  const realTransactionPriceDetailLeftPx =
+    realTransactionPricePanelLeftPx +
+    (realTransactionPriceOpen ? realTransactionPricePanelWidth : 0)
+  const developmentChargePanelLeftPx =
+    realTransactionPriceDetailLeftPx +
+    (realTransactionPriceDetailOpen ? realTransactionPriceDetailWidth : 0)
   const developmentChargeDetailLeftPx =
     developmentChargePanelLeftPx + (developmentChargeOpen ? developmentChargePanelWidth : 0)
-  const riverIllegalOccupationPanelLeftPx =
+  const cadastralControlPointPanelLeftPx =
     developmentChargeDetailLeftPx +
     (developmentChargeDetailOpen ? developmentChargeDetailWidth : 0)
+  const cadastralControlPointDetailLeftPx =
+    cadastralControlPointPanelLeftPx +
+    (cadastralControlPointOpen ? cadastralControlPointPanelWidth : 0)
+  const riverIllegalOccupationPanelLeftPx =
+    cadastralControlPointDetailLeftPx +
+    (cadastralControlPointDetailOpen ? cadastralControlPointDetailWidth : 0)
   const riverIllegalOccupationDetailLeftPx =
     riverIllegalOccupationPanelLeftPx +
     (riverIllegalOccupationOpen ? riverIllegalOccupationPanelWidth : 0)
@@ -2064,9 +2124,19 @@ function MapLayoutContent({
     setOpened(openedWindows.filter((w) => w !== INDIVIDUAL_LAND_PRICE_OPENED_KEY))
   }
 
+  const handleCloseRealTransactionPrice = () => {
+    setRealTransactionPriceUmd(null)
+    setOpened(openedWindows.filter((w) => w !== REAL_TRANSACTION_PRICE_OPENED_KEY))
+  }
+
   const handleCloseDevelopmentCharge = () => {
     setDevelopmentChargeAreaId(null)
     setOpened(openedWindows.filter((w) => w !== DEVELOPMENT_CHARGE_OPENED_KEY))
+  }
+
+  const handleCloseCadastralControlPoint = () => {
+    setCadastralControlPointId(null)
+    setOpened(openedWindows.filter((w) => w !== CADASTRAL_CONTROL_POINT_OPENED_KEY))
   }
 
   const handleCloseRiverIllegalOccupation = () => {
@@ -2252,8 +2322,20 @@ function MapLayoutContent({
   }, [individualLandPriceOpen])
 
   useEffect(() => {
+    if (!realTransactionPriceOpen) {
+      setRealTransactionPriceUmd(null)
+      return
+    }
+    setRealTransactionPricePanelWidth(REAL_TRANSACTION_PRICE_PANEL_DEFAULT_WIDTH)
+  }, [realTransactionPriceOpen])
+
+  useEffect(() => {
     if (!developmentChargeOpen) setDevelopmentChargeAreaId(null)
   }, [developmentChargeOpen])
+
+  useEffect(() => {
+    if (!cadastralControlPointOpen) setCadastralControlPointId(null)
+  }, [cadastralControlPointOpen])
 
   useEffect(() => {
     if (!riverIllegalOccupationOpen) setRiverIllegalOccupationSelectedId(null)
@@ -4113,6 +4195,47 @@ function MapLayoutContent({
               </MapSideListPanel>
             </div>
           )}
+          {realTransactionPriceOpen && (
+            <div className="pointer-events-auto shrink-0">
+              <MapSideListPanel
+                width={realTransactionPricePanelWidth}
+                minWidth={REAL_TRANSACTION_PRICE_PANEL_MIN_WIDTH}
+                maxWidth={REAL_TRANSACTION_PRICE_PANEL_MAX_WIDTH}
+                leftOffsetPx={realTransactionPricePanelLeftPx}
+                onWidthChange={setRealTransactionPricePanelWidth}
+                contentClassName="overflow-hidden"
+                serEng={REAL_TRANSACTION_PRICE_OPENED_KEY}
+              >
+                <RealTransactionPriceListPanel
+                  onClose={handleCloseRealTransactionPrice}
+                  selectedUmd={realTransactionPriceUmd}
+                  dealYmd={realTransactionPriceDealYmd}
+                  onDealYmdChange={setRealTransactionPriceDealYmd}
+                  onSelect={setRealTransactionPriceUmd}
+                />
+              </MapSideListPanel>
+            </div>
+          )}
+          {realTransactionPriceDetailOpen && realTransactionPriceUmd && (
+            <div className="pointer-events-auto shrink-0">
+              <MapSideListPanel
+                width={realTransactionPriceDetailWidth}
+                minWidth={REAL_TRANSACTION_PRICE_DETAIL_MIN_WIDTH}
+                maxWidth={REAL_TRANSACTION_PRICE_DETAIL_MAX_WIDTH}
+                leftOffsetPx={realTransactionPriceDetailLeftPx}
+                onWidthChange={setRealTransactionPriceDetailWidth}
+                contentClassName="overflow-hidden"
+                serEng={REAL_TRANSACTION_PRICE_OPENED_KEY}
+              >
+                <RealTransactionPriceDetailPanel
+                  key={`${realTransactionPriceDealYmd}:${realTransactionPriceUmd}`}
+                  umdNm={realTransactionPriceUmd}
+                  dealYmd={realTransactionPriceDealYmd}
+                  onClose={() => setRealTransactionPriceUmd(null)}
+                />
+              </MapSideListPanel>
+            </div>
+          )}
           {developmentChargeOpen && (
             <div className="pointer-events-auto shrink-0">
               <MapSideListPanel
@@ -4146,6 +4269,43 @@ function MapLayoutContent({
                   key={developmentChargeAreaId}
                   areaId={developmentChargeAreaId}
                   onClose={() => setDevelopmentChargeAreaId(null)}
+                />
+              </MapSideListPanel>
+            </div>
+          )}
+          {cadastralControlPointOpen && (
+            <div className="pointer-events-auto shrink-0">
+              <MapSideListPanel
+                width={cadastralControlPointPanelWidth}
+                minWidth={CADASTRAL_CONTROL_POINT_PANEL_MIN_WIDTH}
+                maxWidth={CADASTRAL_CONTROL_POINT_PANEL_MAX_WIDTH}
+                leftOffsetPx={cadastralControlPointPanelLeftPx}
+                onWidthChange={setCadastralControlPointPanelWidth}
+                serEng={CADASTRAL_CONTROL_POINT_OPENED_KEY}
+              >
+                <CadastralControlPointListPanel
+                  onClose={handleCloseCadastralControlPoint}
+                  selectedId={cadastralControlPointId}
+                  onSelect={setCadastralControlPointId}
+                />
+              </MapSideListPanel>
+            </div>
+          )}
+          {cadastralControlPointDetailOpen && cadastralControlPointId && (
+            <div className="pointer-events-auto shrink-0">
+              <MapSideListPanel
+                width={cadastralControlPointDetailWidth}
+                minWidth={CADASTRAL_CONTROL_POINT_DETAIL_MIN_WIDTH}
+                maxWidth={CADASTRAL_CONTROL_POINT_DETAIL_MAX_WIDTH}
+                leftOffsetPx={cadastralControlPointDetailLeftPx}
+                onWidthChange={setCadastralControlPointDetailWidth}
+                contentClassName="overflow-hidden"
+                serEng={CADASTRAL_CONTROL_POINT_OPENED_KEY}
+              >
+                <CadastralControlPointDetailPanel
+                  key={cadastralControlPointId}
+                  pointId={cadastralControlPointId}
+                  onClose={() => setCadastralControlPointId(null)}
                 />
               </MapSideListPanel>
             </div>
