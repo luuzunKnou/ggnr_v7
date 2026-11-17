@@ -83,6 +83,8 @@ export async function downloadLayersCad(
       error?: string
       fileName?: string
       byteLength?: number
+      included?: string[]
+      skipped?: { tableName?: string; reason?: string }[]
     }
     if (!stRes.ok) {
       throw new Error(typeof st.error === "string" ? st.error : "변환 상태 조회 실패")
@@ -94,7 +96,16 @@ export async function downloadLayersCad(
       if (st.fileName) fileName = st.fileName
       const mb =
         typeof st.byteLength === "number" ? ` (${(st.byteLength / (1024 * 1024)).toFixed(1)}MB)` : ""
-      onProgress?.(`파일 받는 중…${mb}`)
+      const skipNames = (st.skipped ?? [])
+        .map((s) => s.tableName)
+        .filter((n): n is string => Boolean(n))
+      if (skipNames.length) {
+        onProgress?.(
+          `파일 받는 중…${mb} · 일부 제외: ${skipNames.join(", ")}`
+        )
+      } else {
+        onProgress?.(`파일 받는 중…${mb}`)
+      }
       break
     }
     onProgress?.("CAD 변환 중…")
