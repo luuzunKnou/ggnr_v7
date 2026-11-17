@@ -4,6 +4,7 @@ import { useEffect, useId, useRef, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { X } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { MAP_UI_Z_CLASS } from '@/lib/mapUiZIndex'
 import { SmallPublicCheckSheet } from '../SmallPublicCheckSheet'
 import type { SmallPublicInspection } from '../smallPublicMock'
 import {
@@ -68,7 +69,9 @@ export function SmallPublicModalShell({
   return createPortal(
     <div
       className={cn(
-        'pointer-events-auto fixed z-[80] box-border flex min-h-0 items-center justify-center overflow-hidden bg-black/50',
+        /* 점검 상세 플로팅(detail=10050)보다 위 — 이관·보고서 등 오버레이 모달 */
+        'pointer-events-auto fixed box-border flex min-h-0 items-center justify-center overflow-hidden bg-black/50',
+        MAP_UI_Z_CLASS.nestedDialog,
         size === 'full' || size === 'half' ? 'p-4' : 'p-6'
       )}
       style={{ left: overlayLeftPx, top: 0, width: overlayWidthPx, height: '100dvh' }}
