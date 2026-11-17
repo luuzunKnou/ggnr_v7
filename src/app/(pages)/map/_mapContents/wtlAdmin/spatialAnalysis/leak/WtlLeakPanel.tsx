@@ -45,16 +45,21 @@ export function WtlLeakPanel({ active = true, mapLeftPx = 0, onHandoffToOutage }
   const [hiddenPipeIndexes, setHiddenPipeIndexes] = useState<number[]>([])
   const [editMode, setEditMode] = useState<LeakEditMode>(null)
 
-  /** 누수지점·분석결과 나오기 전에는 속성조회 끔 — 관로 클릭은 분석만 */
+  // 따라 그리기 UI 비활성 — 잔여 follow 모드만 정리
+  useEffect(() => {
+    if (editMode === 'follow') setEditMode(null)
+  }, [editMode])
+
+  /** 분석 전·선 편집 중에는 속성조회 끔 (관로 클릭은 분석/편집만) */
   useEffect(() => {
     if (!setMapFeatureIdentifyDisabled) return
     if (!active) {
       setMapFeatureIdentifyDisabled(false)
       return
     }
-    setMapFeatureIdentifyDisabled(result == null)
+    setMapFeatureIdentifyDisabled(result == null || editMode === 'line')
     return () => setMapFeatureIdentifyDisabled(false)
-  }, [active, result, setMapFeatureIdentifyDisabled])
+  }, [active, result, editMode, setMapFeatureIdentifyDisabled])
 
   // 다른 탭으로 나가면 분석 상태를 비워 다시 들어오면 새 분석 (분석 이력 목록은 유지)
   // — effect 대신 이전 값 비교로 렌더 중 초기화(React 권장 패턴)
@@ -170,11 +175,12 @@ export function WtlLeakPanel({ active = true, mapLeftPx = 0, onHandoffToOutage }
     setSelectedPipeIndex(null)
   }
 
-  const openFollowDraw = () => {
-    if (!result) return
-    setEditMode('follow')
-    setNotice('따라 그리기 · 끝점을 끌어 늘이거나 줄입니다')
-  }
+  // 따라 그리기 UI 일시 비활성 — 훅·모드는 유지
+  // const openFollowDraw = () => {
+  //   if (!result) return
+  //   setEditMode('follow')
+  //   setNotice('따라 그리기 · 끝점을 끌어 늘이거나 줄입니다')
+  // }
 
   const loadHistory = (item: WtlLeakHistory) => {
     setHistoryId(item.id)
@@ -400,7 +406,7 @@ export function WtlLeakPanel({ active = true, mapLeftPx = 0, onHandoffToOutage }
           >
             분석결과저장
           </button>
-          <button
+          {/* <button
             type="button"
             disabled={!result || analyzing}
             className={cn(
@@ -413,7 +419,7 @@ export function WtlLeakPanel({ active = true, mapLeftPx = 0, onHandoffToOutage }
             title="끝점·분기 드래그로 결과 선 편집 (클릭 추가·제외 이전 방식)"
           >
             따라 그리기
-          </button>
+          </button> */}
           <button
             type="button"
             disabled={!result || result.gates.length === 0 || analyzing || !onHandoffToOutage}
