@@ -1,7 +1,14 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useRef, useState, type UIEvent } from 'react'
-import { ArrowDown, ArrowUp, ArrowUpDown, Loader2 } from 'lucide-react'
+import {
+  ArrowDown,
+  ArrowUp,
+  ArrowUpDown,
+  FileSpreadsheet,
+  Loader2,
+  MapPinned,
+} from 'lucide-react'
 import { formatDefineFieldDisplayValue } from '@/lib/defineLayerCodeDisplay'
 import { cn } from '@/lib/utils'
 import {
@@ -53,6 +60,10 @@ type Props = {
   /** 점용허가 목록과 동일 — thead 다중 정렬 */
   sorts?: WtlFacilityListSortSpec[]
   onToggleSort?: (field: string) => void
+  onShpDownload?: () => void
+  onExcelDownload?: () => void
+  shpBusy?: boolean
+  excelBusy?: boolean
 }
 
 function fallbackListFields(record: Record<string, unknown> | null): DefineFieldLike[] {
@@ -91,6 +102,10 @@ export function WtlFacilityListView({
   scrollLoadThresholdPx = 240,
   sorts = [],
   onToggleSort,
+  onShpDownload,
+  onExcelDownload,
+  shpBusy = false,
+  excelBusy = false,
 }: Props) {
   const fieldsTableName = String(fieldsTable ?? '').trim()
   const localizeKey = `${fieldsTableName}\0${String(fieldsTableFallback ?? '').trim()}`
@@ -334,7 +349,64 @@ export function WtlFacilityListView({
           </table>
         )}
       </div>
-      <div className="standard-list-footer">{footerText}</div>
+      <div className="standard-list-footer flex items-center justify-between gap-2">
+        <span className="shrink-0 tabular-nums">{footerText}</span>
+        <div className="flex min-w-0 items-center gap-1">
+          {onShpDownload ? (
+            <button
+              type="button"
+              title={shpBusy ? 'SHP 다운로드 중…' : 'SHP 다운로드'}
+              aria-label="SHP 다운로드"
+              aria-busy={shpBusy}
+              disabled={shpBusy || total === 0}
+              onClick={onShpDownload}
+              className="inline-flex h-7 cursor-pointer items-center gap-1 rounded border border-border bg-background px-1.5 text-[11px] font-medium text-muted-foreground hover:bg-muted/50 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <MapPinned className="h-3.5 w-3.5 shrink-0" aria-hidden />
+              <span className="relative inline-flex items-center justify-center">
+                <span className={cn(shpBusy && 'invisible')} aria-hidden={shpBusy}>
+                  SHP 다운로드
+                </span>
+                {shpBusy ? (
+                  <Loader2
+                    className="absolute h-3.5 w-3.5 animate-spin"
+                    strokeWidth={2}
+                    aria-hidden
+                  />
+                ) : null}
+              </span>
+            </button>
+          ) : null}
+          {onExcelDownload ? (
+            <button
+              type="button"
+              title={excelBusy ? '엑셀 다운로드 중…' : '엑셀 다운로드'}
+              aria-label="엑셀 다운로드"
+              aria-busy={excelBusy}
+              disabled={excelBusy || total === 0}
+              onClick={onExcelDownload}
+              className="inline-flex h-7 cursor-pointer items-center gap-1 rounded border border-border bg-background px-1.5 text-[11px] font-medium text-muted-foreground hover:bg-muted/50 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <FileSpreadsheet className="h-3.5 w-3.5 shrink-0" aria-hidden />
+              <span className="relative inline-flex items-center justify-center">
+                <span
+                  className={cn(excelBusy && 'invisible')}
+                  aria-hidden={excelBusy}
+                >
+                  엑셀 다운로드
+                </span>
+                {excelBusy ? (
+                  <Loader2
+                    className="absolute h-3.5 w-3.5 animate-spin"
+                    strokeWidth={2}
+                    aria-hidden
+                  />
+                ) : null}
+              </span>
+            </button>
+          ) : null}
+        </div>
+      </div>
     </div>
   )
 }

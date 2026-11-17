@@ -50,6 +50,11 @@ export interface MapFloatingPanelProps {
   pinPosition?: { top: number; left: number } | null;
   /** 헤더 더블클릭 (최소화 펼치기 등). 버튼·select 위는 무시 */
   onHeaderDoubleClick?: () => void;
+  /**
+   * true면 화면 밖만 막음(여백 0).
+   * 클릭 모서리 부착 모달이 bottom gap clamp로 밀리지 않게 할 때.
+   */
+  flushViewportClamp?: boolean;
 }
 
 export function MapFloatingPanel({
@@ -67,12 +72,15 @@ export function MapFloatingPanel({
   focusToken = 0,
   pinPosition = null,
   onHeaderDoubleClick,
+  flushViewportClamp = false,
 }: MapFloatingPanelProps) {
   const useLeft = defaultPosition.left != null;
   const [position, setPosition] = useState(defaultPosition);
   const rootRef = useRef<HTMLDivElement | null>(null);
   /** 화면 기준 모드에서 사용자가 옮긴 뒤에는 기본 위치로 되돌리지 않는다 */
   const movedRef = useRef(false);
+  const edgeGap = flushViewportClamp ? 0 : VIEWPORT_EDGE_GAP;
+  const bottomGap = flushViewportClamp ? 0 : VIEWPORT_BOTTOM_GAP;
   /** 최소화(pin) 직전 펼침 위치 — 최대화 시 복원 */
   const prePinPositionRef = useRef<MapFloatingPanelPosition | null>(null);
   const wasPinnedRef = useRef(false);
@@ -152,23 +160,26 @@ export function MapFloatingPanel({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- token-driven focus
   }, [focusToken, zClass]);
 
-  const clampToViewport = useCallback((next: { top: number; left: number }) => {
-    const el = rootRef.current;
-    const panelWidth = el?.offsetWidth ?? 0;
-    const panelHeight = el?.offsetHeight ?? 0;
-    const maxLeft = Math.max(
-      VIEWPORT_EDGE_GAP,
-      window.innerWidth - panelWidth - VIEWPORT_EDGE_GAP
-    );
-    const maxTop = Math.max(
-      VIEWPORT_EDGE_GAP,
-      window.innerHeight - panelHeight - VIEWPORT_BOTTOM_GAP
-    );
-    return {
-      top: Math.min(Math.max(VIEWPORT_EDGE_GAP, next.top), maxTop),
-      left: Math.min(Math.max(VIEWPORT_EDGE_GAP, next.left), maxLeft),
-    };
-  }, []);
+  const clampToViewport = useCallback(
+    (next: { top: number; left: number }) => {
+      const el = rootRef.current;
+      const panelWidth = el?.offsetWidth ?? 0;
+      const panelHeight = el?.offsetHeight ?? 0;
+      const maxLeft = Math.max(
+        edgeGap,
+        window.innerWidth - panelWidth - edgeGap
+      );
+      const maxTop = Math.max(
+        edgeGap,
+        window.innerHeight - panelHeight - bottomGap
+      );
+      return {
+        top: Math.min(Math.max(edgeGap, next.top), maxTop),
+        left: Math.min(Math.max(edgeGap, next.left), maxLeft),
+      };
+    },
+    [edgeGap, bottomGap]
+  );
 
   const handlePointerDown = useCallback(
     (e: React.PointerEvent) => {
@@ -301,6 +312,10 @@ export function MapFloatingPanel({
   }, [viewport, clampToViewport]);
 
   const { zIndex: _ignoredZ, ...restStyle } = style ?? {};
+  // 최소화 독 — pin 좌표를 스타일에 직접 반영(패널 폭 변경 시 effect 지연 없이 이동)
+  const isPinned = pinTop != null && pinLeft != null
+  const renderTop = isPinned ? pinTop : position.top
+  const renderLeft = isPinned ? pinLeft : position.left
 
   const panel = (
     <div
@@ -313,8 +328,10 @@ export function MapFloatingPanel({
       )}
       style={{
         position: viewport ? 'fixed' : 'absolute',
-        top: position.top,
-        ...(viewport || useLeft ? { left: position.left } : { right: position.right }),
+        top: renderTop,
+        ...(viewport || useLeft || isPinned
+          ? { left: renderLeft }
+          : { right: position.right }),
         width,
         maxWidth: viewport ? '100vw' : '95vw',
         maxHeight,

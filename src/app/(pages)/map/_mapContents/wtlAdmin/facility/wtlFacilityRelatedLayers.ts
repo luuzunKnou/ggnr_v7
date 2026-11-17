@@ -95,51 +95,32 @@ const PIPE_DISPLAY_ORDER = [
 
 /**
  * 시설 탭 → 연관 규칙(관련 시설·설비).
- * 관로는 PIPE_ALWAYS_RULES로 전 탭 공통. 직접 매칭은 Shell 자동 ON.
+ * 관로는 PIPE_ALWAYS_RULES로 전 탭 공통(버튼 숨김·자동 ON). 직접 매칭은 Shell 자동 ON.
  */
 export const FACILITY_RELATED_RULES: Record<string, readonly WtlFacilityRelatedRule[]> = {
-  wtl_gain_ps: [
-    { kind: 'name', pattern: '%wtl_valv_ps' },
-    { kind: 'name', pattern: '%wtl_flow_ps' },
-  ],
+  /** 취수장 — 관련 설비·시설 없음 */
+  wtl_gain_ps: [],
+  /** 정수장 — 관련 설비만(염소투입·수질계측·펌프). 관련 시설(유량계·수압계) 제외 */
   wtl_puri_as: [
     { kind: 'name', pattern: '%wtl_infeed_ps' },
     { kind: 'name', pattern: '%wtl_meter_ps' },
-    { kind: 'name', pattern: '%wtl_flow_ps' },
-    { kind: 'name', pattern: '%wtl_prga_ps' },
     { kind: 'name', pattern: '%wtl_puri_dt_ps' },
   ],
-  wtl_serv_ps: [
-    { kind: 'name', pattern: '%wtl_valv_ps' },
-    { kind: 'name', pattern: '%wtl_meter_ps' },
-    { kind: 'name', pattern: '%wtl_flow_ps' },
-    { kind: 'name', pattern: '%wtl_prga_ps' },
-  ],
+  /** 배수지 — 관련 없음 */
+  wtl_serv_ps: [],
+  /** 가압장 — 펌프·흡수정만 */
   wtl_pres_ps: [
     { kind: 'name', pattern: '%wtl_pres_pm_ps' },
     { kind: 'name', pattern: '%wtl_pres_hj_ps' },
-    { kind: 'name', pattern: '%wtl_valv_ps' },
-    { kind: 'name', pattern: '%wtl_flow_ps' },
-    { kind: 'name', pattern: '%wtl_prga_ps' },
   ],
-  wtl_rsrv_ps: [
-    { kind: 'name', pattern: '%wtl_meta_ps' },
-    { kind: 'name', pattern: '%wtl_valv_ps' },
-  ],
-  wtl_fire_ps: [
-    { kind: 'name', pattern: '%wtl_manh_ps' },
-    { kind: 'name', pattern: '%wtl_valv_ps' },
-  ],
-  wtl_flow_ps: [
-    { kind: 'name', pattern: '%wtl_manh_ps' },
-    { kind: 'name', pattern: '%wtl_valv_ps' },
-    { kind: 'name', pattern: '%wtl_prga_ps' },
-  ],
-  wtl_prga_ps: [
-    { kind: 'name', pattern: '%wtl_manh_ps' },
-    { kind: 'name', pattern: '%wtl_valv_ps' },
-    { kind: 'name', pattern: '%wtl_flow_ps' },
-  ],
+  /** 저수조 — 관련 없음 */
+  wtl_rsrv_ps: [],
+  /** 소방시설 — 관련 없음 */
+  wtl_fire_ps: [],
+  /** 유량계 — 관련 없음 */
+  wtl_flow_ps: [],
+  /** 수압계 — 관련 없음 */
+  wtl_prga_ps: [],
 }
 
 /**
@@ -150,10 +131,17 @@ export const EQUIPMENT_RELATED_RULES: Record<string, readonly WtlFacilityRelated
   wtl_pres_hj_ps: [{ kind: 'name', pattern: '%wtl_pres_ps' }],
   wtl_pres_pm_ps: [{ kind: 'name', pattern: '%wtl_pres_ps' }],
   wtl_puri_dt_ps: [{ kind: 'name', pattern: '%wtl_puri_as' }],
-  wtl_infeed_ps: [{ kind: 'name', pattern: '%wtl_puri_as' }],
+  /** 염소투입설비 — 관련 시설: 정수장·배수지·가압장 */
+  wtl_infeed_ps: [
+    { kind: 'name', pattern: '%wtl_puri_as' },
+    { kind: 'name', pattern: '%wtl_serv_ps' },
+    { kind: 'name', pattern: '%wtl_pres_ps' },
+  ],
+  /** 수질계측기 — 관련 시설: 정수장·배수지·가압장 */
   wtl_meter_ps: [
     { kind: 'name', pattern: '%wtl_puri_as' },
     { kind: 'name', pattern: '%wtl_serv_ps' },
+    { kind: 'name', pattern: '%wtl_pres_ps' },
   ],
   /** 관로만 — 망 전역 설비라 소속 시설 역매핑 없음 */
   wtl_valv_ps: [],

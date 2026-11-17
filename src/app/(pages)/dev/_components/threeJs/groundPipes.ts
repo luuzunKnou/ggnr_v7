@@ -1,5 +1,4 @@
 import * as THREE from 'three';
-import { createDiameterDimAtEnd } from './cadDimensions';
 import type { GroundHeightField, PipeSegment } from './shapeTypes';
 import { elevToSceneY, GROUND_SCENE_M_PER_UNIT } from './shapeTypes';
 import { sampleSurfaceY } from './groundSteppedMesh';
@@ -41,7 +40,6 @@ export const PIPE_LABEL_KEY = 'ggnrPipeLabel';
 /** @deprecated */
 export const GROUND_PIPE_KEY = PIPE_MESH_KEY;
 
-const EDGE_COLOR = 0x7dd3fc;
 const DEPTH_COLOR = 0xfbbf24;
 
 /**
@@ -77,17 +75,86 @@ function horizontalPerp(tangent: THREE.Vector3): THREE.Vector3 {
 }
 
 /**
- * 지형(지표) ↔ 관 윗면 토피 + 관경 치수.
+ * 입·출구 원형 단면 관경 치수 — 토피와 동일 색·스프라이트.
+ * 기본 숨김(호버). 화면 가까운 끝만 호버 로직에서 킴.
+ */
+function createDiameterBarAtEnd(
+  center: THREE.Vector3,
+  axisDir: THREE.Vector3,
+  outerR: number,
+  diameterM: number
+): THREE.Group {
+  const root = new THREE.Group();
+  root.name = 'pipeDipBar';
+  root.userData[PIPE_MESH_KEY] = true;
+  root.userData.isDipDim = true;
+  root.visible = false;
+  root.raycast = () => {};
+
+  const r = Math.max(0.01, outerR);
+  const axis = axisDir.clone().normalize();
+  let radial = new THREE.Vector3().crossVectors(axis, new THREE.Vector3(0, 1, 0));
+  if (radial.lengthSq() < 1e-8) {
+    radial = new THREE.Vector3().crossVectors(axis, new THREE.Vector3(1, 0, 0));
+  }
+  radial.normalize();
+  const offsetDir = new THREE.Vector3().crossVectors(radial, axis).normalize();
+  if (offsetDir.lengthSq() < 1e-8) offsetDir.set(0, 1, 0);
+
+  const gap = 0.22;
+  const a = center.clone().addScaledVector(radial, -r);
+  const b = center.clone().addScaledVector(radial, r);
+  const a1 = a.clone().addScaledVector(offsetDir, gap);
+  const b1 = b.clone().addScaledVector(offsetDir, gap);
+  const tick = 0.07;
+  const tickA = offsetDir.clone().cross(axis).normalize();
+  if (tickA.lengthSq() < 1e-8) tickA.copy(radial);
+  const positions = [
+    a.x, a.y, a.z, a1.x, a1.y, a1.z,
+    b.x, b.y, b.z, b1.x, b1.y, b1.z,
+    a1.x, a1.y, a1.z, b1.x, b1.y, b1.z,
+    a1.x - tickA.x * tick, a1.y - tickA.y * tick, a1.z - tickA.z * tick,
+    a1.x + tickA.x * tick, a1.y + tickA.y * tick, a1.z + tickA.z * tick,
+    b1.x - tickA.x * tick, b1.y - tickA.y * tick, b1.z - tickA.z * tick,
+    b1.x + tickA.x * tick, b1.y + tickA.y * tick, b1.z + tickA.z * tick,
+  ];
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  const lines = new THREE.LineSegments(
+    geo,
+    new THREE.LineBasicMaterial({
+      color: DEPTH_COLOR,
+      depthTest: true,
+      transparent: true,
+      opacity: 0.95,
+    })
+  );
+  lines.userData.isEdge = true;
+  lines.userData[PIPE_MESH_KEY] = true;
+  lines.raycast = () => {};
+  root.add(lines);
+
+  const sprite = makeDepthValueSprite(`관경 ${fmtDipMm(diameterM)}mm`);
+  sprite.position.set(
+    (a1.x + b1.x) / 2 + offsetDir.x * 0.12,
+    (a1.y + b1.y) / 2 + offsetDir.y * 0.12,
+    (a1.z + b1.z) / 2 + offsetDir.z * 0.12
+  );
+  root.add(sprite);
+  return root;
+}
+
+/**
+ * 지형(지표) ↔ 관 윗면 토피 치수.
  * 토피 = 지표면 → 관 외경 상단 (심도−관반경). 심도 DB는 관 중심 기준.
- * 관경은 구간 중점·관 윗면 위에 고정 (마우스 위치 무관).
+ * 관경은 입·출구 원형 단면(createDiameterBarAtEnd) — 호버·가까운 끝만.
  */
 function createDepthBar(
   pipeCenter: THREE.Vector3,
   surfaceY: number,
   depthM: number,
   tangent: THREE.Vector3,
-  outerR: number,
-  diameterM: number
+  outerR: number
 ): THREE.Group {
   const root = new THREE.Group();
   root.name = 'pipeDepthBar';
@@ -171,85 +238,6 @@ function createDepthBar(
   );
   root.add(coverSprite);
 
-  // 관경 — 구간 중점·관 윗면 위에 고정 (마우스 위치 무관)
-  const dipPerp = midPerp;
-  const crownY = pipeCenter.y + outerR;
-  const dipGap = 0.22;
-  const dipA = new THREE.Vector3(
-    pipeCenter.x - dipPerp.x * outerR,
-    crownY,
-    pipeCenter.z - dipPerp.z * outerR
-  );
-  const dipB = new THREE.Vector3(
-    pipeCenter.x + dipPerp.x * outerR,
-    crownY,
-    pipeCenter.z + dipPerp.z * outerR
-  );
-  const dipA1 = dipA.clone().add(new THREE.Vector3(0, dipGap, 0));
-  const dipB1 = dipB.clone().add(new THREE.Vector3(0, dipGap, 0));
-  const dipAlong = tangent.clone();
-  dipAlong.y = 0;
-  if (dipAlong.lengthSq() < 1e-10) dipAlong.set(1, 0, 0);
-  else dipAlong.normalize();
-  const dipTick = 0.07;
-  const dipPositions = [
-    dipA.x,
-    dipA.y,
-    dipA.z,
-    dipA1.x,
-    dipA1.y,
-    dipA1.z,
-    dipB.x,
-    dipB.y,
-    dipB.z,
-    dipB1.x,
-    dipB1.y,
-    dipB1.z,
-    dipA1.x,
-    dipA1.y,
-    dipA1.z,
-    dipB1.x,
-    dipB1.y,
-    dipB1.z,
-    dipA1.x - dipAlong.x * dipTick,
-    dipA1.y,
-    dipA1.z - dipAlong.z * dipTick,
-    dipA1.x + dipAlong.x * dipTick,
-    dipA1.y,
-    dipA1.z + dipAlong.z * dipTick,
-    dipB1.x - dipAlong.x * dipTick,
-    dipB1.y,
-    dipB1.z - dipAlong.z * dipTick,
-    dipB1.x + dipAlong.x * dipTick,
-    dipB1.y,
-    dipB1.z + dipAlong.z * dipTick,
-  ];
-  const dipGeo = new THREE.BufferGeometry();
-  dipGeo.setAttribute(
-    'position',
-    new THREE.Float32BufferAttribute(dipPositions, 3)
-  );
-  const dipLines = new THREE.LineSegments(
-    dipGeo,
-    new THREE.LineBasicMaterial({
-      color: DEPTH_COLOR,
-      depthTest: true,
-      transparent: true,
-      opacity: 0.95,
-    })
-  );
-  dipLines.userData.isEdge = true;
-  dipLines.userData[PIPE_MESH_KEY] = true;
-  dipLines.raycast = () => {};
-  root.add(dipLines);
-  const dipSprite = makeDepthValueSprite(`관경 ${fmtDipMm(diameterM)}mm`);
-  dipSprite.position.set(
-    (dipA1.x + dipB1.x) / 2,
-    (dipA1.y + dipB1.y) / 2 + 0.12,
-    (dipA1.z + dipB1.z) / 2
-  );
-  root.add(dipSprite);
-
   return root;
 }
 
@@ -304,7 +292,7 @@ function makeDepthValueSprite(text: string): THREE.Sprite {
   return sprite;
 }
 
-/** 관 옆면 라벨 — 외곽선 위에 관 진행 방향으로 붙는 평면 텍스트 */
+/** 관 옆면 라벨 — 관 진행 방향으로 붙는 평면 텍스트(외곽선 없음) */
 function createSideLabelPlane(
   text: string,
   origin: THREE.Vector3,
@@ -320,13 +308,12 @@ function createSideLabelPlane(
   if (!ctx) {
     const fallback = new THREE.Mesh(
       new THREE.PlaneGeometry(0.5, 0.2),
-      new THREE.MeshBasicMaterial({ color: EDGE_COLOR, side: THREE.DoubleSide })
+      new THREE.MeshBasicMaterial({ color: 0xe0f2fe, side: THREE.DoubleSide })
     );
     fallback.position.copy(origin).addScaledVector(outward, outerR + 0.04);
     return fallback;
   }
 
-  // 라벨 + 우측 10px + 흐름 화살표(geom 진행 방향 = 글자 우측)
   const arrow = '→';
   const gapPx = 10;
   ctx.font = 'bold 32px "Malgun Gothic", "Nanum Gothic", sans-serif';
@@ -363,13 +350,10 @@ function createSideLabelPlane(
     side: THREE.DoubleSide,
   });
   const mesh = new THREE.Mesh(geo, mat);
-  // 곡선 관에서 튜브와 교차·끊김 방지 — 바깥으로 띄우고 depthTest off
   mesh.position.copy(origin).addScaledVector(outward, outerR + 0.08);
-  // 관 진행=로컬 X, 바깥=로컬 Z, 위=Y — 옆면에 붙인 글씨
   const xAxis = tangent.clone();
   if (xAxis.lengthSq() < 1e-10) xAxis.set(1, 0, 0);
   else xAxis.normalize();
-  // 수평 투영으로 글자가 뒤집히지 않게
   const xFlat = xAxis.clone();
   xFlat.y = 0;
   if (xFlat.lengthSq() > 1e-8) xFlat.normalize();
@@ -391,51 +375,30 @@ function createSideLabelPlane(
   return mesh;
 }
 
-/**
- * geom 순서 기준 옆면 외곽선 + 라벨(우측 10px에 → 흐름 표기).
- */
-function createSideFlowOutline(
+/** 옆면 라벨만(하늘색 외곽선 없음). 가장 긴 구간 중점. */
+function createSideFlowLabel(
   curve: THREE.Curve<THREE.Vector3>,
   outerR: number,
   labelText: string
 ): THREE.Group {
   const root = new THREE.Group();
-  root.name = 'pipeSideFlow';
+  root.name = 'pipeSideLabel';
   root.userData[PIPE_MESH_KEY] = true;
   root.raycast = () => {};
 
   const len = Math.max(0.2, curve.getLength());
   const segs = Math.max(8, Math.min(80, Math.ceil(len / 0.4)));
-  const sidePts: THREE.Vector3[] = [];
-  const samples: { p: THREE.Vector3; t: THREE.Vector3; out: THREE.Vector3 }[] = [];
+  const samples: { p: THREE.Vector3; t: THREE.Vector3; out: THREE.Vector3 }[] =
+    [];
 
   for (let i = 0; i <= segs; i++) {
     const u = i / segs;
     const p = curve.getPointAt(u);
     const t = curve.getTangentAt(u);
     const out = horizontalPerp(t);
-    sidePts.push(p.clone().addScaledVector(out, outerR + 0.015));
     samples.push({ p, t, out });
   }
 
-  if (sidePts.length >= 2) {
-    const lineGeo = new THREE.BufferGeometry().setFromPoints(sidePts);
-    const line = new THREE.Line(
-      lineGeo,
-      new THREE.LineBasicMaterial({
-        color: EDGE_COLOR,
-        depthTest: true,
-        transparent: true,
-        opacity: 0.95,
-      })
-    );
-    line.userData.isEdge = true;
-    line.userData[PIPE_MESH_KEY] = true;
-    line.raycast = () => {};
-    root.add(line);
-  }
-
-  // 곡선: 가장 긴 구간 중점에서 라벨(꺾임 지점 회피)
   let best = samples[Math.floor(samples.length / 2)] ?? samples[0];
   let bestLen = -1;
   for (let i = 1; i < samples.length; i++) {
@@ -457,7 +420,6 @@ function createSideFlowOutline(
   if (best) {
     root.add(createSideLabelPlane(labelText, best.p, best.t, best.out, outerR));
   }
-
   return root;
 }
 
@@ -500,7 +462,7 @@ export type CreatePipesOverlayOpts = {
 
 /**
  * 상수관로 선 → 중공 TubeGeometry (외경 + 내경 BackSide).
- * 심도: 지표↔관 세로 치수. 라벨·흐름: 옆면 외곽선.
+ * 옆면 라벨만(외곽선 없음). 심도·관경은 호버.
  */
 export function createPipesOverlay(opts: CreatePipesOverlayOpts): THREE.Group {
   const root = new THREE.Group();
@@ -536,18 +498,21 @@ export function createPipesOverlay(opts: CreatePipesOverlayOpts): THREE.Group {
     return mat;
   };
 
-  type DipEnd = {
-    pipeId: string;
-    pos: THREE.Vector3;
-    tangent: THREE.Vector3;
-    radius: number;
-    label: string;
-  };
-  const dipEnds: DipEnd[] = [];
-  const END_SNAP_M = 0.4;
-
   for (const pipe of pipes) {
     if (!pipe.coords3857 || pipe.coords3857.length < 2) continue;
+    // 관경(m) — 결측·비정상은 100mm. 최소 반경 클램프를 낮춰 구간별 차이가 보이게
+    const diameterM = Math.max(
+      0.02,
+      Number.isFinite(pipe.diameterM) && pipe.diameterM > 0 ? pipe.diameterM : 0.1
+    );
+    const outerR = diameterM / 2;
+    // 심도 0·결측이어도 관 전체가 지면 아래 (중심 ≥ 반경+5cm)
+    const minBurialM = outerR + 0.05;
+    const fallbackDepthM = Math.max(
+      minBurialM,
+      Number.isFinite(pipe.depthM) && pipe.depthM > 0 ? pipe.depthM : 1.2
+    );
+
     const pts: THREE.Vector3[] = [];
     for (let vi = 0; vi < pipe.coords3857.length; vi++) {
       const [x, y] = pipe.coords3857[vi]!;
@@ -556,7 +521,11 @@ export function createPipesOverlay(opts: CreatePipesOverlayOpts): THREE.Group {
         pipe.depthsM && pipe.depthsM.length === pipe.coords3857.length
           ? pipe.depthsM[vi]
           : pipe.depthM;
-      const depth = Math.max(0.05, depthRaw ?? pipe.depthM);
+      const depthNum = Number(depthRaw);
+      const depth = Math.max(
+        minBurialM,
+        Number.isFinite(depthNum) && depthNum > 0 ? depthNum : fallbackDepthM
+      );
       const surfY = resolvePipeSurfaceY(pipe, lx, lz, surfaceMode, opts.field);
       pts.push(new THREE.Vector3(lx, surfY - depth, lz));
     }
@@ -573,11 +542,9 @@ export function createPipesOverlay(opts: CreatePipesOverlayOpts): THREE.Group {
     // 범위(사각형)과 동일 — API(ST_Intersection) 좌표 그대로 (클라이언트 재클립 없음)
     const pathRuns = [cleaned];
 
-    const outerR = Math.max(0.04, pipe.diameterM / 2);
-    const wallM = pipeWallThicknessM(pipe.diameterM);
+    const wallM = pipeWallThicknessM(diameterM);
     const innerR = Math.max(0.008, Math.min(outerR - wallM, outerR * 0.92));
     const segColor = pipe.color || fallbackColor;
-    let dipAdded = false;
 
     for (let runIdx = 0; runIdx < pathRuns.length; runIdx++) {
       const run = pathRuns[runIdx]!;
@@ -617,8 +584,8 @@ export function createPipesOverlay(opts: CreatePipesOverlayOpts): THREE.Group {
       innerMesh.renderOrder = 2;
       root.add(innerMesh);
 
-      // 옆면 외곽선(흐름 화살표) + 라벨
-      const side = createSideFlowOutline(
+      // 옆면 라벨(흐름 →) — 하늘색 외곽선 없음
+      const side = createSideFlowLabel(
         curve,
         outerR,
         (pipe.label && pipe.label.trim()) || '관로'
@@ -630,67 +597,39 @@ export function createPipesOverlay(opts: CreatePipesOverlayOpts): THREE.Group {
         c.userData.pipeId = runId;
         c.userData.featureId = pipe.id;
         c.userData.isEdge = true;
-      })
+      });
       root.add(side);
 
       // 심도: 지형↔관 세로 바
       const mid = curve.getPoint(0.5);
       const midT = curve.getTangent(0.5);
+      const midDepth = Math.max(minBurialM, fallbackDepthM);
       const midSurf =
         resolvePipeSurfaceY(pipe, mid.x, mid.z, surfaceMode, opts.field) ||
-        mid.y + Math.max(0.05, pipe.depthM);
-      const depthBar = createDepthBar(
-        mid,
-        midSurf,
-        pipe.depthM,
-        midT,
-        outerR,
-        pipe.diameterM
-      );
+        mid.y + midDepth;
+      const depthBar = createDepthBar(mid, midSurf, midDepth, midT, outerR);
       depthBar.userData.pipeId = runId;
       depthBar.userData.featureId = pipe.id;
       depthBar.userData.isDepthBar = true;
       root.add(depthBar);
 
-      if (dipAdded) continue;
-      dipAdded = true;
-      const dipLabel = `⌀${fmtDipMm(pipe.diameterM)}mm`;
-      dipEnds.push({
-        pipeId: runId,
-        pos: curve.getPoint(0),
-        tangent: curve.getTangent(0),
-        radius: outerR,
-        label: dipLabel,
-      });
-      dipEnds.push({
-        pipeId: runId,
-        pos: curve.getPoint(1),
-        tangent: curve.getTangent(1),
-        radius: outerR,
-        label: dipLabel,
-      });
+      // 관경 — 입·출구 원형 단면(토피 스타일). 호버 시 화면 가까운 끝만
+      for (const t of [0, 1] as const) {
+        const dim = createDiameterBarAtEnd(
+          curve.getPoint(t),
+          curve.getTangent(t),
+          outerR,
+          diameterM
+        );
+        dim.userData.pipeId = runId;
+        dim.userData.featureId = pipe.id;
+        dim.userData.isDipDim = true;
+        root.add(dim);
+      }
       } catch {
         /* skip */
       }
     }
-  }
-
-  const linked = new Array(dipEnds.length).fill(false);
-  for (let i = 0; i < dipEnds.length; i++) {
-    for (let j = i + 1; j < dipEnds.length; j++) {
-      if (dipEnds[i].pipeId === dipEnds[j].pipeId) continue;
-      if (dipEnds[i].pos.distanceTo(dipEnds[j].pos) <= END_SNAP_M) {
-        linked[i] = true;
-        linked[j] = true;
-      }
-    }
-  }
-  for (let i = 0; i < dipEnds.length; i++) {
-    if (linked[i]) continue;
-    const e = dipEnds[i];
-    const dim = createDiameterDimAtEnd(e.pos, e.tangent, e.radius, e.label);
-    dim.userData.pipeId = e.pipeId;
-    root.add(dim);
   }
 
   return root;

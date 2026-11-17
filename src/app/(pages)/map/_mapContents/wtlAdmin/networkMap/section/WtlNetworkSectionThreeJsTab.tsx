@@ -915,27 +915,55 @@ export function WtlNetworkSectionThreeJsTab({
             if (obj.userData?.isGroundElevMarkers) obj.visible = visible
           })
         }
+        const matchesHoverFeature = (
+          ud: { featureId?: string; pipeId?: string },
+          featureId: string
+        ) => {
+          const fid = String(ud.featureId ?? '').trim()
+          const pid = String(ud.pipeId ?? '').trim()
+          return (
+            fid === featureId ||
+            pid === featureId ||
+            pid.startsWith(`${featureId}#`)
+          )
+        }
+        const dipWorldTmp = new THREE.Vector3()
+        /** 호버 관로: 토피 + 카메라에 가까운 쪽 관경만 */
         const setDepthBarsForFeature = (featureId: string | null) => {
-          if (hoverDepthFeatureId === featureId) return
           hoverDepthFeatureId = featureId
+          const dipCandidates: import('three').Object3D[] = []
           root.traverse((obj) => {
             const ud = obj.userData as {
               isDepthBar?: boolean
+              isDipDim?: boolean
               featureId?: string
               pipeId?: string
             }
-            if (!ud.isDepthBar) return
-            if (!featureId) {
-              obj.visible = false
+            if (ud.isDepthBar) {
+              obj.visible = Boolean(
+                featureId && matchesHoverFeature(ud, featureId)
+              )
               return
             }
-            const fid = String(ud.featureId ?? '').trim()
-            const pid = String(ud.pipeId ?? '').trim()
-            obj.visible =
-              fid === featureId ||
-              pid === featureId ||
-              pid.startsWith(`${featureId}#`)
+            if (ud.isDipDim) {
+              obj.visible = false
+              if (featureId && matchesHoverFeature(ud, featureId)) {
+                dipCandidates.push(obj)
+              }
+            }
           })
+          if (!featureId || dipCandidates.length === 0) return
+          let best = dipCandidates[0]!
+          let bestD = Infinity
+          for (const o of dipCandidates) {
+            o.getWorldPosition(dipWorldTmp)
+            const d = dipWorldTmp.distanceToSquared(camera.position)
+            if (d < bestD) {
+              bestD = d
+              best = o
+            }
+          }
+          best.visible = true
         }
         const hideTip = () => {
           tipGenRef.current += 1
@@ -1054,6 +1082,8 @@ export function WtlNetworkSectionThreeJsTab({
         const tick = () => {
           if (cancelled || !renderer) return
           orbit?.update()
+          // 카메라 회전 중에도 가까운 쪽 관경 유지
+          if (hoverDepthFeatureId) setDepthBarsForFeature(hoverDepthFeatureId)
           renderer.render(scene, camera)
           raf = requestAnimationFrame(tick)
         }

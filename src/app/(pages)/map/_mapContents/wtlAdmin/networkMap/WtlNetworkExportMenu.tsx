@@ -1,6 +1,7 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { Loader2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { COORDINATE_SYSTEM_OPTIONS } from '@/app/(pages)/map/_mapComponents/landInfo/shared'
 import {
@@ -11,6 +12,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/app/shadcnComponents/ui/dialog'
+
+/** 관망조회 하단 도구 버튼 스타일 */
+export type WtlNetworkToolBtnVariant = 'legacy' | 'iconLabel' | 'iconLabelColor'
 
 export type WtlNetworkExportScope = 'all' | 'filtered'
 
@@ -38,6 +42,8 @@ type Props = {
   disabled?: boolean
   className?: string
   active?: boolean
+  variant?: WtlNetworkToolBtnVariant
+  icon?: ReactNode
   /** 전체 레이어 목록 */
   layers: WtlNetworkExportLayerOption[]
   /** 현재 지도에서 켜진 레이어 — 모달 열 때 미리 체크 */
@@ -65,6 +71,8 @@ export function WtlNetworkExportMenu({
   disabled = false,
   className,
   active = false,
+  variant = 'legacy',
+  icon,
   layers,
   selectedKeys = [],
   availableKeys = null,
@@ -126,8 +134,8 @@ export function WtlNetworkExportMenu({
     return order.map((group) => ({ group, items: map.get(group)! }))
   }, [layers])
 
-  const shown = busy ? busyLabel || `${label}…` : label
   const checkedCount = checked.size
+  void busyLabel
 
   const selectableLayers = useMemo(
     () =>
@@ -192,20 +200,51 @@ export function WtlNetworkExportMenu({
       <div className={cn('relative min-w-0 flex-1', className)}>
         <button
           type="button"
-          title={title ?? label}
+          title={busy ? `${title ?? label} 중…` : title ?? label}
+          aria-busy={busy}
           disabled={disabled || busy}
           className={cn(
-            'flex h-7 w-full cursor-pointer items-center justify-center whitespace-nowrap rounded-[5px] px-0.5 text-[11px] font-semibold leading-none disabled:cursor-not-allowed disabled:opacity-60',
-            active || open
-              ? 'bg-[#14607a] text-white hover:bg-[#0f4d62] dark:bg-[#d7ebf1] dark:text-[#14607a] dark:hover:bg-[#c5e3eb]'
-              : 'bg-[#d7ebf1] text-[#14607a] hover:bg-[#c5e3eb] dark:bg-[#14607a] dark:text-[#d7ebf1] dark:hover:bg-[#0f4d62]'
+            'flex h-7 w-full cursor-pointer items-center justify-center gap-0.5 whitespace-nowrap disabled:cursor-not-allowed disabled:opacity-60',
+            variant === 'legacy' &&
+              'rounded-[5px] px-0.5 text-[11px] font-semibold leading-none',
+            variant === 'legacy' &&
+              (active || open
+                ? 'bg-[#14607a] text-white hover:bg-[#0f4d62] dark:bg-[#d7ebf1] dark:text-[#14607a] dark:hover:bg-[#c5e3eb]'
+                : 'bg-[#d7ebf1] text-[#14607a] hover:bg-[#c5e3eb] dark:bg-[#14607a] dark:text-[#d7ebf1] dark:hover:bg-[#0f4d62]'),
+            variant === 'iconLabel' &&
+              'standard-detail-action-btn px-1.5 text-[11px] font-medium',
+            variant === 'iconLabel' &&
+              (active || open) &&
+              'border-primary bg-primary text-primary-foreground hover:bg-primary/90',
+            variant === 'iconLabelColor' &&
+              'rounded border px-1.5 text-[11px] font-medium transition-colors',
+            variant === 'iconLabelColor' &&
+              (active || open
+                ? 'border-primary bg-primary text-primary-foreground hover:bg-primary/90'
+                : 'border-primary bg-primary/15 text-primary hover:bg-primary/20')
           )}
           onClick={() => {
             if (busy || disabled) return
             setOpen(true)
           }}
         >
-          {shown}
+          {icon ? (
+            <span className="inline-flex shrink-0" aria-hidden>
+              {icon}
+            </span>
+          ) : null}
+          <span className="relative inline-flex items-center justify-center">
+            <span className={cn(busy && 'invisible')} aria-hidden={busy}>
+              {label}
+            </span>
+            {busy ? (
+              <Loader2
+                className="absolute h-3.5 w-3.5 animate-spin"
+                strokeWidth={2}
+                aria-hidden
+              />
+            ) : null}
+          </span>
         </button>
       </div>
 

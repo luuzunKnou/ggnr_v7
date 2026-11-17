@@ -29,6 +29,11 @@ export interface IdentifyLayerResult {
 
 export interface IdentifyPopupState {
   coordinate: [number, number];
+  /**
+   * 실제 마우스 클릭 화면 좌표(client). 플로팅 모달 모서리 기준.
+   * 지도 피처 좌표→pixel 변환과 어긋날 수 있어 별도 보관.
+   */
+  screenPixel?: { left: number; top: number };
   results: IdentifyLayerResult[];
   /** 시설관리 검색 등 — 다중 식별 목록 헤더 문구 오버라이드 */
   listHeaderLabel?: string;
@@ -132,6 +137,20 @@ export function useFeatureIdentify(
       const coord = evt.coordinate as [number, number];
       const [x, y] = coord;
       const filters = tableFiltersRef.current;
+      const oe = evt.originalEvent as MouseEvent | PointerEvent | TouchEvent | undefined;
+      let screenPixel: { left: number; top: number } | undefined;
+      if (oe && 'clientX' in oe && Number.isFinite(oe.clientX) && Number.isFinite(oe.clientY)) {
+        screenPixel = { left: oe.clientX, top: oe.clientY };
+      } else if (Array.isArray(evt.pixel) && evt.pixel.length >= 2) {
+        const el = evt.map.getTargetElement?.() as HTMLElement | null | undefined;
+        const rect = el?.getBoundingClientRect?.();
+        if (rect) {
+          screenPixel = {
+            left: rect.left + evt.pixel[0],
+            top: rect.top + evt.pixel[1],
+          };
+        }
+      }
 
       try {
         const res = await call('', 'POST', {
@@ -164,7 +183,7 @@ export function useFeatureIdentify(
         const results: IdentifyLayerResult[] = Array.isArray(data?.results) ? data.results : [];
 
         if (results.length > 0) {
-          setPopupState({ coordinate: coord, results });
+          setPopupState({ coordinate: coord, screenPixel, results });
           overlayRef.current?.setPosition(coord);
         } else {
           closePopup();

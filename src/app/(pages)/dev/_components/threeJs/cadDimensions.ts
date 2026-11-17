@@ -260,18 +260,21 @@ function specsForProps(props: ShapeProps): DimSpec[] {
 }
 
 /**
- * 원기둥 입·출구와 동일 — 축에 수직인 지름 치수선 + ⌀ 라벨.
- * @param center 단면 중심
+ * 원기둥 입·출구 단면 — 축에 수직인 지름 치수선 + ⌀ 라벨.
+ * @param center 단면 중심(입구/출구)
  * @param axisDir 관 진행 방향(접선)
  * @param radius 반지름
- * @param label 표기 문자열 (예: ⌀0.15)
+ * @param label 표기 문자열 (예: ⌀150mm)
+ * @param gap 치수선 띄움
+ * @param alwaysVisible true면 상시 표시(관로 입출구). false면 선택 시에만(CAD)
  */
 export function createDiameterDimAtEnd(
   center: THREE.Vector3,
   axisDir: THREE.Vector3,
   radius: number,
   label: string,
-  gap = 0.28
+  gap = 0.28,
+  alwaysVisible = false
 ): THREE.Group {
   const root = new THREE.Group();
   root.userData[CAD_DIM_KEY] = true;
@@ -315,8 +318,7 @@ export function createDiameterDimAtEnd(
   const sprite = makeLabelSprite(label);
   sprite.position.copy(mid);
   root.add(sprite);
-  // 원기둥 CAD와 동일 — 선택 시에만 표시
-  root.visible = false;
+  root.visible = alwaysVisible;
   return root;
 }
 

@@ -1248,13 +1248,26 @@ export default function OpenLayersMap({
   // 데이터 조회(·관망조회) visible → 지하시설물 선택 동기화
   useEffect(() => {
     if (!restored || undergroundFacilityCatalogLoading) return;
-    // visible 전체 비움: null→empty 변환은 하지 않음(미오픈 패널 건드려 루프·부수효과).
-    // 패널에만 UF가 남은 경우(관망 마지막 off 등)는 비운다.
+    // visible 전체 비움(서비스 메뉴 전환 clearServiceMenuLayerState 등):
+    // 지하시설물 패널·WMS는 유지하고, visible에도 다시 넣어 메뉴 언마운트 후에도 남긴다.
+    // 패널을 비우는 경우는 syncUnderground / allLayersOff 등 직접 호출 경로.
+    // null→empty 변환은 하지 않음(미오픈 패널 건드려 루프·부수효과).
     if (visibleLayerNames.size === 0) {
-      setVisibleUndergroundFacilityLayerNames((prev) => {
-        if (prev == null || prev.size === 0) return prev;
-        return new Set();
-      });
+      const selected = visibleUndergroundFacilityLayerNames;
+      if (
+        selected != null &&
+        selected.size > 0 &&
+        setVisibleLayerNames
+      ) {
+        setVisibleLayerNames((prev) => {
+          if (prev.size > 0) return prev;
+          return mirrorUndergroundFacilityIntoVisible(
+            prev,
+            undergroundFacilityAvailableTableNames,
+            selected
+          );
+        });
+      }
       return;
     }
     const fromVisible = pickUndergroundFacilityFromVisible(
@@ -2974,7 +2987,15 @@ export default function OpenLayersMap({
           const map = mapInstanceRef.current;
           const coord = popupForDetail.coordinate;
           let screenAnchor: { top: number; left: number } | null = null;
-          if (map && Array.isArray(coord) && coord.length >= 2) {
+          const sp = popupForDetail.screenPixel;
+          if (
+            sp &&
+            Number.isFinite(sp.left) &&
+            Number.isFinite(sp.top)
+          ) {
+            /** 실제 마우스 client 좌표 — 모달 모서리 기준 */
+            screenAnchor = { left: sp.left, top: sp.top };
+          } else if (map && Array.isArray(coord) && coord.length >= 2) {
             const pixel = map.getPixelFromCoordinate(coord as [number, number]);
             const el = map.getTargetElement?.() as HTMLElement | null | undefined;
             const rect = el?.getBoundingClientRect?.();
@@ -2984,10 +3005,9 @@ export default function OpenLayersMap({
               Number.isFinite(pixel[1]) &&
               rect
             ) {
-              /** 클릭점 우측·아래 약간 띄움 (식별 오버레이와 유사) */
               screenAnchor = {
-                left: rect.left + pixel[0] + 12,
-                top: rect.top + pixel[1] + 12,
+                left: rect.left + pixel[0],
+                top: rect.top + pixel[1],
               };
             }
           }
@@ -3925,23 +3945,86 @@ export default function OpenLayersMap({
         />
       )}
 
-      {layerClickDetail.open ? (
-        <LayerClickDetailFloating
-          key={layerClickDetail.placementToken}
-          open={layerClickDetail.open}
-          hits={layerClickDetail.hits}
-          selected={layerClickDetail.selected}
-          minimized={layerClickDetail.minimized}
-          onMinimizedChange={layerClickDetail.setMinimized}
-          focusToken={layerClickDetail.focusToken}
-          anchorLeftPx={layerClickDetail.anchor?.left ?? mapPaddingLeft + 56}
-          anchorTopPx={layerClickDetail.anchor?.top ?? 72}
-          viewportW={viewportSize.w}
-          viewportH={viewportSize.h}
-          onSelectHit={layerClickDetail.selectHit}
-          onClose={layerClickDetail.close}
-        />
-      ) : null}
+      {(() => {
+        const layerClickDockLeft = mapPaddingLeft + 8
+        const minimizedDockKeys: string[] = []
+        if (layerClickDetail.open && layerClickDetail.minimized) {
+          minimizedDockKeys.push('primary')
+        }
+        for (const kept of layerClickDetail.keptModals) {
+          if (kept.minimized) minimizedDockKeys.push(kept.key)
+        }
+        const dockIndexOf = (key: string) =>
+          minimizedDockKeys.indexOf(key)
+        return (
+          <>
+            {layerClickDetail.open ? (
+              <LayerClickDetailFloating
+                key={layerClickDetail.placementToken}
+                open={layerClickDetail.open}
+                hits={layerClickDetail.hits}
+                selected={layerClickDetail.selected}
+                minimized={layerClickDetail.minimized}
+                onMinimizedChange={layerClickDetail.setMinimized}
+                focusToken={layerClickDetail.focusToken}
+                anchorLeftPx={
+                  layerClickDetail.anchor?.left ?? mapPaddingLeft + 56
+                }
+                anchorTopPx={layerClickDetail.anchor?.top ?? 72}
+                viewportW={viewportSize.w}
+                viewportH={viewportSize.h}
+                dockIndex={Math.max(0, dockIndexOf('primary'))}
+                dockLeftStartPx={layerClickDockLeft}
+                undergroundFacilityTableNames={
+                  undergroundFacilityAvailableTableNames
+                }
+                writeSerEng="dataQuery"
+                onSelectHit={layerClickDetail.selectHit}
+                onClose={layerClickDetail.close}
+                onDetach={(origin) => layerClickDetail.detachKeep(origin)}
+                onSelectedUpdated={(hit) => {
+                  layerClickDetail.patchSelectedHit(hit)
+                }}
+              />
+            ) : null}
+            {layerClickDetail.keptModals.map((kept) => {
+              const selected =
+                kept.hits.find((h) => h.key === kept.selectedKey) ??
+                kept.hits[0] ??
+                null
+              if (!selected) return null
+              return (
+                <LayerClickDetailFloating
+                  key={kept.key}
+                  open
+                  kept
+                  placementAsTopLeft
+                  hits={kept.hits}
+                  selected={selected}
+                  minimized={kept.minimized}
+                  onMinimizedChange={(next) =>
+                    layerClickDetail.setKeepMinimized(kept.key, next)
+                  }
+                  focusToken={kept.focusToken}
+                  anchorLeftPx={kept.anchor?.left ?? mapPaddingLeft + 56}
+                  anchorTopPx={kept.anchor?.top ?? 72}
+                  viewportW={viewportSize.w}
+                  viewportH={viewportSize.h}
+                  dockIndex={Math.max(0, dockIndexOf(kept.key))}
+                  dockLeftStartPx={layerClickDockLeft}
+                  undergroundFacilityTableNames={
+                    undergroundFacilityAvailableTableNames
+                  }
+                  onSelectHit={(hitKey) =>
+                    layerClickDetail.selectKeepHit(kept.key, hitKey)
+                  }
+                  onClose={() => layerClickDetail.closeKeep(kept.key)}
+                />
+              )
+            })}
+          </>
+        )
+      })()}
 
       <MapPrintModal
         open={printOpen}

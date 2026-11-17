@@ -71,6 +71,8 @@ type AdminConsoleLayoutProps = {
   selectMenuSignal?: { menuId: string; nonce: number } | null
   /** 루트 컨테이너 클래스 (기본 h-screen). 높이 유틸은 className이 있으면 그걸 씀 */
   className?: string
+  /** aside+본문 행(relative) 위 오버레이 — 우측 하단 플로팅 모달 등 */
+  renderBodyOverlay?: ReactNode
 }
 
 export function AdminConsoleLayout({
@@ -94,6 +96,7 @@ export function AdminConsoleLayout({
   renderSidebarBottom,
   selectMenuSignal = null,
   className,
+  renderBodyOverlay,
 }: AdminConsoleLayoutProps) {
   const { getPolicy, loading: accessLoading } = useConsoleMenuAccess()
   const [deniedOpen, setDeniedOpen] = useState(false)
@@ -500,18 +503,14 @@ export function AdminConsoleLayout({
     const atTop = sidebarTogglePlacement === "top"
 
     if (atTop) {
+      /** w-12(48px) 기준 아이콘 중앙 = px-2.5 — 접힘/펼침 동일해 좌측 공백·튐 방지 */
       return (
-        <div
-          className={cn(
-            "flex shrink-0 items-center py-2",
-            compact ? "justify-center px-1" : "justify-end px-2"
-          )}
-        >
+        <div className="flex shrink-0 items-center justify-start px-2.5 py-2">
           <button
             type="button"
             title={collapsed ? "메뉴 펼치기" : "메뉴 접기"}
             onClick={() => setCollapsed((prev) => !prev)}
-            className="inline-flex h-7 w-7 cursor-pointer items-center justify-center border-0 bg-transparent p-0 hover:opacity-70"
+            className="inline-flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center border-0 bg-transparent p-0 hover:opacity-70"
           >
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
@@ -520,7 +519,7 @@ export function AdminConsoleLayout({
               width={14}
               height={14}
               className={cn(
-                "h-3.5 w-3.5 dark:brightness-0 dark:invert dark:opacity-70",
+                "h-3.5 w-3.5 transition-transform duration-300 ease-in-out dark:brightness-0 dark:invert dark:opacity-70",
                 collapsed && "scale-x-[-1]"
               )}
               aria-hidden
@@ -583,7 +582,7 @@ export function AdminConsoleLayout({
         </div>
       </header>
 
-      <div className="flex min-h-0 flex-1 overflow-hidden">
+      <div className="relative flex min-h-0 flex-1 overflow-hidden">
         <aside
           className={cn(
             "flex shrink-0 flex-col min-h-0 overflow-hidden border-r bg-muted/30 transition-[width] duration-300 ease-in-out",
@@ -669,7 +668,7 @@ export function AdminConsoleLayout({
         <main
           className={cn(
             "flex h-full min-h-0 flex-1 flex-col overflow-hidden",
-            contentChrome === "plain" ? "p-2" : "p-4"
+            contentChrome === "plain" ? "px-8 py-4" : "p-4"
           )}
         >
           {contentChrome === "plain" ? (
@@ -744,6 +743,7 @@ export function AdminConsoleLayout({
             </Card>
           )}
         </main>
+        {renderBodyOverlay}
       </div>
       {consoleArea ? (
         <ConsoleMenuAccessDeniedDialog

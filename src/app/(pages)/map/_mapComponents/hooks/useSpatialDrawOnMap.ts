@@ -13,9 +13,16 @@ import Draw, { createBox } from 'ol/interaction/Draw';
 import Snap from 'ol/interaction/Snap';
 import { fromCircle } from 'ol/geom/Polygon';
 import { unByKey } from 'ol/Observable';
+import { Fill, Stroke, Style } from 'ol/style';
 import WKT from 'ol/format/WKT';
 import { compareFeaturesByGeometryStackOrder } from '@/lib/mapLayerGeometryOrder';
 import { fetchWfsGeoJsonByBbox } from '@/lib/geoserverWfs';
+
+/** 단면도 도로구간 등 — 스냅 대상 가시화 */
+const SNAP_LAYER_VISIBLE_STYLE = new Style({
+  stroke: new Stroke({ color: 'rgba(217, 119, 6, 0.95)', width: 1.5 }),
+  fill: new Fill({ color: 'rgba(253, 224, 71, 0.4)' }),
+});
 
 /** 그리기 중 꼭짓점 되돌리기 등 — 요청이 살아있는 동안만 유효 */
 export type SpatialDrawSketchControl = {
@@ -28,6 +35,8 @@ export type SpatialDrawRequest = {
   onComplete: (wkt5181: string) => void;
   /** WFS 스냅 대상 테이블(예: tl_sprd_rw). 없으면 스냅 없음 */
   snapLayerName?: string;
+  /** true면 스냅용 WFS 피처를 지도에 보이게 한다(기본 투명) */
+  showSnapLayer?: boolean;
   /** 스케치 제어(선 되돌리기). effect cleanup 시 null */
   sketchControlRef?: MutableRefObject<SpatialDrawSketchControl | null>;
   /** 스케치 꼭짓점 수 변경(미완료 도형) */
@@ -71,8 +80,14 @@ export function useSpatialDrawOnMap(
     layer.set('spatialDrawLayer', true);
     layer.set('mapSplitNoMirror', true);
 
-    const { type, onComplete, snapLayerName, sketchControlRef, onSketchPointCount } =
-      spatialDrawRequest;
+    const {
+      type,
+      onComplete,
+      snapLayerName,
+      showSnapLayer = false,
+      sketchControlRef,
+      onSketchPointCount,
+    } = spatialDrawRequest;
     // line: 두 점 직선(시작·끝). 다각형·다점 폴리라인 아님.
     const draw =
       type === 'rectangle'
@@ -167,9 +182,10 @@ export function useSpatialDrawOnMap(
       snapSource = new VectorSource();
       snapLayer = new VectorLayer({
         source: snapSource,
-        opacity: 0,
+        opacity: showSnapLayer ? 0.95 : 0,
         visible: true,
         zIndex: SNAP_LAYER_Z,
+        style: showSnapLayer ? SNAP_LAYER_VISIBLE_STYLE : undefined,
       });
       snapLayer.set('spatialDrawSnapLayer', true);
       snapLayer.set('mapSplitNoMirror', true);

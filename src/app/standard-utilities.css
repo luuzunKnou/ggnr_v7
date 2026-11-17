@@ -130,14 +130,14 @@
   @apply w-full min-w-0 table-fixed border-collapse text-left text-[11px];
 }
 
-/** 확장패널 내 목록 테이블 헤더 — 기본정보 라벨 톤 */
+/** 확장패널 내 목록 테이블 헤더 — 기본정보(attr-label)와 동일 톤 */
 @utility standard-detail-table-thead {
-  @apply sticky top-0 z-[1] bg-slate-100 dark:bg-muted;
+  @apply sticky top-0 z-[1] bg-muted;
   box-shadow: 0 1px 0 0 var(--border);
 }
 
 @utility standard-detail-table-th {
-  @apply h-8 max-w-0 truncate align-middle border-b-0 bg-slate-100 px-2 py-0 text-[11px] font-medium leading-none text-slate-500 dark:bg-muted dark:text-muted-foreground;
+  @apply h-8 max-w-0 truncate align-middle border-b-0 bg-muted px-2 py-0 text-[11px] font-semibold leading-none text-foreground/90;
   box-shadow: inset 0 -2px 0 0 var(--border);
 }
 
@@ -411,7 +411,15 @@ table.standard-detail-attr-table th.standard-detail-attr-label {
   word-break: keep-all;
   text-align: left;
   vertical-align: top;
-  font-weight: 500;
+  font-weight: 600;
+  /* 시설목록 standard-table-th / thead 와 동일 톤 */
+  background-color: var(--muted);
+  color: color-mix(in oklab, var(--foreground) 90%, transparent);
+}
+
+/* 1row 2필드 — 두 번째 th 좌측 구분선 */
+table.standard-detail-attr-table th.standard-detail-attr-label:not(:first-child) {
+  border-left: 1px solid var(--border);
 }
 
 table.standard-detail-attr-table td.standard-detail-attr-value {
@@ -427,7 +435,8 @@ table.standard-detail-attr-table tr:last-child > .standard-detail-attr-cell-bord
 }
 
 @utility standard-detail-attr-label {
-  @apply whitespace-nowrap border-r border-border bg-slate-100 px-2 py-1.5 text-[11px] font-medium text-slate-500 dark:bg-muted dark:text-muted-foreground;
+  /* 시설목록 thead(bg-muted) · th(text-foreground/90) 톤과 맞춤 */
+  @apply whitespace-nowrap border-r border-border bg-muted px-2 py-1.5 text-[11px] font-semibold text-foreground/90;
 }
 
 @utility standard-detail-attr-value {
