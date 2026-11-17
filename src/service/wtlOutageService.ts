@@ -2112,6 +2112,8 @@ export async function analyzeWtlOutage(params: {
   result: WtlOutageResultDto | null;
   gates: WtlOutageGateDto[];
   error?: string;
+  /** 패널 배너용 — 예: 고립 불가(no_isolation) */
+  errorCode?: 'no_isolation';
   debug?: WtlOutageAnalyzeDebug;
 }> {
   const gateFids = parseGateOgcFids(params.gateIds ?? []);

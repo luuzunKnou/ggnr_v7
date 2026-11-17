@@ -5,7 +5,6 @@
 'use client'
 
 import { Circle as CircleStyle, Fill, Icon, Stroke, Style } from 'ol/style'
-import type { StyleLike } from 'ol/style/Style'
 
 import { call } from '@/lib/api'
 import {
@@ -310,7 +309,7 @@ export function resolveRelatedFacilityOlStyle(
   styleCode: string | null | undefined,
   geomType: string | undefined,
   onReady: () => void
-): StyleLike {
+): Style | Style[] {
   const name = styleName.trim()
   if (!name) return fallbackStyle(geomType)
 
