@@ -1,5 +1,4 @@
-<?xml version='1.0' encoding='UTF-8'?>
-<sld:StyledLayerDescriptor xmlns="http://www.opengis.net/sld" xmlns:sld="http://www.opengis.net/sld" xmlns:gml="http://www.opengis.net/gml" xmlns:ogc="http://www.opengis.net/ogc" version="1.0.0">
+<?xml version="1.0" encoding="UTF-8"?><sld:StyledLayerDescriptor xmlns="http://www.opengis.net/sld" xmlns:sld="http://www.opengis.net/sld" xmlns:gml="http://www.opengis.net/gml" xmlns:ogc="http://www.opengis.net/ogc" version="1.0.0">
   <sld:NamedLayer>
     <sld:Name>Default Styler</sld:Name>
     <sld:UserStyle>
@@ -58,7 +57,7 @@
               <ogc:Function name="strLength">
                 <ogc:Function name="env">
                   <ogc:Literal>swl_task_as_label_property_name</ogc:Literal>
-                  <ogc:Literal></ogc:Literal>
+                  <ogc:Literal/>
                 </ogc:Function>
               </ogc:Function>
               <ogc:Literal>0</ogc:Literal>
@@ -122,7 +121,7 @@
                   <ogc:Literal>#</ogc:Literal>
                   <ogc:Function name="env">
                     <ogc:Literal>swl_task_as_label_color</ogc:Literal>
-                    <ogc:Literal>FFFFFF</ogc:Literal>
+                    <ogc:Literal>3FA9F5</ogc:Literal>
                   </ogc:Function>
                 </ogc:Function>
               </sld:CssParameter>
@@ -133,3 +132,4 @@
     </sld:UserStyle>
   </sld:NamedLayer>
 </sld:StyledLayerDescriptor>
+

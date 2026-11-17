@@ -1,5 +1,4 @@
-<?xml version='1.0' encoding='UTF-8'?>
-<sld:StyledLayerDescriptor xmlns="http://www.opengis.net/sld" xmlns:sld="http://www.opengis.net/sld" xmlns:gml="http://www.opengis.net/gml" xmlns:ogc="http://www.opengis.net/ogc" version="1.0.0">
+<?xml version="1.0" encoding="UTF-8"?><sld:StyledLayerDescriptor xmlns="http://www.opengis.net/sld" xmlns:sld="http://www.opengis.net/sld" xmlns:gml="http://www.opengis.net/gml" xmlns:ogc="http://www.opengis.net/ogc" version="1.0.0">
   <sld:NamedLayer>
     <sld:Name>Default Styler</sld:Name>
     <sld:UserStyle>
@@ -116,7 +115,7 @@
                     <ogc:Literal>#</ogc:Literal>
                     <ogc:Function name="env">
                       <ogc:Literal>swl_dodr_as_label_halo_color</ogc:Literal>
-                      <ogc:Literal>e85d04</ogc:Literal>
+                      <ogc:Literal>FFFFFF</ogc:Literal>
                     </ogc:Function>
                   </ogc:Function>
                 </sld:CssParameter>
@@ -143,3 +142,4 @@
     </sld:UserStyle>
   </sld:NamedLayer>
 </sld:StyledLayerDescriptor>
+
