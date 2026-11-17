@@ -26,6 +26,7 @@ import { fetchWtlAnalysisPipeWmsParams } from '../resolveWtlAnalysisPipeWms'
 import { lonLatToView, useMapViewProjection, viewExtentToMercator } from '../topology/topoMapProjection'
 import type { WtlOutageSelectionHighlight } from './wtlOutageMapFly'
 import { outagePolygonsOf, type WtlOutageGate, type WtlOutageResult } from './wtlOutageSample'
+import { setPanActive } from './wtlOutageEditShared'
 
 const WORKSPACE = 'ggnr'
 /** 급수전계량기 레이어 스타일 기본값(sld env 기본과 동일) — WMS 불가 시 폴백 */
@@ -496,11 +497,19 @@ export function useWtlOutageMapLayer({
       root.className = 'flex overflow-hidden rounded shadow-md'
       root.style.pointerEvents = 'auto'
       root.style.userSelect = 'none'
-      const stopPointer = (event: Event) => event.stopPropagation()
-      root.addEventListener('pointerdown', stopPointer)
-      root.addEventListener('pointerup', stopPointer)
-      root.addEventListener('dblclick', stopPointer)
+      // pointerdown만 막아 오버레이에서 팬이 시작되지 않게 함.
+      // pointerup까지 막으면 지도에서 시작한 드래그를 오버레이 위에서 뗄 때
+      // DragPan이 풀리지 않아 지도가 마우스에 붙은 채로 움직인다.
+      root.addEventListener('pointerdown', (event) => event.stopPropagation())
+      root.addEventListener('dblclick', (event) => event.stopPropagation())
       root.addEventListener('selectstart', (event) => event.preventDefault())
+      const releaseStuckPan = () => {
+        setPanActive(map, false)
+        setPanActive(map, true)
+      }
+      root.addEventListener('pointerup', releaseStuckPan)
+      root.addEventListener('pointercancel', releaseStuckPan)
+      root.addEventListener('lostpointercapture', releaseStuckPan)
 
       const openBtn = document.createElement('button')
       openBtn.type = 'button'

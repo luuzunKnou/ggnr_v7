@@ -503,6 +503,40 @@ export async function listWtlOutageGates(params: {
 }
 
 /**
+ * 지도 중심(경위도)에서 가장 가까운 제수변 1건 — 단수구역 최초 진입 시 이동용.
+ */
+export async function findNearestWtlOutageGate(params: {
+  lon?: number;
+  lat?: number;
+} = {}): Promise<{ rows: WtlOutageGateDto[] }> {
+  const lon = Number(params.lon);
+  const lat = Number(params.lat);
+  if (!Number.isFinite(lon) || !Number.isFinite(lat)) return { rows: [] };
+  if (!(await tableExists('layer', 'wtl_valv_ps'))) return { rows: [] };
+  const res = await db.execute(
+    sql.raw(
+      `SELECT
+         t.ogc_fid AS "ogcFid",
+         t.ftr_idn AS "ftrIdn",
+         t.std_dip AS "stdDip",
+         t.hjd_cde AS hjd,
+         ST_AsGeoJSON(ST_Transform(ST_Centroid(t.geom), 4326))::json AS geom
+       FROM layer.wtl_valv_ps t
+       WHERE t.geom IS NOT NULL
+         AND t.ftr_cde = '${GATE_FTR}'
+       ORDER BY t.geom <-> ST_Transform(ST_SetSRID(ST_MakePoint(${lon}, ${lat}), 4326), ST_SRID(t.geom))
+       LIMIT 1`
+    )
+  );
+  const rows: WtlOutageGateDto[] = [];
+  for (const raw of res.rows ?? []) {
+    const gate = mapGateRow(raw as Record<string, unknown>);
+    if (gate) rows.push(gate);
+  }
+  return { rows };
+}
+
+/**
  * 제수변 번호(ogc_fid)로 찾기 — 지도 이동용. 정확히 일치 우선, 없으면 앞부분 일치.
  */
 export async function findWtlOutageGates(params: { query?: string; limit?: number } = {}): Promise<{
@@ -2159,10 +2193,12 @@ export async function analyzeWtlOutage(params: {
       return {
         result: null,
         gates,
+        /** 지도 상단은 패널에서 짧은 안내로 표시. 여기 error는 패널용 부가 설명만 */
+        errorCode: 'no_isolation' as const,
         error:
           gateXy.length === 1
-            ? '이 제수변만 잠가서는 단수 구간이 생기지 않습니다(다른 관로로 물이 돌아 들어옴). 주변 제수변을 함께 잠가 보세요.'
-            : '잠근 제수변으로는 단수 구간이 생기지 않습니다(다른 관로로 물이 돌아 들어옴). 제수변을 추가로 잠가 보세요.',
+            ? '다른 관로로 물이 돌아 들어옵니다. 주변 제수변을 함께 잠가 보세요.'
+            : '다른 관로로 물이 돌아 들어옵니다. 제수변을 추가로 잠가 보세요.',
       };
     }
     isoPieces = iso.pieces;

@@ -1,7 +1,6 @@
 'use client'
 
 import { useState } from 'react'
-import { call } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import {
   ANALYSIS_HISTORY_PAGE_SIZE,
@@ -83,6 +82,7 @@ export function WtlLeakPanel({ active = true, mapLeftPx = 0, onHandoffToOutage }
     setHistoryId(null)
     setSaved(false)
     setEditMode(null)
+    setHiddenPipeIndexes([])
     // 분석 직후는 누수지점 펄스 — 제수변은 목록에서 고를 때 선택
     setSelectedGateId(null)
     setSelectedPipeIndex(null)
@@ -145,6 +145,7 @@ export function WtlLeakPanel({ active = true, mapLeftPx = 0, onHandoffToOutage }
     setSaved(false)
     setAnalyzing(false)
     setEditMode(null)
+    setHiddenPipeIndexes([])
     setNotice('해당 위치에서 가까운 관로에 맞춰 분석합니다.')
   }
 
@@ -153,6 +154,12 @@ export function WtlLeakPanel({ active = true, mapLeftPx = 0, onHandoffToOutage }
     setSaved(false)
     setSelectedGateId((id) => (id && next.gates.some((gate) => gate.id === id) ? id : null))
     setSelectedPipeIndex(null)
+  }
+
+  const openFollowDraw = () => {
+    if (!result) return
+    setEditMode('follow')
+    setNotice('따라 그리기 · 끝점을 끌어 늘이거나 줄입니다')
   }
 
   const loadHistory = (item: WtlLeakHistory) => {
@@ -190,7 +197,12 @@ export function WtlLeakPanel({ active = true, mapLeftPx = 0, onHandoffToOutage }
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-      <WtlOutageZoomHint active={active} message="제수변이 보이는 축척까지 지도를 확대해 주세요" />
+      <WtlOutageZoomHint
+        active={active}
+        message="제수변이 보이는 축척까지 지도를 확대해 주세요"
+        showLockHint={!snap}
+        lockMessage="지도에서 누수 위치를 클릭하세요"
+      />
       <WtlLeakResultEdit
         active={active}
         mapLeftPx={mapLeftPx}
@@ -373,6 +385,20 @@ export function WtlLeakPanel({ active = true, mapLeftPx = 0, onHandoffToOutage }
             onClick={saveAnalysisResult}
           >
             분석결과저장
+          </button>
+          <button
+            type="button"
+            disabled={!result || analyzing}
+            className={cn(
+              'rounded border px-2.5 py-1.5 text-[11px] font-medium disabled:opacity-40',
+              editMode === 'follow'
+                ? 'border-[#0f766e] bg-[#f3fbf8] text-[#0f766e]'
+                : 'border-dashed border-[#0f766e] text-[#0f766e] hover:bg-[#f3fbf8]'
+            )}
+            onClick={openFollowDraw}
+            title="끝점·분기 드래그로 결과 선 편집 (클릭 추가·제외 이전 방식)"
+          >
+            따라 그리기
           </button>
           <button
             type="button"

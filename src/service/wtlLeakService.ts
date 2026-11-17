@@ -816,6 +816,7 @@ export async function analyzeWtlLeak(params: {
    * hard/tight로 잠근 제수변 주변 교차점: JOIN 안 관 끝 입구를 막아
    * 짧은 연결관으로 옆 갈래·반대쪽 본선이 새지 않게 한다.
    */
+  /** 제수변 근처 관 입구 봉인 — hard/tight 잠금 후 너머 진입 차단 */
   const sealJunctionNearValve = (valve: ValveOnPipe) => {
     for (const p of pipes) {
       if (dist(p.sx, p.sy, valve.x, valve.y) <= JOIN_TOL_M) {

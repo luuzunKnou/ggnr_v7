@@ -72,6 +72,8 @@ export function WtlOutageResultEdit({
   const [undoCount, setUndoCount] = useState(0)
   /** 초기화 기준(baseline)과 다른 결과인지 — 초기화 버튼 활성화용 */
   const [changed, setChanged] = useState(false)
+  /** 건물 모드 Alt 누름 — 도구모음 안내를 제외 문구로 바꿈 */
+  const [altHeld, setAltHeld] = useState(false)
   // 최신 props를 ref에 반영(렌더 중이 아니라 커밋 직후) — 지도·키보드 이벤트 핸들러가 읽음
   useLayoutEffect(() => {
     modeRef.current = mode
@@ -80,6 +82,33 @@ export function WtlOutageResultEdit({
     onNoticeRef.current = onNotice
     onModeRef.current = onMode
   })
+
+  useEffect(() => {
+    if (!active || mode !== 'building') {
+      setAltHeld(false)
+      return
+    }
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Alt') return
+      // 브라우저 메뉴로 포커스 뺏기면 keyup이 빠져 안내문구가 멈춤
+      e.preventDefault()
+      setAltHeld(e.type === 'keydown')
+    }
+    const syncPointer = (e: PointerEvent) => setAltHeld(e.altKey)
+    const clear = () => setAltHeld(false)
+    window.addEventListener('keydown', onKey)
+    window.addEventListener('keyup', onKey)
+    window.addEventListener('pointermove', syncPointer)
+    window.addEventListener('blur', clear)
+    document.addEventListener('visibilitychange', clear)
+    return () => {
+      window.removeEventListener('keydown', onKey)
+      window.removeEventListener('keyup', onKey)
+      window.removeEventListener('pointermove', syncPointer)
+      window.removeEventListener('blur', clear)
+      document.removeEventListener('visibilitychange', clear)
+    }
+  }, [active, mode])
 
 
   const emit = (next: WtlOutageResult) => {
@@ -276,8 +305,9 @@ export function WtlOutageResultEdit({
   const menuRight = Math.max(0, mapLeftPx - hostLeft)
   const center = menuRight + Math.max(0, host.clientWidth - menuRight) / 2
 
+  const editHint = mode === 'draw' || mode === 'erase' || mode === 'building'
   const pillShell =
-    'pointer-events-auto absolute top-20 z-30 flex -translate-x-1/2 flex-col rounded-full border border-border bg-background/95 text-foreground shadow-lg backdrop-blur'
+    'pointer-events-auto absolute top-20 z-30 flex -translate-x-1/2 flex-col overflow-hidden rounded-full border border-border bg-background/95 text-foreground shadow-lg backdrop-blur'
 
   const toggleBtn = (id: 'draw' | 'erase' | 'building', label: string, Icon: LucideIcon) => (
     <button
@@ -296,7 +326,6 @@ export function WtlOutageResultEdit({
     </button>
   )
 
-
   const iconBtn = (id: 'undo' | 'reset', label: string, Icon: LucideIcon, disabled: boolean) => (
     <button
       type="button"
@@ -309,6 +338,17 @@ export function WtlOutageResultEdit({
       <Icon className="size-3.5" />
     </button>
   )
+
+  const hintText =
+    mode === 'draw'
+      ? '클릭으로 점 · 더블클릭으로 끝내기 · Shift+끌기 자유곡선'
+      : mode === 'erase'
+        ? '클릭으로 점 · 더블클릭으로 끝내기 · 그린 만큼 단수 면에서 뺌'
+        : mode === 'building'
+          ? altHeld
+            ? 'Alt+클릭으로 뺌'
+            : '클릭하면 합침 · Alt+클릭하면 뺌'
+          : null
 
   return createPortal(
     <div ref={barRef} className={pillShell} style={barStyle(center)}>
@@ -323,23 +363,41 @@ export function WtlOutageResultEdit({
       >
         <span className="h-1 w-9 rounded-full bg-muted-foreground/30 transition-colors group-hover:bg-muted-foreground/70" />
       </span>
-      <div className="flex items-center gap-2 pt-1 pr-2.5 pb-2 pl-4">
-      {toggleBtn('draw', '그리기', Pencil)}
-      {toggleBtn('erase', '지우기', Eraser)}
-      {toggleBtn('building', '건물', Building2)}
-      <span className="h-5 w-px bg-border" aria-hidden />
-      {iconBtn('undo', `되돌리기 (Ctrl+Z)${undoCount > 0 ? ` · ${undoCount}단계` : ''}`, Undo2, undoCount === 0)}
-      {iconBtn('reset', '초기화 (분석 직후 상태로)', RotateCcw, !changed)}
-      {busy && <span className="text-[11px] text-muted-foreground">계산중…</span>}
-      <button
-        type="button"
-        data-edit="done"
-        className="flex cursor-pointer items-center gap-1 rounded-full bg-primary px-3 py-1 text-[12px] font-medium text-primary-foreground transition-colors hover:bg-primary/90 sm:text-sm"
+      <div
+        className={cn(
+          'flex items-center gap-2 pt-1 pr-2.5 pl-4',
+          editHint ? 'pb-1.5' : 'pb-2'
+        )}
       >
-        <Check className="size-3.5" />
-        완료
-      </button>
+        {toggleBtn('draw', '그리기', Pencil)}
+        {toggleBtn('erase', '지우기', Eraser)}
+        {toggleBtn('building', '건물', Building2)}
+        <span className="h-5 w-px bg-border" aria-hidden />
+        {iconBtn('undo', `되돌리기 (Ctrl+Z)${undoCount > 0 ? ` · ${undoCount}단계` : ''}`, Undo2, undoCount === 0)}
+        {iconBtn('reset', '초기화 (분석 직후 상태로)', RotateCcw, !changed)}
+        {busy && <span className="text-[11px] text-muted-foreground">계산중…</span>}
+        <button
+          type="button"
+          data-edit="done"
+          className="flex cursor-pointer items-center gap-1 rounded-full bg-primary px-3 py-1 text-[12px] font-medium text-primary-foreground transition-colors hover:bg-primary/90 sm:text-sm"
+        >
+          <Check className="size-3.5" />
+          완료
+        </button>
       </div>
+      {hintText && (
+        <div
+          className={cn(
+            'flex items-center justify-center border-t px-4 py-1.5 text-[11px] font-medium leading-tight transition-colors',
+            mode === 'building' && altHeld
+              ? 'border-amber-200/80 bg-amber-500/10 text-amber-800'
+              : 'border-border/60 bg-muted/30 text-muted-foreground'
+          )}
+          role="status"
+        >
+          {hintText}
+        </div>
+      )}
     </div>,
     host
   )
